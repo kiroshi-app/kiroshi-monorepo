@@ -31,7 +31,6 @@ export const WorkspaceSidebar = ({
 	core,
 	drivers,
 	overlay,
-	panels,
 	rosterLines,
 	rosterView,
 	sidebarMissions,
@@ -89,7 +88,6 @@ export const WorkspaceSidebar = ({
 			onDeclineInvitation={switcher.onDeclineInvitation}
 			onRetryInvitation={switcher.onRetryInvitation}
 			onSpaceSwitcherOpenChange={switcher.onSpaceSwitcherOpenChange}
-			onShare={panels.openSpaceMembers}
 			user={overlay.userSettings}
 		/>
 	)

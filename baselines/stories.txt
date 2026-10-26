@@ -833,7 +833,8 @@ navigation-apprail--missions-selected
 navigation-apprail--on-tinted-space
 navigation-apprail--removed-panel-falls-back-to-conversations
 navigation-apprail--selection-moves-to-missions
-navigation-apprail--space-settings-gear-hovered
+navigation-apprail--space-logo-hovered
+navigation-apprail--space-logo-without-space
 navigation-apprail--space-settings-over-conversations
 navigation-apprail--update-downloading
 navigation-apprail--update-idle
@@ -1166,7 +1167,6 @@ navigation-spaceswitcher--m-4-accepting
 navigation-spaceswitcher--m-5-joined
 navigation-spaceswitcher--m-6-unreachable
 navigation-spaceswitcher--m-9-failed-servers
-navigation-spaceswitcher--move-space
 navigation-spaceswitcher--open
 navigation-spaceswitcher--opened-on-invitation
 navigation-spaceswitcher--single-space

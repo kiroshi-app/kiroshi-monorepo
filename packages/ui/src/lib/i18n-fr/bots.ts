@@ -101,13 +101,9 @@ const bots = {
 		switchHostedInvited_other:
 			"Changer d’espace, {{name}} ouvert, {{host}}, {{count}} invitations",
 		open: "Ouvrir {{name}}",
-		moveUp: "Monter",
-		moveDown: "Descendre",
 		create: "Créer un espace",
 		settings: "Ouvrir les réglages de l’espace",
-		leave: "Quitter l’espace",
 		shortcut: "⌘{{rank}}",
-		share: "Partager",
 		host: {
 			shared: "Partagé",
 			up: "En ligne",

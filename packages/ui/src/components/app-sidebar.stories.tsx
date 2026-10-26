@@ -39,6 +39,7 @@ import type {
 	BotMissionState,
 	BotMissionTicket,
 } from "@workspace/ui/components/bot-badge"
+import { blotTint } from "@workspace/ui/components/companion-colour"
 import {
 	companionSeed,
 	pickSilhouette,
@@ -686,7 +687,7 @@ export const WithUser = meta.story({
 		docs: {
 			description: {
 				story:
-					"The reader themselves, alone at the foot of the rail, the space settings gear sitting under Missions at the top. The reader is the only way into their own settings, so a host that has an account to show always hands one down. Check that the reader is a 26px round picture centred in a 44px slot, named by their name, that it is the last stop of the rail, that activating it opens the user settings and that the gear opens the space settings. Check then the lane the roster draws: its rows sit 8px in from both inner edges of the panel, the panel's own inline padding and nothing more. Pick `WithSearch` for the search button in the header.",
+					"The reader themselves, alone at the foot of the rail, the open space's logo first at the top. The reader is the only way into their own settings, so a host that has an account to show always hands one down. Check that the reader is a 26px round picture centred in a 44px slot, named by their name, that it is the last stop of the rail, that activating it opens the user settings and that the Space logo, in the open space's colour, opens the space settings. Check then the lane the roster draws: its rows sit 8px in from both inner edges of the panel, the panel's own inline padding and nothing more. Pick `WithSearch` for the search button in the header.",
 			},
 		},
 	},
@@ -710,9 +711,13 @@ export const WithUser = meta.story({
 
 		await userEvent.click(reader)
 		await expect(args.onOpenUserSettings).toHaveBeenCalledTimes(1)
-		await userEvent.click(
-			within(rail).getByRole("button", { name: "Space settings" }),
+		const spaceLogo = within(rail).getByRole("button", {
+			name: "Space settings",
+		})
+		await expect(slotIn(spaceLogo, "space-dot").style.backgroundColor).toBe(
+			blotTint("blue"),
 		)
+		await userEvent.click(spaceLogo)
 		await expect(args.onOpenSpaceSettings).toHaveBeenCalledTimes(1)
 		await expect(args.onOpenUserSettings).toHaveBeenCalledTimes(1)
 	},
@@ -3973,14 +3978,11 @@ const STUDIO: Space = { id: "studio", name: "Studio", colour: "orange" }
 
 const GARAGE: Space = { id: "garage", name: "Garage" }
 
-const sharedSpace = fn()
-
 const TITLE_BAR_ARGS = {
 	"data-tauri-drag-region": "deep",
 	spaces: [STUDIO, GARAGE],
 	selectedSpaceId: STUDIO.id,
 	botsBySpaceId: { [STUDIO.id]: ROSTER, [GARAGE.id]: ROSTER },
-	onShare: sharedSpace,
 }
 
 const selectorIn = (canvasElement: HTMLElement) =>
@@ -4238,12 +4240,11 @@ export const A7MenuOpen = meta.story({
 		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		docs: {
 			description: {
-				story: `${MOCKUP} A7: the selector's menu is open. Check the selector takes the sidebar accent with its name and chevron in the foreground, that \`Share\` with its users icon comes first then a rule, that each space row carries its square and that space's state dot, and that no connection line, host name or globe appears. \`Share\` only reports: the members panel belongs to the host. Pick \`A2SharedSpace\` for the closed selector.`,
+				story: `${MOCKUP} A7: the selector's menu is open. Check the selector takes the sidebar accent with its name and chevron in the foreground, that the space rows open the menu with no \`Share\` above them, that each space row carries its square and that space's state dot, and that no connection line, host name or globe appears. Pick \`A2SharedSpace\` for the closed selector.`,
 			},
 		},
 	},
 	play: async ({ canvasElement, userEvent }) => {
-		sharedSpace.mockClear()
 		const selector = selectorIn(canvasElement)
 		await expect(hostDotIn(canvasElement)).toHaveAttribute(
 			"data-host",
@@ -4263,13 +4264,10 @@ export const A7MenuOpen = meta.story({
 			)
 		}, FRAME_POLL)
 
-		const share = within(menu).getByRole("menuitem", { name: "Share" })
-		await expect(menu.firstElementChild).toBe(share)
-		await expect(share.querySelector("svg")).toHaveAttribute(
-			"aria-hidden",
-			"true",
-		)
-		await expect(share.nextElementSibling).toHaveAttribute("role", "separator")
+		await expect(
+			within(menu).queryByRole("menuitem", { name: "Share" }),
+		).toBeNull()
+		await expect(menu.firstElementChild).toHaveAttribute("role", "group")
 		for (const [name, host] of [
 			["Studio", "shared"],
 			["Garage", "down"],
@@ -4284,10 +4282,6 @@ export const A7MenuOpen = meta.story({
 			)
 		}
 		await expect(within(menu).queryByText(/Connected|@/)).toBeNull()
-
-		await userEvent.click(share)
-		await expect(sharedSpace).toHaveBeenCalledOnce()
-		await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
 	},
 })
 

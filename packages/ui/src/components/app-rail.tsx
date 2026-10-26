@@ -10,6 +10,8 @@ import {
 	displayNameOf,
 	initialsOf,
 } from "@workspace/ui/components/initials-avatar"
+import type { Space } from "@workspace/ui/components/space"
+import { SpaceDot } from "@workspace/ui/components/space-switcher"
 import { TooltipButton } from "@workspace/ui/components/tooltip-button"
 import type { UserChipIdentity } from "@workspace/ui/components/user-chip"
 import { cn } from "@workspace/ui/lib/utils"
@@ -47,6 +49,8 @@ const RAIL_AVATAR =
 	"grid size-full place-items-center bg-rail-avatar font-medium text-foreground text-xs/4 uppercase"
 
 const AVATAR_SIZE = 26
+
+const RAIL_SPACE_LOGO = "size-6.5 rounded-[7px]"
 
 type RailItemProps = {
 	name: string
@@ -122,6 +126,7 @@ const RailAvatar = ({ name, image }: RailAvatarProps) => (
 
 type AppRailProps = Omit<ComponentProps<"nav">, "children"> & {
 	selected: AppRailPanel
+	space?: Space
 	openSettings?: AppRailSettings
 	dots?: AppRailDots
 	user?: UserChipIdentity
@@ -134,6 +139,7 @@ type AppRailProps = Omit<ComponentProps<"nav">, "children"> & {
 
 const AppRail = ({
 	selected,
+	space,
 	openSettings,
 	dots,
 	user,
@@ -156,8 +162,6 @@ const AppRail = ({
 			name: t(`rail.${entry}`),
 		}
 	}
-	const isSpaceSettingsOpen = openSettings === "space"
-	const SettingsIcon = (isSpaceSettingsOpen ? FillIcons : Icons).Settings
 
 	return (
 		<nav
@@ -168,18 +172,18 @@ const AppRail = ({
 		>
 			<ul className={RAIL_GROUP}>
 				<RailItem
+					hasDot={dots?.settings}
+					isSelected={openSettings === "space"}
+					name={t("rail.spaceSettings")}
+					onPress={onOpenSpaceSettings}
+				>
+					<SpaceDot className={RAIL_SPACE_LOGO} colour={space?.colour} />
+				</RailItem>
+				<RailItem
 					{...panelEntry("conversations")}
 					onPress={onSelectConversations}
 				/>
 				<RailItem {...panelEntry("missions")} onPress={onSelectMissions} />
-				<RailItem
-					hasDot={dots?.settings}
-					isSelected={isSpaceSettingsOpen}
-					name={t("rail.spaceSettings")}
-					onPress={onOpenSpaceSettings}
-				>
-					<SettingsIcon aria-hidden="true" />
-				</RailItem>
 			</ul>
 			<ul className={RAIL_GROUP}>
 				{updateBadge ? (

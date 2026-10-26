@@ -51,9 +51,7 @@ const AppSidebarBase = ({
 	onSelectSpace,
 	onReorderSpaces,
 	onCreateSpace,
-	onLeaveSpace,
 	hostBySpaceId,
-	onShare,
 	invitations,
 	onAcceptInvitation,
 	onDeclineInvitation,
@@ -111,13 +109,9 @@ const AppSidebarBase = ({
 					onAcceptInvitation={onAcceptInvitation}
 					onCreateSpace={onCreateSpace}
 					onDeclineInvitation={onDeclineInvitation}
-					onLeaveSpace={onLeaveSpace}
 					onOpenChange={onSpaceSwitcherOpenChange}
-					onOpenSpaceSettings={onOpenSpaceSettings}
-					onReorderSpaces={onReorderSpaces}
 					onRetryInvitation={onRetryInvitation}
 					onSelectSpace={onSelectSpace}
-					onShare={onShare}
 					selectedSpaceId={selectedSpaceId}
 					spaces={spaces}
 				/>
@@ -139,6 +133,9 @@ const AppSidebarBase = ({
 				onSelectMissions={() => setOpenPanel("missions")}
 				openSettings={openSettings}
 				selected={openPanel}
+				space={
+					spaces.find((space) => space.id === selectedSpaceId) ?? spaces[0]
+				}
 				updateBadge={updateBadge}
 				user={user}
 			/>

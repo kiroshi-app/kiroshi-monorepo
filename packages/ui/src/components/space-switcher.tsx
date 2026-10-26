@@ -192,16 +192,13 @@ const SpaceSquare = ({
 	)
 }
 
-type SpaceSwitcherProps = SpaceSelection &
+type SpaceSwitcherProps = Omit<SpaceSelection, "onReorderSpaces"> &
 	SpaceInvitationCallbacks & {
 		hostBySpaceId?: Record<string, SpaceHost>
 		invitations?: SpaceInvitation[]
 		open?: boolean
 		focusedInvitationId?: string
-		onShare?: () => void
 		onCreateSpace?: () => void
-		onOpenSpaceSettings?: () => void
-		onLeaveSpace?: () => void
 		onOpenChange?: (isOpen: boolean) => void
 	}
 
@@ -214,11 +211,7 @@ const SpaceSwitcher = ({
 	open,
 	focusedInvitationId,
 	onSelectSpace,
-	onReorderSpaces,
-	onShare,
 	onCreateSpace,
-	onOpenSpaceSettings,
-	onLeaveSpace,
 	onAcceptInvitation,
 	onDeclineInvitation,
 	onRetryInvitation,
@@ -238,7 +231,6 @@ const SpaceSwitcher = ({
 
 	if (!selected) return null
 
-	const rank = spaces.indexOf(selected)
 	const host = hostBySpaceId?.[selected.id]
 	const isInvited = invitations.length > 0
 	const switchLabel = isInvited
@@ -248,11 +240,6 @@ const SpaceSwitcher = ({
 		: host
 			? "spaces.switchHosted"
 			: "spaces.switch"
-
-	const moveSelected = (by: number) => {
-		const order = placedOrder(spaces, selected.id, rank + by)
-		if (order) onReorderSpaces?.(order)
-	}
 
 	const elsewhere = isInvited
 		? undefined
@@ -314,15 +301,6 @@ const SpaceSwitcher = ({
 						STILL_UNDER_REDUCED_MOTION,
 					)}
 				>
-					{onShare ? (
-						<>
-							<ContextMenuItem onClick={onShare}>
-								<Icons.Users aria-hidden="true" className="size-3.5" />
-								{t("spaces.share")}
-							</ContextMenuItem>
-							<ContextMenuSeparator />
-						</>
-					) : null}
 					<ContextMenuRadioGroup
 						onValueChange={(value) => onSelectSpace?.(value)}
 						value={selected.id}
@@ -365,42 +343,10 @@ const SpaceSwitcher = ({
 						onRetryInvitation={onRetryInvitation}
 					/>
 					<ContextMenuSeparator />
-					{spaces.length > 1 ? (
-						<>
-							<ContextMenuItem
-								disabled={rank === 0}
-								onClick={() => moveSelected(-1)}
-							>
-								<Icons.ArrowUp aria-hidden="true" className="size-3.5" />
-								{t("spaces.moveUp")}
-							</ContextMenuItem>
-							<ContextMenuItem
-								disabled={rank === spaces.length - 1}
-								onClick={() => moveSelected(1)}
-							>
-								<Icons.ArrowDown aria-hidden="true" className="size-3.5" />
-								{t("spaces.moveDown")}
-							</ContextMenuItem>
-							<ContextMenuSeparator />
-						</>
-					) : null}
 					<ContextMenuItem onClick={onCreateSpace}>
 						<Icons.Add aria-hidden="true" className="size-3.5" />
 						{t("spaces.create")}
 					</ContextMenuItem>
-					<ContextMenuItem onClick={onOpenSpaceSettings}>
-						<Icons.Settings aria-hidden="true" className="size-3.5" />
-						{t("spaces.settings")}
-					</ContextMenuItem>
-					{host && host !== "shared" ? (
-						<>
-							<ContextMenuSeparator />
-							<ContextMenuItem onClick={onLeaveSpace} variant="destructive">
-								<Icons.Leave aria-hidden="true" className="size-3.5" />
-								{t("spaces.leave")}
-							</ContextMenuItem>
-						</>
-					) : null}
 				</ContextMenuContent>
 			</ContextMenu>
 			{host === "connecting" || host === "down" ? (

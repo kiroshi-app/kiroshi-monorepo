@@ -13,7 +13,6 @@ import { afterEach, expect, it, vi } from "vitest"
 
 import { i18n } from "@workspace/ui/lib/i18n"
 
-import { commands } from "@/lib/bindings"
 import { newBotIdentity } from "@/lib/bots/bot-settings"
 import { createFakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
@@ -208,29 +207,6 @@ it("switches between the space and the user settings on the gear and the avatar"
 	expect(shownSettingsOf()).toEqual({
 		subtitle: "space",
 		entry: i18n.t("settings:rail.space"),
-	})
-})
-
-it("opens the space settings on Members when Share asks for it", async () => {
-	vi.mocked(isDesktopHost).mockReturnValue(true)
-	vi.mocked(commands.hostingState).mockResolvedValue({ kind: "off" })
-	const space = await mountApp()
-
-	await act(async () => {
-		fireEvent.contextMenu(
-			screen.getByRole("button", {
-				name: i18n.t("bots:spaces.switch", { name: space.name }),
-			}),
-		)
-	})
-	await settle()
-	await press(
-		screen.getByRole("menuitem", { name: i18n.t("bots:spaces.share") }),
-	)
-
-	expect(shownSettingsOf()).toEqual({
-		subtitle: "space",
-		entry: i18n.t("settings:rail.members"),
 	})
 })
 

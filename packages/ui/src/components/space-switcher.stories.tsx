@@ -147,7 +147,6 @@ const LiveSwitcher = ({
 		<div className="flex w-64 flex-col gap-4">
 			<SwitcherLine
 				badgesBySpaceId={badgesBySpaceId}
-				onReorderSpaces={reorder}
 				onSelectSpace={setSelectedSpaceId}
 				selectedSpaceId={selectedSpaceId}
 				spaces={order}
@@ -162,6 +161,8 @@ const LiveSwitcher = ({
 		</div>
 	)
 }
+
+const reorderSpaces = fn()
 
 const badgeOn = (root: HTMLElement) =>
 	slotsIn(root, "space-switcher-badge")[0]?.dataset.badge
@@ -184,7 +185,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The control that says which space a reader is in and moves them to another one. It is a 32px ghost button in the window's title bar: the space's tint as a 10px swatch, its name in the muted 13px line, then a chevron that says it opens. Pressing it opens a single-choice menu: every space with its tint and its rank as a Cmd shortcut hint, then an item to create one, then an item to open the space settings. `SpaceDots` is its companion for a pinned strip, one dot per space, the open one filled with its tint and larger, the rest muted and smaller, so the reader knows how many spaces exist and where they stand without opening anything. Both take the same props, so a host maps its store onto `spaces` and `selectedSpaceId` once and hands the pair the same callbacks, including `onReorderSpaces`, since the order is the reader's to set: a dot is dragged to the place its space should hold, and the menu's `Move up` and `Move down` do the same move without a pointer. That order is not decoration, it is which space each `⌘1`…`⌘9` reaches and the order a swipe walks, so it is reported whole, as the full list of ids, and never applied here. A single space still shows the button, since creating a second one lives in its menu, but draws no dots, there is nothing to count. Reach for this at the top of a sidebar; `AppSidebar` mounts both and adds the swipe and the Cmd+digit chords that go with them.",
+					"The control that says which space a reader is in and moves them to another one. It is a 32px ghost button in the window's title bar: the space's tint as a 10px swatch, its name in the muted 13px line, then a chevron that says it opens. Pressing it opens a single-choice menu: every space with its tint and its rank as a Cmd shortcut hint, then any waiting invitations, then a single rule over an item to create one, and nothing else. `SpaceDots` is its companion for a pinned strip, one dot per space, the open one filled with its tint and larger, the rest muted and smaller, so the reader knows how many spaces exist and where they stand without opening anything. Both take the same selection props, so a host maps its store onto `spaces` and `selectedSpaceId` once and hands the pair the same callbacks; the dots alone take `onReorderSpaces`, since the order is the reader's to set: a dot is dragged to the place its space should hold. That order is not decoration, it is which space each `⌘1`…`⌘9` reaches and the order a swipe walks, so it is reported whole, as the full list of ids, and never applied here. A single space still shows the button, since creating a second one lives in its menu, but draws no dots, there is nothing to count. Reach for this at the top of a sidebar; `AppSidebar` mounts both and adds the swipe and the Cmd+digit chords that go with them.",
 			},
 		},
 	},
@@ -193,9 +194,6 @@ const meta = preview.meta({
 		selectedSpaceId: "vocca",
 		onSelectSpace: fn(),
 		onCreateSpace: fn(),
-		onOpenSpaceSettings: fn(),
-		onLeaveSpace: fn(),
-		onReorderSpaces: fn(),
 		onAcceptInvitation: fn(),
 		onDeclineInvitation: fn(),
 		onRetryInvitation: fn(),
@@ -232,37 +230,53 @@ export const Default = meta.story({
 })
 
 export const Open = meta.story({
+	args: { hostBySpaceId: { vocca: "up" } },
 	parameters: {
 		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		docs: {
 			description: {
 				story:
-					"The menu the press opens, which is the only place a space is chosen, created, or configured. Check the spaces are a single-choice group — one mark, on the open one, and arrows walk the whole list — that each row carries its tint and its rank as `⌘1`…`⌘9`, and that the reordering pair sits in a band of its own, that the two items under the last rule read as verbs rather than as a sixth space. Choosing a row reports the id and closes; the settings item only reports, since the dialog belongs to the host. Pick `Default` for the resting button. The app assembles it at `apps/app/src/App.tsx:935`.",
+					"The menu the press opens, on a joined space, which is the only place a space is chosen or created. Check the spaces are a single-choice group, one mark on the open one and arrows walking the whole list, that each row carries its tint and its rank as `⌘1`…`⌘5`, and that one rule then `Create a space` close the menu with nothing after it: no `Share`, no `Move up`, no `Move down`, no space settings and no `Leave space`, since the rail's Space logo opens the settings and the dots carry the order. Choosing a row reports the id and closes. Pick `Default` for the resting button. The app assembles it at `apps/app/src/App.tsx:935`.",
 			},
 		},
 	},
 	play: async ({ args, canvas, userEvent }) => {
 		const menu = await openMenu(
-			canvas.getByRole("button", { name: "Change space, Vocca open" }),
+			canvas.getByRole("button", { name: /^Change space, Vocca open/ }),
 		)
 
 		const spaces = within(menu).getAllByRole("menuitemradio")
 		await expect(spaces).toHaveLength(SPACES.length)
+		for (const [rank, space] of SPACES.entries()) {
+			await expect(spaces[rank]).toHaveAccessibleName(
+				new RegExp(`^${space.name}`),
+			)
+		}
 		await expect(spaces[1]).toHaveAttribute("aria-checked", "true")
 		await expect(spaces[0]).toHaveAttribute("aria-checked", "false")
 		await expect(within(menu).getByText("⌘1")).toBeInTheDocument()
 		await expect(within(menu).getByText("⌘5")).toBeInTheDocument()
 
+		const items = within(menu).getAllByRole("menuitem")
+		await expect(items).toHaveLength(1)
+		await expect(items[0]).toHaveAccessibleName("Create a space")
+		for (const removed of [
+			"Share",
+			"Move up",
+			"Move down",
+			/space settings/i,
+			"Leave space",
+		]) {
+			await expect(
+				within(menu).queryByRole("menuitem", { name: removed }),
+			).toBeNull()
+		}
 		const rules = within(menu).getAllByRole("separator")
-		await expect(rules).toHaveLength(2)
-		await expect(
-			within(menu).getByRole("menuitem", { name: "Move down" })
-				.nextElementSibling,
-		).toBe(rules[1])
+		await expect(rules).toHaveLength(1)
+		await expect(rules[0].nextElementSibling).toBe(items[0])
+		await expect(items[0]).toBe(menu.lastElementChild)
 
-		await userEvent.click(
-			within(menu).getByRole("menuitem", { name: /^Create/ }),
-		)
+		await userEvent.click(items[0])
 		await expect(args.onCreateSpace).toHaveBeenCalled()
 
 		await openMenu(canvas.getByRole("button", { name: /^Change space/ }))
@@ -316,7 +330,7 @@ export const SingleSpace = meta.story({
 		docs: {
 			description: {
 				story:
-					"A reader who has only ever had one space — the state every account opens in. Check the button still draws the name and still opens its menu, since creating the second space lives there, that no dot strip is drawn at all — a single dot would say nothing and would invite a press that changes nothing — and that the menu offers no `Move up` and no `Move down`: there is no order to set with one space in it, so the band they would have made is gone and a single rule is left between the list and the two verbs. Pick `WithDots` for the strip once a second space exists, `MoveSpace` for the items the second one brings back. The app assembles it at `apps/app/src/App.tsx:935`.",
+					"A reader who has only ever had one space — the state every account opens in. Check the button still draws the name and still opens its menu, since creating the second space lives there, that no dot strip is drawn at all — a single dot would say nothing and would invite a press that changes nothing — and that a single rule sits between the list and `Create a space`. Pick `WithDots` for the strip once a second space exists. The app assembles it at `apps/app/src/App.tsx:935`.",
 			},
 		},
 	},
@@ -329,12 +343,6 @@ export const SingleSpace = meta.story({
 		await expect(slotsIn(canvasElement, "space-dots")).toHaveLength(0)
 
 		const menu = await openMenu(trigger)
-		await expect(
-			within(menu).queryByRole("menuitem", { name: "Move up" }),
-		).toBeNull()
-		await expect(
-			within(menu).queryByRole("menuitem", { name: "Move down" }),
-		).toBeNull()
 		await expect(within(menu).getAllByRole("separator")).toHaveLength(1)
 
 		await userEvent.keyboard("{Escape}")
@@ -529,17 +537,18 @@ export const LongContent = meta.story({
 
 export const DragDotToPlace = meta.story({
 	render: (args) => (
-		<LiveSwitcher onReorderSpaces={args.onReorderSpaces} spaces={args.spaces} />
+		<LiveSwitcher onReorderSpaces={reorderSpaces} spaces={args.spaces} />
 	),
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Placing a space by hand. A press on a dot that then moves lifts it: the dot comes off the strip a size larger with a shadow under it and follows the pointer, while the strip keeps every dot where it stood — the order is the host's to redraw, so nothing is torn out of the row on the strength of a gesture that has not landed yet. A line is drawn at the boundary the space would take, on the leading edge of the dot it would sit before, or on the trailing edge of the last one when it has passed them all. The dot under the pointer is what decides the place, never the pointer's distance from the row's start, so the gesture reads the same on a row that has wrapped onto three lines — `WrappedDots` is that case. Releasing reports the full new order of ids and nothing else: the open space stays open, the tints and the badges stay with their spaces, and the click a release would otherwise fire is swallowed so a drag never doubles as a selection. Pick `DragDotNowhere` for every way the gesture ends in nothing, `MoveSpace` for the same move from the menu. The app assembles it at `apps/app/src/App.tsx:935`.",
+					"Placing a space by hand. A press on a dot that then moves lifts it: the dot comes off the strip a size larger with a shadow under it and follows the pointer, while the strip keeps every dot where it stood — the order is the host's to redraw, so nothing is torn out of the row on the strength of a gesture that has not landed yet. A line is drawn at the boundary the space would take, on the leading edge of the dot it would sit before, or on the trailing edge of the last one when it has passed them all. The dot under the pointer is what decides the place, never the pointer's distance from the row's start, so the gesture reads the same on a row that has wrapped onto three lines — `WrappedDots` is that case. Releasing reports the full new order of ids and nothing else: the open space stays open, the tints and the badges stay with their spaces, and the click a release would otherwise fire is swallowed so a drag never doubles as a selection. Pick `DragDotNowhere` for every way the gesture ends in nothing. The app assembles it at `apps/app/src/App.tsx:935`.",
 			},
 		},
 	},
-	play: async ({ args, canvasElement }) => {
+	play: async ({ canvasElement }) => {
+		reorderSpaces.mockClear()
 		const handle = dotsIn(canvasElement)[0]
 		const from = liftBy(handle, 12)
 
@@ -551,7 +560,7 @@ export const DragDotToPlace = meta.story({
 		await expect(insertionOn(canvasElement)).toBe(dotsIn(canvasElement)[4])
 
 		dropOver(handle, dotsIn(canvasElement)[3])
-		await expect(args.onReorderSpaces).toHaveBeenCalledWith([
+		await expect(reorderSpaces).toHaveBeenCalledWith([
 			"vocca",
 			"atelier",
 			"veille",
@@ -575,7 +584,7 @@ export const DragDotToPlace = meta.story({
 		await expect(insertionOn(canvasElement)).toBe(dotsIn(canvasElement)[0])
 
 		dropOver(last, dotsIn(canvasElement)[0])
-		await expect(args.onReorderSpaces).toHaveBeenLastCalledWith([
+		await expect(reorderSpaces).toHaveBeenLastCalledWith([
 			"archives",
 			"vocca",
 			"atelier",
@@ -588,7 +597,7 @@ export const DragDotToPlace = meta.story({
 export const DragDotNowhere = meta.story({
 	tags: ["test-only"],
 	render: (args) => (
-		<LiveSwitcher onReorderSpaces={args.onReorderSpaces} spaces={args.spaces} />
+		<LiveSwitcher onReorderSpaces={reorderSpaces} spaces={args.spaces} />
 	),
 	parameters: {
 		docs: {
@@ -598,28 +607,29 @@ export const DragDotNowhere = meta.story({
 			},
 		},
 	},
-	play: async ({ args, canvasElement, userEvent }) => {
+	play: async ({ canvasElement, userEvent }) => {
+		reorderSpaces.mockClear()
 		const handle = dotsIn(canvasElement)[2]
 
 		await userEvent.click(handle)
 		await expect(handle).toHaveAttribute("aria-current", "true")
-		await expect(args.onReorderSpaces).not.toHaveBeenCalled()
+		await expect(reorderSpaces).not.toHaveBeenCalled()
 
 		const from = liftBy(handle, 10)
 		await expect(getComputedStyle(handle).pointerEvents).toBe("none")
 		fireEvent.pointerCancel(handle, POINTER)
 		await expect(getComputedStyle(handle).pointerEvents).not.toBe("none")
-		await expect(args.onReorderSpaces).not.toHaveBeenCalled()
+		await expect(reorderSpaces).not.toHaveBeenCalled()
 
 		liftBy(handle, 10)
 		fireEvent.pointerUp(handle, { ...POINTER, ...from })
-		await expect(args.onReorderSpaces).not.toHaveBeenCalled()
+		await expect(reorderSpaces).not.toHaveBeenCalled()
 
 		liftBy(handle, 10)
 		fireEvent.pointerMove(handle, { ...POINTER, clientX: 4, clientY: 4 })
 		await expect(insertionOn(canvasElement)).toBeUndefined()
 		fireEvent.pointerUp(handle, { ...POINTER, clientX: 4, clientY: 4 })
-		await expect(args.onReorderSpaces).not.toHaveBeenCalled()
+		await expect(reorderSpaces).not.toHaveBeenCalled()
 
 		fireEvent.pointerDown(handle, { ...POINTER, ...from, button: 2 })
 		moveOver(handle, dotsIn(canvasElement)[0])
@@ -632,7 +642,7 @@ export const WrappedDots = meta.story({
 	args: { spaces: MANY_SPACES, selectedSpaceId: "perso" },
 	render: (args) => (
 		<div className={NARROW_STRIP}>
-			<SpaceDots {...args} />
+			<SpaceDots {...args} onReorderSpaces={reorderSpaces} />
 		</div>
 	),
 	parameters: {
@@ -644,6 +654,7 @@ export const WrappedDots = meta.story({
 		},
 	},
 	play: async ({ args, canvasElement }) => {
+		reorderSpaces.mockClear()
 		const tops = dotsIn(canvasElement).map((dot) =>
 			Math.round(dot.getBoundingClientRect().top),
 		)
@@ -666,63 +677,8 @@ export const WrappedDots = meta.story({
 		expected.splice(wrapped, 0, "perso")
 
 		dropOver(handle, below)
-		await expect(args.onReorderSpaces).toHaveBeenCalledWith(expected)
+		await expect(reorderSpaces).toHaveBeenCalledWith(expected)
 		await expect(args.onSelectSpace).not.toHaveBeenCalled()
-	},
-})
-
-export const MoveSpace = meta.story({
-	render: (args) => (
-		<LiveSwitcher onReorderSpaces={args.onReorderSpaces} spaces={args.spaces} />
-	),
-	parameters: {
-		a11y: A11Y_FLOATING_FOCUS_GUARDS,
-		docs: {
-			description: {
-				story:
-					"The same move without a pointer, for a reader who will not drag a five-millimetre dot. The menu of the open space carries `Move up` and `Move down` under the list, and they report exactly what a drop reports: the full new order of ids. Check the pair acts on the space the button names and moves it one place at a time in the list above them, that `Move up` is dead while that space stands first and `Move down` while it stands last — an item that reads as an offer and does nothing is worse than an item that says it cannot — and that the dots redraw in the new order the moment the host takes it. Pick `DragDotToPlace` for the gesture, `SingleSpace` for the account where neither item is offered. The app assembles it at `apps/app/src/App.tsx:935`.",
-			},
-		},
-	},
-	play: async ({ args, canvas, canvasElement, userEvent }) => {
-		const menu = await openMenu(
-			canvas.getByRole("button", { name: "Change space, Perso open" }),
-		)
-
-		await expect(
-			within(menu).getByRole("menuitem", { name: "Move up" }),
-		).toHaveAttribute("aria-disabled", "true")
-
-		await userEvent.click(
-			within(menu).getByRole("menuitem", { name: "Move down" }),
-		)
-		await expect(args.onReorderSpaces).toHaveBeenCalledWith([
-			"vocca",
-			"perso",
-			"atelier",
-			"veille",
-			"archives",
-		])
-		await waitFor(async () => {
-			await expect(dotNames(canvasElement)).toEqual([
-				"Open Vocca",
-				"Open Perso",
-				"Open Atelier",
-				"Open Veille",
-				"Open Archives",
-			])
-		})
-
-		await userEvent.click(dotsIn(canvasElement)[4])
-		const lastMenu = await openMenu(
-			canvas.getByRole("button", { name: "Change space, Archives open" }),
-		)
-		await expect(
-			within(lastMenu).getByRole("menuitem", { name: "Move down" }),
-		).toHaveAttribute("aria-disabled", "true")
-
-		await userEvent.keyboard("{Escape}")
-		await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
 	},
 })
 
@@ -816,24 +772,20 @@ const expectRowDots = async (menu: HTMLElement) => {
 	).toBeNull()
 }
 
-const expectSettingsRightAfterCreate = async (menu: HTMLElement) => {
+const expectCreateLast = async (menu: HTMLElement) => {
 	await expect(
 		within(menu).queryByRole("menuitem", { name: "Join a space" }),
 	).toBeNull()
+	await expect(
+		within(menu).queryByRole("menuitem", { name: "Leave space" }),
+	).toBeNull()
 	const create = within(menu).getByRole("menuitem", { name: "Create a space" })
-	await expect(create.nextElementSibling).toHaveAccessibleName(
-		"Open space settings",
-	)
-}
-
-const expectLeaveLast = async (menu: HTMLElement) => {
-	const leave = within(menu).getByRole("menuitem", { name: "Leave space" })
-	await expect(leave).toHaveAttribute("data-variant", "destructive")
-	await expect(leave).toBe(menu.lastElementChild)
-	await expect(leave.previousElementSibling).toHaveAttribute(
+	await expect(create).toBe(menu.lastElementChild)
+	await expect(create.previousElementSibling).toHaveAttribute(
 		"role",
 		"separator",
 	)
+	await expect(within(menu).getAllByRole("separator")).toHaveLength(1)
 }
 
 const SIDE_BY_SIDE_MENU_A11Y = mergeA11y(
@@ -848,7 +800,7 @@ export const ThemesLocalSpaceMenu = meta.story({
 		a11y: SIDE_BY_SIDE_MENU_A11Y,
 		docs: {
 			description: {
-				story: `${MOCKUP} The menu of a local space beside shared and joined ones (A7 rows). Check every row carries its 10px square on a 3px radius and, where the space has a host state, the 7px state dot centred on the square's bottom end corner: online for the shared and the reachable rows, hollow for the connecting one, muted for the one that does not answer. No globe and no \`Unreachable\` remain, and no \`Leave space\` is offered, since a local space is not left. Pick \`ThemesJoinedSpaceMenu\` for the menu of a joined space.`,
+				story: `${MOCKUP} The menu of a local space beside shared and joined ones (A7 rows). Check every row carries its 10px square on a 3px radius and, where the space has a host state, the 7px state dot centred on the square's bottom end corner: online for the shared and the reachable rows, hollow for the connecting one, muted for the one that does not answer. No globe and no \`Unreachable\` remain, and a single rule then \`Create a space\` close the menu. Pick \`ThemesJoinedSpaceMenu\` for the menu of a joined space.`,
 			},
 		},
 	},
@@ -863,11 +815,7 @@ export const ThemesLocalSpaceMenu = meta.story({
 		for (const trigger of [light, dark]) {
 			const menu = await openMenuLikeItsTheme(trigger)
 			await expectRowDots(menu)
-			await expectSettingsRightAfterCreate(menu)
-			await expect(
-				within(menu).queryByRole("menuitem", { name: "Leave space" }),
-			).toBeNull()
-			await expect(within(menu).getAllByRole("separator")).toHaveLength(2)
+			await expectCreateLast(menu)
 		}
 	},
 })
@@ -879,19 +827,12 @@ export const ThemesJoinedSpaceMenu = meta.story({
 		a11y: SIDE_BY_SIDE_MENU_A11Y,
 		docs: {
 			description: {
-				story: `${MOCKUP} The menu of a joined space whose host does not answer. Check the open row keeps its mark and its muted dot and stays choosable, that the rows read their state to assistive technology after their name, and that a rule then the destructive \`Leave space\` close the menu. The item only reports: the confirmation belongs to the host. Pick \`ThemesLocalSpaceMenu\` for the menu with nothing to leave.`,
+				story: `${MOCKUP} The menu of a joined space whose host does not answer. Check the open row keeps its mark and its muted dot and stays choosable, that the rows read their state to assistive technology after their name, and that the menu still closes on a rule then \`Create a space\`, with no \`Leave space\`: leaving lives in the space settings the rail's Space logo opens. Pick \`ThemesLocalSpaceMenu\` for the menu of a local space.`,
 			},
 		},
 	},
-	play: async ({ args, canvasElement, userEvent }) => {
+	play: async ({ canvasElement }) => {
 		const [light, dark] = triggersIn(canvasElement)
-
-		const leaving = await openMenuLikeItsTheme(light)
-		await userEvent.click(
-			within(leaving).getByRole("menuitem", { name: "Leave space" }),
-		)
-		await expect(args.onLeaveSpace).toHaveBeenCalledOnce()
-		await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
 
 		for (const trigger of [light, dark]) {
 			const menu = await openMenuLikeItsTheme(trigger)
@@ -899,8 +840,7 @@ export const ThemesJoinedSpaceMenu = meta.story({
 			const open = rowNamed(menu, "Veille")
 			await expect(open).toHaveAttribute("aria-checked", "true")
 			await expect(open).toHaveAccessibleName(/^Veille Not connected/)
-			await expectSettingsRightAfterCreate(menu)
-			await expectLeaveLast(menu)
+			await expectCreateLast(menu)
 		}
 	},
 })
@@ -1251,7 +1191,7 @@ export const OpenedOnInvitation = meta.story({
 	play: async ({ args, canvasElement, userEvent }) => {
 		const menu = await settled(await screen.findByRole("menu"))
 		await expect(menu.getBoundingClientRect().width).toBe(280)
-		await expectGroupBetweenSpacesAnd(menu, "Move up")
+		await expectGroupBetweenSpacesAnd(menu, "Create a space")
 		const rows = invitationsIn(menu)
 		await expect(rows[1]).toHaveAccessibleName(SECOND_INVITED.name)
 		await expect(
@@ -1672,7 +1612,7 @@ export const InvitationWithoutJoinEntry = meta.story({
 		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		docs: {
 			description: {
-				story: `${ITERATION_FIVE} 5.5: a reader with one space and one waiting invitation, now that joining goes through the invitation alone. Check the rows read Notes with its \`⌘1\` and its check, a rule, the Invitations label over Studio invited by its host with Accept and Decline, a rule, then \`Create a space\` and \`Open space settings\`, and that no \`Join a space\` is offered anywhere. Pick \`M2InvitationWaiting\` for the same invitation beside several spaces.`,
+				story: `${ITERATION_FIVE} 5.5: a reader with one space and one waiting invitation, now that joining goes through the invitation alone. Check the rows read Notes with its \`⌘1\` and its check, a rule, the Invitations label over Studio invited by its host with Accept and Decline, a rule, then \`Create a space\` and nothing after it, and that no \`Join a space\` is offered anywhere. Pick \`M2InvitationWaiting\` for the same invitation beside several spaces.`,
 			},
 		},
 	},
@@ -1717,11 +1657,6 @@ export const InvitationWithoutJoinEntry = meta.story({
 		await expect(rule?.nextElementSibling).toHaveAccessibleName(
 			"Create a space",
 		)
-		await expect(rule?.nextElementSibling?.nextElementSibling).toBe(
-			menu.lastElementChild,
-		)
-		await expect(menu.lastElementChild).toHaveAccessibleName(
-			"Open space settings",
-		)
+		await expect(rule?.nextElementSibling).toBe(menu.lastElementChild)
 	},
 })
