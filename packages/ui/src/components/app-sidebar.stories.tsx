@@ -369,7 +369,6 @@ const clickWith = (pressed: Partial<SidebarClickModifiers>) => ({
 
 const middleClick = (target: HTMLElement) => {
 	const isAutoscrollKept = fireEvent.mouseDown(target, { button: 1 })
-	fireEvent.mouseUp(target, { button: 1 })
 	fireEvent(
 		target,
 		new MouseEvent("auxclick", { bubbles: true, button: 1, detail: 1 }),
