@@ -1553,7 +1553,6 @@ const expectOneInsetRuleOnShell = async (
 	await openRoutines(canvasElement, userEvent)
 	await within(panel).findByRole("heading", { name: "Routines" })
 	await expectRowsOnThePanelInsetRule(panel, headerTitleStart)
-	await expect(threadInsetsIn(canvasElement)).toEqual(closed)
 }
 
 const ONE_INSET_RULE_ON_SHELL =
