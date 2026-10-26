@@ -525,6 +525,10 @@ mod tests {
 	decided_by_the_tracked_settings! { ALLOW_KEY =>
 		an_auto_merge_of_a_numbered_pr_is_allowed: "gh pr merge --auto 12",
 		an_auto_merge_with_no_argument_is_allowed: "gh pr merge --auto",
+		a_forced_refspec_after_the_branch_is_allowed:
+			"git push origin feature/ope-1-x +feature/ope-1-y",
+		a_pr_body_holding_a_plus_after_an_upstream_push_is_allowed:
+			"git push -u origin feature/ope-1-x && gh pr create --body \"$(cat <<EOF\nsummary +6 -1\nEOF\n)\"",
 	}
 
 	decided_by_the_tracked_settings! { DENY_KEY =>
@@ -558,8 +562,6 @@ mod tests {
 		a_bundle_ending_on_the_short_force_is_asked: "git push origin feature/ope-1-x -uf",
 		a_bundle_holding_the_short_force_before_the_remote_is_asked:
 			"git push -uf origin feature/ope-1-x",
-		a_forced_refspec_after_the_branch_is_asked:
-			"git push origin feature/ope-1-x +feature/ope-1-y",
 		a_forced_refspec_alone_after_the_remote_is_asked: "git push origin +feature/ope-1-x",
 	}
 
