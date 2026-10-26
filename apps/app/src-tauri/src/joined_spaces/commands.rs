@@ -296,8 +296,8 @@ mod tests {
 		};
 		let database = app.state::<db::DatabaseState>();
 		let joined = ready(&database).expect("the database").joined_spaces().join(candidate).await;
-		let cloud = app.state::<RelayGuests>().inner().cloud();
-		JoinedSpace::presented(joined.expect("the join"), cloud, wait, &[])
+		let guests = app.state::<RelayGuests>();
+		JoinedSpace::presented(joined.expect("the join"), guests.cloud(), wait, &[])
 	}
 
 	async fn list(app: &App<MockRuntime>) -> Vec<JoinedSpace> {
