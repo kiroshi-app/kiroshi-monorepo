@@ -328,7 +328,7 @@ describe.each(OPEN_SPACES)(
 		it("paints the rail logo of the conversations sidebar with the selected Space", async () => {
 			await mountAppAtConversations(joined)
 
-			expect(railLogoTint()).toBe(`var(--bot-blot-${colour})`)
+			expect(railLogoTint()).toBe(colour)
 		})
 
 		it.each(SETTINGS_ROUTES)(
