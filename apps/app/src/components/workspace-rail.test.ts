@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react"
+import { createMemoryHistory, RouterProvider } from "@tanstack/react-router"
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { createElement } from "react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
@@ -8,15 +9,72 @@ import { i18n } from "@workspace/ui/lib/i18n"
 
 import { WorkspaceRail } from "@/components/workspace-rail"
 import type { JoinedSpace, Space } from "@/lib/bindings"
+import { newBotIdentity } from "@/lib/bots/bot-settings"
+import { createFakeChatDriver } from "@/lib/chat/fake-driver"
+import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
+import type { TranscriptStore } from "@/lib/conversations/store-port"
 import type { SettingsNavigation } from "@/lib/navigation/use-settings-navigation"
+import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 import type { JoinedSpacesController } from "@/lib/spaces/joined-spaces-controller"
+import { joinedRowIdOf } from "@/lib/spaces/joined-spaces-controller"
 import { useSwitcherSpaces } from "@/lib/spaces/use-joined-spaces"
+import { readMirror, writeMirror } from "@/lib/user/preferences-mirror"
 import type { RosterLines } from "@/lib/workspace/use-roster-lines"
 import type { RosterLists } from "@/lib/workspace/use-roster-lists"
 import type { SettingsPanels } from "@/lib/workspace/use-settings-panels"
 import type { useSidebarPanelSwitch } from "@/lib/workspace/use-sidebar-panel-switch"
 import type { WorkspaceCore } from "@/lib/workspace/use-workspace-core"
 import type { WorkspaceOverlay } from "@/lib/workspace/use-workspace-overlay"
+
+type MountedApp = {
+	store: TranscriptStore | null
+	openJoinedSpace: JoinedSpace | null
+}
+
+const mounted = vi.hoisted(
+	(): MountedApp => ({ store: null, openJoinedSpace: null }),
+)
+
+vi.mock("@/lib/conversations/create-store", () => ({
+	createTranscriptStore: () => mounted.store,
+}))
+
+vi.mock("@/lib/host/index", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@/lib/host/index")>()),
+	isDesktopHost: () => false,
+}))
+
+vi.mock("@/lib/chat/create-driver", async () => {
+	const { withFakeHostWrites } = await import(
+		"@/lib/conversations/fake-host-writes"
+	)
+	return {
+		createChatDriver: (store: TranscriptStore) =>
+			withFakeHostWrites(createFakeChatDriver({ stepMs: 1 }), store),
+	}
+})
+
+vi.mock("@/lib/spaces/use-joined-spaces", async (importOriginal) => {
+	const original =
+		await importOriginal<typeof import("@/lib/spaces/use-joined-spaces")>()
+	const useJoinedSpaces: typeof original.useJoinedSpaces = (...args) => {
+		const joinedSpaces = original.useJoinedSpaces(...args)
+		const open = mounted.openJoinedSpace
+		return open
+			? {
+					...joinedSpaces,
+					state: {
+						...joinedSpaces.state,
+						joinedSpaces: [open],
+						openId: open.id,
+					},
+				}
+			: joinedSpaces
+	}
+	return { ...original, useJoinedSpaces }
+})
+
+const { createWorkspaceRouter } = await import("@/workspace-router")
 
 const OWNED = { position: 0, createdAt: 0, shared: false }
 const HOME: Space = { ...OWNED, id: "home", name: "Home", colour: "red" }
@@ -152,3 +210,124 @@ describe("the rail on a settings screen", () => {
 		expect(openSpaceSettings).toHaveBeenCalledExactlyOnceWith(GARAGE.id)
 	})
 })
+
+const SETTLE_MS = 200
+
+const settle = async () => {
+	await act(async () => {
+		await vi.advanceTimersByTimeAsync(SETTLE_MS)
+	})
+}
+
+const PERSONAL_SPACE_ID = "personal"
+
+const HOST_OF_PERSONAL: JoinedSpace = {
+	...STUDIO,
+	remoteSpaceId: PERSONAL_SPACE_ID,
+}
+
+type OpenSpace = {
+	label: string
+	joined: JoinedSpace | null
+	rowId: string
+	colour: string
+}
+
+const OPEN_SPACES: OpenSpace[] = [
+	{ label: "an owned", joined: null, rowId: PERSONAL_SPACE_ID, colour: "red" },
+	{
+		label: "a joined",
+		joined: HOST_OF_PERSONAL,
+		rowId: joinedRowIdOf(HOST_OF_PERSONAL.id),
+		colour: "purple",
+	},
+]
+
+const mountAppAtConversations = async (joined: JoinedSpace | null) => {
+	writeMirror({ ...readMirror(), firstRunDone: true })
+	const store = createFakeTranscriptStore()
+	const companion = await store.createBot(newBotIdentity([]), PERSONAL_SPACE_ID)
+	mounted.store = store
+	mounted.openJoinedSpace = joined
+	vi.useFakeTimers()
+	const router = createWorkspaceRouter(
+		createMemoryHistory({ initialEntries: ["/"] }),
+	)
+	render(createElement(RouterProvider, { router }), {
+		wrapper: createQueryTestWrapper().wrapper,
+	})
+	await settle()
+	return { router, companionId: companion.id }
+}
+
+type WorkspaceRouter = Awaited<
+	ReturnType<typeof mountAppAtConversations>
+>["router"]
+
+type SettingsRoute = {
+	path: string
+	open: (router: WorkspaceRouter, ids: SettingsIds) => Promise<void>
+}
+
+type SettingsIds = { spaceRowId: string; companionId: string }
+
+const SETTINGS_ROUTES: SettingsRoute[] = [
+	{
+		path: "/settings/space/$spaceId",
+		open: (router, { spaceRowId }) =>
+			router.navigate({
+				to: "/settings/space/$spaceId",
+				params: { spaceId: spaceRowId },
+				search: {},
+			}),
+	},
+	{
+		path: "/settings/user",
+		open: (router) => router.navigate({ to: "/settings/user", search: {} }),
+	},
+	{
+		path: "/settings/companion/$companionId",
+		open: (router, { companionId }) =>
+			router.navigate({
+				to: "/settings/companion/$companionId",
+				params: { companionId },
+				search: {},
+			}),
+	},
+]
+
+const shellTint = () =>
+	document.body
+		.querySelector<HTMLElement>("[data-space-tint]")
+		?.getAttribute("data-space-tint")
+
+describe.each(OPEN_SPACES)(
+	"the app with $label Space open",
+	({ joined, rowId, colour }) => {
+		afterEach(() => {
+			vi.useRealTimers()
+			mounted.store = null
+			mounted.openJoinedSpace = null
+		})
+
+		it("paints the rail logo of the conversations sidebar with the selected Space", async () => {
+			await mountAppAtConversations(joined)
+
+			expect(railLogoTint()).toBe(`var(--bot-blot-${colour})`)
+		})
+
+		it.each(SETTINGS_ROUTES)(
+			"keeps the shell tint of / on $path",
+			async ({ open }) => {
+				const { router, companionId } = await mountAppAtConversations(joined)
+				expect(shellTint()).toBe(colour)
+
+				await act(() => open(router, { spaceRowId: rowId, companionId }))
+				await settle()
+
+				expect(router.state.location.pathname).not.toBe("/")
+				expect(shellTint()).toBe(colour)
+			},
+		)
+	},
+)

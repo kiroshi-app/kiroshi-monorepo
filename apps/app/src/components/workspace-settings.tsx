@@ -62,6 +62,7 @@ const useSettingsFrame = (
 		width: core.preferences.sidebarWidth ?? undefined,
 		onWidthChange: workspace.overlay.changeSidebarWidth,
 		isResizable: isSidebarResizable(),
+		spaceTint: workspace.scopes.spaceTint,
 	}
 }
 
