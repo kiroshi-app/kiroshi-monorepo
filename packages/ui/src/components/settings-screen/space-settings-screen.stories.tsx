@@ -1037,18 +1037,23 @@ export const JoinedSessionUnavailable = meta.story({
 		docs: {
 			description: {
 				story:
-					"A space joined from Steve, whose computer is online, that isn't the current space: no session reads its Secrets, Skills, Applications or History. Check those four entries dimmed, out of the tab order and announced as disabled with their count hidden, Secrets asked for yet the Space page shown, and Members, Companions and Leave space still reachable.",
+					"A space joined from Steve, whose computer is online, that isn't the current space: no session reads its Secrets, Skills, Applications or History. Check those four entries dimmed, out of the tab order and announced as disabled, Secrets asked for yet the Space page shown, and Members, Companions and Leave space still reachable.",
 			},
 		},
 	},
 	play: async ({ userEvent }) => {
-		const { menu } = await expectArtboard({
+		const { menu, main } = await expectArtboard({
 			subtitle: "Joined · hosted by Steve",
 			entries: ARTBOARD_MENU.map((label) =>
 				label === "Companions" ? "Companions4" : label,
 			),
 			pinned: "Leave space",
 		})
+		await expectSettingsPage(main, "Space", "column")
+		await expect(
+			within(main).queryByRole("heading", { name: "Secrets" }),
+		).not.toBeInTheDocument()
+		await expect(entryIn(menu, "Space")).toHaveAttribute("aria-current", "page")
 		for (const label of ["Secrets", "Skills", "Applications", "History"]) {
 			const entry = entryIn(menu, label)
 			await expect(entry).toBeDisabled()
