@@ -26,6 +26,7 @@ import {
 	slotIn,
 	slotsIn,
 	tokenStyleIn,
+	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
 import {
 	type BotAvatarBlot,
@@ -222,20 +223,12 @@ const expectChosenPaint = async (row: HTMLElement) => {
 
 const expectColourSwitchesInstantly = async (row: HTMLElement) => {
 	if (!isInBrowserRunner()) return
-	const { cdp } = await import("vitest/browser")
-	await cdp().send("Emulation.setEmulatedMedia", {
-		features: [{ name: "prefers-reduced-motion", value: "no-preference" }],
-	})
-	try {
+	await withMotionAllowed(async () => {
 		await expect(getComputedStyle(row).transitionProperty).toBe("translate")
 		await expect(
 			getComputedStyle(slotIn(row, "tool-question-key")).transitionDuration,
 		).toBe("0s")
-	} finally {
-		await cdp().send("Emulation.setEmulatedMedia", {
-			features: [{ name: "prefers-reduced-motion", value: "reduce" }],
-		})
-	}
+	})
 }
 
 const markGlyphIn = (row: HTMLElement) =>
