@@ -160,6 +160,14 @@ const menuEntryOf = (name: string | RegExp) =>
 const applicationsEntryOf = () =>
 	menuEntryOf(i18n.t("settings:rail.applications")).closest("li") as HTMLElement
 
+const applicationsMenuOf = () =>
+	within(applicationsEntryOf())
+		.getAllByRole("button")
+		.map((entry) => entry.textContent)
+
+const openApplications = () =>
+	press(menuEntryOf(i18n.t("settings:rail.applications")))
+
 const isMarked = (railItem: HTMLElement) =>
 	railItem.getAttribute("aria-current") === "true"
 
@@ -277,13 +285,9 @@ it("lists one Applications sub-entry per application installed in the open space
 	await mountApp(twoSpaceApplications)
 	await press(gearOf())
 
-	await press(menuEntryOf(i18n.t("settings:rail.applications")))
+	await openApplications()
 
-	expect(
-		within(applicationsEntryOf())
-			.getAllByRole("button")
-			.map((entry) => entry.textContent),
-	).toEqual([
+	expect(applicationsMenuOf()).toEqual([
 		i18n.t("settings:rail.applications"),
 		expect.stringMatching(/^atlas/),
 		expect.stringMatching(/^ledger/),
@@ -294,7 +298,7 @@ it("lists one Applications sub-entry per application installed in the open space
 it("shows the page of the application its sub-entry selects", async () => {
 	await mountApp(twoSpaceApplications)
 	await press(gearOf())
-	await press(menuEntryOf(i18n.t("settings:rail.applications")))
+	await openApplications()
 
 	await press(menuEntryOf(/^ledger/))
 
@@ -306,13 +310,9 @@ it("lists the application the person installed under Applications of the user se
 	await mountApp(oneUserApplication)
 	await press(avatarOf())
 
-	await press(menuEntryOf(i18n.t("settings:rail.applications")))
+	await openApplications()
 
-	expect(
-		within(applicationsEntryOf())
-			.getAllByRole("button")
-			.map((entry) => entry.textContent),
-	).toEqual([
+	expect(applicationsMenuOf()).toEqual([
 		i18n.t("settings:rail.applications"),
 		expect.stringMatching(/^atlas/),
 		i18n.t("bots:applications.add"),
@@ -322,7 +322,7 @@ it("lists the application the person installed under Applications of the user se
 it("opens the applications catalogue on Add an application", async () => {
 	await mountApp(twoSpaceApplications)
 	await press(gearOf())
-	await press(menuEntryOf(i18n.t("settings:rail.applications")))
+	await openApplications()
 
 	await press(menuEntryOf(i18n.t("bots:applications.add")))
 
