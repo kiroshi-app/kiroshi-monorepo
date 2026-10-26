@@ -44,11 +44,9 @@ const spaceHostOf = (space: FocusedSpace, spaceHost?: SpaceHost) =>
 
 const avatarStateOf = (
 	space: FocusedSpace,
-	spaceHost?: SpaceHost,
+	host?: SpaceHost,
 ): SpaceAvatarState =>
-	space.state === "invitation"
-		? "invitation"
-		: spaceAvatarStateOf(spaceHostOf(space, spaceHost))
+	space.state === "invitation" ? "invitation" : spaceAvatarStateOf(host)
 
 type NotSharedCardProps = {
 	name: string
@@ -119,7 +117,8 @@ const FocusedSpacePage = ({
 	const { t: tBots } = useTranslation("bots")
 	const name = value.name.trim() || t("space.untitled")
 	const isInvitation = space.state === "invitation"
-	const pillHost = hostPillOf(spaceHostOf(space, spaceHost))
+	const host = spaceHostOf(space, spaceHost)
+	const pillHost = hostPillOf(host)
 	const isNameShown =
 		space.state === "yours" || (space.state === "joined" && space.isConnected)
 
@@ -152,7 +151,7 @@ const FocusedSpacePage = ({
 					colour={value.colour}
 					size={48}
 					spaceId={spaceId}
-					state={avatarStateOf(space, spaceHost)}
+					state={avatarStateOf(space, host)}
 				/>
 				<div className="flex min-w-0 flex-1 flex-col gap-0.5">
 					<div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">

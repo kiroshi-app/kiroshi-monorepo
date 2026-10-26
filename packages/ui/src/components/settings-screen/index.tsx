@@ -486,7 +486,8 @@ const SpaceSettingsScreen = (props: SpaceSettingsScreenProps) => {
 	const isEntryDisabled = (value: string) =>
 		isHostUnreachable ||
 		(isSessionUnavailable && SESSION_BOUND_ENTRIES.has(value))
-	const pillHost = hostPillOf(spaceHostOf(space, spaceHost))
+	const host = spaceHostOf(space, spaceHost)
+	const pillHost = hostPillOf(host)
 
 	const focusedEntries =
 		space.state === "invitation"
@@ -534,7 +535,7 @@ const SpaceSettingsScreen = (props: SpaceSettingsScreenProps) => {
 					colour={settings.value.colour}
 					size={36}
 					spaceId={spaceId}
-					state={avatarStateOf(space, spaceHost)}
+					state={avatarStateOf(space, host)}
 				/>
 			}
 			entries={focusedEntries}
