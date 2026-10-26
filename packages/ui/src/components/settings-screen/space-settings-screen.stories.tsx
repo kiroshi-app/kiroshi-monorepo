@@ -802,6 +802,25 @@ export const JoinedHostNotConnected = meta.story({
 			pinned: "Leave space",
 		})
 		await expect(hostDotsIn(menu, main)).toEqual(["down", "down"])
+		const menuDot = slotIn(menu, "host-dot")
+		await expect(getComputedStyle(menuDot).backgroundColor).toBe(
+			"rgb(115, 115, 115)",
+		)
+		await expect(getComputedStyle(menuDot).insetInlineEnd).toBe("-3px")
+		await expect(getComputedStyle(menuDot).bottom).toBe("-3px")
+		await expect(
+			getComputedStyle(slotIn(main, "host-dot")).backgroundColor,
+		).toBe("rgb(115, 115, 115)")
+
+		const standing = slotIn(main, "focused-space-standing")
+		await expect(
+			getComputedStyle(standing.parentElement as HTMLElement).rowGap,
+		).toBe("2px")
+		const open = within(main).getByRole("button", { name: "Open ⌘4" })
+		await expect(getComputedStyle(open).columnGap).toBe("8px")
+		await expect(getComputedStyle(within(open).getByText("⌘4")).color).toBe(
+			"color(srgb 0.384314 0.384314 0.384314)",
+		)
 		await expect(within(main).queryByLabelText("Name")).not.toBeInTheDocument()
 		for (const label of ARTBOARD_MENU.slice(1)) {
 			const entry = entryIn(menu, label)
