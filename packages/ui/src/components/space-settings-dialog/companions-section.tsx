@@ -10,7 +10,7 @@ import { Icons } from "@workspace/ui/components/icons"
 import { Button } from "@workspace/ui/components/ui/button"
 
 const CARD =
-	"flex size-full min-w-0 cursor-pointer flex-col gap-3.5 rounded-xl border border-border bg-muted/40 p-4 text-start outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+	"flex w-full min-w-0 cursor-pointer flex-col gap-3.5 rounded-xl border border-border bg-muted/40 p-4 text-start outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
 
 type CompanionSummary = {
 	id: string
@@ -68,7 +68,7 @@ const CompanionCard = ({ companion, onSelect }: CompanionCardProps) => {
 					{companion.instructions}
 				</span>
 				<span className="flex w-full min-w-0 items-center justify-between gap-3 border-border border-t pt-3 text-muted-foreground text-xs">
-					<span className="truncate tabular-nums">
+					<span className="truncate">
 						{t("space.companions.counts", {
 							skills: t("space.companions.skills", {
 								count: companion.skillsCount,
