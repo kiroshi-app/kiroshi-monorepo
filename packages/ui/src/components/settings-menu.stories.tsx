@@ -436,6 +436,9 @@ export const States = meta.story({
 		await expect(
 			within(menu).getByRole("button", { name: "Leave space" }),
 		).toBeEnabled()
+		const focus = within(menu).getByRole("button", { name: /^Focus/ })
+		await expect(slotIn(focus, "settings-menu-indicator")).toBeVisible()
+		await expectCountInset(focus)
 	},
 	parameters: {
 		pseudo: {
@@ -443,11 +446,6 @@ export const States = meta.story({
 			focusVisible:
 				"[data-slot=settings-menu-entries] li:nth-child(3) > button",
 		},
-	},
-	play: async ({ canvasElement }) => {
-		const focus = within(canvasElement).getByRole("button", { name: /^Focus/ })
-		await expect(slotIn(focus, "settings-menu-indicator")).toBeVisible()
-		await expectCountInset(focus)
 	},
 })
 
