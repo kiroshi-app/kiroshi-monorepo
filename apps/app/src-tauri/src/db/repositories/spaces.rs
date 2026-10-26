@@ -115,6 +115,10 @@ impl SpacesRepository {
 			.call_mut(move |connection| Ok(removed_bot(connection, &bot_id, &space_id)))
 			.await?
 	}
+
+	pub async fn companions(&self, space_id: String) -> Result<Vec<String>, SpaceError> {
+		self.access.call(move |connection| Ok(companions_of(connection, &space_id))).await?
+	}
 }
 
 fn created(connection: &mut Connection, name: &str) -> Result<Space, SpaceError> {
@@ -193,6 +197,14 @@ fn bots_of_only_this_space(
 	let mut statement = connection.prepare(BOTS_OF_ONLY_THIS_SPACE)?;
 	let rows = statement.query_map([space_id], |row| row.get(0))?;
 	Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
+fn companions_of(connection: &Connection, space_id: &str) -> Result<Vec<String>, SpaceError> {
+	if !held(connection, space_id)? {
+		return Err(SpaceError::UnknownSpace { id: space_id.to_owned() });
+	}
+	let bots = conversations::bots_of(connection, Some(space_id))?;
+	Ok(bots.into_iter().map(|bot| bot.id).collect())
 }
 
 fn moved_bot(connection: &mut Connection, bot_id: &str, space_id: &str) -> Result<(), SpaceError> {

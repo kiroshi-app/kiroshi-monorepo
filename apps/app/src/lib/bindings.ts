@@ -234,6 +234,7 @@ export const commands = {
 	botRemoveFromSpace: (botId: string, spaceId: string) => typedError<null, SpaceError>(__TAURI_INVOKE("bot_remove_from_space", { botId, spaceId })),
 	spacePreferences: (spaceId: string) => typedError<SpacePreferences, SpaceError>(__TAURI_INVOKE("space_preferences", { spaceId })),
 	spaceSetPreferences: (spaceId: string, preferences: SpacePreferences) => typedError<SpacePreferences, SpaceError>(__TAURI_INVOKE("space_set_preferences", { spaceId, preferences })),
+	spaceCompanionCounts: (spaceId: string) => typedError<CompanionCounts[], SpaceError>(__TAURI_INVOKE("space_companion_counts", { spaceId })),
 	userPreferences: () => typedError<UserPreferences, UserPreferencesError>(__TAURI_INVOKE("user_preferences")),
 	userSetPreferences: (preferences: UserPreferences) => typedError<UserPreferences, UserPreferencesError>(__TAURI_INVOKE("user_set_preferences", { preferences })),
 	userSetProfilePicture: (bytes: number[]) => typedError<UserPreferences, UserPreferencesError>(__TAURI_INVOKE("user_set_profile_picture", { bytes })),
@@ -694,6 +695,12 @@ export type CompanionArrival = {
 	invitedByBotId: string | null,
 	lastMessageSeq: number,
 	createdAt: number,
+};
+
+export type CompanionCounts = {
+	botId: string,
+	skillsCount: number,
+	applicationsCount: number,
 };
 
 export type CompanionCreated = {

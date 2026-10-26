@@ -3543,6 +3543,11 @@ fn a_relay_guest_sets_the_preferences_of_the_shared_space_only() {
 }
 
 #[test]
+fn a_relay_guest_reads_the_companion_counts_of_the_shared_space_only() {
+	run(kept_in_the_space_named("space_companion_counts", space_named));
+}
+
+#[test]
 fn a_relay_guest_reaches_the_plugin_of_the_shared_space_or_its_bots_only() {
 	run(async {
 		let mut guest = Guest::of_two_spaces("plugin-scopes").await;

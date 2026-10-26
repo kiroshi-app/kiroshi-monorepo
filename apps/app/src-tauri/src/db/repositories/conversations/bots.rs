@@ -139,7 +139,7 @@ pub(super) fn counted_bots(connection: &Connection) -> rusqlite::Result<i64> {
 	connection.query_row("SELECT count(*) FROM bots", [], |row| row.get(0))
 }
 
-pub(super) fn bots_of(
+pub(in crate::db::repositories) fn bots_of(
 	connection: &Connection,
 	space_id: Option<&str>,
 ) -> rusqlite::Result<Vec<Bot>> {

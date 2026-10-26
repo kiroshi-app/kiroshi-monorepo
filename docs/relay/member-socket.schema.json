@@ -2148,6 +2148,27 @@
       ],
       "type": "object"
     },
+    "CompanionCounts": {
+      "properties": {
+        "applicationsCount": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "botId": {
+          "type": "string"
+        },
+        "skillsCount": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "botId",
+        "skillsCount",
+        "applicationsCount"
+      ],
+      "type": "object"
+    },
     "CompanionCreated": {
       "properties": {
         "id": {
@@ -11821,6 +11842,28 @@
       },
       "ok": {
         "$ref": "#/$defs/Section"
+      }
+    },
+    "space_companion_counts": {
+      "args": {
+        "properties": {
+          "spaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spaceId"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/SpaceError"
+      },
+      "ok": {
+        "items": {
+          "$ref": "#/$defs/CompanionCounts"
+        },
+        "type": "array"
       }
     },
     "space_preferences": {
