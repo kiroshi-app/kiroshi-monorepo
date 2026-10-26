@@ -741,6 +741,7 @@ describe("SpaceSettingsScreen hosting on the desktop", () => {
 			status: "ok",
 			data: { kind: "off" },
 		})
+		answerMembers({ hosting_members: [] })
 		const gear = await gearWithGarage()
 		const { dialog } = await openShareOf(gear, gear.home.id)
 
