@@ -7,6 +7,7 @@ import {
 	isInBrowserRunner,
 	slotIn,
 	slotsIn,
+	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
 import { ActivityIndicator } from "@workspace/ui/components/activity-indicator"
 import { DaySeparator } from "@workspace/ui/components/day-separator"
@@ -1106,13 +1107,6 @@ const AtRestDemo = (args: TranscriptProps) => {
 	)
 }
 
-const emulateMotion = async (value: "no-preference" | "reduce") => {
-	const { cdp } = await import("vitest/browser")
-	await cdp().send("Emulation.setEmulatedMedia", {
-		features: [{ name: "prefers-reduced-motion", value }],
-	})
-}
-
 const nextFrame = () => new Promise((resolve) => requestAnimationFrame(resolve))
 
 const motionIn = (root: HTMLElement) =>
@@ -1150,8 +1144,7 @@ export const AppendsRowsAtRest = meta.story({
 	},
 	play: async ({ canvas, canvasElement, userEvent }) => {
 		if (!isInBrowserRunner()) return
-		await emulateMotion("no-preference")
-		try {
+		await withMotionAllowed(async () => {
 			await userEvent.click(canvas.getByRole("button", { name: "Send" }))
 			await nextFrame()
 			await expect(motionIn(rowOf(canvasElement, "sent"))).toEqual([])
@@ -1162,8 +1155,6 @@ export const AppendsRowsAtRest = meta.story({
 			await userEvent.click(canvas.getByRole("button", { name: "Reply" }))
 			await nextFrame()
 			await expect(motionIn(rowOf(canvasElement, "replied"))).toEqual([])
-		} finally {
-			await emulateMotion("reduce")
-		}
+		})
 	},
 })

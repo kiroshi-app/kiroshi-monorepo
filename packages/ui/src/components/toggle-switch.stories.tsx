@@ -2,7 +2,11 @@ import { useState } from "react"
 import { expect, fn } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { isInBrowserRunner, slotIn } from "@workspace/storybook/story-utils"
+import {
+	isInBrowserRunner,
+	slotIn,
+	withMotionAllowed,
+} from "@workspace/storybook/story-utils"
 import {
 	ToggleSwitch,
 	type ToggleSwitchProps,
@@ -21,22 +25,6 @@ const ToggleSwitchHost = (props: ToggleSwitchProps) => {
 			}}
 		/>
 	)
-}
-
-const emulateMotion = async (value: "no-preference" | "reduce") => {
-	const { cdp } = await import("vitest/browser")
-	await cdp().send("Emulation.setEmulatedMedia", {
-		features: [{ name: "prefers-reduced-motion", value }],
-	})
-}
-
-const withMotionAllowed = async (run: () => Promise<void>) => {
-	await emulateMotion("no-preference")
-	try {
-		await run()
-	} finally {
-		await emulateMotion("reduce")
-	}
 }
 
 const meta = preview.meta({
