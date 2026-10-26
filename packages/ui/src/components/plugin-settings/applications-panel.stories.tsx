@@ -12,6 +12,8 @@ import {
 	ApplicationsPanel,
 } from "@workspace/ui/components/plugin-settings/applications-panel"
 
+const NEEDS_AUTHORIZATION_DOT = "bg-state-needs-authorization"
+
 const SEARCH_ROW_HEIGHT = 36
 
 const SEARCH_ROW_GAP = 8
@@ -330,12 +332,15 @@ export const NeedsAuthorization = meta.story({
 		docs: {
 			description: {
 				story:
-					"An application that answered that nobody has authorized it yet. Check the blue attention dot beside its label, and that Connect is a target of its own: the keyboard reaches the row first, then Connect, each with its ring.",
+					"An application that answered that nobody has authorized it yet. Check the amber dot beside its label, and that Connect is a target of its own: the keyboard reaches the row first, then Connect, each with its ring.",
 			},
 		},
 	},
 	play: async ({ args, canvas, userEvent }) => {
 		await expect(canvas.getByText("Needs authorization")).toBeVisible()
+		await expect(
+			canvas.getByText("Needs authorization").previousElementSibling,
+		).toHaveClass(NEEDS_AUTHORIZATION_DOT)
 
 		await userEvent.tab()
 		await expect(
@@ -361,6 +366,24 @@ export const NeedsAuthorization = meta.story({
 
 		await expect(args.onConnect).toHaveBeenCalledWith(NEEDS_AUTHORIZATION)
 		await expect(args.onOpen).not.toHaveBeenCalled()
+	},
+})
+
+export const NeedsAuthorizationDark = meta.story({
+	globals: { theme: "dark" },
+	args: NeedsAuthorization.input.args,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The dark theme, for an application nobody has authorized yet. Check that its dot is amber and holds against the dark surface.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		await expect(
+			canvas.getByText("Needs authorization").previousElementSibling,
+		).toHaveClass(NEEDS_AUTHORIZATION_DOT)
 	},
 })
 

@@ -12,6 +12,8 @@ import {
 } from "@workspace/ui/components/settings-menu"
 import { SpaceSquare } from "@workspace/ui/components/space-switcher"
 
+const NEEDS_AUTHORIZATION_DOT = "bg-state-needs-authorization"
+
 const Frame = ({ children }: { children: ReactNode }) => (
 	<div className="flex h-[600px] bg-background p-4">{children}</div>
 )
@@ -204,6 +206,27 @@ export const ApplicationsOpen = meta.story({
 		await expect(
 			within(menu).getByRole("button", { name: "Add an application" }),
 		).toBeVisible()
+		await expect(
+			canvasElement.querySelector('[data-connection="needsAuthorization"]'),
+		).toHaveClass(NEEDS_AUTHORIZATION_DOT)
+	},
+})
+
+export const ApplicationsOpenDark = meta.story({
+	globals: { theme: "dark" },
+	args: ApplicationsOpen.input.args,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The dark theme, Applications opened. Check that GitHub, which needs authorization, carries the amber dot apart from the green of the connected applications.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expect(
+			canvasElement.querySelector('[data-connection="needsAuthorization"]'),
+		).toHaveClass(NEEDS_AUTHORIZATION_DOT)
 	},
 })
 
