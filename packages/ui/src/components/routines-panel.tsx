@@ -76,13 +76,13 @@ const PANEL_SHELL =
 
 const PANEL_SURFACE = "relative min-h-0 border-s border-shell-divider bg-card"
 
-const PANEL_BODY = "gap-4 px-(--shell-inset) pt-1 pb-2"
+const PANEL_BODY = "gap-4 p-(--shell-inset)"
 
 const ROUTINE_SKELETON_LIST =
 	"gap-2 [--skeleton-title:--spacing(28)] [--skeleton-sub:--spacing(24)] [&>:nth-child(3n+2)]:[--skeleton-title:--spacing(35)] [&>:nth-child(3n+2)]:[--skeleton-sub:--spacing(32)] [&>:nth-child(3n)]:[--skeleton-title:--spacing(24.5)] [&>:nth-child(3n)]:[--skeleton-sub:--spacing(27.5)]"
 
 const PANEL_HEADER =
-	"h-12 shrink-0 flex-row items-center pt-0 pe-2.5 pb-0 ps-3.5"
+	"h-12 shrink-0 flex-row items-center px-[calc(var(--shell-inset)+--spacing(2.5))] py-0"
 
 type PanelWidthStyle = CSSProperties & { "--sidebar-width": string }
 
