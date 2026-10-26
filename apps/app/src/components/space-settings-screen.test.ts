@@ -1161,13 +1161,13 @@ const deferredCounts = () => {
 	return { pending, answer }
 }
 
-const companionCardOf = (bot: Bot) =>
-	screen.getByRole("button", { name: new RegExp(`^${bot.name}`) })
+const buttonStartingWith = (label: string) =>
+	screen.getByRole("button", { name: new RegExp(`^${label}`) })
+
+const companionCardOf = (bot: Bot) => buttonStartingWith(bot.name)
 
 const countsLineOf = (bot: Bot) =>
 	within(companionCardOf(bot)).queryByText(COUNTS_LINE)?.textContent ?? null
-
-const countsCalls = () => readCounts.mock.calls
 
 const openCompanionsOf = async (gear: Gear, rowId: string) => {
 	gear.joined.selectSpace(rowId)
@@ -1180,12 +1180,9 @@ const openCompanionsOf = async (gear: Gear, rowId: string) => {
 		}),
 		{ wrapper: createQueryTestWrapper().wrapper },
 	)
-	await screen.findByRole("button", { name: new RegExp(`^${ADA.name}`) })
+	await waitFor(() => companionCardOf(ADA))
 	return rendered
 }
-
-const railButtonOf = (label: string) =>
-	screen.getByRole("button", { name: new RegExp(`^${label}`) })
 
 const otherSpaceOf = (gear: Gear, spaceId: string) => {
 	const other = gear.spaces
@@ -1222,7 +1219,7 @@ describe("SpaceSettingsScreen companion counts", () => {
 			}),
 		)
 		await settle()
-		expect(countsCalls()).toEqual([[gear.home.id]])
+		expect(readCounts.mock.calls).toEqual([[gear.home.id]])
 	})
 
 	it("renders every card without its counts line until the call answers", async () => {
@@ -1267,7 +1264,7 @@ describe("SpaceSettingsScreen companion counts", () => {
 		await openCompanionsOf(gear, gear.home.id)
 
 		act(() => gear.joined.selectSpace(office.id))
-		await waitFor(() => expect(countsCalls()).toHaveLength(2))
+		await waitFor(() => expect(readCounts.mock.calls).toHaveLength(2))
 		await act(async () => {
 			homeCounts.answer([
 				{ botId: ADA.id, skillsCount: 9, applicationsCount: 9 },
@@ -1284,7 +1281,7 @@ describe("SpaceSettingsScreen companion counts", () => {
 		await waitFor(() =>
 			expect(countsLineOf(ADA)).toBe("1 skill · no applications"),
 		)
-		expect(countsCalls()).toEqual([[gear.home.id], [office.id]])
+		expect(readCounts.mock.calls).toEqual([[gear.home.id], [office.id]])
 	})
 
 	it("calls again when the Companions entry opens again", async () => {
@@ -1298,11 +1295,11 @@ describe("SpaceSettingsScreen companion counts", () => {
 			expect(countsLineOf(ADA)).toBe("2 skills · 3 applications"),
 		)
 
-		fireEvent.click(railButtonOf(i18n.t("settings:rail.space")))
+		fireEvent.click(buttonStartingWith(i18n.t("settings:rail.space")))
 		await settle()
-		fireEvent.click(railButtonOf(i18n.t("settings:rail.companions")))
+		fireEvent.click(buttonStartingWith(i18n.t("settings:rail.companions")))
 
-		await waitFor(() => expect(countsCalls()).toHaveLength(2))
-		expect(countsCalls()).toEqual([[gear.home.id], [gear.home.id]])
+		await waitFor(() => expect(readCounts.mock.calls).toHaveLength(2))
+		expect(readCounts.mock.calls).toEqual([[gear.home.id], [gear.home.id]])
 	})
 })

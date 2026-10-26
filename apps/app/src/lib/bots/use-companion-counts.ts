@@ -7,9 +7,9 @@ import { botQueryKeys } from "./bot-query-keys"
 import type { CompanionCounts } from "../bindings"
 import { invoke, isDesktopHost } from "../host/index"
 
-export type CompanionCountsOf = (botId: string) => CompanionCounts | undefined
+type CompanionCountsOf = (botId: string) => CompanionCounts | undefined
 
-const readCompanionCounts = (spaceId: string): Promise<CompanionCounts[]> =>
+const readCompanionCounts = (spaceId: string) =>
 	invoke<CompanionCounts[]>("space_companion_counts", { spaceId })
 
 export const useCompanionCounts = (
