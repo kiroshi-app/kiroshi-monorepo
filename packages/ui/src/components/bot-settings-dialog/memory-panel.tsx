@@ -49,7 +49,7 @@ const MemoryPanel = ({ memory, onSave, isTall = false }: MemoryPanelProps) => {
 				hint={t("dialog.memory.hint")}
 				label={t("dialog.memory.label")}
 				onValueChange={(next) => setEdit({ base: memory, draft: next })}
-				rows={isTall ? undefined : 6}
+				rows={6}
 				value={draft}
 			/>
 

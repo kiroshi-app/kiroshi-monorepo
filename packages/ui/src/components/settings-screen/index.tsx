@@ -57,7 +57,7 @@ const APPLICATION_PAGE = "max-w-140 px-12 py-10"
 
 const COMPANIONS_PAGE = "max-w-188"
 
-const COMPANION_PAGE = "max-w-188 gap-8"
+const COMPANION_SETTINGS_PAGE = "max-w-188 gap-8"
 
 const SECTION_GAP = {
 	tight: "gap-3",
@@ -574,7 +574,7 @@ const CompanionSettingsScreen = ({
 			name={name}
 			onBack={onBack}
 			onEntryChange={onEntryChange}
-			pageClassName={COMPANION_PAGE}
+			pageClassName={COMPANION_SETTINGS_PAGE}
 			pages={pages}
 			rail={rail}
 			sessions={sessions}

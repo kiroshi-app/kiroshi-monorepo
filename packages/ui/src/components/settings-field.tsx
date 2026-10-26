@@ -125,7 +125,7 @@ const SettingsField = ({
 			)}
 			{hint ? (
 				<p
-					className="text-muted-foreground text-xs in-data-companion-page:text-compact in-data-companion-page:leading-4.5"
+					className="text-muted-foreground text-xs in-data-companion-page:text-compact/4.5"
 					id={hintId}
 				>
 					{hint}
