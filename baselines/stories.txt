@@ -1647,7 +1647,9 @@ settings-space-companionssection--hovered-card
 settings-space-companionssection--keyboard-focus
 settings-space-companionssection--long-name-and-title
 settings-space-companionssection--no-companion
+settings-space-companionssection--no-counts
 settings-space-companionssection--one-companion
+settings-space-companionssection--one-count
 settings-space-joinedspacefields--default
 settings-space-joinedspacefields--empty-name
 settings-space-joinedspacefields--long-name

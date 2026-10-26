@@ -20,8 +20,8 @@ type CompanionSummary = {
 	image?: string
 	title?: string
 	instructions: string
-	skillsCount: number
-	applicationsCount: number
+	skillsCount?: number
+	applicationsCount?: number
 	permissionMode: BotPermissionMode
 }
 
@@ -34,6 +34,20 @@ const CompanionCard = ({ companion, onSelect }: CompanionCardProps) => {
 	const { t } = useTranslation("settings")
 	const { t: tBots } = useTranslation("bots")
 	const modeCopy = tBots as (key: `approvals.mode.option.${string}`) => string
+	const skills =
+		companion.skillsCount === undefined
+			? undefined
+			: t("space.companions.skills", { count: companion.skillsCount })
+	const applications =
+		companion.applicationsCount === undefined
+			? undefined
+			: t("space.companions.applications", {
+					count: companion.applicationsCount,
+				})
+	const counts =
+		skills && applications
+			? t("space.companions.counts", { skills, applications })
+			: (skills ?? applications)
 
 	return (
 		<li className="flex min-w-0">
@@ -67,18 +81,9 @@ const CompanionCard = ({ companion, onSelect }: CompanionCardProps) => {
 				>
 					{companion.instructions}
 				</span>
-				<span className="flex w-full min-w-0 items-center justify-between gap-3 border-border border-t pt-3 text-muted-foreground text-xs">
-					<span className="truncate">
-						{t("space.companions.counts", {
-							skills: t("space.companions.skills", {
-								count: companion.skillsCount,
-							}),
-							applications: t("space.companions.applications", {
-								count: companion.applicationsCount,
-							}),
-						})}
-					</span>
-					<span className="shrink-0" data-slot="companion-card-mode">
+				<span className="flex w-full min-w-0 items-center gap-3 border-border border-t pt-3 text-muted-foreground text-xs">
+					{counts && <span className="truncate">{counts}</span>}
+					<span className="ms-auto shrink-0" data-slot="companion-card-mode">
 						{modeCopy(
 							`approvals.mode.option.${companion.permissionMode}.label`,
 						)}
