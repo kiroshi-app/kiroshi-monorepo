@@ -76,11 +76,10 @@ type SettingsScreenLayoutProps = SettingsScreenNavigation & {
 	applications: BotMcpServerItem[]
 }
 
-const pagesOf = (entry: string, sessions: PageSessions) => {
-	if (entry === APPLICATIONS_ENTRY) return sessions.applications.pages
-	if (entry === "skills") return sessions.skills.pages
-	if (entry === HISTORY_TAB) return sessions.history.pages
-	return {}
+const SESSION_OF_ENTRY: Record<string, keyof PageSessions | undefined> = {
+	skills: "skills",
+	[APPLICATIONS_ENTRY]: "applications",
+	[HISTORY_TAB]: "history",
 }
 
 type ApplicationHeaderProps = {
@@ -129,7 +128,8 @@ const SettingsScreenLayout = ({
 	useOverlayScrollbars(column)
 
 	const shown = entries.find(({ value }) => value === entry) ?? entries[0]
-	const page = pages.top ? pagesOf(shown.value, sessions)[pages.top] : null
+	const session = SESSION_OF_ENTRY[shown.value]
+	const page = session && pages.top ? sessions[session].pages[pages.top] : null
 	const isApplicationsShown = shown.value === APPLICATIONS_ENTRY
 	const openedName = sessions.applications.openedName
 	const opened =
