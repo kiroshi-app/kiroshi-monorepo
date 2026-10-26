@@ -63,12 +63,14 @@ type PageSessions = {
 	history: SettingsSession
 }
 
+type SettingsScreenRequestLeave = (navigate: () => void) => void
+
 type SettingsScreenNavigation = {
 	entry: string
 	onEntryChange: (entry: string) => void
 	onBack: () => void
 	backLabel?: string
-	rail?: (requestLeave: (navigate: () => void) => void) => ReactNode
+	rail?: (requestLeave: SettingsScreenRequestLeave) => ReactNode
 }
 
 type SpaceSettingsScreenProps = SettingsScreenNavigation &
@@ -542,6 +544,7 @@ export {
 	type CompanionSettingsScreenProps,
 	SettingsScreen,
 	type SettingsScreenProps,
+	type SettingsScreenRequestLeave,
 	type SpaceSettingsScreenProps,
 	type UserSettingsScreenProps,
 }
