@@ -68,7 +68,7 @@ type SettingsScreenNavigation = {
 	onEntryChange: (entry: string) => void
 	onBack: () => void
 	backLabel?: string
-	rail?: ReactNode
+	rail?: (requestLeave: (navigate: () => void) => void) => ReactNode
 }
 
 type SpaceSettingsScreenProps = SettingsScreenNavigation &
@@ -200,7 +200,7 @@ const SettingsScreenLayout = ({
 			isResizable={false}
 			settingsMenu={
 				<>
-					{rail}
+					{rail?.(leaveThen)}
 					<SettingsMenu
 						avatar={avatar}
 						backLabel={backLabel}

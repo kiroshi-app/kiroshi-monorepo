@@ -70,7 +70,27 @@ const LINEAR_OPEN = {
 	serverConnection: { state: "connected", onDisconnect: fn() },
 } as const
 
-const RAIL = <AppRail selected="conversations" user={{ name: "Ada Martin" }} />
+const RAIL_PRESSES = {
+	onSelectConversations: fn(),
+	onSelectMissions: fn(),
+	onOpenSpaceSettings: fn(),
+	onOpenYou: fn(),
+}
+
+const RAIL: SpaceSettingsScreenProps["rail"] = (requestLeave) => (
+	<AppRail
+		onOpenSpaceSettings={() => requestLeave(RAIL_PRESSES.onOpenSpaceSettings)}
+		onOpenYou={() => requestLeave(RAIL_PRESSES.onOpenYou)}
+		onSelectConversations={() =>
+			requestLeave(RAIL_PRESSES.onSelectConversations)
+		}
+		onSelectMissions={() => requestLeave(RAIL_PRESSES.onSelectMissions)}
+		selected="conversations"
+		user={{ name: "Ada Martin" }}
+	/>
+)
+
+const railIn = () => screen.findByRole("navigation", { name: "Navigation" })
 
 const SpaceSettingsScreen =
 	SettingsScreen as ComponentType<SpaceSettingsScreenProps>
@@ -387,6 +407,68 @@ export const LeavingUnsavedApplicationEdits = meta.story({
 		await expect(
 			within(main).getByRole("heading", { level: 2, name: "Members" }),
 		).toBeVisible()
+	},
+})
+
+export const LeavingUnsavedApplicationEditsByTheRail = meta.story({
+	args: LINEAR_OPEN,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"`LinearApplication` with an edit not yet saved, then the rail's Space settings gear pressed. Check that the screen asks with the dialog's own leave wording before the rail navigates, and that Leave drops the edit and runs the rail's navigation once.",
+			},
+		},
+	},
+	play: async ({ args, userEvent }) => {
+		const menu = await menuIn()
+		const rail = await railIn()
+		const main = screen.getByRole("main")
+		await within(menu).findByRole("button", { name: "Linear Connected" })
+		await userEvent.type(within(main).getByLabelText("Name"), "-desk")
+
+		await userEvent.click(
+			within(rail).getByRole("button", { name: "Space settings" }),
+		)
+		const question = await screen.findByRole("alertdialog", {
+			name: "Leave without saving?",
+		})
+		await expect(RAIL_PRESSES.onOpenSpaceSettings).not.toHaveBeenCalled()
+
+		await userEvent.click(
+			within(question).getByRole("button", { name: "Leave" }),
+		)
+		await expect(RAIL_PRESSES.onOpenSpaceSettings).toHaveBeenCalledTimes(1)
+		await waitFor(() =>
+			expect(within(main).queryByLabelText("Name")).toBeNull(),
+		)
+		await expect(args.onEntryChange).not.toHaveBeenCalled()
+	},
+})
+
+export const LeavesByTheRailWithNothingUnsaved = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Members with nothing unsaved, then each rail entry pressed in turn: Conversations, Missions, the Space settings gear and the avatar. Check that none asks and each runs its navigation at once.",
+			},
+		},
+	},
+	play: async ({ userEvent }) => {
+		const rail = await railIn()
+		const presses = [
+			["Conversations", RAIL_PRESSES.onSelectConversations],
+			["Missions", RAIL_PRESSES.onSelectMissions],
+			["Space settings", RAIL_PRESSES.onOpenSpaceSettings],
+			["Ada Martin", RAIL_PRESSES.onOpenYou],
+		] as const
+
+		for (const [name, navigation] of presses) {
+			await userEvent.click(within(rail).getByRole("button", { name }))
+			await expect(screen.queryByRole("alertdialog")).toBeNull()
+			await expect(navigation).toHaveBeenCalledTimes(1)
+		}
 	},
 })
 
