@@ -19,6 +19,7 @@ import {
 import { AppSidebar } from "@workspace/ui/components/app-sidebar"
 import type { BotBadge } from "@workspace/ui/components/bot-badge"
 import { blotTint } from "@workspace/ui/components/companion-colour"
+import type { Space } from "@workspace/ui/components/space"
 import {
 	UpdateBadge,
 	type UpdateBadgeStatus,
@@ -39,6 +40,12 @@ const ENTRY_NAMES: Record<AppRailPanel, string> = {
 
 const SPACE_SETTINGS = "Space settings"
 
+const CURRENT_SPACE: Space = { id: "vocca", name: "Vocca", colour: "blue" }
+
+const SPACE_LOGO = 26
+
+const SPACE_LOGO_RADIUS = "7px"
+
 const RAIL_WIDTH = 60
 
 const RAIL_BUTTON = 44
@@ -51,7 +58,7 @@ const REMOVED_PANEL = "companions"
 
 const PANELS = Object.keys(ENTRY_NAMES) as AppRailPanel[]
 
-const TOP_GROUP = [...PANELS.map((panel) => ENTRY_NAMES[panel]), SPACE_SETTINGS]
+const TOP_GROUP = [SPACE_SETTINGS, ...PANELS.map((panel) => ENTRY_NAMES[panel])]
 
 const renderRail = (args: AppRailProps) => (
 	<div className="flex h-[32rem] bg-background">
@@ -150,6 +157,29 @@ const iconOf = (entry: HTMLElement) => {
 	return icon
 }
 
+const spaceLogoIn = (canvasElement: HTMLElement) =>
+	slotIn(entryNamed(canvasElement, SPACE_SETTINGS), "space-dot")
+
+const expectSpaceLogoFirstWithoutGear = async (
+	canvasElement: HTMLElement,
+	entryName: string,
+) => {
+	const [first] = railEntriesIn(canvasElement)
+	await expect(first).toHaveAccessibleName(entryName)
+	await expect(first.querySelector("svg")).toBeNull()
+	const logo = slotIn(first, "space-dot")
+	const box = logo.getBoundingClientRect()
+	await expect(box.width).toBe(SPACE_LOGO)
+	await expect(box.height).toBe(SPACE_LOGO)
+	await expect(getComputedStyle(logo).borderTopLeftRadius).toBe(
+		SPACE_LOGO_RADIUS,
+	)
+	await expect(first.querySelector('[data-slot="host-dot"]')).toBeNull()
+	await expect(
+		railIn(canvasElement).querySelectorAll("ul:first-of-type svg"),
+	).toHaveLength(PANELS.length)
+}
+
 const iconColourOf = (entry: HTMLElement) =>
 	getComputedStyle(iconOf(entry)).color
 
@@ -212,9 +242,8 @@ const expectFootLikeIdlePanel = async (
 	const idlePanel = PANELS.find((panel) => panel !== selected)
 	if (!idlePanel) throw new Error("No idle panel entry")
 	const idle = entryNamed(canvasElement, ENTRY_NAMES[idlePanel])
-	const gear = entryNamed(canvasElement, SPACE_SETTINGS)
-	await expect(iconColourOf(gear)).toBe(iconColourOf(idle))
-	for (const entry of [gear, entryNamed(canvasElement, READER.name)]) {
+	const logo = entryNamed(canvasElement, SPACE_SETTINGS)
+	for (const entry of [logo, entryNamed(canvasElement, READER.name)]) {
 		await expect(entry).not.toHaveAttribute("aria-current")
 		await expect(getComputedStyle(entry).color).toBe(
 			getComputedStyle(idle).color,
@@ -372,13 +401,14 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The 60px column of 44px icons down the left edge of the window: the two panels a reader moves between, Conversations then Missions, the space settings gear under them, and the reader at the foot. The rail draws and reports; which panel is open, which settings is open over it and the dot on each entry are props, and each entry reports its own press. An entry is a button named by its panel, the open one marked `aria-current`, and the news it carries is spoken in its name, so a dot never rides on colour alone. While a settings is open, its entry is the current one and no panel entry is.",
+					"The 60px column of 44px icons down the left edge of the window: the current space's logo first, a 26px square in its colour that opens the space settings, then the two panels a reader moves between, Conversations then Missions, and the reader at the foot. The rail draws and reports; which panel is open, which settings is open over it and the dot on each entry are props, and each entry reports its own press. An entry is a button named by its panel, the open one marked `aria-current`, and the news it carries is spoken in its name, so a dot never rides on colour alone. While a settings is open, its entry is the current one and no panel entry is.",
 			},
 		},
 	},
 	args: {
 		selected: OPENING_PANEL,
 		user: READER,
+		space: CURRENT_SPACE,
 		onSelectConversations: fn(),
 		onSelectMissions: fn(),
 		onOpenSpaceSettings: fn(),
@@ -401,7 +431,7 @@ export const Conversations = meta.story({
 		docs: {
 			description: {
 				story:
-					"E1, Conversations. The rail as the app opens it, the current entry beside idle ones. Check the rail is 60px wide and every entry a 44px square on the `radius-lg` corner, that the conversation bubble sits on the 10% fill in the foreground colour while Missions, the gear and the reader stay muted on no fill, that the gear sits directly under Missions, and that the reader's initial alone holds the foot of the rail.",
+					"E1, Conversations. The rail as the app opens it, the current entry beside idle ones. Check the rail is 60px wide and every entry a 44px square on the `radius-lg` corner, that the conversation bubble sits on the 10% fill in the foreground colour while the Space logo, Missions and the reader sit on no fill, that the Space logo sits first, above Conversations, and that the reader's initial alone holds the foot of the rail.",
 			},
 		},
 	},
@@ -413,14 +443,14 @@ export const SpaceSettingsOverConversations = meta.story({
 		docs: {
 			description: {
 				story:
-					"E1, Space settings over Conversations. The space settings open while the Conversations panel stays the one underneath. Check the gear is the only entry marked `aria-current`, on the selected fill with the filled gear, and that Conversations and Missions sit on no fill with their stroked icons. Pick `UserSettingsOverMissions` for the reader's own settings.",
+					"E1, Space settings over Conversations. The space settings open while the Conversations panel stays the one underneath. Check the Space logo is the only entry marked `aria-current`, on the selected fill with its square still in the space colour, and that Conversations and Missions sit on no fill with their stroked icons. Pick `UserSettingsOverMissions` for the reader's own settings.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
 		await expectSettingsOpen(canvasElement, SPACE_SETTINGS)
-		await expect(iconStyleOf(entryNamed(canvasElement, SPACE_SETTINGS))).toBe(
-			"fill",
+		await expect(spaceLogoIn(canvasElement).style.backgroundColor).toBe(
+			blotTint("blue"),
 		)
 	},
 })
@@ -431,7 +461,7 @@ export const UserSettingsOverMissions = meta.story({
 		docs: {
 			description: {
 				story:
-					"E1, User settings over Missions. The reader's own settings open while the Missions panel stays the one underneath. Check the reader's 44px button is the only entry marked `aria-current`, on the selected fill, that the 26px avatar inside it is drawn as it always is, and that Conversations, Missions and the gear sit on no fill with their stroked icons. Pick `SpaceSettingsOverConversations` for the space settings.",
+					"E1, User settings over Missions. The reader's own settings open while the Missions panel stays the one underneath. Check the reader's 44px button is the only entry marked `aria-current`, on the selected fill, that the 26px avatar inside it is drawn as it always is, and that the Space logo, Conversations and Missions sit on no fill with their stroked icons. Pick `SpaceSettingsOverConversations` for the space settings.",
 			},
 		},
 	},
@@ -574,25 +604,55 @@ export const RemovedPanelFallsBackToConversations = meta.story({
 	},
 })
 
-export const SpaceSettingsGearHovered = meta.story({
+export const SpaceLogoHovered = meta.story({
 	args: { dots: { settings: true } },
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The gear under Missions, under the pointer, carrying a dot. Check the tooltip reads Space settings, that the name spoken for the gear is Space settings followed by the news it carries, and that a press opens the space settings.",
+					"The current space's logo, first in the rail, under the pointer, carrying a dot. Check it is a 26px square on a 7px radius filled with the space colour, with no icon and no host dot, that no gear is left in the rail, that the tooltip reads Space settings, that the name spoken for it is Space settings followed by the news it carries, and that a press opens the space settings. Pick `SpaceLogoWithoutSpace` for the logo before a space is known.",
 			},
 		},
 	},
 	play: async ({ args, canvasElement, userEvent }) => {
-		const gear = entryNamed(canvasElement, `${SPACE_SETTINGS}, new activity`)
-		await userEvent.hover(gear)
+		const name = `${SPACE_SETTINGS}, new activity`
+		await expectSpaceLogoFirstWithoutGear(canvasElement, name)
+		const logo = entryNamed(canvasElement, name)
+		await expect(slotIn(logo, "space-dot").style.backgroundColor).toBe(
+			blotTint("blue"),
+		)
+		await expect(slotIn(logo, "app-rail-dot")).toBeVisible()
+		await userEvent.hover(logo)
 		await expect(await screen.findByRole("tooltip")).toHaveTextContent(
 			SPACE_SETTINGS,
 		)
-		await userEvent.click(gear)
+		await userEvent.click(logo)
 		await expect(args.onOpenSpaceSettings).toHaveBeenCalledTimes(1)
 		await expect(args.onOpenYou).not.toHaveBeenCalled()
+	},
+})
+
+export const SpaceLogoWithoutSpace = meta.story({
+	args: { space: undefined },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The rail before the current space is known. Check the logo keeps its 26px square on a 7px radius in the first slot, drawn in the untinted fallback the space dots use rather than any colour, and that it still opens the space settings. Pick `SpaceLogoHovered` for the logo in a space colour.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expectSpaceLogoFirstWithoutGear(canvasElement, SPACE_SETTINGS)
+		const logo = spaceLogoIn(canvasElement)
+		await expect(logo.style.backgroundColor).toBe("")
+		await expect(getComputedStyle(logo).backgroundColor).toBe(
+			tokenStyleIn(
+				railIn(canvasElement),
+				"bg-sidebar-foreground/30",
+				"backgroundColor",
+			),
+		)
 	},
 })
 
@@ -773,17 +833,24 @@ export const KeyboardReach = meta.story({
 	tags: ["test-only"],
 	play: async ({ args, canvasElement, userEvent }) => {
 		await userEvent.tab()
-		const first = entryNamed(canvasElement, "Conversations")
-		await expect(first).toHaveFocus()
-		await expect(first).toHaveAttribute("type", "button")
-		await expect(getComputedStyle(first).boxShadow).not.toBe("none")
+		const logo = entryNamed(canvasElement, SPACE_SETTINGS)
+		await expect(logo).toHaveFocus()
+		await expect(logo).toHaveAttribute("type", "button")
+		await expect(getComputedStyle(logo).boxShadow).not.toBe("none")
+		await expect(await screen.findByRole("tooltip")).toHaveTextContent(
+			SPACE_SETTINGS,
+		)
+		await userEvent.tab()
+		const conversations = entryNamed(canvasElement, "Conversations")
+		await expect(conversations).toHaveFocus()
+		await expect(getComputedStyle(conversations).boxShadow).not.toBe("none")
 		await userEvent.tab()
 		const missions = entryNamed(canvasElement, "Missions")
 		await expect(missions).toHaveFocus()
 		await expect(iconStyleOf(missions)).toBe("stroke")
 		await userEvent.keyboard("{Enter}")
 		await expect(args.onSelectMissions).toHaveBeenCalledTimes(1)
-		for (const entry of railEntriesIn(canvasElement).slice(PANELS.length)) {
+		for (const entry of railEntriesIn(canvasElement).slice(PANELS.length + 1)) {
 			await userEvent.tab()
 			await expect(entry).toHaveFocus()
 			await expect(getComputedStyle(entry).boxShadow).not.toBe("none")
@@ -844,7 +911,7 @@ export const CurrentBesideIdleDark = meta.story({
 		docs: {
 			description: {
 				story:
-					"The rail as the app opens it in dark. Check the conversation bubble sits on the 12% fill in the foreground colour while Missions, the gear and the reader stay muted on no fill, and that hovering Missions draws half the current fill.",
+					"The rail as the app opens it in dark. Check the conversation bubble sits on the 12% fill in the foreground colour while the Space logo, Missions and the reader sit on no fill, and that hovering Missions draws half the current fill.",
 			},
 		},
 	},

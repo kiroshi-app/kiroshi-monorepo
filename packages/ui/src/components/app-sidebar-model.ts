@@ -240,9 +240,7 @@ interface AppSidebarProps
 	onSelectSpace?: (id: string) => void
 	onReorderSpaces?: (ids: string[]) => void
 	onCreateSpace?: () => void
-	onLeaveSpace?: () => void
 	hostBySpaceId?: Record<string, SpaceHost>
-	onShare?: () => void
 	invitations?: SpaceInvitation[]
 	onAcceptInvitation?: SpaceInvitationCallbacks["onAcceptInvitation"]
 	onDeclineInvitation?: SpaceInvitationCallbacks["onDeclineInvitation"]
