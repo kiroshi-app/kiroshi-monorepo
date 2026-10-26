@@ -268,6 +268,7 @@ const mountApp = async (change: StoreChange = (store) => store) => {
 
 afterEach(() => {
 	cleanup()
+	localStorage.clear()
 	vi.useRealTimers()
 	harness.installs = []
 	harness.missions = []

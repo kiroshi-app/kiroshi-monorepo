@@ -207,6 +207,7 @@ export type RosterController = {
 	enter: (entry: RosterEntry) => void
 	select: (id: string) => void
 	selectConversation: (id: string) => void
+	showList: () => void
 	create: () => Promise<void>
 	createFromDraft: (draft: BotDraft) => Promise<Bot>
 	createConversation: (botIds?: string[]) => Promise<Conversation | null>
@@ -253,6 +254,7 @@ type RosterChoice = {
 	lastRowId: string | null
 	chosenBotId: string | null
 	chosenConversationId: string | null
+	isListShown: boolean
 	settingsConversationId: string | null
 	isEditingConversation: boolean
 	hasLoaded: boolean
@@ -264,6 +266,7 @@ const initialRosterChoice: RosterChoice = {
 	lastRowId: null,
 	chosenBotId: null,
 	chosenConversationId: null,
+	isListShown: false,
 	settingsConversationId: null,
 	isEditingConversation: false,
 	hasLoaded: false,
@@ -386,6 +389,9 @@ const choiceOf = ({
 	chosenConversationId: selectedConversationId,
 })
 
+const choosesARow = (fields: Partial<RosterChoice>) =>
+	"chosenBotId" in fields || "chosenConversationId" in fields
+
 const chosenLandingOf = ({
 	chosenBotId,
 	chosenConversationId,
@@ -404,6 +410,9 @@ const landingIn = (
 	rosters: Record<string, Bot[]>,
 	conversationRosters: Record<string, Conversation[]>,
 ): Landing => {
+	if (choice.isListShown) {
+		return NOTHING_SELECTED
+	}
 	const bots = rosterIn(rosters, choice.spaceRowId)
 	const conversations = rosterIn(conversationRosters, choice.spaceRowId)
 	const chosenRowId = choice.chosenBotId ?? choice.chosenConversationId
@@ -679,7 +688,11 @@ export const createRosterController = (
 	}, rosterStateOf)
 
 	const choose = (fields: Partial<RosterChoice>) =>
-		choiceStore.setState({ ...chosen(), ...fields })
+		choiceStore.setState({
+			...chosen(),
+			...(choosesARow(fields) && { isListShown: false }),
+			...fields,
+		})
 
 	const holdRoster = (
 		spaceRowId: string | null,
@@ -1158,6 +1171,17 @@ export const createRosterController = (
 			if (id !== current().selectedConversationId) {
 				catchUpOnLeftConversation()
 				choose({ chosenBotId: null, chosenConversationId: id })
+			}
+		},
+
+		showList: () => {
+			if (!chosen().isListShown) {
+				catchUpOnLeftConversation()
+				choose({
+					chosenBotId: null,
+					chosenConversationId: null,
+					isListShown: true,
+				})
 			}
 		},
 

@@ -9,7 +9,7 @@ export type CompanionSettingsSearch = SettingsSearch & {
 	isFromSpaceSettings?: boolean
 }
 
-const textOf = (value: unknown) =>
+export const textOf = (value: unknown) =>
 	typeof value === "string" ? value : undefined
 
 export const validateSettingsSearch = (

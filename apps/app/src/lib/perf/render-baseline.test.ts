@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 
 import type { QueryClient } from "@tanstack/react-query"
+import { defaultStringifySearch } from "@tanstack/react-router"
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { createElement, Profiler, type ProfilerOnRenderCallback } from "react"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -17,6 +18,8 @@ import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-s
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { type FakeLayout, fakeLayout } from "@/lib/perf/fake-layout"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
+import { writeSpaceTabs } from "@/lib/tabs/tabs-mirror"
+import { spaceTabsOn } from "@/lib/tabs/tabs-model"
 import { readMirror, writeMirror } from "@/lib/user/preferences-mirror"
 
 const harness = vi.hoisted(
@@ -426,6 +429,18 @@ const streamOneTurn = async (
 	await settle(STEP_MS)
 }
 
+const openOnFirstCompanion = async (store: TranscriptStore) => {
+	const [space] = await store.spaces()
+	const [bot] = space ? await store.bots(space.id) : []
+	if (!space || !bot) {
+		throw new Error("no companion to open on")
+	}
+	writeSpaceTabs(
+		space.id,
+		spaceTabsOn(`/${defaultStringifySearch({ bot: bot.id })}`),
+	)
+}
+
 const seedFirstRunDone = () => {
 	writeMirror({ ...readMirror(), firstRunDone: true })
 }
@@ -439,6 +454,7 @@ const mountApp = async (replyFor?: (prompt: string) => string) => {
 	harness.driver = createFakeChatDriver({ stepMs: STEP_MS, replyFor })
 	const watch = watchTurn(harness.driver)
 	await seedRoster(store)
+	await openOnFirstCompanion(store)
 	const { queryClient, wrapper } = createQueryTestWrapper()
 	render(createElement(App), { wrapper })
 	await settle(MOUNT_MS)
@@ -871,6 +887,7 @@ describe("PRF1 render baseline", () => {
 		layout?.restore()
 		layout = null
 		cleanup()
+		localStorage.clear()
 		vi.useRealTimers()
 	})
 
@@ -1000,7 +1017,7 @@ describe("PRF1 render baseline", () => {
 				  },
 				  "grown": 80,
 				  "reopened": {
-				    "commits": 5,
+				    "commits": 6,
 				    "markdownProcessors": 20,
 				    "tasksToLastMessage": 0,
 				  },

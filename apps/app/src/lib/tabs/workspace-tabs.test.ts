@@ -1,0 +1,318 @@
+// @vitest-environment happy-dom
+
+import {
+	createRootRoute,
+	createRoute,
+	createRouter,
+} from "@tanstack/react-router"
+import { act, cleanup, fireEvent, renderHook } from "@testing-library/react"
+import { afterEach, describe, expect, it } from "vitest"
+
+import { useTabKeys } from "./use-tab-keys"
+import { useWorkspaceTabs } from "./use-workspace-tabs"
+import { createWorkspaceTabs, type WorkspaceTabs } from "./workspace-tabs"
+
+import type { ObservedState } from "../conversations/store-contract"
+import { validateThreadSearch } from "../navigation/thread-search"
+
+const SPACE = "space-home"
+
+const OTHER_SPACE = "space-away"
+
+const USER_SETTINGS = "/settings/user"
+
+const routerOn = (tabs: WorkspaceTabs) => {
+	const root = createRootRoute()
+	const list = createRoute({
+		getParentRoute: () => root,
+		path: "/",
+		validateSearch: validateThreadSearch,
+	})
+	const userSettings = createRoute({
+		getParentRoute: () => root,
+		path: USER_SETTINGS,
+	})
+	return createRouter({
+		routeTree: root.addChildren([list, userSettings]),
+		history: tabs.history,
+	})
+}
+
+const tabsOfSpace = (spaceId = SPACE) => {
+	const tabs = createWorkspaceTabs()
+	tabs.showSpace(spaceId)
+	renderHook(() => useTabKeys(tabs))
+	return tabs
+}
+
+const shownHrefs = (tabs: WorkspaceTabs) =>
+	viewOf(tabs).tabs.map((tab) => tab.href)
+
+const viewOf = (tabs: WorkspaceTabs, hostStates = {}, soloThreads = {}) =>
+	renderHook(() =>
+		useWorkspaceTabs({ tabs, hostStates, soloThreads, spaceId: SPACE }),
+	).result.current
+
+const activeHref = (tabs: WorkspaceTabs) => tabs.history.location.href
+
+const pressMod = (key: string) =>
+	act(() => {
+		fireEvent.keyDown(window, { key, metaKey: true })
+	})
+
+const threadOf = (row: string) => `/?conversation=${row}`
+
+const companionOf = (row: string) => `/?bot=${row}`
+
+const NEEDS_YOU: ObservedState = {
+	state: "needs_you",
+	pendingPrompt: null,
+	workingBotIds: [],
+}
+
+afterEach(() => {
+	cleanup()
+	localStorage.clear()
+})
+
+describe("a Space without stored tabs", () => {
+	it("holds one active tab on the empty list", () => {
+		const tabs = tabsOfSpace()
+
+		const view = viewOf(tabs)
+
+		expect(view.tabs).toHaveLength(1)
+		expect(view.activeId).toBe(view.tabs[0]?.id)
+		expect(activeHref(tabs)).toBe("/")
+	})
+})
+
+describe("the tab keys", () => {
+	it("opens an empty-list tab right after the active one on Mod+T", () => {
+		const tabs = tabsOfSpace()
+		tabs.openInNewTab(threadOf("first"))
+		tabs.openInNewTab(threadOf("last"))
+		tabs.select(viewOf(tabs).tabs[1]?.id ?? "")
+
+		pressMod("t")
+
+		expect(shownHrefs(tabs)).toEqual([
+			"/",
+			threadOf("first"),
+			"/",
+			threadOf("last"),
+		])
+		expect(viewOf(tabs).activeId).toBe(viewOf(tabs).tabs[2]?.id)
+	})
+
+	it("closes the active tab on Mod+W and activates its neighbour", () => {
+		const tabs = tabsOfSpace()
+		tabs.openInNewTab(threadOf("first"))
+		tabs.openInNewTab(threadOf("second"))
+		tabs.select(viewOf(tabs).tabs[1]?.id ?? "")
+
+		pressMod("w")
+
+		expect(shownHrefs(tabs)).toEqual(["/", threadOf("second")])
+		expect(activeHref(tabs)).toBe(threadOf("second"))
+	})
+
+	it("keeps a pinned tab open on Mod+W", () => {
+		const tabs = tabsOfSpace()
+		tabs.openInNewTab(threadOf("kept"))
+		tabs.pin(viewOf(tabs).activeId)
+
+		pressMod("w")
+
+		expect(shownHrefs(tabs)).toEqual([threadOf("kept"), "/"])
+		expect(activeHref(tabs)).toBe(threadOf("kept"))
+	})
+
+	it("opens an empty-list tab in place of the last tab closed", () => {
+		const tabs = tabsOfSpace()
+		tabs.history.push(threadOf("only"))
+		const closedId = viewOf(tabs).activeId
+
+		pressMod("w")
+
+		const view = viewOf(tabs)
+		expect(shownHrefs(tabs)).toEqual(["/"])
+		expect(view.activeId).not.toBe(closedId)
+	})
+
+	it("leaves Mod+1 to Mod+9 to the Space switching", () => {
+		const tabs = tabsOfSpace()
+		const before = viewOf(tabs)
+		const event = new KeyboardEvent("keydown", {
+			key: "1",
+			metaKey: true,
+			cancelable: true,
+		})
+
+		act(() => {
+			window.dispatchEvent(event)
+		})
+
+		expect(event.defaultPrevented).toBe(false)
+		expect(viewOf(tabs)).toEqual(before)
+	})
+})
+
+describe("a page already shown", () => {
+	it("selects the tab showing it instead of opening a second one", () => {
+		const tabs = tabsOfSpace()
+		tabs.openInNewTab(threadOf("shown"))
+		const shownId = viewOf(tabs).activeId
+		tabs.openInNewTab(companionOf("other"))
+
+		tabs.openInNewTab(threadOf("shown"))
+
+		expect(viewOf(tabs).tabs).toHaveLength(3)
+		expect(viewOf(tabs).activeId).toBe(shownId)
+	})
+
+	it("selects the tab showing it when the active tab navigates there", async () => {
+		const tabs = tabsOfSpace()
+		const router = routerOn(tabs)
+		await router.load()
+		await router.navigate({ to: USER_SETTINGS })
+		const settingsId = viewOf(tabs).activeId
+		pressMod("t")
+		await router.load()
+
+		await router.navigate({ to: USER_SETTINGS })
+
+		expect(viewOf(tabs).tabs).toHaveLength(2)
+		expect(viewOf(tabs).activeId).toBe(settingsId)
+	})
+})
+
+describe("the history of a tab", () => {
+	it("moves Back and Forward inside the active tab only", async () => {
+		const tabs = tabsOfSpace()
+		const router = routerOn(tabs)
+		await router.load()
+		await router.navigate({ to: USER_SETTINGS })
+		const firstId = viewOf(tabs).activeId
+		pressMod("t")
+		await router.navigate({ to: "/", search: { bot: "nova" } })
+
+		router.history.back()
+		expect(activeHref(tabs)).toBe("/")
+		expect(router.history.canGoBack()).toBe(false)
+		router.history.back()
+		expect(activeHref(tabs)).toBe("/")
+
+		act(() => tabs.select(firstId))
+		await router.load()
+		expect(router.state.location.pathname).toBe(USER_SETTINGS)
+		router.history.back()
+		expect(activeHref(tabs)).toBe("/")
+		router.history.forward()
+		expect(activeHref(tabs)).toBe(USER_SETTINGS)
+		router.history.forward()
+		expect(activeHref(tabs)).toBe(USER_SETTINGS)
+	})
+})
+
+describe("the tab actions", () => {
+	it("orders pinned tabs before unpinned ones whatever the reorder", () => {
+		const tabs = tabsOfSpace()
+		tabs.openInNewTab(threadOf("one"))
+		tabs.openInNewTab(threadOf("two"))
+		const [list, one, two] = viewOf(tabs).tabs.map((tab) => tab.id)
+		tabs.pin(two ?? "")
+
+		tabs.reorder([one ?? "", list ?? "", two ?? ""])
+
+		expect(shownHrefs(tabs)).toEqual([threadOf("two"), threadOf("one"), "/"])
+		tabs.unpin(two ?? "")
+		expect(viewOf(tabs).tabs.every((tab) => !tab.isPinned)).toBe(true)
+	})
+
+	it("closes the others and keeps the pinned ones", () => {
+		const tabs = tabsOfSpace()
+		tabs.openInNewTab(threadOf("pinned"))
+		tabs.pin(viewOf(tabs).activeId)
+		tabs.openInNewTab(threadOf("closed"))
+		tabs.openInNewTab(threadOf("kept"))
+
+		tabs.closeOthers(viewOf(tabs).activeId)
+
+		expect(shownHrefs(tabs)).toEqual([threadOf("pinned"), threadOf("kept")])
+		expect(activeHref(tabs)).toBe(threadOf("kept"))
+	})
+})
+
+describe("the tabs of a Space", () => {
+	it("keeps the tabs of the Space left and shows the ones of the Space reached", () => {
+		const tabs = tabsOfSpace()
+		tabs.openInNewTab(threadOf("home"))
+
+		tabs.showSpace(OTHER_SPACE)
+		expect(shownHrefs(tabs)).toEqual(["/"])
+
+		tabs.showSpace(SPACE)
+		expect(shownHrefs(tabs)).toEqual(["/", threadOf("home")])
+		expect(activeHref(tabs)).toBe(threadOf("home"))
+	})
+
+	it("restores the open tabs, their order, the pinned ones and the active one after a reload", () => {
+		const before = tabsOfSpace()
+		before.openInNewTab(threadOf("pinned"))
+		before.pin(viewOf(before).activeId)
+		before.openInNewTab(companionOf("nova"))
+		before.openInNewTab(USER_SETTINGS)
+		before.select(viewOf(before).tabs[1]?.id ?? "")
+		cleanup()
+
+		const after = tabsOfSpace()
+
+		expect(
+			viewOf(after).tabs.map(({ href, isPinned }) => ({ href, isPinned })),
+		).toEqual([
+			{ href: threadOf("pinned"), isPinned: true },
+			{ href: companionOf("nova"), isPinned: false },
+			{ href: USER_SETTINGS, isPinned: false },
+			{ href: "/", isPinned: false },
+		])
+		expect(activeHref(after)).toBe(companionOf("nova"))
+	})
+
+	it("drops a restored tab whose conversation, companion or settings target is absent", () => {
+		const before = tabsOfSpace()
+		before.openInNewTab(threadOf("gone"))
+		before.openInNewTab("/settings/companion/vanished")
+		before.openInNewTab(companionOf("nova"))
+		cleanup()
+		const after = tabsOfSpace()
+
+		after.dropAbsentRestored(SPACE, (id) => id === "nova")
+
+		expect(shownHrefs(after)).toEqual(["/", companionOf("nova")])
+	})
+})
+
+describe("the Needs you flag", () => {
+	it("flags the tabs showing a conversation or companion whose row needs you", () => {
+		const tabs = tabsOfSpace()
+		tabs.openInNewTab(threadOf("asking"))
+		tabs.openInNewTab(threadOf("quiet"))
+		tabs.openInNewTab(companionOf("nova"))
+
+		const view = viewOf(
+			tabs,
+			{ asking: NEEDS_YOU, "nova-solo": NEEDS_YOU },
+			{ "nova-solo": { spaceId: SPACE, botId: "nova" } },
+		)
+
+		expect(
+			Object.fromEntries(view.tabs.map((tab) => [tab.href, tab.needsYou])),
+		).toEqual({
+			"/": false,
+			[threadOf("asking")]: true,
+			[threadOf("quiet")]: false,
+			[companionOf("nova")]: true,
+		})
+	})
+})

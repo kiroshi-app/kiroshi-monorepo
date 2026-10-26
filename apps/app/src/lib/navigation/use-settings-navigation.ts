@@ -3,7 +3,9 @@ import { useMemo } from "react"
 
 import type { CompanionSettingsSearch, SettingsSearch } from "./settings-search"
 
-export const useSettingsNavigation = () => {
+import { heldThreadOf, type ThreadHolder } from "../tabs/use-tab-thread-sync"
+
+export const useSettingsNavigation = (holder: ThreadHolder) => {
 	const navigate = useNavigate()
 	const router = useRouter()
 
@@ -17,11 +19,19 @@ export const useSettingsNavigation = () => {
 		}
 
 		return {
-			back: () => backOr(() => void navigate({ to: "/", replace: true })),
+			back: () =>
+				backOr(
+					() =>
+						void navigate({
+							to: "/",
+							search: heldThreadOf(holder),
+							replace: true,
+						}),
+				),
 			backToUserSettings: () =>
 				backOr(() => void navigate({ to: "/settings/user", replace: true })),
 			openConversations: () => {
-				void navigate({ to: "/" })
+				void navigate({ to: "/", search: heldThreadOf(holder) })
 			},
 			openSpaceSettings: (spaceId: string, search: SettingsSearch = {}) => {
 				void navigate({
@@ -54,7 +64,7 @@ export const useSettingsNavigation = () => {
 				})
 			},
 		}
-	}, [navigate, router])
+	}, [navigate, router, holder])
 }
 
 export type SettingsNavigation = ReturnType<typeof useSettingsNavigation>

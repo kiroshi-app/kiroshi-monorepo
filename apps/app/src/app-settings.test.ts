@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { createMemoryHistory, RouterProvider } from "@tanstack/react-router"
+import { RouterProvider } from "@tanstack/react-router"
 import {
 	act,
 	cleanup,
@@ -80,6 +80,7 @@ vi.mock("@/lib/chat/create-driver", async () => {
 
 const { App } = await import("@/App")
 const { createWorkspaceRouter } = await import("@/workspace-router")
+const { createWorkspaceTabs } = await import("@/lib/tabs/workspace-tabs")
 
 const SETTLE_MS = 200
 
@@ -89,6 +90,7 @@ const DRAFT = "half a thought for the room"
 
 afterEach(() => {
 	cleanup()
+	localStorage.clear()
 	vi.useRealTimers()
 	vi.mocked(isDesktopHost).mockReturnValue(false)
 	writeMirror({ ...readMirror(), sidebarWidth: null })
@@ -145,9 +147,7 @@ const mountApp = async (install?: Installs) => {
 
 const mountRouterAt = async (path: string) => {
 	await seedStore()
-	const router = createWorkspaceRouter(
-		createMemoryHistory({ initialEntries: [path] }),
-	)
+	const router = createWorkspaceRouter(createWorkspaceTabs(path))
 	render(createElement(RouterProvider, { router }), {
 		wrapper: createQueryTestWrapper().wrapper,
 	})
@@ -483,27 +483,31 @@ it("opens the conversations and every settings screen at the width set on a sett
 	cleanup()
 	await mountApp()
 
-	expect(shownSettingsOf()).toBeNull()
+	expect(shownSettingsOf()?.subtitle).toBe("user")
 	expect(sidebarWidthOf()).toBe(widened)
 })
 
-it("shows the settings of the new Space when the Space switches from the Space settings", async () => {
+it("shows the tabs of the Space reached, and the Space settings again on the way back", async () => {
 	const opened = await mountApp(secondSpace)
 	await press(gearOf())
 	expect(screen.getByDisplayValue(opened.name)).toBeTruthy()
 
 	await switchSpaceTo(VOCCA)
+	expect(shownSettingsOf()).toBeNull()
 
+	await switchSpaceTo(opened.name)
 	expect(shownSettingsOf()?.subtitle).toBe("space")
-	expect(screen.getByDisplayValue(VOCCA)).toBeTruthy()
+	expect(screen.getByDisplayValue(opened.name)).toBeTruthy()
 })
 
-it("keeps the user settings when the Space switches from them", async () => {
-	await mountApp(secondSpace)
+it("keeps the user settings in the tab of the Space left", async () => {
+	const opened = await mountApp(secondSpace)
 	await press(avatarOf())
 
 	await switchSpaceTo(VOCCA)
+	expect(shownSettingsOf()).toBeNull()
 
+	await switchSpaceTo(opened.name)
 	expect(shownSettingsOf()?.subtitle).toBe("user")
 })
 

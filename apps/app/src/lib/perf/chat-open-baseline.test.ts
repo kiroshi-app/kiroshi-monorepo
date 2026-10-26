@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 
+import { defaultStringifySearch } from "@tanstack/react-router"
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { createElement, Profiler, type ProfilerOnRenderCallback } from "react"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -20,6 +21,8 @@ import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-s
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { type FakeLayout, fakeLayout } from "@/lib/perf/fake-layout"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
+import { writeSpaceTabs } from "@/lib/tabs/tabs-mirror"
+import { spaceTabsOn } from "@/lib/tabs/tabs-model"
 import { readMirror, writeMirror } from "@/lib/user/preferences-mirror"
 
 const harness = vi.hoisted(
@@ -233,6 +236,18 @@ const seedFirstRunDone = () => {
 	writeMirror({ ...readMirror(), firstRunDone: true })
 }
 
+const openOnFirstCompanion = async (store: TranscriptStore) => {
+	const [space] = await store.spaces()
+	const [bot] = space ? await store.bots(space.id) : []
+	if (!space || !bot) {
+		throw new Error("no companion to open on")
+	}
+	writeSpaceTabs(
+		space.id,
+		spaceTabsOn(`/${defaultStringifySearch({ bot: bot.id })}`),
+	)
+}
+
 const mountApp = async ({
 	delayMs = 0,
 	pageBotIndex,
@@ -250,6 +265,7 @@ const mountApp = async ({
 			isPage,
 		)
 	}
+	await openOnFirstCompanion(store)
 	const trace = traceStore(store, delayMs)
 	harness.store = trace.store
 	harness.driver = createFakeChatDriver({ stepMs: STEP_MS })
@@ -385,6 +401,7 @@ describe("PRF5 chat open baseline", () => {
 		layout?.restore()
 		layout = null
 		cleanup()
+		localStorage.clear()
 		vi.useRealTimers()
 	})
 
@@ -437,7 +454,7 @@ describe("PRF5 chat open baseline", () => {
 		expect(await measureOpenings(CALL_DELAY_MS)).toMatchInlineSnapshot(`
 			{
 			  "busyOpen": {
-			    "commits": 7,
+			    "commits": 8,
 			    "elapsedMs": 10,
 			    "storeCalls": [
 			      "mainChat",
@@ -449,7 +466,7 @@ describe("PRF5 chat open baseline", () => {
 			    "writesAhead": 0,
 			  },
 			  "coldOpen": {
-			    "commits": 6,
+			    "commits": 7,
 			    "elapsedMs": 10,
 			    "storeCalls": [
 			      "mainChat",
@@ -474,7 +491,7 @@ describe("PRF5 chat open baseline", () => {
 		expect(await measurePage()).toMatchInlineSnapshot(`
 			{
 			  "commitsToFirstRow": 5,
-			  "commitsToSettled": 12,
+			  "commitsToSettled": 13,
 			  "highlightCalls": 10,
 			  "highlighterBuilds": 0,
 			  "markdownProcessors": 32,

@@ -1,3 +1,6 @@
+import { useRouter } from "@tanstack/react-router"
+import { useMemo } from "react"
+
 import { useApplicationScopes } from "./use-application-scopes"
 import { useRosterLines } from "./use-roster-lines"
 import { useRosterView } from "./use-roster-view"
@@ -21,6 +24,8 @@ import {
 	useOpenJoinedHost,
 	useSwitcherSpaces,
 } from "../spaces/use-joined-spaces"
+import { useTabKeys } from "../tabs/use-tab-keys"
+import { useTabThreadSync } from "../tabs/use-tab-thread-sync"
 import { useSpaceTint } from "../theme/use-space-tint"
 import { aboutFieldsOf } from "../updater/about-fields"
 import { useRunningVersion } from "../updater/use-running-version"
@@ -28,8 +33,15 @@ import { useWhatsNew } from "../updater/use-whats-new"
 
 export const useWorkspaceAssembly = () => {
 	const openSettings = useOpenSettings()
-	const navigation = useSettingsNavigation()
 	const core = useWorkspaceCore(openSettings)
+	const threadHolder = useMemo(
+		() => ({
+			roster: core.roster.controller,
+			openedMission: core.openedMission,
+		}),
+		[core.roster.controller, core.openedMission],
+	)
+	const navigation = useSettingsNavigation(threadHolder)
 	const drivers = useWorkspaceDrivers(core)
 	const scopes = useApplicationScopes(core)
 	useSpaceTint(scopes.spaceTint)
@@ -50,6 +62,19 @@ export const useWorkspaceAssembly = () => {
 		rosterView.rosteredSpaceId &&
 		core.roster.controller.hostSpaceIdOf(rosterView.rosteredSpaceId)
 	const loadSpaces = useSpaceLoading({ core, scopes })
+	const { tabs } = useRouter().options.context
+	useTabKeys(tabs)
+	useTabThreadSync({
+		tabs,
+		roster: core.roster.controller,
+		selected: core.roster.state,
+		openedMission: core.openedMission,
+		openSpaceId: scopes.openRowId,
+		isOpenSpaceRostered:
+			rosterView.hasLoaded &&
+			rosterView.rosteredSpaceId === scopes.openRowId &&
+			!core.roster.state.isRosterPending,
+	})
 	useWorkspaceSubscriptions({ core, drivers, rosterView })
 	const rosterLines = useRosterLines({
 		core,
@@ -122,6 +147,7 @@ export const useWorkspaceAssembly = () => {
 		sidebarMissions,
 		sidebarTab,
 		switcher,
+		tabs,
 		whatsNew,
 	}
 }

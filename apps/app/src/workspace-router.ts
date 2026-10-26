@@ -1,9 +1,7 @@
 import {
-	createMemoryHistory,
-	createRootRoute,
+	createRootRouteWithContext,
 	createRoute,
 	createRouter,
-	type RouterHistory,
 } from "@tanstack/react-router"
 
 import { ConversationsScreen } from "@/components/conversations-screen"
@@ -17,12 +15,24 @@ import {
 	validateCompanionSettingsSearch,
 	validateSettingsSearch,
 } from "@/lib/navigation/settings-search"
+import { validateThreadSearch } from "@/lib/navigation/thread-search"
+import {
+	createWorkspaceTabs,
+	type WorkspaceTabs,
+} from "@/lib/tabs/workspace-tabs"
 
-const rootRoute = createRootRoute({ component: WorkspaceLayout })
+type WorkspaceRouterContext = {
+	tabs: WorkspaceTabs
+}
+
+const rootRoute = createRootRouteWithContext<WorkspaceRouterContext>()({
+	component: WorkspaceLayout,
+})
 
 const conversationsRoute = createRoute({
 	getParentRoute: () => rootRoute,
 	path: "/",
+	validateSearch: validateThreadSearch,
 	component: ConversationsScreen,
 })
 
@@ -54,9 +64,8 @@ const routeTree = rootRoute.addChildren([
 	companionSettingsRoute,
 ])
 
-export const createWorkspaceRouter = (
-	history: RouterHistory = createMemoryHistory({ initialEntries: ["/"] }),
-) => createRouter({ routeTree, history })
+export const createWorkspaceRouter = (tabs = createWorkspaceTabs()) =>
+	createRouter({ routeTree, history: tabs.history, context: { tabs } })
 
 declare module "@tanstack/react-router" {
 	interface Register {
