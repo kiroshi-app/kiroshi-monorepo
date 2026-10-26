@@ -75,25 +75,6 @@ const showThread = (
 	}
 }
 
-type RenderedSelection = Pick<TabThreadSync, "roster" | "openedMission"> & {
-	rendered: SelectedRow
-	opened: OpenedMission | null
-}
-
-const isRenderCurrent = ({
-	roster,
-	openedMission,
-	rendered,
-	opened,
-}: RenderedSelection) => {
-	const { selectedBotId, selectedConversationId } = roster.getState()
-	return (
-		selectedBotId === rendered.selectedBotId &&
-		selectedConversationId === rendered.selectedConversationId &&
-		openedMission.getState() === opened
-	)
-}
-
 const presentRowIdsIn = (roster: RosterController) => {
 	const { bots, conversations } = roster.getState()
 	return new Set([...bots, ...conversations].map((row) => row.id))
@@ -152,13 +133,16 @@ export const useTabThreadSync = ({
 			showThread(page.thread, { roster, openedMission, spaceId: readySpaceId })
 			return
 		}
-		const rendered = { selectedBotId, selectedConversationId }
-		if (!isRenderCurrent({ roster, openedMission, rendered, opened })) {
-			return
-		}
-		const shownThread = shownThreadOf(rendered, opened)
-		if (!sameThread(shownThread, page.thread)) {
-			void navigate({ to: "/", search: shownThread })
+		const renderedThread = shownThreadOf(
+			{ selectedBotId, selectedConversationId },
+			opened,
+		)
+		const isRenderStale = !sameThread(
+			renderedThread,
+			heldThreadOf({ roster, openedMission }),
+		)
+		if (!isRenderStale && !sameThread(renderedThread, page.thread)) {
+			void navigate({ to: "/", search: renderedThread })
 		}
 	}, [
 		tabs,

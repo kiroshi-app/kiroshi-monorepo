@@ -12,8 +12,9 @@ const PRESS_BY_KEY = new Map<string, TabKeyPress>([
 ])
 
 const isModOnly = (event: KeyboardEvent) => {
-	const isModHeld = usesCommandKey() ? event.metaKey : event.ctrlKey
-	const isOtherModHeld = usesCommandKey() ? event.ctrlKey : event.metaKey
+	const [isModHeld, isOtherModHeld] = usesCommandKey()
+		? [event.metaKey, event.ctrlKey]
+		: [event.ctrlKey, event.metaKey]
 	return isModHeld && !isOtherModHeld && !event.altKey && !event.shiftKey
 }
 
