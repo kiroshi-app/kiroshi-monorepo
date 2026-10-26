@@ -169,12 +169,12 @@ afterEach(() => {
 })
 
 describe("the switcher rows", () => {
-	it("lists the joined spaces after the local ones, named by the link", () => {
+	it("lists the joined spaces after the local ones, named by the link and painted with their colour", () => {
 		const local = [{ id: "home", name: "Home", colour: null, position: 0 }]
 
 		expect(switcherSpacesOf(local as never, [GARAGE])).toEqual([
 			local[0],
-			{ id: GARAGE_ROW, name: "Garage" },
+			{ id: GARAGE_ROW, name: "Garage", colour: "green" },
 		])
 	})
 
@@ -219,7 +219,7 @@ describe("the switcher rows", () => {
 
 		expect(switcherSpacesOf(local as never, [hostPersonal])).toEqual([
 			local[0],
-			{ id: GARAGE_ROW, name: "Garage" },
+			{ id: GARAGE_ROW, name: "Garage", colour: "green" },
 		])
 		expect(
 			hostMarksOf([hostPersonal], { [GARAGE.id]: { status: "up" } }),

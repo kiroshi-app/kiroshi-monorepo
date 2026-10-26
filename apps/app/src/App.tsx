@@ -47,7 +47,7 @@ export function App() {
 	const core = useWorkspaceCore()
 	const drivers = useWorkspaceDrivers(core)
 	const scopes = useApplicationScopes(core)
-	useSpaceTint(scopes.selectedSpace?.colour)
+	useSpaceTint(scopes.spaceTint)
 	const rosterView = useRosterView({
 		core,
 		drivers,
@@ -152,7 +152,7 @@ export function App() {
 				<WorkspaceSettings about={about} scopes={scopes} {...railProps} />
 			) : (
 				<WorkspaceShell
-					spaceTint={scopes.selectedSpace?.colour}
+					spaceTint={scopes.spaceTint}
 					width={preferences.sidebarWidth ?? undefined}
 					onWidthChange={overlay.changeSidebarWidth}
 					isResizable={isSidebarResizable()}
