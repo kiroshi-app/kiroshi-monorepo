@@ -946,6 +946,7 @@ const bots = {
 		confirm: {
 			title: "Supprimer {{name}} ?",
 		},
+		failed: "Impossible de supprimer ce compagnon. Réessayez.",
 	},
 } as const
 

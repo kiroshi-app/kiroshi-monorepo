@@ -1404,6 +1404,7 @@ settings-bot-companionsettingsscreen--approvals
 settings-bot-companionsettingsscreen--back-to-companions
 settings-bot-companionsettingsscreen--back-to-conversations
 settings-bot-companionsettingsscreen--danger-zone
+settings-bot-companionsettingsscreen--delete-failed
 settings-bot-companionsettingsscreen--general
 settings-bot-companionsettingsscreen--history
 settings-bot-companionsettingsscreen--instructions

@@ -924,6 +924,7 @@ const bots = {
 		confirm: {
 			title: "Delete {{name}}?",
 		},
+		failed: "Couldn’t delete this companion. Retry.",
 	},
 } as const
 
