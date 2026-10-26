@@ -655,9 +655,12 @@ it("keeps the companion screen open on the Danger zone and raises a notice when 
 
 	expect(
 		raisedNoticeTitles().filter(
-			(title) => title === i18n.t("bots:spaces.remove.failed"),
+			(title) => title === i18n.t("bots:danger.failed"),
 		),
 	).toHaveLength(1)
+	expect(raisedNoticeTitles()).not.toContain(
+		i18n.t("bots:spaces.remove.failed"),
+	)
 	expect(companionScreenOf(ATLAS)).toEqual({
 		...ON_GENERAL,
 		entry: i18n.t("bots:dialog.tab.danger"),
