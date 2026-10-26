@@ -21,6 +21,8 @@ pub mod joined_spaces;
 pub mod json;
 pub mod logging;
 pub mod mcp_oauth;
+#[cfg(any(target_os = "macos", test))]
+mod menu;
 pub mod missions;
 pub mod notifications;
 pub mod plugins;
@@ -49,6 +51,7 @@ use commands::builder;
 pub fn run() {
 	descriptors::raise_open_file_limit();
 	tauri::Builder::default()
+		.enable_macos_default_menu(false)
 		.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
 			window_controls::raise_main(app);
 		}))
@@ -82,6 +85,8 @@ pub fn run() {
 			if let Err(failure) = logging::install(app.handle()) {
 				eprintln!("the log file could not be opened: {failure}");
 			}
+			#[cfg(target_os = "macos")]
+			menu::install(app.handle())?;
 			app.manage(db::bootstrap(app.handle()));
 			app.manage(crypto::commands::load(app.handle()));
 			app.manage(crypto::commands::space_keys(app.handle()));
