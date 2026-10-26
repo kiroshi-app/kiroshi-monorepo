@@ -24,6 +24,7 @@ struct ShellView: View {
             }
         }
         .tint(.primary)
+        .environment(\.spaceAccent, SpaceAccent(tint: store.currentSpace?.colour))
         .environment(store.pictures)
         .environment(account.consent)
         .task(id: RelayFollow(spaceId: store.currentSpaceId, isInForeground: isInForeground)) {
