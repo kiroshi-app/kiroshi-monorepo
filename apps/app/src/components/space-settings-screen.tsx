@@ -1,10 +1,13 @@
+import type { ReactNode } from "react"
+
 import type { EnvironmentWrite } from "@workspace/ui/components/environment-panel"
+import { SettingsScreen } from "@workspace/ui/components/settings-screen"
 import type { SpaceSettingsValue } from "@workspace/ui/components/space-settings"
-import { SpaceSettingsDialog } from "@workspace/ui/components/space-settings-dialog"
 import {
 	MembersPanel,
 	type MembersPanelProps,
 } from "@workspace/ui/components/space-settings-dialog/members-panel"
+import { SPACE_ENTRY } from "@workspace/ui/components/space-settings-dialog/use-space-settings"
 
 import { signedInAccountIdOf } from "@/lib/account/use-account"
 import { toEnvironmentRows } from "@/lib/environment/environment-rows"
@@ -16,8 +19,6 @@ import type { ApplicationScopes } from "@/lib/workspace/use-application-scopes"
 import type { SettingsPanels } from "@/lib/workspace/use-settings-panels"
 import type { WorkspaceCore } from "@/lib/workspace/use-workspace-core"
 
-const SPACE_TAB = "space"
-
 type MemberView = Pick<MembersPanelProps, "viewerId" | "blockedBy">
 
 const memberViewOf = (
@@ -28,28 +29,29 @@ const memberViewOf = (
 	blockedBy: isHostOffline ? "hostOffline" : undefined,
 })
 
-type SpaceSettingsHostProps = {
+type SpaceSettingsScreenProps = {
 	core: WorkspaceCore
 	panels: SettingsPanels
+	rail: ReactNode
 	scopes: ApplicationScopes
 }
 
-export const SpaceSettingsHost = ({
+export const SpaceSettingsScreen = ({
 	core,
 	panels,
+	rail,
 	scopes,
-}: SpaceSettingsHostProps) => {
+}: SpaceSettingsScreenProps) => {
 	const { account, joinedSpaces, spaceEnvironment, spaceMcpServers, spaces } =
 		core
 	const {
 		applicationToOpenOn,
-		closeSettingsTab,
+		closeSettings,
 		openAccountSettings,
 		spaceHistory,
 		spaceSkills,
 	} = panels
 	const {
-		isSpaceEditing,
 		selectedSpace,
 		selectedSpaceId,
 		serverEnvironmentSection,
@@ -58,17 +60,16 @@ export const SpaceSettingsHost = ({
 		settingsTab,
 		spaceApplications,
 	} = scopes
-	const editedSpace =
-		isSpaceEditing && selectedSpace
-			? { id: selectedSpace.id, name: selectedSpace.name }
-			: null
+	const editedSpace = selectedSpace
+		? { id: selectedSpace.id, name: selectedSpace.name }
+		: null
 	const joinedSpace = openJoinedSpaceOf(
 		joinedSpaces.state.joinedSpaces,
 		joinedSpaces.state.openId,
 		selectedSpaceId,
 	)
 	const editedJoinedSpace =
-		isSpaceEditing && joinedSpace && selectedSpaceId
+		joinedSpace && selectedSpaceId
 			? { id: selectedSpaceId, name: joinedSpace.name }
 			: null
 	const hosting = useHosting(editedSpace)
@@ -86,22 +87,17 @@ export const SpaceSettingsHost = ({
 		return null
 	}
 
-	const close = () => {
-		closeSettingsTab()
-		spaces.controller.setSettingsOpen(false)
-	}
-
 	const closeIfDeleted = (spaceId: string) => {
 		const isStillHeld = spaces.controller
 			.getState()
 			.spaces.some((space) => space.id === spaceId)
 		if (!isStillHeld) {
-			close()
+			closeSettings()
 		}
 	}
 
 	const signIn = () => {
-		close()
+		closeSettings()
 		openAccountSettings()
 	}
 
@@ -122,6 +118,11 @@ export const SpaceSettingsHost = ({
 			: {}
 
 	const sharedProps = {
+		target: "space" as const,
+		entry: settingsTab ?? SPACE_ENTRY,
+		onEntryChange: setSettingsTab,
+		onBack: closeSettings,
+		rail,
 		environment: toEnvironmentRows(spaceEnvironment.entries),
 		hasEnvironmentFailedToRead: spaceEnvironment.hasFailedToRead,
 		isEnvironmentPending: spaceEnvironment.isPending,
@@ -131,8 +132,6 @@ export const SpaceSettingsHost = ({
 			kind: "space",
 			id: selectedSpaceId,
 		}),
-		tab: settingsTab ?? SPACE_TAB,
-		onTabChange: setSettingsTab,
 		onMcpServerOpen: (name: string | null) =>
 			setOpenedMcpServer(
 				name
@@ -145,19 +144,17 @@ export const SpaceSettingsHost = ({
 			),
 		serverEnvironment: serverEnvironmentSection,
 		history: spaceHistory,
-		onClose: close,
 		onEnvironmentDelete: spaceEnvironment.remove,
 		onEnvironmentSet: ({ name, value }: EnvironmentWrite) =>
 			spaceEnvironment.set(name, value),
 		onValueChange: (value: SpaceSettingsValue) =>
 			spaces.controller.describe(selectedSpaceId, value),
-		open: isSpaceEditing,
 		...spaceSkills,
 	}
 
 	if (selectedSpace) {
 		return (
-			<SpaceSettingsDialog
+			<SettingsScreen
 				{...sharedProps}
 				{...hostingProps}
 				{...membersPropsOf(selectedSpace.name)}
@@ -179,14 +176,16 @@ export const SpaceSettingsHost = ({
 	}
 
 	return joinedSpace ? (
-		<SpaceSettingsDialog
+		<SettingsScreen
 			{...sharedProps}
 			{...membersPropsOf(
 				joinedSpace.name,
 				memberViewOf(isHostOffline, signedInAccountIdOf(account.state)),
 			)}
 			host={joinedSpace.hostUrl}
-			onLeave={() => joinedSpaces.controller.leave(joinedSpace.id).then(close)}
+			onLeave={() =>
+				joinedSpaces.controller.leave(joinedSpace.id).then(closeSettings)
+			}
 			value={{ name: joinedSpace.name }}
 		/>
 	) : null

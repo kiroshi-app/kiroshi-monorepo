@@ -16,7 +16,7 @@ import { NoticeSurface } from "@workspace/ui/components/notice-surface"
 import { MembersPanel } from "@workspace/ui/components/space-settings-dialog/members-panel"
 import { i18n } from "@workspace/ui/lib/i18n"
 
-import { SpaceSettingsHost } from "@/components/space-settings-host"
+import { SpaceSettingsScreen } from "@/components/space-settings-screen"
 import { APPLICATIONS_TAB } from "@/lib/applications/connection-settings"
 import {
 	type AccountState,
@@ -167,7 +167,10 @@ const SpaceSettingsHarness = ({
 	} as unknown as WorkspaceCore
 	const panels = {
 		applicationToOpenOn: () => undefined,
-		closeSettingsTab: () => setSettingsTab(undefined),
+		closeSettings: () => {
+			setSettingsTab(undefined)
+			spaces.setSettingsOpen(false)
+		},
 		openAccountSettings,
 		openSpaceMembers: () => {
 			setSettingsTab("members")
@@ -177,7 +180,6 @@ const SpaceSettingsHarness = ({
 		spaceSkills: { skills: [] },
 	} as unknown as SettingsPanels
 	const scopes = {
-		isSpaceEditing: spacesState.isSettingsOpen,
 		selectedSpace: openLocalSpaceOf(
 			spacesState.spaces,
 			openRowIdOf(joinedState, selectedSpaceId),
@@ -191,24 +193,37 @@ const SpaceSettingsHarness = ({
 	return createElement(
 		Fragment,
 		null,
-		createElement(SpaceSettingsHost, { core, panels, scopes }),
+		spacesState.isSettingsOpen
+			? createElement(SpaceSettingsScreen, {
+					core,
+					panels,
+					rail: null,
+					scopes,
+				})
+			: null,
 		createElement(NoticeSurface),
 	)
 }
 
+const SETTINGS_MENU = i18n.t("settings:screen.menu")
+
+const settingsMenuOf = () =>
+	screen.queryByRole("navigation", { name: SETTINGS_MENU, hidden: true })
+
 const openSettingsOf = (gear: Gear, rowId: string, openedTab?: string) => {
 	gear.joined.selectSpace(rowId)
 	gear.spaces.setSettingsOpen(true)
-	render(createElement(SpaceSettingsHarness, { ...gear, openedTab }), {
+	return render(createElement(SpaceSettingsHarness, { ...gear, openedTab }), {
 		wrapper: createQueryTestWrapper().wrapper,
-	})
-	return screen.getByRole("dialog")
+	}).container
 }
 
 const confirmLeave = async (dialog: HTMLElement) => {
 	const leaveAction = i18n.t("common:spaces.leave.action")
 	fireEvent.click(
-		within(dialog).getByRole("tab", { name: i18n.t("settings:rail.danger") }),
+		within(dialog).getByRole("button", {
+			name: i18n.t("settings:rail.danger"),
+		}),
 	)
 	fireEvent.click(
 		await within(dialog).findByRole("button", { name: leaveAction }),
@@ -222,7 +237,9 @@ const confirmLeave = async (dialog: HTMLElement) => {
 const confirmDelete = async (dialog: HTMLElement) => {
 	const deleteAction = i18n.t("settings:space.danger.delete")
 	fireEvent.click(
-		within(dialog).getByRole("tab", { name: i18n.t("settings:rail.danger") }),
+		within(dialog).getByRole("button", {
+			name: i18n.t("settings:rail.danger"),
+		}),
 	)
 	fireEvent.click(
 		await within(dialog).findByRole("button", { name: deleteAction }),
@@ -239,13 +256,17 @@ afterEach(() => {
 	vi.clearAllMocks()
 })
 
-describe("SpaceSettingsHost on a joined space", () => {
+describe("SpaceSettingsScreen on a joined space", () => {
 	it("opens the joined mode with the space name and host, without the local-only parts", async () => {
 		const gear = await gearWithGarage()
 
 		const dialog = openSettingsOf(gear, GARAGE_ROW)
 
-		expect(within(dialog).getByRole("definition").textContent).toBe("Garage")
+		expect(
+			within(dialog).getByText("Garage", {
+				selector: "[data-slot=settings-menu-name]",
+			}),
+		).toBeTruthy()
 		expect(within(dialog).queryByDisplayValue("Garage")).toBeNull()
 		expect(within(dialog).getByDisplayValue(GARAGE.hostUrl)).toBeTruthy()
 		for (const localOnly of [
@@ -262,7 +283,11 @@ describe("SpaceSettingsHost on a joined space", () => {
 		const gear = await gearWithGarage()
 		const dialog = openSettingsOf(gear, GARAGE_ROW)
 
-		expect(within(dialog).getByRole("definition").textContent).toBe("Garage")
+		expect(
+			within(dialog).getByText("Garage", {
+				selector: "[data-slot=settings-menu-name]",
+			}),
+		).toBeTruthy()
 		expect(within(dialog).queryByDisplayValue("Garage")).toBeNull()
 		expect(gear.joined.getState().joinedSpaces).toEqual([GARAGE])
 	})
@@ -274,9 +299,7 @@ describe("SpaceSettingsHost on a joined space", () => {
 		await confirmLeave(dialog)
 
 		expect(gear.transport.remove).toHaveBeenCalledWith(GARAGE.id)
-		await waitFor(() =>
-			expect(screen.queryByRole("dialog", { hidden: true })).toBeNull(),
-		)
+		await waitFor(() => expect(settingsMenuOf()).toBeNull())
 		expect(gear.joined.getState().joinedSpaces).toEqual([])
 		const [firstLocal] = gear.spaces.getState().spaces
 		expect(gear.spaces.getState().selectedSpaceId).toBe(firstLocal?.id)
@@ -287,16 +310,16 @@ describe("SpaceSettingsHost on a joined space", () => {
 		const dialog = openSettingsOf(gear, GARAGE_ROW, APPLICATIONS_TAB)
 
 		await confirmLeave(dialog)
-		await waitFor(() =>
-			expect(screen.queryByRole("dialog", { hidden: true })).toBeNull(),
-		)
+		await waitFor(() => expect(settingsMenuOf()).toBeNull())
 		act(() => gear.spaces.setSettingsOpen(true))
 
-		const reopened = await screen.findByRole("dialog")
+		const reopened = await screen.findByRole("navigation", {
+			name: SETTINGS_MENU,
+		})
 		expect(
-			within(reopened).getByRole("tab", {
+			within(reopened).getByRole("button", {
 				name: i18n.t("settings:rail.space"),
-				selected: true,
+				current: "page",
 			}),
 		).toBeTruthy()
 	})
@@ -316,11 +339,11 @@ describe("SpaceSettingsHost on a joined space", () => {
 		expect(screen.queryByText("disk full")).toBeNull()
 		expect(gear.joined.getState().joinedSpaces).toEqual([GARAGE])
 		expect(gear.spaces.getState().selectedSpaceId).toBe("garage")
-		expect(screen.getByRole("dialog", { hidden: true })).toBeTruthy()
+		expect(settingsMenuOf()).toBeTruthy()
 	})
 })
 
-describe("SpaceSettingsHost on a local space", () => {
+describe("SpaceSettingsScreen on a local space", () => {
 	it("opens the local mode with its colour and transfer actions", async () => {
 		const gear = await gearWithGarage()
 
@@ -343,16 +366,16 @@ describe("SpaceSettingsHost on a local space", () => {
 		const dialog = openSettingsOf(gear, gear.home.id, APPLICATIONS_TAB)
 
 		await confirmDelete(dialog)
-		await waitFor(() =>
-			expect(screen.queryByRole("dialog", { hidden: true })).toBeNull(),
-		)
+		await waitFor(() => expect(settingsMenuOf()).toBeNull())
 		act(() => gear.spaces.setSettingsOpen(true))
 
-		const reopened = await screen.findByRole("dialog")
+		const reopened = await screen.findByRole("navigation", {
+			name: SETTINGS_MENU,
+		})
 		expect(
-			within(reopened).getByRole("tab", {
+			within(reopened).getByRole("button", {
 				name: i18n.t("settings:rail.space"),
-				selected: true,
+				current: "page",
 			}),
 		).toBeTruthy()
 	})
@@ -364,20 +387,19 @@ const openShareOf = async (gear: Gear, rowId: string) => {
 	const openAccountSettings = vi.fn()
 	gear.joined.selectSpace(rowId)
 	gear.spaces.setSettingsOpen(true)
-	render(
+	const dialog = render(
 		createElement(SpaceSettingsHarness, { ...gear, openAccountSettings }),
 		{
 			wrapper: createQueryTestWrapper().wrapper,
 		},
-	)
-	const dialog = screen.getByRole("dialog")
+	).container
 	fireEvent.click(
-		await within(dialog).findByRole("tab", { name: MEMBERS_TAB_NAME }),
+		await within(dialog).findByRole("button", { name: MEMBERS_TAB_NAME }),
 	)
 	return { dialog, openAccountSettings }
 }
 
-describe("SpaceSettingsHost hosting on the desktop", () => {
+describe("SpaceSettingsScreen hosting on the desktop", () => {
 	const hostingSwitchOf = (dialog: HTMLElement) =>
 		within(dialog).getByRole("switch", {
 			name: i18n.t("settings:space.hosting.label", { name: "Home" }),
@@ -410,9 +432,7 @@ describe("SpaceSettingsHost hosting on the desktop", () => {
 		)
 
 		expect(openAccountSettings).toHaveBeenCalledOnce()
-		await waitFor(() =>
-			expect(screen.queryByRole("dialog", { hidden: true })).toBeNull(),
-		)
+		await waitFor(() => expect(settingsMenuOf()).toBeNull())
 	})
 
 	it("leaves the switch off and raises the H6 notice when the start fails", async () => {
@@ -477,14 +497,18 @@ describe("SpaceSettingsHost hosting on the desktop", () => {
 		expect(hostingSwitchOf(dialog).getAttribute("aria-checked")).toBe("false")
 	})
 
-	it("mounts no Hosting tab", async () => {
+	it("mounts no Hosting entry", async () => {
 		vi.mocked(isDesktopHost).mockReturnValue(true)
 		vi.mocked(commands.hostingState).mockResolvedValue({ kind: "online" })
 		const gear = await gearWithGarage()
 
-		const { dialog } = await openShareOf(gear, gear.home.id)
+		await openShareOf(gear, gear.home.id)
 
-		expect(within(dialog).queryByRole("tab", { name: /hosting/i })).toBeNull()
+		expect(
+			within(settingsMenuOf() as HTMLElement).queryByRole("button", {
+				name: /hosting/i,
+			}),
+		).toBeNull()
 	})
 
 	it("opens on the Members tab when Share asks for it", async () => {
@@ -495,9 +519,9 @@ describe("SpaceSettingsHost hosting on the desktop", () => {
 		const dialog = openSettingsOf(gear, gear.home.id, "members")
 
 		expect(
-			await within(dialog).findByRole("tab", {
+			await within(dialog).findByRole("button", {
 				name: MEMBERS_TAB_NAME,
-				selected: true,
+				current: "page",
 			}),
 		).toBeTruthy()
 		expect(await waitFor(() => hostingSwitchOf(dialog))).toBeTruthy()
@@ -603,7 +627,7 @@ const hostRefusesRemoval = (answers: Record<string, unknown>) =>
 		return answers[command] as never
 	})
 
-describe("SpaceSettingsHost members on the desktop", () => {
+describe("SpaceSettingsScreen members on the desktop", () => {
 	const hostOnline = () => {
 		vi.mocked(isDesktopHost).mockReturnValue(true)
 		vi.mocked(commands.hostingState).mockResolvedValue({ kind: "online" })
@@ -640,7 +664,9 @@ describe("SpaceSettingsHost members on the desktop", () => {
 		).toBeTruthy()
 		expect(within(dialog).queryByText(shareLabel)).toBeNull()
 		fireEvent.click(
-			within(dialog).getByRole("tab", { name: i18n.t("settings:rail.space") }),
+			within(dialog).getByRole("button", {
+				name: i18n.t("settings:rail.space"),
+			}),
 		)
 		await waitFor(() =>
 			expect(within(dialog).queryByText(shareLabel)).toBeNull(),
