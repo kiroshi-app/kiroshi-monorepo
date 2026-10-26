@@ -64,7 +64,24 @@ Spell the tag as a literal: the CSF indexer reads `tags` statically and rejects 
 
 ### Stories under the default motion preference
 
-The `storybook` vitest project emulates `prefers-reduced-motion: reduce` for every story. A story that proves the default case sets `parameters: { motionPreference: "no-preference" }`: under vitest, the `beforeEach` of `preview.tsx` switches the browser to that preference before the render and back to `reduce` after the play. The Storybook UI keeps the reader's own preference.
+The `storybook` vitest project emulates `prefers-reduced-motion: reduce` for every story. A story that proves the default case switches the browser to `no-preference` inside its play, through the Chrome DevTools Protocol, and back to `reduce` in a `finally` block, so a failed assertion never leaks the preference into the next story. The play returns early outside the browser runner, so the Storybook UI keeps the reader's own preference:
+
+```tsx
+const emulateMotion = async (value: "no-preference" | "reduce") => {
+	const { cdp } = await import("vitest/browser")
+	await cdp().send("Emulation.setEmulatedMedia", {
+		features: [{ name: "prefers-reduced-motion", value }],
+	})
+}
+
+if (!isInBrowserRunner()) return
+await emulateMotion("no-preference")
+try {
+	await expect(getComputedStyle(control).transitionProperty).toBe("none")
+} finally {
+	await emulateMotion("reduce")
+}
+```
 
 ## 2. Story names
 

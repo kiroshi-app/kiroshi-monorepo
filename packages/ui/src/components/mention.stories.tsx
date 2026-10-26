@@ -2,7 +2,12 @@ import type { ReactNode } from "react"
 import { expect, fireEvent, fn, screen, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { shown, slotIn, slotsIn } from "@workspace/storybook/story-utils"
+import {
+	isInBrowserRunner,
+	shown,
+	slotIn,
+	slotsIn,
+} from "@workspace/storybook/story-utils"
 import {
 	CONVERSATION_BOTS,
 	LONG_NAMED_BOTS,
@@ -526,6 +531,22 @@ const COLOUR_PROPERTY =
 
 const MOTION_UTILITY = /(^|:)!?(transition|duration)(-|!|$)|\[transition/
 
+const emulateMotion = async (value: "no-preference" | "reduce") => {
+	const { cdp } = await import("vitest/browser")
+	await cdp().send("Emulation.setEmulatedMedia", {
+		features: [{ name: "prefers-reduced-motion", value }],
+	})
+}
+
+const withMotionAllowed = async (run: () => Promise<void>) => {
+	await emulateMotion("no-preference")
+	try {
+		await run()
+	} finally {
+		await emulateMotion("reduce")
+	}
+}
+
 const colourTransitionsOf = (element: HTMLElement) => {
 	const style = getComputedStyle(element)
 	const durations = style.transitionDuration.split(", ")
@@ -542,7 +563,6 @@ const colourTransitionsOf = (element: HTMLElement) => {
 export const CompanionSelectOnPillHoveredWithMotion = meta.story({
 	tags: ["test-only"],
 	parameters: {
-		motionPreference: "no-preference",
 		docs: {
 			description: {
 				story: `The same mention for a reader who left the motion preference at its default, the one case the reduced-motion test browser cannot see. The pointer cannot rest on the chip under the test runner, so the play reads the transition the chip carries into its hover, press and selection: check that the tint deepens on hover in a single frame, with no fade, exactly as it does under reduced motion. ${SELECT_NOT_YET_RENDERED}`,
@@ -553,14 +573,17 @@ export const CompanionSelectOnPillHoveredWithMotion = meta.story({
 	play: async ({ canvasElement }) => {
 		const pill = pillIn(canvasElement)
 
-		await expect(
-			window.matchMedia("(prefers-reduced-motion: no-preference)").matches,
-		).toBe(true)
-		await expect(pill).toHaveClass("hover:bg-current/20")
-		await expect(colourTransitionsOf(pill)).toEqual([])
-		await expect(
-			[...pill.classList].filter((name) => MOTION_UTILITY.test(name)),
-		).toEqual([])
+		if (!isInBrowserRunner()) return
+		await withMotionAllowed(async () => {
+			await expect(
+				window.matchMedia("(prefers-reduced-motion: no-preference)").matches,
+			).toBe(true)
+			await expect(pill).toHaveClass("hover:bg-current/20")
+			await expect(colourTransitionsOf(pill)).toEqual([])
+			await expect(
+				[...pill.classList].filter((name) => MOTION_UTILITY.test(name)),
+			).toEqual([])
+		})
 	},
 })
 

@@ -12,7 +12,6 @@ import {
 import { I18nProvider } from "@workspace/ui/components/i18n-provider"
 import { prepareHighlighter } from "@workspace/ui/lib/code-highlight"
 
-import { emulateStoryMotionPreference } from "./motion-preference"
 import { THEME_CLASS_NAMES, ThemedDocsContainer } from "./themed-docs-container"
 
 prepareHighlighter()
@@ -44,7 +43,6 @@ const withThemeLayout: Decorator = (Story, context) => {
 export default definePreview({
 	addons: [addonDocs(), addonA11y(), addonThemes()],
 	tags: ["autodocs"],
-	beforeEach: emulateStoryMotionPreference,
 	decorators: [
 		withThemeByClassName<ReactRenderer>({
 			themes: THEME_CLASS_NAMES,
