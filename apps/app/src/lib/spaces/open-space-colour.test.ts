@@ -101,7 +101,7 @@ const mountTintedWorkspace = async () => {
 		initialProps: {
 			spaces,
 			joined,
-			onCommit: (tint: Tint) => committedTints.push(tint),
+			onCommit: (tint) => committedTints.push(tint),
 		},
 	})
 
