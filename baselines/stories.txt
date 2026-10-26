@@ -1107,12 +1107,17 @@ navigation-searchresultrow--themes-chat-solo
 navigation-searchresultrow--with-badge-while-active
 navigation-settingsmenu--applications-open
 navigation-settingsmenu--applications-open-dark
+navigation-settingsmenu--companions-count
+navigation-settingsmenu--companions-count-dark
+navigation-settingsmenu--companions-count-selected
 navigation-settingsmenu--connecting-space-dark
 navigation-settingsmenu--danger-selected
 navigation-settingsmenu--danger-selected-dark
 navigation-settingsmenu--default
+navigation-settingsmenu--header-alignment
 navigation-settingsmenu--space-sections
 navigation-settingsmenu--states
+navigation-settingsmenu--states-dark
 navigation-settingspushedpage--controlled
 navigation-settingspushedpage--default
 navigation-settingspushedpage--measured-narrow
