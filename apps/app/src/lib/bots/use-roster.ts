@@ -1,6 +1,7 @@
 import {
 	hashKey,
 	InfiniteQueryObserver,
+	QueryObserver,
 	useInfiniteQuery,
 	useQuery,
 	useQueryClient,
@@ -106,12 +107,16 @@ const useObservedRosters = (
 
 	useEffect(() => {
 		const ids: string[] = JSON.parse(rosteredIds)
-		const stops = ids.map((spaceRowId) =>
+		const stops = ids.flatMap((spaceRowId) => [
 			new InfiniteQueryObserver(
 				queryClient,
 				controller.rosterQuery(spaceRowId),
 			).subscribe(() => undefined),
-		)
+			new QueryObserver(
+				queryClient,
+				controller.soloStatesQuery(spaceRowId),
+			).subscribe(() => undefined),
+		])
 		return () => {
 			for (const stop of stops) {
 				stop()

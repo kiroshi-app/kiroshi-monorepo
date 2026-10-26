@@ -27,6 +27,7 @@ import type {
 	RosterPin,
 	RuntimeSession,
 	Section,
+	SoloState,
 	Space,
 	SpacePreferences,
 	SuggestedBot,
@@ -380,6 +381,9 @@ export const conversationStore: TranscriptStore = {
 			{ spaceId, cursor, limit },
 			{ signal },
 		),
+
+	conversationSoloStates: (spaceId: string, signal?: AbortSignal) =>
+		invoke<SoloState[]>("conversation_solo_states", { spaceId }, { signal }),
 
 	createConversation: ({
 		spaceId,

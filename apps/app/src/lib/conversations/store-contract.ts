@@ -37,6 +37,7 @@ export type {
 	Skill as BotSkill,
 	SkillDraft as BotSkillDraft,
 	SkillFront as BotSkillFront,
+	SoloState,
 	Space,
 	SpaceError,
 	SpacePreferences,

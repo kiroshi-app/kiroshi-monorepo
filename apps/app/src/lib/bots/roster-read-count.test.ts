@@ -34,6 +34,7 @@ const LOCAL = { spaceRowId: "personal", spaceId: "personal" }
 
 const COMMANDS: Record<string, string> = {
 	conversationPage: "conversation_page",
+	conversationSoloStates: "conversation_solo_states",
 	loadPage: "conversation_message_page",
 	mainChat: "conversation_main_chat",
 }
@@ -121,6 +122,7 @@ it.each([
 		await settle()
 
 		expect(counted.countOf("conversation_page")).toBe(1)
+		expect(counted.countOf("conversation_solo_states")).toBe(1)
 		expect(counted.countOf("conversation_message_page")).toBe(0)
 		expect(counted.countOf("conversation_main_chat")).toBe(0)
 		expect(roster.getState().bots).toHaveLength(size.bots)
@@ -129,25 +131,27 @@ it.each([
 	},
 )
 
-it("resolves the solo thread of a bot beyond the loaded pages only when that bot is opened", async () => {
+it("resolves the solo threads of bots beyond the loaded pages with one solo states read and no main chat read", async () => {
 	const counted = countedCallsOn(
 		await storeOfSize({ conversations: 35, bots: 6 }),
 	)
 
 	const roster = await mountRosterOver(counted.store)
 	await settle()
-	const opened = roster.getState().selectedBotId
+	const botIds = roster.getState().bots.map(({ id }) => id)
 
 	expect(counted.countOf("conversation_page")).toBe(1)
-	expect(counted.countOf("conversation_main_chat")).toBe(1)
-	expect(soloBotIdsOf(roster)).toEqual([opened])
+	expect(counted.countOf("conversation_solo_states")).toBe(1)
+	expect(counted.countOf("conversation_main_chat")).toBe(0)
+	expect(soloBotIdsOf(roster).toSorted()).toEqual(botIds.toSorted())
 
+	const opened = roster.getState().selectedBotId
 	const next = roster.getState().bots.find(({ id }) => id !== opened)
 	act(() => roster.select(next?.id ?? ""))
 	await settle()
 
-	expect(counted.countOf("conversation_main_chat")).toBe(2)
-	expect(soloBotIdsOf(roster).toSorted()).toEqual([opened, next?.id].toSorted())
+	expect(counted.countOf("conversation_solo_states")).toBe(1)
+	expect(counted.countOf("conversation_main_chat")).toBe(0)
 })
 
 const withLatestFirst = (store: TranscriptStore) => {
