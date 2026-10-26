@@ -30,8 +30,10 @@ import { useFocusFirstInvalid } from "@workspace/ui/hooks/use-focus-first-invali
 import { usePendingSubmit } from "@workspace/ui/hooks/use-pending-submit"
 import { cn } from "@workspace/ui/lib/utils"
 
-const QUESTION_PANEL_CLASS =
-	"flex w-full flex-col gap-3 rounded-[24px] border border-border bg-muted p-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
+const QUESTION_SURFACE_CLASS =
+	"w-full rounded-[24px] border border-border bg-muted p-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
+
+const QUESTION_PANEL_CLASS = cn("flex flex-col gap-3", QUESTION_SURFACE_CLASS)
 
 const QUESTION_SEGMENTS_CLASS =
 	"relative scrollbar-hide max-w-full justify-start gap-0.5 self-start overflow-x-auto rounded-[11px] bg-border p-0.75 group-data-horizontal/tabs:h-fit"
@@ -502,41 +504,43 @@ const WaitingBar = ({
 	className,
 }: WaitingBarProps) => {
 	const { t } = useTranslation("chat")
+	const titleId = useId()
 	const questionId = useId()
 
 	return (
-		<div
-			className={cn("w-full px-6 py-2", className)}
+		<button
+			aria-describedby={`${titleId} ${questionId}`}
+			aria-label={t("toolQuestion.waiting.answer")}
+			className={cn(
+				QUESTION_SURFACE_CLASS,
+				"flex cursor-pointer items-center gap-2.5 text-start hover:bg-border active:bg-border",
+				className,
+			)}
 			data-slot="tool-question-waiting"
+			onClick={onExpand}
+			type="button"
 		>
-			<div className="flex h-12.5 items-center gap-2.5 rounded-full border border-question-bar-border bg-question-bar py-2 ps-4 pe-2 shadow-[0_1px_3px_rgb(0_0_0/6%)] dark:shadow-[0_1px_3px_rgb(0_0_0/50%)]">
-				<span
-					aria-hidden="true"
-					className="grid size-4 shrink-0 place-items-center rounded-full bg-warning font-bold text-[11px] text-background leading-none"
-				>
-					{t("toolQuestion.waiting.mark")}
-				</span>
-				<p className="min-w-0 truncate font-medium text-compact text-foreground leading-4.5">
-					{companionName
-						? t("toolQuestion.waiting.title", { name: companionName })
-						: t("toolQuestion.waiting.unnamedTitle")}
-				</p>
-				<p
-					className="min-w-0 flex-1 truncate text-compact text-muted-foreground leading-4.5"
-					id={questionId}
-				>
-					{question}
-				</p>
-				<Button
-					aria-describedby={questionId}
-					className={cn(QUESTION_INVERSE_PILL_CLASS, "px-3.5")}
-					onClick={onExpand}
-					type="button"
-				>
-					{t("toolQuestion.waiting.answer")}
-				</Button>
-			</div>
-		</div>
+			<span
+				aria-hidden="true"
+				className="grid size-4 shrink-0 place-items-center rounded-full bg-warning font-bold text-[11px] text-background leading-none"
+			>
+				{t("toolQuestion.waiting.mark")}
+			</span>
+			<span
+				className="min-w-0 truncate font-medium text-compact text-foreground leading-4.5"
+				id={titleId}
+			>
+				{companionName
+					? t("toolQuestion.waiting.title", { name: companionName })
+					: t("toolQuestion.waiting.unnamedTitle")}
+			</span>
+			<span
+				className="min-w-0 flex-1 truncate text-compact text-muted-foreground leading-4.5"
+				id={questionId}
+			>
+				{question}
+			</span>
+		</button>
 	)
 }
 

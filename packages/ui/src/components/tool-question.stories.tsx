@@ -605,7 +605,7 @@ export const WaitingBar = meta.story({
 		a11y: A11Y_SIDE_BY_SIDE_TWIN_LANDMARKS,
 		docs: {
 			description: {
-				story: `Artboard 3.1: the panel folded into its waiting bar, drawn by the same component while \`minimised\` is true. ${ARTBOARD}A pill bordered in #333335 in dark and in the border colour in light. An amber question mark, who is waiting, then the question on one clamped line, and Answer, which calls \`onExpand\`. A screen reader reaches the title as text before Answer, and Answer is described by the question.`,
+				story: `The panel folded into its waiting bar, drawn by the same component while \`minimised\` is true. ${ARTBOARD}The bar wears the surface of the open panel, its radius, border, \`muted\` background and padding, flush with the composer slot so its edges stay put when it unfolds. An amber question mark, who is waiting, then the question on one clamped line. The whole bar is one button named Answer and described by the title and the question: a press, Enter or Space calls \`onExpand\`, hover and press switch the surface to the \`border\` token without a colour transition, and keyboard focus draws the ring of the open panel.`,
 			},
 		},
 	},
@@ -614,39 +614,61 @@ export const WaitingBar = meta.story({
 		await expect(bars).toHaveLength(2)
 		await expect(within(canvasElement).queryByRole("form")).toBeNull()
 
-		for (const bar of bars) {
-			const strip = bar.firstElementChild as HTMLElement
-			const question = within(bar).getByText(PLAN_QUESTION.question)
-			const title = within(bar).getByText("Shoto is waiting on your answer")
-			const answer = within(bar).getByRole("button", {
-				name: chat.toolQuestion.waiting.answer,
-			})
-			await expect(title).toBeVisible()
-			await expect(answer).toHaveAccessibleDescription(PLAN_QUESTION.question)
+		for (const [index, bar] of bars.entries()) {
+			const style = getComputedStyle(bar)
 			await expect(
-				title.compareDocumentPosition(answer) &
-					Node.DOCUMENT_POSITION_FOLLOWING,
-			).toBeTruthy()
-			await expect(backgroundOf(strip)).toBe(
-				tokenStyleIn(strip, "bg-question-bar", "backgroundColor"),
+				within(canvasElement).getAllByRole("button", {
+					name: chat.toolQuestion.waiting.answer,
+				})[index],
+			).toBe(bar)
+			await expect(bar.tagName).toBe("BUTTON")
+			await expect(bar.querySelector("button, a, input, [tabindex]")).toBeNull()
+			await expect(bar).toHaveAccessibleDescription(
+				`Shoto is waiting on your answer ${PLAN_QUESTION.question}`,
 			)
-			await expect(getComputedStyle(strip).borderTopColor).toBe(
-				isInDarkTheme(bar)
-					? "rgb(51, 51, 53)"
-					: tokenStyleIn(strip, "border-border", "borderTopColor"),
+			await expect(backgroundOf(bar)).toBe(
+				tokenStyleIn(bar, "bg-muted", "backgroundColor"),
 			)
-			await expect(backgroundOf(strip.firstElementChild as HTMLElement)).toBe(
-				tokenStyleIn(strip, "bg-warning", "backgroundColor"),
+			await expect(style.borderTopColor).toBe(
+				tokenStyleIn(bar, "border-border", "borderTopColor"),
 			)
-			await expect(getComputedStyle(question).whiteSpace).toBe("nowrap")
+			await expect(style.borderTopLeftRadius).toBe("24px")
+			await expect(style.padding).toBe("12px")
+			await expect(style.boxShadow).toBe("none")
+			await expect(style.transitionDuration).toBe("0s")
+			await expect(bar.parentElement).toBe(
+				within(canvasElement).getAllByTestId("space")[index],
+			)
+			await expect(backgroundOf(bar.firstElementChild as HTMLElement)).toBe(
+				tokenStyleIn(bar, "bg-warning", "backgroundColor"),
+			)
+			await expect(
+				getComputedStyle(within(bar).getByText(PLAN_QUESTION.question))
+					.whiteSpace,
+			).toBe("nowrap")
 		}
 
-		await userEvent.click(
-			within(bars[0] as HTMLElement).getByRole("button", {
-				name: chat.toolQuestion.waiting.answer,
-			}),
-		)
+		const bar = bars[0] as HTMLElement
+		await userEvent.click(bar)
 		await expect(args.onExpand).toHaveBeenCalledTimes(1)
+
+		bar.blur()
+		await userEvent.tab()
+		await expect(bar).toHaveFocus()
+		await expect(bar.matches(":focus-visible")).toBe(true)
+		await waitFor(() =>
+			expect(getComputedStyle(bar).boxShadow).toContain(
+				`${tokenStyleIn(bar, "text-ring/30", "color")} 0px 0px 0px 3px`,
+			),
+		)
+		await expect(getComputedStyle(bar).borderTopColor).toBe(
+			tokenStyleIn(bar, "border-ring", "borderTopColor"),
+		)
+
+		await userEvent.keyboard("{Enter}")
+		await expect(args.onExpand).toHaveBeenCalledTimes(2)
+		await userEvent.keyboard(" ")
+		await expect(args.onExpand).toHaveBeenCalledTimes(3)
 	},
 })
 
@@ -683,7 +705,7 @@ export const AnswerPressed = meta.story({
 		a11y: A11Y_SIDE_BY_SIDE_TWIN_LANDMARKS,
 		docs: {
 			description: {
-				story: `Artboard 3.2: the panel back after Answer on the waiting bar was pressed with the pointer. ${ARTBOARD}Focus lands on option 1, which draws the 3px ring in the \`ring\` token at 30%, flush with the row and without an outline, while every option stays unpicked, Send keeps its unpicked look and the thread does not scroll. The play presses Answer with a real pointer in the Vitest browser runner, where focus moved by script after a click does not match \`:focus-visible\` on its own, then picks option 2 with its digit key, and Arrow Down brings focus onto the chosen row, which draws the same ring over the bubble colour.`,
+				story: `Artboard 3.2: the panel back after the waiting bar was pressed with the pointer, its left and right edges where the bar's were. ${ARTBOARD}Focus lands on option 1, which draws the 3px ring in the \`ring\` token at 30%, flush with the row and without an outline, while every option stays unpicked, Send keeps its unpicked look and the thread does not scroll. The play presses the bar with a real pointer in the Vitest browser runner, where focus moved by script after a click does not match \`:focus-visible\` on its own, then picks option 2 with its digit key, and Arrow Down brings focus onto the chosen row, which draws the same ring over the bubble colour.`,
 			},
 		},
 	},
@@ -693,15 +715,18 @@ export const AnswerPressed = meta.story({
 			real ? real.click(element) : userEvent.click(element)
 
 		for (const index of [0, 1]) {
-			const bar = slotsIn(canvasElement, "tool-question-waiting")[0]
+			const bar = slotsIn(
+				canvasElement,
+				"tool-question-waiting",
+			)[0] as HTMLElement
+			const folded = boxOf(bar)
 			const scrollTop = document.scrollingElement?.scrollTop
-			await press(
-				within(bar as HTMLElement).getByRole("button", {
-					name: chat.toolQuestion.waiting.answer,
-				}),
-			)
+			await press(bar)
 
-			const panel = within(panelsIn(canvasElement)[index] as HTMLElement)
+			const card = panelsIn(canvasElement)[index] as HTMLElement
+			await expect(boxOf(card).left).toBe(folded.left)
+			await expect(boxOf(card).right).toBe(folded.right)
+			const panel = within(card)
 			const rows = panel.getAllByRole("radio")
 			const first = rows[0] as HTMLElement
 			await expect(first).toHaveFocus()
@@ -746,23 +771,36 @@ export const WaitingBarNarrow = meta.story({
 		docs: {
 			description: {
 				story:
-					"The waiting bar of artboard 3.1 in a 320px column. The question gives way first and holds one clamped line, the title truncates only once the question has no room left, and Answer keeps its full size inside the column.",
+					"The waiting bar in a 320px column. The amber mark, the title and the question share one line, the question gives way first and holds one clamped line, and the title truncates only once the question has no room left. The bar keeps the surface of the open panel and stays one Answer button.",
 			},
 		},
 	},
-	play: async ({ canvas }) => {
+	play: async ({ args, canvas, userEvent }) => {
 		const column = canvas.getByTestId("column")
-		const question = canvas.getByText(LONG_QUESTION.question)
-		const answer = canvas.getByRole("button", {
+		const bar = canvas.getByRole("button", {
 			name: chat.toolQuestion.waiting.answer,
 		})
+		const mark = bar.firstElementChild as HTMLElement
+		const title = canvas.getByText("Shoto is waiting on your answer")
+		const question = canvas.getByText(LONG_QUESTION.question)
 
+		await expect(canvas.getAllByRole("button")).toEqual([bar])
+		await expect(backgroundOf(bar)).toBe(
+			tokenStyleIn(bar, "bg-muted", "backgroundColor"),
+		)
+		await expect(getComputedStyle(bar).boxShadow).toBe("none")
 		await expect(boxOf(question).height).toBeLessThanOrEqual(
 			lineHeightOf(question),
 		)
-		await expect(answer.scrollWidth).toBe(answer.clientWidth)
-		await expect(boxOf(answer).right).toBeLessThanOrEqual(boxOf(column).right)
+		for (const element of [mark, title])
+			await expect(boxOf(element).bottom).toBeGreaterThan(boxOf(question).top)
+		await expect(question.scrollWidth).toBeGreaterThan(question.clientWidth)
+		await expect(title.scrollWidth).toBe(title.clientWidth)
+		await expect(boxOf(bar).right).toBeLessThanOrEqual(boxOf(column).right)
 		await expect(column.scrollWidth).toBeLessThanOrEqual(column.clientWidth)
+
+		await userEvent.click(bar)
+		await expect(args.onExpand).toHaveBeenCalledTimes(1)
 	},
 })
 

@@ -23,7 +23,6 @@
 		0 0 0 1px rgb(0 0 0 / 0.06), 0 1px 2px rgb(0 0 0 / 0.06),
 		0 12px 28px rgb(0 0 0 / 0.12);
 	--icon-stroke: 0.09em;
-	--question-bar: var(--card);
 	--question-segment-foreground: color-mix(
 		in oklab,
 		var(--muted-foreground) 90%,
@@ -36,7 +35,6 @@
 	--popover-shadow:
 		0 0 0 1px rgb(255 255 255 / 0.1), 0 0 1px rgb(255 255 255 / 0.16),
 		0 12px 28px rgb(0 0 0 / 0.7);
-	--question-bar: color-mix(in oklab, var(--foreground) 6%, var(--card));
 	--question-segment-foreground: var(--muted-foreground);
 }
 
@@ -62,7 +60,6 @@
 	--color-mark: var(--mark);
 	--color-transcript-new-mark: var(--transcript-new-mark);
 	--color-border: var(--border);
-	--color-question-bar-border: var(--question-bar-border);
 	--color-question-option-ring: var(--question-option-ring);
 	--color-shell-border: var(--shell-border);
 	--color-shell-divider: var(--shell-divider);
@@ -84,7 +81,6 @@
 	--color-title-bar-pill: var(--title-bar-pill);
 	--color-user-bubble: var(--user-bubble);
 	--color-user-bubble-foreground: var(--user-bubble-foreground);
-	--color-question-bar: var(--question-bar);
 	--color-question-segment-foreground: var(--question-segment-foreground);
 	--radius-xs: calc(var(--radius-root) * 0.2);
 	--radius-sm: calc(var(--radius-root) * 0.6);

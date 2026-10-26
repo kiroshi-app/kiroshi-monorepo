@@ -411,7 +411,18 @@ describe("ToolQuestion opening focus", () => {
 	})
 
 	it("lands on option 1 again when the panel reopens from the waiting bar", async () => {
-		const { rerender } = await openPanel({ questions: [PLAN], minimised: true })
+		const onExpand = vi.fn()
+		const { rerender } = await openPanel({
+			questions: [PLAN],
+			minimised: true,
+			onExpand,
+		})
+		await act(async () =>
+			fireEvent.click(
+				screen.getByRole("button", { name: chat.toolQuestion.waiting.answer }),
+			),
+		)
+		expect(onExpand).toHaveBeenCalledTimes(1)
 		rerender(
 			<I18nProvider>
 				<ToolQuestion minimised={false} questions={[PLAN]} />
