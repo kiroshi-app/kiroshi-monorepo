@@ -29,7 +29,7 @@ use super::waiting::{self, WaitingJoin};
 use crate::account::cloud::{Cloud, CloudInstance, InstancesError, LeaveCallError};
 use crate::account::session::{self, AccountSession};
 use crate::db;
-use crate::db::repositories::joined_spaces::{self, JoinedReach};
+use crate::db::repositories::joined_spaces::{self, HostListing, JoinedReach};
 use crate::devices;
 use crate::host_api::token::HostToken;
 use crate::hosting::bridge::SHARED_SPACE_COMMAND;
@@ -363,6 +363,7 @@ pub async fn joined<R: Runtime>(
 	instance_id: String,
 	name: Option<String>,
 	inviter_email: Option<String>,
+	listing: HostListing,
 ) -> Result<JoinedSpace, RelayJoinError> {
 	let guests = app.state::<RelayGuests>();
 	let _turn = guests.turn.lock().await;
@@ -385,6 +386,7 @@ pub async fn joined<R: Runtime>(
 		remote_space_id: None,
 		name: name.or(held_name).unwrap_or_else(|| instance_id.clone()),
 		inviter_email,
+		listing,
 	};
 	let wait = held::wait(app, &instance_id)?;
 	let joined = repository.join(candidate).await?;
@@ -570,8 +572,14 @@ async fn listed_followed<R: Runtime>(
 ) -> Result<(), String> {
 	let reach = JoinedReach::Relay { instance_id: instance.id.clone() };
 	let entry = match held.iter().find(|joined| joined.reach == reach) {
-		Some(entry) if entry.name == instance.name => return Ok(()),
-		Some(entry) => joined_spaces::JoinedSpace { name: instance.name.clone(), ..entry.clone() },
+		Some(entry) if entry.name == instance.name && entry.listing == instance.listing => {
+			return Ok(())
+		}
+		Some(entry) => joined_spaces::JoinedSpace {
+			name: instance.name.clone(),
+			listing: instance.listing.clone(),
+			..entry.clone()
+		},
 		None if hosted.contains(&instance.id) => return Ok(()),
 		None => joined_spaces::JoinedSpace {
 			id: uuid::Uuid::new_v4().to_string(),
@@ -579,6 +587,7 @@ async fn listed_followed<R: Runtime>(
 			remote_space_id: None,
 			name: instance.name.clone(),
 			inviter_email: None,
+			listing: instance.listing.clone(),
 		},
 	};
 	let joined = repository.join(entry).await.map_err(described)?;

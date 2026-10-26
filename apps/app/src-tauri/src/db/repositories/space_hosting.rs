@@ -1,9 +1,10 @@
 use rusqlite::{params, Connection, OptionalExtension};
 
+use super::conversations::AvatarBlot;
 use super::spaces::SpaceError;
 use crate::db::{Access, DatabaseError};
 
-const SELECT_REGISTRATION: &str = "SELECT spaces.name, space_hosting.instance_id
+const SELECT_REGISTRATION: &str = "SELECT spaces.name, spaces.colour, space_hosting.instance_id
 	FROM spaces LEFT JOIN space_hosting ON space_hosting.space_id = spaces.id
 	WHERE spaces.id = ?1";
 
@@ -24,6 +25,7 @@ const SELECT_REGISTERED_INSTANCES: &str =
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Registration {
 	pub name: String,
+	pub colour: Option<AvatarBlot>,
 	pub instance_id: Option<String>,
 }
 
@@ -86,7 +88,11 @@ impl SpaceHostingRepository {
 fn registration_of(connection: &Connection, space_id: &str) -> Result<Registration, SpaceError> {
 	connection
 		.query_row(SELECT_REGISTRATION, [space_id], |row| {
-			Ok(Registration { name: row.get(0)?, instance_id: row.get(1)? })
+			Ok(Registration {
+				name: row.get(0)?,
+				colour: row.get::<_, Option<String>>(1)?.as_deref().and_then(AvatarBlot::parse),
+				instance_id: row.get(2)?,
+			})
 		})
 		.optional()?
 		.ok_or_else(|| SpaceError::UnknownSpace { id: space_id.to_owned() })
@@ -101,7 +107,7 @@ mod tests {
 	const PERSONAL: &str = "personal";
 
 	#[tokio::test]
-	async fn a_space_never_hosted_reads_its_name_and_no_instance() {
+	async fn a_space_never_hosted_reads_its_name_its_colour_and_no_instance() {
 		let dir = temp_dir();
 		let database = open(&dir);
 
@@ -109,7 +115,11 @@ mod tests {
 
 		assert_eq!(
 			read.expect("the registration reads"),
-			Registration { name: "Personal".to_owned(), instance_id: None }
+			Registration {
+				name: "Personal".to_owned(),
+				colour: Some(AvatarBlot::Red),
+				instance_id: None
+			}
 		);
 	}
 

@@ -23,6 +23,7 @@ use crate::crypto::sealed_box;
 use crate::crypto::space_key::HeldSpaceKey;
 use crate::crypto::subkey::Subkey;
 use crate::db;
+use crate::db::repositories::joined_spaces::HostListing;
 use crate::devices;
 use crate::hosting::handover::{rekey_bytes, KeyHandover};
 use crate::hosting::relay::{opened, Opened, Socket};
@@ -37,9 +38,10 @@ pub async fn joined<R: Runtime>(
 	instance_id: String,
 	name: String,
 	inviter_email: Option<String>,
+	listing: HostListing,
 ) -> Result<JoinedSpace, JoinedSpaceError> {
 	log::info!("the join of instance {instance_id} starts");
-	let joined = attempted(app, &instance_id, name, inviter_email).await;
+	let joined = attempted(app, &instance_id, name, inviter_email, listing).await;
 	if let Err(failure) = &joined {
 		log::error!("the join of instance {instance_id} was refused: {failure:?}");
 	}
@@ -51,6 +53,7 @@ async fn attempted<R: Runtime>(
 	instance_id: &str,
 	name: String,
 	inviter_email: Option<String>,
+	listing: HostListing,
 ) -> Result<JoinedSpace, JoinedSpaceError> {
 	let device = device_keys(app)?;
 	let bearer = bearer_of(app)?;
@@ -68,13 +71,13 @@ async fn attempted<R: Runtime>(
 			handed.space.key_id
 		);
 	}
-	relay::joined(app, instance_id.to_owned(), Some(name), inviter_email).await.map_err(|failure| {
-		match failure {
+	relay::joined(app, instance_id.to_owned(), Some(name), inviter_email, listing).await.map_err(
+		|failure| match failure {
 			RelayJoinError::SignedOut => JoinedSpaceError::NeedsSignIn,
 			RelayJoinError::Account(detail) => JoinedSpaceError::SessionStore { detail },
 			RelayJoinError::Joined(failure) => failure,
-		}
-	})
+		},
+	)
 }
 
 pub(super) fn missed_rekey_frame(

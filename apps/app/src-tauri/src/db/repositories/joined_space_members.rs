@@ -112,6 +112,7 @@ mod tests {
 			remote_space_id: None,
 			name: format!("name-of-{id}"),
 			inviter_email: None,
+			listing: Default::default(),
 		}
 	}
 

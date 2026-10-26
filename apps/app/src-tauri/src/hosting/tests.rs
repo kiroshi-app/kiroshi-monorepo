@@ -9,7 +9,7 @@ use axum::extract::ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Path, RawQuery, State as Served};
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{delete, get, post};
+use axum::routing::{delete, get, patch, post};
 use axum::Router;
 use base64::prelude::{Engine as _, BASE64_STANDARD, BASE64_URL_SAFE_NO_PAD};
 use serde_json::{json, Value};
@@ -59,8 +59,8 @@ use crate::conversations::commands::{
 	conversation_update_bot,
 };
 use crate::conversations::contract::{
-	Bot, BotDraft, BotIdentity, Conversation, ConversationInPage, LastWord, NewUserMessage,
-	ObservedState, ParticipantRole, TranscriptStoreError, WrittenFrom,
+	AvatarBlot, Bot, BotDraft, BotIdentity, Conversation, ConversationInPage, LastWord,
+	NewUserMessage, ObservedState, ParticipantRole, TranscriptStoreError, WrittenFrom,
 	CREATED_EVENT as CONVERSATION_CREATED_EVENT, DELETED_EVENT as CONVERSATION_DELETED_EVENT,
 	MESSAGE_STORED_EVENT, STATE_CHANGED_EVENT, UPDATED_EVENT as CONVERSATION_UPDATED_EVENT,
 };
@@ -93,8 +93,9 @@ use crate::routines::commands::CHANGED_EVENT as ROUTINE_CHANGED_EVENT;
 use crate::routines::webhook::{self, Webhook};
 use crate::search::contract::{CatalogueScope, MessageSearchQuery};
 use crate::spaces::commands::{
-	bot_add_to_space, bot_move_to_space, bot_remove_from_space, space_delete,
+	bot_add_to_space, bot_move_to_space, bot_remove_from_space, space_delete, space_update,
 };
+use crate::spaces::contract::{Space as SpaceShown, SpaceError};
 use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 
 const BEARER: &str = "bearer-that-never-leaves";
@@ -172,6 +173,7 @@ struct Relay {
 	is_registration_open: Arc<watch::Sender<bool>>,
 	is_registration_down: Arc<AtomicBool>,
 	registered: Arc<Mutex<Vec<String>>>,
+	instance_bodies: Arc<Mutex<Vec<(String, Value)>>>,
 	known: Arc<Mutex<HashSet<String>>>,
 	attempts: Arc<AtomicUsize>,
 	sockets: mpsc::UnboundedSender<(WebSocket, String)>,
@@ -341,6 +343,11 @@ async fn registration(Served(relay): Served<Relay>, headers: HeaderMap, body: St
 	if relay.is_registration_down.load(Ordering::SeqCst) {
 		return StatusCode::SERVICE_UNAVAILABLE.into_response();
 	}
+	relay
+		.instance_bodies
+		.lock()
+		.expect("the relay")
+		.push(("POST /instances".to_owned(), body.clone()));
 	let id = uuid::Uuid::new_v4().to_string();
 	relay
 		.registered
@@ -352,6 +359,25 @@ async fn registration(Served(relay): Served<Relay>, headers: HeaderMap, body: St
 	is_open.wait_for(|is_open| *is_open).await.expect("the relay opens");
 	relay.known.lock().expect("the relay").insert(id.clone());
 	answered_json(StatusCode::CREATED, json!({ "id": id, "name": body["name"], "role": "owner" }))
+}
+
+async fn instance_described(
+	Served(relay): Served<Relay>,
+	Path(id): Path<String>,
+	headers: HeaderMap,
+	body: String,
+) -> Response {
+	if bearer_of(&headers) != BEARER {
+		return StatusCode::UNAUTHORIZED.into_response();
+	}
+	let body: Value = serde_json::from_str(&body).expect("a json body");
+	let call = format!("PATCH /instances/{id}");
+	relay.instance_bodies.lock().expect("the relay").push((call, body));
+	relay.noticed.send_replace(());
+	if !relay.known.lock().expect("the relay").contains(&id) {
+		return StatusCode::NOT_FOUND.into_response();
+	}
+	answered_json(StatusCode::OK, json!({ "id": id }))
 }
 
 async fn device_challenged(Served(relay): Served<Relay>, headers: HeaderMap) -> Response {
@@ -701,6 +727,7 @@ impl Harness {
 			is_registration_open: Arc::new(watch::channel(true).0),
 			is_registration_down: Arc::default(),
 			registered: Arc::default(),
+			instance_bodies: Arc::default(),
 			known: Arc::default(),
 			attempts: Arc::default(),
 			sockets: sockets_in,
@@ -722,6 +749,7 @@ impl Harness {
 		let cloud = served(
 			Router::new()
 				.route("/instances", post(registration))
+				.route("/instances/{id}", patch(instance_described))
 				.route("/devices", post(device_registered))
 				.route("/devices/challenge", post(device_challenged))
 				.route("/devices/{id}", delete(device_deleted))
@@ -895,6 +923,27 @@ impl Harness {
 		self.relay.registered.lock().expect("the relay").clone()
 	}
 
+	fn instance_bodies(&self) -> Vec<(String, Value)> {
+		self.relay.instance_bodies.lock().expect("the relay").clone()
+	}
+
+	async fn coloured(&self, colour: Option<AvatarBlot>) {
+		let state = self.app.state::<DatabaseState>();
+		let spaces = state.as_ref().expect("the database").spaces();
+		let personal = "Personal".to_owned();
+		spaces.update(PERSONAL.to_owned(), personal, colour.map(Into::into)).await.expect("stored");
+	}
+
+	async fn updated(
+		&self,
+		name: &str,
+		colour: Option<AvatarBlot>,
+	) -> Result<SpaceShown, SpaceError> {
+		let state = self.app.state::<DatabaseState>();
+		space_update(self.app.handle().clone(), state, PERSONAL.to_owned(), name.to_owned(), colour)
+			.await
+	}
+
 	async fn stored(&self) -> (Option<String>, Vec<String>) {
 		let state = self.app.state::<DatabaseState>();
 		let hosting = state.as_ref().expect("the database").space_hosting();
@@ -910,6 +959,7 @@ impl Harness {
 			remote_space_id: None,
 			name: "h.test".to_owned(),
 			inviter_email: None,
+			listing: Default::default(),
 		};
 		let joined_spaces = state.as_ref().expect("the database").joined_spaces();
 		joined_spaces.join(candidate).await.expect("the host joins a space")
@@ -1140,6 +1190,79 @@ fn an_instance_the_relay_forgot_is_registered_anew_and_replaced() {
 		assert_eq!(harness.registered().len(), 1);
 		assert_ne!(stored.as_deref(), Some(forgotten.as_str()));
 		assert_eq!(harness.attempts(), 2);
+	});
+}
+
+#[test]
+fn a_registration_carries_the_space_colour_and_a_later_start_patches_name_and_colour_once() {
+	run(async {
+		let mut harness = Harness::signed_in("described").await;
+		harness.coloured(None).await;
+
+		harness.started().await;
+		let _first = harness.member().await;
+		harness.reached(HostingState::Online).await;
+		harness.stopped().await;
+		harness.coloured(Some(AvatarBlot::Cyan)).await;
+		harness.started().await;
+		let _second = harness.member().await;
+		harness.reached(HostingState::Online).await;
+
+		let instance_id = harness.stored().await.0.expect("an instance");
+		assert_eq!(
+			harness.instance_bodies(),
+			vec![
+				("POST /instances".to_owned(), json!({ "name": "Personal", "colour": null })),
+				(
+					format!("PATCH /instances/{instance_id}"),
+					json!({ "name": "Personal", "colour": "cyan" })
+				),
+			]
+		);
+	});
+}
+
+#[test]
+fn a_space_update_that_relabels_a_registered_space_patches_it_and_an_unchanged_one_does_not() {
+	run(async {
+		let harness = Harness::signed_in("relabelled").await;
+		harness.plant(INSTANCE).await;
+		harness.relay.known.lock().expect("the relay").insert(INSTANCE.to_owned());
+
+		let renamed = harness.updated("Studio", Some(AvatarBlot::Red)).await;
+		let recoloured = harness.updated("Studio", Some(AvatarBlot::Blue)).await;
+		let unchanged = harness.updated("Studio", Some(AvatarBlot::Blue)).await;
+
+		assert_eq!(renamed.expect("the rename").name, "Studio");
+		assert_eq!(recoloured.expect("the recolour").colour, Some(AvatarBlot::Blue));
+		assert!(unchanged.is_ok());
+		let patched = format!("PATCH /instances/{INSTANCE}");
+		assert_eq!(
+			harness.instance_bodies(),
+			vec![
+				(patched.clone(), json!({ "name": "Studio", "colour": "red" })),
+				(patched, json!({ "name": "Studio", "colour": "blue" })),
+			]
+		);
+	});
+}
+
+#[test]
+fn a_space_update_whose_patch_the_relay_refuses_still_returns_the_updated_space() {
+	run(async {
+		let harness = Harness::signed_in("relabel-refused").await;
+		harness.plant(INSTANCE).await;
+
+		let updated = harness.updated("Studio", None).await.expect("the update");
+
+		assert_eq!((updated.name.as_str(), updated.colour), ("Studio", None));
+		assert_eq!(
+			harness.instance_bodies(),
+			vec![(
+				format!("PATCH /instances/{INSTANCE}"),
+				json!({ "name": "Studio", "colour": null })
+			)]
+		);
 	});
 }
 

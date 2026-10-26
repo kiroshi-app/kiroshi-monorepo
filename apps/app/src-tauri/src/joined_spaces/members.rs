@@ -101,7 +101,9 @@ async fn refreshed<R: Runtime>(
 	if !repository.replaced(id.clone(), members.clone()).await? {
 		return Ok(());
 	}
-	let is_host_renamed = hosted_by(&previous, None) != hosted_by(&members, None);
+	let hosted_by_roster =
+		|roster| hosted_by(&joined.listing, joined.inviter_email.clone(), roster);
+	let is_host_renamed = hosted_by_roster(&previous) != hosted_by_roster(&members);
 	let changed = JoinedSpaceMembersChanged { id: id.clone(), members };
 	events::emit(app, JOINED_SPACE_MEMBERS_CHANGED, changed)
 		.map_err(|error| JoinedSpaceError::Undeliverable { detail: error.to_string() })?;
@@ -315,9 +317,15 @@ mod tests {
 
 	async fn joined_space(app: &App<MockRuntime>) -> JoinedSpace {
 		signed_roster_planted(app).await;
-		relay::joined(app.handle(), INSTANCE.to_owned(), Some("Studio".to_owned()), None)
-			.await
-			.expect("the join");
+		relay::joined(
+			app.handle(),
+			INSTANCE.to_owned(),
+			Some("Studio".to_owned()),
+			None,
+			Default::default(),
+		)
+		.await
+		.expect("the join");
 		let state = app.state::<db::DatabaseState>();
 		let held = ready(&state).expect("the database").joined_spaces().list().await;
 		held.expect("the list").into_iter().next().expect("the joined space is held")
@@ -584,7 +592,9 @@ mod tests {
 		let (api_url, _relay) = relay_answering(listed(&[("bob", "Bob")])).await;
 		signed_in(&dir);
 		let app = app_reaching(&dir, &api_url);
-		relay::joined(app.handle(), INSTANCE.to_owned(), None, None).await.expect("the join");
+		relay::joined(app.handle(), INSTANCE.to_owned(), None, None, Default::default())
+			.await
+			.expect("the join");
 		let state = app.state::<db::DatabaseState>();
 		let held = ready(&state).expect("the database").joined_spaces().list().await;
 		let joined = held.expect("the list").into_iter().next().expect("the joined space");
@@ -606,6 +616,7 @@ mod tests {
 			remote_space_id: None,
 			name: "Studio".to_owned(),
 			inviter_email: None,
+			listing: Default::default(),
 		};
 		let state = app.state::<db::DatabaseState>();
 		let joined = ready(&state).expect("the database").joined_spaces().join(candidate).await;

@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::account::cloud::Cloud;
 use crate::conversations::contract::{AvatarBlot, StorageFailure};
 use crate::db::repositories::joined_space_members::{JoinedSpaceMember, JoinedSpaceRole};
-use crate::db::repositories::joined_spaces::{self, JoinedReach};
+use crate::db::repositories::joined_spaces::{self, HostListing, JoinedReach};
 use crate::db::DatabaseError;
 
 const FNV_OFFSET_BASIS: u32 = 0x811c_9dc5;
@@ -64,6 +64,8 @@ impl JoinedSpace {
 		wait: Option<JoinedSpaceWait>,
 		roster: &[JoinedSpaceMember],
 	) -> Self {
+		let hosted_by = hosted_by(&joined.listing, joined.inviter_email, roster);
+		let colour = colour_shown(&joined.listing, &joined.id);
 		let JoinedReach::Relay { instance_id } = joined.reach;
 		let host_url = cloud.member_relay_url(&instance_id);
 		let state = match wait {
@@ -71,8 +73,8 @@ impl JoinedSpace {
 			Some(_) => JoinedSpaceState::WaitingForHost,
 		};
 		Self {
-			hosted_by: hosted_by(roster, joined.inviter_email),
-			colour: colour_of(&joined.id),
+			hosted_by,
+			colour,
 			id: joined.id,
 			host_url,
 			remote_space_id: joined.remote_space_id,
@@ -83,12 +85,28 @@ impl JoinedSpace {
 	}
 }
 
-pub fn hosted_by(roster: &[JoinedSpaceMember], inviter_email: Option<String>) -> Option<String> {
+pub fn hosted_by(
+	listing: &HostListing,
+	inviter_email: Option<String>,
+	roster: &[JoinedSpaceMember],
+) -> Option<String> {
+	listing
+		.host_name
+		.clone()
+		.or_else(|| roster_host_name(roster))
+		.or_else(|| listing.host_email.clone())
+		.or(inviter_email)
+}
+
+fn roster_host_name(roster: &[JoinedSpaceMember]) -> Option<String> {
 	roster
 		.iter()
 		.filter(|member| member.role == JoinedSpaceRole::Host)
 		.find_map(|member| member.name.clone())
-		.or(inviter_email)
+}
+
+pub fn colour_shown(listing: &HostListing, id: &str) -> AvatarBlot {
+	listing.colour.map_or_else(|| colour_of(id), AvatarBlot::from)
 }
 
 pub fn colour_of(id: &str) -> AvatarBlot {
@@ -214,6 +232,7 @@ mod tests {
 	use serde_json::{json, to_value, Value};
 
 	use super::*;
+	use crate::db::repositories::conversations::AvatarBlot as StoredBlot;
 
 	const STORED_BEFORE_INVITERS: &str =
 		r#"{"id":"joined-1","instanceId":"instance-1","remoteSpaceId":null,"name":"Studio"}"#;
@@ -236,6 +255,7 @@ mod tests {
 			remote_space_id: None,
 			name: "Studio".to_owned(),
 			inviter_email: inviter_email.map(str::to_owned),
+			listing: Default::default(),
 		}
 	}
 
@@ -305,6 +325,54 @@ mod tests {
 
 		assert_eq!(colours, vec![json!("green"), json!("orange"), json!("purple"), json!("blue")]);
 		assert_eq!(presented(a_stored_row(None), &[])["colour"], colours[0]);
+	}
+
+	#[test]
+	fn who_hosts_a_space_falls_from_the_relay_name_to_the_roster_to_the_relay_email_to_the_inviter()
+	{
+		let roster = [a_member(Some("Rae"), JoinedSpaceRole::Host)];
+		let listing = HostListing {
+			host_name: Some("Ann".to_owned()),
+			host_email: Some("ann@example.com".to_owned()),
+			colour: None,
+		};
+		let listed = |listing: HostListing, inviter: Option<&str>| joined_spaces::JoinedSpace {
+			listing,
+			..a_stored_row(inviter)
+		};
+		let unnamed = HostListing { host_name: None, ..listing.clone() };
+		let unlisted = HostListing::default();
+
+		let hosts: Vec<Value> = [
+			presented(listed(listing, Some("owner@example.com")), &roster),
+			presented(listed(unnamed.clone(), Some("owner@example.com")), &roster),
+			presented(listed(unnamed, Some("owner@example.com")), &[]),
+			presented(listed(unlisted.clone(), Some("owner@example.com")), &[]),
+			presented(listed(unlisted, None), &[]),
+		]
+		.into_iter()
+		.map(|crossed| crossed["hostedBy"].clone())
+		.collect();
+
+		assert_eq!(
+			hosts,
+			vec![
+				json!("Ann"),
+				json!("Rae"),
+				json!("ann@example.com"),
+				json!("owner@example.com"),
+				Value::Null
+			]
+		);
+	}
+
+	#[test]
+	fn the_relay_colour_wins_and_the_colour_pinned_to_the_id_shows_only_without_it() {
+		let listing = HostListing { colour: Some(StoredBlot::Pink), ..HostListing::default() };
+		let coloured = joined_spaces::JoinedSpace { listing, ..a_stored_row(None) };
+
+		assert_eq!(presented(coloured, &[])["colour"], "pink");
+		assert_eq!(presented(a_stored_row(None), &[])["colour"], json!(colour_of("joined-1")));
 	}
 
 	#[test]

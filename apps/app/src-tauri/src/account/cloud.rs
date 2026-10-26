@@ -13,6 +13,8 @@ use tokio::time::{sleep_until, Instant};
 
 use super::contract::{AccountPlan, KiroshiAccount};
 use crate::crypto::device_keys::DeviceKeys;
+use crate::db::repositories::conversations::AvatarBlot;
+use crate::db::repositories::joined_spaces::HostListing;
 use crate::devices::contract::{DeviceKind, DeviceStatus};
 use crate::hosting::contract::{
 	InvitationState, SpaceInvitation, TransportFailure, UnreachableReason,
@@ -380,6 +382,16 @@ impl SentInvitation {
 pub struct CloudInstance {
 	pub id: String,
 	pub name: String,
+	#[serde(flatten)]
+	pub listing: HostListing,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct ListedInvitation {
+	#[serde(flatten)]
+	pub invitation: Invitation,
+	#[serde(flatten)]
+	pub listing: HostListing,
 }
 
 #[derive(Deserialize)]
@@ -577,8 +589,9 @@ impl Cloud {
 		&self,
 		bearer: &str,
 		name: &str,
+		colour: Option<AvatarBlot>,
 	) -> Result<String, RegisterError> {
-		let body = json!({ "name": name });
+		let body = json!({ "name": name, "colour": colour.map(AvatarBlot::named) });
 		let answered = self
 			.answered(|client| client.post(self.at(INSTANCES_PATH)).bearer_auth(bearer).json(&body))
 			.await
@@ -595,6 +608,23 @@ impl Cloud {
 		uuid::Uuid::parse_str(&registered.id).map(|id| id.to_string()).map_err(|error| {
 			RegisterError::Unreachable(format!("the registered instance id is not a uuid: {error}"))
 		})
+	}
+
+	pub async fn describe_instance(
+		&self,
+		bearer: &str,
+		instance_id: &str,
+		name: &str,
+		colour: Option<AvatarBlot>,
+	) -> Result<(), String> {
+		let mut instance = Url::parse(&self.at(INSTANCES_PATH))
+			.map_err(|error| format!("the instance url is unusable: {error}"))?;
+		instance
+			.path_segments_mut()
+			.map_err(|()| "the cloud url has no path".to_owned())?
+			.push(instance_id);
+		let body = json!({ "name": name, "colour": colour.map(AvatarBlot::named) });
+		self.sent(|client| client.patch(instance).bearer_auth(bearer).json(&body)).await.map(drop)
 	}
 
 	pub async fn register_device(
@@ -909,12 +939,15 @@ impl Cloud {
 		})
 	}
 
-	pub async fn invitations(&self, bearer: &str) -> Result<Vec<Invitation>, InvitationCallError> {
+	pub async fn invitations(
+		&self,
+		bearer: &str,
+	) -> Result<Vec<ListedInvitation>, InvitationCallError> {
 		let answered = self
 			.reached(|client| client.get(self.at(INVITATIONS_PATH)).bearer_auth(bearer))
 			.await?;
 		let answered = invitation_call_answered(answered).await?;
-		answered.json::<Vec<Invitation>>().await.map_err(|error| {
+		answered.json::<Vec<ListedInvitation>>().await.map_err(|error| {
 			InvitationCallError::Unreachable(format!(
 				"the invitation list answered by the cloud did not parse: {error}"
 			))
