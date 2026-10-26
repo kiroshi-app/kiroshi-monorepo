@@ -43,7 +43,7 @@ const MCP_ATTENTION_FIELD =
 const MCP_DESTRUCTIVE_SURFACE = "border-destructive/22 bg-destructive/6"
 
 const MCP_CONNECTION_DOT = {
-	connected: "bg-emerald-500 in-data-companion-page:bg-presence-online",
+	connected: "bg-emerald-500",
 	needsAuthorization: "bg-state-needs-authorization",
 	connecting: "bg-muted-foreground motion-safe:animate-pulse",
 	failed: "bg-destructive",

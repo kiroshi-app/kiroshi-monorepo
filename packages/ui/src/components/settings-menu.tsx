@@ -199,7 +199,12 @@ const SettingsMenuApplication = ({
 						</span>
 						<span
 							aria-hidden="true"
-							className={cn(ROW_DOT, MCP_CONNECTION_DOT[connection])}
+							className={cn(
+								ROW_DOT,
+								MCP_CONNECTION_DOT[connection],
+								connection === "connected" &&
+									"in-data-companion-page:bg-presence-online",
+							)}
 							data-connection={connection}
 							data-slot="settings-menu-connection"
 						/>

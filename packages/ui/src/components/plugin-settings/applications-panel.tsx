@@ -111,6 +111,8 @@ const ApplicationRow = ({ server, onOpen, onConnect }: ApplicationRowProps) => {
 								className={cn(
 									"size-2 shrink-0 rounded-full",
 									MCP_CONNECTION_DOT[state],
+									state === "connected" &&
+										"in-data-companion-page:bg-presence-online",
 								)}
 							/>
 							<span className="truncate text-muted-foreground text-xs">
