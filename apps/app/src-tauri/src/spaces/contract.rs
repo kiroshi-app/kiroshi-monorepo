@@ -12,11 +12,13 @@ pub struct Space {
 	pub colour: Option<AvatarBlot>,
 	pub position: i64,
 	pub created_at: i64,
+	pub shared: bool,
 }
 
-impl From<spaces::Space> for Space {
-	fn from(space: spaces::Space) -> Self {
+impl Space {
+	pub fn presented(space: spaces::Space, hosted_space_ids: &[String]) -> Self {
 		Self {
+			shared: hosted_space_ids.contains(&space.id),
 			id: space.id,
 			name: space.name,
 			colour: space.colour.map(Into::into),
@@ -149,6 +151,7 @@ mod tests {
 				colour: Some(AvatarBlot::Cyan),
 				position: 1,
 				created_at: 3,
+				shared: true,
 			})
 			.expect("the space serializes"),
 			json!({
@@ -156,7 +159,8 @@ mod tests {
 				"name": "Vocca",
 				"colour": "cyan",
 				"position": 1,
-				"createdAt": 3
+				"createdAt": 3,
+				"shared": true
 			})
 		);
 	}
@@ -170,6 +174,7 @@ mod tests {
 				colour: None,
 				position: 1,
 				created_at: 3,
+				shared: false,
 			})
 			.expect("the space serializes"),
 			json!({
@@ -177,7 +182,8 @@ mod tests {
 				"name": "Vocca",
 				"colour": null,
 				"position": 1,
-				"createdAt": 3
+				"createdAt": 3,
+				"shared": false
 			})
 		);
 	}

@@ -586,7 +586,8 @@ fn an_accepted_invitation_joins_holds_the_key_feeds_the_members_and_answers_onli
 		assert_eq!(member.relay.room().accepted, vec![INVITATION.to_owned()]);
 		assert_eq!(member.relay.joins().len(), 1);
 		assert_eq!(member.held_key_id(), Some(1));
-		assert_eq!(member.listed().await, vec![joined]);
+		let named = JoinedSpace { hosted_by: Some("Ann".to_owned()), ..joined };
+		assert_eq!(member.listed().await, vec![named]);
 		assert_eq!(
 			members.iter().map(|row| (row.role, row.fingerprint.clone())).collect::<Vec<_>>(),
 			vec![
@@ -984,7 +985,12 @@ fn a_join_completes_while_a_reconciliation_waits_on_a_429_pause() {
 
 		let joined = tokio::time::timeout(
 			PATIENCE,
-			relay::joined(member.app.handle(), OTHER_INSTANCE.to_owned(), Some("Harbour".into())),
+			relay::joined(
+				member.app.handle(),
+				OTHER_INSTANCE.to_owned(),
+				Some("Harbour".into()),
+				None,
+			),
 		)
 		.await;
 		paused.reconciliation.abort();
@@ -1036,7 +1042,12 @@ fn an_unlisted_space_is_evicted_with_its_departure_reason_once_the_429_pause_end
 
 		let other = tokio::time::timeout(
 			PATIENCE,
-			relay::joined(member.app.handle(), OTHER_INSTANCE.to_owned(), Some("Harbour".into())),
+			relay::joined(
+				member.app.handle(),
+				OTHER_INSTANCE.to_owned(),
+				Some("Harbour".into()),
+				None,
+			),
 		)
 		.await;
 		paused.reconciliation.await.expect("the reconciliation ends");
@@ -1065,7 +1076,7 @@ fn an_unlisted_space_joined_again_during_the_429_pause_is_kept() {
 
 		let again = tokio::time::timeout(
 			PATIENCE,
-			relay::joined(member.app.handle(), INSTANCE.to_owned(), None),
+			relay::joined(member.app.handle(), INSTANCE.to_owned(), None, None),
 		)
 		.await;
 		paused.reconciliation.await.expect("the reconciliation ends");
@@ -1152,7 +1163,7 @@ fn a_join_a_leave_and_a_sign_out_complete_while_the_instance_list_never_answers(
 		let app = member.app.handle();
 		let other = tokio::time::timeout(
 			PATIENCE,
-			relay::joined(app, OTHER_INSTANCE.to_owned(), Some("Harbour".into())),
+			relay::joined(app, OTHER_INSTANCE.to_owned(), Some("Harbour".into()), None),
 		)
 		.await;
 		let left = tokio::time::timeout(PATIENCE, relay::left(app, &joined.id)).await;
@@ -1181,7 +1192,8 @@ fn a_join_and_a_leave_answer_while_the_relay_never_answers_a_sign_out() {
 
 		let app = member.app.handle();
 		let again =
-			tokio::time::timeout(PATIENCE, relay::joined(app, INSTANCE.to_owned(), None)).await;
+			tokio::time::timeout(PATIENCE, relay::joined(app, INSTANCE.to_owned(), None, None))
+				.await;
 		let left = tokio::time::timeout(PATIENCE, relay::left(app, &joined.id)).await;
 		sign_out.abort();
 

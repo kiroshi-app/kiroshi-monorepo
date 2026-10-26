@@ -909,6 +909,7 @@ impl Harness {
 			reach: JoinedReach::Relay { instance_id: "joined-instance".to_owned() },
 			remote_space_id: None,
 			name: "h.test".to_owned(),
+			inviter_email: None,
 		};
 		let joined_spaces = state.as_ref().expect("the database").joined_spaces();
 		joined_spaces.join(candidate).await.expect("the host joins a space")

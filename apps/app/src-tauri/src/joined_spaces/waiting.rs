@@ -281,7 +281,7 @@ async fn joined_announced<R: Runtime>(app: &AppHandle<R>, id: &str, instance_id:
 			"the members of joined space {id} (instance {instance_id}) were not read after its join: {failure:?}"
 		);
 	}
-	if let Err(failure) = announce_change(app, id.to_owned()) {
+	if let Err(failure) = announce_change(app, id.to_owned()).await {
 		log::error!(
 			"joined space {id} (instance {instance_id}) came online and the front was not told: {failure:?}"
 		);

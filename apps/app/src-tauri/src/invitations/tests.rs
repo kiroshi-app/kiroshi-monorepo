@@ -34,7 +34,9 @@ use crate::environment::store;
 use crate::joined_spaces::commands::{
 	joined_space_connect, CHANGED_EVENT as JOINED_CHANGED, RECONNECTED_EVENT, REMOVED_EVENT,
 };
-use crate::joined_spaces::contract::{JoinedSpaceConnection, JoinedSpaceError, JoinedSpaceState};
+use crate::joined_spaces::contract::{
+	colour_of, JoinedSpaceConnection, JoinedSpaceError, JoinedSpaceState,
+};
 use crate::joined_spaces::relay::{reconciled, RelayGuests};
 use crate::joined_spaces::test_host::{SealingHost, CHALLENGE};
 use crate::logging::contract::InstallKind;
@@ -91,6 +93,10 @@ fn an_invitation(instance_id: &str, name: &str) -> Value {
 		"invitedAt": "2026-10-01T00:00:00.000Z",
 		"expiresAt": "2026-10-08T00:00:00.000Z"
 	})
+}
+
+fn changed_of(id: &str) -> Value {
+	json!({ "id": id, "hostedBy": null, "colour": colour_of(id) })
 }
 
 fn an_instance(id: &str, name: &str) -> Value {
@@ -676,12 +682,37 @@ fn an_accept_writes_one_relay_entry_named_by_the_instance_and_announces_it() {
 				reach: JoinedReach::Relay { instance_id: INSTANCE.to_owned() },
 				remote_space_id: None,
 				name: "Studio".to_owned(),
+				inviter_email: None,
 			}]
 		);
-		assert_eq!(harness.heard(JOINED_CHANGED), vec![json!({ "id": joined.id })]);
+		assert_eq!(harness.heard(JOINED_CHANGED), vec![changed_of(&joined.id)]);
 		assert_eq!(
 			harness.cloud.called.lock().expect("the cloud").clone(),
 			vec!["accept instance-1-invitation"]
+		);
+	});
+}
+
+#[test]
+fn an_accept_of_a_read_invitation_names_its_inviter_as_who_hosts_the_space() {
+	run(async {
+		let harness = Harness::new(Some(BEARER)).await;
+		read(harness.app.handle()).await.expect("the invitations are read");
+
+		let joined = accept(harness.app.handle(), INVITATION.to_owned()).await.expect("the accept");
+
+		let presented = serde_json::to_value(&joined).expect("the joined space serializes");
+		assert_eq!(presented["hostedBy"], "owner@example.com");
+		assert_eq!(presented["colour"], json!(colour_of(&joined.id)));
+		let stored = harness.stored().await;
+		assert_eq!(stored[0].inviter_email.as_deref(), Some("owner@example.com"));
+		assert_eq!(
+			harness.heard(JOINED_CHANGED),
+			vec![json!({
+				"id": joined.id,
+				"hostedBy": "owner@example.com",
+				"colour": colour_of(&joined.id)
+			})]
 		);
 	});
 }
@@ -1235,7 +1266,7 @@ fn sign_out_drops_every_relay_entry_and_closes_the_proxy_of_the_connected_one() 
 		let stored = harness.stored().await;
 		assert!(stored.is_empty(), "{stored:?}");
 		let changed = harness.heard(JOINED_CHANGED);
-		assert!(changed.ends_with(&[json!({ "id": relay_id }), json!({ "id": "planted-1" })]));
+		assert!(changed.ends_with(&[changed_of(&relay_id), changed_of("planted-1")]));
 		assert!(harness.heard(REMOVED_EVENT).is_empty());
 		assert!(reqwest::Client::new()
 			.post(format!("{}/api/invoke/conversation_list", connection.host_url))
@@ -1436,6 +1467,7 @@ fn a_relay_entry(id: &str, instance_id: &str, name: &str) -> JoinedSpace {
 		reach: JoinedReach::Relay { instance_id: instance_id.to_owned() },
 		remote_space_id: None,
 		name: name.to_owned(),
+		inviter_email: None,
 	}
 }
 
@@ -1450,7 +1482,7 @@ fn a_restored_bearer_follows_the_cloud_memberships_before_the_first_poll_tick() 
 
 		assert_eq!(stored, vec![a_relay_entry(&stored[0].id, "i-remote", "Remote")]);
 		assert_eq!(harness.instances_read(), 1);
-		assert_eq!(harness.heard(JOINED_CHANGED), vec![json!({ "id": stored[0].id })]);
+		assert_eq!(harness.heard(JOINED_CHANGED), vec![changed_of(&stored[0].id)]);
 	});
 }
 
@@ -1489,7 +1521,7 @@ fn a_listed_instance_without_an_entry_is_added_under_its_listed_name_and_announc
 		);
 		assert_eq!(
 			harness.heard(JOINED_CHANGED),
-			vec![json!({ "id": stored[0].id }), json!({ "id": stored[1].id })]
+			vec![changed_of(&stored[0].id), changed_of(&stored[1].id)]
 		);
 		assert!(harness.heard(REMOVED_EVENT).is_empty());
 	});
@@ -1505,7 +1537,7 @@ fn a_held_entry_listed_under_another_name_is_renamed_in_place_and_announced() {
 		reconciled(harness.app.handle()).await;
 
 		assert_eq!(harness.stored().await, vec![a_relay_entry(&id, INSTANCE, "Atelier")]);
-		assert_eq!(harness.heard(JOINED_CHANGED), vec![json!({ "id": id }), json!({ "id": id })]);
+		assert_eq!(harness.heard(JOINED_CHANGED), vec![changed_of(&id), changed_of(&id)]);
 		assert!(harness.heard(REMOVED_EVENT).is_empty());
 	});
 }
@@ -1523,7 +1555,7 @@ fn a_held_entry_the_listing_omits_stops_its_guest_and_is_removed_with_both_event
 		assert!(!is_guest_running(&harness, &id));
 		assert!(proxy_closed(&connection).await, "the proxy still answers");
 		assert!(harness.stored().await.is_empty());
-		assert_eq!(harness.heard(JOINED_CHANGED), vec![json!({ "id": id }), json!({ "id": id })]);
+		assert_eq!(harness.heard(JOINED_CHANGED), vec![changed_of(&id), changed_of(&id)]);
 		assert_eq!(
 			harness.heard(REMOVED_EVENT),
 			vec![json!({ "id": id, "name": "Studio", "reason": "unknown" })]
@@ -1615,7 +1647,7 @@ fn a_failed_listing_leaves_the_entries_unchanged_and_its_failure_carries_no_bear
 
 		assert!(!format!("{failure:?}").contains(BEARER), "{failure:?}");
 		assert_eq!(harness.stored().await, held);
-		assert_eq!(harness.heard(JOINED_CHANGED), vec![json!({ "id": id })]);
+		assert_eq!(harness.heard(JOINED_CHANGED), vec![changed_of(&id)]);
 		assert!(harness.heard(REMOVED_EVENT).is_empty());
 	});
 }
@@ -1692,7 +1724,7 @@ fn an_accepted_invitation_is_kept_in_place_by_the_next_reconciliation() {
 
 		assert_eq!(accepted, vec![a_relay_entry(&id, INSTANCE, "Studio")]);
 		assert_eq!(harness.stored().await, accepted);
-		assert_eq!(harness.heard(JOINED_CHANGED), vec![json!({ "id": id })]);
+		assert_eq!(harness.heard(JOINED_CHANGED), vec![changed_of(&id)]);
 		assert!(harness.heard(REMOVED_EVENT).is_empty());
 	});
 }

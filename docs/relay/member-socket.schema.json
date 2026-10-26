@@ -7109,6 +7109,9 @@
         },
         "position": {
           "type": "integer"
+        },
+        "shared": {
+          "type": "boolean"
         }
       },
       "required": [
@@ -7116,7 +7119,8 @@
         "name",
         "colour",
         "position",
-        "createdAt"
+        "createdAt",
+        "shared"
       ],
       "type": "object"
     },

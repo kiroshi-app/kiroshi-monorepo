@@ -57,6 +57,14 @@ impl Invitations {
 			},
 		)
 	}
+
+	fn inviter_of(&self, invitation_id: &str) -> Option<String> {
+		self.last()
+			.iter()
+			.flatten()
+			.find(|invitation| invitation.id == invitation_id)
+			.map(|invitation| invitation.inviter_email.clone())
+	}
 }
 
 pub async fn read<R: Runtime>(app: &AppHandle<R>) -> Result<Vec<Invitation>, InvitationError> {
@@ -79,7 +87,9 @@ pub async fn accept<R: Runtime>(
 	invitation_id: String,
 ) -> Result<JoinedSpace, JoinedSpaceError> {
 	let accepted = accepted(app, &invitation_id).await?;
-	let joined = joined_spaces::join::joined(app, accepted.instance_id, accepted.name).await;
+	let inviter_email = app.state::<Invitations>().inviter_of(&invitation_id);
+	let joined =
+		joined_spaces::join::joined(app, accepted.instance_id, accepted.name, inviter_email).await;
 	reread(app).await;
 	joined
 }

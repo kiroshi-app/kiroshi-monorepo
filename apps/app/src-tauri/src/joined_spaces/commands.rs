@@ -1,9 +1,10 @@
 use serde::Serialize;
 use tauri::{AppHandle, Manager, Runtime};
 
-use super::contract::{JoinedSpace, JoinedSpaceConnection, JoinedSpaceError};
+use super::contract::{colour_of, hosted_by, JoinedSpace, JoinedSpaceConnection, JoinedSpaceError};
 use super::relay::{self, RelayGuests};
 use super::{deep_link, held};
+use crate::conversations::contract::AvatarBlot;
 use crate::db;
 use crate::db::repositories::joined_spaces::JoinedReach;
 use crate::events::{self, JOINED_SPACE_CHANGED, JOINED_SPACE_RECONNECTED, JOINED_SPACE_REMOVED};
@@ -18,6 +19,8 @@ pub const RECONNECTED_EVENT: &str = "joined-space://reconnected";
 #[serde(rename_all = "camelCase")]
 pub struct JoinedSpaceChanged {
 	pub id: String,
+	pub hosted_by: Option<String>,
+	pub colour: AvatarBlot,
 }
 
 #[derive(Debug, Clone, Serialize, specta::Type)]
@@ -47,11 +50,21 @@ pub(super) fn ready(state: &db::DatabaseState) -> Result<&db::Database, JoinedSp
 	state.as_ref().map_err(|failure| JoinedSpaceError::Unavailable { failure: failure.into() })
 }
 
-pub(super) fn announce_change<R: Runtime>(
+pub(super) async fn announce_change<R: Runtime>(
 	app: &AppHandle<R>,
 	id: String,
 ) -> Result<(), JoinedSpaceError> {
-	events::emit(app, JOINED_SPACE_CHANGED, JoinedSpaceChanged { id })
+	let state = app.state::<db::DatabaseState>();
+	let database = ready(&state)?;
+	let held = database.joined_spaces().find(id.clone()).await?;
+	let roster = database.joined_space_members().members(id.clone()).await?;
+	let inviter_email = held.and_then(|joined| joined.inviter_email);
+	let changed = JoinedSpaceChanged {
+		hosted_by: hosted_by(&roster, inviter_email),
+		colour: colour_of(&id),
+		id,
+	};
+	events::emit(app, JOINED_SPACE_CHANGED, changed)
 		.map_err(|error| JoinedSpaceError::Undeliverable { detail: error.to_string() })
 }
 
@@ -77,14 +90,17 @@ pub async fn joined_spaces_list<R: Runtime>(
 	app: AppHandle<R>,
 ) -> Result<Vec<JoinedSpace>, JoinedSpaceError> {
 	let state = app.state::<db::DatabaseState>();
-	let stored = ready(&state)?.joined_spaces().list().await?;
+	let database = ready(&state)?;
+	let stored = database.joined_spaces().list().await?;
 	let cloud = app.state::<RelayGuests>().inner().cloud();
-	let listed = stored.into_iter().map(|joined| {
+	let mut listed = Vec::with_capacity(stored.len());
+	for joined in stored {
+		let roster = database.joined_space_members().members(joined.id.clone()).await?;
 		let JoinedReach::Relay { instance_id } = &joined.reach;
 		let wait = held::wait_or_unread(&app, &joined.id, instance_id);
-		JoinedSpace::presented(joined, cloud, wait)
-	});
-	Ok(listed.collect())
+		listed.push(JoinedSpace::presented(joined, cloud, wait, &roster));
+	}
+	Ok(listed)
 }
 
 #[tauri::command]
@@ -109,7 +125,7 @@ pub async fn joined_space_remove<R: Runtime>(
 	id: String,
 ) -> Result<(), JoinedSpaceError> {
 	relay::left(&app, &id).await?;
-	announce_change(&app, id)
+	announce_change(&app, id).await
 }
 
 #[cfg(test)]
@@ -137,6 +153,7 @@ mod tests {
 	use crate::crypto::commands::SpaceKeys;
 	use crate::crypto::space_key::HeldSpaceKey;
 	use crate::db::connection::temp_dir;
+	use crate::db::repositories::joined_space_members::{JoinedSpaceMember, JoinedSpaceRole};
 	use crate::db::repositories::joined_spaces::{self, JoinedReach};
 	use crate::environment::contract::{EnvScope, ACCOUNT_BEARER};
 	use crate::environment::store;
@@ -237,7 +254,7 @@ mod tests {
 		let payload = hearing.recv().expect("the removal was heard");
 		assert_eq!(
 			serde_json::from_str::<Value>(&payload).expect("json"),
-			json!({ "id": added.id })
+			json!({ "id": added.id, "hostedBy": null, "colour": colour_of(&added.id) })
 		);
 	}
 
@@ -275,14 +292,78 @@ mod tests {
 			reach: JoinedReach::Relay { instance_id: instance_id.to_owned() },
 			remote_space_id: Some("remote-1".to_owned()),
 			name: "Studio".to_owned(),
+			inviter_email: None,
 		};
 		let database = app.state::<db::DatabaseState>();
 		let joined = ready(&database).expect("the database").joined_spaces().join(candidate).await;
-		JoinedSpace::presented(joined.expect("the join"), app.state::<RelayGuests>().cloud(), wait)
+		let cloud = app.state::<RelayGuests>().inner().cloud();
+		JoinedSpace::presented(joined.expect("the join"), cloud, wait, &[])
 	}
 
 	async fn list(app: &App<MockRuntime>) -> Vec<JoinedSpace> {
 		joined_spaces_list(app.handle().clone()).await.expect("the list")
+	}
+
+	fn the_host(name: &str) -> JoinedSpaceMember {
+		JoinedSpaceMember {
+			user_id: "owner".to_owned(),
+			name: Some(name.to_owned()),
+			role: JoinedSpaceRole::Host,
+			device_id: "device-of-owner".to_owned(),
+			fingerprint: Vec::new(),
+			is_present: true,
+		}
+	}
+
+	async fn announced(app: &App<MockRuntime>, hearing: &Receiver<String>, id: &str) -> Value {
+		announce_change(app.handle(), id.to_owned()).await.expect("the change is announced");
+		serde_json::from_str(&hearing.recv().expect("the change was heard")).expect("json")
+	}
+
+	#[tokio::test]
+	async fn a_change_carries_the_host_the_roster_names_and_the_colour_of_the_space() {
+		let dir = temp_dir();
+		let app = app_over(&dir);
+		let added = held(&app).await;
+		let state = app.state::<db::DatabaseState>();
+		let members = ready(&state).expect("the database").joined_space_members();
+		members.replaced(added.id.clone(), vec![the_host("Ann")]).await.expect("the roster");
+		let hearing = heard(&app);
+
+		assert_eq!(
+			announced(&app, &hearing, &added.id).await,
+			json!({ "id": added.id, "hostedBy": "Ann", "colour": colour_of(&added.id) })
+		);
+		let listed = serde_json::to_value(list(&app).await).expect("json");
+		assert_eq!(listed[0]["hostedBy"], "Ann");
+		assert_eq!(listed[0]["colour"], json!(colour_of(&added.id)));
+	}
+
+	#[tokio::test]
+	async fn a_change_of_a_space_joined_from_an_invitation_carries_its_inviter_until_the_host_is_named(
+	) {
+		let dir = temp_dir();
+		let app = app_over(&dir);
+		let candidate = joined_spaces::JoinedSpace {
+			id: "invited-1".to_owned(),
+			reach: JoinedReach::Relay { instance_id: INSTANCE.to_owned() },
+			remote_space_id: None,
+			name: "Studio".to_owned(),
+			inviter_email: Some("owner@example.com".to_owned()),
+		};
+		let state = app.state::<db::DatabaseState>();
+		let database = ready(&state).expect("the database");
+		database.joined_spaces().join(candidate).await.expect("the join");
+		let hearing = heard(&app);
+
+		assert_eq!(announced(&app, &hearing, "invited-1").await["hostedBy"], "owner@example.com");
+		let listed = serde_json::to_value(list(&app).await).expect("json");
+		assert_eq!(listed[0]["hostedBy"], "owner@example.com");
+
+		let members = database.joined_space_members();
+		members.replaced("invited-1".to_owned(), vec![the_host("Ann")]).await.expect("the roster");
+
+		assert_eq!(announced(&app, &hearing, "invited-1").await["hostedBy"], "Ann");
 	}
 
 	#[tokio::test]
