@@ -192,4 +192,22 @@ struct SpaceStoreTests {
         #expect(store.spaces.map(\.isHostOnline) == [true, true, false])
         #expect(store.currentSpace?.name == "Studio")
     }
+
+    @Test func eachSpaceShowsTheColourItsHostGaveIt() async {
+        await http.answer(
+            CloudFixture.spacesPath,
+            with: .status(
+                200,
+                #"""
+                [{"id":"studio","name":"Studio","role":"owner","online":true,"colour":"purple"},{"id":"home-lab","name":"Home lab","role":"member","online":true,"colour":"green"}]
+                """#))
+        let store = makeStore()
+        #expect(store.currentSpace?.colour == nil)
+
+        await store.refreshSpaces()
+        #expect(store.currentSpace?.colour == .purple)
+
+        store.select("home-lab")
+        #expect(store.currentSpace?.colour == .green)
+    }
 }

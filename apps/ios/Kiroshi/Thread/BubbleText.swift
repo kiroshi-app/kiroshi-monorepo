@@ -7,11 +7,12 @@ struct BubbleText: View {
     var time = ""
 
     @ScaledMetric(relativeTo: .body) private var cardInset: CGFloat = 6
+    @Environment(\.spaceAccent) private var accent
 
     var body: some View {
         content
             .background(
-                isYours ? Color.kiroshi(.userBubble) : Color(.secondarySystemBackground),
+                isYours ? accent.userBubble : Color(.secondarySystemBackground),
                 in: shape
             )
     }
@@ -30,7 +31,7 @@ struct BubbleText: View {
             .accessibilityElement(children: .contain)
         } else {
             Text(bubble.text)
-                .foregroundStyle(isYours ? Color.kiroshi(.userBubbleForeground) : Color.primary)
+                .foregroundStyle(isYours ? accent.userBubbleForeground : Color.primary)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
                 .textSelection(.enabled)

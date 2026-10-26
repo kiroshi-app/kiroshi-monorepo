@@ -20,6 +20,7 @@ enum KiroshiColor: String, CaseIterable, Sendable {
     case imageOutline = "image-outline"
     case userBubble = "user-bubble"
     case userBubbleForeground = "user-bubble-foreground"
+    case userBubbleTintInk = "user-bubble-tint-ink"
 }
 
 extension Color {

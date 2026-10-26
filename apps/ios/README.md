@@ -367,3 +367,14 @@ xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixt
 `CompanionAvatar` draws what the desktop draws: `CompanionAvatarEngine` runs `Kiroshi/Resources/companion-avatar.js` (built from `packages/ui` by `bun run avatar:build`, never edited by hand) in JavaScriptCore, caches the idle drawing per name, tint and theme, and computes a frame at 30 fps while the companion works, idle under Reduce Motion. A companion with a picture shows it once `relay_avatar` answers; until then, or when it fails, the drawn avatar stays. `CompanionAvatarTests` replays every case of `packages/ui/src/components/companion-avatar.fixture.jsonl` from the repo, so `bun run ios:test` fails when the bundle and the fixture part ways. In the Conversations fixtures, Shoto has a picture and Otto no tint.
 
 A group conversation is identified by its subject icon cell (`ConversationIconCell`, page "Everywhere" of "Kiroshi, Conversation icons") wherever it's named: its list row (52 pt), its pinned chip (56 pt), its thread header (52 pt) and its empty thread (88 pt), all scaled from the same cell. A companion's own conversation keeps `CompanionAvatar` in those places. `ConversationAvatar` picks one or the other from the subject, and an icon or colour changed on the Mac (`conversation://updated`) repaints them while the screen stays open. The bots' pile shows on the list row only.
+
+## The Space's colour
+
+Your bubbles wear the colour of the Space shown, as the desktop does since OPE-1299. `GET /instances` gives each Space its host's `colour`, one of the eight companion tints, or `null`; `Space` decodes it as a `CompanionTint?`, and a value it doesn't know reads as no colour. `ShellView` hands `SpaceAccent(tint: store.currentSpace?.colour)` down through `\.spaceAccent`, so switching Space repaints at once, and `BubbleText` reads it. `SpaceAccent` (`Theme/SpaceAccent.swift`) mixes the bubble the way `[data-space-tint]` does in `packages/ui/src/styles/globals.css`: in OKLab, the tint's `bot-blot-*` at `user-bubble-tint-strength` (100% light, 50% dark) over `card`, the text in `user-bubble-tint-ink`. A Space without a colour keeps `user-bubble` and `user-bubble-foreground`, as a desktop Space without a tint does. The chrome never follows the Space: the app's accent stays `primary`.
+
+`-spaceColours` gives the fixture cloud's Spaces their colours, in order (Studio, Home lab, Side project), `null` for a Space left out. `SpaceAccentTests` (unit) checks each tint against the desktop's values and its contrast, light and dark; `SpaceAccentTests` (UI) audits a yellow bubble at the largest text size, light and dark, and reads your bubble's colour on screen as you switch from Home lab to Studio:
+
+```bash
+xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture 3.1 -spaceColours purple,green
+xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture shared-thread -spaceColours purple,green
+```
