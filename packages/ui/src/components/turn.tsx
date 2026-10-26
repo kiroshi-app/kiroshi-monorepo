@@ -3,10 +3,12 @@
 import {
 	Children,
 	cloneElement,
+	createContext,
 	Fragment,
 	isValidElement,
 	type ReactElement,
 	type ReactNode,
+	useContext,
 } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -124,6 +126,7 @@ type AssistantTurnProps = {
 	onPin?: () => void
 	pinned?: boolean
 	bare?: boolean
+	framed?: boolean
 	fills?: boolean
 	botId?: string
 	author?: MessageAuthor
@@ -179,6 +182,10 @@ const RUN_RADIUS = {
 	middle: "rounded-tl-md rounded-bl-md",
 	last: "rounded-tl-md",
 } satisfies Record<TurnRun, string>
+
+const TurnRunContext = createContext<TurnRun>("single")
+
+const useTurnRunRadius = () => RUN_RADIUS[useContext(TurnRunContext)]
 
 const READER_RUN_RADIUS = {
 	single: "",
@@ -652,6 +659,7 @@ function AssistantTurn(props: AssistantTurnProps) {
 		onPin,
 		pinned = false,
 		bare = false,
+		framed = false,
 		fills = false,
 		botId,
 		author,
@@ -669,6 +677,7 @@ function AssistantTurn(props: AssistantTurnProps) {
 	const actions = useTurnActions({ copyText, onReply, onPin, pinned })
 	const onSelectCompanion = useCompanionSelect()
 	const gutterBot = identity ?? author
+	const unwrapped = bare || framed
 	const mark = gutterBot ? (
 		<BotIdentityAvatar
 			blot={gutterBot.blot}
@@ -715,7 +724,7 @@ function AssistantTurn(props: AssistantTurnProps) {
 					cause={cause}
 					className={cn(
 						TURN_HEAD,
-						bare ? "px-0" : MESSAGE_BUBBLE_INLINE_PADDING,
+						unwrapped ? "px-0" : MESSAGE_BUBBLE_INLINE_PADDING,
 					)}
 				>
 					{sentTimeOf(sentAt, now)}
@@ -726,7 +735,7 @@ function AssistantTurn(props: AssistantTurnProps) {
 			}
 		>
 			<MessageBubble
-				variant={bare ? "bare" : "soft"}
+				variant={unwrapped ? "bare" : "soft"}
 				className={cn("min-w-0", fills && "items-stretch")}
 			>
 				<MessageActions
@@ -736,11 +745,14 @@ function AssistantTurn(props: AssistantTurnProps) {
 					<TurnBody
 						repliedTo={repliedTo}
 						className={cn(
-							bare ? undefined : RUN_RADIUS[run],
+							unwrapped ? undefined : RUN_RADIUS[run],
+							framed && "py-0",
 							fills && "w-full",
 						)}
 					>
-						{children}
+						<TurnRunContext.Provider value={run}>
+							{children}
+						</TurnRunContext.Provider>
 					</TurnBody>
 				</MessageActions>
 			</MessageBubble>
@@ -800,4 +812,5 @@ export {
 	type TurnRun,
 	type TurnState,
 	UserTurn,
+	useTurnRunRadius,
 }
