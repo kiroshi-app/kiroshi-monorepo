@@ -11,8 +11,13 @@ import {
 import { Item } from "@workspace/ui/components/ui/item"
 import { useSidebar } from "@workspace/ui/components/ui/sidebar"
 
-const ROW =
-	"flex-nowrap border-0 py-1.5 pl-1.5 transition-[width,height,padding,scale] will-change-transform focus-visible:ring-sidebar-ring active:scale-[0.98] aria-expanded:bg-sidebar-accent/70 group-data-[collapsible=icon]:pl-0"
+type SidebarListRowGeometry = "roster" | "menu"
+
+const ROW: Record<SidebarListRowGeometry, string> = {
+	roster:
+		"flex-nowrap border-0 py-1.5 pl-1.5 transition-[width,height,padding,scale] will-change-transform focus-visible:ring-sidebar-ring active:scale-[0.98] aria-expanded:bg-sidebar-accent/70 group-data-[collapsible=icon]:pl-0",
+	menu: "flex-nowrap gap-2 rounded-control border-0 py-0 ps-1.5 pe-2 font-normal text-muted-foreground text-sm hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
+}
 
 const STRIPS = "flex flex-col gap-1"
 
@@ -40,6 +45,7 @@ interface SidebarListRowProps extends SidebarListRowElementProps {
 	badge?: BotBadge
 	pendingQuestion?: string
 	strips?: ReactNode
+	geometry?: SidebarListRowGeometry
 	"data-opens"?: string
 }
 
@@ -56,6 +62,7 @@ const SidebarListRow = ({
 	badge,
 	pendingQuestion,
 	strips,
+	geometry = "roster",
 	...rowProps
 }: SidebarListRowProps) => {
 	const { state } = useSidebar()
@@ -71,7 +78,7 @@ const SidebarListRow = ({
 					</span>
 				) : undefined
 			}
-			className={ROW}
+			className={ROW[geometry]}
 			icon={media}
 			isIconDecorative={false}
 			label={name}
