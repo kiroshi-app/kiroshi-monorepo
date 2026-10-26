@@ -15,7 +15,7 @@ import { useOverlayScrollbars } from "@workspace/ui/hooks/use-overlay-scrollbars
 import { cn } from "@workspace/ui/lib/utils"
 
 const MENU =
-	"peer flex w-62 shrink-0 flex-col gap-3 rounded-s-control border-y border-s border-e border-shell-border border-e-shell-divider bg-card p-3"
+	"peer relative flex w-(--sidebar-width) shrink-0 flex-col gap-3 rounded-s-control border-y border-s border-e border-shell-border border-e-shell-divider bg-card p-3"
 
 const FOCUS_RING = "outline-none focus-visible:ring-2 focus-visible:ring-ring"
 
@@ -41,6 +41,7 @@ type SettingsMenuProps = {
 	onBack: () => void
 	backLabel?: string
 	footer?: ReactNode
+	resizeHandle?: ReactNode
 	isCompanionPage?: boolean
 	children: ReactNode
 }
@@ -52,6 +53,7 @@ const SettingsMenu = ({
 	onBack,
 	backLabel,
 	footer,
+	resizeHandle,
 	isCompanionPage = false,
 	children,
 }: SettingsMenuProps) => {
@@ -97,6 +99,7 @@ const SettingsMenu = ({
 					{footer}
 				</ul>
 			) : null}
+			{resizeHandle}
 		</nav>
 	)
 }

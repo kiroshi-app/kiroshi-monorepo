@@ -4,10 +4,12 @@ import { expect, fn, screen, waitFor, within } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	A11Y_FLOATING_FOCUS_GUARDS,
+	expectSettingsChrome,
 	opaque,
 	slotIn,
 } from "@workspace/storybook/story-utils"
 import { AppRail } from "@workspace/ui/components/app-rail"
+import { TITLE_BAR } from "@workspace/ui/components/app-title-bar.fixtures"
 import {
 	type BotModelOption,
 	type BotSettingsValue,
@@ -34,6 +36,11 @@ import {
 	CompanionSettingsScreen,
 	type CompanionSettingsScreenProps,
 } from "@workspace/ui/components/settings-screen"
+import {
+	SIDEBAR_DEFAULT_WIDTH,
+	SIDEBAR_MAX_WIDTH,
+	SIDEBAR_MIN_WIDTH,
+} from "@workspace/ui/components/sidebar-resize"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 const BACK_TO_COMPANIONS = "Back to Companions"
@@ -132,6 +139,7 @@ const meta = preview.meta({
 		onBack: fn(),
 		backLabel: BACK_TO_COMPANIONS,
 		rail: RAIL,
+		titleBar: { ...TITLE_BAR, onSelectSpace: fn() },
 		value: COMPANION,
 		onValueChange: fn(),
 		models: MODELS,
@@ -494,4 +502,46 @@ export const BackToConversations = meta.story({
 		await userEvent.click(entryIn(menu, "Back to conversations"))
 		await expect(args.onBack).toHaveBeenCalledOnce()
 	},
+})
+
+export const DefaultWidth = meta.story({
+	args: { width: SIDEBAR_DEFAULT_WIDTH },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Artboards H02 to H11: a companion's settings at the panel width the conversations screen opens with. Check that the 34px title bar carries the window controls reserve and the Space switcher at the place the conversations screen draws them, that the 60px rail follows, and that the menu panel is 304px wide with the conversations panel's end separator. Pick `MinimumWidth` or `MaximumWidth` for a reader who resized the panel.",
+			},
+		},
+	},
+	play: ({ canvasElement }) =>
+		expectSettingsChrome(canvasElement, SIDEBAR_DEFAULT_WIDTH),
+})
+
+export const MinimumWidth = meta.story({
+	args: { width: SIDEBAR_MIN_WIDTH },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"`DefaultWidth` after the reader narrowed the conversations panel as far as it goes. Check that the menu panel follows it down to 224px and the title bar and rail do not move.",
+			},
+		},
+	},
+	play: ({ canvasElement }) =>
+		expectSettingsChrome(canvasElement, SIDEBAR_MIN_WIDTH),
+})
+
+export const MaximumWidth = meta.story({
+	args: { width: SIDEBAR_MAX_WIDTH },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"`DefaultWidth` after the reader widened the conversations panel as far as it goes. Check that the menu panel follows it up to 416px and the title bar and rail do not move.",
+			},
+		},
+	},
+	play: ({ canvasElement }) =>
+		expectSettingsChrome(canvasElement, SIDEBAR_MAX_WIDTH),
 })

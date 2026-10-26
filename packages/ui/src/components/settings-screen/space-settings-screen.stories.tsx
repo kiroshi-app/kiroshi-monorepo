@@ -4,9 +4,14 @@ import { expect, fn, screen, waitFor, within } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+	expectSettingsChrome,
 	slotIn,
 } from "@workspace/storybook/story-utils"
 import { AppRail } from "@workspace/ui/components/app-rail"
+import {
+	GARAGE,
+	TITLE_BAR,
+} from "@workspace/ui/components/app-title-bar.fixtures"
 import { SPACE_ENVIRONMENT } from "@workspace/ui/components/environment.fixtures"
 import {
 	CATALOGUE_APPLICATIONS,
@@ -22,6 +27,11 @@ import {
 	SettingsScreen,
 	type SpaceSettingsScreenProps,
 } from "@workspace/ui/components/settings-screen"
+import {
+	SIDEBAR_DEFAULT_WIDTH,
+	SIDEBAR_MAX_WIDTH,
+	SIDEBAR_MIN_WIDTH,
+} from "@workspace/ui/components/sidebar-resize"
 import { SPACE_COMPANIONS } from "@workspace/ui/components/space-settings-dialog/companions.fixtures"
 import { MembersPanel } from "@workspace/ui/components/space-settings-dialog/members-panel"
 
@@ -126,6 +136,7 @@ const SPACE_ARGS = {
 	onEntryChange: fn(),
 	onBack: fn(),
 	rail: RAIL,
+	titleBar: { ...TITLE_BAR, onSelectSpace: fn() },
 	presence: "up",
 	value: { name: "Release desk", colour: "blue" },
 	onValueChange: fn(),
@@ -446,6 +457,50 @@ export const LeavingUnsavedApplicationEditsByTheRail = meta.story({
 	},
 })
 
+export const LeavingUnsavedApplicationEditsBySwitchingSpace = meta.story({
+	args: LINEAR_OPEN,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"`LinearApplication` with an edit not yet saved, then another Space picked in the title bar's switcher. Check that the screen asks with the same leave wording the rail and Back use before the Space changes, that Cancel keeps the Space, and that Leave switches to the picked Space once.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const menu = await menuIn()
+		const main = screen.getByRole("main")
+		const switcher = slotIn(
+			slotIn(canvasElement, "app-title-bar"),
+			"space-switcher",
+		)
+		await within(menu).findByRole("button", { name: "Linear Connected" })
+		await userEvent.type(within(main).getByLabelText("Name"), "-desk")
+
+		const pickGarage = async () => {
+			await userEvent.click(switcher)
+			await userEvent.click(
+				await screen.findByRole("menuitemradio", { name: /Garage/ }),
+			)
+			return screen.findByRole("alertdialog", {
+				name: "Leave without saving?",
+			})
+		}
+
+		await userEvent.click(
+			within(await pickGarage()).getByRole("button", { name: "Cancel" }),
+		)
+		await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull())
+		await expect(args.titleBar?.onSelectSpace).not.toHaveBeenCalled()
+
+		await userEvent.click(
+			within(await pickGarage()).getByRole("button", { name: "Leave" }),
+		)
+		await expect(args.titleBar?.onSelectSpace).toHaveBeenCalledTimes(1)
+		await expect(args.titleBar?.onSelectSpace).toHaveBeenCalledWith(GARAGE.id)
+	},
+})
+
 export const LeavesByTheRailWithNothingUnsaved = meta.story({
 	parameters: {
 		docs: {
@@ -628,4 +683,46 @@ export const LongName = meta.story({
 			36,
 		)
 	},
+})
+
+export const DefaultWidth = meta.story({
+	args: { width: SIDEBAR_DEFAULT_WIDTH },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Artboards E2 and E3: the space's settings at the panel width the conversations screen opens with. Check that the 34px title bar carries the window controls reserve and the Space switcher at the place the conversations screen draws them, that the 60px rail follows, and that the menu panel is 304px wide with the conversations panel's end separator. Pick `MinimumWidth` or `MaximumWidth` for a reader who resized the panel.",
+			},
+		},
+	},
+	play: ({ canvasElement }) =>
+		expectSettingsChrome(canvasElement, SIDEBAR_DEFAULT_WIDTH),
+})
+
+export const MinimumWidth = meta.story({
+	args: { width: SIDEBAR_MIN_WIDTH },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"`DefaultWidth` after the reader narrowed the conversations panel as far as it goes. Check that the menu panel follows it down to 224px and the title bar and rail do not move.",
+			},
+		},
+	},
+	play: ({ canvasElement }) =>
+		expectSettingsChrome(canvasElement, SIDEBAR_MIN_WIDTH),
+})
+
+export const MaximumWidth = meta.story({
+	args: { width: SIDEBAR_MAX_WIDTH },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"`DefaultWidth` after the reader widened the conversations panel as far as it goes. Check that the menu panel follows it up to 416px and the title bar and rail do not move.",
+			},
+		},
+	},
+	play: ({ canvasElement }) =>
+		expectSettingsChrome(canvasElement, SIDEBAR_MAX_WIDTH),
 })
