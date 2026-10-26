@@ -1096,6 +1096,7 @@ navigation-searchresultrow--themes-chat-group-red
 navigation-searchresultrow--themes-chat-solo
 navigation-searchresultrow--with-badge-while-active
 navigation-settingsmenu--applications-open
+navigation-settingsmenu--applications-open-dark
 navigation-settingsmenu--connecting-space-dark
 navigation-settingsmenu--danger-selected
 navigation-settingsmenu--danger-selected-dark
@@ -1562,6 +1563,7 @@ settings-plugins-applicationspanel--failed-with-long-reason
 settings-plugins-applicationspanel--failed-with-reason
 settings-plugins-applicationspanel--long-content
 settings-plugins-applicationspanel--needs-authorization
+settings-plugins-applicationspanel--needs-authorization-dark
 settings-plugins-applicationspanel--profile
 settings-plugins-applicationspanel--search-row
 settings-plugins-applicationspanel--search-row-at-largest-text-size

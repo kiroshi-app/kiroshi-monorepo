@@ -78,6 +78,7 @@
 	--color-warning-foreground: var(--warning-foreground);
 	--color-success: var(--success);
 	--color-state-connected: var(--state-connected);
+	--color-state-needs-authorization: var(--state-needs-authorization);
 	--color-presence-online: var(--presence-online);
 	--color-presence-offline: var(--presence-offline);
 	--color-title-bar-pill: var(--title-bar-pill);

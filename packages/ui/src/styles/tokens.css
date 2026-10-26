@@ -41,6 +41,7 @@
 	--warning-foreground: #fffffc;
 	--success: #2e7d4f;
 	--state-connected: oklch(0.696 0.17 162.48);
+	--state-needs-authorization: var(--warning);
 	--presence-online: #239f53;
 	--presence-offline: #737373;
 	--title-bar-pill: #ffffff;
@@ -121,6 +122,7 @@
 	--warning: oklch(0.76 0.16 72);
 	--warning-foreground: #1f1400;
 	--success: #5fbf85;
+	--state-needs-authorization: #e8b04a;
 	--presence-online: #3fb466;
 	--presence-offline: #737373;
 	--title-bar-pill: oklch(1 0 0 / 6%);

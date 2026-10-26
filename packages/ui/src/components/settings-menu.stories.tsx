@@ -2,7 +2,7 @@ import type { ReactNode } from "react"
 import { expect, fn, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { slotIn } from "@workspace/storybook/story-utils"
+import { resolvedRootColor, slotIn } from "@workspace/storybook/story-utils"
 import { MARKED_APPLICATIONS } from "@workspace/ui/components/plugin-settings/applications.fixtures"
 import {
 	SettingsMenu,
@@ -11,6 +11,26 @@ import {
 	SettingsMenuEntry,
 } from "@workspace/ui/components/settings-menu"
 import { SpaceSquare } from "@workspace/ui/components/space-switcher"
+
+const NEEDS_AUTHORIZATION_DOT = "bg-state-needs-authorization"
+
+const E3_DARK_NEEDS_AUTHORIZATION = "rgb(232, 176, 74)"
+
+const expectNeedsAuthorizationDot = async (
+	dot: HTMLElement,
+	backgroundColor: string,
+) => {
+	await expect(dot).toHaveClass(NEEDS_AUTHORIZATION_DOT)
+	await expect(getComputedStyle(dot).backgroundColor).toBe(backgroundColor)
+}
+
+const needsAuthorizationDotIn = (canvasElement: HTMLElement) => {
+	const dot = canvasElement.querySelector<HTMLElement>(
+		'[data-connection="needsAuthorization"]',
+	)
+	if (!dot) throw new Error("No needs-authorization dot in the menu.")
+	return dot
+}
 
 const Frame = ({ children }: { children: ReactNode }) => (
 	<div className="flex h-[600px] bg-background p-4">{children}</div>
@@ -204,6 +224,25 @@ export const ApplicationsOpen = meta.story({
 		await expect(
 			within(menu).getByRole("button", { name: "Add an application" }),
 		).toBeVisible()
+		const dot = needsAuthorizationDotIn(canvasElement)
+		await expectNeedsAuthorizationDot(dot, resolvedRootColor("--warning"))
+	},
+})
+
+export const ApplicationsOpenDark = meta.story({
+	globals: { theme: "dark" },
+	args: ApplicationsOpen.input.args,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The dark theme, Applications opened. Check that GitHub, which needs authorization, carries the amber dot apart from the green of the connected applications.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const dot = needsAuthorizationDotIn(canvasElement)
+		await expectNeedsAuthorizationDot(dot, E3_DARK_NEEDS_AUTHORIZATION)
 	},
 })
 

@@ -54,6 +54,10 @@ const TINTED_USER_BUBBLE_PAIRS = [USER_BUBBLE_PAIR, USER_BUBBLE_MUTED_PAIR]
 
 const WARNING_PAIRS: TokenPair[] = [
 	{ background: ROOT_PAIR.background, foreground: "--warning" },
+	{
+		background: ROOT_PAIR.background,
+		foreground: "--state-needs-authorization",
+	},
 	{ background: "--sidebar", foreground: "--warning" },
 	{ background: "--warning", foreground: "--warning-foreground" },
 ]

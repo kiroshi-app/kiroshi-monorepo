@@ -1,6 +1,7 @@
-import { expect, fn } from "storybook/test"
+import { expect, fn, type within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
+import { resolvedRootColor } from "@workspace/storybook/story-utils"
 import type { BotMcpServerItem } from "@workspace/ui/components/bot-settings"
 import {
 	BOT_MCP_SERVERS,
@@ -11,6 +12,25 @@ import {
 	type ApplicationsOwner,
 	ApplicationsPanel,
 } from "@workspace/ui/components/plugin-settings/applications-panel"
+
+const NEEDS_AUTHORIZATION_DOT = "bg-state-needs-authorization"
+
+const E3_DARK_NEEDS_AUTHORIZATION = "rgb(232, 176, 74)"
+
+const expectNeedsAuthorizationDot = async (
+	dot: HTMLElement,
+	backgroundColor: string,
+) => {
+	await expect(dot).toHaveClass(NEEDS_AUTHORIZATION_DOT)
+	await expect(getComputedStyle(dot).backgroundColor).toBe(backgroundColor)
+}
+
+const needsAuthorizationDotIn = (canvas: ReturnType<typeof within>) => {
+	const dot = canvas.getByText("Needs authorization").previousElementSibling
+	if (!(dot instanceof HTMLElement))
+		throw new Error("No dot beside the needs-authorization state.")
+	return dot
+}
 
 const SEARCH_ROW_HEIGHT = 36
 
@@ -330,12 +350,14 @@ export const NeedsAuthorization = meta.story({
 		docs: {
 			description: {
 				story:
-					"An application that answered that nobody has authorized it yet. Check the blue attention dot beside its label, and that Connect is a target of its own: the keyboard reaches the row first, then Connect, each with its ring.",
+					"An application that answered that nobody has authorized it yet. Check the amber dot beside its label, and that Connect is a target of its own: the keyboard reaches the row first, then Connect, each with its ring.",
 			},
 		},
 	},
 	play: async ({ args, canvas, userEvent }) => {
 		await expect(canvas.getByText("Needs authorization")).toBeVisible()
+		const dot = needsAuthorizationDotIn(canvas)
+		await expectNeedsAuthorizationDot(dot, resolvedRootColor("--warning"))
 
 		await userEvent.tab()
 		await expect(
@@ -361,6 +383,23 @@ export const NeedsAuthorization = meta.story({
 
 		await expect(args.onConnect).toHaveBeenCalledWith(NEEDS_AUTHORIZATION)
 		await expect(args.onOpen).not.toHaveBeenCalled()
+	},
+})
+
+export const NeedsAuthorizationDark = meta.story({
+	globals: { theme: "dark" },
+	args: NeedsAuthorization.input.args,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The dark theme, for an application nobody has authorized yet. Check that its dot is amber and holds against the dark surface.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const dot = needsAuthorizationDotIn(canvas)
+		await expectNeedsAuthorizationDot(dot, E3_DARK_NEEDS_AUTHORIZATION)
 	},
 })
 
