@@ -1,8 +1,8 @@
 import { AppRail } from "@workspace/ui/components/app-rail"
 import type { SettingsScreenRequestLeave } from "@workspace/ui/components/settings-screen"
+import type { Space } from "@workspace/ui/components/space"
 
 import type { SettingsNavigation } from "@/lib/navigation/use-settings-navigation"
-import type { useSwitcherSpaces } from "@/lib/spaces/use-joined-spaces"
 import type { SidebarPanel } from "@/lib/user/use-sidebar-tab"
 import type { RosterLines } from "@/lib/workspace/use-roster-lines"
 import type { RosterLists } from "@/lib/workspace/use-roster-lists"
@@ -10,14 +10,6 @@ import type { SettingsPanels } from "@/lib/workspace/use-settings-panels"
 import type { useSidebarPanelSwitch } from "@/lib/workspace/use-sidebar-panel-switch"
 import type { WorkspaceCore } from "@/lib/workspace/use-workspace-core"
 import type { WorkspaceOverlay } from "@/lib/workspace/use-workspace-overlay"
-
-type RailSwitcher = Pick<
-	ReturnType<typeof useSwitcherSpaces>,
-	"spaces" | "selectedSpaceId"
->
-
-const selectedSpaceOf = ({ spaces, selectedSpaceId }: RailSwitcher) =>
-	spaces.find((space) => space.id === selectedSpaceId) ?? spaces[0]
 
 type WorkspaceRailProps = {
 	collapsedSectionIds: string[]
@@ -29,7 +21,7 @@ type WorkspaceRailProps = {
 	rosterLines: RosterLines
 	rosterLists: RosterLists
 	sidebarTab: ReturnType<typeof useSidebarPanelSwitch>
-	switcher: RailSwitcher
+	space: Space | undefined
 }
 
 export const WorkspaceRail = ({
@@ -42,7 +34,7 @@ export const WorkspaceRail = ({
 	rosterLines,
 	rosterLists,
 	sidebarTab,
-	switcher,
+	space,
 }: WorkspaceRailProps) => {
 	const leaveSettingsFor = (panel: SidebarPanel) => {
 		navigation.openConversations()
@@ -68,7 +60,7 @@ export const WorkspaceRail = ({
 			onSelectMissions={() => requestLeave(() => leaveSettingsFor("missions"))}
 			openSettings={panels.railSettings}
 			selected={sidebarTab.openTab}
-			space={selectedSpaceOf(switcher)}
+			space={space}
 			updateBadge={rosterLines.updateBadge}
 			user={overlay.userSettings}
 		/>
