@@ -24,6 +24,7 @@ import {
 	useOpenJoinedHost,
 	useSwitcherSpaces,
 } from "@/lib/spaces/use-joined-spaces"
+import { useSpaceTint } from "@/lib/theme/use-space-tint"
 import { aboutFieldsOf } from "@/lib/updater/about-fields"
 import { useRunningVersion } from "@/lib/updater/use-running-version"
 import { useWhatsNew } from "@/lib/updater/use-whats-new"
@@ -46,6 +47,7 @@ export function App() {
 	const core = useWorkspaceCore()
 	const drivers = useWorkspaceDrivers(core)
 	const scopes = useApplicationScopes(core)
+	useSpaceTint(scopes.selectedSpace?.colour)
 	const rosterView = useRosterView({
 		core,
 		drivers,
