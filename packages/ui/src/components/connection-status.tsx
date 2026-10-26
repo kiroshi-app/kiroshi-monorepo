@@ -13,7 +13,7 @@ interface ConnectionStatusProps
 
 const CONNECTION_STATUS_DOT = {
 	checking: "bg-muted-foreground motion-safe:animate-pulse",
-	ready: "bg-emerald-500",
+	ready: "bg-success",
 	unavailable: "bg-destructive",
 	crashed: "bg-destructive",
 } satisfies Record<ConnectionStatusState, string>

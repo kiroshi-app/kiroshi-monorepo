@@ -1,7 +1,11 @@
 import { expect } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { listExhaustively, Row } from "@workspace/storybook/story-utils"
+import {
+	listExhaustively,
+	Row,
+	resolvedRootColor,
+} from "@workspace/storybook/story-utils"
 import {
 	ConnectionStatus,
 	type ConnectionStatusState,
@@ -13,6 +17,22 @@ const CONNECTION_STATUS_STATES = listExhaustively<ConnectionStatusState>({
 	unavailable: true,
 	crashed: true,
 })
+
+const READY_DOT = "bg-success"
+
+const E3_DARK_CONNECTED = "rgb(95, 191, 133)"
+
+const expectReadyDot = async (
+	canvasElement: HTMLElement,
+	backgroundColor: string,
+) => {
+	const dot = canvasElement.querySelector<HTMLElement>(
+		'[data-slot="connection-status"] > [aria-hidden="true"]',
+	)
+	if (!dot) throw new Error("No dot in the connection status.")
+	await expect(dot).toHaveClass(READY_DOT)
+	await expect(getComputedStyle(dot).backgroundColor).toBe(backgroundColor)
+}
 
 const meta = preview.meta({
 	title: "Feedback/ConnectionStatus",
@@ -42,11 +62,28 @@ export const Default = meta.story({
 			},
 		},
 	},
-	play: async ({ canvas }) => {
+	play: async ({ canvas, canvasElement }) => {
 		await expect(canvas.getByRole("status")).toHaveTextContent(
 			"Agent ready v2.1.233",
 		)
 		await expect(canvas.getByRole("status")).toHaveClass("sr-only")
+		await expectReadyDot(canvasElement, resolvedRootColor("--success"))
+	},
+})
+
+export const DefaultDark = meta.story({
+	globals: { theme: "dark" },
+	args: Default.input.args,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The ready state in the dark theme. Check that the dot wears the same green as the connected applications of the settings menu.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expectReadyDot(canvasElement, E3_DARK_CONNECTED)
 	},
 })
 
