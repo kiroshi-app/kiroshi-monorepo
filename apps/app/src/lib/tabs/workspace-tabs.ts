@@ -4,7 +4,8 @@ import {
 	type RouterHistory,
 } from "@tanstack/react-router"
 
-import { EMPTY_LIST_HREF, HREF_BASE, rowIdsNamedBy } from "./tab-pages"
+import { goneMissionIdsOf, type ReadMission } from "./restored-missions"
+import { EMPTY_LIST_HREF, HREF_BASE, pageOf, rowIdsNamedBy } from "./tab-pages"
 import { readSpaceTabs, writeSpaceTabs } from "./tabs-mirror"
 import {
 	activeTabOf,
@@ -52,10 +53,12 @@ export type WorkspaceTabs = {
 	closeActive: () => void
 	closeOthers: (id: string) => void
 	reorder: (ids: string[]) => void
-	dropAbsentRestored: (
-		spaceId: string,
-		isPresent: (id: string) => boolean,
-	) => void
+	dropAbsentRestored: (spaceId: string, check: RestoredCheck) => Promise<void>
+}
+
+type RestoredCheck = {
+	isRowPresent: (id: string) => boolean
+	readMission: ReadMission
 }
 
 export const shownTabsOf = ({ spaceId, bySpace }: WorkspaceTabsState) =>
@@ -95,16 +98,18 @@ export const createWorkspaceTabs = (
 	})
 	const shown = () => shownTabsOf(store.getState())
 
-	const keep = (space: SpaceTabs) => {
-		const state = store.getState()
-		if (state.spaceId !== NO_SPACE) {
-			writeSpaceTabs(state.spaceId, space)
+	const keepIn = (spaceId: string, space: SpaceTabs) => {
+		if (spaceId !== NO_SPACE) {
+			writeSpaceTabs(spaceId, space)
 		}
+		const state = store.getState()
 		store.setState({
 			...state,
-			bySpace: { ...state.bySpace, [state.spaceId]: space },
+			bySpace: { ...state.bySpace, [spaceId]: space },
 		})
 	}
+
+	const keep = (space: SpaceTabs) => keepIn(store.getState().spaceId, space)
 
 	const history = createHistory({
 		getLocation: () => locationOf(shownEntryOf(shown())),
@@ -127,6 +132,39 @@ export const createWorkspaceTabs = (
 
 	const change = (update: (space: SpaceTabs) => SpaceTabs) =>
 		showChange(() => keep(update(shown())))
+
+	const changeIn = (
+		spaceId: string,
+		update: (space: SpaceTabs) => SpaceTabs,
+	) => {
+		const held = store.getState().bySpace[spaceId]
+		if (spaceId === store.getState().spaceId) {
+			change(update)
+		} else if (held) {
+			keepIn(spaceId, update(held))
+		}
+	}
+
+	const missionIdsIn = (spaceId: string) =>
+		(store.getState().bySpace[spaceId]?.tabs ?? []).flatMap((tab) => {
+			const { mission } = pageOf(currentHrefOf(tab)).thread
+			return mission === undefined ? [] : [mission]
+		})
+
+	const dropGoneMissions = async (
+		spaceId: string,
+		readMission: ReadMission,
+	) => {
+		const goneIds = await goneMissionIdsOf(readMission, missionIdsIn(spaceId))
+		if (goneIds.length === 0) {
+			return
+		}
+		changeIn(spaceId, (space) =>
+			dropTabsWhere(space, (tab) =>
+				goneIds.includes(pageOf(currentHrefOf(tab)).thread.mission ?? ""),
+			),
+		)
+	}
 
 	const reachedTabsOf = (spaceId: string) => {
 		const state = store.getState()
@@ -172,7 +210,7 @@ export const createWorkspaceTabs = (
 		closeActive: () => change(closeActiveTab),
 		closeOthers: (id) => change((space) => closeOtherTabs(space, id)),
 		reorder: (ids) => change((space) => reorderTabs(space, ids)),
-		dropAbsentRestored: (spaceId, isPresent) => {
+		dropAbsentRestored: async (spaceId, { isRowPresent, readMission }) => {
 			const state = store.getState()
 			if (
 				state.spaceId !== spaceId ||
@@ -188,9 +226,10 @@ export const createWorkspaceTabs = (
 			})
 			change((space) =>
 				dropTabsWhere(space, (tab) =>
-					isNamingAnAbsentRow(currentHrefOf(tab), isPresent),
+					isNamingAnAbsentRow(currentHrefOf(tab), isRowPresent),
 				),
 			)
+			await dropGoneMissions(spaceId, readMission)
 		},
 	}
 }

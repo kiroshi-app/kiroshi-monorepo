@@ -5,6 +5,7 @@ import { isListPage, pageOf, sameThread, threadRowIdOf } from "./tab-pages"
 import type { WorkspaceTabs } from "./workspace-tabs"
 
 import type { RosterController } from "../bots/roster-controller"
+import { missionsTransport } from "../missions/missions-transport"
 import type {
 	OpenedMission,
 	OpenedMissionController,
@@ -119,7 +120,10 @@ export const useTabThreadSync = ({
 			return
 		}
 		const present = presentRowIdsIn(roster)
-		tabs.dropAbsentRestored(readySpaceId, (id) => present.has(id))
+		void tabs.dropAbsentRestored(readySpaceId, {
+			isRowPresent: (id) => present.has(id),
+			readMission: missionsTransport.detail,
+		})
 		if (history.location.href !== shownHref) {
 			return
 		}

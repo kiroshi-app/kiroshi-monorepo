@@ -6,7 +6,7 @@ import {
 	createRouter,
 } from "@tanstack/react-router"
 import { act, cleanup, fireEvent, renderHook } from "@testing-library/react"
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { useTabKeys } from "./use-tab-keys"
 import { useWorkspaceTabs } from "./use-workspace-tabs"
@@ -64,6 +64,23 @@ const threadOf = (row: string) => `/?conversation=${row}`
 
 const companionOf = (row: string) => `/?bot=${row}`
 
+const missionOf = (missionId: string) => `/?bot=nova&mission=${missionId}`
+
+const UNKNOWN = { kind: "unknownMission", id: "unknown" }
+
+const OF_ANOTHER_SPACE = {
+	kind: "missionOfAnotherSpace",
+	id: "elsewhere",
+	spaceId: OTHER_SPACE,
+}
+
+const UNAVAILABLE = { kind: "unavailable", failure: "storage locked" }
+
+const missionReadOf = (missionId: string, failures: Record<string, unknown>) =>
+	missionId in failures
+		? Promise.reject(failures[missionId])
+		: Promise.resolve({ id: missionId })
+
 const NEEDS_YOU: ObservedState = {
 	state: "needs_you",
 	pendingPrompt: null,
@@ -73,6 +90,7 @@ const NEEDS_YOU: ObservedState = {
 afterEach(() => {
 	cleanup()
 	localStorage.clear()
+	vi.restoreAllMocks()
 })
 
 describe("a Space without stored tabs", () => {
@@ -279,7 +297,7 @@ describe("the tabs of a Space", () => {
 		expect(activeHref(after)).toBe(companionOf("nova"))
 	})
 
-	it("drops a restored tab whose conversation, companion or settings target is absent", () => {
+	it("drops a restored tab whose conversation, companion or settings target is absent", async () => {
 		const before = tabsOfSpace()
 		before.openInNewTab(threadOf("gone"))
 		before.openInNewTab("/settings/companion/vanished")
@@ -287,9 +305,50 @@ describe("the tabs of a Space", () => {
 		cleanup()
 		const after = tabsOfSpace()
 
-		after.dropAbsentRestored(SPACE, (id) => id === "nova")
+		await after.dropAbsentRestored(SPACE, {
+			isRowPresent: (id) => id === "nova",
+			readMission: async () => ({}),
+		})
 
 		expect(shownHrefs(after)).toEqual(["/", companionOf("nova")])
+	})
+
+	it("drops a restored mission tab whose mission is unknown and activates its neighbour", async () => {
+		const before = tabsOfSpace()
+		before.openInNewTab(missionOf("present"))
+		before.openInNewTab(missionOf("unknown"))
+		cleanup()
+		const after = tabsOfSpace()
+
+		await after.dropAbsentRestored(SPACE, {
+			isRowPresent: () => true,
+			readMission: (missionId) =>
+				missionReadOf(missionId, { unknown: UNKNOWN }),
+		})
+
+		expect(shownHrefs(after)).toEqual(["/", missionOf("present")])
+		expect(activeHref(after)).toBe(missionOf("present"))
+	})
+
+	it("drops a mission of another Space and keeps the one its side could not read", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+		const before = tabsOfSpace()
+		before.openInNewTab(missionOf("elsewhere"))
+		before.openInNewTab(missionOf("unreadable"))
+		cleanup()
+		const after = tabsOfSpace()
+
+		await after.dropAbsentRestored(SPACE, {
+			isRowPresent: () => true,
+			readMission: (missionId) =>
+				missionReadOf(missionId, {
+					elsewhere: OF_ANOTHER_SPACE,
+					unreadable: UNAVAILABLE,
+				}),
+		})
+
+		expect(shownHrefs(after)).toEqual(["/", missionOf("unreadable")])
+		expect(warn).toHaveBeenCalledOnce()
 	})
 })
 
