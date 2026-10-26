@@ -5,7 +5,10 @@ import { useTranslation } from "react-i18next"
 
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
 import { BotIdentityFields } from "@workspace/ui/components/bot-identity-fields"
-import type { BotMcpServerItem } from "@workspace/ui/components/bot-settings"
+import type {
+	BotMcpServerItem,
+	BotSettingsValue,
+} from "@workspace/ui/components/bot-settings"
 import type { BotSettingsDialogProps } from "@workspace/ui/components/bot-settings-dialog"
 import { DangerZone } from "@workspace/ui/components/bot-settings-dialog/danger-zone"
 import { BotGeneralFields } from "@workspace/ui/components/bot-settings-dialog/general-fields"
@@ -343,7 +346,7 @@ const CompanionSettingsScreen = ({
 	history,
 	seed,
 	onDelete,
-	working = false,
+	working,
 	workingKind,
 	...sessionProps
 }: CompanionSettingsScreenProps) => {
@@ -360,7 +363,7 @@ const CompanionSettingsScreen = ({
 		editorLayout: "page",
 	})
 
-	const patch = (fields: Partial<typeof value>) =>
+	const patch = (fields: Partial<BotSettingsValue>) =>
 		onValueChange({ ...value, ...fields })
 
 	const historyEntry: SettingsEntry[] = history
