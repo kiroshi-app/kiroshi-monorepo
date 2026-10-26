@@ -39,6 +39,7 @@ type SettingsMenuProps = {
 	name: string
 	subtitle: string
 	onBack: () => void
+	backLabel?: string
 	footer?: ReactNode
 	children: ReactNode
 }
@@ -48,6 +49,7 @@ const SettingsMenu = ({
 	name,
 	subtitle,
 	onBack,
+	backLabel,
 	footer,
 	children,
 }: SettingsMenuProps) => {
@@ -63,7 +65,7 @@ const SettingsMenu = ({
 		>
 			<button className={BACK} onClick={onBack} type="button">
 				<Icons.Previous aria-hidden="true" className="size-4 shrink-0" />
-				{t("screen.back")}
+				{backLabel ?? t("screen.back")}
 			</button>
 			<div className="flex min-w-0 items-center gap-2.5 px-2">
 				{avatar}

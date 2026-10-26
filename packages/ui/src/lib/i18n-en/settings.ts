@@ -4,9 +4,11 @@ const settings = {
 	},
 	screen: {
 		back: "Back to conversations",
+		backToCompanions: "Back to Companions",
 		menu: "Settings",
 		subtitle: {
 			space: "Space settings",
+			companion: "Companion settings",
 			user: "User settings",
 		},
 	},

@@ -1365,6 +1365,7 @@ primitives-tooltipbutton--default
 primitives-tooltipbutton--long-content
 primitives-tooltipbutton--states
 primitives-tooltipbutton--with-side
+settings-bot-botgeneralfields--default
 settings-bot-botidentityfields--chooses-the-same-file-twice
 settings-bot-botidentityfields--default
 settings-bot-botidentityfields--dropped-and-pasted
@@ -1373,6 +1374,7 @@ settings-bot-botidentityfields--removes-the-picture
 settings-bot-botidentityfields--takes-the-blot-off
 settings-bot-botidentityfields--with-picture
 settings-bot-botidentityfields--working
+settings-bot-botinstructionsfields--default
 settings-bot-botsettingsdialog--appearance
 settings-bot-botsettingsdialog--closing
 settings-bot-botsettingsdialog--closing-over-an-unsaved-skill
@@ -1393,6 +1395,18 @@ settings-bot-botsettingsdialog--with-server-open
 settings-bot-botsettingsdialog--with-skill-open
 settings-bot-botsettingsdialog--without-history
 settings-bot-botsettingsdialog--working
+settings-bot-companionsettingsscreen--appearance
+settings-bot-companionsettingsscreen--applications
+settings-bot-companionsettingsscreen--approvals
+settings-bot-companionsettingsscreen--back-to-companions
+settings-bot-companionsettingsscreen--back-to-conversations
+settings-bot-companionsettingsscreen--danger-zone
+settings-bot-companionsettingsscreen--general
+settings-bot-companionsettingsscreen--history
+settings-bot-companionsettingsscreen--instructions
+settings-bot-companionsettingsscreen--runtime
+settings-bot-companionsettingsscreen--secrets
+settings-bot-companionsettingsscreen--skills
 settings-bot-dangerzone--cancelled
 settings-bot-dangerzone--confirming
 settings-bot-dangerzone--default
