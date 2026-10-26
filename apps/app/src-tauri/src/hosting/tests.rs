@@ -97,6 +97,7 @@ use crate::spaces::commands::{
 };
 use crate::spaces::contract::{Space as SpaceShown, SpaceError};
 use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
+use crate::test_log::{capturing, warnings_naming};
 
 const BEARER: &str = "bearer-that-never-leaves";
 const LOCAL_TOKEN: &str = "host-token-of-the-loopback";
@@ -174,6 +175,8 @@ struct Relay {
 	is_registration_down: Arc<AtomicBool>,
 	registered: Arc<Mutex<Vec<String>>>,
 	instance_bodies: Arc<Mutex<Vec<(String, Value)>>>,
+	is_description_open: Arc<watch::Sender<bool>>,
+	descriptions_dropped: Arc<AtomicUsize>,
 	known: Arc<Mutex<HashSet<String>>>,
 	attempts: Arc<AtomicUsize>,
 	sockets: mpsc::UnboundedSender<(WebSocket, String)>,
@@ -374,10 +377,28 @@ async fn instance_described(
 	let call = format!("PATCH /instances/{id}");
 	relay.instance_bodies.lock().expect("the relay").push((call, body));
 	relay.noticed.send_replace(());
+	let mut held = HeldDescription { relay: relay.clone(), is_answered: false };
+	let mut is_open = relay.is_description_open.subscribe();
+	is_open.wait_for(|is_open| *is_open).await.expect("the relay opens");
+	held.is_answered = true;
 	if !relay.known.lock().expect("the relay").contains(&id) {
 		return StatusCode::NOT_FOUND.into_response();
 	}
 	answered_json(StatusCode::OK, json!({ "id": id }))
+}
+
+struct HeldDescription {
+	relay: Relay,
+	is_answered: bool,
+}
+
+impl Drop for HeldDescription {
+	fn drop(&mut self) {
+		if !self.is_answered {
+			self.relay.descriptions_dropped.fetch_add(1, Ordering::SeqCst);
+			self.relay.noticed.send_replace(());
+		}
+	}
 }
 
 async fn device_challenged(Served(relay): Served<Relay>, headers: HeaderMap) -> Response {
@@ -728,6 +749,8 @@ impl Harness {
 			is_registration_down: Arc::default(),
 			registered: Arc::default(),
 			instance_bodies: Arc::default(),
+			is_description_open: Arc::new(watch::channel(true).0),
+			descriptions_dropped: Arc::default(),
 			known: Arc::default(),
 			attempts: Arc::default(),
 			sockets: sockets_in,
@@ -925,6 +948,18 @@ impl Harness {
 
 	fn instance_bodies(&self) -> Vec<(String, Value)> {
 		self.relay.instance_bodies.lock().expect("the relay").clone()
+	}
+
+	async fn instance_bodies_until(&self, count: usize) -> Vec<(String, Value)> {
+		let reached = || Some(self.instance_bodies()).filter(|bodies| bodies.len() >= count);
+		self.noticed_until("the awaited instance calls", reached).await
+	}
+
+	async fn known_instance(&self) -> String {
+		let instance_id = uuid::Uuid::new_v4().to_string();
+		self.plant(&instance_id).await;
+		self.relay.known.lock().expect("the relay").insert(instance_id.clone());
+		instance_id
 	}
 
 	async fn coloured(&self, colour: Option<AvatarBlot>) {
@@ -1210,7 +1245,7 @@ fn a_registration_carries_the_space_colour_and_a_later_start_patches_name_and_co
 
 		let instance_id = harness.stored().await.0.expect("an instance");
 		assert_eq!(
-			harness.instance_bodies(),
+			harness.instance_bodies_until(2).await,
 			vec![
 				("POST /instances".to_owned(), json!({ "name": "Personal", "colour": null })),
 				(
@@ -1223,44 +1258,90 @@ fn a_registration_carries_the_space_colour_and_a_later_start_patches_name_and_co
 }
 
 #[test]
-fn a_space_update_that_relabels_a_registered_space_patches_it_and_an_unchanged_one_does_not() {
+fn a_start_connects_while_its_patch_is_held_and_a_stop_drops_the_held_patch() {
 	run(async {
-		let harness = Harness::signed_in("relabelled").await;
-		harness.plant(INSTANCE).await;
-		harness.relay.known.lock().expect("the relay").insert(INSTANCE.to_owned());
+		let mut harness = Harness::signed_in("held-description").await;
+		let instance_id = harness.known_instance().await;
+		harness.relay.is_description_open.send_replace(false);
 
-		let renamed = harness.updated("Studio", Some(AvatarBlot::Red)).await;
-		let recoloured = harness.updated("Studio", Some(AvatarBlot::Blue)).await;
-		let unchanged = harness.updated("Studio", Some(AvatarBlot::Blue)).await;
+		harness.started().await;
+		let _member = harness.member().await;
+		harness.reached(HostingState::Online).await;
+		let held = harness.instance_bodies_until(1).await;
+		harness.stopped().await;
+		let dropped = || {
+			let dropped = harness.relay.descriptions_dropped.load(Ordering::SeqCst);
+			(dropped > 0).then_some(dropped)
+		};
 
-		assert_eq!(renamed.expect("the rename").name, "Studio");
-		assert_eq!(recoloured.expect("the recolour").colour, Some(AvatarBlot::Blue));
-		assert!(unchanged.is_ok());
-		let patched = format!("PATCH /instances/{INSTANCE}");
 		assert_eq!(
-			harness.instance_bodies(),
-			vec![
-				(patched.clone(), json!({ "name": "Studio", "colour": "red" })),
-				(patched, json!({ "name": "Studio", "colour": "blue" })),
-			]
+			held,
+			vec![(
+				format!("PATCH /instances/{instance_id}"),
+				json!({ "name": "Personal", "colour": "red" })
+			)]
 		);
+		let dropped = harness.noticed_until("the held PATCH dropped", dropped);
+		let dropped = tokio::time::timeout(BEFORE_THE_PATCH_TIMES_OUT, dropped).await;
+		assert_eq!(dropped.expect("the stop dropped the held PATCH"), 1);
 	});
 }
 
 #[test]
-fn a_space_update_whose_patch_the_relay_refuses_still_returns_the_updated_space() {
+fn a_space_update_returns_before_its_held_patch_is_answered_and_an_unchanged_one_sends_none() {
 	run(async {
+		let harness = Harness::signed_in("relabelled").await;
+		let instance_id = harness.known_instance().await;
+		harness.relay.is_description_open.send_replace(false);
+
+		let renamed = tokio::time::timeout(
+			BEFORE_THE_PATCH_TIMES_OUT,
+			harness.updated("Studio", Some(AvatarBlot::Red)),
+		)
+		.await
+		.expect("space_update answered while its PATCH is held");
+		let renaming = harness.instance_bodies_until(1).await;
+		let unchanged = harness.updated("Studio", Some(AvatarBlot::Red)).await;
+		let recoloured = harness.updated("Studio", Some(AvatarBlot::Blue)).await;
+		let patched = harness.instance_bodies_until(2).await;
+		harness.relay.is_description_open.send_replace(true);
+
+		assert_eq!(renamed.expect("the rename").name, "Studio");
+		assert!(unchanged.is_ok());
+		assert_eq!(recoloured.expect("the recolour").colour, Some(AvatarBlot::Blue));
+		let call = format!("PATCH /instances/{instance_id}");
+		assert_eq!(renaming, vec![(call.clone(), json!({ "name": "Studio", "colour": "red" }))]);
+		assert_eq!(patched[1], (call, json!({ "name": "Studio", "colour": "blue" })));
+		assert_eq!(patched.len(), 2);
+	});
+}
+
+#[test]
+fn a_space_update_whose_patch_the_relay_refuses_returns_the_space_and_warns_with_the_instance() {
+	run(async {
+		capturing();
 		let harness = Harness::signed_in("relabel-refused").await;
-		harness.plant(INSTANCE).await;
+		let instance_id = uuid::Uuid::new_v4().to_string();
+		harness.plant(&instance_id).await;
 
 		let updated = harness.updated("Studio", None).await.expect("the update");
+		let warned = tokio::time::timeout(PATIENCE, async {
+			loop {
+				let warned = warnings_naming(&instance_id);
+				if !warned.is_empty() {
+					return warned;
+				}
+				tokio::time::sleep(Duration::from_millis(10)).await;
+			}
+		})
+		.await
+		.expect("the refused PATCH was logged");
 
 		assert_eq!((updated.name.as_str(), updated.colour), ("Studio", None));
 		assert_eq!(
-			harness.instance_bodies(),
-			vec![(
-				format!("PATCH /instances/{INSTANCE}"),
-				json!({ "name": "Studio", "colour": null })
+			warned,
+			vec![format!(
+				"instance {instance_id} was not described to the relay: the cloud answered 404 Not Found"
 			)]
 		);
 	});
@@ -2182,6 +2263,8 @@ fn a_space_whose_registration_never_succeeded_is_resumed_and_registered() {
 		assert!(harness.stored().await.0.is_some());
 	});
 }
+
+const BEFORE_THE_PATCH_TIMES_OUT: Duration = Duration::from_secs(5);
 
 const INSTANCE: &str = "6f1c2a7e-0d4b-4c9a-9a51-2f7f3f1d8c10";
 

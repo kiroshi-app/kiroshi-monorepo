@@ -54,7 +54,10 @@ pub async fn space_update<R: Runtime>(
 	let updated = database.spaces().update(id, name, colour.map(Into::into)).await?;
 	let is_relabelled = (&previous.name, previous.colour) != (&updated.name, updated.colour);
 	if let Some(instance_id) = previous.instance_id.filter(|_| is_relabelled) {
-		hosting::described(&app, &instance_id, &updated.name, updated.colour).await;
+		let (name, colour) = (updated.name.clone(), updated.colour);
+		tauri::async_runtime::spawn(async move {
+			hosting::described(&app, &instance_id, &name, colour).await;
+		});
 	}
 	let hosted = database.space_hosting().hosted_space_ids().await?;
 	Ok(Space::presented(updated, &hosted))

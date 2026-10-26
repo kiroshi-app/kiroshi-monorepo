@@ -38,7 +38,7 @@ use crate::joined_spaces::commands::{
 use crate::joined_spaces::contract::{
 	colour_of, JoinedSpaceConnection, JoinedSpaceError, JoinedSpaceState,
 };
-use crate::joined_spaces::relay::{reconciled, RelayGuests};
+use crate::joined_spaces::relay::{self as joined_relay, reconciled, RelayGuests};
 use crate::joined_spaces::test_host::{SealingHost, CHALLENGE};
 use crate::logging::contract::InstallKind;
 use crate::removed_on_drop::RemovedOnDrop;
@@ -1629,6 +1629,60 @@ fn an_accept_stores_the_host_name_email_and_colour_its_invitation_carried() {
 				colour: Some(AvatarBlot::Pink),
 			}
 		);
+	});
+}
+
+fn ann_listed(colour: Option<AvatarBlot>) -> HostListing {
+	HostListing {
+		host_name: Some("Ann".to_owned()),
+		host_email: Some("ann@example.com".to_owned()),
+		colour,
+	}
+}
+
+async fn accepted_from_ann(harness: &Harness, colour: &str) -> String {
+	*harness.cloud.invitations.lock().expect("the cloud") =
+		json!([hosted_by_ann(an_invitation(INSTANCE, "Studio"), json!(colour))]);
+	read(harness.app.handle()).await.expect("the invitations are read");
+	accept(harness.app.handle(), INVITATION.to_owned()).await.expect("the accept").id
+}
+
+#[test]
+fn a_join_handed_an_empty_listing_keeps_the_listing_the_space_holds() {
+	run(async {
+		let harness = Harness::new(Some(BEARER)).await;
+		accepted_from_ann(&harness, "pink").await;
+
+		let rejoined = joined_relay::joined(
+			harness.app.handle(),
+			INSTANCE.to_owned(),
+			None,
+			None,
+			HostListing::default(),
+		)
+		.await
+		.expect("the rejoin");
+
+		let presented = serde_json::to_value(&rejoined).expect("the joined space serializes");
+		assert_eq!((&presented["hostedBy"], &presented["colour"]), (&json!("Ann"), &json!("pink")));
+		assert_eq!(harness.stored().await[0].listing, ann_listed(Some(AvatarBlot::Pink)));
+	});
+}
+
+#[test]
+fn a_listing_is_stored_as_the_relay_answers_it_a_null_colour_and_absent_fields_included() {
+	run(async {
+		let harness = Harness::new(Some(BEARER)).await;
+		accepted_from_ann(&harness, "pink").await;
+		harness.listing(json!([hosted_by_ann(an_instance(INSTANCE, "Studio"), Value::Null)]));
+
+		reconciled(harness.app.handle()).await;
+		let uncoloured = harness.stored().await[0].listing.clone();
+		harness.listing(json!([an_instance(INSTANCE, "Studio")]));
+		reconciled(harness.app.handle()).await;
+
+		assert_eq!(uncoloured, ann_listed(None));
+		assert_eq!(harness.stored().await[0].listing, HostListing::default());
 	});
 }
 

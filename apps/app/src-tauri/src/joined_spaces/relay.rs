@@ -374,12 +374,10 @@ pub async fn joined<R: Runtime>(
 	let database = ready(&state)?;
 	let repository = database.joined_spaces();
 	let reach = JoinedReach::Relay { instance_id: instance_id.clone() };
-	let held_name = repository
-		.list()
-		.await?
-		.into_iter()
-		.find(|joined| joined.reach == reach)
-		.map(|joined| joined.name);
+	let held = repository.list().await?.into_iter().find(|joined| joined.reach == reach);
+	let (held_name, held_listing) =
+		held.map(|joined| (Some(joined.name), joined.listing)).unwrap_or_default();
+	let listing = if listing == HostListing::default() { held_listing } else { listing };
 	let candidate = joined_spaces::JoinedSpace {
 		id: uuid::Uuid::new_v4().to_string(),
 		reach,

@@ -200,11 +200,10 @@ pub(super) async fn hosted<R: Runtime>(
 			return entered(&app, &space_id, instance_id, HostingState::Failed { failure, detail });
 		}
 	};
-	if let Some(instance_id) = &hosted.instance_id {
-		let described = super::described(&app, instance_id, &hosted.name, hosted.colour);
-		if until_stopped(&mut stop, described).await.is_none() {
-			return;
-		}
+	let mut describing = JoinSet::new();
+	if let Some(instance_id) = hosted.instance_id.clone() {
+		let (app, name, colour) = (app.clone(), hosted.name.clone(), hosted.colour);
+		describing.spawn(async move { super::described(&app, &instance_id, &name, colour).await });
 	}
 	let serving = Serving { local: &local, keys: &keys };
 	tokio::select! {
