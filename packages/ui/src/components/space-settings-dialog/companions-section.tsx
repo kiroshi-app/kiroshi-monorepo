@@ -81,7 +81,7 @@ const CompanionCard = ({ companion, onSelect }: CompanionCardProps) => {
 				>
 					{companion.instructions}
 				</span>
-				<span className="flex w-full min-w-0 items-center justify-between gap-3 border-border border-t pt-3 text-muted-foreground text-xs">
+				<span className="flex w-full min-w-0 items-center gap-3 border-border border-t pt-3 text-muted-foreground text-xs">
 					{counts && <span className="truncate">{counts}</span>}
 					<span className="ms-auto shrink-0" data-slot="companion-card-mode">
 						{modeCopy(
