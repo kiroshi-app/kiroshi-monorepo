@@ -23,6 +23,7 @@ import {
 	SectionBranch,
 } from "@workspace/ui/components/roster-menu-items"
 import { SidebarListRow } from "@workspace/ui/components/sidebar-list-row"
+import type { SidebarClickModifiers } from "@workspace/ui/components/sidebar-menu-row"
 import {
 	ContextMenu,
 	ContextMenuContent,
@@ -38,7 +39,7 @@ interface ConversationRosterRowProps extends RosterRowSlot, RosterPinActions {
 	conversation: AppSidebarConversation
 	isSelected: boolean
 	sections: AppSidebarSection[]
-	onSelect?: (id: string) => void
+	onSelect?: (id: string, modifiers?: SidebarClickModifiers) => void
 	onOpenSettings?: (id: string) => void
 	onDelete?: (id: string) => void
 	onMoveToSection?: (id: string, sectionId: string | null) => void
@@ -78,6 +79,7 @@ const ConversationRosterRow = ({
 						{...lift.handlersFor(conversation.id)}
 						badge={badgeOf(conversation)}
 						isActive={isSelected}
+						isMiddleClickSelectable
 						isWorking={Boolean(workingBotOf(conversation))}
 						media={
 							<ConversationSubjectIcon
@@ -86,9 +88,9 @@ const ConversationRosterRow = ({
 							/>
 						}
 						name={conversation.name}
-						onSelect={() => {
+						onSelect={(modifiers) => {
 							if (lift.hasJustDropped()) return
-							onSelect?.(conversation.id)
+							onSelect?.(conversation.id, modifiers)
 						}}
 						pendingQuestion={conversation.pendingQuestion}
 						preview={previewOf(t, conversation) ?? ""}

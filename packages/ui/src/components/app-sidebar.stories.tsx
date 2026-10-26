@@ -32,6 +32,7 @@ import {
 	type AppSidebarSection,
 	type BotAvatarBlot,
 	ROW_AVATAR_SIZE,
+	type SidebarClickModifiers,
 	type Space,
 	type UserChipIdentity,
 } from "@workspace/ui/components/app-sidebar"
@@ -57,6 +58,7 @@ import type {
 	MissionsPanelProps,
 } from "@workspace/ui/components/missions-panel"
 import { SidebarListSkeleton } from "@workspace/ui/components/sidebar-list-skeleton"
+import { NO_CLICK_MODIFIERS } from "@workspace/ui/components/sidebar-menu-row"
 import { SIDEBAR_MIN_WIDTH } from "@workspace/ui/components/sidebar-resize"
 import { WindowControls } from "@workspace/ui/components/window-controls"
 import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
@@ -359,6 +361,20 @@ const rowFor = (canvasElement: HTMLElement, name: string) => {
 }
 
 const rowButton = (row: HTMLElement) => slotIn(row, "sidebar-menu-button")
+
+const clickWith = (pressed: Partial<SidebarClickModifiers>) => ({
+	...NO_CLICK_MODIFIERS,
+	...pressed,
+})
+
+const middleClick = (target: HTMLElement) => {
+	const isAutoscrollKept = fireEvent.mouseDown(target, { button: 1 })
+	fireEvent(
+		target,
+		new MouseEvent("auxclick", { bubbles: true, button: 1, detail: 1 }),
+	)
+	return isAutoscrollKept
+}
 
 const carouselIn = (canvasElement: HTMLElement) =>
 	slotIn(canvasElement, "space-carousel")
@@ -788,7 +804,10 @@ export const Roster = meta.story({
 		await expect(rowButton(rows[1])).toHaveFocus()
 
 		await userEvent.keyboard("{Enter}")
-		await expect(args.onSelectBot).toHaveBeenCalledWith("beacon")
+		await expect(args.onSelectBot).toHaveBeenCalledWith(
+			"beacon",
+			NO_CLICK_MODIFIERS,
+		)
 	},
 })
 
@@ -1105,7 +1124,10 @@ export const Selected = meta.story({
 		)
 
 		await userEvent.click(rowButton(other))
-		await expect(args.onSelectBot).toHaveBeenCalledWith("atlas")
+		await expect(args.onSelectBot).toHaveBeenCalledWith(
+			"atlas",
+			NO_CLICK_MODIFIERS,
+		)
 		await expect(rowButton(selected)).toHaveAttribute("aria-current", "page")
 	},
 })
@@ -5430,7 +5452,10 @@ export const DragBotNowhere = meta.story({
 		const handle = rowButton(rowFor(canvasElement, "Ember"))
 
 		await userEvent.click(handle)
-		await expect(args.onSelectBot).toHaveBeenCalledWith("ember")
+		await expect(args.onSelectBot).toHaveBeenCalledWith(
+			"ember",
+			NO_CLICK_MODIFIERS,
+		)
 		await expect(args.onPinRoster).not.toHaveBeenCalled()
 
 		lift(handle)
@@ -5652,6 +5677,73 @@ export const Conversations = meta.story({
 		await expectMutedSecondaryText(
 			rowFor(canvasElement, "Launch review"),
 			muted,
+		)
+	},
+})
+
+export const RowClickModifiers = meta.story({
+	tags: ["test-only"],
+	args: {
+		...conversationArgs(),
+		conversationsBySpaceId: inHome([
+			{ ...CONVERSATIONS[0], pinPosition: 0 },
+			CONVERSATIONS[1],
+		]),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A row reports how it was clicked, so a host can tell a plain click from one that asks for a new tab. Check that a plain click, a Cmd-click and a middle click each report the row once with the matching modifiers, on a pinned row as on a loose one, that a middle click keeps the browser from starting its autoscroll, that a right-click opens the row menu and selects nothing, and that a Cmd-click on a companion row reports Cmd too.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const pinned = rowButton(rowFor(canvasElement, "Launch review"))
+		const loose = rowButton(rowFor(canvasElement, "Transport migration"))
+
+		await userEvent.click(pinned)
+		await expect(args.onSelectConversation).toHaveBeenLastCalledWith(
+			"launch",
+			NO_CLICK_MODIFIERS,
+		)
+
+		await userEvent.keyboard("{Meta>}")
+		await userEvent.click(loose)
+		await userEvent.click(pinned)
+		await userEvent.keyboard("{/Meta}")
+		await expect(args.onSelectConversation).toHaveBeenNthCalledWith(
+			2,
+			"migration",
+			clickWith({ meta: true }),
+		)
+		await expect(args.onSelectConversation).toHaveBeenLastCalledWith(
+			"launch",
+			clickWith({ meta: true }),
+		)
+
+		await expect(middleClick(pinned)).toBe(false)
+		await expect(args.onSelectConversation).toHaveBeenCalledTimes(4)
+		await expect(args.onSelectConversation).toHaveBeenLastCalledWith(
+			"launch",
+			clickWith({ middle: true }),
+		)
+
+		await userEvent.pointer({ keys: "[MouseRight]", target: loose })
+		await expect(await screen.findByRole("menu")).toBeVisible()
+		await expect(args.onSelectConversation).toHaveBeenCalledTimes(4)
+		await userEvent.keyboard("{Escape}")
+		await waitFor(async () => {
+			await expect(screen.queryByRole("menu")).toBeNull()
+		}, FRAME_POLL)
+
+		await userEvent.keyboard("{Meta>}")
+		await userEvent.click(rowButton(rowFor(canvasElement, "Atlas")))
+		await userEvent.keyboard("{/Meta}")
+		await expect(args.onSelectBot).toHaveBeenCalledOnce()
+		await expect(args.onSelectBot).toHaveBeenCalledWith(
+			"atlas",
+			clickWith({ meta: true }),
 		)
 	},
 })
@@ -6029,7 +6121,10 @@ export const ConversationSelected = meta.story({
 		)
 
 		await userEvent.click(rowButton(rowFor(canvasElement, "Launch review")))
-		await expect(args.onSelectConversation).toHaveBeenCalledWith("launch")
+		await expect(args.onSelectConversation).toHaveBeenCalledWith(
+			"launch",
+			NO_CLICK_MODIFIERS,
+		)
 		await expect(args.onSelectBot).not.toHaveBeenCalled()
 	},
 })

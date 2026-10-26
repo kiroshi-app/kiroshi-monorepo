@@ -11,6 +11,7 @@ import {
 	type AppSidebarSection,
 	ROW_AVATAR_SIZE,
 	type RosterPin,
+	type SidebarClickModifiers,
 } from "@workspace/ui/components/app-sidebar-model"
 import { AppSidebarPanel } from "@workspace/ui/components/app-sidebar-panel"
 import { AppTitleBar } from "@workspace/ui/components/app-title-bar"
@@ -145,6 +146,7 @@ export {
 	type ListEnd,
 	ROW_AVATAR_SIZE,
 	type RosterPin,
+	type SidebarClickModifiers,
 	type Space,
 	type UserChipIdentity,
 }

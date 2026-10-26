@@ -23,6 +23,7 @@ import {
 } from "@workspace/ui/components/app-sidebar.fixtures"
 import { ConversationRosterRow } from "@workspace/ui/components/app-sidebar-conversation-row"
 import { ConversationIcons } from "@workspace/ui/components/icons"
+import { NO_CLICK_MODIFIERS } from "@workspace/ui/components/sidebar-menu-row"
 import { SIDEBAR_MIN_WIDTH } from "@workspace/ui/components/sidebar-resize"
 import { SidebarMenu } from "@workspace/ui/components/ui/sidebar"
 
@@ -58,7 +59,10 @@ export const PinnedConversationWithAWorkingBot = meta.story({
 			"data-roster-drop",
 		)
 		row.click()
-		await expect(args.onSelect).toHaveBeenCalledWith(DESK_ROOM.id)
+		await expect(args.onSelect).toHaveBeenCalledWith(
+			DESK_ROOM.id,
+			NO_CLICK_MODIFIERS,
+		)
 	},
 })
 

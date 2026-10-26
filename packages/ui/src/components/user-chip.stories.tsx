@@ -1,4 +1,4 @@
-import { expect, fn } from "storybook/test"
+import { expect, fireEvent, fn } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
@@ -171,5 +171,27 @@ export const LongContent = meta.story({
 		await expect(chip.getBoundingClientRect().right).toBeLessThanOrEqual(
 			panel.getBoundingClientRect().right,
 		)
+	},
+})
+
+export const MiddleClickIgnored = meta.story({
+	tags: ["test-only"],
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A middle click on the chip opens nothing and leaves the browser its own default, since only the roster rows of the sidebar read a middle click as a select. Check that the open event never fires and that the mousedown is not prevented. Pick `Default` for the click and the key press that do open the settings.",
+			},
+		},
+	},
+	play: async ({ args, canvas }) => {
+		const chip = canvas.getByRole("button", { name: NAME })
+
+		await expect(fireEvent.mouseDown(chip, { button: 1 })).toBe(true)
+		fireEvent(
+			chip,
+			new MouseEvent("auxclick", { bubbles: true, button: 1, detail: 1 }),
+		)
+		await expect(args.onOpen).not.toHaveBeenCalled()
 	},
 })

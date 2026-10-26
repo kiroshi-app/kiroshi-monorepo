@@ -18,6 +18,7 @@ import { BotTitleBadge } from "@workspace/ui/components/bot-badge"
 import { CompanionMenuContent } from "@workspace/ui/components/companion-menu"
 import type { RosterPinActions } from "@workspace/ui/components/roster-menu-items"
 import { SidebarListRow } from "@workspace/ui/components/sidebar-list-row"
+import type { SidebarClickModifiers } from "@workspace/ui/components/sidebar-menu-row"
 import type { Space } from "@workspace/ui/components/space"
 import {
 	ContextMenu,
@@ -44,7 +45,7 @@ interface BotRosterRowProps extends RosterRowSlot, RosterPinActions {
 	memberships: string[]
 	sections: AppSidebarSection[]
 	openSpaceId?: string
-	onSelect?: (id: string) => void
+	onSelect?: (id: string, modifiers?: SidebarClickModifiers) => void
 	onEdit?: (id: string) => void
 	onDuplicate?: (id: string) => void
 	onAddToSpace?: (botId: string, spaceId: string) => void
@@ -106,12 +107,13 @@ const BotRosterRow = ({
 						{...lift.handlersFor(bot.id)}
 						badge={bot.badge}
 						isActive={isSelected}
+						isMiddleClickSelectable
 						isWorking={working}
 						media={<BotRowAvatar bot={bot} />}
 						name={bot.name}
-						onSelect={() => {
+						onSelect={(modifiers) => {
 							if (lift.hasJustDropped()) return
-							onSelect?.(bot.id)
+							onSelect?.(bot.id, modifiers)
 						}}
 						pendingQuestion={bot.pendingQuestion}
 						preview={botPreviewOf(t, bot)}

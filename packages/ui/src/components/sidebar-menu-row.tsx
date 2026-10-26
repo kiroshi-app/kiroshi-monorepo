@@ -4,6 +4,7 @@ import type {
 	AriaAttributes,
 	ComponentProps,
 	HTMLAttributes,
+	MouseEvent,
 	ReactNode,
 } from "react"
 
@@ -29,6 +30,34 @@ const ICON_SLOT =
 const LABEL_SLOT =
 	"min-w-0 flex-1 truncate group-data-[collapsible=icon]:pointer-events-none group-data-[collapsible=icon]:w-0 group-data-[collapsible=icon]:flex-none"
 
+interface SidebarClickModifiers {
+	meta: boolean
+	ctrl: boolean
+	shift: boolean
+	middle: boolean
+}
+
+const NO_CLICK_MODIFIERS: SidebarClickModifiers = {
+	meta: false,
+	ctrl: false,
+	shift: false,
+	middle: false,
+}
+
+const MIDDLE_BUTTON = 1
+
+const isKeyboardActivation = (event: MouseEvent) => event.detail === 0
+
+const modifiersOf = (event: MouseEvent): SidebarClickModifiers =>
+	isKeyboardActivation(event)
+		? NO_CLICK_MODIFIERS
+		: {
+				meta: event.metaKey,
+				ctrl: event.ctrlKey,
+				shift: event.shiftKey,
+				middle: event.button === MIDDLE_BUTTON,
+			}
+
 type SidebarMenuRowElementProps = AriaAttributes &
 	Pick<
 		HTMLAttributes<HTMLElement>,
@@ -42,7 +71,8 @@ interface SidebarMenuRowProps extends SidebarMenuRowElementProps {
 	icon?: ReactNode
 	isIconDecorative?: boolean
 	isActive?: boolean
-	onSelect?: () => void
+	isMiddleClickSelectable?: boolean
+	onSelect?: (modifiers: SidebarClickModifiers) => void
 	className?: string
 	render?: ComponentProps<typeof SidebarMenuButton>["render"]
 }
@@ -54,6 +84,7 @@ const SidebarMenuRow = ({
 	icon,
 	isIconDecorative = true,
 	isActive = false,
+	isMiddleClickSelectable = false,
 	onSelect,
 	className,
 	render,
@@ -61,6 +92,11 @@ const SidebarMenuRow = ({
 }: SidebarMenuRowProps) => {
 	const { isMobile, setOpenMobile, state } = useSidebar()
 	const isCollapsed = !isMobile && state === "collapsed"
+
+	const select = (event: MouseEvent) => {
+		onSelect?.(modifiersOf(event))
+		if (isMobile) setOpenMobile(false)
+	}
 
 	const head = (
 		<>
@@ -88,10 +124,21 @@ const SidebarMenuRow = ({
 			)}
 			data-slot="sidebar-menu-button"
 			isActive={isActive}
-			onClick={() => {
-				onSelect?.()
-				if (isMobile) setOpenMobile(false)
-			}}
+			onAuxClick={
+				isMiddleClickSelectable
+					? (event) => {
+							if (event.button === MIDDLE_BUTTON) select(event)
+						}
+					: undefined
+			}
+			onClick={select}
+			onMouseDown={
+				isMiddleClickSelectable
+					? (event) => {
+							if (event.button === MIDDLE_BUTTON) event.preventDefault()
+						}
+					: undefined
+			}
 			render={render}
 		>
 			{below ? (
@@ -114,4 +161,9 @@ const SidebarMenuRow = ({
 	)
 }
 
-export { SidebarMenuRow, type SidebarMenuRowProps }
+export {
+	NO_CLICK_MODIFIERS,
+	type SidebarClickModifiers,
+	SidebarMenuRow,
+	type SidebarMenuRowProps,
+}
