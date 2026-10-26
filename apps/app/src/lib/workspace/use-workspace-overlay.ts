@@ -44,7 +44,6 @@ export const useWorkspaceOverlay = ({
 		selected,
 		selectedBotId,
 		selectedConversationId,
-		settingsBotId,
 		settingsConversationId,
 	} = rosterView
 	const { isSpaceEditing, selectedSpace, selectedSpaceId } = scopes
@@ -82,20 +81,14 @@ export const useWorkspaceOverlay = ({
 
 	const isOverlayOpen = search.isOpen || isDialogOpen
 
-	const isThreadSettingsOpen = isEditing && settingsBotId === selectedBotId
-
 	const isThreadConversationSettingsOpen =
 		isEditingConversation && settingsConversationId === selectedConversationId
 
 	const toggleSettings = useCallback(() => {
-		if (isThreadSettingsOpen) {
-			roster.controller.setEditing(false)
-			return
-		}
 		if (selectedBotId) {
 			roster.controller.edit(selectedBotId)
 		}
-	}, [roster.controller, isThreadSettingsOpen, selectedBotId])
+	}, [roster.controller, selectedBotId])
 
 	const userSettings = useMemo(
 		() => toUserSettingsValue(preferences),
@@ -141,7 +134,6 @@ export const useWorkspaceOverlay = ({
 		changeSidebarWidth,
 		isOverlayOpen,
 		isThreadConversationSettingsOpen,
-		isThreadSettingsOpen,
 		search,
 		toggleSettings,
 		userSettings,

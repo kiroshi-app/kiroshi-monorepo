@@ -409,7 +409,6 @@ const ThreadHeader = ({
 						blot={thread.bot.avatarBlot ?? undefined}
 						connection={thread.state.connection}
 						image={botImage}
-						isSettingsOpen={thread.isSettingsOpen}
 						kind={botWork?.kind}
 						name={thread.bot.name}
 						onOpenSettings={thread.onToggleSettings}
@@ -1420,7 +1419,7 @@ const useThreadActions = (
 	useComposerFocus({
 		threadId: shownConversationIdOf(thread),
 		isPromptPending: facts.isPromptPending,
-		isSettingsOpen: thread.isSettingsOpen,
+		isSettingsOpen: thread.kind === "conversation" && thread.isSettingsOpen,
 		isOverlayOpen: facts.isOverlayOpen,
 		focusComposer,
 	})

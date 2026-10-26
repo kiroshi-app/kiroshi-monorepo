@@ -124,7 +124,15 @@ describe("settings opened from the sidebar", () => {
 
 		await openSettingsFromContextMenu(ELSEWHERE)
 
-		expect(screen.getByRole("dialog").textContent).toContain(ELSEWHERE)
+		expect(
+			screen.getByRole("navigation", { name: "Settings" }).textContent,
+		).toContain(ELSEWHERE)
+		await act(async () => {
+			fireEvent.click(
+				screen.getByRole("button", { name: "Back to conversations" }),
+			)
+		})
+		await settle(MOUNT_MS)
 		expect(openedThreadHeader()).toContain(OPENED)
 	})
 

@@ -49,7 +49,7 @@ export const useSettingsPanels = ({
 		user,
 		userPlugin,
 	} = core
-	const { isEditing, settingsBotId } = rosterView
+	const { isEditing, settingsBot, settingsBotId } = rosterView
 	const {
 		isSpaceEditing,
 		selectedSpaceId,
@@ -95,18 +95,23 @@ export const useSettingsPanels = ({
 		setSettingsApplication(undefined)
 	}
 
-	const openSpaceSettings = () => {
+	const closeCompanionScreen = () => {
 		closeSettingsTab()
+		roster.controller.setEditing(false)
+	}
+
+	const openSpaceSettings = () => {
+		closeCompanionScreen()
 		showSettingsOf(spaces.controller, user.controller)
 	}
 
 	const openUserSettings = () => {
-		closeSettingsTab()
+		closeCompanionScreen()
 		showSettingsOf(user.controller, spaces.controller)
 	}
 
 	const closeSettings = () => {
-		closeSettingsTab()
+		closeCompanionScreen()
 		spaces.controller.setSettingsOpen(false)
 		user.controller.setSettingsOpen(false)
 	}
@@ -116,6 +121,8 @@ export const useSettingsPanels = ({
 		: isSpaceEditing && selectedSpaceId
 			? "space"
 			: undefined
+
+	const isCompanionScreenOpen = isEditing && settingsBot !== undefined
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: the setters come from useState in useApplicationScopes and never change
 	const openApplicationsOf = useCallback(
@@ -171,6 +178,7 @@ export const useSettingsPanels = ({
 		closeSettingsTab,
 		companionSkills,
 		conversationApplications,
+		isCompanionScreenOpen,
 		openAccountSettings,
 		openSettings,
 		openSpaceMembers,

@@ -146,7 +146,7 @@ export function App() {
 
 	return (
 		<>
-			{panels.openSettings ? (
+			{panels.openSettings || panels.isCompanionScreenOpen ? (
 				<WorkspaceSettings about={about} scopes={scopes} {...railProps} />
 			) : (
 				<WorkspaceShell
@@ -186,7 +186,6 @@ export function App() {
 														sidebarTab.openTab === "missions"
 													}
 													isOverlayOpen={overlay.isOverlayOpen}
-													isSettingsOpen={overlay.isThreadSettingsOpen}
 													landings={core.messageLandings}
 													missions={core.openedMission}
 													onboarding={
@@ -215,10 +214,8 @@ export function App() {
 			<AppDialogs
 				core={core}
 				overlay={overlay}
-				panels={panels}
 				rosterLines={rosterLines}
 				rosterView={rosterView}
-				scopes={scopes}
 				whatsNewDialog={whatsNew.dialog}
 			/>
 		</>
