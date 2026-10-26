@@ -19,7 +19,7 @@ const GLYPH = (
 	<Icons.User aria-hidden="true" className="size-6 text-muted-foreground" />
 )
 
-const EMPTY = { isPlaceholder: true, onRemove: undefined, preview: GLYPH }
+const EMPTY = { onRemove: undefined, preview: GLYPH }
 
 const DRAWN_FACE = (
 	<BotIdentityAvatar blot="blue" seed="bot-7" size={PICTURE_FIELD_SIZE} />
@@ -33,7 +33,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"A picture, as the control that sets it: the round target the settings dialogs head their first group with, whether the picture belongs to the reader or to a companion. Pressing it opens the picker, and a file dropped on it or pasted into it goes the same way — the same drag, paste and browse, wearing the shape the picture will actually have. What sits inside the circle is the host's to draw and arrives as `preview`, which is what lets one field serve a reader with no picture but a person glyph, and a companion with no picture but the face its engine draws. It holds nothing and names nothing: every label arrives as a prop, and the picked file and the removal both go straight to the host, which stores the picture and writes the URL back.",
+					"A picture, as the row that sets it: the preview on the leading edge and the button that picks a file on the trailing one, inside a softly filled box. Pressing the button opens the picker, and a file dropped on it or pasted into it goes the same way. What sits in the preview circle is the host's to draw and arrives as `preview`, which is what lets one field serve a reader with no picture but a person glyph, and a companion with no picture but the face its engine draws. It holds nothing and names nothing: every label arrives as a prop, and the picked file and the removal both go straight to the host, which stores the picture and writes the URL back.",
 			},
 		},
 	},
@@ -52,7 +52,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"A reader who already wears a picture. Check that the picture fills the circle rather than sitting in a box inside it, that the remove button sits on the bottom trailing corner without covering the face, and that both press targets emit and change nothing on screen — the picture only moves once the host writes back. Pick `Empty` for the reader with no picture, `Drawn` for a companion's, `WithoutRemove` for the surface that cannot take one off.",
+					"A reader who already wears a picture. Check that the picture fills the preview circle rather than sitting in a box inside it, that Remove picture sits before Change picture on the trailing edge, and that both buttons emit and change nothing on screen: the picture only moves once the host writes back. Pick `Empty` for the reader with no picture, `Drawn` for a companion's, `WithoutRemove` for the surface that cannot take one off.",
 			},
 		},
 	},
@@ -79,7 +79,7 @@ export const Empty = meta.story({
 		docs: {
 			description: {
 				story:
-					"The reader who has never uploaded one. Check that the circle is a dashed outline carrying a person glyph rather than initials — this control is about the picture, not the name — that it names itself `Add picture` rather than `Change picture`, and that no remove button is reachable, by pointer or by Tab: there is nothing to take off. Pick `Default` for the worn picture.",
+					"The reader who has never uploaded one. Check that the preview carries a person glyph rather than initials, since this field is about the picture and not the name, that the button reads `Add picture` rather than `Change picture`, and that no remove button is reachable, by pointer or by Tab: there is nothing to take off. Pick `Default` for the worn picture.",
 			},
 		},
 	},
@@ -110,7 +110,7 @@ export const Drawn = meta.story({
 		docs: {
 			description: {
 				story:
-					"The same field heading a companion's settings. A companion with no picture is never a blank — it has a face the engine draws — so the host hands that face as the preview and leaves the edge solid rather than dashed. Check that the shape, the size and the corner are the reader's own, and that nothing but the circle's contents tells the two hosts apart.",
+					"The same field in a companion's Appearance. A companion with no picture is never a blank: it has a face the engine draws, so the host hands that face as the preview. Check that the box, the preview size and the button are the reader's own, and that nothing but the circle's contents tells the two hosts apart.",
 			},
 		},
 	},
@@ -163,14 +163,14 @@ export const States = meta.story({
 			hover: [
 				"#picture-empty-hover button",
 				"#picture-filled-hover button",
-				"#picture-remove-hover button:last-of-type",
+				"#picture-remove-hover button:first-of-type",
 			],
 			focusVisible: "#picture-empty-focus button",
 		},
 		docs: {
 			description: {
 				story:
-					"The empty circle under a pointer and under a keyboard, then the worn picture and its remove button under a pointer. Check that hover warms the edge without moving anything, that the focus ring reads against the dashed edge, and that the ring on the round control is not clipped by its own overflow. Two Tabs cover a worn picture — the control, then remove — and the file input behind them is not a stop of its own.",
+					"The empty field's button under a pointer and under a keyboard, then the worn picture's buttons under a pointer. Check that hover fills the button without moving anything and that the focus ring reads against the filled box. Two Tabs cover a worn picture, remove then the picker, and the file input behind them is not a stop of its own.",
 			},
 		},
 	},

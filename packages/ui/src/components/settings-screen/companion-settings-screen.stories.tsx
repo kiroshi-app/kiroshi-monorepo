@@ -9,7 +9,6 @@ import {
 } from "@workspace/storybook/story-utils"
 import { AppRail } from "@workspace/ui/components/app-rail"
 import {
-	BLANK_BOT_PERMISSIONS,
 	type BotModelOption,
 	type BotSettingsValue,
 	DEFAULT_BOT_OUTPUT_STYLE,
@@ -53,27 +52,29 @@ const COMPANION_MENU = [
 ]
 
 const INSTRUCTIONS =
-	"You write release notes and changelogs for the Studio team."
+	"You write release notes and changelogs for the Studio team. Group changes by area, lead with what a reader can now do, and keep each line under twenty words. Ask before publishing anything."
 
 const INSTRUCTIONS_BOX_HEIGHT = 220
 
 const COMPANION: BotSettingsValue = {
-	identity: { blot: "blue" },
+	identity: { blot: "green" },
 	name: "Juniper",
 	title: "Writer",
 	instructions: INSTRUCTIONS,
-	model: "sonnet-4-5",
-	effort: "high",
+	model: "sonnet-4-6",
+	effort: "medium",
 	permissions: {
-		...BLANK_BOT_PERMISSIONS,
-		deny: ["Bash", "Edit", "Write", "NotebookEdit"],
+		defaultMode: "acceptEdits",
+		allow: ["Read", "Bash(git log:*)"],
+		ask: ["Bash(git push:*)"],
+		deny: [],
 	},
 }
 
 const MODELS: BotModelOption[] = [
 	{
-		label: "Claude Sonnet 4.5",
-		value: "sonnet-4-5",
+		label: "Claude Sonnet 4.6",
+		value: "sonnet-4-6",
 		supportedEfforts: ["low", "medium", "high"],
 	},
 	{ label: "Claude Haiku 4.5", value: "haiku-4-5", supportedEfforts: [] },
@@ -153,6 +154,7 @@ const meta = preview.meta({
 		onMcpServerChange: fn(),
 		onMcpServerDelete: fn(),
 		onMcpServerOpen: fn(),
+		onServerConnect: fn(),
 		mcpCatalogue: {
 			category: EVERYTHING_CATEGORY,
 			onCategoryChange: fn(),

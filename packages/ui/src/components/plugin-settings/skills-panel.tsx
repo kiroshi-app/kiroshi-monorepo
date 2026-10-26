@@ -55,7 +55,7 @@ const SkillsPanel = ({ skills, onOpen, onAdd }: SkillsPanelProps) => {
 				{skills.map((skill) => (
 					<li key={skill.id}>
 						<button
-							className="flex w-full cursor-pointer items-center gap-3 rounded-xl border border-border px-3 py-2.5 text-left outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+							className="flex w-full cursor-pointer items-center gap-3 rounded-xl border border-border px-3 py-2.5 text-left outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring in-data-companion-page:rounded-control"
 							onClick={() => onOpen(skill)}
 							type="button"
 						>
@@ -64,7 +64,7 @@ const SkillsPanel = ({ skills, onOpen, onAdd }: SkillsPanelProps) => {
 									{skill.name.trim() || t("skills.untitled")}
 								</span>
 								{skill.description ? (
-									<span className="truncate text-muted-foreground text-xs">
+									<span className="truncate text-muted-foreground text-xs in-data-companion-page:max-w-120">
 										{skill.description}
 									</span>
 								) : null}

@@ -82,7 +82,7 @@ const SettingsListField = ({
 					className={cn(
 						FIELD_CONTROL_CLASS,
 						isRefused && FIELD_CONTROL_INVALID_CLASS,
-						"min-w-0 flex-1 font-mono text-xs",
+						"min-w-0 flex-1 font-mono text-xs in-data-companion-page:h-8 in-data-companion-page:rounded-lg in-data-companion-page:py-0",
 					)}
 					id={id}
 					onChange={(event) => answer(event.target.value)}
@@ -111,7 +111,7 @@ const SettingsListField = ({
 				<ul className="flex list-none flex-col gap-1 p-0">
 					{items.map((item) => (
 						<li
-							className="flex items-center gap-2 rounded-control border border-input bg-muted py-1 pr-1 pl-3"
+							className="flex items-center gap-2 rounded-control border border-input bg-muted py-1 pr-1 pl-3 in-data-companion-page:rounded-lg"
 							key={item}
 						>
 							<span className="min-w-0 flex-1 truncate font-mono text-foreground text-xs">

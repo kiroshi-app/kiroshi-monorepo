@@ -16,7 +16,7 @@ const SettingsGroup = ({
 	className,
 }: SettingsGroupProps) => (
 	<fieldset className={cn("min-w-0 border-0 p-0", className)}>
-		<legend className="mb-2 font-medium text-muted-foreground text-xs">
+		<legend className="mb-2 font-medium text-muted-foreground text-xs in-data-companion-page:text-foreground">
 			{label}
 		</legend>
 		<div className={cn("grid", grid)}>{children}</div>

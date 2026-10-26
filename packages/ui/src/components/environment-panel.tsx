@@ -66,6 +66,9 @@ type EnvironmentWriteDialogProps = {
 
 const NEW_NAME = ""
 
+const SECRET_ACTION_CLASS =
+	"in-data-companion-page:size-7 in-data-companion-page:text-muted-foreground"
+
 const SECRET_SKELETON_LIST =
 	"gap-2 [--skeleton-title:--spacing(27)] [--skeleton-sub:--spacing(51)] [&>:nth-child(3n+2)]:[--skeleton-title:--spacing(31)] [&>:nth-child(3n+2)]:[--skeleton-sub:--spacing(59)] [&>:nth-child(3n)]:[--skeleton-title:--spacing(23)] [&>:nth-child(3n)]:[--skeleton-sub:--spacing(54.5)]"
 
@@ -181,7 +184,7 @@ const EnvironmentRow = ({
 	const defined = t(`secrets.scope.${entry.definedIn}`)
 
 	return (
-		<li className="flex items-center gap-3 rounded-xl border border-border py-2 pr-2 pl-3">
+		<li className="flex items-center gap-3 rounded-xl border border-border py-2 pr-2 pl-3 in-data-companion-page:rounded-control">
 			<span className="flex min-w-0 flex-1 flex-col gap-0.5">
 				<span className="truncate font-medium font-mono text-foreground text-sm">
 					{entry.name}
@@ -223,9 +226,10 @@ const EnvironmentRow = ({
 			) : null}
 
 			{isOwned ? (
-				<span className="flex shrink-0 items-center gap-1">
+				<span className="flex shrink-0 items-center gap-1 in-data-companion-page:w-16 in-data-companion-page:justify-end">
 					<Button
 						aria-label={t("secrets.row.replace", { name: entry.name })}
+						className={SECRET_ACTION_CLASS}
 						onClick={onReplace}
 						size="icon-xs"
 						variant="ghost"
@@ -234,6 +238,7 @@ const EnvironmentRow = ({
 					</Button>
 					<Button
 						aria-label={t("secrets.row.remove", { name: entry.name })}
+						className={SECRET_ACTION_CLASS}
 						onClick={onRemove}
 						size="icon-xs"
 						variant="ghost"
@@ -247,7 +252,7 @@ const EnvironmentRow = ({
 }
 
 const SecretRowSkeleton = () => (
-	<div className="flex min-h-14 flex-col justify-center gap-0.5 rounded-xl border border-border py-2 ps-3 pe-2">
+	<div className="flex min-h-14 flex-col justify-center gap-0.5 rounded-xl border border-border py-2 ps-3 pe-2 in-data-companion-page:rounded-control">
 		<div className="flex h-5 items-center">
 			<SkeletonBar className="w-(--skeleton-title)" />
 		</div>

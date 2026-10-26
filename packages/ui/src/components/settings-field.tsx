@@ -16,6 +16,13 @@ type SettingsFieldKind =
 	| "password"
 	| "number"
 
+type SettingsFieldHeight = "tall" | "medium"
+
+const BOX_HEIGHT: Record<SettingsFieldHeight, string> = {
+	tall: "h-55",
+	medium: "h-33",
+}
+
 type ControlTraits = {
 	inputMode?: "text" | "email" | "url" | "search" | "decimal"
 	isLiteral?: boolean
@@ -40,7 +47,7 @@ type SettingsFieldProps = {
 	error?: string
 	rows?: number
 	fill?: boolean
-	isTall?: boolean
+	height?: SettingsFieldHeight
 	readOnly?: boolean
 	kind?: SettingsFieldKind
 }
@@ -54,7 +61,7 @@ const SettingsField = ({
 	error,
 	rows,
 	fill = false,
-	isTall = false,
+	height,
 	readOnly = false,
 	kind = "text",
 }: SettingsFieldProps) => {
@@ -67,11 +74,16 @@ const SettingsField = ({
 		onValueChange?.(event.target.value)
 
 	return (
-		<div className={cn("flex flex-col gap-1.5", fill && "min-h-0 flex-1")}>
+		<div
+			className={cn(
+				"flex flex-col gap-1.5 in-data-companion-page:gap-2",
+				fill && "min-h-0 flex-1",
+			)}
+		>
 			<label className={FIELD_LABEL_CLASS} htmlFor={id}>
 				{label}
 			</label>
-			{rows || fill || isTall ? (
+			{rows || fill || height ? (
 				<textarea
 					aria-describedby={describedBy}
 					aria-invalid={error ? true : undefined}
@@ -81,7 +93,7 @@ const SettingsField = ({
 						readOnly && FIELD_CONTROL_READONLY_CLASS,
 						"resize-none",
 						fill && "min-h-0 flex-1",
-						isTall && "h-55",
+						height && [BOX_HEIGHT[height], "p-3 leading-5.5"],
 					)}
 					id={id}
 					onChange={emit}
@@ -112,7 +124,10 @@ const SettingsField = ({
 				/>
 			)}
 			{hint ? (
-				<p className="text-muted-foreground text-xs" id={hintId}>
+				<p
+					className="text-muted-foreground text-xs in-data-companion-page:text-compact/4.5"
+					id={hintId}
+				>
 					{hint}
 				</p>
 			) : null}
