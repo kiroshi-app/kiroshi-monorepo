@@ -2388,7 +2388,7 @@ describe("ThreadScreen", () => {
 		expect(screen.getByText("Ada is waiting on your answer")).toBeTruthy()
 		expect(composerField()).toBeNull()
 
-		await press("Answer")
+		await press("Answer Ada is waiting on your answer")
 
 		expect(askedForm()).toBeTruthy()
 		expect(
