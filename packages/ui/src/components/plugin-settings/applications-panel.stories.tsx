@@ -15,20 +15,25 @@ import {
 
 const NEEDS_AUTHORIZATION_DOT = "bg-state-needs-authorization"
 
+const CONNECTED_DOT = "bg-success"
+
 const E3_DARK_NEEDS_AUTHORIZATION = "rgb(232, 176, 74)"
 
-const expectNeedsAuthorizationDot = async (
+const E3_DARK_CONNECTED = "rgb(95, 191, 133)"
+
+const expectDot = async (
 	dot: HTMLElement,
+	dotClass: string,
 	backgroundColor: string,
 ) => {
-	await expect(dot).toHaveClass(NEEDS_AUTHORIZATION_DOT)
+	await expect(dot).toHaveClass(dotClass)
 	await expect(getComputedStyle(dot).backgroundColor).toBe(backgroundColor)
 }
 
-const needsAuthorizationDotIn = (canvas: ReturnType<typeof within>) => {
-	const dot = canvas.getByText("Needs authorization").previousElementSibling
+const dotBeside = (canvas: ReturnType<typeof within>, state: string) => {
+	const dot = canvas.getByText(state).previousElementSibling
 	if (!(dot instanceof HTMLElement))
-		throw new Error("No dot beside the needs-authorization state.")
+		throw new Error(`No dot beside the ${state} state.`)
 	return dot
 }
 
@@ -356,8 +361,11 @@ export const NeedsAuthorization = meta.story({
 	},
 	play: async ({ args, canvas, userEvent }) => {
 		await expect(canvas.getByText("Needs authorization")).toBeVisible()
-		const dot = needsAuthorizationDotIn(canvas)
-		await expectNeedsAuthorizationDot(dot, resolvedRootColor("--warning"))
+		await expectDot(
+			dotBeside(canvas, "Needs authorization"),
+			NEEDS_AUTHORIZATION_DOT,
+			resolvedRootColor("--warning"),
+		)
 
 		await userEvent.tab()
 		await expect(
@@ -398,8 +406,11 @@ export const NeedsAuthorizationDark = meta.story({
 		},
 	},
 	play: async ({ canvas }) => {
-		const dot = needsAuthorizationDotIn(canvas)
-		await expectNeedsAuthorizationDot(dot, E3_DARK_NEEDS_AUTHORIZATION)
+		await expectDot(
+			dotBeside(canvas, "Needs authorization"),
+			NEEDS_AUTHORIZATION_DOT,
+			E3_DARK_NEEDS_AUTHORIZATION,
+		)
 	},
 })
 
@@ -427,15 +438,40 @@ export const Connected = meta.story({
 		docs: {
 			description: {
 				story:
-					"An authorized application at rest. Check that it says Connected and offers nothing in the lane.",
+					"An authorized application at rest. Check that it says Connected beside the success dot and offers nothing in the lane.",
 			},
 		},
 	},
 	play: async ({ canvas }) => {
 		await expect(canvas.getByText("Connected")).toBeVisible()
+		await expectDot(
+			dotBeside(canvas, "Connected"),
+			CONNECTED_DOT,
+			resolvedRootColor("--success"),
+		)
 		await expect(
 			canvas.queryByRole("button", { name: /Connect Linear|Retry Linear/ }),
 		).not.toBeInTheDocument()
+	},
+})
+
+export const ConnectedDark = meta.story({
+	globals: { theme: "dark" },
+	args: Connected.input.args,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The dark theme, for an authorized application at rest. Check that its dot is the success green and holds against the dark surface.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		await expectDot(
+			dotBeside(canvas, "Connected"),
+			CONNECTED_DOT,
+			E3_DARK_CONNECTED,
+		)
 	},
 })
 

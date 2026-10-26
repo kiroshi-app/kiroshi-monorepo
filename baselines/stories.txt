@@ -1556,6 +1556,7 @@ settings-plugins-applicationscatalogue--setup-unavailable
 settings-plugins-applicationscatalogue--unreadable
 settings-plugins-applicationspanel--companion
 settings-plugins-applicationspanel--connected
+settings-plugins-applicationspanel--connected-dark
 settings-plugins-applicationspanel--connecting
 settings-plugins-applicationspanel--empty-companion
 settings-plugins-applicationspanel--empty-profile
