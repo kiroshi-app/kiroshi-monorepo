@@ -497,15 +497,17 @@ describe("SpaceSettingsScreen hosting on the desktop", () => {
 		expect(hostingSwitchOf(dialog).getAttribute("aria-checked")).toBe("false")
 	})
 
-	it("mounts no Hosting tab", async () => {
+	it("mounts no Hosting entry", async () => {
 		vi.mocked(isDesktopHost).mockReturnValue(true)
 		vi.mocked(commands.hostingState).mockResolvedValue({ kind: "online" })
 		const gear = await gearWithGarage()
 
-		const { dialog } = await openShareOf(gear, gear.home.id)
+		await openShareOf(gear, gear.home.id)
 
 		expect(
-			within(dialog).queryByRole("button", { name: /hosting/i }),
+			within(settingsMenuOf() as HTMLElement).queryByRole("button", {
+				name: /hosting/i,
+			}),
 		).toBeNull()
 	})
 
