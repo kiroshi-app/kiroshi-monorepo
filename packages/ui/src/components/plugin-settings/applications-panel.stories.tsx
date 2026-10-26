@@ -17,6 +17,14 @@ const NEEDS_AUTHORIZATION_DOT = "bg-state-needs-authorization"
 
 const E3_DARK_NEEDS_AUTHORIZATION = "rgb(232, 176, 74)"
 
+const expectNeedsAuthorizationDot = async (
+	dot: HTMLElement,
+	backgroundColor: string,
+) => {
+	await expect(dot).toHaveClass(NEEDS_AUTHORIZATION_DOT)
+	await expect(getComputedStyle(dot).backgroundColor).toBe(backgroundColor)
+}
+
 const needsAuthorizationDotIn = (canvas: ReturnType<typeof within>) => {
 	const dot = canvas.getByText("Needs authorization").previousElementSibling
 	if (!(dot instanceof HTMLElement))
@@ -349,10 +357,7 @@ export const NeedsAuthorization = meta.story({
 	play: async ({ args, canvas, userEvent }) => {
 		await expect(canvas.getByText("Needs authorization")).toBeVisible()
 		const dot = needsAuthorizationDotIn(canvas)
-		await expect(dot).toHaveClass(NEEDS_AUTHORIZATION_DOT)
-		await expect(getComputedStyle(dot).backgroundColor).toBe(
-			resolvedRootColor("--warning"),
-		)
+		await expectNeedsAuthorizationDot(dot, resolvedRootColor("--warning"))
 
 		await userEvent.tab()
 		await expect(
@@ -394,10 +399,7 @@ export const NeedsAuthorizationDark = meta.story({
 	},
 	play: async ({ canvas }) => {
 		const dot = needsAuthorizationDotIn(canvas)
-		await expect(dot).toHaveClass(NEEDS_AUTHORIZATION_DOT)
-		await expect(getComputedStyle(dot).backgroundColor).toBe(
-			E3_DARK_NEEDS_AUTHORIZATION,
-		)
+		await expectNeedsAuthorizationDot(dot, E3_DARK_NEEDS_AUTHORIZATION)
 	},
 })
 
