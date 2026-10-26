@@ -2,13 +2,14 @@ import { useMemo } from "react"
 
 import type { MissionEventModel } from "@workspace/ui/components/mission"
 import { MissionDetailSkeleton } from "@workspace/ui/components/mission-detail-skeleton"
+import { MissionHeaderSkeleton } from "@workspace/ui/components/mission-header-skeleton"
 import { Notice } from "@workspace/ui/components/notice"
 import { ThreadLayout } from "@workspace/ui/components/thread-layout"
 import { useChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 
-import { BareAppHeader } from "@/components/bare-app-header"
 import type { ActivityPanel } from "@/components/thread-routines"
 import { ThreadScreen } from "@/components/thread-screen"
+import { titleBarDragRegion } from "@/components/window-caption-controls"
 import { useRosterClock } from "@/lib/bots/use-roster-clock"
 import type { AttachmentsController } from "@/lib/chat/attachments-controller"
 import type { DraftsController } from "@/lib/chat/drafts-controller"
@@ -144,7 +145,15 @@ export function MissionThreadScreen({
 	if (!read || !bot) {
 		if (hasFailedToRead) return <MissionReadFailure onRetry={onRetry} />
 		return detailSkeleton ? (
-			<ThreadLayout header={<BareAppHeader />} skeleton={detailSkeleton}>
+			<ThreadLayout
+				header={
+					<MissionHeaderSkeleton
+						dragRegion={titleBarDragRegion()}
+						onBack={onLeave}
+					/>
+				}
+				skeleton={detailSkeleton}
+			>
 				{null}
 			</ThreadLayout>
 		) : null
