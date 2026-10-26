@@ -1,9 +1,10 @@
 import { useCallback, useSyncExternalStore } from "react"
 
-import { AppHeader } from "@workspace/ui/components/app-header"
 import { Notice } from "@workspace/ui/components/notice"
+import { ScreenLayout } from "@workspace/ui/components/screen-layout"
 import { useCommonCopy } from "@workspace/ui/hooks/use-common-copy"
 
+import { BareAppHeader } from "@/components/bare-app-header"
 import { MissionThreadScreen } from "@/components/mission-thread-screen"
 import type { ActivityPanel } from "@/components/thread-routines"
 import { ThreadScreen } from "@/components/thread-screen"
@@ -13,7 +14,6 @@ import type { Thread } from "@/lib/chat/thread-contract"
 import type { Chat } from "@/lib/chat/use-chat"
 import type { ConversationRuntimes } from "@/lib/conversations/conversation-runtimes"
 import type { Bot, Conversation } from "@/lib/conversations/store-contract"
-import { hasOverlayWindowControls } from "@/lib/host"
 import type { MissionLanding } from "@/lib/missions/mission-actions"
 import type { OpenedMissionController } from "@/lib/missions/opened-mission-controller"
 import type { Onboarding } from "@/lib/onboarding/use-onboarding"
@@ -95,11 +95,13 @@ export function WorkspaceBody(props: WorkspaceBodyProps) {
 
 	if (props.haveSpacesFailed) {
 		return (
-			<Notice
-				description={t("spaces.unavailable.description")}
-				retry={{ onRetry: props.onRetrySpaces }}
-				title={t("spaces.unavailable.title")}
-			/>
+			<ScreenLayout header={<BareAppHeader />}>
+				<Notice
+					description={t("spaces.unavailable.description")}
+					retry={{ onRetry: props.onRetrySpaces }}
+					title={t("spaces.unavailable.title")}
+				/>
+			</ScreenLayout>
 		)
 	}
 
@@ -123,12 +125,7 @@ export function WorkspaceBody(props: WorkspaceBodyProps) {
 	const thread = props.isMissionsPanelOpen ? null : threadOf(props)
 
 	if (!thread) {
-		return (
-			<AppHeader
-				data-tauri-drag-region="deep"
-				insetWindowControls={hasOverlayWindowControls()}
-			/>
-		)
+		return <ScreenLayout header={<BareAppHeader />} />
 	}
 
 	return (

@@ -233,6 +233,7 @@ type Workspace = {
 type BodyOptions = {
 	selected?: Conversation
 	isActivityPanelOpenAtFirst?: boolean
+	overrides?: Partial<WorkspaceBodyHarnessProps>
 }
 
 const workspaceOf = async (store = createFakeTranscriptStore()) => {
@@ -295,9 +296,11 @@ const workspaceOf = async (store = createFakeTranscriptStore()) => {
 		body: ({
 			selected = conversation,
 			isActivityPanelOpenAtFirst = false,
+			overrides,
 		}: BodyOptions = {}) =>
 			createElement(WorkspaceBodyHarness, {
 				...bodyProps(selected),
+				...overrides,
 				isActivityPanelOpenAtFirst,
 			}),
 		controlledBody: (activityPanel: ActivityPanel) =>
@@ -330,6 +333,13 @@ const openMission = async () => {
 
 const missionHeader = () =>
 	document.querySelector('[data-slot="mission-header"]')
+
+const framedSlot = (frame: string, slot: string) =>
+	document.querySelector(`[data-slot="${frame}"] [data-slot="${slot}"]`)
+
+const screenSlot = (slot: string) => framedSlot("screen-layout", slot)
+
+const threadSlot = (slot: string) => framedSlot("chat-layout", slot)
 
 const missionChanges = () => {
 	const listeners = new Set<(changed: MissionChanged) => void>()
@@ -499,6 +509,28 @@ describe("WorkspaceBody missions", () => {
 		expect(screen.getAllByText("Walls").length).toBeGreaterThan(0)
 	})
 
+	it("frames the loading mission under the app header", async () => {
+		const { workspace } = await seed((mission) => ({ mission, events: [] }))
+		readMission.mockReturnValue(new Promise(() => undefined))
+		render(workspace.body(), { wrapper: createQueryTestWrapper().wrapper })
+		await settle()
+
+		await openMission()
+
+		expect(threadSlot("app-header")).not.toBeNull()
+		expect(
+			document.querySelector('[data-slot="skeleton-agent-bubble"]'),
+		).toBeNull()
+		await waitFor(() =>
+			expect(
+				threadSlot("thread-skeleton")?.querySelector(
+					'[data-slot="skeleton-agent-bubble"]',
+				),
+			).not.toBeNull(),
+		)
+		expect(missionHeader()).toBeNull()
+	})
+
 	it("reads the mission again when the read failure is retried", async () => {
 		const { workspace, mission } = await seed((opened) => ({
 			mission: opened,
@@ -539,6 +571,46 @@ describe("WorkspaceBody missions", () => {
 
 		await screen.findAllByText(SEND_FAILURE_TITLE)
 		expect(missionHeader()).toBeTruthy()
+	})
+})
+
+describe("WorkspaceBody frame", () => {
+	beforeEach(() => {
+		vi.clearAllMocks()
+		listRoutines.mockResolvedValue([])
+		listRuns.mockResolvedValue([])
+		listSources.mockResolvedValue([])
+		listenToMissions.mockResolvedValue(() => undefined)
+		listMissions.mockResolvedValue({ open: [], done: [] })
+	})
+
+	afterEach(cleanup)
+
+	it("frames an empty column under the app header when no thread is shown", async () => {
+		const workspace = await workspaceOf()
+		render(workspace.body({ overrides: { isMissionsPanelOpen: true } }))
+		await settle()
+
+		expect(screenSlot("app-header")).not.toBeNull()
+		expect(screenSlot("screen-layout-column")?.childElementCount).toBe(0)
+	})
+
+	it("frames the spaces failure under the app header and retries once", async () => {
+		const workspace = await workspaceOf()
+		const onRetrySpaces = vi.fn()
+		render(
+			workspace.body({ overrides: { haveSpacesFailed: true, onRetrySpaces } }),
+		)
+		await settle()
+
+		expect(screenSlot("app-header")).not.toBeNull()
+		expect(screenSlot("screen-layout-column")?.textContent).toContain(
+			"Couldn’t load your spaces",
+		)
+
+		fireEvent.click(screen.getByRole("button", { name: "Retry" }))
+
+		expect(onRetrySpaces).toHaveBeenCalledTimes(1)
 	})
 })
 

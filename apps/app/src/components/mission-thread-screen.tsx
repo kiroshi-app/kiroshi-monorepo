@@ -6,6 +6,7 @@ import { Notice } from "@workspace/ui/components/notice"
 import { ThreadLayout } from "@workspace/ui/components/thread-layout"
 import { useChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 
+import { BareAppHeader } from "@/components/bare-app-header"
 import type { ActivityPanel } from "@/components/thread-routines"
 import { ThreadScreen } from "@/components/thread-screen"
 import { useRosterClock } from "@/lib/bots/use-roster-clock"
@@ -143,7 +144,9 @@ export function MissionThreadScreen({
 	if (!read || !bot) {
 		if (hasFailedToRead) return <MissionReadFailure onRetry={onRetry} />
 		return detailSkeleton ? (
-			<ThreadLayout skeleton={detailSkeleton}>{null}</ThreadLayout>
+			<ThreadLayout header={<BareAppHeader />} skeleton={detailSkeleton}>
+				{null}
+			</ThreadLayout>
 		) : null
 	}
 
