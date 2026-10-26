@@ -5,7 +5,11 @@ import { useTranslation } from "react-i18next"
 
 import type { BotMcpConnectionState } from "@workspace/ui/components/bot-settings"
 import { MCP_CONNECTION_DOT } from "@workspace/ui/components/bot-settings-dialog/mcp-connection"
-import { type FillIconName, Icons } from "@workspace/ui/components/icons"
+import {
+	type FillIconName,
+	FillIcons,
+	Icons,
+} from "@workspace/ui/components/icons"
 import { ApplicationMark } from "@workspace/ui/components/plugin-settings/application-mark"
 import { useOverlayScrollbars } from "@workspace/ui/hooks/use-overlay-scrollbars"
 import { cn } from "@workspace/ui/lib/utils"
@@ -37,6 +41,7 @@ type SettingsMenuProps = {
 	onBack: () => void
 	backLabel?: string
 	footer?: ReactNode
+	isCompanionPage?: boolean
 	children: ReactNode
 }
 
@@ -47,6 +52,7 @@ const SettingsMenu = ({
 	onBack,
 	backLabel,
 	footer,
+	isCompanionPage = false,
 	children,
 }: SettingsMenuProps) => {
 	const { t } = useTranslation("settings")
@@ -57,13 +63,14 @@ const SettingsMenu = ({
 		<nav
 			aria-label={t("screen.menu")}
 			className={MENU}
+			data-companion-page={isCompanionPage ? "" : undefined}
 			data-slot="settings-menu"
 		>
 			<button className={BACK} onClick={onBack} type="button">
 				<Icons.Previous aria-hidden="true" className="size-4 shrink-0" />
 				{backLabel ?? t("screen.back")}
 			</button>
-			<div className="flex min-w-0 items-center gap-2.5">
+			<div className="flex min-w-0 items-center gap-2.5 px-2 in-data-companion-page:px-0">
 				{avatar}
 				<div className="flex min-w-0 flex-col">
 					<span
@@ -100,6 +107,7 @@ type SettingsMenuEntryProps = {
 	isSelected: boolean
 	isOpen?: boolean
 	isDanger?: boolean
+	isOutlined?: boolean
 	hasIndicator?: boolean
 	count?: number
 	onSelect: () => void
@@ -112,12 +120,14 @@ const SettingsMenuEntry = ({
 	isSelected,
 	isOpen = false,
 	isDanger = false,
+	isOutlined = false,
 	hasIndicator = false,
 	count,
 	onSelect,
 	children,
 }: SettingsMenuEntryProps) => {
-	const EntryIcon = Icons[icon]
+	const isFilled = (isSelected || isOpen) && !isOutlined
+	const EntryIcon = (isFilled ? FillIcons : Icons)[icon]
 
 	return (
 		<li className="flex flex-col gap-0.5">

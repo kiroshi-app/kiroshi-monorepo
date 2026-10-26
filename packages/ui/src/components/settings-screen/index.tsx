@@ -123,7 +123,7 @@ type SettingsScreenLayoutProps = SettingsScreenNavigation & {
 	pages: SettingsPages
 	sessions: PageSessions
 	applications: BotMcpServerItem[]
-	pageClassName?: string
+	isCompanionPage?: boolean
 }
 
 const SESSION_OF_ENTRY: Record<string, keyof PageSessions | undefined> = {
@@ -145,7 +145,7 @@ const SettingsScreenLayout = ({
 	pages,
 	sessions,
 	applications,
-	pageClassName,
+	isCompanionPage = false,
 }: SettingsScreenLayoutProps) => {
 	const column = useRef<HTMLDivElement>(null)
 	useOverlayScrollbars(column)
@@ -192,6 +192,7 @@ const SettingsScreenLayout = ({
 
 	const entryFor = (item: SettingsEntry) => (
 		<SettingsMenuEntry
+			isOutlined={isCompanionPage}
 			count={item.count}
 			hasIndicator={item.hasIndicator}
 			icon={item.icon}
@@ -229,6 +230,7 @@ const SettingsScreenLayout = ({
 				<>
 					{rail?.(leaveThen)}
 					<SettingsMenu
+						isCompanionPage={isCompanionPage}
 						avatar={avatar}
 						backLabel={backLabel}
 						footer={pinned.length > 0 ? pinned.map(entryFor) : undefined}
@@ -249,7 +251,7 @@ const SettingsScreenLayout = ({
 				<div
 					className={cn(
 						PAGE,
-						pageClassName,
+						isCompanionPage && COMPANION_SETTINGS_PAGE,
 						isApplicationOpen && APPLICATION_PAGE,
 						isCompanionsShown && COMPANIONS_PAGE,
 					)}
@@ -544,12 +546,14 @@ const CompanionSettingsScreen = ({
 			layout: "scrolling",
 			isDanger: true,
 			panel: (
-				<DangerZone
-					confirmTitle={t("danger.confirm.title", { name })}
-					actionLabel={t("danger.delete")}
-					description={t("danger.description")}
-					onConfirm={onDelete}
-				/>
+				<CompanionSection gap="tight">
+					<DangerZone
+						confirmTitle={t("danger.confirm.title", { name })}
+						actionLabel={t("danger.delete")}
+						description={t("danger.description")}
+						onConfirm={onDelete}
+					/>
+				</CompanionSection>
 			),
 		},
 	]
@@ -574,7 +578,7 @@ const CompanionSettingsScreen = ({
 			name={name}
 			onBack={onBack}
 			onEntryChange={onEntryChange}
-			pageClassName={COMPANION_SETTINGS_PAGE}
+			isCompanionPage
 			pages={pages}
 			rail={rail}
 			sessions={sessions}

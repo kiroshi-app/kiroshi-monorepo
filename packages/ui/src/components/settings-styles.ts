@@ -34,7 +34,7 @@ const POPUP_CLASS =
 const DIALOG_POPUP_CLASS = `${POPUP_CLASS} transition-[scale,opacity,filter] duration-150 ease-out data-ending-style:scale-[0.99] data-ending-style:opacity-0 data-ending-style:blur-[4px] data-starting-style:scale-[0.98] data-starting-style:opacity-0 motion-reduce:transition-none`
 
 const DANGER_BLOCK_CLASS =
-	"flex flex-col items-start gap-3 rounded-xl border border-destructive/25 bg-destructive/5 p-4"
+	"flex flex-col items-start gap-3 rounded-xl border border-destructive/30 p-4 in-data-companion-page:border-destructive/25 in-data-companion-page:bg-destructive/5"
 
 const SETTINGS_EMPTY_CLASS =
 	"flex flex-1 flex-col items-center justify-center gap-3 text-center"

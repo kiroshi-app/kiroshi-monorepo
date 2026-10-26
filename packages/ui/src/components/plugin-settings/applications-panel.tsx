@@ -86,10 +86,10 @@ const ApplicationRow = ({ server, onOpen, onConnect }: ApplicationRowProps) => {
 	const reason = readMcpConnectionReason(t, server.reason)
 
 	return (
-		<li className="relative flex items-center gap-3 rounded-control border border-border px-3 py-2.5 hover:bg-muted">
+		<li className="relative flex items-center gap-3 rounded-xl border border-border px-3 py-2.5 hover:bg-muted in-data-companion-page:rounded-control">
 			<button
 				aria-label={t("applications.open", { name })}
-				className="absolute inset-0 cursor-pointer rounded-control outline-none focus-visible:ring-2 focus-visible:ring-ring"
+				className="absolute inset-0 cursor-pointer rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring in-data-companion-page:rounded-control"
 				onClick={onOpen}
 				type="button"
 			/>
