@@ -23,7 +23,11 @@ import { RuntimeFields } from "@workspace/ui/components/bot-settings-dialog/runt
 import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
 import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
 import { EnvironmentPanel } from "@workspace/ui/components/environment-panel"
-import type { SpaceHost } from "@workspace/ui/components/host-pill"
+import {
+	HostPill,
+	hostPillOf,
+	type SpaceHost,
+} from "@workspace/ui/components/host-pill"
 import { InitialsAvatar } from "@workspace/ui/components/initials-avatar"
 import type { SettingsPages } from "@workspace/ui/components/plugin-settings/settings-pages"
 import { HISTORY_TAB } from "@workspace/ui/components/plugin-settings/use-history-session"
@@ -49,12 +53,14 @@ import {
 } from "@workspace/ui/components/settings-menu"
 import type { SettingsEntry } from "@workspace/ui/components/settings-rail"
 import {
+	avatarStateOf,
 	type FocusedSpace,
 	FocusedSpacePage,
-	presenceOf,
+	spaceHostOf,
 } from "@workspace/ui/components/settings-screen/focused-space-page"
 import { SidebarResizeHandle } from "@workspace/ui/components/sidebar-resize"
 import type { Space } from "@workspace/ui/components/space"
+import { SpaceAvatar } from "@workspace/ui/components/space-avatar"
 import {
 	APPLICATIONS_ENTRY,
 	COMPANIONS_ENTRY,
@@ -62,7 +68,6 @@ import {
 	type SpaceSettingsProps,
 	useSpaceSettings,
 } from "@workspace/ui/components/space-settings-dialog/use-space-settings"
-import { SpaceSquare } from "@workspace/ui/components/space-switcher"
 import {
 	type UserSettingsProps,
 	useUserSettings,
@@ -149,6 +154,8 @@ type SpaceSettingsScreenProps = SettingsScreenNavigation &
 	SpaceSettingsProps &
 	(OwnedOrJoinedSpace | InvitedSpace) & {
 		target: "space"
+		spaceId: string
+		spaceHost?: SpaceHost
 		hostName?: string
 		isConnected?: boolean
 		isSessionUnavailable?: boolean
@@ -185,6 +192,7 @@ type CompanionSettingsScreenProps = SettingsScreenNavigation &
 type SettingsScreenLayoutProps = SettingsScreenNavigation & {
 	avatar: ReactNode
 	name: string
+	status?: ReactNode
 	subtitle: string
 	entries: SettingsEntry[]
 	pages: SettingsPages
@@ -221,6 +229,7 @@ const SettingsScreenLayout = ({
 	spaceTint,
 	avatar,
 	name,
+	status,
 	subtitle,
 	entries,
 	pages,
@@ -342,6 +351,7 @@ const SettingsScreenLayout = ({
 						name={name}
 						onBack={() => leaveThen(onBack)}
 						resizeHandle={<SidebarResizeHandle side="left" />}
+						status={status}
 						subtitle={subtitle}
 					>
 						{spaces ? (
@@ -424,6 +434,8 @@ const SpaceSettingsScreen = (props: SpaceSettingsScreenProps) => {
 		isResizable,
 		spaceTint,
 		target: _target,
+		spaceId,
+		spaceHost,
 		spaceState: _spaceState,
 		hostName: _hostName,
 		isConnected: _isConnected,
@@ -461,6 +473,8 @@ const SpaceSettingsScreen = (props: SpaceSettingsScreenProps) => {
 				onValueChange={settings.onValueChange}
 				rank={rank}
 				space={space}
+				spaceHost={spaceHost}
+				spaceId={spaceId}
 				value={settings.value}
 			>
 				{space.state === "yours" ? transfer : null}
@@ -472,6 +486,8 @@ const SpaceSettingsScreen = (props: SpaceSettingsScreenProps) => {
 	const isEntryDisabled = (value: string) =>
 		isHostUnreachable ||
 		(isSessionUnavailable && SESSION_BOUND_ENTRIES.has(value))
+	const host = spaceHostOf(space, spaceHost)
+	const pillHost = hostPillOf(host)
 
 	const focusedEntries =
 		space.state === "invitation"
@@ -515,17 +531,18 @@ const SpaceSettingsScreen = (props: SpaceSettingsScreenProps) => {
 		<SettingsScreenLayout
 			applications={settings.mcpServers}
 			avatar={
-				<SpaceSquare
+				<SpaceAvatar
 					colour={settings.value.colour}
-					host={presenceOf(space)}
-					isInvitation={space.state === "invitation"}
-					size="avatar"
+					size={36}
+					spaceId={spaceId}
+					state={avatarStateOf(space, host)}
 				/>
 			}
 			entries={focusedEntries}
 			entry={entry}
 			backLabel={backLabel ?? t("screen.backToSettings")}
 			name={name}
+			status={pillHost ? <HostPill host={pillHost} /> : undefined}
 			onBack={onBack}
 			onEntryChange={onEntryChange}
 			pages={pages}
@@ -616,14 +633,17 @@ const UserSettingsScreen = ({
 								key={space.id}
 								name={space.name}
 								onOpen={() => openSpace(space.id)}
+								spaceId={space.id}
 							/>
 						))}
 						{invitations.map((invitation) => (
 							<SettingsMenuSpace
+								colour={invitation.colour}
 								isInvitation
 								key={invitation.id}
 								name={invitation.name}
 								onOpen={() => openSpace(invitation.id)}
+								spaceId={invitation.id}
 							/>
 						))}
 					</SettingsMenuSection>

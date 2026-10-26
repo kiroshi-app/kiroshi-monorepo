@@ -1,4 +1,5 @@
 import { AppRail } from "@workspace/ui/components/app-rail"
+import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import type { SettingsScreenRequestLeave } from "@workspace/ui/components/settings-screen"
 import type { Space } from "@workspace/ui/components/space"
 
@@ -22,6 +23,7 @@ type WorkspaceRailProps = {
 	rosterLists: RosterLists
 	sidebarTab: ReturnType<typeof useSidebarPanelSwitch>
 	space: Space | undefined
+	spaceHost: SpaceHost | undefined
 }
 
 export const WorkspaceRail = ({
@@ -35,6 +37,7 @@ export const WorkspaceRail = ({
 	rosterLists,
 	sidebarTab,
 	space,
+	spaceHost,
 }: WorkspaceRailProps) => {
 	const leaveSettingsFor = (panel: SidebarPanel) => {
 		navigation.openConversations()
@@ -61,6 +64,7 @@ export const WorkspaceRail = ({
 			openSettings={panels.railSettings}
 			selected={sidebarTab.openTab}
 			space={space}
+			spaceHost={spaceHost}
 			updateBadge={rosterLines.updateBadge}
 			user={overlay.userSettings}
 		/>

@@ -197,6 +197,8 @@ export const SpaceSettingsScreen = ({
 	const sharedProps = {
 		...frame,
 		target: "space" as const,
+		spaceId,
+		spaceHost: hostBySpaceId[spaceId],
 		entry: search.entry ?? SPACE_ENTRY,
 		onEntryChange: navigation.showEntry,
 		onBack: navigation.backToUserSettings,

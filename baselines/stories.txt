@@ -34,6 +34,8 @@ branding-ditheredfieldavatar--one-glyph-in-every-colour
 branding-ditheredfieldavatar--one-screen-for-every-companion
 branding-ditheredfieldavatar--without-ground
 branding-outlinedhexagon--filled-with-an-inside-hairline
+branding-spaceavatar--sizes
+branding-spaceavatar--states
 branding-spacetint--default
 branding-spacetint--untinted
 branding-spacetint--variants
@@ -1677,6 +1679,7 @@ settings-space-companionssection--no-companion
 settings-space-companionssection--no-counts
 settings-space-companionssection--one-companion
 settings-space-companionssection--one-count
+settings-space-focusedspacepage--connecting
 settings-space-focusedspacepage--long-name-in-a-narrow-column
 settings-space-focusedspacepage--shared
 settings-space-focusedspacepage--yours
@@ -1688,6 +1691,7 @@ settings-space-settingsscreen--by-keyboard
 settings-space-settingsscreen--companions
 settings-space-settingsscreen--default-width
 settings-space-settingsscreen--invitation
+settings-space-settingsscreen--joined-host-connecting
 settings-space-settingsscreen--joined-host-not-connected
 settings-space-settingsscreen--joined-host-online
 settings-space-settingsscreen--joined-session-unavailable

@@ -8,12 +8,14 @@ import {
 	expectSettingsPage,
 	LAPTOP_WINDOW,
 	slotIn,
+	slotsIn,
 } from "@workspace/storybook/story-utils"
 import { AppRail } from "@workspace/ui/components/app-rail"
 import {
 	GARAGE,
 	TITLE_BAR,
 } from "@workspace/ui/components/app-title-bar.fixtures"
+import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
 import { SPACE_ENVIRONMENT } from "@workspace/ui/components/environment.fixtures"
 import {
 	CATALOGUE_APPLICATIONS,
@@ -134,6 +136,7 @@ const menuNames = (menu: HTMLElement) =>
 
 const SPACE_ARGS = {
 	target: "space",
+	spaceId: "release-desk",
 	entry: "members",
 	onEntryChange: fn(),
 	onBack: fn(),
@@ -182,7 +185,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"A space's settings as a whole window instead of an overlay. The settings menu takes the place of the conversations panel: Back to your settings, the space's square and name, then its entries, Danger zone pinned at the foot. The content column draws the same panels the space settings dialog draws. Each page sits under a header bar the height of a conversation's header carrying the entry's label, its first row where a conversation's first message starts: forms in a column centred and capped at 800px, lists across the whole card. Members, Companions, Skills, Applications and History are lists; an open application is a form. Space opens on the space's own header: its square, name, standing and Open, then its Name field and, while it is yours and not shared, the Not shared yet card. A joined space pins Leave space instead of Danger zone and, while its host is not connected, greys every entry but Space; an invitation reduces the menu to one Invitation entry and pins Decline. Applications opens onto the space's installed applications, one sub-entry each with its mark and connection dot, then Add an application.",
+					"A space's settings as a whole window instead of an overlay. The settings menu takes the place of the conversations panel: Back to your settings, the space's avatar and name, then its entries, Danger zone pinned at the foot. The content column draws the same panels the space settings dialog draws. Each page sits under a header bar the height of a conversation's header carrying the entry's label, its first row where a conversation's first message starts: forms in a column centred and capped at 800px, lists across the whole card. Members, Companions, Skills, Applications and History are lists; an open application is a form. Space opens on the space's own header: its avatar, name, standing and Open, then its Name field and, while it is yours and not shared, the Not shared yet card. A joined space pins Leave space instead of Danger zone and, while its host is not connected, greys every entry but Space; an invitation reduces the menu to one Invitation entry and pins Decline. Applications opens onto the space's installed applications, one sub-entry each with its mark and connection dot, then Add an application.",
 			},
 		},
 	},
@@ -195,7 +198,7 @@ export const Members = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard E2: the space's settings open on Members. Check the menu order with Danger zone pinned last, Members marked as the current page, the space square with its presence dot beside the name, the Members title above the panel, and that Back to your settings reports itself.",
+					"Artboard E2: the space's settings open on Members. Check the menu order with Danger zone pinned last, Members marked as the current page, the space avatar with its presence dot beside the name, the Members title above the panel, and that Back to your settings reports itself.",
 			},
 		},
 	},
@@ -211,11 +214,8 @@ export const Members = meta.story({
 		)
 		await expect(within(menu).getByText("Release desk")).toBeVisible()
 		await expect(within(menu).getByText("Space settings")).toBeVisible()
-		await expect(slotIn(menu, "space-dot")).toHaveClass("size-9")
-		await expect(slotIn(menu, "host-dot")).toHaveAttribute(
-			"data-host",
-			"shared",
-		)
+		await expect(slotIn(menu, "space-avatar").dataset.size).toBe("36")
+		await expect(slotIn(menu, "space-avatar").dataset.state).toBe("shared")
 
 		const main = screen.getByRole("main")
 		await expectSettingsPage(main, "Members", "full")
@@ -622,13 +622,6 @@ const INK = {
 	none: "rgba(0, 0, 0, 0)",
 }
 
-const TINT = {
-	purple: "rgb(188, 175, 227)",
-	green: "rgb(175, 201, 155)",
-	orange: "rgb(242, 181, 126)",
-	yellow: "rgb(242, 200, 121)",
-}
-
 type PinnedInk = {
 	label: string
 	icon: string
@@ -644,7 +637,7 @@ type ArtboardMenu = {
 	entries: string[]
 	pinned: string
 	pinnedInk: PinnedInk
-	tint: string
+	colour: BotAvatarBlot
 	isInvitation?: boolean
 }
 
@@ -674,34 +667,24 @@ const iconOf = (element: Element) => {
 	return getComputedStyle(icon)
 }
 
-type ArtboardSquare = {
+type ArtboardAvatar = {
 	area: HTMLElement
 	size: number
-	radius: string
-	tint: string
+	colour: BotAvatarBlot
 	isInvitation: boolean
 }
 
-const expectSquare = async ({
+const expectAvatar = async ({
 	area,
 	size,
-	radius,
-	tint,
+	colour,
 	isInvitation,
-}: ArtboardSquare) => {
-	const square = slotIn(area, "space-dot")
-	const box = square.getBoundingClientRect()
+}: ArtboardAvatar) => {
+	const avatar = slotIn(area, "space-avatar")
+	const box = avatar.getBoundingClientRect()
 	await expect([box.width, box.height]).toEqual([size, size])
-	await expect(getComputedStyle(square).borderRadius).toBe(radius)
-	await expect(getComputedStyle(square).backgroundColor).toBe(
-		isInvitation ? INK.none : tint,
-	)
-	if (!isInvitation) return
-	const outline = getComputedStyle(slotIn(square, "space-invitation-outline"))
-	await expect([outline.borderTopStyle, outline.borderTopColor]).toEqual([
-		"dashed",
-		tint,
-	])
+	await expect(avatar.dataset.colour).toBe(colour)
+	if (isInvitation) await expect(avatar.dataset.state).toBe("invitation")
 }
 
 const expectArtboard = async ({
@@ -710,7 +693,7 @@ const expectArtboard = async ({
 	entries,
 	pinned,
 	pinnedInk,
-	tint,
+	colour,
 	isInvitation = false,
 }: ArtboardMenu) => {
 	const menu = await menuIn()
@@ -742,18 +725,16 @@ const expectArtboard = async ({
 		weight: "400",
 		ink: INK.muted,
 	})
-	await expectSquare({
+	await expectAvatar({
 		area: identity,
 		size: 36,
-		radius: "11px",
-		tint,
+		colour,
 		isInvitation,
 	})
-	await expectSquare({
+	await expectAvatar({
 		area: slotIn(main, "focused-space-header"),
 		size: 48,
-		radius: "13px",
-		tint,
+		colour,
 		isInvitation,
 	})
 
@@ -772,32 +753,18 @@ const expectArtboard = async ({
 	return { menu, main }
 }
 
-const hostDotsIn = (menu: HTMLElement, main: HTMLElement) =>
-	[menu, main].map((area) =>
-		area.querySelector("[data-slot=host-dot]")?.getAttribute("data-host"),
-	)
+const avatarStatesIn = (menu: HTMLElement, main: HTMLElement) =>
+	[menu, main].map((area) => slotIn(area, "space-avatar").dataset.state)
 
-const expectHostDots = async (
-	menu: HTMLElement,
-	main: HTMLElement,
-	ink: string,
-) => {
-	for (const [area, size] of [
+const expectPresenceDots = async (menu: HTMLElement, main: HTMLElement) => {
+	for (const [area, diameter] of [
 		[menu, 10],
-		[main, 14],
+		[main, 12],
 	] as const) {
-		const dot = slotIn(area, "host-dot")
-		await expect(dot.getBoundingClientRect().width).toBe(size)
-		await expect(getComputedStyle(dot).backgroundColor).toBe(ink)
-		await expect(getComputedStyle(dot).boxShadow).toContain(
-			`${INK.card} 0px 0px 0px 2px`,
-		)
+		const dot = slotIn(area, "space-avatar-dot")
+		await expect(dot.getBoundingClientRect().width).toBe(diameter)
+		await expect(getComputedStyle(dot).fill).toBe(INK.online)
 	}
-	const menuDot = getComputedStyle(slotIn(menu, "host-dot"))
-	await expect([menuDot.insetInlineEnd, menuDot.bottom]).toEqual([
-		"-3px",
-		"-3px",
-	])
 }
 
 const expectHeaderButton = async (button: HTMLElement) => {
@@ -843,11 +810,11 @@ export const YoursNotShared = meta.story({
 			),
 			pinned: "Danger zone",
 			pinnedInk: DANGER_INK,
-			tint: TINT.purple,
+			colour: "purple",
 		})
 		await expect(entryIn(menu, "Space")).toHaveAttribute("aria-current", "page")
 		await expectSettingsPage(main, "Space", "column")
-		await expect(hostDotsIn(menu, main)).toEqual([undefined, undefined])
+		await expect(avatarStatesIn(menu, main)).toEqual(["local", "local"])
 		await expect(iconOf(entryIn(menu, "Members")).strokeWidth).toBe("1.8px")
 		await expect(
 			within(main).getByRole("heading", { level: 2, name: "Field notes" }),
@@ -945,10 +912,10 @@ export const JoinedHostOnline = meta.story({
 			),
 			pinned: "Leave space",
 			pinnedInk: DANGER_INK,
-			tint: TINT.green,
+			colour: "green",
 		})
-		await expect(hostDotsIn(menu, main)).toEqual(["up", "up"])
-		await expectHostDots(menu, main, INK.online)
+		await expect(avatarStatesIn(menu, main)).toEqual(["online", "online"])
+		await expectPresenceDots(menu, main)
 		await expect(within(main).getByLabelText("Name")).toHaveAttribute(
 			"readonly",
 		)
@@ -982,7 +949,7 @@ export const JoinedHostNotConnected = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard F04: a space joined from Jordan Lee, whose computer isn't connected. Check · Not connected after the host, a grey presence dot, the header alone with no Name field, every entry but Space dimmed, out of the tab order and announced as disabled with its count hidden, and Leave space still reachable.",
+					"Artboard F04: a space joined from Jordan Lee, whose computer isn't connected. Check · Not connected after the host, the avatar in greys without a dot and the Not connected pill beside the name in the menu and on the page, the header alone with no Name field, every entry but Space dimmed, out of the tab order and announced as disabled with its count hidden, and Leave space still reachable.",
 			},
 		},
 	},
@@ -993,10 +960,12 @@ export const JoinedHostNotConnected = meta.story({
 			entries: ARTBOARD_MENU,
 			pinned: "Leave space",
 			pinnedInk: DANGER_INK,
-			tint: TINT.orange,
+			colour: "orange",
 		})
-		await expect(hostDotsIn(menu, main)).toEqual(["down", "down"])
-		await expectHostDots(menu, main, INK.offline)
+		await expect(avatarStatesIn(menu, main)).toEqual(["offline", "offline"])
+		await expect(menu.querySelector("[data-slot=space-avatar-dot]")).toBeNull()
+		await expect(slotIn(menu, "host-pill")).toHaveTextContent("Not connected")
+		await expect(slotIn(main, "host-pill")).toHaveTextContent("Not connected")
 
 		const standing = slotIn(main, "focused-space-standing")
 		await expect(
@@ -1052,7 +1021,7 @@ export const JoinedSessionUnavailable = meta.story({
 			),
 			pinned: "Leave space",
 			pinnedInk: DANGER_INK,
-			tint: TINT[JOINED_ARGS.value.colour],
+			colour: JOINED_ARGS.value.colour,
 		})
 		await expectSettingsPage(main, "Space", "column")
 		await expect(
@@ -1072,6 +1041,37 @@ export const JoinedSessionUnavailable = meta.story({
 		for (const label of ["Space", "Members", companions, "Leave space"]) {
 			await userEvent.tab()
 			await expect(entryIn(menu, label)).toHaveFocus()
+		}
+	},
+})
+
+export const JoinedHostConnecting = meta.story({
+	args: { ...JOINED_ARGS, spaceHost: "connecting" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A joined space whose host this computer is still reaching, the host state handed in by the app. Check the settings header and the Space page both draw the connecting avatar, its ground with the arcs as lines and no dot, and a Connecting… pill beside the space name.",
+			},
+		},
+	},
+	play: async () => {
+		const menu = await menuIn()
+		const main = screen.getByRole("main")
+		await expect(avatarStatesIn(menu, main)).toEqual([
+			"connecting",
+			"connecting",
+		])
+		for (const [area, name] of [
+			[menu, slotIn(menu, "settings-menu-name")],
+			[
+				main,
+				within(main).getByRole("heading", { level: 2, name: "Northwind" }),
+			],
+		] as const) {
+			const pill = slotIn(area, "host-pill")
+			await expect(pill).toHaveTextContent("Connecting…")
+			await expect(pill.previousElementSibling).toBe(name)
 		}
 	},
 })
@@ -1104,16 +1104,25 @@ export const Invitation = meta.story({
 			entries: ["Invitation"],
 			pinned: "Decline",
 			pinnedInk: QUIET_INK,
-			tint: TINT.yellow,
+			colour: "yellow",
 			isInvitation: true,
 		})
 		await expect(entryIn(menu, "Invitation")).toHaveAttribute(
 			"aria-current",
 			"page",
 		)
-		await expect(hostDotsIn(menu, main)).toEqual([undefined, undefined])
-		await expect(slotIn(menu, "space-invitation-outline")).toBeVisible()
-		await expect(slotIn(main, "space-invitation-outline")).toBeVisible()
+		await expect(avatarStatesIn(menu, main)).toEqual([
+			"invitation",
+			"invitation",
+		])
+		for (const area of [menu, main])
+			await expect(
+				slotsIn(area, "space-avatar-outline").filter(
+					(outline) =>
+						getComputedStyle(outline.closest("[data-theme]") ?? outline)
+							.display !== "none",
+				),
+			).toHaveLength(1)
 
 		const accept = within(main).getByRole("button", { name: "Accept" })
 		await expectHeaderButton(accept)
@@ -1206,9 +1215,9 @@ export const LongName = meta.story({
 		await expect(name.scrollWidth).toBeGreaterThan(name.clientWidth)
 		await expect(getComputedStyle(name).whiteSpace).toBe("nowrap")
 		await expect(getComputedStyle(name).textOverflow).toBe("ellipsis")
-		await expect(slotIn(menu, "space-dot").getBoundingClientRect().width).toBe(
-			36,
-		)
+		await expect(
+			slotIn(menu, "space-avatar").getBoundingClientRect().width,
+		).toBe(36)
 	},
 })
 

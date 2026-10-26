@@ -4,11 +4,9 @@ import { ContextMenu as ContextMenuPrimitive } from "@base-ui/react/context-menu
 import { useId } from "react"
 import { useTranslation } from "react-i18next"
 
-import {
-	type BotAvatarBlot,
-	blotTint,
-} from "@workspace/ui/components/companion-colour"
+import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
 import { Icons } from "@workspace/ui/components/icons"
+import { SpaceAvatar } from "@workspace/ui/components/space-avatar"
 import { buttonVariants } from "@workspace/ui/components/ui/button"
 import {
 	ContextMenuGroup,
@@ -29,10 +27,7 @@ const INVITATION_WITHDRAWN = "rounded-xl outline-hidden focus:bg-accent"
 
 const HEADING = "flex items-start gap-2"
 
-const RING =
-	"mt-1.25 size-2.5 shrink-0 rounded-full inset-ring-[1.5px] inset-ring-current"
-
-const RING_MUTED = "text-foreground/30"
+const AVATAR = "mt-0.75"
 
 const TEXT = "flex min-w-0 flex-col"
 
@@ -42,7 +37,7 @@ const NAME_WITHDRAWN = "text-muted-foreground"
 
 const HOST = "break-words text-muted-foreground text-xs"
 
-const INDENTED = "ps-4.5"
+const INDENTED = "ps-5.5"
 
 const CAUSE = "flex items-start gap-1.5 break-words text-destructive text-xs"
 
@@ -116,7 +111,6 @@ const SpaceInvitationRow = ({
 	const isFailed = invitation.state === "failed"
 	const isHostOffline = invitation.state === "hostOffline"
 	const isMuted = isClosed || isHostOffline
-	const tint = !isMuted && colour ? blotTint(colour) : undefined
 	const expiry =
 		expiresAt === undefined ? undefined : formatShortMonthAndDay(expiresAt)
 
@@ -136,11 +130,12 @@ const SpaceInvitationRow = ({
 	const details = (
 		<>
 			<div className={HEADING}>
-				<span
-					aria-hidden="true"
-					className={cn(RING, !tint && RING_MUTED)}
-					data-slot="space-invitation-ring"
-					style={tint ? { color: tint } : undefined}
+				<SpaceAvatar
+					className={AVATAR}
+					colour={isMuted ? null : colour}
+					size={14}
+					spaceId={id}
+					state={isAccepting ? "joining" : "invitation"}
 				/>
 				<div className={TEXT}>
 					<span className={cn(NAME, isMuted && NAME_WITHDRAWN)} id={nameId}>

@@ -4,6 +4,7 @@ import type { ComponentProps, ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
 import { type BotBadge, BotBadgeDot } from "@workspace/ui/components/bot-badge"
+import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import { FillIcons, Icons } from "@workspace/ui/components/icons"
 import {
 	AvatarFrame,
@@ -11,7 +12,10 @@ import {
 	initialsOf,
 } from "@workspace/ui/components/initials-avatar"
 import type { Space } from "@workspace/ui/components/space"
-import { SpaceDot } from "@workspace/ui/components/space-switcher"
+import {
+	SpaceAvatar,
+	spaceAvatarStateOf,
+} from "@workspace/ui/components/space-avatar"
 import { TooltipButton } from "@workspace/ui/components/tooltip-button"
 import type { UserChipIdentity } from "@workspace/ui/components/user-chip"
 import { cn } from "@workspace/ui/lib/utils"
@@ -49,8 +53,6 @@ const RAIL_AVATAR =
 	"grid size-full place-items-center bg-rail-avatar font-medium text-foreground text-xs/4 uppercase"
 
 const AVATAR_SIZE = 26
-
-const RAIL_SPACE_LOGO = "size-6.5 rounded-[7px]"
 
 type RailItemProps = {
 	name: string
@@ -127,6 +129,7 @@ const RailAvatar = ({ name, image }: RailAvatarProps) => (
 type AppRailProps = Omit<ComponentProps<"nav">, "children"> & {
 	selected: AppRailPanel
 	space?: Space
+	spaceHost?: SpaceHost
 	openSettings?: AppRailSettings
 	dots?: AppRailDots
 	user?: UserChipIdentity
@@ -140,6 +143,7 @@ type AppRailProps = Omit<ComponentProps<"nav">, "children"> & {
 const AppRail = ({
 	selected,
 	space,
+	spaceHost,
 	openSettings,
 	dots,
 	user,
@@ -177,7 +181,12 @@ const AppRail = ({
 					name={t("rail.spaceSettings")}
 					onPress={onOpenSpaceSettings}
 				>
-					<SpaceDot className={RAIL_SPACE_LOGO} colour={space?.colour} />
+					<SpaceAvatar
+						colour={space?.colour}
+						size={26}
+						spaceId={space?.id ?? ""}
+						state={spaceAvatarStateOf(spaceHost)}
+					/>
 				</RailItem>
 				<RailItem
 					{...panelEntry("conversations")}

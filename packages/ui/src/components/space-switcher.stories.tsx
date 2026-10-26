@@ -101,11 +101,13 @@ const dropOver = (handle: HTMLElement, onto: Element) => {
 	fireEvent.click(handle)
 }
 
+const ICON_SVG = 'svg:not([data-slot="space-avatar"] svg)'
+
 const insertionOn = (root: HTMLElement) =>
 	slotsIn(root, "space-insertion")[0]?.parentElement
 
 const tintVisibleIn = (trigger: HTMLElement) =>
-	slotsIn(trigger, "space-dot")[0]?.checkVisibility()
+	slotsIn(trigger, "space-avatar")[0]?.checkVisibility()
 
 const openMenu = async (trigger: HTMLElement) => {
 	fireEvent.click(trigger)
@@ -223,9 +225,9 @@ export const Default = meta.story({
 		await expect(trigger.getBoundingClientRect().height).toBe(32)
 		await expect(getComputedStyle(trigger).borderStartStartRadius).toBe("8px")
 		await expect(getComputedStyle(trigger).columnGap).toBe("8px")
-		const swatch = slotsIn(trigger, "space-dot")[0]
-		await expect(swatch.getBoundingClientRect().width).toBe(10)
-		await expect(getComputedStyle(swatch).borderStartStartRadius).toBe("3px")
+		const avatar = slotsIn(trigger, "space-avatar")[0]
+		await expect(avatar.getBoundingClientRect().width).toBe(12)
+		await expect(avatar.dataset.recipe).toBe("compact")
 	},
 })
 
@@ -476,7 +478,7 @@ export const BadgeHere = meta.story({
 
 		const menu = await openMenu(trigger)
 		const open = within(menu).getAllByRole("menuitemradio")[1]
-		await expect(slotsIn(open, "space-dot")[0]?.dataset.badge).toBe("attention")
+		await expect(slotsIn(open, "space-avatar")[0]?.dataset.attention).toBe("")
 
 		await userEvent.keyboard("{Escape}")
 		await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
@@ -732,19 +734,43 @@ const rowNamed = (menu: HTMLElement, name: string) =>
 const shortcutOf = (row: HTMLElement) =>
 	slotsIn(row, "context-menu-shortcut")[0]
 
-const hostDotOn = (root: HTMLElement) => slotsIn(root, "host-dot")[0]
+const AVATAR_STATE_OF_HOST: Record<SpaceHost, string> = {
+	shared: "shared",
+	up: "online",
+	connecting: "connecting",
+	down: "offline",
+}
 
-const expectDotOnSquareCorner = async (root: HTMLElement, host: SpaceHost) => {
-	const square = slotsIn(root, "space-dot")[0]
-	const dot = hostDotOn(root)
-	await expect(dot).toHaveAttribute("data-host", host)
-	await expect(dot.parentElement).toBe(square)
-	const corner = square.getBoundingClientRect()
-	const box = dot.getBoundingClientRect()
-	await expect(box.width).toBe(7)
-	await expect(box.left + box.width / 2).toBeCloseTo(corner.right, 1)
-	await expect(box.top + box.height / 2).toBeCloseTo(corner.bottom, 1)
-	await expect(getComputedStyle(dot).boxShadow).toContain("0px 0px 0px 2px")
+const MENU_DOT = 6
+
+const avatarOn = (root: HTMLElement) => slotsIn(root, "space-avatar")[0]
+
+const presenceDotOn = (root: HTMLElement) =>
+	slotsIn(root, "space-avatar-dot")[0]
+
+const expectRowAvatar = async (root: HTMLElement, host: SpaceHost | null) => {
+	const avatar = avatarOn(root)
+	await expect(avatar.dataset.state).toBe(
+		host ? AVATAR_STATE_OF_HOST[host] : "local",
+	)
+	await expect(avatar.getBoundingClientRect().width).toBe(14)
+	const hasPill = host === "connecting" || host === "down"
+	await expect(slotsIn(root, "host-pill")).toHaveLength(hasPill ? 1 : 0)
+	if (host !== "up" && host !== "shared") {
+		await expect(presenceDotOn(root)).toBeUndefined()
+		return
+	}
+	const corner = avatar.getBoundingClientRect()
+	const box = presenceDotOn(root).getBoundingClientRect()
+	await expect(box.width).toBe(MENU_DOT)
+	await expect(corner.right - (box.left + box.width / 2)).toBeCloseTo(
+		0.32 * MENU_DOT,
+		1,
+	)
+	await expect(corner.bottom - (box.top + box.height / 2)).toBeCloseTo(
+		0.32 * MENU_DOT,
+		1,
+	)
 }
 
 const ROW_STATES: [string, SpaceHost | null][] = [
@@ -758,12 +784,8 @@ const ROW_STATES: [string, SpaceHost | null][] = [
 const expectRowDots = async (menu: HTMLElement) => {
 	for (const [name, host] of ROW_STATES) {
 		const row = rowNamed(menu, name)
-		await expect(
-			getComputedStyle(slotsIn(row, "space-dot")[0]).borderStartStartRadius,
-		).toBe("3px")
-		if (host) await expectDotOnSquareCorner(row, host)
-		else await expect(hostDotOn(row)).toBeUndefined()
-		await expect(row.querySelectorAll("svg")).toHaveLength(
+		await expectRowAvatar(row, host)
+		await expect(row.querySelectorAll(ICON_SVG)).toHaveLength(
 			row.getAttribute("aria-checked") === "true" ? 1 : 0,
 		)
 	}
@@ -800,7 +822,7 @@ export const ThemesLocalSpaceMenu = meta.story({
 		a11y: SIDE_BY_SIDE_MENU_A11Y,
 		docs: {
 			description: {
-				story: `${MOCKUP} The menu of a local space beside shared and joined ones (A7 rows). Check every row carries its 10px square on a 3px radius and, where the space has a host state, the 7px state dot centred on the square's bottom end corner: online for the shared and the reachable rows, hollow for the connecting one, muted for the one that does not answer. No globe and no \`Unreachable\` remain, and a single rule then \`Create a space\` close the menu. Pick \`ThemesJoinedSpaceMenu\` for the menu of a joined space.`,
+				story: `${MOCKUP} The menu of a local space beside shared and joined ones (A7 rows). Check every row carries its 14px SpaceAvatar in the state of its host: the 6px green dot cut out of the bottom end corner for the shared and the reachable rows, lines for the connecting one and greys for the one that does not answer, those two with the HostPill beside the name. No globe and no \`Unreachable\` remain, and a single rule then \`Create a space\` close the menu. Pick \`ThemesJoinedSpaceMenu\` for the menu of a joined space.`,
 			},
 		},
 	},
@@ -808,7 +830,7 @@ export const ThemesLocalSpaceMenu = meta.story({
 		const [light, dark] = triggersIn(canvasElement)
 		for (const trigger of [light, dark]) {
 			await expect(trigger).toHaveAccessibleName("Change space, Perso open")
-			await expect(hostDotOn(trigger)).toBeUndefined()
+			await expect(avatarOn(trigger).dataset.state).toBe("local")
 		}
 		await expect(slotsIn(canvasElement, "host-pill")).toHaveLength(0)
 
@@ -856,7 +878,7 @@ export const HostedLongNames = meta.story({
 		docs: {
 			description: {
 				story:
-					"Joined spaces named as sentences, which their owner chose and the reader cannot shorten. Check each name clips to one line with an ellipsis while the square, its state dot and the shortcut keep their full size inside the row. Pick `LongContent` for a long local name on the button.",
+					"Joined spaces named as sentences, which their owner chose and the reader cannot shorten. Check each name clips to one line with an ellipsis while the avatar, its presence dot and the shortcut keep their full size inside the row. Pick `LongContent` for a long local name on the button.",
 			},
 		},
 	},
@@ -873,10 +895,14 @@ export const HostedLongNames = meta.story({
 			await expect(shortcutOf(row).getBoundingClientRect().right).toBeLessThan(
 				end,
 			)
-			await expect(hostDotOn(row).getBoundingClientRect().width).toBe(7)
-			await expect(
-				slotsIn(row, "space-dot")[0].getBoundingClientRect().width,
-			).toBe(10)
+			const pill = slotsIn(row, "host-pill")[0]
+			if (pill)
+				await expect(pill.scrollWidth).toBeLessThanOrEqual(pill.clientWidth)
+			else
+				await expect(presenceDotOn(row).getBoundingClientRect().width).toBe(
+					MENU_DOT,
+				)
+			await expect(avatarOn(row).getBoundingClientRect().width).toBe(14)
 		}
 
 		await userEvent.keyboard("{Escape}")
@@ -1085,7 +1111,7 @@ export const M2InvitationWaiting = meta.story({
 
 		const accept = within(row).getByRole("menuitem", { name: "Accept" })
 		await expect(accept.tagName).toBe("BUTTON")
-		const ring = slotsIn(row, "space-invitation-ring")[0]
+		const ring = avatarOn(row)
 		for (const action of [
 			accept,
 			within(row).getByRole("menuitem", { name: "Decline" }),
@@ -1098,7 +1124,7 @@ export const M2InvitationWaiting = meta.story({
 		}
 		await expect(
 			accept.getBoundingClientRect().left - ring.getBoundingClientRect().left,
-		).toBe(18)
+		).toBe(22)
 
 		await focusByArrows(accept, userEvent.keyboard)
 		await userEvent.keyboard("{Enter}")
@@ -1280,7 +1306,7 @@ export const M5Joined = meta.story({
 		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		docs: {
 			description: {
-				story: `${INVITED_ARTBOARD} M5, artboard 3.7 of the Mockup page: the invitation is accepted and Studio is open. At rest the menu is closed and the trigger shows Studio, its square carrying the online dot of its reachable host and no invitation dot. Check that, then that the menu lists Studio under Personal with the same dot on its row's square and no Invitations group, and that Escape leaves the menu closed again.`,
+				story: `${INVITED_ARTBOARD} M5, artboard 3.7 of the Mockup page: the invitation is accepted and Studio is open. At rest the menu is closed and the trigger shows Studio, its 12px avatar online, too small for the dot, and no invitation dot. Check that, then that the menu lists Studio under Personal with the online dot on its row's avatar and no Invitations group, and that Escape leaves the menu closed again.`,
 			},
 		},
 	},
@@ -1289,9 +1315,10 @@ export const M5Joined = meta.story({
 			name: "Change space, Studio open, Online",
 		})
 		await expect(invitationDotOn(trigger)).toBeUndefined()
-		await expectDotOnSquareCorner(trigger, "up")
+		await expect(avatarOn(trigger).dataset.state).toBe("online")
+		await expect(presenceDotOn(trigger)).toBeUndefined()
 		const menu = await openSwitcher(canvasElement)
-		await expectDotOnSquareCorner(rowNamed(menu, "Studio"), "up")
+		await expectRowAvatar(rowNamed(menu, "Studio"), "up")
 		await expect(slotsIn(menu, "space-invitations")).toHaveLength(0)
 		await userEvent.keyboard("{Escape}")
 		await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
@@ -1310,13 +1337,13 @@ export const M6Unreachable = meta.story({
 		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		docs: {
 			description: {
-				story: `${INVITED_ARTBOARD} M6: the joined Space's host stops answering, so the dot on its row's square turns to the muted presence colour.`,
+				story: `${INVITED_ARTBOARD} M6: the joined Space's host stops answering, so its row's avatar turns to the greys of a Space not connected, with the HostPill beside its name.`,
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
 		const menu = await openSwitcher(canvasElement)
-		await expectDotOnSquareCorner(rowNamed(menu, "Studio"), "down")
+		await expectRowAvatar(rowNamed(menu, "Studio"), "down")
 	},
 })
 
@@ -1417,7 +1444,7 @@ export const M11Withdrawn = meta.story({
 		await expect(getComputedStyle(name).color).toBe(
 			getComputedStyle(hostLineOf(row)).color,
 		)
-		await expect(slotsIn(row, "space-invitation-ring")[0].style.color).toBe("")
+		await expect(avatarOn(row).dataset.colour).toBeUndefined()
 
 		await expect(args.onOpenChange).toHaveBeenCalledTimes(1)
 		await expect(args.onOpenChange).toHaveBeenLastCalledWith(true)
@@ -1463,7 +1490,7 @@ export const InvitationHostOffline = meta.story({
 			probedStyleOf("bg-presence-offline", "backgroundColor", menu),
 		)
 
-		await expect(slotsIn(row, "space-invitation-ring")[0].style.color).toBe("")
+		await expect(avatarOn(row).dataset.colour).toBeUndefined()
 		await expect(
 			getComputedStyle(within(row).getByText(INVITED.name)).color,
 		).toBe(getComputedStyle(hostLineOf(row)).color)
@@ -1511,7 +1538,7 @@ export const InvitationExpired = meta.story({
 			0,
 		)
 		await expect(expiryLineOf(row)).toBeNull()
-		await expect(slotsIn(row, "space-invitation-ring")[0].style.color).toBe("")
+		await expect(avatarOn(row).dataset.colour).toBeUndefined()
 	},
 })
 
@@ -1581,9 +1608,7 @@ export const InvitationOverBotBadge = meta.story({
 		await expectInvitationDot(trigger)
 		await expect(badgeOn(trigger)).toBeUndefined()
 		const menu = await openSwitcher(canvasElement)
-		await expect(
-			slotsIn(rowNamed(menu, "Veille"), "space-dot")[0],
-		).toHaveAttribute("data-badge", "attention")
+		await expect(avatarOn(rowNamed(menu, "Veille")).dataset.attention).toBe("")
 	},
 })
 

@@ -3,11 +3,19 @@
 import { type ReactNode, useId } from "react"
 import { useTranslation } from "react-i18next"
 
-import type { SpaceHost } from "@workspace/ui/components/host-pill"
+import {
+	HostPill,
+	hostPillOf,
+	type SpaceHost,
+} from "@workspace/ui/components/host-pill"
 import { INVERSE_BUTTON_CLASS } from "@workspace/ui/components/inverse-button"
 import { SettingsField } from "@workspace/ui/components/settings-field"
+import {
+	SpaceAvatar,
+	type SpaceAvatarState,
+	spaceAvatarStateOf,
+} from "@workspace/ui/components/space-avatar"
 import type { SpaceSettingsValue } from "@workspace/ui/components/space-settings"
-import { SpaceSquare } from "@workspace/ui/components/space-switcher"
 import { Button } from "@workspace/ui/components/ui/button"
 import { formatShortMonthAndDay } from "@workspace/ui/lib/time-format"
 import { cn } from "@workspace/ui/lib/utils"
@@ -30,6 +38,15 @@ const presenceOf = (space: FocusedSpace): SpaceHost | undefined => {
 	if (space.state === "yours" && space.isShared) return "shared"
 	return undefined
 }
+
+const spaceHostOf = (space: FocusedSpace, spaceHost?: SpaceHost) =>
+	space.state === "invitation" ? undefined : (spaceHost ?? presenceOf(space))
+
+const avatarStateOf = (
+	space: FocusedSpace,
+	host?: SpaceHost,
+): SpaceAvatarState =>
+	space.state === "invitation" ? "invitation" : spaceAvatarStateOf(host)
 
 type NotSharedCardProps = {
 	name: string
@@ -73,6 +90,8 @@ const NotSharedCard = ({ name, onShare }: NotSharedCardProps) => {
 
 type FocusedSpacePageProps = {
 	space: FocusedSpace
+	spaceId: string
+	spaceHost?: SpaceHost
 	value: SpaceSettingsValue
 	onValueChange: (value: SpaceSettingsValue) => void
 	rank?: number
@@ -84,6 +103,8 @@ type FocusedSpacePageProps = {
 
 const FocusedSpacePage = ({
 	space,
+	spaceId,
+	spaceHost,
 	value,
 	onValueChange,
 	rank,
@@ -96,6 +117,8 @@ const FocusedSpacePage = ({
 	const { t: tBots } = useTranslation("bots")
 	const name = value.name.trim() || t("space.untitled")
 	const isInvitation = space.state === "invitation"
+	const host = spaceHostOf(space, spaceHost)
+	const pillHost = hostPillOf(host)
 	const isNameShown =
 		space.state === "yours" || (space.state === "joined" && space.isConnected)
 
@@ -124,16 +147,19 @@ const FocusedSpacePage = ({
 				className="flex min-w-0 items-center gap-3.5"
 				data-slot="focused-space-header"
 			>
-				<SpaceSquare
+				<SpaceAvatar
 					colour={value.colour}
-					host={presenceOf(space)}
-					isInvitation={isInvitation}
-					size="header"
+					size={48}
+					spaceId={spaceId}
+					state={avatarStateOf(space, host)}
 				/>
 				<div className="flex min-w-0 flex-1 flex-col gap-0.5">
-					<h2 className="break-words font-semibold text-foreground text-xl/6.5 tracking-[-0.01em]">
-						{name}
-					</h2>
+					<div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+						<h2 className="min-w-0 break-words font-semibold text-foreground text-xl/6.5 tracking-[-0.01em]">
+							{name}
+						</h2>
+						{pillHost ? <HostPill host={pillHost} /> : null}
+					</div>
 					<p
 						className="break-words text-compact/4.5 text-muted-foreground"
 						data-slot="focused-space-standing"
@@ -179,4 +205,4 @@ const FocusedSpacePage = ({
 	)
 }
 
-export { type FocusedSpace, FocusedSpacePage, presenceOf }
+export { avatarStateOf, type FocusedSpace, FocusedSpacePage, spaceHostOf }
