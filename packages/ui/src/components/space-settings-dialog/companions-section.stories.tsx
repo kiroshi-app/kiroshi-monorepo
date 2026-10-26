@@ -16,6 +16,14 @@ const CARD_WIDTH = 312
 
 const cardsIn = (root: HTMLElement) => slotsIn(root, "companion-card")
 
+const COMPANIONS_WITHOUT_COUNTS = SPACE_COMPANIONS.map((companion) => ({
+	...companion,
+	skillsCount: undefined,
+	applicationsCount: undefined,
+}))
+
+const COUNTS_TEXT = /skill|application/
+
 const backgroundOf = (element: Element) =>
 	getComputedStyle(element).backgroundColor
 
@@ -110,6 +118,71 @@ export const FourCompanions = meta.story({
 			canvas.getByRole("button", { name: "Create a companion" }),
 		)
 		await expect(args.onCreate).toHaveBeenCalledOnce()
+	},
+})
+
+export const NoCounts = meta.story({
+	globals: { theme: "dark" },
+	args: { companions: COMPANIONS_WITHOUT_COUNTS, spaceName: "Studio" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Artboard H01 before the space reports how many skills and applications each companion carries. Check that no count shows, that each footer keeps its top border and the approval mode on the right, and that cards of one row stay at the same height.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement)
+		const cards = cardsIn(canvasElement)
+
+		await expect(cards).toHaveLength(4)
+		await expect(canvas.queryByText(COUNTS_TEXT)).toBeNull()
+		await expect(canvas.getAllByText("Accept edits")).toHaveLength(2)
+		await expect(canvas.getByText("Plan first")).toBeVisible()
+		await expect(canvas.getByText("Ask every time")).toBeVisible()
+
+		for (const card of cards) {
+			const mode = slotIn(card, "companion-card-mode")
+			const footer = mode.parentElement as HTMLElement
+			await expect(footer.childElementCount).toBe(1)
+			await expect(getComputedStyle(footer).borderTopWidth).toBe("1px")
+			await expect(mode.getBoundingClientRect().right).toBe(
+				footer.getBoundingClientRect().right,
+			)
+		}
+		await expect(cards[0].getBoundingClientRect().height).toBe(
+			cards[1].getBoundingClientRect().height,
+		)
+	},
+})
+
+export const OneCount = meta.story({
+	tags: ["test-only"],
+	args: {
+		companions: [
+			{ ...SPACE_COMPANIONS[0], applicationsCount: undefined },
+			{ ...SPACE_COMPANIONS[3], skillsCount: undefined },
+		],
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A companion with only its skills counted and one with only its applications counted. Check that each footer shows its one count alone, with no separator dot, and that a count of zero still reads as none.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement)
+		const cards = cardsIn(canvasElement)
+
+		await expect(within(cards[0]).getByText("3 skills")).toBeVisible()
+		await expect(within(cards[1]).getByText("no applications")).toBeVisible()
+		await expect(canvas.queryByText(/·/)).toBeNull()
+		await expect(cards[0].getBoundingClientRect().height).toBe(
+			cards[1].getBoundingClientRect().height,
+		)
 	},
 })
 
