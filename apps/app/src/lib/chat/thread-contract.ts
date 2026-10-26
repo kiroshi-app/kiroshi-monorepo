@@ -35,7 +35,6 @@ export type BotThread = {
 	kind: "bot"
 	bot: Bot
 	chat: Chat
-	isSettingsOpen: boolean
 	isOverlayOpen: boolean
 	onToggleSettings: () => void
 }

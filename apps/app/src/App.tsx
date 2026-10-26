@@ -186,7 +186,6 @@ export function App() {
 														sidebarTab.openTab === "missions"
 													}
 													isOverlayOpen={overlay.isOverlayOpen}
-													isSettingsOpen={overlay.isThreadSettingsOpen}
 													landings={core.messageLandings}
 													missions={core.openedMission}
 													onboarding={

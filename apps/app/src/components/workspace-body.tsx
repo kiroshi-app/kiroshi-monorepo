@@ -33,7 +33,6 @@ type WorkspaceBodyProps = {
 	drafts: DraftsController
 	landings: MessageLandingController
 	readerName: string
-	isSettingsOpen: boolean
 	isOverlayOpen: boolean
 	onToggleSettings: () => void
 	isConversationSettingsOpen: boolean
@@ -50,7 +49,6 @@ const threadOf = ({
 	conversation,
 	conversationRuntimes,
 	chat,
-	isSettingsOpen,
 	isOverlayOpen,
 	onToggleSettings,
 	isConversationSettingsOpen,
@@ -70,7 +68,6 @@ const threadOf = ({
 			kind: "bot",
 			bot,
 			chat,
-			isSettingsOpen,
 			isOverlayOpen,
 			onToggleSettings,
 		}

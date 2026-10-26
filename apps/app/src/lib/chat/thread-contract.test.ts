@@ -91,7 +91,6 @@ const botThreadOf = (state: ChatState): LoadedBotThread => ({
 	kind: "bot",
 	bot,
 	chat: { state, controller: botController },
-	isSettingsOpen: false,
 	isOverlayOpen: false,
 	onToggleSettings: () => undefined,
 	state,

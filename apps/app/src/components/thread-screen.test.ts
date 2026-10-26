@@ -395,7 +395,6 @@ const threadOf = ({
 		},
 		controller,
 	},
-	isSettingsOpen: false,
 	isOverlayOpen: false,
 	onToggleSettings: () => undefined,
 })
@@ -983,7 +982,6 @@ const soloOf = async ({
 			kind: "bot",
 			bot,
 			chat: { state: controller.stateFor(bot.id), controller },
-			isSettingsOpen: false,
 			isOverlayOpen: false,
 			onToggleSettings: () => undefined,
 		}),
@@ -3791,7 +3789,6 @@ const signedOutOf = async (
 			kind: "bot",
 			bot,
 			chat: { state: chat.stateFor(bot.id), controller: chat },
-			isSettingsOpen: false,
 			isOverlayOpen: false,
 			onToggleSettings: () => undefined,
 		}),
