@@ -429,36 +429,40 @@ const UserSettingsScreen = ({
 			onWidthChange={onWidthChange}
 			rail={rail}
 			sessions={sessions}
-			spaces={(requestLeave) => (
-				<SettingsMenuSection
-					action={
-						<SettingsMenuAddSpace
-							onAdd={() => requestLeave(() => onCreateSpace?.())}
-						/>
-					}
-					title={t("screen.group.spaces")}
-				>
-					{[...ownedSpaces, ...joinedSpaces].map((space) => (
-						<SettingsMenuSpace
-							colour={space.colour}
-							hasAttention={space.hasAttention}
-							host={space.host}
-							isCurrent={space.id === currentSpaceId}
-							key={space.id}
-							name={space.name}
-							onOpen={() => requestLeave(() => onOpenSpace?.(space.id))}
-						/>
-					))}
-					{invitations.map((invitation) => (
-						<SettingsMenuSpace
-							isInvitation
-							key={invitation.id}
-							name={invitation.name}
-							onOpen={() => requestLeave(() => onOpenSpace?.(invitation.id))}
-						/>
-					))}
-				</SettingsMenuSection>
-			)}
+			spaces={(requestLeave) => {
+				const openSpace = (id: string) => requestLeave(() => onOpenSpace?.(id))
+
+				return (
+					<SettingsMenuSection
+						action={
+							<SettingsMenuAddSpace
+								onAdd={() => requestLeave(() => onCreateSpace?.())}
+							/>
+						}
+						title={t("screen.group.spaces")}
+					>
+						{[...ownedSpaces, ...joinedSpaces].map((space) => (
+							<SettingsMenuSpace
+								colour={space.colour}
+								hasAttention={space.hasAttention}
+								host={space.host}
+								isCurrent={space.id === currentSpaceId}
+								key={space.id}
+								name={space.name}
+								onOpen={() => openSpace(space.id)}
+							/>
+						))}
+						{invitations.map((invitation) => (
+							<SettingsMenuSpace
+								isInvitation
+								key={invitation.id}
+								name={invitation.name}
+								onOpen={() => openSpace(invitation.id)}
+							/>
+						))}
+					</SettingsMenuSection>
+				)
+			}}
 			titleBar={titleBar}
 			width={width}
 			subtitle={t("screen.subtitle.user")}
