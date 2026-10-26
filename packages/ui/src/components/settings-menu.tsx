@@ -151,7 +151,7 @@ const SettingsMenuEntry = ({
 				{hasIndicator ? (
 					<span
 						aria-hidden="true"
-						className={cn(ROW_DOT, "bg-primary")}
+						className={cn(ROW_DOT, "bg-primary-strong")}
 						data-slot="settings-menu-indicator"
 					/>
 				) : null}

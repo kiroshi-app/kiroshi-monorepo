@@ -34,7 +34,7 @@
 	--brand-mark-cells: #a2b1d0;
 	--brand-mark-ground: #ffffff;
 	--bot-avatar-ink: var(--bot-blot-ink);
-	--bot-badge-attention: #46639c;
+	--bot-badge-attention: var(--primary-strong);
 	--bot-badge-done: oklch(0.68 0.17 148);
 	--bot-badge-failed: oklch(0.62 0.22 27);
 	--warning: oklch(0.64 0.16 60);
@@ -48,8 +48,13 @@
 	--card: #ffffff;
 	--popover: #ffffff;
 	--popover-foreground: #0a0a0a;
-	--primary: #7490c2;
-	--primary-foreground: #0a0a0a;
+	--primary: var(--space-tint, var(--bot-blot-blue));
+	--primary-foreground: var(--bot-blot-ink);
+	--primary-strong: color-mix(
+		in oklab,
+		var(--primary) 60%,
+		var(--bot-blot-ink)
+	);
 	--secondary: #f2f2f2;
 	--secondary-foreground: #0a0a0a;
 	--muted: #f2f2f2;
@@ -60,19 +65,23 @@
 	--destructive-tint: #fde6e7;
 	--destructive-tint-foreground: oklch(0.53 0.216 27.325);
 	--window-close: #c42b1c;
-	--mark: rgb(116 144 194 / 40%);
-	--transcript-new-mark: rgb(116 144 194 / 40%);
+	--mark: color-mix(in oklab, var(--primary-strong) 40%, transparent);
+	--transcript-new-mark: color-mix(
+		in oklab,
+		var(--primary-strong) 40%,
+		transparent
+	);
 	--border: #e5e5e5;
 	--question-option-ring: rgb(10 10 10 / 17%);
 	--input: #e5e5e5;
-	--ring: #7490c2;
+	--ring: var(--primary-strong);
 	--sidebar: #f7f7f7;
 	--sidebar-foreground: #0a0a0a;
-	--sidebar-primary: #46639c;
+	--sidebar-primary: var(--primary-strong);
 	--sidebar-accent: #f2f2f2;
 	--sidebar-accent-foreground: #0a0a0a;
 	--sidebar-border: #e5e5e5;
-	--sidebar-ring: #7490c2;
+	--sidebar-ring: var(--primary-strong);
 	--scrollbar: oklch(0.72 0.013 285.938);
 	--scrollbar-hover: oklch(0.6 0.014 285.938);
 	--user-bubble: #364f7c;
@@ -117,7 +126,7 @@
 	--conversation-pile-overflow-foreground: #ededed;
 	--bot-avatar-field-untinted: #75acff;
 	--bot-avatar-ink: oklch(0.995 0 0);
-	--bot-badge-attention: #7490c2;
+	--bot-badge-attention: var(--primary-strong);
 	--warning: oklch(0.76 0.16 72);
 	--warning-foreground: #1f1400;
 	--success: #5fbf85;
@@ -128,8 +137,9 @@
 	--card: #121213;
 	--popover: #121213;
 	--popover-foreground: #f5f5f5;
-	--primary: #7490c2;
-	--primary-foreground: #0a0a0a;
+	--primary: var(--space-tint, var(--bot-blot-blue));
+	--primary-foreground: var(--bot-blot-ink);
+	--primary-strong: var(--primary);
 	--secondary: #262626;
 	--secondary-foreground: #f5f5f5;
 	--muted: #262626;
@@ -140,19 +150,23 @@
 	--destructive-tint: #2a1a1b;
 	--destructive-tint-foreground: var(--destructive);
 	--window-close: #c42b1c;
-	--mark: rgb(116 144 194 / 40%);
-	--transcript-new-mark: rgb(116 144 194 / 40%);
+	--mark: color-mix(in oklab, var(--primary-strong) 40%, transparent);
+	--transcript-new-mark: color-mix(
+		in oklab,
+		var(--primary-strong) 40%,
+		transparent
+	);
 	--border: #212224;
 	--question-option-ring: #525252;
 	--input: oklch(1 0 0 / 15%);
-	--ring: #7490c2;
+	--ring: var(--primary-strong);
 	--sidebar: #1a1a1a;
 	--sidebar-foreground: #f5f5f5;
-	--sidebar-primary: #7490c2;
+	--sidebar-primary: var(--primary-strong);
 	--sidebar-accent: #262626;
 	--sidebar-accent-foreground: #f5f5f5;
 	--sidebar-border: #212224;
-	--sidebar-ring: #7490c2;
+	--sidebar-ring: var(--primary-strong);
 	--scrollbar: oklch(0.44 0.008 286.033);
 	--scrollbar-hover: oklch(0.55 0.01 286.033);
 	--user-bubble: #364f7c;

@@ -115,7 +115,7 @@ const SettingsRailItem = ({
 							<span
 								aria-hidden="true"
 								className={cn(
-									"pointer-events-none size-2 shrink-0 rounded-full bg-primary",
+									"pointer-events-none size-2 shrink-0 rounded-full bg-primary-strong",
 									iconsOnly && "absolute end-2 top-2",
 								)}
 								data-slot="settings-rail-indicator"

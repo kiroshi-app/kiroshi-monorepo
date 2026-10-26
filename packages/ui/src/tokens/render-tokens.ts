@@ -18,16 +18,17 @@ export type Srgb = {
 type Theme = "light" | "dark"
 
 const REFERENCE = /^\{([a-z0-9-]+)\}$/
+const EMBEDDED_REFERENCE = /\{([a-z0-9-]+)\}/g
+const VAR_WITH_FALLBACK = /^var\(--[a-z0-9-]+, (.+)\)$/
+const OKLAB_MIX = /^color-mix\(in oklab, (\S+) ([\d.]+)%, (\S+)\)$/
 const HEX = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i
 const RGB = /^rgb\((\d+) (\d+) (\d+)(?: \/ ([\d.]+%?))?\)$/
 const OKLCH = /^oklch\(([\d.]+) ([\d.]+) ([\d.]+)(?: \/ ([\d.]+%?))?\)$/
 
 const referenceOf = (value: string) => REFERENCE.exec(value)?.[1]
 
-const toCssValue = (value: string) => {
-	const reference = referenceOf(value)
-	return reference ? `var(--${reference})` : value
-}
+const toCssValue = (value: string) =>
+	value.replace(EMBEDDED_REFERENCE, "var(--$1)")
 
 const declarations = (file: TokenFile, theme: Theme) =>
 	Object.entries({ ...file.colors, ...file.parameters }).flatMap(
@@ -54,6 +55,13 @@ const parseAlpha = (alpha: string | undefined) => {
 	return alpha.endsWith("%") ? Number.parseFloat(alpha) / 100 : Number(alpha)
 }
 
+const decodeGamma = (byte: number) => {
+	const encoded = byte / 255
+	return encoded <= 0.04045
+		? encoded / 12.92
+		: ((encoded + 0.055) / 1.055) ** 2.4
+}
+
 const encodeGamma = (linear: number) => {
 	const magnitude = Math.abs(linear)
 	const encoded =
@@ -63,10 +71,7 @@ const encodeGamma = (linear: number) => {
 	return Math.sign(linear) * encoded
 }
 
-const oklchToSrgb = (lightness: number, chroma: number, hue: number) => {
-	const radians = (hue * Math.PI) / 180
-	const a = chroma * Math.cos(radians)
-	const b = chroma * Math.sin(radians)
+const oklabToSrgb = (lightness: number, a: number, b: number) => {
 	const l = (lightness + 0.3963377774 * a + 0.2158037573 * b) ** 3
 	const m = (lightness - 0.1055613458 * a - 0.0638541728 * b) ** 3
 	const s = (lightness - 0.0894841775 * a - 1.291485548 * b) ** 3
@@ -77,10 +82,32 @@ const oklchToSrgb = (lightness: number, chroma: number, hue: number) => {
 	].map(encodeGamma)
 }
 
+const oklchToSrgb = (lightness: number, chroma: number, hue: number) => {
+	const radians = (hue * Math.PI) / 180
+	return oklabToSrgb(
+		lightness,
+		chroma * Math.cos(radians),
+		chroma * Math.sin(radians),
+	)
+}
+
+const srgbToOklab = ({ red, green, blue }: Srgb) => {
+	const [r, g, b] = [red, green, blue].map(decodeGamma)
+	const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b)
+	const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b)
+	const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b)
+	return [
+		0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
+		1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
+		0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s,
+	]
+}
+
 const toByte = (unit: number) =>
 	Math.round(Math.min(1, Math.max(0, unit)) * 255)
 
 export const toSrgb = (value: string): Srgb => {
+	if (value === "transparent") return { red: 0, green: 0, blue: 0, alpha: 0 }
 	const hex = HEX.exec(value)
 	if (hex) {
 		const [red, green, blue] = hex
@@ -105,12 +132,40 @@ export const toSrgb = (value: string): Srgb => {
 	throw new Error(`Unsupported colour notation: ${value}`)
 }
 
-const resolve = (file: TokenFile, name: string, theme: Theme): string => {
+const mixInOklab = (first: Srgb, firstShare: number, second: Srgb): Srgb => {
+	const firstWeight = first.alpha * firstShare
+	const secondWeight = second.alpha * (1 - firstShare)
+	const alpha = firstWeight + secondWeight
+	const [firstLab, secondLab] = [first, second].map(srgbToOklab)
+	const [lightness, a, b] = firstLab.map(
+		(component, index) =>
+			(component * firstWeight + secondLab[index] * secondWeight) / alpha,
+	)
+	const [red, green, blue] = oklabToSrgb(lightness, a, b).map(toByte)
+	return { red, green, blue, alpha }
+}
+
+const resolveValue = (file: TokenFile, value: string, theme: Theme): Srgb => {
+	const reference = referenceOf(value)
+	if (reference) return resolve(file, reference, theme)
+	const fallback = VAR_WITH_FALLBACK.exec(value)?.[1]
+	if (fallback) return resolveValue(file, fallback, theme)
+	const mix = OKLAB_MIX.exec(value)
+	if (mix) {
+		return mixInOklab(
+			resolveValue(file, mix[1], theme),
+			Number(mix[2]) / 100,
+			resolveValue(file, mix[3], theme),
+		)
+	}
+	return toSrgb(value)
+}
+
+const resolve = (file: TokenFile, name: string, theme: Theme): Srgb => {
 	const token = file.colors[name]
 	if (!token) throw new Error(`Unknown colour token: ${name}`)
 	const value = theme === "dark" ? (token.dark ?? token.light) : token.light
-	const reference = referenceOf(value)
-	return reference ? resolve(file, reference, theme) : value
+	return resolveValue(file, value, theme)
 }
 
 const toComponent = (byte: number) =>
@@ -138,12 +193,12 @@ export const renderColorSets = (file: TokenFile) =>
 		contents: toJson({
 			colors: [
 				{
-					color: colorEntry(toSrgb(resolve(file, name, "light"))),
+					color: colorEntry(resolve(file, name, "light")),
 					idiom: "universal",
 				},
 				{
 					appearances: [{ appearance: "luminosity", value: "dark" }],
-					color: colorEntry(toSrgb(resolve(file, name, "dark"))),
+					color: colorEntry(resolve(file, name, "dark")),
 					idiom: "universal",
 				},
 			],

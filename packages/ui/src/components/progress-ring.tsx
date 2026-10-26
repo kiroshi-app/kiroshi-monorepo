@@ -40,7 +40,7 @@ const ProgressRing = ({
 				strokeWidth="2"
 			/>
 			<circle
-				className="fill-none stroke-primary transition-[stroke-dashoffset] duration-300 ease-out motion-reduce:transition-none"
+				className="fill-none stroke-primary-strong transition-[stroke-dashoffset] duration-300 ease-out motion-reduce:transition-none"
 				cx={RING_BOX / 2}
 				cy={RING_BOX / 2}
 				r={RING_RADIUS}
