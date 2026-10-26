@@ -131,7 +131,8 @@ export const ThreadTurn = memo(function ThreadTurn({
 			author={author}
 			cause={cause}
 			identity={avatarFace}
-			bare={bare || card !== undefined}
+			bare={bare}
+			framed={card !== undefined}
 			botId={botId}
 			carriesMark={carriesMark}
 			copyText={card === undefined ? text : ""}

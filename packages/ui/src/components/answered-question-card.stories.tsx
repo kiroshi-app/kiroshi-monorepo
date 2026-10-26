@@ -71,6 +71,10 @@ const MIGRATION_ANSWERS: AnsweredQuestion[] = [
 
 const CHANNEL_ASK = "Which channel should this release ship to?"
 
+const CHANNEL_LEAD = "The release notes are ready."
+
+const CHANNEL_FOLLOW_UP = "Shipping to Beta now."
+
 const CHANNEL_ANSWERS: AnsweredQuestion[] = [
 	{
 		question: CHANNEL_ASK,
@@ -141,14 +145,18 @@ const LONG_ANSWERS: AnsweredQuestion[] = [
 ]
 
 type AnsweredRunProps = {
+	lead?: string
 	ask: string
+	followUp?: string
 	author: AnsweredQuestionAuthor
 	questions: AnsweredQuestion[]
 	width?: string
 }
 
 const AnsweredRun = ({
+	lead,
 	ask,
+	followUp,
 	author,
 	questions,
 	width = "max-w-2xl",
@@ -159,6 +167,16 @@ const AnsweredRun = ({
 		className={cn("mx-auto flex flex-col px-6", width)}
 	>
 		<TurnGroup>
+			{lead ? (
+				<AssistantTurn
+					copyText={lead}
+					identity={COMPANION}
+					sentAt={ASKED_AT}
+					now={READ_ON}
+				>
+					{lead}
+				</AssistantTurn>
+			) : null}
 			<AssistantTurn
 				copyText={ask}
 				identity={COMPANION}
@@ -167,13 +185,18 @@ const AnsweredRun = ({
 			>
 				{ask}
 			</AssistantTurn>
-			<AssistantTurn bare copyText="" identity={COMPANION}>
+			<AssistantTurn framed copyText="" identity={COMPANION}>
 				<AnsweredQuestionCard
 					author={author}
 					answeredAt={ANSWERED_AT}
 					questions={questions}
 				/>
 			</AssistantTurn>
+			{followUp ? (
+				<AssistantTurn copyText={followUp} identity={COMPANION}>
+					{followUp}
+				</AssistantTurn>
+			) : null}
 		</TurnGroup>
 	</div>
 )
@@ -222,11 +245,36 @@ const expectRowsPaintedFromSpace = async (root: HTMLElement) => {
 	}
 }
 
-const softBubbleOf = (root: HTMLElement) =>
-	slotIn(
-		root.querySelector('[data-variant="soft"]') as HTMLElement,
-		"message-bubble-content",
+const softBubblesOf = (root: HTMLElement) =>
+	Array.from(root.querySelectorAll('[data-variant="soft"]'), (bubble) =>
+		slotIn(bubble, "message-bubble-content"),
 	)
+
+const runRadiusIn = (root: HTMLElement) =>
+	tokenStyleIn(root, "rounded-md", "borderTopLeftRadius")
+
+const bubbleRadiusIn = (root: HTMLElement) =>
+	tokenStyleIn(root, "rounded-bubble", "borderTopLeftRadius")
+
+const gapBetween = (above: HTMLElement, below: HTMLElement) =>
+	below.getBoundingClientRect().top - above.getBoundingClientRect().bottom
+
+const expectBottomPaddingMatchesInline = async (card: HTMLElement) => {
+	const { paddingBottom, paddingInlineStart, paddingInlineEnd } =
+		getComputedStyle(card)
+
+	await expect(paddingBottom).toBe(paddingInlineStart)
+	await expect(paddingBottom).toBe(paddingInlineEnd)
+}
+
+const rowOf = (node: HTMLElement) =>
+	node.closest('[data-slot="message"]') as HTMLElement
+
+const carriesAvatar = (node: HTMLElement) =>
+	rowOf(node).querySelector('[data-slot="bot-identity-avatar"]') !== null
+
+const carriesCopy = (node: HTMLElement) =>
+	rowOf(node).querySelector('[aria-label="Copy"]') !== null
 
 export const YouAnswered = meta.story({
 	render: () => (
@@ -240,7 +288,7 @@ export const YouAnswered = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this when the reader answered the question themselves, here three questions at once. The author line reads You answered beside the reader's initials, and each block reads its header then its chosen row, the key chip giving the option's place in its question. Check that the card's top-start corner tightens where it meets the bubble above.",
+					"Reach for this when the reader answered the question themselves, here three questions at once. The author line reads You answered beside the reader's initials, and each block reads its header then its chosen row, the key chip giving the option's place in its question. Check that the card's top-start corner tightens where it meets the bubble above, like any bubble of the run.",
 			},
 		},
 	},
@@ -255,11 +303,16 @@ export const YouAnswered = meta.story({
 		).toBe("ScopeEvery tableOne window, one rollback")
 		await expect(choicesIn(card)).toHaveLength(3)
 		await expect(cardStyle.backgroundColor).toBe(
-			getComputedStyle(softBubbleOf(canvasElement).firstElementChild as Element)
-				.backgroundColor,
+			getComputedStyle(
+				softBubblesOf(canvasElement)[0].firstElementChild as Element,
+			).backgroundColor,
 		)
-		await expect(cardStyle.borderStartStartRadius).toBe("6px")
-		await expect(cardStyle.borderEndStartRadius).toBe("18px")
+		await expect(cardStyle.borderStartStartRadius).toBe(
+			runRadiusIn(canvasElement),
+		)
+		await expect(cardStyle.borderEndStartRadius).toBe(
+			bubbleRadiusIn(canvasElement),
+		)
 		await expectRowsPaintedFromSpace(canvasElement)
 		await expect(getComputedStyle(canvas.getByText("Every table")).color).toBe(
 			tokenStyleIn(
@@ -391,6 +444,93 @@ export const LongContent = meta.story({
 })
 
 export const LongContentDark = LongContent.extend({
+	globals: { theme: "dark" },
+	parameters: { a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION },
+})
+
+export const MiddleOfRun = meta.story({
+	render: () => (
+		<AnsweredRun
+			ask={CHANNEL_ASK}
+			followUp={CHANNEL_FOLLOW_UP}
+			author={MEMBER}
+			questions={CHANNEL_ANSWERS}
+		/>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this when the companion carries on after the answer. The card is a middle row of the run: both start corners tighten like a middle bubble, it sits a run gap away from the bubbles on either side, and the avatar waits on the last bubble.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const card = cardIn(canvasElement)
+		const cardStyle = getComputedStyle(card)
+		const [ask, followUp] = softBubblesOf(canvasElement)
+		const runRadius = runRadiusIn(canvasElement)
+
+		await expect(cardStyle.borderStartStartRadius).toBe(runRadius)
+		await expect(cardStyle.borderEndStartRadius).toBe(runRadius)
+		await expect(cardStyle.borderStartEndRadius).toBe(
+			bubbleRadiusIn(canvasElement),
+		)
+		await expect(getComputedStyle(ask).borderEndStartRadius).toBe(runRadius)
+		await expect(getComputedStyle(followUp).borderStartStartRadius).toBe(
+			runRadius,
+		)
+		await expect(gapBetween(ask, card)).toBe(gapBetween(card, followUp))
+		await expectBottomPaddingMatchesInline(card)
+		await expect(carriesAvatar(card)).toBe(false)
+		await expect(carriesAvatar(followUp)).toBe(true)
+		await expect(carriesCopy(card)).toBe(false)
+		await expect(carriesCopy(followUp)).toBe(true)
+	},
+})
+
+export const MiddleOfRunDark = MiddleOfRun.extend({
+	globals: { theme: "dark" },
+	parameters: { a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION },
+})
+
+export const EndOfRun = meta.story({
+	render: () => (
+		<AnsweredRun
+			lead={CHANNEL_LEAD}
+			ask={CHANNEL_ASK}
+			author={VIEWER}
+			questions={CHANNEL_ANSWERS}
+		/>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this when the answer closes the companion's run. The card is the last row: its top-start corner tightens like a last bubble, it sits the same gap under the bubble above as two bubbles of the run, and the avatar sits beside it.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const card = cardIn(canvasElement)
+		const cardStyle = getComputedStyle(card)
+		const [lead, ask] = softBubblesOf(canvasElement)
+		const runRadius = runRadiusIn(canvasElement)
+
+		await expect(cardStyle.borderStartStartRadius).toBe(runRadius)
+		await expect(cardStyle.borderEndStartRadius).toBe(
+			bubbleRadiusIn(canvasElement),
+		)
+		await expect(getComputedStyle(ask).borderEndStartRadius).toBe(runRadius)
+		await expect(gapBetween(ask, card)).toBe(gapBetween(lead, ask))
+		await expectBottomPaddingMatchesInline(card)
+		await expect(carriesAvatar(card)).toBe(true)
+		await expect(carriesAvatar(ask)).toBe(false)
+		await expect(carriesCopy(card)).toBe(false)
+	},
+})
+
+export const EndOfRunDark = EndOfRun.extend({
 	globals: { theme: "dark" },
 	parameters: { a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION },
 })

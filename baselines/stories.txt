@@ -520,12 +520,16 @@ conversation-routines-routinespanel--saving
 conversation-routines-routinespanel--toggling
 conversation-routines-routinespanel--without-seated-lead
 conversation-routines-routinespanel--write-failed
+conversation-tools-answeredquestioncard--end-of-run
+conversation-tools-answeredquestioncard--end-of-run-dark
 conversation-tools-answeredquestioncard--free-text
 conversation-tools-answeredquestioncard--free-text-dark
 conversation-tools-answeredquestioncard--long-content
 conversation-tools-answeredquestioncard--long-content-dark
 conversation-tools-answeredquestioncard--member-answered
 conversation-tools-answeredquestioncard--member-answered-dark
+conversation-tools-answeredquestioncard--middle-of-run
+conversation-tools-answeredquestioncard--middle-of-run-dark
 conversation-tools-answeredquestioncard--multi-select
 conversation-tools-answeredquestioncard--multi-select-dark
 conversation-tools-answeredquestioncard--you-answered
