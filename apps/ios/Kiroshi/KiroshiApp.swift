@@ -17,12 +17,21 @@ struct KiroshiApp: App {
     var body: some Scene {
         WindowGroup {
             SignInRootView(model: model)
+                .preferredColorScheme(Self.launchColorScheme)
                 .onOpenURL { url in
                     if !model.openInvitation(from: url) {
                         GIDSignIn.sharedInstance.handle(url)
                     }
                 }
         }
+    }
+
+    private static var launchColorScheme: ColorScheme? {
+        #if DEBUG
+            ColorScheme.launchArgument
+        #else
+            nil
+        #endif
     }
 
     private static func makeModel() -> SignInModel {
