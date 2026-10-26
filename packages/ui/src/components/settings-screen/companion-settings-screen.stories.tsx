@@ -69,7 +69,9 @@ const MODELS: BotModelOption[] = [
 	{ label: "Claude Haiku 4.5", value: "haiku-4-5", supportedEfforts: [] },
 ]
 
-const RAIL = <AppRail selected="conversations" user={{ name: "Ada Martin" }} />
+const RAIL = () => (
+	<AppRail selected="conversations" user={{ name: "Ada Martin" }} />
+)
 
 const ScreenHost = (props: CompanionSettingsScreenProps) => {
 	const [entry, setEntry] = useState(props.entry)
