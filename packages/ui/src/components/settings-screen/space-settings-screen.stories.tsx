@@ -1025,6 +1025,57 @@ export const JoinedHostNotConnected = meta.story({
 	},
 })
 
+export const JoinedSessionUnavailable = meta.story({
+	globals: { theme: "dark" },
+	args: {
+		...JOINED_ARGS,
+		entry: "environment",
+		isConnected: true,
+		isSessionUnavailable: true,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A joined space whose host is online, that isn't the current space: no session reads its Secrets, Skills, Applications or History. Check those four entries dimmed, out of the tab order and announced as disabled, Secrets asked for yet the Space page shown, and Members, Companions and Leave space still reachable.",
+			},
+		},
+	},
+	play: async ({ userEvent }) => {
+		const companionCount = JOINED_ARGS.companions.companions.length
+		const companions = `Companions ${companionCount}`
+		const { menu, main } = await expectArtboard({
+			kind: "Space settings",
+			subtitle: `Joined · hosted by ${JOINED_ARGS.hostName}`,
+			entries: ARTBOARD_MENU.map((label) =>
+				label === "Companions" ? `Companions${companionCount}` : label,
+			),
+			pinned: "Leave space",
+			pinnedInk: DANGER_INK,
+			tint: TINT[JOINED_ARGS.value.colour],
+		})
+		await expectSettingsPage(main, "Space", "column")
+		await expect(
+			within(main).queryByRole("heading", { name: "Secrets" }),
+		).not.toBeInTheDocument()
+		await expect(entryIn(menu, "Space")).toHaveAttribute("aria-current", "page")
+		for (const label of ["Secrets", "Skills", "Applications", "History"]) {
+			const entry = entryIn(menu, label)
+			await expect(entry).toBeDisabled()
+			await expect(getComputedStyle(entry).opacity).toBe("0.4")
+		}
+		for (const label of ["Space", "Members", companions]) {
+			await expect(entryIn(menu, label)).toBeEnabled()
+		}
+
+		entryIn(menu, "Back to your settings").focus()
+		for (const label of ["Space", "Members", companions, "Leave space"]) {
+			await userEvent.tab()
+			await expect(entryIn(menu, label)).toHaveFocus()
+		}
+	},
+})
+
 export const Invitation = meta.story({
 	globals: { theme: "dark" },
 	args: {
