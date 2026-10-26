@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import type { CSSProperties, ReactNode } from "react"
 import { expect, fn, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
@@ -11,6 +11,7 @@ import {
 	SettingsMenuApplication,
 	SettingsMenuEntry,
 } from "@workspace/ui/components/settings-menu"
+import { SIDEBAR_DEFAULT_WIDTH } from "@workspace/ui/components/sidebar-resize"
 import { SpaceSquare } from "@workspace/ui/components/space-switcher"
 
 const NEEDS_AUTHORIZATION_DOT = "bg-state-needs-authorization"
@@ -42,7 +43,12 @@ const connectionDotIn = (
 }
 
 const Frame = ({ children }: { children: ReactNode }) => (
-	<div className="flex h-[600px] bg-background p-4">{children}</div>
+	<div
+		className="flex h-[600px] bg-background p-4"
+		style={{ "--sidebar-width": `${SIDEBAR_DEFAULT_WIDTH}px` } as CSSProperties}
+	>
+		{children}
+	</div>
 )
 
 const DANGER = (

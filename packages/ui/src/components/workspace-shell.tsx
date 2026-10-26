@@ -46,7 +46,6 @@ interface WorkspaceShellProps {
 	isResizable?: boolean
 	className?: string
 	sidebar?: ReactNode
-	settingsMenu?: ReactNode
 	spaceTint?: BotAvatarBlot | null
 	isLandmark?: boolean
 	children: ReactNode
@@ -54,7 +53,6 @@ interface WorkspaceShellProps {
 
 const WorkspaceShell = ({
 	sidebar,
-	settingsMenu,
 	spaceTint,
 	isLandmark,
 	width,
@@ -81,7 +79,7 @@ const WorkspaceShell = ({
 					style={shellStyle(resize.width, spaceTint)}
 				>
 					{isMain ? <SkipLink targetId={mainId} /> : null}
-					{settingsMenu ?? sidebar}
+					{sidebar}
 					<ContentCard id={isMain ? mainId : undefined} isLandmark={isMain}>
 						{children}
 					</ContentCard>

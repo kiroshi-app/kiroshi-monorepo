@@ -2,8 +2,13 @@ import { type ComponentType, useState } from "react"
 import { expect, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { slotIn, slotsIn } from "@workspace/storybook/story-utils"
+import {
+	expectSettingsChrome,
+	slotIn,
+	slotsIn,
+} from "@workspace/storybook/story-utils"
 import { AppRail } from "@workspace/ui/components/app-rail"
+import { TITLE_BAR } from "@workspace/ui/components/app-title-bar.fixtures"
 import { MARKED_APPLICATIONS } from "@workspace/ui/components/plugin-settings/applications.fixtures"
 import {
 	HISTORY_DAYS,
@@ -14,6 +19,11 @@ import {
 	SettingsScreen,
 	type UserSettingsScreenProps,
 } from "@workspace/ui/components/settings-screen"
+import {
+	SIDEBAR_DEFAULT_WIDTH,
+	SIDEBAR_MAX_WIDTH,
+	SIDEBAR_MIN_WIDTH,
+} from "@workspace/ui/components/sidebar-resize"
 
 const USER_MENU = [
 	"Account",
@@ -83,6 +93,7 @@ const USER_ARGS = {
 	onEntryChange: fn(),
 	onBack: fn(),
 	rail: RAIL,
+	titleBar: { ...TITLE_BAR, onSelectSpace: fn() },
 	value: { name: "Ada Martin", colorScheme: "system" },
 	onValueChange: fn(),
 	language: null,
@@ -439,4 +450,46 @@ export const About = meta.story({
 			within(screen.getByRole("main")).getByRole("status"),
 		).toHaveTextContent("Kiroshi 0.24.0 is available.")
 	},
+})
+
+export const DefaultWidth = meta.story({
+	args: { width: SIDEBAR_DEFAULT_WIDTH },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Artboard E4: the reader's own settings at the panel width the conversations screen opens with. Check that the 34px title bar carries the window controls reserve and the Space switcher at the place the conversations screen draws them, that the 60px rail follows, and that the menu panel is 304px wide with the conversations panel's end separator. Pick `MinimumWidth` or `MaximumWidth` for a reader who resized the panel.",
+			},
+		},
+	},
+	play: ({ canvasElement }) =>
+		expectSettingsChrome(canvasElement, SIDEBAR_DEFAULT_WIDTH),
+})
+
+export const MinimumWidth = meta.story({
+	args: { width: SIDEBAR_MIN_WIDTH },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"`DefaultWidth` after the reader narrowed the conversations panel as far as it goes. Check that the menu panel follows it down to 224px and the title bar and rail do not move.",
+			},
+		},
+	},
+	play: ({ canvasElement }) =>
+		expectSettingsChrome(canvasElement, SIDEBAR_MIN_WIDTH),
+})
+
+export const MaximumWidth = meta.story({
+	args: { width: SIDEBAR_MAX_WIDTH },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"`DefaultWidth` after the reader widened the conversations panel as far as it goes. Check that the menu panel follows it up to 416px and the title bar and rail do not move.",
+			},
+		},
+	},
+	play: ({ canvasElement }) =>
+		expectSettingsChrome(canvasElement, SIDEBAR_MAX_WIDTH),
 })

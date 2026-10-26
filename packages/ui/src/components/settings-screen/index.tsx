@@ -3,6 +3,10 @@
 import { type ReactNode, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
+import {
+	AppTitleBar,
+	type AppTitleBarProps,
+} from "@workspace/ui/components/app-title-bar"
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
 import { BotIdentityFields } from "@workspace/ui/components/bot-identity-fields"
 import type {
@@ -34,6 +38,7 @@ import {
 	SettingsMenuEntry,
 } from "@workspace/ui/components/settings-menu"
 import type { SettingsEntry } from "@workspace/ui/components/settings-rail"
+import { SidebarResizeHandle } from "@workspace/ui/components/sidebar-resize"
 import {
 	APPLICATIONS_ENTRY,
 	COMPANIONS_ENTRY,
@@ -94,6 +99,10 @@ type SettingsScreenNavigation = {
 	onBack: () => void
 	backLabel?: string
 	rail?: (requestLeave: SettingsScreenRequestLeave) => ReactNode
+	titleBar?: AppTitleBarProps
+	width?: number
+	onWidthChange?: (width: number) => void
+	isResizable?: boolean
 }
 
 type SpaceSettingsScreenProps = SettingsScreenNavigation &
@@ -138,6 +147,10 @@ const SettingsScreenLayout = ({
 	onBack,
 	backLabel,
 	rail,
+	titleBar,
+	width,
+	onWidthChange,
+	isResizable,
 	avatar,
 	name,
 	subtitle,
@@ -228,9 +241,16 @@ const SettingsScreenLayout = ({
 
 	return (
 		<WorkspaceShell
-			isResizable={false}
-			settingsMenu={
+			isResizable={isResizable}
+			onWidthChange={onWidthChange}
+			sidebar={
 				<>
+					<AppTitleBar
+						{...titleBar}
+						onSelectSpace={(id) =>
+							leaveThen(() => titleBar?.onSelectSpace?.(id))
+						}
+					/>
 					{rail?.(leaveThen)}
 					<SettingsMenu
 						isCompanionPage={isCompanionPage}
@@ -239,12 +259,14 @@ const SettingsScreenLayout = ({
 						footer={pinned.length > 0 ? pinned.map(entryFor) : undefined}
 						name={name}
 						onBack={() => leaveThen(onBack)}
+						resizeHandle={<SidebarResizeHandle side="left" />}
 						subtitle={subtitle}
 					>
 						{ordinary.map(entryFor)}
 					</SettingsMenu>
 				</>
 			}
+			width={width}
 		>
 			<div
 				className="min-h-0 flex-1 overflow-y-auto"
@@ -289,6 +311,10 @@ const SpaceSettingsScreen = ({
 	onBack,
 	backLabel,
 	rail,
+	titleBar,
+	width,
+	onWidthChange,
+	isResizable,
 	presence,
 	target: _target,
 	...settings
@@ -317,8 +343,12 @@ const SpaceSettingsScreen = ({
 			onBack={onBack}
 			onEntryChange={onEntryChange}
 			pages={pages}
+			isResizable={isResizable}
+			onWidthChange={onWidthChange}
 			rail={rail}
 			sessions={sessions}
+			titleBar={titleBar}
+			width={width}
 			subtitle={t("screen.subtitle.space")}
 		/>
 	)
@@ -330,6 +360,10 @@ const UserSettingsScreen = ({
 	onBack,
 	backLabel,
 	rail,
+	titleBar,
+	width,
+	onWidthChange,
+	isResizable,
 	target: _target,
 	...settings
 }: UserSettingsScreenProps) => {
@@ -357,8 +391,12 @@ const UserSettingsScreen = ({
 			onBack={onBack}
 			onEntryChange={onEntryChange}
 			pages={pages}
+			isResizable={isResizable}
+			onWidthChange={onWidthChange}
 			rail={rail}
 			sessions={sessions}
+			titleBar={titleBar}
+			width={width}
 			subtitle={t("screen.subtitle.user")}
 		/>
 	)
@@ -370,6 +408,10 @@ const CompanionSettingsScreen = ({
 	onBack,
 	backLabel,
 	rail,
+	titleBar,
+	width,
+	onWidthChange,
+	isResizable,
 	value,
 	onValueChange,
 	models,
@@ -583,8 +625,12 @@ const CompanionSettingsScreen = ({
 			onEntryChange={onEntryChange}
 			isCompanionPage
 			pages={pages}
+			isResizable={isResizable}
+			onWidthChange={onWidthChange}
 			rail={rail}
 			sessions={sessions}
+			titleBar={titleBar}
+			width={width}
 			subtitle={tSettings("screen.subtitle.companion")}
 		/>
 	)

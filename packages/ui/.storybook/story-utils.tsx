@@ -15,6 +15,7 @@ import {
 	SidebarContent,
 	SidebarProvider,
 } from "@workspace/ui/components/ui/sidebar"
+import { SHELL_TITLE_BAR_HEIGHT } from "@workspace/ui/components/workspace-shell"
 import { cn } from "@workspace/ui/lib/utils"
 
 export const withStoryProps = <Props,>(component: ComponentType<never>) =>
@@ -150,6 +151,31 @@ export const slotIn = (root: Element, slot: string) => {
 	const node = root.querySelector<HTMLElement>(`[data-slot="${slot}"]`)
 	if (!node) throw new Error(`Nothing here draws a ${slot}`)
 	return node
+}
+
+const RAIL_WIDTH = 60
+
+export const expectSettingsChrome = async (
+	root: Element,
+	panelWidth: number,
+) => {
+	const shell = slotIn(root, "sidebar-wrapper").getBoundingClientRect()
+	const titleBar = slotIn(root, "app-title-bar")
+	const bar = titleBar.getBoundingClientRect()
+	const rail = slotIn(root, "app-rail").getBoundingClientRect()
+	const menu = slotIn(root, "settings-menu")
+	const panel = menu.getBoundingClientRect()
+
+	await expect(bar.top).toBe(shell.top)
+	await expect(bar.left).toBe(shell.left)
+	await expect(bar.height).toBe(SHELL_TITLE_BAR_HEIGHT)
+	await expect(slotIn(titleBar, "space-switcher")).toBeVisible()
+	await expect(rail.width).toBe(RAIL_WIDTH)
+	await expect(panel.left).toBe(rail.right)
+	await expect(panel.width).toBe(panelWidth)
+	await expect(getComputedStyle(menu).borderInlineEndColor).toBe(
+		resolvedRootColor("--shell-divider"),
+	)
 }
 
 export const expectCentredInWindow = async (root: Element) => {

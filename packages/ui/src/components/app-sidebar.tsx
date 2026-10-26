@@ -13,26 +13,15 @@ import {
 	type RosterPin,
 } from "@workspace/ui/components/app-sidebar-model"
 import { AppSidebarPanel } from "@workspace/ui/components/app-sidebar-panel"
+import { AppTitleBar } from "@workspace/ui/components/app-title-bar"
 import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
 import type { ListEnd } from "@workspace/ui/components/list-skeleton"
 import { type Space, spaceAtRank } from "@workspace/ui/components/space"
-import {
-	SpaceDots,
-	SpaceSwitcher,
-} from "@workspace/ui/components/space-switcher"
+import { SpaceDots } from "@workspace/ui/components/space-switcher"
 import { SidebarFooter } from "@workspace/ui/components/ui/sidebar"
 import type { UserChipIdentity } from "@workspace/ui/components/user-chip"
 import { useSpaceShortcut } from "@workspace/ui/hooks/use-space-shortcut"
 import { probeRender } from "@workspace/ui/lib/render-probe"
-import { cn } from "@workspace/ui/lib/utils"
-
-const TITLE_BAR = "absolute inset-x-0 top-0 flex h-8.5 items-center gap-2"
-
-const WINDOW_CONTROLS_INSET = "pl-[78px]"
-
-const NO_WINDOW_CONTROLS_INSET = "pl-2.5"
-
-const TITLE_BAR_WINDOW_CONTROLS = "ms-auto flex shrink-0 self-stretch"
 
 const FOOTER_INSET = "px-2 py-0 not-has-[*:not(:empty)]:hidden"
 
@@ -61,7 +50,7 @@ const AppSidebarBase = ({
 	updateBadge,
 	user,
 	onOpenUserSettings,
-	insetWindowControls = false,
+	insetWindowControls,
 	windowControls,
 	railDots,
 	openPanel: controlledPanel,
@@ -92,38 +81,22 @@ const AppSidebarBase = ({
 
 	return (
 		<>
-			<div
-				className={cn(
-					TITLE_BAR,
-					insetWindowControls
-						? WINDOW_CONTROLS_INSET
-						: NO_WINDOW_CONTROLS_INSET,
-				)}
-				data-slot="app-title-bar"
+			<AppTitleBar
+				badgesBySpaceId={badgesBySpaceId}
 				data-tauri-drag-region={dragRegion}
-			>
-				<SpaceSwitcher
-					badgesBySpaceId={badgesBySpaceId}
-					hostBySpaceId={hostBySpaceId}
-					invitations={invitations}
-					onAcceptInvitation={onAcceptInvitation}
-					onCreateSpace={onCreateSpace}
-					onDeclineInvitation={onDeclineInvitation}
-					onOpenChange={onSpaceSwitcherOpenChange}
-					onRetryInvitation={onRetryInvitation}
-					onSelectSpace={onSelectSpace}
-					selectedSpaceId={selectedSpaceId}
-					spaces={spaces}
-				/>
-				{windowControls ? (
-					<div
-						className={TITLE_BAR_WINDOW_CONTROLS}
-						data-slot="app-title-bar-window-controls"
-					>
-						{windowControls}
-					</div>
-				) : null}
-			</div>
+				hostBySpaceId={hostBySpaceId}
+				insetWindowControls={insetWindowControls}
+				invitations={invitations}
+				onAcceptInvitation={onAcceptInvitation}
+				onCreateSpace={onCreateSpace}
+				onDeclineInvitation={onDeclineInvitation}
+				onRetryInvitation={onRetryInvitation}
+				onSelectSpace={onSelectSpace}
+				onSpaceSwitcherOpenChange={onSpaceSwitcherOpenChange}
+				selectedSpaceId={selectedSpaceId}
+				spaces={spaces}
+				windowControls={windowControls}
+			/>
 			<AppRail
 				data-tauri-drag-region={dragRegion}
 				dots={railDots}
