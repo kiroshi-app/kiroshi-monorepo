@@ -13,7 +13,6 @@ import {
 	type ConversationRosterActions,
 	NO_COLLAPSED_SECTIONS,
 	type RosterCreateActions,
-	type RosterSpaceActions,
 	type SectionActions,
 	type SectionNaming,
 } from "@workspace/ui/components/app-sidebar-model"
@@ -96,8 +95,7 @@ interface BotRosterProps
 	extends BotRosterActions,
 		ConversationRosterActions,
 		SectionActions,
-		RosterCreateActions,
-		RosterSpaceActions {
+		RosterCreateActions {
 	spaceId?: string
 	bots: AppSidebarBot[]
 	haveBotsFailedToLoad?: boolean
@@ -130,7 +128,6 @@ const BotRoster = ({
 	listEnd,
 	onCreateBot,
 	onCreateConversation,
-	onOpenSpaceSettings,
 	onSelectConversation,
 	onOpenConversationSettings,
 	onDeleteConversation,
@@ -190,7 +187,6 @@ const BotRoster = ({
 		onCreateSection: onCreateSection
 			? () => onNaming?.({ rowId: null })
 			: undefined,
-		onOpenSpaceSettings,
 	}
 
 	if (haveBotsFailedToLoad && bots.length === 0)

@@ -124,7 +124,6 @@ const AppSidebarBase = ({
 					/>
 				}
 				isSpaceSwitchingEnabled={isSpaceSwitchingEnabled}
-				onOpenSpaceSettings={onOpenSpaceSettings}
 				onSelectSpace={onSelectSpace}
 				openPanel={openPanel}
 				selectedSpaceId={selectedSpaceId}

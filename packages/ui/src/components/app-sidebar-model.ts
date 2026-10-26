@@ -162,10 +162,6 @@ interface RosterCreateActions {
 	onCreateConversation?: () => void
 }
 
-interface RosterSpaceActions {
-	onOpenSpaceSettings?: () => void
-}
-
 interface RosterPin {
 	id: string
 	sectionId: string | null
@@ -284,7 +280,6 @@ export {
 	ROW_AVATAR_SIZE,
 	type RosterCreateActions,
 	type RosterPin,
-	type RosterSpaceActions,
 	type SectionActions,
 	type SectionNaming,
 	spaceIdsOfBot,

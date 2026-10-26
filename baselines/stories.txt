@@ -929,7 +929,6 @@ navigation-appsidebar--reduced-motion
 navigation-appsidebar--roster
 navigation-appsidebar--roster-reading-next-page
 navigation-appsidebar--roster-surface-menu
-navigation-appsidebar--roster-surface-without-space-settings
 navigation-appsidebar--roster-without-paging
 navigation-appsidebar--row-context-menu
 navigation-appsidebar--row-last-space

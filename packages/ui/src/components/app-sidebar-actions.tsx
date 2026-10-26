@@ -2,7 +2,6 @@ import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
 import type { AppRailPanel } from "@workspace/ui/components/app-rail"
-import type { RosterSpaceActions } from "@workspace/ui/components/app-sidebar-model"
 import { ContextMenuPressTrigger } from "@workspace/ui/components/context-menu-press-trigger"
 import { Icons } from "@workspace/ui/components/icons"
 import { TooltipButton } from "@workspace/ui/components/tooltip-button"
@@ -10,7 +9,6 @@ import {
 	ContextMenu,
 	ContextMenuContent,
 	ContextMenuItem,
-	ContextMenuSeparator,
 	ContextMenuTrigger,
 } from "@workspace/ui/components/ui/context-menu"
 import { Kbd } from "@workspace/ui/components/ui/kbd"
@@ -93,7 +91,7 @@ const CreateItems = ({
 	)
 }
 
-interface RosterSurfaceProps extends CreateItemsProps, RosterSpaceActions {
+interface RosterSurfaceProps extends CreateItemsProps {
 	children?: ReactNode
 }
 
@@ -101,7 +99,6 @@ const RosterSurface = ({
 	onCreateBot,
 	onCreateConversation,
 	onCreateSection,
-	onOpenSpaceSettings,
 	children,
 }: RosterSurfaceProps) => {
 	const { t } = useTranslation("bots")
@@ -123,15 +120,6 @@ const RosterSurface = ({
 					onCreateConversation={onCreateConversation}
 					onCreateSection={onCreateSection}
 				/>
-				{onOpenSpaceSettings ? (
-					<>
-						<ContextMenuSeparator />
-						<ContextMenuItem onClick={onOpenSpaceSettings}>
-							<Icons.Settings aria-hidden="true" className="size-3.5" />
-							{t("spaces.settings")}
-						</ContextMenuItem>
-					</>
-				) : null}
 			</ContextMenuContent>
 		</ContextMenu>
 	)

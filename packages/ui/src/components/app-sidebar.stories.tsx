@@ -5026,7 +5026,7 @@ export const RosterSurfaceMenu = meta.story({
 		docs: {
 			description: {
 				story:
-					"The panel itself answers a right-click. Everything the sidebar can make used to need a row to start from — a companion to hang a section on, a header menu to open for a conversation — so the empty ground under the roster was the one place a reader could aim and get nothing. It now carries the three things this panel makes on its own — a companion, a conversation, a section — and, under a rule that closes them off, the way into the space's own settings. The ground is the leftover column under the last row, so it is only ever reached when the aim missed every row, every section header and the header above them: those keep their own menus and take the click first. Check the menu names the three, in the order the panel builds them, that space settings sits last behind its rule, and that a right-click on a row still opens that row's actions and not this. Pick `RosterSurfaceWithoutSpaceSettings` for the panel given no settings handler.",
+					"The panel itself answers a right-click. Everything the sidebar can make used to need a row to start from: a companion to hang a section on, a header menu to open for a conversation. So the empty ground under the roster was the one place a reader could aim and get nothing. It now carries exactly the three things this panel makes on its own: a companion, a conversation, a section. No rule, no settings entry: the rail's Space logo is the one way into the space's settings. The ground is the leftover column under the last row, so it is only ever reached when the aim missed every row, every section header and the header above them: those keep their own menus and take the click first. Check the menu names the three, in the order the panel builds them, with no rule, and that a right-click on a row still opens that row's actions and not this.",
 			},
 		},
 	},
@@ -5034,25 +5034,13 @@ export const RosterSurfaceMenu = meta.story({
 		const menu = await openSurfaceMenu(canvasElement)
 		await expect(
 			menu.getAllByRole("menuitem").map((item) => item.textContent),
-		).toEqual([
-			"Create a companion",
-			"Start a conversation",
-			CREATE_SECTION,
-			"Open space settings",
-		])
-		await expect(menu.getAllByRole("separator")).toHaveLength(1)
+		).toEqual(["Create a companion", "Start a conversation", CREATE_SECTION])
+		await expect(menu.queryAllByRole("separator")).toHaveLength(0)
 
 		await userEvent.click(
 			menu.getByRole("menuitem", { name: "Create a companion" }),
 		)
 		await expect(args.onCreateBot).toHaveBeenCalled()
-
-		await userEvent.click(
-			(await openSurfaceMenu(canvasElement)).getByRole("menuitem", {
-				name: "Open space settings",
-			}),
-		)
-		await expect(args.onOpenSpaceSettings).toHaveBeenCalled()
 
 		await userEvent.click(
 			(await openSurfaceMenu(canvasElement)).getByRole("menuitem", {
@@ -5065,30 +5053,6 @@ export const RosterSurfaceMenu = meta.story({
 		await expect(
 			row.getByRole("menuitem", { name: "Open settings" }),
 		).toBeVisible()
-	},
-})
-
-export const RosterSurfaceWithoutSpaceSettings = meta.story({
-	tags: ["test-only"],
-	args: { ...sectionArgs(), onOpenSpaceSettings: undefined },
-	parameters: {
-		a11y: mergeA11y(
-			A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
-			A11Y_FLOATING_FOCUS_GUARDS,
-		),
-		docs: {
-			description: {
-				story:
-					"The same ground, for a host that has no settings dialog to open. The menu keeps the three things the panel makes and drops both the space settings entry and the rule that would have led to it, so the menu never ends on a rule with nothing under it. The app always passes a settings handler, so this one stays out of the catalogue. Pick `RosterSurfaceMenu` for the full menu.",
-			},
-		},
-	},
-	play: async ({ canvasElement }) => {
-		const menu = await openSurfaceMenu(canvasElement)
-		await expect(
-			menu.getAllByRole("menuitem").map((item) => item.textContent),
-		).toEqual(["Create a companion", "Start a conversation", CREATE_SECTION])
-		await expect(menu.queryAllByRole("separator")).toHaveLength(0)
 	},
 })
 
