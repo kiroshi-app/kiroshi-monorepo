@@ -220,6 +220,24 @@ const expectChosenPaint = async (row: HTMLElement) => {
 	)
 }
 
+const expectColourSwitchesInstantly = async (row: HTMLElement) => {
+	if (!isInBrowserRunner()) return
+	const { cdp } = await import("vitest/browser")
+	await cdp().send("Emulation.setEmulatedMedia", {
+		features: [{ name: "prefers-reduced-motion", value: "no-preference" }],
+	})
+	try {
+		await expect(getComputedStyle(row).transitionProperty).toBe("translate")
+		await expect(
+			getComputedStyle(slotIn(row, "tool-question-key")).transitionDuration,
+		).toBe("0s")
+	} finally {
+		await cdp().send("Emulation.setEmulatedMedia", {
+			features: [{ name: "prefers-reduced-motion", value: "reduce" }],
+		})
+	}
+}
+
 const markGlyphIn = (row: HTMLElement) =>
 	slotIn(row, "tool-question-mark").querySelector("svg") as SVGElement
 
@@ -328,7 +346,10 @@ export const OptionChosen = meta.story({
 					markGlyphIn(card.getByRole("radio", { name: "Starter" })),
 				).opacity,
 			).toBe("0")
-			await expect(getComputedStyle(chosen).transitionDuration).toBe("0.15s")
+			await expectColourSwitchesInstantly(chosen)
+			await expectColourSwitchesInstantly(
+				card.getByRole("radio", { name: "Starter" }),
+			)
 			await expect(
 				card.getByRole("button", { name: chat.toolQuestion.submit }),
 			).not.toHaveAttribute("aria-disabled")
@@ -388,7 +409,7 @@ export const OptionRowHovered = meta.story({
 		docs: {
 			description: {
 				story:
-					"Every option row under the pointer, with Team chosen, drawn by the pseudo-state addon: check by eye that an unchosen row tints its card with the `muted` token at 50%, the ink of the design-system interactive rows, and fades it in and out over 150ms. The chosen row keeps the Space bubble colour with no tint over it. Under reduced motion the tint switches at once.",
+					"Every option row under the pointer, with Team chosen, drawn by the pseudo-state addon: check by eye that an unchosen row tints its card with the `muted` token at 50%, the ink of the design-system interactive rows, and switches it in the same frame the pointer enters or leaves, with no fade. The chosen row keeps the Space bubble colour with no tint over it. The play checks that no row transitions a colour.",
 			},
 		},
 	},
@@ -397,6 +418,7 @@ export const OptionRowHovered = meta.story({
 			const { chosen, resting } = await chooseTeamIn(panel, userEvent)
 			await expect(resting).toHaveClass(`hover:${ROW_HOVER_TINT}`)
 			await expect(chosen).not.toHaveClass(`hover:${ROW_HOVER_TINT}`)
+			await expectColourSwitchesInstantly(resting)
 			await expect(
 				tokenStyleIn(resting, ROW_HOVER_TINT, "backgroundColor"),
 			).not.toBe(tokenStyleIn(resting, "bg-card", "backgroundColor"))
@@ -414,7 +436,7 @@ export const OptionRowPressed = meta.story({
 		docs: {
 			description: {
 				story:
-					"Every option row held under the pointer, with Team chosen, drawn by the pseudo-state addon: check by eye that an unchosen row deepens past its hover tint to the full `muted` token and sinks by 1px, the press of the design-system buttons. The chosen row keeps the Space bubble colour. Under reduced motion the press switches at once.",
+					"Every option row held under the pointer, with Team chosen, drawn by the pseudo-state addon: check by eye that an unchosen row deepens past its hover tint to the full `muted` token in the same frame, with no fade, and sinks by 1px, the press of the design-system buttons. The chosen row keeps the Space bubble colour. Only the 1px sink moves, over 150ms, and under reduced motion it lands at once too.",
 			},
 		},
 	},
@@ -424,6 +446,7 @@ export const OptionRowPressed = meta.story({
 			await expect(resting).toHaveClass(...ROW_PRESS_CLASSES)
 			for (const pressed of ROW_PRESS_CLASSES)
 				await expect(chosen).not.toHaveClass(pressed)
+			await expectColourSwitchesInstantly(resting)
 			await expect(
 				tokenStyleIn(resting, "bg-muted", "backgroundColor"),
 			).not.toBe(tokenStyleIn(resting, ROW_HOVER_TINT, "backgroundColor"))
@@ -834,7 +857,10 @@ export const ForcedColorsFocusOutline = meta.story({
 		const { cdp } = await import("vitest/browser")
 		const emulateForcedColors = (value: "active" | "") =>
 			cdp().send("Emulation.setEmulatedMedia", {
-				features: [{ name: "forced-colors", value }],
+				features: [
+					{ name: "forced-colors", value },
+					{ name: "prefers-reduced-motion", value: "reduce" },
+				],
 			})
 		const [first, second] = canvas.getAllByRole("radio") as [
 			HTMLElement,
@@ -1270,7 +1296,7 @@ export const ReducedMotion = meta.story({
 		docs: {
 			description: {
 				story:
-					"The panel for a reader who asked the system to stop moving things. A segment transitions its colour, fill and shadow; the panel drops that under `prefers-reduced-motion`, so the lifted fill moves from one segment to the next in a single frame. An option row drops its hover, press and selection fades the same way. Check that every segment reports a transition of no duration, that every option row reports no transition, and that the track still selects. " +
+					"The panel for a reader who asked the system to stop moving things. A segment switches its colour, fill and shadow in a single frame whatever the preference, so the lifted fill moves from one segment to the next at once. An option row drops its 1px press sink under `prefers-reduced-motion`. Check that every segment and every option row reports no transition property, and that the track still selects. " +
 					POSTED_BY_ONBOARDING,
 			},
 		},
@@ -1279,7 +1305,7 @@ export const ReducedMotion = meta.story({
 		const tabs = canvas.getAllByRole("tab")
 
 		for (const tab of tabs) {
-			await expect(getComputedStyle(tab).transitionDuration).toBe("0s")
+			await expect(getComputedStyle(tab).transitionProperty).toBe("none")
 		}
 		for (const row of canvas.getAllByRole("checkbox")) {
 			await expect(getComputedStyle(row).transitionProperty).toBe("none")

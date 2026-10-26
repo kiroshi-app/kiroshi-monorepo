@@ -4,7 +4,7 @@ import { Switch } from "@workspace/ui/components/ui/switch"
 import { cn } from "@workspace/ui/lib/utils"
 
 const STILL_UNDER_REDUCED_MOTION =
-	"motion-reduce:transition-none motion-reduce:[&_[data-slot=switch-thumb]]:transition-none"
+	"motion-reduce:[&_[data-slot=switch-thumb]]:transition-none"
 
 type ToggleSwitchProps = {
 	checked: boolean

@@ -23,7 +23,7 @@ const SECTION_GROUP = "px-0 py-0"
 const SECTION_PAD = "px-[4.5px] pb-[4.5px]"
 
 const SECTION_CARD =
-	"rounded-xl transition-colors duration-200 ease-out motion-reduce:transition-none [@media(hover:hover)]:has-[[data-slot=roster-section-trigger]:hover]:bg-sidebar-accent/70"
+	"rounded-xl [@media(hover:hover)]:has-[[data-slot=roster-section-trigger]:hover]:bg-sidebar-accent/70"
 
 const SECTION_CARD_OPEN =
 	"bg-sidebar-accent/50 group-data-[landing]/roster-drop:bg-sidebar-accent"

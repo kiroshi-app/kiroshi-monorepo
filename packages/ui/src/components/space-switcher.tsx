@@ -105,7 +105,7 @@ const INSERTION_BEFORE = "start-0"
 const INSERTION_AFTER = "end-0"
 
 const DOT_MOTION =
-	"transition-[width,background-color] duration-150 ease-out motion-reduce:transition-none"
+	"transition-[width] duration-150 ease-out motion-reduce:transition-none"
 
 const DOT_OPEN = "w-4 bg-sidebar-foreground"
 

@@ -29,7 +29,7 @@ const HANDLE =
 const HANDLE_EDGE = "data-[side=left]:-end-1.5 data-[side=right]:-start-1.5"
 
 const HANDLE_GRIP =
-	"after:absolute after:top-1/2 after:left-1/2 after:h-10 after:w-1 after:-translate-x-1/2 after:-translate-y-1/2 after:rounded-full after:bg-transparent after:transition-colors motion-reduce:after:transition-none"
+	"after:absolute after:top-1/2 after:left-1/2 after:h-10 after:w-1 after:-translate-x-1/2 after:-translate-y-1/2 after:rounded-full after:bg-transparent"
 
 const HANDLE_LIT =
 	"hover:after:bg-sidebar-border focus-visible:after:bg-sidebar-ring"

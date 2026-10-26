@@ -55,7 +55,7 @@ export function MessageAttachments({
 							aria-label={t("attachments.open", { name: item.name })}
 							onClick={() => onOpen(item.id)}
 							className={cn(
-								"flex cursor-pointer items-center overflow-hidden rounded-xl border border-foreground/15 text-left outline-none transition duration-150 focus-visible:ring-2 focus-visible:ring-current focus-visible:ring-offset-2 focus-visible:ring-offset-transparent motion-reduce:transition-none",
+								"flex cursor-pointer items-center overflow-hidden rounded-xl border border-foreground/15 text-left outline-none transition-opacity duration-150 focus-visible:ring-2 focus-visible:ring-current focus-visible:ring-offset-2 focus-visible:ring-offset-transparent motion-reduce:transition-none",
 								preview
 									? "hover:opacity-90"
 									: "max-w-56 gap-2 bg-foreground/5 p-1 pr-2 hover:bg-foreground/10",

@@ -37,7 +37,7 @@ const QUESTION_SEGMENTS_CLASS =
 	"relative scrollbar-hide max-w-full justify-start gap-0.5 self-start overflow-x-auto rounded-[11px] bg-border p-0.75 group-data-horizontal/tabs:h-fit"
 
 const QUESTION_SEGMENT_CLASS =
-	"h-6.5 max-w-full flex-none shrink-0 gap-1 rounded-md px-3 py-0 font-medium text-compact text-question-segment-foreground leading-4 transition-[color,background-color,box-shadow] hover:text-foreground data-active:bg-card data-active:text-foreground data-active:shadow-[0_1px_2px_rgb(0_0_0/10%)] motion-reduce:transition-none motion-reduce:duration-0 dark:data-active:bg-card"
+	"h-6.5 max-w-full flex-none shrink-0 gap-1 rounded-md px-3 py-0 font-medium text-compact text-question-segment-foreground leading-4 hover:text-foreground data-active:bg-card data-active:text-foreground data-active:shadow-[0_1px_2px_rgb(0_0_0/10%)] dark:data-active:bg-card"
 
 const QUESTION_GROUP_CLASS = "flex flex-col gap-1.5"
 
@@ -46,12 +46,8 @@ const QUESTION_MONO_LINE_CLASS = "truncate font-mono text-compact leading-5"
 const QUESTION_LINK_ROW_CLASS =
 	"flex items-center gap-2 rounded-control border border-input bg-muted py-1 pe-1 ps-3 has-[input:focus-visible]:border-ring has-[input:focus-visible]:ring-3 has-[input:focus-visible]:ring-ring/30"
 
-const QUESTION_ROW_FADE_CLASS = "duration-150 motion-reduce:transition-none"
-
-const QUESTION_ROW_CLASS = cn(
-	QUESTION_ROW_FADE_CLASS,
-	"flex w-full cursor-pointer items-start gap-3 rounded-control p-3 text-start transition-[color,background-color,translate] focus-visible:outline-hidden focus-visible:ring-3 focus-visible:ring-ring/30 data-opening-focus:focus:outline-hidden data-opening-focus:focus:ring-3 data-opening-focus:focus:ring-ring/30",
-)
+const QUESTION_ROW_CLASS =
+	"flex w-full cursor-pointer items-start gap-3 rounded-control p-3 text-start transition-[translate] duration-150 focus-visible:outline-hidden focus-visible:ring-3 focus-visible:ring-ring/30 data-opening-focus:focus:outline-hidden data-opening-focus:focus:ring-3 data-opening-focus:focus:ring-ring/30 motion-reduce:transition-none"
 
 const QUESTION_PILL_CLASS =
 	"h-8 rounded-full font-medium text-compact leading-4"
@@ -835,8 +831,7 @@ const OptionRow = ({
 			<span
 				aria-hidden="true"
 				className={cn(
-					QUESTION_ROW_FADE_CLASS,
-					"grid size-5 shrink-0 place-items-center rounded-sm font-medium text-[11px] leading-3 tabular-nums transition-colors",
+					"grid size-5 shrink-0 place-items-center rounded-sm font-medium text-[11px] leading-3 tabular-nums",
 					isChecked
 						? "bg-user-bubble-foreground/10 text-user-bubble-foreground/80 dark:bg-user-bubble-foreground/15"
 						: "bg-foreground/6 text-muted-foreground dark:bg-foreground/8",
@@ -854,8 +849,7 @@ const OptionRow = ({
 				</span>
 				<span
 					className={cn(
-						QUESTION_ROW_FADE_CLASS,
-						"min-w-0 wrap-break-word text-compact leading-5 transition-colors",
+						"min-w-0 wrap-break-word text-compact leading-5",
 						isChecked
 							? "text-user-bubble-foreground/70 dark:text-(--color-muted-foreground)"
 							: "text-muted-foreground",
@@ -920,8 +914,7 @@ type OptionMarkProps = {
 
 const OptionMark = ({ isChecked, isMultiSelect }: OptionMarkProps) => {
 	const checkFadeClass = cn(
-		QUESTION_ROW_FADE_CLASS,
-		"transition-opacity",
+		"transition-opacity duration-150 motion-reduce:transition-none",
 		isChecked ? "opacity-100" : "opacity-0",
 	)
 	if (!isMultiSelect) {
@@ -930,8 +923,7 @@ const OptionMark = ({ isChecked, isMultiSelect }: OptionMarkProps) => {
 	return (
 		<span
 			className={cn(
-				QUESTION_ROW_FADE_CLASS,
-				"grid size-5 place-items-center rounded-full border-[1.5px] transition-colors",
+				"grid size-5 place-items-center rounded-full border-[1.5px]",
 				isChecked
 					? "border-transparent bg-user-bubble-foreground text-user-bubble"
 					: "border-foreground/17 dark:border-question-option-ring",
