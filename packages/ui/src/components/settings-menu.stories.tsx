@@ -14,21 +14,26 @@ import { SpaceSquare } from "@workspace/ui/components/space-switcher"
 
 const NEEDS_AUTHORIZATION_DOT = "bg-state-needs-authorization"
 
+const CONNECTED_DOT = "bg-success"
+
 const E3_DARK_NEEDS_AUTHORIZATION = "rgb(232, 176, 74)"
 
-const expectNeedsAuthorizationDot = async (
+const E3_DARK_CONNECTED = "rgb(95, 191, 133)"
+
+const expectDot = async (
 	dot: HTMLElement,
+	dotClass: string,
 	backgroundColor: string,
 ) => {
-	await expect(dot).toHaveClass(NEEDS_AUTHORIZATION_DOT)
+	await expect(dot).toHaveClass(dotClass)
 	await expect(getComputedStyle(dot).backgroundColor).toBe(backgroundColor)
 }
 
-const needsAuthorizationDotIn = (canvasElement: HTMLElement) => {
+const connectionDotIn = (canvasElement: HTMLElement, connection: string) => {
 	const dot = canvasElement.querySelector<HTMLElement>(
-		'[data-connection="needsAuthorization"]',
+		`[data-connection="${connection}"]`,
 	)
-	if (!dot) throw new Error("No needs-authorization dot in the menu.")
+	if (!dot) throw new Error(`No ${connection} dot in the menu.`)
 	return dot
 }
 
@@ -224,8 +229,16 @@ export const ApplicationsOpen = meta.story({
 		await expect(
 			within(menu).getByRole("button", { name: "Add an application" }),
 		).toBeVisible()
-		const dot = needsAuthorizationDotIn(canvasElement)
-		await expectNeedsAuthorizationDot(dot, resolvedRootColor("--warning"))
+		await expectDot(
+			connectionDotIn(canvasElement, "needsAuthorization"),
+			NEEDS_AUTHORIZATION_DOT,
+			resolvedRootColor("--warning"),
+		)
+		await expectDot(
+			connectionDotIn(canvasElement, "connected"),
+			CONNECTED_DOT,
+			resolvedRootColor("--success"),
+		)
 	},
 })
 
@@ -241,8 +254,16 @@ export const ApplicationsOpenDark = meta.story({
 		},
 	},
 	play: async ({ canvasElement }) => {
-		const dot = needsAuthorizationDotIn(canvasElement)
-		await expectNeedsAuthorizationDot(dot, E3_DARK_NEEDS_AUTHORIZATION)
+		await expectDot(
+			connectionDotIn(canvasElement, "needsAuthorization"),
+			NEEDS_AUTHORIZATION_DOT,
+			E3_DARK_NEEDS_AUTHORIZATION,
+		)
+		await expectDot(
+			connectionDotIn(canvasElement, "connected"),
+			CONNECTED_DOT,
+			E3_DARK_CONNECTED,
+		)
 	},
 })
 
