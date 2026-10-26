@@ -764,7 +764,8 @@ const expectArtboard = async ({
 		weight: "400",
 		ink: pinnedInk.label,
 	})
-	await expect([iconOf(foot).stroke, iconOf(foot).strokeWidth]).toEqual([
+	const footIcon = iconOf(foot)
+	await expect([footIcon.stroke, footIcon.strokeWidth]).toEqual([
 		pinnedInk.icon,
 		"1.8px",
 	])
