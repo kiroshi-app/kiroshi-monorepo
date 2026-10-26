@@ -74,7 +74,7 @@ export const CompanionScreenHost = ({
 
 	const refuseDeletion = () => {
 		void reportFailure(
-			{ title: i18n.t("bots:spaces.remove.failed") },
+			{ title: i18n.t("bots:danger.failed") },
 			{ botId: settingsBot.id },
 		)
 	}
