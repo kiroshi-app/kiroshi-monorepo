@@ -3,6 +3,7 @@ import { expect, fn, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
+	emulateMotion,
 	FRAME_POLL,
 	isInBrowserRunner,
 	slotIn,
@@ -1104,13 +1105,6 @@ const AtRestDemo = (args: TranscriptProps) => {
 			</div>
 		</MarkProvider>
 	)
-}
-
-const emulateMotion = async (value: "no-preference" | "reduce") => {
-	const { cdp } = await import("vitest/browser")
-	await cdp().send("Emulation.setEmulatedMedia", {
-		features: [{ name: "prefers-reduced-motion", value }],
-	})
 }
 
 const nextFrame = () => new Promise((resolve) => requestAnimationFrame(resolve))

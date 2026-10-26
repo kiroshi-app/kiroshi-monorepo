@@ -3,6 +3,7 @@ import { expect, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
+	emulateMotion,
 	expectSkeletonFilledTo,
 	FRAME_POLL,
 	isInBrowserRunner,
@@ -97,13 +98,6 @@ const watchSkeleton = (root: HTMLElement) => {
 	})
 	observer.observe(root, { childList: true, subtree: true })
 	return { sighting, stop: () => observer.disconnect() }
-}
-
-const emulateMotion = async (value: "no-preference" | "reduce") => {
-	const { cdp } = await import("vitest/browser")
-	await cdp().send("Emulation.setEmulatedMedia", {
-		features: [{ name: "prefers-reduced-motion", value }],
-	})
 }
 
 const allowMotionBeforeMount = async () => {

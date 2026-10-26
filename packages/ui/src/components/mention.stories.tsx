@@ -7,6 +7,7 @@ import {
 	shown,
 	slotIn,
 	slotsIn,
+	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
 import {
 	CONVERSATION_BOTS,
@@ -530,22 +531,6 @@ const COLOUR_PROPERTY =
 	/^(all|.*color|fill|stroke|box-shadow|background|border(-(top|right|bottom|left|block|inline)(-(start|end))?)?|outline|text-decoration)$/
 
 const MOTION_UTILITY = /(^|:)!?(transition|duration)(-|!|$)|\[transition/
-
-const emulateMotion = async (value: "no-preference" | "reduce") => {
-	const { cdp } = await import("vitest/browser")
-	await cdp().send("Emulation.setEmulatedMedia", {
-		features: [{ name: "prefers-reduced-motion", value }],
-	})
-}
-
-const withMotionAllowed = async (run: () => Promise<void>) => {
-	await emulateMotion("no-preference")
-	try {
-		await run()
-	} finally {
-		await emulateMotion("reduce")
-	}
-}
 
 const colourTransitionsOf = (element: HTMLElement) => {
 	const style = getComputedStyle(element)

@@ -64,27 +64,14 @@ Spell the tag as a literal: the CSF indexer reads `tags` statically and rejects 
 
 ### Stories under the default motion preference
 
-The `storybook` vitest project emulates `prefers-reduced-motion: reduce` for every story. A story that proves the default case switches the browser to `no-preference` inside its play, through the Chrome DevTools Protocol, and back to `reduce` in a `finally` block, so a failed assertion never leaks the preference into the next story. The play returns early outside the browser runner, so the Storybook UI keeps the reader's own preference:
+The `storybook` vitest project emulates `prefers-reduced-motion: reduce` for every story. A story that proves the default case wraps its assertions in `withMotionAllowed` from `@workspace/storybook/story-utils`: it switches the browser to `no-preference` through the Chrome DevTools Protocol, runs the assertions, and switches back to `reduce` in a `finally` block, so a failed assertion never leaks the preference into the next story. A story that must mount under the default preference calls `emulateMotion("no-preference")` before the render and `emulateMotion("reduce")` in its own `finally`. Both load `vitest/browser` on demand, so guard the call with `isInBrowserRunner()` and the Storybook UI keeps the reader's own preference:
 
 ```tsx
-const emulateMotion = async (value: "no-preference" | "reduce") => {
-	const { cdp } = await import("vitest/browser")
-	await cdp().send("Emulation.setEmulatedMedia", {
-		features: [{ name: "prefers-reduced-motion", value }],
-	})
-}
-
-const withMotionAllowed = async (run: () => Promise<void>) => {
-	await emulateMotion("no-preference")
-	try {
-		await run()
-	} finally {
-		await emulateMotion("reduce")
-	}
-}
+if (!isInBrowserRunner()) return
+await withMotionAllowed(() =>
+	expect(getComputedStyle(control).transitionProperty).toBe("none"),
+)
 ```
-
-Inside the play, after `if (!isInBrowserRunner()) return`, wrap the assertions in `withMotionAllowed`, as in `toggle-switch.stories.tsx`.
 
 ## 2. Story names
 
