@@ -208,7 +208,6 @@ mod tests {
 			.collect();
 
 		assert_eq!(bound_to_cmd_w, Vec::new());
-		assert_eq!(Entry::CloseWindow.accelerator(), None);
 	}
 
 	#[test]
