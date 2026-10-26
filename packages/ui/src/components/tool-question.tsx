@@ -919,13 +919,13 @@ type OptionMarkProps = {
 }
 
 const OptionMark = ({ isChecked, isMultiSelect }: OptionMarkProps) => {
-	const check = cn(
+	const checkFadeClass = cn(
 		QUESTION_ROW_FADE_CLASS,
 		"transition-opacity",
 		isChecked ? "opacity-100" : "opacity-0",
 	)
 	if (!isMultiSelect) {
-		return <Icons.Check className={cn(QUESTION_CHECK_CLASS, check)} />
+		return <Icons.Check className={cn(QUESTION_CHECK_CLASS, checkFadeClass)} />
 	}
 	return (
 		<span
@@ -937,7 +937,7 @@ const OptionMark = ({ isChecked, isMultiSelect }: OptionMarkProps) => {
 					: "border-foreground/17 dark:border-question-option-ring",
 			)}
 		>
-			<Icons.Check className={cn("size-3", check)} />
+			<Icons.Check className={cn("size-3", checkFadeClass)} />
 		</span>
 	)
 }
