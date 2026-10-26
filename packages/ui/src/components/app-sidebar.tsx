@@ -55,6 +55,19 @@ const AppSidebarBase = ({
 	insetWindowControls,
 	windowControls,
 	railDots,
+	tabs,
+	activeTabId,
+	overflowTabs,
+	canGoBack,
+	canGoForward,
+	onSelectTab,
+	onCloseTab,
+	onPinTab,
+	onUnpinTab,
+	onCloseOtherTabs,
+	onNewTab,
+	onGoBack,
+	onGoForward,
 	openPanel: controlledPanel,
 	openSettings,
 	onOpenPanelChange,
@@ -84,31 +97,43 @@ const AppSidebarBase = ({
 	return (
 		<>
 			<AppTitleBar
+				activeTabId={activeTabId}
+				canGoBack={canGoBack}
+				canGoForward={canGoForward}
+				data-tauri-drag-region={dragRegion}
+				insetWindowControls={insetWindowControls}
+				onCloseOtherTabs={onCloseOtherTabs}
+				onCloseTab={onCloseTab}
+				onGoBack={onGoBack}
+				onGoForward={onGoForward}
+				onNewTab={onNewTab}
+				onPinTab={onPinTab}
+				onSelectTab={onSelectTab}
+				onUnpinTab={onUnpinTab}
+				overflowTabs={overflowTabs}
+				tabs={tabs}
+				windowControls={windowControls}
+			/>
+			<AppRail
 				badgesBySpaceId={badgesBySpaceId}
 				data-tauri-drag-region={dragRegion}
+				dots={railDots}
 				hostBySpaceId={hostBySpaceId}
-				insetWindowControls={insetWindowControls}
 				invitations={invitations}
 				onAcceptInvitation={onAcceptInvitation}
 				onCreateSpace={onCreateSpace}
 				onDeclineInvitation={onDeclineInvitation}
-				onRetryInvitation={onRetryInvitation}
-				onSelectSpace={onSelectSpace}
-				onSpaceSwitcherOpenChange={onSpaceSwitcherOpenChange}
-				selectedSpaceId={selectedSpaceId}
-				spaces={spaces}
-				windowControls={windowControls}
-			/>
-			<AppRail
-				data-tauri-drag-region={dragRegion}
-				dots={railDots}
 				onOpenSpaceSettings={onOpenSpaceSettings}
 				onOpenYou={onOpenUserSettings}
+				onRetryInvitation={onRetryInvitation}
 				onSelectConversations={() => setOpenPanel("conversations")}
 				onSelectMissions={() => setOpenPanel("missions")}
+				onSelectSpace={onSelectSpace}
+				onSpacesMenuOpenChange={onSpaceSwitcherOpenChange}
 				openSettings={openSettings}
 				selected={openPanel}
 				space={space}
+				spaces={spaces}
 				updateBadge={updateBadge}
 				user={user}
 			/>

@@ -1,18 +1,22 @@
 "use client"
 
 import type { AppSidebarProps } from "@workspace/ui/components/app-sidebar-model"
-import { SpaceSwitcher } from "@workspace/ui/components/space-switcher"
+import {
+	TitleBarTabs,
+	type TitleBarTabsProps,
+} from "@workspace/ui/components/title-bar-tabs"
 import { cn } from "@workspace/ui/lib/utils"
 
-const TITLE_BAR = "absolute inset-x-0 top-0 flex h-8.5 items-center gap-2"
+const TITLE_BAR = "absolute inset-x-0 top-0 flex h-10 items-center gap-2 ps-3.5"
 
-const WINDOW_CONTROLS_INSET = "pl-[78px]"
+const NO_WINDOW_CONTROLS_END = "pe-2"
 
-const NO_WINDOW_CONTROLS_INSET = "pl-2.5"
+const TRAFFIC_LIGHTS_SLOT = "w-14.25 shrink-0 self-stretch"
 
 const TITLE_BAR_WINDOW_CONTROLS = "ms-auto flex shrink-0 self-stretch"
 
-type AppTitleBarProps = Pick<
+// TODO: OPE-1334 drops these once apps/app stops handing the Space switcher to the title bar; the rail's Spaces menu took it over.
+type RetiredSpaceSwitcherProps = Pick<
 	AppSidebarProps,
 	| "spaces"
 	| "selectedSpaceId"
@@ -25,32 +29,34 @@ type AppTitleBarProps = Pick<
 	| "onDeclineInvitation"
 	| "onRetryInvitation"
 	| "onSpaceSwitcherOpenChange"
-	| "insetWindowControls"
-	| "windowControls"
-	| "data-tauri-drag-region"
 >
 
+type AppTitleBarProps = TitleBarTabsProps &
+	RetiredSpaceSwitcherProps &
+	Pick<
+		AppSidebarProps,
+		"insetWindowControls" | "windowControls" | "data-tauri-drag-region"
+	>
+
 const AppTitleBar = ({
-	spaces = [],
-	onSpaceSwitcherOpenChange,
 	insetWindowControls = false,
 	windowControls,
 	"data-tauri-drag-region": dragRegion,
-	...switcher
+	...tabStrip
 }: AppTitleBarProps) => (
 	<div
-		className={cn(
-			TITLE_BAR,
-			insetWindowControls ? WINDOW_CONTROLS_INSET : NO_WINDOW_CONTROLS_INSET,
-		)}
+		className={cn(TITLE_BAR, !windowControls && NO_WINDOW_CONTROLS_END)}
 		data-slot="app-title-bar"
 		data-tauri-drag-region={dragRegion}
 	>
-		<SpaceSwitcher
-			{...switcher}
-			onOpenChange={onSpaceSwitcherOpenChange}
-			spaces={spaces}
-		/>
+		{insetWindowControls ? (
+			<span
+				aria-hidden="true"
+				className={TRAFFIC_LIGHTS_SLOT}
+				data-slot="app-title-bar-traffic-lights"
+			/>
+		) : null}
+		{tabStrip.tabs ? <TitleBarTabs {...tabStrip} /> : null}
 		{windowControls ? (
 			<div
 				className={TITLE_BAR_WINDOW_CONTROLS}

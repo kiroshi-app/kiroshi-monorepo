@@ -23,6 +23,7 @@ import type {
 	SpaceInvitation,
 	SpaceInvitationCallbacks,
 } from "@workspace/ui/components/space-invitations"
+import type { TitleBarTabsProps } from "@workspace/ui/components/title-bar-tabs"
 import type { Sidebar } from "@workspace/ui/components/ui/sidebar"
 import type { UserChipIdentity } from "@workspace/ui/components/user-chip"
 import { toPlainText } from "@workspace/ui/lib/plain-text"
@@ -215,7 +216,8 @@ interface AppSidebarProps
 	extends SidebarShellProps,
 		BotRosterActions,
 		ConversationRosterActions,
-		SectionActions {
+		SectionActions,
+		TitleBarTabsProps {
 	bots: AppSidebarBot[]
 	haveBotsFailedToLoad?: boolean
 	rosterSkeleton?: ReactNode

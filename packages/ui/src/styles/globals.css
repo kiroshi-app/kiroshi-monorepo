@@ -82,6 +82,14 @@
 	--color-presence-online: var(--presence-online);
 	--color-presence-offline: var(--presence-offline);
 	--color-title-bar-pill: var(--title-bar-pill);
+	--color-title-bar-tab: var(--title-bar-tab);
+	--color-title-bar-tab-selected: var(--title-bar-tab-selected);
+	--color-title-bar-pinned: var(--title-bar-pinned);
+	--color-title-bar-chip: var(--title-bar-chip);
+	--color-title-bar-divider: var(--title-bar-divider);
+	--color-title-bar-highlight: var(--title-bar-highlight);
+	--color-title-bar-menu: var(--title-bar-menu);
+	--color-title-bar-menu-border: var(--title-bar-menu-border);
 	--color-user-bubble: var(--user-bubble);
 	--color-user-bubble-foreground: var(--user-bubble-foreground);
 	--color-question-segment-foreground: var(--question-segment-foreground);

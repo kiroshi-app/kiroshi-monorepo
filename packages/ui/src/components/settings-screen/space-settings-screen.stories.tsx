@@ -13,6 +13,7 @@ import {
 import { AppRail } from "@workspace/ui/components/app-rail"
 import {
 	GARAGE,
+	STUDIO,
 	TITLE_BAR,
 } from "@workspace/ui/components/app-title-bar.fixtures"
 import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
@@ -89,10 +90,14 @@ const RAIL_PRESSES = {
 	onSelectMissions: fn(),
 	onOpenSpaceSettings: fn(),
 	onOpenYou: fn(),
+	onSelectSpace: fn(),
 }
 
 const RAIL: SpaceSettingsScreenProps["rail"] = (requestLeave) => (
 	<AppRail
+		onSelectSpace={(id) => requestLeave(() => RAIL_PRESSES.onSelectSpace(id))}
+		space={STUDIO}
+		spaces={[STUDIO, GARAGE]}
 		onOpenSpaceSettings={() => requestLeave(RAIL_PRESSES.onOpenSpaceSettings)}
 		onOpenYou={() => requestLeave(RAIL_PRESSES.onOpenYou)}
 		onSelectConversations={() =>
@@ -447,7 +452,7 @@ export const LeavingUnsavedApplicationEditsByTheRail = meta.story({
 		docs: {
 			description: {
 				story:
-					"`LinearApplication` with an edit not yet saved, then the rail's Space settings gear pressed. Check that the screen asks with the dialog's own leave wording before the rail navigates, and that Leave drops the edit and runs the rail's navigation once.",
+					"`LinearApplication` with an edit not yet saved, then Space settings picked in the rail's Spaces menu. Check that the screen asks with the dialog's own leave wording before the rail navigates, and that Leave drops the edit and runs the rail's navigation once.",
 			},
 		},
 	},
@@ -459,7 +464,10 @@ export const LeavingUnsavedApplicationEditsByTheRail = meta.story({
 		await userEvent.type(within(main).getByLabelText("Name"), "-desk")
 
 		await userEvent.click(
-			within(rail).getByRole("button", { name: "Space settings" }),
+			within(rail).getByRole("button", { name: /^Change space/ }),
+		)
+		await userEvent.click(
+			await screen.findByRole("menuitem", { name: "Space settings" }),
 		)
 		const question = await screen.findByRole("alertdialog", {
 			name: "Leave without saving?",
@@ -483,17 +491,16 @@ export const LeavingUnsavedApplicationEditsBySwitchingSpace = meta.story({
 		docs: {
 			description: {
 				story:
-					"`LinearApplication` with an edit not yet saved, then another Space picked in the title bar's switcher. Check that the screen asks with the same leave wording the rail and Back use before the Space changes, that Cancel keeps the Space, and that Leave switches to the picked Space once.",
+					"`LinearApplication` with an edit not yet saved, then another Space picked in the rail's Spaces menu. Check that the screen asks with the same leave wording the rail and Back use before the Space changes, that Cancel keeps the Space, and that Leave switches to the picked Space once.",
 			},
 		},
 	},
-	play: async ({ args, canvasElement, userEvent }) => {
+	play: async ({ args, userEvent }) => {
 		const menu = await menuIn()
 		const main = screen.getByRole("main")
-		const switcher = slotIn(
-			slotIn(canvasElement, "app-title-bar"),
-			"space-switcher",
-		)
+		const switcher = within(await railIn()).getByRole("button", {
+			name: /^Change space/,
+		})
 		await within(menu).findByRole("button", { name: "Linear Connected" })
 		await userEvent.type(within(main).getByLabelText("Name"), "-desk")
 
@@ -511,13 +518,14 @@ export const LeavingUnsavedApplicationEditsBySwitchingSpace = meta.story({
 			within(await pickGarage()).getByRole("button", { name: "Cancel" }),
 		)
 		await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull())
-		await expect(args.titleBar?.onSelectSpace).not.toHaveBeenCalled()
+		await expect(RAIL_PRESSES.onSelectSpace).not.toHaveBeenCalled()
 
 		await userEvent.click(
 			within(await pickGarage()).getByRole("button", { name: "Leave" }),
 		)
-		await expect(args.titleBar?.onSelectSpace).toHaveBeenCalledTimes(1)
-		await expect(args.titleBar?.onSelectSpace).toHaveBeenCalledWith(GARAGE.id)
+		await expect(RAIL_PRESSES.onSelectSpace).toHaveBeenCalledTimes(1)
+		await expect(RAIL_PRESSES.onSelectSpace).toHaveBeenCalledWith(GARAGE.id)
+		await expect(args.onEntryChange).not.toHaveBeenCalled()
 	},
 })
 
@@ -526,7 +534,7 @@ export const LeavesByTheRailWithNothingUnsaved = meta.story({
 		docs: {
 			description: {
 				story:
-					"Members with nothing unsaved, then each rail entry pressed in turn: Conversations, Missions, the Space settings gear and the avatar. Check that none asks and each runs its navigation at once.",
+					"Members with nothing unsaved, then each rail entry pressed in turn: Conversations, Missions, Space settings from the Spaces menu and the avatar. Check that none asks and each runs its navigation at once.",
 			},
 		},
 	},
@@ -535,7 +543,6 @@ export const LeavesByTheRailWithNothingUnsaved = meta.story({
 		const presses = [
 			["Conversations", RAIL_PRESSES.onSelectConversations],
 			["Missions", RAIL_PRESSES.onSelectMissions],
-			["Space settings", RAIL_PRESSES.onOpenSpaceSettings],
 			["Ada Martin", RAIL_PRESSES.onOpenYou],
 		] as const
 
@@ -544,6 +551,14 @@ export const LeavesByTheRailWithNothingUnsaved = meta.story({
 			await expect(screen.queryByRole("alertdialog")).toBeNull()
 			await expect(navigation).toHaveBeenCalledTimes(1)
 		}
+		await userEvent.click(
+			within(rail).getByRole("button", { name: /^Change space/ }),
+		)
+		await userEvent.click(
+			await screen.findByRole("menuitem", { name: "Space settings" }),
+		)
+		await expect(screen.queryByRole("alertdialog")).toBeNull()
+		await expect(RAIL_PRESSES.onOpenSpaceSettings).toHaveBeenCalledTimes(1)
 	},
 })
 

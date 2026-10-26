@@ -3915,15 +3915,13 @@ export const MissionsScrollMemory = meta.story({
 	},
 })
 
-const TITLE_BAR_HEIGHT = 34
+const TITLE_BAR_HEIGHT = 40
+
+const TRAFFIC_LIGHTS_SLOT = 57
 
 const TITLE_BAR_GAP = 8
 
-const WINDOW_CONTROLS_RESERVE = 78
-
-const WINDOW_CONTROLS_END = 69.5
-
-const HEADER_PADDING = 10
+const TITLE_BAR_START_PADDING = 14
 
 const titleBarIn = (canvasElement: HTMLElement) =>
 	slotIn(canvasElement, "app-title-bar")
@@ -3940,7 +3938,7 @@ export const WindowControlsReserved = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this in a desktop window whose title bar is transparent, so the OS paints its close, minimise and zoom buttons over the top of the window. Check that the 34px title bar holds a gutter wide enough that the space switcher starts past those buttons, 8px after the last one as the reference draws it, and that the rail and the panel below are untouched: the reserve is owed by the title bar alone. Pick `NoWindowControlsReserve` in a browser tab or on a host that draws its own title bar.",
+					"Reach for this in a desktop window whose title bar is transparent, so the OS paints its close, minimise and zoom buttons over the top of the window. Check that the 40px title bar opens on its 14px padding then holds the 57px slot the traffic lights take, and that the rail and the panel below are untouched: the reserve is owed by the title bar alone. Pick `NoWindowControlsReserve` in a browser tab or on a host that draws its own title bar.",
 			},
 		},
 	},
@@ -3948,13 +3946,15 @@ export const WindowControlsReserved = meta.story({
 		const titleBar = titleBarIn(canvasElement)
 		await expect(titleBar.getBoundingClientRect().height).toBe(TITLE_BAR_HEIGHT)
 		await expect(getComputedStyle(titleBar).paddingLeft).toBe(
-			`${WINDOW_CONTROLS_RESERVE}px`,
+			`${TITLE_BAR_START_PADDING}px`,
 		)
-		const switcherStart =
-			slotIn(titleBar, "space-switcher").getBoundingClientRect().left -
-			titleBar.getBoundingClientRect().left
-		await expect(switcherStart).toBeGreaterThanOrEqual(
-			WINDOW_CONTROLS_END + TITLE_BAR_GAP,
+		const slot = slotIn(
+			titleBar,
+			"app-title-bar-traffic-lights",
+		).getBoundingClientRect()
+		await expect(slot.width).toBe(TRAFFIC_LIGHTS_SLOT)
+		await expect(slot.left - titleBar.getBoundingClientRect().left).toBe(
+			TITLE_BAR_START_PADDING,
 		)
 	},
 })
@@ -3964,19 +3964,18 @@ export const NoWindowControlsReserve = meta.story({
 		docs: {
 			description: {
 				story:
-					"The same window where nothing is owed: a browser tab, or a Windows or Linux window whose system title bar sits above the web view rather than over it. Check that the title bar opens on its 10px gutter, so the space switcher starts at the leading edge instead of a third of the way in. Pick `WindowControlsReserved` for the macOS window.",
+					"The same window where nothing is owed: a browser tab, or a Windows or Linux window whose system title bar sits above the web view rather than over it. Check that the title bar holds no traffic lights slot and keeps its 14px padding. Pick `WindowControlsReserved` for the macOS window.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
 		const titleBar = titleBarIn(canvasElement)
 		await expect(getComputedStyle(titleBar).paddingLeft).toBe(
-			`${HEADER_PADDING}px`,
+			`${TITLE_BAR_START_PADDING}px`,
 		)
 		await expect(
-			slotIn(titleBar, "space-switcher").getBoundingClientRect().left -
-				titleBar.getBoundingClientRect().left,
-		).toBeLessThan(WINDOW_CONTROLS_END)
+			titleBar.querySelector('[data-slot="app-title-bar-traffic-lights"]'),
+		).toBeNull()
 		await expectJoinedCard(canvasElement)
 	},
 })
@@ -3997,7 +3996,7 @@ export const CaptionWindowControls = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this on Windows, where the app draws its own caption buttons. Check that minimise, maximise and close sit at the trailing end of the 34px title bar, flush with the top and right edges of the window and as tall as the bar, that the title bar stays a drag region while the buttons do not carry it, and that the space switcher keeps its 10px gutter. Pick `NoWindowControlsReserve` for a window without caption buttons.",
+					"Reach for this on Windows, where the app draws its own caption buttons. Check that minimise, maximise and close sit at the trailing end of the 40px title bar, flush with the top and right edges of the window and as tall as the bar, and that the title bar stays a drag region while the buttons do not carry it. Pick `NoWindowControlsReserve` for a window without caption buttons.",
 			},
 		},
 	},
