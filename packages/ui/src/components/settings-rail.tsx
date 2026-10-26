@@ -177,6 +177,8 @@ type SettingsEntry = {
 	panel: ReactNode
 	layout: SettingsEntryLayout
 	isDanger?: boolean
+	isDisabled?: boolean
+	hasOwnHeading?: boolean
 	hasIndicator?: boolean
 	count?: number
 }

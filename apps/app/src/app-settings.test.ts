@@ -254,17 +254,13 @@ it("switches between the space and the user settings on the gear and the avatar"
 	})
 })
 
-it("brings back the open conversation and its draft on Back to conversations", async () => {
+it("brings back the open conversation and its draft on Back to your settings", async () => {
 	await mountApp()
 	await openConversation()
 	fireEvent.change(composerOf(), { target: { value: DRAFT } })
 	await press(gearOf())
 
-	await press(
-		within(settingsMenuOf() as HTMLElement).getByRole("button", {
-			name: i18n.t("settings:screen.back"),
-		}),
-	)
+	await press(spaceBackOf())
 
 	expect(shownSettingsOf()).toBeNull()
 	expect(composerOf().value).toBe(DRAFT)
@@ -411,10 +407,12 @@ const STORED_PREFERENCES: UserPreferences = {
 
 const secondSpace: Installs = (store) => store.createSpace(VOCCA)
 
-const backOf = () =>
-	within(settingsMenuOf() as HTMLElement).getByRole("button", {
-		name: i18n.t("settings:screen.back"),
-	})
+const backLabelled = (name: string) =>
+	within(settingsMenuOf() as HTMLElement).getByRole("button", { name })
+
+const backOf = () => backLabelled(i18n.t("settings:screen.back"))
+
+const spaceBackOf = () => backLabelled(i18n.t("settings:screen.backToSettings"))
 
 const resizeHandleOf = () =>
 	document.querySelector(
@@ -453,7 +451,7 @@ it("goes back one entry, to the user settings the space settings were opened ove
 	await press(avatarOf())
 	await press(gearOf())
 
-	await press(backOf())
+	await press(spaceBackOf())
 
 	expect(shownSettingsOf()?.subtitle).toBe("user")
 
@@ -472,7 +470,7 @@ it("opens the conversations and every settings screen at the width set on a sett
 	const widened = sidebarWidthOf()
 
 	expect(widened).toBeGreaterThan(openingWidth)
-	await press(backOf())
+	await press(spaceBackOf())
 	expect(sidebarWidthOf()).toBe(widened)
 	await press(avatarOf())
 	expect(sidebarWidthOf()).toBe(widened)

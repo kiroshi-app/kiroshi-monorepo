@@ -12,6 +12,7 @@ import type { BotMcpConnectionState } from "@workspace/ui/components/bot-setting
 import { MARKED_APPLICATIONS } from "@workspace/ui/components/plugin-settings/applications.fixtures"
 import {
 	SettingsMenu,
+	SettingsMenuAction,
 	SettingsMenuAddApplication,
 	SettingsMenuAddSpace,
 	SettingsMenuApplication,
@@ -276,7 +277,22 @@ export const SpaceSections = meta.story({
 export const States = meta.story({
 	tags: ["test-only"],
 	args: {
-		footer: null,
+		footer: (
+			<>
+				<SettingsMenuAction
+					icon="Leave"
+					label="Leave space"
+					onSelect={fn()}
+					tone="danger"
+				/>
+				<SettingsMenuAction
+					icon="X"
+					label="Decline"
+					onSelect={fn()}
+					tone="quiet"
+				/>
+			</>
+		),
 		children: (
 			<>
 				<SettingsMenuEntry
@@ -303,8 +319,29 @@ export const States = meta.story({
 					label="Selected"
 					onSelect={fn()}
 				/>
+				<SettingsMenuEntry
+					count={4}
+					icon="Companions"
+					isDisabled
+					isSelected={false}
+					label="Disabled"
+					onSelect={fn()}
+				/>
 			</>
 		),
+	},
+	play: async ({ canvasElement }) => {
+		const menu = within(canvasElement).getByRole("navigation", {
+			name: "Settings",
+		})
+		const disabled = within(menu).getByRole("button", { name: "Disabled" })
+		await expect(disabled).toBeDisabled()
+		await expect(
+			disabled.querySelector("[data-slot=settings-menu-count]"),
+		).not.toBeInTheDocument()
+		await expect(
+			within(menu).getByRole("button", { name: "Leave space" }),
+		).toBeEnabled()
 	},
 	parameters: {
 		pseudo: {

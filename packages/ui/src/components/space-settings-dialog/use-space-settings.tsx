@@ -118,24 +118,27 @@ const useSpaceSettings = ({
 		editorLayout,
 	})
 
+	const transfer =
+		onExport || onImport ? (
+			<div className="flex flex-wrap gap-2" data-slot="space-transfer">
+				{onExport ? (
+					<Button onClick={onExport} size="sm" variant="outline">
+						{t("space.transfer.export")}
+					</Button>
+				) : null}
+				{onImport ? (
+					<Button onClick={onImport} size="sm" variant="outline">
+						{t("space.transfer.import")}
+					</Button>
+				) : null}
+			</div>
+		) : null
+
 	const spacePanel =
 		host === undefined ? (
 			<>
 				<SpaceFields onValueChange={onValueChange} value={value} />
-				{onExport || onImport ? (
-					<div className="flex flex-wrap gap-2" data-slot="space-transfer">
-						{onExport ? (
-							<Button onClick={onExport} size="sm" variant="outline">
-								{t("space.transfer.export")}
-							</Button>
-						) : null}
-						{onImport ? (
-							<Button onClick={onImport} size="sm" variant="outline">
-								{t("space.transfer.import")}
-							</Button>
-						) : null}
-					</div>
-				) : null}
+				{transfer}
 			</>
 		) : (
 			<JoinedSpaceFields host={host} value={value} />
@@ -257,7 +260,7 @@ const useSpaceSettings = ({
 		},
 	]
 
-	return { name, pages, sessions, entries }
+	return { name, pages, sessions, entries, transfer }
 }
 
 export {

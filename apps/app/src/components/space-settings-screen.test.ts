@@ -233,14 +233,7 @@ const openSettingsOf = (gear: Gear, rowId: string, openedTab?: string) => {
 
 const confirmLeave = async (dialog: HTMLElement) => {
 	const leaveAction = i18n.t("common:spaces.leave.action")
-	fireEvent.click(
-		within(dialog).getByRole("button", {
-			name: i18n.t("settings:rail.danger"),
-		}),
-	)
-	fireEvent.click(
-		await within(dialog).findByRole("button", { name: leaveAction }),
-	)
+	fireEvent.click(within(dialog).getByRole("button", { name: leaveAction }))
 	const confirm = await screen.findByRole("alertdialog")
 	await act(async () => {
 		fireEvent.click(within(confirm).getByRole("button", { name: leaveAction }))
@@ -270,7 +263,7 @@ afterEach(() => {
 })
 
 describe("SpaceSettingsScreen on a joined space", () => {
-	it("opens the joined mode with the space name and host, without the local-only parts", async () => {
+	it("opens the joined mode with the space name, its host in the standing and Leave space pinned, without the local-only parts", async () => {
 		const gear = await gearWithGarage()
 
 		const dialog = openSettingsOf(gear, GARAGE_ROW)
@@ -280,10 +273,24 @@ describe("SpaceSettingsScreen on a joined space", () => {
 				selector: "[data-slot=settings-menu-name]",
 			}),
 		).toBeTruthy()
-		expect(within(dialog).queryByDisplayValue("Garage")).toBeNull()
-		expect(within(dialog).getByDisplayValue(GARAGE.hostUrl)).toBeTruthy()
+		expect(
+			within(dialog).getByText(
+				i18n.t("settings:space.standing.joined", { host: GARAGE.hostUrl }),
+			),
+		).toBeTruthy()
+		expect(
+			within(dialog).getByRole("button", {
+				name: i18n.t("common:spaces.leave.action"),
+			}),
+		).toBeTruthy()
+		expect(
+			within(dialog).queryByRole("button", {
+				name: i18n.t("settings:rail.danger"),
+			}),
+		).toBeNull()
 		for (const localOnly of [
 			i18n.t("settings:space.colour.label"),
+			i18n.t("settings:space.notShared.title"),
 			"Share link",
 			i18n.t("settings:space.transfer.export"),
 			i18n.t("settings:space.transfer.import"),
@@ -292,7 +299,7 @@ describe("SpaceSettingsScreen on a joined space", () => {
 		}
 	})
 
-	it("keeps the name of a joined space and writes no rename", async () => {
+	it("keeps the name of a joined space read-only and writes no rename", async () => {
 		const gear = await gearWithGarage()
 		const dialog = openSettingsOf(gear, GARAGE_ROW)
 
@@ -301,7 +308,9 @@ describe("SpaceSettingsScreen on a joined space", () => {
 				selector: "[data-slot=settings-menu-name]",
 			}),
 		).toBeTruthy()
-		expect(within(dialog).queryByDisplayValue("Garage")).toBeNull()
+		expect(
+			within(dialog).getByLabelText(i18n.t("settings:space.name.label")),
+		).toHaveProperty("readOnly", true)
 		expect(gear.joined.getState().joinedSpaces).toEqual([GARAGE])
 	})
 
@@ -338,14 +347,19 @@ describe("SpaceSettingsScreen on a joined space", () => {
 })
 
 describe("SpaceSettingsScreen on a local space", () => {
-	it("opens the local mode with its colour and transfer actions", async () => {
+	it("opens the local mode with its editable Name field, its transfer actions and Danger zone pinned", async () => {
 		const gear = await gearWithGarage()
 
 		const dialog = openSettingsOf(gear, gear.home.id)
 
-		expect(within(dialog).getByDisplayValue("Home")).toBeTruthy()
+		expect(within(dialog).getByDisplayValue("Home")).toHaveProperty(
+			"readOnly",
+			false,
+		)
 		expect(
-			within(dialog).getByText(i18n.t("settings:space.colour.label")),
+			within(dialog).getByRole("button", {
+				name: i18n.t("settings:rail.danger"),
+			}),
 		).toBeTruthy()
 		expect(
 			within(dialog).getByRole("button", {

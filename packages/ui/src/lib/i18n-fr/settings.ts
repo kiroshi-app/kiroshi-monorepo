@@ -5,11 +5,13 @@ const settings = {
 	screen: {
 		back: "Retour aux conversations",
 		backToCompanions: "Retour aux compagnons",
+		backToSettings: "Retour à vos réglages",
 		menu: "Réglages",
 		subtitle: {
 			space: "Réglages de l’espace",
 			companion: "Réglages du compagnon",
 			user: "Réglages de l’utilisateur",
+			invitation: "Invitation",
 		},
 		group: {
 			settings: "Vos réglages",
@@ -40,6 +42,7 @@ const settings = {
 		diagnostics: "Diagnostic",
 		danger: "Zone sensible",
 		about: "À propos",
+		invitation: "Invitation",
 	},
 	account: {
 		signedOut: {
@@ -232,6 +235,20 @@ const settings = {
 	},
 	space: {
 		untitled: "Espace sans nom",
+		standing: {
+			yours: "À vous · non partagé",
+			yoursShared: "À vous · partagé",
+			joined: "Rejoint · hébergé par {{host}}",
+			joinedNotConnected: "Rejoint · hébergé par {{host}} · Non connecté",
+			invitation: "Invitation de {{email}} · Expire le {{date}}",
+		},
+		open: "Ouvrir",
+		notShared: {
+			title: "Pas encore partagé",
+			description:
+				"Partagez {{name}} pour inviter des personnes. Sa suppression se trouve dans Zone sensible.",
+			share: "Partager",
+		},
 		name: {
 			label: "Nom",
 			placeholder: "Sans nom",

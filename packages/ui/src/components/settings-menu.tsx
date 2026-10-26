@@ -33,6 +33,15 @@ const ENTRY = `${ROW} rounded-control text-muted-foreground text-sm hover:bg-mut
 const DANGER_ENTRY =
 	"text-destructive hover:bg-destructive-tint hover:text-destructive-tint-foreground aria-[current=page]:bg-destructive-tint aria-[current=page]:text-destructive-tint-foreground"
 
+const DISABLED_ENTRY = "disabled:pointer-events-none disabled:opacity-40"
+
+const ACTION_TONE = {
+	danger: DANGER_ENTRY,
+	quiet: "text-soft-foreground [&>svg]:text-muted-foreground",
+} as const
+
+type SettingsMenuActionTone = keyof typeof ACTION_TONE
+
 const SUB_ENTRY = `${ROW} rounded-lg text-compact text-muted-foreground leading-4.5 hover:bg-muted hover:text-foreground aria-[current=page]:bg-muted aria-[current=page]:font-medium aria-[current=page]:text-foreground`
 
 const ROW_DOT = "pointer-events-none size-1.5 shrink-0 rounded-full"
@@ -139,6 +148,7 @@ type SettingsMenuEntryProps = {
 	isSelected: boolean
 	isOpen?: boolean
 	isDanger?: boolean
+	isDisabled?: boolean
 	isOutlined?: boolean
 	hasIndicator?: boolean
 	count?: number
@@ -152,6 +162,7 @@ const SettingsMenuEntry = ({
 	isSelected,
 	isOpen = false,
 	isDanger = false,
+	isDisabled = false,
 	isOutlined = false,
 	hasIndicator = false,
 	count,
@@ -165,14 +176,15 @@ const SettingsMenuEntry = ({
 		<li className="flex flex-col gap-0.5">
 			<button
 				aria-current={isSelected ? "page" : undefined}
-				className={cn(ENTRY, isDanger && DANGER_ENTRY)}
+				className={cn(ENTRY, isDanger && DANGER_ENTRY, DISABLED_ENTRY)}
 				data-open={isOpen ? "" : undefined}
+				disabled={isDisabled}
 				onClick={onSelect}
 				type="button"
 			>
 				<EntryIcon aria-hidden="true" className="size-4 shrink-0" />
 				<span className={ROW_LABEL}>{label}</span>
-				{count === undefined ? null : (
+				{count === undefined || isDisabled ? null : (
 					<span
 						className="shrink-0 font-normal text-muted-foreground text-xs tabular-nums"
 						data-slot="settings-menu-count"
@@ -193,6 +205,35 @@ const SettingsMenuEntry = ({
 					{children}
 				</ul>
 			) : null}
+		</li>
+	)
+}
+
+type SettingsMenuActionProps = {
+	icon: keyof typeof Icons
+	label: string
+	tone: SettingsMenuActionTone
+	onSelect: () => void
+}
+
+const SettingsMenuAction = ({
+	icon,
+	label,
+	tone,
+	onSelect,
+}: SettingsMenuActionProps) => {
+	const ActionIcon = Icons[icon]
+
+	return (
+		<li>
+			<button
+				className={cn(ENTRY, ACTION_TONE[tone])}
+				onClick={onSelect}
+				type="button"
+			>
+				<ActionIcon aria-hidden="true" className="size-4 shrink-0" />
+				<span className={ROW_LABEL}>{label}</span>
+			</button>
 		</li>
 	)
 }
@@ -396,6 +437,7 @@ const SettingsMenuSpace = ({
 
 export {
 	SettingsMenu,
+	SettingsMenuAction,
 	SettingsMenuAddApplication,
 	SettingsMenuAddSpace,
 	SettingsMenuApplication,

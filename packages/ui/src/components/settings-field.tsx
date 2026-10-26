@@ -38,6 +38,8 @@ const CONTROL_TRAITS: Record<SettingsFieldKind, ControlTraits> = {
 	number: { inputMode: "decimal" },
 }
 
+type SettingsFieldReadOnlyLook = "plain" | "filled"
+
 type SettingsFieldProps = {
 	label: string
 	value: string
@@ -49,6 +51,7 @@ type SettingsFieldProps = {
 	fill?: boolean
 	height?: SettingsFieldHeight
 	readOnly?: boolean
+	readOnlyLook?: SettingsFieldReadOnlyLook
 	kind?: SettingsFieldKind
 }
 
@@ -63,8 +66,10 @@ const SettingsField = ({
 	fill = false,
 	height,
 	readOnly = false,
+	readOnlyLook = "plain",
 	kind = "text",
 }: SettingsFieldProps) => {
+	const isPlain = readOnly && readOnlyLook === "plain"
 	const id = useId()
 	const traits = CONTROL_TRAITS[kind]
 	const hintId = hint ? `${id}-hint` : undefined
@@ -90,7 +95,7 @@ const SettingsField = ({
 					className={cn(
 						FIELD_CONTROL_CLASS,
 						error && FIELD_CONTROL_INVALID_CLASS,
-						readOnly && FIELD_CONTROL_READONLY_CLASS,
+						isPlain && FIELD_CONTROL_READONLY_CLASS,
 						"resize-none",
 						fill && "min-h-0 flex-1",
 						height && [BOX_HEIGHT[height], "p-3 leading-5.5"],
@@ -110,7 +115,7 @@ const SettingsField = ({
 					className={cn(
 						FIELD_CONTROL_CLASS,
 						error && FIELD_CONTROL_INVALID_CLASS,
-						readOnly && FIELD_CONTROL_READONLY_CLASS,
+						isPlain && FIELD_CONTROL_READONLY_CLASS,
 					)}
 					id={id}
 					inputMode={traits.inputMode}
