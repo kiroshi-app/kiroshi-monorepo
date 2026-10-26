@@ -1545,8 +1545,7 @@ fn a_held_entry_listed_under_another_name_is_renamed_in_place_and_announced() {
 	});
 }
 
-fn hosted_by_ann(listed: Value, colour: Value) -> Value {
-	let mut listed = listed;
+fn hosted_by_ann(mut listed: Value, colour: Value) -> Value {
 	listed["hostName"] = json!("Ann");
 	listed["hostEmail"] = json!("ann@example.com");
 	listed["colour"] = colour;
