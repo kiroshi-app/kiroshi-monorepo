@@ -56,6 +56,8 @@ const JOINED_STUDIO: JoinedSpace = {
 	remoteSpaceId: null,
 	name: "Studio Nord",
 	state: "online",
+	hostedBy: null,
+	colour: "purple",
 }
 
 const WAITING_ROW = {

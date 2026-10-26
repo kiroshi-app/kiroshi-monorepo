@@ -30,6 +30,8 @@ const HOST_PERSONAL: JoinedSpace = {
 	remoteSpaceId: "personal",
 	name: "Personal",
 	state: "online",
+	hostedBy: null,
+	colour: "orange",
 }
 
 const HOST_PERSONAL_ROW = "joined:joined-personal"

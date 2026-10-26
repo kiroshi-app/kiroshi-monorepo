@@ -104,6 +104,8 @@ const STUDIO_SPACE: JoinedSpace = {
 	remoteSpaceId: "studio",
 	name: "Studio Nord",
 	state: "online",
+	hostedBy: null,
+	colour: "purple",
 }
 
 const openStudio = async () => {
