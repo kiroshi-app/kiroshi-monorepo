@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { type ReactNode, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import type { BotMcpServerDraft } from "@workspace/ui/components/bot-settings"
@@ -11,7 +11,10 @@ import {
 	EditorNotice,
 	UnreadableConfigNotice,
 } from "@workspace/ui/components/bot-settings-dialog/mcp-editor-notice"
-import { McpServerEditorHeader } from "@workspace/ui/components/bot-settings-dialog/mcp-server-editor-header"
+import {
+	McpServerEditorHeader,
+	type McpServerEditorLayout,
+} from "@workspace/ui/components/bot-settings-dialog/mcp-server-editor-header"
 import { McpServerLaunch } from "@workspace/ui/components/bot-settings-dialog/mcp-server-launch"
 import {
 	FIRST_SECTION,
@@ -31,6 +34,21 @@ import {
 } from "@workspace/ui/components/settings-rail"
 import { cn } from "@workspace/ui/lib/utils"
 
+type McpServerEditorSectionProps = {
+	title: string
+	children: ReactNode
+}
+
+const McpServerEditorSection = ({
+	title,
+	children,
+}: McpServerEditorSectionProps) => (
+	<section className="flex min-w-0 flex-col gap-4">
+		<h3 className="font-medium text-foreground text-sm">{title}</h3>
+		{children}
+	</section>
+)
+
 type McpServerEditorProps = {
 	draft: BotMcpServerDraft
 	onDraftChange: (draft: BotMcpServerDraft) => void
@@ -46,6 +64,7 @@ type McpServerEditorProps = {
 	defaultConfirming?: boolean
 	defaultDisconnecting?: boolean
 	defaultLeaving?: boolean
+	layout?: McpServerEditorLayout
 	className?: string
 }
 
@@ -64,6 +83,7 @@ const McpServerEditor = ({
 	defaultConfirming,
 	defaultDisconnecting,
 	defaultLeaving,
+	layout = "dialog",
 	className,
 }: McpServerEditorProps) => {
 	const { t } = useTranslation("bots")
@@ -80,6 +100,109 @@ const McpServerEditor = ({
 	const isWritten = Boolean(saved)
 
 	const leave = () => (form.isUnsaved ? setLeaving(true) : onBack())
+
+	const header = (
+		<McpServerEditorHeader
+			defaultConfirming={defaultConfirming}
+			isNameMonospace={!displayName}
+			isPending={form.isPending}
+			isUnsaved={form.isUnsaved}
+			isWritten={isWritten}
+			layout={layout}
+			mark={mark}
+			name={name}
+			onDelete={onDelete}
+			onSave={form.save}
+			subtitle={
+				connection
+					? t(`applications.connection.state.${connection.state}`)
+					: undefined
+			}
+		/>
+	)
+
+	const connectionSection = (
+		<>
+			{connection ? (
+				<McpAuthorization
+					{...connection}
+					defaultDisconnecting={defaultDisconnecting}
+					isSaved={isWritten}
+					name={name}
+				/>
+			) : null}
+			<EditorNotice icon={Icons.Alert} text={t("applications.notice")} />
+			<McpConnectionFields
+				endpointType={form.fields.type}
+				isReadable={Boolean(form.config)}
+				name={draft.name}
+				nameError={
+					form.isNameRefused ? t("applications.name.blank") : undefined
+				}
+				onAnswer={form.answer}
+				onRename={form.rename}
+				onTransportChange={form.pickTransport}
+				shown={form.shown}
+				transport={draft.transport}
+			/>
+		</>
+	)
+
+	const secretsSection = (
+		<>
+			{form.config ? (
+				<SettingsField
+					hint={t("applications.secrets.hint")}
+					label={t("applications.secrets.label")}
+					onValueChange={(value) => form.answer("environment", value)}
+					placeholder={t("applications.secrets.placeholder")}
+					rows={8}
+					value={form.shown("environment")}
+				/>
+			) : (
+				<UnreadableConfigNotice />
+			)}
+			{environment ? (
+				<EnvironmentPanel {...environment} scope="server" />
+			) : null}
+		</>
+	)
+
+	const advancedSection = (
+		<>
+			<SettingsField
+				error={form.config ? undefined : t("applications.config.invalid")}
+				hint={t("applications.config.hint")}
+				label={t("applications.config.label")}
+				onValueChange={form.editConfig}
+				placeholder={t("applications.config.placeholder")}
+				rows={10}
+				value={draft.config}
+			/>
+			{form.config ? <McpServerLaunch config={form.config} /> : null}
+		</>
+	)
+
+	if (layout === "page") {
+		return (
+			<div
+				className={cn("flex min-w-0 flex-col gap-8", className)}
+				data-slot="mcp-server-editor-page"
+				ref={form.root}
+			>
+				{header}
+				<McpServerEditorSection title={t("applications.section.connection")}>
+					{connectionSection}
+				</McpServerEditorSection>
+				<McpServerEditorSection title={t("applications.section.secrets")}>
+					{secretsSection}
+				</McpServerEditorSection>
+				<McpServerEditorSection title={t("applications.section.advanced")}>
+					{advancedSection}
+				</McpServerEditorSection>
+			</div>
+		)
+	}
 
 	return (
 		<SettingsPushedPage
@@ -113,72 +236,18 @@ const McpServerEditor = ({
 			)}
 		>
 			<div className="flex min-h-0 min-w-0 flex-1 flex-col" ref={form.root}>
-				<McpServerEditorHeader
-					defaultConfirming={defaultConfirming}
-					isNameMonospace={!displayName}
-					isPending={form.isPending}
-					isUnsaved={form.isUnsaved}
-					isWritten={isWritten}
-					mark={mark}
-					name={name}
-					onDelete={onDelete}
-					onSave={form.save}
-				/>
+				{header}
 
 				<SettingsScrollingPanel value={FIRST_SECTION}>
-					{connection ? (
-						<McpAuthorization
-							{...connection}
-							defaultDisconnecting={defaultDisconnecting}
-							isSaved={isWritten}
-							name={name}
-						/>
-					) : null}
-					<EditorNotice icon={Icons.Alert} text={t("applications.notice")} />
-					<McpConnectionFields
-						endpointType={form.fields.type}
-						isReadable={Boolean(form.config)}
-						name={draft.name}
-						nameError={
-							form.isNameRefused ? t("applications.name.blank") : undefined
-						}
-						onAnswer={form.answer}
-						onRename={form.rename}
-						onTransportChange={form.pickTransport}
-						shown={form.shown}
-						transport={draft.transport}
-					/>
+					{connectionSection}
 				</SettingsScrollingPanel>
 
 				<SettingsScrollingPanel value="environment">
-					{form.config ? (
-						<SettingsField
-							hint={t("applications.secrets.hint")}
-							label={t("applications.secrets.label")}
-							onValueChange={(value) => form.answer("environment", value)}
-							placeholder={t("applications.secrets.placeholder")}
-							rows={8}
-							value={form.shown("environment")}
-						/>
-					) : (
-						<UnreadableConfigNotice />
-					)}
-					{environment ? (
-						<EnvironmentPanel {...environment} scope="server" />
-					) : null}
+					{secretsSection}
 				</SettingsScrollingPanel>
 
 				<SettingsScrollingPanel value="advanced">
-					<SettingsField
-						error={form.config ? undefined : t("applications.config.invalid")}
-						hint={t("applications.config.hint")}
-						label={t("applications.config.label")}
-						onValueChange={form.editConfig}
-						placeholder={t("applications.config.placeholder")}
-						rows={10}
-						value={draft.config}
-					/>
-					{form.config ? <McpServerLaunch config={form.config} /> : null}
+					{advancedSection}
 				</SettingsScrollingPanel>
 			</div>
 

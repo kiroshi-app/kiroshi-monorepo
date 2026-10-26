@@ -52,10 +52,25 @@ const SWITCHER =
 
 const SWITCHER_NAME = "min-w-0 truncate"
 
-const SQUARE = "relative rounded-[3px]"
+type SpaceSquareSize = "dot" | "avatar"
 
-const HOST_DOT_ON_SQUARE =
-	"absolute -end-[3.5px] -bottom-[3.5px] ring-2 ring-(--host-dot-surface,var(--shell-surface,var(--background)))"
+type SpaceSquareStyle = {
+	square: string
+	hostDot: string
+}
+
+const SPACE_SQUARE_STYLE = {
+	dot: {
+		square: "relative rounded-[3px]",
+		hostDot:
+			"absolute -end-[3.5px] -bottom-[3.5px] ring-2 ring-(--host-dot-surface,var(--shell-surface,var(--background)))",
+	},
+	avatar: {
+		square: "relative size-9 rounded-[11px]",
+		hostDot:
+			"absolute -end-0.5 -bottom-0.5 size-2.5 ring-2 ring-(--host-dot-surface) [--host-dot-surface:var(--color-card)]",
+	},
+} as const satisfies Record<SpaceSquareSize, SpaceSquareStyle>
 
 const SWITCHER_CHEVRON = "size-3 shrink-0 stroke-2!"
 
@@ -159,13 +174,23 @@ type SpaceSquareProps = {
 	colour?: BotAvatarBlot | null
 	badge?: BotBadge
 	host?: SpaceHost
+	size?: SpaceSquareSize
 }
 
-const SpaceSquare = ({ colour, badge, host }: SpaceSquareProps) => (
-	<SpaceDot badge={badge} className={SQUARE} colour={colour}>
-		{host ? <HostDot className={HOST_DOT_ON_SQUARE} host={host} /> : null}
-	</SpaceDot>
-)
+const SpaceSquare = ({
+	colour,
+	badge,
+	host,
+	size = "dot",
+}: SpaceSquareProps) => {
+	const style = SPACE_SQUARE_STYLE[size]
+
+	return (
+		<SpaceDot badge={badge} className={style.square} colour={colour}>
+			{host ? <HostDot className={style.hostDot} host={host} /> : null}
+		</SpaceDot>
+	)
+}
 
 type SpaceSwitcherProps = SpaceSelection &
 	SpaceInvitationCallbacks & {
@@ -474,4 +499,10 @@ const SpaceDots = ({
 	)
 }
 
-export { SpaceDot, SpaceDots, SpaceSwitcher, type SpaceSwitcherProps }
+export {
+	SpaceDot,
+	SpaceDots,
+	SpaceSquare,
+	SpaceSwitcher,
+	type SpaceSwitcherProps,
+}

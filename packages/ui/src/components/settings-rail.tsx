@@ -3,6 +3,7 @@
 import { Tabs } from "@base-ui/react/tabs"
 import {
 	type ComponentProps,
+	Fragment,
 	type ReactElement,
 	type ReactNode,
 	useRef,
@@ -167,6 +168,61 @@ const SettingsRailSeparator = () => (
 	<span aria-hidden="true" className="mx-1 my-1 h-px shrink-0 bg-border" />
 )
 
+type SettingsEntryLayout = "scrolling" | "fixed" | "flush"
+
+type SettingsEntry = {
+	value: string
+	icon: FillIconName
+	label: string
+	panel: ReactNode
+	layout: SettingsEntryLayout
+	isDanger?: boolean
+	hasIndicator?: boolean
+}
+
+type SettingsEntriesProps = {
+	entries: SettingsEntry[]
+}
+
+type SettingsRailEntriesProps = SettingsEntriesProps & {
+	iconsOnly: boolean
+}
+
+const SettingsRailEntries = ({
+	entries,
+	iconsOnly,
+}: SettingsRailEntriesProps) =>
+	entries.map((entry) => (
+		<Fragment key={entry.value}>
+			{entry.isDanger ? <SettingsRailSeparator /> : null}
+			<SettingsRailItem
+				className={entry.isDanger ? DANGER_RAIL_ITEM_CLASS : undefined}
+				hasIndicator={entry.hasIndicator}
+				icon={entry.icon}
+				iconsOnly={iconsOnly}
+				label={entry.label}
+				value={entry.value}
+			/>
+		</Fragment>
+	))
+
+const SettingsEntryPanels = ({ entries }: SettingsEntriesProps) =>
+	entries.map(({ value, layout, panel }) =>
+		layout === "fixed" ? (
+			<Tabs.Panel className={SETTINGS_PANEL_CLASS} key={value} value={value}>
+				{panel}
+			</Tabs.Panel>
+		) : (
+			<SettingsScrollingPanel
+				isFlush={layout === "flush"}
+				key={value}
+				value={value}
+			>
+				{panel}
+			</SettingsScrollingPanel>
+		),
+	)
+
 type SettingsRailProps = {
 	iconsOnly: boolean
 	leading?: ReactNode
@@ -211,8 +267,11 @@ export {
 	RAIL_ITEM_CLASS,
 	RAIL_LABELS_MIN_WIDTH,
 	SETTINGS_PANEL_CLASS,
+	type SettingsEntry,
+	SettingsEntryPanels,
 	SettingsRail,
 	SettingsRailBack,
+	SettingsRailEntries,
 	SettingsRailItem,
 	type SettingsRailProps,
 	SettingsRailSeparator,

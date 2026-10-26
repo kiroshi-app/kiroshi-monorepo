@@ -11,6 +11,7 @@ import {
 } from "@workspace/ui/components/bot-settings"
 import type { McpConnectionSection } from "@workspace/ui/components/bot-settings-dialog/mcp-connection"
 import { McpServerEditor } from "@workspace/ui/components/bot-settings-dialog/mcp-server-editor"
+import type { McpServerEditorLayout } from "@workspace/ui/components/bot-settings-dialog/mcp-server-editor-header"
 import type { EnvironmentSection } from "@workspace/ui/components/environment-panel"
 import {
 	ApplicationInstallPage,
@@ -66,11 +67,15 @@ type McpSessionProps = ApplicationsSection & {
 	pages: SettingsPages
 	owner: ApplicationsOwner
 	isSettingsOpen: boolean
+	editorLayout?: McpServerEditorLayout
 }
 
 type McpSession = {
 	panel: ReactNode
 	pages: SessionPages
+	openedName?: string
+	open: (server: BotMcpServerItem) => void
+	add: () => void
 	isOpen: boolean
 	isUnsaved: boolean
 	discard: () => void
@@ -105,6 +110,7 @@ const useMcpSession = ({
 	catalogue,
 	serverToOpen,
 	isSettingsOpen,
+	editorLayout,
 }: McpSessionProps): McpSession => {
 	const askedServer = isSettingsOpen ? serverToOpen : undefined
 	const [session, setSession] = useState<OpenedServer | null>(null)
@@ -148,6 +154,10 @@ const useMcpSession = ({
 		catalogue?.onOpen?.()
 	}
 
+	const add = catalogue ? browse : paste
+
+	const openServer = (server: BotMcpServerItem) => open(openedServerOf(server))
+
 	const save = (
 		{ draft, saved }: OpenedServer,
 		config: Record<string, unknown>,
@@ -175,6 +185,7 @@ const useMcpSession = ({
 				displayName={opened.displayName}
 				draft={opened.draft}
 				environment={saved ? serverEnvironment : undefined}
+				layout={editorLayout}
 				mark={opened.mark}
 				onBack={() => open(null)}
 				onDelete={saved ? () => remove(saved) : undefined}
@@ -214,9 +225,9 @@ const useMcpSession = ({
 		panel: (
 			<ApplicationsPanel
 				haveFailedToLoad={haveFailedToLoad}
-				onAdd={catalogue ? browse : paste}
+				onAdd={add}
 				onConnect={onServerConnect}
-				onOpen={(opened) => open(openedServerOf(opened))}
+				onOpen={openServer}
 				onPaste={paste}
 				onQueryChange={setPanelQuery}
 				owner={owner}
@@ -228,6 +239,9 @@ const useMcpSession = ({
 			server: session ? editorFor(session) : null,
 			catalogue: catalogue ? browsedPage(catalogue) : null,
 		},
+		openedName: session?.saved?.name,
+		open: openServer,
+		add,
 		isOpen: pages.isPushed("server") || pages.isPushed("catalogue"),
 		isUnsaved: Boolean(
 			session && isMcpServerDraftUnsaved(session.draft, session.saved),

@@ -7,6 +7,7 @@ import type {
 	BotSkillItem,
 } from "@workspace/ui/components/bot-settings"
 import type { McpConnectionSection } from "@workspace/ui/components/bot-settings-dialog/mcp-connection"
+import type { McpServerEditorLayout } from "@workspace/ui/components/bot-settings-dialog/mcp-server-editor-header"
 import type { EnvironmentSection } from "@workspace/ui/components/environment-panel"
 import type { ApplicationsOwner } from "@workspace/ui/components/plugin-settings/applications-panel"
 import type { PluginHistory } from "@workspace/ui/components/plugin-settings/history-panel"
@@ -60,6 +61,7 @@ type PluginSessionsOptions = PluginSessionsProps & {
 	history?: PluginHistory
 	historyCompanion?: BotIdentity
 	historyCompanionName: string
+	editorLayout?: McpServerEditorLayout
 }
 
 type PluginSessions = {
@@ -94,6 +96,7 @@ const usePluginSessions = ({
 	history,
 	historyCompanion,
 	historyCompanionName,
+	editorLayout,
 }: PluginSessionsOptions): PluginSessions => {
 	const pages = usePushedPages<SettingsPage>()
 	const skillSession = useSkillSession({
@@ -120,6 +123,7 @@ const usePluginSessions = ({
 		serverEnvironment,
 		serverToOpen: mcpServerToOpen,
 		isSettingsOpen,
+		editorLayout,
 	})
 	const historySession = useHistorySession({
 		pages,

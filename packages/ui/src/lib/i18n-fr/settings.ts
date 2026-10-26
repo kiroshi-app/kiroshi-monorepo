@@ -2,6 +2,14 @@ const settings = {
 	breadcrumb: {
 		title: "Réglages",
 	},
+	screen: {
+		back: "Retour aux conversations",
+		menu: "Réglages",
+		subtitle: {
+			space: "Réglages de l’espace",
+			user: "Réglages de l’utilisateur",
+		},
+	},
 	rail: {
 		account: "Compte",
 		space: "Espace",

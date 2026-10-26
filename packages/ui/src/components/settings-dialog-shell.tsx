@@ -141,4 +141,9 @@ const SettingsDialogShell = ({
 	)
 }
 
-export { SettingsDialogShell, type SettingsDialogShellProps }
+export {
+	SettingsDialogShell,
+	type SettingsDialogShellProps,
+	type SettingsSession,
+	wordedKindOf,
+}
