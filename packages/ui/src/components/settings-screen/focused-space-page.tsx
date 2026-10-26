@@ -9,7 +9,7 @@ import { SettingsField } from "@workspace/ui/components/settings-field"
 import type { SpaceSettingsValue } from "@workspace/ui/components/space-settings"
 import { SpaceSquare } from "@workspace/ui/components/space-switcher"
 import { Button } from "@workspace/ui/components/ui/button"
-import { formatDateTime } from "@workspace/ui/lib/time-format"
+import { formatShortMonthAndDay } from "@workspace/ui/lib/time-format"
 import { cn } from "@workspace/ui/lib/utils"
 
 type FocusedSpace =
@@ -17,18 +17,13 @@ type FocusedSpace =
 	| { state: "joined"; hostName: string; isConnected: boolean }
 	| { state: "invitation"; hostEmail: string; expiresAt: number }
 
-const MONTH_AND_DAY: Intl.DateTimeFormatOptions = {
-	month: "short",
-	day: "numeric",
-}
-
 const HEADER_BUTTON = cn(
 	INVERSE_BUTTON_CLASS,
-	"gap-2 rounded-[9px] px-3.5 text-compact transition-none",
+	"gap-2 rounded-[9px] px-3.5 text-compact leading-4 transition-none",
 )
 
 const SHORTCUT =
-	"text-[color-mix(in_srgb,var(--background)_60%,var(--foreground))] text-xs"
+	"font-normal text-[color-mix(in_srgb,var(--background)_60%,var(--foreground))] text-xs"
 
 const presenceOf = (space: FocusedSpace): SpaceHost | undefined => {
 	if (space.state === "joined") return space.isConnected ? "up" : "down"
@@ -66,7 +61,7 @@ const NotSharedCard = ({ name, onShare }: NotSharedCardProps) => {
 			</div>
 			<Button
 				aria-describedby={descriptionId}
-				className="h-7.5 self-start rounded-md px-2.5 text-compact transition-none dark:border-white/12"
+				className="h-7.5 self-start rounded-md px-2.5 text-compact leading-4 transition-none dark:border-white/12"
 				onClick={onShare}
 				variant="outline"
 			>
@@ -108,7 +103,7 @@ const FocusedSpacePage = ({
 		space.state === "invitation"
 			? t("space.standing.invitation", {
 					email: space.hostEmail,
-					date: formatDateTime(space.expiresAt, MONTH_AND_DAY),
+					date: formatShortMonthAndDay(space.expiresAt),
 				})
 			: space.state === "joined"
 				? t(

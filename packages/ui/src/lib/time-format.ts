@@ -51,6 +51,14 @@ const formatDateTime = (
 	options: Intl.DateTimeFormatOptions,
 ) => dateTimeFormatterFor(options).format(at)
 
+const SHORT_MONTH_AND_DAY: Intl.DateTimeFormatOptions = {
+	month: "short",
+	day: "numeric",
+}
+
+const formatShortMonthAndDay = (at: number) =>
+	formatDateTime(at, SHORT_MONTH_AND_DAY)
+
 const toRelativeTime = (at: number, now: number) => {
 	const format = relativeTimeFormatter()
 	const elapsed = at - now
@@ -64,4 +72,4 @@ const toRelativeTime = (at: number, now: number) => {
 	return format.format(0, "second")
 }
 
-export { formatDateTime, toRelativeTime }
+export { formatDateTime, formatShortMonthAndDay, toRelativeTime }
