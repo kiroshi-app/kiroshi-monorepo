@@ -24,4 +24,8 @@ const emulateStoryMotionPreference = async ({
 }
 
 export type { MotionPreference }
-export { emulateStoryMotionPreference, provideMotionEmulation }
+export {
+	emulateStoryMotionPreference,
+	PROJECT_MOTION_PREFERENCE,
+	provideMotionEmulation,
+}

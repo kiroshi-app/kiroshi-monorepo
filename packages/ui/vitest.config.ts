@@ -7,6 +7,11 @@ import { playwright } from "@vitest/browser-playwright"
 import { defineConfig } from "vitest/config"
 import type { BrowserCommand } from "vitest/node"
 
+import {
+	type MotionPreference,
+	PROJECT_MOTION_PREFERENCE,
+} from "./.storybook/motion-preference"
+
 const NO_PAGE_OR_POINTER_SHARED_BETWEEN_STORY_FILES = {
 	isolate: true,
 	fileParallelism: false,
@@ -27,9 +32,10 @@ const readTestWorkers = () => {
 	return Number(requested)
 }
 
-const emulateMotionPreference: BrowserCommand<
-	["reduce" | "no-preference"]
-> = async ({ page }, reducedMotion) => {
+const emulateMotionPreference: BrowserCommand<[MotionPreference]> = async (
+	{ page },
+	reducedMotion,
+) => {
 	await page.emulateMedia({ reducedMotion })
 }
 
@@ -60,7 +66,7 @@ export default defineConfig({
 						enabled: true,
 						headless: true,
 						provider: playwright({
-							contextOptions: { reducedMotion: "reduce" },
+							contextOptions: { reducedMotion: PROJECT_MOTION_PREFERENCE },
 						}),
 						instances: [{ browser: "chromium" }],
 						commands: { emulateMotionPreference },
