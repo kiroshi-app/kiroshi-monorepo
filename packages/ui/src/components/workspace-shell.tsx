@@ -18,11 +18,14 @@ const TITLE_BAR_AND_GUTTER = "pt-8.5 pe-1 pb-1"
 const CARD_ON_SHELL_INSET =
 	"*:data-content-card:me-[calc(var(--shell-inset)-var(--spacing))] *:data-content-card:mb-[calc(var(--shell-inset)-var(--spacing))]"
 
+const SETTINGS_MENU_ON_SHELL_INSET =
+	"*:data-[slot=settings-menu]:mb-[calc(var(--shell-inset)-var(--spacing))]"
+
 const SHELL_TITLE_BAR_HEIGHT = 34
 
 const SHELL_GUTTER = 4
 
-const SHELL = `surface-shell relative h-svh ${TITLE_BAR_AND_GUTTER} ${CARD_ON_SHELL_INSET} min-h-full max-h-full min-w-0 overflow-hidden ${SIDEBAR_INSIDE_SHELL} data-[resizing=true]:cursor-col-resize data-[resizing=true]:select-none`
+const SHELL = `surface-shell relative h-svh ${TITLE_BAR_AND_GUTTER} ${CARD_ON_SHELL_INSET} ${SETTINGS_MENU_ON_SHELL_INSET} min-h-full max-h-full min-w-0 overflow-hidden ${SIDEBAR_INSIDE_SHELL} data-[resizing=true]:cursor-col-resize data-[resizing=true]:select-none`
 
 type ShellStyle = CSSProperties & {
 	"--sidebar-width": string
@@ -43,6 +46,7 @@ interface WorkspaceShellProps {
 	isResizable?: boolean
 	className?: string
 	sidebar?: ReactNode
+	settingsMenu?: ReactNode
 	spaceTint?: BotAvatarBlot | null
 	isLandmark?: boolean
 	children: ReactNode
@@ -50,6 +54,7 @@ interface WorkspaceShellProps {
 
 const WorkspaceShell = ({
 	sidebar,
+	settingsMenu,
 	spaceTint,
 	isLandmark,
 	width,
@@ -76,7 +81,7 @@ const WorkspaceShell = ({
 					style={shellStyle(resize.width, spaceTint)}
 				>
 					{isMain ? <SkipLink targetId={mainId} /> : null}
-					{sidebar}
+					{settingsMenu ?? sidebar}
 					<ContentCard id={isMain ? mainId : undefined} isLandmark={isMain}>
 						{children}
 					</ContentCard>

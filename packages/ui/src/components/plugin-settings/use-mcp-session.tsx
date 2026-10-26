@@ -71,6 +71,9 @@ type McpSessionProps = ApplicationsSection & {
 type McpSession = {
 	panel: ReactNode
 	pages: SessionPages
+	openedName?: string
+	open: (server: BotMcpServerItem) => void
+	add: () => void
 	isOpen: boolean
 	isUnsaved: boolean
 	discard: () => void
@@ -148,6 +151,10 @@ const useMcpSession = ({
 		catalogue?.onOpen?.()
 	}
 
+	const add = catalogue ? browse : paste
+
+	const openServer = (server: BotMcpServerItem) => open(openedServerOf(server))
+
 	const save = (
 		{ draft, saved }: OpenedServer,
 		config: Record<string, unknown>,
@@ -214,9 +221,9 @@ const useMcpSession = ({
 		panel: (
 			<ApplicationsPanel
 				haveFailedToLoad={haveFailedToLoad}
-				onAdd={catalogue ? browse : paste}
+				onAdd={add}
 				onConnect={onServerConnect}
-				onOpen={(opened) => open(openedServerOf(opened))}
+				onOpen={openServer}
 				onPaste={paste}
 				onQueryChange={setPanelQuery}
 				owner={owner}
@@ -228,6 +235,9 @@ const useMcpSession = ({
 			server: session ? editorFor(session) : null,
 			catalogue: catalogue ? browsedPage(catalogue) : null,
 		},
+		openedName: session?.saved?.name,
+		open: openServer,
+		add,
 		isOpen: pages.isPushed("server") || pages.isPushed("catalogue"),
 		isUnsaved: Boolean(
 			session && isMcpServerDraftUnsaved(session.draft, session.saved),

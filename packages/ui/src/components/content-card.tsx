@@ -10,7 +10,7 @@ const YIELDS_INSIDE_A_CARD = [
 ].join(" ")
 
 const JOINS_THE_PANEL_BESIDE_IT =
-	"peer-data-[slot=sidebar]:rounded-s-none peer-data-[slot=sidebar]:border-s-0"
+	"peer-data-[slot=sidebar]:rounded-s-none peer-data-[slot=sidebar]:border-s-0 peer-data-[slot=settings-menu]:rounded-s-none peer-data-[slot=settings-menu]:border-s-0"
 
 const SURFACE = `relative flex min-w-0 flex-1 flex-col overflow-hidden rounded-control border border-shell-border bg-card ${JOINS_THE_PANEL_BESIDE_IT} ${YIELDS_INSIDE_A_CARD}`
 
