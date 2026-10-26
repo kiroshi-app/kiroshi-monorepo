@@ -74,14 +74,17 @@ const emulateMotion = async (value: "no-preference" | "reduce") => {
 	})
 }
 
-if (!isInBrowserRunner()) return
-await emulateMotion("no-preference")
-try {
-	await expect(getComputedStyle(control).transitionProperty).toBe("none")
-} finally {
-	await emulateMotion("reduce")
+const withMotionAllowed = async (run: () => Promise<void>) => {
+	await emulateMotion("no-preference")
+	try {
+		await run()
+	} finally {
+		await emulateMotion("reduce")
+	}
 }
 ```
+
+Inside the play, after `if (!isInBrowserRunner()) return`, wrap the assertions in `withMotionAllowed`, as in `toggle-switch.stories.tsx`.
 
 ## 2. Story names
 
