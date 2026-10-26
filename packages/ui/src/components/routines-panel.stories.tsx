@@ -1421,15 +1421,13 @@ type ThreadInsets = {
 	foot: ContentInset
 }
 
-const lengthOf = (value: string) => Number.parseFloat(value)
-
 const contentInsetIn = (frame: DOMRect, element: HTMLElement) => {
 	const box = element.getBoundingClientRect()
 	const style = getComputedStyle(element)
 	return {
-		start: box.left + lengthOf(style.paddingInlineStart) - frame.left,
-		end: frame.right - box.right + lengthOf(style.paddingInlineEnd),
-		top: box.top + lengthOf(style.paddingTop) - frame.top,
+		start: box.left + Number.parseFloat(style.paddingInlineStart) - frame.left,
+		end: frame.right - box.right + Number.parseFloat(style.paddingInlineEnd),
+		top: box.top + Number.parseFloat(style.paddingTop) - frame.top,
 	}
 }
 
@@ -1471,8 +1469,8 @@ const panelBodyInsetIn = (panel: HTMLElement): InlineInset => {
 		slotIn(surface, "sidebar-content"),
 	)
 	return {
-		start: start - lengthOf(edge.borderInlineStartWidth),
-		end: end - lengthOf(edge.borderInlineEndWidth),
+		start: start - Number.parseFloat(edge.borderInlineStartWidth),
+		end: end - Number.parseFloat(edge.borderInlineEndWidth),
 	}
 }
 
