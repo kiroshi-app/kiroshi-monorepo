@@ -223,11 +223,7 @@ export const ApplicationsOpenDark = meta.story({
 			},
 		},
 	},
-	play: async ({ canvasElement }) => {
-		await expect(
-			canvasElement.querySelector('[data-connection="needsAuthorization"]'),
-		).toHaveClass(NEEDS_AUTHORIZATION_DOT)
-	},
+	play: ApplicationsOpen.input.play,
 })
 
 export const DangerSelected = meta.story({
