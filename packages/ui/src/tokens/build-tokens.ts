@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process"
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 
@@ -18,6 +19,7 @@ const CATALOGUE = fromRepo("apps/ios/Kiroshi/Colors.xcassets")
 const file: TokenFile = JSON.parse(readFileSync(TOKENS, "utf8"))
 
 writeFileSync(CSS, renderCss(file))
+execFileSync("bunx", ["biome", "format", "--write", CSS], { stdio: "inherit" })
 
 rmSync(CATALOGUE, { recursive: true, force: true })
 mkdirSync(CATALOGUE)

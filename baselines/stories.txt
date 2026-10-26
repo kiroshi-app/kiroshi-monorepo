@@ -765,7 +765,10 @@ forms-toggleswitch--states
 forms-toggleswitch--with-label
 foundations-heading-levels--heading-font-on-the-top-two-levels-only
 foundations-icon-stroke--every-keyline-glyph-draws-the-icon-stroke
+foundations-token-contrast--primary-on-every-tint-meets-its-floors
 foundations-token-contrast--semantic-pairs-meet-aa-text
+foundations-token-contrast--tinted-primary-dark
+foundations-token-contrast--tinted-primary-light
 foundations-token-contrast--tinted-user-bubble-meets-aa-text
 foundations-token-contrast--warning-meets-aa-non-text
 layout-appheader--default

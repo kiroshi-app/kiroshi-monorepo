@@ -4220,7 +4220,11 @@ export const A6InvitationWaiting = meta.story({
 		await expect(style.top).toBe("4px")
 		await expect(invitation.getBoundingClientRect().width).toBe(7)
 		await expect(style.backgroundColor).toBe(
-			probedStyleOf("bg-primary", "backgroundColor", titleBarIn(canvasElement)),
+			probedStyleOf(
+				"bg-primary-strong",
+				"backgroundColor",
+				titleBarIn(canvasElement),
+			),
 		)
 		await expect(style.boxShadow).toContain(
 			`${titleBarPaint(canvasElement)} 0px 0px 0px 2px`,

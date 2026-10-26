@@ -75,7 +75,7 @@ const SPACE_SQUARE_STYLE = {
 const SWITCHER_CHEVRON = "size-3 shrink-0 stroke-2!"
 
 const SWITCHER_INVITATION =
-	"pointer-events-none absolute end-0.25 top-1 size-1.75 rounded-full bg-primary ring-2 ring-(--shell-surface,var(--background))"
+	"pointer-events-none absolute end-0.25 top-1 size-1.75 rounded-full bg-primary-strong ring-2 ring-(--shell-surface,var(--background))"
 
 const MENU_RESTING = "max-w-64"
 
