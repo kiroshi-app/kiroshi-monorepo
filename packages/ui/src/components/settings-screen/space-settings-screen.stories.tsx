@@ -2,11 +2,7 @@ import { type ComponentType, useState } from "react"
 import { expect, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import {
-	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
-	expectSettingsChrome,
-	slotIn,
-} from "@workspace/storybook/story-utils"
+import { expectSettingsChrome, slotIn } from "@workspace/storybook/story-utils"
 import { AppRail } from "@workspace/ui/components/app-rail"
 import {
 	GARAGE,
@@ -137,7 +133,7 @@ const SPACE_ARGS = {
 	onBack: fn(),
 	rail: RAIL,
 	titleBar: { ...TITLE_BAR, onSelectSpace: fn() },
-	presence: "up",
+	isShared: true,
 	value: { name: "Release desk", colour: "blue" },
 	onValueChange: fn(),
 	environment: SPACE_ENVIRONMENT,
@@ -180,7 +176,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"A space's settings as a whole window instead of an overlay. The settings menu takes the place of the conversations panel: Back to conversations, the space's square and name, then its entries, Danger zone pinned at the foot. The content column draws the same panels the space settings dialog draws, centred under the entry's title. Applications opens onto the space's installed applications, one sub-entry each with its mark and connection dot, then Add an application.",
+					"A space's settings as a whole window instead of an overlay. The settings menu takes the place of the conversations panel: Back to your settings, the space's square and name, then its entries, Danger zone pinned at the foot. The content column draws the same panels the space settings dialog draws, centred under the entry's title, except Space, which opens on the space's own header: its square, name, standing and Open, then its Name field and, while it is yours and not shared, the Not shared yet card. A joined space pins Leave space instead of Danger zone and, while its host is not connected, greys every entry but Space; an invitation reduces the menu to one Invitation entry and pins Decline. Applications opens onto the space's installed applications, one sub-entry each with its mark and connection dot, then Add an application.",
 			},
 		},
 	},
@@ -193,14 +189,14 @@ export const Members = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard E2: the space's settings open on Members. Check the menu order with Danger zone pinned last, Members marked as the current page, the space square with its presence dot beside the name, the Members title above the panel, and that Back to conversations reports itself.",
+					"Artboard E2: the space's settings open on Members. Check the menu order with Danger zone pinned last, Members marked as the current page, the space square with its presence dot beside the name, the Members title above the panel, and that Back to your settings reports itself.",
 			},
 		},
 	},
 	play: async ({ args, userEvent }) => {
 		const menu = await menuIn()
 		await expect(menuNames(menu)).toEqual([
-			"Back to conversations",
+			"Back to your settings",
 			...SPACE_MENU,
 		])
 		await expect(entryIn(menu, "Members")).toHaveAttribute(
@@ -210,7 +206,10 @@ export const Members = meta.story({
 		await expect(within(menu).getByText("Release desk")).toBeVisible()
 		await expect(within(menu).getByText("Space settings")).toBeVisible()
 		await expect(slotIn(menu, "space-dot")).toHaveClass("size-9")
-		await expect(slotIn(menu, "host-dot")).toHaveAttribute("data-host", "up")
+		await expect(slotIn(menu, "host-dot")).toHaveAttribute(
+			"data-host",
+			"shared",
+		)
 
 		const main = screen.getByRole("main")
 		await expect(
@@ -218,7 +217,7 @@ export const Members = meta.story({
 		).toBeVisible()
 		await expect(within(main).getByText("Maya Chen")).toBeVisible()
 
-		await userEvent.click(entryIn(menu, "Back to conversations"))
+		await userEvent.click(entryIn(menu, "Back to your settings"))
 		await expect(args.onBack).toHaveBeenCalledOnce()
 	},
 })
@@ -257,7 +256,7 @@ export const Companions = meta.story({
 	play: async ({ args, userEvent }) => {
 		const menu = await menuIn()
 		await expect(menuNames(menu)).toEqual([
-			"Back to conversations",
+			"Back to your settings",
 			"Space",
 			"Members",
 			"Companions4",
@@ -561,39 +560,223 @@ export const LeavesASavedApplicationBehind = meta.story({
 	},
 })
 
-export const JoinedSpace = meta.story({
+const ARTBOARD_COMPANIONS = {
+	companions: SPACE_COMPANIONS,
+	onSelect: fn(),
+	onCreate: fn(),
+}
+
+const ARTBOARD_MENU = [
+	"Space",
+	"Members",
+	"Companions",
+	"Secrets",
+	"Skills",
+	"Applications",
+	"History",
+]
+
+const JOINED_ARGS = {
+	entry: "space",
+	value: { name: "Northwind", colour: "green" },
+	companions: ARTBOARD_COMPANIONS,
+	spaceState: "joined",
+	host: "http://192.168.1.24:45367",
+	hostName: "Steve",
+	rank: 3,
+	onOpen: fn(),
+	onLeave: fn(),
+	onDelete: undefined,
+	isShared: undefined,
+} as const
+
+type ArtboardMenu = {
+	subtitle: string
+	entries: string[]
+	pinned: string
+}
+
+const expectArtboard = async ({ subtitle, entries, pinned }: ArtboardMenu) => {
+	const menu = await menuIn()
+	await expect(menuNames(menu)).toEqual([
+		"Back to your settings",
+		...entries,
+		pinned,
+	])
+	const main = screen.getByRole("main")
+	await expect(slotIn(main, "focused-space-standing")).toHaveTextContent(
+		subtitle,
+	)
+	return { menu, main }
+}
+
+const hostDotsIn = (menu: HTMLElement, main: HTMLElement) =>
+	[menu, main].map((area) =>
+		area.querySelector("[data-slot=host-dot]")?.getAttribute("data-host"),
+	)
+
+export const YoursNotShared = meta.story({
+	globals: { theme: "dark" },
 	args: {
 		entry: "space",
-		value: { name: "Northwind" },
-		host: "http://192.168.1.24:45367",
-		onLeave: fn(),
-		onDelete: undefined,
-		presence: "down",
+		value: { name: "Release desk", colour: "blue" },
+		companions: ARTBOARD_COMPANIONS,
+		isShared: false,
+		rank: 2,
+		onOpen: fn(),
+		onShare: fn(),
 	},
 	parameters: {
-		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:
-					"A space joined from another Kiroshi. Check that the Space page reads the host instead of offering fields, and that Danger zone leads to leaving the space rather than deleting it.",
+					"Artboard F02: a space of yours, not shared yet. Check the header with the colour square, the name, Yours · not shared and Open ⌘2, then the Name field, then the Not shared yet card with Share, Danger zone pinned at the foot, and no presence dot on either square.",
+			},
+		},
+	},
+	play: async ({ args, userEvent }) => {
+		const { menu, main } = await expectArtboard({
+			subtitle: "Yours · not shared",
+			entries: ARTBOARD_MENU.map((label) =>
+				label === "Companions" ? "Companions4" : label,
+			),
+			pinned: "Danger zone",
+		})
+		await expect(entryIn(menu, "Space")).toHaveAttribute("aria-current", "page")
+		await expect(hostDotsIn(menu, main)).toEqual([undefined, undefined])
+		await expect(
+			within(main).getByRole("heading", { level: 2, name: "Release desk" }),
+		).toBeVisible()
+		await expect(within(main).getByLabelText("Name")).not.toHaveAttribute(
+			"readonly",
+		)
+
+		const open = within(main).getByRole("button", { name: "Open ⌘2" })
+		await expect(getComputedStyle(open).transitionProperty).toBe("none")
+		await userEvent.click(open)
+		await expect(args.onOpen).toHaveBeenCalledOnce()
+
+		const card = slotIn(main, "not-shared-card")
+		await expect(card).toHaveTextContent(
+			"Share Release desk to invite people. Deleting it lives in Danger zone.",
+		)
+		await userEvent.click(within(card).getByRole("button", { name: "Share" }))
+		await expect(args.onShare).toHaveBeenCalledOnce()
+	},
+})
+
+export const JoinedHostOnline = meta.story({
+	globals: { theme: "dark" },
+	args: { ...JOINED_ARGS, isConnected: true },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Artboard F03: a space joined from Steve, whose computer is online. Check Joined · hosted by Steve, a green presence dot on both squares, a Name field that reads the name without letting it change, no card, and Leave space pinned at the foot, asking before it leaves.",
+			},
+		},
+	},
+	play: async ({ args, userEvent }) => {
+		const { menu, main } = await expectArtboard({
+			subtitle: "Joined · hosted by Steve",
+			entries: ARTBOARD_MENU.map((label) =>
+				label === "Companions" ? "Companions4" : label,
+			),
+			pinned: "Leave space",
+		})
+		await expect(hostDotsIn(menu, main)).toEqual(["up", "up"])
+		await expect(within(main).getByLabelText("Name")).toHaveAttribute(
+			"readonly",
+		)
+		await expect(
+			main.querySelector("[data-slot=not-shared-card]"),
+		).not.toBeInTheDocument()
+		await userEvent.click(within(main).getByRole("button", { name: "Open ⌘3" }))
+		await expect(args.onOpen).toHaveBeenCalledOnce()
+
+		await userEvent.click(entryIn(menu, "Leave space"))
+		const question = await screen.findByRole("alertdialog", {
+			name: "Leave Northwind?",
+		})
+		await userEvent.click(
+			within(question).getByRole("button", { name: "Leave space" }),
+		)
+		await expect(args.onLeave).toHaveBeenCalledOnce()
+	},
+})
+
+export const JoinedHostNotConnected = meta.story({
+	globals: { theme: "dark" },
+	args: { ...JOINED_ARGS, isConnected: false, rank: 4 },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Artboard F04: a space joined from Steve, whose computer isn't connected. Check · Not connected after the host, a grey presence dot, the header alone with no Name field, every entry but Space dimmed, out of the tab order and announced as disabled with its count hidden, and Leave space still reachable.",
 			},
 		},
 	},
 	play: async ({ userEvent }) => {
-		const menu = await menuIn()
-		const main = screen.getByRole("main")
-		await expect(within(main).getByLabelText("Host")).toHaveValue(
-			"http://192.168.1.24:45367",
-		)
+		const { menu, main } = await expectArtboard({
+			subtitle: "Joined · hosted by Steve · Not connected",
+			entries: ARTBOARD_MENU,
+			pinned: "Leave space",
+		})
+		await expect(hostDotsIn(menu, main)).toEqual(["down", "down"])
+		await expect(within(main).queryByLabelText("Name")).not.toBeInTheDocument()
+		for (const label of ARTBOARD_MENU.slice(1)) {
+			const entry = entryIn(menu, label)
+			await expect(entry).toBeDisabled()
+			await expect(getComputedStyle(entry).opacity).toBe("0.4")
+		}
 
-		await userEvent.click(entryIn(menu, "Danger zone"))
-		await expect(entryIn(menu, "Danger zone")).toHaveAttribute(
+		entryIn(menu, "Back to your settings").focus()
+		await userEvent.tab()
+		await expect(entryIn(menu, "Space")).toHaveFocus()
+		await userEvent.tab()
+		await expect(entryIn(menu, "Leave space")).toHaveFocus()
+	},
+})
+
+export const Invitation = meta.story({
+	globals: { theme: "dark" },
+	args: {
+		entry: "space",
+		value: { name: "Atelier", colour: "yellow" },
+		spaceState: "invitation",
+		invitation: {
+			hostEmail: "steve@example.com",
+			expiresAt: new Date(2026, 10, 2).getTime(),
+		},
+		onAccept: fn(),
+		onDecline: fn(),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Artboard F06: an invitation to a space. Check that the menu holds one selected Invitation entry with Decline pinned at the foot, that both squares are dashed in the space's colour without a presence dot, and that the header reads who invited you and when it expires beside Accept.",
+			},
+		},
+	},
+	play: async ({ args, userEvent }) => {
+		const { menu, main } = await expectArtboard({
+			subtitle: "Invitation from steve@example.com · Expires November 2",
+			entries: ["Invitation"],
+			pinned: "Decline",
+		})
+		await expect(entryIn(menu, "Invitation")).toHaveAttribute(
 			"aria-current",
 			"page",
 		)
-		await expect(
-			within(main).getByRole("button", { name: "Leave space" }),
-		).toBeVisible()
+		await expect(hostDotsIn(menu, main)).toEqual([undefined, undefined])
+		await expect(slotIn(menu, "space-invitation-outline")).toBeVisible()
+		await expect(slotIn(main, "space-invitation-outline")).toBeVisible()
+
+		await userEvent.click(within(main).getByRole("button", { name: "Accept" }))
+		await expect(args.onAccept).toHaveBeenCalledOnce()
+		await userEvent.click(entryIn(menu, "Decline"))
+		await expect(args.onDecline).toHaveBeenCalledOnce()
 	},
 })
 
@@ -602,13 +785,13 @@ export const ByKeyboard = meta.story({
 		docs: {
 			description: {
 				story:
-					"The menu driven from the keyboard. Check that Tab walks Back to conversations then each entry in order, each drawing the focus ring, and that Enter opens the focused entry.",
+					"The menu driven from the keyboard. Check that Tab walks Back to your settings then each entry in order, each drawing the focus ring, and that Enter opens the focused entry.",
 			},
 		},
 	},
 	play: async ({ args, userEvent }) => {
 		const menu = await menuIn()
-		entryIn(menu, "Back to conversations").focus()
+		entryIn(menu, "Back to your settings").focus()
 
 		await userEvent.tab()
 		const space = entryIn(menu, "Space")

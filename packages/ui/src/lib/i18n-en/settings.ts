@@ -5,11 +5,13 @@ const settings = {
 	screen: {
 		back: "Back to conversations",
 		backToCompanions: "Back to Companions",
+		backToSettings: "Back to your settings",
 		menu: "Settings",
 		subtitle: {
 			space: "Space settings",
 			companion: "Companion settings",
 			user: "User settings",
+			invitation: "Invitation",
 		},
 		group: {
 			settings: "Your settings",
@@ -39,6 +41,7 @@ const settings = {
 		diagnostics: "Diagnostics",
 		danger: "Danger zone",
 		about: "About",
+		invitation: "Invitation",
 	},
 	account: {
 		signedOut: {
@@ -221,6 +224,20 @@ const settings = {
 	},
 	space: {
 		untitled: "Untitled space",
+		standing: {
+			yours: "Yours · not shared",
+			yoursShared: "Yours · shared",
+			joined: "Joined · hosted by {{host}}",
+			joinedNotConnected: "Joined · hosted by {{host}} · Not connected",
+			invitation: "Invitation from {{email}} · Expires {{date}}",
+		},
+		open: "Open",
+		notShared: {
+			title: "Not shared yet",
+			description:
+				"Share {{name}} to invite people. Deleting it lives in Danger zone.",
+			share: "Share",
+		},
 		name: {
 			label: "Name",
 			placeholder: "No name",

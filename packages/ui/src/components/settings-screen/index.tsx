@@ -21,7 +21,6 @@ import { PermissionsPanel } from "@workspace/ui/components/bot-settings-dialog/p
 import { RuntimeFields } from "@workspace/ui/components/bot-settings-dialog/runtime-fields"
 import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
 import { EnvironmentPanel } from "@workspace/ui/components/environment-panel"
-import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import { InitialsAvatar } from "@workspace/ui/components/initials-avatar"
 import type { SettingsPages } from "@workspace/ui/components/plugin-settings/settings-pages"
 import { HISTORY_TAB } from "@workspace/ui/components/plugin-settings/use-history-session"
@@ -33,6 +32,7 @@ import {
 } from "@workspace/ui/components/settings-dialog-shell"
 import {
 	SettingsMenu,
+	SettingsMenuAction,
 	SettingsMenuAddApplication,
 	SettingsMenuAddSpace,
 	SettingsMenuApplication,
@@ -41,11 +41,17 @@ import {
 	SettingsMenuSpace,
 } from "@workspace/ui/components/settings-menu"
 import type { SettingsEntry } from "@workspace/ui/components/settings-rail"
+import {
+	type FocusedSpace,
+	FocusedSpacePage,
+	presenceOf,
+} from "@workspace/ui/components/settings-screen/focused-space-page"
 import { SidebarResizeHandle } from "@workspace/ui/components/sidebar-resize"
 import type { Space } from "@workspace/ui/components/space"
 import {
 	APPLICATIONS_ENTRY,
 	COMPANIONS_ENTRY,
+	SPACE_ENTRY,
 	type SpaceSettingsProps,
 	useSpaceSettings,
 } from "@workspace/ui/components/space-settings-dialog/use-space-settings"
@@ -63,6 +69,8 @@ const HEADER_AVATAR_SIZE = 36
 const PAGE = "mx-auto flex w-full max-w-160 flex-col gap-4 px-14 py-12"
 
 const APPLICATION_PAGE = "max-w-140 px-12 py-10"
+
+const SELF_HEADED_PAGE = "gap-6 px-8 py-14"
 
 const COMPANIONS_PAGE = "max-w-188"
 
@@ -109,10 +117,37 @@ type SettingsScreenNavigation = {
 	isResizable?: boolean
 }
 
+type SpaceState = FocusedSpace["state"]
+
+type SpaceInvitationTerms = {
+	hostEmail: string
+	expiresAt: number
+}
+
+type OwnedOrJoinedSpace = {
+	spaceState?: Exclude<SpaceState, "invitation">
+	invitation?: never
+	onAccept?: never
+	onDecline?: never
+}
+
+type InvitedSpace = {
+	spaceState: "invitation"
+	invitation: SpaceInvitationTerms
+	onAccept: () => void
+	onDecline: () => void
+}
+
 type SpaceSettingsScreenProps = SettingsScreenNavigation &
-	SpaceSettingsProps & {
+	SpaceSettingsProps &
+	(OwnedOrJoinedSpace | InvitedSpace) & {
 		target: "space"
-		presence?: SpaceHost
+		hostName?: string
+		isConnected?: boolean
+		isShared?: boolean
+		rank?: number
+		onOpen?: () => void
+		onShare?: () => void
 	}
 
 type UserSpace = Space & {
@@ -147,6 +182,7 @@ type SettingsScreenLayoutProps = SettingsScreenNavigation & {
 	pages: SettingsPages
 	sessions: PageSessions
 	applications: BotMcpServerItem[]
+	pinnedAction?: ReactNode
 	isCompanionPage?: boolean
 	spaces?: (requestLeave: SettingsScreenRequestLeave) => ReactNode
 }
@@ -174,6 +210,7 @@ const SettingsScreenLayout = ({
 	pages,
 	sessions,
 	applications,
+	pinnedAction,
 	isCompanionPage = false,
 	spaces,
 }: SettingsScreenLayoutProps) => {
@@ -183,7 +220,9 @@ const SettingsScreenLayout = ({
 	const { t } = useTranslation(["bots", "settings"])
 	const [pendingLeave, setPendingLeave] = useState<(() => void) | null>(null)
 
-	const shown = entries.find(({ value }) => value === entry) ?? entries[0]
+	const shown =
+		entries.find(({ value, isDisabled }) => value === entry && !isDisabled) ??
+		entries[0]
 	const sessionKind = SESSION_OF_ENTRY[shown.value]
 	const shownSession = sessionKind ? sessions[sessionKind] : undefined
 	const page = shownSession && pages.top ? shownSession.pages[pages.top] : null
@@ -228,6 +267,7 @@ const SettingsScreenLayout = ({
 			hasIndicator={item.hasIndicator}
 			icon={item.icon}
 			isDanger={item.isDanger}
+			isDisabled={item.isDisabled}
 			isOpen={item.value === shown.value && isSubEntrySelected}
 			isSelected={item.value === shown.value && !isSubEntrySelected}
 			key={item.value}
@@ -273,7 +313,14 @@ const SettingsScreenLayout = ({
 						isCompanionPage={isCompanionPage}
 						avatar={avatar}
 						backLabel={backLabel}
-						footer={pinned.length > 0 ? pinned.map(entryFor) : undefined}
+						footer={
+							pinned.length > 0 || pinnedAction ? (
+								<>
+									{pinned.map(entryFor)}
+									{pinnedAction}
+								</>
+							) : undefined
+						}
 						name={name}
 						onBack={() => leaveThen(onBack)}
 						resizeHandle={<SidebarResizeHandle side="left" />}
@@ -307,11 +354,14 @@ const SettingsScreenLayout = ({
 						isCompanionPage && COMPANION_SETTINGS_PAGE,
 						isApplicationOpen && APPLICATION_PAGE,
 						isCompanionsShown && COMPANIONS_PAGE,
+						shown.hasOwnHeading && SELF_HEADED_PAGE,
 					)}
 					data-entry={shown.value}
 					data-slot="settings-screen-page"
 				>
-					{isApplicationOpen || isCompanionsShown ? null : (
+					{isApplicationOpen ||
+					isCompanionsShown ||
+					shown.hasOwnHeading ? null : (
 						<h2 className="font-medium text-muted-foreground text-sm">
 							{shown.label}
 						</h2>
@@ -333,26 +383,118 @@ const SettingsScreenLayout = ({
 	)
 }
 
-const SpaceSettingsScreen = ({
-	entry,
-	onEntryChange,
-	onBack,
-	backLabel,
-	rail,
-	titleBar,
-	width,
-	onWidthChange,
-	isResizable,
-	presence,
-	target: _target,
-	...settings
-}: SpaceSettingsScreenProps) => {
+const focusedSpaceOf = (props: SpaceSettingsScreenProps): FocusedSpace => {
+	if (props.spaceState === "invitation") {
+		return { state: "invitation", ...props.invitation }
+	}
+	const state =
+		props.spaceState ?? (props.host === undefined ? "yours" : "joined")
+	return state === "joined"
+		? {
+				state,
+				hostName: props.hostName ?? props.host ?? "",
+				isConnected: props.isConnected ?? true,
+			}
+		: { state, isShared: props.isShared ?? false }
+}
+
+const SpaceSettingsScreen = (props: SpaceSettingsScreenProps) => {
+	const {
+		entry,
+		onEntryChange,
+		onBack,
+		backLabel,
+		rail,
+		titleBar,
+		width,
+		onWidthChange,
+		isResizable,
+		target: _target,
+		spaceState: _spaceState,
+		hostName: _hostName,
+		isConnected: _isConnected,
+		isShared: _isShared,
+		invitation: _invitation,
+		rank,
+		onOpen,
+		onShare,
+		onAccept,
+		onDecline,
+		...settings
+	} = props
 	const { t } = useTranslation("settings")
-	const { name, pages, sessions, entries } = useSpaceSettings({
+	const { t: tCommon } = useTranslation("common")
+	const { t: tBots } = useTranslation("bots")
+	const [isLeaving, setIsLeaving] = useState(false)
+	const space = focusedSpaceOf(props)
+	const { name, pages, sessions, entries, transfer } = useSpaceSettings({
 		...settings,
 		isOpen: true,
 		editorLayout: "page",
 	})
+
+	const spaceEntry: SettingsEntry = {
+		value: SPACE_ENTRY,
+		icon: "Folder",
+		label: t(space.state === "invitation" ? "rail.invitation" : "rail.space"),
+		layout: "scrolling",
+		hasOwnHeading: true,
+		panel: (
+			<FocusedSpacePage
+				onAccept={onAccept}
+				onOpen={onOpen}
+				onShare={onShare}
+				onValueChange={settings.onValueChange}
+				rank={rank}
+				space={space}
+				value={settings.value}
+			>
+				{space.state === "yours" ? transfer : null}
+			</FocusedSpacePage>
+		),
+	}
+
+	const isHostUnreachable = space.state === "joined" && !space.isConnected
+
+	const focusedEntries =
+		space.state === "invitation"
+			? [spaceEntry]
+			: entries
+					.filter(({ isDanger }) => space.state === "yours" || !isDanger)
+					.map((item) =>
+						item.value === SPACE_ENTRY
+							? spaceEntry
+							: { ...item, isDisabled: isHostUnreachable },
+					)
+
+	const leave = settings.onLeave
+
+	const pinnedAction = onDecline ? (
+		<SettingsMenuAction
+			icon="X"
+			label={tBots("spaces.invitations.decline")}
+			onSelect={onDecline}
+			tone="quiet"
+		/>
+	) : space.state === "joined" && leave ? (
+		<>
+			<SettingsMenuAction
+				icon="Leave"
+				label={tCommon("spaces.leave.action")}
+				onSelect={() => setIsLeaving(true)}
+				tone="danger"
+			/>
+			<ConfirmDialog
+				confirmLabel={tCommon("spaces.leave.action")}
+				confirmVariant="destructive"
+				description={tCommon("spaces.leave.description")}
+				onConfirm={leave}
+				onOpenChange={setIsLeaving}
+				open={isLeaving}
+				title={tCommon("spaces.leave.title", { name })}
+			/>
+		</>
+	) : undefined
 
 	return (
 		<SettingsScreenLayout
@@ -360,24 +502,30 @@ const SpaceSettingsScreen = ({
 			avatar={
 				<SpaceSquare
 					colour={settings.value.colour}
-					host={presence}
+					host={presenceOf(space)}
+					isInvitation={space.state === "invitation"}
 					size="avatar"
 				/>
 			}
-			entries={entries}
+			entries={focusedEntries}
 			entry={entry}
-			backLabel={backLabel}
+			backLabel={backLabel ?? t("screen.backToSettings")}
 			name={name}
 			onBack={onBack}
 			onEntryChange={onEntryChange}
 			pages={pages}
+			pinnedAction={pinnedAction}
 			isResizable={isResizable}
 			onWidthChange={onWidthChange}
 			rail={rail}
 			sessions={sessions}
 			titleBar={titleBar}
 			width={width}
-			subtitle={t("screen.subtitle.space")}
+			subtitle={t(
+				space.state === "invitation"
+					? "screen.subtitle.invitation"
+					: "screen.subtitle.space",
+			)}
 		/>
 	)
 }

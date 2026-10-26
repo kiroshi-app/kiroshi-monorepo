@@ -52,7 +52,7 @@ const SWITCHER =
 
 const SWITCHER_NAME = "min-w-0 truncate"
 
-type SpaceSquareSize = "dot" | "menu" | "avatar"
+type SpaceSquareSize = "dot" | "menu" | "avatar" | "header"
 
 type SpaceSquareStyle = {
 	square: string
@@ -74,6 +74,11 @@ const SPACE_SQUARE_STYLE = {
 		square: "relative size-9 rounded-[11px]",
 		hostDot:
 			"absolute -end-0.5 -bottom-0.5 size-2.5 ring-2 ring-(--host-dot-surface) [--host-dot-surface:var(--color-card)]",
+	},
+	header: {
+		square: "relative size-12 rounded-[13px]",
+		hostDot:
+			"absolute -end-0.75 -bottom-0.75 size-3.5 ring-2 ring-(--host-dot-surface) [--host-dot-surface:var(--color-card)]",
 	},
 } as const satisfies Record<SpaceSquareSize, SpaceSquareStyle>
 
@@ -180,6 +185,7 @@ type SpaceSquareProps = {
 	badge?: BotBadge
 	host?: SpaceHost
 	size?: SpaceSquareSize
+	isInvitation?: boolean
 }
 
 const SpaceSquare = ({
@@ -187,11 +193,24 @@ const SpaceSquare = ({
 	badge,
 	host,
 	size = "dot",
+	isInvitation = false,
 }: SpaceSquareProps) => {
 	const style = SPACE_SQUARE_STYLE[size]
 
 	return (
-		<SpaceDot badge={badge} className={style.square} colour={colour}>
+		<SpaceDot
+			badge={badge}
+			className={cn(style.square, isInvitation && "bg-transparent")}
+			colour={colour}
+			isFilled={!isInvitation}
+		>
+			{isInvitation ? (
+				<span
+					className="pointer-events-none absolute inset-0 rounded-[inherit] border-[1.5px] border-muted-foreground border-dashed"
+					data-slot="space-invitation-outline"
+					style={colour ? { borderColor: blotTint(colour) } : undefined}
+				/>
+			) : null}
 			{host ? <HostDot className={style.hostDot} host={host} /> : null}
 		</SpaceDot>
 	)
