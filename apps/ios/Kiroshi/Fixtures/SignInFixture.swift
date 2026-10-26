@@ -34,8 +34,14 @@
         static let threeSpaces = ScriptedTransport.Answer.status(
             200,
             #"""
-            [{"id":"\#(studioId)","name":"Studio","role":"owner","createdAt":"2026-10-01T09:00:00.000Z","online":true},{"id":"\#(homeLabId)","name":"Home lab","role":"member","createdAt":"2026-10-03T09:00:00.000Z","online":true},{"id":"\#(sideProjectId)","name":"Side project","role":"owner","createdAt":"2026-10-04T09:00:00.000Z","online":false}]
+            [{"id":"\#(studioId)","name":"Studio","role":"owner","createdAt":"2026-10-01T09:00:00.000Z","online":true,"colour":\#(colour(0))},{"id":"\#(homeLabId)","name":"Home lab","role":"member","createdAt":"2026-10-03T09:00:00.000Z","online":true,"colour":\#(colour(1))},{"id":"\#(sideProjectId)","name":"Side project","role":"owner","createdAt":"2026-10-04T09:00:00.000Z","online":false,"colour":\#(colour(2))}]
             """#)
+
+        static func colour(_ index: Int) -> String {
+            let colours =
+                UserDefaults.standard.string(forKey: "spaceColours")?.split(separator: ",") ?? []
+            return colours.indices.contains(index) ? #""\#(colours[index])""# : "null"
+        }
         static let signOutPath = "/api/auth/sign-out"
         static let signedOut = ScriptedTransport.Answer.status(200, #"{"status":true}"#)
         static let accountPath = "/me"
