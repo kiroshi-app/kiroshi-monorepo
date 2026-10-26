@@ -63,7 +63,6 @@
 	--mark: rgb(116 144 194 / 40%);
 	--transcript-new-mark: rgb(116 144 194 / 40%);
 	--border: #e5e5e5;
-	--question-bar-border: var(--border);
 	--question-option-ring: rgb(10 10 10 / 17%);
 	--input: #e5e5e5;
 	--ring: #7490c2;
@@ -144,7 +143,6 @@
 	--mark: rgb(116 144 194 / 40%);
 	--transcript-new-mark: rgb(116 144 194 / 40%);
 	--border: #212224;
-	--question-bar-border: #333335;
 	--question-option-ring: #525252;
 	--input: oklch(1 0 0 / 15%);
 	--ring: #7490c2;
