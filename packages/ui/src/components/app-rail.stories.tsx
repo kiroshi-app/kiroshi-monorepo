@@ -44,7 +44,7 @@ const CURRENT_SPACE: Space = { id: "vocca", name: "Vocca", colour: "blue" }
 
 const SPACE_LOGO = 26
 
-const SPACE_LOGO_RADIUS = "7px"
+const SPACE_AVATAR = '[data-slot="space-avatar"]'
 
 const RAIL_WIDTH = 60
 
@@ -158,7 +158,7 @@ const iconOf = (entry: HTMLElement) => {
 }
 
 const spaceLogoIn = (canvasElement: HTMLElement) =>
-	slotIn(entryNamed(canvasElement, SPACE_SETTINGS), "space-dot")
+	slotIn(entryNamed(canvasElement, SPACE_SETTINGS), "space-avatar")
 
 const expectSpaceLogoFirstWithoutGear = async (
 	canvasElement: HTMLElement,
@@ -166,17 +166,17 @@ const expectSpaceLogoFirstWithoutGear = async (
 ) => {
 	const [first] = railEntriesIn(canvasElement)
 	await expect(first).toHaveAccessibleName(entryName)
-	await expect(first.querySelector("svg")).toBeNull()
-	const logo = slotIn(first, "space-dot")
+	await expect(first.querySelector(`svg:not(${SPACE_AVATAR} svg)`)).toBeNull()
+	const logo = slotIn(first, "space-avatar")
 	const box = logo.getBoundingClientRect()
 	await expect(box.width).toBe(SPACE_LOGO)
 	await expect(box.height).toBe(SPACE_LOGO)
-	await expect(getComputedStyle(logo).borderTopLeftRadius).toBe(
-		SPACE_LOGO_RADIUS,
-	)
-	await expect(first.querySelector('[data-slot="host-dot"]')).toBeNull()
+	await expect(logo.dataset.recipe).toBe("glaze")
+	await expect(first.querySelector('[data-slot="space-avatar-dot"]')).toBeNull()
 	await expect(
-		railIn(canvasElement).querySelectorAll("ul:first-of-type svg"),
+		railIn(canvasElement).querySelectorAll(
+			`ul:first-of-type svg:not(${SPACE_AVATAR} svg)`,
+		),
 	).toHaveLength(PANELS.length)
 }
 
@@ -449,9 +449,7 @@ export const SpaceSettingsOverConversations = meta.story({
 	},
 	play: async ({ canvasElement }) => {
 		await expectSettingsOpen(canvasElement, SPACE_SETTINGS)
-		await expect(spaceLogoIn(canvasElement).style.backgroundColor).toBe(
-			blotTint("blue"),
-		)
+		await expect(spaceLogoIn(canvasElement).dataset.colour).toBe("blue")
 	},
 })
 
@@ -610,7 +608,7 @@ export const SpaceLogoHovered = meta.story({
 		docs: {
 			description: {
 				story:
-					"The current space's logo, first in the rail, under the pointer, carrying a dot. Check it is a 26px square on a 7px radius filled with the space colour, with no icon and no host dot, that no gear is left in the rail, that the tooltip reads Space settings, that the name spoken for it is Space settings followed by the news it carries, and that a press opens the space settings. Pick `SpaceLogoWithoutSpace` for the logo before a space is known.",
+					"The current space's logo, first in the rail, under the pointer, carrying a dot. Check it is the 26px SpaceAvatar in the space colour, with no icon and no presence dot, that no gear is left in the rail, that the tooltip reads Space settings, that the name spoken for it is Space settings followed by the news it carries, and that a press opens the space settings. Pick `SpaceLogoWithoutSpace` for the logo before a space is known.",
 			},
 		},
 	},
@@ -618,9 +616,7 @@ export const SpaceLogoHovered = meta.story({
 		const name = `${SPACE_SETTINGS}, new activity`
 		await expectSpaceLogoFirstWithoutGear(canvasElement, name)
 		const logo = entryNamed(canvasElement, name)
-		await expect(slotIn(logo, "space-dot").style.backgroundColor).toBe(
-			blotTint("blue"),
-		)
+		await expect(slotIn(logo, "space-avatar").dataset.colour).toBe("blue")
 		await expect(slotIn(logo, "app-rail-dot")).toBeVisible()
 		await userEvent.hover(logo)
 		await expect(await screen.findByRole("tooltip")).toHaveTextContent(
@@ -638,21 +634,13 @@ export const SpaceLogoWithoutSpace = meta.story({
 		docs: {
 			description: {
 				story:
-					"The rail before the current space is known. Check the logo keeps its 26px square on a 7px radius in the first slot, drawn in the untinted fallback the space dots use rather than any colour, and that it still opens the space settings. Pick `SpaceLogoHovered` for the logo in a space colour.",
+					"The rail before the current space is known. Check the logo keeps its 26px SpaceAvatar in the first slot, drawn in the greys of a Space with no colour, and that it still opens the space settings. Pick `SpaceLogoHovered` for the logo in a space colour.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
 		await expectSpaceLogoFirstWithoutGear(canvasElement, SPACE_SETTINGS)
-		const logo = spaceLogoIn(canvasElement)
-		await expect(logo.style.backgroundColor).toBe("")
-		await expect(getComputedStyle(logo).backgroundColor).toBe(
-			tokenStyleIn(
-				railIn(canvasElement),
-				"bg-sidebar-foreground/30",
-				"backgroundColor",
-			),
-		)
+		await expect(spaceLogoIn(canvasElement).dataset.colour).toBeUndefined()
 	},
 })
 

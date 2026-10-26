@@ -57,4 +57,4 @@ const HostPill = ({ host }: HostPillProps) => {
 	)
 }
 
-export { HostDot, HostPill, type HostPillProps, type SpaceHost }
+export { HostPill, type HostPillProps, type SpaceHost }

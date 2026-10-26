@@ -11,12 +11,13 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The Space entry of a space's settings screen: a header with the space's square, name, standing and its action, then the Name field while the space can be renamed or read, then the Not shared yet card while it is yours and unshared. The screen's stories carry the four artboards; these prove the page on its own, in the light theme and in narrow columns.",
+					"The Space entry of a space's settings screen: a header with the space's avatar, name, standing and its action, then the Name field while the space can be renamed or read, then the Not shared yet card while it is yours and unshared. The screen's stories carry the four artboards; these prove the page on its own, in the light theme and in narrow columns.",
 			},
 		},
 	},
 	args: {
 		space: { state: "yours", isShared: false } as const,
+		spaceId: "release-desk",
 		value: { name: "Release desk", colour: "blue" } as const,
 		onValueChange: fn(),
 		rank: 2,
@@ -68,8 +69,7 @@ export const Shared = meta.story({
 		await expect(
 			slotIn(canvasElement, "focused-space-standing"),
 		).toHaveTextContent("Yours · shared")
-		await expect(slotIn(canvasElement, "host-dot")).toHaveAttribute(
-			"data-host",
+		await expect(slotIn(canvasElement, "space-avatar").dataset.state).toBe(
 			"shared",
 		)
 		await expect(
@@ -94,7 +94,7 @@ export const LongNameInANarrowColumn = meta.story({
 		docs: {
 			description: {
 				story:
-					"An unbreakable name in a 320px column. Check that it wraps inside the header instead of overflowing, while the square and Open keep their size.",
+					"An unbreakable name in a 320px column. Check that it wraps inside the header instead of overflowing, while the avatar and Open keep their size.",
 			},
 		},
 	},
@@ -102,7 +102,7 @@ export const LongNameInANarrowColumn = meta.story({
 		const header = slotIn(canvasElement, "focused-space-header")
 		await expect(header.scrollWidth).toBeLessThanOrEqual(header.clientWidth)
 		await expect(
-			slotIn(header, "space-dot").getBoundingClientRect().width,
+			slotIn(header, "space-avatar").getBoundingClientRect().width,
 		).toBe(48)
 		await expect(
 			within(header)

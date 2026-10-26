@@ -7,7 +7,7 @@ import { BotTitleBadge } from "@workspace/ui/components/bot-badge"
 import type { BotMcpConnectionState } from "@workspace/ui/components/bot-settings"
 import { MCP_CONNECTION_DOT } from "@workspace/ui/components/bot-settings-dialog/mcp-connection"
 import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
-import type { SpaceHost } from "@workspace/ui/components/host-pill"
+import { HostPill, type SpaceHost } from "@workspace/ui/components/host-pill"
 import {
 	type FillIconName,
 	FillIcons,
@@ -15,7 +15,10 @@ import {
 } from "@workspace/ui/components/icons"
 import { ApplicationMark } from "@workspace/ui/components/plugin-settings/application-mark"
 import { SidebarListRow } from "@workspace/ui/components/sidebar-list-row"
-import { SpaceSquare } from "@workspace/ui/components/space-switcher"
+import {
+	SpaceAvatar,
+	spaceAvatarStateOf,
+} from "@workspace/ui/components/space-avatar"
 import { Badge } from "@workspace/ui/components/ui/badge"
 import { useOverlayScrollbars } from "@workspace/ui/hooks/use-overlay-scrollbars"
 import { cn } from "@workspace/ui/lib/utils"
@@ -65,12 +68,6 @@ const SECTION_TITLE =
 
 const SECTION_ACTION = `grid size-6 shrink-0 cursor-pointer place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground ${FOCUS_RING}`
 
-const SPACE_ROW =
-	"[--host-dot-surface:var(--color-card)] hover:[--host-dot-surface:var(--color-muted)]"
-
-const SPACE_INVITATION_MEDIA =
-	"size-3.5 rounded-[4px] border border-warning border-dashed"
-
 const SPACE_TRAILING = "ms-auto flex shrink-0 items-center gap-1.5"
 
 const SPACE_PILL = "basis-auto py-0.75"
@@ -83,6 +80,7 @@ const SPACE_ATTENTION_DOT =
 type SettingsMenuProps = {
 	avatar: ReactNode
 	name: string
+	status?: ReactNode
 	subtitle: string
 	onBack: () => void
 	backLabel?: string
@@ -95,6 +93,7 @@ type SettingsMenuProps = {
 const SettingsMenu = ({
 	avatar,
 	name,
+	status,
 	subtitle,
 	onBack,
 	backLabel,
@@ -127,12 +126,15 @@ const SettingsMenu = ({
 			>
 				{avatar}
 				<div className="flex min-w-0 flex-col">
-					<span
-						className="truncate font-semibold text-foreground text-sm"
-						data-slot="settings-menu-name"
-					>
-						{name}
-					</span>
+					<div className="flex min-w-0 items-center gap-1.5">
+						<span
+							className="truncate font-semibold text-foreground text-sm"
+							data-slot="settings-menu-name"
+						>
+							{name}
+						</span>
+						{status}
+					</div>
 					<span className="truncate text-muted-foreground text-xs">
 						{subtitle}
 					</span>
@@ -376,6 +378,7 @@ const SettingsMenuAddSpace = ({ onAdd }: SettingsMenuAddSpaceProps) => {
 }
 
 type SettingsMenuSpaceProps = {
+	spaceId: string
 	name: string
 	colour?: BotAvatarBlot | null
 	host?: SpaceHost
@@ -386,6 +389,7 @@ type SettingsMenuSpaceProps = {
 }
 
 const SettingsMenuSpace = ({
+	spaceId,
 	name,
 	colour,
 	host,
@@ -397,26 +401,25 @@ const SettingsMenuSpace = ({
 	const { t } = useTranslation(["settings", "bots"])
 
 	return (
-		<li className={SPACE_ROW}>
+		<li>
 			<SidebarListRow
 				aria-current={isCurrent ? "true" : undefined}
 				geometry="menu"
 				media={
-					isInvitation ? (
-						<span
-							aria-hidden="true"
-							className={SPACE_INVITATION_MEDIA}
-							data-slot="settings-menu-space-invitation"
-						/>
-					) : (
-						<SpaceSquare colour={colour} host={host} size="menu" />
-					)
+					<SpaceAvatar
+						colour={colour}
+						size={14}
+						spaceId={spaceId}
+						state={isInvitation ? "invitation" : spaceAvatarStateOf(host)}
+					/>
 				}
 				name={name}
 				onSelect={onOpen}
 				trailing={
 					<span className={SPACE_TRAILING}>
-						{host ? (
+						{host === "connecting" || host === "down" ? (
+							<HostPill host={host} />
+						) : host ? (
 							<span className="sr-only">{t(`bots:spaces.host.${host}`)}</span>
 						) : null}
 						{isCurrent ? (

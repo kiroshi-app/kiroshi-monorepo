@@ -1,6 +1,6 @@
 "use client"
 
-import { type ReactNode, useLayoutEffect, useRef } from "react"
+import { useLayoutEffect, useRef } from "react"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -16,13 +16,13 @@ import {
 	ContextMenuPressTrigger,
 	openBelow,
 } from "@workspace/ui/components/context-menu-press-trigger"
-import {
-	HostDot,
-	HostPill,
-	type SpaceHost,
-} from "@workspace/ui/components/host-pill"
+import { HostPill, type SpaceHost } from "@workspace/ui/components/host-pill"
 import { Icons } from "@workspace/ui/components/icons"
 import type { Space } from "@workspace/ui/components/space"
+import {
+	SpaceAvatar,
+	spaceAvatarStateOf,
+} from "@workspace/ui/components/space-avatar"
 import {
 	type SpaceInvitation,
 	type SpaceInvitationCallbacks,
@@ -48,39 +48,9 @@ import { STILL_UNDER_REDUCED_MOTION } from "@workspace/ui/lib/reduced-motion"
 import { cn } from "@workspace/ui/lib/utils"
 
 const SWITCHER =
-	"relative h-8 min-w-0 max-w-64 shrink gap-2 rounded-md px-2 font-normal text-compact text-muted-foreground leading-4 aria-expanded:bg-sidebar-accent aria-expanded:[--host-dot-surface:var(--color-sidebar-accent)]"
+	"relative h-8 min-w-0 max-w-64 shrink gap-2 rounded-md px-2 font-normal text-compact text-muted-foreground leading-4 aria-expanded:bg-sidebar-accent"
 
 const SWITCHER_NAME = "min-w-0 truncate"
-
-type SpaceSquareSize = "dot" | "menu" | "avatar" | "header"
-
-type SpaceSquareStyle = {
-	square: string
-	hostDot: string
-}
-
-const SPACE_SQUARE_STYLE = {
-	dot: {
-		square: "relative rounded-[3px]",
-		hostDot:
-			"absolute -end-[3.5px] -bottom-[3.5px] ring-2 ring-(--host-dot-surface,var(--shell-surface,var(--background)))",
-	},
-	menu: {
-		square: "relative size-3.5 rounded-[4px]",
-		hostDot:
-			"absolute -end-[3px] -bottom-[3px] size-2 ring-[1.5px] ring-(--host-dot-surface,var(--color-card))",
-	},
-	avatar: {
-		square: "relative size-9 rounded-[11px]",
-		hostDot:
-			"absolute -end-0.75 -bottom-0.75 size-2.5 ring-2 ring-(--host-dot-surface) [--host-dot-surface:var(--color-card)]",
-	},
-	header: {
-		square: "relative size-12 rounded-[13px]",
-		hostDot:
-			"absolute -end-0.75 -bottom-0.75 size-3.5 ring-2 ring-(--host-dot-surface) [--host-dot-surface:var(--color-card)]",
-	},
-} as const satisfies Record<SpaceSquareSize, SpaceSquareStyle>
 
 const SWITCHER_CHEVRON = "size-3 shrink-0 stroke-2!"
 
@@ -90,9 +60,6 @@ const SWITCHER_INVITATION =
 const MENU_RESTING = "max-w-64"
 
 const MENU_INVITED = "w-70"
-
-const ROW =
-	"[--host-dot-surface:var(--color-popover)] focus:[--host-dot-surface:var(--color-accent)]"
 
 const ROW_NAME = "min-w-0 grow truncate"
 
@@ -141,7 +108,6 @@ type SpaceDotProps = {
 	badge?: BotBadge
 	isFilled?: boolean
 	className?: string
-	children?: ReactNode
 }
 
 const SpaceDot = ({
@@ -149,7 +115,6 @@ const SpaceDot = ({
 	badge,
 	isFilled = true,
 	className,
-	children,
 }: SpaceDotProps) => {
 	const tint = isFilled && colour ? blotTint(colour) : undefined
 
@@ -166,9 +131,7 @@ const SpaceDot = ({
 			data-badge={badge}
 			data-slot="space-dot"
 			style={tint ? { backgroundColor: tint } : undefined}
-		>
-			{children}
-		</span>
+		/>
 	)
 }
 
@@ -178,42 +141,6 @@ type SpaceSelection = {
 	badgesBySpaceId?: Record<string, BotBadge>
 	onSelectSpace?: (id: string) => void
 	onReorderSpaces?: (ids: string[]) => void
-}
-
-type SpaceSquareProps = {
-	colour?: BotAvatarBlot | null
-	badge?: BotBadge
-	host?: SpaceHost
-	size?: SpaceSquareSize
-	isInvitation?: boolean
-}
-
-const SpaceSquare = ({
-	colour,
-	badge,
-	host,
-	size = "dot",
-	isInvitation = false,
-}: SpaceSquareProps) => {
-	const style = SPACE_SQUARE_STYLE[size]
-
-	return (
-		<SpaceDot
-			badge={badge}
-			className={cn(style.square, isInvitation && "bg-transparent")}
-			colour={colour}
-			isFilled={!isInvitation}
-		>
-			{isInvitation ? (
-				<span
-					className="pointer-events-none absolute inset-0 rounded-[inherit] border-[1.5px] border-muted-foreground border-dashed"
-					data-slot="space-invitation-outline"
-					style={colour ? { borderColor: blotTint(colour) } : undefined}
-				/>
-			) : null}
-			{host ? <HostDot className={style.hostDot} host={host} /> : null}
-		</SpaceDot>
-	)
 }
 
 type SpaceSwitcherProps = Omit<SpaceSelection, "onReorderSpaces"> &
@@ -296,7 +223,12 @@ const SpaceSwitcher = ({
 							size="sm"
 							variant="ghost"
 						>
-							<SpaceSquare colour={selected.colour} host={host} />
+							<SpaceAvatar
+								colour={selected.colour}
+								size={12}
+								spaceId={selected.id}
+								state={spaceAvatarStateOf(host)}
+							/>
 							<span className={SWITCHER_NAME} data-slot="space-switcher-name">
 								{selected.name}
 							</span>
@@ -333,19 +265,22 @@ const SpaceSwitcher = ({
 							const rowHost = hostBySpaceId?.[space.id]
 							return (
 								<ContextMenuRadioItem
-									className={ROW}
 									closeOnClick
 									key={space.id}
 									label={space.name}
 									value={space.id}
 								>
-									<SpaceSquare
-										badge={badgesBySpaceId?.[space.id]}
+									<SpaceAvatar
 										colour={space.colour}
-										host={rowHost}
+										hasAttention={badgesBySpaceId?.[space.id] === "attention"}
+										size={14}
+										spaceId={space.id}
+										state={spaceAvatarStateOf(rowHost)}
 									/>
 									<span className={ROW_NAME}>{space.name}</span>
-									{rowHost ? (
+									{rowHost === "connecting" || rowHost === "down" ? (
+										<HostPill host={rowHost} />
+									) : rowHost ? (
 										<span className="sr-only">
 											{t(`spaces.host.${rowHost}`)}
 										</span>
@@ -469,10 +404,4 @@ const SpaceDots = ({
 	)
 }
 
-export {
-	SpaceDot,
-	SpaceDots,
-	SpaceSquare,
-	SpaceSwitcher,
-	type SpaceSwitcherProps,
-}
+export { SpaceDots, SpaceSwitcher, type SpaceSwitcherProps }

@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next"
 
 import { Icons } from "@workspace/ui/components/icons"
 import type { Space } from "@workspace/ui/components/space"
-import { SpaceDot } from "@workspace/ui/components/space-switcher"
+import { SpaceAvatar } from "@workspace/ui/components/space-avatar"
 import {
 	ContextMenuCheckboxItem,
 	ContextMenuItem,
@@ -188,7 +188,7 @@ const SpacesBranch = ({
 									: onRemoveFromSpace?.(botId, space.id)
 							}
 						>
-							<SpaceDot colour={space.colour} />
+							<SpaceAvatar colour={space.colour} size={14} spaceId={space.id} />
 							<span className={DESTINATION_NAME}>{space.name}</span>
 						</ContextMenuCheckboxItem>
 					)

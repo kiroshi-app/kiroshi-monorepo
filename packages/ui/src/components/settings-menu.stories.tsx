@@ -23,7 +23,7 @@ import {
 	SettingsMenuSpace,
 } from "@workspace/ui/components/settings-menu"
 import { SIDEBAR_DEFAULT_WIDTH } from "@workspace/ui/components/sidebar-resize"
-import { SpaceSquare } from "@workspace/ui/components/space-switcher"
+import { SpaceAvatar } from "@workspace/ui/components/space-avatar"
 import { SidebarProvider } from "@workspace/ui/components/ui/sidebar"
 
 const NEEDS_AUTHORIZATION_DOT = "bg-state-needs-authorization"
@@ -86,7 +86,14 @@ const meta = preview.meta({
 		},
 	},
 	args: {
-		avatar: <SpaceSquare colour="blue" host="up" size="avatar" />,
+		avatar: (
+			<SpaceAvatar
+				colour="blue"
+				size={36}
+				spaceId="release-desk"
+				state="online"
+			/>
+		),
 		name: "Release desk",
 		subtitle: "Space settings",
 		onBack: fn(),
@@ -176,7 +183,7 @@ const titleRowOf = (menu: HTMLElement, title: string) =>
 
 export const SpaceSections = meta.story({
 	args: {
-		avatar: <SpaceSquare colour="orange" size="avatar" />,
+		avatar: <SpaceAvatar colour="orange" size={36} spaceId="studio" />,
 		name: "Ada Martin",
 		subtitle: "User settings",
 		footer: undefined,
@@ -200,14 +207,22 @@ export const SpaceSections = meta.story({
 						isCurrent
 						name={`Studio ${LONG_NAME}`}
 						onOpen={SPACE_PRESSES.onOpenStudio}
+						spaceId="studio"
 					/>
 					<SettingsMenuSpace
 						colour="blue"
 						hasAttention
 						name={LONG_NAME}
 						onOpen={SPACE_PRESSES.onOpenNorthwind}
+						spaceId="northwind"
 					/>
-					<SettingsMenuSpace isInvitation name={LONG_NAME} onOpen={fn()} />
+					<SettingsMenuSpace
+						colour="green"
+						isInvitation
+						name={LONG_NAME}
+						onOpen={fn()}
+						spaceId="atelier"
+					/>
 				</SettingsMenuSection>
 			</>
 		),
@@ -251,14 +266,14 @@ export const SpaceSections = meta.story({
 		const studio = within(menu).getByRole("button", { name: /^Studio/ })
 		await expect(heightOf(studio)).toBe(36)
 		await expect(studio).toHaveAttribute("aria-current", "true")
-		await expect(heightOf(slotIn(studio, "space-dot"))).toBe(14)
-		await expect(heightOf(slotIn(studio, "host-dot"))).toBe(8)
+		await expect(heightOf(slotIn(studio, "space-avatar"))).toBe(14)
+		await expect(heightOf(slotIn(studio, "space-avatar-dot"))).toBe(6)
 		const account = within(menu).getByRole("button", { name: "Account" })
 		const leftOf = (element: Element) => element.getBoundingClientRect().left
 		await expect(leftOf(slotIn(studio, "roster-row-name"))).toBe(
 			leftOf(within(account).getByText("Account")),
 		)
-		await expect(leftOf(slotIn(studio, "space-dot"))).toBe(
+		await expect(leftOf(slotIn(studio, "space-avatar"))).toBe(
 			leftOf(account.querySelector("svg") as SVGElement) + 1,
 		)
 
@@ -593,14 +608,21 @@ export const DangerSelectedDark = meta.story({
 export const ConnectingSpaceDark = meta.story({
 	globals: { theme: "dark" },
 	args: {
-		avatar: <SpaceSquare colour="pink" host="connecting" size="avatar" />,
+		avatar: (
+			<SpaceAvatar
+				colour="pink"
+				size={36}
+				spaceId="release-desk"
+				state="connecting"
+			/>
+		),
 		children: Default.input.args?.children,
 	},
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The dark theme, for a space whose host is still connecting. Check that the hollow presence dot is filled with the card behind it and ringed in it.",
+					"The dark theme, for a space whose host is still connecting. Check that the avatar keeps its ground with its arcs drawn as lines, and carries no dot.",
 			},
 		},
 	},
@@ -615,7 +637,14 @@ const HEADER_MENUS = [
 	},
 	{
 		isCompanionPage: false,
-		avatar: <SpaceSquare colour="blue" host="up" size="avatar" />,
+		avatar: (
+			<SpaceAvatar
+				colour="blue"
+				size={36}
+				spaceId="release-desk"
+				state="online"
+			/>
+		),
 		name: "Release desk",
 		subtitle: "Space settings",
 	},

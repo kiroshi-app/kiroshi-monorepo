@@ -293,6 +293,7 @@ const companionAvatar = ({
 
 export {
 	type AvatarCell,
+	BLOT_COLOURS,
 	COMPANION_OUTLINE,
 	type CompanionAvatarInput,
 	companionAvatar,
@@ -304,6 +305,8 @@ export {
 	fieldLattice,
 	fieldTones,
 	hueShift,
+	oklabOf,
 	type Srgb,
+	srgbOfHex,
 	TONE_OPACITIES,
 }

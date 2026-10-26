@@ -219,17 +219,16 @@ const expectSpaceRows = async (menu: HTMLElement, names: string[]) => {
 			(name) => name.textContent,
 		),
 	).toEqual(names)
-	await expect(slotsIn(groupIn(menu, "Your spaces"), "host-dot")).toHaveLength(
-		2,
+	await expect(
+		slotIn(spaceRowOf(menu, "Studio"), "space-avatar").dataset.state,
+	).toBe("shared")
+	await expect(
+		slotIn(spaceRowOf(menu, "Harbor"), "space-avatar").dataset.state,
+	).toBe("offline")
+	await expect(slotsIn(groupIn(menu, "Your spaces"), "host-pill")).toHaveLength(
+		1,
 	)
-	await expect(slotIn(spaceRowOf(menu, "Studio"), "host-dot")).toHaveAttribute(
-		"data-host",
-		"shared",
-	)
-	await expect(slotIn(spaceRowOf(menu, "Harbor"), "host-dot")).toHaveAttribute(
-		"data-host",
-		"down",
-	)
+	await expect(slotIn(spaceRowOf(menu, "Harbor"), "host-pill")).toBeVisible()
 	await expect(spaceRowOf(menu, "Studio")).toHaveAttribute(
 		"aria-current",
 		"true",
@@ -241,8 +240,8 @@ const expectSpaceRows = async (menu: HTMLElement, names: string[]) => {
 		slotIn(spaceRowOf(menu, "Atelier"), "settings-menu-space-invitation-pill"),
 	).toHaveTextContent("Invitation")
 	await expect(
-		slotIn(spaceRowOf(menu, "Atelier"), "settings-menu-space-invitation"),
-	).toBeVisible()
+		slotIn(spaceRowOf(menu, "Atelier"), "space-avatar").dataset.state,
+	).toBe("invitation")
 	await expect(
 		slotsIn(groupIn(menu, "Your spaces"), "settings-menu-space-current"),
 	).toHaveLength(1)
@@ -257,8 +256,8 @@ const expectSpaceRows = async (menu: HTMLElement, names: string[]) => {
 		...SPACES_ARGS.joinedSpaces,
 	].filter((space) => names.includes(space.name))) {
 		await expect(
-			slotIn(spaceRowOf(menu, name), "space-dot").style.backgroundColor,
-		).toBe(`var(--bot-blot-${colour})`)
+			slotIn(spaceRowOf(menu, name), "space-avatar").dataset.colour,
+		).toBe(colour)
 	}
 }
 
@@ -335,7 +334,7 @@ export const Spaces = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard F01: the menu in two titled groups, Your settings then Your spaces. The screen opens on Account when no entry is chosen. Check Studio marked current with its Open now pill and online dot, Northwind ending on the attention dot, Harbor's not-connected dot, Atelier's dashed square and Invitation pill, and the + creating a space by pointer or keyboard. The contrast audit is left to review: the Invitation pill wears the warning token on its own tint as the artboard draws it, 2.96:1 in the light theme.",
+					"Artboard F01: the menu in two titled groups, Your settings then Your spaces. The screen opens on Account when no entry is chosen. Check Studio marked current with its Open now pill and the shared dot on its avatar, Northwind ending on the attention dot, Harbor in greys with its Not connected pill, Atelier's dashed outline and Invitation pill, and the + creating a space by pointer or keyboard. The contrast audit is left to review: the Invitation pill wears the warning token on its own tint as the artboard draws it, 2.96:1 in the light theme.",
 			},
 		},
 	},
@@ -391,7 +390,7 @@ export const SpacesDark = meta.story({
 		docs: {
 			description: {
 				story:
-					"`Spaces` in the dark theme. Check that each host dot keeps its ring of the menu surface and the Invitation pill stays legible on its warning tint.",
+					"`Spaces` in the dark theme. Check that each presence dot keeps its cut-out from the avatar and the Invitation pill stays legible on its warning tint.",
 			},
 		},
 	},

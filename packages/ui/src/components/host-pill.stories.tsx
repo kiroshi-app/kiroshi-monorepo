@@ -22,7 +22,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The state pill a guest's title bar shows beside the space selector while the computer hosting the joined space is not answering yet, or not at all: `Connecting…` over a hollow dot, `Not connected` over the muted presence dot. A reachable host and a space shared from this computer draw no pill, the dot on the selector's square says it. The words are its only readable content; it is a plain label, not a control, and carries no tooltip. `HostDot` is the dot it shares with the selector's square and the menu rows.",
+					"The state pill a guest's title bar shows beside the space selector while the computer hosting the joined space is not answering yet, or not at all: `Connecting…` over a hollow dot, `Not connected` over the muted presence dot. A reachable host and a space shared from this computer draw no pill, the SpaceAvatar beside the name says it. The words are its only readable content; it is a plain label, not a control, and carries no tooltip. It sits beside the Space name wherever a connecting or unreachable Space is named: the selector, its menu rows, the settings menu and the Space page.",
 			},
 		},
 	},

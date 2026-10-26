@@ -40,7 +40,6 @@ import type {
 	BotMissionState,
 	BotMissionTicket,
 } from "@workspace/ui/components/bot-badge"
-import { blotTint } from "@workspace/ui/components/companion-colour"
 import {
 	companionSeed,
 	pickSilhouette,
@@ -60,6 +59,7 @@ import type {
 import { SidebarListSkeleton } from "@workspace/ui/components/sidebar-list-skeleton"
 import { NO_CLICK_MODIFIERS } from "@workspace/ui/components/sidebar-menu-row"
 import { SIDEBAR_MIN_WIDTH } from "@workspace/ui/components/sidebar-resize"
+import type { SpaceAvatarState } from "@workspace/ui/components/space-avatar"
 import { WindowControls } from "@workspace/ui/components/window-controls"
 import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 
@@ -738,9 +738,7 @@ export const WithUser = meta.story({
 		const spaceLogo = within(rail).getByRole("button", {
 			name: "Space settings",
 		})
-		await expect(slotIn(spaceLogo, "space-dot").style.backgroundColor).toBe(
-			blotTint("blue"),
-		)
+		await expect(slotIn(spaceLogo, "space-avatar").dataset.colour).toBe("blue")
 		await userEvent.click(spaceLogo)
 		await expect(args.onOpenSpaceSettings).toHaveBeenCalledTimes(1)
 		await expect(args.onOpenUserSettings).toHaveBeenCalledTimes(1)
@@ -2716,8 +2714,6 @@ const openRowMenu = async (canvasElement: HTMLElement, name: string) => {
 const LAST_SPACE_NOTE =
 	"A companion stays in at least one space. To remove a companion from its last space, delete the companion."
 
-const tintOf = (node: HTMLElement) => getComputedStyle(node).backgroundColor
-
 type Gestures = {
 	click: (node: Element) => Promise<void>
 	hover: (node: Element) => Promise<void>
@@ -2815,11 +2811,9 @@ export const RowSpaces = meta.story({
 			"false",
 			"false",
 		])
-		await expect(slotsIn(panel, "space-dot").map(tintOf)).toEqual(
-			FIVE_SPACES.map((space) =>
-				tokenColor(canvasElement, `--bot-blot-${space.colour}`),
-			),
-		)
+		await expect(
+			slotsIn(panel, "space-avatar").map((avatar) => avatar.dataset.colour),
+		).toEqual(FIVE_SPACES.map((space) => space.colour ?? undefined))
 		for (const row of rows)
 			await expect(row).not.toHaveAttribute("aria-disabled", "true")
 		await expect(within(panel).queryByText(LAST_SPACE_NOTE)).toBeNull()
@@ -3074,7 +3068,7 @@ export const RowSpaceNameTooLong = meta.story({
 		docs: {
 			description: {
 				story:
-					"A space named longer than the branch is wide. The name clips on one line with an ellipsis rather than wrapping onto a second or widening the panel past the row menu it hangs off, and the two things that carry the state — the tick slot and the tint dot — keep their full size, so a long name never costs the reader the answer they opened the branch for. The full name stays the row's accessible name, so a reader who cannot see the clip still hears it whole.",
+					"A space named longer than the branch is wide. The name clips on one line with an ellipsis rather than wrapping onto a second or widening the panel past the row menu it hangs off, and the two things that carry the state — the tick slot and the space avatar — keep their full size, so a long name never costs the reader the answer they opened the branch for. The full name stays the row's accessible name, so a reader who cannot see the clip still hears it whole.",
 			},
 		},
 	},
@@ -3084,13 +3078,13 @@ export const RowSpaceNameTooLong = meta.story({
 			name: WORDY_SPACE.name,
 		})
 		const name = within(row).getByText(WORDY_SPACE.name)
-		const dot = name.previousElementSibling as HTMLElement
+		const avatar = name.previousElementSibling as HTMLElement
 
 		await expect(name.scrollWidth).toBeGreaterThan(name.clientWidth)
 		await expect(name.getBoundingClientRect().height).toBeLessThanOrEqual(
 			Number.parseFloat(getComputedStyle(name).lineHeight) + 1,
 		)
-		await expect(dot.getBoundingClientRect().width).toBe(10)
+		await expect(avatar.getBoundingClientRect().width).toBe(14)
 		const tick = (row.firstElementChild as HTMLElement).getBoundingClientRect()
 		await expect(tick.left).toBeGreaterThanOrEqual(
 			name.getBoundingClientRect().right,
@@ -4026,22 +4020,14 @@ const TITLE_BAR_ARGS = {
 const selectorIn = (canvasElement: HTMLElement) =>
 	slotIn(titleBarIn(canvasElement), "space-switcher")
 
-const hostDotIn = (canvasElement: HTMLElement) =>
-	slotsIn(selectorIn(canvasElement), "host-dot")[0]
+const ICON_SVG = 'svg:not([data-slot="space-avatar"] svg)'
+
+const avatarIn = (canvasElement: HTMLElement) =>
+	slotIn(selectorIn(canvasElement), "space-avatar")
 
 const titleBarPaint = (canvasElement: HTMLElement) =>
 	probedStyleOf(
 		"bg-(--shell-surface,var(--background))",
-		"backgroundColor",
-		titleBarIn(canvasElement),
-	)
-
-const presencePaint = (
-	canvasElement: HTMLElement,
-	tone: "online" | "offline",
-) =>
-	probedStyleOf(
-		tone === "online" ? "bg-presence-online" : "bg-presence-offline",
 		"backgroundColor",
 		titleBarIn(canvasElement),
 	)
@@ -4054,25 +4040,20 @@ const expectOneSelector = async (canvasElement: HTMLElement) => {
 	await expect(
 		within(titleBar).queryByRole("button", { name: "Share" }),
 	).toBeNull()
-	await expect(selectorIn(canvasElement).querySelectorAll("svg")).toHaveLength(
-		1,
-	)
+	await expect(
+		selectorIn(canvasElement).querySelectorAll(ICON_SVG),
+	).toHaveLength(1)
 	await expect(within(titleBar).queryByText(/Connected$/)).toBeNull()
 }
 
-const expectDotOnSquare = async (canvasElement: HTMLElement) => {
-	const dot = hostDotIn(canvasElement)
-	const square = slotsIn(selectorIn(canvasElement), "space-dot")[0]
-	await expect(dot.parentElement).toBe(square)
-	const corner = square.getBoundingClientRect()
-	const box = dot.getBoundingClientRect()
-	await expect(box.width).toBe(7)
-	await expect(box.left + box.width / 2).toBeCloseTo(corner.right, 1)
-	await expect(box.top + box.height / 2).toBeCloseTo(corner.bottom, 1)
-	await expect(getComputedStyle(dot).boxShadow).toContain(
-		`${titleBarPaint(canvasElement)} 0px 0px 0px 2px`,
-	)
-	return getComputedStyle(dot)
+const expectSelectorAvatar = async (
+	canvasElement: HTMLElement,
+	state: SpaceAvatarState,
+) => {
+	const avatar = avatarIn(canvasElement)
+	await expect(avatar.dataset.state).toBe(state)
+	await expect(avatar.getBoundingClientRect().width).toBe(12)
+	await expect(avatar.querySelector("[data-slot=space-avatar-dot]")).toBeNull()
 }
 
 const expectNoPill = async (canvasElement: HTMLElement) => {
@@ -4110,7 +4091,7 @@ export const A1LocalSpace = meta.story({
 		await expect(selectorIn(canvasElement)).toHaveAccessibleName(
 			"Change space, Studio open",
 		)
-		await expect(hostDotIn(canvasElement)).toBeUndefined()
+		await expectSelectorAvatar(canvasElement, "local")
 		await expectNoPill(canvasElement)
 	},
 })
@@ -4130,10 +4111,7 @@ export const A2SharedSpace = meta.story({
 		await expect(selectorIn(canvasElement)).toHaveAccessibleName(
 			"Change space, Studio open, Shared",
 		)
-		const dot = await expectDotOnSquare(canvasElement)
-		await expect(dot.backgroundColor).toBe(
-			presencePaint(canvasElement, "online"),
-		)
+		await expectSelectorAvatar(canvasElement, "shared")
 		await expectNoPill(canvasElement)
 	},
 })
@@ -4157,10 +4135,7 @@ export const A3JoinedSpace = meta.story({
 		await expect(selectorIn(canvasElement)).toHaveAccessibleName(
 			"Change space, Garage open, Online",
 		)
-		const dot = await expectDotOnSquare(canvasElement)
-		await expect(dot.backgroundColor).toBe(
-			presencePaint(canvasElement, "online"),
-		)
+		await expectSelectorAvatar(canvasElement, "online")
 		await expectNoPill(canvasElement)
 	},
 })
@@ -4184,11 +4159,7 @@ export const A4Connecting = meta.story({
 		await expect(selectorIn(canvasElement)).toHaveAccessibleName(
 			"Change space, Garage open, Connecting…",
 		)
-		const dot = await expectDotOnSquare(canvasElement)
-		await expect(dot.boxShadow).toContain(
-			`${presencePaint(canvasElement, "offline")} 0px 0px 0px 1.5px inset`,
-		)
-		await expect(dot.backgroundColor).toBe(titleBarPaint(canvasElement))
+		await expectSelectorAvatar(canvasElement, "connecting")
 		const pill = await expectPillBeside(canvasElement, "Connecting…")
 		await expect(slotIn(pill, "host-dot")).toHaveAttribute(
 			"data-host",
@@ -4216,10 +4187,7 @@ export const A5NotConnected = meta.story({
 		await expect(selectorIn(canvasElement)).toHaveAccessibleName(
 			"Change space, Garage open, Not connected",
 		)
-		const dot = await expectDotOnSquare(canvasElement)
-		await expect(dot.backgroundColor).toBe(
-			presencePaint(canvasElement, "offline"),
-		)
+		await expectSelectorAvatar(canvasElement, "offline")
 		const pill = await expectPillBeside(canvasElement, "Not connected")
 		await expect(slotIn(pill, "host-dot")).toHaveAttribute("data-host", "down")
 	},
@@ -4267,7 +4235,7 @@ export const A6InvitationWaiting = meta.story({
 		await expect(style.boxShadow).toContain(
 			`${titleBarPaint(canvasElement)} 0px 0px 0px 2px`,
 		)
-		await expect(hostDotIn(canvasElement)).toBeUndefined()
+		await expectSelectorAvatar(canvasElement, "local")
 		await expectNoPill(canvasElement)
 	},
 })
@@ -4288,10 +4256,7 @@ export const A7MenuOpen = meta.story({
 	},
 	play: async ({ canvasElement, userEvent }) => {
 		const selector = selectorIn(canvasElement)
-		await expect(hostDotIn(canvasElement)).toHaveAttribute(
-			"data-host",
-			"shared",
-		)
+		await expectSelectorAvatar(canvasElement, "shared")
 		await expectNoPill(canvasElement)
 		await userEvent.click(selector)
 		const menu = await settled(await screen.findByRole("menu"))
@@ -4310,18 +4275,14 @@ export const A7MenuOpen = meta.story({
 			within(menu).queryByRole("menuitem", { name: "Share" }),
 		).toBeNull()
 		await expect(menu.firstElementChild).toHaveAttribute("role", "group")
-		for (const [name, host] of [
+		for (const [name, state] of [
 			["Studio", "shared"],
-			["Garage", "down"],
+			["Garage", "offline"],
 		]) {
 			const row = within(menu).getByRole("menuitemradio", {
 				name: new RegExp(`^${name}`),
 			})
-			await expect(slotIn(row, "host-dot")).toHaveAttribute("data-host", host)
-			await expect(slotIn(row, "host-dot").parentElement).toHaveAttribute(
-				"data-slot",
-				"space-dot",
-			)
+			await expect(slotIn(row, "space-avatar").dataset.state).toBe(state)
 		}
 		await expect(within(menu).queryByText(/Connected|@/)).toBeNull()
 	},
@@ -4372,13 +4333,13 @@ export const A8LongNameAtMinimumWidth = meta.story({
 		await expect(getComputedStyle(name).textOverflow).toBe("ellipsis")
 		await expect(name.scrollWidth).toBeGreaterThan(name.clientWidth)
 		await expect(name.getBoundingClientRect().height).toBe(16)
-		const chevron = selector.querySelector("svg")
+		const chevron = selector.querySelector(ICON_SVG)
 		if (!chevron) throw new Error("The selector draws no chevron")
 		const chevronBox = chevron.getBoundingClientRect()
 		await expect(chevronBox.width).toBe(12)
 		await expect(chevronBox.right).toBeLessThanOrEqual(frame.right)
-		await expectDotOnSquare(canvasElement)
-		await expect(hostDotIn(canvasElement).checkVisibility()).toBe(true)
+		await expectSelectorAvatar(canvasElement, "shared")
+		await expect(avatarIn(canvasElement).checkVisibility()).toBe(true)
 		await expectNoPill(canvasElement)
 	},
 })

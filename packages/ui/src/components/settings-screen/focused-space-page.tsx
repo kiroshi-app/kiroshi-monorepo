@@ -3,11 +3,15 @@
 import { type ReactNode, useId } from "react"
 import { useTranslation } from "react-i18next"
 
-import type { SpaceHost } from "@workspace/ui/components/host-pill"
+import { HostPill, type SpaceHost } from "@workspace/ui/components/host-pill"
 import { INVERSE_BUTTON_CLASS } from "@workspace/ui/components/inverse-button"
 import { SettingsField } from "@workspace/ui/components/settings-field"
+import {
+	SpaceAvatar,
+	type SpaceAvatarState,
+	spaceAvatarStateOf,
+} from "@workspace/ui/components/space-avatar"
 import type { SpaceSettingsValue } from "@workspace/ui/components/space-settings"
-import { SpaceSquare } from "@workspace/ui/components/space-switcher"
 import { Button } from "@workspace/ui/components/ui/button"
 import { formatShortMonthAndDay } from "@workspace/ui/lib/time-format"
 import { cn } from "@workspace/ui/lib/utils"
@@ -30,6 +34,11 @@ const presenceOf = (space: FocusedSpace): SpaceHost | undefined => {
 	if (space.state === "yours" && space.isShared) return "shared"
 	return undefined
 }
+
+const avatarStateOf = (space: FocusedSpace): SpaceAvatarState =>
+	space.state === "invitation"
+		? "invitation"
+		: spaceAvatarStateOf(presenceOf(space))
 
 type NotSharedCardProps = {
 	name: string
@@ -73,6 +82,7 @@ const NotSharedCard = ({ name, onShare }: NotSharedCardProps) => {
 
 type FocusedSpacePageProps = {
 	space: FocusedSpace
+	spaceId: string
 	value: SpaceSettingsValue
 	onValueChange: (value: SpaceSettingsValue) => void
 	rank?: number
@@ -84,6 +94,7 @@ type FocusedSpacePageProps = {
 
 const FocusedSpacePage = ({
 	space,
+	spaceId,
 	value,
 	onValueChange,
 	rank,
@@ -124,16 +135,19 @@ const FocusedSpacePage = ({
 				className="flex min-w-0 items-center gap-3.5"
 				data-slot="focused-space-header"
 			>
-				<SpaceSquare
+				<SpaceAvatar
 					colour={value.colour}
-					host={presenceOf(space)}
-					isInvitation={isInvitation}
-					size="header"
+					size={48}
+					spaceId={spaceId}
+					state={avatarStateOf(space)}
 				/>
 				<div className="flex min-w-0 flex-1 flex-col gap-0.5">
-					<h2 className="break-words font-semibold text-foreground text-xl/6.5 tracking-[-0.01em]">
-						{name}
-					</h2>
+					<div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+						<h2 className="min-w-0 break-words font-semibold text-foreground text-xl/6.5 tracking-[-0.01em]">
+							{name}
+						</h2>
+						{presenceOf(space) === "down" ? <HostPill host="down" /> : null}
+					</div>
 					<p
 						className="break-words text-compact/4.5 text-muted-foreground"
 						data-slot="focused-space-standing"
@@ -179,4 +193,4 @@ const FocusedSpacePage = ({
 	)
 }
 
-export { type FocusedSpace, FocusedSpacePage, presenceOf }
+export { avatarStateOf, type FocusedSpace, FocusedSpacePage }
