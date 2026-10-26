@@ -1025,6 +1025,47 @@ export const JoinedHostNotConnected = meta.story({
 	},
 })
 
+export const JoinedSessionUnavailable = meta.story({
+	globals: { theme: "dark" },
+	args: {
+		...JOINED_ARGS,
+		entry: "environment",
+		isConnected: true,
+		isSessionUnavailable: true,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A space joined from Steve, whose computer is online, that isn't the current space: no session reads its Secrets, Skills, Applications or History. Check those four entries dimmed, out of the tab order and announced as disabled with their count hidden, Secrets asked for yet the Space page shown, and Members, Companions and Leave space still reachable.",
+			},
+		},
+	},
+	play: async ({ userEvent }) => {
+		const { menu } = await expectArtboard({
+			subtitle: "Joined · hosted by Steve",
+			entries: ARTBOARD_MENU.map((label) =>
+				label === "Companions" ? "Companions4" : label,
+			),
+			pinned: "Leave space",
+		})
+		for (const label of ["Secrets", "Skills", "Applications", "History"]) {
+			const entry = entryIn(menu, label)
+			await expect(entry).toBeDisabled()
+			await expect(getComputedStyle(entry).opacity).toBe("0.4")
+		}
+		for (const label of ["Space", "Members", "Companions 4"]) {
+			await expect(entryIn(menu, label)).toBeEnabled()
+		}
+
+		entryIn(menu, "Back to your settings").focus()
+		for (const label of ["Space", "Members", "Companions 4", "Leave space"]) {
+			await userEvent.tab()
+			await expect(entryIn(menu, label)).toHaveFocus()
+		}
+	},
+})
+
 export const Invitation = meta.story({
 	globals: { theme: "dark" },
 	args: {

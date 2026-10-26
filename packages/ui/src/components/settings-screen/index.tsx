@@ -151,6 +151,7 @@ type SpaceSettingsScreenProps = SettingsScreenNavigation &
 		target: "space"
 		hostName?: string
 		isConnected?: boolean
+		isSessionUnavailable?: boolean
 		isShared?: boolean
 		rank?: number
 		onOpen?: () => void
@@ -199,6 +200,13 @@ const SESSION_OF_ENTRY: Record<string, keyof PageSessions | undefined> = {
 	[APPLICATIONS_ENTRY]: "applications",
 	[HISTORY_TAB]: "history",
 }
+
+const SESSION_BOUND_ENTRIES = new Set([
+	"environment",
+	"skills",
+	APPLICATIONS_ENTRY,
+	HISTORY_TAB,
+])
 
 const SettingsScreenLayout = ({
 	entry,
@@ -419,6 +427,7 @@ const SpaceSettingsScreen = (props: SpaceSettingsScreenProps) => {
 		spaceState: _spaceState,
 		hostName: _hostName,
 		isConnected: _isConnected,
+		isSessionUnavailable = false,
 		isShared: _isShared,
 		invitation: _invitation,
 		rank,
@@ -460,6 +469,9 @@ const SpaceSettingsScreen = (props: SpaceSettingsScreenProps) => {
 	}
 
 	const isHostUnreachable = space.state === "joined" && !space.isConnected
+	const isEntryDisabled = (value: string) =>
+		isHostUnreachable ||
+		(isSessionUnavailable && SESSION_BOUND_ENTRIES.has(value))
 
 	const focusedEntries =
 		space.state === "invitation"
@@ -469,7 +481,7 @@ const SpaceSettingsScreen = (props: SpaceSettingsScreenProps) => {
 					.map((item) =>
 						item.value === SPACE_ENTRY
 							? spaceEntry
-							: { ...item, isDisabled: isHostUnreachable },
+							: { ...item, isDisabled: isEntryDisabled(item.value) },
 					)
 
 	const pinnedAction = onDecline ? (

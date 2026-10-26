@@ -1688,6 +1688,7 @@ settings-space-settingsscreen--default-width
 settings-space-settingsscreen--invitation
 settings-space-settingsscreen--joined-host-not-connected
 settings-space-settingsscreen--joined-host-online
+settings-space-settingsscreen--joined-session-unavailable
 settings-space-settingsscreen--leaves-a-saved-application-behind
 settings-space-settingsscreen--leaves-by-the-rail-with-nothing-unsaved
 settings-space-settingsscreen--leaving-unsaved-application-edits
