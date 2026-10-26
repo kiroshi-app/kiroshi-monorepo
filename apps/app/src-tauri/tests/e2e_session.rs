@@ -489,8 +489,9 @@ impl Stored {
 			}
 			assert!(
 				Instant::now() < deadline,
-				"waited {DEADLINE:?} for {expected}, the replies held {:#?}",
-				self.replies()
+				"waited {DEADLINE:?} for {expected}, the replies held {:#?} and the lapses {:?}",
+				self.replies(),
+				self.lapses()
 			);
 			std::thread::sleep(POLL);
 		}
@@ -535,6 +536,13 @@ impl Stored {
 			.collect()
 	}
 
+	fn awaited_lapses(&self, expected: &[Lapse]) -> Vec<Lapse> {
+		self.wait_for(&format!("the lapses {expected:?}"), |stored| {
+			let lapses = stored.lapses();
+			(lapses.len() >= expected.len()).then_some(lapses)
+		})
+	}
+
 	fn reply_of(&self, turn_id: &str) -> Option<StoredMessage> {
 		self.replies().into_iter().find(|reply| reply.turn_id == turn_id)
 	}
@@ -574,7 +582,7 @@ fn a_query_that_never_answers_loses_its_lease_and_the_next_prompt_still_gets_a_w
 	assert_eq!(answered.content, RESUMED);
 	assert_eq!(answered.state, MessageState::Complete);
 	assert_eq!(stored.turn_endings(), vec![TurnOutcome::Failed, TurnOutcome::Completed]);
-	assert_eq!(stored.lapses(), vec![Lapse::InterruptUnanswered]);
+	assert_eq!(stored.awaited_lapses(&[Lapse::InterruptUnanswered]), vec![Lapse::InterruptUnanswered]);
 	stored.close();
 }
 
@@ -589,7 +597,7 @@ fn a_sidecar_silent_past_its_lease_then_replaying_its_query_changes_neither_turn
 	let failed = stored.only_reply();
 	assert_eq!(failed.content, STREAMED);
 	assert_eq!(failed.state, MessageState::Failed);
-	assert_eq!(stored.lapses(), vec![Lapse::Silent]);
+	assert_eq!(stored.awaited_lapses(&[Lapse::Silent]), vec![Lapse::Silent]);
 
 	stored.submit("t2", "p2");
 	stored.completed("t2");
@@ -607,7 +615,7 @@ fn a_sidecar_silent_past_its_lease_then_replaying_its_query_changes_neither_turn
 		permission_request(&agent_events(&stored.log.held())).is_none(),
 		"the replayed permission reached the front"
 	);
-	assert_eq!(stored.lapses(), vec![Lapse::Silent]);
+	assert_eq!(stored.awaited_lapses(&[Lapse::Silent]), vec![Lapse::Silent]);
 	stored.close();
 }
 
