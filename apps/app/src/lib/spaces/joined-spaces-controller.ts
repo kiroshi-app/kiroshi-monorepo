@@ -10,7 +10,7 @@ import { i18n } from "@workspace/ui/lib/i18n"
 
 import { heldJoinedMembersOf } from "./joined-space-members"
 import { spaceQueryKeys } from "./space-query-keys"
-import type { SpacesController } from "./spaces-controller"
+import type { SpacesController, SpacesState } from "./spaces-controller"
 
 import {
 	commands,
@@ -207,7 +207,11 @@ export const switcherSpacesOf = (
 	joinedSpaces: JoinedSpace[],
 ): SwitcherSpace[] => [
 	...spaces,
-	...joinedSpaces.map((joined) => ({ id: rowIdOf(joined), name: joined.name })),
+	...joinedSpaces.map((joined) => ({
+		id: rowIdOf(joined),
+		name: joined.name,
+		colour: joined.colour,
+	})),
 ]
 
 export const hostMarksOf = (
@@ -227,6 +231,17 @@ export const openLocalSpaceOf = (
 	spaces: Space[],
 	openRowId: string | null,
 ): Space | undefined => spaces.find((space) => space.id === openRowId)
+
+export const openSpaceColourOf = (
+	{ spaces, selectedSpaceId }: Pick<SpacesState, "spaces" | "selectedSpaceId">,
+	joined: Pick<JoinedSpacesState, "joinedSpaces" | "openId" | "departed">,
+) => {
+	const openRowId = openRowIdOf(joined, selectedSpaceId)
+	return (
+		joinedSpaceOfRow(joined.joinedSpaces, openRowId)?.colour ??
+		openLocalSpaceOf(spaces, openRowId)?.colour
+	)
+}
 
 export const rosterSpacesOf = (
 	spaces: Space[],

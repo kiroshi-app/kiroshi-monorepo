@@ -17,6 +17,7 @@ import { useEnvironment } from "../environment/use-environment"
 import {
 	openLocalSpaceOf,
 	openRowIdOf,
+	openSpaceColourOf,
 } from "../spaces/joined-spaces-controller"
 
 export const useApplicationScopes = (core: WorkspaceCore) => {
@@ -46,6 +47,7 @@ export const useApplicationScopes = (core: WorkspaceCore) => {
 	const { selectedSpaceId, isSettingsOpen: isSpaceEditing } = spaces.state
 	const openRowId = openRowIdOf(joinedSpaces.state, selectedSpaceId)
 	const selectedSpace = openLocalSpaceOf(spaces.state.spaces, openRowId)
+	const spaceTint = openSpaceColourOf(spaces.state, joinedSpaces.state)
 
 	const reopenSessions = useMemo(
 		() =>
@@ -115,6 +117,7 @@ export const useApplicationScopes = (core: WorkspaceCore) => {
 		selectedSpace,
 		selectedSpaceId,
 		serverEnvironmentSection,
+		spaceTint,
 		setOpenedMcpServer,
 		setSettingsApplication,
 		setSettingsTab,
