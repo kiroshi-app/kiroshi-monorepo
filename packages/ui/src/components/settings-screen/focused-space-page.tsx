@@ -124,7 +124,7 @@ const FocusedSpacePage = ({
 					)
 
 	return (
-		<div className="contents" data-slot="focused-space-page">
+		<div className="flex min-w-0 flex-col gap-6" data-slot="focused-space-page">
 			<div
 				className="flex min-w-0 items-center gap-3.5"
 				data-slot="focused-space-header"
