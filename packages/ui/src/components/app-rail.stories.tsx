@@ -719,7 +719,9 @@ export const UpdateWaiting = meta.story({
 	play: async (context) => {
 		await updateWaiting.play(context)
 		await expectRailGeometry(context.canvasElement)
-		await expectOnlySelected(context.canvasElement, "conversations")
+		await waitFor(() =>
+			expectOnlySelected(context.canvasElement, "conversations"),
+		)
 	},
 })
 
