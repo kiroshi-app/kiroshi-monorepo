@@ -37,6 +37,7 @@ type AppSidebarChromeProp =
 	| "onCreateSpace"
 	| "onDeclineInvitation"
 	| "onOpenPanelChange"
+	| "onOpenSpaceSettings"
 	| "onOpenUserSettings"
 	| "openSettings"
 	| "onReorderSpaces"
@@ -108,7 +109,6 @@ const AppSidebarPanel = ({
 	selectedSpaceId,
 	isSpaceSwitchingEnabled,
 	onSelectSpace,
-	onOpenSpaceSettings,
 	onOpenSearch,
 	missionsBySpaceId,
 	onSearchMissions,
@@ -147,7 +147,6 @@ const AppSidebarPanel = ({
 		onEditBot,
 		onNaming: setNaming,
 		onOpenConversationSettings,
-		onOpenSpaceSettings,
 		onPinRoster,
 		onRemoveBotFromSpace,
 		onRenameSection,

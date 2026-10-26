@@ -102,7 +102,6 @@ const bots = {
 			"Changer d’espace, {{name}} ouvert, {{host}}, {{count}} invitations",
 		open: "Ouvrir {{name}}",
 		create: "Créer un espace",
-		settings: "Ouvrir les réglages de l’espace",
 		shortcut: "⌘{{rank}}",
 		host: {
 			shared: "Partagé",

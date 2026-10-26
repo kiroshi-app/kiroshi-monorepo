@@ -105,7 +105,6 @@ const bots = {
 			"Change space, {{name}} open, {{host}}, {{count}} invitations",
 		open: "Open {{name}}",
 		create: "Create a space",
-		settings: "Open space settings",
 		shortcut: "⌘{{rank}}",
 		host: {
 			shared: "Shared",
