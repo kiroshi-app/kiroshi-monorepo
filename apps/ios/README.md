@@ -76,6 +76,14 @@ xcrun simctl shutdown "$SIMULATOR"
 xcrun simctl delete "$SIMULATOR"
 ```
 
+## Dark mode in a UI test
+
+On the iOS 27.0 simulator nothing system-wide switches the appearance an app gets: `XCUIDevice.shared.appearance = .dark` and `xcrun simctl ui "$SIMULATOR" appearance dark` both read back `dark`, yet Settings › Appearance keeps Light selected and every app stays light. A UI test that needs an appearance launches through `launch(_:in:_:)` (`KiroshiUITests/Appearance.swift`) instead. It passes `-appearance dark` (or `light`), which the Debug app reads once at launch (`ColorScheme.launchArgument`) and applies with `.preferredColorScheme` on its root view, before the first frame. Then it checks the screen: the median luminance of a screenshot under 128 is dark, and a screen that isn't the appearance asked fails the test, with the screenshot attached. `AppearanceTests` proves that a dark screen asked to be light fails. To change the appearance, launch again: never `XCUIDevice.shared.appearance`.
+
+```bash
+xcrun simctl launch --terminate-running-process "$SIMULATOR" com.kiroshi.app.ios -fixture 3.1 -appearance dark
+```
+
 ## Device keys and protocol v2
 
 The iPhone speaks protocol v2 of `docs/relay/v2-protocol.md`: every call leaves sealed and signed with its own device keys, and every answer or event is opened only once the host's signature verifies. The relay carries bytes it can neither read nor forge.
