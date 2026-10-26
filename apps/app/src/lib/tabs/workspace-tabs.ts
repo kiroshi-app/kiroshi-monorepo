@@ -24,6 +24,7 @@ import {
 	type SpaceTabs,
 	selectTab,
 	spaceTabsOn,
+	type Tab,
 	type TabEntry,
 	tabShowing,
 	unpinTab,
@@ -88,6 +89,8 @@ const isNamingAnAbsentRow = (
 	isPresent: (id: string) => boolean,
 ) => rowIdsNamedBy(href).some((id) => !isPresent(id))
 
+const missionOfTab = (tab: Tab) => pageOf(currentHrefOf(tab)).thread.mission
+
 export const createWorkspaceTabs = (
 	initialHref = EMPTY_LIST_HREF,
 ): WorkspaceTabs => {
@@ -146,10 +149,9 @@ export const createWorkspaceTabs = (
 	}
 
 	const missionIdsIn = (spaceId: string) =>
-		(store.getState().bySpace[spaceId]?.tabs ?? []).flatMap((tab) => {
-			const { mission } = pageOf(currentHrefOf(tab)).thread
-			return mission === undefined ? [] : [mission]
-		})
+		(store.getState().bySpace[spaceId]?.tabs ?? [])
+			.map(missionOfTab)
+			.filter((mission) => mission !== undefined)
 
 	const dropGoneMissions = async (
 		spaceId: string,
@@ -161,7 +163,7 @@ export const createWorkspaceTabs = (
 		}
 		changeIn(spaceId, (space) =>
 			dropTabsWhere(space, (tab) =>
-				goneIds.includes(pageOf(currentHrefOf(tab)).thread.mission ?? ""),
+				goneIds.some((id) => id === missionOfTab(tab)),
 			),
 		)
 	}
