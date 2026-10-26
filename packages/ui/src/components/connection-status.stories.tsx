@@ -18,8 +18,6 @@ const CONNECTION_STATUS_STATES = listExhaustively<ConnectionStatusState>({
 	crashed: true,
 })
 
-const READY_DOT = "bg-success"
-
 const E3_DARK_CONNECTED = "rgb(95, 191, 133)"
 
 const expectReadyDot = async (
@@ -30,7 +28,7 @@ const expectReadyDot = async (
 		'[data-slot="connection-status"] > [aria-hidden="true"]',
 	)
 	if (!dot) throw new Error("No dot in the connection status.")
-	await expect(dot).toHaveClass(READY_DOT)
+	await expect(dot).toHaveClass("bg-success")
 	await expect(getComputedStyle(dot).backgroundColor).toBe(backgroundColor)
 }
 
