@@ -33,17 +33,17 @@ const STUDIO: JoinedSpace = {
 const SPACE_SETTINGS = i18n.t("bots:rail.spaceSettings")
 const SETTINGS_RAILS: SettingsPanels["railSettings"][] = ["space", "you"]
 
-type RailHarnessProps = {
-	selectedSpaceId: string
-	railSettings?: SettingsPanels["railSettings"]
-	navigation?: Partial<SettingsNavigation>
-}
-
 const NO_INVITATIONS = {
 	rows: [],
 	accept: () => undefined,
 	decline: () => undefined,
 	sweepWithdrawn: () => undefined,
+}
+
+type RailHarnessProps = {
+	selectedSpaceId: string
+	railSettings?: SettingsPanels["railSettings"]
+	navigation?: Partial<SettingsNavigation>
 }
 
 const RailHarness = ({
@@ -61,7 +61,7 @@ const RailHarness = ({
 				departed: null,
 			},
 			controller: {} as JoinedSpacesController,
-			hosts: { active: STUDIO.id, connections: {} },
+			hosts: { active: null, connections: {} },
 		},
 		NO_INVITATIONS,
 	)
