@@ -504,6 +504,8 @@ conversation-routines-routinespanel--missions-read-failed
 conversation-routines-routinespanel--no-mission
 conversation-routines-routinespanel--on-shell-surface-closed
 conversation-routines-routinespanel--on-shell-surface-closed-dark
+conversation-routines-routinespanel--on-shell-surface-insets
+conversation-routines-routinespanel--on-shell-surface-insets-dark
 conversation-routines-routinespanel--on-shell-surface-open
 conversation-routines-routinespanel--on-shell-surface-open-dark
 conversation-routines-routinespanel--on-shell-surface-tinted

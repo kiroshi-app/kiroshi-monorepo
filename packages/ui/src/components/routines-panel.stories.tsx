@@ -1411,6 +1411,118 @@ export const OnShellSurfaceClosedDark = meta.story({
 	},
 })
 
+type InlineInset = { start: number; end: number }
+
+type ContentInset = InlineInset & { top: number }
+
+type ThreadInsets = {
+	card: { top: number; end: number; bottom: number }
+	transcript: ContentInset
+	foot: ContentInset
+}
+
+const lengthOf = (value: string) => Number.parseFloat(value)
+
+const contentInsetIn = (frame: DOMRect, element: HTMLElement) => {
+	const box = element.getBoundingClientRect()
+	const style = getComputedStyle(element)
+	return {
+		start: box.left + lengthOf(style.paddingInlineStart) - frame.left,
+		end: frame.right - box.right + lengthOf(style.paddingInlineEnd),
+		top: box.top + lengthOf(style.paddingTop) - frame.top,
+	}
+}
+
+const composerFootIn = (layout: HTMLElement) => {
+	const foot = Array.from(layout.children).find((child) =>
+		child.querySelector("textarea"),
+	)
+	if (!(foot instanceof HTMLElement)) {
+		throw new Error("This thread draws no composer foot")
+	}
+	return foot
+}
+
+const threadInsetsIn = (canvasElement: HTMLElement): ThreadInsets => {
+	const [shellCard, threadCard] = cardsIn(canvasElement)
+	const card = shellCard.getBoundingClientRect()
+	const frame = threadCard.getBoundingClientRect()
+	const layout = slotIn(threadCard, "chat-layout")
+	return {
+		card: {
+			top: card.top,
+			end: window.innerWidth - card.right,
+			bottom: window.innerHeight - card.bottom,
+		},
+		transcript: contentInsetIn(
+			frame,
+			slotIn(layout, "message-scroller-content"),
+		),
+		foot: contentInsetIn(frame, composerFootIn(layout)),
+	}
+}
+
+const panelBodyInsetIn = (panel: HTMLElement): InlineInset => {
+	const surface = panelSurfaceIn(panel)
+	const edges = surface.getBoundingClientRect()
+	const edge = getComputedStyle(surface)
+	const { start, end } = contentInsetIn(
+		edges,
+		slotIn(surface, "sidebar-content"),
+	)
+	return {
+		start: start - lengthOf(edge.borderInlineStartWidth),
+		end: end - lengthOf(edge.borderInlineEndWidth),
+	}
+}
+
+const expectOneInsetRuleOnShell = async (
+	canvasElement: HTMLElement,
+	userEvent: { click: (element: Element) => Promise<void> },
+) => {
+	const canvas = within(canvasElement)
+	const closed = threadInsetsIn(canvasElement)
+
+	await userEvent.click(canvas.getByRole("button", { name: "Toggle activity" }))
+	const panel = await canvas.findByRole("complementary", { name: "Activity" })
+	await expectShellSurfaceAround(canvasElement)
+
+	const opened = threadInsetsIn(canvasElement)
+	await expect(opened).toEqual(closed)
+	await expect(panelBodyInsetIn(panel)).toEqual({
+		start: opened.foot.start,
+		end: opened.foot.end,
+	})
+}
+
+const ONE_INSET_RULE_ON_SHELL =
+	"The thread opens its panel inside the shell, and nothing it already drew moves: the shell card keeps its distance from the top, the trailing and the bottom edges of the window, the transcript keeps its inset from the thread card and the composer its own, and the panel body takes from the panel surface, inside its divider, the same inline inset the composer takes from the thread card. Check the conversation and the composer hold still as the panel opens, and that the activity rows line up with the composer's edge on their own surface. Pick `OnShellSurfaceOpen` for the frames the two surfaces draw. `apps/app/src/App.tsx:935` is the shell, and `apps/app/src/components/thread-routines.tsx:107` the panel inside it."
+
+export const OnShellSurfaceInsets = meta.story({
+	args: { isOpen: false },
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: { description: { story: ONE_INSET_RULE_ON_SHELL } },
+	},
+	render: renderInShell,
+	play: async ({ canvasElement, userEvent }) => {
+		await expectOneInsetRuleOnShell(canvasElement, userEvent)
+	},
+})
+
+export const OnShellSurfaceInsetsDark = meta.story({
+	args: { isOpen: false },
+	globals: { theme: "dark" },
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: { description: { story: ONE_INSET_RULE_ON_SHELL } },
+	},
+	render: renderInShell,
+	play: async ({ canvasElement, userEvent }) => {
+		await expectOneInsetRuleOnShell(canvasElement, userEvent)
+	},
+})
+
 export const OnShellSurfaceTinted = meta.story({
 	args: { isOpen: true },
 	parameters: {

@@ -76,7 +76,7 @@ const PANEL_SHELL =
 
 const PANEL_SURFACE = "relative min-h-0 border-s border-shell-divider bg-card"
 
-const PANEL_BODY = "gap-4 px-2 pt-1 pb-2"
+const PANEL_BODY = "gap-4 px-(--shell-inset) pt-1 pb-2"
 
 const ROUTINE_SKELETON_LIST =
 	"gap-2 [--skeleton-title:--spacing(28)] [--skeleton-sub:--spacing(24)] [&>:nth-child(3n+2)]:[--skeleton-title:--spacing(35)] [&>:nth-child(3n+2)]:[--skeleton-sub:--spacing(32)] [&>:nth-child(3n)]:[--skeleton-title:--spacing(24.5)] [&>:nth-child(3n)]:[--skeleton-sub:--spacing(27.5)]"
