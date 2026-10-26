@@ -1,5 +1,7 @@
 import { useCallback, useMemo } from "react"
 
+import type { AppRailSettings } from "@workspace/ui/components/app-rail"
+
 import type { ApplicationScopes } from "./use-application-scopes"
 import type { RosterView } from "./use-roster-view"
 import type { WorkspaceCore } from "./use-workspace-core"
@@ -15,9 +17,16 @@ import { applicationToOpenIn } from "../applications/settings-target"
 import { useHistoryView } from "../bots/use-history-view"
 import { toPluginSkills } from "../plugins/plugin-skills"
 
-const ACCOUNT_TAB = "account"
+export const ACCOUNT_TAB = "account"
 
 const MEMBERS_TAB = "members"
+
+type SettingsOpening = { setSettingsOpen: (isSettingsOpen: boolean) => void }
+
+const showSettingsOf = (shown: SettingsOpening, hidden: SettingsOpening) => {
+	hidden.setSettingsOpen(false)
+	shown.setSettingsOpen(true)
+}
 
 type SettingsPanelsInput = {
 	core: WorkspaceCore
@@ -86,6 +95,28 @@ export const useSettingsPanels = ({
 		setSettingsApplication(undefined)
 	}
 
+	const openSpaceSettings = () => {
+		closeSettingsTab()
+		showSettingsOf(spaces.controller, user.controller)
+	}
+
+	const openUserSettings = () => {
+		closeSettingsTab()
+		showSettingsOf(user.controller, spaces.controller)
+	}
+
+	const closeSettings = () => {
+		closeSettingsTab()
+		spaces.controller.setSettingsOpen(false)
+		user.controller.setSettingsOpen(false)
+	}
+
+	const openSettings: AppRailSettings | undefined = user.state.isSettingsOpen
+		? "you"
+		: isSpaceEditing && selectedSpaceId
+			? "space"
+			: undefined
+
 	// biome-ignore lint/correctness/useExhaustiveDependencies: the setters come from useState in useApplicationScopes and never change
 	const openApplicationsOf = useCallback(
 		(scope: ReopenedScope, server?: string) => {
@@ -97,11 +128,11 @@ export const useSettingsPanels = ({
 				openedServerScope(server ?? null, ownerOfScope(scope, selectedSpaceId)),
 			)
 			if (scope.kind === "user") {
-				user.controller.setSettingsOpen(true)
+				showSettingsOf(user.controller, spaces.controller)
 			} else if (scope.kind === "companion") {
 				roster.controller.edit(scope.id)
 			} else {
-				spaces.controller.setSettingsOpen(true)
+				showSettingsOf(spaces.controller, user.controller)
 			}
 		},
 		[roster.controller, spaces.controller, user.controller, selectedSpaceId],
@@ -109,14 +140,14 @@ export const useSettingsPanels = ({
 
 	const openAccountSettings = () => {
 		setSettingsTab(ACCOUNT_TAB)
-		user.controller.setSettingsOpen(true)
+		showSettingsOf(user.controller, spaces.controller)
 	}
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: the setter comes from useState in useApplicationScopes and never changes
 	const openSpaceMembers = useCallback(() => {
 		setSettingsTab(MEMBERS_TAB)
-		spaces.controller.setSettingsOpen(true)
-	}, [spaces.controller])
+		showSettingsOf(spaces.controller, user.controller)
+	}, [spaces.controller, user.controller])
 
 	const conversationApplications = useMemo(
 		() => ({
@@ -136,11 +167,15 @@ export const useSettingsPanels = ({
 	return {
 		applicationToOpenOn,
 		botHistory,
+		closeSettings,
 		closeSettingsTab,
 		companionSkills,
 		conversationApplications,
 		openAccountSettings,
+		openSettings,
 		openSpaceMembers,
+		openSpaceSettings,
+		openUserSettings,
 		personSkills,
 		sessionApplications,
 		spaceHistory,

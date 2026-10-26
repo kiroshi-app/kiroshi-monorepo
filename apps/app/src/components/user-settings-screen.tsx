@@ -1,5 +1,7 @@
+import type { ReactNode } from "react"
+
 import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
-import { UserSettingsDialog } from "@workspace/ui/components/user-settings-dialog"
+import { SettingsScreen } from "@workspace/ui/components/settings-screen"
 import type { AboutFieldsProps } from "@workspace/ui/components/user-settings-dialog/about-fields"
 
 import { signOutLeavingOf, useAccount } from "@/lib/account/use-account"
@@ -9,26 +11,31 @@ import { isRelaySpace } from "@/lib/spaces/joined-spaces-controller"
 import { diagnosticsActions } from "@/lib/user/diagnostics-actions"
 import { toNotificationChange } from "@/lib/user/user-settings"
 import type { ApplicationScopes } from "@/lib/workspace/use-application-scopes"
-import type { SettingsPanels } from "@/lib/workspace/use-settings-panels"
+import {
+	ACCOUNT_TAB,
+	type SettingsPanels,
+} from "@/lib/workspace/use-settings-panels"
 import type { WorkspaceCore } from "@/lib/workspace/use-workspace-core"
 import type { WorkspaceOverlay } from "@/lib/workspace/use-workspace-overlay"
 import { USER_OWNER } from "@/lib/workspace/user-owner"
 
-type UserSettingsHostProps = {
+type UserSettingsScreenProps = {
 	about: AboutFieldsProps | undefined
 	core: WorkspaceCore
 	overlay: WorkspaceOverlay
 	panels: SettingsPanels
+	rail: ReactNode
 	scopes: ApplicationScopes
 }
 
-export const UserSettingsHost = ({
+export const UserSettingsScreen = ({
 	about,
 	core,
 	overlay,
 	panels,
+	rail,
 	scopes,
-}: UserSettingsHostProps) => {
+}: UserSettingsScreenProps) => {
 	const {
 		account: watchedAccount,
 		joinedSpaces,
@@ -37,11 +44,12 @@ export const UserSettingsHost = ({
 		userMcpServers,
 	} = core
 	const { userSettings } = overlay
-	const { applicationToOpenOn, closeSettingsTab, personSkills, userHistory } =
+	const { applicationToOpenOn, closeSettings, personSkills, userHistory } =
 		panels
 	const {
 		serverEnvironmentSection,
 		setOpenedMcpServer,
+		setSettingsTab,
 		settingsTab,
 		userApplications,
 	} = scopes
@@ -54,13 +62,16 @@ export const UserSettingsHost = ({
 		),
 	)
 
-	const devices = useYourDevices(watchedAccount.state, {
-		isShown: user.state.isSettingsOpen,
-	})
+	const devices = useYourDevices(watchedAccount.state, { isShown: true })
 
 	return (
 		<>
-			<UserSettingsDialog
+			<SettingsScreen
+				target="user"
+				entry={settingsTab ?? ACCOUNT_TAB}
+				onEntryChange={setSettingsTab}
+				onBack={closeSettings}
+				rail={rail}
 				about={about}
 				account={{ ...accountPanel, devices }}
 				applications={{
@@ -79,11 +90,6 @@ export const UserSettingsHost = ({
 				}}
 				diagnostics={diagnosticsActions}
 				history={userHistory}
-				tab={settingsTab}
-				onClose={() => {
-					closeSettingsTab()
-					user.controller.setSettingsOpen(false)
-				}}
 				language={preferences.language}
 				onLanguageChange={(next) => {
 					void user.controller.setLanguage(next)
@@ -97,7 +103,6 @@ export const UserSettingsHost = ({
 						void user.controller.setNotification(notification)
 					}
 				}}
-				open={user.state.isSettingsOpen}
 				{...personSkills}
 				value={userSettings}
 			/>

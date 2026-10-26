@@ -8,6 +8,7 @@ import { probeRender } from "@workspace/ui/lib/render-probe"
 import { AppDialogs } from "@/components/app-dialogs"
 import { StartupScreen } from "@/components/startup-screen"
 import { WorkspaceBody } from "@/components/workspace-body"
+import { WorkspaceSettings } from "@/components/workspace-settings"
 import { WorkspaceSidebar } from "@/components/workspace-sidebar"
 import { ConversationApplicationsContext } from "@/lib/applications/use-conversation-installs"
 import { SessionApplicationsContext } from "@/lib/applications/use-session-application"
@@ -23,6 +24,9 @@ import {
 	useOpenJoinedHost,
 	useSwitcherSpaces,
 } from "@/lib/spaces/use-joined-spaces"
+import { aboutFieldsOf } from "@/lib/updater/about-fields"
+import { useRunningVersion } from "@/lib/updater/use-running-version"
+import { useWhatsNew } from "@/lib/updater/use-whats-new"
 import { useApplicationScopes } from "@/lib/workspace/use-application-scopes"
 import { useRosterLines } from "@/lib/workspace/use-roster-lines"
 import { useRosterView } from "@/lib/workspace/use-roster-view"
@@ -86,6 +90,15 @@ export function App() {
 
 	const newDevice = useNewDevice(core.account)
 
+	const runningVersion = useRunningVersion()
+	const whatsNew = useWhatsNew({ user: core.user, runningVersion })
+	const about = aboutFieldsOf({
+		updater: drivers.updater,
+		user: core.user,
+		runningVersion,
+		onWhatsNew: whatsNew.openFromAbout,
+	})
+
 	const { preferences, roster, spaces } = core
 	const isOpenSpaceRostered =
 		rosterView.rosteredSpaceId === scopes.openRowId &&
@@ -119,81 +132,86 @@ export function App() {
 		)
 	}
 
+	const railProps = {
+		collapsedSectionIds,
+		core,
+		drivers,
+		overlay,
+		panels,
+		rosterLines,
+		rosterView,
+		sidebarMissions,
+		sidebarTab,
+	}
+
 	return (
 		<>
-			<WorkspaceShell
-				spaceTint={scopes.selectedSpace?.colour}
-				width={preferences.sidebarWidth ?? undefined}
-				onWidthChange={overlay.changeSidebarWidth}
-				isResizable={isSidebarResizable()}
-				sidebar={
-					<WorkspaceSidebar
-						collapsedSectionIds={collapsedSectionIds}
-						core={core}
-						drivers={drivers}
-						overlay={overlay}
-						panels={panels}
-						rosterLines={rosterLines}
-						rosterView={rosterView}
-						sidebarMissions={sidebarMissions}
-						sidebarTab={sidebarTab}
-						switcher={switcher}
-					/>
-				}
-			>
-				<OpenJoinedHostContext.Provider value={joinedHost}>
-					<ConversationSeatingContext.Provider
-						value={rosterLines.conversationSeating}
-					>
-						<CompanionMenuProvider menuFor={companionMenu}>
-							<CompanionSelectProvider onSelect={selectCompanion}>
-								<SessionApplicationsContext.Provider
-									value={panels.sessionApplications}
-								>
-									<ConversationApplicationsContext.Provider
-										value={panels.conversationApplications}
+			{panels.openSettings ? (
+				<WorkspaceSettings about={about} scopes={scopes} {...railProps} />
+			) : (
+				<WorkspaceShell
+					spaceTint={scopes.selectedSpace?.colour}
+					width={preferences.sidebarWidth ?? undefined}
+					onWidthChange={overlay.changeSidebarWidth}
+					isResizable={isSidebarResizable()}
+					sidebar={<WorkspaceSidebar {...railProps} switcher={switcher} />}
+				>
+					<OpenJoinedHostContext.Provider value={joinedHost}>
+						<ConversationSeatingContext.Provider
+							value={rosterLines.conversationSeating}
+						>
+							<CompanionMenuProvider menuFor={companionMenu}>
+								<CompanionSelectProvider onSelect={selectCompanion}>
+									<SessionApplicationsContext.Provider
+										value={panels.sessionApplications}
 									>
-										<ThreadAuthorshipContext.Provider value={authorship}>
-											<WorkspaceBody
-												activityPanel={overlay.activityPanel}
-												attachments={core.attachments}
-												bot={rosterView.selected}
-												bots={rosterView.bots}
-												chat={core.chat}
-												conversation={rosterView.selectedConversation}
-												conversationRuntimes={core.conversationRuntimes}
-												drafts={core.drafts}
-												haveSpacesFailed={spaces.state.hasFailedToLoad}
-												isConversationSettingsOpen={
-													overlay.isThreadConversationSettingsOpen
-												}
-												isMissionsPanelOpen={sidebarTab.openTab === "missions"}
-												isOverlayOpen={overlay.isOverlayOpen}
-												isSettingsOpen={overlay.isThreadSettingsOpen}
-												landings={core.messageLandings}
-												missions={core.openedMission}
-												onboarding={
-													preferences.firstRunDone
-														? undefined
-														: drivers.onboarding
-												}
-												onOpenConversationSettings={
-													roster.controller.editConversation
-												}
-												onRetrySpaces={loadSpaces}
-												onToggleSettings={overlay.toggleSettings}
-												readerName={preferences.displayName}
-												signIn={drivers.signIn}
-												spaceId={rosteredHostSpaceId}
-											/>
-										</ThreadAuthorshipContext.Provider>
-									</ConversationApplicationsContext.Provider>
-								</SessionApplicationsContext.Provider>
-							</CompanionSelectProvider>
-						</CompanionMenuProvider>
-					</ConversationSeatingContext.Provider>
-				</OpenJoinedHostContext.Provider>
-			</WorkspaceShell>
+										<ConversationApplicationsContext.Provider
+											value={panels.conversationApplications}
+										>
+											<ThreadAuthorshipContext.Provider value={authorship}>
+												<WorkspaceBody
+													activityPanel={overlay.activityPanel}
+													attachments={core.attachments}
+													bot={rosterView.selected}
+													bots={rosterView.bots}
+													chat={core.chat}
+													conversation={rosterView.selectedConversation}
+													conversationRuntimes={core.conversationRuntimes}
+													drafts={core.drafts}
+													haveSpacesFailed={spaces.state.hasFailedToLoad}
+													isConversationSettingsOpen={
+														overlay.isThreadConversationSettingsOpen
+													}
+													isMissionsPanelOpen={
+														sidebarTab.openTab === "missions"
+													}
+													isOverlayOpen={overlay.isOverlayOpen}
+													isSettingsOpen={overlay.isThreadSettingsOpen}
+													landings={core.messageLandings}
+													missions={core.openedMission}
+													onboarding={
+														preferences.firstRunDone
+															? undefined
+															: drivers.onboarding
+													}
+													onOpenConversationSettings={
+														roster.controller.editConversation
+													}
+													onRetrySpaces={loadSpaces}
+													onToggleSettings={overlay.toggleSettings}
+													readerName={preferences.displayName}
+													signIn={drivers.signIn}
+													spaceId={rosteredHostSpaceId}
+												/>
+											</ThreadAuthorshipContext.Provider>
+										</ConversationApplicationsContext.Provider>
+									</SessionApplicationsContext.Provider>
+								</CompanionSelectProvider>
+							</CompanionMenuProvider>
+						</ConversationSeatingContext.Provider>
+					</OpenJoinedHostContext.Provider>
+				</WorkspaceShell>
+			)}
 			<AppDialogs
 				core={core}
 				overlay={overlay}
@@ -201,7 +219,7 @@ export function App() {
 				rosterLines={rosterLines}
 				rosterView={rosterView}
 				scopes={scopes}
-				updater={drivers.updater}
+				whatsNewDialog={whatsNew.dialog}
 			/>
 		</>
 	)
