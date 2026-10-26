@@ -34,6 +34,8 @@ pub mod spaces;
 pub mod termination;
 #[cfg(test)]
 mod test_app;
+#[cfg(test)]
+mod test_log;
 pub mod updates;
 pub mod user;
 mod window_controls;

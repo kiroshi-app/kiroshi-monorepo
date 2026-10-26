@@ -8,8 +8,9 @@ use tauri::async_runtime::JoinHandle;
 use tauri::{AppHandle, Manager, Runtime};
 use tokio::time::{interval, MissedTickBehavior};
 
-use crate::account::cloud::{Cloud, InvitationCallError, JoinedInstance};
+use crate::account::cloud::{Cloud, InvitationCallError, JoinedInstance, ListedInvitation};
 use crate::account::session::{self, AccountSession};
+use crate::db::repositories::joined_spaces::HostListing;
 use crate::events::{self, INVITATION_CHANGED};
 use crate::joined_spaces;
 use crate::joined_spaces::contract::{JoinedSpace, JoinedSpaceError};
@@ -20,7 +21,7 @@ const INVITATIONS_EVERY: Duration = Duration::from_secs(30);
 pub struct Invitations {
 	cloud: Cloud,
 	every: Duration,
-	last: Mutex<Option<Vec<Invitation>>>,
+	last: Mutex<Option<Vec<ListedInvitation>>>,
 	poll: Mutex<Option<JoinHandle<()>>>,
 	turn: tokio::sync::Mutex<()>,
 }
@@ -41,7 +42,7 @@ impl Invitations {
 		Self { every, ..self }
 	}
 
-	fn last(&self) -> MutexGuard<'_, Option<Vec<Invitation>>> {
+	fn last(&self) -> MutexGuard<'_, Option<Vec<ListedInvitation>>> {
 		self.last.lock().unwrap_or_else(PoisonError::into_inner)
 	}
 
@@ -49,21 +50,15 @@ impl Invitations {
 		self.poll.lock().unwrap_or_else(PoisonError::into_inner)
 	}
 
-	fn invited(&self, invitation_id: &str) -> Option<JoinedInstance> {
-		self.last().iter().flatten().find(|invitation| invitation.id == invitation_id).map(
-			|invitation| JoinedInstance {
-				instance_id: invitation.instance_id.clone(),
-				name: invitation.instance_name.clone(),
-			},
-		)
+	fn listed(&self, invitation_id: &str) -> Option<ListedInvitation> {
+		self.last().iter().flatten().find(|listed| listed.invitation.id == invitation_id).cloned()
 	}
 
-	fn inviter_of(&self, invitation_id: &str) -> Option<String> {
-		self.last()
-			.iter()
-			.flatten()
-			.find(|invitation| invitation.id == invitation_id)
-			.map(|invitation| invitation.inviter_email.clone())
+	fn invited(&self, invitation_id: &str) -> Option<JoinedInstance> {
+		self.listed(invitation_id).map(|listed| JoinedInstance {
+			instance_id: listed.invitation.instance_id,
+			name: listed.invitation.instance_name,
+		})
 	}
 }
 
@@ -79,7 +74,7 @@ pub async fn read<R: Runtime>(app: &AppHandle<R>) -> Result<Vec<Invitation>, Inv
 	if invitations.last().as_ref() != Some(&listed) {
 		announced(app, &invitations, listed.clone());
 	}
-	Ok(listed)
+	Ok(listed.into_iter().map(|listed| listed.invitation).collect())
 }
 
 pub async fn accept<R: Runtime>(
@@ -87,9 +82,19 @@ pub async fn accept<R: Runtime>(
 	invitation_id: String,
 ) -> Result<JoinedSpace, JoinedSpaceError> {
 	let accepted = accepted(app, &invitation_id).await?;
-	let inviter_email = app.state::<Invitations>().inviter_of(&invitation_id);
-	let joined =
-		joined_spaces::join::joined(app, accepted.instance_id, accepted.name, inviter_email).await;
+	let invitation = app.state::<Invitations>().listed(&invitation_id);
+	let (inviter_email, listing) = match invitation {
+		Some(listed) => (Some(listed.invitation.inviter_email), listed.listing),
+		None => (None, HostListing::default()),
+	};
+	let joined = joined_spaces::join::joined(
+		app,
+		accepted.instance_id,
+		accepted.name,
+		inviter_email,
+		listing,
+	)
+	.await;
 	reread(app).await;
 	joined
 }
@@ -214,9 +219,14 @@ fn bearer_of<R: Runtime>(app: &AppHandle<R>) -> Result<String, InvitationError> 
 	}
 }
 
-fn announced<R: Runtime>(app: &AppHandle<R>, invitations: &Invitations, listed: Vec<Invitation>) {
-	*invitations.last() = Some(listed.clone());
-	let changed = InvitationsChanged { invitations: listed };
+fn announced<R: Runtime>(
+	app: &AppHandle<R>,
+	invitations: &Invitations,
+	listed: Vec<ListedInvitation>,
+) {
+	let shown = listed.iter().map(|listed| listed.invitation.clone()).collect();
+	*invitations.last() = Some(listed);
+	let changed = InvitationsChanged { invitations: shown };
 	if let Err(error) = events::emit(app, INVITATION_CHANGED, changed) {
 		eprintln!("the invitations did not reach the front: {error}");
 	}

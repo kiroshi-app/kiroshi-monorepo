@@ -215,7 +215,7 @@ fn commands<R: Runtime>() -> Commands<R> {
 		sections::commands::bot_move_to_section,
 		spaces::commands::space_list,
 		spaces::commands::space_create::<tauri::Wry>,
-		spaces::commands::space_update,
+		spaces::commands::space_update::<tauri::Wry>,
 		spaces::commands::space_reorder,
 		spaces::commands::space_delete::<tauri::Wry>,
 		spaces::commands::space_export::<tauri::Wry>,

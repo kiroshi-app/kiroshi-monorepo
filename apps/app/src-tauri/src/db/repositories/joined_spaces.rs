@@ -2,9 +2,10 @@ use std::sync::LazyLock;
 
 use rusqlite::types::Type;
 use rusqlite::{Connection, TransactionBehavior};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 
+use super::conversations::AvatarBlot;
 use super::settings::Settings;
 use crate::db::{Access, DatabaseError};
 
@@ -24,6 +25,24 @@ pub struct JoinedSpace {
 	pub name: String,
 	#[serde(default, skip_serializing_if = "Option::is_none")]
 	pub inviter_email: Option<String>,
+	#[serde(flatten)]
+	pub listing: HostListing,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HostListing {
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub host_name: Option<String>,
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub host_email: Option<String>,
+	#[serde(
+		default,
+		skip_serializing_if = "Option::is_none",
+		serialize_with = "colour_named",
+		deserialize_with = "known_colour"
+	)]
+	pub colour: Option<AvatarBlot>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -78,6 +97,7 @@ impl JoinedSpacesRepository {
 						held.remote_space_id =
 							candidate.remote_space_id.or(held.remote_space_id.take());
 						held.inviter_email = candidate.inviter_email.or(held.inviter_email.take());
+						held.listing = candidate.listing;
 						held.clone()
 					}
 					None => {
@@ -156,6 +176,20 @@ fn write_in(connection: &Connection, joined: &[JoinedSpace]) -> Result<(), Datab
 	SETTINGS.write(connection, None, JOINED_SPACES_KEY, &stored)
 }
 
+fn colour_named<S: Serializer>(
+	colour: &Option<AvatarBlot>,
+	serializer: S,
+) -> Result<S::Ok, S::Error> {
+	colour.map(AvatarBlot::named).serialize(serializer)
+}
+
+fn known_colour<'de, D: Deserializer<'de>>(
+	deserializer: D,
+) -> Result<Option<AvatarBlot>, D::Error> {
+	let named = Option::<Value>::deserialize(deserializer)?;
+	Ok(named.as_ref().and_then(Value::as_str).and_then(AvatarBlot::parse))
+}
+
 fn unreadable_list() -> DatabaseError {
 	rusqlite::Error::FromSqlConversionFailure(0, Type::Text, UNREADABLE_LIST.into()).into()
 }
@@ -175,6 +209,7 @@ mod tests {
 			remote_space_id: None,
 			name: format!("name-of-{id}"),
 			inviter_email: None,
+			listing: HostListing::default(),
 		}
 	}
 
@@ -225,6 +260,40 @@ mod tests {
 		let raw: Value =
 			serde_json::from_str(&read_raw(&database).await.expect("held")).expect("json");
 		assert_eq!(raw[0]["inviterEmail"], "owner@example.com");
+	}
+
+	#[tokio::test]
+	async fn a_rejoin_replaces_the_host_listing_and_a_colour_outside_the_palette_reads_as_none() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let repository = database.joined_spaces();
+		let listing = HostListing {
+			host_name: Some("Ann".to_owned()),
+			host_email: Some("ann@example.com".to_owned()),
+			colour: Some(AvatarBlot::Cyan),
+		};
+		let listed = JoinedSpace { listing: listing.clone(), ..a_relay_space("x", "instance-1") };
+
+		let joined = repository.join(listed).await.expect("the listed join");
+		let raw: Value =
+			serde_json::from_str(&read_raw(&database).await.expect("held")).expect("json");
+		let cleared = repository.join(a_relay_space("y", "instance-1")).await.expect("the rejoin");
+		write_raw(
+			&database,
+			r#"[{"id":"relay","instanceId":"instance-1","remoteSpaceId":null,"name":"n","hostName":"Ann","colour":"chartreuse"}]"#.to_owned(),
+		)
+		.await;
+
+		assert_eq!(joined.listing, listing);
+		assert_eq!(
+			(&raw[0]["hostName"], &raw[0]["hostEmail"], &raw[0]["colour"]),
+			(&Value::from("Ann"), &Value::from("ann@example.com"), &Value::from("cyan"))
+		);
+		assert_eq!(cleared.listing, HostListing::default());
+		assert_eq!(
+			repository.list().await.expect("the unknown colour reads")[0].listing,
+			HostListing { host_name: Some("Ann".to_owned()), host_email: None, colour: None }
+		);
 	}
 
 	#[tokio::test]

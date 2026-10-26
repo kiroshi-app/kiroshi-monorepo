@@ -1,7 +1,9 @@
 use serde::Serialize;
 use tauri::{AppHandle, Manager, Runtime};
 
-use super::contract::{colour_of, hosted_by, JoinedSpace, JoinedSpaceConnection, JoinedSpaceError};
+use super::contract::{
+	colour_shown, hosted_by, JoinedSpace, JoinedSpaceConnection, JoinedSpaceError,
+};
 use super::relay::{self, RelayGuests};
 use super::{deep_link, held};
 use crate::conversations::contract::AvatarBlot;
@@ -58,10 +60,11 @@ pub(super) async fn announce_change<R: Runtime>(
 	let database = ready(&state)?;
 	let held = database.joined_spaces().find(id.clone()).await?;
 	let roster = database.joined_space_members().members(id.clone()).await?;
-	let inviter_email = held.and_then(|joined| joined.inviter_email);
+	let (listing, inviter_email) =
+		held.map(|joined| (joined.listing, joined.inviter_email)).unwrap_or_default();
 	let changed = JoinedSpaceChanged {
-		hosted_by: hosted_by(&roster, inviter_email),
-		colour: colour_of(&id),
+		hosted_by: hosted_by(&listing, inviter_email, &roster),
+		colour: colour_shown(&listing, &id),
 		id,
 	};
 	events::emit(app, JOINED_SPACE_CHANGED, changed)
@@ -146,7 +149,9 @@ mod tests {
 	use tauri::test::{mock_builder, MockRuntime};
 	use tauri::{App, Listener, Manager};
 
-	use super::super::contract::{JoinedSpaceState, JoinedSpaceWait, JoinedSpaceWaitReason};
+	use super::super::contract::{
+		colour_of, JoinedSpaceState, JoinedSpaceWait, JoinedSpaceWaitReason,
+	};
 	use super::super::wait_reason::{wait_of, Stall};
 	use super::*;
 	use crate::account::session::AccountSession;
@@ -293,6 +298,7 @@ mod tests {
 			remote_space_id: Some("remote-1".to_owned()),
 			name: "Studio".to_owned(),
 			inviter_email: None,
+			listing: Default::default(),
 		};
 		let database = app.state::<db::DatabaseState>();
 		let joined = ready(&database).expect("the database").joined_spaces().join(candidate).await;
@@ -350,6 +356,7 @@ mod tests {
 			remote_space_id: None,
 			name: "Studio".to_owned(),
 			inviter_email: Some("owner@example.com".to_owned()),
+			listing: Default::default(),
 		};
 		let state = app.state::<db::DatabaseState>();
 		let database = ready(&state).expect("the database");

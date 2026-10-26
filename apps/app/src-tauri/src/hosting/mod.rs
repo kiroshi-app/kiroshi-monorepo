@@ -28,6 +28,7 @@ use tokio::sync::watch;
 
 use crate::account::cloud::Cloud;
 use crate::account::session::AccountSession;
+use crate::db::repositories::conversations::AvatarBlot;
 use crate::db::repositories::space_hosting::Registration;
 use crate::db::DatabaseState;
 use crate::environment::contract::EnvError;
@@ -188,7 +189,12 @@ async fn begun<R: Runtime>(
 	entered(app, &space_id, instance_id.as_deref(), state.clone());
 	if let (HostingState::Connecting, Some(local)) = (&state, &hosting.local) {
 		let (stop, stopped) = watch::channel(false);
-		let hosted = Hosted { space_id: space_id.clone(), name: registration.name, instance_id };
+		let hosted = Hosted {
+			space_id: space_id.clone(),
+			name: registration.name,
+			colour: registration.colour,
+			instance_id,
+		};
 		let handle =
 			tauri::async_runtime::spawn(relay::hosted(app.clone(), hosted, local.clone(), stopped));
 		hosting.hosts().entry(space_id).or_default().run = Some(Run { stop, handle });
@@ -274,6 +280,32 @@ pub async fn signed_out<R: Runtime>(app: &AppHandle<R>) {
 	space_ids.extend(flagged(app).await);
 	for space_id in space_ids {
 		entered(app, &space_id, None, HostingState::NeedsSignIn);
+	}
+}
+
+pub async fn described<R: Runtime>(
+	app: &AppHandle<R>,
+	instance_id: &str,
+	name: &str,
+	colour: Option<AvatarBlot>,
+) {
+	let Some(hosting) = app.try_state::<Hosting>() else {
+		return;
+	};
+	let bearer = match app.state::<AccountSession>().bearer() {
+		Ok(Some(bearer)) => bearer,
+		Ok(None) => {
+			return log::warn!("instance {instance_id} was not described to the relay: signed out")
+		}
+		Err(error) => {
+			return log::warn!(
+				"instance {instance_id} was not described to the relay: the account session store failed: {error:?}"
+			)
+		}
+	};
+	if let Err(failure) = hosting.cloud.describe_instance(&bearer, instance_id, name, colour).await
+	{
+		log::warn!("instance {instance_id} was not described to the relay: {failure}");
 	}
 }
 

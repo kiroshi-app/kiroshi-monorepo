@@ -636,13 +636,15 @@ fn while_pending_no_member_socket_opens() {
 				remote_space_id: None,
 				name: "Remote".to_owned(),
 				inviter_email: None,
+				listing: Default::default(),
 			})
 			.await
 			.expect("the joined space is stored");
 
 		let connected = joined_space_connect(harness.handle(), joined.id.clone()).await;
 		let accepted_join =
-			join::joined(&harness.handle(), "i1".to_owned(), joined.name, None).await;
+			join::joined(&harness.handle(), "i1".to_owned(), joined.name, None, Default::default())
+				.await;
 
 		assert_eq!(connected.err(), Some(JoinedSpaceError::HostOffline { id: joined.id }));
 		assert!(

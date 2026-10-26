@@ -42,14 +42,23 @@ pub async fn space_create<R: Runtime>(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn space_update(
+pub async fn space_update<R: Runtime>(
+	app: AppHandle<R>,
 	state: State<'_, db::DatabaseState>,
 	id: String,
 	name: String,
 	colour: Option<AvatarBlot>,
 ) -> Result<Space, SpaceError> {
 	let database = ready(&state)?;
+	let previous = database.space_hosting().registration(id.clone()).await?;
 	let updated = database.spaces().update(id, name, colour.map(Into::into)).await?;
+	let is_relabelled = (&previous.name, previous.colour) != (&updated.name, updated.colour);
+	if let Some(instance_id) = previous.instance_id.filter(|_| is_relabelled) {
+		let (name, colour) = (updated.name.clone(), updated.colour);
+		tauri::async_runtime::spawn(async move {
+			hosting::described(&app, &instance_id, &name, colour).await;
+		});
+	}
 	let hosted = database.space_hosting().hosted_space_ids().await?;
 	Ok(Space::presented(updated, &hosted))
 }

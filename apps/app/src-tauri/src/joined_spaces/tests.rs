@@ -990,6 +990,7 @@ fn a_join_completes_while_a_reconciliation_waits_on_a_429_pause() {
 				OTHER_INSTANCE.to_owned(),
 				Some("Harbour".into()),
 				None,
+				Default::default(),
 			),
 		)
 		.await;
@@ -1047,6 +1048,7 @@ fn an_unlisted_space_is_evicted_with_its_departure_reason_once_the_429_pause_end
 				OTHER_INSTANCE.to_owned(),
 				Some("Harbour".into()),
 				None,
+				Default::default(),
 			),
 		)
 		.await;
@@ -1076,7 +1078,7 @@ fn an_unlisted_space_joined_again_during_the_429_pause_is_kept() {
 
 		let again = tokio::time::timeout(
 			PATIENCE,
-			relay::joined(member.app.handle(), INSTANCE.to_owned(), None, None),
+			relay::joined(member.app.handle(), INSTANCE.to_owned(), None, None, Default::default()),
 		)
 		.await;
 		paused.reconciliation.await.expect("the reconciliation ends");
@@ -1163,7 +1165,13 @@ fn a_join_a_leave_and_a_sign_out_complete_while_the_instance_list_never_answers(
 		let app = member.app.handle();
 		let other = tokio::time::timeout(
 			PATIENCE,
-			relay::joined(app, OTHER_INSTANCE.to_owned(), Some("Harbour".into()), None),
+			relay::joined(
+				app,
+				OTHER_INSTANCE.to_owned(),
+				Some("Harbour".into()),
+				None,
+				Default::default(),
+			),
 		)
 		.await;
 		let left = tokio::time::timeout(PATIENCE, relay::left(app, &joined.id)).await;
@@ -1191,9 +1199,11 @@ fn a_join_and_a_leave_answer_while_the_relay_never_answers_a_sign_out() {
 		.await;
 
 		let app = member.app.handle();
-		let again =
-			tokio::time::timeout(PATIENCE, relay::joined(app, INSTANCE.to_owned(), None, None))
-				.await;
+		let again = tokio::time::timeout(
+			PATIENCE,
+			relay::joined(app, INSTANCE.to_owned(), None, None, Default::default()),
+		)
+		.await;
 		let left = tokio::time::timeout(PATIENCE, relay::left(app, &joined.id)).await;
 		sign_out.abort();
 
