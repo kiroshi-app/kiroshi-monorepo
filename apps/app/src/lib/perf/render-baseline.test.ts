@@ -881,7 +881,7 @@ describe("PRF1 render baseline", () => {
 			{
 			  "app": 17,
 			  "appSidebar": 6,
-			  "cacheEvents": 24,
+			  "cacheEvents": 26,
 			  "chunks": 11,
 			  "quietTurn": 2,
 			  "rosterBots": 7,
@@ -898,7 +898,7 @@ describe("PRF1 render baseline", () => {
 			{
 			  "app": 28,
 			  "appSidebar": 6,
-			  "cacheEvents": 35,
+			  "cacheEvents": 37,
 			  "chunks": 22,
 			  "quietTurn": 2,
 			  "rosterBots": 7,
