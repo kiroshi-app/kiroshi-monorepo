@@ -1,4 +1,4 @@
-import { expect, fn, screen } from "storybook/test"
+import { expect, fn, screen, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
@@ -12,6 +12,7 @@ import {
 	MissionHeader,
 	type MissionHeaderProps,
 } from "@workspace/ui/components/mission-header"
+import { MissionHeaderSkeleton } from "@workspace/ui/components/mission-header-skeleton"
 import {
 	LONG_MISSION_STATUS,
 	MISSION_BOT,
@@ -86,6 +87,56 @@ export const Default = meta.story({
 		await expect(args.onBack).toHaveBeenCalled()
 		await expect(slotsIn(canvasElement, "mission-status")).toHaveLength(0)
 		await expect(slotsIn(canvasElement, "mission-activity")).toHaveLength(0)
+	},
+})
+
+const heightOf = (element: HTMLElement) =>
+	element.getBoundingClientRect().height
+
+export const Loading = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The header of a mission thread while the mission is still on its way, drawn above the loaded header it stands in for, in the same width. Check that the two bands keep the height and the edges of the loaded ones so nothing jumps when the mission lands, that the back control is already live, and that the avatar, the objective, the ticket line and the opening time are shapes with no text, no pill, no tool mark and no activity line. `apps/app/src/components/mission-thread-screen.tsx:146` renders the mission-loading branch of a thread.",
+			},
+		},
+	},
+	render: (args) => (
+		<div className="flex w-[36rem] max-w-full flex-col gap-4">
+			<section data-holds="loading">
+				<MissionHeaderSkeleton onBack={args.onBack} />
+			</section>
+			<section data-holds="loaded">
+				<MissionHeader {...args} />
+			</section>
+		</div>
+	),
+	play: async ({ args, canvasElement, userEvent }) => {
+		const loading = holderOf(canvasElement, "loading")
+		const loaded = holderOf(canvasElement, "loaded")
+		const skeleton = slotIn(loading, "mission-header-skeleton")
+		const header = slotIn(loaded, "mission-header")
+		const skeletonTicketBand = slotIn(loading, "mission-ticket-band-skeleton")
+		const ticketBand = slotIn(loaded, "mission-ticket-band")
+
+		await expect(heightOf(skeleton)).toBe(heightOf(header))
+		await expect(heightOf(slotIn(loading, "app-header"))).toBe(
+			heightOf(slotIn(loaded, "app-header")),
+		)
+		await expect(heightOf(skeletonTicketBand)).toBe(heightOf(ticketBand))
+		await expect(skeletonTicketBand.className).toBe(ticketBand.className)
+		await expect(skeleton).toHaveAttribute("aria-busy", "true")
+		await expect(skeleton).toHaveTextContent("")
+		for (const shape of slotsIn(skeleton, "skeleton")) {
+			await expect(shape.closest('[aria-hidden="true"]')).not.toBeNull()
+		}
+
+		await userEvent.click(
+			within(loading).getByRole("button", { name: "Back to the conversation" }),
+		)
+
+		await expect(args.onBack).toHaveBeenCalledOnce()
 	},
 })
 

@@ -355,6 +355,7 @@ conversation-missions-missioneventrow--with-pull-request-link
 conversation-missions-missioneventrow--without-a-bot
 conversation-missions-missionheader--default
 conversation-missions-missionheader--empty
+conversation-missions-missionheader--loading
 conversation-missions-missionheader--long-content
 conversation-missions-missionheader--long-status
 conversation-missions-missionheader--pull-request-only
