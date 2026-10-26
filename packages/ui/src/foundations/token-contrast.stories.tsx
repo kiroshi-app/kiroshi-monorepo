@@ -50,11 +50,6 @@ const USER_BUBBLE_MUTED_PAIR: TokenPair = {
 	foreground: "--color-muted-foreground",
 }
 
-const DESTRUCTIVE_TINT_PAIR: TokenPair = {
-	background: "--destructive-tint",
-	foreground: "--destructive-tint-foreground",
-}
-
 const TINTED_USER_BUBBLE_PAIRS = [USER_BUBBLE_PAIR, USER_BUBBLE_MUTED_PAIR]
 
 const WARNING_PAIRS: TokenPair[] = [
@@ -68,7 +63,10 @@ const TOKEN_PAIRS = [
 	...SUFFIXED_PAIRS,
 	...CROSS_FAMILY_PAIRS,
 	USER_BUBBLE_PAIR,
-	DESTRUCTIVE_TINT_PAIR,
+	{
+		background: "--destructive-tint",
+		foreground: "--destructive-tint-foreground",
+	},
 ]
 
 const pairKey = (scheme: ThemeName, pair: TokenPair) =>
