@@ -1109,6 +1109,7 @@ navigation-settingspushedpage--measured-wide
 navigation-settingsrail--default
 navigation-settingsrail--icons-only
 navigation-settingsrail--scrolling-panel
+navigation-settingsrail--scrolling-panel-handle-with-motion
 navigation-settingsrail--selected-beside-idle
 navigation-settingsrail--with-back
 navigation-sidebar--expanded

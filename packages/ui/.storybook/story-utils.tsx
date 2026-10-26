@@ -240,6 +240,23 @@ export const expectHeadingFont = async (element: Element) => {
 	await expect(getComputedStyle(element).fontWeight).toBe("600")
 }
 
+const COLOUR_PROPERTY =
+	/^(all|.*color|fill|stroke|box-shadow|background|border(-(top|right|bottom|left|block|inline)(-(start|end))?)?|outline|text-decoration)$/
+
+export const animatedTransitionsOf = (element: HTMLElement) => {
+	const style = getComputedStyle(element)
+	const durations = style.transitionDuration.split(", ")
+
+	return style.transitionProperty
+		.split(", ")
+		.filter((_, index) => durations[index % durations.length] !== "0s")
+}
+
+export const colourTransitionsOf = (element: HTMLElement) =>
+	animatedTransitionsOf(element).filter((property) =>
+		COLOUR_PROPERTY.test(property),
+	)
+
 export const hasOverlayScrollbars = (element: HTMLElement) =>
 	OverlayScrollbars.valid(OverlayScrollbars(element))
 

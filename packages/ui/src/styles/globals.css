@@ -197,7 +197,6 @@
 			border-radius: 9999px;
 			background-color: transparent;
 			background-clip: content-box;
-			transition: background-color 200ms ease-out;
 		}
 		@media (hover: hover) {
 			&:hover::-webkit-scrollbar-thumb {
@@ -206,12 +205,6 @@
 			&:hover::-webkit-scrollbar-thumb:hover {
 				background-color: var(--scrollbar-hover);
 			}
-		}
-	}
-
-	@media (prefers-reduced-motion: reduce) {
-		*::-webkit-scrollbar-thumb {
-			transition: none;
 		}
 	}
 }
@@ -227,9 +220,17 @@
 	--os-handle-bg-active: var(--scrollbar-hover);
 }
 
+.os-scrollbar-horizontal .os-scrollbar-handle {
+	transition-property: opacity, height;
+}
+
+.os-scrollbar-vertical .os-scrollbar-handle {
+	transition-property: opacity, width;
+}
+
 @media (prefers-reduced-motion: reduce) {
 	.os-scrollbar,
-	.os-scrollbar-handle {
+	.os-scrollbar .os-scrollbar-handle {
 		transition: none;
 	}
 }
@@ -248,7 +249,6 @@
 		border-radius: 9999px;
 		background-color: transparent;
 		background-clip: content-box;
-		transition: background-color 200ms ease-out;
 	}
 	@media (hover: hover) {
 		&:hover::-webkit-scrollbar-thumb {
@@ -256,11 +256,6 @@
 		}
 		&:hover::-webkit-scrollbar-thumb:hover {
 			background-color: var(--scrollbar-hover);
-		}
-	}
-	@media (prefers-reduced-motion: reduce) {
-		&::-webkit-scrollbar-thumb {
-			transition: none;
 		}
 	}
 }

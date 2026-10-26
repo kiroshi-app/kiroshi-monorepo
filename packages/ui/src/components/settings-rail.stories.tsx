@@ -4,9 +4,13 @@ import { expect, screen, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
+	animatedTransitionsOf,
+	colourTransitionsOf,
 	hasOverlayScrollbars,
+	isInBrowserRunner,
 	slotsIn,
 	tokenStyleIn,
+	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
 import { FillIcons, type Icon, Icons } from "@workspace/ui/components/icons"
 import {
@@ -320,5 +324,36 @@ export const ScrollingPanel = meta.story({
 			expect(short.scrollHeight).toBeLessThanOrEqual(short.clientHeight),
 		)
 		await expect(short.clientWidth).toBe(contentWidth)
+	},
+})
+
+export const ScrollingPanelHandleWithMotion = meta.story({
+	tags: ["test-only"],
+	render: renderScrollingPanels,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same scrolling panel for a reader who left the motion preference at its default, the one case the reduced-motion test browser cannot see. The pointer cannot rest on the handle under the test runner, so the play reads the transition the OverlayScrollbars handle carries into its hover: check that the handle still fades and grows, and that its colour deepens in a single frame.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const panel = canvas.getByRole("tabpanel")
+
+		await waitFor(() => expect(hasOverlayScrollbars(panel)).toBe(true))
+		const handle = panel.querySelector<HTMLElement>(
+			".os-scrollbar-vertical .os-scrollbar-handle",
+		)
+		if (!handle) throw new Error("The overlay scrollbar handle is not mounted.")
+
+		if (!isInBrowserRunner()) return
+		await withMotionAllowed(async () => {
+			await expect(
+				window.matchMedia("(prefers-reduced-motion: no-preference)").matches,
+			).toBe(true)
+			await expect(colourTransitionsOf(handle)).toEqual([])
+			await expect(animatedTransitionsOf(handle)).toEqual(["opacity", "width"])
+		})
 	},
 })
