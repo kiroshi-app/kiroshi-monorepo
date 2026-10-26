@@ -1,0 +1,47 @@
+name: Tauri system packages
+description: Installs the system packages the Tauri crates link against, from a cache of their archives keyed on the package list and the runner image.
+
+runs:
+  using: composite
+  steps:
+    - name: Key the package cache on the package list and the runner image
+      id: packages
+      shell: bash
+      env:
+        PACKAGES: libwebkit2gtk-4.1-dev
+      run: |
+        : "${ImageOS:?the runner names no image}" "${ImageVersion:?the runner names no image version}"
+        echo "list=$PACKAGES" >> "$GITHUB_OUTPUT"
+        echo "key=tauri-packages-$ImageOS-$ImageVersion-$RUNNER_ARCH-${PACKAGES// /+}" >> "$GITHUB_OUTPUT"
+
+    - name: Restore the package archives
+      id: archives
+      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      with:
+        path: ${{ runner.temp }}/tauri-packages/*.deb
+        key: ${{ steps.packages.outputs.key }}
+
+    - name: Download the package archives from the Ubuntu mirror
+      if: steps.archives.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        ARCHIVES: ${{ runner.temp }}/tauri-packages
+        PACKAGES: ${{ steps.packages.outputs.list }}
+      run: |
+        sudo rm -f /etc/apt/sources.list.d/google-chrome.*
+        sudo apt-get update
+        mkdir -p "$ARCHIVES/partial"
+        sudo apt-get install -y --no-install-recommends --download-only -o Dir::Cache::Archives="$ARCHIVES" $PACKAGES
+
+    - name: Save the package archives for the next run
+      if: steps.archives.outputs.cache-hit != 'true'
+      uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      with:
+        path: ${{ runner.temp }}/tauri-packages/*.deb
+        key: ${{ steps.packages.outputs.key }}
+
+    - name: Install the package archives
+      shell: bash
+      env:
+        ARCHIVES: ${{ runner.temp }}/tauri-packages
+      run: sudo apt-get install -y --no-install-recommends "$ARCHIVES"/*.deb
