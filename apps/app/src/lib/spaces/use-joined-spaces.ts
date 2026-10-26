@@ -1,6 +1,8 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useEffect, useMemo } from "react"
 
+import type { Space } from "@workspace/ui/components/space"
+
 import {
 	createJoinedSpacesController,
 	type DepartedSpace,
@@ -57,6 +59,12 @@ export const useJoinedSpaces = (
 	return { state, controller, hosts }
 }
 
+const selectedSpaceOf = (
+	spaces: Space[],
+	selectedSpaceId: string | null,
+): Space | undefined =>
+	spaces.find((space) => space.id === selectedSpaceId) ?? spaces[0]
+
 export const useSwitcherSpaces = (
 	{ spaces, selectedSpaceId }: Pick<SpacesState, "spaces" | "selectedSpaceId">,
 	{ state, hosts }: JoinedSpaces,
@@ -65,13 +73,16 @@ export const useSwitcherSpaces = (
 	const { joinedSpaces, openId, departed } = state
 	const { connections } = hosts
 	const sharedBySpaceId = useSharedSpaces(spaces)
-	return useMemo(
-		() => ({
-			spaces: switcherSpacesOf(spaces, joinedSpaces),
-			selectedSpaceId: openRowIdOf(
-				{ joinedSpaces, openId, departed },
-				selectedSpaceId,
-			),
+	return useMemo(() => {
+		const switcherSpaces = switcherSpacesOf(spaces, joinedSpaces)
+		const openRowId = openRowIdOf(
+			{ joinedSpaces, openId, departed },
+			selectedSpaceId,
+		)
+		return {
+			spaces: switcherSpaces,
+			selectedSpaceId: openRowId,
+			selectedSpace: selectedSpaceOf(switcherSpaces, openRowId),
 			hostBySpaceId: {
 				...sharedMarksOf(sharedBySpaceId),
 				...hostMarksOf(joinedSpaces, connections),
@@ -83,18 +94,17 @@ export const useSwitcherSpaces = (
 			onSpaceSwitcherOpenChange: (isOpen: boolean) => {
 				if (!isOpen) invitations.sweepWithdrawn()
 			},
-		}),
-		[
-			spaces,
-			selectedSpaceId,
-			joinedSpaces,
-			openId,
-			departed,
-			connections,
-			sharedBySpaceId,
-			invitations,
-		],
-	)
+		}
+	}, [
+		spaces,
+		selectedSpaceId,
+		joinedSpaces,
+		openId,
+		departed,
+		connections,
+		sharedBySpaceId,
+		invitations,
+	])
 }
 
 const hostWaitOf = (joined: JoinedSpace): HostWait | undefined =>
