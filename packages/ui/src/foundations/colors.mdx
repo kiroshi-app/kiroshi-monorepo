@@ -29,7 +29,7 @@ Colour tokens are declared in `tokens.json`: a light value, emitted on `:root`, 
 
 ## Feedback
 
-`--destructive` has no `-foreground` pair — components use it as a text colour or as an alpha background (`bg-destructive/10 text-destructive`), never as a solid surface with text on top.
+`--destructive-tint` and `--destructive-tint-foreground` are the selected and hovered fill of a destructive row and the label and icon on top, at 4.5:1 or more in both themes: the Danger zone entry of the settings menu and rail. `--destructive` alone stays a text colour, never a surface with text on top.
 
 <ColorTokenGrid tokens={FEEDBACK_TOKENS} />
 

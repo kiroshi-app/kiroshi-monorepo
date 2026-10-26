@@ -2,10 +2,7 @@ import type { ReactNode } from "react"
 import { expect, fn, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import {
-	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
-	slotIn,
-} from "@workspace/storybook/story-utils"
+import { slotIn } from "@workspace/storybook/story-utils"
 import { MARKED_APPLICATIONS } from "@workspace/ui/components/plugin-settings/applications.fixtures"
 import {
 	SettingsMenu,
@@ -231,11 +228,23 @@ export const DangerSelected = meta.story({
 		),
 	},
 	parameters: {
-		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:
 					"Danger zone selected. Check that it keeps the destructive tone on its own tinted fill rather than the neutral one.",
+			},
+		},
+	},
+})
+
+export const DangerSelectedDark = meta.story({
+	globals: { theme: "dark" },
+	args: DangerSelected.input.args,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Danger zone selected in the dark theme. Check that its label and icon keep the red of the unselected entry on a dark red fill, apart from the neutral fill of the other entries.",
 			},
 		},
 	},

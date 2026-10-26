@@ -26,7 +26,7 @@ const RAIL_ITEM_CLASS =
 
 const DANGER_RAIL_ITEM_CLASS = cn(
 	RAIL_ITEM_CLASS,
-	"text-destructive hover:bg-destructive/10 hover:text-destructive data-active:bg-destructive/10 data-active:text-destructive",
+	"text-destructive hover:bg-destructive-tint hover:text-destructive-tint-foreground data-active:bg-destructive-tint data-active:text-destructive-tint-foreground",
 )
 
 const SETTINGS_PANEL_CLASS =

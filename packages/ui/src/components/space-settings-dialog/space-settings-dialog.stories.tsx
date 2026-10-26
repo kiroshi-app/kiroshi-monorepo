@@ -107,7 +107,6 @@ const meta = preview.meta({
 	component: SpaceSettingsDialog,
 	parameters: {
 		layout: "fullscreen",
-		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				component:
@@ -408,6 +407,7 @@ export const History = meta.story({
 
 export const Danger = meta.story({
 	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:
@@ -537,6 +537,7 @@ export const JoinedSpace = meta.story({
 		members: <MembersPanel {...MEMBERS_PANEL} space={JOINED_SPACE.name} />,
 	},
 	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:
@@ -605,6 +606,7 @@ export const JoinedSpace = meta.story({
 export const JoinedDanger = meta.story({
 	args: { ...JOINED_ARGS, tab: "danger" },
 	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:
@@ -668,6 +670,7 @@ const JoinedPanels = () => {
 export const JoinedThemes = meta.story({
 	globals: { theme_layout: "side-by-side" },
 	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:
@@ -764,7 +767,10 @@ const shareFailedStory = (
 			</>
 		),
 	],
-	parameters: { docs: { description: { story } } },
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: { description: { story } },
+	},
 	play: async () => {
 		const panel = await membersPanelIn()
 		await expect(shareSwitchIn(panel)).not.toBeChecked()
@@ -1034,6 +1040,7 @@ export const MembersI3 = meta.story({
 		),
 	],
 	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:
@@ -1204,6 +1211,7 @@ export const MembersI5 = meta.story({
 		),
 	],
 	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:
@@ -1232,6 +1240,7 @@ export const MembersRemoveConfirm = meta.story({
 		removing: MAYA,
 	}),
 	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:
@@ -2023,6 +2032,7 @@ export const MembersMemberViewWithInvitation = meta.story({
 export const MembersMemberViewRemoveConfirm = meta.story({
 	args: memberViewArgs({ removing: MAYA }),
 	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:

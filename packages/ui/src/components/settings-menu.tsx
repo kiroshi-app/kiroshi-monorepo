@@ -26,7 +26,7 @@ const BACK = `${ROW} rounded-control font-medium text-compact text-muted-foregro
 const ENTRY = `${ROW} rounded-control text-muted-foreground text-sm hover:bg-muted hover:text-foreground aria-[current=page]:bg-muted aria-[current=page]:font-medium aria-[current=page]:text-foreground data-open:font-medium data-open:text-foreground`
 
 const DANGER_ENTRY =
-	"text-destructive hover:bg-destructive/10 hover:text-destructive aria-[current=page]:bg-destructive/10 aria-[current=page]:text-destructive"
+	"text-destructive hover:bg-destructive-tint hover:text-destructive-tint-foreground aria-[current=page]:bg-destructive-tint aria-[current=page]:text-destructive-tint-foreground"
 
 const SUB_ENTRY = `${ROW} rounded-lg text-compact text-muted-foreground leading-4.5 hover:bg-muted hover:text-foreground aria-[current=page]:bg-muted aria-[current=page]:font-medium aria-[current=page]:text-foreground`
 
