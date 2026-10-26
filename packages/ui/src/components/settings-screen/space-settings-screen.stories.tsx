@@ -234,6 +234,22 @@ export const MembersDark = meta.story({
 	},
 })
 
+export const MembersTinted = meta.story({
+	args: { spaceTint: "blue" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"`Members` in a blue Space. Check that the shell wears the Space's tint, like the conversations shell of the same Space.",
+			},
+		},
+	},
+	play: async () => {
+		const shell = screen.getByRole("main").parentElement as HTMLElement
+		await expect(shell).toHaveAttribute("data-space-tint", "blue")
+	},
+})
+
 export const Companions = meta.story({
 	globals: { theme: "dark" },
 	args: {

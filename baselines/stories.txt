@@ -1689,6 +1689,7 @@ settings-space-settingsscreen--long-name
 settings-space-settingsscreen--maximum-width
 settings-space-settingsscreen--members
 settings-space-settingsscreen--members-dark
+settings-space-settingsscreen--members-tinted
 settings-space-settingsscreen--minimum-width
 settings-space-settingsscreen--short-window
 settings-space-settingsscreen--yours-not-shared
