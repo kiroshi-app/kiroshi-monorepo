@@ -231,6 +231,17 @@ const TitleBarTabs = ({
 	const unpinned = tabs.filter((tab) => !tab.isPinned)
 	const tabWidth = overflowTabs.length > 0 ? TAB_WIDTH_AT_FLOOR : TAB_WIDTH
 	const hasDivider = pinned.length > 0 && unpinned.length > 0
+	const tabItem = (tab: TitleBarTab, width: string) => (
+		<TitleBarTabItem
+			isActive={tab.id === activeTabId}
+			key={tab.id}
+			onCloseOtherTabs={onCloseOtherTabs}
+			onPinTab={onPinTab}
+			onUnpinTab={onUnpinTab}
+			tab={tab}
+			width={width}
+		/>
+	)
 
 	return (
 		<div className={STRIP} data-slot="title-bar-tabs">
@@ -260,17 +271,7 @@ const TitleBarTabs = ({
 				value={activeTabId ?? null}
 			>
 				<Tabs.List aria-label={t("titleBar.tabs")} className={TAB_ROW}>
-					{pinned.map((tab) => (
-						<TitleBarTabItem
-							isActive={tab.id === activeTabId}
-							key={tab.id}
-							onCloseOtherTabs={onCloseOtherTabs}
-							onPinTab={onPinTab}
-							onUnpinTab={onUnpinTab}
-							tab={tab}
-							width={PINNED_WIDTH}
-						/>
-					))}
+					{pinned.map((tab) => tabItem(tab, PINNED_WIDTH))}
 					{hasDivider ? (
 						<span
 							aria-hidden="true"
@@ -278,17 +279,7 @@ const TitleBarTabs = ({
 							data-slot="title-bar-pinned-divider"
 						/>
 					) : null}
-					{unpinned.map((tab) => (
-						<TitleBarTabItem
-							isActive={tab.id === activeTabId}
-							key={tab.id}
-							onCloseOtherTabs={onCloseOtherTabs}
-							onPinTab={onPinTab}
-							onUnpinTab={onUnpinTab}
-							tab={tab}
-							width={tabWidth}
-						/>
-					))}
+					{unpinned.map((tab) => tabItem(tab, tabWidth))}
 				</Tabs.List>
 				<div className={cn(TAB_ROW, CLOSE_LAYER)}>
 					{pinned.map((tab) => (
