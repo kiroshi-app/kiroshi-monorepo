@@ -25,10 +25,7 @@ import { Button } from "@workspace/ui/components/ui/button"
 import { RadioGroup } from "@workspace/ui/components/ui/radio-group"
 import { Tabs, TabsList, TabsTrigger } from "@workspace/ui/components/ui/tabs"
 import { useCopyText } from "@workspace/ui/hooks/use-copy-text"
-import {
-	DIGIT_KEY_LIMIT,
-	useDigitKeys,
-} from "@workspace/ui/hooks/use-digit-keys"
+import { useDigitKeys } from "@workspace/ui/hooks/use-digit-keys"
 import { useFocusFirstInvalid } from "@workspace/ui/hooks/use-focus-first-invalid"
 import { usePendingSubmit } from "@workspace/ui/hooks/use-pending-submit"
 import { cn } from "@workspace/ui/lib/utils"
@@ -49,8 +46,12 @@ const QUESTION_MONO_LINE_CLASS = "truncate font-mono text-compact leading-5"
 const QUESTION_LINK_ROW_CLASS =
 	"flex items-center gap-2 rounded-control border border-input bg-muted py-1 pe-1 ps-3 has-[input:focus-visible]:border-ring has-[input:focus-visible]:ring-3 has-[input:focus-visible]:ring-ring/30"
 
-const QUESTION_ROW_CLASS =
-	"flex w-full cursor-pointer items-start gap-3 rounded-control p-3 text-start focus-visible:outline-hidden focus-visible:ring-3 focus-visible:ring-ring/30 data-opening-focus:focus:outline-hidden data-opening-focus:focus:ring-3 data-opening-focus:focus:ring-ring/30"
+const QUESTION_ROW_FADE_CLASS = "duration-150 motion-reduce:transition-none"
+
+const QUESTION_ROW_CLASS = cn(
+	QUESTION_ROW_FADE_CLASS,
+	"flex w-full cursor-pointer items-start gap-3 rounded-control p-3 text-start transition-[color,background-color,translate] focus-visible:outline-hidden focus-visible:ring-3 focus-visible:ring-ring/30 data-opening-focus:focus:outline-hidden data-opening-focus:focus:ring-3 data-opening-focus:focus:ring-ring/30",
+)
 
 const QUESTION_PILL_CLASS =
 	"h-8 rounded-full font-medium text-compact leading-4"
@@ -169,9 +170,6 @@ const focusOnOpen = (card: HTMLFormElement) => {
 
 const isOptionRow = (target: EventTarget) =>
 	target instanceof HTMLElement && target.dataset.slot === OPTION_ROW_SLOT
-
-const digitRangeOf = (count: number) =>
-	count === 1 ? "1" : `1\u2013${Math.min(count, DIGIT_KEY_LIMIT)}`
 
 const ToolQuestion = ({
 	questions,
@@ -304,23 +302,6 @@ const ToolQuestion = ({
 		if (event.key !== "Enter" || event.shiftKey) return
 		event.preventDefault()
 		sendOrAdvance()
-	}
-
-	const hintOf = () => {
-		if (item.isNotice) return null
-		const typesOwnAnswer = item.entry || draftOf(item.question).text !== ""
-		if (!hasDigitKeys || typesOwnAnswer || item.options.length === 0) {
-			return waiting ? t("toolQuestion.hint.next") : t("toolQuestion.hint.send")
-		}
-		const range = digitRangeOf(item.options.length)
-		if (item.multiSelect) {
-			return waiting
-				? t("toolQuestion.hint.toggleThenNext", { range })
-				: t("toolQuestion.hint.toggleThenSend", { range })
-		}
-		return waiting
-			? t("toolQuestion.hint.chooseThenNext", { range })
-			: t("toolQuestion.hint.chooseThenSend", { range })
 	}
 
 	const hasSegments = questions.length > 1
@@ -472,9 +453,6 @@ const ToolQuestion = ({
 						{item.exit.label}
 					</Button>
 				) : null}
-				<p className="min-w-0 flex-1 text-end text-muted-foreground text-xs">
-					{hintOf()}
-				</p>
 				{item.action ? (
 					<ActionButton action={item.action} />
 				) : (
@@ -849,7 +827,7 @@ const OptionRow = ({
 		QUESTION_ROW_CLASS,
 		isChecked
 			? "surface-user-bubble on-user-bubble text-user-bubble-foreground"
-			: "bg-card text-foreground",
+			: "bg-card text-foreground hover:bg-[color-mix(in_oklab,var(--color-muted)_50%,var(--color-card))] active:translate-y-px active:bg-muted",
 	)
 
 	const content = (
@@ -857,7 +835,8 @@ const OptionRow = ({
 			<span
 				aria-hidden="true"
 				className={cn(
-					"grid size-5 shrink-0 place-items-center rounded-sm font-medium text-[11px] leading-3 tabular-nums",
+					QUESTION_ROW_FADE_CLASS,
+					"grid size-5 shrink-0 place-items-center rounded-sm font-medium text-[11px] leading-3 tabular-nums transition-colors",
 					isChecked
 						? "bg-user-bubble-foreground/10 text-user-bubble-foreground/80 dark:bg-user-bubble-foreground/15"
 						: "bg-foreground/6 text-muted-foreground dark:bg-foreground/8",
@@ -875,7 +854,8 @@ const OptionRow = ({
 				</span>
 				<span
 					className={cn(
-						"min-w-0 wrap-break-word text-compact leading-5",
+						QUESTION_ROW_FADE_CLASS,
+						"min-w-0 wrap-break-word text-compact leading-5 transition-colors",
 						isChecked
 							? "text-user-bubble-foreground/70 dark:text-(--color-muted-foreground)"
 							: "text-muted-foreground",
@@ -939,15 +919,26 @@ type OptionMarkProps = {
 }
 
 const OptionMark = ({ isChecked, isMultiSelect }: OptionMarkProps) => {
+	const check = cn(
+		QUESTION_ROW_FADE_CLASS,
+		"transition-opacity",
+		isChecked ? "opacity-100" : "opacity-0",
+	)
 	if (!isMultiSelect) {
-		return isChecked ? <Icons.Check className={QUESTION_CHECK_CLASS} /> : null
+		return <Icons.Check className={cn(QUESTION_CHECK_CLASS, check)} />
 	}
-	return isChecked ? (
-		<span className="grid size-5 place-items-center rounded-full bg-user-bubble-foreground text-user-bubble">
-			<Icons.Check className="size-3" />
+	return (
+		<span
+			className={cn(
+				QUESTION_ROW_FADE_CLASS,
+				"grid size-5 place-items-center rounded-full border-[1.5px] transition-colors",
+				isChecked
+					? "border-transparent bg-user-bubble-foreground text-user-bubble"
+					: "border-foreground/17 dark:border-question-option-ring",
+			)}
+		>
+			<Icons.Check className={cn("size-3", check)} />
 		</span>
-	) : (
-		<span className="size-5 rounded-full border-[1.5px] border-foreground/17 dark:border-question-option-ring" />
 	)
 }
 

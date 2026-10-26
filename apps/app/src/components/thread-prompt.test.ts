@@ -136,14 +136,6 @@ describe("QuestionPrompt", () => {
 		expect(drawnMark()).toBeNull()
 	})
 
-	it("names the digit range of the unfolded question in its foot hint", () => {
-		renderPrompt(wallQuestion())
-
-		expect(
-			screen.getByText("Press 1\u20133 to choose, Return to send"),
-		).toBeTruthy()
-	})
-
 	it("picks only the second option on the 2 key and sends it on Return", async () => {
 		const answer = vi.fn(async () => undefined)
 		renderPrompt(wallQuestion(), { ...RESPONDER, answer })

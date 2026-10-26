@@ -4,7 +4,15 @@ import {
 	type ReactNode,
 	useState,
 } from "react"
-import { expect, fireEvent, fn, spyOn, waitFor, within } from "storybook/test"
+import {
+	expect,
+	fireEvent,
+	fn,
+	spyOn,
+	type UserEventObject,
+	waitFor,
+	within,
+} from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
@@ -14,6 +22,7 @@ import {
 	isInBrowserRunner,
 	lineHeightOf,
 	realPointer,
+	settled,
 	slotIn,
 	slotsIn,
 	tokenStyleIn,
@@ -198,13 +207,21 @@ const backgroundOf = (element: Element) =>
 
 const isInDarkTheme = (element: Element) => element.closest(".dark") !== null
 
+const expectNoKeyHint = async (panel: HTMLElement) => {
+	await expect(within(panel).queryByText(/^(Press|Return) /)).toBeNull()
+}
+
 const expectChosenPaint = async (row: HTMLElement) => {
+	await settled(row)
 	const bubble = tokenStyleIn(row, "surface-user-bubble", "backgroundColor")
 	await waitFor(() => expect(backgroundOf(row)).toBe(bubble))
 	await expect(getComputedStyle(row).color).toBe(
 		tokenStyleIn(row, "text-user-bubble-foreground", "color"),
 	)
 }
+
+const markGlyphIn = (row: HTMLElement) =>
+	slotIn(row, "tool-question-mark").querySelector("svg") as SVGElement
 
 const OWN_ANSWER = "Wait until the spring catalogue is ready"
 
@@ -216,7 +233,7 @@ export const NothingChosen = meta.story({
 		a11y: A11Y_SIDE_BY_SIDE_TWIN_LANDMARKS,
 		docs: {
 			description: {
-				story: `Artboard 1.1: one single-select question waiting on its first pick. ${ARTBOARD}The header label sits above the question, Minimize top right. Every row carries its 1-based digit in a key chip, and with \`hasDigitKeys\` the panel binds the bare digits 1 to 9 up to its option count and the foot hint names the range; without the prop it binds no digit key and the hint reads the Return part alone. Send is drawn at 40% while nothing is chosen and the own-answer field is empty; it stays reachable, and pressing it says what is missing. Skip calls \`onDeny\`, Minimize calls \`onMinimise\`.`,
+				story: `Artboard 1.1: one single-select question waiting on its first pick. ${ARTBOARD}The header label sits above the question, Minimize top right. Every row carries its 1-based digit in a key chip, and with \`hasDigitKeys\` the panel binds the bare digits 1 to 9 up to its option count; without the prop it binds no digit key. Send is drawn at 40% while nothing is chosen and the own-answer field is empty; it stays reachable, and pressing it says what is missing. Skip calls \`onDeny\`, Minimize calls \`onMinimise\`.`,
 			},
 		},
 	},
@@ -244,9 +261,7 @@ export const NothingChosen = meta.story({
 				)
 			}
 
-			await expect(
-				card.getByText("Press 1\u20133 to choose, Return to send"),
-			).toBeVisible()
+			await expectNoKeyHint(panel)
 			const send = card.getByRole("button", { name: chat.toolQuestion.submit })
 			await expect(send).toHaveTextContent(chat.toolQuestion.send)
 			await expect(send).toHaveAttribute("aria-disabled", "true")
@@ -307,15 +322,13 @@ export const OptionChosen = meta.story({
 					"color",
 				),
 			)
+			await expect(getComputedStyle(markGlyphIn(chosen)).opacity).toBe("1")
 			await expect(
-				slotIn(chosen, "tool-question-mark").querySelector("svg"),
-			).not.toBeNull()
-			await expect(
-				slotIn(
-					card.getByRole("radio", { name: "Starter" }),
-					"tool-question-mark",
-				).childElementCount,
-			).toBe(0)
+				getComputedStyle(
+					markGlyphIn(card.getByRole("radio", { name: "Starter" })),
+				).opacity,
+			).toBe("0")
+			await expect(getComputedStyle(chosen).transitionDuration).toBe("0.15s")
 			await expect(
 				card.getByRole("button", { name: chat.toolQuestion.submit }),
 			).not.toHaveAttribute("aria-disabled")
@@ -350,6 +363,74 @@ export const ChosenRowFollowsSpaceTint = meta.story({
 	},
 })
 
+const OPTION_ROW_SELECTOR = '[data-slot="tool-question-option"]'
+
+const ROW_HOVER_TINT =
+	"bg-[color-mix(in_oklab,var(--color-muted)_50%,var(--color-card))]"
+
+const ROW_PRESS_CLASSES = ["active:bg-muted", "active:translate-y-px"]
+
+const chooseTeamIn = async (panel: HTMLElement, userEvent: UserEventObject) => {
+	const card = within(panel)
+	const chosen = card.getByRole("radio", { name: "Team" })
+	await userEvent.click(chosen)
+	await expectChosenPaint(chosen)
+	return { chosen, resting: card.getByRole("radio", { name: "Starter" }) }
+}
+
+export const OptionRowHovered = meta.story({
+	globals: { theme_layout: "side-by-side" },
+	args: { questions: [PLAN_QUESTION], hasDigitKeys: true },
+	render: inComposerSlot,
+	parameters: {
+		a11y: A11Y_SIDE_BY_SIDE_TWIN_LANDMARKS,
+		pseudo: { hover: OPTION_ROW_SELECTOR },
+		docs: {
+			description: {
+				story:
+					"Every option row under the pointer, with Team chosen, drawn by the pseudo-state addon: check by eye that an unchosen row tints its card with the `muted` token at 50%, the ink of the design-system interactive rows, and fades it in and out over 150ms. The chosen row keeps the Space bubble colour with no tint over it. Under reduced motion the tint switches at once.",
+			},
+		},
+	},
+	play: async ({ canvasElement, userEvent }) => {
+		for (const panel of panelsIn(canvasElement)) {
+			const { chosen, resting } = await chooseTeamIn(panel, userEvent)
+			await expect(resting).toHaveClass(`hover:${ROW_HOVER_TINT}`)
+			await expect(chosen).not.toHaveClass(`hover:${ROW_HOVER_TINT}`)
+			await expect(
+				tokenStyleIn(resting, ROW_HOVER_TINT, "backgroundColor"),
+			).not.toBe(tokenStyleIn(resting, "bg-card", "backgroundColor"))
+		}
+	},
+})
+
+export const OptionRowPressed = meta.story({
+	globals: { theme_layout: "side-by-side" },
+	args: { questions: [PLAN_QUESTION], hasDigitKeys: true },
+	render: inComposerSlot,
+	parameters: {
+		a11y: A11Y_SIDE_BY_SIDE_TWIN_LANDMARKS,
+		pseudo: { hover: OPTION_ROW_SELECTOR, active: OPTION_ROW_SELECTOR },
+		docs: {
+			description: {
+				story:
+					"Every option row held under the pointer, with Team chosen, drawn by the pseudo-state addon: check by eye that an unchosen row deepens past its hover tint to the full `muted` token and sinks by 1px, the press of the design-system buttons. The chosen row keeps the Space bubble colour. Under reduced motion the press switches at once.",
+			},
+		},
+	},
+	play: async ({ canvasElement, userEvent }) => {
+		for (const panel of panelsIn(canvasElement)) {
+			const { chosen, resting } = await chooseTeamIn(panel, userEvent)
+			await expect(resting).toHaveClass(...ROW_PRESS_CLASSES)
+			for (const pressed of ROW_PRESS_CLASSES)
+				await expect(chosen).not.toHaveClass(pressed)
+			await expect(
+				tokenStyleIn(resting, "bg-muted", "backgroundColor"),
+			).not.toBe(tokenStyleIn(resting, ROW_HOVER_TINT, "backgroundColor"))
+		}
+	},
+})
+
 export const SeveralChecked = meta.story({
 	globals: { theme_layout: "side-by-side" },
 	args: {
@@ -362,7 +443,7 @@ export const SeveralChecked = meta.story({
 		a11y: A11Y_SIDE_BY_SIDE_TWIN_LANDMARKS,
 		docs: {
 			description: {
-				story: `Artboard 1.3: a multi-select question with Newsletter and Social checked. ${ARTBOARD}The hint line under the question says any may apply, each checked row wears the bubble colour with a filled ink circle holding a check, an unchecked row keeps an empty ring, #525252 in dark, and the foot hint says the digits toggle.`,
+				story: `Artboard 1.3: a multi-select question with Newsletter and Social checked. ${ARTBOARD}The hint line under the question says any may apply, each checked row wears the bubble colour with a filled ink circle holding a check, an unchecked row keeps an empty ring, #525252 in dark.`,
 			},
 		},
 	},
@@ -399,9 +480,7 @@ export const SeveralChecked = meta.story({
 					: tokenStyleIn(unchecked, "border-foreground/17", "borderTopColor"),
 			)
 
-			await expect(
-				card.getByText("Press 1\u20133 to toggle, Return to send"),
-			).toBeVisible()
+			await expectNoKeyHint(panel)
 		}
 	},
 })
@@ -415,7 +494,7 @@ export const OwnAnswerTyping = meta.story({
 		pseudo: { focus: `input[aria-label="${chat.toolQuestion.freeText}"]` },
 		docs: {
 			description: {
-				story: `Artboard 1.4: an answer of the reader's own, typed into the field under the options. ${ARTBOARD}While the field holds focus it wears a 3px ring in the ring colour at 30% and a caret in the ring colour; while it holds text it ends on a check in the same colour, the picks are dropped, and the foot hint shrinks to the Return key alone.`,
+				story: `Artboard 1.4: an answer of the reader's own, typed into the field under the options. ${ARTBOARD}While the field holds focus it wears a 3px ring in the ring colour at 30% and a caret in the ring colour; while it holds text it ends on a check in the same colour, and the picks are dropped.`,
 			},
 		},
 	},
@@ -438,7 +517,7 @@ export const OwnAnswerTyping = meta.story({
 				tokenStyleIn(frame, "text-ring", "color"),
 			)
 			await expect(getComputedStyle(frame).boxShadow).not.toBe("none")
-			await expect(card.getByText(chat.toolQuestion.hint.send)).toBeVisible()
+			await expectNoKeyHint(panel)
 			for (const row of card.getAllByRole("radio"))
 				await expect(row).toHaveAttribute("aria-checked", "false")
 		}
@@ -457,7 +536,7 @@ export const SeveralQuestions = meta.story({
 		a11y: A11Y_SIDE_BY_SIDE_TWIN_LANDMARKS,
 		docs: {
 			description: {
-				story: `Artboard 1.5: three questions, the first answered. ${ARTBOARD}A segmented control takes the place of the header label: the segment on screen is lifted on the card colour, an answered one leads with a green check. Picking Team handed the panel over to Channels, and while a question still waits after this one the foot ends on Next with an arrow, and the hint says Return goes there.`,
+				story: `Artboard 1.5: three questions, the first answered. ${ARTBOARD}A segmented control takes the place of the header label: the segment on screen is lifted on the card colour, an answered one leads with a green check. Picking Team handed the panel over to Channels, and while a question still waits after this one the foot ends on Next with an arrow.`,
 			},
 		},
 	},
@@ -485,11 +564,7 @@ export const SeveralQuestions = meta.story({
 			await expect(
 				card.queryByRole("button", { name: chat.toolQuestion.submit }),
 			).not.toBeInTheDocument()
-			await expect(
-				card.getByText(
-					"Press 1\u20133 to toggle, Return for the next question",
-				),
-			).toBeVisible()
+			await expectNoKeyHint(panel)
 		}
 	},
 })
@@ -792,7 +867,7 @@ export const SingleSelect = meta.story({
 		docs: {
 			description: {
 				story:
-					"The behaviour behind `NothingChosen` and `OptionChosen`: one question that holds at most one answer, so picking a second option replaces the first. Check that the whole row picks the option (the description, the padding, anywhere but the preview), that Send loses its 40% once a pick is held, that the preview appears only under the picked row, that without `hasDigitKeys` the foot hint reads only `Return to send` and no digit key is bound, and that Skip calls `onDeny`. " +
+					"The behaviour behind `NothingChosen` and `OptionChosen`: one question that holds at most one answer, so picking a second option replaces the first. Check that the whole row picks the option (the description, the padding, anywhere but the preview), that Send loses its 40% once a pick is held, that the preview appears only under the picked row, that without `hasDigitKeys` no digit key is bound, and that Skip calls `onDeny`. " +
 					POSTED_BY_ONBOARDING,
 			},
 		},
@@ -805,8 +880,6 @@ export const SingleSelect = meta.story({
 			canvas.getByText("Server rendering and routing out of the box."),
 		)
 		await expect(submit).not.toHaveAttribute("aria-disabled")
-		await expect(canvas.getByText(chat.toolQuestion.hint.send)).toBeVisible()
-		await expect(canvas.queryByText(/^Press /)).not.toBeInTheDocument()
 		await expect(
 			canvas.getByText("bun create next-app dashboard"),
 		).toBeVisible()
@@ -890,24 +963,6 @@ export const FreeText = meta.story({
 		await expect(args.onAnswer).toHaveBeenCalledWith({
 			[FRAMEWORK_QUESTION.question]: "TanStack Start, once it is stable",
 		})
-	},
-})
-
-export const DigitHintTwoOptions = meta.story({
-	tags: ["test-only"],
-	args: { questions: [REGISTRY_QUESTION], hasDigitKeys: true },
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"The foot hint of `NothingChosen` on a question of two options: with `hasDigitKeys` the range ends on the option count of the question on screen, written with an en dash and no final period.",
-			},
-		},
-	},
-	play: async ({ canvas }) => {
-		await expect(
-			canvas.getByText("Press 1\u20132 to choose, Return to send"),
-		).toBeVisible()
 	},
 })
 
@@ -1215,7 +1270,7 @@ export const ReducedMotion = meta.story({
 		docs: {
 			description: {
 				story:
-					"The panel for a reader who asked the system to stop moving things. A segment transitions its colour, fill and shadow; the panel drops that under `prefers-reduced-motion`, so the lifted fill moves from one segment to the next in a single frame. Check that every segment reports a transition of no duration, and that the track still selects. " +
+					"The panel for a reader who asked the system to stop moving things. A segment transitions its colour, fill and shadow; the panel drops that under `prefers-reduced-motion`, so the lifted fill moves from one segment to the next in a single frame. An option row drops its hover, press and selection fades the same way. Check that every segment reports a transition of no duration, that every option row reports no transition, and that the track still selects. " +
 					POSTED_BY_ONBOARDING,
 			},
 		},
@@ -1225,6 +1280,9 @@ export const ReducedMotion = meta.story({
 
 		for (const tab of tabs) {
 			await expect(getComputedStyle(tab).transitionDuration).toBe("0s")
+		}
+		for (const row of canvas.getAllByRole("checkbox")) {
+			await expect(getComputedStyle(row).transitionProperty).toBe("none")
 		}
 
 		await userEvent.click(
