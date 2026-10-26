@@ -50,8 +50,6 @@ import { cn } from "@workspace/ui/lib/utils"
 
 const HEADER_AVATAR_SIZE = 36
 
-const INSTRUCTIONS_ROWS = 14
-
 const PAGE = "mx-auto flex w-full max-w-160 flex-col gap-4 px-14 py-12"
 
 const APPLICATION_PAGE = "max-w-140 px-12 py-10"
@@ -413,7 +411,7 @@ const CompanionSettingsScreen = ({
 					memory={memory}
 					onMemoryChange={onMemoryChange}
 					onValueChange={onValueChange}
-					rows={INSTRUCTIONS_ROWS}
+					isTall
 					value={value}
 				/>
 			),

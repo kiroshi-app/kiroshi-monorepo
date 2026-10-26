@@ -40,6 +40,7 @@ type SettingsFieldProps = {
 	error?: string
 	rows?: number
 	fill?: boolean
+	isTall?: boolean
 	readOnly?: boolean
 	kind?: SettingsFieldKind
 }
@@ -53,6 +54,7 @@ const SettingsField = ({
 	error,
 	rows,
 	fill = false,
+	isTall = false,
 	readOnly = false,
 	kind = "text",
 }: SettingsFieldProps) => {
@@ -69,7 +71,7 @@ const SettingsField = ({
 			<label className={FIELD_LABEL_CLASS} htmlFor={id}>
 				{label}
 			</label>
-			{rows || fill ? (
+			{rows || fill || isTall ? (
 				<textarea
 					aria-describedby={describedBy}
 					aria-invalid={error ? true : undefined}
@@ -79,6 +81,7 @@ const SettingsField = ({
 						readOnly && FIELD_CONTROL_READONLY_CLASS,
 						"resize-none",
 						fill && "min-h-0 flex-1",
+						isTall && "h-55",
 					)}
 					id={id}
 					onChange={emit}

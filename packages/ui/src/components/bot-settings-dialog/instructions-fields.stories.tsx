@@ -26,7 +26,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"A companion's Instructions section: the prompt, then the memory when the host hands one. The settings dialog lets the prompt fill its tab; the settings screen gives it a number of rows.",
+					"A companion's Instructions section: the prompt, then the memory when the host hands one. The settings dialog lets the prompt fill its tab; the settings screen gives it a tall box of its own.",
 			},
 		},
 	},
@@ -42,7 +42,7 @@ const meta = preview.meta({
 		onValueChange: fn(),
 		memory: BOT_MEMORY,
 		onMemoryChange: fn(),
-		rows: 14,
+		isTall: true,
 	},
 })
 

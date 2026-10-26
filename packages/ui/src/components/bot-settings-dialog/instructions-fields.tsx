@@ -11,7 +11,7 @@ type BotInstructionsFieldsProps = {
 	onValueChange: (value: BotSettingsValue) => void
 	memory?: string
 	onMemoryChange?: (memory: string) => void
-	rows?: number
+	isTall?: boolean
 }
 
 const BotInstructionsFields = ({
@@ -19,20 +19,20 @@ const BotInstructionsFields = ({
 	onValueChange,
 	memory,
 	onMemoryChange,
-	rows,
+	isTall = false,
 }: BotInstructionsFieldsProps) => {
 	const { t } = useTranslation("bots")
 
 	return (
 		<>
 			<SettingsField
-				fill={rows === undefined}
+				fill={!isTall}
+				isTall={isTall}
 				label={t("dialog.instructions.label")}
 				onValueChange={(instructions) =>
 					onValueChange({ ...value, instructions })
 				}
 				placeholder={t("dialog.instructions.placeholder")}
-				rows={rows}
 				value={value.instructions}
 			/>
 			{memory !== undefined ? (

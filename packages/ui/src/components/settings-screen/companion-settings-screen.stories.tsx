@@ -42,12 +42,16 @@ const COMPANION_MENU = [
 	"Danger zone",
 ]
 
+const INSTRUCTIONS =
+	"You write release notes and changelogs for the Studio team."
+
+const INSTRUCTIONS_BOX_HEIGHT = 220
+
 const COMPANION: BotSettingsValue = {
 	identity: { blot: "blue" },
-	name: "Nest Keeper",
-	title: "Repository archivist",
-	instructions:
-		"You are the Nest Keeper.\n\nEvery visual belongs to packages/ui. The app composes, it never draws.\n\nBefore proposing a component, search the package for one that already does the job. Answer with the file you would touch, then the change.",
+	name: "Juniper",
+	title: "Writer",
+	instructions: INSTRUCTIONS,
 	model: "sonnet-4-5",
 	effort: "high",
 	permissions: {
@@ -177,7 +181,7 @@ export const General = meta.story({
 			"aria-current",
 			"page",
 		)
-		await expect(within(menu).getByText("Nest Keeper")).toBeVisible()
+		await expect(within(menu).getByText("Juniper")).toBeVisible()
 		await expect(within(menu).getByText("Companion settings")).toBeVisible()
 		await expect(
 			slotIn(menu, "bot-identity-avatar").getBoundingClientRect().width,
@@ -185,14 +189,12 @@ export const General = meta.story({
 
 		await expect(pageHeading("General")).toBeVisible()
 		const main = screen.getByRole("main")
-		await expect(within(main).getByLabelText("Title")).toHaveValue(
-			"Repository archivist",
-		)
+		await expect(within(main).getByLabelText("Title")).toHaveValue("Writer")
 		await userEvent.type(within(main).getByLabelText("Name"), "!")
 		await expect(args.onValueChange).toHaveBeenLastCalledWith(
-			expect.objectContaining({ name: "Nest Keeper!" }),
+			expect.objectContaining({ name: "Juniper!" }),
 		)
-		await expect(within(menu).getByText("Nest Keeper!")).toBeVisible()
+		await expect(within(menu).getByText("Juniper!")).toBeVisible()
 	},
 })
 
@@ -226,7 +228,7 @@ export const Instructions = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard H04: Instructions, the prompt then the companion's memory with Clear and Save memory. Check that the prompt saves as you type while the memory waits for Save memory.",
+					"Artboard H04: Instructions, the prompt in a 220px box then the companion's memory with Clear and Save memory. Check the box height, that Memory sits under it, and that the prompt saves as you type while the memory waits for Save memory.",
 			},
 		},
 	},
@@ -234,7 +236,15 @@ export const Instructions = meta.story({
 		await menuIn()
 		const main = screen.getByRole("main")
 		await expect(pageHeading("Instructions")).toBeVisible()
-		await userEvent.type(within(main).getByLabelText("Instructions"), ".")
+		const instructions = within(main).getByLabelText("Instructions")
+		await expect(instructions).toHaveValue(INSTRUCTIONS)
+		const box = instructions.getBoundingClientRect()
+		await expect(box.height).toBe(INSTRUCTIONS_BOX_HEIGHT)
+		await expect(
+			within(main).getByLabelText("Memory").getBoundingClientRect().top,
+		).toBeGreaterThan(box.bottom)
+
+		await userEvent.type(instructions, ".")
 		await expect(args.onValueChange).toHaveBeenCalledOnce()
 
 		await userEvent.type(within(main).getByLabelText("Memory"), "!")
