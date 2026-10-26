@@ -108,9 +108,13 @@ const updateBadgeIn = (status: UpdateBadgeStatus) => ({
 		await expect(slot.nextElementSibling).toBe(readerItem)
 		await expect(readerItem.contains(reader)).toBe(true)
 
+		const slotBox = slot.getBoundingClientRect()
 		const badge = slot.firstElementChild as HTMLElement
-		await expect(horizontalCentreOf(badge.getBoundingClientRect())).toBe(
-			horizontalCentreOf(reader.getBoundingClientRect()),
+		await expect(slotBox.width).toBe(RAIL_BUTTON)
+		await expect(slotBox.height).toBe(RAIL_BUTTON)
+		await expect(slotBox.left).toBe(reader.getBoundingClientRect().left)
+		await expect(centreOf(badge.getBoundingClientRect())).toEqual(
+			centreOf(slotBox),
 		)
 		await expectListRowGapBetweenEntries(canvasElement)
 	},
@@ -119,9 +123,7 @@ const updateBadgeIn = (status: UpdateBadgeStatus) => ({
 const boxesInGroup = (group: Element) =>
 	Array.from(group.children)
 		.filter((item) => item.checkVisibility())
-		.map((item) =>
-			(item.firstElementChild as HTMLElement).getBoundingClientRect(),
-		)
+		.map((item) => item.getBoundingClientRect())
 
 const expectListRowGapBetweenEntries = async (canvasElement: HTMLElement) => {
 	const listRowGap = Number.parseFloat(
@@ -137,7 +139,10 @@ const expectListRowGapBetweenEntries = async (canvasElement: HTMLElement) => {
 	}
 }
 
-const horizontalCentreOf = (box: DOMRect) => box.left + box.width / 2
+const centreOf = (box: DOMRect) => ({
+	x: box.left + box.width / 2,
+	y: box.top + box.height / 2,
+})
 
 const iconOf = (entry: HTMLElement) => {
 	const icon = entry.querySelector("svg")
@@ -707,7 +712,7 @@ export const UpdateWaiting = meta.story({
 		docs: {
 			description: {
 				story:
-					"E1, Update waiting. An update waiting to be downloaded, handed to the rail by the host, Conversations the current entry. Check the badge is the first stop of the foot group, its 28px round button centred on the column directly above the reader, and that the rail keeps its 60px width and 44px entries.",
+					"E1, Update waiting. An update waiting to be downloaded, handed to the rail by the host, Conversations the current entry. Check the badge is the first stop of the foot group, a 44px slot with no fill directly above the reader, its 28px round button centred in it on both axes, and that the rail keeps its 60px width and 44px entries.",
 			},
 		},
 	},
@@ -724,7 +729,7 @@ export const UpdateDownloading = meta.story({
 		docs: {
 			description: {
 				story:
-					"The update downloading, its ring filling around the badge. Check the ring stays centred on the column above the reader and the rail does not shift while it fills.",
+					"The update downloading, its ring filling around the badge. Check the ring stays centred in its 44px slot above the reader and the rail does not shift while it fills.",
 			},
 		},
 	},
@@ -736,7 +741,7 @@ export const UpdateReady = meta.story({
 		docs: {
 			description: {
 				story:
-					"The update installed and waiting for a restart, the badge a single restart control with no panel. Check the badge keeps its place above the reader, centred on the same column.",
+					"The update installed and waiting for a restart, the badge a single restart control with no panel. Check the badge keeps its place above the reader, centred in the same 44px slot.",
 			},
 		},
 	},
