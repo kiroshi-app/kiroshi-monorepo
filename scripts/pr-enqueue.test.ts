@@ -65,14 +65,12 @@ const ghCalls = () => {
 		.filter(Boolean)
 		.map((line) => {
 			const call = line.split(ARGUMENT_SEPARATOR).slice(0, -1)
-			if (call[0] === "pr" && call[1] === "list")
-				return `pr list --head ${call[call.indexOf("--head") + 1]}`
 			const output = call.indexOf("--json")
 			return (output === -1 ? call : call.slice(0, output)).join(" ")
 		})
 }
 
-const LIST = `pr list --head ${BRANCH}`
+const LIST = `pr list --repo ${REPOSITORY} --head ${BRANCH} --state open`
 const ARM = `pr merge --auto 42 --repo ${REPOSITORY}`
 const READ_AUTO_MERGE = `pr view 42 --repo ${REPOSITORY}`
 
