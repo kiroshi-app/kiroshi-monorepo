@@ -138,6 +138,17 @@ const noticeText = () => textIn("chat-notice")
 
 const previewText = () => textIn("roster-row-preview")
 
+const openFirstRow = async () => {
+	const row = document
+		.querySelector(
+			'[data-slot="space-panel"]:not([inert]) [data-slot="roster-row-name"]',
+		)
+		?.closest("button")
+	if (!row) throw new Error("no roster row")
+	fireEvent.click(row)
+	await settle(MOUNT_MS)
+}
+
 const enterSpace = async (name: string) => {
 	fireEvent.click(screen.getByRole("button", { name: `Open ${name}` }))
 	await settle(MOUNT_MS)
@@ -147,17 +158,20 @@ afterEach(() => {
 	layout?.restore()
 	layout = null
 	cleanup()
+	localStorage.clear()
 	vi.useRealTimers()
 })
 
 it("opens the solo thread of the space entered and leaves the one it left", async () => {
 	vi.useFakeTimers()
 	await aSharedBot()
+	await openFirstRow()
 
 	expect(threadText()).toContain(HOME_WORD)
 	expect(previewText()).toContain(HOME_WORD)
 
 	await enterSpace("Vocca")
+	await openFirstRow()
 
 	expect(threadText()).toContain(AWAY_WORD)
 	expect(threadText()).not.toContain(HOME_WORD)
@@ -174,9 +188,11 @@ it("opens the thread of the companion's own space when its notification is click
 	const { away, notifications } = await aBotOfAnotherSpace()
 
 	await enterSpace("Vocca")
+	await openFirstRow()
 	expect(threadText()).toContain(AWAY_WORD)
 
 	await enterSpace("Personal")
+	await openFirstRow()
 	expect(threadText()).toContain(HOME_WORD)
 
 	await act(async () => {

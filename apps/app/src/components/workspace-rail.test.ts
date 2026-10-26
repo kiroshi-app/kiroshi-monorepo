@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { createMemoryHistory, RouterProvider } from "@tanstack/react-router"
+import { RouterProvider } from "@tanstack/react-router"
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { createElement } from "react"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -250,9 +250,7 @@ const mountAppAtConversations = async (joined: JoinedSpace | null) => {
 	mounted.store = store
 	mounted.openJoinedSpace = joined
 	vi.useFakeTimers()
-	const router = createWorkspaceRouter(
-		createMemoryHistory({ initialEntries: ["/"] }),
-	)
+	const router = createWorkspaceRouter()
 	render(createElement(RouterProvider, { router }), {
 		wrapper: createQueryTestWrapper().wrapper,
 	})
