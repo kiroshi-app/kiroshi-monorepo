@@ -9,7 +9,13 @@ export const useSettingsNavigation = () => {
 
 	return useMemo(
 		() => ({
-			back: () => router.history.back(),
+			back: () => {
+				if (router.history.canGoBack()) {
+					router.history.back()
+					return
+				}
+				void navigate({ to: "/", replace: true })
+			},
 			openConversations: () => {
 				void navigate({ to: "/" })
 			},

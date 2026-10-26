@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 
+import { createMemoryHistory, RouterProvider } from "@tanstack/react-router"
 import {
 	act,
 	cleanup,
@@ -77,6 +78,7 @@ vi.mock("@/lib/chat/create-driver", async () => {
 })
 
 const { App } = await import("@/App")
+const { createWorkspaceRouter } = await import("@/workspace-router")
 
 const SETTLE_MS = 200
 
@@ -116,7 +118,7 @@ const twoSpaceApplications: Installs = async (store, spaceId) => {
 const oneUserApplication: Installs = (store) =>
 	store.setPluginMcpServer({ kind: "user" }, "atlas", ATLAS)
 
-const mountApp = async (install?: Installs) => {
+const seedStore = async (install?: Installs) => {
 	writeMirror({ ...readMirror(), firstRunDone: true })
 	const store = createFakeTranscriptStore()
 	const [space] = await store.spaces()
@@ -130,9 +132,25 @@ const mountApp = async (install?: Installs) => {
 	})
 	vi.useFakeTimers()
 	harness.store = store
+	return space
+}
+
+const mountApp = async (install?: Installs) => {
+	const space = await seedStore(install)
 	render(createElement(App), { wrapper: createQueryTestWrapper().wrapper })
 	await settle()
 	return space
+}
+
+const mountRouterAt = async (path: string) => {
+	await seedStore()
+	const router = createWorkspaceRouter(
+		createMemoryHistory({ initialEntries: [path] }),
+	)
+	render(createElement(RouterProvider, { router }), {
+		wrapper: createQueryTestWrapper().wrapper,
+	})
+	await settle()
 }
 
 const press = async (control: Element) => {
@@ -494,4 +512,14 @@ it("returns to the conversations when the Space switches from the settings of a 
 	await switchSpaceTo(VOCCA)
 
 	expect(settingsMenuOf()).toBeNull()
+})
+
+it("opens the conversations on Back when a settings screen is the first entry of the history", async () => {
+	await mountRouterAt("/settings/user")
+	expect(shownSettingsOf()?.subtitle).toBe("user")
+
+	await press(backOf())
+
+	expect(shownSettingsOf()).toBeNull()
+	expect(isMarked(conversationsEntryOf())).toBe(true)
 })

@@ -3,6 +3,7 @@ import {
 	createRootRoute,
 	createRoute,
 	createRouter,
+	type RouterHistory,
 } from "@tanstack/react-router"
 
 import { ConversationsScreen } from "@/components/conversations-screen"
@@ -53,11 +54,9 @@ const routeTree = rootRoute.addChildren([
 	companionSettingsRoute,
 ])
 
-export const createWorkspaceRouter = () =>
-	createRouter({
-		routeTree,
-		history: createMemoryHistory({ initialEntries: ["/"] }),
-	})
+export const createWorkspaceRouter = (
+	history: RouterHistory = createMemoryHistory({ initialEntries: ["/"] }),
+) => createRouter({ routeTree, history })
 
 declare module "@tanstack/react-router" {
 	interface Register {
