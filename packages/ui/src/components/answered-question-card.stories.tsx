@@ -245,12 +245,6 @@ const expectRowsPaintedFromSpace = async (root: HTMLElement) => {
 	}
 }
 
-const softBubbleOf = (root: HTMLElement) =>
-	slotIn(
-		root.querySelector('[data-variant="soft"]') as HTMLElement,
-		"message-bubble-content",
-	)
-
 const softBubblesOf = (root: HTMLElement) =>
 	Array.from(root.querySelectorAll('[data-variant="soft"]'), (bubble) =>
 		slotIn(bubble, "message-bubble-content"),
@@ -309,8 +303,9 @@ export const YouAnswered = meta.story({
 		).toBe("ScopeEvery tableOne window, one rollback")
 		await expect(choicesIn(card)).toHaveLength(3)
 		await expect(cardStyle.backgroundColor).toBe(
-			getComputedStyle(softBubbleOf(canvasElement).firstElementChild as Element)
-				.backgroundColor,
+			getComputedStyle(
+				softBubblesOf(canvasElement)[0].firstElementChild as Element,
+			).backgroundColor,
 		)
 		await expect(cardStyle.borderStartStartRadius).toBe(
 			runRadiusIn(canvasElement),
@@ -521,10 +516,11 @@ export const EndOfRun = meta.story({
 		const cardStyle = getComputedStyle(card)
 		const [lead, ask] = softBubblesOf(canvasElement)
 		const runRadius = runRadiusIn(canvasElement)
-		const bubbleRadius = bubbleRadiusIn(canvasElement)
 
 		await expect(cardStyle.borderStartStartRadius).toBe(runRadius)
-		await expect(cardStyle.borderEndStartRadius).toBe(bubbleRadius)
+		await expect(cardStyle.borderEndStartRadius).toBe(
+			bubbleRadiusIn(canvasElement),
+		)
 		await expect(getComputedStyle(ask).borderEndStartRadius).toBe(runRadius)
 		await expect(gapBetween(ask, card)).toBe(gapBetween(lead, ask))
 		await expectBottomPaddingMatchesInline(card)
