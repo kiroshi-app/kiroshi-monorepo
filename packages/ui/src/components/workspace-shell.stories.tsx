@@ -25,7 +25,6 @@ import {
 import { ThreadLayout } from "@workspace/ui/components/thread-layout"
 import { AssistantTurn, UserTurn } from "@workspace/ui/components/turn"
 import {
-	SHELL_GUTTER,
 	SHELL_TITLE_BAR_HEIGHT,
 	WorkspaceShell,
 } from "@workspace/ui/components/workspace-shell"
@@ -121,9 +120,9 @@ const expectCardDetached = async (card: HTMLElement, leadingEdge: number) => {
 	await expect(window.innerHeight - edges.bottom).toBe(shellInset())
 }
 
-const YOU_AVATAR_INSET = 13
+const YOU_AVATAR_INSET = 17
 
-const COMPOSER_INSET_IN_CARD = YOU_AVATAR_INSET - SHELL_GUTTER
+const COMPOSER_INSET_IN_CARD = 9
 
 const expectCardAndComposerOnShellInset = async (root: HTMLElement) => {
 	const avatar = slotIn(root, "app-rail-avatar").getBoundingClientRect()
