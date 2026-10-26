@@ -65,7 +65,7 @@ const SPACE_INVITATION_MEDIA =
 
 const SPACE_TRAILING = "ms-auto flex shrink-0 items-center gap-1.5"
 
-const SPACE_PILL = "basis-auto"
+const SPACE_PILL = "basis-auto py-0.75"
 
 const SPACE_INVITATION_PILL = "bg-warning/15 text-warning"
 

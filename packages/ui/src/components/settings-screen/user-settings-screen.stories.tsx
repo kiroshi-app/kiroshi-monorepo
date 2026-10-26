@@ -5,7 +5,6 @@ import { expect, fn, screen, waitFor, within } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
-	A11Y_FLOATING_FOCUS_GUARDS,
 	expectSettingsChrome,
 	slotIn,
 	slotsIn,
@@ -180,19 +179,19 @@ const spaceRowOf = (menu: HTMLElement, name: string) =>
 const NORTHWIND = {
 	id: "northwind",
 	name: "Northwind",
-	colour: "blue",
+	colour: "green",
 	hasAttention: true,
 } satisfies UserSpace
 
 const SPACES_ARGS = {
 	entry: "",
 	ownedSpaces: [
-		{ ...STUDIO, host: "shared" },
-		{ id: "field-notes", name: "Field notes", colour: "green" },
+		{ ...STUDIO, colour: "blue", host: "shared" },
+		{ id: "field-notes", name: "Field notes", colour: "purple" },
 	],
 	joinedSpaces: [
 		NORTHWIND,
-		{ id: "harbor", name: "Harbor", colour: "purple", host: "down" },
+		{ id: "harbor", name: "Harbor", colour: "orange", host: "down" },
 	],
 	invitations: [{ id: "atelier", name: "Atelier" }],
 	currentSpaceId: STUDIO.id,
@@ -244,6 +243,20 @@ const expectSpaceRows = async (menu: HTMLElement, names: string[]) => {
 	await expect(
 		slotsIn(groupIn(menu, "Your spaces"), "settings-menu-space-current"),
 	).toHaveLength(1)
+	for (const pill of [
+		slotIn(spaceRowOf(menu, "Studio"), "settings-menu-space-current"),
+		slotIn(spaceRowOf(menu, "Atelier"), "settings-menu-space-invitation-pill"),
+	]) {
+		await expect(getComputedStyle(pill).padding).toBe("3px 6px")
+	}
+	for (const { name, colour } of [
+		...SPACES_ARGS.ownedSpaces,
+		...SPACES_ARGS.joinedSpaces,
+	].filter((space) => names.includes(space.name))) {
+		await expect(
+			slotIn(spaceRowOf(menu, name), "space-dot").style.backgroundColor,
+		).toBe(`var(--bot-blot-${colour})`)
+	}
 }
 
 const expectEntryShown = async (label: string) => {
@@ -380,15 +393,6 @@ export const SpacesDark = meta.story({
 	},
 })
 
-const NOTICE_A11Y_LEFT_TO_REVIEW = {
-	config: {
-		rules: [
-			...A11Y_CONTRAST_AWAITING_DESIGN_DECISION.config.rules,
-			...A11Y_FLOATING_FOCUS_GUARDS.config.rules,
-		],
-	},
-}
-
 const LeftNorthwindNotice = () => {
 	const { t } = useTranslation("settings")
 
@@ -422,11 +426,11 @@ export const AfterLeavingASpace = meta.story({
 		),
 	],
 	parameters: {
-		a11y: NOTICE_A11Y_LEFT_TO_REVIEW,
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:
-					"Artboard F09: Northwind just left. Check that its row is gone, the other rows unchanged, and that a success notice says You left Northwind and whom to ask for a new invitation. The notice sits top centred, where every notice sits, not bottom right as the artboard draws it. The contrast and `aria-hidden-focus` audits are left to review: the Invitation pill wears the warning token on its own tint as the artboard draws it, and the notice surface keeps its close control focusable while the library hides the notice behind its announcing mirror.",
+					"Artboard F09: Northwind just left. Check that its row is gone, the other rows unchanged, and that a success notice says You left Northwind and whom to ask for a new invitation. Kept gap: the artboard draws the notice bottom right, 24px from the edges and 340px wide; it sits top centred here, where every notice of the app sits, since moving it means changing the placement of the notice surface for all of them. The contrast audit is left to review: the Invitation pill wears the warning token on its own tint as the artboard draws it.",
 			},
 		},
 	},
