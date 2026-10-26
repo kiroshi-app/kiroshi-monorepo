@@ -446,7 +446,11 @@ const deleteFromDangerZone = async () => {
 		screen.getByRole("button", { name: i18n.t("bots:danger.delete") }),
 	)
 	await press(
-		within(screen.getByRole("alertdialog")).getByRole("button", {
+		within(
+			screen.getByRole("alertdialog", {
+				name: i18n.t("bots:danger.confirm.title", { name: ATLAS }),
+			}),
+		).getByRole("button", {
 			name: i18n.t("bots:danger.delete"),
 		}),
 	)

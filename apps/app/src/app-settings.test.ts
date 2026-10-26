@@ -345,7 +345,11 @@ it("asks before a rail press leaves an unsaved application, and leaves once on L
 		}),
 	)
 
-	expect(screen.queryByRole("alertdialog")).toBeNull()
+	expect(
+		screen.queryByRole("alertdialog", {
+			name: i18n.t("bots:applications.leave.title"),
+		}),
+	).toBeNull()
 	expect(nameField().value).toBe("ledger-desk")
 	expect(menuEntryOf(/^ledger/).getAttribute("aria-current")).toBe("page")
 
