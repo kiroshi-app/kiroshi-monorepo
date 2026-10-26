@@ -1242,12 +1242,19 @@ fn a_leave_the_relay_fails_keeps_the_space_connectable() {
 const SIMULATED: Duration = Duration::from_secs(600);
 const SIMULATED_TICK: Duration = Duration::from_millis(10);
 
+async fn first_attempt_settled(member: &Member) {
+	while member.relay.room().upgrades.is_empty() && member.last_wait().is_none() {
+		tokio::task::yield_now().await;
+	}
+}
+
 async fn waited_for_ten_minutes(member: &Member) {
 	let (_stop, stopped) = watch::channel(false);
 	let id = "joined-space-waiting".to_owned();
 	let waiting =
 		waiting::waited_for_host(member.app.handle().clone(), id, INSTANCE.to_owned(), stopped);
 	let ten_minutes = async {
+		first_attempt_settled(member).await;
 		for _ in 0..SIMULATED.as_millis() / SIMULATED_TICK.as_millis() {
 			tokio::time::advance(SIMULATED_TICK).await;
 		}
