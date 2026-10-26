@@ -1,6 +1,7 @@
-import { expect, fn } from "storybook/test"
+import { expect, fn, type within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
+import { resolvedRootColor } from "@workspace/storybook/story-utils"
 import type { BotMcpServerItem } from "@workspace/ui/components/bot-settings"
 import {
 	BOT_MCP_SERVERS,
@@ -13,6 +14,15 @@ import {
 } from "@workspace/ui/components/plugin-settings/applications-panel"
 
 const NEEDS_AUTHORIZATION_DOT = "bg-state-needs-authorization"
+
+const E3_DARK_NEEDS_AUTHORIZATION = "rgb(232, 176, 74)"
+
+const needsAuthorizationDotIn = (canvas: ReturnType<typeof within>) => {
+	const dot = canvas.getByText("Needs authorization").previousElementSibling
+	if (!(dot instanceof HTMLElement))
+		throw new Error("No dot beside the needs-authorization state.")
+	return dot
+}
 
 const SEARCH_ROW_HEIGHT = 36
 
@@ -338,9 +348,11 @@ export const NeedsAuthorization = meta.story({
 	},
 	play: async ({ args, canvas, userEvent }) => {
 		await expect(canvas.getByText("Needs authorization")).toBeVisible()
-		await expect(
-			canvas.getByText("Needs authorization").previousElementSibling,
-		).toHaveClass(NEEDS_AUTHORIZATION_DOT)
+		const dot = needsAuthorizationDotIn(canvas)
+		await expect(dot).toHaveClass(NEEDS_AUTHORIZATION_DOT)
+		await expect(getComputedStyle(dot).backgroundColor).toBe(
+			resolvedRootColor("--warning"),
+		)
 
 		await userEvent.tab()
 		await expect(
@@ -381,9 +393,11 @@ export const NeedsAuthorizationDark = meta.story({
 		},
 	},
 	play: async ({ canvas }) => {
-		await expect(
-			canvas.getByText("Needs authorization").previousElementSibling,
-		).toHaveClass(NEEDS_AUTHORIZATION_DOT)
+		const dot = needsAuthorizationDotIn(canvas)
+		await expect(dot).toHaveClass(NEEDS_AUTHORIZATION_DOT)
+		await expect(getComputedStyle(dot).backgroundColor).toBe(
+			E3_DARK_NEEDS_AUTHORIZATION,
+		)
 	},
 })
 

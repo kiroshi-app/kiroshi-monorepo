@@ -59,6 +59,17 @@ export const FRAME_POLL = { interval: 10 }
 
 export const isInBrowserRunner = () => "__vitest_browser__" in globalThis
 
+export const resolvedRootColor = (property: string) => {
+	const probe = document.createElement("span")
+	probe.style.backgroundColor = getComputedStyle(
+		document.documentElement,
+	).getPropertyValue(property)
+	document.body.append(probe)
+	const color = getComputedStyle(probe).backgroundColor
+	probe.remove()
+	return color
+}
+
 const runsToAnEnd = (animation: Animation) =>
 	animation.effect?.getTiming().duration !== "auto"
 
