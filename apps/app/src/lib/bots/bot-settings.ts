@@ -13,6 +13,7 @@ import { rosterTimestamp } from "./roster-timestamp"
 
 import { avatarSrc } from "../host"
 import type {
+	CompanionCounts,
 	BotPermissions as HostBotPermissions,
 	OfferedModel_Serialize,
 } from "@/lib/bindings"
@@ -141,10 +142,10 @@ export const toSettingsValue = (bot: Bot): BotSettingsValue => ({
 	},
 })
 
-// TODO: read both counts once the host answers them for every companion of a Space in one call
-const UNREAD_COUNT = 0
-
-export const toCompanionSummary = (bot: Bot): CompanionSummary => ({
+export const toCompanionSummary = (
+	bot: Bot,
+	counts: CompanionCounts | undefined,
+): CompanionSummary => ({
 	id: bot.id,
 	name: bot.name,
 	blot: bot.avatarBlot ?? undefined,
@@ -153,8 +154,8 @@ export const toCompanionSummary = (bot: Bot): CompanionSummary => ({
 	title: bot.title,
 	instructions: bot.instructions,
 	permissionMode: readBotPermissionMode(bot.permissions.defaultMode),
-	skillsCount: UNREAD_COUNT,
-	applicationsCount: UNREAD_COUNT,
+	skillsCount: counts?.skillsCount,
+	applicationsCount: counts?.applicationsCount,
 })
 
 export const toIdentity = (

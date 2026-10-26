@@ -10,10 +10,14 @@ import {
 	MembersPanel,
 	type MembersPanelProps,
 } from "@workspace/ui/components/space-settings-dialog/members-panel"
-import { SPACE_ENTRY } from "@workspace/ui/components/space-settings-dialog/use-space-settings"
+import {
+	COMPANIONS_ENTRY,
+	SPACE_ENTRY,
+} from "@workspace/ui/components/space-settings-dialog/use-space-settings"
 
 import { signedInAccountIdOf } from "@/lib/account/use-account"
 import { toCompanionSummary } from "@/lib/bots/bot-settings"
+import { useCompanionCounts } from "@/lib/bots/use-companion-counts"
 import { toEnvironmentRows } from "@/lib/environment/environment-rows"
 import { useHosting } from "@/lib/host/use-hosting"
 import { useMembers } from "@/lib/host/use-members"
@@ -99,6 +103,9 @@ export const SpaceSettingsScreen = ({
 			account.state !== undefined &&
 			signedInAccountIdOf(account.state) === null,
 	})
+	const countsOf = useCompanionCounts(
+		settingsTab === COMPANIONS_ENTRY ? selectedSpace?.id : undefined,
+	)
 
 	if (!selectedSpaceId) {
 		return null
@@ -173,7 +180,9 @@ export const SpaceSettingsScreen = ({
 			spaces.controller.describe(selectedSpaceId, value),
 		...spaceSkills,
 		companions: {
-			companions: rosterView.bots.map(toCompanionSummary),
+			companions: rosterView.bots.map((bot) =>
+				toCompanionSummary(bot, countsOf(bot.id)),
+			),
 			onSelect: openCompanion,
 			onCreate: rosterLines.sidebarActions.onCreateBot,
 		},
