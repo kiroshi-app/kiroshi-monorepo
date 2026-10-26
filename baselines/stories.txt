@@ -936,6 +936,7 @@ navigation-appsidebar--roster
 navigation-appsidebar--roster-reading-next-page
 navigation-appsidebar--roster-surface-menu
 navigation-appsidebar--roster-without-paging
+navigation-appsidebar--row-click-modifiers
 navigation-appsidebar--row-context-menu
 navigation-appsidebar--row-last-space
 navigation-appsidebar--row-leaves-open-space

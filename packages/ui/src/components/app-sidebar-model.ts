@@ -17,6 +17,7 @@ import type { ConversationParticipant } from "@workspace/ui/components/conversat
 import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import type { ListEnd } from "@workspace/ui/components/list-skeleton"
 import type { MissionsPanelProps } from "@workspace/ui/components/missions-panel"
+import type { SidebarClickModifiers } from "@workspace/ui/components/sidebar-menu-row"
 import type { Space } from "@workspace/ui/components/space"
 import type {
 	SpaceInvitation,
@@ -145,7 +146,7 @@ const announcementFor = (
 }
 
 interface BotRosterActions {
-	onSelectBot?: (id: string) => void
+	onSelectBot?: (id: string, modifiers?: SidebarClickModifiers) => void
 	onEditBot?: (id: string) => void
 	onDuplicateBot?: (id: string) => void
 	onAddBotToSpace?: (botId: string, spaceId: string) => void
@@ -200,7 +201,7 @@ const heldBotsOf = (
 	}))
 
 interface ConversationRosterActions {
-	onSelectConversation?: (id: string) => void
+	onSelectConversation?: (id: string, modifiers?: SidebarClickModifiers) => void
 	onOpenConversationSettings?: (id: string) => void
 	onDeleteConversation?: (id: string) => void
 }
@@ -283,6 +284,7 @@ export {
 	type RosterPin,
 	type SectionActions,
 	type SectionNaming,
+	type SidebarClickModifiers,
 	spaceIdsOfBot,
 	workingBotOf,
 }

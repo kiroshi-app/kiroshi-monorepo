@@ -19,6 +19,7 @@ import {
 	STILL_LIFT,
 } from "@workspace/ui/components/app-sidebar.fixtures"
 import { BotRosterRow } from "@workspace/ui/components/app-sidebar-bot-row"
+import { NO_CLICK_MODIFIERS } from "@workspace/ui/components/sidebar-menu-row"
 import { SidebarMenu } from "@workspace/ui/components/ui/sidebar"
 
 const meta = preview.meta({
@@ -54,7 +55,10 @@ export const SelectedBot = meta.story({
 		await expect(row).toHaveAttribute("aria-current", "page")
 		await expect(within(row).getByText(ATLAS.name)).toBeVisible()
 		row.click()
-		await expect(args.onSelect).toHaveBeenCalledWith(ATLAS.id)
+		await expect(args.onSelect).toHaveBeenCalledWith(
+			ATLAS.id,
+			NO_CLICK_MODIFIERS,
+		)
 	},
 })
 
