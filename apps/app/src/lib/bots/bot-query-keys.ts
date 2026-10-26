@@ -6,4 +6,7 @@ export const botQueryKeys = {
 	mcpServers: () => [...botQueryKeys.all, "mcp-servers"] as const,
 	mcpServersOf: (owner: EnvOwner | null) =>
 		[...botQueryKeys.mcpServers(), owner] as const,
+	companionCounts: () => [...botQueryKeys.all, "companion-counts"] as const,
+	companionCountsOf: (spaceId: string | undefined) =>
+		[...botQueryKeys.companionCounts(), spaceId] as const,
 }

@@ -256,6 +256,8 @@ const settings = {
 			create: "Créer un compagnon",
 			empty: "Aucun compagnon dans cet espace pour l’instant.",
 			counts: "{{skills}} · {{applications}}",
+			countsUnreadable:
+				"Impossible de lire les compétences et les applications des compagnons. Rouvrez Compagnons pour réessayer.",
 			skills_zero: "aucune compétence",
 			skills_one: "{{count}} compétence",
 			skills_many: "{{count}} compétences",

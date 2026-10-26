@@ -245,6 +245,8 @@ const settings = {
 			create: "Create a companion",
 			empty: "No companions in this space yet.",
 			counts: "{{skills}} · {{applications}}",
+			countsUnreadable:
+				"Couldn’t read the skills and applications of the companions. Open Companions again to retry.",
 			skills_zero: "no skills",
 			skills_one: "{{count}} skill",
 			skills_other: "{{count}} skills",
