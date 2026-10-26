@@ -2,12 +2,11 @@ import type { ComponentProps, ReactNode } from "react"
 
 import { cn } from "@workspace/ui/lib/utils"
 
-interface ScreenLayoutProps extends Omit<ComponentProps<"div">, "children"> {
+interface ScreenLayoutProps extends ComponentProps<"div"> {
 	header?: ReactNode
 	footer?: ReactNode
 	centered?: boolean
 	scroller?: (columnClassName: string) => ReactNode
-	children?: ReactNode
 	contentClassName?: string
 	footerClassName?: string
 }
@@ -15,7 +14,7 @@ interface ScreenLayoutProps extends Omit<ComponentProps<"div">, "children"> {
 const ScreenLayout = ({
 	header,
 	footer,
-	centered = false,
+	centered,
 	scroller,
 	children,
 	className,
