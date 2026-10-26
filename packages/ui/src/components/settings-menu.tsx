@@ -16,6 +16,7 @@ import {
 import { ApplicationMark } from "@workspace/ui/components/plugin-settings/application-mark"
 import { SidebarListRow } from "@workspace/ui/components/sidebar-list-row"
 import { SpaceSquare } from "@workspace/ui/components/space-switcher"
+import { Badge } from "@workspace/ui/components/ui/badge"
 import { useOverlayScrollbars } from "@workspace/ui/hooks/use-overlay-scrollbars"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -47,6 +48,8 @@ const SUB_ENTRY = `${ROW} rounded-lg text-compact text-muted-foreground leading-
 const ROW_DOT = "pointer-events-none size-1.5 shrink-0 rounded-full"
 
 const ROW_LABEL = "min-w-0 flex-1 truncate"
+
+const ENTRY_COUNT = "bg-card text-muted-foreground tabular-nums transition-none"
 
 const SECTION = "flex flex-col not-first:pt-4"
 
@@ -110,7 +113,10 @@ const SettingsMenu = ({
 				<Icons.Previous aria-hidden="true" className="size-4 shrink-0" />
 				{backLabel ?? t("screen.back")}
 			</button>
-			<div className="flex min-w-0 items-center gap-2.5 px-2 in-data-companion-page:px-0">
+			<div
+				className="flex min-w-0 items-center gap-2.5"
+				data-slot="settings-menu-header"
+			>
 				{avatar}
 				<div className="flex min-w-0 flex-col">
 					<span
@@ -184,14 +190,6 @@ const SettingsMenuEntry = ({
 			>
 				<EntryIcon aria-hidden="true" className="size-4 shrink-0" />
 				<span className={ROW_LABEL}>{label}</span>
-				{count === undefined || isDisabled ? null : (
-					<span
-						className="shrink-0 font-normal text-muted-foreground text-xs tabular-nums"
-						data-slot="settings-menu-count"
-					>
-						{count}
-					</span>
-				)}
 				{hasIndicator ? (
 					<span
 						aria-hidden="true"
@@ -199,6 +197,15 @@ const SettingsMenuEntry = ({
 						data-slot="settings-menu-indicator"
 					/>
 				) : null}
+				{count === undefined || isDisabled ? null : (
+					<Badge
+						className={ENTRY_COUNT}
+						data-slot="settings-menu-count"
+						variant="outline"
+					>
+						{count}
+					</Badge>
+				)}
 			</button>
 			{children ? (
 				<ul className="ms-4.5 flex list-none flex-col gap-0.5 p-0">

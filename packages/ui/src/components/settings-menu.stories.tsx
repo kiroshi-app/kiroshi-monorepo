@@ -8,7 +8,9 @@ import {
 	slotIn,
 	slotsIn,
 } from "@workspace/storybook/story-utils"
+import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
 import type { BotMcpConnectionState } from "@workspace/ui/components/bot-settings"
+import { InitialsAvatar } from "@workspace/ui/components/initials-avatar"
 import { MARKED_APPLICATIONS } from "@workspace/ui/components/plugin-settings/applications.fixtures"
 import {
 	SettingsMenu,
@@ -274,6 +276,94 @@ export const SpaceSections = meta.story({
 	},
 })
 
+const expectCountInset = async (entry: HTMLElement) => {
+	const row = entry.getBoundingClientRect()
+	const badge = slotIn(entry, "settings-menu-count").getBoundingClientRect()
+	const top = badge.top - row.top
+	await expect(Math.abs(row.bottom - badge.bottom - top)).toBeLessThanOrEqual(1)
+	await expect(Math.abs(row.right - badge.right - top)).toBeLessThanOrEqual(1)
+}
+
+const spaceEntries = (selected: "Space" | "Companions") => (
+	<>
+		<SettingsMenuEntry
+			icon="Folder"
+			isSelected={selected === "Space"}
+			label="Space"
+			onSelect={fn()}
+		/>
+		<SettingsMenuEntry
+			count={3}
+			icon="Users"
+			isSelected={selected === "Companions"}
+			label="Companions"
+			onSelect={fn()}
+		/>
+	</>
+)
+
+const expectCompanionsCount = async (canvasElement: HTMLElement) => {
+	const menu = within(canvasElement).getByRole("navigation", {
+		name: "Settings",
+	})
+	const companions = within(menu).getByRole("button", { name: "Companions 3" })
+	const count = slotIn(companions, "settings-menu-count")
+	await expect(count).toHaveTextContent("3")
+	await expect(getComputedStyle(count).fontVariantNumeric).toBe("tabular-nums")
+	await expect(getComputedStyle(count).transitionProperty).not.toMatch(
+		/color|all/,
+	)
+	await expectCountInset(companions)
+	await expect(heightOf(companions)).toBe(
+		heightOf(within(menu).getByRole("button", { name: "Space" })),
+	)
+}
+
+export const CompanionsCount = meta.story({
+	args: { children: spaceEntries("Space") },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The Space menu, its Companions entry counting three. Check that the count sits in a badge as far from the top, the bottom and the right of its row, and that the row keeps the height of the Space entry.",
+			},
+		},
+	},
+	play: ({ canvasElement }) => expectCompanionsCount(canvasElement),
+})
+
+export const CompanionsCountDark = meta.story({
+	globals: { theme: "dark" },
+	args: CompanionsCount.input.args,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The counted Companions entry in the dark theme. Check that the badge keeps its equal inset and reads on the card.",
+			},
+		},
+	},
+	play: CompanionsCount.input.play,
+})
+
+export const CompanionsCountSelected = meta.story({
+	args: { children: spaceEntries("Companions") },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Companions selected. Check that the badge keeps its card fill and its inset on the muted fill of the selected row.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expect(
+			within(canvasElement).getByRole("button", { name: "Companions 3" }),
+		).toHaveAttribute("aria-current", "page")
+		await expectCompanionsCount(canvasElement)
+	},
+})
+
 export const States = meta.story({
 	tags: ["test-only"],
 	args: {
@@ -302,18 +392,22 @@ export const States = meta.story({
 					onSelect={fn()}
 				/>
 				<SettingsMenuEntry
+					count={4}
 					icon="Users"
 					isSelected={false}
 					label="Hover"
 					onSelect={fn()}
 				/>
 				<SettingsMenuEntry
+					count={12}
+					hasIndicator
 					icon="Json"
 					isSelected={false}
 					label="Focus"
 					onSelect={fn()}
 				/>
 				<SettingsMenuEntry
+					count={3}
 					icon="Skill"
 					isSelected
 					label="Selected"
@@ -342,6 +436,9 @@ export const States = meta.story({
 		await expect(
 			within(menu).getByRole("button", { name: "Leave space" }),
 		).toBeEnabled()
+		const focus = within(menu).getByRole("button", { name: /^Focus/ })
+		await expect(slotIn(focus, "settings-menu-indicator")).toBeVisible()
+		await expectCountInset(focus)
 	},
 	parameters: {
 		pseudo: {
@@ -350,6 +447,14 @@ export const States = meta.story({
 				"[data-slot=settings-menu-entries] li:nth-child(3) > button",
 		},
 	},
+})
+
+export const StatesDark = meta.story({
+	tags: ["test-only"],
+	globals: { theme: "dark" },
+	args: States.input.args,
+	parameters: States.input.parameters,
+	play: States.input.play,
 })
 
 export const ApplicationsOpen = meta.story({
@@ -498,5 +603,58 @@ export const ConnectingSpaceDark = meta.story({
 					"The dark theme, for a space whose host is still connecting. Check that the hollow presence dot is filled with the card behind it and ringed in it.",
 			},
 		},
+	},
+})
+
+const HEADER_MENUS = [
+	{
+		isCompanionPage: true,
+		avatar: <BotIdentityAvatar name="Atlas" seed="atlas" size={36} />,
+		name: "Atlas",
+		subtitle: "Companion settings",
+	},
+	{
+		isCompanionPage: false,
+		avatar: <SpaceSquare colour="blue" host="up" size="avatar" />,
+		name: "Release desk",
+		subtitle: "Space settings",
+	},
+	{
+		isCompanionPage: false,
+		avatar: <InitialsAvatar name="Ada Martin" size={36} />,
+		name: "Ada Martin",
+		subtitle: "User settings",
+	},
+]
+
+export const HeaderAlignment = meta.story({
+	tags: ["test-only"],
+	parameters: {
+		a11y: {
+			config: { rules: [{ id: "landmark-unique", reviewOnFail: true }] },
+		},
+	},
+	render: () => (
+		<Frame>
+			{HEADER_MENUS.map((menu) => (
+				<SettingsMenu key={menu.name} {...menu} onBack={fn()}>
+					{null}
+				</SettingsMenu>
+			))}
+		</Frame>
+	),
+	play: async ({ canvasElement }) => {
+		const menus = within(canvasElement).getAllByRole("navigation")
+		await expect(menus).toHaveLength(3)
+		for (const menu of menus) {
+			const style = getComputedStyle(menu)
+			const contentLeft =
+				menu.getBoundingClientRect().left +
+				Number.parseFloat(style.borderInlineStartWidth) +
+				Number.parseFloat(style.paddingInlineStart)
+			const avatar = slotIn(menu, "settings-menu-header")
+				.firstElementChild as HTMLElement
+			await expect(avatar.getBoundingClientRect().left).toBe(contentLeft)
+		}
 	},
 })
