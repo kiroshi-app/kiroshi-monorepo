@@ -858,6 +858,14 @@ navigation-apprail--update-waiting
 navigation-apprail--update-waiting-dark
 navigation-apprail--user-settings-over-missions
 navigation-apprail--with-dot
+navigation-appsidebar--a-1-local-space
+navigation-appsidebar--a-2-shared-space
+navigation-appsidebar--a-3-joined-space
+navigation-appsidebar--a-4-connecting
+navigation-appsidebar--a-5-not-connected
+navigation-appsidebar--a-6-invitation-waiting
+navigation-appsidebar--a-7-menu-open
+navigation-appsidebar--a-8-long-name-at-minimum-width
 navigation-appsidebar--badges
 navigation-appsidebar--bare-rows
 navigation-appsidebar--caption-window-controls
@@ -1045,6 +1053,7 @@ navigation-apptitlebar--a-5-needs-you
 navigation-apptitlebar--a-5-needs-you-dark
 navigation-apptitlebar--a-6-empty-tab
 navigation-apptitlebar--a-6-empty-tab-dark
+navigation-apptitlebar--default
 navigation-apptitlebar--tab-gestures
 navigation-apptitlebar--with-window-controls
 navigation-conversationbotpile--five-bots-show-two-and-a-counter

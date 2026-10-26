@@ -267,6 +267,14 @@ const AppRail = ({
 	...props
 }: AppRailProps) => {
 	const { t } = useTranslation("bots")
+	const spaceLogo = (
+		<SpaceAvatar
+			colour={space?.colour}
+			size={26}
+			spaceId={space?.avatarSeed ?? ""}
+			state={spaceAvatarStateOf(spaceHost)}
+		/>
+	)
 	const panelEntry = (entry: AppRailPanel) => {
 		const isSelected = openSettings === undefined && selected === entry
 		const PanelIcon = (isSelected ? FillIcons : Icons)[PANEL_ICON[entry]]
@@ -286,38 +294,47 @@ const AppRail = ({
 			data-slot="app-rail"
 		>
 			<ul className={RAIL_GROUP}>
-				<RailItem
-					className={RAIL_SPACES_TRIGGER}
-					hasDot={dots?.settings}
-					isSelected={openSettings === "space"}
-					name={
-						space ? t("spaces.switch", { name: space.name }) : t("spaces.label")
-					}
-					renderButton={(button) => (
-						<RailSpacesMenu
-							badgesBySpaceId={badgesBySpaceId}
-							hostBySpaceId={hostBySpaceId}
-							invitations={invitations}
-							onAcceptInvitation={onAcceptInvitation}
-							onCreateSpace={onCreateSpace}
-							onDeclineInvitation={onDeclineInvitation}
-							onOpenChange={onSpacesMenuOpenChange}
-							onOpenSpaceSettings={onOpenSpaceSettings}
-							onRetryInvitation={onRetryInvitation}
-							onSelectSpace={onSelectSpace}
-							selectedSpaceId={space?.id}
-							spaces={spaces ?? (space ? [space] : [])}
-							trigger={button}
-						/>
-					)}
-				>
-					<SpaceAvatar
-						colour={space?.colour}
-						size={26}
-						spaceId={space?.avatarSeed ?? ""}
-						state={spaceAvatarStateOf(spaceHost)}
-					/>
-				</RailItem>
+				{spaces ? (
+					<RailItem
+						className={RAIL_SPACES_TRIGGER}
+						hasDot={dots?.settings}
+						isSelected={openSettings === "space"}
+						name={
+							space
+								? t("spaces.switch", { name: space.name })
+								: t("spaces.label")
+						}
+						renderButton={(button) => (
+							<RailSpacesMenu
+								badgesBySpaceId={badgesBySpaceId}
+								hostBySpaceId={hostBySpaceId}
+								invitations={invitations}
+								onAcceptInvitation={onAcceptInvitation}
+								onCreateSpace={onCreateSpace}
+								onDeclineInvitation={onDeclineInvitation}
+								onOpenChange={onSpacesMenuOpenChange}
+								onOpenSpaceSettings={onOpenSpaceSettings}
+								onRetryInvitation={onRetryInvitation}
+								onSelectSpace={onSelectSpace}
+								selectedSpaceId={space?.id}
+								spaces={spaces}
+								trigger={button}
+							/>
+						)}
+					>
+						{spaceLogo}
+					</RailItem>
+				) : (
+					// TODO: OPE-1334 drops this Space settings dot once apps/app passes spaces to every rail.
+					<RailItem
+						hasDot={dots?.settings}
+						isSelected={openSettings === "space"}
+						name={t("rail.spaceSettings")}
+						onPress={onOpenSpaceSettings}
+					>
+						{spaceLogo}
+					</RailItem>
+				)}
 				<RailItem
 					{...panelEntry("conversations")}
 					onPress={onSelectConversations}

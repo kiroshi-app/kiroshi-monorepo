@@ -98,19 +98,30 @@ const AppSidebarBase = ({
 		<>
 			<AppTitleBar
 				activeTabId={activeTabId}
+				badgesBySpaceId={badgesBySpaceId}
 				canGoBack={canGoBack}
 				canGoForward={canGoForward}
 				data-tauri-drag-region={dragRegion}
+				hostBySpaceId={hostBySpaceId}
 				insetWindowControls={insetWindowControls}
+				invitations={invitations}
+				onAcceptInvitation={onAcceptInvitation}
 				onCloseOtherTabs={onCloseOtherTabs}
 				onCloseTab={onCloseTab}
+				onCreateSpace={onCreateSpace}
+				onDeclineInvitation={onDeclineInvitation}
 				onGoBack={onGoBack}
 				onGoForward={onGoForward}
 				onNewTab={onNewTab}
 				onPinTab={onPinTab}
+				onRetryInvitation={onRetryInvitation}
+				onSelectSpace={onSelectSpace}
 				onSelectTab={onSelectTab}
+				onSpaceSwitcherOpenChange={onSpaceSwitcherOpenChange}
 				onUnpinTab={onUnpinTab}
 				overflowTabs={overflowTabs}
+				selectedSpaceId={selectedSpaceId}
+				spaces={spaces}
 				tabs={tabs}
 				windowControls={windowControls}
 			/>
@@ -133,7 +144,7 @@ const AppSidebarBase = ({
 				openSettings={openSettings}
 				selected={openPanel}
 				space={space}
-				spaces={spaces}
+				spaces={tabs ? spaces : undefined}
 				updateBadge={updateBadge}
 				user={user}
 			/>
