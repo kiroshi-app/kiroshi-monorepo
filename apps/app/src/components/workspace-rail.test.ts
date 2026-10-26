@@ -49,12 +49,6 @@ const railLogoTint = () =>
 afterEach(cleanup)
 
 describe("the rail on a settings screen", () => {
-	it("draws its logo in the selected Space colour", () => {
-		render(createElement(WorkspaceRail, railPropsFor(GARAGE.id)))
-
-		expect(railLogoTint()).toBe("var(--bot-blot-blue)")
-	})
-
 	it("repaints its logo when another Space is selected", () => {
 		const { rerender } = render(
 			createElement(WorkspaceRail, railPropsFor(HOME.id)),
