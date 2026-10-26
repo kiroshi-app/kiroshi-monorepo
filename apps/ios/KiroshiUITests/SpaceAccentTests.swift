@@ -6,27 +6,22 @@ final class SpaceAccentTests: XCTestCase {
 
     override func setUp() async throws {
         continueAfterFailure = true
-        XCUIDevice.shared.appearance = .light
-    }
-
-    override func tearDown() async throws {
-        XCUIDevice.shared.appearance = .light
     }
 
     func testYourBubbleInTheSpacesColourPassesTheAuditAtTheLargestSize() throws {
-        let app = launch(
-            "3.1", "-spaceColours", "yellow", "-UIPreferredContentSizeCategoryName",
-            "UICTContentSizeCategoryAccessibilityXXXL")
-        let bubble = app.staticTexts[yourMessage].firstMatch
-        XCTAssertTrue(bubble.waitForExistence(timeout: 10))
-        for _ in 0..<5 where !isOnScreen(bubble, in: app) {
-            app.scrollViews.firstMatch.swipeDown()
-        }
-        XCTAssertTrue(isOnScreen(bubble, in: app))
+        for appearance in [Appearance.light, .dark] {
+            let app = try launch(
+                "3.1", in: appearance, "-spaceColours", "yellow",
+                "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL")
+            let bubble = app.staticTexts[yourMessage].firstMatch
+            XCTAssertTrue(bubble.waitForExistence(timeout: 10))
+            for _ in 0..<5 where !isOnScreen(bubble, in: app) {
+                app.scrollViews.firstMatch.swipeDown()
+            }
+            XCTAssertTrue(isOnScreen(bubble, in: app))
 
-        try auditYourBubble(app, named: "light")
-        XCUIDevice.shared.appearance = .dark
-        try auditYourBubble(app, named: "dark")
+            try auditYourBubble(app, named: appearance.rawValue)
+        }
     }
 
     func testSwitchingSpaceRepaintsYourBubbleInTheNewSpacesColour() throws {
