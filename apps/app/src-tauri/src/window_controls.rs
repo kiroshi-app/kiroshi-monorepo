@@ -176,35 +176,86 @@ mod tests {
 #[cfg(target_os = "macos")]
 mod macos {
 	use objc2::rc::Retained;
-	use objc2_app_kit::{NSButton, NSView, NSWindow, NSWindowButton, NSWindowStyleMask};
-	use objc2_foundation::NSPoint;
+	use objc2::runtime::NSObject;
+	use objc2::{define_class, msg_send, sel, AllocAnyThread};
+	use objc2_app_kit::{
+		NSButton, NSView, NSWindow, NSWindowButton, NSWindowDidExitFullScreenNotification,
+		NSWindowStyleMask,
+	};
+	use objc2_foundation::{NSNotification, NSNotificationCenter, NSPoint};
 	use tauri::{Runtime, WebviewWindow, WindowEvent};
 
 	const LEADING_INSET: f64 = 12.0;
-	// Mirrors TITLE_BAR (h-8.5) in packages/ui/src/components/app-sidebar.tsx.
-	const TITLE_BAR_HEIGHT: f64 = 34.0;
+	// Mirrors TITLE_BAR (h-10) in packages/ui/src/components/app-sidebar.tsx.
+	const TITLE_BAR_HEIGHT: f64 = 40.0;
 	const CONTROL_DIAMETER: f64 = 14.0;
 
-	pub fn center_in_header<R: Runtime>(window: &WebviewWindow<R>) {
-		place(window);
-		let subject = window.clone();
-		window.on_window_event(move |event| {
-			if !matches!(event, WindowEvent::Resized(_)) {
-				return;
+	define_class!(
+		#[unsafe(super(NSObject))]
+		#[name = "KiroshiFullscreenExitObserver"]
+		struct FullscreenExitObserver;
+
+		impl FullscreenExitObserver {
+			#[unsafe(method(windowDidExitFullScreen:))]
+			fn window_did_exit_full_screen(&self, notification: &NSNotification) {
+				let Some(ns_window) =
+					notification.object().and_then(|object| object.downcast::<NSWindow>().ok())
+				else {
+					return;
+				};
+				place(&ns_window);
 			}
-			let replaced = subject.clone();
-			let _ = subject.run_on_main_thread(move || place(&replaced));
-		});
+		}
+	);
+
+	impl FullscreenExitObserver {
+		fn observe(ns_window: &NSWindow) -> Retained<Self> {
+			let this = Self::alloc().set_ivars(());
+			let observer: Retained<Self> = unsafe { msg_send![super(this), init] };
+			unsafe {
+				NSNotificationCenter::defaultCenter().addObserver_selector_name_object(
+					&observer,
+					sel!(windowDidExitFullScreen:),
+					Some(NSWindowDidExitFullScreenNotification),
+					Some(ns_window),
+				);
+			}
+			observer
+		}
+
+		fn stop(&self) {
+			unsafe { NSNotificationCenter::defaultCenter().removeObserver(self) };
+		}
 	}
 
-	fn place<R: Runtime>(window: &WebviewWindow<R>) {
+	pub fn center_in_header<R: Runtime>(window: &WebviewWindow<R>) {
 		let Some(ns_window) = main_window(window) else {
 			return;
 		};
+		place(&ns_window);
+		let exit_observer = FullscreenExitObserver::observe(&ns_window);
+		let subject = window.clone();
+		window.on_window_event(move |event| match event {
+			WindowEvent::Resized(_) => {
+				let replaced = subject.clone();
+				let _ = subject.run_on_main_thread(move || place_in(&replaced));
+			}
+			WindowEvent::Destroyed => exit_observer.stop(),
+			_ => {}
+		});
+	}
+
+	fn place_in<R: Runtime>(window: &WebviewWindow<R>) {
+		if let Some(ns_window) = main_window(window) {
+			place(&ns_window);
+		}
+	}
+
+	fn place(ns_window: &NSWindow) {
 		if ns_window.styleMask().contains(NSWindowStyleMask::FullScreen) {
 			return;
 		}
-		let Some(controls) = window_buttons(&ns_window) else {
+		let Some(controls) = window_buttons(ns_window) else {
 			return;
 		};
 		let Some(titlebar) = titlebar_of(&controls[0]) else {
@@ -214,7 +265,7 @@ mod macos {
 		let control = controls[0].frame();
 		let spacing = controls[1].frame().origin.x - control.origin.x;
 		let top = frame_top(control.size.height);
-		let titlebar_height = fit_titlebar(&ns_window, &titlebar, top + control.size.height);
+		let titlebar_height = fit_titlebar(ns_window, &titlebar, top + control.size.height);
 
 		let origin_x = LEADING_INSET - visible_inset(control.size.width);
 		let origin_y = titlebar_height - top - control.size.height;
@@ -266,12 +317,12 @@ mod macos {
 
 		#[test]
 		fn centres_a_button_measured_at_the_visible_diameter_on_the_title_bar() {
-			assert_eq!(centre(14.0), 17.0);
+			assert_eq!(centre(14.0), 20.0);
 		}
 
 		#[test]
 		fn centres_a_button_measured_with_padding_on_the_title_bar() {
-			assert_eq!(centre(16.0), 17.0);
+			assert_eq!(centre(16.0), 20.0);
 		}
 	}
 }
