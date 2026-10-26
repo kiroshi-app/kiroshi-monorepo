@@ -521,7 +521,10 @@ export const CompanionSelectOnPillHovered = meta.story({
 	},
 })
 
-const COLOUR_PROPERTY = /^(all|.*color|fill|stroke|box-shadow)$/
+const COLOUR_PROPERTY =
+	/^(all|.*color|fill|stroke|box-shadow|background|border(-(top|right|bottom|left|block|inline)(-(start|end))?)?|outline|text-decoration)$/
+
+const MOTION_UTILITY = /(^|:)!?(transition|duration)(-|!|$)|\[transition/
 
 const colourTransitionsOf = (element: HTMLElement) => {
 	const style = getComputedStyle(element)
@@ -555,6 +558,9 @@ export const CompanionSelectOnPillHoveredWithMotion = meta.story({
 		).toBe(true)
 		await expect(pill).toHaveClass("hover:bg-current/20")
 		await expect(colourTransitionsOf(pill)).toEqual([])
+		await expect(
+			[...pill.classList].filter((name) => MOTION_UTILITY.test(name)),
+		).toEqual([])
 	},
 })
 
