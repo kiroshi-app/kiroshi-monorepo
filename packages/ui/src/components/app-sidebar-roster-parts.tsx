@@ -23,8 +23,7 @@ const SECTION_DROP =
 
 const SECTION_DROP_AVATAR = "block opacity-40"
 
-const DROP_AREA =
-	"group/roster-drop relative rounded-2xl transition-colors duration-150 ease-out motion-reduce:transition-none"
+const DROP_AREA = "group/roster-drop relative rounded-2xl"
 
 const DROP_AREA_LANDING = "bg-sidebar-accent/60"
 

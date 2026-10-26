@@ -555,7 +555,7 @@ const RoutinesPanelSurface = (props: RoutinesPanelListProps) => {
 			{heading ? null : (
 				<SidebarFooter className="p-2">
 					<button
-						className="flex h-10 items-center gap-2.5 rounded-xl pe-3 ps-2.5 text-start outline-none transition-colors duration-150 hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring/30 motion-reduce:transition-none"
+						className="flex h-10 items-center gap-2.5 rounded-xl pe-3 ps-2.5 text-start outline-none hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring/30"
 						data-opens={ROUTINES_OPENER}
 						data-slot="routines-entry"
 						onClick={() => pages.push("routines", ROUTINES_OPENER)}

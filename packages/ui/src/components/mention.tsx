@@ -16,7 +16,7 @@ const MENTION_CLASS =
 	"inline-flex max-w-full items-center gap-1 rounded-full bg-current/10 pr-2 pl-1 align-top font-medium"
 
 const SELECTABLE_CLASS =
-	"cursor-pointer outline-none transition-colors duration-150 ease-out hover:bg-current/20 focus-visible:ring-2 focus-visible:ring-current motion-reduce:transition-none"
+	"cursor-pointer outline-none hover:bg-current/20 focus-visible:ring-2 focus-visible:ring-current"
 
 const DIM_CLASS = "text-current/70"
 

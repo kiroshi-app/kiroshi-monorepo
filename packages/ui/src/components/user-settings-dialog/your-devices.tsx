@@ -131,7 +131,7 @@ const DeviceRow = ({ device, focusTaker, onRemovePress }: DeviceRowProps) => {
 			<span className="flex w-18 shrink-0 justify-center">
 				<button
 					aria-describedby={nameId}
-					className="relative rounded-xs text-compact text-muted-foreground leading-4 outline-offset-2 transition-colors duration-150 after:absolute after:-inset-1 hover:text-foreground motion-reduce:transition-none"
+					className="relative rounded-xs text-compact text-muted-foreground leading-4 outline-offset-2 after:absolute after:-inset-1 hover:text-foreground"
 					onClick={onRemovePress}
 					ref={focusTaker}
 					type="button"

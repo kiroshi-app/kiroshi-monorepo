@@ -64,7 +64,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"The resting, off state and the press that turns it on. Check that the thumb slides rather than jumps between the two ends when motion is allowed, and that the track fills with the primary rather than only outlining — an off switch and an on one must be distinguishable without reading the label beside them.",
+					"The resting, off state and the press that turns it on. Check that the thumb slides rather than jumps between the two ends when motion is allowed, and that the track fills with the primary at once rather than only outlining — an off switch and an on one must be distinguishable without reading the label beside them.",
 			},
 		},
 	},
@@ -78,9 +78,7 @@ export const Default = meta.story({
 
 		if (!isInBrowserRunner()) return
 		await withMotionAllowed(() =>
-			expect(getComputedStyle(control).transitionProperty).toBe(
-				"color, background-color, border-color, box-shadow",
-			),
+			expect(getComputedStyle(control).transitionProperty).toBe("none"),
 		)
 	},
 })
@@ -168,7 +166,7 @@ export const ReducedMotion = meta.story({
 		docs: {
 			description: {
 				story:
-					"The same press for a reader who asked the system to stop moving things. The registry switch transitions its track and slides its thumb; the composed one drops both under `prefers-reduced-motion`, so the value changes by colour and position alone with nothing travelling between the two ends. Check the track and the thumb both report no transition property at all, and that the thumb is already at the far end on the frame after the press - a switch is a report, so nothing waits on a transition end and dropping the motion outright costs nothing.",
+					"The same press for a reader who asked the system to stop moving things. The track switches its colour at once whatever the preference and the registry switch slides its thumb; the composed one drops that slide under `prefers-reduced-motion`, so the value changes by colour and position alone with nothing travelling between the two ends. Check the track and the thumb both report no transition property at all, and that the thumb is already at the far end on the frame after the press - a switch is a report, so nothing waits on a transition end and dropping the motion outright costs nothing.",
 			},
 		},
 	},

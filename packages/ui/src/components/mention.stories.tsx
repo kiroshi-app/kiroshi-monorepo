@@ -517,7 +517,7 @@ export const CompanionSelectOnPillHovered = meta.story({
 		const pill = pillIn(canvasElement)
 
 		await expect(pill).toHaveClass("hover:bg-current/20")
-		await expect(pill).toHaveClass("motion-reduce:transition-none")
+		await expect(getComputedStyle(pill).transitionDuration).toBe("0s")
 	},
 })
 

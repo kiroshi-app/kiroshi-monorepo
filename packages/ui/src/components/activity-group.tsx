@@ -19,7 +19,7 @@ const OPEN_MISSION_GROUPS: OpenMissionGroup[] = [
 const GROUP_HEAD_CLASS = "flex h-7 items-center gap-1.5 px-1.5"
 
 const GROUP_FOLD_CLASS =
-	"w-full rounded-lg text-start outline-none transition-colors duration-150 hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring/30 motion-reduce:transition-none"
+	"w-full rounded-lg text-start outline-none hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring/30"
 
 type ActivityGroupFold = {
 	isOpen: boolean

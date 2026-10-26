@@ -161,13 +161,11 @@ const TURN_FOOTER_KEY: Partial<
 	queued: "turn.footer.queued",
 }
 
-const HIGHLIGHT =
-	"rounded-xl transition-colors duration-200 data-[highlighted]:bg-accent/40 motion-reduce:transition-none"
+const HIGHLIGHT = "rounded-xl data-[highlighted]:bg-accent/40"
 
 const ROW_BLEEDS_TO_TRANSCRIPT_EDGE = "-mx-6 w-auto px-6"
 
-const ROW_HIGHLIGHT =
-	"transition-colors duration-200 data-[highlighted]:bg-accent/40 motion-reduce:transition-none"
+const ROW_HIGHLIGHT = "data-[highlighted]:bg-accent/40"
 
 const RUN_ROW_PADDING = {
 	single: "pt-2 pb-1",

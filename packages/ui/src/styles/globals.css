@@ -369,10 +369,6 @@
 @media (prefers-reduced-motion: no-preference) {
 	.group\/button.transition-all {
 		transition:
-			color 150ms,
-			background-color 150ms,
-			border-color 150ms,
-			box-shadow 150ms,
 			opacity 150ms,
 			scale 200ms ease-out;
 	}
@@ -381,19 +377,19 @@
 :is(
 	.group\/badge,
 	[data-slot="switch"],
-	[data-slot="tabs-trigger"]
-).transition-all {
-	transition-property: color, background-color, border-color, box-shadow;
+	[data-slot="tabs-trigger"],
+	[data-slot="accordion-trigger"]
+).transition-all,
+[data-slot="item"].transition-colors,
+:is(
+	[data-slot="input"],
+	[data-slot="input-otp-slot"]
+).transition-\[color\,box-shadow\] {
+	transition-property: none;
 }
 
 [data-slot="sidebar-rail"].transition-all {
-	transition-property: left, right, translate, background-color;
-}
-
-@media (prefers-reduced-motion: reduce) {
-	.transition-all.motion-reduce\:transition-none {
-		transition-property: none;
-	}
+	transition-property: left, right, translate;
 }
 
 :is(
@@ -519,9 +515,7 @@ svg[focusable="false"] {
 		animation-duration: 0.01ms;
 	}
 
-	[data-slot="badge"],
 	[data-slot="button"],
-	[data-slot="switch"],
 	[data-slot="switch-thumb"] {
 		transition-duration: 0.01ms;
 	}

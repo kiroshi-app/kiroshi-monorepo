@@ -16,7 +16,7 @@ import { cn } from "@workspace/ui/lib/utils"
 const ROW_AVATAR_SIZE = 28
 
 const ROW_CLASS =
-	"flex items-center gap-2.5 rounded-xl px-2 py-1.5 text-foreground text-sm transition-colors duration-100 ease-out hover:bg-muted motion-reduce:transition-none"
+	"flex items-center gap-2.5 rounded-xl px-2 py-1.5 text-foreground text-sm hover:bg-muted"
 
 type ParticipantRowProps = {
 	bot: RosterBot
