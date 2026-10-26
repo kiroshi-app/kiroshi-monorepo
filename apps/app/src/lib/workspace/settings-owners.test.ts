@@ -12,6 +12,8 @@ const SELECTED = { selectedSpaceId: "vocca" }
 
 const SCRIBE_LISTED = { bots: [{ id: "scribe" } as Bot] }
 
+const VOCCA_SETTINGS = { kind: "space", spaceId: "vocca" } as const
+
 const SCRIBE_SETTINGS = {
 	kind: "companion",
 	companionId: "scribe",
@@ -27,7 +29,7 @@ describe("settings owners", () => {
 
 	it("owns no companion while no companion settings are open", () => {
 		expect(
-			companionSettingsOwnerOf({ kind: "space" }, SCRIBE_LISTED, SELECTED),
+			companionSettingsOwnerOf(VOCCA_SETTINGS, SCRIBE_LISTED, SELECTED),
 		).toBeNull()
 	})
 
@@ -38,15 +40,25 @@ describe("settings owners", () => {
 	})
 
 	it("owns the selected space while its settings are open", () => {
-		expect(spaceSettingsOwnerOf({ kind: "space" }, SELECTED)).toEqual({
+		expect(spaceSettingsOwnerOf(VOCCA_SETTINGS, SELECTED, "vocca")).toEqual({
 			kind: "space",
 			id: "vocca",
 		})
 	})
 
+	it("owns no space while the settings of another space are open", () => {
+		expect(
+			spaceSettingsOwnerOf(
+				{ kind: "space", spaceId: "harbor" },
+				SELECTED,
+				"vocca",
+			),
+		).toBeNull()
+	})
+
 	it("owns no space while none is selected", () => {
 		expect(
-			spaceSettingsOwnerOf({ kind: "space" }, { selectedSpaceId: null }),
+			spaceSettingsOwnerOf(VOCCA_SETTINGS, { selectedSpaceId: null }, null),
 		).toBeNull()
 	})
 

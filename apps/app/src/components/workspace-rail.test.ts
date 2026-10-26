@@ -35,6 +35,8 @@ const SETTINGS_RAILS: SettingsPanels["railSettings"][] = ["space", "you"]
 
 const NO_INVITATIONS = {
 	rows: [],
+	termsOf: () => undefined,
+	joinedIdOf: () => undefined,
 	accept: () => undefined,
 	decline: () => undefined,
 	sweepWithdrawn: () => undefined,
@@ -147,6 +149,6 @@ describe("the rail on a settings screen", () => {
 
 		fireEvent.click(screen.getByRole("button", { name: SPACE_SETTINGS }))
 
-		expect(openSpaceSettings).toHaveBeenCalledOnce()
+		expect(openSpaceSettings).toHaveBeenCalledExactlyOnceWith(GARAGE.id)
 	})
 })

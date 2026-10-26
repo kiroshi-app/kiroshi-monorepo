@@ -28,7 +28,7 @@ const conversationsRoute = createRoute({
 
 const spaceSettingsRoute = createRoute({
 	getParentRoute: () => rootRoute,
-	path: "/settings/space",
+	path: "/settings/space/$spaceId",
 	validateSearch: validateSettingsSearch,
 	component: SpaceSettingsRoute,
 })

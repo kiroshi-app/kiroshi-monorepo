@@ -50,9 +50,9 @@ export const WorkspaceRail = ({
 	return (
 		<AppRail
 			dots={rosterLists.railSignals}
-			onOpenSpaceSettings={() =>
-				requestLeave(() => navigation.openSpaceSettings())
-			}
+			onOpenSpaceSettings={() => {
+				if (space) requestLeave(() => navigation.openSpaceSettings(space.id))
+			}}
 			onOpenYou={() => requestLeave(() => navigation.openUserSettings())}
 			onSelectConversations={() =>
 				requestLeave(() => leaveSettingsFor("conversations"))

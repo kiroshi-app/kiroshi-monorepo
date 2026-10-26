@@ -144,7 +144,10 @@ export const useSidebarActions = ({
 			},
 			onEditBot: (id) => settings.openCompanionSettings(id),
 			onOpenConversationSettings: roster.editConversation,
-			onOpenSpaceSettings: () => settings.openSpaceSettings(),
+			onOpenSpaceSettings: () => {
+				const openRowId = openSpaceRowId(joinedSpaces, spaces)
+				if (openRowId) settings.openSpaceSettings(openRowId)
+			},
 			onOpenUserSettings: () => settings.openUserSettings(),
 			onPinRoster: (spaceId, pins) => {
 				void sections.pin(spaceId, pins)

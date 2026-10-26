@@ -146,6 +146,7 @@ const gearFor = async (listed: Invitation[] = [STUDIO]) => {
 	}
 	const rows = () => result.current.rows
 	return {
+		result,
 		transport,
 		admit,
 		joinedSpaces,
@@ -273,6 +274,28 @@ describe("accepting an invitation", () => {
 		expect(gear.transport.accept).toHaveBeenCalledWith(STUDIO.id)
 		expect(gear.rows()).toEqual([])
 		expect(gear.admit).toHaveBeenCalledWith(JOINED_STUDIO)
+	})
+
+	it("gives the inviter and the expiry of a shown invitation", async () => {
+		const gear = await gearFor()
+
+		expect(gear.result.current.termsOf(STUDIO.instanceId)).toEqual({
+			hostEmail: "lea@example.com",
+			expiresAt: Date.parse(STUDIO.expiresAt),
+		})
+		expect(gear.result.current.termsOf("instance-unknown")).toBeUndefined()
+	})
+
+	it("names the joined space an accepted invitation became, and none before", async () => {
+		const gear = await gearFor()
+
+		expect(gear.result.current.joinedIdOf(STUDIO.instanceId)).toBeUndefined()
+
+		await gear.accept(STUDIO.instanceId)
+
+		expect(gear.result.current.joinedIdOf(STUDIO.instanceId)).toBe(
+			JOINED_STUDIO.id,
+		)
 	})
 
 	it("keeps an accepting row the refreshed list no longer carries", async () => {

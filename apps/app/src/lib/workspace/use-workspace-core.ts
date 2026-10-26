@@ -32,6 +32,7 @@ import { createMessageLandingController } from "../search/message-landing-contro
 import { useCollapsedSections } from "../sections/use-collapsed-sections"
 import { useSections } from "../sections/use-sections"
 import { createShownMemory } from "../sidebar/shown-memory"
+import { openRowIdOf } from "../spaces/joined-spaces-controller"
 import { useInvitations } from "../spaces/use-invitations"
 import { useJoinedSpaces } from "../spaces/use-joined-spaces"
 import { useSpaces } from "../spaces/use-spaces"
@@ -108,7 +109,11 @@ export const useWorkspaceCore = (openSettings: OpenSettings | null) => {
 		roster.state,
 		spaces.state,
 	)
-	const spaceSettingsOwner = spaceSettingsOwnerOf(openSettings, spaces.state)
+	const spaceSettingsOwner = spaceSettingsOwnerOf(
+		openSettings,
+		spaces.state,
+		openRowIdOf(joinedSpaces.state, spaces.state.selectedSpaceId),
+	)
 	const userSettingsOwner = userSettingsOwnerOf(openSettings)
 	const applications = useApplications(applicationTransport, store, {
 		isCatalogueOpen: Boolean(

@@ -27,8 +27,11 @@ export const companionSettingsOwnerOf = (
 export const spaceSettingsOwnerOf = (
 	openSettings: OpenSettings | null,
 	{ selectedSpaceId }: SelectedSpace,
+	openRowId: string | null,
 ): EnvOwner | null =>
-	openSettings?.kind === "space" && selectedSpaceId
+	openSettings?.kind === "space" &&
+	openSettings.spaceId === openRowId &&
+	selectedSpaceId
 		? { kind: "space", id: selectedSpaceId }
 		: null
 

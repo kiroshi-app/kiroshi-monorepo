@@ -7,20 +7,28 @@ export const useSettingsNavigation = () => {
 	const navigate = useNavigate()
 	const router = useRouter()
 
-	return useMemo(
-		() => ({
-			back: () => {
-				if (router.history.canGoBack()) {
-					router.history.back()
-					return
-				}
-				void navigate({ to: "/", replace: true })
-			},
+	return useMemo(() => {
+		const backOr = (fallback: () => void) => {
+			if (router.history.canGoBack()) {
+				router.history.back()
+				return
+			}
+			fallback()
+		}
+
+		return {
+			back: () => backOr(() => void navigate({ to: "/", replace: true })),
+			backToUserSettings: () =>
+				backOr(() => void navigate({ to: "/settings/user", replace: true })),
 			openConversations: () => {
 				void navigate({ to: "/" })
 			},
-			openSpaceSettings: (search: SettingsSearch = {}) => {
-				void navigate({ to: "/settings/space", search })
+			openSpaceSettings: (spaceId: string, search: SettingsSearch = {}) => {
+				void navigate({
+					to: "/settings/space/$spaceId",
+					params: { spaceId },
+					search,
+				})
 			},
 			openUserSettings: (search: SettingsSearch = {}) => {
 				void navigate({ to: "/settings/user", search })
@@ -45,9 +53,8 @@ export const useSettingsNavigation = () => {
 					replace: true,
 				})
 			},
-		}),
-		[navigate, router],
-	)
+		}
+	}, [navigate, router])
 }
 
 export type SettingsNavigation = ReturnType<typeof useSettingsNavigation>
