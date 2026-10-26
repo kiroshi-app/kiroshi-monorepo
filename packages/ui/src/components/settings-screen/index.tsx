@@ -163,6 +163,7 @@ const SettingsScreenLayout = ({
 	const openedName = isApplicationOpen
 		? sessions.applications.openedName
 		: undefined
+	const isSubEntrySelected = openedName !== undefined && !isCompanionPage
 	const wordedKind = wordedKindOf(sessions, pages)
 	const ordinary = entries.filter(({ isDanger }) => !isDanger)
 	const pinned = entries.filter(({ isDanger }) => isDanger)
@@ -197,13 +198,15 @@ const SettingsScreenLayout = ({
 			hasIndicator={item.hasIndicator}
 			icon={item.icon}
 			isDanger={item.isDanger}
-			isOpen={item.value === shown.value && openedName !== undefined}
-			isSelected={item.value === shown.value && openedName === undefined}
+			isOpen={item.value === shown.value && isSubEntrySelected}
+			isSelected={item.value === shown.value && !isSubEntrySelected}
 			key={item.value}
 			label={item.label}
 			onSelect={() => select(item.value)}
 		>
-			{item.value === APPLICATIONS_ENTRY && isApplicationsShown ? (
+			{item.value === APPLICATIONS_ENTRY &&
+			isApplicationsShown &&
+			!isCompanionPage ? (
 				<>
 					{applications.map((server) => (
 						<SettingsMenuApplication

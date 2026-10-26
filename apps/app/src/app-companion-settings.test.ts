@@ -600,8 +600,15 @@ it("opens the companion screen on the application a deep link names", async () =
 
 	expect(companionScreenOf(ATLAS)?.subtitle).toBe("companion")
 	expect(
-		menuEntryOf(new RegExp(`^${SENTRY}`)).getAttribute("aria-current"),
+		menuEntryOf(i18n.t("bots:dialog.tab.applications")).getAttribute(
+			"aria-current",
+		),
 	).toBe("page")
+	expect(
+		within(settingsMenuOf() as HTMLElement).queryByRole("button", {
+			name: new RegExp(`^${SENTRY}`),
+		}),
+	).toBeNull()
 	expect(screen.getByRole("heading", { level: 2, name: SENTRY })).toBeTruthy()
 })
 

@@ -293,20 +293,29 @@ export const Applications = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard H06: Applications, its description, search, add button and rows. Check that the menu lists each installed application under the entry, and that a row opens the application as a pushed page.",
+					"Artboard H06: Applications, its description, search, add button and rows. Check that the menu holds no application under the entry, that a row of the list opens the application as a pushed page, and that Applications stays the current entry.",
 			},
 		},
 	},
 	play: async ({ args, userEvent }) => {
 		const menu = await menuIn()
 		await expect(pageHeading("Applications")).toBeVisible()
+		await expect(
+			within(menu).queryByRole("button", { name: "Linear Connected" }),
+		).not.toBeInTheDocument()
 		await userEvent.click(
-			await within(menu).findByRole("button", { name: "Linear Connected" }),
+			within(screen.getByRole("main")).getByRole("button", {
+				name: "Open Linear",
+			}),
 		)
 		await expect(args.onMcpServerOpen).toHaveBeenLastCalledWith("linear")
 		await expect(
 			await screen.findByRole("heading", { level: 2, name: "Linear" }),
 		).toBeVisible()
+		await expect(entryIn(menu, "Applications")).toHaveAttribute(
+			"aria-current",
+			"page",
+		)
 	},
 })
 
