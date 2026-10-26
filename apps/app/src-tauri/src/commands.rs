@@ -225,6 +225,7 @@ fn commands<R: Runtime>() -> Commands<R> {
 		spaces::commands::bot_remove_from_space::<tauri::Wry>,
 		spaces::commands::space_preferences,
 		spaces::commands::space_set_preferences,
+		spaces::commands::space_companion_counts::<tauri::Wry>,
 		user::commands::user_preferences::<tauri::Wry>,
 		user::commands::user_set_preferences::<tauri::Wry>,
 		user::commands::user_set_profile_picture::<tauri::Wry>,

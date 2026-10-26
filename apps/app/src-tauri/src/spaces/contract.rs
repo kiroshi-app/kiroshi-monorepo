@@ -46,6 +46,14 @@ impl From<SpacePreferences> for space_settings::Preferences {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CompanionCounts {
+	pub bot_id: String,
+	pub skills_count: u64,
+	pub applications_count: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum SpaceError {
 	#[serde(rename_all = "camelCase")]

@@ -342,6 +342,7 @@ pub(super) const REACHES: &[(&str, Reach)] = &[
 	("bot_remove_from_space", Reach::Scoped(BOT_AND_SPACE)),
 	("space_preferences", Reach::Scoped(SPACE_ID)),
 	("space_set_preferences", Reach::Scoped(SPACE_ID)),
+	("space_companion_counts", Reach::Scoped(SPACE_ID)),
 	("user_preferences", Reach::HostOnly),
 	("user_set_preferences", Reach::HostOnly),
 	("user_set_profile_picture", Reach::HostOnly),

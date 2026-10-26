@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Runtime, State};
 
 use super::archive;
-use super::contract::{Space, SpaceError, SpacePreferences};
+use super::contract::{CompanionCounts, Space, SpaceError, SpacePreferences};
 use crate::bundles;
 use crate::conversations::commands::{announce_joined, announce_left, list_bundles};
 use crate::conversations::contract::AvatarBlot;
@@ -125,6 +125,37 @@ pub async fn space_set_preferences(
 		.map(SpacePreferences::from)?)
 }
 
+#[tauri::command]
+#[specta::specta]
+pub async fn space_companion_counts<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	space_id: String,
+) -> Result<Vec<CompanionCounts>, SpaceError> {
+	let bot_ids = ready(&state)?.spaces().companions(space_id).await?;
+	Ok(counted_companions(bundles::root(&app).as_deref(), bot_ids))
+}
+
+fn counted_companions(root: Option<&Path>, bot_ids: Vec<String>) -> Vec<CompanionCounts> {
+	bot_ids
+		.into_iter()
+		.map(|bot_id| {
+			let (skills, applications) = match root {
+				Some(root) => (
+					bundles::skills(root, &bot_id).len(),
+					bundles::mcp_servers(root, &bot_id).len(),
+				),
+				None => (0, 0),
+			};
+			CompanionCounts {
+				bot_id,
+				skills_count: skills as u64,
+				applications_count: applications as u64,
+			}
+		})
+		.collect()
+}
+
 async fn forget_bundles(root: Option<&Path>, database: &db::Database, bot_ids: &[String]) {
 	if let Some(root) = root {
 		for bot_id in bot_ids {
@@ -187,7 +218,9 @@ mod tests {
 
 	use super::*;
 	use crate::db::connection::fixture_root;
-	use crate::db::repositories::conversations::BotIdentity;
+	use crate::db::repositories::conversations::{Bot, BotIdentity};
+	use crate::plugins::commands::{plugin_mcp_servers, plugin_skills};
+	use crate::plugins::contract::PluginScope;
 	use crate::removed_on_drop::RemovedOnDrop;
 	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 	use tauri::test::mock_builder;
@@ -213,6 +246,10 @@ mod tests {
 	}
 
 	async fn a_bot_of(database: &db::Database, space_id: &str, name: &str) -> String {
+		a_stored_bot_of(database, space_id, name).await.id
+	}
+
+	async fn a_stored_bot_of(database: &db::Database, space_id: &str, name: &str) -> Bot {
 		let identity = BotIdentity {
 			name: name.to_owned(),
 			title: String::new(),
@@ -228,13 +265,94 @@ mod tests {
 			.create_bot(identity, Some(space_id.to_owned()), None)
 			.await
 			.expect("the bot is created")
-			.id
 	}
 
 	fn a_host(name: &str) -> AppOfItsOwn {
 		let app = an_app_of_its_own(&format!("space-commands-{name}"), mock_builder());
 		app.manage(db::bootstrap(app.handle()));
 		app
+	}
+
+	fn a_skill(name: &str) -> bundles::SkillDraft {
+		bundles::SkillDraft {
+			name: name.to_owned(),
+			description: format!("{name} on demand"),
+			body: "Do it.".to_owned(),
+			front: bundles::SkillFront::default(),
+		}
+	}
+
+	fn an_application(root: &Path, bot: &Bot, name: &str) {
+		let config = serde_json::json!({ "command": name });
+		bundles::set_mcp_server(root, bot, name, &config, None).expect("the application lands");
+	}
+
+	async fn counted_by_plugin(app: &AppOfItsOwn, bot_id: &str) -> (u64, u64) {
+		let scope = PluginScope::Bot { id: bot_id.to_owned() };
+		let handle = app.handle().clone();
+		let skills = plugin_skills(handle.clone(), scope.clone()).await.expect("the skills read");
+		let servers = plugin_mcp_servers(handle, scope).await.expect("the servers read");
+		(skills.len() as u64, servers.len() as u64)
+	}
+
+	#[tokio::test]
+	async fn every_companion_of_a_space_answers_its_skills_and_applications_counts() {
+		let app = a_host("companion-counts");
+		let database = app.state::<db::DatabaseState>().inner().as_ref().expect("the database");
+		let root = bundles::root(app.handle()).expect("the bundles have a home");
+		let vocca = database.spaces().create("Vocca".to_owned()).await.expect("a space");
+		let elsewhere = database.spaces().create("Elsewhere".to_owned()).await.expect("a space");
+
+		let equipped = a_stored_bot_of(database, &vocca.id, "Bean").await;
+		bundles::write(&root, &equipped).expect("the bundle is written");
+		bundles::create_skill(&root, &equipped, &a_skill("triage")).expect("a skill");
+		bundles::create_skill(&root, &equipped, &a_skill("digest")).expect("a skill");
+		an_application(&root, &equipped, "clock");
+		let bare = a_bot_of(database, &vocca.id, "Sprout").await;
+		let shared = a_stored_bot_of(database, &elsewhere.id, "Pip").await;
+		bundles::write(&root, &shared).expect("the bundle is written");
+		an_application(&root, &shared, "weather");
+		database
+			.spaces()
+			.add_bot(shared.id.clone(), vocca.id.clone(), None)
+			.await
+			.expect("the bot is shared");
+		a_bot_of(database, &elsewhere.id, "Stranger").await;
+
+		let counts = space_companion_counts(app.handle().clone(), app.state(), vocca.id.clone())
+			.await
+			.expect("the counts read");
+
+		let by_bot = |bot_id: &str| {
+			counts
+				.iter()
+				.find(|entry| entry.bot_id == bot_id)
+				.map(|entry| (entry.skills_count, entry.applications_count))
+		};
+		assert_eq!(counts.len(), 3, "got {counts:?}");
+		assert_eq!(by_bot(&equipped.id), Some((2, 1)));
+		assert_eq!(by_bot(&bare), Some((0, 0)));
+		assert_eq!(by_bot(&shared.id), Some((0, 1)));
+		for entry in &counts {
+			assert_eq!(
+				counted_by_plugin(&app, &entry.bot_id).await,
+				(entry.skills_count, entry.applications_count),
+				"the counts drift from the plugin readers for {}",
+				entry.bot_id
+			);
+		}
+	}
+
+	#[tokio::test]
+	async fn an_unknown_space_answers_an_error_rather_than_no_companion() {
+		let app = a_host("companion-counts-unknown");
+
+		let failure =
+			space_companion_counts(app.handle().clone(), app.state(), "nowhere".to_owned())
+				.await
+				.expect_err("the space is unknown");
+
+		assert_eq!(failure, SpaceError::UnknownSpace { id: "nowhere".to_owned() });
 	}
 
 	#[tokio::test]
