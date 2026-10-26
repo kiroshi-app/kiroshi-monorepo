@@ -1256,6 +1256,7 @@ overlays-missionmenu--waiting-on-the-companion
 overlays-missionmenu--waiting-on-the-person
 overlays-missionmenu--working
 overlays-missionmenu--working-without-a-pull-request
+overlays-noticesurface--closed-by-keyboard
 overlays-noticesurface--dark-theme
 overlays-noticesurface--default
 overlays-noticesurface--device-approved

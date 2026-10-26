@@ -13,7 +13,6 @@ import {
 
 import preview from "@workspace/storybook/preview"
 import {
-	A11Y_FLOATING_FOCUS_GUARDS,
 	expectHeadingFont,
 	opaque,
 	slotIn,
@@ -319,7 +318,7 @@ export const Error = meta.story({
 		docs: {
 			description: {
 				story:
-					"The failure a background job raises when nobody opened anything. The story raises it from the trigger and a transient notice straight from the module, outside any component, then waits for the transient to leave: the failure is still there after a delay that already emptied its neighbour, because it holds until the reader closes it. Check that the error mark alone carries the destructive colour role, on a notice surface drawn no louder than any other. While nobody has focused the surface, the urgent announcement is the library's hidden mirror and the drawn notice stays out of the accessibility tree, so the title is announced once rather than twice; a Tab to the close control puts the notice back in the tree, with a visible ring, and Enter takes it off screen and runs the `onClose` the raise was handed. Pick `Default` for the notice that leaves on its own, `Dismissing` for the gesture, `LongContent` for a failure whose strings run past the notice width. The app assembles it at `apps/app/src/App.tsx:1240`.",
+					"The failure a background job raises when nobody opened anything. The story raises it from the trigger and a transient notice straight from the module, outside any component, then waits for the transient to leave: the failure is still there after a delay that already emptied its neighbour, because it holds until the reader closes it. Check that the error mark alone carries the destructive colour role, on a notice surface drawn no louder than any other. While nobody has focused the surface, the urgent announcement is the library's hidden mirror and the drawn notice keeps its text out of the accessibility tree, so the title is announced once rather than twice; a Tab to the close control puts the notice back in the tree, with a visible ring, and Enter takes it off screen and runs the `onClose` the raise was handed. Pick `Default` for the notice that leaves on its own, `Dismissing` for the gesture, `LongContent` for a failure whose strings run past the notice width. The app assembles it at `apps/app/src/App.tsx:1240`.",
 			},
 		},
 	},
@@ -372,6 +371,87 @@ export const Error = meta.story({
 			expect(within(viewport()).queryByText(FAILURE.title)).toBe(null),
 		)
 		await expect(closedFailure).toHaveBeenCalled()
+	},
+})
+
+const tabStopsHiddenFromAssistiveTech = () =>
+	Array.from(
+		viewport().querySelectorAll<HTMLElement>(
+			"button, [tabindex]:not([tabindex='-1'])",
+		),
+	).filter((stop) => isInaccessible(stop))
+
+const closeFromTheKeyboard = async (userEvent: UserEventObject) => {
+	await expect(tabStopsHiddenFromAssistiveTech()).toEqual([])
+	await expect(
+		within(viewport()).getByRole("button", { name: "Close notice" }),
+	).toBe(closeControl())
+
+	await waitFor(async () => {
+		await userEvent.tab()
+		await expect(closeControl()).toHaveFocus()
+	})
+	await expect(closeControl().matches(":focus-visible")).toBe(true)
+	await expect(tabStopsHiddenFromAssistiveTech()).toEqual([])
+
+	await userEvent.keyboard("{Enter}")
+}
+
+const closedFailureFromTheKeyboard = fn()
+
+export const ClosedByKeyboard = meta.story({
+	render: () => (
+		<>
+			<Button
+				onClick={() =>
+					raiseFailureNotice({
+						...FAILURE,
+						onClose: closedFailureFromTheKeyboard,
+					})
+				}
+				variant="outline"
+			>
+				Run the routine
+			</Button>
+			<Button onClick={() => raiseTransientNotice(SAVED)} variant="outline">
+				Save the routine
+			</Button>
+			<NoticeSurface />
+		</>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The keyboard way out, the same on every notice. A Tab from the control that raised the notice reaches its close control, which assistive technology sees under its name the whole time the notice is on screen, never only once it holds focus; Enter takes the notice off screen and runs the `onClose` the raise was handed. The story walks a transient notice, then a failure, whose title the library's hidden mirror announces while the drawn notice keeps its text out of the accessibility tree, so the title is still announced once. Pick `Error` for the failure on its own, `Dismissing` for the pointer gesture. The app assembles it at `apps/app/src/App.tsx:1240`.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Save the routine" }),
+		)
+		await within(viewport()).findByText(SAVED.title)
+		await closeFromTheKeyboard(userEvent)
+		await waitFor(() =>
+			expect(within(viewport()).queryByText(SAVED.title)).toBe(null),
+		)
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Run the routine" }),
+		)
+		await failureNotice()
+		const announced = screen.getAllByText(FAILURE.title, {
+			ignore: '[aria-hidden="true"], [aria-hidden="true"] *',
+		})
+		await expect(announced).toHaveLength(1)
+		await expect(screen.getByRole("alert")).toContainElement(announced[0])
+
+		await closeFromTheKeyboard(userEvent)
+		await waitFor(() =>
+			expect(within(viewport()).queryByText(FAILURE.title)).toBe(null),
+		)
+		await expect(closedFailureFromTheKeyboard).toHaveBeenCalled()
 	},
 })
 
@@ -569,7 +649,6 @@ const ReportedFailureDemo = () => (
 export const WithReport = meta.story({
 	render: () => <ReportedFailureDemo />,
 	parameters: {
-		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		docs: {
 			description: {
 				story:
@@ -616,7 +695,6 @@ export const WithFullReport = meta.story({
 		/>
 	),
 	parameters: {
-		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		docs: {
 			description: {
 				story:
@@ -656,7 +734,6 @@ export const WithSpecsOnlyReport = meta.story({
 		/>
 	),
 	parameters: {
-		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		docs: {
 			description: {
 				story:
@@ -709,7 +786,6 @@ export const WithReportAndAction = meta.story({
 	globals: { viewport: { value: "narrow" } },
 	render: () => <LongReportedFailureDemo />,
 	parameters: {
-		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		viewport: { options: NARROW_VIEWPORT },
 		docs: {
 			description: {
@@ -801,7 +877,6 @@ export const ReportCopied = meta.story({
 	globals: { viewport: { value: "narrow" } },
 	render: () => <LongReportedFailureDemo />,
 	parameters: {
-		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		viewport: { options: NARROW_VIEWPORT },
 		docs: {
 			description: {
@@ -844,7 +919,6 @@ export const ReportCopyRejected = meta.story({
 	tags: ["test-only"],
 	render: () => <ReportedFailureDemo />,
 	parameters: {
-		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		docs: {
 			description: {
 				story:
@@ -880,7 +954,6 @@ export const ReportFromLocalSide = meta.story({
 		/>
 	),
 	parameters: {
-		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		docs: {
 			description: {
 				story:
@@ -921,7 +994,6 @@ export const ReportWithoutCompanionName = meta.story({
 		/>
 	),
 	parameters: {
-		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		docs: {
 			description: {
 				story:
@@ -972,7 +1044,6 @@ export const StopFailedNamed = meta.story({
 	tags: ["test-only"],
 	render: () => <StopFailedNotice />,
 	parameters: {
-		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		docs: {
 			description: {
 				story:
@@ -1014,7 +1085,6 @@ export const QuestionRunFailed = meta.story({
 	tags: ["test-only"],
 	render: () => <QuestionRunFailedNotice />,
 	parameters: {
-		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		docs: {
 			description: {
 				story:
@@ -1041,7 +1111,6 @@ export const QuestionRunFailed = meta.story({
 
 export const Stacked = meta.story({
 	parameters: {
-		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		docs: {
 			description: {
 				story:
@@ -1154,7 +1223,6 @@ export const LongContent = meta.story({
 		/>
 	),
 	parameters: {
-		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		docs: {
 			description: {
 				story:
@@ -1294,7 +1362,6 @@ export const DarkTheme = meta.story({
 	),
 	globals: { theme: "dark" },
 	parameters: {
-		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		docs: {
 			description: {
 				story:
@@ -1325,7 +1392,6 @@ export const ReducedMotion = meta.story({
 		/>
 	),
 	parameters: {
-		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		docs: {
 			description: {
 				story:

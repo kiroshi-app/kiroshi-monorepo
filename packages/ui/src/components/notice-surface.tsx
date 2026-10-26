@@ -1,6 +1,11 @@
 "use client"
 
-import { useEffect } from "react"
+import {
+	type ComponentProps,
+	createContext,
+	useContext,
+	useEffect,
+} from "react"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -378,6 +383,31 @@ const NoticeCopy = ({ text }: NoticeCopyProps) => {
 	)
 }
 
+const MirroredNoticeContext = createContext(false)
+
+const NoticeRoot = ({
+	"aria-hidden": isMirrored,
+	...props
+}: ComponentProps<"div">) => (
+	<MirroredNoticeContext.Provider value={Boolean(isMirrored)}>
+		<div {...props} />
+	</MirroredNoticeContext.Provider>
+)
+
+const NoticeText = () => {
+	const isMirrored = useContext(MirroredNoticeContext)
+
+	return (
+		<div
+			aria-hidden={isMirrored || undefined}
+			className="flex min-w-0 flex-1 flex-col gap-1"
+		>
+			<ToastTitle className="break-words font-semibold" />
+			<ToastDescription className="text-pretty break-words" />
+		</div>
+	)
+}
+
 const NoticeList = () => {
 	const { t } = useTranslation("common")
 	const { toasts } = useToastManager<NoticeData>()
@@ -390,20 +420,19 @@ const NoticeList = () => {
 				FADE_ONLY_UNDER_REDUCED_MOTION,
 			)}
 			key={notice.id}
+			render={(props) => <NoticeRoot {...props} />}
 			swipeDirection={["up"]}
 			toast={notice}
 		>
 			<ToastContent>
 				<NoticeMark spaceColour={notice.data?.spaceColour} type={notice.type} />
-				<div className="flex min-w-0 flex-1 flex-col gap-1">
-					<ToastTitle className="break-words font-semibold" />
-					<ToastDescription className="text-pretty break-words" />
-				</div>
+				<NoticeText />
 				<ToastAction />
 				{notice.data?.reportText ? (
 					<NoticeCopy text={notice.data.reportText} />
 				) : null}
 				<ToastClose
+					aria-hidden={false}
 					render={
 						<Button
 							aria-label={t("notice.close")}
