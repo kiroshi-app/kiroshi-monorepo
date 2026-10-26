@@ -73,10 +73,29 @@ const settle = async () => {
 	})
 }
 
-const mountApp = async () => {
+type Installs = (store: TranscriptStore, spaceId: string) => Promise<unknown>
+
+const ATLAS = { command: "npx", args: ["-y", "@atlas/mcp-server"] }
+
+const LEDGER = { type: "http", url: "https://ledger.internal/mcp" }
+
+const twoSpaceApplications: Installs = async (store, spaceId) => {
+	await store.setPluginMcpServer({ kind: "space", id: spaceId }, "atlas", ATLAS)
+	await store.setPluginMcpServer(
+		{ kind: "space", id: spaceId },
+		"ledger",
+		LEDGER,
+	)
+}
+
+const oneUserApplication: Installs = (store) =>
+	store.setPluginMcpServer({ kind: "user" }, "atlas", ATLAS)
+
+const mountApp = async (install?: Installs) => {
 	writeMirror({ ...readMirror(), firstRunDone: true })
 	const store = createFakeTranscriptStore()
 	const [space] = await store.spaces()
+	await install?.(store, space.id)
 	const bot = await store.createBot(newBotIdentity([]), space.id)
 	await store.createConversation({
 		botIds: [bot.id],
@@ -134,6 +153,12 @@ const shownSettingsOf = () => {
 		entry: within(menu).getByRole("button", { current: "page" }).textContent,
 	}
 }
+
+const menuEntryOf = (name: string | RegExp) =>
+	within(settingsMenuOf() as HTMLElement).getByRole("button", { name })
+
+const applicationsEntryOf = () =>
+	menuEntryOf(i18n.t("settings:rail.applications")).closest("li") as HTMLElement
 
 const isMarked = (railItem: HTMLElement) =>
 	railItem.getAttribute("aria-current") === "true"
@@ -246,4 +271,64 @@ it("opens the user settings again on the first entry once they were closed", asy
 		subtitle: "user",
 		entry: i18n.t("settings:rail.account"),
 	})
+})
+
+it("lists one Applications sub-entry per application installed in the open space", async () => {
+	await mountApp(twoSpaceApplications)
+	await press(gearOf())
+
+	await press(menuEntryOf(i18n.t("settings:rail.applications")))
+
+	expect(
+		within(applicationsEntryOf())
+			.getAllByRole("button")
+			.map((entry) => entry.textContent),
+	).toEqual([
+		i18n.t("settings:rail.applications"),
+		expect.stringMatching(/^atlas/),
+		expect.stringMatching(/^ledger/),
+		i18n.t("bots:applications.add"),
+	])
+})
+
+it("shows the page of the application its sub-entry selects", async () => {
+	await mountApp(twoSpaceApplications)
+	await press(gearOf())
+	await press(menuEntryOf(i18n.t("settings:rail.applications")))
+
+	await press(menuEntryOf(/^ledger/))
+
+	expect(menuEntryOf(/^ledger/).getAttribute("aria-current")).toBe("page")
+	expect(screen.getByRole("heading", { level: 2, name: "ledger" })).toBeTruthy()
+})
+
+it("lists the application the person installed under Applications of the user settings", async () => {
+	await mountApp(oneUserApplication)
+	await press(avatarOf())
+
+	await press(menuEntryOf(i18n.t("settings:rail.applications")))
+
+	expect(
+		within(applicationsEntryOf())
+			.getAllByRole("button")
+			.map((entry) => entry.textContent),
+	).toEqual([
+		i18n.t("settings:rail.applications"),
+		expect.stringMatching(/^atlas/),
+		i18n.t("bots:applications.add"),
+	])
+})
+
+it("opens the applications catalogue on Add an application", async () => {
+	await mountApp(twoSpaceApplications)
+	await press(gearOf())
+	await press(menuEntryOf(i18n.t("settings:rail.applications")))
+
+	await press(menuEntryOf(i18n.t("bots:applications.add")))
+
+	expect(
+		screen.getByRole("tab", {
+			name: i18n.t("bots:applications.catalogue.category.everything"),
+		}),
+	).toBeTruthy()
 })
