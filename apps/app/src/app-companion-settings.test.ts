@@ -273,23 +273,27 @@ const shownScreenOf = () => {
 	}
 }
 
+const BACK_LABELS = [
+	i18n.t("settings:screen.back"),
+	i18n.t("settings:screen.backToCompanions"),
+]
+
 const companionScreenOf = (name: string) => {
 	const menu = settingsMenuOf()
 	if (!menu) return null
 	return {
 		...shownScreenOf(),
-		isOf: within(menu).queryByText(name) !== null,
-		back: within(menu)
-			.getAllByRole("button")
-			.map((button) => button.textContent)
-			.find((label) => label?.startsWith("Back")),
+		isNamed: within(menu).queryByText(name) !== null,
+		back: BACK_LABELS.find(
+			(label) => within(menu).queryByRole("button", { name: label }) !== null,
+		),
 	}
 }
 
 const ON_GENERAL = {
 	subtitle: "companion",
 	entry: i18n.t("bots:dialog.tab.general"),
-	isOf: true,
+	isNamed: true,
 	back: i18n.t("settings:screen.back"),
 }
 
