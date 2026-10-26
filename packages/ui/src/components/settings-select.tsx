@@ -46,7 +46,7 @@ const SettingsSelect = ({
 	const describedBy = [hintId, errorId].filter(Boolean).join(" ") || undefined
 
 	return (
-		<div className="flex shrink-0 flex-col gap-1.5">
+		<div className="flex shrink-0 flex-col gap-1.5 in-data-companion-page:gap-2">
 			<Select.Root
 				disabled={isDisabled}
 				items={options}
@@ -62,7 +62,7 @@ const SettingsSelect = ({
 						error
 							? FIELD_CONTROL_INVALID_CLASS
 							: "hover:border-muted-foreground",
-						"flex items-center justify-between gap-2 pr-2.5 text-left disabled:pointer-events-none disabled:opacity-50",
+						"flex items-center justify-between gap-2 pr-2.5 text-left disabled:pointer-events-none disabled:opacity-50 in-data-companion-page:pr-3",
 					)}
 					ref={ref}
 				>
@@ -71,7 +71,7 @@ const SettingsSelect = ({
 						placeholder={placeholder}
 					/>
 					<Select.Icon className="shrink-0 text-muted-foreground">
-						<Icons.Expand className="size-4" />
+						<Icons.Expand className="size-4 in-data-companion-page:size-3.5" />
 					</Select.Icon>
 				</Select.Trigger>
 				<Select.Portal>
@@ -107,7 +107,10 @@ const SettingsSelect = ({
 				</Select.Portal>
 			</Select.Root>
 			{hint ? (
-				<p className="text-muted-foreground text-xs" id={hintId}>
+				<p
+					className="text-muted-foreground text-xs in-data-companion-page:text-compact in-data-companion-page:leading-4.5"
+					id={hintId}
+				>
 					{hint}
 				</p>
 			) : null}

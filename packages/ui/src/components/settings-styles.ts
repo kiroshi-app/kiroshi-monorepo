@@ -13,19 +13,10 @@ const FIELD_OPTION_MARKS_CLASS =
 
 const FIELD_OPTION_CLASS = `${FIELD_OPTION_MARKS_CLASS} flex flex-col items-center gap-1 p-1.5`
 
-const PICTURE_TARGET_CLASS =
-	"cursor-pointer border border-border outline-none hover:border-primary/50 hover:bg-muted focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-ring/30 data-dragging:border-primary data-dragging:bg-primary/10"
+const PICTURE_FIELD_SIZE = 40
 
-const PICTURE_FIELD_SIZE = 72
-
-const PICTURE_REMOVE_SIZE = 24
-
-const PICTURE_REMOVE_INSET =
-	(PICTURE_FIELD_SIZE / 2) * (1 - Math.SQRT1_2) - PICTURE_REMOVE_SIZE / 2
-
-const PICTURE_REMOVE_CLASS = "absolute rounded-full ring-2 ring-popover"
-
-const PICTURE_CONTROL_CLASS = `${PICTURE_TARGET_CLASS} grid place-items-center overflow-hidden rounded-full`
+const PICTURE_BOX_CLASS =
+	"flex items-center justify-between gap-3 rounded-xl border border-border bg-muted/40 px-4 py-3"
 
 const SETTINGS_TAG_CLASS =
 	"shrink-0 rounded-full bg-muted px-2 py-0.5 font-medium text-xs"
@@ -43,7 +34,7 @@ const POPUP_CLASS =
 const DIALOG_POPUP_CLASS = `${POPUP_CLASS} transition-[scale,opacity,filter] duration-150 ease-out data-ending-style:scale-[0.99] data-ending-style:opacity-0 data-ending-style:blur-[4px] data-starting-style:scale-[0.98] data-starting-style:opacity-0 motion-reduce:transition-none`
 
 const DANGER_BLOCK_CLASS =
-	"flex flex-col items-start gap-3 rounded-xl border border-destructive/30 p-4"
+	"flex flex-col items-start gap-3 rounded-xl border border-destructive/25 bg-destructive/5 p-4"
 
 const SETTINGS_EMPTY_CLASS =
 	"flex flex-1 flex-col items-center justify-center gap-3 text-center"
@@ -59,10 +50,8 @@ export {
 	FIELD_LABEL_CLASS,
 	FIELD_OPTION_CLASS,
 	FIELD_OPTION_MARKS_CLASS,
-	PICTURE_CONTROL_CLASS,
+	PICTURE_BOX_CLASS,
 	PICTURE_FIELD_SIZE,
-	PICTURE_REMOVE_CLASS,
-	PICTURE_REMOVE_INSET,
 	POPUP_CLASS,
 	SETTINGS_EMPTY_CLASS,
 	SETTINGS_HEADER_CLASS,

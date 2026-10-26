@@ -57,6 +57,29 @@ const APPLICATION_PAGE = "max-w-140 px-12 py-10"
 
 const COMPANIONS_PAGE = "max-w-188"
 
+const COMPANION_PAGE = "max-w-188 gap-8"
+
+const SECTION_GAP = {
+	tight: "gap-3",
+	compact: "gap-4",
+	regular: "gap-5",
+	loose: "gap-6",
+	wide: "gap-7",
+} as const
+
+type SectionGap = keyof typeof SECTION_GAP
+
+type CompanionSectionProps = {
+	gap: SectionGap
+	children: ReactNode
+}
+
+const CompanionSection = ({ gap, children }: CompanionSectionProps) => (
+	<div className={cn("flex flex-col", SECTION_GAP[gap])} data-companion-page="">
+		{children}
+	</div>
+)
+
 type PageSessions = {
 	skills: SettingsSession
 	applications: McpSession
@@ -100,6 +123,7 @@ type SettingsScreenLayoutProps = SettingsScreenNavigation & {
 	pages: SettingsPages
 	sessions: PageSessions
 	applications: BotMcpServerItem[]
+	pageClassName?: string
 }
 
 const SESSION_OF_ENTRY: Record<string, keyof PageSessions | undefined> = {
@@ -121,6 +145,7 @@ const SettingsScreenLayout = ({
 	pages,
 	sessions,
 	applications,
+	pageClassName,
 }: SettingsScreenLayoutProps) => {
 	const column = useRef<HTMLDivElement>(null)
 	useOverlayScrollbars(column)
@@ -224,6 +249,7 @@ const SettingsScreenLayout = ({
 				<div
 					className={cn(
 						PAGE,
+						pageClassName,
 						isApplicationOpen && APPLICATION_PAGE,
 						isCompanionsShown && COMPANIONS_PAGE,
 					)}
@@ -382,7 +408,11 @@ const CompanionSettingsScreen = ({
 					icon: "Clock",
 					label: t("dialog.tab.history"),
 					layout: "flush",
-					panel: sessions.history.panel,
+					panel: (
+						<CompanionSection gap="compact">
+							{sessions.history.panel}
+						</CompanionSection>
+					),
 				},
 			]
 		: []
@@ -393,7 +423,11 @@ const CompanionSettingsScreen = ({
 			icon: "User",
 			label: t("dialog.tab.general"),
 			layout: "scrolling",
-			panel: <BotGeneralFields onValueChange={onValueChange} value={value} />,
+			panel: (
+				<CompanionSection gap="regular">
+					<BotGeneralFields onValueChange={onValueChange} value={value} />
+				</CompanionSection>
+			),
 		},
 		{
 			value: "appearance",
@@ -401,15 +435,17 @@ const CompanionSettingsScreen = ({
 			label: t("dialog.tab.appearance"),
 			layout: "scrolling",
 			panel: (
-				<BotIdentityFields
-					identity={value.identity}
-					name={name}
-					onAvatarUpload={onAvatarUpload}
-					onIdentityChange={(identity) => patch({ identity })}
-					seed={seed}
-					working={working}
-					workingKind={workingKind}
-				/>
+				<CompanionSection gap="loose">
+					<BotIdentityFields
+						identity={value.identity}
+						name={name}
+						onAvatarUpload={onAvatarUpload}
+						onIdentityChange={(identity) => patch({ identity })}
+						seed={seed}
+						working={working}
+						workingKind={workingKind}
+					/>
+				</CompanionSection>
 			),
 		},
 		{
@@ -418,13 +454,15 @@ const CompanionSettingsScreen = ({
 			label: t("dialog.tab.instructions"),
 			layout: "scrolling",
 			panel: (
-				<BotInstructionsFields
-					memory={memory}
-					onMemoryChange={onMemoryChange}
-					onValueChange={onValueChange}
-					isTall
-					value={value}
-				/>
+				<CompanionSection gap="wide">
+					<BotInstructionsFields
+						memory={memory}
+						onMemoryChange={onMemoryChange}
+						onValueChange={onValueChange}
+						isTall
+						value={value}
+					/>
+				</CompanionSection>
 			),
 		},
 		{
@@ -432,14 +470,20 @@ const CompanionSettingsScreen = ({
 			icon: "Skill",
 			label: t("dialog.tab.skills"),
 			layout: "fixed",
-			panel: sessions.skills.panel,
+			panel: (
+				<CompanionSection gap="tight">{sessions.skills.panel}</CompanionSection>
+			),
 		},
 		{
 			value: APPLICATIONS_ENTRY,
 			icon: "Server",
 			label: t("dialog.tab.applications"),
 			layout: "fixed",
-			panel: sessions.applications.panel,
+			panel: (
+				<CompanionSection gap="tight">
+					{sessions.applications.panel}
+				</CompanionSection>
+			),
 		},
 		{
 			value: "environment",
@@ -447,14 +491,16 @@ const CompanionSettingsScreen = ({
 			label: t("dialog.tab.secrets"),
 			layout: "fixed",
 			panel: (
-				<EnvironmentPanel
-					entries={environment}
-					hasFailedToRead={hasEnvironmentFailedToRead}
-					isPending={isEnvironmentPending}
-					onDelete={onEnvironmentDelete}
-					onSet={onEnvironmentSet}
-					scope="bot"
-				/>
+				<CompanionSection gap="tight">
+					<EnvironmentPanel
+						entries={environment}
+						hasFailedToRead={hasEnvironmentFailedToRead}
+						isPending={isEnvironmentPending}
+						onDelete={onEnvironmentDelete}
+						onSet={onEnvironmentSet}
+						scope="bot"
+					/>
+				</CompanionSection>
 			),
 		},
 		...historyEntry,
@@ -464,10 +510,12 @@ const CompanionSettingsScreen = ({
 			label: t("dialog.tab.approvals"),
 			layout: "scrolling",
 			panel: (
-				<PermissionsPanel
-					onPermissionsChange={(permissions) => patch({ permissions })}
-					permissions={value.permissions}
-				/>
+				<CompanionSection gap="loose">
+					<PermissionsPanel
+						onPermissionsChange={(permissions) => patch({ permissions })}
+						permissions={value.permissions}
+					/>
+				</CompanionSection>
 			),
 		},
 		{
@@ -476,15 +524,17 @@ const CompanionSettingsScreen = ({
 			label: t("dialog.tab.runtime"),
 			layout: "scrolling",
 			panel: (
-				<RuntimeFields
-					effort={value.effort}
-					model={value.model}
-					models={models}
-					onEffortChange={(effort) => patch({ effort })}
-					onModelChange={patch}
-					onOutputStyleChange={onOutputStyleChange}
-					outputStyle={outputStyle}
-				/>
+				<CompanionSection gap="regular">
+					<RuntimeFields
+						effort={value.effort}
+						model={value.model}
+						models={models}
+						onEffortChange={(effort) => patch({ effort })}
+						onModelChange={patch}
+						onOutputStyleChange={onOutputStyleChange}
+						outputStyle={outputStyle}
+					/>
+				</CompanionSection>
 			),
 		},
 		{
@@ -524,6 +574,7 @@ const CompanionSettingsScreen = ({
 			name={name}
 			onBack={onBack}
 			onEntryChange={onEntryChange}
+			pageClassName={COMPANION_PAGE}
 			pages={pages}
 			rail={rail}
 			sessions={sessions}

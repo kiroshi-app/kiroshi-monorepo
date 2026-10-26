@@ -4,7 +4,6 @@ import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
-import { Icons } from "@workspace/ui/components/icons"
 import { SettingsField } from "@workspace/ui/components/settings-field"
 import {
 	FIELD_CONTROL_CLASS,
@@ -17,6 +16,7 @@ import { cn } from "@workspace/ui/lib/utils"
 type MemoryPanelProps = {
 	memory: string
 	onSave: (memory: string) => void
+	isTall?: boolean
 }
 
 const EMPTY_CLASS = cn(
@@ -25,7 +25,7 @@ const EMPTY_CLASS = cn(
 	"text-muted-foreground",
 )
 
-const MemoryPanel = ({ memory, onSave }: MemoryPanelProps) => {
+const MemoryPanel = ({ memory, onSave, isTall = false }: MemoryPanelProps) => {
 	const { t } = useTranslation("bots")
 	const [edit, setEdit] = useState({ base: memory, draft: memory })
 	const [isClearing, setIsClearing] = useState(false)
@@ -45,20 +45,19 @@ const MemoryPanel = ({ memory, onSave }: MemoryPanelProps) => {
 	return (
 		<div className="flex shrink-0 flex-col gap-2">
 			<SettingsField
+				height={isTall ? "medium" : undefined}
 				hint={t("dialog.memory.hint")}
 				label={t("dialog.memory.label")}
 				onValueChange={(next) => setEdit({ base: memory, draft: next })}
-				rows={6}
+				rows={isTall ? undefined : 6}
 				value={draft}
 			/>
 
 			<div className="flex items-center justify-end gap-2">
 				<Button onClick={() => setIsClearing(true)} size="sm" variant="outline">
-					<Icons.Delete aria-hidden="true" className="size-3.5" />
 					{t("dialog.memory.clear.action")}
 				</Button>
 				<Button disabled={isSaved} onClick={() => onSave(draft)} size="sm">
-					<Icons.Check aria-hidden="true" className="size-3.5" />
 					{t("dialog.memory.save")}
 				</Button>
 			</div>

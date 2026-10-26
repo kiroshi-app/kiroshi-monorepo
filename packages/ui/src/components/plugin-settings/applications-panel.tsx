@@ -86,10 +86,10 @@ const ApplicationRow = ({ server, onOpen, onConnect }: ApplicationRowProps) => {
 	const reason = readMcpConnectionReason(t, server.reason)
 
 	return (
-		<li className="relative flex items-center gap-3 rounded-xl border border-border px-3 py-2.5 hover:bg-muted">
+		<li className="relative flex items-center gap-3 rounded-control border border-border px-3 py-2.5 hover:bg-muted">
 			<button
 				aria-label={t("applications.open", { name })}
-				className="absolute inset-0 cursor-pointer rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring"
+				className="absolute inset-0 cursor-pointer rounded-control outline-none focus-visible:ring-2 focus-visible:ring-ring"
 				onClick={onOpen}
 				type="button"
 			/>
@@ -232,11 +232,16 @@ const ApplicationsPanel = ({
 	return (
 		<>
 			{searchRow}
-			<div className="flex shrink-0 items-center justify-between gap-3">
-				<p className="min-w-0 wrap-break-word text-muted-foreground text-xs">
+			<div className="flex shrink-0 items-center justify-between gap-3 in-data-companion-page:order-first">
+				<p className="min-w-0 wrap-break-word text-muted-foreground text-xs in-data-companion-page:text-compact/4.5">
 					{copy.intro}
 				</p>
-				<Button onClick={onAdd} size="sm" variant="outline">
+				<Button
+					className="in-data-companion-page:hidden"
+					onClick={onAdd}
+					size="sm"
+					variant="outline"
+				>
 					<Icons.Add
 						aria-hidden="true"
 						className="size-3.5"

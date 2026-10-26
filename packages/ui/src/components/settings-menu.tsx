@@ -5,11 +5,7 @@ import { useTranslation } from "react-i18next"
 
 import type { BotMcpConnectionState } from "@workspace/ui/components/bot-settings"
 import { MCP_CONNECTION_DOT } from "@workspace/ui/components/bot-settings-dialog/mcp-connection"
-import {
-	type FillIconName,
-	FillIcons,
-	Icons,
-} from "@workspace/ui/components/icons"
+import { type FillIconName, Icons } from "@workspace/ui/components/icons"
 import { ApplicationMark } from "@workspace/ui/components/plugin-settings/application-mark"
 import { useOverlayScrollbars } from "@workspace/ui/hooks/use-overlay-scrollbars"
 import { cn } from "@workspace/ui/lib/utils"
@@ -67,7 +63,7 @@ const SettingsMenu = ({
 				<Icons.Previous aria-hidden="true" className="size-4 shrink-0" />
 				{backLabel ?? t("screen.back")}
 			</button>
-			<div className="flex min-w-0 items-center gap-2.5 px-2">
+			<div className="flex min-w-0 items-center gap-2.5">
 				{avatar}
 				<div className="flex min-w-0 flex-col">
 					<span
@@ -121,7 +117,7 @@ const SettingsMenuEntry = ({
 	onSelect,
 	children,
 }: SettingsMenuEntryProps) => {
-	const EntryIcon = (isSelected || isOpen ? FillIcons : Icons)[icon]
+	const EntryIcon = Icons[icon]
 
 	return (
 		<li className="flex flex-col gap-0.5">

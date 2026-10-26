@@ -57,35 +57,44 @@ type HistoryPanelProps = PluginHistory & {
 
 const AUTHOR_MARK_SIZE = 20
 
-const HEAD_CLASS = "flex shrink-0 items-center gap-3 px-5 pt-4 pb-3"
+const HEAD_CLASS =
+	"flex shrink-0 items-center gap-3 px-5 pt-4 pb-3 in-data-companion-page:p-0"
 
-const HEAD_SENTENCE_CLASS = "min-w-0 flex-1 text-muted-foreground text-xs/4"
+const HEAD_SENTENCE_CLASS =
+	"min-w-0 flex-1 text-muted-foreground text-xs/4 in-data-companion-page:text-compact/4.5"
+
+const LIST_CLASS =
+	"flex flex-col px-3 pb-5 in-data-companion-page:gap-4 in-data-companion-page:p-0"
 
 const SEARCH_CONTROL_CLASS = "rounded-md text-muted-foreground"
 
-const DAY_CLASS = "[&:not(:first-child)]:pt-2"
+const DAY_CLASS =
+	"[&:not(:first-child)]:pt-2 in-data-companion-page:flex in-data-companion-page:flex-col in-data-companion-page:gap-1 in-data-companion-page:pt-0!"
 
-const DAY_HEADING_ROW_CLASS = "flex items-center gap-2.5 px-2 pt-1.5 pb-2"
+const DAY_HEADING_ROW_CLASS =
+	"flex items-center gap-2.5 px-2 pt-1.5 pb-2 in-data-companion-page:gap-2 in-data-companion-page:px-0 in-data-companion-page:py-1"
 
 const DAY_HEADING_CLASS =
-	"shrink-0 font-medium text-[11px]/[14px] text-muted-foreground uppercase tracking-[0.07em]"
+	"shrink-0 font-medium text-[11px]/[14px] text-muted-foreground uppercase tracking-[0.07em] in-data-companion-page:text-xs/4 in-data-companion-page:normal-case in-data-companion-page:tracking-normal"
 
 const ROW_CLASS =
-	"group/row relative flex list-none items-start gap-2.5 rounded-lg px-2 py-[7px] hover:bg-muted has-[:focus-visible]:bg-muted"
+	"group/row relative flex list-none items-start gap-2.5 rounded-lg px-2 py-[7px] hover:bg-muted has-[:focus-visible]:bg-muted in-data-companion-page:py-2"
 
 const ROW_CONTROL_CLASS =
 	"absolute inset-0 cursor-pointer rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring"
 
-const SENTENCE_CLASS = "min-w-0 flex-1 truncate text-foreground text-sm/5"
+const SENTENCE_CLASS =
+	"min-w-0 flex-1 truncate text-foreground text-sm/5 in-data-companion-page:flex-initial in-data-companion-page:text-muted-foreground"
 
 const SUFFIX_CLASS = "shrink-0 text-sm/5"
 
 const UNDONE_CLASS = `${SUFFIX_CLASS} text-muted-foreground before:me-1 before:content-['·']`
 
-const UNDO_SLOT_CLASS = "relative z-10 grid size-6 shrink-0 place-items-center"
+const UNDO_SLOT_CLASS =
+	"relative z-10 grid size-6 shrink-0 place-items-center in-data-companion-page:order-last in-data-companion-page:size-3.5"
 
 const UNDO_CONTROL_CLASS =
-	"rounded-md bg-card text-muted-foreground transition-opacity duration-150 [@media(hover:hover)]:opacity-0 group-hover/row:opacity-100 group-has-[:focus-visible]/row:opacity-100 motion-reduce:transition-none"
+	"rounded-md bg-card text-muted-foreground transition-opacity duration-150 [@media(hover:hover)]:opacity-0 group-hover/row:opacity-100 group-has-[:focus-visible]/row:opacity-100 motion-reduce:transition-none in-data-companion-page:-m-1.25 in-data-companion-page:bg-transparent in-data-companion-page:[@media(hover:hover)]:opacity-100"
 
 const TIME_CLASS =
 	"w-10 shrink-0 text-end text-muted-foreground text-xs/4 tabular-nums"
@@ -234,7 +243,7 @@ const HistoryPanel = ({
 				)}
 			</div>
 
-			<div className="flex flex-col px-3 pb-5">
+			<div className={LIST_CLASS}>
 				{changeCount === 0 ? (
 					<p className="px-2 py-1.5 text-muted-foreground text-sm">
 						{t("history.noMatch", { text: searchText })}
@@ -248,7 +257,7 @@ const HistoryPanel = ({
 							<span aria-hidden="true" className="h-px flex-1 bg-border" />
 						</div>
 
-						<ul className="flex flex-col p-0">
+						<ul className="flex flex-col p-0 in-data-companion-page:gap-1">
 							{day.changes.map((change) => (
 								<li
 									className={ROW_CLASS}

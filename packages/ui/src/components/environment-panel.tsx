@@ -181,7 +181,7 @@ const EnvironmentRow = ({
 	const defined = t(`secrets.scope.${entry.definedIn}`)
 
 	return (
-		<li className="flex items-center gap-3 rounded-xl border border-border py-2 pr-2 pl-3">
+		<li className="flex items-center gap-3 rounded-control border border-border py-2 pr-2 pl-3">
 			<span className="flex min-w-0 flex-1 flex-col gap-0.5">
 				<span className="truncate font-medium font-mono text-foreground text-sm">
 					{entry.name}
@@ -222,32 +222,36 @@ const EnvironmentRow = ({
 				</span>
 			) : null}
 
-			{isOwned ? (
-				<span className="flex shrink-0 items-center gap-1">
-					<Button
-						aria-label={t("secrets.row.replace", { name: entry.name })}
-						onClick={onReplace}
-						size="icon-xs"
-						variant="ghost"
-					>
-						<Icons.Edit aria-hidden="true" className="size-3.5" />
-					</Button>
-					<Button
-						aria-label={t("secrets.row.remove", { name: entry.name })}
-						onClick={onRemove}
-						size="icon-xs"
-						variant="ghost"
-					>
-						<Icons.Delete aria-hidden="true" className="size-3.5" />
-					</Button>
-				</span>
-			) : null}
+			<span className="flex w-16 shrink-0 items-center justify-end gap-1">
+				{isOwned ? (
+					<>
+						<Button
+							aria-label={t("secrets.row.replace", { name: entry.name })}
+							onClick={onReplace}
+							className="text-muted-foreground"
+							size="icon-sm"
+							variant="ghost"
+						>
+							<Icons.Edit aria-hidden="true" className="size-3.5" />
+						</Button>
+						<Button
+							aria-label={t("secrets.row.remove", { name: entry.name })}
+							onClick={onRemove}
+							className="text-muted-foreground"
+							size="icon-sm"
+							variant="ghost"
+						>
+							<Icons.Delete aria-hidden="true" className="size-3.5" />
+						</Button>
+					</>
+				) : null}
+			</span>
 		</li>
 	)
 }
 
 const SecretRowSkeleton = () => (
-	<div className="flex min-h-14 flex-col justify-center gap-0.5 rounded-xl border border-border py-2 ps-3 pe-2">
+	<div className="flex min-h-14 flex-col justify-center gap-0.5 rounded-control border border-border py-2 ps-3 pe-2">
 		<div className="flex h-5 items-center">
 			<SkeletonBar className="w-(--skeleton-title)" />
 		</div>

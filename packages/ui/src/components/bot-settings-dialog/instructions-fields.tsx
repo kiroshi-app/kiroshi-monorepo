@@ -27,7 +27,7 @@ const BotInstructionsFields = ({
 		<>
 			<SettingsField
 				fill={!isTall}
-				isTall={isTall}
+				height={isTall ? "tall" : undefined}
 				label={t("dialog.instructions.label")}
 				onValueChange={(instructions) =>
 					onValueChange({ ...value, instructions })
@@ -37,6 +37,7 @@ const BotInstructionsFields = ({
 			/>
 			{memory !== undefined ? (
 				<MemoryPanel
+					isTall={isTall}
 					memory={memory}
 					onSave={(next) => onMemoryChange?.(next)}
 				/>

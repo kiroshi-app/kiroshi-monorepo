@@ -1,6 +1,6 @@
 "use client"
 
-import { useId } from "react"
+import { type CSSProperties, useId } from "react"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -12,21 +12,25 @@ import {
 	type BotAvatarBlot,
 	type BotIdentity,
 } from "@workspace/ui/components/bot-settings"
+import { blotTint } from "@workspace/ui/components/companion-colour"
 import { DitheredFieldAvatar } from "@workspace/ui/components/dithered-field-avatar"
 import { ProfilePictureField } from "@workspace/ui/components/profile-picture-field"
 import { SettingsGroup } from "@workspace/ui/components/settings-group"
-import {
-	FIELD_OPTION_CLASS,
-	PICTURE_FIELD_SIZE,
-} from "@workspace/ui/components/settings-styles"
+import { PICTURE_FIELD_SIZE } from "@workspace/ui/components/settings-styles"
 import { cn } from "@workspace/ui/lib/utils"
 
-const PREVIEW_SIZE = 96
-const BLOT_SIZE = 24
+const PREVIEW_SIZE = 64
+const BLOT_SIZE = 56
 
-const BLOT_OPTIONS = [...BLOT_TINTS, undefined] as const
+const BLOT_OPTIONS = [undefined, ...BLOT_TINTS] as const
 
-const BLOT_OPTION_CLASS = cn(FIELD_OPTION_CLASS, "p-1")
+const BLOT_OPTION_CLASS =
+	"cursor-pointer rounded-control border border-border bg-muted/40 p-1 hover:bg-muted has-[:checked]:border-(--swatch) has-[:checked]:bg-(--swatch)/12 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring"
+
+const swatchColour = (blot?: BotAvatarBlot) =>
+	({
+		"--swatch": blot ? blotTint(blot) : "var(--bot-avatar-field-untinted)",
+	}) as CSSProperties
 
 type BotIdentityFieldsProps = {
 	identity: BotIdentity
@@ -63,7 +67,7 @@ const BotIdentityFields = ({
 
 	return (
 		<div
-			className={cn("flex flex-col gap-5", className)}
+			className={cn("flex flex-col gap-6", className)}
 			data-slot="bot-identity-fields"
 		>
 			<div className="flex items-center gap-4">
@@ -87,13 +91,14 @@ const BotIdentityFields = ({
 			</div>
 
 			<SettingsGroup
-				grid="grid-cols-9 gap-1"
+				grid="grid-cols-[repeat(auto-fill,--spacing(16.5))] gap-1"
 				label={t("identity.colour.label")}
 			>
 				{BLOT_OPTIONS.map((blot) => (
 					<label
 						className={BLOT_OPTION_CLASS}
 						key={blot ?? "none"}
+						style={swatchColour(blot)}
 						title={blotLabel(blot)}
 					>
 						<input
@@ -104,7 +109,7 @@ const BotIdentityFields = ({
 							type="radio"
 							value={blot ?? ""}
 						/>
-						<span aria-hidden="true">
+						<span aria-hidden="true" className="flex">
 							<DitheredFieldAvatar
 								name={name ?? seed ?? ""}
 								size={BLOT_SIZE}
