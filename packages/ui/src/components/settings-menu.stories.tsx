@@ -343,7 +343,7 @@ export const CompanionsCountDark = meta.story({
 			},
 		},
 	},
-	play: ({ canvasElement }) => expectCompanionsCount(canvasElement),
+	play: CompanionsCount.input.play,
 })
 
 export const CompanionsCountSelected = meta.story({
