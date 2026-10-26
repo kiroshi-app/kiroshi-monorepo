@@ -32,19 +32,11 @@ type AppTitleBarProps = Pick<
 
 const AppTitleBar = ({
 	spaces = [],
-	selectedSpaceId,
-	badgesBySpaceId,
-	hostBySpaceId,
-	invitations,
-	onSelectSpace,
-	onCreateSpace,
-	onAcceptInvitation,
-	onDeclineInvitation,
-	onRetryInvitation,
 	onSpaceSwitcherOpenChange,
 	insetWindowControls = false,
 	windowControls,
 	"data-tauri-drag-region": dragRegion,
+	...switcher
 }: AppTitleBarProps) => (
 	<div
 		className={cn(
@@ -55,16 +47,8 @@ const AppTitleBar = ({
 		data-tauri-drag-region={dragRegion}
 	>
 		<SpaceSwitcher
-			badgesBySpaceId={badgesBySpaceId}
-			hostBySpaceId={hostBySpaceId}
-			invitations={invitations}
-			onAcceptInvitation={onAcceptInvitation}
-			onCreateSpace={onCreateSpace}
-			onDeclineInvitation={onDeclineInvitation}
+			{...switcher}
 			onOpenChange={onSpaceSwitcherOpenChange}
-			onRetryInvitation={onRetryInvitation}
-			onSelectSpace={onSelectSpace}
-			selectedSpaceId={selectedSpaceId}
 			spaces={spaces}
 		/>
 		{windowControls ? (
