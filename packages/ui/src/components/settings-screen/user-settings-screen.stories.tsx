@@ -1,14 +1,25 @@
-import { type ComponentType, useState } from "react"
+import { type ComponentType, useEffect, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { expect, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
+	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+	A11Y_FLOATING_FOCUS_GUARDS,
 	expectSettingsChrome,
 	slotIn,
 	slotsIn,
 } from "@workspace/storybook/story-utils"
 import { AppRail } from "@workspace/ui/components/app-rail"
-import { TITLE_BAR } from "@workspace/ui/components/app-title-bar.fixtures"
+import {
+	STUDIO,
+	TITLE_BAR,
+} from "@workspace/ui/components/app-title-bar.fixtures"
+import {
+	endNotice,
+	NoticeSurface,
+	raiseTransientNotice,
+} from "@workspace/ui/components/notice-surface"
 import { MARKED_APPLICATIONS } from "@workspace/ui/components/plugin-settings/applications.fixtures"
 import {
 	HISTORY_DAYS,
@@ -18,6 +29,7 @@ import { BOT_SKILLS } from "@workspace/ui/components/plugin-settings/skills.fixt
 import {
 	SettingsScreen,
 	type UserSettingsScreenProps,
+	type UserSpace,
 } from "@workspace/ui/components/settings-screen"
 import {
 	SIDEBAR_DEFAULT_WIDTH,
@@ -149,6 +161,91 @@ const USER_ARGS = {
 
 const menuIn = () => screen.findByRole("navigation", { name: "Settings" })
 
+const groupIn = (menu: HTMLElement, title: string) =>
+	within(menu).getByRole("list", { name: title })
+
+const entriesIn = (menu: HTMLElement) =>
+	within(groupIn(menu, "Your settings"))
+		.getAllByRole("button")
+		.map((button) => button.textContent)
+
+const spaceRowsIn = (menu: HTMLElement) =>
+	within(groupIn(menu, "Your spaces")).queryAllByRole("button")
+
+const spaceRowOf = (menu: HTMLElement, name: string) =>
+	within(groupIn(menu, "Your spaces")).getByRole("button", {
+		name: new RegExp(`^${name}`),
+	})
+
+const NORTHWIND = {
+	id: "northwind",
+	name: "Northwind",
+	colour: "blue",
+	hasAttention: true,
+} satisfies UserSpace
+
+const SPACES_ARGS = {
+	entry: "",
+	ownedSpaces: [
+		{ ...STUDIO, host: "shared" },
+		{ id: "field-notes", name: "Field notes", colour: "green" },
+	],
+	joinedSpaces: [
+		NORTHWIND,
+		{ id: "harbor", name: "Harbor", colour: "purple", host: "down" },
+	],
+	invitations: [{ id: "atelier", name: "Atelier" }],
+	currentSpaceId: STUDIO.id,
+	onOpenSpace: fn(),
+	onCreateSpace: fn(),
+} satisfies Partial<UserSettingsScreenProps>
+
+const COLOUR_TRANSITIONS = /color|background|all/
+
+const expectNoColourTransition = (element: HTMLElement) => {
+	const { transitionProperty, transitionDuration } = getComputedStyle(element)
+	const durations = transitionDuration.split(", ")
+	const animated = transitionProperty
+		.split(", ")
+		.filter((_, index) => durations[index % durations.length] !== "0s")
+	return expect(animated.join(" ")).not.toMatch(COLOUR_TRANSITIONS)
+}
+
+const expectSpaceRows = async (menu: HTMLElement, names: string[]) => {
+	await expect(
+		slotsIn(groupIn(menu, "Your spaces"), "roster-row-name").map(
+			(name) => name.textContent,
+		),
+	).toEqual(names)
+	await expect(slotsIn(groupIn(menu, "Your spaces"), "host-dot")).toHaveLength(
+		2,
+	)
+	await expect(slotIn(spaceRowOf(menu, "Studio"), "host-dot")).toHaveAttribute(
+		"data-host",
+		"shared",
+	)
+	await expect(slotIn(spaceRowOf(menu, "Harbor"), "host-dot")).toHaveAttribute(
+		"data-host",
+		"down",
+	)
+	await expect(spaceRowOf(menu, "Studio")).toHaveAttribute(
+		"aria-current",
+		"true",
+	)
+	await expect(
+		slotIn(spaceRowOf(menu, "Studio"), "settings-menu-space-current"),
+	).toHaveTextContent("Open now")
+	await expect(
+		slotIn(spaceRowOf(menu, "Atelier"), "settings-menu-space-invitation-pill"),
+	).toHaveTextContent("Invitation")
+	await expect(
+		slotIn(spaceRowOf(menu, "Atelier"), "settings-menu-space-invitation"),
+	).toBeVisible()
+	await expect(
+		slotsIn(groupIn(menu, "Your spaces"), "settings-menu-space-current"),
+	).toHaveLength(1)
+}
+
 const expectEntryShown = async (label: string) => {
 	const menu = await menuIn()
 	await expect(
@@ -190,11 +287,11 @@ export const Account = meta.story({
 	},
 	play: async ({ args, userEvent }) => {
 		const menu = await expectEntryShown("Account")
+		await expect(entriesIn(menu)).toEqual(USER_MENU)
+		await expect(spaceRowsIn(menu)).toHaveLength(0)
 		await expect(
-			within(menu)
-				.getAllByRole("button")
-				.map((button) => button.textContent),
-		).toEqual(["Back to conversations", ...USER_MENU])
+			within(menu).getByRole("button", { name: "Create a space" }),
+		).toBeVisible()
 		await expect(slotIn(menu, "user-avatar")).toBeVisible()
 		await expect(within(menu).getByText("User settings")).toBeVisible()
 		await expect(
@@ -211,6 +308,140 @@ export const Account = meta.story({
 			within(menu).getByRole("button", { name: "Back to conversations" }),
 		)
 		await expect(args.onBack).toHaveBeenCalledOnce()
+	},
+})
+
+export const Spaces = meta.story({
+	args: SPACES_ARGS,
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"Artboard F01: the menu in two titled groups, Your settings then Your spaces. The screen opens on Account when no entry is chosen. Check Studio marked current with its Open now pill and online dot, Northwind ending on the attention dot, Harbor's not-connected dot, Atelier's dashed square and Invitation pill, and the + creating a space by pointer or keyboard. The contrast audit is left to review: the Invitation pill wears the warning token on its own tint as the artboard draws it, 2.96:1 in the light theme.",
+			},
+		},
+	},
+	play: async ({ args, userEvent }) => {
+		const menu = await expectEntryShown("Account")
+		await expect(entriesIn(menu)).toEqual(USER_MENU)
+		await expectSpaceRows(menu, [
+			"Studio",
+			"Field notes",
+			"Northwind",
+			"Harbor",
+			"Atelier",
+		])
+		await expect(
+			slotsIn(groupIn(menu, "Your spaces"), "settings-menu-space-attention"),
+		).toHaveLength(1)
+		await expect(
+			slotIn(spaceRowOf(menu, "Northwind"), "settings-menu-space-attention"),
+		).toBeVisible()
+
+		const create = within(menu).getByRole("button", { name: "Create a space" })
+		create.focus()
+		await expect(create).toHaveFocus()
+		await expect(create.matches(":focus-visible")).toBe(true)
+		await expect(getComputedStyle(create).boxShadow).not.toBe("none")
+		await userEvent.keyboard("{Enter}")
+		await expect(args.onCreateSpace).toHaveBeenCalledOnce()
+		await userEvent.tab()
+		await expect(spaceRowOf(menu, "Studio")).toHaveFocus()
+		await userEvent.tab()
+		await userEvent.keyboard("{Enter}")
+		await expect(args.onOpenSpace).toHaveBeenLastCalledWith("field-notes")
+
+		await userEvent.click(create)
+		await expect(args.onCreateSpace).toHaveBeenCalledTimes(2)
+		await userEvent.click(spaceRowOf(menu, "Northwind"))
+		await expect(args.onOpenSpace).toHaveBeenLastCalledWith("northwind")
+
+		for (const drawn of [
+			create,
+			...spaceRowsIn(menu),
+			slotIn(menu, "settings-menu-space-current"),
+			slotIn(menu, "settings-menu-space-invitation-pill"),
+		])
+			await expectNoColourTransition(drawn)
+	},
+})
+
+export const SpacesDark = meta.story({
+	args: SPACES_ARGS,
+	globals: { theme: "dark" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"`Spaces` in the dark theme. Check that each host dot keeps its ring of the menu surface and the Invitation pill stays legible on its warning tint.",
+			},
+		},
+	},
+})
+
+const NOTICE_A11Y_LEFT_TO_REVIEW = {
+	config: {
+		rules: [
+			...A11Y_CONTRAST_AWAITING_DESIGN_DECISION.config.rules,
+			...A11Y_FLOATING_FOCUS_GUARDS.config.rules,
+		],
+	},
+}
+
+const LeftNorthwindNotice = () => {
+	const { t } = useTranslation("settings")
+
+	useEffect(() => {
+		const notice = raiseTransientNotice({
+			title: t("screen.space.left.title", { name: NORTHWIND.name }),
+			description: t("screen.space.left.description", {
+				host: "Sam Rivera",
+			}),
+		})
+		return () => endNotice(notice)
+	}, [t])
+
+	return null
+}
+
+export const AfterLeavingASpace = meta.story({
+	args: {
+		...SPACES_ARGS,
+		joinedSpaces: SPACES_ARGS.joinedSpaces.filter(
+			(space) => space.id !== NORTHWIND.id,
+		),
+	},
+	decorators: [
+		(Story) => (
+			<>
+				<Story />
+				<NoticeSurface transientDelay={0} />
+				<LeftNorthwindNotice />
+			</>
+		),
+	],
+	parameters: {
+		a11y: NOTICE_A11Y_LEFT_TO_REVIEW,
+		docs: {
+			description: {
+				story:
+					"Artboard F09: Northwind just left. Check that its row is gone, the other rows unchanged, and that a success notice says You left Northwind and whom to ask for a new invitation. The notice sits top centred, where every notice sits, not bottom right as the artboard draws it. The contrast and `aria-hidden-focus` audits are left to review: the Invitation pill wears the warning token on its own tint as the artboard draws it, and the notice surface keeps its close control focusable while the library hides the notice behind its announcing mirror.",
+			},
+		},
+	},
+	play: async () => {
+		const menu = await expectEntryShown("Account")
+		await expectSpaceRows(menu, ["Studio", "Field notes", "Harbor", "Atelier"])
+		await expect(
+			slotsIn(groupIn(menu, "Your spaces"), "settings-menu-space-attention"),
+		).toHaveLength(0)
+		const title = await waitFor(() => slotIn(document.body, "toast-title"))
+		await expect(title).toHaveTextContent("You left Northwind")
+		await expect(title).toHaveAttribute("data-type", "success")
+		await expect(slotIn(document.body, "toast-description")).toHaveTextContent(
+			"Ask Sam Rivera for a new invitation to join again.",
+		)
 	},
 })
 
@@ -244,12 +475,7 @@ export const WithoutOptionalEntries = meta.story({
 	},
 	play: async () => {
 		const menu = await expectEntryShown("Appearance")
-		await expect(
-			within(menu)
-				.getAllByRole("button")
-				.map((button) => button.textContent),
-		).toEqual([
-			"Back to conversations",
+		await expect(entriesIn(menu)).toEqual([
 			"Appearance",
 			"Notifications",
 			"Language",

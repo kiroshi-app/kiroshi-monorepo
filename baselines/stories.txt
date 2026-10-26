@@ -1107,6 +1107,7 @@ navigation-settingsmenu--connecting-space-dark
 navigation-settingsmenu--danger-selected
 navigation-settingsmenu--danger-selected-dark
 navigation-settingsmenu--default
+navigation-settingsmenu--space-sections
 navigation-settingsmenu--states
 navigation-settingspushedpage--controlled
 navigation-settingspushedpage--default
@@ -1770,6 +1771,7 @@ settings-user-notificationfields--in-french
 settings-user-settingsscreen--about
 settings-user-settingsscreen--account
 settings-user-settingsscreen--account-dark
+settings-user-settingsscreen--after-leaving-a-space
 settings-user-settingsscreen--appearance
 settings-user-settingsscreen--applications
 settings-user-settingsscreen--default-width
@@ -1781,6 +1783,8 @@ settings-user-settingsscreen--maximum-width
 settings-user-settingsscreen--minimum-width
 settings-user-settingsscreen--notifications
 settings-user-settingsscreen--skills
+settings-user-settingsscreen--spaces
+settings-user-settingsscreen--spaces-dark
 settings-user-settingsscreen--without-optional-entries
 settings-user-usersettingsdialog--about
 settings-user-usersettingsdialog--about-without-an-update

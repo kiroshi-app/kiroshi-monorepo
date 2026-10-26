@@ -52,7 +52,7 @@ const SWITCHER =
 
 const SWITCHER_NAME = "min-w-0 truncate"
 
-type SpaceSquareSize = "dot" | "avatar"
+type SpaceSquareSize = "dot" | "menu" | "avatar"
 
 type SpaceSquareStyle = {
 	square: string
@@ -64,6 +64,11 @@ const SPACE_SQUARE_STYLE = {
 		square: "relative rounded-[3px]",
 		hostDot:
 			"absolute -end-[3.5px] -bottom-[3.5px] ring-2 ring-(--host-dot-surface,var(--shell-surface,var(--background)))",
+	},
+	menu: {
+		square: "relative size-3.5 rounded-[4px]",
+		hostDot:
+			"absolute -end-[3px] -bottom-[3px] size-2 ring-[1.5px] ring-(--host-dot-surface,var(--color-card))",
 	},
 	avatar: {
 		square: "relative size-9 rounded-[11px]",

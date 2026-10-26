@@ -34,11 +34,15 @@ import {
 import {
 	SettingsMenu,
 	SettingsMenuAddApplication,
+	SettingsMenuAddSpace,
 	SettingsMenuApplication,
 	SettingsMenuEntry,
+	SettingsMenuSection,
+	SettingsMenuSpace,
 } from "@workspace/ui/components/settings-menu"
 import type { SettingsEntry } from "@workspace/ui/components/settings-rail"
 import { SidebarResizeHandle } from "@workspace/ui/components/sidebar-resize"
+import type { Space } from "@workspace/ui/components/space"
 import {
 	APPLICATIONS_ENTRY,
 	COMPANIONS_ENTRY,
@@ -111,9 +115,20 @@ type SpaceSettingsScreenProps = SettingsScreenNavigation &
 		presence?: SpaceHost
 	}
 
+type UserSpace = Space & {
+	host?: SpaceHost
+	hasAttention?: boolean
+}
+
 type UserSettingsScreenProps = SettingsScreenNavigation &
 	UserSettingsProps & {
 		target: "user"
+		ownedSpaces?: UserSpace[]
+		joinedSpaces?: UserSpace[]
+		invitations?: Space[]
+		currentSpaceId?: string
+		onOpenSpace?: (id: string) => void
+		onCreateSpace?: () => void
 	}
 
 type SettingsScreenProps = SpaceSettingsScreenProps | UserSettingsScreenProps
@@ -133,6 +148,7 @@ type SettingsScreenLayoutProps = SettingsScreenNavigation & {
 	sessions: PageSessions
 	applications: BotMcpServerItem[]
 	isCompanionPage?: boolean
+	spaces?: (requestLeave: SettingsScreenRequestLeave) => ReactNode
 }
 
 const SESSION_OF_ENTRY: Record<string, keyof PageSessions | undefined> = {
@@ -159,11 +175,12 @@ const SettingsScreenLayout = ({
 	sessions,
 	applications,
 	isCompanionPage = false,
+	spaces,
 }: SettingsScreenLayoutProps) => {
 	const column = useRef<HTMLDivElement>(null)
 	useOverlayScrollbars(column)
 
-	const { t } = useTranslation("bots")
+	const { t } = useTranslation(["bots", "settings"])
 	const [pendingLeave, setPendingLeave] = useState<(() => void) | null>(null)
 
 	const shown = entries.find(({ value }) => value === entry) ?? entries[0]
@@ -262,7 +279,18 @@ const SettingsScreenLayout = ({
 						resizeHandle={<SidebarResizeHandle side="left" />}
 						subtitle={subtitle}
 					>
-						{ordinary.map(entryFor)}
+						{spaces ? (
+							<>
+								<SettingsMenuSection
+									title={t("settings:screen.group.settings")}
+								>
+									{ordinary.map(entryFor)}
+								</SettingsMenuSection>
+								{spaces(leaveThen)}
+							</>
+						) : (
+							ordinary.map(entryFor)
+						)}
 					</SettingsMenu>
 				</>
 			}
@@ -364,6 +392,12 @@ const UserSettingsScreen = ({
 	width,
 	onWidthChange,
 	isResizable,
+	ownedSpaces = [],
+	joinedSpaces = [],
+	invitations = [],
+	currentSpaceId,
+	onOpenSpace,
+	onCreateSpace,
 	target: _target,
 	...settings
 }: UserSettingsScreenProps) => {
@@ -395,6 +429,40 @@ const UserSettingsScreen = ({
 			onWidthChange={onWidthChange}
 			rail={rail}
 			sessions={sessions}
+			spaces={(requestLeave) => {
+				const openSpace = (id: string) => requestLeave(() => onOpenSpace?.(id))
+
+				return (
+					<SettingsMenuSection
+						action={
+							<SettingsMenuAddSpace
+								onAdd={() => requestLeave(() => onCreateSpace?.())}
+							/>
+						}
+						title={t("screen.group.spaces")}
+					>
+						{[...ownedSpaces, ...joinedSpaces].map((space) => (
+							<SettingsMenuSpace
+								colour={space.colour}
+								hasAttention={space.hasAttention}
+								host={space.host}
+								isCurrent={space.id === currentSpaceId}
+								key={space.id}
+								name={space.name}
+								onOpen={() => openSpace(space.id)}
+							/>
+						))}
+						{invitations.map((invitation) => (
+							<SettingsMenuSpace
+								isInvitation
+								key={invitation.id}
+								name={invitation.name}
+								onOpen={() => openSpace(invitation.id)}
+							/>
+						))}
+					</SettingsMenuSection>
+				)
+			}}
 			titleBar={titleBar}
 			width={width}
 			subtitle={t("screen.subtitle.user")}
@@ -651,4 +719,5 @@ export {
 	type SettingsScreenRequestLeave,
 	type SpaceSettingsScreenProps,
 	type UserSettingsScreenProps,
+	type UserSpace,
 }

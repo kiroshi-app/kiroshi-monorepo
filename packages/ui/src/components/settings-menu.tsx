@@ -1,16 +1,21 @@
 "use client"
 
-import { type ReactNode, useRef } from "react"
+import { type ReactNode, useId, useRef } from "react"
 import { useTranslation } from "react-i18next"
 
+import { BotTitleBadge } from "@workspace/ui/components/bot-badge"
 import type { BotMcpConnectionState } from "@workspace/ui/components/bot-settings"
 import { MCP_CONNECTION_DOT } from "@workspace/ui/components/bot-settings-dialog/mcp-connection"
+import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
+import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import {
 	type FillIconName,
 	FillIcons,
 	Icons,
 } from "@workspace/ui/components/icons"
 import { ApplicationMark } from "@workspace/ui/components/plugin-settings/application-mark"
+import { SidebarListRow } from "@workspace/ui/components/sidebar-list-row"
+import { SpaceSquare } from "@workspace/ui/components/space-switcher"
 import { useOverlayScrollbars } from "@workspace/ui/hooks/use-overlay-scrollbars"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -33,6 +38,30 @@ const SUB_ENTRY = `${ROW} rounded-lg text-compact text-muted-foreground leading-
 const ROW_DOT = "pointer-events-none size-1.5 shrink-0 rounded-full"
 
 const ROW_LABEL = "min-w-0 flex-1 truncate"
+
+const SECTION = "flex flex-col not-first:pt-4"
+
+const SECTION_TITLE_ROW = "flex min-h-8 items-center gap-2 px-2 pb-1"
+
+const SECTION_TITLE =
+	"min-w-0 flex-1 truncate font-medium text-muted-foreground text-xs leading-4"
+
+const SECTION_ACTION = `grid size-6 shrink-0 cursor-pointer place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground ${FOCUS_RING}`
+
+const SPACE_ROW =
+	"[--host-dot-surface:var(--color-card)] hover:[--host-dot-surface:var(--color-muted)]"
+
+const SPACE_INVITATION_MEDIA =
+	"size-3.5 rounded-[4px] border border-warning border-dashed"
+
+const SPACE_TRAILING = "ms-auto flex shrink-0 items-center gap-1.5"
+
+const SPACE_PILL = "basis-auto"
+
+const SPACE_INVITATION_PILL = "bg-warning/15 text-warning"
+
+const SPACE_ATTENTION_DOT =
+	"pointer-events-none size-1.75 rounded-full bg-warning"
 
 type SettingsMenuProps = {
 	avatar: ReactNode
@@ -239,9 +268,138 @@ const SettingsMenuAddApplication = ({
 	)
 }
 
+type SettingsMenuSectionProps = {
+	title: string
+	action?: ReactNode
+	children?: ReactNode
+}
+
+const SettingsMenuSection = ({
+	title,
+	action,
+	children,
+}: SettingsMenuSectionProps) => {
+	const titleId = useId()
+
+	return (
+		<li className={SECTION} data-slot="settings-menu-section">
+			<div className={SECTION_TITLE_ROW}>
+				<span className={SECTION_TITLE} id={titleId}>
+					{title}
+				</span>
+				{action}
+			</div>
+			<ul
+				aria-labelledby={titleId}
+				className="flex list-none flex-col gap-0.5 p-0"
+			>
+				{children}
+			</ul>
+		</li>
+	)
+}
+
+type SettingsMenuAddSpaceProps = {
+	onAdd: () => void
+}
+
+const SettingsMenuAddSpace = ({ onAdd }: SettingsMenuAddSpaceProps) => {
+	const { t } = useTranslation("bots")
+
+	return (
+		<button
+			aria-label={t("spaces.create")}
+			className={SECTION_ACTION}
+			data-slot="settings-menu-add-space"
+			onClick={onAdd}
+			type="button"
+		>
+			<Icons.Add aria-hidden="true" className="size-3.5" />
+		</button>
+	)
+}
+
+type SettingsMenuSpaceProps = {
+	name: string
+	colour?: BotAvatarBlot | null
+	host?: SpaceHost
+	isCurrent?: boolean
+	isInvitation?: boolean
+	hasAttention?: boolean
+	onOpen: () => void
+}
+
+const SettingsMenuSpace = ({
+	name,
+	colour,
+	host,
+	isCurrent = false,
+	isInvitation = false,
+	hasAttention = false,
+	onOpen,
+}: SettingsMenuSpaceProps) => {
+	const { t } = useTranslation(["settings", "bots"])
+
+	return (
+		<li className={SPACE_ROW}>
+			<SidebarListRow
+				aria-current={isCurrent ? "true" : undefined}
+				geometry="menu"
+				media={
+					isInvitation ? (
+						<span
+							aria-hidden="true"
+							className={SPACE_INVITATION_MEDIA}
+							data-slot="settings-menu-space-invitation"
+						/>
+					) : (
+						<SpaceSquare colour={colour} host={host} size="menu" />
+					)
+				}
+				name={name}
+				onSelect={onOpen}
+				trailing={
+					<span className={SPACE_TRAILING}>
+						{host ? (
+							<span className="sr-only">{t(`bots:spaces.host.${host}`)}</span>
+						) : null}
+						{isCurrent ? (
+							<BotTitleBadge
+								className={SPACE_PILL}
+								data-slot="settings-menu-space-current"
+								title={t("settings:screen.space.current")}
+							/>
+						) : null}
+						{isInvitation ? (
+							<BotTitleBadge
+								className={cn(SPACE_PILL, SPACE_INVITATION_PILL)}
+								data-slot="settings-menu-space-invitation-pill"
+								title={t("settings:screen.space.invitation")}
+							/>
+						) : null}
+						{hasAttention ? (
+							<>
+								<span className="sr-only">{t("bots:roster.needsYou")}</span>
+								<span
+									aria-hidden="true"
+									className={SPACE_ATTENTION_DOT}
+									data-slot="settings-menu-space-attention"
+								/>
+							</>
+						) : null}
+					</span>
+				}
+			/>
+		</li>
+	)
+}
+
 export {
 	SettingsMenu,
 	SettingsMenuAddApplication,
+	SettingsMenuAddSpace,
 	SettingsMenuApplication,
 	SettingsMenuEntry,
+	SettingsMenuSection,
+	SettingsMenuSpace,
 }

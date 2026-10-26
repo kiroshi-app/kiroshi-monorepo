@@ -78,7 +78,7 @@ const SidebarMenuRow = ({
 	const row = (
 		<SidebarMenuButton
 			{...elementProps}
-			aria-current={isActive ? "page" : undefined}
+			aria-current={isActive ? "page" : elementProps["aria-current"]}
 			aria-label={isCollapsed ? label : undefined}
 			className={cn(
 				ROW,

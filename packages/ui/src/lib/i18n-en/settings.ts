@@ -11,6 +11,18 @@ const settings = {
 			companion: "Companion settings",
 			user: "User settings",
 		},
+		group: {
+			settings: "Your settings",
+			spaces: "Your spaces",
+		},
+		space: {
+			current: "Open now",
+			invitation: "Invitation",
+			left: {
+				title: "You left {{name}}",
+				description: "Ask {{host}} for a new invitation to join again.",
+			},
+		},
 	},
 	rail: {
 		account: "Account",
