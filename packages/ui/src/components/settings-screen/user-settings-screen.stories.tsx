@@ -247,12 +247,7 @@ const expectSpaceRows = async (menu: HTMLElement, names: string[]) => {
 		slotIn(spaceRowOf(menu, "Studio"), "settings-menu-space-current"),
 		slotIn(spaceRowOf(menu, "Atelier"), "settings-menu-space-invitation-pill"),
 	]) {
-		await expect(getComputedStyle(pill)).toMatchObject({
-			paddingBlockStart: "3px",
-			paddingBlockEnd: "3px",
-			paddingInlineStart: "6px",
-			paddingInlineEnd: "6px",
-		})
+		await expect(getComputedStyle(pill).padding).toBe("3px 6px")
 	}
 	for (const { name, colour } of [
 		...SPACES_ARGS.ownedSpaces,
