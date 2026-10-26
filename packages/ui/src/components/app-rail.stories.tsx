@@ -39,11 +39,19 @@ const ENTRY_NAMES: Record<AppRailPanel, string> = {
 
 const SPACE_SETTINGS = "Space settings"
 
-const RAIL_WIDTH = 52
+const RAIL_WIDTH = 60
+
+const RAIL_BUTTON = 44
+
+const RAIL_TOP_INSET = 7
+
+const RAIL_AVATAR = 26
 
 const REMOVED_PANEL = "companions"
 
 const PANELS = Object.keys(ENTRY_NAMES) as AppRailPanel[]
+
+const TOP_GROUP = [...PANELS.map((panel) => ENTRY_NAMES[panel]), SPACE_SETTINGS]
 
 const renderRail = (args: AppRailProps) => (
 	<div className="flex h-[32rem] bg-background">
@@ -59,7 +67,7 @@ const entryNamed = (canvasElement: HTMLElement, name: string) => {
 	return entry
 }
 
-const panelEntriesIn = (canvasElement: HTMLElement) =>
+const topGroupEntriesIn = (canvasElement: HTMLElement) =>
 	Array.from(
 		slotIn(canvasElement, "app-rail").querySelectorAll<HTMLElement>(
 			'ul:first-of-type [data-slot="app-rail-item"]',
@@ -83,9 +91,9 @@ const expectBareBottomGroup = async (canvasElement: HTMLElement) => {
 	const items = bottomGroupItemsIn(canvasElement).filter((item) =>
 		item.checkVisibility(),
 	)
-	await expect(items).toHaveLength(2)
+	await expect(items).toHaveLength(1)
 	await expect(within(items[0]).getByRole("button")).toBe(
-		entryNamed(canvasElement, SPACE_SETTINGS),
+		entryNamed(canvasElement, READER.name),
 	)
 }
 
@@ -94,18 +102,16 @@ const updateBadgeIn = (status: UpdateBadgeStatus) => ({
 		updateBadge: <UpdateBadge progress={42} status={status} version="1.4.0" />,
 	},
 	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-		const [slot, settingsItem] = bottomGroupItemsIn(canvasElement)
-		const gear = entryNamed(canvasElement, SPACE_SETTINGS)
+		const [slot, readerItem] = bottomGroupItemsIn(canvasElement)
+		const reader = entryNamed(canvasElement, READER.name)
 		await expect(slot).toHaveAttribute("data-slot", "app-rail-update")
-		await expect(slot.nextElementSibling).toBe(settingsItem)
-		await expect(settingsItem.contains(gear)).toBe(true)
+		await expect(slot.nextElementSibling).toBe(readerItem)
+		await expect(readerItem.contains(reader)).toBe(true)
 
 		const badge = slot.firstElementChild as HTMLElement
-		const badgeBox = badge.getBoundingClientRect()
-		const gearBox = gear.getBoundingClientRect()
-		await expect(badgeBox.left).toBe(gearBox.left)
-		await expect(badgeBox.width).toBe(gearBox.width)
-		await expect(badgeBox.height).toBe(gearBox.height)
+		await expect(horizontalCentreOf(badge.getBoundingClientRect())).toBe(
+			horizontalCentreOf(reader.getBoundingClientRect()),
+		)
 		await expectListRowGapBetweenEntries(canvasElement)
 	},
 })
@@ -124,14 +130,14 @@ const expectListRowGapBetweenEntries = async (canvasElement: HTMLElement) => {
 	const groups = slotIn(canvasElement, "app-rail").querySelectorAll("ul")
 	for (const group of groups) {
 		const boxes = boxesInGroup(group)
-		await expect(boxes.length).toBeGreaterThan(1)
+		await expect(boxes.length).toBeGreaterThan(0)
 		for (const [index, box] of boxes.slice(1).entries()) {
 			await expect(box.top - boxes[index].bottom).toBe(listRowGap)
 		}
 	}
 }
 
-const verticalCentreOf = (box: DOMRect) => box.top + box.height / 2
+const horizontalCentreOf = (box: DOMRect) => box.left + box.width / 2
 
 const iconOf = (entry: HTMLElement) => {
 	const icon = entry.querySelector("svg")
@@ -177,9 +183,7 @@ const expectOnlySelected = async (
 	)
 	const selectedInk = tokenStyleIn(rail, "text-foreground", "color")
 	const idleInk = tokenStyleIn(rail, "text-muted-foreground", "color")
-	await expect(panelEntriesIn(canvasElement)).toEqual(
-		PANELS.map((panel) => ENTRY_NAMES[panel]),
-	)
+	await expect(topGroupEntriesIn(canvasElement)).toEqual(TOP_GROUP)
 	for (const panel of PANELS) {
 		const entry = entryNamed(canvasElement, ENTRY_NAMES[panel])
 		if (panel === selected) {
@@ -255,6 +259,52 @@ const expectHoverBetweenIdleAndCurrent = async (canvasElement: HTMLElement) => {
 	await pointer.unhover(current)
 }
 
+const expectRailGeometry = async (canvasElement: HTMLElement) => {
+	const rail = railIn(canvasElement)
+	const radius = tokenStyleIn(rail, "rounded-lg", "borderTopLeftRadius")
+	await expect(rail.getBoundingClientRect().width).toBe(RAIL_WIDTH)
+	for (const entry of railEntriesIn(canvasElement)) {
+		const box = entry.getBoundingClientRect()
+		await expect(box.width).toBe(RAIL_BUTTON)
+		await expect(box.height).toBe(RAIL_BUTTON)
+		await expect(getComputedStyle(entry).borderTopLeftRadius).toBe(radius)
+	}
+}
+
+const expectSettingsOpen = async (
+	canvasElement: HTMLElement,
+	current: string,
+) => {
+	const rail = railIn(canvasElement)
+	const selectedFill = tokenStyleIn(
+		rail,
+		"bg-rail-item-selected",
+		"backgroundColor",
+	)
+	await expectRailGeometry(canvasElement)
+	await expect(topGroupEntriesIn(canvasElement)).toEqual(TOP_GROUP)
+	for (const entry of railEntriesIn(canvasElement)) {
+		if (entry.getAttribute("aria-label") === current) {
+			await expect(entry).toHaveAttribute("aria-current", "true")
+			await expect(fillOf(entry)).toBe(selectedFill)
+		} else {
+			await expect(entry).not.toHaveAttribute("aria-current")
+			await expect(fillOf(entry)).toBe(NO_FILL)
+		}
+	}
+	for (const panel of PANELS) {
+		await expect(
+			iconStyleOf(entryNamed(canvasElement, ENTRY_NAMES[panel])),
+		).toBe("stroke")
+	}
+	await expect(
+		slotIn(
+			entryNamed(canvasElement, READER.name),
+			"app-rail-avatar",
+		).getBoundingClientRect().width,
+	).toBe(RAIL_AVATAR)
+}
+
 const selecting = (selected: AppRailPanel) => ({
 	args: { selected },
 	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
@@ -317,7 +367,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The column of icons down the left edge of the window: the two panels a reader moves between, Conversations then Missions, then the space settings gear and the reader at the foot. The rail draws and reports; which panel is open and the dot on each entry are props, and each entry reports its own press. An entry is a button named by its panel, the open one marked `aria-current`, and the news it carries is spoken in its name, so a dot never rides on colour alone.",
+					"The 60px column of 44px icons down the left edge of the window: the two panels a reader moves between, Conversations then Missions, the space settings gear under them, and the reader at the foot. The rail draws and reports; which panel is open, which settings is open over it and the dot on each entry are props, and each entry reports its own press. An entry is a button named by its panel, the open one marked `aria-current`, and the news it carries is spoken in its name, so a dot never rides on colour alone. While a settings is open, its entry is the current one and no panel entry is.",
 			},
 		},
 	},
@@ -331,9 +381,10 @@ const meta = preview.meta({
 	},
 })
 
-export const ConversationsSelected = meta.story({
+export const Conversations = meta.story({
 	...selecting("conversations"),
 	play: async ({ canvasElement }) => {
+		await expectRailGeometry(canvasElement)
 		await expectCurrentBesideIdle(canvasElement)
 		await expectBareBottomGroup(canvasElement)
 		await expectListRowGapBetweenEntries(canvasElement)
@@ -345,9 +396,42 @@ export const ConversationsSelected = meta.story({
 		docs: {
 			description: {
 				story:
-					"The rail as the app opens it, the current entry beside idle ones. Check the conversation bubble sits on the 10% fill in the foreground colour while Missions, the gear and the reader stay muted on no fill, that no other panel entry is drawn, and that the space settings gear and the reader's initial hold the foot of the rail.",
+					"E1, Conversations. The rail as the app opens it, the current entry beside idle ones. Check the rail is 60px wide and every entry a 44px square on the `radius-lg` corner, that the conversation bubble sits on the 10% fill in the foreground colour while Missions, the gear and the reader stay muted on no fill, that the gear sits directly under Missions, and that the reader's initial alone holds the foot of the rail.",
 			},
 		},
+	},
+})
+
+export const SpaceSettingsOverConversations = meta.story({
+	args: { selected: "conversations", openSettings: "space" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"E1, Space settings over Conversations. The space settings open while the Conversations panel stays the one underneath. Check the gear is the only entry marked `aria-current`, on the selected fill with the filled gear, and that Conversations and Missions sit on no fill with their stroked icons. Pick `UserSettingsOverMissions` for the reader's own settings.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expectSettingsOpen(canvasElement, SPACE_SETTINGS)
+		await expect(iconStyleOf(entryNamed(canvasElement, SPACE_SETTINGS))).toBe(
+			"fill",
+		)
+	},
+})
+
+export const UserSettingsOverMissions = meta.story({
+	args: { selected: "missions", openSettings: "you" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"E1, User settings over Missions. The reader's own settings open while the Missions panel stays the one underneath. Check the reader's 44px button is the only entry marked `aria-current`, on the selected fill, that the 26px avatar inside it is drawn as it always is, and that Conversations, Missions and the gear sit on no fill with their stroked icons. Pick `SpaceSettingsOverConversations` for the space settings.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expectSettingsOpen(canvasElement, READER.name)
 	},
 })
 
@@ -491,7 +575,7 @@ export const SpaceSettingsGearHovered = meta.story({
 		docs: {
 			description: {
 				story:
-					"The gear at the foot of the rail under the pointer, carrying a dot. Check the tooltip reads Space settings, that the name spoken for the gear is Space settings followed by the news it carries, and that a press opens the space settings.",
+					"The gear under Missions, under the pointer, carrying a dot. Check the tooltip reads Space settings, that the name spoken for the gear is Space settings followed by the news it carries, and that a press opens the space settings.",
 			},
 		},
 	},
@@ -507,13 +591,13 @@ export const SpaceSettingsGearHovered = meta.story({
 	},
 })
 
-export const FirstTabLevelWithPanelTitle = meta.story({
+export const FirstTabUnderTitleBar = meta.story({
 	render: renderInSidebar("conversations"),
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The rail beside the panel it opens, under the title bar. Check the first tab is centred on the panel title row within 1px and that the rail stays 52px wide under a 34px title bar.",
+					"The rail beside the panel it opens, under the title bar. Check the first tab starts 7px under the 34px title bar, the rail's own top padding, and that the rail stays 60px wide.",
 			},
 		},
 	},
@@ -526,13 +610,7 @@ export const FirstTabLevelWithPanelTitle = meta.story({
 			canvasElement,
 			"app-title-bar",
 		).getBoundingClientRect()
-		const titleRow = within(slotIn(canvasElement, "sidebar-header"))
-			.getByRole("heading", { name: ENTRY_NAMES.conversations })
-			.parentElement?.getBoundingClientRect()
-		if (!titleRow) throw new Error("No panel title row")
-		await expect(
-			Math.abs(verticalCentreOf(first) - verticalCentreOf(titleRow)),
-		).toBeLessThanOrEqual(1)
+		await expect(first.top - titleBar.bottom).toBe(RAIL_TOP_INSET)
 		await expect(rail.getBoundingClientRect().width).toBe(RAIL_WIDTH)
 		await expect(titleBar.height).toBe(SHELL_TITLE_BAR_HEIGHT)
 	},
@@ -544,7 +622,7 @@ export const WithDot = meta.story({
 		docs: {
 			description: {
 				story:
-					"Two entries with something new, the way the reference draws them. Check each dot is 8px, carries no number, flush with the top and trailing corner of its 36px entry and ringed 2px in the window ground, and that the entry's name says there is news.",
+					"Two entries with something new, the way the reference draws them. Check each dot is 8px, carries no number, flush with the top and trailing corner of its 44px entry and ringed 2px in the window ground, and that the entry's name says there is news.",
 			},
 		},
 	},
@@ -621,15 +699,22 @@ export const FailedDotDark = meta.story({
 	globals: { theme: "dark" },
 })
 
-export const UpdateAvailable = meta.story({
-	...updateBadgeIn("available"),
+const updateWaiting = updateBadgeIn("available")
+
+export const UpdateWaiting = meta.story({
+	...updateWaiting,
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"An update waiting to be downloaded, handed to the rail by the host. Check the badge is the first stop of the foot group, directly above the space settings gear, on the same column and in the same 36px square.",
+					"E1, Update waiting. An update waiting to be downloaded, handed to the rail by the host, Conversations the current entry. Check the badge is the first stop of the foot group, its 28px round button centred on the column directly above the reader, and that the rail keeps its 60px width and 44px entries.",
 			},
 		},
+	},
+	play: async (context) => {
+		await updateWaiting.play(context)
+		await expectRailGeometry(context.canvasElement)
+		await expectOnlySelected(context.canvasElement, "conversations")
 	},
 })
 
@@ -639,7 +724,7 @@ export const UpdateDownloading = meta.story({
 		docs: {
 			description: {
 				story:
-					"The update downloading, its ring filling around the badge. Check the ring holds the same 36px square as the gear under it and the rail does not shift while it fills.",
+					"The update downloading, its ring filling around the badge. Check the ring stays centred on the column above the reader and the rail does not shift while it fills.",
 			},
 		},
 	},
@@ -651,14 +736,14 @@ export const UpdateReady = meta.story({
 		docs: {
 			description: {
 				story:
-					"The update installed and waiting for a restart, the badge a single restart control with no panel. Check the badge keeps its place above the gear, on the same column and in the same 36px square.",
+					"The update installed and waiting for a restart, the badge a single restart control with no panel. Check the badge keeps its place above the reader, centred on the same column.",
 			},
 		},
 	},
 })
 
-export const UpdateAvailableDark = meta.story({
-	...updateBadgeIn("available"),
+export const UpdateWaitingDark = meta.story({
+	...updateWaiting,
 	globals: { theme: "dark" },
 })
 
@@ -668,7 +753,7 @@ export const UpdateIdle = meta.story({
 		docs: {
 			description: {
 				story:
-					"The state the app is in nearly all the time: the host hands the rail a badge that has nothing to show. Check the foot of the rail holds the gear and the reader only, with no gap held open above the gear.",
+					"The state the app is in nearly all the time: the host hands the rail a badge that has nothing to show. Check the foot of the rail holds the reader only, with no gap held open above it.",
 			},
 		},
 	},

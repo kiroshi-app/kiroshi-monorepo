@@ -67,6 +67,7 @@ const AppSidebarBase = ({
 	windowControls,
 	railDots,
 	openPanel: controlledPanel,
+	openSettings,
 	onOpenPanelChange,
 	"data-tauri-drag-region": dragRegion,
 	...sidebar
@@ -136,6 +137,7 @@ const AppSidebarBase = ({
 				onOpenYou={onOpenUserSettings}
 				onSelectConversations={() => setOpenPanel("conversations")}
 				onSelectMissions={() => setOpenPanel("missions")}
+				openSettings={openSettings}
 				selected={openPanel}
 				updateBadge={updateBadge}
 				user={user}

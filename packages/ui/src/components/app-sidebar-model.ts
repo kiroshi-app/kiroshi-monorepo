@@ -4,6 +4,7 @@ import type { ComponentProps, ReactNode } from "react"
 import type {
 	AppRailDots,
 	AppRailPanel,
+	AppRailSettings,
 } from "@workspace/ui/components/app-rail"
 import type {
 	BotBadge,
@@ -258,6 +259,7 @@ interface AppSidebarProps
 	windowControls?: ReactNode
 	railDots?: AppRailDots
 	openPanel?: string
+	openSettings?: AppRailSettings
 	onOpenPanelChange?: (panel: AppRailPanel) => void
 	"data-tauri-drag-region"?: string
 }
