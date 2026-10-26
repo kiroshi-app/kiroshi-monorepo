@@ -9,7 +9,7 @@ import {
 } from "../spaces/joined-spaces-controller"
 import type { SpacesController } from "../spaces/spaces-controller"
 
-export type SettingsSpaceSwitchSource = {
+type SettingsSpaceSwitchSource = {
 	joinedSpaces: JoinedSpacesController
 	sidebarActions: Pick<SidebarActions, "onSelectSpace">
 	spaces: SpacesController
