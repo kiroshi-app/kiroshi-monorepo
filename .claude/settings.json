@@ -6,7 +6,9 @@
 			"Bash(git push origin feature/*)",
 			"Bash(git push -u origin feature/*)",
 			"Bash(scripts/pr-dequeue.sh)",
-			"Bash(./scripts/pr-dequeue.sh)"
+			"Bash(./scripts/pr-dequeue.sh)",
+			"Bash(scripts/pr-enqueue.sh)",
+			"Bash(./scripts/pr-enqueue.sh)"
 		],
 		"ask": [
 			"Bash(git push* +*)",
@@ -21,6 +23,8 @@
 		"deny": [
 			"Edit(/scripts/pr-dequeue.sh)",
 			"Write(/scripts/pr-dequeue.sh)",
+			"Edit(/scripts/pr-enqueue.sh)",
+			"Write(/scripts/pr-enqueue.sh)",
 			"Bash(gh pr merge* --squash*)",
 			"Bash(gh pr merge* --merge*)",
 			"Bash(gh pr merge* --rebase*)",

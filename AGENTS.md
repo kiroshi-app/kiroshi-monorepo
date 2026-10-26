@@ -227,4 +227,6 @@ Force push, hard reset, `git clean -fd`, branch delete (`-D`), `rm -rf` on a dir
 
 Never push to `main`. Always work on feature branches.
 
-PR already queued and a fix must land: run `scripts/pr-dequeue.sh`, push, then run `gh pr merge --auto <N>` again. Never close the PR.
+Right after `gh pr create`, run `scripts/pr-enqueue.sh` alone in its own Bash call: it arms auto-merge on the PR of the current branch and fails if it is not armed.
+
+PR already queued and a fix must land: run `scripts/pr-dequeue.sh`, push, then run `scripts/pr-enqueue.sh` again. Never close the PR.
