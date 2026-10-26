@@ -55,25 +55,6 @@ const pressReturn = async (element: HTMLElement) => {
 	})
 }
 
-describe("ToolQuestion hint", () => {
-	afterEach(cleanup)
-
-	it("reads only the Return part while no digit keys are wired", () => {
-		renderPanel({ questions: [PLAN] })
-
-		expect(screen.getByText("Return to send")).toBeTruthy()
-		expect(screen.queryByText(/^Press /)).toBeNull()
-	})
-
-	it("names the digit range once the digit keys are wired", () => {
-		renderPanel({ questions: [PLAN], hasDigitKeys: true })
-
-		expect(
-			screen.getByText("Press 1\u20133 to choose, Return to send"),
-		).toBeTruthy()
-	})
-})
-
 const pressKey = (init: KeyboardEventInit, target: Element = document.body) => {
 	const event = new KeyboardEvent("keydown", {
 		bubbles: true,
@@ -238,9 +219,6 @@ describe("ToolQuestion digit keys", () => {
 		}
 		renderPanel({ questions: [wide], hasDigitKeys: true })
 
-		expect(
-			screen.getByText("Press 1\u20139 to choose, Return to send"),
-		).toBeTruthy()
 		pressKey(digitKey(9))
 		expect(checkedLabels()).toEqual([expect.stringContaining("Plan 9")])
 	})

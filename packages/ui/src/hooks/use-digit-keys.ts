@@ -2,8 +2,6 @@ import { type RefObject, useEffect, useRef } from "react"
 
 import { isTypingTarget } from "@workspace/ui/lib/typing-target"
 
-export const DIGIT_KEY_LIMIT = 9
-
 const DIGIT_CODE = /^(?:Digit|Numpad)([1-9])$/
 
 const OVERLAY = "[aria-modal='true'], [role='menu']"

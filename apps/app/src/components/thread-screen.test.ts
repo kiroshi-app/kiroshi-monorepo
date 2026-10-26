@@ -2344,9 +2344,6 @@ describe("ThreadScreen", () => {
 		expect(askedForm()).toBeTruthy()
 		expect(composerField()).toBeNull()
 		expect(rowIndexOf("Which wall holds?")).toBe(-1)
-		expect(
-			screen.getByText("Press 1\u20132 to choose, Return to send"),
-		).toBeTruthy()
 	})
 
 	it("picks an option from a digit key and leaves the transcript and the chords alone", async () => {

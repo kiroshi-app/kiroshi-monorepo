@@ -547,7 +547,6 @@ conversation-tools-toolquestion--answer-pressed
 conversation-tools-toolquestion--application-scope
 conversation-tools-toolquestion--arrow-key-tabs
 conversation-tools-toolquestion--chosen-row-follows-space-tint
-conversation-tools-toolquestion--digit-hint-two-options
 conversation-tools-toolquestion--digit-keys-choose
 conversation-tools-toolquestion--digit-keys-toggle
 conversation-tools-toolquestion--digit-typed-into-own-answer
@@ -576,6 +575,8 @@ conversation-tools-toolquestion--no-skip
 conversation-tools-toolquestion--nothing-chosen
 conversation-tools-toolquestion--notice-in-queue
 conversation-tools-toolquestion--option-chosen
+conversation-tools-toolquestion--option-row-hovered
+conversation-tools-toolquestion--option-row-pressed
 conversation-tools-toolquestion--options-as-whole-answer
 conversation-tools-toolquestion--own-answer-typing
 conversation-tools-toolquestion--reduced-motion
