@@ -321,7 +321,7 @@ const verticalCentreOf = (box: DOMRect) => box.top + box.height / 2
 
 const ROSTER_LANE = 8
 
-const RAIL_SLOT = 36
+const RAIL_SLOT = 44
 
 const RAIL_AVATAR = 26
 
@@ -686,7 +686,7 @@ export const WithUser = meta.story({
 		docs: {
 			description: {
 				story:
-					"The reader themselves, at the foot of the rail under the space settings gear. The reader is the only way into their own settings, so a host that has an account to show always hands one down. Check that the reader is a 26px round picture centred in a 36px slot, named by their name, that it is the last stop of the rail, that activating it opens the user settings and that the gear opens the space settings. Check then the lane the roster draws: its rows sit 8px in from both inner edges of the panel, the panel's own inline padding and nothing more. Pick `WithSearch` for the search button in the header.",
+					"The reader themselves, alone at the foot of the rail, the space settings gear sitting under Missions at the top. The reader is the only way into their own settings, so a host that has an account to show always hands one down. Check that the reader is a 26px round picture centred in a 44px slot, named by their name, that it is the last stop of the rail, that activating it opens the user settings and that the gear opens the space settings. Check then the lane the roster draws: its rows sit 8px in from both inner edges of the panel, the panel's own inline padding and nothing more. Pick `WithSearch` for the search button in the header.",
 			},
 		},
 	},
@@ -2210,7 +2210,7 @@ export const NoFooter = meta.story({
 	},
 })
 
-const RAIL_WIDTH = 52
+const RAIL_WIDTH = 60
 
 const SHELL_CARD_RADIUS = "12px"
 
@@ -2241,7 +2241,7 @@ export const ConversationsPanel = meta.story({
 		docs: {
 			description: {
 				story:
-					"The V1 shell as the app opens it, drawn against the reference artboard: the title bar with the space switcher, the rail on the window ground with Conversations selected, a still green dot on Conversations and a pulsing warning dot on Missions, then the shell card holding the Conversations panel and the conversation. Check the rail is 52px wide, the panel 304px with its 1px divider, the panel header 32px with the 15px semibold title and the search and create buttons, the card on its 12px radius with a 1px border 34px under the top of the window and 4px off the trailing and bottom edges, and the roster below the header exactly as the list has always drawn it.",
+					"The V1 shell as the app opens it, drawn against the reference artboard: the title bar with the space switcher, the rail on the window ground with Conversations selected, a still green dot on Conversations and a pulsing warning dot on Missions, then the shell card holding the Conversations panel and the conversation. Check the rail is 60px wide, the panel 304px with its 1px divider, the panel header 32px with the 15px semibold title and the search and create buttons, the card on its 12px radius with a 1px border 34px under the top of the window and 4px off the trailing and bottom edges, and the roster below the header exactly as the list has always drawn it.",
 			},
 		},
 	},

@@ -16,6 +16,8 @@ import { cn } from "@workspace/ui/lib/utils"
 
 type AppRailPanel = "conversations" | "missions"
 
+type AppRailSettings = "space" | "you"
+
 type AppRailDots = Partial<
 	Record<AppRailPanel, BotBadge> & Record<"settings" | "you", boolean>
 >
@@ -26,16 +28,17 @@ const PANEL_ICON = {
 } as const satisfies Record<AppRailPanel, keyof typeof FillIcons>
 
 const RAIL =
-	"flex w-13 shrink-0 flex-col justify-between gap-1 px-2 pt-1.75 pb-[calc(var(--shell-inset)-var(--spacing))]"
+	"flex w-15 shrink-0 flex-col justify-between gap-1 px-2 pt-1.75 pb-[calc(var(--shell-inset)-var(--spacing))]"
 
 const NAVIGATION_ROW_GAP = "gap-0.5"
 
 const RAIL_GROUP = `flex flex-col ${NAVIGATION_ROW_GAP}`
 
-const RAIL_SLOT = "flex empty:hidden"
+const RAIL_SLOT =
+	"flex size-11 items-center justify-center rounded-lg empty:hidden"
 
 const RAIL_ITEM =
-	"relative size-9 rounded-md text-muted-foreground hover:bg-rail-item-selected/50 hover:text-foreground dark:hover:bg-rail-item-selected/50 aria-[current=true]:bg-rail-item-selected aria-[current=true]:text-foreground dark:aria-[current=true]:bg-rail-item-selected [&_svg]:size-4.5 [&_svg]:stroke-[1.75]!"
+	"relative size-11 rounded-lg text-muted-foreground hover:bg-rail-item-selected/50 hover:text-foreground dark:hover:bg-rail-item-selected/50 aria-[current=true]:bg-rail-item-selected aria-[current=true]:text-foreground dark:aria-[current=true]:bg-rail-item-selected [&_svg]:size-4.5 [&_svg]:stroke-[1.75]!"
 
 const RAIL_DOT =
 	"pointer-events-none absolute -end-px -top-px size-2 rounded-full bg-primary ring-2 ring-(--shell-surface,var(--background)) transition-shadow duration-400 ease-out motion-reduce:transition-none"
@@ -119,6 +122,7 @@ const RailAvatar = ({ name, image }: RailAvatarProps) => (
 
 type AppRailProps = Omit<ComponentProps<"nav">, "children"> & {
 	selected: AppRailPanel
+	openSettings?: AppRailSettings
 	dots?: AppRailDots
 	user?: UserChipIdentity
 	updateBadge?: ReactNode
@@ -130,6 +134,7 @@ type AppRailProps = Omit<ComponentProps<"nav">, "children"> & {
 
 const AppRail = ({
 	selected,
+	openSettings,
 	dots,
 	user,
 	updateBadge,
@@ -142,7 +147,7 @@ const AppRail = ({
 }: AppRailProps) => {
 	const { t } = useTranslation("bots")
 	const panelEntry = (entry: AppRailPanel) => {
-		const isSelected = selected === entry
+		const isSelected = openSettings === undefined && selected === entry
 		const PanelIcon = (isSelected ? FillIcons : Icons)[PANEL_ICON[entry]]
 		return {
 			children: <PanelIcon aria-hidden="true" />,
@@ -151,6 +156,8 @@ const AppRail = ({
 			name: t(`rail.${entry}`),
 		}
 	}
+	const isSpaceSettingsOpen = openSettings === "space"
+	const SettingsIcon = (isSpaceSettingsOpen ? FillIcons : Icons).Settings
 
 	return (
 		<nav
@@ -165,6 +172,14 @@ const AppRail = ({
 					onPress={onSelectConversations}
 				/>
 				<RailItem {...panelEntry("missions")} onPress={onSelectMissions} />
+				<RailItem
+					hasDot={dots?.settings}
+					isSelected={isSpaceSettingsOpen}
+					name={t("rail.spaceSettings")}
+					onPress={onOpenSpaceSettings}
+				>
+					<SettingsIcon aria-hidden="true" />
+				</RailItem>
 			</ul>
 			<ul className={RAIL_GROUP}>
 				{updateBadge ? (
@@ -173,14 +188,8 @@ const AppRail = ({
 					</li>
 				) : null}
 				<RailItem
-					hasDot={dots?.settings}
-					name={t("rail.spaceSettings")}
-					onPress={onOpenSpaceSettings}
-				>
-					<Icons.Settings aria-hidden="true" />
-				</RailItem>
-				<RailItem
 					hasDot={dots?.you}
+					isSelected={openSettings === "you"}
 					name={displayNameOf(user?.name)}
 					onPress={onOpenYou}
 				>
@@ -196,5 +205,6 @@ export {
 	type AppRailDots,
 	type AppRailPanel,
 	type AppRailProps,
+	type AppRailSettings,
 	NAVIGATION_ROW_GAP,
 }
