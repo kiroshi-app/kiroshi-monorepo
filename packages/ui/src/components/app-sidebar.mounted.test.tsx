@@ -10,6 +10,7 @@ import {
 	type AppSidebarSection,
 	type Space,
 } from "@workspace/ui/components/app-sidebar"
+import { blotTint } from "@workspace/ui/components/companion-colour"
 import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 
 import "@workspace/ui/lib/i18n"
@@ -176,5 +177,45 @@ describe("AppSidebar merged roster order mounted", () => {
 			MIDDLE_REVIEW.name,
 			OLDER_ATLAS.name,
 		])
+	})
+})
+
+const railLogoIn = (container: HTMLElement) => {
+	const logo = container.querySelector<HTMLElement>(
+		'[data-slot="app-rail"] [data-slot="space-dot"]',
+	)
+	if (!logo) throw new Error("No rail logo on screen")
+	return logo
+}
+
+const shellWithSpace = (space?: Space) => (
+	<WorkspaceShell
+		sidebar={
+			<AppSidebar
+				bots={[ATLAS]}
+				conversations={[REVIEW]}
+				selectedSpaceId="personal"
+				space={space}
+				spaces={SPACES}
+			/>
+		}
+	>
+		{null}
+	</WorkspaceShell>
+)
+
+describe("AppSidebar rail logo colour mounted", () => {
+	afterEach(cleanup)
+
+	it("paints the logo with the space it is handed, not the selected entry of the list", () => {
+		const { container } = render(shellWithSpace(SPACES[2]))
+
+		expect(railLogoIn(container).style.backgroundColor).toBe(blotTint("red"))
+	})
+
+	it("leaves the logo untinted while no space is handed, whatever the list selects", () => {
+		const { container } = render(shellWithSpace())
+
+		expect(railLogoIn(container).style.backgroundColor).toBe("")
 	})
 })

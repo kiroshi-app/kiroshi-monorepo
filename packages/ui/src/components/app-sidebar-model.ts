@@ -230,6 +230,7 @@ interface AppSidebarProps
 	selectedConversationId?: string
 	onCreateBot?: () => void
 	onCreateConversation?: () => void
+	space?: Space
 	spaces?: Space[]
 	selectedSpaceId?: string
 	isSpaceSwitchingEnabled?: boolean
