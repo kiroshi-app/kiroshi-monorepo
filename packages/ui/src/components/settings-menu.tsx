@@ -103,6 +103,7 @@ type SettingsMenuEntryProps = {
 	isOpen?: boolean
 	isDanger?: boolean
 	hasIndicator?: boolean
+	count?: number
 	onSelect: () => void
 	children?: ReactNode
 }
@@ -114,6 +115,7 @@ const SettingsMenuEntry = ({
 	isOpen = false,
 	isDanger = false,
 	hasIndicator = false,
+	count,
 	onSelect,
 	children,
 }: SettingsMenuEntryProps) => {
@@ -130,6 +132,14 @@ const SettingsMenuEntry = ({
 			>
 				<EntryIcon aria-hidden="true" className="size-4 shrink-0" />
 				<span className={ROW_LABEL}>{label}</span>
+				{count === undefined ? null : (
+					<span
+						className="shrink-0 font-normal text-muted-foreground text-xs tabular-nums"
+						data-slot="settings-menu-count"
+					>
+						{count}
+					</span>
+				)}
 				{hasIndicator ? (
 					<span
 						aria-hidden="true"

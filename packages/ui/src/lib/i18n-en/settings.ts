@@ -14,6 +14,7 @@ const settings = {
 		account: "Account",
 		space: "Space",
 		members: "Members",
+		companions: "Companions",
 		secrets: "Secrets",
 		appearance: "Appearance",
 		notifications: "Notifications",
@@ -235,6 +236,19 @@ const settings = {
 				unwritableArchive: "The archive couldn’t be written.",
 				generic: "Something went wrong, nothing was changed.",
 			},
+		},
+		companions: {
+			title: "Companions",
+			caption: "Every companion in {{space}}. Pick one to change how it works.",
+			create: "Create a companion",
+			empty: "No companions in this space yet.",
+			counts: "{{skills}} · {{applications}}",
+			skills_zero: "no skills",
+			skills_one: "{{count}} skill",
+			skills_other: "{{count}} skills",
+			applications_zero: "no applications",
+			applications_one: "{{count}} application",
+			applications_other: "{{count}} applications",
 		},
 		members: {
 			invite: {

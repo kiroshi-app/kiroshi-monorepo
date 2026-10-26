@@ -22,6 +22,7 @@ import {
 	SettingsScreen,
 	type SpaceSettingsScreenProps,
 } from "@workspace/ui/components/settings-screen"
+import { SPACE_COMPANIONS } from "@workspace/ui/components/space-settings-dialog/companions.fixtures"
 import { MembersPanel } from "@workspace/ui/components/space-settings-dialog/members-panel"
 
 const SPACE_MENU = [
@@ -200,6 +201,54 @@ export const MembersDark = meta.story({
 					"`Members` in the dark theme. Check that the selected entry sits on the muted surface and the presence dot keeps its ring of the card.",
 			},
 		},
+	},
+})
+
+export const Companions = meta.story({
+	globals: { theme: "dark" },
+	args: {
+		entry: "companions",
+		companions: {
+			companions: SPACE_COMPANIONS,
+			onSelect: fn(),
+			onCreate: fn(),
+		},
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Artboard H01: the space's settings open on Companions. Check that Companions follows Members with its count on the right, that the section draws its own title once, and that the cards sit two to a row in the 640 column.",
+			},
+		},
+	},
+	play: async ({ args, userEvent }) => {
+		const menu = await menuIn()
+		await expect(menuNames(menu)).toEqual([
+			"Back to conversations",
+			"Space",
+			"Members",
+			"Companions4",
+			...SPACE_MENU.slice(2),
+		])
+		const entry = entryIn(menu, "Companions 4")
+		await expect(entry).toHaveAttribute("aria-current", "page")
+		await expect(slotIn(entry, "settings-menu-count")).toHaveTextContent("4")
+
+		const main = screen.getByRole("main")
+		await expect(
+			within(main).getAllByRole("heading", { level: 2 }),
+		).toHaveLength(1)
+		const cards = within(main).getAllByRole("button", {
+			name: /Writer|Planner|Builder|Designer/,
+		})
+		await expect(cards).toHaveLength(4)
+		await expect(cards[0].getBoundingClientRect().top).toBe(
+			cards[1].getBoundingClientRect().top,
+		)
+
+		await userEvent.click(cards[0])
+		await expect(args.companions?.onSelect).toHaveBeenCalledWith("juniper")
 	},
 })
 

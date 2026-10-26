@@ -18,6 +18,10 @@ import {
 } from "@workspace/ui/components/plugin-settings/use-plugin-sessions"
 import type { SettingsEntry } from "@workspace/ui/components/settings-rail"
 import type { SpaceSettingsValue } from "@workspace/ui/components/space-settings"
+import {
+	CompanionsSection,
+	type CompanionsSectionProps,
+} from "@workspace/ui/components/space-settings-dialog/companions-section"
 import { JoinedSpaceFields } from "@workspace/ui/components/space-settings-dialog/joined-space-fields"
 import {
 	ShareCard,
@@ -30,11 +34,15 @@ const SPACE_ENTRY = "space"
 
 const MEMBERS_ENTRY = "members"
 
+const COMPANIONS_ENTRY = "companions"
+
 const APPLICATIONS_ENTRY = "mcp"
 
 type Hosting = Omit<ShareCardProps, "name">
 
 type NoHosting = { [Key in keyof Hosting]?: never }
+
+type SpaceCompanions = Omit<CompanionsSectionProps, "spaceName">
 
 type LocalSpace = {
 	host?: never
@@ -64,6 +72,7 @@ type SpaceSettingsProps = PluginSessionsProps & {
 	onEnvironmentDelete: (name: string) => void | Promise<void>
 	history: PluginHistory
 	members?: ReactNode
+	companions?: SpaceCompanions
 } & (LocalSpace | JoinedSpace) &
 	(Hosting | NoHosting)
 
@@ -90,6 +99,7 @@ const useSpaceSettings = ({
 	host,
 	onLeave,
 	members,
+	companions,
 	hosting,
 	onHost,
 	onStopHosting,
@@ -157,6 +167,20 @@ const useSpaceSettings = ({
 					},
 				]
 
+	const companionsEntry: SettingsEntry[] =
+		companions === undefined
+			? []
+			: [
+					{
+						value: COMPANIONS_ENTRY,
+						icon: "Companions",
+						label: t("rail.companions"),
+						layout: "scrolling",
+						count: companions.companions.length,
+						panel: <CompanionsSection {...companions} spaceName={name} />,
+					},
+				]
+
 	const dangerPanel =
 		host === undefined ? (
 			<DangerZone
@@ -185,6 +209,7 @@ const useSpaceSettings = ({
 			panel: spacePanel,
 		},
 		...membersEntry,
+		...companionsEntry,
 		{
 			value: "environment",
 			icon: "Json",
@@ -237,6 +262,7 @@ const useSpaceSettings = ({
 
 export {
 	APPLICATIONS_ENTRY,
+	COMPANIONS_ENTRY,
 	SPACE_ENTRY,
 	type SpaceSettingsProps,
 	useSpaceSettings,
