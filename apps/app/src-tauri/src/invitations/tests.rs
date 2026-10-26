@@ -1338,6 +1338,11 @@ async fn proxy_closed(connection: &JoinedSpaceConnection) -> bool {
 	tokio::time::timeout(PATIENCE, refused).await.is_ok()
 }
 
+async fn port_held(connection: &JoinedSpaceConnection) -> TcpListener {
+	let address = connection.host_url.trim_start_matches("http://");
+	TcpListener::bind(address).await.expect("the closed proxy port binds again")
+}
+
 fn stopping(harness: &Harness, id: &str) -> watch::Receiver<bool> {
 	harness.app.state::<RelayGuests>().stopping(id).expect("a guest runs")
 }
@@ -1443,6 +1448,7 @@ fn a_guest_refused_401_signs_the_account_out_on_site_and_a_new_sign_in_connects_
 
 		assert!(guest_ended(&harness, &id, stopping).await, "the guest still runs");
 		assert!(proxy_closed(&first).await, "the proxy still answers");
+		let _first_port = port_held(&first).await;
 		assert!(harness.stored_until(<[JoinedSpace]>::is_empty).await.is_empty());
 		let session = harness.app.state::<AccountSession>();
 		let signed_out_on_site =
