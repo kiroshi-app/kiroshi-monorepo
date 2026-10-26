@@ -18,6 +18,7 @@ import type { AccountState, JoinedSpace } from "@/lib/bindings"
 import { toCompanionSummary } from "@/lib/bots/bot-settings"
 import { useCompanionCounts } from "@/lib/bots/use-companion-counts"
 import { toEnvironmentRows } from "@/lib/environment/environment-rows"
+import type { HostedSpace } from "@/lib/host/hosting-transport"
 import { useHosting } from "@/lib/host/use-hosting"
 import { useMembers } from "@/lib/host/use-members"
 import type { SettingsSearch } from "@/lib/navigation/settings-search"
@@ -46,16 +47,9 @@ const memberViewOf = (
 	blockedBy: isHostOffline ? "hostOffline" : undefined,
 })
 
-type EditedSpace = { id: string; name: string }
-
-const editedSpaceOf = ({ id, name }: EditedSpace): EditedSpace => ({
-	id,
-	name,
-})
-
 const editedJoinedSpaceOf = (
 	joined: JoinedSpace | undefined,
-): EditedSpace | null =>
+): HostedSpace | null =>
 	joined?.remoteSpaceId ? { id: joined.remoteSpaceId, name: joined.name } : null
 
 const leftSpaceOf = (
@@ -148,7 +142,7 @@ export const SpaceSettingsScreen = ({
 	const isCurrent = spaceId === openRowId
 	const ownedSpace = page.state === "yours" ? page.space : undefined
 	const joinedSpace = page.state === "joined" ? page.joined : undefined
-	const editedSpace = ownedSpace ? editedSpaceOf(ownedSpace) : null
+	const editedSpace = ownedSpace ?? null
 	const editedJoinedSpace = editedJoinedSpaceOf(joinedSpace)
 	const hosting = useHosting(editedSpace)
 	const isHosted = hosting?.hosting === "online" || editedJoinedSpace !== null
