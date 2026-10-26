@@ -509,6 +509,20 @@ describe("WorkspaceBody missions", () => {
 		expect(screen.getAllByText("Walls").length).toBeGreaterThan(0)
 	})
 
+	it("holds the app header while the mission skeleton is still delayed", async () => {
+		const { workspace } = await seed((mission) => ({ mission, events: [] }))
+		readMission.mockReturnValue(new Promise(() => undefined))
+		render(workspace.body(), { wrapper: createQueryTestWrapper().wrapper })
+		await settle()
+
+		await openMission()
+
+		expect(threadSlot("app-header")).not.toBeNull()
+		expect(
+			document.querySelector('[data-slot="skeleton-agent-bubble"]'),
+		).toBeNull()
+	})
+
 	it("frames the loading mission under the app header", async () => {
 		const { workspace } = await seed((mission) => ({ mission, events: [] }))
 		readMission.mockReturnValue(new Promise(() => undefined))
