@@ -3,6 +3,7 @@ import { expect, fn, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { resolvedRootColor, slotIn } from "@workspace/storybook/story-utils"
+import type { BotMcpConnectionState } from "@workspace/ui/components/bot-settings"
 import { MARKED_APPLICATIONS } from "@workspace/ui/components/plugin-settings/applications.fixtures"
 import {
 	SettingsMenu,
@@ -29,7 +30,10 @@ const expectDot = async (
 	await expect(getComputedStyle(dot).backgroundColor).toBe(backgroundColor)
 }
 
-const connectionDotIn = (canvasElement: HTMLElement, connection: string) => {
+const connectionDotIn = (
+	canvasElement: HTMLElement,
+	connection: BotMcpConnectionState,
+) => {
 	const dot = canvasElement.querySelector<HTMLElement>(
 		`[data-connection="${connection}"]`,
 	)
