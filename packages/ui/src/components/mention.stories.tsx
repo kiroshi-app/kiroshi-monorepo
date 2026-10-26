@@ -3,6 +3,7 @@ import { expect, fireEvent, fn, screen, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
+	colourTransitionsOf,
 	isInBrowserRunner,
 	shown,
 	slotIn,
@@ -527,23 +528,7 @@ export const CompanionSelectOnPillHovered = meta.story({
 	},
 })
 
-const COLOUR_PROPERTY =
-	/^(all|.*color|fill|stroke|box-shadow|background|border(-(top|right|bottom|left|block|inline)(-(start|end))?)?|outline|text-decoration)$/
-
 const MOTION_UTILITY = /(^|:)!?(transition|duration)(-|!|$)|\[transition/
-
-const colourTransitionsOf = (element: HTMLElement) => {
-	const style = getComputedStyle(element)
-	const durations = style.transitionDuration.split(", ")
-
-	return style.transitionProperty
-		.split(", ")
-		.filter(
-			(property, index) =>
-				COLOUR_PROPERTY.test(property) &&
-				durations[index % durations.length] !== "0s",
-		)
-}
 
 export const CompanionSelectOnPillHoveredWithMotion = meta.story({
 	tags: ["test-only"],
