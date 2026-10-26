@@ -1037,17 +1037,22 @@ export const JoinedSessionUnavailable = meta.story({
 		docs: {
 			description: {
 				story:
-					"A space joined from Steve, whose computer is online, that isn't the current space: no session reads its Secrets, Skills, Applications or History. Check those four entries dimmed, out of the tab order and announced as disabled, Secrets asked for yet the Space page shown, and Members, Companions and Leave space still reachable.",
+					"A joined space whose host is online, that isn't the current space: no session reads its Secrets, Skills, Applications or History. Check those four entries dimmed, out of the tab order and announced as disabled, Secrets asked for yet the Space page shown, and Members, Companions and Leave space still reachable.",
 			},
 		},
 	},
 	play: async ({ userEvent }) => {
+		const companionCount = JOINED_ARGS.companions.companions.length
+		const companions = `Companions ${companionCount}`
 		const { menu, main } = await expectArtboard({
-			subtitle: "Joined · hosted by Steve",
+			kind: "Space settings",
+			subtitle: `Joined · hosted by ${JOINED_ARGS.hostName}`,
 			entries: ARTBOARD_MENU.map((label) =>
-				label === "Companions" ? "Companions4" : label,
+				label === "Companions" ? `Companions${companionCount}` : label,
 			),
 			pinned: "Leave space",
+			pinnedInk: DANGER_INK,
+			tint: TINT[JOINED_ARGS.value.colour],
 		})
 		await expectSettingsPage(main, "Space", "column")
 		await expect(
@@ -1059,12 +1064,12 @@ export const JoinedSessionUnavailable = meta.story({
 			await expect(entry).toBeDisabled()
 			await expect(getComputedStyle(entry).opacity).toBe("0.4")
 		}
-		for (const label of ["Space", "Members", "Companions 4"]) {
+		for (const label of ["Space", "Members", companions]) {
 			await expect(entryIn(menu, label)).toBeEnabled()
 		}
 
 		entryIn(menu, "Back to your settings").focus()
-		for (const label of ["Space", "Members", "Companions 4", "Leave space"]) {
+		for (const label of ["Space", "Members", companions, "Leave space"]) {
 			await userEvent.tab()
 			await expect(entryIn(menu, label)).toHaveFocus()
 		}
