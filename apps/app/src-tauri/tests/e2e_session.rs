@@ -582,7 +582,10 @@ fn a_query_that_never_answers_loses_its_lease_and_the_next_prompt_still_gets_a_w
 	assert_eq!(answered.content, RESUMED);
 	assert_eq!(answered.state, MessageState::Complete);
 	assert_eq!(stored.turn_endings(), vec![TurnOutcome::Failed, TurnOutcome::Completed]);
-	assert_eq!(stored.awaited_lapses(&[Lapse::InterruptUnanswered]), vec![Lapse::InterruptUnanswered]);
+	assert_eq!(
+		stored.awaited_lapses(&[Lapse::InterruptUnanswered]),
+		vec![Lapse::InterruptUnanswered]
+	);
 	stored.close();
 }
 
