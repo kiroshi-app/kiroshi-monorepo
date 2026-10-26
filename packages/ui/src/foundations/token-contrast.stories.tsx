@@ -63,6 +63,10 @@ const TOKEN_PAIRS = [
 	...SUFFIXED_PAIRS,
 	...CROSS_FAMILY_PAIRS,
 	USER_BUBBLE_PAIR,
+	{
+		background: "--destructive-tint",
+		foreground: "--destructive-tint-foreground",
+	},
 ]
 
 const pairKey = (scheme: ThemeName, pair: TokenPair) =>

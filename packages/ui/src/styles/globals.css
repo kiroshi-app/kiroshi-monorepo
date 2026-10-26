@@ -56,6 +56,8 @@
 	--color-accent: var(--accent);
 	--color-accent-foreground: var(--accent-foreground);
 	--color-destructive: var(--destructive);
+	--color-destructive-tint: var(--destructive-tint);
+	--color-destructive-tint-foreground: var(--destructive-tint-foreground);
 	--color-window-close: var(--window-close);
 	--color-mark: var(--mark);
 	--color-transcript-new-mark: var(--transcript-new-mark);

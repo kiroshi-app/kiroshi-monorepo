@@ -4,7 +4,6 @@ import { expect, screen, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
-	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 	hasOverlayScrollbars,
 	slotsIn,
 	tokenStyleIn,
@@ -225,7 +224,6 @@ export const IconsOnly = meta.story({
 
 export const SelectedBesideIdle = meta.story({
 	parameters: {
-		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:
@@ -245,7 +243,9 @@ export const SelectedBesideIdle = meta.story({
 		await userEvent.click(danger)
 		await expect(danger).toHaveAttribute("aria-selected", "true")
 		await expectDrawnWith(danger, FillIcons.Alert)
-		await expect(getComputedStyle(iconIn(danger)).color).toBe(destructive)
+		await expect(getComputedStyle(iconIn(danger)).color).toBe(
+			tokenStyleIn(rail, "text-destructive-tint-foreground", "color"),
+		)
 	},
 })
 

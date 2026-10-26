@@ -17,7 +17,11 @@ export const ACTION_TOKENS = [
 	"--muted-foreground",
 ]
 
-export const FEEDBACK_TOKENS = ["--destructive"]
+export const FEEDBACK_TOKENS = [
+	"--destructive",
+	"--destructive-tint",
+	"--destructive-tint-foreground",
+]
 
 export const WINDOW_TOKENS = ["--window-close"]
 

@@ -1097,6 +1097,7 @@ navigation-searchresultrow--with-badge-while-active
 navigation-settingsmenu--applications-open
 navigation-settingsmenu--connecting-space-dark
 navigation-settingsmenu--danger-selected
+navigation-settingsmenu--danger-selected-dark
 navigation-settingsmenu--default
 navigation-settingsmenu--states
 navigation-settingspushedpage--controlled
