@@ -38,6 +38,7 @@ const useSettingsFrame = (
 				rosterLines={rosterLines}
 				rosterLists={rosterLists}
 				sidebarTab={workspace.sidebarTab}
+				switcher={switcher}
 			/>
 		),
 		titleBar: {
