@@ -467,8 +467,6 @@ const SpaceSettingsScreen = (props: SpaceSettingsScreenProps) => {
 							: { ...item, isDisabled: isHostUnreachable },
 					)
 
-	const leave = settings.onLeave
-
 	const pinnedAction = onDecline ? (
 		<SettingsMenuAction
 			icon="X"
@@ -476,7 +474,7 @@ const SpaceSettingsScreen = (props: SpaceSettingsScreenProps) => {
 			onSelect={onDecline}
 			tone="quiet"
 		/>
-	) : space.state === "joined" && leave ? (
+	) : space.state === "joined" && settings.onLeave ? (
 		<>
 			<SettingsMenuAction
 				icon="Leave"
@@ -488,7 +486,7 @@ const SpaceSettingsScreen = (props: SpaceSettingsScreenProps) => {
 				confirmLabel={tCommon("spaces.leave.action")}
 				confirmVariant="destructive"
 				description={tCommon("spaces.leave.description")}
-				onConfirm={leave}
+				onConfirm={settings.onLeave}
 				onOpenChange={setIsLeaving}
 				open={isLeaving}
 				title={tCommon("spaces.leave.title", { name })}
