@@ -80,6 +80,7 @@ export const WorkspaceSidebar = ({
 			onCreateConversation={rosterLines.startConversation}
 			selectedBotId={rosterView.selectedBotId ?? undefined}
 			selectedConversationId={rosterView.selectedConversationId ?? undefined}
+			space={switcher.selectedSpace}
 			selectedSpaceId={switcher.selectedSpaceId ?? undefined}
 			spaces={switcher.spaces}
 			hostBySpaceId={switcher.hostBySpaceId}
