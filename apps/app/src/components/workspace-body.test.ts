@@ -600,13 +600,12 @@ describe("WorkspaceBody frame", () => {
 		)
 		await settle()
 
-		const column = screenSlot("screen-layout-column")
 		expect(screenSlot("app-header")).not.toBeNull()
-		expect(column?.textContent).toContain("Couldn’t load your spaces")
-
-		fireEvent.click(
-			within(column as HTMLElement).getByRole("button", { name: "Retry" }),
+		expect(screenSlot("screen-layout-column")?.textContent).toContain(
+			"Couldn’t load your spaces",
 		)
+
+		fireEvent.click(screen.getByRole("button", { name: "Retry" }))
 
 		expect(onRetrySpaces).toHaveBeenCalledTimes(1)
 	})
