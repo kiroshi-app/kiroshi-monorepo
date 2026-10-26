@@ -14,6 +14,7 @@ import {
 import { useSpaceShortcut } from "@workspace/ui/hooks/use-space-shortcut"
 
 import { signedInAccountIdOf } from "@/lib/account/use-account"
+import { openedServerScope } from "@/lib/applications/application-settings"
 import type { AccountState, JoinedSpace } from "@/lib/bindings"
 import { toCompanionSummary } from "@/lib/bots/bot-settings"
 import { useCompanionCounts } from "@/lib/bots/use-companion-counts"
@@ -129,12 +130,12 @@ export const SpaceSettingsScreen = ({
 		joinedSpaces,
 		spaceEnvironment,
 		spaceMcpServers,
+		spaceSettingsOwner,
 		spaces,
 	} = core
 	const { openAccountSettings, spaceHistory, spaceSkills } = panels
 	const {
 		openRowId,
-		selectedSpaceId,
 		serverEnvironmentSection,
 		setOpenedMcpServer,
 		spaceApplications,
@@ -206,15 +207,7 @@ export const SpaceSettingsScreen = ({
 		...spaceApplications,
 		mcpServerToOpen: search.application,
 		onMcpServerOpen: (name: string | null) =>
-			setOpenedMcpServer(
-				name && selectedSpaceId
-					? {
-							kind: "server",
-							name,
-							owner: { kind: "space", id: selectedSpaceId },
-						}
-					: null,
-			),
+			setOpenedMcpServer(openedServerScope(name, spaceSettingsOwner)),
 		serverEnvironment: serverEnvironmentSection,
 		history: spaceHistory,
 		onEnvironmentDelete: spaceEnvironment.remove,

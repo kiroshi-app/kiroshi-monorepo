@@ -6,9 +6,14 @@ import {
 	userSettingsOwnerOf,
 } from "./settings-owners"
 
-import type { Bot } from "../conversations/store-contract"
+import type { Bot, Space } from "../conversations/store-contract"
 
 const SELECTED = { selectedSpaceId: "vocca" }
+
+const HELD_VOCCA_CURRENT = {
+	spaces: [{ id: "vocca" }, { id: "studio" }] as Space[],
+	selectedSpaceId: "vocca",
+}
 
 const SCRIBE_LISTED = { bots: [{ id: "scribe" } as Bot] }
 
@@ -39,26 +44,45 @@ describe("settings owners", () => {
 		).toBeNull()
 	})
 
-	it("owns the selected space while its settings are open", () => {
-		expect(spaceSettingsOwnerOf(VOCCA_SETTINGS, SELECTED, "vocca")).toEqual({
-			kind: "space",
-			id: "vocca",
-		})
+	it("owns the space of yours whose settings are open, the current one", () => {
+		expect(
+			spaceSettingsOwnerOf(VOCCA_SETTINGS, HELD_VOCCA_CURRENT, "vocca"),
+		).toEqual({ kind: "space", id: "vocca" })
 	})
 
-	it("owns no space while the settings of another space are open", () => {
+	it("owns the space of yours whose settings are open, though another is current", () => {
 		expect(
 			spaceSettingsOwnerOf(
-				{ kind: "space", spaceId: "harbor" },
-				SELECTED,
+				{ kind: "space", spaceId: "studio" },
+				HELD_VOCCA_CURRENT,
+				"vocca",
+			),
+		).toEqual({ kind: "space", id: "studio" })
+	})
+
+	it("owns the shared space of the current joined space whose settings are open", () => {
+		expect(
+			spaceSettingsOwnerOf(
+				{ kind: "space", spaceId: "joined:harbor" },
+				{ ...HELD_VOCCA_CURRENT, selectedSpaceId: "harbor-on-host" },
+				"joined:harbor",
+			),
+		).toEqual({ kind: "space", id: "harbor-on-host" })
+	})
+
+	it("owns no joined space other than the current one", () => {
+		expect(
+			spaceSettingsOwnerOf(
+				{ kind: "space", spaceId: "joined:harbor" },
+				HELD_VOCCA_CURRENT,
 				"vocca",
 			),
 		).toBeNull()
 	})
 
-	it("owns no space while none is selected", () => {
+	it("owns no space while no space settings are open", () => {
 		expect(
-			spaceSettingsOwnerOf(VOCCA_SETTINGS, { selectedSpaceId: null }, null),
+			spaceSettingsOwnerOf({ kind: "user" }, HELD_VOCCA_CURRENT, "vocca"),
 		).toBeNull()
 	})
 

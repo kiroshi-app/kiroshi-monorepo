@@ -175,6 +175,7 @@ export const useWorkspaceCore = (openSettings: OpenSettings | null) => {
 		spaceEnvironment,
 		spaceMcpServers,
 		spacePlugin,
+		spaceSettingsOwner,
 		spaces,
 		spokenWords,
 		store,

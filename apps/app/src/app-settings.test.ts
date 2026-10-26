@@ -14,9 +14,11 @@ import { afterEach, expect, it, vi } from "vitest"
 
 import { i18n } from "@workspace/ui/lib/i18n"
 
+import { openedServerScope } from "@/lib/applications/application-settings"
 import { newBotIdentity } from "@/lib/bots/bot-settings"
 import { createFakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
+import type { EnvScope } from "@/lib/conversations/store-contract"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { isDesktopHost } from "@/lib/host/index"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
@@ -532,6 +534,49 @@ it("opens the settings of a Space other than the current one from its row, then 
 	await press(spaceBackOf())
 
 	expect(shownSettingsOf()?.subtitle).toBe("user")
+})
+
+it("reads the secrets of the Space its route shows, though another Space is current", async () => {
+	const opened = await mountApp(async (store, spaceId) => {
+		const vocca = await store.createSpace(VOCCA)
+		await store.setEnvironmentVariable(
+			{ kind: "space", id: spaceId },
+			"OPENED_TOKEN",
+			"opened",
+		)
+		await store.setEnvironmentVariable(
+			{ kind: "space", id: vocca.id },
+			"VOCCA_TOKEN",
+			"vocca",
+		)
+	})
+	await press(avatarOf())
+	await press(spaceRowOf(VOCCA))
+
+	await press(menuEntryOf(i18n.t("settings:rail.secrets")))
+
+	expect(screen.getByText("VOCCA_TOKEN")).toBeTruthy()
+	expect(screen.queryByText("OPENED_TOKEN")).toBeNull()
+	expect(spaceSwitcherOf().textContent).toContain(opened.name)
+})
+
+it("opens an application of the Space its route shows under that Space", async () => {
+	await mountApp(async (store) => {
+		const vocca = await store.createSpace(VOCCA)
+		await twoSpaceApplications(store, vocca.id)
+		await store.setEnvironmentVariable(
+			openedServerScope("ledger", { kind: "space", id: vocca.id }) as EnvScope,
+			"LEDGER_KEY",
+			"vocca",
+		)
+	})
+	await press(avatarOf())
+	await press(spaceRowOf(VOCCA))
+	await openApplications()
+
+	await press(menuEntryOf(/^ledger/))
+
+	expect(screen.getByText("LEDGER_KEY")).toBeTruthy()
 })
 
 it("switches to the Space and shows its conversations on Open", async () => {

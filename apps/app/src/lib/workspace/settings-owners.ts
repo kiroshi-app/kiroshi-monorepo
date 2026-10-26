@@ -12,6 +12,17 @@ type ListedBots = Pick<RosterState, "bots">
 
 type SelectedSpace = Pick<SpacesState, "selectedSpaceId">
 
+type HeldSpaces = Pick<SpacesState, "spaces" | "selectedSpaceId">
+
+const routedSpaceIdOf = (
+	spaceId: string,
+	{ spaces, selectedSpaceId }: HeldSpaces,
+	openRowId: string | null,
+) => {
+	if (spaces.some((space) => space.id === spaceId)) return spaceId
+	return spaceId === openRowId ? selectedSpaceId : null
+}
+
 export const companionSettingsOwnerOf = (
 	openSettings: OpenSettings | null,
 	{ bots }: ListedBots,
@@ -26,14 +37,13 @@ export const companionSettingsOwnerOf = (
 
 export const spaceSettingsOwnerOf = (
 	openSettings: OpenSettings | null,
-	{ selectedSpaceId }: SelectedSpace,
+	spaces: HeldSpaces,
 	openRowId: string | null,
-): EnvOwner | null =>
-	openSettings?.kind === "space" &&
-	openSettings.spaceId === openRowId &&
-	selectedSpaceId
-		? { kind: "space", id: selectedSpaceId }
-		: null
+): EnvOwner | null => {
+	if (openSettings?.kind !== "space") return null
+	const id = routedSpaceIdOf(openSettings.spaceId, spaces, openRowId)
+	return id ? { kind: "space", id } : null
+}
 
 export const userSettingsOwnerOf = (
 	openSettings: OpenSettings | null,

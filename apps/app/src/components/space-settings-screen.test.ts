@@ -267,6 +267,16 @@ const isShown = (page: SpacePage): page is ShownSpacePage =>
 	page.state === "joined" ||
 	page.state === "invitation"
 
+type RejectionListener = (reason: unknown) => void
+
+type RejectionEvents = {
+	on: (event: "unhandledRejection", listener: RejectionListener) => void
+	off: (event: "unhandledRejection", listener: RejectionListener) => void
+}
+
+const rejectionEvents = (globalThis as unknown as { process: RejectionEvents })
+	.process
+
 const SETTINGS_MENU = i18n.t("settings:screen.menu")
 
 const LEFT_GARAGE = i18n.t("settings:screen.space.left.title", {
@@ -385,13 +395,19 @@ describe("SpaceSettingsScreen on a joined space", () => {
 		expect(gear.spaces.getState().selectedSpaceId).toBe(firstLocal?.id)
 	})
 
-	it("keeps the space and raises the refusal when the leave fails", async () => {
+	it("keeps the space and raises the refusal when the leave fails, leaving no rejection unhandled", async () => {
+		const unhandled: unknown[] = []
+		const noteUnhandled = (reason: unknown) => unhandled.push(reason)
+		rejectionEvents.on("unhandledRejection", noteUnhandled)
 		const gear = await gearWithGarage()
 		gear.transport.remove.mockRejectedValueOnce(new Error("disk full"))
 		const dialog = openSettingsOf(gear, GARAGE_ROW)
 
 		await confirmLeave(dialog)
+		await act(settle)
+		rejectionEvents.off("unhandledRejection", noteUnhandled)
 
+		expect(unhandled).toEqual([])
 		expect(
 			await screen.findAllByText(
 				i18n.t("chat:screen.notice.joinRefused.unexpected.title"),
