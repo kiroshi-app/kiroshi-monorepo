@@ -197,13 +197,22 @@ const SettingsScreenLayout = ({
 			hasIndicator={item.hasIndicator}
 			icon={item.icon}
 			isDanger={item.isDanger}
-			isOpen={item.value === shown.value && openedName !== undefined}
-			isSelected={item.value === shown.value && openedName === undefined}
+			isOpen={
+				item.value === shown.value &&
+				openedName !== undefined &&
+				!isCompanionPage
+			}
+			isSelected={
+				item.value === shown.value &&
+				(openedName === undefined || isCompanionPage)
+			}
 			key={item.value}
 			label={item.label}
 			onSelect={() => select(item.value)}
 		>
-			{item.value === APPLICATIONS_ENTRY && isApplicationsShown ? (
+			{item.value === APPLICATIONS_ENTRY &&
+			isApplicationsShown &&
+			!isCompanionPage ? (
 				<>
 					{applications.map((server) => (
 						<SettingsMenuApplication
