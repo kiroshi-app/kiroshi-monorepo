@@ -9,10 +9,21 @@ import { titleBarWindowControls } from "@/components/window-caption-controls"
 import { WorkspaceRail } from "@/components/workspace-rail"
 import { hasOverlayWindowControls, isSidebarResizable } from "@/lib/host"
 import { settingsSpacesOf, spacePageOf } from "@/lib/spaces/settings-spaces"
+import { useSettingsSpaceSwitch } from "@/lib/tabs/use-settings-space-switch"
 import type { SettingsFrame } from "@/lib/workspace/settings-frame"
 import { useRosterLists } from "@/lib/workspace/use-roster-lists"
 import { ACCOUNT_TAB } from "@/lib/workspace/use-settings-panels"
 import { useWorkspace } from "@/lib/workspace/workspace-context"
+
+const useWorkspaceSpaceSwitch = () => {
+	const { core, rosterLines, tabs } = useWorkspace()
+	return useSettingsSpaceSwitch({
+		joinedSpaces: core.joinedSpaces.controller,
+		sidebarActions: rosterLines.sidebarActions,
+		spaces: core.spaces.controller,
+		tabs,
+	})
+}
 
 const useSettingsFrame = (
 	onSelectSpace: (id: string) => void,
@@ -71,8 +82,9 @@ export const SpaceSettingsRoute = () => {
 	const { core, navigation, rosterLines, switcher } = workspace
 	const { spaceId } = useParams({ from: "/settings/space/$spaceId" })
 	const search = useSearch({ from: "/settings/space/$spaceId" })
+	const spaceSwitch = useWorkspaceSpaceSwitch()
 	const frame = useSettingsFrame((id) => {
-		rosterLines.sidebarActions.onSelectSpace(id)
+		spaceSwitch.switchSpace(id)
 		navigation.openSpaceSettings(id, { entry: search.entry })
 	})
 	const page = spacePageOf(spaceId, {
@@ -119,6 +131,7 @@ export const SpaceSettingsRoute = () => {
 export const UserSettingsRoute = () => {
 	const workspace = useWorkspace()
 	const search = useSearch({ from: "/settings/user" })
+	const spaceSwitch = useWorkspaceSpaceSwitch()
 	const frame = useSettingsFrame(
 		workspace.rosterLines.sidebarActions.onSelectSpace,
 	)
@@ -138,7 +151,11 @@ export const UserSettingsRoute = () => {
 				badgesBySpaceId: frame.titleBar.badgesBySpaceId,
 			})}
 			currentSpaceId={workspace.switcher.selectedSpaceId ?? undefined}
-			onCreateSpace={workspace.rosterLines.sidebarActions.onCreateSpace}
+			onCreateSpace={() => {
+				void spaceSwitch.createSpace(() =>
+					workspace.navigation.openUserSettings(search),
+				)
+			}}
 		/>
 	)
 }
@@ -147,10 +164,8 @@ export const CompanionSettingsRoute = () => {
 	const workspace = useWorkspace()
 	const search = useSearch({ from: "/settings/companion/$companionId" })
 	const { navigation, rosterLines } = workspace
-	const frame = useSettingsFrame((id) => {
-		rosterLines.sidebarActions.onSelectSpace(id)
-		navigation.openConversations()
-	})
+	const spaceSwitch = useWorkspaceSpaceSwitch()
+	const frame = useSettingsFrame(spaceSwitch.switchSpace)
 
 	if (!workspace.rosterView.settingsBot) {
 		return <Navigate to="/" replace />

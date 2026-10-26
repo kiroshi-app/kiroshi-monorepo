@@ -487,17 +487,22 @@ it("opens the conversations and every settings screen at the width set on a sett
 	expect(sidebarWidthOf()).toBe(widened)
 })
 
-it("shows the tabs of the Space reached, and the Space settings again on the way back", async () => {
+it("shows the settings of the Space reached and leaves the tab of the Space left on its own settings", async () => {
 	const opened = await mountApp(secondSpace)
 	await press(gearOf())
 	expect(screen.getByDisplayValue(opened.name)).toBeTruthy()
 
 	await switchSpaceTo(VOCCA)
-	expect(shownSettingsOf()).toBeNull()
+	expect(shownSettingsOf()?.subtitle).toBe("space")
+	expect(screen.getByDisplayValue(VOCCA)).toBeTruthy()
 
+	await press(conversationsEntryOf())
+	expect(shownSettingsOf()).toBeNull()
 	await switchSpaceTo(opened.name)
+
 	expect(shownSettingsOf()?.subtitle).toBe("space")
 	expect(screen.getByDisplayValue(opened.name)).toBeTruthy()
+	expect(screen.queryByDisplayValue(VOCCA)).toBeNull()
 })
 
 it("keeps the user settings in the tab of the Space left", async () => {
