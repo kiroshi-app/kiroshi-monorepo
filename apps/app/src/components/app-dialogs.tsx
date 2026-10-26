@@ -7,7 +7,6 @@ import {
 } from "@workspace/ui/components/whats-new-dialog"
 
 import { ConversationSettingsHost } from "@/components/conversation-settings-host"
-import { JoinedSpaceDialogs } from "@/components/joined-space-dialogs"
 import { useDeviceApprovals } from "@/lib/devices/use-device-approvals"
 import type { RosterLines } from "@/lib/workspace/use-roster-lines"
 import type { RosterView } from "@/lib/workspace/use-roster-view"
@@ -38,7 +37,6 @@ export const AppDialogs = ({
 				rosterLines={rosterLines}
 				rosterView={rosterView}
 			/>
-			<JoinedSpaceDialogs joinedSpaces={core.joinedSpaces} />
 			{whatsNewDialog ? <WhatsNewDialog {...whatsNewDialog} /> : null}
 			<SearchPalette {...overlay.search.palette} />
 			{deviceApproval ? <DeviceApprovalDialog {...deviceApproval} /> : null}

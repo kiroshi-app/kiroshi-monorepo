@@ -49,8 +49,6 @@ export type DepartedSpace = {
 export type JoinedSpacesState = {
 	joinedSpaces: JoinedSpace[]
 	hasFailedToLoad: boolean
-	isLeaveOpen: boolean
-	leavingId: string | null
 	openId: string | null
 	departed: DepartedSpace | null
 }
@@ -62,8 +60,6 @@ export type JoinedSpacesController = {
 	watch: () => () => void
 	selectSpace: (id: string) => void
 	restore: (rowId: string | null) => void
-	askToLeave: () => void
-	setLeaveOpen: (isLeaveOpen: boolean) => void
 	leave: (id: string) => Promise<void>
 	admit: (joined: JoinedSpace) => Promise<void>
 	hostNameOf: (id: string) => string
@@ -254,14 +250,9 @@ export const rosterSpacesOf = (
 		: spaces.map((space) => ({ spaceRowId: space.id, spaceId: space.id }))
 }
 
-type JoinedSpacesChoice = Pick<
-	JoinedSpacesState,
-	"isLeaveOpen" | "leavingId" | "openId" | "departed"
->
+type JoinedSpacesChoice = Pick<JoinedSpacesState, "openId" | "departed">
 
 const initialJoinedSpacesChoice: JoinedSpacesChoice = {
-	isLeaveOpen: false,
-	leavingId: null,
 	openId: null,
 	departed: null,
 }
@@ -575,12 +566,6 @@ export const createJoinedSpacesController = ({
 		watch,
 		selectSpace,
 		restore,
-		askToLeave: () =>
-			set({
-				isLeaveOpen: true,
-				leavingId: openJoined()?.id ?? null,
-			}),
-		setLeaveOpen: (isLeaveOpen: boolean) => set({ isLeaveOpen }),
 		leave,
 		admit,
 		hostNameOf,

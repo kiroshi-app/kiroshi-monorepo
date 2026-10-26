@@ -20,8 +20,6 @@ import { toPluginSkills } from "../plugins/plugin-skills"
 
 export const ACCOUNT_TAB = "account"
 
-const MEMBERS_TAB = "members"
-
 const railSettingsOf = (
 	openSettings: OpenSettings | null,
 ): AppRailSettings | undefined => {
@@ -104,11 +102,6 @@ export const useSettingsPanels = ({
 	const openAccountSettings = () =>
 		navigation.openUserSettings({ entry: ACCOUNT_TAB })
 
-	const openSpaceMembers = useCallback(
-		() => navigation.openSpaceSettings({ entry: MEMBERS_TAB }),
-		[navigation],
-	)
-
 	const conversationApplications = useMemo(
 		() => ({
 			port: applicationTransport,
@@ -129,7 +122,6 @@ export const useSettingsPanels = ({
 		companionSkills,
 		conversationApplications,
 		openAccountSettings,
-		openSpaceMembers,
 		personSkills,
 		railSettings: railSettingsOf(openSettings),
 		sessionApplications,
