@@ -604,12 +604,20 @@ const expectPanelDivider = async (panel: HTMLElement) => {
 const stateOf = (panel: HTMLElement) =>
 	panel.closest<HTMLElement>('[data-slot="sidebar"]')?.dataset.state
 
+const openSpaceOf = ({ spaces, selectedSpaceId }: AppSidebarProps) =>
+	spaces?.find((space) => space.id === selectedSpaceId)
+
 const renderShell = (args: AppSidebarProps) => (
-	<WorkspaceShell sidebar={<AppSidebar {...args} />}>{null}</WorkspaceShell>
+	<WorkspaceShell sidebar={<AppSidebar {...args} space={openSpaceOf(args)} />}>
+		{null}
+	</WorkspaceShell>
 )
 
 const renderTintedShell = (args: AppSidebarProps) => (
-	<WorkspaceShell sidebar={<AppSidebar {...args} />} spaceTint="blue">
+	<WorkspaceShell
+		sidebar={<AppSidebar {...args} space={openSpaceOf(args)} />}
+		spaceTint="blue"
+	>
 		{null}
 	</WorkspaceShell>
 )
@@ -2370,7 +2378,13 @@ export const DragRegion = meta.story({
 	tags: ["test-only"],
 	render: (args: AppSidebarProps) => (
 		<WorkspaceShell
-			sidebar={<AppSidebar {...args} data-tauri-drag-region="deep" />}
+			sidebar={
+				<AppSidebar
+					{...args}
+					data-tauri-drag-region="deep"
+					space={openSpaceOf(args)}
+				/>
+			}
 		>
 			{null}
 		</WorkspaceShell>
@@ -2532,6 +2546,7 @@ const LiveSpaces = (args: AppSidebarProps) => {
 						setSelectedSpaceId(id)
 					}}
 					selectedSpaceId={selectedSpaceId}
+					space={openSpaceOf({ ...args, selectedSpaceId })}
 				/>
 			}
 		>
@@ -2881,6 +2896,7 @@ const LiveMemberships = (args: AppSidebarProps) => {
 				<AppSidebar
 					{...args}
 					botsBySpaceId={rosters}
+					space={openSpaceOf(args)}
 					onRemoveBotFromSpace={(botId, spaceId) => {
 						args.onRemoveBotFromSpace?.(botId, spaceId)
 						setRosters((held) => ({
@@ -4310,7 +4326,7 @@ export const A8LongNameAtMinimumWidth = meta.story({
 	render: (args) => (
 		<div style={{ width: NARROW_WINDOW }}>
 			<WorkspaceShell
-				sidebar={<AppSidebar {...args} />}
+				sidebar={<AppSidebar {...args} space={openSpaceOf(args)} />}
 				width={SIDEBAR_MIN_WIDTH}
 			>
 				{null}
@@ -4400,6 +4416,7 @@ const LiveSections = (args: AppSidebarProps) => {
 				<AppSidebar
 					{...args}
 					collapsedSectionIds={collapsedSectionIds}
+					space={openSpaceOf(args)}
 					onCollapseSection={(id, isCollapsed) => {
 						args.onCollapseSection?.(id, isCollapsed)
 						setCollapsedSectionIds((held) =>

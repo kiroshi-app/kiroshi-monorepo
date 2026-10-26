@@ -34,6 +34,7 @@ const SpaceDotsFooter = (dots: ComponentProps<typeof SpaceDots>) =>
 
 const AppSidebarBase = ({
 	badgesBySpaceId,
+	space,
 	spaces = [],
 	selectedSpaceId,
 	isSpaceSwitchingEnabled = true,
@@ -106,9 +107,7 @@ const AppSidebarBase = ({
 				onSelectMissions={() => setOpenPanel("missions")}
 				openSettings={openSettings}
 				selected={openPanel}
-				space={
-					spaces.find((space) => space.id === selectedSpaceId) ?? spaces[0]
-				}
+				space={space}
 				updateBadge={updateBadge}
 				user={user}
 			/>
