@@ -16,7 +16,8 @@ import type {
 	BotSettingsValue,
 } from "@workspace/ui/components/bot-settings"
 import { DangerZone } from "@workspace/ui/components/bot-settings-dialog/danger-zone"
-import { MemoryPanel } from "@workspace/ui/components/bot-settings-dialog/memory-panel"
+import { BotGeneralFields } from "@workspace/ui/components/bot-settings-dialog/general-fields"
+import { BotInstructionsFields } from "@workspace/ui/components/bot-settings-dialog/instructions-fields"
 import { PermissionsPanel } from "@workspace/ui/components/bot-settings-dialog/permissions-panel"
 import { RuntimeFields } from "@workspace/ui/components/bot-settings-dialog/runtime-fields"
 import {
@@ -29,7 +30,6 @@ import { HISTORY_TAB } from "@workspace/ui/components/plugin-settings/use-histor
 import type { PluginSessionsProps } from "@workspace/ui/components/plugin-settings/use-plugin-sessions"
 import { usePluginSessions } from "@workspace/ui/components/plugin-settings/use-plugin-sessions"
 import { SettingsDialogShell } from "@workspace/ui/components/settings-dialog-shell"
-import { SettingsField } from "@workspace/ui/components/settings-field"
 import {
 	DANGER_RAIL_ITEM_CLASS,
 	SETTINGS_PANEL_CLASS,
@@ -199,18 +199,7 @@ const BotSettingsDialog = ({
 			tab={showDanger ? DANGER_TAB : (tab ?? FIRST_TAB)}
 		>
 			<SettingsScrollingPanel value={FIRST_TAB}>
-				<SettingsField
-					label={t("dialog.name.label")}
-					onValueChange={(name) => patch({ name })}
-					placeholder={t("dialog.name.placeholder")}
-					value={value.name}
-				/>
-				<SettingsField
-					label={t("dialog.title.label")}
-					onValueChange={(title) => patch({ title })}
-					placeholder={t("dialog.title.placeholder")}
-					value={value.title}
-				/>
+				<BotGeneralFields onValueChange={onValueChange} value={value} />
 			</SettingsScrollingPanel>
 
 			<SettingsScrollingPanel value="appearance">
@@ -226,19 +215,12 @@ const BotSettingsDialog = ({
 			</SettingsScrollingPanel>
 
 			<Tabs.Panel className={SETTINGS_PANEL_CLASS} value="instructions">
-				<SettingsField
-					fill
-					label={t("dialog.instructions.label")}
-					onValueChange={(instructions) => patch({ instructions })}
-					placeholder={t("dialog.instructions.placeholder")}
-					value={value.instructions}
+				<BotInstructionsFields
+					memory={memory}
+					onMemoryChange={onMemoryChange}
+					onValueChange={onValueChange}
+					value={value}
 				/>
-				{memory !== undefined ? (
-					<MemoryPanel
-						memory={memory}
-						onSave={(next) => onMemoryChange?.(next)}
-					/>
-				) : null}
 			</Tabs.Panel>
 
 			<Tabs.Panel className={SETTINGS_PANEL_CLASS} value="skills">

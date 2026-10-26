@@ -3,13 +3,26 @@
 import { type ReactNode, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
-import type { BotMcpServerItem } from "@workspace/ui/components/bot-settings"
+import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
+import { BotIdentityFields } from "@workspace/ui/components/bot-identity-fields"
+import type {
+	BotMcpServerItem,
+	BotSettingsValue,
+} from "@workspace/ui/components/bot-settings"
+import type { BotSettingsDialogProps } from "@workspace/ui/components/bot-settings-dialog"
+import { DangerZone } from "@workspace/ui/components/bot-settings-dialog/danger-zone"
+import { BotGeneralFields } from "@workspace/ui/components/bot-settings-dialog/general-fields"
+import { BotInstructionsFields } from "@workspace/ui/components/bot-settings-dialog/instructions-fields"
+import { PermissionsPanel } from "@workspace/ui/components/bot-settings-dialog/permissions-panel"
+import { RuntimeFields } from "@workspace/ui/components/bot-settings-dialog/runtime-fields"
 import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
+import { EnvironmentPanel } from "@workspace/ui/components/environment-panel"
 import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import { InitialsAvatar } from "@workspace/ui/components/initials-avatar"
 import type { SettingsPages } from "@workspace/ui/components/plugin-settings/settings-pages"
 import { HISTORY_TAB } from "@workspace/ui/components/plugin-settings/use-history-session"
 import type { McpSession } from "@workspace/ui/components/plugin-settings/use-mcp-session"
+import { usePluginSessions } from "@workspace/ui/components/plugin-settings/use-plugin-sessions"
 import {
 	type SettingsSession,
 	wordedKindOf,
@@ -51,6 +64,7 @@ type SettingsScreenNavigation = {
 	entry: string
 	onEntryChange: (entry: string) => void
 	onBack: () => void
+	backLabel?: string
 	rail?: ReactNode
 }
 
@@ -66,6 +80,12 @@ type UserSettingsScreenProps = SettingsScreenNavigation &
 	}
 
 type SettingsScreenProps = SpaceSettingsScreenProps | UserSettingsScreenProps
+
+type CompanionSettingsScreenProps = SettingsScreenNavigation &
+	Omit<
+		BotSettingsDialogProps,
+		"open" | "onClose" | "tab" | "showDanger" | "className"
+	>
 
 type SettingsScreenLayoutProps = SettingsScreenNavigation & {
 	avatar: ReactNode
@@ -87,6 +107,7 @@ const SettingsScreenLayout = ({
 	entry,
 	onEntryChange,
 	onBack,
+	backLabel,
 	rail,
 	avatar,
 	name,
@@ -177,6 +198,7 @@ const SettingsScreenLayout = ({
 					{rail}
 					<SettingsMenu
 						avatar={avatar}
+						backLabel={backLabel}
 						footer={pinned.length > 0 ? pinned.map(entryFor) : undefined}
 						name={name}
 						onBack={() => leaveThen(onBack)}
@@ -223,6 +245,7 @@ const SpaceSettingsScreen = ({
 	entry,
 	onEntryChange,
 	onBack,
+	backLabel,
 	rail,
 	presence,
 	target: _target,
@@ -247,6 +270,7 @@ const SpaceSettingsScreen = ({
 			}
 			entries={entries}
 			entry={entry}
+			backLabel={backLabel}
 			name={name}
 			onBack={onBack}
 			onEntryChange={onEntryChange}
@@ -262,6 +286,7 @@ const UserSettingsScreen = ({
 	entry,
 	onEntryChange,
 	onBack,
+	backLabel,
 	rail,
 	target: _target,
 	...settings
@@ -285,6 +310,7 @@ const UserSettingsScreen = ({
 			}
 			entries={entries}
 			entry={entry}
+			backLabel={backLabel}
 			name={name}
 			onBack={onBack}
 			onEntryChange={onEntryChange}
@@ -292,6 +318,205 @@ const UserSettingsScreen = ({
 			rail={rail}
 			sessions={sessions}
 			subtitle={t("screen.subtitle.user")}
+		/>
+	)
+}
+
+const CompanionSettingsScreen = ({
+	entry,
+	onEntryChange,
+	onBack,
+	backLabel,
+	rail,
+	value,
+	onValueChange,
+	models,
+	outputStyle,
+	onOutputStyleChange,
+	memory,
+	onMemoryChange,
+	onAvatarUpload,
+	environment,
+	isEnvironmentPending,
+	hasEnvironmentFailedToRead,
+	onEnvironmentSet,
+	onEnvironmentDelete,
+	history,
+	seed,
+	onDelete,
+	working,
+	workingKind,
+	...sessionProps
+}: CompanionSettingsScreenProps) => {
+	const { t } = useTranslation("bots")
+	const { t: tSettings } = useTranslation("settings")
+	const name = value.name.trim() || t("dialog.untitled")
+	const { pages, sessions } = usePluginSessions({
+		...sessionProps,
+		owner: { kind: "companion", name },
+		isSettingsOpen: true,
+		history,
+		historyCompanion: value.identity,
+		historyCompanionName: name,
+		editorLayout: "page",
+	})
+
+	const patch = (fields: Partial<BotSettingsValue>) =>
+		onValueChange({ ...value, ...fields })
+
+	const historyEntry: SettingsEntry[] = history
+		? [
+				{
+					value: HISTORY_TAB,
+					icon: "Clock",
+					label: t("dialog.tab.history"),
+					layout: "flush",
+					panel: sessions.history.panel,
+				},
+			]
+		: []
+
+	const entries: SettingsEntry[] = [
+		{
+			value: "general",
+			icon: "User",
+			label: t("dialog.tab.general"),
+			layout: "scrolling",
+			panel: <BotGeneralFields onValueChange={onValueChange} value={value} />,
+		},
+		{
+			value: "appearance",
+			icon: "Palette",
+			label: t("dialog.tab.appearance"),
+			layout: "scrolling",
+			panel: (
+				<BotIdentityFields
+					identity={value.identity}
+					name={name}
+					onAvatarUpload={onAvatarUpload}
+					onIdentityChange={(identity) => patch({ identity })}
+					seed={seed}
+					working={working}
+					workingKind={workingKind}
+				/>
+			),
+		},
+		{
+			value: "instructions",
+			icon: "File",
+			label: t("dialog.tab.instructions"),
+			layout: "scrolling",
+			panel: (
+				<BotInstructionsFields
+					memory={memory}
+					onMemoryChange={onMemoryChange}
+					onValueChange={onValueChange}
+					isTall
+					value={value}
+				/>
+			),
+		},
+		{
+			value: "skills",
+			icon: "Skill",
+			label: t("dialog.tab.skills"),
+			layout: "fixed",
+			panel: sessions.skills.panel,
+		},
+		{
+			value: APPLICATIONS_ENTRY,
+			icon: "Server",
+			label: t("dialog.tab.applications"),
+			layout: "fixed",
+			panel: sessions.applications.panel,
+		},
+		{
+			value: "environment",
+			icon: "Json",
+			label: t("dialog.tab.secrets"),
+			layout: "fixed",
+			panel: (
+				<EnvironmentPanel
+					entries={environment}
+					hasFailedToRead={hasEnvironmentFailedToRead}
+					isPending={isEnvironmentPending}
+					onDelete={onEnvironmentDelete}
+					onSet={onEnvironmentSet}
+					scope="bot"
+				/>
+			),
+		},
+		...historyEntry,
+		{
+			value: "permissions",
+			icon: "ShieldCheck",
+			label: t("dialog.tab.approvals"),
+			layout: "scrolling",
+			panel: (
+				<PermissionsPanel
+					onPermissionsChange={(permissions) => patch({ permissions })}
+					permissions={value.permissions}
+				/>
+			),
+		},
+		{
+			value: "runtime",
+			icon: "Cpu",
+			label: t("dialog.tab.runtime"),
+			layout: "scrolling",
+			panel: (
+				<RuntimeFields
+					effort={value.effort}
+					model={value.model}
+					models={models}
+					onEffortChange={(effort) => patch({ effort })}
+					onModelChange={patch}
+					onOutputStyleChange={onOutputStyleChange}
+					outputStyle={outputStyle}
+				/>
+			),
+		},
+		{
+			value: "danger",
+			icon: "Alert",
+			label: t("dialog.tab.danger"),
+			layout: "scrolling",
+			isDanger: true,
+			panel: (
+				<DangerZone
+					confirmTitle={t("danger.confirm.title", { name })}
+					actionLabel={t("danger.delete")}
+					description={t("danger.description")}
+					onConfirm={onDelete}
+				/>
+			),
+		},
+	]
+
+	return (
+		<SettingsScreenLayout
+			applications={sessionProps.mcpServers}
+			avatar={
+				<BotIdentityAvatar
+					blot={value.identity.blot}
+					image={value.identity.image}
+					kind={workingKind}
+					name={name}
+					seed={seed}
+					size={HEADER_AVATAR_SIZE}
+					working={working}
+				/>
+			}
+			backLabel={backLabel}
+			entries={entries}
+			entry={entry}
+			name={name}
+			onBack={onBack}
+			onEntryChange={onEntryChange}
+			pages={pages}
+			rail={rail}
+			sessions={sessions}
+			subtitle={tSettings("screen.subtitle.companion")}
 		/>
 	)
 }
@@ -304,6 +529,8 @@ const SettingsScreen = (props: SettingsScreenProps) =>
 	)
 
 export {
+	CompanionSettingsScreen,
+	type CompanionSettingsScreenProps,
 	SettingsScreen,
 	type SettingsScreenProps,
 	type SpaceSettingsScreenProps,

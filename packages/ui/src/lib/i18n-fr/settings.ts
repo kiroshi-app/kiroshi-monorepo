@@ -4,9 +4,11 @@ const settings = {
 	},
 	screen: {
 		back: "Retour aux conversations",
+		backToCompanions: "Retour aux compagnons",
 		menu: "Réglages",
 		subtitle: {
 			space: "Réglages de l’espace",
+			companion: "Réglages du compagnon",
 			user: "Réglages de l’utilisateur",
 		},
 	},
