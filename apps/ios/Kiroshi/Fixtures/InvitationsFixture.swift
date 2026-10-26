@@ -6,9 +6,11 @@
         static let studioId = "9b1e0000-0000-4000-8000-000000000011"
         static let invitationId = "4c1d0000-0000-4000-8000-000000000001"
         static let otherEmailInvitationId = "4c1d0000-0000-4000-8000-000000000002"
+        static let colour = UserDefaults.standard.string(forKey: "invitationColour")
         static let invitation = Invitation(
             id: invitationId, instanceId: studioId, instanceName: "Studio",
-            inviterEmail: "noa@example.com")
+            inviterEmail: "noa@example.com", colour: colour.flatMap(CompanionTint.init(rawValue:)))
+        static let writtenColour = colour.map { #""\#($0)""# } ?? "null"
         static let listPath = "/invitations"
         static let statePath = "/invitations/\(invitationId)/state"
         static let otherEmailStatePath = "/invitations/\(otherEmailInvitationId)/state"
@@ -22,11 +24,11 @@
         )
         static let listed = ScriptedTransport.Answer.status(
             200,
-            #"[{"id":"\#(invitationId)","instanceId":"\#(studioId)","instanceName":"Studio","inviterEmail":"noa@example.com","invitedAt":"2026-10-18T12:00:00.000Z"}]"#
+            #"[{"id":"\#(invitationId)","instanceId":"\#(studioId)","instanceName":"Studio","inviterEmail":"noa@example.com","colour":\#(writtenColour),"invitedAt":"2026-10-18T12:00:00.000Z"}]"#
         )
         static let valid = ScriptedTransport.Answer.status(
             200,
-            #"{"state":"valid","spaceName":"Studio","inviter":"noa@example.com","expiresAt":"2026-10-25T12:00:00.000Z"}"#
+            #"{"state":"valid","spaceName":"Studio","inviter":"noa@example.com","colour":\#(writtenColour),"expiresAt":"2026-10-25T12:00:00.000Z"}"#
         )
         static let accepted = ScriptedTransport.Answer.status(
             200,
