@@ -362,6 +362,7 @@ pub async fn joined<R: Runtime>(
 	app: &AppHandle<R>,
 	instance_id: String,
 	name: Option<String>,
+	inviter_email: Option<String>,
 ) -> Result<JoinedSpace, RelayJoinError> {
 	let guests = app.state::<RelayGuests>();
 	let _turn = guests.turn.lock().await;
@@ -369,7 +370,8 @@ pub async fn joined<R: Runtime>(
 		return Err(RelayJoinError::SignedOut);
 	}
 	let state = app.state::<db::DatabaseState>();
-	let repository = ready(&state)?.joined_spaces();
+	let database = ready(&state)?;
+	let repository = database.joined_spaces();
 	let reach = JoinedReach::Relay { instance_id: instance_id.clone() };
 	let held_name = repository
 		.list()
@@ -382,6 +384,7 @@ pub async fn joined<R: Runtime>(
 		reach,
 		remote_space_id: None,
 		name: name.or(held_name).unwrap_or_else(|| instance_id.clone()),
+		inviter_email,
 	};
 	let wait = held::wait(app, &instance_id)?;
 	let joined = repository.join(candidate).await?;
@@ -389,8 +392,9 @@ pub async fn joined<R: Runtime>(
 	guests.unlisted().remove(&joined.id);
 	guests.gesture_made();
 	members::read_soon(app, &joined);
-	announce_change(app, joined.id.clone())?;
-	Ok(JoinedSpace::presented(joined, guests.cloud(), wait))
+	announce_change(app, joined.id.clone()).await?;
+	let roster = database.joined_space_members().members(joined.id.clone()).await?;
+	Ok(JoinedSpace::presented(joined, guests.cloud(), wait, &roster))
 }
 
 pub async fn reconciled<R: Runtime>(app: &AppHandle<R>) {
@@ -574,10 +578,11 @@ async fn listed_followed<R: Runtime>(
 			reach,
 			remote_space_id: None,
 			name: instance.name.clone(),
+			inviter_email: None,
 		},
 	};
 	let joined = repository.join(entry).await.map_err(described)?;
-	announce_change(app, joined.id).map_err(described)
+	announce_change(app, joined.id).await.map_err(described)
 }
 
 async fn unlisted_stopped(guests: &RelayGuests, id: &str) -> bool {
@@ -820,7 +825,7 @@ async fn relay_entries_dropped<R: Runtime>(app: &AppHandle<R>) -> Result<(), Joi
 		if repository.remove(joined.id.clone()).await? {
 			let JoinedReach::Relay { instance_id } = &joined.reach;
 			wait_ended(app, instance_id);
-			announce_change(app, joined.id)?;
+			announce_change(app, joined.id).await?;
 		}
 	}
 	Ok(())
@@ -1225,6 +1230,6 @@ pub(super) async fn entry_evicted<R: Runtime>(
 	log::warn!(
 		"joined space {id} (instance {instance_id}) was removed: its membership ended ({reason:?})"
 	);
-	announce_change(app, id.to_owned())?;
+	announce_change(app, id.to_owned()).await?;
 	announce_removal(app, JoinedSpaceRemoved { id: id.to_owned(), name: found.name, reason })
 }

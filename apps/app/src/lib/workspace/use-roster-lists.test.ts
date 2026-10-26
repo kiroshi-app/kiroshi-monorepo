@@ -400,6 +400,8 @@ const STUDIO: JoinedSpace = {
 	remoteSpaceId: "studio",
 	name: "Studio Nord",
 	state: "online",
+	hostedBy: null,
+	colour: "purple",
 }
 
 const STUDIO_ROW = "joined:joined-studio"

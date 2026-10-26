@@ -91,6 +91,7 @@ const DEFAULT_SPACE: Space = {
 	colour: "red",
 	position: 0,
 	createdAt: 0,
+	shared: false,
 }
 
 const chatIdOf = (botId: string, spaceId: string) => `chat-${botId}-${spaceId}`
@@ -917,6 +918,7 @@ export const createFakeTranscriptStore = (
 				colour: null,
 				position: mintedSpaces,
 				createdAt: mintedSpaces,
+				shared: false,
 			}
 			spaces.set(space.id, space)
 			return Promise.resolve(space)

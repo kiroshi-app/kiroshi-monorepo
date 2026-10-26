@@ -5,8 +5,8 @@ use serde::Serialize;
 use tauri::{AppHandle, Manager, Runtime, State};
 use tokio::time::{interval, MissedTickBehavior};
 
-use super::commands::ready;
-use super::contract::JoinedSpaceError;
+use super::commands::{announce_change, ready};
+use super::contract::{hosted_by, JoinedSpaceError};
 use super::held;
 use super::relay::RelayGuests;
 use crate::account::cloud::{CloudRosterMember, MemberCallError};
@@ -95,12 +95,20 @@ async fn refreshed<R: Runtime>(
 ) -> Result<(), JoinedSpaceError> {
 	let members = roster_of(app, joined).await?;
 	let state = app.state::<db::DatabaseState>();
+	let repository = ready(&state)?.joined_space_members();
 	let id = joined.id.clone();
-	if !ready(&state)?.joined_space_members().replaced(id.clone(), members.clone()).await? {
+	let previous = repository.members(id.clone()).await?;
+	if !repository.replaced(id.clone(), members.clone()).await? {
 		return Ok(());
 	}
-	events::emit(app, JOINED_SPACE_MEMBERS_CHANGED, JoinedSpaceMembersChanged { id, members })
-		.map_err(|error| JoinedSpaceError::Undeliverable { detail: error.to_string() })
+	let is_host_renamed = hosted_by(&previous, None) != hosted_by(&members, None);
+	let changed = JoinedSpaceMembersChanged { id: id.clone(), members };
+	events::emit(app, JOINED_SPACE_MEMBERS_CHANGED, changed)
+		.map_err(|error| JoinedSpaceError::Undeliverable { detail: error.to_string() })?;
+	if is_host_renamed {
+		announce_change(app, id).await?;
+	}
+	Ok(())
 }
 
 async fn roster_of<R: Runtime>(
@@ -173,7 +181,8 @@ mod tests {
 	use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver};
 	use tokio::time::timeout;
 
-	use super::super::contract::JoinedSpaceWaitReason;
+	use super::super::commands::CHANGED_EVENT;
+	use super::super::contract::{colour_of, JoinedSpaceWaitReason};
 	use super::super::held::{device_keys, kept};
 	use super::super::roster_set::fixtures::{signed_set, Device};
 	use super::super::roster_set::{verified_set, Handed};
@@ -252,6 +261,24 @@ mod tests {
 		hearing
 	}
 
+	fn changes_heard(app: &App<MockRuntime>) -> UnboundedReceiver<Value> {
+		let (told, hearing) = unbounded_channel();
+		app.listen_any(CHANGED_EVENT, move |event| {
+			let payload = serde_json::from_str(event.payload()).expect("the payload is json");
+			told.send(payload).expect("the test listens");
+		});
+		hearing
+	}
+
+	async fn hosted_by_heard(changes: &mut UnboundedReceiver<Value>, hosted_by: &str) -> Value {
+		loop {
+			let changed = next(changes).await;
+			if changed["hostedBy"] == hosted_by {
+				return changed;
+			}
+		}
+	}
+
 	async fn next(hearing: &mut UnboundedReceiver<Value>) -> Value {
 		timeout(HEARD_WITHIN, hearing.recv()).await.expect("heard in time").expect("open")
 	}
@@ -288,7 +315,7 @@ mod tests {
 
 	async fn joined_space(app: &App<MockRuntime>) -> JoinedSpace {
 		signed_roster_planted(app).await;
-		relay::joined(app.handle(), INSTANCE.to_owned(), Some("Studio".to_owned()))
+		relay::joined(app.handle(), INSTANCE.to_owned(), Some("Studio".to_owned()), None)
 			.await
 			.expect("the join");
 		let state = app.state::<db::DatabaseState>();
@@ -383,6 +410,50 @@ mod tests {
 				("eve", None, "guest", false),
 			])
 		);
+	}
+
+	#[tokio::test]
+	async fn a_host_renamed_in_the_roster_is_announced_as_who_hosts_the_space() {
+		let dir = temp_dir();
+		let (api_url, relay) = relay_answering(listed(&[("bob", "Bob")])).await;
+		signed_in(&dir);
+		let app = app_reaching(&dir, &api_url);
+		let mut changes = changes_heard(&app);
+		let joined = joined_space(&app).await;
+		hosted_by_heard(&mut changes, "Ann").await;
+
+		relay.answers(
+			StatusCode::OK,
+			json!([
+				{ "userId": "owner", "name": "Annie", "role": "owner" },
+				{ "userId": "bob", "name": "Bob", "role": "member" }
+			]),
+		);
+		read(app.handle(), &joined).await;
+
+		assert_eq!(
+			hosted_by_heard(&mut changes, "Annie").await,
+			json!({ "id": joined.id, "hostedBy": "Annie", "colour": colour_of(&joined.id) })
+		);
+	}
+
+	#[tokio::test]
+	async fn a_guest_renamed_in_the_roster_announces_no_change_of_the_space() {
+		let dir = temp_dir();
+		let (api_url, relay) = relay_answering(listed(&[("bob", "Bob")])).await;
+		signed_in(&dir);
+		let app = app_reaching(&dir, &api_url);
+		let mut members = heard(&app);
+		let mut changes = changes_heard(&app);
+		let joined = joined_space(&app).await;
+		next(&mut members).await;
+		hosted_by_heard(&mut changes, "Ann").await;
+
+		relay.answers(StatusCode::OK, listed(&[("bob", "Robert")]));
+		read(app.handle(), &joined).await;
+		next(&mut members).await;
+
+		assert!(is_silent(&mut changes).await);
 	}
 
 	#[tokio::test]
@@ -513,7 +584,7 @@ mod tests {
 		let (api_url, _relay) = relay_answering(listed(&[("bob", "Bob")])).await;
 		signed_in(&dir);
 		let app = app_reaching(&dir, &api_url);
-		relay::joined(app.handle(), INSTANCE.to_owned(), None).await.expect("the join");
+		relay::joined(app.handle(), INSTANCE.to_owned(), None, None).await.expect("the join");
 		let state = app.state::<db::DatabaseState>();
 		let held = ready(&state).expect("the database").joined_spaces().list().await;
 		let joined = held.expect("the list").into_iter().next().expect("the joined space");
@@ -534,6 +605,7 @@ mod tests {
 			reach: JoinedReach::Relay { instance_id: INSTANCE.to_owned() },
 			remote_space_id: None,
 			name: "Studio".to_owned(),
+			inviter_email: None,
 		};
 		let state = app.state::<db::DatabaseState>();
 		let joined = ready(&state).expect("the database").joined_spaces().join(candidate).await;

@@ -18,8 +18,10 @@ pub(crate) fn ready(state: &db::DatabaseState) -> Result<&db::Database, SpaceErr
 #[tauri::command]
 #[specta::specta]
 pub async fn space_list(state: State<'_, db::DatabaseState>) -> Result<Vec<Space>, SpaceError> {
-	let stored = ready(&state)?.spaces().list().await?;
-	Ok(stored.into_iter().map(Space::from).collect())
+	let database = ready(&state)?;
+	let stored = database.spaces().list().await?;
+	let hosted = database.space_hosting().hosted_space_ids().await?;
+	Ok(stored.into_iter().map(|space| Space::presented(space, &hosted)).collect())
 }
 
 #[tauri::command]
@@ -32,7 +34,7 @@ pub async fn space_create<R: Runtime>(
 	let database = ready(&state)?;
 	let created = database.spaces().create(name).await?;
 	let Err(failure) = bundles::space::lay_down(&app, &created.id) else {
-		return Ok(Space::from(created));
+		return Ok(Space::presented(created, &[]));
 	};
 	database.spaces().delete(created.id).await?;
 	Err(SpaceError::UnwritableBundle { detail: failure.to_string() })
@@ -46,7 +48,10 @@ pub async fn space_update(
 	name: String,
 	colour: Option<AvatarBlot>,
 ) -> Result<Space, SpaceError> {
-	Ok(ready(&state)?.spaces().update(id, name, colour.map(Into::into)).await.map(Space::from)?)
+	let database = ready(&state)?;
+	let updated = database.spaces().update(id, name, colour.map(Into::into)).await?;
+	let hosted = database.space_hosting().hosted_space_ids().await?;
+	Ok(Space::presented(updated, &hosted))
 }
 
 #[tauri::command]
@@ -251,6 +256,37 @@ mod tests {
 		assert!(matches!(failure, SpaceError::UnwritableBundle { .. }), "got {failure:?}");
 		let listed = space_list(app.state()).await.expect("the spaces read");
 		assert!(!listed.iter().any(|space| space.name == "Vocca"), "got {listed:?}");
+	}
+
+	async fn shared_by_name(app: &AppOfItsOwn) -> Vec<(String, bool)> {
+		let listed = space_list(app.state()).await.expect("the spaces read");
+		let listed = serde_json::to_value(listed).expect("the spaces serialize");
+		let rows = listed.as_array().expect("a space list");
+		rows.iter()
+			.map(|row| {
+				let name = row["name"].as_str().expect("a name").to_owned();
+				(name, row["shared"].as_bool().expect("a shared flag"))
+			})
+			.filter(|(name, _)| name == "Vocca" || name == "Studio")
+			.collect()
+	}
+
+	#[tokio::test]
+	async fn turning_the_hosting_of_one_space_on_and_off_shares_that_space_alone() {
+		let app = a_host("shared");
+		let state = app.state::<db::DatabaseState>();
+		let database = ready(&state).expect("the database");
+		let vocca = database.spaces().create("Vocca".to_owned()).await.expect("a space");
+		database.spaces().create("Studio".to_owned()).await.expect("a space");
+		let named = |vocca: bool| vec![("Vocca".to_owned(), vocca), ("Studio".to_owned(), false)];
+
+		assert_eq!(shared_by_name(&app).await, named(false));
+
+		database.space_hosting().set_hosted(vocca.id.clone(), true).await.expect("hosted");
+		assert_eq!(shared_by_name(&app).await, named(true));
+
+		database.space_hosting().set_hosted(vocca.id, false).await.expect("unhosted");
+		assert_eq!(shared_by_name(&app).await, named(false));
 	}
 
 	#[tokio::test]

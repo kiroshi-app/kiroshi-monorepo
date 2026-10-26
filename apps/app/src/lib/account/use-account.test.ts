@@ -350,6 +350,8 @@ describe("useAccount", () => {
 					remoteSpaceId: "studio",
 					name: "Studio Nord",
 					state: "online",
+					hostedBy: null,
+					colour: "purple",
 				},
 			],
 			() => "Lea",

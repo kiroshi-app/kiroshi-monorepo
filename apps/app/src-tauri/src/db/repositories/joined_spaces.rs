@@ -22,6 +22,8 @@ pub struct JoinedSpace {
 	pub reach: JoinedReach,
 	pub remote_space_id: Option<String>,
 	pub name: String,
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub inviter_email: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -66,21 +68,23 @@ impl JoinedSpacesRepository {
 				let transaction =
 					connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
 				let mut stored = stored_in(&transaction)?;
-				let joined =
-					match stored.iter_mut().find(|held| held.reaches_the_same_space_as(&candidate))
-					{
-						Some(held) => {
-							held.reach = candidate.reach;
-							held.name = candidate.name;
-							held.remote_space_id =
-								candidate.remote_space_id.or(held.remote_space_id.take());
-							held.clone()
-						}
-						None => {
-							stored.push(candidate.clone());
-							candidate
-						}
-					};
+				let joined = match stored
+					.iter_mut()
+					.find(|held| held.reaches_the_same_space_as(&candidate))
+				{
+					Some(held) => {
+						held.reach = candidate.reach;
+						held.name = candidate.name;
+						held.remote_space_id =
+							candidate.remote_space_id.or(held.remote_space_id.take());
+						held.inviter_email = candidate.inviter_email.or(held.inviter_email.take());
+						held.clone()
+					}
+					None => {
+						stored.push(candidate.clone());
+						candidate
+					}
+				};
 				write_in(&transaction, &stored)?;
 				transaction.commit()?;
 				Ok(joined)
@@ -170,6 +174,7 @@ mod tests {
 			reach: JoinedReach::Relay { instance_id: instance_id.to_owned() },
 			remote_space_id: None,
 			name: format!("name-of-{id}"),
+			inviter_email: None,
 		}
 	}
 
@@ -194,6 +199,32 @@ mod tests {
 	async fn holding_a_link_and_a_relay_record(database: &Database) {
 		let relay = serde_json::to_string(&a_relay_space("relay", "instance-1")).expect("json");
 		write_raw(database, format!("[{LINK_RECORD},{relay}]")).await;
+	}
+
+	#[tokio::test]
+	async fn a_row_stored_before_inviters_reads_and_a_rejoin_keeps_the_inviter_it_was_given() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let stored = r#"[{"id":"relay","instanceId":"instance-1","remoteSpaceId":null,"name":"name-of-relay"}]"#;
+		write_raw(&database, stored.to_owned()).await;
+		let repository = database.joined_spaces();
+
+		assert_eq!(
+			repository.list().await.expect("the old row reads"),
+			vec![a_relay_space("relay", "instance-1")]
+		);
+
+		let inviter = Some("owner@example.com".to_owned());
+		let invited =
+			JoinedSpace { inviter_email: inviter.clone(), ..a_relay_space("x", "instance-1") };
+		repository.join(invited).await.expect("the invited join");
+		let rejoined = repository.join(a_relay_space("y", "instance-1")).await.expect("the rejoin");
+
+		assert_eq!(rejoined.id, "relay");
+		assert_eq!(rejoined.inviter_email, inviter);
+		let raw: Value =
+			serde_json::from_str(&read_raw(&database).await.expect("held")).expect("json");
+		assert_eq!(raw[0]["inviterEmail"], "owner@example.com");
 	}
 
 	#[tokio::test]

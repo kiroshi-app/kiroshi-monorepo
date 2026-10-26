@@ -111,6 +111,7 @@ mod tests {
 			reach: JoinedReach::Relay { instance_id: format!("instance-of-{id}") },
 			remote_space_id: None,
 			name: format!("name-of-{id}"),
+			inviter_email: None,
 		}
 	}
 

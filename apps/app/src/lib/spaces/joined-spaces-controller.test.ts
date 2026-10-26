@@ -42,6 +42,8 @@ const GARAGE: JoinedSpace = {
 	remoteSpaceId: "garage",
 	name: "Garage",
 	state: "online",
+	hostedBy: null,
+	colour: "green",
 }
 
 const GARAGE_ROW = "joined:joined-garage"
@@ -52,6 +54,8 @@ const ATTIC: JoinedSpace = {
 	remoteSpaceId: "attic",
 	name: "Attic",
 	state: "online",
+	hostedBy: null,
+	colour: "pink",
 }
 
 const hostsFake = () => {
@@ -526,6 +530,8 @@ const STUDIO: JoinedSpace = {
 	remoteSpaceId: "studio",
 	name: "Studio Nord",
 	state: "online",
+	hostedBy: null,
+	colour: "purple",
 }
 
 const STUDIO_ROW = "joined:joined-studio"
@@ -951,6 +957,8 @@ const HOST_PERSONAL: JoinedSpace = {
 	remoteSpaceId: "personal",
 	name: "Personal",
 	state: "online",
+	hostedBy: null,
+	colour: "orange",
 }
 
 const HOST_PERSONAL_ROW = "joined:joined-personal"

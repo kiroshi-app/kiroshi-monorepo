@@ -3,9 +3,14 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 
 use crate::account::cloud::Cloud;
-use crate::conversations::contract::StorageFailure;
+use crate::conversations::contract::{AvatarBlot, StorageFailure};
+use crate::db::repositories::joined_space_members::{JoinedSpaceMember, JoinedSpaceRole};
 use crate::db::repositories::joined_spaces::{self, JoinedReach};
 use crate::db::DatabaseError;
+
+const FNV_OFFSET_BASIS: u32 = 0x811c_9dc5;
+
+const FNV_PRIME: u32 = 0x0100_0193;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
@@ -17,6 +22,8 @@ pub struct JoinedSpace {
 	pub state: JoinedSpaceState,
 	#[specta(optional)]
 	pub wait: Option<JoinedSpaceWait>,
+	pub hosted_by: Option<String>,
+	pub colour: AvatarBlot,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
@@ -55,6 +62,7 @@ impl JoinedSpace {
 		joined: joined_spaces::JoinedSpace,
 		cloud: &Cloud,
 		wait: Option<JoinedSpaceWait>,
+		roster: &[JoinedSpaceMember],
 	) -> Self {
 		let JoinedReach::Relay { instance_id } = joined.reach;
 		let host_url = cloud.member_relay_url(&instance_id);
@@ -63,6 +71,8 @@ impl JoinedSpace {
 			Some(_) => JoinedSpaceState::WaitingForHost,
 		};
 		Self {
+			hosted_by: hosted_by(roster, joined.inviter_email),
+			colour: colour_of(&joined.id),
 			id: joined.id,
 			host_url,
 			remote_space_id: joined.remote_space_id,
@@ -71,6 +81,21 @@ impl JoinedSpace {
 			wait,
 		}
 	}
+}
+
+pub fn hosted_by(roster: &[JoinedSpaceMember], inviter_email: Option<String>) -> Option<String> {
+	roster
+		.iter()
+		.filter(|member| member.role == JoinedSpaceRole::Host)
+		.find_map(|member| member.name.clone())
+		.or(inviter_email)
+}
+
+pub fn colour_of(id: &str) -> AvatarBlot {
+	let hash = id
+		.bytes()
+		.fold(FNV_OFFSET_BASIS, |hash, byte| (hash ^ u32::from(byte)).wrapping_mul(FNV_PRIME));
+	AvatarBlot::ALL[hash as usize % AvatarBlot::ALL.len()]
 }
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
@@ -186,7 +211,101 @@ impl From<DatabaseError> for JoinedSpaceError {
 
 #[cfg(test)]
 mod tests {
+	use serde_json::{json, to_value, Value};
+
 	use super::*;
+
+	const STORED_BEFORE_INVITERS: &str =
+		r#"{"id":"joined-1","instanceId":"instance-1","remoteSpaceId":null,"name":"Studio"}"#;
+
+	fn a_member(name: Option<&str>, role: JoinedSpaceRole) -> JoinedSpaceMember {
+		JoinedSpaceMember {
+			user_id: format!("user-{role:?}"),
+			name: name.map(str::to_owned),
+			role,
+			device_id: format!("device-{role:?}"),
+			fingerprint: Vec::new(),
+			is_present: true,
+		}
+	}
+
+	fn a_stored_row(inviter_email: Option<&str>) -> joined_spaces::JoinedSpace {
+		joined_spaces::JoinedSpace {
+			id: "joined-1".to_owned(),
+			reach: JoinedReach::Relay { instance_id: "instance-1".to_owned() },
+			remote_space_id: None,
+			name: "Studio".to_owned(),
+			inviter_email: inviter_email.map(str::to_owned),
+		}
+	}
+
+	fn presented(joined: joined_spaces::JoinedSpace, roster: &[JoinedSpaceMember]) -> Value {
+		let cloud = Cloud::new("http://127.0.0.1:9");
+		to_value(JoinedSpace::presented(joined, &cloud, None, roster)).expect("json")
+	}
+
+	#[test]
+	fn a_joined_space_crosses_to_the_front_with_who_hosts_it_and_its_colour() {
+		let roster = [a_member(Some("Ann"), JoinedSpaceRole::Host)];
+
+		let crossed = presented(a_stored_row(None), &roster);
+
+		assert_eq!(crossed["hostedBy"], "Ann");
+		assert_eq!(crossed["colour"], json!(colour_of("joined-1")));
+		assert!(crossed.get("hosted_by").is_none(), "{crossed}");
+	}
+
+	#[test]
+	fn the_host_named_in_the_roster_wins_over_the_inviter() {
+		let roster = [
+			a_member(None, JoinedSpaceRole::Host),
+			a_member(Some("Bob"), JoinedSpaceRole::Guest),
+			a_member(Some("Ann"), JoinedSpaceRole::Host),
+		];
+
+		let crossed = presented(a_stored_row(Some("owner@example.com")), &roster);
+
+		assert_eq!(crossed["hostedBy"], "Ann");
+	}
+
+	#[test]
+	fn a_space_whose_host_is_unnamed_is_hosted_by_its_inviter() {
+		let roster =
+			[a_member(None, JoinedSpaceRole::Host), a_member(Some("Bob"), JoinedSpaceRole::Guest)];
+
+		let crossed = presented(a_stored_row(Some("owner@example.com")), &roster);
+
+		assert_eq!(crossed["hostedBy"], "owner@example.com");
+	}
+
+	#[test]
+	fn a_space_with_no_host_name_and_no_inviter_is_hosted_by_null() {
+		let crossed = presented(a_stored_row(None), &[a_member(None, JoinedSpaceRole::Host)]);
+
+		assert_eq!(crossed.get("hostedBy"), Some(&Value::Null));
+	}
+
+	#[test]
+	fn a_row_stored_before_inviters_were_kept_reads_and_is_hosted_by_its_roster_or_null() {
+		let stored: joined_spaces::JoinedSpace =
+			serde_json::from_str(STORED_BEFORE_INVITERS).expect("the old row reads");
+		let roster = [a_member(Some("Ann"), JoinedSpaceRole::Host)];
+
+		assert_eq!(stored.inviter_email, None);
+		assert_eq!(presented(stored.clone(), &roster)["hostedBy"], "Ann");
+		assert_eq!(presented(stored, &[]).get("hostedBy"), Some(&Value::Null));
+	}
+
+	#[test]
+	fn the_colour_of_a_joined_space_is_pinned_to_its_id() {
+		let colours: Vec<Value> = ["joined-1", "joined-2", "", "a"]
+			.iter()
+			.map(|id| to_value(colour_of(id)).expect("json"))
+			.collect();
+
+		assert_eq!(colours, vec![json!("green"), json!("orange"), json!("purple"), json!("blue")]);
+		assert_eq!(presented(a_stored_row(None), &[])["colour"], colours[0]);
+	}
 
 	#[test]
 	fn the_debug_output_of_a_joined_space_connection_carries_no_token() {
