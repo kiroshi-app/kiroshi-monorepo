@@ -112,7 +112,7 @@ const SpaceAvatar = ({
 		lip: `${id}-lip`,
 	}
 	const isCompactRecipe = isCompact(size)
-	const isGlazed = !isCompactRecipe && state !== "offline" && isFilled(state)
+	const isGlazed = !isCompactRecipe && (state === "local" || hasDot(state))
 	const centre = size / 2
 	const shape = superellipsePath(centre, centre)
 	const { anchor, radii: seededRadii } = spaceArcs(spaceId)

@@ -183,8 +183,7 @@ const hexOfLinear = (channels: number[]) =>
 		})
 		.join("")}`
 
-const toneHex = ([lightness, chroma]: LightnessChroma, hue?: number) => {
-	if (hue === undefined) return hexOfLinear(linearSrgbOf(lightness, 0, 0))
+const toneHex = ([lightness, chroma]: LightnessChroma, hue = 0) => {
 	let fitted = chroma
 	while (fitted > 0 && !isInSrgb(linearSrgbOf(lightness, fitted, hue)))
 		fitted = Math.max(0, fitted - CHROMA_STEP)
@@ -195,12 +194,12 @@ const spacePalette = (
 	theme: SpaceAvatarTheme,
 	colour?: BotAvatarBlot | null,
 ): SpacePalette => {
-	const hue = colour ? hueOf(colour) : undefined
 	const { full, compact } = TONES[theme]
-	return {
-		full: full.map((tone) => toneHex(tone, hue)),
-		compact: compact.map((tone) => toneHex(tone, hue)),
-	}
+	const tone = ([lightness, chroma]: LightnessChroma) =>
+		colour
+			? toneHex([lightness, chroma], hueOf(colour))
+			: toneHex([lightness, 0])
+	return { full: full.map(tone), compact: compact.map(tone) }
 }
 
 const superellipsePoints = (centre: number, half: number): Point[] => {
