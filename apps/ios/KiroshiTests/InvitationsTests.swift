@@ -14,19 +14,26 @@ struct InvitationsTests {
 
     let invitation = InvitationsFixture.invitation
     let relay = TestRelayTransport()
+    let clock = TestRelayClock()
     let outcomes = Outcomes()
+    let studio = Space(
+        id: InvitationsFixture.studioId, name: "Studio", role: .member, isHostOnline: true)
 
-    func make(_ changes: [String: ScriptedTransport.Answer] = [:]) -> (
-        Invitations, ScriptedTransport
-    ) {
+    func make(
+        _ changes: [String: ScriptedTransport.Answer] = [:],
+        listedOnceAccepted: ScriptedTransport.Answer? = InvitationsFixture.joined(colour: "null")
+    ) -> (Invitations, ScriptedTransport) {
         let transport = ScriptedTransport(
             InvitationsFixture.answers(.invitationSheet).merging(changes) { _, changed in changed
-            })
+            },
+            afterwards: listedOnceAccepted.map {
+                [InvitationsFixture.acceptPath: [CloudFixture.spacesPath: $0]]
+            } ?? [:])
         let invitations = Invitations(
             bearer: "fixture-bearer", device: FixtureKeys.device,
             cloud: KiroshiCloud(baseURL: KiroshiCloud.productionURL, transport: transport),
             relay: RelayEnvironment(
-                transport: relay, clock: TestRelayClock(),
+                transport: relay, clock: clock,
                 spaceKeys: FixtureSpaceKeys(missing: [InvitationsFixture.studioId]),
                 handsKeys: true),
             joined: { [outcomes] space in outcomes.joined.append(space) },
@@ -72,6 +79,53 @@ struct InvitationsTests {
         #expect(invitations.phase(of: invitation) == .open)
     }
 
+    @Test(arguments: [CompanionTint.purple, nil])
+    func theJoinedSpaceWearsItsHostsColourAsTheCloudListsIt(colour: CompanionTint?) async {
+        let (invitations, _) = make(
+            listedOnceAccepted: InvitationsFixture.joined(
+                colour: colour.map { #""\#($0.rawValue)""# } ?? "null"))
+
+        invitations.accept(invitation)
+        await relay.nextOpening().accept(ScriptedRelaySocket(sharedSpaceId: "space-studio"))
+        await waitUntil { invitations.phase(of: invitation) == .open }
+
+        var coloured = studio
+        coloured.colour = colour
+        #expect(outcomes.joined == [coloured])
+    }
+
+    @Test func aSpaceTheCloudDoesNotListYetIsReadAgain() async {
+        let (invitations, transport) = make(listedOnceAccepted: nil)
+
+        invitations.accept(invitation)
+        await relay.nextOpening().accept(ScriptedRelaySocket(sharedSpaceId: "space-studio"))
+        let retry = await clock.nextSleep(of: Invitations.listingRetry)
+        #expect(outcomes.joined.isEmpty)
+        await transport.answer(
+            CloudFixture.spacesPath, with: InvitationsFixture.joined(colour: #""green""#))
+        retry?.wake.yield()
+        await waitUntil { invitations.phase(of: invitation) == .open }
+
+        var coloured = studio
+        coloured.colour = .green
+        #expect(outcomes.joined == [coloured])
+    }
+
+    @Test func aSpaceTheCloudNeverListsIsJoinedWithoutItsColour() async {
+        let (invitations, transport) = make(listedOnceAccepted: nil)
+
+        invitations.accept(invitation)
+        await relay.nextOpening().accept(ScriptedRelaySocket(sharedSpaceId: "space-studio"))
+        await clock.wakeNextSleep(of: Invitations.listingRetry)
+        await clock.wakeNextSleep(of: Invitations.listingRetry)
+        await waitUntil { invitations.phase(of: invitation) == .open }
+
+        #expect(outcomes.joined == [studio])
+        #expect(
+            await paths(transport).filter { $0 == CloudFixture.spacesPath }.count
+                == Invitations.listingReads)
+    }
+
     @Test func anAlreadyJoinedAcceptJoinsTheListedSpaceLikeAnAcceptedOne() async {
         let (invitations, _) = make([
             InvitationsFixture.acceptPath: CloudFixture.error(
@@ -94,8 +148,8 @@ struct InvitationsTests {
         #expect(invitations.phase(of: invitation) == .open)
     }
 
-    @Test func theJoinedSpaceWearsTheInvitedSpacesColour() async {
-        let (invitations, _) = make()
+    @Test func aSpaceTheCloudNeverListsKeepsTheInvitedSpacesColour() async {
+        let (invitations, _) = make(listedOnceAccepted: nil)
         let pink = Invitation(
             id: invitation.id, instanceId: invitation.instanceId, instanceName: "Studio",
             inviterEmail: "noa@example.com", colour: .pink)
@@ -103,6 +157,8 @@ struct InvitationsTests {
 
         invitations.accept(pink)
         await relay.nextOpening().accept(ScriptedRelaySocket(sharedSpaceId: "space-studio"))
+        await clock.wakeNextSleep(of: Invitations.listingRetry)
+        await clock.wakeNextSleep(of: Invitations.listingRetry)
         await waitUntil { invitations.opened == nil }
 
         #expect(outcomes.joined.map(\.colour) == [.pink])
@@ -148,6 +204,7 @@ struct InvitationsTests {
         #expect(
             await paths(transport) == [
                 InvitationsFixture.acceptPath, InvitationsFixture.acceptPath,
+                CloudFixture.spacesPath,
             ])
     }
 
