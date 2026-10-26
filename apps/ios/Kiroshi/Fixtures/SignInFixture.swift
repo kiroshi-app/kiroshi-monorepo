@@ -487,7 +487,9 @@
             let model = SignInModel(
                 cloud: KiroshiCloud(
                     baseURL: KiroshiCloud.productionURL,
-                    transport: ScriptedTransport(fixture.answers, log: SignInFixture.requestLog)),
+                    transport: ScriptedTransport(
+                        fixture.answers, afterwards: InvitationsFixture.afterwards(fixture),
+                        log: SignInFixture.requestLog)),
                 sessions: fixture.sessions,
                 lastSpace: InMemoryLastSpaceStore(fixture.lastSpaceId),
                 agreements: fixture.agreements,

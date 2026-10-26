@@ -12,6 +12,9 @@ enum InvitationPhase: Equatable, Sendable {
 @MainActor
 @Observable
 final class Invitations {
+    static let listingReads = 3
+    static let listingRetry = Duration.milliseconds(500)
+
     private(set) var pending: [Invitation] = []
     var opened: Invitation?
     private(set) var phases: [Invitation.ID: InvitationPhase] = [:]
@@ -20,6 +23,7 @@ final class Invitations {
     private(set) var hasFailedToDecline = false
 
     @ObservationIgnored private let cloud: CloudInvitations
+    @ObservationIgnored private let instances: KiroshiCloud
     @ObservationIgnored private let baseURL: URL
     @ObservationIgnored private let bearer: String
     @ObservationIgnored private let device: RelayDevice
@@ -38,6 +42,7 @@ final class Invitations {
         self.bearer = bearer
         self.device = device
         self.cloud = cloud.invitations
+        instances = cloud
         baseURL = cloud.baseURL
         self.relay = relay
         self.joined = joined
@@ -162,7 +167,9 @@ final class Invitations {
             switch state {
             case .online:
                 await connection.stop()
-                finish(invitation)
+                let listed = await listedSpace(of: invitation)
+                guard !Task.isCancelled else { return }
+                finish(invitation, as: listed)
                 return
             case .joining:
                 phases[invitation.id] = .joining
@@ -183,16 +190,31 @@ final class Invitations {
         await connection.stop()
     }
 
-    private func finish(_ invitation: Invitation) {
+    private func listedSpace(of invitation: Invitation) async -> Space? {
+        for read in 1...Self.listingReads {
+            if case .spaces(let listed) = try? await instances.spaces(bearer: bearer),
+                let space = listed.first(where: { $0.id == invitation.instanceId })
+            {
+                return space
+            }
+            guard read < Self.listingReads,
+                (try? await relay.clock.sleep(for: Self.listingRetry)) != nil
+            else { return nil }
+        }
+        return nil
+    }
+
+    private func finish(_ invitation: Invitation, as listed: Space?) {
         pending.removeAll { $0.id == invitation.id }
         phases[invitation.id] = nil
         if opened?.id == invitation.id {
             opened = nil
         }
         joined(
-            Space(
-                id: invitation.instanceId, name: invitation.instanceName, role: .member,
-                isHostOnline: true, colour: invitation.colour))
+            listed
+                ?? Space(
+                    id: invitation.instanceId, name: invitation.instanceName, role: .member,
+                    isHostOnline: true, colour: invitation.colour))
     }
 
     private func answerNo(to invitation: Invitation) async {

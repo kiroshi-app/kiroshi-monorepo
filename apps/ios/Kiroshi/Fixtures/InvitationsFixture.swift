@@ -22,6 +22,12 @@
             200,
             #"[{"id":"\#(personalId)","name":"Personal","role":"owner","createdAt":"2026-10-01T09:00:00.000Z","online":true}]"#
         )
+        static func joined(colour: String) -> ScriptedTransport.Answer {
+            .status(
+                200,
+                #"[{"id":"\#(personalId)","name":"Personal","role":"owner","createdAt":"2026-10-01T09:00:00.000Z","online":true},{"id":"\#(studioId)","name":"Studio","role":"member","createdAt":"2026-10-02T09:00:00.000Z","online":true,"colour":\#(colour)}]"#
+            )
+        }
         static let listed = ScriptedTransport.Answer.status(
             200,
             #"[{"id":"\#(invitationId)","instanceId":"\#(studioId)","instanceName":"Studio","inviterEmail":"noa@example.com","colour":\#(writtenColour),"invitedAt":"2026-10-18T12:00:00.000Z"}]"#
@@ -60,6 +66,16 @@
             default: break
             }
             return answers
+        }
+
+        static func afterwards(_ fixture: SignInFixture)
+            -> [String: [String: ScriptedTransport.Answer]]
+        {
+            switch fixture {
+            case .invitationJoined, .invitationAlreadyJoined:
+                [acceptPath: [CloudFixture.spacesPath: joined(colour: CloudFixture.colour(0))]]
+            default: [:]
+            }
         }
 
         @MainActor static func relay(_ fixture: SignInFixture) -> RelayEnvironment {

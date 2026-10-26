@@ -600,6 +600,8 @@
                 script.messages[releaseCrew.id] = sharedThread
             case .sharedList:
                 script.messages.merge(sharedListMessages) { _, shared in shared }
+            case .invitationJoined, .invitationAlreadyJoined:
+                script.messages[juniper.id] = sharedListMessages[juniper.id]
             case .groupMention:
                 script.messages[releaseCrew.id] = releasePlanning + groupThread
             case .groupWorking:

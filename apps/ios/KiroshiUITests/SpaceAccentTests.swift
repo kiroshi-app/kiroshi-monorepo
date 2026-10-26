@@ -50,6 +50,26 @@ final class SpaceAccentTests: XCTestCase {
         assert(purple, is: [0xBC, 0xAF, 0xE3])
     }
 
+    func testASpaceYouJustJoinedPaintsYourBubbleInItsHostsColour() throws {
+        let yourAsk = "Send me the notes once they’re drafted."
+        let app = launch("4.7", "-spaceColours", "purple")
+        XCTAssertTrue(app.navigationBars["Studio"].buttons["Space"].waitForExistence(timeout: 15))
+        let juniper = button("Juniper", in: app)
+        XCTAssertTrue(juniper.waitForExistence(timeout: 10))
+        juniper.tap()
+        XCTAssertTrue(app.staticTexts[yourAsk].firstMatch.waitForExistence(timeout: 10))
+
+        keepScreenshot(named: "Your bubble in Studio just joined, purple")
+        assert(try colour(behind: yourAsk, in: app), is: [0xBC, 0xAF, 0xE3])
+    }
+
+    func keepScreenshot(named name: String) {
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = name
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
     func button(_ name: String, in app: XCUIApplication) -> XCUIElement {
         app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", name)).firstMatch
     }

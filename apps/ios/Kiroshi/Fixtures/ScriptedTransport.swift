@@ -9,14 +9,19 @@
         }
 
         private var answers: [String: Answer]
+        private var afterwards: [String: [String: Answer]]
         private let log: URL?
         private(set) var requests: [URLRequest] = []
 
-        init(_ answers: [String: Answer] = [:], log: URL? = nil) {
+        init(
+            _ answers: [String: Answer] = [:], afterwards: [String: [String: Answer]] = [:],
+            log: URL? = nil
+        ) {
             self.answers = [
                 FixtureKeys.challengePath: FixtureKeys.challenge,
                 FixtureKeys.devicesPath: FixtureKeys.registered,
             ].merging(answers) { _, scripted in scripted }
+            self.afterwards = afterwards
             self.log = log
         }
 
@@ -28,7 +33,11 @@
             requests.append(request)
             guard let url = request.url else { throw URLError(.badURL) }
             write(request.httpMethod ?? "GET", url.path(), to: log)
-            switch answers[url.path(), default: .offline] {
+            let answer = answers[url.path(), default: .offline]
+            if let changes = afterwards.removeValue(forKey: url.path()) {
+                answers.merge(changes) { _, changed in changed }
+            }
+            switch answer {
             case .status(let status, let body):
                 let response = HTTPURLResponse(
                     url: url, statusCode: status, httpVersion: nil, headerFields: nil)
