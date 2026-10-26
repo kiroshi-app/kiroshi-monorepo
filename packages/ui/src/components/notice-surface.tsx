@@ -399,7 +399,7 @@ const NoticeText = () => {
 
 	return (
 		<div
-			aria-hidden={isMirrored || undefined}
+			aria-hidden={isMirrored}
 			className="flex min-w-0 flex-1 flex-col gap-1"
 		>
 			<ToastTitle className="break-words font-semibold" />
