@@ -27,7 +27,10 @@ const FOCUS_RING = "outline-none focus-visible:ring-2 focus-visible:ring-ring"
 
 const ROW = `flex w-full min-w-0 cursor-pointer items-center gap-2.5 p-2 text-start select-none ${FOCUS_RING}`
 
-const BACK = `${ROW} rounded-control font-medium text-compact text-muted-foreground leading-4.5 hover:bg-muted hover:text-foreground`
+const BACK = cn(
+	ROW,
+	"w-auto max-w-full self-start rounded-control font-medium text-compact text-muted-foreground leading-4.5 hover:bg-muted hover:text-foreground",
+)
 
 const ENTRY = `${ROW} rounded-control text-muted-foreground text-sm hover:bg-muted hover:text-foreground aria-[current=page]:bg-muted aria-[current=page]:font-medium aria-[current=page]:text-foreground data-open:font-medium data-open:text-foreground`
 
@@ -48,6 +51,8 @@ const SUB_ENTRY = `${ROW} rounded-lg text-compact text-muted-foreground leading-
 const ROW_DOT = "pointer-events-none size-1.5 shrink-0 rounded-full"
 
 const ROW_LABEL = "min-w-0 flex-1 truncate"
+
+const ENTRY_ICON = "size-4 shrink-0 stroke-[1.8]!"
 
 const ENTRY_COUNT = "bg-card text-muted-foreground tabular-nums transition-none"
 
@@ -110,7 +115,10 @@ const SettingsMenu = ({
 			data-slot="settings-menu"
 		>
 			<button className={BACK} onClick={onBack} type="button">
-				<Icons.Previous aria-hidden="true" className="size-4 shrink-0" />
+				<Icons.Previous
+					aria-hidden="true"
+					className="size-4 shrink-0 stroke-2!"
+				/>
 				{backLabel ?? t("screen.back")}
 			</button>
 			<div
@@ -188,7 +196,7 @@ const SettingsMenuEntry = ({
 				onClick={onSelect}
 				type="button"
 			>
-				<EntryIcon aria-hidden="true" className="size-4 shrink-0" />
+				<EntryIcon aria-hidden="true" className={ENTRY_ICON} />
 				<span className={ROW_LABEL}>{label}</span>
 				{hasIndicator ? (
 					<span
@@ -238,7 +246,7 @@ const SettingsMenuAction = ({
 				onClick={onSelect}
 				type="button"
 			>
-				<ActionIcon aria-hidden="true" className="size-4 shrink-0" />
+				<ActionIcon aria-hidden="true" className={ENTRY_ICON} />
 				<span className={ROW_LABEL}>{label}</span>
 			</button>
 		</li>
