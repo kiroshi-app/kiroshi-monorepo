@@ -18,18 +18,26 @@ import {
 
 const UNUSED = {} as never
 
+const NO_JOINED_SPACES = {
+	getState: () => ({ joinedSpaces: [], openId: null, departed: null }),
+} as unknown as SidebarActionsSource["joinedSpaces"]
+
+const VOCCA_SELECTED = {
+	getState: () => ({ selectedSpaceId: "vocca" }),
+} as unknown as SidebarActionsSource["spaces"]
+
 const gearFor = (settings: SidebarActionsSource["settings"]) => {
 	const source: SidebarActionsSource = {
 		attachments: UNUSED,
 		collapsedSections: UNUSED,
 		drafts: UNUSED,
-		joinedSpaces: UNUSED,
+		joinedSpaces: NO_JOINED_SPACES,
 		openedMission: UNUSED,
 		roster: UNUSED,
 		runtimes: UNUSED,
 		sections: UNUSED,
 		settings,
-		spaces: UNUSED,
+		spaces: VOCCA_SELECTED,
 	}
 	const { result } = renderHook(() => useSidebarActions(source))
 	return { press: result.current.onOpenSpaceSettings }
@@ -48,7 +56,7 @@ describe("the rail gear", () => {
 
 		gear.press()
 
-		expect(settings.openSpaceSettings).toHaveBeenCalledOnce()
+		expect(settings.openSpaceSettings).toHaveBeenCalledExactlyOnceWith("vocca")
 	})
 })
 

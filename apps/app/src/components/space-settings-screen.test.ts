@@ -12,6 +12,7 @@ import {
 import { createElement, Fragment, useState } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import { NoticeSurface } from "@workspace/ui/components/notice-surface"
 import { MembersPanel } from "@workspace/ui/components/space-settings-dialog/members-panel"
 import { COMPANIONS_ENTRY } from "@workspace/ui/components/space-settings-dialog/use-space-settings"
@@ -26,6 +27,7 @@ import {
 	type JoinedSpace,
 	type JoinedSpaceMember,
 	type JoinedSpaceMembersChanged,
+	type JoinedSpaceRemoved,
 	type Member,
 	type SpaceInvitation,
 } from "@/lib/bindings"
@@ -42,11 +44,18 @@ import {
 	type JoinedSpacesTransport,
 	openLocalSpaceOf,
 	openRowIdOf,
+	switcherSpacesOf,
 } from "@/lib/spaces/joined-spaces-controller"
+import {
+	type ShownSpacePage,
+	type SpacePage,
+	spacePageOf,
+} from "@/lib/spaces/settings-spaces"
 import {
 	createSpacesController,
 	type SpacesController,
 } from "@/lib/spaces/spaces-controller"
+import type { Invitations } from "@/lib/spaces/use-invitations"
 import { useControllerState } from "@/lib/use-controller"
 import type { SettingsFrame } from "@/lib/workspace/settings-frame"
 import type { ApplicationScopes } from "@/lib/workspace/use-application-scopes"
@@ -119,7 +128,8 @@ const garageTransport = (garage: JoinedSpace) =>
 		list: async () => [garage],
 		remove: vi.fn(async (_id: string) => undefined),
 		onChanged: async () => () => undefined,
-		onRemoved: async () => () => undefined,
+		onRemoved: async (_listener: (removed: JoinedSpaceRemoved) => void) => () =>
+			undefined,
 	}) satisfies JoinedSpacesTransport
 
 const hostsFake = () => ({
@@ -130,13 +140,15 @@ const hostsFake = () => ({
 	forget: () => undefined,
 })
 
-const gearWithGarage = async (garage = GARAGE) => {
+const gearWithGarage = async (
+	garage = GARAGE,
+	transport = garageTransport(garage),
+) => {
 	const store = createFakeTranscriptStore()
 	const home = await store.createSpace("Home")
 	const { queryClient } = createQueryTestWrapper()
 	const spaces = createSpacesController(store, { queryClient })
 	await spaces.load(home.id)
-	const transport = garageTransport(garage)
 	const joined = createJoinedSpacesController({
 		queryClient,
 		spaces,
@@ -148,7 +160,19 @@ const gearWithGarage = async (garage = GARAGE) => {
 	return { home, spaces, joined, transport }
 }
 
+const NO_INVITATIONS: Invitations = {
+	rows: [],
+	termsOf: () => undefined,
+	joinedIdOf: () => undefined,
+	accept: vi.fn(),
+	decline: vi.fn(),
+	sweepWithdrawn: vi.fn(),
+}
+
 type SpaceSettingsHarnessProps = Gear & {
+	spaceId: string
+	invitations?: Invitations
+	hostBySpaceId?: Record<string, SpaceHost>
 	openedTab?: string
 	openAccountSettings?: () => void
 	bots?: Bot[]
@@ -157,6 +181,9 @@ type SpaceSettingsHarnessProps = Gear & {
 const SpaceSettingsHarness = ({
 	spaces,
 	joined,
+	spaceId,
+	invitations = NO_INVITATIONS,
+	hostBySpaceId = {},
 	openedTab,
 	openAccountSettings,
 	bots = [],
@@ -168,6 +195,7 @@ const SpaceSettingsHarness = ({
 	const { selectedSpaceId } = spacesState
 	const core = {
 		account: { state: SAM_SIGNED_IN },
+		invitations,
 		joinedSpaces: { state: joinedState, controller: joined },
 		spaces: { state: spacesState, controller: spaces },
 		spaceEnvironment: {
@@ -180,6 +208,7 @@ const SpaceSettingsHarness = ({
 	} as unknown as WorkspaceCore
 	const navigation = {
 		back: () => setIsOpen(false),
+		backToUserSettings: () => setIsOpen(false),
 		openConversations: () => setIsOpen(false),
 		openCompanionSettings: vi.fn(),
 		showEntry: (entry: string) => setSearch({ entry }),
@@ -189,46 +218,84 @@ const SpaceSettingsHarness = ({
 		spaceHistory: { days: [], oldestDate: "2026-01-01", onUndo: vi.fn() },
 		spaceSkills: { skills: [] },
 	} as unknown as SettingsPanels
+	const openRowId = openRowIdOf(joinedState, selectedSpaceId)
 	const scopes = {
-		selectedSpace: openLocalSpaceOf(
-			spacesState.spaces,
-			openRowIdOf(joinedState, selectedSpaceId),
-		),
+		openRowId,
+		selectedSpace: openLocalSpaceOf(spacesState.spaces, openRowId),
 		selectedSpaceId,
 		setOpenedMcpServer: vi.fn(),
 		spaceApplications: { mcpServers: [] },
 	} as unknown as ApplicationScopes
+	const page = spacePageOf(spaceId, {
+		spaces: spacesState.spaces,
+		joinedSpaces: joinedState.joinedSpaces,
+		invitations,
+	})
 	return createElement(
 		Fragment,
 		null,
-		isOpen
+		isOpen && isShown(page)
 			? createElement(SpaceSettingsScreen, {
 					core,
 					frame: { rail: () => null } as unknown as SettingsFrame,
+					hostBySpaceId,
 					navigation,
+					page,
 					panels,
 					rosterLines: {
-						sidebarActions: { onCreateBot: vi.fn() },
+						sidebarActions: {
+							onCreateBot: vi.fn(),
+							onSelectSpace: joined.selectSpace,
+						},
 					} as unknown as RosterLines,
 					rosterView: { bots } as unknown as RosterView,
 					scopes,
 					search,
+					spaceId,
+					switcherSpaces: switcherSpacesOf(
+						spacesState.spaces,
+						joinedState.joinedSpaces,
+					),
 				})
 			: null,
 		createElement(NoticeSurface),
 	)
 }
 
+const isShown = (page: SpacePage): page is ShownSpacePage =>
+	page.state === "yours" ||
+	page.state === "joined" ||
+	page.state === "invitation"
+
+type RejectionListener = (reason: unknown) => void
+
+type RejectionEvents = {
+	on: (event: "unhandledRejection", listener: RejectionListener) => void
+	off: (event: "unhandledRejection", listener: RejectionListener) => void
+}
+
+const rejectionEvents = (globalThis as unknown as { process: RejectionEvents })
+	.process
+
 const SETTINGS_MENU = i18n.t("settings:screen.menu")
+
+const LEFT_GARAGE = i18n.t("settings:screen.space.left.title", {
+	name: "Garage",
+})
 
 const settingsMenuOf = () =>
 	screen.queryByRole("navigation", { name: SETTINGS_MENU, hidden: true })
 
 const openSettingsOf = (gear: Gear, rowId: string, openedTab?: string) => {
 	gear.joined.selectSpace(rowId)
-	return render(createElement(SpaceSettingsHarness, { ...gear, openedTab }), {
-		wrapper: createQueryTestWrapper().wrapper,
-	}).container
+	return render(
+		createElement(SpaceSettingsHarness, {
+			...gear,
+			spaceId: rowId,
+			openedTab,
+		}),
+		{ wrapper: createQueryTestWrapper().wrapper },
+	).container
 }
 
 const confirmLeave = async (dialog: HTMLElement) => {
@@ -314,7 +381,7 @@ describe("SpaceSettingsScreen on a joined space", () => {
 		expect(gear.joined.getState().joinedSpaces).toEqual([GARAGE])
 	})
 
-	it("leaves through the roster path, closes the dialog and selects the first local space", async () => {
+	it("leaves through the roster path, closes the page on the notice naming the space and selects the first local space", async () => {
 		const gear = await gearWithGarage()
 		const dialog = openSettingsOf(gear, GARAGE_ROW)
 
@@ -322,18 +389,25 @@ describe("SpaceSettingsScreen on a joined space", () => {
 
 		expect(gear.transport.remove).toHaveBeenCalledWith(GARAGE.id)
 		await waitFor(() => expect(settingsMenuOf()).toBeNull())
+		expect(await screen.findByText(LEFT_GARAGE)).toBeTruthy()
 		expect(gear.joined.getState().joinedSpaces).toEqual([])
 		const [firstLocal] = gear.spaces.getState().spaces
 		expect(gear.spaces.getState().selectedSpaceId).toBe(firstLocal?.id)
 	})
 
-	it("keeps the space and raises the refusal when the leave fails", async () => {
+	it("keeps the space and raises the refusal when the leave fails, leaving no rejection unhandled", async () => {
+		const unhandled: unknown[] = []
+		const noteUnhandled = (reason: unknown) => unhandled.push(reason)
+		rejectionEvents.on("unhandledRejection", noteUnhandled)
 		const gear = await gearWithGarage()
 		gear.transport.remove.mockRejectedValueOnce(new Error("disk full"))
 		const dialog = openSettingsOf(gear, GARAGE_ROW)
 
 		await confirmLeave(dialog)
+		await act(settle)
+		rejectionEvents.off("unhandledRejection", noteUnhandled)
 
+		expect(unhandled).toEqual([])
 		expect(
 			await screen.findAllByText(
 				i18n.t("chat:screen.notice.joinRefused.unexpected.title"),
@@ -368,7 +442,7 @@ describe("SpaceSettingsScreen on a local space", () => {
 		).toBeTruthy()
 	})
 
-	it("returns to the conversations once the space is deleted", async () => {
+	it("closes the page once the space is deleted", async () => {
 		const gear = await gearWithGarage()
 		await gear.spaces.create()
 		const dialog = openSettingsOf(gear, gear.home.id)
@@ -379,13 +453,199 @@ describe("SpaceSettingsScreen on a local space", () => {
 	})
 })
 
+const OPEN_LABEL = new RegExp(`^${i18n.t("settings:space.open")}`)
+
+const openOtherSpaceOf = async () => {
+	const gear = await gearWithGarage()
+	await gear.spaces.create()
+	const office = otherSpaceOf(gear, gear.home.id)
+	gear.joined.selectSpace(gear.home.id)
+	const dialog = render(
+		createElement(SpaceSettingsHarness, {
+			...gear,
+			spaceId: office.id,
+		}),
+		{ wrapper: createQueryTestWrapper().wrapper },
+	).container
+	const rank =
+		gear.spaces.getState().spaces.findIndex(({ id }) => id === office.id) + 1
+	return { gear, office, rank, dialog }
+}
+
+const removableTransport = () => {
+	let announceRemoval: (removed: JoinedSpaceRemoved) => void = () => undefined
+	const transport = {
+		...garageTransport(GARAGE),
+		onRemoved: async (listener: (removed: JoinedSpaceRemoved) => void) => {
+			announceRemoval = listener
+			return () => undefined
+		},
+	}
+	return {
+		transport,
+		announce: (removed: JoinedSpaceRemoved) => announceRemoval(removed),
+	}
+}
+
+const ATELIER_INVITATION = {
+	id: "instance-atelier",
+	name: "Atelier",
+	hostEmail: "steve@example.com",
+	state: "waiting",
+} as const
+
+const ATELIER_EXPIRY = new Date(2026, 10, 2).getTime()
+
+const atelierInvitations = (): Invitations => ({
+	...NO_INVITATIONS,
+	rows: [ATELIER_INVITATION],
+	termsOf: () => ({
+		hostEmail: "steve@example.com",
+		expiresAt: ATELIER_EXPIRY,
+	}),
+	accept: vi.fn(),
+	decline: vi.fn(),
+})
+
+describe("SpaceSettingsScreen on a space other than the current one", () => {
+	it("shows that space, not the current one, with Open on its rank", async () => {
+		const { office, rank, dialog } = await openOtherSpaceOf()
+
+		expect(within(dialog).getByDisplayValue(office.name)).toBeTruthy()
+		expect(within(dialog).queryByDisplayValue("Home")).toBeNull()
+		expect(
+			within(dialog)
+				.getByRole("button", { name: OPEN_LABEL })
+				.getAttribute("aria-keyshortcuts"),
+		).toBe(`Meta+${rank}`)
+	})
+
+	it("reads it as shared from its host mark", async () => {
+		const gear = await gearWithGarage()
+		const dialog = render(
+			createElement(SpaceSettingsHarness, {
+				...gear,
+				spaceId: gear.home.id,
+				hostBySpaceId: { [gear.home.id]: "shared" },
+			}),
+			{ wrapper: createQueryTestWrapper().wrapper },
+		).container
+
+		expect(
+			within(dialog).getByText(i18n.t("settings:space.standing.yoursShared")),
+		).toBeTruthy()
+	})
+
+	it("switches to that space and closes the page on Open", async () => {
+		const { gear, office, dialog } = await openOtherSpaceOf()
+
+		fireEvent.click(within(dialog).getByRole("button", { name: OPEN_LABEL }))
+
+		expect(gear.spaces.getState().selectedSpaceId).toBe(office.id)
+		expect(settingsMenuOf()).toBeNull()
+	})
+
+	it("switches to the space of a rank and closes the page on its shortcut", async () => {
+		const { gear, office, rank } = await openOtherSpaceOf()
+
+		fireEvent.keyDown(window, { key: String(rank), metaKey: true })
+
+		expect(gear.spaces.getState().selectedSpaceId).toBe(office.id)
+		await waitFor(() => expect(settingsMenuOf()).toBeNull())
+	})
+})
+
+describe("SpaceSettingsScreen on a joined space removed while shown", () => {
+	it("closes the page on the notice naming the space once its host removes it", async () => {
+		const removable = removableTransport()
+		const gear = await gearWithGarage(GARAGE, removable.transport)
+		render(
+			createElement(SpaceSettingsHarness, { ...gear, spaceId: GARAGE_ROW }),
+			{ wrapper: createQueryTestWrapper().wrapper },
+		)
+		expect(settingsMenuOf()).toBeTruthy()
+
+		act(() =>
+			removable.announce({ id: GARAGE.id, name: "Garage", reason: "deleted" }),
+		)
+
+		await waitFor(() => expect(settingsMenuOf()).toBeNull())
+		expect(await screen.findByText(LEFT_GARAGE)).toBeTruthy()
+	})
+})
+
+describe("SpaceSettingsScreen on an invitation", () => {
+	const openAtelier = () => {
+		const invitations = atelierInvitations()
+		return gearWithGarage().then((gear) => {
+			const dialog = render(
+				createElement(SpaceSettingsHarness, {
+					...gear,
+					invitations,
+					spaceId: ATELIER_INVITATION.id,
+				}),
+				{ wrapper: createQueryTestWrapper().wrapper },
+			).container
+			return { dialog, invitations }
+		})
+	}
+
+	it("reads who invited you beside Accept, with Decline pinned", async () => {
+		const { dialog } = await openAtelier()
+
+		expect(
+			within(dialog).getByText("steve@example.com", { exact: false }),
+		).toBeTruthy()
+		expect(
+			within(dialog).getByRole("button", {
+				name: i18n.t("bots:spaces.invitations.accept"),
+			}),
+		).toBeTruthy()
+		expect(
+			within(dialog).queryByRole("button", { name: OPEN_LABEL }),
+		).toBeNull()
+	})
+
+	it("accepts that invitation on Accept", async () => {
+		const { dialog, invitations } = await openAtelier()
+
+		fireEvent.click(
+			within(dialog).getByRole("button", {
+				name: i18n.t("bots:spaces.invitations.accept"),
+			}),
+		)
+
+		expect(invitations.accept).toHaveBeenCalledExactlyOnceWith(
+			ATELIER_INVITATION.id,
+		)
+	})
+
+	it("declines that invitation on Decline", async () => {
+		const { dialog, invitations } = await openAtelier()
+
+		fireEvent.click(
+			within(dialog).getByRole("button", {
+				name: i18n.t("bots:spaces.invitations.decline"),
+			}),
+		)
+
+		expect(invitations.decline).toHaveBeenCalledExactlyOnceWith(
+			ATELIER_INVITATION.id,
+		)
+	})
+})
+
 const MEMBERS_TAB_NAME = i18n.t("settings:rail.members")
 
 const openShareOf = async (gear: Gear, rowId: string) => {
 	const openAccountSettings = vi.fn()
 	gear.joined.selectSpace(rowId)
 	const dialog = render(
-		createElement(SpaceSettingsHarness, { ...gear, openAccountSettings }),
+		createElement(SpaceSettingsHarness, {
+			...gear,
+			spaceId: rowId,
+			openAccountSettings,
+		}),
 		{
 			wrapper: createQueryTestWrapper().wrapper,
 		},
@@ -990,34 +1250,29 @@ describe("SpaceSettingsScreen members on the desktop", () => {
 		).toEqual([])
 	})
 
-	it("disables the invite field, Invite and every row action while the host is offline, reading nothing from it", async () => {
+	it("dims Members while the host is not connected, opening on Space and reading nothing from it", async () => {
 		garageHostAnswers()
+		vi.mocked(isDesktopHost).mockReturnValue(true)
+		answerJoinedMembers([SAM_GUEST, STEVE_HOSTING, TOM_GUEST])
+		const gear = await gearWithGarage({ ...GARAGE, state: "waitingForHost" })
 
-		const dialog = await openGarageMembers({
-			...GARAGE,
-			state: "waitingForHost",
-		})
+		const dialog = openSettingsOf(gear, GARAGE_ROW, "members")
+		await act(async () => settle())
 
 		expect(
 			within(dialog)
-				.getByRole("textbox", {
-					name: i18n.t("settings:space.members.invite.label"),
-				})
+				.getByRole("button", { name: MEMBERS_TAB_NAME })
 				.hasAttribute("disabled"),
 		).toBe(true)
-		for (const button of [
-			within(dialog).getByRole("button", {
-				name: i18n.t("settings:space.members.invite.action"),
-			}),
-			await removeTomOf(dialog),
-		]) {
-			expect(button.hasAttribute("disabled")).toBe(true)
-		}
-		expect(membersCalls()).toEqual([])
-		await act(async () => settle())
 		expect(
-			screen.queryByText(i18n.t("settings:space.transfer.reason.generic")),
-		).toBeNull()
+			within(dialog).getByText(
+				i18n.t("settings:space.standing.joinedNotConnected", {
+					host: GARAGE.hostUrl,
+				}),
+			),
+		).toBeTruthy()
+		expect(within(dialog).queryByText("Tom Reed")).toBeNull()
+		expect(membersCalls()).toEqual([])
 	})
 
 	it("invites on the host of a joined space", async () => {
@@ -1156,6 +1411,7 @@ const openCompanionsOf = async (gear: Gear, rowId: string) => {
 	const rendered = render(
 		createElement(SpaceSettingsHarness, {
 			...gear,
+			spaceId: rowId,
 			openedTab: COMPANIONS_ENTRY,
 			bots: COMPANIONS,
 		}),
@@ -1195,6 +1451,7 @@ describe("SpaceSettingsScreen companion counts", () => {
 		rerender(
 			createElement(SpaceSettingsHarness, {
 				...gear,
+				spaceId: gear.home.id,
 				openedTab: COMPANIONS_ENTRY,
 				bots: [...COMPANIONS],
 			}),
@@ -1242,9 +1499,19 @@ describe("SpaceSettingsScreen companion counts", () => {
 		const gear = await gearWithGarage()
 		await gear.spaces.create()
 		const office = otherSpaceOf(gear, gear.home.id)
-		await openCompanionsOf(gear, gear.home.id)
+		const { rerender } = await openCompanionsOf(gear, gear.home.id)
 
-		act(() => gear.joined.selectSpace(office.id))
+		act(() => {
+			gear.joined.selectSpace(office.id)
+			rerender(
+				createElement(SpaceSettingsHarness, {
+					...gear,
+					spaceId: office.id,
+					openedTab: COMPANIONS_ENTRY,
+					bots: COMPANIONS,
+				}),
+			)
+		})
 		await waitFor(() => expect(readCounts.mock.calls).toHaveLength(2))
 		await act(async () => {
 			homeCounts.answer([

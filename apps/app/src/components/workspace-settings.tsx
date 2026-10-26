@@ -1,4 +1,4 @@
-import { Navigate, useSearch } from "@tanstack/react-router"
+import { Navigate, useParams, useSearch } from "@tanstack/react-router"
 
 import type { SettingsScreenRequestLeave } from "@workspace/ui/components/settings-screen"
 
@@ -8,8 +8,10 @@ import { UserSettingsScreen } from "@/components/user-settings-screen"
 import { titleBarWindowControls } from "@/components/window-caption-controls"
 import { WorkspaceRail } from "@/components/workspace-rail"
 import { hasOverlayWindowControls, isSidebarResizable } from "@/lib/host"
+import { settingsSpacesOf, spacePageOf } from "@/lib/spaces/settings-spaces"
 import type { SettingsFrame } from "@/lib/workspace/settings-frame"
 import { useRosterLists } from "@/lib/workspace/use-roster-lists"
+import { ACCOUNT_TAB } from "@/lib/workspace/use-settings-panels"
 import { useWorkspace } from "@/lib/workspace/workspace-context"
 
 const useSettingsFrame = (
@@ -65,21 +67,50 @@ const useSettingsFrame = (
 
 export const SpaceSettingsRoute = () => {
 	const workspace = useWorkspace()
-	const search = useSearch({ from: "/settings/space" })
-	const frame = useSettingsFrame(
-		workspace.rosterLines.sidebarActions.onSelectSpace,
-	)
+	const { core, navigation, rosterLines, switcher } = workspace
+	const { spaceId } = useParams({ from: "/settings/space/$spaceId" })
+	const search = useSearch({ from: "/settings/space/$spaceId" })
+	const frame = useSettingsFrame((id) => {
+		rosterLines.sidebarActions.onSelectSpace(id)
+		navigation.openSpaceSettings(id, { entry: search.entry })
+	})
+	const page = spacePageOf(spaceId, {
+		spaces: core.spaces.state.spaces,
+		joinedSpaces: core.joinedSpaces.state.joinedSpaces,
+		invitations: core.invitations,
+	})
+
+	if (page.state === "gone") {
+		return (
+			<Navigate to="/settings/user" search={{ entry: ACCOUNT_TAB }} replace />
+		)
+	}
+
+	if (page.state === "accepted") {
+		return (
+			<Navigate
+				to="/settings/space/$spaceId"
+				params={{ spaceId: page.rowId }}
+				search={search}
+				replace
+			/>
+		)
+	}
 
 	return (
 		<SpaceSettingsScreen
-			core={workspace.core}
+			core={core}
 			frame={frame}
-			navigation={workspace.navigation}
+			hostBySpaceId={switcher.hostBySpaceId}
+			navigation={navigation}
+			page={page}
 			panels={workspace.panels}
-			rosterLines={workspace.rosterLines}
+			rosterLines={rosterLines}
 			rosterView={workspace.rosterView}
 			scopes={workspace.scopes}
 			search={search}
+			spaceId={spaceId}
+			switcherSpaces={switcher.spaces}
 		/>
 	)
 }
@@ -101,6 +132,12 @@ export const UserSettingsRoute = () => {
 			panels={workspace.panels}
 			scopes={workspace.scopes}
 			search={search}
+			spaces={settingsSpacesOf({
+				...workspace.switcher,
+				badgesBySpaceId: frame.titleBar.badgesBySpaceId,
+			})}
+			currentSpaceId={workspace.switcher.selectedSpaceId ?? undefined}
+			onCreateSpace={workspace.rosterLines.sidebarActions.onCreateSpace}
 		/>
 	)
 }

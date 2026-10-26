@@ -2,6 +2,7 @@ import { QueryObserver } from "@tanstack/react-query"
 import { describe, expect, it, vi } from "vitest"
 
 import type { NoticeMessage } from "@workspace/ui/components/notice-surface"
+import { i18n } from "@workspace/ui/lib/i18n"
 
 import type { ArchivePickers } from "./archive-pickers"
 import {
@@ -221,6 +222,23 @@ describe("createSpacesController", () => {
 		expect(controller.getState().hasFailedToCreate).toBe(true)
 		expect(controller.getState().hasFailedToLoad).toBe(false)
 		expect(held(controller)).toEqual(await names(store))
+	})
+
+	it("raises a failure notice when the create is refused", async () => {
+		const store = createFakeTranscriptStore()
+		vi.spyOn(store, "createSpace").mockRejectedValue(new Error("no record"))
+		const reportFailure = vi.fn()
+		const controller = createSpacesController(store, {
+			queryClient: createQueryTestWrapper().queryClient,
+			reportFailure,
+		})
+		await controller.load(null)
+
+		await controller.create()
+
+		expect(reportFailure).toHaveBeenCalledExactlyOnceWith({
+			title: i18n.t("chat:screen.notice.failed"),
+		})
 	})
 
 	it("clears the refused create once a create lands", async () => {

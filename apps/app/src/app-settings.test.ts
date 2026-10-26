@@ -14,6 +14,7 @@ import { afterEach, expect, it, vi } from "vitest"
 
 import { i18n } from "@workspace/ui/lib/i18n"
 
+import { serverScopeOf } from "@/lib/applications/application-install"
 import { newBotIdentity } from "@/lib/bots/bot-settings"
 import { createFakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
@@ -500,6 +501,140 @@ it("keeps the user settings when the Space switches from them", async () => {
 	await switchSpaceTo(VOCCA)
 
 	expect(shownSettingsOf()?.subtitle).toBe("user")
+})
+
+const spaceRowOf = (name: string) =>
+	within(settingsMenuOf() as HTMLElement).getByRole("button", {
+		name: new RegExp(`^${name}`),
+	})
+
+const spaceSwitcherOf = () =>
+	document.querySelector('[data-slot="space-switcher"]') as HTMLElement
+
+it("lists every Space on the user settings, the current one marked", async () => {
+	const opened = await mountApp(secondSpace)
+
+	await press(avatarOf())
+
+	expect(spaceRowOf(opened.name).getAttribute("aria-current")).toBe("true")
+	expect(spaceRowOf(VOCCA).getAttribute("aria-current")).toBeNull()
+})
+
+it("opens the settings of a Space other than the current one from its row, then goes back to the user settings", async () => {
+	const opened = await mountApp(secondSpace)
+	await press(avatarOf())
+
+	await press(spaceRowOf(VOCCA))
+
+	expect(shownSettingsOf()?.subtitle).toBe("space")
+	expect(screen.getByDisplayValue(VOCCA)).toBeTruthy()
+	expect(spaceSwitcherOf().textContent).toContain(opened.name)
+
+	await press(spaceBackOf())
+
+	expect(shownSettingsOf()?.subtitle).toBe("user")
+})
+
+it("reads the secrets of the Space its route shows, though another Space is current", async () => {
+	const opened = await mountApp(async (store, spaceId) => {
+		const vocca = await store.createSpace(VOCCA)
+		await store.setEnvironmentVariable(
+			{ kind: "space", id: spaceId },
+			"OPENED_TOKEN",
+			"opened",
+		)
+		await store.setEnvironmentVariable(
+			{ kind: "space", id: vocca.id },
+			"VOCCA_TOKEN",
+			"vocca",
+		)
+	})
+	await press(avatarOf())
+	await press(spaceRowOf(VOCCA))
+
+	await press(menuEntryOf(i18n.t("settings:rail.secrets")))
+
+	expect(screen.getByText("VOCCA_TOKEN")).toBeTruthy()
+	expect(screen.queryByText("OPENED_TOKEN")).toBeNull()
+	expect(spaceSwitcherOf().textContent).toContain(opened.name)
+})
+
+it("opens an application of the Space its route shows under that Space", async () => {
+	await mountApp(async (store) => {
+		const vocca = await store.createSpace(VOCCA)
+		await twoSpaceApplications(store, vocca.id)
+		await store.setEnvironmentVariable(
+			serverScopeOf({ kind: "space", id: vocca.id }, "ledger"),
+			"LEDGER_KEY",
+			"vocca",
+		)
+	})
+	await press(avatarOf())
+	await press(spaceRowOf(VOCCA))
+	await openApplications()
+
+	await press(menuEntryOf(/^ledger/))
+
+	expect(screen.getByText("LEDGER_KEY")).toBeTruthy()
+})
+
+it("switches to the Space and shows its conversations on Open", async () => {
+	await mountApp(secondSpace)
+	await press(avatarOf())
+	await press(spaceRowOf(VOCCA))
+
+	await press(
+		screen.getByRole("button", {
+			name: new RegExp(`^${i18n.t("settings:space.open")}`),
+		}),
+	)
+
+	expect(shownSettingsOf()).toBeNull()
+	expect(spaceSwitcherOf().textContent).toContain(VOCCA)
+})
+
+it("adds the row of a new Space on the + of Your spaces", async () => {
+	await mountApp()
+	await press(avatarOf())
+	const untitled = i18n.t("settings:space.untitled")
+	expect(
+		within(settingsMenuOf() as HTMLElement).queryByText(untitled),
+	).toBeNull()
+
+	await press(
+		screen.getByRole("button", { name: i18n.t("bots:spaces.create") }),
+	)
+
+	expect(
+		within(settingsMenuOf() as HTMLElement).getByText(untitled),
+	).toBeTruthy()
+})
+
+it("opens the user settings on Back to your settings when the Space settings are the first entry of the history", async () => {
+	const space = await seedStore()
+	const router = createWorkspaceRouter(
+		createMemoryHistory({ initialEntries: ["/"] }),
+	)
+	render(createElement(RouterProvider, { router }), {
+		wrapper: createQueryTestWrapper().wrapper,
+	})
+	await settle()
+	await act(async () => {
+		await router.navigate({
+			to: "/settings/space/$spaceId",
+			params: { spaceId: space.id },
+			replace: true,
+		})
+	})
+	await settle()
+	expect(shownSettingsOf()?.subtitle).toBe("space")
+
+	await press(spaceBackOf())
+
+	expect(shownSettingsOf()).toEqual({
+		subtitle: "user",
+		entry: i18n.t("settings:rail.account"),
+	})
 })
 
 it("returns to the conversations when the Space switches from the settings of a companion", async () => {

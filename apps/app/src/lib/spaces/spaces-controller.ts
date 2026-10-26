@@ -188,6 +188,7 @@ export const createSpacesController = (
 
 	const noteRefusedCreate = () => {
 		choose({ hasFailedToCreate: true })
+		reportFailure({ title: i18n.t("chat:screen.notice.failed") })
 		return reload()
 	}
 

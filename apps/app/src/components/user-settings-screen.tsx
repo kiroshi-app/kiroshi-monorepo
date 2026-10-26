@@ -8,6 +8,7 @@ import { useYourDevices } from "@/lib/devices/use-your-devices"
 import type { SettingsSearch } from "@/lib/navigation/settings-search"
 import type { SettingsNavigation } from "@/lib/navigation/use-settings-navigation"
 import { isRelaySpace } from "@/lib/spaces/joined-spaces-controller"
+import type { SettingsSpaces } from "@/lib/spaces/settings-spaces"
 import { diagnosticsActions } from "@/lib/user/diagnostics-actions"
 import { toNotificationChange } from "@/lib/user/user-settings"
 import type { SettingsFrame } from "@/lib/workspace/settings-frame"
@@ -29,6 +30,9 @@ type UserSettingsScreenProps = {
 	panels: SettingsPanels
 	scopes: ApplicationScopes
 	search: SettingsSearch
+	spaces: SettingsSpaces
+	currentSpaceId: string | undefined
+	onCreateSpace: () => void
 }
 
 export const UserSettingsScreen = ({
@@ -40,6 +44,9 @@ export const UserSettingsScreen = ({
 	panels,
 	scopes,
 	search,
+	spaces,
+	currentSpaceId,
+	onCreateSpace,
 }: UserSettingsScreenProps) => {
 	const {
 		account: watchedAccount,
@@ -71,6 +78,10 @@ export const UserSettingsScreen = ({
 				entry={search.entry ?? ACCOUNT_TAB}
 				onEntryChange={navigation.showEntry}
 				onBack={navigation.back}
+				{...spaces}
+				currentSpaceId={currentSpaceId}
+				onOpenSpace={(id) => navigation.openSpaceSettings(id)}
+				onCreateSpace={onCreateSpace}
 				about={about}
 				account={{ ...accountPanel, devices }}
 				applications={{

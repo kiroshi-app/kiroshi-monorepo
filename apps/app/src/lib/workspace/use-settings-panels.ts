@@ -52,7 +52,7 @@ export const useSettingsPanels = ({
 		userPlugin,
 	} = core
 	const { settingsBotId } = rosterView
-	const { selectedSpaceId, setOpenedMcpServer } = scopes
+	const { openRowId, selectedSpaceId, setOpenedMcpServer } = scopes
 
 	const botHistory = useHistoryView({
 		...companionPlugin.state,
@@ -92,11 +92,11 @@ export const useSettingsPanels = ({
 				navigation.openUserSettings(search)
 			} else if (scope.kind === "companion") {
 				navigation.openCompanionSettings(scope.id, search)
-			} else {
-				navigation.openSpaceSettings(search)
+			} else if (openRowId) {
+				navigation.openSpaceSettings(openRowId, search)
 			}
 		},
-		[navigation, selectedSpaceId, setOpenedMcpServer],
+		[navigation, openRowId, selectedSpaceId, setOpenedMcpServer],
 	)
 
 	const openAccountSettings = () =>

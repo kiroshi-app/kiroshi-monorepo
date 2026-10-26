@@ -46,8 +46,15 @@ type InvitationStatus =
 	| { state: "expired" }
 	| { state: "failed"; failure: SpaceInvitationFailure }
 
+export type InvitationTerms = {
+	hostEmail: string
+	expiresAt: number
+}
+
 export type Invitations = {
 	rows: SpaceInvitation[]
+	termsOf: (id: string) => InvitationTerms | undefined
+	joinedIdOf: (id: string) => string | undefined
 	accept: (id: string) => void
 	decline: (id: string) => void
 	sweepWithdrawn: () => void
@@ -120,6 +127,20 @@ const expiryOf = (invitation: Invitation) => Date.parse(invitation.expiresAt)
 
 const hasExpired = (invitation: Invitation, now: number) =>
 	expiryOf(invitation) <= now
+
+const termsOf = (invitation: Invitation): InvitationTerms => ({
+	hostEmail: invitation.inviterEmail,
+	expiresAt: expiryOf(invitation),
+})
+
+const admittedJoinedIdOf = (statuses: Statuses, id: string) => {
+	for (const status of Object.values(statuses)) {
+		if (status.state === "admitted" && status.invitation.instanceId === id) {
+			return status.joinedId
+		}
+	}
+	return undefined
+}
 
 const isWaitingSpace = (joinedId: string) => (joined: JoinedSpace) =>
 	joined.id === joinedId && joined.state === "waitingForHost"
@@ -257,6 +278,11 @@ export const useInvitations = (
 
 		return {
 			rows: shown.map(rowOf(statuses, Date.now(), hostNameOf)),
+			termsOf: (id) => {
+				const invitation = shownWithId(id)
+				return invitation && termsOf(invitation)
+			},
+			joinedIdOf: (id) => admittedJoinedIdOf(statuses, id),
 			accept: (id) => {
 				const invitation = shownWithId(id)
 				if (invitation && stateOf(invitation) !== "accepting") {
