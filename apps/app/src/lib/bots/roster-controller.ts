@@ -463,7 +463,7 @@ const previewsOf = (
 		rows.flatMap(({ id }) => (words[id] ? [[id, words[id]]] : [])),
 	)
 
-const pagedSoloThreadsIn = (
+const rosteredSoloThreadsIn = (
 	spaceRowId: string,
 	bots: Bot[],
 	soloBotIds: SoloBotIds,
@@ -478,13 +478,15 @@ const pagedSoloThreadsIn = (
 
 const NO_SOLO_STATES: SoloState[] = []
 
-const soloBotIdsOfStates = (soloStates: SoloState[]): SoloBotIds =>
+const soloBotIdsOfStates = (
+	soloStates: SoloState[] = NO_SOLO_STATES,
+): SoloBotIds =>
 	Object.fromEntries(
 		soloStates.map(({ conversationId, botId }) => [conversationId, botId]),
 	)
 
 const hostStatesOfSoloStates = (
-	soloStates: SoloState[],
+	soloStates: SoloState[] = NO_SOLO_STATES,
 ): ConversationHostStates =>
 	Object.fromEntries(
 		soloStates.map((entry) => [entry.conversationId, observedStateOf(entry)]),
@@ -529,17 +531,15 @@ const rosterBaseOf = (
 	const soloThreads: SoloThreads = Object.assign(
 		{},
 		...spaceRowIds.map((id, index) =>
-			pagedSoloThreadsIn(id, rosters[id], {
-				...soloBotIdsOfStates(soloStates[index] ?? NO_SOLO_STATES),
+			rosteredSoloThreadsIn(id, rosters[id], {
+				...soloBotIdsOfStates(soloStates[index]),
 				...(paged[index] ? soloBotIdsOf(paged[index]) : NO_SOLO_BOT_IDS),
 			}),
 		),
 	)
 	const hostStates: ConversationHostStates = Object.assign(
 		{},
-		...soloStates.map((entries) =>
-			hostStatesOfSoloStates(entries ?? NO_SOLO_STATES),
-		),
+		...soloStates.map(hostStatesOfSoloStates),
 		...paged.map((pages) => (pages ? hostStatesOf(pages) : NO_HOST_STATES)),
 	)
 	const bots = rosterIn(rosters, choice.spaceRowId)
