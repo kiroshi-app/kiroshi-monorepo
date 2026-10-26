@@ -298,7 +298,7 @@ const SETTINGS_ROUTES: SettingsRoute[] = [
 
 const shellTint = () =>
 	document.body
-		.querySelector<HTMLElement>("[data-space-tint]")
+		.querySelector("[data-space-tint]")
 		?.getAttribute("data-space-tint")
 
 describe.each(OPEN_SPACES)(
@@ -318,14 +318,14 @@ describe.each(OPEN_SPACES)(
 
 		it.each(SETTINGS_ROUTES)(
 			"keeps the shell tint of / on $path",
-			async ({ open }) => {
+			async ({ path, open }) => {
 				const { router, companionId } = await mountAppAtConversations(joined)
 				expect(shellTint()).toBe(colour)
 
 				await act(() => open(router, { spaceRowId: rowId, companionId }))
 				await settle()
 
-				expect(router.state.location.pathname).not.toBe("/")
+				expect(router.state.matches.at(-1)?.routeId).toBe(path)
 				expect(shellTint()).toBe(colour)
 			},
 		)
