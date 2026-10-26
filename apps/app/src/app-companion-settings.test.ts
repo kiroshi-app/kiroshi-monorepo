@@ -15,18 +15,23 @@ import { BLANK_BOT_PERMISSIONS } from "@workspace/ui/components/bot-settings"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import type { ApplicationInstall } from "@/lib/applications/application-port"
+import type { MissionInSpace } from "@/lib/bindings"
 import { newBotIdentity } from "@/lib/bots/bot-settings"
 import { createFakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
+import { aMission } from "@/lib/missions/mission-fixtures"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 import { readMirror, writeMirror } from "@/lib/user/preferences-mirror"
 
+type Harness = {
+	store: TranscriptStore | null
+	installs: ApplicationInstall[]
+	missions: MissionInSpace[]
+}
+
 const harness = vi.hoisted(
-	(): { store: TranscriptStore | null; installs: ApplicationInstall[] } => ({
-		store: null,
-		installs: [],
-	}),
+	(): Harness => ({ store: null, installs: [], missions: [] }),
 )
 
 vi.mock("@/lib/conversations/create-store", () => ({
@@ -60,6 +65,30 @@ vi.mock("@/lib/applications/application-transport", async (importOriginal) => {
 	}
 })
 
+vi.mock("@/lib/missions/missions-transport", async (importOriginal) => {
+	const actual =
+		await importOriginal<typeof import("@/lib/missions/missions-transport")>()
+	const { aSpacePage: pageOf } = await import("@/lib/missions/mission-fixtures")
+	const heldMission = (missionId: string) => {
+		const held = harness.missions.find(
+			({ mission }) => mission.id === missionId,
+		)
+		if (!held) throw new Error(`no mission ${missionId}`)
+		return held.mission
+	}
+	return {
+		...actual,
+		missionsTransport: {
+			...actual.missionsTransport,
+			spacePage: async () => pageOf(harness.missions),
+			detail: async (missionId: string) => ({
+				mission: heldMission(missionId),
+				events: [],
+			}),
+		},
+	}
+})
+
 const { App } = await import("@/App")
 
 const SETTLE_MS = 200
@@ -84,11 +113,22 @@ const MENTION_TEXT = "hold the gate"
 
 const DRAFT = "half a thought for the room"
 
+const MISSION_DRAFT = "half a thought for the mission"
+
+const MISSION_OBJECTIVE = "Ship the release notes"
+
+const MISSION_SAID = "the mission notes are drafted"
+
 const SENTRY = "sentry"
 
 const SENTRY_SERVER = { type: "http", url: "https://sentry.internal/mcp" }
 
-type Seeded = { atlasId: string; atlasThreadId: string; companionCount: number }
+type Seeded = {
+	atlasId: string
+	atlasThreadId: string
+	companionCount: number
+	missionThreadId: string
+}
 
 let said = 0
 
@@ -163,16 +203,39 @@ const seed = async (store: TranscriptStore): Promise<Seeded> => {
 	await saidIn(store, room.id, `<@${atlas.id}> ${MENTION_TEXT}`)
 	const atlasThread = await store.mainChat(atlas.id, space.id)
 	await saidIn(store, atlasThread.id, ATLAS_SAID)
+	const missionThread = await store.createConversation({
+		botIds: [atlas.id],
+		sectionId: null,
+		spaceId: space.id,
+		title: MISSION_OBJECTIVE,
+	})
+	await repliedIn(store, missionThread.id, atlas.id, MISSION_SAID)
+	harness.missions = [
+		{
+			mission: aMission({
+				botId: atlas.id,
+				objective: MISSION_OBJECTIVE,
+				originConversationId: room.id,
+				spaceId: space.id,
+				threadConversationId: missionThread.id,
+			}),
+			conversationId: room.id,
+			conversationTitle: ROOM,
+		},
+	]
 	return {
 		atlasId: atlas.id,
 		atlasThreadId: atlasThread.id,
 		companionCount: (await store.bots(space.id)).length,
+		missionThreadId: missionThread.id,
 	}
 }
 
-const mountApp = async () => {
+type StoreChange = (store: TranscriptStore) => TranscriptStore
+
+const mountApp = async (change: StoreChange = (store) => store) => {
 	writeMirror({ ...readMirror(), firstRunDone: true })
-	const store = createFakeTranscriptStore()
+	const store = change(createFakeTranscriptStore())
 	const seeded = await seed(store)
 	vi.useFakeTimers()
 	harness.store = store
@@ -185,6 +248,7 @@ afterEach(() => {
 	cleanup()
 	vi.useRealTimers()
 	harness.installs = []
+	harness.missions = []
 })
 
 const settle = async () => {
@@ -341,6 +405,33 @@ const installOf = (
 	lastMessageSeq: 1,
 	createdAt: 0,
 })
+
+const missionsEntryOf = () =>
+	within(railOf()).getByRole("button", { name: i18n.t("bots:rail.missions") })
+
+const raisedNoticeTitles = () =>
+	[...document.querySelectorAll('[data-slot="toast-title"]')].map(
+		(title) => title.textContent,
+	)
+
+const refusingDeletion: StoreChange = (store) => ({
+	...store,
+	deleteBot: () => Promise.reject({ kind: "storage" }),
+})
+
+const deleteFromDangerZone = async () => {
+	await press(
+		within(document.querySelector("main") ?? document.body).getByRole(
+			"button",
+			{ name: i18n.t("bots:danger.delete") },
+		),
+	)
+	await press(
+		within(screen.getByRole("alertdialog")).getByRole("button", {
+			name: i18n.t("bots:danger.delete"),
+		}),
+	)
+}
 
 const pressInstallCard = () =>
 	press(
@@ -556,4 +647,38 @@ it("replaces the companion screen with the User settings from the rail avatar", 
 		subtitle: "user",
 		entry: i18n.t("settings:rail.account"),
 	})
+})
+
+it("keeps the companion screen open on the Danger zone and raises a notice when the deletion fails", async () => {
+	await mountApp(refusingDeletion)
+	await openContextMenuOn(rosterRowOf(ATLAS))
+	await chooseInMenu(i18n.t("bots:roster.delete"))
+
+	await deleteFromDangerZone()
+
+	expect(
+		raisedNoticeTitles().filter(
+			(title) => title === i18n.t("bots:spaces.remove.failed"),
+		),
+	).toHaveLength(1)
+	expect(companionScreenOf(ATLAS)).toEqual({
+		...ON_GENERAL,
+		entry: i18n.t("bots:dialog.tab.danger"),
+	})
+})
+
+it("brings back the open mission thread and its draft on Back to conversations", async () => {
+	await mountApp()
+	await press(missionsEntryOf())
+	expect(screen.getByText(MISSION_SAID)).toBeTruthy()
+	fireEvent.change(composerOf(), { target: { value: MISSION_DRAFT } })
+	await openContextMenuOn(gutterOf(MISSION_SAID))
+	await chooseInMenu(i18n.t("bots:roster.settings"))
+	expect(companionScreenOf(ATLAS)).toEqual(ON_GENERAL)
+
+	await pressBack(i18n.t("settings:screen.back"))
+
+	expect(settingsMenuOf()).toBeNull()
+	expect(screen.getByText(MISSION_SAID)).toBeTruthy()
+	expect(composerOf().value).toBe(MISSION_DRAFT)
 })

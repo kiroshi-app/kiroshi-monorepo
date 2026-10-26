@@ -1369,7 +1369,10 @@ export const createRosterController = (
 				})
 				choose(choiceOf(landOn(bots, conversations, null)))
 				holdRoster(state.spaceRowId, () => ({ bots, conversations }))
-			}).catch(reload),
+			}).catch(async (reason: unknown) => {
+				await reload()
+				throw reason
+			}),
 
 		moveConversationToSection: (
 			conversationId: string,

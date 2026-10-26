@@ -14,6 +14,7 @@ import {
 	toSettingsValue,
 } from "@/lib/bots/bot-settings"
 import { toEnvironmentRows } from "@/lib/environment/environment-rows"
+import { failureReporterIn } from "@/lib/failure-report"
 import type { ApplicationScopes } from "@/lib/workspace/use-application-scopes"
 import type { RosterLines } from "@/lib/workspace/use-roster-lines"
 import type { RosterView } from "@/lib/workspace/use-roster-view"
@@ -23,6 +24,8 @@ import type { WorkspaceCore } from "@/lib/workspace/use-workspace-core"
 const GENERAL_ENTRY = "general"
 
 const DANGER_ENTRY = "danger"
+
+const reportFailure = failureReporterIn("companion-screen-host")
 
 type CompanionScreenHostProps = {
 	core: WorkspaceCore
@@ -68,6 +71,13 @@ export const CompanionScreenHost = ({
 	}
 
 	const leave = isSpaceEditing ? backToCompanions : closeSettings
+
+	const refuseDeletion = () => {
+		void reportFailure(
+			{ title: i18n.t("bots:spaces.remove.failed") },
+			{ botId: settingsBot.id },
+		)
+	}
 
 	const showEntry = (entry: string) => {
 		if (isShowingDanger) {
@@ -123,7 +133,7 @@ export const CompanionScreenHost = ({
 				void roster.controller.uploadAvatar(settingsBot.id, file)
 			}}
 			onDelete={() => {
-				void deleteBot(settingsBot.id).then(leave)
+				void deleteBot(settingsBot.id).then(leave, refuseDeletion)
 			}}
 			onOutputStyleChange={(outputStyle) => {
 				if (outputStyle === settingsBot.outputStyle) {
