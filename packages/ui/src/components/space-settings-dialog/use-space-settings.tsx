@@ -4,6 +4,7 @@ import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
 import { DangerZone } from "@workspace/ui/components/bot-settings-dialog/danger-zone"
+import type { McpServerEditorLayout } from "@workspace/ui/components/bot-settings-dialog/mcp-server-editor-header"
 import {
 	type EnvironmentEntry,
 	EnvironmentPanel,
@@ -68,10 +69,12 @@ type SpaceSettingsProps = PluginSessionsProps & {
 
 type SpaceSettingsOptions = SpaceSettingsProps & {
 	isOpen: boolean
+	editorLayout?: McpServerEditorLayout
 }
 
 const useSpaceSettings = ({
 	isOpen,
+	editorLayout,
 	value,
 	onValueChange,
 	environment,
@@ -102,6 +105,7 @@ const useSpaceSettings = ({
 		isSettingsOpen: isOpen,
 		history,
 		historyCompanionName: t("plugin.author.bot"),
+		editorLayout,
 	})
 
 	const spacePanel =

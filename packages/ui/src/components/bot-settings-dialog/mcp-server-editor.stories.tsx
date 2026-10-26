@@ -798,3 +798,46 @@ export const WithDisconnection = meta.story({
 		await expect(args.connection?.onDisconnect).toHaveBeenCalledTimes(1)
 	},
 })
+
+export const PageLayout = meta.story({
+	args: {
+		layout: "page",
+		mark: GRANOLA_MARK,
+		displayName: "Granola",
+		connection: {
+			state: "connected",
+			onDisconnect: fn(),
+		},
+	},
+	render: (args) => (
+		<div className="mx-auto h-full w-140 overflow-y-auto px-12 py-10">
+			<EditorHost {...args} />
+		</div>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The editor as a focused settings screen draws it: no rail and no back, a header with the 36 pixel mark, the full name and the connection state, then Connection, Secrets and Advanced stacked under their own headings. Check that the name is drawn once and never cut, and that Save and Remove application still sit beside it.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		await expect(canvas.queryByRole("tab")).toBeNull()
+		const name = canvas.getByRole("heading", { level: 2, name: "Granola" })
+		await expect(canvas.getAllByText("Granola")).toHaveLength(1)
+		await expect(name.scrollWidth).toBeLessThanOrEqual(name.clientWidth)
+		await expect(
+			canvas.getByText("Connected", { selector: "span" }),
+		).toBeVisible()
+		await expect(
+			canvas
+				.getAllByRole("heading", { level: 3 })
+				.map((heading) => heading.textContent)
+				.slice(0, 3),
+		).toEqual(["Connection", "Secrets", "Advanced"])
+		await expect(
+			canvas.getByRole("button", { name: "Save changes" }),
+		).toBeVisible()
+	},
+})

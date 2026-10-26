@@ -6,6 +6,7 @@ import type {
 	BotSkillDraft,
 	BotSkillItem,
 } from "@workspace/ui/components/bot-settings"
+import type { McpServerEditorLayout } from "@workspace/ui/components/bot-settings-dialog/mcp-server-editor-header"
 import { displayNameOf } from "@workspace/ui/components/initials-avatar"
 import type { PluginHistory } from "@workspace/ui/components/plugin-settings/history-panel"
 import type { SettingsPage } from "@workspace/ui/components/plugin-settings/settings-pages"
@@ -71,10 +72,12 @@ type UserSettingsProps = {
 
 type UserSettingsOptions = UserSettingsProps & {
 	isOpen: boolean
+	editorLayout?: McpServerEditorLayout
 }
 
 const useUserSettings = ({
 	isOpen,
+	editorLayout,
 	value,
 	onValueChange,
 	language,
@@ -108,6 +111,7 @@ const useUserSettings = ({
 		...(applications ?? NO_APPLICATIONS),
 		owner: { kind: "profile" },
 		isSettingsOpen: isOpen,
+		editorLayout,
 	})
 	const historySession = useHistorySession({
 		pages,

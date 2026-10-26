@@ -11,6 +11,7 @@ import {
 } from "@workspace/ui/components/bot-settings"
 import type { McpConnectionSection } from "@workspace/ui/components/bot-settings-dialog/mcp-connection"
 import { McpServerEditor } from "@workspace/ui/components/bot-settings-dialog/mcp-server-editor"
+import type { McpServerEditorLayout } from "@workspace/ui/components/bot-settings-dialog/mcp-server-editor-header"
 import type { EnvironmentSection } from "@workspace/ui/components/environment-panel"
 import {
 	ApplicationInstallPage,
@@ -66,6 +67,7 @@ type McpSessionProps = ApplicationsSection & {
 	pages: SettingsPages
 	owner: ApplicationsOwner
 	isSettingsOpen: boolean
+	editorLayout?: McpServerEditorLayout
 }
 
 type McpSession = {
@@ -108,6 +110,7 @@ const useMcpSession = ({
 	catalogue,
 	serverToOpen,
 	isSettingsOpen,
+	editorLayout,
 }: McpSessionProps): McpSession => {
 	const askedServer = isSettingsOpen ? serverToOpen : undefined
 	const [session, setSession] = useState<OpenedServer | null>(null)
@@ -182,6 +185,7 @@ const useMcpSession = ({
 				displayName={opened.displayName}
 				draft={opened.draft}
 				environment={saved ? serverEnvironment : undefined}
+				layout={editorLayout}
 				mark={opened.mark}
 				onBack={() => open(null)}
 				onDelete={saved ? () => remove(saved) : undefined}

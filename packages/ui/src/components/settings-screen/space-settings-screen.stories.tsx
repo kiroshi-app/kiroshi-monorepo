@@ -66,6 +66,7 @@ const MEMBERS = (
 const LINEAR_OPEN = {
 	entry: "mcp",
 	mcpServerToOpen: "linear",
+	serverConnection: { state: "connected", onDisconnect: fn() },
 } as const
 
 const RAIL = <AppRail selected="conversations" user={{ name: "Ada Martin" }} />
@@ -233,9 +234,17 @@ export const LinearApplication = meta.story({
 		).toHaveAttribute("data-connection", "needsAuthorization")
 
 		const main = screen.getByRole("main")
+		const name = within(main).getByRole("heading", {
+			level: 2,
+			name: "Linear",
+		})
+		await expect(name).toBeVisible()
+		await expect(within(main).getAllByText("Linear")).toHaveLength(1)
+		await expect(name.scrollWidth).toBeLessThanOrEqual(name.clientWidth)
+		await expect(within(main).queryByRole("tab")).toBeNull()
 		await expect(
-			within(main).getByRole("heading", { level: 2, name: "Linear" }),
-		).toBeVisible()
+			slotIn(main, "settings-screen-page").getBoundingClientRect().width,
+		).toBe(560)
 
 		await userEvent.click(entryIn(menu, "GitHub Needs authorization"))
 		await expect(args.onMcpServerOpen).toHaveBeenLastCalledWith("github")
@@ -278,6 +287,90 @@ export const BackToTheApplicationsList = meta.story({
 				name: "Applications",
 			}),
 		).toBeVisible()
+	},
+})
+
+export const LeavingUnsavedApplicationEdits = meta.story({
+	args: LINEAR_OPEN,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"`LinearApplication` with an edit not yet saved, then Members picked in the menu. Check that the screen asks with the dialog's own leave wording, that Cancel keeps the page, the edit and the menu selection, and that Leave goes to Members.",
+			},
+		},
+	},
+	play: async ({ args, userEvent }) => {
+		const menu = await menuIn()
+		const main = screen.getByRole("main")
+		const linear = await within(menu).findByRole("button", {
+			name: "Linear Connected",
+		})
+		const field = within(main).getByLabelText("Name")
+		await userEvent.type(field, "-desk")
+
+		await userEvent.click(entryIn(menu, "Members"))
+		const question = await screen.findByRole("alertdialog", {
+			name: "Leave without saving?",
+		})
+		await userEvent.click(
+			within(question).getByRole("button", { name: "Cancel" }),
+		)
+		await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull())
+		await expect(field).toHaveValue("linear-desk")
+		await expect(linear).toHaveAttribute("aria-current", "page")
+		await expect(entryIn(menu, "Members")).not.toHaveAttribute("aria-current")
+		await expect(args.onEntryChange).not.toHaveBeenCalled()
+
+		await userEvent.click(entryIn(menu, "Members"))
+		await userEvent.click(
+			within(
+				await screen.findByRole("alertdialog", {
+					name: "Leave without saving?",
+				}),
+			).getByRole("button", { name: "Leave" }),
+		)
+		await expect(args.onEntryChange).toHaveBeenLastCalledWith("members")
+		await waitFor(() =>
+			expect(entryIn(menu, "Members")).toHaveAttribute("aria-current", "page"),
+		)
+		await expect(
+			within(main).getByRole("heading", { level: 2, name: "Members" }),
+		).toBeVisible()
+	},
+})
+
+export const LeavesASavedApplicationBehind = meta.story({
+	args: LINEAR_OPEN,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"`LinearApplication` with nothing unsaved, then Members, then Applications again. Check that leaving asks nothing and closes the application page, so Applications comes back on its list rather than on Linear.",
+			},
+		},
+	},
+	play: async ({ userEvent }) => {
+		const menu = await menuIn()
+		await within(menu).findByRole("button", { name: "Linear Connected" })
+
+		await userEvent.click(entryIn(menu, "Members"))
+		await expect(screen.queryByRole("alertdialog")).toBeNull()
+		await userEvent.click(entryIn(menu, "Applications"))
+
+		const main = screen.getByRole("main")
+		await waitFor(() =>
+			expect(
+				within(main).getByRole("heading", { level: 2, name: "Applications" }),
+			).toBeVisible(),
+		)
+		await expect(entryIn(menu, "Applications")).toHaveAttribute(
+			"aria-current",
+			"page",
+		)
+		await expect(entryIn(menu, "Linear Connected")).not.toHaveAttribute(
+			"aria-current",
+		)
 	},
 })
 
