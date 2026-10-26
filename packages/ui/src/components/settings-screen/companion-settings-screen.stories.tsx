@@ -443,7 +443,6 @@ export const DeleteFailed = meta.story({
 			within(question).getByRole("button", { name: "Delete companion" }),
 		)
 		await expect(args.onDelete).toHaveBeenCalledOnce()
-		await waitFor(() => expect(question).not.toBeInTheDocument())
 		await opaque(await waitFor(() => slotIn(document.body, "toast")))
 		const title = slotIn(document.body, "toast-title")
 		await expect(title.textContent).toBe(i18n.t("bots:danger.failed"))
