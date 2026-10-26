@@ -67,6 +67,24 @@ describe("the runtime", () => {
 		expect(i18n.t("chat:missions.event.line.dismissed")).toBe("Fermée par vous")
 	})
 
+	it("tells a failed companion deletion from a failed removal from a space, in both languages", () => {
+		expect(i18n.t("bots:danger.failed")).toBe(
+			"Couldn’t delete this companion. Retry.",
+		)
+		expect(i18n.t("bots:danger.failed")).not.toBe(
+			i18n.t("bots:spaces.remove.failed"),
+		)
+
+		activateLanguage("fr")
+
+		expect(i18n.t("bots:danger.failed")).toBe(
+			"Impossible de supprimer ce compagnon. Réessayez.",
+		)
+		expect(i18n.t("bots:danger.failed")).not.toBe(
+			i18n.t("bots:spaces.remove.failed"),
+		)
+	})
+
 	it("counts in the plural forms French takes", () => {
 		activateLanguage("fr")
 

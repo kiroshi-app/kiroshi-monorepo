@@ -1,8 +1,12 @@
 import { useState } from "react"
-import { expect, fn, screen, within } from "storybook/test"
+import { expect, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { slotIn } from "@workspace/storybook/story-utils"
+import {
+	A11Y_FLOATING_FOCUS_GUARDS,
+	opaque,
+	slotIn,
+} from "@workspace/storybook/story-utils"
 import { AppRail } from "@workspace/ui/components/app-rail"
 import {
 	BLANK_BOT_PERMISSIONS,
@@ -12,6 +16,11 @@ import {
 } from "@workspace/ui/components/bot-settings"
 import { BOT_MEMORY } from "@workspace/ui/components/bot-settings-dialog/memory.fixtures"
 import { BOT_ENVIRONMENT } from "@workspace/ui/components/environment.fixtures"
+import {
+	endNotice,
+	NoticeSurface,
+	raiseFailureNotice,
+} from "@workspace/ui/components/notice-surface"
 import {
 	CATALOGUE_APPLICATIONS,
 	MARKED_APPLICATIONS,
@@ -26,6 +35,7 @@ import {
 	CompanionSettingsScreen,
 	type CompanionSettingsScreenProps,
 } from "@workspace/ui/components/settings-screen"
+import { i18n } from "@workspace/ui/lib/i18n"
 
 const BACK_TO_COMPANIONS = "Back to Companions"
 
@@ -391,6 +401,54 @@ export const DangerZone = meta.story({
 			within(question).getByRole("button", { name: "Delete companion" }),
 		)
 		await expect(args.onDelete).toHaveBeenCalledOnce()
+	},
+})
+
+let raisedNotice: string | undefined
+
+export const DeleteFailed = meta.story({
+	args: {
+		entry: "danger",
+		onDelete: fn(() => {
+			raisedNotice = raiseFailureNotice({ title: i18n.t("bots:danger.failed") })
+		}),
+	},
+	render: (args) => (
+		<>
+			<ScreenHost {...args} />
+			<NoticeSurface />
+		</>
+	),
+	beforeEach: () => () => {
+		if (raisedNotice) endNotice(raisedNotice)
+	},
+	parameters: {
+		a11y: A11Y_FLOATING_FOCUS_GUARDS,
+		docs: {
+			description: {
+				story:
+					"The deletion confirmed from the Danger zone failed. Check that the failure notice says the companion couldn't be deleted, not that it couldn't be removed from a space. The app raises it with `raiseFailureNotice` and the catalogue's `bots:danger.failed` copy; the screen only reports the deletion. The `aria-hidden-focus` audit is left to review for the reason given in the NoticeSurface `LongContent` story.",
+			},
+		},
+	},
+	play: async ({ args, userEvent }) => {
+		await menuIn()
+		await userEvent.click(
+			within(screen.getByRole("main")).getByRole("button", {
+				name: "Delete companion",
+			}),
+		)
+		const question = await screen.findByRole("alertdialog")
+		await userEvent.click(
+			within(question).getByRole("button", { name: "Delete companion" }),
+		)
+		await expect(args.onDelete).toHaveBeenCalledOnce()
+		await opaque(await waitFor(() => slotIn(document.body, "toast")))
+		const title = slotIn(document.body, "toast-title")
+		await expect(title.textContent).toBe(i18n.t("bots:danger.failed"))
+		await expect(
+			screen.queryByText(i18n.t("bots:spaces.remove.failed")),
+		).toBeNull()
 	},
 })
 
