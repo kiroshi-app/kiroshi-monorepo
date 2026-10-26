@@ -504,13 +504,14 @@ const WaitingBar = ({
 	className,
 }: WaitingBarProps) => {
 	const { t } = useTranslation("chat")
+	const answerId = useId()
 	const titleId = useId()
 	const questionId = useId()
 
 	return (
 		<button
-			aria-describedby={`${titleId} ${questionId}`}
-			aria-label={t("toolQuestion.waiting.answer")}
+			aria-describedby={questionId}
+			aria-labelledby={`${answerId} ${titleId}`}
 			className={cn(
 				QUESTION_SURFACE_CLASS,
 				"flex cursor-pointer items-center gap-2.5 text-start hover:bg-border active:bg-border",
@@ -520,6 +521,9 @@ const WaitingBar = ({
 			onClick={onExpand}
 			type="button"
 		>
+			<span className="sr-only" id={answerId}>
+				{t("toolQuestion.waiting.answer")}
+			</span>
 			<span
 				aria-hidden="true"
 				className="grid size-4 shrink-0 place-items-center rounded-full bg-warning font-bold text-[11px] text-background leading-none"

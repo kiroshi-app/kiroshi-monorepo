@@ -169,6 +169,10 @@ const LONG_QUESTION: ToolQuestionItem = {
 
 const NORTHWIND_TINT: BotAvatarBlot = "green"
 
+const WAITING_TITLE = "Shoto is waiting on your answer"
+
+const WAITING_BAR_NAME = `${chat.toolQuestion.waiting.answer} ${WAITING_TITLE}`
+
 const ARTBOARD =
 	"Light and dark side by side, in the composer slot of the green Space Northwind, whose bubble colour paints every chosen row. "
 
@@ -618,14 +622,13 @@ export const WaitingBar = meta.story({
 			const style = getComputedStyle(bar)
 			await expect(
 				within(canvasElement).getAllByRole("button", {
-					name: chat.toolQuestion.waiting.answer,
+					name: WAITING_BAR_NAME,
 				})[index],
 			).toBe(bar)
 			await expect(bar.tagName).toBe("BUTTON")
 			await expect(bar.querySelector("button, a, input, [tabindex]")).toBeNull()
-			await expect(bar).toHaveAccessibleDescription(
-				`Shoto is waiting on your answer ${PLAN_QUESTION.question}`,
-			)
+			await expect(bar).toHaveAccessibleName(WAITING_BAR_NAME)
+			await expect(bar).toHaveAccessibleDescription(PLAN_QUESTION.question)
 			await expect(backgroundOf(bar)).toBe(
 				tokenStyleIn(bar, "bg-muted", "backgroundColor"),
 			)
@@ -639,9 +642,9 @@ export const WaitingBar = meta.story({
 			await expect(bar.parentElement).toBe(
 				within(canvasElement).getAllByTestId("space")[index],
 			)
-			await expect(backgroundOf(bar.firstElementChild as HTMLElement)).toBe(
-				tokenStyleIn(bar, "bg-warning", "backgroundColor"),
-			)
+			await expect(
+				backgroundOf(within(bar).getByText(chat.toolQuestion.waiting.mark)),
+			).toBe(tokenStyleIn(bar, "bg-warning", "backgroundColor"))
 			await expect(
 				getComputedStyle(within(bar).getByText(PLAN_QUESTION.question))
 					.whiteSpace,
@@ -777,14 +780,14 @@ export const WaitingBarNarrow = meta.story({
 	},
 	play: async ({ args, canvas, userEvent }) => {
 		const column = canvas.getByTestId("column")
-		const bar = canvas.getByRole("button", {
-			name: chat.toolQuestion.waiting.answer,
-		})
-		const mark = bar.firstElementChild as HTMLElement
-		const title = canvas.getByText("Shoto is waiting on your answer")
+		const bar = canvas.getByRole("button", { name: WAITING_BAR_NAME })
+		const mark = within(bar).getByText(chat.toolQuestion.waiting.mark)
+		const title = canvas.getByText(WAITING_TITLE)
 		const question = canvas.getByText(LONG_QUESTION.question)
 
 		await expect(canvas.getAllByRole("button")).toEqual([bar])
+		await expect(bar).toHaveAccessibleName(WAITING_BAR_NAME)
+		await expect(bar).toHaveAccessibleDescription(LONG_QUESTION.question)
 		await expect(backgroundOf(bar)).toBe(
 			tokenStyleIn(bar, "bg-muted", "backgroundColor"),
 		)

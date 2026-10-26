@@ -417,11 +417,11 @@ describe("ToolQuestion opening focus", () => {
 			minimised: true,
 			onExpand,
 		})
-		await act(async () =>
-			fireEvent.click(
-				screen.getByRole("button", { name: chat.toolQuestion.waiting.answer }),
-			),
-		)
+		const bar = screen.getByRole("button", {
+			name: `${chat.toolQuestion.waiting.answer} ${chat.toolQuestion.waiting.unnamedTitle}`,
+			description: PLAN.question,
+		})
+		await act(async () => fireEvent.click(bar))
 		expect(onExpand).toHaveBeenCalledTimes(1)
 		rerender(
 			<I18nProvider>
