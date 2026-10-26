@@ -107,6 +107,7 @@ const BotRosterRow = ({
 						{...lift.handlersFor(bot.id)}
 						badge={bot.badge}
 						isActive={isSelected}
+						isMiddleClickSelectable
 						isWorking={working}
 						media={<BotRowAvatar bot={bot} />}
 						name={bot.name}

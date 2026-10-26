@@ -71,6 +71,7 @@ interface SidebarMenuRowProps extends SidebarMenuRowElementProps {
 	icon?: ReactNode
 	isIconDecorative?: boolean
 	isActive?: boolean
+	isMiddleClickSelectable?: boolean
 	onSelect?: (modifiers: SidebarClickModifiers) => void
 	className?: string
 	render?: ComponentProps<typeof SidebarMenuButton>["render"]
@@ -83,6 +84,7 @@ const SidebarMenuRow = ({
 	icon,
 	isIconDecorative = true,
 	isActive = false,
+	isMiddleClickSelectable = false,
 	onSelect,
 	className,
 	render,
@@ -122,13 +124,21 @@ const SidebarMenuRow = ({
 			)}
 			data-slot="sidebar-menu-button"
 			isActive={isActive}
-			onAuxClick={(event) => {
-				if (event.button === MIDDLE_BUTTON) select(event)
-			}}
+			onAuxClick={
+				isMiddleClickSelectable
+					? (event) => {
+							if (event.button === MIDDLE_BUTTON) select(event)
+						}
+					: undefined
+			}
 			onClick={select}
-			onMouseDown={(event) => {
-				if (event.button === MIDDLE_BUTTON) event.preventDefault()
-			}}
+			onMouseDown={
+				isMiddleClickSelectable
+					? (event) => {
+							if (event.button === MIDDLE_BUTTON) event.preventDefault()
+						}
+					: undefined
+			}
 			render={render}
 		>
 			{below ? (

@@ -1199,6 +1199,7 @@ navigation-tabs--states
 navigation-tabs--variants
 navigation-userchip--default
 navigation-userchip--long-content
+navigation-userchip--middle-click-ignored
 navigation-userchip--without-name
 navigation-userchip--without-picture
 overlays-companionmenu--default

@@ -79,6 +79,7 @@ const ConversationRosterRow = ({
 						{...lift.handlersFor(conversation.id)}
 						badge={badgeOf(conversation)}
 						isActive={isSelected}
+						isMiddleClickSelectable
 						isWorking={Boolean(workingBotOf(conversation))}
 						media={
 							<ConversationSubjectIcon
