@@ -620,9 +620,7 @@ it("adds the row of a new Space on the + of Your spaces", async () => {
 
 it("opens the user settings on Back to your settings when the Space settings are the first entry of the history", async () => {
 	const space = await seedStore()
-	const router = createWorkspaceRouter(
-		createMemoryHistory({ initialEntries: ["/"] }),
-	)
+	const router = createWorkspaceRouter()
 	render(createElement(RouterProvider, { router }), {
 		wrapper: createQueryTestWrapper().wrapper,
 	})
