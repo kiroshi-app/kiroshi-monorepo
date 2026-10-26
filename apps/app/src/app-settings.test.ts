@@ -306,6 +306,43 @@ it("shows the page of the application its sub-entry selects", async () => {
 	expect(screen.getByRole("heading", { level: 2, name: "ledger" })).toBeTruthy()
 })
 
+it("asks before a rail press leaves an unsaved application, and leaves once on Leave", async () => {
+	await mountApp(twoSpaceApplications)
+	await press(gearOf())
+	await openApplications()
+	await press(menuEntryOf(/^ledger/))
+	const nameField = () =>
+		screen.getByLabelText<HTMLInputElement>(
+			i18n.t("bots:applications.name.label"),
+		)
+	fireEvent.change(nameField(), { target: { value: "ledger-desk" } })
+	const leaveQuestion = () =>
+		screen.getByRole("alertdialog", {
+			name: i18n.t("bots:applications.leave.title"),
+		})
+
+	await press(conversationsEntryOf())
+	await press(
+		within(leaveQuestion()).getByRole("button", {
+			name: i18n.t("common:confirm.cancel"),
+		}),
+	)
+
+	expect(screen.queryByRole("alertdialog")).toBeNull()
+	expect(nameField().value).toBe("ledger-desk")
+	expect(menuEntryOf(/^ledger/).getAttribute("aria-current")).toBe("page")
+
+	await press(conversationsEntryOf())
+	await press(
+		within(leaveQuestion()).getByRole("button", {
+			name: i18n.t("bots:applications.leave.action"),
+		}),
+	)
+
+	expect(shownSettingsOf()).toBeNull()
+	expect(isMarked(conversationsEntryOf())).toBe(true)
+})
+
 it("lists the application the person installed under Applications of the user settings", async () => {
 	await mountApp(oneUserApplication)
 	await press(avatarOf())

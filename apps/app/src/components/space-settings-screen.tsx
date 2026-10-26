@@ -1,7 +1,10 @@
 import type { ReactNode } from "react"
 
 import type { EnvironmentWrite } from "@workspace/ui/components/environment-panel"
-import { SettingsScreen } from "@workspace/ui/components/settings-screen"
+import {
+	SettingsScreen,
+	type SettingsScreenRequestLeave,
+} from "@workspace/ui/components/settings-screen"
 import type { SpaceSettingsValue } from "@workspace/ui/components/space-settings"
 import {
 	MembersPanel,
@@ -32,7 +35,7 @@ const memberViewOf = (
 type SpaceSettingsScreenProps = {
 	core: WorkspaceCore
 	panels: SettingsPanels
-	rail: ReactNode
+	rail: (requestLeave: SettingsScreenRequestLeave) => ReactNode
 	scopes: ApplicationScopes
 }
 

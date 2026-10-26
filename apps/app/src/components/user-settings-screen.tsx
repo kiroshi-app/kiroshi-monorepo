@@ -1,7 +1,10 @@
 import type { ReactNode } from "react"
 
 import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
-import { SettingsScreen } from "@workspace/ui/components/settings-screen"
+import {
+	SettingsScreen,
+	type SettingsScreenRequestLeave,
+} from "@workspace/ui/components/settings-screen"
 import type { AboutFieldsProps } from "@workspace/ui/components/user-settings-dialog/about-fields"
 
 import { signOutLeavingOf, useAccount } from "@/lib/account/use-account"
@@ -24,7 +27,7 @@ type UserSettingsScreenProps = {
 	core: WorkspaceCore
 	overlay: WorkspaceOverlay
 	panels: SettingsPanels
-	rail: ReactNode
+	rail: (requestLeave: SettingsScreenRequestLeave) => ReactNode
 	scopes: ApplicationScopes
 }
 

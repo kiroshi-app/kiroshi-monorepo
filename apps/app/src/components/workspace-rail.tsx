@@ -1,4 +1,5 @@
 import { AppRail } from "@workspace/ui/components/app-rail"
+import type { SettingsScreenRequestLeave } from "@workspace/ui/components/settings-screen"
 
 import type { SidebarPanel } from "@/lib/user/use-sidebar-tab"
 import type { RosterLines } from "@/lib/workspace/use-roster-lines"
@@ -23,17 +24,22 @@ export type WorkspaceRailProps = {
 	sidebarTab: ReturnType<typeof useSidebarPanelSwitch>
 }
 
+type WorkspaceRailLeave = {
+	requestLeave: SettingsScreenRequestLeave
+}
+
 export const WorkspaceRail = ({
 	collapsedSectionIds,
 	core,
 	drivers,
 	overlay,
 	panels,
+	requestLeave,
 	rosterLines,
 	rosterView,
 	sidebarMissions,
 	sidebarTab,
-}: WorkspaceRailProps) => {
+}: WorkspaceRailProps & WorkspaceRailLeave) => {
 	const rosterLists = useRosterLists({
 		core,
 		drivers,
@@ -56,10 +62,12 @@ export const WorkspaceRail = ({
 	return (
 		<AppRail
 			dots={rosterLists.railSignals}
-			onOpenSpaceSettings={panels.openSpaceSettings}
-			onOpenYou={panels.openUserSettings}
-			onSelectConversations={() => leaveSettingsFor("conversations")}
-			onSelectMissions={() => leaveSettingsFor("missions")}
+			onOpenSpaceSettings={() => requestLeave(panels.openSpaceSettings)}
+			onOpenYou={() => requestLeave(panels.openUserSettings)}
+			onSelectConversations={() =>
+				requestLeave(() => leaveSettingsFor("conversations"))
+			}
+			onSelectMissions={() => requestLeave(() => leaveSettingsFor("missions"))}
 			openSettings={panels.openSettings}
 			selected={sidebarTab.openTab}
 			updateBadge={rosterLines.updateBadge}
