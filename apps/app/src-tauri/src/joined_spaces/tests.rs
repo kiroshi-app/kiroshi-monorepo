@@ -1241,11 +1241,18 @@ fn a_leave_the_relay_fails_keeps_the_space_connectable() {
 
 const SIMULATED: Duration = Duration::from_secs(600);
 const SIMULATED_TICK: Duration = Duration::from_millis(10);
+const FIRST_ATTEMPT_YIELDS: usize = 5_000_000;
 
 async fn first_attempt_settled(member: &Member) {
-	while member.relay.room().upgrades.is_empty() && member.last_wait().is_none() {
+	for _ in 0..FIRST_ATTEMPT_YIELDS {
+		if !member.relay.room().upgrades.is_empty() || member.last_wait().is_some() {
+			return;
+		}
 		tokio::task::yield_now().await;
 	}
+	panic!(
+		"the first upgrade never reached the relay and no wait was recorded within {FIRST_ATTEMPT_YIELDS} yields"
+	);
 }
 
 async fn waited_for_ten_minutes(member: &Member) {
