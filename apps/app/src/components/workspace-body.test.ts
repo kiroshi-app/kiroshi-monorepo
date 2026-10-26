@@ -337,11 +337,6 @@ const missionHeader = () =>
 const missionHeaderSkeleton = () =>
 	document.querySelector('[data-slot="mission-header-skeleton"]')
 
-const threadAppHeaders = () =>
-	document.querySelectorAll(
-		'[data-slot="chat-layout"] [data-slot="app-header"]',
-	)
-
 const framedSlot = (frame: string, slot: string) =>
 	document.querySelector(`[data-slot="${frame}"] [data-slot="${slot}"]`)
 
@@ -525,11 +520,12 @@ describe("WorkspaceBody missions", () => {
 
 		await openMission()
 
-		const [header, ...otherHeaders] = threadAppHeaders()
-		expect(otherHeaders).toHaveLength(0)
+		expect(threadSlot("mission-header-skeleton")).not.toBeNull()
 		expect(
-			header?.closest('[data-slot="mission-header-skeleton"]'),
-		).toBeTruthy()
+			document.querySelectorAll(
+				'[data-slot="chat-layout"] [data-slot="app-header"]',
+			),
+		).toHaveLength(1)
 		expect(
 			document.querySelector('[data-slot="skeleton-agent-bubble"]'),
 		).toBeNull()
