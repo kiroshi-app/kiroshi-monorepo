@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::io::ErrorKind;
 use std::net::Ipv4Addr;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -1338,6 +1339,15 @@ async fn proxy_closed(connection: &JoinedSpaceConnection) -> bool {
 	tokio::time::timeout(PATIENCE, refused).await.is_ok()
 }
 
+async fn port_held(connection: &JoinedSpaceConnection) -> Option<TcpListener> {
+	let address = connection.host_url.trim_start_matches("http://");
+	match TcpListener::bind(address).await {
+		Ok(listener) => Some(listener),
+		Err(error) if error.kind() == ErrorKind::AddrInUse => None,
+		Err(error) => panic!("the closed proxy port does not bind again: {error}"),
+	}
+}
+
 fn stopping(harness: &Harness, id: &str) -> watch::Receiver<bool> {
 	harness.app.state::<RelayGuests>().stopping(id).expect("a guest runs")
 }
@@ -1417,6 +1427,7 @@ fn a_guest_left_without_an_account_ends_closes_its_proxy_and_keeps_the_entry() {
 
 		assert!(guest_ended(&harness, &id, stopping).await, "the guest still runs");
 		assert!(proxy_closed(&connection).await, "the proxy still answers");
+		let _first_port = port_held(&connection).await;
 		assert_eq!(harness.stored().await.len(), 1);
 		assert!(harness.heard(REMOVED_EVENT).is_empty());
 		assert!(harness.members.try_recv().is_err());
@@ -1443,6 +1454,7 @@ fn a_guest_refused_401_signs_the_account_out_on_site_and_a_new_sign_in_connects_
 
 		assert!(guest_ended(&harness, &id, stopping).await, "the guest still runs");
 		assert!(proxy_closed(&first).await, "the proxy still answers");
+		let _first_port = port_held(&first).await;
 		assert!(harness.stored_until(<[JoinedSpace]>::is_empty).await.is_empty());
 		let session = harness.app.state::<AccountSession>();
 		let signed_out_on_site =
