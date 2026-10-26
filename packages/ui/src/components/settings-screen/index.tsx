@@ -36,6 +36,7 @@ import {
 import type { SettingsEntry } from "@workspace/ui/components/settings-rail"
 import {
 	APPLICATIONS_ENTRY,
+	COMPANIONS_ENTRY,
 	type SpaceSettingsProps,
 	useSpaceSettings,
 } from "@workspace/ui/components/space-settings-dialog/use-space-settings"
@@ -53,6 +54,8 @@ const HEADER_AVATAR_SIZE = 36
 const PAGE = "mx-auto flex w-full max-w-160 flex-col gap-4 px-14 py-12"
 
 const APPLICATION_PAGE = "max-w-140 px-12 py-10"
+
+const COMPANIONS_PAGE = "max-w-188"
 
 type PageSessions = {
 	skills: SettingsSession
@@ -129,6 +132,7 @@ const SettingsScreenLayout = ({
 	const page = shownSession && pages.top ? shownSession.pages[pages.top] : null
 	const isApplicationsShown = shown.value === APPLICATIONS_ENTRY
 	const isApplicationOpen = isApplicationsShown && pages.top === "server"
+	const isCompanionsShown = shown.value === COMPANIONS_ENTRY
 	const openedName = isApplicationOpen
 		? sessions.applications.openedName
 		: undefined
@@ -161,6 +165,7 @@ const SettingsScreenLayout = ({
 
 	const entryFor = (item: SettingsEntry) => (
 		<SettingsMenuEntry
+			count={item.count}
 			hasIndicator={item.hasIndicator}
 			icon={item.icon}
 			isDanger={item.isDanger}
@@ -215,11 +220,15 @@ const SettingsScreenLayout = ({
 				ref={column}
 			>
 				<div
-					className={cn(PAGE, isApplicationOpen && APPLICATION_PAGE)}
+					className={cn(
+						PAGE,
+						isApplicationOpen && APPLICATION_PAGE,
+						isCompanionsShown && COMPANIONS_PAGE,
+					)}
 					data-entry={shown.value}
 					data-slot="settings-screen-page"
 				>
-					{isApplicationOpen ? null : (
+					{isApplicationOpen || isCompanionsShown ? null : (
 						<h2 className="font-medium text-muted-foreground text-sm">
 							{shown.label}
 						</h2>

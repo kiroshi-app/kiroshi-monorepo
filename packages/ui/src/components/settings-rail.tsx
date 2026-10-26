@@ -178,6 +178,7 @@ type SettingsEntry = {
 	layout: SettingsEntryLayout
 	isDanger?: boolean
 	hasIndicator?: boolean
+	count?: number
 }
 
 type SettingsEntriesProps = {
