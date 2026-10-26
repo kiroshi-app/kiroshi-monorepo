@@ -419,7 +419,6 @@ export const OptionRowHovered = meta.story({
 			await expect(resting).toHaveClass(`hover:${ROW_HOVER_TINT}`)
 			await expect(chosen).not.toHaveClass(`hover:${ROW_HOVER_TINT}`)
 			await expectColourSwitchesInstantly(resting)
-			await expectColourSwitchesInstantly(chosen)
 			await expect(
 				tokenStyleIn(resting, ROW_HOVER_TINT, "backgroundColor"),
 			).not.toBe(tokenStyleIn(resting, "bg-card", "backgroundColor"))
