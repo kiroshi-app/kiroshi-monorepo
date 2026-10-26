@@ -208,6 +208,7 @@ export const Companions = meta.story({
 	globals: { theme: "dark" },
 	args: {
 		entry: "companions",
+		value: { name: "Studio", colour: "blue" },
 		companions: {
 			companions: SPACE_COMPANIONS,
 			onSelect: fn(),

@@ -6,10 +6,10 @@ const JUNIPER: CompanionSummary = {
 	blot: "purple",
 	title: "Writer",
 	instructions:
-		"Drafts release notes, changelogs and announcement posts from merged pull requests. Keeps the tone plain, the sentences short, and asks before publishing anything.",
+		"You write release notes and changelogs for the Studio team. Group changes by area, link every pull request, and keep each entry to one plain sentence a customer can read.",
 	skillsCount: 3,
 	applicationsCount: 2,
-	permissionMode: "default",
+	permissionMode: "acceptEdits",
 }
 
 const ATLAS: CompanionSummary = {
@@ -18,8 +18,8 @@ const ATLAS: CompanionSummary = {
 	blot: "blue",
 	title: "Planner",
 	instructions:
-		"Turns a goal into missions with owners and deadlines, then checks in on each one every morning.",
-	skillsCount: 1,
+		"You turn a goal into a plan the team can run: milestones, owners and the first three steps.",
+	skillsCount: 5,
 	applicationsCount: 1,
 	permissionMode: "plan",
 }
@@ -30,10 +30,10 @@ const PICO: CompanionSummary = {
 	blot: "green",
 	title: "Builder",
 	instructions:
-		"Writes and fixes code in the desktop app, runs the tests before handing anything back.",
-	skillsCount: 5,
-	applicationsCount: 0,
-	permissionMode: "acceptEdits",
+		"You ship small changes to the Studio site. Run the checks before you say it works.",
+	skillsCount: 8,
+	applicationsCount: 3,
+	permissionMode: "default",
 }
 
 const MIRA: CompanionSummary = {
@@ -42,10 +42,10 @@ const MIRA: CompanionSummary = {
 	blot: "pink",
 	title: "Designer",
 	instructions:
-		"Reviews screens against the design system and suggests the smallest change that fixes spacing, colour or type.",
+		"You draw screens from what the product really does, and name every state you leave out.",
 	skillsCount: 2,
-	applicationsCount: 3,
-	permissionMode: "auto",
+	applicationsCount: 0,
+	permissionMode: "acceptEdits",
 }
 
 const SPACE_COMPANIONS = [JUNIPER, ATLAS, PICO, MIRA]

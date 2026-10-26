@@ -1,7 +1,11 @@
-import { expect, fn, within } from "storybook/test"
+import { expect, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { slotIn, slotsIn } from "@workspace/storybook/story-utils"
+import {
+	isInBrowserRunner,
+	slotIn,
+	slotsIn,
+} from "@workspace/storybook/story-utils"
 import {
 	JUNIPER,
 	SPACE_COMPANIONS,
@@ -11,6 +15,20 @@ import { CompanionsSection } from "@workspace/ui/components/space-settings-dialo
 const CARD_WIDTH = 312
 
 const cardsIn = (root: HTMLElement) => slotsIn(root, "companion-card")
+
+const backgroundOf = (element: Element) =>
+	getComputedStyle(element).backgroundColor
+
+const mutedSurfaceIn = (root: HTMLElement) => {
+	const probe = document.createElement("span")
+	probe.className = "bg-muted"
+	root.append(probe)
+	const background = backgroundOf(probe)
+	probe.remove()
+	return background
+}
+
+const realPointer = async () => (await import("vitest/browser")).userEvent
 
 const meta = preview.meta({
 	title: "Settings/Space/CompanionsSection",
@@ -41,6 +59,7 @@ const meta = preview.meta({
 
 export const FourCompanions = meta.story({
 	globals: { theme: "dark" },
+	args: { spaceName: "Studio" },
 	parameters: {
 		docs: {
 			description: {
@@ -59,14 +78,16 @@ export const FourCompanions = meta.story({
 		).toBeVisible()
 		await expect(
 			canvas.getByText(
-				"Every companion in Release desk. Pick one to change how it works.",
+				"Every companion in Studio. Pick one to change how it works.",
 			),
 		).toBeVisible()
 		await expect(canvas.getByText("3 skills · 2 applications")).toBeVisible()
-		await expect(canvas.getByText("1 skill · 1 application")).toBeVisible()
-		await expect(canvas.getByText("5 skills · no applications")).toBeVisible()
-		await expect(canvas.getByText("Ask every time")).toBeVisible()
+		await expect(canvas.getByText("5 skills · 1 application")).toBeVisible()
+		await expect(canvas.getByText("8 skills · 3 applications")).toBeVisible()
+		await expect(canvas.getByText("2 skills · no applications")).toBeVisible()
+		await expect(canvas.getAllByText("Accept edits")).toHaveLength(2)
 		await expect(canvas.getByText("Plan first")).toBeVisible()
+		await expect(canvas.getByText("Ask every time")).toBeVisible()
 
 		for (const card of cards) {
 			await expect(card.getBoundingClientRect().width).toBe(CARD_WIDTH)
@@ -146,15 +167,26 @@ export const HoveredCard = meta.story({
 		docs: {
 			description: {
 				story:
-					"Juniper under the pointer, as drawn on H01. Check that its card sits on the full muted surface while the others keep the lighter one, with no colour transition.",
+					"Juniper under the pointer, as drawn on H01. Check that its card sits on the full muted surface while the others keep the lighter one, with no colour transition. The play hovers with a real pointer, which needs the Vitest browser runner; in Storybook, hover by hand.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
-		const [hovered] = cardsIn(canvasElement)
+		const [hovered, rest] = cardsIn(canvasElement)
+		const muted = mutedSurfaceIn(canvasElement)
 
-		await expect(hovered).toHaveClass("bg-muted/40", "hover:bg-muted")
 		await expect(getComputedStyle(hovered).transitionDuration).toBe("0s")
+		if (!isInBrowserRunner()) return
+
+		const pointer = await realPointer()
+		try {
+			await pointer.hover(hovered)
+			await waitFor(() => expect(hovered.matches(":hover")).toBe(true))
+			await expect(backgroundOf(hovered)).toBe(muted)
+			await expect(backgroundOf(rest)).not.toBe(muted)
+		} finally {
+			await pointer.unhover(hovered)
+		}
 	},
 })
 
@@ -209,6 +241,15 @@ export const LongNameAndTitle = meta.story({
 		await expect(card.getBoundingClientRect().width).toBe(CARD_WIDTH)
 		await expect(name.scrollWidth).toBeGreaterThan(name.clientWidth)
 		await expect(name.getBoundingClientRect().height).toBe(20)
+		await expect(title.scrollWidth).toBeGreaterThan(title.clientWidth)
+		await expect(getComputedStyle(title).textOverflow).toBe("ellipsis")
+		await expect(getComputedStyle(title).whiteSpace).toBe("nowrap")
+		await expect(title.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+			name.getBoundingClientRect().top,
+		)
+		await expect(title.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+			name.getBoundingClientRect().bottom,
+		)
 		await expect(title.getBoundingClientRect().right).toBeLessThanOrEqual(
 			card.getBoundingClientRect().right,
 		)

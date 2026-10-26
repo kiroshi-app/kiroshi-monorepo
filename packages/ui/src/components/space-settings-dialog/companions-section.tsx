@@ -62,7 +62,7 @@ const CompanionCard = ({ companion, onSelect }: CompanionCardProps) => {
 					</span>
 				</span>
 				<span
-					className="line-clamp-2 h-10 wrap-break-word text-compact text-secondary-foreground leading-5"
+					className="line-clamp-2 h-10 wrap-break-word text-compact text-foreground/85 leading-5"
 					data-slot="companion-card-excerpt"
 				>
 					{companion.instructions}
