@@ -281,14 +281,6 @@ const verticalCentreOf = (element: HTMLElement) => {
 const resizeHandleIn = (canvas: ReturnType<typeof within>) =>
 	canvas.getByRole("separator", { name: "Resize sidebar" })
 
-const glyphInsetOf = (control: HTMLElement, host: HTMLElement) => {
-	const glyph = control.querySelector("svg")
-	if (!glyph) throw new Error("This control draws no icon")
-	return Math.round(
-		host.getBoundingClientRect().right - glyph.getBoundingClientRect().right,
-	)
-}
-
 const renderInShell = (args: RoutinesPanelProps) => (
 	<WorkspaceShell sidebar={WORKSPACE_SIDEBAR}>
 		<PanelHost {...args} />
@@ -547,16 +539,14 @@ export const Toggling = meta.story({
 		docs: {
 			description: {
 				story:
-					"The way in and the way out, each in its own place. Check that the control in the app header opens the panel and then leaves the header, that the icon that closes it again sits on the same line the opener's icon sat on and the same distance in from the frame, once the thread card's own gutter is counted — the two controls are the same size, so the icons land together rather than the boxes around them — the two read as one control moving between two homes rather than two controls at two positions — that opening hands the keyboard to the close control inside the panel rather than dropping it on the body, that this control closes the panel, and that closing hands the keyboard back to the control in the app header. " +
+					"The way in and the way out, each in its own place. Check that the control in the app header opens the panel and then leaves the header, that the icon that closes it again sits on the same line the opener's icon sat on, in the column of the routine rows' delete icons rather than the opener's distance from the frame, that opening hands the keyboard to the close control inside the panel rather than dropping it on the body, that this control closes the panel, and that closing hands the keyboard back to the control in the app header. " +
 					MOUNTED_BY_THE_THREAD,
 			},
 		},
 	},
-	play: async ({ args, canvas, canvasElement, userEvent }) => {
+	play: async ({ args, canvas, userEvent }) => {
 		const opener = canvas.getByRole("button", { name: "Toggle activity" })
 		const openerCentre = verticalCentreOf(opener)
-		const [, threadCard] = cardsIn(canvasElement)
-		const openerGlyphInset = glyphInsetOf(opener, threadCard)
 
 		await userEvent.click(opener)
 		await expect(args.onOpenChange).toHaveBeenCalledWith(true)
@@ -569,7 +559,6 @@ export const Toggling = meta.story({
 
 		const close = within(panel).getByRole("button", { name: "Close activity" })
 		await expect(verticalCentreOf(close)).toBe(openerCentre)
-		await expect(glyphInsetOf(close, panel)).toBe(openerGlyphInset)
 		await waitFor(() => expect(close).toHaveFocus(), FRAME_POLL)
 
 		await userEvent.click(close)
@@ -1408,6 +1397,189 @@ export const OnShellSurfaceClosedDark = meta.story({
 	render: renderInShell,
 	play: async ({ canvasElement }) => {
 		await expectShellSurfaceWithoutPanel(canvasElement)
+	},
+})
+
+type InlineInset = { start: number; end: number }
+
+type ContentInset = InlineInset & { top: number }
+
+type ThreadInsets = {
+	card: { top: number; end: number; bottom: number }
+	transcript: ContentInset
+	foot: ContentInset
+}
+
+const contentInsetIn = (frame: DOMRect, element: HTMLElement) => {
+	const box = element.getBoundingClientRect()
+	const style = getComputedStyle(element)
+	return {
+		start: box.left + Number.parseFloat(style.paddingInlineStart) - frame.left,
+		end: frame.right - box.right + Number.parseFloat(style.paddingInlineEnd),
+		top: box.top + Number.parseFloat(style.paddingTop) - frame.top,
+	}
+}
+
+const composerFootIn = (layout: HTMLElement) => {
+	const foot = Array.from(layout.children).find((child) =>
+		child.querySelector("textarea"),
+	)
+	if (!(foot instanceof HTMLElement)) {
+		throw new Error("This thread draws no composer foot")
+	}
+	return foot
+}
+
+const threadInsetsIn = (canvasElement: HTMLElement): ThreadInsets => {
+	const [shellCard, threadCard] = cardsIn(canvasElement)
+	const card = shellCard.getBoundingClientRect()
+	const frame = threadCard.getBoundingClientRect()
+	const layout = slotIn(threadCard, "chat-layout")
+	return {
+		card: {
+			top: card.top,
+			end: window.innerWidth - card.right,
+			bottom: window.innerHeight - card.bottom,
+		},
+		transcript: contentInsetIn(
+			frame,
+			slotIn(layout, "message-scroller-content"),
+		),
+		foot: contentInsetIn(frame, composerFootIn(layout)),
+	}
+}
+
+const surfaceEdgesOf = (panel: HTMLElement) => {
+	const surface = panelSurfaceIn(panel)
+	const box = surface.getBoundingClientRect()
+	const edge = getComputedStyle(surface)
+	return new DOMRect(
+		box.left + Number.parseFloat(edge.borderInlineStartWidth),
+		box.top,
+		box.width -
+			Number.parseFloat(edge.borderInlineStartWidth) -
+			Number.parseFloat(edge.borderInlineEndWidth),
+		box.height,
+	)
+}
+
+const panelBodyInsetIn = (panel: HTMLElement): InlineInset => {
+	const { start, end } = contentInsetIn(
+		surfaceEdgesOf(panel),
+		slotIn(panel, "sidebar-content"),
+	)
+	return { start, end }
+}
+
+const centreXOf = (element: Element) => {
+	const box = element.getBoundingClientRect()
+	return box.left + box.width / 2
+}
+
+const expectWithinAPixel = async (actual: number, expected: number) => {
+	await expect(Math.abs(actual - expected)).toBeLessThanOrEqual(1)
+}
+
+const iconOf = (control: HTMLElement) => {
+	const glyph = control.querySelector("svg")
+	if (!glyph) throw new Error("This control draws no icon")
+	return glyph
+}
+
+const expectBodyInsetUnderHeader = async (panel: HTMLElement) => {
+	const header = slotIn(panel, "sidebar-header").getBoundingClientRect()
+	const first = slotIn(panel, "sidebar-content").firstElementChild
+	if (!first) throw new Error("This panel body holds nothing")
+	await expectWithinAPixel(
+		first.getBoundingClientRect().top - header.bottom,
+		shellInset(),
+	)
+}
+
+const expectRowsOnThePanelInsetRule = async (
+	panel: HTMLElement,
+	headerTitleStart: number,
+) => {
+	const inset = shellInset()
+	const surface = surfaceEdgesOf(panel)
+	const body = slotIn(panel, "sidebar-content")
+	const [row] = slotsIn(panel, "routine-row")
+	if (!row) throw new Error("This panel lists no routine")
+	const card = row.getBoundingClientRect()
+	const titleId = within(row)
+		.getByRole("switch")
+		.getAttribute("aria-labelledby")
+	const title = titleId && row.ownerDocument.getElementById(titleId)
+	if (!title) throw new Error("This routine row names no title")
+	const remove = within(row).getByRole("button", { name: /^Delete / })
+	const close = within(panel).getByRole("button", { name: "Close activity" })
+
+	await expectBodyInsetUnderHeader(panel)
+	await expectWithinAPixel(card.left - surface.left, inset)
+	await expectWithinAPixel(surface.right - card.right, inset)
+	await expectWithinAPixel(title.getBoundingClientRect().left, headerTitleStart)
+	await expectWithinAPixel(centreXOf(iconOf(close)), centreXOf(iconOf(remove)))
+	await expect(body.scrollHeight).toBeLessThanOrEqual(body.clientHeight)
+	await expectWithinAPixel(
+		surface.bottom -
+			body.getBoundingClientRect().bottom +
+			Number.parseFloat(getComputedStyle(body).paddingBlockEnd),
+		inset,
+	)
+}
+
+const expectOneInsetRuleOnShell = async (
+	canvasElement: HTMLElement,
+	userEvent: { click: (element: Element) => Promise<void> },
+) => {
+	const canvas = within(canvasElement)
+	const closed = threadInsetsIn(canvasElement)
+
+	await userEvent.click(canvas.getByRole("button", { name: "Toggle activity" }))
+	const panel = await canvas.findByRole("complementary", { name: "Activity" })
+	await expectShellSurfaceAround(canvasElement)
+
+	const opened = threadInsetsIn(canvasElement)
+	await expect(opened).toEqual(closed)
+	await expect(panelBodyInsetIn(panel)).toEqual({
+		start: opened.foot.start,
+		end: opened.foot.end,
+	})
+	await expectBodyInsetUnderHeader(panel)
+	const headerTitleStart = within(slotIn(panel, "sidebar-header"))
+		.getByRole("heading")
+		.getBoundingClientRect().left
+
+	await openRoutines(canvasElement, userEvent)
+	await within(panel).findByRole("heading", { name: "Routines" })
+	await expectRowsOnThePanelInsetRule(panel, headerTitleStart)
+}
+
+const ONE_INSET_RULE_ON_SHELL =
+	"The thread opens its panel inside the shell, and nothing it already drew moves: the shell card keeps its distance from the top, the trailing and the bottom edges of the window, the transcript keeps its inset from the thread card and the composer its own. Inside the panel, cards line up with cards and text with text: the panel body takes the composer's inset from its surface on every side, the routine cards sit that inset in from the surface edges, the header title starts where a routine title starts, and the close icon sits on the same line as each row's delete icon. Check the conversation and the composer hold still as the panel opens, that the first item sits one shell inset under the header, and that the Routines list keeps the composer's inset above the bottom of the panel. Pick `OnShellSurfaceOpen` for the frames the two surfaces draw. `apps/app/src/App.tsx:935` is the shell, and `apps/app/src/components/thread-routines.tsx:107` the panel inside it."
+
+export const OnShellSurfaceInsets = meta.story({
+	args: { isOpen: false },
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: { description: { story: ONE_INSET_RULE_ON_SHELL } },
+	},
+	render: renderInShell,
+	play: async ({ canvasElement, userEvent }) => {
+		await expectOneInsetRuleOnShell(canvasElement, userEvent)
+	},
+})
+
+export const OnShellSurfaceInsetsDark = meta.story({
+	args: { isOpen: false },
+	globals: { theme: "dark" },
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: { description: { story: ONE_INSET_RULE_ON_SHELL } },
+	},
+	render: renderInShell,
+	play: async ({ canvasElement, userEvent }) => {
+		await expectOneInsetRuleOnShell(canvasElement, userEvent)
 	},
 })
 
