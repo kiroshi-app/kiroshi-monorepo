@@ -1,7 +1,9 @@
+import type { ComponentProps } from "react"
 import { expect, fn } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
+	COLUMN_WIDTH_CAP,
 	probedStyleOf,
 	slotIn,
 	tokenLengthOf,
@@ -33,7 +35,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The page frame every screen shares: a header slot rendered as given, a content column carrying the transcript padding, and a footer slot inset like the composer. The column is a plain scroll column by default; a screen that brings its own scroll container, as ThreadLayout does with Transcript, passes `scroller` and receives the column classes to put on its scrolled content. `centered` caps the column and centres it in a wider card.",
+					"The page frame every screen shares: a header slot rendered as given, a content column carrying the transcript padding, and a footer slot inset like the composer. The column is a plain scroll column by default; a screen that brings its own scroll container, as ThreadLayout does with Transcript, passes `scroller` and receives the column classes to put on its scrolled content. `width` picks the column: `full`, the default, spans the card; `column` caps it at 800px and centres it in a wider card.",
 			},
 		},
 	},
@@ -117,41 +119,69 @@ export const HeaderContentAndFooter = meta.story({
 	},
 })
 
-export const CenteredInWideCard = meta.story({
-	args: { centered: true, children: CONTENT },
-	render: (args) => (
-		<div style={{ inlineSize: WIDE_CARD }}>
-			<SidebarProvider>
-				<ContentCard isLandmark={false}>
-					<ScreenLayout {...args} />
-				</ContentCard>
-			</SidebarProvider>
-		</div>
-	),
+const inWideCard = (args: ComponentProps<typeof ScreenLayout>) => (
+	<div style={{ inlineSize: WIDE_CARD }}>
+		<SidebarProvider>
+			<ContentCard isLandmark={false}>
+				<ScreenLayout {...args} />
+			</ContentCard>
+		</SidebarProvider>
+	</div>
+)
+
+const boxesIn = (canvasElement: HTMLElement) => {
+	const card = canvasElement.querySelector<HTMLElement>("[data-content-card]")
+	if (!card) throw new globalThis.Error("The layout sits in no card")
+
+	return {
+		card: card.getBoundingClientRect(),
+		column: slotIn(
+			canvasElement,
+			"screen-layout-column",
+		).getBoundingClientRect(),
+		scroller: slotIn(canvasElement, "screen-layout-scroller"),
+	}
+}
+
+export const ColumnWidthInWideCard = meta.story({
+	args: { width: "column", children: CONTENT },
+	render: inWideCard,
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Reach for this for a reading screen in a card wider than the column cap. Check that the column stops at its max width with equal room on both sides, and that the frame wears the card surface.",
+					"Reach for this for a form or reading page in a card wider than the column cap. Check that the column stops at 800px with equal room on both sides, and that the frame wears the card surface.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
-		const layout = layoutIn(canvasElement)
-		const card = canvasElement.querySelector<HTMLElement>("[data-content-card]")
-		if (!card) throw new globalThis.Error("The layout sits in no card")
-		const column = slotIn(canvasElement, "screen-layout-column")
-		const scroller = slotIn(canvasElement, "screen-layout-scroller")
+		const { card, column } = boxesIn(canvasElement)
+		const leftGap = column.left - card.left
+		const rightGap = card.right - column.right
 
-		const cardBox = card.getBoundingClientRect()
-		const columnBox = column.getBoundingClientRect()
-		const leftGap = columnBox.left - cardBox.left
-		const rightGap = cardBox.right - columnBox.right
-
-		await expect(columnBox.width).toBeLessThan(scroller.clientWidth)
+		await expect(column.width).toBe(COLUMN_WIDTH_CAP)
 		await expect(Math.abs(leftGap - rightGap)).toBeLessThanOrEqual(1)
-		await expect(getComputedStyle(layout).backgroundColor).toBe(
-			probedStyleOf("bg-card", "backgroundColor"),
-		)
+		await expect(
+			getComputedStyle(layoutIn(canvasElement)).backgroundColor,
+		).toBe(probedStyleOf("bg-card", "backgroundColor"))
+	},
+})
+
+export const FullWidthInWideCard = meta.story({
+	args: { width: "full", children: CONTENT },
+	render: inWideCard,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this for a list or grid page in a card wider than the column cap. Check that the column takes the whole width of the card, past the 800px cap of the column width.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const { column, scroller } = boxesIn(canvasElement)
+
+		await expect(Math.round(column.width)).toBe(scroller.clientWidth)
+		await expect(column.width).toBeGreaterThan(COLUMN_WIDTH_CAP)
 	},
 })

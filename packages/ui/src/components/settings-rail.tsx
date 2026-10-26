@@ -178,7 +178,6 @@ type SettingsEntry = {
 	layout: SettingsEntryLayout
 	isDanger?: boolean
 	isDisabled?: boolean
-	hasOwnHeading?: boolean
 	hasIndicator?: boolean
 	count?: number
 }
