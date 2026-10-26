@@ -430,7 +430,6 @@ describe("leaving a space", () => {
 		gear.joined.watch()
 		await settle()
 		gear.joined.selectSpace(GARAGE_ROW)
-		gear.joined.askToLeave()
 		return gear
 	}
 
@@ -1021,7 +1020,6 @@ describe("a local and a joined space both carrying the id personal", () => {
 	it("leaves the joined one and opens the first local space", async () => {
 		const gear = await withBothPersonals()
 		gear.joined.selectSpace(HOST_PERSONAL_ROW)
-		gear.joined.askToLeave()
 
 		await gear.joined.leave(HOST_PERSONAL.id)
 
