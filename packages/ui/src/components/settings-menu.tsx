@@ -7,7 +7,11 @@ import { BotTitleBadge } from "@workspace/ui/components/bot-badge"
 import type { BotMcpConnectionState } from "@workspace/ui/components/bot-settings"
 import { MCP_CONNECTION_DOT } from "@workspace/ui/components/bot-settings-dialog/mcp-connection"
 import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
-import { HostPill, type SpaceHost } from "@workspace/ui/components/host-pill"
+import {
+	HostPill,
+	hostPillOf,
+	type SpaceHost,
+} from "@workspace/ui/components/host-pill"
 import {
 	type FillIconName,
 	FillIcons,
@@ -399,6 +403,7 @@ const SettingsMenuSpace = ({
 	onOpen,
 }: SettingsMenuSpaceProps) => {
 	const { t } = useTranslation(["settings", "bots"])
+	const pill = hostPillOf(host)
 
 	return (
 		<li>
@@ -417,8 +422,8 @@ const SettingsMenuSpace = ({
 				onSelect={onOpen}
 				trailing={
 					<span className={SPACE_TRAILING}>
-						{host === "connecting" || host === "down" ? (
-							<HostPill host={host} />
+						{pill ? (
+							<HostPill host={pill} />
 						) : host ? (
 							<span className="sr-only">{t(`bots:spaces.host.${host}`)}</span>
 						) : null}

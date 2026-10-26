@@ -41,6 +41,11 @@ const useSettingsFrame = (
 				rosterLists={rosterLists}
 				sidebarTab={workspace.sidebarTab}
 				space={switcher.selectedSpace}
+				spaceHost={
+					switcher.selectedSpace
+						? switcher.hostBySpaceId[switcher.selectedSpace.id]
+						: undefined
+				}
 			/>
 		),
 		titleBar: {

@@ -136,6 +136,7 @@ const menuNames = (menu: HTMLElement) =>
 
 const SPACE_ARGS = {
 	target: "space",
+	spaceId: "release-desk",
 	entry: "members",
 	onEntryChange: fn(),
 	onBack: fn(),
@@ -1020,7 +1021,7 @@ export const JoinedSessionUnavailable = meta.story({
 			),
 			pinned: "Leave space",
 			pinnedInk: DANGER_INK,
-			tint: TINT[JOINED_ARGS.value.colour],
+			colour: JOINED_ARGS.value.colour,
 		})
 		await expectSettingsPage(main, "Space", "column")
 		await expect(
@@ -1040,6 +1041,37 @@ export const JoinedSessionUnavailable = meta.story({
 		for (const label of ["Space", "Members", companions, "Leave space"]) {
 			await userEvent.tab()
 			await expect(entryIn(menu, label)).toHaveFocus()
+		}
+	},
+})
+
+export const JoinedHostConnecting = meta.story({
+	args: { ...JOINED_ARGS, spaceHost: "connecting" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A joined space whose host this computer is still reaching, the host state handed in by the app. Check the settings header and the Space page both draw the connecting avatar, its ground with the arcs as lines and no dot, and a Connecting… pill beside the space name.",
+			},
+		},
+	},
+	play: async () => {
+		const menu = await menuIn()
+		const main = screen.getByRole("main")
+		await expect(avatarStatesIn(menu, main)).toEqual([
+			"connecting",
+			"connecting",
+		])
+		for (const [area, name] of [
+			[menu, slotIn(menu, "settings-menu-name")],
+			[
+				main,
+				within(main).getByRole("heading", { level: 2, name: "Northwind" }),
+			],
+		] as const) {
+			const pill = slotIn(area, "host-pill")
+			await expect(pill).toHaveTextContent("Connecting…")
+			await expect(pill.previousElementSibling).toBe(name)
 		}
 	},
 })

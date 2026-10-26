@@ -39,6 +39,9 @@ const HostDot = ({ host, className }: HostDotProps) => (
 	/>
 )
 
+const hostPillOf = (host?: SpaceHost): HostPillState | undefined =>
+	host === "connecting" || host === "down" ? host : undefined
+
 type HostPillProps = {
 	host: HostPillState
 }
@@ -57,4 +60,4 @@ const HostPill = ({ host }: HostPillProps) => {
 	)
 }
 
-export { HostPill, type HostPillProps, type SpaceHost }
+export { HostPill, type HostPillProps, hostPillOf, type SpaceHost }

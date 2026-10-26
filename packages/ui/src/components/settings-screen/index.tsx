@@ -23,7 +23,11 @@ import { RuntimeFields } from "@workspace/ui/components/bot-settings-dialog/runt
 import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
 import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
 import { EnvironmentPanel } from "@workspace/ui/components/environment-panel"
-import { HostPill, type SpaceHost } from "@workspace/ui/components/host-pill"
+import {
+	HostPill,
+	hostPillOf,
+	type SpaceHost,
+} from "@workspace/ui/components/host-pill"
 import { InitialsAvatar } from "@workspace/ui/components/initials-avatar"
 import type { SettingsPages } from "@workspace/ui/components/plugin-settings/settings-pages"
 import { HISTORY_TAB } from "@workspace/ui/components/plugin-settings/use-history-session"
@@ -52,6 +56,7 @@ import {
 	avatarStateOf,
 	type FocusedSpace,
 	FocusedSpacePage,
+	spaceHostOf,
 } from "@workspace/ui/components/settings-screen/focused-space-page"
 import { SidebarResizeHandle } from "@workspace/ui/components/sidebar-resize"
 import type { Space } from "@workspace/ui/components/space"
@@ -149,7 +154,8 @@ type SpaceSettingsScreenProps = SettingsScreenNavigation &
 	SpaceSettingsProps &
 	(OwnedOrJoinedSpace | InvitedSpace) & {
 		target: "space"
-		spaceId?: string
+		spaceId: string
+		spaceHost?: SpaceHost
 		hostName?: string
 		isConnected?: boolean
 		isSessionUnavailable?: boolean
@@ -429,6 +435,7 @@ const SpaceSettingsScreen = (props: SpaceSettingsScreenProps) => {
 		spaceTint,
 		target: _target,
 		spaceId,
+		spaceHost,
 		spaceState: _spaceState,
 		hostName: _hostName,
 		isConnected: _isConnected,
@@ -452,7 +459,6 @@ const SpaceSettingsScreen = (props: SpaceSettingsScreenProps) => {
 		isOpen: true,
 		editorLayout: "page",
 	})
-	const avatarId = spaceId ?? name
 
 	const spaceEntry: SettingsEntry = {
 		value: SPACE_ENTRY,
@@ -467,7 +473,8 @@ const SpaceSettingsScreen = (props: SpaceSettingsScreenProps) => {
 				onValueChange={settings.onValueChange}
 				rank={rank}
 				space={space}
-				spaceId={avatarId}
+				spaceHost={spaceHost}
+				spaceId={spaceId}
 				value={settings.value}
 			>
 				{space.state === "yours" ? transfer : null}
@@ -479,6 +486,7 @@ const SpaceSettingsScreen = (props: SpaceSettingsScreenProps) => {
 	const isEntryDisabled = (value: string) =>
 		isHostUnreachable ||
 		(isSessionUnavailable && SESSION_BOUND_ENTRIES.has(value))
+	const pillHost = hostPillOf(spaceHostOf(space, spaceHost))
 
 	const focusedEntries =
 		space.state === "invitation"
@@ -525,15 +533,15 @@ const SpaceSettingsScreen = (props: SpaceSettingsScreenProps) => {
 				<SpaceAvatar
 					colour={settings.value.colour}
 					size={36}
-					spaceId={avatarId}
-					state={avatarStateOf(space)}
+					spaceId={spaceId}
+					state={avatarStateOf(space, spaceHost)}
 				/>
 			}
 			entries={focusedEntries}
 			entry={entry}
 			backLabel={backLabel ?? t("screen.backToSettings")}
 			name={name}
-			status={isHostUnreachable ? <HostPill host="down" /> : undefined}
+			status={pillHost ? <HostPill host={pillHost} /> : undefined}
 			onBack={onBack}
 			onEntryChange={onEntryChange}
 			pages={pages}

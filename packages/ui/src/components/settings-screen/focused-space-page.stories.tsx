@@ -111,3 +111,29 @@ export const LongNameInANarrowColumn = meta.story({
 		).toBe(32)
 	},
 })
+
+export const Connecting = meta.story({
+	args: {
+		space: { state: "joined", hostName: "Jordan Lee", isConnected: true },
+		spaceHost: "connecting",
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A joined space whose host is still being reached, the host state handed in by the app. Check the 48px avatar draws its ground with the arcs as lines and no dot, and a Connecting… pill follows the space name.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const header = slotIn(canvasElement, "focused-space-header")
+		await expect(slotIn(header, "space-avatar").dataset.state).toBe(
+			"connecting",
+		)
+		const pill = slotIn(header, "host-pill")
+		await expect(pill).toHaveTextContent("Connecting…")
+		await expect(pill.previousElementSibling).toBe(
+			within(header).getByRole("heading", { level: 2 }),
+		)
+	},
+})

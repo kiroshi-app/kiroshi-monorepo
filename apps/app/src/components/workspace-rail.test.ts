@@ -138,14 +138,18 @@ const RailHarness = ({
 			typeof useSidebarPanelSwitch
 		>,
 		space: switcher.selectedSpace,
+		spaceHost: switcher.selectedSpace
+			? switcher.hostBySpaceId[switcher.selectedSpace.id]
+			: undefined,
 	})
 }
 
-const railLogoTint = () =>
+const railLogo = () =>
 	screen
 		.getByRole("button", { name: SPACE_SETTINGS })
-		.querySelector<HTMLElement>("[data-slot='space-dot']")?.style
-		.backgroundColor
+		.querySelector<HTMLElement>("[data-slot='space-avatar']")
+
+const railLogoTint = () => railLogo()?.dataset.colour
 
 afterEach(cleanup)
 
@@ -157,7 +161,7 @@ describe.each(SETTINGS_RAILS)(
 				createElement(RailHarness, { selectedSpaceId: HOME.id, railSettings }),
 			)
 
-			expect(railLogoTint()).toBe("var(--bot-blot-red)")
+			expect(railLogoTint()).toBe("red")
 		})
 
 		it("wears the host colour of the joined Space that is open", () => {
@@ -168,14 +172,14 @@ describe.each(SETTINGS_RAILS)(
 				}),
 			)
 
-			expect(railLogoTint()).toBe("var(--bot-blot-purple)")
+			expect(railLogoTint()).toBe("purple")
 		})
 
 		it("repaints its logo when another Space is selected", () => {
 			const { rerender } = render(
 				createElement(RailHarness, { selectedSpaceId: HOME.id, railSettings }),
 			)
-			expect(railLogoTint()).toBe("var(--bot-blot-red)")
+			expect(railLogoTint()).toBe("red")
 
 			rerender(
 				createElement(RailHarness, {
@@ -184,7 +188,7 @@ describe.each(SETTINGS_RAILS)(
 				}),
 			)
 
-			expect(railLogoTint()).toBe("var(--bot-blot-blue)")
+			expect(railLogoTint()).toBe("blue")
 		})
 	},
 )
@@ -193,7 +197,18 @@ describe("the rail on a settings screen", () => {
 	it("falls back to the first Space when none matches the selection", () => {
 		render(createElement(RailHarness, { selectedSpaceId: "gone" }))
 
-		expect(railLogoTint()).toBe("var(--bot-blot-red)")
+		expect(railLogoTint()).toBe("red")
+	})
+
+	it("draws the open Space in the host state the switcher reads", () => {
+		const { rerender } = render(
+			createElement(RailHarness, { selectedSpaceId: HOME.id }),
+		)
+		expect(railLogo()?.dataset.state).toBe("local")
+
+		rerender(createElement(RailHarness, { selectedSpaceId: "studio" }))
+
+		expect(railLogo()?.dataset.state).toBe("connecting")
 	})
 
 	it("opens the selected Space settings when its logo is pressed", () => {

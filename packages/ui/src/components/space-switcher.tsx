@@ -16,7 +16,11 @@ import {
 	ContextMenuPressTrigger,
 	openBelow,
 } from "@workspace/ui/components/context-menu-press-trigger"
-import { HostPill, type SpaceHost } from "@workspace/ui/components/host-pill"
+import {
+	HostPill,
+	hostPillOf,
+	type SpaceHost,
+} from "@workspace/ui/components/host-pill"
 import { Icons } from "@workspace/ui/components/icons"
 import type { Space } from "@workspace/ui/components/space"
 import {
@@ -183,6 +187,7 @@ const SpaceSwitcher = ({
 	if (!selected) return null
 
 	const host = hostBySpaceId?.[selected.id]
+	const pill = hostPillOf(host)
 	const isInvited = invitations.length > 0
 	const switchLabel = isInvited
 		? host
@@ -263,6 +268,7 @@ const SpaceSwitcher = ({
 					>
 						{spaces.map((space, index) => {
 							const rowHost = hostBySpaceId?.[space.id]
+							const rowPill = hostPillOf(rowHost)
 							return (
 								<ContextMenuRadioItem
 									closeOnClick
@@ -278,8 +284,8 @@ const SpaceSwitcher = ({
 										state={spaceAvatarStateOf(rowHost)}
 									/>
 									<span className={ROW_NAME}>{space.name}</span>
-									{rowHost === "connecting" || rowHost === "down" ? (
-										<HostPill host={rowHost} />
+									{rowPill ? (
+										<HostPill host={rowPill} />
 									) : rowHost ? (
 										<span className="sr-only">
 											{t(`spaces.host.${rowHost}`)}
@@ -308,9 +314,7 @@ const SpaceSwitcher = ({
 					</ContextMenuItem>
 				</ContextMenuContent>
 			</ContextMenu>
-			{host === "connecting" || host === "down" ? (
-				<HostPill host={host} />
-			) : null}
+			{pill ? <HostPill host={pill} /> : null}
 		</>
 	)
 }
