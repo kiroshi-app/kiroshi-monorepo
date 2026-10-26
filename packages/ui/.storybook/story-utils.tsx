@@ -2,7 +2,7 @@ import { OverlayScrollbars } from "overlayscrollbars"
 import type { ComponentType, CSSProperties, ReactNode } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import type { ExtraProps } from "react-markdown"
-import { expect, waitFor } from "storybook/test"
+import { expect, waitFor, within } from "storybook/test"
 
 import type { Icon } from "@workspace/ui/components/icons"
 import {
@@ -10,6 +10,7 @@ import {
 	MARKDOWN_TYPESET_CLASS,
 	MARKDOWN_WHITESPACE_CLASS,
 } from "@workspace/ui/components/markdown/prose"
+import type { ScreenLayoutWidth } from "@workspace/ui/components/screen-layout"
 import {
 	Sidebar,
 	SidebarContent,
@@ -175,6 +176,50 @@ export const expectSettingsChrome = async (
 	await expect(panel.width).toBe(panelWidth)
 	await expect(getComputedStyle(menu).borderInlineEndColor).toBe(
 		resolvedRootColor("--shell-divider"),
+	)
+}
+
+export const LAPTOP_WINDOW = { viewport: { value: "laptop" } }
+
+export const expectLaptopWindow = () =>
+	expect([window.innerWidth, window.innerHeight]).toEqual([1280, 800])
+
+const THREAD_HEADER_HEIGHT = 48
+
+const THREAD_FIRST_ROW = { top: 32, inline: 24 }
+
+const COLUMN_PAGE_CAP = 800
+
+export const expectSettingsPage = async (
+	root: Element,
+	label: string,
+	width: ScreenLayoutWidth,
+) => {
+	const page = slotIn(root, "settings-screen-page")
+	const header = slotIn(page, "app-header")
+	const scroller = slotIn(page, "screen-layout-scroller")
+	const column = slotIn(page, "screen-layout-column")
+	const firstRow = column.firstElementChild
+	if (!firstRow) throw new globalThis.Error("The settings page is empty")
+	const headerBox = header.getBoundingClientRect()
+	const columnBox = column.getBoundingClientRect()
+	const firstRowBox = firstRow.getBoundingClientRect()
+
+	await expect(headerBox.height).toBe(THREAD_HEADER_HEIGHT)
+	await expect(
+		within(header).getByRole("heading", { level: 2, name: label }),
+	).toBeVisible()
+	await expect(hasOverlayScrollbars(scroller)).toBe(true)
+	await expect(Math.round(firstRowBox.top - headerBox.bottom)).toBe(
+		THREAD_FIRST_ROW.top,
+	)
+	await expect(Math.round(firstRowBox.left - columnBox.left)).toBe(
+		THREAD_FIRST_ROW.inline,
+	)
+	await expect(Math.round(columnBox.width)).toBe(
+		width === "column"
+			? Math.min(COLUMN_PAGE_CAP, scroller.clientWidth)
+			: scroller.clientWidth,
 	)
 }
 

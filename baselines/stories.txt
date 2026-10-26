@@ -783,7 +783,8 @@ layout-rowanatomy--default
 layout-rowanatomy--in-roster
 layout-rowanatomy--with-blank-identifier
 layout-rowanatomy--with-identifier
-layout-screenlayout--centered-in-wide-card
+layout-screenlayout--column-width-in-wide-card
+layout-screenlayout--full-width-in-wide-card
 layout-screenlayout--header-and-content
 layout-screenlayout--header-content-and-footer
 layout-screenlayout--header-only
@@ -1414,6 +1415,7 @@ settings-bot-companionsettingsscreen--applications
 settings-bot-companionsettingsscreen--approvals
 settings-bot-companionsettingsscreen--back-to-companions
 settings-bot-companionsettingsscreen--back-to-conversations
+settings-bot-companionsettingsscreen--companion-general
 settings-bot-companionsettingsscreen--danger-zone
 settings-bot-companionsettingsscreen--default-width
 settings-bot-companionsettingsscreen--delete-failed
@@ -1692,6 +1694,8 @@ settings-space-settingsscreen--members-dark
 settings-space-settingsscreen--members-tinted
 settings-space-settingsscreen--minimum-width
 settings-space-settingsscreen--short-window
+settings-space-settingsscreen--space-companions
+settings-space-settingsscreen--space-form-page
 settings-space-settingsscreen--yours-not-shared
 settings-space-spacefields--colourless
 settings-space-spacefields--default
@@ -1796,6 +1800,7 @@ settings-user-settingsscreen--notifications
 settings-user-settingsscreen--skills
 settings-user-settingsscreen--spaces
 settings-user-settingsscreen--spaces-dark
+settings-user-settingsscreen--user-skills
 settings-user-settingsscreen--without-optional-entries
 settings-user-usersettingsdialog--about
 settings-user-usersettingsdialog--about-without-an-update

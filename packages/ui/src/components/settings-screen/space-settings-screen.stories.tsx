@@ -2,7 +2,13 @@ import { type ComponentType, useState } from "react"
 import { expect, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { expectSettingsChrome, slotIn } from "@workspace/storybook/story-utils"
+import {
+	expectLaptopWindow,
+	expectSettingsChrome,
+	expectSettingsPage,
+	LAPTOP_WINDOW,
+	slotIn,
+} from "@workspace/storybook/story-utils"
 import { AppRail } from "@workspace/ui/components/app-rail"
 import {
 	GARAGE,
@@ -176,7 +182,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"A space's settings as a whole window instead of an overlay. The settings menu takes the place of the conversations panel: Back to your settings, the space's square and name, then its entries, Danger zone pinned at the foot. The content column draws the same panels the space settings dialog draws, centred under the entry's title, except Space, which opens on the space's own header: its square, name, standing and Open, then its Name field and, while it is yours and not shared, the Not shared yet card. A joined space pins Leave space instead of Danger zone and, while its host is not connected, greys every entry but Space; an invitation reduces the menu to one Invitation entry and pins Decline. Applications opens onto the space's installed applications, one sub-entry each with its mark and connection dot, then Add an application.",
+					"A space's settings as a whole window instead of an overlay. The settings menu takes the place of the conversations panel: Back to your settings, the space's square and name, then its entries, Danger zone pinned at the foot. The content column draws the same panels the space settings dialog draws. Each page sits under a header bar the height of a conversation's header carrying the entry's label, its first row where a conversation's first message starts: forms in a column centred and capped at 800px, lists across the whole card. Members, Companions, Skills, Applications and History are lists; an open application is a form. Space opens on the space's own header: its square, name, standing and Open, then its Name field and, while it is yours and not shared, the Not shared yet card. A joined space pins Leave space instead of Danger zone and, while its host is not connected, greys every entry but Space; an invitation reduces the menu to one Invitation entry and pins Decline. Applications opens onto the space's installed applications, one sub-entry each with its mark and connection dot, then Add an application.",
 			},
 		},
 	},
@@ -212,9 +218,7 @@ export const Members = meta.story({
 		)
 
 		const main = screen.getByRole("main")
-		await expect(
-			within(main).getByRole("heading", { level: 2, name: "Members" }),
-		).toBeVisible()
+		await expectSettingsPage(main, "Members", "full")
 		await expect(within(main).getByText("Maya Chen")).toBeVisible()
 
 		await userEvent.click(entryIn(menu, "Back to your settings"))
@@ -265,7 +269,7 @@ export const Companions = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard H01: the space's settings open on Companions. Check that Companions follows Members with its count on the right, that the section draws its own title once, and that the cards sit two to a row in the 640 column.",
+					"Artboard H01: the space's settings open on Companions. Check that Companions follows Members with its count on the right, that the header bar carries Companions, that the section draws its own title once, and that the cards sit two to a row across the whole card.",
 			},
 		},
 	},
@@ -283,8 +287,11 @@ export const Companions = meta.story({
 		await expect(slotIn(entry, "settings-menu-count")).toHaveTextContent("4")
 
 		const main = screen.getByRole("main")
+		await expectSettingsPage(main, "Companions", "full")
 		await expect(
-			within(main).getAllByRole("heading", { level: 2 }),
+			within(slotIn(main, "screen-layout-column")).getAllByRole("heading", {
+				level: 2,
+			}),
 		).toHaveLength(1)
 		const cards = within(main).getAllByRole("button", {
 			name: /Writer|Planner|Builder|Designer/,
@@ -305,7 +312,7 @@ export const LinearApplication = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard E3: Applications open on Linear. Check that each installed application is a sub-entry with its mark and a connection dot whose state is spoken, that Linear is the current page while Applications stays bold without the fill, that the column heads the application page with its mark, name and state, and that Add an application opens the catalogue and reports it.",
+					"Artboard E3: Applications open on Linear. Check that each installed application is a sub-entry with its mark and a connection dot whose state is spoken, that Linear is the current page while Applications stays bold without the fill, that the centred column under the Applications header bar heads the application page with its mark, name and state, and that Add an application opens the catalogue and reports it.",
 			},
 		},
 	},
@@ -338,9 +345,7 @@ export const LinearApplication = meta.story({
 		await expect(within(main).getAllByText("Linear")).toHaveLength(1)
 		await expect(name.scrollWidth).toBeLessThanOrEqual(name.clientWidth)
 		await expect(within(main).queryByRole("tab")).toBeNull()
-		await expect(
-			slotIn(main, "settings-screen-page").getBoundingClientRect().width,
-		).toBe(560)
+		await expectSettingsPage(main, "Applications", "column")
 
 		await userEvent.click(entryIn(menu, "GitHub Needs authorization"))
 		await expect(args.onMcpServerOpen).toHaveBeenLastCalledWith("github")
@@ -631,22 +636,24 @@ const hostDotsIn = (menu: HTMLElement, main: HTMLElement) =>
 		area.querySelector("[data-slot=host-dot]")?.getAttribute("data-host"),
 	)
 
+const YOURS_NOT_SHARED = {
+	entry: "space",
+	value: { name: "Release desk", colour: "blue" },
+	companions: ARTBOARD_COMPANIONS,
+	isShared: false,
+	rank: 2,
+	onOpen: fn(),
+	onShare: fn(),
+} as const
+
 export const YoursNotShared = meta.story({
 	globals: { theme: "dark" },
-	args: {
-		entry: "space",
-		value: { name: "Release desk", colour: "blue" },
-		companions: ARTBOARD_COMPANIONS,
-		isShared: false,
-		rank: 2,
-		onOpen: fn(),
-		onShare: fn(),
-	},
+	args: YOURS_NOT_SHARED,
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Artboard F02: a space of yours, not shared yet. Check the header with the colour square, the name, Yours · not shared and Open ⌘2, then the Name field, then the Not shared yet card with Share, Danger zone pinned at the foot, and no presence dot on either square.",
+					"Artboard F02: a space of yours, not shared yet. Check the Space header bar over the centred column, then the space's own header with the colour square, the name, Yours · not shared and Open ⌘2, then the Name field, then the Not shared yet card with Share, Danger zone pinned at the foot, and no presence dot on either square.",
 			},
 		},
 	},
@@ -659,6 +666,7 @@ export const YoursNotShared = meta.story({
 			pinned: "Danger zone",
 		})
 		await expect(entryIn(menu, "Space")).toHaveAttribute("aria-current", "page")
+		await expectSettingsPage(main, "Space", "column")
 		await expect(hostDotsIn(menu, main)).toEqual([undefined, undefined])
 		await expect(
 			within(main).getByRole("heading", { level: 2, name: "Release desk" }),
@@ -678,6 +686,42 @@ export const YoursNotShared = meta.story({
 		)
 		await userEvent.click(within(card).getByRole("button", { name: "Share" }))
 		await expect(args.onShare).toHaveBeenCalledOnce()
+	},
+})
+
+export const SpaceFormPage = meta.story({
+	globals: LAPTOP_WINDOW,
+	args: YOURS_NOT_SHARED,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this to see a form page in a laptop window: the Space page of a space of yours, not shared yet. Check the Space header bar, then the space's own header and its Name field in a column centred and capped at 800px, its first row where a conversation's first message starts. Pick `SpaceCompanions` for a list page. The screen in a 1280 by 800 window, the size the review screenshot is taken at.",
+			},
+		},
+	},
+	play: async () => {
+		await expectLaptopWindow()
+		await menuIn()
+		await expectSettingsPage(screen.getByRole("main"), "Space", "column")
+	},
+})
+
+export const SpaceCompanions = meta.story({
+	globals: LAPTOP_WINDOW,
+	args: { ...YOURS_NOT_SHARED, entry: "companions" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this to see a list page in a laptop window: the companions of a space. Check the Companions header bar, then the section title and the cards across the whole card, the first row where a conversation's first message starts. Pick `SpaceFormPage` for a form page. The screen in a 1280 by 800 window, the size the review screenshot is taken at.",
+			},
+		},
+	},
+	play: async () => {
+		await expectLaptopWindow()
+		await menuIn()
+		await expectSettingsPage(screen.getByRole("main"), "Companions", "full")
 	},
 })
 

@@ -24,7 +24,7 @@ const meta = preview.meta({
 		onShare: fn(),
 	},
 	render: (args) => (
-		<div className="flex max-w-160 flex-col gap-6 bg-card px-8 py-14">
+		<div className="flex max-w-200 flex-col gap-6 bg-card px-6 pt-8 pb-4">
 			<FocusedSpacePage {...args} />
 		</div>
 	),
@@ -86,7 +86,7 @@ export const LongNameInANarrowColumn = meta.story({
 		},
 	},
 	render: (args) => (
-		<div className="flex w-80 flex-col gap-6 bg-card px-8 py-14">
+		<div className="flex w-80 flex-col gap-6 bg-card px-6 pt-8 pb-4">
 			<FocusedSpacePage {...args} />
 		</div>
 	),

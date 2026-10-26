@@ -5,7 +5,10 @@ import { expect, fn, screen, waitFor, within } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+	expectLaptopWindow,
 	expectSettingsChrome,
+	expectSettingsPage,
+	LAPTOP_WINDOW,
 	slotIn,
 	slotsIn,
 } from "@workspace/storybook/story-utils"
@@ -259,17 +262,18 @@ const expectSpaceRows = async (menu: HTMLElement, names: string[]) => {
 	}
 }
 
+const FULL_PAGES = new Set(["Skills", "Applications", "History"])
+
 const expectEntryShown = async (label: string) => {
 	const menu = await menuIn()
 	await expect(
 		within(menu).getByRole("button", { name: label }),
 	).toHaveAttribute("aria-current", "page")
-	await expect(
-		within(screen.getByRole("main")).getByRole("heading", {
-			level: 2,
-			name: label,
-		}),
-	).toBeVisible()
+	await expectSettingsPage(
+		screen.getByRole("main"),
+		label,
+		FULL_PAGES.has(label) ? "full" : "column",
+	)
 	return menu
 }
 
@@ -281,7 +285,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The reader's own settings as a whole window instead of an overlay. The settings menu takes the place of the conversations panel: Back to conversations, the reader's round initials avatar and name, then Account, Appearance, Notifications, Language, Skills, Applications, History, Diagnostics and About, each optional entry shown under the same condition as in the user settings dialog. The content column draws the same panels the dialog draws, centred under the entry's title.",
+					"The reader's own settings as a whole window instead of an overlay. The settings menu takes the place of the conversations panel: Back to conversations, the reader's round initials avatar and name, then Account, Appearance, Notifications, Language, Skills, Applications, History, Diagnostics and About, each optional entry shown under the same condition as in the user settings dialog. The content column draws the same panels the dialog draws. Each page sits under a header bar the height of a conversation's header carrying the entry's label, its first row where a conversation's first message starts: forms in a column centred and capped at 800px, lists across the whole card. Skills, Applications and History are lists.",
 			},
 		},
 	},
@@ -553,6 +557,23 @@ export const Skills = meta.story({
 		await expect(
 			within(screen.getByRole("main")).getByText(BOT_SKILLS[0].name),
 		).toBeVisible()
+	},
+})
+
+export const UserSkills = meta.story({
+	globals: LAPTOP_WINDOW,
+	args: { entry: "skills" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this to see the reader's skills as a list page in a laptop window. Check the Skills header bar, then the skills across the whole card, the first row where a conversation's first message starts. The screen in a 1280 by 800 window, the size the review screenshot is taken at.",
+			},
+		},
+	},
+	play: async () => {
+		await expectLaptopWindow()
+		await expectEntryShown("Skills")
 	},
 })
 

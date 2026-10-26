@@ -4,7 +4,10 @@ import { expect, fn, screen, waitFor, within } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	A11Y_FLOATING_FOCUS_GUARDS,
+	expectLaptopWindow,
 	expectSettingsChrome,
+	expectSettingsPage,
+	LAPTOP_WINDOW,
 	opaque,
 	slotIn,
 } from "@workspace/storybook/story-utils"
@@ -117,8 +120,14 @@ const menuIn = () => screen.findByRole("navigation", { name: "Settings" })
 const entryIn = (menu: HTMLElement, name: string) =>
 	within(menu).getByRole("button", { name })
 
-const pageHeading = (name: string) =>
-	within(screen.getByRole("main")).getByRole("heading", { level: 2, name })
+const FULL_PAGES = new Set(["Skills", "Applications", "History", "Approvals"])
+
+const expectPageShown = (label: string) =>
+	expectSettingsPage(
+		screen.getByRole("main"),
+		label,
+		FULL_PAGES.has(label) ? "full" : "column",
+	)
 
 const meta = preview.meta({
 	title: "Settings/Bot/CompanionSettingsScreen",
@@ -128,7 +137,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"A companion's settings as a whole window instead of the dialog. The settings menu takes the place of the conversations panel: the Back link the caller names, the companion's hexagon, its name and Companion settings, then the dialog's ten sections with Danger zone pinned at the foot. The content column draws the same panels the dialog draws, centred under the section's title.",
+					"A companion's settings as a whole window instead of the dialog. The settings menu takes the place of the conversations panel: the Back link the caller names, the companion's hexagon, its name and Companion settings, then the dialog's ten sections with Danger zone pinned at the foot. The content column draws the same panels the dialog draws. Each page sits under a header bar the height of a conversation's header carrying the entry's label, its first row where a conversation's first message starts: forms in a column centred and capped at 800px, lists across the whole card. Skills, Applications, History and Approvals are lists.",
 			},
 		},
 	},
@@ -209,7 +218,7 @@ export const General = meta.story({
 			slotIn(menu, "bot-identity-avatar").getBoundingClientRect().width,
 		).toBe(36)
 
-		await expect(pageHeading("General")).toBeVisible()
+		await expectPageShown("General")
 		const main = screen.getByRole("main")
 		await expect(within(main).getByLabelText("Title")).toHaveValue("Writer")
 		await userEvent.type(within(main).getByLabelText("Name"), "!")
@@ -217,6 +226,23 @@ export const General = meta.story({
 			expect.objectContaining({ name: "Juniper!" }),
 		)
 		await expect(within(menu).getByText("Juniper!")).toBeVisible()
+	},
+})
+
+export const CompanionGeneral = meta.story({
+	globals: LAPTOP_WINDOW,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this to see a companion's General page as a form page in a laptop window. Check the General header bar, then the Name and Title fields in a column centred and capped at 800px, the first row where a conversation's first message starts. The screen in a 1280 by 800 window, the size the review screenshot is taken at.",
+			},
+		},
+	},
+	play: async () => {
+		await expectLaptopWindow()
+		await menuIn()
+		await expectPageShown("General")
 	},
 })
 
@@ -232,7 +258,7 @@ export const Appearance = meta.story({
 	},
 	play: async ({ args, userEvent }) => {
 		await menuIn()
-		await expect(pageHeading("Appearance")).toBeVisible()
+		await expectPageShown("Appearance")
 		await userEvent.click(
 			within(screen.getByRole("main")).getByRole("radio", { name: "Red" }),
 		)
@@ -257,7 +283,7 @@ export const Instructions = meta.story({
 	play: async ({ args, userEvent }) => {
 		await menuIn()
 		const main = screen.getByRole("main")
-		await expect(pageHeading("Instructions")).toBeVisible()
+		await expectPageShown("Instructions")
 		const instructions = within(main).getByLabelText("Instructions")
 		await expect(instructions).toHaveValue(INSTRUCTIONS)
 		const box = instructions.getBoundingClientRect()
@@ -291,7 +317,7 @@ export const Skills = meta.story({
 	},
 	play: async () => {
 		await menuIn()
-		await expect(pageHeading("Skills")).toBeVisible()
+		await expectPageShown("Skills")
 	},
 })
 
@@ -301,13 +327,13 @@ export const Applications = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard H06: Applications, its description, search, add button and rows. Check that the menu holds no application under the entry, that a row of the list opens the application as a pushed page, and that Applications stays the current entry.",
+					"Artboard H06: Applications, its description, search, add button and rows. Check that the menu holds no application under the entry, that a row of the list opens the application as a pushed page in the centred column, and that Applications stays the current entry and the header label.",
 			},
 		},
 	},
 	play: async ({ args, userEvent }) => {
 		const menu = await menuIn()
-		await expect(pageHeading("Applications")).toBeVisible()
+		await expectPageShown("Applications")
 		await expect(
 			within(menu).queryByRole("button", { name: "Linear Connected" }),
 		).not.toBeInTheDocument()
@@ -324,6 +350,7 @@ export const Applications = meta.story({
 			"aria-current",
 			"page",
 		)
+		await expectSettingsPage(screen.getByRole("main"), "Applications", "column")
 	},
 })
 
@@ -339,7 +366,7 @@ export const Secrets = meta.story({
 	},
 	play: async () => {
 		await menuIn()
-		await expect(pageHeading("Secrets")).toBeVisible()
+		await expectPageShown("Secrets")
 		await expect(
 			within(screen.getByRole("main")).getByText("BOT_SEED"),
 		).toBeVisible()
@@ -357,7 +384,7 @@ export const History = meta.story({
 	},
 	play: async () => {
 		await menuIn()
-		await expect(pageHeading("History")).toBeVisible()
+		await expectPageShown("History")
 	},
 })
 
@@ -373,7 +400,7 @@ export const Approvals = meta.story({
 	},
 	play: async () => {
 		await menuIn()
-		await expect(pageHeading("Approvals")).toBeVisible()
+		await expectPageShown("Approvals")
 	},
 })
 
@@ -389,7 +416,7 @@ export const Runtime = meta.story({
 	},
 	play: async () => {
 		await menuIn()
-		await expect(pageHeading("Runtime")).toBeVisible()
+		await expectPageShown("Runtime")
 	},
 })
 
@@ -409,7 +436,7 @@ export const DangerZone = meta.story({
 			"aria-current",
 			"page",
 		)
-		await expect(pageHeading("Danger zone")).toBeVisible()
+		await expectPageShown("Danger zone")
 		await userEvent.click(
 			within(screen.getByRole("main")).getByRole("button", {
 				name: "Delete companion",

@@ -2,10 +2,12 @@ import type { ComponentProps, ReactNode } from "react"
 
 import { cn } from "@workspace/ui/lib/utils"
 
+type ScreenLayoutWidth = "column" | "full"
+
 interface ScreenLayoutProps extends ComponentProps<"div"> {
 	header?: ReactNode
 	footer?: ReactNode
-	centered?: boolean
+	width?: ScreenLayoutWidth
 	scroller?: (columnClassName: string) => ReactNode
 	contentClassName?: string
 	footerClassName?: string
@@ -14,7 +16,7 @@ interface ScreenLayoutProps extends ComponentProps<"div"> {
 const ScreenLayout = ({
 	header,
 	footer,
-	centered,
+	width = "full",
 	scroller,
 	children,
 	className,
@@ -24,7 +26,7 @@ const ScreenLayout = ({
 }: ScreenLayoutProps) => {
 	const columnClassName = cn(
 		"flex min-h-full w-full flex-col px-6 pt-8 pb-4",
-		centered && "mx-auto max-w-160",
+		width === "column" && "mx-auto max-w-200",
 		contentClassName,
 	)
 
@@ -66,4 +68,4 @@ const ScreenLayout = ({
 	)
 }
 
-export { ScreenLayout }
+export { ScreenLayout, type ScreenLayoutWidth }

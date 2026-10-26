@@ -3,6 +3,7 @@
 import { type ReactNode, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
+import { AppHeader } from "@workspace/ui/components/app-header"
 import {
 	AppTitleBar,
 	type AppTitleBarProps,
@@ -28,6 +29,10 @@ import type { SettingsPages } from "@workspace/ui/components/plugin-settings/set
 import { HISTORY_TAB } from "@workspace/ui/components/plugin-settings/use-history-session"
 import type { McpSession } from "@workspace/ui/components/plugin-settings/use-mcp-session"
 import { usePluginSessions } from "@workspace/ui/components/plugin-settings/use-plugin-sessions"
+import {
+	ScreenLayout,
+	type ScreenLayoutWidth,
+} from "@workspace/ui/components/screen-layout"
 import {
 	type SettingsSession,
 	wordedKindOf,
@@ -68,15 +73,14 @@ import { cn } from "@workspace/ui/lib/utils"
 
 const HEADER_AVATAR_SIZE = 36
 
-const PAGE = "mx-auto flex w-full max-w-160 flex-col gap-4 px-14 py-12"
-
-const APPLICATION_PAGE = "max-w-140 px-12 py-10"
-
-const SELF_HEADED_PAGE = "gap-6 px-8 py-14"
-
-const COMPANIONS_PAGE = "max-w-188"
-
-const COMPANION_SETTINGS_PAGE = "max-w-188 gap-8"
+const FULL_PAGES = new Set([
+	"members",
+	COMPANIONS_ENTRY,
+	"skills",
+	APPLICATIONS_ENTRY,
+	HISTORY_TAB,
+	"permissions",
+])
 
 const SECTION_GAP = {
 	tight: "gap-3",
@@ -218,8 +222,8 @@ const SettingsScreenLayout = ({
 	isCompanionPage = false,
 	spaces,
 }: SettingsScreenLayoutProps) => {
-	const column = useRef<HTMLDivElement>(null)
-	useOverlayScrollbars(column)
+	const scroller = useRef<HTMLElement | null>(null)
+	useOverlayScrollbars(scroller)
 
 	const { t } = useTranslation(["bots", "settings"])
 	const [pendingLeave, setPendingLeave] = useState<(() => void) | null>(null)
@@ -232,7 +236,8 @@ const SettingsScreenLayout = ({
 	const page = shownSession && pages.top ? shownSession.pages[pages.top] : null
 	const isApplicationsShown = shown.value === APPLICATIONS_ENTRY
 	const isApplicationOpen = isApplicationsShown && pages.top === "server"
-	const isCompanionsShown = shown.value === COMPANIONS_ENTRY
+	const pageWidth: ScreenLayoutWidth =
+		FULL_PAGES.has(shown.value) && !isApplicationOpen ? "full" : "column"
 	const openedName = isApplicationOpen
 		? sessions.applications.openedName
 		: undefined
@@ -348,32 +353,27 @@ const SettingsScreenLayout = ({
 			}
 			width={width}
 		>
-			<div
-				className="min-h-0 flex-1 overflow-y-auto"
-				data-slot="settings-screen-column"
-				ref={column}
+			<ScreenLayout
+				contentClassName={shown.value === SPACE_ENTRY ? "gap-6" : "gap-4"}
+				data-entry={shown.value}
+				data-slot="settings-screen-page"
+				header={
+					<AppHeader
+						className="pl-6"
+						data-tauri-drag-region="deep"
+						leading={<h2 className="truncate">{shown.label}</h2>}
+					/>
+				}
+				ref={(layout) => {
+					scroller.current =
+						layout?.querySelector<HTMLElement>(
+							'[data-slot="screen-layout-scroller"]',
+						) ?? null
+				}}
+				width={pageWidth}
 			>
-				<div
-					className={cn(
-						PAGE,
-						isCompanionPage && COMPANION_SETTINGS_PAGE,
-						isApplicationOpen && APPLICATION_PAGE,
-						isCompanionsShown && COMPANIONS_PAGE,
-						shown.hasOwnHeading && SELF_HEADED_PAGE,
-					)}
-					data-entry={shown.value}
-					data-slot="settings-screen-page"
-				>
-					{isApplicationOpen ||
-					isCompanionsShown ||
-					shown.hasOwnHeading ? null : (
-						<h2 className="font-medium text-muted-foreground text-sm">
-							{shown.label}
-						</h2>
-					)}
-					{page ?? shown.panel}
-				</div>
-			</div>
+				{page ?? shown.panel}
+			</ScreenLayout>
 			<ConfirmDialog
 				confirmLabel={t(`${wordedKind}.leave.action`)}
 				description={t(`${wordedKind}.leave.description`)}
@@ -444,7 +444,6 @@ const SpaceSettingsScreen = (props: SpaceSettingsScreenProps) => {
 		icon: "Folder",
 		label: t(space.state === "invitation" ? "rail.invitation" : "rail.space"),
 		layout: "scrolling",
-		hasOwnHeading: true,
 		panel: (
 			<FocusedSpacePage
 				onAccept={onAccept}
