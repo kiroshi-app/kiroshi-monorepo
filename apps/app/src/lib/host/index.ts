@@ -11,6 +11,7 @@ import {
 	listen as tauriListen,
 } from "./tauri"
 import { hasTauriInternals } from "./tauri-internals"
+import { listenOnThisWindow } from "./window-listen"
 
 import {
 	commands,
@@ -44,6 +45,8 @@ export const invokeOnThisComputer = joinedHosts.invokeOnThisComputer
 export const invokeOn = joinedHosts.invokeOn
 
 export const listenOnThisComputer = tauriListen
+
+export { listenOnThisWindow }
 
 export const activeJoinedSpaceId = joinedHosts.activeSpaceId
 
@@ -106,8 +109,9 @@ export const watchWindowMaximized = ({
 export const watchMaximizeButton = (
 	report: (state: MaximizeButtonState) => void,
 ): Promise<() => void> =>
-	listen<MaximizeButtonPointer>(MAXIMIZE_BUTTON_EVENT, ({ payload }) =>
-		report(payload.state),
+	listenOnThisWindow<MaximizeButtonPointer>(
+		MAXIMIZE_BUTTON_EVENT,
+		({ payload }) => report(payload.state),
 	)
 
 export type MaximizeButtonBounds = NonNullable<

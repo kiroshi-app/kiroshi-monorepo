@@ -1,15 +1,19 @@
 import { invoke } from "@tauri-apps/api/core"
-import { type EventCallback, listen } from "@tauri-apps/api/event"
+import type { EventCallback } from "@tauri-apps/api/event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { NotificationTarget } from "./notification-port"
 import { notificationTransport } from "./notification-transport"
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }))
-vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn() }))
+const windowListen = vi.hoisted(() => vi.fn())
+
+vi.mock("@tauri-apps/api/webviewWindow", () => ({
+	getCurrentWebviewWindow: () => ({ listen: windowListen }),
+}))
 
 const hostInvoke = vi.mocked(invoke)
-const hostListen = vi.mocked(listen)
+const hostListen = windowListen
 
 const BOT: NotificationTarget = { kind: "bot", id: "bot-one" }
 

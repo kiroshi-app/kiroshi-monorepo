@@ -1,6 +1,6 @@
 import type { NotificationPort, NotificationTarget } from "./notification-port"
 
-import { invoke, listen } from "../host"
+import { invoke, listenOnThisWindow } from "../host"
 
 const ACTIVATED_EVENT = "notification://activated"
 
@@ -10,7 +10,7 @@ export const notificationTransport: NotificationPort = {
 	},
 
 	onActivate: (listener) =>
-		listen<NotificationTarget>(ACTIVATED_EVENT, (event) =>
+		listenOnThisWindow<NotificationTarget>(ACTIVATED_EVENT, (event) =>
 			listener(event.payload),
 		),
 }
