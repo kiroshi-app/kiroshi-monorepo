@@ -11,7 +11,12 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { useTabKeys } from "./use-tab-keys"
 import { useTabsFollowingSpace } from "./use-tab-thread-sync"
 import { useWorkspaceTabs } from "./use-workspace-tabs"
-import { createWorkspaceTabs, type WorkspaceTabs } from "./workspace-tabs"
+import {
+	createWorkspaceTabs,
+	forgetWindowWhenClosed,
+	reopenSecondaryWindows,
+	type WorkspaceTabs,
+} from "./workspace-tabs"
 
 import type { ObservedState } from "../conversations/store-contract"
 import { validateThreadSearch } from "../navigation/thread-search"
@@ -21,6 +26,7 @@ const commandKey = vi.hoisted(() => ({ isUsed: true }))
 const windowHost = vi.hoisted(() => ({
 	windowOpen: vi.fn(),
 	closeWindow: vi.fn(),
+	watchCloseRequest: vi.fn(),
 	raiseReportedFailure: vi.fn(),
 }))
 
@@ -28,6 +34,7 @@ vi.mock("../host", async (importOriginal) => ({
 	...(await importOriginal<typeof import("../host")>()),
 	usesCommandKey: () => commandKey.isUsed,
 	closeWindow: windowHost.closeWindow,
+	watchCloseRequest: windowHost.watchCloseRequest,
 }))
 
 vi.mock("../bindings", async (importOriginal) => {
@@ -145,6 +152,7 @@ afterEach(() => {
 	vi.restoreAllMocks()
 	windowHost.windowOpen.mockReset()
 	windowHost.closeWindow.mockReset()
+	windowHost.watchCloseRequest.mockReset()
 	windowHost.raiseReportedFailure.mockReset()
 })
 
@@ -1103,16 +1111,19 @@ describe("the windows", () => {
 		expect(activeHref(tabs)).toBe(USER_SETTINGS)
 	})
 
-	it("discards the kept tabs of every secondary window when the app launches", () => {
-		const before = tabsOfWindow(SECONDARY, threadOf("moved"))
-		before.showSpace(OTHER_SPACE)
-		showInNewTab(before, threadOf("away"))
+	it("discards at launch the kept tabs of every window not open at quit", () => {
+		const unlistedKey = `windowTabs:window-9:${SPACE}`
+		localStorage.setItem(
+			unlistedKey,
+			JSON.stringify({
+				tabs: [{ href: threadOf("orphan"), isPinned: false }],
+				activeIndex: 0,
+			}),
+		)
 
 		tabsOfSpace()
-		const after = tabsOfWindow(SECONDARY, threadOf("moved"))
-		after.showSpace(OTHER_SPACE)
 
-		expect(shownHrefs(after)).toEqual(["/"])
+		expect(localStorage.getItem(unlistedKey)).toBeNull()
 	})
 
 	it("flags Needs you from the tabs of its own window", () => {
@@ -1155,5 +1166,140 @@ describe("the windows", () => {
 
 		expect(windowHost.closeWindow).not.toHaveBeenCalled()
 		expect(shownHrefs(tabs)).toEqual([threadOf("first")])
+	})
+})
+
+const reopenedHrefs = () =>
+	windowHost.windowOpen.mock.calls.map(([href]) => href as string)
+
+const relaunch = async () => {
+	windowHost.windowOpen.mockClear()
+	cleanup()
+	tabsOfSpace()
+	await reopenSecondaryWindows()
+	return reopenedHrefs()
+}
+
+const reopenedAs = (label: string, href: string) => {
+	const tabs = createWorkspaceTabs(href, label)
+	tabs.showSpace(tabs.reopenedSpaceId ?? SPACE)
+	return tabs
+}
+
+const keysOf = (label: string) =>
+	Object.keys(localStorage).filter((key) => key.includes(label))
+
+const requestClose = async (label: string) => {
+	let closeRequested = () => {}
+	windowHost.watchCloseRequest.mockImplementation((onCloseRequested) => {
+		closeRequested = onCloseRequested
+		return Promise.resolve(() => undefined)
+	})
+	await forgetWindowWhenClosed(label)
+	closeRequested()
+	await vi.waitFor(() => expect(windowHost.closeWindow).toHaveBeenCalled())
+}
+
+describe("the windows open at quit", () => {
+	it("reopens one window per secondary window open at quit", async () => {
+		opensWindows()
+		tabsOfWindow(SECONDARY, threadOf("first"))
+		tabsOfWindow("window-2", threadOf("second"))
+
+		expect(await relaunch()).toEqual(
+			expect.arrayContaining(["/?handover=window-1", "/?handover=window-2"]),
+		)
+		expect(windowHost.windowOpen).toHaveBeenCalledTimes(2)
+	})
+
+	it("reopens a window on the space, tabs, active tab and history it showed", async () => {
+		opensWindows()
+		const before = tabsOfWindow(SECONDARY, threadOf("moved"), OTHER_SPACE)
+		const beforeRouter = routerOn(before)
+		await beforeRouter.load()
+		await beforeRouter.navigate({ to: USER_SETTINGS })
+		showInNewTab(before, threadOf("second"))
+		const settingsTabId = idOfTabOn(before, USER_SETTINGS)
+		act(() => before.select(settingsTabId))
+
+		const [href = ""] = await relaunch()
+		const after = reopenedAs("window-2", href)
+		const afterRouter = routerOn(after)
+		await afterRouter.load()
+
+		expect(after.reopenedSpaceId).toBe(OTHER_SPACE)
+		expect(shownHrefs(after)).toEqual([USER_SETTINGS, threadOf("second")])
+		expect(afterRouter.state.location.pathname).toBe(USER_SETTINGS)
+		afterRouter.history.back()
+		expect(activeHref(after)).toBe(threadOf("moved"))
+	})
+
+	it("never shows the handover in the address of a tab", async () => {
+		opensWindows()
+		tabsOfWindow(SECONDARY, threadOf("moved"))
+		const [href = ""] = await relaunch()
+
+		const after = createWorkspaceTabs(href, "window-2")
+
+		expect(activeHref(after)).toBe("/")
+		after.showSpace(SPACE)
+		expect(shownHrefs(after)).toEqual([threadOf("moved")])
+	})
+
+	it("takes over the kept tabs and the place of its predecessor", async () => {
+		opensWindows()
+		tabsOfWindow(SECONDARY, threadOf("moved"))
+		const [href = ""] = await relaunch()
+		reopenedAs("window-2", href)
+
+		expect(keysOf(SECONDARY)).toEqual([])
+		expect(await relaunch()).toEqual(["/?handover=window-2"])
+	})
+
+	it("forgets a window the person closes", async () => {
+		opensWindows()
+		closesWindows()
+		const tabs = tabsOfWindow(SECONDARY, threadOf("first"))
+		showInNewTab(tabs, threadOf("second"))
+
+		await requestClose(SECONDARY)
+
+		expect(keysOf(SECONDARY)).toEqual([])
+		expect(await relaunch()).toEqual([])
+	})
+
+	it("closes the window once forgotten, and says so when it cannot", async () => {
+		windowHost.closeWindow.mockRejectedValue(new Error("refused"))
+		tabsOfWindow(SECONDARY, threadOf("first"))
+
+		await requestClose(SECONDARY)
+
+		await vi.waitFor(() =>
+			expect(windowHost.raiseReportedFailure).toHaveBeenCalledExactlyOnceWith(
+				{ title: "Couldn’t close Kiroshi." },
+				{ raisedIn: "workspace-tabs", command: undefined },
+			),
+		)
+	})
+
+	it("forgets a window that fails to reopen and says so", async () => {
+		windowHost.windowOpen.mockResolvedValue({
+			status: "error",
+			error: { kind: "unavailable" },
+		})
+		tabsOfWindow(SECONDARY, threadOf("lost"))
+
+		await relaunch()
+
+		expect(windowHost.raiseReportedFailure).toHaveBeenCalledExactlyOnceWith(
+			{
+				title: "Couldn’t reopen a window",
+				description:
+					"Its tabs were closed (unavailable). Open them again from the sidebar.",
+			},
+			{ raisedIn: "workspace-tabs", command: "window_open" },
+		)
+		expect(keysOf(SECONDARY)).toEqual([])
+		expect(await relaunch()).toEqual([])
 	})
 })

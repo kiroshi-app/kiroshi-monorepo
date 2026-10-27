@@ -91,6 +91,14 @@ export const toggleMaximizeWindow = (): Promise<void> =>
 
 export const closeWindow = (): Promise<void> => getCurrentWindow().close()
 
+export const watchCloseRequest = (
+	onCloseRequested: () => void,
+): Promise<() => void> =>
+	getCurrentWindow().onCloseRequested((event) => {
+		event.preventDefault()
+		onCloseRequested()
+	})
+
 export type MaximizedWatch = {
 	report: (isMaximized: boolean) => void
 	onError: (reason: unknown) => void

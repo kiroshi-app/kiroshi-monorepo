@@ -62,8 +62,12 @@ export const useWorkspaceAssembly = () => {
 	const rosteredHostSpaceId =
 		rosterView.rosteredSpaceId &&
 		core.roster.controller.hostSpaceIdOf(rosterView.rosteredSpaceId)
-	const loadSpaces = useSpaceLoading({ core, scopes })
 	const { tabs } = useRouter().options.context
+	const loadSpaces = useSpaceLoading({
+		core,
+		scopes,
+		reopenedSpaceId: tabs.reopenedSpaceId,
+	})
 	useTabKeys(tabs)
 	useNewTabClicks(tabs)
 	useTabThreadSync({

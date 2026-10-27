@@ -63,6 +63,12 @@ const common = {
 			descriptionWithReason:
 				"The tab stayed here ({{reason}}). Choose Move to new window from the tab’s menu to try again.",
 		},
+		reopenWindowFailed: {
+			title: "Couldn’t reopen a window",
+			description: "Its tabs were closed. Open them again from the sidebar.",
+			descriptionWithReason:
+				"Its tabs were closed ({{reason}}). Open them again from the sidebar.",
+		},
 		pinTabShortcut: "Ctrl⇧P",
 		newTabShortcut: "⌘T",
 		reopenClosedTabShortcut: "⌘⇧T",

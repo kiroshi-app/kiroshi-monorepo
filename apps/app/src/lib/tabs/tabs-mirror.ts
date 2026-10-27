@@ -4,7 +4,7 @@ import {
 	currentHrefOf,
 	type SpaceTabs,
 	type Tab,
-	tabOn,
+	tabThrough,
 	withPinnedFirst,
 } from "./tabs-model"
 
@@ -14,9 +14,13 @@ const SPACE_TABS_KEY_PREFIX = "spaceTabs:"
 
 const WINDOW_TABS_KEY_PREFIX = "windowTabs:"
 
+const OPEN_WINDOW_KEY_PREFIX = "openWindow:"
+
 type KeptTab = {
 	href: string
 	isPinned: boolean
+	entries?: unknown
+	index?: unknown
 }
 
 type KeptSpaceTabs = {
@@ -24,17 +28,25 @@ type KeptSpaceTabs = {
 	activeIndex: number
 }
 
+const windowTabsPrefixOf = (windowLabel: string) =>
+	`${WINDOW_TABS_KEY_PREFIX}${windowLabel}:`
+
 const keyOf = (windowLabel: string, spaceId: string) =>
 	windowLabel === MAIN_WINDOW_LABEL
 		? `${SPACE_TABS_KEY_PREFIX}${spaceId}`
-		: `${WINDOW_TABS_KEY_PREFIX}${windowLabel}:${spaceId}`
+		: `${windowTabsPrefixOf(windowLabel)}${spaceId}`
+
+const openWindowKeyOf = (windowLabel: string) =>
+	`${OPEN_WINDOW_KEY_PREFIX}${windowLabel}`
+
+const isKeptHref = (value: unknown): value is string =>
+	typeof value === "string" && isTabHref(value)
 
 const isKeptTab = (value: unknown): value is KeptTab =>
 	typeof value === "object" &&
 	value !== null &&
 	"href" in value &&
-	typeof value.href === "string" &&
-	isTabHref(value.href) &&
+	isKeptHref(value.href) &&
 	"isPinned" in value &&
 	typeof value.isPinned === "boolean"
 
@@ -56,9 +68,24 @@ const parseKept = (value: string | null): unknown => {
 	}
 }
 
-const restoredTabOf = ({ href, isPinned }: KeptTab): Tab => ({
-	...tabOn(href),
-	isPinned,
+const historyOf = ({ href, entries, index }: KeptTab) =>
+	Array.isArray(entries) &&
+	entries.every(isKeptHref) &&
+	typeof index === "number" &&
+	entries[index] === href
+		? tabThrough(entries, index)
+		: tabThrough([href], 0)
+
+const restoredTabOf = (kept: KeptTab): Tab => ({
+	...historyOf(kept),
+	isPinned: kept.isPinned,
+})
+
+const keptTabOf = (tab: Tab): KeptTab => ({
+	href: currentHrefOf(tab),
+	isPinned: tab.isPinned,
+	entries: tab.entries.map((entry) => entry.href),
+	index: tab.index,
 })
 
 const spaceTabsOf = ({ tabs, activeIndex }: KeptSpaceTabs): SpaceTabs => {
@@ -84,21 +111,77 @@ export const writeSpaceTabs = (
 	space: SpaceTabs,
 ) => {
 	const kept: KeptSpaceTabs = {
-		tabs: space.tabs.map((tab) => ({
-			href: currentHrefOf(tab),
-			isPinned: tab.isPinned,
-		})),
+		tabs: space.tabs.map(keptTabOf),
 		activeIndex: space.tabs.indexOf(activeTabOf(space)),
 	}
 	localStorage.setItem(keyOf(windowLabel, spaceId), JSON.stringify(kept))
 }
 
-export const discardSecondaryWindowTabs = () => {
-	const secondaryKeys = Array.from(
+const storedKeys = () =>
+	Array.from(
 		{ length: localStorage.length },
 		(_, i) => localStorage.key(i) ?? "",
-	).filter((key) => key.startsWith(WINDOW_TABS_KEY_PREFIX))
-	for (const key of secondaryKeys) {
+	)
+
+const keysStartingWith = (prefix: string) =>
+	storedKeys().filter((key) => key.startsWith(prefix))
+
+const tabsKeysOf = (windowLabel: string) =>
+	keysStartingWith(windowTabsPrefixOf(windowLabel))
+
+const removeKeys = (keys: string[]) => {
+	for (const key of keys) {
 		localStorage.removeItem(key)
 	}
+}
+
+export const openWindowLabels = () =>
+	keysStartingWith(OPEN_WINDOW_KEY_PREFIX).map((key) =>
+		key.slice(OPEN_WINDOW_KEY_PREFIX.length),
+	)
+
+export const recordOpenWindow = (windowLabel: string) => {
+	if (localStorage.getItem(openWindowKeyOf(windowLabel)) === null) {
+		localStorage.setItem(openWindowKeyOf(windowLabel), "")
+	}
+}
+
+export const recordShownSpace = (windowLabel: string, spaceId: string) => {
+	localStorage.setItem(openWindowKeyOf(windowLabel), spaceId)
+}
+
+export const shownSpaceOf = (windowLabel: string) =>
+	localStorage.getItem(openWindowKeyOf(windowLabel)) || null
+
+export const forgetWindow = (windowLabel: string) => {
+	removeKeys([openWindowKeyOf(windowLabel), ...tabsKeysOf(windowLabel)])
+}
+
+const moveTabsKey = (key: string, from: string, to: string) => {
+	const spaceId = key.slice(windowTabsPrefixOf(from).length)
+	localStorage.setItem(
+		`${windowTabsPrefixOf(to)}${spaceId}`,
+		localStorage.getItem(key) ?? "",
+	)
+}
+
+export const handOverWindow = (predecessor: string, successor: string) => {
+	const shownSpace = localStorage.getItem(openWindowKeyOf(predecessor))
+	if (shownSpace === null) {
+		return
+	}
+	localStorage.setItem(openWindowKeyOf(successor), shownSpace)
+	for (const key of tabsKeysOf(predecessor)) {
+		moveTabsKey(key, predecessor, successor)
+	}
+	forgetWindow(predecessor)
+}
+
+export const discardUnlistedWindowTabs = () => {
+	const listedPrefixes = openWindowLabels().map(windowTabsPrefixOf)
+	removeKeys(
+		keysStartingWith(WINDOW_TABS_KEY_PREFIX).filter(
+			(key) => !listedPrefixes.some((prefix) => key.startsWith(prefix)),
+		),
+	)
 }
