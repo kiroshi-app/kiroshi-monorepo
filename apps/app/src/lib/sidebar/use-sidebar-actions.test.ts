@@ -156,3 +156,67 @@ describe("the roster row", () => {
 		expect(actions).not.toHaveProperty("onStopConversation")
 	})
 })
+
+const newTabFor = (selected: SelectedRow) => {
+	const roster = createStore(selected)
+	const openedMission = createOpenedMissionController(roster)
+	openedMission.open({ missionId: "m-1", rowId: "b-1" })
+	const rows = {
+		getState: roster.getState,
+		select: vi.fn(),
+		selectConversation: vi.fn(),
+	}
+	const settings = {
+		openCompanionSettings: vi.fn(),
+		openSpaceSettings: vi.fn(),
+		openThreadInNewTab: vi.fn(),
+		openUserSettings: vi.fn(),
+	}
+	const source: SidebarActionsSource = {
+		attachments: UNUSED,
+		collapsedSections: UNUSED,
+		drafts: UNUSED,
+		joinedSpaces: UNUSED,
+		openedMission,
+		roster: rows as never,
+		runtimes: UNUSED,
+		sections: UNUSED,
+		settings,
+		spaces: UNUSED,
+	}
+	const { result } = renderHook(() => useSidebarActions(source))
+	return { actions: result.current, openedMission, roster, rows, settings }
+}
+
+const SHOWN_BOT: SelectedRow = {
+	selectedBotId: "b-1",
+	selectedConversationId: null,
+}
+
+describe("open in a new tab from a row menu", () => {
+	it("opens the companion in a background tab and keeps the shown row", () => {
+		const shown = newTabFor(SHOWN_BOT)
+
+		shown.actions.onOpenBotInNewTab("b-2")
+
+		expect(shown.settings.openThreadInNewTab).toHaveBeenCalledExactlyOnceWith({
+			bot: "b-2",
+		})
+		expect(shown.rows.select).not.toHaveBeenCalled()
+		expect(shown.roster.getState()).toEqual(SHOWN_BOT)
+		expect(shown.openedMission.getState()).not.toBeNull()
+	})
+
+	it("opens the conversation in a background tab and keeps the shown row", () => {
+		const shown = newTabFor(SHOWN_BOT)
+
+		shown.actions.onOpenConversationInNewTab("c-2")
+
+		expect(shown.settings.openThreadInNewTab).toHaveBeenCalledExactlyOnceWith({
+			conversation: "c-2",
+		})
+		expect(shown.rows.selectConversation).not.toHaveBeenCalled()
+		expect(shown.roster.getState()).toEqual(SHOWN_BOT)
+		expect(shown.openedMission.getState()).not.toBeNull()
+	})
+})

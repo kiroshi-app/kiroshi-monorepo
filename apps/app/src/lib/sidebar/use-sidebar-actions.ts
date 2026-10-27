@@ -36,6 +36,8 @@ export type SidebarActions = Required<
 		| "onDeleteSection"
 		| "onDuplicateBot"
 		| "onEditBot"
+		| "onOpenBotInNewTab"
+		| "onOpenConversationInNewTab"
 		| "onOpenConversationSettings"
 		| "onOpenSpaceSettings"
 		| "onOpenUserSettings"
@@ -147,6 +149,9 @@ export const useSidebarActions = ({
 				void roster.removeFromSpace(botId, spaceId)
 			},
 			onEditBot: (id) => settings.openCompanionSettings(id),
+			onOpenBotInNewTab: (id) => settings.openThreadInNewTab({ bot: id }),
+			onOpenConversationInNewTab: (id) =>
+				settings.openThreadInNewTab({ conversation: id }),
 			onOpenConversationSettings: roster.editConversation,
 			onOpenSpaceSettings: () => {
 				const openRowId = openSpaceRowId(joinedSpaces, spaces)
