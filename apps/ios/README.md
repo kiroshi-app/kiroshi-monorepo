@@ -393,3 +393,21 @@ An invitation wears the colour of the Space it invites to. `GET /invitations` an
 ```bash
 xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture 4.2 -invitationColour pink
 ```
+
+## The Space avatar
+
+The menu of Spaces draws each Space with the avatar the desktop draws (page "Spec · 8A Horizon Glaze" of the Paper file "Kiroshi, Space avatars"), in place of the online dot. `SpaceAvatarRecipe` (`Core/`) is the Swift port of `packages/ui/src/components/space-avatar-recipe.ts`: the superellipse, the arcs seeded from the Space id (never its name), the tones of each colour and theme, the no-colour greys of a Space without a colour. `SpaceAvatar` (`Shell/`) draws it in a `Canvas`; a menu row only takes an image, so `SpaceSelector` renders it with `ImageRenderer` at the screen's scale, 26 pt, for the current appearance. Nothing moves, in any state.
+
+Each row reads the presence `SpaceStore.presence(of:)` gives it: `Shared` (you own the Space, its host is online), `Online` (you're a member, its host is online), `Connecting…` (the current Space's socket hasn't heard from its host since it opened) and `Not connected` (`online` is false in `GET /instances`, or the host went offline). Its accessibility label is the Space's name then its presence, `Side project, Not connected`; the avatar is hidden from VoiceOver.
+
+`SpaceAvatarRecipeTests` replays `KiroshiTests/Vectors/space-avatar.json`, which the desktop recipe writes:
+
+```bash
+bun apps/ios/scripts/space-avatar-vectors.ts
+```
+
+`-hostSilent YES` keeps the fixture host from ever answering, so the current Space stays `Connecting…` (the Missions fixtures, `5.1`, play through that host; `2.1` plays its own):
+
+```bash
+xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture 5.1 -hostSilent YES -spaceColours blue,null,purple
+```

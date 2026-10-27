@@ -57,7 +57,7 @@ final class InvitationAccessibilityTests: XCTestCase {
         let space = app.navigationBars["Personal"].buttons["Space"]
         XCTAssertTrue(space.waitForExistence(timeout: 10))
         let announcesTheInvitation = NSPredicate(
-            format: "value == 'Personal, online, 1 invitation'")
+            format: "value == 'Personal, Shared, 1 invitation'")
         XCTAssertEqual(
             XCTWaiter().wait(
                 for: [expectation(for: announcesTheInvitation, evaluatedWith: space)], timeout: 10),
@@ -125,7 +125,14 @@ final class InvitationAccessibilityTests: XCTestCase {
             let space = app.navigationBars["Studio"].buttons["Space"]
 
             XCTAssertTrue(space.waitForExistence(timeout: 15), fixture)
-            XCTAssertEqual(space.value as? String, "Studio, online", fixture)
+            XCTAssertEqual(
+                XCTWaiter().wait(
+                    for: [
+                        expectation(
+                            for: NSPredicate(format: "value == 'Studio, Online'"),
+                            evaluatedWith: space)
+                    ], timeout: 10),
+                .completed, fixture)
             XCTAssertFalse(app.buttons["Accept"].exists, fixture)
             XCTAssertTrue(app.staticTexts["Juniper"].waitForExistence(timeout: 10), fixture)
             app.terminate()
