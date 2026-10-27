@@ -229,6 +229,8 @@ Never push to `main`. Always work on feature branches.
 
 Right after `gh pr create`, run `scripts/pr-enqueue.sh` alone in its own Bash call: it arms auto-merge on the PR of the current branch and fails if it is not armed.
 
+`scripts/pr-requeue-check.sh` refuses a PR ejected from the merge queue on its current head unless `--reason "<why this head can pass now>"` is given; it is not wired into the enqueue gesture yet, `scripts/pr-enqueue.sh` does not run it (OPE-1423).
+
 PR already queued and a fix must land: run `scripts/pr-dequeue.sh`, push, then run `scripts/pr-enqueue.sh` again. Never close the PR.
 
 A merge_group run retries a failing vitest or Rust test once and names every test that passed only on its retry in the job summary; a pull_request, `bun run ci` and `ci:fast` retry nothing.

@@ -415,6 +415,16 @@ describe("ci:fast", () => {
 			"PR enqueue script unit tests",
 			"test:pr-enqueue",
 		],
+		[
+			"scripts/pr-requeue-check.sh",
+			"PR requeue check script unit tests",
+			"test:pr-requeue-check",
+		],
+		[
+			"scripts/pr-requeue-check.test.ts",
+			"PR requeue check script unit tests",
+			"test:pr-requeue-check",
+		],
 	]
 	const QUEUE_SCRIPT_PATHS = QUEUE_SCRIPT_UNIT_TESTS.map(([path]) => path)
 	const QUEUE_SCRIPT_STEPS = QUEUE_SCRIPT_UNIT_TESTS.map(([, step]) => step)
