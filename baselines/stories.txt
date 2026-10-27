@@ -1605,6 +1605,11 @@ settings-conversation-conversationsettingsdialog--nothing-set
 settings-conversation-conversationsettingsdialog--own-hue-set
 settings-conversation-conversationsettingsdialog--participants
 settings-conversation-conversationsettingsdialog--participants-with-titles
+settings-conversation-conversationsettingsscreen--danger-zone
+settings-conversation-conversationsettingsscreen--dark
+settings-conversation-conversationsettingsscreen--general
+settings-conversation-conversationsettingsscreen--instructions
+settings-conversation-conversationsettingsscreen--participants
 settings-conversation-participantspanel--default
 settings-conversation-participantspanel--dismissed
 settings-conversation-participantspanel--last-participant

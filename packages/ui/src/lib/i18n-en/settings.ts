@@ -10,6 +10,7 @@ const settings = {
 		subtitle: {
 			space: "Space settings",
 			companion: "Companion settings",
+			conversation: "Conversation settings",
 			user: "User settings",
 			invitation: "Invitation",
 		},
