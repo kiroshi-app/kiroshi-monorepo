@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test"
-import { existsSync, readFileSync } from "node:fs"
+import { readFileSync } from "node:fs"
+import { fileURLToPath } from "node:url"
 
 import {
 	CHANGED_UNIT_TESTS,
@@ -10,6 +11,7 @@ import {
 	type Group,
 	offPullRequestNote,
 	RUST_PULL_REQUEST_STEPS,
+	SHARED_IMPORTER_THRESHOLD,
 	SHARED_PATH_RULES,
 	SIMULATOR_LOOKUP,
 	type Step,
@@ -18,6 +20,7 @@ import {
 	unitTestScope,
 } from "./ci"
 import { decideJobs } from "./ci-changes"
+import { TEST_SOURCE_ROOTS, testImportersByModule } from "./test-importers"
 
 type WorkflowStep = {
 	name?: string
@@ -473,12 +476,45 @@ describe("the unit test scope of a pull request", () => {
 		expect(unitTestScope([])).toEqual({ scope: "changed" })
 	})
 
-	it.each(SHARED_PATH_RULES.filter((rule) => !rule.includes("*")))(
-		"names %s, a file of this checkout",
-		(path) => {
-			expect(existsSync(new URL(`../${path}`, import.meta.url))).toBe(true)
-		},
-	)
+	it("runs the full suite when the diff touches a tokens file at the root of packages/ui/src", () => {
+		expect(unitTestScope(["packages/ui/src/tokens.json"])).toEqual({
+			scope: "full",
+			path: "packages/ui/src/tokens.json",
+			rule: "packages/ui/src/tokens.*",
+		})
+	})
+
+	it(`shares every module ${SHARED_IMPORTER_THRESHOLD} or more test files import, and names no other module`, () => {
+		const importers = testImportersByModule(
+			fileURLToPath(new URL("..", import.meta.url)),
+		)
+		const isShared = (path: string) => unitTestScope([path]).scope === "full"
+		const isUnderDirectoryRule = (path: string) =>
+			SHARED_PATH_RULES.some(
+				(rule) => rule.includes("*") && new Bun.Glob(rule).match(path),
+			)
+
+		const unshared = [...importers]
+			.filter(
+				([path, count]) =>
+					count >= SHARED_IMPORTER_THRESHOLD && !isShared(path),
+			)
+			.map(([path, count]) => `${path} (${count} test files)`)
+		const underThreshold = SHARED_PATH_RULES.filter(
+			(rule) =>
+				!rule.includes("*") &&
+				TEST_SOURCE_ROOTS.some((root) => rule.startsWith(root)) &&
+				!isUnderDirectoryRule(rule),
+		)
+			.map((rule) => ({ rule, count: importers.get(rule) ?? 0 }))
+			.filter(({ count }) => count < SHARED_IMPORTER_THRESHOLD)
+			.map(({ rule, count }) => `${rule} (${count} test files)`)
+
+		expect({ unshared, underThreshold }).toEqual({
+			unshared: [],
+			underThreshold: [],
+		})
+	})
 
 	it("leaves ci:fast on the changed test files when the diff touches a shared path", () => {
 		expect(fastSteps(["packages/ui/src/tokens/tokens.json"]).at(-1)).toEqual(

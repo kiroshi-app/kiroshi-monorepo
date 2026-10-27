@@ -215,8 +215,11 @@ export const CHANGED_UNIT_TESTS: Step = {
 	command: "bun run baseline changed",
 }
 
+export const SHARED_IMPORTER_THRESHOLD = 20
+
 export const SHARED_PATH_RULES = [
 	"packages/ui/src/tokens/**",
+	"packages/ui/src/tokens.*",
 	"packages/ui/src/styles/**",
 	"packages/ui/src/lib/**",
 	"packages/shared/**",
