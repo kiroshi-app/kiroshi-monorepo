@@ -15,6 +15,8 @@ import {
 	ContextMenu,
 	ContextMenuContent,
 	ContextMenuItem,
+	ContextMenuSeparator,
+	ContextMenuShortcut,
 	ContextMenuTrigger,
 } from "@workspace/ui/components/ui/context-menu"
 import { useStableCallback } from "@workspace/ui/hooks/use-stable-callback"
@@ -34,11 +36,15 @@ type TitleBarTabsProps = {
 	activeTabId?: string
 	canGoBack?: boolean
 	canGoForward?: boolean
+	hasClosedTab?: boolean
 	onSelectTab?: (id: string) => void
 	onCloseTab?: (id: string) => void
 	onPinTab?: (id: string) => void
 	onUnpinTab?: (id: string) => void
 	onCloseOtherTabs?: (id: string) => void
+	onDuplicateTab?: (id: string) => void
+	onReopenClosedTab?: () => void
+	onMoveTabToNewWindow?: (id: string) => void
 	onNewTab?: () => void
 	onGoBack?: () => void
 	onGoForward?: () => void
@@ -90,6 +96,20 @@ const OVERFLOW_ICON =
 	"grid size-4 shrink-0 place-items-center [&>svg]:size-3.75!"
 
 const DRAG_REGION = "min-w-6 flex-1 self-stretch"
+
+const TAB_MENU_SHORTCUTS = {
+	pinTab: { hint: "titleBar.pinTabShortcut", keys: "Control+Shift+P" },
+	newTab: { hint: "titleBar.newTabShortcut", keys: "Meta+T" },
+	reopenClosedTab: {
+		hint: "titleBar.reopenClosedTabShortcut",
+		keys: "Meta+Shift+T",
+	},
+	closeTab: { hint: "titleBar.closeTabShortcut", keys: "Meta+W" },
+	closeOtherTabs: {
+		hint: "titleBar.closeOtherTabsShortcut",
+		keys: "Meta+Alt+W",
+	},
+} as const
 
 const UNPINNED_TAB = '[data-slot="title-bar-tab"]'
 
@@ -171,7 +191,15 @@ const splitAtFit = (
 
 type TabGestures = Pick<
 	TitleBarTabsProps,
-	"onPinTab" | "onUnpinTab" | "onCloseOtherTabs"
+	| "hasClosedTab"
+	| "onPinTab"
+	| "onUnpinTab"
+	| "onNewTab"
+	| "onDuplicateTab"
+	| "onReopenClosedTab"
+	| "onCloseTab"
+	| "onCloseOtherTabs"
+	| "onMoveTabToNewWindow"
 >
 
 type TitleBarTabItemProps = TabGestures & {
@@ -184,9 +212,15 @@ const TitleBarTabItem = ({
 	tab,
 	isActive,
 	width,
+	hasClosedTab = false,
 	onPinTab,
 	onUnpinTab,
+	onNewTab,
+	onDuplicateTab,
+	onReopenClosedTab,
+	onCloseTab,
 	onCloseOtherTabs,
+	onMoveTabToNewWindow,
 }: TitleBarTabItemProps) => {
 	const { t } = useTranslation("common")
 	const needsYou = Boolean(tab.isNeedingYou) && !isActive
@@ -228,19 +262,73 @@ const TitleBarTabItem = ({
 				)}
 			</ContextMenuTrigger>
 			<ContextMenuContent
-				className={cn(TITLE_BAR_MENU, "w-55", STILL_UNDER_REDUCED_MOTION)}
+				className={cn(TITLE_BAR_MENU, "min-w-55", STILL_UNDER_REDUCED_MOTION)}
 			>
 				<ContextMenuItem
+					aria-keyshortcuts={TAB_MENU_SHORTCUTS.pinTab.keys}
 					className={TITLE_BAR_MENU_ROW}
 					onClick={() => (tab.isPinned ? onUnpinTab : onPinTab)?.(tab.id)}
 				>
 					{t(tab.isPinned ? "titleBar.unpinTab" : "titleBar.pinTab")}
+					<ContextMenuShortcut aria-hidden="true">
+						{t(TAB_MENU_SHORTCUTS.pinTab.hint)}
+					</ContextMenuShortcut>
 				</ContextMenuItem>
 				<ContextMenuItem
+					aria-keyshortcuts={TAB_MENU_SHORTCUTS.newTab.keys}
+					className={TITLE_BAR_MENU_ROW}
+					onClick={() => onNewTab?.()}
+				>
+					{t("titleBar.newTab")}
+					<ContextMenuShortcut aria-hidden="true">
+						{t(TAB_MENU_SHORTCUTS.newTab.hint)}
+					</ContextMenuShortcut>
+				</ContextMenuItem>
+				<ContextMenuItem
+					className={TITLE_BAR_MENU_ROW}
+					onClick={() => onDuplicateTab?.(tab.id)}
+				>
+					{t("titleBar.duplicateTab")}
+				</ContextMenuItem>
+				<ContextMenuSeparator />
+				<ContextMenuItem
+					aria-keyshortcuts={TAB_MENU_SHORTCUTS.reopenClosedTab.keys}
+					className={TITLE_BAR_MENU_ROW}
+					disabled={!hasClosedTab}
+					onClick={() => onReopenClosedTab?.()}
+				>
+					{t("titleBar.reopenClosedTab")}
+					<ContextMenuShortcut aria-hidden="true">
+						{t(TAB_MENU_SHORTCUTS.reopenClosedTab.hint)}
+					</ContextMenuShortcut>
+				</ContextMenuItem>
+				<ContextMenuSeparator />
+				<ContextMenuItem
+					aria-keyshortcuts={TAB_MENU_SHORTCUTS.closeTab.keys}
+					className={TITLE_BAR_MENU_ROW}
+					disabled={tab.isPinned}
+					onClick={() => onCloseTab?.(tab.id)}
+				>
+					{t("titleBar.closeTab")}
+					<ContextMenuShortcut aria-hidden="true">
+						{t(TAB_MENU_SHORTCUTS.closeTab.hint)}
+					</ContextMenuShortcut>
+				</ContextMenuItem>
+				<ContextMenuItem
+					aria-keyshortcuts={TAB_MENU_SHORTCUTS.closeOtherTabs.keys}
 					className={TITLE_BAR_MENU_ROW}
 					onClick={() => onCloseOtherTabs?.(tab.id)}
 				>
 					{t("titleBar.closeOtherTabs")}
+					<ContextMenuShortcut aria-hidden="true">
+						{t(TAB_MENU_SHORTCUTS.closeOtherTabs.hint)}
+					</ContextMenuShortcut>
+				</ContextMenuItem>
+				<ContextMenuItem
+					className={TITLE_BAR_MENU_ROW}
+					onClick={() => onMoveTabToNewWindow?.(tab.id)}
+				>
+					{t("titleBar.moveTabToNewWindow")}
 				</ContextMenuItem>
 			</ContextMenuContent>
 		</ContextMenu>
@@ -296,11 +384,15 @@ const TitleBarTabs = ({
 	activeTabId,
 	canGoBack = false,
 	canGoForward = false,
+	hasClosedTab,
 	onSelectTab,
 	onCloseTab,
 	onPinTab,
 	onUnpinTab,
 	onCloseOtherTabs,
+	onDuplicateTab,
+	onReopenClosedTab,
+	onMoveTabToNewWindow,
 	onNewTab,
 	onGoBack,
 	onGoForward,
@@ -315,9 +407,15 @@ const TitleBarTabs = ({
 	const tabItem = (tab: TitleBarTab, width: string) => (
 		<TitleBarTabItem
 			isActive={tab.id === activeTabId}
+			hasClosedTab={hasClosedTab}
 			key={tab.id}
 			onCloseOtherTabs={onCloseOtherTabs}
+			onCloseTab={onCloseTab}
+			onDuplicateTab={onDuplicateTab}
+			onMoveTabToNewWindow={onMoveTabToNewWindow}
+			onNewTab={onNewTab}
 			onPinTab={onPinTab}
+			onReopenClosedTab={onReopenClosedTab}
 			onUnpinTab={onUnpinTab}
 			tab={tab}
 			width={width}
