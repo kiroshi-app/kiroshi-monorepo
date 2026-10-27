@@ -3,6 +3,14 @@
 import { useId } from "react"
 
 import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
+import {
+	COMPACT_EDGE,
+	edgeWidthOf,
+	GLAZE_EDGE,
+	GLAZE_THEMES,
+	LIP_OPACITY,
+	THEME_LAYER,
+} from "@workspace/ui/components/glaze-border"
 import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import {
 	COMPACT_RADII,
@@ -28,44 +36,16 @@ type SpaceAvatarState =
 	| "invitation"
 	| "joining"
 
-type Translucent = { colour: string; opacity: number }
-
 const AVATAR = "pointer-events-none inline-block shrink-0"
 
 const DRAWING = "block overflow-visible"
 
 const FILL_FRAME = { width: "100%", height: "100%" }
 
-const THEMES: SpaceAvatarTheme[] = ["light", "dark"]
-
-const THEME_LAYER: Record<SpaceAvatarTheme, string> = {
-	light: "dark:hidden",
-	dark: "hidden dark:inline",
-}
-
-const GLAZE_EDGE: Record<SpaceAvatarTheme, Translucent> = {
-	light: { colour: "#000000", opacity: 0.08 },
-	dark: { colour: "#ffffff", opacity: 0.1 },
-}
-
-const COMPACT_EDGE: Record<SpaceAvatarTheme, Translucent> = {
-	light: { colour: "#000000", opacity: 0.1 },
-	dark: { colour: "#ffffff", opacity: 0.12 },
-}
-
-const LIP_OPACITY: Record<SpaceAvatarTheme, number> = {
-	light: 0.55,
-	dark: 0.22,
-}
-
 const OFFLINE_OPACITY: Record<SpaceAvatarTheme, number> = {
 	light: 0.8,
 	dark: 1,
 }
-
-const GLAZE_EDGE_SHARE = 0.025
-
-const COMPACT_EDGE_SHARE = 0.05
 
 const STATE_OF_HOST: Record<SpaceHost, SpaceAvatarState> = {
 	shared: "shared",
@@ -119,9 +99,7 @@ const SpaceAvatar = ({
 	const radii = isCompactRecipe ? COMPACT_RADII : seededRadii
 	const metrics = STATE_METRICS[size]
 	const dot = hasDot(state) ? metrics.dot : undefined
-	const edgeWidth = isCompactRecipe
-		? COMPACT_EDGE_SHARE * size
-		: Math.max(1, GLAZE_EDGE_SHARE * size)
+	const edgeWidth = edgeWidthOf(size)
 	const arcCentre = { cx: anchor.x * size, cy: anchor.y * size }
 	const outlineHalf = centre - metrics.invitationStroke / 2
 	const fullFrame = { x: -size, y: -size, width: 3 * size, height: 3 * size }
@@ -284,7 +262,7 @@ const SpaceAvatar = ({
 					) : null}
 				</defs>
 				<g mask={dot ? `url(#${ids.cutOut})` : undefined}>
-					{THEMES.map((theme) => (
+					{GLAZE_THEMES.map((theme) => (
 						<g className={THEME_LAYER[theme]} data-theme={theme} key={theme}>
 							{drawing(theme)}
 						</g>

@@ -9,6 +9,8 @@ branding-botbadge--mission-states
 branding-botbadge--on-another-surface
 branding-botbadge--placements
 branding-botidentityavatar--badged-while-working
+branding-botidentityavatar--border-at-every-size
+branding-botidentityavatar--border-at-every-size-dark
 branding-botidentityavatar--bound-to-one-bot
 branding-botidentityavatar--broken-image
 branding-botidentityavatar--broken-image-working-badged
@@ -33,7 +35,8 @@ branding-ditheredfieldavatar--one-drawing-at-every-size
 branding-ditheredfieldavatar--one-glyph-in-every-colour
 branding-ditheredfieldavatar--one-screen-for-every-companion
 branding-ditheredfieldavatar--without-ground
-branding-outlinedhexagon--filled-with-an-inside-hairline
+branding-outlinedhexagon--filled-with-the-glaze-border
+branding-outlinedhexagon--filled-with-the-glaze-border-dark
 branding-spaceavatar--sizes
 branding-spaceavatar--states
 branding-spacetint--default
@@ -1013,6 +1016,8 @@ navigation-appsidebarconversationrow--row-with-two-bots
 navigation-appsidebarconversationrow--row-without-icon-or-colour
 navigation-appsidebarconversationrow--working-conversation-keeps-its-timestamp
 navigation-appsidebarpanel--conversations-with-a-working-bot
+navigation-appsidebarroster--border-on-hovered-and-selected-rows
+navigation-appsidebarroster--border-on-hovered-and-selected-rows-dark
 navigation-appsidebarroster--complete
 navigation-appsidebarroster--complete-dark
 navigation-appsidebarroster--idle
@@ -1052,6 +1057,8 @@ navigation-apptitlebar--a-6-empty-tab-dark
 navigation-apptitlebar--overflow-follows-the-strip
 navigation-apptitlebar--tab-gestures
 navigation-apptitlebar--with-window-controls
+navigation-conversationbotpile--edged-members
+navigation-conversationbotpile--edged-members-dark
 navigation-conversationbotpile--five-bots-show-two-and-a-counter
 navigation-conversationbotpile--one-bot
 navigation-conversationbotpile--side-by-side-five-bots-show-two-and-a-counter
@@ -1059,6 +1066,8 @@ navigation-conversationbotpile--side-by-side-three-bots
 navigation-conversationbotpile--three-bots
 navigation-conversationbotpile--two-bots
 navigation-conversationsubjecticon--blue
+navigation-conversationsubjecticon--border-at-every-size
+navigation-conversationsubjecticon--border-at-every-size-dark
 navigation-conversationsubjecticon--cyan
 navigation-conversationsubjecticon--green
 navigation-conversationsubjecticon--no-colour
