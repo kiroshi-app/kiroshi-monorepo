@@ -91,7 +91,7 @@ export const openSearchTarget = (
 	}
 }
 
-const threadOfTarget = (target: SearchTarget): ThreadSearch => {
+export const threadOfSearchTarget = (target: SearchTarget): ThreadSearch => {
 	if (target.kind === "mission") {
 		return { bot: target.botId, mission: target.missionId }
 	}
@@ -99,11 +99,6 @@ const threadOfTarget = (target: SearchTarget): ThreadSearch => {
 		? { bot: target.row.id }
 		: { conversation: target.row.id }
 }
-
-export const openSearchTargetInNewTab = (
-	target: SearchTarget,
-	navigation: SearchNavigation,
-) => navigation.openThreadInNewTab(threadOfTarget(target))
 
 export type SearchNavigationSource = {
 	roster: Pick<RosterController, "select" | "selectConversation">

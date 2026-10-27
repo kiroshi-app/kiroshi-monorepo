@@ -14,10 +14,10 @@ import {
 import {
 	createSearchNavigation,
 	openSearchTarget,
-	openSearchTargetInNewTab,
 	type SearchNavigation,
 	type SearchNavigationSource,
 	type SearchTarget,
+	threadOfSearchTarget,
 } from "./search-navigation"
 import { type SearchPort, searchPort } from "./search-port"
 import { useSearchKeys } from "./use-search-keys"
@@ -102,7 +102,7 @@ export const useSearch = ({
 		(target: SearchTarget) => {
 			controller.close()
 			if (isNewTabClickInFlight()) {
-				openSearchTargetInNewTab(target, navigation)
+				navigation.openThreadInNewTab(threadOfSearchTarget(target))
 				return
 			}
 			openSearchTarget(target, navigation)
