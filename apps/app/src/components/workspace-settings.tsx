@@ -39,7 +39,7 @@ const gesturesAskedBySettings = (
 	tabs: WorkspaceTabs,
 ): GesturesAskedBySettings => ({
 	onSelectTab: (id) => tabs.leaveAsked(() => tabs.select(id)),
-	onCloseTab: (id) => tabs.leaveAsked(() => tabs.close(id)),
+	onCloseTab: (id) => tabs.leaveAsked(() => tabs.closeUnpinned(id)),
 	onNewTab: () => tabs.leaveAsked(tabs.openEmptyTab),
 	onGoBack: () => tabs.leaveAsked(tabs.back),
 	onGoForward: () => tabs.leaveAsked(tabs.forward),

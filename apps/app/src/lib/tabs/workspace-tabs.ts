@@ -20,6 +20,7 @@ import {
 	closeActiveTab,
 	closeOtherTabs,
 	closeTab,
+	closeUnpinnedTab,
 	currentEntryOf,
 	currentHrefOf,
 	dropTabsWhere,
@@ -72,6 +73,7 @@ export type WorkspaceTabs = {
 	pin: (id: string) => void
 	unpin: (id: string) => void
 	close: (id: string) => void
+	closeUnpinned: (id: string) => void
 	closeActive: () => void
 	closeOthers: (id: string) => void
 	duplicate: (id: string) => void
@@ -392,6 +394,8 @@ export const createWorkspaceTabs = (
 		pin: (id) => change((space) => pinTab(space, id)),
 		unpin: (id) => change((space) => unpinTab(space, id)),
 		close: (id) => closingChange((space) => closeTab(space, id)),
+		closeUnpinned: (id) =>
+			closingChange((space) => closeUnpinnedTab(space, id)),
 		closeActive: () => closingChange(closeActiveTab),
 		closeOthers: (id) => closingChange((space) => closeOtherTabs(space, id)),
 		duplicate: (id) => change((space) => duplicateTab(space, id)),

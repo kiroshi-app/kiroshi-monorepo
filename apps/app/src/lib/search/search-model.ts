@@ -8,6 +8,7 @@ import type {
 	SearchTab,
 } from "@workspace/ui/components/search-palette"
 import type { SearchResultIdentity } from "@workspace/ui/components/search-result-row"
+import type { ClickModifiers } from "@workspace/ui/lib/click-modifiers"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import type {
@@ -134,7 +135,10 @@ const messageRowOf = (
 	return botId ? { kind: "bot", id: botId } : null
 }
 
-type ResultOpening = (target: SearchTarget) => void
+type ResultOpening = (
+	target: SearchTarget,
+	modifiers: ClickModifiers | undefined,
+) => void
 
 const toMessageResult = (
 	hit: MessageHit,
@@ -156,17 +160,20 @@ const toMessageResult = (
 			? soloPart()
 			: { key: "conversation", text: hit.conversationTitle },
 	],
-	onOpen: () =>
-		open({
-			kind: "chat",
-			row,
-			spaceId: hit.spaceId,
-			landing: {
-				conversationId: hit.conversationId,
-				messageId: hit.messageId,
-				seq: hit.seq,
+	onOpen: (modifiers) =>
+		open(
+			{
+				kind: "chat",
+				row,
+				spaceId: hit.spaceId,
+				landing: {
+					conversationId: hit.conversationId,
+					messageId: hit.messageId,
+					seq: hit.seq,
+				},
 			},
-		}),
+			modifiers,
+		),
 })
 
 const toChatResult = (
@@ -185,7 +192,8 @@ const toChatResult = (
 			? soloPart()
 			: { key: "participants", text: chat.participants.join(", ") },
 	],
-	onOpen: () => open({ kind: "chat", row, spaceId: chat.spaceId }),
+	onOpen: (modifiers) =>
+		open({ kind: "chat", row, spaceId: chat.spaceId }, modifiers),
 })
 
 const identityOfMission = (
@@ -210,13 +218,16 @@ const toMissionResult = (
 	timestamp: "",
 	identifier: mission.ticketExternalId,
 	parts: [{ key: "ticket", text: mission.ticketTitle }],
-	onOpen: () =>
-		open({
-			kind: "mission",
-			missionId: mission.id,
-			botId: mission.botId,
-			spaceId: mission.spaceId,
-		}),
+	onOpen: (modifiers) =>
+		open(
+			{
+				kind: "mission",
+				missionId: mission.id,
+				botId: mission.botId,
+				spaceId: mission.spaceId,
+			},
+			modifiers,
+		),
 })
 
 const toRoutineResult = (
@@ -230,14 +241,17 @@ const toRoutineResult = (
 	title: markedTitle(routine.title, query),
 	timestamp: "",
 	parts: [{ key: "expression", text: routine.expression ?? "" }],
-	onOpen: () =>
-		open({
-			kind: "routine",
-			routineId: routine.id,
-			row: rowOfRoutine(routine, lookups),
-			conversationId: routine.conversationId,
-			spaceId: routine.spaceId,
-		}),
+	onOpen: (modifiers) =>
+		open(
+			{
+				kind: "routine",
+				routineId: routine.id,
+				row: rowOfRoutine(routine, lookups),
+				conversationId: routine.conversationId,
+				spaceId: routine.spaceId,
+			},
+			modifiers,
+		),
 })
 
 const soloChatBots = (chats: CatalogueChat[]): Map<string, string> =>

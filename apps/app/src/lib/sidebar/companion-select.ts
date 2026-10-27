@@ -3,7 +3,7 @@ import { useMemo } from "react"
 import type { CompanionSelect } from "@workspace/ui/components/companion-select"
 
 import type { ThreadSearch } from "../navigation/thread-search"
-import { isNewTabClickInFlight } from "../tabs/new-tab-clicks"
+import { opensInNewTab } from "../tabs/new-tab-clicks"
 
 type RosterMember = { id: string }
 
@@ -29,11 +29,11 @@ export const useCompanionSelectGuard = ({
 
 		const members = rosters[openSpaceId] ?? []
 
-		return (companionId: string) => {
+		return (companionId, modifiers) => {
 			if (!members.some((member) => member.id === companionId)) {
 				return
 			}
-			if (isNewTabClickInFlight()) {
+			if (opensInNewTab(modifiers)) {
 				openThreadInNewTab({ bot: companionId })
 				return
 			}

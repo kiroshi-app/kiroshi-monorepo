@@ -129,10 +129,13 @@ export const closeTab = (space: SpaceTabs, id: string): SpaceTabs => {
 	}
 }
 
-export const closeActiveTab = (space: SpaceTabs): SpaceTabs => {
-	const active = activeTabOf(space)
-	return active.isPinned ? space : closeTab(space, active.id)
-}
+export const closeUnpinnedTab = (space: SpaceTabs, id: string): SpaceTabs =>
+	space.tabs.some((tab) => tab.id === id && tab.isPinned)
+		? space
+		: closeTab(space, id)
+
+export const closeActiveTab = (space: SpaceTabs): SpaceTabs =>
+	closeUnpinnedTab(space, activeTabOf(space).id)
 
 export const closeOtherTabs = (space: SpaceTabs, id: string): SpaceTabs =>
 	indexOfTab(space, id) === -1

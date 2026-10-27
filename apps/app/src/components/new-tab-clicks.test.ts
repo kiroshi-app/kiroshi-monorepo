@@ -340,3 +340,85 @@ describe("an in-app link", () => {
 		expect(tabNames()).toEqual([botName])
 	})
 })
+
+const openUserSettings = async (router: {
+	navigate: (options: { to: string }) => Promise<void>
+}) => {
+	await act(async () => {
+		await router.navigate({ to: USER_SETTINGS_HREF })
+	})
+	await settle()
+}
+
+const unselectedSettingsEntry = () =>
+	[
+		...document.querySelectorAll<HTMLElement>(
+			'[data-slot="settings-menu-entries"] button',
+		),
+	].find(
+		(entry) => entry.getAttribute("aria-current") !== "page",
+	) as HTMLElement
+
+describe("a settings menu entry", () => {
+	it("opens in place on a plain click", async () => {
+		const { router } = await mountApp()
+		await openUserSettings(router)
+		const before = router.state.location.href
+
+		await click(unselectedSettingsEntry())
+
+		expect(tabsOf()).toHaveLength(1)
+		expect(router.state.location.href).not.toBe(before)
+	})
+
+	it.each([
+		["middle-click", middleClick],
+		["Cmd-click", (target: Element) => click(target, { metaKey: true })],
+	])("opens in a new background tab on %s", async (_, gesture) => {
+		const { router } = await mountApp()
+		await openUserSettings(router)
+		const before = router.state.location.href
+
+		await gesture(unselectedSettingsEntry())
+
+		expect(tabsOf()).toHaveLength(2)
+		expect(activeTabIndex()).toBe(0)
+		expect(router.state.location.href).toBe(before)
+	})
+})
+
+const pressTogglePin = async () => {
+	await act(async () => {
+		fireEvent.keyDown(window, { key: "P", ctrlKey: true, shiftKey: true })
+	})
+	await settle()
+}
+
+describe.each([
+	["the main screen", async () => undefined],
+	["the settings screen", openUserSettings],
+])("a title bar tab on %s", (_, showScreen) => {
+	it("closes on middle-click when unpinned", async () => {
+		const { botName, router } = await mountApp()
+		await click(rosterRowOf(botName))
+		await click(rosterRowOf(ROOM_TITLE), { metaKey: true })
+		await showScreen(router)
+		expect(tabsOf()).toHaveLength(2)
+
+		await middleClick(tabsOf()[1] as HTMLElement)
+
+		expect(tabsOf()).toHaveLength(1)
+	})
+
+	it("stays open on middle-click when pinned", async () => {
+		const { botName, router } = await mountApp()
+		await click(rosterRowOf(botName))
+		await click(rosterRowOf(ROOM_TITLE), { metaKey: true })
+		await showScreen(router)
+		await pressTogglePin()
+
+		await middleClick(tabsOf()[0] as HTMLElement)
+
+		expect(tabsOf()).toHaveLength(2)
+	})
+})

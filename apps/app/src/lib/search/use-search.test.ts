@@ -12,6 +12,10 @@ import { afterEach, expect, it, vi } from "vitest"
 import "@workspace/ui/lib/i18n"
 
 import type { SearchTab } from "@workspace/ui/components/search-palette"
+import {
+	type ClickModifiers,
+	NO_CLICK_MODIFIERS,
+} from "@workspace/ui/lib/click-modifiers"
 
 import type {
 	Catalogue,
@@ -28,6 +32,13 @@ import { useSearch } from "./use-search"
 import type { Bot, Conversation } from "@/lib/conversations/store-contract"
 import { botIdentity } from "@/lib/conversations/transcript-fixtures"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
+
+const commandKey = vi.hoisted(() => ({ isUsed: true }))
+
+vi.mock("../host", async (importOriginal) => ({
+	...(await importOriginal<typeof import("../host")>()),
+	usesCommandKey: () => commandKey.isUsed,
+}))
 
 const PERSONAL = "personal"
 
@@ -543,4 +554,41 @@ it("leaves a key press that only ends a composition to the composition", async (
 	expect(trace).toEqual([])
 	expect(result.current.isOpen).toBe(true)
 	expect(result.current.palette.activeResultId).toBe(active)
+})
+
+const NEW_TAB_CLICKS: [string, boolean, Partial<ClickModifiers>][] = [
+	["a middle click", true, { middle: true }],
+	["a Cmd click on macOS", true, { meta: true }],
+	["a Ctrl click off macOS", false, { ctrl: true }],
+]
+
+it.each(NEW_TAB_CLICKS)(
+	"opens a result in a new background tab on %s",
+	async (_, isCommandKeyUsed, held) => {
+		commandKey.isUsed = isCommandKeyUsed
+		const { navigation, trace } = aNavigation()
+		const result = await searchedOn(aPort(), navigation)
+		const [chat] = result.current.palette.results[1].results
+
+		act(() => chat.onOpen({ ...NO_CLICK_MODIFIERS, ...held }))
+
+		expect(trace).toEqual([
+			`new-tab:${JSON.stringify({ conversation: A_ROOM.id })}`,
+		])
+		expect(result.current.isOpen).toBe(false)
+		commandKey.isUsed = true
+	},
+)
+
+it.each([
+	["a plain click", NO_CLICK_MODIFIERS],
+	["a Ctrl click on macOS", { ...NO_CLICK_MODIFIERS, ctrl: true }],
+])("opens a result in place on %s", async (_, modifiers) => {
+	const { navigation, trace } = aNavigation()
+	const result = await searchedOn(aPort(), navigation)
+	const [chat] = result.current.palette.results[1].results
+
+	act(() => chat.onOpen(modifiers))
+
+	expect(trace).toEqual([`conversation:${A_ROOM.id}`, `space:${WORK}`])
 })
