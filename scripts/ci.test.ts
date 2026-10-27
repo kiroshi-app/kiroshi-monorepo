@@ -682,25 +682,45 @@ describe("the unit test scope of a pull request", () => {
 })
 
 describe("the merge_group retry", () => {
-	const everyStep = [
-		...GROUP_ORDER.flatMap((group) => GATE[group]),
-		...RUST_PULL_REQUEST_STEPS,
-		CHANGED_UNIT_TESTS,
-		...fastSteps(["scripts/pr-dequeue.sh", "scripts/pr-enqueue.sh"]),
+	const FULL_SCOPE: UnitTestScope = {
+		scope: "full",
+		path: "baselines/a.json",
+		rule: "baselines/**",
+	}
+	const SCOPES = [
+		["the changed scope", CHANGED_SCOPE],
+		["the full scope", FULL_SCOPE],
+	] as const
+	const everyStep = (scope: UnitTestScope) => [
+		...new Set([
+			...GROUP_ORDER.flatMap((group) => GATE[group]),
+			...RUST_PULL_REQUEST_STEPS,
+			CHANGED_UNIT_TESTS,
+			...fastSteps(["scripts/pr-dequeue.sh", "scripts/pr-enqueue.sh"], scope),
+		]),
 	]
-	const retried = (event: string | undefined) =>
-		everyStep.flatMap((step) => {
+	type RetriedOn = { event: string | undefined; scope: UnitTestScope }
+	const retried = ({ event, scope }: RetriedOn) =>
+		everyStep(scope).flatMap((step) => {
 			const retry = retryOf(step, event)
 			return retry ? [`${step.name}: ${retry}`] : []
 		})
 	const RUST_TEST = GATE.rust.find((step) => step.name === "Test") as Step
 
-	it("retries the vitest gate, the rust cargo test and the storybook gate on a merge_group, nothing else", () => {
-		expect(retried("merge_group")).toEqual([
-			"Unit tests, website, sidecar and story ids against the baseline: vitest",
-			"Test: cargo",
-			"Stories played in chromium against the baseline: vitest",
-		])
+	it.each(SCOPES)(
+		"retries the vitest gate, the rust cargo test and the storybook gate on a merge_group, nothing else, under %s",
+		(_, scope) => {
+			expect(retried({ event: "merge_group", scope })).toEqual([
+				"Unit tests, website, sidecar and story ids against the baseline: vitest",
+				"Test: cargo",
+				"Stories played in chromium against the baseline: vitest",
+			])
+		},
+	)
+
+	it("falls back to the full vitest step when no scope is given", () => {
+		expect(unitTestSteps()).toEqual(GATE.vitest)
+		expect(fastSteps([]).slice(FAST_STEP_NAMES.length)).toEqual(GATE.vitest)
 	})
 
 	it("hands the storybook gate one retry per failing story", () => {
@@ -714,7 +734,8 @@ describe("the merge_group retry", () => {
 		["a push", "push"],
 		["no event", undefined],
 	])("retries nothing on %s", (_, event) => {
-		expect(retried(event)).toEqual([])
+		for (const [, scope] of SCOPES)
+			expect(retried({ event, scope })).toEqual([])
 	})
 
 	it("hands the vitest gate one retry per failing test", () => {

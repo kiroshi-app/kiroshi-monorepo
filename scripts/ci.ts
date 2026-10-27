@@ -314,8 +314,8 @@ const scopeReason = (scope: UnitTestScope) => {
 export const scopeLine = (scope: UnitTestScope) =>
 	`ci  unit test scope: ${scopeReason(scope)}${graphTime(scope)}`
 
-export const unitTestSteps = (scope: UnitTestScope) =>
-	scope.scope === "changed" ? [CHANGED_UNIT_TESTS] : GATE.vitest
+export const unitTestSteps = (scope?: UnitTestScope) =>
+	scope?.scope === "changed" ? [CHANGED_UNIT_TESTS] : GATE.vitest
 
 export const SIMULATOR_LOOKUP = `xcrun simctl list devices available "iOS $(cat .xcode-version)" | grep -m1 -E '^ +iPhone 17 \\(' | grep -oE '[0-9A-F-]{36}'`
 
@@ -328,7 +328,7 @@ const touchedQueueScriptUnitTests = (changedPaths: string[]) =>
 
 export const fastSteps = (
 	changedPaths: string[],
-	scope: UnitTestScope,
+	scope?: UnitTestScope,
 ): Step[] => [
 	...FAST_STEP_NAMES.map((name) => {
 		const step = gateSteps().find((candidate) => candidate.name === name)
