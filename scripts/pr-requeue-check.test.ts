@@ -196,7 +196,6 @@ const wiredPrEnqueue = () => {
 	)
 	chmodSync(wired, 0o755)
 	copyFileSync(PR_REQUEUE_CHECK, join(scripts, "pr-requeue-check.sh"))
-	chmodSync(join(scripts, "pr-requeue-check.sh"), 0o755)
 	return wired
 }
 
