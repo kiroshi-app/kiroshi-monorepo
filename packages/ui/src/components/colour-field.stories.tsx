@@ -7,25 +7,7 @@ import {
 	ColourField,
 	type ColourFieldProps,
 } from "@workspace/ui/components/colour-field"
-import { hueStyle } from "@workspace/ui/components/hue-palette"
 import { SpaceTint } from "@workspace/ui/components/space-tint"
-
-type StoryPreviewProps = {
-	hue: number | null
-}
-
-const StoryPreview = ({ hue }: StoryPreviewProps) => (
-	<div
-		className="flex justify-end px-3.5 py-3"
-		data-hue={hue ?? undefined}
-		data-slot="story-colour-preview"
-		style={hue === null ? undefined : hueStyle(hue)}
-	>
-		<span className="rounded-bubble bg-user-bubble px-3 py-2 text-compact text-user-bubble-foreground leading-5">
-			Ship it on Friday?
-		</span>
-	</div>
-)
 
 const FieldHost = (props: ColourFieldProps) => {
 	const [value, setValue] = useState(props.value)
@@ -50,7 +32,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The one colour picker of the Space, conversation and companion settings. A radio group offers No colour, the eight presets and `Your hue`; `Your hue` opens a slider over the whole circle. The value is a hue from 0 to 359 or null: a preset reports its preset hue, No colour reports null, and a hue outside the presets selects `Your hue` without snapping. Every swatch, the track, the thumb and the preview are painted from the hue recipe, so a hue reads in light and dark alike. The host decides what a tile shows (`mark`), what the strip under the field shows (`preview`), where No colour sits and whether tiles are swatches or avatars.",
+					"The one colour picker of the Space, conversation and companion settings. A radio group offers No colour, the eight presets and `Your hue`; `Your hue` opens a slider over the whole circle. The value is a hue from 0 to 359 or null: a preset reports its preset hue, No colour reports null, and a hue outside the presets selects `Your hue` without snapping. Every swatch, the track and the thumb are painted from the hue recipe, so a hue reads in light and dark alike. The host decides what a tile shows (`mark`), where No colour sits and whether tiles are swatches or avatars.",
 			},
 		},
 	},
@@ -59,7 +41,6 @@ const meta = preview.meta({
 		value: 257,
 		onValueChange: fn(),
 		mark: (hue) => <SpaceTint className="size-6" tint={hue} />,
-		preview: (hue) => <StoryPreview hue={hue} />,
 	},
 	render: (args) => (
 		<div className="w-96">
@@ -74,17 +55,14 @@ export const NoColour = meta.story({
 		docs: {
 			description: {
 				story:
-					"Nothing picked. Check in both themes that No colour is the checked tile, that no hue panel shows, and that the preview falls back to the default bubble.",
+					"Nothing picked. Check in both themes that No colour is the checked tile, and that no hue panel shows.",
 			},
 		},
 	},
-	play: async ({ canvas, canvasElement }) => {
+	play: async ({ canvas }) => {
 		const [none] = canvas.getAllByRole("radio", { name: "No colour" })
 		await expect(none).toBeChecked()
 		await expect(canvas.queryAllByRole("slider")).toHaveLength(0)
-		await expect(
-			slotIn(canvasElement, "story-colour-preview"),
-		).not.toHaveAttribute("data-hue")
 	},
 })
 
@@ -93,7 +71,7 @@ export const Preset = meta.story({
 		docs: {
 			description: {
 				story:
-					"A preset picked. Check in both themes that the blue tile wears the foreground border on the muted ground, that hover, press and selection change at once with no transition, that the arrow keys walk the row as one radio group and report each preset's hue, and that the preview repaints on every step.",
+					"A preset picked. Check in both themes that the blue tile wears the foreground border on the muted ground, that hover, press and selection change at once with no transition, and that the arrow keys walk the row as one radio group and report each preset's hue.",
 			},
 		},
 	},
@@ -109,10 +87,6 @@ export const Preset = meta.story({
 		blue.focus()
 		await userEvent.keyboard("{ArrowRight}")
 		await expect(args.onValueChange).toHaveBeenLastCalledWith(296)
-		await expect(slotIn(canvasElement, "story-colour-preview")).toHaveAttribute(
-			"data-hue",
-			"296",
-		)
 	},
 })
 
@@ -122,7 +96,7 @@ export const OwnHue = meta.story({
 		docs: {
 			description: {
 				story:
-					"A hue outside the presets. Check in both themes that `Your hue` is checked with the hue's dot on its rainbow, that the panel reads 320 degrees without snapping to pink, that the thumb is filled with the hue on a rainbow track, and that each arrow step moves the readout, the thumb, the dot and the preview together.",
+					"A hue outside the presets. Check in both themes that `Your hue` is checked with the hue's dot on its rainbow, that the panel reads 320 degrees without snapping to pink, that the thumb is filled with the hue on a rainbow track, and that each arrow step moves the readout, the thumb and the dot together.",
 			},
 		},
 	},
@@ -142,10 +116,6 @@ export const OwnHue = meta.story({
 			slotIn(canvasElement, "colour-field-readout"),
 		).toHaveTextContent("321°")
 		await expect(slotIn(canvasElement, "colour-field-hue")).toHaveAttribute(
-			"data-hue",
-			"321",
-		)
-		await expect(slotIn(canvasElement, "story-colour-preview")).toHaveAttribute(
 			"data-hue",
 			"321",
 		)

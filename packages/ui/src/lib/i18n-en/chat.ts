@@ -535,10 +535,6 @@ const chat = {
 			label: "Name",
 			placeholder: "What this conversation is about",
 		},
-		colour: {
-			previewSubtitle_one: "{{count}} participant",
-			previewSubtitle_other: "{{count}} participants",
-		},
 		icon: {
 			label: "Icon",
 			option: {

@@ -451,7 +451,7 @@ export const OwnHueSet = meta.story({
 		docs: {
 			description: {
 				story:
-					"A conversation wearing a hue of its own, outside the eight presets. Check that `Your hue` is the checked cell, that the hue panel stands open on 320 degrees rather than snapping to the nearest preset, and that the preview strip paints the room hexagon and the tab chip in that hue. Pick `IconAndColourSet` for a preset.",
+					"A conversation wearing a hue of its own, outside the eight presets. Check that `Your hue` is the checked cell, and that the hue panel stands open on 320 degrees rather than snapping to the nearest preset. Pick `IconAndColourSet` for a preset.",
 			},
 		},
 	},
@@ -466,9 +466,5 @@ export const OwnHueSet = meta.story({
 		slider.focus()
 		await userEvent.keyboard("{ArrowRight}")
 		await expect(args.onHueChange).toHaveBeenLastCalledWith(321)
-		const [preview] = slotsIn(dialog, "conversation-colour-preview")
-		await expect(
-			preview?.querySelector("[data-slot=conversation-subject-icon]"),
-		).toHaveAttribute("data-hue", "321")
 	},
 })

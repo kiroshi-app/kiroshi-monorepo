@@ -31,46 +31,6 @@ type BotIdentityFieldsProps = {
 	className?: string
 }
 
-type CompanionPreviewProps = {
-	hue: number | null
-	name?: string
-	seed?: string
-}
-
-const CompanionPreview = ({ hue, name, seed }: CompanionPreviewProps) => {
-	const { t } = useTranslation("bots")
-
-	return (
-		<div
-			className="flex min-w-0 items-center gap-4 px-3.5 py-2.5"
-			data-slot="companion-colour-preview"
-		>
-			<BotIdentityAvatar
-				className="shrink-0"
-				hue={hue ?? undefined}
-				name={name}
-				seed={seed}
-				size={40}
-			/>
-			<span className="flex min-w-0 items-center gap-2">
-				<BotIdentityAvatar
-					className="shrink-0"
-					hue={hue ?? undefined}
-					name={name}
-					seed={seed}
-					size={28}
-				/>
-				<span className="min-w-0 break-words rounded-bubble bg-card px-3 py-2 text-compact text-foreground leading-5">
-					{t("identity.colour.previewMessage")}
-				</span>
-			</span>
-			<span className="shrink-0 rounded-bubble bg-user-bubble px-3 py-2 text-compact text-user-bubble-foreground leading-5">
-				{t("identity.colour.previewReply")}
-			</span>
-		</div>
-	)
-}
-
 const BotIdentityFields = ({
 	identity,
 	hue,
@@ -136,9 +96,6 @@ const BotIdentityFields = ({
 					</span>
 				)}
 				onValueChange={onHueChange}
-				preview={(shown) => (
-					<CompanionPreview hue={shown} name={name} seed={seed} />
-				)}
 				value={hue}
 			/>
 

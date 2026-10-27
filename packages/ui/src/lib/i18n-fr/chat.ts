@@ -556,11 +556,6 @@ const chat = {
 			label: "Nom",
 			placeholder: "Le sujet de cette conversation",
 		},
-		colour: {
-			previewSubtitle_one: "{{count}} participant",
-			previewSubtitle_many: "{{count}} participants",
-			previewSubtitle_other: "{{count}} participants",
-		},
 		icon: {
 			label: "Icône",
 			option: {

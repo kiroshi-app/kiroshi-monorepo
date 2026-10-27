@@ -897,9 +897,6 @@ const bots = {
 			own: "Your hue",
 			ownValue: "Your hue · {{hue}}°",
 			degree: "°",
-			preview: "Preview",
-			previewMessage: "Release notes are in review.",
-			previewReply: "Thanks",
 			option: {
 				red: "Red",
 				yellow: "Yellow",

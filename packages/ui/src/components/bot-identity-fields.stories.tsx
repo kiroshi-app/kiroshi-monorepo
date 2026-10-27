@@ -70,7 +70,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"Everything a companion's face is made of, flat: what it looks like now, the eight colours that mark it, the option that takes the colour off and a hue of its own picked on a slider, with a strip previewing the companion in a conversation, and the field that takes a picture and takes it back off. The glyph itself is drawn from the companion's name, so there is no shape to pick. Nothing is behind a popover, a disclosure or a tab set: a reader sees every choice at once. The colour grid is a real radio group, so arrow keys move within it and the current choice is announced. Every swatch wears the companion's own glyph, so the row previews the actual outcome. The colour travels as a hue, 0 to 359 or null; the dialog holding the companion takes the picture off when a colour is picked, because the picture wins over it. The block never reads a file: it hands the host a `File` and waits for the picture to come back as `identity.image`. Only the preview moves, and only while `working`; the swatches always rest.",
+					"Everything a companion's face is made of, flat: what it looks like now, the eight colours that mark it, the option that takes the colour off and a hue of its own picked on a slider, and the field that takes a picture and takes it back off. The glyph itself is drawn from the companion's name, so there is no shape to pick. Nothing is behind a popover, a disclosure or a tab set: a reader sees every choice at once. The colour grid is a real radio group, so arrow keys move within it and the current choice is announced. Every swatch wears the companion's own glyph, so the row previews the actual outcome. The colour travels as a hue, 0 to 359 or null; the dialog holding the companion takes the picture off when a colour is picked, because the picture wins over it. The block never reads a file: it hands the host a `File` and waits for the picture to come back as `identity.image`. Only the preview moves, and only while `working`; the swatches always rest.",
 			},
 		},
 	},
@@ -165,7 +165,7 @@ export const OwnHue = meta.story({
 		docs: {
 			description: {
 				story:
-					"A companion wearing a hue of its own. Check in both themes that `Your hue` is the checked tile with its rainbow badge, that the header reads `Your hue · 320°`, that the hue panel stands open, and that the preview strip paints both avatars in that hue while the `Thanks` bubble keeps the Space colour.",
+					"A companion wearing a hue of its own. Check in both themes that `Your hue` is the checked tile with its rainbow badge, that the header reads `Your hue · 320°`, that the hue panel stands open, and that the header avatar wears that hue.",
 			},
 		},
 	},
@@ -176,11 +176,6 @@ export const OwnHue = meta.story({
 		await expect(
 			companionHueOf(companionGlyphOf(previewAvatar(canvasElement))),
 		).toBe(320)
-		const [strip] = slotsIn(canvasElement, "companion-colour-preview")
-		if (!strip) throw new Error("The panel is missing its preview strip")
-		await expect(
-			companionGlyphs(strip).map((glyph) => companionHueOf(glyph)),
-		).toEqual([320, 320])
 	},
 })
 

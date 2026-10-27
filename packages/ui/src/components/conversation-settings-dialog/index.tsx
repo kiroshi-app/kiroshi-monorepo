@@ -146,46 +146,8 @@ const ConversationIconField = ({
 	)
 }
 
-type ConversationPreviewProps = {
+type ConversationColourFieldProps = {
 	icon?: ConversationIconName
-	hue: number | null
-	name: string
-	participantCount: number
-}
-
-const ConversationPreview = ({
-	icon,
-	hue,
-	name,
-	participantCount,
-}: ConversationPreviewProps) => {
-	const { t } = useTranslation("chat")
-
-	return (
-		<div
-			className="flex min-w-0 items-center gap-3 px-3.5 py-3"
-			data-slot="conversation-colour-preview"
-		>
-			<ConversationSubjectIcon hue={hue} icon={icon} side={32} />
-			<span className="flex min-w-0 flex-1 flex-col">
-				<span className="truncate font-medium text-compact text-foreground leading-4.5">
-					{name}
-				</span>
-				<span className="truncate text-muted-foreground text-xs">
-					{t("conversationSettings.colour.previewSubtitle", {
-						count: participantCount,
-					})}
-				</span>
-			</span>
-			<span className="flex min-w-0 max-w-40 shrink items-center gap-1.5 rounded-md bg-card py-1 ps-1.5 pe-2.5 text-compact text-foreground">
-				<ConversationSubjectIcon hue={hue} icon={icon} side={16} />
-				<span className="truncate">{name}</span>
-			</span>
-		</div>
-	)
-}
-
-type ConversationColourFieldProps = Omit<ConversationPreviewProps, "hue"> & {
 	hue?: number | null
 	onHueChange?: (hue: number | null) => void
 }
@@ -194,7 +156,6 @@ const ConversationColourField = ({
 	icon,
 	hue = null,
 	onHueChange,
-	...preview
 }: ConversationColourFieldProps) => (
 	<ColourField
 		mark={(option) => (
@@ -202,9 +163,6 @@ const ConversationColourField = ({
 		)}
 		noColour="last"
 		onValueChange={(next) => onHueChange?.(next)}
-		preview={(shown) => (
-			<ConversationPreview {...preview} hue={shown} icon={icon} />
-		)}
 		value={hue}
 	/>
 )
@@ -309,9 +267,7 @@ const ConversationSettingsDialog = ({
 				<ConversationColourField
 					hue={hue}
 					icon={icon}
-					name={conversationName}
 					onHueChange={onHueChange}
-					participantCount={participants.length}
 				/>
 			</SettingsScrollingPanel>
 
