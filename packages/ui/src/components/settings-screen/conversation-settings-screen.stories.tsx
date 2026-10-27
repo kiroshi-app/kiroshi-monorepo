@@ -1,6 +1,7 @@
 import { useState } from "react"
-import { expect, fn, screen, within } from "storybook/test"
+import { expect, fn, screen, waitFor, within } from "storybook/test"
 
+import conversationIcons from "@workspace/shared/conversation-icons.json"
 import preview from "@workspace/storybook/preview"
 import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
@@ -14,6 +15,7 @@ import {
 	ConversationSettingsScreen,
 	type ConversationSettingsScreenProps,
 } from "@workspace/ui/components/settings-screen"
+import { chat } from "@workspace/ui/lib/i18n-en/chat"
 
 const BACK_TO_CONVERSATIONS = "Back to conversations"
 
@@ -31,6 +33,11 @@ const INSTRUCTIONS_BOX_HEIGHT = 220
 
 const SEATED = CONVERSATION_BOTS.slice(0, 3)
 
+const ICONS_PER_ROW = 6
+
+const ICON_LABELS: Record<string, string> =
+	chat.conversationSettings.icon.option
+
 const RAIL: ConversationSettingsScreenProps["rail"] = {
 	selected: "conversations",
 	user: { name: "Ada Martin" },
@@ -40,15 +47,27 @@ const ScreenHost = (props: ConversationSettingsScreenProps) => {
 	const [entry, setEntry] = useState(props.entry)
 	const [value, setValue] = useState(props.value)
 	const [leadId, setLeadId] = useState(props.leadId)
+	const [icon, setIcon] = useState(props.icon)
+	const [hue, setHue] = useState(props.hue)
 
 	return (
 		<ConversationSettingsScreen
 			{...props}
 			entry={entry}
+			hue={hue}
+			icon={icon}
 			leadId={leadId}
 			onEntryChange={(next, modifiers) => {
 				setEntry(next)
 				props.onEntryChange(next, modifiers)
+			}}
+			onHueChange={(next) => {
+				setHue(next)
+				props.onHueChange?.(next)
+			}}
+			onIconChange={(next) => {
+				setIcon(next)
+				props.onIconChange?.(next)
 			}}
 			onLeadChange={(id) => {
 				setLeadId(id)
@@ -70,6 +89,10 @@ const entryIn = (menu: HTMLElement, name: string) =>
 
 const expectPageShown = (label: string) =>
 	expectSettingsPage(screen.getByRole("main"), label, "column")
+
+const pictogramIn = (scope: Element) =>
+	scope.querySelector('[data-slot="conversation-subject-icon-pictogram"]')
+		?.innerHTML
 
 const meta = preview.meta({
 	title: "Settings/Conversation/ConversationSettingsScreen",
@@ -138,6 +161,86 @@ export const General = meta.story({
 			instructions: INSTRUCTIONS,
 		})
 		await expect(within(menu).getByText("Release desk!")).toBeVisible()
+	},
+})
+
+export const IconPopoverOpen = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The icon popover over the General page. Check that the Icon field opens it by keyboard with the icons in the shared order and the rocket pressed and focused, that the arrow keys move between icons without choosing one, that Escape closes it and hands focus back to the field, and that choosing an icon reports it, closes the popover and redraws both the field and the menu header icon.",
+			},
+		},
+	},
+	play: async ({ args, userEvent }) => {
+		const menu = await menuIn()
+		const main = screen.getByRole("main")
+		const trigger = within(main).getByRole("button", { name: "Icon Rocket" })
+
+		trigger.focus()
+		await userEvent.keyboard("{Enter}")
+		await expect(trigger).toHaveAttribute("aria-expanded", "true")
+		const current = await screen.findByRole("button", {
+			name: "Rocket",
+			pressed: true,
+		})
+		const group = current.parentElement as HTMLElement
+		await expect(group).toBeVisible()
+		const icons = within(group).getAllByRole("button")
+		await expect(icons.map((icon) => icon.getAttribute("aria-label"))).toEqual(
+			conversationIcons.map((id) => ICON_LABELS[id]),
+		)
+		await waitFor(() => expect(current).toHaveFocus())
+
+		const currentIndex = conversationIcons.indexOf("Rocket")
+		const nextIndex = currentIndex + 1
+		await userEvent.keyboard("{ArrowRight}")
+		await expect(icons[nextIndex]).toHaveFocus()
+		await userEvent.keyboard("{ArrowDown}")
+		await expect(icons[nextIndex + ICONS_PER_ROW]).toHaveFocus()
+		await expect(args.onIconChange).not.toHaveBeenCalled()
+
+		await userEvent.keyboard("{Escape}")
+		await waitFor(() => expect(group).not.toBeInTheDocument())
+		await expect(trigger).toHaveFocus()
+
+		await userEvent.click(trigger)
+		const message = await screen.findByRole("button", { name: "Message" })
+		const messagePictogram = pictogramIn(message)
+		await userEvent.click(message)
+
+		await expect(args.onIconChange).toHaveBeenCalledWith("MessageSquare")
+		await waitFor(() => expect(message).not.toBeInTheDocument())
+		const chosen = within(main).getByRole("button", { name: "Icon Message" })
+		await expect(pictogramIn(chosen)).toBe(messagePictogram)
+		await expect(pictogramIn(slotIn(menu, "conversation-subject-icon"))).toBe(
+			messagePictogram,
+		)
+	},
+})
+
+export const OwnHueSet = meta.story({
+	args: { hue: 320 },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A conversation wearing a hue of its own, outside the eight presets. Check that Your hue is the checked colour cell, that its slider stands on 320 degrees rather than snapping to the nearest preset, and that one step to the right reports 321.",
+			},
+		},
+	},
+	play: async ({ args, userEvent }) => {
+		await menuIn()
+		const main = within(screen.getByRole("main"))
+
+		await expect(main.getByRole("radio", { name: "Your hue" })).toBeChecked()
+		const slider = main.getByRole("slider", { name: "Your hue" })
+		await expect(slider).toHaveValue("320")
+
+		slider.focus()
+		await userEvent.keyboard("{ArrowRight}")
+		await expect(args.onHueChange).toHaveBeenLastCalledWith(321)
 	},
 })
 
