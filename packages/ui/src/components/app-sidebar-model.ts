@@ -148,6 +148,7 @@ const announcementFor = (
 
 interface BotRosterActions {
 	onSelectBot?: (id: string, modifiers?: SidebarClickModifiers) => void
+	onOpenBotInNewTab?: (id: string) => void
 	onEditBot?: (id: string) => void
 	onDuplicateBot?: (id: string) => void
 	onAddBotToSpace?: (botId: string, spaceId: string) => void
@@ -203,6 +204,7 @@ const heldBotsOf = (
 
 interface ConversationRosterActions {
 	onSelectConversation?: (id: string, modifiers?: SidebarClickModifiers) => void
+	onOpenConversationInNewTab?: (id: string) => void
 	onOpenConversationSettings?: (id: string) => void
 	onDeleteConversation?: (id: string) => void
 }

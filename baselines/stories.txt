@@ -873,11 +873,13 @@ navigation-apprail--with-dot
 navigation-appsidebar--badges
 navigation-appsidebar--bare-rows
 navigation-appsidebar--caption-window-controls
+navigation-appsidebar--companion-row-opens-in-a-new-tab
 navigation-appsidebar--conversation-mission-strips
 navigation-appsidebar--conversation-of-one-bot
 navigation-appsidebar--conversation-participants
 navigation-appsidebar--conversation-preview
 navigation-appsidebar--conversation-row-menu
+navigation-appsidebar--conversation-row-opens-in-a-new-tab
 navigation-appsidebar--conversation-selected
 navigation-appsidebar--conversation-working
 navigation-appsidebar--conversations
