@@ -7,6 +7,9 @@ import { notificationTransport } from "./notification-transport"
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }))
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn() }))
+vi.mock("@tauri-apps/api/window", () => ({
+	getCurrentWindow: () => ({ label: "window-1" }),
+}))
 
 const hostInvoke = vi.mocked(invoke)
 const hostListen = vi.mocked(listen)
@@ -82,6 +85,16 @@ describe("notificationTransport", () => {
 		received(clickWith(CONVERSATION))
 
 		expect(clicked).toHaveBeenCalledWith(CONVERSATION)
+	})
+
+	it("listens on the window it runs in, not on every window", async () => {
+		await notificationTransport.onActivate(vi.fn())
+
+		expect(hostListen).toHaveBeenCalledWith(
+			"notification://activated",
+			expect.any(Function),
+			{ target: { kind: "WebviewWindow", label: "window-1" } },
+		)
 	})
 
 	it("answers with the unsubscribe the host handed back", async () => {

@@ -1,3 +1,4 @@
+import type { EventCallback, UnlistenFn } from "@tauri-apps/api/event"
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { platform } from "@tauri-apps/plugin-os"
 
@@ -44,6 +45,14 @@ export const invokeOnThisComputer = joinedHosts.invokeOnThisComputer
 export const invokeOn = joinedHosts.invokeOn
 
 export const listenOnThisComputer = tauriListen
+
+export const listenOnThisWindow = async <T>(
+	event: string,
+	handler: EventCallback<T>,
+): Promise<UnlistenFn> =>
+	tauriListen<T>(event, handler, {
+		target: { kind: "WebviewWindow", label: getCurrentWindow().label },
+	})
 
 export const activeJoinedSpaceId = joinedHosts.activeSpaceId
 

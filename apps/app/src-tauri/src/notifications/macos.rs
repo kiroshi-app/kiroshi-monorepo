@@ -4,7 +4,6 @@ use mac_usernotifications::{request_auth, Notification};
 use tauri::{AppHandle, Runtime};
 
 use super::commands::NotificationTarget;
-use crate::events::NOTIFICATION_ACTIVATED;
 
 pub fn show<R: Runtime>(
 	app: AppHandle<R>,
@@ -65,20 +64,13 @@ fn through_notification_center<R: Runtime>(
 		};
 
 		match handle.response().await {
-			Ok(response) if response.is_default_action() => activate(&app, target),
+			Ok(response) if response.is_default_action() => super::activated(&app, target),
 			Ok(_) => {}
 			Err(failure) => {
 				eprintln!("the notification response was not read: {failure}");
 			}
 		}
 	});
-}
-
-fn activate<R: Runtime>(app: &AppHandle<R>, target: NotificationTarget) {
-	crate::window_controls::raise_main(app);
-	if let Err(failure) = crate::events::emit(app, NOTIFICATION_ACTIVATED, target) {
-		eprintln!("the notification activation was not emitted: {failure}");
-	}
 }
 
 fn through_notification_sys<R: Runtime>(
@@ -98,7 +90,7 @@ fn through_notification_sys<R: Runtime>(
 			.wait_for_click(true)
 			.send();
 		if let Ok(NotificationResponse::Click) = response {
-			activate(&app, target);
+			super::activated(&app, target);
 		}
 	});
 }

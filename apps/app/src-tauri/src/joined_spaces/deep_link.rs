@@ -97,16 +97,8 @@ fn received<R: Runtime>(app: &AppHandle<R>, invitations: Vec<String>) {
 		return;
 	}
 	drop(inbox);
-	let target = joining_window(app);
+	let target = window_controls::receiving_window(app);
 	invitations.into_iter().for_each(|invitation| announced(app, &target, invitation));
-}
-
-fn joining_window<R: Runtime>(app: &AppHandle<R>) -> String {
-	if let Some(focused) = window_controls::focused_app_window(app) {
-		return focused.label().to_owned();
-	}
-	window_controls::raise_main(app);
-	window_controls::MAIN_WINDOW.to_owned()
 }
 
 pub(super) fn listened<R: Runtime>(app: &AppHandle<R>, listener: &str) {
