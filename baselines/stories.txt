@@ -1793,7 +1793,9 @@ settings-space-settingsscreen--yours-not-shared
 settings-space-spacefields--colourless
 settings-space-spacefields--default
 settings-space-spacefields--empty
+settings-space-spacefields--narrow
 settings-space-spacefields--own-hue
+settings-space-spacefields--own-hue-at-page-width
 settings-space-spacefields--own-hue-over-a-preset
 settings-space-spacefields--recoloured
 settings-space-spacesettingsdialog--danger

@@ -2,7 +2,7 @@ import { useState } from "react"
 import { expect, fn } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { slotIn } from "@workspace/storybook/story-utils"
+import { slotIn, slotsIn } from "@workspace/storybook/story-utils"
 import {
 	SpaceFields,
 	type SpaceFieldsProps,
@@ -171,6 +171,65 @@ export const OwnHue = meta.story({
 			"data-hue",
 			"319",
 		)
+	},
+})
+
+const tileTopsIn = (row: HTMLElement) =>
+	new Set(
+		Array.from(row.querySelectorAll<HTMLElement>("[data-option]")).map(
+			(tile) => tile.offsetTop,
+		),
+	)
+
+export const OwnHueAtPageWidth = meta.story({
+	args: { value: { name: "Release desk", hue: 320 } },
+	globals: { theme_layout: "side-by-side" },
+	render: (args) => (
+		<div className="w-[518px]">
+			<FieldsHost {...args} />
+		</div>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The panel at the 518px content width the Space settings page gives it, wearing a hue of its own. Check in both themes that the ten tiles hold one row with a 4px gap, and that the readout reads in Geist Mono inside a bordered box with no fill.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		for (const row of slotsIn(canvasElement, "colour-field-options")) {
+			await expect(tileTopsIn(row).size).toBe(1)
+		}
+		for (const readout of slotsIn(canvasElement, "colour-field-readout")) {
+			const { fontFamily, backgroundColor, borderTopWidth } =
+				getComputedStyle(readout)
+			await expect(fontFamily.replaceAll(/["']/g, "")).toMatch(/^Geist Mono/)
+			await expect(backgroundColor).toBe("rgba(0, 0, 0, 0)")
+			await expect(borderTopWidth).toBe("1px")
+		}
+	},
+})
+
+export const Narrow = meta.story({
+	args: { value: { name: "Release desk", hue: 320 } },
+	render: (args) => (
+		<div className="w-[320px]">
+			<FieldsHost {...args} />
+		</div>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The panel in a 320px container, narrower than the row. Check that the tiles wrap onto further rows and that nothing is clipped or scrolls sideways.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const row = slotIn(canvasElement, "colour-field-options")
+		await expect(tileTopsIn(row).size).toBeGreaterThan(1)
+		await expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth)
 	},
 })
 
