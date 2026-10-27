@@ -1224,7 +1224,7 @@ export const DescribeRefused = meta.story({
 		docs: {
 			description: {
 				story:
-					"The host refused a member’s rename or recolour of a joined Space, so the space kept its previous name and colour. Check that the title says the name and colour couldn’t be saved, distinct from every join refusal, and that the body opens on the sentence the app gives for that refusal, here the host being offline, then says the space kept its previous name and colour. Pick `DescribeRefusedDark` for the dark theme. The app raises it from `apps/app/src/lib/spaces/joined-spaces-controller.ts`.",
+					"The host refused a member’s rename or recolour of a joined Space, so the space kept its previous name and colour. Check that the title says the name and colour couldn’t be saved, distinct from every join refusal, and that the body opens on the sentence the app gives for that refusal, here the host being offline. Pick `DescribeRefusedDark` for the dark theme. The app raises it from `apps/app/src/lib/spaces/joined-spaces-controller.ts`.",
 			},
 		},
 	},
