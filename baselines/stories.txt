@@ -885,6 +885,7 @@ navigation-appsidebar--conversations-left-column
 navigation-appsidebar--conversations-left-column-dark
 navigation-appsidebar--conversations-panel
 navigation-appsidebar--conversations-rail-space-host
+navigation-appsidebar--conversations-rail-space-host-dark
 navigation-appsidebar--create-label
 navigation-appsidebar--create-menu
 navigation-appsidebar--drag-bot-into-an-empty-pinned-zone
@@ -927,6 +928,7 @@ navigation-appsidebar--missions-left-column
 navigation-appsidebar--missions-left-column-dark
 navigation-appsidebar--missions-of-unloaded-spaces
 navigation-appsidebar--missions-rail-space-host
+navigation-appsidebar--missions-rail-space-host-dark
 navigation-appsidebar--missions-scroll-memory
 navigation-appsidebar--missions-tab
 navigation-appsidebar--move-bot-to-section
@@ -1751,6 +1753,7 @@ settings-space-settingsscreen--members-dark
 settings-space-settingsscreen--members-tinted
 settings-space-settingsscreen--minimum-width
 settings-space-settingsscreen--rail-space-host
+settings-space-settingsscreen--rail-space-host-dark
 settings-space-settingsscreen--short-window
 settings-space-settingsscreen--space-companions
 settings-space-settingsscreen--space-form-page
@@ -1858,6 +1861,7 @@ settings-user-settingsscreen--maximum-width
 settings-user-settingsscreen--minimum-width
 settings-user-settingsscreen--notifications
 settings-user-settingsscreen--rail-space-host
+settings-user-settingsscreen--rail-space-host-dark
 settings-user-settingsscreen--skills
 settings-user-settingsscreen--spaces
 settings-user-settingsscreen--spaces-dark

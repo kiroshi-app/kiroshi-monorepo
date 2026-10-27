@@ -2500,6 +2500,26 @@ export const ConversationsRailSpaceHost = meta.story(
 
 export const MissionsRailSpaceHost = meta.story(railHostStory("missions"))
 
+const railHostDarkStory = (panel: "conversations" | "missions") => ({
+	...railHostStory(panel),
+	globals: { theme: "dark" },
+	parameters: {
+		docs: {
+			description: {
+				story: `\`${panel === "missions" ? "Missions" : "Conversations"}RailSpaceHost\` in the dark theme. Check that the Space logo at the top of the rail still draws the connecting state, its hatching legible on its dark fill and told apart from the filled online logo.`,
+			},
+		},
+	},
+})
+
+export const ConversationsRailSpaceHostDark = meta.story(
+	railHostDarkStory("conversations"),
+)
+
+export const MissionsRailSpaceHostDark = meta.story(
+	railHostDarkStory("missions"),
+)
+
 export const DragRegion = meta.story({
 	tags: ["test-only"],
 	render: (args: AppSidebarProps) => (

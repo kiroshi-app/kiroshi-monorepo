@@ -516,7 +516,7 @@ const LEFT_COLUMN = {
 
 export const LeftColumn = meta.story(LEFT_COLUMN)
 
-export const RailSpaceHost = meta.story({
+const RAIL_SPACE_HOST_STORY = {
 	args: { currentSpace: STUDIO, currentSpaceHost: RAIL_SPACE_HOST },
 	parameters: {
 		docs: {
@@ -528,6 +528,21 @@ export const RailSpaceHost = meta.story({
 	},
 	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
 		await expectRailSpaceHost(canvasElement)
+	},
+}
+
+export const RailSpaceHost = meta.story(RAIL_SPACE_HOST_STORY)
+
+export const RailSpaceHostDark = meta.story({
+	...RAIL_SPACE_HOST_STORY,
+	globals: { theme: "dark" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"`RailSpaceHost` in the dark theme. Check that the Space logo at the top of the rail still draws the connecting state, its hatching legible on its dark fill and told apart from the filled online logo.",
+			},
+		},
 	},
 })
 
