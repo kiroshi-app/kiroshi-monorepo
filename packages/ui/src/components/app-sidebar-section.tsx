@@ -32,7 +32,7 @@ const SECTION_LABEL =
 	"mb-0 h-auto px-0 font-semibold text-sidebar-foreground text-xs normal-case tracking-normal"
 
 const SECTION_TRIGGER =
-	"flex w-full min-w-0 select-none items-center gap-1.5 rounded-xl px-[10.5px] py-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+	"flex w-full min-w-0 touch-none select-none items-center gap-1.5 rounded-xl px-[10.5px] py-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
 
 const SECTION_NAME = "min-w-0 truncate"
 
