@@ -232,6 +232,7 @@ describe("open in a new tab from a row menu", () => {
 })
 
 const deletionFor = (removeConversation: () => Promise<void>) => {
+	reportFailure.mockClear()
 	const attachments = { forget: vi.fn() }
 	const drafts = createDraftsController()
 	drafts.remember("c-1", "Half a thought")
@@ -253,7 +254,6 @@ const deletionFor = (removeConversation: () => Promise<void>) => {
 
 describe("deleting a conversation", () => {
 	it("reports a refused deletion once and keeps its draft and attachments", async () => {
-		reportFailure.mockClear()
 		const refused = deletionFor(() => Promise.reject(new Error("no record")))
 
 		await refused.actions.onDeleteConversation("c-1")
@@ -267,7 +267,6 @@ describe("deleting a conversation", () => {
 	})
 
 	it("forgets the draft and attachments of a deleted conversation without a notice", async () => {
-		reportFailure.mockClear()
 		const deleted = deletionFor(async () => undefined)
 
 		await deleted.actions.onDeleteConversation("c-1")
