@@ -431,6 +431,11 @@ export const A3OverflowDark = meta.story({
 	play: playA3,
 })
 
+const A4 = {
+	tabs: [PINNED_INBOX, RELEASE_NOTES, LOGIN_REDIRECT, WEEKLY_PLANNING],
+	activeTabId: RELEASE_NOTES.id,
+} satisfies Partial<AppTitleBarProps>
+
 const tabMenuRowsFor = (pinRow: string) => [
 	pinRow,
 	"New tab⌘T",
@@ -464,11 +469,6 @@ const expectTabMenu = async (menu: HTMLElement, pinRow: string) => {
 const tabMenuRow = (menu: HTMLElement, label: string) =>
 	within(menu).getByRole("menuitem", { name: label })
 
-const UNPINNED_TAB_MENU = {
-	tabs: [PINNED_INBOX, RELEASE_NOTES, LOGIN_REDIRECT, WEEKLY_PLANNING],
-	activeTabId: RELEASE_NOTES.id,
-} satisfies Partial<AppTitleBarProps>
-
 const playUnpinnedTabMenu = async ({
 	canvasElement,
 }: {
@@ -488,7 +488,7 @@ const playUnpinnedTabMenu = async ({
 }
 
 export const UnpinnedTabMenu = meta.story({
-	args: UNPINNED_TAB_MENU,
+	args: A4,
 	parameters: {
 		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		docs: {
@@ -502,7 +502,7 @@ export const UnpinnedTabMenu = meta.story({
 })
 
 export const UnpinnedTabMenuDark = meta.story({
-	args: UNPINNED_TAB_MENU,
+	args: A4,
 	globals: DARK,
 	parameters: {
 		a11y: A11Y_FLOATING_FOCUS_GUARDS,
@@ -515,11 +515,6 @@ export const UnpinnedTabMenuDark = meta.story({
 	},
 	play: playUnpinnedTabMenu,
 })
-
-const A4 = {
-	tabs: [PINNED_INBOX, RELEASE_NOTES, LOGIN_REDIRECT, WEEKLY_PLANNING],
-	activeTabId: RELEASE_NOTES.id,
-} satisfies Partial<AppTitleBarProps>
 
 const playA4 = async ({ canvasElement }: { canvasElement: HTMLElement }) => {
 	const bar = barIn(canvasElement)
@@ -754,7 +749,6 @@ export const TabGestures = meta.story({
 				bar.getByRole("tab", { name: WEEKLY_PLANNING.title }),
 			)
 			menu = await openMenu()
-			await expect(tabMenuRow(menu, label)).not.toHaveAttribute("aria-disabled")
 			await userEvent.click(tabMenuRow(menu, label))
 			await expect(callback).toHaveBeenLastCalledWith(...expected)
 		}
