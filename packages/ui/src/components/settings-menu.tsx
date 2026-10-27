@@ -65,7 +65,9 @@ const ENTRY_COUNT = "bg-card text-muted-foreground tabular-nums transition-none"
 
 const SECTION = "flex flex-col not-first:pt-4"
 
-const SECTION_TITLE_ROW = "flex min-h-8 items-center gap-2 px-2 pb-1"
+const MENU_INSET = "px-2"
+
+const SECTION_TITLE_ROW = `flex min-h-8 items-center gap-2 ${MENU_INSET} pb-1`
 
 const SECTION_TITLE =
 	"min-w-0 flex-1 truncate font-medium text-muted-foreground text-xs leading-4"
@@ -81,11 +83,40 @@ const SPACE_INVITATION_PILL = "bg-warning/15 text-warning"
 const SPACE_ATTENTION_DOT =
 	"pointer-events-none size-1.75 rounded-full bg-warning"
 
-type SettingsMenuProps = {
+type SettingsMenuHeaderProps = {
 	avatar: ReactNode
 	name: string
 	status?: ReactNode
 	subtitle: string
+}
+
+const SettingsMenuHeader = ({
+	avatar,
+	name,
+	status,
+	subtitle,
+}: SettingsMenuHeaderProps) => (
+	<div
+		className={`flex min-w-0 items-center gap-2.5 ${MENU_INSET}`}
+		data-slot="settings-menu-header"
+	>
+		{avatar}
+		<div className="flex min-w-0 flex-col">
+			<div className="flex min-w-0 items-center gap-1.5">
+				<span
+					className="truncate font-semibold text-foreground text-sm"
+					data-slot="settings-menu-name"
+				>
+					{name}
+				</span>
+				{status}
+			</div>
+			<span className="truncate text-muted-foreground text-xs">{subtitle}</span>
+		</div>
+	</div>
+)
+
+type SettingsMenuProps = SettingsMenuHeaderProps & {
 	onBack: () => void
 	backLabel?: string
 	footer?: ReactNode
@@ -124,26 +155,12 @@ const SettingsMenu = ({
 				/>
 				{backLabel ?? t("screen.back")}
 			</button>
-			<div
-				className="flex min-w-0 items-center gap-2.5"
-				data-slot="settings-menu-header"
-			>
-				{avatar}
-				<div className="flex min-w-0 flex-col">
-					<div className="flex min-w-0 items-center gap-1.5">
-						<span
-							className="truncate font-semibold text-foreground text-sm"
-							data-slot="settings-menu-name"
-						>
-							{name}
-						</span>
-						{status}
-					</div>
-					<span className="truncate text-muted-foreground text-xs">
-						{subtitle}
-					</span>
-				</div>
-			</div>
+			<SettingsMenuHeader
+				avatar={avatar}
+				name={name}
+				status={status}
+				subtitle={subtitle}
+			/>
 			<div
 				className="-m-0.5 min-h-0 flex-1 overflow-y-auto p-0.5"
 				data-slot="settings-menu-entries"
@@ -330,9 +347,26 @@ const SettingsMenuAddApplication = ({
 	)
 }
 
-type SettingsMenuSectionProps = {
+type SettingsMenuGroupTitleProps = {
+	id: string
 	title: string
 	action?: ReactNode
+}
+
+const SettingsMenuGroupTitle = ({
+	id,
+	title,
+	action,
+}: SettingsMenuGroupTitleProps) => (
+	<div className={SECTION_TITLE_ROW} data-slot="settings-menu-group-title">
+		<span className={SECTION_TITLE} id={id}>
+			{title}
+		</span>
+		{action}
+	</div>
+)
+
+type SettingsMenuSectionProps = Omit<SettingsMenuGroupTitleProps, "id"> & {
 	children?: ReactNode
 }
 
@@ -345,12 +379,7 @@ const SettingsMenuSection = ({
 
 	return (
 		<li className={SECTION} data-slot="settings-menu-section">
-			<div className={SECTION_TITLE_ROW}>
-				<span className={SECTION_TITLE} id={titleId}>
-					{title}
-				</span>
-				{action}
-			</div>
+			<SettingsMenuGroupTitle action={action} id={titleId} title={title} />
 			<ul
 				aria-labelledby={titleId}
 				className="flex list-none flex-col gap-0.5 p-0"
@@ -465,6 +494,8 @@ export {
 	SettingsMenuAddSpace,
 	SettingsMenuApplication,
 	SettingsMenuEntry,
+	SettingsMenuGroupTitle,
+	SettingsMenuHeader,
 	SettingsMenuSection,
 	SettingsMenuSpace,
 }

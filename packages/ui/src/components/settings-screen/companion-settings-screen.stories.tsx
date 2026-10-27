@@ -117,6 +117,11 @@ const ScreenHost = (props: CompanionSettingsScreenProps) => {
 
 const menuIn = () => screen.findByRole("navigation", { name: "Settings" })
 
+const inlinePaddingOf = (element: HTMLElement) => {
+	const style = getComputedStyle(element)
+	return [style.paddingInlineStart, style.paddingInlineEnd]
+}
+
 const entryIn = (menu: HTMLElement, name: string) =>
 	within(menu).getByRole("button", { name })
 
@@ -197,7 +202,7 @@ export const General = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard H02: the companion's settings open on General. Check the menu order with Danger zone pinned last under its rule, the 36px hexagon beside the name and Companion settings, General as the current page, and the Name then Title fields under the General title.",
+					"Artboard H02: the companion's settings open on General. Check the menu order with Danger zone pinned last under its rule, the 36px hexagon beside the name and Companion settings inset as far as the Settings title the entries sit under, General as the current page, and the Name then Title fields under the General title.",
 			},
 		},
 	},
@@ -217,6 +222,12 @@ export const General = meta.story({
 		await expect(
 			slotIn(menu, "bot-identity-avatar").getBoundingClientRect().width,
 		).toBe(36)
+		await expect(
+			within(menu).getByRole("list", { name: "Settings" }),
+		).toContainElement(entryIn(menu, "General"))
+		await expect(inlinePaddingOf(slotIn(menu, "settings-menu-header"))).toEqual(
+			inlinePaddingOf(slotIn(menu, "settings-menu-group-title")),
+		)
 
 		await expectPageShown("General")
 		const main = screen.getByRole("main")

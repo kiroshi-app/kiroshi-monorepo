@@ -15,6 +15,7 @@ const settings = {
 		},
 		group: {
 			settings: "Vos réglages",
+			subjectSettings: "Réglages",
 			spaces: "Vos espaces",
 		},
 		space: {

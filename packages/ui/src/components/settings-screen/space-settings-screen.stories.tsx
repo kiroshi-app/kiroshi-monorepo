@@ -195,7 +195,7 @@ export const Members = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard E2: the space's settings open on Members. Check the menu order with Danger zone pinned last, Members marked as the current page, the space avatar with its presence dot beside the name, the Members title above the panel, and that Back to your settings reports itself.",
+					"Artboard E2: the space's settings open on Members. Check the menu order with Danger zone pinned last outside the Settings group, Members marked as the current page, the space avatar with its presence dot beside the name, the Members title above the panel, and that Back to your settings reports itself.",
 			},
 		},
 	},
@@ -212,6 +212,9 @@ export const Members = meta.story({
 		await expect(within(menu).getByText("Release desk")).toBeVisible()
 		await expect(within(menu).getByText("Space settings")).toBeVisible()
 		await expect(slotIn(menu, "space-avatar").dataset.size).toBe("36")
+		const settings = within(menu).getByRole("list", { name: "Settings" })
+		await expect(settings).toContainElement(entryIn(menu, "Members"))
+		await expect(settings).not.toContainElement(entryIn(menu, "Danger zone"))
 		await expect(slotIn(menu, "space-avatar").dataset.state).toBe("shared")
 
 		const main = screen.getByRole("main")
