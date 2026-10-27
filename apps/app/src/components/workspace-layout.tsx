@@ -94,8 +94,6 @@ export const WorkspaceLayout = () => {
 			<AppDialogs
 				core={core}
 				overlay={overlay}
-				rosterLines={rosterLines}
-				rosterView={rosterView}
 				whatsNewDialog={whatsNew.dialog}
 			/>
 		</WorkspaceContext.Provider>

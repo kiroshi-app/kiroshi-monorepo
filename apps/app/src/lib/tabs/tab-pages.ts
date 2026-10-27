@@ -18,18 +18,27 @@ const SPACE_SETTINGS_PATH = /^\/settings\/space\/[^/]+$/
 
 const COMPANION_SETTINGS_PATH = /^\/settings\/companion\/([^/]+)$/
 
+const CONVERSATION_SETTINGS_PATH = /^\/settings\/conversation\/([^/]+)$/
+
 export type TabPage = {
 	pathname: string
 	thread: ThreadSearch
 	companionId?: string
+	conversationId?: string
 	entry?: string
 	application?: string
 }
 
-const companionIdIn = (pathname: string) => {
-	const matched = COMPANION_SETTINGS_PATH.exec(pathname)
+const idIn = (path: RegExp, pathname: string) => {
+	const matched = path.exec(pathname)
 	return matched?.[1] === undefined ? undefined : decodeURIComponent(matched[1])
 }
+
+const companionIdIn = (pathname: string) =>
+	idIn(COMPANION_SETTINGS_PATH, pathname)
+
+const conversationIdIn = (pathname: string) =>
+	idIn(CONVERSATION_SETTINGS_PATH, pathname)
 
 export const pageOf = (href: string): TabPage => {
 	const { pathname, search } = new URL(href, HREF_BASE)
@@ -39,6 +48,7 @@ export const pageOf = (href: string): TabPage => {
 		pathname,
 		thread: validateThreadSearch(parsedSearch),
 		companionId: companionIdIn(pathname),
+		conversationId: conversationIdIn(pathname),
 		entry,
 		application,
 	}
@@ -58,7 +68,8 @@ export const isTabHref = (href: string) => {
 		pathname === LIST_PATH ||
 		pathname === USER_SETTINGS_PATH ||
 		SPACE_SETTINGS_PATH.test(pathname) ||
-		companionIdIn(pathname) !== undefined
+		companionIdIn(pathname) !== undefined ||
+		conversationIdIn(pathname) !== undefined
 	)
 }
 
@@ -68,20 +79,24 @@ export const sameThread = (one: ThreadSearch, other: ThreadSearch) =>
 	one.mission === other.mission
 
 export const rowIdsNamedBy = (href: string) => {
-	const { thread, companionId } = pageOf(href)
-	return [threadRowIdOf(thread), companionId].filter(
+	const { thread, companionId, conversationId } = pageOf(href)
+	return [threadRowIdOf(thread), companionId, conversationId].filter(
 		(id): id is string => id !== undefined,
 	)
 }
 
-export type SettingsTarget = "user" | "space" | "companion"
+export type SettingsTarget = "user" | "space" | "companion" | "conversation"
 
 export const settingsTargetOf = ({
 	pathname,
 	companionId,
+	conversationId,
 }: TabPage): SettingsTarget => {
 	if (companionId !== undefined) {
 		return "companion"
+	}
+	if (conversationId !== undefined) {
+		return "conversation"
 	}
 	return pathname === USER_SETTINGS_PATH ? "user" : "space"
 }

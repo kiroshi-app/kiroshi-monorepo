@@ -7,6 +7,7 @@ import { missionsBySpaceId } from "../missions/missions-model"
 import {
 	type OpenSettings,
 	openCompanionIdOf,
+	openConversationIdOf,
 } from "../navigation/open-settings"
 
 type RosterViewInput = {
@@ -33,8 +34,6 @@ export const useRosterView = ({
 		spaceRowId: rosteredSpaceId,
 		selectedBotId,
 		selectedConversationId,
-		settingsConversationId,
-		isEditingConversation,
 		hasLoaded,
 	} = roster.state
 	const isOnOpenSpace = rosteredSpaceId === openRowId
@@ -47,8 +46,9 @@ export const useRosterView = ({
 	const openCompanionId = openCompanionIdOf(openSettings)
 	const settingsBot = bots.find((bot) => bot.id === openCompanionId)
 	const settingsBotId = settingsBot?.id ?? null
+	const openConversationId = openConversationIdOf(openSettings)
 	const settingsConversation = conversations.find(
-		(conversation) => conversation.id === settingsConversationId,
+		(conversation) => conversation.id === openConversationId,
 	)
 	const missions = useMemo(
 		() =>
@@ -65,7 +65,6 @@ export const useRosterView = ({
 		conversationRosters,
 		conversations,
 		hasLoaded,
-		isEditingConversation,
 		missions,
 		rosteredSpaceId,
 		selected,
@@ -75,7 +74,6 @@ export const useRosterView = ({
 		settingsBot,
 		settingsBotId,
 		settingsConversation,
-		settingsConversationId,
 		soloThreads,
 	}
 }

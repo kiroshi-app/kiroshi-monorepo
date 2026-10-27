@@ -1227,34 +1227,6 @@ describe("createRosterController on conversations", () => {
 		expect(controller.getState().conversations[0].sectionId).toBeNull()
 	})
 
-	it("opens the settings of the conversation it is asked about", async () => {
-		const store = createFakeTranscriptStore()
-		const controller = await loaded(store)
-		const created = await controller.createConversation()
-
-		controller.editConversation(created?.id ?? "")
-
-		const state = controller.getState()
-		expect(state.isEditingConversation).toBe(true)
-		expect(state.settingsConversationId).toBe(created?.id)
-	})
-
-	it("holds the open thread when it opens the settings of a conversation", async () => {
-		const store = createFakeTranscriptStore()
-		const controller = await loaded(store)
-		const created = await controller.createConversation()
-		controller.select("default")
-
-		controller.editConversation(created?.id ?? "")
-
-		expect(controller.getState()).toMatchObject({
-			selectedBotId: "default",
-			selectedConversationId: null,
-			settingsConversationId: created?.id,
-			isEditingConversation: true,
-		})
-	})
-
 	it("stores the name and the instructions that are written", async () => {
 		const store = createFakeTranscriptStore()
 		const controller = await loaded(store)
@@ -1661,17 +1633,6 @@ describe("createRosterController on conversations", () => {
 
 		expect(controller.getState().conversations[0].title).toBe("Launch")
 		expect(leadIn(controller.getState().conversations[0])).toBe("default")
-	})
-
-	it("closes the settings when the conversation it showed is gone", async () => {
-		const store = createFakeTranscriptStore()
-		const controller = await loaded(store)
-		const created = await controller.createConversation()
-		controller.editConversation(created?.id ?? "")
-
-		await controller.removeConversation(created?.id ?? "")
-
-		expect(controller.getState().isEditingConversation).toBe(false)
 	})
 
 	it("drops a deleted conversation and lands on the first row of the roster", async () => {

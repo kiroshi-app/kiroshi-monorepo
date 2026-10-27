@@ -96,8 +96,6 @@ export type RosterState = {
 	conversationPreviews: ConversationPreviews
 	selectedBotId: string | null
 	selectedConversationId: string | null
-	settingsConversationId: string | null
-	isEditingConversation: boolean
 	hasLoaded: boolean
 	hasFailedToLoad: boolean
 	isRosterPending: boolean
@@ -227,8 +225,6 @@ export type RosterController = {
 		conversationId: string,
 		sectionId: string | null,
 	) => Promise<void>
-	editConversation: (id: string) => void
-	setConversationEditing: (isEditing: boolean) => void
 	describeConversation: (id: string, value: ConversationSettingsValue) => void
 	styleConversation: (id: string, style: ConversationStyle) => void
 	nameConversation: (id: string, naming: ConversationNaming) => void
@@ -255,8 +251,6 @@ type RosterChoice = {
 	chosenBotId: string | null
 	chosenConversationId: string | null
 	isListShown: boolean
-	settingsConversationId: string | null
-	isEditingConversation: boolean
 	hasLoaded: boolean
 }
 
@@ -267,8 +261,6 @@ const initialRosterChoice: RosterChoice = {
 	chosenBotId: null,
 	chosenConversationId: null,
 	isListShown: false,
-	settingsConversationId: null,
-	isEditingConversation: false,
 	hasLoaded: false,
 }
 
@@ -337,11 +329,6 @@ const firstRowId = (bots: Bot[], conversations: Conversation[]) =>
 const NOTHING_SELECTED: Landing = {
 	selectedBotId: null,
 	selectedConversationId: null,
-}
-
-const NO_SETTINGS = {
-	settingsConversationId: null,
-	isEditingConversation: false,
 }
 
 const NO_SPACE = { kind: "unknownSpace", id: "" } satisfies SpaceError
@@ -425,21 +412,6 @@ const landingIn = (
 		landingOn(bots, conversations, firstRowId(bots, conversations)) ??
 		NOTHING_SELECTED
 	)
-}
-
-const settingsStandingIn = (
-	choice: RosterChoice,
-	conversations: Conversation[],
-) => {
-	const holdsConversation = conversations.some(
-		(conversation) => conversation.id === choice.settingsConversationId,
-	)
-	return {
-		settingsConversationId: holdsConversation
-			? choice.settingsConversationId
-			: null,
-		isEditingConversation: choice.isEditingConversation && holdsConversation,
-	}
 }
 
 const previewsOf = (
@@ -542,7 +514,6 @@ const rosterBaseOf = (
 		conversationPreviews,
 		spaceRowId: choice.spaceRowId,
 		...landingIn(choice, rosters, conversationRosters),
-		...settingsStandingIn(choice, conversations),
 		hasLoaded: choice.hasLoaded,
 		hasFailedToLoad: failures.includes(true),
 		isRosterPending: pendings[chosenIndex] ?? false,
@@ -1154,7 +1125,7 @@ export const createRosterController = (
 				rosterIn(conversationRosters, spaceRowId),
 				lastRowId,
 			)
-			choose({ spaceRowId, lastRowId, ...choiceOf(landing), ...NO_SETTINGS })
+			choose({ spaceRowId, lastRowId, ...choiceOf(landing) })
 			if (rosterReadIn(spaceRowId) !== undefined) {
 				void rereadRosterIn(spaceRowId)
 			}
@@ -1380,15 +1351,6 @@ export const createRosterController = (
 					color: moved.color,
 				})
 			}).catch(reload),
-
-		editConversation: (id: string) =>
-			choose({
-				settingsConversationId: id,
-				isEditingConversation: true,
-			}),
-
-		setConversationEditing: (isEditingConversation: boolean) =>
-			choose({ isEditingConversation }),
 
 		describeConversation: (id: string, value: ConversationSettingsValue) => {
 			const conversation = heldConversation(id)

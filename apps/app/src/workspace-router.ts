@@ -8,6 +8,7 @@ import { ConversationsScreen } from "@/components/conversations-screen"
 import { WorkspaceLayout } from "@/components/workspace-layout"
 import {
 	CompanionSettingsRoute,
+	ConversationSettingsRoute,
 	SpaceSettingsRoute,
 	UserSettingsRoute,
 } from "@/components/workspace-settings"
@@ -57,11 +58,19 @@ const companionSettingsRoute = createRoute({
 	component: CompanionSettingsRoute,
 })
 
+const conversationSettingsRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: "/settings/conversation/$conversationId",
+	validateSearch: validateSettingsSearch,
+	component: ConversationSettingsRoute,
+})
+
 const routeTree = rootRoute.addChildren([
 	conversationsRoute,
 	spaceSettingsRoute,
 	userSettingsRoute,
 	companionSettingsRoute,
+	conversationSettingsRoute,
 ])
 
 export const createWorkspaceRouter = (tabs = createWorkspaceTabs()) =>
