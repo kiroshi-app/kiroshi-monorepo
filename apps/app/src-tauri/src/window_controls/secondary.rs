@@ -93,9 +93,8 @@ pub fn window_identity<R: Runtime>(window: WebviewWindow<R>) -> WindowIdentity {
 }
 
 fn is_app_page(href: &str) -> bool {
-	let mut letters = href.chars();
-	letters.next() == Some('/')
-		&& !matches!(letters.next(), Some('/'))
+	href.starts_with('/')
+		&& !href.starts_with("//")
 		&& !href.chars().any(|letter| letter == '\\' || letter.is_control())
 }
 
