@@ -16,7 +16,6 @@ type ColourFieldProps = {
 	value: number | null
 	onValueChange: (hue: number | null) => void
 	mark: (hue: number | null) => ReactNode
-	preview: (hue: number | null) => ReactNode
 	look?: ColourFieldLook
 	noColour?: "first" | "last"
 	hint?: string
@@ -112,7 +111,6 @@ const ColourField = ({
 	value,
 	onValueChange,
 	mark,
-	preview,
 	look = "swatch",
 	noColour = "first",
 	hint,
@@ -127,7 +125,6 @@ const ColourField = ({
 	const valueOption = optionOf(value)
 	const selected = isPickingOwnHue ? "own" : valueOption
 	const shownOwnHue = valueOption === "own" && value !== null ? value : ownHue
-	const shownHue = selected === "own" ? shownOwnHue : value
 
 	const options: ColourOption[] =
 		noColour === "first"
@@ -244,15 +241,6 @@ const ColourField = ({
 					</div>
 				) : null}
 			</fieldset>
-
-			<div className="flex min-w-0 flex-col gap-2" data-slot="colour-preview">
-				<span className="font-medium text-muted-foreground text-xs">
-					{t("identity.colour.preview")}
-				</span>
-				<div className="min-w-0 rounded-control bg-muted">
-					{preview(shownHue)}
-				</div>
-			</div>
 		</div>
 	)
 }

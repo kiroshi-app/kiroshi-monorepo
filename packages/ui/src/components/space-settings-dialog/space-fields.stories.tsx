@@ -37,7 +37,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"What a space is called and the hue it is recognised by, the two fields that make up the space's own entry in its settings. The colour row opens on a colourless choice, then offers the eight presets as swatches rather than names and ends on `Your hue`, which opens a slider over the whole circle; the chosen tile carries a foreground border on the muted ground so the choice survives a reader who cannot tell the pastels apart. A preview strip paints a message, the unread dot and Send in the chosen hue. Both fields are fully controlled and report the whole value on every keystroke, every pick and every slider step. Deleting the space is not here: it lives in its own danger zone, `DangerZone`.",
+					"What a space is called and the hue it is recognised by, the two fields that make up the space's own entry in its settings. The colour row opens on a colourless choice, then offers the eight presets as swatches rather than names and ends on `Your hue`, which opens a slider over the whole circle; the chosen tile carries a foreground border on the muted ground so the choice survives a reader who cannot tell the pastels apart. Both fields are fully controlled and report the whole value on every keystroke, every pick and every slider step. Deleting the space is not here: it lives in its own danger zone, `DangerZone`.",
 			},
 		},
 	},
@@ -57,7 +57,7 @@ export const Default = meta.story({
 			},
 		},
 	},
-	play: async ({ args, canvas, canvasElement, userEvent }) => {
+	play: async ({ args, canvas, userEvent }) => {
 		await userEvent.type(canvas.getByLabelText("Name"), "!")
 		await expect(args.onValueChange).toHaveBeenLastCalledWith({
 			name: "Release desk!",
@@ -66,10 +66,6 @@ export const Default = meta.story({
 
 		await expect(canvas.getAllByRole("radio")).toHaveLength(10)
 		await expect(canvas.getByRole("radio", { name: "Blue" })).toBeChecked()
-		await expect(slotIn(canvasElement, "space-colour-preview")).toHaveAttribute(
-			"data-hue",
-			"257",
-		)
 	},
 })
 
@@ -144,7 +140,7 @@ export const OwnHue = meta.story({
 		docs: {
 			description: {
 				story:
-					"A space wearing a hue of its own. Check in both themes that `Your hue` is the checked tile with the hue's dot on its rainbow, that the panel under the row reads 320 degrees with the helper beneath the track, and that a step on the slider repaints the readout, the thumb, the dot and the preview at once while the panel stays open, even on a preset hue.",
+					"A space wearing a hue of its own. Check in both themes that `Your hue` is the checked tile with the hue's dot on its rainbow, that the panel under the row reads 320 degrees with the helper beneath the track, and that a step on the slider repaints the readout, the thumb and the dot at once while the panel stays open, even on a preset hue.",
 			},
 		},
 	},
@@ -167,10 +163,6 @@ export const OwnHue = meta.story({
 		await expect(
 			slotIn(canvasElement, "colour-field-readout"),
 		).toHaveTextContent("319°")
-		await expect(slotIn(canvasElement, "space-colour-preview")).toHaveAttribute(
-			"data-hue",
-			"319",
-		)
 	},
 })
 
