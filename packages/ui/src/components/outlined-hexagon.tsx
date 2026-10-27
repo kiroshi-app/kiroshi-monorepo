@@ -24,7 +24,11 @@ type OutlinedHexagonProps = {
 
 const OutlinedHexagon = ({ side, fill, children }: OutlinedHexagonProps) => {
 	const id = useId()
-	const ids = { shape: `${id}-shape`, lip: `${id}-lip` }
+	const ids = {
+		shape: `${id}-shape`,
+		outline: `${id}-outline`,
+		lip: `${id}-lip`,
+	}
 	const path = roundedHexagonPath(hexagonOfWidth(side))
 	const isCompact = isCompactAt(side)
 	const edge = isCompact ? COMPACT_EDGE : GLAZE_EDGE
@@ -39,14 +43,12 @@ const OutlinedHexagon = ({ side, fill, children }: OutlinedHexagonProps) => {
 		>
 			<defs>
 				<clipPath id={ids.shape}>
-					<path d={path} />
+					<path d={path} id={ids.outline} />
 				</clipPath>
 				{isCompact ? null : (
 					<mask id={ids.lip}>
 						<path d={path} fill="#ffffff" />
-						<svg aria-hidden="true" y={edgeWidth}>
-							<path d={path} fill="#000000" />
-						</svg>
+						<use fill="#000000" href={`#${ids.outline}`} y={edgeWidth} />
 					</mask>
 				)}
 			</defs>
