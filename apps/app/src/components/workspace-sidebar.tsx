@@ -1,7 +1,9 @@
 import { AppSidebar } from "@workspace/ui/components/app-sidebar"
 
 import { titleBarWindowControls } from "@/components/window-caption-controls"
+import { appSidebarRailOf, useWorkspaceRail } from "@/components/workspace-rail"
 import { hasOverlayWindowControls } from "@/lib/host"
+import type { SettingsNavigation } from "@/lib/navigation/use-settings-navigation"
 import type { useSwitcherSpaces } from "@/lib/spaces/use-joined-spaces"
 import type { WorkspaceTabs } from "@/lib/tabs/workspace-tabs"
 import type { RosterLines } from "@/lib/workspace/use-roster-lines"
@@ -19,6 +21,7 @@ type WorkspaceSidebarProps = {
 	collapsedSectionIds: string[]
 	core: WorkspaceCore
 	drivers: WorkspaceDrivers
+	navigation: SettingsNavigation
 	overlay: WorkspaceOverlay
 	panels: SettingsPanels
 	rosterLines: RosterLines
@@ -33,7 +36,9 @@ export const WorkspaceSidebar = ({
 	collapsedSectionIds,
 	core,
 	drivers,
+	navigation,
 	overlay,
+	panels,
 	rosterLines,
 	rosterView,
 	sidebarMissions,
@@ -55,6 +60,19 @@ export const WorkspaceSidebar = ({
 		rosterView,
 		tabs,
 	})
+	const rail = useWorkspaceRail({
+		collapsedSectionIds,
+		core,
+		navigation,
+		overlay,
+		panels,
+		rosterLines,
+		rosterLists,
+		sidebarTab,
+		switcher,
+		tabs,
+		onSelectSpace: rosterLines.sidebarActions.onSelectSpace,
+	})
 	const sidebarRosters = {
 		botsBySpaceId: rosterLists.rosterBotsBySpace,
 		conversationsBySpaceId: rosterLists.rosterConversationsBySpace,
@@ -75,8 +93,6 @@ export const WorkspaceSidebar = ({
 			botsBySpaceId={rosterLists.rosterBotsBySpace}
 			conversations={rosterLists.rosterConversations}
 			conversationsBySpaceId={rosterLists.rosterConversationsBySpace}
-			badgesBySpaceId={rosterLists.badgesBySpaceId}
-			railDots={rosterLists.railSignals}
 			missionsBySpaceId={sidebarMissions.panelsBySpaceId}
 			openPanel={sidebarTab.openTab}
 			onOpenPanelChange={(panel) =>
@@ -84,23 +100,14 @@ export const WorkspaceSidebar = ({
 			}
 			collapsedSectionIds={collapsedSectionIds}
 			sectionsBySpaceId={sections.state.sections}
-			updateBadge={rosterLines.updateBadge}
 			isSpaceSwitchingEnabled={!overlay.isOverlayOpen}
 			onOpenSearch={overlay.search.open}
 			{...rosterLines.sidebarActions}
+			{...appSidebarRailOf(rail)}
 			onCreateConversation={rosterLines.startConversation}
 			selectedBotId={rosterView.selectedBotId ?? undefined}
 			selectedConversationId={rosterView.selectedConversationId ?? undefined}
-			space={switcher.selectedSpace}
 			selectedSpaceId={switcher.selectedSpaceId ?? undefined}
-			spaces={switcher.spaces}
-			hostBySpaceId={switcher.hostBySpaceId}
-			invitations={switcher.invitations}
-			onAcceptInvitation={switcher.onAcceptInvitation}
-			onDeclineInvitation={switcher.onDeclineInvitation}
-			onRetryInvitation={switcher.onRetryInvitation}
-			onSpaceSwitcherOpenChange={switcher.onSpaceSwitcherOpenChange}
-			user={overlay.userSettings}
 		/>
 	)
 }

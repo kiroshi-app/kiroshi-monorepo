@@ -6,6 +6,7 @@ import {
 	cleanup,
 	fireEvent,
 	render,
+	renderHook,
 	screen,
 	within,
 } from "@testing-library/react"
@@ -15,12 +16,13 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { AppRail } from "@workspace/ui/components/app-rail"
 import { i18n } from "@workspace/ui/lib/i18n"
 
-import { workspaceRailOf } from "@/components/workspace-rail"
+import { appSidebarRailOf, useWorkspaceRail } from "@/components/workspace-rail"
 import type { JoinedSpace, Space } from "@/lib/bindings"
 import { newBotIdentity } from "@/lib/bots/bot-settings"
 import { createFakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
+import type { JoinedHostState } from "@/lib/host/joined-hosts"
 import type { SettingsNavigation } from "@/lib/navigation/use-settings-navigation"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 import type { JoinedSpacesController } from "@/lib/spaces/joined-spaces-controller"
@@ -110,6 +112,10 @@ const NO_INVITATIONS = {
 	sweepWithdrawn: () => undefined,
 }
 
+const NO_SECTIONS_CORE = {
+	sections: { state: { sections: {} } },
+} as WorkspaceCore
+
 type RailHarnessProps = {
 	selectedSpaceId: string
 	railSettings?: SettingsPanels["railSettings"]
@@ -137,9 +143,9 @@ const RailHarness = ({
 		},
 		NO_INVITATIONS,
 	)
-	const { rail, currentSpace, currentSpaceHost } = workspaceRailOf({
+	const { rail, currentSpace, currentSpaceHost } = useWorkspaceRail({
 		collapsedSectionIds: [],
-		core: {} as WorkspaceCore,
+		core: NO_SECTIONS_CORE,
 		navigation: navigation as SettingsNavigation,
 		overlay: {} as WorkspaceOverlay,
 		panels: { railSettings } as SettingsPanels,
@@ -285,6 +291,106 @@ describe("the rail on a settings screen", () => {
 		).toBeTruthy()
 	})
 })
+
+type ProducedSpace = {
+	label: string
+	selectedSpaceId: string
+	connections: Record<string, JoinedHostState>
+	space: { id: string; name: string }
+	host: string | undefined
+}
+
+const STUDIO_ROW_ID = joinedRowIdOf(STUDIO.id)
+
+const PRODUCED_SPACES: ProducedSpace[] = [
+	{
+		label: "an owned Space",
+		selectedSpaceId: HOME.id,
+		connections: {},
+		space: { id: HOME.id, name: HOME.name },
+		host: undefined,
+	},
+	{
+		label: "a joined Space online",
+		selectedSpaceId: STUDIO_ROW_ID,
+		connections: { [STUDIO.id]: { status: "up" } },
+		space: { id: STUDIO_ROW_ID, name: STUDIO.name },
+		host: "up",
+	},
+	{
+		label: "a joined Space not connected",
+		selectedSpaceId: STUDIO_ROW_ID,
+		connections: { [STUDIO.id]: { status: "down" } },
+		space: { id: STUDIO_ROW_ID, name: STUDIO.name },
+		host: "down",
+	},
+]
+
+const useProducedRail = ({
+	selectedSpaceId,
+	connections,
+}: Pick<ProducedSpace, "selectedSpaceId" | "connections">) =>
+	useWorkspaceRail({
+		collapsedSectionIds: [],
+		core: NO_SECTIONS_CORE,
+		navigation: {} as SettingsNavigation,
+		overlay: {} as WorkspaceOverlay,
+		panels: {} as SettingsPanels,
+		rosterLines: { sidebarActions: {} } as RosterLines,
+		rosterLists: {} as RosterLists,
+		sidebarTab: { openTab: "conversations" } as ReturnType<
+			typeof useSidebarPanelSwitch
+		>,
+		switcher: useSwitcherSpaces(
+			{ spaces: [HOME, GARAGE], selectedSpaceId },
+			{
+				state: {
+					joinedSpaces: [STUDIO],
+					hasFailedToLoad: false,
+					openId: selectedSpaceId === STUDIO_ROW_ID ? STUDIO.id : null,
+					departed: null,
+				},
+				controller: {} as JoinedSpacesController,
+				hosts: { active: null, connections },
+			},
+			NO_INVITATIONS,
+		),
+		tabs: createWorkspaceTabs(),
+		onSelectSpace: () => undefined,
+	})
+
+const produceRailFor = (
+	space: Pick<ProducedSpace, "selectedSpaceId" | "connections">,
+) => renderHook(() => useProducedRail(space)).result.current
+
+describe.each(PRODUCED_SPACES)(
+	"the sidebar frame producer with $label selected",
+	({ selectedSpaceId, connections, space, host }) => {
+		it("outputs that Space as the current Space", () => {
+			const { currentSpace } = produceRailFor({ selectedSpaceId, connections })
+
+			expect(currentSpace).toMatchObject(space)
+		})
+
+		it("outputs the connection state of that Space", () => {
+			const { currentSpaceHost } = produceRailFor({
+				selectedSpaceId,
+				connections,
+			})
+
+			expect(currentSpaceHost).toBe(host)
+		})
+
+		it("hands the conversations sidebar the same Space in the same connection state", () => {
+			const { hostBySpaceId, space: sidebarSpace } = appSidebarRailOf(
+				produceRailFor({ selectedSpaceId, connections }),
+			)
+
+			expect(sidebarSpace).toMatchObject(space)
+			expect(hostBySpaceId?.[space.id]).toBe(host)
+		})
+	},
+)
 
 const SETTLE_MS = 200
 
