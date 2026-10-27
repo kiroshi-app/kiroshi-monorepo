@@ -1571,60 +1571,50 @@ describe("ThreadScreen", () => {
 		expect(openMission).toHaveBeenCalledWith(SOLO_MISSION.id)
 	})
 
-	it("opens the transcript mission card in a new tab on a new-tab click, in place otherwise", async () => {
-		const openMission = vi.fn()
-		const openMissionInNewTab = vi.fn()
-		listMissions.mockResolvedValue({ open: [SOLO_MISSION], done: [] })
-		render(missionTabsScreenOf(openMission, openMissionInNewTab), {
-			wrapper: createQueryTestWrapper().wrapper,
-		})
-		await settle()
-		const openButton = within(missionCard()).getByRole("button", {
-			name: `Open the mission: ${SOLO_MISSION.objective}`,
-		})
+	it.each([
+		{
+			place: "transcript",
+			openButtonOf: async () =>
+				within(missionCard()).getByRole("button", {
+					name: `Open the mission: ${SOLO_MISSION.objective}`,
+				}),
+		},
+		{
+			place: "Routines panel",
+			openButtonOf: async () => {
+				await openRoutinesPanel()
+				return within(missionsSection()).getByRole("button", {
+					name: new RegExp(SOLO_MISSION.objective),
+				})
+			},
+		},
+	])(
+		"opens the $place mission card in a new tab on a new-tab click, in place otherwise",
+		async ({ openButtonOf }) => {
+			const openMission = vi.fn()
+			const openMissionInNewTab = vi.fn()
+			listMissions.mockResolvedValue({ open: [SOLO_MISSION], done: [] })
+			render(missionTabsScreenOf(openMission, openMissionInNewTab), {
+				wrapper: createQueryTestWrapper().wrapper,
+			})
+			await settle()
+			const openButton = await openButtonOf()
 
-		fireEvent.click(openButton, NEW_TAB_CLICK)
-		middleClick(openButton)
+			fireEvent.click(openButton, NEW_TAB_CLICK)
+			middleClick(openButton)
 
-		expect(openMissionInNewTab.mock.calls).toEqual([
-			[SOLO_MISSION.id],
-			[SOLO_MISSION.id],
-		])
-		expect(openMission).not.toHaveBeenCalled()
+			expect(openMissionInNewTab.mock.calls).toEqual([
+				[SOLO_MISSION.id],
+				[SOLO_MISSION.id],
+			])
+			expect(openMission).not.toHaveBeenCalled()
 
-		fireEvent.click(openButton)
+			fireEvent.click(openButton)
 
-		expect(openMission).toHaveBeenCalledWith(SOLO_MISSION.id)
-		expect(openMissionInNewTab).toHaveBeenCalledTimes(2)
-	})
-
-	it("opens the Routines panel mission card in a new tab on a new-tab click, in place otherwise", async () => {
-		const openMission = vi.fn()
-		const openMissionInNewTab = vi.fn()
-		listMissions.mockResolvedValue({ open: [SOLO_MISSION], done: [] })
-		render(missionTabsScreenOf(openMission, openMissionInNewTab), {
-			wrapper: createQueryTestWrapper().wrapper,
-		})
-		await settle()
-		await openRoutinesPanel()
-		const openButton = within(missionsSection()).getByRole("button", {
-			name: new RegExp(SOLO_MISSION.objective),
-		})
-
-		fireEvent.click(openButton, NEW_TAB_CLICK)
-		middleClick(openButton)
-
-		expect(openMissionInNewTab.mock.calls).toEqual([
-			[SOLO_MISSION.id],
-			[SOLO_MISSION.id],
-		])
-		expect(openMission).not.toHaveBeenCalled()
-
-		fireEvent.click(openButton)
-
-		expect(openMission).toHaveBeenCalledWith(SOLO_MISSION.id)
-		expect(openMissionInNewTab).toHaveBeenCalledTimes(2)
-	})
+			expect(openMission).toHaveBeenCalledWith(SOLO_MISSION.id)
+			expect(openMissionInNewTab).toHaveBeenCalledTimes(2)
+		},
+	)
 
 	it("carries the new state of a mission on its card", async () => {
 		const announce: { toPanel: ((changed: MissionChanged) => void) | null } = {
