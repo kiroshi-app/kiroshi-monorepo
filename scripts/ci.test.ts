@@ -695,11 +695,18 @@ describe("the merge_group retry", () => {
 		})
 	const RUST_TEST = GATE.rust.find((step) => step.name === "Test") as Step
 
-	it("retries the vitest gate and the rust cargo test on a merge_group, nothing else", () => {
+	it("retries the vitest gate, the rust cargo test and the storybook gate on a merge_group, nothing else", () => {
 		expect(retried("merge_group")).toEqual([
 			"Unit tests, website, sidecar and story ids against the baseline: vitest",
 			"Test: cargo",
+			"Stories played in chromium against the baseline: vitest",
 		])
+	})
+
+	it("hands the storybook gate one retry per failing story", () => {
+		expect(vitestRetryStep(GATE.storybook[0] as Step).command).toBe(
+			"bun run baseline storybook --retry",
+		)
 	})
 
 	it.each([

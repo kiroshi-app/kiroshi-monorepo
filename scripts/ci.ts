@@ -173,6 +173,7 @@ export const GATE = {
 			name: "Stories played in chromium against the baseline",
 			command: "bun run baseline storybook",
 			heavy: true,
+			retry: "vitest",
 		},
 	],
 	ios: [

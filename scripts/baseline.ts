@@ -464,11 +464,14 @@ type Live = Record<string, string[]>
 
 type SuitesRun = { suites: VitestSuite[]; into: string; retries?: number }
 
-const runSuites = ({ suites, into, retries }: SuitesRun) =>
-	suites.map((suite) => ({
+const runSuites = ({ suites, into, retries }: SuitesRun) => {
+	const ran = suites.map((suite) => ({
 		suite,
 		...vitestReport({ suite, into, retries }),
 	}))
+	reportRetriedTests(ran.flatMap(({ report }) => vitestRetriedPasses(report)))
+	return ran
+}
 
 type RanSuite = ReturnType<typeof runSuites>[number]
 
@@ -488,15 +491,18 @@ const newReportFolder = () => mkdtempSync(join(tmpdir(), "kiroshi-baseline-"))
 const collectVitest = (retries: number): Live => {
 	const into = newReportFolder()
 	const ran = runSuites({ suites: VITEST_SUITES, into, retries })
-	reportRetriedTests(ran.flatMap(({ report }) => vitestRetriedPasses(report)))
 	return {
 		[TESTS]: attributedFailures([...ran.map(outcomeOf), sidecarOutcome(into)]),
 		[STORIES]: indexedStoryIds(into),
 	}
 }
 
-const collectStorybook = (): Live => {
-	const ran = runSuites({ suites: [STORYBOOK_SUITE], into: newReportFolder() })
+const collectStorybook = (retries: number): Live => {
+	const ran = runSuites({
+		suites: [STORYBOOK_SUITE],
+		into: newReportFolder(),
+		retries,
+	})
 	return { [TESTS]: attributedFailures(ran.map(outcomeOf)) }
 }
 
