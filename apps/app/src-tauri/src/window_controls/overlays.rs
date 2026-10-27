@@ -8,10 +8,9 @@ pub struct Overlay {
 	pub bounds: Option<MaximizeButtonBounds>,
 }
 
-#[derive(Debug)]
 pub struct NotFramed;
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct Overlays(HashMap<String, Option<Overlay>>);
 
 impl Overlays {
