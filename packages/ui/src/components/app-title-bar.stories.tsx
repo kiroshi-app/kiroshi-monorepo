@@ -105,17 +105,15 @@ const chipIn = (canvasElement: HTMLElement) =>
 const iconSlotOf = (owner: HTMLElement) =>
 	owner.querySelector<HTMLElement>('span[aria-hidden="true"]') ?? owner
 
-const expectIconAtItsSize = async (owner: HTMLElement, isAvatar: boolean) => {
+const expectIconAtItsSize = async (owner: HTMLElement, tab: TitleBarTab) => {
 	const slot = iconSlotOf(owner)
 	await expect(boxOf(slot).width).toBe(ICON_SLOT)
 	await expect(boxOf(slot).height).toBe(ICON_SLOT)
 	const icon = slot.firstElementChild as Element
-	const side = isAvatar ? AVATAR_ICON : GLYPH_ICON
+	const side = tab.id === COMPANION_TAB.id ? AVATAR_ICON : GLYPH_ICON
 	await expect(boxOf(icon).width).toBe(side)
 	await expect(boxOf(icon).height).toBe(side)
 }
-
-const isAvatarTab = (tab: TitleBarTab) => tab.id === COMPANION_TAB.id
 
 const tabsOutOfStrip = (canvasElement: HTMLElement, tabs: TitleBarTab[]) => {
 	const inStrip = new Set(
@@ -139,7 +137,7 @@ const expectOverflowRows = async (menu: HTMLElement, tabs: TitleBarTab[]) => {
 	)
 	for (const [rank, tab] of tabs.entries()) {
 		await expect(boxOf(rows[rank]).height).toBe(32)
-		await expectIconAtItsSize(rows[rank], isAvatarTab(tab))
+		await expectIconAtItsSize(rows[rank], tab)
 	}
 }
 
@@ -329,7 +327,7 @@ const playA2Icons = async ({
 		ICON_KINDS.map((tab) => tab.title),
 	)
 	for (const [rank, tab] of ICON_KINDS.entries()) {
-		await expectIconAtItsSize(tabs[rank], isAvatarTab(tab))
+		await expectIconAtItsSize(tabs[rank], tab)
 	}
 }
 
