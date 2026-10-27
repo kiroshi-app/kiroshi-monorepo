@@ -1,7 +1,9 @@
 use std::fs;
 use std::path::Path;
 
+#[cfg(unix)]
 const DIR_MODE: u32 = 0o700;
+#[cfg(unix)]
 const FILE_MODE: u32 = 0o600;
 
 pub fn write(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
