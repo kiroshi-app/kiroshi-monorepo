@@ -1328,6 +1328,8 @@ overlays-noticesurface--loading
 overlays-noticesurface--long-content
 overlays-noticesurface--m-13-signed-out
 overlays-noticesurface--marks
+overlays-noticesurface--move-to-new-window-failed
+overlays-noticesurface--move-to-new-window-failed-dark
 overlays-noticesurface--question-run-failed
 overlays-noticesurface--reduced-motion
 overlays-noticesurface--removed-with-space-mark

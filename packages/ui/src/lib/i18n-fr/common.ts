@@ -56,6 +56,13 @@ const common = {
 		duplicateTab: "Dupliquer l’onglet",
 		reopenClosedTab: "Rouvrir le dernier onglet fermé",
 		moveTabToNewWindow: "Déplacer dans une nouvelle fenêtre",
+		moveTabFailed: {
+			title: "Impossible d’ouvrir une nouvelle fenêtre",
+			description:
+				"L’onglet est resté ici. Choisissez Déplacer dans une nouvelle fenêtre dans le menu de l’onglet pour réessayer.",
+			descriptionWithReason:
+				"L’onglet est resté ici ({{reason}}). Choisissez Déplacer dans une nouvelle fenêtre dans le menu de l’onglet pour réessayer.",
+		},
 		pinTabShortcut: "Ctrl⇧P",
 		newTabShortcut: "⌘T",
 		reopenClosedTabShortcut: "⌘⇧T",

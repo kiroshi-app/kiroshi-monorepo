@@ -1109,6 +1109,76 @@ export const QuestionRunFailed = meta.story({
 	},
 })
 
+const WINDOW_OPEN_REASON = "unavailable"
+
+const MoveToNewWindowFailedNotice = () => {
+	const { t } = useTranslation("common")
+
+	return (
+		<NoticeDemo
+			label="Move to new window"
+			raise={() =>
+				raiseFailureNotice({
+					title: t("titleBar.moveTabFailed.title"),
+					description: t("titleBar.moveTabFailed.descriptionWithReason", {
+						reason: WINDOW_OPEN_REASON,
+					}),
+				})
+			}
+		/>
+	)
+}
+
+const expectMoveToNewWindowFailed = async (
+	canvas: ReturnType<typeof within>,
+	userEvent: UserEventObject,
+) => {
+	await userEvent.click(
+		canvas.getByRole("button", { name: "Move to new window" }),
+	)
+
+	await failureNotice()
+	await expect(
+		within(viewport()).getByText("Couldn’t open a new window"),
+	).toBeVisible()
+	await expect(
+		within(viewport()).getByText(
+			`The tab stayed here (${WINDOW_OPEN_REASON}). Choose Move to new window from the tab’s menu to try again.`,
+		),
+	).toBeVisible()
+}
+
+export const MoveToNewWindowFailed = meta.story({
+	render: () => <MoveToNewWindowFailedNotice />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Move to new window could not open the window, so the tab stayed in this one. Check that the title says the window couldn’t open, distinct from the menu label, and that the body carries the reason the app received, then the gesture to try again from the tab’s menu. Pick `MoveToNewWindowFailedDark` for the dark theme. The app raises it from `apps/app/src/lib/tabs/workspace-tabs.ts`.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		await expectMoveToNewWindowFailed(canvas, userEvent)
+	},
+})
+
+export const MoveToNewWindowFailedDark = meta.story({
+	globals: { theme: "dark" },
+	render: () => <MoveToNewWindowFailedNotice />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"`MoveToNewWindowFailed` in the dark theme. Check that the title and the reason read on the dark notice surface, the error mark alone on the destructive role.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		await expectMoveToNewWindowFailed(canvas, userEvent)
+	},
+})
+
 export const Stacked = meta.story({
 	parameters: {
 		docs: {
