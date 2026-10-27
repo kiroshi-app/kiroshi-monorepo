@@ -49,7 +49,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"Who takes part in a conversation, and who leads it. The seated companions are listed in the order they joined — the list never reorders itself, because that order is the conversation's history — and exactly one of them wears the crown. Moving the crown is a press on another row's crown; dismissing is the cross beside it. The panel holds no state of its own: every press is reported up, so the screen decides what a dismissal or a handover means. One rule is enforced here rather than upstream: the last companion seated cannot be dismissed, because a conversation with nobody in it cannot answer. Joining happens in the composer, by mention, never here. Reach for `ConversationSettingsDialog` for the panel in its rail.",
+					"Who takes part in a conversation, and who leads it. The seated companions are listed in the order they joined — the list never reorders itself, because that order is the conversation's history — and exactly one of them wears the crown. Moving the crown is a press on another row's crown; dismissing is the cross beside it. The panel holds no state of its own: every press is reported up, so the screen decides what a dismissal or a handover means. One rule is enforced here rather than upstream: the last companion seated cannot be dismissed, because a conversation with nobody in it cannot answer. Joining happens in the composer, by mention, never here. Reach for `ConversationSettingsScreen` for the panel under its Participants entry.",
 			},
 		},
 	},
