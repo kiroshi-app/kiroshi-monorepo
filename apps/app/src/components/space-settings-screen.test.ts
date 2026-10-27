@@ -361,8 +361,10 @@ describe("SpaceSettingsScreen on a joined space", () => {
 				name: i18n.t("settings:rail.danger"),
 			}),
 		).toBeNull()
+		expect(
+			within(dialog).getByText(i18n.t("settings:space.colour.label")),
+		).toBeTruthy()
 		for (const localOnly of [
-			i18n.t("settings:space.colour.label"),
 			i18n.t("settings:space.notShared.title"),
 			"Share link",
 			i18n.t("settings:space.transfer.export"),
@@ -372,7 +374,7 @@ describe("SpaceSettingsScreen on a joined space", () => {
 		}
 	})
 
-	it("keeps the name of a joined space read-only and writes no rename", async () => {
+	it("leaves the name of a joined space editable and writes no rename", async () => {
 		const gear = await gearWithGarage()
 		const dialog = openSettingsOf(gear, GARAGE_ROW)
 
@@ -383,7 +385,7 @@ describe("SpaceSettingsScreen on a joined space", () => {
 		).toBeTruthy()
 		expect(
 			within(dialog).getByLabelText(i18n.t("settings:space.name.label")),
-		).toHaveProperty("readOnly", true)
+		).toHaveProperty("readOnly", false)
 		expect(gear.joined.getState().joinedSpaces).toEqual([GARAGE])
 	})
 
