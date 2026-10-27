@@ -77,6 +77,7 @@ import {
 } from "@workspace/ui/components/user-settings-dialog/use-user-settings"
 import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 import { useOverlayScrollbars } from "@workspace/ui/hooks/use-overlay-scrollbars"
+import type { ClickModifiers } from "@workspace/ui/lib/click-modifiers"
 import { cn } from "@workspace/ui/lib/utils"
 
 const HEADER_AVATAR_SIZE = 36
@@ -183,7 +184,7 @@ type UserSettingsScreenProps = SettingsScreenNavigation &
 		joinedSpaces?: UserSpace[]
 		invitations?: Space[]
 		currentSpaceId?: string
-		onOpenSpace?: (id: string) => void
+		onOpenSpace?: (id: string, modifiers: ClickModifiers) => void
 		onCreateSpace?: () => void
 	}
 
@@ -674,7 +675,8 @@ const UserSettingsScreen = ({
 			guardLeave={guardLeave}
 			sessions={sessions}
 			spaces={(requestLeave) => {
-				const openSpace = (id: string) => requestLeave(() => onOpenSpace?.(id))
+				const openSpace = (id: string, modifiers: ClickModifiers) =>
+					requestLeave(() => onOpenSpace?.(id, modifiers))
 
 				return (
 					<SettingsMenuSection
@@ -693,7 +695,7 @@ const UserSettingsScreen = ({
 								isCurrent={space.id === currentSpaceId}
 								key={space.id}
 								name={space.name}
-								onOpen={() => openSpace(space.id)}
+								onOpen={(modifiers) => openSpace(space.id, modifiers)}
 								spaceId={space.avatarSeed}
 							/>
 						))}
@@ -703,7 +705,7 @@ const UserSettingsScreen = ({
 								isInvitation
 								key={invitation.id}
 								name={invitation.name}
-								onOpen={() => openSpace(invitation.id)}
+								onOpen={(modifiers) => openSpace(invitation.id, modifiers)}
 								spaceId={invitation.id}
 							/>
 						))}

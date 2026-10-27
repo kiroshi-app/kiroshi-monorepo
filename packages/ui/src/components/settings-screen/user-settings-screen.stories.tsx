@@ -5,6 +5,7 @@ import { expect, fn, screen, waitFor, within } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+	expectClickModifiers,
 	expectLaptopWindow,
 	expectRailSpaceHost,
 	expectSettingsChrome,
@@ -40,6 +41,7 @@ import {
 	SIDEBAR_MAX_WIDTH,
 	SIDEBAR_MIN_WIDTH,
 } from "@workspace/ui/components/sidebar-resize"
+import { NO_CLICK_MODIFIERS } from "@workspace/ui/lib/click-modifiers"
 
 const USER_MENU = [
 	"Account",
@@ -372,12 +374,18 @@ export const Spaces = meta.story({
 		await expect(spaceRowOf(menu, "Studio")).toHaveFocus()
 		await userEvent.tab()
 		await userEvent.keyboard("{Enter}")
-		await expect(args.onOpenSpace).toHaveBeenLastCalledWith("field-notes")
+		await expect(args.onOpenSpace).toHaveBeenLastCalledWith(
+			"field-notes",
+			NO_CLICK_MODIFIERS,
+		)
 
 		await userEvent.click(create)
 		await expect(args.onCreateSpace).toHaveBeenCalledTimes(2)
 		await userEvent.click(spaceRowOf(menu, "Northwind"))
-		await expect(args.onOpenSpace).toHaveBeenLastCalledWith("northwind")
+		await expect(args.onOpenSpace).toHaveBeenLastCalledWith(
+			"northwind",
+			NO_CLICK_MODIFIERS,
+		)
 
 		for (const drawn of [
 			create,
@@ -386,6 +394,34 @@ export const Spaces = meta.story({
 			slotIn(menu, "settings-menu-space-invitation-pill"),
 		])
 			await expectNoColourTransition(drawn)
+	},
+})
+
+export const OpensASpaceWithClickModifiers = meta.story({
+	tags: ["test-only"],
+	args: SPACES_ARGS,
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"A Space row, then an invitation row, each clicked every way a host can tell apart with nothing unsaved to hold the leave. Check that the screen hands its caller the Space with the button and the keys of that click, middle with the keys held, Cmd, Ctrl or Shift alone, none on a plain click or Enter, and nothing on a right-click.",
+			},
+		},
+	},
+	play: async ({ args, userEvent }) => {
+		const menu = await expectEntryShown("Account")
+		for (const [name, id] of [
+			["Northwind", "northwind"],
+			["Atelier", "atelier"],
+		]) {
+			await expectClickModifiers({
+				target: spaceRowOf(menu, name),
+				callback: args.onOpenSpace,
+				reported: [id],
+				userEvent,
+			})
+		}
 	},
 })
 

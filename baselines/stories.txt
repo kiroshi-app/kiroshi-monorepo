@@ -1873,6 +1873,7 @@ settings-user-settingsscreen--left-column-dark
 settings-user-settingsscreen--maximum-width
 settings-user-settingsscreen--minimum-width
 settings-user-settingsscreen--notifications
+settings-user-settingsscreen--opens-a-space-with-click-modifiers
 settings-user-settingsscreen--rail-space-host
 settings-user-settingsscreen--rail-space-host-dark
 settings-user-settingsscreen--skills
