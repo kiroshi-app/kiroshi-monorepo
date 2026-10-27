@@ -28,9 +28,7 @@ private struct ScaledIconCell: View {
         let hexagon = CompanionOutline(drawing: FlatHexagon.ground)
         hexagon
             .fill(Color.conversation(.cell(color)))
-            .overlay {
-                hexagon.stroke(Color.conversation(.hexagonOutline), lineWidth: side / 40)
-            }
+            .overlay { HexagonBorder() }
             .overlay {
                 Image(systemName: icon.symbolName)
                     .resizable()
