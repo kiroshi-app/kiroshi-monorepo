@@ -9,9 +9,11 @@ import {
 import { useTranslation } from "react-i18next"
 
 import {
+	BLOT_HUES,
 	type BotAvatarBlot,
-	blotTint,
+	hueOf,
 } from "@workspace/ui/components/companion-colour"
+import { hueStyle } from "@workspace/ui/components/hue-palette"
 import { type Icon, Icons } from "@workspace/ui/components/icons"
 import { Button } from "@workspace/ui/components/ui/button"
 import {
@@ -319,8 +321,12 @@ const NoticeMark = ({ type, spaceColour }: NoticeMarkProps) => {
 			<span
 				aria-hidden="true"
 				className={SPACE_MARK}
+				data-hue={hueOf(spaceColour)}
 				data-slot="notice-space-mark"
-				style={{ color: blotTint(spaceColour) }}
+				style={{
+					...hueStyle(BLOT_HUES[spaceColour]),
+					color: "var(--primary-strong)",
+				}}
 			/>
 		)
 	}

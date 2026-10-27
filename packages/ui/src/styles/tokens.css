@@ -1,32 +1,68 @@
-:root {
+:root,
+[data-hue] {
+	--hue-red-bubble: #ffc5af;
+	--hue-red-accent: #9e441d;
+	--hue-red-new-line: #e0b2a0;
+	--hue-red-avatar-ink: #b25630;
+	--hue-red-avatar-ground: #fee1d6;
+	--hue-red-conversation-icon: #f9ded4;
+	--hue-red-conversation-icon-foreground: #6f4b3d;
+	--hue-orange-bubble: #f8caa1;
+	--hue-orange-accent: #905200;
+	--hue-orange-new-line: #dab696;
+	--hue-orange-avatar-ink: #a86100;
+	--hue-orange-avatar-ground: #f9e3d1;
+	--hue-orange-conversation-icon: #f5e0cf;
+	--hue-orange-conversation-icon-foreground: #6b4f35;
+	--hue-yellow-bubble: #edd09c;
+	--hue-yellow-accent: #956300;
+	--hue-yellow-new-line: #d1bb92;
+	--hue-yellow-avatar-ink: #966c00;
+	--hue-yellow-avatar-ground: #f4e6ce;
+	--hue-yellow-conversation-icon: #f0e3cc;
+	--hue-yellow-conversation-icon-foreground: #645231;
+	--hue-green-bubble: #c2dfac;
+	--hue-green-accent: #467212;
+	--hue-green-new-line: #b0c69f;
+	--hue-green-avatar-ink: #578429;
+	--hue-green-avatar-ground: #dfedd5;
+	--hue-green-conversation-icon: #ddead3;
+	--hue-green-conversation-icon-foreground: #4a5c3c;
+	--hue-cyan-bubble: #9ae5db;
+	--hue-cyan-accent: #00736b;
+	--hue-cyan-new-line: #92cbc3;
+	--hue-cyan-avatar-ink: #00877d;
+	--hue-cyan-avatar-ground: #cff0eb;
+	--hue-cyan-conversation-icon: #cdece8;
+	--hue-cyan-conversation-icon-foreground: #2e5f5a;
+	--hue-blue-bubble: #bad6ff;
+	--hue-blue-accent: #2d62ac;
+	--hue-blue-new-line: #a6c0e5;
+	--hue-blue-avatar-ink: #3e74bf;
+	--hue-blue-avatar-ground: #dae9ff;
+	--hue-blue-conversation-icon: #d7e6fb;
+	--hue-blue-conversation-icon-foreground: #425673;
+	--hue-purple-bubble: #d8cbff;
+	--hue-purple-accent: #6b50a4;
+	--hue-purple-new-line: #c1b6e1;
+	--hue-purple-avatar-ink: #7c62b7;
+	--hue-purple-avatar-ground: #e9e4fd;
+	--hue-purple-conversation-icon: #e6e1f9;
+	--hue-purple-conversation-icon-foreground: #584f70;
+	--hue-pink-bubble: #fec0d4;
+	--hue-pink-accent: #9b3e63;
+	--hue-pink-new-line: #dfaebd;
+	--hue-pink-avatar-ink: #af5074;
+	--hue-pink-avatar-ground: #fddfe8;
+	--hue-pink-conversation-icon: #f8dce4;
+	--hue-pink-conversation-icon-foreground: #6e4955;
 	--background: #f5f5f5;
 	--foreground: #0a0a0a;
-	--bot-blot-red: #f4a98c;
-	--bot-blot-yellow: #f2c879;
-	--bot-blot-green: #afc99b;
-	--bot-blot-cyan: #92c9c2;
-	--bot-blot-blue: #a0bee8;
-	--bot-blot-purple: #bcafe3;
-	--bot-blot-pink: #f0a9c0;
-	--bot-blot-orange: #f2b57e;
-	--conversation-icon: #e5e5e5;
-	--conversation-icon-foreground: #525252;
-	--conversation-icon-red: oklch(0.92 0.039 41.97);
-	--conversation-icon-red-foreground: oklch(0.45 0.0635 41.97);
-	--conversation-icon-yellow: oklch(0.92 0.0435 82.21);
-	--conversation-icon-yellow-foreground: oklch(0.45 0.0706 82.21);
-	--conversation-icon-green: oklch(0.92 0.0276 131.83);
-	--conversation-icon-green-foreground: oklch(0.45 0.0448 131.83);
-	--conversation-icon-cyan: oklch(0.92 0.0231 186.29);
-	--conversation-icon-cyan-foreground: oklch(0.45 0.0376 186.29);
-	--conversation-icon-blue: oklch(0.92 0.0273 256.83);
-	--conversation-icon-blue-foreground: oklch(0.45 0.0444 256.83);
-	--conversation-icon-purple: oklch(0.92 0.0297 296.1);
-	--conversation-icon-purple-foreground: oklch(0.45 0.0483 296.1);
-	--conversation-icon-pink: oklch(0.92 0.0352 358.15);
-	--conversation-icon-pink-foreground: oklch(0.45 0.0572 358.15);
-	--conversation-icon-orange: oklch(0.92 0.0402 62.73);
-	--conversation-icon-orange-foreground: oklch(0.45 0.0652 62.73);
+	--conversation-icon: var(--hue-light-conversation-icon, #e5e5e5);
+	--conversation-icon-foreground: var(
+		--hue-light-conversation-icon-foreground,
+		#525252
+	);
 	--conversation-pile-overflow: #e5e5e5;
 	--conversation-pile-overflow-foreground: #404040;
 	--bot-blot-ink: oklch(0.08 0 0);
@@ -56,13 +92,9 @@
 	--card-raised: #fafafa;
 	--popover: #ffffff;
 	--popover-foreground: #0a0a0a;
-	--primary: var(--space-tint, var(--bot-blot-blue));
-	--primary-foreground: var(--bot-blot-ink);
-	--primary-strong: color-mix(
-		in oklab,
-		var(--primary) 60%,
-		var(--bot-blot-ink)
-	);
+	--primary: var(--hue-light-accent, var(--hue-blue-accent));
+	--primary-foreground: #ffffff;
+	--primary-strong: var(--primary);
 	--secondary: #f2f2f2;
 	--secondary-foreground: #0a0a0a;
 	--muted: #f2f2f2;
@@ -75,11 +107,7 @@
 	--destructive-tint-foreground: oklch(0.53 0.216 27.325);
 	--window-close: #c42b1c;
 	--mark: color-mix(in oklab, var(--primary-strong) 40%, transparent);
-	--transcript-new-mark: color-mix(
-		in oklab,
-		var(--primary-strong) 40%,
-		transparent
-	);
+	--transcript-new-mark: var(--hue-light-new-line, var(--hue-blue-new-line));
 	--border: #e5e5e5;
 	--question-option-ring: rgb(10 10 10 / 17%);
 	--input: #e5e5e5;
@@ -93,8 +121,8 @@
 	--sidebar-ring: var(--primary-strong);
 	--scrollbar: oklch(0.72 0.013 285.938);
 	--scrollbar-hover: oklch(0.6 0.014 285.938);
-	--user-bubble: #364f7c;
-	--user-bubble-foreground: #ffffff;
+	--user-bubble: var(--hue-light-bubble, #364f7c);
+	--user-bubble-foreground: var(--hue-light-bubble-foreground, #ffffff);
 	--user-bubble-tint-ink: var(--bot-blot-ink);
 	--image-outline: oklch(0 0 0 / 8%);
 	--shell-border: oklch(0 0 0 / 6%);
@@ -102,35 +130,82 @@
 	--rail-item-selected: oklch(0 0 0 / 10%);
 	--rail-avatar: #e5e5e5;
 	--person-avatar: #e5e5e5;
-	--bot-avatar-field-lightness: 0.5;
-	--bot-avatar-ground-strength: 25%;
-	--user-bubble-tint-strength: 100%;
+	--bot-avatar-field: var(
+		--hue-light-avatar-ink,
+		var(--bot-avatar-field-untinted)
+	);
+	--bot-avatar-ground: var(
+		--hue-light-avatar-ground,
+		color-mix(in oklab, var(--bot-avatar-field-untinted) 25%, var(--secondary))
+	);
 	--user-bubble-muted-strength: 70%;
-	--user-bubble-tint-muted-strength: 70%;
-	--shell-tint-strength: 10%;
 }
 
-.dark {
+.dark,
+.dark [data-hue] {
+	--hue-red-bubble: #813f24;
+	--hue-red-accent: #f89d79;
+	--hue-red-new-line: #633c2d;
+	--hue-red-avatar-ink: #ffa37f;
+	--hue-red-avatar-ground: #3f271e;
+	--hue-red-conversation-icon: #533e36;
+	--hue-red-conversation-icon-foreground: #ddb3a3;
+	--hue-orange-bubble: #794502;
+	--hue-orange-accent: #eea662;
+	--hue-orange-new-line: #5f4024;
+	--hue-orange-avatar-ink: #f4ac68;
+	--hue-orange-avatar-ground: #3c2918;
+	--hue-orange-conversation-icon: #514031;
+	--hue-orange-conversation-icon-foreground: #d7b79a;
+	--hue-yellow-bubble: #6a4c00;
+	--hue-yellow-accent: #deaf56;
+	--hue-yellow-new-line: #58441f;
+	--hue-yellow-avatar-ink: #e4b65c;
+	--hue-yellow-avatar-ground: #382c15;
+	--hue-yellow-conversation-icon: #4d422f;
+	--hue-yellow-conversation-icon-foreground: #cfbb97;
+	--hue-green-bubble: #3a5a19;
+	--hue-green-accent: #9bc875;
+	--hue-green-new-line: #3b4f2c;
+	--hue-green-avatar-ink: #a1ce7c;
+	--hue-green-avatar-ground: #26321d;
+	--hue-green-conversation-icon: #3d4835;
+	--hue-green-conversation-icon-foreground: #b1c6a2;
+	--hue-cyan-bubble: #005c55;
+	--hue-cyan-accent: #42d0c3;
+	--hue-cyan-new-line: #17524c;
+	--hue-cyan-avatar-ink: #4bd7c9;
+	--hue-cyan-avatar-ground: #123431;
+	--hue-cyan-conversation-icon: #2f4a46;
+	--hue-cyan-conversation-icon-foreground: #97cac3;
+	--hue-blue-bubble: #2b5288;
+	--hue-blue-accent: #88baff;
+	--hue-blue-new-line: #324968;
+	--hue-blue-avatar-ink: #93c0ff;
+	--hue-blue-avatar-ground: #212e42;
+	--hue-blue-conversation-icon: #394555;
+	--hue-blue-conversation-icon-foreground: #a8c0e1;
+	--hue-purple-bubble: #5a4785;
+	--hue-purple-accent: #bea7fb;
+	--hue-purple-new-line: #4a4164;
+	--hue-purple-avatar-ink: #c4afff;
+	--hue-purple-avatar-ground: #2f2a40;
+	--hue-purple-conversation-icon: #454054;
+	--hue-purple-conversation-icon-foreground: #c0b7dd;
+	--hue-pink-bubble: #803b55;
+	--hue-pink-accent: #f596b7;
+	--hue-pink-new-line: #623a47;
+	--hue-pink-avatar-ink: #fc9cbd;
+	--hue-pink-avatar-ground: #3e252e;
+	--hue-pink-conversation-icon: #533c44;
+	--hue-pink-conversation-icon-foreground: #dcb0bd;
 	--background: #000000;
 	--foreground: #f5f5f5;
-	--conversation-icon: #303030;
-	--conversation-icon-foreground: #d4d4d4;
-	--conversation-icon-red: #563d33;
-	--conversation-icon-red-foreground: #e2b19e;
-	--conversation-icon-yellow: #4f4228;
-	--conversation-icon-yellow-foreground: #d5ba8a;
-	--conversation-icon-green: #3e4738;
-	--conversation-icon-green-foreground: #b3c4a7;
-	--conversation-icon-cyan: #364845;
-	--conversation-icon-cyan-foreground: #a3c6c1;
-	--conversation-icon-blue: #3a4452;
-	--conversation-icon-blue-foreground: #acbfdb;
-	--conversation-icon-purple: #454152;
-	--conversation-icon-purple-foreground: #c0b8da;
-	--conversation-icon-pink: #543c43;
-	--conversation-icon-pink-foreground: #deafbd;
-	--conversation-icon-orange: #533f2d;
-	--conversation-icon-orange-foreground: #ddb593;
+	--conversation-icon: var(--hue-dark-conversation-icon, #303030);
+	--conversation-icon-foreground: var(
+		--hue-dark-conversation-icon-foreground,
+		#d4d4d4
+	);
 	--conversation-pile-overflow: #333333;
 	--conversation-pile-overflow-foreground: #ededed;
 	--bot-avatar-field-untinted: #75acff;
@@ -154,7 +229,7 @@
 	--card-raised: #18181a;
 	--popover: #121213;
 	--popover-foreground: #f5f5f5;
-	--primary: var(--space-tint, var(--bot-blot-blue));
+	--primary: var(--hue-dark-accent, var(--hue-blue-accent));
 	--primary-foreground: var(--bot-blot-ink);
 	--primary-strong: var(--primary);
 	--secondary: #262626;
@@ -169,11 +244,7 @@
 	--destructive-tint-foreground: var(--destructive);
 	--window-close: #c42b1c;
 	--mark: color-mix(in oklab, var(--primary-strong) 40%, transparent);
-	--transcript-new-mark: color-mix(
-		in oklab,
-		var(--primary-strong) 40%,
-		transparent
-	);
+	--transcript-new-mark: var(--hue-dark-new-line, var(--hue-blue-new-line));
 	--border: #212224;
 	--question-option-ring: #525252;
 	--input: oklch(1 0 0 / 15%);
@@ -187,8 +258,8 @@
 	--sidebar-ring: var(--primary-strong);
 	--scrollbar: oklch(0.44 0.008 286.033);
 	--scrollbar-hover: oklch(0.55 0.01 286.033);
-	--user-bubble: #364f7c;
-	--user-bubble-foreground: #ffffff;
+	--user-bubble: var(--hue-dark-bubble, #364f7c);
+	--user-bubble-foreground: var(--hue-dark-bubble-foreground, #ffffff);
 	--user-bubble-tint-ink: var(--foreground);
 	--image-outline: oklch(1 0 0 / 8%);
 	--shell-border: oklch(1 0 0 / 6%);
@@ -196,10 +267,13 @@
 	--rail-item-selected: oklch(1 0 0 / 12%);
 	--rail-avatar: #3a3a3a;
 	--person-avatar: #333333;
-	--bot-avatar-field-lightness: 0.8;
-	--bot-avatar-ground-strength: 35%;
-	--user-bubble-tint-strength: 50%;
-	--user-bubble-muted-strength: 70%;
-	--user-bubble-tint-muted-strength: 90%;
-	--shell-tint-strength: 20%;
+	--bot-avatar-field: var(
+		--hue-dark-avatar-ink,
+		var(--bot-avatar-field-untinted)
+	);
+	--bot-avatar-ground: var(
+		--hue-dark-avatar-ground,
+		color-mix(in oklab, var(--bot-avatar-field-untinted) 35%, var(--secondary))
+	);
+	--user-bubble-muted-strength: 90%;
 }

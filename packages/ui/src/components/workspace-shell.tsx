@@ -2,9 +2,10 @@ import { type CSSProperties, type ReactNode, useId } from "react"
 
 import {
 	type BotAvatarBlot,
-	blotTint,
+	hueOf,
 } from "@workspace/ui/components/companion-colour"
 import { ContentCard } from "@workspace/ui/components/content-card"
+import { hueStyle } from "@workspace/ui/components/hue-palette"
 import { SidebarResizeProvider } from "@workspace/ui/components/sidebar-resize"
 import { SkipLink } from "@workspace/ui/components/skip-link"
 import { SidebarProvider } from "@workspace/ui/components/ui/sidebar"
@@ -27,17 +28,11 @@ const SHELL_GUTTER = 4
 
 const SHELL = `surface-shell relative h-svh ${TITLE_BAR_AND_GUTTER} ${CARD_ON_SHELL_INSET} ${SETTINGS_MENU_ON_SHELL_INSET} min-h-full max-h-full min-w-0 overflow-hidden ${SIDEBAR_INSIDE_SHELL} data-[resizing=true]:cursor-col-resize data-[resizing=true]:select-none`
 
-type ShellStyle = CSSProperties & {
-	"--sidebar-width": string
-	"--space-tint"?: string
-}
+type ShellStyle = CSSProperties & { "--sidebar-width": string }
 
-const shellStyle = (
-	width: number,
-	tint?: BotAvatarBlot | null,
-): ShellStyle => ({
+const shellStyle = (width: number, hue?: number): ShellStyle => ({
 	"--sidebar-width": `${width}px`,
-	...(tint ? { "--space-tint": blotTint(tint) } : undefined),
+	...(hue === undefined ? undefined : hueStyle(hue)),
 })
 
 interface WorkspaceShellProps {
@@ -63,6 +58,7 @@ const WorkspaceShell = ({
 }: WorkspaceShellProps) => {
 	const mainId = useId()
 	const isMain = isLandmark ?? true
+	const spaceHue = hueOf(spaceTint)
 
 	return (
 		<SidebarResizeProvider
@@ -74,9 +70,9 @@ const WorkspaceShell = ({
 				<SidebarProvider
 					className={cn(SHELL, className)}
 					data-resizing={resize.isResizing}
-					data-space-tint={spaceTint ?? undefined}
+					data-hue={spaceHue}
 					open
-					style={shellStyle(resize.width, spaceTint)}
+					style={shellStyle(resize.width, spaceHue)}
 				>
 					{isMain ? <SkipLink targetId={mainId} /> : null}
 					{sidebar}

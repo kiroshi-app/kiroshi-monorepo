@@ -6,16 +6,10 @@ import {
 	type AvatarCell,
 	companionField,
 	type DensityField,
-	FIELD_CHROMA,
 	fieldCells,
 	fieldTones,
-	hueShift,
 	TONE_OPACITIES,
 } from "@workspace/ui/components/companion-avatar"
-import {
-	type BotAvatarBlot,
-	blotTint,
-} from "@workspace/ui/components/companion-colour"
 import type {
 	FieldAvatarProps,
 	FieldState,
@@ -42,20 +36,13 @@ type DitheredFieldProps = {
 	field: DensityField
 	ink: string
 	surface?: string
-	tint?: BotAvatarBlot
+	hue?: number
 }
 
 const DITHER_SCREEN = "square-tone"
 const FOREGROUND_INK = "var(--foreground)"
-const UNTINTED_FIELD = "var(--bot-avatar-field-untinted)"
-
-const inkOf = (name: string, tint?: BotAvatarBlot) =>
-	tint
-		? `oklch(from ${blotTint(tint)} var(--bot-avatar-field-lightness) ${FIELD_CHROMA} calc(h + ${hueShift(name)}))`
-		: UNTINTED_FIELD
-
-const groundOf = (tint?: BotAvatarBlot) =>
-	`color-mix(in oklab, ${tint ? blotTint(tint) : UNTINTED_FIELD} var(--bot-avatar-ground-strength), var(--secondary))`
+const COMPANION_INK = "var(--bot-avatar-field)"
+const COMPANION_GROUND = "var(--bot-avatar-ground)"
 
 const traceHexagon = (
 	context: CanvasRenderingContext2D,
@@ -124,7 +111,7 @@ const DitheredField = ({
 	field,
 	ink,
 	surface,
-	tint,
+	hue,
 }: DitheredFieldProps) => {
 	const canvas = useRef<HTMLCanvasElement>(null)
 	const prefersReducedMotion = usePrefersReducedMotion()
@@ -159,7 +146,7 @@ const DitheredField = ({
 			size={size}
 			state={state}
 			surface={surface}
-			tint={tint}
+			hue={hue}
 		>
 			<canvas
 				className="pointer-events-none size-full"
@@ -174,13 +161,13 @@ const DitheredField = ({
 
 const DitheredFieldAvatar = ({
 	name,
-	tint,
+	hue,
 	state = "idle",
 	size = 40,
 	hasGround = true,
 	ink: fieldInk = "companion",
 }: DitheredFieldAvatarProps) => {
-	const ink = fieldInk === "foreground" ? FOREGROUND_INK : inkOf(name, tint)
+	const ink = fieldInk === "foreground" ? FOREGROUND_INK : COMPANION_INK
 
 	return (
 		<DitheredField
@@ -189,8 +176,8 @@ const DitheredFieldAvatar = ({
 			name={name}
 			size={size}
 			state={state}
-			surface={hasGround ? groundOf(tint) : undefined}
-			tint={tint}
+			surface={hasGround ? COMPANION_GROUND : undefined}
+			hue={hue}
 		/>
 	)
 }

@@ -163,7 +163,8 @@
 @layer base {
 	:root,
 	.dark,
-	[data-theme] {
+	[data-theme],
+	[data-hue] {
 		--color-foreground: var(--foreground);
 		--color-muted: var(--muted);
 		--color-muted-foreground: var(--muted-foreground);
@@ -171,44 +172,6 @@
 		--color-primary: var(--primary);
 		--color-primary-strong: var(--primary-strong);
 		--color-ring: var(--ring);
-	}
-
-	[data-space-tint] {
-		--primary: var(--space-tint);
-		--primary-strong: color-mix(
-			in oklab,
-			var(--primary) 60%,
-			var(--bot-blot-ink)
-		);
-		--ring: var(--primary-strong);
-		--sidebar-primary: var(--primary-strong);
-		--sidebar-ring: var(--primary-strong);
-		--bot-badge-attention: var(--primary-strong);
-		--mark: color-mix(in oklab, var(--primary-strong) 40%, transparent);
-		--transcript-new-mark: color-mix(
-			in oklab,
-			var(--primary-strong) 40%,
-			transparent
-		);
-		--color-primary: var(--primary);
-		--color-primary-strong: var(--primary-strong);
-		--color-ring: var(--ring);
-		--user-bubble: color-mix(
-			in oklab,
-			var(--space-tint) var(--user-bubble-tint-strength),
-			var(--card)
-		);
-		--user-bubble-foreground: var(--user-bubble-tint-ink);
-		--user-bubble-muted-strength: var(--user-bubble-tint-muted-strength);
-		--shell-surface: color-mix(
-			in oklab,
-			var(--space-tint) var(--shell-tint-strength),
-			var(--background)
-		);
-	}
-
-	.dark [data-space-tint] {
-		--primary-strong: var(--primary);
 	}
 }
 
@@ -311,12 +274,7 @@
 }
 
 @utility surface-shell {
-	background-color: var(--shell-surface, var(--background));
-	transition: background-color 400ms ease-out;
-
-	@media (prefers-reduced-motion: reduce) {
-		transition: none;
-	}
+	background-color: var(--background);
 }
 
 @utility surface-user-bubble {
@@ -357,11 +315,6 @@
 
 @utility on-destructive {
 	--color-foreground: var(--destructive);
-}
-
-@utility on-bot-blot {
-	--bot-avatar-ink: var(--bot-blot-ink);
-	color: var(--bot-avatar-ink);
 }
 
 @utility image-outline {

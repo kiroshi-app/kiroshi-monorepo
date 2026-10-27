@@ -1,4 +1,3 @@
-import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
 import {
 	companionSeed,
 	type FieldState,
@@ -16,6 +15,7 @@ import {
 	hexagonCorners,
 	honeycombGrid,
 } from "@workspace/ui/components/field-grid"
+import { hueTone } from "@workspace/ui/components/hue-palette"
 import {
 	OUTER,
 	roundedHexagonPath,
@@ -25,7 +25,7 @@ type AvatarTheme = "light" | "dark"
 
 type CompanionAvatarInput = {
 	name: string
-	tint?: BotAvatarBlot
+	hue?: number
 	state: FieldState
 	time: number
 	theme: AvatarTheme
@@ -60,7 +60,6 @@ type Oklab = { lightness: number; a: number; b: number }
 
 type ThemeColours = {
 	untinted: string
-	fieldLightness: number
 	groundStrength: number
 	secondary: string
 }
@@ -77,37 +76,22 @@ const DRIFT_PERIOD = 9000
 const STATE_HOLD = 0.6
 const HUE_SALT = 0x51ed270b
 const HUE_JITTER = 12
-const FIELD_CHROMA = 0.16
 const CELL_SHARE = 0.9
 const TONES = [0, 0.5, 1]
 const TONE_OPACITIES: ToneOpacity[] = [
 	{ tone: 0.5, opacity: 0.45 },
 	{ tone: 1, opacity: 1 },
 ]
-const RADIANS_PER_DEGREE = Math.PI / 180
 const CHANNEL_RESOLUTION = 1e6
-
-const BLOT_COLOURS: Record<BotAvatarBlot, string> = {
-	red: "#f4a98c",
-	yellow: "#f2c879",
-	green: "#afc99b",
-	cyan: "#92c9c2",
-	blue: "#a0bee8",
-	purple: "#bcafe3",
-	pink: "#f0a9c0",
-	orange: "#f2b57e",
-}
 
 const THEME_COLOURS: Record<AvatarTheme, ThemeColours> = {
 	light: {
 		untinted: "#1d3ccd",
-		fieldLightness: 0.5,
 		groundStrength: 0.25,
 		secondary: "#f2f2f2",
 	},
 	dark: {
 		untinted: "#75acff",
-		fieldLightness: 0.8,
 		groundStrength: 0.35,
 		secondary: "#262626",
 	},
@@ -248,24 +232,24 @@ const srgbOf = ({ lightness, a, b }: Oklab): Srgb => {
 	}
 }
 
-const cellColourOf = (
+const companionHue = (name: string, hue: number) => hue + hueShift(name)
+
+const cellColourOf = (name: string, theme: AvatarTheme, hue?: number): Srgb =>
+	hue === undefined
+		? srgbOfHex(THEME_COLOURS[theme].untinted)
+		: srgbOfHex(hueTone(companionHue(name, hue), theme, "avatar-ink").hex)
+
+const groundColourOf = (
 	name: string,
 	theme: AvatarTheme,
-	tint?: BotAvatarBlot,
+	hue?: number,
 ): Srgb => {
-	if (!tint) return srgbOfHex(THEME_COLOURS[theme].untinted)
-	const { a, b } = oklabOf(srgbOfHex(BLOT_COLOURS[tint]))
-	const hue = Math.atan2(b, a) + hueShift(name) * RADIANS_PER_DEGREE
-	return srgbOf({
-		lightness: THEME_COLOURS[theme].fieldLightness,
-		a: FIELD_CHROMA * Math.cos(hue),
-		b: FIELD_CHROMA * Math.sin(hue),
-	})
-}
-
-const groundColourOf = (theme: AvatarTheme, tint?: BotAvatarBlot): Srgb => {
+	if (hue !== undefined)
+		return srgbOfHex(
+			hueTone(companionHue(name, hue), theme, "avatar-ground").hex,
+		)
 	const { untinted, groundStrength, secondary } = THEME_COLOURS[theme]
-	const field = oklabOf(srgbOfHex(tint ? BLOT_COLOURS[tint] : untinted))
+	const field = oklabOf(srgbOfHex(untinted))
 	const surface = oklabOf(srgbOfHex(secondary))
 	const mix = (key: keyof Oklab) =>
 		field[key] * groundStrength + surface[key] * (1 - groundStrength)
@@ -274,7 +258,7 @@ const groundColourOf = (theme: AvatarTheme, tint?: BotAvatarBlot): Srgb => {
 
 const companionAvatar = ({
 	name,
-	tint,
+	hue,
 	state,
 	time,
 	theme,
@@ -285,22 +269,21 @@ const companionAvatar = ({
 		tones: fieldTones(field, state, time),
 		toneOpacities: TONE_OPACITIES,
 		cellCorners: CELL_CORNERS,
-		cellColour: cellColourOf(name, theme, tint),
-		groundColour: groundColourOf(theme, tint),
+		cellColour: cellColourOf(name, theme, hue),
+		groundColour: groundColourOf(name, theme, hue),
 		outline: COMPANION_OUTLINE,
 	}
 }
 
 export {
 	type AvatarCell,
-	BLOT_COLOURS,
 	COMPANION_OUTLINE,
 	type CompanionAvatarInput,
 	companionAvatar,
 	companionField,
+	companionHue,
 	type DensityField,
 	FIELD_CELLS,
-	FIELD_CHROMA,
 	fieldCells,
 	fieldLattice,
 	fieldTones,

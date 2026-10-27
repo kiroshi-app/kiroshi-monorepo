@@ -7,6 +7,8 @@ import {
 	BLOT_TINTS,
 	type BotAvatarBlot,
 } from "@workspace/ui/components/bot-settings"
+import { BLOT_HUES, hueOf } from "@workspace/ui/components/companion-colour"
+import { hueStyle } from "@workspace/ui/components/hue-palette"
 import { Icons } from "@workspace/ui/components/icons"
 import { SettingsField } from "@workspace/ui/components/settings-field"
 import { SettingsGroup } from "@workspace/ui/components/settings-group"
@@ -59,12 +61,19 @@ const SpaceFields = ({ value, onValueChange, className }: SpaceFieldsProps) => {
 							type="radio"
 							value={tint ?? ""}
 						/>
-						<span className="relative grid place-items-center">
+						<span
+							className="relative grid place-items-center"
+							data-hue={hueOf(tint)}
+							style={tint ? hueStyle(BLOT_HUES[tint]) : undefined}
+						>
 							<SpaceTint className="size-6" tint={tint} />
 							{value.colour === tint ? (
 								<Icons.Check
 									aria-hidden="true"
-									className={cn("absolute size-3.5", tint && "on-bot-blot")}
+									className={cn(
+										"absolute size-3.5",
+										tint && "text-user-bubble-foreground",
+									)}
 								/>
 							) : null}
 						</span>

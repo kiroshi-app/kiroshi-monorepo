@@ -1,3 +1,5 @@
+import { HUE_PRESETS } from "@workspace/ui/components/hue-tones"
+
 const BLOT_TINTS = [
 	"red",
 	"yellow",
@@ -11,6 +13,9 @@ const BLOT_TINTS = [
 
 type BotAvatarBlot = (typeof BLOT_TINTS)[number]
 
-const blotTint = (blot: BotAvatarBlot) => `var(--bot-blot-${blot})`
+const BLOT_HUES: Record<BotAvatarBlot, number> = HUE_PRESETS
 
-export { BLOT_TINTS, type BotAvatarBlot, blotTint }
+const hueOf = (blot?: BotAvatarBlot | null) =>
+	blot ? BLOT_HUES[blot] : undefined
+
+export { BLOT_HUES, BLOT_TINTS, type BotAvatarBlot, hueOf }

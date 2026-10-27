@@ -1,6 +1,7 @@
 import { type ComponentType, useId, useState } from "react"
 import { expect, userEvent, within } from "storybook/test"
 
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import type {
 	FieldAvatarProps,
 	FieldState,
@@ -21,13 +22,13 @@ type RosterPlay = { canvasElement: HTMLElement }
 type RosterCompanion = Required<Omit<FieldAvatarProps, "size">>
 
 const ROSTER: RosterCompanion[] = [
-	{ name: "Lyra", tint: "blue", state: "idle" },
-	{ name: "Orion", tint: "blue", state: "thinking" },
-	{ name: "Vega", tint: "orange", state: "idle" },
-	{ name: "Atlas", tint: "green", state: "searching" },
-	{ name: "Nova", tint: "purple", state: "idle" },
-	{ name: "Sirius", tint: "pink", state: "writing" },
-	{ name: "Castor", tint: "cyan", state: "working" },
+	{ name: "Lyra", hue: BLOT_HUES.blue, state: "idle" },
+	{ name: "Orion", hue: BLOT_HUES.blue, state: "thinking" },
+	{ name: "Vega", hue: BLOT_HUES.orange, state: "idle" },
+	{ name: "Atlas", hue: BLOT_HUES.green, state: "searching" },
+	{ name: "Nova", hue: BLOT_HUES.purple, state: "idle" },
+	{ name: "Sirius", hue: BLOT_HUES.pink, state: "writing" },
+	{ name: "Castor", hue: BLOT_HUES.cyan, state: "working" },
 ]
 
 const CHOICES: RosterChoice[] = [
@@ -88,7 +89,7 @@ export const CompanionStatesRoster = ({
 							name={companion.name}
 							size={40}
 							state={stateOf(companion.state)}
-							tint={companion.tint}
+							hue={companion.hue}
 						/>
 						<span className="text-muted-foreground text-xs">
 							{companion.name}
@@ -103,7 +104,7 @@ export const CompanionStatesRoster = ({
 						name={featured.name}
 						size={size}
 						state={stateOf(featured.state)}
-						tint={featured.tint}
+						hue={featured.hue}
 					/>
 				))}
 			</fieldset>

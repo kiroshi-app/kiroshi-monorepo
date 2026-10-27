@@ -9,14 +9,15 @@ import {
 	botBadgeRingVariants,
 } from "@workspace/ui/components/bot-badge"
 import {
+	BLOT_HUES,
 	type BotAvatarBlot,
-	blotTint,
 } from "@workspace/ui/components/companion-colour"
 import {
 	ContextMenuPressTrigger,
 	openBelow,
 } from "@workspace/ui/components/context-menu-press-trigger"
 import type { SpaceHost } from "@workspace/ui/components/host-pill"
+import { hueStyle } from "@workspace/ui/components/hue-palette"
 import { Icons } from "@workspace/ui/components/icons"
 import type { Space } from "@workspace/ui/components/space"
 import {
@@ -55,7 +56,7 @@ const SWITCHER_NAME = "min-w-0 truncate"
 const SWITCHER_CHEVRON = "size-3 shrink-0 stroke-2!"
 
 const SWITCHER_INVITATION =
-	"pointer-events-none absolute end-0.25 top-1 size-1.75 rounded-full bg-primary-strong ring-2 ring-(--shell-surface,var(--background))"
+	"pointer-events-none absolute end-0.25 top-1 size-1.75 rounded-full bg-primary-strong ring-2 ring-background"
 
 const MENU_RESTING = "max-w-64"
 
@@ -124,7 +125,7 @@ const SpaceDot = ({
 	isFilled = true,
 	className,
 }: SpaceDotProps) => {
-	const tint = isFilled && colour ? blotTint(colour) : undefined
+	const hue = isFilled && colour ? BLOT_HUES[colour] : undefined
 
 	return (
 		<span
@@ -132,13 +133,18 @@ const SpaceDot = ({
 			className={cn(
 				DOT,
 				DOT_MOTION,
-				!tint && DOT_UNTINTED,
+				hue === undefined && DOT_UNTINTED,
 				badge && botBadgeRingVariants({ badge }),
 				className,
 			)}
 			data-badge={badge}
+			data-hue={hue}
 			data-slot="space-dot"
-			style={tint ? { backgroundColor: tint } : undefined}
+			style={
+				hue === undefined
+					? undefined
+					: { ...hueStyle(hue), backgroundColor: "var(--primary-strong)" }
+			}
 		/>
 	)
 }

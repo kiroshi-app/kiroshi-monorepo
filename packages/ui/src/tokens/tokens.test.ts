@@ -3,6 +3,13 @@ import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 
 import {
+	HUE_PRESETS,
+	HUE_TONES,
+	YELLOW_BAND,
+} from "@workspace/ui/components/hue-tones"
+
+import {
+	hueTonesOf,
 	renderColorSets,
 	renderCss,
 	type TokenFile,
@@ -12,7 +19,7 @@ import {
 const read = (path: string) =>
 	readFileSync(new URL(path, import.meta.url), "utf8")
 
-const THEME_SELECTORS = [":root", ".dark"]
+const THEME_SELECTORS = new Set([":root", ".dark"])
 
 const TINTED_FILE: TokenFile = {
 	colors: {
@@ -45,7 +52,13 @@ const topLevelRules = (css: string) => {
 
 const themeDeclarations = (css: string) =>
 	topLevelRules(css)
-		.filter(({ selector }) => THEME_SELECTORS.includes(selector))
+		.flatMap(({ selector, body }) =>
+			selector
+				.split(",")
+				.map((part) => part.trim())
+				.filter((part) => THEME_SELECTORS.has(part))
+				.map((theme) => ({ selector: theme, body })),
+		)
 		.flatMap(({ selector, body }) =>
 			body
 				.split(";")
@@ -66,6 +79,19 @@ describe("tokens.json", () => {
 		expect(
 			handWritten.filter((declaration) => generated.has(declaration)),
 		).toEqual([])
+	})
+
+	it("re-declares every theme block on an element carrying a hue", () => {
+		expect(renderCss(TINTED_FILE)).toMatch(/^:root, \[data-hue\] \{$/m)
+		expect(renderCss(TINTED_FILE)).toMatch(/^\.dark, \.dark \[data-hue\] \{$/m)
+	})
+
+	it("generates the hue module from the hue section", () => {
+		const file: TokenFile = JSON.parse(read("../../tokens.json"))
+
+		expect(HUE_PRESETS).toEqual(file.hue?.presets)
+		expect(YELLOW_BAND).toEqual(file.hue?.["yellow-band"])
+		expect(HUE_TONES).toEqual(hueTonesOf(file))
 	})
 
 	it("converts each notation to the sRGB bytes Chromium paints", () => {

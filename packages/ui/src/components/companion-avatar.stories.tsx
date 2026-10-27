@@ -7,7 +7,7 @@ import {
 	companionAvatar,
 	type Srgb,
 } from "@workspace/ui/components/companion-avatar"
-import { BLOT_TINTS } from "@workspace/ui/components/companion-colour"
+import { BLOT_TINTS, hueOf } from "@workspace/ui/components/companion-colour"
 import { DitheredFieldAvatar } from "@workspace/ui/components/dithered-field-avatar"
 import { schemeOf } from "@workspace/ui/hooks/use-color-scheme"
 
@@ -25,7 +25,7 @@ const NAMES = [
 ]
 
 const COMPANIONS = NAMES.flatMap((name) =>
-	[undefined, ...BLOT_TINTS].map((tint) => ({ name, tint })),
+	[undefined, ...BLOT_TINTS].map((tint) => ({ name, tint, hue: hueOf(tint) })),
 )
 
 const CHANNEL_STEP = 1
@@ -55,7 +55,7 @@ export const ModuleColourMatchesTheBrowser = meta.story({
 					key={`${name} ${tint ?? "untinted"}`}
 					name={name}
 					size={24}
-					tint={tint}
+					hue={hueOf(tint)}
 				/>
 			))}
 		</div>
@@ -77,8 +77,10 @@ export const ModuleColourMatchesTheBrowser = meta.story({
 		await expect(tiles).toHaveLength(COMPANIONS.length * 2)
 		for (const [index, tile] of tiles.entries()) {
 			const canvas = tile.querySelector("canvas") as HTMLCanvasElement
+			const { name, hue } = COMPANIONS[index % COMPANIONS.length]
 			const input: CompanionAvatarInput = {
-				...COMPANIONS[index % COMPANIONS.length],
+				name,
+				hue,
 				state: "idle",
 				time: 0,
 				theme: schemeOf(tile),

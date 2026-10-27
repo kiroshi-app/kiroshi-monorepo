@@ -9,6 +9,7 @@ import {
 	slotIn,
 	slotsIn,
 } from "@workspace/storybook/story-utils"
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { Icons } from "@workspace/ui/components/icons"
 import { MISSION_BOT } from "@workspace/ui/components/missions.fixtures"
 import {
@@ -275,11 +276,7 @@ export const ThemesChatGroup = meta.story({
 		},
 	},
 	play: async ({ canvasElement }) =>
-		expectSubjectIconInBothThemes(
-			canvasElement,
-			"--conversation-icon",
-			IDENTITY_SIDE,
-		),
+		expectSubjectIconInBothThemes(canvasElement, undefined, IDENTITY_SIDE),
 })
 
 export const ThemesChatGroupRed = meta.story({
@@ -297,11 +294,7 @@ export const ThemesChatGroupRed = meta.story({
 		},
 	},
 	play: async ({ canvasElement }) =>
-		expectSubjectIconInBothThemes(
-			canvasElement,
-			"--conversation-icon-red",
-			IDENTITY_SIDE,
-		),
+		expectSubjectIconInBothThemes(canvasElement, BLOT_HUES.red, IDENTITY_SIDE),
 })
 
 export const Mission = meta.story({

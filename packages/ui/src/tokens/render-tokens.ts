@@ -1,12 +1,29 @@
+import {
+	HUE_THEMES,
+	type HueTheme,
+	type ToneSpec,
+	toneOf,
+	type YellowBand,
+} from "../components/hue-recipe"
+
 type Token = {
 	light: string
 	dark?: string
 }
 
+type HueSection = {
+	presets: Record<string, number>
+	"yellow-band": YellowBand
+	tones: Record<string, Record<HueTheme, ToneSpec>>
+}
+
 export type TokenFile = {
+	hue?: HueSection
 	colors: Record<string, Token>
 	parameters: Record<string, Token>
 }
+
+export type HueTones = Record<HueTheme, Record<string, ToneSpec>>
 
 export type Srgb = {
 	red: number
@@ -40,11 +57,11 @@ const declarations = (file: TokenFile, theme: Theme) =>
 
 export const renderCss = (file: TokenFile) =>
 	[
-		":root {",
+		":root, [data-hue] {",
 		...declarations(file, "light"),
 		"}",
 		"",
-		".dark {",
+		".dark, .dark [data-hue] {",
 		...declarations(file, "dark"),
 		"}",
 		"",
@@ -166,6 +183,54 @@ const resolve = (file: TokenFile, name: string, theme: Theme): Srgb => {
 	if (!token) throw new Error(`Unknown colour token: ${name}`)
 	const value = theme === "dark" ? (token.dark ?? token.light) : token.light
 	return resolveValue(file, value, theme)
+}
+
+const hexOfSrgb = ({ red, green, blue }: Srgb) =>
+	`#${[red, green, blue].map((byte) => byte.toString(16).padStart(2, "0")).join("")}`
+
+const requireHue = (file: TokenFile) => {
+	if (!file.hue) throw new Error("tokens.json has no hue section")
+	return file.hue
+}
+
+export const hueTonesOf = (file: TokenFile): HueTones => {
+	const { tones } = requireHue(file)
+	const themeTones = (theme: HueTheme) =>
+		Object.fromEntries(
+			Object.entries(tones).map(([role, specs]) => {
+				const spec = specs[theme]
+				return [
+					role,
+					spec.contrast
+						? {
+								...spec,
+								contrast: {
+									...spec.contrast,
+									with: hexOfSrgb(resolve(file, spec.contrast.with, theme)),
+								},
+							}
+						: spec,
+				]
+			}),
+		)
+	return { light: themeTones("light"), dark: themeTones("dark") }
+}
+
+export const withHueColours = (file: TokenFile): TokenFile => {
+	const { presets, "yellow-band": band } = requireHue(file)
+	const tones = hueTonesOf(file)
+	const presetColours = Object.entries(presets).flatMap(([preset, hue]) =>
+		Object.keys(tones.light).map((role) => {
+			const [light, dark] = HUE_THEMES.map(
+				(theme) => toneOf(tones[theme][role], hue, band).hex,
+			)
+			return [`hue-${preset}-${role}`, { light, dark }] as const
+		}),
+	)
+	return {
+		...file,
+		colors: { ...Object.fromEntries(presetColours), ...file.colors },
+	}
 }
 
 const toComponent = (byte: number) =>

@@ -1,9 +1,10 @@
-import { type CSSProperties, useState } from "react"
+import { useState } from "react"
 import { expect, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
 	A11Y_FLOATING_FOCUS_GUARDS,
+	hueScopeOf,
 	isInBrowserRunner,
 	probedStyleOf,
 	realPointer,
@@ -29,7 +30,6 @@ import {
 	WEEKLY_PLANNING,
 } from "@workspace/ui/components/app-title-bar.fixtures"
 import type { BotBadge } from "@workspace/ui/components/bot-badge"
-import { blotTint } from "@workspace/ui/components/companion-colour"
 import type { Space } from "@workspace/ui/components/space"
 import {
 	UpdateBadge,
@@ -871,18 +871,10 @@ export const KeyboardReach = meta.story({
 	},
 })
 
-type TintedShellStyle = CSSProperties & { "--space-tint": string }
-
-const TINTED_SHELL: TintedShellStyle = { "--space-tint": blotTint("blue") }
-
 export const OnTintedSpace = meta.story({
 	args: { dots: { conversations: "done", missions: "attention" } },
 	render: (args: AppRailProps) => (
-		<div
-			className="surface-shell flex h-[32rem]"
-			data-space-tint="blue"
-			style={TINTED_SHELL}
-		>
+		<div className="surface-shell flex h-[32rem]" {...hueScopeOf("blue")}>
 			<AppRail {...args} />
 		</div>
 	),

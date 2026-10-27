@@ -1,9 +1,3 @@
-import {
-	BLOT_COLOURS,
-	oklabOf,
-	srgbOfHex,
-} from "@workspace/ui/components/companion-avatar"
-import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
 import { companionSeed } from "@workspace/ui/components/companion-field"
 import { COMPACT_BELOW } from "@workspace/ui/components/glaze-border"
 
@@ -145,11 +139,6 @@ const spaceArcs = (spaceId: string): SpaceArcs => {
 	}
 }
 
-const hueOf = (colour: BotAvatarBlot) => {
-	const { a, b } = oklabOf(srgbOfHex(BLOT_COLOURS[colour]))
-	return Math.atan2(b, a)
-}
-
 const linearSrgbOf = (lightness: number, chroma: number, hue: number) => {
 	const a = chroma * Math.cos(hue)
 	const b = chroma * Math.sin(hue)
@@ -191,13 +180,13 @@ const toneHex = ([lightness, chroma]: LightnessChroma, hue = 0) => {
 
 const spacePalette = (
 	theme: SpaceAvatarTheme,
-	colour?: BotAvatarBlot | null,
+	hue?: number | null,
 ): SpacePalette => {
 	const { full, compact } = TONES[theme]
 	const tone = ([lightness, chroma]: LightnessChroma) =>
-		colour
-			? toneHex([lightness, chroma], hueOf(colour))
-			: toneHex([lightness, 0])
+		hue === undefined || hue === null
+			? toneHex([lightness, 0])
+			: toneHex([lightness, chroma], (hue * Math.PI) / 180)
 	return { full: full.map(tone), compact: compact.map(tone) }
 }
 

@@ -73,7 +73,7 @@ const RAIL_ITEM =
 	"relative size-11 rounded-lg text-muted-foreground hover:bg-rail-item-selected/50 hover:text-foreground dark:hover:bg-rail-item-selected/50 aria-[current=true]:bg-rail-item-selected aria-[current=true]:text-foreground dark:aria-[current=true]:bg-rail-item-selected [&_svg]:size-4.5 [&_svg]:stroke-[1.75]!"
 
 const RAIL_DOT =
-	"pointer-events-none absolute -end-px -top-px size-2 rounded-full bg-primary-strong ring-2 ring-(--shell-surface,var(--background)) transition-shadow duration-400 ease-out motion-reduce:transition-none"
+	"pointer-events-none absolute -end-px -top-px size-2 rounded-full bg-primary-strong ring-2 ring-background transition-shadow duration-400 ease-out motion-reduce:transition-none"
 
 const RAIL_AVATAR =
 	"grid size-full place-items-center bg-rail-avatar font-medium text-foreground text-xs/4 uppercase"
