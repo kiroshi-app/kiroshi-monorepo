@@ -8,9 +8,21 @@ import { createJoinedSpacesController } from "./joined-spaces-controller"
 import { spaceQueryKeys } from "./space-query-keys"
 import { createSpacesController } from "./spaces-controller"
 import { useInvitations } from "./use-invitations"
-import { useOpenJoinedHost, useSwitcherSpaces } from "./use-joined-spaces"
+import {
+	useJoinedSpaces,
+	useOpenJoinedHost,
+	useSwitcherSpaces,
+} from "./use-joined-spaces"
 
-import type { Invitation, JoinedSpace } from "../bindings"
+import {
+	commands,
+	type Invitation,
+	type JoinedSpace,
+	SPACE_DESCRIBED_EVENT,
+} from "../bindings"
+import { listen } from "../host"
+import { createStore } from "../store"
+import type { RosterController } from "../bots/roster-controller"
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
 import type { JoinedHostState } from "../host/joined-hosts"
 import { createQueryTestWrapper } from "../query/query-test-wrapper"
@@ -132,6 +144,8 @@ const openStudio = async () => {
 			remove: async () => undefined,
 			onChanged: async () => () => undefined,
 			onRemoved: async () => () => undefined,
+			describe: vi.fn(),
+			onDescribed: async () => () => undefined,
 		},
 	})
 	await joined.admit(STUDIO_SPACE)
@@ -261,6 +275,8 @@ it("shows a Join waiting for its host as a host offline row, then opens the Spac
 				return () => undefined
 			},
 			onRemoved: async () => () => undefined,
+			describe: vi.fn(),
+			onDescribed: async () => () => undefined,
 		},
 	})
 	joined.watch()
@@ -299,4 +315,38 @@ it("shows a Join waiting for its host as a host offline row, then opens the Spac
 
 	await waitFor(() => expect(result.current.rows).toEqual([]))
 	await waitFor(() => expect(spaces.getState().selectedSpaceId).toBe("studio"))
+})
+
+it("hears the descriptions of joined spaces once while mounted, across renders, and stops on unmount", async () => {
+	const stopHearing = vi.fn()
+	vi.mocked(listen).mockImplementation(async (event) =>
+		event === SPACE_DESCRIBED_EVENT ? stopHearing : () => undefined,
+	)
+	vi.spyOn(commands, "joinedSpacesList").mockResolvedValue({
+		status: "ok",
+		data: [],
+	})
+	const { queryClient, wrapper } = createQueryTestWrapper()
+	const spaces = createSpacesController(createFakeTranscriptStore(), {
+		queryClient,
+	})
+	const roster = createStore({
+		selectedBotId: null,
+		selectedConversationId: null,
+	}) as unknown as RosterController
+
+	const { rerender, unmount } = renderHook(
+		() => useJoinedSpaces(spaces, roster),
+		{ wrapper },
+	)
+	rerender()
+	rerender()
+	unmount()
+
+	await waitFor(() => expect(stopHearing).toHaveBeenCalledOnce())
+	expect(
+		vi
+			.mocked(listen)
+			.mock.calls.filter(([event]) => event === SPACE_DESCRIBED_EVENT),
+	).toHaveLength(1)
 })

@@ -143,6 +143,8 @@ const transportOf = (listed: JoinedSpace[]) => ({
 	remove: vi.fn(async () => undefined),
 	onChanged: vi.fn(async () => () => undefined),
 	onRemoved: vi.fn(async () => () => undefined),
+	describe: vi.fn(),
+	onDescribed: async () => () => undefined,
 })
 
 const relayed = new Proxy({} as TranscriptStore, {

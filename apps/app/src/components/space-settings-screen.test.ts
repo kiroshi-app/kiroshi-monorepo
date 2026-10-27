@@ -30,6 +30,7 @@ import {
 	type JoinedSpaceMembersChanged,
 	type JoinedSpaceRemoved,
 	type Member,
+	type SpaceDescribed,
 	type SpaceInvitation,
 } from "@/lib/bindings"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
@@ -129,8 +130,17 @@ const garageTransport = (garage: JoinedSpace) =>
 	({
 		list: async () => [garage],
 		remove: vi.fn(async (_id: string) => undefined),
+		describe: vi.fn(
+			async (_id: string, name: string, colour: number | null) => ({
+				...garage,
+				name,
+				colour: colour ?? garage.colour,
+			}),
+		),
 		onChanged: async () => () => undefined,
 		onRemoved: async (_listener: (removed: JoinedSpaceRemoved) => void) => () =>
+			undefined,
+		onDescribed: async (_listener: (described: SpaceDescribed) => void) => () =>
 			undefined,
 	}) satisfies JoinedSpacesTransport
 
@@ -374,19 +384,29 @@ describe("SpaceSettingsScreen on a joined space", () => {
 		}
 	})
 
-	it("leaves the name of a joined space editable and writes no rename", async () => {
+	it("writes a rename of a joined space through its host, never as a local space", async () => {
 		const gear = await gearWithGarage()
+		const describeAsLocal = vi.spyOn(gear.spaces, "describe")
 		const dialog = openSettingsOf(gear, GARAGE_ROW)
 
+		fireEvent.change(
+			within(dialog).getByLabelText(i18n.t("settings:space.name.label")),
+			{ target: { value: "Workshop" } },
+		)
+
+		await waitFor(() =>
+			expect(gear.transport.describe).toHaveBeenCalledExactlyOnceWith(
+				GARAGE.id,
+				"Workshop",
+				GARAGE.colour,
+			),
+		)
+		expect(describeAsLocal).not.toHaveBeenCalled()
 		expect(
-			within(dialog).getByText("Garage", {
+			await within(dialog).findByText("Workshop", {
 				selector: "[data-slot=settings-menu-name]",
 			}),
 		).toBeTruthy()
-		expect(
-			within(dialog).getByLabelText(i18n.t("settings:space.name.label")),
-		).toHaveProperty("readOnly", false)
-		expect(gear.joined.getState().joinedSpaces).toEqual([GARAGE])
 	})
 
 	it("leaves through the roster path, closes the page on the notice naming the space and selects the first local space", async () => {

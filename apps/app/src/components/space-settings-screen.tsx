@@ -291,6 +291,9 @@ export const SpaceSettingsScreen = ({
 			isConnected={!isHostOffline}
 			isSessionUnavailable={!isCurrent}
 			onLeave={() => joinedSpaces.controller.leave(joined.id)}
+			onValueChange={(value: SpaceSettingsValue) =>
+				joinedSpaces.controller.describe(joined.id, value)
+			}
 			value={{ name: joined.name, colour: joined.colour }}
 		/>
 	)

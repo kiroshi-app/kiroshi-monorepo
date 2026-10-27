@@ -112,6 +112,8 @@ const joinedTransportFake = (listed: JoinedSpace[]) => ({
 	remove: async () => undefined,
 	onChanged: async () => () => undefined,
 	onRemoved: async () => () => undefined,
+	describe: vi.fn(),
+	onDescribed: async () => () => undefined,
 })
 
 const offlineSwitch = (missions: ReturnType<typeof createFakeMissions>) => {

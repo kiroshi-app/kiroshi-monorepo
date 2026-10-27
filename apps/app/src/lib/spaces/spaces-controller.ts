@@ -15,8 +15,9 @@ import {
 import { spaceQueryKeys } from "./space-query-keys"
 import { newSpaceName } from "./space-settings"
 
+import { SPACE_DESCRIBED_EVENT } from "../bindings"
 import { failureReporterIn } from "../failure-report"
-import { joinedHosts } from "../host"
+import { joinedHosts, listenOnThisComputer } from "../host"
 import { createQueue } from "../queue"
 import { createStore } from "../store"
 import { createWriteLoop } from "../write-loop"
@@ -39,6 +40,7 @@ export type SpacesController = {
 	getState: () => SpacesState
 	subscribe: (listener: () => void) => () => void
 	listQuery: SpaceListQuery
+	watch: () => () => void
 	load: (lastSpaceId: string | null) => Promise<void>
 	select: (id: string) => void
 	create: () => Promise<void>
@@ -55,7 +57,11 @@ export type SpacesControllerOptions = {
 	reportSuccess?: (notice: NoticeMessage) => void
 	reportFailure?: (notice: NoticeMessage) => void
 	hosts?: Pick<JoinedHosts, "activate">
+	onDescribed?: (listener: () => void) => Promise<() => void>
 }
+
+const onDescribedHere = (listener: () => void) =>
+	listenOnThisComputer(SPACE_DESCRIBED_EVENT, () => listener())
 
 const repositioned = (spaces: Space[], ids: string[]) =>
 	ids.flatMap((id, position) => {
@@ -155,6 +161,7 @@ export const createSpacesController = (
 		reportSuccess = raiseTransientNotice,
 		reportFailure = failureReporterIn("spaces-controller"),
 		hosts = joinedHosts,
+		onDescribed = onDescribedHere,
 	}: SpacesControllerOptions,
 ): SpacesController => {
 	const choiceStore = createStore(initialSpacesChoice)
@@ -295,6 +302,18 @@ export const createSpacesController = (
 		subscribe: subscribeWithQueries(choiceStore, queryClient, listKey),
 
 		listQuery,
+
+		watch: () => {
+			const detach = onDescribed(() => {
+				void reload()
+			}).catch(() => {
+				reportFailure({ title: i18n.t("chat:screen.notice.failed") })
+				return undefined
+			})
+			return () => {
+				void detach.then((unlisten) => unlisten?.())
+			}
+		},
 
 		load: (lastSpaceId: string | null) => {
 			choose({ rememberedSpaceId: lastSpaceId, hasFailedToCreate: false })
