@@ -50,7 +50,7 @@ export type WorkspaceTabs = {
 	showSpace: (spaceId: string) => void
 	openEmptyTab: () => void
 	openInNewTab: (href: string) => void
-	openInBackgroundTab: (href: string) => void
+	openInBackgroundTab: (href: string, spaceId?: string) => void
 	back: () => void
 	forward: () => void
 	select: (id: string) => void
@@ -211,19 +211,39 @@ export const createWorkspaceTabs = (
 		)
 	}
 
-	const reachedTabsOf = (spaceId: string) => {
-		const state = store.getState()
-		const held = state.bySpace[spaceId]
+	const heldOrRestoredTabsOf = (spaceId: string) => {
+		const held = store.getState().bySpace[spaceId]
 		if (held) {
 			return { space: held, isRestored: false }
 		}
 		const restored = readSpaceTabs(spaceId)
-		if (restored) {
-			return { space: restored, isRestored: true }
-		}
+		return restored ? { space: restored, isRestored: true } : null
+	}
+
+	const reachedTabsOf = (spaceId: string) => {
 		const fresh =
-			state.spaceId === NO_SPACE ? shown() : spaceTabsOn(EMPTY_LIST_HREF)
-		return { space: fresh, isRestored: false }
+			store.getState().spaceId === NO_SPACE
+				? shown()
+				: spaceTabsOn(EMPTY_LIST_HREF)
+		return heldOrRestoredTabsOf(spaceId) ?? { space: fresh, isRestored: false }
+	}
+
+	const changeAway = (
+		spaceId: string,
+		update: (space: SpaceTabs) => SpaceTabs,
+	) => {
+		const { space, isRestored } = heldOrRestoredTabsOf(spaceId) ?? {
+			space: spaceTabsOn(EMPTY_LIST_HREF),
+			isRestored: false,
+		}
+		if (isRestored) {
+			const state = store.getState()
+			store.setState({
+				...state,
+				restoredSpaceIds: [...state.restoredSpaceIds, spaceId],
+			})
+		}
+		keepIn(spaceId, update(space))
 	}
 
 	const reachSpace = (spaceId: string) => {
@@ -254,8 +274,14 @@ export const createWorkspaceTabs = (
 		openEmptyTab: () =>
 			askingChange((space) => openTab(space, EMPTY_LIST_HREF)),
 		openInNewTab: (href) => askingChange((space) => openTab(space, href)),
-		openInBackgroundTab: (href) =>
-			change((space) => openBackgroundTab(space, href)),
+		openInBackgroundTab: (href, spaceId = store.getState().spaceId) => {
+			const update = (space: SpaceTabs) => openBackgroundTab(space, href)
+			if (spaceId === store.getState().spaceId) {
+				change(update)
+				return
+			}
+			changeAway(spaceId, update)
+		},
 		back: () => askingMove(-1, () => history.back()),
 		forward: () => askingMove(1, () => history.forward()),
 		select: (id) => askingChange((space) => selectTab(space, id)),

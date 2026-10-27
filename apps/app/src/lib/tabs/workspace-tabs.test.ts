@@ -205,6 +205,47 @@ describe("a tab opened in the background", () => {
 
 		expect(viewOf(tabs)).toEqual(before)
 	})
+
+	it("lands in another Space built from the empty list, leaving the open Space as it is", () => {
+		const tabs = tabsOfSpace()
+		tabs.openInNewTab(threadOf("home"))
+		const before = viewOf(tabs)
+
+		tabs.openInBackgroundTab(threadOf("away"), OTHER_SPACE)
+
+		expect(tabs.getState().spaceId).toBe(SPACE)
+		expect(viewOf(tabs)).toEqual(before)
+		expect(activeHref(tabs)).toBe(threadOf("home"))
+
+		tabs.showSpace(OTHER_SPACE)
+		expect(shownHrefs(tabs)).toEqual(["/", threadOf("away")])
+		expect(activeHref(tabs)).toBe("/")
+	})
+
+	it("joins the tabs another Space already holds", () => {
+		const tabs = tabsOfSpace()
+		tabs.showSpace(OTHER_SPACE)
+		tabs.openInNewTab(threadOf("held"))
+		tabs.showSpace(SPACE)
+
+		tabs.openInBackgroundTab(threadOf("away"), OTHER_SPACE)
+		tabs.showSpace(OTHER_SPACE)
+
+		expect(shownHrefs(tabs)).toEqual(["/", threadOf("held"), threadOf("away")])
+		expect(activeHref(tabs)).toBe(threadOf("held"))
+	})
+
+	it("joins the tabs another Space restores after a reload", () => {
+		const before = tabsOfSpace(OTHER_SPACE)
+		before.openInNewTab(threadOf("held"))
+		const after = tabsOfSpace()
+
+		after.openInBackgroundTab(threadOf("away"), OTHER_SPACE)
+		after.showSpace(OTHER_SPACE)
+
+		expect(shownHrefs(after)).toEqual(["/", threadOf("held"), threadOf("away")])
+		expect(activeHref(after)).toBe(threadOf("held"))
+	})
 })
 
 describe("a page already shown", () => {

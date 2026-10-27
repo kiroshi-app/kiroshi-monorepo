@@ -2,6 +2,7 @@ import { expect, it } from "vitest"
 
 import {
 	openSearchTarget,
+	openSearchTargetInNewTab,
 	type SearchNavigation,
 	type SearchTarget,
 } from "./search-navigation"
@@ -20,8 +21,8 @@ const tracedNavigation = () => {
 		openRoutine: ({ routineId }) => trace.push(`routine:${routineId}`),
 		openActivityPanel: () => trace.push("activity"),
 		recordLanding: ({ messageId }) => trace.push(`landing:${messageId}`),
-		openThreadInNewTab: (thread) =>
-			trace.push(`new-tab:${JSON.stringify(thread)}`),
+		openThreadInNewTab: (thread, spaceId = "open") =>
+			trace.push(`new-tab:${JSON.stringify(thread)}:${spaceId}`),
 	}
 
 	return { navigation, trace }
@@ -79,4 +80,24 @@ it("leaves the mission on screen before it opens a routine", () => {
 		"activity",
 		"routine:r-1",
 	])
+})
+
+it("opens a Cmd-clicked result of the open Space in a background tab of that Space", () => {
+	const { navigation, trace } = tracedNavigation()
+
+	openSearchTargetInNewTab(MESSAGE_HIT, "space-1", navigation)
+
+	expect(trace).toEqual(['new-tab:{"bot":"bot-1"}:open'])
+})
+
+it("opens a Cmd-clicked result of another Space in a background tab of that Space", () => {
+	const { navigation, trace } = tracedNavigation()
+
+	openSearchTargetInNewTab(
+		{ kind: "mission", missionId: "mi-1", botId: "bot-1", spaceId: "space-2" },
+		"space-1",
+		navigation,
+	)
+
+	expect(trace).toEqual(['new-tab:{"bot":"bot-1","mission":"mi-1"}:space-2'])
 })

@@ -24,9 +24,10 @@ export const useSettingsNavigation = (holder: ThreadHolder) => {
 			fallback()
 		}
 
-		const openInBackgroundTab = (options: NavigateOptions) =>
+		const openInBackgroundTab = (options: NavigateOptions, spaceId?: string) =>
 			router.options.context.tabs.openInBackgroundTab(
 				router.buildLocation(options).href,
+				spaceId,
 			)
 
 		const go = (options: NavigateOptions) => {
@@ -52,8 +53,8 @@ export const useSettingsNavigation = (holder: ThreadHolder) => {
 			openConversations: () => {
 				void navigate({ to: "/", search: heldThreadOf(holder) })
 			},
-			openThreadInNewTab: (thread: ThreadSearch) =>
-				openInBackgroundTab({ to: "/", search: thread }),
+			openThreadInNewTab: (thread: ThreadSearch, spaceId?: string) =>
+				openInBackgroundTab({ to: "/", search: thread }, spaceId),
 			openSpaceSettings: (spaceId: string, search: SettingsSearch = {}) => {
 				void navigate({
 					to: "/settings/space/$spaceId",

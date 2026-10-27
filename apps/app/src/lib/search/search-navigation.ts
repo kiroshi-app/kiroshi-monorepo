@@ -44,7 +44,7 @@ export type SearchNavigation = {
 	openRoutine: (opened: { routineId: string; conversationId: string }) => void
 	openActivityPanel: () => void
 	recordLanding: (landing: MessageLanding) => void
-	openThreadInNewTab: (thread: ThreadSearch) => void
+	openThreadInNewTab: (thread: ThreadSearch, spaceId?: string) => void
 }
 
 const selectRow = (row: SearchRow, navigation: SearchNavigation) => {
@@ -91,13 +91,26 @@ export const openSearchTarget = (
 	}
 }
 
-export const threadOfSearchTarget = (target: SearchTarget): ThreadSearch => {
+const threadOfSearchTarget = (target: SearchTarget): ThreadSearch => {
 	if (target.kind === "mission") {
 		return { bot: target.botId, mission: target.missionId }
 	}
 	return target.row.kind === "bot"
 		? { bot: target.row.id }
 		: { conversation: target.row.id }
+}
+
+export const openSearchTargetInNewTab = (
+	target: SearchTarget,
+	openSpaceId: string | null,
+	navigation: SearchNavigation,
+) => {
+	const thread = threadOfSearchTarget(target)
+	if (target.spaceId === null || target.spaceId === openSpaceId) {
+		navigation.openThreadInNewTab(thread)
+		return
+	}
+	navigation.openThreadInNewTab(thread, target.spaceId)
 }
 
 export type SearchNavigationSource = {

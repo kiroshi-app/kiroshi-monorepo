@@ -14,10 +14,10 @@ import {
 import {
 	createSearchNavigation,
 	openSearchTarget,
+	openSearchTargetInNewTab,
 	type SearchNavigation,
 	type SearchNavigationSource,
 	type SearchTarget,
-	threadOfSearchTarget,
 } from "./search-navigation"
 import { type SearchPort, searchPort } from "./search-port"
 import { useSearchKeys } from "./use-search-keys"
@@ -102,12 +102,12 @@ export const useSearch = ({
 		(target: SearchTarget) => {
 			controller.close()
 			if (isNewTabClickInFlight()) {
-				navigation.openThreadInNewTab(threadOfSearchTarget(target))
+				openSearchTargetInNewTab(target, spaceId, navigation)
 				return
 			}
 			openSearchTarget(target, navigation)
 		},
-		[controller, navigation],
+		[controller, navigation, spaceId],
 	)
 
 	const results = useMemo(
