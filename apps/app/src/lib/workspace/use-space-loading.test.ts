@@ -60,7 +60,19 @@ const transportOf = (listed: JoinedSpace[]) => ({
 	onRemoved: vi.fn(async () => () => undefined),
 })
 
-const gearFor = async () => {
+type ShownWindow = {
+	isMainWindow: boolean
+	reopenedSpaceId: string | null
+}
+
+const MAIN_WINDOW: ShownWindow = { isMainWindow: true, reopenedSpaceId: null }
+
+const SECONDARY_WINDOW: ShownWindow = {
+	isMainWindow: false,
+	reopenedSpaceId: null,
+}
+
+const gearFor = async (shownWindow = MAIN_WINDOW) => {
 	const { queryClient } = createQueryTestWrapper()
 	const spaces = createSpacesController(createFakeTranscriptStore(), {
 		queryClient,
@@ -105,12 +117,14 @@ const gearFor = async () => {
 				selectedSpaceId,
 				openRowId: openRowIdOf(joined.getState(), selectedSpaceId),
 			},
+			...shownWindow,
 		} as never
 	}
 	const view = renderHook((input) => useSpaceLoading(input), {
 		initialProps: inputOf(),
 	})
 	await act(settle)
+	view.rerender(inputOf())
 	const switchTo = async (rowId: string) => {
 		roster.load.mockClear()
 		roster.enter.mockClear()
@@ -120,7 +134,9 @@ const gearFor = async () => {
 		})
 		view.rerender(inputOf())
 	}
-	return { roster, user, switchTo }
+	const openRowId = () =>
+		openRowIdOf(joined.getState(), spaces.getState().selectedSpaceId)
+	return { roster, user, switchTo, openRowId }
 }
 
 afterEach(() => {
@@ -163,6 +179,37 @@ describe("switching between a local and a joined space both carrying the id pers
 			lastRowId: "local-bot",
 		})
 		expect(user.setLastSpace).toHaveBeenLastCalledWith("personal")
+	})
+})
+
+describe("the last Space", () => {
+	it("is written when the main window shows a Space", async () => {
+		const { user, switchTo } = await gearFor(MAIN_WINDOW)
+
+		await switchTo(HOST_PERSONAL_ROW)
+
+		expect(user.setLastSpace).toHaveBeenLastCalledWith(HOST_PERSONAL_ROW)
+	})
+
+	it("is left alone when the person picks a Space in a secondary window", async () => {
+		const { user, roster, switchTo } = await gearFor(SECONDARY_WINDOW)
+
+		await switchTo(HOST_PERSONAL_ROW)
+
+		expect(roster.enter).toHaveBeenCalledWith(
+			expect.objectContaining({ spaceRowId: HOST_PERSONAL_ROW }),
+		)
+		expect(user.setLastSpace).not.toHaveBeenCalled()
+	})
+
+	it("is left alone when a reopened window shows the Space it had", async () => {
+		const { user, openRowId } = await gearFor({
+			isMainWindow: false,
+			reopenedSpaceId: HOST_PERSONAL_ROW,
+		})
+
+		expect(openRowId()).toBe(HOST_PERSONAL_ROW)
+		expect(user.setLastSpace).not.toHaveBeenCalled()
 	})
 })
 

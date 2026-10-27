@@ -222,7 +222,13 @@ const aWorld = async ({
 				lastRowId: null,
 			})
 		}, [active])
-		useSpaceEntry({ roster, user: reader, selectedSpaceId, openRowId })
+		useSpaceEntry({
+			roster,
+			user: reader,
+			selectedSpaceId,
+			openRowId,
+			isMainWindow: true,
+		})
 	})
 
 	return {

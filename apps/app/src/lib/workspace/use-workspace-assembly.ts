@@ -66,6 +66,7 @@ export const useWorkspaceAssembly = () => {
 	const loadSpaces = useSpaceLoading({
 		core,
 		scopes,
+		isMainWindow: tabs.isMainWindow,
 		reopenedSpaceId: tabs.reopenedSpaceId,
 	})
 	useTabKeys(tabs)

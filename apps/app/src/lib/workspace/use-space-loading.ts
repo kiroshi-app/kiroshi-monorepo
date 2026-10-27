@@ -11,12 +11,14 @@ import { lastBotIn } from "../user/preferences-mirror"
 type SpaceLoadingInput = {
 	core: WorkspaceCore
 	scopes: ApplicationScopes
+	isMainWindow: boolean
 	reopenedSpaceId: string | null
 }
 
 export const useSpaceLoading = ({
 	core,
 	scopes,
+	isMainWindow,
 	reopenedSpaceId,
 }: SpaceLoadingInput) => {
 	const { joinedSpaces, roster, spaces, user } = core
@@ -81,6 +83,7 @@ export const useSpaceLoading = ({
 		user: user.controller,
 		selectedSpaceId,
 		openRowId,
+		isMainWindow,
 	})
 
 	return loadSpaces

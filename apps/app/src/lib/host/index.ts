@@ -1,3 +1,4 @@
+import { getAllWebviewWindows } from "@tauri-apps/api/webviewWindow"
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { platform } from "@tauri-apps/plugin-os"
 
@@ -90,6 +91,9 @@ export const toggleMaximizeWindow = (): Promise<void> =>
 	getCurrentWindow().toggleMaximize()
 
 export const closeWindow = (): Promise<void> => getCurrentWindow().close()
+
+export const liveWindowLabels = async (): Promise<string[]> =>
+	(await getAllWebviewWindows()).map((window) => window.label)
 
 export const watchCloseRequest = (
 	onCloseRequested: () => void,

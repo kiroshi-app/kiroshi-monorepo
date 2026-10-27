@@ -27,6 +27,7 @@ const windowHost = vi.hoisted(() => ({
 	windowOpen: vi.fn(),
 	closeWindow: vi.fn(),
 	watchCloseRequest: vi.fn(),
+	liveWindowLabels: vi.fn(),
 	raiseReportedFailure: vi.fn(),
 }))
 
@@ -35,6 +36,7 @@ vi.mock("../host", async (importOriginal) => ({
 	usesCommandKey: () => commandKey.isUsed,
 	closeWindow: windowHost.closeWindow,
 	watchCloseRequest: windowHost.watchCloseRequest,
+	liveWindowLabels: windowHost.liveWindowLabels,
 }))
 
 vi.mock("../bindings", async (importOriginal) => {
@@ -153,6 +155,7 @@ afterEach(() => {
 	windowHost.windowOpen.mockReset()
 	windowHost.closeWindow.mockReset()
 	windowHost.watchCloseRequest.mockReset()
+	windowHost.liveWindowLabels.mockReset()
 	windowHost.raiseReportedFailure.mockReset()
 })
 
@@ -1172,12 +1175,17 @@ describe("the windows", () => {
 const reopenedHrefs = () =>
 	windowHost.windowOpen.mock.calls.map(([href]) => href as string)
 
-const relaunch = async () => {
+const startMain = async (liveLabels: string[]) => {
 	windowHost.windowOpen.mockClear()
-	cleanup()
-	tabsOfSpace()
+	windowHost.liveWindowLabels.mockResolvedValue(["main", ...liveLabels])
+	await routerOn(tabsOfSpace()).load()
 	await reopenSecondaryWindows()
 	return reopenedHrefs()
+}
+
+const relaunch = () => {
+	cleanup()
+	return startMain([])
 }
 
 const reopenedAs = (label: string, href: string) => {
@@ -1210,6 +1218,26 @@ describe("the windows open at quit", () => {
 			expect.arrayContaining(["/?handover=window-1", "/?handover=window-2"]),
 		)
 		expect(windowHost.windowOpen).toHaveBeenCalledTimes(2)
+	})
+
+	it("reopens only the listed windows that are not alive", async () => {
+		opensWindows()
+		tabsOfWindow(SECONDARY, threadOf("alive"))
+		tabsOfWindow("window-2", threadOf("gone"))
+
+		expect(await startMain([SECONDARY])).toEqual(["/?handover=window-2"])
+	})
+
+	it("keeps the tabs of a window still alive when the main window starts again", async () => {
+		opensWindows()
+		const alive = tabsOfWindow(SECONDARY, threadOf("alive"), OTHER_SPACE)
+		showInNewTab(alive, threadOf("second"))
+
+		expect(await startMain([SECONDARY])).toEqual([])
+
+		const [href = ""] = await relaunch()
+		const after = reopenedAs("window-2", href)
+		expect(shownHrefs(after)).toEqual([threadOf("alive"), threadOf("second")])
 	})
 
 	it("reopens a window on the space, tabs, active tab and history it showed", async () => {

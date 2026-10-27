@@ -54,7 +54,7 @@ import {
 	raiseReportedFailure,
 	type UnreportedFailureNotice,
 } from "../failure-report"
-import { closeWindow, watchCloseRequest } from "../host"
+import { closeWindow, liveWindowLabels, watchCloseRequest } from "../host"
 import { createStore } from "../store"
 
 const NO_SPACE = ""
@@ -74,6 +74,7 @@ type LeaveGuard = (leave: () => void) => void
 
 export type WorkspaceTabs = {
 	history: RouterHistory
+	isMainWindow: boolean
 	reopenedSpaceId: string | null
 	getState: () => WorkspaceTabsState
 	subscribe: (listener: () => void) => () => void
@@ -192,7 +193,12 @@ const reopenWindow = async (predecessor: string) => {
 }
 
 export const reopenSecondaryWindows = async () => {
-	for (const predecessor of openWindowLabels()) {
+	const listedLabels = openWindowLabels()
+	const liveLabels = await liveWindowLabels()
+	const closedLabels = listedLabels.filter(
+		(label) => !liveLabels.includes(label),
+	)
+	for (const predecessor of closedLabels) {
 		await reopenWindow(predecessor)
 	}
 }
@@ -467,6 +473,7 @@ export const createWorkspaceTabs = (
 
 	return {
 		history,
+		isMainWindow,
 		reopenedSpaceId,
 		getState: store.getState,
 		subscribe: store.subscribe,
