@@ -9,7 +9,7 @@ import { tmpdir } from "node:os"
 import { join, relative, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { pathsChangedSinceMain } from "./ci"
+import { pathsChangedSinceMain, reportRetriedTests } from "./ci"
 
 export const STORIES = "stories"
 
@@ -112,6 +112,7 @@ const UPDATE = "bun run baseline:update"
 type VitestAssertion = {
 	fullName: string
 	status: string
+	failureMessages?: string[]
 }
 
 type VitestFile = {
@@ -207,9 +208,14 @@ const readReport = ({ path, label }: ReportFile) => {
 const repoPath = (path: string, from: string) =>
 	relative(REPO, resolve(from, path))
 
-type SuiteRun = { suite: VitestSuite; into: string; files?: string[] }
+type SuiteRun = {
+	suite: VitestSuite
+	into: string
+	files?: string[]
+	retries?: number
+}
 
-const vitestReport = ({ suite, into, files = [] }: SuiteRun) => {
+const vitestReport = ({ suite, into, files = [], retries = 0 }: SuiteRun) => {
 	const path = join(into, `${suite.name}.json`)
 	const label = `the ${suite.name} vitest suite`
 	const exitCode = runInherited({
@@ -222,6 +228,7 @@ const vitestReport = ({ suite, into, files = [] }: SuiteRun) => {
 			...(suite.project ? [`--project=${suite.project}`] : []),
 			...files.map((file) => join(REPO, file)),
 			...(files.length > 0 ? ["--passWithNoTests"] : []),
+			...(retries > 0 ? [`--retry=${retries}`] : []),
 			"--reporter=default",
 			"--reporter=json",
 			`--outputFile.json=${path}`,
@@ -257,6 +264,20 @@ const failuresIn = ({ suite, file }: FileInSuite) => {
 
 export const vitestFailures = ({ suite, report }: SuiteReport) =>
 	report.testResults.flatMap((file) => failuresIn({ suite, file }))
+
+export const vitestRetriedPasses = (report: VitestReport) =>
+	report.testResults.flatMap((file) =>
+		file.assertionResults
+			.filter(
+				(assertion) =>
+					assertion.status === "passed" &&
+					(assertion.failureMessages ?? []).length > 0,
+			)
+			.map((assertion) => ({
+				file: repoPath(file.name, REPO),
+				name: assertion.fullName,
+			})),
+	)
 
 const TESTED_STORY_TAG = "test"
 
@@ -441,10 +462,13 @@ const writeItems = ({ area, items }: AreaItems) => {
 
 type Live = Record<string, string[]>
 
-type SuitesRun = { suites: VitestSuite[]; into: string }
+type SuitesRun = { suites: VitestSuite[]; into: string; retries?: number }
 
-const runSuites = ({ suites, into }: SuitesRun) =>
-	suites.map((suite) => ({ suite, ...vitestReport({ suite, into }) }))
+const runSuites = ({ suites, into, retries }: SuitesRun) =>
+	suites.map((suite) => ({
+		suite,
+		...vitestReport({ suite, into, retries }),
+	}))
 
 type RanSuite = ReturnType<typeof runSuites>[number]
 
@@ -461,9 +485,10 @@ const attributedFailures = (outcomes: SuiteOutcome[]) => {
 
 const newReportFolder = () => mkdtempSync(join(tmpdir(), "kiroshi-baseline-"))
 
-const collectVitest = (): Live => {
+const collectVitest = (retries: number): Live => {
 	const into = newReportFolder()
-	const ran = runSuites({ suites: VITEST_SUITES, into })
+	const ran = runSuites({ suites: VITEST_SUITES, into, retries })
+	reportRetriedTests(ran.flatMap(({ report }) => vitestRetriedPasses(report)))
 	return {
 		[TESTS]: attributedFailures([...ran.map(outcomeOf), sidecarOutcome(into)]),
 		[STORIES]: indexedStoryIds(into),
@@ -503,7 +528,7 @@ const collectLint = (): Live => ({
 	knip: knipItems(),
 })
 
-type ScopeRun = { collect: () => Live; suites: string[] }
+type ScopeRun = { collect: (retries: number) => Live; suites: string[] }
 
 const suiteNames = (suites: VitestSuite[]) => suites.map((suite) => suite.name)
 
@@ -597,10 +622,14 @@ const prune = ({ live, suites }: Collected) => {
 	return 0
 }
 
-const collect = (scopes: Scope[]): Collected => {
+type Collection = { scopes: Scope[]; retries: number }
+
+const collect = ({ scopes, retries }: Collection): Collected => {
 	const live: Live = {}
 	for (const scope of scopes) {
-		for (const [area, found] of Object.entries(SCOPES[scope].collect())) {
+		for (const [area, found] of Object.entries(
+			SCOPES[scope].collect(retries),
+		)) {
 			live[area] = [...(live[area] ?? []), ...withOrdinals(found)]
 		}
 	}
@@ -610,7 +639,8 @@ const collect = (scopes: Scope[]): Collected => {
 const main = (argv: string[]) => {
 	const scopes = requestedScopes(argv)
 	assertChangedScopeChecksAlone(scopes, argv)
-	const collected = collect(scopes)
+	const retries = argv.includes("--retry") ? 1 : 0
+	const collected = collect({ scopes, retries })
 	if (argv.includes("--prune")) return prune(collected)
 	if (argv.includes("--update")) return update(collected.live)
 	return check(collected)

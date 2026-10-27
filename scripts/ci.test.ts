@@ -12,12 +12,18 @@ import { dirname, join } from "node:path"
 import {
 	CHANGED_UNIT_TESTS,
 	FAST_STEP_NAMES,
+	failedRustTargets,
 	fastSteps,
 	GATE,
 	GROUP_ORDER,
 	type Group,
+	loggedCargoStep,
 	offPullRequestNote,
 	RUST_PULL_REQUEST_STEPS,
+	retriedTestAnnotation,
+	retriedTestSummary,
+	retryOf,
+	rustRerunStep,
 	SHARED_IMPORTER_THRESHOLD,
 	SHARED_PATH_RULES,
 	SIMULATOR_LOOKUP,
@@ -28,6 +34,7 @@ import {
 	type UnitTestScope,
 	unitTestScope,
 	unitTestSteps,
+	vitestRetryStep,
 } from "./ci"
 import { decideJobs } from "./ci-changes"
 import { TEST_SOURCE_ROOTS } from "./test-importers"
@@ -671,6 +678,172 @@ describe("the unit test scope of a pull request", () => {
 		expect(
 			unitTestSteps({ scope: "full", error: "Error: ENOENT", graphMs: 3 }),
 		).toEqual(GATE.vitest)
+	})
+})
+
+describe("the merge_group retry", () => {
+	const everyStep = [
+		...GROUP_ORDER.flatMap((group) => GATE[group]),
+		...RUST_PULL_REQUEST_STEPS,
+		CHANGED_UNIT_TESTS,
+		...fastSteps(["scripts/pr-dequeue.sh", "scripts/pr-enqueue.sh"]),
+	]
+	const retried = (event: string | undefined) =>
+		everyStep.flatMap((step) => {
+			const retry = retryOf(step, event)
+			return retry ? [`${step.name}: ${retry}`] : []
+		})
+	const RUST_TEST = GATE.rust.find((step) => step.name === "Test") as Step
+
+	it("retries the vitest gate and the rust cargo test on a merge_group, nothing else", () => {
+		expect(retried("merge_group")).toEqual([
+			"Unit tests, website, sidecar and story ids against the baseline: vitest",
+			"Test: cargo",
+		])
+	})
+
+	it.each([
+		["a pull_request", "pull_request"],
+		["a push", "push"],
+		["no event", undefined],
+	])("retries nothing on %s", (_, event) => {
+		expect(retried(event)).toEqual([])
+	})
+
+	it("hands the vitest gate one retry per failing test", () => {
+		expect(vitestRetryStep(GATE.vitest[0] as Step).command).toBe(
+			"bun run baseline vitest --retry",
+		)
+	})
+
+	it("keeps going past a failing cargo target and logs the output it streams", () => {
+		expect(loggedCargoStep(RUST_TEST, "/tmp/run/cargo-test.log")).toEqual({
+			...RUST_TEST,
+			command:
+				"set -o pipefail; cargo test --manifest-path src-tauri/Cargo.toml --features fake-claude --no-fail-fast 2>&1 | tee '/tmp/run/cargo-test.log'",
+		})
+	})
+
+	it("reruns one failed rust test alone, in its own target", () => {
+		const rerun = rustRerunStep(RUST_TEST, {
+			target: "--test other",
+			file: "apps/app/src-tauri/tests/other.rs",
+			test: "src/lib.rs - it's (line 3)",
+		})
+
+		expect(rerun.command).toBe(
+			"cargo test --manifest-path src-tauri/Cargo.toml --features fake-claude --test other -- --exact 'src/lib.rs - it'\\''s (line 3)'",
+		)
+		expect(rerun.heavy).toBe(true)
+		expect(rerun.cwd).toBe("apps/app")
+	})
+
+	it("reruns a failed doc test by its name, which rustdoc never matches exactly", () => {
+		const rerun = rustRerunStep(RUST_TEST, {
+			target: "--doc",
+			file: "apps/app/src-tauri",
+			test: "src/lib.rs - documented (line 11)",
+		})
+
+		expect(rerun.command).toBe(
+			"cargo test --manifest-path src-tauri/Cargo.toml --features fake-claude --doc -- 'src/lib.rs - documented (line 11)'",
+		)
+	})
+
+	const CARGO_OUTPUT = `     Running unittests src/lib.rs (target/debug/deps/kiroshi-1)
+
+running 3 tests
+test tests::green ... ok
+test tests::flaky ... FAILED
+test tests::red ... FAILED
+
+failures:
+    tests::flaky
+    tests::red
+
+test result: FAILED. 1 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+error: test failed, to rerun pass \`--lib\`
+     Running tests/fine.rs (target/debug/deps/fine-2)
+
+running 1 test
+test fine ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests/other.rs (target/debug/deps/other-3)
+
+running 1 test
+test red ... FAILED
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+error: test failed, to rerun pass \`--test other\`
+error: 2 targets failed:
+    \`--lib\`
+    \`--test other\`
+`
+
+	it("names each failed rust test with its target and its file", () => {
+		expect(failedRustTargets(CARGO_OUTPUT)).toEqual([
+			{
+				target: "--lib",
+				file: "apps/app/src-tauri/src/lib.rs",
+				tests: ["tests::flaky", "tests::red"],
+				isAttributed: true,
+			},
+			{
+				target: "--test other",
+				file: "apps/app/src-tauri/tests/other.rs",
+				tests: ["red"],
+				isAttributed: true,
+			},
+		])
+	})
+
+	it("leaves unattributed a target whose binary died before its test result", () => {
+		const crashed = `     Running tests/crash.rs (target/debug/deps/crash-4)
+
+running 2 tests
+error: test failed, to rerun pass \`--test crash\`
+
+Caused by:
+  process didn't exit successfully (signal: 6, SIGABRT: process abort signal)
+`
+
+		expect(failedRustTargets(crashed)).toEqual([
+			{
+				target: "--test crash",
+				file: "apps/app/src-tauri/tests/crash.rs",
+				tests: [],
+				isAttributed: false,
+			},
+		])
+	})
+
+	it("finds no failed target in a build that never ran a test", () => {
+		expect(
+			failedRustTargets("error[E0425]: cannot find value `x` in this scope\n"),
+		).toEqual([])
+	})
+
+	it("names the file and the test of a pass on its retry in one warning annotation", () => {
+		expect(
+			retriedTestAnnotation({
+				file: "apps/app/src/a,b.test.ts",
+				name: "counts 100%\nof it",
+			}),
+		).toBe(
+			"::warning file=apps/app/src/a%2Cb.test.ts,title=Passed only on its retry::apps/app/src/a,b.test.ts :: counts 100%25%0Aof it",
+		)
+	})
+
+	it("lists every pass on its retry in the job summary", () => {
+		expect(
+			retriedTestSummary([
+				{ file: "apps/app/src/a.test.ts", name: "flips once" },
+				{ file: "apps/app/src-tauri/src/lib.rs", name: "tests::flaky" },
+			]),
+		).toBe(
+			"### Passed only on its retry\n\n- `apps/app/src/a.test.ts` :: flips once\n- `apps/app/src-tauri/src/lib.rs` :: tests::flaky\n\n",
+		)
 	})
 })
 
