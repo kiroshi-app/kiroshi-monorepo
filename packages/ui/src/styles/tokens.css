@@ -239,7 +239,7 @@
 	--soft-foreground: #d4d4d4;
 	--accent: #262626;
 	--accent-foreground: #f5f5f5;
-	--destructive: oklch(0.704 0.191 22.216);
+	--destructive: oklch(0.81 0.191 22.216);
 	--destructive-tint: #2a1a1b;
 	--destructive-tint-foreground: var(--destructive);
 	--window-close: #c42b1c;
