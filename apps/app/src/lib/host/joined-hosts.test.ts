@@ -829,14 +829,14 @@ describe("listening across hosts", () => {
 
 	it("hears a local event from the local host only", async () => {
 		const { hosts, local, sockets } = joinedHostsOf()
-		const maximized = vi.fn()
+		const hostingChanged = vi.fn()
 		await hosts.activate("garage")
 
-		await hosts.listen("window-maximize-button", maximized)
-		sockets[0]?.send({ event: "window-maximize-button", payload: {} })
+		await hosts.listen("hosting://changed", hostingChanged)
+		sockets[0]?.send({ event: "hosting://changed", payload: {} })
 
 		expect(local.listen).toHaveBeenCalledOnce()
-		expect(maximized).not.toHaveBeenCalled()
+		expect(hostingChanged).not.toHaveBeenCalled()
 	})
 })
 
