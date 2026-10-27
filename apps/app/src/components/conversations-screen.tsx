@@ -11,6 +11,7 @@ export const ConversationsScreen = () => {
 		core,
 		drivers,
 		loadSpaces,
+		navigation,
 		overlay,
 		panels,
 		rosterLines,
@@ -35,6 +36,7 @@ export const ConversationsScreen = () => {
 					collapsedSectionIds={collapsedSectionIds}
 					core={core}
 					drivers={drivers}
+					navigation={navigation}
 					overlay={overlay}
 					panels={panels}
 					rosterLines={rosterLines}

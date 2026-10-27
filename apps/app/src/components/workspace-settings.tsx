@@ -6,7 +6,7 @@ import { CompanionScreenHost } from "@/components/companion-screen-host"
 import { SpaceSettingsScreen } from "@/components/space-settings-screen"
 import { UserSettingsScreen } from "@/components/user-settings-screen"
 import { titleBarWindowControls } from "@/components/window-caption-controls"
-import { workspaceRailOf } from "@/components/workspace-rail"
+import { useWorkspaceRail } from "@/components/workspace-rail"
 import { hasOverlayWindowControls, isSidebarResizable } from "@/lib/host"
 import { settingsSpacesOf, spacePageOf } from "@/lib/spaces/settings-spaces"
 import { useSettingsSpaceSwitch } from "@/lib/tabs/use-settings-space-switch"
@@ -71,7 +71,7 @@ const useSettingsFrame = (
 	})
 
 	const frame: SettingsFrame = {
-		...workspaceRailOf({
+		...useWorkspaceRail({
 			collapsedSectionIds: workspace.collapsedSectionIds,
 			core,
 			navigation: workspace.navigation,

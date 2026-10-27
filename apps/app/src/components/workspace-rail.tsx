@@ -1,3 +1,7 @@
+import { useMemo } from "react"
+
+import type { AppSidebarProps } from "@workspace/ui/components/app-sidebar-model"
+
 import type { SettingsNavigation } from "@/lib/navigation/use-settings-navigation"
 import type { useSwitcherSpaces } from "@/lib/spaces/use-joined-spaces"
 import type { WorkspaceTabs } from "@/lib/tabs/workspace-tabs"
@@ -29,7 +33,28 @@ type WorkspaceRail = Pick<
 	"rail" | "currentSpace" | "currentSpaceHost"
 >
 
-export const workspaceRailOf = ({
+type AppSidebarRail = Pick<
+	AppSidebarProps,
+	| "badgesBySpaceId"
+	| "hostBySpaceId"
+	| "invitations"
+	| "onAcceptInvitation"
+	| "onCreateSpace"
+	| "onDeclineInvitation"
+	| "onOpenSpaceSettings"
+	| "onOpenUserSettings"
+	| "onRetryInvitation"
+	| "onSelectSpace"
+	| "onSpaceSwitcherOpenChange"
+	| "openSettings"
+	| "railDots"
+	| "space"
+	| "spaces"
+	| "updateBadge"
+	| "user"
+>
+
+export const useWorkspaceRail = ({
 	collapsedSectionIds,
 	core,
 	navigation,
@@ -42,43 +67,96 @@ export const workspaceRailOf = ({
 	tabs,
 	onSelectSpace,
 }: WorkspaceRailOptions): WorkspaceRail => {
-	const space = switcher.selectedSpace
-	const leaveSettingsFor = (panel: SidebarPanel) => {
-		navigation.openConversations()
-		if (panel === sidebarTab.openTab) return
-		sidebarTab.openSidebarTab(panel, {
-			botsBySpaceId: rosterLists.rosterBotsBySpace,
-			conversationsBySpaceId: rosterLists.rosterConversationsBySpace,
-			sectionsBySpaceId: core.sections.state.sections,
-			collapsedSectionIds,
-		})
-	}
+	const sectionsBySpaceId = core.sections.state.sections
+	const {
+		badgesBySpaceId,
+		railSignals,
+		rosterBotsBySpace,
+		rosterConversationsBySpace,
+	} = rosterLists
+	const { onCreateSpace } = rosterLines.sidebarActions
+	const { updateBadge } = rosterLines
+	const user = overlay.userSettings
+	const openSettings = panels.railSettings
 
-	return {
-		rail: {
-			badgesBySpaceId: rosterLists.badgesBySpaceId,
-			dots: rosterLists.railSignals,
-			hostBySpaceId: switcher.hostBySpaceId,
-			invitations: switcher.invitations,
-			onAcceptInvitation: switcher.onAcceptInvitation,
-			onCreateSpace: rosterLines.sidebarActions.onCreateSpace,
-			onDeclineInvitation: switcher.onDeclineInvitation,
-			onRetryInvitation: switcher.onRetryInvitation,
-			onSelectSpace: (id) => tabs.leaveAsked(() => onSelectSpace(id)),
-			onSpacesMenuOpenChange: switcher.onSpaceSwitcherOpenChange,
-			onOpenSpaceSettings: space
-				? () => navigation.openSpaceSettings(space.id)
-				: undefined,
-			onOpenYou: () => navigation.openUserSettings(),
-			onSelectConversations: () => leaveSettingsFor("conversations"),
-			onSelectMissions: () => leaveSettingsFor("missions"),
-			openSettings: panels.railSettings,
-			selected: sidebarTab.openTab,
-			spaces: switcher.spaces,
-			updateBadge: rosterLines.updateBadge,
-			user: overlay.userSettings,
-		},
-		currentSpace: space,
-		currentSpaceHost: space ? switcher.hostBySpaceId[space.id] : undefined,
-	}
+	return useMemo(() => {
+		const space = switcher.selectedSpace
+		const leaveSettingsFor = (panel: SidebarPanel) => {
+			navigation.openConversations()
+			if (panel === sidebarTab.openTab) return
+			sidebarTab.openSidebarTab(panel, {
+				botsBySpaceId: rosterBotsBySpace,
+				conversationsBySpaceId: rosterConversationsBySpace,
+				sectionsBySpaceId,
+				collapsedSectionIds,
+			})
+		}
+
+		return {
+			rail: {
+				badgesBySpaceId,
+				dots: railSignals,
+				hostBySpaceId: switcher.hostBySpaceId,
+				invitations: switcher.invitations,
+				onAcceptInvitation: switcher.onAcceptInvitation,
+				onCreateSpace,
+				onDeclineInvitation: switcher.onDeclineInvitation,
+				onRetryInvitation: switcher.onRetryInvitation,
+				onSelectSpace: (id) => tabs.leaveAsked(() => onSelectSpace(id)),
+				onSpacesMenuOpenChange: switcher.onSpaceSwitcherOpenChange,
+				onOpenSpaceSettings: space
+					? () => navigation.openSpaceSettings(space.id)
+					: undefined,
+				onOpenYou: () => navigation.openUserSettings(),
+				onSelectConversations: () => leaveSettingsFor("conversations"),
+				onSelectMissions: () => leaveSettingsFor("missions"),
+				openSettings,
+				selected: sidebarTab.openTab,
+				spaces: switcher.spaces,
+				updateBadge,
+				user,
+			},
+			currentSpace: space,
+			currentSpaceHost: space ? switcher.hostBySpaceId[space.id] : undefined,
+		}
+	}, [
+		badgesBySpaceId,
+		collapsedSectionIds,
+		navigation,
+		onCreateSpace,
+		onSelectSpace,
+		openSettings,
+		railSignals,
+		rosterBotsBySpace,
+		rosterConversationsBySpace,
+		sectionsBySpaceId,
+		sidebarTab,
+		switcher,
+		tabs,
+		updateBadge,
+		user,
+	])
 }
+
+export const appSidebarRailOf = ({
+	rail,
+	currentSpace,
+}: WorkspaceRail): AppSidebarRail => ({
+	badgesBySpaceId: rail.badgesBySpaceId,
+	hostBySpaceId: rail.hostBySpaceId,
+	invitations: rail.invitations,
+	onAcceptInvitation: rail.onAcceptInvitation,
+	onCreateSpace: rail.onCreateSpace,
+	onDeclineInvitation: rail.onDeclineInvitation,
+	onOpenSpaceSettings: rail.onOpenSpaceSettings,
+	onOpenUserSettings: rail.onOpenYou,
+	onRetryInvitation: rail.onRetryInvitation,
+	onSelectSpace: rail.onSelectSpace,
+	onSpaceSwitcherOpenChange: rail.onSpacesMenuOpenChange,
+	openSettings: rail.openSettings,
+	railDots: rail.dots,
+	space: currentSpace,
+	spaces: rail.spaces,
+	updateBadge: rail.updateBadge,
+	user: rail.user,
+})
