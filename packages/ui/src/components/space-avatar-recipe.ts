@@ -5,6 +5,7 @@ import {
 } from "@workspace/ui/components/companion-avatar"
 import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
 import { companionSeed } from "@workspace/ui/components/companion-field"
+import { COMPACT_BELOW } from "@workspace/ui/components/glaze-border"
 
 const SPACE_AVATAR_SIZES = [12, 14, 26, 36, 48, 64] as const
 
@@ -30,8 +31,6 @@ type StateMetrics = {
 	invitationStroke: number
 	lineStroke: number
 }
-
-const COMPACT_BELOW = 20
 
 const SUPERELLIPSE_EXPONENT = 4.6
 

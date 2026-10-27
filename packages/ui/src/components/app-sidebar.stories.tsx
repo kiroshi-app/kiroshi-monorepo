@@ -1181,7 +1181,9 @@ export const UploadedPictures = meta.story({
 			"src",
 			UPLOADED_IMAGE,
 		)
-		await expect(wearing.querySelector("svg")).toBeNull()
+		await expect(
+			wearing.querySelector('svg:not([data-slot="outlined-hexagon"])'),
+		).toBeNull()
 		for (const row of [wearing, running]) {
 			const [picture] = slotsIn(row, "bot-identity-avatar")
 			await expectCompanionPictureShape(picture)

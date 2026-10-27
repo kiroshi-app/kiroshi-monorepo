@@ -13,6 +13,7 @@ import type { BotAvatarState } from "@workspace/ui/components/companion-state"
 import { DitheredFieldAvatar } from "@workspace/ui/components/dithered-field-avatar"
 import { Icons } from "@workspace/ui/components/icons"
 import { AvatarFrame } from "@workspace/ui/components/initials-avatar"
+import { OutlinedHexagon } from "@workspace/ui/components/outlined-hexagon"
 import { cn } from "@workspace/ui/lib/utils"
 
 type ActivityIndicatorKind = Extract<
@@ -50,13 +51,16 @@ function BotIdentityAvatar({
 			className={className}
 			image={image}
 			overlay={
-				badge ? (
-					<BotBadgeDot
-						badge={badge}
-						data-slot="bot-activity-dot"
-						placement="avatar"
-					/>
-				) : null
+				<>
+					<OutlinedHexagon fill="none" side={size} />
+					{badge ? (
+						<BotBadgeDot
+							badge={badge}
+							data-slot="bot-activity-dot"
+							placement="avatar"
+						/>
+					) : null}
+				</>
 			}
 			shape="hexagon"
 			size={size}

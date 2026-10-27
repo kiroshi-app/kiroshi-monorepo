@@ -12,6 +12,7 @@ import preview from "@workspace/storybook/preview"
 import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 	expectAnswered,
+	expectGlazeBorders,
 	expectNeedingYou,
 	SidebarFrame,
 	slotIn,
@@ -167,6 +168,39 @@ export const RosterNeedingYouDark = meta.story({
 	args: NEEDING_YOU_ROSTER,
 	globals: { theme: "dark", theme_layout: "single" },
 	play: ({ canvasElement }) => expectRosterNeedingYou(canvasElement),
+})
+
+const HOVERED_ROWS = '[data-slot="sidebar-menu-button"]'
+
+const expectBorderOnHoveredAndSelectedRows = async (
+	canvasElement: HTMLElement,
+	theme: "light" | "dark",
+) => {
+	await expect(rosterRowOf(canvasElement, ATLAS.name)).toHaveAttribute(
+		"data-active",
+	)
+	await expectGlazeBorders(canvasElement, theme)
+}
+
+export const BorderOnHoveredAndSelectedRows = meta.story({
+	parameters: {
+		pseudo: { hover: HOVERED_ROWS },
+		docs: {
+			description: {
+				story:
+					"Every row under the pointer, the selected companion among them: the 40px avatars and subject icons keep the C edge and lip, the 14px pile members their compact edge, with no colour change and no transition. Pick `BorderOnHoveredAndSelectedRowsDark` for the dark theme.",
+			},
+		},
+	},
+	play: ({ canvasElement }) =>
+		expectBorderOnHoveredAndSelectedRows(canvasElement, "light"),
+})
+
+export const BorderOnHoveredAndSelectedRowsDark = meta.story({
+	globals: { theme: "dark", theme_layout: "single" },
+	parameters: { pseudo: { hover: HOVERED_ROWS } },
+	play: ({ canvasElement }) =>
+		expectBorderOnHoveredAndSelectedRows(canvasElement, "dark"),
 })
 
 const PAST_SKELETON_DELAY_MS = 400

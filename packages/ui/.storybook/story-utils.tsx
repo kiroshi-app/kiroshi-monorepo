@@ -4,6 +4,13 @@ import { renderToStaticMarkup } from "react-dom/server"
 import type { ExtraProps } from "react-markdown"
 import { expect, waitFor, within } from "storybook/test"
 
+import {
+	COMPACT_EDGE,
+	edgeWidthOf,
+	GLAZE_EDGE,
+	type GlazeTheme,
+	isCompactAt,
+} from "@workspace/ui/components/glaze-border"
 import type { Icon } from "@workspace/ui/components/icons"
 import {
 	MARKDOWN_CODE_SURFACE_CLASS,
@@ -502,6 +509,38 @@ export const expectSoloAvatarInBothThemes = async (
 	await expect(slotsIn(root, "conversation-subject-icon")).toHaveLength(0)
 	for (const avatar of avatars)
 		await expect(sidesOf(avatar)).toEqual([side, side])
+}
+
+const shownThemeLayers = (border: Element) =>
+	Array.from(border.querySelectorAll<SVGGElement>("g[data-theme]")).filter(
+		(layer) => getComputedStyle(layer).display !== "none",
+	)
+
+export const expectGlazeBorders = async (root: Element, theme: GlazeTheme) => {
+	const borders = slotsIn(root, "outlined-hexagon")
+	await expect(borders.length).toBeGreaterThan(0)
+	for (const border of borders) {
+		const side = Number(border.getAttribute("viewBox")?.split(" ")[2])
+		await expect(sidesOf(border)).toEqual([side, side])
+		const layers = shownThemeLayers(border)
+		await expect(layers.map((layer) => layer.dataset.theme)).toEqual([theme])
+		const edge = slotIn(layers[0], "outlined-hexagon-edge")
+		const { colour, opacity } = (isCompactAt(side) ? COMPACT_EDGE : GLAZE_EDGE)[
+			theme
+		]
+		await expect(edge).toHaveAttribute("stroke", colour)
+		await expect(edge).toHaveAttribute("stroke-opacity", String(opacity))
+		await expect(Number(edge.getAttribute("stroke-width"))).toBeCloseTo(
+			2 * edgeWidthOf(side),
+		)
+		await expect(getComputedStyle(edge).transitionDuration).toBe("0s")
+		await expect(slotsIn(layers[0], "outlined-hexagon-lip")).toHaveLength(
+			isCompactAt(side) ? 0 : 1,
+		)
+		await expect(
+			border.querySelectorAll("linearGradient, radialGradient, circle"),
+		).toHaveLength(0)
+	}
 }
 
 export const companionGlyphOf = (avatar: Element) =>

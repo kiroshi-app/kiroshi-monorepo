@@ -10,6 +10,7 @@ import {
 	expectCellsIn,
 	expectCompanionPictureShape,
 	expectCompanionSilhouette,
+	expectGlazeBorders,
 	expectRoundAvatar,
 	pictureOf,
 	Row,
@@ -581,4 +582,62 @@ export const HoneycombWorking = meta.story({
 		},
 	},
 	play: ({ canvasElement }) => expectOneHoneycomb(canvasElement),
+})
+
+const BORDER_SIZES = [14, 24, 40, 64]
+
+const BorderSizes = (props: BotIdentityAvatarProps) => (
+	<div className="flex flex-col gap-3">
+		<Row>
+			{BORDER_SIZES.map((size) => (
+				<BotIdentityAvatar {...props} key={size} size={size} />
+			))}
+		</Row>
+		<Row>
+			{BORDER_SIZES.map((size) => (
+				<BotIdentityAvatar
+					{...props}
+					image={UPLOADED_AVATAR_IMAGE}
+					key={size}
+					size={size}
+				/>
+			))}
+		</Row>
+	</div>
+)
+
+const expectBorderAtEverySize = async (
+	canvasElement: HTMLElement,
+	theme: "light" | "dark",
+) => {
+	const avatars = botIdentityAvatars(canvasElement)
+	await expect(
+		avatars.map((avatar) => avatar.getBoundingClientRect().width),
+	).toEqual([...BORDER_SIZES, ...BORDER_SIZES])
+	for (const avatar of avatars.slice(BORDER_SIZES.length))
+		await pictureOf(avatar)
+	await expectGlazeBorders(canvasElement, theme)
+}
+
+const BORDER_STORY =
+	"The C border at 14, 24, 40 and 64, over the dithered field on the first line and over an uploaded picture on the second. From 20px up the hexagon wears a translucent edge drawn inside its outline and a white lip along its top; below 20px it wears a slightly stronger edge alone. No sheen, no highlight, no arcs. Pick `BorderAtEverySizeDark` for the dark theme."
+
+export const BorderAtEverySize = meta.story({
+	render: (args) => <BorderSizes {...args} />,
+	parameters: { docs: { description: { story: BORDER_STORY } } },
+	play: ({ canvasElement }) => expectBorderAtEverySize(canvasElement, "light"),
+})
+
+export const BorderAtEverySizeDark = meta.story({
+	globals: { theme: "dark" },
+	render: (args) => <BorderSizes {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same four sizes in the dark theme: the edge turns white and the lip dims, so the border reads on a dark sidebar without glowing.",
+			},
+		},
+	},
+	play: ({ canvasElement }) => expectBorderAtEverySize(canvasElement, "dark"),
 })

@@ -487,7 +487,7 @@ const expectBotsSideBySide = async (row: HTMLElement) => {
 	for (const slot of slots) {
 		await expect(getComputedStyle(slot).maskImage).toBe("none")
 	}
-	await expect(slotsIn(pile, "outlined-hexagon")).toHaveLength(0)
+	await expect(slotsIn(pile, "outlined-hexagon")).toHaveLength(slots.length)
 }
 
 const expectLongQuestionBesideAWholePile = async (

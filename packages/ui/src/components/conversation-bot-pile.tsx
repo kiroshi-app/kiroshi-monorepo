@@ -54,8 +54,6 @@ const SLOT: Record<PileLayout, string> = {
 	"side-by-side": "relative size-4",
 }
 
-const FACE = "pointer-events-none absolute inset-0 size-full"
-
 const COUNTER_TEXT = "font-bold tabular-nums"
 
 type ConversationParticipant = Pick<
@@ -81,19 +79,6 @@ const PileSlot = ({ layout, style, slot, children }: PileSlotProps) => (
 	<span className={SLOT[layout]} data-slot={slot} style={style}>
 		{children}
 	</span>
-)
-
-type HexagonFaceProps = {
-	side: number
-	fill: string
-	children: ReactNode
-}
-
-const HexagonFace = ({ side, fill, children }: HexagonFaceProps) => (
-	<svg aria-hidden="true" className={FACE} viewBox={`0 0 ${side} ${side}`}>
-		<path d={roundedHexagonPath(hexagonOfWidth(side))} style={{ fill }} />
-		{children}
-	</svg>
 )
 
 const ConversationBotPile = ({
@@ -162,9 +147,6 @@ const ConversationBotPile = ({
 						size={side}
 						working={bot.working}
 					/>
-					{isOverlapping ? (
-						<OutlinedHexagon fill="none" side={HEXAGON_SIDE} />
-					) : null}
 				</PileSlot>
 			))}
 			{isOverflowing ? (
@@ -173,18 +155,9 @@ const ConversationBotPile = ({
 					slot="conversation-bot-pile-overflow"
 					style={slotStyleOf(PILE_LIMIT - 1)}
 				>
-					{isOverlapping ? (
-						<OutlinedHexagon
-							fill="var(--conversation-pile-overflow)"
-							side={HEXAGON_SIDE}
-						>
-							{counter}
-						</OutlinedHexagon>
-					) : (
-						<HexagonFace fill="var(--conversation-pile-overflow)" side={side}>
-							{counter}
-						</HexagonFace>
-					)}
+					<OutlinedHexagon fill="var(--conversation-pile-overflow)" side={side}>
+						{counter}
+					</OutlinedHexagon>
 				</PileSlot>
 			) : null}
 		</span>

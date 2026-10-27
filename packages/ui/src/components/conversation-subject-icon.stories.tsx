@@ -1,7 +1,13 @@
 import { expect } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { glyphIn, slotIn } from "@workspace/storybook/story-utils"
+import {
+	expectGlazeBorders,
+	glyphIn,
+	Row,
+	slotIn,
+	slotsIn,
+} from "@workspace/storybook/story-utils"
 import { ConversationSubjectIcon } from "@workspace/ui/components/conversation-subject-icon"
 import { ConversationIcons } from "@workspace/ui/components/icons"
 
@@ -133,4 +139,59 @@ export const RedShieldKeyDark = meta.story({
 		).toBe("rgb(86, 61, 51)")
 		await expect(getComputedStyle(icon).color).toBe("rgb(226, 177, 158)")
 	},
+})
+
+const BORDER_SIDES = [14, 24, 40, 64]
+
+const BorderSides = () => (
+	<Row>
+		{BORDER_SIDES.map((side) => (
+			<ConversationSubjectIcon
+				color="red"
+				icon="ShieldKey"
+				key={side}
+				side={side}
+			/>
+		))}
+	</Row>
+)
+
+const expectBorderAtEverySize = async (
+	canvasElement: HTMLElement,
+	theme: "light" | "dark",
+) => {
+	const icons = slotsIn(canvasElement, "conversation-subject-icon")
+	await expect(icons.map((icon) => icon.getBoundingClientRect().width)).toEqual(
+		BORDER_SIDES,
+	)
+	for (const icon of icons)
+		await expect(slotIn(icon, "outlined-hexagon-face").style.stroke).toBe("")
+	await expectGlazeBorders(canvasElement, theme)
+}
+
+export const BorderAtEverySize = meta.story({
+	render: () => <BorderSides />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The C border at 14, 24, 40 and 64 over the flat pair of the cell: a translucent edge inside the outline and a white lip along the top from 20px up, the edge alone below. The image hairline is gone. Pick `BorderAtEverySizeDark` for the dark theme.",
+			},
+		},
+	},
+	play: ({ canvasElement }) => expectBorderAtEverySize(canvasElement, "light"),
+})
+
+export const BorderAtEverySizeDark = meta.story({
+	globals: { theme: "dark" },
+	render: () => <BorderSides />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same four sizes in the dark theme: a white edge and a dimmer lip over the dark pair.",
+			},
+		},
+	},
+	play: ({ canvasElement }) => expectBorderAtEverySize(canvasElement, "dark"),
 })
