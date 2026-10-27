@@ -176,6 +176,7 @@ type EjectedReport = {
 	jobs: Job[]
 	pullRequest: QueuedPullRequest
 	batch: QueuedRun[]
+	mainSha: string
 }
 
 const ejectedIssue = ({
@@ -183,6 +184,7 @@ const ejectedIssue = ({
 	jobs,
 	pullRequest,
 	batch,
+	mainSha,
 }: EjectedReport): IssueInput => {
 	const failedJobs = failedJobNames(jobs)
 	return {
@@ -194,7 +196,7 @@ const ejectedIssue = ({
 			pullRequestLine([pullRequest]),
 			`PR head: ${pullRequest.headSha}`,
 			`Batch: ${batch.map((member) => `#${member.pullRequest}`).join(", ")}`,
-			`Reproduce on main at ${entry.baseSha} before classifying as pre-existing`,
+			`Reproduce on main at ${mainSha} before classifying as pre-existing`,
 		].join("\n\n"),
 	}
 }
@@ -313,13 +315,11 @@ const laterEntries = (entry: QueuedRun, queue: QueuedRun[]): QueuedRun[] =>
 		.filter((queued) => queued.baseSha === entry.run.headSha)
 		.flatMap((later) => [later, ...laterEntries(later, queue)])
 
-const queuedRuns = (runs: Run[], workflowName: string): QueuedRun[] =>
-	runs
-		.filter((run) => run.name === workflowName)
-		.flatMap((run) => {
-			const entry = parseQueueBranch(run.headBranch)
-			return entry ? [{ ...entry, run }] : []
-		})
+const queuedRuns = (runs: Run[]): QueuedRun[] =>
+	runs.flatMap((run) => {
+		const entry = parseQueueBranch(run.headBranch)
+		return entry ? [{ ...entry, run }] : []
+	})
 
 const reportEjected = async (
 	run: Run,
@@ -332,7 +332,7 @@ const reportEjected = async (
 		github.readJobs(String(run.id)),
 		github.readQueueRuns(run),
 	])
-	const queue = queuedRuns(runs, run.name)
+	const queue = queuedRuns(runs)
 	const { reds, brokenFirst } = await readEarlierEntries(
 		github,
 		pause,
@@ -347,9 +347,16 @@ const reportEjected = async (
 	if (existing)
 		return `no issue: ${existing} already reports PR #${pullRequest.number} at ${shortSha(pullRequest.headSha)}`
 	const batch = [...reds, entry, ...laterEntries(entry, queue)]
+	const firstOfChain = reds[0] ?? entry
 	const issue = await createIssue(
 		linear,
-		ejectedIssue({ entry, jobs, pullRequest, batch }),
+		ejectedIssue({
+			entry,
+			jobs,
+			pullRequest,
+			batch,
+			mainSha: firstOfChain.baseSha,
+		}),
 	)
 	return `created ${issue.identifier} ${issue.url}`
 }
@@ -399,6 +406,8 @@ type GitHubJob = {
 
 const QUEUE_WINDOW_MS = 3 * 60 * 60 * 1000
 
+const PAGE_SIZE = 100
+
 const toRun = (run: GitHubRun): Run => ({
 	id: run.id,
 	name: run.name,
@@ -419,7 +428,7 @@ const createdAround = (createdAt: string) => {
 	return encodeURIComponent(`${from}..${to}`)
 }
 
-const createGitHub = (repository: string, token: string): GitHub => {
+export const createGitHub = (repository: string, token: string): GitHub => {
 	const read = async <T>(step: string, path: string): Promise<T> => {
 		const response = await fetch(
 			`https://api.github.com/repos/${repository}${path}`,
@@ -468,11 +477,15 @@ const createGitHub = (repository: string, token: string): GitHub => {
 			}))
 		},
 		readQueueRuns: async (run) => {
-			const { workflow_runs } = await read<{ workflow_runs: GitHubRun[] }>(
-				"list the merge queue runs",
-				`/actions/runs?event=merge_group&created=${createdAround(run.createdAt)}&per_page=100`,
-			)
-			return workflow_runs.map(toRun)
+			const runs: Run[] = []
+			for (let page = 1; ; page++) {
+				const { workflow_runs } = await read<{ workflow_runs: GitHubRun[] }>(
+					"list the merge queue runs",
+					`/actions/workflows/ci.yml/runs?event=merge_group&created=${createdAround(run.createdAt)}&per_page=${PAGE_SIZE}&page=${page}`,
+				)
+				runs.push(...workflow_runs.map(toRun))
+				if (workflow_runs.length < PAGE_SIZE) return runs
+			}
 		},
 		readPullRequest: async (number) => {
 			const pullRequest = await read<

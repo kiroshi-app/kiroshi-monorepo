@@ -1,6 +1,7 @@
-import { describe, expect, it } from "bun:test"
+import { afterEach, describe, expect, it, mock, spyOn } from "bun:test"
 
 import {
+	createGitHub,
 	type GitHub,
 	type GraphQLRequest,
 	type Job,
@@ -548,5 +549,95 @@ describe("reporting a red merge queue entry", () => {
 			'read the queue branch: "gh-readonly-queue/main/21" is not gh-readonly-queue/main/pr-<N>-<sha>',
 		)
 		expect(requests).toEqual([])
+	})
+})
+
+describe("the reproduce line of an Ejected issue", () => {
+	it("names the base of the first entry of the red chain for an entry built on a red earlier entry", async () => {
+		const { created } = await reportEntry(entry22, {
+			listed: [entry21, entry22],
+			readsOf: { 201: [entry21] },
+			jobsOf: { 201: [job("lint", "failure")] },
+		})
+
+		expect(created?.description).toEndWith(
+			`Reproduce on main at ${MAIN_SHA} before classifying as pre-existing`,
+		)
+	})
+
+	it("names the entry's own base when it is the first of its chain", async () => {
+		const { created } = await reportEntry(entry21, { listed: [entry21] })
+
+		expect(created?.description).toEndWith(
+			`Reproduce on main at ${MAIN_SHA} before classifying as pre-existing`,
+		)
+	})
+
+	it("stops the chain at a green earlier entry, whose head lands on main", async () => {
+		const { created } = await reportEntry(entry22, {
+			listed: [{ ...entry21, conclusion: "success" }, entry22],
+			readsOf: { 201: [{ ...entry21, conclusion: "success" }] },
+		})
+
+		expect(created?.description).toEndWith(
+			`Reproduce on main at ${HEAD_21} before classifying as pre-existing`,
+		)
+	})
+})
+
+describe("listing the merge queue runs from GitHub", () => {
+	afterEach(() => {
+		mock.restore()
+	})
+
+	const gitHubRun = (id: number) => ({
+		id,
+		name: "CI",
+		event: "merge_group",
+		head_branch: `gh-readonly-queue/main/pr-${id}-${MAIN_SHA}`,
+		conclusion: "failure",
+		head_sha: HEAD_21,
+		html_url: `https://github.com/acme/repo/actions/runs/${id}`,
+		head_commit: null,
+		created_at: "2026-10-27T16:24:55Z",
+	})
+
+	const answerPages = (...pageSizes: number[]) => {
+		const urls: string[] = []
+		spyOn(globalThis, "fetch").mockImplementation((async (
+			input: string | URL | Request,
+		) => {
+			urls.push(String(input))
+			const size = pageSizes[urls.length - 1] ?? 0
+			const workflow_runs = Array.from({ length: size }, (_, index) =>
+				gitHubRun(urls.length * 1000 + index),
+			)
+			return new Response(JSON.stringify({ workflow_runs }))
+		}) as typeof fetch)
+		return urls
+	}
+
+	it("lists the merge_group runs of the CI workflow only", async () => {
+		const urls = answerPages(1)
+
+		await createGitHub("acme/repo", "token").readQueueRuns(entry21)
+
+		expect(urls).toHaveLength(1)
+		expect(urls[0]).toStartWith(
+			"https://api.github.com/repos/acme/repo/actions/workflows/ci.yml/runs?event=merge_group&",
+		)
+	})
+
+	it("reads the next page while a page holds 100 runs", async () => {
+		const urls = answerPages(100, 100, 3)
+
+		const runs = await createGitHub("acme/repo", "token").readQueueRuns(entry21)
+
+		expect(runs).toHaveLength(203)
+		expect(urls.map((url) => new URL(url).searchParams.get("page"))).toEqual([
+			"1",
+			"2",
+			"3",
+		])
 	})
 })
