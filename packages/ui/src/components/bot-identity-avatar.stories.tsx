@@ -138,13 +138,13 @@ const meta = preview.meta({
 	},
 	args: {
 		name: "Atlas",
-		blot: "blue",
+		hue: BLOT_HUES.blue,
 		seed: "bot-7",
 		size: 96,
 	},
 	argTypes: {
 		badge: { control: "select", options: [undefined, ...BOT_BADGES] },
-		blot: { control: "select", options: [undefined, ...BLOT_TINTS] },
+		hue: { control: { type: "range", min: 0, max: 359, step: 1 } },
 		name: { control: "text" },
 		size: { control: { type: "range", min: 16, max: 160, step: 8 } },
 		working: { control: "boolean" },
@@ -204,9 +204,9 @@ export const EveryTint = meta.story({
 	tags: ["test-only"],
 	render: (args) => (
 		<Row>
-			<BotIdentityAvatar {...args} blot={undefined} />
+			<BotIdentityAvatar {...args} hue={undefined} />
 			{BLOT_TINTS.map((blot) => (
-				<BotIdentityAvatar {...args} blot={blot} key={blot} />
+				<BotIdentityAvatar {...args} hue={BLOT_HUES[blot]} key={blot} />
 			))}
 		</Row>
 	),
@@ -229,8 +229,25 @@ export const EveryTint = meta.story({
 	},
 })
 
+export const FreeHue = meta.story({
+	args: { hue: 210 },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A companion given a hue outside the eight presets, 210. Check that its cells are painted in that hue, between cyan and blue, rather than snapped to the nearest preset.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const [avatar] = botIdentityAvatars(canvasElement)
+
+		await expect(companionHueOf(companionGlyphOf(avatar))).toBe(210)
+	},
+})
+
 export const NoChosenColour = meta.story({
-	args: { blot: undefined },
+	args: { hue: undefined },
 	render: (args) => <EveryPlace {...args} />,
 	parameters: {
 		docs: {

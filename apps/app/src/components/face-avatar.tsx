@@ -9,7 +9,7 @@ type FaceAvatarProps = {
 
 export const FaceAvatar = ({ face, size }: FaceAvatarProps) => (
 	<BotIdentityAvatar
-		blot={face.blot}
+		hue={face.blot}
 		image={face.image}
 		name={face.name}
 		seed={face.id}

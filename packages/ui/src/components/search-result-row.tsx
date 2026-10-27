@@ -29,9 +29,9 @@ import { cn } from "@workspace/ui/lib/utils"
 type SearchResultIdentity =
 	| { kind: "message"; bot: MissionBot }
 	| { kind: "message-from-you"; reader: string }
-	| ({ kind: "chat-group" } & Pick<
+	| ({ kind: "chat-group"; color?: number | null } & Pick<
 			ConversationSubjectIconProps,
-			"icon" | "color"
+			"icon"
 	  >)
 	| { kind: "chat-solo"; bot: MissionBot }
 	| { kind: "mission"; bot: MissionBot; badge?: BotBadge; mark: MissionMark }
@@ -79,7 +79,7 @@ const SearchResultIdentityMark = ({
 	if (identity.kind === "chat-group")
 		return (
 			<ConversationSubjectIcon
-				color={identity.color}
+				hue={identity.color}
 				icon={identity.icon}
 				side={MISSION_AVATAR_SIZE}
 			/>

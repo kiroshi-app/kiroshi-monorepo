@@ -30,6 +30,7 @@ import {
 	WEEKLY_PLANNING,
 } from "@workspace/ui/components/app-title-bar.fixtures"
 import type { BotBadge } from "@workspace/ui/components/bot-badge"
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import type { Space } from "@workspace/ui/components/space"
 import {
 	UpdateBadge,
@@ -54,7 +55,7 @@ const SPACE_SETTINGS = "Space settings"
 const CURRENT_SPACE: Space = {
 	id: "vocca",
 	name: "Vocca",
-	colour: "blue",
+	colour: BLOT_HUES.blue,
 	avatarSeed: "vocca",
 }
 
@@ -465,7 +466,9 @@ export const SpaceSettingsOverConversations = meta.story({
 	},
 	play: async ({ canvasElement }) => {
 		await expectSettingsOpen(canvasElement, SPACE_SETTINGS)
-		await expect(spaceLogoIn(canvasElement).dataset.colour).toBe("blue")
+		await expect(spaceLogoIn(canvasElement).dataset.colour).toBe(
+			String(BLOT_HUES.blue),
+		)
 	},
 })
 
@@ -637,7 +640,9 @@ export const SpaceLogoHovered = meta.story({
 		const name = `${SPACE_SETTINGS}, new activity`
 		await expectSpaceLogoFirstWithoutGear(canvasElement, name)
 		const logo = entryNamed(canvasElement, name)
-		await expect(slotIn(logo, "space-avatar").dataset.colour).toBe("blue")
+		await expect(slotIn(logo, "space-avatar").dataset.colour).toBe(
+			String(BLOT_HUES.blue),
+		)
 		await expect(slotIn(logo, "app-rail-dot")).toBeVisible()
 		await userEvent.hover(logo)
 		await expect(await screen.findByRole("tooltip")).toHaveTextContent(
@@ -980,7 +985,7 @@ const playA7 = async ({
 	}
 	const avatar = slotIn(rows[0], "space-avatar")
 	await expect(avatar.getBoundingClientRect().width).toBe(14)
-	await expect(avatar.dataset.colour).toBe(STUDIO.colour)
+	await expect(avatar.dataset.colour).toBe(String(STUDIO.colour))
 	await expect(
 		within(menu)
 			.getAllByRole("menuitem")

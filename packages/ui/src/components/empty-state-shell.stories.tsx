@@ -3,13 +3,14 @@ import { expect, fn } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import { expectHeadingFont } from "@workspace/storybook/story-utils"
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { EmptyStateShell } from "@workspace/ui/components/empty-state-shell"
 import { Icons } from "@workspace/ui/components/icons"
 import { Button } from "@workspace/ui/components/ui/button"
 
 const MARK = (
 	<BotIdentityAvatar
-		blot="blue"
+		hue={BLOT_HUES.blue}
 		name="Nest Keeper"
 		seed="bot_4f8c21"
 		size={64}

@@ -1626,7 +1626,7 @@ export const OnShellSurfaceTinted = meta.story({
 		},
 	},
 	render: (args) => (
-		<WorkspaceShell sidebar={WORKSPACE_SIDEBAR} spaceTint="blue">
+		<WorkspaceShell sidebar={WORKSPACE_SIDEBAR} spaceTint={BLOT_HUES.blue}>
 			<PanelHost {...args} />
 		</WorkspaceShell>
 	),

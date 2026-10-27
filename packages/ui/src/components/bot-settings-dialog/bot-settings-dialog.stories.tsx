@@ -28,6 +28,7 @@ import {
 } from "@workspace/ui/components/bot-settings-dialog"
 import { BOT_MCP_SERVERS } from "@workspace/ui/components/bot-settings-dialog/mcp-servers.fixtures"
 import { BOT_MEMORY } from "@workspace/ui/components/bot-settings-dialog/memory.fixtures"
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { BOT_ENVIRONMENT } from "@workspace/ui/components/environment.fixtures"
 import {
 	HISTORY_DAYS,
@@ -58,7 +59,7 @@ const MODELS: BotModelOption[] = [
 ]
 
 const FILLED_BOT: BotSettingsValue = {
-	identity: { blot: "blue" },
+	identity: { blot: BLOT_HUES.blue },
 	name: "Nest Keeper",
 	title: "Repository archivist",
 	instructions:
@@ -283,7 +284,37 @@ export const Appearance = meta.story({
 		await userEvent.click(within(panel).getByRole("radio", { name: "Red" }))
 		await expect(args.onValueChange).toHaveBeenCalledWith(
 			expect.objectContaining({
-				identity: expect.objectContaining({ blot: "red" }),
+				identity: expect.objectContaining({ blot: BLOT_HUES.red }),
+			}),
+		)
+	},
+})
+
+export const FreeHue = meta.story({
+	args: { value: { ...FILLED_BOT, identity: { blot: 210 } } },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A companion stored at a hue outside the eight presets, 210. Check that Appearance opens with `Your hue` selected at 210 rather than the nearest preset, and that moving the slider writes the new hue back untouched. Pick `Appearance` for a preset.",
+			},
+		},
+	},
+	play: async ({ args, userEvent }) => {
+		const dialog = await dialogIn()
+		const panel = await openTab(dialog, "Appearance", userEvent)
+
+		await expect(
+			within(panel).getByRole("radio", { name: "Your hue" }),
+		).toBeChecked()
+		const slider = within(panel).getByRole("slider", { name: "Your hue" })
+		await expect(slider).toHaveValue("210")
+
+		slider.focus()
+		await userEvent.keyboard("{ArrowRight}")
+		await expect(args.onValueChange).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				identity: expect.objectContaining({ blot: 211 }),
 			}),
 		)
 	},

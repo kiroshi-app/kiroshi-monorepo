@@ -10,7 +10,6 @@ import {
 	BotStopButton,
 	type BotStopProps,
 } from "@workspace/ui/components/bot-identity-avatar"
-import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
 import { useMarkId } from "@workspace/ui/components/mark-context"
 import { SharedMark } from "@workspace/ui/components/motion/shared-mark"
 import {
@@ -32,7 +31,7 @@ type ActivityIndicatorProps = BotStopProps & {
 	waitingOn?: ActivityIndicatorWait
 	startedAt?: number
 	elapsedSeconds?: number
-	blot?: BotAvatarBlot
+	blot?: number | null
 	image?: string
 	seed?: string
 	size?: number
@@ -132,7 +131,7 @@ function ActivityIndicator(props: ActivityIndicatorProps) {
 	const text = rowTextOf({ t, kind, name: named, label, waitingOn })
 	const avatar = (
 		<BotIdentityAvatar
-			blot={blot}
+			hue={blot}
 			image={image}
 			kind={kind}
 			name={name}

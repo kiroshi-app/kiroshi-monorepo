@@ -39,7 +39,7 @@ const ParticipantRow = ({
 		<li className={ROW_CLASS} data-slot="participant">
 			<span aria-hidden="true" className="contents">
 				<BotIdentityAvatar
-					blot={bot.blot}
+					hue={bot.blot}
 					image={bot.image}
 					name={bot.name}
 					seed={bot.id}

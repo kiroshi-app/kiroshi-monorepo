@@ -94,20 +94,21 @@ describe("toRosterConversations", () => {
 			{
 				id: "c-1",
 				name: "Launch",
+				color: null,
 				sectionId: "n-1",
 				pinPosition: 2,
 				participants: [
 					{
 						id: "b-1",
 						name: "Chef",
-						blot: "cyan",
+						blot: 186,
 						image: undefined,
 						status: "idle",
 					},
 					{
 						id: "b-2",
 						name: "Sous-chef",
-						blot: "cyan",
+						blot: 186,
 						image: undefined,
 						status: "idle",
 					},
@@ -277,7 +278,7 @@ describe("toRosterConversations", () => {
 			NOW,
 		)
 
-		expect(row).toMatchObject({ icon: "Rocket", color: "cyan" })
+		expect(row).toMatchObject({ icon: "Rocket", color: 186 })
 	})
 
 	it("leaves the icon and the colour of a room that wears none blank", () => {
@@ -288,7 +289,7 @@ describe("toRosterConversations", () => {
 		)
 
 		expect(row.icon).toBeUndefined()
-		expect(row.color).toBeUndefined()
+		expect(row.color).toBeNull()
 	})
 
 	it("draws the room of the most recent word first", () => {
@@ -451,7 +452,7 @@ describe("unseatedBots", () => {
 			{
 				id: "b-2",
 				name: "Sous-chef",
-				blot: "cyan",
+				blot: 186,
 				image: undefined,
 			},
 		])

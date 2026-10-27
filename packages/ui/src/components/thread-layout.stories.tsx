@@ -5,6 +5,7 @@ import preview from "@workspace/storybook/preview"
 import { probedStyleOf, slotIn } from "@workspace/storybook/story-utils"
 import { AppHeader } from "@workspace/ui/components/app-header"
 import { ChatEmptyState } from "@workspace/ui/components/chat-empty-state"
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import type { ConnectionStatusState } from "@workspace/ui/components/connection-status"
 import { HeaderIdentityButton } from "@workspace/ui/components/header-identity-button"
 import { Notice } from "@workspace/ui/components/notice"
@@ -29,7 +30,7 @@ const ANSWER =
 const BOT: RosterBot = {
 	id: "bot-skippy",
 	name: "Skippy",
-	blot: "blue",
+	blot: BLOT_HUES.blue,
 }
 
 const LONG_TRANSCRIPT = [

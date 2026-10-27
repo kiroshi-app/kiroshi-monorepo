@@ -14,10 +14,7 @@ import { createElement } from "react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { AppRail } from "@workspace/ui/components/app-rail"
-import {
-	BLOT_HUES,
-	type BotAvatarBlot,
-} from "@workspace/ui/components/companion-colour"
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { appSidebarRailOf, useWorkspaceRail } from "@/components/workspace-rail"
@@ -197,7 +194,7 @@ describe.each(SETTINGS_RAILS)(
 				createElement(RailHarness, { selectedSpaceId: HOME.id, railSettings }),
 			)
 
-			expect(railLogoTint()).toBe("red")
+			expect(railLogoTint()).toBe(String(BLOT_HUES.red))
 		})
 
 		it("wears the host colour of the joined Space that is open", () => {
@@ -208,14 +205,14 @@ describe.each(SETTINGS_RAILS)(
 				}),
 			)
 
-			expect(railLogoTint()).toBe("purple")
+			expect(railLogoTint()).toBe(String(BLOT_HUES.purple))
 		})
 
 		it("repaints its logo when another Space is selected", () => {
 			const { rerender } = render(
 				createElement(RailHarness, { selectedSpaceId: HOME.id, railSettings }),
 			)
-			expect(railLogoTint()).toBe("red")
+			expect(railLogoTint()).toBe(String(BLOT_HUES.red))
 
 			rerender(
 				createElement(RailHarness, {
@@ -224,7 +221,7 @@ describe.each(SETTINGS_RAILS)(
 				}),
 			)
 
-			expect(railLogoTint()).toBe("blue")
+			expect(railLogoTint()).toBe(String(BLOT_HUES.blue))
 		})
 	},
 )
@@ -233,7 +230,7 @@ describe("the rail on a settings screen", () => {
 	it("falls back to the first Space when none matches the selection", () => {
 		render(createElement(RailHarness, { selectedSpaceId: "gone" }))
 
-		expect(railLogoTint()).toBe("red")
+		expect(railLogoTint()).toBe(String(BLOT_HUES.red))
 	})
 
 	it("draws the open Space in the host state the switcher reads", () => {
@@ -422,16 +419,21 @@ type OpenSpace = {
 	label: string
 	joined: JoinedSpace | null
 	rowId: string
-	colour: BotAvatarBlot
+	colour: string
 }
 
 const OPEN_SPACES: OpenSpace[] = [
-	{ label: "an owned", joined: null, rowId: PERSONAL_SPACE_ID, colour: "red" },
+	{
+		label: "an owned",
+		joined: null,
+		rowId: PERSONAL_SPACE_ID,
+		colour: String(BLOT_HUES.red),
+	},
 	{
 		label: "a joined",
 		joined: HOST_OF_PERSONAL,
 		rowId: joinedRowIdOf(HOST_OF_PERSONAL.id),
-		colour: "purple",
+		colour: String(BLOT_HUES.purple),
 	},
 ]
 
@@ -508,13 +510,13 @@ describe.each(OPEN_SPACES)(
 			"keeps the shell tint of / on $path",
 			async ({ path, open }) => {
 				const { router, companionId } = await mountAppAtConversations(joined)
-				expect(shellTint()).toBe(String(BLOT_HUES[colour]))
+				expect(shellTint()).toBe(colour)
 
 				await act(() => open(router, { spaceRowId: rowId, companionId }))
 				await settle()
 
 				expect(router.state.matches.at(-1)?.routeId).toBe(path)
-				expect(shellTint()).toBe(String(BLOT_HUES[colour]))
+				expect(shellTint()).toBe(colour)
 			},
 		)
 	},

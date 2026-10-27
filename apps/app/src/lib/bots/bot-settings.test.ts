@@ -49,7 +49,7 @@ describe("toSettingsValue", () => {
 				}),
 			),
 		).toEqual({
-			identity: { blot: "green", image: undefined },
+			identity: { blot: 132, image: undefined },
 			name: "Nyx",
 			title: "Reviewer",
 			instructions: "Answer briefly.",
@@ -64,9 +64,7 @@ describe("toSettingsValue", () => {
 	})
 
 	it("reads a companion nobody marked as wearing no blot", () => {
-		expect(
-			toSettingsValue(bot({ avatarBlot: null })).identity.blot,
-		).toBeUndefined()
+		expect(toSettingsValue(bot({ avatarBlot: null })).identity.blot).toBeNull()
 	})
 })
 
@@ -114,7 +112,7 @@ describe("changesRuntime", () => {
 		expect(
 			changesRuntime(stored, {
 				...value,
-				identity: { blot: "blue" },
+				identity: { blot: 257 },
 			}),
 		).toBe(false)
 	})
@@ -133,7 +131,7 @@ describe("toIdentity", () => {
 		const value = toSettingsValue(stored)
 
 		expect(
-			toIdentity({ ...value, identity: { blot: "yellow" } }, stored),
+			toIdentity({ ...value, identity: { blot: 82 } }, stored),
 		).toMatchObject({
 			avatarBlot: 82,
 			avatarImagePath: null,
@@ -385,7 +383,7 @@ describe("toRosterBots", () => {
 			id: "b-1",
 			name: "Atlas",
 			title: "Research",
-			blot: "green",
+			blot: 132,
 			sectionId: "n-1",
 			pinPosition: 2,
 		})
@@ -484,7 +482,7 @@ describe("toRosterBots", () => {
 			NOW,
 		)
 
-		expect(bare.blot).toBeUndefined()
+		expect(bare.blot).toBeNull()
 	})
 
 	it("puts the companion that spoke last above the one that spoke earlier", () => {

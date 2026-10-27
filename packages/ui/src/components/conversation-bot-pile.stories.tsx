@@ -6,15 +6,16 @@ import {
 	slotIn,
 	slotsIn,
 } from "@workspace/storybook/story-utils"
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { ConversationBotPile } from "@workspace/ui/components/conversation-bot-pile"
 import type { GlazeTheme } from "@workspace/ui/components/glaze-border"
 
 const BOTS = [
-	{ id: "atlas", name: "Atlas", blot: "blue" },
-	{ id: "beacon", name: "Beacon", blot: "yellow" },
-	{ id: "cinder", name: "Cinder", blot: "red" },
-	{ id: "dune", name: "Dune", blot: "green" },
-	{ id: "ember", name: "Ember", blot: "pink" },
+	{ id: "atlas", name: "Atlas", blot: BLOT_HUES.blue },
+	{ id: "beacon", name: "Beacon", blot: BLOT_HUES.yellow },
+	{ id: "cinder", name: "Cinder", blot: BLOT_HUES.red },
+	{ id: "dune", name: "Dune", blot: BLOT_HUES.green },
+	{ id: "ember", name: "Ember", blot: BLOT_HUES.pink },
 ] as const
 
 const meta = preview.meta({

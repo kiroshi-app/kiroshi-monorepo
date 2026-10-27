@@ -6,7 +6,6 @@ import { useTranslation } from "react-i18next"
 import { BotTitleBadge } from "@workspace/ui/components/bot-badge"
 import type { BotMcpConnectionState } from "@workspace/ui/components/bot-settings"
 import { MCP_CONNECTION_DOT } from "@workspace/ui/components/bot-settings-dialog/mcp-connection"
-import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
 import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import {
 	type FillIconName,
@@ -410,7 +409,7 @@ const SettingsMenuAddSpace = ({ onAdd }: SettingsMenuAddSpaceProps) => {
 type SettingsMenuSpaceProps = {
 	spaceId: string
 	name: string
-	colour?: BotAvatarBlot | null
+	colour?: number | null
 	host?: SpaceHost
 	isCurrent?: boolean
 	isInvitation?: boolean

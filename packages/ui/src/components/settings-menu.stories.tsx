@@ -11,6 +11,7 @@ import {
 } from "@workspace/storybook/story-utils"
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
 import type { BotMcpConnectionState } from "@workspace/ui/components/bot-settings"
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { InitialsAvatar } from "@workspace/ui/components/initials-avatar"
 import { MARKED_APPLICATIONS } from "@workspace/ui/components/plugin-settings/applications.fixtures"
 import {
@@ -89,7 +90,7 @@ const meta = preview.meta({
 	args: {
 		avatar: (
 			<SpaceAvatar
-				colour="blue"
+				colour={BLOT_HUES.blue}
 				size={36}
 				spaceId="release-desk"
 				state="online"
@@ -182,7 +183,9 @@ const MODIFIER_PRESSES = {
 export const OpensWithClickModifiers = meta.story({
 	tags: ["test-only"],
 	args: {
-		avatar: <SpaceAvatar colour="orange" size={36} spaceId="studio" />,
+		avatar: (
+			<SpaceAvatar colour={BLOT_HUES.orange} size={36} spaceId="studio" />
+		),
 		name: "Ada Martin",
 		subtitle: "User settings",
 		footer: undefined,
@@ -198,7 +201,7 @@ export const OpensWithClickModifiers = meta.story({
 				</SettingsMenuSection>
 				<SettingsMenuSection title="Spaces">
 					<SettingsMenuSpace
-						colour="orange"
+						colour={BLOT_HUES.orange}
 						host="up"
 						name="Studio"
 						onOpen={MODIFIER_PRESSES.onOpenStudio}
@@ -252,7 +255,9 @@ const titleRowOf = (menu: HTMLElement, title: string) =>
 
 export const SpaceSections = meta.story({
 	args: {
-		avatar: <SpaceAvatar colour="orange" size={36} spaceId="studio" />,
+		avatar: (
+			<SpaceAvatar colour={BLOT_HUES.orange} size={36} spaceId="studio" />
+		),
 		name: "Ada Martin",
 		subtitle: "User settings",
 		footer: undefined,
@@ -271,7 +276,7 @@ export const SpaceSections = meta.story({
 					title="Spaces"
 				>
 					<SettingsMenuSpace
-						colour="orange"
+						colour={BLOT_HUES.orange}
 						host="up"
 						isCurrent
 						name={`Studio ${LONG_NAME}`}
@@ -279,14 +284,14 @@ export const SpaceSections = meta.story({
 						spaceId="studio"
 					/>
 					<SettingsMenuSpace
-						colour="blue"
+						colour={BLOT_HUES.blue}
 						hasAttention
 						name={LONG_NAME}
 						onOpen={SPACE_PRESSES.onOpenNorthwind}
 						spaceId="northwind"
 					/>
 					<SettingsMenuSpace
-						colour="green"
+						colour={BLOT_HUES.green}
 						isInvitation
 						name={LONG_NAME}
 						onOpen={fn()}
@@ -402,6 +407,48 @@ const expectCompanionsCount = async (canvasElement: HTMLElement) => {
 		heightOf(within(menu).getByRole("button", { name: "Space" })),
 	)
 }
+
+export const FreeHue = meta.story({
+	args: {
+		avatar: <SpaceAvatar colour={210} size={36} spaceId="studio" />,
+		name: "Studio",
+		children: (
+			<SettingsMenuSection title="Spaces">
+				<SettingsMenuSpace
+					colour={210}
+					isCurrent
+					name="Studio"
+					onOpen={fn()}
+					spaceId="studio"
+				/>
+			</SettingsMenuSection>
+		),
+	},
+	render: (args) => (
+		<SidebarProvider>
+			<Frame>
+				<SettingsMenu {...args} />
+			</Frame>
+		</SidebarProvider>
+	),
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"A space at a hue outside the eight presets, 210, heading the menu and listed in it. Check that both marks wear that hue rather than the nearest preset. Pick `SpaceSections` for preset hues.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const avatars = slotsIn(canvasElement, "space-avatar")
+
+		await expect(avatars.map((avatar) => avatar.dataset.colour)).toEqual([
+			"210",
+			"210",
+		])
+	},
+})
 
 export const CompanionsCount = meta.story({
 	args: { children: spaceEntries("Space") },
@@ -684,7 +731,7 @@ export const ConnectingSpaceDark = meta.story({
 	args: {
 		avatar: (
 			<SpaceAvatar
-				colour="pink"
+				colour={BLOT_HUES.pink}
 				size={36}
 				spaceId="release-desk"
 				state="connecting"
@@ -714,7 +761,7 @@ const HEADER_MENUS = [
 		isCompanionPage: false,
 		avatar: (
 			<SpaceAvatar
-				colour="blue"
+				colour={BLOT_HUES.blue}
 				size={36}
 				spaceId="release-desk"
 				state="online"

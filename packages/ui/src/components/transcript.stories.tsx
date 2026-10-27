@@ -10,6 +10,7 @@ import {
 	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
 import { ActivityIndicator } from "@workspace/ui/components/activity-indicator"
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { DaySeparator } from "@workspace/ui/components/day-separator"
 import { MarkProvider } from "@workspace/ui/components/mark-context"
 import type { RosterBot } from "@workspace/ui/components/roster"
@@ -1030,7 +1031,11 @@ export const JoinsConsecutiveRuns = meta.story({
 	},
 })
 
-const AT_REST_BOT: RosterBot = { id: "bot-lyra", name: "Lyra", blot: "purple" }
+const AT_REST_BOT: RosterBot = {
+	id: "bot-lyra",
+	name: "Lyra",
+	blot: BLOT_HUES.purple,
+}
 
 type AtRestStage = "answered" | "sent" | "replied"
 

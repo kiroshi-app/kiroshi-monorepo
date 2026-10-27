@@ -22,6 +22,7 @@ import {
 	STUDIO,
 	TITLE_BAR,
 } from "@workspace/ui/components/app-title-bar.fixtures"
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import {
 	endNotice,
 	NoticeSurface,
@@ -184,7 +185,7 @@ const spaceRowOf = (menu: HTMLElement, name: string) =>
 const NORTHWIND = {
 	id: "northwind",
 	name: "Northwind",
-	colour: "green",
+	colour: BLOT_HUES.green,
 	avatarSeed: "northwind",
 	hasAttention: true,
 } satisfies UserSpace
@@ -192,11 +193,11 @@ const NORTHWIND = {
 const SPACES_ARGS = {
 	entry: "",
 	ownedSpaces: [
-		{ ...STUDIO, colour: "blue", host: "shared" },
+		{ ...STUDIO, colour: BLOT_HUES.blue, host: "shared" },
 		{
 			id: "field-notes",
 			name: "Field notes",
-			colour: "purple",
+			colour: BLOT_HUES.purple,
 			avatarSeed: "field-notes",
 		},
 	],
@@ -205,7 +206,7 @@ const SPACES_ARGS = {
 		{
 			id: "harbor",
 			name: "Harbor",
-			colour: "orange",
+			colour: BLOT_HUES.orange,
 			avatarSeed: "harbor",
 			host: "down",
 		},
@@ -268,7 +269,7 @@ const expectSpaceRows = async (menu: HTMLElement, names: string[]) => {
 	].filter((space) => names.includes(space.name))) {
 		await expect(
 			slotIn(spaceRowOf(menu, name), "space-avatar").dataset.colour,
-		).toBe(colour)
+		).toBe(colour == null ? undefined : String(colour))
 	}
 }
 
@@ -443,26 +444,26 @@ export const SpacesDark = meta.story({
 
 const HOST_STATES_ARGS = {
 	...SPACES_ARGS,
-	ownedSpaces: [{ ...STUDIO, colour: "blue", host: "shared" }],
+	ownedSpaces: [{ ...STUDIO, colour: BLOT_HUES.blue, host: "shared" }],
 	joinedSpaces: [
 		{
 			id: "vocca",
 			name: "Vocca",
-			colour: "green",
+			colour: BLOT_HUES.green,
 			avatarSeed: "vocca",
 			host: "up",
 		},
 		{
 			id: "archives",
 			name: "Archives",
-			colour: "purple",
+			colour: BLOT_HUES.purple,
 			avatarSeed: "archives",
 			host: "connecting",
 		},
 		{
 			id: "harbor",
 			name: "Harbor",
-			colour: "orange",
+			colour: BLOT_HUES.orange,
 			avatarSeed: "harbor",
 			host: "down",
 		},

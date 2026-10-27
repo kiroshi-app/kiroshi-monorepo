@@ -16,10 +16,11 @@ import {
 	type BotIdentityFieldsProps,
 } from "@workspace/ui/components/bot-identity-fields"
 import type { BotIdentity } from "@workspace/ui/components/bot-settings"
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 
 const BOT_ID = "bot-7"
 
-const IDENTITY: BotIdentity = { blot: "blue" }
+const IDENTITY: BotIdentity = { blot: BLOT_HUES.blue }
 
 const FieldsHost = (props: BotIdentityFieldsProps) => {
 	const [identity, setIdentity] = useState(props.identity)
@@ -230,7 +231,7 @@ export const RemovesThePicture = meta.story({
 		)
 
 		await expect(args.onIdentityChange).toHaveBeenCalledWith({
-			blot: "blue",
+			blot: BLOT_HUES.blue,
 		})
 		await expect(field.querySelector("img")).toBeNull()
 		await expect(companionGlyphOf(field)).toHaveAttribute("aria-label", "Atlas")

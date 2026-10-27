@@ -17,6 +17,7 @@ branding-botidentityavatar--broken-image-working-badged
 branding-botidentityavatar--every-badge
 branding-botidentityavatar--every-size
 branding-botidentityavatar--every-tint
+branding-botidentityavatar--free-hue
 branding-botidentityavatar--honeycomb-idle
 branding-botidentityavatar--honeycomb-working
 branding-botidentityavatar--no-chosen-colour
@@ -37,9 +38,11 @@ branding-ditheredfieldavatar--one-screen-for-every-companion
 branding-ditheredfieldavatar--without-ground
 branding-outlinedhexagon--filled-with-the-glaze-border
 branding-outlinedhexagon--filled-with-the-glaze-border-dark
+branding-spaceavatar--free-hue
 branding-spaceavatar--sizes
 branding-spaceavatar--states
 branding-spacetint--default
+branding-spacetint--free-hue
 branding-spacetint--untinted
 branding-spacetint--variants
 conversation-markdown-codeblock--copy
@@ -125,7 +128,9 @@ conversation-markdown-markdowntable--wider-than-the-block
 conversation-markdown-markdowntaskcheckbox--default
 conversation-markdown-markdowntaskcheckbox--read-only
 conversation-message-chatemptystate--centred-in-its-frame
+conversation-message-chatemptystate--free-hue
 conversation-message-chatemptystate--not-connected
+conversation-message-chatemptystate--preset-hue
 conversation-message-chatemptystate--unavailable
 conversation-message-chatemptystate--unnamed
 conversation-message-chatemptystate--with-picture
@@ -141,6 +146,7 @@ conversation-message-conversationemptystate--empty-with-long-suggestion-name
 conversation-message-conversationemptystate--empty-with-suggestions
 conversation-message-conversationemptystate--empty-with-suggestions-focused
 conversation-message-conversationemptystate--empty-with-suggestions-narrow
+conversation-message-conversationemptystate--free-hue
 conversation-message-conversationemptystate--in-space
 conversation-message-conversationemptystate--long-content
 conversation-message-conversationemptystate--single-bot
@@ -612,6 +618,7 @@ conversation-tools-toolquestion--waiting-bar-narrow
 feedback-activityindicator--blot
 feedback-activityindicator--conversation-change
 feedback-activityindicator--default
+feedback-activityindicator--free-hue
 feedback-activityindicator--held-clock
 feedback-activityindicator--in-wave
 feedback-activityindicator--long-content
@@ -835,6 +842,7 @@ layout-workspaceshell--default
 layout-workspaceshell--empty
 layout-workspaceshell--four-companions-in-cold-space-dark
 layout-workspaceshell--four-companions-in-warm-space-dark
+layout-workspaceshell--free-hue
 layout-workspaceshell--not-a-landmark
 layout-workspaceshell--not-resizable
 layout-workspaceshell--resize-by-keyboard
@@ -918,6 +926,7 @@ navigation-appsidebar--empty-panels
 navigation-appsidebar--empty-section
 navigation-appsidebar--five-spaces
 navigation-appsidebar--footer
+navigation-appsidebar--free-hue
 navigation-appsidebar--full-row-menu
 navigation-appsidebar--identities
 navigation-appsidebar--live-space-selection
@@ -1116,6 +1125,7 @@ navigation-conversationsubjecticon--blue
 navigation-conversationsubjecticon--border-at-every-size
 navigation-conversationsubjecticon--border-at-every-size-dark
 navigation-conversationsubjecticon--cyan
+navigation-conversationsubjecticon--free-hue
 navigation-conversationsubjecticon--green
 navigation-conversationsubjecticon--no-colour
 navigation-conversationsubjecticon--orange
@@ -1137,8 +1147,10 @@ navigation-headerconversationbutton--themes-group-red
 navigation-headerconversationbutton--themes-solo
 navigation-headeridentitybutton--default
 navigation-headeridentitybutton--expanded
+navigation-headeridentitybutton--free-hue
 navigation-headeridentitybutton--in-layout
 navigation-headeridentitybutton--long-content
+navigation-headeridentitybutton--preset-hue
 navigation-headeridentitybutton--variants
 navigation-headeridentitybutton--working
 navigation-missionspanel--complete
@@ -1186,6 +1198,7 @@ navigation-settingsmenu--connecting-space-dark
 navigation-settingsmenu--danger-selected
 navigation-settingsmenu--danger-selected-dark
 navigation-settingsmenu--default
+navigation-settingsmenu--free-hue
 navigation-settingsmenu--header-alignment
 navigation-settingsmenu--opens-with-click-modifiers
 navigation-settingsmenu--space-sections
@@ -1237,6 +1250,7 @@ navigation-spaceswitcher--colourless
 navigation-spaceswitcher--default
 navigation-spaceswitcher--drag-dot-nowhere
 navigation-spaceswitcher--drag-dot-to-place
+navigation-spaceswitcher--free-hue
 navigation-spaceswitcher--hosted-long-names
 navigation-spaceswitcher--invitation-at-rest
 navigation-spaceswitcher--invitation-expired
@@ -1348,6 +1362,7 @@ overlays-noticesurface--move-to-new-window-failed-dark
 overlays-noticesurface--question-run-failed
 overlays-noticesurface--reduced-motion
 overlays-noticesurface--removed-with-space-mark
+overlays-noticesurface--removed-with-space-mark-at-free-hue
 overlays-noticesurface--repeated-failure
 overlays-noticesurface--report-copied
 overlays-noticesurface--report-copy-rejected
@@ -1480,6 +1495,7 @@ settings-bot-botsettingsdialog--closing-over-an-unsaved-skill
 settings-bot-botsettingsdialog--danger-zone
 settings-bot-botsettingsdialog--default
 settings-bot-botsettingsdialog--empty
+settings-bot-botsettingsdialog--free-hue
 settings-bot-botsettingsdialog--history
 settings-bot-botsettingsdialog--history-change
 settings-bot-botsettingsdialog--instructions
@@ -1495,6 +1511,7 @@ settings-bot-botsettingsdialog--with-skill-open
 settings-bot-botsettingsdialog--without-history
 settings-bot-botsettingsdialog--working
 settings-bot-companionsettingsscreen--appearance
+settings-bot-companionsettingsscreen--appearance-at-free-hue
 settings-bot-companionsettingsscreen--applications
 settings-bot-companionsettingsscreen--approvals
 settings-bot-companionsettingsscreen--back-to-companions
@@ -1748,6 +1765,7 @@ settings-settingsdialogshell--rail-icons-only
 settings-settingsdialogshell--skill-page-wording
 settings-settingsdialogshell--without-session-closes-unasked
 settings-space-companionssection--four-companions
+settings-space-companionssection--free-hue
 settings-space-companionssection--hovered-card
 settings-space-companionssection--keyboard-focus
 settings-space-companionssection--long-name-and-title
@@ -1781,6 +1799,7 @@ settings-space-settingsscreen--linear-application
 settings-space-settingsscreen--long-name
 settings-space-settingsscreen--maximum-width
 settings-space-settingsscreen--members
+settings-space-settingsscreen--members-at-free-hue
 settings-space-settingsscreen--members-dark
 settings-space-settingsscreen--members-tinted
 settings-space-settingsscreen--minimum-width
@@ -1800,6 +1819,7 @@ settings-space-spacesettingsdialog--danger
 settings-space-spacesettingsdialog--default
 settings-space-spacesettingsdialog--environment
 settings-space-spacesettingsdialog--environment-loading
+settings-space-spacesettingsdialog--free-hue
 settings-space-spacesettingsdialog--history
 settings-space-spacesettingsdialog--joined-danger
 settings-space-spacesettingsdialog--joined-space

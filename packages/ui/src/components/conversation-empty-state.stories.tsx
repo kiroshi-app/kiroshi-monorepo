@@ -19,17 +19,17 @@ import { schemeOf } from "@workspace/ui/hooks/use-color-scheme"
 const KEEPER: RosterBot = {
 	id: "bot_4f8c21",
 	name: "Nest Keeper",
-	blot: "blue",
+	blot: BLOT_HUES.blue,
 }
 const SCOUT: RosterBot = {
 	id: "bot_9a2b40",
 	name: "Twig Scout",
-	blot: "orange",
+	blot: BLOT_HUES.orange,
 }
 const WARDEN: RosterBot = {
 	id: "bot_1c7d55",
 	name: "Shell Warden",
-	blot: "green",
+	blot: BLOT_HUES.green,
 }
 
 const SEATED = [KEEPER, SCOUT, WARDEN]
@@ -114,8 +114,8 @@ const SUGGESTED: RosterBot[] = [
 	KEEPER,
 	SCOUT,
 	WARDEN,
-	{ id: "bot_7e3f18", name: "Moss Reader", blot: "purple" },
-	{ id: "bot_2b9a06", name: "Pebble Clerk", blot: "pink" },
+	{ id: "bot_7e3f18", name: "Moss Reader", blot: BLOT_HUES.purple },
+	{ id: "bot_2b9a06", name: "Pebble Clerk", blot: BLOT_HUES.pink },
 ]
 
 const NOBODY_SEATED_WITH_SUGGESTIONS = {
@@ -132,7 +132,7 @@ const NOBODY_DESCRIPTION =
 const LONG_NAMED_SUGGESTION: RosterBot = {
 	id: "bot_6a0c58",
 	name: "Keeper of the Lighthouse at the Far End of the Northern Harbour Wall",
-	blot: "purple",
+	blot: BLOT_HUES.purple,
 }
 
 const PRESS_HEIGHT = 32
@@ -171,7 +171,7 @@ const hexOfComputed = (colour: string) =>
 		.join("")}`
 
 export const InSpace = meta.story({
-	args: { spaceName: "Northwind", spaceTint: "green" },
+	args: { spaceName: "Northwind", spaceTint: BLOT_HUES.green },
 	globals: { theme_layout: "side-by-side" },
 	parameters: {
 		docs: {
@@ -345,9 +345,9 @@ export const LongContent = meta.story({
 			"Ship the December release, then plan the January retrospective with everyone involved",
 		bots: [
 			...SEATED,
-			{ id: "bot_7e3f18", name: "Moss Reader", blot: "purple" },
-			{ id: "bot_2b9a06", name: "Pebble Clerk", blot: "pink" },
-			{ id: "bot_8d4c73", name: "Fern Guide", blot: "cyan" },
+			{ id: "bot_7e3f18", name: "Moss Reader", blot: BLOT_HUES.purple },
+			{ id: "bot_2b9a06", name: "Pebble Clerk", blot: BLOT_HUES.pink },
+			{ id: "bot_8d4c73", name: "Fern Guide", blot: BLOT_HUES.cyan },
 		],
 	},
 	parameters: {
@@ -398,7 +398,7 @@ export const ThemesGroup = meta.story({
 
 export const ThemesGroupRed = meta.story({
 	globals: { theme_layout: "side-by-side" },
-	args: { color: "red", icon: "ShieldKey" },
+	args: { color: BLOT_HUES.red, icon: "ShieldKey" },
 	parameters: {
 		docs: {
 			description: {
@@ -413,4 +413,31 @@ export const ThemesGroupRed = meta.story({
 			BLOT_HUES.red,
 			THEMES_MARK_SIZE,
 		),
+})
+
+export const FreeHue = meta.story({
+	globals: { theme_layout: "side-by-side" },
+	args: {
+		color: 210,
+		icon: "ShieldKey",
+		spaceName: "Northwind",
+		spaceTint: 210,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A room coloured at a hue outside the eight presets, 210, in a Space at that hue, light beside dark. Check that the subject icon and the Space chip both wear 210 rather than the nearest preset. Pick `ThemesGroupRed` and `InSpace` for preset hues.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expectSubjectIconInBothThemes(canvasElement, 210, THEMES_MARK_SIZE)
+		for (const line of slotsIn(canvasElement, "conversation-empty-space")) {
+			const chip = slotIn(line, "space-tint")
+			await expect(hexOfComputed(getComputedStyle(chip).backgroundColor)).toBe(
+				hueTone(210, schemeOf(chip), "bubble").hex,
+			)
+		}
+	},
 })

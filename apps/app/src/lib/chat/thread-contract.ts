@@ -11,7 +11,6 @@ import type { WorkingState } from "./working-kind"
 
 import { avatarSrc } from "../host"
 import type { PermissionRequest, QuestionRequest } from "../agent/contract"
-import { presetOfHue } from "../colour/hue-shim"
 import type {
 	ConversationController,
 	ConversationState,
@@ -75,7 +74,7 @@ export const faceOfBot = (bot: Bot): ThreadFace => ({
 	id: bot.id,
 	name: bot.name,
 	title: bot.title || undefined,
-	blot: bot.avatarBlot === null ? undefined : presetOfHue(bot.avatarBlot),
+	blot: bot.avatarBlot,
 	image: avatarSrc(bot.avatarImagePath),
 })
 

@@ -105,7 +105,7 @@ describe("createSpacesController", () => {
 		const store = createFakeTranscriptStore()
 		const controller = await loaded(store)
 
-		controller.describe("personal", { name: "Vocca", colour: "cyan" })
+		controller.describe("personal", { name: "Vocca", colour: 186 })
 
 		expect(controller.getState().spaces[0]).toMatchObject({
 			name: "Vocca",
@@ -124,7 +124,7 @@ describe("createSpacesController", () => {
 		await store.updateSpace("personal", "Perso", 210)
 		const controller = await loaded(store)
 
-		controller.describe("personal", { name: "Vocca", colour: "cyan" })
+		controller.describe("personal", { name: "Vocca", colour: 210 })
 
 		expect(controller.getState().spaces[0]).toMatchObject({
 			name: "Vocca",
@@ -144,7 +144,7 @@ describe("createSpacesController", () => {
 		await store.updateSpace("personal", "Perso", 210)
 		const controller = await loaded(store)
 
-		controller.describe("personal", { name: "Perso", colour: "blue" })
+		controller.describe("personal", { name: "Perso", colour: 257 })
 
 		await vi.waitFor(async () =>
 			expect((await store.spaces())[0].colour).toBe(257),

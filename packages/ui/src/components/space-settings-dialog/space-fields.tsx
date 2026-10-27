@@ -3,7 +3,6 @@
 import { useTranslation } from "react-i18next"
 
 import { ColourField } from "@workspace/ui/components/colour-field"
-import { blotOf } from "@workspace/ui/components/companion-colour"
 import { hueStyle } from "@workspace/ui/components/hue-palette"
 import { Icons } from "@workspace/ui/components/icons"
 import { SettingsField } from "@workspace/ui/components/settings-field"
@@ -74,7 +73,7 @@ const SpaceFields = ({ value, onValueChange, className }: SpaceFieldsProps) => {
 
 			<ColourField
 				hint={t("space.colour.hint")}
-				mark={(hue) => <SpaceTint className="size-6" tint={blotOf(hue)} />}
+				mark={(hue) => <SpaceTint className="size-6" tint={hue} />}
 				onValueChange={(hue) => onValueChange({ ...value, hue })}
 				preview={(hue) => <SpacePreview hue={hue} />}
 				value={value.hue}

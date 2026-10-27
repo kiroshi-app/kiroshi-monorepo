@@ -247,7 +247,7 @@ const RowDensity = ({
 				isWorking={isWorking}
 				media={
 					<BotIdentityAvatar
-						blot={identity.blot}
+						hue={identity.blot}
 						image={identity.image}
 						kind="working"
 						name={identity.name}

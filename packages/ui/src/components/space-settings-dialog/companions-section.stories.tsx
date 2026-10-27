@@ -2,6 +2,8 @@ import { expect, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
+	companionGlyphs,
+	companionHueOf,
 	isInBrowserRunner,
 	slotIn,
 	slotsIn,
@@ -201,6 +203,24 @@ export const OneCompanion = meta.story({
 
 		await expect(cards).toHaveLength(1)
 		await expect(cards[0].getBoundingClientRect().width).toBe(CARD_WIDTH)
+	},
+})
+
+export const FreeHue = meta.story({
+	args: { companions: [{ ...JUNIPER, blot: 210 }] },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A companion at a hue outside the eight presets, 210. Check that its card avatar wears 210 rather than the nearest preset. Pick `OneCompanion` for a preset hue.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const [card] = cardsIn(canvasElement)
+		if (!card) throw new Error("The companion card is missing")
+
+		await expect(companionGlyphs(card).map(companionHueOf)).toEqual([210])
 	},
 })
 

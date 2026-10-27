@@ -58,8 +58,8 @@ const COUNTER_TEXT = "font-bold tabular-nums"
 
 type ConversationParticipant = Pick<
 	BotIdentityAvatarProps,
-	"name" | "blot" | "image" | "working" | "kind"
-> & { id: string; isPerson?: boolean }
+	"name" | "image" | "working" | "kind"
+> & { id: string; isPerson?: boolean; blot?: number | null }
 
 type PileBot = Omit<ConversationParticipant, "isPerson">
 
@@ -139,7 +139,7 @@ const ConversationBotPile = ({
 					style={slotStyleOf(index)}
 				>
 					<BotIdentityAvatar
-						blot={bot.blot}
+						hue={bot.blot}
 						image={bot.image}
 						kind={bot.kind}
 						name={bot.name}

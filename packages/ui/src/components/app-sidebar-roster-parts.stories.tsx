@@ -117,7 +117,7 @@ export const ThemesLiftedGroupRed = meta.story({
 	globals: { theme_layout: "side-by-side" },
 	render: () => (
 		<LiftedConversationAtPointer
-			conversation={{ ...DESK_ROOM, color: "red", icon: "ShieldKey" }}
+			conversation={{ ...DESK_ROOM, color: BLOT_HUES.red, icon: "ShieldKey" }}
 		/>
 	),
 	play: async ({ canvasElement }) => {

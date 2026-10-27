@@ -86,7 +86,7 @@ const ConversationRosterRow = ({
 						isWorking={Boolean(workingBotOf(conversation))}
 						media={
 							<ConversationSubjectIcon
-								color={conversation.color}
+								hue={conversation.color}
 								icon={conversation.icon}
 							/>
 						}

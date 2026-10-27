@@ -20,7 +20,6 @@ import { joinedHosts } from "../host"
 import { createQueue } from "../queue"
 import { createStore } from "../store"
 import { createWriteLoop } from "../write-loop"
-import { hueAfterPick } from "../colour/hue-shim"
 import type { Space, SpaceError } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
 import type { JoinedHosts } from "../host/joined-hosts"
@@ -326,7 +325,7 @@ export const createSpacesController = (
 			}
 			const description: SpaceDescription = {
 				name: value.name,
-				colour: hueAfterPick(value.colour, held.colour),
+				colour: value.colour ?? null,
 			}
 			apply({ ...held, ...description })
 			writes.push(id, description)

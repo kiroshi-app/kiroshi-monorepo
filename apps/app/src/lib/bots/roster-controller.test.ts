@@ -375,7 +375,7 @@ describe("createRosterController", () => {
 				title: "Reviewer",
 				instructions: "Answer briefly.",
 				model: "haiku",
-				identity: { blot: "blue" },
+				identity: { blot: 257 },
 			}),
 		)
 		expect(held(controller, id).name).toBe("Nyx")
@@ -473,7 +473,7 @@ describe("createRosterController", () => {
 		const value = toSettingsValue(held(controller, "default"))
 		controller.describe("default", {
 			...value,
-			identity: { blot: "yellow" },
+			identity: { blot: 82 },
 		})
 		await vi.waitFor(async () =>
 			expect((await reloaded(store)).bots[0].avatarImagePath).toBeNull(),
@@ -1513,7 +1513,7 @@ describe("createRosterController on conversations", () => {
 			"default",
 			edited(value, {
 				name: "Nyx",
-				identity: { blot: "blue" },
+				identity: { blot: 257 },
 			}),
 		)
 

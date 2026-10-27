@@ -99,7 +99,7 @@ const PromptMentionMenu = ({
 					className={cn("flex shrink-0", bot.isOutside && "opacity-70")}
 				>
 					<BotIdentityAvatar
-						blot={bot.blot}
+						hue={bot.blot}
 						image={bot.image}
 						name={bot.name}
 						seed={bot.id}

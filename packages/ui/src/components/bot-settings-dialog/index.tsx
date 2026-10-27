@@ -21,11 +21,6 @@ import { BotInstructionsFields } from "@workspace/ui/components/bot-settings-dia
 import { PermissionsPanel } from "@workspace/ui/components/bot-settings-dialog/permissions-panel"
 import { RuntimeFields } from "@workspace/ui/components/bot-settings-dialog/runtime-fields"
 import {
-	blotOf,
-	hueOf,
-	isFreeHue,
-} from "@workspace/ui/components/companion-colour"
-import {
 	type EnvironmentEntry,
 	EnvironmentPanel,
 	type EnvironmentWrite,
@@ -113,10 +108,7 @@ const BotSettingsDialog = ({
 	const patch = (fields: Partial<BotSettingsValue>) =>
 		onValueChange({ ...value, ...fields })
 
-	const recolour = (hue: number | null) => {
-		if (isFreeHue(hue)) return
-		patch({ identity: { blot: blotOf(hue) } })
-	}
+	const recolour = (hue: number | null) => patch({ identity: { blot: hue } })
 
 	return (
 		<SettingsDialogShell
@@ -124,7 +116,7 @@ const BotSettingsDialog = ({
 			className={className}
 			mark={
 				<BotIdentityAvatar
-					blot={value.identity.blot}
+					hue={value.identity.blot}
 					image={value.identity.image}
 					kind={workingKind}
 					name={botName}
@@ -214,7 +206,7 @@ const BotSettingsDialog = ({
 
 			<SettingsScrollingPanel value="appearance">
 				<BotIdentityFields
-					hue={hueOf(value.identity.blot) ?? null}
+					hue={value.identity.blot ?? null}
 					identity={value.identity}
 					name={botName}
 					onAvatarUpload={onAvatarUpload}

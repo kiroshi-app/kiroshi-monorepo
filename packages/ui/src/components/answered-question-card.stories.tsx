@@ -13,6 +13,7 @@ import {
 	type AnsweredQuestionAuthor,
 	AnsweredQuestionCard,
 } from "@workspace/ui/components/answered-question-card"
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import type { RosterBot } from "@workspace/ui/components/roster"
 import { AssistantTurn, TurnGroup } from "@workspace/ui/components/turn"
 import { cn } from "@workspace/ui/lib/utils"
@@ -20,7 +21,7 @@ import { cn } from "@workspace/ui/lib/utils"
 const COMPANION: RosterBot = {
 	id: "bot-atlas",
 	name: "Atlas",
-	blot: "blue",
+	blot: BLOT_HUES.blue,
 }
 
 const VIEWER: AnsweredQuestionAuthor = { name: "Sam", isViewer: true }

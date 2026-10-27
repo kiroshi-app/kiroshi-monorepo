@@ -1,9 +1,5 @@
 import { type CSSProperties, type ReactNode, useId } from "react"
 
-import {
-	type BotAvatarBlot,
-	hueOf,
-} from "@workspace/ui/components/companion-colour"
 import { ContentCard } from "@workspace/ui/components/content-card"
 import { hueStyle } from "@workspace/ui/components/hue-palette"
 import { SidebarResizeProvider } from "@workspace/ui/components/sidebar-resize"
@@ -41,7 +37,7 @@ interface WorkspaceShellProps {
 	isResizable?: boolean
 	className?: string
 	sidebar?: ReactNode
-	spaceTint?: BotAvatarBlot | null
+	spaceTint?: number | null
 	isLandmark?: boolean
 	children: ReactNode
 }
@@ -58,7 +54,7 @@ const WorkspaceShell = ({
 }: WorkspaceShellProps) => {
 	const mainId = useId()
 	const isMain = isLandmark ?? true
-	const spaceHue = hueOf(spaceTint)
+	const spaceHue = spaceTint ?? undefined
 
 	return (
 		<SidebarResizeProvider

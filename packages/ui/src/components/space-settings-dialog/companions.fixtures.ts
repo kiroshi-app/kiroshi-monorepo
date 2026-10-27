@@ -1,9 +1,10 @@
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import type { CompanionSummary } from "@workspace/ui/components/space-settings-dialog/companions-section"
 
 const JUNIPER: CompanionSummary = {
 	id: "juniper",
 	name: "Juniper",
-	blot: "purple",
+	blot: BLOT_HUES.purple,
 	title: "Writer",
 	instructions:
 		"You write release notes and changelogs for the Studio team. Group changes by area, link every pull request, and keep each entry to one plain sentence a customer can read.",
@@ -15,7 +16,7 @@ const JUNIPER: CompanionSummary = {
 const ATLAS: CompanionSummary = {
 	id: "atlas",
 	name: "Atlas",
-	blot: "blue",
+	blot: BLOT_HUES.blue,
 	title: "Planner",
 	instructions:
 		"You turn a goal into a plan the team can run: milestones, owners and the first three steps.",
@@ -27,7 +28,7 @@ const ATLAS: CompanionSummary = {
 const PICO: CompanionSummary = {
 	id: "pico",
 	name: "Pico",
-	blot: "green",
+	blot: BLOT_HUES.green,
 	title: "Builder",
 	instructions:
 		"You ship small changes to the Studio site. Run the checks before you say it works.",
@@ -39,7 +40,7 @@ const PICO: CompanionSummary = {
 const MIRA: CompanionSummary = {
 	id: "mira",
 	name: "Mira",
-	blot: "pink",
+	blot: BLOT_HUES.pink,
 	title: "Designer",
 	instructions:
 		"You draw screens from what the product really does, and name every state you leave out.",

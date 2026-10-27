@@ -16,7 +16,7 @@ import type {
 	BotPermissions as HostBotPermissions,
 	OfferedModel_Serialize,
 } from "@/lib/bindings"
-import { hueAfterPick, PRESET_HUES, presetOfHue } from "@/lib/colour/hue-shim"
+import { PRESET_HUES } from "@/lib/colour/hue-shim"
 import type { SidebarActivity } from "../chat/screen-model"
 import type { Bot, BotIdentity, Hue } from "../conversations/store-contract"
 import type { LastWord } from "../conversations/transcript-state"
@@ -124,7 +124,7 @@ export const newBotIdentity = (bots: Bot[]): BotIdentity => ({
 
 export const toSettingsValue = (bot: Bot): BotSettingsValue => ({
 	identity: {
-		blot: bot.avatarBlot === null ? undefined : presetOfHue(bot.avatarBlot),
+		blot: bot.avatarBlot,
 		image: avatarSrc(bot.avatarImagePath),
 	},
 	name: bot.name,
@@ -144,7 +144,7 @@ export const toCompanionSummary = (
 ): CompanionSummary => ({
 	id: bot.id,
 	name: bot.name,
-	blot: bot.avatarBlot === null ? undefined : presetOfHue(bot.avatarBlot),
+	blot: bot.avatarBlot,
 	seed: bot.id,
 	image: avatarSrc(bot.avatarImagePath),
 	title: bot.title,
@@ -161,7 +161,7 @@ export const toIdentity = (
 	name: value.name,
 	title: value.title,
 	model: value.model,
-	avatarBlot: hueAfterPick(value.identity.blot, bot.avatarBlot),
+	avatarBlot: value.identity.blot ?? null,
 	avatarImagePath: value.identity.image ? bot.avatarImagePath : null,
 	instructions: value.instructions,
 	deniedTools: withoutChangingTools(bot.deniedTools),
@@ -218,7 +218,7 @@ export const toRosterBots = (
 			sectionId: bot.sectionId,
 			pinPosition: bot.pinPosition,
 			title: bot.title || undefined,
-			blot: bot.avatarBlot === null ? undefined : presetOfHue(bot.avatarBlot),
+			blot: bot.avatarBlot,
 			image: avatarSrc(bot.avatarImagePath),
 			lastMessage: preview?.text,
 			timestamp: preview ? rosterTimestamp(preview.at, now) : undefined,

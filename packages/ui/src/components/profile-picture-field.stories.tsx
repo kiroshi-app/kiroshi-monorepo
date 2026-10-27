@@ -6,6 +6,7 @@ import {
 	UPLOADED_AVATAR_IMAGE,
 } from "@workspace/storybook/story-utils"
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { Icons } from "@workspace/ui/components/icons"
 import { InitialsAvatar } from "@workspace/ui/components/initials-avatar"
 import { ProfilePictureField } from "@workspace/ui/components/profile-picture-field"
@@ -22,7 +23,11 @@ const GLYPH = (
 const EMPTY = { onRemove: undefined, preview: GLYPH }
 
 const DRAWN_FACE = (
-	<BotIdentityAvatar blot="blue" seed="bot-7" size={PICTURE_FIELD_SIZE} />
+	<BotIdentityAvatar
+		hue={BLOT_HUES.blue}
+		seed="bot-7"
+		size={PICTURE_FIELD_SIZE}
+	/>
 )
 
 const meta = preview.meta({

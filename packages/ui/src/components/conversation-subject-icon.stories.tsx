@@ -72,50 +72,55 @@ export const NoColour = meta.story({
 })
 
 export const Red = meta.story({
-	args: { color: "red" },
+	args: { hue: BLOT_HUES.red },
 	play: async ({ canvasElement }) => expectPair(canvasElement, BLOT_HUES.red),
 })
 
 export const Yellow = meta.story({
-	args: { color: "yellow" },
+	args: { hue: BLOT_HUES.yellow },
 	play: async ({ canvasElement }) =>
 		expectPair(canvasElement, BLOT_HUES.yellow),
 })
 
 export const Green = meta.story({
-	args: { color: "green" },
+	args: { hue: BLOT_HUES.green },
 	play: async ({ canvasElement }) => expectPair(canvasElement, BLOT_HUES.green),
 })
 
 export const Cyan = meta.story({
-	args: { color: "cyan" },
+	args: { hue: BLOT_HUES.cyan },
 	play: async ({ canvasElement }) => expectPair(canvasElement, BLOT_HUES.cyan),
 })
 
 export const Blue = meta.story({
-	args: { color: "blue" },
+	args: { hue: BLOT_HUES.blue },
 	play: async ({ canvasElement }) => expectPair(canvasElement, BLOT_HUES.blue),
 })
 
 export const Purple = meta.story({
-	args: { color: "purple" },
+	args: { hue: BLOT_HUES.purple },
 	play: async ({ canvasElement }) =>
 		expectPair(canvasElement, BLOT_HUES.purple),
 })
 
 export const Pink = meta.story({
-	args: { color: "pink" },
+	args: { hue: BLOT_HUES.pink },
 	play: async ({ canvasElement }) => expectPair(canvasElement, BLOT_HUES.pink),
 })
 
 export const Orange = meta.story({
-	args: { color: "orange" },
+	args: { hue: BLOT_HUES.orange },
 	play: async ({ canvasElement }) =>
 		expectPair(canvasElement, BLOT_HUES.orange),
 })
 
+export const FreeHue = meta.story({
+	args: { hue: 210 },
+	play: async ({ canvasElement }) => expectPair(canvasElement, 210),
+})
+
 export const RedShieldKey = meta.story({
-	args: { color: "red", icon: "ShieldKey" },
+	args: { hue: BLOT_HUES.red, icon: "ShieldKey" },
 	play: async ({ canvasElement }) => {
 		await expectPair(canvasElement, BLOT_HUES.red)
 		await expect(
@@ -138,7 +143,7 @@ const rgbOf = (hex: string) =>
 	`rgb(${[1, 3, 5].map((offset) => Number.parseInt(hex.slice(offset, offset + 2), 16)).join(", ")})`
 
 export const RedShieldKeyDark = meta.story({
-	args: { color: "red", icon: "ShieldKey" },
+	args: { hue: BLOT_HUES.red, icon: "ShieldKey" },
 	globals: { theme: "dark" },
 	play: async ({ canvasElement }) => {
 		const icon = slotIn(canvasElement, "conversation-subject-icon")
@@ -157,7 +162,7 @@ const BorderSides = () => (
 	<Row>
 		{BORDER_SIDES.map((side) => (
 			<ConversationSubjectIcon
-				color="red"
+				hue={BLOT_HUES.red}
 				icon="ShieldKey"
 				key={side}
 				side={side}

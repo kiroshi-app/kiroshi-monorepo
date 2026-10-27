@@ -3,12 +3,13 @@ import type {
 	AppSidebarConversation,
 	AppSidebarSection,
 } from "@workspace/ui/components/app-sidebar"
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import type { Space } from "@workspace/ui/components/space"
 import type { Lifter } from "@workspace/ui/hooks/use-roster-lift"
 
 export const SIDEBAR_SPACES: Space[] = [
-	{ id: "perso", name: "Perso", colour: "blue", avatarSeed: "perso" },
-	{ id: "vocca", name: "Vocca", colour: "green", avatarSeed: "vocca" },
+	{ id: "perso", name: "Perso", colour: BLOT_HUES.blue, avatarSeed: "perso" },
+	{ id: "vocca", name: "Vocca", colour: BLOT_HUES.green, avatarSeed: "vocca" },
 ]
 
 export const SIDEBAR_SECTION: AppSidebarSection = {
@@ -19,7 +20,7 @@ export const SIDEBAR_SECTION: AppSidebarSection = {
 
 export const ATLAS: AppSidebarBot = {
 	id: "atlas",
-	blot: "blue",
+	blot: BLOT_HUES.blue,
 	name: "Atlas",
 	title: "Research",
 	lastMessage: "Pulled the three papers and summarised each one for you.",
@@ -28,7 +29,7 @@ export const ATLAS: AppSidebarBot = {
 
 export const BEACON: AppSidebarBot = {
 	id: "beacon",
-	blot: "yellow",
+	blot: BLOT_HUES.yellow,
 	name: "Beacon",
 	status: "working",
 	pose: "writing",

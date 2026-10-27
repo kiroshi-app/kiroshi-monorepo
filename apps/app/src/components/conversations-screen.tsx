@@ -2,7 +2,6 @@ import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 
 import { WorkspaceBody } from "@/components/workspace-body"
 import { WorkspaceSidebar } from "@/components/workspace-sidebar"
-import { presetOfHue } from "@/lib/colour/hue-shim"
 import { isSidebarResizable } from "@/lib/host"
 import { useWorkspace } from "@/lib/workspace/workspace-context"
 
@@ -28,9 +27,7 @@ export const ConversationsScreen = () => {
 
 	return (
 		<WorkspaceShell
-			spaceTint={
-				scopes.spaceHue == null ? undefined : presetOfHue(scopes.spaceHue)
-			}
+			spaceTint={scopes.spaceHue}
 			width={preferences.sidebarWidth ?? undefined}
 			onWidthChange={overlay.changeSidebarWidth}
 			isResizable={isSidebarResizable()}

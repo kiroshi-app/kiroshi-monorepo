@@ -11,6 +11,7 @@ import {
 	slotsIn,
 } from "@workspace/storybook/story-utils"
 import type { BotBadge } from "@workspace/ui/components/bot-badge"
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import type { Space } from "@workspace/ui/components/space"
 import type { SpaceInvitation } from "@workspace/ui/components/space-invitations"
@@ -21,14 +22,24 @@ import {
 } from "@workspace/ui/components/space-switcher"
 
 const SPACES: Space[] = [
-	{ id: "perso", name: "Perso", colour: "blue", avatarSeed: "perso" },
-	{ id: "vocca", name: "Vocca", colour: "green", avatarSeed: "vocca" },
-	{ id: "atelier", name: "Atelier", colour: "pink", avatarSeed: "atelier" },
-	{ id: "veille", name: "Veille", colour: "yellow", avatarSeed: "veille" },
+	{ id: "perso", name: "Perso", colour: BLOT_HUES.blue, avatarSeed: "perso" },
+	{ id: "vocca", name: "Vocca", colour: BLOT_HUES.green, avatarSeed: "vocca" },
+	{
+		id: "atelier",
+		name: "Atelier",
+		colour: BLOT_HUES.pink,
+		avatarSeed: "atelier",
+	},
+	{
+		id: "veille",
+		name: "Veille",
+		colour: BLOT_HUES.yellow,
+		avatarSeed: "veille",
+	},
 	{
 		id: "archives",
 		name: "Archives",
-		colour: "purple",
+		colour: BLOT_HUES.purple,
 		avatarSeed: "archives",
 	},
 ]
@@ -43,18 +54,38 @@ const LONG_SPACES: Space[] = [
 	{
 		id: "perso",
 		name: "Everything I have not filed anywhere else yet",
-		colour: "blue",
+		colour: BLOT_HUES.blue,
 		avatarSeed: "perso",
 	},
-	{ id: "vocca", name: "Vocca", colour: "green", avatarSeed: "vocca" },
+	{ id: "vocca", name: "Vocca", colour: BLOT_HUES.green, avatarSeed: "vocca" },
 ]
 
 const MANY_SPACES: Space[] = [
 	...SPACES,
-	{ id: "lecture", name: "Lecture", colour: "red", avatarSeed: "lecture" },
-	{ id: "cuisine", name: "Cuisine", colour: "orange", avatarSeed: "cuisine" },
-	{ id: "musique", name: "Musique", colour: "cyan", avatarSeed: "musique" },
-	{ id: "jardin", name: "Jardin", colour: "green", avatarSeed: "jardin" },
+	{
+		id: "lecture",
+		name: "Lecture",
+		colour: BLOT_HUES.red,
+		avatarSeed: "lecture",
+	},
+	{
+		id: "cuisine",
+		name: "Cuisine",
+		colour: BLOT_HUES.orange,
+		avatarSeed: "cuisine",
+	},
+	{
+		id: "musique",
+		name: "Musique",
+		colour: BLOT_HUES.cyan,
+		avatarSeed: "musique",
+	},
+	{
+		id: "jardin",
+		name: "Jardin",
+		colour: BLOT_HUES.green,
+		avatarSeed: "jardin",
+	},
 ]
 
 const TITLE_BAR_LINE =
@@ -698,7 +729,7 @@ const HOSTS: Record<string, SpaceHost> = {
 }
 
 const LONG_HOSTED_SPACES: Space[] = [
-	{ id: "perso", name: "Perso", colour: "blue", avatarSeed: "perso" },
+	{ id: "perso", name: "Perso", colour: BLOT_HUES.blue, avatarSeed: "perso" },
 	{
 		id: "vocca",
 		name: "Everything the team has not filed anywhere else yet",
@@ -965,7 +996,7 @@ const EXPIRES_AT = new Date(2026, 9, 25).getTime()
 const INVITED: Omit<SpaceInvitation, "state"> = {
 	id: "studio",
 	name: "Studio",
-	colour: "blue",
+	colour: BLOT_HUES.blue,
 	hostEmail: "noa@example.com",
 	hostName: "Noa",
 	expiresAt: EXPIRES_AT,
@@ -974,14 +1005,14 @@ const INVITED: Omit<SpaceInvitation, "state"> = {
 const SECOND_INVITED: Omit<SpaceInvitation, "state"> = {
 	id: "atelier-sud",
 	name: "Atelier Sud",
-	colour: "cyan",
+	colour: BLOT_HUES.cyan,
 	hostEmail: "marc@example.com",
 }
 
 const PERSONAL: Space = {
 	id: "personal",
 	name: "Personal",
-	colour: "green",
+	colour: BLOT_HUES.green,
 	avatarSeed: "personal",
 }
 
@@ -992,7 +1023,12 @@ const PERSONAL_OPEN = {
 
 const JOINED_SPACES: Space[] = [
 	PERSONAL,
-	{ id: "studio", name: "Studio", colour: "blue", avatarSeed: "studio" },
+	{
+		id: "studio",
+		name: "Studio",
+		colour: BLOT_HUES.blue,
+		avatarSeed: "studio",
+	},
 ]
 
 const INVITED_ARTBOARD =
@@ -1081,6 +1117,54 @@ const expectFailedRow = async (
 	await expect(onRetry).toHaveBeenCalledWith(INVITED.id)
 	await expect(screen.getByRole("menu")).toBeVisible()
 }
+
+const FREE_HUE = 210
+
+const FREE_HUE_SPACES = SPACES.map((space) =>
+	space.id === "vocca" ? { ...space, colour: FREE_HUE } : space,
+)
+
+export const FreeHue = meta.story({
+	args: {
+		spaces: FREE_HUE_SPACES,
+		invitations: [{ ...INVITED, colour: FREE_HUE, state: "waiting" }],
+	},
+	render: (args) => (
+		<div className="flex w-64 flex-col gap-4">
+			<SwitcherLine {...args} />
+			<SpaceDots
+				onSelectSpace={args.onSelectSpace}
+				selectedSpaceId={args.selectedSpaceId}
+				spaces={args.spaces}
+			/>
+		</div>
+	),
+	parameters: {
+		a11y: A11Y_FLOATING_FOCUS_GUARDS,
+		docs: {
+			description: {
+				story:
+					"Vocca open at a hue outside the eight presets, 210, with an invitation to a Space at that hue. Check that the swatch, the open dot and the invitation's mark wear 210 rather than the nearest preset. Pick `Default` for preset hues.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const [swatch] = slotsIn(canvasElement, "space-avatar")
+		await expect(swatch).toHaveAttribute("data-colour", String(FREE_HUE))
+		const openDot = slotsIn(canvasElement, "space-dot").find(
+			(dot) => dot.dataset.hue !== undefined,
+		)
+		await expect(openDot).toHaveAttribute("data-hue", String(FREE_HUE))
+
+		const menu = await openSwitcher(canvasElement)
+		const [invitation] = invitationsIn(menu)
+		if (!invitation) throw new Error("The invitation is missing")
+		await expect(slotsIn(invitation, "space-avatar")[0]).toHaveAttribute(
+			"data-colour",
+			String(FREE_HUE),
+		)
+	},
+})
 
 export const InvitationAtRest = meta.story({
 	globals: DARK,
@@ -1671,13 +1755,13 @@ const ITERATION_FIVE =
 	"Measured against the Paper page `Iteration 5` of `Kiroshi, Invitations`, dark only."
 
 const NOTES: Space[] = [
-	{ id: "notes", name: "Notes", colour: "green", avatarSeed: "notes" },
+	{ id: "notes", name: "Notes", colour: BLOT_HUES.green, avatarSeed: "notes" },
 ]
 
 const STUDIO_INVITATION: SpaceInvitation = {
 	id: "studio",
 	name: "Studio",
-	colour: "orange",
+	colour: BLOT_HUES.orange,
 	hostEmail: "steve@example.com",
 	state: "waiting",
 }

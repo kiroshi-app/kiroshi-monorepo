@@ -183,7 +183,7 @@ describe("the switcher rows", () => {
 			{
 				id: GARAGE_ROW,
 				name: "Garage",
-				colour: "green",
+				colour: 132,
 				avatarSeed: GARAGE.instanceId,
 			},
 		])
@@ -233,7 +233,7 @@ describe("the switcher rows", () => {
 			{
 				id: GARAGE_ROW,
 				name: "Garage",
-				colour: "green",
+				colour: 132,
 				avatarSeed: GARAGE.instanceId,
 			},
 		])

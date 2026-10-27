@@ -55,7 +55,7 @@ const MissionTurn = ({ mission, onOpen, wrap }: MissionTurnProps) => {
 				>
 					<BotIdentityAvatar
 						badge={missionBadgeFor(card.state)}
-						blot={identity.blot}
+						hue={identity.blot}
 						image={identity.image}
 						kind="working"
 						name={identity.name}
