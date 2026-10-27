@@ -604,6 +604,7 @@ const chat = {
 			confirm: {
 				title: "Supprimer {{name}} ?",
 			},
+			failed: "Impossible de supprimer cette conversation. Réessayez.",
 		},
 	},
 	activity: {

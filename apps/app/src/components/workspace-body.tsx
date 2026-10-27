@@ -36,7 +36,6 @@ type WorkspaceBodyProps = {
 	readerName: string
 	isOverlayOpen: boolean
 	onToggleSettings: () => void
-	isConversationSettingsOpen: boolean
 	isMissionsPanelOpen: boolean
 	onOpenConversationSettings: (conversationId: string) => void
 	onOpenThreadInNewTab: (thread: ThreadSearch) => void
@@ -53,7 +52,6 @@ const threadOf = ({
 	chat,
 	isOverlayOpen,
 	onToggleSettings,
-	isConversationSettingsOpen,
 	onOpenConversationSettings,
 }: WorkspaceBodyProps): Thread | null => {
 	if (conversation) {
@@ -61,7 +59,6 @@ const threadOf = ({
 			kind: "conversation",
 			conversation,
 			runtimes: conversationRuntimes,
-			isSettingsOpen: isConversationSettingsOpen,
 			onOpenSettings: onOpenConversationSettings,
 		}
 	}

@@ -1,15 +1,12 @@
 "use client"
 
-import { Tabs } from "@base-ui/react/tabs"
 import { Toggle } from "@base-ui/react/toggle"
 import { ToggleGroup } from "@base-ui/react/toggle-group"
 import { type KeyboardEvent, useId, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import conversationIcons from "@workspace/shared/conversation-icons.json"
-import { DangerZone } from "@workspace/ui/components/bot-settings-dialog/danger-zone"
 import { ColourField } from "@workspace/ui/components/colour-field"
-import { ParticipantsPanel } from "@workspace/ui/components/conversation-settings-dialog/participants-panel"
 import {
 	ConversationSubjectIcon,
 	conversationIconOf,
@@ -19,15 +16,7 @@ import {
 	Icons,
 } from "@workspace/ui/components/icons"
 import type { RosterBot } from "@workspace/ui/components/roster"
-import { SettingsDialogShell } from "@workspace/ui/components/settings-dialog-shell"
 import { SettingsField } from "@workspace/ui/components/settings-field"
-import {
-	DANGER_RAIL_ITEM_CLASS,
-	SETTINGS_PANEL_CLASS,
-	SettingsRailItem,
-	SettingsRailSeparator,
-	SettingsScrollingPanel,
-} from "@workspace/ui/components/settings-rail"
 import {
 	FIELD_LABEL_CLASS,
 	POPUP_CLASS,
@@ -38,10 +27,6 @@ import {
 	PopoverTrigger,
 } from "@workspace/ui/components/ui/popover"
 import { cn } from "@workspace/ui/lib/utils"
-
-const FIRST_TAB = "general"
-
-const DANGER_TAB = "danger"
 
 const ICON_OPTIONS = conversationIcons as ConversationIconName[]
 
@@ -234,8 +219,6 @@ const ConversationInstructionsField = ({
 }
 
 type ConversationSettingsDialogProps = {
-	open: boolean
-	onClose: () => void
 	value: ConversationSettingsValue
 	onValueChange: (value: ConversationSettingsValue) => void
 	icon?: ConversationIconName
@@ -247,114 +230,11 @@ type ConversationSettingsDialogProps = {
 	onLeadChange: (id: string) => void
 	onDismiss: (id: string) => void
 	onDelete: () => void
-	className?: string
-}
-
-const ConversationSettingsDialog = ({
-	open,
-	onClose,
-	value,
-	onValueChange,
-	icon,
-	hue,
-	onIconChange,
-	onHueChange,
-	participants,
-	leadId,
-	onLeadChange,
-	onDismiss,
-	onDelete,
-	className,
-}: ConversationSettingsDialogProps) => {
-	const { t } = useTranslation("chat")
-	const conversationName =
-		value.name.trim() || t("conversationSettings.untitled")
-
-	return (
-		<SettingsDialogShell
-			breadcrumb={t("conversationSettings.breadcrumb")}
-			className={className}
-			mark={<ConversationSubjectIcon hue={hue} icon={icon} side={24} />}
-			name={conversationName}
-			onClose={onClose}
-			open={open}
-			rail={(iconsOnly) => (
-				<>
-					<SettingsRailItem
-						icon="Settings"
-						iconsOnly={iconsOnly}
-						label={t("conversationSettings.tab.general")}
-						value={FIRST_TAB}
-					/>
-					<SettingsRailItem
-						icon="User"
-						iconsOnly={iconsOnly}
-						label={t("conversationSettings.tab.participants")}
-						value="participants"
-					/>
-					<SettingsRailItem
-						icon="Docs"
-						iconsOnly={iconsOnly}
-						label={t("conversationSettings.tab.instructions")}
-						value="instructions"
-					/>
-					<SettingsRailSeparator />
-					<SettingsRailItem
-						className={DANGER_RAIL_ITEM_CLASS}
-						icon="Alert"
-						iconsOnly={iconsOnly}
-						label={t("conversationSettings.tab.danger")}
-						value={DANGER_TAB}
-					/>
-				</>
-			)}
-			tab={FIRST_TAB}
-		>
-			<SettingsScrollingPanel value={FIRST_TAB}>
-				<ConversationGeneralFields
-					hue={hue}
-					icon={icon}
-					onHueChange={onHueChange}
-					onIconChange={onIconChange}
-					onValueChange={onValueChange}
-					value={value}
-				/>
-			</SettingsScrollingPanel>
-
-			<SettingsScrollingPanel value="participants">
-				<ParticipantsPanel
-					leadId={leadId}
-					onDismiss={onDismiss}
-					onLeadChange={onLeadChange}
-					participants={participants}
-				/>
-			</SettingsScrollingPanel>
-
-			<Tabs.Panel className={SETTINGS_PANEL_CLASS} value="instructions">
-				<ConversationInstructionsField
-					onValueChange={onValueChange}
-					value={value}
-				/>
-			</Tabs.Panel>
-
-			<SettingsScrollingPanel value={DANGER_TAB}>
-				<DangerZone
-					confirmTitle={t("conversationSettings.danger.confirm.title", {
-						name: conversationName,
-					})}
-					actionLabel={t("conversationSettings.danger.delete")}
-					description={t("conversationSettings.danger.description")}
-					onConfirm={onDelete}
-				/>
-			</SettingsScrollingPanel>
-		</SettingsDialogShell>
-	)
 }
 
 export {
 	ConversationGeneralFields,
 	ConversationInstructionsField,
-	ConversationSettingsDialog,
 	type ConversationSettingsDialogProps,
 	type ConversationSettingsValue,
 }

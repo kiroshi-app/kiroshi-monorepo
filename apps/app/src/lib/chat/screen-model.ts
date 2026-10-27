@@ -356,7 +356,6 @@ export type ComposerFocusClaim = {
 	threadId: string
 	focusedThreadId: string | null
 	isPromptPending: boolean
-	isSettingsOpen: boolean
 	isOverlayOpen: boolean
 }
 
@@ -364,7 +363,6 @@ export function claimsComposerFocus(claim: ComposerFocusClaim): boolean {
 	return (
 		claim.threadId !== claim.focusedThreadId &&
 		!claim.isPromptPending &&
-		!claim.isSettingsOpen &&
 		!claim.isOverlayOpen
 	)
 }

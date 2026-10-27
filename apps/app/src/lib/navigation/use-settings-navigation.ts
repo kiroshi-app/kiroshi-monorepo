@@ -106,6 +106,11 @@ export const useSettingsNavigation = (holder: ThreadHolder) => {
 					params: { companionId },
 					search,
 				}),
+			openConversationSettings: (conversationId: string) =>
+				go({
+					to: "/settings/conversation/$conversationId",
+					params: { conversationId },
+				}),
 			showEntry: (entry: string, modifiers?: ClickModifiers) =>
 				goFromClick(replacingSearch(entrySearchOf(entry)), modifiers),
 			openApplication: (application: string, modifiers?: ClickModifiers) =>

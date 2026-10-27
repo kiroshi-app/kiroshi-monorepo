@@ -23,7 +23,7 @@ export const ConversationsScreen = () => {
 		switcher,
 		tabs,
 	} = useWorkspace()
-	const { preferences, roster, spaces } = core
+	const { preferences, spaces } = core
 
 	return (
 		<WorkspaceShell
@@ -58,13 +58,14 @@ export const ConversationsScreen = () => {
 				conversationRuntimes={core.conversationRuntimes}
 				drafts={core.drafts}
 				haveSpacesFailed={spaces.state.hasFailedToLoad}
-				isConversationSettingsOpen={overlay.isThreadConversationSettingsOpen}
 				isMissionsPanelOpen={sidebarTab.openTab === "missions"}
 				isOverlayOpen={overlay.isOverlayOpen}
 				landings={core.messageLandings}
 				missions={core.openedMission}
 				onboarding={preferences.firstRunDone ? undefined : drivers.onboarding}
-				onOpenConversationSettings={roster.controller.editConversation}
+				onOpenConversationSettings={
+					rosterLines.sidebarActions.onOpenConversationSettings
+				}
 				onOpenThreadInNewTab={navigation.openThreadInNewTab}
 				onRetrySpaces={loadSpaces}
 				onToggleSettings={overlay.toggleSettings}

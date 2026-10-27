@@ -273,7 +273,6 @@ const workspaceOf = async (store = createFakeTranscriptStore()) => {
 			conversationRuntimes: runtimes,
 			drafts: createDraftsController(),
 			haveSpacesFailed: false,
-			isConversationSettingsOpen: false,
 			isMissionsPanelOpen: false,
 			isOverlayOpen: false,
 			landings: createMessageLandingController(),

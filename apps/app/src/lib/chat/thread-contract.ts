@@ -51,7 +51,6 @@ export type ConversationThread = {
 	kind: "conversation"
 	conversation: Conversation
 	runtimes: ConversationRuntimes
-	isSettingsOpen: boolean
 	onOpenSettings: (conversationId: string) => void
 	mission?: ThreadMission
 }

@@ -782,7 +782,6 @@ describe("claimsComposerFocus", () => {
 		threadId: "conversation-1",
 		focusedThreadId: null,
 		isPromptPending: false,
-		isSettingsOpen: false,
 		isOverlayOpen: false,
 	}
 
@@ -804,10 +803,6 @@ describe("claimsComposerFocus", () => {
 
 	it("yields to a card that waits for the reader", () => {
 		expect(claimsComposerFocus({ ...claim, isPromptPending: true })).toBe(false)
-	})
-
-	it("yields to an open settings dialog", () => {
-		expect(claimsComposerFocus({ ...claim, isSettingsOpen: true })).toBe(false)
 	})
 
 	it("yields to an open overlay", () => {

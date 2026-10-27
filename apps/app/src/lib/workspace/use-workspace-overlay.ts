@@ -43,17 +43,10 @@ export const useWorkspaceOverlay = ({
 		user,
 	} = core
 	const { now, sidebarActions } = rosterLines
-	const {
-		conversationRosters,
-		isEditingConversation,
-		selected,
-		selectedBotId,
-		selectedConversationId,
-		settingsConversationId,
-	} = rosterView
+	const { conversationRosters, selected, selectedBotId } = rosterView
 	const { selectedSpace, selectedSpaceId } = scopes
 
-	const isDialogOpen = openSettings !== null || isEditingConversation
+	const isDialogOpen = openSettings !== null
 
 	const searchLookups = useSearchLookups({
 		rosters: roster.state.rosters,
@@ -81,9 +74,6 @@ export const useWorkspaceOverlay = ({
 	})
 
 	const isOverlayOpen = search.isOpen || isDialogOpen
-
-	const isThreadConversationSettingsOpen =
-		isEditingConversation && settingsConversationId === selectedConversationId
 
 	const toggleSettings = useCallback(() => {
 		if (selectedBotId) {
@@ -134,7 +124,6 @@ export const useWorkspaceOverlay = ({
 		activityPanel,
 		changeSidebarWidth,
 		isOverlayOpen,
-		isThreadConversationSettingsOpen,
 		search,
 		toggleSettings,
 		userSettings,

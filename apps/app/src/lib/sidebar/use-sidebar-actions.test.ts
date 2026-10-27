@@ -49,6 +49,7 @@ describe("the rail gear", () => {
 	it("opens the settings of the selected space", () => {
 		const settings = {
 			openCompanionSettings: vi.fn(),
+			openConversationSettings: vi.fn(),
 			openSpaceSettings: vi.fn(),
 			openThreadInNewTab: vi.fn(),
 			openUserSettings: vi.fn(),
@@ -168,6 +169,7 @@ const newTabFor = (selected: SelectedRow) => {
 	}
 	const settings = {
 		openCompanionSettings: vi.fn(),
+		openConversationSettings: vi.fn(),
 		openSpaceSettings: vi.fn(),
 		openThreadInNewTab: vi.fn(),
 		openUserSettings: vi.fn(),

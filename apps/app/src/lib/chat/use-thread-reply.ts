@@ -80,7 +80,6 @@ export function useComposerRequest(
 type ComposerFocusInput = {
 	threadId: string | null
 	isPromptPending: boolean
-	isSettingsOpen: boolean
 	isOverlayOpen: boolean
 	focusComposer: () => void
 }
@@ -88,7 +87,6 @@ type ComposerFocusInput = {
 export function useComposerFocus({
 	threadId,
 	isPromptPending,
-	isSettingsOpen,
 	isOverlayOpen,
 	focusComposer,
 }: ComposerFocusInput): void {
@@ -102,7 +100,6 @@ export function useComposerFocus({
 			threadId,
 			focusedThreadId: focusedThreadId.current,
 			isPromptPending,
-			isSettingsOpen,
 			isOverlayOpen,
 		})
 		if (!claimed) {
@@ -110,5 +107,5 @@ export function useComposerFocus({
 		}
 		focusedThreadId.current = threadId
 		focusComposer()
-	}, [threadId, isPromptPending, isSettingsOpen, isOverlayOpen, focusComposer])
+	}, [threadId, isPromptPending, isOverlayOpen, focusComposer])
 }

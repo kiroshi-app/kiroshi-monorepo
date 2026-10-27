@@ -780,7 +780,6 @@ const roomOf = async ({
 			kind: "conversation",
 			conversation,
 			runtimes,
-			isSettingsOpen: false,
 			onOpenSettings: () => undefined,
 		},
 		idOf: (name) => bots.find((bot) => bot.name === name)?.id ?? name,
@@ -2040,7 +2039,6 @@ describe("ThreadScreen", () => {
 			kind: "conversation",
 			conversation,
 			runtimes,
-			isSettingsOpen: false,
 			onOpenSettings: () => undefined,
 		}
 		render(createElement(NoticeSurface), {
@@ -4225,7 +4223,6 @@ const sendingRoomWith = async ({
 					kind: "conversation",
 					conversation,
 					runtimes,
-					isSettingsOpen: false,
 					onOpenSettings: () => undefined,
 				},
 			}),
@@ -4414,7 +4411,6 @@ const arrivalRoomOf = async (
 			kind: "conversation",
 			conversation,
 			runtimes: createConversationRuntimes(createScriptedDriver(), store),
-			isSettingsOpen: false,
 			onOpenSettings: () => undefined,
 		},
 	}
@@ -5094,7 +5090,6 @@ const heldRoomOf = async (spoken: SpokenTurn[] = []) => {
 		kind: "conversation",
 		conversation,
 		runtimes,
-		isSettingsOpen: false,
 		onOpenSettings: () => undefined,
 	}
 	render(screenOf(thread, bots), { wrapper: createQueryTestWrapper().wrapper })
@@ -5129,7 +5124,6 @@ const heldRoomOnFakeTimers = async () => {
 		kind: "conversation",
 		conversation,
 		runtimes,
-		isSettingsOpen: false,
 		onOpenSettings: () => undefined,
 	}
 	render(screenOf(thread, bots), { wrapper: createQueryTestWrapper().wrapper })

@@ -62,7 +62,6 @@ const unseatedThread: LoadedConversationThread = {
 	kind: "conversation",
 	conversation: unseatedConversation,
 	runtimes: {} as ConversationRuntimes,
-	isSettingsOpen: false,
 	onOpenSettings: () => undefined,
 	state: conversationState,
 	controller: {} as ConversationController,

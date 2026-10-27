@@ -583,6 +583,7 @@ const chat = {
 			confirm: {
 				title: "Delete {{name}}?",
 			},
+			failed: "Couldn’t delete this conversation. Retry.",
 		},
 	},
 	activity: {

@@ -3,6 +3,7 @@ import { Navigate, useParams, useSearch } from "@tanstack/react-router"
 import type { TitleBarTabsProps } from "@workspace/ui/components/title-bar-tabs"
 
 import { CompanionScreenHost } from "@/components/companion-screen-host"
+import { ConversationScreenHost } from "@/components/conversation-screen-host"
 import { SpaceSettingsScreen } from "@/components/space-settings-screen"
 import { UserSettingsScreen } from "@/components/user-settings-screen"
 import { titleBarWindowControls } from "@/components/window-caption-controls"
@@ -203,6 +204,30 @@ export const CompanionSettingsRoute = () => {
 			rosterLines={rosterLines}
 			rosterView={workspace.rosterView}
 			scopes={workspace.scopes}
+			search={search}
+		/>
+	)
+}
+
+export const ConversationSettingsRoute = () => {
+	const workspace = useWorkspace()
+	const search = useSearch({ from: "/settings/conversation/$conversationId" })
+	const spaceSwitch = useWorkspaceSpaceSwitch()
+	const { frame } = useSettingsFrame(spaceSwitch.switchSpace)
+	const conversation = workspace.rosterView.settingsConversation
+
+	if (!conversation) {
+		return <Navigate to="/" replace />
+	}
+
+	return (
+		<ConversationScreenHost
+			bots={workspace.rosterView.bots}
+			conversation={conversation}
+			core={workspace.core}
+			frame={frame}
+			navigation={workspace.navigation}
+			rosterLines={workspace.rosterLines}
 			search={search}
 		/>
 	)
