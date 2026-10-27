@@ -9,6 +9,7 @@ import { act, cleanup, fireEvent, renderHook } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { useTabKeys } from "./use-tab-keys"
+import { useTabsFollowingSpace } from "./use-tab-thread-sync"
 import { useWorkspaceTabs } from "./use-workspace-tabs"
 import { createWorkspaceTabs, type WorkspaceTabs } from "./workspace-tabs"
 
@@ -477,6 +478,18 @@ describe("the leave guard", () => {
 
 		expect(guard).not.toHaveBeenCalled()
 		expect(activeHref(shown.tabs)).not.toBe(USER_SETTINGS)
+	})
+
+	it("follows the open Space without asking, even under a cancelling guard", () => {
+		const shown = tabsShowingSettings()
+		const guard = cancellingGuard()
+		shown.tabs.guardLeave(guard)
+
+		renderHook(() => useTabsFollowingSpace(shown.tabs, OTHER_SPACE))
+
+		expect(guard).not.toHaveBeenCalled()
+		expect(shown.tabs.getState().spaceId).toBe(OTHER_SPACE)
+		expect(activeHref(shown.tabs)).toBe("/")
 	})
 
 	it("does not ask again for a gesture already asked", () => {

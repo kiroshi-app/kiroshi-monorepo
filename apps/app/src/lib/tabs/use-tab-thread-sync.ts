@@ -81,6 +81,17 @@ const presentRowIdsIn = (roster: RosterController) => {
 	return new Set([...bots, ...conversations].map((row) => row.id))
 }
 
+export const useTabsFollowingSpace = (
+	tabs: WorkspaceTabs,
+	openSpaceId: string | null,
+) => {
+	useEffect(() => {
+		if (openSpaceId !== null) {
+			tabs.leaveAsked(() => tabs.showSpace(openSpaceId))
+		}
+	}, [tabs, openSpaceId])
+}
+
 export const useTabThreadSync = ({
 	tabs,
 	roster,
@@ -106,11 +117,7 @@ export const useTabThreadSync = ({
 	const readySpaceId =
 		isOpenSpaceRostered && shownSpaceId === openSpaceId ? openSpaceId : null
 
-	useEffect(() => {
-		if (openSpaceId !== null) {
-			tabs.showSpace(openSpaceId)
-		}
-	}, [tabs, openSpaceId])
+	useTabsFollowingSpace(tabs, openSpaceId)
 
 	const { selectedBotId, selectedConversationId } = selected
 	const appliedHref = useRef<string | null>(null)
