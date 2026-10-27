@@ -32,6 +32,7 @@
 		"test:release": "bun test scripts/release.test.ts",
 		"test:pr-dequeue": "bun test scripts/pr-dequeue.test.ts",
 		"test:pr-enqueue": "bun test scripts/pr-enqueue.test.ts",
+		"test:pr-requeue-check": "bun test scripts/pr-requeue-check.test.ts",
 		"test:slot": "bun test scripts/slot.test.ts",
 		"baseline:update": "bun scripts/baseline.ts --update",
 		"baseline:prune": "bun scripts/baseline.ts --prune",

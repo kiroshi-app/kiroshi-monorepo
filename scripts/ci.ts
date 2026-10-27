@@ -54,6 +54,11 @@ const PR_ENQUEUE_UNIT_TESTS: Step = {
 	command: "bun run test:pr-enqueue",
 }
 
+const PR_REQUEUE_CHECK_UNIT_TESTS: Step = {
+	name: "PR requeue check script unit tests",
+	command: "bun run test:pr-requeue-check",
+}
+
 const QUEUE_SCRIPT_UNIT_TESTS = [
 	{
 		step: PR_DEQUEUE_UNIT_TESTS,
@@ -62,6 +67,10 @@ const QUEUE_SCRIPT_UNIT_TESTS = [
 	{
 		step: PR_ENQUEUE_UNIT_TESTS,
 		paths: ["scripts/pr-enqueue.sh", "scripts/pr-enqueue.test.ts"],
+	},
+	{
+		step: PR_REQUEUE_CHECK_UNIT_TESTS,
+		paths: ["scripts/pr-requeue-check.sh", "scripts/pr-requeue-check.test.ts"],
 	},
 ]
 
@@ -102,6 +111,7 @@ export const GATE = {
 		{ name: "Red main reporter unit tests", command: "bun run test:red-main" },
 		PR_DEQUEUE_UNIT_TESTS,
 		PR_ENQUEUE_UNIT_TESTS,
+		PR_REQUEUE_CHECK_UNIT_TESTS,
 		{ name: "Gate definition matches ci.yml", command: "bun run test:ci" },
 		{
 			name: "Biome and knip against the baseline",
@@ -205,8 +215,9 @@ const OFF_PULL_REQUEST_TRIGGERS: Partial<Record<Group, string>> = {
 // dozen agents loading the machine, which the full unit set cannot do. It
 // runs the format, Biome and knip against the baseline, the types, the unit
 // test step bun scripts/ci.ts changed picks for the same diff, and the
-// pr-dequeue or pr-enqueue script tests when the diff touches that script or
-// its tests. bun run ci and the CI jobs keep the rest: the perf set, the
+// pr-dequeue, pr-enqueue or pr-requeue-check script tests when the diff
+// touches that script or its tests. bun run ci and the CI jobs keep the rest:
+// the perf set, the
 // stories, the website and sidecar suites, rust, the website build and ios.
 export const FAST_STEP_NAMES = [
 	"Biome format",

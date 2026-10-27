@@ -229,4 +229,6 @@ Never push to `main`. Always work on feature branches.
 
 Right after `gh pr create`, run `scripts/pr-enqueue.sh` alone in its own Bash call: it arms auto-merge on the PR of the current branch and fails if it is not armed.
 
+PR ejected from the merge queue on its current head: `scripts/pr-enqueue.sh` refuses to queue it again, push a fix, or pass `--reason "<why this head can pass now>"` to queue the same head.
+
 PR already queued and a fix must land: run `scripts/pr-dequeue.sh`, push, then run `scripts/pr-enqueue.sh` again. Never close the PR.
