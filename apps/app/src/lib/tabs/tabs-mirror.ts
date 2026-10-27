@@ -157,12 +157,9 @@ export const forgetWindow = (windowLabel: string) => {
 	removeKeys([openWindowKeyOf(windowLabel), ...tabsKeysOf(windowLabel)])
 }
 
-const moveTabsKey = (key: string, from: string, to: string) => {
+const copyTabsKey = (key: string, from: string, to: string) => {
 	const spaceId = key.slice(windowTabsPrefixOf(from).length)
-	localStorage.setItem(
-		`${windowTabsPrefixOf(to)}${spaceId}`,
-		localStorage.getItem(key) ?? "",
-	)
+	localStorage.setItem(keyOf(to, spaceId), localStorage.getItem(key) ?? "")
 }
 
 export const handOverWindow = (predecessor: string, successor: string) => {
@@ -172,7 +169,7 @@ export const handOverWindow = (predecessor: string, successor: string) => {
 	}
 	localStorage.setItem(openWindowKeyOf(successor), shownSpace)
 	for (const key of tabsKeysOf(predecessor)) {
-		moveTabsKey(key, predecessor, successor)
+		copyTabsKey(key, predecessor, successor)
 	}
 	forgetWindow(predecessor)
 }
