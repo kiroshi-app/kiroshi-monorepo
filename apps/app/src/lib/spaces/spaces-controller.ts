@@ -57,11 +57,7 @@ export type SpacesControllerOptions = {
 	reportSuccess?: (notice: NoticeMessage) => void
 	reportFailure?: (notice: NoticeMessage) => void
 	hosts?: Pick<JoinedHosts, "activate">
-	onDescribed?: (listener: () => void) => Promise<() => void>
 }
-
-const onDescribedHere = (listener: () => void) =>
-	listenOnThisComputer(SPACE_DESCRIBED_EVENT, () => listener())
 
 const repositioned = (spaces: Space[], ids: string[]) =>
 	ids.flatMap((id, position) => {
@@ -161,7 +157,6 @@ export const createSpacesController = (
 		reportSuccess = raiseTransientNotice,
 		reportFailure = failureReporterIn("spaces-controller"),
 		hosts = joinedHosts,
-		onDescribed = onDescribedHere,
 	}: SpacesControllerOptions,
 ): SpacesController => {
 	const choiceStore = createStore(initialSpacesChoice)
@@ -304,7 +299,7 @@ export const createSpacesController = (
 		listQuery,
 
 		watch: () => {
-			const detach = onDescribed(() => {
+			const detach = listenOnThisComputer(SPACE_DESCRIBED_EVENT, () => {
 				void reload()
 			}).catch(() => {
 				reportFailure({ title: i18n.t("chat:screen.notice.failed") })
