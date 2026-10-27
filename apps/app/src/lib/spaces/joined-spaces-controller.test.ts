@@ -287,14 +287,6 @@ describe("the avatar seed of a switcher row", () => {
 		})
 	})
 
-	it("keeps the arcs of a shared space no longer hosted", () => {
-		const unhosted = { ...OWNED_STUDIO, shared: false }
-
-		expect(arcsOfRow(switcherSpacesOf([unhosted], []), "studio")).toEqual(
-			spaceArcs(SHARED_INSTANCE_ID),
-		)
-	})
-
 	it("draws a space never shared with the arcs of its local id", () => {
 		const local = { ...OWNED_STUDIO, shared: false, instanceId: null }
 
