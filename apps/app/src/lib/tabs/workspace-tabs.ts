@@ -197,14 +197,15 @@ export const createWorkspaceTabs = (
 		})
 
 	const reopenClosed = () => {
-		const closed = closedTabsOf(store.getState())
-		const last = closed.at(-1)
+		const last = closedTabsOf(store.getState()).at(-1)
 		if (!last) {
 			return
 		}
 		const reopen = (space: SpaceTabs) => reopenTab(space, last)
 		askIfLeaving(reopen, () => {
-			keepClosed(closed.slice(0, -1))
+			keepClosed(
+				closedTabsOf(store.getState()).filter((closed) => closed !== last),
+			)
 			change(reopen)
 		})
 	}
