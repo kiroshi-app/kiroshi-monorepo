@@ -4,22 +4,17 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import { listenOnThisWindow } from "./window-listen"
 
-type IpcCall = { command: string; args: unknown }
+type ListenArgs = { target: unknown }
 
-const EVENT = "join-link://opened"
-
-let calls: IpcCall[] = []
-
-const listenTargets = () =>
-	calls
-		.filter(({ command }) => command === "plugin:event|listen")
-		.map(({ args }) => (args as { target: unknown }).target)
+let listenTargets: unknown[] = []
 
 beforeEach(() => {
-	calls = []
-	mockWindows("A", "B")
+	listenTargets = []
+	mockWindows("A")
 	mockIPC((command, args) => {
-		calls.push({ command, args })
+		if (command === "plugin:event|listen") {
+			listenTargets.push((args as ListenArgs).target)
+		}
 		return 1
 	})
 })
@@ -30,8 +25,8 @@ afterEach(() => {
 
 describe("listenOnThisWindow", () => {
 	it("registers the listener on the current window only", async () => {
-		await listenOnThisWindow(EVENT, () => undefined)
+		await listenOnThisWindow("join-link://opened", () => undefined)
 
-		expect(listenTargets()).toEqual([{ kind: "WebviewWindow", label: "A" }])
+		expect(listenTargets).toEqual([{ kind: "WebviewWindow", label: "A" }])
 	})
 })
