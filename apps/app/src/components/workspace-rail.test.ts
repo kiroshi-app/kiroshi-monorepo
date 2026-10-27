@@ -326,42 +326,40 @@ const PRODUCED_SPACES: ProducedSpace[] = [
 	},
 ]
 
-const useProducedRail = ({
+const produceRailFor = ({
 	selectedSpaceId,
 	connections,
 }: Pick<ProducedSpace, "selectedSpaceId" | "connections">) =>
-	useWorkspaceRail({
-		collapsedSectionIds: [],
-		core: NO_SECTIONS_CORE,
-		navigation: {} as SettingsNavigation,
-		overlay: {} as WorkspaceOverlay,
-		panels: {} as SettingsPanels,
-		rosterLines: { sidebarActions: {} } as RosterLines,
-		rosterLists: {} as RosterLists,
-		sidebarTab: { openTab: "conversations" } as ReturnType<
-			typeof useSidebarPanelSwitch
-		>,
-		switcher: useSwitcherSpaces(
-			{ spaces: [HOME, GARAGE], selectedSpaceId },
-			{
-				state: {
-					joinedSpaces: [STUDIO],
-					hasFailedToLoad: false,
-					openId: selectedSpaceId === STUDIO_ROW_ID ? STUDIO.id : null,
-					departed: null,
+	renderHook(() =>
+		useWorkspaceRail({
+			collapsedSectionIds: [],
+			core: NO_SECTIONS_CORE,
+			navigation: {} as SettingsNavigation,
+			overlay: {} as WorkspaceOverlay,
+			panels: {} as SettingsPanels,
+			rosterLines: { sidebarActions: {} } as RosterLines,
+			rosterLists: {} as RosterLists,
+			sidebarTab: { openTab: "conversations" } as ReturnType<
+				typeof useSidebarPanelSwitch
+			>,
+			switcher: useSwitcherSpaces(
+				{ spaces: [HOME, GARAGE], selectedSpaceId },
+				{
+					state: {
+						joinedSpaces: [STUDIO],
+						hasFailedToLoad: false,
+						openId: selectedSpaceId === STUDIO_ROW_ID ? STUDIO.id : null,
+						departed: null,
+					},
+					controller: {} as JoinedSpacesController,
+					hosts: { active: null, connections },
 				},
-				controller: {} as JoinedSpacesController,
-				hosts: { active: null, connections },
-			},
-			NO_INVITATIONS,
-		),
-		tabs: createWorkspaceTabs(),
-		onSelectSpace: () => undefined,
-	})
-
-const produceRailFor = (
-	space: Pick<ProducedSpace, "selectedSpaceId" | "connections">,
-) => renderHook(() => useProducedRail(space)).result.current
+				NO_INVITATIONS,
+			),
+			tabs: createWorkspaceTabs(),
+			onSelectSpace: () => undefined,
+		}),
+	).result.current
 
 describe.each(PRODUCED_SPACES)(
 	"the sidebar frame producer with $label selected",
