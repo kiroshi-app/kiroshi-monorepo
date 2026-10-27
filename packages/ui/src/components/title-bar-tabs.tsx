@@ -331,6 +331,7 @@ const TitleBarTabItem = ({
 	const { t } = useTranslation("common")
 	const needsYou = Boolean(tab.isNeedingYou) && !isActive
 	const isLifted = lift.lift?.id === tab.id
+	const PinIcon = tab.isPinned ? Icons.Unpin : Icons.Pin
 
 	return (
 		<ContextMenu>
@@ -393,11 +394,7 @@ const TitleBarTabItem = ({
 					className={TITLE_BAR_MENU_ROW}
 					onClick={() => (tab.isPinned ? onUnpinTab : onPinTab)?.(tab.id)}
 				>
-					{tab.isPinned ? (
-						<Icons.Unpin aria-hidden="true" className="size-3.5" />
-					) : (
-						<Icons.Pin aria-hidden="true" className="size-3.5" />
-					)}
+					<PinIcon aria-hidden="true" className="size-3.5" />
 					{t(tab.isPinned ? "titleBar.unpinTab" : "titleBar.pinTab")}
 					<ContextMenuShortcut aria-hidden="true">
 						{t(TAB_MENU_SHORTCUTS.pinTab.hint)}
