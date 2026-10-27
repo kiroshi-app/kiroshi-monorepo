@@ -80,11 +80,10 @@ export const Default = meta.story({
 export const StoppedItself = meta.story({
 	args: RELEASE_WATCH,
 	parameters: {
-		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:
-					"The routine failed often enough that it switched itself off. The badge says so in words, not in colour alone, and it is drawn on the destructive status token — the palette's known contrast gap, flagged for review rather than nudged here. Check that enabling the routine again clears the badge in the same press, and that the badge keeps its full size while the title truncates beside it. `packages/ui/src/components/routines-panel.tsx:298` lists one row per stored routine, with the switch and the menu wired to the routines controller.",
+					"The routine failed often enough that it switched itself off. The badge says so in words, not in colour alone, and it wears `--destructive` on its own tint, 4.87:1 in the light theme, which clears AA. Check that enabling the routine again clears the badge in the same press, and that the badge keeps its full size while the title truncates beside it. `packages/ui/src/components/routines-panel.tsx:298` lists one row per stored routine, with the switch and the menu wired to the routines controller.",
 			},
 		},
 	},
