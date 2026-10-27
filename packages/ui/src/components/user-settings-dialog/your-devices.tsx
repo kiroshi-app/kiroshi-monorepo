@@ -188,7 +188,7 @@ const RemovalConfirm = ({
 					aria-describedby={titleId}
 					className={cn(
 						CONFIRM_BUTTON_CLASS,
-						"bg-destructive/60 text-foreground hover:bg-destructive/50 data-disabled:opacity-70",
+						"bg-destructive/60 text-foreground hover:bg-destructive/50 data-disabled:opacity-70 dark:bg-destructive/40 dark:hover:bg-destructive/30",
 					)}
 					disabled={isRemoving}
 					focusableWhenDisabled
