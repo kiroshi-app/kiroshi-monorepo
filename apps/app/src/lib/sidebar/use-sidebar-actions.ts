@@ -1,7 +1,9 @@
 import { useMemo } from "react"
 
 import type { AppSidebarProps } from "@workspace/ui/components/app-sidebar"
+import { i18n } from "@workspace/ui/lib/i18n"
 
+import { failureReporterIn } from "../failure-report"
 import type { RosterController } from "../bots/roster-controller"
 import type { AttachmentsController } from "../chat/attachments-controller"
 import type { DraftsController } from "../chat/drafts-controller"
@@ -49,7 +51,7 @@ export type SidebarActions = Required<
 		| "onSelectSpace"
 	>
 > & {
-	onDeleteConversation: (id: string) => Promise<void>
+	onDeleteConversation: (id: string) => Promise<boolean>
 }
 
 type SettingsOpening = Pick<
@@ -83,6 +85,8 @@ const openSpaceRowId = (
 	joinedSpaces: JoinedSpacesController,
 	spaces: SpacesController,
 ) => openRowIdOf(joinedSpaces.getState(), spaces.getState().selectedSpaceId)
+
+const reportFailure = failureReporterIn("use-sidebar-actions")
 
 export const useSidebarActions = ({
 	attachments,
@@ -133,10 +137,19 @@ export const useSidebarActions = ({
 			onDeleteBot: (id) =>
 				settings.openCompanionSettings(id, { entry: COMPANION_DANGER_ENTRY }),
 			onDeleteConversation: async (id) => {
-				await runtimes.release(id)
+				try {
+					await runtimes.release(id)
+					await roster.removeConversation(id)
+				} catch {
+					void reportFailure(
+						{ title: i18n.t("chat:conversationSettings.danger.failed") },
+						{ conversation: id },
+					)
+					return false
+				}
 				attachments.forget({ kind: "conversation", id })
 				drafts.forget(id)
-				await roster.removeConversation(id)
+				return true
 			},
 			onDeleteSection: (id) => {
 				void sections.remove(id)

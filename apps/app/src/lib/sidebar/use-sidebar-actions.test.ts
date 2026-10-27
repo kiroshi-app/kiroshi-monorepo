@@ -3,7 +3,7 @@
 import { cleanup, renderHook } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import "@workspace/ui/lib/i18n"
+import { i18n } from "@workspace/ui/lib/i18n"
 
 import {
 	type SidebarActionsSource,
@@ -11,10 +11,18 @@ import {
 } from "./use-sidebar-actions"
 
 import { createStore } from "../store"
+import { createDraftsController } from "../chat/drafts-controller"
 import {
 	createOpenedMissionController,
 	type SelectedRow,
 } from "../missions/opened-mission-controller"
+
+const { reportFailure } = vi.hoisted(() => ({ reportFailure: vi.fn() }))
+
+vi.mock("../failure-report", async (importOriginal) => ({
+	...(await importOriginal<typeof import("../failure-report")>()),
+	failureReporterIn: () => reportFailure,
+}))
 
 const UNUSED = {} as never
 
@@ -220,5 +228,74 @@ describe("open in a new tab from a row menu", () => {
 		expect(shown.rows.selectConversation).not.toHaveBeenCalled()
 		expect(shown.roster.getState()).toEqual(SHOWN_BOT)
 		expect(shown.openedMission.getState()).not.toBeNull()
+	})
+})
+
+type Deletion = {
+	release: () => Promise<void>
+	removeConversation: () => Promise<void>
+}
+
+const SETTLED = async () => undefined
+
+const REFUSED = () => Promise.reject(new Error("no record"))
+
+const deletionFor = ({ release, removeConversation }: Deletion) => {
+	reportFailure.mockClear()
+	const attachments = { forget: vi.fn() }
+	const drafts = createDraftsController()
+	drafts.remember("c-1", "Half a thought")
+	const source: SidebarActionsSource = {
+		attachments: attachments as never,
+		collapsedSections: UNUSED,
+		drafts,
+		joinedSpaces: UNUSED,
+		openedMission: UNUSED,
+		roster: { removeConversation } as never,
+		runtimes: { release } as never,
+		sections: UNUSED,
+		settings: UNUSED,
+		spaces: UNUSED,
+	}
+	const { result } = renderHook(() => useSidebarActions(source))
+	return { actions: result.current, attachments, drafts }
+}
+
+describe("deleting a conversation", () => {
+	it.each([
+		["the runtime release", { release: REFUSED, removeConversation: SETTLED }],
+		["the store deletion", { release: SETTLED, removeConversation: REFUSED }],
+	])(
+		"reports a refused deletion once when %s fails and keeps its draft and attachments",
+		async (_, deletion) => {
+			const refused = deletionFor(deletion)
+
+			const isDeleted = await refused.actions.onDeleteConversation("c-1")
+
+			expect(isDeleted).toBe(false)
+			expect(reportFailure).toHaveBeenCalledExactlyOnceWith(
+				{ title: i18n.t("chat:conversationSettings.danger.failed") },
+				{ conversation: "c-1" },
+			)
+			expect(refused.drafts.read("c-1")).toBe("Half a thought")
+			expect(refused.attachments.forget).not.toHaveBeenCalled()
+		},
+	)
+
+	it("forgets the draft and attachments of a deleted conversation without a notice", async () => {
+		const deleted = deletionFor({
+			release: SETTLED,
+			removeConversation: SETTLED,
+		})
+
+		const isDeleted = await deleted.actions.onDeleteConversation("c-1")
+
+		expect(isDeleted).toBe(true)
+		expect(reportFailure).not.toHaveBeenCalled()
+		expect(deleted.drafts.read("c-1")).toBe("")
+		expect(deleted.attachments.forget).toHaveBeenCalledExactlyOnceWith({
+			kind: "conversation",
+			id: "c-1",
+		})
 	})
 })

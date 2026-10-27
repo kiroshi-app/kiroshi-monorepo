@@ -1649,6 +1649,24 @@ describe("createRosterController on conversations", () => {
 		expect(await store.conversations("personal")).toEqual([])
 	})
 
+	it("rejects a refused deletion and keeps the conversation shown", async () => {
+		const store = createFakeTranscriptStore()
+		const controller = await loaded(store)
+		const created = await controller.createConversation()
+		const id = created?.id ?? ""
+		vi.spyOn(store, "deleteConversation").mockRejectedValue(
+			new Error("no record"),
+		)
+		const rereads = vi.spyOn(store, "conversationPage")
+
+		await expect(controller.removeConversation(id)).rejects.toThrow("no record")
+
+		const state = controller.getState()
+		expect(rereads).toHaveBeenCalled()
+		expect(state.conversations.map((held) => held.id)).toEqual([id])
+		expect(state.selectedConversationId).toBe(id)
+	})
+
 	it("selects the first row of the roster when the remembered conversation is gone", async () => {
 		const store = createFakeTranscriptStore()
 		const controller = mountRoster(store)
