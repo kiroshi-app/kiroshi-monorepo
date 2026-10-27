@@ -21,7 +21,7 @@ const RESOLVED_SUFFIXES = [
 	"/index.tsx",
 ]
 
-const SCANNED_MODULE = /\.(ts|tsx|js)$/
+export const SCANNED_MODULE = /\.(ts|tsx|js)$/
 
 const TEST_FILE = /\.test\.tsx?$/
 
