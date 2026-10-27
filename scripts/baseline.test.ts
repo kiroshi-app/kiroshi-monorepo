@@ -10,6 +10,7 @@ import {
 	TESTS,
 	testedStoryIds,
 	vitestFailures,
+	vitestRetriedPasses,
 	withOrdinals,
 } from "./baseline"
 
@@ -154,6 +155,35 @@ describe("baseline test items", () => {
 
 		expect(items).toEqual([
 			"ui :: packages/ui/src/panel.test.ts :: panel opens late",
+		])
+	})
+
+	it("names a test that passed only on its retry, never one green at once or red on its retry", () => {
+		const retried = vitestRetriedPasses({
+			success: false,
+			testResults: [
+				{
+					name: "apps/app/src/flip.test.ts",
+					status: "failed",
+					assertionResults: [
+						{ ...passing, failureMessages: [] },
+						{
+							fullName: "flips once",
+							status: "passed",
+							failureMessages: ["AssertionError: expected 1 to be 2"],
+						},
+						{
+							fullName: "stays red",
+							status: "failed",
+							failureMessages: ["first", "second"],
+						},
+					],
+				},
+			],
+		})
+
+		expect(retried).toEqual([
+			{ file: "apps/app/src/flip.test.ts", name: "flips once" },
 		])
 	})
 

@@ -1,3 +1,5 @@
+import { appendFileSync, mkdtempSync, readFileSync } from "node:fs"
+import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -8,11 +10,14 @@ import {
 	testImportersByModule,
 } from "./test-importers"
 
+type Retry = "vitest" | "cargo"
+
 export type Step = {
 	name: string
 	command: string
 	cwd?: string
 	heavy?: true
+	retry?: Retry
 }
 
 const REPO = fileURLToPath(new URL("..", import.meta.url))
@@ -20,6 +25,10 @@ const REPO = fileURLToPath(new URL("..", import.meta.url))
 const SLOT = join(REPO, "scripts/slot.sh")
 
 const APP = "apps/app"
+
+const SRC_TAURI = join(APP, "src-tauri")
+
+const RETRYING_EVENT = "merge_group"
 
 const SIMULATOR_DESTINATION =
 	'-destination "platform=iOS Simulator,id=$SIMULATOR"'
@@ -141,6 +150,7 @@ export const GATE = {
 		{
 			name: "Unit tests, website, sidecar and story ids against the baseline",
 			command: "bun run baseline vitest",
+			retry: "vitest",
 		},
 	],
 	website: [{ name: "Build website", command: "bun run build:website" }],
@@ -154,6 +164,7 @@ export const GATE = {
 				"cargo test --manifest-path src-tauri/Cargo.toml --features fake-claude",
 			cwd: APP,
 			heavy: true,
+			retry: "cargo",
 		},
 		BINDINGS_MATCH,
 	],
@@ -162,6 +173,7 @@ export const GATE = {
 			name: "Stories played in chromium against the baseline",
 			command: "bun run baseline storybook",
 			heavy: true,
+			retry: "vitest",
 		},
 	],
 	ios: [
@@ -424,8 +436,151 @@ const runStep = ({ label, step }: Labelled) => {
 	return false
 }
 
+export const retryOf = (step: Step, event: string | undefined) =>
+	event === RETRYING_EVENT ? step.retry : undefined
+
+const shellQuoted = (text: string) => `'${text.replaceAll("'", "'\\''")}'`
+
+export const vitestRetryStep = (step: Step): Step => ({
+	...step,
+	command: `${step.command} --retry`,
+})
+
+export const loggedCargoStep = (step: Step, log: string): Step => ({
+	...step,
+	command: `set -o pipefail; ${step.command} --no-fail-fast 2>&1 | tee ${shellQuoted(log)}`,
+})
+
+export type FailedRustTarget = {
+	target: string
+	file: string
+	tests: string[]
+	isAttributed: boolean
+}
+
+const RUST_TARGET_START = /^\s+(?:Running (?:unittests )?(\S+) \(|Doc-tests )/
+
+const FAILED_RUST_TEST = /^test (.+) \.\.\. FAILED$/
+
+const FAILED_RUST_RESULT = /^test result: FAILED\. \d+ passed; (\d+) failed;/
+
+const RUST_RERUN_HINT = /^error: (?:doc)?test failed, to rerun pass `([^`]+)`/
+
+const DOC_TESTS_TARGET = "--doc"
+
+const SINGLE_RUST_TEST_PASSED = /^test result: ok\. 1 passed;/m
+
+export const failedRustTargets = (output: string) => {
+	const targets: FailedRustTarget[] = []
+	let file = SRC_TAURI
+	let tests: string[] = []
+	let reportedFailures = -1
+	for (const line of output.split("\n").map((raw) => raw.trimEnd())) {
+		const start = RUST_TARGET_START.exec(line)
+		if (start) {
+			file = start[1] ? join(SRC_TAURI, start[1]) : SRC_TAURI
+			tests = []
+			reportedFailures = -1
+		}
+		const failedTest = FAILED_RUST_TEST.exec(line)?.[1]
+		if (failedTest) tests.push(failedTest)
+		const failures = FAILED_RUST_RESULT.exec(line)?.[1]
+		if (failures) reportedFailures = Number(failures)
+		const target = RUST_RERUN_HINT.exec(line)?.[1]
+		if (target) {
+			const isAttributed = tests.length > 0 && tests.length === reportedFailures
+			targets.push({ target, file, tests, isAttributed })
+			tests = []
+			reportedFailures = -1
+		}
+	}
+	return targets
+}
+
+type RustRerun = { target: string; file: string; test: string }
+
+export const rustRerunStep = (
+	step: Step,
+	{ target, test }: RustRerun,
+): Step => ({
+	...step,
+	command: `${step.command} ${target} -- ${target === DOC_TESTS_TARGET ? "" : "--exact "}${shellQuoted(test)}`,
+})
+
+export type RetriedTest = { file: string; name: string }
+
+const escapedAnnotationData = (text: string) =>
+	text.replaceAll("%", "%25").replaceAll("\r", "%0D").replaceAll("\n", "%0A")
+
+const escapedAnnotationProperty = (text: string) =>
+	escapedAnnotationData(text).replaceAll(":", "%3A").replaceAll(",", "%2C")
+
+export const retriedTestAnnotation = ({ file, name }: RetriedTest) =>
+	`::warning file=${escapedAnnotationProperty(file)},title=Passed only on its retry::${escapedAnnotationData(`${file} :: ${name}`)}`
+
+export const retriedTestSummary = (tests: RetriedTest[]) =>
+	`### Passed only on its retry\n\n${tests.map(({ file, name }) => `- \`${file}\` :: ${name}`).join("\n")}\n\n`
+
+export const reportRetriedTests = (tests: RetriedTest[]) => {
+	if (tests.length === 0) return
+	for (const test of tests) console.log(retriedTestAnnotation(test))
+	// biome-ignore lint/suspicious/noUndeclaredEnvVars: scripts/ci.ts runs outside turbo, its cache never reads this variable
+	const summary = process.env.GITHUB_STEP_SUMMARY
+	if (summary) appendFileSync(summary, retriedTestSummary(tests))
+}
+
+const rerunPasses = (rerun: Step) => {
+	console.log(`\nci  rerun\n    $ ${rerun.command}`)
+	const finished = Bun.spawnSync({
+		cmd: spawnedCommand(rerun),
+		cwd: join(REPO, rerun.cwd ?? ""),
+		stdout: "pipe",
+		stderr: "inherit",
+		env: process.env,
+	})
+	const output = finished.stdout.toString()
+	process.stdout.write(output)
+	return finished.exitCode === 0 && SINGLE_RUST_TEST_PASSED.test(output)
+}
+
+const runRustTestsWithRerun = ({ label, step }: Labelled) => {
+	const log = join(mkdtempSync(join(tmpdir(), "kiroshi-ci-")), "cargo-test.log")
+	if (runStep({ label, step: loggedCargoStep(step, log) })) return true
+	const targets = failedRustTargets(readFileSync(log, "utf8"))
+	const unattributed = targets
+		.filter((target) => !target.isAttributed)
+		.map((target) => target.target)
+	if (targets.length === 0 || unattributed.length > 0) {
+		console.error(
+			`ci  no rerun: cargo test failed outside the tests it names${unattributed.length > 0 ? `, in ${unattributed.join(", ")}` : ""}`,
+		)
+		return false
+	}
+	const reruns = targets.flatMap(({ target, file, tests }) =>
+		tests.map((test) => ({ target, file, test })),
+	)
+	const failedAgain = reruns.filter(
+		(rerun) => !rerunPasses(rustRerunStep(step, rerun)),
+	)
+	for (const { target, test } of failedAgain) {
+		console.error(`ci  failed on its retry too: ${test} (${target})`)
+	}
+	if (failedAgain.length > 0) return false
+	reportRetriedTests(reruns.map(({ file, test }) => ({ file, name: test })))
+	console.log(`ci  ${label} / ${step.name} passed on the rerun`)
+	return true
+}
+
+const runWithRetry = ({ label, step }: Labelled) => {
+	// biome-ignore lint/suspicious/noUndeclaredEnvVars: scripts/ci.ts runs outside turbo, its cache never reads this variable
+	const retry = retryOf(step, process.env.GITHUB_EVENT_NAME)
+	if (retry === "cargo") return runRustTestsWithRerun({ label, step })
+	if (retry === "vitest") return runStep({ label, step: vitestRetryStep(step) })
+	return runStep({ label, step })
+}
+
 const runSteps = (label: string, steps: Step[]) =>
-	steps.every((step) => runStep({ label, step }))
+	steps.every((step) => runWithRetry({ label, step }))
 
 const runGroup = (group: Group) => {
 	if (group === "ios") ensureSimulator()
