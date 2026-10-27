@@ -77,7 +77,10 @@ import {
 } from "@workspace/ui/components/user-settings-dialog/use-user-settings"
 import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 import { useOverlayScrollbars } from "@workspace/ui/hooks/use-overlay-scrollbars"
-import type { ClickModifiers } from "@workspace/ui/lib/click-modifiers"
+import {
+	type ClickModifiers,
+	isPlainClick,
+} from "@workspace/ui/lib/click-modifiers"
 import { cn } from "@workspace/ui/lib/utils"
 
 const HEADER_AVATAR_SIZE = 36
@@ -123,6 +126,7 @@ type SettingsScreenRequestLeave = (navigate: () => void) => void
 type SettingsScreenNavigation = {
 	entry: string
 	onEntryChange: (entry: string, modifiers: ClickModifiers) => void
+	onOpenApplication?: (name: string, modifiers: ClickModifiers) => void
 	onBack: () => void
 	backLabel?: string
 	rail: AppFrameRailProps
@@ -268,6 +272,7 @@ const railAskingBeforeLeaving = (
 const SettingsScreenLayout = ({
 	entry,
 	onEntryChange,
+	onOpenApplication,
 	onBack,
 	backLabel,
 	rail,
@@ -340,6 +345,10 @@ const SettingsScreenLayout = ({
 		server: BotMcpServerItem,
 		modifiers: ClickModifiers,
 	) => {
+		if (onOpenApplication && !isPlainClick(modifiers)) {
+			onOpenApplication(server.name, modifiers)
+			return
+		}
 		if (server.name === openedName) return
 		leaveThen(() => {
 			sessions.applications.open(server)
@@ -481,6 +490,7 @@ const SpaceSettingsScreen = (props: SpaceSettingsScreenProps) => {
 	const {
 		entry,
 		onEntryChange,
+		onOpenApplication,
 		onBack,
 		backLabel,
 		rail,
@@ -602,6 +612,7 @@ const SpaceSettingsScreen = (props: SpaceSettingsScreenProps) => {
 			name={name}
 			onBack={onBack}
 			onEntryChange={onEntryChange}
+			onOpenApplication={onOpenApplication}
 			pages={pages}
 			pinnedAction={pinnedAction}
 			isResizable={isResizable}
@@ -626,6 +637,7 @@ const SpaceSettingsScreen = (props: SpaceSettingsScreenProps) => {
 const UserSettingsScreen = ({
 	entry,
 	onEntryChange,
+	onOpenApplication,
 	onBack,
 	backLabel,
 	rail,
@@ -669,6 +681,7 @@ const UserSettingsScreen = ({
 			name={name}
 			onBack={onBack}
 			onEntryChange={onEntryChange}
+			onOpenApplication={onOpenApplication}
 			pages={pages}
 			isResizable={isResizable}
 			spaceTint={spaceTint}
@@ -726,6 +739,7 @@ const UserSettingsScreen = ({
 const CompanionSettingsScreen = ({
 	entry,
 	onEntryChange,
+	onOpenApplication,
 	onBack,
 	backLabel,
 	rail,
@@ -948,6 +962,7 @@ const CompanionSettingsScreen = ({
 			name={name}
 			onBack={onBack}
 			onEntryChange={onEntryChange}
+			onOpenApplication={onOpenApplication}
 			isCompanionPage
 			pages={pages}
 			isResizable={isResizable}
