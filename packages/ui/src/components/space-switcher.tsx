@@ -157,6 +157,65 @@ type SpaceSwitcherProps = Omit<SpaceSelection, "onReorderSpaces"> &
 		onOpenChange?: (isOpen: boolean) => void
 	}
 
+type SpaceMenuRowsProps = Pick<
+	SpaceSwitcherProps,
+	"spaces" | "badgesBySpaceId" | "hostBySpaceId" | "onSelectSpace"
+> & {
+	selectedSpaceId?: string
+	rowClassName?: string
+}
+
+const SpaceMenuRows = ({
+	spaces,
+	selectedSpaceId,
+	badgesBySpaceId,
+	hostBySpaceId,
+	onSelectSpace,
+	rowClassName,
+}: SpaceMenuRowsProps) => {
+	const { t } = useTranslation("bots")
+
+	return (
+		<ContextMenuRadioGroup
+			onValueChange={(value) => onSelectSpace?.(value)}
+			value={selectedSpaceId}
+		>
+			{spaces.map((space, index) => {
+				const rowHost = hostBySpaceId?.[space.id]
+				const rowPill = hostPillOf(rowHost)
+				return (
+					<ContextMenuRadioItem
+						className={rowClassName}
+						closeOnClick
+						key={space.id}
+						label={space.name}
+						value={space.id}
+					>
+						<SpaceAvatar
+							colour={space.colour}
+							hasAttention={badgesBySpaceId?.[space.id] === "attention"}
+							size={14}
+							spaceId={space.avatarSeed}
+							state={spaceAvatarStateOf(rowHost)}
+						/>
+						<span className={ROW_NAME}>{space.name}</span>
+						{rowPill ? (
+							<HostPill host={rowPill} />
+						) : rowHost ? (
+							<span className="sr-only">{t(`spaces.host.${rowHost}`)}</span>
+						) : null}
+						{index < SPACE_RANK_LIMIT ? (
+							<ContextMenuShortcut>
+								{t("spaces.shortcut", { rank: index + 1 })}
+							</ContextMenuShortcut>
+						) : null}
+					</ContextMenuRadioItem>
+				)
+			})}
+		</ContextMenuRadioGroup>
+	)
+}
+
 const SpaceSwitcher = ({
 	spaces,
 	selectedSpaceId,
@@ -262,44 +321,13 @@ const SpaceSwitcher = ({
 						STILL_UNDER_REDUCED_MOTION,
 					)}
 				>
-					<ContextMenuRadioGroup
-						onValueChange={(value) => onSelectSpace?.(value)}
-						value={selected.id}
-					>
-						{spaces.map((space, index) => {
-							const rowHost = hostBySpaceId?.[space.id]
-							const rowPill = hostPillOf(rowHost)
-							return (
-								<ContextMenuRadioItem
-									closeOnClick
-									key={space.id}
-									label={space.name}
-									value={space.id}
-								>
-									<SpaceAvatar
-										colour={space.colour}
-										hasAttention={badgesBySpaceId?.[space.id] === "attention"}
-										size={14}
-										spaceId={space.avatarSeed}
-										state={spaceAvatarStateOf(rowHost)}
-									/>
-									<span className={ROW_NAME}>{space.name}</span>
-									{rowPill ? (
-										<HostPill host={rowPill} />
-									) : rowHost ? (
-										<span className="sr-only">
-											{t(`spaces.host.${rowHost}`)}
-										</span>
-									) : null}
-									{index < SPACE_RANK_LIMIT ? (
-										<ContextMenuShortcut>
-											{t("spaces.shortcut", { rank: index + 1 })}
-										</ContextMenuShortcut>
-									) : null}
-								</ContextMenuRadioItem>
-							)
-						})}
-					</ContextMenuRadioGroup>
+					<SpaceMenuRows
+						badgesBySpaceId={badgesBySpaceId}
+						hostBySpaceId={hostBySpaceId}
+						onSelectSpace={onSelectSpace}
+						selectedSpaceId={selected.id}
+						spaces={spaces}
+					/>
 					<SpaceInvitations
 						focusedInvitationId={focusedInvitationId}
 						invitations={invitations}
@@ -408,4 +436,4 @@ const SpaceDots = ({
 	)
 }
 
-export { SpaceDots, SpaceSwitcher, type SpaceSwitcherProps }
+export { SpaceDots, SpaceMenuRows, SpaceSwitcher, type SpaceSwitcherProps }

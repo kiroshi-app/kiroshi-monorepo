@@ -55,6 +55,19 @@ const AppSidebarBase = ({
 	insetWindowControls,
 	windowControls,
 	railDots,
+	tabs,
+	activeTabId,
+	overflowTabs,
+	canGoBack,
+	canGoForward,
+	onSelectTab,
+	onCloseTab,
+	onPinTab,
+	onUnpinTab,
+	onCloseOtherTabs,
+	onNewTab,
+	onGoBack,
+	onGoForward,
 	openPanel: controlledPanel,
 	openSettings,
 	onOpenPanelChange,
@@ -84,31 +97,54 @@ const AppSidebarBase = ({
 	return (
 		<>
 			<AppTitleBar
+				activeTabId={activeTabId}
 				badgesBySpaceId={badgesBySpaceId}
+				canGoBack={canGoBack}
+				canGoForward={canGoForward}
 				data-tauri-drag-region={dragRegion}
 				hostBySpaceId={hostBySpaceId}
 				insetWindowControls={insetWindowControls}
 				invitations={invitations}
 				onAcceptInvitation={onAcceptInvitation}
+				onCloseOtherTabs={onCloseOtherTabs}
+				onCloseTab={onCloseTab}
 				onCreateSpace={onCreateSpace}
 				onDeclineInvitation={onDeclineInvitation}
+				onGoBack={onGoBack}
+				onGoForward={onGoForward}
+				onNewTab={onNewTab}
+				onPinTab={onPinTab}
 				onRetryInvitation={onRetryInvitation}
 				onSelectSpace={onSelectSpace}
+				onSelectTab={onSelectTab}
 				onSpaceSwitcherOpenChange={onSpaceSwitcherOpenChange}
+				onUnpinTab={onUnpinTab}
+				overflowTabs={overflowTabs}
 				selectedSpaceId={selectedSpaceId}
 				spaces={spaces}
+				tabs={tabs}
 				windowControls={windowControls}
 			/>
 			<AppRail
+				badgesBySpaceId={badgesBySpaceId}
 				data-tauri-drag-region={dragRegion}
 				dots={railDots}
+				hostBySpaceId={hostBySpaceId}
+				invitations={invitations}
+				onAcceptInvitation={onAcceptInvitation}
+				onCreateSpace={onCreateSpace}
+				onDeclineInvitation={onDeclineInvitation}
 				onOpenSpaceSettings={onOpenSpaceSettings}
 				onOpenYou={onOpenUserSettings}
+				onRetryInvitation={onRetryInvitation}
 				onSelectConversations={() => setOpenPanel("conversations")}
 				onSelectMissions={() => setOpenPanel("missions")}
+				onSelectSpace={onSelectSpace}
+				onSpacesMenuOpenChange={onSpaceSwitcherOpenChange}
 				openSettings={openSettings}
 				selected={openPanel}
 				space={space}
+				spaces={tabs ? spaces : undefined}
 				updateBadge={updateBadge}
 				user={user}
 			/>

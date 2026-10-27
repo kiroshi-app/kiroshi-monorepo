@@ -44,6 +44,18 @@ const common = {
 			pointer: "The maximize button can’t show hover or press feedback.",
 		},
 	},
+	titleBar: {
+		tabs: "Tabs",
+		back: "Back",
+		forward: "Forward",
+		newTab: "New tab",
+		closeTab: "Close tab",
+		pinTab: "Pin tab",
+		unpinTab: "Unpin tab",
+		closeOtherTabs: "Close other tabs",
+		more: "{{count}} more",
+		tabNeedsYou: "{{title}}, needs you",
+	},
 	notice: {
 		label: "Notices",
 		close: "Close notice",

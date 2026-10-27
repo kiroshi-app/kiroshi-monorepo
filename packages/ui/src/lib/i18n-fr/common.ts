@@ -44,6 +44,18 @@ const common = {
 			pointer: "Le bouton Agrandir ne peut pas afficher le survol ni l’appui.",
 		},
 	},
+	titleBar: {
+		tabs: "Onglets",
+		back: "Précédent",
+		forward: "Suivant",
+		newTab: "Nouvel onglet",
+		closeTab: "Fermer l’onglet",
+		pinTab: "Épingler l’onglet",
+		unpinTab: "Désépingler l’onglet",
+		closeOtherTabs: "Fermer les autres onglets",
+		more: "{{count}} de plus",
+		tabNeedsYou: "{{title}}, vous attend",
+	},
 	notice: {
 		label: "Avis",
 		close: "Fermer l’avis",

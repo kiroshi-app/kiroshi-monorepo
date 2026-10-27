@@ -3,9 +3,11 @@ import { expect, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
+	A11Y_FLOATING_FOCUS_GUARDS,
 	isInBrowserRunner,
 	probedStyleOf,
 	realPointer,
+	settled,
 	slotIn,
 	tokenStyleIn,
 } from "@workspace/storybook/story-utils"
@@ -17,6 +19,15 @@ import {
 	NAVIGATION_ROW_GAP,
 } from "@workspace/ui/components/app-rail"
 import { AppSidebar } from "@workspace/ui/components/app-sidebar"
+import { AppTitleBar } from "@workspace/ui/components/app-title-bar"
+import {
+	ATELIER,
+	GARAGE,
+	LOGIN_REDIRECT,
+	RELEASE_NOTES,
+	STUDIO,
+	WEEKLY_PLANNING,
+} from "@workspace/ui/components/app-title-bar.fixtures"
 import type { BotBadge } from "@workspace/ui/components/bot-badge"
 import { blotTint } from "@workspace/ui/components/companion-colour"
 import type { Space } from "@workspace/ui/components/space"
@@ -911,5 +922,136 @@ export const CurrentBesideIdleDark = meta.story({
 	play: async ({ canvasElement }) => {
 		await expectCurrentBesideIdle(canvasElement)
 		await expectHoverBetweenIdleAndCurrent(canvasElement)
+	},
+})
+
+const SPACES_MENU = "Change space, Vocca open"
+
+const SPACE_LIST: Space[] = [STUDIO, CURRENT_SPACE, ATELIER, GARAGE]
+
+const renderSpacesWindow = (args: AppRailProps) => (
+	<div className="surface-shell relative flex h-[32rem] w-320 pt-10">
+		<AppTitleBar
+			activeTabId={RELEASE_NOTES.id}
+			canGoBack
+			data-tauri-drag-region="deep"
+			insetWindowControls
+			tabs={[RELEASE_NOTES, LOGIN_REDIRECT, WEEKLY_PLANNING]}
+		/>
+		<AppRail {...args} />
+	</div>
+)
+
+const A7 = {
+	spaces: SPACE_LIST,
+	onSelectSpace: fn(),
+	onCreateSpace: fn(),
+} satisfies Partial<AppRailProps>
+
+const playA7 = async ({
+	args,
+	canvasElement,
+	userEvent,
+}: {
+	args: AppRailProps
+	canvasElement: HTMLElement
+	userEvent: { click: (element: Element) => Promise<void> }
+}) => {
+	const logo = entryNamed(canvasElement, SPACES_MENU)
+	await expect(logo).not.toHaveAttribute("aria-current")
+	await expect(getComputedStyle(logo).backgroundColor).toBe("rgba(0, 0, 0, 0)")
+	await userEvent.click(logo)
+	const menu = await settled(
+		await screen.findByRole("menu", { name: "Spaces" }),
+	)
+	await expect(logo).toHaveAttribute("aria-expanded", "true")
+	await expect(getComputedStyle(logo).backgroundColor).toBe(
+		tokenStyleIn(logo, "bg-rail-item-selected", "backgroundColor"),
+	)
+	await expect(menu.getBoundingClientRect().width).toBe(248)
+
+	const rows = within(menu).getAllByRole("menuitemradio")
+	await expect(rows).toHaveLength(SPACE_LIST.length)
+	for (const [rank, space] of SPACE_LIST.entries()) {
+		await expect(rows[rank]).toHaveAccessibleName(new RegExp(`^${space.name}`))
+		await expect(rows[rank]).toHaveTextContent(`⌘${rank + 1}`)
+		await expect(rows[rank].getBoundingClientRect().height).toBe(32)
+		await expect(rows[rank]).toHaveAttribute(
+			"aria-checked",
+			space.id === CURRENT_SPACE.id ? "true" : "false",
+		)
+	}
+	const avatar = slotIn(rows[0], "space-avatar")
+	await expect(avatar.getBoundingClientRect().width).toBe(14)
+	await expect(avatar.dataset.colour).toBe(STUDIO.colour)
+	await expect(
+		within(menu)
+			.getAllByRole("menuitem")
+			.map((item) => item.textContent),
+	).toEqual(["Space settings", "Create a space"])
+	await expect(args.onSelectSpace).not.toHaveBeenCalled()
+}
+
+export const A7SpacesMenu = meta.story({
+	args: A7,
+	render: renderSpacesWindow,
+	parameters: {
+		a11y: A11Y_FLOATING_FOCUS_GUARDS,
+		docs: {
+			description: {
+				story:
+					"A7, light: the Spaces menu the rail's Space logo opens, in a 1280px window under the tab bar. Check the logo rests on no fill and takes the selected rail fill while its menu is open, that the 248px menu lists the four spaces with their 10px swatch, their name and their shortcut, the current one checked, then a rule, Space settings and Create a space. Pick `SpaceLogoHovered` for the logo itself.",
+			},
+		},
+	},
+	play: playA7,
+})
+
+export const A7SpacesMenuDark = meta.story({
+	args: A7,
+	globals: { theme: "dark" },
+	render: renderSpacesWindow,
+	parameters: {
+		a11y: A11Y_FLOATING_FOCUS_GUARDS,
+		docs: {
+			description: {
+				story:
+					"A7, dark: the Spaces menu on the raised dark menu ground, the open logo on the 12% white fill. Pick `A7SpacesMenu` for the light theme.",
+			},
+		},
+	},
+	play: playA7,
+})
+
+export const SpacesMenuGestures = meta.story({
+	tags: ["test-only"],
+	args: { ...A7, onSpacesMenuOpenChange: fn() },
+	parameters: {
+		a11y: A11Y_FLOATING_FOCUS_GUARDS,
+		docs: {
+			description: {
+				story:
+					"Each entry of the Spaces menu reports its gesture: choosing a space reports its id, Space settings and Create a space each report once, and the menu reports it opened. Check no row runs a colour transition and the logo changes its fill at once.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const logo = entryNamed(canvasElement, SPACES_MENU)
+		await expect(getComputedStyle(logo).transitionDuration).toBe("0s")
+		const pick = async (role: "menuitem" | "menuitemradio", name: string) => {
+			await userEvent.click(logo)
+			const menu = await settled(await screen.findByRole("menu"))
+			const row = within(menu).getByRole(role, { name: new RegExp(`^${name}`) })
+			await expect(getComputedStyle(row).transitionDuration).toBe("0s")
+			await userEvent.click(row)
+			await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
+		}
+		await pick("menuitemradio", ATELIER.name)
+		await expect(args.onSelectSpace).toHaveBeenCalledWith(ATELIER.id)
+		await expect(args.onSpacesMenuOpenChange).toHaveBeenCalledWith(true)
+		await pick("menuitem", "Space settings")
+		await expect(args.onOpenSpaceSettings).toHaveBeenCalledTimes(1)
+		await pick("menuitem", "Create a space")
+		await expect(args.onCreateSpace).toHaveBeenCalledTimes(1)
 	},
 })

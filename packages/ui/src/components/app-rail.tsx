@@ -1,9 +1,15 @@
 "use client"
 
-import type { ComponentProps, ReactNode } from "react"
+import type {
+	ComponentProps,
+	HTMLAttributes,
+	ReactElement,
+	ReactNode,
+} from "react"
 import { useTranslation } from "react-i18next"
 
 import { type BotBadge, BotBadgeDot } from "@workspace/ui/components/bot-badge"
+import { ContextMenuPressTrigger } from "@workspace/ui/components/context-menu-press-trigger"
 import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import { FillIcons, Icons } from "@workspace/ui/components/icons"
 import {
@@ -16,8 +22,25 @@ import {
 	SpaceAvatar,
 	spaceAvatarStateOf,
 } from "@workspace/ui/components/space-avatar"
+import {
+	type SpaceInvitation,
+	type SpaceInvitationCallbacks,
+	SpaceInvitations,
+} from "@workspace/ui/components/space-invitations"
+import { SpaceMenuRows } from "@workspace/ui/components/space-switcher"
+import {
+	TITLE_BAR_MENU,
+	TITLE_BAR_MENU_ROW,
+} from "@workspace/ui/components/title-bar-menu"
 import { TooltipButton } from "@workspace/ui/components/tooltip-button"
+import {
+	ContextMenu,
+	ContextMenuContent,
+	ContextMenuItem,
+	ContextMenuSeparator,
+} from "@workspace/ui/components/ui/context-menu"
 import type { UserChipIdentity } from "@workspace/ui/components/user-chip"
+import { STILL_UNDER_REDUCED_MOTION } from "@workspace/ui/lib/reduced-motion"
 import { cn } from "@workspace/ui/lib/utils"
 
 type AppRailPanel = "conversations" | "missions"
@@ -54,12 +77,23 @@ const RAIL_AVATAR =
 
 const AVATAR_SIZE = 26
 
+const RAIL_SPACES_TRIGGER =
+	"transition-none aria-expanded:bg-rail-item-selected aria-expanded:text-foreground dark:aria-expanded:bg-rail-item-selected"
+
+const SPACES_MENU_ROW = "gap-2.5 ps-2.5 pe-8 [&_svg]:size-3.5!"
+
+const SPACES_MENU_ICON = "size-3.5"
+
+type RailButton = ReactElement<HTMLAttributes<HTMLElement>>
+
 type RailItemProps = {
 	name: string
 	badge?: BotBadge
 	hasDot?: boolean
 	isSelected?: boolean
+	className?: string
 	onPress?: () => void
+	renderButton?: (button: RailButton) => ReactNode
 	children: ReactNode
 }
 
@@ -68,7 +102,9 @@ const RailItem = ({
 	badge,
 	hasDot,
 	isSelected,
+	className,
 	onPress,
+	renderButton,
 	children,
 }: RailItemProps) => {
 	const { t } = useTranslation("bots")
@@ -78,37 +114,33 @@ const RailItem = ({
 			? t("rail.dot", { name })
 			: name
 
-	return (
-		<li>
-			<TooltipButton
-				aria-current={isSelected ? "true" : undefined}
-				aria-label={spokenName}
-				className={RAIL_ITEM}
-				data-slot="app-rail-item"
-				onClick={onPress}
-				size="icon-lg"
-				tooltip={name}
-				tooltipSide="right"
-				variant="ghost"
-			>
-				{children}
-				{badge ? (
-					<BotBadgeDot
-						badge={badge}
-						data-slot="app-rail-dot"
-						placement="rail"
-					/>
-				) : null}
-				{hasDot ? (
-					<span
-						aria-hidden="true"
-						className={RAIL_DOT}
-						data-slot="app-rail-dot"
-					/>
-				) : null}
-			</TooltipButton>
-		</li>
+	const button = (
+		<TooltipButton
+			aria-current={isSelected ? "true" : undefined}
+			aria-label={spokenName}
+			className={cn(RAIL_ITEM, className)}
+			data-slot="app-rail-item"
+			onClick={onPress}
+			size="icon-lg"
+			tooltip={name}
+			tooltipSide="right"
+			variant="ghost"
+		>
+			{children}
+			{badge ? (
+				<BotBadgeDot badge={badge} data-slot="app-rail-dot" placement="rail" />
+			) : null}
+			{hasDot ? (
+				<span
+					aria-hidden="true"
+					className={RAIL_DOT}
+					data-slot="app-rail-dot"
+				/>
+			) : null}
+		</TooltipButton>
 	)
+
+	return <li>{renderButton ? renderButton(button) : button}</li>
 }
 
 type RailAvatarProps = UserChipIdentity
@@ -126,24 +158,103 @@ const RailAvatar = ({ name, image }: RailAvatarProps) => (
 	</AvatarFrame>
 )
 
-type AppRailProps = Omit<ComponentProps<"nav">, "children"> & {
-	selected: AppRailPanel
-	space?: Space
-	spaceHost?: SpaceHost
-	openSettings?: AppRailSettings
-	dots?: AppRailDots
-	user?: UserChipIdentity
-	updateBadge?: ReactNode
-	onSelectConversations?: () => void
-	onSelectMissions?: () => void
+type RailSpacesMenuProps = SpaceInvitationCallbacks & {
+	trigger: RailButton
+	spaces: Space[]
+	selectedSpaceId?: string
+	badgesBySpaceId?: Record<string, BotBadge>
+	hostBySpaceId?: Record<string, SpaceHost>
+	invitations?: SpaceInvitation[]
+	onSelectSpace?: (id: string) => void
 	onOpenSpaceSettings?: () => void
-	onOpenYou?: () => void
+	onCreateSpace?: () => void
+	onOpenChange?: (isOpen: boolean) => void
 }
+
+const RailSpacesMenu = ({
+	trigger,
+	spaces,
+	selectedSpaceId,
+	badgesBySpaceId,
+	hostBySpaceId,
+	invitations = [],
+	onSelectSpace,
+	onOpenSpaceSettings,
+	onCreateSpace,
+	onOpenChange,
+	...invitationCallbacks
+}: RailSpacesMenuProps) => {
+	const { t } = useTranslation("bots")
+
+	return (
+		<ContextMenu onOpenChange={(isOpen) => onOpenChange?.(isOpen)}>
+			<ContextMenuPressTrigger render={trigger} />
+			<ContextMenuContent
+				aria-label={t("spaces.label")}
+				className={cn(TITLE_BAR_MENU, "w-62", STILL_UNDER_REDUCED_MOTION)}
+			>
+				<SpaceMenuRows
+					badgesBySpaceId={badgesBySpaceId}
+					hostBySpaceId={hostBySpaceId}
+					onSelectSpace={onSelectSpace}
+					rowClassName={cn(TITLE_BAR_MENU_ROW, SPACES_MENU_ROW)}
+					selectedSpaceId={selectedSpaceId}
+					spaces={spaces}
+				/>
+				<SpaceInvitations {...invitationCallbacks} invitations={invitations} />
+				<ContextMenuSeparator />
+				<ContextMenuItem
+					className={TITLE_BAR_MENU_ROW}
+					onClick={onOpenSpaceSettings}
+				>
+					<Icons.Settings aria-hidden="true" className={SPACES_MENU_ICON} />
+					{t("rail.spaceSettings")}
+				</ContextMenuItem>
+				<ContextMenuItem className={TITLE_BAR_MENU_ROW} onClick={onCreateSpace}>
+					<Icons.Add aria-hidden="true" className={SPACES_MENU_ICON} />
+					{t("spaces.create")}
+				</ContextMenuItem>
+			</ContextMenuContent>
+		</ContextMenu>
+	)
+}
+
+type AppRailProps = Omit<ComponentProps<"nav">, "children"> &
+	SpaceInvitationCallbacks & {
+		selected: AppRailPanel
+		space?: Space
+		spaceHost?: SpaceHost
+		spaces?: Space[]
+		badgesBySpaceId?: Record<string, BotBadge>
+		hostBySpaceId?: Record<string, SpaceHost>
+		invitations?: SpaceInvitation[]
+		onSelectSpace?: (id: string) => void
+		onCreateSpace?: () => void
+		onSpacesMenuOpenChange?: (isOpen: boolean) => void
+		openSettings?: AppRailSettings
+		dots?: AppRailDots
+		user?: UserChipIdentity
+		updateBadge?: ReactNode
+		onSelectConversations?: () => void
+		onSelectMissions?: () => void
+		onOpenSpaceSettings?: () => void
+		onOpenYou?: () => void
+	}
 
 const AppRail = ({
 	selected,
 	space,
 	spaceHost,
+	spaces,
+	badgesBySpaceId,
+	hostBySpaceId,
+	invitations,
+	onSelectSpace,
+	onCreateSpace,
+	onSpacesMenuOpenChange,
+	onAcceptInvitation,
+	onDeclineInvitation,
+	onRetryInvitation,
 	openSettings,
 	dots,
 	user,
@@ -156,6 +267,14 @@ const AppRail = ({
 	...props
 }: AppRailProps) => {
 	const { t } = useTranslation("bots")
+	const spaceLogo = (
+		<SpaceAvatar
+			colour={space?.colour}
+			size={26}
+			spaceId={space?.avatarSeed ?? ""}
+			state={spaceAvatarStateOf(spaceHost)}
+		/>
+	)
 	const panelEntry = (entry: AppRailPanel) => {
 		const isSelected = openSettings === undefined && selected === entry
 		const PanelIcon = (isSelected ? FillIcons : Icons)[PANEL_ICON[entry]]
@@ -175,19 +294,47 @@ const AppRail = ({
 			data-slot="app-rail"
 		>
 			<ul className={RAIL_GROUP}>
-				<RailItem
-					hasDot={dots?.settings}
-					isSelected={openSettings === "space"}
-					name={t("rail.spaceSettings")}
-					onPress={onOpenSpaceSettings}
-				>
-					<SpaceAvatar
-						colour={space?.colour}
-						size={26}
-						spaceId={space?.avatarSeed ?? ""}
-						state={spaceAvatarStateOf(spaceHost)}
-					/>
-				</RailItem>
+				{spaces ? (
+					<RailItem
+						className={RAIL_SPACES_TRIGGER}
+						hasDot={dots?.settings}
+						isSelected={openSettings === "space"}
+						name={
+							space
+								? t("spaces.switch", { name: space.name })
+								: t("spaces.label")
+						}
+						renderButton={(button) => (
+							<RailSpacesMenu
+								badgesBySpaceId={badgesBySpaceId}
+								hostBySpaceId={hostBySpaceId}
+								invitations={invitations}
+								onAcceptInvitation={onAcceptInvitation}
+								onCreateSpace={onCreateSpace}
+								onDeclineInvitation={onDeclineInvitation}
+								onOpenChange={onSpacesMenuOpenChange}
+								onOpenSpaceSettings={onOpenSpaceSettings}
+								onRetryInvitation={onRetryInvitation}
+								onSelectSpace={onSelectSpace}
+								selectedSpaceId={space?.id}
+								spaces={spaces}
+								trigger={button}
+							/>
+						)}
+					>
+						{spaceLogo}
+					</RailItem>
+				) : (
+					// TODO: OPE-1334 drops this Space settings dot once apps/app passes spaces to every rail.
+					<RailItem
+						hasDot={dots?.settings}
+						isSelected={openSettings === "space"}
+						name={t("rail.spaceSettings")}
+						onPress={onOpenSpaceSettings}
+					>
+						{spaceLogo}
+					</RailItem>
+				)}
 				<RailItem
 					{...panelEntry("conversations")}
 					onPress={onSelectConversations}

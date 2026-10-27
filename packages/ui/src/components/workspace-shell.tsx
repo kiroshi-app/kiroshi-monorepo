@@ -11,9 +11,9 @@ import { SidebarProvider } from "@workspace/ui/components/ui/sidebar"
 import { cn } from "@workspace/ui/lib/utils"
 
 const SIDEBAR_INSIDE_SHELL =
-	"**:data-[slot=sidebar-container]:absolute **:data-[slot=sidebar-container]:top-8.5 **:data-[slot=sidebar-container]:bottom-(--shell-inset) **:data-[slot=sidebar-container]:h-auto"
+	"**:data-[slot=sidebar-container]:absolute **:data-[slot=sidebar-container]:top-10 **:data-[slot=sidebar-container]:bottom-(--shell-inset) **:data-[slot=sidebar-container]:h-auto"
 
-const TITLE_BAR_AND_GUTTER = "pt-8.5 pe-1 pb-1"
+const TITLE_BAR_AND_GUTTER = "pt-10 pe-1 pb-1"
 
 const CARD_ON_SHELL_INSET =
 	"*:data-content-card:me-[calc(var(--shell-inset)-var(--spacing))] *:data-content-card:mb-[calc(var(--shell-inset)-var(--spacing))]"
@@ -21,7 +21,7 @@ const CARD_ON_SHELL_INSET =
 const SETTINGS_MENU_ON_SHELL_INSET =
 	"*:data-[slot=settings-menu]:mb-[calc(var(--shell-inset)-var(--spacing))]"
 
-const SHELL_TITLE_BAR_HEIGHT = 34
+const SHELL_TITLE_BAR_HEIGHT = 40
 
 const SHELL_GUTTER = 4
 

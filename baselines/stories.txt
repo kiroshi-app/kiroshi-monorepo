@@ -828,6 +828,8 @@ layout-workspaceshell--space-tinted
 layout-workspaceshell--space-tinted-dark
 layout-workspaceshell--tall-content
 layout-workspaceshell--tall-host
+navigation-apprail--a-7-spaces-menu
+navigation-apprail--a-7-spaces-menu-dark
 navigation-apprail--attention-dot
 navigation-apprail--attention-dot-dark
 navigation-apprail--conversations
@@ -848,6 +850,7 @@ navigation-apprail--selection-moves-to-missions
 navigation-apprail--space-logo-hovered
 navigation-apprail--space-logo-without-space
 navigation-apprail--space-settings-over-conversations
+navigation-apprail--spaces-menu-gestures
 navigation-apprail--update-downloading
 navigation-apprail--update-idle
 navigation-apprail--update-ready
@@ -1038,7 +1041,20 @@ navigation-appsidebarrosterparts--zone-separator
 navigation-appsidebarsection--label-around-a-name
 navigation-appsidebarsection--name-field-commits-on-enter
 navigation-appsidebarsection--open-section
+navigation-apptitlebar--a-1-tabs
+navigation-apptitlebar--a-1-tabs-dark
+navigation-apptitlebar--a-2-equal-width-tabs
+navigation-apptitlebar--a-2-equal-width-tabs-dark
+navigation-apptitlebar--a-3-overflow
+navigation-apptitlebar--a-3-overflow-dark
+navigation-apptitlebar--a-4-pinned-tab
+navigation-apptitlebar--a-4-pinned-tab-dark
+navigation-apptitlebar--a-5-needs-you
+navigation-apptitlebar--a-5-needs-you-dark
+navigation-apptitlebar--a-6-empty-tab
+navigation-apptitlebar--a-6-empty-tab-dark
 navigation-apptitlebar--default
+navigation-apptitlebar--tab-gestures
 navigation-apptitlebar--with-window-controls
 navigation-conversationbotpile--five-bots-show-two-and-a-counter
 navigation-conversationbotpile--one-bot

@@ -253,6 +253,7 @@ const RowAnatomy = ({
 export {
 	ACTIVITY_ROW_CLASS,
 	DOT_CLASS,
+	NEEDS_YOU_GLYPH,
 	ROW_GLYPH_CLASS,
 	RowAnatomy,
 	type RowPart,
