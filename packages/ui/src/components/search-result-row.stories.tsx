@@ -3,6 +3,7 @@ import { expect, fn } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
+	expectClickModifiers,
 	expectSoloAvatarInBothThemes,
 	expectSubjectIconInBothThemes,
 	slotIn,
@@ -602,6 +603,27 @@ export const Activated = meta.story({
 		row.focus()
 		await userEvent.keyboard("{Enter}")
 		await expect(args.onOpen).toHaveBeenCalledTimes(2)
+	},
+})
+
+export const OpensWithClickModifiers = meta.story({
+	tags: ["test-only"],
+	args: { onOpen: fn() },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The row clicked every way a host can tell apart. Check that a middle click reports once with middle and the keys held, keeps the browser from starting its autoscroll, that a Cmd, Ctrl or Shift click reports that key alone, that a plain click and Enter report no key, and that a right-click reports nothing.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		await expectClickModifiers({
+			target: canvas.getByRole("option"),
+			callback: args.onOpen,
+			reported: [],
+			userEvent,
+		})
 	},
 })
 

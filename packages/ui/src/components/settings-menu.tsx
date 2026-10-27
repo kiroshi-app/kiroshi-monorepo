@@ -21,6 +21,10 @@ import {
 } from "@workspace/ui/components/space-avatar"
 import { Badge } from "@workspace/ui/components/ui/badge"
 import { useOverlayScrollbars } from "@workspace/ui/hooks/use-overlay-scrollbars"
+import {
+	type ClickModifiers,
+	clickHandlersFor,
+} from "@workspace/ui/lib/click-modifiers"
 import { cn } from "@workspace/ui/lib/utils"
 
 const MENU =
@@ -179,7 +183,7 @@ type SettingsMenuEntryProps = {
 	isOutlined?: boolean
 	hasIndicator?: boolean
 	count?: number
-	onSelect: () => void
+	onSelect: (modifiers: ClickModifiers) => void
 	children?: ReactNode
 }
 
@@ -206,7 +210,7 @@ const SettingsMenuEntry = ({
 				className={cn(ENTRY, isDanger && DANGER_ENTRY, DISABLED_ENTRY)}
 				data-open={isOpen ? "" : undefined}
 				disabled={isDisabled}
-				onClick={onSelect}
+				{...clickHandlersFor(onSelect)}
 				type="button"
 			>
 				<EntryIcon aria-hidden="true" className={ENTRY_ICON} />
@@ -408,7 +412,7 @@ type SettingsMenuSpaceProps = {
 	isCurrent?: boolean
 	isInvitation?: boolean
 	hasAttention?: boolean
-	onOpen: () => void
+	onOpen: (modifiers: ClickModifiers) => void
 }
 
 const SettingsMenuSpace = ({
@@ -428,6 +432,7 @@ const SettingsMenuSpace = ({
 			<SidebarListRow
 				aria-current={isCurrent ? "true" : undefined}
 				geometry="menu"
+				isMiddleClickSelectable
 				media={
 					<SpaceAvatar
 						colour={colour}

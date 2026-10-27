@@ -4,6 +4,7 @@ import { expect, fireEvent, fn, screen, within } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	colourTransitionsOf,
+	expectClickModifiers,
 	isInBrowserRunner,
 	shown,
 	slotIn,
@@ -25,6 +26,7 @@ import { RosterProvider } from "@workspace/ui/components/roster"
 import type { RosterMenuSection } from "@workspace/ui/components/roster-menu-items"
 import type { Space } from "@workspace/ui/components/space"
 import { UserTurn } from "@workspace/ui/components/turn"
+import { NO_CLICK_MODIFIERS } from "@workspace/ui/lib/click-modifiers"
 
 const ROOM = [...CONVERSATION_BOTS.slice(0, 3), ...LONG_NAMED_BOTS]
 
@@ -612,7 +614,32 @@ export const CompanionSelectOnCountedPill = meta.story({
 
 		await userEvent.click(pill)
 		await expect(selectCompanion).toHaveBeenCalledTimes(1)
-		await expect(selectCompanion).toHaveBeenLastCalledWith(WORDY.id)
+		await expect(selectCompanion).toHaveBeenLastCalledWith(
+			WORDY.id,
+			NO_CLICK_MODIFIERS,
+		)
+	},
+})
+
+export const CompanionSelectWithClickModifiers = meta.story({
+	tags: ["test-only"],
+	parameters: {
+		docs: {
+			description: {
+				story: `A mention under a mounted select and a companion menu, clicked every way a host can tell apart. Check that a middle click reports the companion once with middle and the keys held, keeps the browser from starting its autoscroll, that a Cmd, Ctrl or Shift click reports that key alone, that a plain click and Enter report no key, and that a right-click opens the companion menu and selects nothing. ${SELECT_NOT_YET_RENDERED}`,
+			},
+		},
+	},
+	render: () => <SelectableMessage source={ASKED} withMenu />,
+	play: async ({ canvasElement, userEvent }) => {
+		await expectClickModifiers({
+			target: pillIn(canvasElement),
+			callback: selectCompanion,
+			reported: [WORDY.id],
+			userEvent,
+		})
+		await expect(await screen.findByRole("menu")).toBeVisible()
+		await userEvent.keyboard("{Escape}")
 	},
 })
 
@@ -654,14 +681,20 @@ export const CompanionSelectFromPill = meta.story({
 
 		await userEvent.click(pill)
 		await expect(selectCompanion).toHaveBeenCalledTimes(1)
-		await expect(selectCompanion).toHaveBeenLastCalledWith(WORDY.id)
+		await expect(selectCompanion).toHaveBeenLastCalledWith(
+			WORDY.id,
+			NO_CLICK_MODIFIERS,
+		)
 
 		pill.focus()
 		await userEvent.keyboard("{Enter}")
 		await expect(selectCompanion).toHaveBeenCalledTimes(2)
 		await userEvent.keyboard(" ")
 		await expect(selectCompanion).toHaveBeenCalledTimes(3)
-		await expect(selectCompanion).toHaveBeenLastCalledWith(WORDY.id)
+		await expect(selectCompanion).toHaveBeenLastCalledWith(
+			WORDY.id,
+			NO_CLICK_MODIFIERS,
+		)
 
 		rightClickOn(pill)
 		await shown(await screen.findByRole("menu", { name: COMPANION_MENU_LABEL }))

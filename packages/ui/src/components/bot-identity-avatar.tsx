@@ -14,6 +14,10 @@ import { DitheredFieldAvatar } from "@workspace/ui/components/dithered-field-ava
 import { Icons } from "@workspace/ui/components/icons"
 import { AvatarFrame } from "@workspace/ui/components/initials-avatar"
 import { OutlinedHexagon } from "@workspace/ui/components/outlined-hexagon"
+import {
+	type ClickModifiers,
+	clickHandlersFor,
+} from "@workspace/ui/lib/click-modifiers"
 import { cn } from "@workspace/ui/lib/utils"
 
 type ActivityIndicatorKind = Extract<
@@ -124,7 +128,7 @@ type BotSelectButtonProps = {
 	name: string
 	image?: string
 	size?: number
-	onSelect: () => void
+	onSelect: (modifiers: ClickModifiers) => void
 	children: ReactNode
 }
 
@@ -137,7 +141,7 @@ const BotSelectButton = ({
 		type="button"
 		data-slot="bot-select"
 		aria-label={name}
-		onClick={onSelect}
+		{...clickHandlersFor(onSelect)}
 		className={cn(
 			"block w-fit cursor-pointer transition-opacity duration-150 ease-out hover:not-focus-visible:opacity-70 hover:transition-none motion-reduce:transition-none",
 			SILHOUETTE_FOCUS_RING,

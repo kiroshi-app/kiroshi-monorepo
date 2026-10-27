@@ -2,7 +2,7 @@ import { OverlayScrollbars } from "overlayscrollbars"
 import type { ComponentType, CSSProperties, ReactNode } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import type { ExtraProps } from "react-markdown"
-import { expect, waitFor, within } from "storybook/test"
+import { expect, fireEvent, type Mock, waitFor, within } from "storybook/test"
 
 import {
 	COMPACT_EDGE,
@@ -26,6 +26,10 @@ import {
 	SidebarProvider,
 } from "@workspace/ui/components/ui/sidebar"
 import { SHELL_TITLE_BAR_HEIGHT } from "@workspace/ui/components/workspace-shell"
+import {
+	type ClickModifiers,
+	NO_CLICK_MODIFIERS,
+} from "@workspace/ui/lib/click-modifiers"
 import { cn } from "@workspace/ui/lib/utils"
 
 export const withStoryProps = <Props,>(component: ComponentType<never>) =>
@@ -161,6 +165,110 @@ export const slotIn = (root: Element, slot: string) => {
 	const node = root.querySelector<HTMLElement>(`[data-slot="${slot}"]`)
 	if (!node) throw new Error(`Nothing here draws a ${slot}`)
 	return node
+}
+
+type HeldKeys = Pick<MouseEventInit, "metaKey" | "ctrlKey" | "shiftKey">
+
+const MIDDLE_BUTTON = 1
+
+const SECONDARY_BUTTON = 2
+
+export const middleClick = (target: HTMLElement, held: HeldKeys = {}) => {
+	const isAutoscrollKept = fireEvent.mouseDown(target, {
+		button: MIDDLE_BUTTON,
+		...held,
+	})
+	fireEvent(
+		target,
+		new MouseEvent("auxclick", {
+			bubbles: true,
+			button: MIDDLE_BUTTON,
+			detail: 1,
+			...held,
+		}),
+	)
+	return isAutoscrollKept
+}
+
+export const rightClick = (target: HTMLElement) => {
+	const bounds = target.getBoundingClientRect()
+	const at = { clientX: bounds.left + 4, clientY: bounds.top + 4 }
+	fireEvent.pointerDown(target, { button: SECONDARY_BUTTON, ...at })
+	fireEvent.mouseDown(target, { button: SECONDARY_BUTTON, ...at })
+	fireEvent.contextMenu(target, at)
+	fireEvent(
+		target,
+		new MouseEvent("auxclick", {
+			bubbles: true,
+			button: SECONDARY_BUTTON,
+			detail: 1,
+			...at,
+		}),
+	)
+}
+
+const clickWith = (pressed: Partial<ClickModifiers>) => ({
+	...NO_CLICK_MODIFIERS,
+	...pressed,
+})
+
+const HELD_CLICKS: [HeldKeys, Partial<ClickModifiers>][] = [
+	[{ metaKey: true }, { meta: true }],
+	[{ ctrlKey: true }, { ctrl: true }],
+	[{ shiftKey: true }, { shift: true }],
+]
+
+type ClickGestures = {
+	click: (node: Element) => Promise<void>
+	keyboard: (keys: string) => Promise<void>
+}
+
+type ClickModifiersCheck = {
+	target: HTMLElement
+	callback: unknown
+	reported: unknown[]
+	userEvent: ClickGestures
+}
+
+export const expectClickModifiers = async ({
+	target,
+	callback,
+	reported,
+	userEvent,
+}: ClickModifiersCheck) => {
+	const { calls } = (callback as Mock).mock
+	const before = calls.length
+
+	await expect(middleClick(target, { shiftKey: true })).toBe(false)
+	await expect(calls.length).toBe(before + 1)
+	await expect(callback).toHaveBeenLastCalledWith(
+		...reported,
+		clickWith({ middle: true, shift: true }),
+	)
+
+	for (const [held, pressed] of HELD_CLICKS) {
+		fireEvent.click(target, { ...held, detail: 1 })
+		await expect(callback).toHaveBeenLastCalledWith(
+			...reported,
+			clickWith(pressed),
+		)
+	}
+
+	await userEvent.click(target)
+	await expect(callback).toHaveBeenLastCalledWith(
+		...reported,
+		NO_CLICK_MODIFIERS,
+	)
+	target.focus()
+	await userEvent.keyboard("{Enter}")
+	await expect(callback).toHaveBeenLastCalledWith(
+		...reported,
+		NO_CLICK_MODIFIERS,
+	)
+	await expect(calls.length).toBe(before + 6)
+
+	rightClick(target)
+	await expect(calls.length).toBe(before + 6)
 }
 
 const RAIL_WIDTH = 60

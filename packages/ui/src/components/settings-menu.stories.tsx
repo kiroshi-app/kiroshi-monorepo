@@ -4,6 +4,7 @@ import { expect, fn, within } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+	expectClickModifiers,
 	resolvedRootColor,
 	slotIn,
 	slotsIn,
@@ -172,6 +173,74 @@ const SPACE_PRESSES = {
 	onOpenStudio: fn(),
 	onOpenNorthwind: fn(),
 }
+
+const MODIFIER_PRESSES = {
+	onSelectAccount: fn(),
+	onOpenStudio: fn(),
+}
+
+export const OpensWithClickModifiers = meta.story({
+	tags: ["test-only"],
+	args: {
+		avatar: <SpaceAvatar colour="orange" size={36} spaceId="studio" />,
+		name: "Ada Martin",
+		subtitle: "User settings",
+		footer: undefined,
+		children: (
+			<>
+				<SettingsMenuSection title="Your settings">
+					<SettingsMenuEntry
+						icon="Cloud"
+						isSelected={false}
+						label="Account"
+						onSelect={MODIFIER_PRESSES.onSelectAccount}
+					/>
+				</SettingsMenuSection>
+				<SettingsMenuSection title="Your spaces">
+					<SettingsMenuSpace
+						colour="orange"
+						host="up"
+						name="Studio"
+						onOpen={MODIFIER_PRESSES.onOpenStudio}
+						spaceId="studio"
+					/>
+				</SettingsMenuSection>
+			</>
+		),
+	},
+	render: (args) => (
+		<SidebarProvider>
+			<Frame>
+				<SettingsMenu {...args} />
+			</Frame>
+		</SidebarProvider>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"An entry and a Space row clicked every way a host can tell apart. Check that a middle click reports once with middle and the keys held, keeps the browser from starting its autoscroll, that a Cmd, Ctrl or Shift click reports that key alone, that a plain click and Enter report no key, and that a right-click reports nothing.",
+			},
+		},
+	},
+	play: async ({ canvasElement, userEvent }) => {
+		const menu = within(canvasElement).getByRole("navigation", {
+			name: "Settings",
+		})
+		await expectClickModifiers({
+			target: within(menu).getByRole("button", { name: "Account" }),
+			callback: MODIFIER_PRESSES.onSelectAccount,
+			reported: [],
+			userEvent,
+		})
+		await expectClickModifiers({
+			target: within(menu).getByRole("button", { name: /^Studio/ }),
+			callback: MODIFIER_PRESSES.onOpenStudio,
+			reported: [],
+			userEvent,
+		})
+	},
+})
 
 const heightOf = (element: Element) => element.getBoundingClientRect().height
 

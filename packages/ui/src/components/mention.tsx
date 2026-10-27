@@ -8,6 +8,7 @@ import { CompanionMenuHost } from "@workspace/ui/components/companion-menu"
 import { useCompanionSelect } from "@workspace/ui/components/companion-select"
 import { Icons } from "@workspace/ui/components/icons"
 import { useRosterBot } from "@workspace/ui/components/roster"
+import { clickHandlersFor } from "@workspace/ui/lib/click-modifiers"
 import { cn } from "@workspace/ui/lib/utils"
 
 const MENTION_AVATAR_SIZE = 16
@@ -41,12 +42,15 @@ const Mention = ({ botId, count = 1, className }: MentionProps) => {
 	const isCounted = count > 1
 	const onSelect = useCompanionSelect()
 
-	const selectBot = onSelect && bot ? () => onSelect(bot.id) : undefined
+	const selectHandlers =
+		onSelect && bot
+			? clickHandlersFor((modifiers) => onSelect(bot.id, modifiers))
+			: undefined
 	const pillProps = {
 		className: cn(
 			MENTION_CLASS,
 			!bot && UNKNOWN_CLASS,
-			selectBot && SELECTABLE_CLASS,
+			selectHandlers && SELECTABLE_CLASS,
 			className,
 		),
 		"data-slot": "bot-mention",
@@ -90,8 +94,8 @@ const Mention = ({ botId, count = 1, className }: MentionProps) => {
 
 	return (
 		<CompanionMenuHost companionId={bot?.id}>
-			{selectBot ? (
-				<button {...pillProps} type="button" onClick={selectBot}>
+			{selectHandlers ? (
+				<button {...pillProps} {...selectHandlers} type="button">
 					{content}
 				</button>
 			) : (

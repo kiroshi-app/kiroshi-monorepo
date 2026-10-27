@@ -68,7 +68,7 @@ const MissionTurn = ({ mission, onOpen, wrap }: MissionTurnProps) => {
 						{...card}
 						className="col-start-2 row-start-2 min-w-0"
 						density="card"
-						onOpen={onOpen}
+						onOpen={(missionId) => onOpen(missionId)}
 					/>,
 					wrap,
 				)}

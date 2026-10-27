@@ -2,7 +2,9 @@
 
 import { createContext, type PropsWithChildren, useContext } from "react"
 
-type CompanionSelect = (companionId: string) => void
+import type { ClickModifiers } from "@workspace/ui/lib/click-modifiers"
+
+type CompanionSelect = (companionId: string, modifiers: ClickModifiers) => void
 
 const CompanionSelectContext = createContext<CompanionSelect | undefined>(
 	undefined,

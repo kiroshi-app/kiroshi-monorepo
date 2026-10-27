@@ -5,6 +5,7 @@ import preview from "@workspace/storybook/preview"
 import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 	companionGlyphsIn,
+	expectClickModifiers,
 	slotIn,
 	slotsIn,
 } from "@workspace/storybook/story-utils"
@@ -41,6 +42,7 @@ import {
 import { ROUTINES_PANEL_WIDTH } from "@workspace/ui/components/routines-panel"
 import { SidebarListRow } from "@workspace/ui/components/sidebar-list-row"
 import { Sidebar, SidebarProvider } from "@workspace/ui/components/ui/sidebar"
+import { NO_CLICK_MODIFIERS } from "@workspace/ui/lib/click-modifiers"
 
 const UNRECOGNISED_MISSION_CARD = {
 	...WORKING_MISSION_CARD,
@@ -301,7 +303,10 @@ export const CardWaitingHuman = meta.story({
 		const open = canvas.getByRole("button")
 
 		await userEvent.click(open)
-		await expect(args.onOpen).toHaveBeenCalledWith(WAITING_MISSION_CARD.id)
+		await expect(args.onOpen).toHaveBeenCalledWith(
+			WAITING_MISSION_CARD.id,
+			NO_CLICK_MODIFIERS,
+		)
 
 		await userEvent.tab()
 		await expect(canvas.getByRole("link")).toHaveFocus()
@@ -723,7 +728,10 @@ export const RowWorking = meta.story({
 			WORKING_MISSION.id,
 		)
 		await userEvent.click(canvas.getByText(WORKING_MISSION.objective))
-		await expect(args.onOpen).toHaveBeenCalledWith(WORKING_MISSION.id)
+		await expect(args.onOpen).toHaveBeenCalledWith(
+			WORKING_MISSION.id,
+			NO_CLICK_MODIFIERS,
+		)
 	},
 })
 
@@ -1158,7 +1166,10 @@ export const RowWithStatus = meta.story({
 		await expect(tip).toHaveTextContent("4 minutes ago")
 
 		await userEvent.click(status)
-		await expect(args.onOpen).toHaveBeenCalledWith(WAITING_HUMAN_MISSION.id)
+		await expect(args.onOpen).toHaveBeenCalledWith(
+			WAITING_HUMAN_MISSION.id,
+			NO_CLICK_MODIFIERS,
+		)
 	},
 })
 
@@ -1254,7 +1265,7 @@ const expectOpensFromAnywhere = async ({
 
 	await expect(canvas.getByRole("button").contains(hit)).toBe(true)
 	hit.click()
-	await expect(onOpen).toHaveBeenLastCalledWith(id)
+	await expect(onOpen).toHaveBeenLastCalledWith(id, NO_CLICK_MODIFIERS)
 }
 
 export const RowOpensFromAnywhere = meta.story({
@@ -1282,7 +1293,10 @@ export const RowOpensFromAnywhere = meta.story({
 		await expect(getComputedStyle(open).boxShadow).not.toBe("none")
 		await userEvent.keyboard("{Enter}")
 		await expect(args.onOpen).toHaveBeenCalledTimes(2)
-		await expect(args.onOpen).toHaveBeenLastCalledWith(WORKING_MISSION.id)
+		await expect(args.onOpen).toHaveBeenLastCalledWith(
+			WORKING_MISSION.id,
+			NO_CLICK_MODIFIERS,
+		)
 	},
 })
 
@@ -1311,7 +1325,44 @@ export const CardOpensFromAnywhere = meta.story({
 		await expect(getComputedStyle(open).boxShadow).not.toBe("none")
 		await userEvent.keyboard("{Enter}")
 		await expect(args.onOpen).toHaveBeenCalledTimes(2)
-		await expect(args.onOpen).toHaveBeenLastCalledWith(WORKING_MISSION_CARD.id)
+		await expect(args.onOpen).toHaveBeenLastCalledWith(
+			WORKING_MISSION_CARD.id,
+			NO_CLICK_MODIFIERS,
+		)
+	},
+})
+
+export const OpensWithClickModifiers = meta.story({
+	tags: ["test-only"],
+	args: WORKING_MISSION_CARD,
+	render: (args) => (
+		<div className="flex flex-col gap-6">
+			<MissionCard {...args} density="card" />
+			<Panel>
+				<MissionCard {...args} density="row" />
+			</Panel>
+		</div>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The bubble and the row of one mission, each clicked every way a host can tell apart. Check that a middle click reports the mission once with middle and the keys held, keeps the browser from starting its autoscroll, that a Cmd, Ctrl or Shift click reports that key alone, that a plain click and Enter report no key, and that a right-click opens nothing.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		for (const target of [
+			canvas.getByRole("button", { name: /^Open the mission/ }),
+			slotIn(canvasElement, "sidebar-menu-button"),
+		]) {
+			await expectClickModifiers({
+				target,
+				callback: args.onOpen,
+				reported: [WORKING_MISSION_CARD.id],
+				userEvent,
+			})
+		}
 	},
 })
 

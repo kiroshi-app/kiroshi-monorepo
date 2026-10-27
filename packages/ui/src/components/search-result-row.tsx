@@ -20,6 +20,10 @@ import {
 	type RowPart,
 	RowParts,
 } from "@workspace/ui/components/row-anatomy"
+import {
+	type ClickModifiers,
+	clickHandlersFor,
+} from "@workspace/ui/lib/click-modifiers"
 import { cn } from "@workspace/ui/lib/utils"
 
 type SearchResultIdentity =
@@ -45,7 +49,7 @@ type SearchResultRowProps = {
 	identifier?: string
 	isActive?: boolean
 	id?: string
-	onOpen: () => void
+	onOpen: (modifiers?: ClickModifiers) => void
 }
 
 const ACTIVATION_CLASS =
@@ -119,7 +123,7 @@ const SearchResultRow = ({
 			data-active={isActive}
 			data-slot="search-result-row"
 			id={id}
-			onClick={onOpen}
+			{...clickHandlersFor(onOpen)}
 			role="option"
 			tabIndex={-1}
 			type="button"
