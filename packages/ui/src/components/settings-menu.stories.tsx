@@ -188,7 +188,7 @@ export const OpensWithClickModifiers = meta.story({
 		footer: undefined,
 		children: (
 			<>
-				<SettingsMenuSection title="Your settings">
+				<SettingsMenuSection title="Settings">
 					<SettingsMenuEntry
 						icon="Cloud"
 						isSelected={false}
@@ -196,7 +196,7 @@ export const OpensWithClickModifiers = meta.story({
 						onSelect={MODIFIER_PRESSES.onSelectAccount}
 					/>
 				</SettingsMenuSection>
-				<SettingsMenuSection title="Your spaces">
+				<SettingsMenuSection title="Spaces">
 					<SettingsMenuSpace
 						colour="orange"
 						host="up"
@@ -258,7 +258,7 @@ export const SpaceSections = meta.story({
 		footer: undefined,
 		children: (
 			<>
-				<SettingsMenuSection title="Your settings">
+				<SettingsMenuSection title="Settings">
 					<SettingsMenuEntry
 						icon="Cloud"
 						isSelected
@@ -268,7 +268,7 @@ export const SpaceSections = meta.story({
 				</SettingsMenuSection>
 				<SettingsMenuSection
 					action={<SettingsMenuAddSpace onAdd={SPACE_PRESSES.onAdd} />}
-					title="Your spaces"
+					title="Spaces"
 				>
 					<SettingsMenuSpace
 						colour="orange"
@@ -308,7 +308,7 @@ export const SpaceSections = meta.story({
 		docs: {
 			description: {
 				story:
-					"The two titled groups of the user settings menu, Space names longer than the menu. Check that each name truncates while the Open now pill, the Invitation pill and the attention dot stay whole, that the Your spaces title row is 16px taller than the first, that the + is a 24px control named Create a space, and that a row and the + answer Enter. The contrast audit is left to review: the Invitation pill wears the warning token on its own tint as the artboard draws it.",
+					"The two titled groups of the user settings menu, Space names longer than the menu. Check that each name truncates while the Open now pill, the Invitation pill and the attention dot stay whole, that the Spaces title row is 16px taller than the first, that the + is a 24px control named Create a space, and that a row and the + answer Enter. The contrast audit is left to review: the Invitation pill wears the warning token on its own tint as the artboard draws it.",
 			},
 		},
 	},
@@ -316,10 +316,10 @@ export const SpaceSections = meta.story({
 		const menu = within(canvasElement).getByRole("navigation", {
 			name: "Settings",
 		})
-		await expect(heightOf(titleRowOf(menu, "Your settings"))).toBe(32)
+		await expect(heightOf(titleRowOf(menu, "Settings"))).toBe(32)
 		await expect(
-			heightOf(titleRowOf(menu, "Your spaces").parentElement as HTMLElement) -
-				heightOf(within(menu).getByRole("list", { name: "Your spaces" })),
+			heightOf(titleRowOf(menu, "Spaces").parentElement as HTMLElement) -
+				heightOf(within(menu).getByRole("list", { name: "Spaces" })),
 		).toBe(48)
 
 		const names = slotsIn(menu, "roster-row-name")
@@ -729,7 +729,7 @@ const HEADER_MENUS = [
 		avatar: <InitialsAvatar name="Ada Martin" size={36} />,
 		name: "Ada Martin",
 		subtitle: "User settings",
-		group: "Your settings",
+		group: "Settings",
 	},
 ]
 
