@@ -12,7 +12,9 @@ import {
 	expectSettingsMenuLeftColumn,
 	expectSettingsPage,
 	LAPTOP_WINDOW,
+	middleClick,
 	RAIL_SPACE_HOST,
+	rightClick,
 	slotIn,
 	slotsIn,
 } from "@workspace/storybook/story-utils"
@@ -41,7 +43,10 @@ import {
 	SIDEBAR_MAX_WIDTH,
 	SIDEBAR_MIN_WIDTH,
 } from "@workspace/ui/components/sidebar-resize"
-import { NO_CLICK_MODIFIERS } from "@workspace/ui/lib/click-modifiers"
+import {
+	type ClickModifiers,
+	NO_CLICK_MODIFIERS,
+} from "@workspace/ui/lib/click-modifiers"
 
 const USER_MENU = [
 	"Account",
@@ -866,32 +871,66 @@ export const Applications = meta.story({
 	},
 })
 
+const MODIFIED_CLICKS: [MouseEventInit, Partial<ClickModifiers>][] = [
+	[{ metaKey: true }, { meta: true }],
+	[{ ctrlKey: true }, { ctrl: true }],
+	[{ shiftKey: true }, { shift: true }],
+]
+
 export const OpensAnApplicationWithClickModifiers = meta.story({
 	tags: ["test-only"],
 	args: { entry: "mcp", onOpenApplication: fn() },
 	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:
-					"Applications with a caller taking the open. atlas opened from the list and clicked again plainly, then edited and Linear Cmd clicked with the leave confirmed, then Linear clicked every way a host can tell apart. Check that the open application clicked plainly does nothing, that the confirmed leave hands the caller Linear with the Cmd of the original click, that each click reports middle with the keys held, Cmd, Ctrl or Shift alone, none on a plain click or Enter, and nothing on a right-click, and that neither the entry nor the shown page moves to Linear.",
+					"Applications with a caller taking the opens that land elsewhere. atlas clicked plainly twice and edited, then Linear middle, Cmd, Ctrl, Shift and right-clicked, then Linear activated with Enter and the leave confirmed. Check that a plain click opens atlas in place and reports Applications with no key while the caller hears nothing, that the open atlas clicked again does nothing, that each modified click hands the caller Linear with its keys at once with no leave question while the edit, the page and the selected entry stay, that a right-click reports nothing, and that Enter opens Linear in place after the leave question.",
 			},
 		},
 	},
 	play: async ({ args, userEvent }) => {
 		const menu = await expectEntryShown("Applications")
-		const main = screen.getByRole("main")
-		const linear = within(menu).getByRole("button", { name: /^Linear/ })
-		await userEvent.click(
-			within(main).getByRole("button", { name: "Open atlas" }),
-		)
 		const atlas = within(menu).getByRole("button", { name: /^atlas/ })
-		await expect(atlas).toHaveAttribute("aria-current", "page")
+		const linear = within(menu).getByRole("button", { name: /^Linear/ })
 
 		await userEvent.click(atlas)
+		await expect(atlas).toHaveAttribute("aria-current", "page")
+		await expect(args.onEntryChange).toHaveBeenCalledOnce()
+		await expect(args.onEntryChange).toHaveBeenLastCalledWith(
+			"mcp",
+			NO_CLICK_MODIFIERS,
+		)
+		await userEvent.click(atlas)
+		await expect(args.onEntryChange).toHaveBeenCalledOnce()
 		await expect(args.onOpenApplication).not.toHaveBeenCalled()
 
-		await userEvent.type(within(main).getByLabelText("Name"), "-desk")
-		fireEvent.click(linear, { metaKey: true, detail: 1 })
+		const name = within(screen.getByRole("main")).getByLabelText("Name")
+		await userEvent.type(name, "-desk")
+
+		await expect(middleClick(linear, { shiftKey: true })).toBe(false)
+		await expect(args.onOpenApplication).toHaveBeenLastCalledWith("linear", {
+			...NO_CLICK_MODIFIERS,
+			middle: true,
+			shift: true,
+		})
+		for (const [held, pressed] of MODIFIED_CLICKS) {
+			fireEvent.click(linear, { ...held, detail: 1 })
+			await expect(args.onOpenApplication).toHaveBeenLastCalledWith("linear", {
+				...NO_CLICK_MODIFIERS,
+				...pressed,
+			})
+		}
+		rightClick(linear)
+		await expect(args.onOpenApplication).toHaveBeenCalledTimes(4)
+		await expect(screen.queryByRole("alertdialog")).toBeNull()
+		await expect(name).toHaveValue("atlas-desk")
+		await expect(atlas).toHaveAttribute("aria-current", "page")
+		await expect(linear).not.toHaveAttribute("aria-current")
+		await expect(args.onEntryChange).toHaveBeenCalledOnce()
+
+		linear.focus()
+		await userEvent.keyboard("{Enter}")
 		await userEvent.click(
 			within(
 				await screen.findByRole("alertdialog", {
@@ -899,20 +938,13 @@ export const OpensAnApplicationWithClickModifiers = meta.story({
 				}),
 			).getByRole("button", { name: "Leave" }),
 		)
-		await expect(args.onOpenApplication).toHaveBeenCalledOnce()
-		await expect(args.onOpenApplication).toHaveBeenLastCalledWith("linear", {
-			...NO_CLICK_MODIFIERS,
-			meta: true,
-		})
-
-		await expectClickModifiers({
-			target: linear,
-			callback: args.onOpenApplication,
-			reported: ["linear"],
-			userEvent,
-		})
-		await expect(linear).not.toHaveAttribute("aria-current")
-		await expect(args.onEntryChange).not.toHaveBeenCalled()
+		await expect(linear).toHaveAttribute("aria-current", "page")
+		await expect(args.onEntryChange).toHaveBeenCalledTimes(2)
+		await expect(args.onEntryChange).toHaveBeenLastCalledWith(
+			"mcp",
+			NO_CLICK_MODIFIERS,
+		)
+		await expect(args.onOpenApplication).toHaveBeenCalledTimes(4)
 	},
 })
 
@@ -924,12 +956,13 @@ export const OpensAnApplicationInPlace = meta.story({
 		docs: {
 			description: {
 				story:
-					"Applications with no caller taking the open. Linear clicked plainly, then clicked again plainly, then Cmd clicked. Check that the first click opens Linear in the page and reports the entry with no key, that the second does nothing, and that the Cmd click reports the entry with Cmd.",
+					"Applications with no caller taking the open. Linear clicked plainly, then clicked again plainly, Cmd clicked and middle clicked, then atlas Cmd clicked, then Linear activated with Enter, then atlas right-clicked. Check that every open happens in place and reports Applications with the keys of its click, none on a plain click or Enter, that the open Linear does nothing whatever the click, and that a right-click reports nothing.",
 			},
 		},
 	},
 	play: async ({ args, userEvent }) => {
 		const menu = await expectEntryShown("Applications")
+		const atlas = within(menu).getByRole("button", { name: /^atlas/ })
 		const linear = within(menu).getByRole("button", { name: /^Linear/ })
 
 		await userEvent.click(linear)
@@ -941,13 +974,27 @@ export const OpensAnApplicationInPlace = meta.story({
 		)
 
 		await userEvent.click(linear)
+		fireEvent.click(linear, { metaKey: true, detail: 1 })
+		middleClick(linear)
 		await expect(args.onEntryChange).toHaveBeenCalledOnce()
 
-		fireEvent.click(linear, { metaKey: true, detail: 1 })
+		fireEvent.click(atlas, { metaKey: true, detail: 1 })
+		await expect(atlas).toHaveAttribute("aria-current", "page")
 		await expect(args.onEntryChange).toHaveBeenLastCalledWith("mcp", {
 			...NO_CLICK_MODIFIERS,
 			meta: true,
 		})
+
+		linear.focus()
+		await userEvent.keyboard("{Enter}")
+		await expect(linear).toHaveAttribute("aria-current", "page")
+		await expect(args.onEntryChange).toHaveBeenLastCalledWith(
+			"mcp",
+			NO_CLICK_MODIFIERS,
+		)
+
+		rightClick(atlas)
+		await expect(args.onEntryChange).toHaveBeenCalledTimes(3)
 	},
 })
 

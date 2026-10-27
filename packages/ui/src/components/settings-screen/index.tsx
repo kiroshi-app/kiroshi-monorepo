@@ -345,12 +345,12 @@ const SettingsScreenLayout = ({
 		server: BotMcpServerItem,
 		modifiers: ClickModifiers,
 	) => {
-		if (server.name === openedName && isPlainClick(modifiers)) return
+		if (onOpenApplication && !isPlainClick(modifiers)) {
+			onOpenApplication(server.name, modifiers)
+			return
+		}
+		if (server.name === openedName) return
 		leaveThen(() => {
-			if (onOpenApplication) {
-				onOpenApplication(server.name, modifiers)
-				return
-			}
 			sessions.applications.open(server)
 			onEntryChange(APPLICATIONS_ENTRY, modifiers)
 		})
