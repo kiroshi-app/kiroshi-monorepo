@@ -3,6 +3,15 @@ import { $ } from "bun"
 import { BLOT_TINTS } from "../../../packages/ui/src/components/companion-colour"
 import { companionSeed } from "../../../packages/ui/src/components/companion-field"
 import {
+	COMPACT_BELOW,
+	COMPACT_EDGE,
+	edgeWidthOf,
+	GLAZE_EDGE,
+	GLAZE_THEMES,
+	isCompactAt,
+	LIP_OPACITY,
+} from "../../../packages/ui/src/components/glaze-border"
+import {
 	COMPACT_RADII,
 	dotCentre,
 	isCompact,
@@ -17,6 +26,13 @@ const OUTPUT = new URL(
 	"../KiroshiTests/Vectors/space-avatar.json",
 	import.meta.url,
 )
+
+const BORDER_OUTPUT = new URL(
+	"../KiroshiTests/Vectors/glaze-border.json",
+	import.meta.url,
+)
+
+const BORDER_SIDES = [12, 14, 16, 17.87, 19, 20, 24, 28, 40, 52, 56, 64, 88]
 
 const SPACE_IDS = [
 	"9b1e0000-0000-4000-8000-000000000001",
@@ -67,8 +83,27 @@ const vectors = {
 	}),
 }
 
+const borders = {
+	compactBelow: COMPACT_BELOW,
+	borders: GLAZE_THEMES.flatMap((theme) =>
+		BORDER_SIDES.map((side) => {
+			const isCompact = isCompactAt(side)
+			return {
+				side,
+				theme,
+				isCompact,
+				edgeWidth: edgeWidthOf(side),
+				edge: (isCompact ? COMPACT_EDGE : GLAZE_EDGE)[theme],
+				lipOpacity: isCompact ? null : LIP_OPACITY[theme],
+			}
+		}),
+	),
+}
+
 await Bun.write(OUTPUT, JSON.stringify(vectors))
-await $`bunx biome format --write ${OUTPUT.pathname}`.quiet()
+await Bun.write(BORDER_OUTPUT, JSON.stringify(borders))
+await $`bunx biome format --write ${OUTPUT.pathname} ${BORDER_OUTPUT.pathname}`.quiet()
 console.log(
 	`${vectors.arcs.length} ids, ${vectors.palettes.length} palettes, ${vectors.sizes.length} sizes -> ${OUTPUT.pathname}`,
 )
+console.log(`${borders.borders.length} borders -> ${BORDER_OUTPUT.pathname}`)
