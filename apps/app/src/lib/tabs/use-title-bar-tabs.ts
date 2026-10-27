@@ -53,7 +53,7 @@ export const useTitleBarTabs = ({
 	const missionTitles = useMissionTitles(
 		missionIdsOf(tabViews.map((tab) => tab.href)),
 	)
-	const { activeId, canGoBack, canGoForward } = view
+	const { activeId, canGoBack, canGoForward, hasClosedTab } = view
 
 	return useMemo(() => {
 		const faces = {
@@ -71,11 +71,15 @@ export const useTitleBarTabs = ({
 			activeTabId: activeId,
 			canGoBack,
 			canGoForward,
+			hasClosedTab,
 			onSelectTab: tabs.select,
 			onCloseTab: tabs.close,
 			onPinTab: tabs.pin,
 			onUnpinTab: tabs.unpin,
 			onCloseOtherTabs: tabs.closeOthers,
+			onDuplicateTab: tabs.duplicate,
+			onReopenClosedTab: tabs.reopenClosed,
+			onReorderTabs: tabs.reorder,
 			onNewTab: tabs.openEmptyTab,
 			onGoBack: tabs.back,
 			onGoForward: tabs.forward,
@@ -88,6 +92,7 @@ export const useTitleBarTabs = ({
 		activeId,
 		canGoBack,
 		canGoForward,
+		hasClosedTab,
 		tabs,
 	])
 }

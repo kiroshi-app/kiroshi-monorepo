@@ -9,17 +9,20 @@ import { EMPTY_LIST_HREF, HREF_BASE, pageOf, rowIdsNamedBy } from "./tab-pages"
 import { readSpaceTabs, writeSpaceTabs } from "./tabs-mirror"
 import {
 	activeTabOf,
+	type ClosedTab,
 	closeActiveTab,
 	closeOtherTabs,
 	closeTab,
 	currentEntryOf,
 	currentHrefOf,
 	dropTabsWhere,
+	duplicateTab,
 	moveInHistory,
 	openBackgroundTab,
 	openEmptyTab,
 	pinTab,
 	pushEntry,
+	reopenTab,
 	reorderTabs,
 	replaceEntry,
 	type SpaceTabs,
@@ -27,6 +30,7 @@ import {
 	spaceTabsOn,
 	type Tab,
 	type TabEntry,
+	tabsClosedBetween,
 	unpinTab,
 } from "./tabs-model"
 
@@ -34,10 +38,13 @@ import { createStore } from "../store"
 
 const NO_SPACE = ""
 
+const MAX_CLOSED_TABS = 10
+
 export type WorkspaceTabsState = {
 	spaceId: string
 	bySpace: Record<string, SpaceTabs>
 	restoredSpaceIds: string[]
+	closedBySpace: Record<string, ClosedTab[]>
 }
 
 type LeaveGuard = (leave: () => void) => void
@@ -57,6 +64,8 @@ export type WorkspaceTabs = {
 	close: (id: string) => void
 	closeActive: () => void
 	closeOthers: (id: string) => void
+	duplicate: (id: string) => void
+	reopenClosed: () => void
 	reorder: (ids: string[]) => void
 	dropAbsentRestored: (spaceId: string, check: RestoredCheck) => Promise<void>
 	guardLeave: (guard: LeaveGuard) => () => void
@@ -70,6 +79,9 @@ type RestoredCheck = {
 
 export const shownTabsOf = ({ spaceId, bySpace }: WorkspaceTabsState) =>
 	bySpace[spaceId] ?? spaceTabsOn(EMPTY_LIST_HREF)
+
+export const closedTabsOf = ({ spaceId, closedBySpace }: WorkspaceTabsState) =>
+	closedBySpace[spaceId] ?? []
 
 const locationOf = ({ href, state }: TabEntry): HistoryLocation => {
 	const { pathname, search, hash } = new URL(href, HREF_BASE)
@@ -92,6 +104,7 @@ export const createWorkspaceTabs = (
 		spaceId: NO_SPACE,
 		bySpace: { [NO_SPACE]: spaceTabsOn(initialHref) },
 		restoredSpaceIds: [],
+		closedBySpace: {},
 	})
 	const shown = () => shownTabsOf(store.getState())
 
@@ -162,6 +175,40 @@ export const createWorkspaceTabs = (
 	const askingChange = (update: (space: SpaceTabs) => SpaceTabs) =>
 		askIfLeaving(update, () => change(update))
 
+	const keepClosed = (closed: ClosedTab[]) => {
+		const state = store.getState()
+		store.setState({
+			...state,
+			closedBySpace: {
+				...state.closedBySpace,
+				[state.spaceId]: closed.slice(-MAX_CLOSED_TABS),
+			},
+		})
+	}
+
+	const closingChange = (update: (space: SpaceTabs) => SpaceTabs) =>
+		askIfLeaving(update, () => {
+			const before = shown()
+			change(update)
+			const closed = tabsClosedBetween(before, shown())
+			if (closed.length > 0) {
+				keepClosed([...closedTabsOf(store.getState()), ...closed])
+			}
+		})
+
+	const reopenClosed = () => {
+		const closed = closedTabsOf(store.getState())
+		const last = closed.at(-1)
+		if (!last) {
+			return
+		}
+		const reopen = (space: SpaceTabs) => reopenTab(space, last)
+		askIfLeaving(reopen, () => {
+			keepClosed(closed.slice(0, -1))
+			change(reopen)
+		})
+	}
+
 	const askingMove = (steps: number, move: () => void) =>
 		askIfLeaving((space) => moveInHistory(space, steps), move)
 
@@ -217,6 +264,7 @@ export const createWorkspaceTabs = (
 		const { space, isRestored } = reachedTabsOf(spaceId)
 		showChange(() =>
 			store.setState({
+				...state,
 				spaceId,
 				bySpace: { ...state.bySpace, [spaceId]: space },
 				restoredSpaceIds: isRestored
@@ -244,9 +292,11 @@ export const createWorkspaceTabs = (
 		select: (id) => askingChange((space) => selectTab(space, id)),
 		pin: (id) => change((space) => pinTab(space, id)),
 		unpin: (id) => change((space) => unpinTab(space, id)),
-		close: (id) => askingChange((space) => closeTab(space, id)),
-		closeActive: () => askingChange(closeActiveTab),
-		closeOthers: (id) => askingChange((space) => closeOtherTabs(space, id)),
+		close: (id) => closingChange((space) => closeTab(space, id)),
+		closeActive: () => closingChange(closeActiveTab),
+		closeOthers: (id) => closingChange((space) => closeOtherTabs(space, id)),
+		duplicate: (id) => change((space) => duplicateTab(space, id)),
+		reopenClosed,
 		reorder: (ids) => change((space) => reorderTabs(space, ids)),
 		dropAbsentRestored: async (spaceId, { isRowPresent, readMission }) => {
 			const state = store.getState()

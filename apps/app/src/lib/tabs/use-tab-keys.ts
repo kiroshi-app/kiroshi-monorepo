@@ -1,32 +1,60 @@
 import { useEffect } from "react"
 
-import type { WorkspaceTabs } from "./workspace-tabs"
+import { activeTabOf } from "./tabs-model"
+import { shownTabsOf, type WorkspaceTabs } from "./workspace-tabs"
 
 import { usesCommandKey } from "../host"
 
 type TabKeyPress = (tabs: WorkspaceTabs) => void
 
-const PRESS_BY_KEY = new Map<string, TabKeyPress>([
-	["t", (tabs) => tabs.openEmptyTab()],
-	["w", (tabs) => tabs.closeActive()],
-])
+const activeTabIn = (tabs: WorkspaceTabs) =>
+	activeTabOf(shownTabsOf(tabs.getState()))
 
-const isModOnly = (event: KeyboardEvent) => {
-	const [isModHeld, isOtherModHeld] = usesCommandKey()
-		? [event.metaKey, event.ctrlKey]
-		: [event.ctrlKey, event.metaKey]
-	return isModHeld && !isOtherModHeld && !event.altKey && !event.shiftKey
+const closeAllButActive: TabKeyPress = (tabs) =>
+	tabs.closeOthers(activeTabIn(tabs).id)
+
+const togglePinOfActive: TabKeyPress = (tabs) => {
+	const { id, isPinned } = activeTabIn(tabs)
+	if (isPinned) {
+		tabs.unpin(id)
+	} else {
+		tabs.pin(id)
+	}
 }
 
-const pressOf = (event: KeyboardEvent) =>
-	event.isComposing || !isModOnly(event)
-		? undefined
-		: PRESS_BY_KEY.get(event.key.toLowerCase())
+const pressesWith = (mod: string) =>
+	new Map<string, TabKeyPress>([
+		[`${mod}+t`, (tabs) => tabs.openEmptyTab()],
+		[`${mod}+w`, (tabs) => tabs.closeActive()],
+		[`${mod}+shift+t`, (tabs) => tabs.reopenClosed()],
+		[`${mod}+alt+w`, closeAllButActive],
+		["ctrl+shift+p", togglePinOfActive],
+	])
+
+const letterOf = (event: KeyboardEvent) =>
+	event.altKey && event.code.startsWith("Key")
+		? event.code.slice("Key".length).toLowerCase()
+		: event.key.toLowerCase()
+
+const chordOf = (event: KeyboardEvent) =>
+	[
+		event.ctrlKey && "ctrl",
+		event.metaKey && "meta",
+		event.altKey && "alt",
+		event.shiftKey && "shift",
+		letterOf(event),
+	]
+		.filter(Boolean)
+		.join("+")
 
 export const useTabKeys = (tabs: WorkspaceTabs) => {
 	useEffect(() => {
+		const presses = pressesWith(usesCommandKey() ? "meta" : "ctrl")
+
 		const press = (event: KeyboardEvent) => {
-			const pressed = pressOf(event)
+			const pressed = event.isComposing
+				? undefined
+				: presses.get(chordOf(event))
 			if (!pressed) {
 				return
 			}

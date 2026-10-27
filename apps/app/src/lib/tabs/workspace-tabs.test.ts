@@ -16,6 +16,13 @@ import { createWorkspaceTabs, type WorkspaceTabs } from "./workspace-tabs"
 import type { ObservedState } from "../conversations/store-contract"
 import { validateThreadSearch } from "../navigation/thread-search"
 
+const commandKey = vi.hoisted(() => ({ isUsed: true }))
+
+vi.mock("../host", async (importOriginal) => ({
+	...(await importOriginal<typeof import("../host")>()),
+	usesCommandKey: () => commandKey.isUsed,
+}))
+
 const SPACE = "space-home"
 
 const OTHER_SPACE = "space-away"
@@ -68,6 +75,22 @@ const pressMod = (key: string) =>
 		fireEvent.keyDown(window, { key, metaKey: true })
 	})
 
+const press = (init: KeyboardEventInit) =>
+	act(() => {
+		fireEvent.keyDown(window, init)
+	})
+
+const REOPEN_ON_MAC = { key: "T", metaKey: true, shiftKey: true }
+
+const CLOSE_OTHERS_ON_MAC = {
+	key: "∑",
+	code: "KeyW",
+	metaKey: true,
+	altKey: true,
+}
+
+const TOGGLE_PIN = { key: "P", ctrlKey: true, shiftKey: true }
+
 const threadOf = (row: string) => `/?conversation=${row}`
 
 const companionOf = (row: string) => `/?bot=${row}`
@@ -96,6 +119,7 @@ const NEEDS_YOU: ObservedState = {
 }
 
 afterEach(() => {
+	commandKey.isUsed = true
 	cleanup()
 	localStorage.clear()
 	vi.restoreAllMocks()
@@ -615,5 +639,216 @@ describe("the leave guard", () => {
 
 		expect(guard).not.toHaveBeenCalled()
 		expect(activeHref(shown.tabs)).toBe(threadOf("other"))
+	})
+})
+
+const tabsOn = (...hrefs: string[]) => {
+	const tabs = tabsOfSpace()
+	for (const href of hrefs) {
+		showInNewTab(tabs, href)
+	}
+	return tabs
+}
+
+const idOfTabOn = (tabs: WorkspaceTabs, href: string) =>
+	viewOf(tabs).tabs.find((tab) => tab.href === href)?.id ?? ""
+
+describe("the strip drag", () => {
+	it("restores the dragged order after a relaunch", () => {
+		const before = tabsOn(threadOf("one"), threadOf("two"))
+		const [list = "", one = "", two = ""] = idsOf(before)
+
+		before.reorder([two, list, one])
+		cleanup()
+
+		expect(shownHrefs(tabsOfSpace())).toEqual([
+			threadOf("two"),
+			"/",
+			threadOf("one"),
+		])
+	})
+})
+
+describe("Duplicate tab", () => {
+	it("inserts a tab on the same page right after it and keeps the active tab", () => {
+		const tabs = tabsOn(threadOf("copied"), threadOf("shown"))
+		const activeId = viewOf(tabs).activeId
+
+		tabs.duplicate(idOfTabOn(tabs, threadOf("copied")))
+
+		expect(shownHrefs(tabs)).toEqual([
+			"/",
+			threadOf("copied"),
+			threadOf("copied"),
+			threadOf("shown"),
+		])
+		expect(viewOf(tabs).activeId).toBe(activeId)
+		expect(activeHref(tabs)).toBe(threadOf("shown"))
+	})
+})
+
+describe("the closed tabs", () => {
+	it("offers no reopen before a tab closes", () => {
+		const tabs = tabsOn(threadOf("open"))
+
+		tabs.reopenClosed()
+
+		expect(viewOf(tabs).hasClosedTab).toBe(false)
+		expect(shownHrefs(tabs)).toEqual(["/", threadOf("open")])
+	})
+
+	it("reopens the last closed tab at its position, active, with its history and pin", async () => {
+		const tabs = tabsOn(threadOf("first"), threadOf("left"))
+		const router = routerOn(tabs)
+		await router.load()
+		await router.navigate({ to: "/", search: { conversation: "right" } })
+		tabs.pin(idOfTabOn(tabs, threadOf("right")))
+		tabs.select(idOfTabOn(tabs, threadOf("first")))
+
+		tabs.close(idOfTabOn(tabs, threadOf("right")))
+		expect(viewOf(tabs).hasClosedTab).toBe(true)
+		tabs.reopenClosed()
+
+		expect(
+			viewOf(tabs).tabs.map(({ href, isPinned }) => ({ href, isPinned })),
+		).toEqual([
+			{ href: threadOf("right"), isPinned: true },
+			{ href: "/", isPinned: false },
+			{ href: threadOf("first"), isPinned: false },
+		])
+		expect(activeHref(tabs)).toBe(threadOf("right"))
+		expect(viewOf(tabs).hasClosedTab).toBe(false)
+		tabs.back()
+		expect(activeHref(tabs)).toBe(threadOf("left"))
+	})
+
+	it("closes the tab of the menu, not the active one, and reopens it in place", () => {
+		const tabs = tabsOn(threadOf("closed"), threadOf("shown"))
+
+		tabs.close(idOfTabOn(tabs, threadOf("closed")))
+		expect(shownHrefs(tabs)).toEqual(["/", threadOf("shown")])
+		expect(activeHref(tabs)).toBe(threadOf("shown"))
+		tabs.reopenClosed()
+
+		expect(shownHrefs(tabs)).toEqual([
+			"/",
+			threadOf("closed"),
+			threadOf("shown"),
+		])
+		expect(activeHref(tabs)).toBe(threadOf("closed"))
+	})
+
+	it("restores the order of tabs closed together, one reopen at a time", () => {
+		const tabs = tabsOn(threadOf("one"), threadOf("two"), threadOf("kept"))
+
+		tabs.closeOthers(viewOf(tabs).activeId)
+		tabs.reopenClosed()
+		tabs.reopenClosed()
+		tabs.reopenClosed()
+
+		expect(shownHrefs(tabs)).toEqual([
+			"/",
+			threadOf("one"),
+			threadOf("two"),
+			threadOf("kept"),
+		])
+	})
+
+	it("keeps the last ten closed tabs", () => {
+		const rows = Array.from({ length: 11 }, (_, i) => threadOf(`row-${i}`))
+		const tabs = tabsOn(...rows)
+		for (const row of rows) {
+			tabs.close(idOfTabOn(tabs, row))
+		}
+
+		for (const _ of rows) {
+			tabs.reopenClosed()
+		}
+
+		expect(shownHrefs(tabs)).toEqual(["/", ...rows.slice(1)])
+		expect(viewOf(tabs).hasClosedTab).toBe(false)
+	})
+
+	it("reopens from the stack of the current Space only", () => {
+		const tabs = tabsOn(threadOf("home"))
+		tabs.closeActive()
+
+		tabs.showSpace(OTHER_SPACE)
+		expect(viewOf(tabs).hasClosedTab).toBe(false)
+		tabs.reopenClosed()
+		expect(shownHrefs(tabs)).toEqual(["/"])
+
+		tabs.showSpace(SPACE)
+		tabs.reopenClosed()
+		expect(activeHref(tabs)).toBe(threadOf("home"))
+	})
+
+	it("asks before reopening over a guarded page and keeps the tab closed when cancelled", () => {
+		const shown = tabsShowingSettings()
+		shown.tabs.close(shown.otherId)
+		const guard = cancellingGuard()
+		shown.tabs.guardLeave(guard)
+
+		shown.tabs.reopenClosed()
+
+		expect(guard).toHaveBeenCalledOnce()
+		expect(activeHref(shown.tabs)).toBe(USER_SETTINGS)
+		expect(viewOf(shown.tabs).hasClosedTab).toBe(true)
+	})
+})
+
+describe("the tab menu keys", () => {
+	it("reopens the last closed tab on Cmd+Shift+T", () => {
+		const tabs = tabsOn(threadOf("closed"))
+		pressMod("w")
+
+		press(REOPEN_ON_MAC)
+
+		expect(shownHrefs(tabs)).toEqual(["/", threadOf("closed")])
+		expect(activeHref(tabs)).toBe(threadOf("closed"))
+	})
+
+	it("keeps only the active tab and the pinned ones on Cmd+Alt+W", () => {
+		const tabs = tabsOn(threadOf("pinned"), threadOf("closed"))
+		tabs.pin(idOfTabOn(tabs, threadOf("pinned")))
+		showInNewTab(tabs, threadOf("active"))
+
+		press(CLOSE_OTHERS_ON_MAC)
+
+		expect(shownHrefs(tabs)).toEqual([threadOf("pinned"), threadOf("active")])
+		expect(activeHref(tabs)).toBe(threadOf("active"))
+	})
+
+	it("toggles the pin of the active tab on Ctrl+Shift+P, not on Cmd+Shift+P", () => {
+		const tabs = tabsOn(threadOf("active"))
+
+		press({ key: "P", metaKey: true, shiftKey: true })
+		expect(viewOf(tabs).tabs.some((tab) => tab.isPinned)).toBe(false)
+
+		press(TOGGLE_PIN)
+		expect(shownHrefs(tabs)).toEqual([threadOf("active"), "/"])
+		expect(viewOf(tabs).tabs[0]?.isPinned).toBe(true)
+
+		press(TOGGLE_PIN)
+		expect(viewOf(tabs).tabs.every((tab) => !tab.isPinned)).toBe(true)
+	})
+
+	it("reads Ctrl in place of Cmd outside macOS", () => {
+		commandKey.isUsed = false
+		const tabs = tabsOn(threadOf("pinned"), threadOf("closed"))
+		tabs.pin(idOfTabOn(tabs, threadOf("pinned")))
+
+		press(REOPEN_ON_MAC)
+		press({ key: "t", ctrlKey: true })
+		press({ key: "w", ctrlKey: true, altKey: true, code: "KeyW" })
+		expect(shownHrefs(tabs)).toEqual([threadOf("pinned"), "/"])
+
+		press({ key: "T", ctrlKey: true, shiftKey: true })
+		press(TOGGLE_PIN)
+		expect(viewOf(tabs).tabs.map(({ isPinned }) => isPinned)).toEqual([
+			true,
+			true,
+			false,
+		])
 	})
 })

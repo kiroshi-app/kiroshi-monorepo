@@ -4,7 +4,7 @@ import type { BotBadge } from "@workspace/ui/components/bot-badge"
 
 import { pageOf, threadRowIdOf } from "./tab-pages"
 import { activeTabOf, currentHrefOf, type Tab } from "./tabs-model"
-import { shownTabsOf, type WorkspaceTabs } from "./workspace-tabs"
+import { closedTabsOf, shownTabsOf, type WorkspaceTabs } from "./workspace-tabs"
 
 import type { SoloThreads } from "../bots/roster-line"
 import type { ConversationHostStates } from "../bots/roster-pages"
@@ -72,6 +72,7 @@ export const useWorkspaceTabs = ({ tabs, ...needs }: WorkspaceTabsSource) => {
 		activeId: active.id,
 		canGoBack: active.index > 0,
 		canGoForward: active.index < active.entries.length - 1,
+		hasClosedTab: closedTabsOf(state).length > 0,
 		select: tabs.select,
 		pin: tabs.pin,
 		unpin: tabs.unpin,
