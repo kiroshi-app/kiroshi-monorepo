@@ -99,7 +99,7 @@ jobs:
       contents: read
       packages: read
     container:
-      image: ghcr.io/kiroshi-app/ci-rust:ubuntu-24.04
+      image: ghcr.io/kiroshi-app/ci-rust:${{ needs.changes.outputs.rust-image }}
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -177,6 +177,7 @@ jobs:
       website: ${{ steps.filter.outputs.website }}
       storybook: ${{ steps.filter.outputs.storybook }}
       ios: ${{ steps.filter.outputs.ios }}
+      rust-image: ${{ steps.image.outputs.tag }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -191,6 +192,10 @@ jobs:
       - name: Decide the jobs to run
         id: filter
         run: bun scripts/ci-changes.ts "$CI_EVENT" "$BASE" | tee -a "$GITHUB_OUTPUT"
+
+      - name: Tag the CI rust image with the Dockerfile digest
+        id: image
+        run: echo "tag=$(sha256sum .github/ci-rust/Dockerfile | cut -c1-12)" >> "$GITHUB_OUTPUT"
 
   ios:
     needs: changes

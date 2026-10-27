@@ -20,9 +20,13 @@ jobs:
       contents: read
       packages: write
     env:
-      IMAGE: ghcr.io/kiroshi-app/ci-rust:ubuntu-24.04
+      REPOSITORY: ghcr.io/kiroshi-app/ci-rust
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Tag the CI rust image with the Dockerfile digest
+        id: image
+        run: echo "tag=$(sha256sum .github/ci-rust/Dockerfile | cut -c1-12)" >> "$GITHUB_OUTPUT"
 
       - name: Log in to the GitHub container registry
         env:
@@ -31,7 +35,11 @@ jobs:
         run: echo "$TOKEN" | docker login ghcr.io --username "$ACTOR" --password-stdin
 
       - name: Build the image
-        run: docker build --platform linux/amd64 --tag "$IMAGE" .github/ci-rust
+        env:
+          TAG: ${{ steps.image.outputs.tag }}
+        run: docker build --platform linux/amd64 --tag "$REPOSITORY:$TAG" .github/ci-rust
 
       - name: Push the image
-        run: docker push "$IMAGE"
+        env:
+          TAG: ${{ steps.image.outputs.tag }}
+        run: docker push "$REPOSITORY:$TAG"
