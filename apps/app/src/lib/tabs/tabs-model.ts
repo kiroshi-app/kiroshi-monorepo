@@ -35,7 +35,7 @@ export const tabThrough = (hrefs: string[], index: number): Tab => ({
 	index,
 })
 
-export const tabOn = (href: string): Tab => tabThrough([href], 0)
+const tabOn = (href: string): Tab => tabThrough([href], 0)
 
 export const spaceTabsOn = (href: string): SpaceTabs => {
 	const tab = tabOn(href)
