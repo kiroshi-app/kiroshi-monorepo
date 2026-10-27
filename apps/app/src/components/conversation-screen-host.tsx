@@ -1,4 +1,5 @@
 import { ConversationSettingsScreen } from "@workspace/ui/components/settings-screen"
+import { i18n } from "@workspace/ui/lib/i18n"
 
 import type { Bot, Conversation } from "@/lib/bindings"
 import {
@@ -8,6 +9,7 @@ import {
 	toConversationLook,
 	toConversationSettingsValue,
 } from "@/lib/conversations/roster-conversations"
+import { failureReporterIn } from "@/lib/failure-report"
 import type { SettingsSearch } from "@/lib/navigation/settings-search"
 import type { SettingsNavigation } from "@/lib/navigation/use-settings-navigation"
 import type { SettingsFrame } from "@/lib/workspace/settings-frame"
@@ -15,6 +17,8 @@ import type { RosterLines } from "@/lib/workspace/use-roster-lines"
 import type { WorkspaceCore } from "@/lib/workspace/use-workspace-core"
 
 const GENERAL_ENTRY = "general"
+
+const reportFailure = failureReporterIn("conversation-screen-host")
 
 type ConversationScreenHostProps = {
 	bots: Bot[]
@@ -38,6 +42,13 @@ export const ConversationScreenHost = ({
 	const roster = core.roster.controller
 	const { id } = conversation
 
+	const refuseDeletion = () => {
+		void reportFailure(
+			{ title: i18n.t("chat:conversationSettings.danger.failed") },
+			{ conversation: id },
+		)
+	}
+
 	return (
 		<ConversationSettingsScreen
 			{...frame}
@@ -50,7 +61,7 @@ export const ConversationScreenHost = ({
 			onDelete={() => {
 				void rosterLines.sidebarActions
 					.onDeleteConversation(id)
-					.then(navigation.back)
+					.then(navigation.back, refuseDeletion)
 			}}
 			onDismiss={(botId) => {
 				void roster.dismissFromConversation(id, botId)

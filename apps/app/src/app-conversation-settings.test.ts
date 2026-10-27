@@ -23,9 +23,34 @@ import { readMirror, writeMirror } from "@/lib/user/preferences-mirror"
 
 type Harness = {
 	store: TranscriptStore | null
+	refusesRelease: boolean
 }
 
-const harness = vi.hoisted((): Harness => ({ store: null }))
+const harness = vi.hoisted(
+	(): Harness => ({ store: null, refusesRelease: false }),
+)
+
+vi.mock("@/lib/conversations/conversation-runtimes", async (importOriginal) => {
+	const actual =
+		await importOriginal<
+			typeof import("@/lib/conversations/conversation-runtimes")
+		>()
+	return {
+		...actual,
+		createConversationRuntimes: (
+			...args: Parameters<typeof actual.createConversationRuntimes>
+		) => {
+			const runtimes = actual.createConversationRuntimes(...args)
+			return {
+				...runtimes,
+				release: (conversationId: string) =>
+					harness.refusesRelease
+						? Promise.reject({ kind: "storage" })
+						: runtimes.release(conversationId),
+			}
+		},
+	}
+})
 
 vi.mock("@/lib/conversations/create-store", () => ({
 	createTranscriptStore: () => harness.store,
@@ -62,6 +87,7 @@ afterEach(() => {
 	localStorage.clear()
 	vi.useRealTimers()
 	harness.store = null
+	harness.refusesRelease = false
 })
 
 const settle = async () => {
@@ -247,6 +273,27 @@ it("deletes the conversation from the Danger zone and leaves the screen", async 
 
 	expect(settingsMenuOf()).toBeNull()
 	expect(rosterRowNamed(ROOM)).toBeNull()
+})
+
+const raisedNoticeTitles = () =>
+	[...document.querySelectorAll('[data-slot="toast-title"]')].map(
+		(title) => title.textContent,
+	)
+
+it("keeps the screen on the Danger zone and reports the failure when the deletion is refused", async () => {
+	await mountRouterAt()
+	await openSettingsFromRowMenu()
+	harness.refusesRelease = true
+
+	await deleteFromDangerZone()
+
+	expect(raisedNoticeTitles()).toContain(
+		i18n.t("chat:conversationSettings.danger.failed"),
+	)
+	expect(conversationScreenOf(ROOM)).toEqual({
+		...ON_GENERAL,
+		entry: i18n.t("chat:conversationSettings.tab.danger"),
+	})
 })
 
 it("returns to the conversations when the route names no conversation of the Space", async () => {
