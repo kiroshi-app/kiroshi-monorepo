@@ -659,6 +659,11 @@ export const DangerSelected = meta.story({
 			},
 		},
 	},
+	play: async ({ canvasElement }) => {
+		const menu = canvasElement.querySelector('nav[data-slot="settings-menu"]')
+		await expect(menu).not.toBeNull()
+		await expect(menu?.querySelector('li[aria-hidden="true"]')).toBeNull()
+	},
 })
 
 export const DangerSelectedDark = meta.story({

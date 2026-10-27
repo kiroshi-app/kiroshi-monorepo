@@ -165,7 +165,6 @@ const SettingsMenu = ({
 			</div>
 			{footer ? (
 				<ul className="left-column-inset flex shrink-0 list-none flex-col gap-1 py-0">
-					<li aria-hidden="true" className="mx-1 h-px bg-border" />
 					{footer}
 				</ul>
 			) : null}
