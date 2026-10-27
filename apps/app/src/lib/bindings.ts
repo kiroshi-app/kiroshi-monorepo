@@ -103,7 +103,7 @@ export const commands = {
 	conversationMissionThread: (conversationId: string) => typedError<Conversation, TranscriptStoreError>(__TAURI_INVOKE("conversation_mission_thread", { conversationId })),
 	conversationPage: (spaceId: string, cursor: string | null, limit: number | null) => typedError<ConversationPage, TranscriptStoreError>(__TAURI_INVOKE("conversation_page", { spaceId, cursor, limit })),
 	conversationLocalIds: () => typedError<string[], TranscriptStoreError>(__TAURI_INVOKE("conversation_local_ids")),
-	conversationUpdate: (conversationId: string, title: string, instructions: string, sectionId: string | null, icon: string | null, color: string | null) => typedError<Conversation, TranscriptStoreError>(__TAURI_INVOKE("conversation_update", { conversationId, title, instructions, sectionId, icon, color })),
+	conversationUpdate: (conversationId: string, title: string, instructions: string, sectionId: string | null, icon: string | null, color: number | null) => typedError<Conversation, TranscriptStoreError>(__TAURI_INVOKE("conversation_update", { conversationId, title, instructions, sectionId, icon, color })),
 	conversationDelete: (conversationId: string) => typedError<null, TranscriptStoreError>(__TAURI_INVOKE("conversation_delete", { conversationId })),
 	conversationAddParticipant: (conversationId: string, botId: string, invitedByBotId: string | null) => typedError<Conversation, TranscriptStoreError>(__TAURI_INVOKE("conversation_add_participant", { conversationId, botId, invitedByBotId })),
 	conversationRemoveParticipant: (conversationId: string, botId: string) => typedError<Conversation, TranscriptStoreError>(__TAURI_INVOKE("conversation_remove_participant", { conversationId, botId })),
@@ -226,7 +226,7 @@ export const commands = {
 	botMoveToSection: (botId: string, sectionId: string | null, spaceId: string | null) => typedError<null, SectionError>(__TAURI_INVOKE("bot_move_to_section", { botId, sectionId, spaceId })),
 	spaceList: () => typedError<Space[], SpaceError>(__TAURI_INVOKE("space_list")),
 	spaceCreate: (name: string) => typedError<Space, SpaceError>(__TAURI_INVOKE("space_create", { name })),
-	spaceUpdate: (id: string, name: string, colour: "red" | "yellow" | "green" | "cyan" | "blue" | "purple" | "pink" | "orange" | null) => typedError<Space, SpaceError>(__TAURI_INVOKE("space_update", { id, name, colour })),
+	spaceUpdate: (id: string, name: string, colour: number | null) => typedError<Space, SpaceError>(__TAURI_INVOKE("space_update", { id, name, colour })),
 	spaceReorder: (ids: string[]) => typedError<null, SpaceError>(__TAURI_INVOKE("space_reorder", { ids })),
 	spaceDelete: (id: string) => typedError<null, SpaceError>(__TAURI_INVOKE("space_delete", { id })),
 	spaceExport: (id: string, path: string) => typedError<null, SpaceError>(__TAURI_INVOKE("space_export", { id, path })),
@@ -516,8 +516,6 @@ export type AuthPosture = "authRequired" | "noAuth";
 
 export type AuthorizationWithheld = "servedOverNoUrl" | "loopbackAddress" | "ownAuthorizationHeader" | "unexpandedPlaceholder";
 
-export type AvatarBlot = "red" | "yellow" | "green" | "cyan" | "blue" | "purple" | "pink" | "orange";
-
 export type AvatarRejection = { kind: "unknownFormat" } | { kind: "tooLarge"; bytes: number; limit: number } | { kind: "undecodable"; detail: string } | { kind: "unwritable"; detail: string };
 
 export type Bot = {
@@ -527,7 +525,7 @@ export type Bot = {
 	name: string,
 	title: string,
 	model: string,
-	avatarBlot: AvatarBlot | null,
+	avatarBlot: Hue | null,
 	avatarImagePath: string | null,
 	instructions: string,
 	memory: string,
@@ -565,7 +563,7 @@ export type BotIdentity = {
 	name: string,
 	title: string,
 	model: string,
-	avatarBlot: AvatarBlot | null,
+	avatarBlot: Hue | null,
 	avatarImagePath: string | null,
 	instructions: string,
 	deniedTools: string[],
@@ -736,7 +734,7 @@ export type Conversation = {
 	title: string,
 	instructions: string,
 	icon: string | null,
-	color: AvatarBlot | null,
+	color: Hue | null,
 	createdAt: number,
 	updatedAt: number,
 	participants: Participant[],
@@ -910,6 +908,8 @@ export type HostingFailureKind = "notOwner" | "instanceUnknownAfterReregistratio
 
 export type HostingState = { kind: "off" } | { kind: "connecting" } | { kind: "online" } | { kind: "failed"; failure: HostingFailureKind; detail: string } | { kind: "needsSignIn" };
 
+export type Hue = number;
+
 export type Install = ({ kind: "nothing" }) & { fields?: never } | { kind: "key"; fields: InstallField[] } | ({ kind: "oauth" }) & { fields?: never } | {
 	kind: "refused",
 } & InstallRefusal;
@@ -959,7 +959,7 @@ export type JoinedSpace = {
 	state: JoinedSpaceState,
 	wait?: JoinedSpaceWait | null,
 	hostedBy: string | null,
-	colour: AvatarBlot,
+	colour: Hue,
 	instanceId: string,
 };
 
@@ -1296,7 +1296,7 @@ export type Participant = {
 	joinedAt: number,
 	leftAt: number | null,
 	name: string,
-	avatarBlot: AvatarBlot | null,
+	avatarBlot: Hue | null,
 	avatarImagePath: string | null,
 	isDeleted: boolean,
 };
@@ -1631,14 +1631,14 @@ export type SoloState = {
 export type Space = {
 	id: string,
 	name: string,
-	colour: AvatarBlot | null,
+	colour: Hue | null,
 	position: number,
 	createdAt: number,
 	shared: boolean,
 	instanceId: string | null,
 };
 
-export type SpaceError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "unknownSpace"; id: string } | { kind: "unknownBot"; id: string } | { kind: "unwritableBundle"; detail: string } | { kind: "incompleteOrder" } | { kind: "lastSpace" } | { kind: "lastSpaceOfBot"; id: string } | { kind: "foreignSection"; id: string } | { kind: "unsupportedArchive"; found: number | null; supported: number } | { kind: "unreadableArchive"; detail: string } | { kind: "unwritableArchive"; detail: string };
+export type SpaceError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "unknownSpace"; id: string } | { kind: "unknownBot"; id: string } | { kind: "unwritableBundle"; detail: string } | { kind: "incompleteOrder" } | { kind: "lastSpace" } | { kind: "lastSpaceOfBot"; id: string } | { kind: "foreignSection"; id: string } | { kind: "unsupportedArchive"; found: number | null; supported: number } | { kind: "unreadableArchive"; detail: string } | { kind: "unwritableArchive"; detail: string } | { kind: "unknownColour"; colour: string; accepted: string[] };
 
 export type SpaceInvitation = {
 	id: string,

@@ -21,9 +21,10 @@ companion the subject belongs to. You hold six tools for them, on the `kiroshi` 
 - `conversation_update`, the title, the icon, the colour and the seats of a conversation
   you hold a seat in, every field given landing in one call or none of them, answering that
   conversation as it stands after the call. The icon is the name of a Keyline icon, such as
-  Rocket, spelled as listed in `packages/shared/conversation-icons.json`. The colour is one
-  of red, yellow, green, cyan, blue, purple, pink or orange, or null to give the room back
-  its default colour. A field left out keeps what the room wears.
+  Rocket, spelled as listed in `packages/shared/conversation-icons.json`. The colour is a
+  hue, a whole number from 0 to 359 around the colour wheel, or one of red, orange, yellow,
+  green, cyan, blue, purple or pink for the hue that name stands for, or null to give the
+  room back its default colour. A field left out keeps what the room wears.
 - `conversation_close`, the archive of a room you lead once its subject is settled,
   answering the id of that room, its title and whether it is archived. Every message of
   the room is kept. A main conversation and the thread of a mission still open are never

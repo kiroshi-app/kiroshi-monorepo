@@ -301,8 +301,19 @@ describe("companionTools", () => {
 		)
 	})
 
-	it("describes the colour naming the eight and what null does", () => {
+	it("takes the colour as a hue or one of the eight names", () => {
 		const { colour } = toolNamed(SESSION, "conversation_update").inputSchema
+
+		for (const taken of [0, 257, 359, "purple", null]) {
+			expect(colour?.safeParse(taken).success).toBe(true)
+		}
+		expect(colour?.safeParse(1.5).success).toBe(false)
+	})
+
+	it("describes the colour as a hue from 0 to 359, naming the eight and what null does", () => {
+		const { colour } = toolNamed(SESSION, "conversation_update").inputSchema
+
+		expect(colour?.description).toContain("0 to 359")
 
 		for (const name of [
 			"red",

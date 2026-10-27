@@ -30,7 +30,7 @@ use super::wire::{self, Dropped, HostKeys, Opened as OpenedFrame, Refusal, Wire}
 use super::{admission, devices, entered, handover, members, Hosting};
 use crate::account::cloud::{retry_after, Cloud, DeviceRegisterError, MeError, RegisterError};
 use crate::account::session::{self, AccountSession};
-use crate::db::repositories::conversations::AvatarBlot;
+use crate::db::repositories::conversations::Hue;
 use crate::db::{self, Database};
 use crate::host_api::events::{FELL_BEHIND, SEND_PATIENCE};
 use crate::missions::github::installed_tls_provider;
@@ -103,7 +103,7 @@ fn dropped_reason(reason: &str, frames: LastFrames) -> String {
 pub(super) struct Hosted {
 	pub(super) space_id: String,
 	pub(super) name: String,
-	pub(super) colour: Option<AvatarBlot>,
+	pub(super) colour: Option<Hue>,
 	pub(super) instance_id: Option<String>,
 }
 

@@ -2,7 +2,7 @@ use rusqlite::{params, Connection, OptionalExtension, Row, Transaction};
 use uuid::Uuid;
 
 use super::super::{bot_spaces, sections};
-use super::avatar::AvatarBlot;
+use super::avatar::Hue;
 use super::{
 	ensure_chat_in, now, refuse_if_untouched, space_of, unserializable, write_transaction,
 	ConversationError, CHAT_KIND, DEFAULT_BOT_ID, DEFAULT_BOT_MODEL, DEFAULT_BOT_NAME,
@@ -17,7 +17,7 @@ pub struct Bot {
 	pub name: String,
 	pub title: String,
 	pub model: String,
-	pub avatar_blot: Option<AvatarBlot>,
+	pub avatar_blot: Option<Hue>,
 	pub avatar_image_path: Option<String>,
 	pub instructions: String,
 	pub memory: String,
@@ -32,7 +32,7 @@ pub struct BotIdentity {
 	pub name: String,
 	pub title: String,
 	pub model: String,
-	pub avatar_blot: Option<AvatarBlot>,
+	pub avatar_blot: Option<Hue>,
 	pub avatar_image_path: Option<String>,
 	pub instructions: String,
 	pub denied_tools: Vec<String>,
@@ -464,7 +464,7 @@ mod tests {
 			title: "Reviewer".to_owned(),
 			model: "haiku".to_owned(),
 			denied_tools: vec!["Bash".to_owned(), "Write".to_owned()],
-			avatar_blot: Some(AvatarBlot::Red),
+			avatar_blot: Hue::named("red"),
 			avatar_image_path: Some("/pictures/owl.png".to_owned()),
 			instructions: "Answer briefly.".to_owned(),
 			effort: None,
@@ -481,7 +481,7 @@ mod tests {
 		assert_eq!(listed[0].name, described.name);
 		assert_eq!(listed[0].title, described.title);
 		assert_eq!(listed[0].model, "haiku");
-		assert_eq!(listed[0].avatar_blot, Some(AvatarBlot::Red));
+		assert_eq!(listed[0].avatar_blot, Hue::named("red"));
 		assert_eq!(listed[0].avatar_image_path.as_deref(), Some("/pictures/owl.png"));
 		assert_eq!(listed[0].instructions, described.instructions);
 		assert_eq!(listed[0].denied_tools, described.denied_tools);
@@ -599,7 +599,7 @@ mod tests {
 					title: "Reviewer".to_owned(),
 					model: "opus".to_owned(),
 					denied_tools: vec!["Bash".to_owned()],
-					avatar_blot: Some(AvatarBlot::Orange),
+					avatar_blot: Hue::named("orange"),
 					avatar_image_path: Some("/pictures/koala.png".to_owned()),
 					instructions: "answer at length".to_owned(),
 					effort: None,
@@ -610,7 +610,7 @@ mod tests {
 
 		assert_eq!(updated.name, "Ada");
 		assert_eq!(updated.title, "Reviewer");
-		assert_eq!(updated.avatar_blot, Some(AvatarBlot::Orange));
+		assert_eq!(updated.avatar_blot, Hue::named("orange"));
 		assert_eq!(updated.model, "opus", "an update left the bot on its old model");
 		assert_eq!(
 			updated.instructions, "answer at length",

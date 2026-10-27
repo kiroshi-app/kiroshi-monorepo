@@ -59,8 +59,8 @@ use crate::conversations::commands::{
 	conversation_update_bot,
 };
 use crate::conversations::contract::{
-	AvatarBlot, Bot, BotDraft, BotIdentity, Conversation, ConversationInPage, LastWord,
-	NewUserMessage, ObservedState, ParticipantRole, TranscriptStoreError, WrittenFrom,
+	Bot, BotDraft, BotIdentity, Conversation, ConversationInPage, Hue, LastWord, NewUserMessage,
+	ObservedState, ParticipantRole, TranscriptStoreError, WrittenFrom,
 	CREATED_EVENT as CONVERSATION_CREATED_EVENT, DELETED_EVENT as CONVERSATION_DELETED_EVENT,
 	MESSAGE_STORED_EVENT, STATE_CHANGED_EVENT, UPDATED_EVENT as CONVERSATION_UPDATED_EVENT,
 };
@@ -962,19 +962,16 @@ impl Harness {
 		instance_id
 	}
 
-	async fn coloured(&self, colour: Option<AvatarBlot>) {
+	async fn coloured(&self, colour: Option<Hue>) {
 		let state = self.app.state::<DatabaseState>();
 		let spaces = state.as_ref().expect("the database").spaces();
 		let personal = "Personal".to_owned();
-		spaces.update(PERSONAL.to_owned(), personal, colour.map(Into::into)).await.expect("stored");
+		spaces.update(PERSONAL.to_owned(), personal, colour).await.expect("stored");
 	}
 
-	async fn updated(
-		&self,
-		name: &str,
-		colour: Option<AvatarBlot>,
-	) -> Result<SpaceShown, SpaceError> {
+	async fn updated(&self, name: &str, colour: Option<Hue>) -> Result<SpaceShown, SpaceError> {
 		let state = self.app.state::<DatabaseState>();
+		let colour = colour.map(|hue| i64::from(hue.value()));
 		space_update(self.app.handle().clone(), state, PERSONAL.to_owned(), name.to_owned(), colour)
 			.await
 	}
@@ -1238,7 +1235,7 @@ fn a_registration_carries_the_space_colour_and_a_later_start_patches_name_and_co
 		let _first = harness.member().await;
 		harness.reached(HostingState::Online).await;
 		harness.stopped().await;
-		harness.coloured(Some(AvatarBlot::Cyan)).await;
+		harness.coloured(Hue::named("cyan")).await;
 		harness.started().await;
 		let _second = harness.member().await;
 		harness.reached(HostingState::Online).await;
@@ -1250,7 +1247,7 @@ fn a_registration_carries_the_space_colour_and_a_later_start_patches_name_and_co
 				("POST /instances".to_owned(), json!({ "name": "Personal", "colour": null })),
 				(
 					format!("PATCH /instances/{instance_id}"),
-					json!({ "name": "Personal", "colour": "cyan" })
+					json!({ "name": "Personal", "colour": 186 })
 				),
 			]
 		);
@@ -1278,7 +1275,7 @@ fn a_start_connects_while_its_patch_is_held_and_a_stop_drops_the_held_patch() {
 			held,
 			vec![(
 				format!("PATCH /instances/{instance_id}"),
-				json!({ "name": "Personal", "colour": "red" })
+				json!({ "name": "Personal", "colour": 42 })
 			)]
 		);
 		let dropped = harness.noticed_until("the held PATCH dropped", dropped);
@@ -1296,22 +1293,22 @@ fn a_space_update_returns_before_its_held_patch_is_answered_and_an_unchanged_one
 
 		let renamed = tokio::time::timeout(
 			BEFORE_THE_PATCH_TIMES_OUT,
-			harness.updated("Studio", Some(AvatarBlot::Red)),
+			harness.updated("Studio", Hue::named("red")),
 		)
 		.await
 		.expect("space_update answered while its PATCH is held");
 		let renaming = harness.instance_bodies_until(1).await;
-		let unchanged = harness.updated("Studio", Some(AvatarBlot::Red)).await;
-		let recoloured = harness.updated("Studio", Some(AvatarBlot::Blue)).await;
+		let unchanged = harness.updated("Studio", Hue::named("red")).await;
+		let recoloured = harness.updated("Studio", Hue::named("blue")).await;
 		let patched = harness.instance_bodies_until(2).await;
 		harness.relay.is_description_open.send_replace(true);
 
 		assert_eq!(renamed.expect("the rename").name, "Studio");
 		assert!(unchanged.is_ok());
-		assert_eq!(recoloured.expect("the recolour").colour, Some(AvatarBlot::Blue));
+		assert_eq!(recoloured.expect("the recolour").colour, Hue::named("blue"));
 		let call = format!("PATCH /instances/{instance_id}");
-		assert_eq!(renaming, vec![(call.clone(), json!({ "name": "Studio", "colour": "red" }))]);
-		assert_eq!(patched[1], (call, json!({ "name": "Studio", "colour": "blue" })));
+		assert_eq!(renaming, vec![(call.clone(), json!({ "name": "Studio", "colour": 42 }))]);
+		assert_eq!(patched[1], (call, json!({ "name": "Studio", "colour": 257 })));
 		assert_eq!(patched.len(), 2);
 	});
 }
@@ -2885,7 +2882,7 @@ const ELSEWHERE: &str = "elsewhere";
 const OTHER_SPACE_REFUSAL: &str = "this command reaches outside the shared space";
 const TWO_SPACES: &str = "
 	INSERT INTO spaces (id, name, colour, position, created_at)
-		VALUES ('elsewhere', 'Elsewhere', 'blue', 1, 1);
+		VALUES ('elsewhere', 'Elsewhere', 257, 1, 1);
 	INSERT INTO sections (id, space_id, name, position, created_at)
 		VALUES ('s-mine', 'personal', 'Mine', 0, 1), ('s-theirs', 'elsewhere', 'Theirs', 0, 1);
 	INSERT INTO bots (id, name, model, created_at)
@@ -5972,7 +5969,7 @@ fn a_relay_guest_hears_a_companion_added_to_the_shared_space_only() {
 	run(async {
 		let mut guest = Guest::of_two_spaces("companion-added").await;
 		guest
-			.planted("INSERT INTO spaces (id, name, colour, position, created_at) VALUES ('third', 'Third', 'red', 2, 1);")
+			.planted("INSERT INTO spaces (id, name, colour, position, created_at) VALUES ('third', 'Third', 42, 2, 1);")
 			.await;
 
 		guest.bot_added("b-theirs", "third").await;

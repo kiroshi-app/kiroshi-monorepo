@@ -2,9 +2,7 @@ use std::path::Path;
 
 use tauri::{AppHandle, Manager, Runtime, State};
 
-use super::super::contract::{
-	AvatarBlot, Bot, BotDraft, BotIdentity, SuggestedBot, TranscriptStoreError,
-};
+use super::super::contract::{Bot, BotDraft, BotIdentity, Hue, SuggestedBot, TranscriptStoreError};
 use super::super::seed;
 use crate::agent::commands::supported_effort_levels;
 use crate::agent::contract::AgentCommand;
@@ -291,8 +289,7 @@ fn drafted_identity(
 	if name.is_empty() {
 		return Err(TranscriptStoreError::NamelessBot);
 	}
-	let blots: Vec<AvatarBlot> =
-		worn.iter().filter_map(|bot| bot.avatar_blot.map(Into::into)).collect();
+	let blots: Vec<Hue> = worn.iter().filter_map(|bot| bot.avatar_blot).collect();
 	Ok(BotIdentity {
 		name: name.to_owned(),
 		title: draft.job.trim().to_owned(),
@@ -307,12 +304,9 @@ fn drafted_identity(
 	})
 }
 
-fn unworn(worn: &[AvatarBlot], crowd: usize) -> AvatarBlot {
-	AvatarBlot::ALL
-		.iter()
-		.copied()
-		.find(|blot| !worn.contains(blot))
-		.unwrap_or(AvatarBlot::ALL[crowd % AvatarBlot::ALL.len()])
+fn unworn(worn: &[Hue], crowd: usize) -> Hue {
+	let presets = Hue::presets();
+	presets.into_iter().find(|blot| !worn.contains(blot)).unwrap_or(presets[crowd % presets.len()])
 }
 
 pub(in crate::conversations) async fn create_bundled_bot<R: Runtime>(
@@ -653,7 +647,6 @@ mod tests {
 	use std::path::PathBuf;
 
 	use super::*;
-	use crate::db::repositories::conversations::AvatarBlot as StoredBlot;
 	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 	use tauri::test::{mock_builder, MockRuntime};
 	use tauri::App;
@@ -681,7 +674,7 @@ mod tests {
 		BotDraft { name: name.to_owned(), job: job.to_owned(), description: description.to_owned() }
 	}
 
-	fn wearing(blot: Option<StoredBlot>) -> StoredBot {
+	fn wearing(blot: Option<Hue>) -> StoredBot {
 		StoredBot { avatar_blot: blot, ..a_bot() }
 	}
 
@@ -721,7 +714,7 @@ mod tests {
 				name: "Quill".to_owned(),
 				title: "a writing partner".to_owned(),
 				model: DEFAULT_BOT_MODEL.to_owned(),
-				avatar_blot: Some(contract::AvatarBlot::Red),
+				avatar_blot: contract::Hue::named("red"),
 				avatar_image_path: None,
 				instructions: "Write well.".to_owned(),
 				denied_tools: Vec::new(),
@@ -744,12 +737,11 @@ mod tests {
 	fn a_draft_wears_the_first_blot_no_bot_of_the_space_wears() {
 		use crate::conversations::contract;
 
-		let worn =
-			[wearing(Some(StoredBlot::Red)), wearing(None), wearing(Some(StoredBlot::Green))];
+		let worn = [wearing(Hue::named("red")), wearing(None), wearing(Hue::named("green"))];
 
 		let identity = drafted_identity(a_draft("Quill", "", ""), &worn).expect("it is named");
 
-		assert_eq!(identity.avatar_blot, Some(contract::AvatarBlot::Yellow));
+		assert_eq!(identity.avatar_blot, contract::Hue::named("yellow"));
 	}
 
 	#[test]
@@ -757,14 +749,14 @@ mod tests {
 		use crate::conversations::contract;
 
 		let mut worn: Vec<StoredBot> =
-			contract::AvatarBlot::ALL.iter().map(|&blot| wearing(Some(blot.into()))).collect();
+			Hue::presets().into_iter().map(|blot| wearing(Some(blot))).collect();
 
 		let eighth = drafted_identity(a_draft("Quill", "", ""), &worn).expect("it is named");
-		worn.push(wearing(Some(StoredBlot::Red)));
+		worn.push(wearing(Hue::named("red")));
 		let ninth = drafted_identity(a_draft("Quill", "", ""), &worn).expect("it is named");
 
-		assert_eq!(eighth.avatar_blot, Some(contract::AvatarBlot::Red));
-		assert_eq!(ninth.avatar_blot, Some(contract::AvatarBlot::Yellow));
+		assert_eq!(eighth.avatar_blot, contract::Hue::named("red"));
+		assert_eq!(ninth.avatar_blot, contract::Hue::named("yellow"));
 	}
 
 	#[tokio::test]
@@ -903,7 +895,7 @@ mod tests {
 
 	#[test]
 	fn a_duplicate_is_the_source_under_a_name_that_says_where_it_came_from() {
-		use crate::conversations::contract::AvatarBlot;
+		use crate::conversations::contract::Hue;
 
 		let source = Bot {
 			id: "b1".to_owned(),
@@ -912,7 +904,7 @@ mod tests {
 			name: "Bean".to_owned(),
 			title: "Bakes".to_owned(),
 			model: "opus".to_owned(),
-			avatar_blot: Some(AvatarBlot::Cyan),
+			avatar_blot: Hue::named("cyan"),
 			avatar_image_path: Some("/pictures/bean.png".to_owned()),
 			instructions: "Answer briefly.".to_owned(),
 			memory: "They bake on Sundays.".to_owned(),

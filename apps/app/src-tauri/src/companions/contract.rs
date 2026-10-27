@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::attachments::contract::AttachmentStoreError;
 use crate::attachments::Rejection;
-use crate::conversations::contract::{Bot, StorageFailure, TranscriptStoreError};
+use crate::conversations::contract::{Bot, Hue, StorageFailure, TranscriptStoreError};
 use crate::db::repositories::conversations::Bot as StoredBot;
 use crate::db::DatabaseError;
 use crate::missions::contract::MissionError;
@@ -75,7 +75,7 @@ pub struct Conversation {
 	pub kind: String,
 	pub title: String,
 	pub icon: Option<String>,
-	pub colour: Option<String>,
+	pub colour: Option<Hue>,
 	pub companions: Vec<SeatedCompanion>,
 	pub last_message: Option<LastMessage>,
 	pub archived: bool,

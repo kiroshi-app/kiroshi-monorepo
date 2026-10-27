@@ -13,7 +13,7 @@ use tokio::time::{sleep_until, Instant};
 
 use super::contract::{AccountPlan, KiroshiAccount};
 use crate::crypto::device_keys::DeviceKeys;
-use crate::db::repositories::conversations::AvatarBlot;
+use crate::db::repositories::conversations::Hue;
 use crate::db::repositories::joined_spaces::HostListing;
 use crate::devices::contract::{DeviceKind, DeviceStatus};
 use crate::hosting::contract::{
@@ -589,9 +589,9 @@ impl Cloud {
 		&self,
 		bearer: &str,
 		name: &str,
-		colour: Option<AvatarBlot>,
+		colour: Option<Hue>,
 	) -> Result<String, RegisterError> {
-		let body = json!({ "name": name, "colour": colour.map(AvatarBlot::named) });
+		let body = json!({ "name": name, "colour": colour });
 		let answered = self
 			.answered(|client| client.post(self.at(INSTANCES_PATH)).bearer_auth(bearer).json(&body))
 			.await
@@ -615,7 +615,7 @@ impl Cloud {
 		bearer: &str,
 		instance_id: &str,
 		name: &str,
-		colour: Option<AvatarBlot>,
+		colour: Option<Hue>,
 	) -> Result<(), String> {
 		let mut instance = Url::parse(&self.at(INSTANCES_PATH))
 			.map_err(|error| format!("the instance url is unusable: {error}"))?;
@@ -623,7 +623,7 @@ impl Cloud {
 			.path_segments_mut()
 			.map_err(|()| "the cloud url has no path".to_owned())?
 			.push(instance_id);
-		let body = json!({ "name": name, "colour": colour.map(AvatarBlot::named) });
+		let body = json!({ "name": name, "colour": colour });
 		self.sent(|client| client.patch(instance).bearer_auth(bearer).json(&body)).await.map(drop)
 	}
 

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::conversations::contract::{AvatarBlot, StorageFailure};
+use crate::conversations::contract::{Hue, StorageFailure};
 use crate::db::repositories::space_hosting::Hosting;
 use crate::db::repositories::{space_rows, space_settings, spaces};
 use crate::db::DatabaseError;
@@ -10,7 +10,7 @@ use crate::db::DatabaseError;
 pub struct Space {
 	pub id: String,
 	pub name: String,
-	pub colour: Option<AvatarBlot>,
+	pub colour: Option<Hue>,
 	pub position: i64,
 	pub created_at: i64,
 	pub shared: bool,
@@ -25,7 +25,7 @@ impl Space {
 			instance_id: hosting.and_then(|hosting| hosting.instance_id.clone()),
 			id: space.id,
 			name: space.name,
-			colour: space.colour.map(Into::into),
+			colour: space.colour,
 			position: space.position,
 			created_at: space.created_at,
 		}
@@ -105,6 +105,20 @@ pub enum SpaceError {
 	UnwritableArchive {
 		detail: String,
 	},
+	#[serde(rename_all = "camelCase")]
+	UnknownColour {
+		colour: String,
+		accepted: Vec<String>,
+	},
+}
+
+impl SpaceError {
+	pub fn unknown_colour(colour: i64) -> Self {
+		SpaceError::UnknownColour {
+			colour: colour.to_string(),
+			accepted: vec![Hue::ACCEPTED.to_owned()],
+		}
+	}
 }
 
 impl From<DatabaseError> for SpaceError {
@@ -160,7 +174,7 @@ mod tests {
 			to_value(Space {
 				id: "s1".to_owned(),
 				name: "Vocca".to_owned(),
-				colour: Some(AvatarBlot::Cyan),
+				colour: Hue::named("cyan"),
 				position: 1,
 				created_at: 3,
 				shared: true,
@@ -170,7 +184,7 @@ mod tests {
 			json!({
 				"id": "s1",
 				"name": "Vocca",
-				"colour": "cyan",
+				"colour": 186,
 				"position": 1,
 				"createdAt": 3,
 				"shared": true,

@@ -3,7 +3,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use super::bot::AvatarBlot;
+use super::bot::Hue;
 use super::transcript::WrittenFrom;
 use crate::avatars;
 use crate::db::repositories::{conversations, runtime_context};
@@ -139,7 +139,7 @@ pub struct Conversation {
 	pub title: String,
 	pub instructions: String,
 	pub icon: Option<String>,
-	pub color: Option<AvatarBlot>,
+	pub color: Option<Hue>,
 	pub created_at: i64,
 	pub updated_at: i64,
 	pub participants: Vec<Participant>,
@@ -155,7 +155,7 @@ impl Conversation {
 			title: room.title,
 			instructions: room.instructions,
 			icon: room.icon,
-			color: room.color.map(Into::into),
+			color: room.color,
 			created_at: room.created_at,
 			updated_at: room.updated_at,
 			participants: room
@@ -296,7 +296,7 @@ pub struct Participant {
 	pub joined_at: i64,
 	pub left_at: Option<i64>,
 	pub name: String,
-	pub avatar_blot: Option<AvatarBlot>,
+	pub avatar_blot: Option<Hue>,
 	pub avatar_image_path: Option<String>,
 	pub is_deleted: bool,
 }
@@ -309,7 +309,7 @@ impl Participant {
 			joined_at: seat.joined_at,
 			left_at: seat.left_at,
 			name: seat.name,
-			avatar_blot: seat.avatar_blot.map(Into::into),
+			avatar_blot: seat.avatar_blot,
 			avatar_image_path: drawable_avatar(seat.avatar_image_path.as_deref(), avatars),
 			is_deleted: seat.is_deleted,
 		}
@@ -455,7 +455,7 @@ mod tests {
 					title: "Launch".into(),
 					instructions: String::new(),
 					icon: Some("Message".into()),
-					color: Some(conversations::AvatarBlot::Cyan),
+					color: conversations::Hue::named("cyan"),
 					created_at: 1,
 					updated_at: 2,
 					seats: vec![
@@ -475,7 +475,7 @@ mod tests {
 							joined_at: 2,
 							left_at: Some(3),
 							name: "Ada".into(),
-							avatar_blot: Some(conversations::AvatarBlot::Blue),
+							avatar_blot: conversations::Hue::named("blue"),
 							avatar_image_path: None,
 							is_deleted: true,
 						},
@@ -491,7 +491,7 @@ mod tests {
 				"title": "Launch",
 				"instructions": "",
 				"icon": "Message",
-				"color": "cyan",
+				"color": 186,
 				"createdAt": 1,
 				"updatedAt": 2,
 				"participants": [
@@ -511,7 +511,7 @@ mod tests {
 						"joinedAt": 2,
 						"leftAt": 3,
 						"name": "Ada",
-						"avatarBlot": "blue",
+						"avatarBlot": 257,
 						"avatarImagePath": null,
 						"isDeleted": true
 					}
