@@ -42,7 +42,7 @@ const Mention = ({ botId, count = 1, className }: MentionProps) => {
 	const isCounted = count > 1
 	const onSelect = useCompanionSelect()
 
-	const selectBot =
+	const selectHandlers =
 		onSelect && bot
 			? clickHandlersFor((modifiers) => onSelect(bot.id, modifiers))
 			: undefined
@@ -50,7 +50,7 @@ const Mention = ({ botId, count = 1, className }: MentionProps) => {
 		className: cn(
 			MENTION_CLASS,
 			!bot && UNKNOWN_CLASS,
-			selectBot && SELECTABLE_CLASS,
+			selectHandlers && SELECTABLE_CLASS,
 			className,
 		),
 		"data-slot": "bot-mention",
@@ -94,8 +94,8 @@ const Mention = ({ botId, count = 1, className }: MentionProps) => {
 
 	return (
 		<CompanionMenuHost companionId={bot?.id}>
-			{selectBot ? (
-				<button {...pillProps} {...selectBot} type="button">
+			{selectHandlers ? (
+				<button {...pillProps} {...selectHandlers} type="button">
 					{content}
 				</button>
 			) : (
