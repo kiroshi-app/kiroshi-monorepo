@@ -101,7 +101,8 @@ const fittingTabCount = (strip: HTMLElement, unpinnedCount: number) => {
 	const list = strip.querySelector<HTMLElement>('[role="tablist"]')
 	const tab = list?.querySelector(UNPINNED_TAB)
 	const dragRegion = strip.querySelector('[data-slot="title-bar-drag-region"]')
-	if (!list || !tab || !dragRegion) return unpinnedCount
+	if (!list || !tab || !dragRegion || strip.clientWidth === 0)
+		return unpinnedCount
 
 	const chip = strip.querySelector('[data-slot="title-bar-overflow"]')
 	const stripGap = pixelsOf(getComputedStyle(strip).columnGap)
