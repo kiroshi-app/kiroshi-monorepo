@@ -1,0 +1,7241 @@
+{
+	"tones": {
+		"light": {
+			"bubble": {
+				"lightness": 0.87,
+				"chroma": 0.075,
+				"contrast": { "with": "#020202", "ratio": 7 }
+			},
+			"accent": {
+				"lightness": 0.5,
+				"chroma": 0.13,
+				"contrast": { "with": "#ffffff", "ratio": 4.5 },
+				"yellow": { "hue": 75, "lightness": 0.54, "chroma": 0.115 }
+			},
+			"new-line": { "lightness": 0.8, "chroma": 0.06 },
+			"avatar-ink": { "lightness": 0.56, "chroma": 0.13 },
+			"avatar-ground": { "lightness": 0.93, "chroma": 0.035 },
+			"conversation-icon": { "lightness": 0.92, "chroma": 0.033 },
+			"conversation-icon-foreground": { "lightness": 0.45, "chroma": 0.054 }
+		},
+		"dark": {
+			"bubble": {
+				"lightness": 0.45,
+				"chroma": 0.1,
+				"contrast": { "with": "#f5f5f5", "ratio": 7.2 }
+			},
+			"accent": {
+				"lightness": 0.78,
+				"chroma": 0.12,
+				"contrast": { "with": "#121213", "ratio": 4.5 }
+			},
+			"new-line": { "lightness": 0.4, "chroma": 0.06 },
+			"avatar-ink": { "lightness": 0.8, "chroma": 0.12 },
+			"avatar-ground": { "lightness": 0.3, "chroma": 0.04 },
+			"conversation-icon": { "lightness": 0.385, "chroma": 0.033 },
+			"conversation-icon-foreground": { "lightness": 0.8, "chroma": 0.054 }
+		}
+	},
+	"hues": [
+		{
+			"light": {
+				"bubble": "#ffc0d2",
+				"accent": "#9c3e60",
+				"new-line": "#dfaebc",
+				"avatar-ink": "#af4f71",
+				"avatar-ground": "#fddfe7",
+				"conversation-icon": "#f9dce4",
+				"conversation-icon-foreground": "#6e4954"
+			},
+			"dark": {
+				"bubble": "#803b53",
+				"accent": "#f696b4",
+				"new-line": "#623a46",
+				"avatar-ink": "#fd9cba",
+				"avatar-ground": "#3e252d",
+				"conversation-icon": "#533c43",
+				"conversation-icon-foreground": "#dcb0bc"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ffc0d1",
+				"accent": "#9c3e5f",
+				"new-line": "#e0aebb",
+				"avatar-ink": "#b04f70",
+				"avatar-ground": "#fddfe6",
+				"conversation-icon": "#f9dce3",
+				"conversation-icon-foreground": "#6f4953"
+			},
+			"dark": {
+				"bubble": "#803a51",
+				"accent": "#f696b3",
+				"new-line": "#623a46",
+				"avatar-ink": "#fd9cb9",
+				"avatar-ground": "#3f252d",
+				"conversation-icon": "#533c43",
+				"conversation-icon-foreground": "#dcb0bb"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ffc0d0",
+				"accent": "#9c3d5d",
+				"new-line": "#e0aebb",
+				"avatar-ink": "#b04f6e",
+				"avatar-ground": "#fddfe6",
+				"conversation-icon": "#f9dce3",
+				"conversation-icon-foreground": "#6f4953"
+			},
+			"dark": {
+				"bubble": "#803a50",
+				"accent": "#f796b1",
+				"new-line": "#633a45",
+				"avatar-ink": "#fe9cb8",
+				"avatar-ground": "#3f252c",
+				"conversation-icon": "#533c42",
+				"conversation-icon-foreground": "#ddb0bb"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ffc1cf",
+				"accent": "#9d3d5c",
+				"new-line": "#e0aeba",
+				"avatar-ink": "#b14f6d",
+				"avatar-ground": "#fddfe5",
+				"conversation-icon": "#f9dce2",
+				"conversation-icon-foreground": "#6f4952"
+			},
+			"dark": {
+				"bubble": "#813b50",
+				"accent": "#f796b0",
+				"new-line": "#633a44",
+				"avatar-ink": "#fe9cb6",
+				"avatar-ground": "#3f252c",
+				"conversation-icon": "#533c42",
+				"conversation-icon-foreground": "#ddb0ba"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ffc1cf",
+				"accent": "#9d3d5b",
+				"new-line": "#e0aeb9",
+				"avatar-ink": "#b14f6c",
+				"avatar-ground": "#fedfe5",
+				"conversation-icon": "#f9dce2",
+				"conversation-icon-foreground": "#6f4952"
+			},
+			"dark": {
+				"bubble": "#813a4e",
+				"accent": "#f796ae",
+				"new-line": "#633a44",
+				"avatar-ink": "#fe9cb5",
+				"avatar-ground": "#3f252b",
+				"conversation-icon": "#533c42",
+				"conversation-icon-foreground": "#ddb0ba"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ffc1ce",
+				"accent": "#9d3d59",
+				"new-line": "#e0aeb8",
+				"avatar-ink": "#b14f6a",
+				"avatar-ground": "#fedfe5",
+				"conversation-icon": "#f9dce1",
+				"conversation-icon-foreground": "#6f4951"
+			},
+			"dark": {
+				"bubble": "#813a4d",
+				"accent": "#f896ad",
+				"new-line": "#633a43",
+				"avatar-ink": "#ff9cb3",
+				"avatar-ground": "#3f252b",
+				"conversation-icon": "#533c41",
+				"conversation-icon-foreground": "#ddb0b9"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ffc1cd",
+				"accent": "#9d3d58",
+				"new-line": "#e1aeb8",
+				"avatar-ink": "#b14f69",
+				"avatar-ground": "#fedfe4",
+				"conversation-icon": "#f9dce1",
+				"conversation-icon-foreground": "#6f4951"
+			},
+			"dark": {
+				"bubble": "#813a4c",
+				"accent": "#f896ac",
+				"new-line": "#633a43",
+				"avatar-ink": "#ff9cb2",
+				"avatar-ground": "#3f252b",
+				"conversation-icon": "#533c41",
+				"conversation-icon-foreground": "#ddb0b8"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ffc1cc",
+				"accent": "#9e3d56",
+				"new-line": "#e1aeb7",
+				"avatar-ink": "#b24f67",
+				"avatar-ground": "#fedfe4",
+				"conversation-icon": "#f9dce1",
+				"conversation-icon-foreground": "#6f4950"
+			},
+			"dark": {
+				"bubble": "#813a4b",
+				"accent": "#f896aa",
+				"new-line": "#633a42",
+				"avatar-ink": "#ff9cb0",
+				"avatar-ground": "#3f252a",
+				"conversation-icon": "#543c41",
+				"conversation-icon-foreground": "#deb0b8"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ffc1cb",
+				"accent": "#9e3d55",
+				"new-line": "#e1aeb6",
+				"avatar-ink": "#b24f66",
+				"avatar-ground": "#fedfe3",
+				"conversation-icon": "#f9dce0",
+				"conversation-icon-foreground": "#70494f"
+			},
+			"dark": {
+				"bubble": "#823a4a",
+				"accent": "#f996a9",
+				"new-line": "#633a41",
+				"avatar-ink": "#ff9daf",
+				"avatar-ground": "#3f252a",
+				"conversation-icon": "#543d40",
+				"conversation-icon-foreground": "#deb0b7"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ffc1ca",
+				"accent": "#9e3d54",
+				"new-line": "#e1aeb6",
+				"avatar-ink": "#b24f64",
+				"avatar-ground": "#fedfe3",
+				"conversation-icon": "#fadce0",
+				"conversation-icon-foreground": "#70494f"
+			},
+			"dark": {
+				"bubble": "#823a49",
+				"accent": "#f996a7",
+				"new-line": "#633a41",
+				"avatar-ink": "#ff9dae",
+				"avatar-ground": "#3f252a",
+				"conversation-icon": "#543d40",
+				"conversation-icon-foreground": "#deb0b6"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ffc2c9",
+				"accent": "#9e3d52",
+				"new-line": "#e1aeb5",
+				"avatar-ink": "#b24f63",
+				"avatar-ground": "#fedfe2",
+				"conversation-icon": "#fadcdf",
+				"conversation-icon-foreground": "#70494e"
+			},
+			"dark": {
+				"bubble": "#823a48",
+				"accent": "#f996a6",
+				"new-line": "#643a40",
+				"avatar-ink": "#ff9dac",
+				"avatar-ground": "#3f2529",
+				"conversation-icon": "#543d40",
+				"conversation-icon-foreground": "#deb0b6"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ffc2c9",
+				"accent": "#9f3d51",
+				"new-line": "#e1aeb4",
+				"avatar-ink": "#b34f61",
+				"avatar-ground": "#fedfe2",
+				"conversation-icon": "#fadcdf",
+				"conversation-icon-foreground": "#70494e"
+			},
+			"dark": {
+				"bubble": "#823a47",
+				"accent": "#f996a4",
+				"new-line": "#643a40",
+				"avatar-ink": "#ff9dab",
+				"avatar-ground": "#3f2529",
+				"conversation-icon": "#543d3f",
+				"conversation-icon-foreground": "#deb0b5"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ffc2c8",
+				"accent": "#9f3d4f",
+				"new-line": "#e1aeb3",
+				"avatar-ink": "#b34f60",
+				"avatar-ground": "#fedfe2",
+				"conversation-icon": "#fadcdf",
+				"conversation-icon-foreground": "#70494d"
+			},
+			"dark": {
+				"bubble": "#823a46",
+				"accent": "#fa96a3",
+				"new-line": "#643a3f",
+				"avatar-ink": "#ff9eaa",
+				"avatar-ground": "#3f2528",
+				"conversation-icon": "#543d3f",
+				"conversation-icon-foreground": "#deb0b4"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ffc2c7",
+				"accent": "#9f3d4e",
+				"new-line": "#e2aeb3",
+				"avatar-ink": "#b34f5e",
+				"avatar-ground": "#fedfe1",
+				"conversation-icon": "#fadcde",
+				"conversation-icon-foreground": "#70494d"
+			},
+			"dark": {
+				"bubble": "#823a45",
+				"accent": "#fa96a1",
+				"new-line": "#643a3e",
+				"avatar-ink": "#ff9ea8",
+				"avatar-ground": "#402528",
+				"conversation-icon": "#543d3f",
+				"conversation-icon-foreground": "#deb0b4"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ffc2c6",
+				"accent": "#9f3e4c",
+				"new-line": "#e2afb2",
+				"avatar-ink": "#b3505d",
+				"avatar-ground": "#ffdfe1",
+				"conversation-icon": "#fadcde",
+				"conversation-icon-foreground": "#70494c"
+			},
+			"dark": {
+				"bubble": "#833b44",
+				"accent": "#fa96a0",
+				"new-line": "#643a3e",
+				"avatar-ink": "#ff9ea7",
+				"avatar-ground": "#402528",
+				"conversation-icon": "#543d3e",
+				"conversation-icon-foreground": "#deb0b3"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ffc2c5",
+				"accent": "#9f3e4b",
+				"new-line": "#e2afb1",
+				"avatar-ink": "#b3505b",
+				"avatar-ground": "#ffdfe0",
+				"conversation-icon": "#fadcdd",
+				"conversation-icon-foreground": "#70494c"
+			},
+			"dark": {
+				"bubble": "#833b43",
+				"accent": "#fa969f",
+				"new-line": "#643a3d",
+				"avatar-ink": "#ff9ea6",
+				"avatar-ground": "#402527",
+				"conversation-icon": "#543d3e",
+				"conversation-icon-foreground": "#deb0b3"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ffc2c5",
+				"accent": "#a03e49",
+				"new-line": "#e2afb1",
+				"avatar-ink": "#b4505a",
+				"avatar-ground": "#ffdfe0",
+				"conversation-icon": "#fadcdd",
+				"conversation-icon-foreground": "#70494b"
+			},
+			"dark": {
+				"bubble": "#833a41",
+				"accent": "#fa979d",
+				"new-line": "#643a3d",
+				"avatar-ink": "#ff9ea4",
+				"avatar-ground": "#402527",
+				"conversation-icon": "#543d3e",
+				"conversation-icon-foreground": "#deb0b2"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ffc2c4",
+				"accent": "#a03e48",
+				"new-line": "#e2afb0",
+				"avatar-ink": "#b45058",
+				"avatar-ground": "#ffdfdf",
+				"conversation-icon": "#fadcdd",
+				"conversation-icon-foreground": "#70494a"
+			},
+			"dark": {
+				"bubble": "#833a40",
+				"accent": "#fa979c",
+				"new-line": "#643a3c",
+				"avatar-ink": "#ff9fa3",
+				"avatar-ground": "#402527",
+				"conversation-icon": "#543d3d",
+				"conversation-icon-foreground": "#dfb0b1"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ffc2c3",
+				"accent": "#a03e46",
+				"new-line": "#e2afaf",
+				"avatar-ink": "#b45057",
+				"avatar-ground": "#ffdfdf",
+				"conversation-icon": "#fadcdc",
+				"conversation-icon-foreground": "#70494a"
+			},
+			"dark": {
+				"bubble": "#833a3f",
+				"accent": "#fb979a",
+				"new-line": "#643a3b",
+				"avatar-ink": "#ff9fa2",
+				"avatar-ground": "#402526",
+				"conversation-icon": "#543d3d",
+				"conversation-icon-foreground": "#dfb0b1"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ffc3c2",
+				"accent": "#a03e45",
+				"new-line": "#e2afae",
+				"avatar-ink": "#b45055",
+				"avatar-ground": "#ffdfdf",
+				"conversation-icon": "#fadcdc",
+				"conversation-icon-foreground": "#704949"
+			},
+			"dark": {
+				"bubble": "#833b3e",
+				"accent": "#fb9799",
+				"new-line": "#643a3b",
+				"avatar-ink": "#ff9fa0",
+				"avatar-ground": "#402526",
+				"conversation-icon": "#543d3d",
+				"conversation-icon-foreground": "#dfb0b0"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ffc3c1",
+				"accent": "#a03e43",
+				"new-line": "#e2afae",
+				"avatar-ink": "#b45054",
+				"avatar-ground": "#ffdfde",
+				"conversation-icon": "#fadcdb",
+				"conversation-icon-foreground": "#704949"
+			},
+			"dark": {
+				"bubble": "#833b3d",
+				"accent": "#fb9797",
+				"new-line": "#643a3a",
+				"avatar-ink": "#ff9f9f",
+				"avatar-ground": "#402625",
+				"conversation-icon": "#543d3c",
+				"conversation-icon-foreground": "#dfb1af"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ffc3c1",
+				"accent": "#a03e42",
+				"new-line": "#e2afad",
+				"avatar-ink": "#b45052",
+				"avatar-ground": "#ffdfde",
+				"conversation-icon": "#fadcdb",
+				"conversation-icon-foreground": "#704948"
+			},
+			"dark": {
+				"bubble": "#843b3d",
+				"accent": "#fb9796",
+				"new-line": "#643a3a",
+				"avatar-ink": "#ff9f9e",
+				"avatar-ground": "#402625",
+				"conversation-icon": "#543d3c",
+				"conversation-icon-foreground": "#dfb1af"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ffc3c0",
+				"accent": "#a03f40",
+				"new-line": "#e2afac",
+				"avatar-ink": "#b45151",
+				"avatar-ground": "#ffdfdd",
+				"conversation-icon": "#fadddb",
+				"conversation-icon-foreground": "#704948"
+			},
+			"dark": {
+				"bubble": "#833b3b",
+				"accent": "#fb9795",
+				"new-line": "#643a39",
+				"avatar-ink": "#ffa09c",
+				"avatar-ground": "#402625",
+				"conversation-icon": "#543d3c",
+				"conversation-icon-foreground": "#dfb1ae"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ffc3bf",
+				"accent": "#a03f3f",
+				"new-line": "#e2afac",
+				"avatar-ink": "#b4514f",
+				"avatar-ground": "#ffdfdd",
+				"conversation-icon": "#faddda",
+				"conversation-icon-foreground": "#704947"
+			},
+			"dark": {
+				"bubble": "#833b3a",
+				"accent": "#fb9893",
+				"new-line": "#643a38",
+				"avatar-ink": "#ffa09b",
+				"avatar-ground": "#402624",
+				"conversation-icon": "#543d3b",
+				"conversation-icon-foreground": "#dfb1ae"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ffc3be",
+				"accent": "#a03f3d",
+				"new-line": "#e2afab",
+				"avatar-ink": "#b4514e",
+				"avatar-ground": "#ffdfdd",
+				"conversation-icon": "#faddda",
+				"conversation-icon-foreground": "#704947"
+			},
+			"dark": {
+				"bubble": "#833b39",
+				"accent": "#fb9892",
+				"new-line": "#643a38",
+				"avatar-ink": "#ffa09a",
+				"avatar-ground": "#402624",
+				"conversation-icon": "#543d3b",
+				"conversation-icon-foreground": "#dfb1ad"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ffc3bd",
+				"accent": "#a03f3c",
+				"new-line": "#e2afaa",
+				"avatar-ink": "#b4514c",
+				"avatar-ground": "#ffdfdc",
+				"conversation-icon": "#faddda",
+				"conversation-icon-foreground": "#704946"
+			},
+			"dark": {
+				"bubble": "#833b37",
+				"accent": "#fb9890",
+				"new-line": "#643a37",
+				"avatar-ink": "#ffa098",
+				"avatar-ground": "#402624",
+				"conversation-icon": "#543d3b",
+				"conversation-icon-foreground": "#dfb1ac"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ffc3bd",
+				"accent": "#a03f3a",
+				"new-line": "#e2b0aa",
+				"avatar-ink": "#b4514b",
+				"avatar-ground": "#ffe0dc",
+				"conversation-icon": "#faddd9",
+				"conversation-icon-foreground": "#704a45"
+			},
+			"dark": {
+				"bubble": "#833b36",
+				"accent": "#fb988f",
+				"new-line": "#643b37",
+				"avatar-ink": "#ffa097",
+				"avatar-ground": "#402623",
+				"conversation-icon": "#543d3a",
+				"conversation-icon-foreground": "#dfb1ac"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ffc3bc",
+				"accent": "#a04038",
+				"new-line": "#e2b0a9",
+				"avatar-ink": "#b45249",
+				"avatar-ground": "#ffe0db",
+				"conversation-icon": "#faddd9",
+				"conversation-icon-foreground": "#704a45"
+			},
+			"dark": {
+				"bubble": "#833c35",
+				"accent": "#fb988d",
+				"new-line": "#643b36",
+				"avatar-ink": "#ffa196",
+				"avatar-ground": "#402623",
+				"conversation-icon": "#543d3a",
+				"conversation-icon-foreground": "#dfb1ab"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ffc4bb",
+				"accent": "#a04037",
+				"new-line": "#e2b0a8",
+				"avatar-ink": "#b45248",
+				"avatar-ground": "#ffe0db",
+				"conversation-icon": "#faddd8",
+				"conversation-icon-foreground": "#704a44"
+			},
+			"dark": {
+				"bubble": "#833c34",
+				"accent": "#fb998c",
+				"new-line": "#643b35",
+				"avatar-ink": "#ffa194",
+				"avatar-ground": "#402622",
+				"conversation-icon": "#543d3a",
+				"conversation-icon-foreground": "#dfb1ab"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ffc4ba",
+				"accent": "#a04035",
+				"new-line": "#e2b0a8",
+				"avatar-ink": "#b45246",
+				"avatar-ground": "#ffe0db",
+				"conversation-icon": "#faddd8",
+				"conversation-icon-foreground": "#704a44"
+			},
+			"dark": {
+				"bubble": "#833c33",
+				"accent": "#fb998b",
+				"new-line": "#643b35",
+				"avatar-ink": "#ffa193",
+				"avatar-ground": "#402622",
+				"conversation-icon": "#543d3a",
+				"conversation-icon-foreground": "#dfb1aa"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ffc4b9",
+				"accent": "#a04034",
+				"new-line": "#e2b0a7",
+				"avatar-ink": "#b45244",
+				"avatar-ground": "#ffe0da",
+				"conversation-icon": "#faddd8",
+				"conversation-icon-foreground": "#704a43"
+			},
+			"dark": {
+				"bubble": "#833c32",
+				"accent": "#fb9989",
+				"new-line": "#643b34",
+				"avatar-ink": "#ffa191",
+				"avatar-ground": "#402622",
+				"conversation-icon": "#543d39",
+				"conversation-icon-foreground": "#deb1a9"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ffc4b9",
+				"accent": "#a04132",
+				"new-line": "#e2b0a6",
+				"avatar-ink": "#b45343",
+				"avatar-ground": "#ffe0da",
+				"conversation-icon": "#faddd7",
+				"conversation-icon-foreground": "#704a43"
+			},
+			"dark": {
+				"bubble": "#833c31",
+				"accent": "#fa9988",
+				"new-line": "#643b34",
+				"avatar-ink": "#ffa190",
+				"avatar-ground": "#402621",
+				"conversation-icon": "#543d39",
+				"conversation-icon-foreground": "#deb2a9"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ffc4b8",
+				"accent": "#a04130",
+				"new-line": "#e2b0a6",
+				"avatar-ink": "#b45341",
+				"avatar-ground": "#fee0d9",
+				"conversation-icon": "#faddd7",
+				"conversation-icon-foreground": "#704a42"
+			},
+			"dark": {
+				"bubble": "#833d30",
+				"accent": "#fa9a87",
+				"new-line": "#643b33",
+				"avatar-ink": "#ffa18f",
+				"avatar-ground": "#402621",
+				"conversation-icon": "#543d39",
+				"conversation-icon-foreground": "#deb2a8"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ffc4b7",
+				"accent": "#a0412e",
+				"new-line": "#e2b0a5",
+				"avatar-ink": "#b45340",
+				"avatar-ground": "#fee0d9",
+				"conversation-icon": "#faddd7",
+				"conversation-icon-foreground": "#704a42"
+			},
+			"dark": {
+				"bubble": "#833d2e",
+				"accent": "#fa9a85",
+				"new-line": "#643b32",
+				"avatar-ink": "#ffa28d",
+				"avatar-ground": "#402621",
+				"conversation-icon": "#543d38",
+				"conversation-icon-foreground": "#deb2a8"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ffc4b6",
+				"accent": "#a0422d",
+				"new-line": "#e2b0a5",
+				"avatar-ink": "#b4543e",
+				"avatar-ground": "#fee0d9",
+				"conversation-icon": "#faddd6",
+				"conversation-icon-foreground": "#704a41"
+			},
+			"dark": {
+				"bubble": "#833d2d",
+				"accent": "#fa9a84",
+				"new-line": "#643b32",
+				"avatar-ink": "#ffa28c",
+				"avatar-ground": "#402620",
+				"conversation-icon": "#543e38",
+				"conversation-icon-foreground": "#deb2a7"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ffc4b5",
+				"accent": "#9f422b",
+				"new-line": "#e1b1a4",
+				"avatar-ink": "#b3543c",
+				"avatar-ground": "#fee0d8",
+				"conversation-icon": "#faddd6",
+				"conversation-icon-foreground": "#704a41"
+			},
+			"dark": {
+				"bubble": "#833d2c",
+				"accent": "#fa9b82",
+				"new-line": "#643c31",
+				"avatar-ink": "#ffa28a",
+				"avatar-ground": "#3f2620",
+				"conversation-icon": "#543e38",
+				"conversation-icon-foreground": "#deb2a7"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ffc4b4",
+				"accent": "#9f4229",
+				"new-line": "#e1b1a3",
+				"avatar-ink": "#b3543b",
+				"avatar-ground": "#fee0d8",
+				"conversation-icon": "#faddd6",
+				"conversation-icon-foreground": "#704b40"
+			},
+			"dark": {
+				"bubble": "#823d2b",
+				"accent": "#fa9b81",
+				"new-line": "#643c31",
+				"avatar-ink": "#ffa289",
+				"avatar-ground": "#3f2620",
+				"conversation-icon": "#543e38",
+				"conversation-icon-foreground": "#deb2a6"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ffc5b3",
+				"accent": "#9f4327",
+				"new-line": "#e1b1a3",
+				"avatar-ink": "#b35539",
+				"avatar-ground": "#fee0d8",
+				"conversation-icon": "#f9ded5",
+				"conversation-icon-foreground": "#704b40"
+			},
+			"dark": {
+				"bubble": "#823e2a",
+				"accent": "#f99b80",
+				"new-line": "#643c30",
+				"avatar-ink": "#ffa287",
+				"avatar-ground": "#3f271f",
+				"conversation-icon": "#543e37",
+				"conversation-icon-foreground": "#deb2a6"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ffc5b3",
+				"accent": "#9f4325",
+				"new-line": "#e1b1a2",
+				"avatar-ink": "#b35537",
+				"avatar-ground": "#fee1d7",
+				"conversation-icon": "#f9ded5",
+				"conversation-icon-foreground": "#704b3f"
+			},
+			"dark": {
+				"bubble": "#823e29",
+				"accent": "#f99b7e",
+				"new-line": "#643c30",
+				"avatar-ink": "#ffa286",
+				"avatar-ground": "#3f271f",
+				"conversation-icon": "#543e37",
+				"conversation-icon-foreground": "#deb2a5"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ffc5b2",
+				"accent": "#9f4323",
+				"new-line": "#e1b1a2",
+				"avatar-ink": "#b35536",
+				"avatar-ground": "#fee1d7",
+				"conversation-icon": "#f9ded5",
+				"conversation-icon-foreground": "#704b3f"
+			},
+			"dark": {
+				"bubble": "#823e27",
+				"accent": "#f99c7d",
+				"new-line": "#633c2f",
+				"avatar-ink": "#ffa384",
+				"avatar-ground": "#3f271f",
+				"conversation-icon": "#543e37",
+				"conversation-icon-foreground": "#deb3a4"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ffc5b1",
+				"accent": "#9e4421",
+				"new-line": "#e1b1a1",
+				"avatar-ink": "#b25634",
+				"avatar-ground": "#fee1d7",
+				"conversation-icon": "#f9ded4",
+				"conversation-icon-foreground": "#6f4b3e"
+			},
+			"dark": {
+				"bubble": "#823e26",
+				"accent": "#f99c7c",
+				"new-line": "#633c2e",
+				"avatar-ink": "#ffa383",
+				"avatar-ground": "#3f271e",
+				"conversation-icon": "#543e36",
+				"conversation-icon-foreground": "#ddb3a4"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ffc5b0",
+				"accent": "#9e441f",
+				"new-line": "#e0b2a0",
+				"avatar-ink": "#b25632",
+				"avatar-ground": "#fee1d6",
+				"conversation-icon": "#f9ded4",
+				"conversation-icon-foreground": "#6f4b3e"
+			},
+			"dark": {
+				"bubble": "#813e24",
+				"accent": "#f89c7a",
+				"new-line": "#633c2e",
+				"avatar-ink": "#ffa381",
+				"avatar-ground": "#3f271e",
+				"conversation-icon": "#533e36",
+				"conversation-icon-foreground": "#ddb3a3"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ffc5af",
+				"accent": "#9e441d",
+				"new-line": "#e0b2a0",
+				"avatar-ink": "#b25630",
+				"avatar-ground": "#fee1d6",
+				"conversation-icon": "#f9ded4",
+				"conversation-icon-foreground": "#6f4b3d"
+			},
+			"dark": {
+				"bubble": "#813f24",
+				"accent": "#f89d79",
+				"new-line": "#633c2d",
+				"avatar-ink": "#ffa37f",
+				"avatar-ground": "#3f271e",
+				"conversation-icon": "#533e36",
+				"conversation-icon-foreground": "#ddb3a3"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ffc5ae",
+				"accent": "#9e451b",
+				"new-line": "#e0b29f",
+				"avatar-ink": "#b2572f",
+				"avatar-ground": "#fde1d6",
+				"conversation-icon": "#f9ded3",
+				"conversation-icon-foreground": "#6f4b3d"
+			},
+			"dark": {
+				"bubble": "#813f23",
+				"accent": "#f89d78",
+				"new-line": "#633d2d",
+				"avatar-ink": "#ffa47e",
+				"avatar-ground": "#3f271d",
+				"conversation-icon": "#533e36",
+				"conversation-icon-foreground": "#ddb3a2"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ffc5ad",
+				"accent": "#9d4518",
+				"new-line": "#e0b29f",
+				"avatar-ink": "#b1572d",
+				"avatar-ground": "#fde1d5",
+				"conversation-icon": "#f9ded3",
+				"conversation-icon-foreground": "#6f4c3c"
+			},
+			"dark": {
+				"bubble": "#803f21",
+				"accent": "#f79e77",
+				"new-line": "#633d2c",
+				"avatar-ink": "#fea47d",
+				"avatar-ground": "#3f271d",
+				"conversation-icon": "#533e35",
+				"conversation-icon-foreground": "#ddb3a2"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ffc5ac",
+				"accent": "#9d4616",
+				"new-line": "#e0b29e",
+				"avatar-ink": "#b1582b",
+				"avatar-ground": "#fde1d5",
+				"conversation-icon": "#f9ded3",
+				"conversation-icon-foreground": "#6f4c3c"
+			},
+			"dark": {
+				"bubble": "#803f1f",
+				"accent": "#f79e75",
+				"new-line": "#633d2c",
+				"avatar-ink": "#fea47c",
+				"avatar-ground": "#3f271d",
+				"conversation-icon": "#533e35",
+				"conversation-icon-foreground": "#dcb3a1"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ffc6ab",
+				"accent": "#9d4613",
+				"new-line": "#dfb29e",
+				"avatar-ink": "#b15829",
+				"avatar-ground": "#fde1d5",
+				"conversation-icon": "#f8ded3",
+				"conversation-icon-foreground": "#6f4c3c"
+			},
+			"dark": {
+				"bubble": "#80401f",
+				"accent": "#f79e74",
+				"new-line": "#623d2b",
+				"avatar-ink": "#fea57a",
+				"avatar-ground": "#3f271c",
+				"conversation-icon": "#533e35",
+				"conversation-icon-foreground": "#dcb4a1"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ffc6aa",
+				"accent": "#9c4710",
+				"new-line": "#dfb39d",
+				"avatar-ink": "#b05827",
+				"avatar-ground": "#fde1d4",
+				"conversation-icon": "#f8dfd2",
+				"conversation-icon-foreground": "#6e4c3b"
+			},
+			"dark": {
+				"bubble": "#80401e",
+				"accent": "#f69f73",
+				"new-line": "#623d2b",
+				"avatar-ink": "#fda579",
+				"avatar-ground": "#3e271c",
+				"conversation-icon": "#533e35",
+				"conversation-icon-foreground": "#dcb4a1"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#fec6aa",
+				"accent": "#9c470d",
+				"new-line": "#dfb39d",
+				"avatar-ink": "#b05925",
+				"avatar-ground": "#fde2d4",
+				"conversation-icon": "#f8dfd2",
+				"conversation-icon-foreground": "#6e4c3b"
+			},
+			"dark": {
+				"bubble": "#7f401b",
+				"accent": "#f69f72",
+				"new-line": "#623d2a",
+				"avatar-ink": "#fda578",
+				"avatar-ground": "#3e281c",
+				"conversation-icon": "#533f34",
+				"conversation-icon-foreground": "#dcb4a0"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#fec6a9",
+				"accent": "#9c4709",
+				"new-line": "#dfb39c",
+				"avatar-ink": "#af5923",
+				"avatar-ground": "#fce2d4",
+				"conversation-icon": "#f8dfd2",
+				"conversation-icon-foreground": "#6e4c3a"
+			},
+			"dark": {
+				"bubble": "#7f401a",
+				"accent": "#f59f71",
+				"new-line": "#623e2a",
+				"avatar-ink": "#fca677",
+				"avatar-ground": "#3e281c",
+				"conversation-icon": "#533f34",
+				"conversation-icon-foreground": "#dcb4a0"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#fec7a9",
+				"accent": "#9b4805",
+				"new-line": "#deb39c",
+				"avatar-ink": "#af5a21",
+				"avatar-ground": "#fce2d4",
+				"conversation-icon": "#f8dfd2",
+				"conversation-icon-foreground": "#6e4c3a"
+			},
+			"dark": {
+				"bubble": "#7f411a",
+				"accent": "#f5a06f",
+				"new-line": "#623e29",
+				"avatar-ink": "#fca676",
+				"avatar-ground": "#3e281b",
+				"conversation-icon": "#533f34",
+				"conversation-icon-foreground": "#dbb49f"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#fdc7a8",
+				"accent": "#9b4801",
+				"new-line": "#deb39b",
+				"avatar-ink": "#af5a1f",
+				"avatar-ground": "#fce2d3",
+				"conversation-icon": "#f8dfd1",
+				"conversation-icon-foreground": "#6e4d39"
+			},
+			"dark": {
+				"bubble": "#7e4117",
+				"accent": "#f4a06e",
+				"new-line": "#623e29",
+				"avatar-ink": "#fba774",
+				"avatar-ground": "#3e281b",
+				"conversation-icon": "#523f34",
+				"conversation-icon-foreground": "#dbb59f"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#fdc7a7",
+				"accent": "#9a4900",
+				"new-line": "#deb49b",
+				"avatar-ink": "#ae5b1d",
+				"avatar-ground": "#fce2d3",
+				"conversation-icon": "#f7dfd1",
+				"conversation-icon-foreground": "#6e4d39"
+			},
+			"dark": {
+				"bubble": "#7e4116",
+				"accent": "#f4a16d",
+				"new-line": "#613e28",
+				"avatar-ink": "#fba773",
+				"avatar-ground": "#3e281b",
+				"conversation-icon": "#523f34",
+				"conversation-icon-foreground": "#dbb59e"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#fdc7a7",
+				"accent": "#994a00",
+				"new-line": "#deb49a",
+				"avatar-ink": "#ae5b1a",
+				"avatar-ground": "#fce2d3",
+				"conversation-icon": "#f7dfd1",
+				"conversation-icon-foreground": "#6d4d39"
+			},
+			"dark": {
+				"bubble": "#7d4114",
+				"accent": "#f3a16c",
+				"new-line": "#613e28",
+				"avatar-ink": "#faa772",
+				"avatar-ground": "#3e281a",
+				"conversation-icon": "#523f33",
+				"conversation-icon-foreground": "#dbb59e"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#fcc8a6",
+				"accent": "#984b00",
+				"new-line": "#ddb49a",
+				"avatar-ink": "#ad5c18",
+				"avatar-ground": "#fce2d3",
+				"conversation-icon": "#f7dfd1",
+				"conversation-icon-foreground": "#6d4d38"
+			},
+			"dark": {
+				"bubble": "#7d4213",
+				"accent": "#f3a26b",
+				"new-line": "#613e27",
+				"avatar-ink": "#faa871",
+				"avatar-ground": "#3e281a",
+				"conversation-icon": "#523f33",
+				"conversation-icon-foreground": "#dab59e"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#fcc8a6",
+				"accent": "#974c00",
+				"new-line": "#ddb499",
+				"avatar-ink": "#ad5c15",
+				"avatar-ground": "#fbe2d2",
+				"conversation-icon": "#f7dfd0",
+				"conversation-icon-foreground": "#6d4d38"
+			},
+			"dark": {
+				"bubble": "#7d4211",
+				"accent": "#f2a26a",
+				"new-line": "#613f27",
+				"avatar-ink": "#f9a870",
+				"avatar-ground": "#3d281a",
+				"conversation-icon": "#523f33",
+				"conversation-icon-foreground": "#dab59d"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#fbc8a5",
+				"accent": "#964d00",
+				"new-line": "#ddb499",
+				"avatar-ink": "#ac5d13",
+				"avatar-ground": "#fbe3d2",
+				"conversation-icon": "#f7e0d0",
+				"conversation-icon-foreground": "#6d4d38"
+			},
+			"dark": {
+				"bubble": "#7c420f",
+				"accent": "#f2a269",
+				"new-line": "#603f26",
+				"avatar-ink": "#f9a96f",
+				"avatar-ground": "#3d281a",
+				"conversation-icon": "#523f33",
+				"conversation-icon-foreground": "#dab59d"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#fbc8a4",
+				"accent": "#954e00",
+				"new-line": "#dcb599",
+				"avatar-ink": "#ac5d10",
+				"avatar-ground": "#fbe3d2",
+				"conversation-icon": "#f6e0d0",
+				"conversation-icon-foreground": "#6c4e37"
+			},
+			"dark": {
+				"bubble": "#7c430e",
+				"accent": "#f1a368",
+				"new-line": "#603f26",
+				"avatar-ink": "#f8a96e",
+				"avatar-ground": "#3d2919",
+				"conversation-icon": "#523f32",
+				"conversation-icon-foreground": "#d9b69c"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#fbc9a4",
+				"accent": "#944e00",
+				"new-line": "#dcb598",
+				"avatar-ink": "#ab5e0c",
+				"avatar-ground": "#fbe3d2",
+				"conversation-icon": "#f6e0d0",
+				"conversation-icon-foreground": "#6c4e37"
+			},
+			"dark": {
+				"bubble": "#7c430c",
+				"accent": "#f1a366",
+				"new-line": "#603f26",
+				"avatar-ink": "#f8aa6d",
+				"avatar-ground": "#3d2919",
+				"conversation-icon": "#514032",
+				"conversation-icon-foreground": "#d9b69c"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#fac9a3",
+				"accent": "#934f00",
+				"new-line": "#dcb598",
+				"avatar-ink": "#ab5e08",
+				"avatar-ground": "#fae3d1",
+				"conversation-icon": "#f6e0cf",
+				"conversation-icon-foreground": "#6c4e36"
+			},
+			"dark": {
+				"bubble": "#7b440a",
+				"accent": "#f0a465",
+				"new-line": "#603f25",
+				"avatar-ink": "#f7aa6c",
+				"avatar-ground": "#3d2919",
+				"conversation-icon": "#514032",
+				"conversation-icon-foreground": "#d9b69c"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#fac9a3",
+				"accent": "#925000",
+				"new-line": "#dbb597",
+				"avatar-ink": "#aa5f04",
+				"avatar-ground": "#fae3d1",
+				"conversation-icon": "#f6e0cf",
+				"conversation-icon-foreground": "#6c4e36"
+			},
+			"dark": {
+				"bubble": "#7b4409",
+				"accent": "#efa464",
+				"new-line": "#5f4025",
+				"avatar-ink": "#f6ab6b",
+				"avatar-ground": "#3d2919",
+				"conversation-icon": "#514032",
+				"conversation-icon-foreground": "#d8b69b"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#f9caa2",
+				"accent": "#915100",
+				"new-line": "#dbb697",
+				"avatar-ink": "#aa5f00",
+				"avatar-ground": "#fae3d1",
+				"conversation-icon": "#f6e0cf",
+				"conversation-icon-foreground": "#6b4e36"
+			},
+			"dark": {
+				"bubble": "#7a4405",
+				"accent": "#efa564",
+				"new-line": "#5f4024",
+				"avatar-ink": "#f6ab6a",
+				"avatar-ground": "#3c2918",
+				"conversation-icon": "#514032",
+				"conversation-icon-foreground": "#d8b69b"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#f9caa2",
+				"accent": "#915100",
+				"new-line": "#dbb697",
+				"avatar-ink": "#a96000",
+				"avatar-ground": "#fae3d1",
+				"conversation-icon": "#f5e0cf",
+				"conversation-icon-foreground": "#6b4f35"
+			},
+			"dark": {
+				"bubble": "#794404",
+				"accent": "#eea563",
+				"new-line": "#5f4024",
+				"avatar-ink": "#f5ac69",
+				"avatar-ground": "#3c2918",
+				"conversation-icon": "#514032",
+				"conversation-icon-foreground": "#d8b79b"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#f8caa1",
+				"accent": "#905200",
+				"new-line": "#dab696",
+				"avatar-ink": "#a86100",
+				"avatar-ground": "#f9e3d1",
+				"conversation-icon": "#f5e0cf",
+				"conversation-icon-foreground": "#6b4f35"
+			},
+			"dark": {
+				"bubble": "#794502",
+				"accent": "#eea662",
+				"new-line": "#5f4024",
+				"avatar-ink": "#f4ac68",
+				"avatar-ground": "#3c2918",
+				"conversation-icon": "#514031",
+				"conversation-icon-foreground": "#d7b79a"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#f8caa1",
+				"accent": "#8f5300",
+				"new-line": "#dab696",
+				"avatar-ink": "#a76100",
+				"avatar-ground": "#f9e4d0",
+				"conversation-icon": "#f5e1ce",
+				"conversation-icon-foreground": "#6b4f35"
+			},
+			"dark": {
+				"bubble": "#794500",
+				"accent": "#eda661",
+				"new-line": "#5e4023",
+				"avatar-ink": "#f4ad67",
+				"avatar-ground": "#3c2918",
+				"conversation-icon": "#504031",
+				"conversation-icon-foreground": "#d7b79a"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#f7cba1",
+				"accent": "#8f5400",
+				"new-line": "#d9b696",
+				"avatar-ink": "#a66200",
+				"avatar-ground": "#f9e4d0",
+				"conversation-icon": "#f5e1ce",
+				"conversation-icon-foreground": "#6a4f35"
+			},
+			"dark": {
+				"bubble": "#784600",
+				"accent": "#eca760",
+				"new-line": "#5e4123",
+				"avatar-ink": "#f3ad66",
+				"avatar-ground": "#3c2a18",
+				"conversation-icon": "#504031",
+				"conversation-icon-foreground": "#d7b79a"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#f7cba0",
+				"accent": "#8f5400",
+				"new-line": "#d9b795",
+				"avatar-ink": "#a56300",
+				"avatar-ground": "#f9e4d0",
+				"conversation-icon": "#f4e1ce",
+				"conversation-icon-foreground": "#6a4f34"
+			},
+			"dark": {
+				"bubble": "#774600",
+				"accent": "#eba75f",
+				"new-line": "#5e4123",
+				"avatar-ink": "#f2ae65",
+				"avatar-ground": "#3c2a17",
+				"conversation-icon": "#504031",
+				"conversation-icon-foreground": "#d6b79a"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#f6cba0",
+				"accent": "#8f5500",
+				"new-line": "#d9b795",
+				"avatar-ink": "#a46400",
+				"avatar-ground": "#f8e4d0",
+				"conversation-icon": "#f4e1ce",
+				"conversation-icon-foreground": "#6a4f34"
+			},
+			"dark": {
+				"bubble": "#764700",
+				"accent": "#eba85e",
+				"new-line": "#5d4122",
+				"avatar-ink": "#f1ae65",
+				"avatar-ground": "#3b2a17",
+				"conversation-icon": "#504031",
+				"conversation-icon-foreground": "#d6b899"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#f6cc9f",
+				"accent": "#905600",
+				"new-line": "#d8b795",
+				"avatar-ink": "#a36400",
+				"avatar-ground": "#f8e4d0",
+				"conversation-icon": "#f4e1ce",
+				"conversation-icon-foreground": "#695034"
+			},
+			"dark": {
+				"bubble": "#764700",
+				"accent": "#eaa85d",
+				"new-line": "#5d4122",
+				"avatar-ink": "#f1af64",
+				"avatar-ground": "#3b2a17",
+				"conversation-icon": "#504131",
+				"conversation-icon-foreground": "#d6b899"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#f5cc9f",
+				"accent": "#905700",
+				"new-line": "#d8b794",
+				"avatar-ink": "#a26500",
+				"avatar-ground": "#f8e4cf",
+				"conversation-icon": "#f4e1ce",
+				"conversation-icon-foreground": "#695034"
+			},
+			"dark": {
+				"bubble": "#744700",
+				"accent": "#e9a95d",
+				"new-line": "#5d4122",
+				"avatar-ink": "#f0af63",
+				"avatar-ground": "#3b2a17",
+				"conversation-icon": "#4f4131",
+				"conversation-icon-foreground": "#d5b899"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#f5cc9f",
+				"accent": "#915800",
+				"new-line": "#d7b894",
+				"avatar-ink": "#a16600",
+				"avatar-ground": "#f8e4cf",
+				"conversation-icon": "#f3e1ce",
+				"conversation-icon-foreground": "#695033"
+			},
+			"dark": {
+				"bubble": "#744800",
+				"accent": "#e8a95c",
+				"new-line": "#5c4221",
+				"avatar-ink": "#efb062",
+				"avatar-ground": "#3b2a17",
+				"conversation-icon": "#4f4130",
+				"conversation-icon-foreground": "#d5b899"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#f4cd9e",
+				"accent": "#925900",
+				"new-line": "#d7b894",
+				"avatar-ink": "#a06600",
+				"avatar-ground": "#f7e5cf",
+				"conversation-icon": "#f3e1cd",
+				"conversation-icon-foreground": "#685033"
+			},
+			"dark": {
+				"bubble": "#734800",
+				"accent": "#e8aa5b",
+				"new-line": "#5c4221",
+				"avatar-ink": "#eeb062",
+				"avatar-ground": "#3b2a16",
+				"conversation-icon": "#4f4130",
+				"conversation-icon-foreground": "#d4b998"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#f3cd9e",
+				"accent": "#935a00",
+				"new-line": "#d6b894",
+				"avatar-ink": "#9f6700",
+				"avatar-ground": "#f7e5cf",
+				"conversation-icon": "#f3e2cd",
+				"conversation-icon-foreground": "#685033"
+			},
+			"dark": {
+				"bubble": "#724800",
+				"accent": "#e7aa5b",
+				"new-line": "#5c4221",
+				"avatar-ink": "#edb161",
+				"avatar-ground": "#3a2a16",
+				"conversation-icon": "#4f4130",
+				"conversation-icon-foreground": "#d4b998"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#f3cd9e",
+				"accent": "#935b00",
+				"new-line": "#d6b893",
+				"avatar-ink": "#9e6700",
+				"avatar-ground": "#f7e5cf",
+				"conversation-icon": "#f3e2cd",
+				"conversation-icon-foreground": "#685133"
+			},
+			"dark": {
+				"bubble": "#724900",
+				"accent": "#e6ab5a",
+				"new-line": "#5b4220",
+				"avatar-ink": "#edb160",
+				"avatar-ground": "#3a2b16",
+				"conversation-icon": "#4f4130",
+				"conversation-icon-foreground": "#d3b998"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#f2ce9e",
+				"accent": "#945d00",
+				"new-line": "#d5b993",
+				"avatar-ink": "#9d6800",
+				"avatar-ground": "#f6e5cf",
+				"conversation-icon": "#f2e2cd",
+				"conversation-icon-foreground": "#675132"
+			},
+			"dark": {
+				"bubble": "#714900",
+				"accent": "#e5ab59",
+				"new-line": "#5b4320",
+				"avatar-ink": "#ecb260",
+				"avatar-ground": "#3a2b16",
+				"conversation-icon": "#4e4130",
+				"conversation-icon-foreground": "#d3b998"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#f2ce9d",
+				"accent": "#955e00",
+				"new-line": "#d5b993",
+				"avatar-ink": "#9c6900",
+				"avatar-ground": "#f6e5cf",
+				"conversation-icon": "#f2e2cd",
+				"conversation-icon-foreground": "#675132"
+			},
+			"dark": {
+				"bubble": "#704a00",
+				"accent": "#e4ac59",
+				"new-line": "#5b4320",
+				"avatar-ink": "#ebb25f",
+				"avatar-ground": "#3a2b16",
+				"conversation-icon": "#4e4130",
+				"conversation-icon-foreground": "#d3b998"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#f1ce9d",
+				"accent": "#965f00",
+				"new-line": "#d4b993",
+				"avatar-ink": "#9b6900",
+				"avatar-ground": "#f6e5cf",
+				"conversation-icon": "#f2e2cd",
+				"conversation-icon-foreground": "#675132"
+			},
+			"dark": {
+				"bubble": "#6f4a00",
+				"accent": "#e3ac58",
+				"new-line": "#5a4320",
+				"avatar-ink": "#eab35f",
+				"avatar-ground": "#392b16",
+				"conversation-icon": "#4e4130",
+				"conversation-icon-foreground": "#d2ba97"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#f0cf9d",
+				"accent": "#965f00",
+				"new-line": "#d4b993",
+				"avatar-ink": "#9a6a00",
+				"avatar-ground": "#f5e5cf",
+				"conversation-icon": "#f1e2cd",
+				"conversation-icon-foreground": "#665132"
+			},
+			"dark": {
+				"bubble": "#6e4a00",
+				"accent": "#e2ad58",
+				"new-line": "#5a4320",
+				"avatar-ink": "#e9b35e",
+				"avatar-ground": "#392b16",
+				"conversation-icon": "#4e4230",
+				"conversation-icon-foreground": "#d2ba97"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#f0cf9d",
+				"accent": "#966000",
+				"new-line": "#d3ba93",
+				"avatar-ink": "#996a00",
+				"avatar-ground": "#f5e6ce",
+				"conversation-icon": "#f1e2cd",
+				"conversation-icon-foreground": "#665232"
+			},
+			"dark": {
+				"bubble": "#6e4b00",
+				"accent": "#e1ad57",
+				"new-line": "#59431f",
+				"avatar-ink": "#e8b45e",
+				"avatar-ground": "#392b16",
+				"conversation-icon": "#4e4230",
+				"conversation-icon-foreground": "#d1ba97"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#efcf9c",
+				"accent": "#966100",
+				"new-line": "#d3ba92",
+				"avatar-ink": "#996b00",
+				"avatar-ground": "#f5e6ce",
+				"conversation-icon": "#f1e3cd",
+				"conversation-icon-foreground": "#655232"
+			},
+			"dark": {
+				"bubble": "#6d4b00",
+				"accent": "#e0ae57",
+				"new-line": "#59441f",
+				"avatar-ink": "#e7b45d",
+				"avatar-ground": "#392b15",
+				"conversation-icon": "#4d4230",
+				"conversation-icon-foreground": "#d1ba97"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#eecf9c",
+				"accent": "#966200",
+				"new-line": "#d2ba92",
+				"avatar-ink": "#986b00",
+				"avatar-ground": "#f4e6ce",
+				"conversation-icon": "#f0e3cd",
+				"conversation-icon-foreground": "#655232"
+			},
+			"dark": {
+				"bubble": "#6c4b00",
+				"accent": "#e0ae57",
+				"new-line": "#59441f",
+				"avatar-ink": "#e6b55d",
+				"avatar-ground": "#382c15",
+				"conversation-icon": "#4d4230",
+				"conversation-icon-foreground": "#d0bb97"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#eed09c",
+				"accent": "#956300",
+				"new-line": "#d2ba92",
+				"avatar-ink": "#976c00",
+				"avatar-ground": "#f4e6ce",
+				"conversation-icon": "#f0e3cc",
+				"conversation-icon-foreground": "#655231"
+			},
+			"dark": {
+				"bubble": "#6c4c00",
+				"accent": "#dfaf56",
+				"new-line": "#58441f",
+				"avatar-ink": "#e5b55d",
+				"avatar-ground": "#382c15",
+				"conversation-icon": "#4d4230",
+				"conversation-icon-foreground": "#d0bb97"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#edd09c",
+				"accent": "#956300",
+				"new-line": "#d1bb92",
+				"avatar-ink": "#966c00",
+				"avatar-ground": "#f4e6ce",
+				"conversation-icon": "#f0e3cc",
+				"conversation-icon-foreground": "#645231"
+			},
+			"dark": {
+				"bubble": "#6a4c00",
+				"accent": "#deaf56",
+				"new-line": "#58441f",
+				"avatar-ink": "#e4b65c",
+				"avatar-ground": "#382c15",
+				"conversation-icon": "#4d422f",
+				"conversation-icon-foreground": "#cfbb97"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ecd09c",
+				"accent": "#946400",
+				"new-line": "#d1bb92",
+				"avatar-ink": "#956d00",
+				"avatar-ground": "#f3e6ce",
+				"conversation-icon": "#efe3cc",
+				"conversation-icon-foreground": "#645331"
+			},
+			"dark": {
+				"bubble": "#6a4c00",
+				"accent": "#ddb056",
+				"new-line": "#57451f",
+				"avatar-ink": "#e3b65c",
+				"avatar-ground": "#382c15",
+				"conversation-icon": "#4c422f",
+				"conversation-icon-foreground": "#cfbb97"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ecd19c",
+				"accent": "#926400",
+				"new-line": "#d0bb92",
+				"avatar-ink": "#946d00",
+				"avatar-ground": "#f3e6ce",
+				"conversation-icon": "#efe3cc",
+				"conversation-icon-foreground": "#635331"
+			},
+			"dark": {
+				"bubble": "#6a4d00",
+				"accent": "#dcb155",
+				"new-line": "#57451f",
+				"avatar-ink": "#e2b75c",
+				"avatar-ground": "#372c15",
+				"conversation-icon": "#4c422f",
+				"conversation-icon-foreground": "#cebb97"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ebd19c",
+				"accent": "#916400",
+				"new-line": "#d0bb92",
+				"avatar-ink": "#936e00",
+				"avatar-ground": "#f3e7ce",
+				"conversation-icon": "#efe3cc",
+				"conversation-icon-foreground": "#635331"
+			},
+			"dark": {
+				"bubble": "#684d00",
+				"accent": "#dbb155",
+				"new-line": "#57451e",
+				"avatar-ink": "#e1b75c",
+				"avatar-ground": "#372c15",
+				"conversation-icon": "#4c432f",
+				"conversation-icon-foreground": "#cebc97"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ead19c",
+				"accent": "#8f6500",
+				"new-line": "#cfbc92",
+				"avatar-ink": "#926e00",
+				"avatar-ground": "#f2e7ce",
+				"conversation-icon": "#eee4cc",
+				"conversation-icon-foreground": "#635331"
+			},
+			"dark": {
+				"bubble": "#684d00",
+				"accent": "#d9b255",
+				"new-line": "#56451e",
+				"avatar-ink": "#e0b85c",
+				"avatar-ground": "#372c15",
+				"conversation-icon": "#4c432f",
+				"conversation-icon-foreground": "#cdbc97"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ead29c",
+				"accent": "#8d6500",
+				"new-line": "#cebc92",
+				"avatar-ink": "#916f00",
+				"avatar-ground": "#f2e7ce",
+				"conversation-icon": "#eee4cc",
+				"conversation-icon-foreground": "#625331"
+			},
+			"dark": {
+				"bubble": "#674e00",
+				"accent": "#d8b255",
+				"new-line": "#56451e",
+				"avatar-ink": "#dfb95c",
+				"avatar-ground": "#362d15",
+				"conversation-icon": "#4b432f",
+				"conversation-icon-foreground": "#cdbc96"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#e9d29c",
+				"accent": "#8b6500",
+				"new-line": "#cebc92",
+				"avatar-ink": "#906f00",
+				"avatar-ground": "#f2e7ce",
+				"conversation-icon": "#eee4cc",
+				"conversation-icon-foreground": "#625431"
+			},
+			"dark": {
+				"bubble": "#664e00",
+				"accent": "#d7b355",
+				"new-line": "#55461e",
+				"avatar-ink": "#deb95c",
+				"avatar-ground": "#362d15",
+				"conversation-icon": "#4b432f",
+				"conversation-icon-foreground": "#ccbc96"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#e8d29c",
+				"accent": "#896500",
+				"new-line": "#cdbc92",
+				"avatar-ink": "#8f7000",
+				"avatar-ground": "#f1e7ce",
+				"conversation-icon": "#ede4cc",
+				"conversation-icon-foreground": "#615431"
+			},
+			"dark": {
+				"bubble": "#664e00",
+				"accent": "#d6b355",
+				"new-line": "#55461e",
+				"avatar-ink": "#ddba5c",
+				"avatar-ground": "#362d15",
+				"conversation-icon": "#4b432f",
+				"conversation-icon-foreground": "#ccbd96"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#e7d39c",
+				"accent": "#876500",
+				"new-line": "#cdbd92",
+				"avatar-ink": "#8f7000",
+				"avatar-ground": "#f1e7ce",
+				"conversation-icon": "#ede4cc",
+				"conversation-icon-foreground": "#615431"
+			},
+			"dark": {
+				"bubble": "#654f00",
+				"accent": "#d5b455",
+				"new-line": "#54461e",
+				"avatar-ink": "#dcba5c",
+				"avatar-ground": "#362d15",
+				"conversation-icon": "#4a432f",
+				"conversation-icon-foreground": "#cbbd97"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#e7d39c",
+				"accent": "#846500",
+				"new-line": "#ccbd92",
+				"avatar-ink": "#8e7100",
+				"avatar-ground": "#f0e8ce",
+				"conversation-icon": "#ede4cc",
+				"conversation-icon-foreground": "#605431"
+			},
+			"dark": {
+				"bubble": "#644f00",
+				"accent": "#d4b455",
+				"new-line": "#54461e",
+				"avatar-ink": "#dbbb5c",
+				"avatar-ground": "#352d15",
+				"conversation-icon": "#4a432f",
+				"conversation-icon-foreground": "#cbbd97"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#e6d39c",
+				"accent": "#826500",
+				"new-line": "#cbbd92",
+				"avatar-ink": "#8d7100",
+				"avatar-ground": "#f0e8ce",
+				"conversation-icon": "#ece4cc",
+				"conversation-icon-foreground": "#605431"
+			},
+			"dark": {
+				"bubble": "#634f00",
+				"accent": "#d3b555",
+				"new-line": "#53471e",
+				"avatar-ink": "#d9bb5c",
+				"avatar-ground": "#352d15",
+				"conversation-icon": "#4a432f",
+				"conversation-icon-foreground": "#cabd97"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#e5d49c",
+				"accent": "#806400",
+				"new-line": "#cbbd92",
+				"avatar-ink": "#8c7200",
+				"avatar-ground": "#f0e8ce",
+				"conversation-icon": "#ece5cc",
+				"conversation-icon-foreground": "#605531"
+			},
+			"dark": {
+				"bubble": "#624f00",
+				"accent": "#d2b555",
+				"new-line": "#53471f",
+				"avatar-ink": "#d8bc5c",
+				"avatar-ground": "#352d15",
+				"conversation-icon": "#4a432f",
+				"conversation-icon-foreground": "#c9be97"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#e4d49c",
+				"accent": "#7d6400",
+				"new-line": "#cabe92",
+				"avatar-ink": "#8b7200",
+				"avatar-ground": "#efe8ce",
+				"conversation-icon": "#ece5cc",
+				"conversation-icon-foreground": "#5f5531"
+			},
+			"dark": {
+				"bubble": "#625000",
+				"accent": "#d1b655",
+				"new-line": "#52471f",
+				"avatar-ink": "#d7bc5c",
+				"avatar-ground": "#342d15",
+				"conversation-icon": "#49442f",
+				"conversation-icon-foreground": "#c9be97"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#e3d49c",
+				"accent": "#7b6400",
+				"new-line": "#cabe92",
+				"avatar-ink": "#8a7300",
+				"avatar-ground": "#efe8ce",
+				"conversation-icon": "#ebe5cc",
+				"conversation-icon-foreground": "#5f5531"
+			},
+			"dark": {
+				"bubble": "#615000",
+				"accent": "#cfb656",
+				"new-line": "#52471f",
+				"avatar-ink": "#d6bd5c",
+				"avatar-ground": "#342e15",
+				"conversation-icon": "#49442f",
+				"conversation-icon-foreground": "#c8be97"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#e3d59c",
+				"accent": "#796400",
+				"new-line": "#c9be92",
+				"avatar-ink": "#897300",
+				"avatar-ground": "#efe8ce",
+				"conversation-icon": "#ebe5cd",
+				"conversation-icon-foreground": "#5e5531"
+			},
+			"dark": {
+				"bubble": "#605000",
+				"accent": "#ceb756",
+				"new-line": "#51471f",
+				"avatar-ink": "#d5bd5d",
+				"avatar-ground": "#342e15",
+				"conversation-icon": "#494430",
+				"conversation-icon-foreground": "#c8be97"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#e2d59c",
+				"accent": "#776400",
+				"new-line": "#c8be92",
+				"avatar-ink": "#887400",
+				"avatar-ground": "#eee8ce",
+				"conversation-icon": "#eae5cd",
+				"conversation-icon-foreground": "#5e5632"
+			},
+			"dark": {
+				"bubble": "#605100",
+				"accent": "#cdb756",
+				"new-line": "#51481f",
+				"avatar-ink": "#d3be5d",
+				"avatar-ground": "#332e15",
+				"conversation-icon": "#494430",
+				"conversation-icon-foreground": "#c7be97"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#e1d59c",
+				"accent": "#756400",
+				"new-line": "#c8bf93",
+				"avatar-ink": "#877400",
+				"avatar-ground": "#eee9ce",
+				"conversation-icon": "#eae5cd",
+				"conversation-icon-foreground": "#5d5632"
+			},
+			"dark": {
+				"bubble": "#5e5100",
+				"accent": "#ccb857",
+				"new-line": "#50481f",
+				"avatar-ink": "#d2be5d",
+				"avatar-ground": "#332e15",
+				"conversation-icon": "#484430",
+				"conversation-icon-foreground": "#c7bf97"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#e0d69d",
+				"accent": "#736400",
+				"new-line": "#c7bf93",
+				"avatar-ink": "#867500",
+				"avatar-ground": "#ede9cf",
+				"conversation-icon": "#eae5cd",
+				"conversation-icon-foreground": "#5d5632"
+			},
+			"dark": {
+				"bubble": "#5e5100",
+				"accent": "#cbb957",
+				"new-line": "#50481f",
+				"avatar-ink": "#d1bf5e",
+				"avatar-ground": "#332e16",
+				"conversation-icon": "#484430",
+				"conversation-icon-foreground": "#c6bf97"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#dfd69d",
+				"accent": "#726400",
+				"new-line": "#c6bf93",
+				"avatar-ink": "#857500",
+				"avatar-ground": "#ede9cf",
+				"conversation-icon": "#e9e6cd",
+				"conversation-icon-foreground": "#5c5632"
+			},
+			"dark": {
+				"bubble": "#5d5200",
+				"accent": "#c9b957",
+				"new-line": "#4f481f",
+				"avatar-ink": "#d0bf5e",
+				"avatar-ground": "#322e16",
+				"conversation-icon": "#484430",
+				"conversation-icon-foreground": "#c5bf97"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ded69d",
+				"accent": "#716400",
+				"new-line": "#c6bf93",
+				"avatar-ink": "#847600",
+				"avatar-ground": "#ece9cf",
+				"conversation-icon": "#e9e6cd",
+				"conversation-icon-foreground": "#5c5632"
+			},
+			"dark": {
+				"bubble": "#5c5200",
+				"accent": "#c8ba58",
+				"new-line": "#4f4920",
+				"avatar-ink": "#cec05f",
+				"avatar-ground": "#322e16",
+				"conversation-icon": "#474430",
+				"conversation-icon-foreground": "#c5bf98"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ded79d",
+				"accent": "#706500",
+				"new-line": "#c5c093",
+				"avatar-ink": "#837600",
+				"avatar-ground": "#ece9cf",
+				"conversation-icon": "#e9e6cd",
+				"conversation-icon-foreground": "#5b5732"
+			},
+			"dark": {
+				"bubble": "#5b5200",
+				"accent": "#c7ba58",
+				"new-line": "#4e4920",
+				"avatar-ink": "#cdc15f",
+				"avatar-ground": "#322f16",
+				"conversation-icon": "#474530",
+				"conversation-icon-foreground": "#c4c098"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ddd79e",
+				"accent": "#6f6500",
+				"new-line": "#c4c093",
+				"avatar-ink": "#827600",
+				"avatar-ground": "#ece9cf",
+				"conversation-icon": "#e8e6cd",
+				"conversation-icon-foreground": "#5b5732"
+			},
+			"dark": {
+				"bubble": "#5a5200",
+				"accent": "#c5bb59",
+				"new-line": "#4e4920",
+				"avatar-ink": "#ccc160",
+				"avatar-ground": "#312f16",
+				"conversation-icon": "#474530",
+				"conversation-icon-foreground": "#c4c098"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#dcd79e",
+				"accent": "#6e6500",
+				"new-line": "#c4c094",
+				"avatar-ink": "#807700",
+				"avatar-ground": "#ebeacf",
+				"conversation-icon": "#e8e6cd",
+				"conversation-icon-foreground": "#5a5733"
+			},
+			"dark": {
+				"bubble": "#5a5300",
+				"accent": "#c4bb5a",
+				"new-line": "#4d4920",
+				"avatar-ink": "#cac260",
+				"avatar-ground": "#312f16",
+				"conversation-icon": "#464530",
+				"conversation-icon-foreground": "#c3c098"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#dbd89e",
+				"accent": "#6d6600",
+				"new-line": "#c3c094",
+				"avatar-ink": "#7f7700",
+				"avatar-ground": "#ebeacf",
+				"conversation-icon": "#e7e6cd",
+				"conversation-icon-foreground": "#5a5733"
+			},
+			"dark": {
+				"bubble": "#595300",
+				"accent": "#c3bc5a",
+				"new-line": "#4c4921",
+				"avatar-ink": "#c9c261",
+				"avatar-ground": "#312f16",
+				"conversation-icon": "#464530",
+				"conversation-icon-foreground": "#c2c098"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#dad89e",
+				"accent": "#6c6600",
+				"new-line": "#c2c194",
+				"avatar-ink": "#7e7800",
+				"avatar-ground": "#eaeacf",
+				"conversation-icon": "#e7e6ce",
+				"conversation-icon-foreground": "#595733"
+			},
+			"dark": {
+				"bubble": "#585300",
+				"accent": "#c1bc5b",
+				"new-line": "#4c4a21",
+				"avatar-ink": "#c8c361",
+				"avatar-ground": "#302f16",
+				"conversation-icon": "#464530",
+				"conversation-icon-foreground": "#c2c098"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#d9d89f",
+				"accent": "#6b6700",
+				"new-line": "#c2c194",
+				"avatar-ink": "#7d7800",
+				"avatar-ground": "#eaeacf",
+				"conversation-icon": "#e7e7ce",
+				"conversation-icon-foreground": "#585733"
+			},
+			"dark": {
+				"bubble": "#575400",
+				"accent": "#c0bd5c",
+				"new-line": "#4b4a21",
+				"avatar-ink": "#c6c362",
+				"avatar-ground": "#302f17",
+				"conversation-icon": "#454530",
+				"conversation-icon-foreground": "#c1c199"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#d8d99f",
+				"accent": "#6a6700",
+				"new-line": "#c1c195",
+				"avatar-ink": "#7c7900",
+				"avatar-ground": "#eaead0",
+				"conversation-icon": "#e6e7ce",
+				"conversation-icon-foreground": "#585834"
+			},
+			"dark": {
+				"bubble": "#575400",
+				"accent": "#bfbd5c",
+				"new-line": "#4b4a21",
+				"avatar-ink": "#c5c463",
+				"avatar-ground": "#302f17",
+				"conversation-icon": "#454531",
+				"conversation-icon-foreground": "#c1c199"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#d8d9a0",
+				"accent": "#696700",
+				"new-line": "#c0c195",
+				"avatar-ink": "#7b7900",
+				"avatar-ground": "#e9ead0",
+				"conversation-icon": "#e6e7ce",
+				"conversation-icon-foreground": "#575834"
+			},
+			"dark": {
+				"bubble": "#555400",
+				"accent": "#bdbe5d",
+				"new-line": "#4a4a22",
+				"avatar-ink": "#c4c463",
+				"avatar-ground": "#2f2f17",
+				"conversation-icon": "#454531",
+				"conversation-icon-foreground": "#c0c199"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#d7d9a0",
+				"accent": "#686800",
+				"new-line": "#c0c295",
+				"avatar-ink": "#797a00",
+				"avatar-ground": "#e9ead0",
+				"conversation-icon": "#e5e7ce",
+				"conversation-icon-foreground": "#575834"
+			},
+			"dark": {
+				"bubble": "#545400",
+				"accent": "#bcbe5e",
+				"new-line": "#4a4b22",
+				"avatar-ink": "#c2c564",
+				"avatar-ground": "#2f3017",
+				"conversation-icon": "#444531",
+				"conversation-icon-foreground": "#bfc199"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#d6daa0",
+				"accent": "#666800",
+				"new-line": "#bfc295",
+				"avatar-ink": "#787a00",
+				"avatar-ground": "#e8ebd0",
+				"conversation-icon": "#e5e7ce",
+				"conversation-icon-foreground": "#565834"
+			},
+			"dark": {
+				"bubble": "#535500",
+				"accent": "#bbbf5f",
+				"new-line": "#494b22",
+				"avatar-ink": "#c1c565",
+				"avatar-ground": "#2f3017",
+				"conversation-icon": "#444631",
+				"conversation-icon-foreground": "#bfc29a"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#d5daa1",
+				"accent": "#656900",
+				"new-line": "#bec296",
+				"avatar-ink": "#777b00",
+				"avatar-ground": "#e8ebd0",
+				"conversation-icon": "#e5e7ce",
+				"conversation-icon-foreground": "#565835"
+			},
+			"dark": {
+				"bubble": "#525500",
+				"accent": "#b9bf5f",
+				"new-line": "#484b23",
+				"avatar-ink": "#bfc566",
+				"avatar-ground": "#2e3017",
+				"conversation-icon": "#444631",
+				"conversation-icon-foreground": "#bec29a"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#d4daa1",
+				"accent": "#646900",
+				"new-line": "#bdc296",
+				"avatar-ink": "#767b00",
+				"avatar-ground": "#e7ebd1",
+				"conversation-icon": "#e4e7cf",
+				"conversation-icon-foreground": "#555935"
+			},
+			"dark": {
+				"bubble": "#515500",
+				"accent": "#b8c060",
+				"new-line": "#484b23",
+				"avatar-ink": "#bec667",
+				"avatar-ground": "#2e3018",
+				"conversation-icon": "#444631",
+				"conversation-icon-foreground": "#bdc29a"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#d3daa2",
+				"accent": "#636a00",
+				"new-line": "#bdc396",
+				"avatar-ink": "#747c00",
+				"avatar-ground": "#e7ebd1",
+				"conversation-icon": "#e4e7cf",
+				"conversation-icon-foreground": "#555935"
+			},
+			"dark": {
+				"bubble": "#505600",
+				"accent": "#b6c061",
+				"new-line": "#474b23",
+				"avatar-ink": "#bdc668",
+				"avatar-ground": "#2d3018",
+				"conversation-icon": "#434631",
+				"conversation-icon-foreground": "#bdc29b"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#d2dba2",
+				"accent": "#626a00",
+				"new-line": "#bcc397",
+				"avatar-ink": "#737c00",
+				"avatar-ground": "#e7ebd1",
+				"conversation-icon": "#e3e8cf",
+				"conversation-icon-foreground": "#545935"
+			},
+			"dark": {
+				"bubble": "#4f5600",
+				"accent": "#b5c062",
+				"new-line": "#474c24",
+				"avatar-ink": "#bbc769",
+				"avatar-ground": "#2d3018",
+				"conversation-icon": "#434632",
+				"conversation-icon-foreground": "#bcc29b"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#d1dba3",
+				"accent": "#606a00",
+				"new-line": "#bbc397",
+				"avatar-ink": "#717d00",
+				"avatar-ground": "#e6ebd1",
+				"conversation-icon": "#e3e8cf",
+				"conversation-icon-foreground": "#545936"
+			},
+			"dark": {
+				"bubble": "#4e5600",
+				"accent": "#b3c163",
+				"new-line": "#464c24",
+				"avatar-ink": "#bac769",
+				"avatar-ground": "#2d3018",
+				"conversation-icon": "#434632",
+				"conversation-icon-foreground": "#bbc39b"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#d0dba3",
+				"accent": "#5f6b00",
+				"new-line": "#bbc398",
+				"avatar-ink": "#707d00",
+				"avatar-ground": "#e6ebd1",
+				"conversation-icon": "#e3e8cf",
+				"conversation-icon-foreground": "#535936"
+			},
+			"dark": {
+				"bubble": "#4c5600",
+				"accent": "#b2c164",
+				"new-line": "#454c25",
+				"avatar-ink": "#b8c86a",
+				"avatar-ground": "#2c3019",
+				"conversation-icon": "#424632",
+				"conversation-icon-foreground": "#bbc39c"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#cfdca4",
+				"accent": "#5e6b00",
+				"new-line": "#bac498",
+				"avatar-ink": "#6e7e01",
+				"avatar-ground": "#e5ecd2",
+				"conversation-icon": "#e2e8d0",
+				"conversation-icon-foreground": "#525a36"
+			},
+			"dark": {
+				"bubble": "#4c5701",
+				"accent": "#b0c265",
+				"new-line": "#454c25",
+				"avatar-ink": "#b7c86b",
+				"avatar-ground": "#2c3119",
+				"conversation-icon": "#424632",
+				"conversation-icon-foreground": "#bac39c"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#cedca4",
+				"accent": "#5c6c00",
+				"new-line": "#b9c498",
+				"avatar-ink": "#6d7e05",
+				"avatar-ground": "#e5ecd2",
+				"conversation-icon": "#e2e8d0",
+				"conversation-icon-foreground": "#525a37"
+			},
+			"dark": {
+				"bubble": "#4a5702",
+				"accent": "#afc266",
+				"new-line": "#444c25",
+				"avatar-ink": "#b5c96c",
+				"avatar-ground": "#2c3119",
+				"conversation-icon": "#424632",
+				"conversation-icon-foreground": "#b9c39c"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#cddca5",
+				"accent": "#5b6c00",
+				"new-line": "#b8c499",
+				"avatar-ink": "#6b7f09",
+				"avatar-ground": "#e4ecd2",
+				"conversation-icon": "#e1e8d0",
+				"conversation-icon-foreground": "#515a37"
+			},
+			"dark": {
+				"bubble": "#495704",
+				"accent": "#adc367",
+				"new-line": "#434c26",
+				"avatar-ink": "#b4c96d",
+				"avatar-ground": "#2b3119",
+				"conversation-icon": "#414633",
+				"conversation-icon-foreground": "#b9c39d"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#cddca5",
+				"accent": "#5a6d00",
+				"new-line": "#b8c499",
+				"avatar-ink": "#6a7f0d",
+				"avatar-ground": "#e4ecd2",
+				"conversation-icon": "#e1e8d0",
+				"conversation-icon-foreground": "#515a38"
+			},
+			"dark": {
+				"bubble": "#485706",
+				"accent": "#acc368",
+				"new-line": "#434d26",
+				"avatar-ink": "#b2ca6f",
+				"avatar-ground": "#2b311a",
+				"conversation-icon": "#414733",
+				"conversation-icon-foreground": "#b8c49d"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ccdda6",
+				"accent": "#586d00",
+				"new-line": "#b7c49a",
+				"avatar-ink": "#688011",
+				"avatar-ground": "#e4ecd3",
+				"conversation-icon": "#e1e8d1",
+				"conversation-icon-foreground": "#505a38"
+			},
+			"dark": {
+				"bubble": "#475809",
+				"accent": "#aac469",
+				"new-line": "#424d27",
+				"avatar-ink": "#b1ca70",
+				"avatar-ground": "#2a311a",
+				"conversation-icon": "#414733",
+				"conversation-icon-foreground": "#b8c49d"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#cbdda6",
+				"accent": "#566e00",
+				"new-line": "#b6c59a",
+				"avatar-ink": "#668014",
+				"avatar-ground": "#e3ecd3",
+				"conversation-icon": "#e0e9d1",
+				"conversation-icon-foreground": "#4f5a38"
+			},
+			"dark": {
+				"bubble": "#46580a",
+				"accent": "#a9c46a",
+				"new-line": "#424d27",
+				"avatar-ink": "#afca71",
+				"avatar-ground": "#2a311a",
+				"conversation-icon": "#404733",
+				"conversation-icon-foreground": "#b7c49e"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#cadda7",
+				"accent": "#556e00",
+				"new-line": "#b5c59b",
+				"avatar-ink": "#658017",
+				"avatar-ground": "#e3ecd3",
+				"conversation-icon": "#e0e9d1",
+				"conversation-icon-foreground": "#4f5b39"
+			},
+			"dark": {
+				"bubble": "#44580c",
+				"accent": "#a7c46c",
+				"new-line": "#414d28",
+				"avatar-ink": "#aecb72",
+				"avatar-ground": "#2a311a",
+				"conversation-icon": "#404733",
+				"conversation-icon-foreground": "#b6c49e"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#c9dda8",
+				"accent": "#536f00",
+				"new-line": "#b5c59b",
+				"avatar-ink": "#638119",
+				"avatar-ground": "#e2ecd3",
+				"conversation-icon": "#dfe9d1",
+				"conversation-icon-foreground": "#4e5b39"
+			},
+			"dark": {
+				"bubble": "#43590e",
+				"accent": "#a6c56d",
+				"new-line": "#404d28",
+				"avatar-ink": "#accb73",
+				"avatar-ground": "#29311b",
+				"conversation-icon": "#404734",
+				"conversation-icon-foreground": "#b6c49f"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#c8dea8",
+				"accent": "#516f00",
+				"new-line": "#b4c59c",
+				"avatar-ink": "#61811c",
+				"avatar-ground": "#e2edd4",
+				"conversation-icon": "#dfe9d2",
+				"conversation-icon-foreground": "#4e5b3a"
+			},
+			"dark": {
+				"bubble": "#425910",
+				"accent": "#a4c56e",
+				"new-line": "#404e29",
+				"avatar-ink": "#aacc74",
+				"avatar-ground": "#29311b",
+				"conversation-icon": "#3f4734",
+				"conversation-icon-foreground": "#b5c59f"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#c7dea9",
+				"accent": "#4f7000",
+				"new-line": "#b3c59c",
+				"avatar-ink": "#60821e",
+				"avatar-ground": "#e1edd4",
+				"conversation-icon": "#dfe9d2",
+				"conversation-icon-foreground": "#4d5b3a"
+			},
+			"dark": {
+				"bubble": "#415912",
+				"accent": "#a3c66f",
+				"new-line": "#3f4e29",
+				"avatar-ink": "#a9cc75",
+				"avatar-ground": "#28321b",
+				"conversation-icon": "#3f4734",
+				"conversation-icon-foreground": "#b4c5a0"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#c6deaa",
+				"accent": "#4d7002",
+				"new-line": "#b3c69d",
+				"avatar-ink": "#5e8221",
+				"avatar-ground": "#e1edd4",
+				"conversation-icon": "#dee9d2",
+				"conversation-icon-foreground": "#4d5b3a"
+			},
+			"dark": {
+				"bubble": "#3f5912",
+				"accent": "#a1c670",
+				"new-line": "#3e4e2a",
+				"avatar-ink": "#a7cd77",
+				"avatar-ground": "#28321c",
+				"conversation-icon": "#3f4734",
+				"conversation-icon-foreground": "#b4c5a0"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#c5dfaa",
+				"accent": "#4b7106",
+				"new-line": "#b2c69d",
+				"avatar-ink": "#5c8223",
+				"avatar-ground": "#e1edd4",
+				"conversation-icon": "#dee9d2",
+				"conversation-icon-foreground": "#4c5b3b"
+			},
+			"dark": {
+				"bubble": "#3e5914",
+				"accent": "#9fc672",
+				"new-line": "#3e4e2a",
+				"avatar-ink": "#a6cd78",
+				"avatar-ground": "#28321c",
+				"conversation-icon": "#3e4735",
+				"conversation-icon-foreground": "#b3c5a0"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#c4dfab",
+				"accent": "#4a710a",
+				"new-line": "#b1c69e",
+				"avatar-ink": "#5a8325",
+				"avatar-ground": "#e0edd5",
+				"conversation-icon": "#dde9d3",
+				"conversation-icon-foreground": "#4b5b3b"
+			},
+			"dark": {
+				"bubble": "#3d5a16",
+				"accent": "#9ec773",
+				"new-line": "#3d4e2b",
+				"avatar-ink": "#a4cd79",
+				"avatar-ground": "#27321c",
+				"conversation-icon": "#3e4735",
+				"conversation-icon-foreground": "#b2c5a1"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#c3dfac",
+				"accent": "#48710e",
+				"new-line": "#b0c69e",
+				"avatar-ink": "#598327",
+				"avatar-ground": "#e0edd5",
+				"conversation-icon": "#ddead3",
+				"conversation-icon-foreground": "#4b5c3c"
+			},
+			"dark": {
+				"bubble": "#3c5a18",
+				"accent": "#9cc774",
+				"new-line": "#3c4e2b",
+				"avatar-ink": "#a2ce7a",
+				"avatar-ground": "#27321c",
+				"conversation-icon": "#3d4835",
+				"conversation-icon-foreground": "#b2c5a1"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#c2dfac",
+				"accent": "#467212",
+				"new-line": "#b0c69f",
+				"avatar-ink": "#578429",
+				"avatar-ground": "#dfedd5",
+				"conversation-icon": "#ddead3",
+				"conversation-icon-foreground": "#4a5c3c"
+			},
+			"dark": {
+				"bubble": "#3a5a19",
+				"accent": "#9bc875",
+				"new-line": "#3b4f2c",
+				"avatar-ink": "#a1ce7c",
+				"avatar-ground": "#26321d",
+				"conversation-icon": "#3d4835",
+				"conversation-icon-foreground": "#b1c6a2"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#c1dfad",
+				"accent": "#447215",
+				"new-line": "#afc79f",
+				"avatar-ink": "#55842b",
+				"avatar-ground": "#dfedd6",
+				"conversation-icon": "#dcead3",
+				"conversation-icon-foreground": "#495c3d"
+			},
+			"dark": {
+				"bubble": "#385a1a",
+				"accent": "#99c877",
+				"new-line": "#3b4f2c",
+				"avatar-ink": "#9fce7d",
+				"avatar-ground": "#26321d",
+				"conversation-icon": "#3d4836",
+				"conversation-icon-foreground": "#b0c6a2"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#c0e0ae",
+				"accent": "#427218",
+				"new-line": "#aec7a0",
+				"avatar-ink": "#53842d",
+				"avatar-ground": "#dfedd6",
+				"conversation-icon": "#dcead4",
+				"conversation-icon-foreground": "#495c3d"
+			},
+			"dark": {
+				"bubble": "#375a1b",
+				"accent": "#97c878",
+				"new-line": "#3a4f2d",
+				"avatar-ink": "#9ecf7e",
+				"avatar-ground": "#25321d",
+				"conversation-icon": "#3c4836",
+				"conversation-icon-foreground": "#b0c6a3"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#bfe0ae",
+				"accent": "#40731a",
+				"new-line": "#adc7a0",
+				"avatar-ink": "#51852f",
+				"avatar-ground": "#deeed6",
+				"conversation-icon": "#dbead4",
+				"conversation-icon-foreground": "#485c3e"
+			},
+			"dark": {
+				"bubble": "#365b1e",
+				"accent": "#96c979",
+				"new-line": "#394f2d",
+				"avatar-ink": "#9ccf7f",
+				"avatar-ground": "#25321e",
+				"conversation-icon": "#3c4836",
+				"conversation-icon-foreground": "#afc6a3"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#bee0af",
+				"accent": "#3e731d",
+				"new-line": "#adc7a1",
+				"avatar-ink": "#4f8531",
+				"avatar-ground": "#deeed7",
+				"conversation-icon": "#dbead4",
+				"conversation-icon-foreground": "#485c3e"
+			},
+			"dark": {
+				"bubble": "#345b1e",
+				"accent": "#94c97b",
+				"new-line": "#394f2e",
+				"avatar-ink": "#9ad081",
+				"avatar-ground": "#25321e",
+				"conversation-icon": "#3c4836",
+				"conversation-icon-foreground": "#aec6a4"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#bde0b0",
+				"accent": "#3c731f",
+				"new-line": "#acc7a1",
+				"avatar-ink": "#4d8533",
+				"avatar-ground": "#ddeed7",
+				"conversation-icon": "#dbead5",
+				"conversation-icon-foreground": "#475c3f"
+			},
+			"dark": {
+				"bubble": "#335b20",
+				"accent": "#92c97c",
+				"new-line": "#384f2f",
+				"avatar-ink": "#99d082",
+				"avatar-ground": "#24331e",
+				"conversation-icon": "#3b4837",
+				"conversation-icon-foreground": "#aec6a4"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#bde1b1",
+				"accent": "#397421",
+				"new-line": "#abc7a2",
+				"avatar-ink": "#4b8634",
+				"avatar-ground": "#ddeed7",
+				"conversation-icon": "#daead5",
+				"conversation-icon-foreground": "#465d3f"
+			},
+			"dark": {
+				"bubble": "#315b21",
+				"accent": "#91ca7d",
+				"new-line": "#374f2f",
+				"avatar-ink": "#97d083",
+				"avatar-ground": "#24331f",
+				"conversation-icon": "#3b4837",
+				"conversation-icon-foreground": "#adc7a5"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#bce1b1",
+				"accent": "#377423",
+				"new-line": "#abc8a3",
+				"avatar-ink": "#498636",
+				"avatar-ground": "#dceed8",
+				"conversation-icon": "#daead5",
+				"conversation-icon-foreground": "#465d40"
+			},
+			"dark": {
+				"bubble": "#2f5b22",
+				"accent": "#8fca7f",
+				"new-line": "#375030",
+				"avatar-ink": "#95d185",
+				"avatar-ground": "#23331f",
+				"conversation-icon": "#3b4837",
+				"conversation-icon-foreground": "#adc7a5"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#bbe1b2",
+				"accent": "#357426",
+				"new-line": "#aac8a3",
+				"avatar-ink": "#478638",
+				"avatar-ground": "#dceed8",
+				"conversation-icon": "#d9ead6",
+				"conversation-icon-foreground": "#455d40"
+			},
+			"dark": {
+				"bubble": "#2e5c24",
+				"accent": "#8dca80",
+				"new-line": "#365030",
+				"avatar-ink": "#94d186",
+				"avatar-ground": "#23331f",
+				"conversation-icon": "#3a4837",
+				"conversation-icon-foreground": "#acc7a6"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#bae1b3",
+				"accent": "#327528",
+				"new-line": "#a9c8a4",
+				"avatar-ink": "#44873a",
+				"avatar-ground": "#dceed8",
+				"conversation-icon": "#d9ead6",
+				"conversation-icon-foreground": "#455d41"
+			},
+			"dark": {
+				"bubble": "#2c5c25",
+				"accent": "#8ccb81",
+				"new-line": "#355031",
+				"avatar-ink": "#92d188",
+				"avatar-ground": "#233320",
+				"conversation-icon": "#3a4838",
+				"conversation-icon-foreground": "#abc7a7"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#b9e1b4",
+				"accent": "#30752a",
+				"new-line": "#a8c8a4",
+				"avatar-ink": "#42873c",
+				"avatar-ground": "#dbeed9",
+				"conversation-icon": "#d9ebd6",
+				"conversation-icon-foreground": "#445d41"
+			},
+			"dark": {
+				"bubble": "#2b5c26",
+				"accent": "#8acb83",
+				"new-line": "#355031",
+				"avatar-ink": "#90d189",
+				"avatar-ground": "#223320",
+				"conversation-icon": "#3a4838",
+				"conversation-icon-foreground": "#abc7a7"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#b8e2b5",
+				"accent": "#2d752b",
+				"new-line": "#a8c8a5",
+				"avatar-ink": "#40873d",
+				"avatar-ground": "#dbeed9",
+				"conversation-icon": "#d8ebd7",
+				"conversation-icon-foreground": "#435d42"
+			},
+			"dark": {
+				"bubble": "#285c27",
+				"accent": "#88cb84",
+				"new-line": "#345032",
+				"avatar-ink": "#8fd28a",
+				"avatar-ground": "#223321",
+				"conversation-icon": "#394838",
+				"conversation-icon-foreground": "#aac7a8"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#b7e2b5",
+				"accent": "#2a752d",
+				"new-line": "#a7c8a6",
+				"avatar-ink": "#3d873f",
+				"avatar-ground": "#daeeda",
+				"conversation-icon": "#d8ebd7",
+				"conversation-icon-foreground": "#435d42"
+			},
+			"dark": {
+				"bubble": "#275c28",
+				"accent": "#87cb86",
+				"new-line": "#335033",
+				"avatar-ink": "#8dd28c",
+				"avatar-ground": "#213321",
+				"conversation-icon": "#394839",
+				"conversation-icon-foreground": "#a9c7a8"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#b6e2b6",
+				"accent": "#27762f",
+				"new-line": "#a6c9a6",
+				"avatar-ink": "#3b8841",
+				"avatar-ground": "#daefda",
+				"conversation-icon": "#d8ebd7",
+				"conversation-icon-foreground": "#425d43"
+			},
+			"dark": {
+				"bubble": "#255c29",
+				"accent": "#85cc87",
+				"new-line": "#325033",
+				"avatar-ink": "#8bd28d",
+				"avatar-ground": "#213321",
+				"conversation-icon": "#394939",
+				"conversation-icon-foreground": "#a9c7a9"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#b5e2b7",
+				"accent": "#247631",
+				"new-line": "#a6c9a7",
+				"avatar-ink": "#388842",
+				"avatar-ground": "#daefda",
+				"conversation-icon": "#d7ebd8",
+				"conversation-icon-foreground": "#425e43"
+			},
+			"dark": {
+				"bubble": "#235c2a",
+				"accent": "#83cc88",
+				"new-line": "#325034",
+				"avatar-ink": "#89d38f",
+				"avatar-ground": "#203322",
+				"conversation-icon": "#394939",
+				"conversation-icon-foreground": "#a8c8a9"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#b4e2b8",
+				"accent": "#207633",
+				"new-line": "#a5c9a8",
+				"avatar-ink": "#368844",
+				"avatar-ground": "#d9efdb",
+				"conversation-icon": "#d7ebd8",
+				"conversation-icon-foreground": "#415e44"
+			},
+			"dark": {
+				"bubble": "#225d2c",
+				"accent": "#81cc8a",
+				"new-line": "#315134",
+				"avatar-ink": "#88d390",
+				"avatar-ground": "#203322",
+				"conversation-icon": "#384939",
+				"conversation-icon-foreground": "#a8c8aa"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#b3e2b9",
+				"accent": "#1d7635",
+				"new-line": "#a4c9a8",
+				"avatar-ink": "#338946",
+				"avatar-ground": "#d9efdb",
+				"conversation-icon": "#d7ebd9",
+				"conversation-icon-foreground": "#405e44"
+			},
+			"dark": {
+				"bubble": "#205d2d",
+				"accent": "#80cd8b",
+				"new-line": "#305135",
+				"avatar-ink": "#86d391",
+				"avatar-ground": "#203322",
+				"conversation-icon": "#38493a",
+				"conversation-icon-foreground": "#a7c8ab"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#b3e3ba",
+				"accent": "#187736",
+				"new-line": "#a4c9a9",
+				"avatar-ink": "#308947",
+				"avatar-ground": "#d9efdb",
+				"conversation-icon": "#d6ebd9",
+				"conversation-icon-foreground": "#405e45"
+			},
+			"dark": {
+				"bubble": "#1d5d2e",
+				"accent": "#7ecd8d",
+				"new-line": "#2f5136",
+				"avatar-ink": "#84d393",
+				"avatar-ground": "#1f3323",
+				"conversation-icon": "#38493a",
+				"conversation-icon-foreground": "#a6c8ab"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#b2e3bb",
+				"accent": "#137738",
+				"new-line": "#a3c9aa",
+				"avatar-ink": "#2d8949",
+				"avatar-ground": "#d8efdc",
+				"conversation-icon": "#d6ebd9",
+				"conversation-icon-foreground": "#3f5e45"
+			},
+			"dark": {
+				"bubble": "#1a5d2f",
+				"accent": "#7ccd8e",
+				"new-line": "#2f5136",
+				"avatar-ink": "#83d494",
+				"avatar-ground": "#1f3423",
+				"conversation-icon": "#37493a",
+				"conversation-icon-foreground": "#a6c8ac"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#b1e3bb",
+				"accent": "#0d773a",
+				"new-line": "#a2c9aa",
+				"avatar-ink": "#2a894b",
+				"avatar-ground": "#d8efdc",
+				"conversation-icon": "#d6ebda",
+				"conversation-icon-foreground": "#3f5e46"
+			},
+			"dark": {
+				"bubble": "#185d30",
+				"accent": "#7acd90",
+				"new-line": "#2e5137",
+				"avatar-ink": "#81d496",
+				"avatar-ground": "#1e3423",
+				"conversation-icon": "#37493b",
+				"conversation-icon-foreground": "#a5c8ac"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#b0e3bc",
+				"accent": "#05773b",
+				"new-line": "#a2c9ab",
+				"avatar-ink": "#26894c",
+				"avatar-ground": "#d8efdd",
+				"conversation-icon": "#d5ebda",
+				"conversation-icon-foreground": "#3e5e46"
+			},
+			"dark": {
+				"bubble": "#155d32",
+				"accent": "#79cd91",
+				"new-line": "#2d5137",
+				"avatar-ink": "#7fd497",
+				"avatar-ground": "#1e3424",
+				"conversation-icon": "#37493b",
+				"conversation-icon-foreground": "#a5c8ad"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#afe3bd",
+				"accent": "#00773e",
+				"new-line": "#a1caac",
+				"avatar-ink": "#228a4e",
+				"avatar-ground": "#d7efdd",
+				"conversation-icon": "#d5ebda",
+				"conversation-icon-foreground": "#3d5e47"
+			},
+			"dark": {
+				"bubble": "#125e33",
+				"accent": "#77ce92",
+				"new-line": "#2d5138",
+				"avatar-ink": "#7dd499",
+				"avatar-ground": "#1d3424",
+				"conversation-icon": "#36493b",
+				"conversation-icon-foreground": "#a4c8ae"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#aee3be",
+				"accent": "#007740",
+				"new-line": "#a0caac",
+				"avatar-ink": "#1e8a50",
+				"avatar-ground": "#d7efdd",
+				"conversation-icon": "#d5ebdb",
+				"conversation-icon-foreground": "#3d5e48"
+			},
+			"dark": {
+				"bubble": "#105e35",
+				"accent": "#75ce94",
+				"new-line": "#2c5139",
+				"avatar-ink": "#7cd49a",
+				"avatar-ground": "#1d3425",
+				"conversation-icon": "#36493c",
+				"conversation-icon-foreground": "#a4c8ae"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ade3bf",
+				"accent": "#007742",
+				"new-line": "#a0caad",
+				"avatar-ink": "#1a8a51",
+				"avatar-ground": "#d6efde",
+				"conversation-icon": "#d4ecdb",
+				"conversation-icon-foreground": "#3c5e48"
+			},
+			"dark": {
+				"bubble": "#0b5e35",
+				"accent": "#73ce95",
+				"new-line": "#2b5139",
+				"avatar-ink": "#7ad59c",
+				"avatar-ground": "#1d3425",
+				"conversation-icon": "#36493c",
+				"conversation-icon-foreground": "#a3c9af"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ade4c0",
+				"accent": "#007745",
+				"new-line": "#9fcaae",
+				"avatar-ink": "#148a53",
+				"avatar-ground": "#d6efde",
+				"conversation-icon": "#d4ecdc",
+				"conversation-icon-foreground": "#3c5e49"
+			},
+			"dark": {
+				"bubble": "#075e36",
+				"accent": "#72ce97",
+				"new-line": "#2a513a",
+				"avatar-ink": "#78d59d",
+				"avatar-ground": "#1c3425",
+				"conversation-icon": "#35493c",
+				"conversation-icon-foreground": "#a2c9af"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ace4c1",
+				"accent": "#007747",
+				"new-line": "#9fcaae",
+				"avatar-ink": "#0d8a54",
+				"avatar-ground": "#d6efdf",
+				"conversation-icon": "#d4ecdc",
+				"conversation-icon-foreground": "#3b5e49"
+			},
+			"dark": {
+				"bubble": "#035e37",
+				"accent": "#70ce98",
+				"new-line": "#2a513b",
+				"avatar-ink": "#76d59f",
+				"avatar-ground": "#1c3426",
+				"conversation-icon": "#35493d",
+				"conversation-icon-foreground": "#a2c9b0"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#abe4c2",
+				"accent": "#007749",
+				"new-line": "#9ecaaf",
+				"avatar-ink": "#048b56",
+				"avatar-ground": "#d5efdf",
+				"conversation-icon": "#d3ecdc",
+				"conversation-icon-foreground": "#3b5f4a"
+			},
+			"dark": {
+				"bubble": "#005e39",
+				"accent": "#6ecf9a",
+				"new-line": "#29523b",
+				"avatar-ink": "#75d5a0",
+				"avatar-ground": "#1b3426",
+				"conversation-icon": "#35493d",
+				"conversation-icon-foreground": "#a1c9b1"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#aae4c3",
+				"accent": "#00764a",
+				"new-line": "#9dcab0",
+				"avatar-ink": "#008b58",
+				"avatar-ground": "#d5f0df",
+				"conversation-icon": "#d3ecdd",
+				"conversation-icon-foreground": "#3a5f4a"
+			},
+			"dark": {
+				"bubble": "#005e3a",
+				"accent": "#6ccf9b",
+				"new-line": "#28523c",
+				"avatar-ink": "#73d5a2",
+				"avatar-ground": "#1b3426",
+				"conversation-icon": "#35493d",
+				"conversation-icon-foreground": "#a1c9b1"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#a9e4c3",
+				"accent": "#00764c",
+				"new-line": "#9dcab1",
+				"avatar-ink": "#008a5a",
+				"avatar-ground": "#d5f0e0",
+				"conversation-icon": "#d3ecdd",
+				"conversation-icon-foreground": "#395f4b"
+			},
+			"dark": {
+				"bubble": "#005e3c",
+				"accent": "#6bcf9d",
+				"new-line": "#28523c",
+				"avatar-ink": "#71d6a3",
+				"avatar-ground": "#1b3427",
+				"conversation-icon": "#34493e",
+				"conversation-icon-foreground": "#a0c9b2"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#a9e4c4",
+				"accent": "#00764e",
+				"new-line": "#9ccab1",
+				"avatar-ink": "#008a5c",
+				"avatar-ground": "#d5f0e0",
+				"conversation-icon": "#d2ecdd",
+				"conversation-icon-foreground": "#395f4b"
+			},
+			"dark": {
+				"bubble": "#005e3d",
+				"accent": "#69cf9e",
+				"new-line": "#27523d",
+				"avatar-ink": "#70d6a4",
+				"avatar-ground": "#1a3427",
+				"conversation-icon": "#34493e",
+				"conversation-icon-foreground": "#a0c9b3"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#a8e4c5",
+				"accent": "#007650",
+				"new-line": "#9ccab2",
+				"avatar-ink": "#008a5e",
+				"avatar-ground": "#d4f0e1",
+				"conversation-icon": "#d2ecde",
+				"conversation-icon-foreground": "#385f4c"
+			},
+			"dark": {
+				"bubble": "#005e3f",
+				"accent": "#67cfa0",
+				"new-line": "#26523e",
+				"avatar-ink": "#6ed6a6",
+				"avatar-ground": "#1a3428",
+				"conversation-icon": "#34493e",
+				"conversation-icon-foreground": "#9fc9b3"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#a7e4c6",
+				"accent": "#007651",
+				"new-line": "#9bcab3",
+				"avatar-ink": "#008a60",
+				"avatar-ground": "#d4f0e1",
+				"conversation-icon": "#d2ecde",
+				"conversation-icon-foreground": "#385f4d"
+			},
+			"dark": {
+				"bubble": "#005e40",
+				"accent": "#65cfa1",
+				"new-line": "#25523e",
+				"avatar-ink": "#6cd6a7",
+				"avatar-ground": "#193428",
+				"conversation-icon": "#33493f",
+				"conversation-icon-foreground": "#9fc9b4"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#a6e4c7",
+				"accent": "#007653",
+				"new-line": "#9acab3",
+				"avatar-ink": "#008a61",
+				"avatar-ground": "#d4f0e2",
+				"conversation-icon": "#d2ecdf",
+				"conversation-icon-foreground": "#375f4d"
+			},
+			"dark": {
+				"bubble": "#005d41",
+				"accent": "#64d0a3",
+				"new-line": "#25523f",
+				"avatar-ink": "#6bd6a9",
+				"avatar-ground": "#193428",
+				"conversation-icon": "#33493f",
+				"conversation-icon-foreground": "#9ec9b4"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#a6e4c8",
+				"accent": "#007654",
+				"new-line": "#9acbb4",
+				"avatar-ink": "#008a63",
+				"avatar-ground": "#d3f0e2",
+				"conversation-icon": "#d1ecdf",
+				"conversation-icon-foreground": "#375f4e"
+			},
+			"dark": {
+				"bubble": "#005d42",
+				"accent": "#62d0a4",
+				"new-line": "#245240",
+				"avatar-ink": "#69d6aa",
+				"avatar-ground": "#193429",
+				"conversation-icon": "#33493f",
+				"conversation-icon-foreground": "#9ec9b5"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#a5e5c9",
+				"accent": "#007555",
+				"new-line": "#99cbb5",
+				"avatar-ink": "#008964",
+				"avatar-ground": "#d3f0e2",
+				"conversation-icon": "#d1ecdf",
+				"conversation-icon-foreground": "#365f4e"
+			},
+			"dark": {
+				"bubble": "#005d43",
+				"accent": "#60d0a6",
+				"new-line": "#235240",
+				"avatar-ink": "#67d6ac",
+				"avatar-ground": "#183429",
+				"conversation-icon": "#334940",
+				"conversation-icon-foreground": "#9dc9b6"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#a4e5ca",
+				"accent": "#007557",
+				"new-line": "#99cbb6",
+				"avatar-ink": "#008966",
+				"avatar-ground": "#d3f0e3",
+				"conversation-icon": "#d1ece0",
+				"conversation-icon-foreground": "#365f4f"
+			},
+			"dark": {
+				"bubble": "#005d44",
+				"accent": "#5fd0a7",
+				"new-line": "#235241",
+				"avatar-ink": "#66d6ad",
+				"avatar-ground": "#18342a",
+				"conversation-icon": "#324a40",
+				"conversation-icon-foreground": "#9dc9b6"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#a4e5cb",
+				"accent": "#007558",
+				"new-line": "#98cbb6",
+				"avatar-ink": "#008968",
+				"avatar-ground": "#d3f0e3",
+				"conversation-icon": "#d1ece0",
+				"conversation-icon-foreground": "#355f4f"
+			},
+			"dark": {
+				"bubble": "#005d45",
+				"accent": "#5dd0a9",
+				"new-line": "#225241",
+				"avatar-ink": "#64d6af",
+				"avatar-ground": "#18342a",
+				"conversation-icon": "#324a40",
+				"conversation-icon-foreground": "#9dc9b7"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#a3e5cc",
+				"accent": "#007559",
+				"new-line": "#98cbb7",
+				"avatar-ink": "#008969",
+				"avatar-ground": "#d2f0e4",
+				"conversation-icon": "#d0ece1",
+				"conversation-icon-foreground": "#355f50"
+			},
+			"dark": {
+				"bubble": "#005d46",
+				"accent": "#5bd0aa",
+				"new-line": "#215242",
+				"avatar-ink": "#62d7b0",
+				"avatar-ground": "#17342a",
+				"conversation-icon": "#324a41",
+				"conversation-icon-foreground": "#9cc9b8"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#a2e5cd",
+				"accent": "#00755a",
+				"new-line": "#97cbb8",
+				"avatar-ink": "#00896a",
+				"avatar-ground": "#d2f0e4",
+				"conversation-icon": "#d0ece1",
+				"conversation-icon-foreground": "#345f51"
+			},
+			"dark": {
+				"bubble": "#005d47",
+				"accent": "#5ad0ac",
+				"new-line": "#215243",
+				"avatar-ink": "#61d7b2",
+				"avatar-ground": "#17342b",
+				"conversation-icon": "#324a41",
+				"conversation-icon-foreground": "#9ccab8"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#a2e5ce",
+				"accent": "#00755c",
+				"new-line": "#97cbb9",
+				"avatar-ink": "#00896c",
+				"avatar-ground": "#d2f0e5",
+				"conversation-icon": "#d0ece2",
+				"conversation-icon-foreground": "#345f51"
+			},
+			"dark": {
+				"bubble": "#005d48",
+				"accent": "#58d0ad",
+				"new-line": "#205243",
+				"avatar-ink": "#5fd7b3",
+				"avatar-ground": "#17342b",
+				"conversation-icon": "#324a41",
+				"conversation-icon-foreground": "#9bcab9"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#a1e5cf",
+				"accent": "#00755d",
+				"new-line": "#97cbb9",
+				"avatar-ink": "#00896d",
+				"avatar-ground": "#d2f0e5",
+				"conversation-icon": "#d0ece2",
+				"conversation-icon-foreground": "#335f52"
+			},
+			"dark": {
+				"bubble": "#005d4a",
+				"accent": "#56d0af",
+				"new-line": "#1f5244",
+				"avatar-ink": "#5ed7b5",
+				"avatar-ground": "#16342b",
+				"conversation-icon": "#314a42",
+				"conversation-icon-foreground": "#9bcaba"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#a0e5cf",
+				"accent": "#00755e",
+				"new-line": "#96cbba",
+				"avatar-ink": "#00886e",
+				"avatar-ground": "#d1f0e6",
+				"conversation-icon": "#cfece2",
+				"conversation-icon-foreground": "#335f52"
+			},
+			"dark": {
+				"bubble": "#005d4b",
+				"accent": "#55d0b0",
+				"new-line": "#1f5245",
+				"avatar-ink": "#5cd7b6",
+				"avatar-ground": "#16342c",
+				"conversation-icon": "#314a42",
+				"conversation-icon-foreground": "#9bcaba"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#a0e5d0",
+				"accent": "#00745f",
+				"new-line": "#96cbbb",
+				"avatar-ink": "#008870",
+				"avatar-ground": "#d1f0e6",
+				"conversation-icon": "#cfece3",
+				"conversation-icon-foreground": "#325f53"
+			},
+			"dark": {
+				"bubble": "#005d4c",
+				"accent": "#53d0b1",
+				"new-line": "#1e5245",
+				"avatar-ink": "#5bd7b8",
+				"avatar-ground": "#16342c",
+				"conversation-icon": "#314a42",
+				"conversation-icon-foreground": "#9acabb"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#9fe5d1",
+				"accent": "#007460",
+				"new-line": "#95cbbb",
+				"avatar-ink": "#008871",
+				"avatar-ground": "#d1f0e6",
+				"conversation-icon": "#cfece3",
+				"conversation-icon-foreground": "#325f53"
+			},
+			"dark": {
+				"bubble": "#005d4d",
+				"accent": "#52d0b3",
+				"new-line": "#1d5246",
+				"avatar-ink": "#59d7b9",
+				"avatar-ground": "#15342d",
+				"conversation-icon": "#314a43",
+				"conversation-icon-foreground": "#9acabc"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#9fe5d2",
+				"accent": "#007461",
+				"new-line": "#95cbbc",
+				"avatar-ink": "#008872",
+				"avatar-ground": "#d1f0e7",
+				"conversation-icon": "#cfece4",
+				"conversation-icon-foreground": "#325f54"
+			},
+			"dark": {
+				"bubble": "#005d4d",
+				"accent": "#50d0b4",
+				"new-line": "#1d5246",
+				"avatar-ink": "#58d7bb",
+				"avatar-ground": "#15342d",
+				"conversation-icon": "#304a43",
+				"conversation-icon-foreground": "#99cabc"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#9ee5d3",
+				"accent": "#007462",
+				"new-line": "#94cbbd",
+				"avatar-ink": "#008873",
+				"avatar-ground": "#d0f0e7",
+				"conversation-icon": "#cfece4",
+				"conversation-icon-foreground": "#315f55"
+			},
+			"dark": {
+				"bubble": "#005c4e",
+				"accent": "#4ed0b6",
+				"new-line": "#1c5247",
+				"avatar-ink": "#56d7bc",
+				"avatar-ground": "#15342d",
+				"conversation-icon": "#304a43",
+				"conversation-icon-foreground": "#99cabd"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#9ee5d4",
+				"accent": "#007463",
+				"new-line": "#94cbbe",
+				"avatar-ink": "#008874",
+				"avatar-ground": "#d0f0e8",
+				"conversation-icon": "#ceece4",
+				"conversation-icon-foreground": "#315f55"
+			},
+			"dark": {
+				"bubble": "#005c4e",
+				"accent": "#4dd0b7",
+				"new-line": "#1c5248",
+				"avatar-ink": "#55d7be",
+				"avatar-ground": "#14342e",
+				"conversation-icon": "#304a44",
+				"conversation-icon-foreground": "#99cabe"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#9de5d5",
+				"accent": "#007464",
+				"new-line": "#94cbbe",
+				"avatar-ink": "#008876",
+				"avatar-ground": "#d0f0e8",
+				"conversation-icon": "#ceece5",
+				"conversation-icon-foreground": "#305f56"
+			},
+			"dark": {
+				"bubble": "#005c4f",
+				"accent": "#4cd0b9",
+				"new-line": "#1b5248",
+				"avatar-ink": "#53d7bf",
+				"avatar-ground": "#14342e",
+				"conversation-icon": "#304a44",
+				"conversation-icon-foreground": "#98cabe"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#9de5d6",
+				"accent": "#007465",
+				"new-line": "#93cbbf",
+				"avatar-ink": "#008777",
+				"avatar-ground": "#d0f0e9",
+				"conversation-icon": "#ceece5",
+				"conversation-icon-foreground": "#305f56"
+			},
+			"dark": {
+				"bubble": "#005c50",
+				"accent": "#4ad0ba",
+				"new-line": "#1a5249",
+				"avatar-ink": "#52d7c1",
+				"avatar-ground": "#14342f",
+				"conversation-icon": "#304a44",
+				"conversation-icon-foreground": "#98cabf"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#9ce5d7",
+				"accent": "#007466",
+				"new-line": "#93cbc0",
+				"avatar-ink": "#008778",
+				"avatar-ground": "#d0f0e9",
+				"conversation-icon": "#ceece6",
+				"conversation-icon-foreground": "#305f57"
+			},
+			"dark": {
+				"bubble": "#005c51",
+				"accent": "#49d0bc",
+				"new-line": "#1a5249",
+				"avatar-ink": "#51d7c2",
+				"avatar-ground": "#13342f",
+				"conversation-icon": "#304a45",
+				"conversation-icon-foreground": "#98cac0"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#9ce5d8",
+				"accent": "#007467",
+				"new-line": "#93cbc0",
+				"avatar-ink": "#008779",
+				"avatar-ground": "#d0f0e9",
+				"conversation-icon": "#ceece6",
+				"conversation-icon-foreground": "#2f5f57"
+			},
+			"dark": {
+				"bubble": "#005c52",
+				"accent": "#47d0bd",
+				"new-line": "#19524a",
+				"avatar-ink": "#50d7c3",
+				"avatar-ground": "#13342f",
+				"conversation-icon": "#2f4a45",
+				"conversation-icon-foreground": "#98cac0"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#9be5d9",
+				"accent": "#007368",
+				"new-line": "#92cbc1",
+				"avatar-ink": "#00877a",
+				"avatar-ground": "#cff0ea",
+				"conversation-icon": "#ceece6",
+				"conversation-icon-foreground": "#2f5f58"
+			},
+			"dark": {
+				"bubble": "#005c53",
+				"accent": "#46d0bf",
+				"new-line": "#19524b",
+				"avatar-ink": "#4ed7c5",
+				"avatar-ground": "#133430",
+				"conversation-icon": "#2f4a45",
+				"conversation-icon-foreground": "#97cac1"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#9be5da",
+				"accent": "#007369",
+				"new-line": "#92cbc2",
+				"avatar-ink": "#00877b",
+				"avatar-ground": "#cff0ea",
+				"conversation-icon": "#cdece7",
+				"conversation-icon-foreground": "#2f5f59"
+			},
+			"dark": {
+				"bubble": "#005c54",
+				"accent": "#45d0c0",
+				"new-line": "#18524b",
+				"avatar-ink": "#4dd7c6",
+				"avatar-ground": "#133430",
+				"conversation-icon": "#2f4a46",
+				"conversation-icon-foreground": "#97cac1"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#9be5db",
+				"accent": "#00736a",
+				"new-line": "#92cbc3",
+				"avatar-ink": "#00877c",
+				"avatar-ground": "#cff0eb",
+				"conversation-icon": "#cdece7",
+				"conversation-icon-foreground": "#2f5f59"
+			},
+			"dark": {
+				"bubble": "#005c54",
+				"accent": "#44d0c1",
+				"new-line": "#18524c",
+				"avatar-ink": "#4cd7c8",
+				"avatar-ground": "#123430",
+				"conversation-icon": "#2f4a46",
+				"conversation-icon-foreground": "#97cac2"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#9ae5db",
+				"accent": "#00736b",
+				"new-line": "#92cbc3",
+				"avatar-ink": "#00877d",
+				"avatar-ground": "#cff0eb",
+				"conversation-icon": "#cdece8",
+				"conversation-icon-foreground": "#2e5f5a"
+			},
+			"dark": {
+				"bubble": "#005c55",
+				"accent": "#42d0c3",
+				"new-line": "#17524c",
+				"avatar-ink": "#4bd7c9",
+				"avatar-ground": "#123431",
+				"conversation-icon": "#2f4a46",
+				"conversation-icon-foreground": "#97cac3"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#9ae5dc",
+				"accent": "#00736c",
+				"new-line": "#91cbc4",
+				"avatar-ink": "#00877e",
+				"avatar-ground": "#cff0ec",
+				"conversation-icon": "#cdece8",
+				"conversation-icon-foreground": "#2e5f5a"
+			},
+			"dark": {
+				"bubble": "#005c56",
+				"accent": "#41d0c4",
+				"new-line": "#17524d",
+				"avatar-ink": "#4ad6cb",
+				"avatar-ground": "#123431",
+				"conversation-icon": "#2f4a47",
+				"conversation-icon-foreground": "#96cac3"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#9ae5dd",
+				"accent": "#00736c",
+				"new-line": "#91cbc5",
+				"avatar-ink": "#00867f",
+				"avatar-ground": "#cff0ec",
+				"conversation-icon": "#cdece8",
+				"conversation-icon-foreground": "#2e5f5b"
+			},
+			"dark": {
+				"bubble": "#005c57",
+				"accent": "#40d0c6",
+				"new-line": "#17524e",
+				"avatar-ink": "#49d6cc",
+				"avatar-ground": "#123431",
+				"conversation-icon": "#2f4a47",
+				"conversation-icon-foreground": "#96c9c4"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#99e5de",
+				"accent": "#00736d",
+				"new-line": "#91cbc5",
+				"avatar-ink": "#008680",
+				"avatar-ground": "#cff0ec",
+				"conversation-icon": "#cdece9",
+				"conversation-icon-foreground": "#2e5f5b"
+			},
+			"dark": {
+				"bubble": "#005c57",
+				"accent": "#3fd0c7",
+				"new-line": "#16524e",
+				"avatar-ink": "#48d6cd",
+				"avatar-ground": "#123432",
+				"conversation-icon": "#2f4a47",
+				"conversation-icon-foreground": "#96c9c5"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#99e5df",
+				"accent": "#00736e",
+				"new-line": "#91cbc6",
+				"avatar-ink": "#008681",
+				"avatar-ground": "#cef0ed",
+				"conversation-icon": "#cdece9",
+				"conversation-icon-foreground": "#2d5f5c"
+			},
+			"dark": {
+				"bubble": "#005c59",
+				"accent": "#3ed0c8",
+				"new-line": "#16524f",
+				"avatar-ink": "#47d6cf",
+				"avatar-ground": "#123432",
+				"conversation-icon": "#2e4a48",
+				"conversation-icon-foreground": "#96c9c5"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#99e5e0",
+				"accent": "#00726f",
+				"new-line": "#90cbc7",
+				"avatar-ink": "#008682",
+				"avatar-ground": "#cef0ed",
+				"conversation-icon": "#cdecea",
+				"conversation-icon-foreground": "#2d5f5c"
+			},
+			"dark": {
+				"bubble": "#005c59",
+				"accent": "#3ed0ca",
+				"new-line": "#16524f",
+				"avatar-ink": "#47d6d0",
+				"avatar-ground": "#113433",
+				"conversation-icon": "#2e4948",
+				"conversation-icon-foreground": "#96c9c6"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#99e4e1",
+				"accent": "#007270",
+				"new-line": "#90cbc8",
+				"avatar-ink": "#008683",
+				"avatar-ground": "#cef0ee",
+				"conversation-icon": "#cdecea",
+				"conversation-icon-foreground": "#2d5f5d"
+			},
+			"dark": {
+				"bubble": "#005c59",
+				"accent": "#3dcfcb",
+				"new-line": "#155250",
+				"avatar-ink": "#46d6d1",
+				"avatar-ground": "#113433",
+				"conversation-icon": "#2e4948",
+				"conversation-icon-foreground": "#96c9c7"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#99e4e2",
+				"accent": "#007271",
+				"new-line": "#90cac8",
+				"avatar-ink": "#008684",
+				"avatar-ground": "#cef0ee",
+				"conversation-icon": "#cdecea",
+				"conversation-icon-foreground": "#2d5f5d"
+			},
+			"dark": {
+				"bubble": "#005b5a",
+				"accent": "#3ccfcc",
+				"new-line": "#155251",
+				"avatar-ink": "#45d6d3",
+				"avatar-ground": "#113433",
+				"conversation-icon": "#2e4948",
+				"conversation-icon-foreground": "#95c9c7"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#98e4e3",
+				"accent": "#007271",
+				"new-line": "#90cac9",
+				"avatar-ink": "#008685",
+				"avatar-ground": "#cef0ef",
+				"conversation-icon": "#cceceb",
+				"conversation-icon-foreground": "#2d5f5e"
+			},
+			"dark": {
+				"bubble": "#005b5b",
+				"accent": "#3ccfce",
+				"new-line": "#155251",
+				"avatar-ink": "#45d6d4",
+				"avatar-ground": "#113434",
+				"conversation-icon": "#2e4949",
+				"conversation-icon-foreground": "#95c9c8"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#98e4e3",
+				"accent": "#007272",
+				"new-line": "#90caca",
+				"avatar-ink": "#008686",
+				"avatar-ground": "#cef0ef",
+				"conversation-icon": "#cceceb",
+				"conversation-icon-foreground": "#2d5f5f"
+			},
+			"dark": {
+				"bubble": "#005b5b",
+				"accent": "#3bcfcf",
+				"new-line": "#155252",
+				"avatar-ink": "#44d6d6",
+				"avatar-ground": "#113434",
+				"conversation-icon": "#2e4949",
+				"conversation-icon-foreground": "#95c9c8"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#98e4e4",
+				"accent": "#007273",
+				"new-line": "#90caca",
+				"avatar-ink": "#008587",
+				"avatar-ground": "#cef0ef",
+				"conversation-icon": "#ccecec",
+				"conversation-icon-foreground": "#2c5f5f"
+			},
+			"dark": {
+				"bubble": "#005b5c",
+				"accent": "#3bcfd0",
+				"new-line": "#145252",
+				"avatar-ink": "#44d5d7",
+				"avatar-ground": "#113434",
+				"conversation-icon": "#2e4949",
+				"conversation-icon-foreground": "#95c9c9"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#98e4e5",
+				"accent": "#007274",
+				"new-line": "#90cacb",
+				"avatar-ink": "#008588",
+				"avatar-ground": "#cef0f0",
+				"conversation-icon": "#ccecec",
+				"conversation-icon-foreground": "#2c5f60"
+			},
+			"dark": {
+				"bubble": "#005b5d",
+				"accent": "#3acfd2",
+				"new-line": "#145253",
+				"avatar-ink": "#44d5d8",
+				"avatar-ground": "#113435",
+				"conversation-icon": "#2e494a",
+				"conversation-icon-foreground": "#95c9ca"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#98e4e6",
+				"accent": "#007275",
+				"new-line": "#90cacc",
+				"avatar-ink": "#008589",
+				"avatar-ground": "#cef0f0",
+				"conversation-icon": "#ccecec",
+				"conversation-icon-foreground": "#2c5f60"
+			},
+			"dark": {
+				"bubble": "#005b5d",
+				"accent": "#3aced3",
+				"new-line": "#145153",
+				"avatar-ink": "#43d5d9",
+				"avatar-ground": "#113435",
+				"conversation-icon": "#2e494a",
+				"conversation-icon-foreground": "#95c9ca"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#98e4e7",
+				"accent": "#007275",
+				"new-line": "#90cacc",
+				"avatar-ink": "#008589",
+				"avatar-ground": "#cef0f1",
+				"conversation-icon": "#cceced",
+				"conversation-icon-foreground": "#2c5e61"
+			},
+			"dark": {
+				"bubble": "#005b5e",
+				"accent": "#3aced4",
+				"new-line": "#145154",
+				"avatar-ink": "#43d5db",
+				"avatar-ground": "#113435",
+				"conversation-icon": "#2e494a",
+				"conversation-icon-foreground": "#95c9cb"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#98e4e8",
+				"accent": "#007176",
+				"new-line": "#90cacd",
+				"avatar-ink": "#00858a",
+				"avatar-ground": "#ceeff1",
+				"conversation-icon": "#cceced",
+				"conversation-icon-foreground": "#2c5e61"
+			},
+			"dark": {
+				"bubble": "#005b5f",
+				"accent": "#3aced6",
+				"new-line": "#145154",
+				"avatar-ink": "#43d5dc",
+				"avatar-ground": "#113436",
+				"conversation-icon": "#2e494b",
+				"conversation-icon-foreground": "#95c9cb"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#98e4e8",
+				"accent": "#007177",
+				"new-line": "#90cace",
+				"avatar-ink": "#00858b",
+				"avatar-ground": "#ceeff1",
+				"conversation-icon": "#ccecee",
+				"conversation-icon-foreground": "#2c5e62"
+			},
+			"dark": {
+				"bubble": "#005b60",
+				"accent": "#3aced7",
+				"new-line": "#145155",
+				"avatar-ink": "#43d5dd",
+				"avatar-ground": "#113436",
+				"conversation-icon": "#2e494b",
+				"conversation-icon-foreground": "#95c9cc"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#98e3e9",
+				"accent": "#007178",
+				"new-line": "#90cace",
+				"avatar-ink": "#00858c",
+				"avatar-ground": "#ceeff2",
+				"conversation-icon": "#ccecee",
+				"conversation-icon-foreground": "#2c5e62"
+			},
+			"dark": {
+				"bubble": "#005b61",
+				"accent": "#3aced8",
+				"new-line": "#145155",
+				"avatar-ink": "#43d4df",
+				"avatar-ground": "#113436",
+				"conversation-icon": "#2e494b",
+				"conversation-icon-foreground": "#95c9cd"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#98e3ea",
+				"accent": "#007179",
+				"new-line": "#90cacf",
+				"avatar-ink": "#00848d",
+				"avatar-ground": "#ceeff2",
+				"conversation-icon": "#ccecee",
+				"conversation-icon-foreground": "#2c5e63"
+			},
+			"dark": {
+				"bubble": "#005b62",
+				"accent": "#3aced9",
+				"new-line": "#145156",
+				"avatar-ink": "#44d4e0",
+				"avatar-ground": "#113437",
+				"conversation-icon": "#2e494b",
+				"conversation-icon-foreground": "#95c9cd"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#98e3eb",
+				"accent": "#007179",
+				"new-line": "#90cacf",
+				"avatar-ink": "#00848e",
+				"avatar-ground": "#ceeff3",
+				"conversation-icon": "#ccecef",
+				"conversation-icon-foreground": "#2c5e63"
+			},
+			"dark": {
+				"bubble": "#005b62",
+				"accent": "#3bcdda",
+				"new-line": "#145157",
+				"avatar-ink": "#44d4e1",
+				"avatar-ground": "#113437",
+				"conversation-icon": "#2e494c",
+				"conversation-icon-foreground": "#95c8ce"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#98e3ec",
+				"accent": "#00717a",
+				"new-line": "#90c9d0",
+				"avatar-ink": "#00848f",
+				"avatar-ground": "#ceeff3",
+				"conversation-icon": "#ccebef",
+				"conversation-icon-foreground": "#2c5e64"
+			},
+			"dark": {
+				"bubble": "#005a62",
+				"accent": "#3bcddc",
+				"new-line": "#155157",
+				"avatar-ink": "#44d4e2",
+				"avatar-ground": "#113437",
+				"conversation-icon": "#2e494c",
+				"conversation-icon-foreground": "#95c8ce"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#98e3ec",
+				"accent": "#00717b",
+				"new-line": "#90c9d1",
+				"avatar-ink": "#008490",
+				"avatar-ground": "#ceeff3",
+				"conversation-icon": "#ccebef",
+				"conversation-icon-foreground": "#2d5e64"
+			},
+			"dark": {
+				"bubble": "#005a63",
+				"accent": "#3ccddd",
+				"new-line": "#155158",
+				"avatar-ink": "#45d3e3",
+				"avatar-ground": "#113438",
+				"conversation-icon": "#2e494c",
+				"conversation-icon-foreground": "#95c8cf"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#98e3ed",
+				"accent": "#00717c",
+				"new-line": "#90c9d1",
+				"avatar-ink": "#008491",
+				"avatar-ground": "#ceeff4",
+				"conversation-icon": "#ccebf0",
+				"conversation-icon-foreground": "#2d5e64"
+			},
+			"dark": {
+				"bubble": "#005a63",
+				"accent": "#3ccdde",
+				"new-line": "#155158",
+				"avatar-ink": "#45d3e5",
+				"avatar-ground": "#113338",
+				"conversation-icon": "#2e494d",
+				"conversation-icon-foreground": "#95c8cf"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#98e3ee",
+				"accent": "#00707d",
+				"new-line": "#90c9d2",
+				"avatar-ink": "#008492",
+				"avatar-ground": "#ceeff4",
+				"conversation-icon": "#ccebf0",
+				"conversation-icon-foreground": "#2d5e65"
+			},
+			"dark": {
+				"bubble": "#005a64",
+				"accent": "#3dccdf",
+				"new-line": "#155159",
+				"avatar-ink": "#46d3e6",
+				"avatar-ground": "#113338",
+				"conversation-icon": "#2e494d",
+				"conversation-icon-foreground": "#95c8d0"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#99e2ef",
+				"accent": "#00707e",
+				"new-line": "#90c9d3",
+				"avatar-ink": "#008493",
+				"avatar-ground": "#ceeff4",
+				"conversation-icon": "#ccebf0",
+				"conversation-icon-foreground": "#2d5e65"
+			},
+			"dark": {
+				"bubble": "#005a65",
+				"accent": "#3ecce0",
+				"new-line": "#155059",
+				"avatar-ink": "#46d3e7",
+				"avatar-ground": "#113339",
+				"conversation-icon": "#2e494d",
+				"conversation-icon-foreground": "#95c8d0"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#99e2f0",
+				"accent": "#00707e",
+				"new-line": "#90c9d3",
+				"avatar-ink": "#008394",
+				"avatar-ground": "#ceeff5",
+				"conversation-icon": "#ccebf1",
+				"conversation-icon-foreground": "#2d5e66"
+			},
+			"dark": {
+				"bubble": "#005a66",
+				"accent": "#3ecce2",
+				"new-line": "#16505a",
+				"avatar-ink": "#47d2e8",
+				"avatar-ground": "#113339",
+				"conversation-icon": "#2e494d",
+				"conversation-icon-foreground": "#95c8d1"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#99e2f0",
+				"accent": "#00707f",
+				"new-line": "#90c9d4",
+				"avatar-ink": "#008395",
+				"avatar-ground": "#ceeff5",
+				"conversation-icon": "#cdebf1",
+				"conversation-icon-foreground": "#2d5d66"
+			},
+			"dark": {
+				"bubble": "#005a67",
+				"accent": "#3fcce3",
+				"new-line": "#16505a",
+				"avatar-ink": "#48d2e9",
+				"avatar-ground": "#123339",
+				"conversation-icon": "#2e494e",
+				"conversation-icon-foreground": "#96c8d2"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#99e2f1",
+				"accent": "#007080",
+				"new-line": "#91c9d4",
+				"avatar-ink": "#008396",
+				"avatar-ground": "#ceeff6",
+				"conversation-icon": "#cdebf1",
+				"conversation-icon-foreground": "#2e5d67"
+			},
+			"dark": {
+				"bubble": "#005a68",
+				"accent": "#40cbe4",
+				"new-line": "#16505a",
+				"avatar-ink": "#49d2ea",
+				"avatar-ground": "#123339",
+				"conversation-icon": "#2e494e",
+				"conversation-icon-foreground": "#96c8d2"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#99e2f2",
+				"accent": "#007081",
+				"new-line": "#91c8d5",
+				"avatar-ink": "#008397",
+				"avatar-ground": "#ceeff6",
+				"conversation-icon": "#cdebf2",
+				"conversation-icon-foreground": "#2e5d67"
+			},
+			"dark": {
+				"bubble": "#005a68",
+				"accent": "#41cbe5",
+				"new-line": "#17505b",
+				"avatar-ink": "#4ad2ec",
+				"avatar-ground": "#12333a",
+				"conversation-icon": "#2f494e",
+				"conversation-icon-foreground": "#96c7d3"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#9ae2f2",
+				"accent": "#007082",
+				"new-line": "#91c8d5",
+				"avatar-ink": "#008398",
+				"avatar-ground": "#cfeff6",
+				"conversation-icon": "#cdebf2",
+				"conversation-icon-foreground": "#2e5d68"
+			},
+			"dark": {
+				"bubble": "#005a69",
+				"accent": "#42cbe6",
+				"new-line": "#17505b",
+				"avatar-ink": "#4bd1ed",
+				"avatar-ground": "#12333a",
+				"conversation-icon": "#2f484e",
+				"conversation-icon-foreground": "#96c7d3"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#9ae1f3",
+				"accent": "#006f83",
+				"new-line": "#91c8d6",
+				"avatar-ink": "#008399",
+				"avatar-ground": "#cfeef7",
+				"conversation-icon": "#cdebf2",
+				"conversation-icon-foreground": "#2e5d68"
+			},
+			"dark": {
+				"bubble": "#005a6a",
+				"accent": "#43cae7",
+				"new-line": "#18505c",
+				"avatar-ink": "#4cd1ee",
+				"avatar-ground": "#12333a",
+				"conversation-icon": "#2f484f",
+				"conversation-icon-foreground": "#96c7d4"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#9ae1f4",
+				"accent": "#006f83",
+				"new-line": "#91c8d7",
+				"avatar-ink": "#00829a",
+				"avatar-ground": "#cfeef7",
+				"conversation-icon": "#cdebf3",
+				"conversation-icon-foreground": "#2e5d68"
+			},
+			"dark": {
+				"bubble": "#005a6a",
+				"accent": "#45cae8",
+				"new-line": "#18505c",
+				"avatar-ink": "#4dd1ef",
+				"avatar-ground": "#13333b",
+				"conversation-icon": "#2f484f",
+				"conversation-icon-foreground": "#96c7d4"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#9be1f5",
+				"accent": "#006f84",
+				"new-line": "#92c8d7",
+				"avatar-ink": "#00829b",
+				"avatar-ground": "#cfeef7",
+				"conversation-icon": "#cdebf3",
+				"conversation-icon-foreground": "#2f5d69"
+			},
+			"dark": {
+				"bubble": "#005a6b",
+				"accent": "#46cae9",
+				"new-line": "#194f5d",
+				"avatar-ink": "#4ed0f0",
+				"avatar-ground": "#13333b",
+				"conversation-icon": "#2f484f",
+				"conversation-icon-foreground": "#97c7d5"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#9be1f5",
+				"accent": "#006f85",
+				"new-line": "#92c8d8",
+				"avatar-ink": "#00829c",
+				"avatar-ground": "#cfeef8",
+				"conversation-icon": "#cdeaf3",
+				"conversation-icon-foreground": "#2f5d69"
+			},
+			"dark": {
+				"bubble": "#00596b",
+				"accent": "#47caea",
+				"new-line": "#194f5d",
+				"avatar-ink": "#4fd0f1",
+				"avatar-ground": "#13333b",
+				"conversation-icon": "#2f484f",
+				"conversation-icon-foreground": "#97c7d5"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#9be1f6",
+				"accent": "#006f86",
+				"new-line": "#92c8d8",
+				"avatar-ink": "#00829d",
+				"avatar-ground": "#cfeef8",
+				"conversation-icon": "#cdeaf4",
+				"conversation-icon-foreground": "#2f5d6a"
+			},
+			"dark": {
+				"bubble": "#00596d",
+				"accent": "#48c9eb",
+				"new-line": "#1a4f5e",
+				"avatar-ink": "#50d0f2",
+				"avatar-ground": "#13333b",
+				"conversation-icon": "#2f4850",
+				"conversation-icon-foreground": "#97c7d5"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#9ce0f7",
+				"accent": "#006f87",
+				"new-line": "#93c7d9",
+				"avatar-ink": "#00829e",
+				"avatar-ground": "#cfeef8",
+				"conversation-icon": "#ceeaf4",
+				"conversation-icon-foreground": "#305c6a"
+			},
+			"dark": {
+				"bubble": "#00596d",
+				"accent": "#4ac9ec",
+				"new-line": "#1a4f5e",
+				"avatar-ink": "#52cff3",
+				"avatar-ground": "#13323c",
+				"conversation-icon": "#2f4850",
+				"conversation-icon-foreground": "#97c7d6"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#9ce0f7",
+				"accent": "#006f88",
+				"new-line": "#93c7d9",
+				"avatar-ink": "#00819f",
+				"avatar-ground": "#cfeef9",
+				"conversation-icon": "#ceeaf4",
+				"conversation-icon-foreground": "#305c6a"
+			},
+			"dark": {
+				"bubble": "#00596e",
+				"accent": "#4bc9ed",
+				"new-line": "#1b4f5e",
+				"avatar-ink": "#53cff4",
+				"avatar-ground": "#14323c",
+				"conversation-icon": "#304850",
+				"conversation-icon-foreground": "#98c6d6"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#9de0f8",
+				"accent": "#006e89",
+				"new-line": "#93c7da",
+				"avatar-ink": "#0081a0",
+				"avatar-ground": "#d0eef9",
+				"conversation-icon": "#ceeaf5",
+				"conversation-icon-foreground": "#305c6b"
+			},
+			"dark": {
+				"bubble": "#00596f",
+				"accent": "#4cc8ee",
+				"new-line": "#1b4f5f",
+				"avatar-ink": "#54cff5",
+				"avatar-ground": "#14323c",
+				"conversation-icon": "#304850",
+				"conversation-icon-foreground": "#98c6d7"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#9de0f8",
+				"accent": "#006e8a",
+				"new-line": "#94c7da",
+				"avatar-ink": "#0081a1",
+				"avatar-ground": "#d0eef9",
+				"conversation-icon": "#ceeaf5",
+				"conversation-icon-foreground": "#315c6b"
+			},
+			"dark": {
+				"bubble": "#005970",
+				"accent": "#4ec8ef",
+				"new-line": "#1c4f5f",
+				"avatar-ink": "#56cef6",
+				"avatar-ground": "#14323c",
+				"conversation-icon": "#304851",
+				"conversation-icon-foreground": "#98c6d7"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#9ee0f9",
+				"accent": "#006e8b",
+				"new-line": "#94c7db",
+				"avatar-ink": "#0081a2",
+				"avatar-ground": "#d0eef9",
+				"conversation-icon": "#ceeaf5",
+				"conversation-icon-foreground": "#315c6c"
+			},
+			"dark": {
+				"bubble": "#005971",
+				"accent": "#4fc8f0",
+				"new-line": "#1c4f60",
+				"avatar-ink": "#57cef7",
+				"avatar-ground": "#15323d",
+				"conversation-icon": "#304851",
+				"conversation-icon-foreground": "#99c6d8"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#9edffa",
+				"accent": "#006e8c",
+				"new-line": "#94c7db",
+				"avatar-ink": "#0081a3",
+				"avatar-ground": "#d0edfa",
+				"conversation-icon": "#ceeaf5",
+				"conversation-icon-foreground": "#325c6c"
+			},
+			"dark": {
+				"bubble": "#005972",
+				"accent": "#51c7f1",
+				"new-line": "#1d4e60",
+				"avatar-ink": "#58cef8",
+				"avatar-ground": "#15323d",
+				"conversation-icon": "#304851",
+				"conversation-icon-foreground": "#99c6d8"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#9fdffa",
+				"accent": "#006e8d",
+				"new-line": "#95c6dc",
+				"avatar-ink": "#0080a4",
+				"avatar-ground": "#d0edfa",
+				"conversation-icon": "#ceeaf6",
+				"conversation-icon-foreground": "#325c6c"
+			},
+			"dark": {
+				"bubble": "#005872",
+				"accent": "#52c7f2",
+				"new-line": "#1e4e60",
+				"avatar-ink": "#5acdf9",
+				"avatar-ground": "#15323d",
+				"conversation-icon": "#304851",
+				"conversation-icon-foreground": "#99c6d9"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#9fdffb",
+				"accent": "#006d8e",
+				"new-line": "#95c6dc",
+				"avatar-ink": "#0080a5",
+				"avatar-ground": "#d1edfa",
+				"conversation-icon": "#cfeaf6",
+				"conversation-icon-foreground": "#325b6d"
+			},
+			"dark": {
+				"bubble": "#005873",
+				"accent": "#54c6f3",
+				"new-line": "#1e4e61",
+				"avatar-ink": "#5bcdf9",
+				"avatar-ground": "#15323d",
+				"conversation-icon": "#314751",
+				"conversation-icon-foreground": "#9ac5d9"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#a0dffb",
+				"accent": "#006d8f",
+				"new-line": "#95c6dc",
+				"avatar-ink": "#0080a7",
+				"avatar-ground": "#d1edfb",
+				"conversation-icon": "#cfeaf6",
+				"conversation-icon-foreground": "#335b6d"
+			},
+			"dark": {
+				"bubble": "#005874",
+				"accent": "#55c6f4",
+				"new-line": "#1f4e61",
+				"avatar-ink": "#5dcdfa",
+				"avatar-ground": "#16323e",
+				"conversation-icon": "#314752",
+				"conversation-icon-foreground": "#9ac5d9"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#a0defc",
+				"accent": "#006d90",
+				"new-line": "#96c6dd",
+				"avatar-ink": "#0080a8",
+				"avatar-ground": "#d1edfb",
+				"conversation-icon": "#cfe9f6",
+				"conversation-icon-foreground": "#335b6d"
+			},
+			"dark": {
+				"bubble": "#005875",
+				"accent": "#57c6f4",
+				"new-line": "#1f4e61",
+				"avatar-ink": "#5eccfb",
+				"avatar-ground": "#16323e",
+				"conversation-icon": "#314752",
+				"conversation-icon-foreground": "#9ac5da"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#a1defc",
+				"accent": "#006d91",
+				"new-line": "#96c6dd",
+				"avatar-ink": "#007fa9",
+				"avatar-ground": "#d1edfb",
+				"conversation-icon": "#cfe9f7",
+				"conversation-icon-foreground": "#345b6e"
+			},
+			"dark": {
+				"bubble": "#005876",
+				"accent": "#59c5f5",
+				"new-line": "#204e62",
+				"avatar-ink": "#60ccfc",
+				"avatar-ground": "#16323e",
+				"conversation-icon": "#314752",
+				"conversation-icon-foreground": "#9bc5da"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#a1defd",
+				"accent": "#006d92",
+				"new-line": "#97c5de",
+				"avatar-ink": "#007faa",
+				"avatar-ground": "#d1edfb",
+				"conversation-icon": "#cfe9f7",
+				"conversation-icon-foreground": "#345b6e"
+			},
+			"dark": {
+				"bubble": "#005877",
+				"accent": "#5ac5f6",
+				"new-line": "#214d62",
+				"avatar-ink": "#61cbfd",
+				"avatar-ground": "#17313e",
+				"conversation-icon": "#314752",
+				"conversation-icon-foreground": "#9bc5db"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#a2defd",
+				"accent": "#006c93",
+				"new-line": "#97c5de",
+				"avatar-ink": "#007fac",
+				"avatar-ground": "#d2edfc",
+				"conversation-icon": "#d0e9f7",
+				"conversation-icon-foreground": "#355b6e"
+			},
+			"dark": {
+				"bubble": "#005878",
+				"accent": "#5cc5f7",
+				"new-line": "#214d62",
+				"avatar-ink": "#63cbfe",
+				"avatar-ground": "#17313e",
+				"conversation-icon": "#324752",
+				"conversation-icon-foreground": "#9bc5db"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#a3ddfe",
+				"accent": "#006c94",
+				"new-line": "#98c5de",
+				"avatar-ink": "#007fad",
+				"avatar-ground": "#d2edfc",
+				"conversation-icon": "#d0e9f7",
+				"conversation-icon-foreground": "#355b6f"
+			},
+			"dark": {
+				"bubble": "#005879",
+				"accent": "#5dc4f8",
+				"new-line": "#224d63",
+				"avatar-ink": "#64cbfe",
+				"avatar-ground": "#17313f",
+				"conversation-icon": "#324753",
+				"conversation-icon-foreground": "#9cc4db"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#a3ddfe",
+				"accent": "#006c95",
+				"new-line": "#98c5df",
+				"avatar-ink": "#007eae",
+				"avatar-ground": "#d2ecfc",
+				"conversation-icon": "#d0e9f8",
+				"conversation-icon-foreground": "#355a6f"
+			},
+			"dark": {
+				"bubble": "#005779",
+				"accent": "#5fc4f8",
+				"new-line": "#234d63",
+				"avatar-ink": "#66caff",
+				"avatar-ground": "#18313f",
+				"conversation-icon": "#324753",
+				"conversation-icon-foreground": "#9cc4dc"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#a4ddff",
+				"accent": "#006c97",
+				"new-line": "#99c5df",
+				"avatar-ink": "#007eb0",
+				"avatar-ground": "#d2ecfc",
+				"conversation-icon": "#d0e9f8",
+				"conversation-icon-foreground": "#365a6f"
+			},
+			"dark": {
+				"bubble": "#00577b",
+				"accent": "#61c3f9",
+				"new-line": "#234d63",
+				"avatar-ink": "#69caff",
+				"avatar-ground": "#18313f",
+				"conversation-icon": "#324753",
+				"conversation-icon-foreground": "#9dc4dc"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#a5ddff",
+				"accent": "#006b98",
+				"new-line": "#99c4e0",
+				"avatar-ink": "#007eb1",
+				"avatar-ground": "#d3ecfd",
+				"conversation-icon": "#d1e9f8",
+				"conversation-icon-foreground": "#365a6f"
+			},
+			"dark": {
+				"bubble": "#00577c",
+				"accent": "#62c3fa",
+				"new-line": "#244d64",
+				"avatar-ink": "#6cc9ff",
+				"avatar-ground": "#19313f",
+				"conversation-icon": "#334753",
+				"conversation-icon-foreground": "#9dc4dc"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#a6dcff",
+				"accent": "#006b99",
+				"new-line": "#9ac4e0",
+				"avatar-ink": "#007db3",
+				"avatar-ground": "#d3ecfd",
+				"conversation-icon": "#d1e9f8",
+				"conversation-icon-foreground": "#375a70"
+			},
+			"dark": {
+				"bubble": "#00577d",
+				"accent": "#64c2fa",
+				"new-line": "#254c64",
+				"avatar-ink": "#6ec9ff",
+				"avatar-ground": "#19313f",
+				"conversation-icon": "#334753",
+				"conversation-icon-foreground": "#9ec4dd"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#a8dcff",
+				"accent": "#006b9a",
+				"new-line": "#9ac4e0",
+				"avatar-ink": "#007db4",
+				"avatar-ground": "#d3ecfd",
+				"conversation-icon": "#d1e8f8",
+				"conversation-icon-foreground": "#375a70"
+			},
+			"dark": {
+				"bubble": "#005780",
+				"accent": "#66c2fb",
+				"new-line": "#254c64",
+				"avatar-ink": "#71c8ff",
+				"avatar-ground": "#193140",
+				"conversation-icon": "#334653",
+				"conversation-icon-foreground": "#9ec3dd"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#a9dcff",
+				"accent": "#006a9c",
+				"new-line": "#9bc4e1",
+				"avatar-ink": "#007db6",
+				"avatar-ground": "#d3ecfd",
+				"conversation-icon": "#d1e8f9",
+				"conversation-icon-foreground": "#385a70"
+			},
+			"dark": {
+				"bubble": "#005680",
+				"accent": "#67c2fc",
+				"new-line": "#264c65",
+				"avatar-ink": "#73c8ff",
+				"avatar-ground": "#1a3140",
+				"conversation-icon": "#334654",
+				"conversation-icon-foreground": "#9ec3dd"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#aadbff",
+				"accent": "#006a9d",
+				"new-line": "#9bc4e1",
+				"avatar-ink": "#007cb7",
+				"avatar-ground": "#d4ecfd",
+				"conversation-icon": "#d2e8f9",
+				"conversation-icon-foreground": "#385970"
+			},
+			"dark": {
+				"bubble": "#005681",
+				"accent": "#69c1fc",
+				"new-line": "#274c65",
+				"avatar-ink": "#76c7ff",
+				"avatar-ground": "#1a3040",
+				"conversation-icon": "#344654",
+				"conversation-icon-foreground": "#9fc3de"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#abdbff",
+				"accent": "#006a9f",
+				"new-line": "#9cc3e1",
+				"avatar-ink": "#027cb9",
+				"avatar-ground": "#d4ecfe",
+				"conversation-icon": "#d2e8f9",
+				"conversation-icon-foreground": "#395971"
+			},
+			"dark": {
+				"bubble": "#025682",
+				"accent": "#6bc1fd",
+				"new-line": "#274c65",
+				"avatar-ink": "#78c7ff",
+				"avatar-ground": "#1a3040",
+				"conversation-icon": "#344654",
+				"conversation-icon-foreground": "#9fc3de"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#acdbff",
+				"accent": "#0069a0",
+				"new-line": "#9cc3e2",
+				"avatar-ink": "#0b7bb9",
+				"avatar-ground": "#d4ebfe",
+				"conversation-icon": "#d2e8f9",
+				"conversation-icon-foreground": "#3a5971"
+			},
+			"dark": {
+				"bubble": "#075683",
+				"accent": "#6cc0fd",
+				"new-line": "#284b65",
+				"avatar-ink": "#7ac6ff",
+				"avatar-ground": "#1b3040",
+				"conversation-icon": "#344654",
+				"conversation-icon-foreground": "#a0c3de"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#addaff",
+				"accent": "#0069a2",
+				"new-line": "#9dc3e2",
+				"avatar-ink": "#127bba",
+				"avatar-ground": "#d5ebfe",
+				"conversation-icon": "#d3e8f9",
+				"conversation-icon-foreground": "#3a5971"
+			},
+			"dark": {
+				"bubble": "#0b5683",
+				"accent": "#6ec0fe",
+				"new-line": "#294b66",
+				"avatar-ink": "#7cc6ff",
+				"avatar-ground": "#1b3040",
+				"conversation-icon": "#344654",
+				"conversation-icon-foreground": "#a0c3de"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#aedaff",
+				"accent": "#0068a4",
+				"new-line": "#9dc3e2",
+				"avatar-ink": "#177bba",
+				"avatar-ground": "#d5ebfe",
+				"conversation-icon": "#d3e8fa",
+				"conversation-icon-foreground": "#3b5971"
+			},
+			"dark": {
+				"bubble": "#0e5583",
+				"accent": "#70bffe",
+				"new-line": "#294b66",
+				"avatar-ink": "#7ec6ff",
+				"avatar-ground": "#1c3041",
+				"conversation-icon": "#354654",
+				"conversation-icon-foreground": "#a1c2df"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#afdaff",
+				"accent": "#0068a5",
+				"new-line": "#9ec3e2",
+				"avatar-ink": "#1c7abb",
+				"avatar-ground": "#d5ebfe",
+				"conversation-icon": "#d3e8fa",
+				"conversation-icon-foreground": "#3b5972"
+			},
+			"dark": {
+				"bubble": "#125584",
+				"accent": "#71bfff",
+				"new-line": "#2a4b66",
+				"avatar-ink": "#80c5ff",
+				"avatar-ground": "#1c3041",
+				"conversation-icon": "#354654",
+				"conversation-icon-foreground": "#a1c2df"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#b0daff",
+				"accent": "#0068a7",
+				"new-line": "#9fc2e3",
+				"avatar-ink": "#207abb",
+				"avatar-ground": "#d6ebfe",
+				"conversation-icon": "#d3e7fa",
+				"conversation-icon-foreground": "#3c5872"
+			},
+			"dark": {
+				"bubble": "#155584",
+				"accent": "#73bfff",
+				"new-line": "#2b4b66",
+				"avatar-ink": "#82c5ff",
+				"avatar-ground": "#1c3041",
+				"conversation-icon": "#354655",
+				"conversation-icon-foreground": "#a2c2df"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#b1d9ff",
+				"accent": "#0467a8",
+				"new-line": "#9fc2e3",
+				"avatar-ink": "#2479bc",
+				"avatar-ground": "#d6ebff",
+				"conversation-icon": "#d4e7fa",
+				"conversation-icon-foreground": "#3c5872"
+			},
+			"dark": {
+				"bubble": "#175585",
+				"accent": "#76beff",
+				"new-line": "#2c4b66",
+				"avatar-ink": "#84c4ff",
+				"avatar-ground": "#1d3041",
+				"conversation-icon": "#364655",
+				"conversation-icon-foreground": "#a2c2df"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#b2d9ff",
+				"accent": "#0b67a9",
+				"new-line": "#a0c2e3",
+				"avatar-ink": "#2779bc",
+				"avatar-ground": "#d6ebff",
+				"conversation-icon": "#d4e7fa",
+				"conversation-icon-foreground": "#3d5872"
+			},
+			"dark": {
+				"bubble": "#1a5485",
+				"accent": "#78beff",
+				"new-line": "#2c4a67",
+				"avatar-ink": "#85c4ff",
+				"avatar-ground": "#1d3041",
+				"conversation-icon": "#364555",
+				"conversation-icon-foreground": "#a3c2df"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#b3d9ff",
+				"accent": "#1266a9",
+				"new-line": "#a0c2e3",
+				"avatar-ink": "#2a78bd",
+				"avatar-ground": "#d7eaff",
+				"conversation-icon": "#d4e7fa",
+				"conversation-icon-foreground": "#3d5872"
+			},
+			"dark": {
+				"bubble": "#1c5485",
+				"accent": "#7abdff",
+				"new-line": "#2d4a67",
+				"avatar-ink": "#87c3ff",
+				"avatar-ground": "#1e2f41",
+				"conversation-icon": "#364555",
+				"conversation-icon-foreground": "#a3c1e0"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#b4d8ff",
+				"accent": "#1666aa",
+				"new-line": "#a1c1e4",
+				"avatar-ink": "#2d78bd",
+				"avatar-ground": "#d7eaff",
+				"conversation-icon": "#d5e7fa",
+				"conversation-icon-foreground": "#3e5872"
+			},
+			"dark": {
+				"bubble": "#1f5486",
+				"accent": "#7cbdff",
+				"new-line": "#2e4a67",
+				"avatar-ink": "#89c3ff",
+				"avatar-ground": "#1e2f41",
+				"conversation-icon": "#364555",
+				"conversation-icon-foreground": "#a4c1e0"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#b5d8ff",
+				"accent": "#1b65aa",
+				"new-line": "#a2c1e4",
+				"avatar-ink": "#3077bd",
+				"avatar-ground": "#d7eaff",
+				"conversation-icon": "#d5e7fa",
+				"conversation-icon-foreground": "#3e5773"
+			},
+			"dark": {
+				"bubble": "#205386",
+				"accent": "#7ebcff",
+				"new-line": "#2e4a67",
+				"avatar-ink": "#8ac3ff",
+				"avatar-ground": "#1e2f41",
+				"conversation-icon": "#374555",
+				"conversation-icon-foreground": "#a5c1e0"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#b6d8ff",
+				"accent": "#1e65aa",
+				"new-line": "#a2c1e4",
+				"avatar-ink": "#3377be",
+				"avatar-ground": "#d8eaff",
+				"conversation-icon": "#d5e7fb",
+				"conversation-icon-foreground": "#3f5773"
+			},
+			"dark": {
+				"bubble": "#225386",
+				"accent": "#80bcff",
+				"new-line": "#2f4a67",
+				"avatar-ink": "#8cc2ff",
+				"avatar-ground": "#1f2f41",
+				"conversation-icon": "#374555",
+				"conversation-icon-foreground": "#a5c1e0"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#b6d8ff",
+				"accent": "#2264ab",
+				"new-line": "#a3c1e4",
+				"avatar-ink": "#3576be",
+				"avatar-ground": "#d8eaff",
+				"conversation-icon": "#d6e6fb",
+				"conversation-icon-foreground": "#405773"
+			},
+			"dark": {
+				"bubble": "#245387",
+				"accent": "#81bbff",
+				"new-line": "#304967",
+				"avatar-ink": "#8ec2ff",
+				"avatar-ground": "#1f2f42",
+				"conversation-icon": "#374555",
+				"conversation-icon-foreground": "#a6c0e0"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#b7d7ff",
+				"accent": "#2564ab",
+				"new-line": "#a4c0e4",
+				"avatar-ink": "#3876be",
+				"avatar-ground": "#d9eaff",
+				"conversation-icon": "#d6e6fb",
+				"conversation-icon-foreground": "#405773"
+			},
+			"dark": {
+				"bubble": "#265387",
+				"accent": "#83bbff",
+				"new-line": "#304967",
+				"avatar-ink": "#8fc1ff",
+				"avatar-ground": "#202f42",
+				"conversation-icon": "#384555",
+				"conversation-icon-foreground": "#a6c0e1"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#b8d7ff",
+				"accent": "#2863ab",
+				"new-line": "#a4c0e4",
+				"avatar-ink": "#3a75bf",
+				"avatar-ground": "#d9eaff",
+				"conversation-icon": "#d6e6fb",
+				"conversation-icon-foreground": "#415773"
+			},
+			"dark": {
+				"bubble": "#275287",
+				"accent": "#85baff",
+				"new-line": "#314968",
+				"avatar-ink": "#91c1ff",
+				"avatar-ground": "#202f42",
+				"conversation-icon": "#384555",
+				"conversation-icon-foreground": "#a7c0e1"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#b9d7ff",
+				"accent": "#2a63ab",
+				"new-line": "#a5c0e5",
+				"avatar-ink": "#3c75bf",
+				"avatar-ground": "#d9e9ff",
+				"conversation-icon": "#d7e6fb",
+				"conversation-icon-foreground": "#415773"
+			},
+			"dark": {
+				"bubble": "#295288",
+				"accent": "#87baff",
+				"new-line": "#324968",
+				"avatar-ink": "#92c1ff",
+				"avatar-ground": "#202f42",
+				"conversation-icon": "#384555",
+				"conversation-icon-foreground": "#a7c0e1"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#bad6ff",
+				"accent": "#2d62ac",
+				"new-line": "#a6c0e5",
+				"avatar-ink": "#3e74bf",
+				"avatar-ground": "#dae9ff",
+				"conversation-icon": "#d7e6fb",
+				"conversation-icon-foreground": "#425673"
+			},
+			"dark": {
+				"bubble": "#2b5288",
+				"accent": "#88baff",
+				"new-line": "#324968",
+				"avatar-ink": "#93c0ff",
+				"avatar-ground": "#212e42",
+				"conversation-icon": "#394555",
+				"conversation-icon-foreground": "#a8c0e1"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#bbd6ff",
+				"accent": "#2f62ac",
+				"new-line": "#a6c0e5",
+				"avatar-ink": "#4174bf",
+				"avatar-ground": "#dae9ff",
+				"conversation-icon": "#d7e6fb",
+				"conversation-icon-foreground": "#425673"
+			},
+			"dark": {
+				"bubble": "#2c5288",
+				"accent": "#8ab9ff",
+				"new-line": "#334868",
+				"avatar-ink": "#95c0ff",
+				"avatar-ground": "#212e42",
+				"conversation-icon": "#394456",
+				"conversation-icon-foreground": "#a9bfe1"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#bbd6ff",
+				"accent": "#3262ac",
+				"new-line": "#a7bfe5",
+				"avatar-ink": "#4373c0",
+				"avatar-ground": "#dbe9ff",
+				"conversation-icon": "#d8e6fb",
+				"conversation-icon-foreground": "#435673"
+			},
+			"dark": {
+				"bubble": "#2e5188",
+				"accent": "#8cb9ff",
+				"new-line": "#344868",
+				"avatar-ink": "#96bfff",
+				"avatar-ground": "#222e42",
+				"conversation-icon": "#394456",
+				"conversation-icon-foreground": "#a9bfe1"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#bcd6ff",
+				"accent": "#3461ac",
+				"new-line": "#a8bfe5",
+				"avatar-ink": "#4573c0",
+				"avatar-ground": "#dbe9ff",
+				"conversation-icon": "#d8e6fb",
+				"conversation-icon-foreground": "#445674"
+			},
+			"dark": {
+				"bubble": "#2f5188",
+				"accent": "#8db8ff",
+				"new-line": "#344868",
+				"avatar-ink": "#98bfff",
+				"avatar-ground": "#222e42",
+				"conversation-icon": "#394456",
+				"conversation-icon-foreground": "#aabfe1"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#bdd5ff",
+				"accent": "#3661ac",
+				"new-line": "#a8bfe5",
+				"avatar-ink": "#4773c0",
+				"avatar-ground": "#dbe9ff",
+				"conversation-icon": "#d8e5fb",
+				"conversation-icon-foreground": "#445674"
+			},
+			"dark": {
+				"bubble": "#325189",
+				"accent": "#8fb8ff",
+				"new-line": "#354868",
+				"avatar-ink": "#99bfff",
+				"avatar-ground": "#222e42",
+				"conversation-icon": "#3a4456",
+				"conversation-icon-foreground": "#aabfe1"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#bed5ff",
+				"accent": "#3860ac",
+				"new-line": "#a9bfe5",
+				"avatar-ink": "#4972c0",
+				"avatar-ground": "#dce9ff",
+				"conversation-icon": "#d9e5fb",
+				"conversation-icon-foreground": "#455574"
+			},
+			"dark": {
+				"bubble": "#325089",
+				"accent": "#90b7ff",
+				"new-line": "#364868",
+				"avatar-ink": "#9abeff",
+				"avatar-ground": "#232e42",
+				"conversation-icon": "#3a4456",
+				"conversation-icon-foreground": "#abbfe1"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#bed5ff",
+				"accent": "#3a60ad",
+				"new-line": "#aabee5",
+				"avatar-ink": "#4b72c0",
+				"avatar-ground": "#dce8ff",
+				"conversation-icon": "#d9e5fb",
+				"conversation-icon-foreground": "#455574"
+			},
+			"dark": {
+				"bubble": "#345089",
+				"accent": "#92b7ff",
+				"new-line": "#364768",
+				"avatar-ink": "#9cbeff",
+				"avatar-ground": "#232e42",
+				"conversation-icon": "#3a4456",
+				"conversation-icon-foreground": "#acbee1"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#bfd5ff",
+				"accent": "#3c5fad",
+				"new-line": "#aabee5",
+				"avatar-ink": "#4d71c0",
+				"avatar-ground": "#dde8ff",
+				"conversation-icon": "#dae5fb",
+				"conversation-icon-foreground": "#465574"
+			},
+			"dark": {
+				"bubble": "#365089",
+				"accent": "#93b7ff",
+				"new-line": "#374768",
+				"avatar-ink": "#9dbdff",
+				"avatar-ground": "#242e42",
+				"conversation-icon": "#3b4456",
+				"conversation-icon-foreground": "#acbee1"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#c0d4ff",
+				"accent": "#3e5fad",
+				"new-line": "#abbee5",
+				"avatar-ink": "#4e71c0",
+				"avatar-ground": "#dde8ff",
+				"conversation-icon": "#dae5fb",
+				"conversation-icon-foreground": "#475574"
+			},
+			"dark": {
+				"bubble": "#375089",
+				"accent": "#95b6ff",
+				"new-line": "#384768",
+				"avatar-ink": "#9ebdff",
+				"avatar-ground": "#242d42",
+				"conversation-icon": "#3b4456",
+				"conversation-icon-foreground": "#adbee1"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#c1d4ff",
+				"accent": "#405ead",
+				"new-line": "#acbee5",
+				"avatar-ink": "#5070c0",
+				"avatar-ground": "#dde8ff",
+				"conversation-icon": "#dae5fb",
+				"conversation-icon-foreground": "#475574"
+			},
+			"dark": {
+				"bubble": "#384f8a",
+				"accent": "#96b6ff",
+				"new-line": "#384768",
+				"avatar-ink": "#9fbdff",
+				"avatar-ground": "#242d42",
+				"conversation-icon": "#3b4456",
+				"conversation-icon-foreground": "#adbee1"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#c2d4ff",
+				"accent": "#425ead",
+				"new-line": "#acbde5",
+				"avatar-ink": "#5270c0",
+				"avatar-ground": "#dee8ff",
+				"conversation-icon": "#dbe5fb",
+				"conversation-icon-foreground": "#485574"
+			},
+			"dark": {
+				"bubble": "#3a4f8a",
+				"accent": "#97b5ff",
+				"new-line": "#394768",
+				"avatar-ink": "#a1bcff",
+				"avatar-ground": "#252d42",
+				"conversation-icon": "#3c4356",
+				"conversation-icon-foreground": "#aebde2"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#c2d4ff",
+				"accent": "#445dad",
+				"new-line": "#adbde5",
+				"avatar-ink": "#546fc0",
+				"avatar-ground": "#dee8ff",
+				"conversation-icon": "#dbe4fb",
+				"conversation-icon-foreground": "#485474"
+			},
+			"dark": {
+				"bubble": "#3b4f8a",
+				"accent": "#99b5ff",
+				"new-line": "#3a4668",
+				"avatar-ink": "#a2bcff",
+				"avatar-ground": "#252d42",
+				"conversation-icon": "#3c4356",
+				"conversation-icon-foreground": "#afbde2"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#c3d3ff",
+				"accent": "#455dad",
+				"new-line": "#aebde5",
+				"avatar-ink": "#556fc0",
+				"avatar-ground": "#dfe8ff",
+				"conversation-icon": "#dbe4fb",
+				"conversation-icon-foreground": "#495474"
+			},
+			"dark": {
+				"bubble": "#3c4e89",
+				"accent": "#9ab4ff",
+				"new-line": "#3a4668",
+				"avatar-ink": "#a3bbff",
+				"avatar-ground": "#252d42",
+				"conversation-icon": "#3c4356",
+				"conversation-icon-foreground": "#afbde2"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#c4d3ff",
+				"accent": "#475cad",
+				"new-line": "#aebde5",
+				"avatar-ink": "#576ec0",
+				"avatar-ground": "#dfe7ff",
+				"conversation-icon": "#dce4fb",
+				"conversation-icon-foreground": "#495474"
+			},
+			"dark": {
+				"bubble": "#3d4e89",
+				"accent": "#9cb4ff",
+				"new-line": "#3b4668",
+				"avatar-ink": "#a4bbff",
+				"avatar-ground": "#262d42",
+				"conversation-icon": "#3d4356",
+				"conversation-icon-foreground": "#b0bde1"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#c5d3ff",
+				"accent": "#495cad",
+				"new-line": "#afbce5",
+				"avatar-ink": "#596ec0",
+				"avatar-ground": "#dfe7ff",
+				"conversation-icon": "#dce4fb",
+				"conversation-icon-foreground": "#4a5474"
+			},
+			"dark": {
+				"bubble": "#3f4e8a",
+				"accent": "#9db3ff",
+				"new-line": "#3c4668",
+				"avatar-ink": "#a6baff",
+				"avatar-ground": "#262d42",
+				"conversation-icon": "#3d4356",
+				"conversation-icon-foreground": "#b1bde1"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#c5d3ff",
+				"accent": "#4a5bac",
+				"new-line": "#b0bce5",
+				"avatar-ink": "#5a6dc0",
+				"avatar-ground": "#e0e7ff",
+				"conversation-icon": "#dde4fb",
+				"conversation-icon-foreground": "#4b5474"
+			},
+			"dark": {
+				"bubble": "#404e8a",
+				"accent": "#9eb3ff",
+				"new-line": "#3c4668",
+				"avatar-ink": "#a7baff",
+				"avatar-ground": "#272d42",
+				"conversation-icon": "#3d4356",
+				"conversation-icon-foreground": "#b1bce1"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#c6d2ff",
+				"accent": "#4c5bac",
+				"new-line": "#b1bce5",
+				"avatar-ink": "#5c6dc0",
+				"avatar-ground": "#e0e7ff",
+				"conversation-icon": "#dde4fb",
+				"conversation-icon-foreground": "#4b5374"
+			},
+			"dark": {
+				"bubble": "#414d89",
+				"accent": "#a0b2ff",
+				"new-line": "#3d4568",
+				"avatar-ink": "#a8baff",
+				"avatar-ground": "#272c42",
+				"conversation-icon": "#3e4356",
+				"conversation-icon-foreground": "#b2bce1"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#c7d2ff",
+				"accent": "#4d5aac",
+				"new-line": "#b1bce5",
+				"avatar-ink": "#5e6cc0",
+				"avatar-ground": "#e0e7ff",
+				"conversation-icon": "#dde4fb",
+				"conversation-icon-foreground": "#4c5374"
+			},
+			"dark": {
+				"bubble": "#434d8a",
+				"accent": "#a1b2ff",
+				"new-line": "#3e4568",
+				"avatar-ink": "#a9b9ff",
+				"avatar-ground": "#272c42",
+				"conversation-icon": "#3e4356",
+				"conversation-icon-foreground": "#b2bce1"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#c7d2ff",
+				"accent": "#4f5aac",
+				"new-line": "#b2bbe5",
+				"avatar-ink": "#5f6cc0",
+				"avatar-ground": "#e1e7ff",
+				"conversation-icon": "#dee3fb",
+				"conversation-icon-foreground": "#4c5374"
+			},
+			"dark": {
+				"bubble": "#444d8a",
+				"accent": "#a2b2ff",
+				"new-line": "#3e4568",
+				"avatar-ink": "#aab9ff",
+				"avatar-ground": "#282c42",
+				"conversation-icon": "#3e4356",
+				"conversation-icon-foreground": "#b3bce1"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#c8d1ff",
+				"accent": "#5159ac",
+				"new-line": "#b3bbe5",
+				"avatar-ink": "#616bbf",
+				"avatar-ground": "#e1e7ff",
+				"conversation-icon": "#dee3fb",
+				"conversation-icon-foreground": "#4d5373"
+			},
+			"dark": {
+				"bubble": "#444c89",
+				"accent": "#a4b1ff",
+				"new-line": "#3f4568",
+				"avatar-ink": "#acb8ff",
+				"avatar-ground": "#282c42",
+				"conversation-icon": "#3f4256",
+				"conversation-icon-foreground": "#b4bbe1"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#c9d1ff",
+				"accent": "#5259ac",
+				"new-line": "#b3bbe5",
+				"avatar-ink": "#626bbf",
+				"avatar-ground": "#e2e6ff",
+				"conversation-icon": "#dee3fb",
+				"conversation-icon-foreground": "#4d5373"
+			},
+			"dark": {
+				"bubble": "#464c8a",
+				"accent": "#a5b1ff",
+				"new-line": "#3f4568",
+				"avatar-ink": "#adb8ff",
+				"avatar-ground": "#292c42",
+				"conversation-icon": "#3f4256",
+				"conversation-icon-foreground": "#b4bbe1"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#cad1ff",
+				"accent": "#5459ab",
+				"new-line": "#b4bbe5",
+				"avatar-ink": "#646abf",
+				"avatar-ground": "#e2e6ff",
+				"conversation-icon": "#dfe3fb",
+				"conversation-icon-foreground": "#4e5273"
+			},
+			"dark": {
+				"bubble": "#474c89",
+				"accent": "#a6b0ff",
+				"new-line": "#404468",
+				"avatar-ink": "#aeb8ff",
+				"avatar-ground": "#292c42",
+				"conversation-icon": "#3f4255",
+				"conversation-icon-foreground": "#b5bbe1"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#cad1ff",
+				"accent": "#5558ab",
+				"new-line": "#b5bae5",
+				"avatar-ink": "#656abf",
+				"avatar-ground": "#e2e6ff",
+				"conversation-icon": "#dfe3fb",
+				"conversation-icon-foreground": "#4f5273"
+			},
+			"dark": {
+				"bubble": "#484c89",
+				"accent": "#a8b0ff",
+				"new-line": "#414468",
+				"avatar-ink": "#afb7ff",
+				"avatar-ground": "#292c42",
+				"conversation-icon": "#404255",
+				"conversation-icon-foreground": "#b6bbe1"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#cbd0ff",
+				"accent": "#5658ab",
+				"new-line": "#b5bae4",
+				"avatar-ink": "#6769bf",
+				"avatar-ground": "#e3e6ff",
+				"conversation-icon": "#e0e3fb",
+				"conversation-icon-foreground": "#4f5273"
+			},
+			"dark": {
+				"bubble": "#494b89",
+				"accent": "#a9afff",
+				"new-line": "#414468",
+				"avatar-ink": "#b0b7ff",
+				"avatar-ground": "#2a2c42",
+				"conversation-icon": "#404255",
+				"conversation-icon-foreground": "#b6bbe1"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ccd0ff",
+				"accent": "#5857ab",
+				"new-line": "#b6bae4",
+				"avatar-ink": "#6869be",
+				"avatar-ground": "#e3e6ff",
+				"conversation-icon": "#e0e3fb",
+				"conversation-icon-foreground": "#505273"
+			},
+			"dark": {
+				"bubble": "#4a4b89",
+				"accent": "#aaafff",
+				"new-line": "#424467",
+				"avatar-ink": "#b2b6ff",
+				"avatar-ground": "#2a2b42",
+				"conversation-icon": "#404255",
+				"conversation-icon-foreground": "#b7bae1"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#cdd0ff",
+				"accent": "#5957aa",
+				"new-line": "#b7bae4",
+				"avatar-ink": "#6a68be",
+				"avatar-ground": "#e4e6ff",
+				"conversation-icon": "#e0e2fb",
+				"conversation-icon-foreground": "#505273"
+			},
+			"dark": {
+				"bubble": "#4c4b89",
+				"accent": "#acaeff",
+				"new-line": "#424467",
+				"avatar-ink": "#b3b6ff",
+				"avatar-ground": "#2a2b42",
+				"conversation-icon": "#414255",
+				"conversation-icon-foreground": "#b8bae0"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#cdcfff",
+				"accent": "#5b56aa",
+				"new-line": "#b8b9e4",
+				"avatar-ink": "#6b68be",
+				"avatar-ground": "#e4e6ff",
+				"conversation-icon": "#e1e2fb",
+				"conversation-icon-foreground": "#515273"
+			},
+			"dark": {
+				"bubble": "#4c4a88",
+				"accent": "#adaeff",
+				"new-line": "#434367",
+				"avatar-ink": "#b4b5ff",
+				"avatar-ground": "#2b2b41",
+				"conversation-icon": "#414255",
+				"conversation-icon-foreground": "#b8bae0"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#cecfff",
+				"accent": "#5c56aa",
+				"new-line": "#b8b9e4",
+				"avatar-ink": "#6c67bd",
+				"avatar-ground": "#e4e5ff",
+				"conversation-icon": "#e1e2fb",
+				"conversation-icon-foreground": "#515173"
+			},
+			"dark": {
+				"bubble": "#4d4a88",
+				"accent": "#aeadff",
+				"new-line": "#444367",
+				"avatar-ink": "#b5b5ff",
+				"avatar-ground": "#2b2b41",
+				"conversation-icon": "#414255",
+				"conversation-icon-foreground": "#b9bae0"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#cfcfff",
+				"accent": "#5d55a9",
+				"new-line": "#b9b9e4",
+				"avatar-ink": "#6e67bd",
+				"avatar-ground": "#e5e5ff",
+				"conversation-icon": "#e2e2fa",
+				"conversation-icon-foreground": "#525172"
+			},
+			"dark": {
+				"bubble": "#4f4a89",
+				"accent": "#b0adff",
+				"new-line": "#444367",
+				"avatar-ink": "#b6b4ff",
+				"avatar-ground": "#2c2b41",
+				"conversation-icon": "#424155",
+				"conversation-icon-foreground": "#b9bae0"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#d0cfff",
+				"accent": "#5f55a9",
+				"new-line": "#bab9e3",
+				"avatar-ink": "#6f67bc",
+				"avatar-ground": "#e5e5ff",
+				"conversation-icon": "#e2e2fa",
+				"conversation-icon-foreground": "#525172"
+			},
+			"dark": {
+				"bubble": "#4f4987",
+				"accent": "#b1acff",
+				"new-line": "#454367",
+				"avatar-ink": "#b8b4ff",
+				"avatar-ground": "#2c2b41",
+				"conversation-icon": "#424155",
+				"conversation-icon-foreground": "#bab9e0"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#d0ceff",
+				"accent": "#6054a8",
+				"new-line": "#bab9e3",
+				"avatar-ink": "#7166bc",
+				"avatar-ground": "#e6e5ff",
+				"conversation-icon": "#e2e2fa",
+				"conversation-icon-foreground": "#535172"
+			},
+			"dark": {
+				"bubble": "#504987",
+				"accent": "#b2acff",
+				"new-line": "#454367",
+				"avatar-ink": "#b9b3ff",
+				"avatar-ground": "#2c2b41",
+				"conversation-icon": "#424155",
+				"conversation-icon-foreground": "#bbb9e0"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#d1ceff",
+				"accent": "#6154a8",
+				"new-line": "#bbb8e3",
+				"avatar-ink": "#7266bc",
+				"avatar-ground": "#e6e5ff",
+				"conversation-icon": "#e3e2fa",
+				"conversation-icon-foreground": "#545172"
+			},
+			"dark": {
+				"bubble": "#524988",
+				"accent": "#b4abff",
+				"new-line": "#464266",
+				"avatar-ink": "#bab3ff",
+				"avatar-ground": "#2d2b41",
+				"conversation-icon": "#424155",
+				"conversation-icon-foreground": "#bbb9df"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#d2ceff",
+				"accent": "#6253a8",
+				"new-line": "#bcb8e3",
+				"avatar-ink": "#7365bb",
+				"avatar-ground": "#e6e5ff",
+				"conversation-icon": "#e3e2fa",
+				"conversation-icon-foreground": "#545072"
+			},
+			"dark": {
+				"bubble": "#534987",
+				"accent": "#b5aaff",
+				"new-line": "#474266",
+				"avatar-ink": "#bbb2ff",
+				"avatar-ground": "#2d2a41",
+				"conversation-icon": "#434155",
+				"conversation-icon-foreground": "#bcb9df"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#d3cdff",
+				"accent": "#6453a7",
+				"new-line": "#bcb8e2",
+				"avatar-ink": "#7565bb",
+				"avatar-ground": "#e7e4fe",
+				"conversation-icon": "#e4e1fa",
+				"conversation-icon-foreground": "#555072"
+			},
+			"dark": {
+				"bubble": "#534886",
+				"accent": "#b6aaff",
+				"new-line": "#474266",
+				"avatar-ink": "#bcb2ff",
+				"avatar-ground": "#2d2a41",
+				"conversation-icon": "#434154",
+				"conversation-icon-foreground": "#bdb8df"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#d4cdff",
+				"accent": "#6553a7",
+				"new-line": "#bdb8e2",
+				"avatar-ink": "#7664ba",
+				"avatar-ground": "#e7e4fe",
+				"conversation-icon": "#e4e1fa",
+				"conversation-icon-foreground": "#555071"
+			},
+			"dark": {
+				"bubble": "#554887",
+				"accent": "#b8a9fe",
+				"new-line": "#484266",
+				"avatar-ink": "#beb1ff",
+				"avatar-ground": "#2e2a40",
+				"conversation-icon": "#434154",
+				"conversation-icon-foreground": "#bdb8df"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#d4cdff",
+				"accent": "#6652a6",
+				"new-line": "#beb7e2",
+				"avatar-ink": "#7764ba",
+				"avatar-ground": "#e8e4fe",
+				"conversation-icon": "#e4e1f9",
+				"conversation-icon-foreground": "#565071"
+			},
+			"dark": {
+				"bubble": "#564886",
+				"accent": "#b9a9fe",
+				"new-line": "#484265",
+				"avatar-ink": "#bfb1ff",
+				"avatar-ground": "#2e2a40",
+				"conversation-icon": "#444154",
+				"conversation-icon-foreground": "#beb8de"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#d5ccff",
+				"accent": "#6752a6",
+				"new-line": "#bfb7e2",
+				"avatar-ink": "#7863b9",
+				"avatar-ground": "#e8e4fe",
+				"conversation-icon": "#e5e1f9",
+				"conversation-icon-foreground": "#565071"
+			},
+			"dark": {
+				"bubble": "#564785",
+				"accent": "#baa9fd",
+				"new-line": "#494165",
+				"avatar-ink": "#c0b0ff",
+				"avatar-ground": "#2e2a40",
+				"conversation-icon": "#444154",
+				"conversation-icon-foreground": "#beb8de"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#d6ccff",
+				"accent": "#6951a5",
+				"new-line": "#bfb7e1",
+				"avatar-ink": "#7a63b8",
+				"avatar-ground": "#e9e4fe",
+				"conversation-icon": "#e5e1f9",
+				"conversation-icon-foreground": "#575071"
+			},
+			"dark": {
+				"bubble": "#584785",
+				"accent": "#bca8fd",
+				"new-line": "#494165",
+				"avatar-ink": "#c1b0ff",
+				"avatar-ground": "#2f2a40",
+				"conversation-icon": "#444054",
+				"conversation-icon-foreground": "#bfb8de"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#d7ccff",
+				"accent": "#6a51a4",
+				"new-line": "#c0b7e1",
+				"avatar-ink": "#7b62b8",
+				"avatar-ground": "#e9e4fe",
+				"conversation-icon": "#e6e1f9",
+				"conversation-icon-foreground": "#574f70"
+			},
+			"dark": {
+				"bubble": "#584785",
+				"accent": "#bda8fc",
+				"new-line": "#4a4165",
+				"avatar-ink": "#c3afff",
+				"avatar-ground": "#2f2a40",
+				"conversation-icon": "#454054",
+				"conversation-icon-foreground": "#c0b7de"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#d8cbff",
+				"accent": "#6b50a4",
+				"new-line": "#c1b6e1",
+				"avatar-ink": "#7c62b7",
+				"avatar-ground": "#e9e4fd",
+				"conversation-icon": "#e6e1f9",
+				"conversation-icon-foreground": "#584f70"
+			},
+			"dark": {
+				"bubble": "#5a4785",
+				"accent": "#bea7fb",
+				"new-line": "#4a4164",
+				"avatar-ink": "#c4afff",
+				"avatar-ground": "#2f2a40",
+				"conversation-icon": "#454054",
+				"conversation-icon-foreground": "#c0b7dd"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#d9cbff",
+				"accent": "#6c50a3",
+				"new-line": "#c1b6e0",
+				"avatar-ink": "#7d62b7",
+				"avatar-ground": "#eae4fd",
+				"conversation-icon": "#e6e0f9",
+				"conversation-icon-foreground": "#584f70"
+			},
+			"dark": {
+				"bubble": "#5a4684",
+				"accent": "#bfa7fb",
+				"new-line": "#4b4164",
+				"avatar-ink": "#c5aeff",
+				"avatar-ground": "#302a40",
+				"conversation-icon": "#454053",
+				"conversation-icon-foreground": "#c1b7dd"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#dacbff",
+				"accent": "#6d50a3",
+				"new-line": "#c2b6e0",
+				"avatar-ink": "#7e61b6",
+				"avatar-ground": "#eae3fd",
+				"conversation-icon": "#e7e0f8",
+				"conversation-icon-foreground": "#594f70"
+			},
+			"dark": {
+				"bubble": "#5b4684",
+				"accent": "#c1a6fa",
+				"new-line": "#4c4064",
+				"avatar-ink": "#c7adff",
+				"avatar-ground": "#30293f",
+				"conversation-icon": "#464053",
+				"conversation-icon-foreground": "#c1b7dd"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#dacaff",
+				"accent": "#6e4fa2",
+				"new-line": "#c3b6e0",
+				"avatar-ink": "#8061b5",
+				"avatar-ground": "#ebe3fd",
+				"conversation-icon": "#e7e0f8",
+				"conversation-icon-foreground": "#594f6f"
+			},
+			"dark": {
+				"bubble": "#5d4684",
+				"accent": "#c2a6fa",
+				"new-line": "#4c4064",
+				"avatar-ink": "#c8adff",
+				"avatar-ground": "#30293f",
+				"conversation-icon": "#464053",
+				"conversation-icon-foreground": "#c2b7dc"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#dbcaff",
+				"accent": "#6f4fa1",
+				"new-line": "#c3b6df",
+				"avatar-ink": "#8160b5",
+				"avatar-ground": "#ebe3fc",
+				"conversation-icon": "#e8e0f8",
+				"conversation-icon-foreground": "#5a4f6f"
+			},
+			"dark": {
+				"bubble": "#5d4683",
+				"accent": "#c3a5f9",
+				"new-line": "#4d4063",
+				"avatar-ink": "#c9acff",
+				"avatar-ground": "#31293f",
+				"conversation-icon": "#464053",
+				"conversation-icon-foreground": "#c3b6dc"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#dcc9ff",
+				"accent": "#714ea1",
+				"new-line": "#c4b5df",
+				"avatar-ink": "#8260b4",
+				"avatar-ground": "#ebe3fc",
+				"conversation-icon": "#e8e0f8",
+				"conversation-icon-foreground": "#5a4e6f"
+			},
+			"dark": {
+				"bubble": "#5e4582",
+				"accent": "#c4a5f8",
+				"new-line": "#4d4063",
+				"avatar-ink": "#cbabff",
+				"avatar-ground": "#31293f",
+				"conversation-icon": "#474053",
+				"conversation-icon-foreground": "#c3b6dc"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ddc9fe",
+				"accent": "#724ea0",
+				"new-line": "#c5b5df",
+				"avatar-ink": "#835fb3",
+				"avatar-ground": "#ece3fc",
+				"conversation-icon": "#e8e0f8",
+				"conversation-icon-foreground": "#5b4e6f"
+			},
+			"dark": {
+				"bubble": "#5f4582",
+				"accent": "#c6a5f7",
+				"new-line": "#4e4063",
+				"avatar-ink": "#ccabfe",
+				"avatar-ground": "#31293f",
+				"conversation-icon": "#474053",
+				"conversation-icon-foreground": "#c4b6db"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#dec9fe",
+				"accent": "#734d9f",
+				"new-line": "#c5b5de",
+				"avatar-ink": "#845fb3",
+				"avatar-ground": "#ece3fc",
+				"conversation-icon": "#e9e0f7",
+				"conversation-icon-foreground": "#5b4e6e"
+			},
+			"dark": {
+				"bubble": "#604582",
+				"accent": "#c7a4f7",
+				"new-line": "#4e4062",
+				"avatar-ink": "#cdabfd",
+				"avatar-ground": "#32293e",
+				"conversation-icon": "#474052",
+				"conversation-icon-foreground": "#c4b6db"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#dfc9fd",
+				"accent": "#744d9f",
+				"new-line": "#c6b5de",
+				"avatar-ink": "#855fb2",
+				"avatar-ground": "#ede3fc",
+				"conversation-icon": "#e9e0f7",
+				"conversation-icon-foreground": "#5c4e6e"
+			},
+			"dark": {
+				"bubble": "#604480",
+				"accent": "#c8a4f6",
+				"new-line": "#4f3f62",
+				"avatar-ink": "#ceaafd",
+				"avatar-ground": "#32293e",
+				"conversation-icon": "#473f52",
+				"conversation-icon-foreground": "#c5b6db"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#dfc8fd",
+				"accent": "#754d9e",
+				"new-line": "#c6b5dd",
+				"avatar-ink": "#865eb1",
+				"avatar-ground": "#ede2fb",
+				"conversation-icon": "#e9e0f7",
+				"conversation-icon-foreground": "#5c4e6e"
+			},
+			"dark": {
+				"bubble": "#614480",
+				"accent": "#c9a3f5",
+				"new-line": "#4f3f62",
+				"avatar-ink": "#d0aafc",
+				"avatar-ground": "#32293e",
+				"conversation-icon": "#483f52",
+				"conversation-icon-foreground": "#c6b6da"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#e0c8fc",
+				"accent": "#764c9d",
+				"new-line": "#c7b4dd",
+				"avatar-ink": "#885eb0",
+				"avatar-ground": "#ede2fb",
+				"conversation-icon": "#eadff7",
+				"conversation-icon-foreground": "#5d4e6d"
+			},
+			"dark": {
+				"bubble": "#624480",
+				"accent": "#caa3f4",
+				"new-line": "#503f61",
+				"avatar-ink": "#d1a9fb",
+				"avatar-ground": "#33293e",
+				"conversation-icon": "#483f52",
+				"conversation-icon-foreground": "#c6b5da"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#e1c8fb",
+				"accent": "#774c9c",
+				"new-line": "#c8b4dd",
+				"avatar-ink": "#895daf",
+				"avatar-ground": "#eee2fb",
+				"conversation-icon": "#eadff6",
+				"conversation-icon-foreground": "#5d4d6d"
+			},
+			"dark": {
+				"bubble": "#63447f",
+				"accent": "#cca3f3",
+				"new-line": "#503f61",
+				"avatar-ink": "#d2a9fa",
+				"avatar-ground": "#33283e",
+				"conversation-icon": "#483f52",
+				"conversation-icon-foreground": "#c7b5da"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#e2c8fb",
+				"accent": "#784b9b",
+				"new-line": "#c8b4dc",
+				"avatar-ink": "#8a5daf",
+				"avatar-ground": "#eee2fa",
+				"conversation-icon": "#ebdff6",
+				"conversation-icon-foreground": "#5e4d6d"
+			},
+			"dark": {
+				"bubble": "#64447f",
+				"accent": "#cda2f3",
+				"new-line": "#513f61",
+				"avatar-ink": "#d3a9f9",
+				"avatar-ground": "#33283d",
+				"conversation-icon": "#493f52",
+				"conversation-icon-foreground": "#c7b5d9"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#e3c7fa",
+				"accent": "#794b9b",
+				"new-line": "#c9b4dc",
+				"avatar-ink": "#8b5dae",
+				"avatar-ground": "#efe2fa",
+				"conversation-icon": "#ebdff6",
+				"conversation-icon-foreground": "#5e4d6c"
+			},
+			"dark": {
+				"bubble": "#65437e",
+				"accent": "#cea2f2",
+				"new-line": "#513f60",
+				"avatar-ink": "#d4a8f8",
+				"avatar-ground": "#34283d",
+				"conversation-icon": "#493f51",
+				"conversation-icon-foreground": "#c8b5d9"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#e3c7fa",
+				"accent": "#7a4b9a",
+				"new-line": "#cab4db",
+				"avatar-ink": "#8c5cad",
+				"avatar-ground": "#efe2fa",
+				"conversation-icon": "#ebdff6",
+				"conversation-icon-foreground": "#5e4d6c"
+			},
+			"dark": {
+				"bubble": "#66437e",
+				"accent": "#cfa1f1",
+				"new-line": "#523e60",
+				"avatar-ink": "#d5a8f8",
+				"avatar-ground": "#34283d",
+				"conversation-icon": "#493f51",
+				"conversation-icon-foreground": "#c8b5d8"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#e4c7f9",
+				"accent": "#7b4a99",
+				"new-line": "#cab3db",
+				"avatar-ink": "#8d5cac",
+				"avatar-ground": "#efe2fa",
+				"conversation-icon": "#ecdff5",
+				"conversation-icon-foreground": "#5f4d6c"
+			},
+			"dark": {
+				"bubble": "#66437d",
+				"accent": "#d0a1f0",
+				"new-line": "#523e60",
+				"avatar-ink": "#d7a7f7",
+				"avatar-ground": "#34283d",
+				"conversation-icon": "#493f51",
+				"conversation-icon-foreground": "#c9b4d8"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#e5c7f9",
+				"accent": "#7c4a98",
+				"new-line": "#cbb3da",
+				"avatar-ink": "#8e5bab",
+				"avatar-ground": "#f0e2f9",
+				"conversation-icon": "#ecdff5",
+				"conversation-icon-foreground": "#5f4d6b"
+			},
+			"dark": {
+				"bubble": "#67437c",
+				"accent": "#d1a1ef",
+				"new-line": "#533e5f",
+				"avatar-ink": "#d8a7f6",
+				"avatar-ground": "#35283c",
+				"conversation-icon": "#4a3f51",
+				"conversation-icon-foreground": "#cab4d7"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#e6c6f8",
+				"accent": "#7d4a97",
+				"new-line": "#cbb3da",
+				"avatar-ink": "#8f5baa",
+				"avatar-ground": "#f0e2f9",
+				"conversation-icon": "#ecdff5",
+				"conversation-icon-foreground": "#604d6b"
+			},
+			"dark": {
+				"bubble": "#68427c",
+				"accent": "#d2a0ee",
+				"new-line": "#533e5f",
+				"avatar-ink": "#d9a7f5",
+				"avatar-ground": "#35283c",
+				"conversation-icon": "#4a3f50",
+				"conversation-icon-foreground": "#cab4d7"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#e6c6f7",
+				"accent": "#7e4996",
+				"new-line": "#ccb3d9",
+				"avatar-ink": "#905ba9",
+				"avatar-ground": "#f1e1f9",
+				"conversation-icon": "#eddff4",
+				"conversation-icon-foreground": "#604c6a"
+			},
+			"dark": {
+				"bubble": "#68427b",
+				"accent": "#d3a0ed",
+				"new-line": "#533e5e",
+				"avatar-ink": "#daa6f4",
+				"avatar-ground": "#35283c",
+				"conversation-icon": "#4a3f50",
+				"conversation-icon-foreground": "#cbb4d7"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#e7c6f7",
+				"accent": "#7f4995",
+				"new-line": "#cdb3d9",
+				"avatar-ink": "#915aa8",
+				"avatar-ground": "#f1e1f8",
+				"conversation-icon": "#eddef4",
+				"conversation-icon-foreground": "#614c6a"
+			},
+			"dark": {
+				"bubble": "#69427a",
+				"accent": "#d4a0ec",
+				"new-line": "#543e5e",
+				"avatar-ink": "#dba6f3",
+				"avatar-ground": "#35283c",
+				"conversation-icon": "#4a3f50",
+				"conversation-icon-foreground": "#cbb4d6"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#e8c6f6",
+				"accent": "#7f4894",
+				"new-line": "#cdb2d8",
+				"avatar-ink": "#925aa7",
+				"avatar-ground": "#f1e1f8",
+				"conversation-icon": "#eddef4",
+				"conversation-icon-foreground": "#614c6a"
+			},
+			"dark": {
+				"bubble": "#6a417a",
+				"accent": "#d59feb",
+				"new-line": "#543d5e",
+				"avatar-ink": "#dca5f2",
+				"avatar-ground": "#36283b",
+				"conversation-icon": "#4b3e50",
+				"conversation-icon-foreground": "#ccb4d6"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#e9c6f5",
+				"accent": "#804893",
+				"new-line": "#ceb2d8",
+				"avatar-ink": "#935aa6",
+				"avatar-ground": "#f2e1f8",
+				"conversation-icon": "#eedef4",
+				"conversation-icon-foreground": "#624c69"
+			},
+			"dark": {
+				"bubble": "#6b4179",
+				"accent": "#d69fea",
+				"new-line": "#553d5d",
+				"avatar-ink": "#dda5f1",
+				"avatar-ground": "#36273b",
+				"conversation-icon": "#4b3e50",
+				"conversation-icon-foreground": "#ccb3d5"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#e9c5f5",
+				"accent": "#814893",
+				"new-line": "#ceb2d7",
+				"avatar-ink": "#9459a5",
+				"avatar-ground": "#f2e1f7",
+				"conversation-icon": "#eedef3",
+				"conversation-icon-foreground": "#624c69"
+			},
+			"dark": {
+				"bubble": "#6b4178",
+				"accent": "#d79fe9",
+				"new-line": "#553d5d",
+				"avatar-ink": "#dea5f0",
+				"avatar-ground": "#36273b",
+				"conversation-icon": "#4b3e4f",
+				"conversation-icon-foreground": "#cdb3d5"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#eac5f4",
+				"accent": "#824792",
+				"new-line": "#cfb2d7",
+				"avatar-ink": "#9559a4",
+				"avatar-ground": "#f2e1f7",
+				"conversation-icon": "#eedef3",
+				"conversation-icon-foreground": "#624c69"
+			},
+			"dark": {
+				"bubble": "#6c4177",
+				"accent": "#d89ee8",
+				"new-line": "#563d5c",
+				"avatar-ink": "#dfa4ef",
+				"avatar-ground": "#37273b",
+				"conversation-icon": "#4b3e4f",
+				"conversation-icon-foreground": "#cdb3d4"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ebc5f3",
+				"accent": "#834791",
+				"new-line": "#cfb2d6",
+				"avatar-ink": "#9558a3",
+				"avatar-ground": "#f3e1f7",
+				"conversation-icon": "#efdef3",
+				"conversation-icon-foreground": "#634c68"
+			},
+			"dark": {
+				"bubble": "#6d4177",
+				"accent": "#d99ee7",
+				"new-line": "#563d5c",
+				"avatar-ink": "#e0a4ee",
+				"avatar-ground": "#37273a",
+				"conversation-icon": "#4c3e4f",
+				"conversation-icon-foreground": "#ceb3d4"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ebc5f3",
+				"accent": "#844790",
+				"new-line": "#d0b2d6",
+				"avatar-ink": "#9658a2",
+				"avatar-ground": "#f3e1f6",
+				"conversation-icon": "#efdef2",
+				"conversation-icon-foreground": "#634b68"
+			},
+			"dark": {
+				"bubble": "#6d4076",
+				"accent": "#da9de6",
+				"new-line": "#573d5b",
+				"avatar-ink": "#e1a4ed",
+				"avatar-ground": "#37273a",
+				"conversation-icon": "#4c3e4f",
+				"conversation-icon-foreground": "#ceb3d3"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ecc4f2",
+				"accent": "#85468f",
+				"new-line": "#d1b1d5",
+				"avatar-ink": "#9758a1",
+				"avatar-ground": "#f3e1f6",
+				"conversation-icon": "#efdef2",
+				"conversation-icon-foreground": "#644b67"
+			},
+			"dark": {
+				"bubble": "#6e4075",
+				"accent": "#db9de5",
+				"new-line": "#573d5b",
+				"avatar-ink": "#e2a3ec",
+				"avatar-ground": "#37273a",
+				"conversation-icon": "#4c3e4e",
+				"conversation-icon-foreground": "#cfb3d3"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#edc4f1",
+				"accent": "#85468d",
+				"new-line": "#d1b1d5",
+				"avatar-ink": "#9857a0",
+				"avatar-ground": "#f4e1f6",
+				"conversation-icon": "#f0def2",
+				"conversation-icon-foreground": "#644b67"
+			},
+			"dark": {
+				"bubble": "#6f4075",
+				"accent": "#dc9de4",
+				"new-line": "#573c5a",
+				"avatar-ink": "#e3a3eb",
+				"avatar-ground": "#38273a",
+				"conversation-icon": "#4c3e4e",
+				"conversation-icon-foreground": "#cfb3d2"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#edc4f1",
+				"accent": "#86468c",
+				"new-line": "#d2b1d4",
+				"avatar-ink": "#99579f",
+				"avatar-ground": "#f4e0f5",
+				"conversation-icon": "#f0def1",
+				"conversation-icon-foreground": "#644b66"
+			},
+			"dark": {
+				"bubble": "#704074",
+				"accent": "#dd9de3",
+				"new-line": "#583c5a",
+				"avatar-ink": "#e4a3e9",
+				"avatar-ground": "#382739",
+				"conversation-icon": "#4d3e4e",
+				"conversation-icon-foreground": "#d0b2d2"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#eec4f0",
+				"accent": "#87458b",
+				"new-line": "#d2b1d3",
+				"avatar-ink": "#9a579e",
+				"avatar-ground": "#f4e0f5",
+				"conversation-icon": "#f0ddf1",
+				"conversation-icon-foreground": "#654b66"
+			},
+			"dark": {
+				"bubble": "#703f73",
+				"accent": "#de9ce2",
+				"new-line": "#583c5a",
+				"avatar-ink": "#e5a3e8",
+				"avatar-ground": "#382739",
+				"conversation-icon": "#4d3e4e",
+				"conversation-icon-foreground": "#d0b2d1"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#efc4ef",
+				"accent": "#88458a",
+				"new-line": "#d3b1d3",
+				"avatar-ink": "#9b569d",
+				"avatar-ground": "#f5e0f5",
+				"conversation-icon": "#f1ddf1",
+				"conversation-icon-foreground": "#654b65"
+			},
+			"dark": {
+				"bubble": "#703f72",
+				"accent": "#df9ce1",
+				"new-line": "#593c59",
+				"avatar-ink": "#e6a2e7",
+				"avatar-ground": "#382739",
+				"conversation-icon": "#4d3e4d",
+				"conversation-icon-foreground": "#d1b2d1"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#efc4ee",
+				"accent": "#894589",
+				"new-line": "#d3b1d2",
+				"avatar-ink": "#9c569c",
+				"avatar-ground": "#f5e0f4",
+				"conversation-icon": "#f1ddf0",
+				"conversation-icon-foreground": "#664b65"
+			},
+			"dark": {
+				"bubble": "#723f72",
+				"accent": "#e09cdf",
+				"new-line": "#593c59",
+				"avatar-ink": "#e7a2e6",
+				"avatar-ground": "#392738",
+				"conversation-icon": "#4d3e4d",
+				"conversation-icon-foreground": "#d1b2d0"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#f0c3ee",
+				"accent": "#894488",
+				"new-line": "#d4b1d2",
+				"avatar-ink": "#9c569b",
+				"avatar-ground": "#f5e0f4",
+				"conversation-icon": "#f1ddf0",
+				"conversation-icon-foreground": "#664b65"
+			},
+			"dark": {
+				"bubble": "#723f71",
+				"accent": "#e19bde",
+				"new-line": "#593c58",
+				"avatar-ink": "#e8a2e5",
+				"avatar-ground": "#392738",
+				"conversation-icon": "#4e3e4d",
+				"conversation-icon-foreground": "#d2b2d0"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#f1c3ed",
+				"accent": "#8a4487",
+				"new-line": "#d4b0d1",
+				"avatar-ink": "#9d5699",
+				"avatar-ground": "#f6e0f4",
+				"conversation-icon": "#f2ddf0",
+				"conversation-icon-foreground": "#664a64"
+			},
+			"dark": {
+				"bubble": "#733f70",
+				"accent": "#e29bdd",
+				"new-line": "#5a3c58",
+				"avatar-ink": "#e9a1e4",
+				"avatar-ground": "#392638",
+				"conversation-icon": "#4e3e4c",
+				"conversation-icon-foreground": "#d2b2cf"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#f1c3ec",
+				"accent": "#8b4486",
+				"new-line": "#d5b0d0",
+				"avatar-ink": "#9e5598",
+				"avatar-ground": "#f6e0f3",
+				"conversation-icon": "#f2ddef",
+				"conversation-icon-foreground": "#674a64"
+			},
+			"dark": {
+				"bubble": "#733e6f",
+				"accent": "#e39bdc",
+				"new-line": "#5a3c57",
+				"avatar-ink": "#e9a1e3",
+				"avatar-ground": "#392637",
+				"conversation-icon": "#4e3d4c",
+				"conversation-icon-foreground": "#d2b2cf"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#f2c3eb",
+				"accent": "#8c4385",
+				"new-line": "#d5b0d0",
+				"avatar-ink": "#9f5597",
+				"avatar-ground": "#f6e0f3",
+				"conversation-icon": "#f2ddef",
+				"conversation-icon-foreground": "#674a63"
+			},
+			"dark": {
+				"bubble": "#733e6e",
+				"accent": "#e49bdb",
+				"new-line": "#5a3b57",
+				"avatar-ink": "#eaa1e1",
+				"avatar-ground": "#3a2637",
+				"conversation-icon": "#4e3d4c",
+				"conversation-icon-foreground": "#d3b2ce"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#f2c3ea",
+				"accent": "#8c4384",
+				"new-line": "#d6b0cf",
+				"avatar-ink": "#9f5596",
+				"avatar-ground": "#f7e0f2",
+				"conversation-icon": "#f3ddef",
+				"conversation-icon-foreground": "#674a63"
+			},
+			"dark": {
+				"bubble": "#753e6e",
+				"accent": "#e49ada",
+				"new-line": "#5b3b56",
+				"avatar-ink": "#eba1e0",
+				"avatar-ground": "#3a2637",
+				"conversation-icon": "#4e3d4c",
+				"conversation-icon-foreground": "#d3b1cd"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#f3c3ea",
+				"accent": "#8d4383",
+				"new-line": "#d6b0cf",
+				"avatar-ink": "#a05495",
+				"avatar-ground": "#f7e0f2",
+				"conversation-icon": "#f3ddee",
+				"conversation-icon-foreground": "#684a62"
+			},
+			"dark": {
+				"bubble": "#753e6d",
+				"accent": "#e59ad8",
+				"new-line": "#5b3b56",
+				"avatar-ink": "#eca0df",
+				"avatar-ground": "#3a2636",
+				"conversation-icon": "#4f3d4b",
+				"conversation-icon-foreground": "#d4b1cd"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#f4c2e9",
+				"accent": "#8e4381",
+				"new-line": "#d7b0ce",
+				"avatar-ink": "#a15494",
+				"avatar-ground": "#f7e0f2",
+				"conversation-icon": "#f3ddee",
+				"conversation-icon-foreground": "#684a62"
+			},
+			"dark": {
+				"bubble": "#753d6b",
+				"accent": "#e69ad7",
+				"new-line": "#5b3b55",
+				"avatar-ink": "#eda0de",
+				"avatar-ground": "#3a2636",
+				"conversation-icon": "#4f3d4b",
+				"conversation-icon-foreground": "#d4b1cc"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#f4c2e8",
+				"accent": "#8f4280",
+				"new-line": "#d7b0cd",
+				"avatar-ink": "#a25492",
+				"avatar-ground": "#f8e0f1",
+				"conversation-icon": "#f3dded",
+				"conversation-icon-foreground": "#684a61"
+			},
+			"dark": {
+				"bubble": "#763e6b",
+				"accent": "#e79ad6",
+				"new-line": "#5c3b55",
+				"avatar-ink": "#eea0dc",
+				"avatar-ground": "#3a2636",
+				"conversation-icon": "#4f3d4b",
+				"conversation-icon-foreground": "#d5b1cc"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#f5c2e7",
+				"accent": "#8f427f",
+				"new-line": "#d7b0cd",
+				"avatar-ink": "#a25491",
+				"avatar-ground": "#f8e0f1",
+				"conversation-icon": "#f4dded",
+				"conversation-icon-foreground": "#694a61"
+			},
+			"dark": {
+				"bubble": "#763d69",
+				"accent": "#e899d5",
+				"new-line": "#5c3b54",
+				"avatar-ink": "#eea0db",
+				"avatar-ground": "#3b2635",
+				"conversation-icon": "#4f3d4a",
+				"conversation-icon-foreground": "#d5b1cb"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#f5c2e6",
+				"accent": "#90427e",
+				"new-line": "#d8afcc",
+				"avatar-ink": "#a35390",
+				"avatar-ground": "#f8dff0",
+				"conversation-icon": "#f4dded",
+				"conversation-icon-foreground": "#694a60"
+			},
+			"dark": {
+				"bubble": "#773d69",
+				"accent": "#e899d3",
+				"new-line": "#5c3b53",
+				"avatar-ink": "#ef9fda",
+				"avatar-ground": "#3b2635",
+				"conversation-icon": "#503d4a",
+				"conversation-icon-foreground": "#d5b1cb"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#f6c2e6",
+				"accent": "#91417d",
+				"new-line": "#d8afcb",
+				"avatar-ink": "#a4538f",
+				"avatar-ground": "#f8dff0",
+				"conversation-icon": "#f4ddec",
+				"conversation-icon-foreground": "#694a60"
+			},
+			"dark": {
+				"bubble": "#783d68",
+				"accent": "#e999d2",
+				"new-line": "#5d3b53",
+				"avatar-ink": "#f09fd9",
+				"avatar-ground": "#3b2635",
+				"conversation-icon": "#503d4a",
+				"conversation-icon-foreground": "#d6b1ca"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#f6c2e5",
+				"accent": "#91417b",
+				"new-line": "#d9afcb",
+				"avatar-ink": "#a4538d",
+				"avatar-ground": "#f9dff0",
+				"conversation-icon": "#f4ddec",
+				"conversation-icon-foreground": "#6a4a5f"
+			},
+			"dark": {
+				"bubble": "#783d67",
+				"accent": "#ea99d1",
+				"new-line": "#5d3b52",
+				"avatar-ink": "#f19fd7",
+				"avatar-ground": "#3b2634",
+				"conversation-icon": "#503d4a",
+				"conversation-icon-foreground": "#d6b1c9"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#f7c2e4",
+				"accent": "#92417a",
+				"new-line": "#d9afca",
+				"avatar-ink": "#a5538c",
+				"avatar-ground": "#f9dfef",
+				"conversation-icon": "#f5ddec",
+				"conversation-icon-foreground": "#6a495f"
+			},
+			"dark": {
+				"bubble": "#783c66",
+				"accent": "#eb98cf",
+				"new-line": "#5d3b52",
+				"avatar-ink": "#f19fd6",
+				"avatar-ground": "#3b2634",
+				"conversation-icon": "#503d49",
+				"conversation-icon-foreground": "#d6b1c9"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#f7c1e3",
+				"accent": "#924179",
+				"new-line": "#d9afc9",
+				"avatar-ink": "#a6528b",
+				"avatar-ground": "#f9dfef",
+				"conversation-icon": "#f5dceb",
+				"conversation-icon-foreground": "#6a495e"
+			},
+			"dark": {
+				"bubble": "#793d66",
+				"accent": "#eb98ce",
+				"new-line": "#5e3b51",
+				"avatar-ink": "#f29ed5",
+				"avatar-ground": "#3c2634",
+				"conversation-icon": "#503d49",
+				"conversation-icon-foreground": "#d7b1c8"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#f8c1e2",
+				"accent": "#934078",
+				"new-line": "#daafc9",
+				"avatar-ink": "#a6528a",
+				"avatar-ground": "#f9dfee",
+				"conversation-icon": "#f5dceb",
+				"conversation-icon-foreground": "#6a495e"
+			},
+			"dark": {
+				"bubble": "#793c64",
+				"accent": "#ec98cd",
+				"new-line": "#5e3a51",
+				"avatar-ink": "#f39ed3",
+				"avatar-ground": "#3c2633",
+				"conversation-icon": "#503d49",
+				"conversation-icon-foreground": "#d7b1c8"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#f8c1e1",
+				"accent": "#944076",
+				"new-line": "#daafc8",
+				"avatar-ink": "#a75288",
+				"avatar-ground": "#fadfee",
+				"conversation-icon": "#f5dcea",
+				"conversation-icon-foreground": "#6b495d"
+			},
+			"dark": {
+				"bubble": "#7a3c64",
+				"accent": "#ed98cc",
+				"new-line": "#5e3a50",
+				"avatar-ink": "#f49ed2",
+				"avatar-ground": "#3c2633",
+				"conversation-icon": "#513d48",
+				"conversation-icon-foreground": "#d8b0c7"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#f9c1e0",
+				"accent": "#944075",
+				"new-line": "#dbafc7",
+				"avatar-ink": "#a85287",
+				"avatar-ground": "#fadfee",
+				"conversation-icon": "#f6dcea",
+				"conversation-icon-foreground": "#6b495d"
+			},
+			"dark": {
+				"bubble": "#7b3c63",
+				"accent": "#ed98ca",
+				"new-line": "#5f3a50",
+				"avatar-ink": "#f49ed1",
+				"avatar-ground": "#3c2633",
+				"conversation-icon": "#513d48",
+				"conversation-icon-foreground": "#d8b0c6"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#f9c1e0",
+				"accent": "#954074",
+				"new-line": "#dbafc7",
+				"avatar-ink": "#a85186",
+				"avatar-ground": "#fadfed",
+				"conversation-icon": "#f6dcea",
+				"conversation-icon-foreground": "#6b495c"
+			},
+			"dark": {
+				"bubble": "#7b3c62",
+				"accent": "#ee97c9",
+				"new-line": "#5f3a4f",
+				"avatar-ink": "#f59ecf",
+				"avatar-ground": "#3c2632",
+				"conversation-icon": "#513d48",
+				"conversation-icon-foreground": "#d8b0c6"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#fac1df",
+				"accent": "#954073",
+				"new-line": "#dbafc6",
+				"avatar-ink": "#a95184",
+				"avatar-ground": "#fadfed",
+				"conversation-icon": "#f6dce9",
+				"conversation-icon-foreground": "#6b495c"
+			},
+			"dark": {
+				"bubble": "#7b3b60",
+				"accent": "#ef97c8",
+				"new-line": "#5f3a4e",
+				"avatar-ink": "#f69ece",
+				"avatar-ground": "#3d2632",
+				"conversation-icon": "#513d47",
+				"conversation-icon-foreground": "#d9b0c5"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#fac1de",
+				"accent": "#963f71",
+				"new-line": "#dcafc5",
+				"avatar-ink": "#a95183",
+				"avatar-ground": "#fbdfec",
+				"conversation-icon": "#f6dce9",
+				"conversation-icon-foreground": "#6c495b"
+			},
+			"dark": {
+				"bubble": "#7c3c60",
+				"accent": "#ef97c6",
+				"new-line": "#5f3a4e",
+				"avatar-ink": "#f69dcd",
+				"avatar-ground": "#3d2532",
+				"conversation-icon": "#513d47",
+				"conversation-icon-foreground": "#d9b0c4"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#fbc1dd",
+				"accent": "#963f70",
+				"new-line": "#dcafc4",
+				"avatar-ink": "#aa5182",
+				"avatar-ground": "#fbdfec",
+				"conversation-icon": "#f6dce8",
+				"conversation-icon-foreground": "#6c495b"
+			},
+			"dark": {
+				"bubble": "#7c3c5f",
+				"accent": "#f097c5",
+				"new-line": "#603a4d",
+				"avatar-ink": "#f79dcb",
+				"avatar-ground": "#3d2531",
+				"conversation-icon": "#513d47",
+				"conversation-icon-foreground": "#d9b0c4"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#fbc1dc",
+				"accent": "#973f6f",
+				"new-line": "#dcafc4",
+				"avatar-ink": "#aa5180",
+				"avatar-ground": "#fbdfec",
+				"conversation-icon": "#f7dce8",
+				"conversation-icon-foreground": "#6c495a"
+			},
+			"dark": {
+				"bubble": "#7c3b5d",
+				"accent": "#f197c4",
+				"new-line": "#603a4d",
+				"avatar-ink": "#f79dca",
+				"avatar-ground": "#3d2531",
+				"conversation-icon": "#523d46",
+				"conversation-icon-foreground": "#dab0c3"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#fbc1db",
+				"accent": "#973f6e",
+				"new-line": "#ddaec3",
+				"avatar-ink": "#ab517f",
+				"avatar-ground": "#fbdfeb",
+				"conversation-icon": "#f7dce8",
+				"conversation-icon-foreground": "#6c4959"
+			},
+			"dark": {
+				"bubble": "#7d3b5d",
+				"accent": "#f197c2",
+				"new-line": "#603a4c",
+				"avatar-ink": "#f89dc9",
+				"avatar-ground": "#3d2531",
+				"conversation-icon": "#523d46",
+				"conversation-icon-foreground": "#dab0c3"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#fcc1da",
+				"accent": "#983f6c",
+				"new-line": "#ddaec2",
+				"avatar-ink": "#ab507e",
+				"avatar-ground": "#fcdfeb",
+				"conversation-icon": "#f7dce7",
+				"conversation-icon-foreground": "#6d4959"
+			},
+			"dark": {
+				"bubble": "#7e3b5c",
+				"accent": "#f297c1",
+				"new-line": "#603a4c",
+				"avatar-ink": "#f99dc7",
+				"avatar-ground": "#3d2530",
+				"conversation-icon": "#523d46",
+				"conversation-icon-foreground": "#dab0c2"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#fcc1d9",
+				"accent": "#983f6b",
+				"new-line": "#ddaec2",
+				"avatar-ink": "#ac507c",
+				"avatar-ground": "#fcdfea",
+				"conversation-icon": "#f7dce7",
+				"conversation-icon-foreground": "#6d4958"
+			},
+			"dark": {
+				"bubble": "#7e3b5b",
+				"accent": "#f297bf",
+				"new-line": "#613a4b",
+				"avatar-ink": "#f99dc6",
+				"avatar-ground": "#3d2530",
+				"conversation-icon": "#523d45",
+				"conversation-icon-foreground": "#dab0c1"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#fdc0d8",
+				"accent": "#993e6a",
+				"new-line": "#deaec1",
+				"avatar-ink": "#ac507b",
+				"avatar-ground": "#fcdfea",
+				"conversation-icon": "#f7dce6",
+				"conversation-icon-foreground": "#6d4958"
+			},
+			"dark": {
+				"bubble": "#7e3b5a",
+				"accent": "#f396be",
+				"new-line": "#613a4a",
+				"avatar-ink": "#fa9dc4",
+				"avatar-ground": "#3e252f",
+				"conversation-icon": "#523d45",
+				"conversation-icon-foreground": "#dbb0c1"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#fdc0d8",
+				"accent": "#993e68",
+				"new-line": "#deaec0",
+				"avatar-ink": "#ad507a",
+				"avatar-ground": "#fcdfe9",
+				"conversation-icon": "#f8dce6",
+				"conversation-icon-foreground": "#6d4957"
+			},
+			"dark": {
+				"bubble": "#7f3b59",
+				"accent": "#f396bd",
+				"new-line": "#613a4a",
+				"avatar-ink": "#fa9dc3",
+				"avatar-ground": "#3e252f",
+				"conversation-icon": "#523d45",
+				"conversation-icon-foreground": "#dbb0c0"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#fdc0d7",
+				"accent": "#9a3e67",
+				"new-line": "#deaec0",
+				"avatar-ink": "#ad5078",
+				"avatar-ground": "#fcdfe9",
+				"conversation-icon": "#f8dce6",
+				"conversation-icon-foreground": "#6e4957"
+			},
+			"dark": {
+				"bubble": "#7f3b58",
+				"accent": "#f496bb",
+				"new-line": "#613a49",
+				"avatar-ink": "#fb9dc2",
+				"avatar-ground": "#3e252f",
+				"conversation-icon": "#523d44",
+				"conversation-icon-foreground": "#dbb0bf"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#fec0d6",
+				"accent": "#9a3e66",
+				"new-line": "#deaebf",
+				"avatar-ink": "#ae5077",
+				"avatar-ground": "#fcdfe8",
+				"conversation-icon": "#f8dce5",
+				"conversation-icon-foreground": "#6e4956"
+			},
+			"dark": {
+				"bubble": "#7f3b57",
+				"accent": "#f496ba",
+				"new-line": "#613a49",
+				"avatar-ink": "#fb9cc0",
+				"avatar-ground": "#3e252e",
+				"conversation-icon": "#523c44",
+				"conversation-icon-foreground": "#dbb0bf"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#fec0d5",
+				"accent": "#9a3e64",
+				"new-line": "#dfaebe",
+				"avatar-ink": "#ae5075",
+				"avatar-ground": "#fddfe8",
+				"conversation-icon": "#f8dce5",
+				"conversation-icon-foreground": "#6e4956"
+			},
+			"dark": {
+				"bubble": "#7f3a55",
+				"accent": "#f596b8",
+				"new-line": "#623a48",
+				"avatar-ink": "#fc9cbf",
+				"avatar-ground": "#3e252e",
+				"conversation-icon": "#533c44",
+				"conversation-icon-foreground": "#dcb0be"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#fec0d4",
+				"accent": "#9b3e63",
+				"new-line": "#dfaebd",
+				"avatar-ink": "#af5074",
+				"avatar-ground": "#fddfe8",
+				"conversation-icon": "#f8dce4",
+				"conversation-icon-foreground": "#6e4955"
+			},
+			"dark": {
+				"bubble": "#803b55",
+				"accent": "#f596b7",
+				"new-line": "#623a47",
+				"avatar-ink": "#fc9cbd",
+				"avatar-ground": "#3e252e",
+				"conversation-icon": "#533c44",
+				"conversation-icon-foreground": "#dcb0bd"
+			}
+		},
+		{
+			"light": {
+				"bubble": "#ffc0d3",
+				"accent": "#9b3e62",
+				"new-line": "#dfaebd",
+				"avatar-ink": "#af5073",
+				"avatar-ground": "#fddfe7",
+				"conversation-icon": "#f8dce4",
+				"conversation-icon-foreground": "#6e4954"
+			},
+			"dark": {
+				"bubble": "#803b54",
+				"accent": "#f696b6",
+				"new-line": "#623a47",
+				"avatar-ink": "#fc9cbc",
+				"avatar-ground": "#3e252d",
+				"conversation-icon": "#533c43",
+				"conversation-icon-foreground": "#dcb0bd"
+			}
+		}
+	]
+}
