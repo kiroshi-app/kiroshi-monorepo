@@ -37,6 +37,7 @@ const bots = {
 		},
 		actions: "Actions for {{name}}",
 		titled: "{{name}} · {{title}}",
+		openInNewTab: "Open in a new tab",
 		settings: "Open settings",
 		duplicate: "Duplicate",
 		spaces: {

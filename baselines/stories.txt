@@ -1005,6 +1005,7 @@ navigation-appsidebarconversationrow--row-in-pink
 navigation-appsidebarconversationrow--row-in-purple
 navigation-appsidebarconversationrow--row-in-red
 navigation-appsidebarconversationrow--row-in-yellow
+navigation-appsidebarconversationrow--row-menu-opens-in-a-new-tab
 navigation-appsidebarconversationrow--row-with-a-badge-and-a-pile
 navigation-appsidebarconversationrow--row-with-five-bots
 navigation-appsidebarconversationrow--row-with-one-bot
@@ -1051,6 +1052,8 @@ navigation-apptitlebar--a-6-empty-tab
 navigation-apptitlebar--a-6-empty-tab-dark
 navigation-apptitlebar--overflow-follows-the-strip
 navigation-apptitlebar--tab-gestures
+navigation-apptitlebar--unpinned-tab-menu
+navigation-apptitlebar--unpinned-tab-menu-dark
 navigation-apptitlebar--with-window-controls
 navigation-conversationbotpile--five-bots-show-two-and-a-counter
 navigation-conversationbotpile--one-bot
@@ -1218,6 +1221,7 @@ navigation-userchip--without-name
 navigation-userchip--without-picture
 overlays-companionmenu--default
 overlays-companionmenu--header-labels-its-items
+overlays-companionmenu--open-in-a-new-tab
 overlays-companionmenu--pinned
 overlays-companionmenu--with-header
 overlays-companionmenu--with-header-untitled

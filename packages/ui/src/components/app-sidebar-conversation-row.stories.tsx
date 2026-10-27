@@ -1,4 +1,11 @@
-import { expect, fn, userEvent, within } from "storybook/test"
+import {
+	expect,
+	fireEvent,
+	fn,
+	screen,
+	userEvent,
+	within,
+} from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
@@ -8,6 +15,7 @@ import {
 	expectQuestionCutInsideTheRow,
 	glyphIn,
 	SidebarFrame,
+	shown,
 	slotIn,
 	slotsIn,
 } from "@workspace/storybook/story-utils"
@@ -63,6 +71,45 @@ export const PinnedConversationWithAWorkingBot = meta.story({
 			DESK_ROOM.id,
 			NO_CLICK_MODIFIERS,
 		)
+	},
+})
+
+export const RowMenuOpensInANewTab = meta.story({
+	args: {
+		onOpenInNewTab: fn(),
+		onUnpin: fn(),
+		onOpenSettings: fn(),
+		onDelete: fn(),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The menu of a pinned conversation row, opened with a right click, on a host that can open the conversation in a tab of its own. Check that Open in a new tab comes first with its own separator under it, that Unpin, Open settings and Delete follow unchanged, and that choosing it reports the conversation.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		fireEvent.contextMenu(slotIn(canvasElement, "sidebar-menu-button"))
+		const menu = await shown(
+			await screen.findByRole("menu", {
+				name: `Actions for ${DESK_ROOM.name}`,
+			}),
+		)
+		const rows = within(menu).getAllByRole("menuitem")
+
+		await expect(rows.map((row) => row.textContent)).toEqual([
+			"Open in a new tab",
+			"Unpin",
+			"Open settings",
+			"Delete",
+		])
+		await expect(rows[0].nextElementSibling).toHaveAttribute(
+			"role",
+			"separator",
+		)
+		await userEvent.click(rows[0])
+		await expect(args.onOpenInNewTab).toHaveBeenCalledWith(DESK_ROOM.id)
 	},
 })
 

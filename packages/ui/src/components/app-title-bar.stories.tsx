@@ -75,6 +75,9 @@ const meta = preview.meta({
 		onPinTab: fn(),
 		onUnpinTab: fn(),
 		onCloseOtherTabs: fn(),
+		onDuplicateTab: fn(),
+		onReopenClosedTab: fn(),
+		onMoveTabToNewWindow: fn(),
 		onNewTab: fn(),
 		onGoBack: fn(),
 		onGoForward: fn(),
@@ -428,6 +431,91 @@ export const A3OverflowDark = meta.story({
 	play: playA3,
 })
 
+const tabMenuRowsFor = (pinRow: string) => [
+	pinRow,
+	"New tab⌘T",
+	"Duplicate tab",
+	"Reopen last closed tab⌘⇧T",
+	"Close tab⌘W",
+	"Close other tabs⌘⌥W",
+	"Move to new window",
+]
+
+const UNHINTED_TAB_MENU_ROWS = ["Duplicate tab", "Move to new window"]
+
+const expectTabMenu = async (menu: HTMLElement, pinRow: string) => {
+	const rows = within(menu).getAllByRole("menuitem")
+	await expect(rows.map((row) => row.textContent)).toEqual(
+		tabMenuRowsFor(pinRow),
+	)
+	for (const row of rows) {
+		await expect(
+			row.querySelector('[data-slot="context-menu-shortcut"]') === null,
+		).toBe(UNHINTED_TAB_MENU_ROWS.includes(row.textContent ?? ""))
+		await expect(row.scrollWidth).toBe(row.clientWidth)
+	}
+	const [, , duplicate, reopen] = rows
+	const [afterDuplicate, afterReopen] = within(menu).getAllByRole("separator")
+	await expect(duplicate.nextElementSibling).toBe(afterDuplicate)
+	await expect(reopen.nextElementSibling).toBe(afterReopen)
+	await expect(reopen).toHaveAttribute("aria-disabled", "true")
+}
+
+const tabMenuRow = (menu: HTMLElement, label: string) =>
+	within(menu).getByRole("menuitem", { name: label })
+
+const UNPINNED_TAB_MENU = {
+	tabs: [PINNED_INBOX, RELEASE_NOTES, LOGIN_REDIRECT, WEEKLY_PLANNING],
+	activeTabId: RELEASE_NOTES.id,
+} satisfies Partial<AppTitleBarProps>
+
+const playUnpinnedTabMenu = async ({
+	canvasElement,
+}: {
+	canvasElement: HTMLElement
+}) => {
+	fireEvent.contextMenu(
+		within(barIn(canvasElement)).getByRole("tab", {
+			name: LOGIN_REDIRECT.title,
+		}),
+	)
+	const menu = await openMenu()
+	await expect(boxOf(menu).width).toBeGreaterThanOrEqual(220)
+	await expectTabMenu(menu, "Pin tabCtrl⇧P")
+	await expect(tabMenuRow(menu, "Close tab")).not.toHaveAttribute(
+		"aria-disabled",
+	)
+}
+
+export const UnpinnedTabMenu = meta.story({
+	args: UNPINNED_TAB_MENU,
+	parameters: {
+		a11y: A11Y_FLOATING_FOCUS_GUARDS,
+		docs: {
+			description: {
+				story:
+					"Light: the menu of an unpinned tab, opened with a right click, with no closed tab to bring back. Check it reads Pin tab, New tab, Duplicate tab, a separator, Reopen last closed tab, a separator, then Close tab, Close other tabs and Move to new window, that every row but Duplicate tab and Move to new window ends on its shortcut hint, and that Reopen last closed tab is greyed out while Close tab is live. Pick `UnpinnedTabMenuDark` for the dark theme, `A4PinnedTab` for the menu of a pinned tab.",
+			},
+		},
+	},
+	play: playUnpinnedTabMenu,
+})
+
+export const UnpinnedTabMenuDark = meta.story({
+	args: UNPINNED_TAB_MENU,
+	globals: DARK,
+	parameters: {
+		a11y: A11Y_FLOATING_FOCUS_GUARDS,
+		docs: {
+			description: {
+				story:
+					"Dark: the menu of an unpinned tab on the raised dark menu, its hints in the muted grey. Pick `UnpinnedTabMenu` for the light theme.",
+			},
+		},
+	},
+	play: playUnpinnedTabMenu,
+})
+
 const A4 = {
 	tabs: [PINNED_INBOX, RELEASE_NOTES, LOGIN_REDIRECT, WEEKLY_PLANNING],
 	activeTabId: RELEASE_NOTES.id,
@@ -454,12 +542,12 @@ const playA4 = async ({ canvasElement }: { canvasElement: HTMLElement }) => {
 
 	fireEvent.contextMenu(pinned)
 	const menu = await openMenu()
-	await expect(boxOf(menu).width).toBe(220)
-	await expect(
-		within(menu)
-			.getAllByRole("menuitem")
-			.map((item) => item.textContent),
-	).toEqual(["Unpin tab", "Close other tabs"])
+	await expect(boxOf(menu).width).toBeGreaterThanOrEqual(220)
+	await expectTabMenu(menu, "Unpin tabCtrl⇧P")
+	await expect(tabMenuRow(menu, "Close tab")).toHaveAttribute(
+		"aria-disabled",
+		"true",
+	)
 }
 
 export const A4PinnedTab = meta.story({
@@ -469,7 +557,7 @@ export const A4PinnedTab = meta.story({
 		docs: {
 			description: {
 				story:
-					"A4, light: a pinned tab at the start of the row, its menu open. Check the pinned tab is a 28px icon-only square named by its title, followed by the 1px by 16px divider, that the unpinned tabs follow, and that its menu, 220px wide, offers exactly Unpin tab then Close other tabs. Pick `A1Tabs` for a row with nothing pinned.",
+					"A4, light: a pinned tab at the start of the row, its menu open. Check the pinned tab is a 28px icon-only square named by its title, followed by the 1px by 16px divider, that the unpinned tabs follow, and that its menu, at least 220px wide and wider when a row needs it, offers Unpin tab in place of Pin tab with Close tab greyed out, since a pinned tab does not close. Pick `A1Tabs` for a row with nothing pinned.",
 			},
 		},
 	},
@@ -621,13 +709,14 @@ export const TabGestures = meta.story({
 		tabs: [PINNED_INBOX, ...TWELVE_TABS],
 		activeTabId: RELEASE_NOTES.id,
 		canGoForward: true,
+		hasClosedTab: true,
 	},
 	parameters: {
 		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		docs: {
 			description: {
 				story:
-					"Every gesture the bar reports, on a row with a pinned tab and an overflow. Check a press on a tab selects it, a press on Close tab closes the open tab without selecting it, each menu entry reports its tab, Back, Forward and New tab each report once, focus shows on every control, and no colour on a tab, a chip, a button or a menu row runs a transition.",
+					"Every gesture the bar reports, on a row with a pinned tab and an overflow. Check a press on a tab selects it, a press on Close tab closes the open tab without selecting it, each menu entry reports its tab or, for New tab and Reopen last closed tab, reports once, Back, Forward and New tab each report once, focus shows on every control, and no colour on a tab, a chip, a button or a menu row runs a transition.",
 			},
 		},
 	},
@@ -651,10 +740,26 @@ export const TabGestures = meta.story({
 
 		fireEvent.contextMenu(bar.getByRole("tab", { name: WEEKLY_PLANNING.title }))
 		let menu = await openMenu()
-		await userEvent.click(
-			within(menu).getByRole("menuitem", { name: "Pin tab" }),
-		)
+		await userEvent.click(tabMenuRow(menu, "Pin tab"))
 		await expect(args.onPinTab).toHaveBeenCalledWith(WEEKLY_PLANNING.id)
+
+		for (const [label, callback, ...expected] of [
+			["New tab", args.onNewTab],
+			["Duplicate tab", args.onDuplicateTab, WEEKLY_PLANNING.id],
+			["Reopen last closed tab", args.onReopenClosedTab],
+			["Close tab", args.onCloseTab, WEEKLY_PLANNING.id],
+			["Move to new window", args.onMoveTabToNewWindow, WEEKLY_PLANNING.id],
+		] as const) {
+			fireEvent.contextMenu(
+				bar.getByRole("tab", { name: WEEKLY_PLANNING.title }),
+			)
+			menu = await openMenu()
+			await expect(tabMenuRow(menu, label)).not.toHaveAttribute("aria-disabled")
+			await userEvent.click(tabMenuRow(menu, label))
+			await expect(callback).toHaveBeenLastCalledWith(...expected)
+		}
+		await expect(args.onNewTab).toHaveBeenCalledTimes(2)
+		await expect(args.onCloseTab).toHaveBeenCalledTimes(2)
 
 		fireEvent.contextMenu(bar.getByRole("tab", { name: PINNED_INBOX.title }))
 		menu = await openMenu()
@@ -666,9 +771,7 @@ export const TabGestures = meta.story({
 		await expect(args.onUnpinTab).toHaveBeenCalledWith(PINNED_INBOX.id)
 		fireEvent.contextMenu(bar.getByRole("tab", { name: PINNED_INBOX.title }))
 		menu = await openMenu()
-		await userEvent.click(
-			within(menu).getByRole("menuitem", { name: "Close other tabs" }),
-		)
+		await userEvent.click(tabMenuRow(menu, "Close other tabs"))
 		await expect(args.onCloseOtherTabs).toHaveBeenCalledWith(PINNED_INBOX.id)
 
 		const chip = chipIn(canvasElement)

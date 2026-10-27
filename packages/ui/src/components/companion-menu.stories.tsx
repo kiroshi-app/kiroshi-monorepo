@@ -61,7 +61,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"Everything the app can do to one companion, in one menu. It is the menu the roster row has always opened on a right-click, lifted out of that row so the same list can hang off any surface naming a companion — the roster row, the avatar in the transcript gutter, a mention inside a message. It is a `ContextMenuContent`, so it is given to a `ContextMenu` beside its trigger and never rendered on its own. The order is fixed: the pin toggle and its separator first, then Settings, Duplicate, the section branch, the spaces branch, and Delete apart at the bottom. Settings, Duplicate and Delete are always drawn — each calls the callback it was given and does nothing when it was given none. The three that answer to the host are the pin toggle, which needs `onPin` or `onUnpin` depending on `isPinned`, the section branch, which needs `onMoveToSection` or `onCreateSectionFor`, and the spaces branch, which needs `onAddToSpace` or `onRemoveFromSpace` plus spaces and memberships to list: each of those draws nothing at all without them. Outside the roster, `CompanionMenuProvider` is what hands this content to the transcript: it answers one companion id with one menu, and a surface it answers nothing for keeps the markup it had.",
+					"Everything the app can do to one companion, in one menu. It is the menu the roster row has always opened on a right-click, lifted out of that row so the same list can hang off any surface naming a companion — the roster row, the avatar in the transcript gutter, a mention inside a message. It is a `ContextMenuContent`, so it is given to a `ContextMenu` beside its trigger and never rendered on its own. The order is fixed: Open in a new tab and its separator first when `onOpenInNewTab` is given, then the pin toggle and its separator, then Settings, Duplicate, the section branch, the spaces branch, and Delete apart at the bottom. Settings, Duplicate and Delete are always drawn — each calls the callback it was given and does nothing when it was given none. The three that answer to the host are the pin toggle, which needs `onPin` or `onUnpin` depending on `isPinned`, the section branch, which needs `onMoveToSection` or `onCreateSectionFor`, and the spaces branch, which needs `onAddToSpace` or `onRemoveFromSpace` plus spaces and memberships to list: each of those draws nothing at all without them. Outside the roster, `CompanionMenuProvider` is what hands this content to the transcript: it answers one companion id with one menu, and a surface it answers nothing for keeps the markup it had.",
 			},
 		},
 	},
@@ -129,6 +129,32 @@ export const Pinned = meta.story({
 		const [first] = menu.getAllByRole("menuitem")
 
 		await expect(first).toHaveTextContent("Unpin")
+	},
+})
+
+export const OpenInANewTab = meta.story({
+	args: { onOpenInNewTab: fn() },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A host that can open the companion in a tab of its own. Check that Open in a new tab is the first item, fenced off by its own separator, that every item of `Default` follows it unchanged, and that choosing it reports the companion. Pick `Default` for a host that wires no tab.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const menu = await openMenu(canvas.getByText(TRIGGER_LABEL))
+		const [openInNewTab] = menu.getAllByRole("menuitem")
+
+		await expect(
+			menu.getAllByRole("menuitem").map((item) => item.textContent),
+		).toEqual(["Open in a new tab", ...ITEMS_IN_ORDER])
+		await expect(openInNewTab.nextElementSibling).toHaveAttribute(
+			"role",
+			"separator",
+		)
+		await userEvent.click(openInNewTab)
+		await expect(args.onOpenInNewTab).toHaveBeenCalledWith(ATLAS.id)
 	},
 })
 
