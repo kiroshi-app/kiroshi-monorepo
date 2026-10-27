@@ -90,7 +90,7 @@ const { createWorkspaceRouter } = await import("@/workspace-router")
 
 const OWNED = { position: 0, createdAt: 0, shared: false, instanceId: null }
 const HOME: Space = { ...OWNED, id: "home", name: "Home", colour: 42 }
-const GARAGE: Space = { ...OWNED, id: "garage", name: "Garage", colour: 257 }
+const GARAGE: Space = { ...OWNED, id: "garage", name: "Garage", colour: 210 }
 const STUDIO: JoinedSpace = {
 	id: "studio-host",
 	hostUrl: "https://studio.example",
@@ -221,7 +221,7 @@ describe.each(SETTINGS_RAILS)(
 				}),
 			)
 
-			expect(railLogoTint()).toBe(String(BLOT_HUES.blue))
+			expect(railLogoTint()).toBe("210")
 		})
 	},
 )

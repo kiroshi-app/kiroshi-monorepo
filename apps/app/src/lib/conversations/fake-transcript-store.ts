@@ -56,8 +56,7 @@ import {
 } from "./transcript-contract"
 
 import type { AgentCommand } from "@/lib/agent/contract"
-import { PRESET_HUES } from "@/lib/colour/hue-shim"
-import { deniesChanges } from "../bots/bot-settings"
+import { deniesChanges, PRESET_HUES } from "../bots/bot-settings"
 import { UNDONE_TITLE_PREFIX } from "../bots/history-runs"
 import { messageUri } from "../links/message-uri"
 
