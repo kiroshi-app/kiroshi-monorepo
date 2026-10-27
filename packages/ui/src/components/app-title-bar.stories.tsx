@@ -78,6 +78,7 @@ const meta = preview.meta({
 		onDuplicateTab: fn(),
 		onReopenClosedTab: fn(),
 		onMoveTabToNewWindow: fn(),
+		onReorderTabs: fn(),
 		onNewTab: fn(),
 		onGoBack: fn(),
 		onGoForward: fn(),
@@ -101,6 +102,36 @@ const titleOf = (tab: HTMLElement) =>
 	tab.querySelector<HTMLElement>("span:last-child") ?? tab
 
 const openMenu = async () => settled(await screen.findByRole("menu"))
+
+const POINTER = {
+	button: 0,
+	isPrimary: true,
+	pointerId: 1,
+	pointerType: "mouse",
+}
+
+const pointAt = (clientX: number, onto: Element) => ({
+	...POINTER,
+	clientX: Math.round(clientX),
+	clientY: Math.round(boxOf(onto).top + boxOf(onto).height / 2),
+})
+
+const middleOf = (element: Element) =>
+	boxOf(element).left + boxOf(element).width / 2
+
+const liftTo = (handle: HTMLElement, clientX: number) => {
+	fireEvent.pointerDown(handle, pointAt(middleOf(handle), handle))
+	fireEvent.pointerMove(handle, pointAt(middleOf(handle) + 8, handle))
+	fireEvent.pointerMove(handle, pointAt(clientX, handle))
+}
+
+const dropAt = (handle: HTMLElement, clientX: number) => {
+	fireEvent.pointerUp(handle, pointAt(clientX, handle))
+	fireEvent.click(handle)
+}
+
+const insertionsIn = (root: HTMLElement) =>
+	slotsIn(root, "title-bar-tab-insertion")
 
 const chipIn = (canvasElement: HTMLElement) =>
 	slotIn(barIn(canvasElement), "title-bar-overflow")
@@ -676,6 +707,77 @@ export const A6EmptyTabDark = meta.story({
 	play: playA6,
 })
 
+const A7 = {
+	tabs: [
+		PINNED_INBOX,
+		RELEASE_NOTES,
+		LOGIN_REDIRECT,
+		WEEKLY_PLANNING,
+		INVOICE_EXPORT,
+	],
+	activeTabId: RELEASE_NOTES.id,
+} satisfies Partial<AppTitleBarProps>
+
+const playA7 = async ({
+	args,
+	canvasElement,
+}: {
+	args: Partial<AppTitleBarProps>
+	canvasElement: HTMLElement
+}) => {
+	const bar = barIn(canvasElement)
+	const [, lifted, passed, next] = unpinnedTabsIn(canvasElement)
+	const restingLeft = boxOf(lifted).left
+	const pressedAt = middleOf(lifted)
+	const target = boxOf(passed).right
+	liftTo(lifted, target)
+
+	await waitFor(() => expect(insertionsIn(bar)).toHaveLength(1))
+	const [line] = insertionsIn(bar)
+	await expect(line.parentElement).toBe(next)
+	await expect(boxOf(line).left).toBeGreaterThan(boxOf(passed).right)
+	await expect(boxOf(line).right).toBeLessThan(boxOf(next).left)
+	await expect(getComputedStyle(line).backgroundColor).toBe(
+		tokenStyleIn(bar, "bg-foreground", "backgroundColor"),
+	)
+	await expect(getComputedStyle(lifted).pointerEvents).toBe("none")
+	await expect(boxOf(lifted).left - restingLeft).toBeCloseTo(
+		Math.round(target) - Math.round(pressedAt),
+		0,
+	)
+	await expect(getComputedStyle(lifted).backgroundColor).toBe(
+		tokenStyleIn(bar, "bg-title-bar-menu", "backgroundColor"),
+	)
+	await expect(args.onReorderTabs).not.toHaveBeenCalled()
+}
+
+export const A7DraggingTab = meta.story({
+	args: A7,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A7, light: Fix the login redirect lifted and carried past Weekly planning, held there. Check the lifted tab rides the pointer along the strip on the solid menu fill with a shadow under it, the others keep their place, and one 2px line in the foreground colour stands in the gap where it would land, before Invoice export. Pick `DragTabTwoRight` for the drop and the order it reports.",
+			},
+		},
+	},
+	play: playA7,
+})
+
+export const A7DraggingTabDark = meta.story({
+	args: A7,
+	globals: DARK,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A7, dark: the lifted tab on the raised dark menu fill and the drop line in the light foreground. Pick `A7DraggingTab` for the light theme.",
+			},
+		},
+	},
+	play: playA7,
+})
+
 export const WithWindowControls = meta.story({
 	args: {
 		...A1,
@@ -891,5 +993,131 @@ export const OverflowFollowsTheStrip = meta.story({
 			expect(tabsOutOfStrip(canvasElement, STRIP_TABS)).toEqual(overflowing),
 		)
 		await expect(chipIn(canvasElement)).toBeVisible()
+	},
+})
+
+export const DragTabTwoRight = meta.story({
+	tags: ["test-only"],
+	args: { tabs: TWELVE_TABS, activeTabId: RELEASE_NOTES.id },
+	parameters: {
+		a11y: A11Y_FLOATING_FOCUS_GUARDS,
+		docs: {
+			description: {
+				story:
+					"Placing a tab by hand on a row with an overflow. Check a press released in place selects the tab and reports no order, a drop back on its own place reports nothing, a drop two places right reports every tab id once, the overflowed ones at their place, and swallows the click it would fire, that an overflow row never lifts, and that the keyboard still selects and closes a tab.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const bar = within(barIn(canvasElement))
+		const [first, second, third, fourth] = unpinnedTabsIn(canvasElement)
+		await expect(
+			tabsOutOfStrip(canvasElement, TWELVE_TABS).length,
+		).toBeGreaterThan(0)
+
+		fireEvent.pointerDown(second, pointAt(middleOf(second), second))
+		dropAt(second, middleOf(second))
+		await expect(args.onSelectTab).toHaveBeenCalledWith(ONBOARDING_COPY.id)
+		await expect(args.onReorderTabs).not.toHaveBeenCalled()
+
+		liftTo(first, boxOf(first).right - 2)
+		await waitFor(() => expect(insertionsIn(canvasElement)).toHaveLength(1))
+		dropAt(first, boxOf(first).right - 2)
+		await waitFor(() => expect(insertionsIn(canvasElement)).toHaveLength(0))
+		await expect(args.onReorderTabs).not.toHaveBeenCalled()
+
+		liftTo(first, boxOf(third).right)
+		await waitFor(() =>
+			expect(insertionsIn(canvasElement)[0]?.parentElement).toBe(fourth),
+		)
+		dropAt(first, boxOf(third).right)
+		await expect(args.onReorderTabs).toHaveBeenCalledTimes(1)
+		await expect(args.onReorderTabs).toHaveBeenCalledWith([
+			ONBOARDING_COPY.id,
+			LOGIN_REDIRECT.id,
+			RELEASE_NOTES.id,
+			...TWELVE_TABS.slice(3).map((tab) => tab.id),
+		])
+		await expect(args.onSelectTab).toHaveBeenCalledTimes(1)
+
+		await userEvent.click(chipIn(canvasElement))
+		const menu = await openMenu()
+		const row = within(menu).getByRole("menuitem", { name: STANDUP.title })
+		fireEvent.pointerDown(row, pointAt(middleOf(row), row))
+		fireEvent.pointerMove(row, pointAt(middleOf(row) - 40, row))
+		await expect(insertionsIn(document.body)).toHaveLength(0)
+		await userEvent.keyboard("{Escape}")
+		await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
+
+		bar.getByRole("tab", { name: WEEKLY_PLANNING.title }).focus()
+		await userEvent.keyboard("{Enter}")
+		await expect(args.onSelectTab).toHaveBeenLastCalledWith(WEEKLY_PLANNING.id)
+		bar.getByRole("button", { name: "Close tab" }).focus()
+		await userEvent.keyboard("{Enter}")
+		await expect(args.onCloseTab).toHaveBeenCalledWith(RELEASE_NOTES.id)
+		await expect(args.onReorderTabs).toHaveBeenCalledTimes(1)
+	},
+})
+
+const PINNED_ROADMAP: TitleBarTab = { ...ROADMAP, isPinned: true }
+
+export const DragAcrossTheDivider = meta.story({
+	tags: ["test-only"],
+	args: {
+		tabs: [
+			PINNED_INBOX,
+			PINNED_ROADMAP,
+			RELEASE_NOTES,
+			LOGIN_REDIRECT,
+			WEEKLY_PLANNING,
+		],
+		activeTabId: RELEASE_NOTES.id,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Each zone keeps its tabs. Check a pinned tab carried past the divider lands last of the pinned zone, its line stopping before the divider, and an unpinned tab carried over the pinned tabs lands first of the unpinned zone, its line after the divider.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		const bar = barIn(canvasElement)
+		const divider = slotIn(bar, "title-bar-pinned-divider")
+		const [inbox, roadmap] = slotsIn(bar, "title-bar-pinned-tab")
+		const [release, login, weekly] = unpinnedTabsIn(canvasElement)
+
+		liftTo(inbox, middleOf(weekly))
+		await waitFor(() =>
+			expect(insertionsIn(bar)[0]?.parentElement).toBe(roadmap),
+		)
+		await expect(boxOf(insertionsIn(bar)[0]).right).toBeLessThan(
+			boxOf(divider).left,
+		)
+		dropAt(inbox, middleOf(weekly))
+		await expect(args.onReorderTabs).toHaveBeenLastCalledWith([
+			ROADMAP.id,
+			PINNED_INBOX.id,
+			RELEASE_NOTES.id,
+			LOGIN_REDIRECT.id,
+			WEEKLY_PLANNING.id,
+		])
+
+		liftTo(login, middleOf(inbox))
+		await waitFor(() =>
+			expect(insertionsIn(bar)[0]?.parentElement).toBe(release),
+		)
+		await expect(boxOf(insertionsIn(bar)[0]).left).toBeGreaterThan(
+			boxOf(divider).right,
+		)
+		dropAt(login, middleOf(inbox))
+		await expect(args.onReorderTabs).toHaveBeenLastCalledWith([
+			PINNED_INBOX.id,
+			ROADMAP.id,
+			LOGIN_REDIRECT.id,
+			RELEASE_NOTES.id,
+			WEEKLY_PLANNING.id,
+		])
+		await expect(args.onReorderTabs).toHaveBeenCalledTimes(2)
 	},
 })

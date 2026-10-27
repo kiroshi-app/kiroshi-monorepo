@@ -1055,6 +1055,10 @@ navigation-apptitlebar--a-5-needs-you
 navigation-apptitlebar--a-5-needs-you-dark
 navigation-apptitlebar--a-6-empty-tab
 navigation-apptitlebar--a-6-empty-tab-dark
+navigation-apptitlebar--a-7-dragging-tab
+navigation-apptitlebar--a-7-dragging-tab-dark
+navigation-apptitlebar--drag-across-the-divider
+navigation-apptitlebar--drag-tab-two-right
 navigation-apptitlebar--overflow-follows-the-strip
 navigation-apptitlebar--tab-gestures
 navigation-apptitlebar--unpinned-tab-menu
