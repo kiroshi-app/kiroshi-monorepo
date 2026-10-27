@@ -1,7 +1,14 @@
 // @vitest-environment happy-dom
 
 import { RouterProvider } from "@tanstack/react-router"
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
+import {
+	act,
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+	within,
+} from "@testing-library/react"
 import { createElement } from "react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
@@ -105,12 +112,14 @@ type RailHarnessProps = {
 	selectedSpaceId: string
 	railSettings?: SettingsPanels["railSettings"]
 	navigation?: Partial<SettingsNavigation>
+	onSelectSpace?: (id: string) => void
 }
 
 const RailHarness = ({
 	selectedSpaceId,
 	railSettings = "space",
 	navigation = {},
+	onSelectSpace = () => undefined,
 }: RailHarnessProps) => {
 	const switcher = useSwitcherSpaces(
 		{ spaces: [HOME, GARAGE], selectedSpaceId },
@@ -133,22 +142,31 @@ const RailHarness = ({
 		overlay: {} as WorkspaceOverlay,
 		panels: { railSettings } as SettingsPanels,
 		requestLeave: (leave) => leave(),
-		rosterLines: {} as RosterLines,
-		rosterLists: {} as RosterLists,
+		rosterLines: {
+			sidebarActions: { onCreateSpace: () => undefined },
+		} as RosterLines,
+		rosterLists: { badgesBySpaceId: {} } as RosterLists,
 		sidebarTab: { openTab: "conversations" } as ReturnType<
 			typeof useSidebarPanelSwitch
 		>,
-		space: switcher.selectedSpace,
-		spaceHost: switcher.selectedSpace
-			? switcher.hostBySpaceId[switcher.selectedSpace.id]
-			: undefined,
+		switcher,
+		onSelectSpace,
 	})
 }
 
+const railOf = () =>
+	screen.getByRole("navigation", { name: i18n.t("bots:rail.label") })
+
 const railLogo = () =>
-	screen
-		.getByRole("button", { name: SPACE_SETTINGS })
-		.querySelector<HTMLElement>("[data-slot='space-avatar']")
+	railOf().querySelector<HTMLElement>("[data-slot='space-avatar']")
+
+const openSpacesMenu = () => {
+	const trigger = railLogo()?.closest("button")
+	act(() => {
+		fireEvent.click(trigger as HTMLElement)
+	})
+	return screen.getByRole("menu", { name: i18n.t("bots:spaces.label") })
+}
 
 const railLogoTint = () => railLogo()?.dataset.colour
 
@@ -212,7 +230,7 @@ describe("the rail on a settings screen", () => {
 		expect(railLogo()?.dataset.state).toBe("connecting")
 	})
 
-	it("opens the selected Space settings when its logo is pressed", () => {
+	it("opens the Spaces menu from its logo, its Space settings opening the selected Space settings", () => {
 		const openSpaceSettings = vi.fn()
 		render(
 			createElement(RailHarness, {
@@ -221,9 +239,43 @@ describe("the rail on a settings screen", () => {
 			}),
 		)
 
-		fireEvent.click(screen.getByRole("button", { name: SPACE_SETTINGS }))
+		const menu = openSpacesMenu()
+		expect(openSpaceSettings).not.toHaveBeenCalled()
+		act(() => {
+			fireEvent.click(
+				within(menu).getByRole("menuitem", { name: SPACE_SETTINGS }),
+			)
+		})
 
 		expect(openSpaceSettings).toHaveBeenCalledExactlyOnceWith(GARAGE.id)
+	})
+
+	it("switches to the Space picked in its Spaces menu", () => {
+		const onSelectSpace = vi.fn()
+		render(
+			createElement(RailHarness, { selectedSpaceId: HOME.id, onSelectSpace }),
+		)
+
+		const menu = openSpacesMenu()
+		act(() => {
+			fireEvent.click(
+				within(menu).getByRole("menuitemradio", { name: /Garage/ }),
+			)
+		})
+
+		expect(onSelectSpace).toHaveBeenCalledExactlyOnceWith(GARAGE.id)
+	})
+
+	it("offers to create a space in its Spaces menu", () => {
+		render(createElement(RailHarness, { selectedSpaceId: HOME.id }))
+
+		const menu = openSpacesMenu()
+
+		expect(
+			within(menu).getByRole("menuitem", {
+				name: i18n.t("bots:spaces.create"),
+			}),
+		).toBeTruthy()
 	})
 })
 

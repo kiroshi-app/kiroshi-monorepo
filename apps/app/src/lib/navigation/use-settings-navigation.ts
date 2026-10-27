@@ -2,6 +2,7 @@ import { useNavigate, useRouter } from "@tanstack/react-router"
 import { useMemo } from "react"
 
 import type { CompanionSettingsSearch, SettingsSearch } from "./settings-search"
+import type { ThreadSearch } from "./thread-search"
 
 import { heldThreadOf, type ThreadHolder } from "../tabs/use-tab-thread-sync"
 
@@ -32,6 +33,10 @@ export const useSettingsNavigation = (holder: ThreadHolder) => {
 				backOr(() => void navigate({ to: "/settings/user", replace: true })),
 			openConversations: () => {
 				void navigate({ to: "/", search: heldThreadOf(holder) })
+			},
+			openThreadInNewTab: (thread: ThreadSearch) => {
+				const { href } = router.buildLocation({ to: "/", search: thread })
+				router.options.context.tabs.openInNewTab(href)
 			},
 			openSpaceSettings: (spaceId: string, search: SettingsSearch = {}) => {
 				void navigate({

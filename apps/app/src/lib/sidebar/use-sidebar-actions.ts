@@ -1,7 +1,11 @@
 import { useMemo } from "react"
 
-import type { AppSidebarProps } from "@workspace/ui/components/app-sidebar"
+import type {
+	AppSidebarProps,
+	SidebarClickModifiers,
+} from "@workspace/ui/components/app-sidebar"
 
+import { usesCommandKey } from "../host"
 import type { RosterController } from "../bots/roster-controller"
 import type { AttachmentsController } from "../chat/attachments-controller"
 import type { DraftsController } from "../chat/drafts-controller"
@@ -50,7 +54,10 @@ export type SidebarActions = Required<
 
 type SettingsOpening = Pick<
 	SettingsNavigation,
-	"openCompanionSettings" | "openSpaceSettings" | "openUserSettings"
+	| "openCompanionSettings"
+	| "openSpaceSettings"
+	| "openThreadInNewTab"
+	| "openUserSettings"
 >
 
 export type SidebarActionsSource = {
@@ -69,6 +76,14 @@ export type SidebarActionsSource = {
 const localSpaceIdsIn = (spaces: SpacesController, ids: string[]) => {
 	const localIds = new Set(spaces.getState().spaces.map((space) => space.id))
 	return ids.filter((id) => localIds.has(id))
+}
+
+const opensInNewTab = (modifiers: SidebarClickModifiers | undefined) => {
+	if (!modifiers) {
+		return false
+	}
+	const isModHeld = usesCommandKey() ? modifiers.meta : modifiers.ctrl
+	return modifiers.middle || isModHeld
 }
 
 const openSpaceRowId = (
@@ -156,7 +171,11 @@ export const useSidebarActions = ({
 			onReorderSpaces: (ids) => {
 				void spaces.reorder(localSpaceIdsIn(spaces, ids))
 			},
-			onSelectBot: (id) => {
+			onSelectBot: (id, modifiers) => {
+				if (opensInNewTab(modifiers)) {
+					settings.openThreadInNewTab({ bot: id })
+					return
+				}
 				startInvokePhaseUnless(
 					"thread open",
 					() => id === roster.getState().selectedBotId,
@@ -164,7 +183,11 @@ export const useSidebarActions = ({
 				openedMission.leave()
 				roster.select(id)
 			},
-			onSelectConversation: (id) => {
+			onSelectConversation: (id, modifiers) => {
+				if (opensInNewTab(modifiers)) {
+					settings.openThreadInNewTab({ conversation: id })
+					return
+				}
 				startInvokePhaseUnless(
 					"thread open",
 					() => id === roster.getState().selectedConversationId,

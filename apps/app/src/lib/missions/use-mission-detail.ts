@@ -26,7 +26,7 @@ export type MissionDetailRead = {
 	onRetry: () => void
 }
 
-const readMission = async (missionId: string): Promise<MissionRead> => {
+export const readMission = async (missionId: string): Promise<MissionRead> => {
 	const detail = await missionsTransport.detail(missionId)
 	return {
 		mission: detail.mission,

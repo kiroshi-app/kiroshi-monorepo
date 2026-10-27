@@ -20,6 +20,7 @@ export const ConversationsScreen = () => {
 		sidebarMissions,
 		sidebarTab,
 		switcher,
+		tabs,
 	} = useWorkspace()
 	const { preferences, roster, spaces } = core
 
@@ -41,6 +42,7 @@ export const ConversationsScreen = () => {
 					sidebarMissions={sidebarMissions}
 					sidebarTab={sidebarTab}
 					switcher={switcher}
+					tabs={tabs}
 				/>
 			}
 		>

@@ -47,6 +47,8 @@ export type WorkspaceTabs = {
 	showSpace: (spaceId: string) => void
 	openEmptyTab: () => void
 	openInNewTab: (href: string) => void
+	back: () => void
+	forward: () => void
 	select: (id: string) => void
 	pin: (id: string) => void
 	unpin: (id: string) => void
@@ -205,6 +207,8 @@ export const createWorkspaceTabs = (
 		},
 		openEmptyTab: () => change((space) => openTab(space, EMPTY_LIST_HREF)),
 		openInNewTab: (href) => change((space) => openTab(space, href)),
+		back: () => history.back(),
+		forward: () => history.forward(),
 		select: (id) => change((space) => selectTab(space, id)),
 		pin: (id) => change((space) => pinTab(space, id)),
 		unpin: (id) => change((space) => unpinTab(space, id)),

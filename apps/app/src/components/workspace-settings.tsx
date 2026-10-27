@@ -11,8 +11,12 @@ import { hasOverlayWindowControls, isSidebarResizable } from "@/lib/host"
 import { settingsSpacesOf, spacePageOf } from "@/lib/spaces/settings-spaces"
 import { useSettingsSpaceSwitch } from "@/lib/tabs/use-settings-space-switch"
 import type { SettingsFrame } from "@/lib/workspace/settings-frame"
-import { useRosterLists } from "@/lib/workspace/use-roster-lists"
+import {
+	type RosterLists,
+	useRosterLists,
+} from "@/lib/workspace/use-roster-lists"
 import { ACCOUNT_TAB } from "@/lib/workspace/use-settings-panels"
+import { useWorkspaceTitleBarTabs } from "@/lib/workspace/use-workspace-title-bar-tabs"
 import { useWorkspace } from "@/lib/workspace/workspace-context"
 
 const useWorkspaceSpaceSwitch = () => {
@@ -25,9 +29,14 @@ const useWorkspaceSpaceSwitch = () => {
 	})
 }
 
+type SettingsFrameRead = {
+	frame: SettingsFrame
+	badgesBySpaceId: RosterLists["badgesBySpaceId"]
+}
+
 const useSettingsFrame = (
 	onSelectSpace: (id: string) => void,
-): SettingsFrame => {
+): SettingsFrameRead => {
 	const workspace = useWorkspace()
 	const { core, drivers, rosterLines, rosterView, sidebarMissions, switcher } =
 		workspace
@@ -38,8 +47,14 @@ const useSettingsFrame = (
 		rosterView,
 		waitingMissionCount: sidebarMissions.waitingCount,
 	})
+	const titleBarTabs = useWorkspaceTitleBarTabs({
+		core,
+		rosterLists,
+		rosterView,
+		tabs: workspace.tabs,
+	})
 
-	return {
+	const frame: SettingsFrame = {
 		rail: (requestLeave: SettingsScreenRequestLeave) => (
 			<WorkspaceRail
 				collapsedSectionIds={workspace.collapsedSectionIds}
@@ -51,35 +66,22 @@ const useSettingsFrame = (
 				rosterLines={rosterLines}
 				rosterLists={rosterLists}
 				sidebarTab={workspace.sidebarTab}
-				space={switcher.selectedSpace}
-				spaceHost={
-					switcher.selectedSpace
-						? switcher.hostBySpaceId[switcher.selectedSpace.id]
-						: undefined
-				}
+				switcher={switcher}
+				onSelectSpace={onSelectSpace}
 			/>
 		),
 		titleBar: {
 			"data-tauri-drag-region": "deep",
 			insetWindowControls: hasOverlayWindowControls(),
 			windowControls: titleBarWindowControls(),
-			badgesBySpaceId: rosterLists.badgesBySpaceId,
-			selectedSpaceId: switcher.selectedSpaceId ?? undefined,
-			spaces: switcher.spaces,
-			hostBySpaceId: switcher.hostBySpaceId,
-			invitations: switcher.invitations,
-			onAcceptInvitation: switcher.onAcceptInvitation,
-			onDeclineInvitation: switcher.onDeclineInvitation,
-			onRetryInvitation: switcher.onRetryInvitation,
-			onSpaceSwitcherOpenChange: switcher.onSpaceSwitcherOpenChange,
-			onCreateSpace: rosterLines.sidebarActions.onCreateSpace,
-			onSelectSpace,
+			...titleBarTabs,
 		},
 		width: core.preferences.sidebarWidth ?? undefined,
 		onWidthChange: workspace.overlay.changeSidebarWidth,
 		isResizable: isSidebarResizable(),
 		spaceTint: workspace.scopes.spaceTint,
 	}
+	return { frame, badgesBySpaceId: rosterLists.badgesBySpaceId }
 }
 
 export const SpaceSettingsRoute = () => {
@@ -88,7 +90,7 @@ export const SpaceSettingsRoute = () => {
 	const { spaceId } = useParams({ from: "/settings/space/$spaceId" })
 	const search = useSearch({ from: "/settings/space/$spaceId" })
 	const spaceSwitch = useWorkspaceSpaceSwitch()
-	const frame = useSettingsFrame((id) => {
+	const { frame } = useSettingsFrame((id) => {
 		spaceSwitch.switchSpace(id)
 		navigation.openSpaceSettings(id, { entry: search.entry })
 	})
@@ -137,7 +139,7 @@ export const UserSettingsRoute = () => {
 	const workspace = useWorkspace()
 	const search = useSearch({ from: "/settings/user" })
 	const spaceSwitch = useWorkspaceSpaceSwitch()
-	const frame = useSettingsFrame(
+	const { frame, badgesBySpaceId } = useSettingsFrame(
 		workspace.rosterLines.sidebarActions.onSelectSpace,
 	)
 
@@ -153,7 +155,7 @@ export const UserSettingsRoute = () => {
 			search={search}
 			spaces={settingsSpacesOf({
 				...workspace.switcher,
-				badgesBySpaceId: frame.titleBar.badgesBySpaceId,
+				badgesBySpaceId,
 			})}
 			currentSpaceId={workspace.switcher.selectedSpaceId ?? undefined}
 			onCreateSpace={() => {
@@ -170,7 +172,7 @@ export const CompanionSettingsRoute = () => {
 	const search = useSearch({ from: "/settings/companion/$companionId" })
 	const { navigation, rosterLines } = workspace
 	const spaceSwitch = useWorkspaceSpaceSwitch()
-	const frame = useSettingsFrame(spaceSwitch.switchSpace)
+	const { frame } = useSettingsFrame(spaceSwitch.switchSpace)
 
 	if (!workspace.rosterView.settingsBot) {
 		return <Navigate to="/" replace />

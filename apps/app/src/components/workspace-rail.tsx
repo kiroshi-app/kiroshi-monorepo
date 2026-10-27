@@ -1,9 +1,8 @@
 import { AppRail } from "@workspace/ui/components/app-rail"
-import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import type { SettingsScreenRequestLeave } from "@workspace/ui/components/settings-screen"
-import type { Space } from "@workspace/ui/components/space"
 
 import type { SettingsNavigation } from "@/lib/navigation/use-settings-navigation"
+import type { useSwitcherSpaces } from "@/lib/spaces/use-joined-spaces"
 import type { SidebarPanel } from "@/lib/user/use-sidebar-tab"
 import type { RosterLines } from "@/lib/workspace/use-roster-lines"
 import type { RosterLists } from "@/lib/workspace/use-roster-lists"
@@ -22,8 +21,8 @@ type WorkspaceRailProps = {
 	rosterLines: RosterLines
 	rosterLists: RosterLists
 	sidebarTab: ReturnType<typeof useSidebarPanelSwitch>
-	space: Space | undefined
-	spaceHost: SpaceHost | undefined
+	switcher: ReturnType<typeof useSwitcherSpaces>
+	onSelectSpace: (id: string) => void
 }
 
 export const WorkspaceRail = ({
@@ -36,9 +35,10 @@ export const WorkspaceRail = ({
 	rosterLines,
 	rosterLists,
 	sidebarTab,
-	space,
-	spaceHost,
+	switcher,
+	onSelectSpace,
 }: WorkspaceRailProps) => {
+	const space = switcher.selectedSpace
 	const leaveSettingsFor = (panel: SidebarPanel) => {
 		navigation.openConversations()
 		if (panel === sidebarTab.openTab) return
@@ -52,7 +52,16 @@ export const WorkspaceRail = ({
 
 	return (
 		<AppRail
+			badgesBySpaceId={rosterLists.badgesBySpaceId}
 			dots={rosterLists.railSignals}
+			hostBySpaceId={switcher.hostBySpaceId}
+			invitations={switcher.invitations}
+			onAcceptInvitation={switcher.onAcceptInvitation}
+			onCreateSpace={rosterLines.sidebarActions.onCreateSpace}
+			onDeclineInvitation={switcher.onDeclineInvitation}
+			onRetryInvitation={switcher.onRetryInvitation}
+			onSelectSpace={(id) => requestLeave(() => onSelectSpace(id))}
+			onSpacesMenuOpenChange={switcher.onSpaceSwitcherOpenChange}
 			onOpenSpaceSettings={() => {
 				if (space) requestLeave(() => navigation.openSpaceSettings(space.id))
 			}}
@@ -64,7 +73,8 @@ export const WorkspaceRail = ({
 			openSettings={panels.railSettings}
 			selected={sidebarTab.openTab}
 			space={space}
-			spaceHost={spaceHost}
+			spaceHost={space ? switcher.hostBySpaceId[space.id] : undefined}
+			spaces={switcher.spaces}
 			updateBadge={rosterLines.updateBadge}
 			user={overlay.userSettings}
 		/>

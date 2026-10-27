@@ -329,10 +329,17 @@ const mentionPillOf = (text: string) => {
 const railOf = () =>
 	screen.getByRole("navigation", { name: i18n.t("bots:rail.label") })
 
-const gearOf = () =>
-	within(railOf()).getByRole("button", {
-		name: i18n.t("bots:rail.spaceSettings"),
-	})
+const spacesLogoOf = () =>
+	railOf()
+		.querySelector('[data-slot="space-avatar"]')
+		?.closest("button") as HTMLElement
+
+const openSpaceSettingsByRail = async () => {
+	await press(spacesLogoOf())
+	await press(
+		screen.getByRole("menuitem", { name: i18n.t("bots:rail.spaceSettings") }),
+	)
+}
 
 const avatarOf = () =>
 	within(railOf()).getAllByRole("button").at(-1) as HTMLElement
@@ -409,7 +416,7 @@ const cardOf = (name: string) => {
 }
 
 const openCompanionsOfSpace = async () => {
-	await press(gearOf())
+	await openSpaceSettingsByRail()
 	await press(menuEntryOf(new RegExp(`^${i18n.t("settings:rail.companions")}`)))
 }
 
@@ -497,7 +504,7 @@ it("opens the screen of a pressed card with Back to Companions, and Back returns
 		...ON_GENERAL,
 		back: i18n.t("settings:screen.backToCompanions"),
 	})
-	expect(isMarked(gearOf())).toBe(true)
+	expect(isMarked(spacesLogoOf())).toBe(true)
 
 	await pressBack(i18n.t("settings:screen.backToCompanions"))
 
@@ -659,7 +666,7 @@ it("keeps the rail on the companion screen, and the Space settings replace it", 
 	await chooseInMenu(i18n.t("bots:roster.settings"))
 
 	expect(railOf()).toBeTruthy()
-	await press(gearOf())
+	await openSpaceSettingsByRail()
 
 	expect(shownScreenOf()).toEqual({
 		subtitle: "space",

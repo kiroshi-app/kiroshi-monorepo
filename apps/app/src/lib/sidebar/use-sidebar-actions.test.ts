@@ -50,6 +50,7 @@ describe("the rail gear", () => {
 		const settings = {
 			openCompanionSettings: vi.fn(),
 			openSpaceSettings: vi.fn(),
+			openThreadInNewTab: vi.fn(),
 			openUserSettings: vi.fn(),
 		}
 		const gear = gearFor(settings)

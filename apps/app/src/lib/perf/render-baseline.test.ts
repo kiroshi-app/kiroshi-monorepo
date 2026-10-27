@@ -977,7 +977,7 @@ describe("PRF1 render baseline", () => {
 			working,
 		}).toMatchInlineSnapshot(`
 			{
-			  "avatars": 6,
+			  "avatars": 7,
 			  "idle": {
 			    "draws": 0,
 			    "movingAvatars": 0,
