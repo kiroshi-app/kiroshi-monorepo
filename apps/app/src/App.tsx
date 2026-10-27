@@ -9,17 +9,14 @@ type AppProps = {
 	windowIdentity?: WindowIdentity
 }
 
-const tabsOfWindow = (windowIdentity?: WindowIdentity) =>
-	windowIdentity
-		? createWorkspaceTabs(
-				windowIdentity.initialHref ?? undefined,
-				windowIdentity.label,
-			)
-		: createWorkspaceTabs()
-
 export function App({ windowIdentity }: AppProps) {
 	const [router] = useState(() =>
-		createWorkspaceRouter(tabsOfWindow(windowIdentity)),
+		createWorkspaceRouter(
+			createWorkspaceTabs(
+				windowIdentity?.initialHref ?? undefined,
+				windowIdentity?.label,
+			),
+		),
 	)
 	return <RouterProvider router={router} />
 }
