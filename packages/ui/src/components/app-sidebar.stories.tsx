@@ -11,12 +11,15 @@ import {
 	companionGlyphsIn,
 	companionTintOf,
 	expectCompanionPictureShape,
+	expectLeftColumn,
+	expectRailSpaceHost,
 	expectSkeletonFilledTo,
 	FRAME_POLL,
 	hasOverlayScrollbars,
 	mergeA11y,
 	pictureOf,
 	probedStyleOf,
+	RAIL_SPACE_HOST,
 	settled,
 	shown,
 	slotIn,
@@ -2415,6 +2418,87 @@ export const MissionsTab = meta.story({
 		await expect(args.onSearchMissions).toHaveBeenCalledTimes(1)
 	},
 })
+
+const expectPanelLeftColumn = (canvasElement: HTMLElement, row: HTMLElement) =>
+	expectLeftColumn({
+		column: slotIn(canvasElement, "sidebar-inner"),
+		header: slotIn(canvasElement, "sidebar-header"),
+		row,
+	})
+
+const CONVERSATIONS_LEFT_COLUMN = {
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The Conversations panel as the left column every screen shares. Check that the column opens 8px under its top edge and closes 12px over its bottom edge, that its pieces stand 8px apart, that its header is 32px tall and that its first row sits 8px in from its inner edge, the same numbers the Missions panel and the User and Space settings menus read.",
+			},
+		},
+	},
+	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+		await expectPanelLeftColumn(
+			canvasElement,
+			rowButton(rowsIn(canvasElement)[0]),
+		)
+	},
+}
+
+export const ConversationsLeftColumn = meta.story(CONVERSATIONS_LEFT_COLUMN)
+
+export const ConversationsLeftColumnDark = meta.story({
+	...CONVERSATIONS_LEFT_COLUMN,
+	globals: { theme: "dark" },
+})
+
+const MISSIONS_LEFT_COLUMN = {
+	args: MissionsTab.input.args,
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"The Missions panel as the left column every screen shares. Check that the column opens 8px under its top edge and closes 12px over its bottom edge, that its pieces stand 8px apart, that its header is 32px tall and that its missions sit 8px in from its inner edge, the same numbers the Conversations panel and the User and Space settings menus read.",
+			},
+		},
+	},
+	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+		await expectPanelLeftColumn(
+			canvasElement,
+			slotIn(canvasElement, "missions-panel"),
+		)
+	},
+}
+
+export const MissionsLeftColumn = meta.story(MISSIONS_LEFT_COLUMN)
+
+export const MissionsLeftColumnDark = meta.story({
+	...MISSIONS_LEFT_COLUMN,
+	globals: { theme: "dark" },
+})
+
+const railHostStory = (panel: "conversations" | "missions") => ({
+	args: {
+		...(panel === "missions" ? MissionsTab.input.args : {}),
+		space: SPACES[0],
+		hostBySpaceId: { [HOME]: RAIL_SPACE_HOST },
+	},
+	parameters: {
+		docs: {
+			description: {
+				story: `The ${panel === "missions" ? "Missions" : "Conversations"} panel while the current Space's host is being reached. Check that the Space logo at the top of the rail draws the connecting state, the same one the User and Space settings screens draw for the same host.`,
+			},
+		},
+	},
+	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+		await expectRailSpaceHost(canvasElement)
+	},
+})
+
+export const ConversationsRailSpaceHost = meta.story(
+	railHostStory("conversations"),
+)
+
+export const MissionsRailSpaceHost = meta.story(railHostStory("missions"))
 
 export const DragRegion = meta.story({
 	tags: ["test-only"],

@@ -18,7 +18,7 @@ const CLIPPED_SIDEWAYS = { overflow: { x: "hidden" } } as const
 
 const CAROUSEL_CONTENT = "overflow-y-hidden p-0"
 
-const CONTENT_INSET = "px-2 py-0"
+const CONTENT_INSET = "left-column-inset py-0"
 
 const CAROUSEL =
 	"flex min-h-0 flex-1 snap-x snap-mandatory overflow-y-hidden overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
@@ -28,7 +28,7 @@ const CAROUSEL_SWIPEABLE = "overflow-x-auto"
 const CAROUSEL_HELD = "overflow-x-hidden"
 
 const CAROUSEL_PANEL =
-	"flex w-full flex-none snap-start snap-always flex-col gap-1 overflow-y-auto overscroll-y-contain px-2 py-0"
+	"flex w-full flex-none snap-start snap-always flex-col gap-1 overflow-y-auto overscroll-y-contain left-column-inset py-0"
 
 const NEIGHBOURING = 1
 

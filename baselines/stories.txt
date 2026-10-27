@@ -831,6 +831,13 @@ layout-workspaceshell--space-tinted
 layout-workspaceshell--space-tinted-dark
 layout-workspaceshell--tall-content
 layout-workspaceshell--tall-host
+navigation-appframe--connecting-space
+navigation-appframe--local-space
+navigation-appframe--offline-space
+navigation-appframe--offline-space-dark
+navigation-appframe--offline-space-with-space-settings-open
+navigation-appframe--online-space
+navigation-appframe--shared-space
 navigation-apprail--a-7-spaces-badge
 navigation-apprail--a-7-spaces-badge-dark
 navigation-apprail--a-7-spaces-menu
@@ -874,7 +881,10 @@ navigation-appsidebar--conversation-row-menu
 navigation-appsidebar--conversation-selected
 navigation-appsidebar--conversation-working
 navigation-appsidebar--conversations
+navigation-appsidebar--conversations-left-column
+navigation-appsidebar--conversations-left-column-dark
 navigation-appsidebar--conversations-panel
+navigation-appsidebar--conversations-rail-space-host
 navigation-appsidebar--create-label
 navigation-appsidebar--create-menu
 navigation-appsidebar--drag-bot-into-an-empty-pinned-zone
@@ -913,7 +923,10 @@ navigation-appsidebar--mission-strip-unnamed-platform
 navigation-appsidebar--mission-strip-untracked-ticket
 navigation-appsidebar--mission-strip-with-chat-badge
 navigation-appsidebar--missions-across-spaces
+navigation-appsidebar--missions-left-column
+navigation-appsidebar--missions-left-column-dark
 navigation-appsidebar--missions-of-unloaded-spaces
+navigation-appsidebar--missions-rail-space-host
 navigation-appsidebar--missions-scroll-memory
 navigation-appsidebar--missions-tab
 navigation-appsidebar--move-bot-to-section
@@ -1460,6 +1473,8 @@ settings-bot-companionsettingsscreen--delete-failed
 settings-bot-companionsettingsscreen--general
 settings-bot-companionsettingsscreen--history
 settings-bot-companionsettingsscreen--instructions
+settings-bot-companionsettingsscreen--left-column
+settings-bot-companionsettingsscreen--left-column-dark
 settings-bot-companionsettingsscreen--maximum-width
 settings-bot-companionsettingsscreen--minimum-width
 settings-bot-companionsettingsscreen--runtime
@@ -1726,6 +1741,8 @@ settings-space-settingsscreen--leaves-a-saved-application-behind
 settings-space-settingsscreen--leaves-by-the-rail-with-nothing-unsaved
 settings-space-settingsscreen--leaving-unsaved-application-edits
 settings-space-settingsscreen--leaving-unsaved-application-edits-by-the-rail
+settings-space-settingsscreen--left-column
+settings-space-settingsscreen--left-column-dark
 settings-space-settingsscreen--linear-application
 settings-space-settingsscreen--long-name
 settings-space-settingsscreen--maximum-width
@@ -1733,6 +1750,7 @@ settings-space-settingsscreen--members
 settings-space-settingsscreen--members-dark
 settings-space-settingsscreen--members-tinted
 settings-space-settingsscreen--minimum-width
+settings-space-settingsscreen--rail-space-host
 settings-space-settingsscreen--short-window
 settings-space-settingsscreen--space-companions
 settings-space-settingsscreen--space-form-page
@@ -1834,9 +1852,12 @@ settings-user-settingsscreen--diagnostics
 settings-user-settingsscreen--history
 settings-user-settingsscreen--language
 settings-user-settingsscreen--leaving-an-unsaved-skill-by-the-rail
+settings-user-settingsscreen--left-column
+settings-user-settingsscreen--left-column-dark
 settings-user-settingsscreen--maximum-width
 settings-user-settingsscreen--minimum-width
 settings-user-settingsscreen--notifications
+settings-user-settingsscreen--rail-space-host
 settings-user-settingsscreen--skills
 settings-user-settingsscreen--spaces
 settings-user-settingsscreen--spaces-dark
