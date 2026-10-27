@@ -279,6 +279,7 @@ const workspaceOf = async (store = createFakeTranscriptStore()) => {
 			landings: createMessageLandingController(),
 			missions,
 			onOpenConversationSettings: () => undefined,
+			onOpenThreadInNewTab: () => undefined,
 			onRetrySpaces: () => undefined,
 			onToggleSettings: () => undefined,
 			readerName: "Reader",
@@ -417,6 +418,36 @@ describe("WorkspaceBody missions", () => {
 		expect(readMission).toHaveBeenCalledWith("m-1")
 		expect(missionHeader()?.textContent).toContain("OPE-42")
 		expect(missionHeader()?.textContent).toContain("Blocked on you")
+	})
+
+	it("opens the mission of the activity panel in a new tab of its conversation on a middle click, keeping the thread", async () => {
+		const { workspace } = await seed((mission) => ({
+			mission,
+			events: [eventOf("opened", 0)],
+		}))
+		const onOpenThreadInNewTab = vi.fn()
+		render(workspace.body({ overrides: { onOpenThreadInNewTab } }), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
+		await settle()
+		fireEvent.click(screen.getByRole("button", { name: ACTIVITY }))
+		await settle()
+
+		fireEvent(
+			within(screen.getByRole("region", { name: "Waiting on you" })).getByRole(
+				"button",
+				{ name: new RegExp(OBJECTIVE) },
+			),
+			new MouseEvent("auxclick", { bubbles: true, button: 1, detail: 1 }),
+		)
+		await settle()
+
+		expect(onOpenThreadInNewTab).toHaveBeenCalledWith({
+			conversation: workspace.conversation.id,
+			mission: "m-1",
+		})
+		expect(readMission).not.toHaveBeenCalled()
+		expect(missionHeader()).toBeNull()
 	})
 
 	it("sends what the composer holds to the owning companion", async () => {

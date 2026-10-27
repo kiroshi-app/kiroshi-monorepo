@@ -16,6 +16,7 @@ import type { ConversationRuntimes } from "@/lib/conversations/conversation-runt
 import type { Bot, Conversation } from "@/lib/conversations/store-contract"
 import type { MissionLanding } from "@/lib/missions/mission-actions"
 import type { OpenedMissionController } from "@/lib/missions/opened-mission-controller"
+import type { ThreadSearch } from "@/lib/navigation/thread-search"
 import type { Onboarding } from "@/lib/onboarding/use-onboarding"
 import type { SignIn } from "@/lib/onboarding/use-sign-in"
 import type { MessageLandingController } from "@/lib/search/message-landing-controller"
@@ -38,6 +39,7 @@ type WorkspaceBodyProps = {
 	isConversationSettingsOpen: boolean
 	isMissionsPanelOpen: boolean
 	onOpenConversationSettings: (conversationId: string) => void
+	onOpenThreadInNewTab: (thread: ThreadSearch) => void
 	missions: OpenedMissionController
 	onboarding?: Onboarding
 	signIn: SignIn
@@ -75,6 +77,21 @@ const threadOf = ({
 	return null
 }
 
+type MissionRow = Pick<WorkspaceBodyProps, "conversation" | "bot">
+
+const missionThreadOf = (
+	{ conversation, bot }: MissionRow,
+	missionId: string,
+): ThreadSearch | null => {
+	if (conversation) {
+		return { conversation: conversation.id, mission: missionId }
+	}
+	if (bot) {
+		return { bot: bot.id, mission: missionId }
+	}
+	return null
+}
+
 export function WorkspaceBody(props: WorkspaceBodyProps) {
 	const t = useCommonCopy()
 	const { missions } = props
@@ -88,6 +105,16 @@ export function WorkspaceBody(props: WorkspaceBodyProps) {
 			}
 		},
 		[missions, rowId],
+	)
+	const { conversation, bot, onOpenThreadInNewTab } = props
+	const openMissionInNewTab = useCallback(
+		(missionId: string) => {
+			const thread = missionThreadOf({ conversation, bot }, missionId)
+			if (thread) {
+				onOpenThreadInNewTab(thread)
+			}
+		},
+		[conversation, bot, onOpenThreadInNewTab],
 	)
 	const leaveMission = useCallback(() => missions.leave(), [missions])
 
@@ -115,6 +142,7 @@ export function WorkspaceBody(props: WorkspaceBodyProps) {
 				landings={props.landings}
 				onLeave={leaveMission}
 				onOpenMission={openMission}
+				onOpenMissionInNewTab={openMissionInNewTab}
 				opening={openedMission}
 				readerName={props.readerName}
 				runtimes={props.conversationRuntimes}
@@ -137,6 +165,7 @@ export function WorkspaceBody(props: WorkspaceBodyProps) {
 			landings={props.landings}
 			onboarding={props.onboarding}
 			onOpenMission={openMission}
+			onOpenMissionInNewTab={openMissionInNewTab}
 			readerName={props.readerName}
 			runtimes={props.conversationRuntimes}
 			signIn={props.signIn}

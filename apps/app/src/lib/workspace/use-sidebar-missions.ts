@@ -7,6 +7,7 @@ import {
 
 import { MissionsFeedSkeleton } from "@workspace/ui/components/missions-feed-skeleton"
 import type { MissionsPanelProps } from "@workspace/ui/components/missions-panel"
+import type { ClickModifiers } from "@workspace/ui/lib/click-modifiers"
 
 import {
 	type StoppableRuntimes,
@@ -31,7 +32,7 @@ import { useSpaceMissions } from "../missions/use-space-missions"
 import type { SettingsNavigation } from "../navigation/use-settings-navigation"
 import { useSkeletonSlot } from "../query/use-skeleton-slot"
 import type { ShownMemory } from "../sidebar/shown-memory"
-import { isNewTabClickInFlight } from "../tabs/new-tab-clicks"
+import { opensInNewTab } from "../tabs/new-tab-clicks"
 
 const MISSIONS_FEED_SKELETON = createElement(MissionsFeedSkeleton)
 
@@ -177,8 +178,8 @@ export const useSidebarMissions = ({
 	)
 
 	const openFromPanel = useCallback(
-		(missionId: string) =>
-			isNewTabClickInFlight()
+		(missionId: string, _conversationId: string, modifiers: ClickModifiers) =>
+			opensInNewTab(modifiers)
 				? openMissionInNewTab(missionId)
 				: openMission(missionId),
 		[openMission, openMissionInNewTab],

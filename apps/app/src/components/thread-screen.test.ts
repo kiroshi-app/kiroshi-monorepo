@@ -416,6 +416,7 @@ type ThreadScreenHarnessProps = {
 	onboarding?: OnboardingController
 	signIn?: SignInController
 	onOpenMission: (missionId: string) => void
+	onOpenMissionInNewTab?: (missionId: string) => void
 	staging?: AttachmentsController
 }
 
@@ -426,6 +427,7 @@ const ThreadScreenHarness = ({
 	onboarding,
 	signIn,
 	onOpenMission,
+	onOpenMissionInNewTab = () => undefined,
 	staging = attachments,
 }: ThreadScreenHarnessProps) => {
 	const [isOpen, setOpen] = useState(false)
@@ -456,6 +458,7 @@ const ThreadScreenHarness = ({
 					} satisfies Onboarding)
 				: undefined,
 		onOpenMission,
+		onOpenMissionInNewTab,
 		readerName: "Reader",
 		runtimes: runtimesOf(thread),
 		signIn:
@@ -916,6 +919,26 @@ const missionCard = () =>
 
 const missionsSection = () =>
 	screen.getByRole("region", { name: "In progress" })
+
+const NEW_TAB_CLICK = { detail: 1, metaKey: true }
+
+const middleClick = (target: HTMLElement) =>
+	fireEvent(
+		target,
+		new MouseEvent("auxclick", { bubbles: true, button: 1, detail: 1 }),
+	)
+
+const missionTabsScreenOf = (
+	openMission: (missionId: string) => void,
+	openMissionInNewTab: (missionId: string) => void,
+) =>
+	createElement(ThreadScreenHarness, {
+		bots: NO_BOT_RECORDS,
+		landings: createMessageLandingController(),
+		onOpenMission: openMission,
+		onOpenMissionInNewTab: openMissionInNewTab,
+		thread: threadOf({ id: "bot-1", name: "Nyx", said: "held" }),
+	})
 
 const openRoutinesPanel = async () => {
 	fireEvent.click(screen.getByRole("button", { name: ROUTINES_TOGGLE }))
@@ -1546,6 +1569,61 @@ describe("ThreadScreen", () => {
 		)
 
 		expect(openMission).toHaveBeenCalledWith(SOLO_MISSION.id)
+	})
+
+	it("opens the transcript mission card in a new tab on a new-tab click, in place otherwise", async () => {
+		const openMission = vi.fn()
+		const openMissionInNewTab = vi.fn()
+		listMissions.mockResolvedValue({ open: [SOLO_MISSION], done: [] })
+		render(missionTabsScreenOf(openMission, openMissionInNewTab), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
+		await settle()
+		const openButton = within(missionCard()).getByRole("button", {
+			name: `Open the mission: ${SOLO_MISSION.objective}`,
+		})
+
+		fireEvent.click(openButton, NEW_TAB_CLICK)
+		middleClick(openButton)
+
+		expect(openMissionInNewTab.mock.calls).toEqual([
+			[SOLO_MISSION.id],
+			[SOLO_MISSION.id],
+		])
+		expect(openMission).not.toHaveBeenCalled()
+
+		fireEvent.click(openButton)
+
+		expect(openMission).toHaveBeenCalledWith(SOLO_MISSION.id)
+		expect(openMissionInNewTab).toHaveBeenCalledTimes(2)
+	})
+
+	it("opens the Routines panel mission card in a new tab on a new-tab click, in place otherwise", async () => {
+		const openMission = vi.fn()
+		const openMissionInNewTab = vi.fn()
+		listMissions.mockResolvedValue({ open: [SOLO_MISSION], done: [] })
+		render(missionTabsScreenOf(openMission, openMissionInNewTab), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
+		await settle()
+		await openRoutinesPanel()
+		const openButton = within(missionsSection()).getByRole("button", {
+			name: new RegExp(SOLO_MISSION.objective),
+		})
+
+		fireEvent.click(openButton, NEW_TAB_CLICK)
+		middleClick(openButton)
+
+		expect(openMissionInNewTab.mock.calls).toEqual([
+			[SOLO_MISSION.id],
+			[SOLO_MISSION.id],
+		])
+		expect(openMission).not.toHaveBeenCalled()
+
+		fireEvent.click(openButton)
+
+		expect(openMission).toHaveBeenCalledWith(SOLO_MISSION.id)
+		expect(openMissionInNewTab).toHaveBeenCalledTimes(2)
 	})
 
 	it("carries the new state of a mission on its card", async () => {
