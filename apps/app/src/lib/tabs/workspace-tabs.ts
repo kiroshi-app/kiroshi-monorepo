@@ -16,7 +16,8 @@ import {
 	currentHrefOf,
 	dropTabsWhere,
 	moveInHistory,
-	openTab,
+	openBackgroundTab,
+	openEmptyTab,
 	pinTab,
 	pushEntry,
 	reorderTabs,
@@ -26,7 +27,6 @@ import {
 	spaceTabsOn,
 	type Tab,
 	type TabEntry,
-	tabShowing,
 	unpinTab,
 } from "./tabs-model"
 
@@ -78,18 +78,6 @@ const locationOf = ({ href, state }: TabEntry): HistoryLocation => {
 
 const shownEntryOf = (space: SpaceTabs) => currentEntryOf(activeTabOf(space))
 
-const pushedIn = (space: SpaceTabs, entry: TabEntry) => {
-	const shownElsewhere = tabShowing(space, entry.href)
-	if (!shownElsewhere || shownElsewhere.id === space.activeId) {
-		return pushEntry(space, entry)
-	}
-	const selected = selectTab(space, shownElsewhere.id)
-	return replaceEntry(selected, {
-		href: entry.href,
-		state: currentEntryOf(shownElsewhere).state,
-	})
-}
-
 const isNamingAnAbsentRow = (
 	href: string,
 	isPresent: (id: string) => boolean,
@@ -123,7 +111,7 @@ export const createWorkspaceTabs = (
 	const history = createHistory({
 		getLocation: () => locationOf(shownEntryOf(shown())),
 		getLength: () => activeTabOf(shown()).entries.length,
-		pushState: (href, state) => keep(pushedIn(shown(), { href, state })),
+		pushState: (href, state) => keep(pushEntry(shown(), { href, state })),
 		replaceState: (href, state) => keep(replaceEntry(shown(), { href, state })),
 		back: () => keep(moveInHistory(shown(), -1)),
 		forward: () => keep(moveInHistory(shown(), 1)),
@@ -249,9 +237,8 @@ export const createWorkspaceTabs = (
 			}
 			askBeforeLeaving(() => reachSpace(spaceId))
 		},
-		openEmptyTab: () =>
-			askingChange((space) => openTab(space, EMPTY_LIST_HREF)),
-		openInNewTab: (href) => askingChange((space) => openTab(space, href)),
+		openEmptyTab: () => askingChange(openEmptyTab),
+		openInNewTab: (href) => change((space) => openBackgroundTab(space, href)),
 		back: () => askingMove(-1, () => history.back()),
 		forward: () => askingMove(1, () => history.forward()),
 		select: (id) => askingChange((space) => selectTab(space, id)),

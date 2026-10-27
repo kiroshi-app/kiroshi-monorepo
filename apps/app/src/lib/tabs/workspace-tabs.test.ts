@@ -56,6 +56,13 @@ const viewOf = (tabs: WorkspaceTabs, hostStates = {}, soloThreads = {}) =>
 
 const activeHref = (tabs: WorkspaceTabs) => tabs.history.location.href
 
+const showInNewTab = (tabs: WorkspaceTabs, href: string) => {
+	tabs.openEmptyTab()
+	tabs.history.push(href)
+}
+
+const idsOf = (tabs: WorkspaceTabs) => viewOf(tabs).tabs.map((tab) => tab.id)
+
 const pressMod = (key: string) =>
 	act(() => {
 		fireEvent.keyDown(window, { key, metaKey: true })
@@ -109,8 +116,8 @@ describe("a Space without stored tabs", () => {
 describe("the tab keys", () => {
 	it("opens an empty-list tab right after the active one on Mod+T", () => {
 		const tabs = tabsOfSpace()
-		tabs.openInNewTab(threadOf("first"))
-		tabs.openInNewTab(threadOf("last"))
+		showInNewTab(tabs, threadOf("first"))
+		showInNewTab(tabs, threadOf("last"))
 		tabs.select(viewOf(tabs).tabs[1]?.id ?? "")
 
 		pressMod("t")
@@ -126,8 +133,8 @@ describe("the tab keys", () => {
 
 	it("closes the active tab on Mod+W and activates its neighbour", () => {
 		const tabs = tabsOfSpace()
-		tabs.openInNewTab(threadOf("first"))
-		tabs.openInNewTab(threadOf("second"))
+		showInNewTab(tabs, threadOf("first"))
+		showInNewTab(tabs, threadOf("second"))
 		tabs.select(viewOf(tabs).tabs[1]?.id ?? "")
 
 		pressMod("w")
@@ -138,7 +145,7 @@ describe("the tab keys", () => {
 
 	it("keeps a pinned tab open on Mod+W", () => {
 		const tabs = tabsOfSpace()
-		tabs.openInNewTab(threadOf("kept"))
+		showInNewTab(tabs, threadOf("kept"))
 		tabs.pin(viewOf(tabs).activeId)
 
 		pressMod("w")
@@ -177,32 +184,138 @@ describe("the tab keys", () => {
 	})
 })
 
-describe("a page already shown", () => {
-	it("selects the tab showing it instead of opening a second one", () => {
+describe("a page another tab shows", () => {
+	it("pushes onto the active tab and leaves the tab showing it untouched", () => {
 		const tabs = tabsOfSpace()
-		tabs.openInNewTab(threadOf("shown"))
-		const shownId = viewOf(tabs).activeId
-		tabs.openInNewTab(companionOf("other"))
+		showInNewTab(tabs, threadOf("shown"))
+		const before = viewOf(tabs).tabs
+		tabs.select(before[0]?.id ?? "")
 
-		tabs.openInNewTab(threadOf("shown"))
+		tabs.history.push(threadOf("shown"))
 
-		expect(viewOf(tabs).tabs).toHaveLength(3)
-		expect(viewOf(tabs).activeId).toBe(shownId)
+		expect(viewOf(tabs).activeId).toBe(before[0]?.id)
+		expect(viewOf(tabs).tabs[1]).toEqual(before[1])
+		expect(shownHrefs(tabs)).toEqual([threadOf("shown"), threadOf("shown")])
 	})
 
-	it("selects the tab showing it when the active tab navigates there", async () => {
+	it("stays on the active tab when it navigates to a page another tab shows", async () => {
 		const tabs = tabsOfSpace()
 		const router = routerOn(tabs)
 		await router.load()
 		await router.navigate({ to: USER_SETTINGS })
-		const settingsId = viewOf(tabs).activeId
 		pressMod("t")
 		await router.load()
+		const freshId = viewOf(tabs).activeId
 
 		await router.navigate({ to: USER_SETTINGS })
 
-		expect(viewOf(tabs).tabs).toHaveLength(2)
-		expect(viewOf(tabs).activeId).toBe(settingsId)
+		expect(viewOf(tabs).activeId).toBe(freshId)
+		expect(shownHrefs(tabs)).toEqual([USER_SETTINGS, USER_SETTINGS])
+	})
+
+	it("opens a second tab on it in the background", () => {
+		const tabs = tabsOfSpace()
+		tabs.history.push(threadOf("shown"))
+		const activeId = viewOf(tabs).activeId
+
+		tabs.openInNewTab(threadOf("shown"))
+
+		expect(shownHrefs(tabs)).toEqual([threadOf("shown"), threadOf("shown")])
+		expect(viewOf(tabs).activeId).toBe(activeId)
+	})
+})
+
+describe("open in new tab", () => {
+	it("inserts the tab right after the active one and keeps the active one shown", () => {
+		const tabs = tabsOfSpace()
+		showInNewTab(tabs, threadOf("active"))
+		showInNewTab(tabs, threadOf("last"))
+		const [, activeId = ""] = idsOf(tabs)
+		tabs.select(activeId)
+
+		tabs.openInNewTab(companionOf("nova"))
+
+		expect(shownHrefs(tabs)).toEqual([
+			"/",
+			threadOf("active"),
+			companionOf("nova"),
+			threadOf("last"),
+		])
+		expect(viewOf(tabs).activeId).toBe(activeId)
+		expect(activeHref(tabs)).toBe(threadOf("active"))
+	})
+})
+
+describe("two tabs on one conversation", () => {
+	type TwinTabs = {
+		tabs: WorkspaceTabs
+		firstId: string
+		secondId: string
+	}
+
+	const twinTabs = (): TwinTabs => {
+		const tabs = tabsOfSpace()
+		tabs.history.push(threadOf("x"))
+		showInNewTab(tabs, threadOf("y"))
+		tabs.history.push(threadOf("x"))
+		const [firstId = "", secondId = ""] = idsOf(tabs)
+		return { tabs, firstId, secondId }
+	}
+
+	it("shows X in the active tab, keeps it active on open in new tab, and moves back and forward per tab", () => {
+		const { tabs, firstId, secondId } = twinTabs()
+
+		expect(shownHrefs(tabs)).toEqual([threadOf("x"), threadOf("x")])
+		expect(viewOf(tabs).activeId).toBe(secondId)
+
+		tabs.openInNewTab(threadOf("z"))
+		expect(shownHrefs(tabs)).toEqual([
+			threadOf("x"),
+			threadOf("x"),
+			threadOf("z"),
+		])
+		expect(viewOf(tabs).activeId).toBe(secondId)
+
+		tabs.back()
+		expect(activeHref(tabs)).toBe(threadOf("y"))
+		tabs.forward()
+		expect(activeHref(tabs)).toBe(threadOf("x"))
+
+		tabs.select(firstId)
+		tabs.back()
+		expect(activeHref(tabs)).toBe("/")
+		tabs.forward()
+		expect(activeHref(tabs)).toBe(threadOf("x"))
+		expect(viewOf(tabs).activeId).toBe(firstId)
+	})
+
+	it("flags both tabs when the conversation needs you", () => {
+		const { tabs } = twinTabs()
+
+		const view = viewOf(tabs, { x: NEEDS_YOU })
+
+		expect(view.tabs.map((tab) => tab.needsYou)).toEqual([true, true])
+	})
+
+	it("closes one and leaves the other in place", () => {
+		const { tabs, firstId, secondId } = twinTabs()
+
+		tabs.close(secondId)
+
+		expect(idsOf(tabs)).toEqual([firstId])
+		expect(activeHref(tabs)).toBe(threadOf("x"))
+		tabs.back()
+		expect(activeHref(tabs)).toBe("/")
+	})
+
+	it("restores both after a reload", () => {
+		twinTabs()
+		cleanup()
+
+		const after = tabsOfSpace()
+
+		expect(shownHrefs(after)).toEqual([threadOf("x"), threadOf("x")])
+		expect(viewOf(after).activeId).toBe(idsOf(after)[1])
 	})
 })
 
@@ -237,8 +350,8 @@ describe("the history of a tab", () => {
 describe("the tab actions", () => {
 	it("orders pinned tabs before unpinned ones whatever the reorder", () => {
 		const tabs = tabsOfSpace()
-		tabs.openInNewTab(threadOf("one"))
-		tabs.openInNewTab(threadOf("two"))
+		showInNewTab(tabs, threadOf("one"))
+		showInNewTab(tabs, threadOf("two"))
 		const [list, one, two] = viewOf(tabs).tabs.map((tab) => tab.id)
 		tabs.pin(two ?? "")
 
@@ -251,10 +364,10 @@ describe("the tab actions", () => {
 
 	it("closes the others and keeps the pinned ones", () => {
 		const tabs = tabsOfSpace()
-		tabs.openInNewTab(threadOf("pinned"))
+		showInNewTab(tabs, threadOf("pinned"))
 		tabs.pin(viewOf(tabs).activeId)
-		tabs.openInNewTab(threadOf("closed"))
-		tabs.openInNewTab(threadOf("kept"))
+		showInNewTab(tabs, threadOf("closed"))
+		showInNewTab(tabs, threadOf("kept"))
 
 		tabs.closeOthers(viewOf(tabs).activeId)
 
@@ -266,7 +379,7 @@ describe("the tab actions", () => {
 describe("the tabs of a Space", () => {
 	it("keeps the tabs of the Space left and shows the ones of the Space reached", () => {
 		const tabs = tabsOfSpace()
-		tabs.openInNewTab(threadOf("home"))
+		showInNewTab(tabs, threadOf("home"))
 
 		tabs.showSpace(OTHER_SPACE)
 		expect(shownHrefs(tabs)).toEqual(["/"])
@@ -278,10 +391,10 @@ describe("the tabs of a Space", () => {
 
 	it("restores the open tabs, their order, the pinned ones and the active one after a reload", () => {
 		const before = tabsOfSpace()
-		before.openInNewTab(threadOf("pinned"))
+		showInNewTab(before, threadOf("pinned"))
 		before.pin(viewOf(before).activeId)
-		before.openInNewTab(companionOf("nova"))
-		before.openInNewTab(USER_SETTINGS)
+		showInNewTab(before, companionOf("nova"))
+		showInNewTab(before, USER_SETTINGS)
 		before.select(viewOf(before).tabs[1]?.id ?? "")
 		cleanup()
 
@@ -300,9 +413,9 @@ describe("the tabs of a Space", () => {
 
 	it("drops a restored tab whose conversation, companion or settings target is absent", async () => {
 		const before = tabsOfSpace()
-		before.openInNewTab(threadOf("gone"))
-		before.openInNewTab("/settings/companion/vanished")
-		before.openInNewTab(companionOf("nova"))
+		showInNewTab(before, threadOf("gone"))
+		showInNewTab(before, "/settings/companion/vanished")
+		showInNewTab(before, companionOf("nova"))
 		cleanup()
 		const after = tabsOfSpace()
 
@@ -316,8 +429,8 @@ describe("the tabs of a Space", () => {
 
 	it("drops a restored mission tab whose mission is unknown and activates its neighbour", async () => {
 		const before = tabsOfSpace()
-		before.openInNewTab(missionOf("present"))
-		before.openInNewTab(missionOf("unknown"))
+		showInNewTab(before, missionOf("present"))
+		showInNewTab(before, missionOf("unknown"))
 		cleanup()
 		const after = tabsOfSpace()
 
@@ -334,8 +447,8 @@ describe("the tabs of a Space", () => {
 	it("drops a mission of another Space and keeps the one its side could not read", async () => {
 		const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined)
 		const before = tabsOfSpace()
-		before.openInNewTab(missionOf("elsewhere"))
-		before.openInNewTab(missionOf("unreadable"))
+		showInNewTab(before, missionOf("elsewhere"))
+		showInNewTab(before, missionOf("unreadable"))
 		cleanup()
 		const after = tabsOfSpace()
 
@@ -356,9 +469,9 @@ describe("the tabs of a Space", () => {
 describe("the Needs you flag", () => {
 	it("flags the tabs showing a conversation or companion whose row needs you", () => {
 		const tabs = tabsOfSpace()
-		tabs.openInNewTab(threadOf("asking"))
-		tabs.openInNewTab(threadOf("quiet"))
-		tabs.openInNewTab(companionOf("nova"))
+		showInNewTab(tabs, threadOf("asking"))
+		showInNewTab(tabs, threadOf("quiet"))
+		showInNewTab(tabs, companionOf("nova"))
 
 		const view = viewOf(
 			tabs,
@@ -385,8 +498,8 @@ type ShownSettings = {
 
 const tabsShowingSettings = (): ShownSettings => {
 	const tabs = tabsOfSpace()
-	tabs.openInNewTab(threadOf("other"))
-	tabs.openInNewTab(threadOf("earlier"))
+	showInNewTab(tabs, threadOf("other"))
+	showInNewTab(tabs, threadOf("earlier"))
 	tabs.history.push(USER_SETTINGS)
 	const [, otherId = "", settingsId = ""] = viewOf(tabs).tabs.map(
 		(tab) => tab.id,
@@ -416,6 +529,7 @@ const LEAVING_GESTURES: [string, Gesture][] = [
 
 const STAYING_GESTURES: [string, Gesture][] = [
 	["pinning", ({ tabs, settingsId }) => tabs.pin(settingsId)],
+	["opening in a new tab", ({ tabs }) => tabs.openInNewTab(USER_SETTINGS)],
 	["unpinning", ({ tabs, settingsId }) => tabs.unpin(settingsId)],
 	["closing an inactive tab", ({ tabs, otherId }) => tabs.close(otherId)],
 	[
