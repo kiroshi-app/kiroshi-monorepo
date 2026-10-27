@@ -295,6 +295,14 @@ describe("the avatar seed of a switcher row", () => {
 		)
 	})
 
+	it("draws a joined row read without an instance with the arcs of its row id", () => {
+		const unseeded = { ...GARAGE, instanceId: undefined } as never
+
+		expect(arcsOfRow(switcherSpacesOf([], [unseeded]), GARAGE_ROW)).toEqual(
+			spaceArcs(GARAGE_ROW),
+		)
+	})
+
 	it("keeps the arcs of a renamed space", () => {
 		const renamed = { ...OWNED_STUDIO, name: "Studio B" }
 

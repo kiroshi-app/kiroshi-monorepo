@@ -207,7 +207,7 @@ const joinedSwitcherSpaceOf = (joined: JoinedSpace): SwitcherSpace => ({
 	id: rowIdOf(joined),
 	name: joined.name,
 	colour: joined.colour,
-	avatarSeed: joined.instanceId,
+	avatarSeed: joined.instanceId ?? rowIdOf(joined),
 })
 
 export const switcherSpacesOf = (
