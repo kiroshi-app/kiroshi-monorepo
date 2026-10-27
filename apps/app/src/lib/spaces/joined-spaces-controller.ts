@@ -24,7 +24,7 @@ import {
 	SPACE_DESCRIBED_EVENT,
 	type SpaceDescribed,
 } from "../bindings"
-import { describeFailure, failureReporterIn } from "../failure-report"
+import { failureReporterIn } from "../failure-report"
 import { joinedHosts, listen } from "../host"
 import { createQueue } from "../queue"
 import { createStore } from "../store"
@@ -175,19 +175,12 @@ const descriptionOf = ({
 	colour,
 }: JoinedSpaceDescription): JoinedSpaceDescription => ({ name, colour })
 
-const describeRefusalNoticeOf = (refusal: unknown) => {
-	const reason =
-		refusal == null ? undefined : describeFailure(refusal).trim() || undefined
-	return {
-		title: i18n.t("chat:screen.notice.describeRefused.title"),
-		description:
-			reason === undefined
-				? i18n.t("chat:screen.notice.describeRefused.description")
-				: i18n.t("chat:screen.notice.describeRefused.descriptionWithReason", {
-						reason,
-					}),
-	}
-}
+const describeRefusalNoticeOf = (refusal: unknown) => ({
+	title: i18n.t("chat:screen.notice.describeRefused.title"),
+	description: i18n.t("chat:screen.notice.describeRefused.description", {
+		reason: joinRejectionNoticeOf(refusal).description ?? "",
+	}),
+})
 
 const isSharedSpaceKnown = (joined: JoinedSpace) =>
 	joined.remoteSpaceId !== null

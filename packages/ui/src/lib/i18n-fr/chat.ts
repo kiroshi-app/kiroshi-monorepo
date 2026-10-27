@@ -333,9 +333,7 @@ const chat = {
 			describeRefused: {
 				title: "Impossible d’enregistrer le nom et la couleur",
 				description:
-					"Votre modification n’a pas été enregistrée : l’espace a gardé son nom et sa couleur précédents. Modifiez-les dans Réglages de l’espace pour réessayer.",
-				descriptionWithReason:
-					"Votre modification n’a pas été enregistrée ({{reason}}) : l’espace a gardé son nom et sa couleur précédents. Modifiez-les dans Réglages de l’espace pour réessayer.",
+					"{{reason}} L’espace a gardé son nom et sa couleur précédents.",
 			},
 			joinRefused: {
 				unavailable: {

@@ -1181,8 +1181,6 @@ export const MoveToNewWindowFailedDark = meta.story({
 	},
 })
 
-const DESCRIBE_REFUSAL_REASON = "hostOffline"
-
 const DescribeRefusedNotice = () => {
 	const { t } = useTranslation("chat")
 
@@ -1192,12 +1190,9 @@ const DescribeRefusedNotice = () => {
 			raise={() =>
 				raiseFailureNotice({
 					title: t("screen.notice.describeRefused.title"),
-					description: t(
-						"screen.notice.describeRefused.descriptionWithReason",
-						{
-							reason: DESCRIBE_REFUSAL_REASON,
-						},
-					),
+					description: t("screen.notice.describeRefused.description", {
+						reason: t("screen.notice.hostOffline.description"),
+					}),
 				})
 			}
 		/>
@@ -1218,7 +1213,7 @@ const expectDescribeRefused = async (
 	).toBeVisible()
 	await expect(
 		within(viewport()).getByText(
-			`Your change wasn’t saved (${DESCRIBE_REFUSAL_REASON}), so the space kept its previous name and colour. Change them in Space settings to try again.`,
+			"Its computer is offline. Try again once it’s back online. The space kept its previous name and colour.",
 		),
 	).toBeVisible()
 }
@@ -1229,7 +1224,7 @@ export const DescribeRefused = meta.story({
 		docs: {
 			description: {
 				story:
-					"The host refused a member’s rename or recolour of a joined Space, so the space kept its previous name and colour. Check that the title says the name and colour couldn’t be saved, distinct from every join refusal, and that the body carries the reason the app received, then the gesture to try again from Space settings. Pick `DescribeRefusedDark` for the dark theme. The app raises it from `apps/app/src/lib/spaces/joined-spaces-controller.ts`.",
+					"The host refused a member’s rename or recolour of a joined Space, so the space kept its previous name and colour. Check that the title says the name and colour couldn’t be saved, distinct from every join refusal, and that the body opens on the sentence the app gives for that refusal, here the host being offline, then says the space kept its previous name and colour. Pick `DescribeRefusedDark` for the dark theme. The app raises it from `apps/app/src/lib/spaces/joined-spaces-controller.ts`.",
 			},
 		},
 	},

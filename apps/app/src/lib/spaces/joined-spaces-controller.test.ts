@@ -1213,7 +1213,7 @@ describe("describing a joined space", () => {
 		])
 	})
 
-	it("restores the previous name and hue and raises the save failure with the refusal as its reason", async () => {
+	it("restores the previous name and hue and raises the save failure with the host offline sentence as its reason", async () => {
 		const gear = await describingGarage()
 		gear.wire.transport.describe.mockRejectedValueOnce({
 			kind: "hostOffline",
@@ -1227,13 +1227,13 @@ describe("describing a joined space", () => {
 		expect(gear.reportFailure).toHaveBeenCalledExactlyOnceWith({
 			title: "Couldn’t save the name and colour",
 			description:
-				"Your change wasn’t saved (hostOffline), so the space kept its previous name and colour. Change them in Space settings to try again.",
+				"Its computer is offline. Try again once it’s back online. The space kept its previous name and colour.",
 		})
 	})
 
-	it("raises the save failure without a reason when the refusal carries none", async () => {
+	it("raises the save failure with the unexpected sentence as its reason when the refusal is not a joined space error", async () => {
 		const gear = await describingGarage()
-		gear.wire.transport.describe.mockRejectedValueOnce(" ")
+		gear.wire.transport.describe.mockRejectedValueOnce(new Error("disk full"))
 
 		gear.joined.describe(GARAGE.id, { name: "Workshop", colour: 40 })
 		await settle()
@@ -1241,7 +1241,7 @@ describe("describing a joined space", () => {
 		expect(gear.reportFailure).toHaveBeenCalledExactlyOnceWith({
 			title: "Couldn’t save the name and colour",
 			description:
-				"Your change wasn’t saved, so the space kept its previous name and colour. Change them in Space settings to try again.",
+				"Kiroshi couldn’t finish the request. Try again in a moment. The space kept its previous name and colour.",
 		})
 	})
 

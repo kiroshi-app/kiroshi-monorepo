@@ -318,10 +318,7 @@ const chat = {
 			},
 			describeRefused: {
 				title: "Couldn’t save the name and colour",
-				description:
-					"Your change wasn’t saved, so the space kept its previous name and colour. Change them in Space settings to try again.",
-				descriptionWithReason:
-					"Your change wasn’t saved ({{reason}}), so the space kept its previous name and colour. Change them in Space settings to try again.",
+				description: "{{reason}} The space kept its previous name and colour.",
 			},
 			joinRefused: {
 				unavailable: {
