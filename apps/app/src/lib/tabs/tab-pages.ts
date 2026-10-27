@@ -39,9 +39,6 @@ export const pageOf = (href: string): TabPage => {
 
 export const isListPage = ({ pathname }: TabPage) => pathname === LIST_PATH
 
-export const isEmptyListPage = (page: TabPage) =>
-	isListPage(page) && threadRowIdOf(page.thread) === undefined
-
 export const threadRowIdOf = ({ bot, conversation }: ThreadSearch) =>
 	bot ?? conversation
 
@@ -56,15 +53,6 @@ export const isTabHref = (href: string) => {
 		SPACE_SETTINGS_PATH.test(pathname) ||
 		companionIdIn(pathname) !== undefined
 	)
-}
-
-export const pageKeyOf = (href: string) => {
-	const page = pageOf(href)
-	if (!isListPage(page)) {
-		return page.pathname
-	}
-	const { bot, conversation, mission } = page.thread
-	return JSON.stringify([LIST_PATH, bot, conversation, mission])
 }
 
 export const sameThread = (one: ThreadSearch, other: ThreadSearch) =>

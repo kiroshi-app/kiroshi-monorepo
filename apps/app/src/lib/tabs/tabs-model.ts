@@ -1,11 +1,6 @@
 import type { HistoryLocation } from "@tanstack/react-router"
 
-import {
-	EMPTY_LIST_HREF,
-	isEmptyListPage,
-	pageKeyOf,
-	pageOf,
-} from "./tab-pages"
+import { EMPTY_LIST_HREF } from "./tab-pages"
 
 type EntryState = HistoryLocation["state"]
 
@@ -59,38 +54,28 @@ export const withPinnedFirst = (tabs: Tab[]) => [
 const indexOfTab = ({ tabs }: SpaceTabs, id: string) =>
 	tabs.findIndex((tab) => tab.id === id)
 
-export const tabShowing = (
-	{ tabs }: SpaceTabs,
-	href: string,
-): Tab | undefined => {
-	if (isEmptyListPage(pageOf(href))) {
-		return undefined
-	}
-	const key = pageKeyOf(href)
-	return tabs.find((tab) => pageKeyOf(currentHrefOf(tab)) === key)
-}
-
 export const selectTab = (space: SpaceTabs, id: string): SpaceTabs =>
 	indexOfTab(space, id) === -1 ? space : { ...space, activeId: id }
 
 const insertAfterActive = (space: SpaceTabs, tab: Tab): SpaceTabs => {
 	const after = indexOfTab(space, activeTabOf(space).id) + 1
 	return {
+		...space,
 		tabs: withPinnedFirst([
 			...space.tabs.slice(0, after),
 			tab,
 			...space.tabs.slice(after),
 		]),
-		activeId: tab.id,
 	}
 }
 
 export const openTab = (space: SpaceTabs, href: string): SpaceTabs => {
-	const shown = tabShowing(space, href)
-	return shown
-		? selectTab(space, shown.id)
-		: insertAfterActive(space, tabOn(href))
+	const tab = tabOn(href)
+	return selectTab(insertAfterActive(space, tab), tab.id)
 }
+
+export const openBackgroundTab = (space: SpaceTabs, href: string): SpaceTabs =>
+	insertAfterActive(space, tabOn(href))
 
 const neighbourOf = (closedIndex: number, rest: Tab[]) =>
 	rest[closedIndex] ?? rest[closedIndex - 1] ?? tabOn(EMPTY_LIST_HREF)
