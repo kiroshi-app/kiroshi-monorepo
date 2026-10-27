@@ -11,6 +11,7 @@ import {
 	type GlazeTheme,
 	isCompactAt,
 } from "@workspace/ui/components/glaze-border"
+import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import type { Icon } from "@workspace/ui/components/icons"
 import {
 	MARKDOWN_CODE_SURFACE_CLASS,
@@ -18,6 +19,7 @@ import {
 	MARKDOWN_WHITESPACE_CLASS,
 } from "@workspace/ui/components/markdown/prose"
 import type { ScreenLayoutWidth } from "@workspace/ui/components/screen-layout"
+import { spaceAvatarStateOf } from "@workspace/ui/components/space-avatar"
 import {
 	Sidebar,
 	SidebarContent,
@@ -235,6 +237,13 @@ export const expectSettingsMenuLeftColumn = (root: Element) => {
 		row: firstEntry,
 	})
 }
+
+export const RAIL_SPACE_HOST: SpaceHost = "connecting"
+
+export const expectRailSpaceHost = (root: Element) =>
+	expect(slotIn(slotIn(root, "app-rail"), "space-avatar").dataset.state).toBe(
+		spaceAvatarStateOf(RAIL_SPACE_HOST),
+	)
 
 export const LAPTOP_WINDOW = { viewport: { value: "laptop" } }
 

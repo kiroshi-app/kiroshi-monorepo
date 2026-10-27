@@ -12,12 +12,14 @@ import {
 	companionTintOf,
 	expectCompanionPictureShape,
 	expectLeftColumn,
+	expectRailSpaceHost,
 	expectSkeletonFilledTo,
 	FRAME_POLL,
 	hasOverlayScrollbars,
 	mergeA11y,
 	pictureOf,
 	probedStyleOf,
+	RAIL_SPACE_HOST,
 	settled,
 	shown,
 	slotIn,
@@ -2473,6 +2475,30 @@ export const MissionsLeftColumnDark = meta.story({
 	...MISSIONS_LEFT_COLUMN,
 	globals: { theme: "dark" },
 })
+
+const railHostStory = (panel: "conversations" | "missions") => ({
+	args: {
+		...(panel === "missions" ? MissionsTab.input.args : {}),
+		space: SPACES[0],
+		hostBySpaceId: { [HOME]: RAIL_SPACE_HOST },
+	},
+	parameters: {
+		docs: {
+			description: {
+				story: `The ${panel === "missions" ? "Missions" : "Conversations"} panel while the current Space's host is being reached. Check that the Space logo at the top of the rail draws the connecting state, the same one the User and Space settings screens draw for the same host.`,
+			},
+		},
+	},
+	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+		await expectRailSpaceHost(canvasElement)
+	},
+})
+
+export const ConversationsRailSpaceHost = meta.story(
+	railHostStory("conversations"),
+)
+
+export const MissionsRailSpaceHost = meta.story(railHostStory("missions"))
 
 export const DragRegion = meta.story({
 	tags: ["test-only"],

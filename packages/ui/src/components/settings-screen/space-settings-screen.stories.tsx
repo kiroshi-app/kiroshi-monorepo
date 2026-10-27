@@ -4,14 +4,19 @@ import { expect, fn, screen, waitFor, within } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	expectLaptopWindow,
+	expectRailSpaceHost,
 	expectSettingsChrome,
 	expectSettingsMenuLeftColumn,
 	expectSettingsPage,
 	LAPTOP_WINDOW,
+	RAIL_SPACE_HOST,
 	slotIn,
 	slotsIn,
 } from "@workspace/storybook/story-utils"
-import { TITLE_BAR } from "@workspace/ui/components/app-title-bar.fixtures"
+import {
+	STUDIO,
+	TITLE_BAR,
+} from "@workspace/ui/components/app-title-bar.fixtures"
 import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
 import { SPACE_ENVIRONMENT } from "@workspace/ui/components/environment.fixtures"
 import {
@@ -246,6 +251,21 @@ const LEFT_COLUMN = {
 }
 
 export const LeftColumn = meta.story(LEFT_COLUMN)
+
+export const RailSpaceHost = meta.story({
+	args: { currentSpace: STUDIO, currentSpaceHost: RAIL_SPACE_HOST },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The Space settings while the current Space's host is being reached. Check that the Space logo at the top of the rail draws the connecting state, the same one the Conversations and Missions panels and the User settings screen draw for the same host.",
+			},
+		},
+	},
+	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+		await expectRailSpaceHost(canvasElement)
+	},
+})
 
 export const LeftColumnDark = meta.story({
 	...LEFT_COLUMN,

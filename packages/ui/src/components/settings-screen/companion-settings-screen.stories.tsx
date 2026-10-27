@@ -6,6 +6,7 @@ import {
 	A11Y_FLOATING_FOCUS_GUARDS,
 	expectLaptopWindow,
 	expectSettingsChrome,
+	expectSettingsMenuLeftColumn,
 	expectSettingsPage,
 	LAPTOP_WINDOW,
 	opaque,
@@ -540,6 +541,27 @@ export const BackToConversations = meta.story({
 		await userEvent.click(entryIn(menu, "Back to conversations"))
 		await expect(args.onBack).toHaveBeenCalledOnce()
 	},
+})
+
+const LEFT_COLUMN = {
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The companion settings menu as the left column every screen shares. Check that the column opens 8px under its top edge and closes 12px over its bottom edge, that its pieces stand 8px apart, that its back header is 32px tall like the Conversations panel header and that its first entry sits 8px in from its inner edge, the same numbers the Conversations and Missions panels and the User and Space settings menus read.",
+			},
+		},
+	},
+	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+		await expectSettingsMenuLeftColumn(canvasElement)
+	},
+}
+
+export const LeftColumn = meta.story(LEFT_COLUMN)
+
+export const LeftColumnDark = meta.story({
+	...LEFT_COLUMN,
+	globals: { theme: "dark" },
 })
 
 export const DefaultWidth = meta.story({
