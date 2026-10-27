@@ -568,6 +568,8 @@ const SESSION_FREE_ENTRIES = [
 	i18n.t("settings:rail.companions"),
 ]
 
+const EVERY_ENTRY = [...SESSION_BOUND_ENTRIES, ...SESSION_FREE_ENTRIES]
+
 const isMenuEntryDisabled = async (label: string) => {
 	const menu = settingsMenuOf()
 	if (!menu) throw new Error("the settings menu is not shown")
@@ -588,22 +590,20 @@ describe("SpaceSettingsScreen entries bound to the current space session", () =>
 		const gear = await gearWithGarage()
 		gear.joined.selectSpace(gear.home.id)
 
-		const dialog = render(
+		render(
 			createElement(SpaceSettingsHarness, { ...gear, spaceId: GARAGE_ROW }),
 			{ wrapper: createQueryTestWrapper().wrapper },
-		).container
+		)
 
 		for (const label of SESSION_BOUND_ENTRIES) {
 			expect(await isMenuEntryDisabled(label), label).toBe(true)
 		}
-		for (const label of SESSION_FREE_ENTRIES) {
+		for (const label of [
+			...SESSION_FREE_ENTRIES,
+			i18n.t("common:spaces.leave.action"),
+		]) {
 			expect(await isMenuEntryDisabled(label), label).toBe(false)
 		}
-		expect(
-			within(dialog)
-				.getByRole("button", { name: i18n.t("common:spaces.leave.action") })
-				.hasAttribute("disabled"),
-		).toBe(false)
 	})
 
 	it("enables every entry on the current joined space", async () => {
@@ -611,7 +611,7 @@ describe("SpaceSettingsScreen entries bound to the current space session", () =>
 
 		openSettingsOf(gear, GARAGE_ROW)
 
-		for (const label of [...SESSION_BOUND_ENTRIES, ...SESSION_FREE_ENTRIES]) {
+		for (const label of EVERY_ENTRY) {
 			expect(await isMenuEntryDisabled(label), label).toBe(false)
 		}
 	})
@@ -621,7 +621,7 @@ describe("SpaceSettingsScreen entries bound to the current space session", () =>
 
 		openSettingsOf(gear, gear.home.id)
 
-		for (const label of [...SESSION_BOUND_ENTRIES, ...SESSION_FREE_ENTRIES]) {
+		for (const label of EVERY_ENTRY) {
 			expect(await isMenuEntryDisabled(label), label).toBe(false)
 		}
 	})
