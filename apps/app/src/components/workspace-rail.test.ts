@@ -25,6 +25,7 @@ import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 import type { JoinedSpacesController } from "@/lib/spaces/joined-spaces-controller"
 import { joinedRowIdOf } from "@/lib/spaces/joined-spaces-controller"
 import { useSwitcherSpaces } from "@/lib/spaces/use-joined-spaces"
+import { createWorkspaceTabs } from "@/lib/tabs/workspace-tabs"
 import { readMirror, writeMirror } from "@/lib/user/preferences-mirror"
 import type { RosterLines } from "@/lib/workspace/use-roster-lines"
 import type { RosterLists } from "@/lib/workspace/use-roster-lists"
@@ -150,6 +151,7 @@ const RailHarness = ({
 			typeof useSidebarPanelSwitch
 		>,
 		switcher,
+		tabs: createWorkspaceTabs(),
 		onSelectSpace,
 	})
 }

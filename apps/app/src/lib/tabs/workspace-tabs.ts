@@ -40,6 +40,8 @@ export type WorkspaceTabsState = {
 	restoredSpaceIds: string[]
 }
 
+export type LeaveGuard = (leave: () => void) => void
+
 export type WorkspaceTabs = {
 	history: RouterHistory
 	getState: () => WorkspaceTabsState
@@ -57,6 +59,8 @@ export type WorkspaceTabs = {
 	closeOthers: (id: string) => void
 	reorder: (ids: string[]) => void
 	dropAbsentRestored: (spaceId: string, check: RestoredCheck) => Promise<void>
+	guardLeave: (guard: LeaveGuard) => () => void
+	leaveAsked: (gesture: () => void) => void
 }
 
 type RestoredCheck = {
@@ -138,6 +142,46 @@ export const createWorkspaceTabs = (
 	const change = (update: (space: SpaceTabs) => SpaceTabs) =>
 		showChange(() => keep(update(shown())))
 
+	let leaveGuard: LeaveGuard | undefined
+	let isLeaveAsked = false
+
+	const leaveAsked = (gesture: () => void) => {
+		const wasAsked = isLeaveAsked
+		isLeaveAsked = true
+		try {
+			gesture()
+		} finally {
+			isLeaveAsked = wasAsked
+		}
+	}
+
+	const askBeforeLeaving = (gesture: () => void) => {
+		if (!leaveGuard || isLeaveAsked) {
+			gesture()
+			return
+		}
+		leaveGuard(() => leaveAsked(gesture))
+	}
+
+	const leavesShown = (update: (space: SpaceTabs) => SpaceTabs) =>
+		shownEntryOf(update(shown())) !== shownEntryOf(shown())
+
+	const askingChange = (update: (space: SpaceTabs) => SpaceTabs) => {
+		if (leavesShown(update)) {
+			askBeforeLeaving(() => change(update))
+		} else {
+			change(update)
+		}
+	}
+
+	const askingMove = (steps: number, move: () => void) => {
+		if (leavesShown((space) => moveInHistory(space, steps))) {
+			askBeforeLeaving(move)
+		} else {
+			move()
+		}
+	}
+
 	const changeIn = (
 		spaceId: string,
 		update: (space: SpaceTabs) => SpaceTabs,
@@ -185,6 +229,20 @@ export const createWorkspaceTabs = (
 		return { space: fresh, isRestored: false }
 	}
 
+	const reachSpace = (spaceId: string) => {
+		const state = store.getState()
+		const { space, isRestored } = reachedTabsOf(spaceId)
+		showChange(() =>
+			store.setState({
+				spaceId,
+				bySpace: { ...state.bySpace, [spaceId]: space },
+				restoredSpaceIds: isRestored
+					? [...state.restoredSpaceIds, spaceId]
+					: state.restoredSpaceIds,
+			}),
+		)
+	}
+
 	return {
 		history,
 		getState: store.getState,
@@ -194,27 +252,19 @@ export const createWorkspaceTabs = (
 			if (spaceId === state.spaceId) {
 				return
 			}
-			const { space, isRestored } = reachedTabsOf(spaceId)
-			showChange(() =>
-				store.setState({
-					spaceId,
-					bySpace: { ...state.bySpace, [spaceId]: space },
-					restoredSpaceIds: isRestored
-						? [...state.restoredSpaceIds, spaceId]
-						: state.restoredSpaceIds,
-				}),
-			)
+			askBeforeLeaving(() => reachSpace(spaceId))
 		},
-		openEmptyTab: () => change((space) => openTab(space, EMPTY_LIST_HREF)),
-		openInNewTab: (href) => change((space) => openTab(space, href)),
-		back: () => history.back(),
-		forward: () => history.forward(),
-		select: (id) => change((space) => selectTab(space, id)),
+		openEmptyTab: () =>
+			askingChange((space) => openTab(space, EMPTY_LIST_HREF)),
+		openInNewTab: (href) => askingChange((space) => openTab(space, href)),
+		back: () => askingMove(-1, () => history.back()),
+		forward: () => askingMove(1, () => history.forward()),
+		select: (id) => askingChange((space) => selectTab(space, id)),
 		pin: (id) => change((space) => pinTab(space, id)),
 		unpin: (id) => change((space) => unpinTab(space, id)),
-		close: (id) => change((space) => closeTab(space, id)),
-		closeActive: () => change(closeActiveTab),
-		closeOthers: (id) => change((space) => closeOtherTabs(space, id)),
+		close: (id) => askingChange((space) => closeTab(space, id)),
+		closeActive: () => askingChange(closeActiveTab),
+		closeOthers: (id) => askingChange((space) => closeOtherTabs(space, id)),
 		reorder: (ids) => change((space) => reorderTabs(space, ids)),
 		dropAbsentRestored: async (spaceId, { isRowPresent, readMission }) => {
 			const state = store.getState()
@@ -237,5 +287,14 @@ export const createWorkspaceTabs = (
 			)
 			await dropGoneMissions(spaceId, readMission)
 		},
+		guardLeave: (guard) => {
+			leaveGuard = guard
+			return () => {
+				if (leaveGuard === guard) {
+					leaveGuard = undefined
+				}
+			}
+		},
+		leaveAsked,
 	}
 }

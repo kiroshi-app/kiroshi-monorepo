@@ -1,8 +1,11 @@
+import { useEffect } from "react"
+
 import { AppRail } from "@workspace/ui/components/app-rail"
 import type { SettingsScreenRequestLeave } from "@workspace/ui/components/settings-screen"
 
 import type { SettingsNavigation } from "@/lib/navigation/use-settings-navigation"
 import type { useSwitcherSpaces } from "@/lib/spaces/use-joined-spaces"
+import type { WorkspaceTabs } from "@/lib/tabs/workspace-tabs"
 import type { SidebarPanel } from "@/lib/user/use-sidebar-tab"
 import type { RosterLines } from "@/lib/workspace/use-roster-lines"
 import type { RosterLists } from "@/lib/workspace/use-roster-lists"
@@ -22,6 +25,7 @@ type WorkspaceRailProps = {
 	rosterLists: RosterLists
 	sidebarTab: ReturnType<typeof useSidebarPanelSwitch>
 	switcher: ReturnType<typeof useSwitcherSpaces>
+	tabs: WorkspaceTabs
 	onSelectSpace: (id: string) => void
 }
 
@@ -36,8 +40,11 @@ export const WorkspaceRail = ({
 	rosterLists,
 	sidebarTab,
 	switcher,
+	tabs,
 	onSelectSpace,
 }: WorkspaceRailProps) => {
+	useEffect(() => tabs.guardLeave(requestLeave), [tabs, requestLeave])
+
 	const space = switcher.selectedSpace
 	const leaveSettingsFor = (panel: SidebarPanel) => {
 		navigation.openConversations()
@@ -60,7 +67,9 @@ export const WorkspaceRail = ({
 			onCreateSpace={rosterLines.sidebarActions.onCreateSpace}
 			onDeclineInvitation={switcher.onDeclineInvitation}
 			onRetryInvitation={switcher.onRetryInvitation}
-			onSelectSpace={(id) => requestLeave(() => onSelectSpace(id))}
+			onSelectSpace={(id) =>
+				requestLeave(() => tabs.leaveAsked(() => onSelectSpace(id)))
+			}
 			onSpacesMenuOpenChange={switcher.onSpaceSwitcherOpenChange}
 			onOpenSpaceSettings={() => {
 				if (space) requestLeave(() => navigation.openSpaceSettings(space.id))

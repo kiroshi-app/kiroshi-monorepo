@@ -371,6 +371,79 @@ it("asks before a rail press leaves an unsaved application, and leaves once on L
 	expect(isMarked(conversationsEntryOf())).toBe(true)
 })
 
+const pressCloseTab = async () => {
+	await act(async () => {
+		fireEvent.keyDown(window, { key: "w", metaKey: true })
+	})
+	await settle()
+}
+
+it("asks once before Mod+W closes the tab of an unsaved application, and closes it on Leave", async () => {
+	await mountApp(twoSpaceApplications)
+	await openSpaceSettingsByRail()
+	await openApplications()
+	await press(menuEntryOf(/^ledger/))
+	const nameField = () =>
+		screen.getByLabelText<HTMLInputElement>(
+			i18n.t("bots:applications.name.label"),
+		)
+	fireEvent.change(nameField(), { target: { value: "ledger-desk" } })
+	const leaveQuestions = () =>
+		screen.queryAllByRole("alertdialog", {
+			name: i18n.t("bots:applications.leave.title"),
+		})
+
+	await pressCloseTab()
+	expect(leaveQuestions()).toHaveLength(1)
+	await press(
+		within(leaveQuestions()[0] as HTMLElement).getByRole("button", {
+			name: i18n.t("common:confirm.cancel"),
+		}),
+	)
+
+	expect(leaveQuestions()).toHaveLength(0)
+	expect(nameField().value).toBe("ledger-desk")
+
+	await pressCloseTab()
+	expect(leaveQuestions()).toHaveLength(1)
+	await press(
+		within(leaveQuestions()[0] as HTMLElement).getByRole("button", {
+			name: i18n.t("bots:applications.leave.action"),
+		}),
+	)
+
+	expect(leaveQuestions()).toHaveLength(0)
+	expect(shownSettingsOf()).toBeNull()
+})
+
+it("asks once before the title bar opens a new tab over an unsaved application", async () => {
+	await mountApp(twoSpaceApplications)
+	await openSpaceSettingsByRail()
+	await openApplications()
+	await press(menuEntryOf(/^ledger/))
+	fireEvent.change(
+		screen.getByLabelText(i18n.t("bots:applications.name.label")),
+		{ target: { value: "ledger-desk" } },
+	)
+	const leaveQuestions = () =>
+		screen.queryAllByRole("alertdialog", {
+			name: i18n.t("bots:applications.leave.title"),
+		})
+
+	await press(
+		screen.getByRole("button", { name: i18n.t("common:titleBar.newTab") }),
+	)
+	expect(leaveQuestions()).toHaveLength(1)
+	await press(
+		within(leaveQuestions()[0] as HTMLElement).getByRole("button", {
+			name: i18n.t("bots:applications.leave.action"),
+		}),
+	)
+
+	expect(leaveQuestions()).toHaveLength(0)
+	expect(shownSettingsOf()).toBeNull()
+})
+
 it("lists the application the person installed under Applications of the user settings", async () => {
 	await mountApp(oneUserApplication)
 	await press(avatarOf())
