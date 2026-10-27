@@ -69,12 +69,12 @@ describe("FocusedSpacePage avatar", () => {
 	})
 
 	it.each([
-		["connecting", "connecting", "Connecting…"],
-		["down", "offline", "Not connected"],
+		["connecting", "connecting"],
+		["down", "offline"],
 	] as const)(
-		"draws a %s host passed in, over what the page infers, with its pill",
-		(spaceHost, state, pill) => {
-			const { container, getByText } = render(
+		"draws a %s host passed in, over what the page infers, with no pill",
+		(spaceHost, state) => {
+			const { container } = render(
 				pageOf({ spaceId: "space-harbor", name: "Harbor", spaceHost }),
 			)
 
@@ -82,7 +82,7 @@ describe("FocusedSpacePage avatar", () => {
 				container.querySelector<HTMLElement>('[data-slot="space-avatar"]')
 					?.dataset.state,
 			).toBe(state)
-			expect(getByText(pill)).toBeTruthy()
+			expect(container.querySelector('[data-slot="host-pill"]')).toBeNull()
 		},
 	)
 })

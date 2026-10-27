@@ -7,11 +7,7 @@ import { BotTitleBadge } from "@workspace/ui/components/bot-badge"
 import type { BotMcpConnectionState } from "@workspace/ui/components/bot-settings"
 import { MCP_CONNECTION_DOT } from "@workspace/ui/components/bot-settings-dialog/mcp-connection"
 import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
-import {
-	HostPill,
-	hostPillOf,
-	type SpaceHost,
-} from "@workspace/ui/components/host-pill"
+import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import {
 	type FillIconName,
 	FillIcons,
@@ -86,14 +82,12 @@ const SPACE_ATTENTION_DOT =
 type SettingsMenuHeaderProps = {
 	avatar: ReactNode
 	name: string
-	status?: ReactNode
 	subtitle: string
 }
 
 const SettingsMenuHeader = ({
 	avatar,
 	name,
-	status,
 	subtitle,
 }: SettingsMenuHeaderProps) => (
 	<div
@@ -109,7 +103,6 @@ const SettingsMenuHeader = ({
 				>
 					{name}
 				</span>
-				{status}
 			</div>
 			<span className="truncate text-muted-foreground text-xs">{subtitle}</span>
 		</div>
@@ -128,7 +121,6 @@ type SettingsMenuProps = SettingsMenuHeaderProps & {
 const SettingsMenu = ({
 	avatar,
 	name,
-	status,
 	subtitle,
 	onBack,
 	backLabel,
@@ -155,12 +147,7 @@ const SettingsMenu = ({
 				/>
 				{backLabel ?? t("screen.back")}
 			</button>
-			<SettingsMenuHeader
-				avatar={avatar}
-				name={name}
-				status={status}
-				subtitle={subtitle}
-			/>
+			<SettingsMenuHeader avatar={avatar} name={name} subtitle={subtitle} />
 			<div
 				className="-m-0.5 min-h-0 flex-1 overflow-y-auto p-0.5"
 				data-slot="settings-menu-entries"
@@ -432,7 +419,6 @@ const SettingsMenuSpace = ({
 	onOpen,
 }: SettingsMenuSpaceProps) => {
 	const { t } = useTranslation(["settings", "bots"])
-	const pill = hostPillOf(host)
 
 	return (
 		<li>
@@ -451,9 +437,7 @@ const SettingsMenuSpace = ({
 				onSelect={onOpen}
 				trailing={
 					<span className={SPACE_TRAILING}>
-						{pill ? (
-							<HostPill host={pill} />
-						) : host ? (
+						{host ? (
 							<span className="sr-only">{t(`bots:spaces.host.${host}`)}</span>
 						) : null}
 						{isCurrent ? (

@@ -23,11 +23,7 @@ import { RuntimeFields } from "@workspace/ui/components/bot-settings-dialog/runt
 import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
 import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
 import { EnvironmentPanel } from "@workspace/ui/components/environment-panel"
-import {
-	HostPill,
-	hostPillOf,
-	type SpaceHost,
-} from "@workspace/ui/components/host-pill"
+import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import { InitialsAvatar } from "@workspace/ui/components/initials-avatar"
 import type { SettingsPages } from "@workspace/ui/components/plugin-settings/settings-pages"
 import { HISTORY_TAB } from "@workspace/ui/components/plugin-settings/use-history-session"
@@ -192,7 +188,6 @@ type CompanionSettingsScreenProps = SettingsScreenNavigation &
 type SettingsScreenLayoutProps = SettingsScreenNavigation & {
 	avatar: ReactNode
 	name: string
-	status?: ReactNode
 	subtitle: string
 	entries: SettingsEntry[]
 	pages: SettingsPages
@@ -255,7 +250,6 @@ const SettingsScreenLayout = ({
 	spaceTint,
 	avatar,
 	name,
-	status,
 	subtitle,
 	entries,
 	pages,
@@ -372,7 +366,6 @@ const SettingsScreenLayout = ({
 						name={name}
 						onBack={() => leaveThen(onBack)}
 						resizeHandle={<SidebarResizeHandle side="left" />}
-						status={status}
 						subtitle={subtitle}
 					>
 						<SettingsMenuSection
@@ -506,7 +499,6 @@ const SpaceSettingsScreen = (props: SpaceSettingsScreenProps) => {
 		isHostUnreachable ||
 		(isSessionUnavailable && SESSION_BOUND_ENTRIES.has(value))
 	const host = spaceHostOf(space, spaceHost)
-	const pillHost = hostPillOf(host)
 
 	const focusedEntries =
 		space.state === "invitation"
@@ -561,7 +553,6 @@ const SpaceSettingsScreen = (props: SpaceSettingsScreenProps) => {
 			entry={entry}
 			backLabel={backLabel ?? t("screen.backToSettings")}
 			name={name}
-			status={pillHost ? <HostPill host={pillHost} /> : undefined}
 			onBack={onBack}
 			onEntryChange={onEntryChange}
 			pages={pages}

@@ -905,7 +905,7 @@ export const JoinedHostNotConnected = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard F04: a space joined from Jordan Lee, whose computer isn't connected. Check · Not connected after the host, the avatar in greys without a dot and the Not connected pill beside the name in the menu and on the page, the header alone with no Name field, every entry but Space dimmed, out of the tab order and announced as disabled with its count hidden, and Leave space still reachable.",
+					"Artboard F04: a space joined from Jordan Lee, whose computer isn't connected. Check · Not connected after the host, the avatar in greys without a dot and no state pill beside the name in the menu or on the page, the header alone with no Name field, every entry but Space dimmed, out of the tab order and announced as disabled with its count hidden, and Leave space still reachable.",
 			},
 		},
 	},
@@ -920,8 +920,8 @@ export const JoinedHostNotConnected = meta.story({
 		})
 		await expect(avatarStatesIn(menu, main)).toEqual(["offline", "offline"])
 		await expect(menu.querySelector("[data-slot=space-avatar-dot]")).toBeNull()
-		await expect(slotIn(menu, "host-pill")).toHaveTextContent("Not connected")
-		await expect(slotIn(main, "host-pill")).toHaveTextContent("Not connected")
+		await expect(slotsIn(menu, "host-pill")).toHaveLength(0)
+		await expect(slotsIn(main, "host-pill")).toHaveLength(0)
 
 		const standing = slotIn(main, "focused-space-standing")
 		await expect(
@@ -1007,7 +1007,7 @@ export const JoinedHostConnecting = meta.story({
 		docs: {
 			description: {
 				story:
-					"A joined space whose host this computer is still reaching, the host state handed in by the app. Check the settings header and the Space page both draw the connecting avatar, its ground with the arcs as lines and no dot, and a Connecting… pill beside the space name.",
+					"A joined space whose host this computer is still reaching, the host state handed in by the app. Check the settings header and the Space page both draw the connecting avatar, its ground with the arcs as lines and no dot, with no state pill beside the space name.",
 			},
 		},
 	},
@@ -1018,17 +1018,14 @@ export const JoinedHostConnecting = meta.story({
 			"connecting",
 			"connecting",
 		])
-		for (const [area, name] of [
-			[menu, slotIn(menu, "settings-menu-name")],
-			[
-				main,
-				within(main).getByRole("heading", { level: 2, name: "Northwind" }),
-			],
-		] as const) {
-			const pill = slotIn(area, "host-pill")
-			await expect(pill).toHaveTextContent("Connecting…")
-			await expect(pill.previousElementSibling).toBe(name)
-		}
+		await expect(slotIn(menu, "settings-menu-name")).toHaveTextContent(
+			"Northwind",
+		)
+		await expect(
+			within(main).getByRole("heading", { level: 2, name: "Northwind" }),
+		).toBeVisible()
+		for (const area of [menu, main])
+			await expect(slotsIn(area, "host-pill")).toHaveLength(0)
 	},
 })
 
