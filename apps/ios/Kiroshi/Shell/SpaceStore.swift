@@ -15,6 +15,7 @@ final class SpaceStore {
     private(set) var connection: RelayConnection?
     private(set) var pictures: CompanionPictures?
     private(set) var spaceIdsToJoin: Set<Space.ID> = []
+    private(set) var spaceIdsAwaitingHost: Set<Space.ID> = []
     let email: String
     let accountId: String?
     let work = CompanionWork()
@@ -66,6 +67,10 @@ final class SpaceStore {
         currentSpace.flatMap { $0.isHostOnline ? nil : $0 }
     }
 
+    func presence(of space: Space) -> SpacePresence {
+        space.presence(isAwaitingHost: spaceIdsAwaitingHost.contains(space.id))
+    }
+
     var spaceToJoin: Space? {
         currentSpace.flatMap { spaceIdsToJoin.contains($0.id) ? $0 : nil }
     }
@@ -97,13 +102,19 @@ final class SpaceStore {
         let updates = await connection.updates()
         if !hasLeft {
             await connection.start()
+            var hasHeardHost = false
             for await update in updates {
                 work.apply(update)
                 guard case .state(let state) = update else { continue }
+                if state == .connecting, !hasHeardHost {
+                    spaceIdsAwaitingHost.insert(spaceId)
+                }
+                hasHeardHost = hasHeardHost || Self.namesTheHost(state)
                 apply(state, to: spaceId)
             }
         }
         await connection.stop()
+        spaceIdsAwaitingHost.remove(spaceId)
         if self.connection === connection {
             self.connection = nil
             pictures = nil
@@ -149,7 +160,15 @@ final class SpaceStore {
         }
     }
 
+    private static func namesTheHost(_ state: RelayState) -> Bool {
+        switch state {
+        case .online, .hostOffline: true
+        default: false
+        }
+    }
+
     private func setHost(of spaceId: Space.ID, online: Bool) {
+        spaceIdsAwaitingHost.remove(spaceId)
         guard let index = spaces.firstIndex(where: { $0.id == spaceId }) else { return }
         spaces[index].isHostOnline = online
     }

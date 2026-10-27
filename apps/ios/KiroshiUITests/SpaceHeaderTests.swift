@@ -16,7 +16,14 @@ final class SpaceHeaderTests: XCTestCase {
         let conversations = header(in: app)
         XCTAssertTrue(conversations.space.waitForExistence(timeout: 10))
         XCTAssertTrue(conversations.settings.exists)
-        XCTAssertEqual(conversations.space.value as? String, "Studio, online")
+        XCTAssertEqual(
+            XCTWaiter().wait(
+                for: [
+                    expectation(
+                        for: NSPredicate(format: "value == 'Studio, Shared'"),
+                        evaluatedWith: conversations.space)
+                ], timeout: 10),
+            .completed)
         let settingsFrame = conversations.settings.frame
         let spaceFrame = conversations.space.frame
 
@@ -25,17 +32,14 @@ final class SpaceHeaderTests: XCTestCase {
         let missions = header(in: app)
         XCTAssertTrue(missions.space.waitForExistence(timeout: 10))
         XCTAssertTrue(missions.settings.exists)
-        XCTAssertEqual(missions.space.value as? String, "Studio, online")
+        XCTAssertEqual(missions.space.value as? String, "Studio, Shared")
         XCTAssertEqual(missions.settings.frame, settingsFrame)
         XCTAssertEqual(missions.space.frame, spaceFrame)
 
         missions.space.tap()
 
-        XCTAssertTrue(
-            app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Side project'")).firstMatch
-                .waitForExistence(timeout: 5))
-        XCTAssertTrue(
-            app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Home lab'")).firstMatch
-                .exists)
+        XCTAssertTrue(app.buttons["Side project, Not connected"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Home lab, Online"].exists)
+        XCTAssertTrue(app.buttons["Studio, Shared"].exists)
     }
 }

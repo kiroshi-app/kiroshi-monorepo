@@ -25,6 +25,9 @@
             let path = request.url?.pathComponents ?? []
             let spaceId = path.dropLast(2).last ?? ""
             let sharedSpaceId = "space-\(spaceId)"
+            if UserDefaults.standard.bool(forKey: "hostSilent") {
+                try await Task.sleep(for: .seconds(3600))
+            }
             if onlineOnceSpaceIds.contains(spaceId), !leftSpaceIds.contains(spaceId) {
                 leftSpaceIds.insert(spaceId)
                 return ScriptedRelaySocket(

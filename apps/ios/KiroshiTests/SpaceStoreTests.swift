@@ -99,6 +99,43 @@ struct SpaceStoreTests {
         #expect(store.connection == nil)
     }
 
+    @Test func eachSpaceTellsItsPresenceFromItsRoleAndItsHost() {
+        let store = makeStore()
+        let sideProject = Space(id: "side", name: "Side", role: .member, isHostOnline: false)
+        let hosted = Space(id: "hosted", name: "Hosted", role: .owner, isHostOnline: true)
+
+        #expect(store.presence(of: hosted) == .shared)
+        #expect(store.presence(of: homeLab) == .online)
+        #expect(store.presence(of: studio) == .notConnected)
+        #expect(store.presence(of: sideProject) == .notConnected)
+    }
+
+    @Test func theCurrentSpaceConnectsOnlyUntilItsHostFirstAnswers() async {
+        let store = makeStore()
+        let current = { store.currentSpace.map(store.presence(of:)) }
+        let following = Task { await store.follow() }
+
+        let first = await relay.nextOpening()
+        await waitUntil { current() == .connecting }
+        #expect(store.presence(of: homeLab) == .online)
+
+        first.close(RelayClosure.hostOffline)
+        await waitUntil { current() == .notConnected }
+
+        var sleeps = clock.sleeps.makeAsyncIterator()
+        await sleeps.next()?.wake.yield()
+        let second = await relay.nextOpening()
+        for _ in 0..<10 { await Task.yield() }
+        #expect(current() == .notConnected)
+
+        second.accept(ScriptedRelaySocket(sharedSpaceId: "s-1"))
+        await waitUntil { current() == .shared }
+
+        following.cancel()
+        await following.value
+        #expect(store.spaceIdsAwaitingHost.isEmpty)
+    }
+
     @Test func leavingClosesTheRelaySocketForGood() async throws {
         let store = makeStore()
         let following = Task { await store.follow() }
