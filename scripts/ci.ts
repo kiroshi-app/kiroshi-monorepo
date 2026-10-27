@@ -215,6 +215,101 @@ export const CHANGED_UNIT_TESTS: Step = {
 	command: "bun run baseline changed",
 }
 
+export const SHARED_IMPORTER_THRESHOLD = 20
+
+export const SHARED_PATH_RULES = [
+	"packages/ui/src/tokens/**",
+	"packages/ui/src/tokens.*",
+	"packages/ui/tokens.json",
+	"packages/ui/src/styles/**",
+	"packages/ui/src/lib/**",
+	"packages/shared/**",
+	"apps/app/src/lib/**",
+	"apps/app/vitest.config.ts",
+	"packages/ui/vitest.config.ts",
+	"baselines/**",
+	"packages/ui/src/components/bot-badge.tsx",
+	"packages/ui/src/components/bot-identity-avatar.tsx",
+	"packages/ui/src/components/bot-settings.ts",
+	"packages/ui/src/components/code-block.tsx",
+	"packages/ui/src/components/companion-avatar.ts",
+	"packages/ui/src/components/companion-colour.ts",
+	"packages/ui/src/components/companion-field.ts",
+	"packages/ui/src/components/companion-menu.tsx",
+	"packages/ui/src/components/companion-picture.ts",
+	"packages/ui/src/components/companion-silhouette.ts",
+	"packages/ui/src/components/conversation-subject-icon.tsx",
+	"packages/ui/src/components/dithered-field-avatar.tsx",
+	"packages/ui/src/components/field-frame.tsx",
+	"packages/ui/src/components/field-grid.ts",
+	"packages/ui/src/components/glaze-border.ts",
+	"packages/ui/src/components/hue-palette.ts",
+	"packages/ui/src/components/hue-recipe.ts",
+	"packages/ui/src/components/hue-tones.ts",
+	"packages/ui/src/components/icon-swap.tsx",
+	"packages/ui/src/components/icons.tsx",
+	"packages/ui/src/components/initials-avatar.tsx",
+	"packages/ui/src/components/inverse-button.ts",
+	"packages/ui/src/components/kiroshi-hexagon.ts",
+	"packages/ui/src/components/list-skeleton.tsx",
+	"packages/ui/src/components/markdown/prose.ts",
+	"packages/ui/src/components/message-bubble.tsx",
+	"packages/ui/src/components/message-side-context.tsx",
+	"packages/ui/src/components/mission-marks.tsx",
+	"packages/ui/src/components/motion/text-shimmer.tsx",
+	"packages/ui/src/components/notice-surface.tsx",
+	"packages/ui/src/components/outlined-hexagon.tsx",
+	"packages/ui/src/components/plugin-settings/application-mark.tsx",
+	"packages/ui/src/components/roster-menu-items.tsx",
+	"packages/ui/src/components/row-anatomy.tsx",
+	"packages/ui/src/components/settings-field.tsx",
+	"packages/ui/src/components/settings-select.tsx",
+	"packages/ui/src/components/settings-styles.ts",
+	"packages/ui/src/components/sidebar-list-row.tsx",
+	"packages/ui/src/components/sidebar-menu-row.tsx",
+	"packages/ui/src/components/space-avatar-recipe.ts",
+	"packages/ui/src/components/space-avatar.tsx",
+	"packages/ui/src/components/tooltip-button.tsx",
+	"packages/ui/src/components/tooltip-hint.tsx",
+	"packages/ui/src/components/ui/avatar.tsx",
+	"packages/ui/src/components/ui/badge.tsx",
+	"packages/ui/src/components/ui/button.tsx",
+	"packages/ui/src/components/ui/context-menu.tsx",
+	"packages/ui/src/components/ui/input.tsx",
+	"packages/ui/src/components/ui/item.tsx",
+	"packages/ui/src/components/ui/separator.tsx",
+	"packages/ui/src/components/ui/sheet.tsx",
+	"packages/ui/src/components/ui/sidebar.tsx",
+	"packages/ui/src/components/ui/skeleton.tsx",
+	"packages/ui/src/components/ui/toast.tsx",
+	"packages/ui/src/components/ui/tooltip.tsx",
+	"packages/ui/src/hooks/use-chat-copy.ts",
+	"packages/ui/src/hooks/use-code-highlight-ready.ts",
+	"packages/ui/src/hooks/use-color-scheme.ts",
+	"packages/ui/src/hooks/use-copy-text.ts",
+	"packages/ui/src/hooks/use-focus-first-invalid.ts",
+	"packages/ui/src/hooks/use-mobile.ts",
+	"packages/ui/src/hooks/use-overlay-scrollbars.ts",
+	"packages/ui/src/hooks/use-pending-submit.ts",
+	"packages/ui/src/hooks/use-prefers-reduced-motion.ts",
+	"packages/ui/src/hooks/use-skeleton-timing.ts",
+]
+
+export type UnitTestScope =
+	| { scope: "changed" }
+	| { scope: "full"; path: string; rule: string }
+
+const sharedRuleOf = (path: string) =>
+	SHARED_PATH_RULES.find((rule) => new Bun.Glob(rule).match(path))
+
+export const unitTestScope = (changedPaths: string[]): UnitTestScope => {
+	for (const path of changedPaths) {
+		const rule = sharedRuleOf(path)
+		if (rule !== undefined) return { scope: "full", path, rule }
+	}
+	return { scope: "changed" }
+}
+
 export const SIMULATOR_LOOKUP = `xcrun simctl list devices available "iOS $(cat .xcode-version)" | grep -m1 -E '^ +iPhone 17 \\(' | grep -oE '[0-9A-F-]{36}'`
 
 const gateSteps = (): Step[] => GROUP_ORDER.flatMap((group) => GATE[group])
@@ -351,11 +446,19 @@ const runGate = () => {
 	})
 }
 
+const runChangedUnitTests = () => {
+	const decision = unitTestScope(pathsChangedSinceMain())
+	if (decision.scope === "changed")
+		return runSteps("changed", [CHANGED_UNIT_TESTS])
+	console.log(`\nci  full suite: ${decision.path} is shared (${decision.rule})`)
+	return runSteps("changed", GATE.vitest)
+}
+
 const runRequested = (argument: string | undefined) => {
 	if (argument === undefined) return runGate()
 	if (argument === "fast")
 		return runSteps("fast", fastSteps(pathsChangedSinceMain()))
-	if (argument === "changed") return runSteps("changed", [CHANGED_UNIT_TESTS])
+	if (argument === "changed") return runChangedUnitTests()
 	if (argument === "rust-pr")
 		return runSteps("rust-pr", RUST_PULL_REQUEST_STEPS)
 	if (isGroup(argument)) return runGroup(argument)
