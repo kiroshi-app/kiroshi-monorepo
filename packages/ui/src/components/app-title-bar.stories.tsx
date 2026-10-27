@@ -121,11 +121,14 @@ const POINTER = {
 	pointerType: "mouse",
 }
 
-const pointAt = (clientX: number, onto: Element) => ({
+const pointerAt = (clientX: number, clientY: number) => ({
 	...POINTER,
 	clientX: Math.round(clientX),
-	clientY: Math.round(boxOf(onto).top + boxOf(onto).height / 2),
+	clientY: Math.round(clientY),
 })
+
+const pointAt = (clientX: number, onto: Element) =>
+	pointerAt(clientX, boxOf(onto).top + boxOf(onto).height / 2)
 
 const middleOf = (element: Element) =>
 	boxOf(element).left + boxOf(element).width / 2
@@ -1201,12 +1204,6 @@ const LIFT_ROW = {
 	],
 	activeTabId: RELEASE_NOTES.id,
 } satisfies Partial<AppTitleBarProps>
-
-const pointerAt = (clientX: number, clientY: number) => ({
-	...POINTER,
-	clientX: Math.round(clientX),
-	clientY: Math.round(clientY),
-})
 
 const isLifted = (tab: HTMLElement) =>
 	getComputedStyle(tab).pointerEvents === "none"
