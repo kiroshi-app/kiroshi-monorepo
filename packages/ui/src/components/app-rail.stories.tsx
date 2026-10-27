@@ -606,7 +606,12 @@ export const RemovedPanelFallsBackToConversations = meta.story({
 		},
 	},
 	play: async ({ canvas, canvasElement }) => {
-		await expectOnlySelected(canvasElement, "conversations")
+		await expect(
+			entryNamed(canvasElement, ENTRY_NAMES.conversations),
+		).toHaveAttribute("aria-current", "true")
+		await expect(
+			entryNamed(canvasElement, ENTRY_NAMES.missions),
+		).not.toHaveAttribute("aria-current")
 		await expect(
 			canvas.getByRole("complementary", { name: ENTRY_NAMES.conversations }),
 		).toBeVisible()

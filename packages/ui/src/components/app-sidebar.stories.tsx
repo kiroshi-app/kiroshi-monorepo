@@ -58,8 +58,6 @@ import type {
 } from "@workspace/ui/components/missions-panel"
 import { SidebarListSkeleton } from "@workspace/ui/components/sidebar-list-skeleton"
 import { NO_CLICK_MODIFIERS } from "@workspace/ui/components/sidebar-menu-row"
-import { SIDEBAR_MIN_WIDTH } from "@workspace/ui/components/sidebar-resize"
-import type { SpaceAvatarState } from "@workspace/ui/components/space-avatar"
 import { WindowControls } from "@workspace/ui/components/window-controls"
 import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 
@@ -726,7 +724,7 @@ export const WithUser = meta.story({
 		docs: {
 			description: {
 				story:
-					"The reader themselves, alone at the foot of the rail, the open space's logo first at the top. The reader is the only way into their own settings, so a host that has an account to show always hands one down. Check that the reader is a 26px round picture centred in a 44px slot, named by their name, that it is the last stop of the rail, that activating it opens the user settings and that the Space logo, in the open space's colour, opens the space settings. Check then the lane the roster draws: its rows sit 8px in from both inner edges of the panel, the panel's own inline padding and nothing more. Pick `WithSearch` for the search button in the header.",
+					"The reader themselves, alone at the foot of the rail, the open space's logo first at the top. The reader is the only way into their own settings, so a host that has an account to show always hands one down. Check that the reader is a 26px round picture centred in a 44px slot, named by their name, that it is the last stop of the rail, that activating it opens the user settings and that the Space logo, in the open space's colour, opens the Spaces menu whose Space settings opens the space settings. Check then the lane the roster draws: its rows sit 8px in from both inner edges of the panel, the panel's own inline padding and nothing more. Pick `WithSearch` for the search button in the header.",
 			},
 		},
 	},
@@ -751,10 +749,13 @@ export const WithUser = meta.story({
 		await userEvent.click(reader)
 		await expect(args.onOpenUserSettings).toHaveBeenCalledTimes(1)
 		const spaceLogo = within(rail).getByRole("button", {
-			name: "Space settings",
+			name: /^Change space/,
 		})
 		await expect(slotIn(spaceLogo, "space-avatar").dataset.colour).toBe("blue")
 		await userEvent.click(spaceLogo)
+		await userEvent.click(
+			await screen.findByRole("menuitem", { name: "Space settings" }),
+		)
 		await expect(args.onOpenSpaceSettings).toHaveBeenCalledTimes(1)
 		await expect(args.onOpenUserSettings).toHaveBeenCalledTimes(1)
 	},
@@ -766,7 +767,7 @@ export const Roster = meta.story({
 		docs: {
 			description: {
 				story:
-					"A dozen companions, some with a title badge and some without, each wearing the blot it was given. Check that the avatars, the names and the timestamps each hold one column down the whole list — a row without a badge must not slide its name or its preview out of line with the row above it — and that every row is the same height whatever it carries. The message and the time read as muted and read alike, on the selected row as on the rest, so a row says its name first and dates itself second; the name is the only line in the row drawn at full strength. The roster sits in the panel the app mounts: one space, its own roster, the search button and the create menu above it, so the carousel holds a single panel and there is no dot strip to count. The list is walked with Tab and a row is its own only stop, since the actions carry no button: the space switcher, the search button and the create menu first, then one stop per row, and Enter on a row reports the selection rather than taking it. Pick `LongContent` for the same list under names and messages that do not fit, `RowContextMenu` for the actions behind a row, `Identities` for the blots at rest.",
+					"A dozen companions, some with a title badge and some without, each wearing the blot it was given. Check that the avatars, the names and the timestamps each hold one column down the whole list — a row without a badge must not slide its name or its preview out of line with the row above it — and that every row is the same height whatever it carries. The message and the time read as muted and read alike, on the selected row as on the rest, so a row says its name first and dates itself second; the name is the only line in the row drawn at full strength. The roster sits in the panel the app mounts: one space, its own roster, the search button and the create menu above it, so the carousel holds a single panel and there is no dot strip to count. The list is walked with Tab and a row is its own only stop, since the actions carry no button: New tab in the title bar, the rail, then the search button and the create menu, then one stop per row, and Enter on a row reports the selection rather than taking it. Pick `LongContent` for the same list under names and messages that do not fit, `RowContextMenu` for the actions behind a row, `Identities` for the blots at rest.",
 			},
 		},
 	},
@@ -793,7 +794,11 @@ export const Roster = meta.story({
 		const create = canvas.getByRole("button", { name: CREATE })
 		await userEvent.tab()
 		await userEvent.tab()
-		await expect(slotIn(canvasElement, "space-switcher")).toHaveFocus()
+		await expect(
+			within(titleBarIn(canvasElement)).getByRole("button", {
+				name: "New tab",
+			}),
+		).toHaveFocus()
 		await tabAcrossRail(userEvent)
 		await userEvent.tab()
 		await expect(searchButtonIn(canvasElement)).toHaveFocus()
@@ -2605,20 +2610,18 @@ export const OneSpace = meta.story({
 		docs: {
 			description: {
 				story:
-					"The state every account opens in: one space, so the header names it and nothing else navigates. Check the switcher names it in the title bar above the panel header, that the create button keeps its 2px insets inside the 32px header row, that no dot strip is drawn in the pinned region, that the row holds exactly one panel filling the list area, and that the row is no wider than that panel, so the trackpad has nothing to scroll and lands nowhere new, there is nowhere to go, and a gesture that silently does nothing is better than one that rubber-bands. Pick `FiveSpaces` for the navigating case, `SpaceScrolling` for the row under the gesture.",
+					"The state every account opens in: one space, so the header names it and nothing else navigates. Check the rail's Space logo names it, that the create button keeps its 2px insets inside the 32px header row, that no dot strip is drawn in the pinned region, that the row holds exactly one panel filling the list area, and that the row is no wider than that panel, so the trackpad has nothing to scroll and lands nowhere new, there is nowhere to go, and a gesture that silently does nothing is better than one that rubber-bands. Pick `FiveSpaces` for the navigating case, `SpaceScrolling` for the row under the gesture.",
 			},
 		},
 	},
 	play: async ({ args, canvas, canvasElement }) => {
-		const switcher = canvas.getByRole("button", {
-			name: "Change space, Perso open",
-		})
+		await expect(
+			within(slotIn(canvasElement, "app-rail")).getByRole("button", {
+				name: "Change space, Perso open",
+			}),
+		).toBeVisible()
 		const create = canvas.getByRole("button", { name: CREATE })
 		const header = slotIn(canvasElement, "sidebar-header")
-
-		await expect(switcher.getBoundingClientRect().bottom).toBeLessThanOrEqual(
-			header.getBoundingClientRect().top,
-		)
 
 		const headerBox = header.getBoundingClientRect()
 		const createBox = create.getBoundingClientRect()
@@ -3220,11 +3223,11 @@ export const SpaceBadges = meta.story({
 		docs: {
 			description: {
 				story:
-					"Three spaces the reader is not in, each with a companion that has something to say. Check each dot in the strip keeps its space's tint and takes the badge as a ring around it, that the spaces with nothing are drawn exactly as they are without badges, and that the switcher takes a single mark for the strongest of the three — attention here — so a reader looking at one roster still knows another one wants them. Pick `FiveSpaces` for the same strip with nothing waiting, `Badges` for the marks on the rows inside a space.",
+					"Three spaces the reader is not in, each with a companion that has something to say. Check each dot in the strip keeps its space's tint and takes the badge as a ring around it, that the spaces with nothing are drawn exactly as they are without badges. Pick `FiveSpaces` for the same strip with nothing waiting, `Badges` for the marks on the rows inside a space.",
 			},
 		},
 	},
-	play: async ({ canvas, canvasElement }) => {
+	play: async ({ canvasElement }) => {
 		const dots = spaceDotsIn(canvasElement).map(
 			(button) => slotsIn(button, "space-dot")[0]?.dataset.badge,
 		)
@@ -3239,13 +3242,6 @@ export const SpaceBadges = meta.story({
 			getComputedStyle(slotsIn(spaceDotsIn(canvasElement)[2], "space-dot")[0])
 				.boxShadow,
 		).toContain(tokenBackground(canvasElement, "var(--warning)"))
-
-		const trigger = canvas.getByRole("button", {
-			name: "Change space, Vocca open",
-		})
-		await expect(
-			slotsIn(trigger, "space-switcher-badge")[0]?.dataset.badge,
-		).toBe("attention")
 	},
 })
 
@@ -3264,11 +3260,11 @@ export const MissionSpaceRing = meta.story({
 		docs: {
 			description: {
 				story:
-					"Two spaces the reader is not in, each with a companion on a mission, and only one of them lit. The space whose mission waits on a person takes the attention ring; the space whose mission is simply running stays exactly as a space with nothing to say, because a companion at work is not news. Check the switcher above the roster repeats the lit mark and only that one, so a reader deep in one space learns another is blocked on them without being pulled by every mission in the app. Check no companion row anywhere carries a mission badge on its preview line: the ring is derived from the missions, not from a dot written onto a row. Pick `SpaceBadges` for the rings a chat lights, `MissionStripStates` for what the mission puts on a row.",
+					"Two spaces the reader is not in, each with a companion on a mission, and only one of them lit. The space whose mission waits on a person takes the attention ring; the space whose mission is simply running stays exactly as a space with nothing to say, because a companion at work is not news. Check no companion row anywhere carries a mission badge on its preview line: the ring is derived from the missions, not from a dot written onto a row. Pick `SpaceBadges` for the rings a chat lights, `MissionStripStates` for what the mission puts on a row.",
 			},
 		},
 	},
-	play: async ({ canvas, canvasElement }) => {
+	play: async ({ canvasElement }) => {
 		const dots = spaceDotsIn(canvasElement).map(
 			(button) => slotsIn(button, "space-dot")[0]?.dataset.badge,
 		)
@@ -3279,13 +3275,6 @@ export const MissionSpaceRing = meta.story({
 			undefined,
 			undefined,
 		])
-
-		const trigger = canvas.getByRole("button", {
-			name: "Change space, Vocca open",
-		})
-		await expect(
-			slotsIn(trigger, "space-switcher-badge")[0]?.dataset.badge,
-		).toBe("attention")
 
 		await expect(slotsIn(canvasElement, "bot-activity-dot")).toHaveLength(0)
 	},
@@ -3382,7 +3371,7 @@ export const SpaceScrolling = meta.story({
 		}
 
 		const still = [
-			leftOf(slotIn(canvasElement, "space-switcher-name")),
+			leftOf(slotIn(slotIn(canvasElement, "app-rail"), "space-avatar")),
 			leftOf(slotIn(canvasElement, "space-dots")),
 		]
 
@@ -3390,7 +3379,7 @@ export const SpaceScrolling = meta.story({
 		await expect(args.onSelectSpace).toHaveBeenCalledTimes(1)
 		await expect(args.onSelectSpace).toHaveBeenLastCalledWith("atelier")
 		await expect([
-			leftOf(slotIn(canvasElement, "space-switcher-name")),
+			leftOf(slotIn(slotIn(canvasElement, "app-rail"), "space-avatar")),
 			leftOf(slotIn(canvasElement, "space-dots")),
 		]).toEqual(still)
 
@@ -3919,8 +3908,6 @@ const TITLE_BAR_HEIGHT = 40
 
 const TRAFFIC_LIGHTS_SLOT = 57
 
-const TITLE_BAR_GAP = 8
-
 const TITLE_BAR_START_PADDING = 14
 
 const titleBarIn = (canvasElement: HTMLElement) =>
@@ -4018,353 +4005,6 @@ export const CaptionWindowControls = meta.story({
 		}
 	},
 })
-const MOCKUP =
-	"Measured against the Paper page `Mockup`; light and dark through the theme toolbar."
-
-const STUDIO: Space = {
-	id: "studio",
-	name: "Studio",
-	colour: "orange",
-	avatarSeed: "studio",
-}
-
-const GARAGE: Space = { id: "garage", name: "Garage", avatarSeed: "garage" }
-
-const TITLE_BAR_ARGS = {
-	"data-tauri-drag-region": "deep",
-	spaces: [STUDIO, GARAGE],
-	selectedSpaceId: STUDIO.id,
-	botsBySpaceId: { [STUDIO.id]: ROSTER, [GARAGE.id]: ROSTER },
-}
-
-const selectorIn = (canvasElement: HTMLElement) =>
-	slotIn(titleBarIn(canvasElement), "space-switcher")
-
-const ICON_SVG = 'svg:not([data-slot="space-avatar"] svg)'
-
-const avatarIn = (canvasElement: HTMLElement) =>
-	slotIn(selectorIn(canvasElement), "space-avatar")
-
-const titleBarPaint = (canvasElement: HTMLElement) =>
-	probedStyleOf(
-		"bg-(--shell-surface,var(--background))",
-		"backgroundColor",
-		titleBarIn(canvasElement),
-	)
-
-const expectOneSelector = async (canvasElement: HTMLElement) => {
-	const titleBar = titleBarIn(canvasElement)
-	await expect(
-		within(titleBar).getAllByRole("button", { name: /^Change space/ }),
-	).toHaveLength(1)
-	await expect(
-		within(titleBar).queryByRole("button", { name: "Share" }),
-	).toBeNull()
-	await expect(
-		selectorIn(canvasElement).querySelectorAll(ICON_SVG),
-	).toHaveLength(1)
-	await expect(within(titleBar).queryByText(/Connected$/)).toBeNull()
-}
-
-const expectSelectorAvatar = async (
-	canvasElement: HTMLElement,
-	state: SpaceAvatarState,
-) => {
-	const avatar = avatarIn(canvasElement)
-	await expect(avatar.dataset.state).toBe(state)
-	await expect(avatar.getBoundingClientRect().width).toBe(12)
-	await expect(avatar.querySelector("[data-slot=space-avatar-dot]")).toBeNull()
-}
-
-const expectNoPill = async (canvasElement: HTMLElement) => {
-	await expect(slotsIn(titleBarIn(canvasElement), "host-pill")).toHaveLength(0)
-}
-
-const expectPillBeside = async (canvasElement: HTMLElement, label: string) => {
-	const titleBar = titleBarIn(canvasElement)
-	const pill = slotIn(titleBar, "host-pill")
-	await expect(pill).toHaveTextContent(new RegExp(`^${label}$`))
-	await expect(pill.previousElementSibling).toBe(selectorIn(canvasElement))
-	const selector = selectorIn(canvasElement).getBoundingClientRect()
-	const box = pill.getBoundingClientRect()
-	await expect(box.left - selector.right).toBe(TITLE_BAR_GAP)
-	const bar = titleBar.getBoundingClientRect()
-	await expect(box.top - bar.top).toBe(bar.bottom - box.bottom)
-	await expect(
-		within(titleBar).queryByRole("button", { name: label }),
-	).toBeNull()
-	return pill
-}
-
-export const A1LocalSpace = meta.story({
-	name: "A1 Local space",
-	args: TITLE_BAR_ARGS,
-	parameters: {
-		docs: {
-			description: {
-				story: `${MOCKUP} A1: the reader's own space, kept on this computer. Check the title bar holds one selector and nothing after it: the 10px square on a 3px radius without any state dot, the muted name, the chevron, no globe, no \`Share\` button and no pill. Pick \`A2SharedSpace\` once the space is shared.`,
-			},
-		},
-	},
-	play: async ({ canvasElement }) => {
-		await expectOneSelector(canvasElement)
-		await expect(selectorIn(canvasElement)).toHaveAccessibleName(
-			"Change space, Studio open",
-		)
-		await expectSelectorAvatar(canvasElement, "local")
-		await expectNoPill(canvasElement)
-	},
-})
-
-export const A2SharedSpace = meta.story({
-	name: "A2 Shared space",
-	args: { ...TITLE_BAR_ARGS, hostBySpaceId: { [STUDIO.id]: "shared" } },
-	parameters: {
-		docs: {
-			description: {
-				story: `${MOCKUP} A2: the reader shares their own space from this computer. Check the 7px online dot sits centred on the square's bottom end corner inside a 2px ring of the title bar background, that the selector names the space as shared, and that no pill follows it. Pick \`A3JoinedSpace\` for the same dot on a joined space.`,
-			},
-		},
-	},
-	play: async ({ canvasElement }) => {
-		await expectOneSelector(canvasElement)
-		await expect(selectorIn(canvasElement)).toHaveAccessibleName(
-			"Change space, Studio open, Shared",
-		)
-		await expectSelectorAvatar(canvasElement, "shared")
-		await expectNoPill(canvasElement)
-	},
-})
-
-export const A3JoinedSpace = meta.story({
-	name: "A3 Joined space",
-	args: {
-		...TITLE_BAR_ARGS,
-		selectedSpaceId: GARAGE.id,
-		hostBySpaceId: { [GARAGE.id]: "up" },
-	},
-	parameters: {
-		docs: {
-			description: {
-				story: `${MOCKUP} A3: the reader joined the open space and its host answers. Check the untinted square carries the same online dot as \`A2SharedSpace\`, that the selector names the host as online, and that no pill and no \`Connected\` appear. Pick \`A4Connecting\` for a host still being reached.`,
-			},
-		},
-	},
-	play: async ({ canvasElement }) => {
-		await expectOneSelector(canvasElement)
-		await expect(selectorIn(canvasElement)).toHaveAccessibleName(
-			"Change space, Garage open, Online",
-		)
-		await expectSelectorAvatar(canvasElement, "online")
-		await expectNoPill(canvasElement)
-	},
-})
-
-export const A4Connecting = meta.story({
-	name: "A4 Connecting",
-	args: {
-		...TITLE_BAR_ARGS,
-		selectedSpaceId: GARAGE.id,
-		hostBySpaceId: { [GARAGE.id]: "connecting" },
-	},
-	parameters: {
-		docs: {
-			description: {
-				story: `${MOCKUP} A4: the reader's computer is still reaching the host. Check the dot on the square is hollow, a 1.5px muted presence ring filled with the title bar background, and that the pill reading \`Connecting…\` sits 8px after the selector, centred in the bar. Pick \`A5NotConnected\` for the host that does not answer.`,
-			},
-		},
-	},
-	play: async ({ canvasElement }) => {
-		await expectOneSelector(canvasElement)
-		await expect(selectorIn(canvasElement)).toHaveAccessibleName(
-			"Change space, Garage open, Connecting…",
-		)
-		await expectSelectorAvatar(canvasElement, "connecting")
-		const pill = await expectPillBeside(canvasElement, "Connecting…")
-		await expect(slotIn(pill, "host-dot")).toHaveAttribute(
-			"data-host",
-			"connecting",
-		)
-	},
-})
-
-export const A5NotConnected = meta.story({
-	name: "A5 Not connected",
-	args: {
-		...TITLE_BAR_ARGS,
-		selectedSpaceId: GARAGE.id,
-		hostBySpaceId: { [GARAGE.id]: "down" },
-	},
-	parameters: {
-		docs: {
-			description: {
-				story: `${MOCKUP} A5: the host is down, or refused the reader. Check the dot on the square is filled with the muted presence colour and that the pill reading \`Not connected\` sits 8px after the selector, centred in the bar. Pick \`A4Connecting\` for the host still being reached.`,
-			},
-		},
-	},
-	play: async ({ canvasElement }) => {
-		await expectOneSelector(canvasElement)
-		await expect(selectorIn(canvasElement)).toHaveAccessibleName(
-			"Change space, Garage open, Not connected",
-		)
-		await expectSelectorAvatar(canvasElement, "offline")
-		const pill = await expectPillBeside(canvasElement, "Not connected")
-		await expect(slotIn(pill, "host-dot")).toHaveAttribute("data-host", "down")
-	},
-})
-
-export const A6InvitationWaiting = meta.story({
-	name: "A6 Invitation waiting",
-	args: {
-		...TITLE_BAR_ARGS,
-		invitations: [
-			{
-				id: "atelier",
-				name: "Atelier",
-				colour: "cyan",
-				hostEmail: "lea@example.com",
-				state: "waiting",
-			},
-		],
-	},
-	parameters: {
-		docs: {
-			description: {
-				story: `${MOCKUP} A6: an invitation waits. Check the 7px primary dot sits 1px from the selector's end and 4px from its top inside a 2px ring of the title bar background, that the selector counts the invitation in its name, and that the square carries no state dot and no pill follows. Pick \`A1LocalSpace\` for the resting bar.`,
-			},
-		},
-	},
-	play: async ({ canvasElement }) => {
-		await expectOneSelector(canvasElement)
-		const selector = selectorIn(canvasElement)
-		await expect(selector).toHaveAccessibleName(
-			"Change space, Studio open, 1 invitation",
-		)
-		const invitation = slotIn(selector, "space-switcher-invitation")
-		const style = getComputedStyle(invitation)
-		await expect(style.insetInlineEnd).toBe("1px")
-		await expect(style.top).toBe("4px")
-		await expect(invitation.getBoundingClientRect().width).toBe(7)
-		await expect(style.backgroundColor).toBe(
-			probedStyleOf(
-				"bg-primary-strong",
-				"backgroundColor",
-				titleBarIn(canvasElement),
-			),
-		)
-		await expect(style.boxShadow).toContain(
-			`${titleBarPaint(canvasElement)} 0px 0px 0px 2px`,
-		)
-		await expectSelectorAvatar(canvasElement, "local")
-		await expectNoPill(canvasElement)
-	},
-})
-
-export const A7MenuOpen = meta.story({
-	name: "A7 Menu open",
-	args: {
-		...TITLE_BAR_ARGS,
-		hostBySpaceId: { [STUDIO.id]: "shared", [GARAGE.id]: "down" },
-	},
-	parameters: {
-		a11y: A11Y_FLOATING_FOCUS_GUARDS,
-		docs: {
-			description: {
-				story: `${MOCKUP} A7: the selector's menu is open. Check the selector takes the sidebar accent with its name and chevron in the foreground, that the space rows open the menu with no \`Share\` above them, that each space row carries its square and that space's state dot, and that no connection line, host name or globe appears. Pick \`A2SharedSpace\` for the closed selector.`,
-			},
-		},
-	},
-	play: async ({ canvasElement, userEvent }) => {
-		const selector = selectorIn(canvasElement)
-		await expectSelectorAvatar(canvasElement, "shared")
-		await expectNoPill(canvasElement)
-		await userEvent.click(selector)
-		const menu = await settled(await screen.findByRole("menu"))
-		await expect(selector).toHaveAttribute("aria-expanded", "true")
-		await waitFor(async () => {
-			const style = getComputedStyle(selector)
-			await expect(style.backgroundColor).toBe(
-				probedStyleOf("bg-sidebar-accent", "backgroundColor", selector),
-			)
-			await expect(style.color).toBe(
-				probedStyleOf("text-foreground", "color", selector),
-			)
-		}, FRAME_POLL)
-
-		await expect(
-			within(menu).queryByRole("menuitem", { name: "Share" }),
-		).toBeNull()
-		await expect(menu.firstElementChild).toHaveAttribute("role", "group")
-		for (const [name, state] of [
-			["Studio", "shared"],
-			["Garage", "offline"],
-		]) {
-			const row = within(menu).getByRole("menuitemradio", {
-				name: new RegExp(`^${name}`),
-			})
-			await expect(slotIn(row, "space-avatar").dataset.state).toBe(state)
-		}
-		await expect(within(menu).queryByText(/Connected|@/)).toBeNull()
-	},
-})
-
-const LONG_SPACE: Space = {
-	id: "long-studio",
-	name: "Studio of the quarterly planning offsite in Lisbon",
-	colour: "orange",
-	avatarSeed: "long-studio",
-}
-
-const NARROW_WINDOW = 320
-
-export const A8LongNameAtMinimumWidth = meta.story({
-	name: "A8 Long name at minimum width",
-	args: {
-		...TITLE_BAR_ARGS,
-		spaces: [LONG_SPACE],
-		selectedSpaceId: LONG_SPACE.id,
-		botsBySpaceId: { [LONG_SPACE.id]: ROSTER },
-		hostBySpaceId: { [LONG_SPACE.id]: "shared" },
-		insetWindowControls: true,
-	},
-	render: (args) => (
-		<div style={{ width: NARROW_WINDOW }}>
-			<WorkspaceShell
-				sidebar={<AppSidebar {...args} space={openSpaceOf(args)} />}
-				width={SIDEBAR_MIN_WIDTH}
-			>
-				{null}
-			</WorkspaceShell>
-		</div>
-	),
-	parameters: {
-		docs: {
-			description: {
-				story: `${MOCKUP} A8: a space name its owner chose and the reader cannot shorten, with the sidebar at its minimum width in a 320px window. Check the name clips to one line with an ellipsis while the square, its state dot and the chevron stay whole inside the selector. Pick \`A2SharedSpace\` for a name that fits.`,
-			},
-		},
-	},
-	play: async ({ canvasElement }) => {
-		const selector = selectorIn(canvasElement)
-		const frame = selector.getBoundingClientRect()
-		await expect(titleBarIn(canvasElement).getBoundingClientRect().width).toBe(
-			NARROW_WINDOW,
-		)
-		const name = slotIn(selector, "space-switcher-name")
-		await expect(getComputedStyle(name).textOverflow).toBe("ellipsis")
-		await expect(name.scrollWidth).toBeGreaterThan(name.clientWidth)
-		await expect(name.getBoundingClientRect().height).toBe(16)
-		const chevron = selector.querySelector(ICON_SVG)
-		if (!chevron) throw new Error("The selector draws no chevron")
-		const chevronBox = chevron.getBoundingClientRect()
-		await expect(chevronBox.width).toBe(12)
-		await expect(chevronBox.right).toBeLessThanOrEqual(frame.right)
-		await expectSelectorAvatar(canvasElement, "shared")
-		await expect(avatarIn(canvasElement).checkVisibility()).toBe(true)
-		await expectNoPill(canvasElement)
-	},
-})
-
 const SECTIONS: AppSidebarSection[] = [
 	{ id: "research", name: "Research", position: 0 },
 	{ id: "shipping", name: "Shipping", position: 3 },

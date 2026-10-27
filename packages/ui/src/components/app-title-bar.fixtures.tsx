@@ -33,8 +33,6 @@ export const ATELIER: Space = {
 export const TITLE_BAR: AppTitleBarProps = {
 	"data-tauri-drag-region": "deep",
 	insetWindowControls: true,
-	spaces: [STUDIO, GARAGE],
-	selectedSpaceId: STUDIO.id,
 }
 
 export const RELEASE_NOTES: TitleBarTab = {

@@ -15,7 +15,6 @@ import {
 import {
 	BUG_BASH,
 	DESIGN_REVIEW,
-	GARAGE,
 	HIRING_PLAN,
 	INVOICE_EXPORT,
 	LOGIN_REDIRECT,
@@ -27,7 +26,6 @@ import {
 	RELEASE_NOTES,
 	ROADMAP,
 	STANDUP,
-	STUDIO,
 	SUPPORT_TRIAGE,
 	WEEKLY_PLANNING,
 } from "@workspace/ui/components/app-title-bar.fixtures"
@@ -460,34 +458,6 @@ export const A6EmptyTabDark = meta.story({
 		},
 	},
 	play: playA6,
-})
-
-export const Default = meta.story({
-	args: {
-		spaces: [STUDIO, GARAGE],
-		selectedSpaceId: STUDIO.id,
-		onSelectSpace: fn(),
-		onCreateSpace: fn(),
-	},
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"The bar as apps/app mounts it until it passes tabs (OPE-1334): no tab strip, the Space switcher wired to the legacy props, after the traffic lights slot. Check the bar is 40px, that the switcher names the open Space and starts past the traffic lights, and that the bar stays a drag region. Pick `A1Tabs` for the bar once tabs are passed.",
-			},
-		},
-	},
-	play: async ({ canvasElement }) => {
-		const bar = barIn(canvasElement)
-		const switcher = slotIn(bar, "space-switcher")
-		await expect(boxOf(bar).height).toBe(SHELL_TITLE_BAR_HEIGHT)
-		await expect(switcher).toHaveTextContent(STUDIO.name)
-		await expect(boxOf(switcher).left).toBeGreaterThanOrEqual(
-			boxOf(slotIn(bar, "app-title-bar-traffic-lights")).right,
-		)
-		await expect(bar.querySelector('[data-slot="title-bar-tabs"]')).toBeNull()
-		await expect(bar).toHaveAttribute("data-tauri-drag-region", "deep")
-	},
 })
 
 export const WithWindowControls = meta.story({

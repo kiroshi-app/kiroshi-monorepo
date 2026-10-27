@@ -329,12 +329,7 @@ const SettingsScreenLayout = ({
 			onWidthChange={onWidthChange}
 			sidebar={
 				<>
-					<AppTitleBar
-						{...titleBar}
-						onSelectSpace={(id) =>
-							leaveThen(() => titleBar?.onSelectSpace?.(id))
-						}
-					/>
+					<AppTitleBar {...titleBar} />
 					{rail?.(leaveThen)}
 					<SettingsMenu
 						isCompanionPage={isCompanionPage}
