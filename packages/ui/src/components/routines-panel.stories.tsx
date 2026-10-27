@@ -69,7 +69,6 @@ import {
 	SHELL_TITLE_BAR_HEIGHT,
 	WorkspaceShell,
 } from "@workspace/ui/components/workspace-shell"
-import { NO_CLICK_MODIFIERS } from "@workspace/ui/lib/click-modifiers"
 
 const ANSWER =
 	"Three routines watch this conversation: a digest, a changelog watch and a nightly cleanup."
@@ -679,7 +678,6 @@ export const OpeningAMission = meta.story({
 		await userEvent.click(canvas.getByText(WAITING_HUMAN_MISSION.objective))
 		await expect(args.missions.onOpen).toHaveBeenCalledWith(
 			WAITING_HUMAN_MISSION.id,
-			NO_CLICK_MODIFIERS,
 		)
 
 		await userEvent.keyboard("{Enter}")

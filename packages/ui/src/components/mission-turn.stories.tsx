@@ -21,7 +21,6 @@ import {
 	WORKING_MISSION_CARD,
 } from "@workspace/ui/components/missions.fixtures"
 import { AssistantTurn, TurnGroup } from "@workspace/ui/components/turn"
-import { NO_CLICK_MODIFIERS } from "@workspace/ui/lib/click-modifiers"
 
 const OPENING_ANSWER =
 	"That one is wide enough to run on its own, so I opened a mission for it and I will report here when it lands."
@@ -162,10 +161,7 @@ export const WaitingForTheReader = meta.story({
 		const ticket = canvas.getByRole("link")
 
 		await userEvent.click(open)
-		await expect(args.onOpen).toHaveBeenCalledWith(
-			WAITING_MISSION_CARD.id,
-			NO_CLICK_MODIFIERS,
-		)
+		await expect(args.onOpen).toHaveBeenCalledWith(WAITING_MISSION_CARD.id)
 
 		ticket.focus()
 		await expect(ticket).toHaveFocus()

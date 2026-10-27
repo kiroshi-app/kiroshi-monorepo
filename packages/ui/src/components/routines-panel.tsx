@@ -355,7 +355,7 @@ const RoutinesPanelBody = ({
 									<MissionCard
 										{...mission}
 										density="row"
-										onOpen={missions.onOpen}
+										onOpen={(missionId) => missions.onOpen(missionId)}
 									/>,
 									missions.wrap,
 								)}
@@ -383,7 +383,7 @@ const RoutinesPanelBody = ({
 									<MissionCard
 										{...row}
 										density="row"
-										onOpen={missions.onOpen}
+										onOpen={(missionId) => missions.onOpen(missionId)}
 									/>,
 									missions.wrap,
 								)}
