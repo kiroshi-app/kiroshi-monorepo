@@ -108,6 +108,14 @@ pub fn focused_app_window<R: Runtime>(app: &AppHandle<R>) -> Option<WebviewWindo
 	)
 }
 
+pub fn receiving_window<R: Runtime>(app: &AppHandle<R>) -> String {
+	if let Some(focused) = focused_app_window(app) {
+		return focused.label().to_owned();
+	}
+	raise_main(app);
+	MAIN_WINDOW.to_owned()
+}
+
 #[derive(Debug, PartialEq, Eq)]
 enum Closing {
 	Hidden,
