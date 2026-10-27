@@ -13,6 +13,7 @@ runs:
         : "${ImageOS:?the runner names no image}" "${ImageVersion:?the runner names no image version}"
         echo "list=$PACKAGES" >> "$GITHUB_OUTPUT"
         echo "key=tauri-packages-$ImageOS-$ImageVersion-$RUNNER_ARCH-${PACKAGES// /+}" >> "$GITHUB_OUTPUT"
+        echo "previous-image-key=tauri-packages-$ImageOS-" >> "$GITHUB_OUTPUT"
 
     - name: Restore the package archives
       id: archives
@@ -20,18 +21,25 @@ runs:
       with:
         path: ${{ runner.temp }}/tauri-packages/*.deb
         key: ${{ steps.packages.outputs.key }}
+        restore-keys: ${{ steps.packages.outputs.previous-image-key }}
 
-    - name: Download the package archives from the Ubuntu mirror
+    - name: Download the missing package archives from the Ubuntu mirror
       if: steps.archives.outputs.cache-hit != 'true'
       shell: bash
       env:
         ARCHIVES: ${{ runner.temp }}/tauri-packages
         PACKAGES: ${{ steps.packages.outputs.list }}
       run: |
+        set -x
         sudo rm -f /etc/apt/sources.list.d/google-chrome.*
-        sudo apt-get update
+        sudo apt-get -qq update
         mkdir -p "$ARCHIVES/partial"
-        sudo apt-get install -y --no-install-recommends --download-only -o Dir::Cache::Archives="$ARCHIVES" $PACKAGES
+        wanted=$(apt-get -qq install --print-uris --no-install-recommends -o Dir::Cache::Archives="$(mktemp -d)" $PACKAGES | cut -d' ' -f2)
+        for archive in "$ARCHIVES"/*.deb; do
+          [ -e "$archive" ] || continue
+          grep -qxF "$(basename "$archive")" <<< "$wanted" || rm "$archive"
+        done
+        sudo apt-get -qq install -y --no-install-recommends --download-only -o Dir::Cache::Archives="$ARCHIVES" $PACKAGES
 
     - name: Save the package archives for the next run
       if: steps.archives.outputs.cache-hit != 'true'
@@ -44,4 +52,6 @@ runs:
       shell: bash
       env:
         ARCHIVES: ${{ runner.temp }}/tauri-packages
-      run: sudo apt-get install -y --no-install-recommends "$ARCHIVES"/*.deb
+      run: |
+        set -x
+        sudo apt-get -qq install -y --no-install-recommends --no-download -o Dir::Cache::Archives="$ARCHIVES" "$ARCHIVES"/*.deb > /dev/null
