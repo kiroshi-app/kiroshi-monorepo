@@ -43,6 +43,7 @@ const AppSidebarBase = ({
 	onReorderSpaces,
 	onCreateSpace,
 	hostBySpaceId,
+	spaceHost,
 	invitations,
 	onAcceptInvitation,
 	onDeclineInvitation,
@@ -118,7 +119,7 @@ const AppSidebarBase = ({
 				user,
 			}}
 			space={space}
-			spaceHost={space ? hostBySpaceId?.[space.id] : undefined}
+			spaceHost={spaceHost}
 			titleBar={{
 				activeTabId,
 				canGoBack,

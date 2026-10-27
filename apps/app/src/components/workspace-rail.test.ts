@@ -380,11 +380,20 @@ describe.each(PRODUCED_SPACES)(
 		})
 
 		it("hands the conversations sidebar the same Space in the same connection state", () => {
-			const { hostBySpaceId, space: sidebarSpace } = appSidebarRailOf(
+			const produced = produceRailFor({ selectedSpaceId, connections })
+			const { space: sidebarSpace, spaceHost } = appSidebarRailOf(produced)
+
+			expect({ space: sidebarSpace, spaceHost }).toEqual({
+				space: produced.currentSpace,
+				spaceHost: produced.currentSpaceHost,
+			})
+		})
+
+		it("keeps handing the Space switcher rows every Space's connection state", () => {
+			const { hostBySpaceId } = appSidebarRailOf(
 				produceRailFor({ selectedSpaceId, connections }),
 			)
 
-			expect(sidebarSpace).toMatchObject(space)
 			expect(hostBySpaceId?.[space.id]).toBe(host)
 		})
 	},

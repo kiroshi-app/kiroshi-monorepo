@@ -44,6 +44,7 @@ type AppSidebarChromeProp =
 	| "onRetryInvitation"
 	| "onSpaceSwitcherOpenChange"
 	| "railDots"
+	| "spaceHost"
 	| "updateBadge"
 	| "user"
 	| "windowControls"

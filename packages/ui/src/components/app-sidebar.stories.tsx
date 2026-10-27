@@ -2481,6 +2481,7 @@ const railHostStory = (panel: "conversations" | "missions") => ({
 		...(panel === "missions" ? MissionsTab.input.args : {}),
 		space: SPACES[0],
 		hostBySpaceId: { [HOME]: RAIL_SPACE_HOST },
+		spaceHost: RAIL_SPACE_HOST,
 	},
 	parameters: {
 		docs: {

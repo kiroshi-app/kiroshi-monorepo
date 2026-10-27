@@ -49,6 +49,7 @@ type AppSidebarRail = Pick<
 	| "openSettings"
 	| "railDots"
 	| "space"
+	| "spaceHost"
 	| "spaces"
 	| "updateBadge"
 	| "user"
@@ -141,6 +142,7 @@ export const useWorkspaceRail = ({
 export const appSidebarRailOf = ({
 	rail,
 	currentSpace,
+	currentSpaceHost,
 }: WorkspaceRail): AppSidebarRail => ({
 	badgesBySpaceId: rail.badgesBySpaceId,
 	hostBySpaceId: rail.hostBySpaceId,
@@ -156,6 +158,7 @@ export const appSidebarRailOf = ({
 	openSettings: rail.openSettings,
 	railDots: rail.dots,
 	space: currentSpace,
+	spaceHost: currentSpaceHost,
 	spaces: rail.spaces,
 	updateBadge: rail.updateBadge,
 	user: rail.user,
