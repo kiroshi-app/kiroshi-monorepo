@@ -1494,10 +1494,11 @@ fn a_restored_bearer_follows_the_cloud_memberships_before_the_first_poll_tick() 
 
 		restore(harness.app.handle().clone()).await;
 		let stored = harness.stored_until(|stored| !stored.is_empty()).await;
+		let changed = harness.heard_until(JOINED_CHANGED, 1).await;
 
 		assert_eq!(stored, vec![a_relay_entry(&stored[0].id, "i-remote", "Remote")]);
 		assert_eq!(harness.instances_read(), 1);
-		assert_eq!(harness.heard(JOINED_CHANGED), vec![changed_of(&stored[0].id)]);
+		assert_eq!(changed, vec![changed_of(&stored[0].id)]);
 	});
 }
 
