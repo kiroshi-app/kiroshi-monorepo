@@ -10,6 +10,7 @@ import {
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest"
 
 import { BOT_MCP_SERVERS } from "@workspace/ui/components/bot-settings-dialog/mcp-servers.fixtures"
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import {
 	SERVER_ENVIRONMENT,
 	SPACE_ENVIRONMENT,
@@ -56,7 +57,7 @@ const SPACE_PROPS = {
 	open: true,
 	serverEnvironment: SERVER_ENVIRONMENT_SECTION,
 	skills: BOT_SKILLS,
-	value: { name: "Release desk", colour: "blue" },
+	value: { name: "Release desk", colour: BLOT_HUES.blue },
 } satisfies SpaceSettingsDialogProps
 
 const spaceDialog = (overrides: Partial<PluginSessionsProps> = {}) =>

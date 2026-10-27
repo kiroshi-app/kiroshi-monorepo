@@ -19,6 +19,7 @@ import {
 } from "@workspace/storybook/story-utils"
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { DialogSurface } from "@workspace/ui/components/dialog-surface"
+import { hueTone } from "@workspace/ui/components/hue-palette"
 import {
 	endNotice,
 	type FailureReport,
@@ -1558,7 +1559,9 @@ const REMOVAL_TITLE = "Steve removed you from Studio."
 const REMOVAL_DESCRIPTION =
 	"It’s gone from your spaces. Its conversations stay on Steve’s Kiroshi."
 
-const RemovalNotice = () => {
+type RemovalNoticeProps = { spaceColour: number }
+
+const RemovalNotice = ({ spaceColour }: RemovalNoticeProps) => {
 	const { t } = useTranslation("bots")
 	const title = t("spaces.removed.notice", {
 		host: "Steve",
@@ -1569,12 +1572,12 @@ const RemovalNotice = () => {
 	useEffect(() => {
 		const id = raiseTransientNotice({
 			description,
-			spaceColour: "orange",
+			spaceColour,
 			title,
 			type: "info",
 		})
 		return () => endNotice(id)
-	}, [description, title])
+	}, [description, spaceColour, title])
 
 	return <NoticeSurface transientDelay={0} />
 }
@@ -1582,7 +1585,7 @@ const RemovalNotice = () => {
 export const RemovedWithSpaceMark = meta.story({
 	name: "Removed with the space mark",
 	globals: { theme: "dark" },
-	render: () => <RemovalNotice />,
+	render: () => <RemovalNotice spaceColour={BLOT_HUES.orange} />,
 	parameters: {
 		docs: {
 			description: {
@@ -1615,6 +1618,30 @@ export const RemovedWithSpaceMark = meta.story({
 		await expect(
 			getComputedStyle(within(notice).getByText(REMOVAL_DESCRIPTION)).color,
 		).toBe("rgb(163, 163, 163)")
+	},
+})
+
+export const RemovedWithSpaceMarkAtFreeHue = meta.story({
+	globals: { theme: "dark" },
+	render: () => <RemovalNotice spaceColour={210} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The removal notice for a space at a hue outside the eight presets, 210. Check that the square mark is drawn in that hue rather than the nearest preset. Pick `RemovedWithSpaceMark` for a preset hue.",
+			},
+		},
+	},
+	play: async () => {
+		const title = await within(viewport()).findByText(REMOVAL_TITLE)
+		const notice = title.closest<HTMLElement>("[data-slot=toast]")
+		if (!notice) throw new window.Error("The notice is not on the surface")
+		const mark = slotIn(notice, "notice-space-mark")
+
+		await expect(mark).toHaveAttribute("data-hue", "210")
+		await expect(mark.style.getPropertyValue("--hue-dark-accent")).toBe(
+			hueTone(210, "dark", "accent").hex,
+		)
 	},
 })
 

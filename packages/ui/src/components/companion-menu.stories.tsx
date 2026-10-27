@@ -2,6 +2,7 @@ import { expect, fireEvent, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { shown, slotIn, slotsIn } from "@workspace/storybook/story-utils"
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import {
 	CompanionMenuContent,
 	type CompanionMenuSubject,
@@ -19,8 +20,8 @@ const ATLAS: CompanionMenuSubject = {
 }
 
 const SPACES: Space[] = [
-	{ id: "perso", name: "Perso", colour: "blue", avatarSeed: "perso" },
-	{ id: "vocca", name: "Vocca", colour: "green", avatarSeed: "vocca" },
+	{ id: "perso", name: "Perso", colour: BLOT_HUES.blue, avatarSeed: "perso" },
+	{ id: "vocca", name: "Vocca", colour: BLOT_HUES.green, avatarSeed: "vocca" },
 ]
 
 const SECTIONS = [

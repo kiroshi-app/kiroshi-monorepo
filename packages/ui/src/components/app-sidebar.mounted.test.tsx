@@ -10,6 +10,7 @@ import {
 	type AppSidebarSection,
 	type Space,
 } from "@workspace/ui/components/app-sidebar"
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 
 import "@workspace/ui/lib/i18n"
@@ -67,9 +68,14 @@ describe("AppSidebar roster badge placement mounted", () => {
 })
 
 const SPACES: Space[] = [
-	{ id: "personal", name: "Personal", colour: "blue", avatarSeed: "personal" },
-	{ id: "vocca", name: "Vocca", colour: "green", avatarSeed: "vocca" },
-	{ id: "labs", name: "Labs", colour: "red", avatarSeed: "labs" },
+	{
+		id: "personal",
+		name: "Personal",
+		colour: BLOT_HUES.blue,
+		avatarSeed: "personal",
+	},
+	{ id: "vocca", name: "Vocca", colour: BLOT_HUES.green, avatarSeed: "vocca" },
+	{ id: "labs", name: "Labs", colour: BLOT_HUES.red, avatarSeed: "labs" },
 ]
 
 const RESEARCH: AppSidebarSection = {
@@ -209,7 +215,7 @@ describe("AppSidebar rail logo colour mounted", () => {
 	it("paints the logo with the space it is handed, not the selected entry of the list", () => {
 		const { container } = render(shellWithSpace(SPACES[2]))
 
-		expect(railLogoIn(container).dataset.colour).toBe("red")
+		expect(railLogoIn(container).dataset.colour).toBe(String(BLOT_HUES.red))
 	})
 
 	it("leaves the logo untinted while no space is handed, whatever the list selects", () => {

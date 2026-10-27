@@ -16,15 +16,12 @@ import {
 	ActivityIndicator,
 	type ActivityIndicatorKind,
 } from "@workspace/ui/components/activity-indicator"
-import {
-	BLOT_HUES,
-	BLOT_TINTS,
-} from "@workspace/ui/components/companion-colour"
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { MarkProvider } from "@workspace/ui/components/mark-context"
 import { TURN_AVATAR_SIZE, UserTurn } from "@workspace/ui/components/turn"
 import { Button } from "@workspace/ui/components/ui/button"
 
-const BUSY_BOT = { blot: "blue", seed: "bot-7" } as const
+const BUSY_BOT = { blot: BLOT_HUES.blue, seed: "bot-7" } as const
 
 const SECOND = 1000
 
@@ -40,9 +37,9 @@ const EDGE = 8
 const PAST_ONE_TICK = 1200
 
 const ROOM_BOTS = [
-	{ botId: "bot-lyra", name: "Lyra", blot: "blue" },
-	{ botId: "bot-orion", name: "Orion", blot: "orange" },
-	{ botId: "bot-vega", name: "Vega", blot: "purple" },
+	{ botId: "bot-lyra", name: "Lyra", blot: BLOT_HUES.blue },
+	{ botId: "bot-orion", name: "Orion", blot: BLOT_HUES.orange },
+	{ botId: "bot-vega", name: "Vega", blot: BLOT_HUES.purple },
 ] as const
 
 const [SPEAKING_BOT, ...WAITING_BOTS] = ROOM_BOTS
@@ -150,7 +147,7 @@ const meta = preview.meta({
 		kind: { control: "select", options: BOT_WORKING_KINDS },
 		waitingOn: { control: "inline-radio", options: ["you", "next"] },
 		botId: { control: "text" },
-		blot: { control: "select", options: [undefined, ...BLOT_TINTS] },
+		blot: { control: { type: "range", min: 0, max: 359, step: 1 } },
 		seed: { control: "text" },
 		size: { control: { type: "range", min: 20, max: 64, step: 2 } },
 	},
@@ -231,7 +228,7 @@ export const InWave = meta.story({
 
 export const Blot = meta.story({
 	tags: ["test-only"],
-	args: { blot: "blue" },
+	args: { blot: BLOT_HUES.blue },
 	render: (args) => (
 		<div className="flex flex-col gap-4">
 			<ActivityIndicator {...args} blot={undefined} />
@@ -257,6 +254,24 @@ export const Blot = meta.story({
 				BLOT_HUES.blue,
 			)
 		}
+	},
+})
+
+export const FreeHue = meta.story({
+	tags: ["test-only"],
+	args: { blot: 210 },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A companion given a hue outside the eight presets, 210, at work. Check that its glyph is painted in that hue rather than the nearest preset.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const [avatar] = botIdentityAvatars(canvasElement)
+
+		await expect(companionHueOf(companionGlyphOf(avatar))).toBe(210)
 	},
 })
 

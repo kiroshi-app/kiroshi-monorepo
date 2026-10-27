@@ -4,7 +4,10 @@ import type {
 	Space,
 	UserChipIdentity,
 } from "@workspace/ui/components/app-sidebar"
-import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
+import {
+	BLOT_HUES,
+	type BotAvatarBlot,
+} from "@workspace/ui/components/companion-colour"
 import type {
 	MissionCardModel,
 	MissionState,
@@ -28,6 +31,7 @@ type BotLook = {
 
 const castBot = (look: BotLook, copy: BotCopy): RosterBot => ({
 	...look,
+	blot: BLOT_HUES[look.blot],
 	name: copy.name,
 	title: copy.title,
 })
@@ -182,7 +186,7 @@ const PERSONAL: SceneSpace = {
 	id: "personal",
 	name: SCENE_COPY.spaces.personal,
 	avatarSeed: "personal",
-	colour: "blue",
+	colour: BLOT_HUES.blue,
 	bots: [MOCHI, OLIVE, PIP, TOMO, ASH],
 	rows: [
 		rosterRow(MOCHI, SCENE_COPY.bots.mochi),

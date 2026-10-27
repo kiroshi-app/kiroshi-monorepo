@@ -61,7 +61,7 @@ const Mention = ({ botId, count = 1, className }: MentionProps) => {
 			{bot ? (
 				<span aria-hidden="true" className="contents">
 					<BotIdentityAvatar
-						blot={bot.blot}
+						hue={bot.blot}
 						image={bot.image}
 						name={bot.name}
 						seed={bot.id}

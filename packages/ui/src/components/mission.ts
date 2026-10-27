@@ -27,8 +27,9 @@ type MissionState =
 
 const MISSION_AVATAR_SIZE = 32
 
-type MissionBot = Pick<BotIdentityAvatarProps, "blot" | "image" | "seed"> & {
+type MissionBot = Pick<BotIdentityAvatarProps, "image" | "seed"> & {
 	name: string
+	blot?: number | null
 }
 
 type MissionTicket = {

@@ -100,7 +100,7 @@ const MissionHeader = ({
 						</Button>
 						<BotIdentityAvatar
 							badge={missionBadgeFor(state)}
-							blot={bot.blot}
+							hue={bot.blot}
 							image={bot.image}
 							kind="working"
 							name={bot.name}

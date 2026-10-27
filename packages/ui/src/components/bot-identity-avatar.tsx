@@ -5,10 +5,6 @@ import { useTranslation } from "react-i18next"
 
 import { type BotBadge, BotBadgeDot } from "@workspace/ui/components/bot-badge"
 import {
-	type BotAvatarBlot,
-	hueOf,
-} from "@workspace/ui/components/companion-colour"
-import {
 	COMPANION_SILHOUETTE,
 	SILHOUETTE_FOCUS_RING,
 } from "@workspace/ui/components/companion-picture"
@@ -32,8 +28,7 @@ const DEFAULT_SIZE = 40
 
 type BotIdentityAvatarProps = {
 	name?: string
-	blot?: BotAvatarBlot
-	hue?: number
+	hue?: number | null
 	seed?: string
 	image?: string
 	badge?: BotBadge
@@ -45,8 +40,7 @@ type BotIdentityAvatarProps = {
 
 function BotIdentityAvatar({
 	name,
-	blot,
-	hue = hueOf(blot),
+	hue,
 	seed,
 	image,
 	badge,
@@ -79,7 +73,7 @@ function BotIdentityAvatar({
 				name={name ?? seed ?? ""}
 				size={size}
 				state={working ? kind : "idle"}
-				hue={hue}
+				hue={hue ?? undefined}
 			/>
 		</AvatarFrame>
 	)

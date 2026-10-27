@@ -2,6 +2,7 @@ import { expect } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { botIdentityAvatars, slotIn } from "@workspace/storybook/story-utils"
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import {
 	type ConversationArrivalInviter,
 	ConversationArrivalRow,
@@ -15,22 +16,22 @@ import type { RosterBot } from "@workspace/ui/components/roster"
 const MARLOW: RosterBot = {
 	id: "bot_5d1e92",
 	name: "Marlow",
-	blot: "purple",
+	blot: BLOT_HUES.purple,
 }
 const HAPPY: RosterBot = {
 	id: "bot_3a7c48",
 	name: "Happy",
-	blot: "orange",
+	blot: BLOT_HUES.orange,
 }
 const LONG_NAMED: RosterBot = {
 	id: "bot_6f0b27",
 	name: "Lighthousekeeperofthenorthshoreandthesouthernbayharbourwatchtower",
-	blot: "green",
+	blot: BLOT_HUES.green,
 }
 const LONG_NAMED_INVITER: RosterBot = {
 	id: "bot_0c9e14",
 	name: "Harbourmasterofthewesternquay",
-	blot: "blue",
+	blot: BLOT_HUES.blue,
 }
 
 const INVITED_BY_PERSON: ConversationArrivalInviter = { kind: "person" }

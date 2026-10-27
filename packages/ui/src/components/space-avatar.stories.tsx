@@ -2,7 +2,7 @@ import { expect } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { slotsIn } from "@workspace/storybook/story-utils"
-import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import {
 	SpaceAvatar,
 	type SpaceAvatarState,
@@ -10,6 +10,7 @@ import {
 import {
 	SPACE_AVATAR_SIZES,
 	type SpaceAvatarSize,
+	spacePalette,
 } from "@workspace/ui/components/space-avatar-recipe"
 
 type StateEntry = {
@@ -21,12 +22,12 @@ type StateEntry = {
 type StateVariant = {
 	label: string
 	size: SpaceAvatarSize
-	colour: BotAvatarBlot | null
+	colour: number | null
 }
 
 const SPACE_ID = "space-release-desk"
 
-const COLOURED: BotAvatarBlot = "blue"
+const COLOURED = BLOT_HUES.blue
 
 const STATES: StateEntry[] = [
 	{ label: "Local", state: "local" },
@@ -117,6 +118,25 @@ export const Sizes = meta.story({
 			await expect(avatar.getBoundingClientRect().width).toBe(size)
 			await expect(avatar.dataset.recipe).toBe(size < 20 ? "compact" : "glaze")
 		}
+	},
+})
+
+export const FreeHue = meta.story({
+	render: () => <SpaceAvatar colour={210} size={48} spaceId={SPACE_ID} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A Space given a hue outside the eight presets, 210. Check that its four tones are drawn from that hue, between cyan and blue, rather than from the nearest preset. Pick `Sizes` for a preset hue.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const [avatar] = avatarsIn(canvasElement)
+		const [ground] = spacePalette("light", 210).full
+
+		await expect(avatar).toHaveAttribute("data-colour", "210")
+		await expect(avatar?.querySelector(`rect[fill="${ground}"]`)).not.toBeNull()
 	},
 })
 

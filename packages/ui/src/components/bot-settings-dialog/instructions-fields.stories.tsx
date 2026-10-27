@@ -7,9 +7,10 @@ import {
 } from "@workspace/ui/components/bot-settings"
 import { BotInstructionsFields } from "@workspace/ui/components/bot-settings-dialog/instructions-fields"
 import { BOT_MEMORY } from "@workspace/ui/components/bot-settings-dialog/memory.fixtures"
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 
 const COMPANION: BotSettingsValue = {
-	identity: { blot: "blue" },
+	identity: { blot: BLOT_HUES.blue },
 	name: "Nest Keeper",
 	title: "",
 	instructions: "You are the Nest Keeper.",

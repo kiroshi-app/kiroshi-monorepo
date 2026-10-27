@@ -75,7 +75,7 @@ const SpaceConnections = ({ port, onSettled }: SpaceConnectionsProps) => {
 		open: true,
 		skills: [],
 		tab: APPLICATIONS_TAB,
-		value: { name: "Release desk", colour: "blue" },
+		value: { name: "Release desk", colour: 257 },
 	})
 }
 

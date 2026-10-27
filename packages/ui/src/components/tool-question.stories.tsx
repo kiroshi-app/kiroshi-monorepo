@@ -25,6 +25,7 @@ import {
 	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
 import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { Icons } from "@workspace/ui/components/icons"
 import type { MessageAuthor } from "@workspace/ui/components/message"
 import { CATALOGUE_APPLICATIONS } from "@workspace/ui/components/plugin-settings/applications.fixtures"
@@ -1349,7 +1350,7 @@ export const ReducedMotion = meta.story({
 const SHOTO: MessageAuthor = {
 	id: "bot-shoto",
 	name: "Shoto",
-	blot: "green",
+	blot: BLOT_HUES.green,
 }
 
 const askedByShoto = (args: ToolQuestionProps) => (

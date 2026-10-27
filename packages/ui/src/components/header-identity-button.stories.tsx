@@ -1,8 +1,14 @@
 import { expect, fn, userEvent } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { listExhaustively } from "@workspace/storybook/story-utils"
+import {
+	botIdentityAvatars,
+	companionGlyphOf,
+	companionHueOf,
+	listExhaustively,
+} from "@workspace/storybook/story-utils"
 import { AppHeader } from "@workspace/ui/components/app-header"
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import type { ConnectionStatusState } from "@workspace/ui/components/connection-status"
 import { HeaderIdentityButton } from "@workspace/ui/components/header-identity-button"
 
@@ -105,7 +111,7 @@ export const Expanded = meta.story({
 
 export const Working = meta.story({
 	args: {
-		blot: "blue",
+		blot: BLOT_HUES.blue,
 		connection: "ready",
 		kind: "writing",
 		name: "Nest",
@@ -118,6 +124,32 @@ export const Working = meta.story({
 					"Reach for this while the companion holds the turn: the header avatar runs the same animation and carries the same pulsing activity dot as the one in the transcript, so the reader can leave the transcript and still see the companion is busy. Check that the row does not reflow while it animates and that the motion stops under `prefers-reduced-motion`. Pick `Default` for the resting companion. The app assembles it at `apps/app/src/components/thread-screen.tsx:334`.",
 			},
 		},
+	},
+})
+
+export const PresetHue = meta.story({
+	args: { blot: BLOT_HUES.blue, connection: "ready", name: "Nest" },
+	play: async ({ canvasElement }) => {
+		const [avatar] = botIdentityAvatars(canvasElement)
+
+		await expect(companionHueOf(companionGlyphOf(avatar))).toBe(BLOT_HUES.blue)
+	},
+})
+
+export const FreeHue = meta.story({
+	args: { blot: 210, connection: "ready", name: "Nest" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A companion given a hue outside the eight presets, 210. Check that the header avatar wears that hue rather than the nearest preset. Pick `PresetHue` for a preset.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const [avatar] = botIdentityAvatars(canvasElement)
+
+		await expect(companionHueOf(companionGlyphOf(avatar))).toBe(210)
 	},
 })
 

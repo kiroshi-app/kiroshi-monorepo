@@ -12,15 +12,18 @@ import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { HeaderConversationButton } from "@workspace/ui/components/header-conversation-button"
 import type { RosterBot } from "@workspace/ui/components/roster"
 
-const NEST: RosterBot = { id: "nest", name: "Nest", blot: "blue" }
+const NEST: RosterBot = { id: "nest", name: "Nest", blot: BLOT_HUES.blue }
 
-const BOTS: RosterBot[] = [NEST, { id: "atlas", name: "Atlas", blot: "green" }]
+const BOTS: RosterBot[] = [
+	NEST,
+	{ id: "atlas", name: "Atlas", blot: BLOT_HUES.green },
+]
 
 const CROWD: RosterBot[] = [
 	...BOTS,
-	{ id: "pike", name: "Pike", blot: "orange" },
-	{ id: "wren", name: "Wren", blot: "purple" },
-	{ id: "otto", name: "Otto", blot: "pink" },
+	{ id: "pike", name: "Pike", blot: BLOT_HUES.orange },
+	{ id: "wren", name: "Wren", blot: BLOT_HUES.purple },
+	{ id: "otto", name: "Otto", blot: BLOT_HUES.pink },
 ]
 
 const CELL_SIDE = 24
@@ -152,7 +155,7 @@ export const ThemesGroup = meta.story({
 
 export const ThemesGroupRed = meta.story({
 	globals: { theme_layout: "side-by-side" },
-	args: { color: "red", icon: "ShieldKey" },
+	args: { color: BLOT_HUES.red, icon: "ShieldKey" },
 	parameters: {
 		docs: {
 			description: {

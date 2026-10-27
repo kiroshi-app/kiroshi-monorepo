@@ -16,6 +16,7 @@ import {
 } from "@workspace/ui/components/app-sidebar"
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { HeaderIdentityButton } from "@workspace/ui/components/header-identity-button"
+import { hueTone } from "@workspace/ui/components/hue-palette"
 import { hueDistance } from "@workspace/ui/components/hue-recipe"
 import { PinnedMessages } from "@workspace/ui/components/pinned-messages"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
@@ -40,7 +41,7 @@ const ANSWER =
 const BOT: RosterBot = {
 	id: "bot-skippy",
 	name: "Skippy",
-	blot: "blue",
+	blot: BLOT_HUES.blue,
 }
 
 const ROSTER: AppSidebarBot[] = [
@@ -48,7 +49,7 @@ const ROSTER: AppSidebarBot[] = [
 		id: "atlas",
 		name: "Atlas",
 		title: "Research",
-		blot: "blue",
+		blot: BLOT_HUES.blue,
 		lastMessage: ANSWER,
 	},
 ]
@@ -316,7 +317,7 @@ const tokenPaintOf = (host: HTMLElement, token: string) => {
 
 const SPACE_TINTED_ARGS = {
 	sidebar: SIDEBAR,
-	spaceTint: "blue",
+	spaceTint: BLOT_HUES.blue,
 } as const
 
 export const SpaceTinted = meta.story({
@@ -346,11 +347,30 @@ export const SpaceTintedDark = meta.story({
 	play: async ({ canvas }) => expectNeutralShellInSpace(canvas, BLOT_HUES.blue),
 })
 
+export const FreeHue = meta.story({
+	args: { ...SPACE_TINTED_ARGS, spaceTint: 210 },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The shell with a space at a hue outside the eight presets, 210. Check that the accent and the bubble follow 210 rather than the nearest preset while the shell itself stays neutral. Pick `SpaceTinted` for a preset hue.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		await expectNeutralShellInSpace(canvas, 210)
+		const surface = shellSurface(canvas)
+		await expect(tokenPaintOf(surface, "--primary")).toBe(
+			paintFor(hueTone(210, schemeOf(surface), "accent").hex),
+		)
+	},
+})
+
 const FOUR_COMPANIONS: AppSidebarBot[] = [
-	{ id: "atlas", name: "Atlas", blot: "blue", lastMessage: ANSWER },
-	{ id: "lyra", name: "Lyra", blot: "pink", lastMessage: ANSWER },
-	{ id: "nova", name: "Nova", blot: "green", lastMessage: ANSWER },
-	{ id: "vega", name: "Vega", blot: "yellow", lastMessage: ANSWER },
+	{ id: "atlas", name: "Atlas", blot: BLOT_HUES.blue, lastMessage: ANSWER },
+	{ id: "lyra", name: "Lyra", blot: BLOT_HUES.pink, lastMessage: ANSWER },
+	{ id: "nova", name: "Nova", blot: BLOT_HUES.green, lastMessage: ANSWER },
+	{ id: "vega", name: "Vega", blot: BLOT_HUES.yellow, lastMessage: ANSWER },
 ]
 
 const FOUR_COMPANIONS_SIDEBAR = (
@@ -367,7 +387,7 @@ const expectCompanionsToldApart = async (sidebar: HTMLElement) => {
 	)
 
 	await expect(hues).toEqual(
-		FOUR_COMPANIONS.map(({ blot }) => (blot ? BLOT_HUES[blot] : undefined)),
+		FOUR_COMPANIONS.map(({ blot }) => blot ?? undefined),
 	)
 	await expect(new Set(inks).size).toBe(FOUR_COMPANIONS.length)
 	for (const [index, hue] of hues.entries())
@@ -377,12 +397,12 @@ const expectCompanionsToldApart = async (sidebar: HTMLElement) => {
 			)
 }
 
-const fourCompanionsStory = (blot: "orange" | "blue", description: string) => ({
-	args: { sidebar: FOUR_COMPANIONS_SIDEBAR, spaceTint: blot },
+const fourCompanionsStory = (hue: number, description: string) => ({
+	args: { sidebar: FOUR_COMPANIONS_SIDEBAR, spaceTint: hue },
 	globals: { theme: "dark" },
 	parameters: { docs: { description: { story: description } } },
 	play: async ({ canvas }: { canvas: ReturnType<typeof within> }) => {
-		await expectNeutralShellInSpace(canvas, BLOT_HUES[blot])
+		await expectNeutralShellInSpace(canvas, hue)
 		await expectCompanionsToldApart(
 			canvas.getByRole("complementary", { name: SIDEBAR_LABEL }),
 		)
@@ -391,14 +411,14 @@ const fourCompanionsStory = (blot: "orange" | "blue", description: string) => ({
 
 export const FourCompanionsInWarmSpaceDark = meta.story(
 	fourCompanionsStory(
-		"orange",
+		BLOT_HUES.orange,
 		"Four companions in a warm space, hue 63, in the dark theme, the roster carrying no title so only the avatar tells them apart. Check that blue, pink, green and yellow each read as their own hue at a glance on the black shell, that none of them drifts towards the orange of the space accent, and that the shell itself stays neutral. Pick `FourCompanionsInColdSpaceDark` for the cold counterpart.",
 	),
 )
 
 export const FourCompanionsInColdSpaceDark = meta.story(
 	fourCompanionsStory(
-		"blue",
+		BLOT_HUES.blue,
 		"Four companions in a cold space, hue 257, in the dark theme, the roster carrying no title so only the avatar tells them apart. Check that Atlas, whose blue matches the space, still reads apart from the three others, that pink, green and yellow keep their hue, and that the shell itself stays neutral. Pick `FourCompanionsInWarmSpaceDark` for the warm counterpart.",
 	),
 )

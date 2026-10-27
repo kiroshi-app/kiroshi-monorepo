@@ -16,6 +16,7 @@ import {
 	UPLOADED_AVATAR_IMAGE,
 } from "@workspace/storybook/story-utils"
 import { ActivityIndicator } from "@workspace/ui/components/activity-indicator"
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import {
 	CompanionMenuContent,
 	CompanionMenuProvider,
@@ -108,14 +109,14 @@ const TABLE = `| § | Subject |
 const LEAD: MessageAuthor = {
 	id: "bot-atlas",
 	name: "Atlas",
-	blot: "blue",
+	blot: BLOT_HUES.blue,
 	isLead: true,
 }
 
 const SECOND: MessageAuthor = {
 	id: "bot-basile",
 	name: "Basile",
-	blot: "purple",
+	blot: BLOT_HUES.purple,
 }
 
 const GONE: MessageAuthor = {
@@ -189,7 +190,7 @@ const TURN_STATES: TurnState[] = [
 const BOT: RosterBot = {
 	id: "bot-skippy",
 	name: "Skippy",
-	blot: "blue",
+	blot: BLOT_HUES.blue,
 }
 
 const NO_SPACES: Space[] = []
@@ -209,7 +210,7 @@ const MARKED_BOT_ID = "bot-lyra"
 const MARKED_FACE: RosterBot = {
 	id: MARKED_BOT_ID,
 	name: "Lyra",
-	blot: "purple",
+	blot: BLOT_HUES.purple,
 }
 
 const bubbleStyleOf = (node: Element) => {

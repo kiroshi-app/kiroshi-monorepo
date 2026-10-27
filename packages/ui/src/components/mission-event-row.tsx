@@ -140,7 +140,7 @@ const MissionEventGutter = ({ Mark, bot }: MissionEventGutterProps) => {
 			data-slot="mission-event-gutter"
 		>
 			<BotIdentityAvatar
-				blot={bot?.blot}
+				hue={bot?.blot}
 				image={bot?.image}
 				name={bot?.name}
 				seed={bot?.seed}

@@ -1,15 +1,21 @@
 import { expect, fn } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { botIdentityAvatars, pictureOf } from "@workspace/storybook/story-utils"
+import {
+	botIdentityAvatars,
+	companionGlyphOf,
+	companionHueOf,
+	pictureOf,
+} from "@workspace/storybook/story-utils"
 import { ChatEmptyState } from "@workspace/ui/components/chat-empty-state"
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 
 const UPLOADED_IMAGE =
 	"data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCA5NiA5Nic+PHJlY3Qgd2lkdGg9Jzk2JyBoZWlnaHQ9Jzk2JyBmaWxsPScjZThhMzNkJy8+PGNpcmNsZSBjeD0nNDgnIGN5PSczOCcgcj0nMTYnIGZpbGw9JyNmZmY3ZTgnLz48cmVjdCB4PScyMCcgeT0nNjAnIHdpZHRoPSc1NicgaGVpZ2h0PSc0MCcgcng9JzIwJyBmaWxsPScjZmZmN2U4Jy8+PC9zdmc+"
 
 const BOT = {
 	name: "Nest Keeper",
-	blot: "blue",
+	blot: BLOT_HUES.blue,
 	seed: "bot_4f8c21",
 } as const
 
@@ -58,6 +64,32 @@ export const WithSettings = meta.story({
 		).toBeVisible()
 		await userEvent.click(settings)
 		await expect(args.onOpenSettings).toHaveBeenCalled()
+	},
+})
+
+export const PresetHue = meta.story({
+	args: { status: "ready" },
+	play: async ({ canvasElement }) => {
+		const [avatar] = botIdentityAvatars(canvasElement)
+
+		await expect(companionHueOf(companionGlyphOf(avatar))).toBe(BLOT_HUES.blue)
+	},
+})
+
+export const FreeHue = meta.story({
+	args: { status: "ready", blot: 210 },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A companion given a hue outside the eight presets, 210. Check that its face is painted in that hue rather than the nearest preset. Pick `PresetHue` for a preset.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const [avatar] = botIdentityAvatars(canvasElement)
+
+		await expect(companionHueOf(companionGlyphOf(avatar))).toBe(210)
 	},
 })
 

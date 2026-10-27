@@ -3,6 +3,7 @@
 import { cleanup, render } from "@testing-library/react"
 import { afterEach, describe, expect, it } from "vitest"
 
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import { FocusedSpacePage } from "@workspace/ui/components/settings-screen/focused-space-page"
 
@@ -28,7 +29,7 @@ const pageOf = ({ spaceId, name, spaceHost }: PageOptions) => (
 		space={spaceHost ? JOINED : YOURS}
 		spaceHost={spaceHost}
 		spaceId={spaceId}
-		value={{ name, colour: "blue" }}
+		value={{ name, colour: BLOT_HUES.blue }}
 	/>
 )
 

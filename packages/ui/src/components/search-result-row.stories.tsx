@@ -283,7 +283,7 @@ export const ThemesChatGroupRed = meta.story({
 	globals: { theme_layout: "side-by-side" },
 	args: {
 		...KIND_ARGS["chat-group"],
-		identity: { kind: "chat-group", color: "red", icon: "ShieldKey" },
+		identity: { kind: "chat-group", color: BLOT_HUES.red, icon: "ShieldKey" },
 	},
 	parameters: {
 		docs: {

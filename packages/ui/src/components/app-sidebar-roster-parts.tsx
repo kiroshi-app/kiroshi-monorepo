@@ -64,7 +64,7 @@ interface BotRowAvatarProps {
 
 const BotRowAvatar = ({ bot }: BotRowAvatarProps) => (
 	<BotIdentityAvatar
-		blot={bot.blot}
+		hue={bot.blot}
 		image={bot.image}
 		kind={poseOf(bot)}
 		name={bot.name}
@@ -169,7 +169,7 @@ const LiftedConversationMark = ({
 }: LiftedConversationMarkProps) =>
 	conversation.participants.length > 1 ? (
 		<ConversationSubjectIcon
-			color={conversation.color}
+			hue={conversation.color}
 			icon={conversation.icon}
 			side={ROW_AVATAR_SIZE}
 		/>

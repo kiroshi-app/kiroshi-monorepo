@@ -17,7 +17,6 @@ import {
 	STUDIO,
 	TITLE_BAR,
 } from "@workspace/ui/components/app-title-bar.fixtures"
-import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { SPACE_ENVIRONMENT } from "@workspace/ui/components/environment.fixtures"
 import {
@@ -140,7 +139,7 @@ const SPACE_ARGS = {
 	rail: RAIL,
 	titleBar: TITLE_BAR,
 	isShared: true,
-	value: { name: "Release desk", colour: "blue" },
+	value: { name: "Release desk", colour: BLOT_HUES.blue },
 	onValueChange: fn(),
 	environment: SPACE_ENVIRONMENT,
 	onEnvironmentSet: fn(),
@@ -290,7 +289,7 @@ export const LeftColumnDark = meta.story({
 })
 
 export const MembersTinted = meta.story({
-	args: { spaceTint: "blue" },
+	args: { spaceTint: BLOT_HUES.blue },
 	parameters: {
 		docs: {
 			description: {
@@ -305,11 +304,27 @@ export const MembersTinted = meta.story({
 	},
 })
 
+export const MembersAtFreeHue = meta.story({
+	args: { spaceTint: 210 },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"`Members` in a Space at a hue outside the eight presets, 210. Check that the shell carries 210 for its accent rather than the nearest preset. Pick `MembersTinted` for a preset.",
+			},
+		},
+	},
+	play: async () => {
+		const shell = screen.getByRole("main").parentElement as HTMLElement
+		await expect(shell).toHaveAttribute("data-hue", "210")
+	},
+})
+
 export const Companions = meta.story({
 	globals: { theme: "dark" },
 	args: {
 		entry: "companions",
-		value: { name: "Studio", colour: "blue" },
+		value: { name: "Studio", colour: BLOT_HUES.blue },
 		companions: {
 			companions: SPACE_COMPANIONS,
 			onSelect: fn(),
@@ -609,7 +624,7 @@ const ARTBOARD_MENU = [
 
 const JOINED_ARGS = {
 	entry: "space",
-	value: { name: "Northwind", colour: "green" },
+	value: { name: "Northwind", colour: BLOT_HUES.green },
 	companions: artboardCompanions(3),
 	spaceState: "joined",
 	host: "http://192.168.1.24:45367",
@@ -647,7 +662,7 @@ type ArtboardMenu = {
 	entries: string[]
 	pinned: string
 	pinnedInk: PinnedInk
-	colour: BotAvatarBlot
+	colour: number
 	isInvitation?: boolean
 }
 
@@ -680,7 +695,7 @@ const iconOf = (element: Element) => {
 type ArtboardAvatar = {
 	area: HTMLElement
 	size: number
-	colour: BotAvatarBlot
+	colour: number
 	isInvitation: boolean
 }
 
@@ -693,7 +708,7 @@ const expectAvatar = async ({
 	const avatar = slotIn(area, "space-avatar")
 	const box = avatar.getBoundingClientRect()
 	await expect([box.width, box.height]).toEqual([size, size])
-	await expect(avatar.dataset.colour).toBe(colour)
+	await expect(avatar.dataset.colour).toBe(String(colour))
 	if (isInvitation) await expect(avatar.dataset.state).toBe("invitation")
 }
 
@@ -791,7 +806,7 @@ const expectHeaderButton = async (button: HTMLElement) => {
 
 const YOURS_NOT_SHARED = {
 	entry: "space",
-	value: { name: "Release desk", colour: "blue" },
+	value: { name: "Release desk", colour: BLOT_HUES.blue },
 	companions: artboardCompanions(2),
 	isShared: false,
 	rank: 2,
@@ -803,7 +818,7 @@ export const YoursNotShared = meta.story({
 	globals: { theme: "dark" },
 	args: {
 		...YOURS_NOT_SHARED,
-		value: { name: "Field notes", colour: "purple" },
+		value: { name: "Field notes", colour: BLOT_HUES.purple },
 	},
 	parameters: {
 		docs: {
@@ -822,7 +837,7 @@ export const YoursNotShared = meta.story({
 			),
 			pinned: "Danger zone",
 			pinnedInk: DANGER_INK,
-			colour: "purple",
+			colour: BLOT_HUES.purple,
 		})
 		await expect(entryIn(menu, "Space")).toHaveAttribute("aria-current", "page")
 		await expectSettingsPage(main, "Space", "column")
@@ -924,7 +939,7 @@ export const JoinedHostOnline = meta.story({
 			),
 			pinned: "Leave space",
 			pinnedInk: DANGER_INK,
-			colour: "green",
+			colour: BLOT_HUES.green,
 		})
 		await expect(avatarStatesIn(menu, main)).toEqual(["online", "online"])
 		await expectPresenceDots(menu, main)
@@ -952,7 +967,7 @@ export const JoinedHostNotConnected = meta.story({
 	globals: { theme: "dark" },
 	args: {
 		...JOINED_ARGS,
-		value: { name: "Harbor", colour: "orange" },
+		value: { name: "Harbor", colour: BLOT_HUES.orange },
 		hostName: "Jordan Lee",
 		isConnected: false,
 		rank: 4,
@@ -972,7 +987,7 @@ export const JoinedHostNotConnected = meta.story({
 			entries: ARTBOARD_MENU,
 			pinned: "Leave space",
 			pinnedInk: DANGER_INK,
-			colour: "orange",
+			colour: BLOT_HUES.orange,
 		})
 		await expect(avatarStatesIn(menu, main)).toEqual(["offline", "offline"])
 		await expect(menu.querySelector("[data-slot=space-avatar-dot]")).toBeNull()
@@ -1089,7 +1104,7 @@ export const Invitation = meta.story({
 	globals: { theme: "dark" },
 	args: {
 		entry: "space",
-		value: { name: "Atelier", colour: "yellow" },
+		value: { name: "Atelier", colour: BLOT_HUES.yellow },
 		spaceState: "invitation",
 		invitation: {
 			hostEmail: "priya@example.com",
@@ -1113,7 +1128,7 @@ export const Invitation = meta.story({
 			entries: ["Invitation"],
 			pinned: "Decline",
 			pinnedInk: QUIET_INK,
-			colour: "yellow",
+			colour: BLOT_HUES.yellow,
 			isInvitation: true,
 		})
 		await expect(entryIn(menu, "Invitation")).toHaveAttribute(
@@ -1210,7 +1225,7 @@ export const LongName = meta.story({
 	args: {
 		value: {
 			name: "The quarterly release desk for every product line we ship",
-			colour: "pink",
+			colour: BLOT_HUES.pink,
 		},
 	},
 	parameters: {

@@ -3,10 +3,6 @@
 import { useId } from "react"
 
 import {
-	type BotAvatarBlot,
-	hueOf,
-} from "@workspace/ui/components/companion-colour"
-import {
 	COMPACT_EDGE,
 	edgeWidthOf,
 	GLAZE_EDGE,
@@ -71,7 +67,7 @@ const hasDot = (state: SpaceAvatarState) =>
 
 type SpaceAvatarProps = {
 	spaceId: string
-	colour?: BotAvatarBlot | null
+	colour?: number | null
 	size: SpaceAvatarSize
 	state?: SpaceAvatarState
 	hasAttention?: boolean
@@ -185,10 +181,7 @@ const SpaceAvatar = ({
 	)
 
 	const drawing = (theme: SpaceAvatarTheme) => {
-		const palette = spacePalette(
-			theme,
-			state === "offline" ? null : hueOf(colour),
-		)
+		const palette = spacePalette(theme, state === "offline" ? null : colour)
 		const tones = isCompactRecipe ? palette.compact : palette.full
 		const lineColour = palette.compact[2] ?? ""
 		if (isFilled(state)) return filled(theme, tones)

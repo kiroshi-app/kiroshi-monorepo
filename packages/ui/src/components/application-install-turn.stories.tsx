@@ -7,6 +7,7 @@ import {
 	type ApplicationInstallNotice,
 	ApplicationInstallTurn,
 } from "@workspace/ui/components/application-install-turn"
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import type { MessageAuthor } from "@workspace/ui/components/message"
 import { CATALOGUE_APPLICATIONS } from "@workspace/ui/components/plugin-settings/applications.fixtures"
 import { AssistantTurn, TurnGroup } from "@workspace/ui/components/turn"
@@ -19,7 +20,7 @@ const SENTRY_MARK = CATALOGUE_APPLICATIONS.find(
 const INSTALLER: MessageAuthor = {
 	id: "bot-atlas",
 	name: "Atlas",
-	blot: "blue",
+	blot: BLOT_HUES.blue,
 }
 
 const ANNOUNCEMENT =

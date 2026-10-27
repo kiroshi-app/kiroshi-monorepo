@@ -2,7 +2,6 @@ import { type ComponentProps, useId } from "react"
 import { useTranslation } from "react-i18next"
 
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
-import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
 import {
 	ConversationSubjectIcon,
 	type ConversationSubjectIconProps,
@@ -22,13 +21,14 @@ type SuggestionProps =
 
 type ConversationEmptyStateProps = Omit<
 	ComponentProps<"div">,
-	"children" | "title"
+	"children" | "title" | "color"
 > &
-	Pick<ConversationSubjectIconProps, "icon" | "color"> & {
+	Pick<ConversationSubjectIconProps, "icon"> & {
+		color?: number | null
 		title: string
 		bots: RosterBot[]
 		spaceName?: string
-		spaceTint?: BotAvatarBlot | null
+		spaceTint?: number | null
 	} & SuggestionProps
 
 const MARK_SIZE = 56
@@ -39,7 +39,7 @@ const MENTION_GLYPH = "@"
 
 type SpaceLineProps = {
 	name: string
-	tint?: BotAvatarBlot | null
+	tint?: number | null
 }
 
 const SpaceLine = ({ name, tint }: SpaceLineProps) => (
@@ -82,7 +82,7 @@ const SuggestedBots = ({ bots, onPress }: SuggestedBotsProps) => {
 					>
 						<span aria-hidden="true" className="flex shrink-0">
 							<BotIdentityAvatar
-								blot={bot.blot}
+								hue={bot.blot}
 								image={bot.image}
 								name={bot.name}
 								seed={bot.id}
@@ -153,10 +153,10 @@ const ConversationEmptyState = ({
 			hint={t("conversationEmptyState.hint")}
 			mark={
 				bots.length > 1 ? (
-					<ConversationSubjectIcon color={color} icon={icon} side={MARK_SIZE} />
+					<ConversationSubjectIcon hue={color} icon={icon} side={MARK_SIZE} />
 				) : (
 					<BotIdentityAvatar
-						blot={soloBot.blot}
+						hue={soloBot.blot}
 						image={soloBot.image}
 						name={soloBot.name}
 						seed={soloBot.id}

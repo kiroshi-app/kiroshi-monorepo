@@ -33,7 +33,6 @@ import {
 	type AppSidebarProps,
 	type AppSidebarRowMission,
 	type AppSidebarSection,
-	type BotAvatarBlot,
 	ROW_AVATAR_SIZE,
 	type SidebarClickModifiers,
 	type Space,
@@ -43,7 +42,10 @@ import type {
 	BotMissionState,
 	BotMissionTicket,
 } from "@workspace/ui/components/bot-badge"
-import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
+import {
+	BLOT_HUES,
+	BLOT_TINTS,
+} from "@workspace/ui/components/companion-colour"
 import {
 	companionSeed,
 	pickSilhouette,
@@ -84,7 +86,7 @@ const UPLOADED_IMAGE =
 const ROSTER: AppSidebarBot[] = [
 	{
 		id: "atlas",
-		blot: "blue",
+		blot: BLOT_HUES.blue,
 		name: "Atlas",
 		title: "Research",
 		lastMessage: "Pulled the three papers and summarised each one for you.",
@@ -92,14 +94,14 @@ const ROSTER: AppSidebarBot[] = [
 	},
 	{
 		id: "beacon",
-		blot: "yellow",
+		blot: BLOT_HUES.yellow,
 		name: "Beacon",
 		lastMessage: LAST_MESSAGE,
 		timestamp: "09:18",
 	},
 	{
 		id: "cinder",
-		blot: "red",
+		blot: BLOT_HUES.red,
 		name: "Cinder",
 		title: "Build",
 		status: "working",
@@ -109,14 +111,14 @@ const ROSTER: AppSidebarBot[] = [
 	},
 	{
 		id: "dune",
-		blot: "green",
+		blot: BLOT_HUES.green,
 		name: "Dune",
 		lastMessage: "Nothing since the migration landed.",
 		timestamp: "Mon",
 	},
 	{
 		id: "ember",
-		blot: "purple",
+		blot: BLOT_HUES.purple,
 		name: "Ember",
 		title: "Review",
 		lastMessage: "Left four comments on the transport rename.",
@@ -124,14 +126,14 @@ const ROSTER: AppSidebarBot[] = [
 	},
 	{
 		id: "flint",
-		blot: "pink",
+		blot: BLOT_HUES.pink,
 		name: "Flint",
 		lastMessage: "Ran the suite twice, both green.",
 		timestamp: "Sun",
 	},
 	{
 		id: "grove",
-		blot: "cyan",
+		blot: BLOT_HUES.cyan,
 		name: "Grove",
 		title: "Docs",
 		lastMessage: "Rewrote the setup page around the new command.",
@@ -139,14 +141,14 @@ const ROSTER: AppSidebarBot[] = [
 	},
 	{
 		id: "harbor",
-		blot: "orange",
+		blot: BLOT_HUES.orange,
 		name: "Harbor",
 		lastMessage: "Waiting on the credentials you promised.",
 		timestamp: "Sat",
 	},
 	{
 		id: "iris",
-		blot: "yellow",
+		blot: BLOT_HUES.yellow,
 		name: "Iris",
 		title: "Design",
 		lastMessage: "Swapped the rail avatars for the new blots.",
@@ -154,14 +156,14 @@ const ROSTER: AppSidebarBot[] = [
 	},
 	{
 		id: "juno",
-		blot: "blue",
+		blot: BLOT_HUES.blue,
 		name: "Juno",
 		lastMessage: "Summarised yesterday's session into six bullets.",
 		timestamp: "Fri",
 	},
 	{
 		id: "kite",
-		blot: "red",
+		blot: BLOT_HUES.red,
 		name: "Kite",
 		title: "Ops",
 		lastMessage: "Rotated the signing key and restarted the runner.",
@@ -169,7 +171,7 @@ const ROSTER: AppSidebarBot[] = [
 	},
 	{
 		id: "lumen",
-		blot: "orange",
+		blot: BLOT_HUES.orange,
 		name: "Lumen",
 		lastMessage: "Nothing yet.",
 		timestamp: "Thu",
@@ -254,16 +256,7 @@ const LOOSE_MISSION_ROSTER: AppSidebarBot[] = [
 	},
 ]
 
-const IDENTITY_BLOTS: BotAvatarBlot[] = [
-	"red",
-	"yellow",
-	"green",
-	"cyan",
-	"blue",
-	"purple",
-	"pink",
-	"orange",
-]
+const IDENTITY_BLOTS = BLOT_TINTS.map((tint) => BLOT_HUES[tint])
 
 const IDENTITY_ROSTER: AppSidebarBot[] = IDENTITY_BLOTS.map((blot, index) => ({
 	...ROSTER[index],
@@ -276,7 +269,7 @@ const tintsIn = (root: HTMLElement) =>
 
 const SHARED_TINT_ROSTER: AppSidebarBot[] = IDENTITY_ROSTER.map((bot) => ({
 	...bot,
-	blot: "blue",
+	blot: BLOT_HUES.blue,
 }))
 
 const LONG_ROSTER: AppSidebarBot[] = [0, 1, 2].flatMap((pass) =>
@@ -284,30 +277,50 @@ const LONG_ROSTER: AppSidebarBot[] = [0, 1, 2].flatMap((pass) =>
 )
 
 const SPACES: Space[] = [
-	{ id: "perso", name: "Perso", colour: "blue", avatarSeed: "perso" },
-	{ id: "vocca", name: "Vocca", colour: "green", avatarSeed: "vocca" },
-	{ id: "atelier", name: "Atelier", colour: "pink", avatarSeed: "atelier" },
-	{ id: "veille", name: "Veille", colour: "yellow", avatarSeed: "veille" },
+	{ id: "perso", name: "Perso", colour: BLOT_HUES.blue, avatarSeed: "perso" },
+	{ id: "vocca", name: "Vocca", colour: BLOT_HUES.green, avatarSeed: "vocca" },
+	{
+		id: "atelier",
+		name: "Atelier",
+		colour: BLOT_HUES.pink,
+		avatarSeed: "atelier",
+	},
+	{
+		id: "veille",
+		name: "Veille",
+		colour: BLOT_HUES.yellow,
+		avatarSeed: "veille",
+	},
 	{
 		id: "archives",
 		name: "Archives",
-		colour: "purple",
+		colour: BLOT_HUES.purple,
 		avatarSeed: "archives",
 	},
 	{
 		id: "chantier",
 		name: "Chantier",
-		colour: "orange",
+		colour: BLOT_HUES.orange,
 		avatarSeed: "chantier",
 	},
-	{ id: "lecture", name: "Lecture", colour: "cyan", avatarSeed: "lecture" },
+	{
+		id: "lecture",
+		name: "Lecture",
+		colour: BLOT_HUES.cyan,
+		avatarSeed: "lecture",
+	},
 	{
 		id: "brouillons",
 		name: "Brouillons",
-		colour: "red",
+		colour: BLOT_HUES.red,
 		avatarSeed: "brouillons",
 	},
-	{ id: "essais", name: "Essais", colour: "green", avatarSeed: "essais" },
+	{
+		id: "essais",
+		name: "Essais",
+		colour: BLOT_HUES.green,
+		avatarSeed: "essais",
+	},
 ]
 
 const READER_NAME = "Ada Martin"
@@ -649,7 +662,7 @@ const renderShell = (args: AppSidebarProps) => (
 const renderTintedShell = (args: AppSidebarProps) => (
 	<WorkspaceShell
 		sidebar={<AppSidebar {...args} space={openSpaceOf(args)} />}
-		spaceTint="blue"
+		spaceTint={BLOT_HUES.blue}
 	>
 		{null}
 	</WorkspaceShell>
@@ -755,7 +768,9 @@ export const WithUser = meta.story({
 		const spaceLogo = within(rail).getByRole("button", {
 			name: /^Change space/,
 		})
-		await expect(slotIn(spaceLogo, "space-avatar").dataset.colour).toBe("blue")
+		await expect(slotIn(spaceLogo, "space-avatar").dataset.colour).toBe(
+			String(BLOT_HUES.blue),
+		)
 		await userEvent.click(spaceLogo)
 		await userEvent.click(
 			await screen.findByRole("menuitem", { name: "Space settings" }),
@@ -1247,9 +1262,7 @@ export const Identities = meta.story({
 		const rows = rowsIn(canvasElement)
 
 		await expect(rows).toHaveLength(IDENTITY_BLOTS.length)
-		await expect(tintsIn(canvasElement)).toEqual(
-			IDENTITY_BLOTS.map((blot) => BLOT_HUES[blot]),
-		)
+		await expect(tintsIn(canvasElement)).toEqual(IDENTITY_BLOTS)
 		for (const row of rows) {
 			await expect(avatarDrawingIn(row).dataset.state).toBe("idle")
 		}
@@ -2892,7 +2905,7 @@ const BEACON_IN_TWO_SPACES: Record<string, AppSidebarBot[]> = {
 const WORDY_SPACE: Space = {
 	id: "wordy",
 	name: "Recherche, veille et documentation partagée",
-	colour: "cyan",
+	colour: BLOT_HUES.cyan,
 	avatarSeed: "wordy",
 }
 
@@ -2940,7 +2953,11 @@ export const RowSpaces = meta.story({
 		])
 		await expect(
 			slotsIn(panel, "space-avatar").map((avatar) => avatar.dataset.colour),
-		).toEqual(FIVE_SPACES.map((space) => space.colour ?? undefined))
+		).toEqual(
+			FIVE_SPACES.map((space) =>
+				space.colour == null ? undefined : String(space.colour),
+			),
+		)
 		for (const row of rows)
 			await expect(row).not.toHaveAttribute("aria-disabled", "true")
 		await expect(within(panel).queryByText(LAST_SPACE_NOTE)).toBeNull()
@@ -5408,6 +5425,33 @@ export const Conversations = meta.story({
 			rowFor(canvasElement, "Launch review"),
 			muted,
 		)
+	},
+})
+
+export const FreeHue = meta.story({
+	tags: ["test-only"],
+	args: {
+		...conversationArgs(),
+		botsBySpaceId: inHome([{ ...ROSTER[0], blot: 210 }]),
+		conversationsBySpaceId: inHome([{ ...CONVERSATIONS[0], color: 210 }]),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A companion and a conversation at a hue outside the eight presets, 210. Check that the companion avatar and the conversation hexagon both wear 210 rather than the nearest preset. Pick `Identities` for the preset hues.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const room = rowFor(canvasElement, "Launch review")
+		const companion = rowFor(canvasElement, ROSTER[0].name)
+
+		await expect(slotIn(room, "conversation-subject-icon")).toHaveAttribute(
+			"data-hue",
+			"210",
+		)
+		await expect(companionGlyphs(companion).map(companionHueOf)).toEqual([210])
 	},
 })
 

@@ -12,7 +12,6 @@ import type {
 	BotMissionTicket,
 } from "@workspace/ui/components/bot-badge"
 import type { ActivityIndicatorKind } from "@workspace/ui/components/bot-identity-avatar"
-import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
 import type { ConversationParticipant } from "@workspace/ui/components/conversation-bot-pile"
 import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import type { ListEnd } from "@workspace/ui/components/list-skeleton"
@@ -63,7 +62,7 @@ interface AppSidebarBot {
 	lastMessage?: string
 	timestamp?: string
 	lastActivityAt?: number
-	blot?: BotAvatarBlot
+	blot?: number | null
 	image?: string
 	status?: AppSidebarStatus
 	pose?: ActivityIndicatorKind
@@ -87,7 +86,7 @@ interface AppSidebarConversation {
 	pendingQuestion?: string
 	missions?: AppSidebarRowMission[]
 	icon?: string
-	color?: BotAvatarBlot
+	color?: number | null
 }
 
 const poseOf = (bot: AppSidebarBot) => bot.pose ?? "thinking"

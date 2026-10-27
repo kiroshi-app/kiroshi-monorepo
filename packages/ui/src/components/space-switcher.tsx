@@ -9,10 +9,6 @@ import {
 	botBadgeRingVariants,
 } from "@workspace/ui/components/bot-badge"
 import {
-	BLOT_HUES,
-	type BotAvatarBlot,
-} from "@workspace/ui/components/companion-colour"
-import {
 	ContextMenuPressTrigger,
 	openBelow,
 } from "@workspace/ui/components/context-menu-press-trigger"
@@ -114,7 +110,7 @@ const placedOrder = (spaces: Space[], id: string, at: number) => {
 }
 
 type SpaceDotProps = {
-	colour?: BotAvatarBlot | null
+	colour?: number | null
 	badge?: BotBadge
 	isFilled?: boolean
 	className?: string
@@ -126,7 +122,7 @@ const SpaceDot = ({
 	isFilled = true,
 	className,
 }: SpaceDotProps) => {
-	const hue = isFilled && colour ? BLOT_HUES[colour] : undefined
+	const hue = isFilled ? (colour ?? undefined) : undefined
 
 	return (
 		<span

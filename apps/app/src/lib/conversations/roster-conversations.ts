@@ -3,7 +3,6 @@ import type {
 	AppSidebarBot,
 	AppSidebarConversation,
 } from "@workspace/ui/components/app-sidebar"
-import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
 import type { ConversationSettingsValue } from "@workspace/ui/components/conversation-settings-dialog"
 import { conversationIconOf } from "@workspace/ui/components/conversation-subject-icon"
 import type { ConversationIconName } from "@workspace/ui/components/icons"
@@ -17,6 +16,7 @@ import type {
 	Bot,
 	Conversation,
 	ConversationInPage,
+	Hue,
 	Participant,
 } from "./store-contract"
 import type {
@@ -26,7 +26,6 @@ import type {
 } from "./transcript-state"
 
 import { avatarSrc } from "../host"
-import { presetOfHue } from "@/lib/colour/hue-shim"
 import type { ConversationHostStates } from "../bots/roster-pages"
 import { rosterTimestamp } from "../bots/roster-timestamp"
 
@@ -54,7 +53,7 @@ export const storedSpeakerIdsOf = ({
 const toBotRow = (id: string, face: BotFace): AppSidebarBot => ({
 	id,
 	name: face.name,
-	blot: face.avatarBlot === null ? undefined : presetOfHue(face.avatarBlot),
+	blot: face.avatarBlot,
 	image: avatarSrc(face.avatarImagePath),
 })
 
@@ -156,7 +155,7 @@ export const toConversationSettingsValue = (
 
 type ConversationLook = {
 	icon?: ConversationIconName
-	color?: BotAvatarBlot
+	color?: Hue | null
 }
 
 export const toConversationLook = ({
@@ -164,7 +163,7 @@ export const toConversationLook = ({
 	color,
 }: Conversation): ConversationLook => ({
 	icon: icon === null ? undefined : conversationIconOf(icon),
-	color: color === null ? undefined : presetOfHue(color),
+	color,
 })
 
 export type ConversationRosterActivity = {

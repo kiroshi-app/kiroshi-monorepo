@@ -6,7 +6,6 @@ import {
 	type ActivityIndicatorKind,
 	BotIdentityAvatar,
 } from "@workspace/ui/components/bot-identity-avatar"
-import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
 import {
 	ConnectionStatus,
 	type ConnectionStatusState,
@@ -21,7 +20,7 @@ const HEADER_IDENTITY_CLASS = "h-9 min-w-0 shrink gap-2 pr-2.5 pl-1.5"
 
 type HeaderIdentityButtonProps = {
 	name: string
-	blot?: BotAvatarBlot
+	blot?: number | null
 	seed?: string
 	image?: string
 	working?: boolean
@@ -58,7 +57,7 @@ const HeaderIdentityButton = ({
 			variant="ghost"
 		>
 			<BotIdentityAvatar
-				blot={blot}
+				hue={blot}
 				image={image}
 				kind={kind}
 				name={name}

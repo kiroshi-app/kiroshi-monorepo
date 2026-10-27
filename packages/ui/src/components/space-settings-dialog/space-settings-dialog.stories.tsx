@@ -16,6 +16,7 @@ import {
 import { BLOT_TINTS } from "@workspace/ui/components/bot-settings"
 import { DangerZone } from "@workspace/ui/components/bot-settings-dialog/danger-zone"
 import { BOT_MCP_SERVERS } from "@workspace/ui/components/bot-settings-dialog/mcp-servers.fixtures"
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { SPACE_ENVIRONMENT } from "@workspace/ui/components/environment.fixtures"
 import { Icons } from "@workspace/ui/components/icons"
 import {
@@ -47,7 +48,7 @@ import { formatDateTime } from "@workspace/ui/lib/time-format"
 
 const FILLED_SPACE: SpaceSettingsValue = {
 	name: "Release desk",
-	colour: "blue",
+	colour: BLOT_HUES.blue,
 }
 
 const DialogHost = (props: SpaceSettingsDialogProps) => {
@@ -141,13 +142,45 @@ export const Default = meta.story({
 		await userEvent.type(name, "!")
 		await expect(args.onValueChange).toHaveBeenLastCalledWith({
 			name: "Release desk!",
-			colour: "blue",
+			colour: BLOT_HUES.blue,
 		})
 
 		await userEvent.click(within(dialog).getByRole("radio", { name: "Pink" }))
 		await expect(args.onValueChange).toHaveBeenLastCalledWith({
 			name: "Release desk!",
-			colour: "pink",
+			colour: BLOT_HUES.pink,
+		})
+	},
+})
+
+export const FreeHue = meta.story({
+	args: { value: { ...FILLED_SPACE, colour: 210 } },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A space stored at a hue outside the eight presets, 210. Check that the breadcrumb dot wears 210, that the colour field opens with `Your hue` selected at 210 rather than the nearest preset, and that moving the slider writes the new hue back untouched with the name unchanged. Pick `Default` for a preset.",
+			},
+		},
+	},
+	play: async ({ args, userEvent }) => {
+		const dialog = await dialogIn()
+
+		await expect(slotsIn(dialog, "space-tint")[0]).toHaveAttribute(
+			"data-hue",
+			"210",
+		)
+		await expect(
+			within(dialog).getByRole("radio", { name: "Your hue" }),
+		).toBeChecked()
+		const slider = within(dialog).getByRole("slider", { name: "Your hue" })
+		await expect(slider).toHaveValue("210")
+
+		slider.focus()
+		await userEvent.keyboard("{ArrowRight}")
+		await expect(args.onValueChange).toHaveBeenLastCalledWith({
+			name: FILLED_SPACE.name,
+			colour: 211,
 		})
 	},
 })
@@ -870,7 +903,7 @@ const membersArgs = (
 	return {
 		...SHARE_ARGS,
 		tab: "members",
-		value: { name: props.space, colour: "blue" },
+		value: { name: props.space, colour: BLOT_HUES.blue },
 		hosting,
 		members: <MembersPanel {...props} />,
 	} as const

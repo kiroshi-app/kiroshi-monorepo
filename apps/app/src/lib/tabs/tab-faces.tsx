@@ -54,7 +54,7 @@ const botFaceOf = (bot: TabBot): TabFace => ({
 	title: bot.name,
 	icon: (
 		<BotIdentityAvatar
-			blot={bot.blot}
+			hue={bot.blot}
 			image={bot.image}
 			name={bot.name}
 			seed={bot.id}
@@ -67,7 +67,7 @@ const conversationFaceOf = (conversation: TabConversation): TabFace => ({
 	title: conversation.name,
 	icon: (
 		<ConversationSubjectIcon
-			color={conversation.color}
+			hue={conversation.color}
 			icon={conversation.icon}
 			side={TAB_ICON_SIDE}
 		/>

@@ -1,4 +1,5 @@
 import type { AppTitleBarProps } from "@workspace/ui/components/app-title-bar"
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { Icons } from "@workspace/ui/components/icons"
 import type { Space } from "@workspace/ui/components/space"
 import type { TitleBarTab } from "@workspace/ui/components/title-bar-tabs"
@@ -6,7 +7,7 @@ import type { TitleBarTab } from "@workspace/ui/components/title-bar-tabs"
 export const STUDIO: Space = {
 	id: "studio",
 	name: "Studio",
-	colour: "orange",
+	colour: BLOT_HUES.orange,
 	avatarSeed: "studio",
 }
 
@@ -19,14 +20,14 @@ export const GARAGE: Space = {
 export const VOCCA: Space = {
 	id: "vocca",
 	name: "Vocca",
-	colour: "blue",
+	colour: BLOT_HUES.blue,
 	avatarSeed: "vocca",
 }
 
 export const ATELIER: Space = {
 	id: "atelier",
 	name: "Atelier",
-	colour: "green",
+	colour: BLOT_HUES.green,
 	avatarSeed: "atelier",
 }
 

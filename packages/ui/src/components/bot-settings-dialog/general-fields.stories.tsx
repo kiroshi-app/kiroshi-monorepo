@@ -6,9 +6,10 @@ import {
 	type BotSettingsValue,
 } from "@workspace/ui/components/bot-settings"
 import { BotGeneralFields } from "@workspace/ui/components/bot-settings-dialog/general-fields"
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 
 const COMPANION: BotSettingsValue = {
-	identity: { blot: "blue" },
+	identity: { blot: BLOT_HUES.blue },
 	name: "Nest Keeper",
 	title: "Repository archivist",
 	instructions: "",

@@ -114,7 +114,7 @@ const AuthorMark = ({
 }: AuthorMarkProps) =>
 	author === "bot" ? (
 		<BotIdentityAvatar
-			blot={companion?.blot}
+			hue={companion?.blot}
 			className="shrink-0"
 			image={companion?.image}
 			name={companionName}

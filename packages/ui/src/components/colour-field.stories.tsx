@@ -7,7 +7,6 @@ import {
 	ColourField,
 	type ColourFieldProps,
 } from "@workspace/ui/components/colour-field"
-import { blotOf } from "@workspace/ui/components/companion-colour"
 import { hueStyle } from "@workspace/ui/components/hue-palette"
 import { SpaceTint } from "@workspace/ui/components/space-tint"
 
@@ -59,7 +58,7 @@ const meta = preview.meta({
 	args: {
 		value: 257,
 		onValueChange: fn(),
-		mark: (hue) => <SpaceTint className="size-6" tint={blotOf(hue)} />,
+		mark: (hue) => <SpaceTint className="size-6" tint={hue} />,
 		preview: (hue) => <StoryPreview hue={hue} />,
 	},
 	render: (args) => (

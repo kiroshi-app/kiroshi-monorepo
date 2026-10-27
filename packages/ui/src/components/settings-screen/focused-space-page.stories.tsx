@@ -2,6 +2,7 @@ import { expect, fn, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { slotIn, slotsIn } from "@workspace/storybook/story-utils"
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { FocusedSpacePage } from "@workspace/ui/components/settings-screen/focused-space-page"
 
 const meta = preview.meta({
@@ -18,7 +19,7 @@ const meta = preview.meta({
 	args: {
 		space: { state: "yours", isShared: false } as const,
 		spaceId: "release-desk",
-		value: { name: "Release desk", colour: "blue" } as const,
+		value: { name: "Release desk", colour: BLOT_HUES.blue } as const,
 		onValueChange: fn(),
 		rank: 2,
 		onOpen: fn(),
@@ -45,7 +46,7 @@ export const Yours = meta.story({
 		await userEvent.type(page.getByLabelText("Name"), "!")
 		await expect(args.onValueChange).toHaveBeenLastCalledWith({
 			name: "Release desk!",
-			colour: "blue",
+			colour: BLOT_HUES.blue,
 		})
 		await expect(
 			page.getByRole("button", { name: "Share" }),
@@ -82,7 +83,7 @@ export const LongNameInANarrowColumn = meta.story({
 	args: {
 		value: {
 			name: "Thequarterlyreleasedeskforeveryproductlineweship",
-			colour: "pink",
+			colour: BLOT_HUES.pink,
 		},
 	},
 	render: (args) => (

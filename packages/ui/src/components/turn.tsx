@@ -680,7 +680,7 @@ function AssistantTurn(props: AssistantTurnProps) {
 	const unwrapped = bare || framed
 	const mark = gutterBot ? (
 		<BotIdentityAvatar
-			blot={gutterBot.blot}
+			hue={gutterBot.blot}
 			image={gutterBot.image}
 			name={gutterBot.name}
 			seed={gutterBot.id}

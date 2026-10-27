@@ -2,13 +2,17 @@ import { expect } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { slotsIn } from "@workspace/storybook/story-utils"
-import { BLOT_TINTS } from "@workspace/ui/components/bot-settings"
+import {
+	BLOT_HUES,
+	BLOT_TINTS,
+} from "@workspace/ui/components/companion-colour"
+import { hueTone } from "@workspace/ui/components/hue-palette"
 import {
 	SpaceTint,
 	type SpaceTintProps,
 } from "@workspace/ui/components/space-tint"
 
-const BLUE_TINT = { tint: "blue" } satisfies SpaceTintProps
+const BLUE_TINT = { tint: BLOT_HUES.blue } satisfies SpaceTintProps
 
 const meta = preview.meta({
 	title: "Branding/SpaceTint",
@@ -57,7 +61,7 @@ export const Untinted = meta.story({
 	play: async ({ canvasElement }) => {
 		const [dot] = slotsIn(canvasElement, "space-tint")
 
-		await expect(dot).not.toHaveAttribute("data-tint")
+		await expect(dot).not.toHaveAttribute("data-hue")
 		await expect(dot?.style.backgroundColor).toBe("")
 	},
 })
@@ -66,7 +70,7 @@ export const Variants = meta.story({
 	render: () => (
 		<div className="flex items-center gap-2">
 			{BLOT_TINTS.map((tint) => (
-				<SpaceTint className="size-6" key={tint} tint={tint} />
+				<SpaceTint className="size-6" key={tint} tint={BLOT_HUES[tint]} />
 			))}
 		</div>
 	),
@@ -81,6 +85,28 @@ export const Variants = meta.story({
 	play: async ({ canvasElement }) => {
 		const dots = slotsIn(canvasElement, "space-tint")
 
-		await expect(dots.map((dot) => dot.dataset.tint)).toEqual([...BLOT_TINTS])
+		await expect(dots.map((dot) => Number(dot.dataset.hue))).toEqual(
+			BLOT_TINTS.map((tint) => BLOT_HUES[tint]),
+		)
+	},
+})
+
+export const FreeHue = meta.story({
+	args: { tint: 210 },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A space given a hue outside the eight presets, 210. Check that the dot wears that hue, between cyan and blue, rather than the nearest preset.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const [dot] = slotsIn(canvasElement, "space-tint")
+
+		await expect(dot).toHaveAttribute("data-hue", "210")
+		await expect(dot?.style.getPropertyValue("--hue-light-bubble")).toBe(
+			hueTone(210, "light", "bubble").hex,
+		)
 	},
 })

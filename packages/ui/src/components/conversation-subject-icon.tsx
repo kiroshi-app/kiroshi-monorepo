@@ -1,8 +1,4 @@
 import conversationIcons from "@workspace/shared/conversation-icons.json"
-import {
-	type BotAvatarBlot,
-	hueOf,
-} from "@workspace/ui/components/companion-colour"
 import { hueStyle } from "@workspace/ui/components/hue-palette"
 import {
 	type ConversationIconName,
@@ -16,7 +12,6 @@ const PICTOGRAM = "relative"
 
 type ConversationSubjectIconProps = {
 	icon?: string
-	color?: BotAvatarBlot
 	hue?: number | null
 	side?: number
 }
@@ -31,8 +26,7 @@ const conversationIconOf = (icon: string | undefined): ConversationIconName =>
 
 const ConversationSubjectIcon = ({
 	icon,
-	color,
-	hue = hueOf(color),
+	hue,
 	side = 40,
 }: ConversationSubjectIconProps) => {
 	const Pictogram = ConversationIcons[conversationIconOf(icon)]

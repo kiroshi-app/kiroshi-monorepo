@@ -19,6 +19,7 @@ import {
 	DEFAULT_BOT_OUTPUT_STYLE,
 } from "@workspace/ui/components/bot-settings"
 import { BOT_MEMORY } from "@workspace/ui/components/bot-settings-dialog/memory.fixtures"
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { BOT_ENVIRONMENT } from "@workspace/ui/components/environment.fixtures"
 import {
 	endNotice,
@@ -67,7 +68,7 @@ const INSTRUCTIONS =
 const INSTRUCTIONS_BOX_HEIGHT = 220
 
 const COMPANION: BotSettingsValue = {
-	identity: { blot: "green" },
+	identity: { blot: BLOT_HUES.green },
 	name: "Juniper",
 	title: "Writer",
 	instructions: INSTRUCTIONS,
@@ -276,7 +277,39 @@ export const Appearance = meta.story({
 		)
 		await expect(args.onValueChange).toHaveBeenLastCalledWith(
 			expect.objectContaining({
-				identity: expect.objectContaining({ blot: "red" }),
+				identity: expect.objectContaining({ blot: BLOT_HUES.red }),
+			}),
+		)
+	},
+})
+
+export const AppearanceAtFreeHue = meta.story({
+	args: {
+		entry: "appearance",
+		value: { ...COMPANION, identity: { blot: 210 } },
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Appearance for a companion stored at a hue outside the eight presets, 210. Check that `Your hue` is selected at 210 rather than the nearest preset, and that moving the slider writes the new hue back untouched. Pick `Appearance` for a preset.",
+			},
+		},
+	},
+	play: async ({ args, userEvent }) => {
+		await menuIn()
+		await expectPageShown("Appearance")
+		const page = within(screen.getByRole("main"))
+
+		await expect(page.getByRole("radio", { name: "Your hue" })).toBeChecked()
+		const slider = page.getByRole("slider", { name: "Your hue" })
+		await expect(slider).toHaveValue("210")
+
+		slider.focus()
+		await userEvent.keyboard("{ArrowRight}")
+		await expect(args.onValueChange).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				identity: expect.objectContaining({ blot: 211 }),
 			}),
 		)
 	},

@@ -4,7 +4,6 @@ import { ContextMenu as ContextMenuPrimitive } from "@base-ui/react/context-menu
 import { useId } from "react"
 import { useTranslation } from "react-i18next"
 
-import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
 import { Icons } from "@workspace/ui/components/icons"
 import { SpaceAvatar } from "@workspace/ui/components/space-avatar"
 import { buttonVariants } from "@workspace/ui/components/ui/button"
@@ -73,7 +72,7 @@ type SpaceInvitationState =
 type SpaceInvitation = SpaceInvitationState & {
 	id: string
 	name: string
-	colour?: BotAvatarBlot | null
+	colour?: number | null
 	hostEmail: string
 	hostName?: string
 	expiresAt?: number

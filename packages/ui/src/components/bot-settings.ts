@@ -1,11 +1,8 @@
 import permissionModes from "@workspace/shared/permission-modes.json"
-import {
-	BLOT_TINTS,
-	type BotAvatarBlot,
-} from "@workspace/ui/components/companion-colour"
+import { BLOT_TINTS } from "@workspace/ui/components/companion-colour"
 
 type BotIdentity = {
-	blot?: BotAvatarBlot
+	blot?: number | null
 	image?: string
 }
 
@@ -431,7 +428,6 @@ export {
 	BOT_OUTPUT_STYLES,
 	BOT_PERMISSION_MODES,
 	BOT_PERMISSION_RULE_LISTS,
-	type BotAvatarBlot,
 	type BotCommitAuthor,
 	type BotEffort,
 	type BotIdentity,

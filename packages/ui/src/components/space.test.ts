@@ -1,11 +1,17 @@
 import { describe, expect, it } from "vitest"
 
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { type Space, spaceAtRank } from "@workspace/ui/components/space"
 
 const SPACES: Space[] = [
-	{ id: "perso", name: "Perso", colour: "blue", avatarSeed: "perso" },
-	{ id: "vocca", name: "Vocca", colour: "green", avatarSeed: "vocca" },
-	{ id: "atelier", name: "Atelier", colour: "pink", avatarSeed: "atelier" },
+	{ id: "perso", name: "Perso", colour: BLOT_HUES.blue, avatarSeed: "perso" },
+	{ id: "vocca", name: "Vocca", colour: BLOT_HUES.green, avatarSeed: "vocca" },
+	{
+		id: "atelier",
+		name: "Atelier",
+		colour: BLOT_HUES.pink,
+		avatarSeed: "atelier",
+	},
 ]
 
 describe("spaceAtRank", () => {

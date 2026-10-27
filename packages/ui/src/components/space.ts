@@ -1,9 +1,7 @@
-import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
-
 type Space = {
 	id: string
 	name: string
-	colour?: BotAvatarBlot | null
+	colour?: number | null
 	avatarSeed: string
 }
 

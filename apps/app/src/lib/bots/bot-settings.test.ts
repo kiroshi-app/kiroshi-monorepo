@@ -49,7 +49,7 @@ describe("toSettingsValue", () => {
 				}),
 			),
 		).toEqual({
-			identity: { blot: "green", image: undefined },
+			identity: { blot: 132, image: undefined },
 			name: "Nyx",
 			title: "Reviewer",
 			instructions: "Answer briefly.",
@@ -63,10 +63,12 @@ describe("toSettingsValue", () => {
 		expect(toSettingsValue(bot({ effort: "xhigh" })).effort).toBe("xhigh")
 	})
 
+	it("hands the panel a hue outside the presets as it was stored", () => {
+		expect(toSettingsValue(bot({ avatarBlot: 210 })).identity.blot).toBe(210)
+	})
+
 	it("reads a companion nobody marked as wearing no blot", () => {
-		expect(
-			toSettingsValue(bot({ avatarBlot: null })).identity.blot,
-		).toBeUndefined()
+		expect(toSettingsValue(bot({ avatarBlot: null })).identity.blot).toBeNull()
 	})
 })
 
@@ -114,7 +116,7 @@ describe("changesRuntime", () => {
 		expect(
 			changesRuntime(stored, {
 				...value,
-				identity: { blot: "blue" },
+				identity: { blot: 257 },
 			}),
 		).toBe(false)
 	})
@@ -133,7 +135,7 @@ describe("toIdentity", () => {
 		const value = toSettingsValue(stored)
 
 		expect(
-			toIdentity({ ...value, identity: { blot: "yellow" } }, stored),
+			toIdentity({ ...value, identity: { blot: 82 } }, stored),
 		).toMatchObject({
 			avatarBlot: 82,
 			avatarImagePath: null,
@@ -144,6 +146,23 @@ describe("toIdentity", () => {
 		const value = toSettingsValue(stored)
 
 		expect(toIdentity({ ...value, identity: {} }, stored).avatarBlot).toBeNull()
+	})
+
+	it("writes a blot the reader set to no colour as an absence", () => {
+		const value = toSettingsValue(stored)
+
+		expect(
+			toIdentity({ ...value, identity: { blot: null } }, stored).avatarBlot,
+		).toBeNull()
+	})
+
+	it("writes a hue outside the presets over the preset it replaces", () => {
+		const blue = bot({ avatarBlot: 257 })
+		const value = toSettingsValue(blue)
+
+		expect(
+			toIdentity({ ...value, identity: { blot: 210 } }, blue).avatarBlot,
+		).toBe(210)
 	})
 
 	it("carries the style the companion already answers under", () => {
@@ -385,7 +404,7 @@ describe("toRosterBots", () => {
 			id: "b-1",
 			name: "Atlas",
 			title: "Research",
-			blot: "green",
+			blot: 132,
 			sectionId: "n-1",
 			pinPosition: 2,
 		})
@@ -484,7 +503,17 @@ describe("toRosterBots", () => {
 			NOW,
 		)
 
-		expect(bare.blot).toBeUndefined()
+		expect(bare.blot).toBeNull()
+	})
+
+	it("hands the roster a hue outside the presets as it was stored", () => {
+		const [free] = toRosterBots(
+			[bot({ avatarBlot: 210 })],
+			{ working: {}, previews: {} },
+			NOW,
+		)
+
+		expect(free.blot).toBe(210)
 	})
 
 	it("puts the companion that spoke last above the one that spoke earlier", () => {

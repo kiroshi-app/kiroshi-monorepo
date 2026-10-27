@@ -42,7 +42,7 @@ const ConversationArrivalRow = ({
 		>
 			<span aria-hidden="true" className="flex shrink-0">
 				<BotIdentityAvatar
-					blot={bot.blot}
+					hue={bot.blot}
 					image={bot.image}
 					name={bot.name}
 					seed={bot.id}

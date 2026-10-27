@@ -114,9 +114,17 @@ export const RowMenuOpensInANewTab = meta.story({
 	},
 })
 
-const CINDER: AppSidebarBot = { id: "cinder", name: "Cinder", blot: "red" }
-const DUNE: AppSidebarBot = { id: "dune", name: "Dune", blot: "green" }
-const EMBER: AppSidebarBot = { id: "ember", name: "Ember", blot: "pink" }
+const CINDER: AppSidebarBot = {
+	id: "cinder",
+	name: "Cinder",
+	blot: BLOT_HUES.red,
+}
+const DUNE: AppSidebarBot = { id: "dune", name: "Dune", blot: BLOT_HUES.green }
+const EMBER: AppSidebarBot = {
+	id: "ember",
+	name: "Ember",
+	blot: BLOT_HUES.pink,
+}
 
 const FIVE_BOTS = [ATLAS, BEACON, CINDER, DUNE, EMBER]
 
@@ -267,7 +275,9 @@ export const RowWithoutIconOrColour = meta.story({
 
 export const RedShieldKeyRow = meta.story({
 	tags: ["test-only"],
-	args: { conversation: { ...DESK_ROOM, color: "red", icon: "ShieldKey" } },
+	args: {
+		conversation: { ...DESK_ROOM, color: BLOT_HUES.red, icon: "ShieldKey" },
+	},
 	play: async ({ canvasElement }) => {
 		const row = rowIn(canvasElement)
 		await expectRowAnatomy(row)
@@ -278,56 +288,56 @@ export const RedShieldKeyRow = meta.story({
 
 export const RowInRed = meta.story({
 	tags: ["test-only"],
-	args: { conversation: { ...DESK_ROOM, color: "red" } },
+	args: { conversation: { ...DESK_ROOM, color: BLOT_HUES.red } },
 	play: async ({ canvasElement }) =>
 		expectCellWears(rowIn(canvasElement), BLOT_HUES.red),
 })
 
 export const RowInYellow = meta.story({
 	tags: ["test-only"],
-	args: { conversation: { ...DESK_ROOM, color: "yellow" } },
+	args: { conversation: { ...DESK_ROOM, color: BLOT_HUES.yellow } },
 	play: async ({ canvasElement }) =>
 		expectCellWears(rowIn(canvasElement), BLOT_HUES.yellow),
 })
 
 export const RowInGreen = meta.story({
 	tags: ["test-only"],
-	args: { conversation: { ...DESK_ROOM, color: "green" } },
+	args: { conversation: { ...DESK_ROOM, color: BLOT_HUES.green } },
 	play: async ({ canvasElement }) =>
 		expectCellWears(rowIn(canvasElement), BLOT_HUES.green),
 })
 
 export const RowInCyan = meta.story({
 	tags: ["test-only"],
-	args: { conversation: { ...DESK_ROOM, color: "cyan" } },
+	args: { conversation: { ...DESK_ROOM, color: BLOT_HUES.cyan } },
 	play: async ({ canvasElement }) =>
 		expectCellWears(rowIn(canvasElement), BLOT_HUES.cyan),
 })
 
 export const RowInBlue = meta.story({
 	tags: ["test-only"],
-	args: { conversation: { ...DESK_ROOM, color: "blue" } },
+	args: { conversation: { ...DESK_ROOM, color: BLOT_HUES.blue } },
 	play: async ({ canvasElement }) =>
 		expectCellWears(rowIn(canvasElement), BLOT_HUES.blue),
 })
 
 export const RowInPurple = meta.story({
 	tags: ["test-only"],
-	args: { conversation: { ...DESK_ROOM, color: "purple" } },
+	args: { conversation: { ...DESK_ROOM, color: BLOT_HUES.purple } },
 	play: async ({ canvasElement }) =>
 		expectCellWears(rowIn(canvasElement), BLOT_HUES.purple),
 })
 
 export const RowInPink = meta.story({
 	tags: ["test-only"],
-	args: { conversation: { ...DESK_ROOM, color: "pink" } },
+	args: { conversation: { ...DESK_ROOM, color: BLOT_HUES.pink } },
 	play: async ({ canvasElement }) =>
 		expectCellWears(rowIn(canvasElement), BLOT_HUES.pink),
 })
 
 export const RowInOrange = meta.story({
 	tags: ["test-only"],
-	args: { conversation: { ...DESK_ROOM, color: "orange" } },
+	args: { conversation: { ...DESK_ROOM, color: BLOT_HUES.orange } },
 	play: async ({ canvasElement }) =>
 		expectCellWears(rowIn(canvasElement), BLOT_HUES.orange),
 })
@@ -445,7 +455,7 @@ export const OpenRowWithMissionStrips = meta.story({
 		isSelected: true,
 		conversation: {
 			...roomOf([ATLAS, BEACON, CINDER]),
-			color: "blue",
+			color: BLOT_HUES.blue,
 			icon: "Rocket",
 			missions: [
 				{

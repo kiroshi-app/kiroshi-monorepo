@@ -1,4 +1,3 @@
-import { isFreeHue } from "@workspace/ui/components/companion-colour"
 import { ConversationSettingsDialog } from "@workspace/ui/components/conversation-settings-dialog"
 
 import {
@@ -42,12 +41,11 @@ export const ConversationSettingsHost = ({
 					botId,
 				)
 			}}
-			onHueChange={(hue) => {
-				if (isFreeHue(hue)) return
+			onHueChange={(hue) =>
 				roster.controller.styleConversation(settingsConversation.id, {
 					color: hue,
 				})
-			}}
+			}
 			onIconChange={(icon) =>
 				roster.controller.styleConversation(settingsConversation.id, { icon })
 			}

@@ -5,7 +5,6 @@ import { useTranslation } from "react-i18next"
 import { BotTitleBadge } from "@workspace/ui/components/bot-badge"
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
 import type { BotPermissionMode } from "@workspace/ui/components/bot-settings"
-import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
 import { Icons } from "@workspace/ui/components/icons"
 import { Button } from "@workspace/ui/components/ui/button"
 
@@ -15,7 +14,7 @@ const CARD =
 type CompanionSummary = {
 	id: string
 	name: string
-	blot?: BotAvatarBlot
+	blot?: number | null
 	seed?: string
 	image?: string
 	title?: string
@@ -59,7 +58,7 @@ const CompanionCard = ({ companion, onSelect }: CompanionCardProps) => {
 			>
 				<span className="flex w-full min-w-0 items-center gap-3">
 					<BotIdentityAvatar
-						blot={companion.blot}
+						hue={companion.blot}
 						className="shrink-0"
 						image={companion.image}
 						name={companion.name}

@@ -8,11 +8,6 @@ import {
 } from "react"
 import { useTranslation } from "react-i18next"
 
-import {
-	BLOT_HUES,
-	type BotAvatarBlot,
-	hueOf,
-} from "@workspace/ui/components/companion-colour"
 import { hueStyle } from "@workspace/ui/components/hue-palette"
 import { type Icon, Icons } from "@workspace/ui/components/icons"
 import { Button } from "@workspace/ui/components/ui/button"
@@ -36,7 +31,7 @@ const TRANSIENT_NOTICE_DELAY = 5000
 const NOTICE_LIMIT = 3
 
 type NoticeData = {
-	spaceColour?: BotAvatarBlot
+	spaceColour?: number | null
 	reportText?: string
 }
 
@@ -55,7 +50,7 @@ type NoticeMessage = {
 	title: string
 	description?: string
 	action?: NoticeAction
-	spaceColour?: BotAvatarBlot
+	spaceColour?: number | null
 }
 
 type TransientNotice = NoticeMessage & {
@@ -312,19 +307,19 @@ const SPACE_MARK =
 
 type NoticeMarkProps = {
 	type: string | undefined
-	spaceColour?: BotAvatarBlot
+	spaceColour?: number | null
 }
 
 const NoticeMark = ({ type, spaceColour }: NoticeMarkProps) => {
-	if (spaceColour) {
+	if (spaceColour != null) {
 		return (
 			<span
 				aria-hidden="true"
 				className={SPACE_MARK}
-				data-hue={hueOf(spaceColour)}
+				data-hue={spaceColour}
 				data-slot="notice-space-mark"
 				style={{
-					...hueStyle(BLOT_HUES[spaceColour]),
+					...hueStyle(spaceColour),
 					color: "var(--primary-strong)",
 				}}
 			/>

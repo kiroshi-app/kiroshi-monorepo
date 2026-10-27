@@ -6,11 +6,6 @@ import { useTranslation } from "react-i18next"
 import { DangerZone } from "@workspace/ui/components/bot-settings-dialog/danger-zone"
 import type { McpServerEditorLayout } from "@workspace/ui/components/bot-settings-dialog/mcp-server-editor-header"
 import {
-	blotOf,
-	hueOf,
-	isFreeHue,
-} from "@workspace/ui/components/companion-colour"
-import {
 	type EnvironmentEntry,
 	EnvironmentPanel,
 	type EnvironmentWrite,
@@ -142,17 +137,15 @@ const useSpaceSettings = ({
 			</div>
 		) : null
 
-	const describeSpace = ({ name, hue }: SpaceFieldsValue) => {
-		if (isFreeHue(hue)) return
-		onValueChange({ name, colour: blotOf(hue) })
-	}
+	const describeSpace = ({ name, hue }: SpaceFieldsValue) =>
+		onValueChange({ name, colour: hue })
 
 	const spacePanel =
 		host === undefined ? (
 			<>
 				<SpaceFields
 					onValueChange={describeSpace}
-					value={{ name: value.name, hue: hueOf(value.colour) ?? null }}
+					value={{ name: value.name, hue: value.colour ?? null }}
 				/>
 				{transfer}
 			</>
