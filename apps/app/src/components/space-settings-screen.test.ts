@@ -555,6 +555,78 @@ describe("SpaceSettingsScreen on a space other than the current one", () => {
 	})
 })
 
+const SESSION_BOUND_ENTRIES = [
+	i18n.t("settings:rail.secrets"),
+	i18n.t("settings:rail.skills"),
+	i18n.t("settings:rail.applications"),
+	i18n.t("settings:rail.history"),
+]
+
+const SESSION_FREE_ENTRIES = [
+	i18n.t("settings:rail.space"),
+	i18n.t("settings:rail.members"),
+	i18n.t("settings:rail.companions"),
+]
+
+const isMenuEntryDisabled = async (label: string) => {
+	const menu = settingsMenuOf()
+	if (!menu) throw new Error("the settings menu is not shown")
+	const entry = await within(menu).findByRole("button", {
+		name: new RegExp(`^${label}`),
+	})
+	return entry.hasAttribute("disabled")
+}
+
+describe("SpaceSettingsScreen entries bound to the current space session", () => {
+	beforeEach(() => {
+		vi.mocked(isDesktopHost).mockReturnValue(true)
+		vi.mocked(commands.hostingState).mockResolvedValue({ kind: "off" })
+		answerJoinedMembers([])
+	})
+
+	it("disables Secrets, Skills, Applications and History on a joined space that is not the current one", async () => {
+		const gear = await gearWithGarage()
+		gear.joined.selectSpace(gear.home.id)
+
+		const dialog = render(
+			createElement(SpaceSettingsHarness, { ...gear, spaceId: GARAGE_ROW }),
+			{ wrapper: createQueryTestWrapper().wrapper },
+		).container
+
+		for (const label of SESSION_BOUND_ENTRIES) {
+			expect(await isMenuEntryDisabled(label), label).toBe(true)
+		}
+		for (const label of SESSION_FREE_ENTRIES) {
+			expect(await isMenuEntryDisabled(label), label).toBe(false)
+		}
+		expect(
+			within(dialog)
+				.getByRole("button", { name: i18n.t("common:spaces.leave.action") })
+				.hasAttribute("disabled"),
+		).toBe(false)
+	})
+
+	it("enables every entry on the current joined space", async () => {
+		const gear = await gearWithGarage()
+
+		openSettingsOf(gear, GARAGE_ROW)
+
+		for (const label of [...SESSION_BOUND_ENTRIES, ...SESSION_FREE_ENTRIES]) {
+			expect(await isMenuEntryDisabled(label), label).toBe(false)
+		}
+	})
+
+	it("enables every entry on the current owned space", async () => {
+		const gear = await gearWithGarage()
+
+		openSettingsOf(gear, gear.home.id)
+
+		for (const label of [...SESSION_BOUND_ENTRIES, ...SESSION_FREE_ENTRIES]) {
+			expect(await isMenuEntryDisabled(label), label).toBe(false)
+		}
+	})
+})
+
 describe("SpaceSettingsScreen on a joined space removed while shown", () => {
 	it("closes the page on the notice naming the space once its host removes it", async () => {
 		const removable = removableTransport()
