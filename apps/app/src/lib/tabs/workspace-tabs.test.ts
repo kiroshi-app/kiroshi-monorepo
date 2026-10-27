@@ -18,9 +18,29 @@ import { validateThreadSearch } from "../navigation/thread-search"
 
 const commandKey = vi.hoisted(() => ({ isUsed: true }))
 
+const windowHost = vi.hoisted(() => ({
+	windowOpen: vi.fn(),
+	closeWindow: vi.fn(),
+	raiseReportedFailure: vi.fn(),
+}))
+
 vi.mock("../host", async (importOriginal) => ({
 	...(await importOriginal<typeof import("../host")>()),
 	usesCommandKey: () => commandKey.isUsed,
+	closeWindow: windowHost.closeWindow,
+}))
+
+vi.mock("../bindings", async (importOriginal) => {
+	const bindings = await importOriginal<typeof import("../bindings")>()
+	return {
+		...bindings,
+		commands: { ...bindings.commands, windowOpen: windowHost.windowOpen },
+	}
+})
+
+vi.mock("../failure-report", async (importOriginal) => ({
+	...(await importOriginal<typeof import("../failure-report")>()),
+	raiseReportedFailure: windowHost.raiseReportedFailure,
 }))
 
 const SPACE = "space-home"
@@ -123,6 +143,9 @@ afterEach(() => {
 	cleanup()
 	localStorage.clear()
 	vi.restoreAllMocks()
+	windowHost.windowOpen.mockReset()
+	windowHost.closeWindow.mockReset()
+	windowHost.raiseReportedFailure.mockReset()
 })
 
 describe("a Space without stored tabs", () => {
@@ -893,5 +916,197 @@ describe("the tab menu keys", () => {
 			true,
 			false,
 		])
+	})
+})
+
+const SECONDARY = "window-1"
+
+const tabsOfWindow = (label: string, initialHref: string, spaceId = SPACE) => {
+	const tabs = createWorkspaceTabs(initialHref, label)
+	tabs.showSpace(spaceId)
+	return tabs
+}
+
+const opensWindows = () =>
+	windowHost.windowOpen.mockResolvedValue({ status: "ok", data: null })
+
+const closesWindows = () => windowHost.closeWindow.mockResolvedValue(undefined)
+
+describe("Move to new window", () => {
+	it("opens a window on the current page of the tab, then removes it from the strip", async () => {
+		opensWindows()
+		const tabs = tabsOn(threadOf("moved"), threadOf("kept"))
+
+		await tabs.moveToNewWindow(idOfTabOn(tabs, threadOf("moved")))
+
+		expect(windowHost.windowOpen).toHaveBeenCalledExactlyOnceWith(
+			threadOf("moved"),
+		)
+		expect(shownHrefs(tabs)).toEqual(["/", threadOf("kept")])
+	})
+
+	it("leaves without the leave prompt and keeps the moved tab off the closed tabs", async () => {
+		opensWindows()
+		const shown = tabsShowingSettings()
+		const guard = cancellingGuard()
+		shown.tabs.guardLeave(guard)
+
+		await shown.tabs.moveToNewWindow(shown.settingsId)
+
+		expect(guard).not.toHaveBeenCalled()
+		expect(shownHrefs(shown.tabs)).not.toContain(USER_SETTINGS)
+		expect(viewOf(shown.tabs).hasClosedTab).toBe(false)
+	})
+
+	it.each([
+		[
+			"refuses",
+			() =>
+				Promise.resolve({ status: "error", error: { kind: "unavailable" } }),
+		],
+		["fails", () => Promise.reject(new Error("window lost"))],
+	])(
+		"keeps the tab and raises a notice when opening the window %s",
+		async (_, opening) => {
+			windowHost.windowOpen.mockImplementation(opening)
+			const tabs = tabsOn(threadOf("stays"))
+
+			await tabs.moveToNewWindow(idOfTabOn(tabs, threadOf("stays")))
+
+			expect(shownHrefs(tabs)).toEqual(["/", threadOf("stays")])
+			expect(windowHost.raiseReportedFailure).toHaveBeenCalledOnce()
+		},
+	)
+
+	it("keeps the main window open on a new empty tab when its last tab moves", async () => {
+		opensWindows()
+		const tabs = createWorkspaceTabs(threadOf("last"))
+		tabs.showSpace(SPACE)
+
+		await tabs.moveToNewWindow(viewOf(tabs).activeId)
+
+		expect(shownHrefs(tabs)).toEqual(["/"])
+		expect(windowHost.closeWindow).not.toHaveBeenCalled()
+	})
+
+	it("closes a secondary window when its last tab moves", async () => {
+		opensWindows()
+		closesWindows()
+		const tabs = tabsOfWindow(SECONDARY, threadOf("last"))
+
+		await tabs.moveToNewWindow(viewOf(tabs).activeId)
+
+		expect(windowHost.closeWindow).toHaveBeenCalledOnce()
+	})
+})
+
+describe("the windows", () => {
+	it("shows the page a secondary window opened on as its single tab, ignoring its kept tabs", () => {
+		const before = tabsOfWindow(SECONDARY, threadOf("earlier"))
+		showInNewTab(before, threadOf("kept"))
+
+		const after = tabsOfWindow(SECONDARY, threadOf("moved"))
+
+		expect(shownHrefs(after)).toEqual([threadOf("moved")])
+		expect(activeHref(after)).toBe(threadOf("moved"))
+	})
+
+	it("keeps the tabs and the active tab of each window apart", () => {
+		const main = tabsOn(threadOf("main"))
+		const secondary = tabsOfWindow(SECONDARY, threadOf("moved"))
+		showInNewTab(secondary, threadOf("secondary"))
+		secondary.openEmptyTab()
+		secondary.select(idOfTabOn(secondary, threadOf("moved")))
+		cleanup()
+
+		const relaunched = tabsOfSpace()
+
+		expect(shownHrefs(main)).toEqual(["/", threadOf("main")])
+		expect(shownHrefs(relaunched)).toEqual(["/", threadOf("main")])
+		expect(activeHref(relaunched)).toBe(threadOf("main"))
+	})
+
+	it("changes only the strip of the window where a tab key is pressed", () => {
+		const main = createWorkspaceTabs()
+		main.showSpace(SPACE)
+		const secondary = tabsOfWindow(SECONDARY, threadOf("moved"))
+		renderHook(() => useTabKeys(secondary))
+
+		pressMod("t")
+
+		expect(shownHrefs(main)).toEqual(["/"])
+		expect(shownHrefs(secondary)).toEqual([threadOf("moved"), "/"])
+	})
+
+	it("restores the main window tabs kept before tabs were kept per window", () => {
+		localStorage.setItem(
+			`spaceTabs:${SPACE}`,
+			JSON.stringify({
+				tabs: [
+					{ href: threadOf("before"), isPinned: false },
+					{ href: USER_SETTINGS, isPinned: false },
+				],
+				activeIndex: 1,
+			}),
+		)
+
+		const tabs = tabsOfSpace()
+
+		expect(shownHrefs(tabs)).toEqual([threadOf("before"), USER_SETTINGS])
+		expect(activeHref(tabs)).toBe(USER_SETTINGS)
+	})
+
+	it("discards the kept tabs of every secondary window when the app launches", () => {
+		const before = tabsOfWindow(SECONDARY, threadOf("moved"))
+		before.showSpace(OTHER_SPACE)
+		showInNewTab(before, threadOf("away"))
+
+		tabsOfSpace()
+		const after = tabsOfWindow(SECONDARY, threadOf("moved"))
+		after.showSpace(OTHER_SPACE)
+
+		expect(shownHrefs(after)).toEqual(["/"])
+	})
+
+	it("flags Needs you from the tabs of its own window", () => {
+		const main = tabsOn(threadOf("asking"))
+		const secondary = tabsOfWindow(SECONDARY, threadOf("quiet"))
+		const hostStates = { asking: NEEDS_YOU }
+
+		expect(viewOf(main, hostStates).tabs.map((tab) => tab.needsYou)).toEqual([
+			false,
+			true,
+		])
+		expect(
+			viewOf(secondary, hostStates).tabs.map((tab) => tab.needsYou),
+		).toEqual([false])
+	})
+
+	it.each([
+		["closing it", (tabs: WorkspaceTabs) => tabs.close(viewOf(tabs).activeId)],
+		[
+			"Cmd+W",
+			(tabs: WorkspaceTabs) => {
+				renderHook(() => useTabKeys(tabs))
+				pressMod("w")
+			},
+		],
+	])("closes a secondary window on %s its last tab", (_, gesture) => {
+		closesWindows()
+		const tabs = tabsOfWindow(SECONDARY, threadOf("last"))
+
+		gesture(tabs)
+
+		expect(windowHost.closeWindow).toHaveBeenCalledOnce()
+	})
+
+	it("keeps a secondary window open when a tab closes and others remain", () => {
+		const tabs = tabsOfWindow(SECONDARY, threadOf("first"))
+		showInNewTab(tabs, threadOf("second"))
+
+		tabs.closeActive()
+
+		expect(windowHost.closeWindow).not.toHaveBeenCalled()
+		expect(shownHrefs(tabs)).toEqual([threadOf("first")])
 	})
 })

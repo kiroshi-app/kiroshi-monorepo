@@ -9,7 +9,8 @@ import { App } from "./App"
 
 import { forgetOwnAccountIds } from "@/lib/account/forget-own-account-ids"
 import { exposeLiveSessions } from "@/lib/agent/live-sessions-devtools"
-import { revealWindow } from "@/lib/host"
+import { commands, type WindowIdentity } from "@/lib/bindings"
+import { isDesktopHost, revealWindow } from "@/lib/host"
 import { forwardConsoleToLogFile } from "@/lib/host/console-log-forwarding"
 import { installInvokeTally } from "@/lib/perf/invoke-tally-devtools"
 import { exposeScrollTrace } from "@/lib/perf/scroll-trace-devtools"
@@ -48,20 +49,33 @@ const AnnotationToolbar = import.meta.env.DEV
 const queryClient = createQueryClient()
 invalidateOnHostReconnect(queryClient)
 
-createRoot(document.getElementById("root")!).render(
-	<StrictMode>
-		<QueryClientProvider client={queryClient}>
-			<I18nProvider>
-				<App />
-			</I18nProvider>
-			{import.meta.env.DEV && <ReactQueryDevtools />}
-			{AnnotationToolbar && (
-				<Suspense>
-					<AnnotationToolbar />
-				</Suspense>
-			)}
-		</QueryClientProvider>
-	</StrictMode>,
-)
+const renderApp = (windowIdentity?: WindowIdentity) => {
+	createRoot(document.getElementById("root")!).render(
+		<StrictMode>
+			<QueryClientProvider client={queryClient}>
+				<I18nProvider>
+					<App windowIdentity={windowIdentity} />
+				</I18nProvider>
+				{import.meta.env.DEV && <ReactQueryDevtools />}
+				{AnnotationToolbar && (
+					<Suspense>
+						<AnnotationToolbar />
+					</Suspense>
+				)}
+			</QueryClientProvider>
+		</StrictMode>,
+	)
+}
+
+const renderAsMainWindow = (reason: unknown) => {
+	console.error("window identity at start failed", reason)
+	renderApp()
+}
+
+if (isDesktopHost()) {
+	commands.windowIdentity().then(renderApp, renderAsMainWindow)
+} else {
+	renderApp()
+}
 
 warmCodeHighlighter()

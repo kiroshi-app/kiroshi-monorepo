@@ -78,6 +78,7 @@ export const useTitleBarTabs = ({
 			onUnpinTab: tabs.unpin,
 			onCloseOtherTabs: tabs.closeOthers,
 			onDuplicateTab: tabs.duplicate,
+			onMoveTabToNewWindow: tabs.moveToNewWindow,
 			onReopenClosedTab: tabs.reopenClosed,
 			onReorderTabs: tabs.reorder,
 			onNewTab: tabs.openEmptyTab,

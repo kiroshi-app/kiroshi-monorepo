@@ -8,7 +8,11 @@ import {
 	withPinnedFirst,
 } from "./tabs-model"
 
+export const MAIN_WINDOW_LABEL = "main"
+
 const SPACE_TABS_KEY_PREFIX = "spaceTabs:"
+
+const WINDOW_TABS_KEY_PREFIX = "windowTabs:"
 
 type KeptTab = {
 	href: string
@@ -20,7 +24,10 @@ type KeptSpaceTabs = {
 	activeIndex: number
 }
 
-const keyOf = (spaceId: string) => `${SPACE_TABS_KEY_PREFIX}${spaceId}`
+const keyOf = (windowLabel: string, spaceId: string) =>
+	windowLabel === MAIN_WINDOW_LABEL
+		? `${SPACE_TABS_KEY_PREFIX}${spaceId}`
+		: `${WINDOW_TABS_KEY_PREFIX}${windowLabel}:${spaceId}`
 
 const isKeptTab = (value: unknown): value is KeptTab =>
 	typeof value === "object" &&
@@ -63,12 +70,19 @@ const spaceTabsOf = ({ tabs, activeIndex }: KeptSpaceTabs): SpaceTabs => {
 	}
 }
 
-export const readSpaceTabs = (spaceId: string): SpaceTabs | null => {
-	const kept = parseKept(localStorage.getItem(keyOf(spaceId)))
+export const readSpaceTabs = (
+	windowLabel: string,
+	spaceId: string,
+): SpaceTabs | null => {
+	const kept = parseKept(localStorage.getItem(keyOf(windowLabel, spaceId)))
 	return isKeptSpaceTabs(kept) ? spaceTabsOf(kept) : null
 }
 
-export const writeSpaceTabs = (spaceId: string, space: SpaceTabs) => {
+export const writeSpaceTabs = (
+	windowLabel: string,
+	spaceId: string,
+	space: SpaceTabs,
+) => {
 	const kept: KeptSpaceTabs = {
 		tabs: space.tabs.map((tab) => ({
 			href: currentHrefOf(tab),
@@ -76,5 +90,15 @@ export const writeSpaceTabs = (spaceId: string, space: SpaceTabs) => {
 		})),
 		activeIndex: space.tabs.indexOf(activeTabOf(space)),
 	}
-	localStorage.setItem(keyOf(spaceId), JSON.stringify(kept))
+	localStorage.setItem(keyOf(windowLabel, spaceId), JSON.stringify(kept))
+}
+
+export const discardSecondaryWindowTabs = () => {
+	const secondaryKeys = Array.from(
+		{ length: localStorage.length },
+		(_, i) => localStorage.key(i) ?? "",
+	).filter((key) => key.startsWith(WINDOW_TABS_KEY_PREFIX))
+	for (const key of secondaryKeys) {
+		localStorage.removeItem(key)
+	}
 }

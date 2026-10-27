@@ -18,7 +18,7 @@ import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-s
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { type FakeLayout, fakeLayout } from "@/lib/perf/fake-layout"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
-import { writeSpaceTabs } from "@/lib/tabs/tabs-mirror"
+import { MAIN_WINDOW_LABEL, writeSpaceTabs } from "@/lib/tabs/tabs-mirror"
 import { spaceTabsOn } from "@/lib/tabs/tabs-model"
 import { readMirror, writeMirror } from "@/lib/user/preferences-mirror"
 
@@ -436,6 +436,7 @@ const openOnFirstCompanion = async (store: TranscriptStore) => {
 		throw new Error("no companion to open on")
 	}
 	writeSpaceTabs(
+		MAIN_WINDOW_LABEL,
 		space.id,
 		spaceTabsOn(`/${defaultStringifySearch({ bot: bot.id })}`),
 	)
