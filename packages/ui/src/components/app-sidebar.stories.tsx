@@ -5924,6 +5924,54 @@ export const ConversationRowMenu = meta.story({
 	},
 })
 
+export const ConversationRowOpensInANewTab = meta.story({
+	tags: ["test-only"],
+	args: { ...conversationArgs(), onOpenConversationInNewTab: fn() },
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"The menu of a room row on a host that opens a room in a tab of its own. Check that Open in a new tab leads the menu, and that choosing it reports the room once and selects nothing.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const menu = await openRowMenu(canvasElement, "Launch review")
+		const [openInNewTab] = menu.getAllByRole("menuitem")
+		await expect(openInNewTab).toHaveTextContent("Open in a new tab")
+
+		await userEvent.click(openInNewTab)
+		await expect(args.onOpenConversationInNewTab).toHaveBeenCalledOnce()
+		await expect(args.onOpenConversationInNewTab).toHaveBeenCalledWith("launch")
+		await expect(args.onSelectConversation).not.toHaveBeenCalled()
+	},
+})
+
+export const CompanionRowOpensInANewTab = meta.story({
+	tags: ["test-only"],
+	args: { onOpenBotInNewTab: fn() },
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"The menu of a companion row on a host that opens a companion in a tab of its own. Check that Open in a new tab leads the menu, and that choosing it reports the companion once and selects nothing.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const menu = await openRowMenu(canvasElement, "Cinder")
+		const [openInNewTab] = menu.getAllByRole("menuitem")
+		await expect(openInNewTab).toHaveTextContent("Open in a new tab")
+
+		await userEvent.click(openInNewTab)
+		await expect(args.onOpenBotInNewTab).toHaveBeenCalledOnce()
+		await expect(args.onOpenBotInNewTab).toHaveBeenCalledWith("cinder")
+		await expect(args.onSelectBot).not.toHaveBeenCalled()
+	},
+})
+
 export const CreateMenu = meta.story({
 	tags: ["test-only"],
 	args: { ...conversationArgs(), onCreateSection: fn() },

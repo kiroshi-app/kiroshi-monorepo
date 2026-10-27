@@ -91,6 +91,7 @@ const RosterRow = ({ entry, isSlotted, rows }: RosterRowProps) => {
 				conversation={entry.conversation}
 				isSelected={entry.conversation.id === rows.selectedConversationId}
 				onDelete={rows.onDeleteConversation}
+				onOpenInNewTab={rows.onOpenConversationInNewTab}
 				onOpenSettings={rows.onOpenConversationSettings}
 				onSelect={rows.onSelectConversation}
 			/>
@@ -106,6 +107,7 @@ const RosterRow = ({ entry, isSlotted, rows }: RosterRowProps) => {
 			onDelete={rows.onDeleteBot}
 			onDuplicate={rows.onDuplicateBot}
 			onEdit={rows.onEditBot}
+			onOpenInNewTab={rows.onOpenBotInNewTab}
 			onRemoveFromSpace={rows.onRemoveBotFromSpace}
 			onSelect={rows.onSelectBot}
 			openSpaceId={rows.spaceId}

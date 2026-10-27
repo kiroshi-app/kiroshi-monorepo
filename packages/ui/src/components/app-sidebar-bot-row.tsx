@@ -46,6 +46,7 @@ interface BotRosterRowProps extends RosterRowSlot, RosterPinActions {
 	sections: AppSidebarSection[]
 	openSpaceId?: string
 	onSelect?: (id: string, modifiers?: SidebarClickModifiers) => void
+	onOpenInNewTab?: (id: string) => void
 	onEdit?: (id: string) => void
 	onDuplicate?: (id: string) => void
 	onAddToSpace?: (botId: string, spaceId: string) => void
@@ -70,6 +71,7 @@ const BotRosterRow = ({
 	onPin,
 	onUnpin,
 	onSelect,
+	onOpenInNewTab,
 	onEdit,
 	onDuplicate,
 	onAddToSpace,
@@ -135,6 +137,7 @@ const BotRosterRow = ({
 					onDuplicate={onDuplicate}
 					onEdit={onEdit}
 					onMoveToSection={onMoveToSection}
+					onOpenInNewTab={onOpenInNewTab}
 					onPin={onPin}
 					onRemoveFromSpace={leaveSpace}
 					onUnpin={onUnpin}
