@@ -145,6 +145,8 @@ objc2-app-kit = { version = "0.3", default-features = false, features = [
 objc2-foundation = { version = "0.3", default-features = false, features = [
 	"std",
 	"NSGeometry",
+	"NSNotification",
+	"NSString",
 ] }
 # Keeps the device keys of an installed build in the login Keychain. Already in the tree under
 # rustls-platform-verifier; named here so no crate enters the lockfile through this line.
