@@ -1,7 +1,9 @@
 import { useMemo } from "react"
 
 import type { AppSidebarProps } from "@workspace/ui/components/app-sidebar"
+import { i18n } from "@workspace/ui/lib/i18n"
 
+import { failureReporterIn } from "../failure-report"
 import type { RosterController } from "../bots/roster-controller"
 import type { AttachmentsController } from "../chat/attachments-controller"
 import type { DraftsController } from "../chat/drafts-controller"
@@ -84,6 +86,8 @@ const openSpaceRowId = (
 	spaces: SpacesController,
 ) => openRowIdOf(joinedSpaces.getState(), spaces.getState().selectedSpaceId)
 
+const reportFailure = failureReporterIn("use-sidebar-actions")
+
 export const useSidebarActions = ({
 	attachments,
 	collapsedSections,
@@ -134,9 +138,17 @@ export const useSidebarActions = ({
 				settings.openCompanionSettings(id, { entry: COMPANION_DANGER_ENTRY }),
 			onDeleteConversation: async (id) => {
 				await runtimes.release(id)
+				try {
+					await roster.removeConversation(id)
+				} catch {
+					void reportFailure(
+						{ title: i18n.t("chat:conversationSettings.danger.failed") },
+						{ conversation: id },
+					)
+					return
+				}
 				attachments.forget({ kind: "conversation", id })
 				drafts.forget(id)
-				await roster.removeConversation(id)
 			},
 			onDeleteSection: (id) => {
 				void sections.remove(id)

@@ -3,7 +3,7 @@
 import { cleanup, renderHook } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import "@workspace/ui/lib/i18n"
+import { i18n } from "@workspace/ui/lib/i18n"
 
 import {
 	type SidebarActionsSource,
@@ -11,10 +11,18 @@ import {
 } from "./use-sidebar-actions"
 
 import { createStore } from "../store"
+import { createDraftsController } from "../chat/drafts-controller"
 import {
 	createOpenedMissionController,
 	type SelectedRow,
 } from "../missions/opened-mission-controller"
+
+const { reportFailure } = vi.hoisted(() => ({ reportFailure: vi.fn() }))
+
+vi.mock("../failure-report", async (importOriginal) => ({
+	...(await importOriginal<typeof import("../failure-report")>()),
+	failureReporterIn: () => reportFailure,
+}))
 
 const UNUSED = {} as never
 
@@ -220,5 +228,55 @@ describe("open in a new tab from a row menu", () => {
 		expect(shown.rows.selectConversation).not.toHaveBeenCalled()
 		expect(shown.roster.getState()).toEqual(SHOWN_BOT)
 		expect(shown.openedMission.getState()).not.toBeNull()
+	})
+})
+
+const deletionFor = (removeConversation: () => Promise<void>) => {
+	const attachments = { forget: vi.fn() }
+	const drafts = createDraftsController()
+	drafts.remember("c-1", "Half a thought")
+	const source: SidebarActionsSource = {
+		attachments: attachments as never,
+		collapsedSections: UNUSED,
+		drafts,
+		joinedSpaces: UNUSED,
+		openedMission: UNUSED,
+		roster: { removeConversation } as never,
+		runtimes: { release: vi.fn(async () => undefined) } as never,
+		sections: UNUSED,
+		settings: UNUSED,
+		spaces: UNUSED,
+	}
+	const { result } = renderHook(() => useSidebarActions(source))
+	return { actions: result.current, attachments, drafts }
+}
+
+describe("deleting a conversation", () => {
+	it("reports a refused deletion once and keeps its draft and attachments", async () => {
+		reportFailure.mockClear()
+		const refused = deletionFor(() => Promise.reject(new Error("no record")))
+
+		await refused.actions.onDeleteConversation("c-1")
+
+		expect(reportFailure).toHaveBeenCalledExactlyOnceWith(
+			{ title: i18n.t("chat:conversationSettings.danger.failed") },
+			{ conversation: "c-1" },
+		)
+		expect(refused.drafts.read("c-1")).toBe("Half a thought")
+		expect(refused.attachments.forget).not.toHaveBeenCalled()
+	})
+
+	it("forgets the draft and attachments of a deleted conversation without a notice", async () => {
+		reportFailure.mockClear()
+		const deleted = deletionFor(async () => undefined)
+
+		await deleted.actions.onDeleteConversation("c-1")
+
+		expect(reportFailure).not.toHaveBeenCalled()
+		expect(deleted.drafts.read("c-1")).toBe("")
+		expect(deleted.attachments.forget).toHaveBeenCalledExactlyOnceWith({
+			kind: "conversation",
+			id: "c-1",
+		})
 	})
 })

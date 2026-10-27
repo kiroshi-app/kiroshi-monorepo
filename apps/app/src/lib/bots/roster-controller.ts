@@ -1419,6 +1419,9 @@ export const createRosterController = (
 				)
 				choose(choiceOf(landOn(state.bots, conversations, null)))
 				holdConversations(state.spaceRowId, conversations)
-			}).catch(reload),
+			}).catch(async (reason: unknown) => {
+				await reload()
+				throw reason
+			}),
 	}
 }
