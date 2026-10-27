@@ -97,6 +97,20 @@ const OVERFLOW_ICON =
 
 const DRAG_REGION = "min-w-6 flex-1 self-stretch"
 
+const TAB_MENU_SHORTCUTS = {
+	pinTab: { hint: "titleBar.pinTabShortcut", keys: "Control+Shift+P" },
+	newTab: { hint: "titleBar.newTabShortcut", keys: "Meta+T" },
+	reopenClosedTab: {
+		hint: "titleBar.reopenClosedTabShortcut",
+		keys: "Meta+Shift+T",
+	},
+	closeTab: { hint: "titleBar.closeTabShortcut", keys: "Meta+W" },
+	closeOtherTabs: {
+		hint: "titleBar.closeOtherTabsShortcut",
+		keys: "Meta+Alt+W",
+	},
+} as const
+
 const UNPINNED_TAB = '[data-slot="title-bar-tab"]'
 
 const widthOf = (element: Element) => element.getBoundingClientRect().width
@@ -251,21 +265,23 @@ const TitleBarTabItem = ({
 				className={cn(TITLE_BAR_MENU, "min-w-55", STILL_UNDER_REDUCED_MOTION)}
 			>
 				<ContextMenuItem
+					aria-keyshortcuts={TAB_MENU_SHORTCUTS.pinTab.keys}
 					className={TITLE_BAR_MENU_ROW}
 					onClick={() => (tab.isPinned ? onUnpinTab : onPinTab)?.(tab.id)}
 				>
 					{t(tab.isPinned ? "titleBar.unpinTab" : "titleBar.pinTab")}
 					<ContextMenuShortcut aria-hidden="true">
-						{t("titleBar.pinTabShortcut")}
+						{t(TAB_MENU_SHORTCUTS.pinTab.hint)}
 					</ContextMenuShortcut>
 				</ContextMenuItem>
 				<ContextMenuItem
+					aria-keyshortcuts={TAB_MENU_SHORTCUTS.newTab.keys}
 					className={TITLE_BAR_MENU_ROW}
 					onClick={() => onNewTab?.()}
 				>
 					{t("titleBar.newTab")}
 					<ContextMenuShortcut aria-hidden="true">
-						{t("titleBar.newTabShortcut")}
+						{t(TAB_MENU_SHORTCUTS.newTab.hint)}
 					</ContextMenuShortcut>
 				</ContextMenuItem>
 				<ContextMenuItem
@@ -276,33 +292,36 @@ const TitleBarTabItem = ({
 				</ContextMenuItem>
 				<ContextMenuSeparator />
 				<ContextMenuItem
+					aria-keyshortcuts={TAB_MENU_SHORTCUTS.reopenClosedTab.keys}
 					className={TITLE_BAR_MENU_ROW}
 					disabled={!hasClosedTab}
 					onClick={() => onReopenClosedTab?.()}
 				>
 					{t("titleBar.reopenClosedTab")}
 					<ContextMenuShortcut aria-hidden="true">
-						{t("titleBar.reopenClosedTabShortcut")}
+						{t(TAB_MENU_SHORTCUTS.reopenClosedTab.hint)}
 					</ContextMenuShortcut>
 				</ContextMenuItem>
 				<ContextMenuSeparator />
 				<ContextMenuItem
+					aria-keyshortcuts={TAB_MENU_SHORTCUTS.closeTab.keys}
 					className={TITLE_BAR_MENU_ROW}
 					disabled={tab.isPinned}
 					onClick={() => onCloseTab?.(tab.id)}
 				>
 					{t("titleBar.closeTab")}
 					<ContextMenuShortcut aria-hidden="true">
-						{t("titleBar.closeTabShortcut")}
+						{t(TAB_MENU_SHORTCUTS.closeTab.hint)}
 					</ContextMenuShortcut>
 				</ContextMenuItem>
 				<ContextMenuItem
+					aria-keyshortcuts={TAB_MENU_SHORTCUTS.closeOtherTabs.keys}
 					className={TITLE_BAR_MENU_ROW}
 					onClick={() => onCloseOtherTabs?.(tab.id)}
 				>
 					{t("titleBar.closeOtherTabs")}
 					<ContextMenuShortcut aria-hidden="true">
-						{t("titleBar.closeOtherTabsShortcut")}
+						{t(TAB_MENU_SHORTCUTS.closeOtherTabs.hint)}
 					</ContextMenuShortcut>
 				</ContextMenuItem>
 				<ContextMenuItem

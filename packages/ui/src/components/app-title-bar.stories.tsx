@@ -448,6 +448,16 @@ const tabMenuRowsFor = (pinRow: string) => [
 
 const UNHINTED_TAB_MENU_ROWS = ["Duplicate tab", "Move to new window"]
 
+const TAB_MENU_KEYSHORTCUTS = [
+	"Control+Shift+P",
+	"Meta+T",
+	null,
+	"Meta+Shift+T",
+	"Meta+W",
+	"Meta+Alt+W",
+	null,
+]
+
 const expectTabMenu = async (menu: HTMLElement, pinRow: string) => {
 	const rows = within(menu).getAllByRole("menuitem")
 	await expect(rows.map((row) => row.textContent)).toEqual(
@@ -459,6 +469,9 @@ const expectTabMenu = async (menu: HTMLElement, pinRow: string) => {
 		).toBe(UNHINTED_TAB_MENU_ROWS.includes(row.textContent ?? ""))
 		await expect(row.scrollWidth).toBe(row.clientWidth)
 	}
+	await expect(
+		rows.map((row) => row.getAttribute("aria-keyshortcuts")),
+	).toEqual(TAB_MENU_KEYSHORTCUTS)
 	const [, , duplicate, reopen] = rows
 	const [afterDuplicate, afterReopen] = within(menu).getAllByRole("separator")
 	await expect(duplicate.nextElementSibling).toBe(afterDuplicate)
