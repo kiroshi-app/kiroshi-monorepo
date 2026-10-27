@@ -1147,6 +1147,12 @@ const ReorderingTitleBar = (args: AppTitleBarProps) => {
 	)
 }
 
+type KeyboardPlayContext = {
+	args: Partial<AppTitleBarProps>
+	canvasElement: HTMLElement
+	userEvent: { keyboard: (text: string) => Promise<void> }
+}
+
 const moveAnnouncementIn = (canvasElement: HTMLElement) =>
 	slotIn(barIn(canvasElement), "title-bar-tab-move-announcement")
 
@@ -1154,11 +1160,7 @@ const playKeyboardReorder = async ({
 	args,
 	canvasElement,
 	userEvent,
-}: {
-	args: Partial<AppTitleBarProps>
-	canvasElement: HTMLElement
-	userEvent: { keyboard: (text: string) => Promise<void> }
-}) => {
+}: KeyboardPlayContext) => {
 	const bar = within(barIn(canvasElement))
 	const login = bar.getByRole("tab", { name: LOGIN_REDIRECT.title })
 	const roadmap = bar.getByRole("tab", { name: ROADMAP.title })
@@ -1291,11 +1293,7 @@ const playEscapeCancelsDrag = async ({
 	args,
 	canvasElement,
 	userEvent,
-}: {
-	args: Partial<AppTitleBarProps>
-	canvasElement: HTMLElement
-	userEvent: { keyboard: (text: string) => Promise<void> }
-}) => {
+}: KeyboardPlayContext) => {
 	const bar = barIn(canvasElement)
 	const [, lifted, passed] = unpinnedTabsIn(canvasElement)
 	const restingLeft = boxOf(lifted).left
