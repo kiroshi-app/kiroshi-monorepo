@@ -27,7 +27,10 @@ import {
 	type SpaceInvitationCallbacks,
 	SpaceInvitations,
 } from "@workspace/ui/components/space-invitations"
-import { SpaceMenuRows } from "@workspace/ui/components/space-switcher"
+import {
+	badgeElsewhere,
+	SpaceMenuRows,
+} from "@workspace/ui/components/space-switcher"
 import {
 	TITLE_BAR_MENU,
 	TITLE_BAR_MENU_ROW,
@@ -296,6 +299,7 @@ const AppRail = ({
 			<ul className={RAIL_GROUP}>
 				{spaces ? (
 					<RailItem
+						badge={badgeElsewhere(spaces, space?.id, badgesBySpaceId)}
 						className={RAIL_SPACES_TRIGGER}
 						hasDot={dots?.settings}
 						isSelected={openSettings === "space"}

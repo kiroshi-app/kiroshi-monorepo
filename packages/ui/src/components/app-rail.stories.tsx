@@ -1028,6 +1028,65 @@ export const A7SpacesMenuDark = meta.story({
 	play: playA7,
 })
 
+const A7_BADGE = {
+	...A7,
+	badgesBySpaceId: {
+		[CURRENT_SPACE.id]: "attention",
+		[STUDIO.id]: "done",
+		[GARAGE.id]: "failed",
+	},
+} satisfies Partial<AppRailProps>
+
+const playA7Badge = async ({
+	canvasElement,
+}: {
+	canvasElement: HTMLElement
+}) => {
+	const logo = entryNamed(canvasElement, `${SPACES_MENU}, ${DOT_NEWS.failed}`)
+	const box = logo.getBoundingClientRect()
+	await expect(box.width).toBe(RAIL_BUTTON)
+	await expect(slotIn(logo, "space-avatar").getBoundingClientRect().width).toBe(
+		SPACE_LOGO,
+	)
+	const dot = slotIn(logo, "app-rail-dot")
+	const dotBox = dot.getBoundingClientRect()
+	await expect(dotBox.width).toBe(8)
+	await expect(dotBox.top).toBe(box.top)
+	await expect(dotBox.right).toBe(box.right)
+	await expect(getComputedStyle(dot).backgroundColor).toBe(
+		tokenStyleIn(logo, DOT_TOKEN.failed, "backgroundColor"),
+	)
+}
+
+export const A7SpacesBadge = meta.story({
+	args: A7_BADGE,
+	render: renderSpacesWindow,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A7, light: the rail's Space logo carrying the strongest badge of the other spaces, the rule the Space switcher uses. The current space waits on the reader, which the logo leaves out, Studio finished and Garage failed. Check the 8px failed dot sits flush with the top and trailing corner of the 44px button, the way the other rail entries carry theirs, and that the button's name ends on activity failed. The artboard draws no badge here. Pick `A7SpacesMenu` for the logo with no news.",
+			},
+		},
+	},
+	play: playA7Badge,
+})
+
+export const A7SpacesBadgeDark = meta.story({
+	args: A7_BADGE,
+	globals: { theme: "dark" },
+	render: renderSpacesWindow,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A7, dark: the failed dot on the Space logo, ringed in the dark window ground. Pick `A7SpacesBadge` for the light theme.",
+			},
+		},
+	},
+	play: playA7Badge,
+})
+
 export const SpacesMenuGestures = meta.story({
 	tags: ["test-only"],
 	args: { ...A7, onSpacesMenuOpenChange: fn() },

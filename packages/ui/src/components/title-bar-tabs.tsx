@@ -1,7 +1,7 @@
 "use client"
 
 import { Tabs } from "@base-ui/react/tabs"
-import type { ReactNode } from "react"
+import { type ReactNode, useLayoutEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { ContextMenuPressTrigger } from "@workspace/ui/components/context-menu-press-trigger"
@@ -17,6 +17,7 @@ import {
 	ContextMenuItem,
 	ContextMenuTrigger,
 } from "@workspace/ui/components/ui/context-menu"
+import { useStableCallback } from "@workspace/ui/hooks/use-stable-callback"
 import { STILL_UNDER_REDUCED_MOTION } from "@workspace/ui/lib/reduced-motion"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -31,7 +32,6 @@ type TitleBarTab = {
 type TitleBarTabsProps = {
 	tabs?: TitleBarTab[]
 	activeTabId?: string
-	overflowTabs?: TitleBarTab[]
 	canGoBack?: boolean
 	canGoForward?: boolean
 	onSelectTab?: (id: string) => void
@@ -66,7 +66,7 @@ const PINNED_WIDTH = "size-7 shrink-0"
 const DIVIDER = "h-4 w-px shrink-0"
 
 const TAB_ICON =
-	"pointer-events-none grid size-4 shrink-0 place-items-center [&_svg]:size-3.75"
+	"pointer-events-none grid size-4 shrink-0 place-items-center [&>svg]:size-3.75"
 
 const TAB =
 	"flex h-7 items-center gap-1.5 rounded-md bg-title-bar-tab px-2 text-muted-foreground hover:bg-title-bar-highlight hover:text-foreground focus-visible:outline-2 focus-visible:outline-foreground focus-visible:outline-offset-1 aria-selected:bg-title-bar-tab-selected aria-selected:pe-7.25 aria-selected:text-foreground"
@@ -87,9 +87,87 @@ const OVERFLOW_CHIP =
 	"flex h-7 shrink-0 items-center gap-1 rounded-md bg-title-bar-chip ps-2 pe-1.5 font-medium text-foreground text-xs hover:bg-title-bar-tab-selected focus-visible:outline-2 focus-visible:outline-foreground focus-visible:outline-offset-1 aria-expanded:bg-title-bar-tab-selected [&_svg]:size-3"
 
 const OVERFLOW_ICON =
-	"grid size-4 shrink-0 place-items-center [&_svg]:size-3.75!"
+	"grid size-4 shrink-0 place-items-center [&>svg]:size-3.75!"
 
 const DRAG_REGION = "min-w-6 flex-1 self-stretch"
+
+const UNPINNED_TAB = '[data-slot="title-bar-tab"]'
+
+const widthOf = (element: Element) => element.getBoundingClientRect().width
+
+const pixelsOf = (value: string) => Number.parseFloat(value) || 0
+
+const EVERY_TAB = Number.POSITIVE_INFINITY
+
+const fittingTabCount = (strip: HTMLElement, unpinnedCount: number) => {
+	const list = strip.querySelector<HTMLElement>('[role="tablist"]')
+	const tab = list?.querySelector(UNPINNED_TAB)
+	const dragRegion = strip.querySelector('[data-slot="title-bar-drag-region"]')
+	if (!list || !tab || !dragRegion || strip.clientWidth === 0) return EVERY_TAB
+
+	const chip = strip.querySelector('[data-slot="title-bar-overflow"]')
+	const stripGap = pixelsOf(getComputedStyle(strip).columnGap)
+	const listGap = pixelsOf(getComputedStyle(list).columnGap)
+	const floor = pixelsOf(getComputedStyle(tab).minWidth)
+	const besideTabs = [...strip.children].filter(
+		(child) =>
+			child !== list.parentElement && child !== chip && child !== dragRegion,
+	)
+	const pinned = [...list.children].filter(
+		(child) => !child.matches(UNPINNED_TAB),
+	)
+	const room =
+		strip.clientWidth -
+		pixelsOf(getComputedStyle(dragRegion).minWidth) -
+		stripGap -
+		besideTabs.reduce((sum, child) => sum + widthOf(child) + stripGap, 0) -
+		pinned.reduce((sum, child) => sum + widthOf(child) + listGap, 0)
+	const fitting = (width: number) =>
+		Math.floor((width + listGap) / (floor + listGap))
+
+	if (fitting(room) >= unpinnedCount) return EVERY_TAB
+	const chipWidth = chip ? widthOf(chip) + stripGap : 0
+	return Math.max(1, fitting(room - chipWidth))
+}
+
+const useFittingTabCount = (unpinnedCount: number) => {
+	const stripRef = useRef<HTMLDivElement>(null)
+	const [fittingCount, setFittingCount] = useState(EVERY_TAB)
+	const measure = useStableCallback(() => {
+		const strip = stripRef.current
+		if (!strip) return
+		const next = fittingTabCount(strip, unpinnedCount)
+		if (next !== fittingCount) setFittingCount(next)
+	})
+
+	useLayoutEffect(measure)
+	useLayoutEffect(() => {
+		const strip = stripRef.current
+		if (!strip) return
+		const observer = new ResizeObserver(measure)
+		observer.observe(strip)
+		return () => observer.disconnect()
+	}, [measure])
+
+	return { stripRef, fittingCount }
+}
+
+const splitAtFit = (
+	unpinned: TitleBarTab[],
+	fittingCount: number,
+	activeTabId?: string,
+) => {
+	const active = unpinned.find((tab) => tab.id === activeTabId)
+	const leading = unpinned.slice(0, fittingCount)
+	const kept =
+		active && !leading.includes(active)
+			? [...leading.slice(0, -1), active]
+			: leading
+	return {
+		kept,
+		overflowing: unpinned.filter((tab) => !kept.includes(tab)),
+	}
+}
 
 type TabGestures = Pick<
 	TitleBarTabsProps,
@@ -180,6 +258,7 @@ const OverflowChip = ({ tabs, onSelectTab }: OverflowChipProps) => {
 	return (
 		<ContextMenu>
 			<ContextMenuPressTrigger
+				edge="end"
 				render={
 					<button
 						className={OVERFLOW_CHIP}
@@ -193,6 +272,7 @@ const OverflowChip = ({ tabs, onSelectTab }: OverflowChipProps) => {
 			/>
 			<ContextMenuContent
 				className={cn(TITLE_BAR_MENU, "w-72.5", STILL_UNDER_REDUCED_MOTION)}
+				side="inline-start"
 			>
 				{tabs.map((tab) => (
 					<ContextMenuItem
@@ -214,7 +294,6 @@ const OverflowChip = ({ tabs, onSelectTab }: OverflowChipProps) => {
 const TitleBarTabs = ({
 	tabs = [],
 	activeTabId,
-	overflowTabs = [],
 	canGoBack = false,
 	canGoForward = false,
 	onSelectTab,
@@ -229,7 +308,9 @@ const TitleBarTabs = ({
 	const { t } = useTranslation("common")
 	const pinned = tabs.filter((tab) => tab.isPinned)
 	const unpinned = tabs.filter((tab) => !tab.isPinned)
-	const tabWidth = overflowTabs.length > 0 ? TAB_WIDTH_AT_FLOOR : TAB_WIDTH
+	const { stripRef, fittingCount } = useFittingTabCount(unpinned.length)
+	const { kept, overflowing } = splitAtFit(unpinned, fittingCount, activeTabId)
+	const tabWidth = overflowing.length > 0 ? TAB_WIDTH_AT_FLOOR : TAB_WIDTH
 	const hasDivider = pinned.length > 0 && unpinned.length > 0
 	const tabItem = (tab: TitleBarTab, width: string) => (
 		<TitleBarTabItem
@@ -244,7 +325,7 @@ const TitleBarTabs = ({
 	)
 
 	return (
-		<div className={STRIP} data-slot="title-bar-tabs">
+		<div className={STRIP} data-slot="title-bar-tabs" ref={stripRef}>
 			<div className={HISTORY} data-slot="title-bar-history">
 				<button
 					aria-label={t("titleBar.back")}
@@ -279,14 +360,14 @@ const TitleBarTabs = ({
 							data-slot="title-bar-pinned-divider"
 						/>
 					) : null}
-					{unpinned.map((tab) => tabItem(tab, tabWidth))}
+					{kept.map((tab) => tabItem(tab, tabWidth))}
 				</Tabs.List>
 				<div className={cn(TAB_ROW, CLOSE_LAYER)}>
 					{pinned.map((tab) => (
 						<span className={PINNED_WIDTH} key={tab.id} />
 					))}
 					{hasDivider ? <span className={DIVIDER} /> : null}
-					{unpinned.map((tab) => (
+					{kept.map((tab) => (
 						<span className={cn(CLOSE_SLOT, tabWidth)} key={tab.id}>
 							{tab.id === activeTabId ? (
 								<button
@@ -303,8 +384,8 @@ const TitleBarTabs = ({
 					))}
 				</div>
 			</Tabs.Root>
-			{overflowTabs.length > 0 ? (
-				<OverflowChip onSelectTab={onSelectTab} tabs={overflowTabs} />
+			{overflowing.length > 0 ? (
+				<OverflowChip onSelectTab={onSelectTab} tabs={overflowing} />
 			) : null}
 			<button
 				aria-label={t("titleBar.newTab")}

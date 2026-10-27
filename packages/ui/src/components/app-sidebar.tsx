@@ -57,7 +57,6 @@ const AppSidebarBase = ({
 	railDots,
 	tabs,
 	activeTabId,
-	overflowTabs,
 	canGoBack,
 	canGoForward,
 	onSelectTab,
@@ -110,7 +109,6 @@ const AppSidebarBase = ({
 				onPinTab={onPinTab}
 				onSelectTab={onSelectTab}
 				onUnpinTab={onUnpinTab}
-				overflowTabs={overflowTabs}
 				tabs={tabs}
 				windowControls={windowControls}
 			/>

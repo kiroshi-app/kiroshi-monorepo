@@ -29,6 +29,9 @@ import {
 	SUPPORT_TRIAGE,
 	WEEKLY_PLANNING,
 } from "@workspace/ui/components/app-title-bar.fixtures"
+import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
+import { ConversationIcons, Icons } from "@workspace/ui/components/icons"
+import type { TitleBarTab } from "@workspace/ui/components/title-bar-tabs"
 import { WindowControls } from "@workspace/ui/components/window-controls"
 import { SHELL_TITLE_BAR_HEIGHT } from "@workspace/ui/components/workspace-shell"
 
@@ -41,6 +44,12 @@ const TAB_HEIGHT = 28
 const TAB_WIDTH = 176
 
 const TAB_FLOOR_WIDTH = 104
+
+const ICON_SLOT = 16
+
+const AVATAR_ICON = 16
+
+const GLYPH_ICON = 15
 
 const DARK = { theme: "dark" }
 
@@ -89,6 +98,48 @@ const titleOf = (tab: HTMLElement) =>
 	tab.querySelector<HTMLElement>("span:last-child") ?? tab
 
 const openMenu = async () => settled(await screen.findByRole("menu"))
+
+const chipIn = (canvasElement: HTMLElement) =>
+	slotIn(barIn(canvasElement), "title-bar-overflow")
+
+const iconSlotOf = (owner: HTMLElement) =>
+	owner.querySelector<HTMLElement>('span[aria-hidden="true"]') ?? owner
+
+const expectIconAtItsSize = async (owner: HTMLElement, tab: TitleBarTab) => {
+	const slot = iconSlotOf(owner)
+	await expect(boxOf(slot).width).toBe(ICON_SLOT)
+	await expect(boxOf(slot).height).toBe(ICON_SLOT)
+	const icon = slot.firstElementChild as Element
+	const side = tab.id === COMPANION_TAB.id ? AVATAR_ICON : GLYPH_ICON
+	await expect(boxOf(icon).width).toBe(side)
+	await expect(boxOf(icon).height).toBe(side)
+}
+
+const tabsOutOfStrip = (canvasElement: HTMLElement, tabs: TitleBarTab[]) => {
+	const inStrip = new Set(
+		within(barIn(canvasElement))
+			.getAllByRole("tab")
+			.map((tab) => tab.getAttribute("aria-label") ?? tab.textContent),
+	)
+	return tabs.filter((tab) => !inStrip.has(tab.title))
+}
+
+const expectMenuUnderChip = async (menu: HTMLElement, chip: HTMLElement) => {
+	await expect(boxOf(menu).width).toBe(290)
+	await expect(boxOf(menu).right).toBeCloseTo(boxOf(chip).right, 0)
+	await expect(boxOf(menu).top).toBeCloseTo(boxOf(chip).bottom + 4, 0)
+}
+
+const expectOverflowRows = async (menu: HTMLElement, tabs: TitleBarTab[]) => {
+	const rows = within(menu).getAllByRole("menuitem")
+	await expect(rows.map((row) => row.textContent)).toEqual(
+		tabs.map((tab) => tab.title),
+	)
+	for (const [rank, tab] of tabs.entries()) {
+		await expect(boxOf(rows[rank]).height).toBe(32)
+		await expectIconAtItsSize(rows[rank], tab)
+	}
+}
 
 const expectBarAnatomy = async (canvasElement: HTMLElement) => {
 	const bar = barIn(canvasElement)
@@ -235,29 +286,105 @@ export const A2EqualWidthTabsDark = meta.story({
 	play: playA2,
 })
 
-const OVERFLOW = [HIRING_PLAN, BUG_BASH, ROADMAP, STANDUP]
+const COMPANION_TAB: TitleBarTab = {
+	id: "companion-ada",
+	title: "Ada",
+	icon: <BotIdentityAvatar name="Ada" seed="ada" size={AVATAR_ICON} />,
+}
+
+const ROCKET_TAB: TitleBarTab = {
+	id: "launch-plan",
+	title: "Launch plan",
+	icon: <ConversationIcons.Rocket />,
+}
+
+const MISSION_TAB: TitleBarTab = {
+	id: "mission-checkout",
+	title: "Checkout flow",
+	icon: <Icons.Missions />,
+}
+
+const SETTINGS_TAB: TitleBarTab = {
+	id: "settings-general",
+	title: "General",
+	icon: <Icons.Settings />,
+}
+
+const ICON_KINDS = [COMPANION_TAB, ROCKET_TAB, MISSION_TAB, SETTINGS_TAB]
+
+const A2_ICONS = {
+	tabs: ICON_KINDS,
+	activeTabId: COMPANION_TAB.id,
+} satisfies Partial<AppTitleBarProps>
+
+const playA2Icons = async ({
+	canvasElement,
+}: {
+	canvasElement: HTMLElement
+}) => {
+	const tabs = unpinnedTabsIn(canvasElement)
+	await expect(tabs.map((tab) => tab.textContent)).toEqual(
+		ICON_KINDS.map((tab) => tab.title),
+	)
+	for (const [rank, tab] of ICON_KINDS.entries()) {
+		await expectIconAtItsSize(tabs[rank], tab)
+	}
+}
+
+export const A2TabIconKinds = meta.story({
+	args: A2_ICONS,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A2, light: one tab per icon kind, a companion, a conversation, a mission and Settings. Check each icon sits in a 16px slot, the companion's hexagon avatar at its full 16px and the Rocket, Flag and Settings glyphs at 15px. Pick `A2EqualWidthTabs` for tabs of one kind.",
+			},
+		},
+	},
+	play: playA2Icons,
+})
+
+export const A2TabIconKindsDark = meta.story({
+	args: A2_ICONS,
+	globals: DARK,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A2, dark: the four icon kinds on the dark ground. Pick `A2TabIconKinds` for the light theme.",
+			},
+		},
+	},
+	play: playA2Icons,
+})
+
+const TWELVE_TABS = [
+	RELEASE_NOTES,
+	ONBOARDING_COPY,
+	LOGIN_REDIRECT,
+	WEEKLY_PLANNING,
+	INVOICE_EXPORT,
+	PRICING_PAGE,
+	SUPPORT_TRIAGE,
+	DESIGN_REVIEW,
+	HIRING_PLAN,
+	BUG_BASH,
+	ROADMAP,
+	STANDUP,
+]
 
 const A3 = {
-	tabs: [
-		RELEASE_NOTES,
-		ONBOARDING_COPY,
-		LOGIN_REDIRECT,
-		WEEKLY_PLANNING,
-		INVOICE_EXPORT,
-		PRICING_PAGE,
-		SUPPORT_TRIAGE,
-		DESIGN_REVIEW,
-	],
-	overflowTabs: OVERFLOW,
+	tabs: TWELVE_TABS,
 	activeTabId: RELEASE_NOTES.id,
 } satisfies Partial<AppTitleBarProps>
 
 const playA3 = async ({ canvasElement }: { canvasElement: HTMLElement }) => {
 	await expectEqualTabs(canvasElement, TAB_FLOOR_WIDTH)
-	const chip = within(barIn(canvasElement)).getByRole("button", {
-		name: "4 more",
-	})
-	await expect(chip).toHaveTextContent("4 more")
+	const overflowing = tabsOutOfStrip(canvasElement, TWELVE_TABS)
+	await expect(overflowing.length).toBeGreaterThan(0)
+	await expect(overflowing).toEqual(TWELVE_TABS.slice(-overflowing.length))
+	const chip = chipIn(canvasElement)
+	await expect(chip).toHaveAccessibleName(`${overflowing.length} more`)
 	await expect(boxOf(chip).height).toBe(TAB_HEIGHT)
 	const lastTab = unpinnedTabsIn(canvasElement).at(-1) as HTMLElement
 	await expect(boxOf(chip).left).toBe(boxOf(lastTab).right + 4)
@@ -268,15 +395,8 @@ const playA3 = async ({ canvasElement }: { canvasElement: HTMLElement }) => {
 
 	chip.click()
 	const menu = await openMenu()
-	await expect(boxOf(menu).width).toBe(290)
-	const rows = within(menu).getAllByRole("menuitem")
-	await expect(rows.map((row) => row.textContent)).toEqual(
-		OVERFLOW.map((tab) => tab.title),
-	)
-	for (const row of rows) {
-		await expect(row.querySelector("svg")).not.toBeNull()
-		await expect(boxOf(row).height).toBe(32)
-	}
+	await expectMenuUnderChip(menu, chip)
+	await expectOverflowRows(menu, overflowing)
 }
 
 export const A3Overflow = meta.story({
@@ -286,7 +406,7 @@ export const A3Overflow = meta.story({
 		docs: {
 			description: {
 				story:
-					"A3, light: eight tabs in the row and four the app moved to the overflow, the overflow list open. Check the tabs drop to their 104px floor, all equal, that the chip after the last one reads 4 more, that New tab follows it, and that the 290px list names the four tabs with their icon and title on 32px rows. Pick `A2EqualWidthTabs` for a row that holds every tab.",
+					"A3, light: twelve tabs at 1280px, the strip keeping the tabs that fit at their 104px floor and moving the last ones to the overflow, the overflow list open. Check the kept tabs are all equal, that the chip after the last one counts the moved tabs, that New tab follows it, and that the 290px list, its end on the chip's end and 4px under it, names the moved tabs in tab order with their 15px icon and title on 32px rows. Pick `A2EqualWidthTabs` for a row that holds every tab.",
 			},
 		},
 	},
@@ -497,7 +617,11 @@ export const WithWindowControls = meta.story({
 
 export const TabGestures = meta.story({
 	tags: ["test-only"],
-	args: { ...A4, canGoForward: true, overflowTabs: OVERFLOW },
+	args: {
+		tabs: [PINNED_INBOX, ...TWELVE_TABS],
+		activeTabId: RELEASE_NOTES.id,
+		canGoForward: true,
+	},
 	parameters: {
 		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		docs: {
@@ -547,7 +671,8 @@ export const TabGestures = meta.story({
 		)
 		await expect(args.onCloseOtherTabs).toHaveBeenCalledWith(PINNED_INBOX.id)
 
-		await userEvent.click(bar.getByRole("button", { name: "4 more" }))
+		const chip = chipIn(canvasElement)
+		await userEvent.click(chip)
 		menu = await openMenu()
 		await userEvent.click(
 			within(menu).getByRole("menuitem", { name: ROADMAP.title }),
@@ -560,7 +685,7 @@ export const TabGestures = meta.story({
 			bar.getByRole("button", { name: "Forward" }),
 			...bar.getAllByRole("tab"),
 			bar.getByRole("button", { name: "Close tab" }),
-			bar.getByRole("button", { name: "4 more" }),
+			chip,
 			bar.getByRole("button", { name: "New tab" }),
 		]
 		for (const control of controls) {
@@ -588,10 +713,73 @@ export const TabGestures = meta.story({
 		await expect(close).toHaveFocus()
 		await expect(getComputedStyle(close).outlineStyle).not.toBe("none")
 		await userEvent.tab()
-		await expect(bar.getByRole("button", { name: "4 more" })).toHaveFocus()
+		await expect(chip).toHaveFocus()
 		await userEvent.tab()
 		const newTab = bar.getByRole("button", { name: "New tab" })
 		await expect(newTab).toHaveFocus()
 		await expect(getComputedStyle(newTab).outlineStyle).not.toBe("none")
+	},
+})
+
+const STRIP_TABS = [
+	PINNED_INBOX,
+	...TWELVE_TABS.slice(0, 9),
+	COMPANION_TAB,
+	ROCKET_TAB,
+	STANDUP,
+]
+
+export const OverflowFollowsTheStrip = meta.story({
+	tags: ["test-only"],
+	args: { tabs: STRIP_TABS, activeTabId: STANDUP.id },
+	parameters: {
+		a11y: A11Y_FLOATING_FOCUS_GUARDS,
+		docs: {
+			description: {
+				story:
+					"The strip decides the overflow from its own width. Check the pinned tab and the open last tab stay in the row, that the menu lists every other tab that does not fit in tab order, a companion row at 16px and a glyph at 15px, that choosing a row reports its tab, and that widening the bar drops the chip once every tab fits and narrowing it brings it back.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const bar = within(barIn(canvasElement))
+		await expect(bar.getByRole("tab", { name: PINNED_INBOX.title })).toBe(
+			slotIn(barIn(canvasElement), "title-bar-pinned-tab"),
+		)
+		await expect(bar.getByRole("tab", { name: STANDUP.title })).toHaveAttribute(
+			"aria-selected",
+			"true",
+		)
+		await expectEqualTabs(canvasElement, TAB_FLOOR_WIDTH)
+		const overflowing = tabsOutOfStrip(canvasElement, STRIP_TABS)
+		await expect(overflowing.map((tab) => tab.id)).not.toContain(STANDUP.id)
+		await expect(overflowing.map((tab) => tab.id)).toContain(COMPANION_TAB.id)
+		const chip = chipIn(canvasElement)
+		await expect(chip).toHaveAccessibleName(`${overflowing.length} more`)
+
+		await userEvent.click(chip)
+		const menu = await openMenu()
+		await expectMenuUnderChip(menu, chip)
+		await expectOverflowRows(menu, overflowing)
+		await userEvent.click(
+			within(menu).getByRole("menuitem", { name: COMPANION_TAB.title }),
+		)
+		await expect(args.onSelectTab).toHaveBeenCalledWith(COMPANION_TAB.id)
+		await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
+
+		const frame = barIn(canvasElement).parentElement as HTMLElement
+		frame.style.width = "2560px"
+		await waitFor(() =>
+			expect(
+				barIn(canvasElement).querySelector('[data-slot="title-bar-overflow"]'),
+			).toBeNull(),
+		)
+		await expect(tabsOutOfStrip(canvasElement, STRIP_TABS)).toEqual([])
+
+		frame.style.width = ""
+		await waitFor(() =>
+			expect(tabsOutOfStrip(canvasElement, STRIP_TABS)).toEqual(overflowing),
+		)
+		await expect(chipIn(canvasElement)).toBeVisible()
 	},
 })

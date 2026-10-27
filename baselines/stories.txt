@@ -828,6 +828,8 @@ layout-workspaceshell--space-tinted
 layout-workspaceshell--space-tinted-dark
 layout-workspaceshell--tall-content
 layout-workspaceshell--tall-host
+navigation-apprail--a-7-spaces-badge
+navigation-apprail--a-7-spaces-badge-dark
 navigation-apprail--a-7-spaces-menu
 navigation-apprail--a-7-spaces-menu-dark
 navigation-apprail--attention-dot
@@ -1037,6 +1039,8 @@ navigation-apptitlebar--a-1-tabs
 navigation-apptitlebar--a-1-tabs-dark
 navigation-apptitlebar--a-2-equal-width-tabs
 navigation-apptitlebar--a-2-equal-width-tabs-dark
+navigation-apptitlebar--a-2-tab-icon-kinds
+navigation-apptitlebar--a-2-tab-icon-kinds-dark
 navigation-apptitlebar--a-3-overflow
 navigation-apptitlebar--a-3-overflow-dark
 navigation-apptitlebar--a-4-pinned-tab
@@ -1045,6 +1049,7 @@ navigation-apptitlebar--a-5-needs-you
 navigation-apptitlebar--a-5-needs-you-dark
 navigation-apptitlebar--a-6-empty-tab
 navigation-apptitlebar--a-6-empty-tab-dark
+navigation-apptitlebar--overflow-follows-the-strip
 navigation-apptitlebar--tab-gestures
 navigation-apptitlebar--with-window-controls
 navigation-conversationbotpile--five-bots-show-two-and-a-counter
