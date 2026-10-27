@@ -222,7 +222,10 @@ const pressOnControl = (key: string, held: KeyboardEventInit = {}) => {
 	control.remove()
 }
 
-afterEach(cleanup)
+afterEach(() => {
+	cleanup()
+	commandKey.isUsed = true
+})
 
 it("keeps the palette closed on Cmd+Shift+F", () => {
 	const result = renderSearch({
@@ -576,7 +579,6 @@ it.each(NEW_TAB_CLICKS)(
 			`new-tab:${JSON.stringify({ conversation: A_ROOM.id })}`,
 		])
 		expect(result.current.isOpen).toBe(false)
-		commandKey.isUsed = true
 	},
 )
 
