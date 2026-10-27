@@ -57,17 +57,17 @@ const indexOfTab = ({ tabs }: SpaceTabs, id: string) =>
 export const selectTab = (space: SpaceTabs, id: string): SpaceTabs =>
 	indexOfTab(space, id) === -1 ? space : { ...space, activeId: id }
 
-const insertAfterActive = (space: SpaceTabs, tab: Tab): SpaceTabs => {
-	const after = indexOfTab(space, activeTabOf(space).id) + 1
-	return {
-		...space,
-		tabs: withPinnedFirst([
-			...space.tabs.slice(0, after),
-			tab,
-			...space.tabs.slice(after),
-		]),
-	}
-}
+const insertAt = (space: SpaceTabs, position: number, tab: Tab): SpaceTabs => ({
+	...space,
+	tabs: withPinnedFirst([
+		...space.tabs.slice(0, position),
+		tab,
+		...space.tabs.slice(position),
+	]),
+})
+
+const insertAfterActive = (space: SpaceTabs, tab: Tab): SpaceTabs =>
+	insertAt(space, indexOfTab(space, activeTabOf(space).id) + 1, tab)
 
 export const openEmptyTab = (space: SpaceTabs): SpaceTabs => {
 	const tab = tabOn(EMPTY_LIST_HREF)
@@ -76,6 +76,39 @@ export const openEmptyTab = (space: SpaceTabs): SpaceTabs => {
 
 export const openBackgroundTab = (space: SpaceTabs, href: string): SpaceTabs =>
 	insertAfterActive(space, tabOn(href))
+
+export const duplicateTab = (space: SpaceTabs, id: string): SpaceTabs => {
+	const position = indexOfTab(space, id)
+	const original = space.tabs[position]
+	if (!original) {
+		return space
+	}
+	const copy = {
+		...tabOn(currentHrefOf(original)),
+		isPinned: original.isPinned,
+	}
+	return insertAt(space, position + 1, copy)
+}
+
+export type ClosedTab = {
+	position: number
+	tab: Tab
+}
+
+export const tabsClosedBetween = (
+	before: SpaceTabs,
+	after: SpaceTabs,
+): ClosedTab[] =>
+	before.tabs
+		.flatMap((tab, position) =>
+			after.tabs.some((kept) => kept.id === tab.id) ? [] : [{ position, tab }],
+		)
+		.reverse()
+
+export const reopenTab = (
+	space: SpaceTabs,
+	{ position, tab }: ClosedTab,
+): SpaceTabs => selectTab(insertAt(space, position, tab), tab.id)
 
 const neighbourOf = (closedIndex: number, rest: Tab[]) =>
 	rest[closedIndex] ?? rest[closedIndex - 1] ?? tabOn(EMPTY_LIST_HREF)
