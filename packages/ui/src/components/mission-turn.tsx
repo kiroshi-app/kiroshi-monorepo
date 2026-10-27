@@ -19,11 +19,12 @@ import {
 	wrapCard,
 } from "@workspace/ui/components/mission-card"
 import { TURN_AVATAR_SIZE } from "@workspace/ui/components/turn"
+import type { ClickModifiers } from "@workspace/ui/lib/click-modifiers"
 import { cn } from "@workspace/ui/lib/utils"
 
 type MissionTurnProps = {
 	mission: MissionCardModel
-	onOpen: (missionId: string) => void
+	onOpen: (missionId: string, modifiers: ClickModifiers) => void
 	wrap?: MissionCardWrap
 }
 
@@ -68,7 +69,7 @@ const MissionTurn = ({ mission, onOpen, wrap }: MissionTurnProps) => {
 						{...card}
 						className="col-start-2 row-start-2 min-w-0"
 						density="card"
-						onOpen={(missionId) => onOpen(missionId)}
+						onOpen={onOpen}
 					/>,
 					wrap,
 				)}

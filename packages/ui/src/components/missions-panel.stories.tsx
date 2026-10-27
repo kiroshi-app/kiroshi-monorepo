@@ -5,6 +5,7 @@ import preview from "@workspace/storybook/preview"
 import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 	A11Y_FLOATING_FOCUS_GUARDS,
+	expectClickModifiers,
 	expectSkeletonFilledTo,
 	mergeA11y,
 	shown,
@@ -27,6 +28,7 @@ import {
 	type MissionsPanelProps,
 } from "@workspace/ui/components/missions-panel"
 import { Sidebar, SidebarProvider } from "@workspace/ui/components/ui/sidebar"
+import { NO_CLICK_MODIFIERS } from "@workspace/ui/lib/click-modifiers"
 
 const PANEL_WIDTH = 304
 
@@ -257,6 +259,7 @@ export const OpeningAMission = meta.story({
 		await expect(args.onOpen).toHaveBeenCalledWith(
 			mission.id,
 			mission.conversationId,
+			NO_CLICK_MODIFIERS,
 		)
 
 		await userEvent.keyboard("{Enter}")
@@ -264,7 +267,31 @@ export const OpeningAMission = meta.story({
 		await expect(args.onOpen).toHaveBeenLastCalledWith(
 			mission.id,
 			mission.conversationId,
+			NO_CLICK_MODIFIERS,
 		)
+	},
+})
+
+export const OpensWithClickModifiers = meta.story({
+	tags: ["test-only"],
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A mission row clicked every way a host can tell apart. Check that the panel hands its caller the mission and its conversation with the button and the keys of that click, middle with the keys held, Cmd, Ctrl or Shift alone, none on a plain click or Enter, and nothing on a right-click.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const mission = firstOpenMission()
+		await expectClickModifiers({
+			target: canvas
+				.getByText(mission.objective)
+				.closest("button") as HTMLElement,
+			callback: args.onOpen,
+			reported: [mission.id, mission.conversationId],
+			userEvent,
+		})
 	},
 })
 

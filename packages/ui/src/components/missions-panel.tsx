@@ -18,13 +18,18 @@ import {
 	wrapCard,
 } from "@workspace/ui/components/mission-card"
 import { MissionsFeedRow } from "@workspace/ui/components/missions-feed-skeleton"
+import type { ClickModifiers } from "@workspace/ui/lib/click-modifiers"
 
 type MissionsPanelMission = MissionCardModel & { conversationId: string }
 
 type MissionsPanelProps = {
 	open: MissionsPanelMission[]
 	earlierToday: MissionsPanelMission[]
-	onOpen: (missionId: string, conversationId: string) => void
+	onOpen: (
+		missionId: string,
+		conversationId: string,
+		modifiers: ClickModifiers,
+	) => void
 	openMissionId?: string | null
 	wrap?: MissionCardWrap
 	listEnd?: ListEnd
@@ -51,7 +56,9 @@ const MissionsPanelRows = ({
 					{...mission}
 					density="row"
 					isActive={mission.id === openMissionId}
-					onOpen={(missionId) => onOpen(missionId, conversationId)}
+					onOpen={(missionId, modifiers) =>
+						onOpen(missionId, conversationId, modifiers)
+					}
 				/>,
 				wrap,
 			)}

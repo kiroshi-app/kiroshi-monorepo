@@ -952,7 +952,11 @@ const toMissionCardRow = ({
 }: MissionCardRowRead): TranscriptItem => ({
 	key: `mission-${read.mission.id}`,
 	render: () => (
-		<MissionTurn mission={toMissionCard(read)} onOpen={onOpen} wrap={wrap} />
+		<MissionTurn
+			mission={toMissionCard(read)}
+			onOpen={(missionId) => onOpen(missionId)}
+			wrap={wrap}
+		/>
 	),
 })
 

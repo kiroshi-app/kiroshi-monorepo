@@ -4,6 +4,7 @@ import { expect, fn, screen, waitFor, within } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+	expectClickModifiers,
 	expectFont,
 	expectHeadingFont,
 	expectSkeletonClippedAtBottomOf,
@@ -69,6 +70,7 @@ import {
 	SHELL_TITLE_BAR_HEIGHT,
 	WorkspaceShell,
 } from "@workspace/ui/components/workspace-shell"
+import { NO_CLICK_MODIFIERS } from "@workspace/ui/lib/click-modifiers"
 
 const ANSWER =
 	"Three routines watch this conversation: a digest, a changelog watch and a nightly cleanup."
@@ -678,6 +680,7 @@ export const OpeningAMission = meta.story({
 		await userEvent.click(canvas.getByText(WAITING_HUMAN_MISSION.objective))
 		await expect(args.missions.onOpen).toHaveBeenCalledWith(
 			WAITING_HUMAN_MISSION.id,
+			NO_CLICK_MODIFIERS,
 		)
 
 		await userEvent.keyboard("{Enter}")
@@ -688,6 +691,33 @@ export const OpeningAMission = meta.story({
 			.closest("button") as HTMLElement
 		await expect(row).toHaveFocus()
 		await expect(getComputedStyle(row).boxShadow).not.toBe("none")
+	},
+})
+
+export const OpensWithClickModifiers = meta.story({
+	tags: ["test-only"],
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"An open mission, then a mission closed earlier today, each clicked every way a host can tell apart. Check that both lists hand the caller the mission with the button and the keys of that click, middle with the keys held, Cmd, Ctrl or Shift alone, none on a plain click or Enter, and nothing on a right-click. " +
+					MOUNTED_BY_THE_THREAD,
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		await userEvent.click(canvas.getByRole("button", { name: /Earlier today/ }))
+		for (const mission of [WAITING_HUMAN_MISSION, CLOSED_MISSION]) {
+			await expectClickModifiers({
+				target: canvas
+					.getByText(mission.objective)
+					.closest("button") as HTMLElement,
+				callback: args.missions.onOpen,
+				reported: [mission.id],
+				userEvent,
+			})
+		}
 	},
 })
 
