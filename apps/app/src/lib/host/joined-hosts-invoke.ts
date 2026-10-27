@@ -30,6 +30,8 @@ export const LOCAL_COMMANDS: ReadonlySet<string> = new Set([
 	"user_set_preferences",
 	"user_set_profile_picture",
 	"window_declare_maximize_button",
+	"window_open",
+	"window_identity",
 	"diagnostics",
 	"log_tail",
 	"log_reveal",
