@@ -4,9 +4,13 @@ use serde_json::Value;
 
 const HOST: &str = include_str!("../../src/lib/host/index.ts");
 const CAPABILITY: &str = include_str!("../capabilities/default.json");
+const CAPABILITIES: &[(&str, &str)] =
+	&[("default.json", CAPABILITY), ("windows.json", include_str!("../capabilities/windows.json"))];
 const DEV_CONFIG: &str = include_str!("../tauri.dev.conf.json");
 
 const WINDOW_PREFIX: &str = "core:window:allow-";
+const MAIN_WINDOW: &str = "main";
+const SECONDARY_WINDOWS: &str = "window-*";
 const CORE_DEFAULT: &str = "core:default";
 const HANDLE_FACTORY: &str = "getCurrentWindow()";
 
@@ -163,6 +167,29 @@ fn the_front_calls_set_focus_on_the_reveal_path() {
 		commands_called_by_the_front(HOST).contains("set-focus"),
 		"lib/host/index.ts no longer brings the window to the front"
 	);
+}
+
+fn windows_of(capability: &str) -> Vec<String> {
+	let parsed: Value = serde_json::from_str(capability).expect("the capability is valid JSON");
+	parsed["windows"]
+		.as_array()
+		.expect("the capability lists its windows")
+		.iter()
+		.filter_map(Value::as_str)
+		.map(ToString::to_string)
+		.collect()
+}
+
+#[test]
+fn every_capability_of_the_main_window_reaches_the_windows_opened_beside_it() {
+	for (file, capability) in CAPABILITIES {
+		let windows = windows_of(capability);
+		assert!(windows.iter().any(|window| window == MAIN_WINDOW), "{file} no longer lists main");
+		assert!(
+			windows.iter().any(|window| window == SECONDARY_WINDOWS),
+			"{file} lists main but not {SECONDARY_WINDOWS}, so a secondary window is refused what main is granted"
+		);
+	}
 }
 
 #[test]

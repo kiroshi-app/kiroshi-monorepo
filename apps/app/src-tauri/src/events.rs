@@ -126,6 +126,16 @@ pub fn emit<R: Runtime, P: Serialize + Clone>(
 	app.emit(event.name(), payload)
 }
 
+pub fn emit_to<R: Runtime, P: Serialize + Clone>(
+	app: &AppHandle<R>,
+	label: &str,
+	event: Event<P>,
+	payload: P,
+) -> tauri::Result<()> {
+	publish(&relay(app), event.name(), &payload);
+	app.emit_to(label, event.name(), payload)
+}
+
 pub fn frame<P: Serialize>(event: Event<P>, payload: &P) -> serde_json::Result<Frame> {
 	framed(event.name(), payload)
 }

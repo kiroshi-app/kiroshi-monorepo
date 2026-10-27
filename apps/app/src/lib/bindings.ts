@@ -87,6 +87,8 @@ export const commands = {
 	width: number,
 	height: number,
 } | null) => typedError<null, WindowFrameError>(__TAURI_INVOKE("window_declare_maximize_button", { bounds })),
+	windowOpen: (href: string) => typedError<null, WindowOpenError>(__TAURI_INVOKE("window_open", { href })),
+	windowIdentity: () => __TAURI_INVOKE<WindowIdentity>("window_identity"),
 	conversationDuplicateBot: (botId: string, spaceId: string | null) => typedError<Bot, TranscriptStoreError>(__TAURI_INVOKE("conversation_duplicate_bot", { botId, spaceId })),
 	conversationUpdateBot: (id: string, identity: BotIdentity) => typedError<Bot, TranscriptStoreError>(__TAURI_INVOKE("conversation_update_bot", { id, identity })),
 	conversationDeleteBot: (id: string) => typedError<null, TranscriptStoreError>(__TAURI_INVOKE("conversation_delete_bot", { id })),
@@ -1812,6 +1814,13 @@ export type UserPreferences = {
 export type UserPreferencesError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "rejectedProfilePicture"; reason: AvatarRejection };
 
 export type WindowFrameError = { kind: "unsupported" } | { kind: "invalidBounds" } | { kind: "unavailable" } | { kind: "overlayFailed" };
+
+export type WindowIdentity = {
+	label: string,
+	initialHref: string | null,
+};
+
+export type WindowOpenError = { kind: "notAnAppPage" } | { kind: "unavailable" };
 
 export type WorkingBot = {
 	botId: string,

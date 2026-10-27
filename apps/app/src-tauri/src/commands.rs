@@ -100,6 +100,8 @@ fn commands<R: Runtime>() -> Commands<R> {
 		devices::commands::devices_list::<tauri::Wry>,
 		devices::commands::device_remove::<tauri::Wry>,
 		window_controls::window_declare_maximize_button::<tauri::Wry>,
+		window_controls::secondary::window_open::<tauri::Wry>,
+		window_controls::secondary::window_identity::<tauri::Wry>,
 		conversations::commands::conversation_duplicate_bot::<tauri::Wry>,
 		conversations::commands::conversation_update_bot::<tauri::Wry>,
 		conversations::commands::conversation_delete_bot::<tauri::Wry>,

@@ -2,7 +2,7 @@
 	"$schema": "../gen/schemas/desktop-schema.json",
 	"identifier": "windows-frame",
 	"description": "Window controls the front renders on Windows, where the main window has no native frame",
-	"windows": ["main"],
+	"windows": ["main", "window-*"],
 	"platforms": ["windows"],
 	"permissions": [
 		"core:window:allow-minimize",
