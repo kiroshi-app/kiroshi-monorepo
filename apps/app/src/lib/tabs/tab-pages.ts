@@ -22,6 +22,7 @@ export type TabPage = {
 	pathname: string
 	thread: ThreadSearch
 	companionId?: string
+	entry?: string
 	application?: string
 }
 
@@ -33,11 +34,13 @@ const companionIdIn = (pathname: string) => {
 export const pageOf = (href: string): TabPage => {
 	const { pathname, search } = new URL(href, HREF_BASE)
 	const parsedSearch = defaultParseSearch(search)
+	const { entry, application } = validateSettingsSearch(parsedSearch)
 	return {
 		pathname,
 		thread: validateThreadSearch(parsedSearch),
 		companionId: companionIdIn(pathname),
-		application: validateSettingsSearch(parsedSearch).application,
+		entry,
+		application,
 	}
 }
 

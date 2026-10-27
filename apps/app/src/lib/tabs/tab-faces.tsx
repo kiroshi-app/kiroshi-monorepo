@@ -5,6 +5,7 @@ import type {
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
 import { ConversationSubjectIcon } from "@workspace/ui/components/conversation-subject-icon"
 import { Icons } from "@workspace/ui/components/icons"
+import { APPLICATIONS_ENTRY } from "@workspace/ui/components/space-settings-dialog/use-space-settings"
 import type { TitleBarTab } from "@workspace/ui/components/title-bar-tabs"
 import { i18n } from "@workspace/ui/lib/i18n"
 
@@ -38,9 +39,12 @@ const emptyTabFace = (): TabFace => ({
 	icon: <Icons.Conversations />,
 })
 
+const shownApplicationOf = ({ entry, application }: TabPage) =>
+	entry === APPLICATIONS_ENTRY ? application : undefined
+
 const settingsFaceOf = (page: TabPage): TabFace => ({
 	title:
-		page.application ??
+		shownApplicationOf(page) ??
 		i18n.t(`settings:screen.subtitle.${settingsTargetOf(page)}`),
 	icon: <Icons.Settings />,
 })

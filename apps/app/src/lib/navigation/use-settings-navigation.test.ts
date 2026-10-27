@@ -131,6 +131,25 @@ describe("useSettingsNavigation", () => {
 		expect(shownHref()).toBe(`${USER_SETTINGS}?application=notion`)
 	})
 
+	it("drops the open application from an entry other than Applications opened in a background tab or shown in place", async () => {
+		const { navigation, openInNewTab, shownHref } =
+			await renderSettingsNavigation()
+		await act(async () =>
+			navigation.openApplication("github", NO_CLICK_MODIFIERS),
+		)
+
+		act(() => navigation.showEntry("skills", MOD_CLICK))
+
+		expect(openInNewTab.mock.calls).toEqual([
+			[`${USER_SETTINGS}?entry=skills`, undefined],
+		])
+		expect(shownHref()).toBe(`${USER_SETTINGS}?entry=mcp&application=github`)
+
+		await act(async () => navigation.showEntry("skills", NO_CLICK_MODIFIERS))
+
+		expect(shownHref()).toBe(`${USER_SETTINGS}?entry=skills`)
+	})
+
 	it("opens an application in place on a plain click, opening no tab", async () => {
 		const { navigation, openInNewTab, shownHref } =
 			await renderSettingsNavigation()

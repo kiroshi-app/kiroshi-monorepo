@@ -14,6 +14,9 @@ import type { ThreadSearch } from "./thread-search"
 import { isNewTabClickInFlight, opensInNewTab } from "../tabs/new-tab-clicks"
 import { heldThreadOf, type ThreadHolder } from "../tabs/use-tab-thread-sync"
 
+const entrySearchOf = (entry: string): SettingsSearch =>
+	entry === APPLICATIONS_ENTRY ? { entry } : { entry, application: undefined }
+
 export const useSettingsNavigation = (holder: ThreadHolder) => {
 	const navigate = useNavigate()
 	const router = useRouter()
@@ -101,7 +104,7 @@ export const useSettingsNavigation = (holder: ThreadHolder) => {
 					search,
 				}),
 			showEntry: (entry: string, modifiers?: ClickModifiers) =>
-				goFromClick(replacingSearch({ entry }), modifiers),
+				goFromClick(replacingSearch(entrySearchOf(entry)), modifiers),
 			openApplication: (application: string, modifiers?: ClickModifiers) =>
 				goFromClick(
 					replacingSearch({ entry: APPLICATIONS_ENTRY, application }),
