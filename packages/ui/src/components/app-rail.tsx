@@ -184,7 +184,7 @@ const AppRail = ({
 					<SpaceAvatar
 						colour={space?.colour}
 						size={26}
-						spaceId={space?.id ?? ""}
+						spaceId={space?.avatarSeed ?? ""}
 						state={spaceAvatarStateOf(spaceHost)}
 					/>
 				</RailItem>

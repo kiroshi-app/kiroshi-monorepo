@@ -231,7 +231,7 @@ const SpaceSwitcher = ({
 							<SpaceAvatar
 								colour={selected.colour}
 								size={12}
-								spaceId={selected.id}
+								spaceId={selected.avatarSeed}
 								state={spaceAvatarStateOf(host)}
 							/>
 							<span className={SWITCHER_NAME} data-slot="space-switcher-name">
@@ -280,7 +280,7 @@ const SpaceSwitcher = ({
 										colour={space.colour}
 										hasAttention={badgesBySpaceId?.[space.id] === "attention"}
 										size={14}
-										spaceId={space.id}
+										spaceId={space.avatarSeed}
 										state={spaceAvatarStateOf(rowHost)}
 									/>
 									<span className={ROW_NAME}>{space.name}</span>

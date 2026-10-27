@@ -1200,7 +1200,9 @@ const CompanionMenuHarness = ({
 					})),
 				},
 				sectionsBySpaceId: {},
-				spaces: [{ id: SPACE, name: "Personal", colour: "blue" }],
+				spaces: [
+					{ id: SPACE, name: "Personal", colour: "blue", avatarSeed: SPACE },
+				],
 			}),
 		},
 		children,

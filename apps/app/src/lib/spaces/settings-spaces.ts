@@ -46,7 +46,7 @@ export const settingsSpacesOf = ({
 			.map(userSpaceOf),
 		invitations: invitations
 			.filter(isReceived)
-			.map(({ id, name, colour }) => ({ id, name, colour })),
+			.map(({ id, name, colour }) => ({ id, name, colour, avatarSeed: id })),
 	}
 }
 
@@ -107,3 +107,6 @@ export const spaceRankOf = (spaces: SwitcherSpace[], spaceId: string) => {
 	const rank = spaces.findIndex((space) => space.id === spaceId) + 1
 	return rank >= 1 && rank <= SPACE_RANK_LIMIT ? rank : undefined
 }
+
+export const avatarSeedOfRow = (spaces: SwitcherSpace[], rowId: string) =>
+	spaces.find((space) => space.id === rowId)?.avatarSeed ?? rowId

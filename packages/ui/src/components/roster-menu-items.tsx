@@ -188,7 +188,11 @@ const SpacesBranch = ({
 									: onRemoveFromSpace?.(botId, space.id)
 							}
 						>
-							<SpaceAvatar colour={space.colour} size={14} spaceId={space.id} />
+							<SpaceAvatar
+								colour={space.colour}
+								size={14}
+								spaceId={space.avatarSeed}
+							/>
 							<span className={DESTINATION_NAME}>{space.name}</span>
 						</ContextMenuCheckboxItem>
 					)

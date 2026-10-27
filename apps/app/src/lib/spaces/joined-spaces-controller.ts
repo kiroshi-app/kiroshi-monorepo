@@ -198,16 +198,24 @@ export const openRowIdOf = (
 	return open ? rowIdOf(open) : selectedSpaceId
 }
 
+const ownedSwitcherSpaceOf = (space: Space): SwitcherSpace => ({
+	...space,
+	avatarSeed: space.instanceId ?? space.id,
+})
+
+const joinedSwitcherSpaceOf = (joined: JoinedSpace): SwitcherSpace => ({
+	id: rowIdOf(joined),
+	name: joined.name,
+	colour: joined.colour,
+	avatarSeed: joined.instanceId,
+})
+
 export const switcherSpacesOf = (
 	spaces: Space[],
 	joinedSpaces: JoinedSpace[],
 ): SwitcherSpace[] => [
-	...spaces,
-	...joinedSpaces.map((joined) => ({
-		id: rowIdOf(joined),
-		name: joined.name,
-		colour: joined.colour,
-	})),
+	...spaces.map(ownedSwitcherSpaceOf),
+	...joinedSpaces.map(joinedSwitcherSpaceOf),
 ]
 
 export const hostMarksOf = (

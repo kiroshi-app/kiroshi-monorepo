@@ -633,7 +633,7 @@ const UserSettingsScreen = ({
 								key={space.id}
 								name={space.name}
 								onOpen={() => openSpace(space.id)}
-								spaceId={space.id}
+								spaceId={space.avatarSeed}
 							/>
 						))}
 						{invitations.map((invitation) => (

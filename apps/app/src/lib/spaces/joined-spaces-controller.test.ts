@@ -4,6 +4,8 @@ import {
 	raiseFailureNotice,
 	raiseTransientNotice,
 } from "@workspace/ui/components/notice-surface"
+import type { Space as SwitcherSpace } from "@workspace/ui/components/space"
+import { spaceArcs } from "@workspace/ui/components/space-avatar-recipe"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import {
@@ -24,8 +26,10 @@ import type {
 	JoinedSpaceRemovalReason,
 	JoinedSpaceRemoved,
 	JoinedSpaceWaitReason,
+	Space,
 } from "../bindings"
 import { createStore } from "../store"
+import iPhoneVectors from "../../../../ios/KiroshiTests/Vectors/space-avatar.json?raw"
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
 import type { JoinedHostState, JoinedHostsState } from "../host/joined-hosts"
 import { createQueryTestWrapper } from "../query/query-test-wrapper"
@@ -175,8 +179,13 @@ describe("the switcher rows", () => {
 		const local = [{ id: "home", name: "Home", colour: null, position: 0 }]
 
 		expect(switcherSpacesOf(local as never, [GARAGE])).toEqual([
-			local[0],
-			{ id: GARAGE_ROW, name: "Garage", colour: "green" },
+			{ ...local[0], avatarSeed: "home" },
+			{
+				id: GARAGE_ROW,
+				name: "Garage",
+				colour: "green",
+				avatarSeed: GARAGE.instanceId,
+			},
 		])
 	})
 
@@ -220,12 +229,86 @@ describe("the switcher rows", () => {
 		const hostPersonal = { ...GARAGE, remoteSpaceId: "personal" }
 
 		expect(switcherSpacesOf(local as never, [hostPersonal])).toEqual([
-			local[0],
-			{ id: GARAGE_ROW, name: "Garage", colour: "green" },
+			{ ...local[0], avatarSeed: "personal" },
+			{
+				id: GARAGE_ROW,
+				name: "Garage",
+				colour: "green",
+				avatarSeed: GARAGE.instanceId,
+			},
 		])
 		expect(
 			hostMarksOf([hostPersonal], { [GARAGE.id]: { status: "up" } }),
 		).toEqual({ [GARAGE_ROW]: "up" })
+	})
+})
+
+type ParityVector = {
+	id: string
+	anchor: { x: number; y: number }
+	radii: number[]
+}
+
+const IPHONE_PARITY_VECTORS: ParityVector[] = JSON.parse(iPhoneVectors).arcs
+
+const SHARED_INSTANCE_ID = "9b1e0000-0000-4000-8000-000000000001"
+
+const OWNED_STUDIO: Space = {
+	id: "studio",
+	name: "Studio",
+	colour: "blue",
+	position: 0,
+	createdAt: 0,
+	shared: true,
+	instanceId: SHARED_INSTANCE_ID,
+}
+
+const arcsOfRow = (rows: SwitcherSpace[], rowId: string) => {
+	const row = rows.find((space) => space.id === rowId)
+	if (!row) throw new Error(`no switcher row ${rowId}`)
+	return spaceArcs(row.avatarSeed)
+}
+
+describe("the avatar seed of a switcher row", () => {
+	it("draws the host view and the joined view of one shared space with the arcs of the iPhone", () => {
+		const joinedStudio = { ...GARAGE, instanceId: SHARED_INSTANCE_ID }
+		const hostView = switcherSpacesOf([OWNED_STUDIO], [])
+		const joinedView = switcherSpacesOf([], [joinedStudio])
+		const vector = IPHONE_PARITY_VECTORS.find(
+			({ id }) => id === SHARED_INSTANCE_ID,
+		)
+
+		expect(arcsOfRow(joinedView, GARAGE_ROW)).toEqual(
+			arcsOfRow(hostView, "studio"),
+		)
+		expect(arcsOfRow(hostView, "studio")).toEqual({
+			anchor: vector?.anchor,
+			radii: vector?.radii,
+		})
+	})
+
+	it("keeps the arcs of a shared space no longer hosted", () => {
+		const unhosted = { ...OWNED_STUDIO, shared: false }
+
+		expect(arcsOfRow(switcherSpacesOf([unhosted], []), "studio")).toEqual(
+			spaceArcs(SHARED_INSTANCE_ID),
+		)
+	})
+
+	it("draws a space never shared with the arcs of its local id", () => {
+		const local = { ...OWNED_STUDIO, shared: false, instanceId: null }
+
+		expect(arcsOfRow(switcherSpacesOf([local], []), "studio")).toEqual(
+			spaceArcs("studio"),
+		)
+	})
+
+	it("keeps the arcs of a renamed space", () => {
+		const renamed = { ...OWNED_STUDIO, name: "Studio B" }
+
+		expect(arcsOfRow(switcherSpacesOf([renamed], []), "studio")).toEqual(
+			arcsOfRow(switcherSpacesOf([OWNED_STUDIO], []), "studio"),
+		)
 	})
 })
 

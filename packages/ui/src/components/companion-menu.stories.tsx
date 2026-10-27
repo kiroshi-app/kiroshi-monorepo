@@ -19,8 +19,8 @@ const ATLAS: CompanionMenuSubject = {
 }
 
 const SPACES: Space[] = [
-	{ id: "perso", name: "Perso", colour: "blue" },
-	{ id: "vocca", name: "Vocca", colour: "green" },
+	{ id: "perso", name: "Perso", colour: "blue", avatarSeed: "perso" },
+	{ id: "vocca", name: "Vocca", colour: "green", avatarSeed: "vocca" },
 ]
 
 const SECTIONS = [

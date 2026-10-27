@@ -67,9 +67,9 @@ describe("AppSidebar roster badge placement mounted", () => {
 })
 
 const SPACES: Space[] = [
-	{ id: "personal", name: "Personal", colour: "blue" },
-	{ id: "vocca", name: "Vocca", colour: "green" },
-	{ id: "labs", name: "Labs", colour: "red" },
+	{ id: "personal", name: "Personal", colour: "blue", avatarSeed: "personal" },
+	{ id: "vocca", name: "Vocca", colour: "green", avatarSeed: "vocca" },
+	{ id: "labs", name: "Labs", colour: "red", avatarSeed: "labs" },
 ]
 
 const RESEARCH: AppSidebarSection = {

@@ -183,6 +183,7 @@ const NORTHWIND = {
 	id: "northwind",
 	name: "Northwind",
 	colour: "green",
+	avatarSeed: "northwind",
 	hasAttention: true,
 } satisfies UserSpace
 
@@ -190,13 +191,24 @@ const SPACES_ARGS = {
 	entry: "",
 	ownedSpaces: [
 		{ ...STUDIO, colour: "blue", host: "shared" },
-		{ id: "field-notes", name: "Field notes", colour: "purple" },
+		{
+			id: "field-notes",
+			name: "Field notes",
+			colour: "purple",
+			avatarSeed: "field-notes",
+		},
 	],
 	joinedSpaces: [
 		NORTHWIND,
-		{ id: "harbor", name: "Harbor", colour: "orange", host: "down" },
+		{
+			id: "harbor",
+			name: "Harbor",
+			colour: "orange",
+			avatarSeed: "harbor",
+			host: "down",
+		},
 	],
-	invitations: [{ id: "atelier", name: "Atelier" }],
+	invitations: [{ id: "atelier", name: "Atelier", avatarSeed: "atelier" }],
 	currentSpaceId: STUDIO.id,
 	onOpenSpace: fn(),
 	onCreateSpace: fn(),
