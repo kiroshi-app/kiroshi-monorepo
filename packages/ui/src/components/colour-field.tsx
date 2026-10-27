@@ -220,7 +220,7 @@ const ColourField = ({
 							</span>
 							<span
 								aria-hidden="true"
-								className="inline-flex h-7 items-center rounded-md bg-muted px-2.5 font-mono text-compact text-foreground tabular-nums"
+								className="inline-flex h-7 items-center gap-0.5 rounded-md border border-border px-2.5 font-mono text-compact text-foreground leading-4.5 tabular-nums"
 								data-slot="colour-field-readout"
 							>
 								{shownOwnHue}
