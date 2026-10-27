@@ -634,6 +634,7 @@ const HEADER_MENUS = [
 		avatar: <BotIdentityAvatar name="Atlas" seed="atlas" size={36} />,
 		name: "Atlas",
 		subtitle: "Companion settings",
+		group: "Settings",
 	},
 	{
 		isCompanionPage: false,
@@ -647,14 +648,21 @@ const HEADER_MENUS = [
 		),
 		name: "Release desk",
 		subtitle: "Space settings",
+		group: "Settings",
 	},
 	{
 		isCompanionPage: false,
 		avatar: <InitialsAvatar name="Ada Martin" size={36} />,
 		name: "Ada Martin",
 		subtitle: "User settings",
+		group: "Your settings",
 	},
 ]
+
+const inlinePaddingOf = (element: HTMLElement) => {
+	const style = getComputedStyle(element)
+	return [style.paddingInlineStart, style.paddingInlineEnd]
+}
 
 export const HeaderAlignment = meta.story({
 	tags: ["test-only"],
@@ -665,25 +673,29 @@ export const HeaderAlignment = meta.story({
 	},
 	render: () => (
 		<Frame>
-			{HEADER_MENUS.map((menu) => (
+			{HEADER_MENUS.map(({ group, ...menu }) => (
 				<SettingsMenu key={menu.name} {...menu} onBack={fn()}>
-					{null}
+					<SettingsMenuSection title={group}>
+						<SettingsMenuEntry
+							icon="Cloud"
+							isSelected
+							label="General"
+							onSelect={fn()}
+						/>
+					</SettingsMenuSection>
 				</SettingsMenu>
 			))}
 		</Frame>
 	),
 	play: async ({ canvasElement }) => {
 		const menus = within(canvasElement).getAllByRole("navigation")
-		await expect(menus).toHaveLength(3)
-		for (const menu of menus) {
-			const style = getComputedStyle(menu)
-			const contentLeft =
-				menu.getBoundingClientRect().left +
-				Number.parseFloat(style.borderInlineStartWidth) +
-				Number.parseFloat(style.paddingInlineStart)
-			const avatar = slotIn(menu, "settings-menu-header")
-				.firstElementChild as HTMLElement
-			await expect(avatar.getBoundingClientRect().left).toBe(contentLeft)
+		await expect(menus).toHaveLength(HEADER_MENUS.length)
+		for (const [index, menu] of menus.entries()) {
+			const header = slotIn(menu, "settings-menu-header")
+			const [title] = slotsIn(menu, "settings-menu-group-title")
+			await expect(title).toHaveTextContent(HEADER_MENUS[index].group)
+			await expect(inlinePaddingOf(header)).toEqual(inlinePaddingOf(title))
+			await expect(inlinePaddingOf(header)).not.toEqual(["0px", "0px"])
 		}
 	},
 })

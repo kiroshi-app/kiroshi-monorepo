@@ -375,18 +375,16 @@ const SettingsScreenLayout = ({
 						status={status}
 						subtitle={subtitle}
 					>
-						{spaces ? (
-							<>
-								<SettingsMenuSection
-									title={t("settings:screen.group.settings")}
-								>
-									{ordinary.map(entryFor)}
-								</SettingsMenuSection>
-								{spaces(leaveThen)}
-							</>
-						) : (
-							ordinary.map(entryFor)
-						)}
+						<SettingsMenuSection
+							title={t(
+								spaces
+									? "settings:screen.group.settings"
+									: "settings:screen.group.subjectSettings",
+							)}
+						>
+							{ordinary.map(entryFor)}
+						</SettingsMenuSection>
+						{spaces?.(leaveThen)}
 					</SettingsMenu>
 				</>
 			}
