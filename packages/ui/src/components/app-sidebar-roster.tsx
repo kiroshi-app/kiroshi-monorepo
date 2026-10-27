@@ -16,7 +16,7 @@ import {
 	type SectionActions,
 	type SectionNaming,
 } from "@workspace/ui/components/app-sidebar-model"
-import { SORTED, SORTED_ZONE } from "@workspace/ui/components/app-sidebar-pins"
+import { SORTED_ZONE } from "@workspace/ui/components/app-sidebar-pins"
 import { useRosterDrag } from "@workspace/ui/components/app-sidebar-roster-drag"
 import {
 	rosterEntriesOf,
@@ -232,10 +232,7 @@ const BotRoster = ({
 			) : null}
 			{hasPinnedZone ? <RosterZoneSeparator /> : null}
 			{hasSortedRows || isLifting ? (
-				<RosterDropArea
-					isLanding={rosterLift.lift?.landing === SORTED}
-					landing={SORTED_ZONE}
-				>
+				<RosterDropArea isLanding={drag.isLandingSorted} landing={SORTED_ZONE}>
 					{hasSortedRows ? (
 						recentMenuOf(sortedConversations, sortedBots, rows)
 					) : (

@@ -4,8 +4,10 @@ import {
 	useEffect,
 	useRef,
 	useState,
+	useSyncExternalStore,
 } from "react"
 
+import { useStableCallback } from "@workspace/ui/hooks/use-stable-callback"
 import { capturePointer, releasePointer } from "@workspace/ui/lib/touch"
 
 const LIFT_THRESHOLD = 4
@@ -27,14 +29,13 @@ interface Point {
 	y: number
 }
 
-interface Press extends Point {
-	id: string
-	isLifted: boolean
+interface Press {
+	from: Point
+	end: () => void
 }
 
-interface Lift<Landing> {
+interface Lift {
 	id: string
-	landing: Landing | null
 }
 
 const place = (node: HTMLElement | null, at: Point, from: Point) => {
@@ -45,11 +46,28 @@ const place = (node: HTMLElement | null, at: Point, from: Point) => {
 	node.style.setProperty("--lift-dy", `${at.y - from.y}px`)
 }
 
+const createLandingStore = <Landing>() => {
+	let held: Landing | null = null
+	const listeners = new Set<() => void>()
+	return {
+		read: () => held,
+		subscribe: (listener: () => void) => {
+			listeners.add(listener)
+			return () => {
+				listeners.delete(listener)
+			}
+		},
+		write: (next: Landing | null) => {
+			held = next
+			for (const listener of listeners) listener()
+		},
+	}
+}
+
+type LandingStore<Landing> = ReturnType<typeof createLandingStore<Landing>>
+
 interface RosterLiftHandlers {
-	onPointerCancel: () => void
 	onPointerDown: (event: ReactPointerEvent<HTMLElement>) => void
-	onPointerMove: (event: ReactPointerEvent<HTMLElement>) => void
-	onPointerUp: (event: ReactPointerEvent<HTMLElement>) => void
 }
 
 export interface Lifter {
@@ -59,94 +77,124 @@ export interface Lifter {
 
 export interface RosterLift<Landing> extends Lifter {
 	followRef: (node: HTMLElement | null) => void
-	lift: Lift<Landing> | null
+	lift: Lift | null
+	landing: LandingStore<Landing>
 }
 
 interface UseRosterLiftOptions<Landing> {
 	isEnabled: boolean
 	landingAt: (x: number, y: number, id: string) => Landing | null
 	isSameLanding?: (one: Landing | null, other: Landing | null) => boolean
+	onLift?: (id: string) => void
 	onLand: (id: string, landing: Landing) => void
 }
+
+export const useLiftLanding = <Landing, Selected = Landing | null>(
+	lift: RosterLift<Landing>,
+	select: (landing: Landing | null) => Selected = (landing) =>
+		landing as Selected,
+) =>
+	useSyncExternalStore(lift.landing.subscribe, () =>
+		select(lift.landing.read()),
+	)
 
 export const useRosterLift = <Landing>({
 	isEnabled,
 	landingAt,
 	isSameLanding = Object.is,
+	onLift,
 	onLand,
 }: UseRosterLiftOptions<Landing>): RosterLift<Landing> => {
-	const [lift, setLift] = useState<Lift<Landing> | null>(null)
+	const [lift, setLift] = useState<Lift | null>(null)
+	const [landing] = useState(createLandingStore<Landing>)
 	const press = useRef<Press | null>(null)
 	const at = useRef<Point>({ x: 0, y: 0 })
 	const followed = useRef<HTMLElement | null>(null)
 	const hasDropped = useRef(false)
+	const landingFor = useStableCallback(landingAt)
+	const isSame = useStableCallback(isSameLanding)
+	const lifted = useStableCallback((id: string) => onLift?.(id))
+	const land = useStableCallback(onLand)
 
 	const followRef = useCallback((node: HTMLElement | null) => {
 		followed.current = node
-		if (press.current) place(node, at.current, press.current)
+		if (press.current) place(node, at.current, press.current.from)
 	}, [])
 
-	const isLifted = lift !== null
+	useEffect(() => () => press.current?.end(), [])
 
-	useEffect(() => {
-		if (!isLifted) return
+	const pressAt = (id: string, event: ReactPointerEvent<HTMLElement>) => {
+		const element = event.currentTarget
+		const { pointerId } = event
+		const from = { x: event.clientX, y: event.clientY }
+		let isLifted = false
+
+		const end = () => {
+			press.current = null
+			window.removeEventListener("pointermove", follow)
+			window.removeEventListener("pointerup", release)
+			window.removeEventListener("pointercancel", cancel)
+			window.removeEventListener("keydown", cancelOnEscape, true)
+			element.removeEventListener("lostpointercapture", cancel)
+			if (!isLifted) return
+			releasePointer(element, pointerId)
+			hasDropped.current = true
+			landing.write(null)
+			setLift(null)
+		}
+
+		const follow = (moved: PointerEvent) => {
+			if (moved.pointerId !== pointerId) return
+			at.current = { x: moved.clientX, y: moved.clientY }
+			if (!isLifted) {
+				const travelled = Math.hypot(
+					at.current.x - from.x,
+					at.current.y - from.y,
+				)
+				if (travelled < LIFT_THRESHOLD) return
+				isLifted = true
+				capturePointer(element, pointerId)
+				element.addEventListener("lostpointercapture", cancel)
+				window.addEventListener("keydown", cancelOnEscape, true)
+				lifted(id)
+				setLift({ id })
+			}
+			place(followed.current, at.current, from)
+			const next = landingFor(at.current.x, at.current.y, id)
+			if (!isSame(landing.read(), next)) landing.write(next)
+		}
+
+		const release = (released: PointerEvent) => {
+			if (released.pointerId !== pointerId) return
+			const dropped = isLifted
+				? landingFor(released.clientX, released.clientY, id)
+				: null
+			end()
+			if (dropped !== null) land(id, dropped)
+		}
+
+		const cancel = (cancelled: PointerEvent) => {
+			if (cancelled.pointerId === pointerId) end()
+		}
+
 		const cancelOnEscape = (event: KeyboardEvent) => {
 			if (event.key !== "Escape") return
 			event.preventDefault()
 			event.stopPropagation()
-			press.current = null
-			hasDropped.current = true
-			setLift(null)
+			end()
 		}
-		window.addEventListener("keydown", cancelOnEscape, true)
-		return () => window.removeEventListener("keydown", cancelOnEscape, true)
-	}, [isLifted])
+
+		window.addEventListener("pointermove", follow)
+		window.addEventListener("pointerup", release)
+		window.addEventListener("pointercancel", cancel)
+		press.current = { from, end }
+	}
 
 	const handlersFor = (id: string): RosterLiftHandlers => ({
-		onPointerCancel: () => {
-			press.current = null
-			setLift(null)
-		},
 		onPointerDown: (event) => {
 			hasDropped.current = false
-			if (!isEnabled || event.button !== 0) return
-			press.current = {
-				id,
-				isLifted: false,
-				x: event.clientX,
-				y: event.clientY,
-			}
-		},
-		onPointerMove: (event) => {
-			const pressed = press.current
-			if (!pressed) return
-			at.current = { x: event.clientX, y: event.clientY }
-			if (!pressed.isLifted) {
-				const travelled = Math.hypot(
-					event.clientX - pressed.x,
-					event.clientY - pressed.y,
-				)
-				if (travelled < LIFT_THRESHOLD) return
-				pressed.isLifted = true
-				capturePointer(event.currentTarget, event.pointerId)
-			}
-			place(followed.current, at.current, pressed)
-			const landing = landingAt(event.clientX, event.clientY, pressed.id)
-			setLift((held) =>
-				held?.id === pressed.id && isSameLanding(held.landing, landing)
-					? held
-					: { id: pressed.id, landing },
-			)
-		},
-		onPointerUp: (event) => {
-			const pressed = press.current
-			press.current = null
-			if (!pressed?.isLifted) return
-			releasePointer(event.currentTarget, event.pointerId)
-			hasDropped.current = true
-			setLift(null)
-			const landing = landingAt(event.clientX, event.clientY, pressed.id)
-			if (landing !== null) onLand(pressed.id, landing)
+			if (!isEnabled || event.button !== 0 || press.current) return
+			pressAt(id, event)
 		},
 	})
 
@@ -156,5 +204,5 @@ export const useRosterLift = <Landing>({
 		return true
 	}
 
-	return { followRef, handlersFor, hasJustDropped, lift }
+	return { followRef, handlersFor, hasJustDropped, landing, lift }
 }

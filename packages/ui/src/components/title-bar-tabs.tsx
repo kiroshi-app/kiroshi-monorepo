@@ -29,6 +29,7 @@ import {
 } from "@workspace/ui/components/ui/context-menu"
 import {
 	type RosterLift,
+	useLiftLanding,
 	useRosterLift,
 } from "@workspace/ui/hooks/use-roster-lift"
 import { useStableCallback } from "@workspace/ui/hooks/use-stable-callback"
@@ -89,13 +90,13 @@ const TAB_ICON =
 	"pointer-events-none grid size-4 shrink-0 place-items-center [&>svg]:size-3.75"
 
 const TAB =
-	"flex h-7 items-center gap-1.5 rounded-md bg-title-bar-tab px-2 text-muted-foreground hover:bg-title-bar-highlight hover:text-foreground focus-visible:outline-2 focus-visible:outline-foreground focus-visible:outline-offset-1 aria-selected:bg-title-bar-tab-selected aria-selected:pe-7.25 aria-selected:text-foreground"
+	"relative flex h-7 touch-none select-none items-center gap-1.5 rounded-md bg-title-bar-tab px-2 text-muted-foreground hover:bg-title-bar-highlight hover:text-foreground focus-visible:outline-2 focus-visible:outline-foreground focus-visible:outline-offset-1 aria-selected:bg-title-bar-tab-selected aria-selected:pe-7.25 aria-selected:text-foreground"
 
 const PINNED_TAB =
-	"grid place-items-center rounded-md bg-title-bar-pinned text-muted-foreground hover:bg-title-bar-highlight hover:text-foreground focus-visible:outline-2 focus-visible:outline-foreground focus-visible:outline-offset-1 aria-selected:bg-title-bar-tab-selected aria-selected:text-foreground"
+	"relative grid touch-none select-none place-items-center rounded-md bg-title-bar-pinned text-muted-foreground hover:bg-title-bar-highlight hover:text-foreground focus-visible:outline-2 focus-visible:outline-foreground focus-visible:outline-offset-1 aria-selected:bg-title-bar-tab-selected aria-selected:text-foreground"
 
 const LIFTED_TAB =
-	"pointer-events-none z-10 bg-title-bar-menu text-foreground drop-shadow-md translate-x-[var(--lift-dx,0px)] aria-selected:bg-title-bar-menu"
+	"pointer-events-none z-10 bg-title-bar-menu text-foreground drop-shadow-md translate-x-[var(--lift-dx,0px)] translate-y-[var(--lift-dy,0px)] aria-selected:bg-title-bar-menu"
 
 const INSERTION_LINE =
 	"pointer-events-none absolute inset-y-1 z-20 w-0.5 rounded-full bg-foreground"
@@ -107,7 +108,8 @@ const INSERTION_EDGE = {
 
 type InsertionEdge = keyof typeof INSERTION_EDGE
 
-const TAB_TITLE = "min-w-0 truncate font-medium text-compact leading-4"
+const TAB_TITLE =
+	"min-w-0 select-none truncate font-medium text-compact leading-4"
 
 const TAB_NEEDS_YOU = cn(NEEDS_YOU_GLYPH, "size-3.25")
 
@@ -238,6 +240,11 @@ const middlesOf = (strip: HTMLElement | null, slot: string) =>
 		return box.left + box.width / 2
 	})
 
+type SlotMiddles = {
+	count: number
+	middles: number[]
+}
+
 type TabLiftSource = {
 	tabs: TitleBarTab[]
 	pinned: TitleBarTab[]
@@ -287,17 +294,41 @@ const useTabLift = ({
 		onReorderTabs(reorderedIds(tabs, zone, id, to))
 	}
 
+	const measured = useRef<SlotMiddles | null>(null)
+	const forgetSlots = () => {
+		measured.current = null
+	}
+	const middlesFor = (id: string) => {
+		if (measured.current?.count !== tabs.length)
+			measured.current = {
+				count: tabs.length,
+				middles: middlesOf(
+					stripRef.current,
+					isPinned(id) ? PINNED_TAB_SLOT : UNPINNED_TAB,
+				),
+			}
+		return measured.current.middles
+	}
+
+	useLayoutEffect(() => {
+		const strip = stripRef.current
+		if (!strip) return
+		const observer = new ResizeObserver(() => {
+			measured.current = null
+		})
+		observer.observe(strip)
+		return () => observer.disconnect()
+	}, [stripRef])
+
 	const lift = useRosterLift({
 		isEnabled: Boolean(onReorderTabs),
 		landingAt: (x, _y, id) => {
-			const middles = middlesOf(
-				stripRef.current,
-				isPinned(id) ? PINNED_TAB_SLOT : UNPINNED_TAB,
-			)
+			const middles = middlesFor(id)
 			return zoneOf(id).filter(
 				(tab, rank) => tab.id !== id && middles[rank] < x,
 			).length
 		},
+		onLift: forgetSlots,
 		onLand: (id, at: number) => {
 			const zone = zoneOf(id)
 			if (at === zone.findIndex((tab) => tab.id === id)) return
@@ -306,25 +337,18 @@ const useTabLift = ({
 	})
 
 	const liftedId = lift.lift?.id
-	const at = lift.lift?.landing ?? null
-	const others = liftedId
-		? zoneOf(liftedId).filter((tab) => tab.id !== liftedId)
-		: []
-	const mark =
-		at === null
-			? null
-			: at < others.length
-				? { id: others[at].id, edge: "start" as const }
-				: at > 0
-					? { id: others[at - 1].id, edge: "end" as const }
-					: null
 
-	return {
-		lift,
-		insertionOn: (id: string) => (mark?.id === id ? mark.edge : undefined),
-		move,
-		moveByKey,
+	const insertionOn = (id: string, at: number | null) => {
+		if (!liftedId || at === null) return undefined
+		const zone = zoneOf(liftedId)
+		if (at === zone.findIndex((tab) => tab.id === liftedId)) return undefined
+		const others = zone.filter((tab) => tab.id !== liftedId)
+		if (others[at]?.id === id) return "start"
+		if (at === others.length && others[at - 1]?.id === id) return "end"
+		return undefined
 	}
+
+	return { lift, insertionOn, move, moveByKey }
 }
 
 type TabGestures = Pick<
@@ -345,8 +369,25 @@ type TitleBarTabItemProps = TabGestures & {
 	isActive: boolean
 	width: string
 	lift: RosterLift<number>
-	insertion?: InsertionEdge
+	insertionOn: (id: string, at: number | null) => InsertionEdge | undefined
 	onMoveKey: (event: KeyboardEvent<HTMLElement>) => void
+}
+
+type TabInsertionLineProps = {
+	lift: RosterLift<number>
+	onEdge: (at: number | null) => InsertionEdge | undefined
+}
+
+const TabInsertionLine = ({ lift, onEdge }: TabInsertionLineProps) => {
+	const edge = useLiftLanding(lift, onEdge)
+	if (!edge) return null
+	return (
+		<span
+			aria-hidden="true"
+			className={cn(INSERTION_LINE, INSERTION_EDGE[edge])}
+			data-slot="title-bar-tab-insertion"
+		/>
+	)
 }
 
 const TitleBarTabItem = ({
@@ -355,7 +396,7 @@ const TitleBarTabItem = ({
 	width,
 	hasClosedTab = false,
 	lift,
-	insertion,
+	insertionOn,
 	onMoveKey,
 	onPinTab,
 	onUnpinTab,
@@ -391,7 +432,6 @@ const TitleBarTabItem = ({
 							tab.isPinned ? PINNED_TAB : TAB,
 							width,
 							isLifted && LIFTED_TAB,
-							insertion && "relative",
 						)}
 						data-slot={tab.isPinned ? "title-bar-pinned-tab" : "title-bar-tab"}
 						onClick={(event) => {
@@ -403,13 +443,10 @@ const TitleBarTabItem = ({
 					/>
 				}
 			>
-				{insertion ? (
-					<span
-						aria-hidden="true"
-						className={cn(INSERTION_LINE, INSERTION_EDGE[insertion])}
-						data-slot="title-bar-tab-insertion"
-					/>
-				) : null}
+				<TabInsertionLine
+					lift={lift}
+					onEdge={(at) => insertionOn(tab.id, at)}
+				/>
 				<span aria-hidden="true" className={TAB_ICON}>
 					{tab.icon}
 				</span>
@@ -588,7 +625,7 @@ const TitleBarTabs = ({
 	})
 	const tabItem = (tab: TitleBarTab, width: string) => (
 		<TitleBarTabItem
-			insertion={insertionOn(tab.id)}
+			insertionOn={insertionOn}
 			isActive={tab.id === activeTabId}
 			hasClosedTab={hasClosedTab}
 			key={tab.id}

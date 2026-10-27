@@ -54,10 +54,7 @@ export const SIDEBAR_CONVERSATIONS: AppSidebarConversation[] = [DESK_ROOM]
 
 export const STILL_LIFT: Lifter = {
 	handlersFor: () => ({
-		onPointerCancel: () => undefined,
 		onPointerDown: () => undefined,
-		onPointerMove: () => undefined,
-		onPointerUp: () => undefined,
 	}),
 	hasJustDropped: () => false,
 }

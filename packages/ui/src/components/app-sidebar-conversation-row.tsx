@@ -79,6 +79,7 @@ const ConversationRosterRow = ({
 				<ContextMenuTrigger>
 					<SidebarListRow
 						{...lift.handlersFor(conversation.id)}
+						isLiftable
 						badge={badgeOf(conversation)}
 						isActive={isSelected}
 						isMiddleClickSelectable

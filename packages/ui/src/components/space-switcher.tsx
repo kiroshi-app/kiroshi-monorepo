@@ -42,6 +42,7 @@ import {
 import {
 	dropArea,
 	dropAreaAt,
+	useLiftLanding,
 	useRosterLift,
 } from "@workspace/ui/hooks/use-roster-lift"
 import { SPACE_RANK_LIMIT } from "@workspace/ui/hooks/use-space-shortcut"
@@ -70,7 +71,7 @@ const DOTS =
 	"flex flex-wrap items-center justify-center group-data-[collapsible=icon]:hidden"
 
 const DOT_BUTTON =
-	"group/space-dot relative grid size-5 shrink-0 place-items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+	"group/space-dot relative grid size-5 shrink-0 touch-none select-none place-items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
 
 const DOT_LIFTED =
 	"pointer-events-none z-10 scale-125 drop-shadow-md translate-x-[var(--lift-dx,0px)] translate-y-[var(--lift-dy,0px)]"
@@ -371,11 +372,11 @@ const SpaceDots = ({
 		landingAt: insertionAt,
 		onLand: placeSpace,
 	})
+	const insertion = useLiftLanding(lift)
 
 	if (spaces.length < 2) return null
 
 	const liftedId = lift.lift?.id
-	const insertion = lift.lift?.landing ?? null
 	const placed = spaces.filter((space) => space.id !== liftedId)
 	const insertsBefore = insertion === null ? null : placed[insertion]?.id
 	const insertsAfter =

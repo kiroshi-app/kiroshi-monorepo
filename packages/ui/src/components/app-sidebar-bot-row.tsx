@@ -107,6 +107,7 @@ const BotRosterRow = ({
 				<ContextMenuTrigger>
 					<SidebarListRow
 						{...lift.handlersFor(bot.id)}
+						isLiftable
 						badge={bot.badge}
 						isActive={isSelected}
 						isMiddleClickSelectable

@@ -9,7 +9,11 @@ import {
 } from "@workspace/ui/components/app-sidebar-pins"
 import type { RosterEntries } from "@workspace/ui/components/app-sidebar-roster-layout"
 import type { InsertionEdge } from "@workspace/ui/components/app-sidebar-roster-parts"
-import { dropAreaAt, useRosterLift } from "@workspace/ui/hooks/use-roster-lift"
+import {
+	dropAreaAt,
+	useLiftLanding,
+	useRosterLift,
+} from "@workspace/ui/hooks/use-roster-lift"
 import { useStableCallback } from "@workspace/ui/hooks/use-stable-callback"
 
 interface RosterDragSource {
@@ -71,7 +75,7 @@ const useRosterDrag = ({ entries, onLand }: RosterDragSource) => {
 	const liftedId = rosterLift.lift?.id
 	const liftedEntry = liftedId ? blockOf(liftedId)[0] : undefined
 	const liftedSectionId = liftedEntry?.section?.id
-	const held = rosterLift.lift?.landing ?? null
+	const held = useLiftLanding(rosterLift)
 	const insertion = held === null || held === SORTED ? null : held
 	const placedUnderLift = !liftedId
 		? pinnedEntries
@@ -102,6 +106,7 @@ const useRosterDrag = ({ entries, onLand }: RosterDragSource) => {
 		edgeAt: (id: string): InsertionEdge | undefined =>
 			mark?.id === id ? mark.edge : undefined,
 		insertion,
+		isLandingSorted: held === SORTED,
 		landingSection: liftedSectionId ? null : (insertion?.holder ?? null),
 		liftedEntry,
 		liftedSectionId,
