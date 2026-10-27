@@ -14,6 +14,8 @@ import {
 	renderCss,
 	type TokenFile,
 	toSrgb,
+	withBlotAliases,
+	withHueColours,
 } from "./render-tokens"
 
 const read = (path: string) =>
@@ -92,6 +94,25 @@ describe("tokens.json", () => {
 		expect(HUE_PRESETS).toEqual(file.hue?.presets)
 		expect(YELLOW_BAND).toEqual(file.hue?.["yellow-band"])
 		expect(HUE_TONES).toEqual(hueTonesOf(file))
+	})
+
+	it("aliases each bot-blot colour set in the catalogue to the accent of its hue", () => {
+		const file: TokenFile = JSON.parse(read("../../tokens.json"))
+		const hued = withHueColours(file)
+		const colorSets = Object.fromEntries(
+			renderColorSets(withBlotAliases(hued)).map(({ name, contents }) => [
+				name,
+				JSON.parse(contents).colors,
+			]),
+		)
+		const presets = Object.keys(file.hue?.presets ?? {})
+
+		expect(presets).toHaveLength(8)
+		for (const preset of presets)
+			expect(colorSets[`bot-blot-${preset}`]).toEqual(
+				colorSets[`hue-${preset}-accent`],
+			)
+		expect(renderCss(hued)).not.toMatch(/--bot-blot-(?!ink)/)
 	})
 
 	it("converts each notation to the sRGB bytes Chromium paints", () => {

@@ -8,6 +8,7 @@ import {
 	renderColorSets,
 	renderCss,
 	type TokenFile,
+	withBlotAliases,
 	withHueColours,
 } from "./render-tokens"
 
@@ -42,7 +43,7 @@ execFileSync("bunx", ["biome", "format", "--write", CSS, HUE_TONES], {
 rmSync(CATALOGUE, { recursive: true, force: true })
 mkdirSync(CATALOGUE)
 writeFileSync(`${CATALOGUE}/Contents.json`, CATALOGUE_CONTENTS)
-for (const { name, contents } of renderColorSets(file)) {
+for (const { name, contents } of renderColorSets(withBlotAliases(file))) {
 	mkdirSync(`${CATALOGUE}/${name}.colorset`)
 	writeFileSync(`${CATALOGUE}/${name}.colorset/Contents.json`, contents)
 }

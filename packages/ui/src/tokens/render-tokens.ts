@@ -233,6 +233,22 @@ export const withHueColours = (file: TokenFile): TokenFile => {
 	}
 }
 
+export const withBlotAliases = (file: TokenFile): TokenFile => ({
+	...file,
+	colors: {
+		...file.colors,
+		...Object.fromEntries(
+			Object.keys(requireHue(file).presets).map((preset) => [
+				`bot-blot-${preset}`,
+				{
+					light: `{hue-${preset}-accent}`,
+					dark: `{hue-${preset}-accent}`,
+				},
+			]),
+		),
+	},
+})
+
 const toComponent = (byte: number) =>
 	`0x${byte.toString(16).toUpperCase().padStart(2, "0")}`
 
