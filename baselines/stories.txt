@@ -709,6 +709,9 @@ forms-checkbox--default
 forms-checkbox--on-dark-surface
 forms-checkbox--states
 forms-checkbox--with-label
+forms-colourfield--no-colour
+forms-colourfield--own-hue
+forms-colourfield--preset
 forms-copyfield--default
 forms-copyfield--empty
 forms-input--default
@@ -768,6 +771,7 @@ forms-settingsselect--with-hint
 forms-settingsswitch--on
 forms-settingsswitch--playground
 forms-settingsswitch--pressing-the-label
+forms-slider--default
 forms-switch--default
 forms-switch--long-content
 forms-switch--states
@@ -1463,6 +1467,7 @@ settings-bot-botgeneralfields--default
 settings-bot-botidentityfields--chooses-the-same-file-twice
 settings-bot-botidentityfields--default
 settings-bot-botidentityfields--dropped-and-pasted
+settings-bot-botidentityfields--own-hue
 settings-bot-botidentityfields--picks-a-blot
 settings-bot-botidentityfields--removes-the-picture
 settings-bot-botidentityfields--takes-the-blot-off
@@ -1580,6 +1585,7 @@ settings-conversation-conversationsettingsdialog--icon-popover-open
 settings-conversation-conversationsettingsdialog--instructions
 settings-conversation-conversationsettingsdialog--long-content
 settings-conversation-conversationsettingsdialog--nothing-set
+settings-conversation-conversationsettingsdialog--own-hue-set
 settings-conversation-conversationsettingsdialog--participants
 settings-conversation-conversationsettingsdialog--participants-with-titles
 settings-conversation-participantspanel--default
@@ -1787,6 +1793,8 @@ settings-space-settingsscreen--yours-not-shared
 settings-space-spacefields--colourless
 settings-space-spacefields--default
 settings-space-spacefields--empty
+settings-space-spacefields--own-hue
+settings-space-spacefields--own-hue-over-a-preset
 settings-space-spacefields--recoloured
 settings-space-spacesettingsdialog--danger
 settings-space-spacesettingsdialog--default

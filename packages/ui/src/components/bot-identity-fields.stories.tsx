@@ -23,11 +23,17 @@ const IDENTITY: BotIdentity = { blot: "blue" }
 
 const FieldsHost = (props: BotIdentityFieldsProps) => {
 	const [identity, setIdentity] = useState(props.identity)
+	const [hue, setHue] = useState(props.hue)
 
 	return (
 		<BotIdentityFields
 			{...props}
+			hue={hue}
 			identity={identity}
+			onHueChange={(next) => {
+				setHue(next)
+				props.onHueChange(next)
+			}}
 			onIdentityChange={(next) => {
 				setIdentity(next)
 				props.onIdentityChange(next)
@@ -63,7 +69,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"Everything a companion's face is made of, flat: what it looks like now, the eight colours that mark it plus the option that takes the colour off, and the field that takes a picture and takes it back off. The glyph itself is drawn from the companion's name, so there is no shape to pick. Nothing is behind a popover, a disclosure or a tab set: a reader sees every choice at once. The colour grid is a real radio group, so arrow keys move within it and the current choice is announced. Every swatch wears the companion's own glyph, so the row previews the actual outcome. Picking a colour takes the picture off, because the picture wins over it. The block never reads a file: it hands the host a `File` and waits for the picture to come back as `identity.image`. Only the preview moves, and only while `working`; the swatches always rest.",
+					"Everything a companion's face is made of, flat: what it looks like now, the eight colours that mark it, the option that takes the colour off and a hue of its own picked on a slider, with a strip previewing the companion in a conversation, and the field that takes a picture and takes it back off. The glyph itself is drawn from the companion's name, so there is no shape to pick. Nothing is behind a popover, a disclosure or a tab set: a reader sees every choice at once. The colour grid is a real radio group, so arrow keys move within it and the current choice is announced. Every swatch wears the companion's own glyph, so the row previews the actual outcome. The colour travels as a hue, 0 to 359 or null; the dialog holding the companion takes the picture off when a colour is picked, because the picture wins over it. The block never reads a file: it hands the host a `File` and waits for the picture to come back as `identity.image`. Only the preview moves, and only while `working`; the swatches always rest.",
 			},
 		},
 	},
@@ -71,6 +77,8 @@ const meta = preview.meta({
 		identity: IDENTITY,
 		name: "Atlas",
 		seed: BOT_ID,
+		hue: 257,
+		onHueChange: fn(),
 		onIdentityChange: fn(),
 		onAvatarUpload: fn(),
 	},
@@ -98,7 +106,7 @@ export const Default = meta.story({
 	},
 	play: async ({ canvas, canvasElement }) => {
 		await expect(canvas.getByRole("radio", { name: "Blue" })).toBeChecked()
-		await expect(canvas.getAllByRole("radio")).toHaveLength(9)
+		await expect(canvas.getAllByRole("radio")).toHaveLength(10)
 		await expect(canvas.queryByRole("radio", { name: "Owl" })).toBeNull()
 		await expect(
 			companionGlyphs(canvasElement).every(
@@ -118,16 +126,14 @@ export const PicksABlot = meta.story({
 		docs: {
 			description: {
 				story:
-					"Picking a colour: the glyph stays, the colour behind it changes, and the picture goes with it. Check that the preview repaints onto the new colour at once.",
+					"Picking a colour: the glyph stays and the colour behind it changes. Check that the pick reports the preset's hue and that the preview repaints onto the new colour at once.",
 			},
 		},
 	},
 	play: async ({ args, canvas, userEvent }) => {
 		await userEvent.click(canvas.getByRole("radio", { name: "Red" }))
 
-		await expect(args.onIdentityChange).toHaveBeenCalledWith({
-			blot: "red",
-		})
+		await expect(args.onHueChange).toHaveBeenLastCalledWith(42)
 		await expect(canvas.getByRole("radio", { name: "Red" })).toBeChecked()
 	},
 })
@@ -137,19 +143,43 @@ export const TakesTheBlotOff = meta.story({
 		docs: {
 			description: {
 				story:
-					"The ninth colour option is the absence of one. It sits in the same radio group rather than beside it as a clear button, because wearing no colour is a choice a companion makes, not an undo. Check that the emitted identity carries no colour at all and that the glyph is then drawn on no tile.",
+					"The option that opens the row is the absence of a colour. It sits in the same radio group rather than beside it as a clear button, because wearing no colour is a choice a companion makes, not an undo. Check that it reports null and that the glyph is then drawn on no tile.",
 			},
 		},
 	},
 	play: async ({ args, canvas, canvasElement, userEvent }) => {
 		await userEvent.click(canvas.getByRole("radio", { name: "No colour" }))
 
-		await expect(args.onIdentityChange).toHaveBeenCalledWith({
-			blot: undefined,
-		})
+		await expect(args.onHueChange).toHaveBeenLastCalledWith(null)
 		await expect(
 			companionHueOf(companionGlyphOf(previewAvatar(canvasElement))),
 		).toBeUndefined()
+	},
+})
+
+export const OwnHue = meta.story({
+	args: { hue: 320 },
+	globals: { theme_layout: "side-by-side" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A companion wearing a hue of its own. Check in both themes that `Your hue` is the checked tile with its rainbow badge, that the header reads `Your hue · 320°`, that the hue panel stands open, and that the preview strip paints both avatars in that hue while the `Thanks` bubble keeps the Space colour.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const [ownHue] = canvas.getAllByRole("radio", { name: "Your hue" })
+		await expect(ownHue).toBeChecked()
+		await expect(canvas.getAllByText("Your hue · 320°")[0]).toBeVisible()
+		await expect(
+			companionHueOf(companionGlyphOf(previewAvatar(canvasElement))),
+		).toBe(320)
+		const [strip] = slotsIn(canvasElement, "companion-colour-preview")
+		if (!strip) throw new Error("The panel is missing its preview strip")
+		await expect(
+			companionGlyphs(strip).map((glyph) => companionHueOf(glyph)),
+		).toEqual([320, 320])
 	},
 })
 

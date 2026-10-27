@@ -27,7 +27,12 @@ import { BotGeneralFields } from "@workspace/ui/components/bot-settings-dialog/g
 import { BotInstructionsFields } from "@workspace/ui/components/bot-settings-dialog/instructions-fields"
 import { PermissionsPanel } from "@workspace/ui/components/bot-settings-dialog/permissions-panel"
 import { RuntimeFields } from "@workspace/ui/components/bot-settings-dialog/runtime-fields"
-import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
+import {
+	type BotAvatarBlot,
+	blotOf,
+	hueOf,
+	isFreeHue,
+} from "@workspace/ui/components/companion-colour"
 import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
 import { EnvironmentPanel } from "@workspace/ui/components/environment-panel"
 import type { SpaceHost } from "@workspace/ui/components/host-pill"
@@ -823,9 +828,14 @@ const CompanionSettingsScreen = ({
 			panel: (
 				<CompanionSection gap="loose">
 					<BotIdentityFields
+						hue={hueOf(value.identity.blot) ?? null}
 						identity={value.identity}
 						name={name}
 						onAvatarUpload={onAvatarUpload}
+						onHueChange={(hue) => {
+							if (isFreeHue(hue)) return
+							patch({ identity: { blot: blotOf(hue) } })
+						}}
 						onIdentityChange={(identity) => patch({ identity })}
 						seed={seed}
 						working={working}

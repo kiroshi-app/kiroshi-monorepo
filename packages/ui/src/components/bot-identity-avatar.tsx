@@ -33,6 +33,7 @@ const DEFAULT_SIZE = 40
 type BotIdentityAvatarProps = {
 	name?: string
 	blot?: BotAvatarBlot
+	hue?: number
 	seed?: string
 	image?: string
 	badge?: BotBadge
@@ -45,6 +46,7 @@ type BotIdentityAvatarProps = {
 function BotIdentityAvatar({
 	name,
 	blot,
+	hue = hueOf(blot),
 	seed,
 	image,
 	badge,
@@ -77,7 +79,7 @@ function BotIdentityAvatar({
 				name={name ?? seed ?? ""}
 				size={size}
 				state={working ? kind : "idle"}
-				hue={hueOf(blot)}
+				hue={hue}
 			/>
 		</AvatarFrame>
 	)

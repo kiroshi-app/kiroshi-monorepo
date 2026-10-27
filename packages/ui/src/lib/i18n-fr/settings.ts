@@ -261,6 +261,8 @@ const settings = {
 		colour: {
 			label: "Couleur",
 			none: "Aucune couleur",
+			hint: "N'importe quelle teinte. La clarté et l'intensité viennent de la recette, pour rester lisible en clair comme en sombre.",
+			previewMessage: "On livre vendredi ?",
 		},
 		transfer: {
 			export: "Exporter cet espace",

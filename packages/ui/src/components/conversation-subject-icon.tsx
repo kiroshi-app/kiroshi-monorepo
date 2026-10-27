@@ -1,6 +1,5 @@
 import conversationIcons from "@workspace/shared/conversation-icons.json"
 import {
-	BLOT_HUES,
 	type BotAvatarBlot,
 	hueOf,
 } from "@workspace/ui/components/companion-colour"
@@ -18,6 +17,7 @@ const PICTOGRAM = "relative"
 type ConversationSubjectIconProps = {
 	icon?: string
 	color?: BotAvatarBlot
+	hue?: number | null
 	side?: number
 }
 
@@ -32,6 +32,7 @@ const conversationIconOf = (icon: string | undefined): ConversationIconName =>
 const ConversationSubjectIcon = ({
 	icon,
 	color,
+	hue = hueOf(color),
 	side = 40,
 }: ConversationSubjectIconProps) => {
 	const Pictogram = ConversationIcons[conversationIconOf(icon)]
@@ -40,10 +41,10 @@ const ConversationSubjectIcon = ({
 		<span
 			aria-hidden="true"
 			className={CELL}
-			data-hue={hueOf(color)}
+			data-hue={hue ?? undefined}
 			data-slot="conversation-subject-icon"
 			style={{
-				...(color && hueStyle(BLOT_HUES[color])),
+				...(hue != null && hueStyle(hue)),
 				color: "var(--conversation-icon-foreground)",
 				width: side,
 				height: side,
