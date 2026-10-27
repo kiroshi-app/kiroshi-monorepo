@@ -280,21 +280,39 @@ const raisedNoticeTitles = () =>
 		(title) => title.textContent,
 	)
 
-it("keeps the screen on the Danger zone and reports the failure when the deletion is refused", async () => {
-	await mountRouterAt()
-	await openSettingsFromRowMenu()
+const refuseRelease = () => {
 	harness.refusesRelease = true
+}
 
-	await deleteFromDangerZone()
+const refuseStoreDeletion = () => {
+	vi.spyOn(
+		harness.store as TranscriptStore,
+		"deleteConversation",
+	).mockRejectedValue(new Error("no record"))
+}
 
-	expect(raisedNoticeTitles()).toContain(
-		i18n.t("chat:conversationSettings.danger.failed"),
-	)
-	expect(conversationScreenOf(ROOM)).toEqual({
-		...ON_GENERAL,
-		entry: i18n.t("chat:conversationSettings.tab.danger"),
-	})
-})
+it.each([
+	["the runtime release", refuseRelease],
+	["the store deletion", refuseStoreDeletion],
+])(
+	"keeps the screen on the Danger zone and reports the failure once when %s is refused",
+	async (_, refuse) => {
+		await mountRouterAt()
+		await openSettingsFromRowMenu()
+		refuse()
+
+		await deleteFromDangerZone()
+
+		const failed = i18n.t("chat:conversationSettings.danger.failed")
+		expect(raisedNoticeTitles().filter((title) => title === failed)).toEqual([
+			failed,
+		])
+		expect(conversationScreenOf(ROOM)).toEqual({
+			...ON_GENERAL,
+			entry: i18n.t("chat:conversationSettings.tab.danger"),
+		})
+	},
+)
 
 it("returns to the conversations when the route names no conversation of the Space", async () => {
 	await mountRouterAt("/settings/conversation/nowhere")

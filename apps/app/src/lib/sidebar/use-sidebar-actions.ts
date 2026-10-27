@@ -51,7 +51,7 @@ export type SidebarActions = Required<
 		| "onSelectSpace"
 	>
 > & {
-	onDeleteConversation: (id: string) => Promise<void>
+	onDeleteConversation: (id: string) => Promise<boolean>
 }
 
 type SettingsOpening = Pick<
@@ -137,18 +137,19 @@ export const useSidebarActions = ({
 			onDeleteBot: (id) =>
 				settings.openCompanionSettings(id, { entry: COMPANION_DANGER_ENTRY }),
 			onDeleteConversation: async (id) => {
-				await runtimes.release(id)
 				try {
+					await runtimes.release(id)
 					await roster.removeConversation(id)
 				} catch {
 					void reportFailure(
 						{ title: i18n.t("chat:conversationSettings.danger.failed") },
 						{ conversation: id },
 					)
-					return
+					return false
 				}
 				attachments.forget({ kind: "conversation", id })
 				drafts.forget(id)
+				return true
 			},
 			onDeleteSection: (id) => {
 				void sections.remove(id)

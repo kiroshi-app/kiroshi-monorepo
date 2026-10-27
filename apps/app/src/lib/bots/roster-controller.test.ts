@@ -1654,7 +1654,6 @@ describe("createRosterController on conversations", () => {
 		const controller = await loaded(store)
 		const created = await controller.createConversation()
 		const id = created?.id ?? ""
-		controller.editConversation(id)
 		vi.spyOn(store, "deleteConversation").mockRejectedValue(
 			new Error("no record"),
 		)
@@ -1666,7 +1665,6 @@ describe("createRosterController on conversations", () => {
 		expect(rereads).toHaveBeenCalled()
 		expect(state.conversations.map((held) => held.id)).toEqual([id])
 		expect(state.selectedConversationId).toBe(id)
-		expect(state.isEditingConversation).toBe(true)
 	})
 
 	it("selects the first row of the roster when the remembered conversation is gone", async () => {

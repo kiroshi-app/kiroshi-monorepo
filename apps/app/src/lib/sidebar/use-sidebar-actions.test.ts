@@ -231,7 +231,16 @@ describe("open in a new tab from a row menu", () => {
 	})
 })
 
-const deletionFor = (removeConversation: () => Promise<void>) => {
+type Deletion = {
+	release: () => Promise<void>
+	removeConversation: () => Promise<void>
+}
+
+const SETTLED = async () => undefined
+
+const REFUSED = () => Promise.reject(new Error("no record"))
+
+const deletionFor = ({ release, removeConversation }: Deletion) => {
 	reportFailure.mockClear()
 	const attachments = { forget: vi.fn() }
 	const drafts = createDraftsController()
@@ -243,7 +252,7 @@ const deletionFor = (removeConversation: () => Promise<void>) => {
 		joinedSpaces: UNUSED,
 		openedMission: UNUSED,
 		roster: { removeConversation } as never,
-		runtimes: { release: vi.fn(async () => undefined) } as never,
+		runtimes: { release } as never,
 		sections: UNUSED,
 		settings: UNUSED,
 		spaces: UNUSED,
@@ -253,24 +262,35 @@ const deletionFor = (removeConversation: () => Promise<void>) => {
 }
 
 describe("deleting a conversation", () => {
-	it("reports a refused deletion once and keeps its draft and attachments", async () => {
-		const refused = deletionFor(() => Promise.reject(new Error("no record")))
+	it.each([
+		["the runtime release", { release: REFUSED, removeConversation: SETTLED }],
+		["the store deletion", { release: SETTLED, removeConversation: REFUSED }],
+	])(
+		"reports a refused deletion once when %s fails and keeps its draft and attachments",
+		async (_, deletion) => {
+			const refused = deletionFor(deletion)
 
-		await refused.actions.onDeleteConversation("c-1")
+			const isDeleted = await refused.actions.onDeleteConversation("c-1")
 
-		expect(reportFailure).toHaveBeenCalledExactlyOnceWith(
-			{ title: i18n.t("chat:conversationSettings.danger.failed") },
-			{ conversation: "c-1" },
-		)
-		expect(refused.drafts.read("c-1")).toBe("Half a thought")
-		expect(refused.attachments.forget).not.toHaveBeenCalled()
-	})
+			expect(isDeleted).toBe(false)
+			expect(reportFailure).toHaveBeenCalledExactlyOnceWith(
+				{ title: i18n.t("chat:conversationSettings.danger.failed") },
+				{ conversation: "c-1" },
+			)
+			expect(refused.drafts.read("c-1")).toBe("Half a thought")
+			expect(refused.attachments.forget).not.toHaveBeenCalled()
+		},
+	)
 
 	it("forgets the draft and attachments of a deleted conversation without a notice", async () => {
-		const deleted = deletionFor(async () => undefined)
+		const deleted = deletionFor({
+			release: SETTLED,
+			removeConversation: SETTLED,
+		})
 
-		await deleted.actions.onDeleteConversation("c-1")
+		const isDeleted = await deleted.actions.onDeleteConversation("c-1")
 
+		expect(isDeleted).toBe(true)
 		expect(reportFailure).not.toHaveBeenCalled()
 		expect(deleted.drafts.read("c-1")).toBe("")
 		expect(deleted.attachments.forget).toHaveBeenCalledExactlyOnceWith({
