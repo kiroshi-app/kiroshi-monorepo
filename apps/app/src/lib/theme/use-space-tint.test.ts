@@ -3,44 +3,73 @@
 import { cleanup, renderHook } from "@testing-library/react"
 import { afterEach, describe, expect, it } from "vitest"
 
-import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
+import {
+	BLOT_HUES,
+	type BotAvatarBlot,
+} from "@workspace/ui/components/companion-colour"
+import { hueStyle } from "@workspace/ui/components/hue-palette"
 
 import { useSpaceTint } from "./use-space-tint"
 
 const root = () => document.documentElement
 
-const tintOnRoot = () => ({
-	attribute: root().getAttribute("data-space-tint"),
-	property: root().style.getPropertyValue("--space-tint"),
+const hueProperties = () =>
+	Array.from(root().style).filter((property) => property.startsWith("--hue-"))
+
+const hueOnRoot = () => ({
+	attribute: root().getAttribute("data-hue"),
+	properties: Object.fromEntries(
+		hueProperties().map((property) => [
+			property,
+			root().style.getPropertyValue(property),
+		]),
+	),
 })
+
+const hueOf = (colour: BotAvatarBlot) => ({
+	attribute: String(BLOT_HUES[colour]),
+	properties: hueStyle(BLOT_HUES[colour]),
+})
+
+const CLEARED = { attribute: null, properties: {} }
 
 describe("useSpaceTint", () => {
 	afterEach(cleanup)
 
-	it("follows the selected Space colour on the html element, then clears on unmount", () => {
-		const { rerender, unmount } = renderHook(useSpaceTint, {
-			initialProps: "cyan" as BotAvatarBlot | null,
-		})
+	it("sets the Space hue and both themes of every role on the html element", () => {
+		renderHook(useSpaceTint, { initialProps: "cyan" as BotAvatarBlot | null })
 
-		expect(tintOnRoot()).toEqual({
-			attribute: "cyan",
-			property: "var(--bot-blot-cyan)",
+		expect(hueOnRoot()).toEqual(hueOf("cyan"))
+		expect(
+			hueProperties().some((name) => name.startsWith("--hue-light-")),
+		).toBe(true)
+		expect(hueProperties().some((name) => name.startsWith("--hue-dark-"))).toBe(
+			true,
+		)
+	})
+
+	it("replaces every property when the hue changes", () => {
+		const { rerender } = renderHook(useSpaceTint, {
+			initialProps: "cyan" as BotAvatarBlot | null,
 		})
 
 		rerender("purple")
 
-		expect(tintOnRoot()).toEqual({
-			attribute: "purple",
-			property: "var(--bot-blot-purple)",
+		expect(hueOnRoot()).toEqual(hueOf("purple"))
+	})
+
+	it("removes the attribute and every property when the colour clears, then on unmount", () => {
+		const { rerender, unmount } = renderHook(useSpaceTint, {
+			initialProps: "cyan" as BotAvatarBlot | null,
 		})
 
 		rerender(null)
 
-		expect(tintOnRoot()).toEqual({ attribute: null, property: "" })
+		expect(hueOnRoot()).toEqual(CLEARED)
 
-		rerender("cyan")
+		rerender("orange")
 		unmount()
 
-		expect(tintOnRoot()).toEqual({ attribute: null, property: "" })
+		expect(hueOnRoot()).toEqual(CLEARED)
 	})
 })

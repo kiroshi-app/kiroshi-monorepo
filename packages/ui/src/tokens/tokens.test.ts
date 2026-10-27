@@ -25,7 +25,7 @@ const TINTED_FILE: TokenFile = {
 	colors: {
 		blue: { light: "#a0bee8" },
 		ink: { light: "oklch(0.08 0 0)" },
-		tint: { light: "var(--space-tint, {blue})" },
+		tint: { light: "var(--hue-light-accent, {blue})" },
 		strong: { light: "color-mix(in oklab, {tint} 60%, {ink})" },
 		mark: { light: "color-mix(in oklab, {strong} 40%, transparent)" },
 	},
