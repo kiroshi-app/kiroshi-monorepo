@@ -14,7 +14,7 @@ use super::relay::{self, HostCall, RelayGuests, SharedSpace};
 use crate::db;
 use crate::db::repositories::joined_spaces::{self, HostListing};
 use crate::events::Frame;
-use crate::spaces::contract::{Space, SpaceDescribed, SpaceError, DESCRIBED_EVENT};
+use crate::spaces::contract::{Space, SpaceDescribed, DESCRIBED_EVENT};
 
 const SPACE_UPDATE_COMMAND: &str = "space_update";
 
@@ -46,21 +46,19 @@ pub(super) async fn asked<R: Runtime>(
 }
 
 fn space_answered(id: &str, Answer { status, body }: Answer) -> Result<Space, JoinedSpaceError> {
-	match status {
-		200 => {
-			if let Ok(space) = serde_json::from_value(body) {
-				return Ok(space);
-			}
-		}
-		500 => {
-			if let Ok(refusal) = serde_json::from_value::<SpaceError>(body) {
-				return Err(JoinedSpaceError::SpaceRefused { refusal });
-			}
-		}
-		_ => {}
-	}
-	log::warn!("joined space {id} could not read the {status} answer of its host to {SPACE_UPDATE_COMMAND}");
-	Err(JoinedSpaceError::HostOffline { id: id.to_owned() })
+	let read = match status {
+		200 => serde_json::from_value(body).ok().map(Ok),
+		500 => serde_json::from_value(body)
+			.ok()
+			.map(|refusal| Err(JoinedSpaceError::SpaceRefused { refusal })),
+		_ => None,
+	};
+	read.unwrap_or_else(|| {
+		log::warn!(
+			"joined space {id} could not read the {status} answer of its host to {SPACE_UPDATE_COMMAND}"
+		);
+		Err(JoinedSpaceError::HostOffline { id: id.to_owned() })
+	})
 }
 
 pub(super) fn alongside<R: Runtime>(

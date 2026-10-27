@@ -1957,9 +1957,7 @@ fn a_description_taken_while_a_reconciliation_reads_the_older_listing_is_kept() 
 		gate.send_replace(true);
 		reconciling.await.expect("the reconciliation");
 
-		let listed = member.listed().await;
-		let described: Vec<_> =
-			listed.iter().map(|joined| (joined.name.as_str(), joined.colour)).collect();
-		assert_eq!(described, vec![("Lab", Hue::new(200).expect("a hue"))]);
+		let lab = vec![("Lab".to_owned(), Hue::new(200).expect("a hue"))];
+		assert_eq!(named_and_coloured(&member.app).await, lab);
 	});
 }
