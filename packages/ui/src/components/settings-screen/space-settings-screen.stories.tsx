@@ -824,7 +824,7 @@ export const YoursNotShared = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard F02: a space of yours, not shared yet. Check the Space header bar over the centred column, then the space's own header with the colour square, the name, Yours · not shared and Open ⌘2, Companions counting 2, then the Name field, then the Not shared yet card with Share, Danger zone pinned at the foot, and no presence dot on either square.",
+					"Artboard F02: a space of yours, not shared yet. Check the Space header bar over the centred column, then the space's own header with the colour square, the name, Yours · not shared and Open ⌘2, Companions counting 2, then the Name field, then the Colour field, then the Not shared yet card with Share, Danger zone pinned at the foot, and no presence dot on either square.",
 			},
 		},
 	},

@@ -18,6 +18,24 @@ type SpaceFieldsProps = {
 	className?: string
 }
 
+type SpaceColourFieldProps = {
+	value: number | null
+	onValueChange: (hue: number | null) => void
+}
+
+const SpaceColourField = ({ value, onValueChange }: SpaceColourFieldProps) => {
+	const { t } = useTranslation("settings")
+
+	return (
+		<ColourField
+			hint={t("space.colour.hint")}
+			mark={(hue) => <SpaceTint className="size-6" tint={hue} />}
+			onValueChange={onValueChange}
+			value={value}
+		/>
+	)
+}
+
 const SpaceFields = ({ value, onValueChange, className }: SpaceFieldsProps) => {
 	const { t } = useTranslation("settings")
 
@@ -33,9 +51,7 @@ const SpaceFields = ({ value, onValueChange, className }: SpaceFieldsProps) => {
 				value={value.name}
 			/>
 
-			<ColourField
-				hint={t("space.colour.hint")}
-				mark={(hue) => <SpaceTint className="size-6" tint={hue} />}
+			<SpaceColourField
 				onValueChange={(hue) => onValueChange({ ...value, hue })}
 				value={value.hue}
 			/>
@@ -43,4 +59,9 @@ const SpaceFields = ({ value, onValueChange, className }: SpaceFieldsProps) => {
 	)
 }
 
-export { SpaceFields, type SpaceFieldsProps, type SpaceFieldsValue }
+export {
+	SpaceColourField,
+	SpaceFields,
+	type SpaceFieldsProps,
+	type SpaceFieldsValue,
+}

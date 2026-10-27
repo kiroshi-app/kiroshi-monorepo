@@ -12,6 +12,7 @@ import {
 	spaceAvatarStateOf,
 } from "@workspace/ui/components/space-avatar"
 import type { SpaceSettingsValue } from "@workspace/ui/components/space-settings"
+import { SpaceColourField } from "@workspace/ui/components/space-settings-dialog/space-fields"
 import { Button } from "@workspace/ui/components/ui/button"
 import { formatShortMonthAndDay } from "@workspace/ui/lib/time-format"
 import { cn } from "@workspace/ui/lib/utils"
@@ -187,6 +188,12 @@ const FocusedSpacePage = ({
 					readOnly={space.state === "joined"}
 					readOnlyLook="filled"
 					value={value.name}
+				/>
+			) : null}
+			{space.state === "yours" ? (
+				<SpaceColourField
+					onValueChange={(hue) => onValueChange({ ...value, colour: hue })}
+					value={value.colour ?? null}
 				/>
 			) : null}
 			{space.state === "yours" && !space.isShared && onShare ? (
