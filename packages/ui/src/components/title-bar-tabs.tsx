@@ -1,7 +1,7 @@
 "use client"
 
 import { Tabs } from "@base-ui/react/tabs"
-import { type ReactNode, useLayoutEffect, useState } from "react"
+import { type ReactNode, useLayoutEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { ContextMenuPressTrigger } from "@workspace/ui/components/context-menu-press-trigger"
@@ -97,12 +97,13 @@ const widthOf = (element: Element) => element.getBoundingClientRect().width
 
 const pixelsOf = (value: string) => Number.parseFloat(value) || 0
 
+const EVERY_TAB = Number.POSITIVE_INFINITY
+
 const fittingTabCount = (strip: HTMLElement, unpinnedCount: number) => {
 	const list = strip.querySelector<HTMLElement>('[role="tablist"]')
 	const tab = list?.querySelector(UNPINNED_TAB)
 	const dragRegion = strip.querySelector('[data-slot="title-bar-drag-region"]')
-	if (!list || !tab || !dragRegion || strip.clientWidth === 0)
-		return unpinnedCount
+	if (!list || !tab || !dragRegion || strip.clientWidth === 0) return EVERY_TAB
 
 	const chip = strip.querySelector('[data-slot="title-bar-overflow"]')
 	const stripGap = pixelsOf(getComputedStyle(strip).columnGap)
@@ -124,27 +125,31 @@ const fittingTabCount = (strip: HTMLElement, unpinnedCount: number) => {
 	const fitting = (width: number) =>
 		Math.floor((width + listGap) / (floor + listGap))
 
-	if (fitting(room) >= unpinnedCount) return unpinnedCount
+	if (fitting(room) >= unpinnedCount) return EVERY_TAB
 	const chipWidth = chip ? widthOf(chip) + stripGap : 0
 	return Math.max(1, fitting(room - chipWidth))
 }
 
 const useFittingTabCount = (unpinnedCount: number) => {
-	const [strip, setStrip] = useState<HTMLElement | null>(null)
-	const [fittingCount, setFittingCount] = useState(unpinnedCount)
+	const stripRef = useRef<HTMLDivElement>(null)
+	const [fittingCount, setFittingCount] = useState(EVERY_TAB)
 	const measure = useStableCallback(() => {
-		if (strip) setFittingCount(fittingTabCount(strip, unpinnedCount))
+		const strip = stripRef.current
+		if (!strip) return
+		const next = fittingTabCount(strip, unpinnedCount)
+		if (next !== fittingCount) setFittingCount(next)
 	})
 
 	useLayoutEffect(measure)
 	useLayoutEffect(() => {
+		const strip = stripRef.current
 		if (!strip) return
 		const observer = new ResizeObserver(measure)
 		observer.observe(strip)
 		return () => observer.disconnect()
-	}, [strip, measure])
+	}, [measure])
 
-	return { stripRef: setStrip, fittingCount }
+	return { stripRef, fittingCount }
 }
 
 const splitAtFit = (
