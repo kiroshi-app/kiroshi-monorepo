@@ -2,7 +2,6 @@ import { useState } from "react"
 import { expect, fn } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { A11Y_CONTRAST_AWAITING_DESIGN_DECISION } from "@workspace/storybook/story-utils"
 import type { BotMcpServerItem } from "@workspace/ui/components/bot-settings"
 import { BOT_MCP_SERVERS } from "@workspace/ui/components/bot-settings-dialog/mcp-servers.fixtures"
 import {
@@ -77,7 +76,6 @@ const meta = preview.meta({
 	component: McpSessionScreen,
 	parameters: {
 		layout: "fullscreen",
-		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				component:

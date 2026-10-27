@@ -192,7 +192,6 @@ const meta = preview.meta({
 
 export const GuardRaised = meta.story({
 	parameters: {
-		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:
@@ -215,7 +214,6 @@ export const GuardRaised = meta.story({
 
 export const GuardRefused = meta.story({
 	parameters: {
-		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:
@@ -302,7 +300,6 @@ export const RailIconsOnly = meta.story({
 export const ChordIgnored = meta.story({
 	tags: ["test-only"],
 	parameters: {
-		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:
@@ -322,7 +319,6 @@ export const ChordIgnored = meta.story({
 
 export const SkillPageWording = meta.story({
 	parameters: {
-		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:
@@ -341,7 +337,6 @@ export const SkillPageWording = meta.story({
 
 export const ApplicationPageWording = meta.story({
 	parameters: {
-		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:
@@ -362,7 +357,6 @@ export const ApplicationPageWording = meta.story({
 export const DefaultWordingWithNoPage = meta.story({
 	render: (args) => <ShellWithUnsavedWorkOffPage {...args} />,
 	parameters: {
-		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:

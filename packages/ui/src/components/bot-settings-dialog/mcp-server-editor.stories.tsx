@@ -2,7 +2,6 @@ import { useState } from "react"
 import { expect, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { A11Y_CONTRAST_AWAITING_DESIGN_DECISION } from "@workspace/storybook/story-utils"
 import {
 	BLANK_MCP_SERVER_DRAFT,
 	type BotMcpConnectionReason,
@@ -62,11 +61,10 @@ const meta = preview.meta({
 	component: McpServerEditor,
 	parameters: {
 		layout: "fullscreen",
-		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				component:
-					"One MCP server of a companion's, whole, on the whole dialog: a rail of sections down the left and one section at a time on the right. The rail replaces the companion's own while a server is open — Connection, Environment, Advanced — so a reader sees what a server is made of rather than a name and a box of JSON. The fields and the JSON are two readings of one thing: a field answered is carried into the text, the text edited is carried back into the fields, and every key no field names is kept untouched, because the shape belongs to the transport. Which fields stand under Connection is the transport's own answer — a command and its arguments for a server started here, an address and its headers for one reached over the network. Nothing is written as it is typed: the save is a press, and the way out asks before it drops a draft. The destructive red on its own tint is the token's known contrast gap, flagged for review rather than worked around here.",
+					"One MCP server of a companion's, whole, on the whole dialog: a rail of sections down the left and one section at a time on the right. The rail replaces the companion's own while a server is open — Connection, Environment, Advanced — so a reader sees what a server is made of rather than a name and a box of JSON. The fields and the JSON are two readings of one thing: a field answered is carried into the text, the text edited is carried back into the fields, and every key no field names is kept untouched, because the shape belongs to the transport. Which fields stand under Connection is the transport's own answer — a command and its arguments for a server started here, an address and its headers for one reached over the network. Nothing is written as it is typed: the save is a press, and the way out asks before it drops a draft.",
 			},
 		},
 	},

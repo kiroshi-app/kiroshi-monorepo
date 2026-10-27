@@ -403,11 +403,10 @@ export const Runtime = meta.story({
 
 export const DangerZone = meta.story({
 	parameters: {
-		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:
-					"The last group, and the only one that cannot be undone. Check that the destructive action is never one press away: it opens a confirmation naming the companion and saying what leaves with it, that Cancel closes that confirmation and changes nothing, and that only the second press reports the deletion. The group carries its tone in the rail as well as in the panel, so a reader never lands here by accident. The destructive red on its own tint is the token's known contrast gap, flagged for review rather than worked around here.",
+					"The last group, and the only one that cannot be undone. Check that the destructive action is never one press away: it opens a confirmation naming the companion and saying what leaves with it, that Cancel closes that confirmation and changes nothing, and that only the second press reports the deletion. The group carries its tone in the rail as well as in the panel, so a reader never lands here by accident.",
 			},
 		},
 	},
@@ -745,7 +744,6 @@ export const WithALongSkill = meta.story({
 
 export const WithSkillOpen = meta.story({
 	parameters: {
-		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:
@@ -779,7 +777,6 @@ export const WithSkillOpen = meta.story({
 
 export const WithServerOpen = meta.story({
 	parameters: {
-		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:

@@ -292,6 +292,61 @@ const opaqueColor = (
 	token: string,
 ) => paintOver(pixel, CANVAS_BASE, readComputedColor(scope, token))
 
+const DESTRUCTIVE_BUTTON_SURFACES = ["--card", "--background"]
+
+export const DestructiveButtonMeetsAaText = meta.story({
+	render: () => (
+		<>
+			{THEMES.map((scheme) => (
+				<div key={scheme} className={scheme} data-scheme-scope={scheme}>
+					{DESTRUCTIVE_BUTTON_SURFACES.map((surface) => (
+						<div
+							key={surface}
+							data-surface-scope={surface}
+							style={{ backgroundColor: `var(${surface})` }}
+						>
+							<Button variant="destructive" size="sm">
+								Delete conversation
+							</Button>
+						</div>
+					))}
+				</div>
+			))}
+		</>
+	),
+	play: async ({ canvasElement }) => {
+		const pixel = createPixel()
+		const measurements = THEMES.map((scheme) =>
+			probeTheme(pixel, canvasElement, scheme),
+		).flatMap(({ scheme, scope }) =>
+			DESTRUCTIVE_BUTTON_SURFACES.map((surface) => {
+				const button = scope.querySelector<HTMLElement>(
+					`[data-surface-scope="${surface}"] button`,
+				)
+				if (!button) {
+					throw new Error(`Missing destructive button on ${surface}.`)
+				}
+				const { backgroundColor, color } = getComputedStyle(button)
+				const fill = paintOver(
+					pixel,
+					opaqueColor(pixel, scope, surface),
+					backgroundColor,
+				)
+				return {
+					key: `${scheme} --destructive on the destructive fill on ${surface}`,
+					ratio: contrastRatio(fill, paintOver(pixel, fill, color)),
+				}
+			}),
+		)
+		const problems = failuresIn(measurements)
+
+		await expect(
+			problems,
+			`Destructive button failing its contrast floor:\n${problems.join("\n")}`,
+		).toEqual([])
+	},
+})
+
 type PrimaryMeasurement = Measurement & { floor: number }
 
 const primaryMeasurements = (

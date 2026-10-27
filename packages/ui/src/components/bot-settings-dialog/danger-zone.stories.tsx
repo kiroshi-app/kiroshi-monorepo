@@ -1,7 +1,6 @@
 import { expect, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { A11Y_CONTRAST_AWAITING_DESIGN_DECISION } from "@workspace/storybook/story-utils"
 import { DangerZone } from "@workspace/ui/components/bot-settings-dialog/danger-zone"
 
 const confirmation = async () => {
@@ -15,11 +14,10 @@ const meta = preview.meta({
 	component: DangerZone,
 	parameters: {
 		layout: "padded",
-		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				component:
-					"The one action a settings panel cannot undo, kept behind a question — the same group a companion, a conversation and a space all end on. It states what leaves before the reader presses anything, then names the thing again in the confirmation, so a reader who opened the wrong settings finds out there rather than after. The destructive tone is carried by a hairline border rather than a fill, so the group reads as serious without shouting over the panel above it. It carries no copy of its own: the heading, the sentence and the confirmation title all arrive as props, which is what lets one group serve every panel. The question is its own — the group opens and closes it, and `onConfirm` fires only on the second press. The destructive red on its own tint is the token's known contrast gap, flagged for review rather than worked around here.",
+					"The one action a settings panel cannot undo, kept behind a question — the same group a companion, a conversation and a space all end on. It states what leaves before the reader presses anything, then names the thing again in the confirmation, so a reader who opened the wrong settings finds out there rather than after. The destructive tone is carried by a hairline border rather than a fill, so the group reads as serious without shouting over the panel above it. It carries no copy of its own: the heading, the sentence and the confirmation title all arrive as props, which is what lets one group serve every panel. The question is its own — the group opens and closes it, and `onConfirm` fires only on the second press.",
 			},
 		},
 	},

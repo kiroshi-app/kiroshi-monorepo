@@ -237,6 +237,60 @@ export const MembersDark = meta.story({
 	},
 })
 
+export const DangerZone = meta.story({
+	args: { entry: "danger" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The delete card of a space of yours. Check that Danger zone is the current page, that Delete space reads on its tinted fill, and that deleting asks first, then reports.",
+			},
+		},
+	},
+	play: async ({ args, userEvent }) => {
+		const menu = await menuIn()
+		await expect(entryIn(menu, "Danger zone")).toHaveAttribute(
+			"aria-current",
+			"page",
+		)
+		await userEvent.click(
+			within(screen.getByRole("main")).getByRole("button", {
+				name: "Delete space",
+			}),
+		)
+		const question = await screen.findByRole("alertdialog")
+		await userEvent.click(
+			within(question).getByRole("button", { name: "Delete space" }),
+		)
+		await expect(args.onDelete).toHaveBeenCalledOnce()
+	},
+})
+
+export const DangerZoneDark = meta.story({
+	globals: { theme: "dark" },
+	args: { entry: "danger" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"`DangerZone` in the dark theme. Check that Delete space stays legible on its tinted fill over the dark card.",
+			},
+		},
+	},
+	play: async () => {
+		const menu = await menuIn()
+		await expect(entryIn(menu, "Danger zone")).toHaveAttribute(
+			"aria-current",
+			"page",
+		)
+		await expect(
+			within(screen.getByRole("main")).getByRole("button", {
+				name: "Delete space",
+			}),
+		).toBeEnabled()
+	},
+})
+
 const LEFT_COLUMN = {
 	parameters: {
 		docs: {

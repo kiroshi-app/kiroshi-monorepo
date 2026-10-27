@@ -1,7 +1,6 @@
 import { expect, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { A11Y_CONTRAST_AWAITING_DESIGN_DECISION } from "@workspace/storybook/story-utils"
 import { DiagnosticsFields } from "@workspace/ui/components/user-settings-dialog/diagnostics-fields"
 
 const CLEAR_LABEL = "Clear log"
@@ -66,7 +65,6 @@ export const Idle = meta.story({
 
 export const ClearLogConfirming = meta.story({
 	parameters: {
-		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:

@@ -2,11 +2,7 @@ import type { VariantProps } from "class-variance-authority"
 import { expect, fn } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import {
-	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
-	listExhaustively,
-	Row,
-} from "@workspace/storybook/story-utils"
+import { listExhaustively, Row } from "@workspace/storybook/story-utils"
 import { Icons } from "@workspace/ui/components/icons"
 import { Button, type buttonVariants } from "@workspace/ui/components/ui/button"
 
@@ -65,7 +61,6 @@ export const Playground = meta.story({
 
 export const Variants = meta.story({
 	tags: ["test-only"],
-	parameters: { a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION },
 	render: () => (
 		<Row>
 			{BUTTON_VARIANTS.map((variant) => (
@@ -120,7 +115,6 @@ export const States = meta.story({
 })
 
 export const WithIcons = meta.story({
-	parameters: { a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION },
 	render: () => (
 		<Row>
 			<Button>

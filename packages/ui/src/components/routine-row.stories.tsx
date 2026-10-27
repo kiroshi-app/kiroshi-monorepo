@@ -105,7 +105,6 @@ export const StoppedItself = meta.story({
 export const LongContent = meta.story({
 	args: { ...RELEASE_WATCH, title: LONG_TITLE },
 	parameters: {
-		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:

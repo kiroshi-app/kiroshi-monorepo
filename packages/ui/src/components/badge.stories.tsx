@@ -2,11 +2,7 @@ import type { VariantProps } from "class-variance-authority"
 import { expect } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import {
-	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
-	listExhaustively,
-	Row,
-} from "@workspace/storybook/story-utils"
+import { listExhaustively, Row } from "@workspace/storybook/story-utils"
 import { Badge, type badgeVariants } from "@workspace/ui/components/ui/badge"
 
 type BadgeVariant = NonNullable<VariantProps<typeof badgeVariants>["variant"]>
@@ -55,7 +51,6 @@ export const Variants = meta.story({
 		</Row>
 	),
 	parameters: {
-		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:

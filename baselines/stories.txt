@@ -1518,6 +1518,7 @@ settings-bot-companionsettingsscreen--back-to-companions
 settings-bot-companionsettingsscreen--back-to-conversations
 settings-bot-companionsettingsscreen--companion-general
 settings-bot-companionsettingsscreen--danger-zone
+settings-bot-companionsettingsscreen--danger-zone-light
 settings-bot-companionsettingsscreen--default-width
 settings-bot-companionsettingsscreen--delete-failed
 settings-bot-companionsettingsscreen--general
@@ -1595,6 +1596,7 @@ settings-bot-runtimefields--picking-a-model
 settings-bot-runtimefields--playground
 settings-bot-runtimefields--standard-answers
 settings-conversation-conversationsettingsscreen--danger-zone
+settings-conversation-conversationsettingsscreen--danger-zone-dark
 settings-conversation-conversationsettingsscreen--dark
 settings-conversation-conversationsettingsscreen--general
 settings-conversation-conversationsettingsscreen--icon-popover-open
@@ -1780,6 +1782,8 @@ settings-space-joinedspacefields--long-name
 settings-space-settingsscreen--back-to-the-applications-list
 settings-space-settingsscreen--by-keyboard
 settings-space-settingsscreen--companions
+settings-space-settingsscreen--danger-zone
+settings-space-settingsscreen--danger-zone-dark
 settings-space-settingsscreen--default-width
 settings-space-settingsscreen--invitation
 settings-space-settingsscreen--joined-host-connecting

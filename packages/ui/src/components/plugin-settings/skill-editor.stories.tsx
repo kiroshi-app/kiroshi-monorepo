@@ -2,7 +2,6 @@ import { useState } from "react"
 import { expect, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { A11Y_CONTRAST_AWAITING_DESIGN_DECISION } from "@workspace/storybook/story-utils"
 import { BLANK_SKILL_DRAFT } from "@workspace/ui/components/bot-settings"
 import {
 	SkillEditor,
@@ -40,11 +39,10 @@ const meta = preview.meta({
 	component: SkillEditor,
 	parameters: {
 		layout: "fullscreen",
-		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				component:
-					"One skill of a companion's, whole, on the whole dialog: a rail of sections down the left and one section at a time on the right. The rail replaces the companion's own while a skill is open and is the summary — Instructions, Triggering, Execution, Tools, Advanced — so a reader sees at once everything a skill can carry rather than three fields and a format they have to know about. Nothing is written as it is typed: every keystroke reports the draft, the editor says when it differs from the skill it was opened on, the save is a press and the way out asks before it drops anything. The description and when to use are budgeted as one paragraph against 1536 characters, because that is how the companion reads them. The destructive red on its own tint is the token's known contrast gap, flagged for review rather than worked around here.",
+					"One skill of a companion's, whole, on the whole dialog: a rail of sections down the left and one section at a time on the right. The rail replaces the companion's own while a skill is open and is the summary — Instructions, Triggering, Execution, Tools, Advanced — so a reader sees at once everything a skill can carry rather than three fields and a format they have to know about. Nothing is written as it is typed: every keystroke reports the draft, the editor says when it differs from the skill it was opened on, the save is a press and the way out asks before it drops anything. The description and when to use are budgeted as one paragraph against 1536 characters, because that is how the companion reads them.",
 			},
 		},
 	},

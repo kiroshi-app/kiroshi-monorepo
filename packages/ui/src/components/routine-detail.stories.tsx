@@ -226,7 +226,6 @@ export const StoppedItself = meta.story({
 		runs: OUTCOME_RUNS,
 	},
 	parameters: {
-		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:

@@ -3242,11 +3242,7 @@ export const RowSpaceNameTooLong = meta.story({
 export const OneSpaceRowMenu = meta.story({
 	tags: ["test-only"],
 	parameters: {
-		a11y: mergeA11y(
-			A11Y_FLOATING_FOCUS_GUARDS,
-			A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
-			A11Y_SUBMENU_PORTAL_GUARD,
-		),
+		a11y: mergeA11y(A11Y_FLOATING_FOCUS_GUARDS, A11Y_SUBMENU_PORTAL_GUARD),
 		docs: {
 			description: {
 				story:
@@ -4607,10 +4603,7 @@ export const SectionDelete = meta.story({
 	tags: ["test-only"],
 	args: sectionArgs(),
 	parameters: {
-		a11y: mergeA11y(
-			A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
-			A11Y_FLOATING_FOCUS_GUARDS,
-		),
+		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		docs: {
 			description: {
 				story:
