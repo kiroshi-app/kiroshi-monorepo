@@ -732,7 +732,6 @@ fn waiting_for_host(id: &str, instance_id: &str, wait: JoinedSpaceWait) -> Joine
 }
 
 pub(super) struct SharedSpace {
-	pub(super) joined: joined_spaces::JoinedSpace,
 	pub(super) space_id: String,
 	pub(super) link: Arc<MemberLink>,
 }
@@ -746,7 +745,7 @@ pub(super) async fn shared_space<R: Runtime>(
 		Some(space_id) => space_id,
 		None => learned(app, id, &reached.link).await?,
 	};
-	Ok(SharedSpace { joined, space_id, link: reached.link })
+	Ok(SharedSpace { space_id, link: reached.link })
 }
 
 pub(super) struct HostCall<'a> {

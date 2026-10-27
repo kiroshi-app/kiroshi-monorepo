@@ -12,7 +12,6 @@ use super::contract::{JoinedSpace, JoinedSpaceError};
 use super::member_link::{Answer, MemberLink};
 use super::relay::{self, HostCall, RelayGuests, SharedSpace};
 use crate::db;
-use crate::db::repositories::joined_spaces::{self, HostListing};
 use crate::events::Frame;
 use crate::spaces::contract::{Space, SpaceDescribed, DESCRIBED_EVENT};
 
@@ -30,19 +29,18 @@ pub(super) async fn asked<R: Runtime>(
 	name: String,
 	colour: Option<i64>,
 ) -> Result<JoinedSpace, JoinedSpaceError> {
-	let SharedSpace { joined, space_id, link } = relay::shared_space(app, &id).await?;
+	let SharedSpace { space_id, link } = relay::shared_space(app, &id).await?;
 	let args = json!({ "id": space_id, "name": name, "colour": colour });
 	let bound = app.state::<RelayGuests>().answer_bound();
 	let call = HostCall { command: SPACE_UPDATE_COMMAND, args, bound };
 	let space = space_answered(&id, relay::host_answered(app, &id, &link, call).await?)?;
-	let described = joined_spaces::JoinedSpace {
-		remote_space_id: Some(space_id),
-		name: space.name,
-		listing: HostListing { colour: space.colour, ..joined.listing },
-		..joined
-	};
+	let described = SpaceDescribed { space_id: space.id, name: space.name, colour: space.colour };
+	relay::description_adopted(app, &id, described).await?;
 	let state = app.state::<db::DatabaseState>();
-	presented(app, ready(&state)?, described).await
+	let database = ready(&state)?;
+	let stored = database.joined_spaces().find(id.clone()).await?;
+	let stored = stored.ok_or(JoinedSpaceError::UnknownJoinedSpace { id })?;
+	presented(app, database, stored).await
 }
 
 fn space_answered(id: &str, Answer { status, body }: Answer) -> Result<Space, JoinedSpaceError> {

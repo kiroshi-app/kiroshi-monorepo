@@ -314,6 +314,7 @@ describe("the local command list", () => {
 				"joined_spaces_list",
 				"joined_space_connect",
 				"joined_space_remove",
+				"joined_space_describe",
 				"user_preferences",
 				"user_set_preferences",
 				"window_declare_maximize_button",

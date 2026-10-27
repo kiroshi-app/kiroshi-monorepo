@@ -79,6 +79,7 @@ enum HostSide {
 	Leaving(Duration),
 	Answering(String),
 	GreetingAfterRead { frames: Vec<String>, reads: usize },
+	DroppingAfterItsAnswer { host: Arc<SealingHost>, command: &'static str, body: Value },
 }
 
 struct Room {
@@ -392,6 +393,16 @@ async fn membered(relay: Relay, mut socket: WebSocket) {
 			continue;
 		};
 		let frame: Value = serde_json::from_str(text.as_str()).expect("a json member frame");
+		let host = relay.room().host.clone();
+		if let HostSide::DroppingAfterItsAnswer { host, command, body } = host {
+			let call = host.opened(text.as_str()).plaintext;
+			if call["command"] != command {
+				continue;
+			}
+			let answer = json!({ "id": call["id"], "status": 200, "body": body }).to_string();
+			let sealed = Message::Text(host.sealed(&answer).into());
+			return socket.send(sealed).await.expect("the answer leaves");
+		}
 		if !is_missed_rekey(&frame) {
 			for greeting in relay.greeting().await {
 				if socket.send(Message::Text(greeting.into())).await.is_err() {
@@ -411,9 +422,10 @@ async fn membered(relay: Relay, mut socket: WebSocket) {
 				Message::Close(Some(close))
 			}
 			HostSide::Closing(code) => Message::Close(Some(CloseFrame { code, reason: "".into() })),
-			HostSide::Silent | HostSide::Leaving(_) | HostSide::GreetingAfterRead { .. } => {
-				continue
-			}
+			HostSide::Silent
+			| HostSide::Leaving(_)
+			| HostSide::GreetingAfterRead { .. }
+			| HostSide::DroppingAfterItsAnswer { .. } => continue,
 			HostSide::Answering(answer) => Message::Text(answer.into()),
 		};
 		if socket.send(answer).await.is_err() {
@@ -1957,6 +1969,71 @@ fn a_description_taken_while_a_reconciliation_reads_the_older_listing_is_kept() 
 		gate.send_replace(true);
 		reconciling.await.expect("the reconciliation");
 
+		let lab = vec![("Lab".to_owned(), Hue::new(200).expect("a hue"))];
+		assert_eq!(named_and_coloured(&member.app).await, lab);
+	});
+}
+
+async fn online_and_greeted(member: &Member, host: &SealingHost) -> JoinedSpace {
+	let joined = online_with_two_members(member, host).await;
+	member.relay.greets_after_the_next_members_read(vec![host.hello()]);
+	joined_space_connect(member.app.handle().clone(), joined.id.clone())
+		.await
+		.expect("the connection");
+	let guests = member.app.state::<RelayGuests>();
+	until("the link online", || async {
+		(guests.presence(&joined.id) == Some(Presence::Online)).then_some(())
+	})
+	.await;
+	joined
+}
+
+#[test]
+fn a_description_the_link_drops_before_its_event_still_lists_the_answered_name_and_hue() {
+	run(async {
+		let member = Member::new("described-then-dropped").await;
+		let host = Arc::new(member.host());
+		let joined = online_and_greeted(&member, &host).await;
+		let changes = changes_heard(&member.app);
+		let body = json!({
+			"id": SPACE, "name": "Lab", "colour": 200, "position": 0, "createdAt": 0,
+			"shared": true, "instanceId": INSTANCE,
+		});
+		let dropping = HostSide::DroppingAfterItsAnswer { host, command: "space_update", body };
+		member.relay.hosting(dropping);
+
+		let app = member.app.handle().clone();
+		let answered = joined_space_describe(app, joined.id.clone(), "Lab".to_owned(), Some(200))
+			.await
+			.expect("the description");
+
+		let lab = vec![("Lab".to_owned(), Hue::new(200).expect("a hue"))];
+		assert_eq!((answered.name.clone(), answered.colour), lab[0].clone());
+		assert_eq!(named_and_coloured(&member.app).await, lab);
+		assert_eq!(member.listed().await, vec![answered]);
+		let heard = changes.lock().expect("the events").clone();
+		assert_eq!(heard, vec![json!({ "id": joined.id, "hostedBy": "Ann", "colour": 200 })]);
+	});
+}
+
+#[test]
+fn a_description_heard_again_with_the_same_name_and_hue_writes_nothing_and_announces_nothing() {
+	run(async {
+		let member = Member::new("described-twice").await;
+		let host = member.host();
+		let joined = online_with_two_members(&member, &host).await;
+		let changes = changes_heard(&member.app);
+		let lab = || SpaceDescribed {
+			space_id: SPACE.to_owned(),
+			name: "Lab".to_owned(),
+			colour: Hue::new(200),
+		};
+
+		relay::description_adopted(member.app.handle(), &joined.id, lab()).await.expect("first");
+		relay::description_adopted(member.app.handle(), &joined.id, lab()).await.expect("again");
+
+		let heard = changes.lock().expect("the events").clone();
+		assert_eq!(heard, vec![json!({ "id": joined.id, "hostedBy": "Ann", "colour": 200 })]);
 		let lab = vec![("Lab".to_owned(), Hue::new(200).expect("a hue"))];
 		assert_eq!(named_and_coloured(&member.app).await, lab);
 	});

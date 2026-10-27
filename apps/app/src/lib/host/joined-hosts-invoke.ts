@@ -25,6 +25,7 @@ export const LOCAL_COMMANDS: ReadonlySet<string> = new Set([
 	"joined_space_connect",
 	"joined_space_members",
 	"joined_space_remove",
+	"joined_space_describe",
 	"join_link_listen",
 	"user_preferences",
 	"user_set_preferences",
