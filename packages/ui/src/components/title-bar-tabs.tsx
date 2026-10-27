@@ -331,6 +331,7 @@ const TitleBarTabItem = ({
 	const { t } = useTranslation("common")
 	const needsYou = Boolean(tab.isNeedingYou) && !isActive
 	const isLifted = lift.lift?.id === tab.id
+	const PinIcon = tab.isPinned ? Icons.Unpin : Icons.Pin
 
 	return (
 		<ContextMenu>
@@ -393,6 +394,7 @@ const TitleBarTabItem = ({
 					className={TITLE_BAR_MENU_ROW}
 					onClick={() => (tab.isPinned ? onUnpinTab : onPinTab)?.(tab.id)}
 				>
+					<PinIcon aria-hidden="true" className="size-3.5" />
 					{t(tab.isPinned ? "titleBar.unpinTab" : "titleBar.pinTab")}
 					<ContextMenuShortcut aria-hidden="true">
 						{t(TAB_MENU_SHORTCUTS.pinTab.hint)}
@@ -403,6 +405,7 @@ const TitleBarTabItem = ({
 					className={TITLE_BAR_MENU_ROW}
 					onClick={() => onNewTab?.()}
 				>
+					<Icons.NewTab aria-hidden="true" className="size-3.5" />
 					{t("titleBar.newTab")}
 					<ContextMenuShortcut aria-hidden="true">
 						{t(TAB_MENU_SHORTCUTS.newTab.hint)}
@@ -412,6 +415,7 @@ const TitleBarTabItem = ({
 					className={TITLE_BAR_MENU_ROW}
 					onClick={() => onDuplicateTab?.(tab.id)}
 				>
+					<Icons.Copy aria-hidden="true" className="size-3.5" />
 					{t("titleBar.duplicateTab")}
 				</ContextMenuItem>
 				<ContextMenuSeparator />
@@ -421,6 +425,7 @@ const TitleBarTabItem = ({
 					disabled={!hasClosedTab}
 					onClick={() => onReopenClosedTab?.()}
 				>
+					<Icons.ReopenTab aria-hidden="true" className="size-3.5" />
 					{t("titleBar.reopenClosedTab")}
 					<ContextMenuShortcut aria-hidden="true">
 						{t(TAB_MENU_SHORTCUTS.reopenClosedTab.hint)}
@@ -433,6 +438,7 @@ const TitleBarTabItem = ({
 					disabled={tab.isPinned}
 					onClick={() => onCloseTab?.(tab.id)}
 				>
+					<Icons.Close aria-hidden="true" className="size-3.5" />
 					{t("titleBar.closeTab")}
 					<ContextMenuShortcut aria-hidden="true">
 						{t(TAB_MENU_SHORTCUTS.closeTab.hint)}
@@ -443,6 +449,7 @@ const TitleBarTabItem = ({
 					className={TITLE_BAR_MENU_ROW}
 					onClick={() => onCloseOtherTabs?.(tab.id)}
 				>
+					<Icons.CloseOtherTabs aria-hidden="true" className="size-3.5" />
 					{t("titleBar.closeOtherTabs")}
 					<ContextMenuShortcut aria-hidden="true">
 						{t(TAB_MENU_SHORTCUTS.closeOtherTabs.hint)}
@@ -452,6 +459,7 @@ const TitleBarTabItem = ({
 					className={TITLE_BAR_MENU_ROW}
 					onClick={() => onMoveTabToNewWindow?.(tab.id)}
 				>
+					<Icons.NewWindow aria-hidden="true" className="size-3.5" />
 					{t("titleBar.moveTabToNewWindow")}
 				</ContextMenuItem>
 			</ContextMenuContent>

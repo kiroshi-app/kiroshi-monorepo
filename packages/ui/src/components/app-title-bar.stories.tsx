@@ -499,7 +499,12 @@ const expectTabMenu = async (menu: HTMLElement, pinRow: string) => {
 			row.querySelector('[data-slot="context-menu-shortcut"]') === null,
 		).toBe(UNHINTED_TAB_MENU_ROWS.includes(row.textContent ?? ""))
 		await expect(row.scrollWidth).toBe(row.clientWidth)
+		await expect(row.firstElementChild?.tagName).toBe("svg")
+		await expect(row.firstElementChild).toHaveAttribute("aria-hidden", "true")
 	}
+	await expect(
+		new Set(rows.map((row) => row.firstElementChild?.innerHTML)).size,
+	).toBe(rows.length)
 	await expect(
 		rows.map((row) => row.getAttribute("aria-keyshortcuts")),
 	).toEqual(TAB_MENU_KEYSHORTCUTS)
