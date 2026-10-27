@@ -25,7 +25,11 @@ import { useMembers } from "@/lib/host/use-members"
 import type { SettingsSearch } from "@/lib/navigation/settings-search"
 import type { SettingsNavigation } from "@/lib/navigation/use-settings-navigation"
 import type { JoinedSpacesController } from "@/lib/spaces/joined-spaces-controller"
-import { type ShownSpacePage, spaceRankOf } from "@/lib/spaces/settings-spaces"
+import {
+	avatarSeedOfRow,
+	type ShownSpacePage,
+	spaceRankOf,
+} from "@/lib/spaces/settings-spaces"
 import { toSpaceSettingsValue } from "@/lib/spaces/space-settings"
 import {
 	type LeftSpace,
@@ -197,7 +201,7 @@ export const SpaceSettingsScreen = ({
 	const sharedProps = {
 		...frame,
 		target: "space" as const,
-		spaceId,
+		spaceId: avatarSeedOfRow(switcherSpaces, spaceId),
 		spaceHost: hostBySpaceId[spaceId],
 		entry: search.entry ?? SPACE_ENTRY,
 		onEntryChange: navigation.showEntry,

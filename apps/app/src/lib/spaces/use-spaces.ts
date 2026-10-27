@@ -6,8 +6,10 @@ import {
 	type SpacesState,
 } from "./spaces-controller"
 
+import { HOSTING_CHANGED_EVENT } from "../bindings"
 import { useController } from "../use-controller"
 import type { TranscriptStore } from "../conversations/store-port"
+import { useInvalidateOnHostEvent } from "../query/host-invalidations"
 
 export type Spaces = {
 	state: SpacesState
@@ -20,5 +22,8 @@ export const useSpaces = (store: TranscriptStore): Spaces => {
 		createSpacesController(store, { queryClient }),
 	)
 	useQuery(spaces.controller.listQuery)
+	useInvalidateOnHostEvent(HOSTING_CHANGED_EVENT, [
+		spaces.controller.listQuery.queryKey,
+	])
 	return spaces
 }

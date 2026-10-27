@@ -63,8 +63,8 @@ const sourceWith = (actions: CompanionMenuActions): CompanionMenuSource => ({
 		perso: [{ id: "section-build", name: "Build", position: 0 }],
 	},
 	spaces: [
-		{ id: "perso", name: "Perso", colour: "blue" },
-		{ id: "vocca", name: "Vocca", colour: "green" },
+		{ id: "perso", name: "Perso", colour: "blue", avatarSeed: "perso" },
+		{ id: "vocca", name: "Vocca", colour: "green", avatarSeed: "vocca" },
 	],
 })
 

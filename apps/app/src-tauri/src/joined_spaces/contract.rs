@@ -24,6 +24,7 @@ pub struct JoinedSpace {
 	pub wait: Option<JoinedSpaceWait>,
 	pub hosted_by: Option<String>,
 	pub colour: AvatarBlot,
+	pub instance_id: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
@@ -81,6 +82,7 @@ impl JoinedSpace {
 			name: joined.name,
 			state,
 			wait,
+			instance_id,
 		}
 	}
 }
@@ -273,6 +275,14 @@ mod tests {
 		assert_eq!(crossed["hostedBy"], "Ann");
 		assert_eq!(crossed["colour"], json!(colour_of("joined-1")));
 		assert!(crossed.get("hosted_by").is_none(), "{crossed}");
+	}
+
+	#[test]
+	fn a_joined_space_crosses_to_the_front_with_its_relay_instance_beside_its_row_id() {
+		let crossed = presented(a_stored_row(None), &[]);
+
+		assert_eq!(crossed["id"], "joined-1");
+		assert_eq!(crossed["instanceId"], "instance-1");
 	}
 
 	#[test]

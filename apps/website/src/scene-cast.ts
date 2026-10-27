@@ -181,6 +181,7 @@ const TRIAGE = castConversation({
 const PERSONAL: SceneSpace = {
 	id: "personal",
 	name: SCENE_COPY.spaces.personal,
+	avatarSeed: "personal",
 	colour: "blue",
 	bots: [MOCHI, OLIVE, PIP, TOMO, ASH],
 	rows: [
@@ -226,6 +227,7 @@ const PERSONAL: SceneSpace = {
 const WORK: SceneSpace = {
 	id: "work",
 	name: SCENE_COPY.spaces.work,
+	avatarSeed: "work",
 	bots: [WREN, IVY, SABLE, JUNO],
 	rows: [
 		rosterRow(WREN, SCENE_COPY.bots.wren),
@@ -273,11 +275,14 @@ const WORK: SceneSpace = {
 
 const SCENE_SPACES: SceneSpace[] = [WORK, PERSONAL]
 
-const SPACES: Space[] = SCENE_SPACES.map(({ id, name, colour }) => ({
-	id,
-	name,
-	colour,
-}))
+const SPACES: Space[] = SCENE_SPACES.map(
+	({ id, name, colour, avatarSeed }) => ({
+		id,
+		name,
+		colour,
+		avatarSeed,
+	}),
+)
 
 const spaceOf = (id: string): SceneSpace =>
 	SCENE_SPACES.find((space) => space.id === id) ?? WORK

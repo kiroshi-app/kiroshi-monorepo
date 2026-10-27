@@ -402,6 +402,7 @@ const STUDIO: JoinedSpace = {
 	state: "online",
 	hostedBy: null,
 	colour: "purple",
+	instanceId: "instance-of-joined-studio",
 }
 
 const STUDIO_ROW = "joined:joined-studio"

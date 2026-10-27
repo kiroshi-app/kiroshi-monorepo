@@ -18,6 +18,7 @@ const HARBOR: JoinedSpace = {
 	state: "waitingForHost",
 	hostedBy: "Steve",
 	colour: "green",
+	instanceId: "instance-of-harbor",
 }
 
 const ATELIER: SpaceInvitation = {
@@ -94,8 +95,8 @@ describe("spacePageOf", () => {
 describe("settingsSpacesOf", () => {
 	const listed = settingsSpacesOf({
 		spaces: [
-			{ id: "studio", name: "Studio" },
-			{ id: "joined:harbor", name: "Harbor" },
+			{ id: "studio", name: "Studio", avatarSeed: "studio" },
+			{ id: "joined:harbor", name: "Harbor", avatarSeed: "joined:harbor" },
 		],
 		hostBySpaceId: { studio: "shared", "joined:harbor": "down" },
 		badgesBySpaceId: { studio: "unread" },
@@ -107,12 +108,19 @@ describe("settingsSpacesOf", () => {
 
 	it("lists the spaces of yours apart from the joined ones, each with its host mark", () => {
 		expect(listed.ownedSpaces).toEqual([
-			{ id: "studio", name: "Studio", host: "shared", hasAttention: true },
+			{
+				id: "studio",
+				name: "Studio",
+				avatarSeed: "studio",
+				host: "shared",
+				hasAttention: true,
+			},
 		])
 		expect(listed.joinedSpaces).toEqual([
 			{
 				id: "joined:harbor",
 				name: "Harbor",
+				avatarSeed: "joined:harbor",
 				host: "down",
 				hasAttention: false,
 			},
@@ -121,7 +129,12 @@ describe("settingsSpacesOf", () => {
 
 	it("lists the received invitations, without the ones already joined", () => {
 		expect(listed.invitations).toEqual([
-			{ id: "atelier", name: "Atelier", colour: undefined },
+			{
+				id: "atelier",
+				name: "Atelier",
+				colour: undefined,
+				avatarSeed: "atelier",
+			},
 		])
 	})
 })
@@ -130,6 +143,7 @@ describe("spaceRankOf", () => {
 	const spaces = Array.from({ length: 10 }, (_, i) => ({
 		id: `space-${i + 1}`,
 		name: `Space ${i + 1}`,
+		avatarSeed: `space-${i + 1}`,
 	}))
 
 	it("ranks a space by its place in the switcher", () => {

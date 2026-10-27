@@ -1200,7 +1200,9 @@ const CompanionMenuHarness = ({
 					})),
 				},
 				sectionsBySpaceId: {},
-				spaces: [{ id: SPACE, name: "Personal", colour: "blue" }],
+				spaces: [
+					{ id: SPACE, name: "Personal", colour: "blue", avatarSeed: SPACE },
+				],
 			}),
 		},
 		children,
@@ -4510,6 +4512,7 @@ const INSTALLED_SPACE: Space = {
 	position: 0,
 	createdAt: 0,
 	shared: false,
+	instanceId: null,
 }
 
 const receiptIn = (row: HTMLElement) =>

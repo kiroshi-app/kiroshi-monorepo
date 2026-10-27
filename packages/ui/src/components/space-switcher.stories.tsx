@@ -21,11 +21,16 @@ import {
 } from "@workspace/ui/components/space-switcher"
 
 const SPACES: Space[] = [
-	{ id: "perso", name: "Perso", colour: "blue" },
-	{ id: "vocca", name: "Vocca", colour: "green" },
-	{ id: "atelier", name: "Atelier", colour: "pink" },
-	{ id: "veille", name: "Veille", colour: "yellow" },
-	{ id: "archives", name: "Archives", colour: "purple" },
+	{ id: "perso", name: "Perso", colour: "blue", avatarSeed: "perso" },
+	{ id: "vocca", name: "Vocca", colour: "green", avatarSeed: "vocca" },
+	{ id: "atelier", name: "Atelier", colour: "pink", avatarSeed: "atelier" },
+	{ id: "veille", name: "Veille", colour: "yellow", avatarSeed: "veille" },
+	{
+		id: "archives",
+		name: "Archives",
+		colour: "purple",
+		avatarSeed: "archives",
+	},
 ]
 
 const BADGES: Record<string, BotBadge> = {
@@ -39,16 +44,17 @@ const LONG_SPACES: Space[] = [
 		id: "perso",
 		name: "Everything I have not filed anywhere else yet",
 		colour: "blue",
+		avatarSeed: "perso",
 	},
-	{ id: "vocca", name: "Vocca", colour: "green" },
+	{ id: "vocca", name: "Vocca", colour: "green", avatarSeed: "vocca" },
 ]
 
 const MANY_SPACES: Space[] = [
 	...SPACES,
-	{ id: "lecture", name: "Lecture", colour: "red" },
-	{ id: "cuisine", name: "Cuisine", colour: "orange" },
-	{ id: "musique", name: "Musique", colour: "cyan" },
-	{ id: "jardin", name: "Jardin", colour: "green" },
+	{ id: "lecture", name: "Lecture", colour: "red", avatarSeed: "lecture" },
+	{ id: "cuisine", name: "Cuisine", colour: "orange", avatarSeed: "cuisine" },
+	{ id: "musique", name: "Musique", colour: "cyan", avatarSeed: "musique" },
+	{ id: "jardin", name: "Jardin", colour: "green", avatarSeed: "jardin" },
 ]
 
 const TITLE_BAR_LINE =
@@ -355,8 +361,8 @@ export const SingleSpace = meta.story({
 export const Colourless = meta.story({
 	args: {
 		spaces: [
-			{ id: "perso", name: "Perso" },
-			{ id: "vocca", name: "Vocca" },
+			{ id: "perso", name: "Perso", avatarSeed: "perso" },
+			{ id: "vocca", name: "Vocca", avatarSeed: "vocca" },
 			SPACES[2],
 		],
 		selectedSpaceId: "perso",
@@ -692,14 +698,16 @@ const HOSTS: Record<string, SpaceHost> = {
 }
 
 const LONG_HOSTED_SPACES: Space[] = [
-	{ id: "perso", name: "Perso", colour: "blue" },
+	{ id: "perso", name: "Perso", colour: "blue", avatarSeed: "perso" },
 	{
 		id: "vocca",
 		name: "Everything the team has not filed anywhere else yet",
+		avatarSeed: "vocca",
 	},
 	{
 		id: "veille",
 		name: "Reading list shared with the whole studio this quarter",
+		avatarSeed: "veille",
 	},
 ]
 
@@ -928,7 +936,12 @@ const SECOND_INVITED: Omit<SpaceInvitation, "state"> = {
 	hostEmail: "marc@example.com",
 }
 
-const PERSONAL: Space = { id: "personal", name: "Personal", colour: "green" }
+const PERSONAL: Space = {
+	id: "personal",
+	name: "Personal",
+	colour: "green",
+	avatarSeed: "personal",
+}
 
 const PERSONAL_OPEN = {
 	spaces: [PERSONAL],
@@ -937,7 +950,7 @@ const PERSONAL_OPEN = {
 
 const JOINED_SPACES: Space[] = [
 	PERSONAL,
-	{ id: "studio", name: "Studio", colour: "blue" },
+	{ id: "studio", name: "Studio", colour: "blue", avatarSeed: "studio" },
 ]
 
 const INVITED_ARTBOARD =
@@ -1615,7 +1628,9 @@ export const InvitationOverBotBadge = meta.story({
 const ITERATION_FIVE =
 	"Measured against the Paper page `Iteration 5` of `Kiroshi, Invitations`, dark only."
 
-const NOTES: Space[] = [{ id: "notes", name: "Notes", colour: "green" }]
+const NOTES: Space[] = [
+	{ id: "notes", name: "Notes", colour: "green", avatarSeed: "notes" },
+]
 
 const STUDIO_INVITATION: SpaceInvitation = {
 	id: "studio",

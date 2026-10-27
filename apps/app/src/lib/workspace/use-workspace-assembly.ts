@@ -92,14 +92,6 @@ export const useWorkspaceAssembly = () => {
 	})
 	const collapsedSectionIds = useSpaceSections({ core, rosterLines })
 	const sidebarTab = useSidebarPanelSwitch({ core, sidebarMissions })
-	const companionMenu = useCompanionMenuLookup({
-		actions: rosterLines.sidebarActions,
-		conversationRosters: core.roster.state.conversationRosters,
-		openSpaceId: scopes.openRowId,
-		rosters: core.roster.state.rosters,
-		sectionsBySpaceId: core.sections.state.sections,
-		spaces: core.spaces.state.spaces,
-	})
 	const selectCompanion = useCompanionSelectGuard({
 		openSpaceId: scopes.openRowId,
 		rosters: core.roster.state.rosters,
@@ -111,6 +103,14 @@ export const useWorkspaceAssembly = () => {
 		core.joinedSpaces,
 		core.invitations,
 	)
+	const companionMenu = useCompanionMenuLookup({
+		actions: rosterLines.sidebarActions,
+		conversationRosters: core.roster.state.conversationRosters,
+		openSpaceId: scopes.openRowId,
+		rosters: core.roster.state.rosters,
+		sectionsBySpaceId: core.sections.state.sections,
+		spaces: switcher.ownedSpaces,
+	})
 	const authorship = useThreadAuthorship(core)
 	const joinedHost = useOpenJoinedHost(
 		core.spaces.state.selectedSpaceId,

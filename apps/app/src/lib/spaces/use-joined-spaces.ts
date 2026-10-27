@@ -7,6 +7,7 @@ import {
 	createJoinedSpacesController,
 	type DepartedSpace,
 	hostMarksOf,
+	isJoinedRowId,
 	type JoinedSpacesController,
 	type JoinedSpacesState,
 	openJoinedSpaceOf,
@@ -81,6 +82,7 @@ export const useSwitcherSpaces = (
 		)
 		return {
 			spaces: switcherSpaces,
+			ownedSpaces: switcherSpaces.filter((space) => !isJoinedRowId(space.id)),
 			selectedSpaceId: openRowId,
 			selectedSpace: selectedSpaceOf(switcherSpaces, openRowId),
 			hostBySpaceId: {

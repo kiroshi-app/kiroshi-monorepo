@@ -32,6 +32,7 @@ const HOST_PERSONAL: JoinedSpace = {
 	state: "online",
 	hostedBy: null,
 	colour: "orange",
+	instanceId: "instance-of-joined-personal",
 }
 
 const HOST_PERSONAL_ROW = "joined:joined-personal"

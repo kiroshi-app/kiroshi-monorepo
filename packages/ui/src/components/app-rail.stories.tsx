@@ -40,7 +40,12 @@ const ENTRY_NAMES: Record<AppRailPanel, string> = {
 
 const SPACE_SETTINGS = "Space settings"
 
-const CURRENT_SPACE: Space = { id: "vocca", name: "Vocca", colour: "blue" }
+const CURRENT_SPACE: Space = {
+	id: "vocca",
+	name: "Vocca",
+	colour: "blue",
+	avatarSeed: "vocca",
+}
 
 const SPACE_LOGO = 26
 

@@ -19,6 +19,9 @@ const UPSERT_HOSTED: &str = "INSERT INTO space_hosting (space_id, instance_id, i
 const SELECT_HOSTED: &str =
 	"SELECT space_id FROM space_hosting WHERE is_hosted = 1 ORDER BY space_id ASC";
 
+const SELECT_HOSTINGS: &str =
+	"SELECT space_id, instance_id, is_hosted FROM space_hosting ORDER BY space_id ASC";
+
 const SELECT_REGISTERED_INSTANCES: &str =
 	"SELECT instance_id FROM space_hosting WHERE instance_id IS NOT NULL ORDER BY instance_id ASC";
 
@@ -27,6 +30,13 @@ pub struct Registration {
 	pub name: String,
 	pub colour: Option<AvatarBlot>,
 	pub instance_id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Hosting {
+	pub space_id: String,
+	pub instance_id: Option<String>,
+	pub is_hosted: bool,
 }
 
 pub struct SpaceHostingRepository {
@@ -70,6 +80,24 @@ impl SpaceHostingRepository {
 				let mut statement = connection.prepare_cached(SELECT_HOSTED)?;
 				let ids = statement.query_map([], |row| row.get(0))?.collect::<Result<_, _>>()?;
 				Ok(ids)
+			})
+			.await
+	}
+
+	pub async fn hostings(&self) -> Result<Vec<Hosting>, DatabaseError> {
+		self.access
+			.call(|connection| {
+				let mut statement = connection.prepare_cached(SELECT_HOSTINGS)?;
+				let hostings = statement
+					.query_map([], |row| {
+						Ok(Hosting {
+							space_id: row.get(0)?,
+							instance_id: row.get(1)?,
+							is_hosted: row.get(2)?,
+						})
+					})?
+					.collect::<Result<_, _>>()?;
+				Ok(hostings)
 			})
 			.await
 	}
@@ -184,5 +212,26 @@ mod tests {
 
 		assert!(intended.is_empty());
 		assert_eq!(hosting.registered_instance_ids().await.expect("listed"), vec!["i1".to_owned()]);
+	}
+
+	#[tokio::test]
+	async fn a_hosting_keeps_its_instance_once_the_space_stops_being_hosted() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let hosting = database.space_hosting();
+
+		let untouched = hosting.hostings().await.expect("listed");
+		hosting.registered(PERSONAL.to_owned(), "i1".to_owned()).await.expect("stored");
+		hosting.set_hosted(PERSONAL.to_owned(), false).await.expect("cleared");
+
+		assert!(untouched.is_empty());
+		assert_eq!(
+			hosting.hostings().await.expect("listed"),
+			vec![Hosting {
+				space_id: PERSONAL.to_owned(),
+				instance_id: Some("i1".to_owned()),
+				is_hosted: false
+			}]
+		);
 	}
 }

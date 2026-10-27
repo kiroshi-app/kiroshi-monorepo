@@ -7,8 +7,8 @@ import type { Space } from "@workspace/ui/components/space"
 import type { Lifter } from "@workspace/ui/hooks/use-roster-lift"
 
 export const SIDEBAR_SPACES: Space[] = [
-	{ id: "perso", name: "Perso", colour: "blue" },
-	{ id: "vocca", name: "Vocca", colour: "green" },
+	{ id: "perso", name: "Perso", colour: "blue", avatarSeed: "perso" },
+	{ id: "vocca", name: "Vocca", colour: "green", avatarSeed: "vocca" },
 ]
 
 export const SIDEBAR_SECTION: AppSidebarSection = {

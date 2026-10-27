@@ -282,15 +282,30 @@ const LONG_ROSTER: AppSidebarBot[] = [0, 1, 2].flatMap((pass) =>
 )
 
 const SPACES: Space[] = [
-	{ id: "perso", name: "Perso", colour: "blue" },
-	{ id: "vocca", name: "Vocca", colour: "green" },
-	{ id: "atelier", name: "Atelier", colour: "pink" },
-	{ id: "veille", name: "Veille", colour: "yellow" },
-	{ id: "archives", name: "Archives", colour: "purple" },
-	{ id: "chantier", name: "Chantier", colour: "orange" },
-	{ id: "lecture", name: "Lecture", colour: "cyan" },
-	{ id: "brouillons", name: "Brouillons", colour: "red" },
-	{ id: "essais", name: "Essais", colour: "green" },
+	{ id: "perso", name: "Perso", colour: "blue", avatarSeed: "perso" },
+	{ id: "vocca", name: "Vocca", colour: "green", avatarSeed: "vocca" },
+	{ id: "atelier", name: "Atelier", colour: "pink", avatarSeed: "atelier" },
+	{ id: "veille", name: "Veille", colour: "yellow", avatarSeed: "veille" },
+	{
+		id: "archives",
+		name: "Archives",
+		colour: "purple",
+		avatarSeed: "archives",
+	},
+	{
+		id: "chantier",
+		name: "Chantier",
+		colour: "orange",
+		avatarSeed: "chantier",
+	},
+	{ id: "lecture", name: "Lecture", colour: "cyan", avatarSeed: "lecture" },
+	{
+		id: "brouillons",
+		name: "Brouillons",
+		colour: "red",
+		avatarSeed: "brouillons",
+	},
+	{ id: "essais", name: "Essais", colour: "green", avatarSeed: "essais" },
 ]
 
 const READER_NAME = "Ada Martin"
@@ -2767,6 +2782,7 @@ const WORDY_SPACE: Space = {
 	id: "wordy",
 	name: "Recherche, veille et documentation partagée",
 	colour: "cyan",
+	avatarSeed: "wordy",
 }
 
 const WORDY_SPACES = [...FIVE_SPACES, WORDY_SPACE]
@@ -4006,9 +4022,14 @@ export const CaptionWindowControls = meta.story({
 const MOCKUP =
 	"Measured against the Paper page `Mockup`; light and dark through the theme toolbar."
 
-const STUDIO: Space = { id: "studio", name: "Studio", colour: "orange" }
+const STUDIO: Space = {
+	id: "studio",
+	name: "Studio",
+	colour: "orange",
+	avatarSeed: "studio",
+}
 
-const GARAGE: Space = { id: "garage", name: "Garage" }
+const GARAGE: Space = { id: "garage", name: "Garage", avatarSeed: "garage" }
 
 const TITLE_BAR_ARGS = {
 	"data-tauri-drag-region": "deep",
@@ -4292,6 +4313,7 @@ const LONG_SPACE: Space = {
 	id: "long-studio",
 	name: "Studio of the quarterly planning offsite in Lisbon",
 	colour: "orange",
+	avatarSeed: "long-studio",
 }
 
 const NARROW_WINDOW = 320

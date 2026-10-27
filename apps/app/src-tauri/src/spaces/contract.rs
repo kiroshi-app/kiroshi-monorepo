@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::conversations::contract::{AvatarBlot, StorageFailure};
+use crate::db::repositories::space_hosting::Hosting;
 use crate::db::repositories::{space_rows, space_settings, spaces};
 use crate::db::DatabaseError;
 
@@ -13,12 +14,15 @@ pub struct Space {
 	pub position: i64,
 	pub created_at: i64,
 	pub shared: bool,
+	pub instance_id: Option<String>,
 }
 
 impl Space {
-	pub fn presented(space: spaces::Space, hosted_space_ids: &[String]) -> Self {
+	pub fn presented(space: spaces::Space, hostings: &[Hosting]) -> Self {
+		let hosting = hostings.iter().find(|hosting| hosting.space_id == space.id);
 		Self {
-			shared: hosted_space_ids.contains(&space.id),
+			shared: hosting.is_some_and(|hosting| hosting.is_hosted),
+			instance_id: hosting.and_then(|hosting| hosting.instance_id.clone()),
 			id: space.id,
 			name: space.name,
 			colour: space.colour.map(Into::into),
@@ -160,6 +164,7 @@ mod tests {
 				position: 1,
 				created_at: 3,
 				shared: true,
+				instance_id: Some("i1".to_owned()),
 			})
 			.expect("the space serializes"),
 			json!({
@@ -168,7 +173,8 @@ mod tests {
 				"colour": "cyan",
 				"position": 1,
 				"createdAt": 3,
-				"shared": true
+				"shared": true,
+				"instanceId": "i1"
 			})
 		);
 	}
@@ -183,6 +189,7 @@ mod tests {
 				position: 1,
 				created_at: 3,
 				shared: false,
+				instance_id: None,
 			})
 			.expect("the space serializes"),
 			json!({
@@ -191,7 +198,8 @@ mod tests {
 				"colour": null,
 				"position": 1,
 				"createdAt": 3,
-				"shared": false
+				"shared": false,
+				"instanceId": null
 			})
 		);
 	}

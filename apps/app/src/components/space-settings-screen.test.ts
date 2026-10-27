@@ -104,6 +104,7 @@ const GARAGE: JoinedSpace = {
 	state: "online",
 	hostedBy: null,
 	colour: "green",
+	instanceId: "instance-of-joined-garage",
 }
 
 const GARAGE_ROW = "joined:joined-garage"
