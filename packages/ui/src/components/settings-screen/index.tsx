@@ -122,7 +122,7 @@ type SettingsScreenRequestLeave = (navigate: () => void) => void
 
 type SettingsScreenNavigation = {
 	entry: string
-	onEntryChange: (entry: string) => void
+	onEntryChange: (entry: string, modifiers: ClickModifiers) => void
 	onBack: () => void
 	backLabel?: string
 	rail: AppFrameRailProps
@@ -333,13 +333,17 @@ const SettingsScreenLayout = ({
 		[guardLeave],
 	)
 
-	const select = (value: string) => leaveThen(() => onEntryChange(value))
+	const select = (value: string, modifiers: ClickModifiers) =>
+		leaveThen(() => onEntryChange(value, modifiers))
 
-	const openApplication = (server: BotMcpServerItem) => {
+	const openApplication = (
+		server: BotMcpServerItem,
+		modifiers: ClickModifiers,
+	) => {
 		if (server.name === openedName) return
 		leaveThen(() => {
 			sessions.applications.open(server)
-			onEntryChange(APPLICATIONS_ENTRY)
+			onEntryChange(APPLICATIONS_ENTRY, modifiers)
 		})
 	}
 
@@ -355,7 +359,7 @@ const SettingsScreenLayout = ({
 			isSelected={item.value === shown.value && !isSubEntrySelected}
 			key={item.value}
 			label={item.label}
-			onSelect={() => select(item.value)}
+			onSelect={(modifiers) => select(item.value, modifiers)}
 		>
 			{item.value === APPLICATIONS_ENTRY &&
 			isApplicationsShown &&
@@ -368,7 +372,7 @@ const SettingsScreenLayout = ({
 							key={server.name}
 							mark={server.mark}
 							name={server.displayName ?? server.name}
-							onSelect={() => openApplication(server)}
+							onSelect={(modifiers) => openApplication(server, modifiers)}
 						/>
 					))}
 					<SettingsMenuAddApplication

@@ -1,6 +1,6 @@
 import { type ComponentType, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { expect, fn, screen, waitFor, within } from "storybook/test"
+import { expect, fireEvent, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
@@ -68,9 +68,9 @@ const ScreenHost = (props: UserSettingsScreenProps) => {
 			{...props}
 			entry={entry}
 			language={language}
-			onEntryChange={(next) => {
+			onEntryChange={(next, modifiers) => {
 				setEntry(next)
-				props.onEntryChange(next)
+				props.onEntryChange(next, modifiers)
 			}}
 			onLanguageChange={(next) => {
 				setLanguage(next)
@@ -799,6 +799,49 @@ export const LeavingAnUnsavedSkillByTheRail = meta.story({
 			expect(within(main).queryByLabelText("Body")).toBeNull(),
 		)
 		await expect(args.onEntryChange).not.toHaveBeenCalled()
+	},
+})
+
+export const OpensAnEntryWithClickModifiers = meta.story({
+	tags: ["test-only"],
+	args: { entry: "skills" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A skill with an edit not yet saved, then Appearance Cmd clicked and the leave confirmed, then Appearance clicked every way a host can tell apart. Check that the confirmed leave hands the caller the entry with the Cmd of the original click, and that a free entry reports middle with the keys held, Cmd, Ctrl or Shift alone, none on a plain click or Enter, and nothing on a right-click.",
+			},
+		},
+	},
+	play: async ({ args, userEvent }) => {
+		const menu = await expectEntryShown("Skills")
+		const main = screen.getByRole("main")
+		await userEvent.click(
+			within(main).getByRole("button", { name: /release-notes/ }),
+		)
+		await userEvent.type(within(main).getByLabelText("Body"), "!")
+		const appearance = within(menu).getByRole("button", { name: "Appearance" })
+
+		fireEvent.click(appearance, { metaKey: true, detail: 1 })
+		await userEvent.click(
+			within(
+				await screen.findByRole("alertdialog", {
+					name: "Leave without saving?",
+				}),
+			).getByRole("button", { name: "Leave" }),
+		)
+		await expect(args.onEntryChange).toHaveBeenCalledOnce()
+		await expect(args.onEntryChange).toHaveBeenLastCalledWith("appearance", {
+			...NO_CLICK_MODIFIERS,
+			meta: true,
+		})
+
+		await expectClickModifiers({
+			target: within(menu).getByRole("button", { name: "Appearance" }),
+			callback: args.onEntryChange,
+			reported: ["appearance"],
+			userEvent,
+		})
 	},
 })
 
