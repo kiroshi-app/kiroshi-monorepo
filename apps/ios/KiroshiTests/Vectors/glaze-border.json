@@ -1,0 +1,213 @@
+{
+	"compactBelow": 20,
+	"borders": [
+		{
+			"side": 12,
+			"theme": "light",
+			"isCompact": true,
+			"edgeWidth": 0.6000000000000001,
+			"edge": { "colour": "#000000", "opacity": 0.1 },
+			"lipOpacity": null
+		},
+		{
+			"side": 14,
+			"theme": "light",
+			"isCompact": true,
+			"edgeWidth": 0.7000000000000001,
+			"edge": { "colour": "#000000", "opacity": 0.1 },
+			"lipOpacity": null
+		},
+		{
+			"side": 16,
+			"theme": "light",
+			"isCompact": true,
+			"edgeWidth": 0.8,
+			"edge": { "colour": "#000000", "opacity": 0.1 },
+			"lipOpacity": null
+		},
+		{
+			"side": 17.87,
+			"theme": "light",
+			"isCompact": true,
+			"edgeWidth": 0.8935000000000001,
+			"edge": { "colour": "#000000", "opacity": 0.1 },
+			"lipOpacity": null
+		},
+		{
+			"side": 19,
+			"theme": "light",
+			"isCompact": true,
+			"edgeWidth": 0.9500000000000001,
+			"edge": { "colour": "#000000", "opacity": 0.1 },
+			"lipOpacity": null
+		},
+		{
+			"side": 20,
+			"theme": "light",
+			"isCompact": false,
+			"edgeWidth": 1,
+			"edge": { "colour": "#000000", "opacity": 0.08 },
+			"lipOpacity": 0.55
+		},
+		{
+			"side": 24,
+			"theme": "light",
+			"isCompact": false,
+			"edgeWidth": 1,
+			"edge": { "colour": "#000000", "opacity": 0.08 },
+			"lipOpacity": 0.55
+		},
+		{
+			"side": 28,
+			"theme": "light",
+			"isCompact": false,
+			"edgeWidth": 1,
+			"edge": { "colour": "#000000", "opacity": 0.08 },
+			"lipOpacity": 0.55
+		},
+		{
+			"side": 40,
+			"theme": "light",
+			"isCompact": false,
+			"edgeWidth": 1,
+			"edge": { "colour": "#000000", "opacity": 0.08 },
+			"lipOpacity": 0.55
+		},
+		{
+			"side": 52,
+			"theme": "light",
+			"isCompact": false,
+			"edgeWidth": 1.3,
+			"edge": { "colour": "#000000", "opacity": 0.08 },
+			"lipOpacity": 0.55
+		},
+		{
+			"side": 56,
+			"theme": "light",
+			"isCompact": false,
+			"edgeWidth": 1.4000000000000001,
+			"edge": { "colour": "#000000", "opacity": 0.08 },
+			"lipOpacity": 0.55
+		},
+		{
+			"side": 64,
+			"theme": "light",
+			"isCompact": false,
+			"edgeWidth": 1.6,
+			"edge": { "colour": "#000000", "opacity": 0.08 },
+			"lipOpacity": 0.55
+		},
+		{
+			"side": 88,
+			"theme": "light",
+			"isCompact": false,
+			"edgeWidth": 2.2,
+			"edge": { "colour": "#000000", "opacity": 0.08 },
+			"lipOpacity": 0.55
+		},
+		{
+			"side": 12,
+			"theme": "dark",
+			"isCompact": true,
+			"edgeWidth": 0.6000000000000001,
+			"edge": { "colour": "#ffffff", "opacity": 0.12 },
+			"lipOpacity": null
+		},
+		{
+			"side": 14,
+			"theme": "dark",
+			"isCompact": true,
+			"edgeWidth": 0.7000000000000001,
+			"edge": { "colour": "#ffffff", "opacity": 0.12 },
+			"lipOpacity": null
+		},
+		{
+			"side": 16,
+			"theme": "dark",
+			"isCompact": true,
+			"edgeWidth": 0.8,
+			"edge": { "colour": "#ffffff", "opacity": 0.12 },
+			"lipOpacity": null
+		},
+		{
+			"side": 17.87,
+			"theme": "dark",
+			"isCompact": true,
+			"edgeWidth": 0.8935000000000001,
+			"edge": { "colour": "#ffffff", "opacity": 0.12 },
+			"lipOpacity": null
+		},
+		{
+			"side": 19,
+			"theme": "dark",
+			"isCompact": true,
+			"edgeWidth": 0.9500000000000001,
+			"edge": { "colour": "#ffffff", "opacity": 0.12 },
+			"lipOpacity": null
+		},
+		{
+			"side": 20,
+			"theme": "dark",
+			"isCompact": false,
+			"edgeWidth": 1,
+			"edge": { "colour": "#ffffff", "opacity": 0.1 },
+			"lipOpacity": 0.22
+		},
+		{
+			"side": 24,
+			"theme": "dark",
+			"isCompact": false,
+			"edgeWidth": 1,
+			"edge": { "colour": "#ffffff", "opacity": 0.1 },
+			"lipOpacity": 0.22
+		},
+		{
+			"side": 28,
+			"theme": "dark",
+			"isCompact": false,
+			"edgeWidth": 1,
+			"edge": { "colour": "#ffffff", "opacity": 0.1 },
+			"lipOpacity": 0.22
+		},
+		{
+			"side": 40,
+			"theme": "dark",
+			"isCompact": false,
+			"edgeWidth": 1,
+			"edge": { "colour": "#ffffff", "opacity": 0.1 },
+			"lipOpacity": 0.22
+		},
+		{
+			"side": 52,
+			"theme": "dark",
+			"isCompact": false,
+			"edgeWidth": 1.3,
+			"edge": { "colour": "#ffffff", "opacity": 0.1 },
+			"lipOpacity": 0.22
+		},
+		{
+			"side": 56,
+			"theme": "dark",
+			"isCompact": false,
+			"edgeWidth": 1.4000000000000001,
+			"edge": { "colour": "#ffffff", "opacity": 0.1 },
+			"lipOpacity": 0.22
+		},
+		{
+			"side": 64,
+			"theme": "dark",
+			"isCompact": false,
+			"edgeWidth": 1.6,
+			"edge": { "colour": "#ffffff", "opacity": 0.1 },
+			"lipOpacity": 0.22
+		},
+		{
+			"side": 88,
+			"theme": "dark",
+			"isCompact": false,
+			"edgeWidth": 2.2,
+			"edge": { "colour": "#ffffff", "opacity": 0.1 },
+			"lipOpacity": 0.22
+		}
+	]
+}

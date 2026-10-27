@@ -122,6 +122,7 @@ struct CompanionAvatarArt: View {
 
     var body: some View {
         content
+            .overlay { HexagonBorder() }
             .task(id: pictureRequest) {
                 guard let file = pictureRequest?.file else { return }
                 await pictures?.load(file)

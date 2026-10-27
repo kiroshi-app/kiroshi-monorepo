@@ -48,6 +48,7 @@ private struct ScaledPile: View {
                 hole(at: pile.shown.count)
                 slot(at: pile.shown.count) {
                     outline.fill(Color.conversation(.pileCounter))
+                        .overlay { HexagonBorder() }
                         .overlay {
                             Text("+\(pile.hiddenCount)")
                                 .font(
@@ -89,7 +90,6 @@ private struct ScaledPile: View {
         let side = Self.hexagon * unit
         return content()
             .frame(width: side, height: side)
-            .overlay { outline.stroke(Color.conversation(.hexagonOutline), lineWidth: unit) }
             .offset(x: (Self.knockout + Self.step * Double(index)) * unit)
     }
 }

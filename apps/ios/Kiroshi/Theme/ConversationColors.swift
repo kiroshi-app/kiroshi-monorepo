@@ -5,11 +5,10 @@ enum ConversationColor: Hashable, Sendable {
     case glyph(CompanionTint?)
     case pileCounter
     case pileCounterGlyph
-    case hexagonOutline
 
     static var allCases: [ConversationColor] {
         let tints = [nil] + CompanionTint.allCases.map(Optional.some)
-        return tints.map(cell) + tints.map(glyph) + [pileCounter, pileCounterGlyph, hexagonOutline]
+        return tints.map(cell) + tints.map(glyph) + [pileCounter, pileCounterGlyph]
     }
 
     var name: String {
@@ -18,7 +17,6 @@ enum ConversationColor: Hashable, Sendable {
         case .glyph(let tint): ConversationColor.cell(tint).name + "-glyph"
         case .pileCounter: "conversation-pile-counter"
         case .pileCounterGlyph: "conversation-pile-counter-glyph"
-        case .hexagonOutline: "conversation-hexagon-outline"
         }
     }
 }

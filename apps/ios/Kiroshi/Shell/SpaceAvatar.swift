@@ -28,16 +28,7 @@ extension SpaceAvatar {
 }
 
 private struct SpaceAvatarDrawing {
-    static let glazeEdge: [SpaceAvatarTheme: Color] = [
-        .light: .black.opacity(0.08), .dark: .white.opacity(0.1),
-    ]
-    static let compactEdge: [SpaceAvatarTheme: Color] = [
-        .light: .black.opacity(0.1), .dark: .white.opacity(0.12),
-    ]
-    static let lipOpacity: [SpaceAvatarTheme: Double] = [.light: 0.55, .dark: 0.22]
     static let notConnectedOpacity: [SpaceAvatarTheme: Double] = [.light: 0.8, .dark: 1]
-    static let glazeEdgeShare = 0.025
-    static let compactEdgeShare = 0.05
     static let sheen = Gradient(stops: [
         .init(color: .white.opacity(0.3), location: 0),
         .init(color: .white.opacity(0), location: 0.55),
@@ -77,9 +68,8 @@ private struct SpaceAvatarDrawing {
 
     private var isGlazed: Bool { !size.isCompact && isHostUp }
 
-    private var edgeWidth: Double {
-        size.isCompact
-            ? Self.compactEdgeShare * side : max(1, Self.glazeEdgeShare * side)
+    private var border: GlazeBorder {
+        GlazeBorder(side: side, colorScheme: theme == .dark ? .dark : .light)
     }
 
     private var shape: Path {
@@ -102,12 +92,8 @@ private struct SpaceAvatarDrawing {
                 for (index, radius) in radii.enumerated().reversed() {
                     clipped.fill(arc(radius), with: .color(tones[tones.count - 1 - index]))
                 }
-                if isGlazed { glaze(in: &clipped) }
-                if size.isCompact {
-                    clipped.stroke(
-                        shape, with: .color(Self.compactEdge[theme] ?? .clear),
-                        lineWidth: 2 * edgeWidth)
-                }
+                if isGlazed { sheen(in: &clipped) }
+                if isGlazed || size.isCompact { border.draw(around: shape, in: clipped) }
             }
             if let dot {
                 avatar.blendMode = .destinationOut
@@ -121,7 +107,7 @@ private struct SpaceAvatarDrawing {
         }
     }
 
-    private func glaze(in context: inout GraphicsContext) {
+    private func sheen(in context: inout GraphicsContext) {
         context.fill(
             Path(frame),
             with: .linearGradient(
@@ -131,13 +117,6 @@ private struct SpaceAvatarDrawing {
             with: .radialGradient(
                 Self.highlight, center: CGPoint(x: 0.3 * side, y: 0.18 * side),
                 startRadius: 0, endRadius: 0.6 * side))
-        context.stroke(
-            shape, with: .color(Self.glazeEdge[theme] ?? .clear), lineWidth: 2 * edgeWidth)
-        var lip = shape
-        lip.addPath(shape, transform: CGAffineTransform(translationX: 0, y: edgeWidth))
-        context.fill(
-            lip, with: .color(.white.opacity(Self.lipOpacity[theme] ?? 0)),
-            style: FillStyle(eoFill: true))
     }
 
     private var frame: CGRect {
