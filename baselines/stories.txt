@@ -1094,9 +1094,6 @@ navigation-headeridentitybutton--in-layout
 navigation-headeridentitybutton--long-content
 navigation-headeridentitybutton--variants
 navigation-headeridentitybutton--working
-navigation-hostpill--connecting
-navigation-hostpill--not-connected
-navigation-hostpill--themes-side-by-side
 navigation-missionspanel--complete
 navigation-missionspanel--complete-dark
 navigation-missionspanel--default
@@ -1213,6 +1210,7 @@ navigation-spaceswitcher--opened-on-invitation
 navigation-spaceswitcher--single-space
 navigation-spaceswitcher--themes-joined-space-menu
 navigation-spaceswitcher--themes-local-space-menu
+navigation-spaceswitcher--themes-title-bar-hosts
 navigation-spaceswitcher--with-dots
 navigation-spaceswitcher--wrapped-dots
 navigation-tabs--default
@@ -1834,6 +1832,8 @@ settings-user-settingsscreen--notifications
 settings-user-settingsscreen--skills
 settings-user-settingsscreen--spaces
 settings-user-settingsscreen--spaces-dark
+settings-user-settingsscreen--spaces-host-states
+settings-user-settingsscreen--spaces-host-states-dark
 settings-user-settingsscreen--user-skills
 settings-user-settingsscreen--without-optional-entries
 settings-user-usersettingsdialog--about

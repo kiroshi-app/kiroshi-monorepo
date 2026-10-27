@@ -16,11 +16,7 @@ import {
 	ContextMenuPressTrigger,
 	openBelow,
 } from "@workspace/ui/components/context-menu-press-trigger"
-import {
-	HostPill,
-	hostPillOf,
-	type SpaceHost,
-} from "@workspace/ui/components/host-pill"
+import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import { Icons } from "@workspace/ui/components/icons"
 import type { Space } from "@workspace/ui/components/space"
 import {
@@ -190,7 +186,6 @@ const SpaceMenuRows = ({
 		>
 			{spaces.map((space, index) => {
 				const rowHost = hostBySpaceId?.[space.id]
-				const rowPill = hostPillOf(rowHost)
 				return (
 					<ContextMenuRadioItem
 						className={rowClassName}
@@ -207,9 +202,7 @@ const SpaceMenuRows = ({
 							state={spaceAvatarStateOf(rowHost)}
 						/>
 						<span className={ROW_NAME}>{space.name}</span>
-						{rowPill ? (
-							<HostPill host={rowPill} />
-						) : rowHost ? (
+						{rowHost ? (
 							<span className="sr-only">{t(`spaces.host.${rowHost}`)}</span>
 						) : null}
 						{index < SPACE_RANK_LIMIT ? (
@@ -254,7 +247,6 @@ const SpaceSwitcher = ({
 	if (!selected) return null
 
 	const host = hostBySpaceId?.[selected.id]
-	const pill = hostPillOf(host)
 	const isInvited = invitations.length > 0
 	const switchLabel = isInvited
 		? host
@@ -269,85 +261,82 @@ const SpaceSwitcher = ({
 		: badgeElsewhere(spaces, selected.id, badgesBySpaceId)
 
 	return (
-		<>
-			<ContextMenu
-				onOpenChange={(isOpen) => {
-					isAnchoredRef.current = isOpen
-					onOpenChange?.(isOpen)
-				}}
-				open={open}
-			>
-				<ContextMenuPressTrigger
-					ref={triggerRef}
-					render={
-						<Button
-							aria-label={t(switchLabel, {
-								count: invitations.length,
-								host: host ? t(`spaces.host.${host}`) : "",
-								name: selected.name,
-							})}
-							className={SWITCHER}
-							data-slot="space-switcher"
-							size="sm"
-							variant="ghost"
-						>
-							<SpaceAvatar
-								colour={selected.colour}
-								size={12}
-								spaceId={selected.avatarSeed}
-								state={spaceAvatarStateOf(host)}
+		<ContextMenu
+			onOpenChange={(isOpen) => {
+				isAnchoredRef.current = isOpen
+				onOpenChange?.(isOpen)
+			}}
+			open={open}
+		>
+			<ContextMenuPressTrigger
+				ref={triggerRef}
+				render={
+					<Button
+						aria-label={t(switchLabel, {
+							count: invitations.length,
+							host: host ? t(`spaces.host.${host}`) : "",
+							name: selected.name,
+						})}
+						className={SWITCHER}
+						data-slot="space-switcher"
+						size="sm"
+						variant="ghost"
+					>
+						<SpaceAvatar
+							colour={selected.colour}
+							size={12}
+							spaceId={selected.avatarSeed}
+							state={spaceAvatarStateOf(host)}
+						/>
+						<span className={SWITCHER_NAME} data-slot="space-switcher-name">
+							{selected.name}
+						</span>
+						<Icons.Expand aria-hidden="true" className={SWITCHER_CHEVRON} />
+						{elsewhere ? (
+							<BotBadgeDot
+								badge={elsewhere}
+								data-slot="space-switcher-badge"
+								placement="switcher"
 							/>
-							<span className={SWITCHER_NAME} data-slot="space-switcher-name">
-								{selected.name}
-							</span>
-							<Icons.Expand aria-hidden="true" className={SWITCHER_CHEVRON} />
-							{elsewhere ? (
-								<BotBadgeDot
-									badge={elsewhere}
-									data-slot="space-switcher-badge"
-									placement="switcher"
-								/>
-							) : null}
-							{isInvited ? (
-								<span
-									aria-hidden="true"
-									className={SWITCHER_INVITATION}
-									data-slot="space-switcher-invitation"
-								/>
-							) : null}
-						</Button>
-					}
+						) : null}
+						{isInvited ? (
+							<span
+								aria-hidden="true"
+								className={SWITCHER_INVITATION}
+								data-slot="space-switcher-invitation"
+							/>
+						) : null}
+					</Button>
+				}
+			/>
+			<ContextMenuContent
+				aria-label={t("spaces.label")}
+				className={cn(
+					isInvited ? MENU_INVITED : MENU_RESTING,
+					STILL_UNDER_REDUCED_MOTION,
+				)}
+			>
+				<SpaceMenuRows
+					badgesBySpaceId={badgesBySpaceId}
+					hostBySpaceId={hostBySpaceId}
+					onSelectSpace={onSelectSpace}
+					selectedSpaceId={selected.id}
+					spaces={spaces}
 				/>
-				<ContextMenuContent
-					aria-label={t("spaces.label")}
-					className={cn(
-						isInvited ? MENU_INVITED : MENU_RESTING,
-						STILL_UNDER_REDUCED_MOTION,
-					)}
-				>
-					<SpaceMenuRows
-						badgesBySpaceId={badgesBySpaceId}
-						hostBySpaceId={hostBySpaceId}
-						onSelectSpace={onSelectSpace}
-						selectedSpaceId={selected.id}
-						spaces={spaces}
-					/>
-					<SpaceInvitations
-						focusedInvitationId={focusedInvitationId}
-						invitations={invitations}
-						onAcceptInvitation={onAcceptInvitation}
-						onDeclineInvitation={onDeclineInvitation}
-						onRetryInvitation={onRetryInvitation}
-					/>
-					<ContextMenuSeparator />
-					<ContextMenuItem onClick={onCreateSpace}>
-						<Icons.Add aria-hidden="true" className="size-3.5" />
-						{t("spaces.create")}
-					</ContextMenuItem>
-				</ContextMenuContent>
-			</ContextMenu>
-			{pill ? <HostPill host={pill} /> : null}
-		</>
+				<SpaceInvitations
+					focusedInvitationId={focusedInvitationId}
+					invitations={invitations}
+					onAcceptInvitation={onAcceptInvitation}
+					onDeclineInvitation={onDeclineInvitation}
+					onRetryInvitation={onRetryInvitation}
+				/>
+				<ContextMenuSeparator />
+				<ContextMenuItem onClick={onCreateSpace}>
+					<Icons.Add aria-hidden="true" className="size-3.5" />
+					{t("spaces.create")}
+				</ContextMenuItem>
+			</ContextMenuContent>
+		</ContextMenu>
 	)
 }
 

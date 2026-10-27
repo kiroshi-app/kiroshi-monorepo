@@ -3,11 +3,7 @@
 import { type ReactNode, useId } from "react"
 import { useTranslation } from "react-i18next"
 
-import {
-	HostPill,
-	hostPillOf,
-	type SpaceHost,
-} from "@workspace/ui/components/host-pill"
+import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import { INVERSE_BUTTON_CLASS } from "@workspace/ui/components/inverse-button"
 import { SettingsField } from "@workspace/ui/components/settings-field"
 import {
@@ -118,7 +114,6 @@ const FocusedSpacePage = ({
 	const name = value.name.trim() || t("space.untitled")
 	const isInvitation = space.state === "invitation"
 	const host = spaceHostOf(space, spaceHost)
-	const pillHost = hostPillOf(host)
 	const isNameShown =
 		space.state === "yours" || (space.state === "joined" && space.isConnected)
 
@@ -154,12 +149,9 @@ const FocusedSpacePage = ({
 					state={avatarStateOf(space, host)}
 				/>
 				<div className="flex min-w-0 flex-1 flex-col gap-0.5">
-					<div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-						<h2 className="min-w-0 break-words font-semibold text-foreground text-xl/6.5 tracking-[-0.01em]">
-							{name}
-						</h2>
-						{pillHost ? <HostPill host={pillHost} /> : null}
-					</div>
+					<h2 className="min-w-0 break-words font-semibold text-foreground text-xl/6.5 tracking-[-0.01em]">
+						{name}
+					</h2>
 					<p
 						className="break-words text-compact/4.5 text-muted-foreground"
 						data-slot="focused-space-standing"
