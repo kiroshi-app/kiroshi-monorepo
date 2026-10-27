@@ -2,25 +2,31 @@ import { useLayoutEffect } from "react"
 
 import {
 	type BotAvatarBlot,
-	blotTint,
+	hueOf,
 } from "@workspace/ui/components/companion-colour"
+import { hueStyle } from "@workspace/ui/components/hue-palette"
 
-const TINT_ATTRIBUTE = "data-space-tint"
-const TINT_PROPERTY = "--space-tint"
+const HUE_ATTRIBUTE = "data-hue"
 
 export const useSpaceTint = (colour?: BotAvatarBlot | null) => {
 	useLayoutEffect(() => {
-		if (!colour) {
+		const hue = hueOf(colour)
+		if (hue === undefined) {
 			return undefined
 		}
 
 		const root = document.documentElement
-		root.setAttribute(TINT_ATTRIBUTE, colour)
-		root.style.setProperty(TINT_PROPERTY, blotTint(colour))
+		const properties = Object.entries(hueStyle(hue))
+		root.setAttribute(HUE_ATTRIBUTE, String(hue))
+		for (const [property, value] of properties) {
+			root.style.setProperty(property, value)
+		}
 
 		return () => {
-			root.removeAttribute(TINT_ATTRIBUTE)
-			root.style.removeProperty(TINT_PROPERTY)
+			root.removeAttribute(HUE_ATTRIBUTE)
+			for (const [property] of properties) {
+				root.style.removeProperty(property)
+			}
 		}
 	}, [colour])
 }

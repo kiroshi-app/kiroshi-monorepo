@@ -30,8 +30,13 @@ import {
 	vi,
 } from "vitest"
 
+import {
+	BLOT_HUES,
+	type BotAvatarBlot,
+} from "@workspace/ui/components/companion-colour"
 import { CompanionMenuProvider } from "@workspace/ui/components/companion-menu"
 import { CompanionSelectProvider } from "@workspace/ui/components/companion-select"
+import { hueStyle } from "@workspace/ui/components/hue-palette"
 import {
 	type ConversationIconName,
 	ConversationIcons,
@@ -3168,6 +3173,36 @@ const pictogramIn = (surface: HTMLElement | null) =>
 		'[data-slot="conversation-subject-icon-pictogram"]',
 	)?.innerHTML
 
+const LIGHT_FOREGROUND = "--hue-light-conversation-icon-foreground"
+const DARK_FOREGROUND = "--hue-dark-conversation-icon-foreground"
+
+const subjectColourIn = (surface: HTMLElement | null) => {
+	const icon = subjectIconIn(surface)
+	return {
+		hue: icon?.getAttribute("data-hue") ?? null,
+		color: icon?.style.color,
+		lightForeground: icon?.style.getPropertyValue(LIGHT_FOREGROUND),
+		darkForeground: icon?.style.getPropertyValue(DARK_FOREGROUND),
+	}
+}
+
+const UNCOLOURED_SUBJECT = {
+	hue: null,
+	color: "var(--conversation-icon-foreground)",
+	lightForeground: "",
+	darkForeground: "",
+}
+
+const subjectColourOf = (colour: BotAvatarBlot) => {
+	const style = hueStyle(BLOT_HUES[colour])
+	return {
+		hue: String(BLOT_HUES[colour]),
+		color: "var(--conversation-icon-foreground)",
+		lightForeground: style[LIGHT_FOREGROUND],
+		darkForeground: style[DARK_FOREGROUND],
+	}
+}
+
 const drawnPictogramOf = (icon: ConversationIconName) => {
 	const { container, unmount } = renderWithoutQueries(
 		createElement(ConversationIcons[icon]),
@@ -3212,9 +3247,7 @@ describe("ThreadScreen wearing the look of a group conversation", () => {
 		await settle()
 		const header = screen.getByRole("button", { name: HEADER_OF_WALLS })
 		expect(pictogramIn(header)).toBe(drawnPictogramOf("MessageSquare"))
-		expect(subjectIconIn(header)?.style.color).toBe(
-			"var(--conversation-icon-foreground)",
-		)
+		expect(subjectColourIn(header)).toEqual(UNCOLOURED_SUBJECT)
 
 		rerender(
 			screenOf(wearing(room.thread, { icon: "Rocket", color: 186 }), room.bots),
@@ -3223,9 +3256,7 @@ describe("ThreadScreen wearing the look of a group conversation", () => {
 
 		const redrawn = screen.getByRole("button", { name: HEADER_OF_WALLS })
 		expect(pictogramIn(redrawn)).toBe(drawnPictogramOf("Rocket"))
-		expect(subjectIconIn(redrawn)?.style.color).toBe(
-			"var(--conversation-icon-cyan-foreground)",
-		)
+		expect(subjectColourIn(redrawn)).toEqual(subjectColourOf("cyan"))
 	})
 
 	it("draws the icon and the colour of a conversation with no message in its empty state", async () => {
@@ -3240,9 +3271,7 @@ describe("ThreadScreen wearing the look of a group conversation", () => {
 			'[data-slot="conversation-empty-state"]',
 		)
 		expect(pictogramIn(emptyState)).toBe(drawnPictogramOf("Rocket"))
-		expect(subjectIconIn(emptyState)?.style.color).toBe(
-			"var(--conversation-icon-cyan-foreground)",
-		)
+		expect(subjectColourIn(emptyState)).toEqual(subjectColourOf("cyan"))
 	})
 })
 

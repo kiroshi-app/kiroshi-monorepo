@@ -1,5 +1,10 @@
 import conversationIcons from "@workspace/shared/conversation-icons.json"
-import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
+import {
+	BLOT_HUES,
+	type BotAvatarBlot,
+	hueOf,
+} from "@workspace/ui/components/companion-colour"
+import { hueStyle } from "@workspace/ui/components/hue-palette"
 import {
 	type ConversationIconName,
 	ConversationIcons,
@@ -24,29 +29,27 @@ const isConversationIcon = (
 const conversationIconOf = (icon: string | undefined): ConversationIconName =>
 	isConversationIcon(icon) ? icon : "MessageSquare"
 
-const pairTokenOf = (color: BotAvatarBlot | undefined) =>
-	color ? `--conversation-icon-${color}` : "--conversation-icon"
-
 const ConversationSubjectIcon = ({
 	icon,
 	color,
 	side = 40,
 }: ConversationSubjectIconProps) => {
-	const token = pairTokenOf(color)
 	const Pictogram = ConversationIcons[conversationIconOf(icon)]
 
 	return (
 		<span
 			aria-hidden="true"
 			className={CELL}
+			data-hue={hueOf(color)}
 			data-slot="conversation-subject-icon"
 			style={{
-				color: `var(${token}-foreground)`,
+				...(color && hueStyle(BLOT_HUES[color])),
+				color: "var(--conversation-icon-foreground)",
 				width: side,
 				height: side,
 			}}
 		>
-			<OutlinedHexagon fill={`var(${token})`} side={side} />
+			<OutlinedHexagon fill="var(--conversation-icon)" side={side} />
 			<span className={PICTOGRAM} style={{ width: side / 2, height: side / 2 }}>
 				<Pictogram
 					className="size-full"

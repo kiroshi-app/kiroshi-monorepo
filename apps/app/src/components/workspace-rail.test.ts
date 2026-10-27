@@ -14,6 +14,10 @@ import { createElement } from "react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { AppRail } from "@workspace/ui/components/app-rail"
+import {
+	BLOT_HUES,
+	type BotAvatarBlot,
+} from "@workspace/ui/components/companion-colour"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { appSidebarRailOf, useWorkspaceRail } from "@/components/workspace-rail"
@@ -418,7 +422,7 @@ type OpenSpace = {
 	label: string
 	joined: JoinedSpace | null
 	rowId: string
-	colour: string
+	colour: BotAvatarBlot
 }
 
 const OPEN_SPACES: OpenSpace[] = [
@@ -483,9 +487,7 @@ const SETTINGS_ROUTES: SettingsRoute[] = [
 ]
 
 const shellTint = () =>
-	document.body
-		.querySelector("[data-space-tint]")
-		?.getAttribute("data-space-tint")
+	document.body.querySelector("[data-hue]")?.getAttribute("data-hue")
 
 describe.each(OPEN_SPACES)(
 	"the app with $label Space open",
@@ -506,13 +508,13 @@ describe.each(OPEN_SPACES)(
 			"keeps the shell tint of / on $path",
 			async ({ path, open }) => {
 				const { router, companionId } = await mountAppAtConversations(joined)
-				expect(shellTint()).toBe(colour)
+				expect(shellTint()).toBe(String(BLOT_HUES[colour]))
 
 				await act(() => open(router, { spaceRowId: rowId, companionId }))
 				await settle()
 
 				expect(router.state.matches.at(-1)?.routeId).toBe(path)
-				expect(shellTint()).toBe(colour)
+				expect(shellTint()).toBe(String(BLOT_HUES[colour]))
 			},
 		)
 	},

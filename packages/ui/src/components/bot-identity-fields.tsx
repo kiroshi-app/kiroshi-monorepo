@@ -12,8 +12,9 @@ import {
 	type BotAvatarBlot,
 	type BotIdentity,
 } from "@workspace/ui/components/bot-settings"
-import { blotTint } from "@workspace/ui/components/companion-colour"
+import { BLOT_HUES, hueOf } from "@workspace/ui/components/companion-colour"
 import { DitheredFieldAvatar } from "@workspace/ui/components/dithered-field-avatar"
+import { hueStyle } from "@workspace/ui/components/hue-palette"
 import { ProfilePictureField } from "@workspace/ui/components/profile-picture-field"
 import { SettingsGroup } from "@workspace/ui/components/settings-group"
 import { PICTURE_FIELD_SIZE } from "@workspace/ui/components/settings-styles"
@@ -29,7 +30,10 @@ const BLOT_OPTION_CLASS =
 
 const swatchColour = (blot?: BotAvatarBlot) =>
 	({
-		"--swatch": blot ? blotTint(blot) : "var(--bot-avatar-field-untinted)",
+		...(blot && hueStyle(BLOT_HUES[blot])),
+		"--swatch": blot
+			? "var(--primary-strong)"
+			: "var(--bot-avatar-field-untinted)",
 	}) as CSSProperties
 
 type BotIdentityFieldsProps = {
@@ -97,6 +101,7 @@ const BotIdentityFields = ({
 				{BLOT_OPTIONS.map((blot) => (
 					<label
 						className={BLOT_OPTION_CLASS}
+						data-hue={hueOf(blot)}
 						key={blot ?? "none"}
 						style={swatchColour(blot)}
 						title={blotLabel(blot)}
@@ -113,7 +118,7 @@ const BotIdentityFields = ({
 							<DitheredFieldAvatar
 								name={name ?? seed ?? ""}
 								size={BLOT_SIZE}
-								tint={blot}
+								hue={hueOf(blot)}
 							/>
 						</span>
 						<span className="sr-only">{blotLabel(blot)}</span>

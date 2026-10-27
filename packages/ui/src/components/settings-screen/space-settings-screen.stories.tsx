@@ -18,6 +18,7 @@ import {
 	TITLE_BAR,
 } from "@workspace/ui/components/app-title-bar.fixtures"
 import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { SPACE_ENVIRONMENT } from "@workspace/ui/components/environment.fixtures"
 import {
 	CATALOGUE_APPLICATIONS,
@@ -294,13 +295,13 @@ export const MembersTinted = meta.story({
 		docs: {
 			description: {
 				story:
-					"`Members` in a blue Space. Check that the shell wears the Space's tint, like the conversations shell of the same Space.",
+					"`Members` in a blue Space. Check that the shell carries the Space's hue for its accent while its surface stays neutral, like the conversations shell of the same Space.",
 			},
 		},
 	},
 	play: async () => {
 		const shell = screen.getByRole("main").parentElement as HTMLElement
-		await expect(shell).toHaveAttribute("data-space-tint", "blue")
+		await expect(shell).toHaveAttribute("data-hue", String(BLOT_HUES.blue))
 	},
 })
 

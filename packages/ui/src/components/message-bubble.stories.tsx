@@ -1,18 +1,19 @@
-import type { CSSProperties, ReactNode } from "react"
+import type { ReactNode } from "react"
 import { expect } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+	hueScopeOf,
 	listExhaustively,
 	slotIn,
 	slotsIn,
 } from "@workspace/storybook/story-utils"
 import { CodeSnippet } from "@workspace/ui/components/code-snippet"
 import {
+	BLOT_HUES,
 	BLOT_TINTS,
 	type BotAvatarBlot,
-	blotTint,
 } from "@workspace/ui/components/companion-colour"
 import { Markdown } from "@workspace/ui/components/markdown"
 import { MessageAttachments } from "@workspace/ui/components/message-attachments"
@@ -39,12 +40,7 @@ const THREAD_WIDTH = "w-[34rem] max-w-full"
 type SpaceTintScopeProps = { blot: BotAvatarBlot; children: ReactNode }
 
 const SpaceTintScope = ({ blot, children }: SpaceTintScopeProps) => (
-	<div
-		data-space-tint={blot}
-		style={{ "--space-tint": blotTint(blot) } as CSSProperties}
-	>
-		{children}
-	</div>
+	<div {...hueScopeOf(blot)}>{children}</div>
 )
 
 const USER_PROMPT =
@@ -290,9 +286,9 @@ export const SpaceTinted = meta.story({
 			.getByText("Sent in the blue space")
 			.closest("[data-slot]")
 
-		await expect(sent?.closest("[data-space-tint]")).toHaveAttribute(
-			"data-space-tint",
-			"blue",
+		await expect(sent?.closest("[data-hue]")).toHaveAttribute(
+			"data-hue",
+			String(BLOT_HUES.blue),
 		)
 	},
 })

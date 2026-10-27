@@ -9,7 +9,7 @@ import {
 	companionGlyphOf,
 	companionGlyphs,
 	companionGlyphsIn,
-	companionTintOf,
+	companionHueOf,
 	expectCompanionPictureShape,
 	expectLeftColumn,
 	expectRailSpaceHost,
@@ -43,6 +43,7 @@ import type {
 	BotMissionState,
 	BotMissionTicket,
 } from "@workspace/ui/components/bot-badge"
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import {
 	companionSeed,
 	pickSilhouette,
@@ -271,7 +272,7 @@ const IDENTITY_ROSTER: AppSidebarBot[] = IDENTITY_BLOTS.map((blot, index) => ({
 }))
 
 const tintsIn = (root: HTMLElement) =>
-	companionGlyphs(root).map((glyph) => companionTintOf(glyph))
+	companionGlyphs(root).map((glyph) => companionHueOf(glyph))
 
 const SHARED_TINT_ROSTER: AppSidebarBot[] = IDENTITY_ROSTER.map((bot) => ({
 	...bot,
@@ -1247,7 +1248,7 @@ export const Identities = meta.story({
 
 		await expect(rows).toHaveLength(IDENTITY_BLOTS.length)
 		await expect(tintsIn(canvasElement)).toEqual(
-			IDENTITY_BLOTS.map((blot) => `var(--bot-blot-${blot})`),
+			IDENTITY_BLOTS.map((blot) => BLOT_HUES[blot]),
 		)
 		for (const row of rows) {
 			await expect(avatarDrawingIn(row).dataset.state).toBe("idle")
@@ -1319,7 +1320,7 @@ export const Working = meta.story({
 			resting.querySelector('[data-slot="bot-activity-dot"]'),
 		).toBeNull()
 		await expect(companionGlyphsIn(resting, "idle")[0]).toBeVisible()
-		await expect(tintsIn(resting)).toEqual(["var(--bot-blot-purple)"])
+		await expect(tintsIn(resting)).toEqual([BLOT_HUES.purple])
 		await expect(resting.querySelector('[data-slot="text-shimmer"]')).toBeNull()
 		await expect(colorOf(resting, "roster-row-preview")).toBe(muted)
 
@@ -2135,7 +2136,7 @@ export const SpaceTinted = meta.story({
 
 		await expect(paintOf(inner)).toBe("rgba(0, 0, 0, 0)")
 		await expectPanelDivider(panel)
-		await expect(shell).toHaveAttribute("data-space-tint", "blue")
+		await expect(shell).toHaveAttribute("data-hue", String(BLOT_HUES.blue))
 		await expect(tokenPaintsIn(panel)).toEqual(tokenPaintsIn(document.body))
 	},
 })

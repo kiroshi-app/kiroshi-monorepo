@@ -13,6 +13,7 @@ type EmptyStateShellProps = Omit<
 	"children" | "title"
 > & {
 	mark: ReactNode
+	eyebrow?: ReactNode
 	title: string
 	description: string
 	action?: ReactNode
@@ -21,6 +22,7 @@ type EmptyStateShellProps = Omit<
 
 const EmptyStateShell = ({
 	mark,
+	eyebrow,
 	title,
 	description,
 	action,
@@ -37,7 +39,8 @@ const EmptyStateShell = ({
 	>
 		{mark}
 
-		<div className="flex max-w-md flex-col gap-2">
+		<div className="flex max-w-md flex-col items-center gap-2">
+			{eyebrow}
 			<h2 className="text-balance font-heading text-foreground text-lg">
 				{title}
 			</h2>

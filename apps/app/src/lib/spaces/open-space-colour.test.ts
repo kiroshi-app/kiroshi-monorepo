@@ -5,6 +5,12 @@ import { useLayoutEffect } from "react"
 import { afterEach, expect, it } from "vitest"
 
 import {
+	BLOT_HUES,
+	type BotAvatarBlot,
+} from "@workspace/ui/components/companion-colour"
+import { hueStyle } from "@workspace/ui/components/hue-palette"
+
+import {
 	createJoinedSpacesController,
 	type JoinedSpacesController,
 	joinedRowIdOf,
@@ -33,13 +39,13 @@ const STUDIO: JoinedSpace = {
 }
 
 const tintOnRoot = () => ({
-	attribute: document.documentElement.getAttribute("data-space-tint"),
-	property: document.documentElement.style.getPropertyValue("--space-tint"),
+	attribute: document.documentElement.getAttribute("data-hue"),
+	accent: document.documentElement.style.getPropertyValue("--hue-light-accent"),
 })
 
-const tintOf = (colour: string) => ({
-	attribute: colour,
-	property: `var(--bot-blot-${colour})`,
+const tintOf = (colour: BotAvatarBlot) => ({
+	attribute: String(BLOT_HUES[colour]),
+	accent: hueStyle(BLOT_HUES[colour])["--hue-light-accent"],
 })
 
 type Tint = ReturnType<typeof tintOnRoot>
