@@ -1,6 +1,8 @@
 import { existsSync, readFileSync, statSync } from "node:fs"
 import { dirname, join, relative } from "node:path"
 
+import ts from "typescript"
+
 export const TEST_SOURCE_ROOTS = ["apps/app/src/", "packages/ui/src/"]
 
 const ALIASES: [string, string][] = [
@@ -23,12 +25,12 @@ const SCANNED_MODULE = /\.(ts|tsx|js)$/
 
 const TEST_FILE = /\.test\.tsx?$/
 
-const TRANSPILERS = {
-	ts: new Bun.Transpiler({ loader: "ts" }),
-	tsx: new Bun.Transpiler({
-		loader: "tsx",
-		tsconfig: { compilerOptions: { jsx: "react" } },
-	}),
+const JAVASCRIPT = new Bun.Transpiler({ loader: "js" })
+
+const STRIPPED_TYPES: ts.CompilerOptions = {
+	jsx: ts.JsxEmit.React,
+	module: ts.ModuleKind.ESNext,
+	target: ts.ScriptTarget.ESNext,
 }
 
 type ImportGraph = { repo: string; importsOf: Map<string, string[]> }
@@ -49,10 +51,11 @@ const resolveImport = (graph: ImportGraph, from: string, specifier: string) => {
 
 const scannedImports = (file: string) => {
 	if (!SCANNED_MODULE.test(file)) return []
-	const transpiler = file.endsWith(".tsx") ? TRANSPILERS.tsx : TRANSPILERS.ts
-	return transpiler
-		.scanImports(readFileSync(file, "utf8"))
-		.map(({ path }) => path)
+	const { outputText } = ts.transpileModule(readFileSync(file, "utf8"), {
+		compilerOptions: STRIPPED_TYPES,
+		fileName: file,
+	})
+	return JAVASCRIPT.scanImports(outputText).map(({ path }) => path)
 }
 
 const directImports = (graph: ImportGraph, file: string) => {

@@ -449,6 +449,8 @@ describe("ci:fast", () => {
 	})
 })
 
+const IMPORT_GRAPH_TIMEOUT_MS = 60_000
+
 describe("the unit test scope of a pull request", () => {
 	it("runs the full suite when the diff touches a shared path, naming the path and its rule", () => {
 		expect(
@@ -492,37 +494,41 @@ describe("the unit test scope of a pull request", () => {
 		})
 	})
 
-	it(`shares every module ${SHARED_IMPORTER_THRESHOLD} or more test files import, and names no other module`, () => {
-		const importers = testImportersByModule(
-			fileURLToPath(new URL("..", import.meta.url)),
-		)
-		const isShared = (path: string) => unitTestScope([path]).scope === "full"
-		const isUnderDirectoryRule = (path: string) =>
-			SHARED_PATH_RULES.some(
-				(rule) => rule.includes("*") && new Bun.Glob(rule).match(path),
+	it(
+		`shares every module ${SHARED_IMPORTER_THRESHOLD} or more test files import, and names no other module`,
+		() => {
+			const importers = testImportersByModule(
+				fileURLToPath(new URL("..", import.meta.url)),
 			)
+			const isShared = (path: string) => unitTestScope([path]).scope === "full"
+			const isUnderDirectoryRule = (path: string) =>
+				SHARED_PATH_RULES.some(
+					(rule) => rule.includes("*") && new Bun.Glob(rule).match(path),
+				)
 
-		const unshared = [...importers]
-			.filter(
-				([path, count]) =>
-					count >= SHARED_IMPORTER_THRESHOLD && !isShared(path),
+			const unshared = [...importers]
+				.filter(
+					([path, count]) =>
+						count >= SHARED_IMPORTER_THRESHOLD && !isShared(path),
+				)
+				.map(([path, count]) => `${path} (${count} test files)`)
+			const underThreshold = SHARED_PATH_RULES.filter(
+				(rule) =>
+					!rule.includes("*") &&
+					TEST_SOURCE_ROOTS.some((root) => rule.startsWith(root)) &&
+					!isUnderDirectoryRule(rule),
 			)
-			.map(([path, count]) => `${path} (${count} test files)`)
-		const underThreshold = SHARED_PATH_RULES.filter(
-			(rule) =>
-				!rule.includes("*") &&
-				TEST_SOURCE_ROOTS.some((root) => rule.startsWith(root)) &&
-				!isUnderDirectoryRule(rule),
-		)
-			.map((rule) => ({ rule, count: importers.get(rule) ?? 0 }))
-			.filter(({ count }) => count < SHARED_IMPORTER_THRESHOLD)
-			.map(({ rule, count }) => `${rule} (${count} test files)`)
+				.map((rule) => ({ rule, count: importers.get(rule) ?? 0 }))
+				.filter(({ count }) => count < SHARED_IMPORTER_THRESHOLD)
+				.map(({ rule, count }) => `${rule} (${count} test files)`)
 
-		expect({ unshared, underThreshold }).toEqual({
-			unshared: [],
-			underThreshold: [],
-		})
-	})
+			expect({ unshared, underThreshold }).toEqual({
+				unshared: [],
+				underThreshold: [],
+			})
+		},
+		IMPORT_GRAPH_TIMEOUT_MS,
+	)
 
 	it("leaves ci:fast on the changed test files when the diff touches a shared path", () => {
 		expect(fastSteps(["packages/ui/src/tokens/tokens.json"]).at(-1)).toEqual(
