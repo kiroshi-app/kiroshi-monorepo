@@ -1153,8 +1153,8 @@ type KeyboardPlayContext = {
 	userEvent: { keyboard: (text: string) => Promise<void> }
 }
 
-const moveAnnouncementIn = (canvasElement: HTMLElement) =>
-	slotIn(barIn(canvasElement), "title-bar-tab-move-announcement")
+const moveAnnouncement = () =>
+	slotIn(document.body, "title-bar-tab-move-announcement")
 
 const playKeyboardReorder = async ({
 	args,
@@ -1177,11 +1177,8 @@ const playKeyboardReorder = async ({
 	])
 	await waitFor(() => expect(unpinnedTabsIn(canvasElement)[2]).toBe(login))
 	await expect(login).toHaveFocus()
-	await expect(moveAnnouncementIn(canvasElement)).toHaveAttribute(
-		"aria-live",
-		"polite",
-	)
-	await expect(moveAnnouncementIn(canvasElement)).toHaveTextContent(
+	await expect(moveAnnouncement()).toHaveAttribute("aria-live", "polite")
+	await expect(moveAnnouncement()).toHaveTextContent(
 		`${LOGIN_REDIRECT.title} moved to position 5 of 5`,
 	)
 
@@ -1198,7 +1195,7 @@ const playKeyboardReorder = async ({
 		WEEKLY_PLANNING.id,
 	])
 	await expect(login).toHaveFocus()
-	await expect(moveAnnouncementIn(canvasElement)).toHaveTextContent(
+	await expect(moveAnnouncement()).toHaveTextContent(
 		`${LOGIN_REDIRECT.title} moved to position 4 of 5`,
 	)
 
@@ -1223,7 +1220,7 @@ const playKeyboardReorder = async ({
 		WEEKLY_PLANNING.id,
 	])
 	await expect(roadmap).toHaveFocus()
-	await expect(moveAnnouncementIn(canvasElement)).toHaveTextContent(
+	await expect(moveAnnouncement()).toHaveTextContent(
 		`${ROADMAP.title} moved to position 1 of 5`,
 	)
 	await userEvent.keyboard("{Alt>}{ArrowLeft}{/Alt}")
@@ -1285,7 +1282,7 @@ export const KeyboardReorderWithoutHandler = meta.story({
 		await userEvent.keyboard("{Alt>}{ArrowLeft}{/Alt}")
 		await expect(unpinnedTabsIn(canvasElement)[1]).toBe(login)
 		await expect(login).toHaveFocus()
-		await expect(moveAnnouncementIn(canvasElement)).toHaveTextContent("")
+		await expect(moveAnnouncement()).toHaveTextContent("")
 	},
 })
 

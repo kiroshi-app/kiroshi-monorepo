@@ -9,6 +9,7 @@ import {
 	useRef,
 	useState,
 } from "react"
+import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 
 import { ContextMenuPressTrigger } from "@workspace/ui/components/context-menu-press-trigger"
@@ -653,13 +654,6 @@ const TitleBarTabs = ({
 						</span>
 					))}
 				</div>
-				<span
-					aria-live="polite"
-					className="sr-only"
-					data-slot="title-bar-tab-move-announcement"
-				>
-					{move ? t("titleBar.tabMoved", move) : ""}
-				</span>
 			</Tabs.Root>
 			{overflowing.length > 0 ? (
 				<OverflowChip onSelectTab={onSelectTab} tabs={overflowing} />
@@ -673,6 +667,16 @@ const TitleBarTabs = ({
 				<Icons.Add aria-hidden="true" />
 			</button>
 			<div className={DRAG_REGION} data-slot="title-bar-drag-region" />
+			{createPortal(
+				<span
+					aria-live="polite"
+					className="sr-only"
+					data-slot="title-bar-tab-move-announcement"
+				>
+					{move ? t("titleBar.tabMoved", move) : ""}
+				</span>,
+				document.body,
+			)}
 		</div>
 	)
 }
