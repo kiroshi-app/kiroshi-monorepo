@@ -98,7 +98,7 @@ Only **technical composition** — it places things, it does not draw them:
 ### Colour
 
 - Chrome wears the iOS system colours, by their semantic names: backgrounds (`systemBackground`, `systemGroupedBackground`, `secondarySystemBackground`…), labels (`.primary`, `.secondary`), separators, fills and grays, `systemRed` for errors and Sign out, `systemBlue` for the text cursor, the tab bar tinted with the label colour. No hex, no `Color(red:)`.
-- The Kiroshi catalogue (`Color.kiroshi`, `Colors.xcassets`) paints only what an artboard draws in a Kiroshi colour. On Sign in, Home and Settings it still feeds the companion avatars and the Hive (with its `+N` counter), your initial top left of Home and in Settings, and the online dot of the menu of Spaces.
+- The Kiroshi catalogue (`Color.kiroshi`, `Colors.xcassets`) paints only what an artboard draws in a Kiroshi colour. On Sign in, Home and Settings it still feeds the companion avatars and the Hive (with its `+N` counter), your initial top left of Home and in Settings, and the dot of the Space avatar.
 - Your bubbles, in a Conversation, a group Conversation or a Mission thread, wear the current Space's colour through `SpaceAccent`; a Space without a colour keeps the catalogue's `user-bubble`. The chrome never follows the Space: the app's global accent stays the catalogue's `primary`, which tints the Conversations and Missions screens, and Send stays the label colour.
 
 ### Vocabulary

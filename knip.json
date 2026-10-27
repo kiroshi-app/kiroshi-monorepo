@@ -10,7 +10,10 @@
 	"ignoreBinaries": ["xcodegen"],
 	"workspaces": {
 		".": {
-			"entry": ["scripts/generate-v2-vectors.ts"]
+			"entry": [
+				"scripts/generate-v2-vectors.ts",
+				"apps/ios/scripts/space-avatar-vectors.ts"
+			]
 		},
 		"apps/app": {
 			"entry": ["src/main.tsx", "src/styles.css"]
