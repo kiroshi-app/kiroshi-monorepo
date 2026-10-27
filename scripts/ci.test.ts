@@ -1,6 +1,13 @@
-import { describe, expect, it } from "bun:test"
-import { readFileSync } from "node:fs"
-import { fileURLToPath } from "node:url"
+import { afterAll, describe, expect, it } from "bun:test"
+import {
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs"
+import { tmpdir } from "node:os"
+import { dirname, join } from "node:path"
 
 import {
 	CHANGED_UNIT_TESTS,
@@ -15,12 +22,15 @@ import {
 	SHARED_PATH_RULES,
 	SIMULATOR_LOOKUP,
 	type Step,
+	scopeLine,
 	skipReason,
 	spawnedCommand,
+	type UnitTestScope,
 	unitTestScope,
+	unitTestSteps,
 } from "./ci"
 import { decideJobs } from "./ci-changes"
-import { TEST_SOURCE_ROOTS, testImportersByModule } from "./test-importers"
+import { TEST_SOURCE_ROOTS } from "./test-importers"
 
 type WorkflowStep = {
 	name?: string
@@ -373,6 +383,8 @@ describe("the gate", () => {
 	})
 })
 
+const CHANGED_SCOPE: UnitTestScope = { scope: "changed" }
+
 describe("ci:fast", () => {
 	const gate = GROUP_ORDER.flatMap((group) => GATE[group])
 	const QUEUE_SCRIPT_UNIT_TESTS = [
@@ -401,7 +413,7 @@ describe("ci:fast", () => {
 	const QUEUE_SCRIPT_STEPS = QUEUE_SCRIPT_UNIT_TESTS.map(([, step]) => step)
 
 	it("runs the named gate steps with the same command, then the changed unit tests", () => {
-		const steps = fastSteps([])
+		const steps = fastSteps([], CHANGED_SCOPE)
 
 		expect(steps.map((step) => step.name)).toEqual([
 			...FAST_STEP_NAMES,
@@ -410,22 +422,37 @@ describe("ci:fast", () => {
 		for (const step of steps.slice(0, -1)) expect(gate).toContainEqual(step)
 	})
 
-	it("leaves the full unit set and the perf set to the gate", () => {
+	it("runs the full vitest step of the gate, and no slot, when the scope is full", () => {
+		const scope: UnitTestScope = {
+			scope: "full",
+			path: "baselines/a.json",
+			rule: "baselines/**",
+		}
+		const steps = fastSteps([], scope)
+
+		expect(steps.slice(FAST_STEP_NAMES.length)).toEqual(unitTestSteps(scope))
+		expect(steps.slice(FAST_STEP_NAMES.length)).toEqual(GATE.vitest)
+		expect(steps.filter((step) => step.heavy)).toEqual([])
+	})
+
+	it("leaves the full unit set and the perf set to the gate when the scope is changed", () => {
 		expect(gate).not.toContainEqual(CHANGED_UNIT_TESTS)
 		for (const step of GATE.vitest)
-			expect(fastSteps(QUEUE_SCRIPT_PATHS)).not.toContainEqual(step)
+			expect(fastSteps(QUEUE_SCRIPT_PATHS, CHANGED_SCOPE)).not.toContainEqual(
+				step,
+			)
 	})
 
 	it("takes no slot", () => {
-		expect(fastSteps(QUEUE_SCRIPT_PATHS).filter((step) => step.heavy)).toEqual(
-			[],
-		)
+		expect(
+			fastSteps(QUEUE_SCRIPT_PATHS, CHANGED_SCOPE).filter((step) => step.heavy),
+		).toEqual([])
 	})
 
 	it.each(QUEUE_SCRIPT_UNIT_TESTS)(
 		"runs the lint step of its script tests before the changed unit tests when the diff touches %s",
 		(path, stepName, script) => {
-			const steps = fastSteps(["AGENTS.md", path])
+			const steps = fastSteps(["AGENTS.md", path], CHANGED_SCOPE)
 			const scriptTests = steps[FAST_STEP_NAMES.length]
 
 			expect(steps.map((step) => step.name)).toEqual([
@@ -439,23 +466,75 @@ describe("ci:fast", () => {
 	)
 
 	it("leaves the queue script tests out when the diff touches neither script nor its tests", () => {
-		const steps = fastSteps(["scripts/slot.sh", "scripts/ci.ts"]).map(
-			(step) => step.name,
-		)
+		const steps = fastSteps(
+			["scripts/slot.sh", "scripts/ci.ts"],
+			CHANGED_SCOPE,
+		).map((step) => step.name)
 
 		for (const step of QUEUE_SCRIPT_STEPS) expect(steps).not.toContain(step)
 	})
 })
 
-const IMPORT_GRAPH_TIMEOUT_MS = 60_000
+const NO_REPO = join(tmpdir(), "kiroshi-ci-test-no-repo")
+
+const SHARED_MODULE = "packages/ui/src/components/shared.ts"
+
+const RELAY_MODULE = "packages/ui/src/components/relay.ts"
+
+type FixtureRepo = { directImporters: number; relayImporters: number }
+
+const fixtureRepo = ({ directImporters, relayImporters }: FixtureRepo) => {
+	const repo = mkdtempSync(join(tmpdir(), "kiroshi-ci-test-"))
+	const write = (path: string, source: string) => {
+		mkdirSync(dirname(join(repo, path)), { recursive: true })
+		writeFileSync(join(repo, path), source)
+	}
+	write(SHARED_MODULE, "export const shared = 1\n")
+	write(RELAY_MODULE, 'export { shared } from "./shared"\n')
+	for (let index = 0; index < directImporters; index++)
+		write(
+			`packages/ui/src/components/direct-${index}.test.ts`,
+			'import { shared } from "./shared"\nshared\n',
+		)
+	for (let index = 0; index < relayImporters; index++)
+		write(
+			`apps/app/src/relay-${index}.test.ts`,
+			'import { shared } from "@workspace/ui/components/relay"\nshared\n',
+		)
+	return repo
+}
 
 describe("the unit test scope of a pull request", () => {
+	const repos: string[] = []
+	const decided = (changedPaths: string[], fixture: FixtureRepo) => {
+		const repo = fixtureRepo(fixture)
+		repos.push(repo)
+		return unitTestScope({ changedPaths, repo })
+	}
+
+	afterAll(() => {
+		for (const repo of repos) rmSync(repo, { recursive: true, force: true })
+	})
+
+	it("keeps only glob rules and config paths, no module under the test source roots", () => {
+		const moduleRules = SHARED_PATH_RULES.filter(
+			(rule) =>
+				!rule.includes("*") &&
+				TEST_SOURCE_ROOTS.some((root) => rule.startsWith(root)),
+		)
+
+		expect(moduleRules).toEqual([])
+	})
+
 	it("runs the full suite when the diff touches a shared path, naming the path and its rule", () => {
 		expect(
-			unitTestScope([
-				"packages/ui/src/components/activity-indicator.tsx",
-				"packages/ui/src/tokens/tokens.json",
-			]),
+			unitTestScope({
+				changedPaths: [
+					"packages/ui/src/components/activity-indicator.tsx",
+					"packages/ui/src/tokens/tokens.json",
+				],
+				repo: NO_REPO,
+			}),
 		).toEqual({
 			scope: "full",
 			path: "packages/ui/src/tokens/tokens.json",
@@ -463,21 +542,33 @@ describe("the unit test scope of a pull request", () => {
 		})
 	})
 
-	it("runs the changed test files when the diff touches one component and its story", () => {
+	it("runs the changed test files without building the import graph when the diff is empty", () => {
+		expect(unitTestScope({ changedPaths: [], repo: NO_REPO })).toEqual({
+			scope: "changed",
+		})
+	})
+
+	it("decides without building the import graph when no changed path is a source module", () => {
 		expect(
-			unitTestScope([
-				"packages/ui/src/components/activity-indicator.tsx",
-				"packages/ui/src/components/activity-indicator.stories.tsx",
-			]),
+			unitTestScope({
+				changedPaths: [
+					"AGENTS.md",
+					"scripts/ci.ts",
+					"packages/ui/src/components/shared.css",
+					"apps/app/src-tauri/src/main.rs",
+				],
+				repo: NO_REPO,
+			}),
 		).toEqual({ scope: "changed" })
 	})
 
-	it("runs the changed test files when the diff is empty", () => {
-		expect(unitTestScope([])).toEqual({ scope: "changed" })
-	})
-
 	it("runs the full suite when the diff touches the token source", () => {
-		expect(unitTestScope(["packages/ui/tokens.json"])).toEqual({
+		expect(
+			unitTestScope({
+				changedPaths: ["packages/ui/tokens.json"],
+				repo: NO_REPO,
+			}),
+		).toEqual({
 			scope: "full",
 			path: "packages/ui/tokens.json",
 			rule: "packages/ui/tokens.json",
@@ -485,53 +576,101 @@ describe("the unit test scope of a pull request", () => {
 	})
 
 	it("runs the full suite when the diff touches a tokens file at the root of packages/ui/src", () => {
-		expect(unitTestScope(["packages/ui/src/tokens.json"])).toEqual({
+		expect(
+			unitTestScope({
+				changedPaths: ["packages/ui/src/tokens.json"],
+				repo: NO_REPO,
+			}),
+		).toEqual({
 			scope: "full",
 			path: "packages/ui/src/tokens.json",
 			rule: "packages/ui/src/tokens.*",
 		})
 	})
 
-	it(
-		`shares every module ${SHARED_IMPORTER_THRESHOLD} or more test files import, and names no other module`,
-		() => {
-			const importers = testImportersByModule(
-				fileURLToPath(new URL("..", import.meta.url)),
-			)
-			const isShared = (path: string) => unitTestScope([path]).scope === "full"
-			const isUnderDirectoryRule = (path: string) =>
-				SHARED_PATH_RULES.some(
-					(rule) => rule.includes("*") && new Bun.Glob(rule).match(path),
-				)
+	it(`runs the changed test files when ${SHARED_IMPORTER_THRESHOLD - 1} test files reach the changed module`, () => {
+		expect(
+			decided([SHARED_MODULE], {
+				directImporters: SHARED_IMPORTER_THRESHOLD - 1,
+				relayImporters: 0,
+			}),
+		).toEqual({ scope: "changed", graphMs: expect.any(Number) })
+	})
 
-			const unshared = [...importers]
-				.filter(
-					([path, count]) =>
-						count >= SHARED_IMPORTER_THRESHOLD && !isShared(path),
-				)
-				.map(([path, count]) => `${path} (${count} test files)`)
-			const underThreshold = SHARED_PATH_RULES.filter(
-				(rule) =>
-					!rule.includes("*") &&
-					TEST_SOURCE_ROOTS.some((root) => rule.startsWith(root)) &&
-					!isUnderDirectoryRule(rule),
-			)
-				.map((rule) => ({ rule, count: importers.get(rule) ?? 0 }))
-				.filter(({ count }) => count < SHARED_IMPORTER_THRESHOLD)
-				.map(({ rule, count }) => `${rule} (${count} test files)`)
+	it(`runs the full suite when ${SHARED_IMPORTER_THRESHOLD} test files reach the changed module, naming the path and its importer count`, () => {
+		expect(
+			decided(["AGENTS.md", SHARED_MODULE], {
+				directImporters: SHARED_IMPORTER_THRESHOLD,
+				relayImporters: 0,
+			}),
+		).toEqual({
+			scope: "full",
+			path: SHARED_MODULE,
+			importers: SHARED_IMPORTER_THRESHOLD,
+			graphMs: expect.any(Number),
+		})
+	})
 
-			expect({ unshared, underThreshold }).toEqual({
-				unshared: [],
-				underThreshold: [],
-			})
+	it("counts a test file that reaches the changed module through another module", () => {
+		expect(
+			decided([SHARED_MODULE], {
+				directImporters: SHARED_IMPORTER_THRESHOLD - 1,
+				relayImporters: 1,
+			}),
+		).toEqual({
+			scope: "full",
+			path: SHARED_MODULE,
+			importers: SHARED_IMPORTER_THRESHOLD,
+			graphMs: expect.any(Number),
+		})
+	})
+
+	it("runs the full suite and carries the error when building the import graph throws", () => {
+		const scope = unitTestScope({
+			changedPaths: [SHARED_MODULE],
+			repo: NO_REPO,
+		})
+
+		expect(scope).toEqual({
+			scope: "full",
+			error: expect.stringContaining("ENOENT"),
+			graphMs: expect.any(Number),
+		})
+	})
+
+	it.each([
+		[
+			{ scope: "full", path: "baselines/a.json", rule: "baselines/**" },
+			"ci  unit test scope: full suite: baselines/a.json is shared (baselines/**)",
+		],
+		[
+			{ scope: "full", path: SHARED_MODULE, importers: 24, graphMs: 812 },
+			`ci  unit test scope: full suite: ${SHARED_MODULE} is shared (24 test files reach it, threshold ${SHARED_IMPORTER_THRESHOLD}), import graph build took 812 ms`,
+		],
+		[
+			{ scope: "full", error: "Error: ENOENT", graphMs: 3 },
+			"ci  unit test scope: full suite: building the import graph failed: Error: ENOENT, import graph build took 3 ms",
+		],
+		[
+			{ scope: "changed", graphMs: 640 },
+			"ci  unit test scope: changed test files: no changed path is shared, import graph build took 640 ms",
+		],
+		[
+			{ scope: "changed" },
+			"ci  unit test scope: changed test files: no changed path is shared",
+		],
+	] satisfies [UnitTestScope, string][])(
+		"prints %o as its scope line",
+		(scope, line) => {
+			expect(scopeLine(scope)).toBe(line)
 		},
-		IMPORT_GRAPH_TIMEOUT_MS,
 	)
 
-	it("leaves ci:fast on the changed test files when the diff touches a shared path", () => {
-		expect(fastSteps(["packages/ui/src/tokens/tokens.json"]).at(-1)).toEqual(
-			CHANGED_UNIT_TESTS,
-		)
+	it("runs the full vitest step for a full scope and the changed unit tests otherwise", () => {
+		expect(unitTestSteps({ scope: "changed" })).toEqual([CHANGED_UNIT_TESTS])
+		expect(
+			unitTestSteps({ scope: "full", error: "Error: ENOENT", graphMs: 3 }),
+		).toEqual(GATE.vitest)
 	})
 })
 
