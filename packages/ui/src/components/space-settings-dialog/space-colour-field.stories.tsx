@@ -29,7 +29,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The colour a space is recognised by, on its own: the row of swatches drawn as space tints, the `Your hue` slider with its helper, and the preview strip painting a message, the unread dot and Send in the chosen hue. The space dialog places it under the name in `SpaceFields`, and the focused settings page places it under the name of a space of yours. It reports the bare hue, every pick and every slider step; the caller decides what a hue matching no preset means.",
+					"The colour a space is recognised by, on its own: the row of swatches drawn as space tints, then the `Your hue` slider with its helper. The space dialog places it under the name in `SpaceFields`, and the focused settings page places it under the name of a space of yours. It reports the bare hue on every pick and every slider step.",
 			},
 		},
 	},
@@ -45,7 +45,7 @@ export const Preset = meta.story({
 		docs: {
 			description: {
 				story:
-					"A space wearing a preset. Check that its swatch is the checked one, marked by a border and a filled well rather than by colour alone, and that picking another swatch reports that preset's hue and repaints the preview. Pick `Colourless` for the choice a space is created with.",
+					"A space wearing a preset. Check that its swatch is the checked one, marked by a border and a filled well rather than by colour alone, and that picking another swatch reports that preset's hue. Pick `Colourless` for the choice a space is created with.",
 			},
 		},
 	},
