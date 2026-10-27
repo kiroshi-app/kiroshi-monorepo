@@ -45,7 +45,7 @@ export const useWorkspaceAssembly = () => {
 	const navigation = useSettingsNavigation(threadHolder)
 	const drivers = useWorkspaceDrivers(core)
 	const scopes = useApplicationScopes(core)
-	useSpaceTint(scopes.spaceTint)
+	useSpaceTint(scopes.spaceHue)
 	const rosterView = useRosterView({
 		core,
 		drivers,

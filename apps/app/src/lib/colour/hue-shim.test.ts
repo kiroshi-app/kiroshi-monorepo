@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest"
 
-import { hueOfPreset, presetOfHue } from "@/lib/colour/hue-shim"
+import {
+	hueAfterPick,
+	hueOfPreset,
+	PRESET_HUES,
+	presetOfHue,
+} from "@/lib/colour/hue-shim"
 
 const PRESETS = [
 	["red", 42],
@@ -30,5 +35,20 @@ describe("hue shim", () => {
 	it("gives a tie to the lower preset hue", () => {
 		expect(presetOfHue(20)).toBe("red")
 		expect(presetOfHue(107)).toBe("yellow")
+	})
+
+	it("keeps a held hue while the preset picked is still its nearest", () => {
+		expect(hueAfterPick("cyan", 210)).toBe(210)
+		expect(hueAfterPick("cyan", 186)).toBe(186)
+	})
+
+	it("takes the preset hue once another preset is picked, and nothing once none is", () => {
+		expect(hueAfterPick("blue", 210)).toBe(257)
+		expect(hueAfterPick("blue", null)).toBe(257)
+		expect(hueAfterPick(undefined, 210)).toBeNull()
+	})
+
+	it("lists the preset hues in the order companions wear them", () => {
+		expect(PRESET_HUES).toEqual([42, 82, 132, 186, 257, 296, 358, 63])
 	})
 })

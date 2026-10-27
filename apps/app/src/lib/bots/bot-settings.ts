@@ -1,7 +1,6 @@
 import type { AppSidebarBot } from "@workspace/ui/components/app-sidebar"
 import {
 	BLANK_BOT_PERMISSIONS,
-	BLOT_TINTS,
 	type BotModelOption,
 	type BotSettingsValue,
 	DEFAULT_BOT_OUTPUT_STYLE,
@@ -17,7 +16,7 @@ import type {
 	BotPermissions as HostBotPermissions,
 	OfferedModel_Serialize,
 } from "@/lib/bindings"
-import { hueOfPreset, presetOfHue } from "@/lib/colour/hue-shim"
+import { hueAfterPick, PRESET_HUES, presetOfHue } from "@/lib/colour/hue-shim"
 import type { SidebarActivity } from "../chat/screen-model"
 import type { Bot, BotIdentity, Hue } from "../conversations/store-contract"
 import type { LastWord } from "../conversations/transcript-state"
@@ -98,9 +97,9 @@ export const BOT_NAMES = [
 
 const nextBlot = (bots: Bot[]): Hue => {
 	const marked = new Set(bots.map((bot) => bot.avatarBlot))
-	return hueOfPreset(
-		BLOT_TINTS.find((tint) => !marked.has(hueOfPreset(tint))) ??
-			BLOT_TINTS[bots.length % BLOT_TINTS.length],
+	return (
+		PRESET_HUES.find((hue) => !marked.has(hue)) ??
+		PRESET_HUES[bots.length % PRESET_HUES.length]
 	)
 }
 
@@ -162,8 +161,7 @@ export const toIdentity = (
 	name: value.name,
 	title: value.title,
 	model: value.model,
-	avatarBlot:
-		value.identity.blot === undefined ? null : hueOfPreset(value.identity.blot),
+	avatarBlot: hueAfterPick(value.identity.blot, bot.avatarBlot),
 	avatarImagePath: value.identity.image ? bot.avatarImagePath : null,
 	instructions: value.instructions,
 	deniedTools: withoutChangingTools(bot.deniedTools),

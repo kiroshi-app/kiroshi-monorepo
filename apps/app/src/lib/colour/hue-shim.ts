@@ -1,10 +1,13 @@
-import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
+import {
+	BLOT_TINTS,
+	type BotAvatarBlot,
+} from "@workspace/ui/components/companion-colour"
 
 import type { Hue } from "@/lib/bindings"
 
 const TURN = 360
 
-const PRESET_HUES: Record<BotAvatarBlot, Hue> = {
+const HUE_OF_PRESET: Record<BotAvatarBlot, Hue> = {
 	red: 42,
 	orange: 63,
 	yellow: 82,
@@ -15,7 +18,7 @@ const PRESET_HUES: Record<BotAvatarBlot, Hue> = {
 	pink: 358,
 }
 
-const PRESETS = Object.entries(PRESET_HUES) as [BotAvatarBlot, Hue][]
+const PRESETS = Object.entries(HUE_OF_PRESET) as [BotAvatarBlot, Hue][]
 
 const distanceOnTheCircle = (hue: Hue, preset: Hue) => {
 	const gap = Math.abs(hue - preset)
@@ -35,4 +38,15 @@ export const presetOfHue = (hue: Hue): BotAvatarBlot =>
 		isNearer(hue, candidate[1], nearest[1]) ? candidate : nearest,
 	)[0]
 
-export const hueOfPreset = (preset: BotAvatarBlot): Hue => PRESET_HUES[preset]
+export const hueOfPreset = (preset: BotAvatarBlot): Hue => HUE_OF_PRESET[preset]
+
+export const PRESET_HUES: readonly Hue[] = BLOT_TINTS.map(hueOfPreset)
+
+export const hueAfterPick = (
+	picked: BotAvatarBlot | undefined,
+	held: Hue | null,
+): Hue | null => {
+	if (picked === undefined) return null
+	if (held !== null && presetOfHue(held) === picked) return held
+	return hueOfPreset(picked)
+}

@@ -1,6 +1,5 @@
 import {
 	BLANK_BOT_PERMISSIONS,
-	BLOT_TINTS,
 	DEFAULT_BOT_OUTPUT_STYLE,
 } from "@workspace/ui/components/bot-settings"
 
@@ -57,7 +56,7 @@ import {
 } from "./transcript-contract"
 
 import type { AgentCommand } from "@/lib/agent/contract"
-import { hueOfPreset } from "@/lib/colour/hue-shim"
+import { PRESET_HUES } from "@/lib/colour/hue-shim"
 import { deniesChanges } from "../bots/bot-settings"
 import { UNDONE_TITLE_PREFIX } from "../bots/history-runs"
 import { messageUri } from "../links/message-uri"
@@ -1230,7 +1229,7 @@ export const createFakeTranscriptStore = (
 					title: draft.job.trim(),
 					model: "sonnet",
 					avatarBlot: unworn<Hue>(
-						BLOT_TINTS.map(hueOfPreset),
+						PRESET_HUES,
 						worn.map((bot) => bot.avatarBlot),
 						worn.length,
 					),

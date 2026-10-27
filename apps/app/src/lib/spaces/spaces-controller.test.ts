@@ -119,6 +119,38 @@ describe("createSpacesController", () => {
 		)
 	})
 
+	it("keeps a hue outside the presets when the space is renamed and its colour left alone", async () => {
+		const store = createFakeTranscriptStore()
+		await store.updateSpace("personal", "Perso", 210)
+		const controller = await loaded(store)
+
+		controller.describe("personal", { name: "Vocca", colour: "cyan" })
+
+		expect(controller.getState().spaces[0]).toMatchObject({
+			name: "Vocca",
+			colour: 210,
+		})
+		await vi.waitFor(async () =>
+			expect((await store.spaces())[0]).toMatchObject({
+				name: "Vocca",
+				colour: 210,
+			}),
+		)
+		expect((await loaded(store)).getState().spaces[0].colour).toBe(210)
+	})
+
+	it("replaces a hue outside the presets with the preset picked in its place", async () => {
+		const store = createFakeTranscriptStore()
+		await store.updateSpace("personal", "Perso", 210)
+		const controller = await loaded(store)
+
+		controller.describe("personal", { name: "Perso", colour: "blue" })
+
+		await vi.waitFor(async () =>
+			expect((await store.spaces())[0].colour).toBe(257),
+		)
+	})
+
 	it("writes a space stripped of its colour", async () => {
 		const store = createFakeTranscriptStore()
 		const controller = await loaded(store)
