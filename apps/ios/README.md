@@ -400,11 +400,7 @@ The menu of Spaces draws each Space with the avatar the desktop draws (page "Spe
 
 Each row reads the presence `SpaceStore.presence(of:)` gives it: `Shared` (you own the Space, its host is online), `Online` (you're a member, its host is online), `Connecting…` (the current Space's socket hasn't heard from its host since it opened) and `Not connected` (`online` is false in `GET /instances`, or the host went offline). Its accessibility label is the Space's name then its presence, `Side project, Not connected`; the avatar is hidden from VoiceOver.
 
-`SpaceAvatarRecipeTests` replays `KiroshiTests/Vectors/space-avatar.json`, which the desktop recipe writes:
-
-```bash
-bun apps/ios/scripts/space-avatar-vectors.ts
-```
+`SpaceAvatarRecipeTests` replays `KiroshiTests/Vectors/space-avatar.json`, written once from the desktop recipe (12 Space ids, both themes, the eight colours and no colour, the six sizes). The vectors don't follow the desktop on their own: when `space-avatar-recipe.ts` changes, write them again from it and port the change.
 
 `-hostSilent YES` keeps the fixture host from ever answering, so the current Space stays `Connecting…` (the Missions fixtures, `5.1`, play through that host; `2.1` plays its own):
 
