@@ -7,7 +7,6 @@ import { useComposerFocus, useThreadReply } from "./use-thread-reply"
 
 type FocusProps = {
 	threadId: string | null
-	isSettingsOpen?: boolean
 }
 
 const mountComposer = (): HTMLTextAreaElement => {
@@ -21,7 +20,7 @@ const renderThread = (
 	initialProps: FocusProps,
 ) =>
 	renderHook(
-		({ threadId, isSettingsOpen = false }: FocusProps) => {
+		({ threadId }: FocusProps) => {
 			const { focusComposer } = useThreadReply({
 				composerRef: { current: composer },
 				scrollerRef: { current: null },
@@ -30,7 +29,6 @@ const renderThread = (
 			useComposerFocus({
 				threadId,
 				isPromptPending: false,
-				isSettingsOpen,
 				isOverlayOpen: false,
 				focusComposer,
 			})
@@ -78,16 +76,6 @@ it("focuses the input again when a shared companion's solo thread switches to an
 	rerender({ threadId: "solo-in-space-2" })
 
 	expect(document.activeElement).toBe(composer)
-})
-
-it("leaves the focus where it is while the settings page is open", () => {
-	const composer = mountComposer()
-	const elsewhere = mountComposer()
-	elsewhere.focus()
-
-	renderThread(composer, { threadId: "conversation-1", isSettingsOpen: true })
-
-	expect(document.activeElement).toBe(elsewhere)
 })
 
 it("takes no focus on a closed mission whose input is disabled", () => {

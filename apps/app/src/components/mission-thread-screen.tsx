@@ -90,7 +90,6 @@ const MissionThread = ({
 			kind: "conversation",
 			conversation: toMissionConversation({ mission, bot }),
 			runtimes,
-			isSettingsOpen: false,
 			onOpenSettings: () => undefined,
 			mission: { mission, events, now, opening, onLeave },
 		}),

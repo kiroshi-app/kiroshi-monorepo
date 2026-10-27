@@ -424,7 +424,6 @@ const ThreadHeader = ({
 					<HeaderConversationButton
 						{...toConversationLook(thread.conversation)}
 						bots={present}
-						isSettingsOpen={thread.isSettingsOpen}
 						name={thread.conversation.title}
 						onOpenSettings={() => thread.onOpenSettings(thread.conversation.id)}
 					/>
@@ -1435,7 +1434,6 @@ const useThreadActions = (
 	useComposerFocus({
 		threadId: shownConversationIdOf(thread),
 		isPromptPending: facts.isPromptPending,
-		isSettingsOpen: thread.kind === "conversation" && thread.isSettingsOpen,
 		isOverlayOpen: facts.isOverlayOpen,
 		focusComposer,
 	})

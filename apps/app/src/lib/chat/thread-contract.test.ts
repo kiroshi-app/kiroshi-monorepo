@@ -109,7 +109,6 @@ const conversationThreadOf = ({
 	kind: "conversation",
 	conversation: conversationOf(participants),
 	runtimes: {} as ConversationRuntimes,
-	isSettingsOpen: false,
 	onOpenSettings: () => undefined,
 	state: conversationState(pendingPrompt),
 	controller: {} as ConversationController,

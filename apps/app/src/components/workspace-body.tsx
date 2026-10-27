@@ -59,7 +59,6 @@ const threadOf = ({
 			kind: "conversation",
 			conversation,
 			runtimes: conversationRuntimes,
-			isSettingsOpen: false,
 			onOpenSettings: onOpenConversationSettings,
 		}
 	}
