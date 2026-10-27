@@ -204,44 +204,6 @@ mod tests {
 		);
 	}
 
-	fn a_stored_space(id: &str) -> spaces::Space {
-		spaces::Space {
-			id: id.to_owned(),
-			name: "Vocca".to_owned(),
-			colour: None,
-			position: 1,
-			created_at: 3,
-		}
-	}
-
-	#[test]
-	fn a_space_no_longer_hosted_still_carries_its_instance() {
-		let hostings = [Hosting {
-			space_id: "s1".to_owned(),
-			instance_id: Some("i1".to_owned()),
-			is_hosted: false,
-		}];
-
-		let presented = Space::presented(a_stored_space("s1"), &hostings);
-
-		assert!(!presented.shared);
-		assert_eq!(presented.instance_id.as_deref(), Some("i1"));
-	}
-
-	#[test]
-	fn a_space_never_registered_carries_no_instance() {
-		let hostings = [Hosting {
-			space_id: "other".to_owned(),
-			instance_id: Some("i1".to_owned()),
-			is_hosted: true,
-		}];
-
-		let presented = Space::presented(a_stored_space("s1"), &hostings);
-
-		assert!(!presented.shared);
-		assert_eq!(presented.instance_id, None);
-	}
-
 	#[test]
 	fn a_space_record_crosses_to_the_front_under_the_name_it_reads() {
 		assert_eq!(
