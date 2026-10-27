@@ -2,6 +2,7 @@
 
 import { Tabs } from "@base-ui/react/tabs"
 import {
+	type KeyboardEvent,
 	type ReactNode,
 	type RefObject,
 	useLayoutEffect,
@@ -243,6 +244,20 @@ type TabLiftSource = {
 	onReorderTabs?: (ids: string[]) => void
 }
 
+const stepOf = (event: KeyboardEvent<HTMLElement>) => {
+	if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey)
+		return 0
+	if (event.key === "ArrowLeft") return -1
+	if (event.key === "ArrowRight") return 1
+	return 0
+}
+
+type TabMove = {
+	title: string
+	position: number
+	count: number
+}
+
 const useTabLift = ({
 	tabs,
 	pinned,
@@ -252,6 +267,23 @@ const useTabLift = ({
 }: TabLiftSource) => {
 	const isPinned = (id: string) => pinned.some((tab) => tab.id === id)
 	const zoneOf = (id: string) => (isPinned(id) ? pinned : kept)
+	const [move, setMove] = useState<TabMove | null>(null)
+
+	const moveByKey = (id: string, event: KeyboardEvent<HTMLElement>) => {
+		const step = stepOf(event)
+		if (!onReorderTabs || step === 0) return
+		event.preventDefault()
+		const zone = zoneOf(id)
+		const from = zone.findIndex((tab) => tab.id === id)
+		const to = from + step
+		if (to < 0 || to >= zone.length) return
+		setMove({
+			title: zone[from].title,
+			position: (isPinned(id) ? 0 : pinned.length) + to + 1,
+			count: pinned.length + kept.length,
+		})
+		onReorderTabs(reorderedIds(tabs, zone, id, to))
+	}
 
 	const lift = useRosterLift({
 		isEnabled: Boolean(onReorderTabs),
@@ -288,6 +320,8 @@ const useTabLift = ({
 	return {
 		lift,
 		insertionOn: (id: string) => (mark?.id === id ? mark.edge : undefined),
+		move,
+		moveByKey,
 	}
 }
 
@@ -310,6 +344,7 @@ type TitleBarTabItemProps = TabGestures & {
 	width: string
 	lift: RosterLift<number>
 	insertion?: InsertionEdge
+	onMoveKey: (event: KeyboardEvent<HTMLElement>) => void
 }
 
 const TitleBarTabItem = ({
@@ -319,6 +354,7 @@ const TitleBarTabItem = ({
 	hasClosedTab = false,
 	lift,
 	insertion,
+	onMoveKey,
 	onPinTab,
 	onUnpinTab,
 	onNewTab,
@@ -355,6 +391,7 @@ const TitleBarTabItem = ({
 						onClick={(event) => {
 							if (lift.hasJustDropped()) event.preventBaseUIHandler()
 						}}
+						onKeyDown={onMoveKey}
 						ref={isLifted ? lift.followRef : undefined}
 						value={tab.id}
 					/>
@@ -529,7 +566,7 @@ const TitleBarTabs = ({
 	const { kept, overflowing } = splitAtFit(unpinned, fittingCount, activeTabId)
 	const tabWidth = overflowing.length > 0 ? TAB_WIDTH_AT_FLOOR : TAB_WIDTH
 	const hasDivider = pinned.length > 0 && unpinned.length > 0
-	const { lift, insertionOn } = useTabLift({
+	const { lift, insertionOn, move, moveByKey } = useTabLift({
 		tabs,
 		pinned,
 		kept,
@@ -546,6 +583,7 @@ const TitleBarTabs = ({
 			onCloseOtherTabs={onCloseOtherTabs}
 			onCloseTab={onCloseTab}
 			onDuplicateTab={onDuplicateTab}
+			onMoveKey={(event) => moveByKey(tab.id, event)}
 			onMoveTabToNewWindow={onMoveTabToNewWindow}
 			onNewTab={onNewTab}
 			onPinTab={onPinTab}
@@ -615,6 +653,13 @@ const TitleBarTabs = ({
 						</span>
 					))}
 				</div>
+				<span
+					aria-live="polite"
+					className="sr-only"
+					data-slot="title-bar-tab-move-announcement"
+				>
+					{move ? t("titleBar.tabMoved", move) : ""}
+				</span>
 			</Tabs.Root>
 			{overflowing.length > 0 ? (
 				<OverflowChip onSelectTab={onSelectTab} tabs={overflowing} />
