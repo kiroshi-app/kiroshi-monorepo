@@ -240,7 +240,7 @@ export type UnitTestScope =
 	| { scope: "full"; path: string; importers: number; graphMs: number }
 	| { scope: "full"; error: string; graphMs: number }
 
-export type ScopeInputs = { changedPaths: string[]; repo: string }
+type ScopeInputs = { changedPaths: string[]; repo: string }
 
 const GRAPHED_ROOTS = [...TEST_SOURCE_ROOTS, "packages/shared/"]
 
@@ -286,7 +286,7 @@ export const unitTestScope = ({
 
 const graphTime = (scope: UnitTestScope) =>
 	"graphMs" in scope && scope.graphMs !== undefined
-		? `, import graph built in ${scope.graphMs} ms`
+		? `, import graph build took ${scope.graphMs} ms`
 		: ""
 
 const scopeReason = (scope: UnitTestScope) => {

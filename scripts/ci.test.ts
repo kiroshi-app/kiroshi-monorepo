@@ -647,15 +647,15 @@ describe("the unit test scope of a pull request", () => {
 		],
 		[
 			{ scope: "full", path: SHARED_MODULE, importers: 24, graphMs: 812 },
-			`ci  unit test scope: full suite: ${SHARED_MODULE} is shared (24 test files reach it, threshold ${SHARED_IMPORTER_THRESHOLD}), import graph built in 812 ms`,
+			`ci  unit test scope: full suite: ${SHARED_MODULE} is shared (24 test files reach it, threshold ${SHARED_IMPORTER_THRESHOLD}), import graph build took 812 ms`,
 		],
 		[
 			{ scope: "full", error: "Error: ENOENT", graphMs: 3 },
-			"ci  unit test scope: full suite: building the import graph failed: Error: ENOENT, import graph built in 3 ms",
+			"ci  unit test scope: full suite: building the import graph failed: Error: ENOENT, import graph build took 3 ms",
 		],
 		[
 			{ scope: "changed", graphMs: 640 },
-			"ci  unit test scope: changed test files: no changed path is shared, import graph built in 640 ms",
+			"ci  unit test scope: changed test files: no changed path is shared, import graph build took 640 ms",
 		],
 		[
 			{ scope: "changed" },
