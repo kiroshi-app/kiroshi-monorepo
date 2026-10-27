@@ -222,12 +222,12 @@ export const ConversationSettingsRoute = () => {
 
 	return (
 		<ConversationScreenHost
+			bots={workspace.rosterView.bots}
 			conversation={conversation}
 			core={workspace.core}
 			frame={frame}
 			navigation={workspace.navigation}
 			rosterLines={workspace.rosterLines}
-			rosterView={workspace.rosterView}
 			search={search}
 		/>
 	)

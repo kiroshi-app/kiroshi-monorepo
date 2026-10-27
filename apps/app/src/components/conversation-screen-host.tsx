@@ -1,6 +1,6 @@
 import { ConversationSettingsScreen } from "@workspace/ui/components/settings-screen"
 
-import type { Conversation } from "@/lib/bindings"
+import type { Bot, Conversation } from "@/lib/bindings"
 import {
 	leadOf,
 	presentParticipants,
@@ -12,28 +12,27 @@ import type { SettingsSearch } from "@/lib/navigation/settings-search"
 import type { SettingsNavigation } from "@/lib/navigation/use-settings-navigation"
 import type { SettingsFrame } from "@/lib/workspace/settings-frame"
 import type { RosterLines } from "@/lib/workspace/use-roster-lines"
-import type { RosterView } from "@/lib/workspace/use-roster-view"
 import type { WorkspaceCore } from "@/lib/workspace/use-workspace-core"
 
 const GENERAL_ENTRY = "general"
 
 type ConversationScreenHostProps = {
+	bots: Bot[]
 	conversation: Conversation
 	core: WorkspaceCore
 	frame: SettingsFrame
 	navigation: SettingsNavigation
 	rosterLines: RosterLines
-	rosterView: RosterView
 	search: SettingsSearch
 }
 
 export const ConversationScreenHost = ({
+	bots,
 	conversation,
 	core,
 	frame,
 	navigation,
 	rosterLines,
-	rosterView,
 	search,
 }: ConversationScreenHostProps) => {
 	const roster = core.roster.controller
@@ -62,10 +61,7 @@ export const ConversationScreenHost = ({
 				void roster.setConversationLead(id, botId)
 			}}
 			onValueChange={(value) => roster.describeConversation(id, value)}
-			participants={toConversationBots(
-				presentParticipants(conversation),
-				rosterView.bots,
-			)}
+			participants={toConversationBots(presentParticipants(conversation), bots)}
 			value={toConversationSettingsValue(conversation)}
 		/>
 	)

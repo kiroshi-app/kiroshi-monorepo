@@ -116,15 +116,15 @@ const headerButtonOf = (name: string) =>
 		name: i18n.t("chat:screen.conversationIdentity", { name }),
 	})
 
-const openSettingsFromRowMenu = async () => {
+const rowMenuSettingsOf = async () => {
 	await act(async () => {
 		fireEvent.contextMenu(rosterRowOf(ROOM), { clientX: 20, clientY: 20 })
 	})
 	await settle()
-	await press(
-		screen.getByRole("menuitem", { name: i18n.t("bots:roster.settings") }),
-	)
+	return screen.getByRole("menuitem", { name: i18n.t("bots:roster.settings") })
 }
+
+const openSettingsFromRowMenu = async () => press(await rowMenuSettingsOf())
 
 const railOf = () =>
 	screen.queryByRole("navigation", { name: i18n.t("bots:rail.label") })
@@ -261,16 +261,8 @@ const cmdClickHeaderButton = async () => {
 	await press(headerButtonOf(ROOM), { metaKey: true })
 }
 
-const cmdClickRowMenuSettings = async () => {
-	await act(async () => {
-		fireEvent.contextMenu(rosterRowOf(ROOM), { clientX: 20, clientY: 20 })
-	})
-	await settle()
-	await press(
-		screen.getByRole("menuitem", { name: i18n.t("bots:roster.settings") }),
-		{ metaKey: true },
-	)
-}
+const cmdClickRowMenuSettings = async () =>
+	press(await rowMenuSettingsOf(), { metaKey: true })
 
 it.each([
 	["the thread header button", cmdClickHeaderButton],
