@@ -72,6 +72,15 @@ fn secondary_labels_after_opening(app: &App<MockRuntime>, count: usize) -> BTree
 	labels(app).into_iter().filter(|label| label != MAIN).collect()
 }
 
+fn assert_no_window_opens(app: &App<MockRuntime>) {
+	let main = main_window(app);
+	assert_eq!(
+		call(&main, "window_open", json!({ "href": PAGE })),
+		Err(json!({ "kind": "unavailable" }))
+	);
+	assert_eq!(labels(app), vec![MAIN.to_owned()]);
+}
+
 fn secondary_of(app: &App<MockRuntime>) -> WebviewWindow<MockRuntime> {
 	app.webview_windows()
 		.into_iter()
@@ -184,24 +193,12 @@ fn a_launch_whose_label_store_did_not_open_opens_no_window() {
 	let home = DataDirectory::new();
 	let app = home.launch_without_a_store();
 	app.manage(db::DatabaseState::Err(db::DatabaseError::AppDataDir));
-	let main = main_window(&app);
-
-	assert_eq!(
-		call(&main, "window_open", json!({ "href": PAGE })),
-		Err(json!({ "kind": "unavailable" }))
-	);
-	assert_eq!(labels(&app), vec![MAIN.to_owned()]);
+	assert_no_window_opens(&app);
 }
 
 #[test]
 fn a_launch_with_no_label_store_opens_no_window() {
 	let home = DataDirectory::new();
 	let app = home.launch_without_a_store();
-	let main = main_window(&app);
-
-	assert_eq!(
-		call(&main, "window_open", json!({ "href": PAGE })),
-		Err(json!({ "kind": "unavailable" }))
-	);
-	assert_eq!(labels(&app), vec![MAIN.to_owned()]);
+	assert_no_window_opens(&app);
 }
