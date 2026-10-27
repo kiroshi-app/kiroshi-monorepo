@@ -24,7 +24,9 @@ const EVERYTHING: &str = "*";
 
 const HEAD: &str = "HEAD";
 
+#[cfg(unix)]
 const OWNER_DIR_MODE: u32 = 0o700;
+#[cfg(unix)]
 const OWNER_FILE_MODE: u32 = 0o600;
 
 const UNDONE: &str = "Change undone";
