@@ -789,6 +789,7 @@ forms-toggleswitch--with-label
 foundations-heading-levels--heading-font-on-the-top-two-levels-only
 foundations-hue-recipe--preset-and-arbitrary-hues
 foundations-icon-stroke--every-keyline-glyph-draws-the-icon-stroke
+foundations-token-contrast--destructive-button-meets-aa-text
 foundations-token-contrast--primary-on-every-tint-meets-its-floors
 foundations-token-contrast--semantic-pairs-meet-aa-text
 foundations-token-contrast--tinted-primary-dark
