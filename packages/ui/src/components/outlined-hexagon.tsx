@@ -44,11 +44,9 @@ const OutlinedHexagon = ({ side, fill, children }: OutlinedHexagonProps) => {
 				{isCompact ? null : (
 					<mask id={ids.lip}>
 						<path d={path} fill="#ffffff" />
-						<path
-							d={path}
-							fill="#000000"
-							transform={`translate(0 ${edgeWidth})`}
-						/>
+						<svg aria-hidden="true" y={edgeWidth}>
+							<path d={path} fill="#000000" />
+						</svg>
 					</mask>
 				)}
 			</defs>
