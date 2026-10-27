@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test"
 import {
 	chmodSync,
-	copyFileSync,
 	existsSync,
 	mkdirSync,
 	mkdtempSync,
@@ -13,15 +12,11 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 
+import { copyWiredPrEnqueue } from "./pr-enqueue-wiring"
+
 const PR_REQUEUE_CHECK = fileURLToPath(
 	new URL("./pr-requeue-check.sh", import.meta.url),
 )
-
-const PR_ENQUEUE = fileURLToPath(new URL("./pr-enqueue.sh", import.meta.url))
-
-const ENQUEUE_ARGUMENT_CHECK = "if [ $# -ne 0 ]; then\n"
-
-const ENQUEUE_LINE = `if [ $# -eq 0 ] || { [ $# -eq 2 ] && [ "$1" = --reason ]; }; then "$(dirname "$0")/pr-requeue-check.sh" "$@"; set --; fi\n`
 
 const REPOSITORY = "kiroshi-app/kiroshi-monorepo"
 
@@ -177,28 +172,6 @@ const run = async (scenario: Scenario) => {
 	}
 }
 
-const wiredPrEnqueue = () => {
-	const source = readFileSync(PR_ENQUEUE, "utf8")
-	if (!source.includes(ENQUEUE_ARGUMENT_CHECK)) {
-		throw new Error("pr-enqueue.sh has no argument check to wire before")
-	}
-	const scripts = join(stub, "scripts")
-	mkdirSync(scripts)
-	const wired = join(scripts, "pr-enqueue.sh")
-	writeFileSync(
-		wired,
-		source.includes(ENQUEUE_LINE)
-			? source
-			: source.replace(
-					ENQUEUE_ARGUMENT_CHECK,
-					`${ENQUEUE_LINE}${ENQUEUE_ARGUMENT_CHECK}`,
-				),
-	)
-	chmodSync(wired, 0o755)
-	copyFileSync(PR_REQUEUE_CHECK, join(scripts, "pr-requeue-check.sh"))
-	return wired
-}
-
 beforeEach(() => {
 	stub = mkdtempSync(join(tmpdir(), "kiroshi-pr-requeue-check-stub-"))
 	repository = mkdtempSync(
@@ -320,7 +293,7 @@ describe("scripts/pr-requeue-check.sh", () => {
 describe("scripts/pr-enqueue.sh wired to the requeue check", () => {
 	it("refuses a PR ejected on its current head and arms nothing", async () => {
 		const result = await run({
-			script: wiredPrEnqueue(),
+			script: copyWiredPrEnqueue(stub),
 			failedQueueRuns: [EJECTION_ON_CURRENT_HEAD],
 		})
 
@@ -331,7 +304,7 @@ describe("scripts/pr-enqueue.sh wired to the requeue check", () => {
 
 	it("arms auto-merge on a PR ejected on its current head when --reason is given", async () => {
 		const result = await run({
-			script: wiredPrEnqueue(),
+			script: copyWiredPrEnqueue(stub),
 			arguments: ["--reason", "runner lost mid-job"],
 			failedQueueRuns: [EJECTION_ON_CURRENT_HEAD],
 		})
@@ -347,7 +320,7 @@ describe("scripts/pr-enqueue.sh wired to the requeue check", () => {
 		"still refuses %j with its own usage line and calls gh not at all",
 		async (badArguments) => {
 			const result = await run({
-				script: wiredPrEnqueue(),
+				script: copyWiredPrEnqueue(stub),
 				arguments: badArguments,
 			})
 
