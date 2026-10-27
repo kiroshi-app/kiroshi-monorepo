@@ -7,7 +7,7 @@ use tokio::sync::broadcast;
 
 use crate::{
 	account, agent, applications, companions, conversations, devices, hosting, invitations,
-	joined_spaces, missions, notifications, routines, updates, window_controls,
+	joined_spaces, missions, notifications, routines, spaces, updates, window_controls,
 };
 
 pub const BUFFERED_FRAMES: usize = 1024;
@@ -112,6 +112,7 @@ declared! {
 	NOTIFICATION_ACTIVATED: notifications::commands::NotificationTarget =
 		notifications::commands::ACTIVATED_EVENT,
 	ROUTINE_CHANGED: routines::commands::RoutineChanged = routines::commands::CHANGED_EVENT,
+	SPACE_DESCRIBED: spaces::contract::SpaceDescribed = spaces::contract::DESCRIBED_EVENT,
 	MAXIMIZE_BUTTON: window_controls::MaximizeButtonPointer =
 		window_controls::MAXIMIZE_BUTTON_EVENT,
 	UPDATE_CHANGED: updates::contract::UpdateState = updates::contract::CHANGED_EVENT,

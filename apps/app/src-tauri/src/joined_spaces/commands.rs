@@ -5,10 +5,10 @@ use super::contract::{
 	colour_shown, hosted_by, JoinedSpace, JoinedSpaceConnection, JoinedSpaceError,
 };
 use super::relay::{self, RelayGuests};
-use super::{deep_link, held};
+use super::{deep_link, description, held};
 use crate::conversations::contract::Hue;
 use crate::db;
-use crate::db::repositories::joined_spaces::JoinedReach;
+use crate::db::repositories::joined_spaces::{self, JoinedReach};
 use crate::events::{self, JOINED_SPACE_CHANGED, JOINED_SPACE_RECONNECTED, JOINED_SPACE_REMOVED};
 
 pub const CHANGED_EVENT: &str = "joined-space://changed";
@@ -95,15 +95,23 @@ pub async fn joined_spaces_list<R: Runtime>(
 	let state = app.state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	let stored = database.joined_spaces().list().await?;
-	let cloud = app.state::<RelayGuests>().inner().cloud();
 	let mut listed = Vec::with_capacity(stored.len());
 	for joined in stored {
-		let roster = database.joined_space_members().members(joined.id.clone()).await?;
-		let JoinedReach::Relay { instance_id } = &joined.reach;
-		let wait = held::wait_or_unread(&app, &joined.id, instance_id);
-		listed.push(JoinedSpace::presented(joined, cloud, wait, &roster));
+		listed.push(presented(&app, database, joined).await?);
 	}
 	Ok(listed)
+}
+
+pub(super) async fn presented<R: Runtime>(
+	app: &AppHandle<R>,
+	database: &db::Database,
+	joined: joined_spaces::JoinedSpace,
+) -> Result<JoinedSpace, JoinedSpaceError> {
+	let roster = database.joined_space_members().members(joined.id.clone()).await?;
+	let JoinedReach::Relay { instance_id } = &joined.reach;
+	let wait = held::wait_or_unread(app, &joined.id, instance_id);
+	let cloud = app.state::<RelayGuests>().inner().cloud();
+	Ok(JoinedSpace::presented(joined, cloud, wait, &roster))
 }
 
 #[tauri::command]
@@ -129,6 +137,17 @@ pub async fn joined_space_remove<R: Runtime>(
 ) -> Result<(), JoinedSpaceError> {
 	relay::left(&app, &id).await?;
 	announce_change(&app, id).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn joined_space_describe<R: Runtime>(
+	app: AppHandle<R>,
+	id: String,
+	name: String,
+	colour: Option<i64>,
+) -> Result<JoinedSpace, JoinedSpaceError> {
+	description::asked(&app, id, name, colour).await
 }
 
 #[cfg(test)]

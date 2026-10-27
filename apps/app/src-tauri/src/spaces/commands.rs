@@ -3,12 +3,13 @@ use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Runtime, State};
 
 use super::archive;
-use super::contract::{CompanionCounts, Space, SpaceError, SpacePreferences};
+use super::contract::{CompanionCounts, Space, SpaceDescribed, SpaceError, SpacePreferences};
 use crate::bundles;
 use crate::conversations::commands::{announce_joined, announce_left, list_bundles};
 use crate::conversations::contract::Hue;
 use crate::db;
 use crate::environment;
+use crate::events;
 use crate::hosting;
 
 pub(crate) fn ready(state: &db::DatabaseState) -> Result<&db::Database, SpaceError> {
@@ -56,14 +57,30 @@ pub async fn space_update<R: Runtime>(
 	let previous = database.space_hosting().registration(id.clone()).await?;
 	let updated = database.spaces().update(id, name, colour).await?;
 	let is_relabelled = (&previous.name, previous.colour) != (&updated.name, updated.colour);
-	if let Some(instance_id) = previous.instance_id.filter(|_| is_relabelled) {
-		let (name, colour) = (updated.name.clone(), updated.colour);
-		tauri::async_runtime::spawn(async move {
-			hosting::described(&app, &instance_id, &name, colour).await;
-		});
+	if is_relabelled {
+		let described = SpaceDescribed {
+			space_id: updated.id.clone(),
+			name: updated.name.clone(),
+			colour: updated.colour,
+		};
+		tauri::async_runtime::spawn(announced_once_listed(app, previous.instance_id, described));
 	}
 	let hostings = database.space_hosting().hostings().await?;
 	Ok(Space::presented(updated, &hostings))
+}
+
+async fn announced_once_listed<R: Runtime>(
+	app: AppHandle<R>,
+	instance_id: Option<String>,
+	described: SpaceDescribed,
+) {
+	if let Some(instance_id) = instance_id {
+		hosting::described(&app, &instance_id, &described.name, described.colour).await;
+	}
+	let space_id = described.space_id.clone();
+	if let Err(error) = events::emit(&app, events::SPACE_DESCRIBED, described) {
+		log::warn!("the description of space {space_id} was not announced: {error}");
+	}
 }
 
 #[tauri::command]

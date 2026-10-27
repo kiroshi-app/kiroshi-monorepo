@@ -95,7 +95,7 @@ use crate::search::contract::{CatalogueScope, MessageSearchQuery};
 use crate::spaces::commands::{
 	bot_add_to_space, bot_move_to_space, bot_remove_from_space, space_delete, space_update,
 };
-use crate::spaces::contract::{Space as SpaceShown, SpaceError};
+use crate::spaces::contract::{Space as SpaceShown, SpaceError, DESCRIBED_EVENT};
 use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 use crate::test_log::{capturing, warnings_naming};
 
@@ -1863,6 +1863,46 @@ fn a_local_event_is_forwarded_to_the_relay() {
 			next_text(&mut member, |frame| frame["event"]["payload"]["n"] == json!(1)).await;
 
 		assert!(forwarded["event"].to_string().contains(r#""n":1"#), "{forwarded}");
+	});
+}
+
+#[test]
+fn a_relabelled_space_is_described_once_to_the_front_and_its_members_after_the_relay_lists_it() {
+	run(async {
+		let mut harness = Harness::signed_in("described-to-members").await;
+		harness.started().await;
+		let mut member = harness.member().await;
+		send(&mut member, r#"{"id": "warm", "command": "agent_models"}"#).await;
+		answer(&mut member).await;
+		let described = Arc::new(Mutex::new(Vec::new()));
+		let hearing = Arc::clone(&described);
+		let noticing = Arc::clone(&harness.relay.noticed);
+		harness.app.listen(DESCRIBED_EVENT, move |event| {
+			let payload: Value = serde_json::from_str(event.payload()).expect("a json payload");
+			hearing.lock().expect("the events").push(payload);
+			noticing.send_replace(());
+		});
+		harness.relay.is_description_open.send_replace(false);
+
+		harness.updated("Lab", Hue::new(200)).await.expect("the rename");
+		harness.instance_bodies_until(2).await;
+		let heard_while_held = described.lock().expect("the events").len();
+		harness.relay.is_description_open.send_replace(true);
+		let forwarded =
+			next_text(&mut member, |frame| frame["event"]["event"] == DESCRIBED_EVENT).await;
+		harness.updated("Lab", Hue::new(200)).await.expect("the unchanged update");
+		harness.updated("Lab", None).await.expect("the hue cleared");
+		let cleared =
+			next_text(&mut member, |frame| frame["event"]["event"] == DESCRIBED_EVENT).await;
+
+		let lab = json!({ "spaceId": PERSONAL, "name": "Lab", "colour": 200 });
+		let uncoloured = json!({ "spaceId": PERSONAL, "name": "Lab", "colour": null });
+		assert_eq!(heard_while_held, 0);
+		assert_eq!(forwarded["event"]["payload"], lab);
+		assert_eq!(cleared["event"]["payload"], uncoloured);
+		let front = || described.lock().expect("the events").clone();
+		harness.noticed_until("both descriptions", || (front().len() >= 2).then_some(())).await;
+		assert_eq!(front(), vec![lab, uncoloured]);
 	});
 }
 

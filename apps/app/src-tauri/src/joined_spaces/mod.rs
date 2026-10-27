@@ -1,6 +1,7 @@
 pub mod commands;
 pub mod contract;
 pub mod deep_link;
+mod description;
 mod held;
 pub mod join;
 mod member_link;

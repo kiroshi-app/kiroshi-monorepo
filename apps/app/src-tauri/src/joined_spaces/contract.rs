@@ -7,6 +7,7 @@ use crate::conversations::contract::{Hue, StorageFailure};
 use crate::db::repositories::joined_space_members::{JoinedSpaceMember, JoinedSpaceRole};
 use crate::db::repositories::joined_spaces::{self, HostListing, JoinedReach};
 use crate::db::DatabaseError;
+use crate::spaces::contract::SpaceError;
 
 const FNV_OFFSET_BASIS: u32 = 0x811c_9dc5;
 
@@ -221,6 +222,10 @@ pub enum JoinedSpaceError {
 	#[serde(rename_all = "camelCase")]
 	KeyStore {
 		detail: String,
+	},
+	#[serde(rename_all = "camelCase")]
+	SpaceRefused {
+		refusal: SpaceError,
 	},
 }
 
