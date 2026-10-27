@@ -606,6 +606,10 @@ type Gesture = (shown: ShownSettings) => void
 
 const LEAVING_GESTURES: [string, Gesture][] = [
 	["closing the active tab", ({ tabs, settingsId }) => tabs.close(settingsId)],
+	[
+		"closing the active unpinned tab",
+		({ tabs, settingsId }) => tabs.closeUnpinned(settingsId),
+	],
 	["closeActive", ({ tabs }) => tabs.closeActive()],
 	[
 		"Close other tabs from an inactive tab",
@@ -622,6 +626,10 @@ const STAYING_GESTURES: [string, Gesture][] = [
 	["opening in a new tab", ({ tabs }) => tabs.openInNewTab(USER_SETTINGS)],
 	["unpinning", ({ tabs, settingsId }) => tabs.unpin(settingsId)],
 	["closing an inactive tab", ({ tabs, otherId }) => tabs.close(otherId)],
+	[
+		"closing an inactive unpinned tab",
+		({ tabs, otherId }) => tabs.closeUnpinned(otherId),
+	],
 	[
 		"Close other tabs on the active tab",
 		({ tabs, settingsId }) => tabs.closeOthers(settingsId),
@@ -671,6 +679,26 @@ describe("the leave guard", () => {
 		expect(shown.tabs.getState()).not.toBe(before)
 		expect(activeHref(shown.tabs)).toBe(USER_SETTINGS)
 	})
+
+	it.each([
+		["active", ({ settingsId }: ShownSettings) => settingsId],
+		["inactive", ({ otherId }: ShownSettings) => otherId],
+	])(
+		"leaves an %s pinned tab open when asked to close an unpinned one",
+		(_, idOf) => {
+			const shown = tabsShowingSettings()
+			shown.tabs.pin(idOf(shown))
+			const guard = cancellingGuard()
+			shown.tabs.guardLeave(guard)
+			const before = shown.tabs.getState()
+
+			shown.tabs.closeUnpinned(idOf(shown))
+
+			expect(guard).not.toHaveBeenCalled()
+			expect(shown.tabs.getState()).toEqual(before)
+			expect(activeHref(shown.tabs)).toBe(USER_SETTINGS)
+		},
+	)
 
 	it("acts at once once the guard is released", () => {
 		const shown = tabsShowingSettings()

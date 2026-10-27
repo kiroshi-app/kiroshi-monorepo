@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react"
 
 import type { SearchPaletteProps } from "@workspace/ui/components/search-palette"
+import type { ClickModifiers } from "@workspace/ui/lib/click-modifiers"
 
 import { activeIndexOn, createSearchController } from "./search-controller"
 import {
@@ -24,7 +25,7 @@ import { useSearchKeys } from "./use-search-keys"
 import { useSearchReads } from "./use-search-reads"
 
 import { useControllerState } from "../use-controller"
-import { isNewTabClickInFlight } from "../tabs/new-tab-clicks"
+import { opensInNewTab } from "../tabs/new-tab-clicks"
 
 export type SearchSource = {
 	spaceId: string | null
@@ -99,9 +100,9 @@ export const useSearch = ({
 	})
 
 	const openTarget = useCallback(
-		(target: SearchTarget) => {
+		(target: SearchTarget, modifiers: ClickModifiers | undefined) => {
 			controller.close()
-			if (isNewTabClickInFlight()) {
+			if (opensInNewTab(modifiers)) {
 				openSearchTargetInNewTab(target, spaceId, navigation)
 				return
 			}

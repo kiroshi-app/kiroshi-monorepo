@@ -73,7 +73,7 @@ export const useTitleBarTabs = ({
 			canGoForward,
 			hasClosedTab,
 			onSelectTab: tabs.select,
-			onCloseTab: tabs.close,
+			onCloseTab: tabs.closeUnpinned,
 			onPinTab: tabs.pin,
 			onUnpinTab: tabs.unpin,
 			onCloseOtherTabs: tabs.closeOthers,
