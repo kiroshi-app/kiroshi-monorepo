@@ -1,10 +1,11 @@
 import { type ComponentType, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { expect, fn, screen, waitFor, within } from "storybook/test"
+import { expect, fireEvent, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+	expectClickModifiers,
 	expectLaptopWindow,
 	expectRailSpaceHost,
 	expectSettingsChrome,
@@ -40,6 +41,7 @@ import {
 	SIDEBAR_MAX_WIDTH,
 	SIDEBAR_MIN_WIDTH,
 } from "@workspace/ui/components/sidebar-resize"
+import { NO_CLICK_MODIFIERS } from "@workspace/ui/lib/click-modifiers"
 
 const USER_MENU = [
 	"Account",
@@ -66,9 +68,9 @@ const ScreenHost = (props: UserSettingsScreenProps) => {
 			{...props}
 			entry={entry}
 			language={language}
-			onEntryChange={(next) => {
+			onEntryChange={(next, modifiers) => {
 				setEntry(next)
-				props.onEntryChange(next)
+				props.onEntryChange(next, modifiers)
 			}}
 			onLanguageChange={(next) => {
 				setLanguage(next)
@@ -372,12 +374,18 @@ export const Spaces = meta.story({
 		await expect(spaceRowOf(menu, "Studio")).toHaveFocus()
 		await userEvent.tab()
 		await userEvent.keyboard("{Enter}")
-		await expect(args.onOpenSpace).toHaveBeenLastCalledWith("field-notes")
+		await expect(args.onOpenSpace).toHaveBeenLastCalledWith(
+			"field-notes",
+			NO_CLICK_MODIFIERS,
+		)
 
 		await userEvent.click(create)
 		await expect(args.onCreateSpace).toHaveBeenCalledTimes(2)
 		await userEvent.click(spaceRowOf(menu, "Northwind"))
-		await expect(args.onOpenSpace).toHaveBeenLastCalledWith("northwind")
+		await expect(args.onOpenSpace).toHaveBeenLastCalledWith(
+			"northwind",
+			NO_CLICK_MODIFIERS,
+		)
 
 		for (const drawn of [
 			create,
@@ -386,6 +394,34 @@ export const Spaces = meta.story({
 			slotIn(menu, "settings-menu-space-invitation-pill"),
 		])
 			await expectNoColourTransition(drawn)
+	},
+})
+
+export const OpensASpaceWithClickModifiers = meta.story({
+	tags: ["test-only"],
+	args: SPACES_ARGS,
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"A Space row, then an invitation row, each clicked every way a host can tell apart with nothing unsaved to hold the leave. Check that the screen hands its caller the Space with the button and the keys of that click, middle with the keys held, Cmd, Ctrl or Shift alone, none on a plain click or Enter, and nothing on a right-click.",
+			},
+		},
+	},
+	play: async ({ args, userEvent }) => {
+		const menu = await expectEntryShown("Account")
+		for (const [name, id] of [
+			["Northwind", "northwind"],
+			["Atelier", "atelier"],
+		]) {
+			await expectClickModifiers({
+				target: spaceRowOf(menu, name),
+				callback: args.onOpenSpace,
+				reported: [id],
+				userEvent,
+			})
+		}
 	},
 })
 
@@ -763,6 +799,49 @@ export const LeavingAnUnsavedSkillByTheRail = meta.story({
 			expect(within(main).queryByLabelText("Body")).toBeNull(),
 		)
 		await expect(args.onEntryChange).not.toHaveBeenCalled()
+	},
+})
+
+export const OpensAnEntryWithClickModifiers = meta.story({
+	tags: ["test-only"],
+	args: { entry: "skills" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A skill with an edit not yet saved, then Appearance Cmd clicked and the leave confirmed, then Appearance clicked every way a host can tell apart. Check that the confirmed leave hands the caller the entry with the Cmd of the original click, and that a free entry reports middle with the keys held, Cmd, Ctrl or Shift alone, none on a plain click or Enter, and nothing on a right-click.",
+			},
+		},
+	},
+	play: async ({ args, userEvent }) => {
+		const menu = await expectEntryShown("Skills")
+		const main = screen.getByRole("main")
+		await userEvent.click(
+			within(main).getByRole("button", { name: /release-notes/ }),
+		)
+		await userEvent.type(within(main).getByLabelText("Body"), "!")
+		const appearance = within(menu).getByRole("button", { name: "Appearance" })
+
+		fireEvent.click(appearance, { metaKey: true, detail: 1 })
+		await userEvent.click(
+			within(
+				await screen.findByRole("alertdialog", {
+					name: "Leave without saving?",
+				}),
+			).getByRole("button", { name: "Leave" }),
+		)
+		await expect(args.onEntryChange).toHaveBeenCalledOnce()
+		await expect(args.onEntryChange).toHaveBeenLastCalledWith("appearance", {
+			...NO_CLICK_MODIFIERS,
+			meta: true,
+		})
+
+		await expectClickModifiers({
+			target: within(menu).getByRole("button", { name: "Appearance" }),
+			callback: args.onEntryChange,
+			reported: ["appearance"],
+			userEvent,
+		})
 	},
 })
 

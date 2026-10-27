@@ -68,6 +68,7 @@ import {
 } from "@workspace/ui/components/ui/sidebar"
 import { usePushedPages } from "@workspace/ui/hooks/use-pushed-pages"
 import { useSkeletonTiming } from "@workspace/ui/hooks/use-skeleton-timing"
+import type { ClickModifiers } from "@workspace/ui/lib/click-modifiers"
 
 const ROUTINES_PANEL_WIDTH = 320
 
@@ -138,7 +139,7 @@ type EarlierTodayRow =
 type RoutinesPanelMissions = {
 	open: MissionCardModel[]
 	earlierToday: EarlierTodayRow[]
-	onOpen: (missionId: string) => void
+	onOpen: (missionId: string, modifiers: ClickModifiers) => void
 	wrap?: MissionCardWrap
 }
 
@@ -355,7 +356,7 @@ const RoutinesPanelBody = ({
 									<MissionCard
 										{...mission}
 										density="row"
-										onOpen={(missionId) => missions.onOpen(missionId)}
+										onOpen={missions.onOpen}
 									/>,
 									missions.wrap,
 								)}
@@ -383,7 +384,7 @@ const RoutinesPanelBody = ({
 									<MissionCard
 										{...row}
 										density="row"
-										onOpen={(missionId) => missions.onOpen(missionId)}
+										onOpen={missions.onOpen}
 									/>,
 									missions.wrap,
 								)}

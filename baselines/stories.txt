@@ -379,6 +379,7 @@ conversation-missions-missionstatepill--states
 conversation-missions-missionturn--done
 conversation-missions-missionturn--failed
 conversation-missions-missionturn--in-a-solo-thread
+conversation-missions-missionturn--opens-with-click-modifiers
 conversation-missions-missionturn--ready-to-merge
 conversation-missions-missionturn--states
 conversation-missions-missionturn--under-the-turn-that-opened-it
@@ -523,6 +524,7 @@ conversation-routines-routinespanel--one-mission
 conversation-routines-routinespanel--opening
 conversation-routines-routinespanel--opening-a-mission
 conversation-routines-routinespanel--opening-the-routines
+conversation-routines-routinespanel--opens-with-click-modifiers
 conversation-routines-routinespanel--routines-loading
 conversation-routines-routinespanel--routines-read-failed
 conversation-routines-routinespanel--run-now-failed
@@ -1138,6 +1140,7 @@ navigation-missionspanel--long-title
 navigation-missionspanel--no-selected-row
 navigation-missionspanel--one-group
 navigation-missionspanel--opening-a-mission
+navigation-missionspanel--opens-with-click-modifiers
 navigation-missionspanel--reading-more
 navigation-missionspanel--reading-more-dark
 navigation-missionspanel--reading-more-under-a-fold
@@ -1875,6 +1878,8 @@ settings-user-settingsscreen--left-column-dark
 settings-user-settingsscreen--maximum-width
 settings-user-settingsscreen--minimum-width
 settings-user-settingsscreen--notifications
+settings-user-settingsscreen--opens-a-space-with-click-modifiers
+settings-user-settingsscreen--opens-an-entry-with-click-modifiers
 settings-user-settingsscreen--rail-space-host
 settings-user-settingsscreen--rail-space-host-dark
 settings-user-settingsscreen--skills

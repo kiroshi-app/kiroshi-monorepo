@@ -40,6 +40,7 @@ import {
 } from "@workspace/ui/components/sidebar-resize"
 import { SPACE_COMPANIONS } from "@workspace/ui/components/space-settings-dialog/companions.fixtures"
 import { MembersPanel } from "@workspace/ui/components/space-settings-dialog/members-panel"
+import { NO_CLICK_MODIFIERS } from "@workspace/ui/lib/click-modifiers"
 
 const SPACE_MENU = [
 	"Space",
@@ -111,9 +112,9 @@ const ScreenHost = (props: SpaceSettingsScreenProps) => {
 		<SpaceSettingsScreen
 			{...props}
 			entry={entry}
-			onEntryChange={(next) => {
+			onEntryChange={(next, modifiers) => {
 				setEntry(next)
-				props.onEntryChange(next)
+				props.onEntryChange(next, modifiers)
 			}}
 		/>
 	)
@@ -480,7 +481,10 @@ export const LeavingUnsavedApplicationEdits = meta.story({
 				}),
 			).getByRole("button", { name: "Leave" }),
 		)
-		await expect(args.onEntryChange).toHaveBeenLastCalledWith("members")
+		await expect(args.onEntryChange).toHaveBeenLastCalledWith(
+			"members",
+			NO_CLICK_MODIFIERS,
+		)
 		await waitFor(() =>
 			expect(entryIn(menu, "Members")).toHaveAttribute("aria-current", "page"),
 		)
@@ -1159,7 +1163,10 @@ export const ByKeyboard = meta.story({
 		await userEvent.tab()
 		await expect(entryIn(menu, "Secrets")).toHaveFocus()
 		await userEvent.keyboard("{Enter}")
-		await expect(args.onEntryChange).toHaveBeenLastCalledWith("environment")
+		await expect(args.onEntryChange).toHaveBeenLastCalledWith(
+			"environment",
+			NO_CLICK_MODIFIERS,
+		)
 		await expect(entryIn(menu, "Secrets")).toHaveAttribute(
 			"aria-current",
 			"page",

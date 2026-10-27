@@ -109,7 +109,11 @@ const ThreadRoutines = ({
 			isOpen={activityPanel.isOpen}
 			isMissionsPending={missions.isPending}
 			isRoutinesPending={isPending}
-			missions={{ ...rows, onOpen: onOpenMission, wrap: wrapMissionCard }}
+			missions={{
+				...rows,
+				onOpen: (missionId) => onOpenMission(missionId),
+				wrap: wrapMissionCard,
+			}}
 			onDelete={remove}
 			onEnabledChange={setEnabled}
 			onOpenChange={activityPanel.onOpenChange}

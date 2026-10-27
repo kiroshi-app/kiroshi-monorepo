@@ -103,9 +103,9 @@ const ScreenHost = (props: CompanionSettingsScreenProps) => {
 		<CompanionSettingsScreen
 			{...props}
 			entry={entry}
-			onEntryChange={(next) => {
+			onEntryChange={(next, modifiers) => {
 				setEntry(next)
-				props.onEntryChange(next)
+				props.onEntryChange(next, modifiers)
 			}}
 			onValueChange={(next) => {
 				setValue(next)

@@ -77,6 +77,7 @@ import {
 } from "@workspace/ui/components/user-settings-dialog/use-user-settings"
 import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 import { useOverlayScrollbars } from "@workspace/ui/hooks/use-overlay-scrollbars"
+import type { ClickModifiers } from "@workspace/ui/lib/click-modifiers"
 import { cn } from "@workspace/ui/lib/utils"
 
 const HEADER_AVATAR_SIZE = 36
@@ -121,7 +122,7 @@ type SettingsScreenRequestLeave = (navigate: () => void) => void
 
 type SettingsScreenNavigation = {
 	entry: string
-	onEntryChange: (entry: string) => void
+	onEntryChange: (entry: string, modifiers: ClickModifiers) => void
 	onBack: () => void
 	backLabel?: string
 	rail: AppFrameRailProps
@@ -183,7 +184,7 @@ type UserSettingsScreenProps = SettingsScreenNavigation &
 		joinedSpaces?: UserSpace[]
 		invitations?: Space[]
 		currentSpaceId?: string
-		onOpenSpace?: (id: string) => void
+		onOpenSpace?: (id: string, modifiers: ClickModifiers) => void
 		onCreateSpace?: () => void
 	}
 
@@ -332,13 +333,17 @@ const SettingsScreenLayout = ({
 		[guardLeave],
 	)
 
-	const select = (value: string) => leaveThen(() => onEntryChange(value))
+	const select = (value: string, modifiers: ClickModifiers) =>
+		leaveThen(() => onEntryChange(value, modifiers))
 
-	const openApplication = (server: BotMcpServerItem) => {
+	const openApplication = (
+		server: BotMcpServerItem,
+		modifiers: ClickModifiers,
+	) => {
 		if (server.name === openedName) return
 		leaveThen(() => {
 			sessions.applications.open(server)
-			onEntryChange(APPLICATIONS_ENTRY)
+			onEntryChange(APPLICATIONS_ENTRY, modifiers)
 		})
 	}
 
@@ -354,7 +359,7 @@ const SettingsScreenLayout = ({
 			isSelected={item.value === shown.value && !isSubEntrySelected}
 			key={item.value}
 			label={item.label}
-			onSelect={() => select(item.value)}
+			onSelect={(modifiers) => select(item.value, modifiers)}
 		>
 			{item.value === APPLICATIONS_ENTRY &&
 			isApplicationsShown &&
@@ -367,7 +372,7 @@ const SettingsScreenLayout = ({
 							key={server.name}
 							mark={server.mark}
 							name={server.displayName ?? server.name}
-							onSelect={() => openApplication(server)}
+							onSelect={(modifiers) => openApplication(server, modifiers)}
 						/>
 					))}
 					<SettingsMenuAddApplication
@@ -674,7 +679,8 @@ const UserSettingsScreen = ({
 			guardLeave={guardLeave}
 			sessions={sessions}
 			spaces={(requestLeave) => {
-				const openSpace = (id: string) => requestLeave(() => onOpenSpace?.(id))
+				const openSpace = (id: string, modifiers: ClickModifiers) =>
+					requestLeave(() => onOpenSpace?.(id, modifiers))
 
 				return (
 					<SettingsMenuSection
@@ -693,7 +699,7 @@ const UserSettingsScreen = ({
 								isCurrent={space.id === currentSpaceId}
 								key={space.id}
 								name={space.name}
-								onOpen={() => openSpace(space.id)}
+								onOpen={(modifiers) => openSpace(space.id, modifiers)}
 								spaceId={space.avatarSeed}
 							/>
 						))}
@@ -703,7 +709,7 @@ const UserSettingsScreen = ({
 								isInvitation
 								key={invitation.id}
 								name={invitation.name}
-								onOpen={() => openSpace(invitation.id)}
+								onOpen={(modifiers) => openSpace(invitation.id, modifiers)}
 								spaceId={invitation.id}
 							/>
 						))}

@@ -3,6 +3,7 @@ import { expect, fn } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	companionGlyphsIn,
+	expectClickModifiers,
 	holderOf,
 	slotIn,
 	slotsIn,
@@ -21,6 +22,7 @@ import {
 	WORKING_MISSION_CARD,
 } from "@workspace/ui/components/missions.fixtures"
 import { AssistantTurn, TurnGroup } from "@workspace/ui/components/turn"
+import { NO_CLICK_MODIFIERS } from "@workspace/ui/lib/click-modifiers"
 
 const OPENING_ANSWER =
 	"That one is wide enough to run on its own, so I opened a mission for it and I will report here when it lands."
@@ -161,7 +163,10 @@ export const WaitingForTheReader = meta.story({
 		const ticket = canvas.getByRole("link")
 
 		await userEvent.click(open)
-		await expect(args.onOpen).toHaveBeenCalledWith(WAITING_MISSION_CARD.id)
+		await expect(args.onOpen).toHaveBeenCalledWith(
+			WAITING_MISSION_CARD.id,
+			NO_CLICK_MODIFIERS,
+		)
 
 		ticket.focus()
 		await expect(ticket).toHaveFocus()
@@ -321,4 +326,24 @@ export const UnderTheTurnThatOpenedIt = meta.story({
 			<MissionTurn {...args} />
 		</div>
 	),
+})
+
+export const OpensWithClickModifiers = meta.story({
+	tags: ["test-only"],
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The mission bubble of a transcript clicked every way a host can tell apart. Check that the turn hands its caller the mission with the button and the keys of that click, middle with the keys held, Cmd, Ctrl or Shift alone, none on a plain click or Enter, and nothing on a right-click.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		await expectClickModifiers({
+			target: canvas.getByRole("button", { name: /^Open the mission/ }),
+			callback: args.onOpen,
+			reported: [WAITING_MISSION_CARD.id],
+			userEvent,
+		})
+	},
 })

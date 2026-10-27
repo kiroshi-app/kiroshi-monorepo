@@ -24,6 +24,7 @@ import {
 } from "@workspace/ui/components/missions-panel"
 import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
 import { SidebarProvider } from "@workspace/ui/components/ui/sidebar"
+import { NO_CLICK_MODIFIERS } from "@workspace/ui/lib/click-modifiers"
 import "@workspace/ui/lib/i18n"
 
 import {
@@ -308,7 +309,7 @@ describe("useSidebarMissions", () => {
 		const { result, select, selectConversation, open } = renderSidebarMissions()
 		await waitFor(() => expect(panelOf(result.current).open).toHaveLength(2))
 
-		panelOf(result.current).onOpen("m-working", "c-2")
+		panelOf(result.current).onOpen("m-working", "c-2", NO_CLICK_MODIFIERS)
 
 		expect(selectConversation).toHaveBeenCalledWith("c-2")
 		expect(open).toHaveBeenCalledWith({
@@ -326,7 +327,7 @@ describe("useSidebarMissions", () => {
 		const { result, select, selectConversation, open } = renderSidebarMissions()
 		await waitFor(() => expect(panelOf(result.current).open).toHaveLength(2))
 
-		panelOf(result.current).onOpen("m-waiting", "c-1")
+		panelOf(result.current).onOpen("m-waiting", "c-1", NO_CLICK_MODIFIERS)
 
 		expect(select).toHaveBeenCalledWith(BOT.id)
 		expect(open).toHaveBeenCalledWith({
@@ -469,7 +470,9 @@ describe("useSidebarMissions", () => {
 		const { result, openedMission } = renderSidebarMissions()
 		await waitFor(() => expect(panelOf(result.current).open).toHaveLength(2))
 
-		act(() => panelOf(result.current).onOpen("m-working", "c-2"))
+		act(() =>
+			panelOf(result.current).onOpen("m-working", "c-2", NO_CLICK_MODIFIERS),
+		)
 		expect(panelOf(result.current).openMissionId).toBe("m-working")
 
 		act(() => openedMission.leave())
