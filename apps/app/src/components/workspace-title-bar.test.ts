@@ -25,6 +25,16 @@ const harness = vi.hoisted((): { store: TranscriptStore | null } => ({
 	store: null,
 }))
 
+const windowHost = vi.hoisted(() => ({ windowOpen: vi.fn() }))
+
+vi.mock("@/lib/bindings", async (importOriginal) => {
+	const bindings = await importOriginal<typeof import("@/lib/bindings")>()
+	return {
+		...bindings,
+		commands: { ...bindings.commands, windowOpen: windowHost.windowOpen },
+	}
+})
+
 vi.mock("@/lib/conversations/create-store", () => ({
 	createTranscriptStore: () => harness.store,
 }))
@@ -61,6 +71,7 @@ afterEach(() => {
 	localStorage.clear()
 	vi.useRealTimers()
 	harness.store = null
+	windowHost.windowOpen.mockReset()
 })
 
 const settle = async () => {
@@ -260,6 +271,50 @@ describe("the title bar", () => {
 
 		await pickInTabMenu(botName, i18n.t("common:titleBar.closeOtherTabs"))
 		expect(tabNames()).toEqual([botName])
+	})
+
+	it("duplicates a tab right after it from its tab menu", async () => {
+		const { botName } = await mountApp()
+		await clickRow(botName)
+		await clickRow(ROOM_TITLE, { metaKey: true })
+
+		await pickInTabMenu(botName, i18n.t("common:titleBar.duplicateTab"))
+
+		expect(tabNames()).toEqual([botName, botName, ROOM_TITLE])
+		expect(activeTabName()).toBe(botName)
+	})
+
+	it("moves a tab to a new window opened on its page from its tab menu", async () => {
+		windowHost.windowOpen.mockResolvedValue({ status: "ok", data: null })
+		const { botName } = await mountApp()
+		await clickRow(ROOM_TITLE)
+		await clickRow(botName, { metaKey: true })
+
+		await pickInTabMenu(botName, i18n.t("common:titleBar.moveTabToNewWindow"))
+
+		expect(windowHost.windowOpen).toHaveBeenCalledOnce()
+		expect(tabNames()).toEqual([ROOM_TITLE])
+	})
+
+	it("keeps the tab and raises a notice when the new window cannot open", async () => {
+		windowHost.windowOpen.mockRejectedValue(new Error("window lost"))
+		const { botName } = await mountApp()
+		await clickRow(ROOM_TITLE)
+		await clickRow(botName, { metaKey: true })
+
+		await pickInTabMenu(botName, i18n.t("common:titleBar.moveTabToNewWindow"))
+
+		expect(tabNames()).toEqual([ROOM_TITLE, botName])
+		expect(
+			screen.getAllByText(i18n.t("common:titleBar.moveTabFailed.title")),
+		).not.toHaveLength(0)
+		expect(
+			screen.getAllByText(
+				i18n.t("common:titleBar.moveTabFailed.descriptionWithReason", {
+					reason: "window lost",
+				}),
+			),
+		).not.toHaveLength(0)
 	})
 
 	it("closes the active tab on Cmd+W, and shows an empty tab once the last one closes", async () => {
