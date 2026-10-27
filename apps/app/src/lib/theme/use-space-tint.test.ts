@@ -26,7 +26,7 @@ const hueOnRoot = () => ({
 	),
 })
 
-const hueOf = (colour: BotAvatarBlot) => ({
+const expectedHueOf = (colour: BotAvatarBlot) => ({
 	attribute: String(BLOT_HUES[colour]),
 	properties: hueStyle(BLOT_HUES[colour]),
 })
@@ -39,7 +39,7 @@ describe("useSpaceTint", () => {
 	it("sets the Space hue and both themes of every role on the html element", () => {
 		renderHook(useSpaceTint, { initialProps: "cyan" as BotAvatarBlot | null })
 
-		expect(hueOnRoot()).toEqual(hueOf("cyan"))
+		expect(hueOnRoot()).toEqual(expectedHueOf("cyan"))
 		expect(
 			hueProperties().some((name) => name.startsWith("--hue-light-")),
 		).toBe(true)
@@ -55,7 +55,7 @@ describe("useSpaceTint", () => {
 
 		rerender("purple")
 
-		expect(hueOnRoot()).toEqual(hueOf("purple"))
+		expect(hueOnRoot()).toEqual(expectedHueOf("purple"))
 	})
 
 	it("removes the attribute and every property when the colour clears, then on unmount", () => {
