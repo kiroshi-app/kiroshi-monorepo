@@ -1181,6 +1181,79 @@ export const MoveToNewWindowFailedDark = meta.story({
 	},
 })
 
+const DESCRIBE_REFUSAL_REASON = "hostOffline"
+
+const DescribeRefusedNotice = () => {
+	const { t } = useTranslation("chat")
+
+	return (
+		<NoticeDemo
+			label="Save name and colour"
+			raise={() =>
+				raiseFailureNotice({
+					title: t("screen.notice.describeRefused.title"),
+					description: t(
+						"screen.notice.describeRefused.descriptionWithReason",
+						{
+							reason: DESCRIBE_REFUSAL_REASON,
+						},
+					),
+				})
+			}
+		/>
+	)
+}
+
+const expectDescribeRefused = async (
+	canvas: ReturnType<typeof within>,
+	userEvent: UserEventObject,
+) => {
+	await userEvent.click(
+		canvas.getByRole("button", { name: "Save name and colour" }),
+	)
+
+	await failureNotice()
+	await expect(
+		within(viewport()).getByText("Couldn’t save the name and colour"),
+	).toBeVisible()
+	await expect(
+		within(viewport()).getByText(
+			`Your change wasn’t saved (${DESCRIBE_REFUSAL_REASON}), so the space kept its previous name and colour. Change them in Space settings to try again.`,
+		),
+	).toBeVisible()
+}
+
+export const DescribeRefused = meta.story({
+	render: () => <DescribeRefusedNotice />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The host refused a member’s rename or recolour of a joined Space, so the space kept its previous name and colour. Check that the title says the name and colour couldn’t be saved, distinct from every join refusal, and that the body carries the reason the app received, then the gesture to try again from Space settings. Pick `DescribeRefusedDark` for the dark theme. The app raises it from `apps/app/src/lib/spaces/joined-spaces-controller.ts`.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		await expectDescribeRefused(canvas, userEvent)
+	},
+})
+
+export const DescribeRefusedDark = meta.story({
+	globals: { theme: "dark" },
+	render: () => <DescribeRefusedNotice />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"`DescribeRefused` in the dark theme. Check that the title and the reason read on the dark notice surface, the error mark alone on the destructive role.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		await expectDescribeRefused(canvas, userEvent)
+	},
+})
+
 export const Stacked = meta.story({
 	parameters: {
 		docs: {

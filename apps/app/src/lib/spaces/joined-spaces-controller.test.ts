@@ -1177,11 +1177,6 @@ describe("describing a joined space", () => {
 	const garageOf = ({ joined }: Gear) =>
 		joined.getState().joinedSpaces.find(({ id }) => id === GARAGE.id)
 
-	const HOST_OFFLINE_NOTICE = () => ({
-		title: i18n.t("chat:screen.notice.hostOffline.title"),
-		description: i18n.t("chat:screen.notice.hostOffline.description"),
-	})
-
 	it("paints the new name and hue at once, in the switcher and as the open space colour", async () => {
 		const gear = await describingGarage()
 
@@ -1218,7 +1213,7 @@ describe("describing a joined space", () => {
 		])
 	})
 
-	it("restores the previous name and hue and raises the refusal when the host refuses", async () => {
+	it("restores the previous name and hue and raises the save failure with the refusal as its reason", async () => {
 		const gear = await describingGarage()
 		gear.wire.transport.describe.mockRejectedValueOnce({
 			kind: "hostOffline",
@@ -1229,9 +1224,25 @@ describe("describing a joined space", () => {
 		await settle()
 
 		expect(gear.joined.getState().joinedSpaces).toEqual([GARAGE, ATTIC])
-		expect(gear.reportFailure).toHaveBeenCalledExactlyOnceWith(
-			HOST_OFFLINE_NOTICE(),
-		)
+		expect(gear.reportFailure).toHaveBeenCalledExactlyOnceWith({
+			title: "Couldn’t save the name and colour",
+			description:
+				"Your change wasn’t saved (hostOffline), so the space kept its previous name and colour. Change them in Space settings to try again.",
+		})
+	})
+
+	it("raises the save failure without a reason when the refusal carries none", async () => {
+		const gear = await describingGarage()
+		gear.wire.transport.describe.mockRejectedValueOnce(" ")
+
+		gear.joined.describe(GARAGE.id, { name: "Workshop", colour: 40 })
+		await settle()
+
+		expect(gear.reportFailure).toHaveBeenCalledExactlyOnceWith({
+			title: "Couldn’t save the name and colour",
+			description:
+				"Your change wasn’t saved, so the space kept its previous name and colour. Change them in Space settings to try again.",
+		})
 	})
 
 	it("sends nothing while the host of the space is offline", async () => {

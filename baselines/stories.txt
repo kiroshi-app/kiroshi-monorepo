@@ -1348,6 +1348,8 @@ overlays-missionmenu--working-without-a-pull-request
 overlays-noticesurface--closed-by-keyboard
 overlays-noticesurface--dark-theme
 overlays-noticesurface--default
+overlays-noticesurface--describe-refused
+overlays-noticesurface--describe-refused-dark
 overlays-noticesurface--device-approved
 overlays-noticesurface--device-rejected
 overlays-noticesurface--device-removed

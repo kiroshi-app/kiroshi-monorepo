@@ -24,7 +24,7 @@ import {
 	SPACE_DESCRIBED_EVENT,
 	type SpaceDescribed,
 } from "../bindings"
-import { failureReporterIn } from "../failure-report"
+import { describeFailure, failureReporterIn } from "../failure-report"
 import { joinedHosts, listen } from "../host"
 import { createQueue } from "../queue"
 import { createStore } from "../store"
@@ -359,6 +359,20 @@ export const createJoinedSpacesController = ({
 	const reportRefusal = (reason: unknown) =>
 		reportFailure(joinRejectionNoticeOf(reason))
 
+	const reportDescribeRefusal = (refusal: unknown) => {
+		const reason =
+			refusal == null ? undefined : describeFailure(refusal).trim() || undefined
+		reportFailure({
+			title: i18n.t("chat:screen.notice.describeRefused.title"),
+			description:
+				reason === undefined
+					? i18n.t("chat:screen.notice.describeRefused.description")
+					: i18n.t("chat:screen.notice.describeRefused.descriptionWithReason", {
+							reason,
+						}),
+		})
+	}
+
 	const heldJoined = (id: string) =>
 		current().joinedSpaces.find((joined) => joined.id === id)
 
@@ -398,7 +412,7 @@ export const createJoinedSpacesController = ({
 		onRefused: (id, reason) => {
 			writes.drop(id)
 			restoreSaved(id)
-			reportRefusal(reason)
+			reportDescribeRefusal(reason)
 		},
 	})
 
