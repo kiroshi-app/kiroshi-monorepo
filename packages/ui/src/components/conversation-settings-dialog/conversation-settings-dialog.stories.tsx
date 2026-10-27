@@ -28,7 +28,7 @@ const DialogHost = (props: ConversationSettingsDialogProps) => {
 	const [participants, setParticipants] = useState(props.participants)
 	const [leadId, setLeadId] = useState(props.leadId)
 	const [icon, setIcon] = useState(props.icon)
-	const [color, setColor] = useState(props.color)
+	const [hue, setHue] = useState(props.hue)
 
 	const dismiss = (id: string) => {
 		const left = participants.filter((bot) => bot.id !== id)
@@ -42,16 +42,16 @@ const DialogHost = (props: ConversationSettingsDialogProps) => {
 	return (
 		<ConversationSettingsDialog
 			{...props}
-			color={color}
+			hue={hue}
 			icon={icon}
 			leadId={leadId}
 			onClose={() => {
 				setOpen(false)
 				props.onClose()
 			}}
-			onColorChange={(next) => {
-				setColor(next)
-				props.onColorChange?.(next)
+			onHueChange={(next) => {
+				setHue(next)
+				props.onHueChange?.(next)
 			}}
 			onDismiss={dismiss}
 			onIconChange={(next) => {
@@ -127,7 +127,7 @@ const meta = preview.meta({
 		onDismiss: fn(),
 		onDelete: fn(),
 		onIconChange: fn(),
-		onColorChange: fn(),
+		onHueChange: fn(),
 	},
 	render: (args) => <DialogHost {...args} />,
 })
@@ -414,12 +414,12 @@ export const IconPopoverOpen = meta.story({
 })
 
 export const IconAndColourSet = meta.story({
-	args: { icon: "Rocket", color: "blue" },
+	args: { icon: "Rocket", hue: 257 },
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"A conversation with its icon and colour chosen. Check that the header and the field draw the rocket in the blue pair, that every colour cell previews the rocket in its own tint with `No colour` last in the neutral pair, and that choosing a cell reports its tint, or nothing for `No colour`.",
+					"A conversation with its icon and colour chosen. Check that the header and the field draw the rocket in the blue pair, that every colour cell previews the rocket in its own tint with `No colour` after the eight and `Your hue` last, and that choosing a cell reports its hue, or null for `No colour`.",
 			},
 		},
 	},
@@ -432,11 +432,43 @@ export const IconAndColourSet = meta.story({
 		).toBeVisible()
 		await expect(inside.getByRole("radio", { name: "Blue" })).toBeChecked()
 
+		const radios = inside.getAllByRole("radio")
+		await expect(radios.at(-2)).toHaveAccessibleName("No colour")
+		await expect(radios.at(-1)).toHaveAccessibleName("Your hue")
+
 		await userEvent.click(inside.getByRole("radio", { name: "No colour" }))
-		await expect(args.onColorChange).toHaveBeenLastCalledWith(undefined)
+		await expect(args.onHueChange).toHaveBeenLastCalledWith(null)
 
 		await userEvent.click(inside.getByRole("radio", { name: "Blue" }))
-		await expect(args.onColorChange).toHaveBeenLastCalledWith("blue")
+		await expect(args.onHueChange).toHaveBeenLastCalledWith(257)
 		await expect(inside.getByRole("radio", { name: "Blue" })).toBeChecked()
+	},
+})
+
+export const OwnHueSet = meta.story({
+	args: { icon: "Rocket", hue: 320 },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A conversation wearing a hue of its own, outside the eight presets. Check that `Your hue` is the checked cell, that the hue panel stands open on 320 degrees rather than snapping to the nearest preset, and that the preview strip paints the room hexagon and the tab chip in that hue. Pick `IconAndColourSet` for a preset.",
+			},
+		},
+	},
+	play: async ({ args, userEvent }) => {
+		const dialog = await dialogIn()
+		const inside = within(dialog)
+
+		await expect(inside.getByRole("radio", { name: "Your hue" })).toBeChecked()
+		const slider = inside.getByRole("slider", { name: "Your hue" })
+		await expect(slider).toHaveValue("320")
+
+		slider.focus()
+		await userEvent.keyboard("{ArrowRight}")
+		await expect(args.onHueChange).toHaveBeenLastCalledWith(321)
+		const [preview] = slotsIn(dialog, "conversation-colour-preview")
+		await expect(
+			preview?.querySelector("[data-slot=conversation-subject-icon]"),
+		).toHaveAttribute("data-hue", "321")
 	},
 })

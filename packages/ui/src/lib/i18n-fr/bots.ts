@@ -916,6 +916,12 @@ const bots = {
 		colour: {
 			label: "Couleur",
 			none: "Aucune couleur",
+			own: "Votre teinte",
+			ownValue: "Votre teinte · {{hue}}°",
+			degree: "°",
+			preview: "Aperçu",
+			previewMessage: "Les notes de version sont en relecture.",
+			previewReply: "Merci",
 			option: {
 				red: "Rouge",
 				yellow: "Jaune",

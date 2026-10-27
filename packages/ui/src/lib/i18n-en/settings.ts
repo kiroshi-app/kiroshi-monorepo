@@ -250,6 +250,8 @@ const settings = {
 		colour: {
 			label: "Colour",
 			none: "No colour",
+			hint: "Any hue. Lightness and strength come from the recipe, so it reads in light and dark.",
+			previewMessage: "Ship it on Friday?",
 		},
 		transfer: {
 			export: "Export this space",

@@ -8,10 +8,7 @@ import { useTranslation } from "react-i18next"
 
 import conversationIcons from "@workspace/shared/conversation-icons.json"
 import { DangerZone } from "@workspace/ui/components/bot-settings-dialog/danger-zone"
-import {
-	BLOT_TINTS,
-	type BotAvatarBlot,
-} from "@workspace/ui/components/companion-colour"
+import { ColourField } from "@workspace/ui/components/colour-field"
 import { ParticipantsPanel } from "@workspace/ui/components/conversation-settings-dialog/participants-panel"
 import {
 	ConversationSubjectIcon,
@@ -24,7 +21,6 @@ import {
 import type { RosterBot } from "@workspace/ui/components/roster"
 import { SettingsDialogShell } from "@workspace/ui/components/settings-dialog-shell"
 import { SettingsField } from "@workspace/ui/components/settings-field"
-import { SettingsGroup } from "@workspace/ui/components/settings-group"
 import {
 	DANGER_RAIL_ITEM_CLASS,
 	SETTINGS_PANEL_CLASS,
@@ -34,7 +30,6 @@ import {
 } from "@workspace/ui/components/settings-rail"
 import {
 	FIELD_LABEL_CLASS,
-	FIELD_OPTION_CLASS,
 	POPUP_CLASS,
 } from "@workspace/ui/components/settings-styles"
 import {
@@ -57,8 +52,6 @@ const ROW_STEPS: Partial<Record<string, number>> = {
 	ArrowUp: -ICON_COLUMNS,
 }
 
-const COLOUR_OPTIONS = [...BLOT_TINTS, undefined] as const
-
 const ICON_TRIGGER_CLASS =
 	"flex w-fit cursor-pointer items-center gap-2 rounded-control border border-input bg-muted py-1.25 ps-1.5 pe-2.5 text-foreground text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 aria-expanded:bg-[color-mix(in_oklch,var(--muted),var(--foreground)_3%)]"
 
@@ -67,11 +60,9 @@ const ICON_POPUP_CLASS = cn(POPUP_CLASS, "w-auto gap-0 rounded-xl p-1.5 ring-0")
 const ICON_OPTION_CLASS =
 	"grid size-9 cursor-pointer place-items-center rounded-lg outline-none not-data-pressed:hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring data-pressed:bg-muted data-pressed:inset-ring-1 data-pressed:inset-ring-foreground/22"
 
-const COLOUR_OPTION_CLASS = cn(FIELD_OPTION_CLASS, "p-1")
-
 type ConversationIconFieldProps = {
 	icon?: ConversationIconName
-	color?: BotAvatarBlot
+	hue?: number | null
 	onIconChange?: (icon: ConversationIconName) => void
 }
 
@@ -89,7 +80,7 @@ const focusOptionOneRowAway = (event: KeyboardEvent<HTMLDivElement>) => {
 
 const ConversationIconField = ({
 	icon,
-	color,
+	hue,
 	onIconChange,
 }: ConversationIconFieldProps) => {
 	const { t } = useTranslation("chat")
@@ -114,7 +105,7 @@ const ConversationIconField = ({
 					aria-labelledby={`${labelId} ${valueId}`}
 					className={ICON_TRIGGER_CLASS}
 				>
-					<ConversationSubjectIcon color={color} icon={current} side={26} />
+					<ConversationSubjectIcon hue={hue} icon={current} side={26} />
 					<span className="w-18 truncate text-start" id={valueId}>
 						{t(`conversationSettings.icon.option.${current}`)}
 					</span>
@@ -145,11 +136,7 @@ const ConversationIconField = ({
 								ref={option === current ? currentOption : undefined}
 								value={option}
 							>
-								<ConversationSubjectIcon
-									color={color}
-									icon={option}
-									side={28}
-								/>
+								<ConversationSubjectIcon hue={hue} icon={option} side={28} />
 							</Toggle>
 						))}
 					</ToggleGroup>
@@ -159,46 +146,68 @@ const ConversationIconField = ({
 	)
 }
 
-type ConversationColourFieldProps = {
+type ConversationPreviewProps = {
 	icon?: ConversationIconName
-	color?: BotAvatarBlot
-	onColorChange?: (color: BotAvatarBlot | undefined) => void
+	hue: number | null
+	name: string
+	participantCount: number
+}
+
+const ConversationPreview = ({
+	icon,
+	hue,
+	name,
+	participantCount,
+}: ConversationPreviewProps) => {
+	const { t } = useTranslation("chat")
+
+	return (
+		<div
+			className="flex min-w-0 items-center gap-3 px-3.5 py-3"
+			data-slot="conversation-colour-preview"
+		>
+			<ConversationSubjectIcon hue={hue} icon={icon} side={32} />
+			<span className="flex min-w-0 flex-1 flex-col">
+				<span className="truncate font-medium text-compact text-foreground leading-4.5">
+					{name}
+				</span>
+				<span className="truncate text-muted-foreground text-xs">
+					{t("conversationSettings.colour.previewSubtitle", {
+						count: participantCount,
+					})}
+				</span>
+			</span>
+			<span className="flex min-w-0 max-w-40 shrink items-center gap-1.5 rounded-md bg-card py-1 ps-1.5 pe-2.5 text-compact text-foreground">
+				<ConversationSubjectIcon hue={hue} icon={icon} side={16} />
+				<span className="truncate">{name}</span>
+			</span>
+		</div>
+	)
+}
+
+type ConversationColourFieldProps = Omit<ConversationPreviewProps, "hue"> & {
+	hue?: number | null
+	onHueChange?: (hue: number | null) => void
 }
 
 const ConversationColourField = ({
 	icon,
-	color,
-	onColorChange,
-}: ConversationColourFieldProps) => {
-	const { t } = useTranslation("bots")
-	const groupId = useId()
-
-	const colourLabel = (colour?: BotAvatarBlot) =>
-		colour ? t(`identity.colour.option.${colour}`) : t("identity.colour.none")
-
-	return (
-		<SettingsGroup grid="grid-cols-9 gap-1" label={t("identity.colour.label")}>
-			{COLOUR_OPTIONS.map((colour) => (
-				<label
-					className={COLOUR_OPTION_CLASS}
-					key={colour ?? "none"}
-					title={colourLabel(colour)}
-				>
-					<input
-						checked={color === colour}
-						className="sr-only"
-						name={`${groupId}-colour`}
-						onChange={() => onColorChange?.(colour)}
-						type="radio"
-						value={colour ?? ""}
-					/>
-					<ConversationSubjectIcon color={colour} icon={icon} side={24} />
-					<span className="sr-only">{colourLabel(colour)}</span>
-				</label>
-			))}
-		</SettingsGroup>
-	)
-}
+	hue = null,
+	onHueChange,
+	...preview
+}: ConversationColourFieldProps) => (
+	<ColourField
+		mark={(option) => (
+			<ConversationSubjectIcon hue={option} icon={icon} side={26} />
+		)}
+		noColour="last"
+		onValueChange={(next) => onHueChange?.(next)}
+		preview={(shown) => (
+			<ConversationPreview {...preview} hue={shown} icon={icon} />
+		)}
+		value={hue}
+	/>
+)
 
 type ConversationSettingsValue = {
 	name: string
@@ -211,9 +220,9 @@ type ConversationSettingsDialogProps = {
 	value: ConversationSettingsValue
 	onValueChange: (value: ConversationSettingsValue) => void
 	icon?: ConversationIconName
-	color?: BotAvatarBlot
+	hue?: number | null
 	onIconChange?: (icon: ConversationIconName) => void
-	onColorChange?: (color: BotAvatarBlot | undefined) => void
+	onHueChange?: (hue: number | null) => void
 	participants: RosterBot[]
 	leadId: string
 	onLeadChange: (id: string) => void
@@ -228,9 +237,9 @@ const ConversationSettingsDialog = ({
 	value,
 	onValueChange,
 	icon,
-	color,
+	hue,
 	onIconChange,
-	onColorChange,
+	onHueChange,
 	participants,
 	leadId,
 	onLeadChange,
@@ -249,7 +258,7 @@ const ConversationSettingsDialog = ({
 		<SettingsDialogShell
 			breadcrumb={t("conversationSettings.breadcrumb")}
 			className={className}
-			mark={<ConversationSubjectIcon color={color} icon={icon} side={24} />}
+			mark={<ConversationSubjectIcon hue={hue} icon={icon} side={24} />}
 			name={conversationName}
 			onClose={onClose}
 			open={open}
@@ -293,14 +302,16 @@ const ConversationSettingsDialog = ({
 					value={value.name}
 				/>
 				<ConversationIconField
-					color={color}
+					hue={hue}
 					icon={icon}
 					onIconChange={onIconChange}
 				/>
 				<ConversationColourField
-					color={color}
+					hue={hue}
 					icon={icon}
-					onColorChange={onColorChange}
+					name={conversationName}
+					onHueChange={onHueChange}
+					participantCount={participants.length}
 				/>
 			</SettingsScrollingPanel>
 

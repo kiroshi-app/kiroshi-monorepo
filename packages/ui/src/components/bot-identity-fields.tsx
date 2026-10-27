@@ -1,73 +1,103 @@
 "use client"
 
-import { type CSSProperties, useId } from "react"
 import { useTranslation } from "react-i18next"
 
 import {
 	type ActivityIndicatorKind,
 	BotIdentityAvatar,
 } from "@workspace/ui/components/bot-identity-avatar"
-import {
-	BLOT_TINTS,
-	type BotAvatarBlot,
-	type BotIdentity,
-} from "@workspace/ui/components/bot-settings"
-import { BLOT_HUES, hueOf } from "@workspace/ui/components/companion-colour"
+import type { BotIdentity } from "@workspace/ui/components/bot-settings"
+import { ColourField } from "@workspace/ui/components/colour-field"
+import { blotOf } from "@workspace/ui/components/companion-colour"
 import { DitheredFieldAvatar } from "@workspace/ui/components/dithered-field-avatar"
-import { hueStyle } from "@workspace/ui/components/hue-palette"
 import { ProfilePictureField } from "@workspace/ui/components/profile-picture-field"
 import { SettingsGroup } from "@workspace/ui/components/settings-group"
 import { PICTURE_FIELD_SIZE } from "@workspace/ui/components/settings-styles"
 import { cn } from "@workspace/ui/lib/utils"
 
 const PREVIEW_SIZE = 64
-const BLOT_SIZE = 56
-
-const BLOT_OPTIONS = [undefined, ...BLOT_TINTS] as const
-
-const BLOT_OPTION_CLASS =
-	"cursor-pointer rounded-control border border-border bg-muted/40 p-1 hover:bg-muted has-[:checked]:border-(--swatch) has-[:checked]:bg-(--swatch)/12 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring"
-
-const swatchColour = (blot?: BotAvatarBlot) =>
-	({
-		...(blot && hueStyle(BLOT_HUES[blot])),
-		"--swatch": blot
-			? "var(--primary-strong)"
-			: "var(--bot-avatar-field-untinted)",
-	}) as CSSProperties
+const OPTION_AVATAR_SIZE = 52
 
 type BotIdentityFieldsProps = {
 	identity: BotIdentity
+	hue: number | null
 	name?: string
 	seed?: string
 	working?: boolean
 	workingKind?: ActivityIndicatorKind
 	onIdentityChange: (identity: BotIdentity) => void
+	onHueChange: (hue: number | null) => void
 	onAvatarUpload: (file: File) => void
 	className?: string
 }
 
+type CompanionPreviewProps = {
+	hue: number | null
+	name?: string
+	seed?: string
+}
+
+const CompanionPreview = ({ hue, name, seed }: CompanionPreviewProps) => {
+	const { t } = useTranslation("bots")
+
+	return (
+		<div
+			className="flex min-w-0 items-center gap-4 px-3.5 py-2.5"
+			data-slot="companion-colour-preview"
+		>
+			<BotIdentityAvatar
+				className="shrink-0"
+				hue={hue ?? undefined}
+				name={name}
+				seed={seed}
+				size={40}
+			/>
+			<span className="flex min-w-0 items-center gap-2">
+				<BotIdentityAvatar
+					className="shrink-0"
+					hue={hue ?? undefined}
+					name={name}
+					seed={seed}
+					size={28}
+				/>
+				<span className="min-w-0 break-words rounded-bubble bg-card px-3 py-2 text-compact text-foreground leading-5">
+					{t("identity.colour.previewMessage")}
+				</span>
+			</span>
+			<span className="shrink-0 rounded-bubble bg-user-bubble px-3 py-2 text-compact text-user-bubble-foreground leading-5">
+				{t("identity.colour.previewReply")}
+			</span>
+		</div>
+	)
+}
+
 const BotIdentityFields = ({
 	identity,
+	hue,
 	name,
 	seed,
 	working = false,
 	workingKind,
 	onIdentityChange,
+	onHueChange,
 	onAvatarUpload,
 	className,
 }: BotIdentityFieldsProps) => {
 	const { t } = useTranslation("bots")
-	const groupId = useId()
-
-	const blotLabel = (blot?: BotAvatarBlot) =>
-		blot ? t(`identity.colour.option.${blot}`) : t("identity.colour.none")
 
 	const dropPicture = () => onIdentityChange({ blot: identity.blot })
 
+	const colourLabel = () => {
+		if (hue === null) return t("identity.colour.none")
+		const blot = blotOf(hue)
+		return blot
+			? t(`identity.colour.option.${blot}`)
+			: t("identity.colour.ownValue", { hue })
+	}
+
 	const currentLabel = identity.image
 		? t("identity.uploadedImage")
-		: blotLabel(identity.blot)
+		: colourLabel()
 
 	return (
 		<div
@@ -76,7 +106,7 @@ const BotIdentityFields = ({
 		>
 			<div className="flex items-center gap-4">
 				<BotIdentityAvatar
-					blot={identity.blot}
+					hue={hue ?? undefined}
 					image={identity.image}
 					kind={workingKind}
 					name={name}
@@ -94,37 +124,23 @@ const BotIdentityFields = ({
 				</div>
 			</div>
 
-			<SettingsGroup
-				grid="grid-cols-[repeat(auto-fill,--spacing(16.5))] gap-1"
-				label={t("identity.colour.label")}
-			>
-				{BLOT_OPTIONS.map((blot) => (
-					<label
-						className={BLOT_OPTION_CLASS}
-						data-hue={hueOf(blot)}
-						key={blot ?? "none"}
-						style={swatchColour(blot)}
-						title={blotLabel(blot)}
-					>
-						<input
-							checked={identity.blot === blot}
-							className="sr-only"
-							name={`${groupId}-blot`}
-							onChange={() => onIdentityChange({ blot })}
-							type="radio"
-							value={blot ?? ""}
+			<ColourField
+				look="avatar"
+				mark={(option) => (
+					<span aria-hidden="true" className="flex">
+						<DitheredFieldAvatar
+							hue={option ?? undefined}
+							name={name ?? seed ?? ""}
+							size={OPTION_AVATAR_SIZE}
 						/>
-						<span aria-hidden="true" className="flex">
-							<DitheredFieldAvatar
-								name={name ?? seed ?? ""}
-								size={BLOT_SIZE}
-								hue={hueOf(blot)}
-							/>
-						</span>
-						<span className="sr-only">{blotLabel(blot)}</span>
-					</label>
-				))}
-			</SettingsGroup>
+					</span>
+				)}
+				onValueChange={onHueChange}
+				preview={(shown) => (
+					<CompanionPreview hue={shown} name={name} seed={seed} />
+				)}
+				value={hue}
+			/>
 
 			<SettingsGroup grid="grid-cols-1" label={t("identity.picture.label")}>
 				<ProfilePictureField
@@ -136,7 +152,7 @@ const BotIdentityFields = ({
 					)}
 					preview={
 						<BotIdentityAvatar
-							blot={identity.blot}
+							hue={hue ?? undefined}
 							image={identity.image}
 							name={name}
 							seed={seed}

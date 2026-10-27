@@ -6,6 +6,11 @@ import { useTranslation } from "react-i18next"
 import { DangerZone } from "@workspace/ui/components/bot-settings-dialog/danger-zone"
 import type { McpServerEditorLayout } from "@workspace/ui/components/bot-settings-dialog/mcp-server-editor-header"
 import {
+	blotOf,
+	hueOf,
+	isFreeHue,
+} from "@workspace/ui/components/companion-colour"
+import {
 	type EnvironmentEntry,
 	EnvironmentPanel,
 	type EnvironmentWrite,
@@ -27,7 +32,10 @@ import {
 	ShareCard,
 	type ShareCardProps,
 } from "@workspace/ui/components/space-settings-dialog/share-card"
-import { SpaceFields } from "@workspace/ui/components/space-settings-dialog/space-fields"
+import {
+	SpaceFields,
+	type SpaceFieldsValue,
+} from "@workspace/ui/components/space-settings-dialog/space-fields"
 import { Button } from "@workspace/ui/components/ui/button"
 
 const SPACE_ENTRY = "space"
@@ -134,10 +142,18 @@ const useSpaceSettings = ({
 			</div>
 		) : null
 
+	const describeSpace = ({ name, hue }: SpaceFieldsValue) => {
+		if (isFreeHue(hue)) return
+		onValueChange({ name, colour: blotOf(hue) })
+	}
+
 	const spacePanel =
 		host === undefined ? (
 			<>
-				<SpaceFields onValueChange={onValueChange} value={value} />
+				<SpaceFields
+					onValueChange={describeSpace}
+					value={{ name: value.name, hue: hueOf(value.colour) ?? null }}
+				/>
 				{transfer}
 			</>
 		) : (

@@ -1,38 +1,64 @@
 "use client"
 
-import { useId } from "react"
 import { useTranslation } from "react-i18next"
 
-import {
-	BLOT_TINTS,
-	type BotAvatarBlot,
-} from "@workspace/ui/components/bot-settings"
-import { BLOT_HUES, hueOf } from "@workspace/ui/components/companion-colour"
+import { ColourField } from "@workspace/ui/components/colour-field"
+import { blotOf } from "@workspace/ui/components/companion-colour"
 import { hueStyle } from "@workspace/ui/components/hue-palette"
 import { Icons } from "@workspace/ui/components/icons"
 import { SettingsField } from "@workspace/ui/components/settings-field"
-import { SettingsGroup } from "@workspace/ui/components/settings-group"
-import { FIELD_OPTION_CLASS } from "@workspace/ui/components/settings-styles"
-import type { SpaceSettingsValue } from "@workspace/ui/components/space-settings"
 import { SpaceTint } from "@workspace/ui/components/space-tint"
 import { cn } from "@workspace/ui/lib/utils"
 
-const COLOUR_OPTIONS = [undefined, ...BLOT_TINTS] as const
+type SpaceFieldsValue = {
+	name: string
+	hue: number | null
+}
 
 type SpaceFieldsProps = {
-	value: SpaceSettingsValue
-	onValueChange: (value: SpaceSettingsValue) => void
+	value: SpaceFieldsValue
+	onValueChange: (value: SpaceFieldsValue) => void
 	className?: string
+}
+
+type SpacePreviewProps = {
+	hue: number | null
+}
+
+const SpacePreview = ({ hue }: SpacePreviewProps) => {
+	const { t } = useTranslation("settings")
+
+	return (
+		<div
+			className="flex min-w-0 items-center gap-3 px-3.5 py-3"
+			data-hue={hue ?? undefined}
+			data-slot="space-colour-preview"
+			style={hue === null ? undefined : hueStyle(hue)}
+		>
+			<span
+				aria-hidden="true"
+				className="size-6.5 shrink-0 rounded-[7px] bg-user-bubble"
+			/>
+			<span className="flex-1" />
+			<span
+				aria-hidden="true"
+				className="size-2 shrink-0 rounded-full bg-primary"
+			/>
+			<span className="min-w-0 break-words rounded-bubble bg-user-bubble px-3 py-2 text-compact text-user-bubble-foreground leading-5">
+				{t("space.colour.previewMessage")}
+			</span>
+			<span
+				aria-hidden="true"
+				className="grid size-7.5 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground"
+			>
+				<Icons.Send className="size-4" />
+			</span>
+		</div>
+	)
 }
 
 const SpaceFields = ({ value, onValueChange, className }: SpaceFieldsProps) => {
 	const { t } = useTranslation("settings")
-	const groupId = useId()
-
-	const tintLabel = (tint?: BotAvatarBlot) =>
-		tint
-			? t(`identity.colour.option.${tint}`, { ns: "bots" })
-			: t("space.colour.none")
 
 	return (
 		<div
@@ -46,43 +72,15 @@ const SpaceFields = ({ value, onValueChange, className }: SpaceFieldsProps) => {
 				value={value.name}
 			/>
 
-			<SettingsGroup grid="grid-cols-9 gap-1" label={t("space.colour.label")}>
-				{COLOUR_OPTIONS.map((tint) => (
-					<label
-						className={FIELD_OPTION_CLASS}
-						key={tint ?? "none"}
-						title={tintLabel(tint)}
-					>
-						<input
-							checked={value.colour === tint}
-							className="sr-only"
-							name={`${groupId}-colour`}
-							onChange={() => onValueChange({ ...value, colour: tint })}
-							type="radio"
-							value={tint ?? ""}
-						/>
-						<span
-							className="relative grid place-items-center"
-							data-hue={hueOf(tint)}
-							style={tint ? hueStyle(BLOT_HUES[tint]) : undefined}
-						>
-							<SpaceTint className="size-6" tint={tint} />
-							{value.colour === tint ? (
-								<Icons.Check
-									aria-hidden="true"
-									className={cn(
-										"absolute size-3.5",
-										tint && "text-user-bubble-foreground",
-									)}
-								/>
-							) : null}
-						</span>
-						<span className="sr-only">{tintLabel(tint)}</span>
-					</label>
-				))}
-			</SettingsGroup>
+			<ColourField
+				hint={t("space.colour.hint")}
+				mark={(hue) => <SpaceTint className="size-6" tint={blotOf(hue)} />}
+				onValueChange={(hue) => onValueChange({ ...value, hue })}
+				preview={(hue) => <SpacePreview hue={hue} />}
+				value={value.hue}
+			/>
 		</div>
 	)
 }
 
-export { SpaceFields, type SpaceFieldsProps }
+export { SpaceFields, type SpaceFieldsProps, type SpaceFieldsValue }

@@ -1,6 +1,6 @@
+import { isFreeHue } from "@workspace/ui/components/companion-colour"
 import { ConversationSettingsDialog } from "@workspace/ui/components/conversation-settings-dialog"
 
-import { hueOfPreset } from "@/lib/colour/hue-shim"
 import {
 	leadOf,
 	presentParticipants,
@@ -29,14 +29,10 @@ export const ConversationSettingsHost = ({
 
 	return settingsConversation ? (
 		<ConversationSettingsDialog
-			{...toConversationLook(settingsConversation)}
+			hue={settingsConversation.color}
+			icon={toConversationLook(settingsConversation).icon}
 			leadId={leadOf(settingsConversation) ?? ""}
 			onClose={() => roster.controller.setConversationEditing(false)}
-			onColorChange={(color) =>
-				roster.controller.styleConversation(settingsConversation.id, {
-					color: color ? hueOfPreset(color) : null,
-				})
-			}
 			onDelete={() => {
 				void sidebarActions.onDeleteConversation(settingsConversation.id)
 			}}
@@ -45,6 +41,12 @@ export const ConversationSettingsHost = ({
 					settingsConversation.id,
 					botId,
 				)
+			}}
+			onHueChange={(hue) => {
+				if (isFreeHue(hue)) return
+				roster.controller.styleConversation(settingsConversation.id, {
+					color: hue,
+				})
 			}}
 			onIconChange={(icon) =>
 				roster.controller.styleConversation(settingsConversation.id, { icon })
