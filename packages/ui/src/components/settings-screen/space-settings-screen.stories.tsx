@@ -12,6 +12,7 @@ import {
 	RAIL_SPACE_HOST,
 	slotIn,
 	slotsIn,
+	tokenStyleIn,
 } from "@workspace/storybook/story-utils"
 import {
 	STUDIO,
@@ -693,8 +694,6 @@ const JOINED_ARGS = {
 const INK = {
 	foreground: "rgb(245, 245, 245)",
 	muted: "rgb(163, 163, 163)",
-	soft: "rgb(212, 212, 212)",
-	destructive: "oklch(0.704 0.191 22.216)",
 	online: "rgb(63, 180, 102)",
 	offline: "rgb(115, 115, 115)",
 	card: "rgb(18, 18, 19)",
@@ -706,9 +705,15 @@ type PinnedInk = {
 	icon: string
 }
 
-const DANGER_INK: PinnedInk = { label: INK.destructive, icon: INK.destructive }
+const DANGER_INK: PinnedInk = {
+	label: "text-destructive",
+	icon: "text-destructive",
+}
 
-const QUIET_INK: PinnedInk = { label: INK.soft, icon: INK.muted }
+const QUIET_INK: PinnedInk = {
+	label: "text-soft-foreground",
+	icon: "text-muted-foreground",
+}
 
 type ArtboardMenu = {
 	kind: string
@@ -824,11 +829,11 @@ const expectArtboard = async ({
 		size: "14px",
 		leading: "20px",
 		weight: "400",
-		ink: pinnedInk.label,
+		ink: tokenStyleIn(foot, pinnedInk.label, "color"),
 	})
 	const footIcon = iconOf(foot)
 	await expect([footIcon.stroke, footIcon.strokeWidth]).toEqual([
-		pinnedInk.icon,
+		tokenStyleIn(foot, pinnedInk.icon, "color"),
 		"1.8px",
 	])
 	return { menu, main }

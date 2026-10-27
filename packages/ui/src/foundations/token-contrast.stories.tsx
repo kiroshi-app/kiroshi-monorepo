@@ -1,4 +1,4 @@
-import { expect } from "storybook/test"
+import { expect, fn } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { hueScopeOf } from "@workspace/storybook/story-utils"
@@ -6,6 +6,8 @@ import {
 	BLOT_TINTS,
 	type BotAvatarBlot,
 } from "@workspace/ui/components/companion-colour"
+import { RoutineRow } from "@workspace/ui/components/routine-row"
+import { RELEASE_WATCH } from "@workspace/ui/components/routines.fixtures"
 import { Button } from "@workspace/ui/components/ui/button"
 import { Switch } from "@workspace/ui/components/ui/switch"
 import {
@@ -343,6 +345,71 @@ export const DestructiveButtonMeetsAaText = meta.story({
 		await expect(
 			problems,
 			`Destructive button failing its contrast floor:\n${problems.join("\n")}`,
+		).toEqual([])
+	},
+})
+
+const STOPPED_BADGE = '[data-slot="routine-stopped"]'
+
+const paintedFillOf = (
+	pixel: CanvasRenderingContext2D,
+	scope: HTMLElement,
+	element: HTMLElement,
+) => {
+	const layers: HTMLElement[] = []
+	for (
+		let layer: HTMLElement | null = element;
+		layer && layer !== scope;
+		layer = layer.parentElement
+	) {
+		layers.unshift(layer)
+	}
+	return layers.reduce(
+		(fill, layer) =>
+			paintOver(pixel, fill, getComputedStyle(layer).backgroundColor),
+		CANVAS_BASE,
+	)
+}
+
+export const StoppedBadgeMeetsAaText = meta.story({
+	render: () => (
+		<>
+			{THEMES.map((scheme) => (
+				<div key={scheme} className={scheme} data-scheme-scope={scheme}>
+					<ul className="bg-card text-foreground">
+						<RoutineRow
+							{...RELEASE_WATCH}
+							onDelete={fn()}
+							onEnabledChange={fn()}
+						/>
+					</ul>
+				</div>
+			))}
+		</>
+	),
+	play: async ({ canvasElement }) => {
+		const pixel = createPixel()
+		const measurements = THEMES.map((scheme) =>
+			probeTheme(pixel, canvasElement, scheme),
+		).map(({ scheme, scope }) => {
+			const badge = scope.querySelector<HTMLElement>(STOPPED_BADGE)
+			if (!badge) {
+				throw new Error(`Missing Stopped itself badge in ${scheme}.`)
+			}
+			const fill = paintedFillOf(pixel, scope, badge)
+			return {
+				key: `${scheme} Stopped itself badge on its fill over --card`,
+				ratio: contrastRatio(
+					fill,
+					paintOver(pixel, fill, getComputedStyle(badge).color),
+				),
+			}
+		})
+		const problems = failuresIn(measurements)
+
+		await expect(
+			problems,
+			`Stopped itself badge failing its contrast floor:\n${problems.join("\n")}`,
 		).toEqual([])
 	},
 })

@@ -1600,10 +1600,9 @@ export const OnShellSurfaceInsetsDark = meta.story({
 	args: { isOpen: false },
 	globals: { theme: "dark" },
 	parameters: {
-		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
-				story: `${ONE_INSET_RULE_ON_SHELL} The contrast audit is left to review: the Stopped badge wears the dark destructive token on its own fill, 4.47:1 against the 4.5:1 AA asks for.`,
+				story: `${ONE_INSET_RULE_ON_SHELL} The Stopped badge wears the dark destructive token on its own fill, 5.20:1, which clears AA.`,
 			},
 		},
 	},
