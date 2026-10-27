@@ -1,9 +1,4 @@
-import {
-	type ComponentProps,
-	type CSSProperties,
-	type ReactNode,
-	useState,
-} from "react"
+import { type ComponentProps, type ReactNode, useState } from "react"
 import {
 	expect,
 	fireEvent,
@@ -19,6 +14,7 @@ import {
 	A11Y_SIDE_BY_SIDE_TWIN_LANDMARKS,
 	expectControlFrame,
 	expectInverseAtRest,
+	hueScopeOf,
 	isInBrowserRunner,
 	lineHeightOf,
 	realPointer,
@@ -28,10 +24,7 @@ import {
 	tokenStyleIn,
 	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
-import {
-	type BotAvatarBlot,
-	blotTint,
-} from "@workspace/ui/components/companion-colour"
+import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
 import { Icons } from "@workspace/ui/components/icons"
 import type { MessageAuthor } from "@workspace/ui/components/message"
 import { CATALOGUE_APPLICATIONS } from "@workspace/ui/components/plugin-settings/applications.fixtures"
@@ -182,9 +175,8 @@ type InComposerSlotProps = { children: ReactNode }
 const InComposerSlot = ({ children }: InComposerSlotProps) => (
 	<div
 		className="surface-shell px-(--shell-inset) pt-6 pb-(--shell-inset)"
-		data-space-tint={NORTHWIND_TINT}
 		data-testid="space"
-		style={{ "--space-tint": blotTint(NORTHWIND_TINT) } as CSSProperties}
+		{...hueScopeOf(NORTHWIND_TINT)}
 	>
 		{children}
 	</div>
@@ -373,8 +365,10 @@ export const ChosenRowFollowsSpaceTint = meta.story({
 		await expectChosenPaint(chosen)
 		const green = backgroundOf(chosen)
 
-		space.dataset.spaceTint = "blue"
-		space.style.setProperty("--space-tint", blotTint("blue"))
+		const blue = hueScopeOf("blue")
+		space.dataset.hue = String(blue["data-hue"])
+		for (const [property, value] of Object.entries(blue.style))
+			space.style.setProperty(property, String(value))
 
 		await waitFor(() => expect(backgroundOf(chosen)).not.toBe(green))
 		await expectChosenPaint(chosen)

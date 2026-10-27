@@ -16,7 +16,10 @@ import type { DraftsController } from "@/lib/chat/drafts-controller"
 import type { Thread } from "@/lib/chat/thread-contract"
 import type { ConversationRuntimes } from "@/lib/conversations/conversation-runtimes"
 import type { Bot } from "@/lib/conversations/store-contract"
-import type { OpenMission } from "@/lib/missions/mission-actions"
+import type {
+	OpenMission,
+	OpenMissionInNewTab,
+} from "@/lib/missions/mission-actions"
 import type { Mission } from "@/lib/missions/mission-contract"
 import { toMissionConversation } from "@/lib/missions/mission-thread-model"
 import type { OpenedMission } from "@/lib/missions/opened-mission-controller"
@@ -58,6 +61,7 @@ type MissionThreadProps = {
 	readerName: string
 	onLeave: () => void
 	onOpenMission: OpenMission
+	onOpenMissionInNewTab: OpenMissionInNewTab
 }
 
 const MissionThread = ({
@@ -75,6 +79,7 @@ const MissionThread = ({
 	readerName,
 	onLeave,
 	onOpenMission,
+	onOpenMissionInNewTab,
 }: MissionThreadProps) => {
 	const now = useRosterClock()
 
@@ -100,6 +105,7 @@ const MissionThread = ({
 			drafts={drafts}
 			landings={landings}
 			onOpenMission={onOpenMission}
+			onOpenMissionInNewTab={onOpenMissionInNewTab}
 			readerName={readerName}
 			runtimes={runtimes}
 			spaceId={null}
@@ -119,6 +125,7 @@ type MissionThreadScreenProps = {
 	readerName: string
 	onLeave: () => void
 	onOpenMission: OpenMission
+	onOpenMissionInNewTab: OpenMissionInNewTab
 }
 
 export function MissionThreadScreen({
@@ -132,6 +139,7 @@ export function MissionThreadScreen({
 	readerName,
 	onLeave,
 	onOpenMission,
+	onOpenMissionInNewTab,
 }: MissionThreadScreenProps) {
 	const { read, isPending, hasFailedToRead, onRetry } = useMissionDetail(
 		opening.missionId,
@@ -172,6 +180,7 @@ export function MissionThreadScreen({
 			mission={read.mission}
 			onLeave={onLeave}
 			onOpenMission={onOpenMission}
+			onOpenMissionInNewTab={onOpenMissionInNewTab}
 			opening={opening}
 			readerName={readerName}
 			runtimes={runtimes}

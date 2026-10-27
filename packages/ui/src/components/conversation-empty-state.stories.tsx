@@ -10,8 +10,11 @@ import {
 	slotsIn,
 	UPLOADED_AVATAR_IMAGE,
 } from "@workspace/storybook/story-utils"
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { ConversationEmptyState } from "@workspace/ui/components/conversation-empty-state"
+import { hueTone } from "@workspace/ui/components/hue-palette"
 import type { RosterBot } from "@workspace/ui/components/roster"
+import { schemeOf } from "@workspace/ui/hooks/use-color-scheme"
 
 const KEEPER: RosterBot = {
 	id: "bot_4f8c21",
@@ -158,6 +161,51 @@ const expectHeldToCopyMeasure = async (canvasElement: HTMLElement) => {
 	)
 	await expect(surface.scrollWidth).toBeLessThanOrEqual(surface.clientWidth)
 }
+
+const SPACE_CHIP_SIDE = 16
+
+const hexOfComputed = (colour: string) =>
+	`#${(colour.match(/\d+/g) ?? [])
+		.slice(0, 3)
+		.map((channel) => Number(channel).toString(16).padStart(2, "0"))
+		.join("")}`
+
+export const InSpace = meta.story({
+	args: { spaceName: "Northwind", spaceTint: "green" },
+	globals: { theme_layout: "side-by-side" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"An empty thread in the green Space Northwind, light beside dark. Check that a 16 px rounded square sits before the Space name, filled with the Space bubble tone and edged in 1 px of its accent, and that it reads as the Space colour in both themes. `apps/app/src/components/thread-screen.tsx` does not pass the Space yet.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const lines = slotsIn(canvasElement, "conversation-empty-space")
+		await expect(lines).toHaveLength(2)
+		for (const line of lines) {
+			const chip = slotIn(line, "space-tint")
+			const style = getComputedStyle(chip)
+			const theme = schemeOf(chip)
+			const box = chip.getBoundingClientRect()
+			await expect(line).toHaveTextContent("Northwind")
+			await expect(line.firstElementChild).toBe(chip)
+			await expect([box.width, box.height]).toEqual([
+				SPACE_CHIP_SIDE,
+				SPACE_CHIP_SIDE,
+			])
+			await expect(style.borderTopLeftRadius).not.toBe("9999px")
+			await expect(style.borderTopWidth).toBe("1px")
+			await expect(hexOfComputed(style.backgroundColor)).toBe(
+				hueTone(BLOT_HUES.green, theme, "bubble").hex,
+			)
+			await expect(hexOfComputed(style.borderTopColor)).toBe(
+				hueTone(BLOT_HUES.green, theme, "accent").hex,
+			)
+		}
+	},
+})
 
 export const Empty = meta.story({
 	args: { bots: [] },
@@ -345,11 +393,7 @@ export const ThemesGroup = meta.story({
 		},
 	},
 	play: async ({ canvasElement }) =>
-		expectSubjectIconInBothThemes(
-			canvasElement,
-			"--conversation-icon",
-			THEMES_MARK_SIZE,
-		),
+		expectSubjectIconInBothThemes(canvasElement, undefined, THEMES_MARK_SIZE),
 })
 
 export const ThemesGroupRed = meta.story({
@@ -366,7 +410,7 @@ export const ThemesGroupRed = meta.story({
 	play: async ({ canvasElement }) =>
 		expectSubjectIconInBothThemes(
 			canvasElement,
-			"--conversation-icon-red",
+			BLOT_HUES.red,
 			THEMES_MARK_SIZE,
 		),
 })

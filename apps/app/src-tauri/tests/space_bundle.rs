@@ -608,6 +608,42 @@ fn a_space_travels_to_another_root_whole_and_twice_without_colliding() {
 }
 
 #[test]
+fn an_archive_written_before_hues_reads_the_hue_of_each_of_the_eight_names() {
+	let source = Home::new();
+	let seeded = seeded(&source);
+	let scratch = scratch();
+	let archive = exported(&source, &seeded.space_id, &scratch);
+	let named = rewritten(&archive, &scratch, |path, bytes| match path {
+		"rows.json" => {
+			let mut rows: Value = serde_json::from_slice(&bytes).expect("rows");
+			rows["spaces"][0]["colour"] = json!("purple");
+			for bot in rows["bots"].as_array_mut().expect("the bots") {
+				bot["avatar_color"] = json!("pink");
+			}
+			for conversation in rows["conversations"].as_array_mut().expect("the conversations") {
+				conversation["color"] = json!("cyan");
+			}
+			serde_json::to_vec(&rows).expect("json")
+		}
+		_ => bytes,
+	});
+	let target = Home::new();
+
+	let space = imported(&target, &named);
+
+	let space_id = space["id"].as_str().expect("an id");
+	assert_eq!(space["colour"], json!(296));
+	let blots: Vec<Value> =
+		target.bots_of(space_id).iter().map(|bot| bot["avatarBlot"].clone()).collect();
+	assert_eq!(blots, vec![json!(358); seeded.bot_ids.len()]);
+	let topics = target.topics_of(space_id);
+	assert!(!topics.is_empty(), "the archive carried no conversation");
+	assert!(topics.iter().all(|topic| topic["color"] == json!(186)), "{topics:?}");
+
+	let _ = fs::remove_dir_all(scratch);
+}
+
+#[test]
 fn an_archive_of_another_version_or_that_fails_midway_leaves_the_target_untouched() {
 	let source = Home::new();
 	let seeded = seeded(&source);

@@ -855,7 +855,7 @@ fn a_bot_created_over_ipc_is_listed_described_and_deleted_with_its_chat() {
 	let created = call(
 		&window,
 		"conversation_create_bot",
-		json!({ "identity": an_identity("Nyx", "sonnet", json!("red")) }),
+		json!({ "identity": an_identity("Nyx", "sonnet", json!(42)) }),
 	)
 	.expect("the bot is created");
 	let id = created["id"].as_str().expect("the bot holds an id").to_owned();
@@ -864,7 +864,7 @@ fn a_bot_created_over_ipc_is_listed_described_and_deleted_with_its_chat() {
 	assert_eq!(created["title"], json!("Reviewer"));
 	assert_eq!(created["model"], json!("sonnet"));
 	assert_eq!(created.get("avatarAnimal"), None, "a bot still crossed with an animal");
-	assert_eq!(created["avatarBlot"], json!("red"));
+	assert_eq!(created["avatarBlot"], json!(42));
 	assert_eq!(created["avatarImagePath"], json!(null));
 	assert_eq!(created["instructions"], json!("Answer with the file you would touch."));
 	assert!(created["createdAt"].is_i64(), "a bot crossed without a camelCase moment: {created}");
@@ -950,7 +950,7 @@ fn a_model_label_outside_the_offered_aliases_is_stored_and_read_back_whole() {
 	let created = call(
 		&window,
 		"conversation_create_bot",
-		json!({ "identity": an_identity("Nyx", "claude-opus-4-1-20250805", json!("red")) }),
+		json!({ "identity": an_identity("Nyx", "claude-opus-4-1-20250805", json!(42)) }),
 	)
 	.expect("a bot on a label the host does not know");
 	let id = created["id"].as_str().expect("the bot holds an id").to_owned();
@@ -966,7 +966,7 @@ fn a_model_label_outside_the_offered_aliases_is_stored_and_read_back_whole() {
 		call(
 			&window,
 			"conversation_update_bot",
-			json!({ "id": id, "identity": an_identity("Nyx", "fable", json!("red")) })
+			json!({ "id": id, "identity": an_identity("Nyx", "fable", json!(42)) })
 		)
 		.map(|bot| bot["model"].clone()),
 		Ok(json!("fable"))
@@ -978,7 +978,7 @@ fn the_tools_a_bot_denies_are_written_to_its_agent_file_and_read_back_from_it() 
 	let home = Home::new();
 	let app = home.app();
 	let window = window(&app);
-	let mut held_back = an_identity("Nyx", "sonnet", json!("red"));
+	let mut held_back = an_identity("Nyx", "sonnet", json!(42));
 	held_back["deniedTools"] = json!(["Bash", "Edit", "NotebookEdit", "Write"]);
 
 	let created = call(&window, "conversation_create_bot", json!({ "identity": held_back }))
@@ -993,7 +993,7 @@ fn the_tools_a_bot_denies_are_written_to_its_agent_file_and_read_back_from_it() 
 		"the file the session is promoted onto denies nothing"
 	);
 
-	let mut one_tool = an_identity("Nyx", "sonnet", json!("red"));
+	let mut one_tool = an_identity("Nyx", "sonnet", json!(42));
 	one_tool["deniedTools"] = json!(["WebFetch"]);
 	let updated =
 		call(&window, "conversation_update_bot", json!({ "id": id, "identity": one_tool }))
@@ -1008,7 +1008,7 @@ fn the_rules_a_bot_is_given_are_written_to_its_settings_file_and_read_back_from_
 	let home = Home::new();
 	let app = home.app();
 	let window = window(&app);
-	let mut ruled = an_identity("Nyx", "sonnet", json!("red"));
+	let mut ruled = an_identity("Nyx", "sonnet", json!(42));
 	ruled["permissions"] = json!({
 		"defaultMode": "plan",
 		"allow": ["Read"],
@@ -1058,7 +1058,7 @@ fn the_rules_the_panel_reads_are_the_stored_ones_and_never_the_file_it_writes() 
 	let home = Home::new();
 	let app = home.app();
 	let window = window(&app);
-	let mut held_back = an_identity("Nyx", "sonnet", json!("red"));
+	let mut held_back = an_identity("Nyx", "sonnet", json!(42));
 	held_back["deniedTools"] = json!(["Bash", "Edit", "NotebookEdit", "Write"]);
 	held_back["permissions"] = json!({
 		"defaultMode": "auto",
@@ -1154,7 +1154,7 @@ fn a_bot(window: &WebviewWindow<MockRuntime>, name: &str) -> String {
 	call(
 		window,
 		"conversation_create_bot",
-		json!({ "identity": an_identity(name, "sonnet", json!("red")) }),
+		json!({ "identity": an_identity(name, "sonnet", json!(42)) }),
 	)
 	.expect("the bot is created")["id"]
 		.as_str()
@@ -1204,7 +1204,7 @@ fn an_uploaded_picture_is_stored_squared_beside_the_database_and_crosses_as_a_pa
 	assert_eq!(wearing(&window, &id), json!(recorded), "the list answers another path");
 	assert_eq!(
 		worn["avatarBlot"],
-		json!("red"),
+		json!(42),
 		"an uploaded picture took the blot the bot falls back to with it"
 	);
 }
@@ -1343,7 +1343,7 @@ fn an_identity_written_without_a_path_takes_the_picture_off_and_one_written_with
 		.expect("a path")
 		.to_owned();
 
-	let mut echoed = an_identity("Nyx", "sonnet", json!("red"));
+	let mut echoed = an_identity("Nyx", "sonnet", json!(42));
 	echoed["avatarImagePath"] = json!(worn);
 	let unchanged =
 		call(&window, "conversation_update_bot", json!({ "id": id, "identity": echoed }))
@@ -1355,7 +1355,7 @@ fn an_identity_written_without_a_path_takes_the_picture_off_and_one_written_with
 	let bare = call(
 		&window,
 		"conversation_update_bot",
-		json!({ "id": id, "identity": an_identity("Nyx", "sonnet", json!("red")) }),
+		json!({ "id": id, "identity": an_identity("Nyx", "sonnet", json!(42)) }),
 	)
 	.expect("the bot is updated");
 
@@ -1378,7 +1378,7 @@ fn a_recorded_path_outside_the_avatar_directory_is_refused_rather_than_read() {
 		avatar_dir(&app).join("..").join("elsewhere.png").to_string_lossy().into_owned(),
 		"/etc/passwd".to_owned(),
 	] {
-		let mut identity = an_identity("Nyx", "sonnet", json!("red"));
+		let mut identity = an_identity("Nyx", "sonnet", json!(42));
 		identity["avatarImagePath"] = json!(escaping);
 		let updated =
 			call(&window, "conversation_update_bot", json!({ "id": id, "identity": identity }))
@@ -1904,7 +1904,7 @@ fn a_duplicated_bot_carries_the_bundle_and_none_of_the_transcript() {
 	let source = call(
 		&window,
 		"conversation_create_bot",
-		json!({ "identity": an_identity("Nyx", "sonnet", json!("red")) }),
+		json!({ "identity": an_identity("Nyx", "sonnet", json!(42)) }),
 	)
 	.expect("the bot is created");
 	let source_id = source["id"].as_str().expect("the bot holds an id").to_owned();
@@ -2211,7 +2211,7 @@ fn a_duplicate_only_dodges_the_names_the_space_it_lands_in_already_carries() {
 		&window,
 		"conversation_create_bot",
 		json!({
-			"identity": an_identity("Nyx copy", "sonnet", json!("red")),
+			"identity": an_identity("Nyx copy", "sonnet", json!(42)),
 			"spaceId": away,
 		}),
 	)
@@ -3046,8 +3046,8 @@ fn a_room_and_a_main_chat_updated_over_ipc_carry_their_icon_and_colour_on_every_
 		.expect("the main chat");
 	let chat = chat["id"].as_str().expect("the chat holds an id").to_owned();
 
-	let answered = dressed(&window, &room, json!("MessageSquare"), json!("cyan")).expect("dressed");
-	let main = dressed(&window, &chat, json!("Sparkles"), json!("orange")).expect("main dressed");
+	let answered = dressed(&window, &room, json!("MessageSquare"), json!(257)).expect("dressed");
+	let main = dressed(&window, &chat, json!("Sparkles"), json!(63)).expect("main dressed");
 	let page = call(&window, "conversation_page", json!({ "spaceId": space })).expect("the page")
 		["conversations"]
 		.clone();
@@ -3058,34 +3058,39 @@ fn a_room_and_a_main_chat_updated_over_ipc_carry_their_icon_and_colour_on_every_
 			.expect("the page holds the conversation")
 	};
 
-	assert_eq!(look(&answered), (json!("MessageSquare"), json!("cyan")));
-	assert_eq!(look(&room_of(&window, &space, &room)), (json!("MessageSquare"), json!("cyan")));
-	assert_eq!(look(&paged(&room)), (json!("MessageSquare"), json!("cyan")));
-	assert_eq!(look(&main), (json!("Sparkles"), json!("orange")));
-	assert_eq!(look(&paged(&chat)), (json!("Sparkles"), json!("orange")));
+	assert_eq!(look(&answered), (json!("MessageSquare"), json!(257)));
+	assert_eq!(look(&room_of(&window, &space, &room)), (json!("MessageSquare"), json!(257)));
+	assert_eq!(look(&paged(&room)), (json!("MessageSquare"), json!(257)));
+	assert_eq!(look(&main), (json!("Sparkles"), json!(63)));
+	assert_eq!(look(&paged(&chat)), (json!("Sparkles"), json!(63)));
 
 	let cleared = dressed(&window, &chat, Value::Null, Value::Null).expect("main cleared");
 	assert_eq!(look(&cleared), (Value::Null, Value::Null));
 }
 
 #[test]
-fn an_update_with_a_colour_outside_eight_or_an_icon_off_the_list_is_refused_and_changes_nothing() {
+fn an_update_with_a_hue_outside_0_to_359_or_an_icon_off_the_list_is_refused_and_changes_nothing() {
 	let home = Home::new();
 	let app = home.app();
 	let window = window(&app);
 	let space = a_space(&window, "Nest");
 	let bot = a_bot_in(&window, &space, "Nyx");
 	let room = id_of(&a_room(&window, &space, "Retro", vec![bot]));
-	dressed(&window, &room, json!("MessageSquare"), json!("red")).expect("dressed");
+	dressed(&window, &room, json!("MessageSquare"), json!(42)).expect("dressed");
 	let before = room_of(&window, &space, &room);
 
-	let teal = dressed(&window, &room, json!("MessageSquare"), json!("teal"));
-	let blank = dressed(&window, &room, json!(" \n"), json!("blue"));
-	let unlisted = dressed(&window, &room, json!("Message"), json!("blue"));
+	let beyond = dressed(&window, &room, json!("MessageSquare"), json!(400));
+	let below = dressed(&window, &room, json!("MessageSquare"), json!(-1));
+	let blank = dressed(&window, &room, json!(" \n"), json!(257));
+	let unlisted = dressed(&window, &room, json!("Message"), json!(257));
 
 	assert_eq!(
-		teal.as_ref().map_err(|refusal| refusal["kind"].clone()),
-		Err(json!("unknownColour"))
+		beyond,
+		Err(json!({ "kind": "unknownColour", "colour": "400", "accepted": ["0 to 359"] }))
+	);
+	assert_eq!(
+		below,
+		Err(json!({ "kind": "unknownColour", "colour": "-1", "accepted": ["0 to 359"] }))
 	);
 	assert_eq!(blank, Err(json!({ "kind": "blankIcon" })));
 	let unlisted = unlisted.expect_err("an icon off the list was stored");
@@ -3098,6 +3103,40 @@ fn an_update_with_a_colour_outside_eight_or_an_icon_off_the_list_is_refused_and_
 		"the refusal does not name the list: {unlisted}"
 	);
 	assert_eq!(room_of(&window, &space, &room), before, "a refused update moved the room");
+}
+
+#[test]
+fn a_space_update_stores_a_hue_and_refuses_one_outside_0_to_359_changing_nothing() {
+	let home = Home::new();
+	let app = home.app();
+	let window = window(&app);
+	let space = a_space(&window, "Nest");
+	let recoloured = |colour: Value| {
+		call(&window, "space_update", json!({ "id": space, "name": "Nest", "colour": colour }))
+	};
+	let listed = || {
+		call(&window, "space_list", json!({}))
+			.expect("the spaces")
+			.as_array()
+			.and_then(|spaces| spaces.iter().find(|held| held["id"] == json!(space)).cloned())
+			.expect("the space is listed")
+	};
+
+	let stored = recoloured(json!(257)).expect("a hue is stored");
+	let before = listed();
+	let beyond = recoloured(json!(400));
+	let below = recoloured(json!(-1));
+
+	assert_eq!((stored["colour"].clone(), before["colour"].clone()), (json!(257), json!(257)));
+	assert_eq!(
+		beyond,
+		Err(json!({ "kind": "unknownColour", "colour": "400", "accepted": ["0 to 359"] }))
+	);
+	assert_eq!(
+		below,
+		Err(json!({ "kind": "unknownColour", "colour": "-1", "accepted": ["0 to 359"] }))
+	);
+	assert_eq!(listed(), before, "a refused update moved the space");
 }
 
 #[test]
@@ -3582,13 +3621,13 @@ fn an_effort_the_update_receives_is_stored_and_written_and_null_takes_the_key_ou
 	let created = call(
 		&window,
 		"conversation_create_bot",
-		json!({ "identity": an_identity("Nyx", "sonnet", json!("red")) }),
+		json!({ "identity": an_identity("Nyx", "sonnet", json!(42)) }),
 	)
 	.expect("the bot is created");
 	let id = created["id"].as_str().expect("the bot holds an id").to_owned();
 	assert_eq!(created["effort"], Value::Null, "a companion was born with an effort");
 
-	let mut high = an_identity("Nyx", "sonnet", json!("red"));
+	let mut high = an_identity("Nyx", "sonnet", json!(42));
 	high["effort"] = json!("high");
 	let updated = call(&window, "conversation_update_bot", json!({ "id": id, "identity": high }))
 		.expect("the effort is saved");
@@ -3601,7 +3640,7 @@ fn an_effort_the_update_receives_is_stored_and_written_and_null_takes_the_key_ou
 	);
 	assert_eq!(occurrences(&agent_text(&app, &id), "\neffort: high\n"), 1);
 
-	let mut cleared = an_identity("Nyx", "sonnet", json!("red"));
+	let mut cleared = an_identity("Nyx", "sonnet", json!(42));
 	cleared["effort"] = Value::Null;
 	let updated =
 		call(&window, "conversation_update_bot", json!({ "id": id, "identity": cleared }))
@@ -3616,14 +3655,14 @@ fn an_effort_outside_the_five_levels_is_refused_and_changes_nothing() {
 	let home = Home::new();
 	let app = home.app();
 	let window = window(&app);
-	let mut high = an_identity("Nyx", "sonnet", json!("red"));
+	let mut high = an_identity("Nyx", "sonnet", json!(42));
 	high["effort"] = json!("high");
 	let created = call(&window, "conversation_create_bot", json!({ "identity": high }))
 		.expect("the bot is created");
 	let id = created["id"].as_str().expect("the bot holds an id").to_owned();
 	let before = agent_text(&app, &id);
 
-	let mut extreme = an_identity("Ada", "opus", json!("blue"));
+	let mut extreme = an_identity("Ada", "opus", json!(257));
 	extreme["effort"] = json!("extreme");
 	let refused =
 		call(&window, "conversation_update_bot", json!({ "id": id, "identity": extreme }));
@@ -3643,7 +3682,7 @@ fn a_duplicate_carries_the_effort_of_its_source() {
 	let home = Home::new();
 	let app = home.app();
 	let window = window(&app);
-	let mut max = an_identity("Nyx", "sonnet", json!("red"));
+	let mut max = an_identity("Nyx", "sonnet", json!(42));
 	max["effort"] = json!("max");
 	let source = call(&window, "conversation_create_bot", json!({ "identity": max }))
 		.expect("the bot is created");

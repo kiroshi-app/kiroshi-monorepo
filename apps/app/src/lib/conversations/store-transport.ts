@@ -1,6 +1,5 @@
 import { RefusedWrite } from "./refused-write"
 import type {
-	AvatarBlot,
 	Bot,
 	BotChangedFile,
 	BotDraft,
@@ -17,6 +16,7 @@ import type {
 	ConversationPage,
 	EnvEntry,
 	EnvScope,
+	Hue,
 	McpServerMark,
 	MessagePin,
 	MessageReference,
@@ -167,7 +167,7 @@ export const conversationStore: TranscriptStore = {
 
 	createSpace: (name: string) => invoke<Space>("space_create", { name }),
 
-	updateSpace: (id: string, name: string, colour?: AvatarBlot) =>
+	updateSpace: (id: string, name: string, colour?: Hue) =>
 		invoke<Space>("space_update", { id, name, colour: colour ?? null }),
 
 	reorderSpaces: (ids: string[]) => invoke<void>("space_reorder", { ids }),

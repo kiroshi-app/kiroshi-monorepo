@@ -1,11 +1,7 @@
 import { describe, expect, it } from "vitest"
 
-import {
-	BLOT_COLOURS,
-	oklabOf,
-	srgbOfHex,
-} from "@workspace/ui/components/companion-avatar"
-import { BLOT_TINTS } from "@workspace/ui/components/companion-colour"
+import { oklabOf, srgbOfHex } from "@workspace/ui/components/companion-avatar"
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import {
 	dashArray,
 	isCompact,
@@ -61,10 +57,9 @@ describe("spacePalette", () => {
 			expect(chromaOf(hex)).toBeLessThan(1e-3)
 	})
 
-	it.each(BLOT_TINTS)("keeps the hue of the %s blot", (colour) => {
-		const hue = hueDegreesOf(BLOT_COLOURS[colour])
+	it.each(Object.entries(BLOT_HUES))("keeps the hue of %s, %i", (_, hue) => {
 		for (const theme of ["light", "dark"] as const)
-			for (const hex of spacePalette(theme, colour).full) {
+			for (const hex of spacePalette(theme, hue).full) {
 				const drift = Math.abs(((hueDegreesOf(hex) - hue + 540) % 360) - 180)
 				expect(drift).toBeLessThan(4)
 			}
@@ -72,8 +67,8 @@ describe("spacePalette", () => {
 
 	it("darkens from ground to core in light and lightens in dark", () => {
 		const lightnessOf = (hex: string) => oklabOf(srgbOfHex(hex)).lightness
-		const light = spacePalette("light", "blue").full.map(lightnessOf)
-		const dark = spacePalette("dark", "blue").full.map(lightnessOf)
+		const light = spacePalette("light", BLOT_HUES.blue).full.map(lightnessOf)
+		const dark = spacePalette("dark", BLOT_HUES.blue).full.map(lightnessOf)
 		expect([...light].sort((a, b) => b - a)).toEqual(light)
 		expect([...dark].sort((a, b) => a - b)).toEqual(dark)
 	})

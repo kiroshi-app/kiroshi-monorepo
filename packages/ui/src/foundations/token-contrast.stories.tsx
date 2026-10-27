@@ -1,11 +1,10 @@
-import type { CSSProperties } from "react"
 import { expect } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
+import { hueScopeOf } from "@workspace/storybook/story-utils"
 import {
 	BLOT_TINTS,
 	type BotAvatarBlot,
-	blotTint,
 } from "@workspace/ui/components/companion-colour"
 import { Button } from "@workspace/ui/components/ui/button"
 import { Switch } from "@workspace/ui/components/ui/switch"
@@ -27,10 +26,8 @@ const TRANSPARENT_COMPUTED_COLOR = "rgba(0, 0, 0, 0)"
 const CANVAS_BASE: Rgb = [255, 255, 255]
 const LIGHT_PAGE: Rgb = [245, 245, 245]
 const DARK_CARD: Rgb = [18, 18, 19]
-const PRIMARY_FOREGROUND_FLOOR = 9.8
 const PRIMARY_STRONG_ON_CANVAS_BASE_FLOOR = 5
 const PRIMARY_STRONG_ON_LIGHT_PAGE_FLOOR = 4.5
-const DARK_TINT_ON_CARD_FLOOR = 9.2
 const SHOWCASED_TINTS: BotAvatarBlot[] = ["yellow", "purple"]
 const FOCUS_PROBE = "[data-focus-probe]"
 
@@ -182,9 +179,6 @@ const failuresIn = (measurements: Measurement[], floor = AA_TEXT_RATIO) =>
 				`${key}: measured ${ratio.toFixed(2)}:1, needs ${floor}:1`,
 		)
 
-const tintScopeStyle = (blot: BotAvatarBlot) =>
-	({ "--space-tint": blotTint(blot) }) as CSSProperties
-
 const tintScopeIn = (scope: HTMLElement, blot: BotAvatarBlot) => {
 	const tinted = scope.querySelector<HTMLElement>(`[data-blot-scope="${blot}"]`)
 	if (!tinted) {
@@ -262,9 +256,8 @@ export const TintedUserBubbleMeetsAaText = meta.story({
 						<div
 							key={blot}
 							data-blot-scope={blot}
-							data-space-tint={blot}
 							className="on-user-bubble"
-							style={tintScopeStyle(blot)}
+							{...hueScopeOf(blot)}
 						/>
 					))}
 				</div>
@@ -315,7 +308,7 @@ const primaryMeasurements = (
 			primary,
 			opaqueColor(pixel, scope, "--primary-foreground"),
 		),
-		floor: PRIMARY_FOREGROUND_FLOOR,
+		floor: AA_TEXT_RATIO,
 	}
 	if (scheme === "dark") {
 		return [
@@ -323,7 +316,7 @@ const primaryMeasurements = (
 			{
 				key: key("--primary on #121213"),
 				ratio: contrastRatio(primary, DARK_CARD),
-				floor: DARK_TINT_ON_CARD_FLOOR,
+				floor: AA_TEXT_RATIO,
 			},
 		]
 	}
@@ -349,12 +342,7 @@ export const PrimaryOnEveryTintMeetsItsFloors = meta.story({
 			{THEMES.map((scheme) => (
 				<div key={scheme} className={scheme} data-scheme-scope={scheme}>
 					{BLOT_TINTS.map((blot) => (
-						<div
-							key={blot}
-							data-blot-scope={blot}
-							data-space-tint={blot}
-							style={tintScopeStyle(blot)}
-						/>
+						<div key={blot} data-blot-scope={blot} {...hueScopeOf(blot)} />
 					))}
 				</div>
 			))}
@@ -374,14 +362,14 @@ export const PrimaryOnEveryTintMeetsItsFloors = meta.story({
 
 		const unfollowed = scopes
 			.filter(
-				({ scope }) =>
+				({ scheme, scope }) =>
 					readComputedColor(scope, "--primary") !==
-					readComputedColor(scope, "--space-tint"),
+					readComputedColor(scope, `--hue-${scheme}-accent`),
 			)
 			.map(({ scheme, blot }) => `${scheme} ${blot}`)
 		await expect(
 			unfollowed,
-			`--primary not following the space tint:\n${unfollowed.join("\n")}`,
+			`--primary not following the Space hue accent:\n${unfollowed.join("\n")}`,
 		).toEqual([])
 
 		const problems = scopes
@@ -403,12 +391,7 @@ const TintedPrimaryShowcase = ({ scheme }: TintedPrimaryShowcaseProps) => (
 		className={`${scheme} flex flex-col gap-4 bg-background p-6 text-foreground`}
 	>
 		{SHOWCASED_TINTS.map((blot) => (
-			<div
-				key={blot}
-				data-space-tint={blot}
-				style={tintScopeStyle(blot)}
-				className="flex items-center gap-3"
-			>
+			<div key={blot} {...hueScopeOf(blot)} className="flex items-center gap-3">
 				<Button>Save memory</Button>
 				<Button variant="outline" data-focus-probe>
 					Connect

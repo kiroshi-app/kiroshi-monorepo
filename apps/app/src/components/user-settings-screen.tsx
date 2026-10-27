@@ -80,7 +80,9 @@ export const UserSettingsScreen = ({
 				onBack={navigation.back}
 				{...spaces}
 				currentSpaceId={currentSpaceId}
-				onOpenSpace={(id) => navigation.openSpaceSettings(id)}
+				onOpenSpace={(id, modifiers) =>
+					navigation.openSpaceSettings(id, {}, modifiers)
+				}
 				onCreateSpace={onCreateSpace}
 				about={about}
 				account={{ ...accountPanel, devices }}

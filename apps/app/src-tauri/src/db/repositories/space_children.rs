@@ -109,7 +109,7 @@ mod tests {
 
 	const TWO_SPACES: &str = "
 		INSERT INTO spaces (id, name, colour, position, created_at)
-			VALUES ('work', 'Work', 'blue', 1, 1);
+			VALUES ('work', 'Work', 257, 1, 1);
 		INSERT INTO sections (id, space_id, name, position, created_at)
 			VALUES ('s1', 'personal', 'Mine', 0, 1), ('s2', 'work', 'Theirs', 0, 1);
 		INSERT INTO bots (id, name, model, created_at)

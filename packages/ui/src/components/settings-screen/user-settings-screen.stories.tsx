@@ -164,15 +164,15 @@ const groupIn = (menu: HTMLElement, title: string) =>
 	within(menu).getByRole("list", { name: title })
 
 const entriesIn = (menu: HTMLElement) =>
-	within(groupIn(menu, "Your settings"))
+	within(groupIn(menu, "Settings"))
 		.getAllByRole("button")
 		.map((button) => button.textContent)
 
 const spaceRowsIn = (menu: HTMLElement) =>
-	within(groupIn(menu, "Your spaces")).queryAllByRole("button")
+	within(groupIn(menu, "Spaces")).queryAllByRole("button")
 
 const spaceRowOf = (menu: HTMLElement, name: string) =>
-	within(groupIn(menu, "Your spaces")).getByRole("button", {
+	within(groupIn(menu, "Spaces")).getByRole("button", {
 		name: new RegExp(`^${name}`),
 	})
 
@@ -224,7 +224,7 @@ const expectNoColourTransition = (element: HTMLElement) => {
 
 const expectSpaceRows = async (menu: HTMLElement, names: string[]) => {
 	await expect(
-		slotsIn(groupIn(menu, "Your spaces"), "roster-row-name").map(
+		slotsIn(groupIn(menu, "Spaces"), "roster-row-name").map(
 			(name) => name.textContent,
 		),
 	).toEqual(names)
@@ -234,9 +234,7 @@ const expectSpaceRows = async (menu: HTMLElement, names: string[]) => {
 	await expect(
 		slotIn(spaceRowOf(menu, "Harbor"), "space-avatar").dataset.state,
 	).toBe("offline")
-	await expect(slotsIn(groupIn(menu, "Your spaces"), "host-pill")).toHaveLength(
-		0,
-	)
+	await expect(slotsIn(groupIn(menu, "Spaces"), "host-pill")).toHaveLength(0)
 	await expect(spaceRowOf(menu, "Studio")).toHaveAttribute(
 		"aria-current",
 		"true",
@@ -251,7 +249,7 @@ const expectSpaceRows = async (menu: HTMLElement, names: string[]) => {
 		slotIn(spaceRowOf(menu, "Atelier"), "space-avatar").dataset.state,
 	).toBe("invitation")
 	await expect(
-		slotsIn(groupIn(menu, "Your spaces"), "settings-menu-space-current"),
+		slotsIn(groupIn(menu, "Spaces"), "settings-menu-space-current"),
 	).toHaveLength(1)
 	for (const pill of [
 		slotIn(spaceRowOf(menu, "Studio"), "settings-menu-space-current"),
@@ -342,7 +340,7 @@ export const Spaces = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard F01: the menu in two titled groups, Your settings then Your spaces. The screen opens on Account when no entry is chosen. Check Studio marked current with its Open now pill and the shared dot on its avatar, Northwind ending on the attention dot, Harbor in greys with no state pill, Atelier's dashed outline and Invitation pill, and the + creating a space by pointer or keyboard. The contrast audit is left to review: the Invitation pill wears the warning token on its own tint as the artboard draws it, 2.96:1 in the light theme.",
+					"Artboard F01: the menu in two titled groups, Settings then Spaces. The screen opens on Account when no entry is chosen. Check Studio marked current with its Open now pill and the shared dot on its avatar, Northwind ending on the attention dot, Harbor in greys with no state pill, Atelier's dashed outline and Invitation pill, and the + creating a space by pointer or keyboard. The contrast audit is left to review: the Invitation pill wears the warning token on its own tint as the artboard draws it, 2.96:1 in the light theme.",
 			},
 		},
 	},
@@ -357,7 +355,7 @@ export const Spaces = meta.story({
 			"Atelier",
 		])
 		await expect(
-			slotsIn(groupIn(menu, "Your spaces"), "settings-menu-space-attention"),
+			slotsIn(groupIn(menu, "Spaces"), "settings-menu-space-attention"),
 		).toHaveLength(1)
 		await expect(
 			slotIn(spaceRowOf(menu, "Northwind"), "settings-menu-space-attention"),
@@ -476,7 +474,7 @@ const HOST_ROWS = [
 
 const playHostStates = async () => {
 	const menu = await menuIn()
-	const spaces = groupIn(menu, "Your spaces")
+	const spaces = groupIn(menu, "Spaces")
 	const names = slotsIn(spaces, "roster-row-name")
 	await expect(names.map((name) => name.textContent)).toEqual(
 		HOST_ROWS.map(({ name }) => name),
@@ -499,7 +497,7 @@ export const SpacesHostStates = meta.story({
 		docs: {
 			description: {
 				story:
-					"Your spaces with one row per host state: Studio shared from this computer, Vocca joined and online, Archives connecting, Harbor not connected. Check every row shows its name in full beside its avatar in the state of its host, that no state pill sits in any row, and that each row reads its state to assistive technology after the name. Pick `SpacesHostStatesDark` for the dark theme.",
+					"Spaces with one row per host state: Studio shared from this computer, Vocca joined and online, Archives connecting, Harbor not connected. Check every row shows its name in full beside its avatar in the state of its host, that no state pill sits in any row, and that each row reads its state to assistive technology after the name. Pick `SpacesHostStatesDark` for the dark theme.",
 			},
 		},
 	},
@@ -616,7 +614,7 @@ export const AfterLeavingASpace = meta.story({
 		const menu = await expectEntryShown("Account")
 		await expectSpaceRows(menu, ["Studio", "Field notes", "Harbor", "Atelier"])
 		await expect(
-			slotsIn(groupIn(menu, "Your spaces"), "settings-menu-space-attention"),
+			slotsIn(groupIn(menu, "Spaces"), "settings-menu-space-attention"),
 		).toHaveLength(0)
 		const title = await waitFor(() => slotIn(document.body, "toast-title"))
 		await expect(title).toHaveTextContent("You left Northwind")

@@ -141,6 +141,7 @@ conversation-message-conversationemptystate--empty-with-long-suggestion-name
 conversation-message-conversationemptystate--empty-with-suggestions
 conversation-message-conversationemptystate--empty-with-suggestions-focused
 conversation-message-conversationemptystate--empty-with-suggestions-narrow
+conversation-message-conversationemptystate--in-space
 conversation-message-conversationemptystate--long-content
 conversation-message-conversationemptystate--single-bot
 conversation-message-conversationemptystate--themes-group
@@ -775,6 +776,7 @@ forms-toggleswitch--reduced-motion
 forms-toggleswitch--states
 forms-toggleswitch--with-label
 foundations-heading-levels--heading-font-on-the-top-two-levels-only
+foundations-hue-recipe--preset-and-arbitrary-hues
 foundations-icon-stroke--every-keyline-glyph-draws-the-icon-stroke
 foundations-token-contrast--primary-on-every-tint-meets-its-floors
 foundations-token-contrast--semantic-pairs-meet-aa-text
@@ -827,6 +829,8 @@ layout-workspaceshell--composer-with-reply-on-shell-inset
 layout-workspaceshell--conversation-open-dark
 layout-workspaceshell--default
 layout-workspaceshell--empty
+layout-workspaceshell--four-companions-in-cold-space-dark
+layout-workspaceshell--four-companions-in-warm-space-dark
 layout-workspaceshell--not-a-landmark
 layout-workspaceshell--not-resizable
 layout-workspaceshell--resize-by-keyboard

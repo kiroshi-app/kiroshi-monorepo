@@ -2,12 +2,14 @@ import { type ComponentProps, useId } from "react"
 import { useTranslation } from "react-i18next"
 
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
+import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
 import {
 	ConversationSubjectIcon,
 	type ConversationSubjectIconProps,
 } from "@workspace/ui/components/conversation-subject-icon"
 import { EmptyStateShell } from "@workspace/ui/components/empty-state-shell"
 import type { RosterBot } from "@workspace/ui/components/roster"
+import { SpaceTint } from "@workspace/ui/components/space-tint"
 import { Button } from "@workspace/ui/components/ui/button"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -25,6 +27,8 @@ type ConversationEmptyStateProps = Omit<
 	Pick<ConversationSubjectIconProps, "icon" | "color"> & {
 		title: string
 		bots: RosterBot[]
+		spaceName?: string
+		spaceTint?: BotAvatarBlot | null
 	} & SuggestionProps
 
 const MARK_SIZE = 56
@@ -32,6 +36,21 @@ const MARK_SIZE = 56
 const SUGGESTED_AVATAR_SIZE = 20
 
 const MENTION_GLYPH = "@"
+
+type SpaceLineProps = {
+	name: string
+	tint?: BotAvatarBlot | null
+}
+
+const SpaceLine = ({ name, tint }: SpaceLineProps) => (
+	<p
+		className="flex min-w-0 max-w-full items-center gap-2 text-muted-foreground text-sm"
+		data-slot="conversation-empty-space"
+	>
+		<SpaceTint className="rounded-sm" tint={tint} />
+		<span className="min-w-0 truncate">{name}</span>
+	</p>
+)
 
 type SuggestedBotsProps = {
 	bots: RosterBot[]
@@ -83,6 +102,8 @@ const ConversationEmptyState = ({
 	bots,
 	icon,
 	color,
+	spaceName,
+	spaceTint,
 	suggestedBots,
 	onSuggestedBotPress,
 	className,
@@ -90,6 +111,9 @@ const ConversationEmptyState = ({
 }: ConversationEmptyStateProps) => {
 	const { t } = useTranslation("chat")
 	const [soloBot] = bots
+	const eyebrow = spaceName ? (
+		<SpaceLine name={spaceName} tint={spaceTint} />
+	) : undefined
 
 	if (bots.length === 0) {
 		return (
@@ -102,6 +126,7 @@ const ConversationEmptyState = ({
 				className={cn("m-auto", className)}
 				data-slot="conversation-empty-state"
 				description={t("conversationEmptyState.nobody.description")}
+				eyebrow={eyebrow}
 				mark={
 					<span
 						aria-hidden="true"
@@ -124,6 +149,7 @@ const ConversationEmptyState = ({
 			description={t("conversationEmptyState.description", {
 				count: bots.length,
 			})}
+			eyebrow={eyebrow}
 			hint={t("conversationEmptyState.hint")}
 			mark={
 				bots.length > 1 ? (

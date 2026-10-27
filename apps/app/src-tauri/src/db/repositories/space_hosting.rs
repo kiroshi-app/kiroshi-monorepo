@@ -1,7 +1,7 @@
 use rusqlite::{params, Connection, OptionalExtension};
 
-use super::conversations::AvatarBlot;
-use super::spaces::SpaceError;
+use super::conversations::Hue;
+use super::spaces::{colour_of, SpaceError};
 use crate::db::{Access, DatabaseError};
 
 const SELECT_REGISTRATION: &str = "SELECT spaces.name, spaces.colour, space_hosting.instance_id
@@ -28,7 +28,7 @@ const SELECT_REGISTERED_INSTANCES: &str =
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Registration {
 	pub name: String,
-	pub colour: Option<AvatarBlot>,
+	pub colour: Option<Hue>,
 	pub instance_id: Option<String>,
 }
 
@@ -118,7 +118,7 @@ fn registration_of(connection: &Connection, space_id: &str) -> Result<Registrati
 		.query_row(SELECT_REGISTRATION, [space_id], |row| {
 			Ok(Registration {
 				name: row.get(0)?,
-				colour: row.get::<_, Option<String>>(1)?.as_deref().and_then(AvatarBlot::parse),
+				colour: colour_of(row, 1)?,
 				instance_id: row.get(2)?,
 			})
 		})
@@ -145,7 +145,7 @@ mod tests {
 			read.expect("the registration reads"),
 			Registration {
 				name: "Personal".to_owned(),
-				colour: Some(AvatarBlot::Red),
+				colour: Hue::named("red"),
 				instance_id: None
 			}
 		);

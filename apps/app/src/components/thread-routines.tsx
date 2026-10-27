@@ -8,7 +8,10 @@ import {
 
 import { useRosterClock } from "@/lib/bots/use-roster-clock"
 import type { ThreadNaming } from "@/lib/chat/use-thread-roster"
-import type { OpenMission } from "@/lib/missions/mission-actions"
+import type {
+	OpenMission,
+	OpenMissionInNewTab,
+} from "@/lib/missions/mission-actions"
 import {
 	type LiveMissionIds,
 	toActivityMissions,
@@ -17,6 +20,7 @@ import type { ConversationMissionsRead } from "@/lib/missions/use-missions"
 import type { OpenedRoutineController } from "@/lib/routines/opened-routine-controller"
 import { useOpenedRoutine } from "@/lib/routines/use-opened-routine"
 import { useRoutines } from "@/lib/routines/use-routines"
+import { opensInNewTab } from "@/lib/tabs/new-tab-clicks"
 
 type ActivityPanel = {
 	isOpen: boolean
@@ -33,6 +37,7 @@ type ThreadRoutinesProps = {
 	missions: ConversationMissionsRead
 	faceOf: ThreadNaming["faceOf"]
 	onOpenMission: OpenMission
+	onOpenMissionInNewTab: OpenMissionInNewTab
 	wrapMissionCard: MissionCardWrap
 	children: ReactNode
 }
@@ -57,6 +62,7 @@ const ThreadRoutines = ({
 	missions,
 	faceOf,
 	onOpenMission,
+	onOpenMissionInNewTab,
 	wrapMissionCard,
 	children,
 }: ThreadRoutinesProps) => {
@@ -111,7 +117,10 @@ const ThreadRoutines = ({
 			isRoutinesPending={isPending}
 			missions={{
 				...rows,
-				onOpen: (missionId) => onOpenMission(missionId),
+				onOpen: (missionId, modifiers) =>
+					opensInNewTab(modifiers)
+						? onOpenMissionInNewTab(missionId)
+						: onOpenMission(missionId),
 				wrap: wrapMissionCard,
 			}}
 			onDelete={remove}

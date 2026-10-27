@@ -8,6 +8,7 @@ import {
 	slotsIn,
 } from "@workspace/storybook/story-utils"
 import { AppHeader } from "@workspace/ui/components/app-header"
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { HeaderConversationButton } from "@workspace/ui/components/header-conversation-button"
 import type { RosterBot } from "@workspace/ui/components/roster"
 
@@ -146,11 +147,7 @@ export const ThemesGroup = meta.story({
 		},
 	},
 	play: async ({ canvasElement }) =>
-		expectSubjectIconInBothThemes(
-			canvasElement,
-			"--conversation-icon",
-			CELL_SIDE,
-		),
+		expectSubjectIconInBothThemes(canvasElement, undefined, CELL_SIDE),
 })
 
 export const ThemesGroupRed = meta.story({
@@ -165,11 +162,7 @@ export const ThemesGroupRed = meta.story({
 		},
 	},
 	play: async ({ canvasElement }) =>
-		expectSubjectIconInBothThemes(
-			canvasElement,
-			"--conversation-icon-red",
-			CELL_SIDE,
-		),
+		expectSubjectIconInBothThemes(canvasElement, BLOT_HUES.red, CELL_SIDE),
 })
 
 export const LongContent = meta.story({

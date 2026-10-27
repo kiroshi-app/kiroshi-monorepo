@@ -446,7 +446,7 @@ mod tests {
 
 	const A_SECOND_SPACE: &str = "
 		INSERT INTO spaces (id, name, colour, position, created_at)
-			VALUES ('writers', 'Writers', 'blue', 1, 1);
+			VALUES ('writers', 'Writers', 257, 1, 1);
 		INSERT INTO bot_spaces (bot_id, space_id, joined_at) VALUES ('b1', 'writers', 2);
 		INSERT INTO conversations (id, kind, space_id, title, created_at, updated_at)
 			VALUES ('c2', 'main', 'writers', 'Second', 1, 1);
@@ -507,7 +507,7 @@ mod tests {
 
 	const SEATS_IN_TWO_SPACES: &str = "
 		INSERT INTO spaces (id, name, colour, position, created_at)
-			VALUES ('writers', 'Writers', 'blue', 1, 1), ('empty', 'Empty', 'green', 2, 1);
+			VALUES ('writers', 'Writers', 257, 1, 1), ('empty', 'Empty', 132, 2, 1);
 		INSERT INTO bots (id, name, model, created_at, deleted_at)
 			VALUES ('b0', 'Zero', 'sonnet', 2, NULL), ('b2', 'Second', 'sonnet', 1, NULL),
 				('gone', 'Gone', 'sonnet', 1, 1);

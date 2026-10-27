@@ -1,5 +1,4 @@
 import type {
-	AvatarBlot,
 	Bot,
 	BotChangedFile,
 	BotDraft,
@@ -16,6 +15,7 @@ import type {
 	ConversationPage,
 	EnvEntry,
 	EnvScope,
+	Hue,
 	McpServerMark,
 	MessagePin,
 	MessageReference,
@@ -39,7 +39,7 @@ import type { AgentCommand } from "@/lib/agent/contract"
 export type TranscriptStore = TranscriptPort & {
 	spaces: () => Promise<Space[]>
 	createSpace: (name: string) => Promise<Space>
-	updateSpace: (id: string, name: string, colour?: AvatarBlot) => Promise<Space>
+	updateSpace: (id: string, name: string, colour?: Hue) => Promise<Space>
 	reorderSpaces: (ids: string[]) => Promise<void>
 	deleteSpace: (id: string) => Promise<void>
 	exportSpace: (id: string, path: string) => Promise<void>

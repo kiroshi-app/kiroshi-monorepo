@@ -3,20 +3,20 @@
 import { type ReactNode, useEffect, useRef } from "react"
 import { useTranslation } from "react-i18next"
 
-import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
+import { companionHue } from "@workspace/ui/components/companion-avatar"
 import {
 	type FieldAvatarProps,
 	type FieldState,
 	stillTime,
 } from "@workspace/ui/components/companion-field"
 import { COMPANION_SILHOUETTE } from "@workspace/ui/components/companion-picture"
+import { hueStyle } from "@workspace/ui/components/hue-palette"
 import { usePrefersReducedMotion } from "@workspace/ui/hooks/use-prefers-reduced-motion"
-import { cn } from "@workspace/ui/lib/utils"
 
 type Paint = (time: number) => void
 
-type FieldFrameProps = Required<Omit<FieldAvatarProps, "tint">> & {
-	tint?: BotAvatarBlot
+type FieldFrameProps = Required<Omit<FieldAvatarProps, "hue">> & {
+	hue?: number
 	surface?: string
 	children: ReactNode
 }
@@ -44,7 +44,7 @@ const subscribe = (paint: Paint) => {
 
 const FieldFrame = ({
 	name,
-	tint,
+	hue,
 	state,
 	size,
 	surface,
@@ -55,14 +55,13 @@ const FieldFrame = ({
 	return (
 		<span
 			aria-label={name.trim() || t("companion.unnamed")}
-			className={cn(
-				"relative inline-flex shrink-0 overflow-hidden",
-				tint ? "text-(--bot-blot-ink)" : "text-(--bot-avatar-ink)",
-			)}
+			className="relative inline-flex shrink-0 overflow-hidden text-(--bot-avatar-ink)"
+			data-hue={hue}
 			data-slot="companion-field"
 			data-state={state}
 			role="img"
 			style={{
+				...(hue === undefined ? undefined : hueStyle(companionHue(name, hue))),
 				width: size,
 				height: size,
 				...(surface && COMPANION_SILHOUETTE),

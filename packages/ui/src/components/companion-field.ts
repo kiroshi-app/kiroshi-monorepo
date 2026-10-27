@@ -1,4 +1,3 @@
-import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
 import type { BotAvatarState } from "@workspace/ui/components/companion-state"
 
 const FIELD_STATES = [
@@ -14,7 +13,7 @@ type FieldState = (typeof FIELD_STATES)[number]
 
 type FieldAvatarProps = {
 	name: string
-	tint?: BotAvatarBlot
+	hue?: number
 	state?: FieldState
 	size?: number
 }

@@ -29,7 +29,7 @@ const botBadgeVariants = cva("", {
 			switcher:
 				"group-data-[collapsible=icon]:absolute group-data-[collapsible=icon]:top-1 group-data-[collapsible=icon]:right-1 group-data-[collapsible=icon]:ring-2 group-data-[collapsible=icon]:ring-[var(--badge-ring,var(--color-sidebar))]",
 			row: "absolute end-0 bottom-1",
-			rail: "absolute -end-px -top-px ring-2 ring-(--shell-surface,var(--background)) transition-shadow duration-400 ease-out motion-reduce:transition-none",
+			rail: "absolute -end-px -top-px ring-2 ring-background transition-shadow duration-400 ease-out motion-reduce:transition-none",
 		},
 	},
 })

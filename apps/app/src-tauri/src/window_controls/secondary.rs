@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use serde::Serialize;
@@ -7,12 +6,11 @@ use tauri::utils::config::WindowConfig;
 use tauri::{AppHandle, Manager, Runtime, State, WebviewWindow, WindowEvent};
 
 use super::{built, main_config};
+use crate::db::DatabaseState;
 
 const SECONDARY_PREFIX: &str = "window-";
 
 const CASCADE_OFFSET: f64 = 30.0;
-
-static NEXT_SECONDARY: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -69,7 +67,7 @@ pub async fn window_open<R: Runtime>(
 		eprintln!("the geometry of the window {} could not be read: {failure}", window.label());
 		WindowOpenError::Unavailable
 	})?;
-	let config = secondary_config(main, fresh_label(), beside(caller));
+	let config = secondary_config(main, fresh_label(app).await?, beside(caller));
 	opened_windows(app).initial_hrefs().insert(config.label.clone(), href);
 	match built(app, &config) {
 		Ok(opened) => {
@@ -98,8 +96,24 @@ fn is_app_page(href: &str) -> bool {
 		&& !href.chars().any(|letter| letter == '\\' || letter.is_control())
 }
 
-fn fresh_label() -> String {
-	format!("{SECONDARY_PREFIX}{}", NEXT_SECONDARY.fetch_add(1, Ordering::Relaxed))
+async fn fresh_label<R: Runtime>(app: &AppHandle<R>) -> Result<String, WindowOpenError> {
+	let Some(state) = app.try_state::<DatabaseState>() else {
+		eprintln!("no store is open to record the label of a new window");
+		return Err(WindowOpenError::Unavailable);
+	};
+	let database = state.inner().as_ref().map_err(|failure| {
+		eprintln!("the store of window labels did not open: {failure:?}");
+		WindowOpenError::Unavailable
+	})?;
+	let rank = database.user().hand_out_window_rank().await.map_err(|failure| {
+		eprintln!("the label of a new window could not be recorded: {failure:?}");
+		WindowOpenError::Unavailable
+	})?;
+	Ok(secondary_label(rank))
+}
+
+fn secondary_label(rank: u64) -> String {
+	format!("{SECONDARY_PREFIX}{rank}")
 }
 
 fn opened_windows<R: Runtime>(app: &AppHandle<R>) -> State<'_, OpenedWindows> {
@@ -146,7 +160,8 @@ fn forgotten_once_destroyed<R: Runtime>(window: &WebviewWindow<R>) {
 mod tests {
 	use tauri::utils::config::WindowConfig;
 
-	use super::{beside, fresh_label, is_app_page, is_secondary, secondary_config, Placement};
+	use super::{beside, is_app_page, is_secondary, secondary_config, secondary_label, Placement};
+	use crate::window_controls::is_app_window;
 
 	const CALLER: Placement = Placement { width: 1400.0, height: 900.0, x: 120.0, y: 64.0 };
 
@@ -188,12 +203,12 @@ mod tests {
 	}
 
 	#[test]
-	fn every_fresh_label_is_a_new_secondary_label() {
-		let first = fresh_label();
-		let second = fresh_label();
-
-		assert_ne!(first, second);
-		assert!(is_secondary(&first) && is_secondary(&second));
+	fn every_secondary_label_is_an_app_window_and_main_is_none() {
+		for rank in [1, 42, u64::MAX] {
+			let label = secondary_label(rank);
+			assert!(is_secondary(&label) && is_app_window(&label), "{label} is not secondary");
+		}
+		assert!(!is_secondary("main") && is_app_window("main"));
 	}
 
 	#[test]

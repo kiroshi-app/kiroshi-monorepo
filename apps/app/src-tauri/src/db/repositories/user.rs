@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 
 use std::sync::LazyLock;
 
+use rusqlite::types::Type;
 use rusqlite::{Connection, Transaction, TransactionBehavior};
 
 use super::settings::Settings;
@@ -27,6 +28,9 @@ const SHOW_WHATS_NEW_KEY: &str = "user.show_whats_new";
 const LAST_SEEN_VERSION_KEY: &str = "user.last_seen_version";
 
 const FIRST_COMPANION_SEEDED_KEY: &str = "app.first_companion_seeded";
+const LAST_WINDOW_RANK_KEY: &str = "app.last_window_rank";
+
+const UNREADABLE_WINDOW_RANK: &str = "the last window rank does not read as a count";
 
 const SWITCH_ON: &str = "on";
 const SWITCH_OFF: &str = "off";
@@ -230,6 +234,18 @@ impl UserRepository {
 		self.mark_switch_on(FIRST_RUN_DONE_KEY).await
 	}
 
+	pub async fn hand_out_window_rank(&self) -> Result<u64, DatabaseError> {
+		self.access
+			.call_mut(|connection| {
+				let transaction = write_transaction(connection)?;
+				let rank = rank_after(setting_in(&transaction, LAST_WINDOW_RANK_KEY)?)?;
+				SETTINGS.write(&transaction, None, LAST_WINDOW_RANK_KEY, &rank.to_string())?;
+				transaction.commit()?;
+				Ok(rank)
+			})
+			.await
+	}
+
 	async fn mark_switch_on(&self, key: &'static str) -> Result<(), DatabaseError> {
 		self.access
 			.call_mut(move |connection| {
@@ -285,6 +301,16 @@ fn switch_on_in(connection: &Connection, key: &str) -> Result<bool, DatabaseErro
 
 fn setting_in(connection: &Connection, key: &str) -> Result<Option<String>, DatabaseError> {
 	SETTINGS.read(connection, None, key)
+}
+
+fn rank_after(last: Option<String>) -> Result<u64, DatabaseError> {
+	let Some(last) = last else {
+		return Ok(1);
+	};
+	last.parse::<u64>().ok().and_then(|rank| rank.checked_add(1)).ok_or_else(|| {
+		rusqlite::Error::FromSqlConversionFailure(0, Type::Text, UNREADABLE_WINDOW_RANK.into())
+			.into()
+	})
 }
 
 fn write_in(transaction: &Transaction<'_>, preferences: &Preferences) -> Result<(), DatabaseError> {
@@ -821,5 +847,53 @@ mod tests {
 		let read = database.user().preferences().await.expect("the record");
 
 		assert_eq!(read.update_channel, UpdateChannel::Stable);
+	}
+
+	#[tokio::test]
+	async fn window_ranks_count_up_from_one_and_go_on_after_the_file_is_reopened() {
+		let dir = temp_dir();
+		{
+			let database = open(&dir);
+			assert_eq!(database.user().hand_out_window_rank().await.expect("the rank"), 1);
+			assert_eq!(database.user().hand_out_window_rank().await.expect("the rank"), 2);
+		}
+
+		let database = open(&dir);
+
+		assert_eq!(database.user().hand_out_window_rank().await.expect("the rank"), 3);
+		assert_eq!(setting(&database, LAST_WINDOW_RANK_KEY).await.as_deref(), Some("3"));
+	}
+
+	#[tokio::test]
+	async fn window_ranks_asked_for_at_once_are_all_distinct() {
+		let dir = temp_dir();
+		let database = open(&dir);
+
+		let ranks =
+			futures_util::future::join_all((0..8).map(|_| database.user().hand_out_window_rank()))
+				.await
+				.into_iter()
+				.map(|rank| rank.expect("the rank"))
+				.collect::<std::collections::BTreeSet<_>>();
+
+		assert_eq!(ranks, (1..=8).collect());
+	}
+
+	#[tokio::test]
+	async fn a_last_window_rank_that_does_not_read_as_a_count_hands_out_nothing_and_stays() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		database
+			.call_mut(|connection| {
+				let transaction = write_transaction(connection)?;
+				SETTINGS.write(&transaction, None, LAST_WINDOW_RANK_KEY, "many")?;
+				transaction.commit()?;
+				Ok(())
+			})
+			.await
+			.expect("the planted value");
+
+		assert!(database.user().hand_out_window_rank().await.is_err());
+		assert_eq!(setting(&database, LAST_WINDOW_RANK_KEY).await.as_deref(), Some("many"));
 	}
 }

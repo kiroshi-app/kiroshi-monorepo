@@ -45,7 +45,7 @@ const participant = (fields: Partial<Participant> = {}): Participant => ({
 	joinedAt: 1,
 	leftAt: null,
 	name: "Nyx",
-	avatarBlot: "green",
+	avatarBlot: 132,
 	avatarImagePath: null,
 	isDeleted: false,
 	...fields,

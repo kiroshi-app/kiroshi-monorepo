@@ -3,22 +3,31 @@ import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 
 import {
+	HUE_PRESETS,
+	HUE_TONES,
+	YELLOW_BAND,
+} from "@workspace/ui/components/hue-tones"
+
+import {
+	hueTonesOf,
 	renderColorSets,
 	renderCss,
 	type TokenFile,
 	toSrgb,
+	withBlotAliases,
+	withHueColours,
 } from "./render-tokens"
 
 const read = (path: string) =>
 	readFileSync(new URL(path, import.meta.url), "utf8")
 
-const THEME_SELECTORS = [":root", ".dark"]
+const THEME_SELECTORS = new Set([":root", ".dark"])
 
 const TINTED_FILE: TokenFile = {
 	colors: {
 		blue: { light: "#a0bee8" },
 		ink: { light: "oklch(0.08 0 0)" },
-		tint: { light: "var(--space-tint, {blue})" },
+		tint: { light: "var(--hue-light-accent, {blue})" },
 		strong: { light: "color-mix(in oklab, {tint} 60%, {ink})" },
 		mark: { light: "color-mix(in oklab, {strong} 40%, transparent)" },
 	},
@@ -45,7 +54,13 @@ const topLevelRules = (css: string) => {
 
 const themeDeclarations = (css: string) =>
 	topLevelRules(css)
-		.filter(({ selector }) => THEME_SELECTORS.includes(selector))
+		.flatMap(({ selector, body }) =>
+			selector
+				.split(",")
+				.map((part) => part.trim())
+				.filter((part) => THEME_SELECTORS.has(part))
+				.map((theme) => ({ selector: theme, body })),
+		)
 		.flatMap(({ selector, body }) =>
 			body
 				.split(";")
@@ -66,6 +81,38 @@ describe("tokens.json", () => {
 		expect(
 			handWritten.filter((declaration) => generated.has(declaration)),
 		).toEqual([])
+	})
+
+	it("re-declares every theme block on an element carrying a hue", () => {
+		expect(renderCss(TINTED_FILE)).toMatch(/^:root, \[data-hue\] \{$/m)
+		expect(renderCss(TINTED_FILE)).toMatch(/^\.dark, \.dark \[data-hue\] \{$/m)
+	})
+
+	it("generates the hue module from the hue section", () => {
+		const file: TokenFile = JSON.parse(read("../../tokens.json"))
+
+		expect(HUE_PRESETS).toEqual(file.hue?.presets)
+		expect(YELLOW_BAND).toEqual(file.hue?.["yellow-band"])
+		expect(HUE_TONES).toEqual(hueTonesOf(file))
+	})
+
+	it("aliases each bot-blot colour set in the catalogue to the accent of its hue", () => {
+		const file: TokenFile = JSON.parse(read("../../tokens.json"))
+		const hued = withHueColours(file)
+		const colorSets = Object.fromEntries(
+			renderColorSets(withBlotAliases(hued)).map(({ name, contents }) => [
+				name,
+				JSON.parse(contents).colors,
+			]),
+		)
+		const presets = Object.keys(file.hue?.presets ?? {})
+
+		expect(presets).toHaveLength(8)
+		for (const preset of presets)
+			expect(colorSets[`bot-blot-${preset}`]).toEqual(
+				colorSets[`hue-${preset}-accent`],
+			)
+		expect(renderCss(hued)).not.toMatch(/--bot-blot-(?!ink)/)
 	})
 
 	it("converts each notation to the sRGB bytes Chromium paints", () => {

@@ -3,7 +3,7 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 
 use crate::account::cloud::Cloud;
-use crate::conversations::contract::{AvatarBlot, StorageFailure};
+use crate::conversations::contract::{Hue, StorageFailure};
 use crate::db::repositories::joined_space_members::{JoinedSpaceMember, JoinedSpaceRole};
 use crate::db::repositories::joined_spaces::{self, HostListing, JoinedReach};
 use crate::db::DatabaseError;
@@ -23,7 +23,7 @@ pub struct JoinedSpace {
 	#[specta(optional)]
 	pub wait: Option<JoinedSpaceWait>,
 	pub hosted_by: Option<String>,
-	pub colour: AvatarBlot,
+	pub colour: Hue,
 	pub instance_id: String,
 }
 
@@ -107,15 +107,16 @@ fn roster_host_name(roster: &[JoinedSpaceMember]) -> Option<String> {
 		.find_map(|member| member.name.clone())
 }
 
-pub fn colour_shown(listing: &HostListing, id: &str) -> AvatarBlot {
-	listing.colour.map_or_else(|| colour_of(id), AvatarBlot::from)
+pub fn colour_shown(listing: &HostListing, id: &str) -> Hue {
+	listing.colour.unwrap_or_else(|| colour_of(id))
 }
 
-pub fn colour_of(id: &str) -> AvatarBlot {
+pub fn colour_of(id: &str) -> Hue {
 	let hash = id
 		.bytes()
 		.fold(FNV_OFFSET_BASIS, |hash, byte| (hash ^ u32::from(byte)).wrapping_mul(FNV_PRIME));
-	AvatarBlot::ALL[hash as usize % AvatarBlot::ALL.len()]
+	let presets = Hue::presets();
+	presets[hash as usize % presets.len()]
 }
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
@@ -234,7 +235,6 @@ mod tests {
 	use serde_json::{json, to_value, Value};
 
 	use super::*;
-	use crate::db::repositories::conversations::AvatarBlot as StoredBlot;
 
 	const STORED_BEFORE_INVITERS: &str =
 		r#"{"id":"joined-1","instanceId":"instance-1","remoteSpaceId":null,"name":"Studio"}"#;
@@ -333,7 +333,7 @@ mod tests {
 			.map(|id| to_value(colour_of(id)).expect("json"))
 			.collect();
 
-		assert_eq!(colours, vec![json!("green"), json!("orange"), json!("purple"), json!("blue")]);
+		assert_eq!(colours, vec![json!(132), json!(63), json!(296), json!(257)]);
 		assert_eq!(presented(a_stored_row(None), &[])["colour"], colours[0]);
 	}
 
@@ -378,10 +378,10 @@ mod tests {
 
 	#[test]
 	fn the_relay_colour_wins_and_the_colour_pinned_to_the_id_shows_only_without_it() {
-		let listing = HostListing { colour: Some(StoredBlot::Pink), ..HostListing::default() };
+		let listing = HostListing { colour: Hue::named("pink"), ..HostListing::default() };
 		let coloured = joined_spaces::JoinedSpace { listing, ..a_stored_row(None) };
 
-		assert_eq!(presented(coloured, &[])["colour"], "pink");
+		assert_eq!(presented(coloured, &[])["colour"], 358);
 		assert_eq!(presented(a_stored_row(None), &[])["colour"], json!(colour_of("joined-1")));
 	}
 

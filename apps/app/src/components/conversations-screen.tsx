@@ -65,6 +65,7 @@ export const ConversationsScreen = () => {
 				missions={core.openedMission}
 				onboarding={preferences.firstRunDone ? undefined : drivers.onboarding}
 				onOpenConversationSettings={roster.controller.editConversation}
+				onOpenThreadInNewTab={navigation.openThreadInNewTab}
 				onRetrySpaces={loadSpaces}
 				onToggleSettings={overlay.toggleSettings}
 				readerName={preferences.displayName}

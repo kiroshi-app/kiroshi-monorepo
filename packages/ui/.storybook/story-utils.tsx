@@ -5,6 +5,10 @@ import type { ExtraProps } from "react-markdown"
 import { expect, fireEvent, type Mock, waitFor, within } from "storybook/test"
 
 import {
+	BLOT_HUES,
+	type BotAvatarBlot,
+} from "@workspace/ui/components/companion-colour"
+import {
 	COMPACT_EDGE,
 	edgeWidthOf,
 	GLAZE_EDGE,
@@ -12,6 +16,7 @@ import {
 	isCompactAt,
 } from "@workspace/ui/components/glaze-border"
 import type { SpaceHost } from "@workspace/ui/components/host-pill"
+import { hueStyle } from "@workspace/ui/components/hue-palette"
 import type { Icon } from "@workspace/ui/components/icons"
 import {
 	MARKDOWN_CODE_SURFACE_CLASS,
@@ -26,6 +31,7 @@ import {
 	SidebarProvider,
 } from "@workspace/ui/components/ui/sidebar"
 import { SHELL_TITLE_BAR_HEIGHT } from "@workspace/ui/components/workspace-shell"
+import { schemeOf } from "@workspace/ui/hooks/use-color-scheme"
 import {
 	type ClickModifiers,
 	NO_CLICK_MODIFIERS,
@@ -34,6 +40,11 @@ import { cn } from "@workspace/ui/lib/utils"
 
 export const withStoryProps = <Props,>(component: ComponentType<never>) =>
 	component as ComponentType<Partial<Props>>
+
+export const hueScopeOf = (blot: BotAvatarBlot) => ({
+	"data-hue": BLOT_HUES[blot],
+	style: hueStyle(BLOT_HUES[blot]) as CSSProperties,
+})
 
 export const listExhaustively = <T extends string>(members: Record<T, true>) =>
 	Object.keys(members) as T[]
@@ -650,7 +661,7 @@ const sidesOf = (element: Element) => {
 
 export const expectSubjectIconInBothThemes = async (
 	root: Element,
-	token: string,
+	hue: number | undefined,
 	side: number,
 ) => {
 	const icons = slotsIn(root, "conversation-subject-icon")
@@ -661,7 +672,16 @@ export const expectSubjectIconInBothThemes = async (
 		const fill = getComputedStyle(slotIn(icon, "outlined-hexagon-face")).fill
 		await expect(icon).toHaveAttribute("aria-hidden", "true")
 		await expect(sidesOf(icon)).toEqual([side, side])
-		await expect(fill).toBe(colourOfToken(token, icon))
+		if (hue === undefined) await expect(icon).not.toHaveAttribute("data-hue")
+		else await expect(icon).toHaveAttribute("data-hue", String(hue))
+		await expect(fill).toBe(
+			colourOfToken(
+				hue === undefined
+					? "--conversation-icon"
+					: `--hue-${schemeOf(icon)}-conversation-icon`,
+				icon,
+			),
+		)
 		fills.push(fill)
 	}
 	await expect(fills[0]).not.toBe(fills[1])
@@ -716,8 +736,8 @@ export const companionGlyphOf = (avatar: Element) =>
 export const companionGlyphs = (root: Element) =>
 	slotsIn(root, "companion-field")
 
-export const companionTintOf = (glyph: HTMLElement) =>
-	glyph.style.backgroundColor.match(/var\(--bot-blot-\w+\)/)?.[0] ?? ""
+export const companionHueOf = (glyph: HTMLElement) =>
+	glyph.dataset.hue === undefined ? undefined : Number(glyph.dataset.hue)
 
 export const companionGlyphsIn = (root: Element, state: string) =>
 	companionGlyphs(root).filter((glyph) => glyph.dataset.state === state)
