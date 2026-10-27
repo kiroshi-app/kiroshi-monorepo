@@ -56,6 +56,13 @@ const common = {
 		duplicateTab: "Duplicate tab",
 		reopenClosedTab: "Reopen last closed tab",
 		moveTabToNewWindow: "Move to new window",
+		moveTabFailed: {
+			title: "Couldn’t open a new window",
+			description:
+				"The tab stayed here. Choose Move to new window from the tab’s menu to try again.",
+			descriptionWithReason:
+				"The tab stayed here ({{reason}}). Choose Move to new window from the tab’s menu to try again.",
+		},
 		pinTabShortcut: "Ctrl⇧P",
 		newTabShortcut: "⌘T",
 		reopenClosedTabShortcut: "⌘⇧T",

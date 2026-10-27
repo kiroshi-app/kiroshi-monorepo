@@ -943,6 +943,7 @@ describe("Move to new window", () => {
 			threadOf("moved"),
 		)
 		expect(shownHrefs(tabs)).toEqual(["/", threadOf("kept")])
+		expect(windowHost.raiseReportedFailure).not.toHaveBeenCalled()
 	})
 
 	it("leaves without the leave prompt and keeps the moved tab off the closed tabs", async () => {
@@ -963,18 +964,36 @@ describe("Move to new window", () => {
 			"refuses",
 			() =>
 				Promise.resolve({ status: "error", error: { kind: "unavailable" } }),
+			"The tab stayed here (unavailable). Choose Move to new window from the tab’s menu to try again.",
 		],
-		["fails", () => Promise.reject(new Error("window lost"))],
+		[
+			"fails",
+			() => Promise.reject(new Error("window lost")),
+			"The tab stayed here (window lost). Choose Move to new window from the tab’s menu to try again.",
+		],
+		[
+			"fails with no reason",
+			() => Promise.reject(),
+			"The tab stayed here. Choose Move to new window from the tab’s menu to try again.",
+		],
+		[
+			"fails with an empty reason",
+			() => Promise.reject(new Error("")),
+			"The tab stayed here. Choose Move to new window from the tab’s menu to try again.",
+		],
 	])(
-		"keeps the tab and raises a notice when opening the window %s",
-		async (_, opening) => {
+		"keeps the tab and raises one notice when opening the window %s",
+		async (_, opening, description) => {
 			windowHost.windowOpen.mockImplementation(opening)
 			const tabs = tabsOn(threadOf("stays"))
 
 			await tabs.moveToNewWindow(idOfTabOn(tabs, threadOf("stays")))
 
 			expect(shownHrefs(tabs)).toEqual(["/", threadOf("stays")])
-			expect(windowHost.raiseReportedFailure).toHaveBeenCalledOnce()
+			expect(windowHost.raiseReportedFailure).toHaveBeenCalledExactlyOnceWith(
+				{ title: "Couldn’t open a new window", description },
+				{ raisedIn: "workspace-tabs", command: "window_open" },
+			)
 		},
 	)
 

@@ -42,7 +42,11 @@ import {
 } from "./tabs-model"
 
 import { commands } from "../bindings"
-import { raiseReportedFailure } from "../failure-report"
+import {
+	describeFailure,
+	raiseReportedFailure,
+	type UnreportedFailureNotice,
+} from "../failure-report"
 import { closeWindow } from "../host"
 import { createStore } from "../store"
 
@@ -108,21 +112,44 @@ const isNamingAnAbsentRow = (
 
 const missionOfTab = (tab: Tab) => pageOf(currentHrefOf(tab)).thread.mission
 
-const raiseWindowFailure = (title: string, command?: string) => {
-	raiseReportedFailure({ title }, { raisedIn: "workspace-tabs", command })
+const raiseWindowFailure = (
+	notice: UnreportedFailureNotice,
+	command?: string,
+) => {
+	raiseReportedFailure(notice, { raisedIn: "workspace-tabs", command })
 }
 
 const closeThisWindow = () => {
 	closeWindow().catch(() =>
-		raiseWindowFailure(i18n.t("common:windowControls.failure.close")),
+		raiseWindowFailure({
+			title: i18n.t("common:windowControls.failure.close"),
+		}),
 	)
 }
 
-const isWindowOpenedOn = (href: string) =>
+type WindowOpening = { isOpened: true } | { isOpened: false; reason?: string }
+
+const reasonOf = (error: unknown) =>
+	(error == null ? "" : describeFailure(error).trim()) || undefined
+
+const openWindowOn = (href: string): Promise<WindowOpening> =>
 	commands.windowOpen(href).then(
-		(opened) => opened.status === "ok",
-		() => false,
+		(opened) =>
+			opened.status === "ok"
+				? { isOpened: true }
+				: { isOpened: false, reason: reasonOf(opened.error) },
+		(error: unknown) => ({ isOpened: false, reason: reasonOf(error) }),
 	)
+
+const moveFailureOf = (reason: string | undefined) => ({
+	title: i18n.t("common:titleBar.moveTabFailed.title"),
+	description:
+		reason === undefined
+			? i18n.t("common:titleBar.moveTabFailed.description")
+			: i18n.t("common:titleBar.moveTabFailed.descriptionWithReason", {
+					reason,
+				}),
+})
 
 const isOnlyTab = (space: SpaceTabs | undefined, id: string) =>
 	space?.tabs.length === 1 && space.tabs[0]?.id === id
@@ -341,14 +368,12 @@ export const createWorkspaceTabs = (
 		if (!moved) {
 			return
 		}
-		if (await isWindowOpenedOn(currentHrefOf(moved))) {
+		const opening = await openWindowOn(currentHrefOf(moved))
+		if (opening.isOpened) {
 			removeMoved(spaceId, id)
 			return
 		}
-		raiseWindowFailure(
-			i18n.t("common:titleBar.moveTabToNewWindow"),
-			"window_open",
-		)
+		raiseWindowFailure(moveFailureOf(opening.reason), "window_open")
 	}
 
 	const reachSpace = (spaceId: string) => {
