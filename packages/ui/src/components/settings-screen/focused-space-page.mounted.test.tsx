@@ -114,6 +114,11 @@ const colourPageOf = ({
 const colourFieldIn = (container: HTMLElement) =>
 	container.querySelector<HTMLElement>('[data-slot="colour-field"]')
 
+const BLUE_DESK: SpaceSettingsValue = {
+	name: "Release desk",
+	colour: BLOT_HUES.blue,
+}
+
 const INVITATION = {
 	state: "invitation",
 	hostEmail: "priya@example.com",
@@ -125,7 +130,7 @@ describe("FocusedSpacePage colour", () => {
 		const { container } = render(
 			colourPageOf({
 				space: YOURS,
-				value: { name: "Release desk", colour: BLOT_HUES.blue },
+				value: BLUE_DESK,
 			}),
 		)
 		const field = colourFieldIn(container)
@@ -143,7 +148,7 @@ describe("FocusedSpacePage colour", () => {
 		render(
 			colourPageOf({
 				space: YOURS,
-				value: { name: "Release desk", colour: BLOT_HUES.blue },
+				value: BLUE_DESK,
 				onValueChange,
 			}),
 		)
