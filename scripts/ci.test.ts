@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { readFileSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 
 import {
 	CHANGED_UNIT_TESTS,
@@ -10,10 +10,12 @@ import {
 	type Group,
 	offPullRequestNote,
 	RUST_PULL_REQUEST_STEPS,
+	SHARED_PATH_RULES,
 	SIMULATOR_LOOKUP,
 	type Step,
 	skipReason,
 	spawnedCommand,
+	unitTestScope,
 } from "./ci"
 import { decideJobs } from "./ci-changes"
 
@@ -441,6 +443,47 @@ describe("ci:fast", () => {
 		)
 
 		for (const step of QUEUE_SCRIPT_STEPS) expect(steps).not.toContain(step)
+	})
+})
+
+describe("the unit test scope of a pull request", () => {
+	it("runs the full suite when the diff touches a shared path, naming the path and its rule", () => {
+		expect(
+			unitTestScope([
+				"packages/ui/src/components/activity-indicator.tsx",
+				"packages/ui/src/tokens/tokens.json",
+			]),
+		).toEqual({
+			scope: "full",
+			path: "packages/ui/src/tokens/tokens.json",
+			rule: "packages/ui/src/tokens/**",
+		})
+	})
+
+	it("runs the changed test files when the diff touches one component and its story", () => {
+		expect(
+			unitTestScope([
+				"packages/ui/src/components/activity-indicator.tsx",
+				"packages/ui/src/components/activity-indicator.stories.tsx",
+			]),
+		).toEqual({ scope: "changed" })
+	})
+
+	it("runs the changed test files when the diff is empty", () => {
+		expect(unitTestScope([])).toEqual({ scope: "changed" })
+	})
+
+	it.each(SHARED_PATH_RULES.filter((rule) => !rule.includes("*")))(
+		"names %s, a file of this checkout",
+		(path) => {
+			expect(existsSync(new URL(`../${path}`, import.meta.url))).toBe(true)
+		},
+	)
+
+	it("leaves ci:fast on the changed test files when the diff touches a shared path", () => {
+		expect(fastSteps(["packages/ui/src/tokens/tokens.json"]).at(-1)).toEqual(
+			CHANGED_UNIT_TESTS,
+		)
 	})
 })
 
