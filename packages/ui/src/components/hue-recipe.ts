@@ -104,14 +104,14 @@ const yellowWeight = (hue: number, { centre, radius }: YellowBand) => {
 }
 
 const correctedTone = (spec: ToneSpec, hue: number, band: YellowBand) => {
-	const weight = spec.yellow ? yellowWeight(hue, band) : 0
+	const { lightness, chroma, yellow } = spec
+	if (!yellow) return { lightness, chroma, hue }
+	const weight = yellowWeight(hue, band)
 	const blend = (from: number, to: number) => from + (to - from) * weight
 	return {
-		lightness: blend(spec.lightness, spec.yellow?.lightness ?? 0),
-		chroma: blend(spec.chroma, spec.yellow?.chroma ?? 0),
-		hue: normaliseHue(
-			hue + weight * ((spec.yellow?.hue ?? band.centre) - band.centre),
-		),
+		lightness: blend(lightness, yellow.lightness),
+		chroma: blend(chroma, yellow.chroma),
+		hue: normaliseHue(blend(hue, hue + yellow.hue - band.centre)),
 	}
 }
 
