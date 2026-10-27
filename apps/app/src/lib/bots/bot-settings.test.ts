@@ -342,7 +342,7 @@ describe("newBotIdentity", () => {
 			bot({ id: `b-${index}`, avatarBlot: HUE_PRESETS[blot] }),
 		)
 
-		expect(BLOT_TINTS.map((blot) => HUE_PRESETS[blot])).toContain(
+		expect(Object.values(HUE_PRESETS)).toContain(
 			newBotIdentity(roster).avatarBlot,
 		)
 	})
