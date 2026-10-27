@@ -9,6 +9,7 @@ import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
 import {
 	BOT_NAMES,
 	newBotIdentity,
+	toIdentity,
 	toRosterBots,
 	toSettingsValue,
 } from "./bot-settings"
@@ -386,6 +387,30 @@ describe("createRosterController", () => {
 				instructions: "Answer briefly.",
 				model: "haiku",
 				avatarBlot: 257,
+			}),
+		)
+	})
+
+	it("keeps a hue outside the presets when a companion is saved with its colour left alone", async () => {
+		const store = createFakeTranscriptStore()
+		const id = "default"
+		const stored = held(await loaded(store), id)
+		await store.updateBot(id, {
+			...toIdentity(toSettingsValue(stored), stored),
+			avatarBlot: 210,
+		})
+		const controller = await loaded(store)
+
+		controller.describe(
+			id,
+			edited(toSettingsValue(held(controller, id)), { name: "Nyx" }),
+		)
+
+		expect(held(controller, id).avatarBlot).toBe(210)
+		await vi.waitFor(async () =>
+			expect((await reloaded(store)).bots[0]).toMatchObject({
+				name: "Nyx",
+				avatarBlot: 210,
 			}),
 		)
 	})
@@ -1307,6 +1332,19 @@ describe("createRosterController on conversations", () => {
 				color: 186,
 			})
 		})
+	})
+
+	it("stores a hue outside the presets unchanged and reads it back after a reload", async () => {
+		const store = createFakeTranscriptStore()
+		const controller = await loaded(store)
+		const id = (await controller.createConversation())?.id ?? ""
+
+		controller.styleConversation(id, { color: 210 })
+
+		expect(controller.getState().conversations[0].color).toBe(210)
+		await vi.waitFor(async () =>
+			expect((await reloaded(store)).conversations[0].color).toBe(210),
+		)
 	})
 
 	it("stores no colour when none is picked", async () => {

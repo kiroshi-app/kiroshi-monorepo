@@ -43,7 +43,7 @@ export const useApplicationScopes = (core: WorkspaceCore) => {
 	const { selectedSpaceId } = spaces.state
 	const openRowId = openRowIdOf(joinedSpaces.state, selectedSpaceId)
 	const selectedSpace = openLocalSpaceOf(spaces.state.spaces, openRowId)
-	const spaceTint = openSpaceColourOf(spaces.state, joinedSpaces.state)
+	const spaceHue = openSpaceColourOf(spaces.state, joinedSpaces.state)
 
 	const reopenSessions = useMemo(
 		() =>
@@ -112,7 +112,7 @@ export const useApplicationScopes = (core: WorkspaceCore) => {
 		selectedSpace,
 		selectedSpaceId,
 		serverEnvironmentSection,
-		spaceTint,
+		spaceHue,
 		setOpenedMcpServer,
 		spaceApplications,
 		userApplications,

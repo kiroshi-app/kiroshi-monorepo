@@ -4,10 +4,6 @@ import { act, cleanup, renderHook, waitFor } from "@testing-library/react"
 import { useLayoutEffect } from "react"
 import { afterEach, expect, it } from "vitest"
 
-import {
-	BLOT_HUES,
-	type BotAvatarBlot,
-} from "@workspace/ui/components/companion-colour"
 import { hueStyle } from "@workspace/ui/components/hue-palette"
 
 import {
@@ -43,9 +39,9 @@ const tintOnRoot = () => ({
 	accent: document.documentElement.style.getPropertyValue("--hue-light-accent"),
 })
 
-const tintOf = (colour: BotAvatarBlot) => ({
-	attribute: String(BLOT_HUES[colour]),
-	accent: hueStyle(BLOT_HUES[colour])["--hue-light-accent"],
+const tintOf = (hue: number) => ({
+	attribute: String(hue),
+	accent: hueStyle(hue)["--hue-light-accent"],
 })
 
 type Tint = ReturnType<typeof tintOnRoot>
@@ -75,7 +71,7 @@ afterEach(() => {
 const mountTintedWorkspace = async () => {
 	const store = createFakeTranscriptStore()
 	const home = await store.createSpace("Home")
-	await store.updateSpace(home.id, home.name, 186)
+	await store.updateSpace(home.id, home.name, 210)
 	const { queryClient } = createQueryTestWrapper()
 	const spaces = createSpacesController(store, { queryClient })
 	await spaces.load(home.id)
@@ -125,16 +121,16 @@ const mountTintedWorkspace = async () => {
 	return { home, switchTo, changeStudioColour }
 }
 
-it("paints html with the open joined Space colour, follows its changes, and returns to the owned colour", async () => {
+it("paints html with the exact hue of the open joined Space, follows its changes, and returns to the owned hue", async () => {
 	const { home, switchTo, changeStudioColour } = await mountTintedWorkspace()
 
-	expect(tintOnRoot()).toEqual(tintOf("cyan"))
+	expect(tintOnRoot()).toEqual(tintOf(210))
 
-	expect(switchTo(joinedRowIdOf(STUDIO.id))).toEqual([tintOf("purple")])
+	expect(switchTo(joinedRowIdOf(STUDIO.id))).toEqual([tintOf(296)])
 
-	await changeStudioColour(63)
+	await changeStudioColour(75)
 
-	await waitFor(() => expect(tintOnRoot()).toEqual(tintOf("orange")))
+	await waitFor(() => expect(tintOnRoot()).toEqual(tintOf(75)))
 
-	expect(switchTo(home.id)).toEqual([tintOf("cyan")])
+	expect(switchTo(home.id)).toEqual([tintOf(210)])
 })

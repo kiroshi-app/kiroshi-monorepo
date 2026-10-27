@@ -3,10 +3,6 @@
 import { cleanup, renderHook } from "@testing-library/react"
 import { afterEach, describe, expect, it } from "vitest"
 
-import {
-	BLOT_HUES,
-	type BotAvatarBlot,
-} from "@workspace/ui/components/companion-colour"
 import { hueStyle } from "@workspace/ui/components/hue-palette"
 
 import { useSpaceTint } from "./use-space-tint"
@@ -26,9 +22,9 @@ const hueOnRoot = () => ({
 	),
 })
 
-const expectedHueOf = (colour: BotAvatarBlot) => ({
-	attribute: String(BLOT_HUES[colour]),
-	properties: hueStyle(BLOT_HUES[colour]),
+const expectedHueOf = (hue: number) => ({
+	attribute: String(hue),
+	properties: hueStyle(hue),
 })
 
 const CLEARED = { attribute: null, properties: {} }
@@ -37,9 +33,9 @@ describe("useSpaceTint", () => {
 	afterEach(cleanup)
 
 	it("sets the Space hue and both themes of every role on the html element", () => {
-		renderHook(useSpaceTint, { initialProps: "cyan" as BotAvatarBlot | null })
+		renderHook(useSpaceTint, { initialProps: 186 as number | null })
 
-		expect(hueOnRoot()).toEqual(expectedHueOf("cyan"))
+		expect(hueOnRoot()).toEqual(expectedHueOf(186))
 		expect(
 			hueProperties().some((name) => name.startsWith("--hue-light-")),
 		).toBe(true)
@@ -48,26 +44,38 @@ describe("useSpaceTint", () => {
 		)
 	})
 
+	it("writes a hue outside the presets on the root unchanged", () => {
+		renderHook(useSpaceTint, { initialProps: 210 as number | null })
+
+		expect(hueOnRoot()).toEqual(expectedHueOf(210))
+	})
+
+	it("keeps a hue of 0 on the root", () => {
+		renderHook(useSpaceTint, { initialProps: 0 as number | null })
+
+		expect(hueOnRoot()).toEqual(expectedHueOf(0))
+	})
+
 	it("replaces every property when the hue changes", () => {
 		const { rerender } = renderHook(useSpaceTint, {
-			initialProps: "cyan" as BotAvatarBlot | null,
+			initialProps: 186 as number | null,
 		})
 
-		rerender("purple")
+		rerender(296)
 
-		expect(hueOnRoot()).toEqual(expectedHueOf("purple"))
+		expect(hueOnRoot()).toEqual(expectedHueOf(296))
 	})
 
 	it("removes the attribute and every property when the colour clears, then on unmount", () => {
 		const { rerender, unmount } = renderHook(useSpaceTint, {
-			initialProps: "cyan" as BotAvatarBlot | null,
+			initialProps: 186 as number | null,
 		})
 
 		rerender(null)
 
 		expect(hueOnRoot()).toEqual(CLEARED)
 
-		rerender("orange")
+		rerender(63)
 		unmount()
 
 		expect(hueOnRoot()).toEqual(CLEARED)

@@ -20,12 +20,14 @@ import { joinedHosts } from "../host"
 import { createQueue } from "../queue"
 import { createStore } from "../store"
 import { createWriteLoop } from "../write-loop"
-import { hueOfPreset } from "../colour/hue-shim"
+import { hueAfterPick } from "../colour/hue-shim"
 import type { Space, SpaceError } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
 import type { JoinedHosts } from "../host/joined-hosts"
 import { memoizedOn, subscribeWithQueries } from "../query/cache-view"
 import { runMutation } from "../query/run-mutation"
+
+type SpaceDescription = Pick<Space, "name" | "colour">
 
 export type SpacesState = {
 	spaces: Space[]
@@ -193,15 +195,11 @@ export const createSpacesController = (
 		return reload()
 	}
 
-	const writes = createWriteLoop<SpaceSettingsValue, Space>({
+	const writes = createWriteLoop<SpaceDescription, Space>({
 		enqueue,
-		write: (id, value) =>
+		write: (id, { name, colour }) =>
 			runMutation(queryClient, () =>
-				store.updateSpace(
-					id,
-					value.name,
-					value.colour === undefined ? undefined : hueOfPreset(value.colour),
-				),
+				store.updateSpace(id, name, colour ?? undefined),
 			),
 		apply: (_id, written) => apply(written),
 		onRefused: () => {
@@ -326,12 +324,12 @@ export const createSpacesController = (
 			if (!held) {
 				return
 			}
-			apply({
-				...held,
+			const description: SpaceDescription = {
 				name: value.name,
-				colour: value.colour === undefined ? null : hueOfPreset(value.colour),
-			})
-			writes.push(id, value)
+				colour: hueAfterPick(value.colour, held.colour),
+			}
+			apply({ ...held, ...description })
+			writes.push(id, description)
 		},
 
 		reorder: (ids: string[]) => {

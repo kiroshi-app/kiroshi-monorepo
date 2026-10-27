@@ -7,6 +7,7 @@ import { SpaceSettingsScreen } from "@/components/space-settings-screen"
 import { UserSettingsScreen } from "@/components/user-settings-screen"
 import { titleBarWindowControls } from "@/components/window-caption-controls"
 import { useWorkspaceRail } from "@/components/workspace-rail"
+import { presetOfHue } from "@/lib/colour/hue-shim"
 import { hasOverlayWindowControls, isSidebarResizable } from "@/lib/host"
 import { settingsSpacesOf, spacePageOf } from "@/lib/spaces/settings-spaces"
 import { useSettingsSpaceSwitch } from "@/lib/tabs/use-settings-space-switch"
@@ -95,7 +96,10 @@ const useSettingsFrame = (
 		width: core.preferences.sidebarWidth ?? undefined,
 		onWidthChange: workspace.overlay.changeSidebarWidth,
 		isResizable: isSidebarResizable(),
-		spaceTint: workspace.scopes.spaceTint,
+		spaceTint:
+			workspace.scopes.spaceHue == null
+				? undefined
+				: presetOfHue(workspace.scopes.spaceHue),
 	}
 	return { frame, badgesBySpaceId: rosterLists.badgesBySpaceId }
 }

@@ -4,8 +4,6 @@ import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import type { SettingsScreenRequestLeave } from "@workspace/ui/components/settings-screen"
 import type { Space } from "@workspace/ui/components/space"
 
-import type { ApplicationScopes } from "@/lib/workspace/use-application-scopes"
-
 export type SettingsFrame = {
 	rail: AppFrameRailProps
 	currentSpace: Space | undefined
@@ -15,5 +13,5 @@ export type SettingsFrame = {
 	width: number | undefined
 	onWidthChange: (width: number) => void
 	isResizable: boolean
-	spaceTint: ApplicationScopes["spaceTint"]
+	spaceTint: Space["colour"]
 }

@@ -243,10 +243,10 @@ export const openSpaceColourOf = (
 	joined: Pick<JoinedSpacesState, "joinedSpaces" | "openId" | "departed">,
 ) => {
 	const openRowId = openRowIdOf(joined, selectedSpaceId)
-	const colour =
+	return (
 		joinedSpaceOfRow(joined.joinedSpaces, openRowId)?.colour ??
 		openLocalSpaceOf(spaces, openRowId)?.colour
-	return colour == null ? colour : presetOfHue(colour)
+	)
 }
 
 export const rosterSpacesOf = (

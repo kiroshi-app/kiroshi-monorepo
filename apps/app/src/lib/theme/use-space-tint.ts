@@ -1,17 +1,14 @@
 import { useLayoutEffect } from "react"
 
-import {
-	type BotAvatarBlot,
-	hueOf,
-} from "@workspace/ui/components/companion-colour"
 import { hueStyle } from "@workspace/ui/components/hue-palette"
+
+import type { Hue } from "@/lib/bindings"
 
 const HUE_ATTRIBUTE = "data-hue"
 
-export const useSpaceTint = (colour?: BotAvatarBlot | null) => {
+export const useSpaceTint = (hue?: Hue | null) => {
 	useLayoutEffect(() => {
-		const hue = hueOf(colour)
-		if (hue === undefined) {
+		if (hue == null) {
 			return undefined
 		}
 
@@ -28,5 +25,5 @@ export const useSpaceTint = (colour?: BotAvatarBlot | null) => {
 				root.style.removeProperty(property)
 			}
 		}
-	}, [colour])
+	}, [hue])
 }
