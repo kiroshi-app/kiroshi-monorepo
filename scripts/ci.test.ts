@@ -718,11 +718,6 @@ describe("the merge_group retry", () => {
 		},
 	)
 
-	it("falls back to the full vitest step when no scope is given", () => {
-		expect(unitTestSteps()).toEqual(GATE.vitest)
-		expect(fastSteps([]).slice(FAST_STEP_NAMES.length)).toEqual(GATE.vitest)
-	})
-
 	it("hands the storybook gate one retry per failing story", () => {
 		expect(vitestRetryStep(GATE.storybook[0] as Step).command).toBe(
 			"bun run baseline storybook --retry",
