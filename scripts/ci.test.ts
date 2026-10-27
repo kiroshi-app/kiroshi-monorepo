@@ -39,6 +39,7 @@ type Workflow = {
 		string,
 		{
 			if?: string
+			container?: { image?: string }
 			env?: Record<string, string>
 			needs?: string | string[]
 			"timeout-minutes"?: number
@@ -58,12 +59,9 @@ const releaseWorkflow = Bun.YAML.parse(
 	),
 ) as Workflow
 
-const TAURI_PACKAGES_STEP = "Install Tauri system dependencies"
-
 const SETUP_STEPS = new Set([
 	"Install dependencies",
 	"Drop the unused third-party apt sources",
-	TAURI_PACKAGES_STEP,
 	"Install Playwright browser",
 	"Select the Xcode pinned in .xcode-version",
 	"Install XcodeGen",
@@ -604,20 +602,29 @@ describe("the jobs of ci.yml", () => {
 	})
 
 	it.each(CI_JOBS)("%s bounds its gate by the job timeout only", (job) => {
-		const stepTimeouts = (workflow.jobs[job]?.steps ?? [])
-			.filter((step) => step.name !== TAURI_PACKAGES_STEP)
-			.flatMap((step) => step["timeout-minutes"] ?? [])
+		const stepTimeouts = (workflow.jobs[job]?.steps ?? []).flatMap(
+			(step) => step["timeout-minutes"] ?? [],
+		)
 
 		expect(stepTimeouts).toEqual([])
 	})
 
-	it("bounds the rust package setup by 5 minutes inside the 25 minutes of the job", () => {
-		const setup = workflow.jobs.rust?.steps?.find(
-			(step) => step.name === TAURI_PACKAGES_STEP,
+	it("bounds the rust job by 25 minutes", () => {
+		expect(workflow.jobs.rust?.["timeout-minutes"]).toBe(25)
+	})
+
+	it("runs the rust job inside the prebuilt ci-rust image", () => {
+		expect(workflow.jobs.rust?.container?.image).toStartWith(
+			"ghcr.io/kiroshi-app/ci-rust:",
+		)
+	})
+
+	it("installs no system package in the rust job", () => {
+		const systemCommands = (workflow.jobs.rust?.steps ?? []).filter((step) =>
+			/\b(apt-get|sudo)\b/.test(step.run ?? ""),
 		)
 
-		expect(setup?.["timeout-minutes"]).toBe(5)
-		expect(workflow.jobs.rust?.["timeout-minutes"]).toBe(25)
+		expect(systemCommands).toEqual([])
 	})
 
 	it("starts lint without changes on every event but a push to main, and has verify require it then and its skip on a push to main", () => {
