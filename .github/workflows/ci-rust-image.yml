@@ -31,7 +31,7 @@ jobs:
         run: echo "$TOKEN" | docker login ghcr.io --username "$ACTOR" --password-stdin
 
       - name: Build the image
-        run: docker build --platform linux/amd64 --pull --tag "$IMAGE" .github/ci-rust
+        run: docker build --platform linux/amd64 --tag "$IMAGE" .github/ci-rust
 
       - name: Push the image
         run: docker push "$IMAGE"
