@@ -4,7 +4,6 @@ import { expect, fn, screen, waitFor, within } from "storybook/test"
 import conversationIcons from "@workspace/shared/conversation-icons.json"
 import preview from "@workspace/storybook/preview"
 import {
-	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 	expectSettingsPage,
 	slotIn,
 	slotsIn,
@@ -304,7 +303,6 @@ export const Instructions = meta.story({
 export const DangerZone = meta.story({
 	args: { entry: "danger" },
 	parameters: {
-		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:
@@ -329,6 +327,27 @@ export const DangerZone = meta.story({
 			within(question).getByRole("button", { name: "Delete conversation" }),
 		)
 		await expect(args.onDelete).toHaveBeenCalledOnce()
+	},
+})
+
+export const DangerZoneDark = meta.story({
+	globals: { theme: "dark" },
+	args: { entry: "danger" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"`DangerZone` in the dark theme. Check that Delete conversation stays legible on its tinted fill over the dark card.",
+			},
+		},
+	},
+	play: async () => {
+		const menu = await menuIn()
+		await expect(entryIn(menu, "Danger zone")).toHaveAttribute(
+			"aria-current",
+			"page",
+		)
+		await expectPageShown("Danger zone")
 	},
 })
 

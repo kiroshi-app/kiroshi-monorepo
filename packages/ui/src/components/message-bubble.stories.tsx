@@ -145,7 +145,6 @@ export const Default = meta.story({
 export const Variants = meta.story({
 	tags: ["test-only"],
 	parameters: {
-		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:

@@ -495,6 +495,27 @@ export const DangerZone = meta.story({
 	},
 })
 
+export const DangerZoneLight = meta.story({
+	globals: { theme: "light" },
+	args: { entry: "danger" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"`DangerZone` in the light theme. Check that Delete companion reads on its tinted fill over the tinted Danger card.",
+			},
+		},
+	},
+	play: async () => {
+		const menu = await menuIn()
+		await expect(entryIn(menu, "Danger zone")).toHaveAttribute(
+			"aria-current",
+			"page",
+		)
+		await expectPageShown("Danger zone")
+	},
+})
+
 let raisedNotice: string | undefined
 
 export const DeleteFailed = meta.story({

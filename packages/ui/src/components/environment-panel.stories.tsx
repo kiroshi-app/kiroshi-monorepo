@@ -2,7 +2,6 @@ import { expect, fn, screen, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
-	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 	expectHeadingFont,
 	expectSkeletonClippedAtBottomOf,
 	slotIn,
@@ -314,7 +313,6 @@ export const RejectedDelete = meta.story({
 		onDelete: fn(() => Promise.reject(new globalThis.Error("remove refused"))),
 	},
 	parameters: {
-		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:

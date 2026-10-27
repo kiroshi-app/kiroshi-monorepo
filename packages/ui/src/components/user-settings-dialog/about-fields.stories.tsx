@@ -2,11 +2,7 @@ import { useState } from "react"
 import { expect, fn, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import {
-	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
-	slotIn,
-	slotsIn,
-} from "@workspace/storybook/story-utils"
+import { slotIn, slotsIn } from "@workspace/storybook/story-utils"
 import {
 	AboutFields,
 	type AboutFieldsProps,
@@ -277,7 +273,6 @@ export const CompanionsStillRunning = meta.story({
 export const DownloadFailed = meta.story({
 	args: { update: { status: "failed", version: "0.24.0" } },
 	parameters: {
-		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:

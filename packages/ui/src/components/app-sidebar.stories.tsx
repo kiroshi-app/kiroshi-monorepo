@@ -2029,11 +2029,10 @@ export const RowContextMenu = meta.story({
 		onPinRoster: fn(),
 	},
 	parameters: {
-		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:
-					"The actions behind a row, on the third one. There is no button to find: the row itself is the trigger, so the columns never move to make room for a control and nothing appears on hover. A pointer right-clicks the row; a keyboard reaches the same menu with the Menu key or Shift+F10 on the focused row, which the browser turns into the same `contextmenu` event this story fires. Focus lands on the menu itself and the first arrow reaches its first row, which is what a menu opened by a pointer does everywhere in Base UI. Check that the menu leads with pin and a rule under it, then offers companion settings, a duplicate under it, the branch that says which spaces hold the companion and delete with delete reading as destructive, that the arrow keys walk them, and that Escape closes the menu and puts focus back on the row it belongs to rather than dropping it on the page, as does choosing an entry. The highlighted item is the focused one, drawn by the registry item's own `focus:bg-accent`, so the focus ring and the highlight are the same signal. The row carries no `aria-haspopup`: a click on it opens a companion, not a menu, so the registry trigger leaves the row saying only what it does. The menu is left open here so the panel can be read with it up. Pick `FullRowMenu` for the same menu in an account that has sections to file under as well. Delete carries `--destructive`, which does not clear AA against a light popup at this size — the same open question `Primitives/Button` already carries on its own destructive variant, and a token decision rather than a decision this menu can make on its own.",
+					"The actions behind a row, on the third one. There is no button to find: the row itself is the trigger, so the columns never move to make room for a control and nothing appears on hover. A pointer right-clicks the row; a keyboard reaches the same menu with the Menu key or Shift+F10 on the focused row, which the browser turns into the same `contextmenu` event this story fires. Focus lands on the menu itself and the first arrow reaches its first row, which is what a menu opened by a pointer does everywhere in Base UI. Check that the menu leads with pin and a rule under it, then offers companion settings, a duplicate under it, the branch that says which spaces hold the companion and delete with delete reading as destructive, that the arrow keys walk them, and that Escape closes the menu and puts focus back on the row it belongs to rather than dropping it on the page, as does choosing an entry. The highlighted item is the focused one, drawn by the registry item's own `focus:bg-accent`, so the focus ring and the highlight are the same signal. The row carries no `aria-haspopup`: a click on it opens a companion, not a menu, so the registry trigger leaves the row saying only what it does. The menu is left open here so the panel can be read with it up. Pick `FullRowMenu` for the same menu in an account that has sections to file under as well. Delete carries `--destructive`, 6.13:1 on the light popup and 5.07:1 on its focused tint.",
 			},
 		},
 	},
@@ -3242,11 +3241,7 @@ export const RowSpaceNameTooLong = meta.story({
 export const OneSpaceRowMenu = meta.story({
 	tags: ["test-only"],
 	parameters: {
-		a11y: mergeA11y(
-			A11Y_FLOATING_FOCUS_GUARDS,
-			A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
-			A11Y_SUBMENU_PORTAL_GUARD,
-		),
+		a11y: mergeA11y(A11Y_FLOATING_FOCUS_GUARDS, A11Y_SUBMENU_PORTAL_GUARD),
 		docs: {
 			description: {
 				story:
@@ -4607,14 +4602,11 @@ export const SectionDelete = meta.story({
 	tags: ["test-only"],
 	args: sectionArgs(),
 	parameters: {
-		a11y: mergeA11y(
-			A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
-			A11Y_FLOATING_FOCUS_GUARDS,
-		),
+		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		docs: {
 			description: {
 				story:
-					"Deleting a section from its own header. It reads as destructive, sits last under the reordering entries, and reports only the section — what becomes of the companions filed under it is the host's decision, not this panel's, so nothing is removed here and the panel redraws from the props it is given next. Delete carries `--destructive`, which does not clear AA against a light popup at this size, the same open token question `RowContextMenu` already carries.",
+					"Deleting a section from its own header. It reads as destructive, sits last under the reordering entries, and reports only the section — what becomes of the companions filed under it is the host's decision, not this panel's, so nothing is removed here and the panel redraws from the props it is given next. Delete carries `--destructive` on the same item as `RowContextMenu`, 6.13:1 on the light popup and 5.07:1 on its focused tint.",
 			},
 		},
 	},

@@ -864,7 +864,6 @@ export const ActivityReadFailed = meta.story({
 export const WriteFailed = meta.story({
 	args: { failure: "write" },
 	parameters: {
-		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:
@@ -887,7 +886,6 @@ export const WriteFailed = meta.story({
 
 export const Creating = meta.story({
 	parameters: {
-		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:
@@ -926,7 +924,6 @@ export const Creating = meta.story({
 
 export const Opening = meta.story({
 	parameters: {
-		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:
@@ -1209,7 +1206,6 @@ export const WithoutSeatedLead = meta.story({
 		},
 	},
 	parameters: {
-		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:
@@ -1592,7 +1588,6 @@ const ONE_INSET_RULE_ON_SHELL =
 export const OnShellSurfaceInsets = meta.story({
 	args: { isOpen: false },
 	parameters: {
-		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: { description: { story: ONE_INSET_RULE_ON_SHELL } },
 	},
 	render: renderInShell,
@@ -1606,7 +1601,11 @@ export const OnShellSurfaceInsetsDark = meta.story({
 	globals: { theme: "dark" },
 	parameters: {
 		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
-		docs: { description: { story: ONE_INSET_RULE_ON_SHELL } },
+		docs: {
+			description: {
+				story: `${ONE_INSET_RULE_ON_SHELL} The contrast audit is left to review: the Stopped badge wears the dark destructive token on its own fill, 4.47:1 against the 4.5:1 AA asks for.`,
+			},
+		},
 	},
 	render: renderInShell,
 	play: async ({ canvasElement, userEvent }) => {

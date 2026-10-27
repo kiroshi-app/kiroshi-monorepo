@@ -882,7 +882,6 @@ export const OpensAnApplicationWithClickModifiers = meta.story({
 	tags: ["test-only"],
 	args: { entry: "mcp", onOpenApplication: fn() },
 	parameters: {
-		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:
@@ -953,7 +952,6 @@ export const OpensAnApplicationInPlace = meta.story({
 	tags: ["test-only"],
 	args: { entry: "mcp" },
 	parameters: {
-		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:

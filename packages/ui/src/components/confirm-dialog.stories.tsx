@@ -2,10 +2,7 @@ import { useTranslation } from "react-i18next"
 import { expect, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import {
-	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
-	expectHeadingFont,
-} from "@workspace/storybook/story-utils"
+import { expectHeadingFont } from "@workspace/storybook/story-utils"
 import {
 	ConfirmDialog,
 	type ConfirmDialogProps,
@@ -63,11 +60,10 @@ const meta = preview.meta({
 	component: ConfirmDialog,
 	parameters: {
 		layout: "centered",
-		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				component:
-					"The question that stands between a reader and something they cannot undo. Reach for it wherever a press deletes: it dims the page and traps focus, so it reads as a question rather than as a notification, and it puts Cancel first so the safe way out is the one the hand reaches. The title names the thing, never the action alone, so a reader who opened the wrong row finds out here rather than after, and the description repeats the consequence in full instead of shortening it to `Are you sure?`. It owns its own open state and reports nothing until the reader answers: `onConfirm` fires once on the second press, and `onCancel` once when they back out through Cancel, Escape or the backdrop, never after a confirm. The destructive red on its own tint is the token's known contrast gap, flagged for review rather than worked around here.",
+					"The question that stands between a reader and something they cannot undo. Reach for it wherever a press deletes: it dims the page and traps focus, so it reads as a question rather than as a notification, and it puts Cancel first so the safe way out is the one the hand reaches. The title names the thing, never the action alone, so a reader who opened the wrong row finds out here rather than after, and the description repeats the consequence in full instead of shortening it to `Are you sure?`. It owns its own open state and reports nothing until the reader answers: `onConfirm` fires once on the second press, and `onCancel` once when they back out through Cancel, Escape or the backdrop, never after a confirm.",
 			},
 		},
 	},
