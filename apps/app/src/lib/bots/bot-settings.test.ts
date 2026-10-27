@@ -4,6 +4,7 @@ import {
 	BLANK_BOT_PERMISSIONS,
 	BLOT_TINTS,
 } from "@workspace/ui/components/bot-settings"
+import { HUE_PRESETS } from "@workspace/ui/components/hue-tones"
 
 import {
 	BOT_NAMES,
@@ -19,7 +20,6 @@ import {
 } from "./bot-settings"
 
 import { avatarSrc } from "../host"
-import { hueOfPreset } from "../colour/hue-shim"
 import type { Bot } from "../conversations/store-contract"
 import { botIdentity } from "../conversations/transcript-fixtures"
 
@@ -327,24 +327,35 @@ describe("newBotIdentity", () => {
 	it("marks a companion with a tint nobody in the roster is marked with", () => {
 		const [spared, ...marked] = BLOT_TINTS
 
-		expect(newBotIdentity([]).avatarBlot).toBe(hueOfPreset(spared))
+		expect(newBotIdentity([]).avatarBlot).toBe(HUE_PRESETS[spared])
 		expect(
 			newBotIdentity(
 				marked.map((blot, index) =>
-					bot({ id: `b-${index}`, avatarBlot: hueOfPreset(blot) }),
+					bot({ id: `b-${index}`, avatarBlot: HUE_PRESETS[blot] }),
 				),
 			).avatarBlot,
-		).toBe(hueOfPreset(spared))
+		).toBe(HUE_PRESETS[spared])
 	})
 
 	it("marks from the whole list once every tint is taken", () => {
 		const roster = BLOT_TINTS.map((blot, index) =>
-			bot({ id: `b-${index}`, avatarBlot: hueOfPreset(blot) }),
+			bot({ id: `b-${index}`, avatarBlot: HUE_PRESETS[blot] }),
 		)
 
-		expect(BLOT_TINTS.map(hueOfPreset)).toContain(
+		expect(BLOT_TINTS.map((blot) => HUE_PRESETS[blot])).toContain(
 			newBotIdentity(roster).avatarBlot,
 		)
+	})
+
+	it("marks each new companion with the next preset hue nobody wears", () => {
+		const roster: Bot[] = []
+		for (const index of BLOT_TINTS.keys()) {
+			roster.push(bot({ id: `b-${index}`, ...newBotIdentity(roster) }))
+		}
+
+		expect(roster.map((companion) => companion.avatarBlot)).toEqual([
+			42, 82, 132, 186, 257, 296, 358, 63,
+		])
 	})
 
 	it("creates a companion on the concise style", () => {

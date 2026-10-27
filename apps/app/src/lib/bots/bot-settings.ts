@@ -6,6 +6,8 @@ import {
 	DEFAULT_BOT_OUTPUT_STYLE,
 	readBotPermissionMode,
 } from "@workspace/ui/components/bot-settings"
+import { BLOT_TINTS } from "@workspace/ui/components/companion-colour"
+import { HUE_PRESETS } from "@workspace/ui/components/hue-tones"
 import type { CompanionSummary } from "@workspace/ui/components/space-settings-dialog/companions-section"
 
 import { rosterTimestamp } from "./roster-timestamp"
@@ -16,10 +18,13 @@ import type {
 	BotPermissions as HostBotPermissions,
 	OfferedModel_Serialize,
 } from "@/lib/bindings"
-import { PRESET_HUES } from "@/lib/colour/hue-shim"
 import type { SidebarActivity } from "../chat/screen-model"
 import type { Bot, BotIdentity, Hue } from "../conversations/store-contract"
 import type { LastWord } from "../conversations/transcript-state"
+
+export const PRESET_HUES: readonly Hue[] = BLOT_TINTS.map(
+	(tint) => HUE_PRESETS[tint],
+)
 
 export const FALLBACK_MODELS = ["opus", "fable", "sonnet", "haiku"]
 

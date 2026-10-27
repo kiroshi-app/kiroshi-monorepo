@@ -11,6 +11,7 @@ import {
 	conversationName,
 	mentionableBots,
 	toConversationBots,
+	toConversationLook,
 	toConversationSettingsValue,
 	toRosterConversations,
 	unseatedBots,
@@ -525,6 +526,12 @@ describe("toConversationSettingsValue", () => {
 				conversation({ title: "Launch", instructions: "Stay short." }),
 			),
 		).toEqual({ name: "Launch", instructions: "Stay short." })
+	})
+})
+
+describe("toConversationLook", () => {
+	it("hands the hue the conversation is stored at to its icon unchanged", () => {
+		expect(toConversationLook(conversation({ color: 210 })).color).toBe(210)
 	})
 })
 
