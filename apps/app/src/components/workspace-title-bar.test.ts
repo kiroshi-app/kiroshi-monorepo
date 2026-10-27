@@ -161,6 +161,13 @@ const pickInTabMenu = async (tabName: string, item: string) => {
 	await press(screen.getByRole("menuitem", { name: item }))
 }
 
+const mountOnRoomAndBotTabs = async () => {
+	const { botName } = await mountApp()
+	await clickRow(ROOM_TITLE)
+	await clickRow(botName, { metaKey: true })
+	return botName
+}
+
 const pressModKey = async (key: string) => {
 	await act(async () => {
 		fireEvent.keyDown(window, { key, metaKey: true })
@@ -274,21 +281,17 @@ describe("the title bar", () => {
 	})
 
 	it("duplicates a tab right after it from its tab menu", async () => {
-		const { botName } = await mountApp()
-		await clickRow(botName)
-		await clickRow(ROOM_TITLE, { metaKey: true })
+		const botName = await mountOnRoomAndBotTabs()
 
 		await pickInTabMenu(botName, i18n.t("common:titleBar.duplicateTab"))
 
-		expect(tabNames()).toEqual([botName, botName, ROOM_TITLE])
-		expect(activeTabName()).toBe(botName)
+		expect(tabNames()).toEqual([ROOM_TITLE, botName, botName])
+		expect(activeTabName()).toBe(ROOM_TITLE)
 	})
 
 	it("moves a tab to a new window opened on its page from its tab menu", async () => {
 		windowHost.windowOpen.mockResolvedValue({ status: "ok", data: null })
-		const { botName } = await mountApp()
-		await clickRow(ROOM_TITLE)
-		await clickRow(botName, { metaKey: true })
+		const botName = await mountOnRoomAndBotTabs()
 
 		await pickInTabMenu(botName, i18n.t("common:titleBar.moveTabToNewWindow"))
 
@@ -298,9 +301,7 @@ describe("the title bar", () => {
 
 	it("keeps the tab and raises a notice when the new window cannot open", async () => {
 		windowHost.windowOpen.mockRejectedValue(new Error("window lost"))
-		const { botName } = await mountApp()
-		await clickRow(ROOM_TITLE)
-		await clickRow(botName, { metaKey: true })
+		const botName = await mountOnRoomAndBotTabs()
 
 		await pickInTabMenu(botName, i18n.t("common:titleBar.moveTabToNewWindow"))
 
