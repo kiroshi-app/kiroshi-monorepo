@@ -175,6 +175,20 @@ const descriptionOf = ({
 	colour,
 }: JoinedSpaceDescription): JoinedSpaceDescription => ({ name, colour })
 
+const describeRefusalNoticeOf = (refusal: unknown) => {
+	const reason =
+		refusal == null ? undefined : describeFailure(refusal).trim() || undefined
+	return {
+		title: i18n.t("chat:screen.notice.describeRefused.title"),
+		description:
+			reason === undefined
+				? i18n.t("chat:screen.notice.describeRefused.description")
+				: i18n.t("chat:screen.notice.describeRefused.descriptionWithReason", {
+						reason,
+					}),
+	}
+}
+
 const isSharedSpaceKnown = (joined: JoinedSpace) =>
 	joined.remoteSpaceId !== null
 
@@ -359,20 +373,6 @@ export const createJoinedSpacesController = ({
 	const reportRefusal = (reason: unknown) =>
 		reportFailure(joinRejectionNoticeOf(reason))
 
-	const reportDescribeRefusal = (refusal: unknown) => {
-		const reason =
-			refusal == null ? undefined : describeFailure(refusal).trim() || undefined
-		reportFailure({
-			title: i18n.t("chat:screen.notice.describeRefused.title"),
-			description:
-				reason === undefined
-					? i18n.t("chat:screen.notice.describeRefused.description")
-					: i18n.t("chat:screen.notice.describeRefused.descriptionWithReason", {
-							reason,
-						}),
-		})
-	}
-
 	const heldJoined = (id: string) =>
 		current().joinedSpaces.find((joined) => joined.id === id)
 
@@ -412,7 +412,7 @@ export const createJoinedSpacesController = ({
 		onRefused: (id, reason) => {
 			writes.drop(id)
 			restoreSaved(id)
-			reportDescribeRefusal(reason)
+			reportFailure(describeRefusalNoticeOf(reason))
 		},
 	})
 
