@@ -552,6 +552,9 @@ describe("reporting a red merge queue entry", () => {
 	})
 })
 
+const reproduceOn = (sha: string) =>
+	`Reproduce on main at ${sha} before classifying as pre-existing`
+
 describe("the reproduce line of an Ejected issue", () => {
 	it("names the base of the first entry of the red chain for an entry built on a red earlier entry", async () => {
 		const { created } = await reportEntry(entry22, {
@@ -560,17 +563,13 @@ describe("the reproduce line of an Ejected issue", () => {
 			jobsOf: { 201: [job("lint", "failure")] },
 		})
 
-		expect(created?.description).toEndWith(
-			`Reproduce on main at ${MAIN_SHA} before classifying as pre-existing`,
-		)
+		expect(created?.description).toEndWith(reproduceOn(MAIN_SHA))
 	})
 
 	it("names the entry's own base when it is the first of its chain", async () => {
 		const { created } = await reportEntry(entry21, { listed: [entry21] })
 
-		expect(created?.description).toEndWith(
-			`Reproduce on main at ${MAIN_SHA} before classifying as pre-existing`,
-		)
+		expect(created?.description).toEndWith(reproduceOn(MAIN_SHA))
 	})
 
 	it("stops the chain at a green earlier entry, whose head lands on main", async () => {
@@ -579,9 +578,7 @@ describe("the reproduce line of an Ejected issue", () => {
 			readsOf: { 201: [{ ...entry21, conclusion: "success" }] },
 		})
 
-		expect(created?.description).toEndWith(
-			`Reproduce on main at ${HEAD_21} before classifying as pre-existing`,
-		)
+		expect(created?.description).toEndWith(reproduceOn(HEAD_21))
 	})
 })
 
