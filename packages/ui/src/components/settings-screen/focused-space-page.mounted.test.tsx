@@ -210,7 +210,7 @@ describe("FocusedSpacePage colour", () => {
 	})
 
 	it.each([
-		["joined", JOINED],
+		["joined, not connected", { ...JOINED, isConnected: false }],
 		["invitation", INVITATION],
 	] as const)("draws no colour field for a %s Space", (_state, space) => {
 		const { container } = render(
