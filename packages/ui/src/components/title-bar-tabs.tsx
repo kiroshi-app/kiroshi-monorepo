@@ -287,7 +287,6 @@ const useTabLift = ({
 
 	return {
 		lift,
-		liftedId,
 		insertionOn: (id: string) => (mark?.id === id ? mark.edge : undefined),
 	}
 }
@@ -530,7 +529,7 @@ const TitleBarTabs = ({
 	const { kept, overflowing } = splitAtFit(unpinned, fittingCount, activeTabId)
 	const tabWidth = overflowing.length > 0 ? TAB_WIDTH_AT_FLOOR : TAB_WIDTH
 	const hasDivider = pinned.length > 0 && unpinned.length > 0
-	const { lift, liftedId, insertionOn } = useTabLift({
+	const { lift, insertionOn } = useTabLift({
 		tabs,
 		pinned,
 		kept,
@@ -602,7 +601,7 @@ const TitleBarTabs = ({
 					{hasDivider ? <span className={DIVIDER} /> : null}
 					{kept.map((tab) => (
 						<span className={cn(CLOSE_SLOT, tabWidth)} key={tab.id}>
-							{tab.id === activeTabId && tab.id !== liftedId ? (
+							{tab.id === activeTabId && tab.id !== lift.lift?.id ? (
 								<button
 									aria-label={t("titleBar.closeTab")}
 									className={CLOSE_BUTTON}
