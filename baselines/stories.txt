@@ -1608,7 +1608,9 @@ settings-conversation-conversationsettingsdialog--participants-with-titles
 settings-conversation-conversationsettingsscreen--danger-zone
 settings-conversation-conversationsettingsscreen--dark
 settings-conversation-conversationsettingsscreen--general
+settings-conversation-conversationsettingsscreen--icon-popover-open
 settings-conversation-conversationsettingsscreen--instructions
+settings-conversation-conversationsettingsscreen--own-hue-set
 settings-conversation-conversationsettingsscreen--participants
 settings-conversation-participantspanel--default
 settings-conversation-participantspanel--dismissed
