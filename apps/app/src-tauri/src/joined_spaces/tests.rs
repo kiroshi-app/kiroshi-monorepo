@@ -1909,11 +1909,7 @@ fn a_description_the_host_never_answers_is_host_offline_and_leaves_the_row_uncha
 	run(async {
 		let member = Member::facing_a_silent_host("described-silent").await;
 		let host = member.host();
-		let joined = online_with_two_members(&member, &host).await;
-		member.relay.greets_after_the_next_members_read(vec![host.hello()]);
-		joined_space_connect(member.app.handle().clone(), joined.id.clone())
-			.await
-			.expect("the connection");
+		let joined = online_and_greeted(&member, &host).await;
 		let before = member.listed().await;
 
 		let app = member.app.handle().clone();
