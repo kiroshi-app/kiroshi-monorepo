@@ -1,9 +1,9 @@
 use tauri::{AppHandle, Runtime};
 
 #[cfg(target_os = "macos")]
-use tauri::menu::{Menu, MenuEvent, MenuItem, MenuItemKind, PredefinedMenuItem, Submenu};
+use crate::window_controls;
 #[cfg(target_os = "macos")]
-use tauri::Manager;
+use tauri::menu::{Menu, MenuEvent, MenuItem, MenuItemKind, PredefinedMenuItem, Submenu};
 
 #[cfg(target_os = "macos")]
 const CLOSE_WINDOW: &str = "close-window";
@@ -134,17 +134,11 @@ fn close_window_when_chosen<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
 	if event.id() != CLOSE_WINDOW {
 		return;
 	}
-	for window in app.webview_windows().into_values() {
-		match window.is_focused() {
-			Ok(false) => {}
-			Ok(true) => {
-				if let Err(failure) = window.close() {
-					eprintln!("the focused window was not closed from the menu: {failure}");
-				}
-				return;
-			}
-			Err(failure) => eprintln!("the focus of a window could not be read: {failure}"),
-		}
+	let Some(window) = window_controls::focused_app_window(app) else {
+		return;
+	};
+	if let Err(failure) = window.close() {
+		eprintln!("the focused window was not closed from the menu: {failure}");
 	}
 }
 

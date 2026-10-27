@@ -162,6 +162,8 @@ pub(super) const REACHES: &[(&str, Reach)] = &[
 	("devices_list", Reach::HostOnly),
 	("device_remove", Reach::HostOnly),
 	("window_declare_maximize_button", Reach::HostOnly),
+	("window_open", Reach::HostOnly),
+	("window_identity", Reach::HostOnly),
 	("diagnostics", Reach::HostOnly),
 	("log_tail", Reach::HostOnly),
 	("log_reveal", Reach::HostOnly),

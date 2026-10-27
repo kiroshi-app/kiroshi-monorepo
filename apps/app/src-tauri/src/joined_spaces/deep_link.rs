@@ -56,7 +56,6 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) {
 		if invitations.is_empty() {
 			return;
 		}
-		window_controls::raise_main(&handle);
 		received(&handle, invitations);
 	});
 }
@@ -98,10 +97,19 @@ fn received<R: Runtime>(app: &AppHandle<R>, invitations: Vec<String>) {
 		return;
 	}
 	drop(inbox);
-	invitations.into_iter().for_each(|invitation| announced(app, invitation));
+	let target = joining_window(app);
+	invitations.into_iter().for_each(|invitation| announced(app, &target, invitation));
 }
 
-pub(super) fn listened<R: Runtime>(app: &AppHandle<R>) {
+fn joining_window<R: Runtime>(app: &AppHandle<R>) -> String {
+	if let Some(focused) = window_controls::focused_app_window(app) {
+		return focused.label().to_owned();
+	}
+	window_controls::raise_main(app);
+	window_controls::MAIN_WINDOW.to_owned()
+}
+
+pub(super) fn listened<R: Runtime>(app: &AppHandle<R>, listener: &str) {
 	let Some(join_links) = app.try_state::<JoinLinks>() else {
 		return log::warn!("the front listens for join links before their inbox was installed");
 	};
@@ -110,11 +118,13 @@ pub(super) fn listened<R: Runtime>(app: &AppHandle<R>) {
 		inbox.is_listened = true;
 		std::mem::take(&mut inbox.held)
 	};
-	held.into_iter().for_each(|invitation| announced(app, invitation));
+	held.into_iter().for_each(|invitation| announced(app, listener, invitation));
 }
 
-fn announced<R: Runtime>(app: &AppHandle<R>, invitation_id: String) {
-	if let Err(failure) = events::emit(app, JOIN_LINK_OPENED, JoinLinkOpened { invitation_id }) {
+fn announced<R: Runtime>(app: &AppHandle<R>, target: &str, invitation_id: String) {
+	if let Err(failure) =
+		events::emit_to(app, target, JOIN_LINK_OPENED, JoinLinkOpened { invitation_id })
+	{
 		log::warn!("a join link did not reach the front: {failure}");
 	}
 }
@@ -124,7 +134,7 @@ mod tests {
 	use std::sync::mpsc::{channel, Receiver};
 
 	use tauri::test::{mock_builder, MockRuntime};
-	use tauri::{App, Listener};
+	use tauri::{App, Listener, WebviewWindow, WebviewWindowBuilder};
 
 	use super::*;
 	use crate::test_app::an_app_of_its_own;
@@ -142,6 +152,18 @@ mod tests {
 		hearing
 	}
 
+	fn heard_by(window: &WebviewWindow<MockRuntime>) -> Receiver<String> {
+		let (told, hearing) = channel();
+		window.listen(OPENED_EVENT, move |event| {
+			told.send(event.payload().to_owned()).expect("the test hears");
+		});
+		hearing
+	}
+
+	fn opened(app: &App<MockRuntime>, label: &str) -> WebviewWindow<MockRuntime> {
+		WebviewWindowBuilder::new(app, label, Default::default()).build().expect("window builds")
+	}
+
 	fn urls(links: &[&str]) -> Vec<Url> {
 		links.iter().map(|link| Url::parse(link).expect("a url")).collect()
 	}
@@ -154,7 +176,7 @@ mod tests {
 
 		received(app.handle(), invitations_of(&urls(&[LINK, LINK])));
 		let before = hearing.try_recv().ok();
-		listened(app.handle());
+		listened(app.handle(), window_controls::MAIN_WINDOW);
 
 		assert_eq!(before, None);
 		assert_eq!(
@@ -168,7 +190,7 @@ mod tests {
 		let app = an_app_of_its_own("join-links-live", mock_builder());
 		app.manage(JoinLinks::default());
 		let hearing = heard(&app);
-		listened(app.handle());
+		listened(app.handle(), window_controls::MAIN_WINDOW);
 
 		received(app.handle(), invitations_of(&urls(&[LINK])));
 
@@ -176,6 +198,34 @@ mod tests {
 			hearing.try_iter().collect::<Vec<_>>(),
 			vec![serde_json::json!({ "invitationId": INVITATION })]
 		);
+	}
+
+	#[test]
+	fn an_invitation_link_reaches_main_alone_when_no_app_window_is_focused() {
+		let app = an_app_of_its_own("join-links-one-window", mock_builder());
+		app.manage(JoinLinks::default());
+		let main = heard_by(&opened(&app, window_controls::MAIN_WINDOW));
+		let secondary = heard_by(&opened(&app, "window-1"));
+		listened(app.handle(), window_controls::MAIN_WINDOW);
+
+		received(app.handle(), invitations_of(&urls(&[LINK])));
+
+		assert_eq!(main.try_iter().count(), 1);
+		assert_eq!(secondary.try_iter().count(), 0);
+	}
+
+	#[test]
+	fn a_held_invitation_link_reaches_the_window_that_listens_alone() {
+		let app = an_app_of_its_own("join-links-held-one-window", mock_builder());
+		app.manage(JoinLinks::default());
+		let main = heard_by(&opened(&app, window_controls::MAIN_WINDOW));
+		let secondary = heard_by(&opened(&app, "window-1"));
+
+		received(app.handle(), invitations_of(&urls(&[LINK])));
+		listened(app.handle(), "window-1");
+
+		assert_eq!(main.try_iter().count(), 0);
+		assert_eq!(secondary.try_iter().count(), 1);
 	}
 
 	#[test]

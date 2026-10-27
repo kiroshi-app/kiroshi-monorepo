@@ -1,11 +1,17 @@
+use std::any::TypeId;
+
 use serde::{Deserialize, Serialize};
+use tauri::utils::config::WindowConfig;
 use tauri::{AppHandle, Manager, Runtime, WebviewWindow, WebviewWindowBuilder, WindowEvent};
+
+pub use secondary::is_secondary;
 
 #[cfg(target_os = "macos")]
 pub use macos::center_in_header;
 
 #[cfg(any(windows, test))]
 mod pointer;
+pub(crate) mod secondary;
 #[cfg(windows)]
 mod win32;
 #[cfg(windows)]
@@ -75,7 +81,7 @@ async fn declare_maximize_button<R: Runtime>(
 #[cfg(not(target_os = "macos"))]
 pub fn center_in_header<R: Runtime>(_window: &WebviewWindow<R>) {}
 
-const MAIN_WINDOW: &str = "main";
+pub const MAIN_WINDOW: &str = "main";
 
 const HEADLESS_FLAG: &str = "--headless";
 
@@ -83,17 +89,37 @@ pub fn is_headless(args: impl IntoIterator<Item = String>) -> bool {
 	args.into_iter().any(|arg| arg == HEADLESS_FLAG)
 }
 
+pub fn is_app_window(label: &str) -> bool {
+	label == MAIN_WINDOW || secondary::is_secondary(label)
+}
+
+pub fn focused_app_window<R: Runtime>(app: &AppHandle<R>) -> Option<WebviewWindow<R>> {
+	app.webview_windows().into_iter().filter(|(label, _)| is_app_window(label)).find_map(
+		|(_, window)| match window.is_focused() {
+			Ok(is_focused) => is_focused.then_some(window),
+			Err(failure) => {
+				eprintln!(
+					"the focus of the window {} could not be read: {failure}",
+					window.label()
+				);
+				None
+			}
+		},
+	)
+}
+
 #[derive(Debug, PartialEq, Eq)]
-enum MainClose {
+enum Closing {
 	Hidden,
+	Closed,
 	Quit,
 }
 
-fn main_close_on(os: &str) -> MainClose {
-	if os == "macos" {
-		MainClose::Hidden
-	} else {
-		MainClose::Quit
+fn closing_on(os: &str, label: &str, has_another_app_window: bool) -> Closing {
+	match (os == "macos", label == MAIN_WINDOW, has_another_app_window) {
+		(true, true, _) => Closing::Hidden,
+		(true, false, _) | (false, _, true) => Closing::Closed,
+		(false, _, false) => Closing::Quit,
 	}
 }
 
@@ -109,19 +135,46 @@ pub fn raise_main<R: Runtime>(app: &AppHandle<R>) {
 }
 
 pub fn open_main<R: Runtime>(app: &AppHandle<R>) {
-	let Some(config) = app.config().app.windows.iter().find(|window| window.label == MAIN_WINDOW)
-	else {
+	let Some(config) = main_config(app) else {
 		return eprintln!("the config declares no main window");
 	};
-	match WebviewWindowBuilder::from_config(app, config).and_then(WebviewWindowBuilder::build) {
-		Ok(window) => {
-			center_in_header(&window);
-			#[cfg(windows)]
-			frame(&window);
-			closed_per_platform(&window);
-		}
-		Err(failure) => eprintln!("the main window did not open: {failure}"),
+	if let Err(failure) = built(app, &config) {
+		eprintln!("the main window did not open: {failure}");
 	}
+}
+
+fn main_config<R: Runtime>(app: &AppHandle<R>) -> Option<WindowConfig> {
+	app.config().app.windows.iter().find(|window| window.label == MAIN_WINDOW).cloned()
+}
+
+fn built<R: Runtime>(app: &AppHandle<R>, config: &WindowConfig) -> tauri::Result<WebviewWindow<R>> {
+	let window = WebviewWindowBuilder::from_config(app, config)?.build()?;
+	closed_per_platform(&window);
+	if draws_native_windows::<R>() {
+		let dressed = window.clone();
+		if let Err(failure) = window.run_on_main_thread(move || dress(&dressed)) {
+			eprintln!("the window {} kept its default chrome: {failure}", window.label());
+		}
+	}
+	Ok(window)
+}
+
+fn draws_native_windows<R: Runtime>() -> bool {
+	TypeId::of::<R>() == TypeId::of::<tauri::Wry>()
+}
+
+fn dress<R: Runtime>(window: &WebviewWindow<R>) {
+	center_in_header(window);
+	#[cfg(windows)]
+	frame(window);
+}
+
+fn has_another_app_window<R: Runtime>(window: &WebviewWindow<R>) -> bool {
+	window
+		.app_handle()
+		.webview_windows()
+		.keys()
+		.any(|label| label != window.label() && is_app_window(label))
 }
 
 fn closed_per_platform<R: Runtime>(window: &WebviewWindow<R>) {
@@ -130,21 +183,25 @@ fn closed_per_platform<R: Runtime>(window: &WebviewWindow<R>) {
 		let WindowEvent::CloseRequested { api, .. } = event else {
 			return;
 		};
-		api.prevent_close();
-		match main_close_on(std::env::consts::OS) {
-			MainClose::Hidden => {
+		match closing_on(std::env::consts::OS, subject.label(), has_another_app_window(&subject)) {
+			Closing::Closed => {}
+			Closing::Hidden => {
+				api.prevent_close();
 				if let Err(failure) = subject.hide() {
 					eprintln!("the main window was not hidden on close: {failure}");
 				}
 			}
-			MainClose::Quit => subject.app_handle().exit(0),
+			Closing::Quit => {
+				api.prevent_close();
+				subject.app_handle().exit(0);
+			}
 		}
 	});
 }
 
 #[cfg(test)]
 mod tests {
-	use super::{is_headless, main_close_on, MainClose};
+	use super::{closing_on, is_app_window, is_headless, Closing, MAIN_WINDOW};
 
 	fn launched_with(args: &[&str]) -> bool {
 		is_headless(args.iter().map(|arg| (*arg).to_owned()))
@@ -162,14 +219,39 @@ mod tests {
 	}
 
 	#[test]
-	fn closing_the_main_window_on_macos_hides_it() {
-		assert_eq!(main_close_on("macos"), MainClose::Hidden);
+	fn closing_the_main_window_on_macos_hides_it_whatever_else_is_open() {
+		assert_eq!(closing_on("macos", MAIN_WINDOW, false), Closing::Hidden);
+		assert_eq!(closing_on("macos", MAIN_WINDOW, true), Closing::Hidden);
 	}
 
 	#[test]
-	fn closing_the_main_window_elsewhere_quits() {
-		assert_eq!(main_close_on("windows"), MainClose::Quit);
-		assert_eq!(main_close_on("linux"), MainClose::Quit);
+	fn closing_a_secondary_window_on_macos_closes_only_it() {
+		assert_eq!(closing_on("macos", "window-1", true), Closing::Closed);
+		assert_eq!(closing_on("macos", "window-1", false), Closing::Closed);
+	}
+
+	#[test]
+	fn closing_the_last_app_window_elsewhere_quits() {
+		for os in ["windows", "linux"] {
+			assert_eq!(closing_on(os, MAIN_WINDOW, false), Closing::Quit);
+			assert_eq!(closing_on(os, "window-1", false), Closing::Quit);
+		}
+	}
+
+	#[test]
+	fn closing_an_app_window_elsewhere_while_another_is_open_closes_only_it() {
+		for os in ["windows", "linux"] {
+			assert_eq!(closing_on(os, MAIN_WINDOW, true), Closing::Closed);
+			assert_eq!(closing_on(os, "window-1", true), Closing::Closed);
+		}
+	}
+
+	#[test]
+	fn main_and_the_secondary_windows_are_app_windows_and_the_dispatcher_is_not() {
+		assert!(is_app_window(MAIN_WINDOW));
+		assert!(is_app_window("window-7"));
+		assert!(!is_app_window("dispatcher"));
+		assert!(!is_app_window("window-"));
 	}
 }
 

@@ -1,5 +1,5 @@
 use serde::Serialize;
-use tauri::{AppHandle, Manager, Runtime};
+use tauri::{AppHandle, Manager, Runtime, WebviewWindow};
 
 use super::contract::{
 	colour_shown, hosted_by, JoinedSpace, JoinedSpaceConnection, JoinedSpaceError,
@@ -117,8 +117,8 @@ pub async fn joined_space_connect<R: Runtime>(
 
 #[tauri::command]
 #[specta::specta]
-pub fn join_link_listen<R: Runtime>(app: AppHandle<R>) {
-	deep_link::listened(&app);
+pub fn join_link_listen<R: Runtime>(window: WebviewWindow<R>) {
+	deep_link::listened(window.app_handle(), window.label());
 }
 
 #[tauri::command]
