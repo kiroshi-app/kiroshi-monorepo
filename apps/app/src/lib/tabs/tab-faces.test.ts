@@ -58,6 +58,14 @@ describe("the face of a tab", () => {
 		expect(tabFaceOf(href, SOURCES).title).toBe(title)
 	})
 
+	it.each([
+		"/settings/user?entry=mcp&application=github",
+		"/settings/space/home?entry=mcp&application=github",
+		"/settings/companion/nova?entry=mcp&application=github",
+	])("titles %s with the application it shows", (href) => {
+		expect(tabFaceOf(href, SOURCES).title).toBe("github")
+	})
+
 	it("titles the empty list New tab", () => {
 		expect(tabFaceOf("/", SOURCES).title).toBe(i18n.t("common:titleBar.newTab"))
 	})

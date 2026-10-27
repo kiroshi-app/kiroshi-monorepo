@@ -5,6 +5,7 @@ import {
 } from "@tanstack/react-router"
 import { useMemo } from "react"
 
+import { APPLICATIONS_ENTRY } from "@workspace/ui/components/space-settings-dialog/use-space-settings"
 import type { ClickModifiers } from "@workspace/ui/lib/click-modifiers"
 
 import type { CompanionSettingsSearch, SettingsSearch } from "./settings-search"
@@ -100,6 +101,28 @@ export const useSettingsNavigation = (holder: ThreadHolder) => {
 					},
 					modifiers,
 				),
+			openApplication: (application: string, modifiers?: ClickModifiers) =>
+				goFromClick(
+					{
+						to: ".",
+						search: (previous: CompanionSettingsSearch) => ({
+							...previous,
+							entry: APPLICATIONS_ENTRY,
+							application,
+						}),
+						replace: true,
+					},
+					modifiers,
+				),
+			showApplication: (application: string | null) =>
+				void navigate({
+					to: ".",
+					search: (previous: CompanionSettingsSearch) => ({
+						...previous,
+						application: application ?? undefined,
+					}),
+					replace: true,
+				}),
 		}
 	}, [navigate, router, holder])
 }

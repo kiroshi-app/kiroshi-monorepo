@@ -206,6 +206,7 @@ export const SpaceSettingsScreen = ({
 		spaceHost: hostBySpaceId[spaceId],
 		entry: search.entry ?? SPACE_ENTRY,
 		onEntryChange: navigation.showEntry,
+		onOpenApplication: navigation.openApplication,
 		onBack: navigation.backToUserSettings,
 		environment: toEnvironmentRows(spaceEnvironment.entries),
 		hasEnvironmentFailedToRead: spaceEnvironment.hasFailedToRead,
@@ -213,8 +214,10 @@ export const SpaceSettingsScreen = ({
 		haveMcpServersFailedToLoad: spaceMcpServers.hasFailedToLoad,
 		...spaceApplications,
 		mcpServerToOpen: search.application,
-		onMcpServerOpen: (name: string | null) =>
-			setOpenedMcpServer(openedServerScope(name, spaceSettingsOwner)),
+		onMcpServerOpen: (name: string | null) => {
+			setOpenedMcpServer(openedServerScope(name, spaceSettingsOwner))
+			navigation.showApplication(name)
+		},
 		serverEnvironment: serverEnvironmentSection,
 		history: spaceHistory,
 		onEnvironmentDelete: spaceEnvironment.remove,

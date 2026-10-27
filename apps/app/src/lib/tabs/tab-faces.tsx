@@ -39,7 +39,9 @@ const emptyTabFace = (): TabFace => ({
 })
 
 const settingsFaceOf = (page: TabPage): TabFace => ({
-	title: i18n.t(`settings:screen.subtitle.${settingsTargetOf(page)}`),
+	title:
+		page.application ??
+		i18n.t(`settings:screen.subtitle.${settingsTargetOf(page)}`),
 	icon: <Icons.Settings />,
 })
 

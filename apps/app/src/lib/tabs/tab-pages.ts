@@ -1,5 +1,6 @@
 import { defaultParseSearch } from "@tanstack/react-router"
 
+import { validateSettingsSearch } from "../navigation/settings-search"
 import {
 	type ThreadSearch,
 	validateThreadSearch,
@@ -21,6 +22,7 @@ export type TabPage = {
 	pathname: string
 	thread: ThreadSearch
 	companionId?: string
+	application?: string
 }
 
 const companionIdIn = (pathname: string) => {
@@ -30,10 +32,12 @@ const companionIdIn = (pathname: string) => {
 
 export const pageOf = (href: string): TabPage => {
 	const { pathname, search } = new URL(href, HREF_BASE)
+	const parsedSearch = defaultParseSearch(search)
 	return {
 		pathname,
-		thread: validateThreadSearch(defaultParseSearch(search)),
+		thread: validateThreadSearch(parsedSearch),
 		companionId: companionIdIn(pathname),
+		application: validateSettingsSearch(parsedSearch).application,
 	}
 }
 
