@@ -4,7 +4,7 @@ type WriteLoopOptions<Value, Written> = {
 	enqueue: ReturnType<typeof createQueue>
 	write: (key: string, value: Value) => Promise<Written | null>
 	apply: (key: string, written: Written) => void
-	onRefused: () => void
+	onRefused: (key: string, reason: unknown) => void
 }
 
 export type WriteLoop<Value> = {
@@ -43,7 +43,7 @@ export const createWriteLoop = <Value, Written>({
 			}
 			running.add(key)
 			void enqueue(() => flush(key))
-				.catch(onRefused)
+				.catch((reason: unknown) => onRefused(key, reason))
 				.finally(() => {
 					running.delete(key)
 				})

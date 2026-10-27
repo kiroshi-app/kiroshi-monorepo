@@ -2,7 +2,7 @@
 
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react"
 import { useLayoutEffect } from "react"
-import { afterEach, expect, it } from "vitest"
+import { afterEach, expect, it, vi } from "vitest"
 
 import { hueStyle } from "@workspace/ui/components/hue-palette"
 
@@ -94,6 +94,8 @@ const mountTintedWorkspace = async () => {
 				return () => undefined
 			},
 			onRemoved: async () => () => undefined,
+			describe: vi.fn(),
+			onDescribed: async () => () => undefined,
 		},
 	})
 	stopWatching.push(joined.watch())

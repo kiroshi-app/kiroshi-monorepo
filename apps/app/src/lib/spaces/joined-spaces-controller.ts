@@ -6,6 +6,7 @@ import {
 	raiseTransientNotice,
 } from "@workspace/ui/components/notice-surface"
 import type { Space as SwitcherSpace } from "@workspace/ui/components/space"
+import type { SpaceSettingsValue } from "@workspace/ui/components/space-settings"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { heldJoinedMembersOf } from "./joined-space-members"
@@ -20,10 +21,14 @@ import {
 	type JoinedSpaceRemovalReason,
 	type JoinedSpaceRemoved,
 	type JoinedSpaceWaitReason,
+	SPACE_DESCRIBED_EVENT,
+	type SpaceDescribed,
 } from "../bindings"
 import { failureReporterIn } from "../failure-report"
 import { joinedHosts, listen } from "../host"
+import { createQueue } from "../queue"
 import { createStore } from "../store"
+import { createWriteLoop } from "../write-loop"
 import type { RosterSpace, RosterState } from "../bots/roster-controller"
 import type { Space } from "../conversations/store-contract"
 import { joinRejectionNoticeOf } from "../host/join-refusal"
@@ -34,6 +39,7 @@ import {
 } from "../host/joined-hosts"
 import { hostAmong, memberNameOf } from "../host/member-names"
 import { memoizedOn, subscribeWithQueries } from "../query/cache-view"
+import { runMutation } from "../query/run-mutation"
 
 export type DepartureReason = Exclude<JoinedSpaceRemovalReason, "left">
 
@@ -62,17 +68,28 @@ export type JoinedSpacesController = {
 	restore: (rowId: string | null) => void
 	leave: (id: string) => Promise<void>
 	admit: (joined: JoinedSpace) => Promise<void>
+	describe: (id: string, value: SpaceSettingsValue) => void
 	hostNameOf: (id: string) => string
 }
 
 export type JoinedSpacesTransport = {
 	list: () => Promise<JoinedSpace[]>
 	remove: (id: string) => Promise<void>
+	describe: (
+		id: string,
+		name: string,
+		colour: number | null,
+	) => Promise<JoinedSpace>
 	onChanged: (listener: () => void) => Promise<() => void>
+	onDescribed: (
+		listener: (described: SpaceDescribed) => void,
+	) => Promise<() => void>
 	onRemoved: (
 		listener: (removed: JoinedSpaceRemoved) => void,
 	) => Promise<() => void>
 }
+
+type JoinedSpaceDescription = Pick<JoinedSpace, "name" | "colour">
 
 type ShownThread = Pick<RosterState, "selectedBotId" | "selectedConversationId">
 
@@ -112,7 +129,13 @@ const joinedSpacesTransport: JoinedSpacesTransport = {
 	remove: async (id) => {
 		dataOf(await commands.joinedSpaceRemove(id))
 	},
+	describe: async (id, name, colour) =>
+		dataOf(await commands.joinedSpaceDescribe(id, name, colour)),
 	onChanged: (listener) => listen(JOINED_SPACE_CHANGED_EVENT, () => listener()),
+	onDescribed: (listener) =>
+		listen<SpaceDescribed>(SPACE_DESCRIBED_EVENT, ({ payload }) =>
+			listener(payload),
+		),
 	onRemoved: (listener) =>
 		listen<JoinedSpaceRemoved>(JOINED_SPACE_REMOVED_EVENT, ({ payload }) =>
 			listener(payload),
@@ -146,6 +169,11 @@ const hostOfflineBodyKeyOf = (reason: JoinedSpaceWaitReason | undefined) =>
 
 const isWaitingForHost = (joined: JoinedSpace) =>
 	joined.state === "waitingForHost"
+
+const descriptionOf = ({
+	name,
+	colour,
+}: JoinedSpaceDescription): JoinedSpaceDescription => ({ name, colour })
 
 const isSharedSpaceKnown = (joined: JoinedSpace) =>
 	joined.remoteSpaceId !== null
@@ -331,6 +359,80 @@ export const createJoinedSpacesController = ({
 	const reportRefusal = (reason: unknown) =>
 		reportFailure(joinRejectionNoticeOf(reason))
 
+	const heldJoined = (id: string) =>
+		current().joinedSpaces.find((joined) => joined.id === id)
+
+	const replaceRow = (written: JoinedSpace) =>
+		hold(
+			current().joinedSpaces.map((joined) =>
+				joined.id === written.id ? written : joined,
+			),
+		)
+
+	const paint = (id: string, description: JoinedSpaceDescription) => {
+		const held = heldJoined(id)
+		if (held) replaceRow({ ...held, ...description })
+	}
+
+	const savedDescriptions = new Map<string, JoinedSpaceDescription>()
+
+	const restoreSaved = (id: string) => {
+		const saved = savedDescriptions.get(id)
+		savedDescriptions.delete(id)
+		if (saved) paint(id, saved)
+	}
+
+	const writes = createWriteLoop<SpaceSettingsValue, JoinedSpace>({
+		enqueue: createQueue(),
+		write: async (id, { name, colour }) => {
+			const written = await runMutation(queryClient, () =>
+				transport.describe(id, name, colour ?? null),
+			)
+			savedDescriptions.set(id, descriptionOf(written))
+			return written
+		},
+		apply: (id, written) => {
+			savedDescriptions.delete(id)
+			replaceRow(written)
+		},
+		onRefused: (id, reason) => {
+			writes.drop(id)
+			restoreSaved(id)
+			reportRefusal(reason)
+		},
+	})
+
+	const describe = (id: string, value: SpaceSettingsValue) => {
+		const held = heldJoined(id)
+		if (!held || isWaitingForHost(held)) {
+			return
+		}
+		if (!savedDescriptions.has(id)) {
+			savedDescriptions.set(id, descriptionOf(held))
+		}
+		paint(id, { name: value.name, colour: value.colour ?? held.colour })
+		writes.push(id, value)
+	}
+
+	const noteDescription = (
+		joined: JoinedSpace,
+		description: JoinedSpaceDescription,
+	) => {
+		if (savedDescriptions.has(joined.id)) {
+			savedDescriptions.set(joined.id, description)
+			return
+		}
+		paint(joined.id, description)
+	}
+
+	const noteDescribed = ({ spaceId, name, colour }: SpaceDescribed) => {
+		for (const joined of current().joinedSpaces) {
+			if (joined.remoteSpaceId === spaceId) {
+				noteDescription(joined, { name, colour: colour ?? joined.colour })
+			}
+		}
+	}
+
 	const connectEach = (joinedSpaces: JoinedSpace[]) => {
 		for (const joined of joinedSpaces) {
 			void hosts.connect(joined.id)
@@ -406,12 +508,19 @@ export const createJoinedSpacesController = ({
 				reportRefusal(reason)
 				return undefined
 			})
+		const detachDescriptions = transport
+			.onDescribed(noteDescribed)
+			.catch((reason: unknown) => {
+				reportRefusal(reason)
+				return undefined
+			})
 		const stopFollowingThreads = shownThreads?.subscribe(
 			leaveDepartedOnceElsewhere,
 		)
 		return () => {
 			void detachChanges.then((unlisten) => unlisten?.())
 			void detachRemovals.then((unlisten) => unlisten?.())
+			void detachDescriptions.then((unlisten) => unlisten?.())
 			stopFollowingThreads?.()
 		}
 	}
@@ -576,6 +685,7 @@ export const createJoinedSpacesController = ({
 		restore,
 		leave,
 		admit,
+		describe,
 		hostNameOf,
 	}
 }

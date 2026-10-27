@@ -14,6 +14,7 @@ import {
 	type JoinedSpacesTransport,
 	openLocalSpaceOf,
 	openRowIdOf,
+	openSpaceColourOf,
 	rosterSpacesOf,
 	switcherSpacesOf,
 } from "./joined-spaces-controller"
@@ -27,6 +28,7 @@ import type {
 	JoinedSpaceRemoved,
 	JoinedSpaceWaitReason,
 	Space,
+	SpaceDescribed,
 } from "../bindings"
 import { createStore } from "../store"
 import iPhoneVectors from "../../../../ios/KiroshiTests/Vectors/space-avatar.json?raw"
@@ -92,10 +94,22 @@ const transportFake = (listed: JoinedSpace[] = []) => {
 	let held = [...listed]
 	let announce: () => void = () => undefined
 	let announceRemoval: (removed: JoinedSpaceRemoved) => void = () => undefined
+	let announceDescription: (described: SpaceDescribed) => void = () => undefined
+	const stopHearingDescriptions = vi.fn()
 	const transport = {
 		list: vi.fn(async () => held),
 		remove: vi.fn(async (id: string) => {
 			held = held.filter((joined) => joined.id !== id)
+		}),
+		describe: vi.fn(async (id: string, name: string, colour: number | null) => {
+			const described = held.find((joined) => joined.id === id)
+			if (!described) throw { kind: "unknownJoinedSpace", id }
+			return {
+				...described,
+				name,
+				colour: colour ?? described.colour,
+				hostedBy: "Lea",
+			}
 		}),
 		onChanged: vi.fn(async (listener: () => void) => {
 			announce = listener
@@ -107,10 +121,18 @@ const transportFake = (listed: JoinedSpace[] = []) => {
 				return () => undefined
 			},
 		),
+		onDescribed: vi.fn(
+			async (listener: (described: SpaceDescribed) => void) => {
+				announceDescription = listener
+				return stopHearingDescriptions
+			},
+		),
 	} satisfies JoinedSpacesTransport
 	return {
 		transport,
+		stopHearingDescriptions,
 		announce: () => announce(),
+		describeAs: (described: SpaceDescribed) => announceDescription(described),
 		evict: (
 			joined: JoinedSpace,
 			reason: JoinedSpaceRemovalReason = "removed",
@@ -1138,5 +1160,133 @@ describe("a local and a joined space both carrying the id personal", () => {
 
 		expect(switcherOf(gear).checked).toBe("personal")
 		expect(gear.hosts.activate).toHaveBeenLastCalledWith(null)
+	})
+})
+
+describe("describing a joined space", () => {
+	const describingGarage = async (garage: JoinedSpace = GARAGE) => {
+		const gear = await gearFor([garage, ATTIC])
+		gear.joined.watch()
+		await settle()
+		gear.joined.selectSpace(GARAGE_ROW)
+		return gear
+	}
+
+	type Gear = Awaited<ReturnType<typeof describingGarage>>
+
+	const garageOf = ({ joined }: Gear) =>
+		joined.getState().joinedSpaces.find(({ id }) => id === GARAGE.id)
+
+	const HOST_OFFLINE_NOTICE = () => ({
+		title: i18n.t("chat:screen.notice.hostOffline.title"),
+		description: i18n.t("chat:screen.notice.hostOffline.description"),
+	})
+
+	it("paints the new name and hue at once, in the switcher and as the open space colour", async () => {
+		const gear = await describingGarage()
+
+		gear.joined.describe(GARAGE.id, { name: "Workshop", colour: 40 })
+
+		expect(garageOf(gear)).toMatchObject({ name: "Workshop", colour: 40 })
+		expect(
+			switcherSpacesOf(
+				gear.spaces.getState().spaces,
+				gear.joined.getState().joinedSpaces,
+			),
+		).toContainEqual(
+			expect.objectContaining({ id: GARAGE_ROW, name: "Workshop", colour: 40 }),
+		)
+		expect(
+			openSpaceColourOf(gear.spaces.getState(), gear.joined.getState()),
+		).toBe(40)
+	})
+
+	it("writes them through the joined describe and holds the space it returns", async () => {
+		const gear = await describingGarage()
+
+		gear.joined.describe(GARAGE.id, { name: "Workshop", colour: 40 })
+		await settle()
+
+		expect(gear.wire.transport.describe).toHaveBeenCalledExactlyOnceWith(
+			GARAGE.id,
+			"Workshop",
+			40,
+		)
+		expect(gear.joined.getState().joinedSpaces).toEqual([
+			{ ...GARAGE, name: "Workshop", colour: 40, hostedBy: "Lea" },
+			ATTIC,
+		])
+	})
+
+	it("restores the previous name and hue and raises the refusal when the host refuses", async () => {
+		const gear = await describingGarage()
+		gear.wire.transport.describe.mockRejectedValueOnce({
+			kind: "hostOffline",
+			id: GARAGE.id,
+		})
+
+		gear.joined.describe(GARAGE.id, { name: "Workshop", colour: 40 })
+		await settle()
+
+		expect(gear.joined.getState().joinedSpaces).toEqual([GARAGE, ATTIC])
+		expect(gear.reportFailure).toHaveBeenCalledExactlyOnceWith(
+			HOST_OFFLINE_NOTICE(),
+		)
+	})
+
+	it("sends nothing while the host of the space is offline", async () => {
+		const waiting: JoinedSpace = { ...GARAGE, state: "waitingForHost" }
+		const gear = await describingGarage(waiting)
+
+		gear.joined.describe(GARAGE.id, { name: "Workshop", colour: 40 })
+		await settle()
+
+		expect(gear.wire.transport.describe).not.toHaveBeenCalled()
+		expect(garageOf(gear)).toEqual(waiting)
+	})
+
+	it("paints the name and hue another member gave the space", async () => {
+		const gear = await describingGarage()
+
+		gear.wire.describeAs({ spaceId: "garage", name: "Lab", colour: 200 })
+
+		expect(gear.joined.getState().joinedSpaces).toEqual([
+			{ ...GARAGE, name: "Lab", colour: 200 },
+			ATTIC,
+		])
+	})
+
+	it("keeps an edit in flight over a description heard meanwhile, and falls back to the heard one when refused", async () => {
+		const gear = await describingGarage()
+		let refuse: (reason: unknown) => void = () => undefined
+		gear.wire.transport.describe.mockImplementationOnce(
+			() =>
+				new Promise((_resolve, reject) => {
+					refuse = reject
+				}),
+		)
+
+		gear.joined.describe(GARAGE.id, { name: "Workshop", colour: 40 })
+		await settle()
+		gear.wire.describeAs({ spaceId: "garage", name: "Lab", colour: 200 })
+
+		expect(garageOf(gear)).toMatchObject({ name: "Workshop", colour: 40 })
+
+		refuse({ kind: "hostOffline", id: GARAGE.id })
+		await settle()
+
+		expect(garageOf(gear)).toMatchObject({ name: "Lab", colour: 200 })
+	})
+
+	it("stops hearing descriptions once the watch ends", async () => {
+		const gear = await gearFor([GARAGE])
+		const stopWatching = gear.joined.watch()
+		await settle()
+
+		stopWatching()
+		await settle()
+
+		expect(gear.wire.transport.onDescribed).toHaveBeenCalledOnce()
+		expect(gear.wire.stopHearingDescriptions).toHaveBeenCalledOnce()
 	})
 })
