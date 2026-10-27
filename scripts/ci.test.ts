@@ -476,6 +476,14 @@ describe("the unit test scope of a pull request", () => {
 		expect(unitTestScope([])).toEqual({ scope: "changed" })
 	})
 
+	it("runs the full suite when the diff touches the token source", () => {
+		expect(unitTestScope(["packages/ui/tokens.json"])).toEqual({
+			scope: "full",
+			path: "packages/ui/tokens.json",
+			rule: "packages/ui/tokens.json",
+		})
+	})
+
 	it("runs the full suite when the diff touches a tokens file at the root of packages/ui/src", () => {
 		expect(unitTestScope(["packages/ui/src/tokens.json"])).toEqual({
 			scope: "full",
