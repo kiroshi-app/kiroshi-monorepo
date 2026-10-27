@@ -4,9 +4,16 @@ import {
 	type RouterHistory,
 } from "@tanstack/react-router"
 
+import { i18n } from "@workspace/ui/lib/i18n"
+
 import { goneMissionIdsOf, type ReadMission } from "./restored-missions"
 import { EMPTY_LIST_HREF, HREF_BASE, pageOf, rowIdsNamedBy } from "./tab-pages"
-import { readSpaceTabs, writeSpaceTabs } from "./tabs-mirror"
+import {
+	discardSecondaryWindowTabs,
+	MAIN_WINDOW_LABEL,
+	readSpaceTabs,
+	writeSpaceTabs,
+} from "./tabs-mirror"
 import {
 	activeTabOf,
 	type ClosedTab,
@@ -34,6 +41,9 @@ import {
 	unpinTab,
 } from "./tabs-model"
 
+import { commands } from "../bindings"
+import { raiseReportedFailure } from "../failure-report"
+import { closeWindow } from "../host"
 import { createStore } from "../store"
 
 const NO_SPACE = ""
@@ -65,6 +75,7 @@ export type WorkspaceTabs = {
 	closeActive: () => void
 	closeOthers: (id: string) => void
 	duplicate: (id: string) => void
+	moveToNewWindow: (id: string) => Promise<void>
 	reopenClosed: () => void
 	reorder: (ids: string[]) => void
 	dropAbsentRestored: (spaceId: string, check: RestoredCheck) => Promise<void>
@@ -97,9 +108,33 @@ const isNamingAnAbsentRow = (
 
 const missionOfTab = (tab: Tab) => pageOf(currentHrefOf(tab)).thread.mission
 
+const raiseWindowFailure = (title: string, command?: string) => {
+	raiseReportedFailure({ title }, { raisedIn: "workspace-tabs", command })
+}
+
+const closeThisWindow = () => {
+	closeWindow().catch(() =>
+		raiseWindowFailure(i18n.t("common:windowControls.failure.close")),
+	)
+}
+
+const isWindowOpenedOn = (href: string) =>
+	commands.windowOpen(href).then(
+		(opened) => opened.status === "ok",
+		() => false,
+	)
+
+const isOnlyTab = (space: SpaceTabs | undefined, id: string) =>
+	space?.tabs.length === 1 && space.tabs[0]?.id === id
+
 export const createWorkspaceTabs = (
 	initialHref = EMPTY_LIST_HREF,
+	windowLabel = MAIN_WINDOW_LABEL,
 ): WorkspaceTabs => {
+	const isMainWindow = windowLabel === MAIN_WINDOW_LABEL
+	if (isMainWindow) {
+		discardSecondaryWindowTabs()
+	}
 	const store = createStore<WorkspaceTabsState>({
 		spaceId: NO_SPACE,
 		bySpace: { [NO_SPACE]: spaceTabsOn(initialHref) },
@@ -110,7 +145,7 @@ export const createWorkspaceTabs = (
 
 	const keepIn = (spaceId: string, space: SpaceTabs) => {
 		if (spaceId !== NO_SPACE) {
-			writeSpaceTabs(spaceId, space)
+			writeSpaceTabs(windowLabel, spaceId, space)
 		}
 		const state = store.getState()
 		store.setState({
@@ -186,8 +221,19 @@ export const createWorkspaceTabs = (
 		})
 	}
 
+	const closesEveryTab = (update: (space: SpaceTabs) => SpaceTabs) => {
+		const before = shown()
+		return (
+			tabsClosedBetween(before, update(before)).length === before.tabs.length
+		)
+	}
+
 	const closingChange = (update: (space: SpaceTabs) => SpaceTabs) =>
 		askIfLeaving(update, () => {
+			if (!isMainWindow && closesEveryTab(update)) {
+				closeThisWindow()
+				return
+			}
 			const before = shown()
 			change(update)
 			const closed = tabsClosedBetween(before, shown())
@@ -250,15 +296,16 @@ export const createWorkspaceTabs = (
 		if (held) {
 			return { space: held, isRestored: false }
 		}
-		const restored = readSpaceTabs(spaceId)
+		const restored = readSpaceTabs(windowLabel, spaceId)
 		return restored ? { space: restored, isRestored: true } : null
 	}
 
 	const reachedTabsOf = (spaceId: string) => {
-		const fresh =
-			store.getState().spaceId === NO_SPACE
-				? shown()
-				: spaceTabsOn(EMPTY_LIST_HREF)
+		const isBooting = store.getState().spaceId === NO_SPACE
+		if (isBooting && !isMainWindow) {
+			return { space: shown(), isRestored: false }
+		}
+		const fresh = isBooting ? shown() : spaceTabsOn(EMPTY_LIST_HREF)
 		return heldOrRestoredTabsOf(spaceId) ?? { space: fresh, isRestored: false }
 	}
 
@@ -278,6 +325,30 @@ export const createWorkspaceTabs = (
 			})
 		}
 		keepIn(spaceId, update(space))
+	}
+
+	const removeMoved = (spaceId: string, id: string) => {
+		if (!isMainWindow && isOnlyTab(store.getState().bySpace[spaceId], id)) {
+			closeThisWindow()
+			return
+		}
+		changeIn(spaceId, (space) => closeTab(space, id))
+	}
+
+	const moveToNewWindow = async (id: string) => {
+		const { spaceId } = store.getState()
+		const moved = shown().tabs.find((tab) => tab.id === id)
+		if (!moved) {
+			return
+		}
+		if (await isWindowOpenedOn(currentHrefOf(moved))) {
+			removeMoved(spaceId, id)
+			return
+		}
+		raiseWindowFailure(
+			i18n.t("common:titleBar.moveTabToNewWindow"),
+			"window_open",
+		)
 	}
 
 	const reachSpace = (spaceId: string) => {
@@ -324,6 +395,7 @@ export const createWorkspaceTabs = (
 		closeActive: () => closingChange(closeActiveTab),
 		closeOthers: (id) => closingChange((space) => closeOtherTabs(space, id)),
 		duplicate: (id) => change((space) => duplicateTab(space, id)),
+		moveToNewWindow,
 		reopenClosed,
 		reorder: (ids) => change((space) => reorderTabs(space, ids)),
 		dropAbsentRestored: async (spaceId, { isRowPresent, readMission }) => {
