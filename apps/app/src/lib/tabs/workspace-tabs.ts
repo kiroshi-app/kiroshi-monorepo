@@ -40,7 +40,7 @@ export type WorkspaceTabsState = {
 	restoredSpaceIds: string[]
 }
 
-export type LeaveGuard = (leave: () => void) => void
+type LeaveGuard = (leave: () => void) => void
 
 export type WorkspaceTabs = {
 	history: RouterHistory
@@ -166,21 +166,16 @@ export const createWorkspaceTabs = (
 	const leavesShown = (update: (space: SpaceTabs) => SpaceTabs) =>
 		shownEntryOf(update(shown())) !== shownEntryOf(shown())
 
-	const askingChange = (update: (space: SpaceTabs) => SpaceTabs) => {
-		if (leavesShown(update)) {
-			askBeforeLeaving(() => change(update))
-		} else {
-			change(update)
-		}
-	}
+	const askIfLeaving = (
+		update: (space: SpaceTabs) => SpaceTabs,
+		gesture: () => void,
+	) => (leavesShown(update) ? askBeforeLeaving(gesture) : gesture())
 
-	const askingMove = (steps: number, move: () => void) => {
-		if (leavesShown((space) => moveInHistory(space, steps))) {
-			askBeforeLeaving(move)
-		} else {
-			move()
-		}
-	}
+	const askingChange = (update: (space: SpaceTabs) => SpaceTabs) =>
+		askIfLeaving(update, () => change(update))
+
+	const askingMove = (steps: number, move: () => void) =>
+		askIfLeaving((space) => moveInHistory(space, steps), move)
 
 	const changeIn = (
 		spaceId: string,
