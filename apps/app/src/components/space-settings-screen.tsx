@@ -282,6 +282,7 @@ export const SpaceSettingsScreen = ({
 			host={joined.hostUrl}
 			hostName={joined.hostedBy ?? undefined}
 			isConnected={!isHostOffline}
+			isSessionUnavailable={!isCurrent}
 			onLeave={() => joinedSpaces.controller.leave(joined.id)}
 			value={{ name: joined.name, colour: joined.colour }}
 		/>
