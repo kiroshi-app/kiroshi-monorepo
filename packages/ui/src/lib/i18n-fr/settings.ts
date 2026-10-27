@@ -10,6 +10,7 @@ const settings = {
 		subtitle: {
 			space: "Réglages de l’espace",
 			companion: "Réglages du compagnon",
+			conversation: "Réglages de la conversation",
 			user: "Réglages de l’utilisateur",
 			invitation: "Invitation",
 		},

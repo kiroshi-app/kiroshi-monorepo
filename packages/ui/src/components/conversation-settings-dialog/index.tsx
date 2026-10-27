@@ -172,6 +172,67 @@ type ConversationSettingsValue = {
 	instructions: string
 }
 
+type ConversationValueProps = {
+	value: ConversationSettingsValue
+	onValueChange: (value: ConversationSettingsValue) => void
+}
+
+type ConversationGeneralFieldsProps = ConversationValueProps &
+	ConversationColourFieldProps & {
+		onIconChange?: (icon: ConversationIconName) => void
+	}
+
+const ConversationGeneralFields = ({
+	value,
+	onValueChange,
+	onIconChange,
+	...colour
+}: ConversationGeneralFieldsProps) => {
+	const { t } = useTranslation("chat")
+
+	return (
+		<>
+			<SettingsField
+				label={t("conversationSettings.name.label")}
+				onValueChange={(next) => onValueChange({ ...value, name: next })}
+				placeholder={t("conversationSettings.name.placeholder")}
+				value={value.name}
+			/>
+			<ConversationIconField
+				hue={colour.hue}
+				icon={colour.icon}
+				onIconChange={onIconChange}
+			/>
+			<ConversationColourField {...colour} />
+		</>
+	)
+}
+
+type ConversationInstructionsFieldProps = ConversationValueProps & {
+	isTall?: boolean
+}
+
+const ConversationInstructionsField = ({
+	value,
+	onValueChange,
+	isTall,
+}: ConversationInstructionsFieldProps) => {
+	const { t } = useTranslation("chat")
+
+	return (
+		<SettingsField
+			fill={!isTall}
+			height={isTall ? "tall" : undefined}
+			label={t("conversationSettings.instructions.label")}
+			onValueChange={(instructions) =>
+				onValueChange({ ...value, instructions })
+			}
+			placeholder={t("conversationSettings.instructions.placeholder")}
+			value={value.instructions}
+		/>
+	)
+}
+
 type ConversationSettingsDialogProps = {
 	open: boolean
 	onClose: () => void
@@ -208,9 +269,6 @@ const ConversationSettingsDialog = ({
 	const { t } = useTranslation("chat")
 	const conversationName =
 		value.name.trim() || t("conversationSettings.untitled")
-
-	const patch = (fields: Partial<ConversationSettingsValue>) =>
-		onValueChange({ ...value, ...fields })
 
 	return (
 		<SettingsDialogShell
@@ -253,21 +311,13 @@ const ConversationSettingsDialog = ({
 			tab={FIRST_TAB}
 		>
 			<SettingsScrollingPanel value={FIRST_TAB}>
-				<SettingsField
-					label={t("conversationSettings.name.label")}
-					onValueChange={(name) => patch({ name })}
-					placeholder={t("conversationSettings.name.placeholder")}
-					value={value.name}
-				/>
-				<ConversationIconField
-					hue={hue}
-					icon={icon}
-					onIconChange={onIconChange}
-				/>
-				<ConversationColourField
+				<ConversationGeneralFields
 					hue={hue}
 					icon={icon}
 					onHueChange={onHueChange}
+					onIconChange={onIconChange}
+					onValueChange={onValueChange}
+					value={value}
 				/>
 			</SettingsScrollingPanel>
 
@@ -281,12 +331,9 @@ const ConversationSettingsDialog = ({
 			</SettingsScrollingPanel>
 
 			<Tabs.Panel className={SETTINGS_PANEL_CLASS} value="instructions">
-				<SettingsField
-					fill
-					label={t("conversationSettings.instructions.label")}
-					onValueChange={(instructions) => patch({ instructions })}
-					placeholder={t("conversationSettings.instructions.placeholder")}
-					value={value.instructions}
+				<ConversationInstructionsField
+					onValueChange={onValueChange}
+					value={value}
 				/>
 			</Tabs.Panel>
 
@@ -305,6 +352,8 @@ const ConversationSettingsDialog = ({
 }
 
 export {
+	ConversationGeneralFields,
+	ConversationInstructionsField,
 	ConversationSettingsDialog,
 	type ConversationSettingsDialogProps,
 	type ConversationSettingsValue,

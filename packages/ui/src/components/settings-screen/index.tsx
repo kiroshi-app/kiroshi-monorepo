@@ -28,6 +28,13 @@ import { BotInstructionsFields } from "@workspace/ui/components/bot-settings-dia
 import { PermissionsPanel } from "@workspace/ui/components/bot-settings-dialog/permissions-panel"
 import { RuntimeFields } from "@workspace/ui/components/bot-settings-dialog/runtime-fields"
 import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
+import {
+	ConversationGeneralFields,
+	ConversationInstructionsField,
+	type ConversationSettingsDialogProps,
+} from "@workspace/ui/components/conversation-settings-dialog"
+import { ParticipantsPanel } from "@workspace/ui/components/conversation-settings-dialog/participants-panel"
+import { ConversationSubjectIcon } from "@workspace/ui/components/conversation-subject-icon"
 import { EnvironmentPanel } from "@workspace/ui/components/environment-panel"
 import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import { InitialsAvatar } from "@workspace/ui/components/initials-avatar"
@@ -199,14 +206,17 @@ type CompanionSettingsScreenProps = SettingsScreenNavigation &
 		"open" | "onClose" | "tab" | "showDanger" | "className"
 	>
 
+type ConversationSettingsScreenProps = SettingsScreenNavigation &
+	Omit<ConversationSettingsDialogProps, "open" | "onClose" | "className">
+
 type SettingsScreenLayoutProps = SettingsScreenNavigation & {
 	avatar: ReactNode
 	name: string
 	subtitle: string
 	entries: SettingsEntry[]
-	pages: SettingsPages
-	sessions: PageSessions
-	applications: BotMcpServerItem[]
+	pages?: SettingsPages
+	sessions?: Partial<PageSessions>
+	applications?: BotMcpServerItem[]
 	pinnedAction?: ReactNode
 	isCompanionPage?: boolean
 	spaces?: (requestLeave: SettingsScreenRequestLeave) => ReactNode
@@ -288,8 +298,8 @@ const SettingsScreenLayout = ({
 	subtitle,
 	entries,
 	pages,
-	sessions,
-	applications,
+	sessions = {},
+	applications = [],
 	pinnedAction,
 	isCompanionPage = false,
 	spaces,
@@ -305,13 +315,13 @@ const SettingsScreenLayout = ({
 		entries[0]
 	const sessionKind = SESSION_OF_ENTRY[shown.value]
 	const shownSession = sessionKind ? sessions[sessionKind] : undefined
-	const page = shownSession && pages.top ? shownSession.pages[pages.top] : null
+	const page = shownSession && pages?.top ? shownSession.pages[pages.top] : null
 	const isApplicationsShown = shown.value === APPLICATIONS_ENTRY
-	const isApplicationOpen = isApplicationsShown && pages.top === "server"
+	const isApplicationOpen = isApplicationsShown && pages?.top === "server"
 	const pageWidth: ScreenLayoutWidth =
 		FULL_PAGES.has(shown.value) && !isApplicationOpen ? "full" : "column"
 	const openedName = isApplicationOpen
-		? sessions.applications.openedName
+		? sessions.applications?.openedName
 		: undefined
 	const isSubEntrySelected = openedName !== undefined && !isCompanionPage
 	const wordedKind = wordedKindOf(sessions, pages)
@@ -350,7 +360,7 @@ const SettingsScreenLayout = ({
 		}
 		if (server.name === openedName) return
 		leaveThen(() => {
-			sessions.applications.open(server)
+			sessions.applications?.open(server)
 			onEntryChange(APPLICATIONS_ENTRY, modifiers)
 		})
 	}
@@ -384,7 +394,7 @@ const SettingsScreenLayout = ({
 						/>
 					))}
 					<SettingsMenuAddApplication
-						onAdd={() => leaveThen(sessions.applications.add)}
+						onAdd={() => leaveThen(() => sessions.applications?.add())}
 					/>
 				</>
 			) : null}
@@ -981,6 +991,113 @@ const CompanionSettingsScreen = ({
 	)
 }
 
+const ConversationSettingsScreen = ({
+	value,
+	onValueChange,
+	icon,
+	hue,
+	onIconChange,
+	onHueChange,
+	participants,
+	leadId,
+	onLeadChange,
+	onDismiss,
+	onDelete,
+	...navigation
+}: ConversationSettingsScreenProps) => {
+	const { t } = useTranslation("chat")
+	const { t: tSettings } = useTranslation("settings")
+	const name = value.name.trim() || t("conversationSettings.untitled")
+
+	const entries: SettingsEntry[] = [
+		{
+			value: "general",
+			icon: "Settings",
+			label: t("conversationSettings.tab.general"),
+			layout: "scrolling",
+			panel: (
+				<CompanionSection gap="regular">
+					<ConversationGeneralFields
+						hue={hue}
+						icon={icon}
+						onHueChange={onHueChange}
+						onIconChange={onIconChange}
+						onValueChange={onValueChange}
+						value={value}
+					/>
+				</CompanionSection>
+			),
+		},
+		{
+			value: "participants",
+			icon: "Companions",
+			label: t("conversationSettings.tab.participants"),
+			layout: "scrolling",
+			panel: (
+				<CompanionSection gap="tight">
+					<ParticipantsPanel
+						leadId={leadId}
+						onDismiss={onDismiss}
+						onLeadChange={onLeadChange}
+						participants={participants}
+					/>
+				</CompanionSection>
+			),
+		},
+		{
+			value: "instructions",
+			icon: "File",
+			label: t("conversationSettings.tab.instructions"),
+			layout: "scrolling",
+			panel: (
+				<CompanionSection gap="wide">
+					<ConversationInstructionsField
+						isTall
+						onValueChange={onValueChange}
+						value={value}
+					/>
+				</CompanionSection>
+			),
+		},
+		{
+			value: "danger",
+			icon: "Alert",
+			label: t("conversationSettings.tab.danger"),
+			layout: "scrolling",
+			isDanger: true,
+			panel: (
+				<CompanionSection gap="tight">
+					<DangerZone
+						confirmTitle={t("conversationSettings.danger.confirm.title", {
+							name,
+						})}
+						actionLabel={t("conversationSettings.danger.delete")}
+						description={t("conversationSettings.danger.description")}
+						onConfirm={onDelete}
+					/>
+				</CompanionSection>
+			),
+		},
+	]
+
+	return (
+		<SettingsScreenLayout
+			{...navigation}
+			avatar={
+				<ConversationSubjectIcon
+					hue={hue}
+					icon={icon}
+					side={HEADER_AVATAR_SIZE}
+				/>
+			}
+			entries={entries}
+			isCompanionPage
+			name={name}
+			subtitle={tSettings("screen.subtitle.conversation")}
+		/>
+	)
+}
+
 const SettingsScreen = (props: SettingsScreenProps) =>
 	props.target === "space" ? (
 		<SpaceSettingsScreen {...props} />
@@ -991,6 +1108,8 @@ const SettingsScreen = (props: SettingsScreenProps) =>
 export {
 	CompanionSettingsScreen,
 	type CompanionSettingsScreenProps,
+	ConversationSettingsScreen,
+	type ConversationSettingsScreenProps,
 	SettingsScreen,
 	type SettingsScreenProps,
 	type SettingsScreenRequestLeave,
