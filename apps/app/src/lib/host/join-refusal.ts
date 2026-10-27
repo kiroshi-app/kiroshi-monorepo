@@ -27,6 +27,7 @@ const NOTICE_KEYS = {
 	removedByRotation: "joinRefused.removedByRotation",
 	waitingForHost: "joinRefused.waitingForHost",
 	keyStore: "joinRefused.keyStore",
+	spaceRefused: "joinRefused.unexpected",
 } as const satisfies Record<JoinedSpaceError["kind"], string>
 
 export const isJoinedSpaceError = (

@@ -128,6 +128,32 @@ impl JoinedSpacesRepository {
 			.await
 	}
 
+	pub async fn described(
+		&self,
+		id: String,
+		name: String,
+		colour: Option<Hue>,
+	) -> Result<bool, DatabaseError> {
+		self.access
+			.call_mut(move |connection| {
+				let transaction =
+					connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+				let mut stored = stored_in(&transaction)?;
+				let Some(held) = stored.iter_mut().find(|joined| joined.id == id) else {
+					return Ok(false);
+				};
+				if (&held.name, held.listing.colour) == (&name, colour) {
+					return Ok(false);
+				}
+				held.name = name;
+				held.listing.colour = colour;
+				write_in(&transaction, &stored)?;
+				transaction.commit()?;
+				Ok(true)
+			})
+			.await
+	}
+
 	pub async fn remove(&self, id: String) -> Result<bool, DatabaseError> {
 		self.access
 			.call_mut(move |connection| {
@@ -465,5 +491,32 @@ mod tests {
 			}
 			assert!(database.joined_spaces().join(a_relay_space("a", "instance-a")).await.is_err());
 		}
+	}
+
+	#[tokio::test]
+	async fn a_description_writes_the_name_and_hue_of_its_row_only_and_an_unchanged_one_writes_nothing(
+	) {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let repository = database.joined_spaces();
+		let host_name = Some("Ann".to_owned());
+		let listing = HostListing { host_name: host_name.clone(), ..HostListing::default() };
+		let held = JoinedSpace { listing, ..a_relay_space("a", "instance-a") };
+		repository.join(held.clone()).await.expect("a");
+		repository.join(a_relay_space("b", "instance-b")).await.expect("b");
+		let describe =
+			|id: &str, colour| repository.described(id.to_owned(), "Lab".to_owned(), colour);
+
+		let first = describe("a", Hue::new(200)).await.expect("the description");
+		let again = describe("a", Hue::new(200)).await.expect("the same description");
+		let unknown = describe("z", Hue::new(200)).await.expect("an unknown row");
+
+		assert_eq!((first, again, unknown), (true, false, false));
+		let listing = HostListing { host_name, host_email: None, colour: Hue::new(200) };
+		let described = JoinedSpace { name: "Lab".to_owned(), listing, ..held };
+		assert_eq!(
+			repository.list().await.expect("the list"),
+			vec![described, a_relay_space("b", "instance-b")]
+		);
 	}
 }

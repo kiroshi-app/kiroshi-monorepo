@@ -27,6 +27,7 @@ pub fn builder() -> Builder<tauri::Wry> {
 		.constant("JOINED_SPACE_REMOVED_EVENT", joined_spaces::commands::REMOVED_EVENT)
 		.constant("JOINED_SPACE_RECONNECTED_EVENT", joined_spaces::commands::RECONNECTED_EVENT)
 		.constant("JOIN_LINK_OPENED_EVENT", joined_spaces::deep_link::OPENED_EVENT)
+		.constant("SPACE_DESCRIBED_EVENT", spaces::contract::DESCRIBED_EVENT)
 		.constant("UPDATE_CHANGED_EVENT", updates::contract::CHANGED_EVENT)
 		.typ::<window_controls::MaximizeButtonPointer>()
 		.typ::<devices::contract::DeviceApproval>()
@@ -42,6 +43,7 @@ pub fn builder() -> Builder<tauri::Wry> {
 		.typ::<agent::contract::EventTurn>()
 		.typ::<applications::contract::ApplicationInstalled>()
 		.typ::<missions::commands::MissionChanged>()
+		.typ::<spaces::contract::SpaceDescribed>()
 }
 
 // `tauri::test::mock_builder` only ever yields a `Builder<MockRuntime>`, so the handler the
@@ -162,6 +164,7 @@ fn commands<R: Runtime>() -> Commands<R> {
 		joined_spaces::commands::joined_spaces_list::<tauri::Wry>,
 		joined_spaces::commands::joined_space_connect::<tauri::Wry>,
 		joined_spaces::commands::joined_space_remove::<tauri::Wry>,
+		joined_spaces::commands::joined_space_describe::<tauri::Wry>,
 		joined_spaces::commands::join_link_listen::<tauri::Wry>,
 		joined_spaces::members::joined_space_members,
 		mcp_oauth::commands::mcp_oauth_connect::<tauri::Wry>,

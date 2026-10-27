@@ -18,8 +18,9 @@ use super::commands::{
 	JoinedSpaceRemoved,
 };
 use super::contract::{JoinedSpace, JoinedSpaceConnection, JoinedSpaceError, JoinedSpaceWait};
+use super::description;
 use super::held::{self, Held};
-use super::member_link::{MemberLink, Presence, Resync, LEARN_BOUND};
+use super::member_link::{Answer, MemberLink, Presence, Resync, LEARN_BOUND};
 use super::member_wire::{Heard, MemberWire};
 use super::members;
 use super::proxy;
@@ -37,6 +38,7 @@ use crate::hosting::relay::{
 	opened_unpaused, sent, until_stopped, Backoff, Departure, Opened, Sink, Socket, PING_EVERY,
 	SILENCE_BOUND,
 };
+use crate::spaces::contract::SpaceDescribed;
 
 const HOST_ABSENT: u16 = 4002;
 
@@ -703,6 +705,7 @@ async fn started_in_turn<R: Runtime>(
 	let linked =
 		Linked { id: id.to_owned(), instance_id, link: Arc::clone(&link), joined: found.clone() };
 	let linked = guest_linked(app.clone(), linked, held, stopped);
+	let linked = description::alongside(app.clone(), id.to_owned(), &link, linked);
 	let run = tauri::async_runtime::spawn(members::alongside(app.clone(), &found, linked));
 	let reached = Reached {
 		origin: origin.clone(),
@@ -728,27 +731,86 @@ fn waiting_for_host(id: &str, instance_id: &str, wait: JoinedSpaceWait) -> Joine
 	}
 }
 
-async fn learned<R: Runtime>(
+pub(super) struct SharedSpace {
+	pub(super) space_id: String,
+	pub(super) link: Arc<MemberLink>,
+}
+
+pub(super) async fn shared_space<R: Runtime>(
+	app: &AppHandle<R>,
+	id: &str,
+) -> Result<SharedSpace, JoinedSpaceError> {
+	let (joined, reached) = started(app, id).await?;
+	let space_id = match joined.remote_space_id.clone() {
+		Some(space_id) => space_id,
+		None => learned(app, id, &reached.link).await?,
+	};
+	Ok(SharedSpace { space_id, link: reached.link })
+}
+
+pub(super) struct HostCall<'a> {
+	pub(super) command: &'a str,
+	pub(super) args: Value,
+	pub(super) bound: Duration,
+}
+
+pub(super) async fn host_answered<R: Runtime>(
 	app: &AppHandle<R>,
 	id: &str,
 	link: &MemberLink,
-) -> Result<String, JoinedSpaceError> {
+	call: HostCall<'_>,
+) -> Result<Answer, JoinedSpaceError> {
 	let offline = || JoinedSpaceError::HostOffline { id: id.to_owned() };
 	match link.settled().await {
 		Presence::Online => {}
 		Presence::Ended => return Err(app.state::<RelayGuests>().ended_error(id)),
 		Presence::Connecting | Presence::Down => return Err(offline()),
 	}
-	let answer = timeout(LEARN_BOUND, link.called(SHARED_SPACE_COMMAND, json!({})))
+	timeout(call.bound, link.called(call.command, call.args))
 		.await
 		.ok()
 		.flatten()
+		.ok_or_else(offline)
+}
+
+async fn learned<R: Runtime>(
+	app: &AppHandle<R>,
+	id: &str,
+	link: &MemberLink,
+) -> Result<String, JoinedSpaceError> {
+	let offline = || JoinedSpaceError::HostOffline { id: id.to_owned() };
+	let call = HostCall { command: SHARED_SPACE_COMMAND, args: json!({}), bound: LEARN_BOUND };
+	let answer = host_answered(app, id, link, call).await?;
+	let space_id = Some(&answer)
 		.filter(|answer| answer.status == 200)
+		.and_then(|answer| answer.body.get("spaceId"))
+		.and_then(Value::as_str)
 		.ok_or_else(offline)?;
-	let space_id = answer.body.get("spaceId").and_then(Value::as_str).ok_or_else(offline)?;
 	let state = app.state::<db::DatabaseState>();
 	ready(&state)?.joined_spaces().learned(id.to_owned(), space_id.to_owned()).await?;
 	Ok(space_id.to_owned())
+}
+
+pub(super) async fn description_adopted<R: Runtime>(
+	app: &AppHandle<R>,
+	id: &str,
+	described: SpaceDescribed,
+) -> Result<(), JoinedSpaceError> {
+	let guests = app.state::<RelayGuests>();
+	let _turn = guests.turn.lock().await;
+	let state = app.state::<db::DatabaseState>();
+	let repository = ready(&state)?.joined_spaces();
+	let found = repository.find(id.to_owned()).await?;
+	let is_its_space = found.is_some_and(|joined| {
+		joined.remote_space_id.is_none_or(|known| known == described.space_id)
+	});
+	if !is_its_space
+		|| !repository.described(id.to_owned(), described.name, described.colour).await?
+	{
+		return Ok(());
+	}
+	guests.gesture_made();
+	announce_change(app, id.to_owned()).await
 }
 
 pub async fn left<R: Runtime>(app: &AppHandle<R>, id: &str) -> Result<(), JoinedSpaceError> {

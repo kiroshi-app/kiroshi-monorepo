@@ -7149,6 +7149,32 @@
       ],
       "type": "object"
     },
+    "SpaceDescribed": {
+      "properties": {
+        "colour": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Hue"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "spaceId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "spaceId",
+        "name",
+        "colour"
+      ],
+      "type": "object"
+    },
     "SpaceError": {
       "anyOf": [
         {
@@ -12048,6 +12074,11 @@
     "routine://changed": {
       "payload": {
         "$ref": "#/$defs/RoutineChanged"
+      }
+    },
+    "space://described": {
+      "payload": {
+        "$ref": "#/$defs/SpaceDescribed"
       }
     }
   },

@@ -5,6 +5,8 @@ use crate::db::repositories::space_hosting::Hosting;
 use crate::db::repositories::{space_rows, space_settings, spaces};
 use crate::db::DatabaseError;
 
+pub const DESCRIBED_EVENT: &str = "space://described";
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct Space {
@@ -30,6 +32,14 @@ impl Space {
 			created_at: space.created_at,
 		}
 	}
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SpaceDescribed {
+	pub space_id: String,
+	pub name: String,
+	pub colour: Option<Hue>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]

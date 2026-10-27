@@ -39,6 +39,7 @@ const PAYLOADS: &[(&str, Definition)] = &[
 	payload_of(events::MEMBERS_CHANGED),
 	payload_of(events::MISSION_CHANGED),
 	payload_of(events::ROUTINE_CHANGED),
+	payload_of(events::SPACE_DESCRIBED),
 ];
 
 const FRAME_NAMES: [&str; 3] = ["CallFrame", "AnswerFrame", "EventFrame"];

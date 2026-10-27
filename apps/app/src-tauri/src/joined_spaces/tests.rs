@@ -1,38 +1,40 @@
 use std::collections::HashMap;
 use std::net::Ipv4Addr;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use std::time::Duration;
 
 use axum::extract::ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Path, RawQuery, State as Served};
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{delete, get, post};
+use axum::routing::{delete, get, patch, post};
 use axum::Router;
 use base64::prelude::{Engine as _, BASE64_URL_SAFE_NO_PAD};
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{json, Value};
 use tauri::test::{mock_builder, MockRuntime};
-use tauri::{App, Listener, Manager};
+use tauri::{App, AppHandle, Listener, Manager};
 use tokio::net::TcpListener;
 use tokio::sync::mpsc::{self, UnboundedSender};
 use tokio::sync::watch;
 use tokio::time::Instant;
 
 use super::commands::{
-	joined_space_connect, joined_space_remove, joined_spaces_list, CHANGED_EVENT, REMOVED_EVENT,
+	joined_space_connect, joined_space_describe, joined_space_remove, joined_spaces_list,
+	CHANGED_EVENT, REMOVED_EVENT,
 };
 use super::contract::{
 	JoinedSpace, JoinedSpaceError, JoinedSpaceState, JoinedSpaceWait, JoinedSpaceWaitReason,
 };
-use super::member_link::Presence;
+use super::member_link::{MemberLink, Presence};
 use super::members::{self, joined_space_members, MEMBERS_CHANGED_EVENT};
-use super::relay::{self, RelayGuests, RelayJoinError};
+use super::relay::{self, HostCall, RelayGuests, RelayJoinError};
 use super::test_host::SealingHost;
 use super::wait_reason::{wait_of, Stall};
 use super::waiting;
 use crate::account::session::{self, AccountSession};
+use crate::conversations::contract::Hue;
 use crate::crypto::commands::{DeviceKeysState, SpaceKeys};
 use crate::crypto::device_keys::DeviceKeys;
 use crate::crypto::fingerprint::fingerprint;
@@ -47,6 +49,8 @@ use crate::hosting::Hosting;
 use crate::invitations::{self, Invitations};
 use crate::logging::contract::InstallKind;
 use crate::removed_on_drop::RemovedOnDrop;
+use crate::spaces::commands::space_update;
+use crate::spaces::contract::{SpaceDescribed, SpaceError};
 use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 
 const INSTANCE: &str = "6f1c2b8e-7d3a-4b5e-9c1d-2a3b4c5d6e7f";
@@ -75,6 +79,7 @@ enum HostSide {
 	Leaving(Duration),
 	Answering(String),
 	GreetingAfterRead { frames: Vec<String>, reads: usize },
+	DroppingAfterItsAnswer { host: Arc<SealingHost>, command: &'static str, body: Value },
 }
 
 struct Room {
@@ -96,6 +101,7 @@ struct Room {
 	upgrades: Vec<Instant>,
 	instance_reads: usize,
 	is_instance_list_stalled: bool,
+	is_instance_list_open: Arc<watch::Sender<bool>>,
 	leave: (StatusCode, Value),
 	is_sign_out_stalled: bool,
 	sign_out_calls: Vec<(&'static str, String)>,
@@ -125,6 +131,7 @@ impl Relay {
 			upgrades: Vec::new(),
 			instance_reads: 0,
 			is_instance_list_stalled: false,
+			is_instance_list_open: Arc::new(watch::channel(true).0),
 			leave: (StatusCode::NO_CONTENT, Value::Null),
 			is_sign_out_stalled: false,
 			sign_out_calls: Vec::new(),
@@ -266,14 +273,15 @@ async fn sign_out_called(relay: &Relay, call: &'static str, headers: &HeaderMap)
 }
 
 async fn instances_listed(Served(relay): Served<Relay>) -> Response {
-	let is_stalled = {
+	let (is_stalled, mut is_open) = {
 		let mut room = relay.room();
 		room.instance_reads += 1;
-		room.is_instance_list_stalled
+		(room.is_instance_list_stalled, room.is_instance_list_open.subscribe())
 	};
 	if is_stalled {
 		std::future::pending::<()>().await;
 	}
+	is_open.wait_for(|is_open| *is_open).await.map(drop).expect("the relay holds the gate");
 	let room = relay.room();
 	let mut listed = room.other_memberships.clone();
 	if !room.accepted.is_empty() {
@@ -385,6 +393,16 @@ async fn membered(relay: Relay, mut socket: WebSocket) {
 			continue;
 		};
 		let frame: Value = serde_json::from_str(text.as_str()).expect("a json member frame");
+		let host = relay.room().host.clone();
+		if let HostSide::DroppingAfterItsAnswer { host, command, body } = host {
+			let call = host.opened(text.as_str()).plaintext;
+			if call["command"] != command {
+				continue;
+			}
+			let answer = json!({ "id": call["id"], "status": 200, "body": body }).to_string();
+			let sealed = Message::Text(host.sealed(&answer).into());
+			return socket.send(sealed).await.expect("the answer leaves");
+		}
 		if !is_missed_rekey(&frame) {
 			for greeting in relay.greeting().await {
 				if socket.send(Message::Text(greeting.into())).await.is_err() {
@@ -404,9 +422,10 @@ async fn membered(relay: Relay, mut socket: WebSocket) {
 				Message::Close(Some(close))
 			}
 			HostSide::Closing(code) => Message::Close(Some(CloseFrame { code, reason: "".into() })),
-			HostSide::Silent | HostSide::Leaving(_) | HostSide::GreetingAfterRead { .. } => {
-				continue
-			}
+			HostSide::Silent
+			| HostSide::Leaving(_)
+			| HostSide::GreetingAfterRead { .. }
+			| HostSide::DroppingAfterItsAnswer { .. } => continue,
 			HostSide::Answering(answer) => Message::Text(answer.into()),
 		};
 		if socket.send(answer).await.is_err() {
@@ -1492,6 +1511,7 @@ struct Admission {
 	devices: Vec<(String, &'static str, Value)>,
 	host: Option<UnboundedSender<Message>>,
 	members: HashMap<String, UnboundedSender<Message>>,
+	listing: Value,
 }
 
 #[derive(Clone, Default)]
@@ -1515,7 +1535,8 @@ impl AdmittingRelay {
 	async fn served(&self) -> String {
 		let router = Router::new()
 			.route("/me", get(admitting_me))
-			.route("/instances", post(instance_registered))
+			.route("/instances", post(instance_registered).get(admitting_instances_listed))
+			.route("/instances/{id}", patch(admitting_instance_described))
 			.route("/devices/challenge", post(device_challenged))
 			.route("/devices", post(admitting_device_registered))
 			.route("/instances/{id}/devices", get(admitting_devices_listed))
@@ -1547,8 +1568,9 @@ async fn admitting_me(headers: HeaderMap) -> Response {
 	answered_json(StatusCode::OK, me)
 }
 
-async fn instance_registered(body: String) -> Response {
+async fn instance_registered(Served(relay): Served<AdmittingRelay>, body: String) -> Response {
 	let body: Value = serde_json::from_str(&body).expect("a json body");
+	relay.admission().listing = json!({ "name": body["name"], "colour": body["colour"] });
 	answered_json(
 		StatusCode::CREATED,
 		json!({ "id": INSTANCE, "name": body["name"], "role": "owner" }),
@@ -1577,6 +1599,21 @@ async fn admitting_device_registered(
 		StatusCode::CREATED,
 		json!({ "id": id, "createdAt": "2026-10-01T00:00:00.000Z", "transferred": false, "status": "approved" }),
 	)
+}
+
+async fn admitting_instance_described(
+	Served(relay): Served<AdmittingRelay>,
+	body: String,
+) -> Response {
+	let body: Value = serde_json::from_str(&body).expect("a json body");
+	relay.admission().listing = json!({ "name": body["name"], "colour": body["colour"] });
+	answered_json(StatusCode::OK, json!({ "id": INSTANCE }))
+}
+
+async fn admitting_instances_listed(Served(relay): Served<AdmittingRelay>) -> Response {
+	let mut listed = relay.admission().listing.clone();
+	listed["id"] = json!(INSTANCE);
+	answered_json(StatusCode::OK, json!([listed]))
 }
 
 async fn admitting_devices_listed(Served(relay): Served<AdmittingRelay>) -> Response {
@@ -1701,6 +1738,27 @@ async fn local_answered(Path(command): Path<String>) -> Response {
 	answered_json(StatusCode::OK, json!({ "command": command }))
 }
 
+#[derive(Clone, Default)]
+struct HostApp(Arc<OnceLock<AppHandle<MockRuntime>>>);
+
+async fn host_invoked(
+	Served(host): Served<HostApp>,
+	Path(command): Path<String>,
+	body: String,
+) -> Response {
+	if command != "space_update" {
+		return local_answered(Path(command)).await;
+	}
+	let app = host.0.get().expect("the host app").clone();
+	let args: Value = serde_json::from_str(&body).expect("json arguments");
+	let text = |key: &str| args[key].as_str().expect("a text argument").to_owned();
+	let colour = args["colour"].as_i64();
+	match space_update(app.clone(), app.state(), text("id"), text("name"), colour).await {
+		Ok(space) => answered_json(StatusCode::OK, json!(space)),
+		Err(refusal) => answered_json(StatusCode::INTERNAL_SERVER_ERROR, json!(refusal)),
+	}
+}
+
 struct Peers {
 	relay: AdmittingRelay,
 	cloud: String,
@@ -1712,10 +1770,12 @@ impl Peers {
 	async fn hosting() -> Self {
 		let relay = AdmittingRelay::default();
 		let cloud = relay.served().await;
-		let local =
-			served(Router::new().route("/api/invoke/{command}", post(local_answered))).await;
+		let host_app = HostApp::default();
+		let invoked = Router::new().route("/api/invoke/{command}", post(host_invoked));
+		let local = served(invoked.with_state(host_app.clone())).await;
 		let (host, _root, temporary) =
 			signed_in("joined-admission-host", OWNER_BEARER, &cloud, PATIENCE);
+		assert!(host_app.0.set(host.handle().clone()).is_ok());
 		let local = LocalApi::new(local, LOCAL_TOKEN.to_owned()).expect("the local client builds");
 		host.manage(Hosting::new(&cloud, Some(local)));
 		hosting_start(host.handle().clone(), SPACE.to_owned()).await.expect("the hosting starts");
@@ -1755,5 +1815,222 @@ fn a_member_the_host_admits_from_the_device_list_joins_on_its_first_rekey_and_pi
 		let roster: Value = serde_json::from_str(&roster.expect("a pinned roster").roster)
 			.expect("a json roster set");
 		assert_eq!(roster["host"], peers.host_device_id());
+	});
+}
+
+async fn joined_by(peers: &Peers, name: &str) -> (AppOfItsOwn, JoinedSpace, Vec<RemovedOnDrop>) {
+	let (member, _root, temporary) = signed_in(name, MEMBER_BEARER, &peers.cloud, PATIENCE);
+	let joined = invitations::accept(member.handle(), INVITATION.to_owned()).await;
+	(member, joined.expect("the join"), temporary)
+}
+
+async fn described(
+	member: &AppOfItsOwn,
+	joined: &JoinedSpace,
+	colour: i64,
+) -> Result<JoinedSpace, JoinedSpaceError> {
+	let (app, id) = (member.handle().clone(), joined.id.clone());
+	joined_space_describe(app, id, "Lab".to_owned(), Some(colour)).await
+}
+
+async fn host_space(peers: &Peers) -> (String, Option<Hue>) {
+	let state = peers.host.state::<DatabaseState>();
+	let spaces = state.as_ref().expect("the database").spaces().list().await.expect("the spaces");
+	let space = spaces.into_iter().find(|space| space.id == SPACE).expect("the shared space");
+	(space.name, space.colour)
+}
+
+async fn named_and_coloured(member: &AppOfItsOwn) -> Vec<(String, Hue)> {
+	let listed = joined_spaces_list(member.handle().clone()).await.expect("the list");
+	listed.into_iter().map(|joined| (joined.name, joined.colour)).collect()
+}
+
+async fn listed_as(member: &AppOfItsOwn, expected: &[(String, Hue)]) {
+	until("the description of the joined space", || async {
+		(named_and_coloured(member).await == expected).then_some(())
+	})
+	.await;
+}
+
+#[test]
+fn a_member_describes_its_joined_space_and_the_host_and_every_member_take_it_through_a_reconciliation(
+) {
+	run(async {
+		let peers = Peers::hosting().await;
+		let (member, joined, _member_files) = joined_by(&peers, "described-member").await;
+		let (other, other_joined, _other_files) = joined_by(&peers, "described-other").await;
+		joined_space_connect(other.handle().clone(), other_joined.id.clone())
+			.await
+			.expect("the other member connects");
+		let other_changes = changes_heard(&other);
+		let host_before = host_space(&peers).await;
+		let before = named_and_coloured(&member).await;
+
+		let refused = described(&member, &joined, 360).await;
+		let host_after_refusal = host_space(&peers).await;
+		let after_refusal = named_and_coloured(&member).await;
+		let answered = described(&member, &joined, 200).await.expect("the description");
+		let lab = vec![("Lab".to_owned(), Hue::new(200).expect("a hue"))];
+		listed_as(&other, &lab).await;
+		listed_as(&member, &lab).await;
+		relay::reconciled(other.handle()).await;
+		relay::reconciled(member.handle()).await;
+
+		assert_eq!(joined.remote_space_id, None);
+		assert_eq!(
+			refused,
+			Err(JoinedSpaceError::SpaceRefused { refusal: SpaceError::unknown_colour(360) })
+		);
+		assert_eq!((host_after_refusal, after_refusal), (host_before, before));
+		let expected = JoinedSpace {
+			remote_space_id: Some(SPACE.to_owned()),
+			name: "Lab".to_owned(),
+			colour: Hue::new(200).expect("a hue"),
+			hosted_by: answered.hosted_by.clone(),
+			..joined
+		};
+		assert_eq!(answered, expected);
+		assert_eq!(host_space(&peers).await, ("Lab".to_owned(), Hue::new(200)));
+		let heard = other_changes.lock().expect("the events").clone();
+		assert!(
+			heard
+				.iter()
+				.any(|changed| changed["id"] == other_joined.id && changed["colour"] == 200),
+			"{heard:?}"
+		);
+		assert_eq!(peers.relay.admission().listing, json!({ "name": "Lab", "colour": 200 }));
+		assert_eq!(named_and_coloured(&other).await, lab);
+		assert_eq!(named_and_coloured(&member).await, lab);
+	});
+}
+
+#[test]
+fn a_description_the_host_never_answers_is_host_offline_and_leaves_the_row_unchanged() {
+	run(async {
+		let member = Member::facing_a_silent_host("described-silent").await;
+		let host = member.host();
+		let joined = online_and_greeted(&member, &host).await;
+		let before = member.listed().await;
+
+		let app = member.app.handle().clone();
+		let silent =
+			joined_space_describe(app, joined.id.clone(), "Lab".to_owned(), Some(200)).await;
+
+		assert_eq!(silent, Err(JoinedSpaceError::HostOffline { id: joined.id.clone() }));
+		assert_eq!(member.listed().await, before);
+	});
+}
+
+#[test]
+fn a_call_over_a_link_that_is_down_is_host_offline_without_being_sent() {
+	run(async {
+		let member = Member::new("described-down").await;
+		let link = MemberLink::new(INSTANCE, "Studio".to_owned());
+		link.closed(Presence::Down);
+		let call = HostCall { command: "space_update", args: json!({}), bound: PATIENCE };
+
+		let answered = relay::host_answered(member.app.handle(), "joined-1", &link, call).await;
+
+		assert_eq!(
+			answered.err(),
+			Some(JoinedSpaceError::HostOffline { id: "joined-1".to_owned() })
+		);
+	});
+}
+
+#[test]
+fn a_description_taken_while_a_reconciliation_reads_the_older_listing_is_kept() {
+	run(async {
+		let member = Member::new("described-while-reconciling").await;
+		let host = member.host();
+		let joined = online_with_two_members(&member, &host).await;
+		let gate = Arc::clone(&member.relay.room().is_instance_list_open);
+		gate.send_replace(false);
+		let reads = member.relay.room().instance_reads;
+		let app = member.app.handle().clone();
+		let reconciling = tauri::async_runtime::spawn(async move { relay::reconciled(&app).await });
+		until("the listing read", || async {
+			(member.relay.room().instance_reads > reads).then_some(())
+		})
+		.await;
+
+		let lab = SpaceDescribed {
+			space_id: SPACE.to_owned(),
+			name: "Lab".to_owned(),
+			colour: Hue::new(200),
+		};
+		relay::description_adopted(member.app.handle(), &joined.id, lab)
+			.await
+			.expect("the description is taken");
+		gate.send_replace(true);
+		reconciling.await.expect("the reconciliation");
+
+		let lab = vec![("Lab".to_owned(), Hue::new(200).expect("a hue"))];
+		assert_eq!(named_and_coloured(&member.app).await, lab);
+	});
+}
+
+async fn online_and_greeted(member: &Member, host: &SealingHost) -> JoinedSpace {
+	let joined = online_with_two_members(member, host).await;
+	member.relay.greets_after_the_next_members_read(vec![host.hello()]);
+	joined_space_connect(member.app.handle().clone(), joined.id.clone())
+		.await
+		.expect("the connection");
+	let guests = member.app.state::<RelayGuests>();
+	until("the link online", || async {
+		(guests.presence(&joined.id) == Some(Presence::Online)).then_some(())
+	})
+	.await;
+	joined
+}
+
+#[test]
+fn a_description_the_link_drops_before_its_event_still_lists_the_answered_name_and_hue() {
+	run(async {
+		let member = Member::new("described-then-dropped").await;
+		let host = Arc::new(member.host());
+		let joined = online_and_greeted(&member, &host).await;
+		let changes = changes_heard(&member.app);
+		let body = json!({
+			"id": SPACE, "name": "Lab", "colour": 200, "position": 0, "createdAt": 0,
+			"shared": true, "instanceId": INSTANCE,
+		});
+		let dropping = HostSide::DroppingAfterItsAnswer { host, command: "space_update", body };
+		member.relay.hosting(dropping);
+
+		let app = member.app.handle().clone();
+		let answered = joined_space_describe(app, joined.id.clone(), "Lab".to_owned(), Some(200))
+			.await
+			.expect("the description");
+
+		let lab = vec![("Lab".to_owned(), Hue::new(200).expect("a hue"))];
+		assert_eq!((answered.name.clone(), answered.colour), lab[0].clone());
+		assert_eq!(named_and_coloured(&member.app).await, lab);
+		assert_eq!(member.listed().await, vec![answered]);
+		let heard = changes.lock().expect("the events").clone();
+		assert_eq!(heard, vec![json!({ "id": joined.id, "hostedBy": "Ann", "colour": 200 })]);
+	});
+}
+
+#[test]
+fn a_description_heard_again_with_the_same_name_and_hue_writes_nothing_and_announces_nothing() {
+	run(async {
+		let member = Member::new("described-twice").await;
+		let host = member.host();
+		let joined = online_with_two_members(&member, &host).await;
+		let changes = changes_heard(&member.app);
+		let lab = || SpaceDescribed {
+			space_id: SPACE.to_owned(),
+			name: "Lab".to_owned(),
+			colour: Hue::new(200),
+		};
+
+		relay::description_adopted(member.app.handle(), &joined.id, lab()).await.expect("first");
+		relay::description_adopted(member.app.handle(), &joined.id, lab()).await.expect("again");
+
+		let heard = changes.lock().expect("the events").clone();
+		assert_eq!(heard, vec![json!({ "id": joined.id, "hostedBy": "Ann", "colour": 200 })]);
+		let lab = vec![("Lab".to_owned(), Hue::new(200).expect("a hue"))];
+		assert_eq!(named_and_coloured(&member.app).await, lab);
 	});
 }

@@ -167,6 +167,7 @@ export const commands = {
 	joinedSpacesList: () => typedError<JoinedSpace[], JoinedSpaceError>(__TAURI_INVOKE("joined_spaces_list")),
 	joinedSpaceConnect: (id: string) => typedError<JoinedSpaceConnection, JoinedSpaceError>(__TAURI_INVOKE("joined_space_connect", { id })),
 	joinedSpaceRemove: (id: string) => typedError<null, JoinedSpaceError>(__TAURI_INVOKE("joined_space_remove", { id })),
+	joinedSpaceDescribe: (id: string, name: string, colour: number | null) => typedError<JoinedSpace, JoinedSpaceError>(__TAURI_INVOKE("joined_space_describe", { id, name, colour })),
 	joinLinkListen: () => __TAURI_INVOKE<void>("join_link_listen"),
 	joinedSpaceMembers: (id: string) => typedError<JoinedSpaceMember[], JoinedSpaceError>(__TAURI_INVOKE("joined_space_members", { id })),
 	mcpOauthConnect: (owner: EnvOwner, name: string, url: string) => typedError<null, OauthError_Serialize>(__TAURI_INVOKE("mcp_oauth_connect", { owner, name, url })),
@@ -275,6 +276,8 @@ export const JOINED_SPACE_REMOVED_EVENT = "joined-space://removed" as const;
 export const JOIN_LINK_OPENED_EVENT = "join-link://opened" as const;
 
 export const MAXIMIZE_BUTTON_EVENT = "window-maximize-button" as const;
+
+export const SPACE_DESCRIBED_EVENT = "space://described" as const;
 
 export const UPDATE_CHANGED_EVENT = "update://changed" as const;
 
@@ -971,7 +974,7 @@ export type JoinedSpaceConnection = {
 	name: string,
 };
 
-export type JoinedSpaceError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "unknownJoinedSpace"; id: string } | { kind: "undeliverable"; detail: string } | { kind: "hostOffline"; id: string } | { kind: "proxyUnavailable"; detail: string } | { kind: "ownerNotRemovable" } | { kind: "needsSignIn" } | { kind: "sessionRevoked" } | { kind: "sessionStore"; detail: string } | { kind: "relayUnreachable"; detail: string } | { kind: "relayRefused"; detail: string } | { kind: "invitationExpired" } | { kind: "invitationWithdrawn" } | { kind: "invitationUsed" } | { kind: "invitationOtherEmail" } | { kind: "couldNotAccept"; detail: string } | { kind: "noInvitation"; inviterEmail: string | null } | { kind: "notInRoster" } | { kind: "badSignature" } | { kind: "removedByRotation" } | { kind: "waitingForHost"; id: string; instanceId: string; reason: JoinedSpaceWaitReason; detail: string } | { kind: "keyStore"; detail: string };
+export type JoinedSpaceError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "unknownJoinedSpace"; id: string } | { kind: "undeliverable"; detail: string } | { kind: "hostOffline"; id: string } | { kind: "proxyUnavailable"; detail: string } | { kind: "ownerNotRemovable" } | { kind: "needsSignIn" } | { kind: "sessionRevoked" } | { kind: "sessionStore"; detail: string } | { kind: "relayUnreachable"; detail: string } | { kind: "relayRefused"; detail: string } | { kind: "invitationExpired" } | { kind: "invitationWithdrawn" } | { kind: "invitationUsed" } | { kind: "invitationOtherEmail" } | { kind: "couldNotAccept"; detail: string } | { kind: "noInvitation"; inviterEmail: string | null } | { kind: "notInRoster" } | { kind: "badSignature" } | { kind: "removedByRotation" } | { kind: "waitingForHost"; id: string; instanceId: string; reason: JoinedSpaceWaitReason; detail: string } | { kind: "keyStore"; detail: string } | { kind: "spaceRefused"; refusal: SpaceError };
 
 export type JoinedSpaceMember = {
 	userId: string,
@@ -1636,6 +1639,12 @@ export type Space = {
 	createdAt: number,
 	shared: boolean,
 	instanceId: string | null,
+};
+
+export type SpaceDescribed = {
+	spaceId: string,
+	name: string,
+	colour: Hue | null,
 };
 
 export type SpaceError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "unknownSpace"; id: string } | { kind: "unknownBot"; id: string } | { kind: "unwritableBundle"; detail: string } | { kind: "incompleteOrder" } | { kind: "lastSpace" } | { kind: "lastSpaceOfBot"; id: string } | { kind: "foreignSection"; id: string } | { kind: "unsupportedArchive"; found: number | null; supported: number } | { kind: "unreadableArchive"; detail: string } | { kind: "unwritableArchive"; detail: string } | { kind: "unknownColour"; colour: string; accepted: string[] };
