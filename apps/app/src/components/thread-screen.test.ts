@@ -1245,6 +1245,7 @@ const CompanionSelectHarness = ({
 				rosters: { [SPACE]: companionIds.map((id) => ({ id })) },
 				select: target.select,
 				leaveMission: target.missions.leave,
+				openThreadInNewTab: vi.fn(),
 			}),
 		},
 		children,

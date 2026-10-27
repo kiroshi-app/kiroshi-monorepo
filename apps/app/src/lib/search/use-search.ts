@@ -14,6 +14,7 @@ import {
 import {
 	createSearchNavigation,
 	openSearchTarget,
+	openSearchTargetInNewTab,
 	type SearchNavigation,
 	type SearchNavigationSource,
 	type SearchTarget,
@@ -23,6 +24,7 @@ import { useSearchKeys } from "./use-search-keys"
 import { useSearchReads } from "./use-search-reads"
 
 import { useControllerState } from "../use-controller"
+import { isNewTabClickInFlight } from "../tabs/new-tab-clicks"
 
 export type SearchSource = {
 	spaceId: string | null
@@ -63,6 +65,7 @@ export const useSearchNavigation = ({
 	routines,
 	landings,
 	user,
+	threads,
 }: SearchNavigationSource): SearchNavigation =>
 	useMemo(
 		() =>
@@ -73,8 +76,9 @@ export const useSearchNavigation = ({
 				routines,
 				landings,
 				user,
+				threads,
 			}),
-		[roster, spaces, missions, routines, landings, user],
+		[roster, spaces, missions, routines, landings, user, threads],
 	)
 
 export const useSearch = ({
@@ -97,6 +101,10 @@ export const useSearch = ({
 	const openTarget = useCallback(
 		(target: SearchTarget) => {
 			controller.close()
+			if (isNewTabClickInFlight()) {
+				openSearchTargetInNewTab(target, navigation)
+				return
+			}
 			openSearchTarget(target, navigation)
 		},
 		[controller, navigation],

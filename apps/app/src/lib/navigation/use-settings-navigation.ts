@@ -1,9 +1,14 @@
-import { useNavigate, useRouter } from "@tanstack/react-router"
+import {
+	type NavigateOptions,
+	useNavigate,
+	useRouter,
+} from "@tanstack/react-router"
 import { useMemo } from "react"
 
 import type { CompanionSettingsSearch, SettingsSearch } from "./settings-search"
 import type { ThreadSearch } from "./thread-search"
 
+import { isNewTabClickInFlight } from "../tabs/new-tab-clicks"
 import { heldThreadOf, type ThreadHolder } from "../tabs/use-tab-thread-sync"
 
 export const useSettingsNavigation = (holder: ThreadHolder) => {
@@ -17,6 +22,19 @@ export const useSettingsNavigation = (holder: ThreadHolder) => {
 				return
 			}
 			fallback()
+		}
+
+		const openInBackgroundTab = (options: NavigateOptions) =>
+			router.options.context.tabs.openInBackgroundTab(
+				router.buildLocation(options).href,
+			)
+
+		const go = (options: NavigateOptions) => {
+			if (isNewTabClickInFlight()) {
+				openInBackgroundTab(options)
+				return
+			}
+			void navigate(options)
 		}
 
 		return {
@@ -34,10 +52,8 @@ export const useSettingsNavigation = (holder: ThreadHolder) => {
 			openConversations: () => {
 				void navigate({ to: "/", search: heldThreadOf(holder) })
 			},
-			openThreadInNewTab: (thread: ThreadSearch) => {
-				const { href } = router.buildLocation({ to: "/", search: thread })
-				router.options.context.tabs.openInNewTab(href)
-			},
+			openThreadInNewTab: (thread: ThreadSearch) =>
+				openInBackgroundTab({ to: "/", search: thread }),
 			openSpaceSettings: (spaceId: string, search: SettingsSearch = {}) => {
 				void navigate({
 					to: "/settings/space/$spaceId",
@@ -45,29 +61,26 @@ export const useSettingsNavigation = (holder: ThreadHolder) => {
 					search,
 				})
 			},
-			openUserSettings: (search: SettingsSearch = {}) => {
-				void navigate({ to: "/settings/user", search })
-			},
+			openUserSettings: (search: SettingsSearch = {}) =>
+				go({ to: "/settings/user", search }),
 			openCompanionSettings: (
 				companionId: string,
 				search: CompanionSettingsSearch = {},
-			) => {
-				void navigate({
+			) =>
+				go({
 					to: "/settings/companion/$companionId",
 					params: { companionId },
 					search,
-				})
-			},
-			showEntry: (entry: string) => {
-				void navigate({
+				}),
+			showEntry: (entry: string) =>
+				go({
 					to: ".",
 					search: (previous: CompanionSettingsSearch) => ({
 						...previous,
 						entry,
 					}),
 					replace: true,
-				})
-			},
+				}),
 		}
 	}, [navigate, router, holder])
 }

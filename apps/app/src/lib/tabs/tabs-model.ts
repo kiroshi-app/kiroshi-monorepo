@@ -92,6 +92,11 @@ export const openTab = (space: SpaceTabs, href: string): SpaceTabs => {
 		: insertAfterActive(space, tabOn(href))
 }
 
+export const openBackgroundTab = (space: SpaceTabs, href: string): SpaceTabs =>
+	tabShowing(space, href)
+		? space
+		: { ...insertAfterActive(space, tabOn(href)), activeId: space.activeId }
+
 const neighbourOf = (closedIndex: number, rest: Tab[]) =>
 	rest[closedIndex] ?? rest[closedIndex - 1] ?? tabOn(EMPTY_LIST_HREF)
 

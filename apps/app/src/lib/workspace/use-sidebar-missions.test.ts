@@ -186,6 +186,7 @@ const sidebarMissionsWiring = (lastMissions: Record<string, string> = {}) => {
 			spaces: { state: { selectedSpaceId } },
 		},
 		rosterLines: { now: NOW },
+		navigation: { openThreadInNewTab: vi.fn() },
 	})
 	return { inputFor, select, selectConversation, open, leave, openedMission }
 }

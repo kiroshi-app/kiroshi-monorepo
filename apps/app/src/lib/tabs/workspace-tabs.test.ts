@@ -177,6 +177,36 @@ describe("the tab keys", () => {
 	})
 })
 
+describe("a tab opened in the background", () => {
+	it("lands right after the active tab and keeps the active tab shown", () => {
+		const tabs = tabsOfSpace()
+		tabs.openInNewTab(threadOf("first"))
+		tabs.openInNewTab(threadOf("last"))
+		tabs.select(viewOf(tabs).tabs[1]?.id ?? "")
+
+		tabs.openInBackgroundTab(threadOf("behind"))
+
+		expect(shownHrefs(tabs)).toEqual([
+			"/",
+			threadOf("first"),
+			threadOf("behind"),
+			threadOf("last"),
+		])
+		expect(activeHref(tabs)).toBe(threadOf("first"))
+	})
+
+	it("leaves the tabs as they are when a tab already shows the page", () => {
+		const tabs = tabsOfSpace()
+		tabs.openInNewTab(threadOf("shown"))
+		tabs.openInNewTab(companionOf("other"))
+		const before = viewOf(tabs)
+
+		tabs.openInBackgroundTab(threadOf("shown"))
+
+		expect(viewOf(tabs)).toEqual(before)
+	})
+})
+
 describe("a page already shown", () => {
 	it("selects the tab showing it instead of opening a second one", () => {
 		const tabs = tabsOfSpace()

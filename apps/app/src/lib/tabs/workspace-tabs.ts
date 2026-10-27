@@ -16,6 +16,7 @@ import {
 	currentHrefOf,
 	dropTabsWhere,
 	moveInHistory,
+	openBackgroundTab,
 	openTab,
 	pinTab,
 	pushEntry,
@@ -49,6 +50,7 @@ export type WorkspaceTabs = {
 	showSpace: (spaceId: string) => void
 	openEmptyTab: () => void
 	openInNewTab: (href: string) => void
+	openInBackgroundTab: (href: string) => void
 	back: () => void
 	forward: () => void
 	select: (id: string) => void
@@ -252,6 +254,8 @@ export const createWorkspaceTabs = (
 		openEmptyTab: () =>
 			askingChange((space) => openTab(space, EMPTY_LIST_HREF)),
 		openInNewTab: (href) => askingChange((space) => openTab(space, href)),
+		openInBackgroundTab: (href) =>
+			change((space) => openBackgroundTab(space, href)),
 		back: () => askingMove(-1, () => history.back()),
 		forward: () => askingMove(1, () => history.forward()),
 		select: (id) => askingChange((space) => selectTab(space, id)),

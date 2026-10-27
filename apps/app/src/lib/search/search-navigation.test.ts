@@ -20,6 +20,8 @@ const tracedNavigation = () => {
 		openRoutine: ({ routineId }) => trace.push(`routine:${routineId}`),
 		openActivityPanel: () => trace.push("activity"),
 		recordLanding: ({ messageId }) => trace.push(`landing:${messageId}`),
+		openThreadInNewTab: (thread) =>
+			trace.push(`new-tab:${JSON.stringify(thread)}`),
 	}
 
 	return { navigation, trace }

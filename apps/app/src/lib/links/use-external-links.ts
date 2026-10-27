@@ -30,6 +30,18 @@ export const externalUrlOf = (
 	return url.href
 }
 
+export const inAppHrefOf = (
+	href: string | null | undefined,
+	pageUrl: string,
+): string | null => {
+	const url = href ? urlOf(href, pageUrl) : null
+	const page = urlOf(pageUrl)
+	if (!url || url.protocol !== page?.protocol || url.host !== page.host) {
+		return null
+	}
+	return `${url.pathname}${url.search}${url.hash}`
+}
+
 export const openInBrowser = async (href: string | null): Promise<void> => {
 	const url = externalUrlOf(href, window.location.href)
 	if (!url) {
@@ -42,7 +54,7 @@ export const openInBrowser = async (href: string | null): Promise<void> => {
 	window.open(url, "_blank", "noopener,noreferrer")
 }
 
-const anchorOf = (target: EventTarget | null) =>
+export const anchorOf = (target: EventTarget | null) =>
 	target instanceof Element ? target.closest("a[href]") : null
 
 export const useExternalLinks = () => {
