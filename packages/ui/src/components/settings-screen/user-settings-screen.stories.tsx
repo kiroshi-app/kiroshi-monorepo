@@ -866,6 +866,91 @@ export const Applications = meta.story({
 	},
 })
 
+export const OpensAnApplicationWithClickModifiers = meta.story({
+	tags: ["test-only"],
+	args: { entry: "mcp", onOpenApplication: fn() },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Applications with a caller taking the open. atlas opened from the list and clicked again plainly, then edited and Linear Cmd clicked with the leave confirmed, then Linear clicked every way a host can tell apart. Check that the open application clicked plainly does nothing, that the confirmed leave hands the caller Linear with the Cmd of the original click, that each click reports middle with the keys held, Cmd, Ctrl or Shift alone, none on a plain click or Enter, and nothing on a right-click, and that neither the entry nor the shown page moves to Linear.",
+			},
+		},
+	},
+	play: async ({ args, userEvent }) => {
+		const menu = await expectEntryShown("Applications")
+		const main = screen.getByRole("main")
+		const linear = within(menu).getByRole("button", { name: /^Linear/ })
+		await userEvent.click(
+			within(main).getByRole("button", { name: "Open atlas" }),
+		)
+		const atlas = within(menu).getByRole("button", { name: /^atlas/ })
+		await expect(atlas).toHaveAttribute("aria-current", "page")
+
+		await userEvent.click(atlas)
+		await expect(args.onOpenApplication).not.toHaveBeenCalled()
+
+		await userEvent.type(within(main).getByLabelText("Name"), "-desk")
+		fireEvent.click(linear, { metaKey: true, detail: 1 })
+		await userEvent.click(
+			within(
+				await screen.findByRole("alertdialog", {
+					name: "Leave without saving?",
+				}),
+			).getByRole("button", { name: "Leave" }),
+		)
+		await expect(args.onOpenApplication).toHaveBeenCalledOnce()
+		await expect(args.onOpenApplication).toHaveBeenLastCalledWith("linear", {
+			...NO_CLICK_MODIFIERS,
+			meta: true,
+		})
+
+		await expectClickModifiers({
+			target: linear,
+			callback: args.onOpenApplication,
+			reported: ["linear"],
+			userEvent,
+		})
+		await expect(linear).not.toHaveAttribute("aria-current")
+		await expect(args.onEntryChange).not.toHaveBeenCalled()
+	},
+})
+
+export const OpensAnApplicationInPlace = meta.story({
+	tags: ["test-only"],
+	args: { entry: "mcp" },
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"Applications with no caller taking the open. Linear clicked plainly, then clicked again plainly, then Cmd clicked. Check that the first click opens Linear in the page and reports the entry with no key, that the second does nothing, and that the Cmd click reports the entry with Cmd.",
+			},
+		},
+	},
+	play: async ({ args, userEvent }) => {
+		const menu = await expectEntryShown("Applications")
+		const linear = within(menu).getByRole("button", { name: /^Linear/ })
+
+		await userEvent.click(linear)
+		await expect(linear).toHaveAttribute("aria-current", "page")
+		await expect(args.onEntryChange).toHaveBeenCalledOnce()
+		await expect(args.onEntryChange).toHaveBeenLastCalledWith(
+			"mcp",
+			NO_CLICK_MODIFIERS,
+		)
+
+		await userEvent.click(linear)
+		await expect(args.onEntryChange).toHaveBeenCalledOnce()
+
+		fireEvent.click(linear, { metaKey: true, detail: 1 })
+		await expect(args.onEntryChange).toHaveBeenLastCalledWith("mcp", {
+			...NO_CLICK_MODIFIERS,
+			meta: true,
+		})
+	},
+})
+
 export const History = meta.story({
 	args: { entry: "history" },
 	parameters: {

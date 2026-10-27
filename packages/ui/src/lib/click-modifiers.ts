@@ -30,6 +30,9 @@ const modifiersOf = (event: MouseEvent): ClickModifiers =>
 				middle: isMiddleButton(event),
 			}
 
+const isPlainClick = ({ meta, ctrl, shift, middle }: ClickModifiers) =>
+	!(meta || ctrl || shift || middle)
+
 const middleClickHandlers = (onMiddleClick: (event: MouseEvent) => void) => ({
 	onAuxClick: (event: MouseEvent) => {
 		if (isMiddleButton(event)) onMiddleClick(event)
@@ -47,6 +50,7 @@ const clickHandlersFor = (onClick: (modifiers: ClickModifiers) => void) => {
 export {
 	type ClickModifiers,
 	clickHandlersFor,
+	isPlainClick,
 	middleClickHandlers,
 	modifiersOf,
 	NO_CLICK_MODIFIERS,

@@ -24,7 +24,6 @@ import { useOverlayScrollbars } from "@workspace/ui/hooks/use-overlay-scrollbars
 import {
 	type ClickModifiers,
 	clickHandlersFor,
-	modifiersOf,
 } from "@workspace/ui/lib/click-modifiers"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -296,7 +295,7 @@ const SettingsMenuApplication = ({
 			<button
 				aria-current={isSelected ? "page" : undefined}
 				className={SUB_ENTRY}
-				onClick={(event) => onSelect(modifiersOf(event))}
+				{...clickHandlersFor(onSelect)}
 				type="button"
 			>
 				<ApplicationMark mark={mark} size="xs" />
