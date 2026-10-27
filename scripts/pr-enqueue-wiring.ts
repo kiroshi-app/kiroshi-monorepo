@@ -16,7 +16,7 @@ const PR_REQUEUE_CHECK = fileURLToPath(
 
 const STRICT_MODE = "set -euo pipefail\n"
 
-export const ENQUEUE_LINE = `if [ $# -eq 0 ] || { [ $# -eq 2 ] && [ "$1" = --reason ]; }; then "$(dirname "$0")/pr-requeue-check.sh" "$@"; set --; fi\n`
+const ENQUEUE_LINE = `if [ $# -eq 0 ] || { [ $# -eq 2 ] && [ "$1" = --reason ]; }; then "$(dirname "$0")/pr-requeue-check.sh" "$@"; set --; fi\n`
 
 const unwiredSource = () => {
 	const source = readFileSync(PR_ENQUEUE, "utf8").replace(ENQUEUE_LINE, "")
