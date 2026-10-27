@@ -97,7 +97,7 @@ const SettingsMenuHeader = ({
 	subtitle,
 }: SettingsMenuHeaderProps) => (
 	<div
-		className={cn("flex min-w-0 items-center gap-2.5", MENU_INSET)}
+		className={`flex min-w-0 items-center gap-2.5 ${MENU_INSET}`}
 		data-slot="settings-menu-header"
 	>
 		{avatar}
