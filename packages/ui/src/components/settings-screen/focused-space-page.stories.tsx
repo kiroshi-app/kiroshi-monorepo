@@ -12,7 +12,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The Space entry of a space's settings screen: a header with the space's avatar, name, standing and its action, then the Name field while the space can be renamed or read, then the Not shared yet card while it is yours and unshared. The screen's stories carry the four artboards; these prove the page on its own, in the light theme and in narrow columns.",
+					"The Space entry of a space's settings screen: a header with the space's avatar, name, standing and its action, then the Name field and the colour field while the space can be renamed, then the Not shared yet card while it is yours and unshared. The screen's stories carry the four artboards; these prove the page on its own, in the light theme and in narrow columns.",
 			},
 		},
 	},
@@ -37,7 +37,7 @@ export const Yours = meta.story({
 		docs: {
 			description: {
 				story:
-					"A space of yours, not shared, in the light theme. Check that the Name field edits the name and that the card's Share describes itself by its sentence.",
+					"A space of yours, not shared, in the light theme. Check that the Name field edits the name, that the colour field sits right under it and reports a picked swatch or No colour with the name untouched, and that the card's Share describes itself by its sentence.",
 			},
 		},
 	},
@@ -47,6 +47,17 @@ export const Yours = meta.story({
 		await expect(args.onValueChange).toHaveBeenLastCalledWith({
 			name: "Release desk!",
 			colour: BLOT_HUES.blue,
+		})
+		await expect(page.getByRole("radio", { name: "Blue" })).toBeChecked()
+		await userEvent.click(page.getByRole("radio", { name: "Green" }))
+		await expect(args.onValueChange).toHaveBeenLastCalledWith({
+			name: "Release desk",
+			colour: BLOT_HUES.green,
+		})
+		await userEvent.click(page.getByRole("radio", { name: "No colour" }))
+		await expect(args.onValueChange).toHaveBeenLastCalledWith({
+			name: "Release desk",
+			colour: null,
 		})
 		await expect(
 			page.getByRole("button", { name: "Share" }),
@@ -79,6 +90,39 @@ export const Shared = meta.story({
 	},
 })
 
+export const Joined = meta.story({
+	args: {
+		space: { state: "joined", hostName: "Sam Rivera", isConnected: true },
+		value: { name: "Northwind", colour: 320 },
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A space joined from a connected host, wearing a hue of its own. Check that the Name field edits the name and the colour field under it moves the hue, each reporting through the page with the other value untouched, since members rename and recolour a joined space for everyone.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const page = within(canvasElement)
+		const nameField = page.getByLabelText("Name")
+		await expect(nameField).not.toHaveAttribute("readonly")
+		await userEvent.type(nameField, "!")
+		await expect(args.onValueChange).toHaveBeenLastCalledWith({
+			name: "Northwind!",
+			colour: 320,
+		})
+
+		const slider = page.getByRole("slider", { name: "Your hue" })
+		slider.focus()
+		await userEvent.keyboard("{ArrowLeft}")
+		await expect(args.onValueChange).toHaveBeenLastCalledWith({
+			name: "Northwind",
+			colour: 319,
+		})
+	},
+})
+
 export const LongNameInANarrowColumn = meta.story({
 	args: {
 		value: {
@@ -95,7 +139,7 @@ export const LongNameInANarrowColumn = meta.story({
 		docs: {
 			description: {
 				story:
-					"An unbreakable name in a 320px column. Check that it wraps inside the header instead of overflowing, while the avatar and Open keep their size.",
+					"An unbreakable name in a 320px column. Check that it wraps inside the header instead of overflowing, while the avatar and Open keep their size, and that the colour field wraps its swatches without scrolling sideways.",
 			},
 		},
 	},
@@ -110,6 +154,10 @@ export const LongNameInANarrowColumn = meta.story({
 				.getByRole("button", { name: "Open ⌘2" })
 				.getBoundingClientRect().height,
 		).toBe(32)
+		const fields = slotIn(canvasElement, "space-fields")
+		await expect(fields.scrollWidth).toBeLessThanOrEqual(fields.clientWidth)
+		const swatches = slotIn(fields, "colour-field-options")
+		await expect(swatches.scrollWidth).toBeLessThanOrEqual(swatches.clientWidth)
 	},
 })
 
