@@ -4431,6 +4431,38 @@ fn a_relay_guest_hears_every_event_of_a_host_turn_in_the_shared_conversation_in_
 	});
 }
 
+fn a_completed_turn_end() -> agent::AgentEvent {
+	agent::AgentEvent::TurnEnded {
+		ended: agent::TurnEnded {
+			session_id: None,
+			outcome: agent::TurnOutcome::Completed,
+			structured_output: None,
+			total_cost_usd: None,
+			model_usage: None,
+		},
+	}
+}
+
+fn a_forwarded_agent_event(
+	scope: &agent::RuntimeScope,
+	turn: Option<agent::EventTurn>,
+	event: agent::AgentEvent,
+) -> Value {
+	let emitted = agent::ScopedEvent { scope: Some(scope.clone()), turn, event };
+	as_forwarded((commands::EVENT_CHANNEL, serde_json::to_value(emitted).expect("a payload")))
+}
+
+fn the_turn_ends_of(heard: &[Value], turn_id: &str) -> Vec<Value> {
+	heard
+		.iter()
+		.filter(|frame| {
+			let payload = &frame["event"]["payload"];
+			payload["event"]["type"] == "turnEnded" && payload["turn"]["turnId"] == turn_id
+		})
+		.cloned()
+		.collect()
+}
+
 #[test]
 fn a_relay_guest_hears_the_end_of_a_host_turn_in_the_shared_conversation() {
 	run(async {
@@ -4440,26 +4472,39 @@ fn a_relay_guest_hears_the_end_of_a_host_turn_in_the_shared_conversation() {
 		let run = commands::a_live_run(&app, scope.clone());
 		let turn =
 			agent::EventTurn { turn_id: "t-mine".to_owned(), conversation_id: "c-mine".to_owned() };
-		let ended = agent::AgentEvent::TurnEnded {
-			ended: agent::TurnEnded {
-				session_id: None,
-				outcome: agent::TurnOutcome::Completed,
-				structured_output: None,
-				total_cost_usd: None,
-				model_usage: None,
-			},
-		};
 
-		run.emit(ended.clone(), Some(turn.clone()));
+		run.emit(a_completed_turn_end(), Some(turn.clone()));
 		let heard = guest.events_until_the_marker().await;
 
-		let emitted = agent::ScopedEvent { scope: Some(scope), turn: Some(turn), event: ended };
 		assert_eq!(
-			heard,
-			[as_forwarded((
-				commands::EVENT_CHANNEL,
-				serde_json::to_value(emitted).expect("a payload")
-			))]
+			the_turn_ends_of(&heard, "t-mine"),
+			[a_forwarded_agent_event(&scope, Some(turn), a_completed_turn_end())]
+		);
+	});
+}
+
+#[test]
+fn a_relay_guest_hears_the_end_of_a_host_turn_once_when_its_evolution_lands_before_the_marker() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("turn-ended-evolved").await;
+		let app = guest.harness.app.handle().clone();
+		let scope = a_live_scope_of("c-mine");
+		let run = commands::a_live_run(&app, scope.clone());
+		let turn =
+			agent::EventTurn { turn_id: "t-mine".to_owned(), conversation_id: "c-mine".to_owned() };
+		let evolution_failed = agent::AgentEvent::BotEvolutionFailed {
+			bundle: agent::EvolvedBundle::Bot,
+			detail: "the objects are read-only".to_owned(),
+		};
+
+		run.emit(a_completed_turn_end(), Some(turn.clone()));
+		commands::announce(&app, Some(scope.clone()), evolution_failed.clone());
+		let heard = guest.events_until_the_marker().await;
+
+		assert!(heard.contains(&a_forwarded_agent_event(&scope, None, evolution_failed)));
+		assert_eq!(
+			the_turn_ends_of(&heard, "t-mine"),
+			[a_forwarded_agent_event(&scope, Some(turn), a_completed_turn_end())]
 		);
 	});
 }
