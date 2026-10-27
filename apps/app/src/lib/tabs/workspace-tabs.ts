@@ -9,9 +9,15 @@ import { i18n } from "@workspace/ui/lib/i18n"
 import { goneMissionIdsOf, type ReadMission } from "./restored-missions"
 import { EMPTY_LIST_HREF, HREF_BASE, pageOf, rowIdsNamedBy } from "./tab-pages"
 import {
-	discardSecondaryWindowTabs,
+	discardUnlistedWindowTabs,
+	forgetWindow,
+	handOverWindow,
 	MAIN_WINDOW_LABEL,
+	openWindowLabels,
 	readSpaceTabs,
+	recordOpenWindow,
+	recordShownSpace,
+	shownSpaceOf,
 	writeSpaceTabs,
 } from "./tabs-mirror"
 import {
@@ -48,10 +54,12 @@ import {
 	raiseReportedFailure,
 	type UnreportedFailureNotice,
 } from "../failure-report"
-import { closeWindow } from "../host"
+import { closeWindow, liveWindowLabels, watchCloseRequest } from "../host"
 import { createStore } from "../store"
 
 const NO_SPACE = ""
+
+const HANDOVER_PARAM = "handover"
 
 const MAX_CLOSED_TABS = 10
 
@@ -66,6 +74,8 @@ type LeaveGuard = (leave: () => void) => void
 
 export type WorkspaceTabs = {
 	history: RouterHistory
+	isMainWindow: boolean
+	reopenedSpaceId: string | null
 	getState: () => WorkspaceTabsState
 	subscribe: (listener: () => void) => () => void
 	showSpace: (spaceId: string) => void
@@ -121,12 +131,13 @@ const raiseWindowFailure = (
 	raiseReportedFailure(notice, { raisedIn: "workspace-tabs", command })
 }
 
+const raiseCloseFailure = () =>
+	raiseWindowFailure({
+		title: i18n.t("common:windowControls.failure.close"),
+	})
+
 const closeThisWindow = () => {
-	closeWindow().catch(() =>
-		raiseWindowFailure({
-			title: i18n.t("common:windowControls.failure.close"),
-		}),
-	)
+	closeWindow().catch(raiseCloseFailure)
 }
 
 type WindowOpening = { isOpened: true } | { isOpened: false; reason?: string }
@@ -156,14 +167,77 @@ const moveFailureOf = (reason: string | undefined) => ({
 const isOnlyTab = (space: SpaceTabs | undefined, id: string) =>
 	space?.tabs.length === 1 && space.tabs[0]?.id === id
 
+const handoverHrefOf = (predecessor: string) =>
+	`${EMPTY_LIST_HREF}?${new URLSearchParams({ [HANDOVER_PARAM]: predecessor })}`
+
+const predecessorNamedIn = (href: string) =>
+	new URL(href, HREF_BASE).searchParams.get(HANDOVER_PARAM)
+
+const reopenFailureOf = (reason: string | undefined) => ({
+	title: i18n.t("common:titleBar.reopenWindowFailed.title"),
+	description:
+		reason === undefined
+			? i18n.t("common:titleBar.reopenWindowFailed.description")
+			: i18n.t("common:titleBar.reopenWindowFailed.descriptionWithReason", {
+					reason,
+				}),
+})
+
+const reopenWindow = async (predecessor: string) => {
+	const opening = await openWindowOn(handoverHrefOf(predecessor))
+	if (opening.isOpened) {
+		return
+	}
+	forgetWindow(predecessor)
+	raiseWindowFailure(reopenFailureOf(opening.reason), "window_open")
+}
+
+export const reopenSecondaryWindows = async () => {
+	const listedLabels = openWindowLabels()
+	const liveLabels = await liveWindowLabels()
+	const closedLabels = listedLabels.filter(
+		(label) => !liveLabels.includes(label),
+	)
+	for (const predecessor of closedLabels) {
+		await reopenWindow(predecessor)
+	}
+}
+
+export const forgetWindowWhenClosed = (windowLabel: string) => {
+	const watching = watchCloseRequest(() => {
+		forgetWindow(windowLabel)
+		watching
+			.then((stopWatching) => stopWatching())
+			.then(closeWindow)
+			.catch(raiseCloseFailure)
+	})
+	return watching
+}
+
+const startSecondaryWindow = (
+	windowLabel: string,
+	predecessor: string | null,
+) => {
+	if (predecessor !== null) {
+		handOverWindow(predecessor, windowLabel)
+	}
+	recordOpenWindow(windowLabel)
+}
+
 export const createWorkspaceTabs = (
-	initialHref = EMPTY_LIST_HREF,
+	openingHref = EMPTY_LIST_HREF,
 	windowLabel = MAIN_WINDOW_LABEL,
 ): WorkspaceTabs => {
 	const isMainWindow = windowLabel === MAIN_WINDOW_LABEL
+	const predecessor = predecessorNamedIn(openingHref)
+	const isReopened = predecessor !== null
+	const initialHref = isReopened ? EMPTY_LIST_HREF : openingHref
 	if (isMainWindow) {
-		discardSecondaryWindowTabs()
+		discardUnlistedWindowTabs()
+	} else {
+		startSecondaryWindow(windowLabel, predecessor)
 	}
+	const reopenedSpaceId = isReopened ? shownSpaceOf(windowLabel) : null
 	const store = createStore<WorkspaceTabsState>({
 		spaceId: NO_SPACE,
 		bySpace: { [NO_SPACE]: spaceTabsOn(initialHref) },
@@ -331,7 +405,7 @@ export const createWorkspaceTabs = (
 
 	const reachedTabsOf = (spaceId: string) => {
 		const isBooting = store.getState().spaceId === NO_SPACE
-		if (isBooting && !isMainWindow) {
+		if (isBooting && !isMainWindow && !isReopened) {
 			return { space: shown(), isRestored: false }
 		}
 		const fresh = isBooting ? shown() : spaceTabsOn(EMPTY_LIST_HREF)
@@ -391,10 +465,16 @@ export const createWorkspaceTabs = (
 					: state.restoredSpaceIds,
 			}),
 		)
+		if (!isMainWindow) {
+			recordShownSpace(windowLabel, spaceId)
+			writeSpaceTabs(windowLabel, spaceId, space)
+		}
 	}
 
 	return {
 		history,
+		isMainWindow,
+		reopenedSpaceId,
 		getState: store.getState,
 		subscribe: store.subscribe,
 		showSpace: (spaceId) => {

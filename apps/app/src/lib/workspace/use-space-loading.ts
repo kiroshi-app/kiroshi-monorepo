@@ -11,9 +11,16 @@ import { lastBotIn } from "../user/preferences-mirror"
 type SpaceLoadingInput = {
 	core: WorkspaceCore
 	scopes: ApplicationScopes
+	isMainWindow: boolean
+	reopenedSpaceId: string | null
 }
 
-export const useSpaceLoading = ({ core, scopes }: SpaceLoadingInput) => {
+export const useSpaceLoading = ({
+	core,
+	scopes,
+	isMainWindow,
+	reopenedSpaceId,
+}: SpaceLoadingInput) => {
 	const { joinedSpaces, roster, spaces, user } = core
 	const { selectedSpaceId, openRowId } = scopes
 	const activeHostId = joinedSpaces.hosts.active
@@ -34,11 +41,17 @@ export const useSpaceLoading = ({ core, scopes }: SpaceLoadingInput) => {
 	)
 
 	const loadSpaces = useCallback(() => {
-		const { lastSpaceId } = user.controller.getState().preferences
+		const spaceId =
+			reopenedSpaceId ?? user.controller.getState().preferences.lastSpaceId
 		void spaces.controller
-			.load(lastSpaceId)
-			.then(() => joinedSpaces.controller.restore(lastSpaceId))
-	}, [spaces.controller, joinedSpaces.controller, user.controller])
+			.load(spaceId)
+			.then(() => joinedSpaces.controller.restore(spaceId))
+	}, [
+		spaces.controller,
+		joinedSpaces.controller,
+		user.controller,
+		reopenedSpaceId,
+	])
 
 	useEffect(() => {
 		loadSpaces()
@@ -70,6 +83,7 @@ export const useSpaceLoading = ({ core, scopes }: SpaceLoadingInput) => {
 		user: user.controller,
 		selectedSpaceId,
 		openRowId,
+		isMainWindow,
 	})
 
 	return loadSpaces

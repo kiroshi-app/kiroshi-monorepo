@@ -16,6 +16,11 @@ import { installInvokeTally } from "@/lib/perf/invoke-tally-devtools"
 import { exposeScrollTrace } from "@/lib/perf/scroll-trace-devtools"
 import { invalidateOnHostReconnect } from "@/lib/query/host-invalidations"
 import { createQueryClient } from "@/lib/query/query-client"
+import { MAIN_WINDOW_LABEL } from "@/lib/tabs/tabs-mirror"
+import {
+	forgetWindowWhenClosed,
+	reopenSecondaryWindows,
+} from "@/lib/tabs/workspace-tabs"
 import { applyLanguage, readMirror } from "@/lib/user/preferences-mirror"
 import { warmCodeHighlighter } from "@/lib/warm-highlighter"
 
@@ -67,13 +72,26 @@ const renderApp = (windowIdentity?: WindowIdentity) => {
 	)
 }
 
+const reportWindowStartFailure = (reason: unknown) => {
+	console.error("window start failed", reason)
+}
+
+const startWindow = (windowIdentity: WindowIdentity) => {
+	renderApp(windowIdentity)
+	const starting =
+		windowIdentity.label === MAIN_WINDOW_LABEL
+			? reopenSecondaryWindows()
+			: forgetWindowWhenClosed(windowIdentity.label)
+	starting.catch(reportWindowStartFailure)
+}
+
 const renderAsMainWindow = (reason: unknown) => {
 	console.error("window identity at start failed", reason)
 	renderApp()
 }
 
 if (isDesktopHost()) {
-	commands.windowIdentity().then(renderApp, renderAsMainWindow)
+	commands.windowIdentity().then(startWindow, renderAsMainWindow)
 } else {
 	renderApp()
 }

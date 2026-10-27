@@ -21,17 +21,21 @@ export type SpaceTabs = {
 	activeId: string
 }
 
-const firstEntryOn = (href: string): TabEntry => {
+const entryOn = (href: string, position: number): TabEntry => {
 	const key = crypto.randomUUID()
-	return { href, state: { key, __TSR_key: key, __TSR_index: 0 } }
+	return { href, state: { key, __TSR_key: key, __TSR_index: position } }
 }
 
-export const tabOn = (href: string): Tab => ({
+const firstEntryOn = (href: string) => entryOn(href, 0)
+
+export const tabThrough = (hrefs: string[], index: number): Tab => ({
 	id: crypto.randomUUID(),
 	isPinned: false,
-	entries: [firstEntryOn(href)],
-	index: 0,
+	entries: hrefs.map(entryOn),
+	index,
 })
+
+const tabOn = (href: string): Tab => tabThrough([href], 0)
 
 export const spaceTabsOn = (href: string): SpaceTabs => {
 	const tab = tabOn(href)
