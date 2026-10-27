@@ -19,6 +19,21 @@ struct Space: Decodable, Identifiable, Equatable, Sendable {
     var colour: CompanionTint?
 }
 
+enum SpacePresence: Equatable, Sendable {
+    case shared
+    case online
+    case connecting
+    case notConnected
+}
+
+extension Space {
+    func presence(isAwaitingHost: Bool) -> SpacePresence {
+        if isAwaitingHost { return .connecting }
+        guard isHostOnline else { return .notConnected }
+        return role == .owner ? .shared : .online
+    }
+}
+
 extension Space {
     init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
