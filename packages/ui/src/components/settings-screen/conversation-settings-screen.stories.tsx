@@ -33,6 +33,8 @@ const INSTRUCTIONS_BOX_HEIGHT = 220
 
 const SEATED = CONVERSATION_BOTS.slice(0, 3)
 
+const ICONS_PER_ROW = 6
+
 const ICON_LABELS: Record<string, string> =
 	chat.conversationSettings.icon.option
 
@@ -192,10 +194,11 @@ export const IconPopoverOpen = meta.story({
 		await waitFor(() => expect(current).toHaveFocus())
 
 		const currentIndex = conversationIcons.indexOf("Rocket")
+		const nextIndex = currentIndex + 1
 		await userEvent.keyboard("{ArrowRight}")
-		await expect(icons[currentIndex + 1]).toHaveFocus()
+		await expect(icons[nextIndex]).toHaveFocus()
 		await userEvent.keyboard("{ArrowDown}")
-		await expect(icons[currentIndex + 7]).toHaveFocus()
+		await expect(icons[nextIndex + ICONS_PER_ROW]).toHaveFocus()
 		await expect(args.onIconChange).not.toHaveBeenCalled()
 
 		await userEvent.keyboard("{Escape}")
