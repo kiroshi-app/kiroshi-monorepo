@@ -181,7 +181,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"A space's settings as a whole window instead of an overlay. The settings menu takes the place of the conversations panel: Back to your settings, the space's avatar and name, then its entries, Danger zone pinned at the foot. The content column draws the same panels the space settings dialog draws. Each page sits under a header bar the height of a conversation's header carrying the entry's label, its first row where a conversation's first message starts: forms in a column centred and capped at 800px, lists across the whole card. Members, Companions, Skills, Applications and History are lists; an open application is a form. Space opens on the space's own header: its avatar, name, standing and Open, then its Name field and, while it is yours and not shared, the Not shared yet card. A joined space pins Leave space instead of Danger zone and, while its host is not connected, greys every entry but Space; an invitation reduces the menu to one Invitation entry and pins Decline. Applications opens onto the space's installed applications, one sub-entry each with its mark and connection dot, then Add an application.",
+					"A space's settings as a whole window instead of an overlay. The settings menu takes the place of the conversations panel: Back to your settings, the space's avatar and name, then its entries, Danger zone pinned at the foot. The content column draws the same panels the space settings dialog draws. Each page sits under a header bar the height of a conversation's header carrying the entry's label, its first row where a conversation's first message starts: forms in a column centred and capped at 800px, lists across the whole card. Members, Companions, Skills, Applications and History are lists; an open application is a form. Space opens on the space's own header: its avatar, name, standing and Open, then its Name field and colour field and, while it is yours and not shared, the Not shared yet card. A joined space pins Leave space instead of Danger zone and, while its host is not connected, greys every entry but Space; an invitation reduces the menu to one Invitation entry and pins Decline. Applications opens onto the space's installed applications, one sub-entry each with its mark and connection dot, then Add an application.",
 			},
 		},
 	},
@@ -926,7 +926,7 @@ export const JoinedHostOnline = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard F03: a space joined from Sam Rivera, whose computer is online. Check Joined · hosted by Sam Rivera, Companions counting 3, a green presence dot on both squares, a Name field that reads the name without letting it change, no card, and Leave space pinned at the foot, asking before it leaves.",
+					"Artboard F03: a space joined from Sam Rivera, whose computer is online. Check Joined · hosted by Sam Rivera, Companions counting 3, a green presence dot on both squares, an editable Name field with the colour field under it, no card, and Leave space pinned at the foot, asking before it leaves.",
 			},
 		},
 	},
@@ -943,9 +943,10 @@ export const JoinedHostOnline = meta.story({
 		})
 		await expect(avatarStatesIn(menu, main)).toEqual(["online", "online"])
 		await expectPresenceDots(menu, main)
-		await expect(within(main).getByLabelText("Name")).toHaveAttribute(
+		await expect(within(main).getByLabelText("Name")).not.toHaveAttribute(
 			"readonly",
 		)
+		await expect(slotIn(main, "colour-field-options")).toBeVisible()
 		await expect(
 			main.querySelector("[data-slot=not-shared-card]"),
 		).not.toBeInTheDocument()

@@ -1779,6 +1779,7 @@ settings-space-companionssection--no-counts
 settings-space-companionssection--one-companion
 settings-space-companionssection--one-count
 settings-space-focusedspacepage--connecting
+settings-space-focusedspacepage--joined
 settings-space-focusedspacepage--long-name-in-a-narrow-column
 settings-space-focusedspacepage--shared
 settings-space-focusedspacepage--yours

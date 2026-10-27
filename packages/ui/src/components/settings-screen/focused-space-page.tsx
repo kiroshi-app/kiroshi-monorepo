@@ -5,14 +5,13 @@ import { useTranslation } from "react-i18next"
 
 import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import { INVERSE_BUTTON_CLASS } from "@workspace/ui/components/inverse-button"
-import { SettingsField } from "@workspace/ui/components/settings-field"
 import {
 	SpaceAvatar,
 	type SpaceAvatarState,
 	spaceAvatarStateOf,
 } from "@workspace/ui/components/space-avatar"
 import type { SpaceSettingsValue } from "@workspace/ui/components/space-settings"
-import { SpaceColourField } from "@workspace/ui/components/space-settings-dialog/space-fields"
+import { SpaceFields } from "@workspace/ui/components/space-settings-dialog/space-fields"
 import { Button } from "@workspace/ui/components/ui/button"
 import { formatShortMonthAndDay } from "@workspace/ui/lib/time-format"
 import { cn } from "@workspace/ui/lib/utils"
@@ -181,19 +180,11 @@ const FocusedSpacePage = ({
 				) : null}
 			</div>
 			{isNameShown ? (
-				<SettingsField
-					label={t("space.name.label")}
-					onValueChange={(next) => onValueChange({ ...value, name: next })}
-					placeholder={t("space.name.placeholder")}
-					readOnly={space.state === "joined"}
-					readOnlyLook="filled"
-					value={value.name}
-				/>
-			) : null}
-			{space.state === "yours" ? (
-				<SpaceColourField
-					onValueChange={(hue) => onValueChange({ ...value, colour: hue })}
-					value={value.colour ?? null}
+				<SpaceFields
+					onValueChange={(next) =>
+						onValueChange({ ...value, name: next.name, colour: next.hue })
+					}
+					value={{ name: value.name, hue: value.colour ?? null }}
 				/>
 			) : null}
 			{space.state === "yours" && !space.isShared && onShare ? (
