@@ -130,7 +130,7 @@ const closeThisWindow = () => {
 type WindowOpening = { isOpened: true } | { isOpened: false; reason?: string }
 
 const reasonOf = (error: unknown) =>
-	(error == null ? "" : describeFailure(error).trim()) || undefined
+	error == null ? undefined : describeFailure(error).trim() || undefined
 
 const openWindowOn = (href: string): Promise<WindowOpening> =>
 	commands.windowOpen(href).then(
