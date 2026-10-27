@@ -84,22 +84,17 @@ const firstOf = (value: number | readonly number[]) =>
 	typeof value === "number" ? value : (value[0] ?? 0)
 
 type OwnHueMarkProps = {
-	hue: number
 	look: ColourFieldLook
 	mark: ReactNode
 }
 
-const OwnHueMark = ({ hue, look, mark }: OwnHueMarkProps) =>
+const OwnHueMark = ({ look, mark }: OwnHueMarkProps) =>
 	look === "swatch" ? (
 		<span
 			aria-hidden="true"
 			className={cn("grid size-6 place-items-center", RAINBOW_DISC_CLASS)}
 		>
-			<span
-				className="size-3 rounded-full bg-primary ring-2 ring-card"
-				data-hue={hue}
-				style={hueStyle(hue)}
-			/>
+			<span className="size-3 rounded-full bg-primary ring-2 ring-card" />
 		</span>
 	) : (
 		<span aria-hidden="true" className="relative flex">
@@ -199,7 +194,7 @@ const ColourField = ({
 									value={option}
 								/>
 								{option === "own" ? (
-									<OwnHueMark hue={shownOwnHue} look={look} mark={mark(hue)} />
+									<OwnHueMark look={look} mark={mark(hue)} />
 								) : (
 									mark(hue)
 								)}
