@@ -28,7 +28,7 @@ use crate::account::session::{restore, sign_out, AccountSession};
 use crate::crypto::commands::{DeviceKeysState, SpaceKeys};
 use crate::crypto::device_keys::DeviceKeys;
 use crate::db::connection::temp_dir;
-use crate::db::repositories::conversations::AvatarBlot;
+use crate::db::repositories::conversations::Hue;
 use crate::db::repositories::joined_spaces::{HostListing, JoinedReach, JoinedSpace};
 use crate::db::{self, DatabaseError, DatabaseState};
 use crate::environment::contract::{EnvScope, ACCOUNT_BEARER};
@@ -1581,12 +1581,12 @@ fn a_listing_that_changes_the_colour_announces_once_and_an_unchanged_listing_ann
 			HostListing {
 				host_name: Some("Ann".to_owned()),
 				host_email: Some("ann@example.com".to_owned()),
-				colour: Some(AvatarBlot::Cyan),
+				colour: Hue::named("cyan"),
 			}
 		);
 		assert_eq!(
 			harness.heard(JOINED_CHANGED),
-			vec![changed_of(&id), json!({ "id": id, "hostedBy": "Ann", "colour": "cyan" })]
+			vec![changed_of(&id), json!({ "id": id, "hostedBy": "Ann", "colour": 186 })]
 		);
 	});
 }
@@ -1633,19 +1633,19 @@ fn an_accept_stores_the_host_name_email_and_colour_its_invitation_carried() {
 		let joined = accept(harness.app.handle(), INVITATION.to_owned()).await.expect("the accept");
 
 		let presented = serde_json::to_value(&joined).expect("the joined space serializes");
-		assert_eq!((&presented["hostedBy"], &presented["colour"]), (&json!("Ann"), &json!("pink")));
+		assert_eq!((&presented["hostedBy"], &presented["colour"]), (&json!("Ann"), &json!(358)));
 		assert_eq!(
 			harness.stored().await[0].listing,
 			HostListing {
 				host_name: Some("Ann".to_owned()),
 				host_email: Some("ann@example.com".to_owned()),
-				colour: Some(AvatarBlot::Pink),
+				colour: Hue::named("pink"),
 			}
 		);
 	});
 }
 
-fn ann_listed(colour: Option<AvatarBlot>) -> HostListing {
+fn ann_listed(colour: Option<Hue>) -> HostListing {
 	HostListing {
 		host_name: Some("Ann".to_owned()),
 		host_email: Some("ann@example.com".to_owned()),
@@ -1677,8 +1677,8 @@ fn a_join_handed_an_empty_listing_keeps_the_listing_the_space_holds() {
 		.expect("the rejoin");
 
 		let presented = serde_json::to_value(&rejoined).expect("the joined space serializes");
-		assert_eq!((&presented["hostedBy"], &presented["colour"]), (&json!("Ann"), &json!("pink")));
-		assert_eq!(harness.stored().await[0].listing, ann_listed(Some(AvatarBlot::Pink)));
+		assert_eq!((&presented["hostedBy"], &presented["colour"]), (&json!("Ann"), &json!(358)));
+		assert_eq!(harness.stored().await[0].listing, ann_listed(Hue::named("pink")));
 	});
 }
 

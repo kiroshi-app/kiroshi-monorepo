@@ -1185,18 +1185,6 @@
         "unexpandedPlaceholder"
       ]
     },
-    "AvatarBlot": {
-      "enum": [
-        "red",
-        "yellow",
-        "green",
-        "cyan",
-        "blue",
-        "purple",
-        "pink",
-        "orange"
-      ]
-    },
     "AvatarRejection": {
       "anyOf": [
         {
@@ -1268,7 +1256,7 @@
         "avatarBlot": {
           "anyOf": [
             {
-              "$ref": "#/$defs/AvatarBlot"
+              "$ref": "#/$defs/Hue"
             },
             {
               "type": "null"
@@ -1460,7 +1448,7 @@
         "avatarBlot": {
           "anyOf": [
             {
-              "$ref": "#/$defs/AvatarBlot"
+              "$ref": "#/$defs/Hue"
             },
             {
               "type": "null"
@@ -2299,7 +2287,7 @@
         "color": {
           "anyOf": [
             {
-              "$ref": "#/$defs/AvatarBlot"
+              "$ref": "#/$defs/Hue"
             },
             {
               "type": "null"
@@ -3300,6 +3288,11 @@
           "type": "object"
         }
       ]
+    },
+    "Hue": {
+      "maximum": 359,
+      "minimum": 0,
+      "type": "integer"
     },
     "Install": {
       "anyOf": [
@@ -5409,7 +5402,7 @@
         "avatarBlot": {
           "anyOf": [
             {
-              "$ref": "#/$defs/AvatarBlot"
+              "$ref": "#/$defs/Hue"
             },
             {
               "type": "null"
@@ -7112,7 +7105,7 @@
         "colour": {
           "anyOf": [
             {
-              "$ref": "#/$defs/AvatarBlot"
+              "$ref": "#/$defs/Hue"
             },
             {
               "type": "null"
@@ -7340,6 +7333,28 @@
           "required": [
             "kind",
             "detail"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "accepted": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "colour": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "unknownColour"
+            }
+          },
+          "required": [
+            "kind",
+            "colour",
+            "accepted"
           ],
           "type": "object"
         }
@@ -10430,7 +10445,7 @@
           "color": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "integer"
               },
               {
                 "type": "null"
@@ -11925,7 +11940,7 @@
           "colour": {
             "anyOf": [
               {
-                "$ref": "#/$defs/AvatarBlot"
+                "type": "integer"
               },
               {
                 "type": "null"

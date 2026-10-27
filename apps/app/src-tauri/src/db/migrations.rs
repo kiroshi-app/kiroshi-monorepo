@@ -70,6 +70,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 61, statements: MESSAGE_WRITTEN_FROM },
 	Migration { version: 62, statements: MESSAGE_AUTHOR_EMAIL_AND_COMPUTER },
 	Migration { version: 63, statements: PENDING_PROMPTS },
+	Migration { version: 64, statements: HUE_COLOURS },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -1324,6 +1325,31 @@ CREATE TABLE pending_prompts (
 CREATE INDEX pending_prompts_by_conversation ON pending_prompts (conversation_id);
 ";
 
+const HUE_COLOURS: &str = "
+CREATE TEMP TABLE preset_hues (name TEXT PRIMARY KEY, hue INTEGER NOT NULL);
+INSERT INTO preset_hues (name, hue) VALUES
+	('red', 42), ('orange', 63), ('yellow', 82), ('green', 132),
+	('cyan', 186), ('blue', 257), ('purple', 296), ('pink', 358);
+
+ALTER TABLE spaces ADD COLUMN colour_hue INTEGER CHECK (colour_hue BETWEEN 0 AND 359);
+UPDATE spaces SET colour_hue = (SELECT hue FROM preset_hues WHERE name = spaces.colour);
+ALTER TABLE spaces DROP COLUMN colour;
+ALTER TABLE spaces RENAME COLUMN colour_hue TO colour;
+
+ALTER TABLE conversations ADD COLUMN color_hue INTEGER CHECK (color_hue BETWEEN 0 AND 359);
+UPDATE conversations SET color_hue = (SELECT hue FROM preset_hues WHERE name = conversations.color);
+ALTER TABLE conversations DROP COLUMN color;
+ALTER TABLE conversations RENAME COLUMN color_hue TO color;
+
+ALTER TABLE bots ADD COLUMN avatar_color_hue INTEGER
+	CHECK (avatar_color_hue BETWEEN 0 AND 359);
+UPDATE bots SET avatar_color_hue = (SELECT hue FROM preset_hues WHERE name = bots.avatar_color);
+ALTER TABLE bots DROP COLUMN avatar_color;
+ALTER TABLE bots RENAME COLUMN avatar_color_hue TO avatar_color;
+
+DROP TABLE temp.preset_hues;
+";
+
 pub fn latest_version() -> u32 {
 	MIGRATIONS.last().map_or(0, |migration| migration.version)
 }
@@ -1438,6 +1464,7 @@ mod tests {
 	const MISSION_HANDOFF_STEP: u32 = 60;
 	const MESSAGE_WRITTEN_FROM_STEP: u32 = 61;
 	const MESSAGE_AUTHOR_EMAIL_AND_COMPUTER_STEP: u32 = 62;
+	const HUE_COLOURS_STEP: u32 = 64;
 
 	const A_LIVE_SESSION: &str = "INSERT INTO runtime_sessions
 		(id, conversation_id, bot_id, provider_session_id, seq, status, started_at)
@@ -2154,7 +2181,7 @@ mod tests {
 					text("Reviewer"),
 					text("/pictures/koala.png"),
 					text("[\"ship\"]"),
-					text("orange"),
+					integer(63),
 					text("[\"Bash\"]"),
 					text("{}"),
 					integer(7),
@@ -2847,7 +2874,7 @@ mod tests {
 
 		assert_eq!(
 			spaces_of(&connection),
-			vec![("personal".to_owned(), "Personal".to_owned(), Some("red".to_owned()), 0)],
+			vec![("personal".to_owned(), "Personal".to_owned(), Some(42), 0)],
 			"the step did not lay down the one space every bot belongs to"
 		);
 		assert_eq!(
@@ -2877,7 +2904,7 @@ mod tests {
 
 		assert_eq!(
 			spaces_of(&connection),
-			vec![("personal".to_owned(), "Personal".to_owned(), Some("red".to_owned()), 0)]
+			vec![("personal".to_owned(), "Personal".to_owned(), Some(42), 0)]
 		);
 		assert_eq!(
 			connection
@@ -2952,8 +2979,8 @@ mod tests {
 		assert_eq!(
 			spaces_of(&connection),
 			vec![
-				("personal".to_owned(), "Personal".to_owned(), Some("red".to_owned()), 0),
-				("writers".to_owned(), "Writers".to_owned(), Some("blue".to_owned()), 1)
+				("personal".to_owned(), "Personal".to_owned(), Some(42), 0),
+				("writers".to_owned(), "Writers".to_owned(), Some(257), 1)
 			],
 			"a space from the older build came out of the step wearing another colour"
 		);
@@ -3089,7 +3116,7 @@ mod tests {
 			.expect("rows")
 	}
 
-	fn spaces_of(connection: &Connection) -> Vec<(String, String, Option<String>, i64)> {
+	fn spaces_of(connection: &Connection) -> Vec<(String, String, Option<i64>, i64)> {
 		let mut statement = connection
 			.prepare("SELECT id, name, colour, position FROM spaces ORDER BY position, id")
 			.expect("prepare");
@@ -3701,31 +3728,6 @@ mod tests {
 	}
 
 	#[test]
-	fn a_blot_outside_the_palette_is_refused_and_no_blot_is_allowed() {
-		let dir = temp_dir();
-		let connection = migrated(&dir);
-
-		for blot in ["red", "yellow", "green", "cyan", "blue", "purple", "pink", "orange"] {
-			assert!(
-				write(&connection, &a_bot_marked(Some(blot), blot)).is_ok(),
-				"the palette holds {blot} and the file refused it"
-			);
-		}
-		assert!(
-			write(&connection, &a_bot_marked(None, "unmarked")).is_ok(),
-			"a bot with no mark was refused"
-		);
-		assert_eq!(blot_of(&connection, "unmarked"), None);
-		assert!(
-			write(&connection, &a_bot_marked(Some("chartreuse"), "unknown-blot")).is_err(),
-			"a colour outside the palette was stored"
-		);
-
-		drop(connection);
-		fs::remove_dir_all(&dir).expect("cleanup");
-	}
-
-	#[test]
 	fn the_step_that_names_the_denied_tools_carries_the_switch_it_replaces() {
 		let dir = temp_dir();
 		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
@@ -3970,14 +3972,14 @@ mod tests {
 		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
 		apply_each(&mut connection, &MIGRATIONS[..6]).expect("the build before the rename");
 		let marked = [
-			("coral", "red"),
-			("amber", "yellow"),
-			("moss", "green"),
-			("water", "cyan"),
-			("sky", "blue"),
-			("lavender", "purple"),
-			("rose", "pink"),
-			("slate", "orange"),
+			("coral", 42),
+			("amber", 82),
+			("moss", 132),
+			("water", 186),
+			("sky", 257),
+			("lavender", 296),
+			("rose", 358),
+			("slate", 63),
 		];
 		let rows: String = marked
 			.iter()
@@ -4000,7 +4002,7 @@ mod tests {
 
 		for (was, now) in marked {
 			assert_eq!(
-				blot_of(&connection, was).as_deref(),
+				blot_of(&connection, was),
 				Some(now),
 				"the bot stored as {was} did not come up as {now}"
 			);
@@ -4027,15 +4029,7 @@ mod tests {
 		)
 	}
 
-	fn a_bot_marked(blot: Option<&str>, id: &str) -> String {
-		let mark = blot.map_or("NULL".to_owned(), |blot| format!("'{blot}'"));
-		format!(
-			"INSERT INTO bots (id, name, model, created_at, avatar_color)
-				VALUES ('{id}', 'A bot', 'sonnet', 1, {mark})"
-		)
-	}
-
-	fn blot_of(connection: &Connection, id: &str) -> Option<String> {
+	fn blot_of(connection: &Connection, id: &str) -> Option<i64> {
 		connection
 			.query_row("SELECT avatar_color FROM bots WHERE id = ?1", [id], |row| row.get(0))
 			.expect("query")
@@ -4478,7 +4472,7 @@ mod tests {
 					row.get::<_, String>(0)?,
 					row.get::<_, String>(1)?,
 					row.get::<_, Option<String>>(2)?,
-					row.get::<_, Option<String>>(3)?,
+					row.get::<_, Option<i64>>(3)?,
 				))
 			})
 			.expect("query")
@@ -4495,14 +4489,14 @@ mod tests {
 			write(&connection, "UPDATE conversations SET color = 'teal' WHERE id = 'c1'").is_err(),
 			"a colour outside the eight reached the file"
 		);
-		let kept: Option<String> = connection
+		let kept: Option<i64> = connection
 			.query_row("SELECT color FROM conversations WHERE id = 'c1'", [], |row| row.get(0))
 			.expect("the colour reads back");
 		assert_eq!(kept, None);
 		assert_eq!(
 			write(
 				&connection,
-				"UPDATE conversations SET icon = 'MessageSquare', color = 'cyan' WHERE id = 'c1'"
+				"UPDATE conversations SET icon = 'MessageSquare', color = 186 WHERE id = 'c1'"
 			),
 			Ok(1)
 		);
@@ -4925,6 +4919,137 @@ mod tests {
 				.expect("query"),
 			"the conversation so far"
 		);
+
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	const PRESET_NAMES: [&str; 8] =
+		["red", "orange", "yellow", "green", "cyan", "blue", "purple", "pink"];
+
+	const PRESET_HUES: [i64; 8] = [42, 63, 82, 132, 186, 257, 296, 358];
+
+	type Kept = Vec<(String, rusqlite::types::Value)>;
+
+	fn named_rows() -> String {
+		let mut statements = String::from(
+			"INSERT INTO bots (id, name, model, created_at) VALUES ('bare', 'Bare', 'sonnet', 1);
+			INSERT INTO conversations (id, kind, title, created_at, updated_at)
+				VALUES ('bare', 'topic', 'Bare', 1, 1);
+			INSERT INTO spaces (id, name, position, created_at) VALUES ('bare', 'Bare', 9, 1);",
+		);
+		for (at, name) in PRESET_NAMES.iter().enumerate() {
+			statements.push_str(&format!(
+				"INSERT INTO spaces (id, name, colour, position, created_at)
+					VALUES ('{name}', 'Space {name}', '{name}', {}, 2);
+				INSERT INTO bots (id, name, model, created_at, avatar_color)
+					VALUES ('{name}', 'Bot {name}', 'sonnet', 3, '{name}');
+				INSERT INTO conversations (id, kind, title, space_id, created_at, updated_at, color)
+					VALUES ('{name}', 'topic', 'Room {name}', '{name}', 4, 5, '{name}');",
+				at + 10
+			));
+		}
+		statements
+	}
+
+	fn colours_of(
+		connection: &Connection,
+		table: &str,
+		column: &str,
+	) -> Vec<(String, Option<i64>)> {
+		connection
+			.prepare(&format!(
+				"SELECT id, {column} FROM {table} WHERE id != 'personal' ORDER BY id"
+			))
+			.expect("the colours select")
+			.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+			.expect("query")
+			.collect::<Result<_, _>>()
+			.expect("the colours read as hues")
+	}
+
+	fn kept_beside(connection: &Connection, table: &str, column: &str) -> Vec<Kept> {
+		let mut statement =
+			connection.prepare(&format!("SELECT * FROM {table} ORDER BY id")).expect("select");
+		let names: Vec<String> = statement.column_names().into_iter().map(str::to_owned).collect();
+		statement
+			.query_map([], |row| {
+				let mut kept = names
+					.iter()
+					.enumerate()
+					.filter(|(_, name)| name.as_str() != column)
+					.map(|(at, name)| Ok((name.clone(), row.get(at)?)))
+					.collect::<rusqlite::Result<Kept>>()?;
+				kept.sort_by(|left, right| left.0.cmp(&right.0));
+				Ok(kept)
+			})
+			.expect("query")
+			.collect::<Result<_, _>>()
+			.expect("the rows read")
+	}
+
+	#[test]
+	fn the_hue_step_rewrites_each_of_the_eight_names_to_its_hue_and_keeps_every_row() {
+		let dir = temp_dir();
+		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
+		apply_each(&mut connection, shipped_before(HUE_COLOURS_STEP)).expect("the shipped schema");
+		connection.execute_batch(&named_rows()).expect("the named colours this build upgrades");
+		let coloured = [("spaces", "colour"), ("bots", "avatar_color"), ("conversations", "color")];
+		let before: Vec<_> = coloured
+			.iter()
+			.map(|(table, column)| kept_beside(&connection, table, column))
+			.collect();
+
+		apply(&mut connection).expect("the file comes up to this build");
+
+		assert_eq!(version(&connection).expect("version"), latest_version());
+		let mut expected: Vec<(String, Option<i64>)> = PRESET_NAMES
+			.iter()
+			.zip(PRESET_HUES)
+			.map(|(name, hue)| ((*name).to_owned(), Some(hue)))
+			.chain([("bare".to_owned(), None)])
+			.collect();
+		expected.sort();
+		for (at, (table, column)) in coloured.iter().enumerate() {
+			assert_eq!(colours_of(&connection, table, column), expected, "{table}.{column}");
+			assert_eq!(kept_beside(&connection, table, column), before[at], "{table} moved");
+		}
+
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[test]
+	fn a_colour_column_holds_a_hue_from_0_to_359_and_nothing_else() {
+		let dir = temp_dir();
+		let connection = migrated(&dir);
+		connection
+			.execute_batch(
+				"INSERT INTO bots (id, name, model, created_at) VALUES ('b1', 'Nyx', 'sonnet', 1);
+				INSERT INTO conversations (id, kind, title, created_at, updated_at)
+					VALUES ('c1', 'topic', 'Retro', 1, 1);",
+			)
+			.expect("the rows");
+		let coloured = [
+			("spaces", "colour", "personal"),
+			("bots", "avatar_color", "b1"),
+			("conversations", "color", "c1"),
+		];
+
+		for (table, column, id) in coloured {
+			let set = |value: &str| {
+				write(
+					&connection,
+					&format!("UPDATE {table} SET {column} = {value} WHERE id = '{id}'"),
+				)
+			};
+			for held in ["0", "359", "NULL"] {
+				assert_eq!(set(held), Ok(1), "{table}.{column} refused {held}");
+			}
+			for refused in ["-1", "360", "'red'"] {
+				assert!(set(refused).is_err(), "{table}.{column} stored {refused}");
+			}
+		}
 
 		drop(connection);
 		fs::remove_dir_all(&dir).expect("cleanup");

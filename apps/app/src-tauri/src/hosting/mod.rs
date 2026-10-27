@@ -28,7 +28,7 @@ use tokio::sync::watch;
 
 use crate::account::cloud::Cloud;
 use crate::account::session::AccountSession;
-use crate::db::repositories::conversations::AvatarBlot;
+use crate::db::repositories::conversations::Hue;
 use crate::db::repositories::space_hosting::Registration;
 use crate::db::DatabaseState;
 use crate::environment::contract::EnvError;
@@ -287,7 +287,7 @@ pub async fn described<R: Runtime>(
 	app: &AppHandle<R>,
 	instance_id: &str,
 	name: &str,
-	colour: Option<AvatarBlot>,
+	colour: Option<Hue>,
 ) {
 	let Some(hosting) = app.try_state::<Hosting>() else {
 		return;

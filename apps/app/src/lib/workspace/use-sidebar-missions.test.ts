@@ -78,7 +78,7 @@ const BOT: Bot = {
 	name: "Atlas",
 	title: "",
 	model: "sonnet",
-	avatarBlot: "blue",
+	avatarBlot: 257,
 	avatarImagePath: null,
 	instructions: "",
 	deniedTools: [],

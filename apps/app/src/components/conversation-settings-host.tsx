@@ -1,5 +1,6 @@
 import { ConversationSettingsDialog } from "@workspace/ui/components/conversation-settings-dialog"
 
+import { hueOfPreset } from "@/lib/colour/hue-shim"
 import {
 	leadOf,
 	presentParticipants,
@@ -33,7 +34,7 @@ export const ConversationSettingsHost = ({
 			onClose={() => roster.controller.setConversationEditing(false)}
 			onColorChange={(color) =>
 				roster.controller.styleConversation(settingsConversation.id, {
-					color: color ?? null,
+					color: color ? hueOfPreset(color) : null,
 				})
 			}
 			onDelete={() => {

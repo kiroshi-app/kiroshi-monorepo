@@ -103,7 +103,7 @@ const GARAGE: JoinedSpace = {
 	name: "Garage",
 	state: "online",
 	hostedBy: null,
-	colour: "green",
+	colour: 132,
 	instanceId: "instance-of-joined-garage",
 }
 

@@ -26,8 +26,8 @@ use crate::conversations::contract::{
 };
 use crate::db;
 use crate::db::repositories::conversations::{
-	Bot as StoredBot, ConversationAmendment, ConversationDraft, ListedConversation, Listing, Seat,
-	LISTED_KINDS, MISSION_KIND, TOPIC_KIND,
+	Bot as StoredBot, ConversationAmendment, ConversationDraft, Hue, ListedConversation, Listing,
+	Seat, LISTED_KINDS, MISSION_KIND, TOPIC_KIND,
 };
 use crate::db::repositories::keyset;
 use crate::db::repositories::messages::{AccountAuthor, MessagePageQuery, StoredMessage};
@@ -177,6 +177,8 @@ impl<R: Runtime> CompanionHost<R> {
 		{
 			return Err(CompanionError::EmptyUpdate);
 		}
+		let colour =
+			asked.colour.map(|colour| colour.as_ref().map(asked_hue).transpose()).transpose()?;
 		let conversation_id = asked.conversation.unwrap_or_else(|| self.conversation_id.clone());
 		if asked.archived == Some(true) {
 			return Err(CompanionError::ArchiveThroughConversationClose { conversation_id });
@@ -189,7 +191,7 @@ impl<R: Runtime> CompanionHost<R> {
 		let amendment = ConversationAmendment {
 			title: title.map(str::to_owned),
 			icon: asked.icon,
-			color: asked.colour,
+			color: colour,
 			seated: ids_of(&roster, &asked.add)?,
 			unseated: ids_of(&roster, &asked.remove)?,
 			reopened: asked.archived == Some(false),
@@ -565,7 +567,7 @@ fn conversation_of(listed: ListedConversation) -> Conversation {
 		kind,
 		title: room.title,
 		icon: room.icon,
-		colour: room.color.map(|colour| colour.named().to_owned()),
+		colour: room.color,
 		companions: room
 			.seats
 			.into_iter()
@@ -775,7 +777,7 @@ struct Updated {
 	title: Option<String>,
 	icon: Option<String>,
 	#[serde(default, deserialize_with = "present")]
-	colour: Option<Option<String>>,
+	colour: Option<Option<Value>>,
 	#[serde(default)]
 	add: Vec<String>,
 	#[serde(default)]
@@ -812,6 +814,13 @@ struct Searched {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Closed {
 	conversation: String,
+}
+
+fn asked_hue(asked: &Value) -> Result<Hue, CompanionError> {
+	Hue::of_json(asked).ok_or_else(|| {
+		let colour = asked.as_str().map_or_else(|| asked.to_string(), str::to_owned);
+		TranscriptStoreError::unknown_colour(colour).into()
+	})
 }
 
 fn present<'de, D: Deserializer<'de>, T: Deserialize<'de>>(
@@ -890,7 +899,7 @@ mod tests {
 
 	const A_ROOM: &str = "
 		INSERT INTO spaces (id, name, colour, position, created_at)
-			VALUES ('work', 'Work', 'blue', 1, 1);
+			VALUES ('work', 'Work', 257, 1, 1);
 		INSERT INTO bots (id, name, model, created_at) VALUES
 			('b2', 'Ada', 'sonnet', 1), ('b3', 'Rex', 'sonnet', 1),
 			('b4', ' rex ', 'sonnet', 1), ('b5', 'Kai', 'sonnet', 1);
@@ -908,7 +917,7 @@ mod tests {
 
 	const A_SHARED_SPACE: &str = "
 		INSERT INTO spaces (id, name, colour, position, created_at)
-			VALUES ('shared', 'Personal', 'red', 1, 1);
+			VALUES ('shared', 'Personal', 42, 1, 1);
 		INSERT INTO bot_spaces (bot_id, space_id, joined_at) VALUES ('b1', 'shared', 1);
 		INSERT INTO conversations (id, kind, space_id, title, created_at, updated_at)
 			VALUES ('shared-chat', 'main', 'shared', 'Chat', 1, 1);
@@ -2441,7 +2450,7 @@ mod tests {
 		json!({ "subtype": "companion", "operation": "conversationUpdate", "payload": payload })
 	}
 
-	type Look = (String, String, Option<String>, Option<String>, Option<String>, i64);
+	type Look = (String, String, Option<String>, Option<String>, Option<i64>, i64);
 
 	async fn look_of(app: &App<MockRuntime>, conversation_id: &'static str) -> Look {
 		ready(&app.state::<db::DatabaseState>())
@@ -2520,7 +2529,7 @@ mod tests {
 				"kind": "topic",
 				"title": "Trip",
 				"icon": "Globe",
-				"colour": "cyan",
+				"colour": 186,
 				"companions": [{ "id": "b1", "name": "Shoto" }, { "id": "b3", "name": "Rex" }],
 				"lastMessage": null,
 				"archived": false
@@ -2531,7 +2540,7 @@ mod tests {
 			(title.as_str(), instructions.as_str(), section_id.as_deref()),
 			("Trip", "Keep it short.", Some("s1"))
 		);
-		assert_eq!((icon.as_deref(), colour.as_deref()), (Some("Globe"), Some("cyan")));
+		assert_eq!((icon.as_deref(), colour), (Some("Globe"), Some(186)));
 		let arrival = announced(&arriving);
 		assert_eq!(arrival["botId"], json!("b3"));
 		assert_eq!(arrival["conversationId"], json!("room"));
@@ -2548,7 +2557,7 @@ mod tests {
 		planted(&app, A_DRESSED_ROOM).await;
 		let host = serving(&app, "room");
 
-		host.answer(an_update(json!({ "icon": "Rocket", "colour": "red" })))
+		host.answer(an_update(json!({ "icon": "Rocket", "colour": 17 })))
 			.await
 			.expect("the look is set");
 		let retitled =
@@ -2558,7 +2567,7 @@ mod tests {
 
 		assert_eq!(
 			(&retitled["title"], &retitled["icon"], &retitled["colour"]),
-			(&json!("Trip"), &json!("Rocket"), &json!("red"))
+			(&json!("Trip"), &json!("Rocket"), &json!(17))
 		);
 		assert_eq!(
 			(&uncoloured["title"], &uncoloured["icon"], &uncoloured["colour"]),
@@ -2581,7 +2590,7 @@ mod tests {
 
 		assert_eq!(
 			(&updated["kind"], &updated["title"], &updated["icon"], &updated["colour"]),
-			(&json!("main"), &json!("Desk"), &json!("Sparkles"), &json!("red"))
+			(&json!("main"), &json!("Desk"), &json!("Sparkles"), &json!(42))
 		);
 	}
 
@@ -2679,6 +2688,7 @@ mod tests {
 			update_refused(&app, &host, "room", with(json!({ "icon": "Message" }))).await;
 		let blank = update_refused(&app, &host, "room", with(json!({ "icon": "  " }))).await;
 		let teal = update_refused(&app, &host, "room", with(json!({ "colour": "teal" }))).await;
+		let beyond = update_refused(&app, &host, "room", with(json!({ "colour": 400 }))).await;
 
 		assert_eq!(unlisted["kind"], json!("unlistedIcon"));
 		assert_eq!(unlisted["icon"], json!("Message"));
@@ -2689,8 +2699,12 @@ mod tests {
 			json!({
 				"kind": "unknownColour",
 				"colour": "teal",
-				"accepted": ["red", "yellow", "green", "cyan", "blue", "purple", "pink", "orange"]
+				"accepted": ["0 to 359"]
 			})
+		);
+		assert_eq!(
+			beyond,
+			json!({ "kind": "unknownColour", "colour": "400", "accepted": ["0 to 359"] })
 		);
 	}
 

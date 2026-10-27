@@ -2,9 +2,8 @@ use rusqlite::{params, Connection};
 
 use super::page::{listed_by_id, ListedConversation};
 use super::{
-	joined, now, refuse_blank_icon, refuse_unknown_colour, refuse_unknown_conversation,
-	refuse_unlisted_icon, unseated, write_transaction, Arrival, ConversationError,
-	ConversationsRepository,
+	joined, now, refuse_blank_icon, refuse_unknown_conversation, refuse_unlisted_icon, unseated,
+	write_transaction, Arrival, ConversationError, ConversationsRepository, Hue,
 };
 use crate::db::connection::Located;
 
@@ -12,7 +11,7 @@ use crate::db::connection::Located;
 pub struct ConversationAmendment {
 	pub title: Option<String>,
 	pub icon: Option<String>,
-	pub color: Option<Option<String>>,
+	pub color: Option<Option<Hue>>,
 	pub seated: Vec<String>,
 	pub unseated: Vec<String>,
 	pub reopened: bool,
@@ -44,7 +43,6 @@ fn amended_conversation(
 ) -> Result<Amended, ConversationError> {
 	refuse_blank_icon(amendment.icon.as_deref())?;
 	refuse_unlisted_icon(amendment.icon.as_deref(), None)?;
-	refuse_unknown_colour(amendment.color.as_ref().and_then(Option::as_deref))?;
 	let transaction = write_transaction(connection)?;
 	let written = transaction.execute(
 		"UPDATE conversations SET title = COALESCE(?2, title), icon = COALESCE(?3, icon),
@@ -56,7 +54,7 @@ fn amended_conversation(
 			amendment.title,
 			amendment.icon,
 			amendment.color.is_some(),
-			amendment.color.clone().flatten(),
+			amendment.color.flatten(),
 			now(),
 			amendment.reopened
 		],
@@ -79,20 +77,19 @@ fn amended_conversation(
 mod tests {
 	use super::*;
 	use crate::db::connection::temp_dir;
-	use crate::db::repositories::conversations::AvatarBlot;
 	use crate::db::{open, Database};
 	use crate::removed_on_drop::RemovedOnDrop;
 
 	const A_ROOM: &str = "
 		INSERT INTO spaces (id, name, colour, position, created_at)
-			VALUES ('work', 'Work', 'blue', 1, 1);
+			VALUES ('work', 'Work', 257, 1, 1);
 		INSERT INTO bots (id, name, model, created_at) VALUES
 			('b1', 'Shoto', 'sonnet', 1), ('b2', 'Ada', 'sonnet', 1), ('b3', 'Kai', 'sonnet', 1);
 		INSERT INTO bot_spaces (bot_id, space_id, joined_at) VALUES
 			('b1', 'personal', 1), ('b2', 'personal', 1), ('b3', 'work', 1);
 		INSERT INTO conversations
 			(id, kind, space_id, title, instructions, icon, color, created_at, updated_at)
-			VALUES ('room', 'topic', 'personal', 'Plans', 'Keep it short.', 'Rocket', 'red', 1, 1);
+			VALUES ('room', 'topic', 'personal', 'Plans', 'Keep it short.', 'Rocket', 42, 1, 1);
 		INSERT INTO conversation_participants (conversation_id, bot_id, role, joined_at, join_seq)
 			VALUES ('room', 'b1', 'lead', 1, 0);
 		INSERT INTO turns (id, conversation_id, seq, started_at) VALUES ('t1', 'room', 1, 5);
@@ -190,7 +187,7 @@ mod tests {
 			.amend_conversation(
 				"room".to_owned(),
 				ConversationAmendment {
-					color: Some(Some("pink".to_owned())),
+					color: Some(Hue::named("pink")),
 					seated: vec!["b1".to_owned()],
 					unseated: vec!["b2".to_owned()],
 					..an_amendment()
@@ -202,7 +199,7 @@ mod tests {
 		let room = &amended.conversation.active.conversation;
 		assert_eq!(
 			(room.title.as_str(), room.icon.as_deref(), room.color),
-			("Plans", Some("Rocket"), Some(AvatarBlot::Pink))
+			("Plans", Some("Rocket"), Hue::named("pink"))
 		);
 		assert_eq!(present(&amended.conversation), vec![("b1", "lead")]);
 		assert!(amended.arrivals.is_empty());
@@ -243,13 +240,6 @@ mod tests {
 				ConversationAmendment { icon: Some(" ".to_owned()), ..titled() },
 			)
 			.await;
-		let teal = database
-			.conversations()
-			.amend_conversation(
-				"room".to_owned(),
-				ConversationAmendment { color: Some(Some("teal".to_owned())), ..titled() },
-			)
-			.await;
 		let missing =
 			database.conversations().amend_conversation("missing".to_owned(), titled()).await;
 
@@ -259,7 +249,6 @@ mod tests {
 			"{unlisted:?}"
 		);
 		assert!(matches!(blank, Err(ConversationError::BlankIcon)), "{blank:?}");
-		assert!(matches!(teal, Err(ConversationError::UnknownColour { .. })), "{teal:?}");
 		assert!(
 			matches!(missing, Err(ConversationError::UnknownConversation { .. })),
 			"{missing:?}"

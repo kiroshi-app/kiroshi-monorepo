@@ -39,7 +39,7 @@ export const botIdentity = (
 	name: "Nyx",
 	title: "Reviewer",
 	model: "opus",
-	avatarBlot: "green",
+	avatarBlot: 132,
 	avatarImagePath: null,
 	instructions: "Answer with the file you would touch.",
 	deniedTools: [],

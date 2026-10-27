@@ -28,7 +28,7 @@ const STUDIO: JoinedSpace = {
 	name: "Studio Nord",
 	state: "online",
 	hostedBy: null,
-	colour: "purple",
+	colour: 296,
 	instanceId: "instance-of-joined-studio",
 }
 
@@ -69,7 +69,7 @@ afterEach(() => {
 const mountTintedWorkspace = async () => {
 	const store = createFakeTranscriptStore()
 	const home = await store.createSpace("Home")
-	await store.updateSpace(home.id, home.name, "cyan")
+	await store.updateSpace(home.id, home.name, 186)
 	const { queryClient } = createQueryTestWrapper()
 	const spaces = createSpacesController(store, { queryClient })
 	await spaces.load(home.id)
@@ -126,7 +126,7 @@ it("paints html with the open joined Space colour, follows its changes, and retu
 
 	expect(switchTo(joinedRowIdOf(STUDIO.id))).toEqual([tintOf("purple")])
 
-	await changeStudioColour("orange")
+	await changeStudioColour(63)
 
 	await waitFor(() => expect(tintOnRoot()).toEqual(tintOf("orange")))
 

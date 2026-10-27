@@ -371,7 +371,7 @@ mod tests {
 
 	const A_CATALOGUE: &str = "
 		INSERT INTO spaces (id, name, colour, position, created_at)
-			VALUES ('work', 'Work', 'blue', 1, 1);
+			VALUES ('work', 'Work', 257, 1, 1);
 		INSERT INTO bots (id, name, model, created_at)
 			VALUES ('b1', 'Amélie', 'sonnet', 1), ('b2', 'Basile', 'sonnet', 1);
 		INSERT INTO bot_spaces (bot_id, space_id, joined_at)
@@ -405,7 +405,7 @@ mod tests {
 
 	const A_QUIET_SPACE: &str = "
 		INSERT INTO spaces (id, name, colour, position, created_at)
-			VALUES ('lab', 'Lab', 'green', 2, 1);
+			VALUES ('lab', 'Lab', 132, 2, 1);
 		INSERT INTO bots (id, name, model, created_at) VALUES ('b9', 'Camille', 'sonnet', 1);
 		INSERT INTO bot_spaces (bot_id, space_id, joined_at) VALUES ('b9', 'lab', 1);
 		INSERT INTO conversations (id, kind, space_id, title, created_at, updated_at)
