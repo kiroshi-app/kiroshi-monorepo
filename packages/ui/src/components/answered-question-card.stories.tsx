@@ -1,9 +1,9 @@
-import type { CSSProperties } from "react"
 import { expect } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+	hueScopeOf,
 	slotIn,
 	slotsIn,
 	tokenStyleIn,
@@ -13,7 +13,6 @@ import {
 	type AnsweredQuestionAuthor,
 	AnsweredQuestionCard,
 } from "@workspace/ui/components/answered-question-card"
-import { blotTint } from "@workspace/ui/components/companion-colour"
 import type { RosterBot } from "@workspace/ui/components/roster"
 import { AssistantTurn, TurnGroup } from "@workspace/ui/components/turn"
 import { cn } from "@workspace/ui/lib/utils"
@@ -162,8 +161,7 @@ const AnsweredRun = ({
 	width = "max-w-2xl",
 }: AnsweredRunProps) => (
 	<div
-		data-space-tint="green"
-		style={{ "--space-tint": blotTint("green") } as CSSProperties}
+		{...hueScopeOf("green")}
 		className={cn("mx-auto flex flex-col px-6", width)}
 	>
 		<TurnGroup>
@@ -231,7 +229,7 @@ const spokenTextOf = (root: HTMLElement) => {
 }
 
 const spaceOf = (root: HTMLElement) =>
-	root.querySelector<HTMLElement>("[data-space-tint]") as HTMLElement
+	root.querySelector<HTMLElement>("[data-hue]") as HTMLElement
 
 const expectRowsPaintedFromSpace = async (root: HTMLElement) => {
 	const spaceBubble = tokenStyleIn(

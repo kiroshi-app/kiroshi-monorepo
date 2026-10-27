@@ -18,7 +18,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The mark a space is recognised by: one filled dot, painted in one of the eight tints a companion's blot is painted in — the same eight, so a space and the companions living in it read as one family. A space carrying no colour gets an empty well instead, which is what the dot draws when no tint is given. It draws nothing but colour, which is why it is decorative to a screen reader: whatever names the space names it in words next to the dot. Reach for it wherever a space has to be told apart at a glance — the breadcrumb of its settings, the row that chooses its tint.",
+					"The mark a space is recognised by: one dot filled with the bubble tone of the space hue and edged in its accent, drawn from one of the eight named hues a companion is painted in, so a space and the companions living in it read as one family. A space carrying no colour gets an empty well instead, which is what the dot draws when no tint is given. It draws nothing but colour, which is why it is decorative to a screen reader: whatever names the space names it in words next to the dot. Reach for it wherever a space has to be told apart at a glance — the breadcrumb of its settings, the row that chooses its tint.",
 			},
 		},
 	},

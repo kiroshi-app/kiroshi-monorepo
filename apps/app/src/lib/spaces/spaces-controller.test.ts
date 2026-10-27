@@ -109,12 +109,12 @@ describe("createSpacesController", () => {
 
 		expect(controller.getState().spaces[0]).toMatchObject({
 			name: "Vocca",
-			colour: "cyan",
+			colour: 186,
 		})
 		await vi.waitFor(async () =>
 			expect((await store.spaces())[0]).toMatchObject({
 				name: "Vocca",
-				colour: "cyan",
+				colour: 186,
 			}),
 		)
 	})

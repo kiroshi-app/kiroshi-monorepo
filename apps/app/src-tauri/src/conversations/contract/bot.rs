@@ -5,62 +5,7 @@ use serde::{Deserialize, Serialize};
 use super::room::drawable_avatar;
 use crate::bundles;
 use crate::db::repositories::conversations;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub enum AvatarBlot {
-	Red,
-	Yellow,
-	Green,
-	Cyan,
-	Blue,
-	Purple,
-	Pink,
-	Orange,
-}
-
-impl AvatarBlot {
-	pub const ALL: &'static [AvatarBlot] = &[
-		AvatarBlot::Red,
-		AvatarBlot::Yellow,
-		AvatarBlot::Green,
-		AvatarBlot::Cyan,
-		AvatarBlot::Blue,
-		AvatarBlot::Purple,
-		AvatarBlot::Pink,
-		AvatarBlot::Orange,
-	];
-}
-
-impl From<conversations::AvatarBlot> for AvatarBlot {
-	fn from(blot: conversations::AvatarBlot) -> Self {
-		match blot {
-			conversations::AvatarBlot::Red => AvatarBlot::Red,
-			conversations::AvatarBlot::Yellow => AvatarBlot::Yellow,
-			conversations::AvatarBlot::Green => AvatarBlot::Green,
-			conversations::AvatarBlot::Cyan => AvatarBlot::Cyan,
-			conversations::AvatarBlot::Blue => AvatarBlot::Blue,
-			conversations::AvatarBlot::Purple => AvatarBlot::Purple,
-			conversations::AvatarBlot::Pink => AvatarBlot::Pink,
-			conversations::AvatarBlot::Orange => AvatarBlot::Orange,
-		}
-	}
-}
-
-impl From<AvatarBlot> for conversations::AvatarBlot {
-	fn from(blot: AvatarBlot) -> Self {
-		match blot {
-			AvatarBlot::Red => conversations::AvatarBlot::Red,
-			AvatarBlot::Yellow => conversations::AvatarBlot::Yellow,
-			AvatarBlot::Green => conversations::AvatarBlot::Green,
-			AvatarBlot::Cyan => conversations::AvatarBlot::Cyan,
-			AvatarBlot::Blue => conversations::AvatarBlot::Blue,
-			AvatarBlot::Purple => conversations::AvatarBlot::Purple,
-			AvatarBlot::Pink => conversations::AvatarBlot::Pink,
-			AvatarBlot::Orange => conversations::AvatarBlot::Orange,
-		}
-	}
-}
+pub use crate::db::repositories::conversations::Hue;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
@@ -71,7 +16,7 @@ pub struct Bot {
 	pub name: String,
 	pub title: String,
 	pub model: String,
-	pub avatar_blot: Option<AvatarBlot>,
+	pub avatar_blot: Option<Hue>,
 	pub avatar_image_path: Option<String>,
 	pub instructions: String,
 	pub memory: String,
@@ -93,8 +38,7 @@ impl Bot {
 		let denied_tools = written
 			.as_ref()
 			.map_or_else(|| bot.denied_tools.clone(), |written| written.denied_tools.clone());
-		let avatar_blot =
-			written.as_ref().map_or(bot.avatar_blot, |written| written.blot).map(Into::into);
+		let avatar_blot = written.as_ref().map_or(bot.avatar_blot, |written| written.blot);
 		let output_style = written
 			.as_ref()
 			.map_or_else(default_output_style, |written| written.output_style.clone());
@@ -135,7 +79,7 @@ pub struct BotIdentity {
 	pub name: String,
 	pub title: String,
 	pub model: String,
-	pub avatar_blot: Option<AvatarBlot>,
+	pub avatar_blot: Option<Hue>,
 	pub avatar_image_path: Option<String>,
 	pub instructions: String,
 	pub denied_tools: Vec<String>,
@@ -157,7 +101,7 @@ impl From<BotIdentity> for conversations::BotIdentity {
 			name: identity.name,
 			title: identity.title,
 			model: identity.model,
-			avatar_blot: identity.avatar_blot.map(Into::into),
+			avatar_blot: identity.avatar_blot,
 			avatar_image_path: identity.avatar_image_path,
 			instructions: identity.instructions,
 			denied_tools: identity.denied_tools,
@@ -350,7 +294,7 @@ mod tests {
 				name: "Claude".into(),
 				title: "Reviewer".into(),
 				model: "opus".into(),
-				avatar_blot: Some(AvatarBlot::Red),
+				avatar_blot: Hue::named("red"),
 				avatar_image_path: Some("/pictures/owl.png".into()),
 				instructions: "Answer briefly.".into(),
 				memory: "They bake on Sundays.".into(),
@@ -373,7 +317,7 @@ mod tests {
 				"name": "Claude",
 				"title": "Reviewer",
 				"model": "opus",
-				"avatarBlot": "red",
+				"avatarBlot": 42,
 				"avatarImagePath": "/pictures/owl.png",
 				"instructions": "Answer briefly.",
 				"memory": "They bake on Sundays.",
@@ -442,24 +386,17 @@ mod tests {
 	}
 
 	#[test]
-	fn every_blot_crosses_as_one_word_and_nothing_else_parses() {
-		for (blot, wire) in [
-			(AvatarBlot::Red, "red"),
-			(AvatarBlot::Yellow, "yellow"),
-			(AvatarBlot::Green, "green"),
-			(AvatarBlot::Cyan, "cyan"),
-			(AvatarBlot::Blue, "blue"),
-			(AvatarBlot::Purple, "purple"),
-			(AvatarBlot::Pink, "pink"),
-			(AvatarBlot::Orange, "orange"),
-		] {
-			assert_crosses_as(blot, json!(wire));
+	fn a_blot_crosses_as_a_bare_hue_and_nothing_outside_0_to_359_parses() {
+		for hue in [0, 257, 359] {
+			assert_crosses_as(Hue::new(hue), json!(hue));
 		}
-		assert_crosses_as(None::<AvatarBlot>, json!(null));
-		assert!(
-			serde_json::from_value::<AvatarBlot>(json!("chartreuse")).is_err(),
-			"a colour outside the palette parsed at the boundary"
-		);
+		assert_crosses_as(None::<Hue>, json!(null));
+		for refused in [json!(360), json!(-1), json!("purple")] {
+			assert!(
+				serde_json::from_value::<Hue>(refused.clone()).is_err(),
+				"{refused} parsed as a hue at the boundary"
+			);
+		}
 	}
 
 	#[test]
@@ -585,17 +522,17 @@ mod tests {
 	fn a_bot_is_reported_on_the_tint_its_bundle_names() {
 		let root = a_bundle_root("tint");
 		let marked = conversations::Bot {
-			avatar_blot: Some(conversations::AvatarBlot::Purple),
+			avatar_blot: conversations::Hue::named("purple"),
 			..a_stored_bot("sonnet")
 		};
 		crate::bundles::write(&root, &marked).expect("the bundle is written");
 		let stored_pink = || conversations::Bot {
-			avatar_blot: Some(conversations::AvatarBlot::Pink),
+			avatar_blot: conversations::Hue::named("pink"),
 			..a_stored_bot("sonnet")
 		};
 
-		assert_eq!(Bot::of(stored_pink(), None, Some(&root)).avatar_blot, Some(AvatarBlot::Purple));
-		assert_eq!(Bot::of(stored_pink(), None, None).avatar_blot, Some(AvatarBlot::Pink));
+		assert_eq!(Bot::of(stored_pink(), None, Some(&root)).avatar_blot, Hue::named("purple"));
+		assert_eq!(Bot::of(stored_pink(), None, None).avatar_blot, Hue::named("pink"));
 
 		crate::bundles::write(&root, &a_stored_bot("sonnet")).expect("the bundle is rewritten");
 		assert_eq!(Bot::of(stored_pink(), None, Some(&root)).avatar_blot, None);

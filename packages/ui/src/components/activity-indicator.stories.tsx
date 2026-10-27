@@ -6,7 +6,7 @@ import {
 	botIdentityAvatars,
 	companionGlyphOf,
 	companionGlyphs,
-	companionTintOf,
+	companionHueOf,
 	expectCompanionPictureShape,
 	slotIn,
 	slotsIn,
@@ -16,7 +16,10 @@ import {
 	ActivityIndicator,
 	type ActivityIndicatorKind,
 } from "@workspace/ui/components/activity-indicator"
-import { BLOT_TINTS } from "@workspace/ui/components/companion-colour"
+import {
+	BLOT_HUES,
+	BLOT_TINTS,
+} from "@workspace/ui/components/companion-colour"
 import { MarkProvider } from "@workspace/ui/components/mark-context"
 import { TURN_AVATAR_SIZE, UserTurn } from "@workspace/ui/components/turn"
 import { Button } from "@workspace/ui/components/ui/button"
@@ -248,10 +251,10 @@ export const Blot = meta.story({
 	play: async ({ canvasElement }) => {
 		const [bare, ...tinted] = botIdentityAvatars(canvasElement)
 
-		await expect(companionTintOf(companionGlyphOf(bare))).toBe("")
+		await expect(companionHueOf(companionGlyphOf(bare))).toBeUndefined()
 		for (const avatar of tinted) {
-			await expect(companionTintOf(companionGlyphOf(avatar))).toBe(
-				"var(--bot-blot-blue)",
+			await expect(companionHueOf(companionGlyphOf(avatar))).toBe(
+				BLOT_HUES.blue,
 			)
 		}
 	},
@@ -597,7 +600,7 @@ export const Marked = meta.story({
 			await expect(glyph.getAttribute("aria-label")).toBe(
 				thinking.getAttribute("aria-label"),
 			)
-			await expect(companionTintOf(glyph)).toBe(companionTintOf(thinking))
+			await expect(companionHueOf(glyph)).toBe(companionHueOf(thinking))
 		}
 	},
 })

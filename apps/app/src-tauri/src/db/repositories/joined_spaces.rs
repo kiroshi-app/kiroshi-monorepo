@@ -2,10 +2,10 @@ use std::sync::LazyLock;
 
 use rusqlite::types::Type;
 use rusqlite::{Connection, TransactionBehavior};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 
-use super::conversations::AvatarBlot;
+use super::conversations::Hue;
 use super::settings::Settings;
 use crate::db::{Access, DatabaseError};
 
@@ -36,13 +36,8 @@ pub struct HostListing {
 	pub host_name: Option<String>,
 	#[serde(default, skip_serializing_if = "Option::is_none")]
 	pub host_email: Option<String>,
-	#[serde(
-		default,
-		skip_serializing_if = "Option::is_none",
-		serialize_with = "colour_named",
-		deserialize_with = "known_colour"
-	)]
-	pub colour: Option<AvatarBlot>,
+	#[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "known_colour")]
+	pub colour: Option<Hue>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -176,18 +171,9 @@ fn write_in(connection: &Connection, joined: &[JoinedSpace]) -> Result<(), Datab
 	SETTINGS.write(connection, None, JOINED_SPACES_KEY, &stored)
 }
 
-fn colour_named<S: Serializer>(
-	colour: &Option<AvatarBlot>,
-	serializer: S,
-) -> Result<S::Ok, S::Error> {
-	colour.map(AvatarBlot::named).serialize(serializer)
-}
-
-fn known_colour<'de, D: Deserializer<'de>>(
-	deserializer: D,
-) -> Result<Option<AvatarBlot>, D::Error> {
-	let named = Option::<Value>::deserialize(deserializer)?;
-	Ok(named.as_ref().and_then(Value::as_str).and_then(AvatarBlot::parse))
+fn known_colour<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<Hue>, D::Error> {
+	let listed = Option::<Value>::deserialize(deserializer)?;
+	Ok(listed.as_ref().and_then(Hue::of_json))
 }
 
 fn unreadable_list() -> DatabaseError {
@@ -270,7 +256,7 @@ mod tests {
 		let listing = HostListing {
 			host_name: Some("Ann".to_owned()),
 			host_email: Some("ann@example.com".to_owned()),
-			colour: Some(AvatarBlot::Cyan),
+			colour: Hue::named("cyan"),
 		};
 		let listed = JoinedSpace { listing: listing.clone(), ..a_relay_space("x", "instance-1") };
 
@@ -287,13 +273,28 @@ mod tests {
 		assert_eq!(joined.listing, listing);
 		assert_eq!(
 			(&raw[0]["hostName"], &raw[0]["hostEmail"], &raw[0]["colour"]),
-			(&Value::from("Ann"), &Value::from("ann@example.com"), &Value::from("cyan"))
+			(&Value::from("Ann"), &Value::from("ann@example.com"), &Value::from(186))
 		);
 		assert_eq!(cleared.listing, HostListing::default());
 		assert_eq!(
 			repository.list().await.expect("the unknown colour reads")[0].listing,
 			HostListing { host_name: Some("Ann".to_owned()), host_email: None, colour: None }
 		);
+	}
+
+	#[tokio::test]
+	async fn a_listing_from_an_older_host_naming_one_of_the_eight_reads_the_hue_of_that_name() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		write_raw(
+			&database,
+			r#"[{"id":"relay","instanceId":"instance-1","remoteSpaceId":null,"name":"n","colour":"purple"}]"#.to_owned(),
+		)
+		.await;
+
+		let listed = database.joined_spaces().list().await.expect("the named colour reads");
+
+		assert_eq!(listed[0].listing.colour.map(Hue::value), Some(296));
 	}
 
 	#[tokio::test]

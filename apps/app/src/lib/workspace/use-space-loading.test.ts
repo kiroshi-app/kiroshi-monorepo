@@ -31,7 +31,7 @@ const HOST_PERSONAL: JoinedSpace = {
 	name: "Personal",
 	state: "online",
 	hostedBy: null,
-	colour: "orange",
+	colour: 63,
 	instanceId: "instance-of-joined-personal",
 }
 

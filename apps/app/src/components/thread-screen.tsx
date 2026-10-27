@@ -157,6 +157,7 @@ import {
 	useThreadRoster,
 } from "@/lib/chat/use-thread-roster"
 import type { WorkingState } from "@/lib/chat/working-kind"
+import { presetOfHue } from "@/lib/colour/hue-shim"
 import {
 	type PlacedArrival,
 	type PlacedBySeq,
@@ -185,7 +186,10 @@ import {
 	useSuggestedBots,
 } from "@/lib/conversations/use-conversation-seating"
 import type { FailureCorrelation } from "@/lib/failure-report"
-import type { OpenMission } from "@/lib/missions/mission-actions"
+import type {
+	OpenMission,
+	OpenMissionInNewTab,
+} from "@/lib/missions/mission-actions"
 import type { Mission } from "@/lib/missions/mission-contract"
 import type { SummonedMissionState } from "@/lib/missions/mission-summons"
 import { toMissionFace } from "@/lib/missions/mission-thread-model"
@@ -225,6 +229,7 @@ import {
 	OpenJoinedHostContext,
 	spaceAccessOf,
 } from "@/lib/spaces/open-joined-host"
+import { opensInNewTab } from "@/lib/tabs/new-tab-clicks"
 
 const THREAD_TRANSCRIPT_SKELETON = <ThreadTranscriptSkeleton />
 
@@ -406,7 +411,11 @@ const ThreadHeader = ({
 			leading={
 				thread.kind === "bot" ? (
 					<HeaderIdentityButton
-						blot={thread.bot.avatarBlot ?? undefined}
+						blot={
+							thread.bot.avatarBlot === null
+								? undefined
+								: presetOfHue(thread.bot.avatarBlot)
+						}
 						connection={thread.state.connection}
 						image={botImage}
 						kind={botWork?.kind}
@@ -587,7 +596,11 @@ const ThreadEmptyState = ({
 
 	return status ? (
 		<ChatEmptyState
-			blot={thread.bot.avatarBlot ?? undefined}
+			blot={
+				thread.bot.avatarBlot === null
+					? undefined
+					: presetOfHue(thread.bot.avatarBlot)
+			}
 			image={botImage}
 			name={thread.bot.name}
 			onOpenSettings={thread.onToggleSettings}
@@ -937,16 +950,19 @@ type MissionCardRowsProps = {
 	liveMissionIds: LiveMissionIds
 	now: number
 	onOpen: OpenMission
+	onOpenInNewTab: OpenMissionInNewTab
 	wrap: MissionCardWrap
 }
 
 type MissionCardRowRead = MissionCardRead & {
 	onOpen: OpenMission
+	onOpenInNewTab: OpenMissionInNewTab
 	wrap: MissionCardWrap
 }
 
 const toMissionCardRow = ({
 	onOpen,
+	onOpenInNewTab,
 	wrap,
 	...read
 }: MissionCardRowRead): TranscriptItem => ({
@@ -954,7 +970,9 @@ const toMissionCardRow = ({
 	render: () => (
 		<MissionTurn
 			mission={toMissionCard(read)}
-			onOpen={(missionId) => onOpen(missionId)}
+			onOpen={(missionId, modifiers) =>
+				opensInNewTab(modifiers) ? onOpenInNewTab(missionId) : onOpen(missionId)
+			}
 			wrap={wrap}
 		/>
 	),
@@ -967,6 +985,7 @@ const missionCardRowsAfter = ({
 	liveMissionIds,
 	now,
 	onOpen,
+	onOpenInNewTab,
 	wrap,
 }: MissionCardRowsProps): RowsAfterRun =>
 	rowsPlacedAfter(placed, ({ mission }) => [
@@ -978,6 +997,7 @@ const missionCardRowsAfter = ({
 			isWorking: liveMissionIds.has(mission.id),
 			now,
 			onOpen,
+			onOpenInNewTab,
 			wrap,
 		}),
 	])
@@ -1221,6 +1241,7 @@ type ThreadViewProps = {
 	onboarding?: Onboarding
 	signIn?: SignIn
 	onOpenMission: OpenMission
+	onOpenMissionInNewTab: OpenMissionInNewTab
 }
 
 const useThreadSeats = ({
@@ -1524,7 +1545,14 @@ const useThreadActions = (
 type ThreadActions = ReturnType<typeof useThreadActions>
 
 const threadRowsOf = (
-	{ thread, bots: known, onboarding, signIn, onOpenMission }: ThreadViewProps,
+	{
+		thread,
+		bots: known,
+		onboarding,
+		signIn,
+		onOpenMission,
+		onOpenMissionInNewTab,
+	}: ThreadViewProps,
 	seats: ThreadSeats,
 	annotations: ThreadAnnotations,
 	actions: ThreadActions,
@@ -1603,6 +1631,7 @@ const threadRowsOf = (
 				liveMissionIds,
 				now: clock,
 				onOpen: onOpenMission,
+				onOpenInNewTab: onOpenMissionInNewTab,
 				wrap: wrapMissionCard,
 				placed: placeMissions({
 					hasOlder: state.hasOlder,
@@ -1670,7 +1699,13 @@ const askerNameOf = ({ askerBotId, authors, botFace }: AskerSource) =>
 	(askerBotId ? authors.get(askerBotId)?.name : undefined) ?? botFace?.name
 
 function ThreadView(props: ThreadViewProps) {
-	const { activityPanel, thread, bots: known, onOpenMission } = props
+	const {
+		activityPanel,
+		thread,
+		bots: known,
+		onOpenMission,
+		onOpenMissionInNewTab,
+	} = props
 	const view = useThreadView(props)
 	const joinedHost = useContext(OpenJoinedHostContext)
 	const departure = joinedHost?.departure
@@ -1827,6 +1862,7 @@ function ThreadView(props: ThreadViewProps) {
 				liveMissionIds={view.liveMissionIds}
 				missions={view.missions}
 				onOpenMission={onOpenMission}
+				onOpenMissionInNewTab={onOpenMissionInNewTab}
 				wrapMissionCard={view.wrapMissionCard}
 			>
 				{layout}
@@ -1848,6 +1884,7 @@ type ThreadScreenProps = {
 	onboarding?: Onboarding
 	signIn?: SignIn
 	onOpenMission: OpenMission
+	onOpenMissionInNewTab: OpenMissionInNewTab
 }
 
 type ConversationThreadViewProps = Omit<ThreadScreenProps, "thread"> & {
@@ -1864,6 +1901,7 @@ function ConversationThreadView({
 	landings,
 	readerName,
 	onOpenMission,
+	onOpenMissionInNewTab,
 	spaceId,
 }: ConversationThreadViewProps) {
 	const { state, controller } = useConversation(
@@ -1881,6 +1919,7 @@ function ConversationThreadView({
 			drafts={drafts}
 			landings={landings}
 			onOpenMission={onOpenMission}
+			onOpenMissionInNewTab={onOpenMissionInNewTab}
 			readerName={readerName}
 			runtimes={runtimes}
 			spaceId={spaceId}
@@ -1905,6 +1944,7 @@ function BotThreadView({
 	onboarding,
 	signIn,
 	onOpenMission,
+	onOpenMissionInNewTab,
 	spaceId,
 }: BotThreadViewProps) {
 	const { controller } = thread.chat
@@ -1924,6 +1964,7 @@ function BotThreadView({
 			landings={landings}
 			onboarding={onboarding}
 			onOpenMission={onOpenMission}
+			onOpenMissionInNewTab={onOpenMissionInNewTab}
 			readerName={readerName}
 			runtimes={runtimes}
 			signIn={signIn}
@@ -1945,6 +1986,7 @@ export function ThreadScreen({
 	onboarding,
 	signIn,
 	onOpenMission,
+	onOpenMissionInNewTab,
 	spaceId,
 }: ThreadScreenProps) {
 	if (thread.kind === "conversation") {
@@ -1957,6 +1999,7 @@ export function ThreadScreen({
 				key={thread.conversation.id}
 				landings={landings}
 				onOpenMission={onOpenMission}
+				onOpenMissionInNewTab={onOpenMissionInNewTab}
 				readerName={readerName}
 				runtimes={runtimes}
 				spaceId={spaceId}
@@ -1975,6 +2018,7 @@ export function ThreadScreen({
 			landings={landings}
 			onboarding={onboarding}
 			onOpenMission={onOpenMission}
+			onOpenMissionInNewTab={onOpenMissionInNewTab}
 			readerName={readerName}
 			runtimes={runtimes}
 			signIn={signIn}

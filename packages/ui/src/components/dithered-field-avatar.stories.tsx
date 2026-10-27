@@ -6,7 +6,7 @@ import {
 } from "@workspace/storybook/companion-states-roster"
 import preview from "@workspace/storybook/preview"
 import { drawingOf, recordLitCells } from "@workspace/storybook/story-utils"
-import { BLOT_TINTS } from "@workspace/ui/components/companion-colour"
+import { BLOT_TINTS, hueOf } from "@workspace/ui/components/companion-colour"
 import { DitheredFieldAvatar } from "@workspace/ui/components/dithered-field-avatar"
 
 const NAMES = [
@@ -46,7 +46,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"A companion drawn as a dithered field that fills the whole rounded tile: square cells in the companion colour on the secondary surface tinted with that same colour at the avatar ground strength, so the ground follows the theme, no outline, the shape carried by cell density alone. Every companion shares one screen: each cell is a square of one fixed size, its tone carried by opacity in two steps through error diffusion, so the tile reads in three tones of one hue. The density field is the companion's ASCII glyph silhouette, blurred, over a seeded low noise floor, all seeded on the name. The grid holds the same cell count at every size. At work the field drifts and the state motion passes through it; at rest, and under reduced motion, it holds still.",
+					"A companion drawn as a dithered field that fills the whole rounded tile: square cells in the avatar ink tone of the companion hue on the avatar ground tone of that same hue, both read from the tone table per theme, no outline, the shape carried by cell density alone. Every companion shares one screen: each cell is a square of one fixed size, its tone carried by opacity in two steps through error diffusion, so the tile reads in three tones of one hue. The density field is the companion's ASCII glyph silhouette, blurred, over a seeded low noise floor, all seeded on the name. The grid holds the same cell count at every size. At work the field drifts and the state motion passes through it; at rest, and under reduced motion, it holds still.",
 			},
 		},
 	},
@@ -62,7 +62,11 @@ export const OneScreenForEveryCompanion = meta.story({
 		<div aria-label="Companions" className="flex flex-wrap gap-4" role="group">
 			{NAMES.map((name, index) => (
 				<div className="flex flex-col items-center gap-2" key={name}>
-					<DitheredFieldAvatar name={name} size={40} tint={COLOURS[index]} />
+					<DitheredFieldAvatar
+						hue={hueOf(COLOURS[index])}
+						name={name}
+						size={40}
+					/>
 					<span className="text-muted-foreground text-xs">{name}</span>
 				</div>
 			))}
@@ -140,7 +144,7 @@ export const OneGlyphInEveryColour = meta.story({
 				<DitheredFieldAvatar
 					key={tint ?? "none"}
 					name={COMPARED_NAME}
-					tint={tint}
+					hue={hueOf(tint)}
 				/>
 			))}
 		</div>
@@ -162,7 +166,11 @@ export const GroundInEveryColour = meta.story({
 		<div aria-label="Grounds" className="flex flex-wrap gap-4" role="group">
 			{COLOURS.map((tint) => (
 				<div className="flex flex-col items-center gap-2" key={tint ?? "none"}>
-					<DitheredFieldAvatar name={COMPARED_NAME} size={96} tint={tint} />
+					<DitheredFieldAvatar
+						hue={hueOf(tint)}
+						name={COMPARED_NAME}
+						size={96}
+					/>
 					<span className="text-muted-foreground text-xs">
 						{tint ?? "untinted"}
 					</span>
@@ -174,7 +182,7 @@ export const GroundInEveryColour = meta.story({
 		docs: {
 			description: {
 				story:
-					"The ground of every colour at 96 px, light above and dark below: the secondary surface mixed with the companion colour at the avatar ground strength, the uncoloured one mixed with the Kiroshi blue. Check that each ground carries a faint cast of its hue, that no dark tile sits on a near-white ground, and that the cells hold on their ground in both themes.",
+					"The ground of every colour at 96 px, light above and dark below: the avatar ground tone of the companion hue, the uncoloured one the secondary surface mixed with the Kiroshi blue. Check that each ground carries a faint cast of its hue, that no dark tile sits on a near-white ground, and that the cells hold on their ground in both themes.",
 			},
 		},
 	},

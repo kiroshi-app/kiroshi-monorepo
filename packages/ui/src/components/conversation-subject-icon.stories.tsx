@@ -8,9 +8,12 @@ import {
 	slotIn,
 	slotsIn,
 } from "@workspace/storybook/story-utils"
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { ConversationSubjectIcon } from "@workspace/ui/components/conversation-subject-icon"
 import type { GlazeTheme } from "@workspace/ui/components/glaze-border"
+import { hueTone } from "@workspace/ui/components/hue-palette"
 import { ConversationIcons } from "@workspace/ui/components/icons"
+import { schemeOf } from "@workspace/ui/hooks/use-color-scheme"
 
 const meta = preview.meta({
 	title: "Navigation/ConversationSubjectIcon",
@@ -34,10 +37,16 @@ const resolvedColourOf = (token: string, host: Element) => {
 	return colour
 }
 
-const expectPair = async (canvasElement: HTMLElement, token: string) => {
+const expectPair = async (canvasElement: HTMLElement, hue?: number) => {
 	const icon = slotIn(canvasElement, "conversation-subject-icon")
 	const cell = slotIn(icon, "outlined-hexagon-face")
+	const token =
+		hue === undefined
+			? "--conversation-icon"
+			: `--hue-${schemeOf(icon)}-conversation-icon`
 	await expect(icon).toHaveAttribute("aria-hidden", "true")
+	if (hue !== undefined)
+		await expect(icon).toHaveAttribute("data-hue", String(hue))
 	await expect(getComputedStyle(cell).fill).toBe(resolvedColourOf(token, icon))
 	await expect(getComputedStyle(icon).color).toBe(
 		resolvedColourOf(`${token}-foreground`, icon),
@@ -55,7 +64,7 @@ const expectPair = async (canvasElement: HTMLElement, token: string) => {
 
 export const NoColour = meta.story({
 	play: async ({ canvasElement }) => {
-		await expectPair(canvasElement, "--conversation-icon")
+		await expectPair(canvasElement)
 		await expect(
 			glyphIn(canvasElement, ConversationIcons.MessageSquare),
 		).not.toBeNull()
@@ -64,56 +73,51 @@ export const NoColour = meta.story({
 
 export const Red = meta.story({
 	args: { color: "red" },
-	play: async ({ canvasElement }) =>
-		expectPair(canvasElement, "--conversation-icon-red"),
+	play: async ({ canvasElement }) => expectPair(canvasElement, BLOT_HUES.red),
 })
 
 export const Yellow = meta.story({
 	args: { color: "yellow" },
 	play: async ({ canvasElement }) =>
-		expectPair(canvasElement, "--conversation-icon-yellow"),
+		expectPair(canvasElement, BLOT_HUES.yellow),
 })
 
 export const Green = meta.story({
 	args: { color: "green" },
-	play: async ({ canvasElement }) =>
-		expectPair(canvasElement, "--conversation-icon-green"),
+	play: async ({ canvasElement }) => expectPair(canvasElement, BLOT_HUES.green),
 })
 
 export const Cyan = meta.story({
 	args: { color: "cyan" },
-	play: async ({ canvasElement }) =>
-		expectPair(canvasElement, "--conversation-icon-cyan"),
+	play: async ({ canvasElement }) => expectPair(canvasElement, BLOT_HUES.cyan),
 })
 
 export const Blue = meta.story({
 	args: { color: "blue" },
-	play: async ({ canvasElement }) =>
-		expectPair(canvasElement, "--conversation-icon-blue"),
+	play: async ({ canvasElement }) => expectPair(canvasElement, BLOT_HUES.blue),
 })
 
 export const Purple = meta.story({
 	args: { color: "purple" },
 	play: async ({ canvasElement }) =>
-		expectPair(canvasElement, "--conversation-icon-purple"),
+		expectPair(canvasElement, BLOT_HUES.purple),
 })
 
 export const Pink = meta.story({
 	args: { color: "pink" },
-	play: async ({ canvasElement }) =>
-		expectPair(canvasElement, "--conversation-icon-pink"),
+	play: async ({ canvasElement }) => expectPair(canvasElement, BLOT_HUES.pink),
 })
 
 export const Orange = meta.story({
 	args: { color: "orange" },
 	play: async ({ canvasElement }) =>
-		expectPair(canvasElement, "--conversation-icon-orange"),
+		expectPair(canvasElement, BLOT_HUES.orange),
 })
 
 export const RedShieldKey = meta.story({
 	args: { color: "red", icon: "ShieldKey" },
 	play: async ({ canvasElement }) => {
-		await expectPair(canvasElement, "--conversation-icon-red")
+		await expectPair(canvasElement, BLOT_HUES.red)
 		await expect(
 			glyphIn(canvasElement, ConversationIcons.ShieldKey),
 		).not.toBeNull()
@@ -130,6 +134,9 @@ export const UnknownIconFallsBackToMessageSquare = meta.story({
 	},
 })
 
+const rgbOf = (hex: string) =>
+	`rgb(${[1, 3, 5].map((offset) => Number.parseInt(hex.slice(offset, offset + 2), 16)).join(", ")})`
+
 export const RedShieldKeyDark = meta.story({
 	args: { color: "red", icon: "ShieldKey" },
 	globals: { theme: "dark" },
@@ -137,8 +144,10 @@ export const RedShieldKeyDark = meta.story({
 		const icon = slotIn(canvasElement, "conversation-subject-icon")
 		await expect(
 			getComputedStyle(slotIn(icon, "outlined-hexagon-face")).fill,
-		).toBe("rgb(86, 61, 51)")
-		await expect(getComputedStyle(icon).color).toBe("rgb(226, 177, 158)")
+		).toBe(rgbOf(hueTone(BLOT_HUES.red, "dark", "conversation-icon").hex))
+		await expect(getComputedStyle(icon).color).toBe(
+			rgbOf(hueTone(BLOT_HUES.red, "dark", "conversation-icon-foreground").hex),
+		)
 	},
 })
 

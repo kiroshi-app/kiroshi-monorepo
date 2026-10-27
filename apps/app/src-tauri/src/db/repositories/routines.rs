@@ -1644,7 +1644,7 @@ mod tests {
 
 	const ROUTINES_IN_TWO_SPACES: &str = "
 		INSERT INTO spaces (id, name, colour, position, created_at)
-			VALUES ('work', 'Work', 'blue', 1, 1), ('empty', 'Empty', 'green', 2, 1);
+			VALUES ('work', 'Work', 257, 1, 1), ('empty', 'Empty', 132, 2, 1);
 		INSERT INTO bots (id, name, model, created_at) VALUES ('b2', 'Second', 'sonnet', 1);
 		INSERT INTO bot_spaces (bot_id, space_id, joined_at) VALUES ('b2', 'work', 1);
 		INSERT INTO conversations (id, kind, space_id, title, created_at, updated_at)

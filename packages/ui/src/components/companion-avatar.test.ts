@@ -8,7 +8,10 @@ import {
 	type CompanionAvatarInput,
 	companionAvatar,
 } from "@workspace/ui/components/companion-avatar"
-import { BLOT_TINTS } from "@workspace/ui/components/companion-colour"
+import {
+	BLOT_HUES,
+	BLOT_TINTS,
+} from "@workspace/ui/components/companion-colour"
 import { hexagonCorners } from "@workspace/ui/components/field-grid"
 
 const FIXTURE = "./companion-avatar.fixture.jsonl"
@@ -44,11 +47,11 @@ const NAMES = [
 ]
 
 const FIXTURE_INPUTS: CompanionAvatarInput[] = NAMES.flatMap((name, index) =>
-	[undefined, BLOT_TINTS[index % BLOT_TINTS.length]].flatMap((tint) =>
+	[undefined, BLOT_HUES[BLOT_TINTS[index % BLOT_TINTS.length]]].flatMap((hue) =>
 		(["idle", "working"] as const).flatMap((state) =>
 			(["light", "dark"] as const).map((theme) => ({
 				name,
-				...(tint && { tint }),
+				...(hue !== undefined && { hue }),
 				state,
 				time: state === "idle" ? 0 : WORKING_FRAME,
 				theme,

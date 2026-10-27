@@ -16,6 +16,7 @@ import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import { NoticeSurface } from "@workspace/ui/components/notice-surface"
 import { MembersPanel } from "@workspace/ui/components/space-settings-dialog/members-panel"
 import { COMPANIONS_ENTRY } from "@workspace/ui/components/space-settings-dialog/use-space-settings"
+import { NO_CLICK_MODIFIERS } from "@workspace/ui/lib/click-modifiers"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { SpaceSettingsScreen } from "@/components/space-settings-screen"
@@ -103,7 +104,7 @@ const GARAGE: JoinedSpace = {
 	name: "Garage",
 	state: "online",
 	hostedBy: null,
-	colour: "green",
+	colour: 132,
 	instanceId: "instance-of-joined-garage",
 }
 
@@ -177,6 +178,7 @@ type SpaceSettingsHarnessProps = Gear & {
 	openedTab?: string
 	openAccountSettings?: () => void
 	bots?: Bot[]
+	showEntry?: SettingsNavigation["showEntry"]
 }
 
 const SpaceSettingsHarness = ({
@@ -188,6 +190,7 @@ const SpaceSettingsHarness = ({
 	openedTab,
 	openAccountSettings,
 	bots = [],
+	showEntry,
 }: SpaceSettingsHarnessProps) => {
 	const [isOpen, setIsOpen] = useState(true)
 	const [search, setSearch] = useState<SettingsSearch>({ entry: openedTab })
@@ -212,7 +215,7 @@ const SpaceSettingsHarness = ({
 		backToUserSettings: () => setIsOpen(false),
 		openConversations: () => setIsOpen(false),
 		openCompanionSettings: vi.fn(),
-		showEntry: (entry: string) => setSearch({ entry }),
+		showEntry: showEntry ?? ((entry: string) => setSearch({ entry })),
 	} as unknown as SettingsNavigation
 	const panels = {
 		openAccountSettings,
@@ -443,6 +446,30 @@ describe("SpaceSettingsScreen on a local space", () => {
 				name: i18n.t("settings:space.transfer.export"),
 			}),
 		).toBeTruthy()
+	})
+
+	it("hands the keys of an entry click to the settings navigation", async () => {
+		const gear = await gearWithGarage()
+		const showEntry = vi.fn()
+		const dialog = render(
+			createElement(SpaceSettingsHarness, {
+				...gear,
+				spaceId: gear.home.id,
+				showEntry,
+			}),
+			{ wrapper: createQueryTestWrapper().wrapper },
+		).container
+		const skills = within(dialog).getByRole("button", {
+			name: i18n.t("settings:rail.skills"),
+		})
+
+		fireEvent.click(skills, { detail: 1, metaKey: true })
+		fireEvent.click(skills, { detail: 1 })
+
+		expect(showEntry.mock.calls).toEqual([
+			["skills", { ...NO_CLICK_MODIFIERS, meta: true }],
+			["skills", NO_CLICK_MODIFIERS],
+		])
 	})
 
 	it("closes the page once the space is deleted", async () => {

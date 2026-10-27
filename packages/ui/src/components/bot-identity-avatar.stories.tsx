@@ -5,7 +5,7 @@ import preview from "@workspace/storybook/preview"
 import {
 	botIdentityAvatars,
 	companionGlyphOf,
-	companionTintOf,
+	companionHueOf,
 	drawingOf,
 	expectCellsIn,
 	expectCompanionPictureShape,
@@ -23,7 +23,10 @@ import {
 	BotIdentityAvatar,
 	type BotIdentityAvatarProps,
 } from "@workspace/ui/components/bot-identity-avatar"
-import { BLOT_TINTS } from "@workspace/ui/components/companion-colour"
+import {
+	BLOT_HUES,
+	BLOT_TINTS,
+} from "@workspace/ui/components/companion-colour"
 import type { GlazeTheme } from "@workspace/ui/components/glaze-border"
 import { InitialsAvatar } from "@workspace/ui/components/initials-avatar"
 import { Button } from "@workspace/ui/components/ui/button"
@@ -114,7 +117,7 @@ const expectFallbackGlyph = async (avatar: HTMLElement, state: string) => {
 	const glyph = companionGlyphOf(avatar)
 
 	await expect(avatar.querySelector("img")).toBeNull()
-	await expect(companionTintOf(glyph)).toBe("var(--bot-blot-blue)")
+	await expect(companionHueOf(glyph)).toBe(BLOT_HUES.blue)
 	await expect(glyph.getBoundingClientRect().width).toBe(
 		avatar.getBoundingClientRect().width,
 	)
@@ -163,7 +166,7 @@ export const Rest = meta.story({
 		const glyph = companionGlyphOf(avatar)
 
 		await expectGlyph(avatar, "idle")
-		await expect(companionTintOf(glyph)).toBe("var(--bot-blot-blue)")
+		await expect(companionHueOf(glyph)).toBe(BLOT_HUES.blue)
 		await expectCompanionSilhouette(glyph)
 		for (const layer of [avatar, glyph]) {
 			await expect(getComputedStyle(layer).borderRadius).toBe("0px")
@@ -219,9 +222,9 @@ export const EveryTint = meta.story({
 		const [none, ...tinted] =
 			botIdentityAvatars(canvasElement).map(companionGlyphOf)
 
-		await expect(companionTintOf(none)).toBe("")
-		await expect(tinted.map((glyph) => companionTintOf(glyph))).toEqual(
-			BLOT_TINTS.map((blot) => `var(--bot-blot-${blot})`),
+		await expect(companionHueOf(none)).toBeUndefined()
+		await expect(tinted.map((glyph) => companionHueOf(glyph))).toEqual(
+			BLOT_TINTS.map((blot) => BLOT_HUES[blot]),
 		)
 	},
 })
@@ -241,8 +244,8 @@ export const NoChosenColour = meta.story({
 		for (const avatar of botIdentityAvatars(canvasElement)) {
 			const glyph = companionGlyphOf(avatar)
 			await expectGlyph(avatar, "idle")
-			await expect(companionTintOf(glyph)).toBe("")
-			await expectCellsIn(cellsOf(glyph), "var(--bot-avatar-field-untinted)")
+			await expect(companionHueOf(glyph)).toBeUndefined()
+			await expectCellsIn(cellsOf(glyph), "var(--bot-avatar-field)")
 		}
 	},
 })

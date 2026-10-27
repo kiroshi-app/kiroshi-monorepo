@@ -47,7 +47,7 @@ const GARAGE: JoinedSpace = {
 	name: "Garage",
 	state: "online",
 	hostedBy: null,
-	colour: "green",
+	colour: 132,
 	instanceId: "instance-of-joined-garage",
 }
 
@@ -60,7 +60,7 @@ const ATTIC: JoinedSpace = {
 	name: "Attic",
 	state: "online",
 	hostedBy: null,
-	colour: "pink",
+	colour: 358,
 	instanceId: "instance-of-joined-attic",
 }
 
@@ -256,7 +256,7 @@ const SHARED_INSTANCE_ID = "9b1e0000-0000-4000-8000-000000000001"
 const OWNED_STUDIO: Space = {
 	id: "studio",
 	name: "Studio",
-	colour: "blue",
+	colour: 257,
 	position: 0,
 	createdAt: 0,
 	shared: true,
@@ -613,7 +613,7 @@ const STUDIO: JoinedSpace = {
 	name: "Studio Nord",
 	state: "online",
 	hostedBy: null,
-	colour: "purple",
+	colour: 296,
 	instanceId: "instance-of-joined-studio",
 }
 
@@ -1041,7 +1041,7 @@ const HOST_PERSONAL: JoinedSpace = {
 	name: "Personal",
 	state: "online",
 	hostedBy: null,
-	colour: "orange",
+	colour: 63,
 	instanceId: "instance-of-joined-personal",
 }
 

@@ -3,8 +3,10 @@ import { expect, fn, waitFor, type within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
+	companionHueOf,
 	FRAME_POLL,
 	slotIn,
+	slotsIn,
 	tokenLengthOf,
 } from "@workspace/storybook/story-utils"
 import { AppHeader } from "@workspace/ui/components/app-header"
@@ -12,7 +14,9 @@ import {
 	AppSidebar,
 	type AppSidebarBot,
 } from "@workspace/ui/components/app-sidebar"
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { HeaderIdentityButton } from "@workspace/ui/components/header-identity-button"
+import { hueDistance } from "@workspace/ui/components/hue-recipe"
 import { PinnedMessages } from "@workspace/ui/components/pinned-messages"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
 import type { ReplyQuote } from "@workspace/ui/components/prompt-reply"
@@ -28,6 +32,7 @@ import {
 	SHELL_TITLE_BAR_HEIGHT,
 	WorkspaceShell,
 } from "@workspace/ui/components/workspace-shell"
+import { schemeOf } from "@workspace/ui/hooks/use-color-scheme"
 
 const ANSWER =
 	"Two packages: `@workspace/ui` holds the design system, `app` holds the Tauri shell."
@@ -153,7 +158,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The application shell: the sidebar surface is the window itself, reaching every edge with no seam, and the main column floats on it as a rounded card detached on all four sides. It is a thin composition over the sidebar foundation — the shell pins the sidebar expanded at one fixed width, with no collapse, no trigger and no resize edge, and hands the room that is left to the card. Whatever fills that card keeps its own scroll boundary, so a `ThreadLayout` still scrolls its transcript alone while the surface around it stays put. `spaceTint` washes that surface with the colour of the space in view, faintly enough that it still reads as the app background.",
+					"The application shell: the sidebar surface is the window itself, reaching every edge with no seam, and the main column floats on it as a rounded card detached on all four sides. It is a thin composition over the sidebar foundation — the shell pins the sidebar expanded at one fixed width, with no collapse, no trigger and no resize edge, and hands the room that is left to the card. Whatever fills that card keeps its own scroll boundary, so a `ThreadLayout` still scrolls its transcript alone while the surface around it stays put. `spaceTint` hands the hue of the space in view to the bubbles, the accent and the New line inside the shell, while the surface itself stays neutral.",
 			},
 		},
 	},
@@ -230,7 +235,7 @@ export const Default = meta.story({
 		await expect(canvas.getByRole("textbox", { name: "Message" })).toBeVisible()
 
 		const surface = shellSurface(canvas)
-		await expect(surface.style.getPropertyValue("--space-tint")).toBe("")
+		await expect(surface).not.toHaveAttribute("data-hue")
 		await expect(paintOf(surface)).toBe(paintFor("var(--background)"))
 		await expectCardDetached(
 			canvas.getByRole("main"),
@@ -282,28 +287,31 @@ const shellPaintWithoutSpaceColour = () => {
 	return painted
 }
 
-const isMotionReduced = () =>
-	window.matchMedia("(prefers-reduced-motion: reduce)").matches
-
-const expectShellInSpaceColour = async (canvas: ReturnType<typeof within>) => {
+const expectNeutralShellInSpace = async (
+	canvas: ReturnType<typeof within>,
+	hue: number,
+) => {
 	const surface = shellSurface(canvas)
-	const background = paintFor("var(--background)")
+	const scheme = schemeOf(surface)
 
-	await expect(surface).toHaveAttribute("data-space-tint", "blue")
-	await expect(surface.style.getPropertyValue("--space-tint")).toBe(
-		"var(--bot-blot-blue)",
-	)
-	await expect(shellPaintWithoutSpaceColour()).toBe(background)
-	await expect(paintOf(surface)).not.toBe(background)
-	await expect(paintOf(surface)).toBe(
-		paintFor(
-			"color-mix(in oklab, var(--bot-blot-blue) var(--shell-tint-strength), var(--background))",
-		),
-	)
-	await expect(getComputedStyle(surface).transitionDuration).toBe(
-		isMotionReduced() ? "0s" : "0.4s",
-	)
+	await expect(surface).toHaveAttribute("data-hue", String(hue))
+	await expect(paintOf(surface)).toBe(shellPaintWithoutSpaceColour())
 	await expect(paintOf(canvas.getByRole("main"))).toBe(paintFor("var(--card)"))
+	await expect(tokenPaintOf(surface, "--primary")).toBe(
+		tokenPaintOf(surface, `--hue-${scheme}-accent`),
+	)
+	await expect(tokenPaintOf(surface, "--user-bubble")).toBe(
+		tokenPaintOf(surface, `--hue-${scheme}-bubble`),
+	)
+}
+
+const tokenPaintOf = (host: HTMLElement, token: string) => {
+	const swatch = document.createElement("div")
+	swatch.style.backgroundColor = `var(${token})`
+	host.append(swatch)
+	const painted = paintOf(swatch)
+	swatch.remove()
+	return painted
 }
 
 const SPACE_TINTED_ARGS = {
@@ -317,11 +325,11 @@ export const SpaceTinted = meta.story({
 		docs: {
 			description: {
 				story:
-					"The same shell with a space in view, whose colour washes the window background: the title bar area, the rail and the gutters around the card. Check that the colour lands on that background and never on the card or the Conversations panel inside it, that it is the space colour mixed into the window background at the strength the theme sets, and that moving between spaces eases the background onto the new colour over a beat, which reduced motion swaps instantly. Pick `SpaceTintedDark` for the dark theme, `Default` for a space with no colour. The app assembles it at `apps/app/src/App.tsx:928`.",
+					"The same shell with a space in view. The window background stays neutral whatever the space colour: the hue reaches the reader's bubbles, the accent (dots, badges, focus ring, Send) and the New line, never the title bar area, the rail, the gutters, the card or the Conversations panel. Check that the background reads exactly as a space with no colour and that the accent and the bubble follow the space hue. Pick `SpaceTintedDark` for the dark theme, `Default` for a space with no colour. The app assembles it at `apps/app/src/App.tsx:928`.",
 			},
 		},
 	},
-	play: async ({ canvas }) => expectShellInSpaceColour(canvas),
+	play: async ({ canvas }) => expectNeutralShellInSpace(canvas, BLOT_HUES.blue),
 })
 
 export const SpaceTintedDark = meta.story({
@@ -331,12 +339,69 @@ export const SpaceTintedDark = meta.story({
 		docs: {
 			description: {
 				story:
-					"The coloured shell in the dark theme, where the window background is black and a faint mix reads as no colour at all. Check that the rail and the title bar area read at a glance as the space colour against a space with no colour, while the card and the Conversations panel keep their neutral surfaces. Pick `SpaceTinted` for the light theme. The app assembles it at `apps/app/src/App.tsx:928`.",
+					"The coloured shell in the dark theme: the window background stays black and the card #121213 whatever the space colour. Check that nothing of the shell reads as the space colour while the accent and the bubble do. Pick `SpaceTinted` for the light theme. The app assembles it at `apps/app/src/App.tsx:928`.",
 			},
 		},
 	},
-	play: async ({ canvas }) => expectShellInSpaceColour(canvas),
+	play: async ({ canvas }) => expectNeutralShellInSpace(canvas, BLOT_HUES.blue),
 })
+
+const FOUR_COMPANIONS: AppSidebarBot[] = [
+	{ id: "atlas", name: "Atlas", blot: "blue", lastMessage: ANSWER },
+	{ id: "lyra", name: "Lyra", blot: "pink", lastMessage: ANSWER },
+	{ id: "nova", name: "Nova", blot: "green", lastMessage: ANSWER },
+	{ id: "vega", name: "Vega", blot: "yellow", lastMessage: ANSWER },
+]
+
+const FOUR_COMPANIONS_SIDEBAR = (
+	<AppSidebar bots={FOUR_COMPANIONS} selectedBotId="atlas" />
+)
+
+const DISTINCT_HUE_GAP = 30
+
+const expectCompanionsToldApart = async (sidebar: HTMLElement) => {
+	const fields = slotsIn(sidebar, "companion-field")
+	const hues = fields.map(companionHueOf)
+	const inks = fields.map(
+		(field) => getComputedStyle(field.querySelector("canvas") ?? field).color,
+	)
+
+	await expect(hues).toEqual(
+		FOUR_COMPANIONS.map(({ blot }) => (blot ? BLOT_HUES[blot] : undefined)),
+	)
+	await expect(new Set(inks).size).toBe(FOUR_COMPANIONS.length)
+	for (const [index, hue] of hues.entries())
+		for (const other of hues.slice(index + 1))
+			await expect(hueDistance(hue ?? 0, other ?? 0)).toBeGreaterThanOrEqual(
+				DISTINCT_HUE_GAP,
+			)
+}
+
+const fourCompanionsStory = (blot: "orange" | "blue", description: string) => ({
+	args: { sidebar: FOUR_COMPANIONS_SIDEBAR, spaceTint: blot },
+	globals: { theme: "dark" },
+	parameters: { docs: { description: { story: description } } },
+	play: async ({ canvas }: { canvas: ReturnType<typeof within> }) => {
+		await expectNeutralShellInSpace(canvas, BLOT_HUES[blot])
+		await expectCompanionsToldApart(
+			canvas.getByRole("complementary", { name: SIDEBAR_LABEL }),
+		)
+	},
+})
+
+export const FourCompanionsInWarmSpaceDark = meta.story(
+	fourCompanionsStory(
+		"orange",
+		"Four companions in a warm space, hue 63, in the dark theme, the roster carrying no title so only the avatar tells them apart. Check that blue, pink, green and yellow each read as their own hue at a glance on the black shell, that none of them drifts towards the orange of the space accent, and that the shell itself stays neutral. Pick `FourCompanionsInColdSpaceDark` for the cold counterpart.",
+	),
+)
+
+export const FourCompanionsInColdSpaceDark = meta.story(
+	fourCompanionsStory(
+		"blue",
+		"Four companions in a cold space, hue 257, in the dark theme, the roster carrying no title so only the avatar tells them apart. Check that Atlas, whose blue matches the space, still reads apart from the three others, that pink, green and yellow keep their hue, and that the shell itself stays neutral. Pick `FourCompanionsInWarmSpaceDark` for the warm counterpart.",
+	),
+)
 
 export const NotALandmark = meta.story({
 	tags: ["test-only"],

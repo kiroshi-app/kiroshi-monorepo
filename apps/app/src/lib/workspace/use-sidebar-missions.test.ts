@@ -78,7 +78,7 @@ const BOT: Bot = {
 	name: "Atlas",
 	title: "",
 	model: "sonnet",
-	avatarBlot: "blue",
+	avatarBlot: 257,
 	avatarImagePath: null,
 	instructions: "",
 	deniedTools: [],
@@ -160,6 +160,7 @@ const sidebarMissionsWiring = (lastMissions: Record<string, string> = {}) => {
 	const openedMission = createOpenedController<OpenedMission>()
 	const open = vi.spyOn(openedMission, "open")
 	const leave = vi.spyOn(openedMission, "leave")
+	const openThreadInNewTab = vi.fn()
 	const threads: MissionSpeakingRuntimes = createFakeThreadRuntimes().runtimes
 	const runtimes = {
 		...threads,
@@ -187,9 +188,17 @@ const sidebarMissionsWiring = (lastMissions: Record<string, string> = {}) => {
 			spaces: { state: { selectedSpaceId } },
 		},
 		rosterLines: { now: NOW },
-		navigation: { openThreadInNewTab: vi.fn() },
+		navigation: { openThreadInNewTab },
 	})
-	return { inputFor, select, selectConversation, open, leave, openedMission }
+	return {
+		inputFor,
+		select,
+		selectConversation,
+		open,
+		leave,
+		openedMission,
+		openThreadInNewTab,
+	}
 }
 
 const renderSidebarMissions = (
@@ -338,6 +347,29 @@ describe("useSidebarMissions", () => {
 		expect(open.mock.invocationCallOrder[0]).toBeLessThan(
 			select.mock.invocationCallOrder[0],
 		)
+		expect(selectConversation).not.toHaveBeenCalled()
+	})
+
+	it("opens the mission of a row in a new tab on a new-tab click, leaving the shown thread", async () => {
+		const { result, select, selectConversation, open, openThreadInNewTab } =
+			renderSidebarMissions()
+		await waitFor(() => expect(panelOf(result.current).open).toHaveLength(2))
+
+		panelOf(result.current).onOpen("m-working", "c-2", {
+			...NO_CLICK_MODIFIERS,
+			middle: true,
+		})
+		panelOf(result.current).onOpen("m-waiting", "c-1", {
+			...NO_CLICK_MODIFIERS,
+			meta: true,
+		})
+
+		expect(openThreadInNewTab.mock.calls).toEqual([
+			[{ conversation: "c-2", mission: "m-working" }],
+			[{ bot: BOT.id, mission: "m-waiting" }],
+		])
+		expect(open).not.toHaveBeenCalled()
+		expect(select).not.toHaveBeenCalled()
 		expect(selectConversation).not.toHaveBeenCalled()
 	})
 

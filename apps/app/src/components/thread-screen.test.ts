@@ -30,8 +30,13 @@ import {
 	vi,
 } from "vitest"
 
+import {
+	BLOT_HUES,
+	type BotAvatarBlot,
+} from "@workspace/ui/components/companion-colour"
 import { CompanionMenuProvider } from "@workspace/ui/components/companion-menu"
 import { CompanionSelectProvider } from "@workspace/ui/components/companion-select"
+import { hueStyle } from "@workspace/ui/components/hue-palette"
 import {
 	type ConversationIconName,
 	ConversationIcons,
@@ -416,6 +421,7 @@ type ThreadScreenHarnessProps = {
 	onboarding?: OnboardingController
 	signIn?: SignInController
 	onOpenMission: (missionId: string) => void
+	onOpenMissionInNewTab?: (missionId: string) => void
 	staging?: AttachmentsController
 }
 
@@ -426,6 +432,7 @@ const ThreadScreenHarness = ({
 	onboarding,
 	signIn,
 	onOpenMission,
+	onOpenMissionInNewTab = () => undefined,
 	staging = attachments,
 }: ThreadScreenHarnessProps) => {
 	const [isOpen, setOpen] = useState(false)
@@ -456,6 +463,7 @@ const ThreadScreenHarness = ({
 					} satisfies Onboarding)
 				: undefined,
 		onOpenMission,
+		onOpenMissionInNewTab,
 		readerName: "Reader",
 		runtimes: runtimesOf(thread),
 		signIn:
@@ -916,6 +924,26 @@ const missionCard = () =>
 
 const missionsSection = () =>
 	screen.getByRole("region", { name: "In progress" })
+
+const NEW_TAB_CLICK = { detail: 1, metaKey: true }
+
+const middleClick = (target: HTMLElement) =>
+	fireEvent(
+		target,
+		new MouseEvent("auxclick", { bubbles: true, button: 1, detail: 1 }),
+	)
+
+const missionTabsScreenOf = (
+	openMission: (missionId: string) => void,
+	openMissionInNewTab: (missionId: string) => void,
+) =>
+	createElement(ThreadScreenHarness, {
+		bots: NO_BOT_RECORDS,
+		landings: createMessageLandingController(),
+		onOpenMission: openMission,
+		onOpenMissionInNewTab: openMissionInNewTab,
+		thread: threadOf({ id: "bot-1", name: "Nyx", said: "held" }),
+	})
 
 const openRoutinesPanel = async () => {
 	fireEvent.click(screen.getByRole("button", { name: ROUTINES_TOGGLE }))
@@ -1547,6 +1575,51 @@ describe("ThreadScreen", () => {
 
 		expect(openMission).toHaveBeenCalledWith(SOLO_MISSION.id)
 	})
+
+	it.each([
+		{
+			place: "transcript",
+			openButtonOf: async () =>
+				within(missionCard()).getByRole("button", {
+					name: `Open the mission: ${SOLO_MISSION.objective}`,
+				}),
+		},
+		{
+			place: "Routines panel",
+			openButtonOf: async () => {
+				await openRoutinesPanel()
+				return within(missionsSection()).getByRole("button", {
+					name: new RegExp(SOLO_MISSION.objective),
+				})
+			},
+		},
+	])(
+		"opens the $place mission card in a new tab on a new-tab click, in place otherwise",
+		async ({ openButtonOf }) => {
+			const openMission = vi.fn()
+			const openMissionInNewTab = vi.fn()
+			listMissions.mockResolvedValue({ open: [SOLO_MISSION], done: [] })
+			render(missionTabsScreenOf(openMission, openMissionInNewTab), {
+				wrapper: createQueryTestWrapper().wrapper,
+			})
+			await settle()
+			const openButton = await openButtonOf()
+
+			fireEvent.click(openButton, NEW_TAB_CLICK)
+			middleClick(openButton)
+
+			expect(openMissionInNewTab.mock.calls).toEqual([
+				[SOLO_MISSION.id],
+				[SOLO_MISSION.id],
+			])
+			expect(openMission).not.toHaveBeenCalled()
+
+			fireEvent.click(openButton)
+
+			expect(openMission).toHaveBeenCalledWith(SOLO_MISSION.id)
+			expect(openMissionInNewTab).toHaveBeenCalledTimes(2)
+		},
+	)
 
 	it("carries the new state of a mission on its card", async () => {
 		const announce: { toPanel: ((changed: MissionChanged) => void) | null } = {
@@ -3100,6 +3173,36 @@ const pictogramIn = (surface: HTMLElement | null) =>
 		'[data-slot="conversation-subject-icon-pictogram"]',
 	)?.innerHTML
 
+const LIGHT_FOREGROUND = "--hue-light-conversation-icon-foreground"
+const DARK_FOREGROUND = "--hue-dark-conversation-icon-foreground"
+
+const subjectColourIn = (surface: HTMLElement | null) => {
+	const icon = subjectIconIn(surface)
+	return {
+		hue: icon?.getAttribute("data-hue") ?? null,
+		color: icon?.style.color,
+		lightForeground: icon?.style.getPropertyValue(LIGHT_FOREGROUND),
+		darkForeground: icon?.style.getPropertyValue(DARK_FOREGROUND),
+	}
+}
+
+const UNCOLOURED_SUBJECT = {
+	hue: null,
+	color: "var(--conversation-icon-foreground)",
+	lightForeground: "",
+	darkForeground: "",
+}
+
+const subjectColourOf = (colour: BotAvatarBlot) => {
+	const style = hueStyle(BLOT_HUES[colour])
+	return {
+		hue: String(BLOT_HUES[colour]),
+		color: "var(--conversation-icon-foreground)",
+		lightForeground: style[LIGHT_FOREGROUND],
+		darkForeground: style[DARK_FOREGROUND],
+	}
+}
+
 const drawnPictogramOf = (icon: ConversationIconName) => {
 	const { container, unmount } = renderWithoutQueries(
 		createElement(ConversationIcons[icon]),
@@ -3144,32 +3247,22 @@ describe("ThreadScreen wearing the look of a group conversation", () => {
 		await settle()
 		const header = screen.getByRole("button", { name: HEADER_OF_WALLS })
 		expect(pictogramIn(header)).toBe(drawnPictogramOf("MessageSquare"))
-		expect(subjectIconIn(header)?.style.color).toBe(
-			"var(--conversation-icon-foreground)",
-		)
+		expect(subjectColourIn(header)).toEqual(UNCOLOURED_SUBJECT)
 
 		rerender(
-			screenOf(
-				wearing(room.thread, { icon: "Rocket", color: "cyan" }),
-				room.bots,
-			),
+			screenOf(wearing(room.thread, { icon: "Rocket", color: 186 }), room.bots),
 		)
 		await settle()
 
 		const redrawn = screen.getByRole("button", { name: HEADER_OF_WALLS })
 		expect(pictogramIn(redrawn)).toBe(drawnPictogramOf("Rocket"))
-		expect(subjectIconIn(redrawn)?.style.color).toBe(
-			"var(--conversation-icon-cyan-foreground)",
-		)
+		expect(subjectColourIn(redrawn)).toEqual(subjectColourOf("cyan"))
 	})
 
 	it("draws the icon and the colour of a conversation with no message in its empty state", async () => {
 		const room = await roomOf({ names: ["Ada", "Zoe"] })
 		const { container } = render(
-			screenOf(
-				wearing(room.thread, { icon: "Rocket", color: "cyan" }),
-				room.bots,
-			),
+			screenOf(wearing(room.thread, { icon: "Rocket", color: 186 }), room.bots),
 			{ wrapper: createQueryTestWrapper().wrapper },
 		)
 		await settle()
@@ -3178,9 +3271,7 @@ describe("ThreadScreen wearing the look of a group conversation", () => {
 			'[data-slot="conversation-empty-state"]',
 		)
 		expect(pictogramIn(emptyState)).toBe(drawnPictogramOf("Rocket"))
-		expect(subjectIconIn(emptyState)?.style.color).toBe(
-			"var(--conversation-icon-cyan-foreground)",
-		)
+		expect(subjectColourIn(emptyState)).toEqual(subjectColourOf("cyan"))
 	})
 })
 

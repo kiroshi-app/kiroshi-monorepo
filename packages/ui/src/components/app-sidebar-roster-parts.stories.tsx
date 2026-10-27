@@ -22,6 +22,7 @@ import {
 	RosterZoneSeparator,
 	SectionDropZone,
 } from "@workspace/ui/components/app-sidebar-roster-parts"
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 
 const meta = preview.meta({
 	title: "Navigation/AppSidebarRosterParts",
@@ -107,11 +108,7 @@ export const ThemesLiftedGroup = meta.story({
 	globals: { theme_layout: "side-by-side" },
 	render: () => <LiftedConversationAtPointer conversation={DESK_ROOM} />,
 	play: async ({ canvasElement }) => {
-		await expectSubjectIconInBothThemes(
-			canvasElement,
-			"--conversation-icon",
-			LIFTED_SIDE,
-		)
+		await expectSubjectIconInBothThemes(canvasElement, undefined, LIFTED_SIDE)
 		await expectLiftedOnPointer(canvasElement)
 	},
 })
@@ -126,7 +123,7 @@ export const ThemesLiftedGroupRed = meta.story({
 	play: async ({ canvasElement }) => {
 		await expectSubjectIconInBothThemes(
 			canvasElement,
-			"--conversation-icon-red",
+			BLOT_HUES.red,
 			LIFTED_SIDE,
 		)
 		await expectLiftedOnPointer(canvasElement)

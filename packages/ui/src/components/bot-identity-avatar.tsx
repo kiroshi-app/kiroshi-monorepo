@@ -4,7 +4,10 @@ import { type ReactNode, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { type BotBadge, BotBadgeDot } from "@workspace/ui/components/bot-badge"
-import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
+import {
+	type BotAvatarBlot,
+	hueOf,
+} from "@workspace/ui/components/companion-colour"
 import {
 	COMPANION_SILHOUETTE,
 	SILHOUETTE_FOCUS_RING,
@@ -74,7 +77,7 @@ function BotIdentityAvatar({
 				name={name ?? seed ?? ""}
 				size={size}
 				state={working ? kind : "idle"}
-				tint={blot}
+				hue={hueOf(blot)}
 			/>
 		</AvatarFrame>
 	)

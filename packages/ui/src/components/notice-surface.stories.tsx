@@ -17,6 +17,7 @@ import {
 	opaque,
 	slotIn,
 } from "@workspace/storybook/story-utils"
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { DialogSurface } from "@workspace/ui/components/dialog-surface"
 import {
 	endNotice,
@@ -1609,7 +1610,8 @@ export const RemovedWithSpaceMark = meta.story({
 		await expect(style.borderTopLeftRadius).toBe("3px")
 		await expect(style.boxShadow).toContain("1.5px")
 		await expect(style.boxShadow).toContain(style.color)
-		await expect(mark.style.color).toBe("var(--bot-blot-orange)")
+		await expect(mark.style.color).toBe("var(--primary-strong)")
+		await expect(mark).toHaveAttribute("data-hue", String(BLOT_HUES.orange))
 		await expect(
 			getComputedStyle(within(notice).getByText(REMOVAL_DESCRIPTION)).color,
 		).toBe("rgb(163, 163, 163)")

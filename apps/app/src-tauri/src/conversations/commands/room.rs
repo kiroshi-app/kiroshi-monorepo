@@ -3,8 +3,8 @@ use tauri::{AppHandle, Runtime, State};
 use super::super::context;
 use super::super::contract::{
 	state_in, Chat, CompanionArrival, ContextCheckpoint, Conversation, ConversationDeleted,
-	ConversationInList, ConversationInPage, ConversationPage, ConversationStored, ObservedState,
-	RuntimeSession, SoloState, TranscriptStoreError,
+	ConversationInList, ConversationInPage, ConversationPage, ConversationStored, Hue,
+	ObservedState, RuntimeSession, SoloState, TranscriptStoreError,
 };
 use super::super::state as conversation_state;
 use super::bot::ready;
@@ -152,8 +152,13 @@ pub async fn conversation_update<R: Runtime>(
 	instructions: String,
 	section_id: Option<String>,
 	icon: Option<String>,
-	color: Option<String>,
+	color: Option<i64>,
 ) -> Result<Conversation, TranscriptStoreError> {
+	let color = color
+		.map(|asked| {
+			Hue::new(asked).ok_or_else(|| TranscriptStoreError::unknown_colour(asked.to_string()))
+		})
+		.transpose()?;
 	let edit = ConversationEdit { title, instructions, section_id, icon, color };
 	let database = ready(&state)?;
 	let updated = database.conversations().update_conversation(conversation_id, edit).await?;

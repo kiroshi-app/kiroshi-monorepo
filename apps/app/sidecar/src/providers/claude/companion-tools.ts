@@ -76,7 +76,7 @@ const OPENED_ICON =
 const UPDATED_ICON = `The name of the Keyline icon drawn beside the title of the conversation, chosen for the subject the title names, left out to keep the one it wears. It is one of ${conversationIcons.join(", ")}, spelled exactly so; any other name is refused with the accepted names.`
 
 const COLOUR =
-	"One of red, yellow, green, cyan, blue, purple, pink or orange, null to give the conversation back its default colour, left out to keep the one it wears."
+	"A hue, a whole number from 0 to 359 around the colour wheel, or one of red, orange, yellow, green, cyan, blue, purple or pink for the hue that name stands for, null to give the conversation back its default colour, left out to keep the one it wears; a hue outside 0 to 359 or another name is refused."
 
 const ADD =
 	"The id or the name of each companion of the space of the conversation to seat in it, recorded as invited by you; one already seated stays as it is, and a name two companions share is refused with their ids."
@@ -153,7 +153,11 @@ const UPDATED: ToolInput = {
 	conversation: z.string().optional().describe(UPDATED_CONVERSATION),
 	title: z.string().optional().describe(UPDATED_TITLE),
 	icon: z.string().optional().describe(UPDATED_ICON),
-	colour: z.string().nullable().optional().describe(COLOUR),
+	colour: z
+		.union([z.number().int(), z.string()])
+		.nullable()
+		.optional()
+		.describe(COLOUR),
 	add: z.array(z.string()).optional().describe(ADD),
 	remove: z.array(z.string()).optional().describe(REMOVE),
 	archived: z.boolean().optional().describe(REOPEN),

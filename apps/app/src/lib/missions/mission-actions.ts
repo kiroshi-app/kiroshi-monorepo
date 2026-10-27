@@ -13,6 +13,8 @@ export type MissionLanding = "composer"
 
 export type OpenMission = (missionId: string, landing?: MissionLanding) => void
 
+export type OpenMissionInNewTab = (missionId: string) => void
+
 export type MissionActionsPort = {
 	openMission: OpenMission
 	openInBrowser: (url: string | null) => Promise<void>

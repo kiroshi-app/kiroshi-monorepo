@@ -5,6 +5,7 @@ use rusqlite::{params, params_from_iter, Connection, Transaction, TransactionBeh
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Number, Value};
 
+use super::conversations::Hue;
 use crate::db::{Access, DatabaseError};
 
 type Row = Map<String, Value>;
@@ -26,11 +27,20 @@ struct Table {
 	references: &'static [&'static str],
 	embedding: &'static [&'static str],
 	detached: &'static [&'static str],
+	hued: Option<&'static str>,
 }
 
 impl Table {
 	const fn new(name: &'static str, scope: &'static str) -> Self {
-		Self { name, scope, identities: &[], references: &[], embedding: &[], detached: &[] }
+		Self {
+			name,
+			scope,
+			identities: &[],
+			references: &[],
+			embedding: &[],
+			detached: &[],
+			hued: None,
+		}
 	}
 
 	fn is_mapped(&self, column: &str) -> bool {
@@ -39,14 +49,18 @@ impl Table {
 }
 
 const TABLES: &[Table] = &[
-	Table { identities: &["id"], ..Table::new("spaces", "id = ?1") },
+	Table { identities: &["id"], hued: Some("colour"), ..Table::new("spaces", "id = ?1") },
 	Table {
 		references: &["space_id"],
 		embedding: &["value"],
 		..Table::new("space_settings", "space_id = ?1")
 	},
 	Table { identities: &["id"], references: &["space_id"], ..Table::new("sections", "space_id = ?1") },
-	Table { identities: &["id"], ..Table::new("bots", "id IN exported_bots") },
+	Table {
+		identities: &["id"],
+		hued: Some("avatar_color"),
+		..Table::new("bots", "id IN exported_bots")
+	},
 	Table {
 		references: &["bot_id", "space_id", "section_id"],
 		..Table::new("bot_spaces", "space_id = ?1")
@@ -54,6 +68,7 @@ const TABLES: &[Table] = &[
 	Table {
 		identities: &["id"],
 		references: &["space_id", "section_id"],
+		hued: Some("color"),
 		..Table::new("conversations", "id IN exported_conversations")
 	},
 	Table {
@@ -402,6 +417,9 @@ fn rewritten(table: &Table, row: &Row, minted: &MintedIds) -> Row {
 				Value::String(text) if table.is_mapped(column) => mapped(text, minted).into(),
 				Value::String(text) if table.embedding.contains(&column.as_str()) => {
 					embedded(text, minted).into()
+				}
+				Value::String(name) if table.hued == Some(column.as_str()) => {
+					Hue::named(name).map_or_else(|| value.clone(), |hue| hue.value().into())
 				}
 				_ => value.clone(),
 			};

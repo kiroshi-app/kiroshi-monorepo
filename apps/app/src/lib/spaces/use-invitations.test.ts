@@ -57,7 +57,7 @@ const JOINED_STUDIO: JoinedSpace = {
 	name: "Studio Nord",
 	state: "online",
 	hostedBy: null,
-	colour: "purple",
+	colour: 296,
 	instanceId: "instance-of-joined-studio",
 }
 

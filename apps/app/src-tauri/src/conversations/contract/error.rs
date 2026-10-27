@@ -267,9 +267,6 @@ impl From<conversations::ConversationError> for TranscriptStoreError {
 					accepted: conversations::conversation_icons().to_vec(),
 				}
 			}
-			conversations::ConversationError::UnknownColour { colour } => {
-				TranscriptStoreError::UnknownColour { colour, accepted: accepted_colours() }
-			}
 			conversations::ConversationError::Database(failure) => {
 				TranscriptStoreError::Storage { failure: (&failure).into() }
 			}
@@ -277,11 +274,10 @@ impl From<conversations::ConversationError> for TranscriptStoreError {
 	}
 }
 
-fn accepted_colours() -> Vec<String> {
-	super::AvatarBlot::ALL
-		.iter()
-		.map(|&blot| conversations::AvatarBlot::from(blot).named().to_owned())
-		.collect()
+impl TranscriptStoreError {
+	pub fn unknown_colour(colour: String) -> Self {
+		Self::UnknownColour { colour, accepted: vec![super::Hue::ACCEPTED.to_owned()] }
+	}
 }
 
 #[cfg(test)]

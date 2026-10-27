@@ -14,9 +14,9 @@ const settings = {
 			invitation: "Invitation",
 		},
 		group: {
-			settings: "Your settings",
+			settings: "Settings",
 			subjectSettings: "Settings",
-			spaces: "Your spaces",
+			spaces: "Spaces",
 		},
 		space: {
 			current: "Open now",

@@ -225,8 +225,9 @@ separator. Otherwise `icon` is `null`. The host reads a frame without `icon` as 
 icon, and `agent_title` answers `{ title, icon }`, or `null` when no title came back.
 
 Every write of a conversation's `icon` goes through the repository, which refuses a
-name absent from that same file (`unlistedIcon`, carrying the accepted names) and a
-colour outside the eight tints (`unknownColour`), and leaves the row as it was. An
+name absent from that same file (`unlistedIcon`, carrying the accepted names), and leaves
+the row as it was. A colour is a hue, a whole number from 0 to 359; a value outside that
+range is refused before the write (`unknownColour`, carrying the range). An
 update that resends the icon the row already stores is not checked against the list,
 so a room still wearing an icon stored before the list was enforced can be renamed
 and moved.

@@ -1,7 +1,6 @@
 export type {
 	ActiveTurn,
 	ApplicationMark_Serialize as McpServerMark,
-	AvatarBlot,
 	Bot,
 	BotChangedFile,
 	BotDraft,
@@ -17,6 +16,7 @@ export type {
 	EnvOwner,
 	EnvScope_Serialize as EnvScope,
 	HistoryAuthor as BotHistoryAuthor,
+	Hue,
 	Json as BotSkillValue,
 	LastWord as StoredLastWord,
 	McpServer_Serialize as BotMcpServer,
@@ -45,7 +45,7 @@ export type {
 	TranscriptStoreError,
 } from "@/lib/bindings"
 
-import type { AvatarBlot } from "@/lib/bindings"
+import type { Hue } from "@/lib/bindings"
 
 export type ConversationDraft = {
 	spaceId: string
@@ -59,5 +59,5 @@ export type ConversationEdit = {
 	instructions: string
 	sectionId: string | null
 	icon: string | null
-	color: AvatarBlot | null
+	color: Hue | null
 }

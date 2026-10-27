@@ -6,7 +6,7 @@ use super::archive;
 use super::contract::{CompanionCounts, Space, SpaceError, SpacePreferences};
 use crate::bundles;
 use crate::conversations::commands::{announce_joined, announce_left, list_bundles};
-use crate::conversations::contract::AvatarBlot;
+use crate::conversations::contract::Hue;
 use crate::db;
 use crate::environment;
 use crate::hosting;
@@ -47,11 +47,14 @@ pub async fn space_update<R: Runtime>(
 	state: State<'_, db::DatabaseState>,
 	id: String,
 	name: String,
-	colour: Option<AvatarBlot>,
+	colour: Option<i64>,
 ) -> Result<Space, SpaceError> {
+	let colour = colour
+		.map(|asked| Hue::new(asked).ok_or_else(|| SpaceError::unknown_colour(asked)))
+		.transpose()?;
 	let database = ready(&state)?;
 	let previous = database.space_hosting().registration(id.clone()).await?;
-	let updated = database.spaces().update(id, name, colour.map(Into::into)).await?;
+	let updated = database.spaces().update(id, name, colour).await?;
 	let is_relabelled = (&previous.name, previous.colour) != (&updated.name, updated.colour);
 	if let Some(instance_id) = previous.instance_id.filter(|_| is_relabelled) {
 		let (name, colour) = (updated.name.clone(), updated.colour);

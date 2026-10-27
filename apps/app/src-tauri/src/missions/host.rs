@@ -440,7 +440,7 @@ mod tests {
 			VALUES ('c1', 'b1', 'assistant', 1, 0), ('c1', 'b2', 'assistant', 1, 1),
 				('c2', 'b1', 'assistant', 1, 0);
 		INSERT INTO spaces (id, name, colour, position, created_at)
-			VALUES ('work', 'Work', 'blue', 1, 1);
+			VALUES ('work', 'Work', 257, 1, 1);
 		INSERT INTO bots (id, name, model, created_at) VALUES ('b3', 'Third', 'sonnet', 1);
 		INSERT INTO bot_spaces (bot_id, space_id, joined_at) VALUES ('b3', 'work', 1);
 		INSERT INTO conversations (id, kind, space_id, title, created_at, updated_at)

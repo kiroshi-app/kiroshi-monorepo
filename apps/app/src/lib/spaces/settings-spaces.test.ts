@@ -8,7 +8,7 @@ import type { Invitations } from "./use-invitations"
 import type { JoinedSpace } from "../bindings"
 import type { Space } from "../conversations/store-contract"
 
-const STUDIO = { id: "studio", name: "Studio", colour: "blue" } as Space
+const STUDIO = { id: "studio", name: "Studio", colour: 257 } as Space
 
 const HARBOR: JoinedSpace = {
 	id: "harbor",
@@ -17,7 +17,7 @@ const HARBOR: JoinedSpace = {
 	name: "Harbor",
 	state: "waitingForHost",
 	hostedBy: "Steve",
-	colour: "green",
+	colour: 132,
 	instanceId: "instance-of-harbor",
 }
 

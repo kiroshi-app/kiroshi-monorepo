@@ -5,10 +5,12 @@ import {
 } from "@tanstack/react-router"
 import { useMemo } from "react"
 
+import type { ClickModifiers } from "@workspace/ui/lib/click-modifiers"
+
 import type { CompanionSettingsSearch, SettingsSearch } from "./settings-search"
 import type { ThreadSearch } from "./thread-search"
 
-import { isNewTabClickInFlight } from "../tabs/new-tab-clicks"
+import { isNewTabClickInFlight, opensInNewTab } from "../tabs/new-tab-clicks"
 import { heldThreadOf, type ThreadHolder } from "../tabs/use-tab-thread-sync"
 
 export const useSettingsNavigation = (holder: ThreadHolder) => {
@@ -38,6 +40,17 @@ export const useSettingsNavigation = (holder: ThreadHolder) => {
 			void navigate(options)
 		}
 
+		const goFromClick = (
+			options: NavigateOptions,
+			modifiers: ClickModifiers | undefined,
+		) => {
+			if (opensInNewTab(modifiers)) {
+				openInBackgroundTab(options)
+				return
+			}
+			void navigate(options)
+		}
+
 		return {
 			back: () =>
 				backOr(
@@ -55,13 +68,15 @@ export const useSettingsNavigation = (holder: ThreadHolder) => {
 			},
 			openThreadInNewTab: (thread: ThreadSearch, spaceId?: string) =>
 				openInBackgroundTab({ to: "/", search: thread }, spaceId),
-			openSpaceSettings: (spaceId: string, search: SettingsSearch = {}) => {
-				void navigate({
-					to: "/settings/space/$spaceId",
-					params: { spaceId },
-					search,
-				})
-			},
+			openSpaceSettings: (
+				spaceId: string,
+				search: SettingsSearch = {},
+				modifiers?: ClickModifiers,
+			) =>
+				goFromClick(
+					{ to: "/settings/space/$spaceId", params: { spaceId }, search },
+					modifiers,
+				),
 			openUserSettings: (search: SettingsSearch = {}) =>
 				go({ to: "/settings/user", search }),
 			openCompanionSettings: (
@@ -73,15 +88,18 @@ export const useSettingsNavigation = (holder: ThreadHolder) => {
 					params: { companionId },
 					search,
 				}),
-			showEntry: (entry: string) =>
-				go({
-					to: ".",
-					search: (previous: CompanionSettingsSearch) => ({
-						...previous,
-						entry,
-					}),
-					replace: true,
-				}),
+			showEntry: (entry: string, modifiers?: ClickModifiers) =>
+				goFromClick(
+					{
+						to: ".",
+						search: (previous: CompanionSettingsSearch) => ({
+							...previous,
+							entry,
+						}),
+						replace: true,
+					},
+					modifiers,
+				),
 		}
 	}, [navigate, router, holder])
 }

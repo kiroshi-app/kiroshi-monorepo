@@ -1,10 +1,11 @@
 use std::collections::HashSet;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use rusqlite::{params, Connection, Row, Transaction, TransactionBehavior};
+use rusqlite::types::ValueRef;
+use rusqlite::{params, Connection, Row, RowIndex, Transaction, TransactionBehavior};
 use uuid::Uuid;
 
-use super::conversations::AvatarBlot;
+use super::conversations::Hue;
 use super::{bot_spaces, conversations, sections};
 use crate::db::{Access, DatabaseError};
 
@@ -46,7 +47,7 @@ impl From<rusqlite::Error> for SpaceError {
 pub struct Space {
 	pub id: String,
 	pub name: String,
-	pub colour: Option<AvatarBlot>,
+	pub colour: Option<Hue>,
 	pub position: i64,
 	pub created_at: i64,
 }
@@ -78,7 +79,7 @@ impl SpacesRepository {
 		&self,
 		id: String,
 		name: String,
-		colour: Option<AvatarBlot>,
+		colour: Option<Hue>,
 	) -> Result<Space, SpaceError> {
 		self.access.call_mut(move |connection| Ok(updated(connection, &id, &name, colour))).await?
 	}
@@ -138,7 +139,7 @@ fn updated(
 	connection: &mut Connection,
 	id: &str,
 	name: &str,
-	colour: Option<AvatarBlot>,
+	colour: Option<Hue>,
 ) -> Result<Space, SpaceError> {
 	let transaction = write_transaction(connection)?;
 	let written = transaction.execute(
@@ -332,14 +333,17 @@ fn space(row: &Row<'_>) -> rusqlite::Result<Space> {
 	Ok(Space {
 		id: row.get("id")?,
 		name: row.get("name")?,
-		colour: colour_of(row)?,
+		colour: colour_of(row, "colour")?,
 		position: row.get("position")?,
 		created_at: row.get("created_at")?,
 	})
 }
 
-fn colour_of(row: &Row<'_>) -> rusqlite::Result<Option<AvatarBlot>> {
-	Ok(row.get::<_, Option<String>>("colour")?.as_deref().and_then(AvatarBlot::parse))
+pub(super) fn colour_of<I: RowIndex>(row: &Row<'_>, column: I) -> rusqlite::Result<Option<Hue>> {
+	Ok(match row.get_ref(column)? {
+		ValueRef::Integer(hue) => Hue::new(hue),
+		_ => None,
+	})
 }
 
 fn now() -> i64 {
@@ -396,7 +400,7 @@ mod tests {
 
 		assert_eq!(listed.len(), 1);
 		assert_eq!(listed[0].name, "Personal");
-		assert_eq!(listed[0].colour, Some(AvatarBlot::Red));
+		assert_eq!(listed[0].colour, Hue::named("red"));
 		assert_eq!(listed[0].position, 0);
 
 		drop(database);
@@ -461,11 +465,11 @@ mod tests {
 		let held = repository.create("Vocca".to_owned()).await.expect("the space");
 
 		let written = repository
-			.update(held.id.clone(), "Work".to_owned(), Some(AvatarBlot::Cyan))
+			.update(held.id.clone(), "Work".to_owned(), Hue::named("cyan"))
 			.await
 			.expect("the space is written");
 
-		assert_eq!((written.name.as_str(), written.colour), ("Work", Some(AvatarBlot::Cyan)));
+		assert_eq!((written.name.as_str(), written.colour), ("Work", Hue::named("cyan")));
 		assert_eq!(written.position, held.position, "writing a space moved it");
 		assert_eq!(
 			repository

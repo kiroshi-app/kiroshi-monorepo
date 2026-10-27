@@ -5,6 +5,12 @@ import { useLayoutEffect } from "react"
 import { afterEach, expect, it } from "vitest"
 
 import {
+	BLOT_HUES,
+	type BotAvatarBlot,
+} from "@workspace/ui/components/companion-colour"
+import { hueStyle } from "@workspace/ui/components/hue-palette"
+
+import {
 	createJoinedSpacesController,
 	type JoinedSpacesController,
 	joinedRowIdOf,
@@ -28,18 +34,18 @@ const STUDIO: JoinedSpace = {
 	name: "Studio Nord",
 	state: "online",
 	hostedBy: null,
-	colour: "purple",
+	colour: 296,
 	instanceId: "instance-of-joined-studio",
 }
 
 const tintOnRoot = () => ({
-	attribute: document.documentElement.getAttribute("data-space-tint"),
-	property: document.documentElement.style.getPropertyValue("--space-tint"),
+	attribute: document.documentElement.getAttribute("data-hue"),
+	accent: document.documentElement.style.getPropertyValue("--hue-light-accent"),
 })
 
-const tintOf = (colour: string) => ({
-	attribute: colour,
-	property: `var(--bot-blot-${colour})`,
+const tintOf = (colour: BotAvatarBlot) => ({
+	attribute: String(BLOT_HUES[colour]),
+	accent: hueStyle(BLOT_HUES[colour])["--hue-light-accent"],
 })
 
 type Tint = ReturnType<typeof tintOnRoot>
@@ -69,7 +75,7 @@ afterEach(() => {
 const mountTintedWorkspace = async () => {
 	const store = createFakeTranscriptStore()
 	const home = await store.createSpace("Home")
-	await store.updateSpace(home.id, home.name, "cyan")
+	await store.updateSpace(home.id, home.name, 186)
 	const { queryClient } = createQueryTestWrapper()
 	const spaces = createSpacesController(store, { queryClient })
 	await spaces.load(home.id)
@@ -126,7 +132,7 @@ it("paints html with the open joined Space colour, follows its changes, and retu
 
 	expect(switchTo(joinedRowIdOf(STUDIO.id))).toEqual([tintOf("purple")])
 
-	await changeStudioColour("orange")
+	await changeStudioColour(63)
 
 	await waitFor(() => expect(tintOnRoot()).toEqual(tintOf("orange")))
 

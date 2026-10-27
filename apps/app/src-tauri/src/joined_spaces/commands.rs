@@ -6,7 +6,7 @@ use super::contract::{
 };
 use super::relay::{self, RelayGuests};
 use super::{deep_link, held};
-use crate::conversations::contract::AvatarBlot;
+use crate::conversations::contract::Hue;
 use crate::db;
 use crate::db::repositories::joined_spaces::JoinedReach;
 use crate::events::{self, JOINED_SPACE_CHANGED, JOINED_SPACE_RECONNECTED, JOINED_SPACE_REMOVED};
@@ -22,7 +22,7 @@ pub const RECONNECTED_EVENT: &str = "joined-space://reconnected";
 pub struct JoinedSpaceChanged {
 	pub id: String,
 	pub hosted_by: Option<String>,
-	pub colour: AvatarBlot,
+	pub colour: Hue,
 }
 
 #[derive(Debug, Clone, Serialize, specta::Type)]

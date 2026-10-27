@@ -53,7 +53,7 @@ fn a_companion_on(model: &str, effort: &str) -> Value {
 		"name": "Nyx",
 		"title": "Reviewer",
 		"model": model,
-		"avatarBlot": "red",
+		"avatarBlot": 42,
 		"avatarImagePath": null,
 		"instructions": "Answer briefly.",
 		"deniedTools": [],

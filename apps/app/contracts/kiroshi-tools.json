@@ -810,10 +810,23 @@
 					"type": "string"
 				},
 				"colour": {
-					"description": "One of red, yellow, green, cyan, blue, purple, pink or orange, null to give the conversation back its default colour, left out to keep the one it wears.",
-					"type": [
-						"string",
-						"null"
+					"description": "A hue, a whole number from 0 to 359 around the colour wheel, or one of red, orange, yellow, green, cyan, blue, purple or pink for the hue that name stands for, null to give the conversation back its default colour, left out to keep the one it wears; a hue outside 0 to 359 or another name is refused.",
+					"anyOf": [
+						{
+							"anyOf": [
+								{
+									"type": "integer",
+									"minimum": -9007199254740991,
+									"maximum": 9007199254740991
+								},
+								{
+									"type": "string"
+								}
+							]
+						},
+						{
+							"type": "null"
+						}
 					]
 				},
 				"add": {

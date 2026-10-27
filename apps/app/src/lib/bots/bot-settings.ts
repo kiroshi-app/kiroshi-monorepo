@@ -17,12 +17,9 @@ import type {
 	BotPermissions as HostBotPermissions,
 	OfferedModel_Serialize,
 } from "@/lib/bindings"
+import { hueOfPreset, presetOfHue } from "@/lib/colour/hue-shim"
 import type { SidebarActivity } from "../chat/screen-model"
-import type {
-	AvatarBlot,
-	Bot,
-	BotIdentity,
-} from "../conversations/store-contract"
+import type { Bot, BotIdentity, Hue } from "../conversations/store-contract"
 import type { LastWord } from "../conversations/transcript-state"
 
 export const FALLBACK_MODELS = ["opus", "fable", "sonnet", "haiku"]
@@ -99,11 +96,11 @@ export const BOT_NAMES = [
 	"Waffle",
 ] as const
 
-const nextBlot = (bots: Bot[]): AvatarBlot => {
+const nextBlot = (bots: Bot[]): Hue => {
 	const marked = new Set(bots.map((bot) => bot.avatarBlot))
-	return (
-		BLOT_TINTS.find((tint) => !marked.has(tint)) ??
-		BLOT_TINTS[bots.length % BLOT_TINTS.length]
+	return hueOfPreset(
+		BLOT_TINTS.find((tint) => !marked.has(hueOfPreset(tint))) ??
+			BLOT_TINTS[bots.length % BLOT_TINTS.length],
 	)
 }
 
@@ -128,7 +125,7 @@ export const newBotIdentity = (bots: Bot[]): BotIdentity => ({
 
 export const toSettingsValue = (bot: Bot): BotSettingsValue => ({
 	identity: {
-		blot: bot.avatarBlot ?? undefined,
+		blot: bot.avatarBlot === null ? undefined : presetOfHue(bot.avatarBlot),
 		image: avatarSrc(bot.avatarImagePath),
 	},
 	name: bot.name,
@@ -148,7 +145,7 @@ export const toCompanionSummary = (
 ): CompanionSummary => ({
 	id: bot.id,
 	name: bot.name,
-	blot: bot.avatarBlot ?? undefined,
+	blot: bot.avatarBlot === null ? undefined : presetOfHue(bot.avatarBlot),
 	seed: bot.id,
 	image: avatarSrc(bot.avatarImagePath),
 	title: bot.title,
@@ -165,7 +162,8 @@ export const toIdentity = (
 	name: value.name,
 	title: value.title,
 	model: value.model,
-	avatarBlot: value.identity.blot ?? null,
+	avatarBlot:
+		value.identity.blot === undefined ? null : hueOfPreset(value.identity.blot),
 	avatarImagePath: value.identity.image ? bot.avatarImagePath : null,
 	instructions: value.instructions,
 	deniedTools: withoutChangingTools(bot.deniedTools),
@@ -222,7 +220,7 @@ export const toRosterBots = (
 			sectionId: bot.sectionId,
 			pinPosition: bot.pinPosition,
 			title: bot.title || undefined,
-			blot: bot.avatarBlot ?? undefined,
+			blot: bot.avatarBlot === null ? undefined : presetOfHue(bot.avatarBlot),
 			image: avatarSrc(bot.avatarImagePath),
 			lastMessage: preview?.text,
 			timestamp: preview ? rosterTimestamp(preview.at, now) : undefined,

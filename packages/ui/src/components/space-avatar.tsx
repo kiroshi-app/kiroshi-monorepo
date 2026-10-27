@@ -2,7 +2,10 @@
 
 import { useId } from "react"
 
-import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
+import {
+	type BotAvatarBlot,
+	hueOf,
+} from "@workspace/ui/components/companion-colour"
 import {
 	COMPACT_EDGE,
 	edgeWidthOf,
@@ -182,7 +185,10 @@ const SpaceAvatar = ({
 	)
 
 	const drawing = (theme: SpaceAvatarTheme) => {
-		const palette = spacePalette(theme, state === "offline" ? null : colour)
+		const palette = spacePalette(
+			theme,
+			state === "offline" ? null : hueOf(colour),
+		)
 		const tones = isCompactRecipe ? palette.compact : palette.full
 		const lineColour = palette.compact[2] ?? ""
 		if (isFilled(state)) return filled(theme, tones)

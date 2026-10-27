@@ -25,6 +25,7 @@ import { failureReporterIn } from "../failure-report"
 import { joinedHosts, listen } from "../host"
 import { createStore } from "../store"
 import type { RosterSpace, RosterState } from "../bots/roster-controller"
+import { presetOfHue } from "../colour/hue-shim"
 import type { Space } from "../conversations/store-contract"
 import { joinRejectionNoticeOf } from "../host/join-refusal"
 import {
@@ -200,13 +201,14 @@ export const openRowIdOf = (
 
 const ownedSwitcherSpaceOf = (space: Space): SwitcherSpace => ({
 	...space,
+	colour: space.colour == null ? space.colour : presetOfHue(space.colour),
 	avatarSeed: space.instanceId ?? space.id,
 })
 
 const joinedSwitcherSpaceOf = (joined: JoinedSpace): SwitcherSpace => ({
 	id: rowIdOf(joined),
 	name: joined.name,
-	colour: joined.colour,
+	colour: presetOfHue(joined.colour),
 	avatarSeed: joined.instanceId ?? rowIdOf(joined),
 })
 
@@ -241,10 +243,10 @@ export const openSpaceColourOf = (
 	joined: Pick<JoinedSpacesState, "joinedSpaces" | "openId" | "departed">,
 ) => {
 	const openRowId = openRowIdOf(joined, selectedSpaceId)
-	return (
+	const colour =
 		joinedSpaceOfRow(joined.joinedSpaces, openRowId)?.colour ??
 		openLocalSpaceOf(spaces, openRowId)?.colour
-	)
+	return colour == null ? colour : presetOfHue(colour)
 }
 
 export const rosterSpacesOf = (
