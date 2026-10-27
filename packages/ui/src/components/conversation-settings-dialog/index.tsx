@@ -185,10 +185,8 @@ type ConversationGeneralFieldsProps = ConversationValueProps &
 const ConversationGeneralFields = ({
 	value,
 	onValueChange,
-	icon,
-	hue,
 	onIconChange,
-	onHueChange,
+	...colour
 }: ConversationGeneralFieldsProps) => {
 	const { t } = useTranslation("chat")
 
@@ -201,15 +199,11 @@ const ConversationGeneralFields = ({
 				value={value.name}
 			/>
 			<ConversationIconField
-				hue={hue}
-				icon={icon}
+				hue={colour.hue}
+				icon={colour.icon}
 				onIconChange={onIconChange}
 			/>
-			<ConversationColourField
-				hue={hue}
-				icon={icon}
-				onHueChange={onHueChange}
-			/>
+			<ConversationColourField {...colour} />
 		</>
 	)
 }
