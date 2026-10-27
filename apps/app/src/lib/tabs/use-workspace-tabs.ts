@@ -72,8 +72,6 @@ export const useWorkspaceTabs = ({ tabs, ...needs }: WorkspaceTabsSource) => {
 		activeId: active.id,
 		canGoBack: active.index > 0,
 		canGoForward: active.index < active.entries.length - 1,
-		back: tabs.back,
-		forward: tabs.forward,
 		select: tabs.select,
 		pin: tabs.pin,
 		unpin: tabs.unpin,
