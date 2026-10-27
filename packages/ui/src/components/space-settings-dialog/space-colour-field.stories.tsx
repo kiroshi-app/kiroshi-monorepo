@@ -2,14 +2,12 @@ import { useState } from "react"
 import { expect, fn } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { SpaceColourField } from "@workspace/ui/components/space-settings-dialog/space-fields"
+import {
+	SpaceColourField,
+	type SpaceColourFieldProps,
+} from "@workspace/ui/components/space-settings-dialog/space-fields"
 
-type ColourHostProps = {
-	value: number | null
-	onValueChange: (hue: number | null) => void
-}
-
-const ColourHost = (props: ColourHostProps) => {
+const ColourHost = (props: SpaceColourFieldProps) => {
 	const [value, setValue] = useState(props.value)
 
 	return (

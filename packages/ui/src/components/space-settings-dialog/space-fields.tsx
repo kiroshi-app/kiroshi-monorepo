@@ -61,6 +61,7 @@ const SpaceFields = ({ value, onValueChange, className }: SpaceFieldsProps) => {
 
 export {
 	SpaceColourField,
+	type SpaceColourFieldProps,
 	SpaceFields,
 	type SpaceFieldsProps,
 	type SpaceFieldsValue,
