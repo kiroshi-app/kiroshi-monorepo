@@ -33,6 +33,17 @@ export const useSettingsNavigation = (holder: ThreadHolder) => {
 				spaceId,
 			)
 
+		const replacingSearch = (
+			patch: CompanionSettingsSearch,
+		): NavigateOptions => ({
+			to: ".",
+			search: (previous: CompanionSettingsSearch) => ({
+				...previous,
+				...patch,
+			}),
+			replace: true,
+		})
+
 		const go = (options: NavigateOptions) => {
 			if (isNewTabClickInFlight()) {
 				openInBackgroundTab(options)
@@ -90,39 +101,16 @@ export const useSettingsNavigation = (holder: ThreadHolder) => {
 					search,
 				}),
 			showEntry: (entry: string, modifiers?: ClickModifiers) =>
-				goFromClick(
-					{
-						to: ".",
-						search: (previous: CompanionSettingsSearch) => ({
-							...previous,
-							entry,
-						}),
-						replace: true,
-					},
-					modifiers,
-				),
+				goFromClick(replacingSearch({ entry }), modifiers),
 			openApplication: (application: string, modifiers?: ClickModifiers) =>
 				goFromClick(
-					{
-						to: ".",
-						search: (previous: CompanionSettingsSearch) => ({
-							...previous,
-							entry: APPLICATIONS_ENTRY,
-							application,
-						}),
-						replace: true,
-					},
+					replacingSearch({ entry: APPLICATIONS_ENTRY, application }),
 					modifiers,
 				),
 			showApplication: (application: string | null) =>
-				void navigate({
-					to: ".",
-					search: (previous: CompanionSettingsSearch) => ({
-						...previous,
-						application: application ?? undefined,
-					}),
-					replace: true,
-				}),
+				void navigate(
+					replacingSearch({ application: application ?? undefined }),
+				),
 		}
 	}, [navigate, router, holder])
 }
