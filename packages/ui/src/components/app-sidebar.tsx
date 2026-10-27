@@ -2,7 +2,8 @@
 
 import { type ComponentProps, memo, useState } from "react"
 
-import { AppRail, type AppRailPanel } from "@workspace/ui/components/app-rail"
+import { AppFrame } from "@workspace/ui/components/app-frame"
+import type { AppRailPanel } from "@workspace/ui/components/app-rail"
 import {
 	type AppSidebarBot,
 	type AppSidebarConversation,
@@ -14,7 +15,6 @@ import {
 	type SidebarClickModifiers,
 } from "@workspace/ui/components/app-sidebar-model"
 import { AppSidebarPanel } from "@workspace/ui/components/app-sidebar-panel"
-import { AppTitleBar } from "@workspace/ui/components/app-title-bar"
 import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
 import type { ListEnd } from "@workspace/ui/components/list-skeleton"
 import { type Space, spaceAtRank } from "@workspace/ui/components/space"
@@ -94,47 +94,49 @@ const AppSidebarBase = ({
 	})
 
 	return (
-		<>
-			<AppTitleBar
-				activeTabId={activeTabId}
-				canGoBack={canGoBack}
-				canGoForward={canGoForward}
-				data-tauri-drag-region={dragRegion}
-				insetWindowControls={insetWindowControls}
-				onCloseOtherTabs={onCloseOtherTabs}
-				onCloseTab={onCloseTab}
-				onGoBack={onGoBack}
-				onGoForward={onGoForward}
-				onNewTab={onNewTab}
-				onPinTab={onPinTab}
-				onSelectTab={onSelectTab}
-				onUnpinTab={onUnpinTab}
-				tabs={tabs}
-				windowControls={windowControls}
-			/>
-			<AppRail
-				badgesBySpaceId={badgesBySpaceId}
-				data-tauri-drag-region={dragRegion}
-				dots={railDots}
-				hostBySpaceId={hostBySpaceId}
-				invitations={invitations}
-				onAcceptInvitation={onAcceptInvitation}
-				onCreateSpace={onCreateSpace}
-				onDeclineInvitation={onDeclineInvitation}
-				onOpenSpaceSettings={onOpenSpaceSettings}
-				onOpenYou={onOpenUserSettings}
-				onRetryInvitation={onRetryInvitation}
-				onSelectConversations={() => setOpenPanel("conversations")}
-				onSelectMissions={() => setOpenPanel("missions")}
-				onSelectSpace={onSelectSpace}
-				onSpacesMenuOpenChange={onSpaceSwitcherOpenChange}
-				openSettings={openSettings}
-				selected={openPanel}
-				space={space}
-				spaces={spaces}
-				updateBadge={updateBadge}
-				user={user}
-			/>
+		<AppFrame
+			rail={{
+				badgesBySpaceId,
+				"data-tauri-drag-region": dragRegion,
+				dots: railDots,
+				hostBySpaceId,
+				invitations,
+				onAcceptInvitation,
+				onCreateSpace,
+				onDeclineInvitation,
+				onOpenSpaceSettings,
+				onOpenYou: onOpenUserSettings,
+				onRetryInvitation,
+				onSelectConversations: () => setOpenPanel("conversations"),
+				onSelectMissions: () => setOpenPanel("missions"),
+				onSelectSpace,
+				onSpacesMenuOpenChange: onSpaceSwitcherOpenChange,
+				openSettings,
+				selected: openPanel,
+				spaces,
+				updateBadge,
+				user,
+			}}
+			space={space}
+			spaceHost={space ? hostBySpaceId?.[space.id] : undefined}
+			titleBar={{
+				activeTabId,
+				canGoBack,
+				canGoForward,
+				"data-tauri-drag-region": dragRegion,
+				insetWindowControls,
+				onCloseOtherTabs,
+				onCloseTab,
+				onGoBack,
+				onGoForward,
+				onNewTab,
+				onPinTab,
+				onSelectTab,
+				onUnpinTab,
+				tabs,
+				windowControls,
+			}}
+		>
 			<AppSidebarPanel
 				{...sidebar}
 				footer={
@@ -152,7 +154,7 @@ const AppSidebarBase = ({
 				selectedSpaceId={selectedSpaceId}
 				spaces={spaces}
 			/>
-		</>
+		</AppFrame>
 	)
 }
 

@@ -15,9 +15,10 @@ import { Kbd } from "@workspace/ui/components/ui/kbd"
 import { SidebarHeader } from "@workspace/ui/components/ui/sidebar"
 import { STILL_UNDER_REDUCED_MOTION } from "@workspace/ui/lib/reduced-motion"
 
-const HEADER = "px-2 py-0"
+const HEADER = "left-column-inset py-0"
 
-const HEADER_ROW = "flex h-8 items-center justify-between ps-2 pe-0.5"
+const HEADER_ROW =
+	"left-column-header flex items-center justify-between ps-2 pe-0.5"
 
 const HEADER_TITLE =
 	"min-w-0 truncate font-semibold text-foreground text-reading leading-4.5 tracking-[-0.01em]"

@@ -11,6 +11,7 @@ import {
 	type GlazeTheme,
 	isCompactAt,
 } from "@workspace/ui/components/glaze-border"
+import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import type { Icon } from "@workspace/ui/components/icons"
 import {
 	MARKDOWN_CODE_SURFACE_CLASS,
@@ -18,6 +19,7 @@ import {
 	MARKDOWN_WHITESPACE_CLASS,
 } from "@workspace/ui/components/markdown/prose"
 import type { ScreenLayoutWidth } from "@workspace/ui/components/screen-layout"
+import { spaceAvatarStateOf } from "@workspace/ui/components/space-avatar"
 import {
 	Sidebar,
 	SidebarContent,
@@ -185,6 +187,63 @@ export const expectSettingsChrome = async (
 		resolvedRootColor("--shell-divider"),
 	)
 }
+
+const LEFT_COLUMN = {
+	paddingTop: "8px",
+	paddingBottom: "12px",
+	paddingInline: "0px",
+	gap: "8px",
+	headerHeight: 32,
+	rowInset: 8,
+}
+
+type LeftColumnParts = {
+	column: HTMLElement
+	header: HTMLElement
+	row: HTMLElement
+}
+
+export const expectLeftColumn = async ({
+	column,
+	header,
+	row,
+}: LeftColumnParts) => {
+	const style = getComputedStyle(column)
+	const innerLeft = column.getBoundingClientRect().left + column.clientLeft
+
+	await expect(style.paddingTop).toBe(LEFT_COLUMN.paddingTop)
+	await expect(style.paddingBottom).toBe(LEFT_COLUMN.paddingBottom)
+	await expect(style.paddingInlineStart).toBe(LEFT_COLUMN.paddingInline)
+	await expect(style.paddingInlineEnd).toBe(LEFT_COLUMN.paddingInline)
+	await expect(style.rowGap).toBe(LEFT_COLUMN.gap)
+	await expect(header.getBoundingClientRect().height).toBe(
+		LEFT_COLUMN.headerHeight,
+	)
+	await expect(row.getBoundingClientRect().left - innerLeft).toBe(
+		LEFT_COLUMN.rowInset,
+	)
+}
+
+export const expectSettingsMenuLeftColumn = (root: Element) => {
+	const column = slotIn(root, "settings-menu")
+	const firstEntry = slotIn(column, "settings-menu-entries").querySelector(
+		"button",
+	)
+	if (!firstEntry) throw new Error("The settings menu lists no entry")
+
+	return expectLeftColumn({
+		column,
+		header: slotIn(column, "settings-menu-back"),
+		row: firstEntry,
+	})
+}
+
+export const RAIL_SPACE_HOST: SpaceHost = "connecting"
+
+export const expectRailSpaceHost = (root: Element) =>
+	expect(slotIn(slotIn(root, "app-rail"), "space-avatar").dataset.state).toBe(
+		spaceAvatarStateOf(RAIL_SPACE_HOST),
+	)
 
 export const LAPTOP_WINDOW = { viewport: { value: "laptop" } }
 

@@ -6,13 +6,15 @@ import preview from "@workspace/storybook/preview"
 import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 	expectLaptopWindow,
+	expectRailSpaceHost,
 	expectSettingsChrome,
+	expectSettingsMenuLeftColumn,
 	expectSettingsPage,
 	LAPTOP_WINDOW,
+	RAIL_SPACE_HOST,
 	slotIn,
 	slotsIn,
 } from "@workspace/storybook/story-utils"
-import { AppRail } from "@workspace/ui/components/app-rail"
 import {
 	STUDIO,
 	TITLE_BAR,
@@ -88,18 +90,11 @@ const RAIL_PRESSES = {
 	onOpenYou: fn(),
 }
 
-const RAIL: UserSettingsScreenProps["rail"] = (requestLeave) => (
-	<AppRail
-		onOpenSpaceSettings={() => requestLeave(RAIL_PRESSES.onOpenSpaceSettings)}
-		onOpenYou={() => requestLeave(RAIL_PRESSES.onOpenYou)}
-		onSelectConversations={() =>
-			requestLeave(RAIL_PRESSES.onSelectConversations)
-		}
-		onSelectMissions={() => requestLeave(RAIL_PRESSES.onSelectMissions)}
-		selected="conversations"
-		user={{ name: "Ada Martin" }}
-	/>
-)
+const RAIL: UserSettingsScreenProps["rail"] = {
+	...RAIL_PRESSES,
+	selected: "conversations",
+	user: { name: "Ada Martin" },
+}
 
 const USER_ARGS = {
 	target: "user",
@@ -238,9 +233,8 @@ const expectSpaceRows = async (menu: HTMLElement, names: string[]) => {
 		slotIn(spaceRowOf(menu, "Harbor"), "space-avatar").dataset.state,
 	).toBe("offline")
 	await expect(slotsIn(groupIn(menu, "Your spaces"), "host-pill")).toHaveLength(
-		1,
+		0,
 	)
-	await expect(slotIn(spaceRowOf(menu, "Harbor"), "host-pill")).toBeVisible()
 	await expect(spaceRowOf(menu, "Studio")).toHaveAttribute(
 		"aria-current",
 		"true",
@@ -346,7 +340,7 @@ export const Spaces = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard F01: the menu in two titled groups, Your settings then Your spaces. The screen opens on Account when no entry is chosen. Check Studio marked current with its Open now pill and the shared dot on its avatar, Northwind ending on the attention dot, Harbor in greys with its Not connected pill, Atelier's dashed outline and Invitation pill, and the + creating a space by pointer or keyboard. The contrast audit is left to review: the Invitation pill wears the warning token on its own tint as the artboard draws it, 2.96:1 in the light theme.",
+					"Artboard F01: the menu in two titled groups, Your settings then Your spaces. The screen opens on Account when no entry is chosen. Check Studio marked current with its Open now pill and the shared dot on its avatar, Northwind ending on the attention dot, Harbor in greys with no state pill, Atelier's dashed outline and Invitation pill, and the + creating a space by pointer or keyboard. The contrast audit is left to review: the Invitation pill wears the warning token on its own tint as the artboard draws it, 2.96:1 in the light theme.",
 			},
 		},
 	},
@@ -408,6 +402,88 @@ export const SpacesDark = meta.story({
 	},
 })
 
+const HOST_STATES_ARGS = {
+	...SPACES_ARGS,
+	ownedSpaces: [{ ...STUDIO, colour: "blue", host: "shared" }],
+	joinedSpaces: [
+		{
+			id: "vocca",
+			name: "Vocca",
+			colour: "green",
+			avatarSeed: "vocca",
+			host: "up",
+		},
+		{
+			id: "archives",
+			name: "Archives",
+			colour: "purple",
+			avatarSeed: "archives",
+			host: "connecting",
+		},
+		{
+			id: "harbor",
+			name: "Harbor",
+			colour: "orange",
+			avatarSeed: "harbor",
+			host: "down",
+		},
+	],
+	invitations: [],
+} satisfies Partial<UserSettingsScreenProps>
+
+const HOST_ROWS = [
+	{ name: "Studio", state: "shared", label: "Shared" },
+	{ name: "Vocca", state: "online", label: "Online" },
+	{ name: "Archives", state: "connecting", label: "Connecting…" },
+	{ name: "Harbor", state: "offline", label: "Not connected" },
+]
+
+const playHostStates = async () => {
+	const menu = await menuIn()
+	const spaces = groupIn(menu, "Your spaces")
+	const names = slotsIn(spaces, "roster-row-name")
+	await expect(names.map((name) => name.textContent)).toEqual(
+		HOST_ROWS.map(({ name }) => name),
+	)
+	for (const name of names) {
+		await expect(name.getBoundingClientRect().width).toBeGreaterThan(0)
+		await expect(name.scrollWidth).toBeLessThanOrEqual(name.clientWidth)
+	}
+	for (const { name, state, label } of HOST_ROWS) {
+		const row = spaceRowOf(menu, name)
+		await expect(slotIn(row, "space-avatar").dataset.state).toBe(state)
+		await expect(within(row).getByText(label)).toHaveClass("sr-only")
+	}
+	await expect(slotsIn(spaces, "host-pill")).toHaveLength(0)
+}
+
+export const SpacesHostStates = meta.story({
+	args: HOST_STATES_ARGS,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Your spaces with one row per host state: Studio shared from this computer, Vocca joined and online, Archives connecting, Harbor not connected. Check every row shows its name in full beside its avatar in the state of its host, that no state pill sits in any row, and that each row reads its state to assistive technology after the name. Pick `SpacesHostStatesDark` for the dark theme.",
+			},
+		},
+	},
+	play: playHostStates,
+})
+
+export const SpacesHostStatesDark = meta.story({
+	args: HOST_STATES_ARGS,
+	globals: { theme: "dark" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"`SpacesHostStates` in the dark theme. Check the four names stay shown in full and the connecting and not connected avatars stay told apart from the online ones without a pill.",
+			},
+		},
+	},
+	play: playHostStates,
+})
+
 const LeftNorthwindNotice = () => {
 	const { t } = useTranslation("settings")
 
@@ -423,6 +499,42 @@ const LeftNorthwindNotice = () => {
 
 	return null
 }
+
+const LEFT_COLUMN = {
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The User settings menu as the left column every screen shares. Check that the column opens 8px under its top edge and closes 12px over its bottom edge, that its pieces stand 8px apart, that its back header is 32px tall like the Conversations panel header and that its first entry sits 8px in from its inner edge, the same numbers the Conversations and Missions panels and the Space settings menu read.",
+			},
+		},
+	},
+	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+		await expectSettingsMenuLeftColumn(canvasElement)
+	},
+}
+
+export const LeftColumn = meta.story(LEFT_COLUMN)
+
+export const RailSpaceHost = meta.story({
+	args: { currentSpace: STUDIO, currentSpaceHost: RAIL_SPACE_HOST },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The User settings while the current Space's host is being reached. Check that the Space logo at the top of the rail draws the connecting state, the same one the Conversations and Missions panels and the Space settings screen draw for the same host.",
+			},
+		},
+	},
+	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+		await expectRailSpaceHost(canvasElement)
+	},
+})
+
+export const LeftColumnDark = meta.story({
+	...LEFT_COLUMN,
+	globals: { theme: "dark" },
+})
 
 export const AfterLeavingASpace = meta.story({
 	args: {

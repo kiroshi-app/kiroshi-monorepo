@@ -40,6 +40,7 @@ interface ConversationRosterRowProps extends RosterRowSlot, RosterPinActions {
 	isSelected: boolean
 	sections: AppSidebarSection[]
 	onSelect?: (id: string, modifiers?: SidebarClickModifiers) => void
+	onOpenInNewTab?: (id: string) => void
 	onOpenSettings?: (id: string) => void
 	onDelete?: (id: string) => void
 	onMoveToSection?: (id: string, sectionId: string | null) => void
@@ -58,6 +59,7 @@ const ConversationRosterRow = ({
 	onPin,
 	onUnpin,
 	onSelect,
+	onOpenInNewTab,
 	onOpenSettings,
 	onDelete,
 	onMoveToSection,
@@ -110,6 +112,15 @@ const ConversationRosterRow = ({
 					aria-label={t("roster.actions", { name: conversation.name })}
 					className={STILL_UNDER_REDUCED_MOTION}
 				>
+					{onOpenInNewTab ? (
+						<>
+							<ContextMenuItem onClick={() => onOpenInNewTab(conversation.id)}>
+								<Icons.ExternalLink aria-hidden="true" className="size-3.5" />
+								{t("roster.openInNewTab")}
+							</ContextMenuItem>
+							<ContextMenuSeparator />
+						</>
+					) : null}
 					<PinGroup
 						id={conversation.id}
 						isPinned={isPinned}

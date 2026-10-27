@@ -4,14 +4,19 @@ import { expect, fn, screen, waitFor, within } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	expectLaptopWindow,
+	expectRailSpaceHost,
 	expectSettingsChrome,
+	expectSettingsMenuLeftColumn,
 	expectSettingsPage,
 	LAPTOP_WINDOW,
+	RAIL_SPACE_HOST,
 	slotIn,
 	slotsIn,
 } from "@workspace/storybook/story-utils"
-import { AppRail } from "@workspace/ui/components/app-rail"
-import { TITLE_BAR } from "@workspace/ui/components/app-title-bar.fixtures"
+import {
+	STUDIO,
+	TITLE_BAR,
+} from "@workspace/ui/components/app-title-bar.fixtures"
 import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
 import { SPACE_ENVIRONMENT } from "@workspace/ui/components/environment.fixtures"
 import {
@@ -88,18 +93,11 @@ const RAIL_PRESSES = {
 	onOpenYou: fn(),
 }
 
-const RAIL: SpaceSettingsScreenProps["rail"] = (requestLeave) => (
-	<AppRail
-		onOpenSpaceSettings={() => requestLeave(RAIL_PRESSES.onOpenSpaceSettings)}
-		onOpenYou={() => requestLeave(RAIL_PRESSES.onOpenYou)}
-		onSelectConversations={() =>
-			requestLeave(RAIL_PRESSES.onSelectConversations)
-		}
-		onSelectMissions={() => requestLeave(RAIL_PRESSES.onSelectMissions)}
-		selected="conversations"
-		user={{ name: "Ada Martin" }}
-	/>
-)
+const RAIL: SpaceSettingsScreenProps["rail"] = {
+	...RAIL_PRESSES,
+	selected: "conversations",
+	user: { name: "Ada Martin" },
+}
 
 const railIn = () => screen.findByRole("navigation", { name: "Navigation" })
 
@@ -236,6 +234,42 @@ export const MembersDark = meta.story({
 			},
 		},
 	},
+})
+
+const LEFT_COLUMN = {
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The Space settings menu as the left column every screen shares. Check that the column opens 8px under its top edge and closes 12px over its bottom edge, that its pieces stand 8px apart, that its back header is 32px tall like the Conversations panel header and that its first entry sits 8px in from its inner edge, the same numbers the Conversations and Missions panels and the User settings menu read.",
+			},
+		},
+	},
+	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+		await expectSettingsMenuLeftColumn(canvasElement)
+	},
+}
+
+export const LeftColumn = meta.story(LEFT_COLUMN)
+
+export const RailSpaceHost = meta.story({
+	args: { currentSpace: STUDIO, currentSpaceHost: RAIL_SPACE_HOST },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The Space settings while the current Space's host is being reached. Check that the Space logo at the top of the rail draws the connecting state, the same one the Conversations and Missions panels and the User settings screen draw for the same host.",
+			},
+		},
+	},
+	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+		await expectRailSpaceHost(canvasElement)
+	},
+})
+
+export const LeftColumnDark = meta.story({
+	...LEFT_COLUMN,
+	globals: { theme: "dark" },
 })
 
 export const MembersTinted = meta.story({
@@ -664,7 +698,9 @@ const expectArtboard = async ({
 	)
 
 	const back = entryIn(menu, "Back to your settings")
-	await expect(getComputedStyle(back).alignSelf).toBe("flex-start")
+	await expect(back.getBoundingClientRect().width).toBeLessThan(
+		slotIn(menu, "settings-menu-back").clientWidth,
+	)
 	await expect(iconOf(back).strokeWidth).toBe("2px")
 
 	const identity = slotIn(menu, "settings-menu-header")
@@ -905,7 +941,7 @@ export const JoinedHostNotConnected = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard F04: a space joined from Jordan Lee, whose computer isn't connected. Check · Not connected after the host, the avatar in greys without a dot and the Not connected pill beside the name in the menu and on the page, the header alone with no Name field, every entry but Space dimmed, out of the tab order and announced as disabled with its count hidden, and Leave space still reachable.",
+					"Artboard F04: a space joined from Jordan Lee, whose computer isn't connected. Check · Not connected after the host, the avatar in greys without a dot and no state pill beside the name in the menu or on the page, the header alone with no Name field, every entry but Space dimmed, out of the tab order and announced as disabled with its count hidden, and Leave space still reachable.",
 			},
 		},
 	},
@@ -920,8 +956,8 @@ export const JoinedHostNotConnected = meta.story({
 		})
 		await expect(avatarStatesIn(menu, main)).toEqual(["offline", "offline"])
 		await expect(menu.querySelector("[data-slot=space-avatar-dot]")).toBeNull()
-		await expect(slotIn(menu, "host-pill")).toHaveTextContent("Not connected")
-		await expect(slotIn(main, "host-pill")).toHaveTextContent("Not connected")
+		await expect(slotsIn(menu, "host-pill")).toHaveLength(0)
+		await expect(slotsIn(main, "host-pill")).toHaveLength(0)
 
 		const standing = slotIn(main, "focused-space-standing")
 		await expect(
@@ -1007,7 +1043,7 @@ export const JoinedHostConnecting = meta.story({
 		docs: {
 			description: {
 				story:
-					"A joined space whose host this computer is still reaching, the host state handed in by the app. Check the settings header and the Space page both draw the connecting avatar, its ground with the arcs as lines and no dot, and a Connecting… pill beside the space name.",
+					"A joined space whose host this computer is still reaching, the host state handed in by the app. Check the settings header and the Space page both draw the connecting avatar, its ground with the arcs as lines and no dot, with no state pill beside the space name.",
 			},
 		},
 	},
@@ -1018,17 +1054,14 @@ export const JoinedHostConnecting = meta.story({
 			"connecting",
 			"connecting",
 		])
-		for (const [area, name] of [
-			[menu, slotIn(menu, "settings-menu-name")],
-			[
-				main,
-				within(main).getByRole("heading", { level: 2, name: "Northwind" }),
-			],
-		] as const) {
-			const pill = slotIn(area, "host-pill")
-			await expect(pill).toHaveTextContent("Connecting…")
-			await expect(pill.previousElementSibling).toBe(name)
-		}
+		await expect(slotIn(menu, "settings-menu-name")).toHaveTextContent(
+			"Northwind",
+		)
+		await expect(
+			within(main).getByRole("heading", { level: 2, name: "Northwind" }),
+		).toBeVisible()
+		for (const area of [menu, main])
+			await expect(slotsIn(area, "host-pill")).toHaveLength(0)
 	},
 })
 

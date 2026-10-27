@@ -1,7 +1,7 @@
 import { expect, fn, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { slotIn } from "@workspace/storybook/story-utils"
+import { slotIn, slotsIn } from "@workspace/storybook/story-utils"
 import { FocusedSpacePage } from "@workspace/ui/components/settings-screen/focused-space-page"
 
 const meta = preview.meta({
@@ -121,7 +121,7 @@ export const Connecting = meta.story({
 		docs: {
 			description: {
 				story:
-					"A joined space whose host is still being reached, the host state handed in by the app. Check the 48px avatar draws its ground with the arcs as lines and no dot, and a Connecting… pill follows the space name.",
+					"A joined space whose host is still being reached, the host state handed in by the app. Check the 48px avatar draws its ground with the arcs as lines and no dot, the only connection signal: no state pill follows the space name.",
 			},
 		},
 	},
@@ -130,10 +130,9 @@ export const Connecting = meta.story({
 		await expect(slotIn(header, "space-avatar").dataset.state).toBe(
 			"connecting",
 		)
-		const pill = slotIn(header, "host-pill")
-		await expect(pill).toHaveTextContent("Connecting…")
-		await expect(pill.previousElementSibling).toBe(
+		await expect(
 			within(header).getByRole("heading", { level: 2 }),
-		)
+		).toBeVisible()
+		await expect(slotsIn(header, "host-pill")).toHaveLength(0)
 	},
 })

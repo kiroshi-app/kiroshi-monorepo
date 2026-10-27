@@ -44,6 +44,7 @@ interface CompanionMenuContentProps extends RosterPinActions {
 	sections: RosterMenuSection[]
 	openSpaceId?: string
 	finalFocus?: () => HTMLElement | boolean
+	onOpenInNewTab?: (id: string) => void
 	onEdit?: (id: string) => void
 	onDuplicate?: (id: string) => void
 	onAddToSpace?: (botId: string, spaceId: string) => void
@@ -63,6 +64,7 @@ const CompanionMenuContent = ({
 	finalFocus,
 	onPin,
 	onUnpin,
+	onOpenInNewTab,
 	onEdit,
 	onDuplicate,
 	onAddToSpace,
@@ -89,6 +91,15 @@ const CompanionMenuContent = ({
 						: companion.name}
 				</ContextMenuLabel>
 				<ContextMenuSeparator />
+				{onOpenInNewTab ? (
+					<>
+						<ContextMenuItem onClick={() => onOpenInNewTab(companion.id)}>
+							<Icons.ExternalLink aria-hidden="true" className="size-3.5" />
+							{t("roster.openInNewTab")}
+						</ContextMenuItem>
+						<ContextMenuSeparator />
+					</>
+				) : null}
 				<PinGroup
 					id={companion.id}
 					isPinned={isPinned}

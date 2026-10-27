@@ -1,13 +1,20 @@
 "use client"
 
-import { type ReactNode, useRef, useState } from "react"
+import {
+	type ReactNode,
+	useEffect,
+	useEffectEvent,
+	useRef,
+	useState,
+} from "react"
 import { useTranslation } from "react-i18next"
 
-import { AppHeader } from "@workspace/ui/components/app-header"
 import {
-	AppTitleBar,
-	type AppTitleBarProps,
-} from "@workspace/ui/components/app-title-bar"
+	AppFrame,
+	type AppFrameRailProps,
+} from "@workspace/ui/components/app-frame"
+import { AppHeader } from "@workspace/ui/components/app-header"
+import type { AppTitleBarProps } from "@workspace/ui/components/app-title-bar"
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
 import { BotIdentityFields } from "@workspace/ui/components/bot-identity-fields"
 import type {
@@ -23,11 +30,7 @@ import { RuntimeFields } from "@workspace/ui/components/bot-settings-dialog/runt
 import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
 import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
 import { EnvironmentPanel } from "@workspace/ui/components/environment-panel"
-import {
-	HostPill,
-	hostPillOf,
-	type SpaceHost,
-} from "@workspace/ui/components/host-pill"
+import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import { InitialsAvatar } from "@workspace/ui/components/initials-avatar"
 import type { SettingsPages } from "@workspace/ui/components/plugin-settings/settings-pages"
 import { HISTORY_TAB } from "@workspace/ui/components/plugin-settings/use-history-session"
@@ -121,7 +124,10 @@ type SettingsScreenNavigation = {
 	onEntryChange: (entry: string) => void
 	onBack: () => void
 	backLabel?: string
-	rail?: (requestLeave: SettingsScreenRequestLeave) => ReactNode
+	rail: AppFrameRailProps
+	currentSpace?: Space
+	currentSpaceHost?: SpaceHost
+	guardLeave?: (requestLeave: SettingsScreenRequestLeave) => () => void
 	titleBar?: AppTitleBarProps
 	width?: number
 	onWidthChange?: (width: number) => void
@@ -192,7 +198,6 @@ type CompanionSettingsScreenProps = SettingsScreenNavigation &
 type SettingsScreenLayoutProps = SettingsScreenNavigation & {
 	avatar: ReactNode
 	name: string
-	status?: ReactNode
 	subtitle: string
 	entries: SettingsEntry[]
 	pages: SettingsPages
@@ -242,12 +247,32 @@ const askingBeforeLeaving = (
 	}
 }
 
+const askedFirst = <Args extends unknown[]>(
+	requestLeave: SettingsScreenRequestLeave,
+	gesture?: (...args: Args) => void,
+) => gesture && ((...args: Args) => requestLeave(() => gesture(...args)))
+
+const railAskingBeforeLeaving = (
+	rail: AppFrameRailProps,
+	requestLeave: SettingsScreenRequestLeave,
+): AppFrameRailProps => ({
+	...rail,
+	onSelectSpace: askedFirst(requestLeave, rail.onSelectSpace),
+	onOpenSpaceSettings: askedFirst(requestLeave, rail.onOpenSpaceSettings),
+	onOpenYou: askedFirst(requestLeave, rail.onOpenYou),
+	onSelectConversations: askedFirst(requestLeave, rail.onSelectConversations),
+	onSelectMissions: askedFirst(requestLeave, rail.onSelectMissions),
+})
+
 const SettingsScreenLayout = ({
 	entry,
 	onEntryChange,
 	onBack,
 	backLabel,
 	rail,
+	currentSpace,
+	currentSpaceHost,
+	guardLeave,
 	titleBar,
 	width,
 	onWidthChange,
@@ -255,7 +280,6 @@ const SettingsScreenLayout = ({
 	spaceTint,
 	avatar,
 	name,
-	status,
 	subtitle,
 	entries,
 	pages,
@@ -301,6 +325,12 @@ const SettingsScreenLayout = ({
 			leave()
 		}
 	}
+
+	const askBeforeLeaving = useEffectEvent(leaveThen)
+	useEffect(
+		() => guardLeave?.((navigate) => askBeforeLeaving(navigate)),
+		[guardLeave],
+	)
 
 	const select = (value: string) => leaveThen(() => onEntryChange(value))
 
@@ -354,9 +384,12 @@ const SettingsScreenLayout = ({
 			spaceTint={spaceTint}
 			onWidthChange={onWidthChange}
 			sidebar={
-				<>
-					<AppTitleBar {...askingBeforeLeaving(titleBar, leaveThen)} />
-					{rail?.(leaveThen)}
+				<AppFrame
+					rail={railAskingBeforeLeaving(rail, leaveThen)}
+					space={currentSpace}
+					spaceHost={currentSpaceHost}
+					titleBar={askingBeforeLeaving(titleBar, leaveThen)}
+				>
 					<SettingsMenu
 						isCompanionPage={isCompanionPage}
 						avatar={avatar}
@@ -372,7 +405,6 @@ const SettingsScreenLayout = ({
 						name={name}
 						onBack={() => leaveThen(onBack)}
 						resizeHandle={<SidebarResizeHandle side="left" />}
-						status={status}
 						subtitle={subtitle}
 					>
 						<SettingsMenuSection
@@ -386,7 +418,7 @@ const SettingsScreenLayout = ({
 						</SettingsMenuSection>
 						{spaces?.(leaveThen)}
 					</SettingsMenu>
-				</>
+				</AppFrame>
 			}
 			width={width}
 		>
@@ -447,6 +479,9 @@ const SpaceSettingsScreen = (props: SpaceSettingsScreenProps) => {
 		onBack,
 		backLabel,
 		rail,
+		currentSpace,
+		currentSpaceHost,
+		guardLeave,
 		titleBar,
 		width,
 		onWidthChange,
@@ -506,7 +541,6 @@ const SpaceSettingsScreen = (props: SpaceSettingsScreenProps) => {
 		isHostUnreachable ||
 		(isSessionUnavailable && SESSION_BOUND_ENTRIES.has(value))
 	const host = spaceHostOf(space, spaceHost)
-	const pillHost = hostPillOf(host)
 
 	const focusedEntries =
 		space.state === "invitation"
@@ -561,7 +595,6 @@ const SpaceSettingsScreen = (props: SpaceSettingsScreenProps) => {
 			entry={entry}
 			backLabel={backLabel ?? t("screen.backToSettings")}
 			name={name}
-			status={pillHost ? <HostPill host={pillHost} /> : undefined}
 			onBack={onBack}
 			onEntryChange={onEntryChange}
 			pages={pages}
@@ -570,6 +603,9 @@ const SpaceSettingsScreen = (props: SpaceSettingsScreenProps) => {
 			spaceTint={spaceTint}
 			onWidthChange={onWidthChange}
 			rail={rail}
+			currentSpace={currentSpace}
+			currentSpaceHost={currentSpaceHost}
+			guardLeave={guardLeave}
 			sessions={sessions}
 			titleBar={titleBar}
 			width={width}
@@ -588,6 +624,9 @@ const UserSettingsScreen = ({
 	onBack,
 	backLabel,
 	rail,
+	currentSpace,
+	currentSpaceHost,
+	guardLeave,
 	titleBar,
 	width,
 	onWidthChange,
@@ -630,6 +669,9 @@ const UserSettingsScreen = ({
 			spaceTint={spaceTint}
 			onWidthChange={onWidthChange}
 			rail={rail}
+			currentSpace={currentSpace}
+			currentSpaceHost={currentSpaceHost}
+			guardLeave={guardLeave}
 			sessions={sessions}
 			spaces={(requestLeave) => {
 				const openSpace = (id: string) => requestLeave(() => onOpenSpace?.(id))
@@ -681,6 +723,9 @@ const CompanionSettingsScreen = ({
 	onBack,
 	backLabel,
 	rail,
+	currentSpace,
+	currentSpaceHost,
+	guardLeave,
 	titleBar,
 	width,
 	onWidthChange,
@@ -903,6 +948,9 @@ const CompanionSettingsScreen = ({
 			spaceTint={spaceTint}
 			onWidthChange={onWidthChange}
 			rail={rail}
+			currentSpace={currentSpace}
+			currentSpaceHost={currentSpaceHost}
+			guardLeave={guardLeave}
 			sessions={sessions}
 			titleBar={titleBar}
 			width={width}

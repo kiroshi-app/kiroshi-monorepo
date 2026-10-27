@@ -25,7 +25,7 @@ export const useSettingsNavigation = (holder: ThreadHolder) => {
 		}
 
 		const openInBackgroundTab = (options: NavigateOptions, spaceId?: string) =>
-			router.options.context.tabs.openInBackgroundTab(
+			router.options.context.tabs.openInNewTab(
 				router.buildLocation(options).href,
 				spaceId,
 			)

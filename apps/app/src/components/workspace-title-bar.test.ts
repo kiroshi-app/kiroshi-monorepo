@@ -196,20 +196,25 @@ describe("the title bar", () => {
 		expect(tabNames()).toEqual([ROOM_TITLE])
 	})
 
-	it("opens a row in a new background tab on Cmd-click and on middle-click, a plain click staying in the active tab", async () => {
+	it("opens a row in a background tab after the active one on Cmd-click and on middle-click, even when shown elsewhere, a plain click staying in the active tab", async () => {
 		const { botName } = await mountApp()
 
 		await clickRow(ROOM_TITLE)
-		await middleClickRow(botName)
+		await clickRow(botName, { metaKey: true })
 
 		expect(tabNames()).toEqual([ROOM_TITLE, botName])
 		expect(activeTabName()).toBe(ROOM_TITLE)
 
 		await press(barButton(NEW_TAB))
-		await clickRow(ROOM_TITLE, { metaKey: true })
+		await middleClickRow(ROOM_TITLE)
 
-		expect(tabNames()).toEqual([ROOM_TITLE, NEW_TAB, botName])
+		expect(tabNames()).toEqual([ROOM_TITLE, NEW_TAB, ROOM_TITLE, botName])
 		expect(activeTabName()).toBe(NEW_TAB)
+
+		await clickRow(botName)
+
+		expect(tabNames()).toEqual([ROOM_TITLE, botName, ROOM_TITLE, botName])
+		expect(activeTabName()).toBe(botName)
 	})
 
 	it("selects, closes and opens tabs, and goes Back and Forward in the active one", async () => {
@@ -261,9 +266,12 @@ describe("the title bar", () => {
 		const { botName } = await mountApp()
 		await clickRow(botName)
 		await clickRow(ROOM_TITLE, { metaKey: true })
+		expect(tabNames()).toEqual([botName, ROOM_TITLE])
+		expect(activeTabName()).toBe(botName)
 
 		await pressModKey("w")
 		expect(tabNames()).toEqual([ROOM_TITLE])
+		expect(activeTabName()).toBe(ROOM_TITLE)
 
 		await press(barButton(i18n.t("common:titleBar.closeTab")))
 		expect(tabNames()).toEqual([NEW_TAB])
@@ -312,6 +320,7 @@ describe("the Spaces menu of the rail", () => {
 		const { botName, spaceName } = await mountApp()
 		await clickRow(botName)
 		await clickRow(ROOM_TITLE, { metaKey: true })
+		expect(activeTabName()).toBe(botName)
 
 		await press(
 			within(await openSpacesMenu()).getByRole("menuitemradio", {

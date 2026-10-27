@@ -44,7 +44,7 @@ export const isNewTabClickInFlight = () =>
 	isDispatching(clickInFlight) &&
 	isNewTabClick(clickInFlight)
 
-const watchNewTabClicks = (openInBackgroundTab: (href: string) => void) => {
+const watchNewTabClicks = (openInNewTab: (href: string) => void) => {
 	const interceptNewTabClick = (event: MouseEvent) => {
 		clickInFlight = event
 		if (!isNewTabClick(event)) {
@@ -58,7 +58,7 @@ const watchNewTabClicks = (openInBackgroundTab: (href: string) => void) => {
 			return
 		}
 		event.preventDefault()
-		openInBackgroundTab(href)
+		openInNewTab(href)
 	}
 
 	for (const type of NEW_TAB_CLICKS) {
@@ -71,11 +71,6 @@ const watchNewTabClicks = (openInBackgroundTab: (href: string) => void) => {
 	}
 }
 
-export const useNewTabClicks = (
-	tabs: Pick<WorkspaceTabs, "openInBackgroundTab">,
-) => {
-	useEffect(
-		() => watchNewTabClicks(tabs.openInBackgroundTab),
-		[tabs.openInBackgroundTab],
-	)
+export const useNewTabClicks = (tabs: Pick<WorkspaceTabs, "openInNewTab">) => {
+	useEffect(() => watchNewTabClicks(tabs.openInNewTab), [tabs.openInNewTab])
 }

@@ -7,11 +7,7 @@ import { BotTitleBadge } from "@workspace/ui/components/bot-badge"
 import type { BotMcpConnectionState } from "@workspace/ui/components/bot-settings"
 import { MCP_CONNECTION_DOT } from "@workspace/ui/components/bot-settings-dialog/mcp-connection"
 import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
-import {
-	HostPill,
-	hostPillOf,
-	type SpaceHost,
-} from "@workspace/ui/components/host-pill"
+import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import {
 	type FillIconName,
 	FillIcons,
@@ -28,7 +24,7 @@ import { useOverlayScrollbars } from "@workspace/ui/hooks/use-overlay-scrollbars
 import { cn } from "@workspace/ui/lib/utils"
 
 const MENU =
-	"peer relative flex w-(--sidebar-width) shrink-0 flex-col gap-3 rounded-s-control border-y border-s border-e border-shell-border border-e-shell-divider bg-card p-3"
+	"peer relative flex w-(--sidebar-width) shrink-0 left-column flex-col rounded-s-control border-y border-s border-e border-shell-border border-e-shell-divider bg-card"
 
 const FOCUS_RING = "outline-none focus-visible:ring-2 focus-visible:ring-ring"
 
@@ -36,8 +32,11 @@ const ROW = `flex w-full min-w-0 cursor-pointer items-center gap-2.5 p-2 text-st
 
 const BACK = cn(
 	ROW,
-	"w-auto max-w-full self-start rounded-control font-medium text-compact text-muted-foreground leading-4.5 hover:bg-muted hover:text-foreground",
+	"h-full w-auto max-w-full rounded-control py-0 font-medium text-compact text-muted-foreground leading-4.5 hover:bg-muted hover:text-foreground",
 )
+
+const BACK_HEADER =
+	"left-column-header left-column-inset flex shrink-0 items-center"
 
 const ENTRY = `${ROW} rounded-control text-muted-foreground text-sm hover:bg-muted hover:text-foreground aria-[current=page]:bg-muted aria-[current=page]:font-medium aria-[current=page]:text-foreground data-open:font-medium data-open:text-foreground`
 
@@ -86,14 +85,12 @@ const SPACE_ATTENTION_DOT =
 type SettingsMenuHeaderProps = {
 	avatar: ReactNode
 	name: string
-	status?: ReactNode
 	subtitle: string
 }
 
 const SettingsMenuHeader = ({
 	avatar,
 	name,
-	status,
 	subtitle,
 }: SettingsMenuHeaderProps) => (
 	<div
@@ -102,15 +99,12 @@ const SettingsMenuHeader = ({
 	>
 		{avatar}
 		<div className="flex min-w-0 flex-col">
-			<div className="flex min-w-0 items-center gap-1.5">
-				<span
-					className="truncate font-semibold text-foreground text-sm"
-					data-slot="settings-menu-name"
-				>
-					{name}
-				</span>
-				{status}
-			</div>
+			<span
+				className="truncate font-semibold text-foreground text-sm"
+				data-slot="settings-menu-name"
+			>
+				{name}
+			</span>
 			<span className="truncate text-muted-foreground text-xs">{subtitle}</span>
 		</div>
 	</div>
@@ -128,7 +122,6 @@ type SettingsMenuProps = SettingsMenuHeaderProps & {
 const SettingsMenu = ({
 	avatar,
 	name,
-	status,
 	subtitle,
 	onBack,
 	backLabel,
@@ -148,28 +141,25 @@ const SettingsMenu = ({
 			data-companion-page={isCompanionPage ? "" : undefined}
 			data-slot="settings-menu"
 		>
-			<button className={BACK} onClick={onBack} type="button">
-				<Icons.Previous
-					aria-hidden="true"
-					className="size-4 shrink-0 stroke-2!"
-				/>
-				{backLabel ?? t("screen.back")}
-			</button>
-			<SettingsMenuHeader
-				avatar={avatar}
-				name={name}
-				status={status}
-				subtitle={subtitle}
-			/>
+			<div className={BACK_HEADER} data-slot="settings-menu-back">
+				<button className={BACK} onClick={onBack} type="button">
+					<Icons.Previous
+						aria-hidden="true"
+						className="size-4 shrink-0 stroke-2!"
+					/>
+					{backLabel ?? t("screen.back")}
+				</button>
+			</div>
+			<SettingsMenuHeader avatar={avatar} name={name} subtitle={subtitle} />
 			<div
-				className="-m-0.5 min-h-0 flex-1 overflow-y-auto p-0.5"
+				className="-my-0.5 left-column-inset min-h-0 flex-1 overflow-y-auto py-0.5"
 				data-slot="settings-menu-entries"
 				ref={list}
 			>
 				<ul className="flex list-none flex-col gap-0.5 p-0">{children}</ul>
 			</div>
 			{footer ? (
-				<ul className="flex shrink-0 list-none flex-col gap-1 p-0">
+				<ul className="left-column-inset flex shrink-0 list-none flex-col gap-1 py-0">
 					<li aria-hidden="true" className="mx-1 h-px bg-border" />
 					{footer}
 				</ul>
@@ -432,7 +422,6 @@ const SettingsMenuSpace = ({
 	onOpen,
 }: SettingsMenuSpaceProps) => {
 	const { t } = useTranslation(["settings", "bots"])
-	const pill = hostPillOf(host)
 
 	return (
 		<li>
@@ -451,9 +440,7 @@ const SettingsMenuSpace = ({
 				onSelect={onOpen}
 				trailing={
 					<span className={SPACE_TRAILING}>
-						{pill ? (
-							<HostPill host={pill} />
-						) : host ? (
+						{host ? (
 							<span className="sr-only">{t(`bots:spaces.host.${host}`)}</span>
 						) : null}
 						{isCurrent ? (

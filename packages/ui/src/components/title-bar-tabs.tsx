@@ -1,7 +1,13 @@
 "use client"
 
 import { Tabs } from "@base-ui/react/tabs"
-import { type ReactNode, useLayoutEffect, useRef, useState } from "react"
+import {
+	type ReactNode,
+	type RefObject,
+	useLayoutEffect,
+	useRef,
+	useState,
+} from "react"
 import { useTranslation } from "react-i18next"
 
 import { ContextMenuPressTrigger } from "@workspace/ui/components/context-menu-press-trigger"
@@ -15,8 +21,14 @@ import {
 	ContextMenu,
 	ContextMenuContent,
 	ContextMenuItem,
+	ContextMenuSeparator,
+	ContextMenuShortcut,
 	ContextMenuTrigger,
 } from "@workspace/ui/components/ui/context-menu"
+import {
+	type RosterLift,
+	useRosterLift,
+} from "@workspace/ui/hooks/use-roster-lift"
 import { useStableCallback } from "@workspace/ui/hooks/use-stable-callback"
 import { STILL_UNDER_REDUCED_MOTION } from "@workspace/ui/lib/reduced-motion"
 import { cn } from "@workspace/ui/lib/utils"
@@ -34,11 +46,16 @@ type TitleBarTabsProps = {
 	activeTabId?: string
 	canGoBack?: boolean
 	canGoForward?: boolean
+	hasClosedTab?: boolean
 	onSelectTab?: (id: string) => void
 	onCloseTab?: (id: string) => void
 	onPinTab?: (id: string) => void
 	onUnpinTab?: (id: string) => void
 	onCloseOtherTabs?: (id: string) => void
+	onDuplicateTab?: (id: string) => void
+	onReopenClosedTab?: () => void
+	onMoveTabToNewWindow?: (id: string) => void
+	onReorderTabs?: (ids: string[]) => void
 	onNewTab?: () => void
 	onGoBack?: () => void
 	onGoForward?: () => void
@@ -74,6 +91,19 @@ const TAB =
 const PINNED_TAB =
 	"grid place-items-center rounded-md bg-title-bar-pinned text-muted-foreground hover:bg-title-bar-highlight hover:text-foreground focus-visible:outline-2 focus-visible:outline-foreground focus-visible:outline-offset-1 aria-selected:bg-title-bar-tab-selected aria-selected:text-foreground"
 
+const LIFTED_TAB =
+	"pointer-events-none z-10 bg-title-bar-menu text-foreground drop-shadow-md translate-x-[var(--lift-dx,0px)] aria-selected:bg-title-bar-menu"
+
+const INSERTION_LINE =
+	"pointer-events-none absolute inset-y-1 z-20 w-0.5 rounded-full bg-foreground"
+
+const INSERTION_EDGE = {
+	start: "-start-0.75",
+	end: "-end-0.75",
+} as const
+
+type InsertionEdge = keyof typeof INSERTION_EDGE
+
 const TAB_TITLE = "min-w-0 truncate font-medium text-compact leading-4"
 
 const TAB_NEEDS_YOU = cn(NEEDS_YOU_GLYPH, "size-3.25")
@@ -91,7 +121,23 @@ const OVERFLOW_ICON =
 
 const DRAG_REGION = "min-w-6 flex-1 self-stretch"
 
+const TAB_MENU_SHORTCUTS = {
+	pinTab: { hint: "titleBar.pinTabShortcut", keys: "Control+Shift+P" },
+	newTab: { hint: "titleBar.newTabShortcut", keys: "Meta+T" },
+	reopenClosedTab: {
+		hint: "titleBar.reopenClosedTabShortcut",
+		keys: "Meta+Shift+T",
+	},
+	closeTab: { hint: "titleBar.closeTabShortcut", keys: "Meta+W" },
+	closeOtherTabs: {
+		hint: "titleBar.closeOtherTabsShortcut",
+		keys: "Meta+Alt+W",
+	},
+} as const
+
 const UNPINNED_TAB = '[data-slot="title-bar-tab"]'
+
+const PINNED_TAB_SLOT = '[data-slot="title-bar-pinned-tab"]'
 
 const widthOf = (element: Element) => element.getBoundingClientRect().width
 
@@ -169,33 +215,129 @@ const splitAtFit = (
 	}
 }
 
+const reorderedIds = (
+	tabs: TitleBarTab[],
+	zone: TitleBarTab[],
+	id: string,
+	at: number,
+) => {
+	const others = zone.filter((tab) => tab.id !== id)
+	const ids = tabs.map((tab) => tab.id).filter((held) => held !== id)
+	const anchor =
+		at > 0 ? ids.indexOf(others[at - 1].id) + 1 : ids.indexOf(others[0].id)
+	ids.splice(anchor, 0, id)
+	return ids
+}
+
+const middlesOf = (strip: HTMLElement | null, slot: string) =>
+	[...(strip?.querySelectorAll(slot) ?? [])].map((node) => {
+		const box = node.getBoundingClientRect()
+		return box.left + box.width / 2
+	})
+
+type TabLiftSource = {
+	tabs: TitleBarTab[]
+	pinned: TitleBarTab[]
+	kept: TitleBarTab[]
+	stripRef: RefObject<HTMLDivElement | null>
+	onReorderTabs?: (ids: string[]) => void
+}
+
+const useTabLift = ({
+	tabs,
+	pinned,
+	kept,
+	stripRef,
+	onReorderTabs,
+}: TabLiftSource) => {
+	const isPinned = (id: string) => pinned.some((tab) => tab.id === id)
+	const zoneOf = (id: string) => (isPinned(id) ? pinned : kept)
+
+	const lift = useRosterLift({
+		isEnabled: Boolean(onReorderTabs),
+		landingAt: (x, _y, id) => {
+			const middles = middlesOf(
+				stripRef.current,
+				isPinned(id) ? PINNED_TAB_SLOT : UNPINNED_TAB,
+			)
+			return zoneOf(id).filter(
+				(tab, rank) => tab.id !== id && middles[rank] < x,
+			).length
+		},
+		onLand: (id, at: number) => {
+			const zone = zoneOf(id)
+			if (at === zone.findIndex((tab) => tab.id === id)) return
+			onReorderTabs?.(reorderedIds(tabs, zone, id, at))
+		},
+	})
+
+	const liftedId = lift.lift?.id
+	const at = lift.lift?.landing ?? null
+	const others = liftedId
+		? zoneOf(liftedId).filter((tab) => tab.id !== liftedId)
+		: []
+	const mark =
+		at === null
+			? null
+			: at < others.length
+				? { id: others[at].id, edge: "start" as const }
+				: at > 0
+					? { id: others[at - 1].id, edge: "end" as const }
+					: null
+
+	return {
+		lift,
+		insertionOn: (id: string) => (mark?.id === id ? mark.edge : undefined),
+	}
+}
+
 type TabGestures = Pick<
 	TitleBarTabsProps,
-	"onPinTab" | "onUnpinTab" | "onCloseOtherTabs"
+	| "hasClosedTab"
+	| "onPinTab"
+	| "onUnpinTab"
+	| "onNewTab"
+	| "onDuplicateTab"
+	| "onReopenClosedTab"
+	| "onCloseTab"
+	| "onCloseOtherTabs"
+	| "onMoveTabToNewWindow"
 >
 
 type TitleBarTabItemProps = TabGestures & {
 	tab: TitleBarTab
 	isActive: boolean
 	width: string
+	lift: RosterLift<number>
+	insertion?: InsertionEdge
 }
 
 const TitleBarTabItem = ({
 	tab,
 	isActive,
 	width,
+	hasClosedTab = false,
+	lift,
+	insertion,
 	onPinTab,
 	onUnpinTab,
+	onNewTab,
+	onDuplicateTab,
+	onReopenClosedTab,
+	onCloseTab,
 	onCloseOtherTabs,
+	onMoveTabToNewWindow,
 }: TitleBarTabItemProps) => {
 	const { t } = useTranslation("common")
 	const needsYou = Boolean(tab.isNeedingYou) && !isActive
+	const isLifted = lift.lift?.id === tab.id
 
 	return (
 		<ContextMenu>
 			<ContextMenuTrigger
 				render={
 					<Tabs.Tab
+						{...lift.handlersFor(tab.id)}
 						aria-label={
 							needsYou
 								? t("titleBar.tabNeedsYou", { title: tab.title })
@@ -203,12 +345,28 @@ const TitleBarTabItem = ({
 									? tab.title
 									: undefined
 						}
-						className={cn(tab.isPinned ? PINNED_TAB : TAB, width)}
+						className={cn(
+							tab.isPinned ? PINNED_TAB : TAB,
+							width,
+							isLifted && LIFTED_TAB,
+							insertion && "relative",
+						)}
 						data-slot={tab.isPinned ? "title-bar-pinned-tab" : "title-bar-tab"}
+						onClick={(event) => {
+							if (lift.hasJustDropped()) event.preventBaseUIHandler()
+						}}
+						ref={isLifted ? lift.followRef : undefined}
 						value={tab.id}
 					/>
 				}
 			>
+				{insertion ? (
+					<span
+						aria-hidden="true"
+						className={cn(INSERTION_LINE, INSERTION_EDGE[insertion])}
+						data-slot="title-bar-tab-insertion"
+					/>
+				) : null}
 				<span aria-hidden="true" className={TAB_ICON}>
 					{tab.icon}
 				</span>
@@ -228,19 +386,73 @@ const TitleBarTabItem = ({
 				)}
 			</ContextMenuTrigger>
 			<ContextMenuContent
-				className={cn(TITLE_BAR_MENU, "w-55", STILL_UNDER_REDUCED_MOTION)}
+				className={cn(TITLE_BAR_MENU, "min-w-55", STILL_UNDER_REDUCED_MOTION)}
 			>
 				<ContextMenuItem
+					aria-keyshortcuts={TAB_MENU_SHORTCUTS.pinTab.keys}
 					className={TITLE_BAR_MENU_ROW}
 					onClick={() => (tab.isPinned ? onUnpinTab : onPinTab)?.(tab.id)}
 				>
 					{t(tab.isPinned ? "titleBar.unpinTab" : "titleBar.pinTab")}
+					<ContextMenuShortcut aria-hidden="true">
+						{t(TAB_MENU_SHORTCUTS.pinTab.hint)}
+					</ContextMenuShortcut>
 				</ContextMenuItem>
 				<ContextMenuItem
+					aria-keyshortcuts={TAB_MENU_SHORTCUTS.newTab.keys}
+					className={TITLE_BAR_MENU_ROW}
+					onClick={() => onNewTab?.()}
+				>
+					{t("titleBar.newTab")}
+					<ContextMenuShortcut aria-hidden="true">
+						{t(TAB_MENU_SHORTCUTS.newTab.hint)}
+					</ContextMenuShortcut>
+				</ContextMenuItem>
+				<ContextMenuItem
+					className={TITLE_BAR_MENU_ROW}
+					onClick={() => onDuplicateTab?.(tab.id)}
+				>
+					{t("titleBar.duplicateTab")}
+				</ContextMenuItem>
+				<ContextMenuSeparator />
+				<ContextMenuItem
+					aria-keyshortcuts={TAB_MENU_SHORTCUTS.reopenClosedTab.keys}
+					className={TITLE_BAR_MENU_ROW}
+					disabled={!hasClosedTab}
+					onClick={() => onReopenClosedTab?.()}
+				>
+					{t("titleBar.reopenClosedTab")}
+					<ContextMenuShortcut aria-hidden="true">
+						{t(TAB_MENU_SHORTCUTS.reopenClosedTab.hint)}
+					</ContextMenuShortcut>
+				</ContextMenuItem>
+				<ContextMenuSeparator />
+				<ContextMenuItem
+					aria-keyshortcuts={TAB_MENU_SHORTCUTS.closeTab.keys}
+					className={TITLE_BAR_MENU_ROW}
+					disabled={tab.isPinned}
+					onClick={() => onCloseTab?.(tab.id)}
+				>
+					{t("titleBar.closeTab")}
+					<ContextMenuShortcut aria-hidden="true">
+						{t(TAB_MENU_SHORTCUTS.closeTab.hint)}
+					</ContextMenuShortcut>
+				</ContextMenuItem>
+				<ContextMenuItem
+					aria-keyshortcuts={TAB_MENU_SHORTCUTS.closeOtherTabs.keys}
 					className={TITLE_BAR_MENU_ROW}
 					onClick={() => onCloseOtherTabs?.(tab.id)}
 				>
 					{t("titleBar.closeOtherTabs")}
+					<ContextMenuShortcut aria-hidden="true">
+						{t(TAB_MENU_SHORTCUTS.closeOtherTabs.hint)}
+					</ContextMenuShortcut>
+				</ContextMenuItem>
+				<ContextMenuItem
+					className={TITLE_BAR_MENU_ROW}
+					onClick={() => onMoveTabToNewWindow?.(tab.id)}
+				>
+					{t("titleBar.moveTabToNewWindow")}
 				</ContextMenuItem>
 			</ContextMenuContent>
 		</ContextMenu>
@@ -296,11 +508,16 @@ const TitleBarTabs = ({
 	activeTabId,
 	canGoBack = false,
 	canGoForward = false,
+	hasClosedTab,
 	onSelectTab,
 	onCloseTab,
 	onPinTab,
 	onUnpinTab,
 	onCloseOtherTabs,
+	onDuplicateTab,
+	onReopenClosedTab,
+	onMoveTabToNewWindow,
+	onReorderTabs,
 	onNewTab,
 	onGoBack,
 	onGoForward,
@@ -312,12 +529,27 @@ const TitleBarTabs = ({
 	const { kept, overflowing } = splitAtFit(unpinned, fittingCount, activeTabId)
 	const tabWidth = overflowing.length > 0 ? TAB_WIDTH_AT_FLOOR : TAB_WIDTH
 	const hasDivider = pinned.length > 0 && unpinned.length > 0
+	const { lift, insertionOn } = useTabLift({
+		tabs,
+		pinned,
+		kept,
+		stripRef,
+		onReorderTabs,
+	})
 	const tabItem = (tab: TitleBarTab, width: string) => (
 		<TitleBarTabItem
+			insertion={insertionOn(tab.id)}
 			isActive={tab.id === activeTabId}
+			hasClosedTab={hasClosedTab}
 			key={tab.id}
+			lift={lift}
 			onCloseOtherTabs={onCloseOtherTabs}
+			onCloseTab={onCloseTab}
+			onDuplicateTab={onDuplicateTab}
+			onMoveTabToNewWindow={onMoveTabToNewWindow}
+			onNewTab={onNewTab}
 			onPinTab={onPinTab}
+			onReopenClosedTab={onReopenClosedTab}
 			onUnpinTab={onUnpinTab}
 			tab={tab}
 			width={width}
@@ -369,7 +601,7 @@ const TitleBarTabs = ({
 					{hasDivider ? <span className={DIVIDER} /> : null}
 					{kept.map((tab) => (
 						<span className={cn(CLOSE_SLOT, tabWidth)} key={tab.id}>
-							{tab.id === activeTabId ? (
+							{tab.id === activeTabId && tab.id !== lift.lift?.id ? (
 								<button
 									aria-label={t("titleBar.closeTab")}
 									className={CLOSE_BUTTON}

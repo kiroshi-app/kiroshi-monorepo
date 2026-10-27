@@ -25,7 +25,7 @@ import type { Space } from "@workspace/ui/components/space"
 import { Sidebar } from "@workspace/ui/components/ui/sidebar"
 
 const PANEL =
-	"data-[side=left]:left-15 rounded-s-control border-y border-s border-e border-shell-border border-e-shell-divider bg-card **:data-[slot=sidebar-inner]:gap-2 **:data-[slot=sidebar-inner]:bg-transparent **:data-[slot=sidebar-inner]:pt-2 **:data-[slot=sidebar-inner]:pb-3"
+	"data-[side=left]:left-15 rounded-s-control border-y border-s border-e border-shell-border border-e-shell-divider bg-card **:data-[slot=sidebar-inner]:left-column **:data-[slot=sidebar-inner]:bg-transparent"
 
 type AppSidebarChromeProp =
 	| "data-tauri-drag-region"

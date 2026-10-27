@@ -17,7 +17,7 @@ import {
 	dropTabsWhere,
 	moveInHistory,
 	openBackgroundTab,
-	openTab,
+	openEmptyTab,
 	pinTab,
 	pushEntry,
 	reorderTabs,
@@ -27,7 +27,6 @@ import {
 	spaceTabsOn,
 	type Tab,
 	type TabEntry,
-	tabShowing,
 	unpinTab,
 } from "./tabs-model"
 
@@ -49,8 +48,7 @@ export type WorkspaceTabs = {
 	subscribe: (listener: () => void) => () => void
 	showSpace: (spaceId: string) => void
 	openEmptyTab: () => void
-	openInNewTab: (href: string) => void
-	openInBackgroundTab: (href: string, spaceId?: string) => void
+	openInNewTab: (href: string, spaceId?: string) => void
 	back: () => void
 	forward: () => void
 	select: (id: string) => void
@@ -79,18 +77,6 @@ const locationOf = ({ href, state }: TabEntry): HistoryLocation => {
 }
 
 const shownEntryOf = (space: SpaceTabs) => currentEntryOf(activeTabOf(space))
-
-const pushedIn = (space: SpaceTabs, entry: TabEntry) => {
-	const shownElsewhere = tabShowing(space, entry.href)
-	if (!shownElsewhere || shownElsewhere.id === space.activeId) {
-		return pushEntry(space, entry)
-	}
-	const selected = selectTab(space, shownElsewhere.id)
-	return replaceEntry(selected, {
-		href: entry.href,
-		state: currentEntryOf(shownElsewhere).state,
-	})
-}
 
 const isNamingAnAbsentRow = (
 	href: string,
@@ -125,7 +111,7 @@ export const createWorkspaceTabs = (
 	const history = createHistory({
 		getLocation: () => locationOf(shownEntryOf(shown())),
 		getLength: () => activeTabOf(shown()).entries.length,
-		pushState: (href, state) => keep(pushedIn(shown(), { href, state })),
+		pushState: (href, state) => keep(pushEntry(shown(), { href, state })),
 		replaceState: (href, state) => keep(replaceEntry(shown(), { href, state })),
 		back: () => keep(moveInHistory(shown(), -1)),
 		forward: () => keep(moveInHistory(shown(), 1)),
@@ -271,10 +257,8 @@ export const createWorkspaceTabs = (
 			}
 			askBeforeLeaving(() => reachSpace(spaceId))
 		},
-		openEmptyTab: () =>
-			askingChange((space) => openTab(space, EMPTY_LIST_HREF)),
-		openInNewTab: (href) => askingChange((space) => openTab(space, href)),
-		openInBackgroundTab: (href, spaceId = store.getState().spaceId) => {
+		openEmptyTab: () => askingChange(openEmptyTab),
+		openInNewTab: (href, spaceId = store.getState().spaceId) => {
 			const update = (space: SpaceTabs) => openBackgroundTab(space, href)
 			if (spaceId === store.getState().spaceId) {
 				change(update)

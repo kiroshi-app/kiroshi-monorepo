@@ -12,9 +12,10 @@ import {
 import { createElement } from "react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
+import { AppRail } from "@workspace/ui/components/app-rail"
 import { i18n } from "@workspace/ui/lib/i18n"
 
-import { WorkspaceRail } from "@/components/workspace-rail"
+import { workspaceRailOf } from "@/components/workspace-rail"
 import type { JoinedSpace, Space } from "@/lib/bindings"
 import { newBotIdentity } from "@/lib/bots/bot-settings"
 import { createFakeChatDriver } from "@/lib/chat/fake-driver"
@@ -136,13 +137,12 @@ const RailHarness = ({
 		},
 		NO_INVITATIONS,
 	)
-	return createElement(WorkspaceRail, {
+	const { rail, currentSpace, currentSpaceHost } = workspaceRailOf({
 		collapsedSectionIds: [],
 		core: {} as WorkspaceCore,
 		navigation: navigation as SettingsNavigation,
 		overlay: {} as WorkspaceOverlay,
 		panels: { railSettings } as SettingsPanels,
-		requestLeave: (leave) => leave(),
 		rosterLines: {
 			sidebarActions: { onCreateSpace: () => undefined },
 		} as RosterLines,
@@ -153,6 +153,11 @@ const RailHarness = ({
 		switcher,
 		tabs: createWorkspaceTabs(),
 		onSelectSpace,
+	})
+	return createElement(AppRail, {
+		...rail,
+		space: currentSpace,
+		spaceHost: currentSpaceHost,
 	})
 }
 

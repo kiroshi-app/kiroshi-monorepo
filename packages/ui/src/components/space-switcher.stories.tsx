@@ -762,8 +762,7 @@ const expectRowAvatar = async (root: HTMLElement, host: SpaceHost | null) => {
 		host ? AVATAR_STATE_OF_HOST[host] : "local",
 	)
 	await expect(avatar.getBoundingClientRect().width).toBe(14)
-	const hasPill = host === "connecting" || host === "down"
-	await expect(slotsIn(root, "host-pill")).toHaveLength(hasPill ? 1 : 0)
+	await expect(slotsIn(root, "host-pill")).toHaveLength(0)
 	if (host !== "up" && host !== "shared") {
 		await expect(presenceDotOn(root)).toBeUndefined()
 		return
@@ -781,6 +780,11 @@ const expectRowAvatar = async (root: HTMLElement, host: SpaceHost | null) => {
 	)
 }
 
+const expectNameShown = async (name: HTMLElement) => {
+	await expect(name.getBoundingClientRect().width).toBeGreaterThan(0)
+	await expect(name.scrollWidth).toBeLessThanOrEqual(name.clientWidth)
+}
+
 const ROW_STATES: [string, SpaceHost | null][] = [
 	["Perso", null],
 	["Vocca", "up"],
@@ -792,6 +796,7 @@ const ROW_STATES: [string, SpaceHost | null][] = [
 const expectRowDots = async (menu: HTMLElement) => {
 	for (const [name, host] of ROW_STATES) {
 		const row = rowNamed(menu, name)
+		await expectNameShown(within(row).getByText(name))
 		await expectRowAvatar(row, host)
 		await expect(row.querySelectorAll(ICON_SVG)).toHaveLength(
 			row.getAttribute("aria-checked") === "true" ? 1 : 0,
@@ -830,7 +835,7 @@ export const ThemesLocalSpaceMenu = meta.story({
 		a11y: SIDE_BY_SIDE_MENU_A11Y,
 		docs: {
 			description: {
-				story: `${MOCKUP} The menu of a local space beside shared and joined ones (A7 rows). Check every row carries its 14px SpaceAvatar in the state of its host: the 6px green dot cut out of the bottom end corner for the shared and the reachable rows, lines for the connecting one and greys for the one that does not answer, those two with the HostPill beside the name. No globe and no \`Unreachable\` remain, and a single rule then \`Create a space\` close the menu. Pick \`ThemesJoinedSpaceMenu\` for the menu of a joined space.`,
+				story: `${MOCKUP} The menu of a local space beside shared and joined ones (A7 rows). Check every row carries its 14px SpaceAvatar in the state of its host: the 6px green dot cut out of the bottom end corner for the shared and the reachable rows, lines for the connecting one and greys for the one that does not answer, every name shown in full and no state pill: the avatar is the only connection signal, and assistive technology reads the state after the name. No globe and no \`Unreachable\` remain, and a single rule then \`Create a space\` close the menu. Pick \`ThemesJoinedSpaceMenu\` for the menu of a joined space.`,
 			},
 		},
 	},
@@ -875,6 +880,47 @@ export const ThemesJoinedSpaceMenu = meta.story({
 	},
 })
 
+const TITLE_BAR_HOSTS: [string, string, SpaceHost, string][] = [
+	["atelier", "Atelier", "shared", "Shared"],
+	["vocca", "Vocca", "up", "Online"],
+	["archives", "Archives", "connecting", "Connecting…"],
+	["veille", "Veille", "down", "Not connected"],
+]
+
+export const ThemesTitleBarHosts = meta.story({
+	globals: { theme_layout: "side-by-side" },
+	args: { hostBySpaceId: HOSTS },
+	parameters: {
+		docs: {
+			description: {
+				story: `${MOCKUP} The button in the title bar on a Space shared from this computer, a joined Space online, one connecting and one whose host does not answer. Check each line shows the Space name in full beside its avatar in the state of its host, that no state pill sits beside the button, and that the button names the state after the Space for assistive technology. Pick \`ThemesLocalSpaceMenu\` for the rows of the menu.`,
+			},
+		},
+	},
+	render: (args) => (
+		<div className="flex flex-col gap-2">
+			{TITLE_BAR_HOSTS.map(([id]) => (
+				<SwitcherLine key={id} {...args} selectedSpaceId={id} />
+			))}
+		</div>
+	),
+	play: async ({ canvasElement }) => {
+		for (const [, name, host, label] of TITLE_BAR_HOSTS) {
+			const triggers = within(canvasElement).getAllByRole("button", {
+				name: `Change space, ${name} open, ${label}`,
+			})
+			await expect(triggers).toHaveLength(2)
+			for (const trigger of triggers) {
+				await expectNameShown(slotsIn(trigger, "space-switcher-name")[0])
+				await expect(avatarOn(trigger).dataset.state).toBe(
+					AVATAR_STATE_OF_HOST[host],
+				)
+			}
+		}
+		await expect(slotsIn(canvasElement, "host-pill")).toHaveLength(0)
+	},
+})
+
 export const HostedLongNames = meta.story({
 	args: {
 		spaces: LONG_HOSTED_SPACES,
@@ -895,7 +941,10 @@ export const HostedLongNames = meta.story({
 			canvas.getByRole("button", { name: /^Change space/ }),
 		)
 
-		for (const name of ["Everything", "Reading"]) {
+		for (const [name, host] of [
+			["Everything", "up"],
+			["Reading", "down"],
+		] as const) {
 			const row = rowNamed(menu, name)
 			const label = within(row).getByText(new RegExp(`^${name}`))
 			await expect(label.scrollWidth).toBeGreaterThan(label.clientWidth)
@@ -903,14 +952,7 @@ export const HostedLongNames = meta.story({
 			await expect(shortcutOf(row).getBoundingClientRect().right).toBeLessThan(
 				end,
 			)
-			const pill = slotsIn(row, "host-pill")[0]
-			if (pill)
-				await expect(pill.scrollWidth).toBeLessThanOrEqual(pill.clientWidth)
-			else
-				await expect(presenceDotOn(row).getBoundingClientRect().width).toBe(
-					MENU_DOT,
-				)
-			await expect(avatarOn(row).getBoundingClientRect().width).toBe(14)
+			await expectRowAvatar(row, host)
 		}
 
 		await userEvent.keyboard("{Escape}")
@@ -1350,7 +1392,7 @@ export const M6Unreachable = meta.story({
 		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		docs: {
 			description: {
-				story: `${INVITED_ARTBOARD} M6: the joined Space's host stops answering, so its row's avatar turns to the greys of a Space not connected, with the HostPill beside its name.`,
+				story: `${INVITED_ARTBOARD} M6: the joined Space's host stops answering, so its row's avatar turns to the greys of a Space not connected, its name still shown in full and no state pill beside it.`,
 			},
 		},
 	},
