@@ -96,14 +96,12 @@ const SettingsMenuHeader = ({
 	>
 		{avatar}
 		<div className="flex min-w-0 flex-col">
-			<div className="flex min-w-0 items-center gap-1.5">
-				<span
-					className="truncate font-semibold text-foreground text-sm"
-					data-slot="settings-menu-name"
-				>
-					{name}
-				</span>
-			</div>
+			<span
+				className="truncate font-semibold text-foreground text-sm"
+				data-slot="settings-menu-name"
+			>
+				{name}
+			</span>
 			<span className="truncate text-muted-foreground text-xs">{subtitle}</span>
 		</div>
 	</div>

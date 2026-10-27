@@ -149,11 +149,9 @@ const FocusedSpacePage = ({
 					state={avatarStateOf(space, host)}
 				/>
 				<div className="flex min-w-0 flex-1 flex-col gap-0.5">
-					<div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-						<h2 className="min-w-0 break-words font-semibold text-foreground text-xl/6.5 tracking-[-0.01em]">
-							{name}
-						</h2>
-					</div>
+					<h2 className="min-w-0 break-words font-semibold text-foreground text-xl/6.5 tracking-[-0.01em]">
+						{name}
+					</h2>
 					<p
 						className="break-words text-compact/4.5 text-muted-foreground"
 						data-slot="focused-space-standing"
