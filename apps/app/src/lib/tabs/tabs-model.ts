@@ -69,8 +69,8 @@ const insertAfterActive = (space: SpaceTabs, tab: Tab): SpaceTabs => {
 	}
 }
 
-export const openTab = (space: SpaceTabs, href: string): SpaceTabs => {
-	const tab = tabOn(href)
+export const openEmptyTab = (space: SpaceTabs): SpaceTabs => {
+	const tab = tabOn(EMPTY_LIST_HREF)
 	return selectTab(insertAfterActive(space, tab), tab.id)
 }
 

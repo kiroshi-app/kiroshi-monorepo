@@ -17,7 +17,7 @@ import {
 	dropTabsWhere,
 	moveInHistory,
 	openBackgroundTab,
-	openTab,
+	openEmptyTab,
 	pinTab,
 	pushEntry,
 	reorderTabs,
@@ -237,8 +237,7 @@ export const createWorkspaceTabs = (
 			}
 			askBeforeLeaving(() => reachSpace(spaceId))
 		},
-		openEmptyTab: () =>
-			askingChange((space) => openTab(space, EMPTY_LIST_HREF)),
+		openEmptyTab: () => askingChange(openEmptyTab),
 		openInNewTab: (href) => change((space) => openBackgroundTab(space, href)),
 		back: () => askingMove(-1, () => history.back()),
 		forward: () => askingMove(1, () => history.forward()),
