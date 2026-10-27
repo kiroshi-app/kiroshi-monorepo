@@ -13,6 +13,7 @@ use tauri_specta::{BuilderConfiguration, LanguageExt};
 
 use super::reach::{Audience, Reach, AUDIENCES, REACHES};
 use super::replay::RESUME_COMMAND;
+use crate::db::repositories::conversations::Hue;
 use crate::events::{self, Event};
 
 type Definition = fn(&mut Types) -> DataType;
@@ -41,6 +42,8 @@ const PAYLOADS: &[(&str, Definition)] = &[
 ];
 
 const FRAME_NAMES: [&str; 3] = ["CallFrame", "AnswerFrame", "EventFrame"];
+
+const MAXIMA: [(&str, u16); 1] = [("Hue", Hue::LAST)];
 
 fn guest_commands() -> BTreeSet<&'static str> {
 	REACHES
@@ -381,10 +384,13 @@ impl Walker<'_> {
 			None => {
 				assert!(!self.defs.contains_key(&name), "the type {origin} shadows a frame");
 				self.origins.insert(name.clone(), origin);
-				let body = match &ndt.ty {
+				let mut body = match &ndt.ty {
 					Some(ty) => self.schema(ty, phase, &Generics::new()),
 					None => json!(true),
 				};
+				if let Some((_, maximum)) = MAXIMA.iter().find(|(bounded, _)| *bounded == name) {
+					body["maximum"] = json!(maximum);
+				}
 				self.defs.insert(name.clone(), body);
 			}
 		}

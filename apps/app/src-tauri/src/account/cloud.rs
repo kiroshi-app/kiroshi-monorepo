@@ -591,7 +591,7 @@ impl Cloud {
 		name: &str,
 		colour: Option<Hue>,
 	) -> Result<String, RegisterError> {
-		let body = json!({ "name": name, "colour": colour });
+		let body = json!({ "name": name, "colour": colour.map(Hue::nearest_preset_name) });
 		let answered = self
 			.answered(|client| client.post(self.at(INSTANCES_PATH)).bearer_auth(bearer).json(&body))
 			.await
@@ -623,7 +623,7 @@ impl Cloud {
 			.path_segments_mut()
 			.map_err(|()| "the cloud url has no path".to_owned())?
 			.push(instance_id);
-		let body = json!({ "name": name, "colour": colour });
+		let body = json!({ "name": name, "colour": colour.map(Hue::nearest_preset_name) });
 		self.sent(|client| client.patch(instance).bearer_auth(bearer).json(&body)).await.map(drop)
 	}
 
@@ -1375,6 +1375,40 @@ mod tests {
 		assert_eq!(
 			*received.lock().expect("the record"),
 			vec![format!(r#"POST /instances/{INSTANCE}/members {{"email":"ada@example.com"}}"#)]
+		);
+	}
+
+	#[tokio::test]
+	async fn an_instance_is_registered_and_described_with_the_preset_name_nearest_its_hue() {
+		let received = Arc::new(Mutex::new(Vec::new()));
+		let recorded = Arc::clone(&received);
+		let cloud =
+			serving(Router::new().fallback(move |method: Asked, uri: Uri, body: String| {
+				let recorded = Arc::clone(&recorded);
+				async move {
+					recorded
+						.lock()
+						.expect("the record")
+						.push(format!("{method} {} {body}", uri.path()));
+					(Answered::CREATED, r#"{"id":"0b6f7d2e-3c4a-4e5f-8a9b-1c2d3e4f5a6b"}"#)
+				}
+			}))
+			.await;
+
+		cloud.register_instance("bearer", "Studio", Hue::new(200)).await.expect("registered");
+		cloud
+			.describe_instance("bearer", INSTANCE, "Studio", Hue::new(296))
+			.await
+			.expect("described");
+		cloud.describe_instance("bearer", INSTANCE, "Studio", None).await.expect("uncoloured");
+
+		assert_eq!(
+			*received.lock().expect("the record"),
+			vec![
+				r#"POST /instances {"colour":"cyan","name":"Studio"}"#.to_owned(),
+				format!(r#"PATCH /instances/{INSTANCE} {{"colour":"purple","name":"Studio"}}"#),
+				format!(r#"PATCH /instances/{INSTANCE} {{"colour":null,"name":"Studio"}}"#),
+			]
 		);
 	}
 

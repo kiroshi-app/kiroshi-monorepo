@@ -3290,6 +3290,7 @@
       ]
     },
     "Hue": {
+      "maximum": 359,
       "minimum": 0,
       "type": "integer"
     },

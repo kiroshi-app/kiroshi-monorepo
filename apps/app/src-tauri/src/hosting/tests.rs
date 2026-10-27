@@ -983,6 +983,12 @@ impl Harness {
 		(registration.instance_id, hosting.hosted_space_ids().await.expect("the flags"))
 	}
 
+	async fn stored_colour(&self) -> Option<Hue> {
+		let state = self.app.state::<DatabaseState>();
+		let hosting = state.as_ref().expect("the database").space_hosting();
+		hosting.registration(PERSONAL.to_owned()).await.expect("the row").colour
+	}
+
 	async fn joined_a_space(&self) -> JoinedSpace {
 		let state = self.app.state::<DatabaseState>();
 		let candidate = JoinedSpace {
@@ -1247,7 +1253,7 @@ fn a_registration_carries_the_space_colour_and_a_later_start_patches_name_and_co
 				("POST /instances".to_owned(), json!({ "name": "Personal", "colour": null })),
 				(
 					format!("PATCH /instances/{instance_id}"),
-					json!({ "name": "Personal", "colour": 186 })
+					json!({ "name": "Personal", "colour": "cyan" })
 				),
 			]
 		);
@@ -1275,7 +1281,7 @@ fn a_start_connects_while_its_patch_is_held_and_a_stop_drops_the_held_patch() {
 			held,
 			vec![(
 				format!("PATCH /instances/{instance_id}"),
-				json!({ "name": "Personal", "colour": 42 })
+				json!({ "name": "Personal", "colour": "red" })
 			)]
 		);
 		let dropped = harness.noticed_until("the held PATCH dropped", dropped);
@@ -1299,16 +1305,17 @@ fn a_space_update_returns_before_its_held_patch_is_answered_and_an_unchanged_one
 		.expect("space_update answered while its PATCH is held");
 		let renaming = harness.instance_bodies_until(1).await;
 		let unchanged = harness.updated("Studio", Hue::named("red")).await;
-		let recoloured = harness.updated("Studio", Hue::named("blue")).await;
+		let recoloured = harness.updated("Studio", Hue::new(250)).await;
 		let patched = harness.instance_bodies_until(2).await;
 		harness.relay.is_description_open.send_replace(true);
 
 		assert_eq!(renamed.expect("the rename").name, "Studio");
 		assert!(unchanged.is_ok());
-		assert_eq!(recoloured.expect("the recolour").colour, Hue::named("blue"));
+		assert_eq!(recoloured.expect("the recolour").colour, Hue::new(250));
+		assert_eq!(harness.stored_colour().await, Hue::new(250));
 		let call = format!("PATCH /instances/{instance_id}");
-		assert_eq!(renaming, vec![(call.clone(), json!({ "name": "Studio", "colour": 42 }))]);
-		assert_eq!(patched[1], (call, json!({ "name": "Studio", "colour": 257 })));
+		assert_eq!(renaming, vec![(call.clone(), json!({ "name": "Studio", "colour": "red" }))]);
+		assert_eq!(patched[1], (call, json!({ "name": "Studio", "colour": "blue" })));
 		assert_eq!(patched.len(), 2);
 	});
 }

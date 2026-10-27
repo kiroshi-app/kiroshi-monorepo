@@ -120,6 +120,8 @@ pub const DEFAULT_OUTPUT_STYLE: &str = "Concise";
 
 const COLOR_KEY: &str = "color";
 
+const HUE_KEY: &str = "hue";
+
 const DISALLOWED_KEY: &str = "disallowedTools";
 
 pub const CHANGING_TOOLS: [&str; 4] = ["Bash", "Edit", "Write", "NotebookEdit"];
@@ -393,7 +395,9 @@ pub fn generated(root: &Path, bot_id: &str) -> Option<Generated> {
 	let model = front_value(&text, MODEL_KEY)
 		.map(|found| found.trim().to_owned())
 		.filter(|found| !found.is_empty());
-	let blot = front_value(&text, COLOR_KEY).and_then(|found| bundled_hue(found.trim()));
+	let blot = front_value(&text, HUE_KEY)
+		.and_then(|found| written_hue(found.trim()))
+		.or_else(|| front_value(&text, COLOR_KEY).and_then(|found| bundled_hue(found.trim())));
 	let denied_tools = front_denials(&text);
 	let output_style = front_output_style(&text);
 	let effort = front_value(&text, EFFORT_KEY).and_then(|found| EffortLevel::parse(found.trim()));
@@ -857,6 +861,7 @@ fn agent(mut parts: Parts, root: &Path, bot: &Bot, written: Written) -> String {
 	parts.front = with_key(&parts.front, &[NAME_KEY], &quoted(AGENT_NAME));
 	parts.front = with_key(&parts.front, &[DESCRIPTION_KEY], &quoted(describe(bot)));
 	parts.front = keyed_line(&parts.front, MODEL_KEY, &model_value(&bot.model));
+	parts.front = keyed_line(&parts.front, HUE_KEY, &hue_value(bot.avatar_blot));
 	parts.front = keyed_line(&parts.front, COLOR_KEY, &color_value(bot.avatar_blot));
 	parts.front = keyed_line(&parts.front, DISALLOWED_KEY, &denial_value(written.denied));
 	parts.front =
@@ -1086,12 +1091,20 @@ fn model_value(model: &str) -> String {
 	quoted(named)
 }
 
+fn written_hue(found: &str) -> Option<Hue> {
+	found.parse().ok().and_then(Hue::new)
+}
+
 fn bundled_hue(found: &str) -> Option<Hue> {
-	Hue::named(found).or_else(|| found.parse().ok().and_then(Hue::new))
+	Hue::named(found).or_else(|| written_hue(found))
+}
+
+fn hue_value(blot: Option<Hue>) -> String {
+	blot.map_or_else(String::new, |blot| blot.value().to_string())
 }
 
 fn color_value(blot: Option<Hue>) -> String {
-	blot.map_or_else(String::new, |blot| blot.value().to_string())
+	blot.map_or_else(String::new, |blot| quoted(blot.nearest_preset_name()))
 }
 
 #[cfg(test)]
@@ -1203,18 +1216,23 @@ mod tests {
 	}
 
 	#[test]
-	fn a_written_bundle_carries_the_hue_the_bot_is_marked_with_as_a_bare_integer() {
+	fn a_written_bundle_carries_the_hue_and_the_name_of_its_nearest_preset() {
 		let root = a_root("tinted");
 		let mut bot = a_bot("Bean", "Answer briefly.");
 		bot.avatar_blot = Hue::named("purple");
 		write(&root, &bot).expect("the bundle is written");
 
-		assert!(written_agent(&root, &bot.id).lines().any(|line| line == "color: 296"));
+		let written = written_agent(&root, &bot.id);
+		assert!(written.lines().any(|line| line == "hue: 296"), "got {written}");
+		assert!(written.lines().any(|line| line == "color: \"purple\""), "got {written}");
 		assert_eq!(named_blot(&root, &bot.id).map(Hue::value), Some(296));
 
-		bot.avatar_blot = Hue::new(17);
+		bot.avatar_blot = Hue::new(50);
 		write(&root, &bot).expect("the bundle is rewritten");
-		assert_eq!(named_blot(&root, &bot.id).map(Hue::value), Some(17));
+		let rewritten = written_agent(&root, &bot.id);
+		assert!(rewritten.lines().any(|line| line == "hue: 50"), "got {rewritten}");
+		assert!(rewritten.lines().any(|line| line == "color: \"red\""), "got {rewritten}");
+		assert_eq!(named_blot(&root, &bot.id).map(Hue::value), Some(50));
 
 		let _ = fs::remove_dir_all(&root);
 	}
@@ -1228,11 +1246,33 @@ mod tests {
 		let agent = agent_file(&root, &bot.id).expect("the agent file is there");
 		let text = fs::read_to_string(&agent)
 			.expect("the agent file reads")
-			.replace("color: 257", "color: \"purple\"");
+			.replace("hue: 257\n", "")
+			.replace("color: \"blue\"", "color: \"purple\"");
 		private_files::replace(&agent, text.as_bytes()).expect("the older bundle lands");
 
 		assert_eq!(named_blot(&root, &bot.id).map(Hue::value), Some(296));
 		assert!(fs::read_to_string(&agent).expect("still there").contains("color: \"purple\""));
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	#[test]
+	fn the_hue_key_wins_over_the_color_key_and_an_unreadable_hue_falls_back_to_the_color() {
+		let root = a_root("hue-first");
+		let mut bot = a_bot("Bean", "Answer briefly.");
+		bot.avatar_blot = Hue::new(50);
+		write(&root, &bot).expect("the bundle is written");
+		let agent = agent_file(&root, &bot.id).expect("the agent file is there");
+		let written = fs::read_to_string(&agent).expect("the agent file reads");
+		let read_with = |hue: &str, colour: &str| {
+			let text = written.replace("hue: 50", hue).replace("color: \"red\"", colour);
+			private_files::replace(&agent, text.as_bytes()).expect("the hand edit lands");
+			named_blot(&root, &bot.id).map(Hue::value)
+		};
+
+		assert_eq!(read_with("hue: 200", "color: \"pink\""), Some(200));
+		assert_eq!(read_with("hue: 400", "color: \"pink\""), Some(358));
+		assert_eq!(read_with("hue: teal", "color: 90"), Some(90));
 
 		let _ = fs::remove_dir_all(&root);
 	}
@@ -1245,7 +1285,7 @@ mod tests {
 
 		let written = written_agent(&root, &bot.id);
 		for line in written.lines() {
-			assert!(!line.starts_with("color:"), "got {written}");
+			assert!(!line.starts_with("color:") && !line.starts_with("hue:"), "got {written}");
 		}
 		assert_eq!(named_blot(&root, &bot.id), None);
 
@@ -1261,12 +1301,14 @@ mod tests {
 		let agent = agent_file(&root, &bot.id).expect("the agent file is there");
 		let written = fs::read_to_string(&agent).expect("the agent file reads");
 
-		for unknown in ["color: teal", "color: 400", "color: -1"] {
-			let text = written.replace("color: 257", unknown);
+		for (hue, colour) in [("teal", "teal"), ("400", "400"), ("-1", "chartreuse")] {
+			let text = written
+				.replace("hue: 257", &format!("hue: {hue}"))
+				.replace("color: \"blue\"", &format!("color: {colour}"));
 			private_files::replace(&agent, text.as_bytes()).expect("the hand edit lands");
 
-			assert_eq!(named_blot(&root, &bot.id), None, "{unknown} read as a hue");
-			assert!(fs::read_to_string(&agent).expect("still there").contains(unknown));
+			assert_eq!(named_blot(&root, &bot.id), None, "hue {hue}, color {colour} read as a hue");
+			assert_eq!(fs::read_to_string(&agent).expect("still there"), text);
 		}
 
 		let _ = fs::remove_dir_all(&root);
