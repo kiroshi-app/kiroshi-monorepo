@@ -63,6 +63,7 @@ const common = {
 		closeOtherTabsShortcut: "⌘⌥W",
 		more: "{{count}} more",
 		tabNeedsYou: "{{title}}, needs you",
+		tabMoved: "{{title}} moved to position {{position}} of {{count}}",
 	},
 	notice: {
 		label: "Notices",

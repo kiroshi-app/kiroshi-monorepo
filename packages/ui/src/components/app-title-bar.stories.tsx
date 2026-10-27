@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { expect, fireEvent, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
@@ -1125,4 +1126,224 @@ export const DragAcrossTheDivider = meta.story({
 		])
 		await expect(args.onReorderTabs).toHaveBeenCalledTimes(2)
 	},
+})
+
+const REORDER_TABS = [
+	PINNED_INBOX,
+	PINNED_ROADMAP,
+	RELEASE_NOTES,
+	LOGIN_REDIRECT,
+	WEEKLY_PLANNING,
+]
+
+const ReorderingTitleBar = (args: AppTitleBarProps) => {
+	const [tabs, setTabs] = useState(args.tabs ?? [])
+	return (
+		<div className="surface-shell relative h-10 w-320">
+			<AppTitleBar
+				{...args}
+				onReorderTabs={(ids) => {
+					args.onReorderTabs?.(ids)
+					setTabs(ids.flatMap((id) => tabs.filter((tab) => tab.id === id)))
+				}}
+				tabs={tabs}
+			/>
+		</div>
+	)
+}
+
+type KeyboardPlayContext = {
+	args: Partial<AppTitleBarProps>
+	canvasElement: HTMLElement
+	userEvent: { keyboard: (text: string) => Promise<void> }
+}
+
+const moveAnnouncement = () =>
+	slotIn(document.body, "title-bar-tab-move-announcement")
+
+const playKeyboardReorder = async ({
+	args,
+	canvasElement,
+	userEvent,
+}: KeyboardPlayContext) => {
+	const bar = within(barIn(canvasElement))
+	const login = bar.getByRole("tab", { name: LOGIN_REDIRECT.title })
+	const roadmap = bar.getByRole("tab", { name: ROADMAP.title })
+
+	login.focus()
+	await userEvent.keyboard("{Alt>}{ArrowRight}{/Alt}")
+	await expect(args.onReorderTabs).toHaveBeenCalledTimes(1)
+	await expect(args.onReorderTabs).toHaveBeenLastCalledWith([
+		PINNED_INBOX.id,
+		ROADMAP.id,
+		RELEASE_NOTES.id,
+		WEEKLY_PLANNING.id,
+		LOGIN_REDIRECT.id,
+	])
+	await waitFor(() => expect(unpinnedTabsIn(canvasElement)[2]).toBe(login))
+	await expect(login).toHaveFocus()
+	await expect(moveAnnouncement()).toHaveAttribute("aria-live", "polite")
+	await expect(moveAnnouncement()).toHaveTextContent(
+		`${LOGIN_REDIRECT.title} moved to position 5 of 5`,
+	)
+
+	await userEvent.keyboard("{Alt>}{ArrowRight}{/Alt}")
+	await expect(args.onReorderTabs).toHaveBeenCalledTimes(1)
+
+	await userEvent.keyboard("{Alt>}{ArrowLeft}{/Alt}")
+	await expect(args.onReorderTabs).toHaveBeenCalledTimes(2)
+	await expect(args.onReorderTabs).toHaveBeenLastCalledWith([
+		PINNED_INBOX.id,
+		ROADMAP.id,
+		RELEASE_NOTES.id,
+		LOGIN_REDIRECT.id,
+		WEEKLY_PLANNING.id,
+	])
+	await expect(login).toHaveFocus()
+	await expect(moveAnnouncement()).toHaveTextContent(
+		`${LOGIN_REDIRECT.title} moved to position 4 of 5`,
+	)
+
+	await userEvent.keyboard("{ArrowLeft}")
+	await expect(
+		bar.getByRole("tab", { name: RELEASE_NOTES.title }),
+	).toHaveFocus()
+	await userEvent.keyboard("{ArrowRight}")
+	await expect(login).toHaveFocus()
+	await expect(args.onReorderTabs).toHaveBeenCalledTimes(2)
+
+	roadmap.focus()
+	await userEvent.keyboard("{Alt>}{ArrowRight}{/Alt}")
+	await expect(args.onReorderTabs).toHaveBeenCalledTimes(2)
+	await userEvent.keyboard("{Alt>}{ArrowLeft}{/Alt}")
+	await expect(args.onReorderTabs).toHaveBeenCalledTimes(3)
+	await expect(args.onReorderTabs).toHaveBeenLastCalledWith([
+		ROADMAP.id,
+		PINNED_INBOX.id,
+		RELEASE_NOTES.id,
+		LOGIN_REDIRECT.id,
+		WEEKLY_PLANNING.id,
+	])
+	await expect(roadmap).toHaveFocus()
+	await expect(moveAnnouncement()).toHaveTextContent(
+		`${ROADMAP.title} moved to position 1 of 5`,
+	)
+	await userEvent.keyboard("{Alt>}{ArrowLeft}{/Alt}")
+	await expect(args.onReorderTabs).toHaveBeenCalledTimes(3)
+}
+
+export const KeyboardReorder = meta.story({
+	tags: ["test-only"],
+	args: { tabs: REORDER_TABS, activeTabId: RELEASE_NOTES.id },
+	render: (args) => <ReorderingTitleBar {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Moving a tab from the keyboard, light. Check Option+Right on the focused Fix the login redirect swaps it with Weekly planning, keeps the focus on it and announces its new place, that it stops at the end of its zone, that Option+Left brings it back, that plain arrows still walk the tabs without moving one, and that a pinned tab never crosses the divider.",
+			},
+		},
+	},
+	play: playKeyboardReorder,
+})
+
+export const KeyboardReorderDark = meta.story({
+	tags: ["test-only"],
+	args: { tabs: REORDER_TABS, activeTabId: RELEASE_NOTES.id },
+	globals: DARK,
+	render: (args) => <ReorderingTitleBar {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Moving a tab from the keyboard, dark. Pick `KeyboardReorder` for the light theme.",
+			},
+		},
+	},
+	play: playKeyboardReorder,
+})
+
+export const KeyboardReorderWithoutHandler = meta.story({
+	tags: ["test-only"],
+	args: {
+		tabs: REORDER_TABS,
+		activeTabId: RELEASE_NOTES.id,
+		onReorderTabs: undefined,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A strip with no reorder handler. Check Option+Right and Option+Left on a focused tab leave the order, the focus and the announcement untouched.",
+			},
+		},
+	},
+	play: async ({ canvasElement, userEvent }) => {
+		const login = within(barIn(canvasElement)).getByRole("tab", {
+			name: LOGIN_REDIRECT.title,
+		})
+		login.focus()
+		await userEvent.keyboard("{Alt>}{ArrowRight}{/Alt}")
+		await userEvent.keyboard("{Alt>}{ArrowLeft}{/Alt}")
+		await expect(unpinnedTabsIn(canvasElement)[1]).toBe(login)
+		await expect(login).toHaveFocus()
+		await expect(moveAnnouncement()).toHaveTextContent("")
+	},
+})
+
+const playEscapeCancelsDrag = async ({
+	args,
+	canvasElement,
+	userEvent,
+}: KeyboardPlayContext) => {
+	const bar = barIn(canvasElement)
+	const [, lifted, passed] = unpinnedTabsIn(canvasElement)
+	const restingLeft = boxOf(lifted).left
+	const target = boxOf(passed).right
+
+	liftTo(lifted, target)
+	await waitFor(() => expect(insertionsIn(bar)).toHaveLength(1))
+	await userEvent.keyboard("{Escape}")
+	await waitFor(() => expect(insertionsIn(bar)).toHaveLength(0))
+	await expect(getComputedStyle(lifted).pointerEvents).not.toBe("none")
+	await expect(boxOf(lifted).left).toBeCloseTo(restingLeft, 0)
+
+	fireEvent.pointerMove(lifted, pointAt(target + 20, lifted))
+	await expect(insertionsIn(bar)).toHaveLength(0)
+	dropAt(lifted, target)
+	await expect(args.onReorderTabs).not.toHaveBeenCalled()
+	await expect(args.onSelectTab).not.toHaveBeenCalled()
+
+	liftTo(lifted, target)
+	dropAt(lifted, target)
+	await expect(args.onReorderTabs).toHaveBeenCalledTimes(1)
+}
+
+export const EscapeCancelsDrag = meta.story({
+	tags: ["test-only"],
+	args: A7,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Escape during a drag, light. Check Escape drops the lift and the drop line and puts Fix the login redirect back in its slot, that the release after it reports no order and selects nothing, and that the next drag still lands.",
+			},
+		},
+	},
+	play: playEscapeCancelsDrag,
+})
+
+export const EscapeCancelsDragDark = meta.story({
+	tags: ["test-only"],
+	args: A7,
+	globals: DARK,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Escape during a drag, dark. Pick `EscapeCancelsDrag` for the light theme.",
+			},
+		},
+	},
+	play: playEscapeCancelsDrag,
 })

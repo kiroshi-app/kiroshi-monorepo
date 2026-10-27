@@ -1076,6 +1076,11 @@ navigation-apptitlebar--a-7-dragging-tab
 navigation-apptitlebar--a-7-dragging-tab-dark
 navigation-apptitlebar--drag-across-the-divider
 navigation-apptitlebar--drag-tab-two-right
+navigation-apptitlebar--escape-cancels-drag
+navigation-apptitlebar--escape-cancels-drag-dark
+navigation-apptitlebar--keyboard-reorder
+navigation-apptitlebar--keyboard-reorder-dark
+navigation-apptitlebar--keyboard-reorder-without-handler
 navigation-apptitlebar--overflow-follows-the-strip
 navigation-apptitlebar--tab-gestures
 navigation-apptitlebar--unpinned-tab-menu

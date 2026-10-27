@@ -1,6 +1,7 @@
 import {
 	type PointerEvent as ReactPointerEvent,
 	useCallback,
+	useEffect,
 	useRef,
 	useState,
 } from "react"
@@ -84,6 +85,22 @@ export const useRosterLift = <Landing>({
 		followed.current = node
 		if (press.current) place(node, at.current, press.current)
 	}, [])
+
+	const isLifted = lift !== null
+
+	useEffect(() => {
+		if (!isLifted) return
+		const cancelOnEscape = (event: KeyboardEvent) => {
+			if (event.key !== "Escape") return
+			event.preventDefault()
+			event.stopPropagation()
+			press.current = null
+			hasDropped.current = true
+			setLift(null)
+		}
+		window.addEventListener("keydown", cancelOnEscape, true)
+		return () => window.removeEventListener("keydown", cancelOnEscape, true)
+	}, [isLifted])
 
 	const handlersFor = (id: string): RosterLiftHandlers => ({
 		onPointerCancel: () => {
