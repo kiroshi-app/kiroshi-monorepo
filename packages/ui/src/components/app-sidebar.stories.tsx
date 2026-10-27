@@ -2449,17 +2449,7 @@ export const ConversationsLeftColumnDark = meta.story({
 })
 
 const MISSIONS_LEFT_COLUMN = {
-	args: {
-		openPanel: "missions" as const,
-		missionsBySpaceId: {
-			[HOME]: {
-				open: SPACE_OPEN_MISSIONS,
-				earlierToday: SPACE_EARLIER_TODAY_MISSIONS,
-				onOpen: fn(),
-			},
-		},
-		onSearchMissions: fn(),
-	},
+	args: MissionsTab.input.args,
 	parameters: {
 		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {

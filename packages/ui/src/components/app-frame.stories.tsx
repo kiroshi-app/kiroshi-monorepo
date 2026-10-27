@@ -31,8 +31,12 @@ const renderFrame = (args: AppFrameProps) => (
 const railAvatarStateIn = (canvasElement: HTMLElement) =>
 	slotIn(slotIn(canvasElement, "app-rail"), "space-avatar").dataset.state
 
-const drawing = (state: SpaceAvatarState, spaceHost?: SpaceHost) => ({
-	args: { spaceHost },
+const drawing = (
+	state: SpaceAvatarState,
+	spaceHost?: SpaceHost,
+	rail = RAIL,
+) => ({
+	args: { spaceHost, rail },
 	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
 		await expect(railAvatarStateIn(canvasElement)).toBe(state)
 	},
@@ -120,11 +124,7 @@ export const OfflineSpace = meta.story({
 })
 
 export const OfflineSpaceWithSpaceSettingsOpen = meta.story({
-	...drawing("offline", "down"),
-	args: {
-		spaceHost: "down",
-		rail: { ...RAIL, openSettings: "space" },
-	},
+	...drawing("offline", "down", { ...RAIL, openSettings: "space" }),
 	parameters: {
 		docs: {
 			description: {
