@@ -3,6 +3,7 @@ import { AppSidebar } from "@workspace/ui/components/app-sidebar"
 import { titleBarWindowControls } from "@/components/window-caption-controls"
 import { hasOverlayWindowControls } from "@/lib/host"
 import type { useSwitcherSpaces } from "@/lib/spaces/use-joined-spaces"
+import type { WorkspaceTabs } from "@/lib/tabs/workspace-tabs"
 import type { RosterLines } from "@/lib/workspace/use-roster-lines"
 import { useRosterLists } from "@/lib/workspace/use-roster-lists"
 import type { RosterView } from "@/lib/workspace/use-roster-view"
@@ -12,6 +13,7 @@ import type { useSidebarPanelSwitch } from "@/lib/workspace/use-sidebar-panel-sw
 import type { WorkspaceCore } from "@/lib/workspace/use-workspace-core"
 import type { WorkspaceDrivers } from "@/lib/workspace/use-workspace-drivers"
 import type { WorkspaceOverlay } from "@/lib/workspace/use-workspace-overlay"
+import { useWorkspaceTitleBarTabs } from "@/lib/workspace/use-workspace-title-bar-tabs"
 
 type WorkspaceSidebarProps = {
 	collapsedSectionIds: string[]
@@ -24,6 +26,7 @@ type WorkspaceSidebarProps = {
 	sidebarMissions: SidebarMissions
 	sidebarTab: ReturnType<typeof useSidebarPanelSwitch>
 	switcher: ReturnType<typeof useSwitcherSpaces>
+	tabs: WorkspaceTabs
 }
 
 export const WorkspaceSidebar = ({
@@ -36,6 +39,7 @@ export const WorkspaceSidebar = ({
 	sidebarMissions,
 	sidebarTab,
 	switcher,
+	tabs,
 }: WorkspaceSidebarProps) => {
 	const { roster, sections } = core
 	const rosterLists = useRosterLists({
@@ -44,6 +48,12 @@ export const WorkspaceSidebar = ({
 		rosterLines,
 		rosterView,
 		waitingMissionCount: sidebarMissions.waitingCount,
+	})
+	const titleBarTabs = useWorkspaceTitleBarTabs({
+		core,
+		rosterLists,
+		rosterView,
+		tabs,
 	})
 	const sidebarRosters = {
 		botsBySpaceId: rosterLists.rosterBotsBySpace,
@@ -57,6 +67,7 @@ export const WorkspaceSidebar = ({
 			data-tauri-drag-region="deep"
 			insetWindowControls={hasOverlayWindowControls()}
 			windowControls={titleBarWindowControls()}
+			{...titleBarTabs}
 			bots={rosterLists.rosterBots}
 			haveBotsFailedToLoad={roster.state.hasFailedToLoad}
 			rosterSkeleton={rosterLists.rosterSkeleton}

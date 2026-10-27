@@ -107,7 +107,7 @@ const USER_ARGS = {
 	onEntryChange: fn(),
 	onBack: fn(),
 	rail: RAIL,
-	titleBar: { ...TITLE_BAR, onSelectSpace: fn() },
+	titleBar: TITLE_BAR,
 	value: { name: "Ada Martin", colorScheme: "system" },
 	onValueChange: fn(),
 	language: null,

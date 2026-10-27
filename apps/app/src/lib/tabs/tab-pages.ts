@@ -78,3 +78,15 @@ export const rowIdsNamedBy = (href: string) => {
 		(id): id is string => id !== undefined,
 	)
 }
+
+export type SettingsTarget = "user" | "space" | "companion"
+
+export const settingsTargetOf = ({
+	pathname,
+	companionId,
+}: TabPage): SettingsTarget => {
+	if (companionId !== undefined) {
+		return "companion"
+	}
+	return pathname === USER_SETTINGS_PATH ? "user" : "space"
+}

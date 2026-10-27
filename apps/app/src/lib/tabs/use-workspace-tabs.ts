@@ -65,10 +65,13 @@ export const useWorkspaceTabs = ({ tabs, ...needs }: WorkspaceTabsSource) => {
 	const state = useSyncExternalStore(tabs.subscribe, tabs.getState)
 	const space = shownTabsOf(state)
 	const needingYou = rowIdsNeedingYouIn(space.tabs, needs)
+	const active = activeTabOf(space)
 
 	return {
 		tabs: space.tabs.map((tab) => tabViewOf(tab, needingYou)),
-		activeId: activeTabOf(space).id,
+		activeId: active.id,
+		canGoBack: active.index > 0,
+		canGoForward: active.index < active.entries.length - 1,
 		select: tabs.select,
 		pin: tabs.pin,
 		unpin: tabs.unpin,

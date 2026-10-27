@@ -171,10 +171,17 @@ const openConversation = async () => {
 const railOf = () =>
 	screen.getByRole("navigation", { name: i18n.t("bots:rail.label") })
 
-const gearOf = () =>
-	within(railOf()).getByRole("button", {
-		name: i18n.t("bots:rail.spaceSettings"),
-	})
+const spacesLogoOf = () =>
+	railOf()
+		.querySelector('[data-slot="space-avatar"]')
+		?.closest("button") as HTMLElement
+
+const openSpaceSettingsByRail = async () => {
+	await press(spacesLogoOf())
+	await press(
+		screen.getByRole("menuitem", { name: i18n.t("bots:rail.spaceSettings") }),
+	)
+}
 
 const avatarOf = () =>
 	within(railOf()).getAllByRole("button").at(-1) as HTMLElement
@@ -223,20 +230,20 @@ const composerOf = () =>
 it("opens the space settings in place of the body on the gear, and marks the gear", async () => {
 	await mountApp()
 
-	await press(gearOf())
+	await openSpaceSettingsByRail()
 
 	expect(shownSettingsOf()).toEqual({
 		subtitle: "space",
 		entry: i18n.t("settings:rail.space"),
 	})
-	expect(isMarked(gearOf())).toBe(true)
+	expect(isMarked(spacesLogoOf())).toBe(true)
 	expect(isMarked(avatarOf())).toBe(false)
 	expect(isMarked(conversationsEntryOf())).toBe(false)
 })
 
 it("switches between the space and the user settings on the gear and the avatar", async () => {
 	await mountApp()
-	await press(gearOf())
+	await openSpaceSettingsByRail()
 
 	await press(avatarOf())
 
@@ -245,9 +252,9 @@ it("switches between the space and the user settings on the gear and the avatar"
 		entry: i18n.t("settings:rail.account"),
 	})
 	expect(isMarked(avatarOf())).toBe(true)
-	expect(isMarked(gearOf())).toBe(false)
+	expect(isMarked(spacesLogoOf())).toBe(false)
 
-	await press(gearOf())
+	await openSpaceSettingsByRail()
 
 	expect(shownSettingsOf()).toEqual({
 		subtitle: "space",
@@ -259,7 +266,7 @@ it("brings back the open conversation and its draft on Back to your settings", a
 	await mountApp()
 	await openConversation()
 	fireEvent.change(composerOf(), { target: { value: DRAFT } })
-	await press(gearOf())
+	await openSpaceSettingsByRail()
 
 	await press(spaceBackOf())
 
@@ -300,7 +307,7 @@ it("opens the user settings again on the first entry once they were closed", asy
 
 it("lists one Applications sub-entry per application installed in the open space", async () => {
 	await mountApp(twoSpaceApplications)
-	await press(gearOf())
+	await openSpaceSettingsByRail()
 
 	await openApplications()
 
@@ -314,7 +321,7 @@ it("lists one Applications sub-entry per application installed in the open space
 
 it("shows the page of the application its sub-entry selects", async () => {
 	await mountApp(twoSpaceApplications)
-	await press(gearOf())
+	await openSpaceSettingsByRail()
 	await openApplications()
 
 	await press(menuEntryOf(/^ledger/))
@@ -325,7 +332,7 @@ it("shows the page of the application its sub-entry selects", async () => {
 
 it("asks before a rail press leaves an unsaved application, and leaves once on Leave", async () => {
 	await mountApp(twoSpaceApplications)
-	await press(gearOf())
+	await openSpaceSettingsByRail()
 	await openApplications()
 	await press(menuEntryOf(/^ledger/))
 	const nameField = () =>
@@ -379,7 +386,7 @@ it("lists the application the person installed under Applications of the user se
 
 it("opens the applications catalogue on Add an application", async () => {
 	await mountApp(twoSpaceApplications)
-	await press(gearOf())
+	await openSpaceSettingsByRail()
 	await openApplications()
 
 	await press(menuEntryOf(i18n.t("bots:applications.add")))
@@ -435,14 +442,12 @@ const widenSidebar = async () => {
 }
 
 const switchSpaceTo = async (name: string) => {
-	await press(
-		document.querySelector('[data-slot="space-switcher"]') as HTMLElement,
-	)
+	await press(spacesLogoOf())
 	await press(screen.getByRole("menuitemradio", { name: new RegExp(name) }))
 }
 
 const openFirstCompanionOfSpace = async () => {
-	await press(gearOf())
+	await openSpaceSettingsByRail()
 	await press(menuEntryOf(new RegExp(`^${i18n.t("settings:rail.companions")}`)))
 	await press(
 		document
@@ -454,7 +459,7 @@ const openFirstCompanionOfSpace = async () => {
 it("goes back one entry, to the user settings the space settings were opened over, then to the conversations", async () => {
 	await mountApp()
 	await press(avatarOf())
-	await press(gearOf())
+	await openSpaceSettingsByRail()
 
 	await press(spaceBackOf())
 
@@ -468,7 +473,7 @@ it("goes back one entry, to the user settings the space settings were opened ove
 it("opens the conversations and every settings screen at the width set on a settings screen, after a restart too", async () => {
 	harness.preferences = STORED_PREFERENCES
 	await mountApp()
-	await press(gearOf())
+	await openSpaceSettingsByRail()
 	const openingWidth = sidebarWidthOf()
 
 	await widenSidebar()
@@ -489,7 +494,7 @@ it("opens the conversations and every settings screen at the width set on a sett
 
 it("shows the settings of the Space reached and leaves the tab of the Space left on its own settings", async () => {
 	const opened = await mountApp(secondSpace)
-	await press(gearOf())
+	await openSpaceSettingsByRail()
 	expect(screen.getByDisplayValue(opened.name)).toBeTruthy()
 
 	await switchSpaceTo(VOCCA)
@@ -521,8 +526,7 @@ const spaceRowOf = (name: string) =>
 		name: new RegExp(`^${name}`),
 	})
 
-const spaceSwitcherOf = () =>
-	document.querySelector('[data-slot="space-switcher"]') as HTMLElement
+const openSpaceLabelOf = () => spacesLogoOf().getAttribute("aria-label")
 
 it("lists every Space on the user settings, the current one marked", async () => {
 	const opened = await mountApp(secondSpace)
@@ -541,7 +545,7 @@ it("opens the settings of a Space other than the current one from its row, then 
 
 	expect(shownSettingsOf()?.subtitle).toBe("space")
 	expect(screen.getByDisplayValue(VOCCA)).toBeTruthy()
-	expect(spaceSwitcherOf().textContent).toContain(opened.name)
+	expect(openSpaceLabelOf()).toContain(opened.name)
 
 	await press(spaceBackOf())
 
@@ -569,7 +573,7 @@ it("reads the secrets of the Space its route shows, though another Space is curr
 
 	expect(screen.getByText("VOCCA_TOKEN")).toBeTruthy()
 	expect(screen.queryByText("OPENED_TOKEN")).toBeNull()
-	expect(spaceSwitcherOf().textContent).toContain(opened.name)
+	expect(openSpaceLabelOf()).toContain(opened.name)
 })
 
 it("opens an application of the Space its route shows under that Space", async () => {
@@ -603,7 +607,7 @@ it("switches to the Space and shows its conversations on Open", async () => {
 	)
 
 	expect(shownSettingsOf()).toBeNull()
-	expect(spaceSwitcherOf().textContent).toContain(VOCCA)
+	expect(openSpaceLabelOf()).toContain(VOCCA)
 })
 
 it("adds the row of a new Space on the + of Your spaces", async () => {
@@ -666,4 +670,118 @@ it("opens the conversations on Back when a settings screen is the first entry of
 
 	expect(shownSettingsOf()).toBeNull()
 	expect(isMarked(conversationsEntryOf())).toBe(true)
+})
+
+const titleBarOf = () =>
+	document.querySelector('[data-slot="app-title-bar"]') as HTMLElement
+
+const tabNamed = (name: string) =>
+	within(titleBarOf()).getByRole("tab", { name })
+
+const tabNames = () =>
+	within(titleBarOf())
+		.getAllByRole("tab")
+		.map((tab) => tab.getAttribute("aria-label") ?? tab.textContent)
+
+const barButtonOf = (name: string) =>
+	within(titleBarOf()).getByRole("button", { name })
+
+const pickInTabMenu = async (tabName: string, item: string) => {
+	await act(async () => {
+		fireEvent.contextMenu(tabNamed(tabName))
+	})
+	await press(screen.getByRole("menuitem", { name: item }))
+}
+
+const SPACE_SETTINGS_TAB = i18n.t("settings:screen.subtitle.space")
+
+const NEW_TAB = i18n.t("common:titleBar.newTab")
+
+const applicationNameField = () =>
+	screen.getByLabelText<HTMLInputElement>(
+		i18n.t("bots:applications.name.label"),
+	)
+
+const applicationLeaveQuestion = () =>
+	screen.queryByRole("alertdialog", {
+		name: i18n.t("bots:applications.leave.title"),
+	})
+
+const answerLeave = (answer: string) =>
+	press(
+		within(applicationLeaveQuestion() as HTMLElement).getByRole("button", {
+			name: answer,
+		}),
+	)
+
+const openUnsavedApplicationInSecondTab = async () => {
+	await mountApp(twoSpaceApplications)
+	await openConversation()
+	await press(barButtonOf(NEW_TAB))
+	await openSpaceSettingsByRail()
+	await openApplications()
+	await press(menuEntryOf(/^ledger/))
+	fireEvent.change(applicationNameField(), {
+		target: { value: "ledger-desk" },
+	})
+}
+
+it.each([
+	["selecting another tab", () => press(tabNamed(CONVERSATION_TITLE))],
+	["opening a new tab", () => press(barButtonOf(NEW_TAB))],
+	["going Back", () => press(barButtonOf(i18n.t("common:titleBar.back")))],
+	[
+		"closing the active tab",
+		() => press(barButtonOf(i18n.t("common:titleBar.closeTab"))),
+	],
+])(
+	"asks before %s leaves an unsaved application, and stays on Cancel",
+	async (_gesture, leave) => {
+		await openUnsavedApplicationInSecondTab()
+
+		await leave()
+		expect(applicationLeaveQuestion()).not.toBeNull()
+		await answerLeave(i18n.t("common:confirm.cancel"))
+
+		expect(applicationLeaveQuestion()).toBeNull()
+		expect(tabNames()).toEqual([CONVERSATION_TITLE, SPACE_SETTINGS_TAB])
+		expect(applicationNameField().value).toBe("ledger-desk")
+	},
+)
+
+it("closes the active settings tab with an unsaved application once Leave is pressed", async () => {
+	await openUnsavedApplicationInSecondTab()
+
+	await press(barButtonOf(i18n.t("common:titleBar.closeTab")))
+	await answerLeave(i18n.t("bots:applications.leave.action"))
+
+	expect(tabNames()).toEqual([CONVERSATION_TITLE])
+	expect(shownSettingsOf()).toBeNull()
+})
+
+it("pins, unpins, closes another tab and the other tabs at once beside an unsaved application", async () => {
+	await openUnsavedApplicationInSecondTab()
+
+	await pickInTabMenu(CONVERSATION_TITLE, i18n.t("common:titleBar.pinTab"))
+	await pickInTabMenu(CONVERSATION_TITLE, i18n.t("common:titleBar.unpinTab"))
+	expect(applicationLeaveQuestion()).toBeNull()
+
+	await pickInTabMenu(
+		SPACE_SETTINGS_TAB,
+		i18n.t("common:titleBar.closeOtherTabs"),
+	)
+	expect(applicationLeaveQuestion()).toBeNull()
+	expect(tabNames()).toEqual([SPACE_SETTINGS_TAB])
+	expect(applicationNameField().value).toBe("ledger-desk")
+})
+
+it("leaves a settings page with nothing unsaved at once on a tab gesture", async () => {
+	await mountApp()
+	await openSpaceSettingsByRail()
+
+	await press(barButtonOf(NEW_TAB))
+
+	expect(applicationLeaveQuestion()).toBeNull()
+	expect(tabNames()).toEqual([SPACE_SETTINGS_TAB, NEW_TAB])
+	expect(shownSettingsOf()).toBeNull()
 })

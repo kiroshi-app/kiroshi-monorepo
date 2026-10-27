@@ -170,7 +170,7 @@ export const expectSettingsChrome = async (
 	await expect(bar.top).toBe(shell.top)
 	await expect(bar.left).toBe(shell.left)
 	await expect(bar.height).toBe(SHELL_TITLE_BAR_HEIGHT)
-	await expect(slotIn(titleBar, "space-switcher")).toBeVisible()
+	await expect(slotIn(titleBar, "title-bar-tabs")).toBeVisible()
 	await expect(rail.width).toBe(RAIL_WIDTH)
 	await expect(panel.left).toBe(rail.right)
 	await expect(panel.width).toBe(panelWidth)

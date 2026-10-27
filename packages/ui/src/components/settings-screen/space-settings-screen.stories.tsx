@@ -11,10 +11,7 @@ import {
 	slotsIn,
 } from "@workspace/storybook/story-utils"
 import { AppRail } from "@workspace/ui/components/app-rail"
-import {
-	GARAGE,
-	TITLE_BAR,
-} from "@workspace/ui/components/app-title-bar.fixtures"
+import { TITLE_BAR } from "@workspace/ui/components/app-title-bar.fixtures"
 import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
 import { SPACE_ENVIRONMENT } from "@workspace/ui/components/environment.fixtures"
 import {
@@ -141,7 +138,7 @@ const SPACE_ARGS = {
 	onEntryChange: fn(),
 	onBack: fn(),
 	rail: RAIL,
-	titleBar: { ...TITLE_BAR, onSelectSpace: fn() },
+	titleBar: TITLE_BAR,
 	isShared: true,
 	value: { name: "Release desk", colour: "blue" },
 	onValueChange: fn(),
@@ -474,50 +471,6 @@ export const LeavingUnsavedApplicationEditsByTheRail = meta.story({
 			expect(within(main).queryByLabelText("Name")).toBeNull(),
 		)
 		await expect(args.onEntryChange).not.toHaveBeenCalled()
-	},
-})
-
-export const LeavingUnsavedApplicationEditsBySwitchingSpace = meta.story({
-	args: LINEAR_OPEN,
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"`LinearApplication` with an edit not yet saved, then another Space picked in the title bar's switcher. Check that the screen asks with the same leave wording the rail and Back use before the Space changes, that Cancel keeps the Space, and that Leave switches to the picked Space once.",
-			},
-		},
-	},
-	play: async ({ args, canvasElement, userEvent }) => {
-		const menu = await menuIn()
-		const main = screen.getByRole("main")
-		const switcher = slotIn(
-			slotIn(canvasElement, "app-title-bar"),
-			"space-switcher",
-		)
-		await within(menu).findByRole("button", { name: "Linear Connected" })
-		await userEvent.type(within(main).getByLabelText("Name"), "-desk")
-
-		const pickGarage = async () => {
-			await userEvent.click(switcher)
-			await userEvent.click(
-				await screen.findByRole("menuitemradio", { name: /Garage/ }),
-			)
-			return screen.findByRole("alertdialog", {
-				name: "Leave without saving?",
-			})
-		}
-
-		await userEvent.click(
-			within(await pickGarage()).getByRole("button", { name: "Cancel" }),
-		)
-		await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull())
-		await expect(args.titleBar?.onSelectSpace).not.toHaveBeenCalled()
-
-		await userEvent.click(
-			within(await pickGarage()).getByRole("button", { name: "Leave" }),
-		)
-		await expect(args.titleBar?.onSelectSpace).toHaveBeenCalledTimes(1)
-		await expect(args.titleBar?.onSelectSpace).toHaveBeenCalledWith(GARAGE.id)
 	},
 })
 
