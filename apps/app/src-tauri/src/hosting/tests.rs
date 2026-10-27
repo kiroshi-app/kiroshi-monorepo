@@ -1253,7 +1253,7 @@ fn a_registration_carries_the_space_colour_and_a_later_start_patches_name_and_co
 				("POST /instances".to_owned(), json!({ "name": "Personal", "colour": null })),
 				(
 					format!("PATCH /instances/{instance_id}"),
-					json!({ "name": "Personal", "colour": "cyan" })
+					json!({ "name": "Personal", "colour": Hue::named("cyan") })
 				),
 			]
 		);
@@ -1281,7 +1281,7 @@ fn a_start_connects_while_its_patch_is_held_and_a_stop_drops_the_held_patch() {
 			held,
 			vec![(
 				format!("PATCH /instances/{instance_id}"),
-				json!({ "name": "Personal", "colour": "red" })
+				json!({ "name": "Personal", "colour": Hue::named("red") })
 			)]
 		);
 		let dropped = harness.noticed_until("the held PATCH dropped", dropped);
@@ -1314,8 +1314,11 @@ fn a_space_update_returns_before_its_held_patch_is_answered_and_an_unchanged_one
 		assert_eq!(recoloured.expect("the recolour").colour, Hue::new(250));
 		assert_eq!(harness.stored_colour().await, Hue::new(250));
 		let call = format!("PATCH /instances/{instance_id}");
-		assert_eq!(renaming, vec![(call.clone(), json!({ "name": "Studio", "colour": "red" }))]);
-		assert_eq!(patched[1], (call, json!({ "name": "Studio", "colour": "blue" })));
+		assert_eq!(
+			renaming,
+			vec![(call.clone(), json!({ "name": "Studio", "colour": Hue::named("red") }))]
+		);
+		assert_eq!(patched[1], (call, json!({ "name": "Studio", "colour": Hue::new(250) })));
 		assert_eq!(patched.len(), 2);
 	});
 }

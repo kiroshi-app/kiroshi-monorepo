@@ -591,7 +591,7 @@ impl Cloud {
 		name: &str,
 		colour: Option<Hue>,
 	) -> Result<String, RegisterError> {
-		let body = json!({ "name": name, "colour": colour.map(Hue::nearest_preset_name) });
+		let body = json!({ "name": name, "colour": colour });
 		let answered = self
 			.answered(|client| client.post(self.at(INSTANCES_PATH)).bearer_auth(bearer).json(&body))
 			.await
@@ -623,7 +623,7 @@ impl Cloud {
 			.path_segments_mut()
 			.map_err(|()| "the cloud url has no path".to_owned())?
 			.push(instance_id);
-		let body = json!({ "name": name, "colour": colour.map(Hue::nearest_preset_name) });
+		let body = json!({ "name": name, "colour": colour });
 		self.sent(|client| client.patch(instance).bearer_auth(bearer).json(&body)).await.map(drop)
 	}
 
@@ -1379,7 +1379,7 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn an_instance_is_registered_and_described_with_the_preset_name_nearest_its_hue() {
+	async fn an_instance_is_registered_and_described_with_its_hue_as_an_integer() {
 		let received = Arc::new(Mutex::new(Vec::new()));
 		let recorded = Arc::clone(&received);
 		let cloud =
@@ -1400,13 +1400,15 @@ mod tests {
 			.describe_instance("bearer", INSTANCE, "Studio", Hue::new(296))
 			.await
 			.expect("described");
+		cloud.register_instance("bearer", "Studio", None).await.expect("registered uncoloured");
 		cloud.describe_instance("bearer", INSTANCE, "Studio", None).await.expect("uncoloured");
 
 		assert_eq!(
 			*received.lock().expect("the record"),
 			vec![
-				r#"POST /instances {"colour":"cyan","name":"Studio"}"#.to_owned(),
-				format!(r#"PATCH /instances/{INSTANCE} {{"colour":"purple","name":"Studio"}}"#),
+				r#"POST /instances {"colour":200,"name":"Studio"}"#.to_owned(),
+				format!(r#"PATCH /instances/{INSTANCE} {{"colour":296,"name":"Studio"}}"#),
+				r#"POST /instances {"colour":null,"name":"Studio"}"#.to_owned(),
 				format!(r#"PATCH /instances/{INSTANCE} {{"colour":null,"name":"Studio"}}"#),
 			]
 		);
