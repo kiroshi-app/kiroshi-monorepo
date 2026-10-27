@@ -1,5 +1,5 @@
 use std::fmt::Display;
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard};
 
 use tauri::{
 	LogicalPosition, LogicalSize, Manager, PhysicalPosition, PhysicalSize, Runtime, WebviewWindow,
@@ -23,6 +23,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 	WS_CHILD, WS_CLIPSIBLINGS, WS_VISIBLE,
 };
 
+use super::overlays::{NotFramed, Overlay, Overlays};
 use super::pointer::{Pointer, PointerInput};
 use super::{MaximizeButtonBounds, MaximizeButtonPointer, MaximizeButtonState, WindowFrameError};
 use crate::events::{self, MAXIMIZE_BUTTON};
@@ -30,13 +31,7 @@ use crate::events::{self, MAXIMIZE_BUTTON};
 const OVERLAY_CLASS: PCWSTR = w!("KiroshiMaximizeButton");
 
 #[derive(Default)]
-struct MaximizeButton(Mutex<Option<Overlay>>);
-
-#[derive(Clone, Copy)]
-struct Overlay {
-	hwnd: isize,
-	bounds: Option<MaximizeButtonBounds>,
-}
+struct MaximizeButtons(Mutex<Overlays>);
 
 struct Tracker {
 	pointer: Pointer,
@@ -58,23 +53,56 @@ impl Failure {
 	}
 }
 
+impl From<NotFramed> for Failure {
+	fn from(_: NotFramed) -> Self {
+		Self::unavailable("the window was never framed")
+	}
+}
+
 pub fn frame<R: Runtime>(window: &WebviewWindow<R>) {
 	if let Err(error) = window.set_decorations(false) {
 		eprintln!("the main window kept its native frame: {error}");
 	}
-	window.manage(MaximizeButton::default());
-	let subject = window.clone();
-	window.on_window_event(move |event| {
-		let WindowEvent::ScaleFactorChanged { scale_factor, .. } = event else {
-			return;
-		};
-		if let Err(failure) = follow_scale(&subject, *scale_factor) {
-			eprintln!(
-				"the maximize button did not follow the scale factor {scale_factor} ({:?}): {}",
-				failure.error, failure.cause
+	window.manage(MaximizeButtons::default());
+	match overlays(window) {
+		Ok(mut overlays) => overlays.frame(window.label()),
+		Err(failure) => {
+			return eprintln!(
+				"the window {} has no maximize button ({:?}): {}",
+				window.label(),
+				failure.error,
+				failure.cause
 			);
 		}
+	}
+	let subject = window.clone();
+	window.on_window_event(move |event| match event {
+		WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
+			if let Err(failure) = follow_scale(&subject, *scale_factor) {
+				eprintln!(
+					"the maximize button did not follow the scale factor {scale_factor} ({:?}): {}",
+					failure.error, failure.cause
+				);
+			}
+		}
+		WindowEvent::Destroyed => match overlays(&subject) {
+			Ok(mut overlays) => overlays.forget(subject.label()),
+			Err(failure) => eprintln!(
+				"the maximize button of {} outlived its window ({:?}): {}",
+				subject.label(),
+				failure.error,
+				failure.cause
+			),
+		},
+		_ => {}
 	});
+}
+
+fn overlays<R: Runtime>(window: &WebviewWindow<R>) -> Result<MutexGuard<'_, Overlays>, Failure> {
+	let state = window
+		.try_state::<MaximizeButtons>()
+		.ok_or_else(|| Failure::unavailable("no window was ever framed"))?;
+	state.inner().0.lock().map_err(Failure::unavailable)
 }
 
 pub async fn declare_maximize_button<R: Runtime>(
@@ -124,16 +152,12 @@ fn place<R: Runtime>(
 	window: &WebviewWindow<R>,
 	bounds: Option<MaximizeButtonBounds>,
 ) -> Result<(), Failure> {
-	let state = window
-		.try_state::<MaximizeButton>()
-		.ok_or_else(|| Failure::unavailable("the main window was never framed"))?;
-	let mut declared = state.0.lock().map_err(Failure::unavailable)?;
-	let hwnd = match (*declared, bounds) {
-		(Some(overlay), _) => overlay.hwnd,
-		(None, Some(_)) => create_overlay(window)?,
-		(None, None) => return Ok(()),
+	let mut overlays = overlays(window)?;
+	let Some(Overlay { hwnd, bounds }) =
+		overlays.declare(window.label(), bounds, || create_overlay(window))?
+	else {
+		return Ok(());
 	};
-	*declared = Some(Overlay { hwnd, bounds });
 	let Some(bounds) = bounds else {
 		return hide(hwnd);
 	};
@@ -142,10 +166,7 @@ fn place<R: Runtime>(
 }
 
 fn follow_scale<R: Runtime>(window: &WebviewWindow<R>, scale: f64) -> Result<(), Failure> {
-	let Some(state) = window.try_state::<MaximizeButton>() else {
-		return Ok(());
-	};
-	let declared = *state.0.lock().map_err(Failure::unavailable)?;
+	let declared = overlays(window)?.overlay(window.label());
 	match declared {
 		Some(Overlay { hwnd, bounds: Some(bounds) }) => position(hwnd, bounds, scale),
 		_ => Ok(()),
@@ -221,9 +242,10 @@ fn create_overlay<R: Runtime>(window: &WebviewWindow<R>) -> Result<isize, Failur
 
 fn reporter<R: Runtime>(window: &WebviewWindow<R>) -> Box<dyn Fn(MaximizeButtonState)> {
 	let app = window.app_handle().clone();
+	let label = window.label().to_owned();
 	Box::new(move |state| {
 		let payload = MaximizeButtonPointer { state };
-		if let Err(error) = events::emit(&app, MAXIMIZE_BUTTON, payload) {
+		if let Err(error) = events::emit_to(&app, &label, MAXIMIZE_BUTTON, payload) {
 			eprintln!("the maximize button did not report {state:?}: {error}");
 		}
 	})

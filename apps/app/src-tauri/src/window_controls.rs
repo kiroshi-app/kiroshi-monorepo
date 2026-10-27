@@ -10,6 +10,8 @@ pub use secondary::is_secondary;
 pub use macos::center_in_header;
 
 #[cfg(any(windows, test))]
+mod overlays;
+#[cfg(any(windows, test))]
 mod pointer;
 pub(crate) mod secondary;
 #[cfg(windows)]
