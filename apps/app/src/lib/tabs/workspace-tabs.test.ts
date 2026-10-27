@@ -9,6 +9,7 @@ import { act, cleanup, fireEvent, renderHook } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { useTabKeys } from "./use-tab-keys"
+import { useTabsFollowingSpace } from "./use-tab-thread-sync"
 import { useWorkspaceTabs } from "./use-workspace-tabs"
 import { createWorkspaceTabs, type WorkspaceTabs } from "./workspace-tabs"
 
@@ -373,5 +374,132 @@ describe("the Needs you flag", () => {
 			[threadOf("quiet")]: false,
 			[companionOf("nova")]: true,
 		})
+	})
+})
+
+type ShownSettings = {
+	tabs: WorkspaceTabs
+	settingsId: string
+	otherId: string
+}
+
+const tabsShowingSettings = (): ShownSettings => {
+	const tabs = tabsOfSpace()
+	tabs.openInNewTab(threadOf("other"))
+	tabs.openInNewTab(threadOf("earlier"))
+	tabs.history.push(USER_SETTINGS)
+	const [, otherId = "", settingsId = ""] = viewOf(tabs).tabs.map(
+		(tab) => tab.id,
+	)
+	return { tabs, settingsId, otherId }
+}
+
+const cancellingGuard = () => vi.fn<(leave: () => void) => void>()
+
+const proceedingGuard = () =>
+	vi.fn<(leave: () => void) => void>((leave) => leave())
+
+type Gesture = (shown: ShownSettings) => void
+
+const LEAVING_GESTURES: [string, Gesture][] = [
+	["closing the active tab", ({ tabs, settingsId }) => tabs.close(settingsId)],
+	["closeActive", ({ tabs }) => tabs.closeActive()],
+	[
+		"Close other tabs from an inactive tab",
+		({ tabs, otherId }) => tabs.closeOthers(otherId),
+	],
+	["selecting another tab", ({ tabs, otherId }) => tabs.select(otherId)],
+	["opening a new tab", ({ tabs }) => tabs.openEmptyTab()],
+	["going back", ({ tabs }) => tabs.back()],
+	["switching Space", ({ tabs }) => tabs.showSpace(OTHER_SPACE)],
+]
+
+const STAYING_GESTURES: [string, Gesture][] = [
+	["pinning", ({ tabs, settingsId }) => tabs.pin(settingsId)],
+	["unpinning", ({ tabs, settingsId }) => tabs.unpin(settingsId)],
+	["closing an inactive tab", ({ tabs, otherId }) => tabs.close(otherId)],
+	[
+		"Close other tabs on the active tab",
+		({ tabs, settingsId }) => tabs.closeOthers(settingsId),
+	],
+]
+
+describe("the leave guard", () => {
+	it.each(LEAVING_GESTURES)(
+		"holds %s while the guard cancels",
+		(_, gesture) => {
+			const shown = tabsShowingSettings()
+			const guard = cancellingGuard()
+			shown.tabs.guardLeave(guard)
+			const before = shown.tabs.getState()
+
+			gesture(shown)
+
+			expect(guard).toHaveBeenCalledOnce()
+			expect(shown.tabs.getState()).toBe(before)
+			expect(activeHref(shown.tabs)).toBe(USER_SETTINGS)
+		},
+	)
+
+	it.each(LEAVING_GESTURES)(
+		"completes %s once the guard proceeds",
+		(_, gesture) => {
+			const shown = tabsShowingSettings()
+			const guard = proceedingGuard()
+			shown.tabs.guardLeave(guard)
+
+			gesture(shown)
+
+			expect(guard).toHaveBeenCalledOnce()
+			expect(activeHref(shown.tabs)).not.toBe(USER_SETTINGS)
+		},
+	)
+
+	it.each(STAYING_GESTURES)("acts on %s without asking", (_, gesture) => {
+		const shown = tabsShowingSettings()
+		const guard = cancellingGuard()
+		shown.tabs.guardLeave(guard)
+		const before = shown.tabs.getState()
+
+		gesture(shown)
+
+		expect(guard).not.toHaveBeenCalled()
+		expect(shown.tabs.getState()).not.toBe(before)
+		expect(activeHref(shown.tabs)).toBe(USER_SETTINGS)
+	})
+
+	it("acts at once once the guard is released", () => {
+		const shown = tabsShowingSettings()
+		const guard = cancellingGuard()
+		const release = shown.tabs.guardLeave(guard)
+
+		release()
+		shown.tabs.closeActive()
+
+		expect(guard).not.toHaveBeenCalled()
+		expect(activeHref(shown.tabs)).not.toBe(USER_SETTINGS)
+	})
+
+	it("follows the open Space without asking, even under a cancelling guard", () => {
+		const shown = tabsShowingSettings()
+		const guard = cancellingGuard()
+		shown.tabs.guardLeave(guard)
+
+		renderHook(() => useTabsFollowingSpace(shown.tabs, OTHER_SPACE))
+
+		expect(guard).not.toHaveBeenCalled()
+		expect(shown.tabs.getState().spaceId).toBe(OTHER_SPACE)
+		expect(activeHref(shown.tabs)).toBe("/")
+	})
+
+	it("does not ask again for a gesture already asked", () => {
+		const shown = tabsShowingSettings()
+		const guard = cancellingGuard()
+		shown.tabs.guardLeave(guard)
+
+		shown.tabs.leaveAsked(() => shown.tabs.select(shown.otherId))
+
+		expect(guard).not.toHaveBeenCalled()
+		expect(activeHref(shown.tabs)).toBe(threadOf("other"))
 	})
 })

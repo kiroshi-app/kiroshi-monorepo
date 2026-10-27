@@ -35,7 +35,7 @@ export const useSettingsSpaceSwitch = ({
 				spaces.getState().selectedSpaceId,
 			)
 			if (openRowId !== null) {
-				tabs.showSpace(openRowId)
+				tabs.leaveAsked(() => tabs.showSpace(openRowId))
 			}
 			reopenSettings()
 		}

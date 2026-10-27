@@ -1,6 +1,7 @@
 import { Navigate, useParams, useSearch } from "@tanstack/react-router"
 
 import type { SettingsScreenRequestLeave } from "@workspace/ui/components/settings-screen"
+import type { TitleBarTabsProps } from "@workspace/ui/components/title-bar-tabs"
 
 import { CompanionScreenHost } from "@/components/companion-screen-host"
 import { SpaceSettingsScreen } from "@/components/space-settings-screen"
@@ -10,6 +11,7 @@ import { WorkspaceRail } from "@/components/workspace-rail"
 import { hasOverlayWindowControls, isSidebarResizable } from "@/lib/host"
 import { settingsSpacesOf, spacePageOf } from "@/lib/spaces/settings-spaces"
 import { useSettingsSpaceSwitch } from "@/lib/tabs/use-settings-space-switch"
+import type { WorkspaceTabs } from "@/lib/tabs/workspace-tabs"
 import type { SettingsFrame } from "@/lib/workspace/settings-frame"
 import {
 	type RosterLists,
@@ -28,6 +30,21 @@ const useWorkspaceSpaceSwitch = () => {
 		tabs,
 	})
 }
+
+type GesturesAskedBySettings = Pick<
+	TitleBarTabsProps,
+	"onSelectTab" | "onCloseTab" | "onNewTab" | "onGoBack" | "onGoForward"
+>
+
+const gesturesAskedBySettings = (
+	tabs: WorkspaceTabs,
+): GesturesAskedBySettings => ({
+	onSelectTab: (id) => tabs.leaveAsked(() => tabs.select(id)),
+	onCloseTab: (id) => tabs.leaveAsked(() => tabs.close(id)),
+	onNewTab: () => tabs.leaveAsked(tabs.openEmptyTab),
+	onGoBack: () => tabs.leaveAsked(tabs.back),
+	onGoForward: () => tabs.leaveAsked(tabs.forward),
+})
 
 type SettingsFrameRead = {
 	frame: SettingsFrame
@@ -67,6 +84,7 @@ const useSettingsFrame = (
 				rosterLists={rosterLists}
 				sidebarTab={workspace.sidebarTab}
 				switcher={switcher}
+				tabs={workspace.tabs}
 				onSelectSpace={onSelectSpace}
 			/>
 		),
@@ -75,6 +93,7 @@ const useSettingsFrame = (
 			insetWindowControls: hasOverlayWindowControls(),
 			windowControls: titleBarWindowControls(),
 			...titleBarTabs,
+			...gesturesAskedBySettings(workspace.tabs),
 		},
 		width: core.preferences.sidebarWidth ?? undefined,
 		onWidthChange: workspace.overlay.changeSidebarWidth,
