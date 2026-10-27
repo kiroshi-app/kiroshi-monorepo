@@ -44,7 +44,6 @@
 	--state-needs-authorization: var(--warning);
 	--presence-online: #239f53;
 	--presence-offline: #737373;
-	--title-bar-pill: #ffffff;
 	--title-bar-tab: oklch(0 0 0 / 4%);
 	--title-bar-tab-selected: var(--rail-item-selected);
 	--title-bar-pinned: oklch(0 0 0 / 5%);
@@ -143,7 +142,6 @@
 	--state-needs-authorization: #e8b04a;
 	--presence-online: #3fb466;
 	--presence-offline: #737373;
-	--title-bar-pill: oklch(1 0 0 / 6%);
 	--title-bar-tab: oklch(1 0 0 / 4%);
 	--title-bar-tab-selected: var(--rail-item-selected);
 	--title-bar-pinned: oklch(1 0 0 / 5%);
