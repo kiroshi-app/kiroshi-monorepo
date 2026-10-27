@@ -12,7 +12,7 @@ import {
 	type JoinLinkOpened,
 } from "../bindings"
 import { describeFailure } from "../failure-report"
-import { listenOnThisWindow } from "../host"
+import { listenOnThisComputer } from "../host"
 import { isJoinedSpaceError } from "../host/join-refusal"
 
 export type InvitationsTransport = {
@@ -51,8 +51,9 @@ export const invitationsTransport: InvitationsTransport = {
 		dataOf(await commands.invitationDecline(id))
 	},
 	onJoinLinkOpened: (listener) =>
-		listenOnThisWindow<JoinLinkOpened>(JOIN_LINK_OPENED_EVENT, ({ payload }) =>
-			listener(payload.invitationId),
+		listenOnThisComputer<JoinLinkOpened>(
+			JOIN_LINK_OPENED_EVENT,
+			({ payload }) => listener(payload.invitationId),
 		),
 	askForJoinLinks: () => commands.joinLinkListen(),
 }

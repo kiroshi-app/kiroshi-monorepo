@@ -40,6 +40,7 @@ const LOCAL_EVENTS: ReadonlySet<string> = new Set([
 	DEVICE_APPROVAL_REQUESTED_EVENT,
 	DEVICE_APPROVAL_SETTLED_EVENT,
 	"window-maximize-button",
+	"notification://activated",
 	"user://first-run-done",
 	"companion://created",
 	"companion://seed-refused",
