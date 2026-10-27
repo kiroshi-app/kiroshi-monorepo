@@ -246,6 +246,49 @@ describe("open in new tab", () => {
 	})
 })
 
+describe("a tab opened in another Space", () => {
+	it("lands in tabs built from the empty list, leaving the open Space as it is", () => {
+		const tabs = tabsOfSpace()
+		showInNewTab(tabs, threadOf("home"))
+		const before = viewOf(tabs)
+
+		tabs.openInNewTab(threadOf("away"), OTHER_SPACE)
+
+		expect(tabs.getState().spaceId).toBe(SPACE)
+		expect(viewOf(tabs)).toEqual(before)
+		expect(activeHref(tabs)).toBe(threadOf("home"))
+
+		tabs.showSpace(OTHER_SPACE)
+		expect(shownHrefs(tabs)).toEqual(["/", threadOf("away")])
+		expect(activeHref(tabs)).toBe("/")
+	})
+
+	it("joins the tabs that Space already holds", () => {
+		const tabs = tabsOfSpace()
+		tabs.showSpace(OTHER_SPACE)
+		showInNewTab(tabs, threadOf("held"))
+		tabs.showSpace(SPACE)
+
+		tabs.openInNewTab(threadOf("away"), OTHER_SPACE)
+		tabs.showSpace(OTHER_SPACE)
+
+		expect(shownHrefs(tabs)).toEqual(["/", threadOf("held"), threadOf("away")])
+		expect(activeHref(tabs)).toBe(threadOf("held"))
+	})
+
+	it("joins the tabs that Space restores after a reload", () => {
+		const before = tabsOfSpace(OTHER_SPACE)
+		showInNewTab(before, threadOf("held"))
+		const after = tabsOfSpace()
+
+		after.openInNewTab(threadOf("away"), OTHER_SPACE)
+		after.showSpace(OTHER_SPACE)
+
+		expect(shownHrefs(after)).toEqual(["/", threadOf("held"), threadOf("away")])
+		expect(activeHref(after)).toBe(threadOf("held"))
+	})
+})
+
 describe("two tabs on one conversation", () => {
 	type TwinTabs = {
 		tabs: WorkspaceTabs

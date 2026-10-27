@@ -24,6 +24,7 @@ import {
 	useOpenJoinedHost,
 	useSwitcherSpaces,
 } from "../spaces/use-joined-spaces"
+import { useNewTabClicks } from "../tabs/new-tab-clicks"
 import { useTabKeys } from "../tabs/use-tab-keys"
 import { useTabThreadSync } from "../tabs/use-tab-thread-sync"
 import { useSpaceTint } from "../theme/use-space-tint"
@@ -64,6 +65,7 @@ export const useWorkspaceAssembly = () => {
 	const loadSpaces = useSpaceLoading({ core, scopes })
 	const { tabs } = useRouter().options.context
 	useTabKeys(tabs)
+	useNewTabClicks(tabs)
 	useTabThreadSync({
 		tabs,
 		roster: core.roster.controller,
@@ -82,9 +84,14 @@ export const useWorkspaceAssembly = () => {
 		rosterView,
 		settings: navigation,
 	})
-	const sidebarMissions = useSidebarMissions({ core, rosterLines })
+	const sidebarMissions = useSidebarMissions({
+		core,
+		rosterLines,
+		navigation,
+	})
 	const overlay = useWorkspaceOverlay({
 		core,
+		navigation,
 		openSettings,
 		rosterLines,
 		rosterView,
@@ -97,6 +104,7 @@ export const useWorkspaceAssembly = () => {
 		rosters: core.roster.state.rosters,
 		select: core.roster.controller.select,
 		leaveMission: core.openedMission.leave,
+		openThreadInNewTab: navigation.openThreadInNewTab,
 	})
 	const switcher = useSwitcherSpaces(
 		core.spaces.state,

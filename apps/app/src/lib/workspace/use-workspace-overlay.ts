@@ -7,6 +7,7 @@ import type { WorkspaceCore } from "./use-workspace-core"
 import { useWorkspaceShortcuts } from "./use-workspace-shortcuts"
 
 import type { OpenSettings } from "../navigation/open-settings"
+import type { SettingsNavigation } from "../navigation/use-settings-navigation"
 import {
 	useSearch,
 	useSearchLookups,
@@ -17,6 +18,7 @@ import { toUserSettingsValue } from "../user/user-settings"
 
 type WorkspaceOverlayInput = {
 	core: WorkspaceCore
+	navigation: Pick<SettingsNavigation, "openThreadInNewTab">
 	openSettings: OpenSettings | null
 	rosterLines: RosterLines
 	rosterView: RosterView
@@ -25,6 +27,7 @@ type WorkspaceOverlayInput = {
 
 export const useWorkspaceOverlay = ({
 	core,
+	navigation,
 	openSettings,
 	rosterLines,
 	rosterView,
@@ -66,6 +69,7 @@ export const useWorkspaceOverlay = ({
 		routines: openedRoutine,
 		landings: messageLandings,
 		user: user.controller,
+		threads: navigation,
 	})
 
 	const search = useSearch({

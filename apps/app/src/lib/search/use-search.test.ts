@@ -154,6 +154,8 @@ const aNavigation = (): TracedNavigation => {
 			openActivityPanel: () => trace.push("activity"),
 			recordLanding: ({ messageId, seq }) =>
 				trace.push(`landing:${messageId}:${seq}`),
+			openThreadInNewTab: (thread) =>
+				trace.push(`new-tab:${JSON.stringify(thread)}`),
 		},
 	}
 }

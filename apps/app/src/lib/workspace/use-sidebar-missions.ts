@@ -28,8 +28,10 @@ import {
 } from "../missions/use-live-missions"
 import { useSpaceMissionsFailure } from "../missions/use-mission-failure-notices"
 import { useSpaceMissions } from "../missions/use-space-missions"
+import type { SettingsNavigation } from "../navigation/use-settings-navigation"
 import { useSkeletonSlot } from "../query/use-skeleton-slot"
 import type { ShownMemory } from "../sidebar/shown-memory"
+import { isNewTabClickInFlight } from "../tabs/new-tab-clicks"
 
 const MISSIONS_FEED_SKELETON = createElement(MissionsFeedSkeleton)
 
@@ -54,6 +56,7 @@ type SidebarMissionsCore = {
 type SidebarMissionsInput = {
 	core: SidebarMissionsCore
 	rosterLines: { now: number }
+	navigation: Pick<SettingsNavigation, "openThreadInNewTab">
 }
 
 export type SidebarMissions = {
@@ -89,6 +92,7 @@ const entriesOf = ({
 export const useSidebarMissions = ({
 	core,
 	rosterLines,
+	navigation,
 }: SidebarMissionsInput): SidebarMissions => {
 	const { conversationRuntimes, openedMission, roster, shownMemory, spaces } =
 		core
@@ -118,11 +122,11 @@ export const useSidebarMissions = ({
 		[roster.state.conversationRosters, spaceRowId],
 	)
 
-	const openMission = useCallback(
-		(missionId: string, landing?: MissionLanding) => {
+	const missionRowOf = useCallback(
+		(missionId: string) => {
 			const entry = entries.find(({ mission }) => mission.id === missionId)
 			if (!entry) {
-				return
+				return null
 			}
 			const { mission, conversationId } = entry
 			const rowId = missionRowIdOf(
@@ -130,25 +134,54 @@ export const useSidebarMissions = ({
 				mission.botId,
 				listedConversationIds,
 			)
+			return { rowId, isConversation: rowId === conversationId }
+		},
+		[entries, listedConversationIds],
+	)
+
+	const openMission = useCallback(
+		(missionId: string, landing?: MissionLanding) => {
+			const row = missionRowOf(missionId)
+			if (!row) {
+				return
+			}
+			const { rowId, isConversation } = row
 			openedMission.open({
 				missionId,
 				rowId,
 				spaceId: spaceRowId ?? undefined,
 				landing,
 			})
-			if (rowId === conversationId) {
+			if (isConversation) {
 				roster.controller.selectConversation(rowId)
 			} else {
 				roster.controller.select(rowId)
 			}
 		},
-		[
-			entries,
-			listedConversationIds,
-			roster.controller,
-			openedMission,
-			spaceRowId,
-		],
+		[missionRowOf, roster.controller, openedMission, spaceRowId],
+	)
+
+	const openMissionInNewTab = useCallback(
+		(missionId: string) => {
+			const row = missionRowOf(missionId)
+			if (!row) {
+				return
+			}
+			navigation.openThreadInNewTab(
+				row.isConversation
+					? { conversation: row.rowId, mission: missionId }
+					: { bot: row.rowId, mission: missionId },
+			)
+		},
+		[missionRowOf, navigation],
+	)
+
+	const openFromPanel = useCallback(
+		(missionId: string) =>
+			isNewTabClickInFlight()
+				? openMissionInNewTab(missionId)
+				: openMission(missionId),
+		[openMission, openMissionInNewTab],
 	)
 
 	const wrap = useMissionCardMenus({
@@ -179,7 +212,7 @@ export const useSidebarMissions = ({
 				liveMissionIds,
 				now,
 			}),
-			onOpen: (missionId: string) => openMission(missionId),
+			onOpen: openFromPanel,
 			openMissionId: opened?.missionId ?? null,
 			wrap,
 			skeleton: feedSkeleton,
@@ -192,7 +225,7 @@ export const useSidebarMissions = ({
 		faces,
 		liveMissionIds,
 		now,
-		openMission,
+		openFromPanel,
 		opened,
 		wrap,
 		feedSkeleton,

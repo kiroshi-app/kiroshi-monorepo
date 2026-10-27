@@ -1,5 +1,7 @@
 import type { RosterController } from "@/lib/bots/roster-controller"
 import type { OpenedMissionController } from "@/lib/missions/opened-mission-controller"
+import type { ThreadSearch } from "@/lib/navigation/thread-search"
+import type { SettingsNavigation } from "@/lib/navigation/use-settings-navigation"
 import type { OpenedRoutineController } from "@/lib/routines/opened-routine-controller"
 import type {
 	MessageLanding,
@@ -42,6 +44,7 @@ export type SearchNavigation = {
 	openRoutine: (opened: { routineId: string; conversationId: string }) => void
 	openActivityPanel: () => void
 	recordLanding: (landing: MessageLanding) => void
+	openThreadInNewTab: (thread: ThreadSearch, spaceId?: string) => void
 }
 
 const selectRow = (row: SearchRow, navigation: SearchNavigation) => {
@@ -88,6 +91,28 @@ export const openSearchTarget = (
 	}
 }
 
+const threadOfSearchTarget = (target: SearchTarget): ThreadSearch => {
+	if (target.kind === "mission") {
+		return { bot: target.botId, mission: target.missionId }
+	}
+	return target.row.kind === "bot"
+		? { bot: target.row.id }
+		: { conversation: target.row.id }
+}
+
+export const openSearchTargetInNewTab = (
+	target: SearchTarget,
+	openSpaceId: string | null,
+	navigation: SearchNavigation,
+) => {
+	const thread = threadOfSearchTarget(target)
+	if (target.spaceId === null || target.spaceId === openSpaceId) {
+		navigation.openThreadInNewTab(thread)
+		return
+	}
+	navigation.openThreadInNewTab(thread, target.spaceId)
+}
+
 export type SearchNavigationSource = {
 	roster: Pick<RosterController, "select" | "selectConversation">
 	spaces: Pick<SpacesController, "select">
@@ -95,6 +120,7 @@ export type SearchNavigationSource = {
 	routines: Pick<OpenedRoutineController, "open">
 	landings: Pick<MessageLandingController, "record">
 	user: Pick<UserController, "setActivityPanelOpen">
+	threads: Pick<SettingsNavigation, "openThreadInNewTab">
 }
 
 export const createSearchNavigation = ({
@@ -104,6 +130,7 @@ export const createSearchNavigation = ({
 	routines,
 	landings,
 	user,
+	threads,
 }: SearchNavigationSource): SearchNavigation => ({
 	selectBot: roster.select,
 	selectConversation: roster.selectConversation,
@@ -113,4 +140,5 @@ export const createSearchNavigation = ({
 	openRoutine: routines.open,
 	openActivityPanel: () => void user.setActivityPanelOpen(true),
 	recordLanding: landings.record,
+	openThreadInNewTab: threads.openThreadInNewTab,
 })

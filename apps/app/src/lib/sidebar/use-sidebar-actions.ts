@@ -1,11 +1,7 @@
 import { useMemo } from "react"
 
-import type {
-	AppSidebarProps,
-	SidebarClickModifiers,
-} from "@workspace/ui/components/app-sidebar"
+import type { AppSidebarProps } from "@workspace/ui/components/app-sidebar"
 
-import { usesCommandKey } from "../host"
 import type { RosterController } from "../bots/roster-controller"
 import type { AttachmentsController } from "../chat/attachments-controller"
 import type { DraftsController } from "../chat/drafts-controller"
@@ -25,6 +21,7 @@ import {
 	openRowIdOf,
 } from "../spaces/joined-spaces-controller"
 import type { SpacesController } from "../spaces/spaces-controller"
+import { opensInNewTab } from "../tabs/new-tab-clicks"
 
 export type SidebarActions = Required<
 	Pick<
@@ -76,14 +73,6 @@ export type SidebarActionsSource = {
 const localSpaceIdsIn = (spaces: SpacesController, ids: string[]) => {
 	const localIds = new Set(spaces.getState().spaces.map((space) => space.id))
 	return ids.filter((id) => localIds.has(id))
-}
-
-const opensInNewTab = (modifiers: SidebarClickModifiers | undefined) => {
-	if (!modifiers) {
-		return false
-	}
-	const isModHeld = usesCommandKey() ? modifiers.meta : modifiers.ctrl
-	return modifiers.middle || isModHeld
 }
 
 const openSpaceRowId = (
