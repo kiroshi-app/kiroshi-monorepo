@@ -4,6 +4,7 @@ import { expect, fireEvent, fn, screen, waitFor, within } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	botIdentityAvatars,
+	expectClickModifiers,
 	expectCompanionPictureShape,
 	glyphIn,
 	isInBrowserRunner,
@@ -39,6 +40,7 @@ import {
 	UserTurn,
 } from "@workspace/ui/components/turn"
 import { Button } from "@workspace/ui/components/ui/button"
+import { NO_CLICK_MODIFIERS } from "@workspace/ui/lib/click-modifiers"
 
 const ANSWER =
 	"The workspace has two packages: `@workspace/ui` holds the design system, `app` holds the Tauri shell. Nothing crosses that line in the other direction."
@@ -1670,18 +1672,52 @@ export const CompanionSelectFromGutter = meta.story({
 
 		await userEvent.click(button)
 		await expect(selectCompanion).toHaveBeenCalledTimes(1)
-		await expect(selectCompanion).toHaveBeenLastCalledWith(BOT.id)
+		await expect(selectCompanion).toHaveBeenLastCalledWith(
+			BOT.id,
+			NO_CLICK_MODIFIERS,
+		)
 
 		button.focus()
 		await userEvent.keyboard("{Enter}")
 		await expect(selectCompanion).toHaveBeenCalledTimes(2)
 		await userEvent.keyboard(" ")
 		await expect(selectCompanion).toHaveBeenCalledTimes(3)
-		await expect(selectCompanion).toHaveBeenLastCalledWith(BOT.id)
+		await expect(selectCompanion).toHaveBeenLastCalledWith(
+			BOT.id,
+			NO_CLICK_MODIFIERS,
+		)
 
 		await rightClickOn(button)
 		await shown(await screen.findByRole("menu", { name: COMPANION_MENU_LABEL }))
 		await expect(selectCompanion).toHaveBeenCalledTimes(3)
+	},
+})
+
+export const CompanionSelectWithClickModifiers = meta.story({
+	tags: ["test-only"],
+	parameters: {
+		docs: {
+			description: {
+				story: `The gutter avatar under a select and a companion menu, clicked every way a host can tell apart. Check that a middle click reports the companion once with middle and the keys held, keeps the browser from starting its autoscroll, that a Cmd, Ctrl or Shift click reports that key alone, that a plain click and Enter report no key, and that a right-click opens the companion menu and selects nothing. ${SELECT_NOT_YET_RENDERED}`,
+			},
+		},
+	},
+	render: () => (
+		<CompanionSelectProvider onSelect={selectCompanion}>
+			<CompanionMenuProvider menuFor={companionMenuFor}>
+				<GutterTurn identity={BOT} />
+			</CompanionMenuProvider>
+		</CompanionSelectProvider>
+	),
+	play: async ({ canvas, userEvent }) => {
+		await expectClickModifiers({
+			target: canvas.getByRole("button", { name: BOT.name }),
+			callback: selectCompanion,
+			reported: [BOT.id],
+			userEvent,
+		})
+		await shown(await screen.findByRole("menu", { name: COMPANION_MENU_LABEL }))
+		await userEvent.keyboard("{Escape}")
 	},
 })
 
@@ -1733,7 +1769,10 @@ export const WorkingCompanionStopsFromItsRow = meta.story({
 		await expect(selectCompanion).not.toHaveBeenCalled()
 
 		await userEvent.click(avatar)
-		await expect(selectCompanion).toHaveBeenLastCalledWith(BOT.id)
+		await expect(selectCompanion).toHaveBeenLastCalledWith(
+			BOT.id,
+			NO_CLICK_MODIFIERS,
+		)
 		await expect(stopTurn).toHaveBeenCalledTimes(1)
 
 		await rightClickOn(avatar)

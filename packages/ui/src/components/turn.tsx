@@ -692,7 +692,7 @@ function AssistantTurn(props: AssistantTurnProps) {
 			<BotSelectButton
 				image={gutterBot.image}
 				name={gutterBot.name}
-				onSelect={() => onSelectCompanion(gutterBot.id)}
+				onSelect={(modifiers) => onSelectCompanion(gutterBot.id, modifiers)}
 				size={TURN_AVATAR_SIZE}
 			>
 				{mark}

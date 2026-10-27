@@ -164,6 +164,7 @@ conversation-message-mention--companion-select-on-pill-focused
 conversation-message-mention--companion-select-on-pill-hovered
 conversation-message-mention--companion-select-on-pill-hovered-with-motion
 conversation-message-mention--companion-select-on-unknown-pill
+conversation-message-mention--companion-select-with-click-modifiers
 conversation-message-mention--counted
 conversation-message-mention--counted-long-name
 conversation-message-mention--counted-to-nine
@@ -253,6 +254,7 @@ conversation-message-turn--companion-select-from-gutter
 conversation-message-turn--companion-select-on-gutter
 conversation-message-turn--companion-select-on-gutter-focused
 conversation-message-turn--companion-select-on-gutter-hovered
+conversation-message-turn--companion-select-with-click-modifiers
 conversation-message-turn--default
 conversation-message-turn--deleted-author
 conversation-message-turn--error
@@ -321,6 +323,7 @@ conversation-missions-missioncard--card-with-and-without-pill
 conversation-missions-missioncard--card-with-status
 conversation-missions-missioncard--card-without-ticket
 conversation-missions-missioncard--card-working
+conversation-missions-missioncard--opens-with-click-modifiers
 conversation-missions-missioncard--row-activity-line
 conversation-missions-missioncard--row-box-matches-a-roster-row
 conversation-missions-missioncard--row-closed
@@ -1081,6 +1084,7 @@ navigation-apptitlebar--escape-cancels-drag-dark
 navigation-apptitlebar--keyboard-reorder
 navigation-apptitlebar--keyboard-reorder-dark
 navigation-apptitlebar--keyboard-reorder-without-handler
+navigation-apptitlebar--middle-click-closes-tab
 navigation-apptitlebar--overflow-follows-the-strip
 navigation-apptitlebar--tab-gestures
 navigation-apptitlebar--unpinned-tab-menu
@@ -1151,6 +1155,7 @@ navigation-searchresultrow--long-content
 navigation-searchresultrow--message
 navigation-searchresultrow--message-from-you
 navigation-searchresultrow--mission
+navigation-searchresultrow--opens-with-click-modifiers
 navigation-searchresultrow--routine
 navigation-searchresultrow--states
 navigation-searchresultrow--themes-chat-group
@@ -1167,6 +1172,7 @@ navigation-settingsmenu--danger-selected
 navigation-settingsmenu--danger-selected-dark
 navigation-settingsmenu--default
 navigation-settingsmenu--header-alignment
+navigation-settingsmenu--opens-with-click-modifiers
 navigation-settingsmenu--space-sections
 navigation-settingsmenu--states
 navigation-settingsmenu--states-dark

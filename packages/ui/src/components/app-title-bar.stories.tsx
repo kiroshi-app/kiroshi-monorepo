@@ -4,6 +4,8 @@ import { expect, fireEvent, fn, screen, waitFor, within } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	A11Y_FLOATING_FOCUS_GUARDS,
+	middleClick,
+	rightClick,
 	settled,
 	slotIn,
 	slotsIn,
@@ -936,6 +938,55 @@ export const TabGestures = meta.story({
 		const newTab = bar.getByRole("button", { name: "New tab" })
 		await expect(newTab).toHaveFocus()
 		await expect(getComputedStyle(newTab).outlineStyle).not.toBe("none")
+	},
+})
+
+export const MiddleClickClosesTab = meta.story({
+	tags: ["test-only"],
+	args: {
+		tabs: [PINNED_INBOX, LOGIN_REDIRECT, RELEASE_NOTES, WEEKLY_PLANNING],
+		activeTabId: RELEASE_NOTES.id,
+	},
+	parameters: {
+		a11y: A11Y_FLOATING_FOCUS_GUARDS,
+		docs: {
+			description: {
+				story:
+					"A middle click on a tab closes it, as a browser does. Check that a middle press and drag lifts nothing, that a middle click reports that tab to close once, keeps the browser from starting its autoscroll and selects nothing, that the open tab stays the open one, that a pinned tab stays open as its menu keeps Close tab off, and that a right-click opens the tab menu and reports nothing.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		const bar = within(barIn(canvasElement))
+		const login = bar.getByRole("tab", { name: LOGIN_REDIRECT.title })
+		const middlePress = { ...pointAt(middleOf(login), login), button: 1 }
+
+		fireEvent.pointerDown(login, middlePress)
+		fireEvent.pointerMove(login, {
+			...middlePress,
+			clientX: middlePress.clientX + 40,
+		})
+		await expect(insertionsIn(canvasElement)).toHaveLength(0)
+		fireEvent.pointerUp(login, middlePress)
+		await expect(args.onReorderTabs).not.toHaveBeenCalled()
+
+		await expect(middleClick(login)).toBe(false)
+		await expect(args.onCloseTab).toHaveBeenCalledOnce()
+		await expect(args.onCloseTab).toHaveBeenCalledWith(LOGIN_REDIRECT.id)
+		await expect(args.onSelectTab).not.toHaveBeenCalled()
+		await expect(
+			bar.getByRole("tab", { name: RELEASE_NOTES.title }),
+		).toHaveAttribute("aria-selected", "true")
+
+		await expect(
+			middleClick(bar.getByRole("tab", { name: PINNED_INBOX.title })),
+		).toBe(false)
+		await expect(args.onCloseTab).toHaveBeenCalledOnce()
+
+		rightClick(login)
+		await openMenu()
+		await expect(args.onCloseTab).toHaveBeenCalledOnce()
+		await expect(args.onSelectTab).not.toHaveBeenCalled()
 	},
 })
 

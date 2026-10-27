@@ -32,6 +32,7 @@ import {
 	useRosterLift,
 } from "@workspace/ui/hooks/use-roster-lift"
 import { useStableCallback } from "@workspace/ui/hooks/use-stable-callback"
+import { middleClickHandlers } from "@workspace/ui/lib/click-modifiers"
 import { STILL_UNDER_REDUCED_MOTION } from "@workspace/ui/lib/reduced-motion"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -376,6 +377,9 @@ const TitleBarTabItem = ({
 				render={
 					<Tabs.Tab
 						{...lift.handlersFor(tab.id)}
+						{...middleClickHandlers(() => {
+							if (!tab.isPinned) onCloseTab?.(tab.id)
+						})}
 						aria-label={
 							needsYou
 								? t("titleBar.tabNeedsYou", { title: tab.title })

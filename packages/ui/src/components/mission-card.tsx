@@ -41,6 +41,10 @@ import {
 } from "@workspace/ui/components/row-anatomy"
 import { SidebarListRow } from "@workspace/ui/components/sidebar-list-row"
 import { TooltipHint } from "@workspace/ui/components/tooltip-hint"
+import {
+	type ClickModifiers,
+	clickHandlersFor,
+} from "@workspace/ui/lib/click-modifiers"
 import { cn } from "@workspace/ui/lib/utils"
 
 type MissionCardDensity = "row" | "card"
@@ -51,7 +55,7 @@ type MissionCardSurface = HTMLAttributes<HTMLElement> & {
 
 type MissionCardProps = Omit<MissionCardModel, "author"> & {
 	density: MissionCardDensity
-	onOpen: (missionId: string) => void
+	onOpen: (missionId: string, modifiers: ClickModifiers) => void
 	surface?: MissionCardSurface
 	isActive?: boolean
 	className?: string
@@ -141,7 +145,7 @@ const CardDensity = ({
 						"absolute rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-ring",
 						MESSAGE_BUBBLE_PADDING_INSET,
 					)}
-					onClick={() => onOpen(id)}
+					{...clickHandlersFor((modifiers) => onOpen(id, modifiers))}
 					type="button"
 				/>
 				<span
@@ -238,6 +242,7 @@ const RowDensity = ({
 					) : undefined
 				}
 				isActive={isActive}
+				isMiddleClickSelectable
 				isNameMuted={state === "done"}
 				isWorking={isWorking}
 				media={
@@ -252,7 +257,7 @@ const RowDensity = ({
 					/>
 				}
 				name={objective}
-				onSelect={() => onOpen(id)}
+				onSelect={(modifiers) => onOpen(id, modifiers)}
 				preview={
 					<>
 						{isWorking ? (

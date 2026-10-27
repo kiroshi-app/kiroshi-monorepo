@@ -13,6 +13,12 @@ import {
 	SidebarMenuButton,
 	useSidebar,
 } from "@workspace/ui/components/ui/sidebar"
+import {
+	type ClickModifiers,
+	middleClickHandlers,
+	modifiersOf,
+	NO_CLICK_MODIFIERS,
+} from "@workspace/ui/lib/click-modifiers"
 import { cn } from "@workspace/ui/lib/utils"
 
 const ROW =
@@ -30,33 +36,7 @@ const ICON_SLOT =
 const LABEL_SLOT =
 	"min-w-0 flex-1 truncate group-data-[collapsible=icon]:pointer-events-none group-data-[collapsible=icon]:w-0 group-data-[collapsible=icon]:flex-none"
 
-interface SidebarClickModifiers {
-	meta: boolean
-	ctrl: boolean
-	shift: boolean
-	middle: boolean
-}
-
-const NO_CLICK_MODIFIERS: SidebarClickModifiers = {
-	meta: false,
-	ctrl: false,
-	shift: false,
-	middle: false,
-}
-
-const MIDDLE_BUTTON = 1
-
-const isKeyboardActivation = (event: MouseEvent) => event.detail === 0
-
-const modifiersOf = (event: MouseEvent): SidebarClickModifiers =>
-	isKeyboardActivation(event)
-		? NO_CLICK_MODIFIERS
-		: {
-				meta: event.metaKey,
-				ctrl: event.ctrlKey,
-				shift: event.shiftKey,
-				middle: event.button === MIDDLE_BUTTON,
-			}
+type SidebarClickModifiers = ClickModifiers
 
 type SidebarMenuRowElementProps = AriaAttributes &
 	Pick<
@@ -123,22 +103,9 @@ const SidebarMenuRow = ({
 				className,
 			)}
 			data-slot="sidebar-menu-button"
+			{...(isMiddleClickSelectable ? middleClickHandlers(select) : {})}
 			isActive={isActive}
-			onAuxClick={
-				isMiddleClickSelectable
-					? (event) => {
-							if (event.button === MIDDLE_BUTTON) select(event)
-						}
-					: undefined
-			}
 			onClick={select}
-			onMouseDown={
-				isMiddleClickSelectable
-					? (event) => {
-							if (event.button === MIDDLE_BUTTON) event.preventDefault()
-						}
-					: undefined
-			}
 			render={render}
 		>
 			{below ? (
