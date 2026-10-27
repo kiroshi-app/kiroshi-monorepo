@@ -1809,6 +1809,8 @@ settings-space-settingsscreen--short-window
 settings-space-settingsscreen--space-companions
 settings-space-settingsscreen--space-form-page
 settings-space-settingsscreen--yours-not-shared
+settings-space-spacecolourfield--colourless
+settings-space-spacecolourfield--preset
 settings-space-spacefields--colourless
 settings-space-spacefields--default
 settings-space-spacefields--empty
