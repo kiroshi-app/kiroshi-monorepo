@@ -54,8 +54,28 @@ describe("the face of a tab", () => {
 		["/settings/user", i18n.t("settings:screen.subtitle.user")],
 		["/settings/space/home", i18n.t("settings:screen.subtitle.space")],
 		["/settings/companion/nova", i18n.t("settings:screen.subtitle.companion")],
+		[
+			"/settings/user?entry=skills&application=github",
+			i18n.t("settings:screen.subtitle.user"),
+		],
+		[
+			"/settings/space/home?application=github",
+			i18n.t("settings:screen.subtitle.space"),
+		],
+		[
+			"/settings/companion/nova?entry=history&application=github",
+			i18n.t("settings:screen.subtitle.companion"),
+		],
 	])("titles %s %s", (href, title) => {
 		expect(tabFaceOf(href, SOURCES).title).toBe(title)
+	})
+
+	it.each([
+		"/settings/user?entry=mcp&application=github",
+		"/settings/space/home?entry=mcp&application=github",
+		"/settings/companion/nova?entry=mcp&application=github",
+	])("titles %s with the application it shows", (href) => {
+		expect(tabFaceOf(href, SOURCES).title).toBe("github")
 	})
 
 	it("titles the empty list New tab", () => {

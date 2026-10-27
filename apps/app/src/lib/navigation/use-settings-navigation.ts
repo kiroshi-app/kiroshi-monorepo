@@ -7,11 +7,18 @@ import { useMemo } from "react"
 
 import type { ClickModifiers } from "@workspace/ui/lib/click-modifiers"
 
-import type { CompanionSettingsSearch, SettingsSearch } from "./settings-search"
+import {
+	APPLICATIONS_ENTRY,
+	type CompanionSettingsSearch,
+	type SettingsSearch,
+} from "./settings-search"
 import type { ThreadSearch } from "./thread-search"
 
 import { isNewTabClickInFlight, opensInNewTab } from "../tabs/new-tab-clicks"
 import { heldThreadOf, type ThreadHolder } from "../tabs/use-tab-thread-sync"
+
+const entrySearchOf = (entry: string): SettingsSearch =>
+	entry === APPLICATIONS_ENTRY ? { entry } : { entry, application: undefined }
 
 export const useSettingsNavigation = (holder: ThreadHolder) => {
 	const navigate = useNavigate()
@@ -31,6 +38,17 @@ export const useSettingsNavigation = (holder: ThreadHolder) => {
 				router.buildLocation(options).href,
 				spaceId,
 			)
+
+		const replacingSearch = (
+			patch: CompanionSettingsSearch,
+		): NavigateOptions => ({
+			to: ".",
+			search: (previous: CompanionSettingsSearch) => ({
+				...previous,
+				...patch,
+			}),
+			replace: true,
+		})
 
 		const go = (options: NavigateOptions) => {
 			if (isNewTabClickInFlight()) {
@@ -89,16 +107,15 @@ export const useSettingsNavigation = (holder: ThreadHolder) => {
 					search,
 				}),
 			showEntry: (entry: string, modifiers?: ClickModifiers) =>
+				goFromClick(replacingSearch(entrySearchOf(entry)), modifiers),
+			openApplication: (application: string, modifiers?: ClickModifiers) =>
 				goFromClick(
-					{
-						to: ".",
-						search: (previous: CompanionSettingsSearch) => ({
-							...previous,
-							entry,
-						}),
-						replace: true,
-					},
+					replacingSearch({ entry: APPLICATIONS_ENTRY, application }),
 					modifiers,
+				),
+			showApplication: (application: string | null) =>
+				void navigate(
+					replacingSearch({ application: application ?? undefined }),
 				),
 		}
 	}, [navigate, router, holder])

@@ -770,6 +770,8 @@ const SPACE_SETTINGS_TAB = i18n.t("settings:screen.subtitle.space")
 
 const NEW_TAB = i18n.t("common:titleBar.newTab")
 
+const OPEN_APPLICATION_TAB = "ledger"
+
 const applicationNameField = () =>
 	screen.getByLabelText<HTMLInputElement>(
 		i18n.t("bots:applications.name.label"),
@@ -817,7 +819,7 @@ it.each([
 		await answerLeave(i18n.t("common:confirm.cancel"))
 
 		expect(applicationLeaveQuestion()).toBeNull()
-		expect(tabNames()).toEqual([CONVERSATION_TITLE, SPACE_SETTINGS_TAB])
+		expect(tabNames()).toEqual([CONVERSATION_TITLE, OPEN_APPLICATION_TAB])
 		expect(applicationNameField().value).toBe("ledger-desk")
 	},
 )
@@ -840,11 +842,11 @@ it("pins, unpins, closes another tab and the other tabs at once beside an unsave
 	expect(applicationLeaveQuestion()).toBeNull()
 
 	await pickInTabMenu(
-		SPACE_SETTINGS_TAB,
+		OPEN_APPLICATION_TAB,
 		i18n.t("common:titleBar.closeOtherTabs"),
 	)
 	expect(applicationLeaveQuestion()).toBeNull()
-	expect(tabNames()).toEqual([SPACE_SETTINGS_TAB])
+	expect(tabNames()).toEqual([OPEN_APPLICATION_TAB])
 	expect(applicationNameField().value).toBe("ledger-desk")
 })
 

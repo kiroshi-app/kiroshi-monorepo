@@ -79,7 +79,7 @@ const renderSettingsNavigation = async () => {
 		throw new Error("the settings navigation never rendered")
 	}
 	const shownHref = () => router.state.location.href
-	return { navigation, openInNewTab, shownHref }
+	return { navigation, openInNewTab, router, shownHref }
 }
 
 describe("useSettingsNavigation", () => {
@@ -112,6 +112,79 @@ describe("useSettingsNavigation", () => {
 
 		expect(openInNewTab).not.toHaveBeenCalled()
 		expect(shownHref()).toBe(`${USER_SETTINGS}?entry=skills`)
+	})
+
+	it("opens an application in a background tab on a new-tab click, leaving the shown page and its open application", async () => {
+		const { navigation, openInNewTab, shownHref } =
+			await renderSettingsNavigation()
+		await act(async () => navigation.showApplication("notion"))
+
+		act(() => {
+			navigation.openApplication("github", MIDDLE_CLICK)
+			navigation.openApplication("linear", MOD_CLICK)
+		})
+
+		expect(openInNewTab.mock.calls).toEqual([
+			[`${USER_SETTINGS}?application=github&entry=mcp`, undefined],
+			[`${USER_SETTINGS}?application=linear&entry=mcp`, undefined],
+		])
+		expect(shownHref()).toBe(`${USER_SETTINGS}?application=notion`)
+	})
+
+	it("drops the open application from an entry other than Applications opened in a background tab or shown in place", async () => {
+		const { navigation, openInNewTab, shownHref } =
+			await renderSettingsNavigation()
+		await act(async () =>
+			navigation.openApplication("github", NO_CLICK_MODIFIERS),
+		)
+
+		act(() => navigation.showEntry("skills", MOD_CLICK))
+
+		expect(openInNewTab.mock.calls).toEqual([
+			[`${USER_SETTINGS}?entry=skills`, undefined],
+		])
+		expect(shownHref()).toBe(`${USER_SETTINGS}?entry=mcp&application=github`)
+
+		await act(async () => navigation.showEntry("skills", NO_CLICK_MODIFIERS))
+
+		expect(shownHref()).toBe(`${USER_SETTINGS}?entry=skills`)
+	})
+
+	it("opens an application in place on a plain click, opening no tab", async () => {
+		const { navigation, openInNewTab, shownHref } =
+			await renderSettingsNavigation()
+
+		await act(async () =>
+			navigation.openApplication("github", NO_CLICK_MODIFIERS),
+		)
+
+		expect(openInNewTab).not.toHaveBeenCalled()
+		expect(shownHref()).toBe(`${USER_SETTINGS}?entry=mcp&application=github`)
+	})
+
+	it("names the application opened in place in the address, without a new history entry", async () => {
+		const { navigation, openInNewTab, router, shownHref } =
+			await renderSettingsNavigation()
+		const historyLength = router.history.length
+
+		await act(async () => {
+			navigation.showApplication("github")
+			navigation.showEntry("mcp", NO_CLICK_MODIFIERS)
+		})
+
+		expect(openInNewTab).not.toHaveBeenCalled()
+		expect(shownHref()).toBe(`${USER_SETTINGS}?entry=mcp&application=github`)
+		expect(router.history.length).toBe(historyLength)
+	})
+
+	it("drops the application from the address once it is closed back to the list", async () => {
+		const { navigation, shownHref } = await renderSettingsNavigation()
+		await act(async () => navigation.showEntry("mcp", NO_CLICK_MODIFIERS))
+		await act(async () => navigation.showApplication("github"))
+
+		await act(async () => navigation.showApplication(null))
+
+		expect(shownHref()).toBe(`${USER_SETTINGS}?entry=mcp`)
 	})
 
 	it("opens a Space settings in a background tab on a new-tab click, leaving the shown page", async () => {

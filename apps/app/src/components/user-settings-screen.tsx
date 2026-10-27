@@ -77,6 +77,7 @@ export const UserSettingsScreen = ({
 				target="user"
 				entry={search.entry ?? ACCOUNT_TAB}
 				onEntryChange={navigation.showEntry}
+				onOpenApplication={navigation.openApplication}
 				onBack={navigation.back}
 				{...spaces}
 				currentSpaceId={currentSpaceId}
@@ -93,8 +94,10 @@ export const UserSettingsScreen = ({
 					onServerChange: userApplications.onMcpServerChange,
 					onServerDelete: userApplications.onMcpServerDelete,
 					onServerConnect: userApplications.onServerConnect,
-					onServerOpen: (name) =>
-						setOpenedMcpServer(openedServerScope(name, USER_OWNER)),
+					onServerOpen: (name) => {
+						setOpenedMcpServer(openedServerScope(name, USER_OWNER))
+						navigation.showApplication(name)
+					},
 					serverConnection: userApplications.serverConnection,
 					serverEnvironment: serverEnvironmentSection,
 					catalogue: userApplications.mcpCatalogue,

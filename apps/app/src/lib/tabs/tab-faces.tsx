@@ -16,6 +16,8 @@ import {
 	threadRowIdOf,
 } from "./tab-pages"
 
+import { APPLICATIONS_ENTRY } from "../navigation/settings-search"
+
 const TAB_ICON_SIDE = 16
 
 export type TabFace = Pick<TitleBarTab, "title" | "icon">
@@ -38,8 +40,13 @@ const emptyTabFace = (): TabFace => ({
 	icon: <Icons.Conversations />,
 })
 
+const shownApplicationOf = ({ entry, application }: TabPage) =>
+	entry === APPLICATIONS_ENTRY ? application : undefined
+
 const settingsFaceOf = (page: TabPage): TabFace => ({
-	title: i18n.t(`settings:screen.subtitle.${settingsTargetOf(page)}`),
+	title:
+		shownApplicationOf(page) ??
+		i18n.t(`settings:screen.subtitle.${settingsTargetOf(page)}`),
 	icon: <Icons.Settings />,
 })
 

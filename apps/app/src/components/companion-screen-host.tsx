@@ -76,6 +76,7 @@ export const CompanionScreenHost = ({
 			entry={search.entry ?? GENERAL_ENTRY}
 			onBack={navigation.back}
 			onEntryChange={navigation.showEntry}
+			onOpenApplication={navigation.openApplication}
 			history={botHistory}
 			haveMcpServersFailedToLoad={botMcpServers.hasFailedToLoad}
 			{...botApplications}
@@ -85,7 +86,7 @@ export const CompanionScreenHost = ({
 			isEnvironmentPending={botEnvironment.isPending}
 			onEnvironmentSet={({ name, value }) => botEnvironment.set(name, value)}
 			onEnvironmentDelete={botEnvironment.remove}
-			onMcpServerOpen={(name) =>
+			onMcpServerOpen={(name) => {
 				setOpenedMcpServer(
 					name && selectedSpaceId
 						? {
@@ -99,7 +100,8 @@ export const CompanionScreenHost = ({
 							}
 						: null,
 				)
-			}
+				navigation.showApplication(name)
+			}}
 			serverEnvironment={serverEnvironmentSection}
 			models={modelOptionsFor(settingsBot.model, catalogue.models)}
 			outputStyle={readBotOutputStyle(settingsBot.outputStyle)}
