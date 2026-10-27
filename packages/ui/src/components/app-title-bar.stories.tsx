@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { Profiler, useState } from "react"
 import {
 	expect,
 	fireEvent,
@@ -1353,6 +1353,83 @@ export const DragMeasuresOnlyAtLift = meta.story({
 			WEEKLY_PLANNING.id,
 			INVOICE_EXPORT.id,
 		])
+	},
+})
+
+const barCommits = { count: 0 }
+
+const tabsCommitsOf = (measures: { mock: { calls: unknown[][] } }) =>
+	measures.mock.calls.filter(([selector]) => selector === '[role="tablist"]')
+		.length
+
+export const DragCommitsTheStripTwice = meta.story({
+	tags: ["test-only"],
+	args: LIFT_ROW,
+	render: (args) => (
+		<div className="surface-shell relative h-10 w-320">
+			<Profiler
+				id="title-bar"
+				onRender={() => {
+					barCommits.count += 1
+				}}
+			>
+				<AppTitleBar {...args} />
+			</Profiler>
+		</div>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A drag carried across three slots. Check the bar commits once per slot change while the tab strip itself commits once when the tab lifts and once when it drops, the strip counted through the fit measure it runs on each of its commits.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const bar = barIn(canvasElement)
+		const strip = slotIn(bar, "title-bar-tabs")
+		const [release, login, weekly, invoice] = unpinnedTabsIn(canvasElement)
+		const y = boxOf(login).top + 14
+		const pressedAt = middleOf(login)
+		const pastWeekly = boxOf(weekly).right
+		const pastInvoice = boxOf(invoice).right + 20
+		const beforeRelease = boxOf(release).left + 4
+		await nextFrames()
+
+		const measures = spyOn(strip, "querySelector")
+		try {
+			fireEvent.pointerDown(login, pointerAt(pressedAt, y))
+			fireEvent.pointerMove(login, pointerAt(pressedAt + 8, y))
+			await waitFor(() => expect(isLifted(login)).toBe(true))
+			await nextFrames()
+			await expect(tabsCommitsOf(measures)).toBe(1)
+			const atLift = barCommits.count
+
+			fireEvent.pointerMove(document.body, pointerAt(pastWeekly, y))
+			fireEvent.pointerMove(document.body, pointerAt(pastWeekly + 6, y))
+			await waitFor(() =>
+				expect(insertionsIn(bar)[0]?.parentElement).toBe(invoice),
+			)
+			fireEvent.pointerMove(document.body, pointerAt(beforeRelease, y))
+			await waitFor(() =>
+				expect(insertionsIn(bar)[0]?.parentElement).toBe(release),
+			)
+			fireEvent.pointerMove(document.body, pointerAt(pastInvoice, y))
+			fireEvent.pointerMove(document.body, pointerAt(pastInvoice + 6, y))
+			await waitFor(() =>
+				expect(insertionsIn(bar)[0]?.parentElement).toBe(invoice),
+			)
+			await nextFrames()
+			await expect(barCommits.count - atLift).toBe(3)
+			await expect(tabsCommitsOf(measures)).toBe(1)
+
+			fireEvent.pointerUp(document.body, pointerAt(pastInvoice, y))
+			await waitFor(() => expect(isLifted(login)).toBe(false))
+			await nextFrames()
+			await expect(tabsCommitsOf(measures)).toBe(2)
+		} finally {
+			measures.mockRestore()
+		}
 	},
 })
 

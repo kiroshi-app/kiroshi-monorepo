@@ -1080,6 +1080,7 @@ navigation-apptitlebar--a-6-empty-tab-dark
 navigation-apptitlebar--a-7-dragging-tab
 navigation-apptitlebar--a-7-dragging-tab-dark
 navigation-apptitlebar--drag-across-the-divider
+navigation-apptitlebar--drag-commits-the-strip-twice
 navigation-apptitlebar--drag-diagonally-off-the-bar
 navigation-apptitlebar--drag-measures-only-at-lift
 navigation-apptitlebar--drag-tab-two-right
