@@ -43,7 +43,7 @@ const PAYLOADS: &[(&str, Definition)] = &[
 
 const FRAME_NAMES: [&str; 3] = ["CallFrame", "AnswerFrame", "EventFrame"];
 
-const MAXIMA: [(&str, u16); 1] = [("Hue", Hue::LAST)];
+const HUE_NAME: &str = "Hue";
 
 fn guest_commands() -> BTreeSet<&'static str> {
 	REACHES
@@ -388,8 +388,8 @@ impl Walker<'_> {
 					Some(ty) => self.schema(ty, phase, &Generics::new()),
 					None => json!(true),
 				};
-				if let Some((_, maximum)) = MAXIMA.iter().find(|(bounded, _)| *bounded == name) {
-					body["maximum"] = json!(maximum);
+				if name == HUE_NAME {
+					body["maximum"] = json!(Hue::LAST);
 				}
 				self.defs.insert(name.clone(), body);
 			}
