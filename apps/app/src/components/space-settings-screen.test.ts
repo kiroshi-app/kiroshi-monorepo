@@ -238,7 +238,9 @@ const SpaceSettingsHarness = ({
 		isOpen && isShown(page)
 			? createElement(SpaceSettingsScreen, {
 					core,
-					frame: { rail: () => null } as unknown as SettingsFrame,
+					frame: {
+						rail: { selected: "conversations" },
+					} as unknown as SettingsFrame,
 					hostBySpaceId,
 					navigation,
 					page,
@@ -1472,8 +1474,15 @@ const deferredCounts = () => {
 	return { pending, answer }
 }
 
-const buttonStartingWith = (label: string) =>
-	screen.getByRole("button", { name: new RegExp(`^${label}`) })
+const buttonStartingWith = (label: string) => {
+	const rail = screen.getByRole("navigation", {
+		name: i18n.t("bots:rail.label"),
+	})
+	const [button] = screen
+		.getAllByRole("button", { name: new RegExp(`^${label}`) })
+		.filter((candidate) => !rail.contains(candidate))
+	return button
+}
 
 const companionCardOf = (bot: Bot) => buttonStartingWith(bot.name)
 

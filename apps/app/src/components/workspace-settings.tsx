@@ -1,13 +1,12 @@
 import { Navigate, useParams, useSearch } from "@tanstack/react-router"
 
-import type { SettingsScreenRequestLeave } from "@workspace/ui/components/settings-screen"
 import type { TitleBarTabsProps } from "@workspace/ui/components/title-bar-tabs"
 
 import { CompanionScreenHost } from "@/components/companion-screen-host"
 import { SpaceSettingsScreen } from "@/components/space-settings-screen"
 import { UserSettingsScreen } from "@/components/user-settings-screen"
 import { titleBarWindowControls } from "@/components/window-caption-controls"
-import { WorkspaceRail } from "@/components/workspace-rail"
+import { workspaceRailOf } from "@/components/workspace-rail"
 import { hasOverlayWindowControls, isSidebarResizable } from "@/lib/host"
 import { settingsSpacesOf, spacePageOf } from "@/lib/spaces/settings-spaces"
 import { useSettingsSpaceSwitch } from "@/lib/tabs/use-settings-space-switch"
@@ -72,22 +71,20 @@ const useSettingsFrame = (
 	})
 
 	const frame: SettingsFrame = {
-		rail: (requestLeave: SettingsScreenRequestLeave) => (
-			<WorkspaceRail
-				collapsedSectionIds={workspace.collapsedSectionIds}
-				core={core}
-				navigation={workspace.navigation}
-				overlay={workspace.overlay}
-				panels={workspace.panels}
-				requestLeave={requestLeave}
-				rosterLines={rosterLines}
-				rosterLists={rosterLists}
-				sidebarTab={workspace.sidebarTab}
-				switcher={switcher}
-				tabs={workspace.tabs}
-				onSelectSpace={onSelectSpace}
-			/>
-		),
+		...workspaceRailOf({
+			collapsedSectionIds: workspace.collapsedSectionIds,
+			core,
+			navigation: workspace.navigation,
+			overlay: workspace.overlay,
+			panels: workspace.panels,
+			rosterLines,
+			rosterLists,
+			sidebarTab: workspace.sidebarTab,
+			switcher,
+			tabs: workspace.tabs,
+			onSelectSpace,
+		}),
+		guardLeave: workspace.tabs.guardLeave,
 		titleBar: {
 			"data-tauri-drag-region": "deep",
 			insetWindowControls: hasOverlayWindowControls(),

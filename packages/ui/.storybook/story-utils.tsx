@@ -186,6 +186,56 @@ export const expectSettingsChrome = async (
 	)
 }
 
+const LEFT_COLUMN = {
+	paddingTop: "8px",
+	paddingBottom: "12px",
+	paddingInline: "0px",
+	gap: "8px",
+	headerHeight: 32,
+	rowInset: 8,
+}
+
+type LeftColumnParts = {
+	column: HTMLElement
+	header: HTMLElement
+	row: HTMLElement
+}
+
+export const expectLeftColumn = async ({
+	column,
+	header,
+	row,
+}: LeftColumnParts) => {
+	const style = getComputedStyle(column)
+	const innerLeft = column.getBoundingClientRect().left + column.clientLeft
+
+	await expect(style.paddingTop).toBe(LEFT_COLUMN.paddingTop)
+	await expect(style.paddingBottom).toBe(LEFT_COLUMN.paddingBottom)
+	await expect(style.paddingInlineStart).toBe(LEFT_COLUMN.paddingInline)
+	await expect(style.paddingInlineEnd).toBe(LEFT_COLUMN.paddingInline)
+	await expect(style.rowGap).toBe(LEFT_COLUMN.gap)
+	await expect(header.getBoundingClientRect().height).toBe(
+		LEFT_COLUMN.headerHeight,
+	)
+	await expect(row.getBoundingClientRect().left - innerLeft).toBe(
+		LEFT_COLUMN.rowInset,
+	)
+}
+
+export const expectSettingsMenuLeftColumn = (root: Element) => {
+	const column = slotIn(root, "settings-menu")
+	const firstEntry = slotIn(column, "settings-menu-entries").querySelector(
+		"button",
+	)
+	if (!firstEntry) throw new Error("The settings menu lists no entry")
+
+	return expectLeftColumn({
+		column,
+		header: slotIn(column, "settings-menu-back"),
+		row: firstEntry,
+	})
+}
+
 export const LAPTOP_WINDOW = { viewport: { value: "laptop" } }
 
 export const expectLaptopWindow = () =>

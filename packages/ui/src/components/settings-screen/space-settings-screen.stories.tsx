@@ -5,12 +5,12 @@ import preview from "@workspace/storybook/preview"
 import {
 	expectLaptopWindow,
 	expectSettingsChrome,
+	expectSettingsMenuLeftColumn,
 	expectSettingsPage,
 	LAPTOP_WINDOW,
 	slotIn,
 	slotsIn,
 } from "@workspace/storybook/story-utils"
-import { AppRail } from "@workspace/ui/components/app-rail"
 import { TITLE_BAR } from "@workspace/ui/components/app-title-bar.fixtures"
 import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
 import { SPACE_ENVIRONMENT } from "@workspace/ui/components/environment.fixtures"
@@ -88,18 +88,11 @@ const RAIL_PRESSES = {
 	onOpenYou: fn(),
 }
 
-const RAIL: SpaceSettingsScreenProps["rail"] = (requestLeave) => (
-	<AppRail
-		onOpenSpaceSettings={() => requestLeave(RAIL_PRESSES.onOpenSpaceSettings)}
-		onOpenYou={() => requestLeave(RAIL_PRESSES.onOpenYou)}
-		onSelectConversations={() =>
-			requestLeave(RAIL_PRESSES.onSelectConversations)
-		}
-		onSelectMissions={() => requestLeave(RAIL_PRESSES.onSelectMissions)}
-		selected="conversations"
-		user={{ name: "Ada Martin" }}
-	/>
-)
+const RAIL: SpaceSettingsScreenProps["rail"] = {
+	...RAIL_PRESSES,
+	selected: "conversations",
+	user: { name: "Ada Martin" },
+}
 
 const railIn = () => screen.findByRole("navigation", { name: "Navigation" })
 
@@ -236,6 +229,27 @@ export const MembersDark = meta.story({
 			},
 		},
 	},
+})
+
+const LEFT_COLUMN = {
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The Space settings menu as the left column every screen shares. Check that the column opens 8px under its top edge and closes 12px over its bottom edge, that its pieces stand 8px apart, that its back header is 32px tall like the Conversations panel header and that its first entry sits 8px in from its inner edge, the same numbers the Conversations and Missions panels and the User settings menu read.",
+			},
+		},
+	},
+	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+		await expectSettingsMenuLeftColumn(canvasElement)
+	},
+}
+
+export const LeftColumn = meta.story(LEFT_COLUMN)
+
+export const LeftColumnDark = meta.story({
+	...LEFT_COLUMN,
+	globals: { theme: "dark" },
 })
 
 export const MembersTinted = meta.story({
@@ -664,7 +678,9 @@ const expectArtboard = async ({
 	)
 
 	const back = entryIn(menu, "Back to your settings")
-	await expect(getComputedStyle(back).alignSelf).toBe("flex-start")
+	await expect(back.getBoundingClientRect().width).toBeLessThan(
+		slotIn(menu, "settings-menu-back").clientWidth,
+	)
 	await expect(iconOf(back).strokeWidth).toBe("2px")
 
 	const identity = slotIn(menu, "settings-menu-header")

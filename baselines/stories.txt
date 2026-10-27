@@ -831,6 +831,13 @@ layout-workspaceshell--space-tinted
 layout-workspaceshell--space-tinted-dark
 layout-workspaceshell--tall-content
 layout-workspaceshell--tall-host
+navigation-appframe--connecting-space
+navigation-appframe--local-space
+navigation-appframe--offline-space
+navigation-appframe--offline-space-dark
+navigation-appframe--offline-space-with-space-settings-open
+navigation-appframe--online-space
+navigation-appframe--shared-space
 navigation-apprail--a-7-spaces-badge
 navigation-apprail--a-7-spaces-badge-dark
 navigation-apprail--a-7-spaces-menu
@@ -874,6 +881,8 @@ navigation-appsidebar--conversation-row-menu
 navigation-appsidebar--conversation-selected
 navigation-appsidebar--conversation-working
 navigation-appsidebar--conversations
+navigation-appsidebar--conversations-left-column
+navigation-appsidebar--conversations-left-column-dark
 navigation-appsidebar--conversations-panel
 navigation-appsidebar--create-label
 navigation-appsidebar--create-menu
@@ -913,6 +922,8 @@ navigation-appsidebar--mission-strip-unnamed-platform
 navigation-appsidebar--mission-strip-untracked-ticket
 navigation-appsidebar--mission-strip-with-chat-badge
 navigation-appsidebar--missions-across-spaces
+navigation-appsidebar--missions-left-column
+navigation-appsidebar--missions-left-column-dark
 navigation-appsidebar--missions-of-unloaded-spaces
 navigation-appsidebar--missions-scroll-memory
 navigation-appsidebar--missions-tab
@@ -1722,6 +1733,8 @@ settings-space-settingsscreen--leaves-a-saved-application-behind
 settings-space-settingsscreen--leaves-by-the-rail-with-nothing-unsaved
 settings-space-settingsscreen--leaving-unsaved-application-edits
 settings-space-settingsscreen--leaving-unsaved-application-edits-by-the-rail
+settings-space-settingsscreen--left-column
+settings-space-settingsscreen--left-column-dark
 settings-space-settingsscreen--linear-application
 settings-space-settingsscreen--long-name
 settings-space-settingsscreen--maximum-width
@@ -1830,6 +1843,8 @@ settings-user-settingsscreen--diagnostics
 settings-user-settingsscreen--history
 settings-user-settingsscreen--language
 settings-user-settingsscreen--leaving-an-unsaved-skill-by-the-rail
+settings-user-settingsscreen--left-column
+settings-user-settingsscreen--left-column-dark
 settings-user-settingsscreen--maximum-width
 settings-user-settingsscreen--minimum-width
 settings-user-settingsscreen--notifications

@@ -11,7 +11,6 @@ import {
 	opaque,
 	slotIn,
 } from "@workspace/storybook/story-utils"
-import { AppRail } from "@workspace/ui/components/app-rail"
 import { TITLE_BAR } from "@workspace/ui/components/app-title-bar.fixtures"
 import {
 	type BotModelOption,
@@ -90,9 +89,10 @@ const MODELS: BotModelOption[] = [
 	{ label: "Claude Haiku 4.5", value: "haiku-4-5", supportedEfforts: [] },
 ]
 
-const RAIL = () => (
-	<AppRail selected="conversations" user={{ name: "Ada Martin" }} />
-)
+const RAIL: CompanionSettingsScreenProps["rail"] = {
+	selected: "conversations",
+	user: { name: "Ada Martin" },
+}
 
 const ScreenHost = (props: CompanionSettingsScreenProps) => {
 	const [entry, setEntry] = useState(props.entry)
