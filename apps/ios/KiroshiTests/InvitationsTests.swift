@@ -79,11 +79,10 @@ struct InvitationsTests {
         #expect(invitations.phase(of: invitation) == .open)
     }
 
-    @Test(arguments: [CompanionTint.purple, nil])
-    func theJoinedSpaceWearsItsHostsColourAsTheCloudListsIt(colour: CompanionTint?) async {
+    @Test(arguments: [(#""purple""#, Hue.purple), ("200", Hue(degrees: 200)), ("null", nil)])
+    func theJoinedSpaceWearsItsHostsColourAsTheCloudListsIt(written: String, colour: Hue?) async {
         let (invitations, _) = make(
-            listedOnceAccepted: InvitationsFixture.joined(
-                colour: colour.map { #""\#($0.rawValue)""# } ?? "null"))
+            listedOnceAccepted: InvitationsFixture.joined(colour: written))
 
         invitations.accept(invitation)
         await relay.nextOpening().accept(ScriptedRelaySocket(sharedSpaceId: "space-studio"))

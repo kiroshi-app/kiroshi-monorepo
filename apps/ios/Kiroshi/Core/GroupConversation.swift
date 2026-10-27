@@ -4,14 +4,14 @@ struct GroupConversation: Decodable, Hashable, Sendable {
     struct Participant: Decodable, Hashable, Sendable {
         let botId: String
         let name: String
-        let avatarBlot: CompanionTint?
+        let avatarBlot: Hue?
         let avatarImagePath: String?
         let leftAt: Int?
         let isDeleted: Bool
         let isLead: Bool
 
         init(
-            botId: String, name: String, avatarBlot: CompanionTint? = nil,
+            botId: String, name: String, avatarBlot: Hue? = nil,
             avatarImagePath: String? = nil, leftAt: Int? = nil, isDeleted: Bool = false,
             isLead: Bool = false
         ) {
@@ -28,7 +28,7 @@ struct GroupConversation: Decodable, Hashable, Sendable {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             botId = try container.decode(String.self, forKey: .botId)
             name = try container.decode(String.self, forKey: .name)
-            avatarBlot = try? container.decodeIfPresent(CompanionTint.self, forKey: .avatarBlot)
+            avatarBlot = container.hue(forKey: .avatarBlot)
             avatarImagePath = try? container.decodeIfPresent(
                 String.self, forKey: .avatarImagePath)
             leftAt = try container.decodeIfPresent(Int.self, forKey: .leftAt)
@@ -63,11 +63,11 @@ struct GroupConversation: Decodable, Hashable, Sendable {
     let memberNames: String
     let createdAt: Int
     let icon: ConversationIcon
-    let color: CompanionTint?
+    let color: Hue?
 
     init(
         id: String, title: String, createdAt: Int, participants: [Participant],
-        icon: ConversationIcon = .messageSquare, color: CompanionTint? = nil
+        icon: ConversationIcon = .messageSquare, color: Hue? = nil
     ) {
         self.id = id
         self.createdAt = createdAt
@@ -96,7 +96,7 @@ struct GroupConversation: Decodable, Hashable, Sendable {
             participants: container.decode([Participant].self, forKey: .participants),
             icon: ConversationIcon(
                 named: try? container.decodeIfPresent(String.self, forKey: .icon)),
-            color: try? container.decodeIfPresent(CompanionTint.self, forKey: .color))
+            color: container.hue(forKey: .color))
     }
 
     private enum CodingKeys: String, CodingKey {

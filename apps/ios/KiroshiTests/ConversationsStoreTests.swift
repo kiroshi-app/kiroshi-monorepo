@@ -653,7 +653,7 @@ struct ConversationsStoreTests {
 
         var release = releaseCrew
         release.icon = "Rocket"
-        release.color = "orange"
+        release.color = .orange
         host.push(
             event: "conversation://updated",
             payload: #"{"spaceId":"s-1","conversation":\#(release.json)}"#)

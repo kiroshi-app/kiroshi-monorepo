@@ -5,29 +5,9 @@ import Testing
 @testable import Kiroshi
 
 struct SpaceAccentTests {
-    struct Desktop: Sendable, CustomTestStringConvertible {
-        let tint: CompanionTint?
-        let light: String
-        let dark: String
-
-        var testDescription: String { tint?.rawValue ?? "no colour" }
-    }
-
-    static let tokens = URL(filePath: #filePath)
-        .deletingLastPathComponent()
-        .appending(path: "../../../packages/ui/tokens.json")
-        .standardizedFileURL
-
-    static let desktop = [
-        Desktop(tint: .red, light: "#F4A98C", dark: "#79584C"),
-        Desktop(tint: .yellow, light: "#F2C879", dark: "#786544"),
-        Desktop(tint: .green, light: "#AFC99B", dark: "#5A6652"),
-        Desktop(tint: .cyan, light: "#92C9C2", dark: "#4E6663"),
-        Desktop(tint: .blue, light: "#A0BEE8", dark: "#546174"),
-        Desktop(tint: .purple, light: "#BCAFE3", dark: "#605A72"),
-        Desktop(tint: .pink, light: "#F0A9C0", dark: "#775862"),
-        Desktop(tint: .orange, light: "#F2B57E", dark: "#785D46"),
-        Desktop(tint: nil, light: "#364F7C", dark: "#364F7C"),
+    static let hues: [Hue?] = [
+        .red, .orange, .yellow, .green, .cyan, .blue, .purple, .pink,
+        Hue(degrees: 17), Hue(degrees: 200), nil,
     ]
 
     static func rgb(of color: Color, in scheme: ColorScheme) throws -> [Double] {
@@ -57,21 +37,39 @@ struct SpaceAccentTests {
         return (max(lighter, darker) + 0.05) / (min(lighter, darker) + 0.05)
     }
 
-    @Test(arguments: desktop)
-    func yourBubbleIsTheOneTheDesktopMixes(_ desktop: Desktop) throws {
-        let accent = SpaceAccent(tint: desktop.tint)
-        #expect(try Self.hex(of: accent.userBubble, in: .light) == desktop.light)
-        #expect(try Self.hex(of: accent.userBubble, in: .dark) == desktop.dark)
+    @Test(arguments: hues.compactMap { $0 })
+    func yourBubbleIsTheBubbleToneOfTheSpacesHue(_ hue: Hue) throws {
+        let accent = SpaceAccent(tint: hue)
+        for (theme, scheme) in [(HueTheme.light, ColorScheme.light), (.dark, .dark)] {
+            #expect(
+                try Self.hex(of: accent.userBubble, in: scheme).lowercased()
+                    == HueTones.tone(hue, theme, .bubble).rgb.hex)
+        }
     }
 
-    @Test(arguments: desktop.map(\.tint))
-    func yourTextReadsOnYourBubble(_ tint: CompanionTint?) throws {
-        let accent = SpaceAccent(tint: tint)
+    @Test func aSpaceOutsideThePresetsPaintsTheDesktopsTones() throws {
+        let accent = SpaceAccent(tint: Hue(degrees: 200))
+        #expect(try Self.hex(of: accent.userBubble, in: .light) == "#98E4E8")
+        #expect(try Self.hex(of: accent.userBubble, in: .dark) == "#005B5F")
+        #expect(try Self.hex(of: accent.tile, in: .light) == "#007176")
+        #expect(try Self.hex(of: accent.tile, in: .dark) == "#3ACED6")
+    }
+
+    @Test func aSpaceWithoutAColourKeepsTheCataloguesBubble() throws {
+        let accent = SpaceAccent(tint: nil)
+        for scheme in [ColorScheme.light, .dark] {
+            #expect(try Self.hex(of: accent.userBubble, in: scheme) == "#364F7C")
+        }
+    }
+
+    @Test(arguments: hues)
+    func yourTextReadsOnYourBubble(_ hue: Hue?) throws {
+        let accent = SpaceAccent(tint: hue)
         for scheme in [ColorScheme.light, .dark] {
             let ratio = Self.contrast(
                 try Self.rgb(of: accent.userBubble, in: scheme),
                 try Self.rgb(of: accent.userBubbleForeground, in: scheme))
-            #expect(ratio >= 4.5, "\(scheme): \(ratio)")
+            #expect(ratio >= 7, "\(scheme): \(ratio)")
         }
     }
 
@@ -84,21 +82,13 @@ struct SpaceAccentTests {
         #expect(try Self.hex(of: fallback.userBubbleForeground, in: .dark) == "#FFFFFF")
     }
 
-    @Test func theTintStrengthsAreTheDesktopTokens() throws {
-        let tokens = try JSONDecoder().decode(Tokens.self, from: Data(contentsOf: Self.tokens))
-        let strength = try #require(tokens.parameters["user-bubble-tint-strength"])
-        #expect(strength == ["light": "100%", "dark": "50%"])
-        #expect(SpaceAccent.lightTintStrength == 1.0)
-        #expect(SpaceAccent.darkTintStrength == 0.5)
-    }
-
-    @Test(arguments: desktop)
-    func anInvitationsTileIsTheInvitedSpacesColourOrBlue(_ desktop: Desktop) throws {
-        let accent = SpaceAccent(tint: desktop.tint)
-        let colour = desktop.tint == nil ? "#A0BEE8" : desktop.light
-        for scheme in [ColorScheme.light, .dark] {
-            #expect(try Self.hex(of: accent.tile, in: scheme) == colour)
-            #expect(try Self.hex(of: accent.tileFill, in: scheme) == colour)
+    @Test(arguments: hues.compactMap { $0 })
+    func anInvitationsTileIsTheAccentToneOfTheInvitedSpacesHue(_ hue: Hue) throws {
+        let accent = SpaceAccent(tint: hue)
+        for (theme, scheme) in [(HueTheme.light, ColorScheme.light), (.dark, .dark)] {
+            let colour = HueTones.tone(hue, theme, .accent).rgb.hex
+            #expect(try Self.hex(of: accent.tile, in: scheme).lowercased() == colour)
+            #expect(try Self.hex(of: accent.tileFill, in: scheme).lowercased() == colour)
             var environment = EnvironmentValues()
             environment.colorScheme = scheme
             #expect(accent.tileFill.resolve(in: environment).opacity == 0.25)
@@ -106,20 +96,18 @@ struct SpaceAccentTests {
     }
 
     @Test func anInvitationWithoutAColourKeepsTheTileItWore() throws {
-        let tile = SpaceAccent(tint: nil).tile
+        let accent = SpaceAccent(tint: nil)
         for scheme in [ColorScheme.light, .dark] {
-            #expect(
-                try Self.hex(of: tile, in: scheme) == Self.hex(of: .kiroshi(.primary), in: scheme))
+            let primary = try Self.hex(of: .kiroshi(.primary), in: scheme)
+            #expect(try Self.hex(of: accent.tile, in: scheme) == primary)
+            #expect(try Self.hex(of: accent.tileFill, in: scheme) == primary)
         }
     }
 
     @Test func anotherSpaceIsAnotherAccent() {
         #expect(SpaceAccent(tint: .green) == SpaceAccent(tint: .green))
         #expect(SpaceAccent(tint: .green) != SpaceAccent(tint: .pink))
+        #expect(SpaceAccent(tint: Hue(degrees: 200)) != SpaceAccent(tint: .cyan))
         #expect(SpaceAccent(tint: nil) != SpaceAccent(tint: .blue))
     }
-}
-
-private struct Tokens: Decodable {
-    let parameters: [String: [String: String]]
 }

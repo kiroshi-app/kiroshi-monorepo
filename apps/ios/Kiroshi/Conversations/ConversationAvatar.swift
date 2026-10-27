@@ -2,7 +2,7 @@ import SwiftUI
 
 enum ConversationAvatar: Equatable {
     case companion(Companion?)
-    case icon(ConversationIcon, color: CompanionTint?)
+    case icon(ConversationIcon, color: Hue?)
 
     init(_ subject: ConversationSubject) {
         switch subject {

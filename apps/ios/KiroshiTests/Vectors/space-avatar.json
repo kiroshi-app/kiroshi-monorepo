@@ -83,51 +83,63 @@
 		},
 		{
 			"theme": "light",
-			"colour": "red",
+			"colour": 42,
 			"full": ["#fee1d6", "#f1c2b0", "#e39e84", "#cb7a5b"],
 			"compact": ["#fdd8ca", "#df8d6d", "#9e441d"]
 		},
 		{
 			"theme": "light",
-			"colour": "yellow",
-			"full": ["#f4e6ce", "#e1cba2", "#ceac6d", "#b38b39"],
+			"colour": 63,
+			"full": ["#f9e3d1", "#ebc6a6", "#daa574", "#c18245"],
+			"compact": ["#f8dcc3", "#d59558", "#905200"]
+		},
+		{
+			"theme": "light",
+			"colour": 82,
+			"full": ["#f4e6ce", "#e2cba2", "#ceac6d", "#b48b39"],
 			"compact": ["#f0dfc0", "#c79e4d", "#805c03"]
 		},
 		{
 			"theme": "light",
-			"colour": "green",
-			"full": ["#dfedd5", "#c0d7ae", "#9cbd81", "#79a057"],
-			"compact": ["#d6e8c9", "#8bb369", "#467211"]
+			"colour": 132,
+			"full": ["#dfedd5", "#bfd7ae", "#9cbd82", "#79a057"],
+			"compact": ["#d6e8ca", "#8bb369", "#467212"]
 		},
 		{
 			"theme": "light",
-			"colour": "cyan",
-			"full": ["#cff0eb", "#a1dbd4", "#67c4ba", "#1ea89d"],
+			"colour": 186,
+			"full": ["#cff0eb", "#a1dbd3", "#67c4b9", "#1fa89c"],
 			"compact": ["#c1ece6", "#3cbbaf", "#07736b"]
 		},
 		{
 			"theme": "light",
-			"colour": "blue",
+			"colour": 257,
 			"full": ["#dae9fe", "#b5d0f5", "#8cb3ea", "#6594d5"],
-			"compact": ["#d0e3fe", "#77a7e9", "#2c63ac"]
+			"compact": ["#d0e3fe", "#77a7e9", "#2d62ac"]
 		},
 		{
 			"theme": "light",
-			"colour": "purple",
+			"colour": 296,
 			"full": ["#e9e4fd", "#d1c6f1", "#b6a6e4", "#9884ce"],
 			"compact": ["#e3dcfd", "#ab96e2", "#6b50a4"]
 		},
 		{
 			"theme": "light",
-			"colour": "pink",
+			"colour": 358,
 			"full": ["#fddfe8", "#f0becd", "#e099b1", "#c87492"],
 			"compact": ["#fcd6e1", "#dc87a4", "#9b3e63"]
 		},
 		{
 			"theme": "light",
-			"colour": "orange",
-			"full": ["#fae3d1", "#ebc6a6", "#daa574", "#c28245"],
-			"compact": ["#f8dbc3", "#d59558", "#905201"]
+			"colour": 17,
+			"full": ["#ffdfdf", "#f3bfc0", "#e59a9d", "#cd757a"],
+			"compact": ["#fed6d7", "#e1878c", "#a03e48"]
+		},
+		{
+			"theme": "light",
+			"colour": 200,
+			"full": ["#ceeff1", "#9fdadd", "#64c3c8", "#10a6ad"],
+			"compact": ["#bfebed", "#35b9c0", "#057176"]
 		},
 		{
 			"theme": "dark",
@@ -137,51 +149,63 @@
 		},
 		{
 			"theme": "dark",
-			"colour": "red",
+			"colour": 42,
 			"full": ["#4f362c", "#754d3d", "#a06751", "#cd8366"],
 			"compact": ["#59392d", "#a16249", "#eea285"]
 		},
 		{
 			"theme": "dark",
-			"colour": "yellow",
+			"colour": 63,
+			"full": ["#4c3927", "#705134", "#996d44", "#c48a54"],
+			"compact": ["#553c25", "#9a6839", "#e5a973"]
+		},
+		{
+			"theme": "dark",
+			"colour": 82,
 			"full": ["#483b24", "#69552f", "#8f733d", "#b7924b"],
 			"compact": ["#504022", "#8f6f30", "#d7b16a"]
 		},
 		{
 			"theme": "dark",
-			"colour": "green",
+			"colour": 132,
 			"full": ["#35422c", "#4c5f3c", "#66814f", "#81a563"],
 			"compact": ["#38482c", "#618046", "#a0c582"]
 		},
 		{
 			"theme": "dark",
-			"colour": "cyan",
-			"full": ["#234440", "#2b635d", "#35877f", "#3eaca2"],
-			"compact": ["#1e4b46", "#1f857d", "#62ccc1"]
+			"colour": 186,
+			"full": ["#234440", "#2b635d", "#35877e", "#3eaca1"],
+			"compact": ["#1e4b46", "#1f857c", "#62ccc1"]
 		},
 		{
 			"theme": "dark",
-			"colour": "blue",
-			"full": ["#303e52", "#425979", "#5879a6", "#709ad6"],
+			"colour": 257,
+			"full": ["#303e52", "#425979", "#5979a6", "#709ad6"],
 			"compact": ["#31435d", "#5176a9", "#8ebaf7"]
 		},
 		{
 			"theme": "dark",
-			"colour": "purple",
+			"colour": 296,
 			"full": ["#3f3950", "#5b5176", "#7b6ea1", "#9e8bcf"],
 			"compact": ["#453d5a", "#7969a3", "#bdaaf0"]
 		},
 		{
 			"theme": "dark",
-			"colour": "pink",
+			"colour": 358,
 			"full": ["#4f343d", "#744a58", "#9e6377", "#ca7e98"],
 			"compact": ["#583742", "#9f5d74", "#ec9cb7"]
 		},
 		{
 			"theme": "dark",
-			"colour": "orange",
-			"full": ["#4c3927", "#705134", "#996d44", "#c48a54"],
-			"compact": ["#553c26", "#9a6839", "#e5a973"]
+			"colour": 17,
+			"full": ["#503535", "#764a4c", "#a16466", "#cf7e82"],
+			"compact": ["#5a3739", "#a35e61", "#f09da0"]
+		},
+		{
+			"theme": "dark",
+			"colour": 200,
+			"full": ["#214445", "#286265", "#31868a", "#38abb1"],
+			"compact": ["#1c4a4d", "#188489", "#5dcbd1"]
 		}
 	],
 	"sizes": [

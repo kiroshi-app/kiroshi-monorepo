@@ -2,7 +2,7 @@ import SwiftUI
 
 struct ConversationIconCell: View {
     let icon: ConversationIcon
-    let color: CompanionTint?
+    let color: Hue?
     let size: CompanionAvatar.Size
 
     var body: some View {
@@ -14,11 +14,11 @@ struct ConversationIconCell: View {
 
 private struct ScaledIconCell: View {
     let icon: ConversationIcon
-    let color: CompanionTint?
+    let color: Hue?
     private let glyphShare = 0.375
     @ScaledMetric private var side: CGFloat
 
-    init(icon: ConversationIcon, color: CompanionTint?, size: CompanionAvatar.Size) {
+    init(icon: ConversationIcon, color: Hue?, size: CompanionAvatar.Size) {
         self.icon = icon
         self.color = color
         _side = ScaledMetric(wrappedValue: size.points, relativeTo: size.textStyle)

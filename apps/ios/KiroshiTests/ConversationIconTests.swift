@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import Testing
 import UIKit
 
@@ -28,9 +29,29 @@ struct ConversationIconTests {
         #expect(UIImage(systemName: icon.symbolName) != nil, "\(icon.symbolName)")
     }
 
-    @Test(arguments: ConversationColor.allCases)
-    func everyCellColourResolvesInTheCatalogue(_ color: ConversationColor) {
-        #expect(UIColor(named: color.name, in: .main, compatibleWith: nil) != nil)
+    @Test(arguments: [
+        "conversation-cell", "conversation-cell-glyph", "conversation-pile-counter",
+        "conversation-pile-counter-glyph",
+    ])
+    func everyUncolouredCellColourResolvesInTheCatalogue(_ name: String) {
+        #expect(UIColor(named: name, in: .main, compatibleWith: nil) != nil)
+    }
+
+    @Test func aColouredCellWearsTheConversationIconTonesOfItsHue() throws {
+        let hue = try #require(Hue(degrees: 200))
+        for (theme, scheme) in [(HueTheme.light, ColorScheme.light), (.dark, .dark)] {
+            let cell = try SpaceAccentTests.hex(of: .conversation(.cell(hue)), in: scheme)
+                .lowercased()
+            let glyph = try SpaceAccentTests.hex(of: .conversation(.glyph(hue)), in: scheme)
+                .lowercased()
+            #expect(cell == HueTones.tone(hue, theme, .conversationIcon).rgb.hex)
+            #expect(glyph == HueTones.tone(hue, theme, .conversationIconForeground).rgb.hex)
+        }
+    }
+
+    @Test func readsAConversationsHueAndTheNameAnOlderHostSends() throws {
+        #expect(try conversation(#""color":200,"#).color == Hue(degrees: 200))
+        #expect(try conversation(#""color":"cyan","#).color == .cyan)
     }
 
     @Test func readsTheIconAndColourOfAConversation() throws {

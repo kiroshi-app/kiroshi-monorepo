@@ -26,9 +26,9 @@ final class SpaceAccentTests: XCTestCase {
 
     func testSwitchingSpaceRepaintsYourBubbleInTheNewSpacesColour() throws {
         let yourAsk = "Can you two get 0.42 out today?"
-        let app = launch("shared-thread", "-spaceColours", "purple,green")
+        let app = launch("shared-thread", "-spaceColours", "purple,200")
         XCTAssertTrue(app.staticTexts[yourAsk].firstMatch.waitForExistence(timeout: 10))
-        let green = try colour(behind: yourAsk, in: app)
+        let homeLab = try colour(behind: yourAsk, in: app)
         app.navigationBars.buttons["BackButton"].tap()
         app.navigationBars.buttons["Space"].tap()
         let studio = button("Studio", in: app)
@@ -41,8 +41,8 @@ final class SpaceAccentTests: XCTestCase {
 
         let purple = try colour(behind: yourAsk, in: app)
 
-        assert(green, is: [0xAF, 0xC9, 0x9B])
-        assert(purple, is: [0xBC, 0xAF, 0xE3])
+        assert(homeLab, is: [0x98, 0xE4, 0xE8])
+        assert(purple, is: [0xD8, 0xCB, 0xFF])
     }
 
     func testASpaceYouJustJoinedPaintsYourBubbleInItsHostsColour() throws {
@@ -55,7 +55,7 @@ final class SpaceAccentTests: XCTestCase {
         XCTAssertTrue(app.staticTexts[yourAsk].firstMatch.waitForExistence(timeout: 10))
 
         keepScreenshot(named: "Your bubble in Studio just joined, purple")
-        assert(try colour(behind: yourAsk, in: app), is: [0xBC, 0xAF, 0xE3])
+        assert(try colour(behind: yourAsk, in: app), is: [0xD8, 0xCB, 0xFF])
     }
 
     func keepScreenshot(named name: String) {

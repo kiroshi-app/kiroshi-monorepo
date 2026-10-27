@@ -1,6 +1,6 @@
 import { $ } from "bun"
 
-import { BLOT_TINTS } from "../../../packages/ui/src/components/companion-colour"
+import { BLOT_HUES } from "../../../packages/ui/src/components/companion-colour"
 import { companionSeed } from "../../../packages/ui/src/components/companion-field"
 import {
 	COMPACT_BELOW,
@@ -11,6 +11,11 @@ import {
 	isCompactAt,
 	LIP_OPACITY,
 } from "../../../packages/ui/src/components/glaze-border"
+import {
+	HUE_ROLES,
+	hueTone,
+} from "../../../packages/ui/src/components/hue-palette"
+import { HUE_TONES } from "../../../packages/ui/src/components/hue-tones"
 import {
 	COMPACT_RADII,
 	dotCentre,
@@ -31,6 +36,15 @@ const BORDER_OUTPUT = new URL(
 	"../KiroshiTests/Vectors/glaze-border.json",
 	import.meta.url,
 )
+
+const HUE_OUTPUT = new URL(
+	"../KiroshiTests/Vectors/hue-tones.json",
+	import.meta.url,
+)
+
+const HUES = [...Array(360).keys()]
+
+const PALETTE_HUES = [null, ...Object.values(BLOT_HUES), 17, 200]
 
 const BORDER_SIDES = [12, 14, 16, 17.87, 19, 20, 24, 28, 40, 52, 56, 64, 88]
 
@@ -65,7 +79,7 @@ const vectors = {
 		...spaceArcs(id),
 	})),
 	palettes: THEMES.flatMap((theme) =>
-		[null, ...BLOT_TINTS].map((colour) => ({
+		PALETTE_HUES.map((colour) => ({
 			theme,
 			colour,
 			...spacePalette(theme, colour),
@@ -100,10 +114,26 @@ const borders = {
 	),
 }
 
+const hueTones = {
+	tones: HUE_TONES,
+	hues: HUES.map((hue) =>
+		Object.fromEntries(
+			THEMES.map((theme) => [
+				theme,
+				Object.fromEntries(
+					HUE_ROLES.map((role) => [role, hueTone(hue, theme, role).hex]),
+				),
+			]),
+		),
+	),
+}
+
 await Bun.write(OUTPUT, JSON.stringify(vectors))
+await Bun.write(HUE_OUTPUT, JSON.stringify(hueTones))
 await Bun.write(BORDER_OUTPUT, JSON.stringify(borders))
-await $`bunx biome format --write ${OUTPUT.pathname} ${BORDER_OUTPUT.pathname}`.quiet()
+await $`bunx biome format --write ${OUTPUT.pathname} ${BORDER_OUTPUT.pathname} ${HUE_OUTPUT.pathname}`.quiet()
 console.log(
 	`${vectors.arcs.length} ids, ${vectors.palettes.length} palettes, ${vectors.sizes.length} sizes -> ${OUTPUT.pathname}`,
 )
 console.log(`${borders.borders.length} borders -> ${BORDER_OUTPUT.pathname}`)
+console.log(`${hueTones.hues.length} hues -> ${HUE_OUTPUT.pathname}`)

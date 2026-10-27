@@ -92,12 +92,28 @@ struct CompanionAvatarTests {
         let bots = #"""
             [{"id":"a","name":"Atlas","avatarBlot":"blue","avatarImagePath":"/pictures/atlas.png"},
              {"id":"b","name":"Pico","avatarBlot":"teal","avatarImagePath":null},
-             {"id":"c","name":"Otto"}]
+             {"id":"c","name":"Otto"},
+             {"id":"d","name":"Juno","avatarBlot":17}]
             """#
         let companions = try JSONDecoder().decode([Companion].self, from: Data(bots.utf8))
 
-        #expect(companions.map(\.tint) == [.blue, nil, nil])
-        #expect(companions.map(\.pictureFile) == ["atlas.png", nil, nil])
+        #expect(companions.map(\.tint) == [.blue, nil, nil, Hue(degrees: 17)])
+        #expect(companions.map(\.pictureFile) == ["atlas.png", nil, nil, nil])
+    }
+
+    @Test(arguments: [CompanionTheme.light, .dark])
+    func drawsTheCompanionInItsHue(_ theme: CompanionTheme) throws {
+        let engine = try engine()
+        let hue = try #require(Hue(degrees: 200))
+        let drawn = try engine.json(name: "Lyra", tint: hue, pose: .idle, time: 0, theme: theme)
+        let desktop = try engine.json([
+            "name": "Lyra", "hue": 200, "state": "idle", "time": 0, "theme": theme.rawValue,
+        ])
+        let untinted = try engine.json(
+            name: "Lyra", tint: nil, pose: .idle, time: 0, theme: theme)
+
+        #expect(drawn == desktop)
+        #expect(drawn != untinted)
     }
 
     @Test(arguments: [ColorScheme.light, .dark])

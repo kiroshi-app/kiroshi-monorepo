@@ -182,7 +182,7 @@ struct PinnedConversationsTests {
 
         var topic = topics[0]
         topic.icon = "Rocket"
-        topic.color = "orange"
+        topic.color = .orange
         host.push(
             event: "conversation://updated",
             payload: #"{"spaceId":"s-1","conversation":\#(topic.json)}"#)

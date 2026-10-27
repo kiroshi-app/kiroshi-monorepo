@@ -107,17 +107,6 @@ enum SpaceAvatarRecipe {
         ),
     ]
 
-    private static let blots: [CompanionTint: SpaceAvatarRGB] = [
-        .red: rgb(0xf4, 0xa9, 0x8c),
-        .yellow: rgb(0xf2, 0xc8, 0x79),
-        .green: rgb(0xaf, 0xc9, 0x9b),
-        .cyan: rgb(0x92, 0xc9, 0xc2),
-        .blue: rgb(0xa0, 0xbe, 0xe8),
-        .purple: rgb(0xbc, 0xaf, 0xe3),
-        .pink: rgb(0xf0, 0xa9, 0xc0),
-        .orange: rgb(0xf2, 0xb5, 0x7e),
-    ]
-
     static func seed(_ spaceId: String) -> UInt32 {
         spaceId.unicodeScalars.reduce(fnvOffset) { hash, scalar in
             (hash ^ scalar.value) &* fnvPrime
@@ -134,8 +123,8 @@ enum SpaceAvatarRecipe {
             })
     }
 
-    static func palette(_ theme: SpaceAvatarTheme, colour: CompanionTint?) -> SpaceAvatarPalette {
-        let hue = colour.flatMap { blots[$0] }.map(hueOf)
+    static func palette(_ theme: SpaceAvatarTheme, colour: Hue?) -> SpaceAvatarPalette {
+        let hue = colour.map { Double($0.degrees) * .pi / 180 }
         let tone = { (tone: Tone) in
             fitted(lightness: tone.lightness, chroma: hue == nil ? 0 : tone.chroma, hue: hue ?? 0)
         }
@@ -156,21 +145,6 @@ enum SpaceAvatarRecipe {
 
     private static func sign(_ value: Double) -> Double {
         value > 0 ? 1 : value < 0 ? -1 : 0
-    }
-
-    private static func rgb(_ red: Int, _ green: Int, _ blue: Int) -> SpaceAvatarRGB {
-        SpaceAvatarRGB(
-            red: Double(red) / 255, green: Double(green) / 255, blue: Double(blue) / 255)
-    }
-
-    private static func hueOf(_ colour: SpaceAvatarRGB) -> Double {
-        let (r, g, b) = (linear(colour.red), linear(colour.green), linear(colour.blue))
-        let l = cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b)
-        let m = cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b)
-        let s = cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b)
-        let a = 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s
-        let bAxis = 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s
-        return atan2(bAxis, a)
     }
 
     private static func fitted(lightness: Double, chroma: Double, hue: Double) -> SpaceAvatarRGB {
@@ -197,10 +171,6 @@ enum SpaceAvatarRecipe {
 
     private static func isInSrgb(_ channels: [Double]) -> Bool {
         channels.allSatisfy { $0 >= -gamutTolerance && $0 <= 1 + gamutTolerance }
-    }
-
-    private static func linear(_ channel: Double) -> Double {
-        channel <= 0.04045 ? channel / 12.92 : pow((channel + 0.055) / 1.055, 2.4)
     }
 
     private static func gamma(_ linear: Double) -> Double {

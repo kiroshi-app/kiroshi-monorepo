@@ -5,7 +5,7 @@ struct Invitation: Decodable, Identifiable, Equatable, Sendable {
     let instanceId: String
     let instanceName: String
     let inviterEmail: String
-    var colour: CompanionTint?
+    var colour: Hue?
 }
 
 extension Invitation {
@@ -23,7 +23,7 @@ extension Invitation {
         instanceId = try container.decode(String.self, forKey: .instanceId)
         instanceName = try container.decode(String.self, forKey: .instanceName)
         inviterEmail = try container.decode(String.self, forKey: .inviterEmail)
-        colour = container.tint(forKey: .colour)
+        colour = container.hue(forKey: .colour)
     }
 }
 
@@ -31,7 +31,7 @@ struct ValidInvitation: Equatable, Sendable {
     let spaceName: String
     let inviter: String
     let expiresAt: Date
-    var colour: CompanionTint?
+    var colour: Hue?
 }
 
 enum InvitationRefusal: Equatable, Sendable {
@@ -204,7 +204,7 @@ private struct ReadState: Decodable {
     let spaceName: String?
     let inviter: String?
     let expiresAt: String?
-    let colour: CompanionTint?
+    let colour: Hue?
 
     init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -212,7 +212,7 @@ private struct ReadState: Decodable {
         spaceName = try container.decodeIfPresent(String.self, forKey: .spaceName)
         inviter = try container.decodeIfPresent(String.self, forKey: .inviter)
         expiresAt = try container.decodeIfPresent(String.self, forKey: .expiresAt)
-        colour = container.tint(forKey: .colour)
+        colour = container.hue(forKey: .colour)
     }
 
     var answer: InvitationStateAnswer? {
