@@ -6,14 +6,13 @@ import type { NotificationTarget } from "./notification-port"
 import { notificationTransport } from "./notification-transport"
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }))
-const windowListen = vi.hoisted(() => vi.fn())
+const hostListen = vi.hoisted(() => vi.fn())
 
 vi.mock("@tauri-apps/api/webviewWindow", () => ({
-	getCurrentWebviewWindow: () => ({ listen: windowListen }),
+	getCurrentWebviewWindow: () => ({ listen: hostListen }),
 }))
 
 const hostInvoke = vi.mocked(invoke)
-const hostListen = windowListen
 
 const BOT: NotificationTarget = { kind: "bot", id: "bot-one" }
 

@@ -46,7 +46,7 @@ export const invokeOn = joinedHosts.invokeOn
 
 export const listenOnThisComputer = tauriListen
 
-export { listenOnThisWindow }
+export { listenOnThisWindow } from "./window-listen"
 
 export const activeJoinedSpaceId = joinedHosts.activeSpaceId
 
