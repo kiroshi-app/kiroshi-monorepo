@@ -98,19 +98,23 @@ const SettingsMenuHeader = ({
 	name,
 	subtitle,
 }: SettingsMenuHeaderProps) => (
-	<div
-		className={`flex min-w-0 items-center gap-2.5 ${MENU_INSET}`}
-		data-slot="settings-menu-header"
-	>
-		{avatar}
-		<div className="flex min-w-0 flex-col">
-			<span
-				className="truncate font-semibold text-foreground text-sm"
-				data-slot="settings-menu-name"
-			>
-				{name}
-			</span>
-			<span className="truncate text-muted-foreground text-xs">{subtitle}</span>
+	<div className="left-column-inset">
+		<div
+			className={`flex min-w-0 items-center gap-2.5 ${MENU_INSET}`}
+			data-slot="settings-menu-header"
+		>
+			{avatar}
+			<div className="flex min-w-0 flex-col">
+				<span
+					className="truncate font-semibold text-foreground text-sm"
+					data-slot="settings-menu-name"
+				>
+					{name}
+				</span>
+				<span className="truncate text-muted-foreground text-xs">
+					{subtitle}
+				</span>
+			</div>
 		</div>
 	</div>
 )

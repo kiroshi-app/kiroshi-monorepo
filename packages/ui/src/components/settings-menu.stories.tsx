@@ -733,10 +733,8 @@ const HEADER_MENUS = [
 	},
 ]
 
-const inlinePaddingOf = (element: HTMLElement) => {
-	const style = getComputedStyle(element)
-	return [style.paddingInlineStart, style.paddingInlineEnd]
-}
+const leftEdgeOf = (element: Element | null) =>
+	(element as HTMLElement).getBoundingClientRect().left
 
 export const HeaderAlignment = meta.story({
 	tags: ["test-only"],
@@ -768,8 +766,10 @@ export const HeaderAlignment = meta.story({
 			const header = slotIn(menu, "settings-menu-header")
 			const [title] = slotsIn(menu, "settings-menu-group-title")
 			await expect(title).toHaveTextContent(HEADER_MENUS[index].group)
-			await expect(inlinePaddingOf(header)).toEqual(inlinePaddingOf(title))
-			await expect(inlinePaddingOf(header)).not.toEqual(["0px", "0px"])
+			await expect(leftEdgeOf(header.firstElementChild)).toBeCloseTo(
+				leftEdgeOf(title.firstElementChild),
+				0,
+			)
 		}
 	},
 })
