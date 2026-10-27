@@ -207,7 +207,7 @@ export const rightClick = (target: HTMLElement) => {
 	)
 }
 
-export const clickWith = (pressed: Partial<ClickModifiers>) => ({
+const clickWith = (pressed: Partial<ClickModifiers>) => ({
 	...NO_CLICK_MODIFIERS,
 	...pressed,
 })
