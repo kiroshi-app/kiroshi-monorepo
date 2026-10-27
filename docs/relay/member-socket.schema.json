@@ -7125,6 +7125,16 @@
         "id": {
           "type": "string"
         },
+        "instanceId": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "name": {
           "type": "string"
         },
@@ -7141,7 +7151,8 @@
         "colour",
         "position",
         "createdAt",
-        "shared"
+        "shared",
+        "instanceId"
       ],
       "type": "object"
     },

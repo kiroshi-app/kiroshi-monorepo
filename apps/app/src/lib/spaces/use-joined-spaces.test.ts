@@ -106,6 +106,7 @@ const STUDIO_SPACE: JoinedSpace = {
 	state: "online",
 	hostedBy: null,
 	colour: "purple",
+	instanceId: "instance-of-joined-studio",
 }
 
 const openStudio = async () => {

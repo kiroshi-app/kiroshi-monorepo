@@ -20,8 +20,8 @@ pub(crate) fn ready(state: &db::DatabaseState) -> Result<&db::Database, SpaceErr
 pub async fn space_list(state: State<'_, db::DatabaseState>) -> Result<Vec<Space>, SpaceError> {
 	let database = ready(&state)?;
 	let stored = database.spaces().list().await?;
-	let hosted = database.space_hosting().hosted_space_ids().await?;
-	Ok(stored.into_iter().map(|space| Space::presented(space, &hosted)).collect())
+	let hostings = database.space_hosting().hostings().await?;
+	Ok(stored.into_iter().map(|space| Space::presented(space, &hostings)).collect())
 }
 
 #[tauri::command]
@@ -59,8 +59,8 @@ pub async fn space_update<R: Runtime>(
 			hosting::described(&app, &instance_id, &name, colour).await;
 		});
 	}
-	let hosted = database.space_hosting().hosted_space_ids().await?;
-	Ok(Space::presented(updated, &hosted))
+	let hostings = database.space_hosting().hostings().await?;
+	Ok(Space::presented(updated, &hostings))
 }
 
 #[tauri::command]
@@ -414,6 +414,26 @@ mod tests {
 
 		database.space_hosting().set_hosted(vocca.id, false).await.expect("unhosted");
 		assert_eq!(shared_by_name(&app).await, named(false));
+	}
+
+	#[tokio::test]
+	async fn a_listed_space_carries_its_registered_instance_until_it_has_none() {
+		let app = a_host("instances");
+		let state = app.state::<db::DatabaseState>();
+		let database = ready(&state).expect("the database");
+		let vocca = database.spaces().create("Vocca".to_owned()).await.expect("a space");
+		let studio = database.spaces().create("Studio".to_owned()).await.expect("a space");
+		let hosting = database.space_hosting();
+		hosting.registered(vocca.id.clone(), "instance-vocca".to_owned()).await.expect("stored");
+		hosting.set_hosted(vocca.id.clone(), false).await.expect("unhosted");
+
+		let listed = space_list(app.state()).await.expect("the spaces read");
+		let instance_of = |id: &str| {
+			listed.iter().find(|space| space.id == id).expect("listed").instance_id.clone()
+		};
+
+		assert_eq!(instance_of(&vocca.id).as_deref(), Some("instance-vocca"));
+		assert_eq!(instance_of(&studio.id), None);
 	}
 
 	#[tokio::test]

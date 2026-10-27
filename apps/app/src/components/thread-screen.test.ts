@@ -4510,6 +4510,7 @@ const INSTALLED_SPACE: Space = {
 	position: 0,
 	createdAt: 0,
 	shared: false,
+	instanceId: null,
 }
 
 const receiptIn = (row: HTMLElement) =>

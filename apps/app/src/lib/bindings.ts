@@ -958,6 +958,7 @@ export type JoinedSpace = {
 	wait?: JoinedSpaceWait | null,
 	hostedBy: string | null,
 	colour: AvatarBlot,
+	instanceId: string,
 };
 
 export type JoinedSpaceConnection = {
@@ -1632,6 +1633,7 @@ export type Space = {
 	position: number,
 	createdAt: number,
 	shared: boolean,
+	instanceId: string | null,
 };
 
 export type SpaceError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "unknownSpace"; id: string } | { kind: "unknownBot"; id: string } | { kind: "unwritableBundle"; detail: string } | { kind: "incompleteOrder" } | { kind: "lastSpace" } | { kind: "lastSpaceOfBot"; id: string } | { kind: "foreignSection"; id: string } | { kind: "unsupportedArchive"; found: number | null; supported: number } | { kind: "unreadableArchive"; detail: string } | { kind: "unwritableArchive"; detail: string };

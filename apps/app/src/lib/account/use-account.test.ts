@@ -352,6 +352,7 @@ describe("useAccount", () => {
 					state: "online",
 					hostedBy: null,
 					colour: "purple",
+					instanceId: "instance-of-joined-studio",
 				},
 			],
 			() => "Lea",

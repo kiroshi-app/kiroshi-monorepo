@@ -239,11 +239,11 @@ pub async fn import(
 		}
 	};
 	let spaces = database.spaces().list().await?;
-	let hosted = database.space_hosting().hosted_space_ids().await?;
+	let hostings = database.space_hosting().hostings().await?;
 	spaces
 		.into_iter()
 		.find(|space| space.id == imported)
-		.map(|space| Space::presented(space, &hosted))
+		.map(|space| Space::presented(space, &hostings))
 		.ok_or(SpaceError::UnknownSpace { id: imported })
 }
 

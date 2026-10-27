@@ -18,6 +18,7 @@ const HARBOR: JoinedSpace = {
 	state: "waitingForHost",
 	hostedBy: "Steve",
 	colour: "green",
+	instanceId: "instance-of-harbor",
 }
 
 const ATELIER: SpaceInvitation = {

@@ -44,6 +44,7 @@ const GARAGE: JoinedSpace = {
 	state: "online",
 	hostedBy: null,
 	colour: "green",
+	instanceId: "instance-of-joined-garage",
 }
 
 const GARAGE_ROW = "joined:joined-garage"
@@ -56,6 +57,7 @@ const ATTIC: JoinedSpace = {
 	state: "online",
 	hostedBy: null,
 	colour: "pink",
+	instanceId: "instance-of-joined-attic",
 }
 
 const hostsFake = () => {
@@ -529,6 +531,7 @@ const STUDIO: JoinedSpace = {
 	state: "online",
 	hostedBy: null,
 	colour: "purple",
+	instanceId: "instance-of-joined-studio",
 }
 
 const STUDIO_ROW = "joined:joined-studio"
@@ -956,6 +959,7 @@ const HOST_PERSONAL: JoinedSpace = {
 	state: "online",
 	hostedBy: null,
 	colour: "orange",
+	instanceId: "instance-of-joined-personal",
 }
 
 const HOST_PERSONAL_ROW = "joined:joined-personal"

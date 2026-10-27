@@ -76,7 +76,7 @@ vi.mock("@/lib/spaces/use-joined-spaces", async (importOriginal) => {
 
 const { createWorkspaceRouter } = await import("@/workspace-router")
 
-const OWNED = { position: 0, createdAt: 0, shared: false }
+const OWNED = { position: 0, createdAt: 0, shared: false, instanceId: null }
 const HOME: Space = { ...OWNED, id: "home", name: "Home", colour: "red" }
 const GARAGE: Space = { ...OWNED, id: "garage", name: "Garage", colour: "blue" }
 const STUDIO: JoinedSpace = {
@@ -87,6 +87,7 @@ const STUDIO: JoinedSpace = {
 	state: "online",
 	hostedBy: "Lea",
 	colour: "purple",
+	instanceId: "instance-of-studio-host",
 }
 const SPACE_SETTINGS = i18n.t("bots:rail.spaceSettings")
 const SETTINGS_RAILS: SettingsPanels["railSettings"][] = ["space", "you"]
