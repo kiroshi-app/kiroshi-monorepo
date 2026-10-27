@@ -1,5 +1,13 @@
 import { useState } from "react"
-import { expect, fireEvent, fn, screen, waitFor, within } from "storybook/test"
+import {
+	expect,
+	fireEvent,
+	fn,
+	screen,
+	spyOn,
+	waitFor,
+	within,
+} from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
@@ -1061,7 +1069,7 @@ export const DragTabTwoRight = meta.story({
 		docs: {
 			description: {
 				story:
-					"Placing a tab by hand on a row with an overflow. Check a press released in place selects the tab and reports no order, a drop back on its own place reports nothing, a drop two places right reports every tab id once, the overflowed ones at their place, and swallows the click it would fire, that an overflow row never lifts, and that the keyboard still selects and closes a tab.",
+					"Placing a tab by hand on a row with an overflow. Check a press released in place selects the tab and reports no order, a tab held over its own place draws no line and dropped there reports nothing, a drop two places right reports every tab id once, the overflowed ones at their place, and swallows the click it would fire, that an overflow row never lifts, and that the keyboard still selects and closes a tab.",
 			},
 		},
 	},
@@ -1078,7 +1086,10 @@ export const DragTabTwoRight = meta.story({
 		await expect(args.onReorderTabs).not.toHaveBeenCalled()
 
 		liftTo(first, boxOf(first).right - 2)
-		await waitFor(() => expect(insertionsIn(canvasElement)).toHaveLength(1))
+		await waitFor(() =>
+			expect(getComputedStyle(first).pointerEvents).toBe("none"),
+		)
+		await expect(insertionsIn(canvasElement)).toHaveLength(0)
 		dropAt(first, boxOf(first).right - 2)
 		await waitFor(() => expect(insertionsIn(canvasElement)).toHaveLength(0))
 		await expect(args.onReorderTabs).not.toHaveBeenCalled()
@@ -1176,6 +1187,216 @@ export const DragAcrossTheDivider = meta.story({
 			WEEKLY_PLANNING.id,
 		])
 		await expect(args.onReorderTabs).toHaveBeenCalledTimes(2)
+	},
+})
+
+const LIFT_ROW = {
+	tabs: [
+		PINNED_INBOX,
+		PINNED_ROADMAP,
+		RELEASE_NOTES,
+		LOGIN_REDIRECT,
+		WEEKLY_PLANNING,
+		INVOICE_EXPORT,
+	],
+	activeTabId: RELEASE_NOTES.id,
+} satisfies Partial<AppTitleBarProps>
+
+const pointerAt = (clientX: number, clientY: number) => ({
+	...POINTER,
+	clientX: Math.round(clientX),
+	clientY: Math.round(clientY),
+})
+
+const isLifted = (tab: HTMLElement) =>
+	getComputedStyle(tab).pointerEvents === "none"
+
+const nextFrames = async () => {
+	await new Promise(requestAnimationFrame)
+	await new Promise(requestAnimationFrame)
+}
+
+export const DragDiagonallyOffTheBar = meta.story({
+	tags: ["test-only"],
+	args: LIFT_ROW,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Pressing anywhere on a tab and leaving the bar. Check 3px of diagonal travel still selects, 4px diagonally out of the tab lifts it, the lifted tab rides the pointer on both axes on top of the tab under it, and a release below the bar, then above and beside it, drops at the nearest slot of the zone.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		const bar = barIn(canvasElement)
+		const [release, login, weekly, invoice] = unpinnedTabsIn(canvasElement)
+		const middle = { x: middleOf(login), y: boxOf(login).top + 14 }
+		const corner = { x: boxOf(login).right - 1, y: boxOf(login).bottom - 1 }
+		const resting = boxOf(login)
+		const overWeekly = { x: middleOf(weekly), y: middle.y }
+		const below = { x: boxOf(weekly).right, y: boxOf(bar).bottom + 120 }
+
+		fireEvent.pointerDown(login, pointerAt(middle.x, middle.y))
+		fireEvent.pointerMove(login, pointerAt(middle.x + 2, middle.y + 2))
+		fireEvent.pointerUp(login, pointerAt(middle.x + 2, middle.y + 2))
+		fireEvent.click(login)
+		await expect(args.onSelectTab).toHaveBeenCalledWith(LOGIN_REDIRECT.id)
+
+		fireEvent.pointerDown(login, pointerAt(corner.x, corner.y))
+		fireEvent.pointerMove(document.body, pointerAt(corner.x + 3, corner.y + 3))
+		await waitFor(() => expect(isLifted(login)).toBe(true))
+
+		fireEvent.pointerMove(document.body, pointerAt(overWeekly.x, overWeekly.y))
+		await waitFor(() =>
+			expect(boxOf(login).left - resting.left).toBeCloseTo(
+				Math.round(overWeekly.x) - Math.round(corner.x),
+				0,
+			),
+		)
+		const carried = boxOf(login)
+		login.style.pointerEvents = "auto"
+		const onTop = document.elementFromPoint(
+			carried.left + carried.width / 2,
+			carried.top + carried.height / 2,
+		)
+		login.style.pointerEvents = ""
+		await expect(login.contains(onTop)).toBe(true)
+
+		fireEvent.pointerMove(document.body, pointerAt(below.x, below.y))
+		await waitFor(() =>
+			expect(insertionsIn(bar)[0]?.parentElement).toBe(invoice),
+		)
+		await expect(boxOf(login).top - resting.top).toBeCloseTo(
+			Math.round(below.y) - Math.round(corner.y),
+			0,
+		)
+		fireEvent.pointerUp(document.body, pointerAt(below.x, below.y))
+		await waitFor(() => expect(isLifted(login)).toBe(false))
+		await expect(args.onReorderTabs).toHaveBeenLastCalledWith([
+			PINNED_INBOX.id,
+			ROADMAP.id,
+			RELEASE_NOTES.id,
+			WEEKLY_PLANNING.id,
+			LOGIN_REDIRECT.id,
+			INVOICE_EXPORT.id,
+		])
+
+		const above = { x: boxOf(bar).right + 40, y: boxOf(bar).top - 40 }
+		fireEvent.pointerDown(release, pointerAt(middleOf(release), middle.y))
+		fireEvent.pointerMove(document.body, pointerAt(above.x, above.y))
+		await waitFor(() => expect(isLifted(release)).toBe(true))
+		fireEvent.pointerUp(document.body, pointerAt(above.x, above.y))
+		await expect(args.onReorderTabs).toHaveBeenLastCalledWith([
+			PINNED_INBOX.id,
+			ROADMAP.id,
+			LOGIN_REDIRECT.id,
+			WEEKLY_PLANNING.id,
+			INVOICE_EXPORT.id,
+			RELEASE_NOTES.id,
+		])
+		await expect(args.onReorderTabs).toHaveBeenCalledTimes(2)
+		await expect(args.onSelectTab).toHaveBeenCalledTimes(1)
+	},
+})
+
+export const DragMeasuresOnlyAtLift = meta.story({
+	tags: ["test-only"],
+	args: LIFT_ROW,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A drag across four slots. Check the tab slots are measured when the tab lifts and never again while it moves, the line drawn only where the drop would change the order, and the drop landing at the last slot shown.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		const bar = barIn(canvasElement)
+		const [release, login, weekly, invoice] = unpinnedTabsIn(canvasElement)
+		const y = boxOf(login).top + 14
+		const pressedAt = middleOf(login)
+		const pastWeekly = boxOf(weekly).right
+		const ownPlace = boxOf(weekly).left + 4
+		const pastInvoice = boxOf(invoice).right + 20
+		const beforeRelease = boxOf(release).left + 4
+		await nextFrames()
+
+		fireEvent.pointerDown(login, pointerAt(pressedAt, y))
+		fireEvent.pointerMove(login, pointerAt(pressedAt + 8, y))
+		await waitFor(() => expect(isLifted(login)).toBe(true))
+
+		const measures = spyOn(Element.prototype, "getBoundingClientRect")
+		try {
+			fireEvent.pointerMove(document.body, pointerAt(pastWeekly, y))
+			await waitFor(() =>
+				expect(insertionsIn(bar)[0]?.parentElement).toBe(invoice),
+			)
+			fireEvent.pointerMove(document.body, pointerAt(ownPlace, y))
+			await waitFor(() => expect(insertionsIn(bar)).toHaveLength(0))
+			fireEvent.pointerMove(document.body, pointerAt(pastInvoice, y))
+			await waitFor(() =>
+				expect(insertionsIn(bar)[0]?.parentElement).toBe(invoice),
+			)
+			fireEvent.pointerMove(document.body, pointerAt(beforeRelease, y))
+			await waitFor(() =>
+				expect(insertionsIn(bar)[0]?.parentElement).toBe(release),
+			)
+			await expect(insertionsIn(bar)).toHaveLength(1)
+			await expect(measures).not.toHaveBeenCalled()
+		} finally {
+			measures.mockRestore()
+		}
+
+		fireEvent.pointerUp(document.body, pointerAt(beforeRelease, y))
+		await expect(args.onReorderTabs).toHaveBeenCalledWith([
+			PINNED_INBOX.id,
+			ROADMAP.id,
+			LOGIN_REDIRECT.id,
+			RELEASE_NOTES.id,
+			WEEKLY_PLANNING.id,
+			INVOICE_EXPORT.id,
+		])
+	},
+})
+
+export const ReleaseOutsideThenHover = meta.story({
+	tags: ["test-only"],
+	args: LIFT_ROW,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A press that ends away from its tab. Check a press released just outside the tab, then a hover back across the strip with the button up, lifts nothing, and that a lift whose pointer capture is lost drops its line and reports no order.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		const bar = barIn(canvasElement)
+		const [, login, weekly] = unpinnedTabsIn(canvasElement)
+		const y = boxOf(login).top + 14
+		const edge = { x: middleOf(login), y: boxOf(login).bottom - 1 }
+		const pastWeekly = boxOf(weekly).right
+
+		fireEvent.pointerDown(login, pointerAt(edge.x, edge.y))
+		fireEvent.pointerMove(document.body, pointerAt(edge.x, edge.y + 2))
+		fireEvent.pointerUp(document.body, pointerAt(edge.x, edge.y + 2))
+		fireEvent.pointerMove(login, pointerAt(edge.x, y))
+		fireEvent.pointerMove(login, pointerAt(pastWeekly, y))
+		await nextFrames()
+		await expect(isLifted(login)).toBe(false)
+		await expect(insertionsIn(bar)).toHaveLength(0)
+
+		fireEvent.pointerDown(login, pointerAt(edge.x, y))
+		fireEvent.pointerMove(login, pointerAt(pastWeekly, y))
+		await waitFor(() => expect(insertionsIn(bar)).toHaveLength(1))
+		fireEvent.lostPointerCapture(login, POINTER)
+		await waitFor(() => expect(insertionsIn(bar)).toHaveLength(0))
+		await expect(isLifted(login)).toBe(false)
+		fireEvent.pointerMove(login, pointerAt(edge.x, y))
+		fireEvent.pointerUp(login, pointerAt(pastWeekly, y))
+		await nextFrames()
+		await expect(insertionsIn(bar)).toHaveLength(0)
+		await expect(args.onReorderTabs).not.toHaveBeenCalled()
 	},
 })
 

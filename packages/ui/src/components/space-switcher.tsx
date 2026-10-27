@@ -41,6 +41,7 @@ import {
 import {
 	dropArea,
 	dropAreaAt,
+	useLiftLanding,
 	useRosterLift,
 } from "@workspace/ui/hooks/use-roster-lift"
 import { SPACE_RANK_LIMIT } from "@workspace/ui/hooks/use-space-shortcut"
@@ -365,11 +366,11 @@ const SpaceDots = ({
 		landingAt: insertionAt,
 		onLand: placeSpace,
 	})
+	const insertion = useLiftLanding(lift)
 
 	if (spaces.length < 2) return null
 
 	const liftedId = lift.lift?.id
-	const insertion = lift.lift?.landing ?? null
 	const placed = spaces.filter((space) => space.id !== liftedId)
 	const insertsBefore = insertion === null ? null : placed[insertion]?.id
 	const insertsAfter =
