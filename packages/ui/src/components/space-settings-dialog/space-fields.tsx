@@ -37,7 +37,7 @@ const SpacePreview = ({ hue }: SpacePreviewProps) => {
 		>
 			<span
 				aria-hidden="true"
-				className="size-6.5 shrink-0 rounded-[7px] bg-user-bubble"
+				className="size-6.5 shrink-0 rounded-md bg-user-bubble"
 			/>
 			<span className="flex-1" />
 			<span
