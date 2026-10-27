@@ -124,7 +124,6 @@ const gearFor = async (shownWindow = MAIN_WINDOW) => {
 		initialProps: inputOf(),
 	})
 	await act(settle)
-	view.rerender(inputOf())
 	const switchTo = async (rowId: string) => {
 		roster.load.mockClear()
 		roster.enter.mockClear()
