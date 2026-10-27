@@ -1,4 +1,10 @@
+mod common;
+
+use std::collections::BTreeSet;
+
+use common::{an_app_of_its_own, AppOfItsOwn};
 use kiroshi_app::commands::invoke_handler;
+use kiroshi_app::db;
 use serde_json::{json, Value};
 use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime, INVOKE_KEY};
 use tauri::utils::config::WindowConfig;
@@ -9,12 +15,26 @@ const MAIN: &str = "main";
 
 const PAGE: &str = "/spaces/s1/conversations/c1?message=m2";
 
-fn app() -> App<MockRuntime> {
-	let mut context = mock_context(noop_assets());
-	let config = context.config_mut();
-	config.identifier = format!("com.kiroshi.secondary-windows-{}", uuid::Uuid::new_v4());
-	config.app.windows.push(WindowConfig { label: MAIN.to_owned(), ..WindowConfig::default() });
-	mock_builder().invoke_handler(invoke_handler()).build(context).expect("the app builds")
+struct DataDirectory(AppOfItsOwn);
+
+impl DataDirectory {
+	fn new() -> Self {
+		Self(an_app_of_its_own("secondary-windows", mock_builder()))
+	}
+
+	fn launch(&self) -> App<MockRuntime> {
+		let app = self.launch_without_a_store();
+		app.manage(db::bootstrap(app.handle()));
+		app
+	}
+
+	fn launch_without_a_store(&self) -> App<MockRuntime> {
+		let mut context = mock_context(noop_assets());
+		let config = context.config_mut();
+		config.identifier = self.0.config().identifier.clone();
+		config.app.windows.push(WindowConfig { label: MAIN.to_owned(), ..WindowConfig::default() });
+		mock_builder().invoke_handler(invoke_handler()).build(context).expect("the app builds")
+	}
 }
 
 fn main_window(app: &App<MockRuntime>) -> WebviewWindow<MockRuntime> {
@@ -44,6 +64,14 @@ fn labels(app: &App<MockRuntime>) -> Vec<String> {
 	labels
 }
 
+fn secondary_labels_after_opening(app: &App<MockRuntime>, count: usize) -> BTreeSet<String> {
+	let main = main_window(app);
+	for _ in 0..count {
+		assert_eq!(call(&main, "window_open", json!({ "href": "/" })), Ok(Value::Null));
+	}
+	labels(app).into_iter().filter(|label| label != MAIN).collect()
+}
+
 fn secondary_of(app: &App<MockRuntime>) -> WebviewWindow<MockRuntime> {
 	app.webview_windows()
 		.into_iter()
@@ -53,7 +81,8 @@ fn secondary_of(app: &App<MockRuntime>) -> WebviewWindow<MockRuntime> {
 
 #[test]
 fn a_window_opened_on_a_page_reads_back_its_label_and_that_page() {
-	let app = app();
+	let home = DataDirectory::new();
+	let app = home.launch();
 	let main = main_window(&app);
 
 	assert_eq!(call(&main, "window_open", json!({ "href": PAGE })), Ok(Value::Null));
@@ -77,7 +106,8 @@ fn a_window_opened_on_a_page_reads_back_its_label_and_that_page() {
 
 #[test]
 fn every_window_opened_takes_a_label_never_given_before() {
-	let app = app();
+	let home = DataDirectory::new();
+	let app = home.launch();
 	let main = main_window(&app);
 
 	for _ in 0..3 {
@@ -89,7 +119,8 @@ fn every_window_opened_takes_a_label_never_given_before() {
 
 #[test]
 fn a_page_outside_the_app_opens_no_window() {
-	let app = app();
+	let home = DataDirectory::new();
+	let app = home.launch();
 	let main = main_window(&app);
 
 	for href in ["https://evil.example/", "//evil.example/x", "conversations/c1"] {
@@ -104,7 +135,8 @@ fn a_page_outside_the_app_opens_no_window() {
 
 #[test]
 fn closing_a_secondary_window_leaves_main_open() {
-	let app = app();
+	let home = DataDirectory::new();
+	let app = home.launch();
 	let main = main_window(&app);
 	assert_eq!(call(&main, "window_open", json!({ "href": PAGE })), Ok(Value::Null));
 
@@ -115,4 +147,61 @@ fn closing_a_secondary_window_leaves_main_open() {
 		call(&main, "window_identity", json!({})),
 		Ok(json!({ "label": MAIN, "initialHref": null }))
 	);
+}
+
+#[test]
+fn a_later_launch_from_the_same_data_directory_never_hands_out_an_earlier_label() {
+	let home = DataDirectory::new();
+	let first = secondary_labels_after_opening(&home.launch(), 2);
+
+	let second = secondary_labels_after_opening(&home.launch(), 2);
+
+	assert_eq!(first, BTreeSet::from(["window-1".to_owned(), "window-2".to_owned()]));
+	assert_eq!(second, BTreeSet::from(["window-3".to_owned(), "window-4".to_owned()]));
+}
+
+#[test]
+fn windows_opened_at_once_each_take_a_label_of_their_own() {
+	let home = DataDirectory::new();
+	let app = home.launch();
+	let main = main_window(&app);
+
+	let openings: Vec<_> = (0..4)
+		.map(|_| {
+			let caller = main.clone();
+			std::thread::spawn(move || call(&caller, "window_open", json!({ "href": "/" })))
+		})
+		.collect();
+
+	for opening in openings {
+		assert_eq!(opening.join().expect("the opening ends"), Ok(Value::Null));
+	}
+	assert_eq!(labels(&app).len(), 5);
+}
+
+#[test]
+fn a_launch_whose_label_store_did_not_open_opens_no_window() {
+	let home = DataDirectory::new();
+	let app = home.launch_without_a_store();
+	app.manage(db::DatabaseState::Err(db::DatabaseError::AppDataDir));
+	let main = main_window(&app);
+
+	assert_eq!(
+		call(&main, "window_open", json!({ "href": PAGE })),
+		Err(json!({ "kind": "unavailable" }))
+	);
+	assert_eq!(labels(&app), vec![MAIN.to_owned()]);
+}
+
+#[test]
+fn a_launch_with_no_label_store_opens_no_window() {
+	let home = DataDirectory::new();
+	let app = home.launch_without_a_store();
+	let main = main_window(&app);
+
+	assert_eq!(
+		call(&main, "window_open", json!({ "href": PAGE })),
+		Err(json!({ "kind": "unavailable" }))
+	);
+	assert_eq!(labels(&app), vec![MAIN.to_owned()]);
 }
