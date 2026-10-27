@@ -330,6 +330,11 @@ const chat = {
 				description:
 					"Son ordinateur est hors ligne. Réessayez une fois qu’il est de nouveau en ligne.",
 			},
+			describeRefused: {
+				title: "Impossible d’enregistrer le nom et la couleur",
+				description:
+					"{{reason}} L’espace a gardé son nom et sa couleur précédents.",
+			},
 			joinRefused: {
 				unavailable: {
 					title: "Impossible d’ouvrir les espaces rejoints",

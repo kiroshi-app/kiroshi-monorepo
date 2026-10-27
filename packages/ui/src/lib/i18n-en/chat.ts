@@ -316,6 +316,10 @@ const chat = {
 				description:
 					"Its computer is offline. Try again once it’s back online.",
 			},
+			describeRefused: {
+				title: "Couldn’t save the name and colour",
+				description: "{{reason}} The space kept its previous name and colour.",
+			},
 			joinRefused: {
 				unavailable: {
 					title: "Couldn’t open the spaces you joined",
