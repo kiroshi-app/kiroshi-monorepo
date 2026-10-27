@@ -671,3 +671,117 @@ it("opens the conversations on Back when a settings screen is the first entry of
 	expect(shownSettingsOf()).toBeNull()
 	expect(isMarked(conversationsEntryOf())).toBe(true)
 })
+
+const titleBarOf = () =>
+	document.querySelector('[data-slot="app-title-bar"]') as HTMLElement
+
+const tabNamed = (name: string) =>
+	within(titleBarOf()).getByRole("tab", { name })
+
+const tabNames = () =>
+	within(titleBarOf())
+		.getAllByRole("tab")
+		.map((tab) => tab.getAttribute("aria-label") ?? tab.textContent)
+
+const barButtonOf = (name: string) =>
+	within(titleBarOf()).getByRole("button", { name })
+
+const pickInTabMenu = async (tabName: string, item: string) => {
+	await act(async () => {
+		fireEvent.contextMenu(tabNamed(tabName))
+	})
+	await press(screen.getByRole("menuitem", { name: item }))
+}
+
+const SPACE_SETTINGS_TAB = i18n.t("settings:screen.subtitle.space")
+
+const NEW_TAB = i18n.t("common:titleBar.newTab")
+
+const applicationNameField = () =>
+	screen.getByLabelText<HTMLInputElement>(
+		i18n.t("bots:applications.name.label"),
+	)
+
+const applicationLeaveQuestion = () =>
+	screen.queryByRole("alertdialog", {
+		name: i18n.t("bots:applications.leave.title"),
+	})
+
+const answerLeave = (answer: string) =>
+	press(
+		within(applicationLeaveQuestion() as HTMLElement).getByRole("button", {
+			name: answer,
+		}),
+	)
+
+const openUnsavedApplicationInSecondTab = async () => {
+	await mountApp(twoSpaceApplications)
+	await openConversation()
+	await press(barButtonOf(NEW_TAB))
+	await openSpaceSettingsByRail()
+	await openApplications()
+	await press(menuEntryOf(/^ledger/))
+	fireEvent.change(applicationNameField(), {
+		target: { value: "ledger-desk" },
+	})
+}
+
+it.each([
+	["selecting another tab", () => press(tabNamed(CONVERSATION_TITLE))],
+	["opening a new tab", () => press(barButtonOf(NEW_TAB))],
+	["going Back", () => press(barButtonOf(i18n.t("common:titleBar.back")))],
+	[
+		"closing the active tab",
+		() => press(barButtonOf(i18n.t("common:titleBar.closeTab"))),
+	],
+])(
+	"asks before %s leaves an unsaved application, and stays on Cancel",
+	async (_gesture, leave) => {
+		await openUnsavedApplicationInSecondTab()
+
+		await leave()
+		expect(applicationLeaveQuestion()).not.toBeNull()
+		await answerLeave(i18n.t("common:confirm.cancel"))
+
+		expect(applicationLeaveQuestion()).toBeNull()
+		expect(tabNames()).toEqual([CONVERSATION_TITLE, SPACE_SETTINGS_TAB])
+		expect(applicationNameField().value).toBe("ledger-desk")
+	},
+)
+
+it("closes the active settings tab with an unsaved application once Leave is pressed", async () => {
+	await openUnsavedApplicationInSecondTab()
+
+	await press(barButtonOf(i18n.t("common:titleBar.closeTab")))
+	await answerLeave(i18n.t("bots:applications.leave.action"))
+
+	expect(tabNames()).toEqual([CONVERSATION_TITLE])
+	expect(shownSettingsOf()).toBeNull()
+})
+
+it("pins, unpins, closes another tab and the other tabs at once beside an unsaved application", async () => {
+	await openUnsavedApplicationInSecondTab()
+
+	await pickInTabMenu(CONVERSATION_TITLE, i18n.t("common:titleBar.pinTab"))
+	await pickInTabMenu(CONVERSATION_TITLE, i18n.t("common:titleBar.unpinTab"))
+	expect(applicationLeaveQuestion()).toBeNull()
+
+	await pickInTabMenu(
+		SPACE_SETTINGS_TAB,
+		i18n.t("common:titleBar.closeOtherTabs"),
+	)
+	expect(applicationLeaveQuestion()).toBeNull()
+	expect(tabNames()).toEqual([SPACE_SETTINGS_TAB])
+	expect(applicationNameField().value).toBe("ledger-desk")
+})
+
+it("leaves a settings page with nothing unsaved at once on a tab gesture", async () => {
+	await mountApp()
+	await openSpaceSettingsByRail()
+
+	await press(barButtonOf(NEW_TAB))
+
+	expect(applicationLeaveQuestion()).toBeNull()
+	expect(tabNames()).toEqual([SPACE_SETTINGS_TAB, NEW_TAB])
+	expect(shownSettingsOf()).toBeNull()
+})

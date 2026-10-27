@@ -216,6 +216,32 @@ const SESSION_BOUND_ENTRIES = new Set([
 	HISTORY_TAB,
 ])
 
+const askingBeforeLeaving = (
+	titleBar: AppTitleBarProps = {},
+	requestLeave: SettingsScreenRequestLeave,
+): AppTitleBarProps => {
+	const {
+		activeTabId,
+		onSelectTab,
+		onCloseTab,
+		onNewTab,
+		onGoBack,
+		onGoForward,
+	} = titleBar
+	const isActive = (id: string) => id === activeTabId
+
+	return {
+		...titleBar,
+		onSelectTab: (id) =>
+			isActive(id) ? onSelectTab?.(id) : requestLeave(() => onSelectTab?.(id)),
+		onCloseTab: (id) =>
+			isActive(id) ? requestLeave(() => onCloseTab?.(id)) : onCloseTab?.(id),
+		onNewTab: () => requestLeave(() => onNewTab?.()),
+		onGoBack: () => requestLeave(() => onGoBack?.()),
+		onGoForward: () => requestLeave(() => onGoForward?.()),
+	}
+}
+
 const SettingsScreenLayout = ({
 	entry,
 	onEntryChange,
@@ -329,7 +355,7 @@ const SettingsScreenLayout = ({
 			onWidthChange={onWidthChange}
 			sidebar={
 				<>
-					<AppTitleBar {...titleBar} />
+					<AppTitleBar {...askingBeforeLeaving(titleBar, leaveThen)} />
 					{rail?.(leaveThen)}
 					<SettingsMenu
 						isCompanionPage={isCompanionPage}
