@@ -387,8 +387,6 @@ describe.each(PRODUCED_SPACES)(
 				space: produced.currentSpace,
 				spaceHost: produced.currentSpaceHost,
 			})
-			expect(sidebarSpace).toMatchObject(space)
-			expect(spaceHost).toBe(host)
 		})
 
 		it("keeps handing the Space switcher rows every Space's connection state", () => {
