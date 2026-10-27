@@ -24,6 +24,7 @@ import {
 	type BotIdentityAvatarProps,
 } from "@workspace/ui/components/bot-identity-avatar"
 import { BLOT_TINTS } from "@workspace/ui/components/companion-colour"
+import type { GlazeTheme } from "@workspace/ui/components/glaze-border"
 import { InitialsAvatar } from "@workspace/ui/components/initials-avatar"
 import { Button } from "@workspace/ui/components/ui/button"
 
@@ -608,7 +609,7 @@ const BorderSizes = (props: BotIdentityAvatarProps) => (
 
 const expectBorderAtEverySize = async (
 	canvasElement: HTMLElement,
-	theme: "light" | "dark",
+	theme: GlazeTheme,
 ) => {
 	const avatars = botIdentityAvatars(canvasElement)
 	await expect(

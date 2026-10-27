@@ -7,6 +7,7 @@ import {
 	slotsIn,
 } from "@workspace/storybook/story-utils"
 import { ConversationBotPile } from "@workspace/ui/components/conversation-bot-pile"
+import type { GlazeTheme } from "@workspace/ui/components/glaze-border"
 
 const BOTS = [
 	{ id: "atlas", name: "Atlas", blot: "blue" },
@@ -161,7 +162,7 @@ const BothLayouts = () => (
 
 const expectEdgedMembers = async (
 	canvasElement: HTMLElement,
-	theme: "light" | "dark",
+	theme: GlazeTheme,
 ) => {
 	const [overlapping, sideBySide] = slotsIn(
 		canvasElement,

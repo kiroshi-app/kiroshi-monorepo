@@ -2,6 +2,7 @@ import { expect } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { expectGlazeBorders, slotIn } from "@workspace/storybook/story-utils"
+import type { GlazeTheme } from "@workspace/ui/components/glaze-border"
 import { OutlinedHexagon } from "@workspace/ui/components/outlined-hexagon"
 
 const SIDE = 40
@@ -39,7 +40,7 @@ const meta = preview.meta({
 
 const expectFilledWithTheGlazeBorder = async (
 	canvasElement: HTMLElement,
-	theme: "light" | "dark",
+	theme: GlazeTheme,
 ) => {
 	const art = slotIn(canvasElement, "outlined-hexagon")
 	const box = art.getBoundingClientRect()

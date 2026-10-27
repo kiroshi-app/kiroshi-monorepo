@@ -9,6 +9,7 @@ import {
 	slotsIn,
 } from "@workspace/storybook/story-utils"
 import { ConversationSubjectIcon } from "@workspace/ui/components/conversation-subject-icon"
+import type { GlazeTheme } from "@workspace/ui/components/glaze-border"
 import { ConversationIcons } from "@workspace/ui/components/icons"
 
 const meta = preview.meta({
@@ -158,7 +159,7 @@ const BorderSides = () => (
 
 const expectBorderAtEverySize = async (
 	canvasElement: HTMLElement,
-	theme: "light" | "dark",
+	theme: GlazeTheme,
 ) => {
 	const icons = slotsIn(canvasElement, "conversation-subject-icon")
 	await expect(icons.map((icon) => icon.getBoundingClientRect().width)).toEqual(

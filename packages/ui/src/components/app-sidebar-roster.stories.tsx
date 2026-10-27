@@ -31,6 +31,7 @@ import {
 import { BotRosterRow } from "@workspace/ui/components/app-sidebar-bot-row"
 import { ConversationRosterRow } from "@workspace/ui/components/app-sidebar-conversation-row"
 import { BotRoster } from "@workspace/ui/components/app-sidebar-roster"
+import type { GlazeTheme } from "@workspace/ui/components/glaze-border"
 
 const meta = preview.meta({
 	title: "Navigation/AppSidebarRoster",
@@ -174,7 +175,7 @@ const HOVERED_ROWS = '[data-slot="sidebar-menu-button"]'
 
 const expectBorderOnHoveredAndSelectedRows = async (
 	canvasElement: HTMLElement,
-	theme: "light" | "dark",
+	theme: GlazeTheme,
 ) => {
 	await expect(rosterRowOf(canvasElement, ATLAS.name)).toHaveAttribute(
 		"data-active",
