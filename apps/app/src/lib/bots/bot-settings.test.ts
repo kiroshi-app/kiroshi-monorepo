@@ -63,6 +63,10 @@ describe("toSettingsValue", () => {
 		expect(toSettingsValue(bot({ effort: "xhigh" })).effort).toBe("xhigh")
 	})
 
+	it("hands the panel a hue outside the presets as it was stored", () => {
+		expect(toSettingsValue(bot({ avatarBlot: 210 })).identity.blot).toBe(210)
+	})
+
 	it("reads a companion nobody marked as wearing no blot", () => {
 		expect(toSettingsValue(bot({ avatarBlot: null })).identity.blot).toBeNull()
 	})
@@ -142,6 +146,23 @@ describe("toIdentity", () => {
 		const value = toSettingsValue(stored)
 
 		expect(toIdentity({ ...value, identity: {} }, stored).avatarBlot).toBeNull()
+	})
+
+	it("writes a blot the reader set to no colour as an absence", () => {
+		const value = toSettingsValue(stored)
+
+		expect(
+			toIdentity({ ...value, identity: { blot: null } }, stored).avatarBlot,
+		).toBeNull()
+	})
+
+	it("writes a hue outside the presets over the preset it replaces", () => {
+		const blue = bot({ avatarBlot: 257 })
+		const value = toSettingsValue(blue)
+
+		expect(
+			toIdentity({ ...value, identity: { blot: 210 } }, blue).avatarBlot,
+		).toBe(210)
 	})
 
 	it("carries the style the companion already answers under", () => {
@@ -483,6 +504,16 @@ describe("toRosterBots", () => {
 		)
 
 		expect(bare.blot).toBeNull()
+	})
+
+	it("hands the roster a hue outside the presets as it was stored", () => {
+		const [free] = toRosterBots(
+			[bot({ avatarBlot: 210 })],
+			{ working: {}, previews: {} },
+			NOW,
+		)
+
+		expect(free.blot).toBe(210)
 	})
 
 	it("puts the companion that spoke last above the one that spoke earlier", () => {
