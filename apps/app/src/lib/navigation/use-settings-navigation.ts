@@ -5,10 +5,13 @@ import {
 } from "@tanstack/react-router"
 import { useMemo } from "react"
 
-import { APPLICATIONS_ENTRY } from "@workspace/ui/components/space-settings-dialog/use-space-settings"
 import type { ClickModifiers } from "@workspace/ui/lib/click-modifiers"
 
-import type { CompanionSettingsSearch, SettingsSearch } from "./settings-search"
+import {
+	APPLICATIONS_ENTRY,
+	type CompanionSettingsSearch,
+	type SettingsSearch,
+} from "./settings-search"
 import type { ThreadSearch } from "./thread-search"
 
 import { isNewTabClickInFlight, opensInNewTab } from "../tabs/new-tab-clicks"

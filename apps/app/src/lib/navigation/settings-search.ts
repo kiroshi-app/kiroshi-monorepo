@@ -1,5 +1,7 @@
 export const COMPANION_DANGER_ENTRY = "danger"
 
+export const APPLICATIONS_ENTRY = "mcp"
+
 export type SettingsSearch = {
 	entry?: string
 	application?: string
