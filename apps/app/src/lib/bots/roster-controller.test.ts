@@ -385,7 +385,7 @@ describe("createRosterController", () => {
 				title: "Reviewer",
 				instructions: "Answer briefly.",
 				model: "haiku",
-				avatarBlot: "blue",
+				avatarBlot: 257,
 			}),
 		)
 	})
@@ -1258,7 +1258,7 @@ describe("createRosterController on conversations", () => {
 			instructions: "",
 			sectionId: null,
 			icon: "Message",
-			color: "cyan",
+			color: 186,
 		})
 		const controller = await loaded(store)
 		const sent = vi.spyOn(store, "updateConversation")
@@ -1271,14 +1271,14 @@ describe("createRosterController on conversations", () => {
 		await controller.moveConversationToSection(id, section.id)
 
 		expect(sent.mock.calls.map(([, edit]) => [edit.icon, edit.color])).toEqual([
-			["Message", "cyan"],
-			["Message", "cyan"],
+			["Message", 186],
+			["Message", 186],
 		])
 		expect((await store.conversations("personal"))[0]).toMatchObject({
 			title: "Menu",
 			sectionId: section.id,
 			icon: "Message",
-			color: "cyan",
+			color: 186,
 		})
 	})
 
@@ -1292,11 +1292,11 @@ describe("createRosterController on conversations", () => {
 		})
 
 		controller.styleConversation(id, { icon: "Rocket" })
-		controller.styleConversation(id, { color: "cyan" })
+		controller.styleConversation(id, { color: 186 })
 
 		expect(controller.getState().conversations[0]).toMatchObject({
 			icon: "Rocket",
-			color: "cyan",
+			color: 186,
 		})
 		await vi.waitFor(async () => {
 			const state = await reloaded(store)
@@ -1304,7 +1304,7 @@ describe("createRosterController on conversations", () => {
 				title: "Menu",
 				instructions: "Stay short.",
 				icon: "Rocket",
-				color: "cyan",
+				color: 186,
 			})
 		})
 	})
@@ -1317,7 +1317,7 @@ describe("createRosterController on conversations", () => {
 			instructions: "",
 			sectionId: null,
 			icon: "Message",
-			color: "cyan",
+			color: 186,
 		})
 		const controller = await loaded(store)
 
@@ -1481,7 +1481,7 @@ describe("createRosterController on conversations", () => {
 
 		expect(
 			faceIn(controller.getState().conversations[0], "default"),
-		).toMatchObject({ name: "Nyx", avatarBlot: "blue" })
+		).toMatchObject({ name: "Nyx", avatarBlot: 257 })
 		expect(faceIn(controller.getState().conversations[0], second.id).name).toBe(
 			second.name,
 		)

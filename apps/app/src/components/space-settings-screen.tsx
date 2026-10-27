@@ -18,6 +18,7 @@ import { openedServerScope } from "@/lib/applications/application-settings"
 import type { AccountState, JoinedSpace } from "@/lib/bindings"
 import { toCompanionSummary } from "@/lib/bots/bot-settings"
 import { useCompanionCounts } from "@/lib/bots/use-companion-counts"
+import { presetOfHue } from "@/lib/colour/hue-shim"
 import { toEnvironmentRows } from "@/lib/environment/environment-rows"
 import type { HostedSpace } from "@/lib/host/hosting-transport"
 import { useHosting } from "@/lib/host/use-hosting"
@@ -288,7 +289,7 @@ export const SpaceSettingsScreen = ({
 			isConnected={!isHostOffline}
 			isSessionUnavailable={!isCurrent}
 			onLeave={() => joinedSpaces.controller.leave(joined.id)}
-			value={{ name: joined.name, colour: joined.colour }}
+			value={{ name: joined.name, colour: presetOfHue(joined.colour) }}
 		/>
 	)
 }

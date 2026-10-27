@@ -157,6 +157,7 @@ import {
 	useThreadRoster,
 } from "@/lib/chat/use-thread-roster"
 import type { WorkingState } from "@/lib/chat/working-kind"
+import { presetOfHue } from "@/lib/colour/hue-shim"
 import {
 	type PlacedArrival,
 	type PlacedBySeq,
@@ -406,7 +407,11 @@ const ThreadHeader = ({
 			leading={
 				thread.kind === "bot" ? (
 					<HeaderIdentityButton
-						blot={thread.bot.avatarBlot ?? undefined}
+						blot={
+							thread.bot.avatarBlot === null
+								? undefined
+								: presetOfHue(thread.bot.avatarBlot)
+						}
 						connection={thread.state.connection}
 						image={botImage}
 						kind={botWork?.kind}
@@ -587,7 +592,11 @@ const ThreadEmptyState = ({
 
 	return status ? (
 		<ChatEmptyState
-			blot={thread.bot.avatarBlot ?? undefined}
+			blot={
+				thread.bot.avatarBlot === null
+					? undefined
+					: presetOfHue(thread.bot.avatarBlot)
+			}
 			image={botImage}
 			name={thread.bot.name}
 			onOpenSettings={thread.onToggleSettings}

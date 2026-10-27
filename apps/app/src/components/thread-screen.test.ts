@@ -3149,10 +3149,7 @@ describe("ThreadScreen wearing the look of a group conversation", () => {
 		)
 
 		rerender(
-			screenOf(
-				wearing(room.thread, { icon: "Rocket", color: "cyan" }),
-				room.bots,
-			),
+			screenOf(wearing(room.thread, { icon: "Rocket", color: 186 }), room.bots),
 		)
 		await settle()
 
@@ -3166,10 +3163,7 @@ describe("ThreadScreen wearing the look of a group conversation", () => {
 	it("draws the icon and the colour of a conversation with no message in its empty state", async () => {
 		const room = await roomOf({ names: ["Ada", "Zoe"] })
 		const { container } = render(
-			screenOf(
-				wearing(room.thread, { icon: "Rocket", color: "cyan" }),
-				room.bots,
-			),
+			screenOf(wearing(room.thread, { icon: "Rocket", color: 186 }), room.bots),
 			{ wrapper: createQueryTestWrapper().wrapper },
 		)
 		await settle()

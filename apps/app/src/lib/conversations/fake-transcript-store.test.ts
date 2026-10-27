@@ -200,9 +200,9 @@ describe("createFakeTranscriptStore", () => {
 			title: "a writer",
 			instructions: "Write.",
 			model: "sonnet",
-			avatarBlot: "red",
+			avatarBlot: 42,
 		})
-		expect(second.avatarBlot).toBe("yellow")
+		expect(second.avatarBlot).toBe(82)
 	})
 
 	it("dresses a draft like the sidebar dresses a new companion in an empty space", async () => {
@@ -229,7 +229,7 @@ describe("createFakeTranscriptStore", () => {
 		const ninth = await store.createBotFromDraft(draft, space.id)
 		const tenth = await store.createBotFromDraft(draft, space.id)
 
-		expect([ninth.avatarBlot, tenth.avatarBlot]).toEqual(["red", "yellow"])
+		expect([ninth.avatarBlot, tenth.avatarBlot]).toEqual([42, 82])
 	})
 
 	it("refuses a draft without a name and makes no companion", async () => {
@@ -322,14 +322,14 @@ describe("createFakeTranscriptStore", () => {
 
 		const updated = await store.updateBot(
 			created.id,
-			botIdentity({ name: "Ada", model: "haiku", avatarBlot: "orange" }),
+			botIdentity({ name: "Ada", model: "haiku", avatarBlot: 63 }),
 		)
 
 		expect(updated.id).toBe(created.id)
 		expect(updated.createdAt).toBe(created.createdAt)
 		expect(updated.name).toBe("Ada")
 		expect(updated.model).toBe("haiku")
-		expect(updated.avatarBlot).toBe("orange")
+		expect(updated.avatarBlot).toBe(63)
 	})
 
 	it("refuses a write on a companion it no longer holds", async () => {

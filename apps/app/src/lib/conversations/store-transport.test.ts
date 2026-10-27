@@ -118,8 +118,8 @@ const WRITES: WriteCase[] = [
 	},
 	{
 		member: "updateSpace",
-		write: () => conversationStore.updateSpace("s-1", "Work", "cyan"),
-		call: ["space_update", { id: "s-1", name: "Work", colour: "cyan" }],
+		write: () => conversationStore.updateSpace("s-1", "Work", 186),
+		call: ["space_update", { id: "s-1", name: "Work", colour: 186 }],
 	},
 	{
 		member: "updateSpace",
@@ -168,7 +168,7 @@ const WRITES: WriteCase[] = [
 				instructions: "Stay short.",
 				sectionId: null,
 				icon: "Message",
-				color: "cyan",
+				color: 186,
 			}),
 		call: [
 			"conversation_update",
@@ -178,7 +178,7 @@ const WRITES: WriteCase[] = [
 				instructions: "Stay short.",
 				sectionId: null,
 				icon: "Message",
-				color: "cyan",
+				color: 186,
 			},
 		],
 	},

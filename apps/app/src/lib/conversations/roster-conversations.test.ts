@@ -25,7 +25,7 @@ const participant = (fields: Partial<Participant> = {}): Participant => ({
 	joinedAt: 1,
 	leftAt: null,
 	name: "Chef",
-	avatarBlot: "cyan",
+	avatarBlot: 186,
 	avatarImagePath: null,
 	isDeleted: false,
 	...fields,
@@ -272,7 +272,7 @@ describe("toRosterConversations", () => {
 
 	it("draws the icon and the colour the room wears", () => {
 		const [row] = toRosterConversations(
-			[conversation({ icon: "Rocket", color: "cyan" })],
+			[conversation({ icon: "Rocket", color: 186 })],
 			atRest(),
 			NOW,
 		)
@@ -425,7 +425,7 @@ const bot = (fields: Partial<Bot> = {}): Bot => ({
 	name: "Chef",
 	title: "",
 	model: "sonnet",
-	avatarBlot: "cyan",
+	avatarBlot: 186,
 	avatarImagePath: null,
 	instructions: "",
 	deniedTools: [],

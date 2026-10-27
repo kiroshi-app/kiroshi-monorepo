@@ -20,6 +20,7 @@ import { joinedHosts } from "../host"
 import { createQueue } from "../queue"
 import { createStore } from "../store"
 import { createWriteLoop } from "../write-loop"
+import { hueOfPreset } from "../colour/hue-shim"
 import type { Space, SpaceError } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
 import type { JoinedHosts } from "../host/joined-hosts"
@@ -196,7 +197,11 @@ export const createSpacesController = (
 		enqueue,
 		write: (id, value) =>
 			runMutation(queryClient, () =>
-				store.updateSpace(id, value.name, value.colour),
+				store.updateSpace(
+					id,
+					value.name,
+					value.colour === undefined ? undefined : hueOfPreset(value.colour),
+				),
 			),
 		apply: (_id, written) => apply(written),
 		onRefused: () => {
@@ -321,7 +326,11 @@ export const createSpacesController = (
 			if (!held) {
 				return
 			}
-			apply({ ...held, name: value.name, colour: value.colour ?? null })
+			apply({
+				...held,
+				name: value.name,
+				colour: value.colour === undefined ? null : hueOfPreset(value.colour),
+			})
 			writes.push(id, value)
 		},
 

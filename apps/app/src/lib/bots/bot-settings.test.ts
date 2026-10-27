@@ -19,6 +19,7 @@ import {
 } from "./bot-settings"
 
 import { avatarSrc } from "../host"
+import { hueOfPreset } from "../colour/hue-shim"
 import type { Bot } from "../conversations/store-contract"
 import { botIdentity } from "../conversations/transcript-fixtures"
 
@@ -44,7 +45,7 @@ describe("toSettingsValue", () => {
 					title: "Reviewer",
 					instructions: "Answer briefly.",
 					model: "haiku",
-					avatarBlot: "green",
+					avatarBlot: 132,
 				}),
 			),
 		).toEqual({
@@ -134,7 +135,7 @@ describe("toIdentity", () => {
 		expect(
 			toIdentity({ ...value, identity: { blot: "yellow" } }, stored),
 		).toMatchObject({
-			avatarBlot: "yellow",
+			avatarBlot: 82,
 			avatarImagePath: null,
 		})
 	})
@@ -294,7 +295,7 @@ describe("newBotIdentity", () => {
 		names.map((name, index) => bot({ id: `b-${index}`, name }))
 
 	it("names a companion before it is named", () => {
-		const created = newBotIdentity([bot({ avatarBlot: "red" })])
+		const created = newBotIdentity([bot({ avatarBlot: 42 })])
 
 		expect(BOT_NAMES).toContain(created.name)
 		expect(created).toMatchObject({
@@ -307,22 +308,24 @@ describe("newBotIdentity", () => {
 	it("marks a companion with a tint nobody in the roster is marked with", () => {
 		const [spared, ...marked] = BLOT_TINTS
 
-		expect(newBotIdentity([]).avatarBlot).toBe(spared)
+		expect(newBotIdentity([]).avatarBlot).toBe(hueOfPreset(spared))
 		expect(
 			newBotIdentity(
 				marked.map((blot, index) =>
-					bot({ id: `b-${index}`, avatarBlot: blot }),
+					bot({ id: `b-${index}`, avatarBlot: hueOfPreset(blot) }),
 				),
 			).avatarBlot,
-		).toBe(spared)
+		).toBe(hueOfPreset(spared))
 	})
 
 	it("marks from the whole list once every tint is taken", () => {
 		const roster = BLOT_TINTS.map((blot, index) =>
-			bot({ id: `b-${index}`, avatarBlot: blot }),
+			bot({ id: `b-${index}`, avatarBlot: hueOfPreset(blot) }),
 		)
 
-		expect(BLOT_TINTS).toContain(newBotIdentity(roster).avatarBlot)
+		expect(BLOT_TINTS.map(hueOfPreset)).toContain(
+			newBotIdentity(roster).avatarBlot,
+		)
 	})
 
 	it("creates a companion on the concise style", () => {
