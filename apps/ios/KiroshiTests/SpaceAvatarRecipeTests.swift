@@ -19,7 +19,7 @@ struct SpaceAvatarRecipeTests {
 
         struct Palette: Decodable {
             let theme: String
-            let colour: String?
+            let colour: Int?
             let full: [String]
             let compact: [String]
         }
@@ -70,13 +70,13 @@ struct SpaceAvatarRecipeTests {
     }
 
     @Test func paintsTheSameTonesAsTheDesktopInEveryColourAndTheme() throws {
-        #expect(vectors.palettes.count == 2 * (CompanionTint.allCases.count + 1))
+        #expect(vectors.palettes.count == 2 * (Hue.presets.count + 3))
         for palette in vectors.palettes {
             let theme = try #require(SpaceAvatarTheme(rawValue: palette.theme))
-            let colour = palette.colour.flatMap(CompanionTint.init(rawValue:))
+            let colour = palette.colour.flatMap(Hue.init(degrees:))
             #expect(colour != nil || palette.colour == nil)
             let drawn = SpaceAvatarRecipe.palette(theme, colour: colour)
-            let label = "\(palette.theme) \(palette.colour ?? "no colour")"
+            let label = "\(palette.theme) \(palette.colour.map(String.init) ?? "no colour")"
             #expect(drawn.full.map(\.hex) == palette.full, "\(label)")
             #expect(drawn.compact.map(\.hex) == palette.compact, "\(label)")
         }

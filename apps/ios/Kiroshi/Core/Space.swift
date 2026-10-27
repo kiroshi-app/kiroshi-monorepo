@@ -16,7 +16,7 @@ struct Space: Decodable, Identifiable, Equatable, Sendable {
     let name: String
     let role: Role
     var isHostOnline: Bool
-    var colour: CompanionTint?
+    var colour: Hue?
 }
 
 enum SpacePresence: Equatable, Sendable {
@@ -41,13 +41,6 @@ extension Space {
         name = try container.decode(String.self, forKey: .name)
         role = try container.decode(Role.self, forKey: .role)
         isHostOnline = try container.decode(Bool.self, forKey: .isHostOnline)
-        colour = container.tint(forKey: .colour)
-    }
-}
-
-extension KeyedDecodingContainer {
-    func tint(forKey key: Key) -> CompanionTint? {
-        let written = try? decodeIfPresent(String.self, forKey: key)
-        return written.flatMap { CompanionTint(rawValue: $0) }
+        colour = container.hue(forKey: .colour)
     }
 }

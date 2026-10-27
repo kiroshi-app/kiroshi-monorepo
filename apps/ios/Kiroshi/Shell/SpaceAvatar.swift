@@ -3,7 +3,7 @@ import UIKit
 
 struct SpaceAvatar: View {
     let spaceId: String
-    let colour: CompanionTint?
+    let colour: Hue?
     let size: SpaceAvatarSize
     let presence: SpacePresence
 
@@ -45,7 +45,7 @@ private struct SpaceAvatarDrawing {
     let lineColour: Color
 
     init(
-        spaceId: String, colour: CompanionTint?, size: SpaceAvatarSize, presence: SpacePresence,
+        spaceId: String, colour: Hue?, size: SpaceAvatarSize, presence: SpacePresence,
         theme: SpaceAvatarTheme
     ) {
         self.size = size

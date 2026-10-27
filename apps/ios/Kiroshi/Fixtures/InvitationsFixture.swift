@@ -9,8 +9,9 @@
         static let colour = UserDefaults.standard.string(forKey: "invitationColour")
         static let invitation = Invitation(
             id: invitationId, instanceId: studioId, instanceName: "Studio",
-            inviterEmail: "noa@example.com", colour: colour.flatMap(CompanionTint.init(rawValue:)))
-        static let writtenColour = colour.map { #""\#($0)""# } ?? "null"
+            inviterEmail: "noa@example.com",
+            colour: colour.flatMap { Int($0).flatMap(Hue.init(degrees:)) ?? Hue(named: $0) })
+        static let writtenColour = colour.map { CloudFixture.written(colour: $0) } ?? "null"
         static let listPath = "/invitations"
         static let statePath = "/invitations/\(invitationId)/state"
         static let otherEmailStatePath = "/invitations/\(otherEmailInvitationId)/state"

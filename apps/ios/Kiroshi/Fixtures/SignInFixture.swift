@@ -40,7 +40,11 @@
         static func colour(_ index: Int) -> String {
             let colours =
                 UserDefaults.standard.string(forKey: "spaceColours")?.split(separator: ",") ?? []
-            return colours.indices.contains(index) ? #""\#(colours[index])""# : "null"
+            return colours.indices.contains(index) ? written(colour: colours[index]) : "null"
+        }
+
+        static func written(colour: some StringProtocol) -> String {
+            Int(colour) != nil ? String(colour) : #""\#(colour)""#
         }
         static let signOutPath = "/api/auth/sign-out"
         static let signedOut = ScriptedTransport.Answer.status(200, #"{"status":true}"#)

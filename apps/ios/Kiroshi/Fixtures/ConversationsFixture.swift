@@ -88,7 +88,8 @@
 
         static let juniper = Companion(
             id: "juniper-6", name: "Juniper", role: "Writer", tint: .green)
-        static let atlas = Companion(id: "atlas-3", name: "Atlas", role: "Planner", tint: .blue)
+        static let atlas = Companion(
+            id: "atlas-3", name: "Atlas", role: "Planner", tint: Hue(degrees: 200))
         static let pico = Companion(id: "pico-6", name: "Pico", role: "Builder", tint: .orange)
         static let mira = Companion(id: "mira-9", name: "Mira", role: "Designer", tint: .purple)
         static let otto = Companion(id: "otto-5", name: "Otto", role: "Digest")
@@ -174,10 +175,10 @@
                 members: [mira, pico], createdAt: 0, icon: "PanelLeft"),
             .init(
                 id: "group-relay-audit", title: "Relay audit: session tokens",
-                members: [pico, juniper, otto], createdAt: 0, icon: "ShieldKey", color: "red"),
+                members: [pico, juniper, otto], createdAt: 0, icon: "ShieldKey", color: .red),
             .init(
                 id: "group-onboarding", title: "Onboarding copy pass", members: [mira],
-                createdAt: 0, icon: "Pen", color: "purple"),
+                createdAt: 0, icon: "Pen", color: Hue(degrees: 320)),
             .init(
                 id: "group-unknown-device", title: "Unknown device on sign-in",
                 members: [atlas, juniper, pico, otto], createdAt: 0, icon: "Laptop"),
@@ -189,11 +190,11 @@
                 members: [shoto, juniper], createdAt: 0, icon: "Bug"),
             .init(
                 id: "group-prod-deploy", title: "Prod deploy failed on Render", members: [juniper],
-                createdAt: 0, icon: "Rocket", color: "orange"),
+                createdAt: 0, icon: "Rocket", color: .orange),
             .init(
                 id: "group-storybook", title: "Storybook baseline drift",
                 members: [shoto, juniper, atlas, pico, mira], createdAt: 0, icon: "BookOpen",
-                color: "green"),
+                color: .green),
             .init(
                 id: "group-apple", title: "Sign in with Apple on iOS",
                 members: [pico, atlas, juniper], createdAt: 0, icon: "Smartphone"),
@@ -242,14 +243,14 @@
             let own = ConversationSummary(
                 subject: .companion(happy), timeLabel: "10:12 PM",
                 preview: "Three tickets are ready for Ni.")
-            let groups = [nil, CompanionTint.red].flatMap { color in
+            let groups = [nil, Hue.red].flatMap { color in
                 [1, 2, 3, 5].map { count in
                     let participants = members.prefix(count).map {
                         GroupConversation.Participant(
                             botId: $0.id, name: $0.name, avatarBlot: $0.tint)
                     }
                     let group = GroupConversation(
-                        id: "close-up-\(color?.rawValue ?? "none")-\(count)",
+                        id: "close-up-\(color.map { "\($0.degrees)" } ?? "none")-\(count)",
                         title: "Relay audit: session tokens", createdAt: 0,
                         participants: participants, icon: .shieldKey, color: color)
                     return ConversationSummary(
@@ -730,7 +731,7 @@
             let createdAt: Int
             var pinPosition: Int?
             var icon: String?
-            var color: String?
+            var color: Hue?
 
             var conversation: GroupConversation {
                 try! JSONDecoder().decode(GroupConversation.self, from: Data(json.utf8))
@@ -754,14 +755,14 @@
 
             var json: String {
                 let participants = members.enumerated().map { index, companion in
-                    let tint = companion.tint.map { #""\#($0.rawValue)""# } ?? "null"
+                    let tint = companion.tint.map { "\($0.degrees)" } ?? "null"
                     let path = companion.picturePath.map { #""\#($0)""# } ?? "null"
                     let role = index == 0 ? "lead" : "assistant"
                     return
                         #"{"botId":"\#(companion.id)","role":"\#(role)","joinedAt":\#(index),"leftAt":null,"name":"\#(companion.name)","avatarBlot":\#(tint),"avatarImagePath":\#(path),"isDeleted":false}"#
                 }
                 let icon = icon.map { #""\#($0)""# } ?? "null"
-                let color = color.map { #""\#($0)""# } ?? "null"
+                let color = color.map { "\($0.degrees)" } ?? "null"
                 return
                     #"{"id":"\#(id)","spaceId":"\#(FixtureHost.spaceId)","sectionId":null,"pinPosition":\#(pinPosition.map(String.init) ?? "null"),"title":"\#(title)","instructions":"","icon":\#(icon),"color":\#(color),"createdAt":\#(createdAt),"updatedAt":\#(createdAt),"participants":[\#(participants.joined(separator: ","))]}"#
             }
@@ -816,7 +817,7 @@
         }()
 
         static func botJSON(_ companion: Companion, pinPosition: Int? = nil) -> String {
-            let tint = companion.tint.map { #""\#($0.rawValue)""# } ?? "null"
+            let tint = companion.tint.map { "\($0.degrees)" } ?? "null"
             let path = companion.picturePath.map { #""\#($0)""# } ?? "null"
             let pin = pinPosition.map(String.init) ?? "null"
             return

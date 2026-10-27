@@ -454,11 +454,11 @@ struct ThreadStoreTests {
         #expect(store.heading.avatar == .icon(.messageSquare, color: nil))
 
         release.icon = "ShieldKey"
-        release.color = "red"
+        release.color = Hue(degrees: 200)
         host.push(
             event: "conversation://updated",
             payload: #"{"spaceId":"s-1","conversation":\#(release.json)}"#)
-        await waitUntil { store.heading.avatar == .icon(.shieldKey, color: .red) }
+        await waitUntil { store.heading.avatar == .icon(.shieldKey, color: Hue(degrees: 200)) }
 
         #expect(store.heading.title == "Release crew")
         following.cancel()

@@ -46,14 +46,15 @@ struct CloudInvitationsTests {
         #expect(request.value(forHTTPHeaderField: "Authorization") == nil)
     }
 
-    static let colours: [(String, CompanionTint?)] = [
-        (#""colour":"pink","#, .pink), (#""colour":null,"#, nil), ("", nil),
-        (#""colour":"magenta","#, nil), (#""colour":7,"#, nil),
+    static let colours: [(String, Hue?)] = [
+        (#""colour":"pink","#, .pink), (#""colour":200,"#, Hue(degrees: 200)),
+        (#""colour":null,"#, nil), ("", nil), (#""colour":"magenta","#, nil),
+        (#""colour":360,"#, nil),
     ]
 
     @Test(arguments: colours)
     func theListReadsTheInvitedSpacesColourAndNothingElseForAnUnknownOne(
-        written: String, colour: CompanionTint?
+        written: String, colour: Hue?
     ) async throws {
         let (invitations, _) = cloud([
             InvitationsFixture.listPath: .status(
@@ -73,7 +74,7 @@ struct CloudInvitationsTests {
 
     @Test(arguments: colours)
     func aValidStateReadsTheInvitedSpacesColourAndNothingElseForAnUnknownOne(
-        written: String, colour: CompanionTint?
+        written: String, colour: Hue?
     ) async throws {
         let (invitations, _) = cloud([
             InvitationsFixture.statePath: .status(

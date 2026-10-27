@@ -1,28 +1,21 @@
 import SwiftUI
 
 enum ConversationColor: Hashable, Sendable {
-    case cell(CompanionTint?)
-    case glyph(CompanionTint?)
+    case cell(Hue?)
+    case glyph(Hue?)
     case pileCounter
     case pileCounterGlyph
-
-    static var allCases: [ConversationColor] {
-        let tints = [nil] + CompanionTint.allCases.map(Optional.some)
-        return tints.map(cell) + tints.map(glyph) + [pileCounter, pileCounterGlyph]
-    }
-
-    var name: String {
-        switch self {
-        case .cell(let tint): tint.map { "conversation-cell-\($0.rawValue)" } ?? "conversation-cell"
-        case .glyph(let tint): ConversationColor.cell(tint).name + "-glyph"
-        case .pileCounter: "conversation-pile-counter"
-        case .pileCounterGlyph: "conversation-pile-counter-glyph"
-        }
-    }
 }
 
 extension Color {
     static func conversation(_ color: ConversationColor) -> Color {
-        Color(color.name)
+        switch color {
+        case .cell(let hue?): Color(uiColor: .hue(hue, .conversationIcon))
+        case .glyph(let hue?): Color(uiColor: .hue(hue, .conversationIconForeground))
+        case .cell(nil): Color("conversation-cell")
+        case .glyph(nil): Color("conversation-cell-glyph")
+        case .pileCounter: Color("conversation-pile-counter")
+        case .pileCounterGlyph: Color("conversation-pile-counter-glyph")
+        }
     }
 }

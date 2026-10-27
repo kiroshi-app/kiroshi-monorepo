@@ -65,7 +65,7 @@ final class CompanionAvatarEngine {
     }
 
     func drawing(
-        name: String, tint: CompanionTint?, pose: CompanionPose, time: Double,
+        name: String, tint: Hue?, pose: CompanionPose, time: Double,
         theme: CompanionTheme
     ) throws -> CompanionDrawing {
         let key = IdleKey(name: name, tint: tint, theme: theme)
@@ -77,13 +77,13 @@ final class CompanionAvatarEngine {
     }
 
     func json(
-        name: String, tint: CompanionTint?, pose: CompanionPose, time: Double,
+        name: String, tint: Hue?, pose: CompanionPose, time: Double,
         theme: CompanionTheme
     ) throws -> String {
         var input: [String: Any] = [
             "name": name, "state": pose.rawValue, "time": time, "theme": theme.rawValue,
         ]
-        input["tint"] = tint?.rawValue
+        input["hue"] = tint?.degrees
         return try json(input)
     }
 
@@ -106,7 +106,7 @@ final class CompanionAvatarEngine {
 
     private struct IdleKey: Hashable {
         let name: String
-        let tint: CompanionTint?
+        let tint: Hue?
         let theme: CompanionTheme
     }
 }
