@@ -218,6 +218,152 @@
     };
   };
 
+  // packages/ui/src/components/hue-recipe.ts
+  var LIGHTNESS_STEP = 0.0025;
+  var LIGHTNESS_RESOLUTION = 1e4;
+  var CHROMA_SEARCH_STEPS = 24;
+  var GAMUT_TOLERANCE = 0.000001;
+  var normaliseHue = (hue) => (hue % 360 + 360) % 360;
+  var hueDistance = (from, to) => Math.abs((from - to + 540) % 360 - 180);
+  var linearSrgbOf = (lightness, chroma, hue) => {
+    const radians = hue * Math.PI / 180;
+    const a = chroma * Math.cos(radians);
+    const b = chroma * Math.sin(radians);
+    const l = (lightness + 0.3963377774 * a + 0.2158037573 * b) ** 3;
+    const m = (lightness - 0.1055613458 * a - 0.0638541728 * b) ** 3;
+    const s = (lightness - 0.0894841775 * a - 1.291485548 * b) ** 3;
+    return [
+      4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+      -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+      -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s
+    ];
+  };
+  var isInSrgb = (lightness, chroma, hue) => linearSrgbOf(lightness, chroma, hue).every((channel) => channel >= -GAMUT_TOLERANCE && channel <= 1 + GAMUT_TOLERANCE);
+  var gamutChroma = (lightness, chroma, hue) => {
+    if (isInSrgb(lightness, chroma, hue))
+      return chroma;
+    let inside = 0;
+    let outside = chroma;
+    for (let step = 0;step < CHROMA_SEARCH_STEPS; step++) {
+      const middle = (inside + outside) / 2;
+      if (isInSrgb(lightness, middle, hue))
+        inside = middle;
+      else
+        outside = middle;
+    }
+    return inside;
+  };
+  var gammaOf = (linear) => {
+    const clamped = Math.min(1, Math.max(0, linear));
+    return clamped <= 0.0031308 ? clamped * 12.92 : 1.055 * clamped ** (1 / 2.4) - 0.055;
+  };
+  var hexOf = (lightness, chroma, hue) => `#${linearSrgbOf(lightness, chroma, hue).map((linear) => Math.round(gammaOf(linear) * 255).toString(16).padStart(2, "0")).join("")}`;
+  var linearOfByte = (byte) => {
+    const encoded = byte / 255;
+    return encoded <= 0.04045 ? encoded / 12.92 : ((encoded + 0.055) / 1.055) ** 2.4;
+  };
+  var relativeLuminance = (hex) => {
+    const [red, green, blue] = [1, 3, 5].map((offset) => linearOfByte(Number.parseInt(hex.slice(offset, offset + 2), 16)));
+    return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+  };
+  var contrastRatio = (first, second) => {
+    const [lighter, darker] = [
+      relativeLuminance(first),
+      relativeLuminance(second)
+    ].sort((a, b) => b - a);
+    return (lighter + 0.05) / (darker + 0.05);
+  };
+  var yellowWeight = (hue, { centre, radius }) => {
+    const distance = hueDistance(hue, centre);
+    return distance < radius ? Math.cos(Math.PI / 2 * distance / radius) ** 2 : 0;
+  };
+  var correctedTone = (spec, hue, band) => {
+    const { lightness, chroma, yellow } = spec;
+    if (!yellow)
+      return { lightness, chroma, hue };
+    const weight = yellowWeight(hue, band);
+    const blend = (from, to) => from + (to - from) * weight;
+    return {
+      lightness: blend(lightness, yellow.lightness),
+      chroma: blend(chroma, yellow.chroma),
+      hue: normaliseHue(blend(hue, hue + yellow.hue - band.centre))
+    };
+  };
+  var roundLightness = (lightness) => Math.round(lightness * LIGHTNESS_RESOLUTION) / LIGHTNESS_RESOLUTION;
+  var toneOf = (spec, hue, band) => {
+    const corrected = correctedTone(spec, normaliseHue(hue), band);
+    const toneAt = (lightness) => {
+      const chroma = gamutChroma(lightness, corrected.chroma, corrected.hue);
+      return {
+        lightness,
+        chroma,
+        hue: corrected.hue,
+        hex: hexOf(lightness, chroma, corrected.hue)
+      };
+    };
+    let tone = toneAt(roundLightness(corrected.lightness));
+    if (!spec.contrast)
+      return tone;
+    const { with: against, ratio } = spec.contrast;
+    const direction = relativeLuminance(against) > relativeLuminance(tone.hex) ? -1 : 1;
+    while (contrastRatio(tone.hex, against) < ratio && tone.lightness > 0 && tone.lightness < 1)
+      tone = toneAt(roundLightness(tone.lightness + direction * LIGHTNESS_STEP));
+    return tone;
+  };
+
+  // packages/ui/src/components/hue-tones.ts
+  var YELLOW_BAND = { centre: 82, radius: 20 };
+  var HUE_TONES = {
+    light: {
+      bubble: {
+        lightness: 0.87,
+        chroma: 0.075,
+        contrast: { with: "#020202", ratio: 7 }
+      },
+      accent: {
+        lightness: 0.5,
+        chroma: 0.13,
+        contrast: { with: "#ffffff", ratio: 4.5 },
+        yellow: { hue: 75, lightness: 0.54, chroma: 0.115 }
+      },
+      "new-line": { lightness: 0.8, chroma: 0.06 },
+      "avatar-ink": { lightness: 0.56, chroma: 0.13 },
+      "avatar-ground": { lightness: 0.93, chroma: 0.035 },
+      "conversation-icon": { lightness: 0.92, chroma: 0.033 },
+      "conversation-icon-foreground": { lightness: 0.45, chroma: 0.054 }
+    },
+    dark: {
+      bubble: {
+        lightness: 0.45,
+        chroma: 0.1,
+        contrast: { with: "#f5f5f5", ratio: 7.2 }
+      },
+      accent: {
+        lightness: 0.78,
+        chroma: 0.12,
+        contrast: { with: "#121213", ratio: 4.5 }
+      },
+      "new-line": { lightness: 0.4, chroma: 0.06 },
+      "avatar-ink": { lightness: 0.8, chroma: 0.12 },
+      "avatar-ground": { lightness: 0.3, chroma: 0.04 },
+      "conversation-icon": { lightness: 0.385, chroma: 0.033 },
+      "conversation-icon-foreground": { lightness: 0.8, chroma: 0.054 }
+    }
+  };
+
+  // packages/ui/src/components/hue-palette.ts
+  var HUE_ROLES = Object.keys(HUE_TONES.light);
+  var tones = new Map;
+  var hueTone = (hue, theme, role) => {
+    const key = `${hue} ${theme} ${role}`;
+    const cached = tones.get(key);
+    if (cached)
+      return cached;
+    const tone = toneOf(HUE_TONES[theme][role], hue, YELLOW_BAND);
+    tones.set(key, tone);
+    return tone;
+  };
+
   // packages/ui/src/components/companion-avatar.ts
   var FIELD_CELLS = 16;
   var LATTICE = 5;
@@ -231,35 +377,21 @@
   var STATE_HOLD = 0.6;
   var HUE_SALT = 1374496523;
   var HUE_JITTER = 12;
-  var FIELD_CHROMA = 0.16;
   var CELL_SHARE = 0.9;
   var TONES = [0, 0.5, 1];
   var TONE_OPACITIES = [
     { tone: 0.5, opacity: 0.45 },
     { tone: 1, opacity: 1 }
   ];
-  var RADIANS_PER_DEGREE = Math.PI / 180;
   var CHANNEL_RESOLUTION = 1e6;
-  var BLOT_COLOURS = {
-    red: "#f4a98c",
-    yellow: "#f2c879",
-    green: "#afc99b",
-    cyan: "#92c9c2",
-    blue: "#a0bee8",
-    purple: "#bcafe3",
-    pink: "#f0a9c0",
-    orange: "#f2b57e"
-  };
   var THEME_COLOURS = {
     light: {
       untinted: "#1d3ccd",
-      fieldLightness: 0.5,
       groundStrength: 0.25,
       secondary: "#f2f2f2"
     },
     dark: {
       untinted: "#75acff",
-      fieldLightness: 0.8,
       groundStrength: 0.35,
       secondary: "#262626"
     }
@@ -355,27 +487,20 @@
       blue: gamma(-0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s)
     };
   };
-  var cellColourOf = (name, theme, tint) => {
-    if (!tint)
-      return srgbOfHex(THEME_COLOURS[theme].untinted);
-    const { a, b } = oklabOf(srgbOfHex(BLOT_COLOURS[tint]));
-    const hue = Math.atan2(b, a) + hueShift(name) * RADIANS_PER_DEGREE;
-    return srgbOf({
-      lightness: THEME_COLOURS[theme].fieldLightness,
-      a: FIELD_CHROMA * Math.cos(hue),
-      b: FIELD_CHROMA * Math.sin(hue)
-    });
-  };
-  var groundColourOf = (theme, tint) => {
+  var companionHue = (name, hue) => hue + hueShift(name);
+  var cellColourOf = (name, theme, hue) => hue === undefined ? srgbOfHex(THEME_COLOURS[theme].untinted) : srgbOfHex(hueTone(companionHue(name, hue), theme, "avatar-ink").hex);
+  var groundColourOf = (name, theme, hue) => {
+    if (hue !== undefined)
+      return srgbOfHex(hueTone(companionHue(name, hue), theme, "avatar-ground").hex);
     const { untinted, groundStrength, secondary } = THEME_COLOURS[theme];
-    const field = oklabOf(srgbOfHex(tint ? BLOT_COLOURS[tint] : untinted));
+    const field = oklabOf(srgbOfHex(untinted));
     const surface = oklabOf(srgbOfHex(secondary));
     const mix = (key) => field[key] * groundStrength + surface[key] * (1 - groundStrength);
     return srgbOf({ lightness: mix("lightness"), a: mix("a"), b: mix("b") });
   };
   var companionAvatar = ({
     name,
-    tint,
+    hue,
     state,
     time,
     theme
@@ -386,8 +511,8 @@
       tones: fieldTones(field, state, time),
       toneOpacities: TONE_OPACITIES,
       cellCorners: CELL_CORNERS,
-      cellColour: cellColourOf(name, theme, tint),
-      groundColour: groundColourOf(theme, tint),
+      cellColour: cellColourOf(name, theme, hue),
+      groundColour: groundColourOf(name, theme, hue),
       outline: COMPANION_OUTLINE
     };
   };
