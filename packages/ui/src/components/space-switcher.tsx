@@ -96,8 +96,16 @@ const DOT_UNTINTED = "bg-sidebar-foreground/30"
 
 const BADGE_RANK: BotBadge[] = ["attention", "failed", "done"]
 
-const strongestBadge = (badges: (BotBadge | undefined)[]) =>
-	BADGE_RANK.find((badge) => badges.includes(badge))
+const badgeElsewhere = (
+	spaces: Space[],
+	currentSpaceId: string | undefined,
+	badgesBySpaceId: Record<string, BotBadge> = {},
+) => {
+	const badges = spaces
+		.filter((space) => space.id !== currentSpaceId)
+		.map((space) => badgesBySpaceId[space.id])
+	return BADGE_RANK.find((badge) => badges.includes(badge))
+}
 
 const placedOrder = (spaces: Space[], id: string, at: number) => {
 	const order = spaces
@@ -258,11 +266,7 @@ const SpaceSwitcher = ({
 
 	const elsewhere = isInvited
 		? undefined
-		: strongestBadge(
-				spaces
-					.filter((space) => space.id !== selected.id)
-					.map((space) => badgesBySpaceId?.[space.id]),
-			)
+		: badgeElsewhere(spaces, selected.id, badgesBySpaceId)
 
 	return (
 		<>
@@ -436,4 +440,10 @@ const SpaceDots = ({
 	)
 }
 
-export { SpaceDots, SpaceMenuRows, SpaceSwitcher, type SpaceSwitcherProps }
+export {
+	badgeElsewhere,
+	SpaceDots,
+	SpaceMenuRows,
+	SpaceSwitcher,
+	type SpaceSwitcherProps,
+}

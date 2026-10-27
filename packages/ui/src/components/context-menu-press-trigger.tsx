@@ -10,17 +10,20 @@ import {
 
 import { ContextMenuTrigger } from "@workspace/ui/components/ui/context-menu"
 
+type PressEdge = "start" | "end"
+
 interface ContextMenuPressTriggerProps {
 	render: ReactElement<HTMLAttributes<HTMLElement>>
 	ref?: Ref<HTMLElement>
+	edge?: PressEdge
 }
 
-export const openBelow = (trigger: HTMLElement) => {
-	const { left, bottom } = trigger.getBoundingClientRect()
+export const openBelow = (trigger: HTMLElement, edge: PressEdge = "start") => {
+	const { left, right, bottom } = trigger.getBoundingClientRect()
 	trigger.dispatchEvent(
 		new MouseEvent("contextmenu", {
 			bubbles: true,
-			clientX: left,
+			clientX: Math.round(edge === "end" ? right : left),
 			clientY: bottom,
 		}),
 	)
@@ -29,11 +32,12 @@ export const openBelow = (trigger: HTMLElement) => {
 export const ContextMenuPressTrigger = ({
 	render,
 	ref,
+	edge,
 }: ContextMenuPressTriggerProps) => (
 	<ContextMenuTrigger
 		aria-haspopup="menu"
 		ref={ref as Ref<HTMLDivElement>}
-		onClick={(event) => openBelow(event.currentTarget)}
+		onClick={(event) => openBelow(event.currentTarget, edge)}
 		render={(props, state) =>
 			cloneElement(
 				render,
