@@ -30,6 +30,7 @@ pub use page::{
 };
 #[cfg(test)]
 pub(crate) use prompts::a_pending_prompt;
+pub(in crate::db) use prompts::release_every_prompt;
 pub use prompts::{Activity, PendingPrompt, PromptKind, StoredPrompt, WaitingPrompt};
 
 use bots::{

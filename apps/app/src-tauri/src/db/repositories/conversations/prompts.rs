@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use rusqlite::types::Type;
+use rusqlite::types::{Type, Value};
 use rusqlite::{params, params_from_iter, Connection, Row};
 
 use super::{ConversationError, ConversationsRepository};
@@ -76,6 +76,9 @@ const RELEASE_PROMPTS_OF_SESSION: &str =
 
 const RELEASE_EVERY_PROMPT: &str = "DELETE FROM pending_prompts";
 
+const RELEASE_ORPHAN_PROMPTS: &str = "DELETE FROM pending_prompts
+	WHERE conversation_id = ?1 AND asked_at < ?2 AND runtime_session_id NOT IN";
+
 pub(super) const HAS_OPEN_TURN: &str = "EXISTS (SELECT 1 FROM turns AS open_turn
 	WHERE open_turn.conversation_id = conversations.id AND open_turn.completed_at IS NULL)";
 
@@ -145,11 +148,32 @@ impl ConversationsRepository {
 	pub async fn release_every_prompt(&self) -> Result<(), ConversationError> {
 		Ok(self
 			.call(|connection| {
-				connection.prepare_cached(RELEASE_EVERY_PROMPT)?.execute([])?;
+				release_every_prompt(connection)?;
 				Ok(())
 			})
 			.await
 			.at("release_every_prompt", "pending_prompts")?)
+	}
+
+	pub async fn release_orphan_prompts(
+		&self,
+		conversation_id: String,
+		live_sessions: Vec<String>,
+		asked_before: i64,
+	) -> Result<(), ConversationError> {
+		Ok(self
+			.call(move |connection| {
+				let slots: Vec<String> =
+					(3..live_sessions.len() + 3).map(|slot| format!("?{slot}")).collect();
+				let mut bound = vec![Value::Text(conversation_id), Value::Integer(asked_before)];
+				bound.extend(live_sessions.into_iter().map(Value::Text));
+				connection
+					.prepare(&format!("{RELEASE_ORPHAN_PROMPTS} ({})", slots.join(", ")))?
+					.execute(params_from_iter(bound))?;
+				Ok(())
+			})
+			.await
+			.at("release_orphan_prompts", "pending_prompts")?)
 	}
 
 	pub async fn activity_of(&self, ids: Vec<String>) -> Result<Vec<Activity>, ConversationError> {
@@ -158,6 +182,10 @@ impl ConversationsRepository {
 			.await
 			.at("activity_of", "pending_prompts")?)
 	}
+}
+
+pub(in crate::db) fn release_every_prompt(connection: &Connection) -> rusqlite::Result<usize> {
+	connection.prepare_cached(RELEASE_EVERY_PROMPT)?.execute([])
 }
 
 fn activities(connection: &Connection, ids: &[String]) -> Result<Vec<Activity>, DatabaseError> {

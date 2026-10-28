@@ -545,7 +545,7 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn a_relaunched_host_reports_a_persisted_prompt_on_its_first_list_read() {
+	async fn a_relaunched_host_reports_idle_for_a_prompt_its_dead_session_left() {
 		let before = a_host("before-relaunch").await;
 		ask(&before, PromptKind::Permission).await;
 		let file = before.path().app_data_dir().expect("the data folder resolves");
@@ -553,7 +553,25 @@ mod tests {
 		let after = an_app_of_its_own("conversation-state-after-relaunch", mock_builder());
 		after.manage(Ok::<_, db::DatabaseError>(db::open(&file)));
 
-		assert_eq!(listed_state(&after).await, Ok(ConversationState::NeedsYou));
+		assert_eq!(listed_state(&after).await, Ok(ConversationState::Idle));
+	}
+
+	#[tokio::test]
+	async fn a_question_asked_after_a_crash_needs_you_until_it_is_answered() {
+		let crashed = a_host("before-crash").await;
+		ask(&crashed, PromptKind::Question).await;
+		let file = crashed.path().app_data_dir().expect("the data folder resolves");
+		let relaunched = an_app_of_its_own("conversation-state-after-crash", mock_builder());
+		relaunched.manage(Ok::<_, db::DatabaseError>(db::open(&file)));
+		assert_eq!(listed_state(&relaunched).await, Ok(ConversationState::Idle));
+
+		ask(&relaunched, PromptKind::Question).await;
+		let open = listed_state(&relaunched).await;
+		answer(&relaunched).await;
+		let answered = listed_state(&relaunched).await;
+
+		assert_eq!(open, Ok(ConversationState::NeedsYou));
+		assert_eq!(answered, Ok(ConversationState::Idle));
 	}
 
 	#[tokio::test]
