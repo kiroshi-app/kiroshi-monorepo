@@ -102,6 +102,7 @@ export const useWorkspaceDrivers = (
 	const badges = useBotBadges({
 		chat: chat.controller,
 		roster: roster.controller,
+		isDriverWindow,
 	})
 
 	const missionMarks = useMissionMarks(spaces.state.selectedSpaceId)
@@ -110,6 +111,7 @@ export const useWorkspaceDrivers = (
 		runtimes: conversationRuntimes,
 		roster: roster.controller,
 		spokenWords,
+		isDriverWindow,
 	})
 
 	return {
