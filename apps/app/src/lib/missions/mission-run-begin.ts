@@ -5,6 +5,15 @@ import { type MissionRunCall, missionRunPromptFor } from "./mission-run-prompt"
 
 export const RUN_DEADLINE_MS = 30 * 60_000
 
+const failedStart = (thrown: unknown) =>
+	new Error("the mission run could not start", { cause: thrown })
+
+const logAlreadyRunning = (missionId: string) => {
+	console.info(
+		`mission run driver: another window runs the mission | mission: ${missionId}`,
+	)
+}
+
 type MissionRunBeginOptions = Pick<
 	MissionRunDriverOptions,
 	"driver" | "store" | "missions"
@@ -48,15 +57,52 @@ export const createMissionRunBegin = ({
 		}
 	}
 
-	const begin = async (call: MissionRunCall) => {
-		const { id } = call.mission
+	const claimRun = async (missionId: string) => {
 		try {
-			const scope = await openScope(call)
-			book.live.set(id, {
-				call,
-				scope,
-				deadline: setTimeout(() => void book.expire(id), RUN_DEADLINE_MS),
+			return await missions.claimRun(missionId)
+		} catch (thrown) {
+			throw new Error("the mission run could not be claimed", {
+				cause: thrown,
 			})
+		}
+	}
+
+	const tokenOf = async (missionId: string) => {
+		const claim = await claimRun(missionId)
+
+		if (claim.kind === "claimed") {
+			return claim.token
+		}
+
+		logAlreadyRunning(missionId)
+		return null
+	}
+
+	const openClaimedScope = async (call: MissionRunCall, token: string) => {
+		try {
+			return await openScope(call)
+		} catch (thrown) {
+			void book.releaseClaim(call.mission.id, token)
+			throw failedStart(thrown)
+		}
+	}
+
+	const begin = async (call: MissionRunCall, token: string) => {
+		const { id } = call.mission
+		const scope = await openClaimedScope(call, token)
+		const held = {
+			call,
+			scope,
+			token,
+			deadline: setTimeout(() => void book.expire(id), RUN_DEADLINE_MS),
+		}
+		book.live.set(id, held)
+
+		if (book.isStopped()) {
+			return book.end(held)
+		}
+
+		try {
 			await driver.startOrResumeSession(
 				scope,
 				undefined,
@@ -65,16 +111,21 @@ export const createMissionRunBegin = ({
 			)
 			await driver.submitPrompt(scope, missionRunPromptFor(call))
 		} catch (thrown) {
-			const held = book.live.get(id)
-			if (held) {
+			if (book.live.get(id) === held) {
 				book.end(held)
 			}
-			throw new Error("the mission run could not start", { cause: thrown })
+			throw failedStart(thrown)
 		}
 	}
 
 	return async (call: MissionRunCall) => {
+		const token = await tokenOf(call.mission.id)
+
+		if (token === null) {
+			return
+		}
+
 		const rosterBlock = await rosterBlockOf(call)
-		await begin({ ...call, rosterBlock })
+		await begin({ ...call, rosterBlock }, token)
 	}
 }

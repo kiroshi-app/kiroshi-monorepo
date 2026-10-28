@@ -11,6 +11,7 @@ import { isSameRuntimeScope } from "../chat/chat-state"
 export type LiveMissionRun = {
 	call: MissionRunCall
 	scope: RuntimeScope
+	token: string
 	deadline: ReturnType<typeof setTimeout>
 }
 
@@ -45,6 +46,7 @@ export const createMissionRunBook = ({
 	const missionIdOfThread = new Map<string, string>()
 	const spaceIdOfMission = new Map<string, string>()
 	const holding = new Set<string>()
+	const releasing = new Set<string>()
 	const seqs = createMissionSeqs()
 	const failures = createMissionRunFailures(reportFailure)
 	let isStopped = false
@@ -59,14 +61,14 @@ export const createMissionRunBook = ({
 	}
 
 	const isBusy = (missionId: string) =>
-		holding.has(missionId) || live.has(missionId)
+		holding.has(missionId) || live.has(missionId) || releasing.has(missionId)
 
 	const shutdownSession = (scope: RuntimeScope) => {
 		void driver.shutdown(scope).catch(reporting("agent_shutdown"))
 	}
 
 	const takeAgain = (missionId: string) => {
-		if (live.has(missionId)) {
+		if (live.has(missionId) || releasing.has(missionId)) {
 			return
 		}
 
@@ -83,9 +85,16 @@ export const createMissionRunBook = ({
 		live.delete(held.call.mission.id)
 	}
 
+	const releaseClaim = async (missionId: string, token: string) => {
+		releasing.add(missionId)
+		await missions.releaseRun(token).catch(reporting("mission_run_release"))
+		releasing.delete(missionId)
+		takeAgain(missionId)
+	}
+
 	const forget = (held: LiveMissionRun) => {
 		release(held)
-		takeAgain(held.call.mission.id)
+		void releaseClaim(held.call.mission.id, held.token)
 	}
 
 	const end = (held: LiveMissionRun) => {
@@ -165,6 +174,7 @@ export const createMissionRunBook = ({
 		shutdownSession,
 		takeAgain,
 		release,
+		releaseClaim,
 		end,
 		refuse,
 		expire,

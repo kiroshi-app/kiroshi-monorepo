@@ -111,12 +111,15 @@ export const createMissionRunSettle = ({
 			book.seqs.remember(settled.id, settled.stateSeq)
 		}
 
-		book.holding.delete(id)
-		book.takeAgain(id)
 		return settled
 	}
 
-	return async (held: LiveMissionRun, ended: TurnEnded) => {
+	const letGo = ({ call, token }: LiveMissionRun) => {
+		book.holding.delete(call.mission.id)
+		void book.releaseClaim(call.mission.id, token)
+	}
+
+	const settleTurn = async (held: LiveMissionRun, ended: TurnEnded) => {
 		const missionId = held.call.mission.id
 		const settled = await endOn(held)
 
@@ -150,6 +153,14 @@ export const createMissionRunSettle = ({
 				error: thrown,
 				missionId,
 			})
+		}
+	}
+
+	return async (held: LiveMissionRun, ended: TurnEnded) => {
+		try {
+			await settleTurn(held, ended)
+		} finally {
+			letGo(held)
 		}
 	}
 }
