@@ -211,14 +211,14 @@ const CRASH: ChatError = {
 
 const NO_ERRORS: ChatError[] = []
 
-const CRASH_TITLE = "The agent stopped"
+const CRASH_TITLE = "Nyx stopped"
 
 const SPAWN_FAILURE: ChatError = {
 	id: "spawnFailed-1",
 	error: { kind: "spawnFailed", detail: "no binary" },
 }
 
-const SPAWN_TITLE = "Couldn’t reach the agent"
+const SPAWN_TITLE = "Couldn’t reach Nyx"
 
 const PINS_TITLE = "Couldn’t sync pinned messages"
 
@@ -1803,7 +1803,7 @@ describe("ThreadScreen", () => {
 
 		expect(
 			within(raisedNotice(CRASH_TITLE)).getByText(
-				`The agent exited (code 1): ${refusal}. Restart the session.`,
+				`Nyx exited (code 1): ${refusal}. Restart the session.`,
 			),
 		).toBeTruthy()
 
@@ -1827,7 +1827,7 @@ describe("ThreadScreen", () => {
 
 		expect(
 			within(raisedNotice(CRASH_TITLE)).getByText(
-				`The agent exited (code unknown): ${refusal}. Restart the session.`,
+				`Nyx exited (code unknown): ${refusal}. Restart the session.`,
 			),
 		).toBeTruthy()
 
@@ -1842,7 +1842,7 @@ describe("ThreadScreen", () => {
 
 		expect(
 			within(raisedNotice(CRASH_TITLE)).getByText(
-				"The agent exited (code 1). Restart the session.",
+				"Nyx exited (code 1). Restart the session.",
 			),
 		).toBeTruthy()
 	})
@@ -3339,7 +3339,7 @@ describe("ThreadScreen application left out of a session", () => {
 	it("keeps the notice of a session a conversation lost", async () => {
 		await conversationFailingWith(CRASHED_SESSION)
 
-		expect(raisedNotices(CRASH_TITLE)).toHaveLength(1)
+		expect(raisedNotices("Ada stopped")).toHaveLength(1)
 	})
 })
 

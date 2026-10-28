@@ -88,7 +88,8 @@ it("fades the notice of a refused resume away on its own", () => {
 	expect(transientNotice).toHaveBeenCalledWith({
 		type: "warning",
 		title: i18n.t("chat:screen.notice.resumeFailed"),
-		description: i18n.t("chat:screen.transport.resumeFailed"),
+		description:
+			"Atlas started a new session. Keep going, your messages are still here.",
 	})
 })
 
@@ -124,7 +125,7 @@ it("keeps the sticky notice of every other failure", async () => {
 	await vi.waitFor(() =>
 		expect(failureNotice).toHaveBeenCalledWith(
 			expect.objectContaining({
-				title: i18n.t("chat:screen.notice.crashed"),
+				title: i18n.t("chat:screen.notice.crashedNamed", { name: "Atlas" }),
 			}),
 		),
 	)
@@ -136,6 +137,14 @@ it("titles the notice of a failed Stop with the companion it names", async () =>
 
 	expect(await raisedNotice()).toMatchObject({
 		title: i18n.t("chat:screen.notice.stopFailedNamed", { name: "Atlas" }),
+	})
+})
+
+it("titles the notice of a failed Stop without a name when the companion's name is blank", async () => {
+	mountOn(failedStop, vi.fn(), { ...THREAD_CONTEXT, botName: "  " })
+
+	expect(await raisedNotice()).toMatchObject({
+		title: i18n.t("chat:screen.notice.stopFailed"),
 	})
 })
 
@@ -161,11 +170,33 @@ it("keeps the description and action of the failure a Stop ran into", async () =
 	expect(stop.action).toEqual(plain.action)
 })
 
-it("keeps the title of a failure that is not a Stop, with or without a companion", async () => {
+it("names the agent that crashed, in the title and the description", async () => {
 	mountOn({ ...crashed, botId: THREAD_CONTEXT.botId })
+
+	expect(await raisedNotice()).toMatchObject({
+		title: "Atlas stopped",
+		description: "Atlas exited (code unknown). Restart the session.",
+	})
+})
+
+it("keeps the crash copy unnamed when the agent's name is blank", async () => {
+	mountOn(crashed, vi.fn(), { ...THREAD_CONTEXT, botName: "  " })
+
 	expect(await raisedNotice()).toMatchObject({
 		title: i18n.t("chat:screen.notice.crashed"),
+		description: i18n.t("chat:screen.transport.crashedUnknownCode"),
 	})
+})
+
+it("keeps the crash code and detail beside the agent's name", async () => {
+	mountOn({
+		id: "error-exited",
+		error: { kind: "crashed", code: 137, detail: "out of memory" },
+	})
+
+	expect((await raisedNotice()).description).toBe(
+		"Atlas exited (code 137): out of memory. Restart the session.",
+	)
 })
 
 const UNREACHED: TransportError = {
@@ -233,12 +264,54 @@ it("names the companion whose group run failed before its question was answered"
 	expect(notice.title).not.toBe(i18n.t("chat:screen.notice.unavailable"))
 })
 
-it("keeps the title of a failed run that held no question", async () => {
+it("names the unreachable agent of a failed run that held no question", async () => {
 	mountOn(chatErrorOf(UNREACHED, 0))
 
 	expect(await raisedNotice()).toMatchObject({
-		title: i18n.t("chat:screen.notice.unavailable"),
+		title: "Couldn’t reach Atlas",
+		description: "Couldn’t start Atlas (no agent binary). Restart the session.",
 	})
+})
+
+it("keeps the unreachable copy unnamed when the agent's name is empty", async () => {
+	mountOn(chatErrorOf(UNREACHED, 0), vi.fn(), {
+		...THREAD_CONTEXT,
+		botName: "",
+	})
+
+	expect(await raisedNotice()).toMatchObject({
+		title: i18n.t("chat:screen.notice.unavailable"),
+		description: i18n.t("chat:screen.transport.spawnFailed", {
+			detail: "no agent binary",
+		}),
+	})
+})
+
+const REJECTED_SETTINGS = chatErrorOf(
+	{ kind: "settingsRejected", detail: "settings.json is not valid JSON" },
+	0,
+)
+
+it("names the agent whose settings were rejected", async () => {
+	mountOn(REJECTED_SETTINGS)
+
+	expect((await raisedNotice()).title).toBe("Couldn’t apply Atlas’s settings")
+})
+
+it("keeps the settings-rejected title unnamed when the agent's name is blank", async () => {
+	mountOn(REJECTED_SETTINGS, vi.fn(), { ...THREAD_CONTEXT, botName: "  " })
+
+	expect((await raisedNotice()).title).toBe(
+		i18n.t("chat:screen.notice.settingsRejected"),
+	)
+})
+
+it("keeps a transport description without a named twin unnamed", async () => {
+	mountOn(chatErrorOf({ kind: "writeFailed", detail: "pipe closed" }, 0))
+
+	expect((await raisedNotice()).description).toBe(
+		i18n.t("chat:screen.transport.writeFailed", { detail: "pipe closed" }),
+	)
 })
 
 it("keeps the title of a failed question run when the companion is unknown", async () => {

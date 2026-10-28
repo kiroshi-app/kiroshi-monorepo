@@ -11,10 +11,14 @@ import {
 import { createElement } from "react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import "@workspace/ui/lib/i18n"
+import { i18n } from "@workspace/ui/lib/i18n"
 
-import { QuestionPrompt } from "@/components/thread-prompt"
-import type { QuestionRequest, QuestionSubject } from "@/lib/agent/contract"
+import { ApprovalPrompt, QuestionPrompt } from "@/components/thread-prompt"
+import type {
+	PermissionRequest,
+	QuestionRequest,
+	QuestionSubject,
+} from "@/lib/agent/contract"
 import type { Application } from "@/lib/applications/application-port"
 import { createFakeApplicationPort } from "@/lib/applications/fake-application-port"
 import { ConversationApplicationsContext } from "@/lib/applications/use-conversation-installs"
@@ -178,5 +182,43 @@ describe("QuestionPrompt", () => {
 
 		expect(event.defaultPrevented).toBe(false)
 		expect(screen.queryAllByRole("radio")).toEqual([])
+	})
+})
+
+const READ_REQUEST: PermissionRequest = {
+	id: "permission-1",
+	toolName: "Read",
+	title: "Read a file",
+	detail: "/tmp/notes.md",
+}
+
+const renderApproval = (agentName?: string) =>
+	render(
+		createElement(ApprovalPrompt, {
+			agentName,
+			request: READ_REQUEST,
+			responder: RESPONDER,
+		}),
+	)
+
+describe("ApprovalPrompt", () => {
+	it("names the agent asking for approval", () => {
+		renderApproval("Ni")
+
+		expect(
+			screen.getByText("Ni needs your approval to run this tool."),
+		).toBeTruthy()
+	})
+
+	it.each([
+		["without a name", undefined],
+		["with an empty name", ""],
+		["with a blank name", "   "],
+	])("keeps the unnamed description for an agent %s", (_, agentName) => {
+		renderApproval(agentName)
+
+		expect(
+			screen.getByText(i18n.t("chat:screen.approval.description")),
+		).toBeTruthy()
 	})
 })

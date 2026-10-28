@@ -10,6 +10,7 @@ import type { MessageAuthorship } from "./thread-authorship"
 import { type WorkingState, workingFor } from "./working-kind"
 
 import type { ConnectionState, TransportError } from "../agent/contract"
+import { agentNameOf } from "../agent/messages"
 import type { MessageReference } from "../conversations/store-contract"
 import type {
 	TranscriptCompletion,
@@ -327,18 +328,27 @@ export function needsFreshSession(error: TransportError): boolean {
 	return SESSION_ENDING[error.kind]
 }
 
-export function noticeTitleFor(t: ChatCopy, error: TransportError): string {
+export function noticeTitleFor(
+	t: ChatCopy,
+	error: TransportError,
+	agentName?: string,
+): string {
+	const name = agentNameOf(agentName)
 	if (isSignedOut(error)) {
 		return t("screen.notice.notAuthenticated")
 	}
 	if (error.kind === "crashed") {
-		return t("screen.notice.crashed")
+		return name
+			? t("screen.notice.crashedNamed", { name })
+			: t("screen.notice.crashed")
 	}
 	if (error.kind === "resumeFailed") {
 		return t("screen.notice.resumeFailed")
 	}
 	if (error.kind === "settingsRejected") {
-		return t("screen.notice.settingsRejected")
+		return name
+			? t("screen.notice.settingsRejectedNamed", { name })
+			: t("screen.notice.settingsRejected")
 	}
 	if (error.kind === "serverEnvRejected") {
 		return t("screen.notice.serverEnvRejected")
@@ -347,7 +357,9 @@ export function noticeTitleFor(t: ChatCopy, error: TransportError): string {
 		return t("screen.notice.readFailed")
 	}
 	if (needsFreshSession(error)) {
-		return t("screen.notice.unavailable")
+		return name
+			? t("screen.notice.unavailableNamed", { name })
+			: t("screen.notice.unavailable")
 	}
 	return t("screen.notice.failed")
 }
