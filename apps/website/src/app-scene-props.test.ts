@@ -6,6 +6,7 @@ import ts from "typescript"
 import { beforeAll, describe, expect, it } from "vitest"
 
 import type { AppRailDots } from "@workspace/ui/components/app-rail"
+import type { AppSidebarRowMission } from "@workspace/ui/components/app-sidebar"
 import type { BotBadge } from "@workspace/ui/components/bot-badge"
 
 import { SCENE_SPACES, type SceneSpace, spaceOf } from "./scene-cast"
@@ -18,6 +19,7 @@ const WORKSPACE_SHELL_CALL = "apps/app/src/components/conversations-screen.tsx"
 const SETTINGS_TITLE_BAR_CALL = "apps/app/src/components/workspace-settings.tsx"
 const SCENE = "apps/website/src/app-scene.tsx"
 const SIDEBAR_BADGES = "apps/app/src/lib/chat/sidebar-badges.ts"
+const MISSIONS_MODEL = "apps/app/src/lib/missions/missions-model.ts"
 
 const LEFT_OUT_OF_THE_SIDEBAR: Record<string, string> = {
 	"data-tauri-drag-region": "a web page holds no Tauri window to drag",
@@ -205,15 +207,32 @@ type RailSources = {
 	spaceId: string | null
 }
 
+type MissionCarriersBySpaceId = Record<
+	string,
+	{ missions?: AppSidebarRowMission[] }[]
+>
+
 type SidebarBadgeRule = {
 	toSpaceBadges: (
 		...groups: BadgeCarriersBySpaceId[]
 	) => Record<string, BotBadge>
 	toRailSignals: (sources: RailSources) => AppRailDots
+	missionRingBadges: (
+		rowsBySpaceId: MissionCarriersBySpaceId,
+	) => BadgeCarriersBySpaceId
 }
 
-const loadSidebarBadgeRule = (): Promise<SidebarBadgeRule> =>
-	import(resolve(REPOSITORY, SIDEBAR_BADGES))
+const loadSidebarBadgeRule = async (): Promise<SidebarBadgeRule> => {
+	const [sidebarBadges, missionsModel] = await Promise.all([
+		import(resolve(REPOSITORY, SIDEBAR_BADGES)),
+		import(resolve(REPOSITORY, MISSIONS_MODEL)),
+	])
+	return {
+		toSpaceBadges: sidebarBadges.toSpaceBadges,
+		toRailSignals: sidebarBadges.toRailSignals,
+		missionRingBadges: missionsModel.missionRingBadges,
+	}
+}
 
 const bySpaceId = <Row>(
 	spaces: SceneSpace[],
@@ -229,25 +248,41 @@ const appRailOf = (
 	rule: SidebarBadgeRule,
 	spaces: SceneSpace[],
 	selected: SceneSpace,
-) => ({
-	badgesBySpaceId: rule.toSpaceBadges(
-		bySpaceId(spaces, (space) => space.rows),
-		bySpaceId(spaces, (space) => space.conversations),
-	),
-	hostBySpaceId: nobodyJoinedOrShared,
-	railDots: rule.toRailSignals({
-		conversationsBySpaceId: bySpaceId(spaces, (space) => space.conversations),
-		waitingMissionCount: waitingMissionCountOf(selected),
-		spaceId: selected.id,
-	}),
-	space: {
-		id: selected.id,
-		name: selected.name,
-		colour: selected.colour,
-		avatarSeed: selected.avatarSeed,
-	},
-	spaceHost: undefined,
-})
+) => {
+	const rowsBySpaceId = bySpaceId(spaces, (space) => space.rows)
+	const conversationsBySpaceId = bySpaceId(
+		spaces,
+		(space) => space.conversations,
+	)
+	return {
+		badgesBySpaceId: rule.toSpaceBadges(
+			rowsBySpaceId,
+			conversationsBySpaceId,
+			rule.missionRingBadges(rowsBySpaceId),
+			rule.missionRingBadges(conversationsBySpaceId),
+		),
+		hostBySpaceId: nobodyJoinedOrShared,
+		railDots: rule.toRailSignals({
+			conversationsBySpaceId,
+			waitingMissionCount: waitingMissionCountOf(selected),
+			spaceId: selected.id,
+		}),
+		space: {
+			id: selected.id,
+			name: selected.name,
+			colour: selected.colour,
+			avatarSeed: selected.avatarSeed,
+		},
+		spaceHost: undefined,
+	}
+}
+
+const withoutMissions = (spaces: SceneSpace[]): SceneSpace[] =>
+	spaces.map((space) => ({
+		...space,
+		missions: [],
+		rows: space.rows.map((row) => ({ ...row, missions: undefined })),
+	}))
 
 const withRowBadge = (
 	spaces: SceneSpace[],
@@ -275,15 +310,6 @@ describe("the landing scene rail indicators against apps/app", () => {
 		rule = await loadSidebarBadgeRule()
 	})
 
-	it("carries no row mission, so no mission ring adds a Space badge", () => {
-		const rows = SCENE_SPACES.flatMap((space) => [
-			...space.rows,
-			...space.conversations,
-		])
-
-		expect(rows.filter((row) => row.missions !== undefined)).toEqual([])
-	})
-
 	it.each(SCENE_SPACES.map((space) => [space.id, space]))(
 		"passes AppRail what the app rule draws with %s selected",
 		(_, selected) => {
@@ -300,15 +326,20 @@ describe("the landing scene rail indicators against apps/app", () => {
 		expect(rail.spaceHost).toBeUndefined()
 	})
 
-	it("holds no Space badge, so the Change space button draws no dot", () => {
-		expect(sceneRailOf(SCENE_SPACES, WORK).badgesBySpaceId).toEqual({})
-		expect(sceneRailOf(SCENE_SPACES, PERSONAL).badgesBySpaceId).toEqual({})
+	it("badges Personal for its waiting mission while Work is selected", () => {
+		expect(sceneRailOf(SCENE_SPACES, WORK).badgesBySpaceId?.[PERSONAL.id]).toBe(
+			"attention",
+		)
 	})
 
 	it.each<BotBadge>(["attention", "failed"])(
 		"badges another Space holding %s as the app does",
 		(badge) => {
-			const lit = withRowBadge(SCENE_SPACES, PERSONAL.id, badge)
+			const lit = withRowBadge(
+				withoutMissions(SCENE_SPACES),
+				PERSONAL.id,
+				badge,
+			)
 
 			expect(sceneRailOf(lit, WORK)).toEqual(appRailOf(rule, lit, WORK))
 			expect(sceneRailOf(lit, WORK).badgesBySpaceId).toEqual({

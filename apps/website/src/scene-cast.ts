@@ -1,10 +1,12 @@
 import type {
 	AppSidebarBot,
 	AppSidebarConversation,
+	AppSidebarRowMission,
 	AppSidebarSection,
 	Space,
 	UserChipIdentity,
 } from "@workspace/ui/components/app-sidebar"
+import type { BotMissionState } from "@workspace/ui/components/bot-badge"
 import {
 	BLOT_HUES,
 	type BotAvatarBlot,
@@ -144,11 +146,16 @@ type ActivityMissionInput = SceneMissionInput & {
 	state: MissionState
 }
 
+type SceneMission = MissionCardModel & {
+	botId: string
+}
+
 const missionRow = ({
 	state,
 	...mission
-}: ActivityMissionInput): MissionCardModel => ({
+}: ActivityMissionInput): SceneMission => ({
 	...sceneMission(mission),
+	botId: mission.bot.id,
 	state,
 	isWorking: state === "working",
 })
@@ -181,10 +188,36 @@ type SceneSpace = Space & {
 	sections: AppSidebarSection[]
 	defaultConversation: AppSidebarConversation
 	openTabIds: string[]
-	missions: MissionCardModel[]
+	missions: SceneMission[]
 	routines: RoutineRowModel[]
 	loop: SceneLoop
 }
+
+const CHIP_STATE_OF: Partial<Record<MissionState, BotMissionState>> = {
+	waiting_human: "waiting",
+	failed: "failed",
+	ready_to_merge: "ready",
+	working: "working",
+	waiting_bot: "working",
+}
+
+const rowMissionsOf = (mission: SceneMission): AppSidebarRowMission[] => {
+	const state = CHIP_STATE_OF[mission.state]
+	if (!state) return []
+
+	const { platform, externalId, title } = mission.ticket
+	return [{ id: mission.id, state, ticket: { platform, externalId, title } }]
+}
+
+const withRowMissions = (space: SceneSpace): SceneSpace => ({
+	...space,
+	rows: space.rows.map((row) => {
+		const missions = space.missions
+			.filter((mission) => mission.botId === row.id)
+			.flatMap(rowMissionsOf)
+		return missions.length > 0 ? { ...row, missions } : row
+	}),
+})
 
 const LISBON = castConversation({
 	id: "lisbon-in-may",
@@ -230,7 +263,7 @@ const SUPPORT: AppSidebarSection = {
 	position: 2,
 }
 
-const PERSONAL: SceneSpace = {
+const PERSONAL: SceneSpace = withRowMissions({
 	id: "personal",
 	name: SCENE_COPY.spaces.personal,
 	avatarSeed: "personal",
@@ -287,9 +320,9 @@ const PERSONAL: SceneSpace = {
 			timestamp: SCENE_COPY.loops.personal.missionTimestamp,
 		}),
 	},
-}
+})
 
-const WORK: SceneSpace = {
+const WORK: SceneSpace = withRowMissions({
 	id: "work",
 	name: SCENE_COPY.spaces.work,
 	avatarSeed: "work",
@@ -351,7 +384,7 @@ const WORK: SceneSpace = {
 			timestamp: SCENE_COPY.loops.work.missionTimestamp,
 		}),
 	},
-}
+})
 
 const SCENE_SPACES: SceneSpace[] = [WORK, PERSONAL]
 
