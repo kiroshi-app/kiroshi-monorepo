@@ -9,10 +9,12 @@ import {
 	type BadgeChannel,
 	mirrorBadges,
 	ownBadges,
+	type SharedBadges,
 	type WindowBadgeReport,
 } from "../chat/badge-sharing"
 import {
 	createFakeBadgeChannel,
+	createHeldBadgeChannel,
 	settleWindows,
 } from "../chat/fake-badge-channel"
 import { toSpaceBadges, withBadges } from "../chat/sidebar-badges"
@@ -84,9 +86,15 @@ type WindowOptions = {
 	channel: BadgeChannel
 	label: string
 	isDriver: boolean
+	onError?: (reason: unknown) => void
 }
 
-const openWindow = ({ channel, label, isDriver }: WindowOptions) => {
+const openWindow = ({
+	channel,
+	label,
+	isDriver,
+	onError = () => {},
+}: WindowOptions) => {
 	const runtimes = createFakeRuntimes()
 	const roster = createFakeRoster()
 	const spokenWords = createSpokenWords()
@@ -104,7 +112,7 @@ const openWindow = ({ channel, label, isDriver }: WindowOptions) => {
 		},
 	})
 	const stopSource = source.start()
-	const sharing = { source, channel, windowLabel: label, onError: () => {} }
+	const sharing = { source, channel, windowLabel: label, onError }
 	let stopSharing = isDriver ? ownBadges(sharing) : mirrorBadges(sharing)
 
 	const focusOn = (focused: boolean) => {
@@ -141,11 +149,42 @@ const openWindow = ({ channel, label, isDriver }: WindowOptions) => {
 }
 
 const spyOn =
-	(report: BadgeChannel["report"], reports: WindowBadgeReport[]) =>
-	(sent: WindowBadgeReport) => {
-		reports.push(sent)
-		return report(sent)
+	<Sent>(send: (sent: Sent) => Promise<void>, sents: Sent[]) =>
+	(sent: Sent) => {
+		sents.push(sent)
+		return send(sent)
 	}
+
+const watchHeldChannel = () => {
+	const held = createHeldBadgeChannel()
+	const shares: SharedBadges[] = []
+	const reports: WindowBadgeReport[] = []
+	const channel = {
+		...held.channel,
+		share: spyOn(held.channel.share, shares),
+		report: spyOn(held.channel.report, reports),
+	}
+	return { ...held, channel, shares, reports }
+}
+
+const openOwnerAndReader = async () => {
+	const watched = watchHeldChannel()
+	const main = openWindow({
+		channel: watched.channel,
+		label: "main",
+		isDriver: true,
+	})
+	const second = openWindow({
+		channel: watched.channel,
+		label: "window-1",
+		isDriver: false,
+	})
+	second.focus()
+	second.open("room-one")
+	watched.releaseReportListening()
+	await settleWindows()
+	return { ...watched, main, second }
+}
 
 const openTwoWindows = async () => {
 	const channel = createFakeBadgeChannel()
@@ -323,5 +362,139 @@ describe("conversation badges shared across windows", () => {
 			readId: "room-one",
 			changed: {},
 		})
+	})
+})
+
+describe("conversation badges across an owner reload and a late report listener", () => {
+	it("names a reloaded owner apart from the owner it replaces", async () => {
+		const { channel, shares, releaseReportListening } = watchHeldChannel()
+		const main = openWindow({ channel, label: "main", isDriver: true })
+		releaseReportListening()
+		await settleWindows()
+
+		main.close()
+		openWindow({ channel, label: "main", isDriver: true })
+		releaseReportListening()
+		await settleWindows()
+
+		expect(shares).toHaveLength(2)
+		expect(new Set(shares.map(({ ownerId }) => ownerId)).size).toBe(2)
+	})
+
+	it("resends the read of the second window to a reloaded owner", async () => {
+		const { channel, main, reports, releaseReportListening } =
+			await openOwnerAndReader()
+		reports.length = 0
+
+		main.close()
+		openWindow({ channel, label: "main", isDriver: true })
+		releaseReportListening()
+		await settleWindows()
+
+		expect(reports).toContainEqual({
+			windowLabel: "window-1",
+			readId: "room-one",
+			changed: {},
+		})
+	})
+
+	it("sends no read for a further share of the owner it knows", async () => {
+		const { main, second, reports } = await openOwnerAndReader()
+		reports.length = 0
+
+		main.speakIn("room-two")
+		await settleWindows()
+
+		expect(second.badgeOf("room-two")).toBe("done")
+		expect(reports).toEqual([])
+	})
+
+	it("raises no badge for the room the second window reads after the owner reloads", async () => {
+		const { channel, main, second, releaseReportListening } =
+			await openOwnerAndReader()
+
+		main.close()
+		const reloaded = openWindow({ channel, label: "main", isDriver: true })
+		releaseReportListening()
+		await settleWindows()
+		reloaded.speakIn("room-one")
+		reloaded.answer("room-one")
+		await settleWindows()
+
+		expect(reloaded.badgeOf("room-one")).toBeUndefined()
+		expect(second.badgeOf("room-one")).toBeUndefined()
+	})
+
+	it("shares nothing before the report listener is registered", async () => {
+		const { channel, shares, releaseReportListening } = watchHeldChannel()
+		const main = openWindow({ channel, label: "main", isDriver: true })
+		const second = openWindow({ channel, label: "window-1", isDriver: false })
+		main.speakIn("room-one")
+		await settleWindows()
+		expect(shares).toEqual([])
+
+		releaseReportListening()
+		await settleWindows()
+
+		expect(second.badgeOf("room-one")).toBe("done")
+	})
+
+	it("clears in every window the read the second window sends on the first share", async () => {
+		const { channel, releaseReportListening } = watchHeldChannel()
+		const main = openWindow({ channel, label: "main", isDriver: true })
+		const second = openWindow({ channel, label: "window-1", isDriver: false })
+		second.focus()
+		second.open("room-one")
+		main.speakIn("room-one")
+		await settleWindows()
+		expect(main.badgeOf("room-one")).toBe("done")
+
+		releaseReportListening()
+		await settleWindows()
+
+		expect(main.badgeOf("room-one")).toBeUndefined()
+		expect(second.badgeOf("room-one")).toBeUndefined()
+	})
+
+	it("still shares the owner badges when the report listener is refused", async () => {
+		const { channel, refuseReportListening } = watchHeldChannel()
+		const errors: unknown[] = []
+		const refusal = new Error("listen refused")
+		const main = openWindow({
+			channel,
+			label: "main",
+			isDriver: true,
+			onError: (reason) => errors.push(reason),
+		})
+		const second = openWindow({ channel, label: "window-1", isDriver: false })
+		refuseReportListening(refusal)
+		await settleWindows()
+
+		main.speakIn("room-one")
+		await settleWindows()
+
+		expect(errors).toEqual([refusal])
+		expect(second.badgeOf("room-one")).toBe("done")
+	})
+
+	it("shares nothing and hears no read once stopped before the listener is registered", async () => {
+		const { channel, shares, reports, releaseReportListening } =
+			watchHeldChannel()
+		const main = openWindow({ channel, label: "main", isDriver: true })
+		main.close()
+		releaseReportListening()
+		await settleWindows()
+
+		const second = openWindow({ channel, label: "window-1", isDriver: false })
+		second.focus()
+		second.open("room-one")
+		await settleWindows()
+
+		expect(reports).toContainEqual({
+			windowLabel: "window-1",
+			readId: "room-one",
+			changed: {},
+		})
+		expect(shares).toEqual([])
 	})
 })

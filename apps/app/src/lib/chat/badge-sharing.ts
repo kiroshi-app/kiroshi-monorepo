@@ -6,7 +6,7 @@ export type WindowBadgeReport = BadgeReport & {
 }
 
 export type SharedBadges = {
-	ownerLabel: string
+	ownerId: string
 	badges: Record<string, BotBadge>
 }
 
@@ -40,28 +40,36 @@ const stopOnceListening = (
 export const ownBadges = ({
 	source,
 	channel,
-	windowLabel,
 	onError,
 }: BadgeSharing): (() => void) => {
+	const ownerId = crypto.randomUUID()
+	let isStopped = false
 	const share = () => {
-		channel
-			.share({ ownerLabel: windowLabel, badges: source.getBadges() })
-			.catch(onError)
+		channel.share({ ownerId, badges: source.getBadges() }).catch(onError)
 	}
-	const stopSharing = source.subscribe(share)
-	const listening = stopOnceListening(
+	const startSharing = (stopReports: () => void) => {
+		if (isStopped) {
+			stopReports()
+			return () => undefined
+		}
+		const stopSharing = source.subscribe(share)
+		share()
+		return () => {
+			stopSharing()
+			stopReports()
+		}
+	}
+	const sharing = stopOnceListening(
 		channel.onReport(({ windowLabel, ...report }) => {
 			source.take(windowLabel, report)
 			share()
 		}),
 		onError,
-	)
-
-	share()
+	).then(startSharing)
 
 	return () => {
-		stopSharing()
-		void listening.then((stop) => stop())
+		isStopped = true
+		void sharing.then((stop) => stop())
 	}
 }
 
@@ -72,7 +80,7 @@ export const mirrorBadges = ({
 	onError,
 }: BadgeSharing): (() => void) => {
 	let sentReadId: string | null | undefined
-	let knownOwnerLabel: string | undefined
+	let knownOwnerId: string | undefined
 
 	const send = (report: BadgeReport) => {
 		sentReadId = report.readId
@@ -87,12 +95,12 @@ export const mirrorBadges = ({
 		}
 	}
 
-	const followShared = ({ ownerLabel, badges }: SharedBadges) => {
+	const followShared = ({ ownerId, badges }: SharedBadges) => {
 		source.mirror(badges)
-		if (ownerLabel === knownOwnerLabel) {
+		if (ownerId === knownOwnerId) {
 			return
 		}
-		knownOwnerLabel = ownerLabel
+		knownOwnerId = ownerId
 		sendRead(sentReadId ?? null)
 	}
 

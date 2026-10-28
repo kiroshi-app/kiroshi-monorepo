@@ -31,5 +31,35 @@ export const createFakeBadgeChannel = (): BadgeChannel => {
 	}
 }
 
+type HeldListening = {
+	release: () => void
+	refuse: (reason: unknown) => void
+}
+
+export const createHeldBadgeChannel = () => {
+	const channel = createFakeBadgeChannel()
+	const held: HeldListening[] = []
+	const onReport: BadgeChannel["onReport"] = (listener) =>
+		new Promise((resolve, reject) => {
+			held.push({
+				release: () => channel.onReport(listener).then(resolve, reject),
+				refuse: reject,
+			})
+		})
+	return {
+		channel: { ...channel, onReport },
+		releaseReportListening: () => {
+			for (const listening of held.splice(0)) {
+				listening.release()
+			}
+		},
+		refuseReportListening: (reason: unknown) => {
+			for (const listening of held.splice(0)) {
+				listening.refuse(reason)
+			}
+		},
+	}
+}
+
 export const settleWindows = () =>
 	new Promise<void>((resolve) => setTimeout(resolve, 0))
