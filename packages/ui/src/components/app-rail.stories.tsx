@@ -1062,7 +1062,7 @@ export const A7SpacesBadge = meta.story({
 		docs: {
 			description: {
 				story:
-					"A7, light: the rail's Space logo carrying the strongest badge of the other spaces, the rule the Space switcher uses. The current space waits on the reader, which the logo leaves out, Studio finished and Garage failed. Check the 8px failed dot sits flush with the top and trailing corner of the 44px button, the way the other rail entries carry theirs, and that the button's name ends on activity failed. The artboard draws no badge here. Pick `A7SpacesMenu` for the logo with no news.",
+					"A7, light: the rail's Space logo carrying the strongest badge of the other spaces, attention over failed, the rule the Space switcher uses. The current space waits on the reader, which the logo leaves out, Studio finished, which the logo leaves out too, and Garage failed. Check the 8px failed dot sits flush with the top and trailing corner of the 44px button, the way the other rail entries carry theirs, and that the button's name ends on activity failed. The artboard draws no badge here. Pick `A7SpacesDoneElsewhere` for a done alone, `A7SpacesMenu` for the logo with no news.",
 			},
 		},
 	},
@@ -1077,11 +1077,29 @@ export const A7SpacesBadgeDark = meta.story({
 		docs: {
 			description: {
 				story:
-					"A7, dark: the failed dot on the Space logo, ringed in the dark window ground. Pick `A7SpacesBadge` for the light theme.",
+					"A7, dark: the failed dot on the Space logo, ringed in the dark window ground, the finished Studio leaving no mark of its own. Pick `A7SpacesBadge` for the light theme.",
 			},
 		},
 	},
 	play: playA7Badge,
+})
+
+export const A7SpacesDoneElsewhere = meta.story({
+	args: { ...A7, badgesBySpaceId: { [STUDIO.id]: "done" } },
+	render: renderSpacesWindow,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A7, light: the only news in the other spaces is Studio finishing a run. Check the Space logo stays bare, with no dot at its trailing corner, and that its name is the plain Change space line with no activity at its end: a done asks nothing of the reader, and a green dot here read as news about the space already open. Pick `A7SpacesBadge` for the dot attention and failed still bring.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const logo = entryNamed(canvasElement, SPACES_MENU)
+		await expect(logo).toHaveAccessibleName(SPACES_MENU)
+		await expect(logo.querySelector('[data-slot="app-rail-dot"]')).toBeNull()
+	},
 })
 
 export const SpacesMenuGestures = meta.story({

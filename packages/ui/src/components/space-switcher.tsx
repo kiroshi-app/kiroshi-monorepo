@@ -88,7 +88,7 @@ const DOT_CLOSED = "group-hover/space-dot:bg-sidebar-foreground"
 
 const DOT_UNTINTED = "bg-sidebar-foreground/30"
 
-const BADGE_RANK: BotBadge[] = ["attention", "failed", "done"]
+const BADGE_RANK: BotBadge[] = ["attention", "failed"]
 
 const badgeElsewhere = (
 	spaces: Space[],
