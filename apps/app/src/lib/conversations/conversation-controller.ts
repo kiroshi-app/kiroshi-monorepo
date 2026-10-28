@@ -1105,6 +1105,7 @@ export const createConversationController = (
 			return
 		}
 		activeTurn = null
+		queue = emptyQueue
 	}
 
 	const drive = () => {

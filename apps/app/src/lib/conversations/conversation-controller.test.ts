@@ -524,7 +524,7 @@ describe("createConversationController", () => {
 		expect(submittedIn(harness)).toEqual([nyx, iris, ada])
 	})
 
-	it("runs in a second wave the companion a wave mate named", async () => {
+	it("starts no second run in the turn for a companion a wave mate named", async () => {
 		const ada = idOf(harness.conversation, "Ada")
 		const nyx = idOf(harness.conversation, "Nyx")
 		await harness.controller.send("@Ada then @Nyx")
@@ -533,18 +533,12 @@ describe("createConversationController", () => {
 		harness.driver.pushTo(ada, spoke(ada, `over to <@${nyx}>`))
 		await harness.settled()
 
-		expect(submittedIn(harness)).toEqual([ada, nyx])
-		expect(harness.controller.getState().waitingBotIds).toEqual([nyx])
+		expect(harness.controller.getState().waitingBotIds).toEqual([])
 
 		harness.driver.pushTo(nyx, spoke(nyx, "walls up"))
 		await harness.settled()
 
-		expect(submittedIn(harness)).toEqual([ada, nyx, nyx])
-		expect(runningIn(harness.controller)).toEqual([nyx])
-
-		harness.driver.pushTo(nyx, spoke(nyx, "and the gates too"))
-		await harness.settled()
-
+		expect(submittedIn(harness)).toEqual([ada, nyx])
 		expect(runningIn(harness.controller)).toEqual([])
 	})
 
@@ -855,7 +849,7 @@ describe("createConversationController", () => {
 		expect(runningIn(harness.controller)).toEqual([ada])
 	})
 
-	it("keeps relaying however many times two companions hand the turn over", async () => {
+	it("starts no second run in the turn for a companion handed the turn back", async () => {
 		const ada = idOf(harness.conversation, "Ada")
 		const nyx = idOf(harness.conversation, "Nyx")
 		await harness.controller.send("and now?")
@@ -865,10 +859,9 @@ describe("createConversationController", () => {
 		await harness.settled()
 		harness.driver.pushTo(nyx, spoke(nyx, `two <@${ada}>`))
 		await harness.settled()
-		harness.driver.pushTo(ada, spoke(ada, `three <@${nyx}>`))
-		await harness.settled()
 
-		expect(runningIn(harness.controller)).toEqual([nyx])
+		expect(submittedIn(harness)).toEqual([ada, nyx])
+		expect(runningIn(harness.controller)).toEqual([])
 	})
 
 	it("leaves what the companion in flight wrote in place when the turn is stopped", async () => {
@@ -2275,6 +2268,28 @@ describe("a run report relaying the companions it names", () => {
 		expect(driver.submissions[0].prompt).toContain(`<@${nyx}>`)
 	})
 
+	it("summons again in a report the companion that ran in the turn before", async () => {
+		const { driver, controller, conversation } = await createReporting()
+		const ada = idOf(conversation, "Ada")
+		const nyx = idOf(conversation, "Nyx")
+		await controller.reportRun(
+			draftFor(conversation.id, ada, "Walls are up. @Nyx, read it."),
+		)
+		await settled()
+		driver.pushTo(nyx, spoke(nyx, "read and noted"))
+		await settled()
+
+		await controller.reportRun(
+			draftFor(conversation.id, ada, "Gates are up. @Nyx, read it."),
+		)
+		await settled()
+
+		expect(driver.submissions.map(({ scope }) => scope.botId)).toEqual([
+			nyx,
+			nyx,
+		])
+	})
+
 	it("stores the answer of a summoned companion outside the turn of the report", async () => {
 		const { driver, store, controller, conversation } = await createReporting()
 		const ada = idOf(conversation, "Ada")
@@ -2622,6 +2637,18 @@ describe("a conversation landed away from its newest end", () => {
 		expect(state.messages.some((said) => said.content === "the north")).toBe(
 			false,
 		)
+		detach()
+	})
+
+	it("holds a failure for the reader when the newest page refuses an answer", async () => {
+		const { controller, detach } = await askedOn(refusingLatest())
+
+		await controller.answer("ask-1", { "Which wall?": "the north" })
+		await settled()
+
+		expect(controller.getState().latestError?.error).toMatchObject({
+			kind: "readFailed",
+		})
 		detach()
 	})
 

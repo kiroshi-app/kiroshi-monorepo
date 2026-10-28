@@ -6,11 +6,13 @@ export type Summons = {
 export type TurnQueue = {
 	wave: Summons[]
 	waiting: Summons[]
+	ranBotIds: string[]
 }
 
 export const emptyQueue: TurnQueue = {
 	wave: [],
 	waiting: [],
+	ranBotIds: [],
 }
 
 export const reopenedFor = (
@@ -19,12 +21,20 @@ export const reopenedFor = (
 ): TurnQueue => ({
 	...queue,
 	waiting: [...summoned],
+	ranBotIds: [],
 })
 
 export const openedWave = (queue: TurnQueue): TurnQueue =>
 	queue.waiting.length === 0
 		? queue
-		: { ...queue, wave: queue.waiting, waiting: [] }
+		: {
+				wave: queue.waiting,
+				waiting: [],
+				ranBotIds: [
+					...queue.ranBotIds,
+					...queue.waiting.map(({ botId }) => botId),
+				],
+			}
 
 export const handedOver = (
 	queue: TurnQueue,
@@ -32,7 +42,8 @@ export const handedOver = (
 	summons: Summons,
 ): TurnQueue => {
 	const isHeld = queue.waiting.some(({ botId }) => botId === summons.botId)
-	if (summons.botId === from || isHeld) {
+	const hasRun = queue.ranBotIds.includes(summons.botId)
+	if (summons.botId === from || isHeld || hasRun) {
 		return queue
 	}
 	return {
