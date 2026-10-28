@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import type { BadgeChannel } from "./badge-sharing"
-import { mirrorBadges, ownBadges } from "./badge-sharing"
+import { type BadgeChannel, mirrorBadges, ownBadges } from "./badge-sharing"
 import { createBotBadgeSource } from "./bot-badge-source"
 import { type ChatState, initialChatState } from "./chat-state"
 import { createFakeBadgeChannel, settleWindows } from "./fake-badge-channel"

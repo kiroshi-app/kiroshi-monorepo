@@ -5,8 +5,11 @@ import { createConversationBadgeSource } from "./conversation-badge-source"
 import { createSpokenWords } from "./spoken-words"
 import { speakingBot } from "./transcript-fixtures"
 
-import type { BadgeChannel } from "../chat/badge-sharing"
-import { mirrorBadges, ownBadges } from "../chat/badge-sharing"
+import {
+	type BadgeChannel,
+	mirrorBadges,
+	ownBadges,
+} from "../chat/badge-sharing"
 import {
 	createFakeBadgeChannel,
 	settleWindows,
