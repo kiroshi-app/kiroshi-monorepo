@@ -23,6 +23,7 @@ import type {
 import { i18n } from "@workspace/ui/lib/i18n"
 import { formatDateTime } from "@workspace/ui/lib/time-format"
 
+import { CHIP_STATE_OF } from "./mission-chip-states"
 import type {
 	Mission,
 	MissionChanged,
@@ -469,14 +470,6 @@ export type MissionsByRow = Record<string, AppSidebarRowMission[]>
 
 type MissionCarrier = {
 	missions?: AppSidebarRowMission[]
-}
-
-const CHIP_STATE_OF: Partial<Record<MissionState, BotMissionState>> = {
-	waiting_human: "waiting",
-	failed: "failed",
-	ready_to_merge: "ready",
-	working: "working",
-	waiting_bot: "working",
 }
 
 const MOST_URGENT_FIRST: BotMissionState[] = [

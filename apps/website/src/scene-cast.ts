@@ -6,7 +6,6 @@ import type {
 	Space,
 	UserChipIdentity,
 } from "@workspace/ui/components/app-sidebar"
-import type { BotMissionState } from "@workspace/ui/components/bot-badge"
 import {
 	BLOT_HUES,
 	type BotAvatarBlot,
@@ -21,6 +20,8 @@ import type { RosterBot } from "@workspace/ui/components/roster"
 import type { RoutineRowModel } from "@workspace/ui/components/routine-row"
 
 import { SCENE_COPY, TICKET_PLATFORM } from "./copy"
+
+import { CHIP_STATE_OF } from "../../app/src/lib/missions/mission-chip-states"
 
 type BotCopy = {
 	name: string
@@ -191,14 +192,6 @@ type SceneSpace = Space & {
 	missions: SceneMission[]
 	routines: RoutineRowModel[]
 	loop: SceneLoop
-}
-
-const CHIP_STATE_OF: Partial<Record<MissionState, BotMissionState>> = {
-	waiting_human: "waiting",
-	failed: "failed",
-	ready_to_merge: "ready",
-	working: "working",
-	waiting_bot: "working",
 }
 
 const rowMissionsOf = (mission: SceneMission): AppSidebarRowMission[] => {

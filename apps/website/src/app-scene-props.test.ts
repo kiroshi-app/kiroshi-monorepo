@@ -12,6 +12,8 @@ import type { BotBadge } from "@workspace/ui/components/bot-badge"
 import { SCENE_SPACES, type SceneSpace, spaceOf } from "./scene-cast"
 import { sceneRailOf } from "./scene-rail"
 
+import { CHIP_STATE_OF } from "../../app/src/lib/missions/mission-chip-states"
+
 const REPOSITORY = resolve(import.meta.dirname, "../../..")
 
 const APP_SIDEBAR_CALL = "apps/app/src/components/workspace-sidebar.tsx"
@@ -347,4 +349,18 @@ describe("the landing scene rail indicators against apps/app", () => {
 			})
 		},
 	)
+})
+
+describe("the landing scene mission chips against apps/app", () => {
+	it("reads the app's mission-state to chip-state table, so any change to it is reviewed on the landing", () => {
+		expect(CHIP_STATE_OF).toMatchInlineSnapshot(`
+			{
+			  "failed": "failed",
+			  "ready_to_merge": "ready",
+			  "waiting_bot": "working",
+			  "waiting_human": "waiting",
+			  "working": "working",
+			}
+		`)
+	})
 })
