@@ -14,6 +14,7 @@ export type MissionRunDriverMount = {
 	store: TranscriptStore
 	runtimes: ConversationRuntimes
 	chat: ChatController
+	isDriverWindow: boolean
 }
 
 export const useMissionRunDriver = ({
@@ -21,21 +22,23 @@ export const useMissionRunDriver = ({
 	store,
 	runtimes,
 	chat,
+	isDriverWindow,
 }: MissionRunDriverMount) => {
-	useEffect(
-		() =>
-			startMissionRunDriver({
-				driver,
-				store: {
-					openRuntimeSession: store.openRuntimeSession,
-					bots: missionRunTransport.bots,
-					mainChat: missionRunTransport.mainChat,
-				},
-				runtimes,
-				chat,
-				missions: missionRunTransport,
-				reportFailure: failureReporterIn("mission-run-driver"),
-			}),
-		[driver, store, runtimes, chat],
-	)
+	useEffect(() => {
+		if (!isDriverWindow) {
+			return
+		}
+		return startMissionRunDriver({
+			driver,
+			store: {
+				openRuntimeSession: store.openRuntimeSession,
+				bots: missionRunTransport.bots,
+				mainChat: missionRunTransport.mainChat,
+			},
+			runtimes,
+			chat,
+			missions: missionRunTransport,
+			reportFailure: failureReporterIn("mission-run-driver"),
+		})
+	}, [driver, store, runtimes, chat, isDriverWindow])
 }

@@ -1,3 +1,4 @@
+import { useDriverWindow } from "./use-driver-window"
 import type { WorkspaceCore } from "./use-workspace-core"
 
 import { useEvolution } from "../bots/use-evolution"
@@ -15,7 +16,10 @@ import { useSignIn } from "../onboarding/use-sign-in"
 import { useReportRelay } from "../routines/use-report-relay"
 import { useUpdater } from "../updater/use-updater"
 
-export const useWorkspaceDrivers = (core: WorkspaceCore) => {
+export const useWorkspaceDrivers = (
+	core: WorkspaceCore,
+	isMainWindow: boolean,
+) => {
 	const {
 		chat,
 		conversationRuntimes,
@@ -28,6 +32,7 @@ export const useWorkspaceDrivers = (core: WorkspaceCore) => {
 		store,
 		user,
 	} = core
+	const isDriverWindow = useDriverWindow(isMainWindow)
 
 	const onboarding = useOnboarding(onboardingTransport, {
 		homeBotId: () => roster.controller.getState().selectedBotId,
@@ -58,6 +63,7 @@ export const useWorkspaceDrivers = (core: WorkspaceCore) => {
 		driver,
 		store,
 		runtimes: conversationRuntimes,
+		isDriverWindow,
 	})
 
 	useMissionRunDriver({
@@ -65,12 +71,14 @@ export const useWorkspaceDrivers = (core: WorkspaceCore) => {
 		store,
 		runtimes: conversationRuntimes,
 		chat: chat.controller,
+		isDriverWindow,
 	})
 
 	useCompanionSpokeDriver({
 		runtimes: conversationRuntimes,
 		roster: roster.controller,
 		spokenWords,
+		isDriverWindow,
 	})
 
 	useNotifications({
@@ -82,11 +90,13 @@ export const useWorkspaceDrivers = (core: WorkspaceCore) => {
 		missions: openedMission,
 		spokenWords,
 		user: user.controller,
+		isDriverWindow,
 	})
 
 	useEvolution({
 		driver,
 		roster: roster.controller,
+		isDriverWindow,
 	})
 
 	const badges = useBotBadges({
@@ -105,6 +115,7 @@ export const useWorkspaceDrivers = (core: WorkspaceCore) => {
 	return {
 		badges,
 		conversationBadges,
+		isDriverWindow,
 		onboarding,
 		signIn,
 		missionMarks,

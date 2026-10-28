@@ -1,3 +1,4 @@
+import { TauriEvent } from "@tauri-apps/api/event"
 import { getAllWebviewWindows } from "@tauri-apps/api/webviewWindow"
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { platform } from "@tauri-apps/plugin-os"
@@ -94,6 +95,30 @@ export const closeWindow = (): Promise<void> => getCurrentWindow().close()
 
 export const liveWindowLabels = async (): Promise<string[]> =>
 	(await getAllWebviewWindows()).map((window) => window.label)
+
+export const currentWindowLabel = (): string => getCurrentWindow().label
+
+export type LiveWindowsWatch = {
+	report: (labels: string[]) => void
+	onError: (reason: unknown) => void
+}
+
+export const watchLiveWindows = async ({
+	report,
+	onError,
+}: LiveWindowsWatch): Promise<() => void> => {
+	const readLabels = () => liveWindowLabels().then(report, onError)
+	const stops = await Promise.all([
+		tauriListen(TauriEvent.WINDOW_CREATED, readLabels),
+		tauriListen(TauriEvent.WINDOW_DESTROYED, readLabels),
+	])
+	readLabels()
+	return () => {
+		for (const stop of stops) {
+			stop()
+		}
+	}
+}
 
 export const watchCloseRequest = (
 	onCloseRequested: () => void,

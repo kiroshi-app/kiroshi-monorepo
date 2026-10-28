@@ -18,6 +18,7 @@ export type CompanionSpokeDriverMount = {
 	runtimes: ConversationRuntimes
 	roster: RosterController
 	spokenWords: SpokenWords
+	isDriverWindow: boolean
 }
 
 const THIS_COMPUTER = null
@@ -36,17 +37,19 @@ export const useCompanionSpokeDriver = ({
 	runtimes,
 	roster,
 	spokenWords,
+	isDriverWindow,
 }: CompanionSpokeDriverMount) => {
-	useEffect(
-		() =>
-			startCompanionSpokeDriver({
-				runtimes,
-				roster,
-				companions: arrivalsTransport,
-				spokenWords,
-				thisComputer,
-				reportFailure: failureReporterIn("companion-spoke-driver"),
-			}),
-		[runtimes, roster, spokenWords],
-	)
+	useEffect(() => {
+		if (!isDriverWindow) {
+			return
+		}
+		return startCompanionSpokeDriver({
+			runtimes,
+			roster,
+			companions: arrivalsTransport,
+			spokenWords,
+			thisComputer,
+			reportFailure: failureReporterIn("companion-spoke-driver"),
+		})
+	}, [runtimes, roster, spokenWords, isDriverWindow])
 }

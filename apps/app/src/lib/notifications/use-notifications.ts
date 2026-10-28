@@ -25,6 +25,7 @@ export type NotificationsMount = {
 	missions: OpenedMissionController
 	spokenWords: SpokenWords
 	user: UserController
+	isDriverWindow: boolean
 }
 
 export const useNotifications = ({
@@ -36,30 +37,42 @@ export const useNotifications = ({
 	missions,
 	spokenWords,
 	user,
+	isDriverWindow,
 }: NotificationsMount) => {
-	useEffect(
-		() =>
-			startNotificationSource({
-				chat,
-				runtimes,
-				roster,
-				spaces,
-				joinedSpaces,
-				missions: {
-					board: missionsTransport.board,
-					onChanged: missionsTransport.onChanged,
-					read: missionsTransport.read,
-					open: missions.open,
-				},
-				spokenWords,
-				notifications: createNotifications(),
-				switches: () => user.getState().preferences,
-				hasFocus: () => document.hasFocus(),
-				watchFocus: watchWindowFocus,
-				raiseWindow: () => revealWindow({ withFocus: true }),
-				playChime: createChime(),
-				reportFailure: failureReporterIn("notification-source"),
-			}),
-		[chat, runtimes, roster, spaces, joinedSpaces, missions, spokenWords, user],
-	)
+	useEffect(() => {
+		if (!isDriverWindow) {
+			return
+		}
+		return startNotificationSource({
+			chat,
+			runtimes,
+			roster,
+			spaces,
+			joinedSpaces,
+			missions: {
+				board: missionsTransport.board,
+				onChanged: missionsTransport.onChanged,
+				read: missionsTransport.read,
+				open: missions.open,
+			},
+			spokenWords,
+			notifications: createNotifications(),
+			switches: () => user.getState().preferences,
+			hasFocus: () => document.hasFocus(),
+			watchFocus: watchWindowFocus,
+			raiseWindow: () => revealWindow({ withFocus: true }),
+			playChime: createChime(),
+			reportFailure: failureReporterIn("notification-source"),
+		})
+	}, [
+		chat,
+		runtimes,
+		roster,
+		spaces,
+		joinedSpaces,
+		missions,
+		spokenWords,
+		user,
+		isDriverWindow,
+	])
 }
