@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { expect, fn } from "storybook/test"
+import { expect, fn, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { slotIn, slotsIn } from "@workspace/storybook/story-utils"
@@ -156,10 +156,12 @@ export const OwnHue = meta.story({
 
 		slider.focus()
 		await userEvent.keyboard("{ArrowLeft}")
-		await expect(args.onValueChange).toHaveBeenLastCalledWith({
-			name: "Release desk",
-			hue: 319,
-		})
+		await waitFor(() =>
+			expect(args.onValueChange).toHaveBeenLastCalledWith({
+				name: "Release desk",
+				hue: 319,
+			}),
+		)
 		await expect(
 			slotIn(canvasElement, "colour-field-readout"),
 		).toHaveTextContent("319°")
@@ -240,10 +242,12 @@ export const OwnHueOverAPreset = meta.story({
 		slider.focus()
 		await userEvent.keyboard("{ArrowLeft}")
 
-		await expect(args.onValueChange).toHaveBeenLastCalledWith({
-			name: "Release desk",
-			hue: 296,
-		})
+		await waitFor(() =>
+			expect(args.onValueChange).toHaveBeenLastCalledWith({
+				name: "Release desk",
+				hue: 296,
+			}),
+		)
 		await expect(canvas.getByRole("radio", { name: "Your hue" })).toBeChecked()
 		await expect(
 			canvas.getByRole("radio", { name: "Purple" }),

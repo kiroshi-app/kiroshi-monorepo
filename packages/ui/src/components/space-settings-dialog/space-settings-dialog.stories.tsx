@@ -178,10 +178,12 @@ export const FreeHue = meta.story({
 
 		slider.focus()
 		await userEvent.keyboard("{ArrowRight}")
-		await expect(args.onValueChange).toHaveBeenLastCalledWith({
-			name: FILLED_SPACE.name,
-			colour: 211,
-		})
+		await waitFor(() =>
+			expect(args.onValueChange).toHaveBeenLastCalledWith({
+				name: FILLED_SPACE.name,
+				colour: 211,
+			}),
+		)
 	},
 })
 

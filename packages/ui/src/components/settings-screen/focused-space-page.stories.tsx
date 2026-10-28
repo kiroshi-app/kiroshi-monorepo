@@ -1,4 +1,4 @@
-import { expect, fn, within } from "storybook/test"
+import { expect, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { slotIn, slotsIn } from "@workspace/storybook/story-utils"
@@ -116,10 +116,12 @@ export const Joined = meta.story({
 		const slider = page.getByRole("slider", { name: "Your hue" })
 		slider.focus()
 		await userEvent.keyboard("{ArrowLeft}")
-		await expect(args.onValueChange).toHaveBeenLastCalledWith({
-			name: "Northwind",
-			colour: 319,
-		})
+		await waitFor(() =>
+			expect(args.onValueChange).toHaveBeenLastCalledWith({
+				name: "Northwind",
+				colour: 319,
+			}),
+		)
 	},
 })
 

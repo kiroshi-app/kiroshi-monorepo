@@ -239,7 +239,7 @@ export const OwnHueSet = meta.story({
 
 		slider.focus()
 		await userEvent.keyboard("{ArrowRight}")
-		await expect(args.onHueChange).toHaveBeenLastCalledWith(321)
+		await waitFor(() => expect(args.onHueChange).toHaveBeenLastCalledWith(321))
 	},
 })
 
