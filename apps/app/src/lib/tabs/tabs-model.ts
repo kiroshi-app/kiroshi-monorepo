@@ -201,18 +201,16 @@ const tabsAfter = (space: SpaceTabs, id: string) => {
 	return [...space.tabs.slice(position + 1), ...space.tabs.slice(0, position)]
 }
 
-const showElsewhere = (space: SpaceTabs, from: Tab, href: string) => {
-	const page = pageOf(href)
-	const showing = tabsAfter(space, from.id).find((tab) => showsPage(tab, page))
-	return showing ? selectTab(space, showing.id) : openTabOn(space, href)
-}
-
 export const pushEntry = (space: SpaceTabs, entry: TabEntry): SpaceTabs => {
 	const active = activeTabOf(space)
-	if (!active.isPinned || showsPage(active, pageOf(entry.href))) {
+	const page = pageOf(entry.href)
+	if (!active.isPinned || showsPage(active, page)) {
 		return pushInPlace(space, entry)
 	}
-	return showElsewhere(space, active, entry.href)
+	const showing = tabsAfter(space, active.id).find((tab) =>
+		showsPage(tab, page),
+	)
+	return showing ? selectTab(space, showing.id) : openTabOn(space, entry.href)
 }
 
 export const replaceEntry = (space: SpaceTabs, entry: TabEntry): SpaceTabs =>
