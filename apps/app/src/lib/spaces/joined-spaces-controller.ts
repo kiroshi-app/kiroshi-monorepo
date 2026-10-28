@@ -276,10 +276,10 @@ export const openSpaceColourOf = (
 	joined: Pick<JoinedSpacesState, "joinedSpaces" | "openId" | "departed">,
 ) => {
 	const openRowId = openRowIdOf(joined, selectedSpaceId)
-	return (
-		joinedSpaceOfRow(joined.joinedSpaces, openRowId)?.colour ??
-		openLocalSpaceOf(spaces, openRowId)?.colour
-	)
+	const openJoined = joinedSpaceOfRow(joined.joinedSpaces, openRowId)
+	return openJoined
+		? openJoined.colour
+		: openLocalSpaceOf(spaces, openRowId)?.colour
 }
 
 export const rosterSpacesOf = (
@@ -424,7 +424,7 @@ export const createJoinedSpacesController = ({
 		if (!savedDescriptions.has(id)) {
 			savedDescriptions.set(id, descriptionOf(held))
 		}
-		paint(id, { name: value.name, colour: value.colour ?? held.colour })
+		paint(id, { name: value.name, colour: value.colour ?? null })
 		writes.push(id, value)
 	}
 
@@ -442,7 +442,7 @@ export const createJoinedSpacesController = ({
 	const noteDescribed = ({ spaceId, name, colour }: SpaceDescribed) => {
 		for (const joined of current().joinedSpaces) {
 			if (joined.remoteSpaceId === spaceId) {
-				noteDescription(joined, { name, colour: colour ?? joined.colour })
+				noteDescription(joined, { name, colour })
 			}
 		}
 	}

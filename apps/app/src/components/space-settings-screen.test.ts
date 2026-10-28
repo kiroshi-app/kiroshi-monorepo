@@ -134,7 +134,7 @@ const garageTransport = (garage: JoinedSpace) =>
 			async (_id: string, name: string, colour: number | null) => ({
 				...garage,
 				name,
-				colour: colour ?? garage.colour,
+				colour,
 			}),
 		),
 		onChanged: async () => () => undefined,
@@ -382,6 +382,18 @@ describe("SpaceSettingsScreen on a joined space", () => {
 		]) {
 			expect(within(dialog).queryByText(localOnly)).toBeNull()
 		}
+	})
+
+	it("shows No colour for a joined space listed without a colour", async () => {
+		const gear = await gearWithGarage({ ...GARAGE, colour: null })
+
+		const dialog = openSettingsOf(gear, GARAGE_ROW)
+
+		expect(
+			within(dialog).getByRole<HTMLInputElement>("radio", {
+				name: i18n.t("bots:identity.colour.none"),
+			}).checked,
+		).toBe(true)
 	})
 
 	it("writes a rename of a joined space through its host, never as a local space", async () => {
