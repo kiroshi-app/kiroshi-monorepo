@@ -330,6 +330,13 @@ const wentOfflineIn = (held: JoinedSpace[], listed: JoinedSpace[]) =>
 			held.some((entry) => entry.id === joined.id && entry.state === "online"),
 	)
 
+const cameOnlineIn = (held: JoinedSpace[], listed: JoinedSpace[]) =>
+	listed.filter(
+		(joined) =>
+			!isWaitingForHost(joined) &&
+			held.some((entry) => entry.id === joined.id && isWaitingForHost(entry)),
+	)
+
 export const createJoinedSpacesController = ({
 	queryClient,
 	spaces,
@@ -440,9 +447,15 @@ export const createJoinedSpacesController = ({
 		}
 	}
 
-	const connectEach = (joinedSpaces: JoinedSpace[]) => {
-		for (const joined of joinedSpaces) {
-			void hosts.connect(joined.id)
+	const isJoinRefused = ({ id }: JoinedSpace) =>
+		hosts.getState().connections[id]?.status === "refused"
+
+	const connectEach = (held: JoinedSpace[], listed: JoinedSpace[]) => {
+		const cameOnline = cameOnlineIn(held, listed)
+		for (const joined of listed) {
+			if (!isJoinRefused(joined) || cameOnline.includes(joined)) {
+				void hosts.connect(joined.id)
+			}
 		}
 	}
 
@@ -492,7 +505,7 @@ export const createJoinedSpacesController = ({
 		}
 		const { joinedSpaces } = current()
 		hasRead = true
-		connectEach(joinedSpaces)
+		connectEach(held, joinedSpaces)
 		leaveVanished(vanishedFrom(held, joinedSpaces))
 		noteWentOffline(wentOfflineIn(held, joinedSpaces))
 		selectAdmittedOnceOnline()

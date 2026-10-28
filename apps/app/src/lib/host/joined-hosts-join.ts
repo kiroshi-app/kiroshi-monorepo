@@ -1,5 +1,7 @@
 import type { InvokeArgs } from "@tauri-apps/api/core"
 
+import type { NoticeMessage } from "@workspace/ui/components/notice-surface"
+
 import { hostOfflineOf, isHostOffline } from "./host-offline"
 import { createHttpHost, type HttpHost, isTimeout } from "./http"
 import {
@@ -79,6 +81,24 @@ export const createJoinedHostsJoin = ({
 	reportJoinRefusal,
 }: JoinedHostsJoinOptions) => {
 	const pendingJoins = new Map<string, Promise<HttpHost | null>>()
+	const reportedRefusals = new Set<string>()
+
+	const reportRefusalOnce = (
+		id: string,
+		notice: NoticeMessage,
+		facts: ReporterFacts,
+	) => {
+		if (reportedRefusals.has(id)) {
+			return
+		}
+		reportedRefusals.add(id)
+		reportJoinRefusal(notice, facts)
+	}
+
+	const markUp = (id: string) => {
+		reportedRefusals.delete(id)
+		down.markUp(id)
+	}
 
 	const refuse = (id: string, failure: string): null => {
 		record(id, { status: "refused", failure })
@@ -88,7 +108,7 @@ export const createJoinedHostsJoin = ({
 	const refuseJoin = (id: string, error: JoinedSpaceError): null => {
 		const notice = joinRefusalNoticeOf(error)
 		if (!isHostOffline(error)) {
-			reportJoinRefusal(notice, refusalFactsOf(id, error))
+			reportRefusalOnce(id, notice, refusalFactsOf(id, error))
 		}
 		return refuse(id, notice.title)
 	}
@@ -97,7 +117,7 @@ export const createJoinedHostsJoin = ({
 		if (isJoinedSpaceError(reason)) {
 			return refuseJoin(id, reason)
 		}
-		reportJoinRefusal(unexpectedJoinNotice(), {
+		reportRefusalOnce(id, unexpectedJoinNotice(), {
 			command: JOIN_COMMAND,
 			space: id,
 		})
@@ -113,7 +133,7 @@ export const createJoinedHostsJoin = ({
 			token,
 			fetch,
 			openSocket,
-			onUp: () => down.markUp(id),
+			onUp: () => markUp(id),
 			onDown: () => down.markDown(id),
 			onReopened: () => down.markReopened(id),
 			onRefused: reportFailure,
