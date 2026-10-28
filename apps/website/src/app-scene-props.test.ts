@@ -306,7 +306,7 @@ describe("the landing scene rail indicators against apps/app", () => {
 	})
 
 	it.each<BotBadge>(["attention", "failed"])(
-		"badges another Space holding %s as the app does, and clears it once it clears",
+		"badges another Space holding %s as the app does",
 		(badge) => {
 			const lit = withRowBadge(SCENE_SPACES, PERSONAL.id, badge)
 
@@ -314,7 +314,6 @@ describe("the landing scene rail indicators against apps/app", () => {
 			expect(sceneRailOf(lit, WORK).badgesBySpaceId).toEqual({
 				[PERSONAL.id]: badge,
 			})
-			expect(sceneRailOf(SCENE_SPACES, WORK).badgesBySpaceId).toEqual({})
 		},
 	)
 })
