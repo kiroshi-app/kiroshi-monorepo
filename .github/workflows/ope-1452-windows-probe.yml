@@ -65,5 +65,38 @@ jobs:
           probe bun-shim bun tauri --version
           probe bun-runtime bun --bun tauri --version
           probe bun-run-script bun run tauri:build --version
-          probe node-direct-info node node_modules/@tauri-apps/cli/tauri.js info
-          probe bun-shim-info bun tauri info
+
+      - name: Probe the tauri-action spawn shape
+        timeout-minutes: 25
+        shell: bash
+        working-directory: apps/app
+        run: |
+          cat > "$RUNNER_TEMP/spawn-probe.mjs" <<'PROBE'
+          import { spawn, execFileSync } from "node:child_process";
+          const [name, closeStdin, windowsHide, command, ...args] = process.argv.slice(2);
+          const started = Date.now();
+          const child = spawn(command, args, { stdio: "pipe", windowsHide: windowsHide === "hide", env: { ...process.env, FORCE_COLOR: "0" } });
+          if (closeStdin === "close") child.stdin.end();
+          let firstOutput = null;
+          let head = "";
+          const report = (outcome, code) => {
+            console.log(`OPE1452|bun=${process.env.PROBE_BUN}|shape=${name}|outcome=${outcome}|exit=${code}|first-output-ms=${firstOutput ?? "none"}|ms=${Date.now() - started}`);
+            console.log(head.split("\n").slice(0, 6).join("\n"));
+          };
+          const kill = () => { try { execFileSync("taskkill", ["/T", "/F", "/PID", String(child.pid)], { stdio: "ignore" }); } catch {} };
+          const onData = (chunk) => {
+            if (firstOutput === null) { firstOutput = Date.now() - started; setTimeout(() => { report("output", "killed"); kill(); }, 3000); }
+            if (head.length < 2000) head += chunk.toString();
+          };
+          child.stdout.on("data", onData);
+          child.stderr.on("data", onData);
+          const hang = setTimeout(() => { report("hang", "killed"); kill(); }, 90000);
+          child.on("exit", (code, signal) => { clearTimeout(hang); if (firstOutput === null) report("exit-before-output", code ?? signal); setTimeout(() => process.exit(0), 3500); });
+          PROBE
+          export PROBE_BUN=${{ matrix.bun }}
+          for try in 1 2 3; do
+            node "$RUNNER_TEMP/spawn-probe.mjs" "bun-build-open-hidden-$try" open hide bun tauri build
+            node "$RUNNER_TEMP/spawn-probe.mjs" "bun-build-closed-hidden-$try" close hide bun tauri build
+            node "$RUNNER_TEMP/spawn-probe.mjs" "bun-build-open-shown-$try" open show bun tauri build
+            node "$RUNNER_TEMP/spawn-probe.mjs" "node-build-open-hidden-$try" open hide node node_modules/@tauri-apps/cli/tauri.js build
+          done
