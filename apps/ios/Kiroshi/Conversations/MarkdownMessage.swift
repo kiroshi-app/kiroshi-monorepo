@@ -417,7 +417,7 @@ enum MentionMarks {
         }
 
         private var unknown: String {
-            String(localized: "Unknown companion")
+            String(localized: "Unknown agent")
         }
 
         private func name(of id: String) -> String? {

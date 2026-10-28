@@ -703,7 +703,7 @@ struct ConversationsStoreTests {
     @Test(arguments: [
         ("<@juniper> can you look", "Atlas: @Juniper can you look"),
         ("<@juniper> then <@atlas>, ship it", "Atlas: @Juniper then @Atlas, ship it"),
-        ("<@otto> left", "Atlas: @Unknown companion left"),
+        ("<@otto> left", "Atlas: @Unknown agent left"),
     ])
     func aMentionInThePreviewReadsAsInTheThread(content: String, preview: String) async {
         let host = hostWithGroups

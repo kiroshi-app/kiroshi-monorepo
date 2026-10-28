@@ -16,7 +16,7 @@ final class DeviceKeysAccessibilityTests: XCTestCase {
             app.staticTexts[
                 "The computer where Studio runs sends this iPhone its key once Kiroshi is open there."
             ].exists)
-        XCTAssertFalse(app.staticTexts["Loading companions"].exists)
+        XCTAssertFalse(app.staticTexts["Loading agents"].exists)
         let navigationBar = app.navigationBars.firstMatch.frame
 
         try audit(app) { issue in

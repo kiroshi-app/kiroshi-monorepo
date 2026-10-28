@@ -203,7 +203,7 @@ struct MarkdownMessageTests {
             return
         }
         #expect(paragraph.runs.map(\.kind) == [.text, .mention(isKnown: false), .text])
-        #expect(paragraph.runs[1].text == "@Unknown\u{00A0}companion")
+        #expect(paragraph.runs[1].text == "@Unknown\u{00A0}agent")
     }
 
     @Test func aMentionInCodeIsNamedButStaysCode() {

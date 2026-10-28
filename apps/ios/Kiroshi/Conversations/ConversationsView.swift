@@ -112,10 +112,10 @@ struct ConversationsView: View {
             .redacted(reason: .placeholder)
             .allowsHitTesting(false)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Loading companions")
+            .accessibilityLabel("Loading agents")
         case .failed:
             ContentUnavailableView {
-                Label("Couldn’t load your companions.", systemImage: "exclamationmark.triangle")
+                Label("Couldn’t load your agents.", systemImage: "exclamationmark.triangle")
             } description: {
                 Text("Check that the computer where Kiroshi runs is on, then try again.")
             } actions: {
@@ -127,7 +127,7 @@ struct ConversationsView: View {
         case .loaded where store.summaries.isEmpty && store.pinned.isEmpty:
             ContentUnavailableView {
                 Label {
-                    Text("No companions yet")
+                    Text("No agents yet")
                 } icon: {
                     FlatHexagon(isDashed: true)
                         .frame(width: 56, height: 56)

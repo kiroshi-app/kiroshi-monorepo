@@ -47,7 +47,7 @@ struct NewConversationSheet: View {
     @ViewBuilder private var content: some View {
         if companions.isEmpty {
             ContentUnavailableView(
-                "No companions yet", systemImage: "person.2",
+                "No agents yet", systemImage: "person.2",
                 description: Text("Add one on your computer. It shows up here."))
         } else {
             List {

@@ -3,7 +3,7 @@ import XCTest
 @MainActor
 final class SignInAccessibilityTests: XCTestCase {
     static let shownText = [
-        "1.1": "Your companions, away from your computer.",
+        "1.1": "Your agents, away from your computer.",
         "1.1b": "Signing in with Apple…",
         "1.1c": "Signing in with Google…",
         "1.1d": "Couldn’t sign in with Apple. Try again, or use your email.",
