@@ -398,6 +398,36 @@ describe("watching the joined spaces", () => {
 		)
 	})
 
+	it("starts no join on a change for a space whose join is settled as refused", async () => {
+		const { joined, hosts, wire } = await gearFor([GARAGE, ATTIC])
+		hosts.answer(GARAGE.id, { status: "refused", failure: "Host silent" })
+		joined.watch()
+		await settle()
+		hosts.connect.mockClear()
+
+		wire.announce()
+		await settle()
+
+		expect(hosts.connect).toHaveBeenCalledExactlyOnceWith(ATTIC.id)
+	})
+
+	it("joins again a refused space whose host comes back online", async () => {
+		const waiting: JoinedSpace = { ...GARAGE, state: "waitingForHost" }
+		const { joined, hosts, wire } = await gearFor([waiting])
+		hosts.answer(GARAGE.id, { status: "refused", failure: "Host silent" })
+		joined.watch()
+		await settle()
+		wire.announce()
+		await settle()
+		hosts.connect.mockClear()
+
+		wire.hold([GARAGE])
+		wire.announce()
+		await settle()
+
+		expect(hosts.connect).toHaveBeenCalledExactlyOnceWith(GARAGE.id)
+	})
+
 	it("raises a refused list in a sentence, never the refusal kind", async () => {
 		const { joined, wire } = await gearFor()
 		wire.transport.list.mockRejectedValueOnce({
@@ -1229,6 +1259,40 @@ describe("describing a joined space", () => {
 			description:
 				"Its computer is offline. Try again once it’s back online. The space kept its previous name and colour.",
 		})
+	})
+
+	it("sends no colour to the joined describe when No colour is picked", async () => {
+		const gear = await describingGarage()
+
+		gear.joined.describe(GARAGE.id, { name: "Garage", colour: null })
+		await settle()
+
+		expect(gear.wire.transport.describe).toHaveBeenCalledExactlyOnceWith(
+			GARAGE.id,
+			"Garage",
+			null,
+		)
+	})
+
+	it("starts no join for a refused space when a refused save is followed by a change", async () => {
+		const gear = await describingGarage()
+		gear.hosts.record(GARAGE.id, { status: "refused", failure: "Host silent" })
+		gear.hosts.connect.mockClear()
+		gear.wire.transport.describe.mockRejectedValueOnce({
+			kind: "hostOffline",
+			id: GARAGE.id,
+		})
+
+		gear.joined.describe(GARAGE.id, { name: "Garage", colour: null })
+		await settle()
+		gear.wire.announce()
+		await settle()
+
+		expect(garageOf(gear)).toEqual(GARAGE)
+		expect(gear.hosts.connect).not.toHaveBeenCalledWith(GARAGE.id)
+		expect(gear.reportFailure).toHaveBeenCalledExactlyOnceWith(
+			expect.objectContaining({ title: "Couldn’t save the name and colour" }),
+		)
 	})
 
 	it("raises the save failure with the unexpected sentence as its reason when the refusal is not a joined space error", async () => {

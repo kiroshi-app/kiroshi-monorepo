@@ -482,6 +482,60 @@ describe("connecting a joined space", () => {
 		})
 	})
 
+	it("reports a join refused again and again only once", async () => {
+		const refusal: JoinedSpaceError = {
+			kind: "waitingForHost",
+			id: "garage",
+			instanceId: "instance-1",
+			reason: "socketClosed",
+			detail: "the member socket closed",
+		}
+		const { hosts, join, reportJoinRefusal } = joinedHostsOf({
+			join: async () => ({ status: "error", error: refusal }),
+		})
+
+		await hosts.connect("garage")
+		await hosts.connect("garage")
+		await hosts.connect("garage")
+
+		expect(join).toHaveBeenCalledTimes(3)
+		expect(reportJoinRefusal).toHaveBeenCalledOnce()
+	})
+
+	it("reports a join rejected again and again only once", async () => {
+		const { hosts, reportJoinRefusal } = joinedHostsOf({
+			join: async () => {
+				throw new Error("ipc closed")
+			},
+		})
+
+		await hosts.connect("garage")
+		await hosts.connect("garage")
+
+		expect(reportJoinRefusal).toHaveBeenCalledOnce()
+	})
+
+	it("reports a refusal again once the connection was up in between", async () => {
+		const refused = {
+			status: "error" as const,
+			error: { kind: "notInRoster" } satisfies JoinedSpaceError,
+		}
+		const join = vi
+			.fn<JoinedHostsOptions["join"]>()
+			.mockResolvedValueOnce(refused)
+			.mockResolvedValueOnce(joinedConnection("garage"))
+			.mockResolvedValueOnce(refused)
+		const { hosts, sockets, reportJoinRefusal } = joinedHostsOf({ join })
+
+		await hosts.connect("garage")
+		await hosts.connect("garage")
+		sockets[0]?.open()
+		hosts.forget("garage")
+		await hosts.connect("garage")
+
+		expect(reportJoinRefusal).toHaveBeenCalledTimes(2)
+	})
+
 	it("records a rejected connect, then retries on the next one", async () => {
 		const join = vi
 			.fn<JoinedHostsOptions["join"]>()
