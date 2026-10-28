@@ -717,6 +717,8 @@ forms-checkbox--on-dark-surface
 forms-checkbox--states
 forms-checkbox--with-label
 forms-colourfield--held-arrow-key-emits-once-after-the-last-repeat
+forms-colourfield--held-replies-keep-the-newer-own-hue
+forms-colourfield--hue-drag-back-to-an-in-flight-hue-emits-it-once
 forms-colourfield--hue-drag-emits-once-after-a-pause
 forms-colourfield--hue-drag-released-before-the-pause-emits-once
 forms-colourfield--hue-emitted-again-after-an-outside-change
@@ -724,6 +726,7 @@ forms-colourfield--no-colour
 forms-colourfield--own-hue
 forms-colourfield--preset
 forms-colourfield--preset-pick-emits-at-once
+forms-colourfield--unmount-mid-drag-emits-the-pending-hue-once
 forms-copyfield--default
 forms-copyfield--empty
 forms-input--default

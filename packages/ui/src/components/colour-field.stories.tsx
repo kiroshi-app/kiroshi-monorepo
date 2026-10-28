@@ -101,6 +101,51 @@ const OutsideChangeHost = (props: ColourFieldProps) => {
 	)
 }
 
+const HeldRepliesHost = (props: ColourFieldProps) => {
+	const [value, setValue] = useState(props.value)
+	const [heldReplies, setHeldReplies] = useState<ColourFieldProps["value"][]>(
+		[],
+	)
+	const [nextReply, ...laterReplies] = heldReplies
+
+	return (
+		<div className="flex w-96 flex-col gap-3">
+			<ColourField
+				{...props}
+				onValueChange={(next) => {
+					setHeldReplies((replies) => [...replies, next])
+					props.onValueChange(next)
+				}}
+				value={value}
+			/>
+			<button
+				disabled={nextReply === undefined}
+				onClick={() => {
+					if (nextReply === undefined) return
+					setValue(nextReply)
+					setHeldReplies(laterReplies)
+				}}
+				type="button"
+			>
+				Play the next reply
+			</button>
+		</div>
+	)
+}
+
+const ClosableHost = (props: ColourFieldProps) => {
+	const [isOpen, setIsOpen] = useState(true)
+
+	return (
+		<div className="flex w-96 flex-col gap-3">
+			{isOpen ? <FieldHost {...props} /> : null}
+			<button onClick={() => setIsOpen(false)} type="button">
+				Close the field
+			</button>
+		</div>
+	)
+}
+
 const meta = preview.meta({
 	title: "Forms/ColourField",
 	component: ColourField,
@@ -377,5 +422,116 @@ export const HueEmittedAgainAfterAnOutsideChange = meta.story({
 		await userEvent.keyboard("{ArrowRight}")
 		await waitFor(() => expect(args.onValueChange).toHaveBeenCalledTimes(2))
 		await expect(args.onValueChange).toHaveBeenLastCalledWith(321)
+	},
+})
+
+export const HueDragBackToAnInFlightHueEmitsItOnce = meta.story({
+	tags: ["test-only"],
+	args: { value: 320 },
+	render: renderOnStaleHost,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A drag that leaves a hue still in flight and comes back to rest on it. Check that the hue is emitted once in total, at the first pause, and never again.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		const field = slotIn(canvasElement, "colour-field")
+		const slider = hueSliderOf(field)
+		const drag = pressHueThumb(field)
+		drag.moveTo(0.5)
+		const inFlightHue = Number(slider.value)
+		await waitFor(() => expect(args.onValueChange).toHaveBeenCalledTimes(1))
+		await expect(args.onValueChange).toHaveBeenCalledWith(inFlightHue)
+
+		drag.moveTo(0.6)
+		const leftHue = Number(slider.value)
+		drag.moveTo(0.5)
+		await expect(leftHue).not.toBe(inFlightHue)
+		await expect(Number(slider.value)).toBe(inFlightHue)
+
+		await pause(EMISSION_PAUSE_MS)
+		drag.releaseAt(0.5)
+		await pause(EMISSION_PAUSE_MS)
+		await expect(args.onValueChange).toHaveBeenCalledTimes(1)
+	},
+})
+
+export const HeldRepliesKeepTheNewerOwnHue = meta.story({
+	tags: ["test-only"],
+	args: { value: 320 },
+	globals: { theme_layout: "single" },
+	render: (args) => <HeldRepliesHost {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Two of your hues in flight on a host that holds its replies, then plays them in order. Check that the older reply leaves the thumb and the readout on the newer hue, and that the newer reply is shown as it lands.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		const field = slotIn(canvasElement, "colour-field")
+		const slider = hueSliderOf(field)
+		const readout = slotIn(field, "colour-field-readout")
+		const drag = pressHueThumb(field)
+		drag.moveTo(0.5)
+		const olderHue = Number(slider.value)
+		await waitFor(() => expect(args.onValueChange).toHaveBeenCalledTimes(1))
+		drag.moveTo(0.4)
+		const newerHue = Number(slider.value)
+		await waitFor(() => expect(args.onValueChange).toHaveBeenCalledTimes(2))
+		drag.releaseAt(0.4)
+		await expect(args.onValueChange).toHaveBeenNthCalledWith(1, olderHue)
+		await expect(args.onValueChange).toHaveBeenNthCalledWith(2, newerHue)
+
+		const playNextReply = canvas.getByRole("button", {
+			name: "Play the next reply",
+		})
+		await userEvent.click(playNextReply)
+		await expect(readout).toHaveTextContent(`${newerHue}°`)
+		await expect(slider).toHaveValue(String(newerHue))
+
+		await userEvent.click(playNextReply)
+		await expect(readout).toHaveTextContent(`${newerHue}°`)
+		await expect(slider).toHaveValue(String(newerHue))
+		await expect(playNextReply).toBeDisabled()
+
+		await pause(EMISSION_PAUSE_MS)
+		await expect(args.onValueChange).toHaveBeenCalledTimes(2)
+	},
+})
+
+export const UnmountMidDragEmitsThePendingHueOnce = meta.story({
+	tags: ["test-only"],
+	args: { value: 320 },
+	globals: { theme_layout: "single" },
+	render: (args) => <ClosableHost {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The field closed in the middle of a drag, before the pause. Check that the hue waiting is emitted once as the field goes, and that nothing follows.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement }) => {
+		const field = slotIn(canvasElement, "colour-field")
+		const slider = hueSliderOf(field)
+		const drag = pressHueThumb(field)
+		drag.moveTo(0.5)
+		const waitingHue = Number(slider.value)
+		const emissionsBeforeClose = emissionsOf(args.onValueChange)
+
+		canvas.getByRole("button", { name: "Close the field" }).click()
+		await expect(emissionsBeforeClose).toBe(0)
+		await waitFor(() => expect(args.onValueChange).toHaveBeenCalledTimes(1))
+		await expect(args.onValueChange).toHaveBeenCalledWith(waitingHue)
+
+		drag.releaseAt(0.5)
+		await pause(EMISSION_PAUSE_MS)
+		await expect(args.onValueChange).toHaveBeenCalledTimes(1)
 	},
 })

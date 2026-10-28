@@ -123,14 +123,17 @@ type HueEmissionProps = Pick<ColourFieldProps, "value" | "onValueChange">
 const useHueEmission = ({ value, onValueChange }: HueEmissionProps) => {
 	const [isDragging, setIsDragging] = useState(false)
 	const [isHoldingLocalHue, setIsHoldingLocalHue] = useState(false)
-	const [lastEmittedHue, setLastEmittedHue] = useState<number>()
+	const [inFlightHues, setInFlightHues] = useState<(number | null)[]>([])
 	const [seenValue, setSeenValue] = useState(value)
 	const pendingHue = useRef<number>(undefined)
 	const emissionTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
 
 	if (value !== seenValue) {
 		setSeenValue(value)
-		if (!isDragging && value !== lastEmittedHue) setIsHoldingLocalHue(false)
+		const reached = inFlightHues.indexOf(value)
+		const stillInFlight = reached === -1 ? [] : inFlightHues.slice(reached + 1)
+		setInFlightHues(stillInFlight)
+		if (!isDragging && stillInFlight.length === 0) setIsHoldingLocalHue(false)
 	}
 
 	const cancelPending = () => {
@@ -142,14 +145,16 @@ const useHueEmission = ({ value, onValueChange }: HueEmissionProps) => {
 		cancelPending()
 		setIsDragging(false)
 		setIsHoldingLocalHue(false)
+		setInFlightHues((hues) => [...hues, hue])
 		onValueChange(hue)
 	}
 
 	const flushPending = useStableCallback(() => {
 		const hue = pendingHue.current
 		cancelPending()
-		if (hue === undefined || hue === value) return
-		setLastEmittedHue(hue)
+		const awaitedValue = inFlightHues.length > 0 ? inFlightHues.at(-1) : value
+		if (hue === undefined || hue === awaitedValue) return
+		setInFlightHues((hues) => [...hues, hue])
 		setIsHoldingLocalHue(true)
 		onValueChange(hue)
 	})
