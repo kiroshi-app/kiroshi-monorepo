@@ -7,11 +7,12 @@ import {
 	type PointerEvent,
 	type ReactNode,
 	type RefObject,
+	useId,
 	useLayoutEffect,
 	useRef,
 	useState,
 } from "react"
-import { createPortal } from "react-dom"
+import { createPortal, flushSync } from "react-dom"
 import { useTranslation } from "react-i18next"
 
 import { ContextMenuPressTrigger } from "@workspace/ui/components/context-menu-press-trigger"
@@ -92,7 +93,7 @@ const TAB_ICON =
 	"pointer-events-none grid size-4 shrink-0 place-items-center [&>svg]:size-3.75"
 
 const TAB =
-	"relative flex h-7 touch-none select-none items-center gap-1.5 rounded-md bg-title-bar-tab ps-2 pe-7.25 text-muted-foreground hover:bg-title-bar-highlight hover:text-foreground focus-visible:outline-2 focus-visible:outline-foreground focus-visible:outline-offset-1 aria-selected:bg-title-bar-tab-selected aria-selected:text-foreground"
+	"relative flex h-7 touch-none select-none items-center gap-1.5 rounded-md bg-title-bar-tab ps-2 pe-7.25 text-muted-foreground hover:bg-title-bar-highlight hover:text-foreground focus-visible:outline-2 focus-visible:outline-foreground focus-visible:outline-offset-1 data-pointer-within:bg-title-bar-highlight data-pointer-within:text-foreground aria-selected:bg-title-bar-tab-selected aria-selected:text-foreground"
 
 const PINNED_TAB =
 	"relative grid touch-none select-none place-items-center rounded-md bg-title-bar-pinned text-muted-foreground hover:bg-title-bar-highlight hover:text-foreground focus-visible:outline-2 focus-visible:outline-foreground focus-visible:outline-offset-1 aria-selected:bg-title-bar-tab-selected aria-selected:text-foreground"
@@ -278,6 +279,18 @@ const closePairOf = (target: EventTarget | null) =>
 		? target.closest(`[${CLOSE_PAIR}]`)?.getAttribute(CLOSE_PAIR)
 		: undefined
 
+const pairedIn = (
+	root: HTMLElement | null,
+	id: string,
+	kind: "tab" | "close",
+) =>
+	root?.querySelector<HTMLElement>(
+		`${kind === "tab" ? '[role="tab"]' : '[data-slot="title-bar-tab-close"]'}[${CLOSE_PAIR}="${CSS.escape(id)}"]`,
+	)
+
+const isTabKey = (event: KeyboardEvent<HTMLElement>, isBackward: boolean) =>
+	event.key === "Tab" && event.shiftKey === isBackward
+
 const useCloseReveal = () => {
 	const [hoveredId, setHoveredId] = useState<string | null>(null)
 	const [focusedId, setFocusedId] = useState<string | null>(null)
@@ -287,17 +300,65 @@ const useCloseReveal = () => {
 			if (closePairOf(event.relatedTarget) === id) return
 			setId((current) => (current === id ? null : current))
 		}
-	const revealHandlersFor = (id: string): CloseRevealHandlers => ({
+	const pointerHandlersFor = (id: string) => ({
 		[CLOSE_PAIR]: id,
 		onPointerEnter: () => setHoveredId(id),
 		onPointerLeave: forget(id, setHoveredId),
+		onBlur: forget(id, setFocusedId),
+	})
+	const tabRevealFor = (id: string): CloseRevealHandlers => ({
+		...pointerHandlersFor(id),
 		onFocus: (event) => {
 			if (event.currentTarget.matches(":focus-visible")) setFocusedId(id)
 		},
-		onBlur: forget(id, setFocusedId),
 	})
+	const closeRevealFor = (id: string): CloseRevealHandlers => ({
+		...pointerHandlersFor(id),
+		onFocus: () => setFocusedId(id),
+	})
+	const revealNow = (id: string) => flushSync(() => setFocusedId(id))
+	const isHovered = (id: string) => id === hoveredId
 	const isRevealed = (id: string) => id === hoveredId || id === focusedId
-	return { isRevealed, revealHandlersFor }
+	return { isHovered, isRevealed, revealNow, tabRevealFor, closeRevealFor }
+}
+
+type TabCloseButtonProps = {
+	title: string
+	isShown: boolean
+	revealHandlers: CloseRevealHandlers
+	onKeyDown: (event: KeyboardEvent<HTMLElement>) => void
+	onClose: () => void
+}
+
+const TabCloseButton = ({
+	title,
+	isShown,
+	revealHandlers,
+	onKeyDown,
+	onClose,
+}: TabCloseButtonProps) => {
+	const { t } = useTranslation("common")
+	const descriptionId = useId()
+	return (
+		<>
+			<button
+				{...revealHandlers}
+				aria-describedby={descriptionId}
+				aria-label={t("titleBar.closeTab")}
+				className={CLOSE_BUTTON}
+				data-slot="title-bar-tab-close"
+				hidden={!isShown}
+				onClick={onClose}
+				onKeyDown={onKeyDown}
+				type="button"
+			>
+				<Icons.Close aria-hidden="true" />
+			</button>
+			<span hidden id={descriptionId}>
+				{t("titleBar.closeTabDescription", { title })}
+			</span>
+		</>
+	)
 }
 
 type TabMove = {
@@ -411,6 +472,7 @@ type TitleBarTabItemProps = TabGestures & {
 	insertionOn: (id: string, at: number | null) => InsertionEdge | undefined
 	onMoveKey: (event: KeyboardEvent<HTMLElement>) => void
 	revealHandlers: CloseRevealHandlers
+	isPointerWithin: boolean
 }
 
 type TabInsertionLineProps = {
@@ -439,6 +501,7 @@ const TitleBarTabItem = ({
 	insertionOn,
 	onMoveKey,
 	revealHandlers,
+	isPointerWithin,
 	onPinTab,
 	onUnpinTab,
 	onNewTab,
@@ -475,6 +538,7 @@ const TitleBarTabItem = ({
 							width,
 							isLifted && LIFTED_TAB,
 						)}
+						data-pointer-within={isPointerWithin || undefined}
 						data-slot={tab.isPinned ? "title-bar-pinned-tab" : "title-bar-tab"}
 						onClick={(event) => {
 							if (lift.hasJustDropped()) event.preventBaseUIHandler()
@@ -665,10 +729,26 @@ const TitleBarTabs = ({
 		stripRef,
 		onReorderTabs,
 	})
-	const { isRevealed, revealHandlersFor } = useCloseReveal()
+	const { isHovered, isRevealed, revealNow, tabRevealFor, closeRevealFor } =
+		useCloseReveal()
 	const showsClose = (id: string) =>
 		id !== lift.lift?.id &&
 		(id === activeTabId || (!lift.lift && isRevealed(id)))
+	const tabKeyOf =
+		(tab: TitleBarTab) => (event: KeyboardEvent<HTMLElement>) => {
+			if (isTabKey(event, false) && !tab.isPinned && !lift.lift) {
+				event.preventDefault()
+				revealNow(tab.id)
+				pairedIn(stripRef.current, tab.id, "close")?.focus()
+				return
+			}
+			moveByKey(tab.id, event)
+		}
+	const closeKeyOf = (id: string) => (event: KeyboardEvent<HTMLElement>) => {
+		if (!isTabKey(event, true)) return
+		event.preventDefault()
+		pairedIn(stripRef.current, id, "tab")?.focus()
+	}
 	const tabItem = (tab: TitleBarTab, width: string) => (
 		<TitleBarTabItem
 			insertionOn={insertionOn}
@@ -679,13 +759,16 @@ const TitleBarTabs = ({
 			onCloseOtherTabs={onCloseOtherTabs}
 			onCloseTab={onCloseTab}
 			onDuplicateTab={onDuplicateTab}
-			onMoveKey={(event) => moveByKey(tab.id, event)}
+			isPointerWithin={
+				tab.id !== activeTabId && !lift.lift && isHovered(tab.id)
+			}
+			onMoveKey={tabKeyOf(tab)}
 			onMoveTabToNewWindow={onMoveTabToNewWindow}
 			onNewTab={onNewTab}
 			onPinTab={onPinTab}
 			onReopenClosedTab={onReopenClosedTab}
 			onUnpinTab={onUnpinTab}
-			revealHandlers={revealHandlersFor(tab.id)}
+			revealHandlers={tabRevealFor(tab.id)}
 			tab={tab}
 			width={width}
 		/>
@@ -736,16 +819,13 @@ const TitleBarTabs = ({
 					{hasDivider ? <span className={DIVIDER} /> : null}
 					{kept.map((tab) => (
 						<span className={cn(CLOSE_SLOT, tabWidth)} key={tab.id}>
-							<button
-								{...revealHandlersFor(tab.id)}
-								aria-label={t("titleBar.closeTab")}
-								className={cn(CLOSE_BUTTON, !showsClose(tab.id) && "invisible")}
-								data-slot="title-bar-tab-close"
-								onClick={() => onCloseTab?.(tab.id)}
-								type="button"
-							>
-								<Icons.Close aria-hidden="true" />
-							</button>
+							<TabCloseButton
+								isShown={showsClose(tab.id)}
+								onClose={() => onCloseTab?.(tab.id)}
+								onKeyDown={closeKeyOf(tab.id)}
+								revealHandlers={closeRevealFor(tab.id)}
+								title={tab.title}
+							/>
 						</span>
 					))}
 				</div>

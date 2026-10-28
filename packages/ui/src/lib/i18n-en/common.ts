@@ -50,6 +50,7 @@ const common = {
 		forward: "Forward",
 		newTab: "New tab",
 		closeTab: "Close tab",
+		closeTabDescription: "Closes {{title}}",
 		pinTab: "Pin tab",
 		unpinTab: "Unpin tab",
 		closeOtherTabs: "Close other tabs",
