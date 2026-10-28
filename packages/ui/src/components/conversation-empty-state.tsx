@@ -21,10 +21,9 @@ type SuggestionProps =
 
 type ConversationEmptyStateProps = Omit<
 	ComponentProps<"div">,
-	"children" | "title" | "color"
+	"children" | "title"
 > &
 	Pick<ConversationSubjectIconProps, "icon"> & {
-		color?: number | null
 		title: string
 		bots: RosterBot[]
 		spaceName?: string
@@ -101,7 +100,6 @@ const ConversationEmptyState = ({
 	title,
 	bots,
 	icon,
-	color,
 	spaceName,
 	spaceTint,
 	suggestedBots,

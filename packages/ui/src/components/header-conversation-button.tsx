@@ -19,7 +19,6 @@ type HeaderConversationButtonProps = Pick<
 	ConversationSubjectIconProps,
 	"icon"
 > & {
-	color?: number | null
 	name: string
 	bots: RosterBot[]
 	isSettingsOpen?: boolean

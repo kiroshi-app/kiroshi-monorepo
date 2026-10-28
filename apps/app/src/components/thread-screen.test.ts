@@ -30,13 +30,9 @@ import {
 	vi,
 } from "vitest"
 
-import {
-	BLOT_HUES,
-	type BotAvatarBlot,
-} from "@workspace/ui/components/companion-colour"
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { CompanionMenuProvider } from "@workspace/ui/components/companion-menu"
 import { CompanionSelectProvider } from "@workspace/ui/components/companion-select"
-import { hueStyle } from "@workspace/ui/components/hue-palette"
 import {
 	type ConversationIconName,
 	ConversationIcons,
@@ -3171,34 +3167,23 @@ const pictogramIn = (surface: HTMLElement | null) =>
 		'[data-slot="conversation-subject-icon-pictogram"]',
 	)?.innerHTML
 
-const LIGHT_FOREGROUND = "--hue-light-conversation-icon-foreground"
-const DARK_FOREGROUND = "--hue-dark-conversation-icon-foreground"
-
 const subjectColourIn = (surface: HTMLElement | null) => {
 	const icon = subjectIconIn(surface)
 	return {
 		hue: icon?.getAttribute("data-hue") ?? null,
 		color: icon?.style.color,
-		lightForeground: icon?.style.getPropertyValue(LIGHT_FOREGROUND),
-		darkForeground: icon?.style.getPropertyValue(DARK_FOREGROUND),
+		hueProperties: Array.from(icon?.style ?? []).filter((property) =>
+			property.startsWith("--hue-"),
+		),
 	}
 }
 
-const UNCOLOURED_SUBJECT = {
+const FREE_HUE = 210
+
+const NEUTRAL_SUBJECT = {
 	hue: null,
 	color: "var(--conversation-icon-foreground)",
-	lightForeground: "",
-	darkForeground: "",
-}
-
-const subjectColourOf = (colour: BotAvatarBlot) => {
-	const style = hueStyle(BLOT_HUES[colour])
-	return {
-		hue: String(BLOT_HUES[colour]),
-		color: "var(--conversation-icon-foreground)",
-		lightForeground: style[LIGHT_FOREGROUND],
-		darkForeground: style[DARK_FOREGROUND],
-	}
+	hueProperties: [],
 }
 
 const drawnPictogramOf = (icon: ConversationIconName) => {
@@ -3236,7 +3221,7 @@ describe("ThreadScreen wearing the look of a group conversation", () => {
 		layout.restore()
 	})
 
-	it("redraws the header with the icon and the colour of a conversation updated while open", async () => {
+	it("redraws the header with the icon of a conversation updated while open, neutral whatever its colour", async () => {
 		const room = await roomOf({ names: ["Ada", "Zoe"] })
 		const { rerender } = render(
 			screenOf(wearing(room.thread, { icon: null, color: null }), room.bots),
@@ -3245,32 +3230,38 @@ describe("ThreadScreen wearing the look of a group conversation", () => {
 		await settle()
 		const header = screen.getByRole("button", { name: HEADER_OF_WALLS })
 		expect(pictogramIn(header)).toBe(drawnPictogramOf("MessageSquare"))
-		expect(subjectColourIn(header)).toEqual(UNCOLOURED_SUBJECT)
+		expect(subjectColourIn(header)).toEqual(NEUTRAL_SUBJECT)
 
-		rerender(
-			screenOf(wearing(room.thread, { icon: "Rocket", color: 186 }), room.bots),
-		)
-		await settle()
+		for (const color of [BLOT_HUES.cyan, FREE_HUE]) {
+			rerender(
+				screenOf(wearing(room.thread, { icon: "Rocket", color }), room.bots),
+			)
+			await settle()
 
-		const redrawn = screen.getByRole("button", { name: HEADER_OF_WALLS })
-		expect(pictogramIn(redrawn)).toBe(drawnPictogramOf("Rocket"))
-		expect(subjectColourIn(redrawn)).toEqual(subjectColourOf("cyan"))
+			const redrawn = screen.getByRole("button", { name: HEADER_OF_WALLS })
+			expect(pictogramIn(redrawn)).toBe(drawnPictogramOf("Rocket"))
+			expect(subjectColourIn(redrawn)).toEqual(NEUTRAL_SUBJECT)
+		}
 	})
 
-	it("draws the icon and the colour of a conversation with no message in its empty state", async () => {
-		const room = await roomOf({ names: ["Ada", "Zoe"] })
-		const { container } = render(
-			screenOf(wearing(room.thread, { icon: "Rocket", color: 186 }), room.bots),
-			{ wrapper: createQueryTestWrapper().wrapper },
-		)
-		await settle()
+	it.each([BLOT_HUES.cyan, FREE_HUE, null])(
+		"draws the icon of a conversation coloured %s with no message, neutral, in its empty state",
+		async (color) => {
+			const room = await roomOf({ names: ["Ada", "Zoe"] })
+			const { container } = render(
+				screenOf(wearing(room.thread, { icon: "Rocket", color }), room.bots),
+				{ wrapper: createQueryTestWrapper().wrapper },
+			)
+			await settle()
 
-		const emptyState = container.querySelector<HTMLElement>(
-			'[data-slot="conversation-empty-state"]',
-		)
-		expect(pictogramIn(emptyState)).toBe(drawnPictogramOf("Rocket"))
-		expect(subjectColourIn(emptyState)).toEqual(subjectColourOf("cyan"))
-	})
+			const emptyState = container.querySelector<HTMLElement>(
+				'[data-slot="conversation-empty-state"]',
+			)
+			expect(emptyState?.hasAttribute("color")).toBe(false)
+			expect(pictogramIn(emptyState)).toBe(drawnPictogramOf("Rocket"))
+			expect(subjectColourIn(emptyState)).toEqual(NEUTRAL_SUBJECT)
+		},
+	)
 })
 
 const leftOutError = (detail: string): ChatError => ({

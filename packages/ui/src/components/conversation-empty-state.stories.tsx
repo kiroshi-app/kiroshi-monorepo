@@ -388,7 +388,7 @@ export const ThemesGroup = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this to read a room of several companions with no colour picked, in light and dark at once. Check that one 56px subject icon stands above the heading on the neutral pair of each theme, the message square centred in it. Pick `ThemesGroupRed` for a coloured room.",
+					"Reach for this to read a room of several companions with no colour picked, in light and dark at once. Check that one 56px subject icon stands above the heading on the neutral pair of each theme, the message square centred in it. Pick `ThemesGroupRed` for a room with a picked icon.",
 			},
 		},
 	},
@@ -398,12 +398,12 @@ export const ThemesGroup = meta.story({
 
 export const ThemesGroupRed = meta.story({
 	globals: { theme_layout: "side-by-side" },
-	args: { color: BLOT_HUES.red, icon: "ShieldKey" },
+	args: { icon: "ShieldKey" },
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Reach for this to read a room of several companions coloured red, in light and dark at once. Check that the 56px subject icon keeps the neutral pair of each theme, as a room with no colour does, and shows the picked pictogram. Pick `ThemesGroup` for a room with no colour.",
+					"Reach for this to read a room of several companions that picked the shield key, in light and dark at once. Check that the 56px subject icon keeps the neutral pair of each theme, whatever colour the room carries, and shows the picked pictogram. Pick `ThemesGroup` for the default icon.",
 			},
 		},
 	},
@@ -414,7 +414,6 @@ export const ThemesGroupRed = meta.story({
 export const FreeHue = meta.story({
 	globals: { theme_layout: "side-by-side" },
 	args: {
-		color: 210,
 		icon: "ShieldKey",
 		spaceName: "Northwind",
 		spaceTint: 210,
@@ -423,7 +422,7 @@ export const FreeHue = meta.story({
 		docs: {
 			description: {
 				story:
-					"A room coloured at a hue outside the eight presets, 210, in a Space at that hue, light beside dark. Check that the Space chip wears 210 rather than the nearest preset while the subject icon keeps the neutral pair of each theme. Pick `ThemesGroupRed` and `InSpace` for preset hues.",
+					"A room in a Space at a hue outside the eight presets, 210, light beside dark. Check that the Space chip wears 210 rather than the nearest preset while the subject icon keeps the neutral pair of each theme. Pick `InSpace` for a preset hue.",
 			},
 		},
 	},

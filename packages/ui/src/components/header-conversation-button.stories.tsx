@@ -145,7 +145,7 @@ export const ThemesGroup = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this to read a room of several companions with no colour picked, in light and dark at once. Check that a 24px subject icon on the neutral pair of each theme leads the button, the message square centred in it. Pick `ThemesGroupRed` for a coloured room.",
+					"Reach for this to read a room of several companions with no colour picked, in light and dark at once. Check that a 24px subject icon on the neutral pair of each theme leads the button, the message square centred in it. Pick `ThemesGroupRed` for a room with a picked icon.",
 			},
 		},
 	},
@@ -155,12 +155,12 @@ export const ThemesGroup = meta.story({
 
 export const ThemesGroupRed = meta.story({
 	globals: { theme_layout: "side-by-side" },
-	args: { color: BLOT_HUES.red, icon: "ShieldKey" },
+	args: { icon: "ShieldKey" },
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Reach for this to read a room of several companions coloured red, in light and dark at once. Check that the 24px subject icon keeps the neutral pair of each theme, as a room with no colour does, and shows the picked pictogram. Pick `ThemesGroup` for a room with no colour.",
+					"Reach for this to read a room of several companions that picked the shield key, in light and dark at once. Check that the 24px subject icon keeps the neutral pair of each theme, whatever colour the room carries, and shows the picked pictogram. Pick `ThemesGroup` for the default icon.",
 			},
 		},
 	},

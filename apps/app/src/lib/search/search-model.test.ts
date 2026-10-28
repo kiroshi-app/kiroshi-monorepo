@@ -115,14 +115,14 @@ const identityOfGroupChatIn = (room: Conversation) => {
 	return groups.find((group) => group.kind === "chats")?.results[0].identity
 }
 
-it("gives a group chat result the icon and the colour its conversation wears", () => {
+it("gives a group chat result the icon its conversation wears and none of its colour", () => {
 	expect(
 		identityOfGroupChatIn(roomWearing({ icon: "Rocket", color: 186 })),
-	).toEqual({ kind: "chat-group", icon: "Rocket", color: 186 })
+	).toStrictEqual({ kind: "chat-group", icon: "Rocket" })
 })
 
-it("leaves the icon and the colour of a group chat result blank when its conversation wears none", () => {
+it("leaves the icon of a group chat result blank when its conversation wears none", () => {
 	expect(
 		identityOfGroupChatIn(roomWearing({ icon: null, color: null })),
-	).toEqual({ kind: "chat-group", icon: undefined, color: null })
+	).toStrictEqual({ kind: "chat-group", icon: undefined })
 })

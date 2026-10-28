@@ -29,10 +29,7 @@ import { cn } from "@workspace/ui/lib/utils"
 type SearchResultIdentity =
 	| { kind: "message"; bot: MissionBot }
 	| { kind: "message-from-you"; reader: string }
-	| ({ kind: "chat-group"; color?: number | null } & Pick<
-			ConversationSubjectIconProps,
-			"icon"
-	  >)
+	| ({ kind: "chat-group" } & Pick<ConversationSubjectIconProps, "icon">)
 	| { kind: "chat-solo"; bot: MissionBot }
 	| { kind: "mission"; bot: MissionBot; badge?: BotBadge; mark: MissionMark }
 	| { kind: "routine"; bot: MissionBot }
