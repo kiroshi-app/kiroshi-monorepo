@@ -45,6 +45,7 @@ export type CompanionSpokeDriverOptions = {
 	companions: CompanionSpokePort
 	spokenWords: Pick<SpokenWords, "announce">
 	thisComputer: ThisComputerPort
+	relayed: Set<string>
 	reportFailure: (
 		notice: UnreportedFailureNotice,
 		facts?: ReporterFacts,
@@ -107,9 +108,9 @@ export const startCompanionSpokeDriver = ({
 	companions,
 	spokenWords,
 	thisComputer,
+	relayed,
 	reportFailure,
 }: CompanionSpokeDriverOptions): (() => void) => {
-	const relayed = new Set<string>()
 	let isStopped = false
 
 	const raiseFailure = (thrown: unknown, facts?: ReporterFacts) => {

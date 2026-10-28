@@ -1,4 +1,4 @@
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 
 import { startCompanionSpokeDriver } from "./companion-spoke-driver"
 import type { ConversationRuntimes } from "./conversation-runtimes"
@@ -39,6 +39,8 @@ export const useCompanionSpokeDriver = ({
 	spokenWords,
 	isDriverWindow,
 }: CompanionSpokeDriverMount) => {
+	const [relayed] = useState(() => new Set<string>())
+
 	useEffect(() => {
 		if (!isDriverWindow) {
 			return
@@ -49,7 +51,8 @@ export const useCompanionSpokeDriver = ({
 			companions: arrivalsTransport,
 			spokenWords,
 			thisComputer,
+			relayed,
 			reportFailure: failureReporterIn("companion-spoke-driver"),
 		})
-	}, [runtimes, roster, spokenWords, isDriverWindow])
+	}, [runtimes, roster, spokenWords, isDriverWindow, relayed])
 }
