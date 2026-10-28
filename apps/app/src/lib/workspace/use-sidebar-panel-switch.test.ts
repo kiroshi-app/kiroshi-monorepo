@@ -545,8 +545,10 @@ const mountTabbedSwitch = async () => {
 	return {
 		...mounted,
 		tabs,
+		tabIds,
 		openTabOn,
 		activate,
+		pickRow: (id: string) => act(() => roster.select(id)),
 		shownHref,
 		showLastMission,
 		openTab: () => mounted.result.current.sidebarTab.openTab,
@@ -614,5 +616,40 @@ describe("activating a title bar tab", () => {
 		act(() => shown.tabs.history.push(C1_HREF))
 
 		expect(shown.openTab()).toBe("missions")
+	})
+})
+
+const stripOf = (tabs: ReturnType<typeof createWorkspaceTabs>) =>
+	shownTabsOf(tabs.getState())
+
+describe("a sidebar row picked while a pinned tab is active", () => {
+	it("opens it in a new tab, selects its row and leaves the pinned tab on its page", async () => {
+		const shown = await mountTabbedSwitch()
+		const [pinnedId = ""] = shown.tabIds()
+		act(() => shown.tabs.pin(pinnedId))
+		const pinnedBefore = stripOf(shown.tabs).tabs[0]
+
+		shown.pickRow("b-1")
+
+		const { tabs, activeId } = stripOf(shown.tabs)
+		expect(tabs.map(currentHrefOf)).toEqual([C1_HREF, COMPANION_HREF])
+		expect(tabs[0]).toEqual(pinnedBefore)
+		expect(tabs[1]?.entries).toHaveLength(1)
+		expect(activeId).toBe(tabs[1]?.id)
+		expect(shown.selectedRow()).toBe("b-1")
+	})
+
+	it("activates the tab already showing it and selects its row", async () => {
+		const shown = await mountTabbedSwitch()
+		const [pinnedId = ""] = shown.tabIds()
+		act(() => shown.tabs.pin(pinnedId))
+		const companionTab = shown.openTabOn(COMPANION_HREF)
+		const before = stripOf(shown.tabs).tabs
+
+		shown.pickRow("b-1")
+
+		expect(stripOf(shown.tabs).tabs).toEqual(before)
+		expect(stripOf(shown.tabs).activeId).toBe(companionTab)
+		expect(shown.selectedRow()).toBe("b-1")
 	})
 })

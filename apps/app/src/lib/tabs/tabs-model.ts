@@ -1,6 +1,6 @@
 import type { HistoryLocation } from "@tanstack/react-router"
 
-import { EMPTY_LIST_HREF } from "./tab-pages"
+import { EMPTY_LIST_HREF, pageOf, samePage, type TabPage } from "./tab-pages"
 
 type EntryState = HistoryLocation["state"]
 
@@ -73,10 +73,13 @@ const insertAt = (space: SpaceTabs, position: number, tab: Tab): SpaceTabs => ({
 const insertAfterActive = (space: SpaceTabs, tab: Tab): SpaceTabs =>
 	insertAt(space, indexOfTab(space, activeTabOf(space).id) + 1, tab)
 
-export const openEmptyTab = (space: SpaceTabs): SpaceTabs => {
-	const tab = tabOn(EMPTY_LIST_HREF)
+const openTabOn = (space: SpaceTabs, href: string): SpaceTabs => {
+	const tab = tabOn(href)
 	return selectTab(insertAfterActive(space, tab), tab.id)
 }
+
+export const openEmptyTab = (space: SpaceTabs): SpaceTabs =>
+	openTabOn(space, EMPTY_LIST_HREF)
 
 export const openBackgroundTab = (space: SpaceTabs, href: string): SpaceTabs =>
 	insertAfterActive(space, tabOn(href))
@@ -183,12 +186,32 @@ const withActiveTab = (space: SpaceTabs, change: (tab: Tab) => Tab) => {
 	}
 }
 
-export const pushEntry = (space: SpaceTabs, entry: TabEntry): SpaceTabs =>
+const pushInPlace = (space: SpaceTabs, entry: TabEntry): SpaceTabs =>
 	withActiveTab(space, (tab) => ({
 		...tab,
 		entries: [...tab.entries.slice(0, tab.index + 1), entry],
 		index: tab.index + 1,
 	}))
+
+const showsPage = (tab: Tab, page: TabPage) =>
+	samePage(pageOf(currentHrefOf(tab)), page)
+
+const tabsAfter = (space: SpaceTabs, id: string) => {
+	const position = indexOfTab(space, id)
+	return [...space.tabs.slice(position + 1), ...space.tabs.slice(0, position)]
+}
+
+export const pushEntry = (space: SpaceTabs, entry: TabEntry): SpaceTabs => {
+	const active = activeTabOf(space)
+	const page = pageOf(entry.href)
+	if (!active.isPinned || showsPage(active, page)) {
+		return pushInPlace(space, entry)
+	}
+	const showing = tabsAfter(space, active.id).find((tab) =>
+		showsPage(tab, page),
+	)
+	return showing ? selectTab(space, showing.id) : openTabOn(space, entry.href)
+}
 
 export const replaceEntry = (space: SpaceTabs, entry: TabEntry): SpaceTabs =>
 	withActiveTab(space, (tab) => ({
