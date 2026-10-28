@@ -352,7 +352,7 @@ describe("the landing scene rail indicators against apps/app", () => {
 })
 
 describe("the landing scene mission chips against apps/app", () => {
-	it("reads the app's mission-state to chip-state table, so any change to it is reviewed on the landing", () => {
+	it("pins the chip-state table the scene reads from apps/app, so any change to it is reviewed on the landing", () => {
 		expect(CHIP_STATE_OF).toMatchInlineSnapshot(`
 			{
 			  "failed": "failed",
