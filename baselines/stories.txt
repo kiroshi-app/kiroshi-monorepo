@@ -1106,6 +1106,8 @@ navigation-apptitlebar--drag-measures-only-at-lift
 navigation-apptitlebar--drag-tab-two-right
 navigation-apptitlebar--escape-cancels-drag
 navigation-apptitlebar--escape-cancels-drag-dark
+navigation-apptitlebar--inactive-tab-hover
+navigation-apptitlebar--inactive-tab-hover-dark
 navigation-apptitlebar--keyboard-reorder
 navigation-apptitlebar--keyboard-reorder-dark
 navigation-apptitlebar--keyboard-reorder-without-handler
