@@ -40,11 +40,13 @@ jobs:
 
       - name: Tauri bin shims
         shell: bash
+        working-directory: apps/app
+        continue-on-error: true
         run: |
-          ls -la node_modules/.bin | grep -i tauri || true
-          cat node_modules/.bin/tauri.bunx 2>/dev/null | od -c | head -5 || true
+          ls -la node_modules/.bin | grep -i tauri
+          od -c node_modules/.bin/tauri.bunx | head -8
+          ls -la node_modules/@tauri-apps
           head -3 node_modules/@tauri-apps/cli/tauri.js
-          ls node_modules/@tauri-apps
 
       - name: Probe each way of starting the tauri CLI
         timeout-minutes: 15
@@ -59,9 +61,9 @@ jobs:
             echo "OPE1452|bun=${{ matrix.bun }}|probe=$name|exit=$code|seconds=$((SECONDS - started))"
             head -15 "$RUNNER_TEMP/$name.out"
           }
-          probe node-direct node ../../node_modules/@tauri-apps/cli/tauri.js --version
+          probe node-direct node node_modules/@tauri-apps/cli/tauri.js --version
           probe bun-shim bun tauri --version
           probe bun-runtime bun --bun tauri --version
           probe bun-run-script bun run tauri:build --version
-          probe node-direct-info node ../../node_modules/@tauri-apps/cli/tauri.js info
+          probe node-direct-info node node_modules/@tauri-apps/cli/tauri.js info
           probe bun-shim-info bun tauri info
