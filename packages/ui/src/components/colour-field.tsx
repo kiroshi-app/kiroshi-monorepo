@@ -118,21 +118,20 @@ const OwnHueMark = ({ look, mark }: OwnHueMarkProps) =>
 	)
 
 const useHueEmission = (onValueChange: ColourFieldProps["onValueChange"]) => {
-	const emit = useStableCallback(onValueChange)
 	const lastEmittedHue = useRef<number | null>(undefined)
 	const pendingHue = useRef<number>(undefined)
 	const emissionTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
 
-	const cancelPending = useStableCallback(() => {
+	const cancelPending = () => {
 		clearTimeout(emissionTimer.current)
 		pendingHue.current = undefined
-	})
+	}
 
-	const emitNow = useStableCallback((hue: number | null) => {
+	const emitNow = (hue: number | null) => {
 		cancelPending()
 		lastEmittedHue.current = hue
-		emit(hue)
-	})
+		onValueChange(hue)
+	}
 
 	const flushPending = useStableCallback(() => {
 		const hue = pendingHue.current
