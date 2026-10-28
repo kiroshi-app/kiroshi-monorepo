@@ -15,7 +15,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        bun: ["1.3.13", "1.4.4"]
+        bun: ["1.3.13", "1.3.14", "1.4.0", "1.4.4"]
+    env:
+      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      NO_STRIP: "true"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -34,27 +44,29 @@ jobs:
         run: |
           gh release view v0.26.0-beta.1 --json body --jq .body > "$RUNNER_TEMP/beta1.txt"
           gh release view v0.25.0 --json body --jq .body > "$RUNNER_TEMP/v025.txt"
-          for size in 4096 8192 12288 16000 16384 16500 24576 32000 32766 32768 65536; do
+          for size in 20480 24576 32000 65536; do
             head -c "$size" /dev/zero | tr '\0' 'a' > "$RUNNER_TEMP/flat-$size.txt"
           done
-          wc -c "$RUNNER_TEMP"/*.txt
 
-      - name: Start bun with each body as INPUT_RELEASEBODY
+      - name: Start bun tauri with each release body in the tauri-action env
         timeout-minutes: 15
         shell: bash
         working-directory: apps/app
         run: |
           probe() {
-            local body=$1; shift
-            local name=$1; shift
+            local body=$1
             local code=0
             local started=$SECONDS
-            INPUT_RELEASEBODY="$(cat "$RUNNER_TEMP/$body.txt")" timeout -k 5 60 "$@" > "$RUNNER_TEMP/out.txt" 2>&1 < /dev/null || code=$?
-            echo "OPE1452|bun=${{ matrix.bun }}|body=$body|probe=$name|exit=$code|seconds=$((SECONDS - started))|$(head -c 160 "$RUNNER_TEMP/out.txt" | tr '\r\n' '  ')"
+            export INPUT_RELEASEBODY="$(cat "$RUNNER_TEMP/$body.txt")"
+            export INPUT_PROJECTPATH=apps/app INPUT_RELEASEID=1 INPUT_RELEASEDRAFT=true INPUT_PRERELEASE=true INPUT_UPLOADUPDATERJSON=true
+            local envbytes=$(env | wc -c)
+            timeout -k 5 60 bun tauri --version > "$RUNNER_TEMP/out.txt" 2>&1 < /dev/null || code=$?
+            echo "OPE1452|bun=${{ matrix.bun }}|body=$body|env-bytes=$envbytes|exit=$code|seconds=$((SECONDS - started))|$(head -c 120 "$RUNNER_TEMP/out.txt" | tr '\r\n' '  ')"
+            if [ "$code" != 0 ]; then head -c 1500 "$RUNNER_TEMP/out.txt" | grep -v -i 'args:\|elapsed'; echo; fi
           }
-          for body in v025 beta1 flat-4096 flat-8192 flat-12288 flat-16000 flat-16384 flat-16500 flat-24576 flat-32000 flat-32766 flat-32768 flat-65536; do
-            probe "$body" bun-version bun --version
-            probe "$body" bun-shim bun tauri --version
-            probe "$body" bun-shim-again bun tauri --version
-            probe "$body" node-direct node node_modules/@tauri-apps/cli/tauri.js --version
-          done
+          probe v025
+          probe beta1
+          probe flat-20480
+          probe flat-24576
+          probe flat-32000
+          probe flat-65536
