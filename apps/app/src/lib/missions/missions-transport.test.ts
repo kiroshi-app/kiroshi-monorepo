@@ -265,6 +265,8 @@ describe("the mission calls of the run driver while a joined space is active", (
 		await missionRunTransport.reported("m-1", "t-1")
 		await missionRunTransport.answered("m-1", 2)
 		await missionRunTransport.rosterBlock("c-1", "b-1")
+		await missionRunTransport.claimRun("m-1")
+		await missionRunTransport.releaseRun("token-1")
 		await missionRunTransport.bots()
 		await missionRunTransport.mainChat("b-1")
 
@@ -277,6 +279,8 @@ describe("the mission calls of the run driver while a joined space is active", (
 			"mission_reported",
 			"mission_answered",
 			"conversation_roster_block",
+			"mission_run_claim",
+			"mission_run_release",
 			"conversation_bots",
 			"conversation_main_chat",
 		])

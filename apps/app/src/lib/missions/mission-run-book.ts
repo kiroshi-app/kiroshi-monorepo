@@ -11,6 +11,7 @@ import { isSameRuntimeScope } from "../chat/chat-state"
 export type LiveMissionRun = {
 	call: MissionRunCall
 	scope: RuntimeScope
+	token: string
 	deadline: ReturnType<typeof setTimeout>
 }
 
@@ -83,8 +84,13 @@ export const createMissionRunBook = ({
 		live.delete(held.call.mission.id)
 	}
 
+	const releaseClaim = (token: string) => {
+		void missions.releaseRun(token).catch(reporting("mission_run_release"))
+	}
+
 	const forget = (held: LiveMissionRun) => {
 		release(held)
+		releaseClaim(held.token)
 		takeAgain(held.call.mission.id)
 	}
 
@@ -165,6 +171,7 @@ export const createMissionRunBook = ({
 		shutdownSession,
 		takeAgain,
 		release,
+		releaseClaim,
 		end,
 		refuse,
 		expire,

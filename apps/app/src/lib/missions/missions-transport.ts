@@ -9,6 +9,7 @@ import type {
 } from "./mission-contract"
 import { createMissionEventRead } from "./mission-event-read"
 
+import type { MissionRunClaim } from "../bindings"
 import {
 	activeJoinedSpaceId,
 	invoke,
@@ -42,6 +43,9 @@ const missionCallsOn = ({ invoke, listen }: MissionHost) => ({
 			conversationId,
 			botId,
 		}),
+	claimRun: (missionId: string) =>
+		invoke<MissionRunClaim>("mission_run_claim", { missionId }),
+	releaseRun: (token: string) => invoke<void>("mission_run_release", { token }),
 	onChanged: (
 		listener: (changed: MissionChanged, hostId?: string | null) => void,
 	) =>

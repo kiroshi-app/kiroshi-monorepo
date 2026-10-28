@@ -5,6 +5,8 @@ import {
 } from "./mission-event-read"
 import type { OpenedMission } from "./opened-mission-controller"
 
+import type { MissionRunClaim } from "../bindings"
+
 export type FakeMissions = {
 	board: () => Promise<{ mission: Mission }[]>
 	unreported: () => Promise<{ mission: Mission }[]>
@@ -24,6 +26,13 @@ export type FakeMissions = {
 	rosterCalls: [conversationId: string, botId: string][]
 	holdRosterBlock: (block: string | null) => void
 	refuseRosterBlock: () => void
+	claimRun: (missionId: string) => Promise<MissionRunClaim>
+	releaseRun: (token: string) => Promise<void>
+	claims: string[]
+	releases: string[]
+	claimElsewhere: (missionId: string) => void
+	refuseClaim: () => void
+	refuseRelease: () => void
 	open: (opened: OpenedMission) => void
 	opened: OpenedMission[]
 	hold: (detail: MissionDetail) => void
@@ -67,6 +76,11 @@ export const createFakeMissions = (): FakeMissions => {
 	let isReportedRefused = false
 	let isAnsweredRefused = false
 	let detailGate: Promise<void> | null = null
+	const claims: string[] = []
+	const releases: string[] = []
+	const tokenOfMission = new Map<string, string>()
+	let isClaimRefused = false
+	let isReleaseRefused = false
 	let openDetailGate: () => void = () => undefined
 
 	const isOpen = ({ closedAt }: Mission) => closedAt === null
@@ -81,6 +95,8 @@ export const createFakeMissions = (): FakeMissions => {
 		answers,
 		detailCalls,
 		readSides,
+		claims,
+		releases,
 
 		read: createMissionEventRead({
 			detailOn: (hostId, missionId) => {
@@ -103,6 +119,43 @@ export const createFakeMissions = (): FakeMissions => {
 
 		refuseRosterBlock: () => {
 			isRosterRefused = true
+		},
+
+		claimRun: async (missionId) => {
+			claims.push(missionId)
+			if (isClaimRefused) {
+				throw new Error("the mission run could not be claimed")
+			}
+			if (tokenOfMission.has(missionId)) {
+				return { kind: "alreadyRunning" }
+			}
+			const token = `token-${claims.length}`
+			tokenOfMission.set(missionId, token)
+			return { kind: "claimed", token }
+		},
+
+		releaseRun: async (token) => {
+			releases.push(token)
+			if (isReleaseRefused) {
+				throw new Error("the mission run could not be released")
+			}
+			for (const [missionId, held] of tokenOfMission) {
+				if (held === token) {
+					tokenOfMission.delete(missionId)
+				}
+			}
+		},
+
+		claimElsewhere: (missionId) => {
+			tokenOfMission.set(missionId, "token-of-another-window")
+		},
+
+		refuseClaim: () => {
+			isClaimRefused = true
+		},
+
+		refuseRelease: () => {
+			isReleaseRefused = true
 		},
 
 		board: async () => {

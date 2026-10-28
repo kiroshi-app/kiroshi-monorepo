@@ -51,7 +51,7 @@ const AGENT_ASKED = missionEvents([
 ])
 
 const settled = async () => {
-	for (let round = 0; round < 30; round += 1) {
+	for (let round = 0; round < 60; round += 1) {
 		await Promise.resolve()
 	}
 }
@@ -100,6 +100,7 @@ type HarnessSeed = {
 	reports?: [missionId: string, turnId: string | null][]
 	soloOrigin?: boolean
 	firstStartFails?: boolean
+	claimedElsewhere?: boolean
 }
 
 const CLOSING_INSTANT = 9
@@ -121,6 +122,7 @@ const createHarness = async ({
 	reports = [],
 	soloOrigin = false,
 	firstStartFails = false,
+	claimedElsewhere = false,
 }: HarnessSeed = {}): Promise<Harness> => {
 	const scripted = createScriptedDriver()
 	const starts: Started[] = []
@@ -214,6 +216,10 @@ const createHarness = async ({
 
 	if (reportedFails) {
 		missions.refuseReported()
+	}
+
+	if (claimedElsewhere) {
+		missions.claimElsewhere(mission.id)
 	}
 
 	const stop = startMissionRunDriver({
@@ -1814,5 +1820,257 @@ describe("startMissionRunDriver raising a failure", () => {
 			expect.anything(),
 			{ side: "local", mission: harness.mission.id, space: "s1", count: 1 },
 		)
+	})
+})
+
+describe("startMissionRunDriver claiming a run", () => {
+	const FIRST_TOKEN = "token-1"
+	let harness: Harness
+	let logged: MockInstance<typeof console.error>
+	let informed: MockInstance<typeof console.info>
+
+	const restart = async (seed: HarnessSeed) => {
+		harness.stop()
+		harness = await createHarness(seed)
+	}
+
+	const consoleLines = () =>
+		[...logged.mock.calls, ...informed.mock.calls].map(([line]) => String(line))
+
+	const runAClosingMission = () => harness.enter("done", closedBy("poller"))
+
+	beforeEach(async () => {
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+		logged = vi.spyOn(console, "error").mockImplementation(() => undefined)
+		informed = vi.spyOn(console, "info").mockImplementation(() => undefined)
+		harness = await createHarness()
+	})
+
+	afterEach(() => {
+		harness.stop()
+		vi.useRealTimers()
+		vi.restoreAllMocks()
+	})
+
+	it("claims the mission before it opens a session for it", async () => {
+		const claim = vi.spyOn(harness.missions, "claimRun")
+		const open = vi.spyOn(harness.store, "openRuntimeSession")
+
+		await runAClosingMission()
+
+		expect(harness.missions.claims).toEqual([harness.mission.id])
+		expect(claim.mock.invocationCallOrder[0]).toBeLessThan(
+			open.mock.invocationCallOrder[0],
+		)
+	})
+
+	it("claims a status run before it opens its session", async () => {
+		await harness.enter("working")
+		await harness.emitAtThread({
+			type: "turnEnded",
+			ended: { sessionId: null, outcome: "completed" },
+		})
+
+		expect(harness.missions.claims).toEqual([harness.mission.id])
+		expect(harness.originStarts()).toHaveLength(1)
+	})
+
+	it("opens nothing, writes nothing and raises nothing when another window runs the mission", async () => {
+		await restart({ claimedElsewhere: true })
+
+		await runAClosingMission()
+
+		expect(harness.originStarts()).toEqual([])
+		expect(harness.driver.submissions).toEqual([])
+		expect(spoken(harness.originTail())).toEqual([])
+		expect(harness.missions.reports).toEqual([])
+		expect(harness.missions.releases).toEqual([])
+		expect(await failuresRaisedBy(harness)).not.toHaveBeenCalled()
+		expect(consoleLines()).toEqual([
+			`mission run driver: another window runs the mission | mission: ${harness.mission.id}`,
+		])
+	})
+
+	it("starts no run and raises the failure when the claim cannot be made", async () => {
+		harness.missions.refuseClaim()
+
+		await runAClosingMission()
+
+		expect(harness.originStarts()).toEqual([])
+		expect(harness.missions.releases).toEqual([])
+		expect(await failuresRaisedBy(harness)).toHaveBeenCalledTimes(1)
+		expect(consoleLines()).toEqual([
+			expect.stringMatching(
+				/^mission run driver: the mission run could not be claimed \| error: /,
+			),
+		])
+	})
+
+	it("releases the claim only once the report is written and recorded", async () => {
+		await restart({ open: "done", openEvents: closedBy("poller") })
+		const recording = Promise.withResolvers<void>()
+		const record = harness.missions.reported
+		vi.spyOn(harness.missions, "reported").mockImplementation(
+			async (missionId, turnId) => {
+				await recording.promise
+				await record(missionId, turnId)
+			},
+		)
+
+		await harness.endTurn(reported("The walls stand."))
+
+		expect(spoken(harness.originTail())).not.toEqual([])
+		expect(harness.missions.releases).toEqual([])
+
+		recording.resolve()
+		await settled()
+
+		expect(harness.missions.reports).toHaveLength(1)
+		expect(harness.missions.releases).toEqual([FIRST_TOKEN])
+	})
+
+	it("releases the claim once when the report cannot be recorded", async () => {
+		await restart({
+			open: "done",
+			openEvents: closedBy("poller"),
+			reportedFails: true,
+		})
+
+		await harness.endTurn(reported("The walls stand."))
+
+		expect(await failuresRaisedBy(harness)).toHaveBeenCalledTimes(1)
+		expect(harness.missions.releases).toEqual([FIRST_TOKEN])
+	})
+
+	it("releases the claim once when the turn does not complete", async () => {
+		await runAClosingMission()
+
+		await harness.endTurn({ outcome: "failed" })
+
+		expect(harness.missions.releases).toEqual([FIRST_TOKEN])
+	})
+
+	it("releases the claim once when the run is refused", async () => {
+		await runAClosingMission()
+
+		await harness.emitAtRun({
+			type: "permissionRequested",
+			request: { id: "p-1", toolName: "Bash", title: "Run it", detail: null },
+		})
+		harness.stop()
+		await settled()
+
+		expect(harness.missions.releases).toEqual([FIRST_TOKEN])
+	})
+
+	it("releases the claim once when the session of the run fails", async () => {
+		await runAClosingMission()
+
+		await harness.emitAtRun({
+			type: "failed",
+			error: { kind: "crashed", code: 1, detail: null },
+		})
+
+		expect(harness.missions.releases).toEqual([FIRST_TOKEN])
+	})
+
+	it("releases the claim once when the run outlives its deadline", async () => {
+		await runAClosingMission()
+
+		await vi.advanceTimersByTimeAsync(RUN_DEADLINE_MS)
+
+		expect(harness.missions.releases).toEqual([FIRST_TOKEN])
+	})
+
+	it("releases the claim once when the session cannot open", async () => {
+		await restart({ firstStartFails: true })
+
+		await runAClosingMission()
+
+		expect(harness.originStarts()).toEqual([])
+		expect(harness.missions.releases).toEqual([FIRST_TOKEN])
+	})
+
+	it("releases the claim once when the prompt cannot be submitted", async () => {
+		vi.spyOn(harness.driver, "submitPrompt").mockRejectedValue(
+			new Error("the agent went away"),
+		)
+
+		await runAClosingMission()
+
+		expect(harness.missions.releases).toEqual([FIRST_TOKEN])
+	})
+
+	it("releases the claim of a live run once when it stops", async () => {
+		await runAClosingMission()
+
+		harness.stop()
+		harness.stop()
+		await settled()
+
+		expect(harness.missions.releases).toEqual([FIRST_TOKEN])
+	})
+
+	it("releases a claim whose session opens after it stopped and submits nothing", async () => {
+		const opening = Promise.withResolvers<void>()
+		const open = harness.store.openRuntimeSession
+		vi.spyOn(harness.store, "openRuntimeSession").mockImplementation(
+			async (...opened) => {
+				await opening.promise
+				return open(...opened)
+			},
+		)
+		await runAClosingMission()
+
+		harness.stop()
+		opening.resolve()
+		await settled()
+
+		expect(harness.driver.submissions).toEqual([])
+		expect(harness.missions.releases).toEqual([FIRST_TOKEN])
+	})
+
+	it("claims the mission again once the run that held it has settled", async () => {
+		await runAClosingMission()
+		await harness.endTurn(reported("The walls stand."))
+
+		await harness.enter("failed", failedBy("agent-hook"))
+
+		expect(harness.missions.claims).toEqual([
+			harness.mission.id,
+			harness.mission.id,
+		])
+		expect(harness.originStarts()).toHaveLength(2)
+	})
+
+	it("claims every unreported mission it catches up on before running it", async () => {
+		await restart({ open: "done", openEvents: closedBy("poller") })
+
+		expect(harness.missions.claims).toEqual([harness.mission.id])
+		expect(harness.originStarts()).toHaveLength(1)
+	})
+
+	it("runs no unreported mission it catches up on while another window runs it", async () => {
+		await restart({
+			open: "done",
+			openEvents: closedBy("poller"),
+			claimedElsewhere: true,
+		})
+
+		expect(harness.originStarts()).toEqual([])
+		expect(harness.missions.reports).toEqual([])
+	})
+
+	it("logs a release that fails and raises nothing", async () => {
+		harness.missions.refuseRelease()
+		await runAClosingMission()
+
+		await harness.endTurn(reported("The walls stand."))
+
+		expect(await failuresRaisedBy(harness)).not.toHaveBeenCalled()
+		expect(consoleLines()).toEqual([
+			"mission run driver: mission_run_release failed",
+		])
+		expect(spoken(harness.originTail())).not.toEqual([])
 	})
 })

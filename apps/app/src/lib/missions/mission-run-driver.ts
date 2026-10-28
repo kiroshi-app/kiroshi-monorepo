@@ -12,6 +12,7 @@ import { createMissionRunRoute } from "./mission-run-route"
 import { createMissionRunSettle } from "./mission-run-settle"
 import { createMissionRunTake, isTakenState } from "./mission-run-take"
 
+import type { MissionRunClaim } from "../bindings"
 import type { ChatController } from "../chat/chat-controller"
 import type { ChatDriver } from "../chat/driver"
 import type { ConversationRuntimes } from "../conversations/conversation-runtimes"
@@ -33,6 +34,8 @@ type MissionRunPort = {
 	detail: (missionId: string) => Promise<MissionDetail>
 	read: ReadMissionOfEvent
 	rosterBlock: (conversationId: string, botId: string) => Promise<string | null>
+	claimRun: (missionId: string) => Promise<MissionRunClaim>
+	releaseRun: (token: string) => Promise<unknown>
 }
 
 export type MissionRunDriverOptions = {
