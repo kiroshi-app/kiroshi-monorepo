@@ -31,7 +31,7 @@ import type { PromptResponder } from "@/lib/chat/use-prompt-responder"
 
 type ApprovalPromptProps = {
 	request: PermissionRequest
-	agentName?: string
+	agentName: string | undefined
 	responder: PromptResponder
 }
 
