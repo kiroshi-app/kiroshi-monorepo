@@ -25,7 +25,7 @@ const IS_ENABLED =
 	"Whether the routine fires. Turn it off instead of deleting it."
 
 const LIST =
-	"Read every routine of this conversation, whichever bot here owns it. Read this before creating one, so you update what already covers the need instead of adding beside it."
+	"Read every routine of this conversation, whichever agent here owns it. Read this before creating one, so you update what already covers the need instead of adding beside it."
 
 const TRIGGER_SOURCES =
 	"Read what can fire a routine here and, for each source, the fields its events carry. Read this before creating or filtering a routine."

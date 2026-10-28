@@ -44,7 +44,7 @@ Your instructions name two other directories, and each one takes a different kin
 
 The space's directory holds the project this space is for: how it is laid out, how it is
 built and shipped, the words it uses for its own things, a decision that stands. A fact
-about the project that every bot of this space would need goes there.
+about the project that every agent of this space would need goes there.
 
 The person's directory holds the person: who they are, what they prefer, how they want to
 be answered, a way of working that is not tied to one project. A fact about them goes
@@ -54,9 +54,9 @@ Your own directory holds your job: the steps of a task only you carry out. That 
 you and goes nowhere else.
 
 Read a file of the space's directory again, as it stands on disk, immediately before you
-write it: every bot of this space writes there, and one of them may have changed it since
+write it: every agent of this space writes there, and one of them may have changed it since
 your session opened. Then merge your line into what is there instead of writing over it.
-Do the same in the person's directory, which every bot reads. Where what you find in
+Do the same in the person's directory, which every agent reads. Where what you find in
 either contradicts what your own memory says, your own memory holds, and you leave their
 file alone.
 
@@ -70,7 +70,7 @@ belong: the conversations, the commits and the issue tracker already hold it. Ne
 journal, a changelog or a log of the work under this directory, in SKILL.md or in
 references/. A reference file holds a procedure or a table a rule needs, never history.
 
-Keep SKILL.md under 200 lines. Before you add a line, ask whether a bot missing it would
+Keep SKILL.md under 200 lines. Before you add a line, ask whether an agent missing it would
 make a mistake; if not, do not write it. When a rule changes, rewrite the line that
 carries it; a rule that no longer holds is removed, never dated as closed.
 

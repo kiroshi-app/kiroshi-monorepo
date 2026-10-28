@@ -19,7 +19,7 @@
 	},
 	{
 		"name": "routine_list",
-		"description": "Read every routine of this conversation, whichever bot here owns it. Read this before creating one, so you update what already covers the need instead of adding beside it.",
+		"description": "Read every routine of this conversation, whichever agent here owns it. Read this before creating one, so you update what already covers the need instead of adding beside it.",
 		"inputSchema": {
 			"$schema": "https://json-schema.org/draft/2020-12/schema",
 			"type": "object",
@@ -231,7 +231,7 @@
 	},
 	{
 		"name": "mission_open",
-		"description": "Open a mission on this conversation, owned by you, and get its own thread with one line telling whether that mission hears its agent. Given the checkout the work happens in, the agent hook is armed there in the same call. The work of the mission carries on in the thread it answers, so end the turn you are answering in with a single line of acknowledgement and nothing more. Call this once you and the person agree on the objective and the ticket it carries.",
+		"description": "Open a mission on this conversation, owned by you, and get its own thread with one line telling whether that mission hears its coding session. Given the checkout the work happens in, the hook of the coding session is armed there in the same call. The work of the mission carries on in the thread it answers, so end the turn you are answering in with a single line of acknowledgement and nothing more. Call this once you and the person agree on the objective and the ticket it carries.",
 		"inputSchema": {
 			"$schema": "https://json-schema.org/draft/2020-12/schema",
 			"type": "object",
@@ -277,7 +277,7 @@
 				},
 				"workspacePath": {
 					"type": "string",
-					"description": "The git checkout on this computer the work of the mission happens in, a linked worktree included. Only a git checkout is accepted, so the path names a directory holding a .git entry and nothing else is taken. A path given arms the agent hook in that checkout, so what an agent does there reaches the thread of the mission. Left out, the mission moves only on the lines, the escalations and the closing you write."
+					"description": "The git checkout on this computer the work of the mission happens in, a linked worktree included. Only a git checkout is accepted, so the path names a directory holding a .git entry and nothing else is taken. A path given arms the hook of the coding session in that checkout, so what a coding session does there reaches the thread of the mission. Left out, the mission moves only on the lines, the escalations and the closing you write."
 				}
 			},
 			"required": [
@@ -424,7 +424,7 @@
 	},
 	{
 		"name": "mission_list",
-		"description": "Read the missions of this conversation, of every companion, open and closed, newest opened first, at most 200. Each comes with its id, its ticket, where it stands, the companion carrying it, the conversation it came from, its own thread, when it opened and closed, and its last status. Given a conversation, read that one instead. Given the space, read every mission of the space. Read this when you no longer hold the id of a mission, or to see what the others carry.",
+		"description": "Read the missions of this conversation, of every agent, open and closed, newest opened first, at most 200. Each comes with its id, its ticket, where it stands, the agent carrying it, the conversation it came from, its own thread, when it opened and closed, and its last status. Given a conversation, read that one instead. Given the space, read every mission of the space. Read this when you no longer hold the id of a mission, or to see what the others carry.",
 		"inputSchema": {
 			"$schema": "https://json-schema.org/draft/2020-12/schema",
 			"type": "object",
@@ -451,7 +451,7 @@
 				},
 				"bot": {
 					"type": "string",
-					"description": "The id of a companion, to keep only the missions it carries."
+					"description": "The id of an agent, to keep only the missions it carries."
 				}
 			},
 			"additionalProperties": false
@@ -459,7 +459,7 @@
 	},
 	{
 		"name": "mission_read",
-		"description": "Read one mission of this space, whoever carries it: its objective, its ticket, where it stands, the companion carrying it, the conversation it came from, its own thread, the branch and the repository it watches, its pull request, when it opened and closed, its last status, and every line written on it in order.",
+		"description": "Read one mission of this space, whoever carries it: its objective, its ticket, where it stands, the agent carrying it, the conversation it came from, its own thread, the branch and the repository it watches, its pull request, when it opened and closed, its last status, and every line written on it in order.",
 		"inputSchema": {
 			"$schema": "https://json-schema.org/draft/2020-12/schema",
 			"type": "object",
@@ -552,7 +552,7 @@
 	},
 	{
 		"name": "mission_handoff",
-		"description": "Hand a mission of yours over to another companion of this space, who owns it from then on. That companion is seated in the thread of the mission and in the conversation it came from, and is called in the thread while the mission is still open. You write nothing more on that mission afterwards.",
+		"description": "Hand a mission of yours over to another agent of this space, who owns it from then on. That agent is seated in the thread of the mission and in the conversation it came from, and is called in the thread while the mission is still open. You write nothing more on that mission afterwards.",
 		"inputSchema": {
 			"$schema": "https://json-schema.org/draft/2020-12/schema",
 			"type": "object",
@@ -563,7 +563,7 @@
 				},
 				"companion": {
 					"type": "string",
-					"description": "The name or the id of the companion of this space who takes the mission over."
+					"description": "The name or the id of the agent of this space who takes the mission over."
 				}
 			},
 			"required": [
@@ -609,7 +609,7 @@
 						"space",
 						"user"
 					],
-					"description": "The destination the person picked: companion, space or user."
+					"description": "The destination the person picked: companion, space or user, where the `companion` scope is the agent alone."
 				}
 			},
 			"required": [
@@ -637,7 +637,7 @@
 						"space",
 						"user"
 					],
-					"description": "The destination the person picked: companion, space or user."
+					"description": "The destination the person picked: companion, space or user, where the `companion` scope is the agent alone."
 				}
 			},
 			"required": [
@@ -649,7 +649,7 @@
 	},
 	{
 		"name": "companion_suggestions",
-		"description": "Read the companions this app suggests, each with the name, the job, the description and the blurb it ships, before you ask the person which one they want.",
+		"description": "Read the agents this app suggests, each with the name, the job, the description and the blurb it ships, before you ask the person which one they want.",
 		"inputSchema": {
 			"$schema": "https://json-schema.org/draft/2020-12/schema",
 			"type": "object",
@@ -659,22 +659,22 @@
 	},
 	{
 		"name": "companion_create",
-		"description": "Create a companion in the space of this conversation, once the person has picked a suggestion or agreed on the name, the job and the description you read back to them.",
+		"description": "Create an agent in the space of this conversation, once the person has picked a suggestion or agreed on the name, the job and the description you read back to them.",
 		"inputSchema": {
 			"$schema": "https://json-schema.org/draft/2020-12/schema",
 			"type": "object",
 			"properties": {
 				"name": {
 					"type": "string",
-					"description": "The name the person will call this companion by, theirs or the one they picked."
+					"description": "The name the person will call this agent by, theirs or the one they picked."
 				},
 				"job": {
 					"type": "string",
-					"description": "What this companion is for, in a few words, read under its name on its roster line."
+					"description": "What this agent is for, in a few words, read under its name on its roster line."
 				},
 				"description": {
 					"type": "string",
-					"description": "What this companion does and how it works, written as an order to it."
+					"description": "What this agent does and how it works, written as an order to it."
 				}
 			},
 			"required": [
@@ -697,7 +697,7 @@
 	},
 	{
 		"name": "companion_list",
-		"description": "List every companion of the space of this conversation, each with its id, its name and its job, before you seat one, take one out or mention one by name.",
+		"description": "List every agent of the space of this conversation, each with its id, its name and its job, before you seat one, take one out or mention one by name.",
 		"inputSchema": {
 			"$schema": "https://json-schema.org/draft/2020-12/schema",
 			"type": "object",
@@ -725,7 +725,7 @@
 					"items": {
 						"type": "string"
 					},
-					"description": "The id or the name of each companion of this space to seat in the room beside you, empty for you alone."
+					"description": "The id or the name of each agent of this space to seat in the room beside you, empty for you alone."
 				},
 				"message": {
 					"type": "string",
@@ -792,7 +792,7 @@
 	},
 	{
 		"name": "conversation_update",
-		"description": "Change a conversation you hold a seat in, its title, its icon, its colour and who is seated in it, or reopen it once archived, every field given landing together in one call and none of them if one is refused, once the person asks for it or once its subject calls for it; the answer is the conversation as it stands after the call, with its id, kind, title, icon, colour, seated companions, last message and whether it is archived.",
+		"description": "Change a conversation you hold a seat in, its title, its icon, its colour and who is seated in it, or reopen it once archived, every field given landing together in one call and none of them if one is refused, once the person asks for it or once its subject calls for it; the answer is the conversation as it stands after the call, with its id, kind, title, icon, colour, seated agents, last message and whether it is archived.",
 		"inputSchema": {
 			"$schema": "https://json-schema.org/draft/2020-12/schema",
 			"type": "object",
@@ -830,14 +830,14 @@
 					]
 				},
 				"add": {
-					"description": "The id or the name of each companion of the space of the conversation to seat in it, recorded as invited by you; one already seated stays as it is, and a name two companions share is refused with their ids.",
+					"description": "The id or the name of each agent of the space of the conversation to seat in it, recorded as invited by you; one already seated stays as it is, and a name two agents share is refused with their ids.",
 					"type": "array",
 					"items": {
 						"type": "string"
 					}
 				},
 				"remove": {
-					"description": "The id or the name of each companion of the space of the conversation to take out of it, your own to leave it yourself; one not seated stays out.",
+					"description": "The id or the name of each agent of the space of the conversation to take out of it, your own to leave it yourself; one not seated stays out.",
 					"type": "array",
 					"items": {
 						"type": "string"
@@ -853,7 +853,7 @@
 	},
 	{
 		"name": "conversation_list",
-		"description": "List the conversations of this space, the latest activity first, each with its id, its kind, its title, its icon, its colour, its companions, its last message and whether it is archived, before you read, join or mention one whose id you do not hold.",
+		"description": "List the conversations of this space, the latest activity first, each with its id, its kind, its title, its icon, its colour, its agents, its last message and whether it is archived, before you read, join or mention one whose id you do not hold.",
 		"inputSchema": {
 			"$schema": "https://json-schema.org/draft/2020-12/schema",
 			"type": "object",
@@ -863,7 +863,7 @@
 					"type": "boolean"
 				},
 				"kind": {
-					"description": "One of main, topic or mission to list only that kind: main is a companion's own chat with the person, topic a room, mission the thread of a mission; left out, every kind is listed.",
+					"description": "One of main, topic or mission to list only that kind: main is an agent's own chat with the person, topic a room, mission the thread of a mission; left out, every kind is listed.",
 					"type": "string"
 				},
 				"limit": {
@@ -912,17 +912,17 @@
 	},
 	{
 		"name": "conversation_search",
-		"description": "Find where something was discussed in the space of this conversation, before you answer from memory or ask the person where it was said: it answers conversations, the rooms whose title or companion names match, each with its id, its kind (main, topic or mission), its title (the companion's name for a main conversation) and the names of the companions seated in it, and messages, the messages whose text matches, best match first, each with the conversationId and conversationTitle of its room, its messageId, its author (the id of the companion who wrote it, or null when the person did), its createdAt in milliseconds since the epoch and a snippet of plain text around the match; two empty lists mean nothing in this space matched, and no other space is ever searched.",
+		"description": "Find where something was discussed in the space of this conversation, before you answer from memory or ask the person where it was said: it answers conversations, the rooms whose title or agent names match, each with its id, its kind (main, topic or mission), its title (the agent's name for a main conversation) and the names of the agents seated in it, and messages, the messages whose text matches, best match first, each with the conversationId and conversationTitle of its room, its messageId, its author (the id of the agent who wrote it, or null when the person did), its createdAt in milliseconds since the epoch and a snippet of plain text around the match; two empty lists mean nothing in this space matched, and no other space is ever searched.",
 		"inputSchema": {
 			"$schema": "https://json-schema.org/draft/2020-12/schema",
 			"type": "object",
 			"properties": {
 				"query": {
 					"type": "string",
-					"description": "The words to look for, matched against the start of words in messages and inside room titles and companion names, at most 200 characters."
+					"description": "The words to look for, matched against the start of words in messages and inside room titles and agent names, at most 200 characters."
 				},
 				"kind": {
-					"description": "One of main (a companion's own conversation with the person), topic (a room) or mission, to keep only the conversations and the messages of that kind, left out for every kind.",
+					"description": "One of main (an agent's own conversation with the person), topic (a room) or mission, to keep only the conversations and the messages of that kind, left out for every kind.",
 					"type": "string",
 					"enum": [
 						"main",

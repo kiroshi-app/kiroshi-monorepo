@@ -103,7 +103,9 @@ Only **technical composition** — it places things, it does not draw them:
 
 ### Vocabulary
 
-- Carried over from the desktop app: Companion, Conversation (never Chat), Message, Send, "the agent" (never "Claude Code" on screen), Applications, Secrets, Approvals, the Space name shown.
+- Carried over from the desktop app: Agent, Conversation (never Chat), Message, Send, Applications, Secrets, Approvals, the Space name shown.
+- The coding runtime has no name on screen, never "Claude Code": the agent acts under its own name, and a mission calls the runtime "the coding session".
+- "bot" and "companion" are banned in strings, tickets and briefs, like "connecteur".
 - Contractions everywhere: `You're signed in.`, `Couldn't send.`
 - An error says what failed plus the gesture to fix it.
 - A deletion says `This can't be undone.`

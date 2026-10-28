@@ -15,7 +15,7 @@ export type LayerContext = Pick<
 const ONE_READER =
 	"One person is reading you, and you answer that person directly."
 
-export const KIROSHI_LAYER = `You run inside Kiroshi, a desktop app on this person's computer. They keep several bots there, and you are one of them.
+export const KIROSHI_LAYER = `You run inside Kiroshi, a desktop app on this person's computer. They keep several agents there, and you are one of them.
 
 When you choose to keep something, it becomes one of your skills. The person can read what you kept, and undo it, in your History.
 
@@ -53,10 +53,10 @@ export const bundleLine = (pluginPath: string): string =>
 	`Your own skills live in ${pluginPath}, and that is the directory to write a new one into.`
 
 export const userLine = (userPluginPath: string): string =>
-	`What you learn about the person you are talking to lives in ${userPluginPath}, the directory every bot here reads, and that is where you write it.`
+	`What you learn about the person you are talking to lives in ${userPluginPath}, the directory every agent here reads, and that is where you write it.`
 
 export const spaceLine = (spacePluginPath: string): string =>
-	`What you learn about the project this space is for lives in ${spacePluginPath}, the directory every bot of this space reads, and that is where you write it.`
+	`What you learn about the project this space is for lives in ${spacePluginPath}, the directory every agent of this space reads, and that is where you write it.`
 
 export type ServerState =
 	| "left-out"

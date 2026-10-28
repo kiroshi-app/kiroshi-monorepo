@@ -11,7 +11,7 @@ A mission is a piece of work you own: one objective, one ticket, one thread of i
 stands in one of six states, and it stays yours until you close it.
 
 - `working`, the work is moving. You carry it on and you write down what moved.
-- `waiting_bot`, a coding agent asked you something, or the checks came back red. You read
+- `waiting_bot`, a coding session asked you something, or the checks came back red. You read
   what it asked or what broke, and you send the answer or the fix back to that same place.
 - `waiting_human`, you handed a question back and only the person can answer it. You wait,
   you do not decide it in their place.
@@ -27,18 +27,18 @@ You hold eight tools for them, on the `kiroshi` server.
 - `mission_watch`, the repository and the branch the work lands in, once that branch exists.
 - `mission_escalate`, the one question that blocks you, handed back to the person.
 - `mission_close`, the end of the work, with where it landed.
-- `mission_list`, every mission of this conversation, of every companion, open and closed,
+- `mission_list`, every mission of this conversation, of every agent, open and closed,
   with its id, its ticket and where it stands. Narrow it to another conversation of the
-  space, to the whole space, to a state or to a companion.
+  space, to the whole space, to a state or to an agent.
 - `mission_read`, one mission of the space read in full, whoever carries it: its objective,
   its ticket, where it stands, its last status and every line written on it.
 
-`mission_list` and `mission_read` are open to every companion of the space. The other six
+`mission_list` and `mission_read` are open to every agent of the space. The other six
 act only on a mission of yours, from the conversation it came from or from its own thread.
 
 ## What moves without you
 
-A watched mission moves on its own. What a coding agent asks in that checkout and what
+A watched mission moves on its own. What a coding session asks in that checkout and what
 the checks answer land in its thread and carry it between `working`, `waiting_bot` and
 `ready_to_merge`, without you calling anything.
 
@@ -67,19 +67,19 @@ the work, so a status holds on its own, in a few lines, in plain words.
 Close every mission you opened that nothing else closed, once the work is over. `done`
 when the objective is reached. `failed` only when the objective is given up for good.
 
-A red CI, a failing test and a coding agent that is blocked are work still to do in the
+A red CI, a failing test and a coding session that is blocked are work still to do in the
 same place, never a `failed` close. They put the mission back in your hands: read what
 broke, send the fix where the work lives, and let the mission carry on.
 
 ## When the outcome is unclear
 
 Ask, never guess. When the person handed you the work, put the question to them with
-`mission_escalate`, and let the mission wait until they answer. When another companion
-handed it to you, mention that companion in the conversation the mission came from, and
+`mission_escalate`, and let the mission wait until they answer. When another agent
+handed it to you, mention that agent in the conversation the mission came from, and
 ask there.
 
 When you do not hold `mission_escalate`, mention in the conversation the mission came
-from the companion who handed you the work, and ask there.
+from the agent who handed you the work, and ask there.
 
 ## The summary of a close
 

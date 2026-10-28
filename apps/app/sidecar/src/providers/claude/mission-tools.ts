@@ -43,10 +43,10 @@ const REPOSITORY =
 	"The repository that branch lives in, written owner then slash then name."
 
 const WORKSPACE_PATH =
-	"The git checkout on this computer the work of the mission happens in, a linked worktree included. Only a git checkout is accepted, so the path names a directory holding a .git entry and nothing else is taken. A path given arms the agent hook in that checkout, so what an agent does there reaches the thread of the mission. Left out, the mission moves only on the lines, the escalations and the closing you write."
+	"The git checkout on this computer the work of the mission happens in, a linked worktree included. Only a git checkout is accepted, so the path names a directory holding a .git entry and nothing else is taken. A path given arms the hook of the coding session in that checkout, so what a coding session does there reaches the thread of the mission. Left out, the mission moves only on the lines, the escalations and the closing you write."
 
 const OPEN =
-	"Open a mission on this conversation, owned by you, and get its own thread with one line telling whether that mission hears its agent. Given the checkout the work happens in, the agent hook is armed there in the same call. The work of the mission carries on in the thread it answers, so end the turn you are answering in with a single line of acknowledgement and nothing more. Call this once you and the person agree on the objective and the ticket it carries."
+	"Open a mission on this conversation, owned by you, and get its own thread with one line telling whether that mission hears its coding session. Given the checkout the work happens in, the hook of the coding session is armed there in the same call. The work of the mission carries on in the thread it answers, so end the turn you are answering in with a single line of acknowledgement and nothing more. Call this once you and the person agree on the objective and the ticket it carries."
 
 const NOTE =
 	"Record one line of progress on a mission of yours. Write what moved, not what you are about to do."
@@ -64,10 +64,10 @@ const WATCH =
 	"Arm a mission of yours on the branch it lands its work in, so what happens on that branch reaches its thread. It answers the address a call reaches the mission at, the key that call carries and the name of the header that key goes in. Call this once the branch exists."
 
 const LIST =
-	"Read the missions of this conversation, of every companion, open and closed, newest opened first, at most 200. Each comes with its id, its ticket, where it stands, the companion carrying it, the conversation it came from, its own thread, when it opened and closed, and its last status. Given a conversation, read that one instead. Given the space, read every mission of the space. Read this when you no longer hold the id of a mission, or to see what the others carry."
+	"Read the missions of this conversation, of every agent, open and closed, newest opened first, at most 200. Each comes with its id, its ticket, where it stands, the agent carrying it, the conversation it came from, its own thread, when it opened and closed, and its last status. Given a conversation, read that one instead. Given the space, read every mission of the space. Read this when you no longer hold the id of a mission, or to see what the others carry."
 
 const READ =
-	"Read one mission of this space, whoever carries it: its objective, its ticket, where it stands, the companion carrying it, the conversation it came from, its own thread, the branch and the repository it watches, its pull request, when it opened and closed, its last status, and every line written on it in order."
+	"Read one mission of this space, whoever carries it: its objective, its ticket, where it stands, the agent carrying it, the conversation it came from, its own thread, the branch and the repository it watches, its pull request, when it opened and closed, its last status, and every line written on it in order."
 
 const LISTED_CONVERSATION =
 	"The id of a conversation of this space to read the missions of. Left out, this conversation."
@@ -77,8 +77,7 @@ const LISTED_SPACE =
 
 const LISTED_STATE = "Keep only the missions standing there."
 
-const LISTED_BOT =
-	"The id of a companion, to keep only the missions it carries."
+const LISTED_BOT = "The id of an agent, to keep only the missions it carries."
 
 const READ_ID = "The id of the mission to read."
 
@@ -89,10 +88,10 @@ const UPDATE =
 	"Rewrite the objective, the ticket or the tools of a mission of yours when the person corrects them. Give only what changes, the rest stays as it is. A new objective also becomes the title of the thread of the mission."
 
 const HANDOFF =
-	"Hand a mission of yours over to another companion of this space, who owns it from then on. That companion is seated in the thread of the mission and in the conversation it came from, and is called in the thread while the mission is still open. You write nothing more on that mission afterwards."
+	"Hand a mission of yours over to another agent of this space, who owns it from then on. That agent is seated in the thread of the mission and in the conversation it came from, and is called in the thread while the mission is still open. You write nothing more on that mission afterwards."
 
 const COMPANION =
-	"The name or the id of the companion of this space who takes the mission over."
+	"The name or the id of the agent of this space who takes the mission over."
 
 const TICKET = z.object({
 	platform: z.string().describe(TICKET_PLATFORM),
