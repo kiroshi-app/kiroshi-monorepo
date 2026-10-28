@@ -42,21 +42,36 @@ interface RosterPinActions {
 interface PinGroupProps extends RosterPinActions {
 	id: string
 	isPinned: boolean
+	onOpenInNewTab?: (id: string) => void
 }
 
-const PinGroup = ({ id, isPinned, onPin, onUnpin }: PinGroupProps) => {
+const PinGroup = ({
+	id,
+	isPinned,
+	onPin,
+	onUnpin,
+	onOpenInNewTab,
+}: PinGroupProps) => {
 	const { t } = useTranslation("bots")
 
 	const toggle = isPinned ? onUnpin : onPin
-	if (!toggle) return null
+	if (!toggle && !onOpenInNewTab) return null
 
 	const PinIcon = isPinned ? Icons.Unpin : Icons.Pin
 	return (
 		<>
-			<ContextMenuItem onClick={() => toggle(id)}>
-				<PinIcon aria-hidden="true" className="size-3.5" />
-				{t(isPinned ? "roster.unpin" : "roster.pin")}
-			</ContextMenuItem>
+			{toggle ? (
+				<ContextMenuItem onClick={() => toggle(id)}>
+					<PinIcon aria-hidden="true" className="size-3.5" />
+					{t(isPinned ? "roster.unpin" : "roster.pin")}
+				</ContextMenuItem>
+			) : null}
+			{onOpenInNewTab ? (
+				<ContextMenuItem onClick={() => onOpenInNewTab(id)}>
+					<Icons.ExternalLink aria-hidden="true" className="size-3.5" />
+					{t("roster.openInNewTab")}
+				</ContextMenuItem>
+			) : null}
 			<ContextMenuSeparator />
 		</>
 	)

@@ -86,7 +86,7 @@ export const RowMenuOpensInANewTab = meta.story({
 		docs: {
 			description: {
 				story:
-					"The menu of a pinned conversation row, opened with a right click, on a host that can open the conversation in a tab of its own. Check that Open in a new tab comes first with its own separator under it, that Unpin, Open settings and Delete follow unchanged, and that choosing it reports the conversation.",
+					"The menu of a pinned conversation row, opened with a right click, on a host that can open the conversation in a tab of its own. Check that Open in a new tab sits right under Unpin with no separator between them, that one separator follows it, that Open settings and Delete follow unchanged, and that choosing it reports the conversation.",
 			},
 		},
 	},
@@ -98,18 +98,20 @@ export const RowMenuOpensInANewTab = meta.story({
 			}),
 		)
 		const rows = within(menu).getAllByRole("menuitem")
+		const [unpin, openInNewTab] = rows
 
 		await expect(rows.map((row) => row.textContent)).toEqual([
-			"Open in a new tab",
 			"Unpin",
+			"Open in a new tab",
 			"Open settings",
 			"Delete",
 		])
-		await expect(rows[0].nextElementSibling).toHaveAttribute(
+		await expect(unpin.nextElementSibling).toBe(openInNewTab)
+		await expect(openInNewTab.nextElementSibling).toHaveAttribute(
 			"role",
 			"separator",
 		)
-		await userEvent.click(rows[0])
+		await userEvent.click(openInNewTab)
 		await expect(args.onOpenInNewTab).toHaveBeenCalledWith(DESK_ROOM.id)
 	},
 })

@@ -91,18 +91,10 @@ const CompanionMenuContent = ({
 						: companion.name}
 				</ContextMenuLabel>
 				<ContextMenuSeparator />
-				{onOpenInNewTab ? (
-					<>
-						<ContextMenuItem onClick={() => onOpenInNewTab(companion.id)}>
-							<Icons.ExternalLink aria-hidden="true" className="size-3.5" />
-							{t("roster.openInNewTab")}
-						</ContextMenuItem>
-						<ContextMenuSeparator />
-					</>
-				) : null}
 				<PinGroup
 					id={companion.id}
 					isPinned={isPinned}
+					onOpenInNewTab={onOpenInNewTab}
 					onPin={onPin}
 					onUnpin={onUnpin}
 				/>
