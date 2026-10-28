@@ -5,9 +5,7 @@ import { afterAll } from "vitest"
 
 setProjectAnnotations(getProjectAnnotations())
 
-const EMPTY_STORY = composeStory({}, {})
-
-const unmountTheLastStory = () => EMPTY_STORY.load()
+const unmountTheLastStory = () => composeStory({}, {}).load()
 
 afterAll(unmountTheLastStory)
 
