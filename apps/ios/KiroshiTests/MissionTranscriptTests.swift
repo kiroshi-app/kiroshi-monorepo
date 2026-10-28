@@ -42,6 +42,18 @@ struct MissionTranscriptTests {
             ])
     }
 
+    @Test(arguments: [
+        "The coding agent of this mission is blocked and waiting on you.",
+        "The coding session of this mission is blocked and waiting on you.",
+    ])
+    func theBlockedSummonsIsHiddenInEitherWording(summons: String) {
+        let shown = transcript([
+            MissionTesting.message(id: "summons", seq: 1, content: summons, createdAt: Self.day)
+        ])
+
+        #expect(shown.entries.isEmpty)
+    }
+
     @Test func theCompanionSpeaksInOneBubblePerParagraphLikeTheConversationThread() {
         let shown = transcript([
             MissionTesting.message(
@@ -97,7 +109,7 @@ struct MissionTranscriptTests {
         #expect(
             MissionTranscript.openedLine(by: Companion(id: "b-1", name: "Atlas"))
                 == "Mission opened by Atlas")
-        #expect(MissionTranscript.openedLine(by: nil) == "Mission opened by the companion")
+        #expect(MissionTranscript.openedLine(by: nil) == "Mission opened by the agent")
     }
 
     @Test func aStoredMessageReplacesTheOneSentWithTheSameId() {

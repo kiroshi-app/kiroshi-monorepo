@@ -4,6 +4,7 @@ struct MissionTranscript: Equatable {
     static let summonses: Set<String> = [
         "Carry out this mission.",
         "The coding agent of this mission is blocked and waiting on you.",
+        "The coding session of this mission is blocked and waiting on you.",
     ]
 
     var openedDay = ""
@@ -23,7 +24,7 @@ struct MissionTranscript: Equatable {
     }
 
     static func openedLine(by companion: Companion?) -> String {
-        "Mission opened by \(companion?.name ?? "the companion")"
+        "Mission opened by \(companion?.name ?? "the agent")"
     }
 
     static func upserting(_ message: MissionThreadMessage, into messages: [MissionThreadMessage])
