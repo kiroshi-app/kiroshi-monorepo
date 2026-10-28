@@ -69,7 +69,7 @@ export const Default = meta.story({
 			slotIn(canvasElement, "conversation-subject-icon"),
 		).toBeVisible()
 		await expect(botIdentityAvatars(canvasElement)).toHaveLength(0)
-		await expect(canvas.getByText(/3 companions are ready/)).toBeVisible()
+		await expect(canvas.getByText(/3 agents are ready/)).toBeVisible()
 	},
 })
 
@@ -84,7 +84,7 @@ export const SingleBot = meta.story({
 		},
 	},
 	play: async ({ canvas }) => {
-		await expect(canvas.getByText(/1 companion is ready/)).toBeVisible()
+		await expect(canvas.getByText(/1 agent is ready/)).toBeVisible()
 	},
 })
 
@@ -224,7 +224,7 @@ export const Empty = meta.story({
 		await expect(canvas.getByText(NOBODY_DESCRIPTION)).toBeVisible()
 		await expect(botIdentityAvatars(canvasElement)).toHaveLength(0)
 		await expect(
-			canvas.queryByText("Message a companion to start."),
+			canvas.queryByText("Message an agent to start."),
 		).not.toBeInTheDocument()
 		await expect(canvas.queryByText("Ship the December release")).toBeNull()
 		await expect(canvas.queryByRole("button")).toBeNull()
@@ -249,7 +249,7 @@ export const EmptyWithSuggestions = meta.story({
 		await expect(suggestedPresses(canvasElement)).toHaveLength(5)
 		await expect(botIdentityAvatars(canvasElement)).toHaveLength(5)
 		await expect(
-			canvas.queryByText("Message a companion to start."),
+			canvas.queryByText("Message an agent to start."),
 		).not.toBeInTheDocument()
 
 		await userEvent.click(canvas.getByRole("button", { name: "Twig Scout" }))

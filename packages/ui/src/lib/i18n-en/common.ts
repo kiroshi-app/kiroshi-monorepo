@@ -5,7 +5,7 @@ const common = {
 	spaces: {
 		unavailable: {
 			title: "Couldn’t load your spaces",
-			description: "Your companions are still there.",
+			description: "Your agents are still there.",
 		},
 		leave: {
 			title: "Leave {{name}}?",
@@ -15,8 +15,8 @@ const common = {
 		},
 	},
 	skipLink: "Skip to the conversation",
-	companion: {
-		unnamed: "Companion",
+	agent: {
+		unnamed: "Agent",
 	},
 	dialog: {
 		close: "Close",
@@ -159,9 +159,9 @@ const common = {
 			downloading: "Downloading update",
 			ready: "Restart to update",
 			readyVersion: "Restart to update to {{version}}",
-			botsBusy_one: "{{count}} companion is still running. Stop it to restart.",
+			botsBusy_one: "{{count}} agent is still running. Stop it to restart.",
 			botsBusy_other:
-				"{{count}} companions are still running. Stop them to restart.",
+				"{{count}} agents are still running. Stop them to restart.",
 			error: "Update failed, download again",
 			retry: "Download the update again",
 		},

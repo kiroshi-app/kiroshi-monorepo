@@ -91,7 +91,7 @@ export const SpaceScope = meta.story({
 		},
 	},
 	play: async ({ canvas }) => {
-		await expect(canvas.getByText("Overridden by Companion")).toBeVisible()
+		await expect(canvas.getByText("Overridden by Agent")).toBeVisible()
 		await expect(
 			canvas.getByRole("button", { name: "Remove ATLAS_REGION" }),
 		).toBeVisible()
@@ -109,7 +109,7 @@ export const ServerScope = meta.story({
 		},
 	},
 	play: async ({ canvas }) => {
-		await expect(canvas.getByText("Overrides Companion")).toBeVisible()
+		await expect(canvas.getByText("Overrides Agent")).toBeVisible()
 		await expect(canvas.queryByText(/Overridden by/)).not.toBeInTheDocument()
 	},
 })
@@ -210,9 +210,7 @@ export const UnsetNeedsValue = meta.story({
 		const name = canvas.getByText(UNSET_NEEDS_VALUE_ENTRY.name)
 		await expect(name.scrollWidth).toBeGreaterThan(name.clientWidth)
 		await expect(canvas.getByText("Needs a value")).toBeVisible()
-		await expect(
-			canvas.getByText("Defined in Companion · No value"),
-		).toBeVisible()
+		await expect(canvas.getByText("Defined in Agent · No value")).toBeVisible()
 		await expect(canvas.queryByText("Unset here")).not.toBeInTheDocument()
 		const row = name.closest("li")
 		await expect(row).not.toBeNull()
@@ -238,7 +236,7 @@ export const UnsetServedElsewhere = meta.story({
 	play: async ({ canvas }) => {
 		await expect(canvas.getByText("Unset here")).toBeVisible()
 		await expect(
-			canvas.getByText("Defined in Companion · Served from Space"),
+			canvas.getByText("Defined in Agent · Served from Space"),
 		).toBeVisible()
 		await expect(canvas.queryByText("Needs a value")).not.toBeInTheDocument()
 		await expect(

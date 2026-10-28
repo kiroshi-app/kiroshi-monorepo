@@ -186,7 +186,7 @@ const useSpaceSettings = ({
 					{
 						value: COMPANIONS_ENTRY,
 						icon: "Companions",
-						label: t("rail.companions"),
+						label: t("rail.agents"),
 						layout: "scrolling",
 						count: companions.companions.length,
 						panel: <CompanionsSection {...companions} spaceName={name} />,

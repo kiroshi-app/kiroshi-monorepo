@@ -359,9 +359,16 @@ const shownScreenOf = () => {
 	const menu = settingsMenuOf()
 	if (!menu) return null
 	const subtitles = ["space", "user", "companion"] as const
+	const subtitleKeys = {
+		space: "space",
+		user: "user",
+		companion: "agent",
+	} as const
 	return {
 		subtitle: subtitles.find((subtitle) =>
-			within(menu).queryByText(i18n.t(`settings:screen.subtitle.${subtitle}`)),
+			within(menu).queryByText(
+				i18n.t(`settings:screen.subtitle.${subtitleKeys[subtitle]}`),
+			),
 		),
 		entry: within(menu).getByRole("button", { current: "page" }).textContent,
 	}
@@ -369,7 +376,7 @@ const shownScreenOf = () => {
 
 const BACK_LABELS = [
 	i18n.t("settings:screen.back"),
-	i18n.t("settings:screen.backToCompanions"),
+	i18n.t("settings:screen.backToAgents"),
 ]
 
 const companionScreenOf = (name: string) => {
@@ -417,7 +424,7 @@ const cardOf = (name: string) => {
 
 const openCompanionsOfSpace = async () => {
 	await openSpaceSettingsByRail()
-	await press(menuEntryOf(new RegExp(`^${i18n.t("settings:rail.companions")}`)))
+	await press(menuEntryOf(new RegExp(`^${i18n.t("settings:rail.agents")}`)))
 }
 
 const installOf = (
@@ -502,15 +509,15 @@ it("opens the screen of a pressed card with Back to Companions, and Back returns
 
 	expect(companionScreenOf(ATLAS)).toEqual({
 		...ON_GENERAL,
-		back: i18n.t("settings:screen.backToCompanions"),
+		back: i18n.t("settings:screen.backToAgents"),
 	})
 	expect(isMarked(spacesLogoOf())).toBe(true)
 
-	await pressBack(i18n.t("settings:screen.backToCompanions"))
+	await pressBack(i18n.t("settings:screen.backToAgents"))
 
 	expect(shownScreenOf()).toEqual({
 		subtitle: "space",
-		entry: expect.stringContaining(i18n.t("settings:rail.companions")),
+		entry: expect.stringContaining(i18n.t("settings:rail.agents")),
 	})
 	expect(companionCards()).toHaveLength(companionCount)
 })
@@ -521,7 +528,7 @@ it("creates a companion from Create a companion, as the roster create does", asy
 
 	await press(
 		screen.getByRole("button", {
-			name: i18n.t("settings:space.companions.create"),
+			name: i18n.t("settings:space.agents.create"),
 		}),
 	)
 

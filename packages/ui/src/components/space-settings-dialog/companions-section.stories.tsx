@@ -48,7 +48,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"Every companion of a space, as cards two to a row under a muted title, a caption naming the space and Create a companion. A card shows the companion's avatar, name and title, two lines of its instructions, how many skills and applications it carries and how it answers a request. The whole card is one button that reports the companion picked.",
+					"Every companion of a space, as cards two to a row under a muted title, a caption naming the space and Create an agent. A card shows the companion's avatar, name and title, two lines of its instructions, how many skills and applications it carries and how it answers a request. The whole card is one button that reports the companion picked.",
 			},
 		},
 	},
@@ -74,7 +74,7 @@ export const FourCompanions = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard H01: four companions in two columns of 312. Check the counts, the approval mode on the right of each footer, cards of one row at the same height, and that a card and Create a companion each report themselves.",
+					"Artboard H01: four companions in two columns of 312. Check the counts, the approval mode on the right of each footer, cards of one row at the same height, and that a card and Create an agent each report themselves.",
 			},
 		},
 	},
@@ -84,11 +84,11 @@ export const FourCompanions = meta.story({
 
 		await expect(cards).toHaveLength(4)
 		await expect(
-			canvas.getByRole("heading", { level: 2, name: "Companions" }),
+			canvas.getByRole("heading", { level: 2, name: "Agents" }),
 		).toBeVisible()
 		await expect(
 			canvas.getByText(
-				"Every companion in Studio. Pick one to change how it works.",
+				"Every agent in Studio. Pick one to change how it works.",
 			),
 		).toBeVisible()
 		await expect(canvas.getByText("3 skills · 2 applications")).toBeVisible()
@@ -117,7 +117,7 @@ export const FourCompanions = meta.story({
 		await expect(args.onSelect).toHaveBeenCalledWith("atlas")
 
 		await userEvent.click(
-			canvas.getByRole("button", { name: "Create a companion" }),
+			canvas.getByRole("button", { name: "Create an agent" }),
 		)
 		await expect(args.onCreate).toHaveBeenCalledOnce()
 	},
@@ -230,7 +230,7 @@ export const NoCompanion = meta.story({
 		docs: {
 			description: {
 				story:
-					"A space with no companion yet. Check that the title, the caption and Create a companion stay, and one muted line takes the place of the cards.",
+					"A space with no companion yet. Check that the title, the caption and Create an agent stay, and one muted line takes the place of the cards.",
 			},
 		},
 	},
@@ -239,15 +239,13 @@ export const NoCompanion = meta.story({
 
 		await expect(cardsIn(canvasElement)).toHaveLength(0)
 		await expect(canvas.queryByRole("list")).toBeNull()
+		await expect(canvas.getByText("No agents in this space yet.")).toBeVisible()
 		await expect(
-			canvas.getByText("No companions in this space yet."),
-		).toBeVisible()
-		await expect(
-			canvas.getByRole("heading", { level: 2, name: "Companions" }),
+			canvas.getByRole("heading", { level: 2, name: "Agents" }),
 		).toBeVisible()
 
 		await userEvent.click(
-			canvas.getByRole("button", { name: "Create a companion" }),
+			canvas.getByRole("button", { name: "Create an agent" }),
 		)
 		await expect(args.onCreate).toHaveBeenCalledOnce()
 	},
@@ -288,7 +286,7 @@ export const KeyboardFocus = meta.story({
 		docs: {
 			description: {
 				story:
-					"A card reached by the keyboard. Check that Tab lands on the first card after Create a companion, that it wears the focus ring, and that Enter and Space both pick it.",
+					"A card reached by the keyboard. Check that Tab lands on the first card after Create an agent, that it wears the focus ring, and that Enter and Space both pick it.",
 			},
 		},
 	},

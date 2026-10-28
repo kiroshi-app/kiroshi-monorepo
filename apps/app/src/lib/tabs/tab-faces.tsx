@@ -11,6 +11,7 @@ import { i18n } from "@workspace/ui/lib/i18n"
 import {
 	isListPage,
 	pageOf,
+	type SettingsTarget,
 	settingsTargetOf,
 	type TabPage,
 	threadRowIdOf,
@@ -43,10 +44,19 @@ const emptyTabFace = (): TabFace => ({
 const shownApplicationOf = ({ entry, application }: TabPage) =>
 	entry === APPLICATIONS_ENTRY ? application : undefined
 
+const SETTINGS_SUBTITLE_KEY = {
+	user: "user",
+	space: "space",
+	companion: "agent",
+	conversation: "conversation",
+} as const satisfies Record<SettingsTarget, string>
+
 const settingsFaceOf = (page: TabPage): TabFace => ({
 	title:
 		shownApplicationOf(page) ??
-		i18n.t(`settings:screen.subtitle.${settingsTargetOf(page)}`),
+		i18n.t(
+			`settings:screen.subtitle.${SETTINGS_SUBTITLE_KEY[settingsTargetOf(page)]}`,
+		),
 	icon: <Icons.Settings />,
 })
 

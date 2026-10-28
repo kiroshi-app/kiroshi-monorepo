@@ -5,20 +5,20 @@ import type {
 	BotSkillContext,
 	BotSkillEffort,
 } from "@workspace/ui/components/bot-settings"
-import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
+import type { HUE_PRESETS } from "@workspace/ui/components/hue-tones"
 
 const bots = {
 	roster: {
 		label: "Conversations",
-		create: "Create a companion",
+		create: "Create an agent",
 		createMenu: "Create",
 		conversation: {
 			create: "Start a conversation",
 			others: "+{{count}}",
 			preview: "{{name}}: {{text}}",
 		},
-		empty: "No companions yet",
-		unavailable: "Couldn’t load your companions. Restart Kiroshi to retry.",
+		empty: "No agents yet",
+		unavailable: "Couldn’t load your agents. Restart Kiroshi to retry.",
 		previewUnreadable:
 			"Couldn’t load the latest messages. Restart Kiroshi to retry.",
 		conversationUnsaved:
@@ -43,7 +43,7 @@ const bots = {
 		spaces: {
 			label: "Spaces",
 			lastSpace:
-				"A companion stays in at least one space. To remove a companion from its last space, delete the companion.",
+				"An agent stays in at least one space. To remove an agent from its last space, delete the agent.",
 		},
 		pin: "Pin",
 		pinDrop: "Drop here to pin",
@@ -60,7 +60,7 @@ const bots = {
 		},
 		idle: "idle",
 		announcement: {
-			none: "No companion selected",
+			none: "No agent selected",
 			selected: "{{name}} selected, {{state}}",
 		},
 		section: {
@@ -75,11 +75,11 @@ const bots = {
 			moveUp: "Move up",
 			moveDown: "Move down",
 			delete: "Delete",
-			empty: "Drop a companion here",
+			empty: "Drop an agent here",
 			unreadable:
 				"Couldn’t load the sections of this space. Restart Kiroshi to retry.",
 		},
-		seedRefused: "Your first companion couldn’t be set up",
+		seedRefused: "Your first agent couldn’t be set up",
 	},
 	rail: {
 		label: "Navigation",
@@ -114,8 +114,8 @@ const bots = {
 			down: "Not connected",
 		},
 		remove: {
-			lastSpace: "A companion needs at least one space.",
-			failed: "Couldn’t remove this companion from the space. Retry.",
+			lastSpace: "An agent needs at least one space.",
+			failed: "Couldn’t remove this agent from the space. Retry.",
 		},
 		invitations: {
 			label: "Invitations",
@@ -157,7 +157,7 @@ const bots = {
 		},
 	},
 	dialog: {
-		untitled: "Untitled companion",
+		untitled: "Untitled agent",
 		breadcrumb: "Settings",
 		tab: {
 			general: "General",
@@ -181,16 +181,16 @@ const bots = {
 		},
 		instructions: {
 			label: "Instructions",
-			placeholder: "The system prompt this companion always runs with",
+			placeholder: "The system prompt this agent always runs with",
 		},
 		memory: {
 			label: "Memory",
-			hint: "What this companion remembers across conversations. Edit it or clear it; it keeps learning either way.",
-			empty: "This companion has no memories yet.",
+			hint: "What this agent remembers across conversations. Edit it or clear it; it keeps learning either way.",
+			empty: "This agent has no memories yet.",
 			save: "Save memory",
 			clear: {
 				action: "Clear",
-				title: "Clear this companion’s memory?",
+				title: "Clear this agent’s memory?",
 				description:
 					"It starts learning again from your next conversation. This can’t be undone.",
 				confirm: "Clear the memory",
@@ -210,7 +210,7 @@ const bots = {
 		undone: "Undone above",
 		recordFailed: {
 			title: {
-				bot: "Couldn’t add a companion’s change to History",
+				bot: "Couldn’t add an agent’s change to History",
 				user: "Couldn’t add a change to your profile to History",
 				space: "Couldn’t add a change to the space to History",
 			},
@@ -280,17 +280,17 @@ const bots = {
 		empty: {
 			title: "No skills yet",
 			description:
-				"Write a skill this companion can reuse, and choose whether it loads on every turn.",
+				"Write a skill this agent can reuse, and choose whether it loads on every turn.",
 		},
 		name: {
 			label: "Name",
 			placeholder: "release-notes",
-			hint: "Lowercase letters, numbers and hyphens. The companion reads the description, not the name.",
+			hint: "Lowercase letters, numbers and hyphens. The agent reads the description, not the name.",
 			blank: "A skill needs a name.",
 		},
 		description: {
 			label: "Description",
-			placeholder: "When this companion should use it",
+			placeholder: "When this agent should use it",
 		},
 		whenToUse: {
 			label: "When to use",
@@ -320,9 +320,9 @@ const bots = {
 			hint: "One glob per line. The files that make this skill relevant.",
 		},
 		modelInvocation: {
-			label: "Keep the companion from reaching for it",
+			label: "Keep the agent from reaching for it",
 			description:
-				"Off, the companion decides from the description. On, only you can run it.",
+				"Off, the agent decides from the description. On, only you can run it.",
 		},
 		userInvocable: {
 			label: "Let you invoke it",
@@ -333,7 +333,7 @@ const bots = {
 			label: "Preload this skill",
 			tag: "Preloaded",
 			description:
-				"On, it’s in this companion’s prompt every turn. Off, the companion reads it only when needed.",
+				"On, it’s in this agent’s prompt every turn. Off, the agent reads it only when needed.",
 		},
 		system: {
 			tag: "System",
@@ -342,12 +342,12 @@ const bots = {
 		},
 		model: {
 			label: "Model",
-			placeholder: "The companion’s own",
-			hint: "Leave empty to use the companion’s model.",
+			placeholder: "The agent’s own",
+			hint: "Leave empty to use the agent’s model.",
 		},
 		effort: {
 			label: "Effort",
-			default: "The companion’s own",
+			default: "The agent’s own",
 			option: {
 				low: "Low",
 				medium: "Medium",
@@ -370,7 +370,7 @@ const bots = {
 		},
 		agent: {
 			label: "Agent",
-			placeholder: "The companion itself",
+			placeholder: "The agent itself",
 			hint: "Who runs the fork.",
 		},
 		background: {
@@ -381,7 +381,7 @@ const bots = {
 		allowedTools: {
 			label: "Allowed tools",
 			placeholder: "Read\nGrep",
-			hint: "One tool name per line. Leave empty to allow every tool the companion has.",
+			hint: "One tool name per line. Leave empty to allow every tool the agent has.",
 		},
 		disallowedTools: {
 			label: "Disallowed tools",
@@ -415,7 +415,7 @@ const bots = {
 		delete: {
 			action: "Delete skill",
 			description:
-				"The companion can no longer use this skill. This can’t be undone.",
+				"The agent can no longer use this skill. This can’t be undone.",
 			confirm: {
 				title: "Delete {{name}}?",
 			},
@@ -466,15 +466,14 @@ const bots = {
 		uses_other: "{{count, number}} uses",
 		hostedOn: "Runs on <host>{{host}}</host>",
 		intro: {
-			companion:
-				"What {{name}} connects to for tools it doesn’t have on its own.",
-			space: "What every companion in {{name}} connects to.",
+			agent: "What {{name}} connects to for tools it doesn’t have on its own.",
+			space: "What every agent in {{name}} connects to.",
 			profile: "What you connect to, in every space.",
 		},
 		footnote: {
 			space:
-				"Each companion here can add applications of its own, and you can add some for every space.",
-			profile: "These reach every companion you have, in every space.",
+				"Each agent here can add applications of its own, and you can add some for every space.",
+			profile: "These reach every agent you have, in every space.",
 		},
 		open: "Open {{name}}",
 		section: {
@@ -522,7 +521,7 @@ const bots = {
 			confirm: {
 				title: "Disconnect {{name}}?",
 				description:
-					"Kiroshi drops the token and asks {{name}} to forget it. This companion loses its {{name}} tools until you connect again.",
+					"Kiroshi drops the token and asks {{name}} to forget it. This agent loses its {{name}} tools until you connect again.",
 			},
 			session: {
 				title: "{{name}} was left out",
@@ -530,9 +529,9 @@ const bots = {
 			refused: {
 				title: "The sign-in stopped working",
 				description_one:
-					"Kiroshi couldn’t refresh the token, so {{name}}’s only tool was left out of {{companion}}’s {{sessions}}. Signing in again is usually all it takes.",
+					"Kiroshi couldn’t refresh the token, so {{name}}’s only tool was left out of {{agent}}’s {{sessions}}. Signing in again is usually all it takes.",
 				description_other:
-					"Kiroshi couldn’t refresh the token, so {{name}}’s {{count}} tools were left out of {{companion}}’s {{sessions}}. Signing in again is usually all it takes.",
+					"Kiroshi couldn’t refresh the token, so {{name}}’s {{count}} tools were left out of {{agent}}’s {{sessions}}. Signing in again is usually all it takes.",
 				sessions_one: "last session",
 				sessions_other: "last {{count}} sessions",
 				action: "Sign in again",
@@ -553,12 +552,12 @@ const bots = {
 				revealLabel: "Show {{field}}",
 				concealLabel: "Hide {{field}}",
 				description: {
-					companion:
+					agent:
 						"Kept with this application’s secrets, never in the configuration. {{name}} sees the tools, never these values.",
 					space:
-						"Kept with this application’s secrets, never in the configuration. Every companion in {{name}} sees the tools, never these values.",
+						"Kept with this application’s secrets, never in the configuration. Every agent in {{name}} sees the tools, never these values.",
 					profile:
-						"Kept with this application’s secrets, never in the configuration. Every companion you have sees the tools, never these values.",
+						"Kept with this application’s secrets, never in the configuration. Every agent you have sees the tools, never these values.",
 				},
 			},
 			none: "Nothing to set up. It runs on this machine, with no key and no sign-in.",
@@ -576,20 +575,20 @@ const bots = {
 				},
 			},
 			footnote: {
-				companion:
+				agent:
 					"Applications run on your machine, under your account. Adding one reopens {{name}}’s session so the tools are there straight away.",
 				space:
-					"Applications run on your machine, under your account. Adding one here gives every companion in {{name}} its tools.",
+					"Applications run on your machine, under your account. Adding one here gives every agent in {{name}} its tools.",
 				profile:
-					"Applications run on your machine, under your account. Adding one here gives every companion you have its tools, in every space.",
+					"Applications run on your machine, under your account. Adding one here gives every agent you have its tools, in every space.",
 			},
 			hostedFootnote: {
-				companion:
+				agent:
 					"This one runs on {{source}}’s server, not on your machine. Adding it reopens {{name}}’s session so the tools are there straight away.",
 				space:
-					"This one runs on {{source}}’s server, not on your machine. Adding it here gives every companion in {{name}} its tools.",
+					"This one runs on {{source}}’s server, not on your machine. Adding it here gives every agent in {{name}} its tools.",
 				profile:
-					"This one runs on {{source}}’s server, not on your machine. Adding it here gives every companion you have its tools, in every space.",
+					"This one runs on {{source}}’s server, not on your machine. Adding it here gives every agent you have its tools, in every space.",
 			},
 			done: "Added",
 			failed: "Couldn’t add it: {{reason}}",
@@ -601,19 +600,19 @@ const bots = {
 			},
 		},
 		notice:
-			"This companion runs applications on your machine, under your account. Only add ones you trust.",
+			"This agent runs applications on your machine, under your account. Only add ones you trust.",
 		empty: {
 			title: {
-				companion: "No applications of its own",
+				agent: "No applications of its own",
 				space: "Nothing shared in {{name}} yet",
 				profile: "No applications of your own",
 			},
 			description: {
-				companion:
-					"Add one here and this companion gets tools it doesn’t have on its own. It runs on your machine.",
-				space: "Add one here and every companion in this space gets its tools.",
+				agent:
+					"Add one here and this agent gets tools it doesn’t have on its own. It runs on your machine.",
+				space: "Add one here and every agent in this space gets its tools.",
 				profile:
-					"Add one here and every companion you have gets its tools, in every space. Good for what is yours rather than a project’s.",
+					"Add one here and every agent you have gets its tools, in every space. Good for what is yours rather than a project’s.",
 			},
 		},
 		catalogue: {
@@ -662,14 +661,14 @@ const bots = {
 		unavailable: "Couldn’t load applications. Reopen settings to retry.",
 		reopen: {
 			refused: {
-				title: "Couldn’t reopen {{companion}}’s session",
+				title: "Couldn’t reopen {{agent}}’s session",
 				description: "{{name}} reaches it the next time that session opens.",
 			},
 		},
 		name: {
 			label: "Name",
 			placeholder: "atlas",
-			hint: "Lowercase letters, numbers and hyphens. The companion knows the application by this name.",
+			hint: "Lowercase letters, numbers and hyphens. The agent knows the application by this name.",
 			blank: "An application needs a name.",
 		},
 		config: {
@@ -690,7 +689,7 @@ const bots = {
 		command: {
 			label: "Command",
 			placeholder: "npx",
-			hint: "The program this companion starts. It runs with your account’s access.",
+			hint: "The program this agent starts. It runs with your account’s access.",
 		},
 		args: {
 			label: "Arguments",
@@ -700,7 +699,7 @@ const bots = {
 		url: {
 			label: "URL",
 			placeholder: "https://example.com/mcp",
-			hint: "The address this companion connects to. Nothing runs on your machine.",
+			hint: "The address this agent connects to. Nothing runs on your machine.",
 		},
 		endpoint: {
 			label: "Endpoint",
@@ -736,7 +735,7 @@ const bots = {
 		},
 		delete: {
 			action: "Remove application",
-			description: "This companion stops starting it. This can’t be undone.",
+			description: "This agent stops starting it. This can’t be undone.",
 			confirm: {
 				title: "Remove {{name}}?",
 			},
@@ -758,7 +757,7 @@ const bots = {
 		scope: {
 			user: "You",
 			space: "Space",
-			bot: "Companion",
+			bot: "Agent",
 			server: "Application",
 		},
 		row: {
@@ -843,7 +842,7 @@ const bots = {
 			option: {
 				auto: {
 					label: "Decide alone",
-					hint: "The companion decides on its own, within the rules below.",
+					hint: "The agent decides on its own, within the rules below.",
 				},
 				default: {
 					label: "Ask every time",
@@ -855,11 +854,11 @@ const bots = {
 				},
 				plan: {
 					label: "Plan first",
-					hint: "The companion reads and plans, and changes nothing until you approve.",
+					hint: "The agent reads and plans, and changes nothing until you approve.",
 				},
 				dontAsk: {
 					label: "Never ask",
-					hint: "You’re never asked. Only the deny rules below stop the companion.",
+					hint: "You’re never asked. Only the deny rules below stop the agent.",
 				},
 			} as const satisfies Record<
 				BotPermissionMode,
@@ -906,7 +905,7 @@ const bots = {
 				purple: "Purple",
 				pink: "Pink",
 				orange: "Orange",
-			} as const satisfies Record<BotAvatarBlot, string>,
+			} as const satisfies Record<keyof typeof HUE_PRESETS, string>,
 		},
 		picture: {
 			label: "Picture",
@@ -917,13 +916,13 @@ const bots = {
 		},
 	},
 	danger: {
-		delete: "Delete companion",
+		delete: "Delete agent",
 		description:
-			"The companion is deleted everywhere, not just removed from its spaces. This can’t be undone.",
+			"The agent is deleted everywhere, not just removed from its spaces. This can’t be undone.",
 		confirm: {
 			title: "Delete {{name}}?",
 		},
-		failed: "Couldn’t delete this companion. Retry.",
+		failed: "Couldn’t delete this agent. Retry.",
 	},
 } as const
 

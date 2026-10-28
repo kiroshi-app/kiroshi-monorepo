@@ -58,9 +58,7 @@ describe("toMentionNames", () => {
 	})
 
 	it("reads a companion that no longer sits as a name", () => {
-		expect(toMentionNames("<@ghost> again", BOTS)).toBe(
-			"@Unknown companion again",
-		)
+		expect(toMentionNames("<@ghost> again", BOTS)).toBe("@Unknown agent again")
 	})
 
 	it("leaves a text holding no token alone", () => {

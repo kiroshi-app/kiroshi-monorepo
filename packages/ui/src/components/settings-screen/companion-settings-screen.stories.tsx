@@ -47,7 +47,7 @@ import {
 } from "@workspace/ui/components/sidebar-resize"
 import { i18n } from "@workspace/ui/lib/i18n"
 
-const BACK_TO_COMPANIONS = "Back to Companions"
+const BACK_TO_COMPANIONS = "Back to Agents"
 
 const COMPANION_MENU = [
 	"General",
@@ -220,7 +220,7 @@ export const General = meta.story({
 			"page",
 		)
 		await expect(within(menu).getByText("Juniper")).toBeVisible()
-		await expect(within(menu).getByText("Companion settings")).toBeVisible()
+		await expect(within(menu).getByText("Agent settings")).toBeVisible()
 		await expect(
 			slotIn(menu, "bot-identity-avatar").getBoundingClientRect().width,
 		).toBe(36)
@@ -484,12 +484,12 @@ export const DangerZone = meta.story({
 		await expectPageShown("Danger zone")
 		await userEvent.click(
 			within(screen.getByRole("main")).getByRole("button", {
-				name: "Delete companion",
+				name: "Delete agent",
 			}),
 		)
 		const question = await screen.findByRole("alertdialog")
 		await userEvent.click(
-			within(question).getByRole("button", { name: "Delete companion" }),
+			within(question).getByRole("button", { name: "Delete agent" }),
 		)
 		await expect(args.onDelete).toHaveBeenCalledOnce()
 	},
@@ -502,7 +502,7 @@ export const DangerZoneLight = meta.story({
 		docs: {
 			description: {
 				story:
-					"`DangerZone` in the light theme. Check that Delete companion reads on its tinted fill over the tinted Danger card.",
+					"`DangerZone` in the light theme. Check that Delete agent reads on its tinted fill over the tinted Danger card.",
 			},
 		},
 	},
@@ -547,12 +547,12 @@ export const DeleteFailed = meta.story({
 		await menuIn()
 		await userEvent.click(
 			within(screen.getByRole("main")).getByRole("button", {
-				name: "Delete companion",
+				name: "Delete agent",
 			}),
 		)
 		const question = await screen.findByRole("alertdialog")
 		await userEvent.click(
-			within(question).getByRole("button", { name: "Delete companion" }),
+			within(question).getByRole("button", { name: "Delete agent" }),
 		)
 		await expect(args.onDelete).toHaveBeenCalledOnce()
 		await opaque(await waitFor(() => slotIn(document.body, "toast")))
@@ -569,13 +569,13 @@ export const BackToCompanions = meta.story({
 		docs: {
 			description: {
 				story:
-					"Opened from the Companions section. Check that the Back link reads Back to Companions and reports itself.",
+					"Opened from the Companions section. Check that the Back link reads Back to Agents and reports itself.",
 			},
 		},
 	},
 	play: async ({ args, userEvent }) => {
 		const menu = await menuIn()
-		await userEvent.click(entryIn(menu, "Back to Companions"))
+		await userEvent.click(entryIn(menu, "Back to Agents"))
 		await expect(args.onBack).toHaveBeenCalledOnce()
 	},
 })

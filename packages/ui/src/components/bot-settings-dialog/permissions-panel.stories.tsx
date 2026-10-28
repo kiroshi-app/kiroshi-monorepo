@@ -130,7 +130,7 @@ export const PlanFirst = meta.story(
 	selectingMode({
 		position: 2,
 		label: "Plan first",
-		hint: "The companion reads and plans, and changes nothing until you approve.",
+		hint: "The agent reads and plans, and changes nothing until you approve.",
 	}),
 )
 
@@ -138,7 +138,7 @@ export const DecideAlone = meta.story(
 	selectingMode({
 		position: 3,
 		label: "Decide alone",
-		hint: "The companion decides on its own, within the rules below.",
+		hint: "The agent decides on its own, within the rules below.",
 	}),
 )
 
@@ -146,7 +146,7 @@ export const NeverAsk = meta.story(
 	selectingMode({
 		position: 4,
 		label: "Never ask",
-		hint: "You’re never asked. Only the deny rules below stop the companion.",
+		hint: "You’re never asked. Only the deny rules below stop the agent.",
 	}),
 )
 

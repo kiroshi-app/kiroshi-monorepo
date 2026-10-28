@@ -415,7 +415,7 @@ export const DangerZone = meta.story({
 		const panel = await openTab(dialog, "Danger zone", userEvent)
 
 		await userEvent.click(
-			within(panel).getByRole("button", { name: "Delete companion" }),
+			within(panel).getByRole("button", { name: "Delete agent" }),
 		)
 		const confirmation = await screen.findByRole("alertdialog")
 		await expect(confirmation).toHaveTextContent("Delete Nest Keeper?")
@@ -427,11 +427,11 @@ export const DangerZone = meta.story({
 		await expect(args.onDelete).not.toHaveBeenCalled()
 
 		await userEvent.click(
-			within(panel).getByRole("button", { name: "Delete companion" }),
+			within(panel).getByRole("button", { name: "Delete agent" }),
 		)
 		const reopened = await screen.findByRole("alertdialog")
 		await userEvent.click(
-			within(reopened).getByRole("button", { name: "Delete companion" }),
+			within(reopened).getByRole("button", { name: "Delete agent" }),
 		)
 		await expect(args.onDelete).toHaveBeenCalledTimes(1)
 	},
@@ -539,7 +539,7 @@ export const Empty = meta.story({
 	},
 	play: async ({ userEvent }) => {
 		const dialog = await dialogIn()
-		await expect(dialog).toHaveAccessibleName("Untitled companion Settings")
+		await expect(dialog).toHaveAccessibleName("Untitled agent Settings")
 		await expect(within(dialog).getByLabelText("Name")).toHaveValue("")
 
 		const panel = await openTab(dialog, "Runtime", userEvent)

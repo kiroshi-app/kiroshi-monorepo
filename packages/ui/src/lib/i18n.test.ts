@@ -55,7 +55,7 @@ describe("the runtime", () => {
 		activateLanguage("fr")
 
 		expect(i18n.t("chat:conversationEmptyState.nobody.description")).toBe(
-			"Tapez @ et choisissez un nom. Le compagnon que vous mentionnez rejoint la conversation, et peut à son tour inviter ceux dont il a besoin.",
+			"Tapez @ et choisissez un nom. L’agent que vous mentionnez rejoint la conversation, et peut à son tour inviter ceux dont il a besoin.",
 		)
 	})
 
@@ -69,7 +69,7 @@ describe("the runtime", () => {
 
 	it("tells a failed companion deletion from a failed removal from a space, in both languages", () => {
 		expect(i18n.t("bots:danger.failed")).toBe(
-			"Couldn’t delete this companion. Retry.",
+			"Couldn’t delete this agent. Retry.",
 		)
 		expect(i18n.t("bots:danger.failed")).not.toBe(
 			i18n.t("bots:spaces.remove.failed"),
@@ -78,7 +78,7 @@ describe("the runtime", () => {
 		activateLanguage("fr")
 
 		expect(i18n.t("bots:danger.failed")).toBe(
-			"Impossible de supprimer ce compagnon. Réessayez.",
+			"Impossible de supprimer cet agent. Réessayez.",
 		)
 		expect(i18n.t("bots:danger.failed")).not.toBe(
 			i18n.t("bots:spaces.remove.failed"),

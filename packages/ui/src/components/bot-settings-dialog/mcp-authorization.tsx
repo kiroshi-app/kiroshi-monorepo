@@ -66,7 +66,7 @@ const McpRefusedRefreshBlock = ({
 				<p className="wrap-break-word text-[13px]/4.5 text-muted-foreground">
 					{t("applications.connection.refused.description", {
 						name,
-						companion: refusal.companionName,
+						agent: refusal.companionName,
 						count: refusal.toolCount,
 						sessions: t("applications.connection.refused.sessions", {
 							count: refusal.sessionCount,

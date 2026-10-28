@@ -73,7 +73,7 @@ export const Default = meta.story({
 			await expect(control).toBeChecked()
 		}
 
-		await userEvent.click(canvas.getByText("A companion asks a question"))
+		await userEvent.click(canvas.getByText("An agent asks a question"))
 		await expect(args.onNotificationsChange).toHaveBeenCalledWith({
 			question: false,
 			permission: true,
@@ -81,7 +81,7 @@ export const Default = meta.story({
 			sound: true,
 		})
 		await expect(
-			canvas.getByRole("switch", { name: "A companion asks a question" }),
+			canvas.getByRole("switch", { name: "An agent asks a question" }),
 		).not.toBeChecked()
 	},
 })
@@ -101,13 +101,13 @@ export const AllOff = meta.story({
 			await expect(control).not.toBeChecked()
 		}
 
-		await userEvent.click(canvas.getByText("A companion finishes its turn"))
+		await userEvent.click(canvas.getByText("An agent finishes its turn"))
 		await expect(args.onNotificationsChange).toHaveBeenCalledWith({
 			...NOTHING_NOTIFIED,
 			turn: true,
 		})
 		await expect(
-			canvas.getByRole("switch", { name: "A companion finishes its turn" }),
+			canvas.getByRole("switch", { name: "An agent finishes its turn" }),
 		).toBeChecked()
 	},
 })
@@ -132,7 +132,7 @@ export const InFrench = meta.story({
 		).toBeVisible()
 		await expect(
 			canvas.getByRole("switch", {
-				name: "Un compagnon demande une autorisation",
+				name: "Un agent demande une autorisation",
 			}),
 		).toBeVisible()
 		await expect(

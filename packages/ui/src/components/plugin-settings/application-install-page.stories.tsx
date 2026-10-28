@@ -477,10 +477,10 @@ export const ForSpace = meta.story({
 	},
 	play: async ({ canvas }) => {
 		await expect(
-			canvas.getByText(/Every companion in Atlas sees the tools/),
+			canvas.getByText(/Every agent in Atlas sees the tools/),
 		).toBeVisible()
 		await expect(
-			canvas.getByText(/gives every companion in Atlas its tools\./),
+			canvas.getByText(/gives every agent in Atlas its tools\./),
 		).toBeVisible()
 	},
 })

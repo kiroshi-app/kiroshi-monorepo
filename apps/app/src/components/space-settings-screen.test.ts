@@ -617,7 +617,7 @@ const SESSION_BOUND_ENTRIES = [
 const SESSION_FREE_ENTRIES = [
 	i18n.t("settings:rail.space"),
 	i18n.t("settings:rail.members"),
-	i18n.t("settings:rail.companions"),
+	i18n.t("settings:rail.agents"),
 ]
 
 const EVERY_ENTRY = [...SESSION_BOUND_ENTRIES, ...SESSION_FREE_ENTRIES]
@@ -1610,7 +1610,7 @@ describe("SpaceSettingsScreen companion counts", () => {
 
 		await openCompanionsOf(gear, gear.home.id)
 
-		const notice = i18n.t("settings:space.companions.countsUnreadable")
+		const notice = i18n.t("settings:space.agents.countsUnreadable")
 		expect(
 			await screen.findAllByRole("heading", { name: notice, hidden: true }),
 		).toHaveLength(1)
@@ -1677,7 +1677,7 @@ describe("SpaceSettingsScreen companion counts", () => {
 
 		fireEvent.click(buttonStartingWith(i18n.t("settings:rail.space")))
 		await settle()
-		fireEvent.click(buttonStartingWith(i18n.t("settings:rail.companions")))
+		fireEvent.click(buttonStartingWith(i18n.t("settings:rail.agents")))
 
 		await waitFor(() => expect(readCounts.mock.calls).toHaveLength(2))
 		expect(readCounts.mock.calls).toEqual([[gear.home.id], [gear.home.id]])

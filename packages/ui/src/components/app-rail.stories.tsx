@@ -620,7 +620,7 @@ export const RemovedPanelFallsBackToConversations = meta.story({
 		).toBeVisible()
 		await expect(
 			within(slotIn(canvasElement, "app-rail")).queryByRole("button", {
-				name: "Companions",
+				name: "Agents",
 			}),
 		).toBeNull()
 	},

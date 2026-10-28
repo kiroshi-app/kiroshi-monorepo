@@ -53,9 +53,9 @@ const useOwnerCopy = (owner: ApplicationsOwner): OwnerCopy => {
 	}
 
 	return {
-		intro: t("applications.intro.companion", { name }),
-		emptyTitle: t("applications.empty.title.companion"),
-		emptyDescription: t("applications.empty.description.companion"),
+		intro: t("applications.intro.agent", { name }),
+		emptyTitle: t("applications.empty.title.agent"),
+		emptyDescription: t("applications.empty.description.agent"),
 		footnote: null,
 	}
 }

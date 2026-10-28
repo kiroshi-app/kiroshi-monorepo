@@ -65,7 +65,7 @@ export const Empty = meta.story({
 	},
 	play: async ({ canvas }) => {
 		await expect(
-			canvas.getByText("This companion has no memories yet."),
+			canvas.getByText("This agent has no memories yet."),
 		).toBeVisible()
 		await expect(canvas.queryByLabelText("Memory")).not.toBeInTheDocument()
 		await expect(
@@ -87,7 +87,7 @@ export const Clearing = meta.story({
 		await userEvent.click(canvas.getByRole("button", { name: "Clear" }))
 
 		const question = await screen.findByRole("alertdialog")
-		await expect(question).toHaveTextContent("Clear this companion’s memory?")
+		await expect(question).toHaveTextContent("Clear this agent’s memory?")
 		await expect(args.onSave).not.toHaveBeenCalled()
 
 		await userEvent.click(

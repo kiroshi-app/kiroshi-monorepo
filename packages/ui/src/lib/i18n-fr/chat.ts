@@ -4,44 +4,48 @@ const chat = {
 			title: "Commencer avec l’agent",
 			description:
 				"Kiroshi dialogue directement avec l’agent. Rien ne quitte votre appareil.",
+			descriptionNamed:
+				"Kiroshi dialogue directement avec {{name}}. Rien ne quitte votre appareil.",
 		},
 		unavailable: {
 			title: "Impossible de joindre l’agent",
+			titleNamed: "Impossible de joindre {{name}}",
 			description: "L’agent intégré de Kiroshi n’a pas répondu. Réessayez.",
+			descriptionNamed: "{{name}} n’a pas répondu. Réessayez.",
 		},
 		notConnected: {
 			title: "Vous n’êtes pas connecté",
 			description:
-				"Connectez votre compte Claude pour que vos compagnons puissent répondre.",
+				"Connectez votre compte Claude pour que vos agents puissent répondre.",
 		},
-		settings: "Ouvrir les réglages du compagnon",
-		hint: "Écrivez à un compagnon pour commencer.",
+		settings: "Ouvrir les réglages de l’agent",
+		hint: "Écrivez à un agent pour commencer.",
 		setup: "Réessayer",
 		signIn: "Se connecter",
 	},
 	conversationEmptyState: {
-		description_one: "{{count}} compagnon est prêt.",
-		description_many: "{{count}} compagnons sont prêts.",
-		description_other: "{{count}} compagnons sont prêts.",
-		hint: "Écrivez à un compagnon pour commencer.",
+		description_one: "{{count}} agent est prêt.",
+		description_many: "{{count}} agents sont prêts.",
+		description_other: "{{count}} agents sont prêts.",
+		hint: "Écrivez à un agent pour commencer.",
 		nobody: {
 			title: "Personne n’est encore dans cette conversation",
 			description:
-				"Tapez @ et choisissez un nom. Le compagnon que vous mentionnez rejoint la conversation, et peut à son tour inviter ceux dont il a besoin.",
+				"Tapez @ et choisissez un nom. L’agent que vous mentionnez rejoint la conversation, et peut à son tour inviter ceux dont il a besoin.",
 			suggested: "Ceux à qui vous parlez le plus",
 		},
 	},
 	conversationArrival: {
 		invitedByPerson:
 			"{{name}} a rejoint cette conversation, sur votre invitation",
-		invitedByCompanion:
+		invitedByAgent:
 			"{{name}} a rejoint cette conversation, à l’invitation de {{inviter}}",
 	},
 	connection: {
-		checking: "Vérification de l’agent…",
-		ready: "Agent prêt",
-		unavailable: "Agent indisponible",
-		crashed: "Agent arrêté",
+		checking: "Vérification de {{name}}…",
+		ready: "{{name}} est prêt",
+		unavailable: "{{name}} est indisponible",
+		crashed: "{{name}} s’est arrêté",
 	},
 	transcript: {
 		label: "Conversation",
@@ -74,7 +78,7 @@ const chat = {
 		showLess: "Afficher moins",
 		author: {
 			lead: "Chef",
-			deleted: "Compagnon supprimé",
+			deleted: "Agent supprimé",
 		},
 		cause: {
 			label: "Rapport de routine",
@@ -86,14 +90,14 @@ const chat = {
 			},
 		},
 		mention: {
-			unknown: "Compagnon inconnu",
+			unknown: "Agent inconnu",
 			counted_one: "{{count}} mention",
 			counted_many: "{{count}} mentions",
 			counted_other: "{{count}} mentions",
 			unresolved: {
-				title_one: "Impossible de convoquer un compagnon",
-				title_many: "Impossible de convoquer ces compagnons",
-				title_other: "Impossible de convoquer ces compagnons",
+				title_one: "Impossible de convoquer un agent",
+				title_many: "Impossible de convoquer ces agents",
+				title_other: "Impossible de convoquer ces agents",
 				description_one:
 					"{{names}} a été nommé mais n’a pas de siège dans cette conversation.",
 				description_many:
@@ -200,7 +204,7 @@ const chat = {
 		offline:
 			"{{space}} est hors ligne. Vous pourrez écrire à nouveau dès que l’ordinateur de {{host}} sera de retour.",
 		commands: "Commandes",
-		mentions: "Compagnons",
+		mentions: "Agents",
 		lead: "Meneur",
 		mentioned_one: "{{count}} mention dans le brouillon",
 		mentioned_many: "{{count}} mentions dans le brouillon",
@@ -257,8 +261,8 @@ const chat = {
 	applicationInstall: {
 		openSettings: "Ouvrir les réglages",
 		receipt: {
-			companion: "{{destination}} a {{name}} dans toutes ses conversations.",
-			space: "Chaque compagnon de {{destination}} a {{name}}.",
+			agent: "{{destination}} a {{name}} dans toutes ses conversations.",
+			space: "Chaque agent de {{destination}} a {{name}}.",
 			user: "Vous avez {{name}} dans toutes vos conversations.",
 		},
 		secret_one: "Sa clé va dans {{secret}}.",
@@ -292,7 +296,7 @@ const chat = {
 	},
 	screen: {
 		label: "Conversation avec l’agent",
-		identity: "{{name}} · réglages du compagnon",
+		identity: "{{name}} · réglages de l’agent",
 		conversationIdentity: "{{name}} · réglages de la conversation",
 		placeholder: "Message à {{name}}",
 		approval: {
@@ -307,7 +311,7 @@ const chat = {
 		notice: {
 			crashed: "L’agent s’est arrêté",
 			resumeFailed: "Impossible de reprendre la conversation",
-			settingsRejected: "Impossible d’appliquer les réglages du compagnon",
+			settingsRejected: "Impossible d’appliquer les réglages de l’agent",
 			serverEnvRejected: "Impossible de démarrer une application",
 			notAuthenticated: "Vous n’êtes pas connecté",
 			unavailable: "Impossible de joindre l’agent",
@@ -527,7 +531,7 @@ const chat = {
 			storage:
 				"Impossible d’enregistrer les fichiers ({{failure}}). Joignez-les à nouveau.",
 			unknownConversation:
-				"Cette conversation n’existe plus. Rouvrez le compagnon et joignez-les à nouveau.",
+				"Cette conversation n’existe plus. Rouvrez l’agent et joignez-les à nouveau.",
 			tooMany:
 				"Un message accepte {{limit}} fichiers au maximum, et {{staged}} sont en attente. Retirez-en.",
 			tooLarge:
@@ -546,7 +550,7 @@ const chat = {
 		failed: "Impossible de changer qui est dans cette conversation. Réessayez.",
 		refused:
 			"Impossible de faire venir {{name}} dans cette conversation. Réessayez.",
-		unavailable: "Impossible de charger les compagnons à suggérer. Réessayez.",
+		unavailable: "Impossible de charger les agents à suggérer. Réessayez.",
 	},
 	conversationSettings: {
 		breadcrumb: "Paramètres",
@@ -593,19 +597,19 @@ const chat = {
 		instructions: {
 			label: "Instructions",
 			placeholder:
-				"Ce que chaque compagnon de cette conversation doit garder en tête",
+				"Ce que chaque agent de cette conversation doit garder en tête",
 		},
 		participants: {
 			label: "Dans cette conversation",
 			lead: "Meneur",
 			promote: "Confier la conduite à {{name}}",
 			dismiss: "Retirer {{name}}",
-			last: "Une conversation a besoin d’au moins un compagnon.",
+			last: "Une conversation a besoin d’au moins un agent.",
 		},
 		danger: {
 			delete: "Supprimer la conversation",
 			description:
-				"Ses messages sont supprimés ; ses compagnons restent dans l’espace. C’est irréversible.",
+				"Ses messages sont supprimés ; ses agents restent dans l’espace. C’est irréversible.",
 			confirm: {
 				title: "Supprimer {{name}} ?",
 			},
@@ -815,7 +819,7 @@ const chat = {
 		empty: {
 			title: "Aucune routine",
 			description:
-				"Créez une routine pour faire travailler un compagnon selon un horaire ou quand un fichier change.",
+				"Créez une routine pour faire travailler un agent selon un horaire ou quand un fichier change.",
 		},
 		leave: {
 			title: "Quitter sans enregistrer ?",
@@ -829,7 +833,7 @@ const chat = {
 			empty: {
 				title: "Aucune mission pour l’instant",
 				description:
-					"Les missions ouvertes par vos compagnons dans cet espace apparaissent ici.",
+					"Les missions ouvertes par vos agents dans cet espace apparaissent ici.",
 			},
 		},
 		state: {
@@ -842,16 +846,16 @@ const chat = {
 		live: "En cours maintenant",
 		event: {
 			source: {
-				bot: "Le compagnon",
+				bot: "L’agent",
 				reader: "Vous",
-				agent: "L’agent",
+				agent: "La session de code",
 				github: "GitHub",
 			},
 			line: {
 				opened: "Mission ouverte par {{source}}",
 				note: "Note enregistrée par {{source}}",
-				agent_asked: "Question envoyée à l’agent par {{source}}",
-				answered: "Réponse envoyée à l’agent",
+				agent_asked: "Question envoyée à la session de code par {{source}}",
+				answered: "Réponse envoyée à la session de code",
 				escalated: "Remontée à un humain par {{source}}",
 				ready: "Marquée prête à fusionner par {{source}}",
 				checks_failed: "Vérifications en échec signalées par {{source}}",
@@ -895,8 +899,8 @@ const chat = {
 				pull_request_url: "URL de la PR",
 				workspace_path: "Chemin de l’espace de travail",
 			},
-			messageAgent: "Écrire à l’agent",
-			stopAgent: "Arrêter l’agent",
+			messageAgent: "Écrire à la session de code",
+			stopAgent: "Arrêter la session de code",
 			answer: "Répondre à la question",
 			close: "Fermer",
 			reopen: "Rouvrir",
@@ -904,7 +908,7 @@ const chat = {
 			failed: {
 				openPullRequest: "Impossible d’ouvrir la pull request",
 				copy: "Impossible de copier dans le presse-papiers",
-				stopAgent: "Impossible d’arrêter l’agent",
+				stopAgent: "Impossible d’arrêter la session de code",
 				close: "Impossible de fermer la mission",
 				reopen: "Impossible de rouvrir la mission",
 			},
@@ -922,7 +926,7 @@ const chat = {
 		},
 		summons: {
 			working: "Ouvert par la mission",
-			waiting_bot: "Ouvert par la question de l’agent",
+			waiting_bot: "Ouvert par la question de la session de code",
 		},
 		composer: {
 			placeholder: "Répondre à cette mission…",
@@ -938,7 +942,7 @@ const chat = {
 				description: "Renvoyez-la.",
 			},
 			run: {
-				title: "Impossible de lancer le compagnon sur sa mission",
+				title: "Impossible de lancer l’agent sur sa mission",
 				description: "Ouvrez sa conversation pour vérifier.",
 			},
 		},
@@ -1019,7 +1023,7 @@ const chat = {
 			header: "Dernière étape",
 			question: "Tout fonctionne. Prêt pour la dernière ?",
 			pick: {
-				label: "Choisir mon premier compagnon",
+				label: "Choisir mon premier agent",
 				description: "Encore une question, et vous êtes prêt.",
 			},
 			keepTalking: {

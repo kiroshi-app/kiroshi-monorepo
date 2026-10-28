@@ -827,7 +827,7 @@ export const Roster = meta.story({
 		await userEvent.click(
 			within(await screen.findByRole("menu", { name: CREATE })).getByRole(
 				"menuitem",
-				{ name: "Create a companion" },
+				{ name: "Create an agent" },
 			),
 		)
 		await expect(args.onCreateBot).toHaveBeenCalled()
@@ -910,7 +910,7 @@ export const PlainCreateButton = meta.story({
 		},
 	},
 	play: async ({ args, canvas, userEvent }) => {
-		const create = canvas.getByRole("button", { name: "Create a companion" })
+		const create = canvas.getByRole("button", { name: "Create an agent" })
 		await expect(create).not.toHaveAttribute("aria-haspopup")
 
 		await userEvent.click(create)
@@ -932,9 +932,9 @@ export const Empty = meta.story({
 	},
 	play: async ({ canvas, canvasElement, userEvent }) => {
 		await expect(rowsIn(canvasElement)).toHaveLength(0)
-		await expect(canvas.getByText("No companions yet")).toBeVisible()
+		await expect(canvas.getByText("No agents yet")).toBeVisible()
 		await expect(canvas.getByRole("status")).toHaveTextContent(
-			"No companion selected",
+			"No agent selected",
 		)
 
 		const create = canvas.getByRole("button", { name: CREATE })
@@ -962,13 +962,9 @@ export const UnreadableRoster = meta.story({
 	play: async ({ canvas, canvasElement }) => {
 		await expect(rowsIn(canvasElement)).toHaveLength(0)
 		await expect(
-			canvas.getByText(
-				"Couldn’t load your companions. Restart Kiroshi to retry.",
-			),
+			canvas.getByText("Couldn’t load your agents. Restart Kiroshi to retry."),
 		).toBeVisible()
-		await expect(
-			canvas.queryByText("No companions yet"),
-		).not.toBeInTheDocument()
+		await expect(canvas.queryByText("No agents yet")).not.toBeInTheDocument()
 	},
 })
 
@@ -988,9 +984,7 @@ export const LoadingRoster = meta.story({
 	play: async ({ canvas, canvasElement }) => {
 		await expectSkeletonFilledTo(canvasElement, "bottom")
 		await expect(rowsIn(canvasElement)).toHaveLength(0)
-		await expect(
-			canvas.queryByText("No companions yet"),
-		).not.toBeInTheDocument()
+		await expect(canvas.queryByText("No agents yet")).not.toBeInTheDocument()
 		await expect(
 			slotIn(canvasElement, "list-skeleton").getBoundingClientRect().bottom,
 		).toBeCloseTo(
@@ -2864,7 +2858,7 @@ const expectOpenInNewTabUnderPin = async (
 }
 
 const LAST_SPACE_NOTE =
-	"A companion stays in at least one space. To remove a companion from its last space, delete the companion."
+	"An agent stays in at least one space. To remove an agent from its last space, delete the agent."
 
 type Gestures = {
 	click: (node: Element) => Promise<void>
@@ -4391,7 +4385,7 @@ export const EmptySection = meta.story({
 		},
 	},
 	play: async ({ canvas, canvasElement }) => {
-		const invitation = canvas.getByText("Drop a companion here")
+		const invitation = canvas.getByText("Drop an agent here")
 		await expect(invitation).toBeVisible()
 
 		const zone = slotIn(canvasElement, "roster-section-drop")
@@ -4826,11 +4820,11 @@ export const RosterSurfaceMenu = meta.story({
 		const menu = await openSurfaceMenu(canvasElement)
 		await expect(
 			menu.getAllByRole("menuitem").map((item) => item.textContent),
-		).toEqual(["Create a companion", "Start a conversation", CREATE_SECTION])
+		).toEqual(["Create an agent", "Start a conversation", CREATE_SECTION])
 		await expect(menu.queryAllByRole("separator")).toHaveLength(0)
 
 		await userEvent.click(
-			menu.getByRole("menuitem", { name: "Create a companion" }),
+			menu.getByRole("menuitem", { name: "Create an agent" }),
 		)
 		await expect(args.onCreateBot).toHaveBeenCalled()
 
@@ -6052,7 +6046,7 @@ export const CreateMenu = meta.story({
 		const menu = within(await screen.findByRole("menu", { name: CREATE }))
 		await expect(
 			menu.getAllByRole("menuitem").map((item) => item.textContent),
-		).toEqual(["Create a companion", "Start a conversation", CREATE_SECTION])
+		).toEqual(["Create an agent", "Start a conversation", CREATE_SECTION])
 		await expect(args.onCreateBot).not.toHaveBeenCalled()
 
 		const pick = async (name: string) => {
@@ -6066,7 +6060,7 @@ export const CreateMenu = meta.story({
 		}
 
 		await userEvent.click(
-			menu.getByRole("menuitem", { name: "Create a companion" }),
+			menu.getByRole("menuitem", { name: "Create an agent" }),
 		)
 		await expect(args.onCreateBot).toHaveBeenCalled()
 

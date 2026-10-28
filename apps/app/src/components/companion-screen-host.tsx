@@ -70,7 +70,7 @@ export const CompanionScreenHost = ({
 			{...frame}
 			backLabel={
 				search.isFromSpaceSettings
-					? i18n.t("settings:screen.backToCompanions")
+					? i18n.t("settings:screen.backToAgents")
 					: undefined
 			}
 			entry={search.entry ?? GENERAL_ENTRY}

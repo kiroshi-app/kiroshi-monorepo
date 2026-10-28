@@ -986,7 +986,7 @@ const CompanionSettingsScreen = ({
 			sessions={sessions}
 			titleBar={titleBar}
 			width={width}
-			subtitle={tSettings("screen.subtitle.companion")}
+			subtitle={tSettings("screen.subtitle.agent")}
 		/>
 	)
 }

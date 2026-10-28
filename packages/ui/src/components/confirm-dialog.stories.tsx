@@ -72,7 +72,7 @@ const meta = preview.meta({
 		triggerClassName: buttonVariants({ variant: "destructive", size: "sm" }),
 		title: "Delete Release notes?",
 		description:
-			"The companion can no longer use this skill. This can’t be undone.",
+			"The agent can no longer use this skill. This can’t be undone.",
 		confirmLabel: "Delete skill",
 		onConfirm: fn(),
 		onCancel: fn(),

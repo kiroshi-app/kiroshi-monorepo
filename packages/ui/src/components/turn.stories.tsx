@@ -972,7 +972,7 @@ export const Authored = meta.story({
 		await expect(
 			canvasElement.querySelectorAll('[data-slot="message-author-lead"]'),
 		).toHaveLength(1)
-		await expect(canvas.getByText("Unknown companion")).toBeVisible()
+		await expect(canvas.getByText("Unknown agent")).toBeVisible()
 
 		const [name] = canvasElement.querySelectorAll<HTMLElement>(
 			'[data-from="assistant"] [data-slot="message-author"]',
@@ -1118,7 +1118,7 @@ export const DeletedAuthor = meta.story({
 		docs: {
 			description: {
 				story:
-					"The companion that wrote this was deleted since. Its message is history and stays legible: the bubble is the ordinary one, only the name is dimmed and marked with a bin so a reader knows nobody is behind it any more. The mark is an icon in the line and *Deleted companion* under it — on hover, and to a screen reader — so the row keeps its length and still says what it means. Check that the icon reads as a state rather than an action nobody can take, and that the row copies and quotes like any other. " +
+					"The companion that wrote this was deleted since. Its message is history and stays legible: the bubble is the ordinary one, only the name is dimmed and marked with a bin so a reader knows nobody is behind it any more. The mark is an icon in the line and *Deleted agent* under it — on hover, and to a screen reader — so the row keeps its length and still says what it means. Check that the icon reads as a state rather than an action nobody can take, and that the row copies and quotes like any other. " +
 					RENDERED_BY_THE_THREAD,
 			},
 		},
@@ -1135,7 +1135,7 @@ export const DeletedAuthor = meta.story({
 	play: async ({ canvas, canvasElement }) => {
 		await expect(
 			canvasElement.querySelector('[data-slot="message-author-deleted"]'),
-		).toHaveAttribute("title", "Deleted companion")
+		).toHaveAttribute("title", "Deleted agent")
 		await expect(canvas.getByText(GONE_REPLY)).toBeVisible()
 	},
 })

@@ -152,8 +152,8 @@ export const Error = meta.story({
 
 export const WithHint = meta.story({
 	args: {
-		hint: "Leave empty to use the companion’s model.",
-		placeholder: "The companion’s own",
+		hint: "Leave empty to use the agent’s model.",
+		placeholder: "The agent’s own",
 		value: "",
 	},
 	parameters: {

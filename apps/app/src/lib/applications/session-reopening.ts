@@ -67,7 +67,7 @@ export const createSessionReopener = ({
 		raiseReportedFailure(
 			{
 				title: i18n.t("bots:applications.reopen.refused.title", {
-					companion: companion.name,
+					agent: companion.name,
 				}),
 				description: i18n.t("bots:applications.reopen.refused.description", {
 					name: application,

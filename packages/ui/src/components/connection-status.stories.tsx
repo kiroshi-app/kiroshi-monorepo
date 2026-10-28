@@ -51,7 +51,7 @@ const meta = preview.meta({
 })
 
 export const Default = meta.story({
-	args: { state: "ready", version: "2.1.233" },
+	args: { name: "Nest Keeper", state: "ready", version: "2.1.233" },
 	parameters: {
 		docs: {
 			description: {
@@ -62,7 +62,7 @@ export const Default = meta.story({
 	},
 	play: async ({ canvas, canvasElement }) => {
 		await expect(canvas.getByRole("status")).toHaveTextContent(
-			"Agent ready v2.1.233",
+			"Nest Keeper is ready v2.1.233",
 		)
 		await expect(canvas.getByRole("status")).toHaveClass("sr-only")
 		await expectReadyDot(canvasElement, resolvedRootColor("--success"))
@@ -87,7 +87,7 @@ export const DefaultDark = meta.story({
 
 export const Variants = meta.story({
 	tags: ["test-only"],
-	args: { state: "ready" },
+	args: { name: "Nest Keeper", state: "ready" },
 	parameters: {
 		docs: {
 			description: {
@@ -100,7 +100,11 @@ export const Variants = meta.story({
 		<div className="flex flex-col gap-3">
 			{CONNECTION_STATUS_STATES.map((state) => (
 				<Row key={state}>
-					<ConnectionStatus state={state} version="2.1.233" />
+					<ConnectionStatus
+						name="Nest Keeper"
+						state={state}
+						version="2.1.233"
+					/>
 				</Row>
 			))}
 		</div>
@@ -108,7 +112,7 @@ export const Variants = meta.story({
 })
 
 export const ZeroValue = meta.story({
-	args: { state: "checking", version: null },
+	args: { name: "Nest Keeper", state: "checking", version: null },
 	parameters: {
 		docs: {
 			description: {
@@ -119,7 +123,7 @@ export const ZeroValue = meta.story({
 	},
 	play: async ({ canvas }) => {
 		await expect(canvas.getByRole("status")).toHaveTextContent(
-			"Checking the agent…",
+			"Checking Nest Keeper…",
 		)
 		await expect(canvas.queryByText(/^v/)).toBeNull()
 	},

@@ -6,24 +6,28 @@ const chat = {
 			title: "Start with the agent",
 			description:
 				"Kiroshi talks to the agent directly. Nothing leaves your device.",
+			descriptionNamed:
+				"Kiroshi talks to {{name}} directly. Nothing leaves your device.",
 		},
 		unavailable: {
 			title: "Couldn’t reach the agent",
+			titleNamed: "Couldn’t reach {{name}}",
 			description: "Kiroshi’s built-in agent didn’t answer. Try again.",
+			descriptionNamed: "{{name}} didn’t answer. Try again.",
 		},
 		notConnected: {
 			title: "You’re not signed in",
-			description: "Connect your Claude account so your companions can answer.",
+			description: "Connect your Claude account so your agents can answer.",
 		},
-		settings: "Open companion settings",
-		hint: "Message a companion to start.",
+		settings: "Open agent settings",
+		hint: "Message an agent to start.",
 		setup: "Try again",
 		signIn: "Sign in",
 	},
 	conversationEmptyState: {
-		description_one: "{{count}} companion is ready.",
-		description_other: "{{count}} companions are ready.",
-		hint: "Message a companion to start.",
+		description_one: "{{count}} agent is ready.",
+		description_other: "{{count}} agents are ready.",
+		hint: "Message an agent to start.",
 		nobody: {
 			title: "Nobody is in this conversation yet",
 			description:
@@ -33,14 +37,13 @@ const chat = {
 	},
 	conversationArrival: {
 		invitedByPerson: "{{name}} joined this conversation, invited by you",
-		invitedByCompanion:
-			"{{name}} joined this conversation, invited by {{inviter}}",
+		invitedByAgent: "{{name}} joined this conversation, invited by {{inviter}}",
 	},
 	connection: {
-		checking: "Checking the agent…",
-		ready: "Agent ready",
-		unavailable: "Agent unavailable",
-		crashed: "Agent stopped",
+		checking: "Checking {{name}}…",
+		ready: "{{name}} is ready",
+		unavailable: "{{name}} is unavailable",
+		crashed: "{{name}} stopped",
 	},
 	transcript: {
 		label: "Conversation",
@@ -72,7 +75,7 @@ const chat = {
 		showLess: "Show less",
 		author: {
 			lead: "Lead",
-			deleted: "Deleted companion",
+			deleted: "Deleted agent",
 		},
 		cause: {
 			label: "Routine report",
@@ -84,12 +87,12 @@ const chat = {
 			},
 		},
 		mention: {
-			unknown: "Unknown companion",
+			unknown: "Unknown agent",
 			counted_one: "{{count}} mention",
 			counted_other: "{{count}} mentions",
 			unresolved: {
-				title_one: "Couldn’t summon a companion",
-				title_other: "Couldn’t summon these companions",
+				title_one: "Couldn’t summon an agent",
+				title_other: "Couldn’t summon these agents",
 				description_one:
 					"{{names}} was named but holds no seat in this conversation.",
 				description_other:
@@ -193,7 +196,7 @@ const chat = {
 		offline:
 			"{{space}} is offline. You can write again once {{host}}’s computer is back.",
 		commands: "Commands",
-		mentions: "Companions",
+		mentions: "Agents",
 		lead: "Lead",
 		mentioned_one: "{{count}} mention in the draft",
 		mentioned_other: "{{count}} mentions in the draft",
@@ -245,8 +248,8 @@ const chat = {
 	applicationInstall: {
 		openSettings: "Open Settings",
 		receipt: {
-			companion: "{{destination}} has {{name}} in every conversation.",
-			space: "Every companion in {{destination}} has {{name}}.",
+			agent: "{{destination}} has {{name}} in every conversation.",
+			space: "Every agent in {{destination}} has {{name}}.",
 			user: "You have {{name}} in every conversation.",
 		},
 		secret_one: "Its key goes in {{secret}}.",
@@ -278,7 +281,7 @@ const chat = {
 	},
 	screen: {
 		label: "Agent conversation",
-		identity: "{{name}} · companion settings",
+		identity: "{{name}} · agent settings",
 		conversationIdentity: "{{name}} · conversation settings",
 		placeholder: "Message {{name}}",
 		approval: {
@@ -293,7 +296,7 @@ const chat = {
 		notice: {
 			crashed: "The agent stopped",
 			resumeFailed: "Couldn’t resume the conversation",
-			settingsRejected: "Couldn’t apply the companion’s settings",
+			settingsRejected: "Couldn’t apply the agent’s settings",
 			serverEnvRejected: "Couldn’t start an application",
 			notAuthenticated: "You’re not signed in",
 			unavailable: "Couldn’t reach the agent",
@@ -507,7 +510,7 @@ const chat = {
 			megabytes: "{{size}} MB",
 			storage: "Couldn’t save the files ({{failure}}). Attach them again.",
 			unknownConversation:
-				"This conversation no longer exists. Reopen the companion and attach them again.",
+				"This conversation no longer exists. Reopen the agent and attach them again.",
 			tooMany:
 				"A message takes up to {{limit}} files, and {{staged}} are staged. Remove some.",
 			tooLarge:
@@ -524,7 +527,7 @@ const chat = {
 	conversationSeating: {
 		failed: "Couldn’t change who is in this conversation. Retry.",
 		refused: "Couldn’t bring {{name}} into this conversation. Retry.",
-		unavailable: "Couldn’t load the companions to suggest. Retry.",
+		unavailable: "Couldn’t load the agents to suggest. Retry.",
 	},
 	conversationSettings: {
 		breadcrumb: "Settings",
@@ -570,20 +573,19 @@ const chat = {
 		},
 		instructions: {
 			label: "Instructions",
-			placeholder:
-				"What every companion in this conversation should keep in mind",
+			placeholder: "What every agent in this conversation should keep in mind",
 		},
 		participants: {
 			label: "In this conversation",
 			lead: "Lead",
 			promote: "Give the lead to {{name}}",
 			dismiss: "Dismiss {{name}}",
-			last: "A conversation needs at least one companion.",
+			last: "A conversation needs at least one agent.",
 		},
 		danger: {
 			delete: "Delete conversation",
 			description:
-				"Its messages are deleted; its companions stay in the space. This can’t be undone.",
+				"Its messages are deleted; its agents stay in the space. This can’t be undone.",
 			confirm: {
 				title: "Delete {{name}}?",
 			},
@@ -786,7 +788,7 @@ const chat = {
 		empty: {
 			title: "No routine yet",
 			description:
-				"Set a routine to run a companion on a schedule or when a file changes.",
+				"Set a routine to run an agent on a schedule or when a file changes.",
 		},
 		leave: {
 			title: "Leave without saving?",
@@ -799,8 +801,7 @@ const chat = {
 		panel: {
 			empty: {
 				title: "No missions yet",
-				description:
-					"Missions your companions open in this space show up here.",
+				description: "Missions your agents open in this space show up here.",
 			},
 		},
 		state: {
@@ -813,16 +814,16 @@ const chat = {
 		live: "Working now",
 		event: {
 			source: {
-				bot: "The companion",
+				bot: "The agent",
 				reader: "You",
-				agent: "The agent",
+				agent: "The coding session",
 				github: "GitHub",
 			},
 			line: {
 				opened: "Mission opened by {{source}}",
 				note: "Note recorded by {{source}}",
-				agent_asked: "Question sent to the agent by {{source}}",
-				answered: "Answer sent to the agent",
+				agent_asked: "Question sent to the coding session by {{source}}",
+				answered: "Answer sent to the coding session",
 				escalated: "Escalated to a human by {{source}}",
 				ready: "Marked ready to merge by {{source}}",
 				checks_failed: "Red checks reported by {{source}}",
@@ -865,8 +866,8 @@ const chat = {
 				pull_request_url: "PR URL",
 				workspace_path: "Workspace path",
 			},
-			messageAgent: "Message the agent",
-			stopAgent: "Stop the agent",
+			messageAgent: "Message the coding session",
+			stopAgent: "Stop the coding session",
 			answer: "Answer the question",
 			close: "Close",
 			reopen: "Reopen",
@@ -874,7 +875,7 @@ const chat = {
 			failed: {
 				openPullRequest: "Couldn’t open the pull request",
 				copy: "Couldn’t copy to the clipboard",
-				stopAgent: "Couldn’t stop the agent",
+				stopAgent: "Couldn’t stop the coding session",
 				close: "Couldn’t close the mission",
 				reopen: "Couldn’t reopen the mission",
 			},
@@ -892,7 +893,7 @@ const chat = {
 		},
 		summons: {
 			working: "Opened by the mission",
-			waiting_bot: "Opened by the agent’s question",
+			waiting_bot: "Opened by the coding session’s question",
 		},
 		composer: {
 			placeholder: "Answer this mission…",
@@ -907,7 +908,7 @@ const chat = {
 				description: "Send it again.",
 			},
 			run: {
-				title: "Couldn’t run the companion on its mission",
+				title: "Couldn’t run the agent on its mission",
 				description: "Open its conversation to check on it.",
 			},
 		},
@@ -988,7 +989,7 @@ const chat = {
 			header: "Last step",
 			question: "That’s it working. Ready for the last one?",
 			pick: {
-				label: "Pick my first companion",
+				label: "Pick my first agent",
 				description: "One more question, then you’re set up.",
 			},
 			keepTalking: {

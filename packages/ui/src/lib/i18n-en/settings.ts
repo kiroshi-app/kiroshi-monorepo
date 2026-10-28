@@ -4,12 +4,12 @@ const settings = {
 	},
 	screen: {
 		back: "Back to conversations",
-		backToCompanions: "Back to Companions",
+		backToAgents: "Back to Agents",
 		backToSettings: "Back to your settings",
 		menu: "Settings",
 		subtitle: {
 			space: "Space settings",
-			companion: "Companion settings",
+			agent: "Agent settings",
 			conversation: "Conversation settings",
 			user: "User settings",
 			invitation: "Invitation",
@@ -32,7 +32,7 @@ const settings = {
 		account: "Account",
 		space: "Space",
 		members: "Members",
-		companions: "Companions",
+		agents: "Agents",
 		secrets: "Secrets",
 		appearance: "Appearance",
 		notifications: "Notifications",
@@ -119,23 +119,23 @@ const settings = {
 	},
 	plugin: {
 		author: {
-			bot: "A companion",
+			bot: "An agent",
 		},
 	},
 	notifications: {
 		label: "Notify me when",
 		event: {
 			question: {
-				label: "A companion asks a question",
+				label: "An agent asks a question",
 				description: "It’s paused until you answer.",
 			},
 			permission: {
-				label: "A companion asks for approval",
+				label: "An agent asks for approval",
 				description:
 					"It’s waiting for your approval to run a command or edit a file.",
 			},
 			turn: {
-				label: "A companion finishes its turn",
+				label: "An agent finishes its turn",
 				description: "It’s done and waiting for your next message.",
 			},
 		},
@@ -188,9 +188,9 @@ const settings = {
 			downloading: "Downloading {{version}}. You can keep working meanwhile.",
 			ready: "{{version}} is ready. Restart Kiroshi to finish updating.",
 			readyHeld: "{{version}} is ready.",
-			running_one: "{{count}} companion is still running. Stop it to restart.",
+			running_one: "{{count}} agent is still running. Stop it to restart.",
 			running_other:
-				"{{count}} companions are still running. Stop them to restart.",
+				"{{count}} agents are still running. Stop them to restart.",
 			failed: "Couldn’t download {{version}}.",
 			failedHint: "Check your connection, then download it again.",
 		},
@@ -271,14 +271,14 @@ const settings = {
 				generic: "Something went wrong, nothing was changed.",
 			},
 		},
-		companions: {
-			title: "Companions",
-			caption: "Every companion in {{space}}. Pick one to change how it works.",
-			create: "Create a companion",
-			empty: "No companions in this space yet.",
+		agents: {
+			title: "Agents",
+			caption: "Every agent in {{space}}. Pick one to change how it works.",
+			create: "Create an agent",
+			empty: "No agents in this space yet.",
 			counts: "{{skills}} · {{applications}}",
 			countsUnreadable:
-				"Couldn’t read the skills and applications of the companions. Open Companions again to retry.",
+				"Couldn’t read the skills and applications of the agents. Open Agents again to retry.",
 			skills_zero: "no skills",
 			skills_one: "{{count}} skill",
 			skills_other: "{{count}} skills",
@@ -446,7 +446,7 @@ const settings = {
 		danger: {
 			delete: "Delete space",
 			description:
-				"Companions that are only in this space are deleted with it. This can’t be undone.",
+				"Agents that are only in this space are deleted with it. This can’t be undone.",
 			last: "You can’t delete your last space.",
 			confirm: {
 				title: "Delete {{name}}?",

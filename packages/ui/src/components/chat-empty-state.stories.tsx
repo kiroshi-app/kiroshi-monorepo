@@ -56,12 +56,15 @@ export const WithSettings = meta.story({
 	},
 	play: async ({ args, canvas, userEvent }) => {
 		const settings = canvas.getByRole("button", {
-			name: "Open companion settings",
+			name: "Open agent settings",
 		})
 
 		await expect(
-			canvas.getByText(/Message a companion to start\./),
+			canvas.getByText(
+				`Kiroshi talks to ${BOT.name} directly. Nothing leaves your device.`,
+			),
 		).toBeVisible()
+		await expect(canvas.getByText(/Message an agent to start\./)).toBeVisible()
 		await userEvent.click(settings)
 		await expect(args.onOpenSettings).toHaveBeenCalled()
 	},
@@ -143,6 +146,11 @@ export const Unnamed = meta.story({
 		await expect(
 			canvas.getByRole("heading", { name: "Start with the agent" }),
 		).toBeVisible()
+		await expect(
+			canvas.getByText(
+				"Kiroshi talks to the agent directly. Nothing leaves your device.",
+			),
+		).toBeVisible()
 	},
 })
 
@@ -160,6 +168,12 @@ export const Unavailable = meta.story({
 		const setup = canvas.getByRole("button", { name: "Try again" })
 
 		await expect(botIdentityAvatars(canvasElement)).toHaveLength(0)
+		await expect(
+			canvas.getByRole("heading", { name: `Couldn’t reach ${BOT.name}` }),
+		).toBeVisible()
+		await expect(
+			canvas.getByText(`${BOT.name} didn’t answer. Try again.`),
+		).toBeVisible()
 		await expect(canvas.queryByText(BOT.name)).toBeNull()
 		await userEvent.click(setup)
 		await expect(args.onSetup).toHaveBeenCalled()

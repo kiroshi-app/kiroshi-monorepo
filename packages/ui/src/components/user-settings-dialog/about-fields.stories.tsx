@@ -259,7 +259,7 @@ export const CompanionsStillRunning = meta.story({
 	play: async ({ args, canvasElement }) => {
 		const panel = lightPanelIn(canvasElement)
 		await expect(panel.getByRole("status")).toHaveTextContent(
-			"0.24.0 is ready.2 companions are still running. Stop them to restart.",
+			"0.24.0 is ready.2 agents are still running. Stop them to restart.",
 		)
 		await expectHeadline(canvasElement, true)
 

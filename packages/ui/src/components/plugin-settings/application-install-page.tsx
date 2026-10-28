@@ -44,6 +44,12 @@ type InstallableApplication = CatalogueApplication & {
 	refusal?: ApplicationRefusal
 }
 
+const OWNER_COPY_KEY = {
+	companion: "agent",
+	space: "space",
+	profile: "profile",
+} as const satisfies Record<ApplicationsOwner["kind"], string>
+
 const ownerNameOf = (owner: ApplicationsOwner) =>
 	owner.kind === "profile" ? "" : owner.name
 
@@ -251,9 +257,12 @@ const KeyPanel = ({
 				/>
 			))}
 			<p className="wrap-break-word text-muted-foreground text-xs/4">
-				{t(`applications.install.key.description.${owner.kind}`, {
-					name: ownerNameOf(owner),
-				})}
+				{t(
+					`applications.install.key.description.${OWNER_COPY_KEY[owner.kind]}`,
+					{
+						name: ownerNameOf(owner),
+					},
+				)}
 			</p>
 		</section>
 	)
@@ -442,10 +451,10 @@ const ApplicationInstallPage = ({
 
 	const footnote = () =>
 		hostedSource === undefined
-			? t(`applications.install.footnote.${owner.kind}`, {
+			? t(`applications.install.footnote.${OWNER_COPY_KEY[owner.kind]}`, {
 					name: ownerNameOf(owner),
 				})
-			: t(`applications.install.hostedFootnote.${owner.kind}`, {
+			: t(`applications.install.hostedFootnote.${OWNER_COPY_KEY[owner.kind]}`, {
 					name: ownerNameOf(owner),
 					source: hostedSource,
 				})
