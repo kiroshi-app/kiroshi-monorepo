@@ -1,3 +1,4 @@
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
@@ -5,7 +6,7 @@ use serde::Serialize;
 use tauri::webview::{PageLoadEvent, PageLoadPayload};
 use tauri::{Manager, Runtime, State, Webview, Window, WindowEvent};
 
-#[derive(Debug, Clone, PartialEq, Serialize, specta::Type)]
+#[derive(Debug, PartialEq, Serialize, specta::Type)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum MissionRunClaim {
 	#[serde(rename_all = "camelCase")]
@@ -30,11 +31,11 @@ impl MissionRunClaims {
 
 	fn claim(&self, mission_id: String, window: &str) -> MissionRunClaim {
 		let mut held = self.held();
-		if held.contains_key(&mission_id) {
+		let Entry::Vacant(free) = held.entry(mission_id) else {
 			return MissionRunClaim::AlreadyRunning;
-		}
+		};
 		let token = uuid::Uuid::new_v4().to_string();
-		held.insert(mission_id, Claim { token: token.clone(), window: window.to_owned() });
+		free.insert(Claim { token: token.clone(), window: window.to_owned() });
 		MissionRunClaim::Claimed { token }
 	}
 
