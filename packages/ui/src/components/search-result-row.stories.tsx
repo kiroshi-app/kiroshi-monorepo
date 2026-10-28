@@ -9,7 +9,6 @@ import {
 	slotIn,
 	slotsIn,
 } from "@workspace/storybook/story-utils"
-import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { Icons } from "@workspace/ui/components/icons"
 import { MISSION_BOT } from "@workspace/ui/components/missions.fixtures"
 import {
@@ -271,30 +270,30 @@ export const ThemesChatGroup = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this to read a room of several companions with no colour picked, in light and dark at once. Check that a 32px subject icon on the neutral pair of each theme leads the row, the message square centred in it. Pick `ThemesChatGroupRed` for a coloured room.",
+					"Reach for this to read a room of several companions with no colour picked, in light and dark at once. Check that a 32px subject icon on the neutral pair of each theme leads the row, the message square centred in it. Pick `ThemesChatGroupRed` for a room with a picked icon.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) =>
-		expectSubjectIconInBothThemes(canvasElement, undefined, IDENTITY_SIDE),
+		expectSubjectIconInBothThemes(canvasElement, IDENTITY_SIDE),
 })
 
 export const ThemesChatGroupRed = meta.story({
 	globals: { theme_layout: "side-by-side" },
 	args: {
 		...KIND_ARGS["chat-group"],
-		identity: { kind: "chat-group", color: BLOT_HUES.red, icon: "ShieldKey" },
+		identity: { kind: "chat-group", icon: "ShieldKey" },
 	},
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Reach for this to read a room of several companions coloured red, in light and dark at once. Check that the 32px subject icon wears the red pair of each theme and the picked pictogram. Pick `ThemesChatGroup` for a room with no colour.",
+					"Reach for this to read a room of several companions that picked the shield key, in light and dark at once. Check that the 32px subject icon keeps the neutral pair of each theme, whatever colour the room carries, and shows the picked pictogram. Pick `ThemesChatGroup` for the default icon.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) =>
-		expectSubjectIconInBothThemes(canvasElement, BLOT_HUES.red, IDENTITY_SIDE),
+		expectSubjectIconInBothThemes(canvasElement, IDENTITY_SIDE),
 })
 
 export const Mission = meta.story({

@@ -58,11 +58,8 @@
 	--hue-pink-conversation-icon-foreground: #6e4955;
 	--background: #f5f5f5;
 	--foreground: #0a0a0a;
-	--conversation-icon: var(--hue-light-conversation-icon, #e5e5e5);
-	--conversation-icon-foreground: var(
-		--hue-light-conversation-icon-foreground,
-		#525252
-	);
+	--conversation-icon: #e5e5e5;
+	--conversation-icon-foreground: #525252;
 	--conversation-pile-overflow: #e5e5e5;
 	--conversation-pile-overflow-foreground: #404040;
 	--bot-blot-ink: oklch(0.08 0 0);
@@ -201,11 +198,8 @@
 	--hue-pink-conversation-icon-foreground: #dcb0bd;
 	--background: #000000;
 	--foreground: #f5f5f5;
-	--conversation-icon: var(--hue-dark-conversation-icon, #303030);
-	--conversation-icon-foreground: var(
-		--hue-dark-conversation-icon-foreground,
-		#d4d4d4
-	);
+	--conversation-icon: #303030;
+	--conversation-icon-foreground: #d4d4d4;
 	--conversation-pile-overflow: #333333;
 	--conversation-pile-overflow-foreground: #ededed;
 	--bot-avatar-field-untinted: #75acff;

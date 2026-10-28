@@ -31,7 +31,6 @@ import {
 	SidebarProvider,
 } from "@workspace/ui/components/ui/sidebar"
 import { SHELL_TITLE_BAR_HEIGHT } from "@workspace/ui/components/workspace-shell"
-import { schemeOf } from "@workspace/ui/hooks/use-color-scheme"
 import {
 	type ClickModifiers,
 	NO_CLICK_MODIFIERS,
@@ -661,7 +660,6 @@ const sidesOf = (element: Element) => {
 
 export const expectSubjectIconInBothThemes = async (
 	root: Element,
-	hue: number | undefined,
 	side: number,
 ) => {
 	const icons = slotsIn(root, "conversation-subject-icon")
@@ -672,16 +670,8 @@ export const expectSubjectIconInBothThemes = async (
 		const fill = getComputedStyle(slotIn(icon, "outlined-hexagon-face")).fill
 		await expect(icon).toHaveAttribute("aria-hidden", "true")
 		await expect(sidesOf(icon)).toEqual([side, side])
-		if (hue === undefined) await expect(icon).not.toHaveAttribute("data-hue")
-		else await expect(icon).toHaveAttribute("data-hue", String(hue))
-		await expect(fill).toBe(
-			colourOfToken(
-				hue === undefined
-					? "--conversation-icon"
-					: `--hue-${schemeOf(icon)}-conversation-icon`,
-				icon,
-			),
-		)
+		await expect(icon).not.toHaveAttribute("data-hue")
+		await expect(fill).toBe(colourOfToken("--conversation-icon", icon))
 		fills.push(fill)
 	}
 	await expect(fills[0]).not.toBe(fills[1])

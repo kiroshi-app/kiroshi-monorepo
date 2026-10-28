@@ -42,6 +42,26 @@ const RAIL: ConversationSettingsScreenProps["rail"] = {
 	user: { name: "Ada Martin" },
 }
 
+const expectNeutralIcons = async (scope: HTMLElement) => {
+	const icons = slotsIn(scope, "conversation-subject-icon")
+	await expect(icons.length).toBeGreaterThan(0)
+	for (const icon of icons) {
+		await expect(icon).not.toHaveAttribute("data-hue")
+		await expect(slotIn(icon, "outlined-hexagon-face").style.fill).toBe(
+			"var(--conversation-icon)",
+		)
+	}
+}
+
+const expectColourOptionsApart = async (scope: HTMLElement) => {
+	const swatches = slotsIn(slotIn(scope, "colour-field-options"), "space-tint")
+	const colours = swatches.map(
+		(swatch) => getComputedStyle(swatch).backgroundColor,
+	)
+	await expect(swatches).toHaveLength(9)
+	await expect(new Set(colours).size).toBe(swatches.length)
+}
+
 const ScreenHost = (props: ConversationSettingsScreenProps) => {
 	const [entry, setEntry] = useState(props.entry)
 	const [value, setValue] = useState(props.value)
@@ -101,7 +121,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"A conversation's settings as a whole window instead of the dialog, laid out like the companion's. The settings menu takes the place of the conversations panel: the Back link the caller names, the conversation's icon in its colour, its name and Conversation settings, then the dialog's four sections with Danger zone pinned at the foot. Each page draws the panel the dialog draws, in a column centred and capped at 800px.",
+					"A conversation's settings as a whole window instead of the dialog, laid out like the companion's. The settings menu takes the place of the conversations panel: the Back link the caller names, the conversation's icon, its name and Conversation settings, then the dialog's four sections with Danger zone pinned at the foot. Each page draws the panel the dialog draws, in a column centred and capped at 800px.",
 			},
 		},
 	},
@@ -132,7 +152,7 @@ export const General = meta.story({
 		docs: {
 			description: {
 				story:
-					"The screen as it opens, on General. Check the menu order with Danger zone pinned last, the 36px conversation icon beside the name and Conversation settings, then the name field, the icon picker and the colour field in the page column. Typing in the name renames the menu header as you type.",
+					"The screen as it opens, on General. Check the menu order with Danger zone pinned last, the 36px conversation icon beside the name and Conversation settings, then the name field, the icon picker and the colour field in the page column. Check that the conversation icon keeps the neutral pair in the menu and in the icon picker although the conversation carries a hue, and that each colour option shows its own hue, No colour apart from them. Typing in the name renames the menu header as you type.",
 			},
 		},
 	},
@@ -154,6 +174,9 @@ export const General = meta.story({
 
 		await expectPageShown("General")
 		const main = screen.getByRole("main")
+		await expectNeutralIcons(menu)
+		await expectNeutralIcons(main)
+		await expectColourOptionsApart(main)
 		await userEvent.type(within(main).getByLabelText("Name"), "!")
 		await expect(args.onValueChange).toHaveBeenLastCalledWith({
 			name: "Release desk!",
@@ -357,7 +380,7 @@ export const Dark = meta.story({
 		docs: {
 			description: {
 				story:
-					"General in the dark theme. Check that the menu, the conversation icon in its colour and the General page draw on the dark tokens.",
+					"General in the dark theme. Check that the menu, the conversation icon and the General page draw on the dark tokens.",
 			},
 		},
 	},

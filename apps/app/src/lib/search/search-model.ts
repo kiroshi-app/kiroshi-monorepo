@@ -104,7 +104,7 @@ const identityOfChat = (
 	const conversation = lookups.conversationOf(chat.conversationId)
 	return {
 		kind: "chat-group",
-		...(conversation && toConversationLook(conversation)),
+		icon: conversation && toConversationLook(conversation).icon,
 	}
 }
 

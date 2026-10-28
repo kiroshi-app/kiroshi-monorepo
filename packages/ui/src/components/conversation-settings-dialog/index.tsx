@@ -21,6 +21,7 @@ import {
 	FIELD_LABEL_CLASS,
 	POPUP_CLASS,
 } from "@workspace/ui/components/settings-styles"
+import { SpaceTint } from "@workspace/ui/components/space-tint"
 import {
 	Popover,
 	PopoverContent,
@@ -47,7 +48,6 @@ const ICON_OPTION_CLASS =
 
 type ConversationIconFieldProps = {
 	icon?: ConversationIconName
-	hue?: number | null
 	onIconChange?: (icon: ConversationIconName) => void
 }
 
@@ -65,7 +65,6 @@ const focusOptionOneRowAway = (event: KeyboardEvent<HTMLDivElement>) => {
 
 const ConversationIconField = ({
 	icon,
-	hue,
 	onIconChange,
 }: ConversationIconFieldProps) => {
 	const { t } = useTranslation("chat")
@@ -90,7 +89,7 @@ const ConversationIconField = ({
 					aria-labelledby={`${labelId} ${valueId}`}
 					className={ICON_TRIGGER_CLASS}
 				>
-					<ConversationSubjectIcon hue={hue} icon={current} side={26} />
+					<ConversationSubjectIcon icon={current} side={26} />
 					<span className="w-18 truncate text-start" id={valueId}>
 						{t(`conversationSettings.icon.option.${current}`)}
 					</span>
@@ -121,7 +120,7 @@ const ConversationIconField = ({
 								ref={option === current ? currentOption : undefined}
 								value={option}
 							>
-								<ConversationSubjectIcon hue={hue} icon={option} side={28} />
+								<ConversationSubjectIcon icon={option} side={28} />
 							</Toggle>
 						))}
 					</ToggleGroup>
@@ -132,20 +131,16 @@ const ConversationIconField = ({
 }
 
 type ConversationColourFieldProps = {
-	icon?: ConversationIconName
 	hue?: number | null
 	onHueChange?: (hue: number | null) => void
 }
 
 const ConversationColourField = ({
-	icon,
 	hue = null,
 	onHueChange,
 }: ConversationColourFieldProps) => (
 	<ColourField
-		mark={(option) => (
-			<ConversationSubjectIcon hue={option} icon={icon} side={26} />
-		)}
+		mark={(option) => <SpaceTint className="size-6" tint={option} />}
 		noColour="last"
 		onValueChange={(next) => onHueChange?.(next)}
 		value={hue}
@@ -163,13 +158,13 @@ type ConversationValueProps = {
 }
 
 type ConversationGeneralFieldsProps = ConversationValueProps &
-	ConversationColourFieldProps & {
-		onIconChange?: (icon: ConversationIconName) => void
-	}
+	ConversationColourFieldProps &
+	ConversationIconFieldProps
 
 const ConversationGeneralFields = ({
 	value,
 	onValueChange,
+	icon,
 	onIconChange,
 	...colour
 }: ConversationGeneralFieldsProps) => {
@@ -183,11 +178,7 @@ const ConversationGeneralFields = ({
 				placeholder={t("conversationSettings.name.placeholder")}
 				value={value.name}
 			/>
-			<ConversationIconField
-				hue={colour.hue}
-				icon={colour.icon}
-				onIconChange={onIconChange}
-			/>
+			<ConversationIconField icon={icon} onIconChange={onIconChange} />
 			<ConversationColourField {...colour} />
 		</>
 	)
