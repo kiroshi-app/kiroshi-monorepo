@@ -312,10 +312,12 @@ export const FreeHue = meta.story({
 
 		slider.focus()
 		await userEvent.keyboard("{ArrowRight}")
-		await expect(args.onValueChange).toHaveBeenLastCalledWith(
-			expect.objectContaining({
-				identity: expect.objectContaining({ blot: 211 }),
-			}),
+		await waitFor(() =>
+			expect(args.onValueChange).toHaveBeenLastCalledWith(
+				expect.objectContaining({
+					identity: expect.objectContaining({ blot: 211 }),
+				}),
+			),
 		)
 	},
 })
