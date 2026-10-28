@@ -104,7 +104,7 @@ export const WEBSITE_COPY = {
 			{
 				question: "Do I need a subscription?",
 				answer:
-					"Yes, an account with the model provider you choose, such as a Claude subscription or an Anthropic API key. Kiroshi ships the coding session that answers and runs it on your own account. Kiroshi is free on your computer. Pro, which takes your spaces online, is free during the beta.",
+					"Yes, an account with the model provider you choose, such as a Claude subscription or an Anthropic API key. Kiroshi runs the coding session that answers, on your own account. Kiroshi is free on your computer. Pro, which takes your spaces online, is free during the beta.",
 			},
 			{
 				question: "Where do my conversations live?",
