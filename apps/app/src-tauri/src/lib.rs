@@ -80,6 +80,9 @@ pub fn run() {
 		.manage(mcp_oauth::reports::ApplicationReports::default())
 		.manage(mcp_oauth::asking::AuthorizationAnswers::default())
 		.manage(missions::commands::AnnouncedLiveness::default())
+		.manage(missions::run_claims::MissionRunClaims::default())
+		.on_page_load(missions::run_claims::forget_on_page_load)
+		.on_window_event(missions::run_claims::forget_on_destroyed)
 		.manage(conversations::turn_run_deadline::TurnRunDeadlines::default())
 		.manage(updates::Updates::default())
 		.setup(|app| {

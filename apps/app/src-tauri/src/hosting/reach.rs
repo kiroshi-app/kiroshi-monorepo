@@ -279,6 +279,8 @@ pub(super) const REACHES: &[(&str, Reach)] = &[
 	("mission_unreported", Reach::HostOnly),
 	("mission_reported", Reach::Scoped(&[child(Mission, "/missionId"), child(Turn, "/turnId")])),
 	("mission_answered", Reach::Scoped(MISSION_ID)),
+	("mission_run_claim", Reach::HostOnly),
+	("mission_run_release", Reach::HostOnly),
 	("notification_show", Reach::HostOnly),
 	("plugin_skills", Reach::Scoped(PLUGIN_SCOPE)),
 	("plugin_create_skill", Reach::Scoped(PLUGIN_WRITE_SCOPE)),

@@ -44,6 +44,8 @@ export const LOCAL_COMMANDS: ReadonlySet<string> = new Set([
 	"conversation_mission_thread",
 	"mission_board",
 	"mission_unreported",
+	"mission_run_claim",
+	"mission_run_release",
 	"notification_show",
 	"companion_launch_outcome",
 	"get_device_identity",

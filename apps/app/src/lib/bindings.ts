@@ -183,6 +183,8 @@ export const commands = {
 	missionSpacePage: (spaceId: string, closedSince: number, cursor: string | null, limit: number | null) => typedError<MissionSpacePage, MissionError>(__TAURI_INVOKE("mission_space_page", { spaceId, closedSince, cursor, limit })),
 	missionUnreported: () => typedError<MissionOnBoard[], MissionError>(__TAURI_INVOKE("mission_unreported")),
 	missionReported: (missionId: string, turnId: string | null) => typedError<Mission, MissionError>(__TAURI_INVOKE("mission_reported", { missionId, turnId })),
+	missionRunClaim: (missionId: string) => __TAURI_INVOKE<MissionRunClaim>("mission_run_claim", { missionId }),
+	missionRunRelease: (token: string) => __TAURI_INVOKE<void>("mission_run_release", { token }),
 	missionAnswered: (missionId: string, seq: number) => typedError<Mission, MissionError>(__TAURI_INVOKE("mission_answered", { missionId, seq })),
 	notificationShow: (target: NotificationTarget, title: string, body: string) => __TAURI_INVOKE<void>("notification_show", { target, title, body }),
 	pluginSkills: (scope: PluginScope) => typedError<Skill[], TranscriptStoreError>(__TAURI_INVOKE("plugin_skills", { scope })),
@@ -1222,6 +1224,8 @@ export type MissionOnBoard = {
 	mission: Mission,
 	bot: Bot,
 };
+
+export type MissionRunClaim = { kind: "claimed"; token: string } | { kind: "alreadyRunning" };
 
 export type MissionSpacePage = {
 	missions: MissionInSpace[],

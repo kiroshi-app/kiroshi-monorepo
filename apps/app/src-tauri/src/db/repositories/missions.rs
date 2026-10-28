@@ -887,7 +887,10 @@ fn reported(
 		return Err(MissionError::MissionStillOpen { id: mission_id.to_owned() });
 	}
 	if standing.reported_at.is_some() {
-		return Err(MissionError::MissionAlreadyReported { id: mission_id.to_owned() });
+		return match standing.reported_turn_id.as_deref() == turn_id {
+			true => Ok(standing),
+			false => Err(MissionError::MissionAlreadyReported { id: mission_id.to_owned() }),
+		};
 	}
 	refuse_an_unreportable_turn(&transaction, &standing.origin_conversation_id, turn_id)?;
 	transaction.execute(REPORT_MISSION, params![mission_id, now(), turn_id])?;
@@ -2699,6 +2702,7 @@ mod tests {
 			.await
 			.expect("the mission opens");
 		let closed = a_closed_mission(&database).await;
+		a_turn_in(&database, "t1", "c1").await;
 
 		let unknown = database
 			.missions()
@@ -2717,9 +2721,9 @@ mod tests {
 			.expect("the report is recorded");
 		let again = database
 			.missions()
-			.report(closed.id.clone(), None)
+			.report(closed.id.clone(), Some("t1".to_owned()))
 			.await
-			.expect_err("a second report lands");
+			.expect_err("a second report in another turn lands");
 
 		assert_eq!(unknown, MissionError::UnknownMission { id: "nobody".to_owned() });
 		assert_eq!(still_open, MissionError::MissionStillOpen { id: open.id });
@@ -2737,6 +2741,32 @@ mod tests {
 			first.reported_at,
 			"the refused report moved the moment already stored"
 		);
+
+		drop(database);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_report_repeated_in_its_own_turn_answers_the_stored_mission_and_writes_nothing() {
+		let (database, dir) = planted().await;
+		let in_a_turn = a_closed_mission(&database).await;
+		let without_a_turn = a_closed_mission(&database).await;
+		a_turn_in(&database, "t1", "c1").await;
+
+		for (mission, turn_id) in [(in_a_turn, Some("t1".to_owned())), (without_a_turn, None)] {
+			let first = database
+				.missions()
+				.report(mission.id.clone(), turn_id.clone())
+				.await
+				.expect("the report is recorded");
+			let again = database
+				.missions()
+				.report(mission.id.clone(), turn_id.clone())
+				.await
+				.expect("the same turn reports again");
+
+			assert_eq!(again, first, "the repeated report in {turn_id:?} rewrote the mission");
+		}
 
 		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
