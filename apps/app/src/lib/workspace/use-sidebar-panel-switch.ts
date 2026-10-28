@@ -10,6 +10,9 @@ import type { RosterController } from "../bots/roster-controller"
 import type { OpenedMissionController } from "../missions/opened-mission-controller"
 import type { ShownMemory } from "../sidebar/shown-memory"
 import { type DisplayedRoster, topRowIdOf } from "../sidebar/top-row"
+import { isListPage, pageOf, threadRowIdOf } from "../tabs/tab-pages"
+import { activeTabOf, currentHrefOf } from "../tabs/tabs-model"
+import type { WorkspaceTabs, WorkspaceTabsState } from "../tabs/workspace-tabs"
 import { type SidebarPanel, useSidebarTab } from "../user/use-sidebar-tab"
 import type { User } from "../user/use-user"
 
@@ -33,12 +36,15 @@ export type SidebarRosters = {
 	collapsedSectionIds: string[]
 }
 
+type ActivatedTabs = Pick<WorkspaceTabs, "getState" | "subscribe">
+
 type SidebarPanelSwitchInput = {
 	core: SidebarPanelSwitchCore
 	sidebarMissions: {
 		loadedSpaceId: string | null
 		showLastMission: () => void
 	}
+	tabs: ActivatedTabs
 }
 
 const displayedIn = (
@@ -80,9 +86,50 @@ const showLastConversation = (
 	}
 }
 
+const panelOfPage = (href: string): SidebarPanel | null => {
+	const page = pageOf(href)
+	if (!isListPage(page) || threadRowIdOf(page.thread) === undefined) {
+		return null
+	}
+	return page.thread.mission === undefined ? "conversations" : "missions"
+}
+
+const activatedPanelOf = (
+	before: WorkspaceTabsState,
+	after: WorkspaceTabsState,
+) => {
+	const space = after.bySpace[after.spaceId]
+	if (
+		space === undefined ||
+		after.spaceId !== before.spaceId ||
+		space.activeId === before.bySpace[before.spaceId]?.activeId
+	) {
+		return null
+	}
+	return panelOfPage(currentHrefOf(activeTabOf(space)))
+}
+
+const usePanelFollowingTabs = (
+	tabs: ActivatedTabs,
+	followPanel: (panel: SidebarPanel) => void,
+) => {
+	useEffect(() => {
+		let shown = tabs.getState()
+		return tabs.subscribe(() => {
+			const before = shown
+			shown = tabs.getState()
+			const panel = activatedPanelOf(before, shown)
+			if (panel !== null) {
+				followPanel(panel)
+			}
+		})
+	}, [tabs, followPanel])
+}
+
 export const useSidebarPanelSwitch = ({
 	core,
 	sidebarMissions,
+	tabs,
 }: SidebarPanelSwitchInput) => {
 	const { openedMission, roster, shownMemory, user } = core
 	const { openTab, openSidebarTab } = useSidebarTab(user)
@@ -102,6 +149,16 @@ export const useSidebarPanelSwitch = ({
 			showLastMission()
 		}
 	}, [openTab, loadedSpaceId, openedMission, showLastMission])
+
+	const followPanel = useCallback(
+		(panel: SidebarPanel) => {
+			openSidebarTab(panel)
+			missionsShownForSpaceId.current =
+				panel === "missions" ? loadedSpaceId : null
+		},
+		[openSidebarTab, loadedSpaceId],
+	)
+	usePanelFollowingTabs(tabs, followPanel)
 
 	const switchPanel = useCallback(
 		(panel: SidebarPanel, sidebarRosters: SidebarRosters) => {

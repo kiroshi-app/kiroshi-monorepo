@@ -2,6 +2,7 @@
 
 import { invoke } from "@tauri-apps/api/core"
 import { act, cleanup, renderHook } from "@testing-library/react"
+import { useSyncExternalStore } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import type {
@@ -15,12 +16,29 @@ import {
 } from "./use-sidebar-panel-switch"
 
 import { createStore } from "../store"
+import type { RosterController } from "../bots/roster-controller"
 import { createOpenedMissionController } from "../missions/opened-mission-controller"
 import { createShownMemory } from "../sidebar/shown-memory"
+import { activeTabOf, currentHrefOf } from "../tabs/tabs-model"
+import { useTabThreadSync } from "../tabs/use-tab-thread-sync"
+import { createWorkspaceTabs, shownTabsOf } from "../tabs/workspace-tabs"
 import type { UserPreferences } from "../user/preferences-contract"
 import { useUser } from "../user/use-user"
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }))
+
+const navigation = vi.hoisted(() => ({ push: (_href: string) => {} }))
+
+vi.mock("@tanstack/react-router", async (importOriginal) => {
+	const router = await importOriginal<typeof import("@tanstack/react-router")>()
+	return {
+		...router,
+		useNavigate:
+			() =>
+			({ search }: { search: Record<string, unknown> }) =>
+				navigation.push(`/${router.defaultStringifySearch(search)}`),
+	}
+})
 
 const hostInvoke = vi.mocked(invoke)
 
@@ -98,11 +116,7 @@ type Mount = {
 	loadedSpaceId?: string | null
 }
 
-const mountSwitch = async ({
-	stored = "conversations",
-	sidebarRosters = ROSTERS,
-	loadedSpaceId = "s-1",
-}: Mount = {}) => {
+const answerPreferences = (stored: UserPreferences["sidebarTab"]) =>
 	hostInvoke.mockImplementation((_, args) =>
 		Promise.resolve(
 			(args as { preferences?: UserPreferences } | undefined)?.preferences ?? {
@@ -111,6 +125,14 @@ const mountSwitch = async ({
 			},
 		),
 	)
+
+const mountSwitch = async ({
+	stored = "conversations",
+	sidebarRosters = ROSTERS,
+	loadedSpaceId = "s-1",
+}: Mount = {}) => {
+	answerPreferences(stored)
+	const tabs = createWorkspaceTabs()
 	const roster = aRoster("s-1", ON_C1)
 	const openedMission = createOpenedMissionController(roster)
 	const shownMemory = createShownMemory({ roster, openedMission })
@@ -138,6 +160,7 @@ const mountSwitch = async ({
 					loadedSpaceId: props.loadedSpaceId,
 					showLastMission,
 				},
+				tabs,
 			})
 			return { user, sidebarTab, sidebarRosters: props.sidebarRosters }
 		},
@@ -171,6 +194,7 @@ const mountSwitch = async ({
 
 beforeEach(() => {
 	hostInvoke.mockReset()
+	localStorage.clear()
 })
 
 afterEach(cleanup)
@@ -451,5 +475,144 @@ describe("a mission opened from a thread card", () => {
 
 		expect(shown.shownMemory.lastMissionIn("s-2")).toBe("m-9")
 		expect(shown.shownMemory.lastMissionIn("s-1")).toBeNull()
+	})
+})
+
+const C1_HREF = "/?conversation=c-1"
+
+const COMPANION_HREF = "/?bot=b-1"
+
+const MISSION_HREF = `/?bot=${MISSION_ROW}&mission=m-7`
+
+const threadRosterOf = (roster: ReturnType<typeof aRoster>) =>
+	({
+		...roster,
+		getState: () => ({ ...roster.getState(), bots: [], conversations: [] }),
+		showList: () =>
+			roster.setState({
+				...roster.getState(),
+				selectedBotId: null,
+				selectedConversationId: null,
+			}),
+	}) as unknown as RosterController
+
+const mountTabbedSwitch = async () => {
+	answerPreferences("conversations")
+	const tabs = createWorkspaceTabs(C1_HREF)
+	navigation.push = (href) => tabs.history.push(href)
+	const roster = aRoster("s-1", ON_C1)
+	const threadRoster = threadRosterOf(roster)
+	const openedMission = createOpenedMissionController(roster)
+	const shownMemory = createShownMemory({ roster, openedMission })
+	const showLastMission = vi.fn(() => {
+		openedMission.open({ missionId: "m-last", rowId: MISSION_ROW })
+		roster.select(MISSION_ROW)
+	})
+	const mounted = renderHook(() => {
+		const user = useUser()
+		const selected = useSyncExternalStore(roster.subscribe, roster.getState)
+		useTabThreadSync({
+			tabs,
+			roster: threadRoster,
+			selected,
+			openedMission,
+			openSpaceId: "s-1",
+			isOpenSpaceRostered: true,
+		})
+		const sidebarTab = useSidebarPanelSwitch({
+			core: {
+				openedMission,
+				roster: { controller: roster },
+				shownMemory,
+				user,
+			},
+			sidebarMissions: { loadedSpaceId: "s-1", showLastMission },
+			tabs,
+		})
+		return { user, sidebarTab }
+	})
+	await act(() => mounted.result.current.user.controller.load())
+
+	const tabIds = () => shownTabsOf(tabs.getState()).tabs.map(({ id }) => id)
+	const openTabOn = (href: string) => {
+		act(() => tabs.openInNewTab(href))
+		return tabIds().at(-1) ?? ""
+	}
+	const activate = (id: string) => act(() => tabs.select(id))
+	const shownHref = () =>
+		currentHrefOf(activeTabOf(shownTabsOf(tabs.getState())))
+
+	return {
+		...mounted,
+		tabs,
+		openTabOn,
+		activate,
+		shownHref,
+		showLastMission,
+		openTab: () => mounted.result.current.sidebarTab.openTab,
+		selectedRow: () =>
+			roster.getState().selectedBotId ??
+			roster.getState().selectedConversationId,
+		shownMissionId: () => openedMission.getState()?.missionId ?? null,
+		switchTo: (panel: "conversations" | "missions") =>
+			act(() =>
+				mounted.result.current.sidebarTab.openSidebarTab(panel, ROSTERS),
+			),
+	}
+}
+
+describe("activating a title bar tab", () => {
+	it("puts the sidebar on Missions and shows the mission of a mission tab", async () => {
+		const shown = await mountTabbedSwitch()
+		const missionTab = shown.openTabOn(MISSION_HREF)
+
+		shown.activate(missionTab)
+
+		expect(shown.openTab()).toBe("missions")
+		expect(shown.shownMissionId()).toBe("m-7")
+		expect(shown.selectedRow()).toBe(MISSION_ROW)
+		expect(shown.showLastMission).not.toHaveBeenCalled()
+	})
+
+	it("puts the sidebar on Conversations and shows the thread of a companion tab", async () => {
+		const shown = await mountTabbedSwitch()
+		shown.switchTo("missions")
+
+		shown.activate(shown.openTabOn(COMPANION_HREF))
+
+		expect(shown.openTab()).toBe("conversations")
+		expect(shown.shownMissionId()).toBeNull()
+		expect(shown.selectedRow()).toBe("b-1")
+	})
+
+	it("follows the conversation tab shown once the active mission tab closes", async () => {
+		const shown = await mountTabbedSwitch()
+		shown.switchTo("missions")
+		shown.openTabOn(C1_HREF)
+
+		act(() => shown.tabs.closeActive())
+
+		expect(shown.openTab()).toBe("conversations")
+		expect(shown.shownMissionId()).toBeNull()
+		expect(shown.selectedRow()).toBe("c-1")
+	})
+
+	it("keeps the sidebar on a panel picked from its switch over the href written next", async () => {
+		const shown = await mountTabbedSwitch()
+
+		shown.switchTo("missions")
+
+		expect(shown.shownHref()).toContain("mission=m-last")
+		expect(shown.openTab()).toBe("missions")
+		expect(shown.shownMissionId()).toBe("m-last")
+	})
+
+	it("keeps the sidebar on Missions when the shown tab is written a conversation", async () => {
+		const shown = await mountTabbedSwitch()
+		shown.switchTo("missions")
+
+		act(() => shown.tabs.history.push(C1_HREF))
+
+		expect(shown.openTab()).toBe("missions")
 	})
 })
