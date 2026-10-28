@@ -1801,11 +1801,17 @@ fn a_member_the_host_admits_from_the_device_list_joins_on_its_first_rekey_and_pi
 			signed_in("joined-admission-member", MEMBER_BEARER, &peers.cloud, PATIENCE);
 
 		let joined = invitations::accept(member.handle(), INVITATION.to_owned()).await;
+		let joined = joined.expect("the join");
+		until("the roster of two devices", || async {
+			let members = joined_space_members(member.state(), joined.id.clone()).await;
+			(members.expect("the members read").len() == 2).then_some(())
+		})
+		.await;
 		let listed = joined_spaces_list(member.handle().clone()).await.expect("the list");
 
-		let joined = joined.expect("the join");
 		assert_eq!(joined.state, JoinedSpaceState::Online);
-		assert_eq!(listed, vec![joined]);
+		let named = JoinedSpace { hosted_by: Some("Ann".to_owned()), ..joined };
+		assert_eq!(listed, vec![named]);
 		let keys = member.state::<SpaceKeys>();
 		let held = keys.held(&format!("joined-{INSTANCE}")).expect("the key reads");
 		assert_eq!(held.map(|held| held.key_id), Some(1));
