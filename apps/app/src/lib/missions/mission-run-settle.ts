@@ -16,6 +16,18 @@ type MissionRunSettleOptions = Pick<MissionRunDriverOptions, "missions"> & {
 	writeReport: ReturnType<typeof createMissionReportWriter>
 }
 
+const isAlreadyReported = (thrown: unknown): boolean =>
+	typeof thrown === "object" &&
+	thrown !== null &&
+	"kind" in thrown &&
+	thrown.kind === "missionAlreadyReported"
+
+const logAlreadyReported = (missionId: string) => {
+	console.info(
+		`mission run driver: the report was already recorded | mission: ${missionId}`,
+	)
+}
+
 export const isClosed = (settled: Mission | null): settled is Mission =>
 	settled !== null && settled.closedAt !== null
 
@@ -41,6 +53,9 @@ export const createMissionRunSettle = ({
 		try {
 			await missions.reported(missionId, reportedTurnId)
 		} catch (thrown) {
+			if (isAlreadyReported(thrown)) {
+				return logAlreadyReported(missionId)
+			}
 			book.raiseFailure({
 				reason: "the report could not be recorded",
 				error: thrown,

@@ -19,7 +19,7 @@ export const useWorkspaceSubscriptions = ({
 	rosterView,
 }: WorkspaceSubscriptionsInput) => {
 	const { chat, joinedSpaces, roster, user } = core
-	const { onboarding } = drivers
+	const { isDriverWindow, onboarding } = drivers
 	const { bots, rosteredSpaceId, selectedBotId, selectedConversationId } =
 		rosterView
 
@@ -33,7 +33,10 @@ export const useWorkspaceSubscriptions = ({
 			if (joinedSpaces.hosts.active === null) {
 				void roster.controller.reload()
 			}
-			if (!user.controller.getState().preferences.firstRunDone) {
+			if (
+				isDriverWindow &&
+				!user.controller.getState().preferences.firstRunDone
+			) {
 				void onboarding.controller.greetCompanion(created)
 			}
 		},

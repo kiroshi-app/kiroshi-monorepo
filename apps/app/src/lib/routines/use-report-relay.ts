@@ -11,21 +11,24 @@ export type ReportRelayMount = {
 	driver: ChatDriver
 	store: TranscriptStore
 	runtimes: ConversationRuntimes
+	isDriverWindow: boolean
 }
 
 export const useReportRelay = ({
 	driver,
 	store,
 	runtimes,
+	isDriverWindow,
 }: ReportRelayMount) => {
-	useEffect(
-		() =>
-			startReportRelay({
-				driver,
-				store,
-				runtimes,
-				reportFailure: failureReporterIn("report-relay"),
-			}),
-		[driver, store, runtimes],
-	)
+	useEffect(() => {
+		if (!isDriverWindow) {
+			return
+		}
+		return startReportRelay({
+			driver,
+			store,
+			runtimes,
+			reportFailure: failureReporterIn("report-relay"),
+		})
+	}, [driver, store, runtimes, isDriverWindow])
 }

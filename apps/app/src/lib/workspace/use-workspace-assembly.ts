@@ -43,7 +43,8 @@ export const useWorkspaceAssembly = () => {
 		[core.roster.controller, core.openedMission],
 	)
 	const navigation = useSettingsNavigation(threadHolder)
-	const drivers = useWorkspaceDrivers(core)
+	const { tabs } = useRouter().options.context
+	const drivers = useWorkspaceDrivers(core, tabs.isMainWindow)
 	const scopes = useApplicationScopes(core)
 	useSpaceTint(scopes.spaceHue)
 	const rosterView = useRosterView({
@@ -62,7 +63,6 @@ export const useWorkspaceAssembly = () => {
 	const rosteredHostSpaceId =
 		rosterView.rosteredSpaceId &&
 		core.roster.controller.hostSpaceIdOf(rosterView.rosteredSpaceId)
-	const { tabs } = useRouter().options.context
 	const loadSpaces = useSpaceLoading({
 		core,
 		scopes,

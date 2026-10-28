@@ -123,6 +123,7 @@ const startFront = async (
 			missionThread,
 			writes: () => onThisComputer,
 		},
+		relayed: new Set(),
 		reportFailure: (notice, reported) => {
 			notices.push(notice)
 			facts.push(reported)
@@ -385,6 +386,7 @@ describe("a companion speaking in a room the front never opened", () => {
 				missionThread: noMissionThread,
 				writes: () => store,
 			},
+			relayed: new Set(),
 			reportFailure: (notice) => {
 				notices.push(notice)
 			},

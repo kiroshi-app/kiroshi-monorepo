@@ -4,8 +4,10 @@ import { createArrivalsListener } from "./create-arrivals-listener"
 import {
 	createMessageStoredListener,
 	createReconnectionListener,
+	createReportTurnAnnouncer,
 	type MessageStoredListener,
 	type ReconnectionListener,
+	type ReportTurnAnnouncer,
 } from "./create-live-listeners"
 import { createForeignTurns, type ForeignSpeaker } from "./foreign-turns"
 import { addresseesIn, toMentionTokens } from "./mentions"
@@ -186,6 +188,7 @@ export type ConversationControllerOptions = {
 	readReportedRuns?: ReportedRunsReader
 	onCompanionArrived?: CompanionArrivalListener
 	onMessageStored?: MessageStoredListener
+	announceReportTurn?: ReportTurnAnnouncer
 	onReconnected?: ReconnectionListener
 	rereadConversation?: (conversationId: string) => void
 	senderAccountId?: () => string | null
@@ -328,6 +331,8 @@ export const createConversationController = (
 		options.onCompanionArrived ?? createArrivalsListener()
 	const onMessageStored =
 		options.onMessageStored ?? createMessageStoredListener()
+	const announceReportTurn =
+		options.announceReportTurn ?? createReportTurnAnnouncer()
 	const onReconnected = options.onReconnected ?? createReconnectionListener()
 	const transcript = createTranscriptController(store)
 	const hearSilence = ({ conversationId }: RuntimeScope) => {
@@ -1100,6 +1105,7 @@ export const createConversationController = (
 			return
 		}
 		activeTurn = null
+		queue = emptyQueue
 	}
 
 	const drive = () => {
@@ -1331,6 +1337,7 @@ export const createConversationController = (
 		)
 		rememberCause(causeOf(draft, reported.turnId))
 		transcript.append(reported)
+		announceReportTurn(reported)
 		if (isSeated) {
 			await relayReport(reported)
 		}
@@ -1397,6 +1404,7 @@ export const createConversationController = (
 			}),
 		)
 		transcript.append(spoken)
+		announceReportTurn(spoken)
 		await relayReport(spoken)
 		return true
 	}

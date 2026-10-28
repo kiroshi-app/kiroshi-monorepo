@@ -30,6 +30,7 @@ export const createConversationOpening = (
 		newId,
 		now,
 		readReportedRuns,
+		announceReportTurn,
 		dispatch,
 		reportStore,
 		syncBot,
@@ -101,6 +102,7 @@ export const createConversationOpening = (
 		const reported = await enqueue(() =>
 			writeReportTurn({ store, draft, newId, now }),
 		)
+		announceReportTurn(reported)
 		const bot = openChatOf(draft)
 		if (bot) {
 			rememberCause(bot, causeOf(draft, reported.turnId))

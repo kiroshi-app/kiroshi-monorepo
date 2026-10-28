@@ -6,11 +6,20 @@ import {
 	startEvolutionSource,
 } from "./evolution-source"
 
+import { failureReporterIn } from "../failure-report"
 import { pluginQueryKeys } from "../plugins/plugin-query-keys"
 
-type EvolutionOptions = Pick<EvolutionSourceOptions, "driver" | "roster">
+type EvolutionOptions = Pick<EvolutionSourceOptions, "driver" | "roster"> & {
+	isDriverWindow: boolean
+}
 
-export const useEvolution = ({ driver, roster }: EvolutionOptions) => {
+const leaveToDriverWindow = () => undefined
+
+export const useEvolution = ({
+	driver,
+	roster,
+	isDriverWindow,
+}: EvolutionOptions) => {
 	const queryClient = useQueryClient()
 
 	useEffect(
@@ -23,7 +32,10 @@ export const useEvolution = ({ driver, roster }: EvolutionOptions) => {
 						queryKey: pluginQueryKeys.scope(scope),
 					})
 				},
+				reportFailure: isDriverWindow
+					? failureReporterIn("evolution-source")
+					: leaveToDriverWindow,
 			}),
-		[driver, roster, queryClient],
+		[driver, roster, queryClient, isDriverWindow],
 	)
 }

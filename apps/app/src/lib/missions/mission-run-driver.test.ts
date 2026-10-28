@@ -1264,6 +1264,18 @@ describe("startMissionRunDriver", () => {
 		expect(await failuresRaisedBy(harness)).toHaveBeenCalledTimes(1)
 	})
 
+	it("raises no failure notice when another window recorded the report first", async () => {
+		const info = vi.spyOn(console, "info").mockImplementation(() => undefined)
+		await restart({ open: "done", openEvents: closedBy("poller") })
+		await harness.missions.reported(harness.mission.id, null)
+
+		await harness.endTurn(reported("The walls stand."))
+
+		expect(await failuresRaisedBy(harness)).not.toHaveBeenCalled()
+		expect(harness.missions.reports).toEqual([[harness.mission.id, null]])
+		expect(info).toHaveBeenCalledTimes(1)
+	})
+
 	it("starts no run for a mission whose report was recorded", async () => {
 		await restart({ open: "done", openEvents: closedBy("poller") })
 		await harness.endTurn(reported("The walls stand."))

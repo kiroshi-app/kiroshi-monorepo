@@ -1,4 +1,4 @@
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 
 import { startCompanionSpokeDriver } from "./companion-spoke-driver"
 import type { ConversationRuntimes } from "./conversation-runtimes"
@@ -18,6 +18,7 @@ export type CompanionSpokeDriverMount = {
 	runtimes: ConversationRuntimes
 	roster: RosterController
 	spokenWords: SpokenWords
+	isDriverWindow: boolean
 }
 
 const THIS_COMPUTER = null
@@ -36,17 +37,22 @@ export const useCompanionSpokeDriver = ({
 	runtimes,
 	roster,
 	spokenWords,
+	isDriverWindow,
 }: CompanionSpokeDriverMount) => {
-	useEffect(
-		() =>
-			startCompanionSpokeDriver({
-				runtimes,
-				roster,
-				companions: arrivalsTransport,
-				spokenWords,
-				thisComputer,
-				reportFailure: failureReporterIn("companion-spoke-driver"),
-			}),
-		[runtimes, roster, spokenWords],
-	)
+	const [relayed] = useState(() => new Set<string>())
+
+	useEffect(() => {
+		if (!isDriverWindow) {
+			return
+		}
+		return startCompanionSpokeDriver({
+			runtimes,
+			roster,
+			companions: arrivalsTransport,
+			spokenWords,
+			thisComputer,
+			relayed,
+			reportFailure: failureReporterIn("companion-spoke-driver"),
+		})
+	}, [runtimes, roster, spokenWords, isDriverWindow, relayed])
 }

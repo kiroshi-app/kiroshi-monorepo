@@ -197,6 +197,8 @@ const NO_LIVE_EVENTS = () => Promise.resolve(() => undefined)
 
 const NO_RECONNECTIONS = () => () => undefined
 
+const NO_ANNOUNCEMENTS = () => undefined
+
 const pageAsked = (conversationId: string) =>
 	vi.waitFor(() => {
 		const asked = [...wire.localCalls, ...wire.hostCalls].some(
@@ -217,6 +219,7 @@ const openGroupThread = () => {
 			readReportedRuns: NO_REPORTED_RUNS,
 			onCompanionArrived: NO_LIVE_EVENTS,
 			onMessageStored: NO_LIVE_EVENTS,
+			announceReportTurn: NO_ANNOUNCEMENTS,
 			onReconnected: NO_RECONNECTIONS,
 		},
 	)
@@ -231,6 +234,7 @@ const openSoloThread = () => {
 		{
 			readReportedRuns: NO_REPORTED_RUNS,
 			onMessageStored: NO_LIVE_EVENTS,
+			announceReportTurn: NO_ANNOUNCEMENTS,
 			onReconnected: NO_RECONNECTIONS,
 		},
 	)

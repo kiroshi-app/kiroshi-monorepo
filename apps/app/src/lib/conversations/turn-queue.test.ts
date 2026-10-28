@@ -56,17 +56,34 @@ describe("handedOver", () => {
 		expect(waitingIn(queue)).toEqual(["ada", "nyx"])
 	})
 
-	it("holds for the next wave a companion running in the open one", () => {
+	it("holds no summons for a companion that already ran in the turn", () => {
 		const queue = handedOver(
 			openedWave(opened(["ada", "nyx"])),
 			"ada",
 			summons("nyx"),
 		)
-		expect(waitingIn(queue)).toEqual(["nyx"])
+		expect(waitingIn(queue)).toEqual([])
+	})
+
+	it("holds no summons for a companion of an earlier wave of the turn", () => {
+		const first = openedWave(opened(["ada"]))
+		const second = openedWave(handedOver(first, "ada", summons("nyx")))
+		const queue = handedOver(second, "nyx", summons("ada"))
+		expect(waitingIn(queue)).toEqual([])
+	})
+
+	it("holds again a companion that ran in the turn before", () => {
+		const earlier = openedWave(opened(["ada"]))
+		const queue = handedOver(
+			openedWave(reopenedFor(earlier, [summons("nyx")])),
+			"nyx",
+			summons("ada"),
+		)
+		expect(waitingIn(queue)).toEqual(["ada"])
 	})
 
 	it("opens a second wave with the companion the first one named", () => {
-		const first = openedWave(opened(["ada", "nyx"]))
+		const first = openedWave(opened(["ada"]))
 		const second = openedWave(handedOver(first, "ada", summons("nyx")))
 		expect(waveIn(second)).toEqual(["nyx"])
 		expect(second.waiting).toEqual([])
