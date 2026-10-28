@@ -346,7 +346,9 @@ export function noticeTitleFor(
 		return t("screen.notice.resumeFailed")
 	}
 	if (error.kind === "settingsRejected") {
-		return t("screen.notice.settingsRejected")
+		return name
+			? t("screen.notice.settingsRejectedNamed", { name })
+			: t("screen.notice.settingsRejected")
 	}
 	if (error.kind === "serverEnvRejected") {
 		return t("screen.notice.serverEnvRejected")

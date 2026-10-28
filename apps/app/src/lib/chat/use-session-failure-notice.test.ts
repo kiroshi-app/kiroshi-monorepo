@@ -287,6 +287,25 @@ it("keeps the unreachable copy unnamed when the agent's name is empty", async ()
 	})
 })
 
+const REJECTED_SETTINGS = chatErrorOf(
+	{ kind: "settingsRejected", detail: "settings.json is not valid JSON" },
+	0,
+)
+
+it("names the agent whose settings were rejected", async () => {
+	mountOn(REJECTED_SETTINGS)
+
+	expect((await raisedNotice()).title).toBe("Couldn’t apply Atlas’s settings")
+})
+
+it("keeps the settings-rejected title unnamed when the agent's name is blank", async () => {
+	mountOn(REJECTED_SETTINGS, vi.fn(), { ...THREAD_CONTEXT, botName: "  " })
+
+	expect((await raisedNotice()).title).toBe(
+		i18n.t("chat:screen.notice.settingsRejected"),
+	)
+})
+
 it("keeps a transport description without a named twin unnamed", async () => {
 	mountOn(chatErrorOf({ kind: "writeFailed", detail: "pipe closed" }, 0))
 
