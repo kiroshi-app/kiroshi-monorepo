@@ -94,7 +94,7 @@ const panelOfPage = (href: string): SidebarPanel | null => {
 	return page.thread.mission === undefined ? "conversations" : "missions"
 }
 
-const activatedHrefOf = (
+const activatedPanelOf = (
 	before: WorkspaceTabsState,
 	after: WorkspaceTabsState,
 ) => {
@@ -106,7 +106,7 @@ const activatedHrefOf = (
 	) {
 		return null
 	}
-	return currentHrefOf(activeTabOf(space))
+	return panelOfPage(currentHrefOf(activeTabOf(space)))
 }
 
 const usePanelFollowingTabs = (
@@ -118,8 +118,7 @@ const usePanelFollowingTabs = (
 		return tabs.subscribe(() => {
 			const before = shown
 			shown = tabs.getState()
-			const href = activatedHrefOf(before, shown)
-			const panel = href === null ? null : panelOfPage(href)
+			const panel = activatedPanelOf(before, shown)
 			if (panel !== null) {
 				followPanel(panel)
 			}

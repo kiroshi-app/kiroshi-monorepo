@@ -545,7 +545,6 @@ const mountTabbedSwitch = async () => {
 	return {
 		...mounted,
 		tabs,
-		tabIds,
 		openTabOn,
 		activate,
 		shownHref,
@@ -602,7 +601,6 @@ describe("activating a title bar tab", () => {
 		const shown = await mountTabbedSwitch()
 
 		shown.switchTo("missions")
-		shown.rerender()
 
 		expect(shown.shownHref()).toContain("mission=m-last")
 		expect(shown.openTab()).toBe("missions")
