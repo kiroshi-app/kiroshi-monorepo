@@ -103,7 +103,11 @@ export const useWorkspaceAssembly = () => {
 		scopes,
 	})
 	const collapsedSectionIds = useSpaceSections({ core, rosterLines })
-	const sidebarTab = useSidebarPanelSwitch({ core, sidebarMissions })
+	const sidebarTab = useSidebarPanelSwitch({
+		core,
+		sidebarMissions,
+		tabs,
+	})
 	const selectCompanion = useCompanionSelectGuard({
 		openSpaceId: scopes.openRowId,
 		rosters: core.roster.state.rosters,
