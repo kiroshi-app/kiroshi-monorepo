@@ -385,6 +385,19 @@ impl<S: Clone> Live<S> {
 		held
 	}
 
+	fn sessions_beside(&self, scope: &RuntimeScope) -> Vec<RunKey> {
+		let admitted = run_key(scope);
+		self.runs
+			.lock()
+			.expect("live runs")
+			.iter()
+			.filter(|(held, run)| {
+				**held != admitted && run.scope.conversation_id == scope.conversation_id
+			})
+			.map(|(held, _)| held.clone())
+			.collect()
+	}
+
 	fn holds(&self, scope: &RuntimeScope) -> bool {
 		self.runs.lock().expect("live runs").values().any(|run| &run.scope == scope)
 	}
@@ -718,9 +731,11 @@ impl AgentState {
 		app: &AppHandle<R>,
 		scope: RuntimeScope,
 	) -> Admission<Arc<Session>> {
+		let admitted_at = now_ms();
 		let admitted = self.live.take_over(scope.clone());
 		announce_denied(app, &admitted.dropped);
-		release_stored_prompts(app, &scope).await;
+		let live_beside = self.live.sessions_beside(&scope);
+		release_orphan_prompts(app, &scope.conversation_id, live_beside, admitted_at).await;
 		admitted
 	}
 
@@ -1585,6 +1600,28 @@ async fn release_stored_prompts<R: Runtime>(app: &AppHandle<R>, scope: &RuntimeS
 		Ok(()) => conversation_state::observe_reporting(app, database, conversation).await,
 		Err(failure) => {
 			log::warn!("the stored prompts of conversation {conversation} stay: {failure:?}")
+		}
+	}
+}
+
+async fn release_orphan_prompts<R: Runtime>(
+	app: &AppHandle<R>,
+	conversation: &str,
+	live_sessions: Vec<RunKey>,
+	asked_before: i64,
+) {
+	let Some(database) = bot_database(app) else {
+		return log::warn!("the orphan prompts of conversation {conversation} stay: no database");
+	};
+	let released = database.conversations().release_orphan_prompts(
+		conversation.to_owned(),
+		live_sessions,
+		asked_before,
+	);
+	match released.await {
+		Ok(()) => conversation_state::observe_reporting(app, database, conversation).await,
+		Err(failure) => {
+			log::warn!("the orphan prompts of conversation {conversation} stay: {failure:?}")
 		}
 	}
 }
@@ -2971,23 +3008,68 @@ mod tests {
 			assert_eq!(*heard.lock().expect("the list is kept"), [serde_json::json!("idle")]);
 		}
 
+		fn another_bot_in_the_room() -> RuntimeScope {
+			RuntimeScope { bot_id: "b2".into(), runtime_session_id: "r9".into(), ..a_scope() }
+		}
+
+		async fn stored_sessions(app: &AppOfItsOwn) -> Vec<String> {
+			bot_database(app.handle())
+				.expect("the database opens")
+				.call(|connection| {
+					let mut statement = connection.prepare(
+						"SELECT runtime_session_id FROM pending_prompts ORDER BY runtime_session_id",
+					)?;
+					let held = statement.query_map([], |row| row.get(0))?;
+					Ok(held.collect::<rusqlite::Result<Vec<String>>>()?)
+				})
+				.await
+				.expect("the prompts are read")
+		}
+
 		#[tokio::test]
-		async fn a_run_taken_over_releases_the_stored_prompts_of_its_session_only() {
-			let app =
-				an_app_storing("stored-taken-over", vec![stored("r1", "w1"), stored("r9", "w9")])
-					.await;
+		async fn a_run_taken_over_releases_its_own_and_dead_prompts_and_keeps_a_live_bots_one() {
+			let app = an_app_storing(
+				"stored-taken-over",
+				vec![stored("r1", "w1"), stored("r5", "w5"), stored("r9", "w9")],
+			)
+			.await;
+			app.state::<AgentState>().live.take_over(another_bot_in_the_room());
 			assert_eq!(listed_state(&app).await, ConversationState::NeedsYou);
 			let heard = heard_states(&app);
 
 			app.state::<AgentState>().admit(app.handle(), a_scope()).await;
 
-			assert_eq!(stored_prompts(&app).await, 1);
+			assert_eq!(stored_sessions(&app).await, ["r9"]);
 			assert_eq!(listed_state(&app).await, ConversationState::NeedsYou);
 			assert_eq!(
 				*heard.lock().expect("the list is kept"),
 				[serde_json::json!("needs_you")],
-				"the pending prompt moved to the one left, the state stayed"
+				"the pending prompt moved to the live bot's one, the state stayed"
 			);
+		}
+
+		#[tokio::test]
+		async fn a_run_taken_over_releases_the_prompt_a_crashed_host_left() {
+			let app = an_app_storing("stored-orphan", vec![stored("r5", "w5")]).await;
+
+			app.state::<AgentState>().admit(app.handle(), a_scope()).await;
+
+			assert!(stored_sessions(&app).await.is_empty());
+			assert_eq!(listed_state(&app).await, ConversationState::Idle);
+		}
+
+		#[tokio::test]
+		async fn a_purge_that_fails_still_admits_the_run() {
+			let app = an_app_storing("stored-unpurgeable", vec![stored("r5", "w5")]).await;
+			bot_database(app.handle())
+				.expect("the database opens")
+				.call(|connection| Ok(connection.execute_batch("DROP TABLE pending_prompts")?))
+				.await
+				.expect("the table is dropped");
+
+			app.state::<AgentState>().admit(app.handle(), a_scope()).await;
+
+			assert!(app.state::<AgentState>().live.holds(&a_scope()), "the run was not admitted");
 		}
 
 		#[tokio::test]

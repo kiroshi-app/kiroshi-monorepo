@@ -2,6 +2,7 @@ use rusqlite::types::FromSql;
 use rusqlite::{params, Connection, OptionalExtension, Row, Transaction, TransactionBehavior};
 
 use super::arrivals::{self, Arrival, SeqSpan};
+use super::conversations::release_every_prompt;
 use crate::agent::translate::now_ms;
 use crate::db::connection::Located;
 use crate::db::{Access, DatabaseError};
@@ -167,6 +168,7 @@ pub struct RecoveryReport {
 	pub completed_turns: usize,
 	pub interrupted_messages: usize,
 	pub terminated_activities: usize,
+	pub released_prompts: usize,
 }
 
 const CONVERSATION_EXISTS: &str = "SELECT EXISTS(SELECT 1 FROM conversations WHERE id = ?1)";
@@ -782,8 +784,14 @@ pub(in crate::db) fn sweep_unfinished(
 	let terminated_activities = transaction.execute(TERMINATE_OPEN_ACTIVITIES, [])?;
 	let completed_turns = transaction.execute(COMPLETE_OPEN_TURNS, [now_ms()])?;
 	transaction.execute(RELEASE_EVERY_RUN, [])?;
+	let released_prompts = release_every_prompt(&transaction)?;
 	transaction.commit()?;
-	Ok(RecoveryReport { completed_turns, interrupted_messages, terminated_activities })
+	Ok(RecoveryReport {
+		completed_turns,
+		interrupted_messages,
+		terminated_activities,
+		released_prompts,
+	})
 }
 
 struct StoredTurnKey {
@@ -1395,6 +1403,7 @@ mod tests {
 
 	use super::*;
 	use crate::db::connection::temp_dir;
+	use crate::db::repositories::conversations::{a_pending_prompt, PromptKind};
 	use crate::db::repositories::runtime_context::ParticipantKey;
 	use crate::db::{open, Database};
 
@@ -2284,6 +2293,11 @@ mod tests {
 		let database = seeded(&dir).await;
 		a_turn(&database, "t1", "c1").await;
 		database
+			.conversations()
+			.hold_prompt(a_pending_prompt("c1", PromptKind::Question))
+			.await
+			.expect("the prompt is held");
+		database
 			.messages()
 			.append_user_message(a_user_message("m1", "hello", 1))
 			.await
@@ -2319,7 +2333,8 @@ mod tests {
 			RecoveryReport {
 				completed_turns: 1,
 				interrupted_messages: 1,
-				terminated_activities: 1
+				terminated_activities: 1,
+				released_prompts: 1
 			},
 			"the sweep closed out something other than what was left open"
 		);
@@ -2328,10 +2343,12 @@ mod tests {
 			RecoveryReport {
 				completed_turns: 0,
 				interrupted_messages: 0,
-				terminated_activities: 0
+				terminated_activities: 0,
+				released_prompts: 0
 			},
 			"a second sweep rewrote what the first one had already closed out"
 		);
+		assert_eq!(rows_in(&database, "pending_prompts").await, 0, "a dead prompt was kept");
 		let transcript = whole_transcript(&database, PAGE).await;
 		assert_eq!(transcript[1].state, MessageState::Interrupted);
 		assert_eq!(transcript[1].content, "half a thought", "the partial text was not kept");
