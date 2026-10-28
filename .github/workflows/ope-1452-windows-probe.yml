@@ -1,4 +1,4 @@
-name: OPE-1452 windows bun env probe
+name: OPE-1452 windows release replay
 
 on:
   push:
@@ -8,15 +8,26 @@ on:
 permissions:
   contents: read
 
+env:
+  CARGO_BUILD_JOBS: default
+  RUSTC_WRAPPER: ""
+
 jobs:
-  probe:
+  replay:
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        bun: ["1.3.13", "1.3.14", "1.4.0", "1.4.4"]
+        include:
+          - bun: "1.4.4"
+            try: 1
+          - bun: "1.4.4"
+            try: 2
+          - bun: "1.3.13"
+            try: control
     env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
       APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
       APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
@@ -28,45 +39,51 @@ jobs:
       NO_STRIP: "true"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: ${{ matrix.bun }}
+          bun-version-file: package.json
+
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: apps/app/src-tauri
+          save-if: false
 
       - name: Install dependencies
-        timeout-minutes: 10
         run: bun install --frozen-lockfile
 
-      - name: Fetch the release bodies
+      - name: Build sidecar
+        run: bun run --filter sidecar build
+
+      - name: Read the v0.26.0-beta.1 release notes
+        id: notes
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view v0.26.0-beta.1 --json body --jq .body > "$RUNNER_TEMP/beta1.txt"
-          gh release view v0.25.0 --json body --jq .body > "$RUNNER_TEMP/v025.txt"
-          for size in 20480 24576 32000 65536; do
-            head -c "$size" /dev/zero | tr '\0' 'a' > "$RUNNER_TEMP/flat-$size.txt"
-          done
+          {
+            echo "body<<RELEASE_NOTES_EOF"
+            gh release view v0.26.0-beta.1 --json body --jq .body
+            echo "RELEASE_NOTES_EOF"
+          } >> "$GITHUB_OUTPUT"
 
-      - name: Start bun tauri with each release body in the tauri-action env
-        timeout-minutes: 15
+      - name: Build
+        timeout-minutes: ${{ matrix.try == 'control' && 10 || 30 }}
+        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # action-v1.0.0
+        with:
+          projectPath: apps/app
+          releaseBody: ${{ steps.notes.outputs.body }}
+          releaseDraft: true
+          prerelease: true
+          uploadUpdaterJson: true
+
+      - name: Bun that built
+        if: always()
         shell: bash
-        working-directory: apps/app
-        run: |
-          probe() {
-            local body=$1
-            local code=0
-            local started=$SECONDS
-            export INPUT_RELEASEBODY="$(cat "$RUNNER_TEMP/$body.txt")"
-            export INPUT_PROJECTPATH=apps/app INPUT_RELEASEID=1 INPUT_RELEASEDRAFT=true INPUT_PRERELEASE=true INPUT_UPLOADUPDATERJSON=true
-            local envbytes=$(env | wc -c)
-            timeout -k 5 60 bun tauri --version > "$RUNNER_TEMP/out.txt" 2>&1 < /dev/null || code=$?
-            echo "OPE1452|bun=${{ matrix.bun }}|body=$body|env-bytes=$envbytes|exit=$code|seconds=$((SECONDS - started))|$(head -c 120 "$RUNNER_TEMP/out.txt" | tr '\r\n' '  ')"
-            if [ "$code" != 0 ]; then head -c 1500 "$RUNNER_TEMP/out.txt" | grep -v -i 'args:\|elapsed'; echo; fi
-          }
-          probe v025
-          probe beta1
-          probe flat-20480
-          probe flat-24576
-          probe flat-32000
-          probe flat-65536
+        run: echo "OPE1452|try=${{ matrix.try }}|bun=$(bun --revision)"
