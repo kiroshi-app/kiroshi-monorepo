@@ -2849,6 +2849,20 @@ const openRowMenu = async (canvasElement: HTMLElement, name: string) => {
 	return within(menu)
 }
 
+const expectOpenInNewTabUnderPin = async (
+	menu: Awaited<ReturnType<typeof openRowMenu>>,
+) => {
+	const [pin, openInNewTab, openSettings] = menu.getAllByRole("menuitem")
+	await expect(pin).toHaveTextContent("Pin")
+	await expect(openInNewTab).toHaveTextContent("Open in a new tab")
+	await expect(pin.nextElementSibling).toBe(openInNewTab)
+	const separator = openInNewTab.nextElementSibling
+	await expect(separator).toHaveAttribute("role", "separator")
+	await expect(separator?.nextElementSibling).toBe(openSettings)
+	await expect(openSettings).toHaveTextContent("Open settings")
+	return openInNewTab
+}
+
 const LAST_SPACE_NOTE =
 	"A companion stays in at least one space. To remove a companion from its last space, delete the companion."
 
@@ -5976,14 +5990,7 @@ export const ConversationRowOpensInANewTab = meta.story({
 	},
 	play: async ({ args, canvasElement, userEvent }) => {
 		const menu = await openRowMenu(canvasElement, "Launch review")
-		const [pin, openInNewTab, openSettings] = menu.getAllByRole("menuitem")
-		await expect(pin).toHaveTextContent("Pin")
-		await expect(openInNewTab).toHaveTextContent("Open in a new tab")
-		await expect(pin.nextElementSibling).toBe(openInNewTab)
-		const separator = openInNewTab.nextElementSibling
-		await expect(separator).toHaveAttribute("role", "separator")
-		await expect(separator?.nextElementSibling).toBe(openSettings)
-		await expect(openSettings).toHaveTextContent("Open settings")
+		const openInNewTab = await expectOpenInNewTabUnderPin(menu)
 
 		await userEvent.click(openInNewTab)
 		await expect(args.onOpenConversationInNewTab).toHaveBeenCalledOnce()
@@ -6006,14 +6013,7 @@ export const CompanionRowOpensInANewTab = meta.story({
 	},
 	play: async ({ args, canvasElement, userEvent }) => {
 		const menu = await openRowMenu(canvasElement, "Cinder")
-		const [pin, openInNewTab, openSettings] = menu.getAllByRole("menuitem")
-		await expect(pin).toHaveTextContent("Pin")
-		await expect(openInNewTab).toHaveTextContent("Open in a new tab")
-		await expect(pin.nextElementSibling).toBe(openInNewTab)
-		const separator = openInNewTab.nextElementSibling
-		await expect(separator).toHaveAttribute("role", "separator")
-		await expect(separator?.nextElementSibling).toBe(openSettings)
-		await expect(openSettings).toHaveTextContent("Open settings")
+		const openInNewTab = await expectOpenInNewTabUnderPin(menu)
 
 		await userEvent.click(openInNewTab)
 		await expect(args.onOpenBotInNewTab).toHaveBeenCalledOnce()
