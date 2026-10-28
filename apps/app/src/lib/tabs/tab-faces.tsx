@@ -27,7 +27,7 @@ export type TabBot = Pick<AppSidebarBot, "id" | "name" | "blot" | "image">
 
 export type TabConversation = Pick<
 	AppSidebarConversation,
-	"id" | "name" | "icon" | "color"
+	"id" | "name" | "icon"
 >
 
 export type TabFaceSources = {
