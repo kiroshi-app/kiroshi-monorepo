@@ -54,7 +54,6 @@ import {
 	invoke,
 	invokeOn,
 	listen,
-	listenOnThisComputer,
 } from "../host"
 import type { AgentCommand } from "@/lib/agent/contract"
 import type { ConversationSource } from "../host/conversation-provenance"
@@ -155,9 +154,8 @@ export const transcriptEventsTransport = {
 			listen<TranscriptMessage>(MESSAGE_STORED_EVENT, ({ payload }) =>
 				listener(payload),
 			),
-			listenOnThisComputer<TranscriptMessage>(
-				REPORT_TURN_ANNOUNCED_EVENT,
-				({ payload }) => listener(payload),
+			listen<TranscriptMessage>(REPORT_TURN_ANNOUNCED_EVENT, ({ payload }) =>
+				listener(payload),
 			),
 		])
 		return () => {
