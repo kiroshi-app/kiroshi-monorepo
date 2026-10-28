@@ -9,6 +9,7 @@ import {
 	type BadgeChannel,
 	mirrorBadges,
 	ownBadges,
+	type WindowBadgeReport,
 } from "../chat/badge-sharing"
 import {
 	createFakeBadgeChannel,
@@ -139,6 +140,13 @@ const openWindow = ({ channel, label, isDriver }: WindowOptions) => {
 	}
 }
 
+const spyOn =
+	(report: BadgeChannel["report"], reports: WindowBadgeReport[]) =>
+	(sent: WindowBadgeReport) => {
+		reports.push(sent)
+		return report(sent)
+	}
+
 const openTwoWindows = async () => {
 	const channel = createFakeBadgeChannel()
 	const main = openWindow({ channel, label: "main", isDriver: true })
@@ -162,6 +170,25 @@ describe("conversation badges shared across windows", () => {
 		expect(second.badgeOf("room-three")).toBe("done")
 		expect(main.spaceBadgeOf("work")).toBe("done")
 		expect(second.spaceBadgeOf("work")).toBe("done")
+	})
+
+	it("clears the space of the main window when the second window reads its room", async () => {
+		const { main, second } = await openTwoWindows()
+		main.open("room-two")
+		second.open("room-two")
+		await settleWindows()
+
+		main.speakIn("room-three")
+		await settleWindows()
+		expect(main.spaceBadgeOf("work")).toBe("done")
+		expect(second.spaceBadgeOf("work")).toBe("done")
+
+		second.focus()
+		second.open("room-three")
+		await settleWindows()
+
+		expect(main.spaceBadgeOf("work")).toBeUndefined()
+		expect(second.spaceBadgeOf("work")).toBeUndefined()
 	})
 
 	it("raises no badge for a room the second window shows under focus", async () => {
@@ -248,5 +275,53 @@ describe("conversation badges shared across windows", () => {
 		await settleWindows()
 		expect(second.badgeOf("room-one")).toBeUndefined()
 		expect(second.badgeOf("room-two")).toBe("done")
+	})
+
+	it("keeps the room a third window reads unlit after the takeover", async () => {
+		const { channel, main, second } = await openTwoWindows()
+		const third = openWindow({ channel, label: "window-2", isDriver: false })
+		third.focus()
+		third.open("room-one")
+		await settleWindows()
+
+		main.close()
+		second.takeOver()
+		await settleWindows()
+		second.speakIn("room-one")
+		await settleWindows()
+
+		expect(second.badgeOf("room-one")).toBeUndefined()
+		expect(third.badgeOf("room-one")).toBeUndefined()
+	})
+
+	it("hands the new owner the read of every other window in one report round", async () => {
+		const channel = createFakeBadgeChannel()
+		const reports: WindowBadgeReport[] = []
+		const watched = { ...channel, report: spyOn(channel.report, reports) }
+		const main = openWindow({ channel: watched, label: "main", isDriver: true })
+		const second = openWindow({
+			channel: watched,
+			label: "window-1",
+			isDriver: false,
+		})
+		const third = openWindow({
+			channel: watched,
+			label: "window-2",
+			isDriver: false,
+		})
+		third.focus()
+		third.open("room-one")
+		await settleWindows()
+
+		main.close()
+		reports.length = 0
+		second.takeOver()
+		await settleWindows()
+
+		expect(reports).toContainEqual({
+			windowLabel: "window-2",
+			readId: "room-one",
+			changed: {},
+		})
 	})
 })
