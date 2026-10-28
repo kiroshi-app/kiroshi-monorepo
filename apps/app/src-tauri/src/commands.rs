@@ -180,6 +180,8 @@ fn commands<R: Runtime>() -> Commands<R> {
 		missions::commands::mission_space_page::<tauri::Wry>,
 		missions::commands::mission_unreported::<tauri::Wry>,
 		missions::commands::mission_reported,
+		missions::run_claims::mission_run_claim::<tauri::Wry>,
+		missions::run_claims::mission_run_release,
 		missions::commands::mission_answered::<tauri::Wry>,
 		notifications::commands::notification_show::<tauri::Wry>,
 		plugins::commands::plugin_skills::<tauri::Wry>,
