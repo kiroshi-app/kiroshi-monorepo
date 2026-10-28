@@ -11,6 +11,8 @@ import {
 	type ConnectionStatusState,
 } from "@workspace/ui/components/connection-status"
 
+const AGENT_NAME = "Nest Keeper"
+
 const CONNECTION_STATUS_STATES = listExhaustively<ConnectionStatusState>({
 	checking: true,
 	ready: true,
@@ -51,7 +53,7 @@ const meta = preview.meta({
 })
 
 export const Default = meta.story({
-	args: { state: "ready", version: "2.1.233" },
+	args: { name: AGENT_NAME, state: "ready", version: "2.1.233" },
 	parameters: {
 		docs: {
 			description: {
@@ -62,7 +64,7 @@ export const Default = meta.story({
 	},
 	play: async ({ canvas, canvasElement }) => {
 		await expect(canvas.getByRole("status")).toHaveTextContent(
-			"Agent ready v2.1.233",
+			`${AGENT_NAME} is ready v2.1.233`,
 		)
 		await expect(canvas.getByRole("status")).toHaveClass("sr-only")
 		await expectReadyDot(canvasElement, resolvedRootColor("--success"))
@@ -87,7 +89,7 @@ export const DefaultDark = meta.story({
 
 export const Variants = meta.story({
 	tags: ["test-only"],
-	args: { state: "ready" },
+	args: { name: AGENT_NAME, state: "ready" },
 	parameters: {
 		docs: {
 			description: {
@@ -100,7 +102,7 @@ export const Variants = meta.story({
 		<div className="flex flex-col gap-3">
 			{CONNECTION_STATUS_STATES.map((state) => (
 				<Row key={state}>
-					<ConnectionStatus state={state} version="2.1.233" />
+					<ConnectionStatus name={AGENT_NAME} state={state} version="2.1.233" />
 				</Row>
 			))}
 		</div>
@@ -108,7 +110,7 @@ export const Variants = meta.story({
 })
 
 export const ZeroValue = meta.story({
-	args: { state: "checking", version: null },
+	args: { name: AGENT_NAME, state: "checking", version: null },
 	parameters: {
 		docs: {
 			description: {
@@ -119,7 +121,7 @@ export const ZeroValue = meta.story({
 	},
 	play: async ({ canvas }) => {
 		await expect(canvas.getByRole("status")).toHaveTextContent(
-			"Checking the agent…",
+			`Checking ${AGENT_NAME}…`,
 		)
 		await expect(canvas.queryByText(/^v/)).toBeNull()
 	},

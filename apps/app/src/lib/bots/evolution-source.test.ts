@@ -128,7 +128,7 @@ describe("evolution source", () => {
 	})
 
 	it.each([
-		["bot", "Couldn’t add a companion’s change to History"],
+		["bot", "Couldn’t add an agent’s change to History"],
 		["user", "Couldn’t add a change to your profile to History"],
 		["space", "Couldn’t add a change to the space to History"],
 	] as const)(

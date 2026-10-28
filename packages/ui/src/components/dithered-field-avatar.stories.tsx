@@ -57,7 +57,7 @@ const STILL_WAIT = 300
 const pause = (duration: number) =>
 	new Promise((resolve) => setTimeout(resolve, duration))
 
-export const OneScreenForEveryCompanion = meta.story({
+export const OneScreenForEveryAgent = meta.story({
 	render: () => (
 		<div aria-label="Companions" className="flex flex-wrap gap-4" role="group">
 			{NAMES.map((name, index) => (

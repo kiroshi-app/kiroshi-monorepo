@@ -214,8 +214,8 @@ export const Authors = meta.story({
 			'[data-slot="message-author-deleted"]',
 		)
 
-		await expect(deleted).toHaveAttribute("title", "Deleted companion")
-		await expect(deleted).toHaveTextContent("Deleted companion")
+		await expect(deleted).toHaveAttribute("title", "Deleted agent")
+		await expect(deleted).toHaveTextContent("Deleted agent")
 	},
 })
 

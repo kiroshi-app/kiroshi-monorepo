@@ -54,7 +54,7 @@ const FieldFrame = ({
 
 	return (
 		<span
-			aria-label={name.trim() || t("companion.unnamed")}
+			aria-label={name.trim() || t("agent.unnamed")}
 			className="relative inline-flex shrink-0 overflow-hidden text-(--bot-avatar-ink)"
 			data-hue={hue}
 			data-slot="companion-field"

@@ -163,11 +163,11 @@ export const Space = meta.story({
 	},
 	play: async ({ canvas }) => {
 		await expect(
-			canvas.getByText("What every companion in Release desk connects to."),
+			canvas.getByText("What every agent in Release desk connects to."),
 		).toBeVisible()
 		await expect(
 			canvas.getByText(
-				"Each companion here can add applications of its own, and you can add some for every space.",
+				"Each agent here can add applications of its own, and you can add some for every space.",
 			),
 		).toBeVisible()
 	},
@@ -188,7 +188,7 @@ export const Profile = meta.story({
 			canvas.getByText("What you connect to, in every space."),
 		).toBeVisible()
 		await expect(
-			canvas.getByText("These reach every companion you have, in every space."),
+			canvas.getByText("These reach every agent you have, in every space."),
 		).toBeVisible()
 	},
 })
@@ -328,7 +328,7 @@ export const EmptySpace = meta.story({
 		).toBeVisible()
 		await expect(
 			canvas.getByText(
-				"Add one here and every companion in this space gets its tools.",
+				"Add one here and every agent in this space gets its tools.",
 			),
 		).toBeVisible()
 	},

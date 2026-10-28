@@ -495,7 +495,7 @@ describe("companion mentions", () => {
 		const html = renderInConversation("ask <@bot-ghost> instead")
 
 		expect(html).toContain('data-unknown="true"')
-		expect(html).toContain("Unknown companion")
+		expect(html).toContain("Unknown agent")
 	})
 
 	it("keeps a mention written in code literal", () => {
@@ -542,7 +542,7 @@ describe("companion mentions", () => {
 		const html = renderInConversation("<@bot-ghost> <@bot-ghost> held the lock")
 
 		expect(count(html, 'data-slot="bot-mention"')).toBe(1)
-		expect(html).toContain("Unknown companion")
+		expect(html).toContain("Unknown agent")
 		expect(html).toContain("2 mentions")
 	})
 

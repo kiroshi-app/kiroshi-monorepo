@@ -375,7 +375,7 @@ export const MembersAtFreeHue = meta.story({
 	},
 })
 
-export const Companions = meta.story({
+export const Agents = meta.story({
 	globals: { theme: "dark" },
 	args: {
 		entry: "companions",
@@ -400,15 +400,15 @@ export const Companions = meta.story({
 			"Back to your settings",
 			"Space",
 			"Members",
-			"Companions4",
+			"Agents4",
 			...SPACE_MENU.slice(2),
 		])
-		const entry = entryIn(menu, "Companions 4")
+		const entry = entryIn(menu, "Agents 4")
 		await expect(entry).toHaveAttribute("aria-current", "page")
 		await expect(slotIn(entry, "settings-menu-count")).toHaveTextContent("4")
 
 		const main = screen.getByRole("main")
-		await expectSettingsPage(main, "Companions", "full")
+		await expectSettingsPage(main, "Agents", "full")
 		await expect(
 			within(slotIn(main, "screen-layout-column")).getAllByRole("heading", {
 				level: 2,
@@ -670,7 +670,7 @@ const artboardCompanions = (count: number) => ({
 const ARTBOARD_MENU = [
 	"Space",
 	"Members",
-	"Companions",
+	"Agents",
 	"Secrets",
 	"Skills",
 	"Applications",
@@ -892,7 +892,7 @@ export const YoursNotShared = meta.story({
 			kind: "Space settings",
 			subtitle: "Yours · not shared",
 			entries: ARTBOARD_MENU.map((label) =>
-				label === "Companions" ? "Companions2" : label,
+				label === "Agents" ? "Agents2" : label,
 			),
 			pinned: "Danger zone",
 			pinnedInk: DANGER_INK,
@@ -974,7 +974,7 @@ export const SpaceCompanions = meta.story({
 	play: async () => {
 		await expectLaptopWindow()
 		await menuIn()
-		await expectSettingsPage(screen.getByRole("main"), "Companions", "full")
+		await expectSettingsPage(screen.getByRole("main"), "Agents", "full")
 	},
 })
 
@@ -994,7 +994,7 @@ export const JoinedHostOnline = meta.story({
 			kind: "Space settings",
 			subtitle: "Joined · hosted by Sam Rivera",
 			entries: ARTBOARD_MENU.map((label) =>
-				label === "Companions" ? "Companions3" : label,
+				label === "Agents" ? "Agents3" : label,
 			),
 			pinned: "Leave space",
 			pinnedInk: DANGER_INK,
@@ -1099,12 +1099,12 @@ export const JoinedSessionUnavailable = meta.story({
 	},
 	play: async ({ userEvent }) => {
 		const companionCount = JOINED_ARGS.companions.companions.length
-		const companions = `Companions ${companionCount}`
+		const companions = `Agents ${companionCount}`
 		const { menu, main } = await expectArtboard({
 			kind: "Space settings",
 			subtitle: `Joined · hosted by ${JOINED_ARGS.hostName}`,
 			entries: ARTBOARD_MENU.map((label) =>
-				label === "Companions" ? `Companions${companionCount}` : label,
+				label === "Agents" ? `Agents${companionCount}` : label,
 			),
 			pinned: "Leave space",
 			pinnedInk: DANGER_INK,

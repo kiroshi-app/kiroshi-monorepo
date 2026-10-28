@@ -521,7 +521,7 @@ const switchSpaceTo = async (name: string) => {
 
 const openFirstCompanionOfSpace = async () => {
 	await openSpaceSettingsByRail()
-	await press(menuEntryOf(new RegExp(`^${i18n.t("settings:rail.companions")}`)))
+	await press(menuEntryOf(new RegExp(`^${i18n.t("settings:rail.agents")}`)))
 	await press(
 		document
 			.querySelector('[data-slot="companion-card-name"]')

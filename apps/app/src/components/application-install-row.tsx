@@ -27,7 +27,7 @@ const receiptSentenceOf = (
 	if (scope === "space") {
 		return t("applicationInstall.receipt.space", { name: title, destination })
 	}
-	return t("applicationInstall.receipt.companion", { name: title, destination })
+	return t("applicationInstall.receipt.agent", { name: title, destination })
 }
 
 export const ApplicationInstallRow = ({

@@ -5,7 +5,7 @@ const common = {
 	spaces: {
 		unavailable: {
 			title: "Impossible de charger vos espaces",
-			description: "Vos compagnons sont toujours là.",
+			description: "Vos agents sont toujours là.",
 		},
 		leave: {
 			title: "Quitter {{name}} ?",
@@ -15,8 +15,8 @@ const common = {
 		},
 	},
 	skipLink: "Passer à la conversation",
-	companion: {
-		unnamed: "Compagnon",
+	agent: {
+		unnamed: "Agent",
 	},
 	dialog: {
 		close: "Fermer",
@@ -164,11 +164,11 @@ const common = {
 			ready: "Redémarrer pour mettre à jour",
 			readyVersion: "Redémarrer pour passer à la version {{version}}",
 			botsBusy_one:
-				"{{count}} compagnon tourne encore. Arrêtez-le pour redémarrer.",
+				"{{count}} agent tourne encore. Arrêtez-le pour redémarrer.",
 			botsBusy_many:
-				"{{count}} compagnons tournent encore. Arrêtez-les pour redémarrer.",
+				"{{count}} agents tournent encore. Arrêtez-les pour redémarrer.",
 			botsBusy_other:
-				"{{count}} compagnons tournent encore. Arrêtez-les pour redémarrer.",
+				"{{count}} agents tournent encore. Arrêtez-les pour redémarrer.",
 			error: "Mise à jour échouée, télécharger à nouveau",
 			retry: "Télécharger à nouveau la mise à jour",
 		},

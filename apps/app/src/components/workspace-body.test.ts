@@ -959,8 +959,12 @@ describe("WorkspaceBody mission menu", () => {
 	}
 
 	it.each([
-		{ entry: "Message the agent", state: "working", place: "Activity panel" },
-		{ entry: "Message the agent", state: "working", place: "thread" },
+		{
+			entry: "Message the coding session",
+			state: "working",
+			place: "Activity panel",
+		},
+		{ entry: "Message the coding session", state: "working", place: "thread" },
 		{
 			entry: "Answer the question",
 			state: "waiting_human",
@@ -984,12 +988,12 @@ describe("WorkspaceBody mission menu", () => {
 		},
 	)
 
-	it("cancels the running turn of the mission thread from Stop the agent", async () => {
+	it("cancels the running turn of the mission thread from Stop the coding session", async () => {
 		const { workspace } = await seed({ state: "working" })
 		const thread = workspace.runtimes.runtimeFor(THREAD_CONVERSATION)
 		const stopped = vi.spyOn(thread, "stop").mockResolvedValue(undefined)
 
-		await choose(panelCardIn("In progress"), "Stop the agent")
+		await choose(panelCardIn("In progress"), "Stop the coding session")
 
 		expect(stopped).toHaveBeenCalledTimes(1)
 	})

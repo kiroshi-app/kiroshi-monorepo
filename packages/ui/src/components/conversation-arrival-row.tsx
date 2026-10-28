@@ -26,7 +26,7 @@ const ConversationArrivalRow = ({
 	const sentence =
 		inviter.kind === "person"
 			? t("conversationArrival.invitedByPerson", { name: bot.name })
-			: t("conversationArrival.invitedByCompanion", {
+			: t("conversationArrival.invitedByAgent", {
 					name: bot.name,
 					inviter: inviter.bot.name,
 				})

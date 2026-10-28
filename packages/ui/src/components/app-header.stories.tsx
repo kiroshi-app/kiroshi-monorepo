@@ -143,7 +143,7 @@ export const WithAction = meta.story({
 		leading: <>Kiroshi</>,
 		trailing: (
 			<>
-				<ConnectionStatus state="crashed" />
+				<ConnectionStatus name="Nest Keeper" state="crashed" />
 				<Button size="xs" variant="outline">
 					<Icons.Retry data-icon="inline-start" />
 					Restart

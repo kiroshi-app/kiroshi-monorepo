@@ -53,7 +53,7 @@ describe("the face of a tab", () => {
 	it.each([
 		["/settings/user", i18n.t("settings:screen.subtitle.user")],
 		["/settings/space/home", i18n.t("settings:screen.subtitle.space")],
-		["/settings/companion/nova", i18n.t("settings:screen.subtitle.companion")],
+		["/settings/companion/nova", i18n.t("settings:screen.subtitle.agent")],
 		[
 			"/settings/user?entry=skills&application=github",
 			i18n.t("settings:screen.subtitle.user"),
@@ -64,7 +64,7 @@ describe("the face of a tab", () => {
 		],
 		[
 			"/settings/companion/nova?entry=history&application=github",
-			i18n.t("settings:screen.subtitle.companion"),
+			i18n.t("settings:screen.subtitle.agent"),
 		],
 	])("titles %s %s", (href, title) => {
 		expect(tabFaceOf(href, SOURCES).title).toBe(title)

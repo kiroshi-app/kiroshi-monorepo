@@ -226,7 +226,7 @@ const SPAWN_TITLE = "Couldn’t reach the agent"
 
 const PINS_TITLE = "Couldn’t sync pinned messages"
 
-const UNRESOLVED_MENTION_TITLE = "Couldn’t summon a companion"
+const UNRESOLVED_MENTION_TITLE = "Couldn’t summon an agent"
 
 const READ_TITLE = "Couldn’t load earlier messages"
 
@@ -1039,7 +1039,7 @@ const SUMMONS_CAUSE = "Opened by the mission"
 
 const SUMMONS_ANNOUNCEMENT = "Mission summons"
 
-const SUMMONS_AGAIN_CAUSE = "Opened by the agent’s question"
+const SUMMONS_AGAIN_CAUSE = "Opened by the coding session’s question"
 
 const MISSION_ASKED: SpokenTurn = {
 	turnId: "t-asked",
@@ -2126,7 +2126,7 @@ describe("ThreadScreen", () => {
 		expect(screen.getByText(UNRESOLVED_MENTION_TITLE)).toBeTruthy()
 		expect(
 			screen.getByText(
-				"Unknown companion was named but holds no seat in this conversation.",
+				"Unknown agent was named but holds no seat in this conversation.",
 			),
 		).toBeTruthy()
 
@@ -3774,7 +3774,7 @@ describe("the first run in a solo thread", () => {
 		await fixture.solo.push(SAID_AND_LANDED)
 		await shown.refresh()
 
-		await shown.choose("Pick my first companion")
+		await shown.choose("Pick my first agent")
 
 		expect(
 			screen.queryByText(onboardingSummonsFor("firstCompanion")),
@@ -3825,7 +3825,7 @@ const ACCESS_QUESTION = "How do you want to connect?"
 
 const NOT_CONNECTED_TITLE = "You’re not signed in"
 
-const UNAVAILABLE_TITLE = "Couldn’t reach the agent"
+const UNAVAILABLE_TITLE = "Couldn’t reach Ada"
 
 const SIGN_IN = "Sign in"
 
@@ -4697,7 +4697,7 @@ describe("ThreadScreen showing the applications installed", () => {
 		render(room.view(), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 
-		const spaceRow = rowHolding("Every companion in Personal has Linear.")
+		const spaceRow = rowHolding("Every agent in Personal has Linear.")
 		const userRow = rowHolding("You have Notion in every conversation.")
 		expect(within(spaceRow).queryByText("Signs you in")).toBeNull()
 		fireEvent.click(

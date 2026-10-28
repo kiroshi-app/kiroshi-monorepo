@@ -1,16 +1,16 @@
 const bots = {
 	roster: {
 		label: "Conversations",
-		create: "Créer un compagnon",
+		create: "Créer un agent",
 		createMenu: "Créer",
 		conversation: {
 			create: "Démarrer une conversation",
 			others: "+{{count}}",
 			preview: "{{name}} : {{text}}",
 		},
-		empty: "Aucun compagnon pour l’instant",
+		empty: "Aucun agent pour l’instant",
 		unavailable:
-			"Impossible de charger vos compagnons. Redémarrez Kiroshi pour réessayer.",
+			"Impossible de charger vos agents. Redémarrez Kiroshi pour réessayer.",
 		previewUnreadable:
 			"Impossible de charger les derniers messages. Redémarrez Kiroshi pour réessayer.",
 		conversationUnsaved:
@@ -35,7 +35,7 @@ const bots = {
 		spaces: {
 			label: "Espaces",
 			lastSpace:
-				"Un compagnon reste dans au moins un espace. Pour retirer un compagnon de son dernier espace, supprimez le compagnon.",
+				"Un agent reste dans au moins un espace. Pour retirer un agent de son dernier espace, supprimez l’agent.",
 		},
 		pin: "Épingler",
 		pinDrop: "Déposer ici pour épingler",
@@ -52,7 +52,7 @@ const bots = {
 		},
 		idle: "au repos",
 		announcement: {
-			none: "Aucun compagnon sélectionné",
+			none: "Aucun agent sélectionné",
 			selected: "{{name}} sélectionné, {{state}}",
 		},
 		section: {
@@ -67,11 +67,11 @@ const bots = {
 			moveUp: "Monter",
 			moveDown: "Descendre",
 			delete: "Supprimer",
-			empty: "Déposez un compagnon ici",
+			empty: "Déposez un agent ici",
 			unreadable:
 				"Impossible de charger les sections de cet espace. Redémarrez Kiroshi pour réessayer.",
 		},
-		seedRefused: "Votre premier compagnon n’a pas pu être créé",
+		seedRefused: "Votre premier agent n’a pas pu être créé",
 	},
 	rail: {
 		label: "Navigation",
@@ -111,8 +111,8 @@ const bots = {
 			down: "Non connecté",
 		},
 		remove: {
-			lastSpace: "Un compagnon a besoin d’au moins un espace.",
-			failed: "Impossible de retirer ce compagnon de l’espace. Réessayez.",
+			lastSpace: "Un agent a besoin d’au moins un espace.",
+			failed: "Impossible de retirer cet agent de l’espace. Réessayez.",
 		},
 		invitations: {
 			label: "Invitations",
@@ -155,7 +155,7 @@ const bots = {
 		},
 	},
 	dialog: {
-		untitled: "Compagnon sans titre",
+		untitled: "Agent sans titre",
 		breadcrumb: "Réglages",
 		tab: {
 			general: "Général",
@@ -179,17 +179,16 @@ const bots = {
 		},
 		instructions: {
 			label: "Instructions",
-			placeholder:
-				"L’invite système avec laquelle ce compagnon tourne toujours",
+			placeholder: "L’invite système avec laquelle cet agent tourne toujours",
 		},
 		memory: {
 			label: "Mémoire",
-			hint: "Ce dont ce compagnon se souvient d’une conversation à l’autre. Modifiez-la ou effacez-la ; il continue d’apprendre.",
-			empty: "Ce compagnon n’a encore aucun souvenir.",
+			hint: "Ce dont cet agent se souvient d’une conversation à l’autre. Modifiez-la ou effacez-la ; il continue d’apprendre.",
+			empty: "Cet agent n’a encore aucun souvenir.",
 			save: "Enregistrer la mémoire",
 			clear: {
 				action: "Effacer",
-				title: "Effacer la mémoire de ce compagnon ?",
+				title: "Effacer la mémoire de cet agent ?",
 				description:
 					"Il recommence à apprendre dès votre prochaine conversation. C’est irréversible.",
 				confirm: "Effacer la mémoire",
@@ -213,7 +212,7 @@ const bots = {
 		undone: "Annulée plus haut",
 		recordFailed: {
 			title: {
-				bot: "Impossible d’ajouter la modification d’un compagnon à l’historique",
+				bot: "Impossible d’ajouter la modification d’un agent à l’historique",
 				user: "Impossible d’ajouter une modification de votre profil à l’historique",
 				space:
 					"Impossible d’ajouter une modification de l’espace à l’historique",
@@ -288,17 +287,17 @@ const bots = {
 		empty: {
 			title: "Aucune compétence",
 			description:
-				"Écrivez une compétence que ce compagnon peut réutiliser, et choisissez si elle se charge à chaque tour.",
+				"Écrivez une compétence que cet agent peut réutiliser, et choisissez si elle se charge à chaque tour.",
 		},
 		name: {
 			label: "Nom",
 			placeholder: "notes-de-version",
-			hint: "Minuscules, chiffres et traits d’union. Le compagnon lit la description, pas le nom.",
+			hint: "Minuscules, chiffres et traits d’union. L’agent lit la description, pas le nom.",
 			blank: "Une compétence a besoin d’un nom.",
 		},
 		description: {
 			label: "Description",
-			placeholder: "Quand ce compagnon doit l’utiliser",
+			placeholder: "Quand cet agent doit l’utiliser",
 		},
 		whenToUse: {
 			label: "Quand l’utiliser",
@@ -328,9 +327,9 @@ const bots = {
 			hint: "Un motif par ligne. Les fichiers qui rendent cette compétence pertinente.",
 		},
 		modelInvocation: {
-			label: "Empêcher le compagnon d’y recourir",
+			label: "Empêcher l’agent d’y recourir",
 			description:
-				"Désactivé, le compagnon décide d’après la description. Activé, vous seul pouvez la lancer.",
+				"Désactivé, l’agent décide d’après la description. Activé, vous seul pouvez la lancer.",
 		},
 		userInvocable: {
 			label: "Vous laisser l’invoquer",
@@ -341,7 +340,7 @@ const bots = {
 			label: "Précharger cette compétence",
 			tag: "Préchargée",
 			description:
-				"Activé, elle est dans l’invite de ce compagnon à chaque tour. Désactivé, le compagnon la lit seulement au besoin.",
+				"Activé, elle est dans l’invite de cet agent à chaque tour. Désactivé, l’agent la lit seulement au besoin.",
 		},
 		system: {
 			tag: "Système",
@@ -350,12 +349,12 @@ const bots = {
 		},
 		model: {
 			label: "Modèle",
-			placeholder: "Celui du compagnon",
-			hint: "Laissez vide pour utiliser le modèle du compagnon.",
+			placeholder: "Celui de l’agent",
+			hint: "Laissez vide pour utiliser le modèle de l’agent.",
 		},
 		effort: {
 			label: "Effort",
-			default: "Celui du compagnon",
+			default: "Celui de l’agent",
 			option: {
 				low: "Faible",
 				medium: "Moyen",
@@ -378,7 +377,7 @@ const bots = {
 		},
 		agent: {
 			label: "Agent",
-			placeholder: "Le compagnon lui-même",
+			placeholder: "L’agent lui-même",
 			hint: "Qui exécute le fork.",
 		},
 		background: {
@@ -389,7 +388,7 @@ const bots = {
 		allowedTools: {
 			label: "Outils autorisés",
 			placeholder: "Read\nGrep",
-			hint: "Un nom d’outil par ligne. Laissez vide pour autoriser tous les outils du compagnon.",
+			hint: "Un nom d’outil par ligne. Laissez vide pour autoriser tous les outils de l’agent.",
 		},
 		disallowedTools: {
 			label: "Outils interdits",
@@ -423,7 +422,7 @@ const bots = {
 		delete: {
 			action: "Supprimer la compétence",
 			description:
-				"Le compagnon ne pourra plus utiliser cette compétence. C’est irréversible.",
+				"L’agent ne pourra plus utiliser cette compétence. C’est irréversible.",
 			confirm: {
 				title: "Supprimer {{name}} ?",
 			},
@@ -476,16 +475,15 @@ const bots = {
 		uses_other: "{{count, number}} utilisations",
 		hostedOn: "Tourne sur <host>{{host}}</host>",
 		intro: {
-			companion:
+			agent:
 				"Ce à quoi {{name}} se connecte pour les outils qu’il n’a pas seul.",
-			space: "Ce à quoi chaque compagnon de {{name}} se connecte.",
+			space: "Ce à quoi chaque agent de {{name}} se connecte.",
 			profile: "Ce à quoi vous vous connectez, dans chaque espace.",
 		},
 		footnote: {
 			space:
-				"Chaque compagnon d’ici peut ajouter ses propres applications, et vous pouvez en ajouter pour tous les espaces.",
-			profile:
-				"Elles parviennent à chacun de vos compagnons, dans chaque espace.",
+				"Chaque agent d’ici peut ajouter ses propres applications, et vous pouvez en ajouter pour tous les espaces.",
+			profile: "Elles parviennent à chacun de vos agents, dans chaque espace.",
 		},
 		open: "Ouvrir {{name}}",
 		section: {
@@ -533,7 +531,7 @@ const bots = {
 			confirm: {
 				title: "Déconnecter {{name}} ?",
 				description:
-					"Kiroshi abandonne le jeton et demande à {{name}} de l’oublier. Ce compagnon perd les outils de {{name}} jusqu’à une nouvelle connexion.",
+					"Kiroshi abandonne le jeton et demande à {{name}} de l’oublier. Cet agent perd les outils de {{name}} jusqu’à une nouvelle connexion.",
 			},
 			session: {
 				title: "{{name}} a été laissé de côté",
@@ -541,11 +539,11 @@ const bots = {
 			refused: {
 				title: "La connexion ne fonctionne plus",
 				description_one:
-					"Kiroshi n’a pas pu renouveler le jeton, le seul outil de {{name}} a donc été absent {{sessions}} de {{companion}}. Se reconnecter suffit en général.",
+					"Kiroshi n’a pas pu renouveler le jeton, le seul outil de {{name}} a donc été absent {{sessions}} de {{agent}}. Se reconnecter suffit en général.",
 				description_many:
-					"Kiroshi n’a pas pu renouveler le jeton, les {{count}} outils de {{name}} ont donc été absents {{sessions}} de {{companion}}. Se reconnecter suffit en général.",
+					"Kiroshi n’a pas pu renouveler le jeton, les {{count}} outils de {{name}} ont donc été absents {{sessions}} de {{agent}}. Se reconnecter suffit en général.",
 				description_other:
-					"Kiroshi n’a pas pu renouveler le jeton, les {{count}} outils de {{name}} ont donc été absents {{sessions}} de {{companion}}. Se reconnecter suffit en général.",
+					"Kiroshi n’a pas pu renouveler le jeton, les {{count}} outils de {{name}} ont donc été absents {{sessions}} de {{agent}}. Se reconnecter suffit en général.",
 				sessions_one: "de la dernière session",
 				sessions_many: "des {{count}} dernières sessions",
 				sessions_other: "des {{count}} dernières sessions",
@@ -567,12 +565,12 @@ const bots = {
 				revealLabel: "Afficher {{field}}",
 				concealLabel: "Masquer {{field}}",
 				description: {
-					companion:
+					agent:
 						"Gardées avec les secrets de cette application, jamais dans la configuration. {{name}} voit les outils, jamais ces valeurs.",
 					space:
-						"Gardées avec les secrets de cette application, jamais dans la configuration. Chaque compagnon de {{name}} voit les outils, jamais ces valeurs.",
+						"Gardées avec les secrets de cette application, jamais dans la configuration. Chaque agent de {{name}} voit les outils, jamais ces valeurs.",
 					profile:
-						"Gardées avec les secrets de cette application, jamais dans la configuration. Chacun de vos compagnons voit les outils, jamais ces valeurs.",
+						"Gardées avec les secrets de cette application, jamais dans la configuration. Chacun de vos agents voit les outils, jamais ces valeurs.",
 				},
 			},
 			none: "Rien à configurer. Elle tourne sur cette machine, sans clé ni connexion.",
@@ -591,20 +589,20 @@ const bots = {
 				},
 			},
 			footnote: {
-				companion:
+				agent:
 					"Les applications tournent sur votre machine, sous votre compte. En ajouter une rouvre la session de {{name}} pour que les outils soient là tout de suite.",
 				space:
-					"Les applications tournent sur votre machine, sous votre compte. En ajouter une ici donne ses outils à chaque compagnon de {{name}}.",
+					"Les applications tournent sur votre machine, sous votre compte. En ajouter une ici donne ses outils à chaque agent de {{name}}.",
 				profile:
-					"Les applications tournent sur votre machine, sous votre compte. En ajouter une ici donne ses outils à chacun de vos compagnons, dans chaque espace.",
+					"Les applications tournent sur votre machine, sous votre compte. En ajouter une ici donne ses outils à chacun de vos agents, dans chaque espace.",
 			},
 			hostedFootnote: {
-				companion:
+				agent:
 					"Celle-ci tourne sur le serveur de {{source}}, pas sur votre machine. L’ajouter rouvre la session de {{name}} pour que les outils soient là tout de suite.",
 				space:
-					"Celle-ci tourne sur le serveur de {{source}}, pas sur votre machine. L’ajouter ici donne ses outils à chaque compagnon de {{name}}.",
+					"Celle-ci tourne sur le serveur de {{source}}, pas sur votre machine. L’ajouter ici donne ses outils à chaque agent de {{name}}.",
 				profile:
-					"Celle-ci tourne sur le serveur de {{source}}, pas sur votre machine. L’ajouter ici donne ses outils à chacun de vos compagnons, dans chaque espace.",
+					"Celle-ci tourne sur le serveur de {{source}}, pas sur votre machine. L’ajouter ici donne ses outils à chacun de vos agents, dans chaque espace.",
 			},
 			done: "Ajoutée",
 			failed: "Impossible de l’ajouter : {{reason}}",
@@ -616,20 +614,20 @@ const bots = {
 			},
 		},
 		notice:
-			"Ce compagnon lance ses applications sur votre machine, sous votre compte. Ajoutez seulement ceux en qui vous avez confiance.",
+			"Cet agent lance ses applications sur votre machine, sous votre compte. Ajoutez seulement ceux en qui vous avez confiance.",
 		empty: {
 			title: {
-				companion: "Aucune application à lui",
+				agent: "Aucune application à lui",
 				space: "Rien de partagé dans {{name}} pour l’instant",
 				profile: "Aucune application à vous",
 			},
 			description: {
-				companion:
-					"Ajoutez-en une ici et ce compagnon reçoit des outils qu’il n’a pas seul. Elle tourne sur votre machine.",
+				agent:
+					"Ajoutez-en une ici et cet agent reçoit des outils qu’il n’a pas seul. Elle tourne sur votre machine.",
 				space:
-					"Ajoutez-en une ici et chaque compagnon de cet espace reçoit ses outils.",
+					"Ajoutez-en une ici et chaque agent de cet espace reçoit ses outils.",
 				profile:
-					"Ajoutez-en une ici et chacun de vos compagnons reçoit ses outils, dans chaque espace. Idéal pour ce qui est à vous plutôt qu’à un projet.",
+					"Ajoutez-en une ici et chacun de vos agents reçoit ses outils, dans chaque espace. Idéal pour ce qui est à vous plutôt qu’à un projet.",
 			},
 		},
 		catalogue: {
@@ -679,7 +677,7 @@ const bots = {
 			"Impossible de charger les applications. Rouvrez les réglages pour réessayer.",
 		reopen: {
 			refused: {
-				title: "Impossible de rouvrir la session de {{companion}}",
+				title: "Impossible de rouvrir la session de {{agent}}",
 				description:
 					"{{name}} la rejoindra à la prochaine ouverture de cette session.",
 			},
@@ -687,7 +685,7 @@ const bots = {
 		name: {
 			label: "Nom",
 			placeholder: "atlas",
-			hint: "Minuscules, chiffres et traits d’union. Le compagnon connaît l’application sous ce nom.",
+			hint: "Minuscules, chiffres et traits d’union. L’agent connaît l’application sous ce nom.",
 			blank: "Une application a besoin d’un nom.",
 		},
 		config: {
@@ -709,7 +707,7 @@ const bots = {
 		command: {
 			label: "Commande",
 			placeholder: "npx",
-			hint: "Le programme que ce compagnon démarre. Il tourne avec les accès de votre compte.",
+			hint: "Le programme que cet agent démarre. Il tourne avec les accès de votre compte.",
 		},
 		args: {
 			label: "Arguments",
@@ -719,7 +717,7 @@ const bots = {
 		url: {
 			label: "URL",
 			placeholder: "https://exemple.com/mcp",
-			hint: "L’adresse à laquelle ce compagnon se connecte. Rien ne tourne sur votre machine.",
+			hint: "L’adresse à laquelle cet agent se connecte. Rien ne tourne sur votre machine.",
 		},
 		endpoint: {
 			label: "Point d’accès",
@@ -755,7 +753,7 @@ const bots = {
 		},
 		delete: {
 			action: "Retirer l’application",
-			description: "Ce compagnon cesse de le démarrer. C’est irréversible.",
+			description: "Cet agent cesse de le démarrer. C’est irréversible.",
 			confirm: {
 				title: "Retirer {{name}} ?",
 			},
@@ -777,7 +775,7 @@ const bots = {
 		scope: {
 			user: "Toi",
 			space: "Espace",
-			bot: "Compagnon",
+			bot: "Agent",
 			server: "Application",
 		},
 		row: {
@@ -859,7 +857,7 @@ const bots = {
 			option: {
 				auto: {
 					label: "Décider seul",
-					hint: "Le compagnon décide seul, dans les limites des règles ci-dessous.",
+					hint: "L’agent décide seul, dans les limites des règles ci-dessous.",
 				},
 				default: {
 					label: "Demander à chaque fois",
@@ -871,11 +869,11 @@ const bots = {
 				},
 				plan: {
 					label: "Planifier d’abord",
-					hint: "Le compagnon lit et planifie, et ne change rien sans votre accord.",
+					hint: "L’agent lit et planifie, et ne change rien sans votre accord.",
 				},
 				dontAsk: {
 					label: "Ne jamais demander",
-					hint: "Rien ne vous est demandé. Seules les règles de refus ci-dessous arrêtent le compagnon.",
+					hint: "Rien ne vous est demandé. Seules les règles de refus ci-dessous arrêtent l’agent.",
 				},
 			},
 		},
@@ -902,7 +900,7 @@ const bots = {
 		},
 		directories: {
 			label: "Autres dossiers",
-			hint: "Les dossiers que le compagnon peut atteindre en plus du sien.",
+			hint: "Les dossiers que l’agent peut atteindre en plus du sien.",
 			placeholder: "/Users/vous/notes",
 			add: "Ajouter",
 			empty: "Aucun dossier en plus du sien.",
@@ -939,13 +937,13 @@ const bots = {
 		},
 	},
 	danger: {
-		delete: "Supprimer le compagnon",
+		delete: "Supprimer l’agent",
 		description:
-			"Le compagnon est supprimé partout, pas seulement retiré de ses espaces. C’est irréversible.",
+			"L’agent est supprimé partout, pas seulement retiré de ses espaces. C’est irréversible.",
 		confirm: {
 			title: "Supprimer {{name}} ?",
 		},
-		failed: "Impossible de supprimer ce compagnon. Réessayez.",
+		failed: "Impossible de supprimer cet agent. Réessayez.",
 	},
 } as const
 

@@ -4,12 +4,12 @@ const settings = {
 	},
 	screen: {
 		back: "Retour aux conversations",
-		backToCompanions: "Retour aux compagnons",
+		backToAgents: "Retour aux agents",
 		backToSettings: "Retour à vos réglages",
 		menu: "Réglages",
 		subtitle: {
 			space: "Réglages de l’espace",
-			companion: "Réglages du compagnon",
+			agent: "Réglages de l’agent",
 			conversation: "Réglages de la conversation",
 			user: "Réglages de l’utilisateur",
 			invitation: "Invitation",
@@ -33,7 +33,7 @@ const settings = {
 		account: "Compte",
 		space: "Espace",
 		members: "Membres",
-		companions: "Compagnons",
+		agents: "Agents",
 		secrets: "Secrets",
 		appearance: "Apparence",
 		notifications: "Notifications",
@@ -123,23 +123,23 @@ const settings = {
 	},
 	plugin: {
 		author: {
-			bot: "Un compagnon",
+			bot: "Un agent",
 		},
 	},
 	notifications: {
 		label: "Me prévenir quand",
 		event: {
 			question: {
-				label: "Un compagnon pose une question",
+				label: "Un agent pose une question",
 				description: "Il attend votre réponse pour continuer.",
 			},
 			permission: {
-				label: "Un compagnon demande une autorisation",
+				label: "Un agent demande une autorisation",
 				description:
 					"Il attend votre autorisation pour lancer une commande ou modifier un fichier.",
 			},
 			turn: {
-				label: "Un compagnon termine son tour",
+				label: "Un agent termine son tour",
 				description: "Il a fini et attend votre prochain message.",
 			},
 		},
@@ -194,12 +194,11 @@ const settings = {
 			ready:
 				"La {{version}} est prête. Redémarrez Kiroshi pour terminer la mise à jour.",
 			readyHeld: "La {{version}} est prête.",
-			running_one:
-				"{{count}} compagnon tourne encore. Arrêtez-le pour redémarrer.",
+			running_one: "{{count}} agent tourne encore. Arrêtez-le pour redémarrer.",
 			running_many:
-				"{{count}} compagnons tournent encore. Arrêtez-les pour redémarrer.",
+				"{{count}} agents tournent encore. Arrêtez-les pour redémarrer.",
 			running_other:
-				"{{count}} compagnons tournent encore. Arrêtez-les pour redémarrer.",
+				"{{count}} agents tournent encore. Arrêtez-les pour redémarrer.",
 			failed: "Impossible de télécharger la {{version}}.",
 			failedHint: "Vérifiez votre connexion, puis téléchargez-la à nouveau.",
 		},
@@ -282,15 +281,15 @@ const settings = {
 				generic: "Une erreur est survenue, rien n’a été modifié.",
 			},
 		},
-		companions: {
-			title: "Compagnons",
+		agents: {
+			title: "Agents",
 			caption:
-				"Tous les compagnons de {{space}}. Choisissez-en un pour changer sa façon de travailler.",
-			create: "Créer un compagnon",
-			empty: "Aucun compagnon dans cet espace pour l’instant.",
+				"Tous les agents de {{space}}. Choisissez-en un pour changer sa façon de travailler.",
+			create: "Créer un agent",
+			empty: "Aucun agent dans cet espace pour l’instant.",
 			counts: "{{skills}} · {{applications}}",
 			countsUnreadable:
-				"Impossible de lire les compétences et les applications des compagnons. Rouvrez Compagnons pour réessayer.",
+				"Impossible de lire les compétences et les applications des agents. Rouvrez Agents pour réessayer.",
 			skills_zero: "aucune compétence",
 			skills_one: "{{count}} compétence",
 			skills_many: "{{count}} compétences",
@@ -463,7 +462,7 @@ const settings = {
 		danger: {
 			delete: "Supprimer l’espace",
 			description:
-				"Les compagnons présents uniquement dans cet espace sont supprimés avec lui. C’est irréversible.",
+				"Les agents présents uniquement dans cet espace sont supprimés avec lui. C’est irréversible.",
 			last: "Vous ne pouvez pas supprimer votre dernier espace.",
 			confirm: {
 				title: "Supprimer {{name}} ?",

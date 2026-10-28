@@ -387,8 +387,8 @@ describe("the first reply step", () => {
 		).toBeNull()
 	})
 
-	it("summons Shoto for the first companion on Pick my first companion", async () => {
-		await answer(stepOf(ANSWERED), "Pick my first companion")
+	it("summons Shoto for the first companion on Pick my first agent", async () => {
+		await answer(stepOf(ANSWERED), "Pick my first agent")
 
 		expect(world.sent.at(-1)).toBe(onboardingSummonsFor("firstCompanion"))
 		expect(controller.getState().step).toBe("done")

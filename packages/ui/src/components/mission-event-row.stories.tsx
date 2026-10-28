@@ -271,7 +271,7 @@ export const FromTheAgentWithoutATool = meta.story({
 		const [authored] = slotsIn(canvasElement, "mission-authored-event")
 		const [gutter] = slotsIn(canvasElement, "mission-event-gutter")
 
-		await expect(authored).toHaveTextContent("The agent")
+		await expect(authored).toHaveTextContent("The coding session")
 		await expect(gutter).toHaveAttribute("data-gutter", "tool")
 	},
 })
@@ -445,7 +445,7 @@ export const WithoutABot = meta.story({
 		const [authored] = slotsIn(canvasElement, "mission-authored-event")
 		const [gutter] = slotsIn(canvasElement, "mission-event-gutter")
 
-		await expect(authored).toHaveTextContent("The companion")
+		await expect(authored).toHaveTextContent("The agent")
 		await expect(gutter).toHaveAttribute("data-gutter", "bot")
 	},
 })

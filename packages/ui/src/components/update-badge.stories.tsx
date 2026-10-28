@@ -19,7 +19,7 @@ const VERSION = "0.4.0"
 
 const RESTART_LABEL = `Restart to update to ${VERSION}`
 
-const BUSY_LABEL = "2 companions are still running. Stop them to restart."
+const BUSY_LABEL = "2 agents are still running. Stop them to restart."
 
 const meta = preview.meta({
 	title: "Feedback/UpdateBadge",
@@ -105,7 +105,7 @@ export const Ready = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this once the bytes have landed: the glyph became a restart and the badge is the whole affordance, with no panel, popover or dialog. Check that hovering or focusing it names the action and the version in a tooltip, that the spoken name is that same text, and that one click calls `onRestart` once. Pick `ReadyWithCompanionsRunning` for the same control when a restart would cost a running companion.",
+					"Reach for this once the bytes have landed: the glyph became a restart and the badge is the whole affordance, with no panel, popover or dialog. Check that hovering or focusing it names the action and the version in a tooltip, that the spoken name is that same text, and that one click calls `onRestart` once. Pick `ReadyWithAgentsRunning` for the same control when a restart would cost a running companion.",
 			},
 		},
 	},
@@ -124,7 +124,7 @@ export const Ready = meta.story({
 	},
 })
 
-export const ReadyWithCompanionsRunning = meta.story({
+export const ReadyWithAgentsRunning = meta.story({
 	args: { status: "ready", activeBotCount: 2 },
 	parameters: {
 		docs: {

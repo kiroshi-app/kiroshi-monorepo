@@ -36,8 +36,8 @@ const OPEN_ENTRIES = ["Open mission", "Copy"]
 
 const AGENT_RUNNING_ENTRIES = [
 	...OPEN_ENTRIES,
-	"Message the agent",
-	"Stop the agent",
+	"Message the coding session",
+	"Stop the coding session",
 	"Close",
 ]
 
@@ -155,7 +155,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"Everything a person can do to one mission, in one menu. It wraps a `MissionCard` in either density: a right click on the card opens it, and the card draws no button of its own for it. Only the entries that apply to the mission's state are drawn, never a greyed one: Open mission always, Open PR when there's a pull request, the Copy branch, Message the agent and Stop the agent while the agent runs, Answer the question while the mission waits on the person, then Close on an open mission or Reopen on a done, failed or closed one. Close calls `onClose` at once, with no popover and no submenu. The component calls nothing on its own: every entry calls the callback it was given.",
+					"Everything a person can do to one mission, in one menu. It wraps a `MissionCard` in either density: a right click on the card opens it, and the card draws no button of its own for it. Only the entries that apply to the mission's state are drawn, never a greyed one: Open mission always, Open PR when there's a pull request, the Copy branch, Message the coding session and Stop the coding session while the agent runs, Answer the question while the mission waits on the person, then Close on an open mission or Reopen on a done, failed or closed one. Close calls `onClose` at once, with no popover and no submenu. The component calls nothing on its own: every entry calls the callback it was given.",
 			},
 		},
 	},
@@ -202,7 +202,7 @@ export const Working = meta.story(
 		state: "working",
 		hasPullRequest: true,
 		story:
-			"A mission the agent is working on, with a pull request. Check that a right click on the row and on the card both open the list Open mission, Open PR, Copy, Message the agent, Stop the agent and Close, and that no entry carries a shortcut. Pick `WorkingWithoutAPullRequest` for the same mission before its pull request.",
+			"A mission the agent is working on, with a pull request. Check that a right click on the row and on the card both open the list Open mission, Open PR, Copy, Message the coding session, Stop the coding session and Close, and that no entry carries a shortcut. Pick `WorkingWithoutAPullRequest` for the same mission before its pull request.",
 	}),
 )
 
@@ -220,7 +220,7 @@ export const WaitingOnTheCompanion = meta.story(
 		state: "waiting_bot",
 		hasPullRequest: true,
 		story:
-			"A mission waiting on the companion. Check that it keeps Message the agent and Stop the agent, like a working mission.",
+			"A mission waiting on the companion. Check that it keeps Message the coding session and Stop the coding session, like a working mission.",
 	}),
 )
 
@@ -437,7 +437,7 @@ export const MessageTheAgentLeavesTheCard = meta.story({
 		await expectFocusLeftOnTheComposer({
 			canvasElement,
 			userEvent,
-			entry: "Message the agent",
+			entry: "Message the coding session",
 		})
 	},
 })

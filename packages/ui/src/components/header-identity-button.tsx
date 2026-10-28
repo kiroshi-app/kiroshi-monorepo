@@ -68,6 +68,7 @@ const HeaderIdentityButton = ({
 			<span className="min-w-0 truncate">{name}</span>
 			<ConnectionStatus
 				className="shrink-0"
+				name={name}
 				state={connection}
 				version={version}
 			/>

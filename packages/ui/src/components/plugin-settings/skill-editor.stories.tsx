@@ -273,7 +273,7 @@ export const Empty = meta.story({
 		).toBeChecked()
 		await expect(
 			canvas.getByRole("switch", {
-				name: "Keep the companion from reaching for it",
+				name: "Keep the agent from reaching for it",
 			}),
 		).not.toBeChecked()
 

@@ -141,13 +141,13 @@ export const Unknown = meta.story({
 		docs: {
 			description: {
 				story:
-					"A mention of a companion the conversation does not know — deleted, or never part of it. Check that the chip keeps its shape and dims rather than disappearing, that a silhouette replaces the avatar, and that the reader is told *Unknown companion* instead of being shown a raw id. " +
+					"A mention of a companion the conversation does not know — deleted, or never part of it. Check that the chip keeps its shape and dims rather than disappearing, that a silhouette replaces the avatar, and that the reader is told *Unknown agent* instead of being shown a raw id. " +
 					BUILT_BY_THE_SPAN,
 			},
 		},
 	},
 	play: async ({ canvas }) => {
-		await expect(canvas.getByText("Unknown companion")).toBeVisible()
+		await expect(canvas.getByText("Unknown agent")).toBeVisible()
 	},
 })
 
@@ -186,7 +186,7 @@ export const InText = meta.story({
 	render: () => <Message source={HANDOVER} />,
 	play: async ({ canvas }) => {
 		await expect(canvas.getByText("Basile")).toBeVisible()
-		await expect(canvas.getByText("Unknown companion")).toBeVisible()
+		await expect(canvas.getByText("Unknown agent")).toBeVisible()
 	},
 })
 
@@ -264,7 +264,7 @@ export const CountedUnknown = meta.story({
 		docs: {
 			description: {
 				story:
-					"A repeated id the conversation cannot resolve. Check that an unknown id collapses on exactly the same rule as a known one: one dimmed chip with a silhouette, *Unknown companion* and the count, never two identical unknown chips in a row. " +
+					"A repeated id the conversation cannot resolve. Check that an unknown id collapses on exactly the same rule as a known one: one dimmed chip with a silhouette, *Unknown agent* and the count, never two identical unknown chips in a row. " +
 					BUILT_BY_THE_SPAN,
 			},
 		},
@@ -275,7 +275,7 @@ export const CountedUnknown = meta.story({
 		await expect(
 			canvasElement.querySelector('[data-unknown="true"]'),
 		).not.toBeNull()
-		await expect(canvas.getByText("Unknown companion")).toBeVisible()
+		await expect(canvas.getByText("Unknown agent")).toBeVisible()
 		await expect(canvas.getByText("2 mentions")).toBeInTheDocument()
 	},
 })
@@ -760,7 +760,7 @@ export const UnknownWithoutTitle = meta.story({
 	play: async ({ canvas, canvasElement }) => {
 		const pill = slotIn(canvasElement, "bot-mention")
 
-		await expect(canvas.getByText("Unknown companion")).toBeVisible()
+		await expect(canvas.getByText("Unknown agent")).toBeVisible()
 		await expect(slotsIn(pill, "bot-title-badge")).toHaveLength(0)
 	},
 })

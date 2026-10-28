@@ -36,16 +36,16 @@ const CompanionCard = ({ companion, onSelect }: CompanionCardProps) => {
 	const skills =
 		companion.skillsCount === undefined
 			? undefined
-			: t("space.companions.skills", { count: companion.skillsCount })
+			: t("space.agents.skills", { count: companion.skillsCount })
 	const applications =
 		companion.applicationsCount === undefined
 			? undefined
-			: t("space.companions.applications", {
+			: t("space.agents.applications", {
 					count: companion.applicationsCount,
 				})
 	const counts =
 		skills && applications
-			? t("space.companions.counts", { skills, applications })
+			? t("space.agents.counts", { skills, applications })
 			: (skills ?? applications)
 
 	return (
@@ -113,10 +113,10 @@ const CompanionsSection = ({
 			<div className="flex flex-wrap items-end justify-between gap-4">
 				<div className="flex min-w-0 flex-col gap-1">
 					<h2 className="font-medium text-muted-foreground text-sm">
-						{t("space.companions.title")}
+						{t("space.agents.title")}
 					</h2>
 					<p className="wrap-break-word text-compact text-muted-foreground leading-4.5">
-						{t("space.companions.caption", { space: spaceName })}
+						{t("space.agents.caption", { space: spaceName })}
 					</p>
 				</div>
 				<Button
@@ -125,12 +125,12 @@ const CompanionsSection = ({
 					variant="outline"
 				>
 					<Icons.Add aria-hidden="true" className="size-3.5" />
-					{t("space.companions.create")}
+					{t("space.agents.create")}
 				</Button>
 			</div>
 			{companions.length === 0 ? (
 				<p className="text-compact text-muted-foreground leading-5">
-					{t("space.companions.empty")}
+					{t("space.agents.empty")}
 				</p>
 			) : (
 				<ul className="grid list-none grid-cols-[repeat(auto-fill,minmax(min(100%,--spacing(78)),1fr))] gap-4 p-0">

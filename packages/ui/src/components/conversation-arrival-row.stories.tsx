@@ -78,7 +78,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this when the person mentioned a companion and sent: that companion arrived on the person's invitation. Check that the sentence names the arriving companion and you, and that the face beside it stays out of assistive technology. Pick `InvitedByCompanion` when a companion did the inviting. `apps/app/src/components/thread-screen.tsx:788` renders it with the person inviter `apps/app/src/components/thread-screen.tsx:770` builds when the arrival carries no inviting companion.",
+					"Reach for this when the person mentioned a companion and sent: that companion arrived on the person's invitation. Check that the sentence names the arriving companion and you, and that the face beside it stays out of assistive technology. Pick `InvitedByAgent` when a companion did the inviting. `apps/app/src/components/thread-screen.tsx:788` renders it with the person inviter `apps/app/src/components/thread-screen.tsx:770` builds when the arrival carries no inviting companion.",
 			},
 		},
 	},
@@ -93,7 +93,7 @@ export const Default = meta.story({
 	},
 })
 
-export const InvitedByCompanion = meta.story({
+export const InvitedByAgent = meta.story({
 	args: { bot: MARLOW, inviter: { kind: "companion", bot: HAPPY } },
 	parameters: {
 		docs: {
@@ -174,7 +174,7 @@ export const LongContent = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this when both companions carry long unbreakable names in a 320 pixel wide transcript. A name too long for one line is not shortened and not clamped: it breaks wherever the line ends and carries on onto the next one, so the sentence is always read in full. Check that the arriving name runs across more than one line, that no line reaches past the sentence, and that nothing scrolls sideways. Pick `InvitedByCompanion` for nominal names. The names come from the store through `apps/app/src/components/thread-screen.tsx:788`, which shortens nothing.",
+					"Reach for this when both companions carry long unbreakable names in a 320 pixel wide transcript. A name too long for one line is not shortened and not clamped: it breaks wherever the line ends and carries on onto the next one, so the sentence is always read in full. Check that the arriving name runs across more than one line, that no line reaches past the sentence, and that nothing scrolls sideways. Pick `InvitedByAgent` for nominal names. The names come from the store through `apps/app/src/components/thread-screen.tsx:788`, which shortens nothing.",
 			},
 		},
 	},

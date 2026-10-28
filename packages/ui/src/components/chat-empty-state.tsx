@@ -1,3 +1,4 @@
+import type { TFunction } from "i18next"
 import type { ComponentProps, ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -22,6 +23,31 @@ interface ChatEmptyStateProps extends Omit<ComponentProps<"div">, "children"> {
 
 const MARK_SIZE = 64
 
+type ChatEmptyStateCopyInput = {
+	status: ChatEmptyStateStatus
+	name?: string
+	t: TFunction<"chat">
+}
+
+const chatEmptyStateCopy = ({ status, name, t }: ChatEmptyStateCopyInput) => {
+	if (!name || status === "notConnected")
+		return {
+			title: t(`emptyState.${status}.title`),
+			description: t(`emptyState.${status}.description`),
+		}
+
+	if (status === "ready")
+		return {
+			title: name,
+			description: t("emptyState.ready.descriptionNamed", { name }),
+		}
+
+	return {
+		title: t("emptyState.unavailable.titleNamed", { name }),
+		description: t("emptyState.unavailable.descriptionNamed", { name }),
+	}
+}
+
 function ChatEmptyState({
 	status = "ready",
 	onSetup,
@@ -36,6 +62,7 @@ function ChatEmptyState({
 }: ChatEmptyStateProps) {
 	const { t } = useTranslation("chat")
 	const isReady = status === "ready"
+	const copy = chatEmptyStateCopy({ status, name, t })
 
 	const settingsAction = onOpenSettings ? (
 		<Button onClick={onOpenSettings} variant="outline">
@@ -72,10 +99,10 @@ function ChatEmptyState({
 			className={cn("m-auto", className)}
 			data-slot="chat-empty-state"
 			data-status={status}
-			description={t(`emptyState.${status}.description`)}
+			description={copy.description}
 			hint={isReady ? t("emptyState.hint") : undefined}
 			mark={isReady ? botMark : alertMark}
-			title={isReady && name ? name : t(`emptyState.${status}.title`)}
+			title={copy.title}
 			{...props}
 		/>
 	)

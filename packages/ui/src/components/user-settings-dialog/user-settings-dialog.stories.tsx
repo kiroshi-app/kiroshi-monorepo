@@ -289,7 +289,7 @@ export const Notifications = meta.story({
 		})
 		await userEvent.click(
 			within(panel).getByRole("switch", {
-				name: "A companion asks for approval",
+				name: "An agent asks for approval",
 			}),
 		)
 		await expect(args.onValueChange).toHaveBeenCalledWith({

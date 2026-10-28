@@ -373,7 +373,7 @@ const expectCountInset = async (entry: HTMLElement) => {
 	await expect(Math.abs(row.right - badge.right - top)).toBeLessThanOrEqual(1)
 }
 
-const spaceEntries = (selected: "Space" | "Companions") => (
+const spaceEntries = (selected: "Space" | "Agents") => (
 	<>
 		<SettingsMenuEntry
 			icon="Folder"
@@ -384,8 +384,8 @@ const spaceEntries = (selected: "Space" | "Companions") => (
 		<SettingsMenuEntry
 			count={3}
 			icon="Users"
-			isSelected={selected === "Companions"}
-			label="Companions"
+			isSelected={selected === "Agents"}
+			label="Agents"
 			onSelect={fn()}
 		/>
 	</>
@@ -395,7 +395,7 @@ const expectCompanionsCount = async (canvasElement: HTMLElement) => {
 	const menu = within(canvasElement).getByRole("navigation", {
 		name: "Settings",
 	})
-	const companions = within(menu).getByRole("button", { name: "Companions 3" })
+	const companions = within(menu).getByRole("button", { name: "Agents 3" })
 	const count = slotIn(companions, "settings-menu-count")
 	await expect(count).toHaveTextContent("3")
 	await expect(getComputedStyle(count).fontVariantNumeric).toBe("tabular-nums")
@@ -450,7 +450,7 @@ export const FreeHue = meta.story({
 	},
 })
 
-export const CompanionsCount = meta.story({
+export const AgentsCount = meta.story({
 	args: { children: spaceEntries("Space") },
 	parameters: {
 		docs: {
@@ -463,9 +463,9 @@ export const CompanionsCount = meta.story({
 	play: ({ canvasElement }) => expectCompanionsCount(canvasElement),
 })
 
-export const CompanionsCountDark = meta.story({
+export const AgentsCountDark = meta.story({
 	globals: { theme: "dark" },
-	args: CompanionsCount.input.args,
+	args: AgentsCount.input.args,
 	parameters: {
 		docs: {
 			description: {
@@ -474,11 +474,11 @@ export const CompanionsCountDark = meta.story({
 			},
 		},
 	},
-	play: CompanionsCount.input.play,
+	play: AgentsCount.input.play,
 })
 
-export const CompanionsCountSelected = meta.story({
-	args: { children: spaceEntries("Companions") },
+export const AgentsCountSelected = meta.story({
+	args: { children: spaceEntries("Agents") },
 	parameters: {
 		docs: {
 			description: {
@@ -489,7 +489,7 @@ export const CompanionsCountSelected = meta.story({
 	},
 	play: async ({ canvasElement }) => {
 		await expect(
-			within(canvasElement).getByRole("button", { name: "Companions 3" }),
+			within(canvasElement).getByRole("button", { name: "Agents 3" }),
 		).toHaveAttribute("aria-current", "page")
 		await expectCompanionsCount(canvasElement)
 	},
@@ -754,7 +754,7 @@ const HEADER_MENUS = [
 		isCompanionPage: true,
 		avatar: <BotIdentityAvatar name="Atlas" seed="atlas" size={36} />,
 		name: "Atlas",
-		subtitle: "Companion settings",
+		subtitle: "Agent settings",
 		group: "Settings",
 	},
 	{

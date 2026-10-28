@@ -7,6 +7,7 @@ type ConnectionStatusState = "checking" | "ready" | "unavailable" | "crashed"
 
 interface ConnectionStatusProps
 	extends Omit<ComponentProps<"div">, "children"> {
+	name: string
 	state: ConnectionStatusState
 	version?: string | null
 }
@@ -19,6 +20,7 @@ const CONNECTION_STATUS_DOT = {
 } satisfies Record<ConnectionStatusState, string>
 
 function ConnectionStatus({
+	name,
 	state,
 	version,
 	className,
@@ -38,7 +40,7 @@ function ConnectionStatus({
 				className={cn("size-1.5 rounded-full", CONNECTION_STATUS_DOT[state])}
 			/>
 			<span role="status" className="sr-only">
-				{t(`connection.${state}`)}
+				{t(`connection.${state}`, { name })}
 				{version ? ` v${version}` : null}
 			</span>
 		</div>

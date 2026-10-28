@@ -1520,7 +1520,7 @@ const FIRST_REPLY_STEP: ToolQuestionItem = {
 	optionsOnly: true,
 	options: [
 		{
-			label: "Pick my first companion",
+			label: "Pick my first agent",
 			description: "One more question, then you’re set up.",
 		},
 		{
@@ -1775,7 +1775,7 @@ export const StepFirstReply = meta.story({
 	},
 })
 
-export const StepFirstCompanion = meta.story({
+export const StepFirstAgent = meta.story({
 	args: { questions: [FIRST_COMPANION_STEP] },
 	render: askedByShoto,
 	parameters: {

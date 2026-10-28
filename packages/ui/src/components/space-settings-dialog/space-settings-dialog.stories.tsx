@@ -240,9 +240,7 @@ export const Environment = meta.story({
 		})
 
 		await expect(within(panel).getByText("ATLAS_TOKEN")).toBeVisible()
-		await expect(
-			within(panel).getByText("Overridden by Companion"),
-		).toBeVisible()
+		await expect(within(panel).getByText("Overridden by Agent")).toBeVisible()
 
 		await userEvent.click(
 			within(panel).getByRole("button", { name: "Add secret" }),
@@ -431,9 +429,9 @@ export const History = meta.story({
 		})
 
 		await expect(within(panel).getAllByText("You").length).toBeGreaterThan(0)
-		await expect(
-			within(panel).getAllByText("A companion").length,
-		).toBeGreaterThan(0)
+		await expect(within(panel).getAllByText("An agent").length).toBeGreaterThan(
+			0,
+		)
 		await expect(within(panel).getAllByRole("listitem")).toHaveLength(6)
 	},
 })

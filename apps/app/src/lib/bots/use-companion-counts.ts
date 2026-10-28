@@ -22,7 +22,7 @@ export const useCompanionCounts = (
 		gcTime: 0,
 		meta: {
 			failureNotice: () => ({
-				title: i18n.t("settings:space.companions.countsUnreadable"),
+				title: i18n.t("settings:space.agents.countsUnreadable"),
 			}),
 			raisedIn: "use-companion-counts",
 		},

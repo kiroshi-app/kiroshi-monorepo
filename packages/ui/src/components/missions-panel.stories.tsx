@@ -145,9 +145,7 @@ export const Empty = meta.story({
 			canvas.getByRole("heading", { name: "No missions yet" }),
 		).toBeVisible()
 		await expect(
-			canvas.getByText(
-				"Missions your companions open in this space show up here.",
-			),
+			canvas.getByText("Missions your agents open in this space show up here."),
 		).toBeVisible()
 		await expect(slotsIn(canvasElement, "mission-card-row")).toHaveLength(0)
 	},

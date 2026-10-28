@@ -389,7 +389,7 @@ describe("toActivityMissions", () => {
 		})
 
 		expect(open.map(({ identity }) => identity)).toEqual([
-			{ id: "b-unknown", name: "Unknown companion" },
+			{ id: "b-unknown", name: "Unknown agent" },
 		])
 	})
 

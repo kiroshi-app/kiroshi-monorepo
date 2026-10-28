@@ -29,7 +29,7 @@ const meta = preview.meta({
 		),
 	],
 	args: {
-		actionLabel: "Delete companion",
+		actionLabel: "Delete agent",
 		description:
 			"Its avatar, instructions and working directory go with it. This cannot be undone.",
 		confirmTitle: "Delete Nest Keeper?",
@@ -50,7 +50,7 @@ export const Playground = meta.story({
 		},
 	},
 	play: async ({ canvas, userEvent }) => {
-		const trigger = canvas.getByRole("button", { name: "Delete companion" })
+		const trigger = canvas.getByRole("button", { name: "Delete agent" })
 
 		await userEvent.tab()
 		await expect(trigger).toHaveFocus()
@@ -99,9 +99,7 @@ export const Cancelled = meta.story({
 		},
 	},
 	play: async ({ args, canvas, userEvent }) => {
-		await userEvent.click(
-			canvas.getByRole("button", { name: "Delete companion" }),
-		)
+		await userEvent.click(canvas.getByRole("button", { name: "Delete agent" }))
 
 		const popup = await confirmation()
 		await userEvent.click(within(popup).getByRole("button", { name: "Cancel" }))
@@ -109,7 +107,7 @@ export const Cancelled = meta.story({
 		await waitFor(() => expect(screen.queryByRole("alertdialog")).toBe(null))
 		await expect(args.onConfirm).not.toHaveBeenCalled()
 		await expect(
-			canvas.getByRole("button", { name: "Delete companion" }),
+			canvas.getByRole("button", { name: "Delete agent" }),
 		).toBeVisible()
 	},
 })
@@ -124,13 +122,11 @@ export const Deleted = meta.story({
 		},
 	},
 	play: async ({ args, canvas, userEvent }) => {
-		await userEvent.click(
-			canvas.getByRole("button", { name: "Delete companion" }),
-		)
+		await userEvent.click(canvas.getByRole("button", { name: "Delete agent" }))
 
 		const popup = await confirmation()
 		await userEvent.click(
-			within(popup).getByRole("button", { name: "Delete companion" }),
+			within(popup).getByRole("button", { name: "Delete agent" }),
 		)
 
 		await waitFor(() => expect(screen.queryByRole("alertdialog")).toBe(null))
