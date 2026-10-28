@@ -7,7 +7,7 @@ import {
 } from "@workspace/ui/components/notice-surface"
 import { type ChatCopy, useChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 
-import { describeTransportError } from "@/lib/agent/messages"
+import { agentNameOf, describeTransportError } from "@/lib/agent/messages"
 import type { ChatError } from "@/lib/chat/chat-state"
 import {
 	isSignedOut,
@@ -40,15 +40,17 @@ type RaisedFailure = {
 	noticeId: Promise<string>
 }
 
-const stopFailureTitleOf = (t: ChatCopy, botName: string | undefined) =>
-	botName
-		? t("screen.notice.stopFailedNamed", { name: botName })
+const stopFailureTitleOf = (t: ChatCopy, botName: string | undefined) => {
+	const name = agentNameOf(botName)
+	return name
+		? t("screen.notice.stopFailedNamed", { name })
 		: t("screen.notice.stopFailed")
+}
 
 const titleOf = (t: ChatCopy, error: ChatError, botName: string | undefined) =>
 	error.isStopFailure
 		? stopFailureTitleOf(t, botName)
-		: noticeTitleFor(t, error.error)
+		: noticeTitleFor(t, error.error, botName)
 
 const sessionMessageOf = (
 	t: ChatCopy,
@@ -65,7 +67,7 @@ const sessionMessageOf = (
 	}
 	return {
 		title,
-		description: describeTransportError(t, error.error),
+		description: describeTransportError(t, error.error, botName),
 		action:
 			needsFreshSession(error.error) && onRestart
 				? { label: t("screen.restart"), onPress: onRestart }
@@ -92,7 +94,7 @@ let fadedFailureId: string | null = null
 
 const fadeRefusedResume = (
 	t: ChatCopy,
-	error: ChatError,
+	{ error, botName }: FailureReading,
 	onDismiss: (id: string) => void,
 ) => {
 	if (fadedFailureId === error.id) {
@@ -101,8 +103,8 @@ const fadeRefusedResume = (
 	fadedFailureId = error.id
 	raiseTransientNotice({
 		type: "warning",
-		title: noticeTitleFor(t, error.error),
-		description: describeTransportError(t, error.error),
+		title: noticeTitleFor(t, error.error, botName),
+		description: describeTransportError(t, error.error, botName),
 	})
 	onDismiss(error.id)
 }
@@ -141,7 +143,7 @@ export const useSessionFailureNotice = ({
 			return
 		}
 		if (error.error.kind === "resumeFailed") {
-			fadeRefusedResume(t, error, onDismiss)
+			fadeRefusedResume(t, { error, botName: context.botName }, onDismiss)
 			return
 		}
 		const dismissUnlessReleased = () => {

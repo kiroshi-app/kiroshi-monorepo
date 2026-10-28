@@ -11,13 +11,14 @@ import {
 	type ToolQuestionItem,
 } from "@workspace/ui/components/tool-question"
 import { AssistantTurn } from "@workspace/ui/components/turn"
-import { useChatCopy } from "@workspace/ui/hooks/use-chat-copy"
+import { type ChatCopy, useChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 
 import type {
 	PermissionRequest,
 	QuestionRequest,
 	QuestionSubject,
 } from "@/lib/agent/contract"
+import { agentNameOf } from "@/lib/agent/messages"
 import type { Application } from "@/lib/applications/application-port"
 import { ConversationApplicationsContext } from "@/lib/applications/use-conversation-installs"
 import type { AnsweredCard } from "@/lib/chat/answered-question"
@@ -30,16 +31,28 @@ import type { PromptResponder } from "@/lib/chat/use-prompt-responder"
 
 type ApprovalPromptProps = {
 	request: PermissionRequest
+	agentName?: string
 	responder: PromptResponder
 }
 
-export const ApprovalPrompt = ({ request, responder }: ApprovalPromptProps) => {
+const approvalDescriptionOf = (t: ChatCopy, agentName: string | undefined) => {
+	const name = agentNameOf(agentName)
+	return name
+		? t("screen.approval.descriptionNamed", { name })
+		: t("screen.approval.description")
+}
+
+export const ApprovalPrompt = ({
+	request,
+	agentName,
+	responder,
+}: ApprovalPromptProps) => {
 	const t = useChatCopy()
 	const isShell = request.toolName === "Bash"
 
 	return (
 		<ToolApproval
-			description={t("screen.approval.description")}
+			description={approvalDescriptionOf(t, agentName)}
 			onAllowOnce={() => {
 				void responder.respond(request.id, "allowOnce")
 			}}
@@ -170,6 +183,10 @@ export const SpokenApproval = ({
 	responder,
 }: SpokenApprovalProps) => (
 	<AssistantTurn author={author} bare>
-		<ApprovalPrompt request={request} responder={responder} />
+		<ApprovalPrompt
+			agentName={author?.name}
+			request={request}
+			responder={responder}
+		/>
 	</AssistantTurn>
 )

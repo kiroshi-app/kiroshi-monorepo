@@ -15,10 +15,59 @@ function describeCrash(t: ChatCopy, { code, detail }: Crash): string {
 		: t("screen.transport.crashed", { code })
 }
 
-export function describeTransportError(
+export const agentNameOf = (name: string | undefined): string | undefined =>
+	name?.trim() || undefined
+
+const describeNamedCrash = (
+	t: ChatCopy,
+	{ code, detail }: Crash,
+	name: string,
+): string => {
+	if (code === null) {
+		return detail
+			? t("screen.transport.crashedUnknownCodeDetailNamed", { name, detail })
+			: t("screen.transport.crashedUnknownCodeNamed", { name })
+	}
+	return detail
+		? t("screen.transport.crashedDetailNamed", { name, code, detail })
+		: t("screen.transport.crashedNamed", { name, code })
+}
+
+const describeNamedTransportError = (
 	t: ChatCopy,
 	error: TransportError,
-): string {
+	name: string,
+): string | null => {
+	switch (error.kind) {
+		case "binaryNotFound":
+			return t("screen.transport.binaryNotFoundNamed", { name })
+		case "spawnFailed":
+			return t("screen.transport.spawnFailedNamed", {
+				name,
+				detail: error.detail,
+			})
+		case "startupTimeout":
+			return t("screen.transport.startupTimeoutNamed", {
+				name,
+				timeoutMs: error.timeoutMs,
+			})
+		case "crashed":
+			return describeNamedCrash(t, error, name)
+		case "resumeFailed":
+			return t("screen.transport.resumeFailedNamed", { name })
+		case "runLapsed":
+			return error.lapse === "silent"
+				? t("screen.transport.runLapsedSilentNamed", { name })
+				: t("screen.transport.runLapsedInterruptNamed", { name })
+		default:
+			return null
+	}
+}
+
+const describeUnnamedTransportError = (
+	t: ChatCopy,
+	error: TransportError,
+): string => {
 	switch (error.kind) {
 		case "binaryNotFound":
 			return t("screen.transport.binaryNotFound")
@@ -67,4 +116,16 @@ export function describeTransportError(
 		case "hostOffline":
 			return t("screen.notice.hostOffline.description")
 	}
+}
+
+export const describeTransportError = (
+	t: ChatCopy,
+	error: TransportError,
+	agentName?: string,
+): string => {
+	const name = agentNameOf(agentName)
+	return (
+		(name && describeNamedTransportError(t, error, name)) ||
+		describeUnnamedTransportError(t, error)
+	)
 }

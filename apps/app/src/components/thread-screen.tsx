@@ -504,12 +504,14 @@ const ThreadComposerSlot = ({
 type ThreadApprovalProps = {
 	permission: ThreadPermission | null
 	authors: ThreadAuthors
+	botFace: ThreadFace | null
 	responder: PromptResponder
 }
 
 const ThreadApproval = ({
 	permission,
 	authors,
+	botFace,
 	responder,
 }: ThreadApprovalProps) => {
 	if (!permission) {
@@ -518,7 +520,11 @@ const ThreadApproval = ({
 
 	const { request, authorBotId } = permission
 	return authorBotId === null ? (
-		<ApprovalPrompt request={request} responder={responder} />
+		<ApprovalPrompt
+			agentName={botFace?.name}
+			request={request}
+			responder={responder}
+		/>
 	) : (
 		<SpokenApproval
 			author={authors.get(authorBotId)}
@@ -1796,6 +1802,7 @@ function ThreadView(props: ThreadViewProps) {
 				departure ? undefined : (
 					<ThreadApproval
 						authors={view.authors}
+						botFace={view.botFace}
 						permission={view.facts.permission}
 						responder={view.promptResponder}
 					/>
