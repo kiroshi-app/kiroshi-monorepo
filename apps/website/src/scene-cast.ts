@@ -1,16 +1,16 @@
 import type {
 	AppSidebarBot,
 	AppSidebarConversation,
+	AppSidebarRowMission,
 	AppSidebarSection,
 	Space,
 	UserChipIdentity,
 } from "@workspace/ui/components/app-sidebar"
-import type { BotBadge } from "@workspace/ui/components/bot-badge"
+import type { BotMissionState } from "@workspace/ui/components/bot-badge"
 import {
 	BLOT_HUES,
 	type BotAvatarBlot,
 } from "@workspace/ui/components/companion-colour"
-import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import type { ConversationIconName } from "@workspace/ui/components/icons"
 import type {
 	MissionCardModel,
@@ -146,11 +146,16 @@ type ActivityMissionInput = SceneMissionInput & {
 	state: MissionState
 }
 
+type SceneMission = MissionCardModel & {
+	botId: string
+}
+
 const missionRow = ({
 	state,
 	...mission
-}: ActivityMissionInput): MissionCardModel => ({
+}: ActivityMissionInput): SceneMission => ({
 	...sceneMission(mission),
+	botId: mission.bot.id,
 	state,
 	isWorking: state === "working",
 })
@@ -183,10 +188,36 @@ type SceneSpace = Space & {
 	sections: AppSidebarSection[]
 	defaultConversation: AppSidebarConversation
 	openTabIds: string[]
-	missions: MissionCardModel[]
+	missions: SceneMission[]
 	routines: RoutineRowModel[]
 	loop: SceneLoop
 }
+
+const CHIP_STATE_OF: Partial<Record<MissionState, BotMissionState>> = {
+	waiting_human: "waiting",
+	failed: "failed",
+	ready_to_merge: "ready",
+	working: "working",
+	waiting_bot: "working",
+}
+
+const rowMissionsOf = (mission: SceneMission): AppSidebarRowMission[] => {
+	const state = CHIP_STATE_OF[mission.state]
+	if (!state) return []
+
+	const { platform, externalId, title } = mission.ticket
+	return [{ id: mission.id, state, ticket: { platform, externalId, title } }]
+}
+
+const withRowMissions = (space: SceneSpace): SceneSpace => ({
+	...space,
+	rows: space.rows.map((row) => {
+		const missions = space.missions
+			.filter((mission) => mission.botId === row.id)
+			.flatMap(rowMissionsOf)
+		return missions.length > 0 ? { ...row, missions } : row
+	}),
+})
 
 const LISBON = castConversation({
 	id: "lisbon-in-may",
@@ -232,7 +263,7 @@ const SUPPORT: AppSidebarSection = {
 	position: 2,
 }
 
-const PERSONAL: SceneSpace = {
+const PERSONAL: SceneSpace = withRowMissions({
 	id: "personal",
 	name: SCENE_COPY.spaces.personal,
 	avatarSeed: "personal",
@@ -289,9 +320,9 @@ const PERSONAL: SceneSpace = {
 			timestamp: SCENE_COPY.loops.personal.missionTimestamp,
 		}),
 	},
-}
+})
 
-const WORK: SceneSpace = {
+const WORK: SceneSpace = withRowMissions({
 	id: "work",
 	name: SCENE_COPY.spaces.work,
 	avatarSeed: "work",
@@ -353,7 +384,7 @@ const WORK: SceneSpace = {
 			timestamp: SCENE_COPY.loops.work.missionTimestamp,
 		}),
 	},
-}
+})
 
 const SCENE_SPACES: SceneSpace[] = [WORK, PERSONAL]
 
@@ -395,25 +426,11 @@ const MISSIONS_BY_SPACE: Record<string, MissionsPanelProps> =
 		SCENE_SPACES.map((space) => [space.id, missionsPanelOf(space)]),
 	)
 
-const HOST_BY_SPACE: Record<string, SpaceHost> = { [WORK.id]: "shared" }
-
-const isWaitingOnReader = (space: SceneSpace) =>
-	space.missions.some((mission) => mission.state === "waiting_human")
-
-const BADGES_BY_SPACE: Record<string, BotBadge> = Object.fromEntries(
-	SCENE_SPACES.filter(isWaitingOnReader).map((space) => [
-		space.id,
-		"attention",
-	]),
-)
-
 const READER: UserChipIdentity = { name: SCENE_COPY.reader }
 
 export {
 	ASH,
-	BADGES_BY_SPACE,
 	CONVERSATIONS_BY_SPACE,
-	HOST_BY_SPACE,
 	IVY,
 	JUNO,
 	MISSIONS_BY_SPACE,
@@ -424,6 +441,7 @@ export {
 	READER,
 	ROSTER_BY_SPACE,
 	SABLE,
+	SCENE_SPACES,
 	type SceneLoop,
 	type SceneSpace,
 	SECTIONS_BY_SPACE,

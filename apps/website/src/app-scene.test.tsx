@@ -7,11 +7,13 @@ import {
 } from "@testing-library/react"
 import { afterEach, describe, expect, it } from "vitest"
 
+import { AppRail } from "@workspace/ui/components/app-rail"
 import { I18nProvider } from "@workspace/ui/components/i18n-provider"
 
 import { AppScene } from "./app-scene"
 import { SCENE_COPY } from "./copy"
-import { spaceOf } from "./scene-cast"
+import { SCENE_SPACES, type SceneSpace, SPACES, spaceOf } from "./scene-cast"
+import { sceneRailOf } from "./scene-rail"
 
 const WORK = spaceOf("work")
 const PERSONAL = spaceOf("personal")
@@ -64,6 +66,39 @@ const missionTools = () =>
 		tool.getAttribute("aria-label"),
 	)
 
+const waitingChangeSpaceButton = (name: string) =>
+	within(scene()).getByRole("button", {
+		name: `Change space, ${name} open, waiting for you`,
+	})
+
+const withoutMissionsIn = (spaceId: string): SceneSpace[] =>
+	SCENE_SPACES.map((space) =>
+		space.id === spaceId
+			? {
+					...space,
+					missions: [],
+					rows: space.rows.map((row) => ({ ...row, missions: undefined })),
+				}
+			: space,
+	)
+
+const renderRailOf = (spaces: SceneSpace[], selected: SceneSpace) => {
+	const { railDots, ...rail } = sceneRailOf(spaces, selected)
+	return render(
+		<I18nProvider>
+			<AppRail
+				{...rail}
+				dots={railDots}
+				selected="conversations"
+				spaces={SPACES}
+			/>
+		</I18nProvider>,
+	)
+}
+
+const presenceDots = () =>
+	scene().querySelectorAll("[data-slot=space-avatar-dot]")
+
 const rosterRowNamed = (name: string) =>
 	within(scene()).getAllByRole("button", { name: new RegExp(`^${name}\\b`) })[0]
 
@@ -87,6 +122,26 @@ describe("the landing scene", () => {
 		expect(
 			tabNamed(PERSONAL.defaultConversation.name).getAttribute("aria-selected"),
 		).toBe("true")
+	})
+
+	it("draws the Space logo local and lights Change space for the other Space's waiting mission", () => {
+		renderScene()
+
+		expect(presenceDots()).toHaveLength(0)
+		expect(waitingChangeSpaceButton(WORK.name)).not.toBeNull()
+
+		switchToPersonal()
+
+		expect(presenceDots()).toHaveLength(0)
+		expect(waitingChangeSpaceButton(PERSONAL.name)).not.toBeNull()
+	})
+
+	it("draws no Change space dot while the selected Space alone waits on the reader", () => {
+		renderRailOf(withoutMissionsIn(PERSONAL.id), WORK)
+
+		expect(
+			screen.getByRole("button", { name: `Change space, ${WORK.name} open` }),
+		).not.toBeNull()
 	})
 
 	it("opens several tabs, the active one on the conversation shown", () => {
