@@ -288,9 +288,12 @@ pub async fn conversation_finalize_message<R: Runtime>(
 	if owned_by_host(&app, |host| host.owns_message(&id)) {
 		return Ok(());
 	}
-	messages.finalize_message(id.clone(), completion.into(), settled_text).await?;
+	let has_closed = messages.finalize_message(id.clone(), completion.into(), settled_text).await?;
 	match messages.conversation_of_message(id.clone()).await {
 		Ok(Some(conversation_id)) => {
+			if has_closed {
+				announce_stored(&app, database, conversation_id.clone(), id).await;
+			}
 			announce_conversation(&app, database, CONVERSATION_UPDATED, &conversation_id).await
 		}
 		Ok(None) => {
@@ -309,8 +312,11 @@ fn owned_by_host<R: Runtime>(app: &AppHandle<R>, owns: impl Fn(&HostWrites) -> b
 
 #[cfg(test)]
 mod tests {
+	use std::sync::{Arc, Mutex};
+
 	use serde_json::json;
 	use tauri::test::mock_builder;
+	use tauri::Listener;
 
 	use super::*;
 	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
@@ -389,5 +395,83 @@ mod tests {
 				},
 			})
 		);
+	}
+
+	fn listen_to_stored_messages(app: &AppOfItsOwn) -> Arc<Mutex<Vec<serde_json::Value>>> {
+		let heard = Arc::new(Mutex::new(Vec::new()));
+		let kept = heard.clone();
+		app.handle().listen(MESSAGE_STORED_EVENT, move |event| {
+			let payload = serde_json::from_str(event.payload()).expect("the payload is JSON");
+			kept.lock().expect("the list is kept").push(payload);
+		});
+		heard
+	}
+
+	async fn write_a_report(app: &AppOfItsOwn) {
+		conversation_start_turn(app.handle().clone(), app.state(), a_turn("t1"))
+			.await
+			.expect("the turn starts");
+		let report = NewAssistantMessage {
+			id: "r1".into(),
+			conversation_id: "c1".into(),
+			turn_id: "t1".into(),
+			author_bot_id: Some("b1".into()),
+			replied_to_message_id: None,
+			created_at: 2,
+		};
+		conversation_open_assistant_message(app.handle().clone(), app.state(), report)
+			.await
+			.expect("the report opens");
+		conversation_append_text(app.handle().clone(), app.state(), "r1".into(), "done".into())
+			.await
+			.expect("the report text lands");
+		finalize_the_report(app).await;
+		conversation_complete_turn(app.handle().clone(), app.state(), "t1".into(), 3)
+			.await
+			.expect("the turn completes");
+	}
+
+	async fn finalize_the_report(app: &AppOfItsOwn) {
+		conversation_finalize_message(
+			app.handle().clone(),
+			app.state(),
+			"r1".into(),
+			TerminalCompletion::Complete,
+			None,
+		)
+		.await
+		.expect("the report is finalized");
+	}
+
+	async fn stored_report(app: &AppOfItsOwn) -> serde_json::Value {
+		let stored = database(app)
+			.messages()
+			.message("c1".into(), "r1".into())
+			.await
+			.expect("the report reads")
+			.expect("the report is stored");
+		serde_json::to_value(TranscriptMessage::of("c1", stored)).expect("the report serializes")
+	}
+
+	#[tokio::test]
+	async fn a_report_written_through_the_five_commands_is_announced_once_as_stored() {
+		let app = a_host("report-announced").await;
+		let heard = listen_to_stored_messages(&app);
+
+		write_a_report(&app).await;
+
+		let expected = vec![stored_report(&app).await];
+		assert_eq!(*heard.lock().expect("the list is kept"), expected);
+	}
+
+	#[tokio::test]
+	async fn a_report_finalized_twice_is_announced_once() {
+		let app = a_host("report-finalized-twice").await;
+		let heard = listen_to_stored_messages(&app);
+
+		write_a_report(&app).await;
+		finalize_the_report(&app).await;
+
+		assert_eq!(heard.lock().expect("the list is kept").len(), 1);
 	}
 }
