@@ -1827,10 +1827,10 @@ async fn joined_by(peers: &Peers, name: &str) -> (AppOfItsOwn, JoinedSpace, Vec<
 async fn described(
 	member: &AppOfItsOwn,
 	joined: &JoinedSpace,
-	colour: i64,
+	colour: Option<i64>,
 ) -> Result<JoinedSpace, JoinedSpaceError> {
 	let (app, id) = (member.handle().clone(), joined.id.clone());
-	joined_space_describe(app, id, "Lab".to_owned(), Some(colour)).await
+	joined_space_describe(app, id, "Lab".to_owned(), colour).await
 }
 
 async fn host_space(peers: &Peers) -> (String, Option<Hue>) {
@@ -1840,12 +1840,12 @@ async fn host_space(peers: &Peers) -> (String, Option<Hue>) {
 	(space.name, space.colour)
 }
 
-async fn named_and_coloured(member: &AppOfItsOwn) -> Vec<(String, Hue)> {
+async fn named_and_coloured(member: &AppOfItsOwn) -> Vec<(String, Option<Hue>)> {
 	let listed = joined_spaces_list(member.handle().clone()).await.expect("the list");
 	listed.into_iter().map(|joined| (joined.name, joined.colour)).collect()
 }
 
-async fn listed_as(member: &AppOfItsOwn, expected: &[(String, Hue)]) {
+async fn listed_as(member: &AppOfItsOwn, expected: &[(String, Option<Hue>)]) {
 	until("the description of the joined space", || async {
 		(named_and_coloured(member).await == expected).then_some(())
 	})
@@ -1866,11 +1866,11 @@ fn a_member_describes_its_joined_space_and_the_host_and_every_member_take_it_thr
 		let host_before = host_space(&peers).await;
 		let before = named_and_coloured(&member).await;
 
-		let refused = described(&member, &joined, 360).await;
+		let refused = described(&member, &joined, Some(360)).await;
 		let host_after_refusal = host_space(&peers).await;
 		let after_refusal = named_and_coloured(&member).await;
-		let answered = described(&member, &joined, 200).await.expect("the description");
-		let lab = vec![("Lab".to_owned(), Hue::new(200).expect("a hue"))];
+		let answered = described(&member, &joined, Some(200)).await.expect("the description");
+		let lab = vec![("Lab".to_owned(), Hue::new(200))];
 		listed_as(&other, &lab).await;
 		listed_as(&member, &lab).await;
 		relay::reconciled(other.handle()).await;
@@ -1885,7 +1885,7 @@ fn a_member_describes_its_joined_space_and_the_host_and_every_member_take_it_thr
 		let expected = JoinedSpace {
 			remote_space_id: Some(SPACE.to_owned()),
 			name: "Lab".to_owned(),
-			colour: Hue::new(200).expect("a hue"),
+			colour: Hue::new(200),
 			hosted_by: answered.hosted_by.clone(),
 			..joined
 		};
@@ -1901,6 +1901,22 @@ fn a_member_describes_its_joined_space_and_the_host_and_every_member_take_it_thr
 		assert_eq!(peers.relay.admission().listing, json!({ "name": "Lab", "colour": 200 }));
 		assert_eq!(named_and_coloured(&other).await, lab);
 		assert_eq!(named_and_coloured(&member).await, lab);
+	});
+}
+
+#[test]
+fn a_description_without_colour_of_a_coloured_space_answers_and_lists_it_with_null() {
+	run(async {
+		let peers = Peers::hosting().await;
+		let (member, joined, _member_files) = joined_by(&peers, "uncoloured-member").await;
+		described(&member, &joined, Some(200)).await.expect("the coloured description");
+		listed_as(&member, &[("Lab".to_owned(), Hue::new(200))]).await;
+
+		let answered = described(&member, &joined, None).await.expect("the uncoloured description");
+		listed_as(&member, &[("Lab".to_owned(), None)]).await;
+
+		assert_eq!(serde_json::to_value(&answered).expect("json")["colour"], Value::Null);
+		assert_eq!(host_space(&peers).await, ("Lab".to_owned(), None));
 	});
 }
 
@@ -1965,7 +1981,7 @@ fn a_description_taken_while_a_reconciliation_reads_the_older_listing_is_kept() 
 		gate.send_replace(true);
 		reconciling.await.expect("the reconciliation");
 
-		let lab = vec![("Lab".to_owned(), Hue::new(200).expect("a hue"))];
+		let lab = vec![("Lab".to_owned(), Hue::new(200))];
 		assert_eq!(named_and_coloured(&member.app).await, lab);
 	});
 }
@@ -2003,7 +2019,7 @@ fn a_description_the_link_drops_before_its_event_still_lists_the_answered_name_a
 			.await
 			.expect("the description");
 
-		let lab = vec![("Lab".to_owned(), Hue::new(200).expect("a hue"))];
+		let lab = vec![("Lab".to_owned(), Hue::new(200))];
 		assert_eq!((answered.name.clone(), answered.colour), lab[0].clone());
 		assert_eq!(named_and_coloured(&member.app).await, lab);
 		assert_eq!(member.listed().await, vec![answered]);
@@ -2030,7 +2046,7 @@ fn a_description_heard_again_with_the_same_name_and_hue_writes_nothing_and_annou
 
 		let heard = changes.lock().expect("the events").clone();
 		assert_eq!(heard, vec![json!({ "id": joined.id, "hostedBy": "Ann", "colour": 200 })]);
-		let lab = vec![("Lab".to_owned(), Hue::new(200).expect("a hue"))];
+		let lab = vec![("Lab".to_owned(), Hue::new(200))];
 		assert_eq!(named_and_coloured(&member.app).await, lab);
 	});
 }

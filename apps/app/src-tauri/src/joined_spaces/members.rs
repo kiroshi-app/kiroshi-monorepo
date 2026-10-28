@@ -184,7 +184,7 @@ mod tests {
 	use tokio::time::timeout;
 
 	use super::super::commands::CHANGED_EVENT;
-	use super::super::contract::{colour_of, JoinedSpaceWaitReason};
+	use super::super::contract::JoinedSpaceWaitReason;
 	use super::super::held::{device_keys, kept};
 	use super::super::roster_set::fixtures::{signed_set, Device};
 	use super::super::roster_set::{verified_set, Handed};
@@ -441,7 +441,7 @@ mod tests {
 
 		assert_eq!(
 			hosted_by_heard(&mut changes, "Annie").await,
-			json!({ "id": joined.id, "hostedBy": "Annie", "colour": colour_of(&joined.id) })
+			json!({ "id": joined.id, "hostedBy": "Annie", "colour": null })
 		);
 	}
 

@@ -962,7 +962,7 @@ export type JoinedSpace = {
 	state: JoinedSpaceState,
 	wait?: JoinedSpaceWait | null,
 	hostedBy: string | null,
-	colour: Hue,
+	colour: Hue | null,
 	instanceId: string,
 };
 

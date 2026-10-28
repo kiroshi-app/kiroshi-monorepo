@@ -9,10 +9,6 @@ use crate::db::repositories::joined_spaces::{self, HostListing, JoinedReach};
 use crate::db::DatabaseError;
 use crate::spaces::contract::SpaceError;
 
-const FNV_OFFSET_BASIS: u32 = 0x811c_9dc5;
-
-const FNV_PRIME: u32 = 0x0100_0193;
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct JoinedSpace {
@@ -24,7 +20,7 @@ pub struct JoinedSpace {
 	#[specta(optional)]
 	pub wait: Option<JoinedSpaceWait>,
 	pub hosted_by: Option<String>,
-	pub colour: Hue,
+	pub colour: Option<Hue>,
 	pub instance_id: String,
 }
 
@@ -67,7 +63,7 @@ impl JoinedSpace {
 		roster: &[JoinedSpaceMember],
 	) -> Self {
 		let hosted_by = hosted_by(&joined.listing, joined.inviter_email, roster);
-		let colour = colour_shown(&joined.listing, &joined.id);
+		let colour = colour_shown(&joined.listing);
 		let JoinedReach::Relay { instance_id } = joined.reach;
 		let host_url = cloud.member_relay_url(&instance_id);
 		let state = match wait {
@@ -108,16 +104,8 @@ fn roster_host_name(roster: &[JoinedSpaceMember]) -> Option<String> {
 		.find_map(|member| member.name.clone())
 }
 
-pub fn colour_shown(listing: &HostListing, id: &str) -> Hue {
-	listing.colour.unwrap_or_else(|| colour_of(id))
-}
-
-pub fn colour_of(id: &str) -> Hue {
-	let hash = id
-		.bytes()
-		.fold(FNV_OFFSET_BASIS, |hash, byte| (hash ^ u32::from(byte)).wrapping_mul(FNV_PRIME));
-	let presets = Hue::presets();
-	presets[hash as usize % presets.len()]
+pub fn colour_shown(listing: &HostListing) -> Option<Hue> {
+	listing.colour
 }
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
@@ -278,7 +266,7 @@ mod tests {
 		let crossed = presented(a_stored_row(None), &roster);
 
 		assert_eq!(crossed["hostedBy"], "Ann");
-		assert_eq!(crossed["colour"], json!(colour_of("joined-1")));
+		assert_eq!(crossed.get("colour"), Some(&Value::Null));
 		assert!(crossed.get("hosted_by").is_none(), "{crossed}");
 	}
 
@@ -332,17 +320,6 @@ mod tests {
 	}
 
 	#[test]
-	fn the_colour_of_a_joined_space_is_pinned_to_its_id() {
-		let colours: Vec<Value> = ["joined-1", "joined-2", "", "a"]
-			.iter()
-			.map(|id| to_value(colour_of(id)).expect("json"))
-			.collect();
-
-		assert_eq!(colours, vec![json!(132), json!(63), json!(296), json!(257)]);
-		assert_eq!(presented(a_stored_row(None), &[])["colour"], colours[0]);
-	}
-
-	#[test]
 	fn who_hosts_a_space_falls_from_the_relay_name_to_the_roster_to_the_relay_email_to_the_inviter()
 	{
 		let roster = [a_member(Some("Rae"), JoinedSpaceRole::Host)];
@@ -382,12 +359,12 @@ mod tests {
 	}
 
 	#[test]
-	fn the_relay_colour_wins_and_the_colour_pinned_to_the_id_shows_only_without_it() {
+	fn a_joined_space_crosses_with_its_relay_colour_and_with_null_without_one() {
 		let listing = HostListing { colour: Hue::named("pink"), ..HostListing::default() };
 		let coloured = joined_spaces::JoinedSpace { listing, ..a_stored_row(None) };
 
 		assert_eq!(presented(coloured, &[])["colour"], 358);
-		assert_eq!(presented(a_stored_row(None), &[])["colour"], json!(colour_of("joined-1")));
+		assert_eq!(presented(a_stored_row(None), &[]).get("colour"), Some(&Value::Null));
 	}
 
 	#[test]
