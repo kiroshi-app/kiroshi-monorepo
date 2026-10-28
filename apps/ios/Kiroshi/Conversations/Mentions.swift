@@ -51,7 +51,7 @@ enum Mentions {
     static func names(in text: String, among authors: [Companion]) -> String {
         text.replacing(token) { match in
             let name = authors.first { $0.id == match.1 }?.name
-            return "@\(name ?? String(localized: "Unknown companion"))"
+            return "@\(name ?? String(localized: "Unknown agent"))"
         }
     }
 

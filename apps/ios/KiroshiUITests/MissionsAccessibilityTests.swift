@@ -146,7 +146,7 @@ final class MissionsAccessibilityTests: XCTestCase {
         let app = launch("5.3")
         XCTAssertTrue(app.staticTexts["No missions yet"].waitForExistence(timeout: 10))
         XCTAssertTrue(
-            app.staticTexts["Missions your companions open in this space show up here."].exists)
+            app.staticTexts["Missions your agents open in this space show up here."].exists)
 
         try auditTheList(app, onScreenAtTheLargestSize: onScreen)
     }

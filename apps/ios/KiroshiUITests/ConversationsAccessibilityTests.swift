@@ -90,7 +90,7 @@ final class ConversationsAccessibilityTests: XCTestCase {
 
     func testNoCompanionSaysWhereToAddOneAndPassesTheAudit() throws {
         let app = launch("2.3")
-        XCTAssertTrue(app.staticTexts["No companions yet"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["No agents yet"].waitForExistence(timeout: 10))
         XCTAssertTrue(
             app.staticTexts["Add one to Studio on your computer. It shows up here."].exists)
 
@@ -100,7 +100,7 @@ final class ConversationsAccessibilityTests: XCTestCase {
     func testLoadingShowsPlaceholderRowsAndPassesTheAudit() throws {
         let app = launch("2.4")
         XCTAssertTrue(
-            app.descendants(matching: .any)["Loading companions"].waitForExistence(timeout: 10))
+            app.descendants(matching: .any)["Loading agents"].waitForExistence(timeout: 10))
 
         try auditTheHome(app)
     }

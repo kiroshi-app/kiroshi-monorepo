@@ -73,7 +73,7 @@ struct MissionsList: View {
 
     private var emptyDescription: LocalizedStringKey {
         conversationId == nil
-            ? "Missions your companions open in this space show up here."
+            ? "Missions your agents open in this space show up here."
             : "Missions opened in this conversation show up here."
     }
 }

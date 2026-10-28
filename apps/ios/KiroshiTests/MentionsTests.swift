@@ -51,7 +51,7 @@ struct MentionsTests {
     @Test func aStoredTokenReadsAsTheCompanionsName() {
         #expect(
             Mentions.names(in: "<@juniper-6> ping <@otto-5>", among: members)
-                == "@Juniper ping @Unknown companion")
+                == "@Juniper ping @Unknown agent")
     }
 
     @Test func aTokenIsShownAsANameOnlyWhenTheAuthorsAreKnown() {

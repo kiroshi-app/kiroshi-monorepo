@@ -7,7 +7,7 @@ final class ConversationsRecoveryTests: XCTestCase {
     }
 
     func failure(in app: XCUIApplication) -> XCUIElement {
-        app.staticTexts["Couldn’t load your companions."]
+        app.staticTexts["Couldn’t load your agents."]
     }
 
     func juniper(in app: XCUIApplication) -> XCUIElement {

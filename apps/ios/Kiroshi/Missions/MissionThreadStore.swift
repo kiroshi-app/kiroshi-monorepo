@@ -224,7 +224,7 @@ extension MissionThreadStore: ThreadModel {
     var working: ThreadWorking? {
         guard let since = workers.map(\.since).min() else { return nil }
         return ThreadWorking(
-            companion: companion, name: companion?.name ?? String(localized: "The companion"),
+            companion: companion, name: companion?.name ?? String(localized: "The agent"),
             isSeveral: false,
             since: since)
     }
