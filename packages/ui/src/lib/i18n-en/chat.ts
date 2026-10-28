@@ -286,6 +286,7 @@ const chat = {
 		placeholder: "Message {{name}}",
 		approval: {
 			description: "The agent needs your approval to run this tool.",
+			descriptionNamed: "{{name}} needs your approval to run this tool.",
 			path: "Path",
 		},
 		question: {
@@ -295,11 +296,14 @@ const chat = {
 		restart: "Restart session",
 		notice: {
 			crashed: "The agent stopped",
+			crashedNamed: "{{name}} stopped",
 			resumeFailed: "Couldn’t resume the conversation",
 			settingsRejected: "Couldn’t apply the agent’s settings",
+			settingsRejectedNamed: "Couldn’t apply {{name}}’s settings",
 			serverEnvRejected: "Couldn’t start an application",
 			notAuthenticated: "You’re not signed in",
 			unavailable: "Couldn’t reach the agent",
+			unavailableNamed: "Couldn’t reach {{name}}",
 			failed: "Couldn’t send that request",
 			stopFailed: "Couldn’t stop the agent",
 			stopFailedNamed: "Couldn’t stop {{name}}",
@@ -466,6 +470,7 @@ const chat = {
 		},
 		transport: {
 			binaryNotFound: "Couldn’t find the agent. Reinstall Kiroshi.",
+			binaryNotFoundNamed: "Couldn’t find {{name}}. Reinstall Kiroshi.",
 			notAuthenticated:
 				"You’re signed out of your Claude subscription. Sign in to Claude, then restart the conversation.",
 			notConnected:
@@ -474,17 +479,30 @@ const chat = {
 				"Couldn’t check your sign-in ({{detail}}). Restart the session.",
 			spawnFailed:
 				"Couldn’t start the agent ({{detail}}). Restart the session.",
+			spawnFailedNamed:
+				"Couldn’t start {{name}} ({{detail}}). Restart the session.",
 			startupTimeout:
 				"The agent didn’t answer within {{timeoutMs}} ms. Restart the session.",
+			startupTimeoutNamed:
+				"{{name}} didn’t answer within {{timeoutMs}} ms. Restart the session.",
 			crashed: "The agent exited (code {{code}}). Restart the session.",
+			crashedNamed: "{{name}} exited (code {{code}}). Restart the session.",
 			crashedDetail:
 				"The agent exited (code {{code}}): {{detail}}. Restart the session.",
+			crashedDetailNamed:
+				"{{name}} exited (code {{code}}): {{detail}}. Restart the session.",
 			crashedUnknownCode:
 				"The agent exited (code unknown). Restart the session.",
+			crashedUnknownCodeNamed:
+				"{{name}} exited (code unknown). Restart the session.",
 			crashedUnknownCodeDetail:
 				"The agent exited (code unknown): {{detail}}. Restart the session.",
+			crashedUnknownCodeDetailNamed:
+				"{{name}} exited (code unknown): {{detail}}. Restart the session.",
 			resumeFailed:
 				"The agent started a new session. Keep going, your messages are still here.",
+			resumeFailedNamed:
+				"{{name}} started a new session. Keep going, your messages are still here.",
 			invalidFrame: "Skipped an unreadable frame ({{detail}}). Keep going.",
 			settingsRejected:
 				"Couldn’t apply settings.json ({{detail}}). Fix it, then restart the session.",
@@ -501,8 +519,12 @@ const chat = {
 			writeFailed: "Couldn’t send the message ({{detail}}). Retry.",
 			runLapsedSilent:
 				"The agent stopped answering, so its reply ended. Send your message again.",
+			runLapsedSilentNamed:
+				"{{name}} stopped answering, so its reply ended. Send your message again.",
 			runLapsedInterrupt:
 				"The agent didn’t answer the stop, so its reply ended. Send your message again.",
+			runLapsedInterruptNamed:
+				"{{name}} didn’t answer the stop, so its reply ended. Send your message again.",
 			readFailed: "Couldn’t load earlier messages ({{detail}}). Retry.",
 			unknownFailure: "Something went wrong ({{detail}}). Retry.",
 		},

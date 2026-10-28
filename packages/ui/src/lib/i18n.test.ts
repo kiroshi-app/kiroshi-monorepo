@@ -7,6 +7,31 @@ import {
 	languageOf,
 } from "@workspace/ui/lib/i18n"
 
+const NAMED_AGENT_KEYS = [
+	"chat:screen.approval.descriptionNamed",
+	"chat:screen.notice.crashedNamed",
+	"chat:screen.notice.settingsRejectedNamed",
+	"chat:screen.notice.unavailableNamed",
+	"chat:screen.notice.stopFailedNamed",
+	"chat:screen.transport.binaryNotFoundNamed",
+	"chat:screen.transport.spawnFailedNamed",
+	"chat:screen.transport.startupTimeoutNamed",
+	"chat:screen.transport.crashedNamed",
+	"chat:screen.transport.crashedDetailNamed",
+	"chat:screen.transport.crashedUnknownCodeNamed",
+	"chat:screen.transport.crashedUnknownCodeDetailNamed",
+	"chat:screen.transport.resumeFailedNamed",
+	"chat:screen.transport.runLapsedSilentNamed",
+	"chat:screen.transport.runLapsedInterruptNamed",
+] as const
+
+const PLACEHOLDERS = {
+	name: "Ada",
+	code: 1,
+	detail: "EACCES",
+	timeoutMs: 30_000,
+}
+
 describe("languageOf", () => {
 	it("answers the catalogue a name asks for", () => {
 		expect(languageOf("en")).toBe("en")
@@ -84,6 +109,22 @@ describe("the runtime", () => {
 			i18n.t("bots:spaces.remove.failed"),
 		)
 	})
+
+	it.each(NAMED_AGENT_KEYS)(
+		"names the agent in %s, in both languages",
+		(key) => {
+			const english = i18n.t(key, PLACEHOLDERS)
+
+			activateLanguage("fr")
+
+			const french = i18n.t(key, PLACEHOLDERS)
+
+			expect(english).toContain("Ada")
+			expect(french).toContain("Ada")
+			expect(`${english} ${french}`).not.toContain("{{")
+			expect(french).not.toBe(english)
+		},
+	)
 
 	it("counts in the plural forms French takes", () => {
 		activateLanguage("fr")
