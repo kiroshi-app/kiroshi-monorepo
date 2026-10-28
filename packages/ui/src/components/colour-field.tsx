@@ -31,8 +31,6 @@ type ColourFieldProps = {
 	className?: string
 }
 
-type SliderCommitReason = SliderPrimitive.Root.CommitEventReason
-
 type ColourOption = "none" | "own" | (typeof BLOT_TINTS)[number]
 
 const LAST_HUE = 359
@@ -164,7 +162,7 @@ const useHueEmission = ({ value, onValueChange }: HueEmissionProps) => {
 		emissionTimer.current = setTimeout(flushPending, HUE_EMISSION_DELAY_MS)
 	}
 
-	const release = (reason: SliderCommitReason) => {
+	const release = (reason: SliderPrimitive.Root.CommitEventReason) => {
 		setIsDragging(false)
 		if (reason !== "keyboard") flushPending()
 	}
