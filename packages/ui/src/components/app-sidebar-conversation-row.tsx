@@ -113,18 +113,10 @@ const ConversationRosterRow = ({
 					aria-label={t("roster.actions", { name: conversation.name })}
 					className={STILL_UNDER_REDUCED_MOTION}
 				>
-					{onOpenInNewTab ? (
-						<>
-							<ContextMenuItem onClick={() => onOpenInNewTab(conversation.id)}>
-								<Icons.ExternalLink aria-hidden="true" className="size-3.5" />
-								{t("roster.openInNewTab")}
-							</ContextMenuItem>
-							<ContextMenuSeparator />
-						</>
-					) : null}
 					<PinGroup
 						id={conversation.id}
 						isPinned={isPinned}
+						onOpenInNewTab={onOpenInNewTab}
 						onPin={onPin}
 						onUnpin={onUnpin}
 					/>

@@ -2849,6 +2849,20 @@ const openRowMenu = async (canvasElement: HTMLElement, name: string) => {
 	return within(menu)
 }
 
+const expectOpenInNewTabUnderPin = async (
+	menu: Awaited<ReturnType<typeof openRowMenu>>,
+) => {
+	const [pin, openInNewTab, openSettings] = menu.getAllByRole("menuitem")
+	await expect(pin).toHaveTextContent("Pin")
+	await expect(openInNewTab).toHaveTextContent("Open in a new tab")
+	await expect(pin.nextElementSibling).toBe(openInNewTab)
+	const separator = openInNewTab.nextElementSibling
+	await expect(separator).toHaveAttribute("role", "separator")
+	await expect(separator?.nextElementSibling).toBe(openSettings)
+	await expect(openSettings).toHaveTextContent("Open settings")
+	return openInNewTab
+}
+
 const LAST_SPACE_NOTE =
 	"A companion stays in at least one space. To remove a companion from its last space, delete the companion."
 
@@ -5970,14 +5984,13 @@ export const ConversationRowOpensInANewTab = meta.story({
 		docs: {
 			description: {
 				story:
-					"The menu of a room row on a host that opens a room in a tab of its own. Check that Open in a new tab leads the menu, and that choosing it reports the room once and selects nothing.",
+					"The menu of a room row on a host that opens a room in a tab of its own. Check that Open in a new tab sits right under Pin with no separator between them and one separator after it, and that choosing it reports the room once and selects nothing.",
 			},
 		},
 	},
 	play: async ({ args, canvasElement, userEvent }) => {
 		const menu = await openRowMenu(canvasElement, "Launch review")
-		const [openInNewTab] = menu.getAllByRole("menuitem")
-		await expect(openInNewTab).toHaveTextContent("Open in a new tab")
+		const openInNewTab = await expectOpenInNewTabUnderPin(menu)
 
 		await userEvent.click(openInNewTab)
 		await expect(args.onOpenConversationInNewTab).toHaveBeenCalledOnce()
@@ -5988,20 +6001,19 @@ export const ConversationRowOpensInANewTab = meta.story({
 
 export const CompanionRowOpensInANewTab = meta.story({
 	tags: ["test-only"],
-	args: { onOpenBotInNewTab: fn() },
+	args: { onOpenBotInNewTab: fn(), onPinRoster: fn() },
 	parameters: {
 		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:
-					"The menu of a companion row on a host that opens a companion in a tab of its own. Check that Open in a new tab leads the menu, and that choosing it reports the companion once and selects nothing.",
+					"The menu of a companion row on a host that opens a companion in a tab of its own. Check that Open in a new tab sits right under Pin with no separator between them and one separator after it, and that choosing it reports the companion once and selects nothing.",
 			},
 		},
 	},
 	play: async ({ args, canvasElement, userEvent }) => {
 		const menu = await openRowMenu(canvasElement, "Cinder")
-		const [openInNewTab] = menu.getAllByRole("menuitem")
-		await expect(openInNewTab).toHaveTextContent("Open in a new tab")
+		const openInNewTab = await expectOpenInNewTabUnderPin(menu)
 
 		await userEvent.click(openInNewTab)
 		await expect(args.onOpenBotInNewTab).toHaveBeenCalledOnce()
