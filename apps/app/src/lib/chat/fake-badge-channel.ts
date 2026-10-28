@@ -38,12 +38,7 @@ type HeldListening = {
 
 export const createHeldBadgeChannel = () => {
 	const channel = createFakeBadgeChannel()
-	let held: HeldListening[] = []
-	const takeHeld = () => {
-		const taken = held
-		held = []
-		return taken
-	}
+	const held: HeldListening[] = []
 	const onReport: BadgeChannel["onReport"] = (listener) =>
 		new Promise((resolve, reject) => {
 			held.push({
@@ -54,12 +49,12 @@ export const createHeldBadgeChannel = () => {
 	return {
 		channel: { ...channel, onReport },
 		releaseReportListening: () => {
-			for (const listening of takeHeld()) {
+			for (const listening of held.splice(0)) {
 				listening.release()
 			}
 		},
 		refuseReportListening: (reason: unknown) => {
-			for (const listening of takeHeld()) {
+			for (const listening of held.splice(0)) {
 				listening.refuse(reason)
 			}
 		},
