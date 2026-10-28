@@ -147,8 +147,7 @@ export const reportTurnWritesOn = (
 	}
 }
 
-export const REPORT_TURN_ANNOUNCED_EVENT =
-	"conversation://report-turn-announced"
+const REPORT_TURN_ANNOUNCED_EVENT = "conversation://report-turn-announced"
 
 export const transcriptEventsTransport = {
 	onMessageStored: async (listener: (stored: TranscriptMessage) => void) => {
