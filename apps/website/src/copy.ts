@@ -1,5 +1,5 @@
 export const WEBSITE_COPY = {
-	headline: "Your team of companions.",
+	headline: "Your team of agents.",
 	lead: "They live on your machine, work in your tools, and keep going while you do something else.",
 	downloadAction: "Download",
 	downloadActionMacOS: "Download for macOS",
@@ -20,11 +20,11 @@ export const WEBSITE_COPY = {
 		columns: [
 			{
 				name: "Conversation",
-				body: "One companion, one thread. Correct it once and it keeps what you said.",
+				body: "One agent, one thread. Correct it once and it keeps what you said.",
 			},
 			{
 				name: "Room",
-				body: "Seat a few companions and @ the ones you need. They split the work between them.",
+				body: "Seat a few agents and @ the ones you need. They split the work between them.",
 			},
 			{
 				name: "Mission",
@@ -38,7 +38,7 @@ export const WEBSITE_COPY = {
 		columns: [
 			{
 				name: "Local-first",
-				body: "Companions, skills and conversations live in a folder on your computer, not on a server.",
+				body: "Agents, skills and conversations live in a folder on your computer, not on a server.",
 			},
 			{
 				name: "It learns as you go",
@@ -46,15 +46,15 @@ export const WEBSITE_COPY = {
 			},
 			{
 				name: "Approvals",
-				body: "You decide what a companion may run on its own, and what waits for your yes.",
+				body: "You decide what an agent may run on its own, and what waits for your yes.",
 			},
 			{
 				name: "Spaces",
-				body: "Personal and Work stay apart, each with its own companions and its own keys.",
+				body: "Personal and Work stay apart, each with its own agents and its own keys.",
 			},
 			{
 				name: "Applications",
-				body: "Plug in the tools you already use, for one companion, one space or all of them.",
+				body: "Plug in the tools you already use, for one agent, one space or all of them.",
 			},
 			{
 				name: "Routines",
@@ -70,7 +70,7 @@ export const WEBSITE_COPY = {
 			description: "Everything Kiroshi does, on your machine.",
 			price: "Free",
 			features: [
-				"Companions, skills and conversations",
+				"Agents, skills and conversations",
 				"Rooms, missions and routines",
 				"Applications, Secrets and Approvals",
 				"Spaces shared on your own network",
@@ -99,17 +99,17 @@ export const WEBSITE_COPY = {
 			{
 				question: "What is Kiroshi?",
 				answer:
-					"A desktop app where you keep a team of companions. Each one has its own skills, memory and history, works in your tools, and keeps going while you do something else.",
+					"A desktop app where you keep a team of agents. Each one has its own skills, memory and history, works in your tools, and keeps going while you do something else.",
 			},
 			{
 				question: "Do I need a subscription?",
 				answer:
-					"Yes, an account with the model provider you choose, such as a Claude subscription or an Anthropic API key. Kiroshi ships the agent that answers and runs it on your own account. Kiroshi is free on your computer. Pro, which takes your spaces online, is free during the beta.",
+					"Yes, an account with the model provider you choose, such as a Claude subscription or an Anthropic API key. Kiroshi runs the coding session that answers, on your own account. Kiroshi is free on your computer. Pro, which takes your spaces online, is free during the beta.",
 			},
 			{
 				question: "Where do my conversations live?",
 				answer:
-					"On your computer. Conversations, companions and what they learn are kept in a local folder, and they’re all there on the next launch. Replies are written by the model provider you configured, so what you send goes through your account with it.",
+					"On your computer. Conversations, agents and what they learn are kept in a local folder, and they’re all there on the next launch. Replies are written by the model provider you configured, so what you send goes through your account with it.",
 			},
 			{
 				question: "Which macOS versions does it run on?",
@@ -121,9 +121,9 @@ export const WEBSITE_COPY = {
 					"Yes. Windows and Linux builds are also available for download, on the Download page.",
 			},
 			{
-				question: "Can I undo what a companion learned?",
+				question: "Can I undo what an agent learned?",
 				answer:
-					"Yes. Everything a companion writes down is saved as its own change in that companion’s History, where you can read it and undo it, one change at a time.",
+					"Yes. Everything an agent writes down is saved as its own change in that agent’s History, where you can read it and undo it, one change at a time.",
 			},
 			{
 				question: "Is Kiroshi open source?",
@@ -155,7 +155,7 @@ export const LATEST_RELEASE_URL = `https://api.github.com/repos/${REPOSITORY_SLU
 export const SCENE_COPY = {
 	sceneLabel: "Live demonstration of the Kiroshi app",
 	reader: "Steve",
-	composerPlaceholder: "Message the room, or @ a companion…",
+	composerPlaceholder: "Message the room, or @ an agent…",
 	spaces: {
 		personal: "Personal",
 		work: "Work",
