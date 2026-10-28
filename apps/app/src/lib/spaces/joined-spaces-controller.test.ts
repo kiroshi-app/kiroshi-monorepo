@@ -107,7 +107,7 @@ const transportFake = (listed: JoinedSpace[] = []) => {
 			return {
 				...described,
 				name,
-				colour: colour ?? described.colour,
+				colour,
 				hostedBy: "Lea",
 			}
 		}),
@@ -1272,6 +1272,106 @@ describe("describing a joined space", () => {
 			"Garage",
 			null,
 		)
+	})
+
+	it("paints No colour at once, before the write returns, in the switcher and as the open space colour", async () => {
+		const gear = await describingGarage()
+		gear.wire.transport.describe.mockImplementationOnce(
+			() => new Promise(() => undefined),
+		)
+
+		gear.joined.describe(GARAGE.id, { name: "Garage", colour: null })
+
+		expect(garageOf(gear)).toMatchObject({ colour: null })
+		expect(
+			switcherSpacesOf(
+				gear.spaces.getState().spaces,
+				gear.joined.getState().joinedSpaces,
+			),
+		).toContainEqual(expect.objectContaining({ id: GARAGE_ROW, colour: null }))
+		expect(
+			openSpaceColourOf(gear.spaces.getState(), gear.joined.getState()),
+		).toBeNull()
+	})
+
+	it("holds No colour once the joined describe returns it", async () => {
+		const gear = await describingGarage()
+
+		gear.joined.describe(GARAGE.id, { name: "Garage", colour: null })
+		await settle()
+
+		expect(garageOf(gear)).toEqual({ ...GARAGE, colour: null, hostedBy: "Lea" })
+	})
+
+	it("restores No colour held before the pick when the write is refused", async () => {
+		const gear = await describingGarage({ ...GARAGE, colour: null })
+		gear.wire.transport.describe.mockRejectedValueOnce({
+			kind: "hostOffline",
+			id: GARAGE.id,
+		})
+
+		gear.joined.describe(GARAGE.id, { name: "Garage", colour: 40 })
+		expect(garageOf(gear)).toMatchObject({ colour: 40 })
+		await settle()
+
+		expect(garageOf(gear)).toEqual({ ...GARAGE, colour: null })
+	})
+
+	it("restores the hue held before the pick when a No colour write is refused", async () => {
+		const gear = await describingGarage()
+		gear.wire.transport.describe.mockRejectedValueOnce({
+			kind: "hostOffline",
+			id: GARAGE.id,
+		})
+
+		gear.joined.describe(GARAGE.id, { name: "Garage", colour: null })
+		await settle()
+
+		expect(garageOf(gear)).toEqual(GARAGE)
+	})
+
+	it("holds a listed space without a colour as No colour", async () => {
+		const gear = await describingGarage({ ...GARAGE, colour: null })
+
+		expect(garageOf(gear)).toMatchObject({ colour: null })
+	})
+
+	it("answers the open space colour of a joined space without a colour as it does for a local one", async () => {
+		const gear = await describingGarage({ ...GARAGE, colour: null })
+		const joinedAnswer = openSpaceColourOf(
+			gear.spaces.getState(),
+			gear.joined.getState(),
+		)
+
+		gear.joined.selectSpace(gear.home.id)
+
+		expect(gear.home.colour).toBeNull()
+		expect(joinedAnswer).toBe(
+			openSpaceColourOf(gear.spaces.getState(), gear.joined.getState()),
+		)
+	})
+
+	it("holds No colour another member gave the space, never its previous hue", async () => {
+		const gear = await describingGarage()
+
+		gear.wire.describeAs({ spaceId: "garage", name: "Garage", colour: null })
+
+		expect(garageOf(gear)).toEqual({ ...GARAGE, colour: null })
+		expect(
+			openSpaceColourOf(gear.spaces.getState(), gear.joined.getState()),
+		).toBeNull()
+	})
+
+	it("paints the hue another member gave the space after No colour", async () => {
+		const gear = await describingGarage()
+		gear.wire.describeAs({ spaceId: "garage", name: "Garage", colour: null })
+
+		gear.wire.describeAs({ spaceId: "garage", name: "Garage", colour: 200 })
+
+		expect(garageOf(gear)).toEqual({ ...GARAGE, colour: 200 })
+		expect(
+			openSpaceColourOf(gear.spaces.getState(), gear.joined.getState()),
+		).toBe(200)
 	})
 
 	it("starts no join for a refused space when a refused save is followed by a change", async () => {
