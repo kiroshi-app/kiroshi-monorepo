@@ -301,6 +301,8 @@ const chat = {
 		placeholder: "Message à {{name}}",
 		approval: {
 			description: "L’agent attend votre autorisation pour lancer cet outil.",
+			descriptionNamed:
+				"{{name}} attend votre autorisation pour lancer cet outil.",
 			path: "Chemin",
 		},
 		question: {
@@ -310,11 +312,14 @@ const chat = {
 		restart: "Redémarrer la session",
 		notice: {
 			crashed: "L’agent s’est arrêté",
+			crashedNamed: "{{name}} s’est arrêté",
 			resumeFailed: "Impossible de reprendre la conversation",
 			settingsRejected: "Impossible d’appliquer les réglages de l’agent",
+			settingsRejectedNamed: "Impossible d’appliquer les réglages de {{name}}",
 			serverEnvRejected: "Impossible de démarrer une application",
 			notAuthenticated: "Vous n’êtes pas connecté",
 			unavailable: "Impossible de joindre l’agent",
+			unavailableNamed: "Impossible de joindre {{name}}",
 			failed: "Impossible d’envoyer cette demande",
 			stopFailed: "Impossible d’arrêter l’agent",
 			stopFailedNamed: "Impossible d’arrêter {{name}}",
@@ -483,6 +488,8 @@ const chat = {
 		},
 		transport: {
 			binaryNotFound: "Impossible de trouver l’agent. Réinstallez Kiroshi.",
+			binaryNotFoundNamed:
+				"Impossible de trouver {{name}}. Réinstallez Kiroshi.",
 			notAuthenticated:
 				"Vous êtes déconnecté de votre abonnement Claude. Connectez-vous à Claude, puis relancez la conversation.",
 			notConnected:
@@ -491,17 +498,31 @@ const chat = {
 				"Impossible de vérifier votre connexion ({{detail}}). Redémarrez la session.",
 			spawnFailed:
 				"Impossible de démarrer l’agent ({{detail}}). Redémarrez la session.",
+			spawnFailedNamed:
+				"Impossible de démarrer {{name}} ({{detail}}). Redémarrez la session.",
 			startupTimeout:
 				"L’agent n’a pas répondu en {{timeoutMs}} ms. Redémarrez la session.",
+			startupTimeoutNamed:
+				"{{name}} n’a pas répondu en {{timeoutMs}} ms. Redémarrez la session.",
 			crashed: "L’agent s’est arrêté (code {{code}}). Redémarrez la session.",
+			crashedNamed:
+				"{{name}} s’est arrêté (code {{code}}). Redémarrez la session.",
 			crashedDetail:
 				"L’agent s’est arrêté (code {{code}}) : {{detail}}. Redémarrez la session.",
+			crashedDetailNamed:
+				"{{name}} s’est arrêté (code {{code}}) : {{detail}}. Redémarrez la session.",
 			crashedUnknownCode:
 				"L’agent s’est arrêté (code inconnu). Redémarrez la session.",
+			crashedUnknownCodeNamed:
+				"{{name}} s’est arrêté (code inconnu). Redémarrez la session.",
 			crashedUnknownCodeDetail:
 				"L’agent s’est arrêté (code inconnu) : {{detail}}. Redémarrez la session.",
+			crashedUnknownCodeDetailNamed:
+				"{{name}} s’est arrêté (code inconnu) : {{detail}}. Redémarrez la session.",
 			resumeFailed:
 				"L’agent a démarré une nouvelle session. Continuez, vos messages sont toujours là.",
+			resumeFailedNamed:
+				"{{name}} a démarré une nouvelle session. Continuez, vos messages sont toujours là.",
 			invalidFrame: "Trame illisible ignorée ({{detail}}). Continuez.",
 			settingsRejected:
 				"Impossible d’appliquer settings.json ({{detail}}). Corrigez-le, puis redémarrez la session.",
@@ -520,8 +541,12 @@ const chat = {
 			writeFailed: "Impossible d’envoyer le message ({{detail}}). Réessayez.",
 			runLapsedSilent:
 				"L’agent ne répondait plus, sa réponse s’est arrêtée. Renvoyez votre message.",
+			runLapsedSilentNamed:
+				"{{name}} ne répondait plus, sa réponse s’est arrêtée. Renvoyez votre message.",
 			runLapsedInterrupt:
 				"L’agent n’a pas répondu à l’arrêt, sa réponse s’est arrêtée. Renvoyez votre message.",
+			runLapsedInterruptNamed:
+				"{{name}} n’a pas répondu à l’arrêt, sa réponse s’est arrêtée. Renvoyez votre message.",
 			readFailed:
 				"Impossible de charger les messages précédents ({{detail}}). Réessayez.",
 			unknownFailure: "Une erreur est survenue ({{detail}}). Réessayez.",
