@@ -1,6 +1,13 @@
 "use client"
 
-import { type CSSProperties, type ReactNode, useId, useState } from "react"
+import {
+	type CSSProperties,
+	type ReactNode,
+	useEffect,
+	useId,
+	useRef,
+	useState,
+} from "react"
 import { useTranslation } from "react-i18next"
 
 import { BLOT_TINTS, blotOf } from "@workspace/ui/components/companion-colour"
@@ -8,6 +15,7 @@ import { hueStyle, hueTone } from "@workspace/ui/components/hue-palette"
 import { HUE_THEMES, type HueTheme } from "@workspace/ui/components/hue-recipe"
 import { HUE_PRESETS } from "@workspace/ui/components/hue-tones"
 import { Slider } from "@workspace/ui/components/ui/slider"
+import { useStableCallback } from "@workspace/ui/hooks/use-stable-callback"
 import { cn } from "@workspace/ui/lib/utils"
 
 type ColourFieldLook = "swatch" | "avatar"
@@ -29,6 +37,8 @@ const LAST_HUE = 359
 const THUMB_RADIUS = 12
 
 const DEFAULT_OWN_HUE = 320
+
+const HUE_EMISSION_DELAY_MS = 150
 
 const RAINBOW_HUES = [
 	0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330, 359,
@@ -107,6 +117,41 @@ const OwnHueMark = ({ look, mark }: OwnHueMarkProps) =>
 		</span>
 	)
 
+const useHueEmission = (onValueChange: ColourFieldProps["onValueChange"]) => {
+	const emit = useStableCallback(onValueChange)
+	const lastEmittedHue = useRef<number | null>(undefined)
+	const pendingHue = useRef<number>(undefined)
+	const emissionTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+
+	const cancelPending = useStableCallback(() => {
+		clearTimeout(emissionTimer.current)
+		pendingHue.current = undefined
+	})
+
+	const emitNow = useStableCallback((hue: number | null) => {
+		cancelPending()
+		lastEmittedHue.current = hue
+		emit(hue)
+	})
+
+	const flushPending = useStableCallback(() => {
+		const hue = pendingHue.current
+		cancelPending()
+		if (hue === undefined || hue === lastEmittedHue.current) return
+		emitNow(hue)
+	})
+
+	const schedule = (hue: number) => {
+		clearTimeout(emissionTimer.current)
+		pendingHue.current = hue
+		emissionTimer.current = setTimeout(flushPending, HUE_EMISSION_DELAY_MS)
+	}
+
+	useEffect(() => flushPending, [flushPending])
+
+	return { emitNow, schedule, flushPending }
+}
+
 const ColourField = ({
 	value,
 	onValueChange,
@@ -121,10 +166,13 @@ const ColourField = ({
 	const ownLabelId = useId()
 	const [isPickingOwnHue, setIsPickingOwnHue] = useState(false)
 	const [ownHue, setOwnHue] = useState(value ?? DEFAULT_OWN_HUE)
+	const [isSliding, setIsSliding] = useState(false)
+	const { emitNow, schedule, flushPending } = useHueEmission(onValueChange)
 
 	const valueOption = optionOf(value)
 	const selected = isPickingOwnHue ? "own" : valueOption
-	const shownOwnHue = valueOption === "own" && value !== null ? value : ownHue
+	const shownOwnHue =
+		!isSliding && valueOption === "own" && value !== null ? value : ownHue
 
 	const options: ColourOption[] =
 		noColour === "first"
@@ -135,17 +183,23 @@ const ColourField = ({
 		setIsPickingOwnHue(option === "own")
 		if (option === "own") {
 			setOwnHue(shownOwnHue)
-			onValueChange(shownOwnHue)
+			emitNow(shownOwnHue)
 			return
 		}
-		onValueChange(option === "none" ? null : HUE_PRESETS[option])
+		emitNow(option === "none" ? null : HUE_PRESETS[option])
 	}
 
 	const slide = (next: number | readonly number[]) => {
 		const hue = firstOf(next)
 		setIsPickingOwnHue(true)
+		setIsSliding(true)
 		setOwnHue(hue)
-		onValueChange(hue)
+		schedule(hue)
+	}
+
+	const release = () => {
+		setIsSliding(false)
+		flushPending()
 	}
 
 	const labelOf = (option: ColourOption) => {
@@ -233,6 +287,7 @@ const ColourField = ({
 							max={LAST_HUE}
 							min={0}
 							onValueChange={slide}
+							onValueCommitted={release}
 							value={[shownOwnHue]}
 						/>
 						{hint ? (

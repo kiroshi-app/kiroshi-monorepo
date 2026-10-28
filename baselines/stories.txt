@@ -716,9 +716,11 @@ forms-checkbox--default
 forms-checkbox--on-dark-surface
 forms-checkbox--states
 forms-checkbox--with-label
+forms-colourfield--hue-drag-emits-once-after-a-pause
 forms-colourfield--no-colour
 forms-colourfield--own-hue
 forms-colourfield--preset
+forms-colourfield--preset-pick-emits-at-once
 forms-copyfield--default
 forms-copyfield--empty
 forms-input--default

@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { expect, fn } from "storybook/test"
+import { expect, fn, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { slotIn, slotsIn } from "@workspace/storybook/story-utils"
@@ -7,6 +7,7 @@ import {
 	ColourField,
 	type ColourFieldProps,
 } from "@workspace/ui/components/colour-field"
+import { HUE_PRESETS } from "@workspace/ui/components/hue-tones"
 import { SpaceTint } from "@workspace/ui/components/space-tint"
 
 const FieldHost = (props: ColourFieldProps) => {
@@ -22,6 +23,42 @@ const FieldHost = (props: ColourFieldProps) => {
 			value={value}
 		/>
 	)
+}
+
+const EMISSION_PAUSE_MS = 200
+
+const pause = (ms: number) =>
+	new Promise((resolve) => {
+		setTimeout(resolve, ms)
+	})
+
+const pressHueThumb = (field: HTMLElement) => {
+	const track = slotIn(field, "slider-track").getBoundingClientRect()
+	const thumb = slotIn(field, "slider-thumb").getBoundingClientRect()
+	const clientY = track.top + track.height / 2
+	const pointAt = (share: number) => ({
+		bubbles: true,
+		button: 0,
+		buttons: 1,
+		clientX: track.left + track.width * share,
+		clientY,
+	})
+
+	slotIn(field, "slider-thumb").dispatchEvent(
+		new PointerEvent("pointerdown", {
+			...pointAt(0),
+			clientX: thumb.left + thumb.width / 2,
+		}),
+	)
+
+	return {
+		moveTo: (share: number) =>
+			document.dispatchEvent(new PointerEvent("pointermove", pointAt(share))),
+		releaseAt: (share: number) =>
+			document.dispatchEvent(
+				new PointerEvent("pointerup", { ...pointAt(share), buttons: 0 }),
+			),
+	}
 }
 
 const meta = preview.meta({
@@ -119,5 +156,79 @@ export const OwnHue = meta.story({
 			"data-hue",
 			"321",
 		)
+	},
+})
+
+export const HueDragEmitsOnceAfterAPause = meta.story({
+	tags: ["test-only"],
+	args: { value: 320 },
+	render: (args) => (
+		<div className="w-96">
+			<ColourField {...args} />
+		</div>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A drag on a host whose value never catches up. Check that the readout follows every move on the local hue, that nothing is emitted while the pointer keeps moving, that one emission follows the pause, and that releasing on the same hue emits nothing more.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		const field = slotIn(canvasElement, "colour-field")
+		const slider = field.querySelector<HTMLInputElement>('input[type="range"]')
+		if (!slider) throw new Error("The hue panel is missing its slider")
+		const readout = slotIn(field, "colour-field-readout")
+		const drag = pressHueThumb(field)
+		const shownHues: number[] = []
+
+		for (const share of [0.7, 0.6, 0.5, 0.4]) {
+			const previous = Number(slider.value)
+			drag.moveTo(share)
+			await waitFor(() => expect(Number(slider.value)).toBeLessThan(previous))
+			const hue = Number(slider.value)
+			await expect(hue).not.toBe(320)
+			await expect(readout).toHaveTextContent(`${hue}°`)
+			shownHues.push(hue)
+		}
+		await expect(args.onValueChange).not.toHaveBeenCalled()
+
+		const lastHue = shownHues.at(-1)
+		await waitFor(() => expect(args.onValueChange).toHaveBeenCalledTimes(1))
+		await expect(args.onValueChange).toHaveBeenCalledWith(lastHue)
+		await expect(readout).toHaveTextContent(`${lastHue}°`)
+
+		drag.releaseAt(0.4)
+		await pause(EMISSION_PAUSE_MS)
+		await expect(args.onValueChange).toHaveBeenCalledTimes(1)
+	},
+})
+
+export const PresetPickEmitsAtOnce = meta.story({
+	tags: ["test-only"],
+	args: { value: 320 },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A preset picked in the middle of a hue drag. Check that the pending hue is dropped and that the preset is emitted once, at once.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		const field = slotIn(canvasElement, "colour-field")
+		const drag = pressHueThumb(field)
+		drag.moveTo(0.5)
+
+		const green = field.querySelector<HTMLInputElement>('input[value="green"]')
+		if (!green) throw new Error("The row is missing its green tile")
+		green.click()
+		await expect(args.onValueChange).toHaveBeenCalledTimes(1)
+		await expect(args.onValueChange).toHaveBeenCalledWith(HUE_PRESETS.green)
+
+		drag.releaseAt(0.5)
+		await pause(EMISSION_PAUSE_MS)
+		await expect(args.onValueChange).toHaveBeenCalledTimes(1)
 	},
 })
