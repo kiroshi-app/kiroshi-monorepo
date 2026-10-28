@@ -151,7 +151,7 @@ conversation-message-conversationemptystate--in-space
 conversation-message-conversationemptystate--long-content
 conversation-message-conversationemptystate--single-bot
 conversation-message-conversationemptystate--themes-group
-conversation-message-conversationemptystate--themes-group-red
+conversation-message-conversationemptystate--themes-group-picked-icon
 conversation-message-conversationemptystate--themes-solo
 conversation-message-conversationemptystate--with-picture
 conversation-message-dayseparator--earlier-this-year
@@ -1073,7 +1073,7 @@ navigation-appsidebarrosterparts--empty-section-drop
 navigation-appsidebarrosterparts--insertion-mark-above
 navigation-appsidebarrosterparts--landing-area-with-mark-below
 navigation-appsidebarrosterparts--themes-lifted-group
-navigation-appsidebarrosterparts--themes-lifted-group-red
+navigation-appsidebarrosterparts--themes-lifted-group-picked-icon
 navigation-appsidebarrosterparts--themes-lifted-solo
 navigation-appsidebarrosterparts--working-bot-avatar
 navigation-appsidebarrosterparts--zone-separator
@@ -1135,7 +1135,7 @@ navigation-headerconversationbutton--in-layout
 navigation-headerconversationbutton--long-content
 navigation-headerconversationbutton--single-bot
 navigation-headerconversationbutton--themes-group
-navigation-headerconversationbutton--themes-group-red
+navigation-headerconversationbutton--themes-group-picked-icon
 navigation-headerconversationbutton--themes-solo
 navigation-headeridentitybutton--default
 navigation-headeridentitybutton--expanded
@@ -1178,7 +1178,7 @@ navigation-searchresultrow--opens-with-click-modifiers
 navigation-searchresultrow--routine
 navigation-searchresultrow--states
 navigation-searchresultrow--themes-chat-group
-navigation-searchresultrow--themes-chat-group-red
+navigation-searchresultrow--themes-chat-group-picked-icon
 navigation-searchresultrow--themes-chat-solo
 navigation-searchresultrow--with-badge-while-active
 navigation-settingsmenu--agents-count

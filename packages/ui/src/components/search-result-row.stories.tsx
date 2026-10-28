@@ -270,7 +270,7 @@ export const ThemesChatGroup = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this to read a room of several companions with no colour picked, in light and dark at once. Check that a 32px subject icon on the neutral pair of each theme leads the row, the message square centred in it. Pick `ThemesChatGroupRed` for a room with a picked icon.",
+					"Reach for this to read a room of several companions with no colour picked, in light and dark at once. Check that a 32px subject icon on the neutral pair of each theme leads the row, the message square centred in it. Pick `ThemesChatGroupPickedIcon` for a room with a picked icon.",
 			},
 		},
 	},
@@ -278,7 +278,7 @@ export const ThemesChatGroup = meta.story({
 		expectSubjectIconInBothThemes(canvasElement, IDENTITY_SIDE),
 })
 
-export const ThemesChatGroupRed = meta.story({
+export const ThemesChatGroupPickedIcon = meta.story({
 	globals: { theme_layout: "side-by-side" },
 	args: {
 		...KIND_ARGS["chat-group"],
