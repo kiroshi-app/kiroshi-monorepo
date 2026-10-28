@@ -56,8 +56,8 @@ jobs:
           probe() {
             local name=$1; shift
             local started=$SECONDS
-            timeout -k 5 120 "$@" > "$RUNNER_TEMP/$name.out" 2>&1 < /dev/null
-            local code=$?
+            local code=0
+            timeout -k 5 120 "$@" > "$RUNNER_TEMP/$name.out" 2>&1 < /dev/null || code=$?
             echo "OPE1452|bun=${{ matrix.bun }}|probe=$name|exit=$code|seconds=$((SECONDS - started))"
             head -15 "$RUNNER_TEMP/$name.out"
           }
