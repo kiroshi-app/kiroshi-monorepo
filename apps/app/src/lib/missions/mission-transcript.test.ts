@@ -7,6 +7,7 @@ import {
 	BEFORE_FIRST_RUN,
 	placeMissionEvents,
 	placeMissions,
+	withoutMissionSummons,
 } from "./mission-transcript"
 
 import type { TranscriptRow } from "@/lib/chat/screen-model"
@@ -190,5 +191,52 @@ describe("placeMissionEvents", () => {
 		])
 
 		expect(placed.map(({ event }) => event.id)).toEqual(["e-early", "e-late"])
+	})
+})
+
+const spokenRowOf = (
+	authorBotId: string | null,
+	timestamp: number,
+	text: string,
+): TranscriptRow => ({ ...rowOf(authorBotId, timestamp), text })
+
+const transcriptAfter = (summons: string) =>
+	withoutMissionSummons(
+		[spokenRowOf(null, 0, summons), spokenRowOf("bot-1", 100, "On it")],
+		"bot-1",
+	)
+
+describe("withoutMissionSummons", () => {
+	it("hides the waiting_bot summons and names the answer it caused", () => {
+		expect(
+			transcriptAfter(
+				"The coding session of this mission is blocked and waiting on you.",
+			),
+		).toEqual({
+			rows: [spokenRowOf("bot-1", 100, "On it")],
+			summonsCauses: [{ turnId: "t-100", state: "waiting_bot" }],
+		})
+	})
+
+	it("hides the waiting_bot summons a thread already holds in its former wording", () => {
+		expect(
+			transcriptAfter(
+				"The coding agent of this mission is blocked and waiting on you.",
+			),
+		).toEqual({
+			rows: [spokenRowOf("bot-1", 100, "On it")],
+			summonsCauses: [{ turnId: "t-100", state: "waiting_bot" }],
+		})
+	})
+
+	it("hides the working summons and names the answer it caused", () => {
+		expect(transcriptAfter("Carry out this mission.")).toEqual({
+			rows: [spokenRowOf("bot-1", 100, "On it")],
+			summonsCauses: [{ turnId: "t-100", state: "working" }],
+		})
+	})
+
+	it("keeps a user message that is no summons", () => {
+		expect(transcriptAfter("toString").rows).toHaveLength(2)
 	})
 })
