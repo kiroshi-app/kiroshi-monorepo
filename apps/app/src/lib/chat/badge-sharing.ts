@@ -26,8 +26,6 @@ type BadgeSharing = {
 	onError: (reason: unknown) => void
 }
 
-const NOTHING_READ: BadgeReport = { readId: null, changed: {} }
-
 const hasChanges = ({ changed }: BadgeReport) => Object.keys(changed).length > 0
 
 const stopOnceListening = (
@@ -81,6 +79,8 @@ export const mirrorBadges = ({
 		channel.report({ windowLabel, ...report }).catch(onError)
 	}
 
+	const sendRead = (readId: string | null) => send({ readId, changed: {} })
+
 	const forward = (report: BadgeReport) => {
 		if (hasChanges(report) || report.readId !== sentReadId) {
 			send(report)
@@ -93,7 +93,7 @@ export const mirrorBadges = ({
 			return
 		}
 		knownOwnerLabel = ownerLabel
-		send({ readId: sentReadId ?? null, changed: {} })
+		sendRead(sentReadId ?? null)
 	}
 
 	const watching = stopOnceListening(
@@ -109,6 +109,6 @@ export const mirrorBadges = ({
 
 	return () => {
 		void watching.then((stop) => stop())
-		send(NOTHING_READ)
+		sendRead(null)
 	}
 }
