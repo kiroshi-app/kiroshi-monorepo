@@ -15,7 +15,7 @@ on the `kiroshi` server.
 - `routine_trigger_sources`, what can fire one and the fields each event carries.
 - `routine_create`, `routine_update`, `routine_run_now`, `routine_delete`.
 
-None of them takes a conversation or a bot: they already work on this conversation and on
+None of them takes a conversation or an agent: they already work on this conversation and on
 you. This conversation may be a thread the person opened with you alone, and a routine
 works there exactly as anywhere else.
 

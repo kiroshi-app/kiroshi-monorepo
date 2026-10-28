@@ -8,7 +8,7 @@ use super::Evolved;
 pub(super) const PLUGIN: Descriptor = Descriptor {
 	dir_name: "user",
 	plugin_name: "me",
-	description: "What every bot in Kiroshi knows about the person it talks to.",
+	description: "What every agent in Kiroshi knows about the person it talks to.",
 	about_id: "about-me",
 	about_description: "Who the person you are talking to is, and how they work.",
 	written_title: "The bot changed what it knows about the person",

@@ -1,6 +1,6 @@
 ---
 name: "conversations"
-description: "How you open a room of this space, who you seat in it, and what you say back where the work came from. Applies when a subject belongs to companions who are not in this conversation, and when work runs long."
+description: "How you open a room of this space, who you seat in it, and what you say back where the work came from. Applies when a subject belongs to agents who are not in this conversation, and when work runs long."
 disable-model-invocation: true
 metadata:
   kiroshi:
@@ -8,13 +8,13 @@ metadata:
 ---
 
 A room is a conversation of this space with a subject of its own and a seat for each
-companion the subject belongs to. You hold six tools for them, on the `kiroshi` server.
+agent the subject belongs to. You hold six tools for them, on the `kiroshi` server.
 
 - `conversation_open`, a new room led by you, answering the id of that room, its title and
-  the companions seated in it. It takes the title and the icon of the room in the same call.
+  the agents seated in it. It takes the title and the icon of the room in the same call.
 - `conversation_say`, one message in a room you already hold a seat in, answering the id of
   that room and its title.
-- `companion_list`, every companion of this space, answering for each one its id, its
+- `companion_list`, every agent of this space, answering for each one its id, its
   name and its job.
 - `conversation_attach`, one file shown to the person, here or in a room you hold a seat
   in, answering the path it was stored under and the id of that conversation.
@@ -31,19 +31,19 @@ companion the subject belongs to. You hold six tools for them, on the `kiroshi` 
   closed. An archived room comes back with `archived` false on `conversation_update`, and
   `archived` true there is refused: only `conversation_close` archives.
 
-`conversation_update` seats companions with `add` and takes them out with `remove`, in this
+`conversation_update` seats agents with `add` and takes them out with `remove`, in this
 conversation, and in another room of the caller when a room id is passed.
 
 ## When a room is worth opening
 
 Two cases, and no others.
 
-- The subject belongs to companions who are not in this conversation.
+- The subject belongs to agents who are not in this conversation.
 - The work runs long and does not belong in the thread it was raised in.
 
 A question you can answer on the spot opens no room: you answer it here.
 
-No room is opened for the convenience of the companion opening it. A room is not a place
+No room is opened for the convenience of the agent opening it. A room is not a place
 to think out loud, to park a task or to keep a note out of the way.
 
 ## The title and the first message
@@ -62,15 +62,15 @@ followed nothing of where it came from.
 
 ## Who is seated and who is summoned
 
-A companion is seated by `with`, and it is summoned by an at sign followed by its exact
-name inside the message. The two are separate: a seat lets a companion read and answer, a
+An agent is seated by `with`, and it is summoned by an at sign followed by its exact
+name inside the message. The two are separate: a seat lets an agent read and answer, a
 summons is what makes it read now.
 
-A companion passed to `with`, `add` and `remove` is named by its name or by its id. A
-name two companions of this space share is refused, and the refusal answers their ids: pass
+An agent passed to `with`, `add` and `remove` is named by its name or by its id. A
+name two agents of this space share is refused, and the refusal answers their ids: pass
 the id of the one you want in place of that name.
 
-A room opened with nobody mentioned is a room where nothing happens. Seat the companions
+A room opened with nobody mentioned is a room where nothing happens. Seat the agents
 the subject belongs to, and mention in the message each one you expect an answer from.
 
 ## Where you speak

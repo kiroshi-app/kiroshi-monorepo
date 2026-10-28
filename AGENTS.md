@@ -98,12 +98,14 @@ Only **technical composition** — it places things, it does not draw them:
 ### Colour
 
 - Chrome wears the iOS system colours, by their semantic names: backgrounds (`systemBackground`, `systemGroupedBackground`, `secondarySystemBackground`…), labels (`.primary`, `.secondary`), separators, fills and grays, `systemRed` for errors and Sign out, `systemBlue` for the text cursor, the tab bar tinted with the label colour. No hex, no `Color(red:)`.
-- The Kiroshi catalogue (`Color.kiroshi`, `Colors.xcassets`) paints only what an artboard draws in a Kiroshi colour. On Sign in, Home and Settings it still feeds the companion avatars and the Hive (with its `+N` counter), your initial top left of Home and in Settings, and the dot of the Space avatar.
+- The Kiroshi catalogue (`Color.kiroshi`, `Colors.xcassets`) paints only what an artboard draws in a Kiroshi colour. On Sign in, Home and Settings it still feeds the agent avatars and the Hive (with its `+N` counter), your initial top left of Home and in Settings, and the dot of the Space avatar.
 - Your bubbles, in a Conversation, a group Conversation or a Mission thread, wear the current Space's colour through `SpaceAccent`; a Space without a colour keeps the catalogue's `user-bubble`. The chrome never follows the Space: the app's global accent stays the catalogue's `primary`, which tints the Conversations and Missions screens, and Send stays the label colour.
 
 ### Vocabulary
 
-- Carried over from the desktop app: Companion, Conversation (never Chat), Message, Send, "the agent" (never "Claude Code" on screen), Applications, Secrets, Approvals, the Space name shown.
+- Carried over from the desktop app: Agent, Conversation (never Chat), Message, Send, Applications, Secrets, Approvals, the Space name shown.
+- The coding runtime has no name on screen, never "Claude Code": the agent acts under its own name, and a mission calls the runtime "the coding session".
+- "bot" and "companion" are banned in strings, tickets and briefs, like "connecteur".
 - Contractions everywhere: `You're signed in.`, `Couldn't send.`
 - An error says what failed plus the gesture to fix it.
 - A deletion says `This can't be undone.`

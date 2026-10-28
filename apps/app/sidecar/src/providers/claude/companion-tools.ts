@@ -12,25 +12,25 @@ import { deniesRead, type FloorScope } from "./security-floor"
 const SUBTYPE = "companion"
 
 const NAME =
-	"The name the person will call this companion by, theirs or the one they picked."
+	"The name the person will call this agent by, theirs or the one they picked."
 
 const JOB =
-	"What this companion is for, in a few words, read under its name on its roster line."
+	"What this agent is for, in a few words, read under its name on its roster line."
 
 const DESCRIPTION =
-	"What this companion does and how it works, written as an order to it."
+	"What this agent does and how it works, written as an order to it."
 
 const SUGGESTIONS =
-	"Read the companions this app suggests, each with the name, the job, the description and the blurb it ships, before you ask the person which one they want."
+	"Read the agents this app suggests, each with the name, the job, the description and the blurb it ships, before you ask the person which one they want."
 
 const CREATE =
-	"Create a companion in the space of this conversation, once the person has picked a suggestion or agreed on the name, the job and the description you read back to them."
+	"Create an agent in the space of this conversation, once the person has picked a suggestion or agreed on the name, the job and the description you read back to them."
 
 const FIRST_RUN_DONE =
 	"Record the first run of the app as finished, once the person has answered the hand-off question, so the app stops opening on it."
 
 const ROSTER =
-	"List every companion of the space of this conversation, each with its id, its name and its job, before you seat one, take one out or mention one by name."
+	"List every agent of the space of this conversation, each with its id, its name and its job, before you seat one, take one out or mention one by name."
 
 const OPEN =
 	"Open a new room in the space of this conversation, led by you, once the person asks for a topic of its own."
@@ -38,7 +38,7 @@ const OPEN =
 const TITLE = "The title of the room, read in the space's list of rooms."
 
 const WITH =
-	"The id or the name of each companion of this space to seat in the room beside you, empty for you alone."
+	"The id or the name of each agent of this space to seat in the room beside you, empty for you alone."
 
 const MESSAGE = "What you say to open the room, the first words read in it."
 
@@ -62,7 +62,7 @@ const ATTACH_ROOM =
 	"The id of a room you hold a seat in to show it there, left out for this conversation."
 
 const UPDATE =
-	"Change a conversation you hold a seat in, its title, its icon, its colour and who is seated in it, or reopen it once archived, every field given landing together in one call and none of them if one is refused, once the person asks for it or once its subject calls for it; the answer is the conversation as it stands after the call, with its id, kind, title, icon, colour, seated companions, last message and whether it is archived."
+	"Change a conversation you hold a seat in, its title, its icon, its colour and who is seated in it, or reopen it once archived, every field given landing together in one call and none of them if one is refused, once the person asks for it or once its subject calls for it; the answer is the conversation as it stands after the call, with its id, kind, title, icon, colour, seated agents, last message and whether it is archived."
 
 const UPDATED_CONVERSATION =
 	"The id of the conversation to change, one you hold a seat in, left out for this conversation."
@@ -79,22 +79,22 @@ const COLOUR =
 	"A hue, a whole number from 0 to 359 around the colour wheel, or one of red, orange, yellow, green, cyan, blue, purple or pink for the hue that name stands for, null to give the conversation back its default colour, left out to keep the one it wears; a hue outside 0 to 359 or another name is refused."
 
 const ADD =
-	"The id or the name of each companion of the space of the conversation to seat in it, recorded as invited by you; one already seated stays as it is, and a name two companions share is refused with their ids."
+	"The id or the name of each agent of the space of the conversation to seat in it, recorded as invited by you; one already seated stays as it is, and a name two agents share is refused with their ids."
 
 const REMOVE =
-	"The id or the name of each companion of the space of the conversation to take out of it, your own to leave it yourself; one not seated stays out."
+	"The id or the name of each agent of the space of the conversation to take out of it, your own to leave it yourself; one not seated stays out."
 
 const REOPEN =
 	"False to reopen an archived conversation, back in the list of rooms of the space with every message it held; true is refused, since only conversation_close archives a room; left out, the conversation stays archived or not as it is."
 
 const LIST =
-	"List the conversations of this space, the latest activity first, each with its id, its kind, its title, its icon, its colour, its companions, its last message and whether it is archived, before you read, join or mention one whose id you do not hold."
+	"List the conversations of this space, the latest activity first, each with its id, its kind, its title, its icon, its colour, its agents, its last message and whether it is archived, before you read, join or mention one whose id you do not hold."
 
 const EVERYWHERE =
 	"True to list every conversation of this space, seated or not, false to list only the ones you hold a seat in; left out, it is false."
 
 const KIND =
-	"One of main, topic or mission to list only that kind: main is a companion's own chat with the person, topic a room, mission the thread of a mission; left out, every kind is listed."
+	"One of main, topic or mission to list only that kind: main is an agent's own chat with the person, topic a room, mission the thread of a mission; left out, every kind is listed."
 
 const LIST_LIMIT =
 	"How many conversations to answer, from 1 to 200; left out, 50."
@@ -114,13 +114,13 @@ const BEFORE =
 	"The cursor the previous conversation_read answered, to read the messages strictly older than the ones it answered; left out, the latest messages are read, and a null cursor in the answer marks the first message of the conversation."
 
 const SEARCH =
-	"Find where something was discussed in the space of this conversation, before you answer from memory or ask the person where it was said: it answers conversations, the rooms whose title or companion names match, each with its id, its kind (main, topic or mission), its title (the companion's name for a main conversation) and the names of the companions seated in it, and messages, the messages whose text matches, best match first, each with the conversationId and conversationTitle of its room, its messageId, its author (the id of the companion who wrote it, or null when the person did), its createdAt in milliseconds since the epoch and a snippet of plain text around the match; two empty lists mean nothing in this space matched, and no other space is ever searched."
+	"Find where something was discussed in the space of this conversation, before you answer from memory or ask the person where it was said: it answers conversations, the rooms whose title or agent names match, each with its id, its kind (main, topic or mission), its title (the agent's name for a main conversation) and the names of the agents seated in it, and messages, the messages whose text matches, best match first, each with the conversationId and conversationTitle of its room, its messageId, its author (the id of the agent who wrote it, or null when the person did), its createdAt in milliseconds since the epoch and a snippet of plain text around the match; two empty lists mean nothing in this space matched, and no other space is ever searched."
 
 const QUERY =
-	"The words to look for, matched against the start of words in messages and inside room titles and companion names, at most 200 characters."
+	"The words to look for, matched against the start of words in messages and inside room titles and agent names, at most 200 characters."
 
 const SEARCH_KIND =
-	"One of main (a companion's own conversation with the person), topic (a room) or mission, to keep only the conversations and the messages of that kind, left out for every kind."
+	"One of main (an agent's own conversation with the person), topic (a room) or mission, to keep only the conversations and the messages of that kind, left out for every kind."
 
 const CLOSE =
 	"Archive a room you lead once its subject is settled, keeping every message in it."

@@ -12,8 +12,8 @@ use crate::conversations::commands::ready;
 use crate::db;
 
 const NO_STORE: &str = "the store of this session is not open";
-const UNREAD_BOT: &str = "the bot of this session could not be read";
-const NO_BOT: &str = "the bot of this session is gone";
+const UNREAD_BOT: &str = "the agent of this session could not be read";
+const NO_BOT: &str = "the agent of this session is gone";
 const NO_ROOT: &str = "this session has no bundles directory";
 const UNSTORED_MEMORY: &str = "the write was recorded but the memory it holds was not stored";
 

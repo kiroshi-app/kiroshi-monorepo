@@ -32,8 +32,8 @@ The destination is the one thing you ask. Ask it with `AskUserQuestion`, naming 
 space of this conversation and the person, as these three destinations and no other:
 
 - `companion`, you alone, in every conversation you are part of.
-- `space`, every companion of the space of this conversation.
-- `user`, the person, in every space and for every companion.
+- `space`, every agent of the space of this conversation.
+- `user`, the person, in every space and for every agent.
 
 Ask it with `metadata.source` set to `application-scope:` followed by the name
 `application_search` answered, exactly as it answered it, so `application-scope:superset` or

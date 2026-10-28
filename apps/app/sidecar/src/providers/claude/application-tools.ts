@@ -20,7 +20,8 @@ const QUERY =
 const APPLICATION =
 	"The exact name application_search answered for the application."
 
-const SCOPE = "The destination the person picked: companion, space or user."
+const SCOPE =
+	"The destination the person picked: companion (you alone), space or user."
 
 type ToolInput = Record<string, z.ZodType>
 

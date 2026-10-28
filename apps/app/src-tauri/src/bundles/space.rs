@@ -9,9 +9,9 @@ use super::Evolved;
 pub(super) const PLUGIN: Descriptor = Descriptor {
 	dir_name: "spaces",
 	plugin_name: "space",
-	description: "What every bot in this space knows about the project it works on.",
+	description: "What every agent in this space knows about the project it works on.",
 	about_id: "about-this-space",
-	about_description: "What this space is, and what every bot working in it needs.",
+	about_description: "What this space is, and what every agent working in it needs.",
 	written_title: "The bot changed what it knows about the space",
 	laid_down_title: "The space's plugin was laid down",
 };
