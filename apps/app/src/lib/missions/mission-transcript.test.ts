@@ -7,6 +7,7 @@ import {
 	BEFORE_FIRST_RUN,
 	placeMissionEvents,
 	placeMissions,
+	withoutMissionSummons,
 } from "./mission-transcript"
 
 import type { TranscriptRow } from "@/lib/chat/screen-model"
@@ -190,5 +191,42 @@ describe("placeMissionEvents", () => {
 		])
 
 		expect(placed.map(({ event }) => event.id)).toEqual(["e-early", "e-late"])
+	})
+})
+
+const ANSWER_TO_SUMMONS: TranscriptRow = {
+	...rowOf("bot-1", 100),
+	text: "On it",
+}
+
+const transcriptAfter = (summons: string) =>
+	withoutMissionSummons(
+		[{ ...rowOf(null, 0), text: summons }, ANSWER_TO_SUMMONS],
+		"bot-1",
+	)
+
+describe("withoutMissionSummons", () => {
+	it.each([
+		[
+			"waiting_bot",
+			"The coding session of this mission is blocked and waiting on you.",
+		],
+		[
+			"waiting_bot",
+			"The coding agent of this mission is blocked and waiting on you.",
+		],
+		["working", "Carry out this mission."],
+	])(
+		"hides the %s summons %j and names the answer it caused",
+		(state, summons) => {
+			expect(transcriptAfter(summons)).toEqual({
+				rows: [ANSWER_TO_SUMMONS],
+				summonsCauses: [{ turnId: "t-100", state }],
+			})
+		},
+	)
+
+	it("keeps a user message that is no summons", () => {
+		expect(transcriptAfter("toString").rows).toHaveLength(2)
 	})
 })

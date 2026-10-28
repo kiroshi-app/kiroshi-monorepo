@@ -405,7 +405,10 @@ describe("startMissionRunDriver", () => {
 		await harness.enter("waiting_bot")
 
 		expect(spoken(harness.tail())).toEqual([
-			[null, "The coding agent of this mission is blocked and waiting on you."],
+			[
+				null,
+				"The coding session of this mission is blocked and waiting on you.",
+			],
 		])
 		expect(harness.tail().speakers.map(({ botId }) => botId)).toEqual([
 			harness.mission.botId,
@@ -1023,7 +1026,10 @@ describe("startMissionRunDriver", () => {
 
 		expect(harness.originStarts()).toHaveLength(1)
 		expect(spoken(harness.tail())).toEqual([
-			[null, "The coding agent of this mission is blocked and waiting on you."],
+			[
+				null,
+				"The coding session of this mission is blocked and waiting on you.",
+			],
 		])
 	})
 
@@ -1143,7 +1149,10 @@ describe("startMissionRunDriver", () => {
 		await restart({ open: "waiting_bot" })
 
 		expect(spoken(harness.tail())).toEqual([
-			[null, "The coding agent of this mission is blocked and waiting on you."],
+			[
+				null,
+				"The coding session of this mission is blocked and waiting on you.",
+			],
 		])
 		expect(harness.originStarts()).toEqual([])
 	})
