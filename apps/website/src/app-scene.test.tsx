@@ -31,10 +31,10 @@ const shellHue = () =>
 const tabNamed = (name: string) =>
 	within(screen.getByRole("tablist")).getByRole("tab", { name })
 
-const switchToPersonal = () =>
-	fireEvent.click(
-		screen.getByRole("button", { name: `Open ${SCENE_COPY.spaces.personal}` }),
-	)
+const openSpace = (name: string) =>
+	fireEvent.click(screen.getByRole("button", { name: `Open ${name}` }))
+
+const switchToPersonal = () => openSpace(SCENE_COPY.spaces.personal)
 
 const conversationIconHues = () =>
 	[...scene().querySelectorAll("[data-slot=conversation-subject-icon]")].map(
@@ -146,12 +146,12 @@ describe("the landing scene", () => {
 
 	it.each([
 		{
-			space: "work",
+			space: SCENE_COPY.spaces.work,
 			bot: SCENE_COPY.bots.wren.name,
 			ticket: SCENE_COPY.exchanges.wren.missionTicketTitle,
 		},
 		{
-			space: "personal",
+			space: SCENE_COPY.spaces.personal,
 			bot: SCENE_COPY.bots.tomo.name,
 			ticket: SCENE_COPY.exchanges.tomo.missionTicketTitle,
 		},
@@ -159,7 +159,7 @@ describe("the landing scene", () => {
 		"titles the ticket of the mission $bot opens in $space",
 		({ space, bot, ticket }) => {
 			renderScene()
-			if (space === "personal") switchToPersonal()
+			openSpace(space)
 
 			fireEvent.click(rosterRowNamed(bot))
 
