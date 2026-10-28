@@ -143,6 +143,9 @@ export const createFakeMissions = (): FakeMissions => {
 			if (isReportedRefused) {
 				throw new Error("the mission report could not be recorded")
 			}
+			if (reports.some(([reportedId]) => reportedId === missionId)) {
+				throw { kind: "missionAlreadyReported", id: missionId }
+			}
 			reports.push([missionId, turnId])
 		},
 
