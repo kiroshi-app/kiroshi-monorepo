@@ -1,12 +1,8 @@
 @import "@workspace/ui/styles/globals.css";
-@import "@fontsource-variable/roboto-mono";
 
 @source "../../../packages/ui/src";
 
 @theme static {
-	--font-mono:
-		"Roboto Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
-
 	--color-window-close: #ff5f57;
 	--color-window-minimize: #febc2e;
 	--color-window-zoom: #28c840;

@@ -2,7 +2,10 @@ import { type ReactNode, useState } from "react"
 
 import { ActivityIndicator } from "@workspace/ui/components/activity-indicator"
 import { AppHeader } from "@workspace/ui/components/app-header"
-import type { AppRailDots } from "@workspace/ui/components/app-rail"
+import type {
+	AppRailDots,
+	AppRailPanel,
+} from "@workspace/ui/components/app-rail"
 import {
 	AppSidebar,
 	type AppSidebarConversation,
@@ -10,12 +13,9 @@ import {
 import type { BotBadge } from "@workspace/ui/components/bot-badge"
 import { HeaderConversationButton } from "@workspace/ui/components/header-conversation-button"
 import { HeaderIdentityButton } from "@workspace/ui/components/header-identity-button"
+import type { ListEnd } from "@workspace/ui/components/list-skeleton"
 import { Markdown } from "@workspace/ui/components/markdown"
 import { MissionTurn } from "@workspace/ui/components/mission-turn"
-import type {
-	MissionsPanelMission,
-	MissionsPanelProps,
-} from "@workspace/ui/components/missions-panel"
 import {
 	type PinnedMessage,
 	PinnedMessages,
@@ -27,6 +27,7 @@ import {
 	RoutinesPanel,
 	RoutinesPanelTrigger,
 } from "@workspace/ui/components/routines-panel"
+import type { SpaceInvitation } from "@workspace/ui/components/space-invitations"
 import { ThreadLayout } from "@workspace/ui/components/thread-layout"
 import type { TranscriptItem } from "@workspace/ui/components/transcript"
 import { AssistantTurn, UserTurn } from "@workspace/ui/components/turn"
@@ -34,15 +35,20 @@ import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 
 import { SCENE_COPY } from "./copy"
 import {
+	BADGES_BY_SPACE,
 	CONVERSATIONS_BY_SPACE,
+	HOST_BY_SPACE,
+	MISSIONS_BY_SPACE,
 	READER,
 	ROSTER_BY_SPACE,
 	type SceneLoop,
 	type SceneSpace,
+	SECTIONS_BY_SPACE,
 	SPACES,
 	spaceOf,
 	WORK,
 } from "./scene-cast"
+import { sceneTabsOf } from "./scene-tabs"
 import { exchangeOf, type SceneTurn } from "./scene-threads"
 import { useReaderAvatar } from "./use-reader-avatar"
 import { type SceneFrame, useSceneTimeline } from "./use-scene-timeline"
@@ -80,16 +86,9 @@ const NO_ACTIVITY: EarlierTodayRow[] = []
 
 const doNothing = () => {}
 
-const NO_EARLIER_MISSIONS: MissionsPanelMission[] = []
+const NO_INVITATIONS: SpaceInvitation[] = []
 
-const missionsPanelOf = (space: SceneSpace): MissionsPanelProps => ({
-	open: space.missions.map((mission) => ({
-		...mission,
-		conversationId: mission.id,
-	})),
-	earlierToday: NO_EARLIER_MISSIONS,
-	onOpen: doNothing,
-})
+const WHOLE_ROSTER: ListEnd = { hasNextPage: false, isFetchingNextPage: false }
 
 const STRONGEST_FIRST: BotBadge[] = ["attention", "failed", "done"]
 
@@ -97,9 +96,7 @@ const railDotsOf = (space: SceneSpace): AppRailDots => ({
 	conversations: STRONGEST_FIRST.find((badge) =>
 		space.conversations.some((row) => row.badge === badge),
 	),
-	missions: space.missions.some((mission) => mission.state === "waiting_human")
-		? "attention"
-		: undefined,
+	missions: BADGES_BY_SPACE[space.id],
 })
 
 const sceneRow = (
@@ -217,6 +214,8 @@ const ThreadTitle = ({ bot, conversation, onOpen }: ThreadTitleProps) =>
 	) : (
 		<HeaderConversationButton
 			bots={conversation.participants}
+			color={conversation.color}
+			icon={conversation.icon}
 			name={conversation.name}
 			onOpenSettings={onOpen}
 		/>
@@ -272,6 +271,9 @@ export const AppScene = () => {
 	const [isPanelOpen, setPanelOpen] = useState(false)
 	const [draft, setDraft] = useState("")
 	const [hasPicked, setHasPicked] = useState(false)
+	const [sidebarPanel, setSidebarPanel] =
+		useState<AppRailPanel>("conversations")
+	const [collapsedSectionIds, setCollapsedSectionIds] = useState<string[]>([])
 	const readerAvatar = useReaderAvatar()
 	const space = spaceOf(spaceId)
 	const exchange = exchangeOf(selectedId)
@@ -303,6 +305,18 @@ export const AppScene = () => {
 		engage()
 		setPanelOpen(isOpen)
 	}
+	const openSidebarPanel = (panel: AppRailPanel) => {
+		engage()
+		setSidebarPanel(panel)
+	}
+	const collapseSection = (id: string, isCollapsed: boolean) => {
+		engage()
+		setCollapsedSectionIds((collapsed) =>
+			isCollapsed
+				? [...collapsed, id]
+				: collapsed.filter((sectionId) => sectionId !== id),
+		)
+	}
 
 	return (
 		<section
@@ -316,24 +330,77 @@ export const AppScene = () => {
 			<RosterProvider bots={space.bots}>
 				<WorkspaceShell
 					isLandmark={false}
+					isResizable
 					sidebar={
 						<AppSidebar
+							activeTabId={selectedId}
+							badgesBySpaceId={BADGES_BY_SPACE}
 							bots={space.rows}
 							botsBySpaceId={ROSTER_BY_SPACE}
+							canGoBack={false}
+							canGoForward={false}
+							collapsedSectionIds={collapsedSectionIds}
+							conversations={space.conversations}
 							conversationsBySpaceId={CONVERSATIONS_BY_SPACE}
+							hasClosedTab={false}
+							haveBotsFailedToLoad={false}
+							hostBySpaceId={HOST_BY_SPACE}
 							insetWindowControls
-							missionsBySpaceId={{ [space.id]: missionsPanelOf(space) }}
+							invitations={NO_INVITATIONS}
+							isSpaceSwitchingEnabled
+							missionsBySpaceId={MISSIONS_BY_SPACE}
+							onAcceptInvitation={engage}
+							onAddBotToSpace={engage}
+							onCloseOtherTabs={engage}
+							onCloseTab={engage}
+							onCollapseSection={collapseSection}
 							onCreateBot={engage}
 							onCreateConversation={engage}
+							onCreateSection={engage}
+							onCreateSpace={engage}
+							onDeclineInvitation={engage}
+							onDeleteBot={engage}
+							onDeleteConversation={engage}
+							onDeleteSection={engage}
+							onDuplicateBot={engage}
+							onDuplicateTab={engage}
+							onEditBot={engage}
+							onGoBack={engage}
+							onGoForward={engage}
+							onMoveTabToNewWindow={engage}
+							onNewTab={engage}
+							onOpenBotInNewTab={engage}
+							onOpenConversationInNewTab={engage}
+							onOpenConversationSettings={engage}
+							onOpenPanelChange={openSidebarPanel}
 							onOpenSearch={engage}
+							onOpenSpaceSettings={engage}
+							onOpenUserSettings={engage}
+							onPinRoster={engage}
+							onPinTab={engage}
+							onRemoveBotFromSpace={engage}
+							onRenameSection={engage}
+							onReopenClosedTab={engage}
+							onReorderSpaces={engage}
+							onReorderTabs={engage}
+							onRetryInvitation={engage}
 							onSelectBot={select}
 							onSelectConversation={select}
 							onSelectSpace={selectSpace}
+							onSelectTab={select}
+							onSpaceSwitcherOpenChange={engage}
+							onUnpinTab={engage}
+							openPanel={sidebarPanel}
 							railDots={railDotsOf(space)}
+							rosterListEnd={WHOLE_ROSTER}
+							sectionsBySpaceId={SECTIONS_BY_SPACE}
 							selectedBotId={exchange?.bot ? selectedId : undefined}
 							selectedConversationId={exchange?.bot ? undefined : selectedId}
 							selectedSpaceId={space.id}
+							space={space}
+							spaceHost={HOST_BY_SPACE[space.id]}
 							spaces={SPACES}
+							tabs={sceneTabsOf(space, selectedId)}
 							user={{ ...READER, image: readerAvatar }}
 						/>
 					}
