@@ -1,5 +1,4 @@
 import conversationIcons from "@workspace/shared/conversation-icons.json"
-import { hueStyle } from "@workspace/ui/components/hue-palette"
 import {
 	type ConversationIconName,
 	ConversationIcons,
@@ -12,7 +11,6 @@ const PICTOGRAM = "relative"
 
 type ConversationSubjectIconProps = {
 	icon?: string
-	hue?: number | null
 	side?: number
 }
 
@@ -26,7 +24,6 @@ const conversationIconOf = (icon: string | undefined): ConversationIconName =>
 
 const ConversationSubjectIcon = ({
 	icon,
-	hue,
 	side = 40,
 }: ConversationSubjectIconProps) => {
 	const Pictogram = ConversationIcons[conversationIconOf(icon)]
@@ -35,10 +32,8 @@ const ConversationSubjectIcon = ({
 		<span
 			aria-hidden="true"
 			className={CELL}
-			data-hue={hue ?? undefined}
 			data-slot="conversation-subject-icon"
 			style={{
-				...(hue != null && hueStyle(hue)),
 				color: "var(--conversation-icon-foreground)",
 				width: side,
 				height: side,

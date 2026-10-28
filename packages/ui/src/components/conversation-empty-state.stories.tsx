@@ -393,7 +393,7 @@ export const ThemesGroup = meta.story({
 		},
 	},
 	play: async ({ canvasElement }) =>
-		expectSubjectIconInBothThemes(canvasElement, undefined, THEMES_MARK_SIZE),
+		expectSubjectIconInBothThemes(canvasElement, THEMES_MARK_SIZE),
 })
 
 export const ThemesGroupRed = meta.story({
@@ -403,16 +403,12 @@ export const ThemesGroupRed = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this to read a room of several companions coloured red, in light and dark at once. Check that the 56px subject icon wears the red pair of each theme and the picked pictogram. Pick `ThemesGroup` for a room with no colour.",
+					"Reach for this to read a room of several companions coloured red, in light and dark at once. Check that the 56px subject icon keeps the neutral pair of each theme, as a room with no colour does, and shows the picked pictogram. Pick `ThemesGroup` for a room with no colour.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) =>
-		expectSubjectIconInBothThemes(
-			canvasElement,
-			BLOT_HUES.red,
-			THEMES_MARK_SIZE,
-		),
+		expectSubjectIconInBothThemes(canvasElement, THEMES_MARK_SIZE),
 })
 
 export const FreeHue = meta.story({
@@ -427,12 +423,12 @@ export const FreeHue = meta.story({
 		docs: {
 			description: {
 				story:
-					"A room coloured at a hue outside the eight presets, 210, in a Space at that hue, light beside dark. Check that the subject icon and the Space chip both wear 210 rather than the nearest preset. Pick `ThemesGroupRed` and `InSpace` for preset hues.",
+					"A room coloured at a hue outside the eight presets, 210, in a Space at that hue, light beside dark. Check that the Space chip wears 210 rather than the nearest preset while the subject icon keeps the neutral pair of each theme. Pick `ThemesGroupRed` and `InSpace` for preset hues.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
-		await expectSubjectIconInBothThemes(canvasElement, 210, THEMES_MARK_SIZE)
+		await expectSubjectIconInBothThemes(canvasElement, THEMES_MARK_SIZE)
 		for (const line of slotsIn(canvasElement, "conversation-empty-space")) {
 			const chip = slotIn(line, "space-tint")
 			await expect(hexOfComputed(getComputedStyle(chip).backgroundColor)).toBe(

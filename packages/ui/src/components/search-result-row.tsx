@@ -79,7 +79,6 @@ const SearchResultIdentityMark = ({
 	if (identity.kind === "chat-group")
 		return (
 			<ConversationSubjectIcon
-				hue={identity.color}
 				icon={identity.icon}
 				side={MISSION_AVATAR_SIZE}
 			/>

@@ -31,7 +31,6 @@ const HeaderConversationButton = ({
 	name,
 	bots,
 	icon,
-	color,
 	isSettingsOpen = false,
 	onOpenSettings,
 	className,
@@ -48,7 +47,7 @@ const HeaderConversationButton = ({
 			variant="ghost"
 		>
 			{bots.length > 1 ? (
-				<ConversationSubjectIcon hue={color} icon={icon} side={AVATAR_SIZE} />
+				<ConversationSubjectIcon icon={icon} side={AVATAR_SIZE} />
 			) : (
 				<span className="flex shrink-0 items-center gap-1">
 					{bots.map((bot) => (

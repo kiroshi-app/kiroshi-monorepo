@@ -677,6 +677,8 @@ const PANEL_TOKENS = [
 	"--input",
 	"--muted",
 	"--secondary",
+	"--conversation-icon",
+	"--conversation-icon-foreground",
 ]
 
 const paintOf = (element: HTMLElement) =>
@@ -2137,7 +2139,7 @@ export const SpaceTinted = meta.story({
 		docs: {
 			description: {
 				story:
-					"The roster in a space that carries a colour, which the panel must not wear: the space colour reaches the reader's own message bubbles and the colour dots, never the roster. Check that the panel's inner layer paints nothing of its own, that the eight tokens it paints with read exactly the values they read outside any space, and that its trailing edge is the single divider the conversation beside it shares. A row, a section card, a rule or a field washed in the space colour is the regression this story catches. Pick `Roster` for the panel in a space with no colour, `Conversation/Routines/RoutinesPanel` `OnShellSurfaceTinted` for the panel opposite.",
+					"The roster in a space that carries a colour, which the panel must not wear: the space colour reaches the reader's own message bubbles and the colour dots, never the roster. Check that the panel's inner layer paints nothing of its own, that the ten tokens it paints with, the conversation icon pair among them, read exactly the values they read outside any space, and that its trailing edge is the single divider the conversation beside it shares. A row, a section card, a rule or a field washed in the space colour is the regression this story catches. Pick `Roster` for the panel in a space with no colour, `Conversation/Routines/RoutinesPanel` `OnShellSurfaceTinted` for the panel opposite.",
 			},
 		},
 	},
@@ -5445,7 +5447,7 @@ export const FreeHue = meta.story({
 		docs: {
 			description: {
 				story:
-					"A companion and a conversation at a hue outside the eight presets, 210. Check that the companion avatar and the conversation hexagon both wear 210 rather than the nearest preset. Pick `Identities` for the preset hues.",
+					"A companion and a conversation at a hue outside the eight presets, 210. Check that the companion avatar wears 210 rather than the nearest preset while the conversation hexagon keeps the neutral pair. Pick `Identities` for the preset hues.",
 			},
 		},
 	},
@@ -5453,9 +5455,10 @@ export const FreeHue = meta.story({
 		const room = rowFor(canvasElement, "Launch review")
 		const companion = rowFor(canvasElement, ROSTER[0].name)
 
-		await expect(slotIn(room, "conversation-subject-icon")).toHaveAttribute(
-			"data-hue",
-			"210",
+		const icon = slotIn(room, "conversation-subject-icon")
+		await expect(icon).not.toHaveAttribute("data-hue")
+		await expect(slotIn(icon, "outlined-hexagon-face").style.fill).toBe(
+			"var(--conversation-icon)",
 		)
 		await expect(companionGlyphs(companion).map(companionHueOf)).toEqual([210])
 	},

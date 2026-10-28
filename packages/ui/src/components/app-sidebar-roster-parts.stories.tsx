@@ -108,7 +108,7 @@ export const ThemesLiftedGroup = meta.story({
 	globals: { theme_layout: "side-by-side" },
 	render: () => <LiftedConversationAtPointer conversation={DESK_ROOM} />,
 	play: async ({ canvasElement }) => {
-		await expectSubjectIconInBothThemes(canvasElement, undefined, LIFTED_SIDE)
+		await expectSubjectIconInBothThemes(canvasElement, LIFTED_SIDE)
 		await expectLiftedOnPointer(canvasElement)
 	},
 })
@@ -121,11 +121,7 @@ export const ThemesLiftedGroupRed = meta.story({
 		/>
 	),
 	play: async ({ canvasElement }) => {
-		await expectSubjectIconInBothThemes(
-			canvasElement,
-			BLOT_HUES.red,
-			LIFTED_SIDE,
-		)
+		await expectSubjectIconInBothThemes(canvasElement, LIFTED_SIDE)
 		await expectLiftedOnPointer(canvasElement)
 	},
 })

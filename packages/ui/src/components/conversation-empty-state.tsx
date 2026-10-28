@@ -153,7 +153,7 @@ const ConversationEmptyState = ({
 			hint={t("conversationEmptyState.hint")}
 			mark={
 				bots.length > 1 ? (
-					<ConversationSubjectIcon hue={color} icon={icon} side={MARK_SIZE} />
+					<ConversationSubjectIcon icon={icon} side={MARK_SIZE} />
 				) : (
 					<BotIdentityAvatar
 						hue={soloBot.blot}

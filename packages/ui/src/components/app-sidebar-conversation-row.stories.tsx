@@ -173,14 +173,13 @@ const expectTwoBotsAndACounter = async (row: HTMLElement) => {
 	)
 }
 
-const expectCellWears = async (row: HTMLElement, hue?: number) => {
+const expectNeutralCell = async (row: HTMLElement) => {
 	const icon = slotIn(row, "conversation-subject-icon")
 	await expect(slotIn(row, "outlined-hexagon-face").style.fill).toBe(
 		"var(--conversation-icon)",
 	)
 	await expect(icon.style.color).toBe("var(--conversation-icon-foreground)")
-	if (hue === undefined) await expect(icon).not.toHaveAttribute("data-hue")
-	else await expect(icon).toHaveAttribute("data-hue", String(hue))
+	await expect(icon).not.toHaveAttribute("data-hue")
 }
 
 const expectKnockoutCutToTheRow = async (row: HTMLElement) => {
@@ -267,7 +266,7 @@ export const RowWithoutIconOrColour = meta.story({
 	play: async ({ canvasElement }) => {
 		const row = rowIn(canvasElement)
 		await expectRowAnatomy(row)
-		await expectCellWears(row)
+		await expectNeutralCell(row)
 		await expect(glyphIn(row, ConversationIcons.MessageSquare)).not.toBeNull()
 		await expect(row).toHaveAccessibleName(
 			expect.stringMatching(new RegExp(`^${DESK_ROOM.name}`)),
@@ -283,65 +282,9 @@ export const RedShieldKeyRow = meta.story({
 	play: async ({ canvasElement }) => {
 		const row = rowIn(canvasElement)
 		await expectRowAnatomy(row)
-		await expectCellWears(row, BLOT_HUES.red)
+		await expectNeutralCell(row)
 		await expect(glyphIn(row, ConversationIcons.ShieldKey)).not.toBeNull()
 	},
-})
-
-export const RowInRed = meta.story({
-	tags: ["test-only"],
-	args: { conversation: { ...DESK_ROOM, color: BLOT_HUES.red } },
-	play: async ({ canvasElement }) =>
-		expectCellWears(rowIn(canvasElement), BLOT_HUES.red),
-})
-
-export const RowInYellow = meta.story({
-	tags: ["test-only"],
-	args: { conversation: { ...DESK_ROOM, color: BLOT_HUES.yellow } },
-	play: async ({ canvasElement }) =>
-		expectCellWears(rowIn(canvasElement), BLOT_HUES.yellow),
-})
-
-export const RowInGreen = meta.story({
-	tags: ["test-only"],
-	args: { conversation: { ...DESK_ROOM, color: BLOT_HUES.green } },
-	play: async ({ canvasElement }) =>
-		expectCellWears(rowIn(canvasElement), BLOT_HUES.green),
-})
-
-export const RowInCyan = meta.story({
-	tags: ["test-only"],
-	args: { conversation: { ...DESK_ROOM, color: BLOT_HUES.cyan } },
-	play: async ({ canvasElement }) =>
-		expectCellWears(rowIn(canvasElement), BLOT_HUES.cyan),
-})
-
-export const RowInBlue = meta.story({
-	tags: ["test-only"],
-	args: { conversation: { ...DESK_ROOM, color: BLOT_HUES.blue } },
-	play: async ({ canvasElement }) =>
-		expectCellWears(rowIn(canvasElement), BLOT_HUES.blue),
-})
-
-export const RowInPurple = meta.story({
-	tags: ["test-only"],
-	args: { conversation: { ...DESK_ROOM, color: BLOT_HUES.purple } },
-	play: async ({ canvasElement }) =>
-		expectCellWears(rowIn(canvasElement), BLOT_HUES.purple),
-})
-
-export const RowInPink = meta.story({
-	tags: ["test-only"],
-	args: { conversation: { ...DESK_ROOM, color: BLOT_HUES.pink } },
-	play: async ({ canvasElement }) =>
-		expectCellWears(rowIn(canvasElement), BLOT_HUES.pink),
-})
-
-export const RowInOrange = meta.story({
-	tags: ["test-only"],
-	args: { conversation: { ...DESK_ROOM, color: BLOT_HUES.orange } },
-	play: async ({ canvasElement }) =>
-		expectCellWears(rowIn(canvasElement), BLOT_HUES.orange),
 })
 
 export const RowWithOneBot = meta.story({

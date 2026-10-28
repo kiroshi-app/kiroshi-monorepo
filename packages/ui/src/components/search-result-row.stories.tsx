@@ -276,7 +276,7 @@ export const ThemesChatGroup = meta.story({
 		},
 	},
 	play: async ({ canvasElement }) =>
-		expectSubjectIconInBothThemes(canvasElement, undefined, IDENTITY_SIDE),
+		expectSubjectIconInBothThemes(canvasElement, IDENTITY_SIDE),
 })
 
 export const ThemesChatGroupRed = meta.story({
@@ -289,12 +289,12 @@ export const ThemesChatGroupRed = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this to read a room of several companions coloured red, in light and dark at once. Check that the 32px subject icon wears the red pair of each theme and the picked pictogram. Pick `ThemesChatGroup` for a room with no colour.",
+					"Reach for this to read a room of several companions coloured red, in light and dark at once. Check that the 32px subject icon keeps the neutral pair of each theme, as a room with no colour does, and shows the picked pictogram. Pick `ThemesChatGroup` for a room with no colour.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) =>
-		expectSubjectIconInBothThemes(canvasElement, BLOT_HUES.red, IDENTITY_SIDE),
+		expectSubjectIconInBothThemes(canvasElement, IDENTITY_SIDE),
 })
 
 export const Mission = meta.story({
