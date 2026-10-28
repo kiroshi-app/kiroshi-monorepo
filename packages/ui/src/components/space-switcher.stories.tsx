@@ -453,7 +453,7 @@ export const Badges = meta.story({
 		docs: {
 			description: {
 				story:
-					"Three of the five spaces carrying a badge while the reader sits in a fourth, which is how a companion working out of sight reaches them. Check every badged dot keeps its space's tint at its centre and wears the badge as a ring around it — the mark says something happened there, the tint still says which space it is — that the dots of the spaces with nothing stay exactly as they are drawn without badges, and that the button takes one mark of its own for the strongest badge waiting elsewhere, attention over failed over done, drawn on the name's line and level with the middle of the letters so the name and the mark read as one pair. The marks are drawn and never spoken: the button's accessible name is still the open space, since a reader who moves there meets the rows that carry the news. Pick `BadgeRanking` for the order under a quieter set, `BadgeHere` for the badge that belongs to the space already open. The app assembles it at `apps/app/src/App.tsx:935`.",
+					"Three of the five spaces carrying a badge while the reader sits in a fourth, which is how a companion working out of sight reaches them. Check every badged dot keeps its space's tint at its centre and wears the badge as a ring around it — the mark says something happened there, the tint still says which space it is — that the dots of the spaces with nothing stay exactly as they are drawn without badges, and that the button takes one mark of its own for the strongest badge waiting elsewhere, attention over failed, a done staying on its dot and off the button, drawn on the name's line and level with the middle of the letters so the name and the mark read as one pair. The marks are drawn and never spoken: the button's accessible name is still the open space, since a reader who moves there meets the rows that carry the news. Pick `BadgeRanking` for the order under a quieter set, `BadgeDoneElsewhere` for a done alone, `BadgeHere` for the badge that belongs to the space already open. The app assembles it at `apps/app/src/App.tsx:935`.",
 			},
 		},
 	},
@@ -484,7 +484,7 @@ export const BadgeRanking = meta.story({
 		docs: {
 			description: {
 				story:
-					"Two spaces waiting, one done and one failed, with neither one open. Check the button wears the failed mark rather than the done one: a run that broke asks for the reader before a run that finished, and the button has room for one mark only. Pick `Badges` for the full order with attention in it. The app assembles it at `apps/app/src/App.tsx:935`.",
+					"Two spaces waiting, one done and one failed, with neither one open. Check the button wears the failed mark: a run that broke asks for the reader, a run that finished never marks the button, and the button has room for one mark only. Pick `Badges` for the full order with attention in it, `BadgeDoneElsewhere` for a done alone. The app assembles it at `apps/app/src/App.tsx:935`.",
 			},
 		},
 	},
@@ -492,6 +492,35 @@ export const BadgeRanking = meta.story({
 		await expect(
 			badgeOn(canvas.getByRole("button", { name: "Change space, Vocca open" })),
 		).toBe("failed")
+	},
+})
+
+export const BadgeDoneElsewhere = meta.story({
+	args: { badgesBySpaceId: { atelier: "done" } },
+	render: (args) => (
+		<LiveSwitcher badgesBySpaceId={args.badgesBySpaceId} spaces={args.spaces} />
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The only news in the account is a run that finished in a space the reader does not have open. Check the button carries no mark and its name is the open space alone: a done asks nothing of the reader, and a mark here read as news about the space already open. Its own dot in the strip still wears the done ring, so the news is not lost. Pick `BadgeRanking` for the failed mark a done never replaces. The app assembles it at `apps/app/src/App.tsx:935`.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const trigger = canvas.getByRole("button", {
+			name: "Change space, Perso open",
+		})
+
+		await expect(badgeOn(trigger)).toBeUndefined()
+		await expect(dotBadges(canvasElement)).toEqual([
+			undefined,
+			undefined,
+			"done",
+			undefined,
+			undefined,
+		])
 	},
 })
 

@@ -863,6 +863,7 @@ navigation-appframe--online-space
 navigation-appframe--shared-space
 navigation-apprail--a-7-spaces-badge
 navigation-apprail--a-7-spaces-badge-dark
+navigation-apprail--a-7-spaces-done-elsewhere
 navigation-apprail--a-7-spaces-menu
 navigation-apprail--a-7-spaces-menu-dark
 navigation-apprail--attention-dot
@@ -1245,6 +1246,7 @@ navigation-skiplink--custom-label
 navigation-skiplink--focused
 navigation-skiplink--hidden
 navigation-spaceswitcher--badge-and-long-name
+navigation-spaceswitcher--badge-done-elsewhere
 navigation-spaceswitcher--badge-here
 navigation-spaceswitcher--badge-ranking
 navigation-spaceswitcher--badges
