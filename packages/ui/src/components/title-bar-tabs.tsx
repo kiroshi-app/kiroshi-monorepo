@@ -300,20 +300,20 @@ const useCloseReveal = () => {
 			if (closePairOf(event.relatedTarget) === id) return
 			setId((current) => (current === id ? null : current))
 		}
-	const pointerHandlersFor = (id: string) => ({
+	const sharedRevealFor = (id: string) => ({
 		[CLOSE_PAIR]: id,
 		onPointerEnter: () => setHoveredId(id),
 		onPointerLeave: forget(id, setHoveredId),
 		onBlur: forget(id, setFocusedId),
 	})
 	const tabRevealFor = (id: string): CloseRevealHandlers => ({
-		...pointerHandlersFor(id),
+		...sharedRevealFor(id),
 		onFocus: (event) => {
 			if (event.currentTarget.matches(":focus-visible")) setFocusedId(id)
 		},
 	})
 	const closeRevealFor = (id: string): CloseRevealHandlers => ({
-		...pointerHandlersFor(id),
+		...sharedRevealFor(id),
 		onFocus: () => setFocusedId(id),
 	})
 	const revealNow = (id: string) => flushSync(() => setFocusedId(id))
