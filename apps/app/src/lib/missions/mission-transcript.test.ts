@@ -194,47 +194,37 @@ describe("placeMissionEvents", () => {
 	})
 })
 
-const spokenRowOf = (
-	authorBotId: string | null,
-	timestamp: number,
-	text: string,
-): TranscriptRow => ({ ...rowOf(authorBotId, timestamp), text })
+const ANSWER_TO_SUMMONS: TranscriptRow = {
+	...rowOf("bot-1", 100),
+	text: "On it",
+}
 
 const transcriptAfter = (summons: string) =>
 	withoutMissionSummons(
-		[spokenRowOf(null, 0, summons), spokenRowOf("bot-1", 100, "On it")],
+		[{ ...rowOf(null, 0), text: summons }, ANSWER_TO_SUMMONS],
 		"bot-1",
 	)
 
 describe("withoutMissionSummons", () => {
-	it("hides the waiting_bot summons and names the answer it caused", () => {
-		expect(
-			transcriptAfter(
-				"The coding session of this mission is blocked and waiting on you.",
-			),
-		).toEqual({
-			rows: [spokenRowOf("bot-1", 100, "On it")],
-			summonsCauses: [{ turnId: "t-100", state: "waiting_bot" }],
-		})
-	})
-
-	it("hides the waiting_bot summons a thread already holds in its former wording", () => {
-		expect(
-			transcriptAfter(
-				"The coding agent of this mission is blocked and waiting on you.",
-			),
-		).toEqual({
-			rows: [spokenRowOf("bot-1", 100, "On it")],
-			summonsCauses: [{ turnId: "t-100", state: "waiting_bot" }],
-		})
-	})
-
-	it("hides the working summons and names the answer it caused", () => {
-		expect(transcriptAfter("Carry out this mission.")).toEqual({
-			rows: [spokenRowOf("bot-1", 100, "On it")],
-			summonsCauses: [{ turnId: "t-100", state: "working" }],
-		})
-	})
+	it.each([
+		[
+			"waiting_bot",
+			"The coding session of this mission is blocked and waiting on you.",
+		],
+		[
+			"waiting_bot",
+			"The coding agent of this mission is blocked and waiting on you.",
+		],
+		["working", "Carry out this mission."],
+	])(
+		"hides the %s summons %j and names the answer it caused",
+		(state, summons) => {
+			expect(transcriptAfter(summons)).toEqual({
+				rows: [ANSWER_TO_SUMMONS],
+				summonsCauses: [{ turnId: "t-100", state }],
+			})
+		},
+	)
 
 	it("keeps a user message that is no summons", () => {
 		expect(transcriptAfter("toString").rows).toHaveLength(2)
