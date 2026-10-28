@@ -28,9 +28,9 @@ export const SITE_PAGES_COPY = {
 				body: [
 					[
 						"Your conversations, files, skills and memory live on your computer. Kiroshi's servers don't store them.",
-						"What the agent works on goes to the model provider you configured, under your own account with it.",
+						"What the coding session works on goes to the model provider you configured, under your own account with it.",
 						"In the online mode, the relay stores your account, your sessions and your Spaces. It passes messages along without storing them, end-to-end encrypted, so it can't read them.",
-						"Kiroshi runs no analytics, no crash reporting and no tracking of its own. The agent, which the desktop app runs, sends its own usage data to the model provider you configured.",
+						"Kiroshi runs no analytics, no crash reporting and no tracking of its own. The coding session, which the desktop app runs, sends its own usage data to the model provider you configured.",
 						"You can delete your account in the iPhone app only, and some data stays behind. Both are explained below.",
 					],
 				],
@@ -63,7 +63,7 @@ export const SITE_PAGES_COPY = {
 			{
 				heading: "Messages and conversations",
 				body: [
-					"On your computer, the app keeps your Spaces, companions, conversations, messages, missions, routines and their runs in a database in the app's data folder, com.kiroshi.app, with no time limit. Attachments, up to 10 MB each and 20 per message, are kept beside it until you delete the conversation.",
+					"On your computer, the app keeps your Spaces, agents, conversations, messages, missions, routines and their runs in a database in the app's data folder, com.kiroshi.app, with no time limit. Attachments, up to 10 MB each and 20 per message, are kept beside it until you delete the conversation.",
 					"Skills, memory and plugins are kept in git repositories on your computer. Removing a line from a skill or from memory leaves that line in the git history.",
 					"In a Space shared online, messages between members and the computer that hosts the Space go through the relay: their text, tool output, profile pictures and photos sent from the iPhone. The relay adds the id of the sending device, forwards each message between the computer that hosts the Space and the devices of its members, and writes none of it anywhere.",
 					"Messages are end-to-end encrypted between devices, and protected by TLS on their way to and from api.kiroshi.app. The relay can't read them.",
@@ -102,16 +102,16 @@ export const SITE_PAGES_COPY = {
 			{
 				heading: "Your model provider",
 				body: [
-					"The desktop app runs the agent on your computer. Everything the agent works on goes to the model provider you configured: your conversations, skills, memory, files and tool results. It goes under your own account, with the subscription or key you entered, for example a Claude subscription or an Anthropic API key. Kiroshi has no model provider key of its own and doesn't route this traffic through its servers, so the provider's terms govern that data.",
-					"If you sign in to the model provider through the agent, the agent keeps that sign-in itself, outside Kiroshi's folder, under its own rules.",
-					"The agent keeps transcripts of its sessions on your computer, outside Kiroshi's folder, under its own retention.",
-					"The agent sends usage telemetry and error reports to the model provider you configured. Kiroshi doesn't turn them off.",
+					"The desktop app runs a coding session on your computer. Everything the coding session works on goes to the model provider you configured: your conversations, skills, memory, files and tool results. It goes under your own account, with the subscription or key you entered, for example a Claude subscription or an Anthropic API key. Kiroshi has no model provider key of its own and doesn't route this traffic through its servers, so the provider's terms govern that data.",
+					"If you sign in to the model provider through the coding session, the coding session keeps that sign-in itself, outside Kiroshi's folder, under its own rules.",
+					"The coding session keeps its transcripts on your computer, outside Kiroshi's folder, under its own retention.",
+					"The coding session sends usage telemetry and error reports to the model provider you configured. Kiroshi doesn't turn them off.",
 				],
 			},
 			{
 				heading: "Applications and secrets",
 				body: [
-					"Applications connect the agent to other services. The desktop app reads their catalogue from api.kiroshi.app, which only sees your IP address, and checks their packages with npm and PyPI. When you connect an application, you sign in with its provider directly, and the content of every tool call goes to that provider.",
+					"Applications connect the coding session to other services. The desktop app reads their catalogue from api.kiroshi.app, which only sees your IP address, and checks their packages with npm and PyPI. When you connect an application, you sign in with its provider directly, and the content of every tool call goes to that provider.",
 					"The key or token of your model provider, your relay session token, the sign-in tokens and client secrets of your applications, and the Secrets you enter in Settings are stored on your computer in plain-text files that only your user account can read. They aren't in your system's keychain. Each application only receives its own secrets. They stay until you delete them in Settings or sign out.",
 				],
 			},
@@ -137,14 +137,14 @@ export const SITE_PAGES_COPY = {
 					],
 					"The relay's own log lines carry no IP address, and the relay writes no line per request.",
 					"To limit abuse, the relay holds your IP address and email address in memory for 1 to 10 minutes.",
-					"The desktop app sends no analytics and no crash reports, and keeps the agent's error output in memory only. The iPhone app has no analytics SDK and no tracking: its privacy manifest declares your email address, name, user ID and other content you create, linked to you, and no tracking.",
+					"The desktop app sends no analytics and no crash reports, and keeps the coding session's error output in memory only. The iPhone app has no analytics SDK and no tracking: its privacy manifest declares your email address, name, user ID and other content you create, linked to you, and no tracking.",
 				],
 			},
 			{
 				heading: "Third parties",
 				body: [
 					[
-						"The model provider you configured, with the account or key you entered (for example Anthropic when you use a Claude subscription): everything the agent works on, under your account, or the host's in someone else's Space, plus the agent's usage telemetry and error reports.",
+						"The model provider you configured, with the account or key you entered (for example Anthropic when you use a Claude subscription): everything the coding session works on, under your account, or the host's in someone else's Space, plus the coding session's usage telemetry and error reports.",
 						"Render: hosts the relay and its logs, and the website with its access logs.",
 						"Resend: your email address, with the sign-in code or link it delivers.",
 						"Apple: your sign-in when you use Sign in with Apple.",
@@ -231,7 +231,7 @@ export const SITE_PAGES_COPY = {
 			{
 				heading: "What the service is",
 				body: [
-					"Kiroshi is a desktop app where you talk with Companions in Conversations. The desktop app is free to use locally, on your computer and in Spaces shared on your own network.",
+					"Kiroshi is a desktop app where you talk with Agents in Conversations. The desktop app is free to use locally, on your computer and in Spaces shared on your own network.",
 					`The online mode runs through our relay at ${RELAY_HOST}. It lets you host a Space for people who aren’t on your network and join a Space off your local network.`,
 					"The iPhone app is part of the online mode. It signs in to your Kiroshi account and reaches your Spaces through the relay.",
 				],
@@ -255,7 +255,7 @@ export const SITE_PAGES_COPY = {
 				heading: "Acceptable use",
 				body: [
 					"Use Kiroshi lawfully. Don’t use the relay to harm other people, to get into accounts or systems you’re not allowed to use, or to disrupt the service for others.",
-					"You’re responsible for what your Companions do, in your Conversations and through the Applications you give them.",
+					"You’re responsible for what your Agents do, in your Conversations and through the Applications you give them.",
 					"You’re responsible for the Secrets you store in Kiroshi, and for having the right to use them.",
 				],
 			},
@@ -263,7 +263,7 @@ export const SITE_PAGES_COPY = {
 				heading: "Your content and the model provider",
 				body: [
 					"You bring your own model provider account, for example a Claude subscription or an Anthropic API key. Kiroshi doesn’t resell model usage.",
-					"What your Companions send to the model provider falls under that provider’s terms, not these.",
+					"What your Agents send to the model provider falls under that provider’s terms, not these.",
 					"In the online mode, your Conversations pass through the relay to reach the people in your Space and your iPhone.",
 				],
 			},
@@ -293,7 +293,7 @@ export const SITE_PAGES_COPY = {
 				heading: "Warranties and limitation of liability",
 				body: [
 					"The service is provided as it is, during a beta, with no warranty beyond what the law requires.",
-					"As far as the law allows, we aren’t liable for what your Companions do, for what the model provider does, or for loss caused by the service being unavailable.",
+					"As far as the law allows, we aren’t liable for what your Agents do, for what the model provider does, or for loss caused by the service being unavailable.",
 					"Nothing in these terms limits the rights French law gives you as a consumer and that can’t be waived.",
 				],
 			},
