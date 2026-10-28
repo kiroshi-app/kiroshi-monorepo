@@ -78,6 +78,9 @@ export const sameThread = (one: ThreadSearch, other: ThreadSearch) =>
 	one.conversation === other.conversation &&
 	one.mission === other.mission
 
+export const samePage = (one: TabPage, other: TabPage) =>
+	one.pathname === other.pathname && sameThread(one.thread, other.thread)
+
 export const rowIdsNamedBy = (href: string) => {
 	const { thread, companionId, conversationId } = pageOf(href)
 	return [threadRowIdOf(thread), companionId, conversationId].filter(

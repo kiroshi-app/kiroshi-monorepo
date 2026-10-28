@@ -15,6 +15,7 @@ import {
 	createWorkspaceTabs,
 	forgetWindowWhenClosed,
 	reopenSecondaryWindows,
+	shownTabsOf,
 	type WorkspaceTabs,
 } from "./workspace-tabs"
 
@@ -771,6 +772,145 @@ describe("the strip drag", () => {
 			"/",
 			threadOf("one"),
 		])
+	})
+})
+
+const stripOf = (tabs: WorkspaceTabs) => shownTabsOf(tabs.getState()).tabs
+
+const tabWithId = (tabs: WorkspaceTabs, id: string) =>
+	stripOf(tabs).find((tab) => tab.id === id)
+
+const pinnedStripOn = (pinnedHrefs: string[], unpinnedHrefs: string[]) => {
+	const tabs = tabsOn(...pinnedHrefs, ...unpinnedHrefs)
+	const [, ...openedIds] = idsOf(tabs)
+	for (const id of openedIds.slice(0, pinnedHrefs.length)) {
+		tabs.pin(id)
+	}
+	tabs.close(idOfTabOn(tabs, "/"))
+	return tabs
+}
+
+describe("a push from a pinned tab", () => {
+	it("activates the tab showing that page and leaves every entry list as it is", () => {
+		const tabs = pinnedStripOn([threadOf("pinned")], [threadOf("shown")])
+		const [pinnedId = "", shownId = ""] = idsOf(tabs)
+		tabs.select(pinnedId)
+		const before = stripOf(tabs)
+
+		tabs.history.push(threadOf("shown"))
+
+		expect(viewOf(tabs).activeId).toBe(shownId)
+		expect(stripOf(tabs)).toEqual(before)
+		expect(activeHref(tabs)).toBe(threadOf("shown"))
+	})
+
+	it("picks the nearest tab after the active one showing that page", () => {
+		const tabs = pinnedStripOn(
+			[threadOf("target"), threadOf("pinned")],
+			[threadOf("other"), threadOf("target")],
+		)
+		const [, pinnedId = "", , nearestId = ""] = idsOf(tabs)
+		tabs.select(pinnedId)
+
+		tabs.history.push(threadOf("target"))
+
+		expect(viewOf(tabs).activeId).toBe(nearestId)
+	})
+
+	it("wraps to the start of the strip when no later tab shows that page", () => {
+		const tabs = pinnedStripOn(
+			[threadOf("target"), threadOf("pinned")],
+			[threadOf("other")],
+		)
+		const [wrappedId = "", pinnedId = ""] = idsOf(tabs)
+		tabs.select(pinnedId)
+
+		tabs.history.push(threadOf("target"))
+
+		expect(viewOf(tabs).activeId).toBe(wrappedId)
+	})
+
+	it("opens an unpinned tab right after the pinned ones when no tab shows that page", () => {
+		const tabs = pinnedStripOn(
+			[threadOf("pinned"), threadOf("second")],
+			[threadOf("other")],
+		)
+		const [pinnedId = ""] = idsOf(tabs)
+		tabs.select(pinnedId)
+		const pinnedBefore = tabWithId(tabs, pinnedId)
+
+		tabs.history.push(threadOf("new"))
+
+		expect(shownHrefs(tabs)).toEqual([
+			threadOf("pinned"),
+			threadOf("second"),
+			threadOf("new"),
+			threadOf("other"),
+		])
+		const opened = stripOf(tabs)[2]
+		expect(opened?.isPinned).toBe(false)
+		expect(opened?.entries).toHaveLength(1)
+		expect(viewOf(tabs).activeId).toBe(opened?.id)
+		expect(tabWithId(tabs, pinnedId)).toEqual(pinnedBefore)
+	})
+
+	it("pushes into the pinned tab when the page stays the same", () => {
+		const tabs = pinnedStripOn([USER_SETTINGS], [])
+		const [pinnedId = ""] = idsOf(tabs)
+		const settingsEntry = `${USER_SETTINGS}?entry=profile`
+		const entryCount = tabWithId(tabs, pinnedId)?.entries.length ?? 0
+
+		tabs.history.push(settingsEntry)
+
+		expect(viewOf(tabs).activeId).toBe(pinnedId)
+		expect(shownHrefs(tabs)).toEqual([settingsEntry])
+		expect(tabWithId(tabs, pinnedId)?.entries).toHaveLength(entryCount + 1)
+	})
+
+	it("replaces, goes back and goes forward inside the pinned tab", () => {
+		const tabs = tabsOfSpace()
+		tabs.history.push(threadOf("first"))
+		tabs.history.push(threadOf("second"))
+		const [pinnedId = ""] = idsOf(tabs)
+		tabs.pin(pinnedId)
+
+		tabs.history.back()
+		expect(activeHref(tabs)).toBe(threadOf("first"))
+		tabs.history.forward()
+		expect(activeHref(tabs)).toBe(threadOf("second"))
+		tabs.history.replace(threadOf("replaced"))
+
+		expect(activeHref(tabs)).toBe(threadOf("replaced"))
+		expect(idsOf(tabs)).toEqual([pinnedId])
+		expect(tabWithId(tabs, pinnedId)?.entries).toHaveLength(3)
+	})
+
+	it("pushes into an unpinned active tab even when a pinned tab shows that page", () => {
+		const tabs = pinnedStripOn([threadOf("shown")], [threadOf("unpinned")])
+		const [pinnedId = "", unpinnedId = ""] = idsOf(tabs)
+		const pinnedBefore = tabWithId(tabs, pinnedId)
+		const entryCount = tabWithId(tabs, unpinnedId)?.entries.length ?? 0
+
+		tabs.history.push(threadOf("shown"))
+
+		expect(viewOf(tabs).activeId).toBe(unpinnedId)
+		expect(shownHrefs(tabs)).toEqual([threadOf("shown"), threadOf("shown")])
+		expect(tabWithId(tabs, unpinnedId)?.entries).toHaveLength(entryCount + 1)
+		expect(tabWithId(tabs, pinnedId)).toEqual(pinnedBefore)
+	})
+
+	it("renders the page of the tab it lands in", async () => {
+		const tabs = tabsOfSpace()
+		const router = routerOn(tabs)
+		await router.load()
+		const [pinnedId = ""] = idsOf(tabs)
+		tabs.pin(pinnedId)
+
+		await router.navigate({ to: USER_SETTINGS })
+
+		expect(router.state.location.pathname).toBe(USER_SETTINGS)
+		expect(shownHrefs(tabs)).toEqual(["/", USER_SETTINGS])
+		expect(viewOf(tabs).activeId).not.toBe(pinnedId)
 	})
 })
 
