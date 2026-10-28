@@ -514,7 +514,7 @@ impl MessagesRepository {
 		id: String,
 		state: TerminalState,
 		settled_text: Option<String>,
-	) -> Result<(), TranscriptError> {
+	) -> Result<bool, TranscriptError> {
 		self.call_mut(move |connection| {
 			Ok(close_message(connection, &id, state, settled_text.as_deref()))
 		})
@@ -1155,9 +1155,10 @@ fn close_message(
 	id: &str,
 	state: TerminalState,
 	settled_text: Option<&str>,
-) -> Result<(), TranscriptError> {
+) -> Result<bool, TranscriptError> {
 	let target = MessageState::from(state);
 	let transaction = write_transaction(connection)?;
+	let mut has_closed = false;
 	if let Some(current) = stored_state::<MessageState>(&transaction, MESSAGE_STATE, id)? {
 		if current != target {
 			if !matches!(current, MessageState::Pending | MessageState::Streaming) {
@@ -1167,11 +1168,12 @@ fn close_message(
 					to: target.as_sql(),
 				});
 			}
-			transaction.execute(FINALIZE_MESSAGE, params![id, target, settled_text])?;
+			has_closed =
+				transaction.execute(FINALIZE_MESSAGE, params![id, target, settled_text])? > 0;
 		}
 	}
 	transaction.commit()?;
-	Ok(())
+	Ok(has_closed)
 }
 
 fn rewrite_content(
@@ -1644,7 +1646,11 @@ mod tests {
 		);
 	}
 
-	pub(super) fn assert_rejected(refused: &Result<(), TranscriptError>, from: &str, to: &str) {
+	pub(super) fn assert_rejected<T: std::fmt::Debug>(
+		refused: &Result<T, TranscriptError>,
+		from: &str,
+		to: &str,
+	) {
 		assert!(
 			matches!(
 				refused,
@@ -2454,16 +2460,18 @@ mod tests {
 			.expect("the reply is appended");
 		database.messages().append_text("m1".into(), "over to @Nyx".into()).await.expect("a delta");
 
-		database
+		let has_closed = database
 			.messages()
 			.finalize_message("m1".into(), TerminalState::Complete, Some("over to <@nyx>".into()))
 			.await
 			.expect("the message is finalized");
-		database
+		let has_closed_again = database
 			.messages()
 			.finalize_message("m1".into(), TerminalState::Complete, Some("too late".into()))
 			.await
 			.expect("a replayed ending was refused");
+		assert!(has_closed, "the first ending did not report the message closed");
+		assert!(!has_closed_again, "a replayed ending reported the message closed again");
 
 		let transcript = whole_transcript(&database, PAGE).await;
 		assert_eq!(
