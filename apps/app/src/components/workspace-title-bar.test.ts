@@ -254,7 +254,9 @@ describe("the title bar", () => {
 		await press(barButton(i18n.t("common:titleBar.forward")))
 		expect(tabNames()).toEqual([botName, ROOM_TITLE])
 
-		await press(barButton(i18n.t("common:titleBar.closeTab")))
+		await press(
+			barButton(i18n.t("common:titleBar.closeTabNamed", { title: botName })),
+		)
 		expect(tabNames()).toEqual([ROOM_TITLE])
 	})
 
@@ -329,7 +331,9 @@ describe("the title bar", () => {
 		expect(tabNames()).toEqual([ROOM_TITLE])
 		expect(activeTabName()).toBe(ROOM_TITLE)
 
-		await press(barButton(i18n.t("common:titleBar.closeTab")))
+		await press(
+			barButton(i18n.t("common:titleBar.closeTabNamed", { title: ROOM_TITLE })),
+		)
 		expect(tabNames()).toEqual([NEW_TAB])
 		expect(activeTabName()).toBe(NEW_TAB)
 	})

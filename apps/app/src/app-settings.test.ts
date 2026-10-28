@@ -807,7 +807,14 @@ it.each([
 	["going Back", () => press(barButtonOf(i18n.t("common:titleBar.back")))],
 	[
 		"closing the active tab",
-		() => press(barButtonOf(i18n.t("common:titleBar.closeTab"))),
+		() =>
+			press(
+				barButtonOf(
+					i18n.t("common:titleBar.closeTabNamed", {
+						title: OPEN_APPLICATION_TAB,
+					}),
+				),
+			),
 	],
 ])(
 	"asks before %s leaves an unsaved application, and stays on Cancel",
@@ -827,7 +834,11 @@ it.each([
 it("closes the active settings tab with an unsaved application once Leave is pressed", async () => {
 	await openUnsavedApplicationInSecondTab()
 
-	await press(barButtonOf(i18n.t("common:titleBar.closeTab")))
+	await press(
+		barButtonOf(
+			i18n.t("common:titleBar.closeTabNamed", { title: OPEN_APPLICATION_TAB }),
+		),
+	)
 	await answerLeave(i18n.t("bots:applications.leave.action"))
 
 	expect(tabNames()).toEqual([CONVERSATION_TITLE])

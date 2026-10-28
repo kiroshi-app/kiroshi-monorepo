@@ -114,6 +114,11 @@ const unpinnedTabsIn = (canvasElement: HTMLElement) =>
 const titleOf = (tab: HTMLElement) =>
 	tab.querySelector<HTMLElement>("span:last-child") ?? tab
 
+const closeButtonsIn = (canvasElement: HTMLElement) =>
+	within(barIn(canvasElement))
+		.queryAllByRole("button")
+		.filter((button) => button.dataset.slot === "title-bar-tab-close")
+
 const openMenu = async () => settled(await screen.findByRole("menu"))
 
 const POINTER = {
@@ -228,7 +233,10 @@ const expectOneCloseOnTheActiveTab = async (canvasElement: HTMLElement) => {
 		.getAllByRole("tab")
 		.filter((tab) => tab.getAttribute("aria-selected") === "true")
 	await expect(selected).toHaveLength(1)
-	const close = bar.getByRole("button", { name: "Close tab" })
+	await expect(closeButtonsIn(canvasElement)).toHaveLength(1)
+	const close = bar.getByRole("button", {
+		name: `Close ${titleOf(selected[0]).textContent}`,
+	})
 	const tab = boxOf(selected[0])
 	await expect(boxOf(close).width).toBe(18)
 	await expect(boxOf(close).right).toBe(tab.right - 5)
@@ -851,9 +859,6 @@ type HoverPlayContext = {
 	}
 }
 
-const closeButtonsIn = (canvasElement: HTMLElement) =>
-	within(barIn(canvasElement)).queryAllByRole("button", { name: "Close tab" })
-
 const skinOf = (element: Element) => {
 	const { backgroundColor, color } = getComputedStyle(element)
 	return { backgroundColor, color }
@@ -913,12 +918,6 @@ const playInactiveTabHover = async ({
 		"title-bar-tab-close",
 	)
 	await expect(closeButtonsIn(canvasElement)).toEqual([activeClose])
-	await expect(activeClose).toHaveAccessibleDescription(
-		`Closes ${RELEASE_NOTES.title}`,
-	)
-	await expect(close).toHaveAccessibleDescription(
-		`Closes ${LOGIN_REDIRECT.title}`,
-	)
 
 	await userEvent.hover(bar.getByRole("tab", { name: PINNED_INBOX.title }))
 	await expect(closeButtonsIn(canvasElement)).toEqual([activeClose])
@@ -930,6 +929,22 @@ const playInactiveTabHover = async ({
 	await expect(active).toHaveFocus()
 	await userEvent.keyboard("{ArrowRight}")
 	await expect(login).toHaveFocus()
+	await expect(closeButtonsIn(canvasElement)).toEqual([activeClose, close])
+
+	const weekly = bar.getByRole("tab", { name: WEEKLY_PLANNING.title })
+	await userEvent.hover(weekly)
+	const revealed = closeButtonsIn(canvasElement)
+	await expect(revealed).toHaveLength(3)
+	const ownNames = [RELEASE_NOTES, LOGIN_REDIRECT, WEEKLY_PLANNING].map(
+		({ title }) => `Close ${title}`,
+	)
+	await expect(
+		ownNames.map((name) => bar.getByRole("button", { name })),
+	).toEqual(revealed)
+	await expect(
+		new Set(revealed.map((cross) => cross.getAttribute("aria-label"))).size,
+	).toBe(3)
+	await userEvent.unhover(weekly)
 	await expect(closeButtonsIn(canvasElement)).toEqual([activeClose, close])
 	await userEvent.tab()
 	await expect(close).toHaveFocus()
@@ -1001,7 +1016,7 @@ export const InactiveTabHover = meta.story({
 		docs: {
 			description: {
 				story:
-					"Light: the pointer on Fix the login redirect, an inactive tab, and then on its own Close tab button. Check its cross shows 5px off its end at the size, glyph and colours of the open tab's cross, with no transition, that the tab keeps its width and its title stays where it was, that the cross stays while the pointer rides onto it, that pressing it closes that tab and selects nothing, that keyboard focus on the tab shows the cross too, and that the pinned tab and a lifted tab show none. Pick `InactiveTabHoverDark` for the dark theme, `A1Tabs` for the row at rest.",
+					"Light: the pointer on Fix the login redirect, an inactive tab, and then on its own cross. Check its cross shows 5px off its end at the size, glyph and colours of the open tab's cross, with no transition, that the tab keeps its width and its title stays where it was, that the cross stays while the pointer rides onto it, that pressing it closes that tab and selects nothing, that keyboard focus on the tab shows the cross too, that the crosses of the open, the focused and a hovered tab each read Close followed by their own tab's title, and that the pinned tab and a lifted tab show none. Pick `InactiveTabHoverDark` for the dark theme, `A1Tabs` for the row at rest.",
 			},
 		},
 	},
@@ -1047,7 +1062,9 @@ export const TabGestures = meta.story({
 		login.blur()
 		await userEvent.unhover(login)
 
-		await userEvent.click(bar.getByRole("button", { name: "Close tab" }))
+		await userEvent.click(
+			bar.getByRole("button", { name: `Close ${RELEASE_NOTES.title}` }),
+		)
 		await expect(args.onCloseTab).toHaveBeenCalledWith(RELEASE_NOTES.id)
 		await expect(args.onSelectTab).toHaveBeenCalledTimes(1)
 
@@ -1108,7 +1125,7 @@ export const TabGestures = meta.story({
 			bar.getByRole("button", { name: "Back" }),
 			bar.getByRole("button", { name: "Forward" }),
 			...bar.getAllByRole("tab"),
-			bar.getByRole("button", { name: "Close tab" }),
+			bar.getByRole("button", { name: `Close ${RELEASE_NOTES.title}` }),
 			chip,
 			bar.getByRole("button", { name: "New tab" }),
 		]
@@ -1134,7 +1151,9 @@ export const TabGestures = meta.story({
 		await expect(getComputedStyle(rovingTab).outlineColor).toBe(foreground)
 		await userEvent.tab()
 		const close = document.activeElement as HTMLElement
-		await expect(close).toHaveAccessibleName("Close tab")
+		await expect(close).toHaveAccessibleName(
+			`Close ${titleOf(rovingTab).textContent}`,
+		)
 		await expect(close).toHaveAttribute(
 			"data-close-pair",
 			rovingTab.getAttribute("data-close-pair"),
@@ -1320,7 +1339,9 @@ export const DragTabTwoRight = meta.story({
 		bar.getByRole("tab", { name: WEEKLY_PLANNING.title }).focus()
 		await userEvent.keyboard("{Enter}")
 		await expect(args.onSelectTab).toHaveBeenLastCalledWith(WEEKLY_PLANNING.id)
-		const [activeClose] = bar.getAllByRole("button", { name: "Close tab" })
+		const activeClose = bar.getByRole("button", {
+			name: `Close ${RELEASE_NOTES.title}`,
+		})
 		activeClose.focus()
 		await userEvent.keyboard("{Enter}")
 		await expect(args.onCloseTab).toHaveBeenCalledWith(RELEASE_NOTES.id)
