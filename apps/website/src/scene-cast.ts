@@ -5,12 +5,10 @@ import type {
 	Space,
 	UserChipIdentity,
 } from "@workspace/ui/components/app-sidebar"
-import type { BotBadge } from "@workspace/ui/components/bot-badge"
 import {
 	BLOT_HUES,
 	type BotAvatarBlot,
 } from "@workspace/ui/components/companion-colour"
-import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import type { ConversationIconName } from "@workspace/ui/components/icons"
 import type {
 	MissionCardModel,
@@ -395,25 +393,11 @@ const MISSIONS_BY_SPACE: Record<string, MissionsPanelProps> =
 		SCENE_SPACES.map((space) => [space.id, missionsPanelOf(space)]),
 	)
 
-const HOST_BY_SPACE: Record<string, SpaceHost> = { [WORK.id]: "shared" }
-
-const isWaitingOnReader = (space: SceneSpace) =>
-	space.missions.some((mission) => mission.state === "waiting_human")
-
-const BADGES_BY_SPACE: Record<string, BotBadge> = Object.fromEntries(
-	SCENE_SPACES.filter(isWaitingOnReader).map((space) => [
-		space.id,
-		"attention",
-	]),
-)
-
 const READER: UserChipIdentity = { name: SCENE_COPY.reader }
 
 export {
 	ASH,
-	BADGES_BY_SPACE,
 	CONVERSATIONS_BY_SPACE,
-	HOST_BY_SPACE,
 	IVY,
 	JUNO,
 	MISSIONS_BY_SPACE,
@@ -424,6 +408,7 @@ export {
 	READER,
 	ROSTER_BY_SPACE,
 	SABLE,
+	SCENE_SPACES,
 	type SceneLoop,
 	type SceneSpace,
 	SECTIONS_BY_SPACE,

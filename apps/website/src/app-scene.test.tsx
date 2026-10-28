@@ -64,6 +64,12 @@ const missionTools = () =>
 		tool.getAttribute("aria-label"),
 	)
 
+const changeSpaceButton = (name: string) =>
+	within(scene()).getByRole("button", { name: `Change space, ${name} open` })
+
+const presenceDots = () =>
+	scene().querySelectorAll("[data-slot=space-avatar-dot]")
+
 const rosterRowNamed = (name: string) =>
 	within(scene()).getAllByRole("button", { name: new RegExp(`^${name}\\b`) })[0]
 
@@ -87,6 +93,18 @@ describe("the landing scene", () => {
 		expect(
 			tabNamed(PERSONAL.defaultConversation.name).getAttribute("aria-selected"),
 		).toBe("true")
+	})
+
+	it("draws the Space logo local and the Change space button without a dot, in every Space", () => {
+		renderScene()
+
+		expect(presenceDots()).toHaveLength(0)
+		expect(changeSpaceButton(WORK.name)).not.toBeNull()
+
+		switchToPersonal()
+
+		expect(presenceDots()).toHaveLength(0)
+		expect(changeSpaceButton(PERSONAL.name)).not.toBeNull()
 	})
 
 	it("opens several tabs, the active one on the conversation shown", () => {

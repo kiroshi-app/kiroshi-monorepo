@@ -2,15 +2,11 @@ import { type ReactNode, useState } from "react"
 
 import { ActivityIndicator } from "@workspace/ui/components/activity-indicator"
 import { AppHeader } from "@workspace/ui/components/app-header"
-import type {
-	AppRailDots,
-	AppRailPanel,
-} from "@workspace/ui/components/app-rail"
+import type { AppRailPanel } from "@workspace/ui/components/app-rail"
 import {
 	AppSidebar,
 	type AppSidebarConversation,
 } from "@workspace/ui/components/app-sidebar"
-import type { BotBadge } from "@workspace/ui/components/bot-badge"
 import { HeaderConversationButton } from "@workspace/ui/components/header-conversation-button"
 import { HeaderIdentityButton } from "@workspace/ui/components/header-identity-button"
 import type { ListEnd } from "@workspace/ui/components/list-skeleton"
@@ -35,19 +31,18 @@ import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 
 import { SCENE_COPY } from "./copy"
 import {
-	BADGES_BY_SPACE,
 	CONVERSATIONS_BY_SPACE,
-	HOST_BY_SPACE,
 	MISSIONS_BY_SPACE,
 	READER,
 	ROSTER_BY_SPACE,
+	SCENE_SPACES,
 	type SceneLoop,
-	type SceneSpace,
 	SECTIONS_BY_SPACE,
 	SPACES,
 	spaceOf,
 	WORK,
 } from "./scene-cast"
+import { sceneRailOf } from "./scene-rail"
 import { sceneTabsOf } from "./scene-tabs"
 import { exchangeOf, type SceneTurn } from "./scene-threads"
 import { useReaderAvatar } from "./use-reader-avatar"
@@ -89,15 +84,6 @@ const doNothing = () => {}
 const NO_INVITATIONS: SpaceInvitation[] = []
 
 const WHOLE_ROSTER: ListEnd = { hasNextPage: false, isFetchingNextPage: false }
-
-const STRONGEST_FIRST: BotBadge[] = ["attention", "failed", "done"]
-
-const railDotsOf = (space: SceneSpace): AppRailDots => ({
-	conversations: STRONGEST_FIRST.find((badge) =>
-		space.conversations.some((row) => row.badge === badge),
-	),
-	missions: BADGES_BY_SPACE[space.id],
-})
 
 const sceneRow = (
 	key: string,
@@ -332,8 +318,8 @@ export const AppScene = () => {
 					isResizable
 					sidebar={
 						<AppSidebar
+							{...sceneRailOf(SCENE_SPACES, space)}
 							activeTabId={selectedId}
-							badgesBySpaceId={BADGES_BY_SPACE}
 							bots={space.rows}
 							botsBySpaceId={ROSTER_BY_SPACE}
 							canGoBack={false}
@@ -343,7 +329,6 @@ export const AppScene = () => {
 							conversationsBySpaceId={CONVERSATIONS_BY_SPACE}
 							hasClosedTab={false}
 							haveBotsFailedToLoad={false}
-							hostBySpaceId={HOST_BY_SPACE}
 							insetWindowControls
 							invitations={NO_INVITATIONS}
 							isSpaceSwitchingEnabled
@@ -390,14 +375,11 @@ export const AppScene = () => {
 							onSpaceSwitcherOpenChange={engage}
 							onUnpinTab={engage}
 							openPanel={sidebarPanel}
-							railDots={railDotsOf(space)}
 							rosterListEnd={WHOLE_ROSTER}
 							sectionsBySpaceId={SECTIONS_BY_SPACE}
 							selectedBotId={exchange?.bot ? selectedId : undefined}
 							selectedConversationId={exchange?.bot ? undefined : selectedId}
 							selectedSpaceId={space.id}
-							space={space}
-							spaceHost={HOST_BY_SPACE[space.id]}
 							spaces={SPACES}
 							tabs={sceneTabsOf(space, selectedId)}
 							user={{ ...READER, image: readerAvatar }}
