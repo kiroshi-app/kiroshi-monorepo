@@ -34,9 +34,6 @@ jobs:
         with:
           bun-version-file: package.json
 
-      - name: Report bun version
-        run: bun --version
-
       - name: Install Tauri system dependencies
         if: matrix.platform == 'ubuntu-22.04'
         run: |
