@@ -36,9 +36,7 @@ use crate::environment::store;
 use crate::joined_spaces::commands::{
 	joined_space_connect, CHANGED_EVENT as JOINED_CHANGED, RECONNECTED_EVENT, REMOVED_EVENT,
 };
-use crate::joined_spaces::contract::{
-	colour_of, JoinedSpaceConnection, JoinedSpaceError, JoinedSpaceState,
-};
+use crate::joined_spaces::contract::{JoinedSpaceConnection, JoinedSpaceError, JoinedSpaceState};
 use crate::joined_spaces::relay::{self as joined_relay, reconciled, RelayGuests};
 use crate::joined_spaces::test_host::{SealingHost, CHALLENGE};
 use crate::logging::contract::InstallKind;
@@ -98,7 +96,7 @@ fn an_invitation(instance_id: &str, name: &str) -> Value {
 }
 
 fn changed_of(id: &str) -> Value {
-	json!({ "id": id, "hostedBy": null, "colour": colour_of(id) })
+	json!({ "id": id, "hostedBy": null, "colour": null })
 }
 
 fn an_instance(id: &str, name: &str) -> Value {
@@ -706,7 +704,7 @@ fn an_accept_of_a_read_invitation_names_its_inviter_as_who_hosts_the_space() {
 
 		let presented = serde_json::to_value(&joined).expect("the joined space serializes");
 		assert_eq!(presented["hostedBy"], "owner@example.com");
-		assert_eq!(presented["colour"], json!(colour_of(&joined.id)));
+		assert_eq!(presented.get("colour"), Some(&Value::Null));
 		let stored = harness.stored().await;
 		assert_eq!(stored[0].inviter_email.as_deref(), Some("owner@example.com"));
 		assert_eq!(
@@ -714,7 +712,7 @@ fn an_accept_of_a_read_invitation_names_its_inviter_as_who_hosts_the_space() {
 			vec![json!({
 				"id": joined.id,
 				"hostedBy": "owner@example.com",
-				"colour": colour_of(&joined.id)
+				"colour": null
 			})]
 		);
 	});
@@ -1617,7 +1615,7 @@ fn a_listing_with_a_colour_outside_the_palette_keeps_every_other_field_of_the_li
 		assert_eq!(stored[1].listing, HostListing::default());
 		assert_eq!(
 			harness.heard(JOINED_CHANGED)[1],
-			json!({ "id": id, "hostedBy": "Ann", "colour": colour_of(&id) })
+			json!({ "id": id, "hostedBy": "Ann", "colour": null })
 		);
 	});
 }

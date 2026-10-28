@@ -22,7 +22,7 @@ pub const RECONNECTED_EVENT: &str = "joined-space://reconnected";
 pub struct JoinedSpaceChanged {
 	pub id: String,
 	pub hosted_by: Option<String>,
-	pub colour: Hue,
+	pub colour: Option<Hue>,
 }
 
 #[derive(Debug, Clone, Serialize, specta::Type)]
@@ -64,7 +64,7 @@ pub(super) async fn announce_change<R: Runtime>(
 		held.map(|joined| (joined.listing, joined.inviter_email)).unwrap_or_default();
 	let changed = JoinedSpaceChanged {
 		hosted_by: hosted_by(&listing, inviter_email, &roster),
-		colour: colour_shown(&listing, &id),
+		colour: colour_shown(&listing),
 		id,
 	};
 	events::emit(app, JOINED_SPACE_CHANGED, changed)
@@ -168,9 +168,7 @@ mod tests {
 	use tauri::test::{mock_builder, MockRuntime};
 	use tauri::{App, Listener, Manager};
 
-	use super::super::contract::{
-		colour_of, JoinedSpaceState, JoinedSpaceWait, JoinedSpaceWaitReason,
-	};
+	use super::super::contract::{JoinedSpaceState, JoinedSpaceWait, JoinedSpaceWaitReason};
 	use super::super::wait_reason::{wait_of, Stall};
 	use super::*;
 	use crate::account::session::AccountSession;
@@ -278,7 +276,7 @@ mod tests {
 		let payload = hearing.recv().expect("the removal was heard");
 		assert_eq!(
 			serde_json::from_str::<Value>(&payload).expect("json"),
-			json!({ "id": added.id, "hostedBy": null, "colour": colour_of(&added.id) })
+			json!({ "id": added.id, "hostedBy": null, "colour": null })
 		);
 	}
 
@@ -346,7 +344,8 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn a_change_carries_the_host_the_roster_names_and_the_colour_of_the_space() {
+	async fn a_change_of_a_space_without_colour_carries_the_host_the_roster_names_and_a_null_colour(
+	) {
 		let dir = temp_dir();
 		let app = app_over(&dir);
 		let added = held(&app).await;
@@ -357,11 +356,11 @@ mod tests {
 
 		assert_eq!(
 			announced(&app, &hearing, &added.id).await,
-			json!({ "id": added.id, "hostedBy": "Ann", "colour": colour_of(&added.id) })
+			json!({ "id": added.id, "hostedBy": "Ann", "colour": null })
 		);
 		let listed = serde_json::to_value(list(&app).await).expect("json");
 		assert_eq!(listed[0]["hostedBy"], "Ann");
-		assert_eq!(listed[0]["colour"], json!(colour_of(&added.id)));
+		assert_eq!(listed[0].get("colour"), Some(&Value::Null));
 	}
 
 	#[tokio::test]
