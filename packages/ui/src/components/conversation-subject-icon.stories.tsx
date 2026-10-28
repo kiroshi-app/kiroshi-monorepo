@@ -34,7 +34,7 @@ const resolvedColourOf = (token: string, host: Element) => {
 	return colour
 }
 
-const expectNeutralPair = async (canvasElement: HTMLElement) => {
+const expectNeutralMessageSquare = async (canvasElement: HTMLElement) => {
 	const icon = slotIn(canvasElement, "conversation-subject-icon")
 	const cell = slotIn(icon, "outlined-hexagon-face")
 	await expect(icon).toHaveAttribute("aria-hidden", "true")
@@ -54,10 +54,6 @@ const expectNeutralPair = async (canvasElement: HTMLElement) => {
 	await expect([pictogram.width, pictogram.height]).toEqual([20, 20])
 	await expect(pictogram.left - box.left).toBe(10)
 	await expect(pictogram.top - box.top).toBe(10)
-}
-
-const expectNeutralMessageSquare = async (canvasElement: HTMLElement) => {
-	await expectNeutralPair(canvasElement)
 	await expect(
 		glyphIn(canvasElement, ConversationIcons.MessageSquare),
 	).not.toBeNull()
