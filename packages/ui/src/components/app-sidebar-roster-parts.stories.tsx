@@ -113,7 +113,7 @@ export const ThemesLiftedGroup = meta.story({
 	},
 })
 
-export const ThemesLiftedGroupRed = meta.story({
+export const ThemesLiftedGroupPickedIcon = meta.story({
 	globals: { theme_layout: "side-by-side" },
 	render: () => (
 		<LiftedConversationAtPointer

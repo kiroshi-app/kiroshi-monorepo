@@ -145,7 +145,7 @@ export const ThemesGroup = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this to read a room of several companions with no colour picked, in light and dark at once. Check that a 24px subject icon on the neutral pair of each theme leads the button, the message square centred in it. Pick `ThemesGroupRed` for a room with a picked icon.",
+					"Reach for this to read a room of several companions with no colour picked, in light and dark at once. Check that a 24px subject icon on the neutral pair of each theme leads the button, the message square centred in it. Pick `ThemesGroupPickedIcon` for a room with a picked icon.",
 			},
 		},
 	},
@@ -153,7 +153,7 @@ export const ThemesGroup = meta.story({
 		expectSubjectIconInBothThemes(canvasElement, CELL_SIDE),
 })
 
-export const ThemesGroupRed = meta.story({
+export const ThemesGroupPickedIcon = meta.story({
 	globals: { theme_layout: "side-by-side" },
 	args: { icon: "ShieldKey" },
 	parameters: {
