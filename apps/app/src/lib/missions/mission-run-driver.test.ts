@@ -2073,4 +2073,85 @@ describe("startMissionRunDriver claiming a run", () => {
 		])
 		expect(spoken(harness.originTail())).not.toEqual([])
 	})
+
+	const claimsOfTheMission = () => harness.missions.claims.length
+
+	it("claims a change kept during the run again only once the host answered its release", async () => {
+		await runAClosingMission()
+		await harness.enter("failed", failedBy("agent-hook"))
+		harness.missions.stallRelease()
+
+		await harness.endTurn(reported("The walls stand."))
+
+		expect(harness.missions.releases).toEqual([FIRST_TOKEN])
+		expect(claimsOfTheMission()).toBe(1)
+
+		harness.missions.answerRelease()
+		await settled()
+
+		expect(claimsOfTheMission()).toBe(2)
+		expect(harness.originStarts()).toHaveLength(2)
+	})
+
+	it("claims a change kept during a refused run again only once the host answered its release", async () => {
+		await runAClosingMission()
+		await harness.enter("failed", failedBy("agent-hook"))
+		harness.missions.stallRelease()
+
+		await harness.emitAtRun({
+			type: "permissionRequested",
+			request: { id: "p-1", toolName: "Bash", title: "Run it", detail: null },
+		})
+
+		expect(claimsOfTheMission()).toBe(1)
+
+		harness.missions.answerRelease()
+		await settled()
+
+		expect(claimsOfTheMission()).toBe(2)
+		expect(harness.originStarts()).toHaveLength(2)
+	})
+
+	it("holds a change announced while its release is in flight until the host answers", async () => {
+		await runAClosingMission()
+		harness.missions.stallRelease()
+		await harness.endTurn(reported("The walls stand."))
+
+		await harness.enter("failed", failedBy("agent-hook"))
+
+		expect(claimsOfTheMission()).toBe(1)
+
+		harness.missions.answerRelease()
+		await settled()
+
+		expect(claimsOfTheMission()).toBe(2)
+		expect(harness.originStarts()).toHaveLength(2)
+	})
+
+	it("holds a change announced while the release of a start that failed is in flight", async () => {
+		await restart({ firstStartFails: true })
+		harness.missions.stallRelease()
+		await runAClosingMission()
+
+		await harness.announce("done")
+
+		expect(claimsOfTheMission()).toBe(1)
+
+		harness.missions.answerRelease()
+		await settled()
+
+		expect(claimsOfTheMission()).toBe(2)
+		expect(harness.originStarts()).toHaveLength(1)
+	})
+
+	it("takes a change kept during the run again when its release fails", async () => {
+		harness.missions.refuseRelease()
+		await runAClosingMission()
+		await harness.enter("failed", failedBy("agent-hook"))
+
+		await harness.endTurn(reported("The walls stand."))
+
+		expect(claimsOfTheMission()).toBe(2)
+		expect(harness.missions.releases).toEqual([FIRST_TOKEN])
+	})
 })

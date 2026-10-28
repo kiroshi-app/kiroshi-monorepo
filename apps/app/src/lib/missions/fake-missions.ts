@@ -33,6 +33,8 @@ export type FakeMissions = {
 	claimElsewhere: (missionId: string) => void
 	refuseClaim: () => void
 	refuseRelease: () => void
+	stallRelease: () => void
+	answerRelease: () => void
 	open: (opened: OpenedMission) => void
 	opened: OpenedMission[]
 	hold: (detail: MissionDetail) => void
@@ -81,6 +83,8 @@ export const createFakeMissions = (): FakeMissions => {
 	const tokenOfMission = new Map<string, string>()
 	let isClaimRefused = false
 	let isReleaseRefused = false
+	let releaseAnswer = Promise.resolve()
+	let answerReleaseNow: () => void = () => undefined
 	let openDetailGate: () => void = () => undefined
 
 	const isOpen = ({ closedAt }: Mission) => closedAt === null
@@ -136,6 +140,7 @@ export const createFakeMissions = (): FakeMissions => {
 
 		releaseRun: async (token) => {
 			releases.push(token)
+			await releaseAnswer
 			if (isReleaseRefused) {
 				throw new Error("the mission run could not be released")
 			}
@@ -156,6 +161,16 @@ export const createFakeMissions = (): FakeMissions => {
 
 		refuseRelease: () => {
 			isReleaseRefused = true
+		},
+
+		stallRelease: () => {
+			releaseAnswer = new Promise<void>((resolve) => {
+				answerReleaseNow = resolve
+			})
+		},
+
+		answerRelease: () => {
+			answerReleaseNow()
 		},
 
 		board: async () => {

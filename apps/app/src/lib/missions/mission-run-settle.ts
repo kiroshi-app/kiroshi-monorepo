@@ -116,8 +116,7 @@ export const createMissionRunSettle = ({
 
 	const letGo = ({ call, token }: LiveMissionRun) => {
 		book.holding.delete(call.mission.id)
-		book.releaseClaim(token)
-		book.takeAgain(call.mission.id)
+		void book.releaseClaim(call.mission.id, token)
 	}
 
 	const settleTurn = async (held: LiveMissionRun, ended: TurnEnded) => {

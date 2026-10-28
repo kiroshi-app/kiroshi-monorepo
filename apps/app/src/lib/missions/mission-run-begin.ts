@@ -82,7 +82,7 @@ export const createMissionRunBegin = ({
 		try {
 			return await openScope(call)
 		} catch (thrown) {
-			book.releaseClaim(token)
+			void book.releaseClaim(call.mission.id, token)
 			throw failedStart(thrown)
 		}
 	}
