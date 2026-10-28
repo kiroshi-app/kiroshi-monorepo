@@ -160,6 +160,10 @@ export const SCENE_COPY = {
 		personal: "Personal",
 		work: "Work",
 	},
+	sections: {
+		home: "Home",
+		support: "Support",
+	},
 	bots: {
 		mochi: {
 			name: "Mochi",
@@ -246,11 +250,15 @@ export const SCENE_COPY = {
 		personal: {
 			flat: {
 				objective: "Find a flat in Graça for four nights, under 600 €.",
+				externalId: "HOME-31",
+				ticketTitle: "Book the Lisbon flat",
 				timestamp: "now",
 			},
 			flights: {
 				objective:
 					"Hold the flights at 180 € and tell me the moment they move.",
+				externalId: "HOME-29",
+				ticketTitle: "Watch the Lisbon fares",
 				timestamp: "12m",
 			},
 		},
@@ -258,16 +266,19 @@ export const SCENE_COPY = {
 			emptyStates: {
 				objective: "Take the empty state through the five screens without one.",
 				externalId: "APP-215",
+				ticketTitle: "Empty states on every screen",
 				timestamp: "now",
 			},
 			settings: {
 				objective: "Ship the settings screen behind the flag.",
 				externalId: "APP-212",
+				ticketTitle: "Settings screen",
 				timestamp: "9m",
 			},
 			exportQueue: {
 				objective: "Cut the export queue in half.",
 				externalId: "APP-209",
+				ticketTitle: "Export queue latency",
 				timestamp: "1h",
 			},
 		},
@@ -337,6 +348,8 @@ export const SCENE_COPY = {
 		tomo: {
 			ask: "Find what I’m paying for and never use.",
 			missionObjective: "List every subscription nothing’s touched in 90 days.",
+			missionTicket: "HOME-33",
+			missionTicketTitle: "Cancel what nobody uses",
 			missionTimestamp: "now",
 			answer:
 				"Seven so far. Two of them renew this week, so I’ll be back before Thursday.",
@@ -353,6 +366,7 @@ export const SCENE_COPY = {
 			ask: "What’s left before Thursday?",
 			missionObjective: "Write the release note from what merged this week.",
 			missionTicket: "APP-217",
+			missionTicketTitle: "Release note 4.2",
 			missionTimestamp: "now",
 			answer: "Two tickets and this note. You’ll have it first thing tomorrow.",
 		},

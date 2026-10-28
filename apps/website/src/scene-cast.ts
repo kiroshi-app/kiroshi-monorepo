@@ -1,17 +1,22 @@
 import type {
 	AppSidebarBot,
 	AppSidebarConversation,
+	AppSidebarSection,
 	Space,
 	UserChipIdentity,
 } from "@workspace/ui/components/app-sidebar"
+import type { BotBadge } from "@workspace/ui/components/bot-badge"
 import {
 	BLOT_HUES,
 	type BotAvatarBlot,
 } from "@workspace/ui/components/companion-colour"
+import type { SpaceHost } from "@workspace/ui/components/host-pill"
+import type { ConversationIconName } from "@workspace/ui/components/icons"
 import type {
 	MissionCardModel,
 	MissionState,
 } from "@workspace/ui/components/mission"
+import type { MissionsPanelProps } from "@workspace/ui/components/missions-panel"
 import type { RosterBot } from "@workspace/ui/components/roster"
 import type { RoutineRowModel } from "@workspace/ui/components/routine-row"
 
@@ -67,15 +72,22 @@ type ConversationCopy = {
 	timestamp: string
 }
 
+type ConversationLook = {
+	icon: ConversationIconName
+	color: number
+}
+
 type ConversationInput = {
 	id: string
 	copy: ConversationCopy
+	look: ConversationLook
 	participants: RosterBot[]
 }
 
 const castConversation = ({
 	id,
 	copy,
+	look,
 	participants,
 }: ConversationInput): AppSidebarConversation => ({
 	id,
@@ -84,31 +96,46 @@ const castConversation = ({
 	lastSpeaker: copy.speaker,
 	lastMessage: copy.preview,
 	timestamp: copy.timestamp,
+	...look,
 })
+
+type RosterPlace = {
+	pinPosition: number
+	sectionId?: string
+}
+
+const placed = <Row extends AppSidebarBot | AppSidebarConversation>(
+	row: Row,
+	place: RosterPlace,
+): Row => ({ ...row, ...place })
 
 type SceneMissionInput = {
 	bot: RosterBot
 	objective: string
 	timestamp: string
-	externalId?: string
+	externalId: string
+	ticketTitle: string
+	tools: string[]
 }
 
 const sceneMission = ({
 	bot,
 	objective,
 	timestamp,
-	externalId = "",
+	externalId,
+	ticketTitle,
+	tools,
 }: SceneMissionInput): MissionCardModel => ({
 	id: `mission-${bot.id}`,
 	identity: bot,
 	objective,
 	ticket: {
-		platform: externalId ? TICKET_PLATFORM : "",
+		platform: TICKET_PLATFORM,
 		externalId,
-		title: "",
+		title: ticketTitle,
 		url: "",
 	},
-	tools: [],
+	tools,
 	state: "working",
 	isWorking: true,
 	isClosed: false,
@@ -149,10 +176,13 @@ type SceneLoop = {
 }
 
 type SceneSpace = Space & {
+	colour: number
 	bots: RosterBot[]
 	rows: AppSidebarBot[]
 	conversations: AppSidebarConversation[]
+	sections: AppSidebarSection[]
 	defaultConversation: AppSidebarConversation
+	openTabIds: string[]
 	missions: MissionCardModel[]
 	routines: RoutineRowModel[]
 	loop: SceneLoop
@@ -161,26 +191,46 @@ type SceneSpace = Space & {
 const LISBON = castConversation({
 	id: "lisbon-in-may",
 	copy: SCENE_COPY.conversations.lisbon,
+	look: { icon: "Globe", color: BLOT_HUES.cyan },
 	participants: [TOMO, ASH, OLIVE],
 })
 
 const MOVE = castConversation({
 	id: "the-move",
 	copy: SCENE_COPY.conversations.move,
+	look: { icon: "Calendar", color: BLOT_HUES.orange },
 	participants: [MOCHI, TOMO],
 })
 
 const RELEASE = castConversation({
 	id: "release-4-2",
 	copy: SCENE_COPY.conversations.release,
+	look: { icon: "Rocket", color: BLOT_HUES.purple },
 	participants: [IVY, SABLE, WREN],
 })
 
 const TRIAGE = castConversation({
 	id: "support-triage",
 	copy: SCENE_COPY.conversations.triage,
+	look: { icon: "Bug", color: BLOT_HUES.red },
 	participants: [JUNO, IVY],
 })
+
+const FLAT_TOOLS = ["Paper"]
+
+const EMPTY_STATES_TOOLS = ["Paper", "GitHub"]
+
+const HOME: AppSidebarSection = {
+	id: "section-home",
+	name: SCENE_COPY.sections.home,
+	position: 2,
+}
+
+const SUPPORT: AppSidebarSection = {
+	id: "section-support",
+	name: SCENE_COPY.sections.support,
+	position: 2,
+}
 
 const PERSONAL: SceneSpace = {
 	id: "personal",
@@ -189,23 +239,33 @@ const PERSONAL: SceneSpace = {
 	colour: BLOT_HUES.blue,
 	bots: [MOCHI, OLIVE, PIP, TOMO, ASH],
 	rows: [
-		rosterRow(MOCHI, SCENE_COPY.bots.mochi),
+		placed(rosterRow(MOCHI, SCENE_COPY.bots.mochi), { pinPosition: 1 }),
 		rosterRow(OLIVE, SCENE_COPY.bots.olive),
-		rosterRow(PIP, SCENE_COPY.bots.pip),
+		placed(rosterRow(PIP, SCENE_COPY.bots.pip), {
+			pinPosition: 3,
+			sectionId: HOME.id,
+		}),
 		rosterRow(TOMO, SCENE_COPY.bots.tomo),
 		rosterRow(ASH, SCENE_COPY.bots.ash),
 	],
-	conversations: [LISBON, MOVE],
+	conversations: [
+		placed(LISBON, { pinPosition: 0 }),
+		placed(MOVE, { pinPosition: 2, sectionId: HOME.id }),
+	],
+	sections: [HOME],
 	defaultConversation: LISBON,
+	openTabIds: [LISBON.id, MOCHI.id, MOVE.id],
 	missions: [
 		missionRow({
 			bot: ASH,
 			state: "working",
+			tools: FLAT_TOOLS,
 			...SCENE_COPY.missions.personal.flat,
 		}),
 		missionRow({
 			bot: TOMO,
 			state: "waiting_human",
+			tools: ["Superset"],
 			...SCENE_COPY.missions.personal.flights,
 		}),
 	],
@@ -223,6 +283,9 @@ const PERSONAL: SceneSpace = {
 		mission: sceneMission({
 			bot: ASH,
 			objective: SCENE_COPY.loops.personal.missionObjective,
+			externalId: SCENE_COPY.missions.personal.flat.externalId,
+			ticketTitle: SCENE_COPY.missions.personal.flat.ticketTitle,
+			tools: FLAT_TOOLS,
 			timestamp: SCENE_COPY.loops.personal.missionTimestamp,
 		}),
 	},
@@ -232,29 +295,41 @@ const WORK: SceneSpace = {
 	id: "work",
 	name: SCENE_COPY.spaces.work,
 	avatarSeed: "work",
+	colour: BLOT_HUES.green,
 	bots: [WREN, IVY, SABLE, JUNO],
 	rows: [
 		rosterRow(WREN, SCENE_COPY.bots.wren),
-		rosterRow(IVY, SCENE_COPY.bots.ivy),
+		placed(rosterRow(IVY, SCENE_COPY.bots.ivy), { pinPosition: 1 }),
 		rosterRow(SABLE, SCENE_COPY.bots.sable),
-		rosterRow(JUNO, SCENE_COPY.bots.juno),
+		placed(rosterRow(JUNO, SCENE_COPY.bots.juno), {
+			pinPosition: 3,
+			sectionId: SUPPORT.id,
+		}),
 	],
-	conversations: [RELEASE, TRIAGE],
+	conversations: [
+		placed(RELEASE, { pinPosition: 0 }),
+		placed(TRIAGE, { pinPosition: 2, sectionId: SUPPORT.id }),
+	],
+	sections: [SUPPORT],
 	defaultConversation: RELEASE,
+	openTabIds: [RELEASE.id, IVY.id, TRIAGE.id],
 	missions: [
 		missionRow({
 			bot: SABLE,
 			state: "working",
+			tools: EMPTY_STATES_TOOLS,
 			...SCENE_COPY.missions.work.emptyStates,
 		}),
 		missionRow({
 			bot: IVY,
 			state: "waiting_human",
+			tools: ["GitHub"],
 			...SCENE_COPY.missions.work.settings,
 		}),
 		missionRow({
 			bot: WREN,
 			state: "ready_to_merge",
+			tools: ["Superset", "GitHub"],
 			...SCENE_COPY.missions.work.exportQueue,
 		}),
 	],
@@ -272,6 +347,9 @@ const WORK: SceneSpace = {
 		mission: sceneMission({
 			bot: SABLE,
 			objective: SCENE_COPY.loops.work.missionObjective,
+			externalId: SCENE_COPY.missions.work.emptyStates.externalId,
+			ticketTitle: SCENE_COPY.missions.work.emptyStates.ticketTitle,
+			tools: EMPTY_STATES_TOOLS,
 			timestamp: SCENE_COPY.loops.work.missionTimestamp,
 		}),
 	},
@@ -300,13 +378,45 @@ const CONVERSATIONS_BY_SPACE: Record<string, AppSidebarConversation[]> =
 		SCENE_SPACES.map((space) => [space.id, space.conversations]),
 	)
 
+const SECTIONS_BY_SPACE: Record<string, AppSidebarSection[]> =
+	Object.fromEntries(SCENE_SPACES.map((space) => [space.id, space.sections]))
+
+const missionsPanelOf = (space: SceneSpace): MissionsPanelProps => ({
+	open: space.missions.map((mission) => ({
+		...mission,
+		conversationId: mission.id,
+	})),
+	earlierToday: [],
+	onOpen: () => {},
+})
+
+const MISSIONS_BY_SPACE: Record<string, MissionsPanelProps> =
+	Object.fromEntries(
+		SCENE_SPACES.map((space) => [space.id, missionsPanelOf(space)]),
+	)
+
+const HOST_BY_SPACE: Record<string, SpaceHost> = { [WORK.id]: "shared" }
+
+const isWaitingOnReader = (space: SceneSpace) =>
+	space.missions.some((mission) => mission.state === "waiting_human")
+
+const BADGES_BY_SPACE: Record<string, BotBadge> = Object.fromEntries(
+	SCENE_SPACES.filter(isWaitingOnReader).map((space) => [
+		space.id,
+		"attention",
+	]),
+)
+
 const READER: UserChipIdentity = { name: SCENE_COPY.reader }
 
 export {
 	ASH,
+	BADGES_BY_SPACE,
 	CONVERSATIONS_BY_SPACE,
+	HOST_BY_SPACE,
 	IVY,
 	JUNO,
+	MISSIONS_BY_SPACE,
 	MOCHI,
 	MOVE,
 	OLIVE,
@@ -316,6 +426,7 @@ export {
 	SABLE,
 	type SceneLoop,
 	type SceneSpace,
+	SECTIONS_BY_SPACE,
 	SPACES,
 	sceneMission,
 	spaceOf,

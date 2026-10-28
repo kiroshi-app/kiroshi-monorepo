@@ -91,6 +91,9 @@ const EXCHANGES: Record<string, SceneExchange> = {
 				sceneMission({
 					bot: TOMO,
 					objective: COPY.tomo.missionObjective,
+					externalId: COPY.tomo.missionTicket,
+					ticketTitle: COPY.tomo.missionTicketTitle,
+					tools: ["Superset"],
 					timestamp: COPY.tomo.missionTimestamp,
 				}),
 			),
@@ -114,6 +117,8 @@ const EXCHANGES: Record<string, SceneExchange> = {
 					bot: WREN,
 					objective: COPY.wren.missionObjective,
 					externalId: COPY.wren.missionTicket,
+					ticketTitle: COPY.wren.missionTicketTitle,
+					tools: ["GitHub"],
 					timestamp: COPY.wren.missionTimestamp,
 				}),
 			),
