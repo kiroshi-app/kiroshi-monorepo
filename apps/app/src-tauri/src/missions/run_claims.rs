@@ -87,8 +87,9 @@ mod tests {
 	use std::thread;
 
 	use serde_json::{json, Value};
-	use tauri::ipc::{CallbackFn, InvokeRequest};
+	use tauri::ipc::CallbackFn;
 	use tauri::test::{get_ipc_response, mock_builder, MockRuntime, INVOKE_KEY};
+	use tauri::webview::InvokeRequest;
 	use tauri::{WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 	use super::*;
@@ -192,9 +193,7 @@ mod tests {
 	fn a_claim_holds_the_calling_window_and_goes_when_that_window_is_destroyed() {
 		let app = an_app_of_its_own(
 			"mission-run-claims",
-			mock_builder()
-				.on_window_event(forget_on_destroyed)
-				.invoke_handler(crate::commands::invoke_handler()),
+			mock_builder().invoke_handler(crate::commands::invoke_handler()),
 		);
 		app.manage(MissionRunClaims::default());
 		let window_of = |label: &str| {
@@ -206,12 +205,19 @@ mod tests {
 
 		let claimed = invoked(&second, "mission_run_claim", json!({ "missionId": "m1" }));
 		let refused = invoked(&main, "mission_run_claim", json!({ "missionId": "m1" }));
-		second.destroy().expect("the window closes");
+		forget_on_destroyed(&second.as_ref().window(), &WindowEvent::Focused(false));
+		let still_held = invoked(&main, "mission_run_claim", json!({ "missionId": "m1" }));
+		forget_on_destroyed(&second.as_ref().window(), &WindowEvent::Destroyed);
 		let reclaimed = invoked(&main, "mission_run_claim", json!({ "missionId": "m1" }));
 
 		assert_eq!(claimed["kind"], "claimed", "the first claim answered {claimed}");
 		assert!(claimed["token"].is_string(), "the claim carries no token: {claimed}");
 		assert_eq!(refused, json!({ "kind": "alreadyRunning" }));
+		assert_eq!(
+			still_held,
+			json!({ "kind": "alreadyRunning" }),
+			"a focus change freed the claim"
+		);
 		assert_eq!(reclaimed["kind"], "claimed", "the destroyed window kept its claim");
 	}
 }
