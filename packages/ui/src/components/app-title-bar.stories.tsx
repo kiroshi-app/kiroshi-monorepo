@@ -861,7 +861,11 @@ const playInactiveTabHover = async ({
 	const login = bar.getByRole("tab", { name: LOGIN_REDIRECT.title })
 	const restingTab = boxOf(login)
 	const restingTitle = boxOf(titleOf(login))
-	await expect(closeButtonsIn(canvasElement)).toHaveLength(1)
+	const [activeClose, close] = slotsIn(
+		barIn(canvasElement),
+		"title-bar-tab-close",
+	)
+	await expect(closeButtonsIn(canvasElement)).toEqual([activeClose])
 
 	await userEvent.hover(bar.getByRole("tab", { name: PINNED_INBOX.title }))
 	await expect(closeButtonsIn(canvasElement)).toHaveLength(1)
@@ -869,15 +873,15 @@ const playInactiveTabHover = async ({
 	active.focus()
 	await userEvent.keyboard("{ArrowRight}")
 	await expect(login).toHaveFocus()
-	await expect(closeButtonsIn(canvasElement)).toHaveLength(2)
-	const focusedClose = closeButtonsIn(canvasElement)[1]
-	focusedClose.focus()
-	await expect(closeButtonsIn(canvasElement)).toHaveLength(2)
-	focusedClose.blur()
-	await waitFor(() => expect(closeButtonsIn(canvasElement)).toHaveLength(1))
+	await expect(closeButtonsIn(canvasElement)).toEqual([activeClose, close])
+	close.focus()
+	await expect(closeButtonsIn(canvasElement)).toEqual([activeClose, close])
+	close.blur()
+	await waitFor(() =>
+		expect(closeButtonsIn(canvasElement)).toEqual([activeClose]),
+	)
 
 	await userEvent.hover(login)
-	const [activeClose, close] = closeButtonsIn(canvasElement)
 	await expect(close).toBeVisible()
 	await expect(boxOf(close).width).toBe(boxOf(activeClose).width)
 	await expect(boxOf(close).height).toBe(boxOf(activeClose).height)
@@ -906,14 +910,13 @@ const playInactiveTabHover = async ({
 	await expect(closeButtonsIn(canvasElement)).toEqual([activeClose])
 
 	await userEvent.hover(login)
-	const hoveredClose = closeButtonsIn(canvasElement)[1]
-	await userEvent.hover(hoveredClose)
-	await expect(closeButtonsIn(canvasElement)).toHaveLength(2)
-	await userEvent.click(hoveredClose)
+	await userEvent.hover(close)
+	await expect(closeButtonsIn(canvasElement)).toEqual([activeClose, close])
+	await userEvent.click(close)
 	await expect(args.onCloseTab).toHaveBeenCalledTimes(1)
 	await expect(args.onCloseTab).toHaveBeenCalledWith(LOGIN_REDIRECT.id)
 	await expect(args.onSelectTab).not.toHaveBeenCalled()
-	await expect(closeButtonsIn(canvasElement)).toHaveLength(2)
+	await expect(closeButtonsIn(canvasElement)).toEqual([activeClose, close])
 }
 
 export const InactiveTabHover = meta.story({
