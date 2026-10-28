@@ -7,7 +7,6 @@ import {
 	type PointerEvent,
 	type ReactNode,
 	type RefObject,
-	useId,
 	useLayoutEffect,
 	useRef,
 	useState,
@@ -338,26 +337,19 @@ const TabCloseButton = ({
 	onClose,
 }: TabCloseButtonProps) => {
 	const { t } = useTranslation("common")
-	const descriptionId = useId()
 	return (
-		<>
-			<button
-				{...revealHandlers}
-				aria-describedby={descriptionId}
-				aria-label={t("titleBar.closeTab")}
-				className={CLOSE_BUTTON}
-				data-slot="title-bar-tab-close"
-				hidden={!isShown}
-				onClick={onClose}
-				onKeyDown={onKeyDown}
-				type="button"
-			>
-				<Icons.Close aria-hidden="true" />
-			</button>
-			<span hidden id={descriptionId}>
-				{t("titleBar.closeTabDescription", { title })}
-			</span>
-		</>
+		<button
+			{...revealHandlers}
+			aria-label={t("titleBar.closeTabNamed", { title })}
+			className={CLOSE_BUTTON}
+			data-slot="title-bar-tab-close"
+			hidden={!isShown}
+			onClick={onClose}
+			onKeyDown={onKeyDown}
+			type="button"
+		>
+			<Icons.Close aria-hidden="true" />
+		</button>
 	)
 }
 

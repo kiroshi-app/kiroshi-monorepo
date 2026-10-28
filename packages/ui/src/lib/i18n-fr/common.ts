@@ -50,7 +50,7 @@ const common = {
 		forward: "Suivant",
 		newTab: "Nouvel onglet",
 		closeTab: "Fermer l’onglet",
-		closeTabDescription: "Ferme {{title}}",
+		closeTabNamed: "Fermer {{title}}",
 		pinTab: "Épingler l’onglet",
 		unpinTab: "Désépingler l’onglet",
 		closeOtherTabs: "Fermer les autres onglets",
