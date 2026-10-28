@@ -86,7 +86,7 @@ const calls: [string, Record<string, unknown>, string][] = [
 const answers: Record<string, unknown> = {
 	open: {
 		mission: A_MISSION,
-		reach: "no agent reaches this mission",
+		reach: "no coding session reaches this mission",
 		carriesOn:
 			"the work of this mission carries on in the thread this answer names",
 		acknowledge: "end the turn you are answering in with a single line",

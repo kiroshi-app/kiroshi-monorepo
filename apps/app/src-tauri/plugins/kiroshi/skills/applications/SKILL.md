@@ -31,7 +31,7 @@ could not be read and offer the curated matches it still answered.
 The destination is the one thing you ask. Ask it with `AskUserQuestion`, naming you, the
 space of this conversation and the person, as these three destinations and no other:
 
-- `companion`, the agent alone: you, in every conversation you are part of.
+- `companion`, you alone, in every conversation you are part of.
 - `space`, every agent of the space of this conversation.
 - `user`, the person, in every space and for every agent.
 

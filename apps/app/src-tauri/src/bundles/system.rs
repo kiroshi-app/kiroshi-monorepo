@@ -298,7 +298,7 @@ mod tests {
 			"`AskUserQuestion`",
 			"`metadata.source` set to `application-scope:`",
 			"exactly as it answered it",
-			"`companion`, the agent alone",
+			"`companion`, you alone, in every conversation you are part of.",
 			"`space`, every agent of",
 			"`user`, the person",
 			"Install only in the destination the person picked",

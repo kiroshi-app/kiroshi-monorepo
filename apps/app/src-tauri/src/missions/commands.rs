@@ -32,8 +32,8 @@ const BOT: &str = "bot";
 const PERSON: &str = "person";
 
 const HEARD: &str =
-	"the agent hook is installed in the checkout of this mission, so what the agent does there \
-	reaches its thread";
+	"the hook of the coding session is installed in the checkout of this mission, so what the coding \
+	session does there reaches its thread";
 
 const CARRIES_ON: &str = "the work of this mission carries on in the thread this answer names, \
 	where the person follows it";
@@ -43,8 +43,8 @@ const ACKNOWLEDGE: &str = "end the turn you are answering in with a single line 
 
 const HANDED_OVER: &str = "this mission is yours now, carry it out:";
 
-const UNHEARD: &str = "no agent reaches this mission, it moves only on the lines, the escalations \
-	and the closing its bot writes";
+const UNHEARD: &str = "no coding session reaches this mission, it moves only on the lines, the \
+	escalations and the closing its agent writes";
 
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]

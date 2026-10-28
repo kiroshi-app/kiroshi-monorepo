@@ -954,7 +954,9 @@ mod tests {
 
 		assert!(opened["mission"]["id"].is_string(), "got {opened}");
 		assert!(
-			opened["reach"].as_str().is_some_and(|line| line.contains("agent hook")),
+			opened["reach"]
+				.as_str()
+				.is_some_and(|line| line.contains("hook of the coding session")),
 			"got {opened}"
 		);
 		let settings = fs::read_to_string(workspace.join(".claude").join("settings.local.json"))
