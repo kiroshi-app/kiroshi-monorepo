@@ -11,6 +11,10 @@ import type {
 	CheckReport,
 	RuntimeScope,
 } from "../../agent/contract"
+import type {
+	MessageStoredListener,
+	ReportTurnAnnouncer,
+} from "../../conversations/create-live-listeners"
 import { withFakeHostWrites } from "../../conversations/fake-host-writes"
 import {
 	createFakeTranscriptStore,
@@ -222,6 +226,8 @@ type HarnessOptions = {
 	driver?: (fake: FakeChatDriver) => ChatDriver
 	promptsPerRun?: number
 	botId?: string
+	onMessageStored?: MessageStoredListener
+	announceReportTurn?: ReportTurnAnnouncer
 }
 
 let launches = 0
@@ -250,6 +256,8 @@ export const createHarness = (options: HarnessOptions = {}): Harness => {
 			return clock
 		},
 		promptsPerRun: options.promptsPerRun,
+		onMessageStored: options.onMessageStored,
+		announceReportTurn: options.announceReportTurn,
 	})
 	return { driver: fake, store, controller, detach: controller.attach() }
 }

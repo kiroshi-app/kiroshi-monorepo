@@ -12,6 +12,7 @@ import type {
 import type {
 	MessageStoredListener,
 	ReconnectionListener,
+	ReportTurnAnnouncer,
 } from "../conversations/create-live-listeners"
 import type {
 	MessagePin,
@@ -106,6 +107,7 @@ export type ChatControllerOptions = {
 	readReportedRuns?: ReportedRunsReader
 	senderAccountId?: () => string | null
 	onMessageStored?: MessageStoredListener
+	announceReportTurn?: ReportTurnAnnouncer
 	onReconnected?: ReconnectionListener
 	rereadConversation?: (conversationId: string) => void
 }

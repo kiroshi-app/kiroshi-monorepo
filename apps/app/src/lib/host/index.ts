@@ -9,6 +9,7 @@ import { createJoinedHosts } from "./joined-hosts"
 import type { Invoke } from "./joined-hosts-invoke"
 import {
 	convertFileSrc,
+	emit as tauriEmit,
 	invoke as tauriInvoke,
 	listen as tauriListen,
 } from "./tauri"
@@ -47,6 +48,8 @@ export const invokeOnThisComputer = joinedHosts.invokeOnThisComputer
 export const invokeOn = joinedHosts.invokeOn
 
 export const listenOnThisComputer = tauriListen
+
+export const emitOnThisComputer = tauriEmit
 
 export { listenOnThisWindow } from "./window-listen"
 

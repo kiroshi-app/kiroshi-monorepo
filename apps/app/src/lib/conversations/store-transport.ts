@@ -48,7 +48,14 @@ import {
 	type TranscriptWindow,
 } from "./transcript-contract"
 
-import { activeJoinedSpaceId, invoke, invokeOn, listen } from "../host"
+import {
+	activeJoinedSpaceId,
+	emitOnThisComputer,
+	invoke,
+	invokeOn,
+	listen,
+	listenOnThisComputer,
+} from "../host"
 import type { AgentCommand } from "@/lib/agent/contract"
 import type { ConversationSource } from "../host/conversation-provenance"
 import type { Invoke } from "../host/joined-hosts-invoke"
@@ -140,11 +147,29 @@ export const reportTurnWritesOn = (
 	}
 }
 
+export const REPORT_TURN_ANNOUNCED_EVENT =
+	"conversation://report-turn-announced"
+
 export const transcriptEventsTransport = {
-	onMessageStored: (listener: (stored: TranscriptMessage) => void) =>
-		listen<TranscriptMessage>(MESSAGE_STORED_EVENT, ({ payload }) =>
-			listener(payload),
-		),
+	onMessageStored: async (listener: (stored: TranscriptMessage) => void) => {
+		const stops = await Promise.all([
+			listen<TranscriptMessage>(MESSAGE_STORED_EVENT, ({ payload }) =>
+				listener(payload),
+			),
+			listenOnThisComputer<TranscriptMessage>(
+				REPORT_TURN_ANNOUNCED_EVENT,
+				({ payload }) => listener(payload),
+			),
+		])
+		return () => {
+			for (const stop of stops) {
+				stop()
+			}
+		}
+	},
+
+	announceReportTurn: (reported: TranscriptMessage) =>
+		emitOnThisComputer(REPORT_TURN_ANNOUNCED_EVENT, reported),
 }
 
 export const conversationStore: TranscriptStore = {

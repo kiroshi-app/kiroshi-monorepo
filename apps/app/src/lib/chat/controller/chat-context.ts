@@ -20,6 +20,7 @@ import type { AgentEvent, RuntimeScope } from "../../agent/contract"
 import {
 	createMessageStoredListener,
 	createReconnectionListener,
+	createReportTurnAnnouncer,
 } from "../../conversations/create-live-listeners"
 import { createForeignTurns } from "../../conversations/foreign-turns"
 import type { TranscriptStore } from "../../conversations/store-port"
@@ -48,6 +49,8 @@ export const createChatContext = (
 		options.readReportedRuns ?? createReportedRunsReader()
 	const onMessageStored =
 		options.onMessageStored ?? createMessageStoredListener()
+	const announceReportTurn =
+		options.announceReportTurn ?? createReportTurnAnnouncer()
 	const onReconnected = options.onReconnected ?? createReconnectionListener()
 	const transcript = createTranscriptController(store)
 	const hearSilence = ({ conversationId }: RuntimeScope) => {
@@ -165,6 +168,7 @@ export const createChatContext = (
 		senderAccountId,
 		readReportedRuns,
 		onMessageStored,
+		announceReportTurn,
 		onReconnected,
 		transcript,
 		foreignTurns,
