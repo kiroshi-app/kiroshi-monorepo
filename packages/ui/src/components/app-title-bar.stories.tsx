@@ -832,6 +832,117 @@ export const WithWindowControls = meta.story({
 	},
 })
 
+const INACTIVE_TAB_HOVER = {
+	tabs: [PINNED_INBOX, RELEASE_NOTES, LOGIN_REDIRECT, WEEKLY_PLANNING],
+	activeTabId: RELEASE_NOTES.id,
+} satisfies Partial<AppTitleBarProps>
+
+type HoverPlayContext = {
+	args: Partial<AppTitleBarProps>
+	canvasElement: HTMLElement
+	userEvent: {
+		click: (element: Element) => Promise<void>
+		hover: (element: Element) => Promise<void>
+		unhover: (element: Element) => Promise<void>
+		keyboard: (text: string) => Promise<void>
+	}
+}
+
+const closeButtonsIn = (canvasElement: HTMLElement) =>
+	within(barIn(canvasElement)).queryAllByRole("button", { name: "Close tab" })
+
+const playInactiveTabHover = async ({
+	args,
+	canvasElement,
+	userEvent,
+}: HoverPlayContext) => {
+	const bar = within(barIn(canvasElement))
+	const active = bar.getByRole("tab", { name: RELEASE_NOTES.title })
+	const login = bar.getByRole("tab", { name: LOGIN_REDIRECT.title })
+	const restingTab = boxOf(login)
+	const restingTitle = boxOf(titleOf(login))
+	await expect(closeButtonsIn(canvasElement)).toHaveLength(1)
+
+	await userEvent.hover(bar.getByRole("tab", { name: PINNED_INBOX.title }))
+	await expect(closeButtonsIn(canvasElement)).toHaveLength(1)
+
+	active.focus()
+	await userEvent.keyboard("{ArrowRight}")
+	await expect(login).toHaveFocus()
+	await expect(closeButtonsIn(canvasElement)).toHaveLength(2)
+	const focusedClose = closeButtonsIn(canvasElement)[1]
+	focusedClose.focus()
+	await expect(closeButtonsIn(canvasElement)).toHaveLength(2)
+	focusedClose.blur()
+	await waitFor(() => expect(closeButtonsIn(canvasElement)).toHaveLength(1))
+
+	await userEvent.hover(login)
+	const [activeClose, close] = closeButtonsIn(canvasElement)
+	await expect(close).toBeVisible()
+	await expect(boxOf(close).width).toBe(boxOf(activeClose).width)
+	await expect(boxOf(close).height).toBe(boxOf(activeClose).height)
+	await expect(boxOf(close).top).toBe(boxOf(activeClose).top)
+	await expect(boxOf(close).right).toBe(boxOf(login).right - 5)
+	await expect(close.className).toBe(activeClose.className)
+	await expect(close.innerHTML).toBe(activeClose.innerHTML)
+	await expect(getComputedStyle(close).color).toBe(
+		getComputedStyle(activeClose).color,
+	)
+	await expect(getComputedStyle(close).transitionDuration).toBe("0s")
+	await expect(boxOf(login).width).toBe(restingTab.width)
+	await expect(boxOf(login).left).toBe(restingTab.left)
+	await expect(boxOf(titleOf(login)).left).toBe(restingTitle.left)
+	await expect(boxOf(titleOf(login)).width).toBe(restingTitle.width)
+
+	liftTo(login, middleOf(login) + 40)
+	await waitFor(() =>
+		expect(getComputedStyle(login).pointerEvents).toBe("none"),
+	)
+	await expect(closeButtonsIn(canvasElement)).toEqual([activeClose])
+	await userEvent.keyboard("{Escape}")
+	dropAt(login, middleOf(login))
+
+	await userEvent.unhover(login)
+	await expect(closeButtonsIn(canvasElement)).toEqual([activeClose])
+
+	await userEvent.hover(login)
+	const hoveredClose = closeButtonsIn(canvasElement)[1]
+	await userEvent.hover(hoveredClose)
+	await expect(closeButtonsIn(canvasElement)).toHaveLength(2)
+	await userEvent.click(hoveredClose)
+	await expect(args.onCloseTab).toHaveBeenCalledTimes(1)
+	await expect(args.onCloseTab).toHaveBeenCalledWith(LOGIN_REDIRECT.id)
+	await expect(args.onSelectTab).not.toHaveBeenCalled()
+	await expect(closeButtonsIn(canvasElement)).toHaveLength(2)
+}
+
+export const InactiveTabHover = meta.story({
+	args: INACTIVE_TAB_HOVER,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Light: the pointer on Fix the login redirect, an inactive tab, and then on its own Close tab button. Check its cross shows 5px off its end at the size, glyph and colours of the open tab's cross, with no transition, that the tab keeps its width and its title stays where it was, that the cross stays while the pointer rides onto it, that pressing it closes that tab and selects nothing, that keyboard focus on the tab shows the cross too, and that the pinned tab and a lifted tab show none. Pick `InactiveTabHoverDark` for the dark theme, `A1Tabs` for the row at rest.",
+			},
+		},
+	},
+	play: playInactiveTabHover,
+})
+
+export const InactiveTabHoverDark = meta.story({
+	args: INACTIVE_TAB_HOVER,
+	globals: DARK,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Dark: the same hovered inactive tab and its cross on the dark ground. Pick `InactiveTabHover` for the light theme.",
+			},
+		},
+	},
+	play: playInactiveTabHover,
+})
+
 export const TabGestures = meta.story({
 	tags: ["test-only"],
 	args: {
@@ -851,8 +962,11 @@ export const TabGestures = meta.story({
 	},
 	play: async ({ args, canvasElement, userEvent }) => {
 		const bar = within(barIn(canvasElement))
-		await userEvent.click(bar.getByRole("tab", { name: LOGIN_REDIRECT.title }))
+		const login = bar.getByRole("tab", { name: LOGIN_REDIRECT.title })
+		await userEvent.click(login)
 		await expect(args.onSelectTab).toHaveBeenCalledWith(LOGIN_REDIRECT.id)
+		login.blur()
+		await userEvent.unhover(login)
 
 		await userEvent.click(bar.getByRole("button", { name: "Close tab" }))
 		await expect(args.onCloseTab).toHaveBeenCalledWith(RELEASE_NOTES.id)
@@ -1123,7 +1237,8 @@ export const DragTabTwoRight = meta.story({
 		bar.getByRole("tab", { name: WEEKLY_PLANNING.title }).focus()
 		await userEvent.keyboard("{Enter}")
 		await expect(args.onSelectTab).toHaveBeenLastCalledWith(WEEKLY_PLANNING.id)
-		bar.getByRole("button", { name: "Close tab" }).focus()
+		const [activeClose] = bar.getAllByRole("button", { name: "Close tab" })
+		activeClose.focus()
 		await userEvent.keyboard("{Enter}")
 		await expect(args.onCloseTab).toHaveBeenCalledWith(RELEASE_NOTES.id)
 		await expect(args.onReorderTabs).toHaveBeenCalledTimes(1)

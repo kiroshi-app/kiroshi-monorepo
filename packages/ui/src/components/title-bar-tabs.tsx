@@ -2,7 +2,9 @@
 
 import { Tabs } from "@base-ui/react/tabs"
 import {
+	type FocusEvent,
 	type KeyboardEvent,
+	type PointerEvent,
 	type ReactNode,
 	type RefObject,
 	useLayoutEffect,
@@ -90,7 +92,7 @@ const TAB_ICON =
 	"pointer-events-none grid size-4 shrink-0 place-items-center [&>svg]:size-3.75"
 
 const TAB =
-	"relative flex h-7 touch-none select-none items-center gap-1.5 rounded-md bg-title-bar-tab px-2 text-muted-foreground hover:bg-title-bar-highlight hover:text-foreground focus-visible:outline-2 focus-visible:outline-foreground focus-visible:outline-offset-1 aria-selected:bg-title-bar-tab-selected aria-selected:pe-7.25 aria-selected:text-foreground"
+	"relative flex h-7 touch-none select-none items-center gap-1.5 rounded-md bg-title-bar-tab ps-2 pe-7.25 text-muted-foreground hover:bg-title-bar-highlight hover:text-foreground focus-visible:outline-2 focus-visible:outline-foreground focus-visible:outline-offset-1 aria-selected:bg-title-bar-tab-selected aria-selected:text-foreground"
 
 const PINNED_TAB =
 	"relative grid touch-none select-none place-items-center rounded-md bg-title-bar-pinned text-muted-foreground hover:bg-title-bar-highlight hover:text-foreground focus-visible:outline-2 focus-visible:outline-foreground focus-visible:outline-offset-1 aria-selected:bg-title-bar-tab-selected aria-selected:text-foreground"
@@ -261,6 +263,43 @@ const stepOf = (event: KeyboardEvent<HTMLElement>) => {
 	return 0
 }
 
+const CLOSE_PAIR = "data-close-pair"
+
+type CloseRevealHandlers = {
+	[CLOSE_PAIR]: string
+	onPointerEnter: () => void
+	onPointerLeave: (event: PointerEvent<HTMLElement>) => void
+	onFocus: (event: FocusEvent<HTMLElement>) => void
+	onBlur: (event: FocusEvent<HTMLElement>) => void
+}
+
+const closePairOf = (target: EventTarget | null) =>
+	target instanceof Element
+		? target.closest(`[${CLOSE_PAIR}]`)?.getAttribute(CLOSE_PAIR)
+		: undefined
+
+const useCloseReveal = () => {
+	const [hoveredId, setHoveredId] = useState<string | null>(null)
+	const [focusedId, setFocusedId] = useState<string | null>(null)
+	const forget =
+		(id: string, setId: typeof setHoveredId) =>
+		(event: { relatedTarget: EventTarget | null }) => {
+			if (closePairOf(event.relatedTarget) === id) return
+			setId((current) => (current === id ? null : current))
+		}
+	const revealHandlersFor = (id: string): CloseRevealHandlers => ({
+		[CLOSE_PAIR]: id,
+		onPointerEnter: () => setHoveredId(id),
+		onPointerLeave: forget(id, setHoveredId),
+		onFocus: (event) => {
+			if (event.currentTarget.matches(":focus-visible")) setFocusedId(id)
+		},
+		onBlur: forget(id, setFocusedId),
+	})
+	const isRevealed = (id: string) => id === hoveredId || id === focusedId
+	return { isRevealed, revealHandlersFor }
+}
+
 type TabMove = {
 	title: string
 	position: number
@@ -371,6 +410,7 @@ type TitleBarTabItemProps = TabGestures & {
 	lift: RosterLift<number>
 	insertionOn: (id: string, at: number | null) => InsertionEdge | undefined
 	onMoveKey: (event: KeyboardEvent<HTMLElement>) => void
+	revealHandlers: CloseRevealHandlers
 }
 
 type TabInsertionLineProps = {
@@ -398,6 +438,7 @@ const TitleBarTabItem = ({
 	lift,
 	insertionOn,
 	onMoveKey,
+	revealHandlers,
 	onPinTab,
 	onUnpinTab,
 	onNewTab,
@@ -418,6 +459,7 @@ const TitleBarTabItem = ({
 				render={
 					<Tabs.Tab
 						{...lift.handlersFor(tab.id)}
+						{...revealHandlers}
 						{...middleClickHandlers(() => {
 							if (!tab.isPinned) onCloseTab?.(tab.id)
 						})}
@@ -623,6 +665,10 @@ const TitleBarTabs = ({
 		stripRef,
 		onReorderTabs,
 	})
+	const { isRevealed, revealHandlersFor } = useCloseReveal()
+	const showsClose = (id: string) =>
+		id !== lift.lift?.id &&
+		(id === activeTabId || (!lift.lift && isRevealed(id)))
 	const tabItem = (tab: TitleBarTab, width: string) => (
 		<TitleBarTabItem
 			insertionOn={insertionOn}
@@ -639,6 +685,7 @@ const TitleBarTabs = ({
 			onPinTab={onPinTab}
 			onReopenClosedTab={onReopenClosedTab}
 			onUnpinTab={onUnpinTab}
+			revealHandlers={revealHandlersFor(tab.id)}
 			tab={tab}
 			width={width}
 		/>
@@ -689,17 +736,16 @@ const TitleBarTabs = ({
 					{hasDivider ? <span className={DIVIDER} /> : null}
 					{kept.map((tab) => (
 						<span className={cn(CLOSE_SLOT, tabWidth)} key={tab.id}>
-							{tab.id === activeTabId && tab.id !== lift.lift?.id ? (
-								<button
-									aria-label={t("titleBar.closeTab")}
-									className={CLOSE_BUTTON}
-									data-slot="title-bar-tab-close"
-									onClick={() => onCloseTab?.(tab.id)}
-									type="button"
-								>
-									<Icons.Close aria-hidden="true" />
-								</button>
-							) : null}
+							<button
+								{...revealHandlersFor(tab.id)}
+								aria-label={t("titleBar.closeTab")}
+								className={cn(CLOSE_BUTTON, !showsClose(tab.id) && "invisible")}
+								data-slot="title-bar-tab-close"
+								onClick={() => onCloseTab?.(tab.id)}
+								type="button"
+							>
+								<Icons.Close aria-hidden="true" />
+							</button>
 						</span>
 					))}
 				</div>
