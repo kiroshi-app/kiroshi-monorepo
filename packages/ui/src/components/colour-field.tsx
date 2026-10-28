@@ -1,5 +1,6 @@
 "use client"
 
+import type { Slider as SliderPrimitive } from "@base-ui/react/slider"
 import {
 	type CSSProperties,
 	type ReactNode,
@@ -29,6 +30,8 @@ type ColourFieldProps = {
 	hint?: string
 	className?: string
 }
+
+type SliderCommitReason = SliderPrimitive.Root.CommitEventReason
 
 type ColourOption = "none" | "own" | (typeof BLOT_TINTS)[number]
 
@@ -117,10 +120,20 @@ const OwnHueMark = ({ look, mark }: OwnHueMarkProps) =>
 		</span>
 	)
 
-const useHueEmission = (onValueChange: ColourFieldProps["onValueChange"]) => {
-	const lastEmittedHue = useRef<number | null>(undefined)
+type HueEmissionProps = Pick<ColourFieldProps, "value" | "onValueChange">
+
+const useHueEmission = ({ value, onValueChange }: HueEmissionProps) => {
+	const [isDragging, setIsDragging] = useState(false)
+	const [isHoldingLocalHue, setIsHoldingLocalHue] = useState(false)
+	const [lastEmittedHue, setLastEmittedHue] = useState<number>()
+	const [seenValue, setSeenValue] = useState(value)
 	const pendingHue = useRef<number>(undefined)
 	const emissionTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+
+	if (value !== seenValue) {
+		setSeenValue(value)
+		if (!isDragging && value !== lastEmittedHue) setIsHoldingLocalHue(false)
+	}
 
 	const cancelPending = () => {
 		clearTimeout(emissionTimer.current)
@@ -129,26 +142,36 @@ const useHueEmission = (onValueChange: ColourFieldProps["onValueChange"]) => {
 
 	const emitNow = (hue: number | null) => {
 		cancelPending()
-		lastEmittedHue.current = hue
+		setIsDragging(false)
+		setIsHoldingLocalHue(false)
 		onValueChange(hue)
 	}
 
 	const flushPending = useStableCallback(() => {
 		const hue = pendingHue.current
 		cancelPending()
-		if (hue === undefined || hue === lastEmittedHue.current) return
-		emitNow(hue)
+		if (hue === undefined || hue === value) return
+		setLastEmittedHue(hue)
+		setIsHoldingLocalHue(true)
+		onValueChange(hue)
 	})
 
 	const schedule = (hue: number) => {
 		clearTimeout(emissionTimer.current)
 		pendingHue.current = hue
+		setIsDragging(true)
+		setIsHoldingLocalHue(true)
 		emissionTimer.current = setTimeout(flushPending, HUE_EMISSION_DELAY_MS)
+	}
+
+	const release = (reason: SliderCommitReason) => {
+		setIsDragging(false)
+		if (reason !== "keyboard") flushPending()
 	}
 
 	useEffect(() => flushPending, [flushPending])
 
-	return { emitNow, schedule, flushPending }
+	return { isHoldingLocalHue, emitNow, schedule, release }
 }
 
 const ColourField = ({
@@ -165,13 +188,17 @@ const ColourField = ({
 	const ownLabelId = useId()
 	const [isPickingOwnHue, setIsPickingOwnHue] = useState(false)
 	const [ownHue, setOwnHue] = useState(value ?? DEFAULT_OWN_HUE)
-	const [isSliding, setIsSliding] = useState(false)
-	const { emitNow, schedule, flushPending } = useHueEmission(onValueChange)
+	const { isHoldingLocalHue, emitNow, schedule, release } = useHueEmission({
+		value,
+		onValueChange,
+	})
 
 	const valueOption = optionOf(value)
 	const selected = isPickingOwnHue ? "own" : valueOption
 	const shownOwnHue =
-		!isSliding && valueOption === "own" && value !== null ? value : ownHue
+		!isHoldingLocalHue && valueOption === "own" && value !== null
+			? value
+			: ownHue
 
 	const options: ColourOption[] =
 		noColour === "first"
@@ -191,14 +218,8 @@ const ColourField = ({
 	const slide = (next: number | readonly number[]) => {
 		const hue = firstOf(next)
 		setIsPickingOwnHue(true)
-		setIsSliding(true)
 		setOwnHue(hue)
 		schedule(hue)
-	}
-
-	const release = () => {
-		setIsSliding(false)
-		flushPending()
 	}
 
 	const labelOf = (option: ColourOption) => {
@@ -286,7 +307,7 @@ const ColourField = ({
 							max={LAST_HUE}
 							min={0}
 							onValueChange={slide}
-							onValueCommitted={release}
+							onValueCommitted={(_, { reason }) => release(reason)}
 							value={[shownOwnHue]}
 						/>
 						{hint ? (

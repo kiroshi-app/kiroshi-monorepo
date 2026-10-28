@@ -1,5 +1,6 @@
 import { useState } from "react"
-import { expect, fn, waitFor } from "storybook/test"
+import { flushSync } from "react-dom"
+import { expect, fn, type Mock, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { slotIn, slotsIn } from "@workspace/storybook/story-utils"
@@ -53,12 +54,51 @@ const pressHueThumb = (field: HTMLElement) => {
 
 	return {
 		moveTo: (share: number) =>
-			document.dispatchEvent(new PointerEvent("pointermove", pointAt(share))),
+			flushSync(() => {
+				document.dispatchEvent(new PointerEvent("pointermove", pointAt(share)))
+			}),
 		releaseAt: (share: number) =>
 			document.dispatchEvent(
 				new PointerEvent("pointerup", { ...pointAt(share), buttons: 0 }),
 			),
 	}
+}
+
+const hueSliderOf = (field: HTMLElement) => {
+	const slider = field.querySelector<HTMLInputElement>('input[type="range"]')
+	if (!slider) throw new Error("The hue panel is missing its slider")
+	return slider
+}
+
+const emissionsOf = (onValueChange: ColourFieldProps["onValueChange"]) =>
+	(onValueChange as Mock).mock.calls.length
+
+const renderOnStaleHost = (args: ColourFieldProps) => (
+	<div className="w-96">
+		<ColourField {...args} />
+	</div>
+)
+
+const OUTSIDE_HUE = 320
+
+const OutsideChangeHost = (props: ColourFieldProps) => {
+	const [value, setValue] = useState(props.value)
+
+	return (
+		<div className="flex w-96 flex-col gap-3">
+			<ColourField
+				{...props}
+				onValueChange={(next) => {
+					setValue(next)
+					props.onValueChange(next)
+				}}
+				value={value}
+			/>
+			<button onClick={() => setValue(OUTSIDE_HUE)} type="button">
+				Another member sets 320
+			</button>
+		</div>
+	)
 }
 
 const meta = preview.meta({
@@ -148,7 +188,9 @@ export const OwnHue = meta.story({
 
 		slider.focus()
 		await userEvent.keyboard("{ArrowRight}")
-		await expect(args.onValueChange).toHaveBeenLastCalledWith(321)
+		await waitFor(() =>
+			expect(args.onValueChange).toHaveBeenLastCalledWith(321),
+		)
 		await expect(
 			slotIn(canvasElement, "colour-field-readout"),
 		).toHaveTextContent("321°")
@@ -162,11 +204,7 @@ export const OwnHue = meta.story({
 export const HueDragEmitsOnceAfterAPause = meta.story({
 	tags: ["test-only"],
 	args: { value: 320 },
-	render: (args) => (
-		<div className="w-96">
-			<ColourField {...args} />
-		</div>
-	),
+	render: renderOnStaleHost,
 	parameters: {
 		docs: {
 			description: {
@@ -177,29 +215,104 @@ export const HueDragEmitsOnceAfterAPause = meta.story({
 	},
 	play: async ({ args, canvasElement }) => {
 		const field = slotIn(canvasElement, "colour-field")
-		const slider = field.querySelector<HTMLInputElement>('input[type="range"]')
-		if (!slider) throw new Error("The hue panel is missing its slider")
+		const slider = hueSliderOf(field)
 		const readout = slotIn(field, "colour-field-readout")
 		const drag = pressHueThumb(field)
-		const shownHues: number[] = []
-
-		for (const share of [0.7, 0.6, 0.5, 0.4]) {
-			const previous = Number(slider.value)
+		const shown = [0.7, 0.6, 0.5, 0.4].map((share) => {
 			drag.moveTo(share)
-			await waitFor(() => expect(Number(slider.value)).toBeLessThan(previous))
-			const hue = Number(slider.value)
-			await expect(hue).not.toBe(320)
-			await expect(readout).toHaveTextContent(`${hue}°`)
-			shownHues.push(hue)
-		}
-		await expect(args.onValueChange).not.toHaveBeenCalled()
+			return { hue: Number(slider.value), readout: readout.textContent }
+		})
+		const emissionsDuringMoves = emissionsOf(args.onValueChange)
 
-		const lastHue = shownHues.at(-1)
+		await expect(emissionsDuringMoves).toBe(0)
+		const hues = shown.map(({ hue }) => hue)
+		await expect(hues).toEqual([...new Set(hues)].sort((a, b) => b - a))
+		await expect(hues).not.toContain(320)
+		for (const { hue, readout: text } of shown) {
+			await expect(text).toBe(`${hue}°`)
+		}
+
+		const lastHue = hues.at(-1)
 		await waitFor(() => expect(args.onValueChange).toHaveBeenCalledTimes(1))
 		await expect(args.onValueChange).toHaveBeenCalledWith(lastHue)
 		await expect(readout).toHaveTextContent(`${lastHue}°`)
 
 		drag.releaseAt(0.4)
+		await pause(EMISSION_PAUSE_MS)
+		await expect(args.onValueChange).toHaveBeenCalledTimes(1)
+	},
+})
+
+export const HueDragReleasedBeforeThePauseEmitsOnce = meta.story({
+	tags: ["test-only"],
+	args: { value: 320 },
+	render: renderOnStaleHost,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A drag released before the pause on a host still writing. Check that the final hue is emitted once at release, that nothing follows when the timer would have fired, and that the readout stays on the released hue instead of snapping back.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		const field = slotIn(canvasElement, "colour-field")
+		const slider = hueSliderOf(field)
+		const drag = pressHueThumb(field)
+		drag.moveTo(0.6)
+		drag.moveTo(0.5)
+		const finalHue = Number(slider.value)
+		const emissionsBeforeRelease = emissionsOf(args.onValueChange)
+		drag.releaseAt(0.5)
+		const emissionsAtRelease = emissionsOf(args.onValueChange)
+
+		await expect(emissionsBeforeRelease).toBe(0)
+		await expect(emissionsAtRelease).toBe(1)
+		await expect(args.onValueChange).toHaveBeenCalledWith(finalHue)
+
+		await pause(EMISSION_PAUSE_MS)
+		await expect(args.onValueChange).toHaveBeenCalledTimes(1)
+		await expect(slotIn(field, "colour-field-readout")).toHaveTextContent(
+			`${finalHue}°`,
+		)
+	},
+})
+
+export const HeldArrowKeyEmitsOnceAfterTheLastRepeat = meta.story({
+	tags: ["test-only"],
+	args: { value: 320 },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"An arrow key held on the hue slider. Check that every repeat moves the readout, that nothing is emitted while the key repeats, and that one emission follows the last repeat.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		const field = slotIn(canvasElement, "colour-field")
+		const slider = hueSliderOf(field)
+		const readout = slotIn(field, "colour-field-readout")
+		slider.focus()
+		const shown = Array.from({ length: 5 }, (_, index) => {
+			flushSync(() => {
+				slider.dispatchEvent(
+					new KeyboardEvent("keydown", {
+						bubbles: true,
+						key: "ArrowRight",
+						repeat: index > 0,
+					}),
+				)
+			})
+			return readout.textContent
+		})
+		const emissionsDuringRepeats = emissionsOf(args.onValueChange)
+
+		await expect(emissionsDuringRepeats).toBe(0)
+		await expect(shown).toEqual(["321°", "322°", "323°", "324°", "325°"])
+		await waitFor(() => expect(args.onValueChange).toHaveBeenCalledTimes(1))
+		await expect(args.onValueChange).toHaveBeenCalledWith(325)
+
 		await pause(EMISSION_PAUSE_MS)
 		await expect(args.onValueChange).toHaveBeenCalledTimes(1)
 	},
@@ -230,5 +343,39 @@ export const PresetPickEmitsAtOnce = meta.story({
 		drag.releaseAt(0.5)
 		await pause(EMISSION_PAUSE_MS)
 		await expect(args.onValueChange).toHaveBeenCalledTimes(1)
+	},
+})
+
+export const HueEmittedAgainAfterAnOutsideChange = meta.story({
+	tags: ["test-only"],
+	args: { value: 320 },
+	globals: { theme_layout: "single" },
+	render: (args) => <OutsideChangeHost {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Another member changes the hue between two of your edits. Check that the field shows their hue, and that stepping back to the hue you last sent sends it again.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		const field = slotIn(canvasElement, "colour-field")
+		const slider = hueSliderOf(field)
+		const readout = slotIn(field, "colour-field-readout")
+
+		slider.focus()
+		await userEvent.keyboard("{ArrowRight}")
+		await waitFor(() => expect(args.onValueChange).toHaveBeenCalledWith(321))
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Another member sets 320" }),
+		)
+		await expect(readout).toHaveTextContent(`${OUTSIDE_HUE}°`)
+
+		slider.focus()
+		await userEvent.keyboard("{ArrowRight}")
+		await waitFor(() => expect(args.onValueChange).toHaveBeenCalledTimes(2))
+		await expect(args.onValueChange).toHaveBeenLastCalledWith(321)
 	},
 })
