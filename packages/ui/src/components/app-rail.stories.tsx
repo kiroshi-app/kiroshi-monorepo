@@ -1062,7 +1062,7 @@ export const A7SpacesBadge = meta.story({
 		docs: {
 			description: {
 				story:
-					"A7, light: the rail's Space logo carrying the strongest badge of the other spaces, attention over failed, the rule the Space switcher uses. A done never marks the logo: it would read as news about the space already open. The current space waits on the reader, which the logo leaves out, Studio finished, which the logo leaves out too, and Garage failed. Check the 8px failed dot sits flush with the top and trailing corner of the 44px button, the way the other rail entries carry theirs, and that the button's name ends on activity failed. The artboard draws no badge here. Pick `A7SpacesDoneElsewhere` for a done alone, `A7SpacesMenu` for the logo with no news.",
+					"A7, light: the rail's Space logo carrying the strongest badge of the other spaces, attention over failed, the rule the Space switcher uses. The current space waits on the reader, which the logo leaves out, Studio finished, which the logo leaves out too, and Garage failed. Check the 8px failed dot sits flush with the top and trailing corner of the 44px button, the way the other rail entries carry theirs, and that the button's name ends on activity failed. The artboard draws no badge here. Pick `A7SpacesDoneElsewhere` for a done alone, `A7SpacesMenu` for the logo with no news.",
 			},
 		},
 	},
