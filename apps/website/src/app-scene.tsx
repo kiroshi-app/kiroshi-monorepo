@@ -214,7 +214,6 @@ const ThreadTitle = ({ bot, conversation, onOpen }: ThreadTitleProps) =>
 	) : (
 		<HeaderConversationButton
 			bots={conversation.participants}
-			color={conversation.color}
 			icon={conversation.icon}
 			name={conversation.name}
 			onOpenSettings={onOpen}

@@ -41,6 +41,13 @@ const conversationIconHues = () =>
 		(icon) => icon.getAttribute("data-hue"),
 	)
 
+const conversationPictograms = () =>
+	[
+		...scene().querySelectorAll(
+			"[data-slot=conversation-subject-icon-pictogram]",
+		),
+	].map((pictogram) => pictogram.innerHTML)
+
 const sectionNames = () =>
 	[...scene().querySelectorAll("[data-slot=roster-section-name]")].map(
 		(name) => name.textContent,
@@ -102,16 +109,12 @@ describe("the landing scene", () => {
 		expect(tabNamed(triage).getAttribute("aria-selected")).toBe("true")
 	})
 
-	it("draws every conversation icon in a colour of its own", () => {
+	it("draws every conversation icon neutral, each with its own pictogram", () => {
 		renderScene()
 
-		const hues = conversationIconHues()
-
-		expect(hues).not.toContain(null)
-		expect(hues).toEqual(
-			expect.arrayContaining(
-				WORK.conversations.map(({ color }) => String(color)),
-			),
+		expect(conversationIconHues().filter((hue) => hue !== null)).toEqual([])
+		expect(new Set(conversationPictograms()).size).toBeGreaterThanOrEqual(
+			WORK.conversations.length,
 		)
 	})
 
