@@ -1084,7 +1084,13 @@ const ConversationSettingsScreen = ({
 	return (
 		<SettingsScreenLayout
 			{...navigation}
-			avatar={<ConversationSubjectIcon icon={icon} side={HEADER_AVATAR_SIZE} />}
+			avatar={
+				<ConversationSubjectIcon
+					hue={hue}
+					icon={icon}
+					side={HEADER_AVATAR_SIZE}
+				/>
+			}
 			entries={entries}
 			isCompanionPage
 			name={name}

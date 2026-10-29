@@ -9,6 +9,7 @@ import {
 	slotIn,
 	slotsIn,
 } from "@workspace/storybook/story-utils"
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { Icons } from "@workspace/ui/components/icons"
 import { MISSION_BOT } from "@workspace/ui/components/missions.fixtures"
 import {
@@ -149,6 +150,8 @@ const Probe = ({ slot, tone }: { slot: string; tone: string }) => (
 const surfaceOf = (canvasElement: HTMLElement, slot: string) =>
 	getComputedStyle(slotIn(canvasElement, slot)).backgroundColor
 
+const FREE_HUE = 210
+
 const meta = preview.meta({
 	title: "Navigation/SearchResultRow",
 	component: SearchResultRow,
@@ -270,30 +273,48 @@ export const ThemesChatGroup = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this to read a room of several companions with no colour picked, in light and dark at once. Check that a 32px subject icon on the neutral pair of each theme leads the row, the message square centred in it. Pick `ThemesChatGroupPickedIcon` for a room with a picked icon.",
+					"Reach for this to read a room of several companions with no colour picked, in light and dark at once. Check that a 32px subject icon on the neutral pair of each theme leads the row, the message square centred in it. Pick `ThemesChatGroupPickedIcon` for a preset hue, `ThemesChatGroupFreeHue` for a free hue.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) =>
-		expectSubjectIconInBothThemes(canvasElement, IDENTITY_SIDE),
+		expectSubjectIconInBothThemes(canvasElement, undefined, IDENTITY_SIDE),
 })
 
 export const ThemesChatGroupPickedIcon = meta.story({
 	globals: { theme_layout: "side-by-side" },
 	args: {
 		...KIND_ARGS["chat-group"],
-		identity: { kind: "chat-group", icon: "ShieldKey" },
+		identity: { kind: "chat-group", color: BLOT_HUES.red, icon: "ShieldKey" },
 	},
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Reach for this to read a room of several companions that picked the shield key, in light and dark at once. Check that the 32px subject icon keeps the neutral pair of each theme, whatever colour the room carries, and shows the picked pictogram. Pick `ThemesChatGroup` for the default icon.",
+					"Reach for this to read a room of several companions coloured red, in light and dark at once. Check that the 32px subject icon wears the red pair of each theme and the picked pictogram. Pick `ThemesChatGroup` for a room with no colour.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) =>
-		expectSubjectIconInBothThemes(canvasElement, IDENTITY_SIDE),
+		expectSubjectIconInBothThemes(canvasElement, BLOT_HUES.red, IDENTITY_SIDE),
+})
+
+export const ThemesChatGroupFreeHue = meta.story({
+	globals: { theme_layout: "side-by-side" },
+	args: {
+		...KIND_ARGS["chat-group"],
+		identity: { kind: "chat-group", color: FREE_HUE },
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this to read a room of several companions coloured at a hue outside the eight presets, 210, in light and dark at once. Check that the 32px subject icon wears the recipe tones of 210 in each theme rather than the nearest preset. Pick `ThemesChatGroupPickedIcon` for a preset hue.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) =>
+		expectSubjectIconInBothThemes(canvasElement, FREE_HUE, IDENTITY_SIDE),
 })
 
 export const Mission = meta.story({

@@ -388,32 +388,37 @@ export const ThemesGroup = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this to read a room of several companions with no colour picked, in light and dark at once. Check that one 56px subject icon stands above the heading on the neutral pair of each theme, the message square centred in it. Pick `ThemesGroupPickedIcon` for a room with a picked icon.",
+					"Reach for this to read a room of several companions with no colour picked, in light and dark at once. Check that one 56px subject icon stands above the heading on the neutral pair of each theme, the message square centred in it. Pick `ThemesGroupPickedIcon` for a preset hue, `FreeHue` for a free hue.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) =>
-		expectSubjectIconInBothThemes(canvasElement, THEMES_MARK_SIZE),
+		expectSubjectIconInBothThemes(canvasElement, undefined, THEMES_MARK_SIZE),
 })
 
 export const ThemesGroupPickedIcon = meta.story({
 	globals: { theme_layout: "side-by-side" },
-	args: { icon: "ShieldKey" },
+	args: { color: BLOT_HUES.red, icon: "ShieldKey" },
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Reach for this to read a room of several companions that picked the shield key, in light and dark at once. Check that the 56px subject icon keeps the neutral pair of each theme, whatever colour the room carries, and shows the picked pictogram. Pick `ThemesGroup` for the default icon.",
+					"Reach for this to read a room of several companions coloured red, in light and dark at once. Check that the 56px subject icon wears the red pair of each theme and the picked pictogram. Pick `ThemesGroup` for a room with no colour.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) =>
-		expectSubjectIconInBothThemes(canvasElement, THEMES_MARK_SIZE),
+		expectSubjectIconInBothThemes(
+			canvasElement,
+			BLOT_HUES.red,
+			THEMES_MARK_SIZE,
+		),
 })
 
 export const FreeHue = meta.story({
 	globals: { theme_layout: "side-by-side" },
 	args: {
+		color: 210,
 		icon: "ShieldKey",
 		spaceName: "Northwind",
 		spaceTint: 210,
@@ -422,12 +427,12 @@ export const FreeHue = meta.story({
 		docs: {
 			description: {
 				story:
-					"A room in a Space at a hue outside the eight presets, 210, light beside dark. Check that the Space chip wears 210 rather than the nearest preset while the subject icon keeps the neutral pair of each theme. Pick `InSpace` for a preset hue.",
+					"A room coloured at a hue outside the eight presets, 210, in a Space at that hue, light beside dark. Check that the subject icon and the Space chip both wear 210 rather than the nearest preset. Pick `ThemesGroupPickedIcon` and `InSpace` for preset hues.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
-		await expectSubjectIconInBothThemes(canvasElement, THEMES_MARK_SIZE)
+		await expectSubjectIconInBothThemes(canvasElement, 210, THEMES_MARK_SIZE)
 		for (const line of slotsIn(canvasElement, "conversation-empty-space")) {
 			const chip = slotIn(line, "space-tint")
 			await expect(hexOfComputed(getComputedStyle(chip).backgroundColor)).toBe(

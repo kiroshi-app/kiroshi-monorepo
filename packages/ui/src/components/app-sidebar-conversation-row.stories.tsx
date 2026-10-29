@@ -36,6 +36,10 @@ import { NO_CLICK_MODIFIERS } from "@workspace/ui/components/sidebar-menu-row"
 import { SIDEBAR_MIN_WIDTH } from "@workspace/ui/components/sidebar-resize"
 import { SidebarMenu } from "@workspace/ui/components/ui/sidebar"
 
+const FREE_HUE = 210
+
+const DARK = { theme: "dark", theme_layout: "single" }
+
 const meta = preview.meta({
 	title: "Navigation/AppSidebarConversationRow",
 	component: ConversationRosterRow,
@@ -173,13 +177,13 @@ const expectTwoBotsAndACounter = async (row: HTMLElement) => {
 	)
 }
 
-const expectNeutralCell = async (row: HTMLElement) => {
+const expectCellWears = async (row: HTMLElement, hue?: number) => {
 	const icon = slotIn(row, "conversation-subject-icon")
 	await expect(slotIn(row, "outlined-hexagon-face").style.fill).toBe(
 		"var(--conversation-icon)",
 	)
 	await expect(icon.style.color).toBe("var(--conversation-icon-foreground)")
-	await expect(icon).not.toHaveAttribute("data-hue")
+	await expect(icon).toHaveAttribute("data-hue", String(hue ?? ""))
 }
 
 const expectKnockoutCutToTheRow = async (row: HTMLElement) => {
@@ -266,7 +270,7 @@ export const RowWithoutIconOrColour = meta.story({
 	play: async ({ canvasElement }) => {
 		const row = rowIn(canvasElement)
 		await expectRowAnatomy(row)
-		await expectNeutralCell(row)
+		await expectCellWears(row)
 		await expect(glyphIn(row, ConversationIcons.MessageSquare)).not.toBeNull()
 		await expect(row).toHaveAccessibleName(
 			expect.stringMatching(new RegExp(`^${DESK_ROOM.name}`)),
@@ -282,9 +286,150 @@ export const RedShieldKeyRow = meta.story({
 	play: async ({ canvasElement }) => {
 		const row = rowIn(canvasElement)
 		await expectRowAnatomy(row)
-		await expectNeutralCell(row)
+		await expectCellWears(row, BLOT_HUES.red)
 		await expect(glyphIn(row, ConversationIcons.ShieldKey)).not.toBeNull()
 	},
+})
+
+export const RowInRed = meta.story({
+	tags: ["test-only"],
+	args: { conversation: { ...DESK_ROOM, color: BLOT_HUES.red } },
+	play: async ({ canvasElement }) =>
+		expectCellWears(rowIn(canvasElement), BLOT_HUES.red),
+})
+
+export const RowInYellow = meta.story({
+	tags: ["test-only"],
+	args: { conversation: { ...DESK_ROOM, color: BLOT_HUES.yellow } },
+	play: async ({ canvasElement }) =>
+		expectCellWears(rowIn(canvasElement), BLOT_HUES.yellow),
+})
+
+export const RowInGreen = meta.story({
+	tags: ["test-only"],
+	args: { conversation: { ...DESK_ROOM, color: BLOT_HUES.green } },
+	play: async ({ canvasElement }) =>
+		expectCellWears(rowIn(canvasElement), BLOT_HUES.green),
+})
+
+export const RowInCyan = meta.story({
+	tags: ["test-only"],
+	args: { conversation: { ...DESK_ROOM, color: BLOT_HUES.cyan } },
+	play: async ({ canvasElement }) =>
+		expectCellWears(rowIn(canvasElement), BLOT_HUES.cyan),
+})
+
+export const RowInBlue = meta.story({
+	tags: ["test-only"],
+	args: { conversation: { ...DESK_ROOM, color: BLOT_HUES.blue } },
+	play: async ({ canvasElement }) =>
+		expectCellWears(rowIn(canvasElement), BLOT_HUES.blue),
+})
+
+export const RowInPurple = meta.story({
+	tags: ["test-only"],
+	args: { conversation: { ...DESK_ROOM, color: BLOT_HUES.purple } },
+	play: async ({ canvasElement }) =>
+		expectCellWears(rowIn(canvasElement), BLOT_HUES.purple),
+})
+
+export const RowInPink = meta.story({
+	tags: ["test-only"],
+	args: { conversation: { ...DESK_ROOM, color: BLOT_HUES.pink } },
+	play: async ({ canvasElement }) =>
+		expectCellWears(rowIn(canvasElement), BLOT_HUES.pink),
+})
+
+export const RowInOrange = meta.story({
+	tags: ["test-only"],
+	args: { conversation: { ...DESK_ROOM, color: BLOT_HUES.orange } },
+	play: async ({ canvasElement }) =>
+		expectCellWears(rowIn(canvasElement), BLOT_HUES.orange),
+})
+
+export const MonochromeRow = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A room with no colour, in the light theme. Check that the 40px subject icon wears the neutral pair. Pick `MutedTintRow` for a preset hue, `MutedTintRowFreeHue` for a free hue.",
+			},
+		},
+	},
+	play: ({ canvasElement }) => expectCellWears(rowIn(canvasElement)),
+})
+
+export const MonochromeRowDark = meta.story({
+	globals: DARK,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A room with no colour, in the dark theme. Check that the 40px subject icon wears the neutral pair. Pick `MutedTintRow` for a preset hue, `MutedTintRowFreeHue` for a free hue.",
+			},
+		},
+	},
+	play: ({ canvasElement }) => expectCellWears(rowIn(canvasElement)),
+})
+
+export const MutedTintRow = meta.story({
+	args: {
+		conversation: { ...DESK_ROOM, color: BLOT_HUES.red, icon: "ShieldKey" },
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A room coloured red with the shield key picked, in the light theme. Check that the 40px subject icon wears the red recipe tones. Pick `MonochromeRow` for a room with no colour.",
+			},
+		},
+	},
+	play: ({ canvasElement }) =>
+		expectCellWears(rowIn(canvasElement), BLOT_HUES.red),
+})
+
+export const MutedTintRowDark = meta.story({
+	globals: DARK,
+	args: {
+		conversation: { ...DESK_ROOM, color: BLOT_HUES.red, icon: "ShieldKey" },
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A room coloured red with the shield key picked, in the dark theme. Check that the 40px subject icon wears the red recipe tones. Pick `MonochromeRow` for a room with no colour.",
+			},
+		},
+	},
+	play: ({ canvasElement }) =>
+		expectCellWears(rowIn(canvasElement), BLOT_HUES.red),
+})
+
+export const MutedTintRowFreeHue = meta.story({
+	args: { conversation: { ...DESK_ROOM, color: FREE_HUE } },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A room coloured at a hue outside the eight presets, 210, in the light theme. Check that the 40px subject icon wears the recipe tones of 210 rather than the nearest preset. Pick `MutedTintRow` for a preset hue.",
+			},
+		},
+	},
+	play: ({ canvasElement }) => expectCellWears(rowIn(canvasElement), FREE_HUE),
+})
+
+export const MutedTintRowFreeHueDark = meta.story({
+	globals: DARK,
+	args: { conversation: { ...DESK_ROOM, color: FREE_HUE } },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A room coloured at a hue outside the eight presets, 210, in the dark theme. Check that the 40px subject icon wears the recipe tones of 210 rather than the nearest preset. Pick `MutedTintRow` for a preset hue.",
+			},
+		},
+	},
+	play: ({ canvasElement }) => expectCellWears(rowIn(canvasElement), FREE_HUE),
 })
 
 export const RowWithOneBot = meta.story({
@@ -461,8 +606,6 @@ const DESK_ROOM_NEEDING_YOU = {
 	badge: "attention" as const,
 	pendingQuestion: PENDING_QUESTION,
 }
-
-const DARK = { theme: "dark", theme_layout: "single" }
 
 const expectPileAfterTheQuestion = async (row: HTMLElement) => {
 	const line = slotIn(row, "roster-row-needs-you")

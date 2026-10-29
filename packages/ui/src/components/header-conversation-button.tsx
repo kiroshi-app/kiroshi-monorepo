@@ -19,6 +19,7 @@ type HeaderConversationButtonProps = Pick<
 	ConversationSubjectIconProps,
 	"icon"
 > & {
+	color?: number | null
 	name: string
 	bots: RosterBot[]
 	isSettingsOpen?: boolean
@@ -30,6 +31,7 @@ const HeaderConversationButton = ({
 	name,
 	bots,
 	icon,
+	color,
 	isSettingsOpen = false,
 	onOpenSettings,
 	className,
@@ -46,7 +48,7 @@ const HeaderConversationButton = ({
 			variant="ghost"
 		>
 			{bots.length > 1 ? (
-				<ConversationSubjectIcon icon={icon} side={AVATAR_SIZE} />
+				<ConversationSubjectIcon hue={color} icon={icon} side={AVATAR_SIZE} />
 			) : (
 				<span className="flex shrink-0 items-center gap-1">
 					{bots.map((bot) => (
