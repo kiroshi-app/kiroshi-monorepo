@@ -12,6 +12,7 @@ import {
 } from "@workspace/ui/components/glaze-border"
 import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import {
+	ARC_OPACITY,
 	COMPACT_RADII,
 	CROSS_GLYPH,
 	dashArray,
@@ -215,7 +216,9 @@ const SpaceAvatar = ({
 					.map((radius, index) => (
 						<circle
 							{...arcCentre}
+							data-slot="space-avatar-arc"
 							fill={tones[tones.length - 1 - index]}
+							fillOpacity={ARC_OPACITY}
 							key={radius}
 							r={radius * size}
 						/>
