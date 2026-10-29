@@ -141,6 +141,7 @@ export const useWorkspaceAssembly = () => {
 		user: core.user,
 		runningVersion,
 		onWhatsNew: whatsNew.openFromAbout,
+		onReplayOnboarding: () => void drivers.onboarding.controller.replay(),
 	})
 
 	return {

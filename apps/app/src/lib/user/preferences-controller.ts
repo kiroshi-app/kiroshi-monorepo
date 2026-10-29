@@ -11,13 +11,15 @@ import {
 	writeMirror,
 } from "./preferences-mirror"
 import {
+	changeOnboardingStep,
 	changePreferences,
 	changeProfilePicture,
 	readPreferences,
+	replayOnboarding,
 } from "./preferences-queue"
 
 import { createStore } from "../store"
-import type { SidebarTab, UpdateChannel } from "@/lib/bindings"
+import type { OnboardingStep, SidebarTab, UpdateChannel } from "@/lib/bindings"
 
 type NotificationField = Extract<keyof UserPreferences, `notify${string}`>
 
@@ -55,6 +57,8 @@ export type UserController = {
 	setSidebarTab: (sidebarTab: SidebarTab) => Promise<void>
 	setActivityPanelOpen: (activityPanelOpen: boolean) => Promise<void>
 	markFirstRunDone: () => Promise<void>
+	setOnboardingStep: (step: OnboardingStep) => Promise<void>
+	replayOnboarding: () => Promise<void>
 	setLastBot: (opened: LastBotOpened) => Promise<void>
 	setLastSpace: (lastSpaceId: string) => Promise<void>
 	setUpdateChannel: (updateChannel: UpdateChannel) => Promise<void>
@@ -164,6 +168,17 @@ export const createUserController = (): UserController => {
 		)
 	}
 
+	const changeOnboarding = (
+		onboardingStep: OnboardingStep,
+		write: () => Promise<UserPreferences>,
+	) => {
+		show({ ...current().preferences, onboardingStep })
+		return write().then(apply, (failure: unknown) => {
+			restore()
+			throw failure
+		})
+	}
+
 	return {
 		getState: current,
 
@@ -232,6 +247,11 @@ export const createUserController = (): UserController => {
 			changeMirrored({ activityPanelOpen }),
 
 		markFirstRunDone: () => changeMirrored({ firstRunDone: true }),
+
+		setOnboardingStep: (step: OnboardingStep) =>
+			changeOnboarding(step, () => changeOnboardingStep(step)),
+
+		replayOnboarding: () => changeOnboarding("welcome", replayOnboarding),
 
 		setLastBot: (opened: LastBotOpened) =>
 			changeMirrored({ lastBotIdBySpace: botIdBySpaceWith(opened) }),

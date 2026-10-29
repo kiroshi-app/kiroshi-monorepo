@@ -8,4 +8,6 @@ export type OnboardingPort = {
 	holdApiKey: (apiKey: string) => Promise<void>
 	openSignInUrl: (url: string) => Promise<void>
 	onSignInStarted: (onStarted: (url: string) => void) => Promise<() => void>
+	hasClaudeHome: () => Promise<boolean>
+	openDownloadPage: () => Promise<void>
 }

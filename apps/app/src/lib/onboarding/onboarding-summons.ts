@@ -55,6 +55,11 @@ const answerTo = (
 		: undefined
 }
 
+export const isSummonedIn = (chat: ChatState, summons: string): boolean =>
+	chat.messages.some(
+		(message) => message.role === "user" && message.content === summons,
+	)
+
 export const summonOutcomeOf = (
 	chat: ChatState,
 	summons: string,

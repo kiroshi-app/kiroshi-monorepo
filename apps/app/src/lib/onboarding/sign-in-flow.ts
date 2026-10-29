@@ -1,14 +1,19 @@
-import { exitDetailOf, isNotRunning } from "./onboarding-failure"
+import {
+	type ConnectFailure,
+	connectFailureOf,
+	exitDetailOf,
+	isNotRunning,
+} from "./onboarding-failure"
 import type { OnboardingPort } from "./onboarding-port"
 
 import type { AccountReport } from "../agent/contract"
 
 export type ConnectionStep =
-	| { state: "detected"; account: string }
+	| { state: "detected"; email: string; plan: string | null }
 	| { state: "offer" }
 	| { state: "waiting"; signInUrl: string }
 	| { state: "apiKey" }
-	| { state: "signInFailed"; exitDetail: string }
+	| { state: "signInFailed"; exitDetail: string; failure: ConnectFailure }
 	| { state: "apiKeyFailed"; exitDetail: string }
 
 export type SignInActions = {
@@ -32,11 +37,6 @@ type SignInFlow = {
 	actions: SignInActions
 }
 
-const ACCOUNT_PLAN_SEPARATOR = " · "
-
-const accountLineOf = (email: string, plan: string | null | undefined) =>
-	plan ? `${email}${ACCOUNT_PLAN_SEPARATOR}${plan}` : email
-
 export const createSignInFlow = (
 	port: OnboardingPort,
 	{ showConnection, setBusy, settle }: SignInHost,
@@ -45,7 +45,11 @@ export const createSignInFlow = (
 	let running: Attempt | null = null
 
 	const showFailed = (reason: unknown) => {
-		showConnection({ state: "signInFailed", exitDetail: exitDetailOf(reason) })
+		showConnection({
+			state: "signInFailed",
+			exitDetail: exitDetailOf(reason),
+			failure: connectFailureOf(reason),
+		})
 	}
 
 	const askApiKey = () => showConnection({ state: "apiKey" })
@@ -66,7 +70,8 @@ export const createSignInFlow = (
 		}
 		showConnection({
 			state: "detected",
-			account: accountLineOf(email, report.account?.plan),
+			email,
+			plan: report.account?.plan ?? null,
 		})
 	}
 

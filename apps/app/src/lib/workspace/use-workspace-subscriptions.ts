@@ -19,29 +19,27 @@ export const useWorkspaceSubscriptions = ({
 	rosterView,
 }: WorkspaceSubscriptionsInput) => {
 	const { chat, joinedSpaces, roster, user } = core
-	const { isDriverWindow, onboarding } = drivers
+	const { onboarding } = drivers
 	const { bots, rosteredSpaceId, selectedBotId, selectedConversationId } =
 		rosterView
 
 	useEffect(() => {
-		void user.controller.load()
+		void user.controller.load().then(onboarding.controller.resume)
 		return user.controller.followOtherWindows()
-	}, [user.controller])
+	}, [user.controller, onboarding.controller])
 
 	useCompanionAnnouncements({
 		onCreated: (created) => {
 			if (joinedSpaces.hosts.active === null) {
 				void roster.controller.reload()
 			}
-			if (
-				isDriverWindow &&
-				!user.controller.getState().preferences.firstRunDone
-			) {
-				void onboarding.controller.greetCompanion(created)
-			}
+			onboarding.controller.noteCreated(created)
 		},
 		onHostCreated: () => void roster.controller.reload(),
-		onFirstRunDone: () => void user.controller.load(),
+		onFirstRunDone: () => {
+			void onboarding.controller.noteFirstRunDone()
+			void user.controller.load()
+		},
 	})
 
 	useCompanionArrivals(() => {

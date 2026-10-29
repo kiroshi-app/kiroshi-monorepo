@@ -36,6 +36,10 @@ const ALL_NOTIFIED = {
 	notifyWithSound: true,
 }
 
+type OnboardingStepArgs = {
+	step: UserPreferences["onboardingStep"]
+}
+
 const aHost = (record: UserPreferences = DEFAULTS) => {
 	let held = record
 
@@ -45,6 +49,12 @@ const aHost = (record: UserPreferences = DEFAULTS) => {
 		}
 		if (command === "user_set_profile_picture") {
 			held = { ...held, profilePicturePath: WORN }
+		}
+		if (command === "user_set_onboarding_step") {
+			held = { ...held, onboardingStep: (args as OnboardingStepArgs).step }
+		}
+		if (command === "user_replay_onboarding") {
+			held = { ...held, onboardingStep: "welcome" }
 		}
 		return Promise.resolve(held)
 	})
@@ -456,6 +466,43 @@ describe("the sidebar tab the reader selects", () => {
 		await controller.setSidebarTab("companions")
 
 		expect(controller.getState().preferences.sidebarTab).toBe("conversations")
+	})
+})
+
+describe("the onboarding step the reader reaches", () => {
+	it("stores the step on the host, and shows it before the host answers", async () => {
+		const host = aHost()
+		const controller = await loaded()
+
+		const written = controller.setOnboardingStep("connect")
+
+		expect(controller.getState().preferences.onboardingStep).toBe("connect")
+		await written
+		expect(host().onboardingStep).toBe("connect")
+	})
+
+	it("shows the stored step again and fails when the host refuses it", async () => {
+		aHost({ ...DEFAULTS, onboardingStep: "welcome" })
+		const controller = await loaded()
+		const refusal = { kind: "storage", failure: { kind: "closed" } }
+		hostInvoke.mockRejectedValue(refusal)
+
+		await expect(controller.setOnboardingStep("connect")).rejects.toBe(refusal)
+
+		expect(controller.getState().preferences.onboardingStep).toBe("welcome")
+	})
+
+	it("replays the onboarding from the first step", async () => {
+		const host = aHost({ ...DEFAULTS, onboardingStep: "done" })
+		const controller = await loaded()
+
+		await controller.replayOnboarding()
+
+		expect(hostInvoke.mock.calls.map(([command]) => command)).toContain(
+			"user_replay_onboarding",
+		)
+		expect(host().onboardingStep).toBe("welcome")
+		expect(controller.getState().preferences.onboardingStep).toBe("welcome")
 	})
 })
 

@@ -110,7 +110,8 @@ describe("reading the account", () => {
 		expect(commands()).toEqual(["account"])
 		expect(controller.getState().connection).toEqual({
 			state: "detected",
-			account: `${EMAIL} · Max`,
+			email: EMAIL,
+			plan: "Max",
 		})
 	})
 
@@ -121,7 +122,8 @@ describe("reading the account", () => {
 
 		expect(controller.getState().connection).toEqual({
 			state: "detected",
-			account: EMAIL,
+			email: EMAIL,
+			plan: null,
 		})
 	})
 
@@ -150,6 +152,7 @@ describe("reading the account", () => {
 		expect(controller.getState().connection).toEqual({
 			state: "signInFailed",
 			exitDetail: "no binary",
+			failure: "agentMissing",
 		})
 	})
 
@@ -161,6 +164,7 @@ describe("reading the account", () => {
 		expect(controller.getState().connection).toEqual({
 			state: "signInFailed",
 			exitDetail: "the agent binary wasn’t found",
+			failure: "agentMissing",
 		})
 	})
 })
@@ -240,6 +244,7 @@ describe("signing in", () => {
 		expect(controller.getState().connection).toEqual({
 			state: "signInFailed",
 			exitDetail: "auth login exited with 1",
+			failure: "cancelled",
 		})
 	})
 
@@ -279,6 +284,7 @@ describe("signing in", () => {
 		expect(controller.getState().connection).toEqual({
 			state: "signInFailed",
 			exitDetail: "the sign-in timed out",
+			failure: "timedOut",
 		})
 	})
 
@@ -386,7 +392,8 @@ describe("the api key", () => {
 		expect(commands().at(-1)).toBe("account")
 		expect(controller.getState().connection).toEqual({
 			state: "detected",
-			account: EMAIL,
+			email: EMAIL,
+			plan: null,
 		})
 	})
 

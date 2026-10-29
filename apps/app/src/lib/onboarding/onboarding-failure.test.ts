@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest"
 
-import { exitDetailOf, isNotRunning } from "./onboarding-failure"
+import {
+	connectFailureOf,
+	exitDetailOf,
+	isNotRunning,
+} from "./onboarding-failure"
 
 const NAMED_KINDS = [
 	"alreadyRunning",
@@ -68,5 +72,24 @@ describe("the exit detail of a failure", () => {
 	it("knows the sign-in that is no longer running", () => {
 		expect(isNotRunning({ kind: "notRunning" })).toBe(true)
 		expect(isNotRunning({ kind: "cancelled" })).toBe(false)
+	})
+})
+
+describe("the failure the connect screen names", () => {
+	it.each([
+		["cancelled", "cancelled"],
+		["timedOut", "timedOut"],
+		["flowTimedOut", "timedOut"],
+		["startupTimeout", "timedOut"],
+		["refusedUrl", "linkRefused"],
+		["binaryNotFound", "agentMissing"],
+		["spawnFailed", "agentMissing"],
+	])("names a %s refusal as %s", (kind, failure) => {
+		expect(connectFailureOf({ kind })).toBe(failure)
+	})
+
+	it("names any other refusal as a cancelled sign-in to try again", () => {
+		expect(connectFailureOf({ kind: "crashed" })).toBe("cancelled")
+		expect(connectFailureOf(new Error("socket closed"))).toBe("cancelled")
 	})
 })

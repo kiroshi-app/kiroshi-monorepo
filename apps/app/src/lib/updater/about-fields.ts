@@ -17,6 +17,7 @@ type AboutFieldsInput = {
 	user: User
 	runningVersion: string | null
 	onWhatsNew: () => void
+	onReplayOnboarding: () => void
 }
 
 const hasCheckFailed = ({ host, offeredVersion }: UpdaterState) =>
@@ -50,6 +51,8 @@ export const toAboutUpdate = (state: UpdaterState): AboutUpdate => {
 	}
 }
 
+const ignoreImport = () => undefined
+
 const raisePreferenceFailure = raiseUpdaterFailure("use-about-fields")
 
 const raiseCheckFailure = raiseUpdaterFailure("check-for-updates")
@@ -66,6 +69,7 @@ export const aboutFieldsOf = ({
 	user,
 	runningVersion,
 	onWhatsNew,
+	onReplayOnboarding,
 }: AboutFieldsInput): AboutFieldsProps | undefined => {
 	if (runningVersion === null) {
 		return undefined
@@ -95,5 +99,10 @@ export const aboutFieldsOf = ({
 		},
 		onWhatsNew,
 		onReleaseNotes: () => openReleaseNotes(releaseNotesUrlOf(runningVersion)),
+		gettingStarted: {
+			canImportFromClaudeCode: false,
+			onImportFromClaudeCode: ignoreImport,
+			onReplayOnboarding,
+		},
 	}
 }

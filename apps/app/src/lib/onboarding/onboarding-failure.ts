@@ -17,6 +17,21 @@ const SENTENCE_OF: Record<string, string> = {
 	unknownSpace: "the roster is in no space",
 }
 
+export type ConnectFailure =
+	| "cancelled"
+	| "timedOut"
+	| "linkRefused"
+	| "agentMissing"
+
+const CONNECT_FAILURE_OF: Record<string, ConnectFailure> = {
+	timedOut: "timedOut",
+	flowTimedOut: "timedOut",
+	startupTimeout: "timedOut",
+	refusedUrl: "linkRefused",
+	binaryNotFound: "agentMissing",
+	spawnFailed: "agentMissing",
+}
+
 const fieldIn = (reason: unknown, field: string): string | null => {
 	if (typeof reason !== "object" || reason === null || !(field in reason)) {
 		return null
@@ -39,3 +54,6 @@ export const exitDetailOf = (reason: unknown): string => {
 	}
 	return reason instanceof Error ? reason.message : NO_REASON
 }
+
+export const connectFailureOf = (reason: unknown): ConnectFailure =>
+	CONNECT_FAILURE_OF[fieldIn(reason, "kind") ?? ""] ?? "cancelled"
