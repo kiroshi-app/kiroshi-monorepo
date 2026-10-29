@@ -10,6 +10,7 @@ pub use secondary::is_secondary;
 pub use macos::center_in_header;
 
 pub(crate) mod drag_ghost;
+pub(crate) mod native_move;
 #[cfg(any(windows, test))]
 mod overlays;
 #[cfg(any(windows, test))]

@@ -4,6 +4,7 @@ use serde::Serialize;
 use serde_json::Value;
 use tauri::{AppHandle, Manager, Runtime, State, WebviewWindow};
 
+use super::native_move;
 use super::secondary::ScreenPosition;
 use crate::events::{self, TAB_DRAG};
 use crate::json::JsonValue;
@@ -99,7 +100,12 @@ pub fn window_tab_drag_cancel<R: Runtime>(window: WebviewWindow<R>) -> Result<()
 pub fn window_start_native_move<R: Runtime>(
 	window: WebviewWindow<R>,
 ) -> Result<(), NativeWindowError> {
-	acted_on(&window, "moved", window.start_dragging())
+	let watch = native_move::watch(&window);
+	acted_on(&window, "moved", window.start_dragging())?;
+	if let Some(watch) = watch {
+		native_move::follow_release(watch);
+	}
+	Ok(())
 }
 
 #[tauri::command]

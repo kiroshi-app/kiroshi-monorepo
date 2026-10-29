@@ -162,6 +162,11 @@ windows = { version = "0.62", features = [
 	"Win32_UI_WindowsAndMessaging",
 ] }
 
+# Already in the tree under `tao` and `tauri`; named here so the end of a native window move is
+# read from the X11 pointer, which the window manager holds for the whole move.
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = "0.18"
+
 [dev-dependencies]
 tauri = { version = "2", features = ["test"] }
 # Already a dependency; named again so an integration test can build the pictures it
