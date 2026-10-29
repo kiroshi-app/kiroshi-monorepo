@@ -37,17 +37,15 @@ impl TurnWindows {
 
 	pub(crate) fn forget_window(&self, window: &str) {
 		let mut held = self.held();
-		held.drivers.remove(window);
-		let left: Vec<String> = held
-			.submitted
-			.iter()
-			.filter(|(_, submitter)| *submitter == window)
-			.map(|(turn_id, _)| turn_id.clone())
-			.collect();
-		for turn_id in left {
-			held.submitted.remove(&turn_id);
-			held.orphaned.insert(turn_id);
-		}
+		let Windows { submitted, orphaned, drivers } = &mut *held;
+		drivers.remove(window);
+		submitted.retain(|turn_id, submitter| {
+			let is_left = submitter == window;
+			if is_left {
+				orphaned.insert(turn_id.clone());
+			}
+			!is_left
+		});
 	}
 
 	fn is_left_to_the_host(&self, turn_id: &str) -> bool {
