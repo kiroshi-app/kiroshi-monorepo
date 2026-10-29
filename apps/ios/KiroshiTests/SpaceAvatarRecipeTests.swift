@@ -167,13 +167,13 @@ struct SpaceAvatarRecipeTests {
     func paintsTheBadgesAndTheHatchInTheDesktopColours(_ theme: SpaceAvatarTheme) throws {
         let badges = try #require(vectors.badges[theme.rawValue])
         let traits = UITraitCollection(userInterfaceStyle: theme == .dark ? .dark : .light)
-        let resolved = { (name: KiroshiColor) in
-            Self.rgba(UIColor.kiroshi(name).resolvedColor(with: traits))
+        let resolved = { (name: String) in
+            Self.rgba(UIColor(named: name)?.resolvedColor(with: traits) ?? .clear)
         }
-        #expect(resolved(.spaceAvatarLocalBadge) == Self.rgba(badges.local, opacity: 1))
-        #expect(resolved(.spaceAvatarOfflineBadge) == Self.rgba(badges.offline, opacity: 1))
+        #expect(resolved("space-avatar-local-badge") == Self.rgba(badges.local, opacity: 1))
+        #expect(resolved("space-avatar-offline-badge") == Self.rgba(badges.offline, opacity: 1))
         #expect(
-            resolved(.spaceAvatarHatch)
+            resolved("space-avatar-hatch")
                 == Self.rgba(badges.hatch.colour, opacity: badges.hatch.opacity))
     }
 

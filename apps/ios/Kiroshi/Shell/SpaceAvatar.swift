@@ -85,6 +85,9 @@ private struct SpaceAvatarDrawing {
     static let highlight = Gradient(colors: [.white.opacity(0.25), .white.opacity(0)])
     static let initialTracking = -0.02
     static let arcOpacity = 0.45
+    static let localBadge = Color("space-avatar-local-badge")
+    static let offlineBadge = Color("space-avatar-offline-badge")
+    static let hatchInk = Color("space-avatar-hatch")
     static let laptop = Path(glyph: SpaceAvatarRecipe.laptopGlyph)
     static let cross = Path(glyph: SpaceAvatarRecipe.crossGlyph)
 
@@ -178,10 +181,10 @@ private struct SpaceAvatarDrawing {
         case .shared, .online:
             context.fill(disc(radius: radius), with: .color(.kiroshi(.presenceOnline)))
         case .local:
-            context.fill(disc(radius: radius), with: .color(.kiroshi(.spaceAvatarLocalBadge)))
+            context.fill(disc(radius: radius), with: .color(Self.localBadge))
             drawGlyph(Self.laptop, marks.laptop, in: &context)
         case .offline:
-            context.fill(disc(radius: radius), with: .color(.kiroshi(.spaceAvatarOfflineBadge)))
+            context.fill(disc(radius: radius), with: .color(Self.offlineBadge))
             if let cross = marks.cross { drawGlyph(Self.cross, cross, in: &context) }
         case .connecting:
             break
@@ -208,7 +211,7 @@ private struct SpaceAvatarDrawing {
             lines.addLine(to: CGPoint(x: offset, y: 0))
         }
         context.stroke(
-            lines, with: .color(.kiroshi(.spaceAvatarHatch)), lineWidth: marks.hatch.stroke)
+            lines, with: .color(Self.hatchInk), lineWidth: marks.hatch.stroke)
     }
 
     private func sheen(in context: inout GraphicsContext) {
