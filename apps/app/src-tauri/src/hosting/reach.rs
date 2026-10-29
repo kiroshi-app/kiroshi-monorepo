@@ -368,6 +368,7 @@ pub(super) const REACHES: &[(&str, Reach)] = &[
 	("user_set_profile_picture", Reach::HostOnly),
 	("user_set_onboarding_step", Reach::HostOnly),
 	("user_replay_onboarding", Reach::HostOnly),
+	("user_set_onboarding_first_companion", Reach::HostOnly),
 	("user_mark_onboarding_import_seen", Reach::HostOnly),
 	("claude_import_inventory", Reach::HostOnly),
 	("claude_import_run", Reach::HostOnly),

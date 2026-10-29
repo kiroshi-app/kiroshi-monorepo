@@ -109,6 +109,8 @@ fn a_record(picture: Value) -> Value {
 		"lastSeenVersion": "0.24.1",
 		"onboardingStep": "done",
 		"onboardingImportSeen": false,
+		"onboardingShotoId": null,
+		"onboardingFirstCompanionId": null,
 	})
 }
 
@@ -154,6 +156,10 @@ fn a_host_without_a_database_answers_every_preferences_command_with_why_there_is
 	);
 	assert_eq!(call(&window, "user_replay_onboarding", json!({})), unavailable);
 	assert_eq!(call(&window, "user_mark_onboarding_import_seen", json!({})), unavailable);
+	assert_eq!(
+		call(&window, "user_set_onboarding_first_companion", json!({ "botId": BOT })),
+		unavailable
+	);
 }
 
 #[test]
@@ -184,6 +190,8 @@ fn a_record_nobody_has_written_crosses_as_the_defaults() {
 			"lastSeenVersion": null,
 			"onboardingStep": "welcome",
 			"onboardingImportSeen": false,
+			"onboardingShotoId": null,
+			"onboardingFirstCompanionId": null,
 		})
 	);
 }
@@ -465,5 +473,56 @@ fn a_written_record_leaves_the_onboarding_step_and_the_import_mark_as_stored() {
 
 	assert_eq!(answered["onboardingStep"], json!("connect"));
 	assert_eq!(answered["onboardingImportSeen"], json!(false));
+	assert_eq!(read(&window), answered);
+}
+
+#[test]
+fn a_first_companion_set_by_hand_is_answered_and_read_back_after_the_host_reopens() {
+	let home = Home::new();
+	{
+		let app = home.app();
+		let window = window(&app);
+		call(&window, "conversation_main_chat", json!({ "botId": BOT })).expect("the chat");
+
+		let answered =
+			call(&window, "user_set_onboarding_first_companion", json!({ "botId": BOT }))
+				.expect("the first companion is stored");
+
+		assert_eq!(answered["onboardingFirstCompanionId"], json!(BOT));
+	}
+
+	let app = home.app();
+	let window = window(&app);
+
+	assert_eq!(read(&window)["onboardingFirstCompanionId"], json!(BOT));
+}
+
+#[test]
+fn a_first_companion_naming_no_bot_is_refused_and_leaves_the_record_as_it_was() {
+	let home = Home::new();
+	let app = home.app();
+	let window = window(&app);
+	let before = read(&window);
+
+	assert_eq!(
+		call(&window, "user_set_onboarding_first_companion", json!({ "botId": "ghost" })),
+		Err(json!({ "kind": "unknownBot", "id": "ghost" }))
+	);
+	assert_eq!(read(&window), before);
+}
+
+#[test]
+fn a_replayed_onboarding_forgets_the_first_companion() {
+	let home = Home::new();
+	let app = home.app();
+	let window = window(&app);
+	call(&window, "conversation_main_chat", json!({ "botId": BOT })).expect("the chat");
+	call(&window, "user_set_onboarding_first_companion", json!({ "botId": BOT }))
+		.expect("the first companion is stored");
+
+	let answered = call(&window, "user_replay_onboarding", json!({})).expect("the replay");
+
+	assert_eq!(answered["onboardingStep"], json!("welcome"));
+	assert_eq!(answered["onboardingFirstCompanionId"], Value::Null);
 	assert_eq!(read(&window), answered);
 }

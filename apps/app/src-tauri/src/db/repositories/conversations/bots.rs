@@ -76,8 +76,15 @@ pub(super) const RANKED_BY_PRESENCE_IN_SPACE: &str = "LEFT JOIN (SELECT seat.bot
 	WHERE bots.deleted_at IS NULL AND membership.space_id = ?1
 	ORDER BY coalesce(presence.seated, 0) DESC, bots.name ASC, bots.id ASC";
 
-pub(super) const LIVE_BOT: &str = "SELECT EXISTS
+const LIVE_BOT: &str = "SELECT EXISTS
 	(SELECT 1 FROM bots WHERE id = ?1 AND deleted_at IS NULL)";
+
+pub(in crate::db::repositories) fn is_live_bot(
+	connection: &Connection,
+	id: &str,
+) -> rusqlite::Result<bool> {
+	connection.query_row(LIVE_BOT, [id], |row| row.get(0))
+}
 
 pub(super) fn ensured_default_bot(connection: &mut Connection) -> Result<Bot, ConversationError> {
 	if let Some(stored) = stored_default_bot(connection)? {

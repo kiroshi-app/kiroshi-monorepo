@@ -36,11 +36,10 @@ pub use prompts::{Activity, PendingPrompt, PromptKind, StoredPrompt, WaitingProm
 use bots::{
 	bot, bot_at, bot_in, counted_bots, created_bot, deleted_bot, ensured_default_bot,
 	oldest_space_of, pinned_bot, seed_default_bot, set_avatar_image_path, set_memory,
-	set_permissions, stored_default_bot, updated_bot, BOT_COLUMNS, LIVE_BOT,
-	RANKED_BY_PRESENCE_IN_SPACE,
+	set_permissions, stored_default_bot, updated_bot, BOT_COLUMNS, RANKED_BY_PRESENCE_IN_SPACE,
 };
 
-pub(in crate::db::repositories) use bots::{bots_of, deleted_chat_in, retired_bot};
+pub(in crate::db::repositories) use bots::{bots_of, deleted_chat_in, is_live_bot, retired_bot};
 
 pub const DEFAULT_BOT_ID: &str = "default";
 const DEFAULT_BOT_NAME: &str = "Claude";
@@ -820,8 +819,7 @@ fn seat(
 	space_id: Option<&str>,
 	role: &str,
 ) -> Result<(), ConversationError> {
-	let is_live: bool = transaction.query_row(LIVE_BOT, [bot_id], |row| row.get(0))?;
-	if !is_live {
+	if !is_live_bot(transaction, bot_id)? {
 		return Err(ConversationError::UnknownBot { id: bot_id.to_owned() });
 	}
 	let foreign = ConversationError::ForeignBot { id: bot_id.to_owned() };

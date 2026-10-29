@@ -85,7 +85,21 @@ pub async fn user_replay_onboarding<R: Runtime>(
 	app: AppHandle<R>,
 	state: State<'_, db::DatabaseState>,
 ) -> Result<UserPreferences, UserPreferencesError> {
-	user_set_onboarding_step(app, state, OnboardingStep::Welcome).await
+	let dir = avatars::Avatars::dir(&app);
+	let stored = ready(&state)?.user().replay_onboarding().await?;
+	Ok(UserPreferences::of(stored, dir.as_deref()))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn user_set_onboarding_first_companion<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	bot_id: String,
+) -> Result<UserPreferences, UserPreferencesError> {
+	let dir = avatars::Avatars::dir(&app);
+	let stored = ready(&state)?.user().set_onboarding_first_companion(bot_id).await?;
+	Ok(UserPreferences::of(stored, dir.as_deref()))
 }
 
 #[tauri::command]

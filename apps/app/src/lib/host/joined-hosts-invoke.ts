@@ -32,6 +32,7 @@ export const LOCAL_COMMANDS: ReadonlySet<string> = new Set([
 	"user_set_profile_picture",
 	"user_set_onboarding_step",
 	"user_replay_onboarding",
+	"user_set_onboarding_first_companion",
 	"user_mark_onboarding_import_seen",
 	"claude_import_inventory",
 	"claude_import_run",
