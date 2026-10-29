@@ -15,7 +15,7 @@ import { listenOnThisWindow } from "../host/window-listen"
 
 const STRIP_SELECTOR = '[data-slot="title-bar-tabs"]'
 
-export type IncomingTab = {
+type IncomingTab = {
 	tab: Tab
 	clientX: number
 }

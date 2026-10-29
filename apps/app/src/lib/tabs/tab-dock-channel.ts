@@ -13,13 +13,13 @@ export type DockedTab = {
 	tab: Tab
 }
 
-export type DockAnswer = {
+type DockAnswer = {
 	windowLabel: string
 	originTabId: string
 	isTaken: boolean
 }
 
-export type DockAnswerAwaited = {
+type DockAnswerAwaited = {
 	answer: Promise<boolean>
 }
 
