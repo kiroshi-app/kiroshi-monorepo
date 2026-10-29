@@ -113,8 +113,11 @@ export const createTabDock = (
 			: null
 	}
 
-	const releaseOnceSettled = async (drag: HeldDrag) => {
-		const settle = await hearing
+	const releaseOnceSettled = async (
+		drag: HeldDrag,
+		heldHearing: SettleHearing,
+	) => {
+		const settle = await heldHearing
 		await settle?.heard
 		if (held === drag) {
 			release()
@@ -125,7 +128,7 @@ export const createTabDock = (
 		hearing = awaitDockSettle(windowLabel, drag.originTabId).catch(
 			reportUnheard,
 		)
-		void releaseOnceSettled(drag)
+		void releaseOnceSettled(drag, hearing)
 	}
 
 	const hold = (originSpaceId: string, packed: Json) => {
