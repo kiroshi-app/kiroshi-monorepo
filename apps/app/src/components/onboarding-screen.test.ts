@@ -129,6 +129,9 @@ const press = async (name: string) => {
 
 const heading = () => screen.getByRole("heading", { level: 1 }).textContent
 
+const importScreen = () =>
+	screen.findByRole("heading", { name: "Bring in your Claude Code setup" })
+
 beforeEach(() => {
 	port = createFakeOnboardingPort()
 	world = createFakeFlowWorld()
@@ -244,7 +247,7 @@ describe("the Import and Account screens", () => {
 		await press("Use this account")
 
 		expect(world.stored).toEqual(["connect", "import"])
-		expect(heading()).toBe("Bring in your Claude Code setup")
+		await importScreen()
 		await press("Skip for now")
 		expect(world.stored.at(-1)).toBe("account")
 		expect(heading()).toBe("Sign in to Kiroshi")
@@ -270,7 +273,7 @@ describe("the Import and Account screens", () => {
 		world.step = "import"
 		await renderOnboarding()
 
-		expect(screen.getByRole("checkbox", { name: "Atlas" })).toBeTruthy()
+		await screen.findByRole("checkbox", { name: "Atlas" })
 		await press("Import 2 items")
 
 		expect(importRun.run).toHaveBeenCalledWith(
@@ -295,6 +298,7 @@ describe("the Import and Account screens", () => {
 		world.step = "import"
 		await renderOnboarding()
 
+		await importScreen()
 		await press("Import 2 items")
 
 		expect(heading()).toBe("Bring in your Claude Code setup")
