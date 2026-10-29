@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en" data-scroll-lock>
+  <head>
+    <meta charset="UTF-8" />
+    <title>kiroshi</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+    <style>
+      html,
+      body {
+        background: transparent;
+      }
+    </style>
+    <script>
+      (() => {
+        const root = document.documentElement
+        const scheme = localStorage.getItem("theme")
+        const isDark =
+          scheme === "dark" ||
+          (scheme !== "light" &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches)
+
+        root.classList.add(isDark ? "dark" : "light")
+      })()
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/drag-ghost.tsx"></script>
+  </body>
+</html>

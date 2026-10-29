@@ -9,11 +9,21 @@ import { i18n } from "@workspace/ui/lib/i18n"
 import { goneMissionIdsOf, type ReadMission } from "./restored-missions"
 import { EMPTY_LIST_HREF, HREF_BASE, pageOf, rowIdsNamedBy } from "./tab-pages"
 import {
+	createTabTearOff,
+	pointOf,
+	type TabTearOff,
+	type TabTearOffSession,
+} from "./tab-tear-off"
+import {
+	discardCarriedTabs,
 	discardUnlistedWindowTabs,
+	forgetCarriedTab,
 	forgetWindow,
 	handOverWindow,
+	keepCarriedTab,
 	MAIN_WINDOW_LABEL,
 	openWindowLabels,
+	readCarriedTab,
 	readSpaceTabs,
 	recordOpenWindow,
 	recordShownSpace,
@@ -48,7 +58,7 @@ import {
 	unpinTab,
 } from "./tabs-model"
 
-import { commands, type ScreenPosition } from "../bindings"
+import { commands, type ScreenPosition, type WindowSize } from "../bindings"
 import {
 	describeFailure,
 	raiseReportedFailure,
@@ -61,6 +71,8 @@ const NO_SPACE = ""
 
 const HANDOVER_PARAM = "handover"
 
+const CARRIED_TAB_PARAM = "carriedTab"
+
 const MAX_CLOSED_TABS = 10
 
 export type WorkspaceTabsState = {
@@ -71,12 +83,6 @@ export type WorkspaceTabsState = {
 }
 
 type LeaveGuard = (leave: () => void) => void
-
-type TabTearOff = {
-	tabId: string
-	screenX: number
-	screenY: number
-}
 
 export type WorkspaceTabs = {
 	history: RouterHistory
@@ -99,6 +105,8 @@ export type WorkspaceTabs = {
 	duplicate: (id: string) => void
 	moveToNewWindow: (id: string) => Promise<void>
 	tearOff: (tearOff: TabTearOff) => true
+	moveTornOff: (tearOff: TabTearOff, size: WindowSize) => Promise<void>
+	tearOffSession: TabTearOffSession
 	reopenClosed: () => void
 	reorder: (ids: string[]) => void
 	dropAbsentRestored: (spaceId: string, check: RestoredCheck) => Promise<void>
@@ -155,8 +163,10 @@ const reasonOf = (error: unknown) =>
 const openWindowOn = (
 	href: string,
 	position: ScreenPosition | null = null,
+	originSpaceId: string | null = null,
+	size: WindowSize | null = null,
 ): Promise<WindowOpening> =>
-	commands.windowOpen(href, position, null, null).then(
+	commands.windowOpen(href, position, originSpaceId, size).then(
 		(opened) =>
 			opened.status === "ok"
 				? { isOpened: true }
@@ -183,6 +193,29 @@ export const openNewWindow = async () => {
 		{ title: i18n.t("common:titleBar.moveTabFailed.title") },
 		"window_open",
 	)
+}
+
+const appHrefOf = ({ pathname, search, hash }: URL) =>
+	`${pathname}${search}${hash}`
+
+const carryingHrefOf = (tab: Tab) => {
+	const url = new URL(currentHrefOf(tab), HREF_BASE)
+	url.searchParams.set(CARRIED_TAB_PARAM, tab.id)
+	return appHrefOf(url)
+}
+
+const withoutCarriedTab = (href: string) => {
+	const url = new URL(href, HREF_BASE)
+	url.searchParams.delete(CARRIED_TAB_PARAM)
+	return appHrefOf(url)
+}
+
+const openingTabsOn = (href: string): SpaceTabs => {
+	const carriedId = new URL(href, HREF_BASE).searchParams.get(CARRIED_TAB_PARAM)
+	const carried = carriedId === null ? null : readCarriedTab(carriedId)
+	return carried
+		? { tabs: [carried], activeId: carried.id }
+		: spaceTabsOn(withoutCarriedTab(href))
 }
 
 const isOnlyTab = (space: SpaceTabs | undefined, id: string) =>
@@ -255,13 +288,14 @@ export const createWorkspaceTabs = (
 	const initialHref = isReopened ? EMPTY_LIST_HREF : openingHref
 	if (isMainWindow) {
 		discardUnlistedWindowTabs()
+		discardCarriedTabs()
 	} else {
 		startSecondaryWindow(windowLabel, predecessor)
 	}
 	const reopenedSpaceId = isReopened ? shownSpaceOf(windowLabel) : null
 	const store = createStore<WorkspaceTabsState>({
 		spaceId: NO_SPACE,
-		bySpace: { [NO_SPACE]: spaceTabsOn(initialHref) },
+		bySpace: { [NO_SPACE]: openingTabsOn(initialHref) },
 		restoredSpaceIds: [],
 		closedBySpace: {},
 	})
@@ -459,22 +493,45 @@ export const createWorkspaceTabs = (
 		changeIn(spaceId, (space) => closeTab(space, id))
 	}
 
-	const moveToWindowAt = async (
+	const moveToWindowBy = async (
 		id: string,
-		position: ScreenPosition | null,
+		open: (moved: Tab, spaceId: string) => Promise<WindowOpening>,
 	) => {
 		const { spaceId } = store.getState()
 		const moved = shown().tabs.find((tab) => tab.id === id)
 		if (!moved) {
 			return
 		}
-		const opening = await openWindowOn(currentHrefOf(moved), position)
+		const opening = await open(moved, spaceId)
 		if (opening.isOpened) {
 			removeMoved(spaceId, id)
 			return
 		}
 		raiseWindowFailure(moveFailureOf(opening.reason), "window_open")
 	}
+
+	const moveToWindowAt = (id: string, position: ScreenPosition | null) =>
+		moveToWindowBy(id, (moved) => openWindowOn(currentHrefOf(moved), position))
+
+	const tearOff = (torn: TabTearOff): true => {
+		void moveToWindowAt(torn.tabId, pointOf(torn))
+		return true
+	}
+
+	const moveTornOff = (torn: TabTearOff, size: WindowSize) =>
+		moveToWindowBy(torn.tabId, async (moved, spaceId) => {
+			keepCarriedTab(moved)
+			const opening = await openWindowOn(
+				carryingHrefOf(moved),
+				pointOf(torn),
+				spaceId === NO_SPACE ? null : spaceId,
+				size,
+			)
+			if (!opening.isOpened) {
+				forgetCarriedTab(moved.id)
+			}
+			return opening
+		})
 
 	const reachSpace = (spaceId: string) => {
 		const state = store.getState()
@@ -529,13 +586,9 @@ export const createWorkspaceTabs = (
 		closeOthers: (id) => closingChange((space) => closeOtherTabs(space, id)),
 		duplicate: (id) => change((space) => duplicateTab(space, id)),
 		moveToNewWindow: (id) => moveToWindowAt(id, null),
-		tearOff: ({ tabId, screenX, screenY }) => {
-			void moveToWindowAt(tabId, {
-				x: Math.round(screenX),
-				y: Math.round(screenY),
-			})
-			return true
-		},
+		tearOff,
+		moveTornOff,
+		tearOffSession: createTabTearOff({ moveUnghosted: tearOff, moveTornOff }),
 		reopenClosed,
 		reorder: (ids) => change((space) => reorderTabs(space, ids)),
 		dropAbsentRestored: async (spaceId, { isRowPresent, readMission }) => {

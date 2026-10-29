@@ -27,5 +27,6 @@ export const useWorkspaceTitleBarTabs = ({
 		spaceId: rosterView.rosteredSpaceId,
 		bots: rosterLists.rosterBots,
 		conversations: rosterLists.rosterConversations,
+		readTranscript: core.store.loadPage,
 	})
 }
