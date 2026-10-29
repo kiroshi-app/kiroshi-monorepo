@@ -57,6 +57,7 @@ import {
 	listen,
 } from "../host"
 import type { AgentCommand } from "@/lib/agent/contract"
+import { SUMMONS_DROPPED_EVENT, type SummonsDropped } from "@/lib/bindings"
 import type { ConversationSource } from "../host/conversation-provenance"
 import type { Invoke } from "../host/joined-hosts-invoke"
 import type { ReportTurnWrites } from "../routines/run-report"
@@ -168,6 +169,11 @@ export const transcriptEventsTransport = {
 			}
 		}
 	},
+
+	onSummonsDropped: (listener: (dropped: SummonsDropped) => void) =>
+		listen<SummonsDropped>(SUMMONS_DROPPED_EVENT, ({ payload }) =>
+			listener(payload),
+		),
 
 	announceReportTurn: (reported: TranscriptMessage) =>
 		emitOnThisComputer(REPORT_TURN_ANNOUNCED_EVENT, reported),

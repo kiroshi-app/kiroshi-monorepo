@@ -21,10 +21,12 @@ import {
 } from "./transcript-contract"
 import { message, seatBots } from "./transcript-fixtures"
 
+import type { SummonsDropped } from "../bindings"
 import type {
 	ActivityStatus,
 	AgentEvent,
 	ConversationNaming,
+	ScopedEvent,
 	TransportError,
 	TurnOutcome,
 } from "../agent/contract"
@@ -2848,14 +2850,31 @@ describe("the mentions a finished turn carries", () => {
 			botIds: [ada.id],
 		})
 		const listeners: ((arrival: CompanionArrival) => void)[] = []
+		const dropListeners: ((dropped: SummonsDropped) => void)[] = []
+		const stopDrops = vi.fn()
+		const scopedListeners: ((scoped: ScopedEvent) => void)[] = []
 		const reportFailure = vi.fn()
+		const hostDriver = withFakeHostWrites(driver, store)
 		const controller = createConversationController(
-			withFakeHostWrites(driver, store),
+			{
+				...hostDriver,
+				subscribe: (listener) => {
+					scopedListeners.push(listener)
+					return hostDriver.subscribe(listener)
+				},
+			},
 			store,
 			{
 				onCompanionArrived: async (listener) => {
 					listeners.push(listener)
 					return () => undefined
+				},
+				onSummonsDropped: async (listener) => {
+					dropListeners.push(listener)
+					return () => {
+						dropListeners.splice(dropListeners.indexOf(listener), 1)
+						stopDrops()
+					}
 				},
 				reportFailure,
 			},
@@ -2869,9 +2888,27 @@ describe("the mentions a finished turn carries", () => {
 			controller,
 			conversation,
 			reportFailure,
+			stopDrops,
 			ada: ada.id,
 			iris: iris.id,
 			detach,
+			drop: async (dropped: Partial<SummonsDropped> & { botId: string }) => {
+				for (const listener of [...dropListeners]) {
+					listener({
+						conversationId: conversation.id,
+						turnId: "turn-handed",
+						reason: "startFailed",
+						error: null,
+						...dropped,
+					})
+				}
+				await settled()
+			},
+			hear: (scoped: ScopedEvent) => {
+				for (const listener of scopedListeners) {
+					listener(scoped)
+				}
+			},
 			seat: (botId: string) =>
 				store.addConversationParticipant(conversation.id, botId),
 			unseat: (botId: string) =>
@@ -3134,5 +3171,136 @@ describe("the mentions a finished turn carries", () => {
 
 		expect(submittedIn(room)).toEqual([room.iris])
 		room.detach()
+	})
+
+	it("raises one notice naming the companion a dropped summons names, with its transport error", async () => {
+		const room = await roomSeating()
+
+		await room.drop({
+			botId: room.iris,
+			error: { kind: "spawnFailed", detail: "no binary" },
+		})
+
+		expect(room.reportFailure).toHaveBeenCalledTimes(1)
+		expect(room.reportFailure).toHaveBeenCalledWith(
+			...notStarted(
+				"Iris didn’t start",
+				"Couldn’t start Iris (no binary). Restart the session.",
+				{ botId: room.iris, botName: "Iris" },
+			),
+		)
+		room.detach()
+	})
+
+	it("describes a dropped summons with no error as a session that never ran", async () => {
+		const room = await roomSeating()
+
+		await room.drop({ botId: room.iris, reason: "neverStarted" })
+
+		expect(room.reportFailure).toHaveBeenCalledWith(
+			...notStarted(
+				"Iris didn’t start",
+				"No session is running. Start a session to continue.",
+				{ botId: room.iris, botName: "Iris" },
+			),
+		)
+		room.detach()
+	})
+
+	it("raises one notice for a run dropped twice", async () => {
+		const room = await roomSeating()
+
+		await room.drop({ botId: room.iris })
+		await room.drop({ botId: room.iris, reason: "lostQueue" })
+
+		expect(room.reportFailure).toHaveBeenCalledTimes(1)
+		room.detach()
+	})
+
+	it("raises no second notice for a drop of a run the sent message already noticed", async () => {
+		const room = await roomSeating()
+		await room.sent(`<@${room.iris}> take the walls`)
+		const turnId = room.controller.getState().messages.at(-1)?.turnId
+
+		await room.drop({ botId: room.iris, turnId })
+
+		expect(turnId).toBeDefined()
+		expect(room.reportFailure).toHaveBeenCalledTimes(1)
+		room.detach()
+	})
+
+	it("raises nothing for a summons dropped in another conversation", async () => {
+		const room = await roomSeating()
+
+		await room.drop({ botId: room.iris, conversationId: "elsewhere" })
+
+		expect(room.reportFailure).not.toHaveBeenCalled()
+		room.detach()
+	})
+
+	it("raises nothing for a reply token the host dropped as unseated or self-addressed", async () => {
+		const room = await roomSeating()
+
+		await room.drop({ botId: "ghost", reason: "notSeated" })
+		await room.drop({ botId: room.ada, reason: "selfMention" })
+
+		expect(room.reportFailure).not.toHaveBeenCalled()
+		room.detach()
+	})
+
+	it("ends as failed the run of the companion whose summons the host dropped", async () => {
+		const room = await roomSeating()
+		const scope = {
+			conversationId: room.conversation.id,
+			botId: room.iris,
+			runtimeSessionId: "host-session",
+			epoch: 1,
+		}
+		const turn = { turnId: "turn-handed", conversationId: room.conversation.id }
+		const running: AgentEvent = { type: "turnChanged", state: "running" }
+		for (const event of [running, ...spoke(room.iris, "on it").slice(0, 2)]) {
+			room.hear({ scope, turn, event })
+		}
+		await settled()
+		const speaking = () =>
+			room.controller.getState().speakers.map(({ botId }) => botId)
+		const reply = () =>
+			room.controller
+				.getState()
+				.messages.find(({ authorBotId }) => authorBotId === room.iris)
+		expect(speaking()).toEqual([room.iris])
+
+		await room.drop({ botId: room.iris })
+
+		expect(speaking()).toEqual([])
+		expect(reply()?.completion).toBe("failed")
+		room.detach()
+	})
+
+	it("stops hearing drops once another conversation is open or the controller detaches", async () => {
+		const room = await roomSeating()
+		await room.controller.open(room.conversation)
+		await settled()
+		await room.drop({ botId: room.iris })
+		const elsewhere = await room.store.createConversation({
+			spaceId: SPACE,
+			sectionId: null,
+			title: "Gates",
+			botIds: [room.ada],
+		})
+		await room.controller.open(elsewhere)
+		await settled()
+		await room.drop({ botId: room.iris, turnId: "turn-other" })
+
+		room.detach()
+		await settled()
+		await room.drop({
+			botId: room.iris,
+			conversationId: elsewhere.id,
+			turnId: "turn-after",
+		})
+
+		expect(room.reportFailure).toHaveBeenCalledTimes(1)
+		expect(room.stopDrops).toHaveBeenCalledTimes(1)
 	})
 })

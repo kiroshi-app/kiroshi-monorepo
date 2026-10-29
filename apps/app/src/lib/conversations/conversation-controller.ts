@@ -5,9 +5,11 @@ import {
 	createMessageStoredListener,
 	createReconnectionListener,
 	createReportTurnAnnouncer,
+	createSummonsDroppedListener,
 	type MessageStoredListener,
 	type ReconnectionListener,
 	type ReportTurnAnnouncer,
+	type SummonsDroppedListener,
 } from "./create-live-listeners"
 import { createForeignTurns, type ForeignSpeaker } from "./foreign-turns"
 import { addresseesIn, toMentionTokens } from "./mentions"
@@ -59,6 +61,7 @@ import {
 	type TurnQueue,
 } from "./turn-queue"
 
+import type { SummonsDropped } from "../bindings"
 import {
 	failureReporterIn,
 	type ReporterFacts,
@@ -80,6 +83,7 @@ import type {
 	ScopedEvent,
 	TransportError,
 } from "../agent/contract"
+import { describeTransportError } from "../agent/messages"
 import type { ChatError } from "../chat/chat-state"
 import {
 	chatErrorOf,
@@ -197,6 +201,7 @@ export type ConversationControllerOptions = {
 	onMessageStored?: MessageStoredListener
 	announceReportTurn?: ReportTurnAnnouncer
 	onReconnected?: ReconnectionListener
+	onSummonsDropped?: SummonsDroppedListener
 	rereadConversation?: (conversationId: string) => void
 	senderAccountId?: () => string | null
 	reportFailure?: (
@@ -257,6 +262,24 @@ const NO_ARRIVALS: CompanionArrival[] = []
 const NO_PINS: MessagePin[] = []
 
 const NO_SPEAKERS: SpeakingBot[] = []
+
+const NO_SESSION: TransportError = { kind: "notStarted" }
+
+const UNNOTICED_DROPS: SummonsDropped["reason"][] = ["selfMention", "notSeated"]
+
+type RunPlace = Pick<TranscriptMessage, "conversationId" | "turnId">
+
+const runKeyOf = (turnId: string, botId: string) => `${turnId}:${botId}`
+
+const notStartedDescriptionOf = (
+	error: TransportError | null,
+	names: string[],
+) =>
+	error
+		? describeTransportError(i18n.getFixedT(null, "chat"), error, names[0])
+		: i18n.t("chat:transcript.mention.notStarted.description", {
+				count: names.length,
+			})
 
 const isSameWork = (left: WorkingState | null, right: WorkingState | null) =>
 	left?.kind === right?.kind &&
@@ -343,6 +366,8 @@ export const createConversationController = (
 	const announceReportTurn =
 		options.announceReportTurn ?? createReportTurnAnnouncer()
 	const onReconnected = options.onReconnected ?? createReconnectionListener()
+	const onSummonsDropped =
+		options.onSummonsDropped ?? createSummonsDroppedListener()
 	const reportFailure =
 		options.reportFailure ?? failureReporterIn("conversation-controller")
 	const transcript = createTranscriptController(store)
@@ -370,6 +395,8 @@ export const createConversationController = (
 	let stopArrivals: Promise<() => void> | null = null
 	let stopStoredMessages: Promise<() => void> | null = null
 	let stopReconnections: (() => void) | null = null
+	let stopDrops: Promise<() => void> | null = null
+	const noticedRuns = new Set<string>()
 	let shouldRebuildForeignTurns = false
 
 	const settle = (next: ConversationState) => {
@@ -1005,6 +1032,8 @@ export const createConversationController = (
 		stopStoredMessages = null
 		stopReconnections?.()
 		stopReconnections = null
+		stopDrops?.then((unlisten) => unlisten())
+		stopDrops = null
 		foreignTurns.dispose()
 	}
 
@@ -1027,6 +1056,7 @@ export const createConversationController = (
 		stopArrivals = onCompanionArrived(announce)
 		stopStoredMessages = onMessageStored(reloadStoredPage)
 		stopReconnections = onReconnected(catchUpAfterReconnection)
+		stopDrops = onSummonsDropped(noteDropped)
 		detach = driver.subscribe((scoped) => route(scoped))
 		return detach
 	}
@@ -1228,19 +1258,34 @@ export const createConversationController = (
 	}
 
 	const notStartedFacts = (
-		said: TranscriptMessage,
+		run: RunPlace,
 		spaceId: string | null,
 		botIds: string[],
 		names: string[],
 	): ReporterFacts => ({
-		conversation: said.conversationId,
-		turn: said.turnId,
+		conversation: run.conversationId,
+		turn: run.turnId,
 		...(spaceId ? { space: spaceId } : {}),
 		...(botIds.length === 1 ? { botId: botIds[0], botName: names[0] } : {}),
 	})
 
-	const raiseNotStarted = async (said: TranscriptMessage, botIds: string[]) => {
-		if (!conversation) {
+	const claimUnnoticedRuns = (turnId: string, botIds: string[]) => {
+		const unnoticed = botIds.filter(
+			(botId) => !noticedRuns.has(runKeyOf(turnId, botId)),
+		)
+		for (const botId of unnoticed) {
+			noticedRuns.add(runKeyOf(turnId, botId))
+		}
+		return unnoticed
+	}
+
+	const raiseNotStarted = async (
+		run: RunPlace,
+		summoned: string[],
+		error: TransportError | null = null,
+	) => {
+		const botIds = claimUnnoticedRuns(run.turnId, summoned)
+		if (!conversation || botIds.length === 0) {
 			return
 		}
 		const { spaceId } = conversation
@@ -1253,12 +1298,9 @@ export const createConversationController = (
 						count,
 						names: names.join(i18n.t("chat:namelessConversation.separator")),
 					}),
-					description: i18n.t(
-						"chat:transcript.mention.notStarted.description",
-						{ count },
-					),
+					description: notStartedDescriptionOf(error, names),
 				},
-				notStartedFacts(said, spaceId, botIds, names),
+				notStartedFacts(run, spaceId, botIds, names),
 			)
 		} catch (reason) {
 			noteFailure(toTransportError(reason))
@@ -1276,6 +1318,18 @@ export const createConversationController = (
 		if (unresolved.length > 0) {
 			void raiseNotStarted(said, unresolved)
 		}
+	}
+
+	const noteDropped = (dropped: SummonsDropped) => {
+		if (
+			!isOpenConversation(dropped.conversationId) ||
+			UNNOTICED_DROPS.includes(dropped.reason)
+		) {
+			return
+		}
+		foreignTurns.fail(dropped)
+		sync()
+		void raiseNotStarted(dropped, [dropped.botId], dropped.error ?? NO_SESSION)
 	}
 
 	const nameFrom = async (conversationId: string, text: string) => {
