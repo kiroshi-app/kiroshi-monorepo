@@ -286,13 +286,7 @@ mod tests {
 	}
 
 	async fn a_companion(database: &db::Database) -> StoredBot {
-		let mut identity = identity(Path::new("kept.png"));
-		identity.name = "Kept".to_owned();
-		database
-			.conversations()
-			.create_bot(identity.into(), personal_space(), None)
-			.await
-			.expect("the companion is created")
+		a_bot(database, "Kept", "").await
 	}
 
 	async fn a_bot(database: &db::Database, name: &str, title: &str) -> StoredBot {
