@@ -674,10 +674,10 @@ impl<R: Runtime> HostTurn<R> {
 		let is_in_line = handed == Handed::Queued;
 		let run = self.run_of(&summons.bot_id);
 		if is_in_line {
-			summons::note_queued(&run, &ridden.scope.runtime_session_id);
+			summons::note_queued(&run);
 			suspend_start_deadline(&self.app, &self.turn_id, &summons.bot_id);
 		} else {
-			summons::note_started(&run, &ridden.scope.runtime_session_id);
+			summons::note_started(&run);
 		}
 		Ok(Speaker { scope: ridden.scope, written: Vec::new(), is_in_line })
 	}
