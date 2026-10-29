@@ -13,6 +13,7 @@ import {
 import { OnboardingShell } from "@workspace/ui/components/onboarding-shell"
 import { OnboardingWelcomeFooter } from "@workspace/ui/components/onboarding-welcome-footer"
 import { OnboardingWelcomeScreen } from "@workspace/ui/components/onboarding-welcome-screen"
+import { DEFAULT_LANGUAGE, i18n } from "@workspace/ui/lib/i18n"
 
 const ARTBOARD =
 	"Measured against the Paper file `Kiroshi, Onboarding v2`, pages `With Claude Code` and `Without Claude Code`, which draw the Welcome screens alike, 1200 by 760, in a blue Space. The footer group under the heading and its Back button follow OPE-1561, not the artboards, which draw a bottom bar and no Back."
@@ -97,9 +98,20 @@ const COMPANION_ROLES = [
 	"Writes release notes",
 ]
 
-const expectCompanionRoles = async (canvasElement: HTMLElement) => {
-	for (const role of COMPANION_ROLES) {
-		const badge = within(canvasElement).getByText(role)
+const NARROW_COLUMN = 96
+
+const FRENCH_COMPANION_ROLES = [
+	"Relit le code",
+	"Tient la documentation",
+	"Rédige les notes de version",
+]
+
+const expectCompanionRoles = async (
+	canvasElement: HTMLElement,
+	roles = COMPANION_ROLES,
+) => {
+	for (const role of roles) {
+		const badge = await within(canvasElement).findByText(role)
 		const card = badge.parentElement as HTMLElement
 		const name = badge.previousElementSibling as HTMLElement
 		const pill = badge.getBoundingClientRect()
@@ -246,6 +258,42 @@ export const WelcomeCompanionsDark = meta.story({
 		})
 		await expectCompanionRoles(canvasElement)
 		await expectBackHidden(canvasElement)
+	},
+})
+
+export const WelcomeCompanionsFrench = meta.story({
+	name: "Welcome / Companions / French",
+	tags: ["test-only"],
+	args: { step: "companions" },
+	beforeEach: async () => {
+		await i18n.changeLanguage("fr")
+		return () => i18n.changeLanguage(DEFAULT_LANGUAGE)
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The Companions slide in French, whose jobs run longer than the English ones. Check each job whole in its pill, wrapped rather than cut when wider than the column, centred under its name.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expectCompanionRoles(canvasElement, FRENCH_COMPANION_ROLES)
+
+		const longest = within(canvasElement).getByText(
+			"Rédige les notes de version",
+		)
+		const card = longest.parentElement as HTMLElement
+		const singleLine = longest.getBoundingClientRect().height
+		card.style.width = `${NARROW_COLUMN}px`
+		try {
+			await expect(longest.getBoundingClientRect().height).toBeGreaterThan(
+				singleLine,
+			)
+			await expect(longest.scrollWidth).toBeLessThanOrEqual(longest.clientWidth)
+		} finally {
+			card.style.width = ""
+		}
 	},
 })
 

@@ -63,7 +63,7 @@ const CompanionsIllustration = () => {
 						{t(`onboarding.intro.companions.${id}.name`)}
 					</p>
 					<BotTitleBadge
-						className="grow-0 basis-auto"
+						className="grow-0 basis-auto whitespace-normal"
 						title={t(`onboarding.intro.companions.${id}.job`)}
 					/>
 				</div>
