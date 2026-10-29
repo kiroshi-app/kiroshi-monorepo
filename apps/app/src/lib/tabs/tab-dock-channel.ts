@@ -28,7 +28,7 @@ type DockAnswerAwaited = {
 	answer: Promise<boolean>
 }
 
-type DockMessageHeard = {
+export type DockMessageHeard = {
 	heard: Promise<boolean>
 	end: (isTaken: boolean) => void
 }

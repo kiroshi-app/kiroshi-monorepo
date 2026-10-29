@@ -207,6 +207,41 @@ describe("a drag of another Space", () => {
 	})
 })
 
+describe("the settle of a held drag", () => {
+	it("is heard as soon as this window holds the drag, before any drop", async () => {
+		holding()
+
+		await vi.waitFor(() => expect(bus.listenerCount()).toBe(1))
+		expect(host.emitOnThisComputer).not.toHaveBeenCalled()
+	})
+
+	it.each([false, true])(
+		"ends the hold when heard before the drop (taken: %s), so the drop answers and takes nothing",
+		async (isTaken) => {
+			const { dock, receive } = holding()
+
+			dock.follow(moved(OVER_STRIP.x, OVER_STRIP.y))
+			await vi.waitFor(() => expect(bus.listenerCount()).toBe(1))
+			await settleFromOrigin(isTaken)
+			await vi.waitFor(() => expect(dock.getState()).toBeNull())
+			dock.follow(dropped(OVER_STRIP.x, OVER_STRIP.y))
+
+			expect(host.emitOnThisComputer).not.toHaveBeenCalled()
+			expect(receive).not.toHaveBeenCalled()
+			expect(bus.listenerCount()).toBe(0)
+		},
+	)
+
+	it("stops being heard when the drag is cancelled", async () => {
+		const { dock } = holding()
+		await vi.waitFor(() => expect(bus.listenerCount()).toBe(1))
+
+		dock.follow({ kind: "cancelled", originLabel: ORIGIN_WINDOW })
+
+		await vi.waitFor(() => expect(bus.listenerCount()).toBe(0))
+	})
+})
+
 describe("a tab dropped on the parted strip", () => {
 	it("answers taken and holds the tab without inserting it until the origin settles", async () => {
 		const { dock, receive } = holding()
@@ -283,7 +318,7 @@ describe("a tab dropped on the parted strip", () => {
 		expect(bus.listenerCount()).toBe(1)
 	})
 
-	it("drops the held tab of an unsettled move when the next one is dropped here", async () => {
+	it("stops hearing an unsettled move once the next drag starts", async () => {
 		const { dock, receive } = holding()
 
 		dock.follow(dropped(OVER_STRIP.x, OVER_STRIP.y))
@@ -323,10 +358,10 @@ describe("a tab dropped on the parted strip", () => {
 				...answerOf(false),
 			),
 		)
+		await vi.waitFor(() => expect(bus.listenerCount()).toBe(0))
 		await settleFromOrigin(true)
 		expect(receive).not.toHaveBeenCalled()
 		expect(host.revealWindow).not.toHaveBeenCalled()
-		expect(host.listenOnThisComputer).not.toHaveBeenCalled()
 	})
 
 	it("takes nothing and stops listening when its answer cannot be sent", async () => {

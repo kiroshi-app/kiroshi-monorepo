@@ -216,31 +216,64 @@ describe("a tab dropped on another window of its Space that confirms at once", (
 	})
 })
 
-describe("a tab dropped on another window that confirms after the wait", () => {
-	it("stays in the origin window only and the target never inserts it", async () => {
+describe("a tab dropped on another window whose answer lands after the wait", () => {
+	it("stays in the origin window only, the target never inserts it and nobody listens anymore", async () => {
 		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
 		const windows = twoWindows()
+		let openAnswers: () => void = () => undefined
+		const answersOpen = new Promise<void>((resolve) => {
+			openAnswers = resolve
+		})
+		host.emitOnThisComputer.mockImplementation(async (event, payload) => {
+			if (event === ANSWER_EVENT) {
+				await answersOpen
+			}
+			return bus.emit(event, payload)
+		})
 
 		await dropFromOrigin(windows)
-		await waitPastTheDockWait()
 		targetDrops(windows)
+		await waitPastTheDockWait()
+		openAnswers()
 
-		await vi.waitFor(() =>
-			expect(host.emitOnThisComputer).toHaveBeenCalledWith(ANSWER_EVENT, {
-				windowLabel: TARGET_WINDOW,
-				originTabId: TAB_ID,
-				isTaken: true,
-			}),
-		)
 		await vi.waitFor(() =>
 			expect(host.raiseReportedFailure).toHaveBeenCalledOnce(),
 		)
+		await vi.waitFor(() => expect(bus.listenerCount()).toBe(0))
+		expect(host.emitOnThisComputer).toHaveBeenCalledWith(ANSWER_EVENT, {
+			windowLabel: TARGET_WINDOW,
+			originTabId: TAB_ID,
+			isTaken: true,
+		})
 		expect(settlesSent()).toEqual([
 			[
 				SETTLE_EVENT,
 				{ windowLabel: TARGET_WINDOW, originTabId: TAB_ID, isTaken: false },
 			],
 		])
+		expect(windows.removeDocked).not.toHaveBeenCalled()
+		expect(windows.receive).not.toHaveBeenCalled()
+	})
+})
+
+describe("a tab whose drop reaches the target after the wait", () => {
+	it("stays in the origin window only, the target answers nothing and nobody listens anymore", async () => {
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+		const windows = twoWindows()
+
+		await dropFromOrigin(windows)
+		await waitPastTheDockWait()
+		await vi.waitFor(() => expect(bus.listenerCount()).toBe(0))
+		targetDrops(windows)
+
+		await vi.waitFor(() =>
+			expect(host.raiseReportedFailure).toHaveBeenCalledOnce(),
+		)
+		expect(bus.listenerCount()).toBe(0)
+		expect(host.emitOnThisComputer).not.toHaveBeenCalledWith(
+			ANSWER_EVENT,
+			expect.anything(),
+		)
 		expect(windows.removeDocked).not.toHaveBeenCalled()
 		expect(windows.receive).not.toHaveBeenCalled()
 	})

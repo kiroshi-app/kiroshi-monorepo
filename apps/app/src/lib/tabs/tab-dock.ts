@@ -3,6 +3,7 @@ import {
 	awaitDockSettle,
 	type DockedTab,
 	type DockMessage,
+	type DockMessageHeard,
 	unpackDockedTab,
 } from "./tab-dock-channel"
 import type { Tab } from "./tabs-model"
@@ -32,6 +33,8 @@ type TabDockSource = {
 	receive: (tab: Tab, index: number) => void
 }
 
+type SettleHearing = Promise<DockMessageHeard | null>
+
 type HeldDrag = DockedTab & {
 	originSpaceId: string
 	strip: StripBounds | null
@@ -48,6 +51,15 @@ const measuredStrip = (): StripBounds | null => {
 	}
 	const { x, y, width, height } = strip.getBoundingClientRect()
 	return { x, y, width, height }
+}
+
+const reportUnheard = (reason: unknown) => {
+	reportDockFailure(reason)
+	return null
+}
+
+const stopHearing = (hearing: SettleHearing) => {
+	void hearing.then((settle) => settle?.end(false))
 }
 
 const isUnsent = (reason: unknown) => {
@@ -75,7 +87,7 @@ export const createTabDock = (
 	const store = createStore<IncomingTab | null>(null)
 	let held: HeldDrag | null = null
 	let incomingIndex: number | null = null
-	let endHolding: (isTaken: boolean) => void = () => undefined
+	let hearing: SettleHearing = Promise.resolve(null)
 
 	const part = (incoming: IncomingTab | null) => {
 		if (!incoming) {
@@ -101,12 +113,29 @@ export const createTabDock = (
 			: null
 	}
 
+	const releaseOnceSettled = async (drag: HeldDrag) => {
+		const settle = await hearing
+		await settle?.heard
+		if (held === drag) {
+			release()
+		}
+	}
+
+	const hearSettleOf = (drag: HeldDrag) => {
+		hearing = awaitDockSettle(windowLabel, drag.originTabId).catch(
+			reportUnheard,
+		)
+		void releaseOnceSettled(drag)
+	}
+
 	const hold = (originSpaceId: string, packed: Json) => {
+		stopHearing(hearing)
 		const docked = unpackDockedTab(packed)
 		held = docked ? { ...docked, originSpaceId, strip: measuredStrip() } : null
 		if (!held) {
 			return
 		}
+		hearSettleOf(held)
 		reportPlace(shownSpaceId(), held.strip)
 	}
 
@@ -124,10 +153,14 @@ export const createTabDock = (
 		return holds(strip, point.x - origin.x, point.y - origin.y)
 	}
 
-	const holdUntilSettled = async (answer: DockMessage) => {
-		endHolding(false)
-		const settle = await awaitDockSettle(windowLabel, answer.originTabId)
-		endHolding = settle.end
+	const isSettledTaken = async (
+		answer: DockMessage,
+		heldHearing: SettleHearing,
+	) => {
+		const settle = await heldHearing
+		if (!settle) {
+			return false
+		}
 		if (!(await answerDock(answer).then(() => true, isUnsent))) {
 			settle.end(false)
 		}
@@ -136,14 +169,16 @@ export const createTabDock = (
 
 	const take = async (drag: HeldDrag, point: ScreenPosition) => {
 		const index = incomingIndex ?? Number.POSITIVE_INFINITY
+		const heldHearing = hearing
 		release()
 		const isTaken = isOverStripNow(drag, point)
 		const answer = { windowLabel, originTabId: drag.originTabId, isTaken }
 		if (!isTaken) {
+			stopHearing(heldHearing)
 			await answerDock(answer).catch(reportDockFailure)
 			return
 		}
-		if (!(await holdUntilSettled(answer).catch(isUnsent))) {
+		if (!(await isSettledTaken(answer, heldHearing))) {
 			return
 		}
 		receive(drag.tab, index)
@@ -163,6 +198,7 @@ export const createTabDock = (
 				void take(held, drag.point)
 			}
 		} else {
+			stopHearing(hearing)
 			release()
 		}
 	}
