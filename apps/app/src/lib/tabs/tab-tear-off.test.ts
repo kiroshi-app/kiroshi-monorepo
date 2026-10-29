@@ -12,6 +12,8 @@ import {
 	type TabTearOff,
 } from "./tab-tear-off"
 
+import type { NativeMoveEnded, ScreenPosition } from "../bindings"
+
 const ghost = vi.hoisted(() => ({
 	dragGhostShow: vi.fn(),
 	dragGhostMove: vi.fn(),
@@ -615,14 +617,10 @@ const lastTabSession = () => {
 	return started
 }
 
-type ScreenPoint = { x: number; y: number }
-
-type MoveEnded = { label: string; point: ScreenPoint }
-
 const nativeWindowMove = () => {
 	let settle: (answer: unknown) => void = () => undefined
 	let moveWindow: () => void = () => undefined
-	let announceEnd: (ended: MoveEnded) => void = () => undefined
+	let announceEnd: (ended: NativeMoveEnded) => void = () => undefined
 	const stopWatching = vi.fn()
 	const stopWatchingEnd = vi.fn()
 	drag.windowStartNativeMove.mockReturnValue(
@@ -635,7 +633,7 @@ const nativeWindowMove = () => {
 		return stopWatching
 	})
 	host.watchNativeMoveEnded.mockImplementation(
-		async (report: (ended: MoveEnded) => void) => {
+		async (report: (ended: NativeMoveEnded) => void) => {
 			announceEnd = report
 			return stopWatchingEnd
 		},
@@ -646,13 +644,13 @@ const nativeWindowMove = () => {
 	return {
 		stopWatching,
 		stopWatchingEnd,
-		moveTo: (point: ScreenPoint) => {
+		moveTo: (point: ScreenPosition) => {
 			pointAt(point)
 			moveWindow()
 		},
 		settle: (answer: unknown = ACCEPTED) => settle(answer),
-		announceEnd: (ended: MoveEnded) => announceEnd(ended),
-		releaseAt: (point: ScreenPoint) => {
+		announceEnd: (ended: NativeMoveEnded) => announceEnd(ended),
+		releaseAt: (point: ScreenPosition) => {
 			pointAt(point)
 			announceEnd({ label: DRAGGED_WINDOW, point })
 		},
