@@ -78,6 +78,7 @@ export const useTitleBarTabs = ({
 			onCloseOtherTabs: tabs.closeOthers,
 			onDuplicateTab: tabs.duplicate,
 			onMoveTabToNewWindow: tabs.moveToNewWindow,
+			onTearOffTab: tabs.tearOff,
 			onReopenClosedTab: tabs.reopenClosed,
 			onReorderTabs: tabs.reorder,
 			onNewTab: tabs.openEmptyTab,
