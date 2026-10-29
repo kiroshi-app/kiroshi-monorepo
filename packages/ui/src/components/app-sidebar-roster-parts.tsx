@@ -199,6 +199,7 @@ interface RosterDropAreaProps extends RosterSlide {
 	landing: string
 	isLanding: boolean
 	isReceiving?: boolean
+	isGiving?: boolean
 	slotId?: string
 	className?: string
 	ref?: (node: HTMLElement | null) => void
@@ -209,6 +210,7 @@ const RosterDropArea = ({
 	landing,
 	isLanding,
 	isReceiving = false,
+	isGiving = false,
 	slotId,
 	className,
 	ref,
@@ -230,6 +232,7 @@ const RosterDropArea = ({
 				slideClass,
 				className,
 			)}
+			data-giving={isGiving || undefined}
 			data-landing={isLanding || undefined}
 			data-receiving={isReceiving || undefined}
 			data-slot="roster-drop-area"

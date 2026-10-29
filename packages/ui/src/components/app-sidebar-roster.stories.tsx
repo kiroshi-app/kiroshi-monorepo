@@ -690,6 +690,89 @@ export const CollapsedSectionSkippedDark = meta.story({
 	play: playCollapsedSectionSkipped,
 })
 
+const visibleBottomOf = (card: HTMLElement) => {
+	const group = slotIn(card, "sidebar-group")
+	const [clip] = getComputedStyle(group, "::before").clipPath.split("round")
+	const [top = 0, , bottom = top] = (clip.match(/-?[\d.]+/g) ?? []).map(Number)
+	return boxOf(group).bottom - bottom
+}
+
+const playPinnedRowLiftedOutOfItsSection = async ({
+	args,
+	canvasElement,
+}: {
+	args: BotRosterProps
+	canvasElement: HTMLElement
+}) => {
+	const desk = cardOf(canvasElement, SIDEBAR_SECTION.id)
+	const fill = slotIn(desk, "sidebar-group")
+	const below = [
+		cardOf(canvasElement, REVIEW.id),
+		itemOf(canvasElement, DUNE.name),
+		slotIn(canvasElement, "roster-zone-separator"),
+		itemOf(canvasElement, ATLAS.name),
+	]
+	const ember = itemOf(canvasElement, EMBER.name)
+	const step = Math.round(boxOf(ember).height + rowGapOf(ember))
+	const fullBottom = visibleBottomOf(desk)
+	const handle = rosterRowOf(canvasElement, EMBER.name)
+	const backInDesk = middleOf(boxOf(rosterRowOf(canvasElement, BEACON.name)))
+	const intoReview = middleOf(boxOf(headerOf(canvasElement, REVIEW.id))).y
+
+	const held = carry(handle, intoReview)
+	await waitFor(() => expect(desk).toHaveAttribute("data-giving", "true"))
+	await waitFor(() =>
+		expect(Math.round(fullBottom - visibleBottomOf(desk))).toBe(step),
+	)
+	await waitFor(async () => {
+		for (const node of below)
+			await expect(boxOf(node).top).toBeGreaterThanOrEqual(
+				visibleBottomOf(desk) - 0.5,
+			)
+	})
+	const closing = getComputedStyle(fill, "::before")
+	if (matchMedia("(prefers-reduced-motion: reduce)").matches)
+		await expect(closing.transitionDuration).toBe("0s")
+	else await expect(closing.transitionProperty).toBe("clip-path")
+
+	fireEvent.pointerMove(handle, pointerAt(backInDesk.x, backInDesk.y))
+	await waitFor(() => expect(desk).not.toHaveAttribute("data-giving"))
+	await waitFor(() =>
+		expect(Math.round(visibleBottomOf(desk))).toBe(Math.round(fullBottom)),
+	)
+
+	fireEvent.pointerMove(handle, held)
+	await waitFor(() => expect(desk).toHaveAttribute("data-giving", "true"))
+	await expect(args.onPinRoster).not.toHaveBeenCalled()
+}
+
+export const PinnedRowLiftedOutOfItsSection = meta.story({
+	args: LIFT_ROSTER,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A pinned row carried out of its section into the next one, light. Ember leaves Desk, so Desk's fill closes from the bottom by Ember's height plus the row gap while Review slides up by the same amount: nothing below Desk ever overlaps it, and no layout moves. Check the fill opens back to its full height the moment Ember is back over what Desk shows, then closes again once it is carried out. Pick `PinnedRowLiftedOutOfItsSectionDark` for the dark theme.",
+			},
+		},
+	},
+	play: playPinnedRowLiftedOutOfItsSection,
+})
+
+export const PinnedRowLiftedOutOfItsSectionDark = meta.story({
+	args: LIFT_ROSTER,
+	globals: DARK,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A pinned row carried out of its section, dark: Desk's fill closed by the row it lost, Review slid up under it. Pick `PinnedRowLiftedOutOfItsSection` for the light theme.",
+			},
+		},
+	},
+	play: playPinnedRowLiftedOutOfItsSection,
+})
+
 const pinnedIn = (props: BotRosterProps, pins: RosterPin[]) => {
 	const rankOf = (id: string) => pins.findIndex((pin) => pin.id === id)
 	const placed = <Row extends { id: string }>(row: Row) => {
@@ -735,7 +818,7 @@ export const KeyboardMovesAPinnedRowOrSection = meta.story({
 		docs: {
 			description: {
 				story:
-					"Moving a pinned row or a section from the keyboard, the pattern of the title bar tabs. Check Option+Down on the focused Launch room files it first in Desk, keeps the focus on it and announces its new place politely, that Option+Up takes it back out, that plain arrows move nothing, and that Option+Up on the Review header moves the whole section above Desk with the focus kept on its header.",
+					"Moving a pinned row or a section from the keyboard, the pattern of the title bar tabs. Check Option+Down on the focused Launch room files it first in Desk, keeps the focus on it and announces its new place politely, that Option+Up takes it back out, that plain arrows move nothing, and that Option+Up on the Review header moves the whole section above Desk with the focus kept on its header. Option+arrows on a sorted row, on the first pinned place going up and on the last going down call nothing and leave the key to the browser.",
 			},
 		},
 	},
@@ -767,7 +850,15 @@ export const KeyboardMovesAPinnedRowOrSection = meta.story({
 		await userEvent.keyboard("{ArrowDown}")
 		await expect(args.onPinRoster).toHaveBeenCalledTimes(2)
 
+		const altArrow = (key: string) => ({ key, altKey: true })
+		const atlas = rosterRowOf(canvasElement, ATLAS.name)
+		await expect(fireEvent.keyDown(room(), altArrow("ArrowUp"))).toBe(true)
+		await expect(fireEvent.keyDown(atlas, altArrow("ArrowUp"))).toBe(true)
+		await expect(fireEvent.keyDown(atlas, altArrow("ArrowDown"))).toBe(true)
 		const review = headerOf(canvasElement, REVIEW.id)
+		await expect(fireEvent.keyDown(review, altArrow("ArrowDown"))).toBe(true)
+		await expect(args.onPinRoster).toHaveBeenCalledTimes(2)
+
 		review.focus()
 		await userEvent.keyboard("{Alt>}{ArrowUp}{/Alt}")
 		await expect(args.onPinRoster).toHaveBeenCalledTimes(3)
@@ -782,5 +873,14 @@ export const KeyboardMovesAPinnedRowOrSection = meta.story({
 		await expect(moveAnnouncement()).toHaveTextContent(
 			`${REVIEW.name} moved to position 2 of 3`,
 		)
+
+		const ember = () => rosterRowOf(canvasElement, EMBER.name)
+		await expect(fireEvent.keyDown(ember(), altArrow("ArrowDown"))).toBe(false)
+		await waitFor(() =>
+			expect(ember().closest('[data-roster-drop="desk"]')).toBeNull(),
+		)
+		await expect(args.onPinRoster).toHaveBeenCalledTimes(4)
+		await expect(fireEvent.keyDown(ember(), altArrow("ArrowDown"))).toBe(true)
+		await expect(args.onPinRoster).toHaveBeenCalledTimes(4)
 	},
 })

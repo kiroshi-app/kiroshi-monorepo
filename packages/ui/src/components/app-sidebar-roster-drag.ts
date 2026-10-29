@@ -239,7 +239,6 @@ const useRosterDrag = ({
 		(id: string, event: KeyboardEvent<HTMLElement>) => {
 			const step = keyStepOf(event)
 			if (step === 0) return
-			event.preventDefault()
 			const from = pinnedEntries.findIndex((entry) => entry.id === id)
 			const lifted = pinnedEntries[from]
 			if (!lifted) return
@@ -260,6 +259,7 @@ const useRosterDrag = ({
 			)
 			const to = current < 0 ? undefined : positions[current + step]
 			if (!to) return
+			event.preventDefault()
 			const siblings = [
 				...rest.slice(0, to.at),
 				{ ...lifted, sectionId: to.holder },
@@ -279,10 +279,10 @@ const useRosterDrag = ({
 	const moveSectionByKey = (id: string, event: KeyboardEvent<HTMLElement>) => {
 		const step = keyStepOf(event)
 		if (step === 0) return
-		event.preventDefault()
 		const from = topLevel.findIndex((entry) => entry.id === id)
 		const to = from + step
 		if (from < 0 || to < 0 || to >= topLevel.length) return
+		event.preventDefault()
 		setMove({
 			name: nameOf(topLevel[from]),
 			position: to + 1,
@@ -293,6 +293,11 @@ const useRosterDrag = ({
 
 	return {
 		cardShiftOf,
+		isGiving: (sectionId: string) =>
+			pinnedLanding !== null &&
+			pinnedLanding.holder !== sectionId &&
+			!liftedSectionId &&
+			liftedEntry?.sectionId === sectionId,
 		isLandingSorted: landing === SORTED,
 		isLifting: Boolean(liftedId),
 		isPinnedLanding: pinnedLanding !== null,

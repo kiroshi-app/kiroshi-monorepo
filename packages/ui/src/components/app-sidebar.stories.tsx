@@ -4912,7 +4912,9 @@ const dropAreaFor = (canvasElement: HTMLElement, landing: string) => {
 }
 
 const isLightened = (node: HTMLElement) =>
-	getComputedStyle(node).backgroundColor !== "rgba(0, 0, 0, 0)"
+	[getComputedStyle(node), getComputedStyle(node, "::before")].some(
+		({ backgroundColor }) => backgroundColor !== "rgba(0, 0, 0, 0)",
+	)
 
 const POINTER = {
 	button: 0,

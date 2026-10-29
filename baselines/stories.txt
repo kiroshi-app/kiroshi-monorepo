@@ -1157,6 +1157,8 @@ navigation-appsidebarroster--lifted-row-with-neighbours-shifted
 navigation-appsidebarroster--lifted-row-with-neighbours-shifted-dark
 navigation-appsidebarroster--lifted-section
 navigation-appsidebarroster--lifted-section-dark
+navigation-appsidebarroster--pinned-row-lifted-out-of-its-section
+navigation-appsidebarroster--pinned-row-lifted-out-of-its-section-dark
 navigation-appsidebarroster--pinned-zone-then-sorted-zone
 navigation-appsidebarroster--reading-more
 navigation-appsidebarroster--reading-more-dark

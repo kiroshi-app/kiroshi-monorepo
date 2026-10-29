@@ -31,10 +31,10 @@ const SECTION_GROUP = "px-0 py-0"
 const SECTION_PAD = "px-[4.5px] pb-[4.5px]"
 
 const SECTION_CARD =
-	"rounded-xl group-data-[receiving]/roster-drop:-mb-(--row-shift) group-data-[receiving]/roster-drop:pb-(--row-shift) [@media(hover:hover)]:has-[[data-slot=roster-section-trigger]:hover]:bg-sidebar-accent/70"
+	"rounded-xl *:relative before:pointer-events-none before:absolute before:inset-0 before:rounded-xl before:[clip-path:inset(0_round_var(--radius-xl))] group-data-[receiving]/roster-drop:-mb-(--row-shift) group-data-[receiving]/roster-drop:pb-(--row-shift) group-data-[giving]/roster-drop:before:[clip-path:inset(0_0_var(--row-shift)_0_round_var(--radius-xl))] motion-safe:group-data-[lifting]/roster-lift:before:transition-[clip-path] motion-safe:group-data-[lifting]/roster-lift:before:duration-150 motion-safe:group-data-[lifting]/roster-lift:before:ease-out [@media(hover:hover)]:has-[[data-slot=roster-section-trigger]:hover]:before:bg-sidebar-accent/70"
 
 const SECTION_CARD_OPEN =
-	"bg-sidebar-accent/50 group-data-[landing]/roster-drop:bg-sidebar-accent"
+	"before:bg-sidebar-accent/50 group-data-[landing]/roster-drop:before:bg-sidebar-accent"
 
 const SECTION_LABEL =
 	"mb-0 h-auto px-0 font-semibold text-sidebar-foreground text-xs normal-case tracking-normal"

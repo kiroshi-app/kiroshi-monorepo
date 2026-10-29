@@ -208,6 +208,7 @@ const PinnedZone = ({
 					const isLifted = id === drag.liftedSectionId
 					return (
 						<RosterDropArea
+							isGiving={drag.isGiving(id)}
 							isLanding={drag.landingSection === id}
 							isLifted={isLifted}
 							isReceiving={drag.isReceiving(id)}
