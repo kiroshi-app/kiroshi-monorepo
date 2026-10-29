@@ -3,6 +3,7 @@ pub mod agent;
 pub mod applications;
 pub mod attachments;
 pub mod avatars;
+pub mod badge;
 pub mod bundles;
 pub mod commands;
 pub mod companions;
@@ -85,6 +86,7 @@ pub fn run() {
 		.on_window_event(missions::run_claims::forget_on_destroyed)
 		.manage(conversations::turn_run_deadline::TurnRunDeadlines::default())
 		.manage(updates::Updates::default())
+		.manage(badge::Badge::default())
 		.setup(|app| {
 			if let Err(failure) = logging::install(app.handle()) {
 				eprintln!("the log file could not be opened: {failure}");
@@ -133,6 +135,9 @@ pub fn run() {
 			#[cfg(target_os = "macos")]
 			RunEvent::Reopen { .. } => window_controls::raise_main(app),
 			RunEvent::Exit => {
+				if let Err(failure) = badge::wear(app, 0) {
+					eprintln!("the badge was not cleared before exit: {failure}");
+				}
 				if let Some(sentinel) = app.try_state::<routines::sentinel::Sentinel>() {
 					sentinel.stop();
 				}

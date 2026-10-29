@@ -160,6 +160,8 @@ fn main_config<R: Runtime>(app: &AppHandle<R>) -> Option<WindowConfig> {
 fn built<R: Runtime>(app: &AppHandle<R>, config: &WindowConfig) -> tauri::Result<WebviewWindow<R>> {
 	let window = WebviewWindowBuilder::from_config(app, config)?.build()?;
 	closed_per_platform(&window);
+	#[cfg(target_os = "windows")]
+	crate::badge::wear_whenever_shown(&window);
 	if draws_native_windows::<R>() {
 		let dressed = window.clone();
 		if let Err(failure) = window.run_on_main_thread(move || dress(&dressed)) {
