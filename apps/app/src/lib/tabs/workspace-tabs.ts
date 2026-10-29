@@ -48,7 +48,7 @@ import {
 	unpinTab,
 } from "./tabs-model"
 
-import { commands } from "../bindings"
+import { commands, type ScreenPosition } from "../bindings"
 import {
 	describeFailure,
 	raiseReportedFailure,
@@ -72,6 +72,12 @@ export type WorkspaceTabsState = {
 
 type LeaveGuard = (leave: () => void) => void
 
+type TabTearOff = {
+	tabId: string
+	screenX: number
+	screenY: number
+}
+
 export type WorkspaceTabs = {
 	history: RouterHistory
 	isMainWindow: boolean
@@ -92,6 +98,7 @@ export type WorkspaceTabs = {
 	closeOthers: (id: string) => void
 	duplicate: (id: string) => void
 	moveToNewWindow: (id: string) => Promise<void>
+	tearOff: (tearOff: TabTearOff) => true
 	reopenClosed: () => void
 	reorder: (ids: string[]) => void
 	dropAbsentRestored: (spaceId: string, check: RestoredCheck) => Promise<void>
@@ -145,8 +152,11 @@ type WindowOpening = { isOpened: true } | { isOpened: false; reason?: string }
 const reasonOf = (error: unknown) =>
 	error == null ? undefined : describeFailure(error).trim() || undefined
 
-const openWindowOn = (href: string): Promise<WindowOpening> =>
-	commands.windowOpen(href, null).then(
+const openWindowOn = (
+	href: string,
+	position: ScreenPosition | null = null,
+): Promise<WindowOpening> =>
+	commands.windowOpen(href, position).then(
 		(opened) =>
 			opened.status === "ok"
 				? { isOpened: true }
@@ -438,18 +448,29 @@ export const createWorkspaceTabs = (
 		changeIn(spaceId, (space) => closeTab(space, id))
 	}
 
-	const moveToNewWindow = async (id: string) => {
+	const moveToWindowAt = async (
+		id: string,
+		position: ScreenPosition | null,
+	) => {
 		const { spaceId } = store.getState()
 		const moved = shown().tabs.find((tab) => tab.id === id)
 		if (!moved) {
 			return
 		}
-		const opening = await openWindowOn(currentHrefOf(moved))
+		const opening = await openWindowOn(currentHrefOf(moved), position)
 		if (opening.isOpened) {
 			removeMoved(spaceId, id)
 			return
 		}
 		raiseWindowFailure(moveFailureOf(opening.reason), "window_open")
+	}
+
+	const tearOff = ({ tabId, screenX, screenY }: TabTearOff) => {
+		void moveToWindowAt(tabId, {
+			x: Math.round(screenX),
+			y: Math.round(screenY),
+		})
+		return true as const
 	}
 
 	const reachSpace = (spaceId: string) => {
@@ -504,7 +525,8 @@ export const createWorkspaceTabs = (
 		closeActive: () => closingChange(closeActiveTab),
 		closeOthers: (id) => closingChange((space) => closeOtherTabs(space, id)),
 		duplicate: (id) => change((space) => duplicateTab(space, id)),
-		moveToNewWindow,
+		moveToNewWindow: (id) => moveToWindowAt(id, null),
+		tearOff,
 		reopenClosed,
 		reorder: (ids) => change((space) => reorderTabs(space, ids)),
 		dropAbsentRestored: async (spaceId, { isRowPresent, readMission }) => {

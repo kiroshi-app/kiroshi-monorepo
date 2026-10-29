@@ -1199,6 +1199,72 @@ describe("Move to new window", () => {
 	})
 })
 
+const RELEASE = { screenX: 640.4, screenY: 120.6 }
+
+const tearOff = (tabs: WorkspaceTabs, href: string) =>
+	tabs.tearOff({ tabId: idOfTabOn(tabs, href), ...RELEASE })
+
+describe("Tear off", () => {
+	it("opens a window on the page of the tab at the rounded release point, then removes it from the strip", async () => {
+		opensWindows()
+		const tabs = tabsOn(threadOf("torn"), threadOf("kept"))
+
+		tearOff(tabs, threadOf("torn"))
+
+		await vi.waitFor(() =>
+			expect(shownHrefs(tabs)).toEqual(["/", threadOf("kept")]),
+		)
+		expect(windowHost.windowOpen).toHaveBeenCalledExactlyOnceWith(
+			threadOf("torn"),
+			{ x: 640, y: 121 },
+		)
+		expect(windowHost.raiseReportedFailure).not.toHaveBeenCalled()
+	})
+
+	it("answers true at once, keeping the tab while the window opens", () => {
+		windowHost.windowOpen.mockReturnValue(new Promise(() => {}))
+		const tabs = tabsOn(threadOf("torn"))
+
+		expect(tearOff(tabs, threadOf("torn"))).toBe(true)
+		expect(shownHrefs(tabs)).toEqual(["/", threadOf("torn")])
+	})
+
+	it("keeps the tab in its slot and raises the move notice with its reason when the window fails to open", async () => {
+		windowHost.windowOpen.mockRejectedValue(new Error("window lost"))
+		const tabs = tabsOn(threadOf("first"), threadOf("stays"), threadOf("last"))
+
+		tearOff(tabs, threadOf("stays"))
+
+		await vi.waitFor(() =>
+			expect(windowHost.raiseReportedFailure).toHaveBeenCalledExactlyOnceWith(
+				{
+					title: "Couldn’t open a new window",
+					description:
+						"The tab stayed here (window lost). Choose Move to new window from the tab’s menu to try again.",
+				},
+				{ raisedIn: "workspace-tabs", command: "window_open" },
+			),
+		)
+		expect(shownHrefs(tabs)).toEqual([
+			"/",
+			threadOf("first"),
+			threadOf("stays"),
+			threadOf("last"),
+		])
+	})
+
+	it("opens no window for an id naming no tab of the shown space", async () => {
+		opensWindows()
+		const tabs = tabsOn(threadOf("kept"))
+
+		tabs.tearOff({ tabId: "absent", ...RELEASE })
+		await Promise.resolve()
+
+		expect(windowHost.windowOpen).not.toHaveBeenCalled()
+		expect(shownHrefs(tabs)).toEqual(["/", threadOf("kept")])
+	})
+})
+
 describe("the windows", () => {
 	it("shows the page a secondary window opened on as its single tab, ignoring its kept tabs", () => {
 		const before = tabsOfWindow(SECONDARY, threadOf("earlier"))

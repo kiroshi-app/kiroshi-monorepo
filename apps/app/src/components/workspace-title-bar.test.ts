@@ -161,6 +161,24 @@ const pickInTabMenu = async (tabName: string, item: string) => {
 	await press(screen.getByRole("menuitem", { name: item }))
 }
 
+type Release = {
+	clientX: number
+	clientY: number
+	screenX: number
+	screenY: number
+}
+
+const dragTab = async (tabName: string, release: Release) => {
+	const tab = within(titleBarOf()).getByRole("tab", { name: tabName })
+	const pointer = { pointerId: 1, ...release }
+	await act(async () => {
+		fireEvent.pointerDown(tab, { pointerId: 1, button: 0 })
+		fireEvent.pointerMove(window, pointer)
+		fireEvent.pointerUp(window, pointer)
+	})
+	await settle()
+}
+
 const mountOnRoomAndBotTabs = async () => {
 	const { botName } = await mountApp()
 	await clickRow(ROOM_TITLE)
@@ -299,6 +317,39 @@ describe("the title bar", () => {
 
 		expect(windowHost.windowOpen).toHaveBeenCalledOnce()
 		expect(tabNames()).toEqual([ROOM_TITLE])
+	})
+
+	it("opens a tab torn off the strip in a new window at the release point, and reorders a tab dropped inside it", async () => {
+		windowHost.windowOpen.mockResolvedValue({ status: "ok", data: null })
+		const { router, botName } = await mountApp()
+		await clickRow(ROOM_TITLE)
+		await clickRow(botName, { metaKey: true })
+		await act(() => router.navigate({ to: "/settings/user", search: {} }))
+		await settle()
+		const settingsName = i18n.t("settings:screen.subtitle.user")
+
+		await dragTab(botName, {
+			clientX: -40,
+			clientY: 0,
+			screenX: 0,
+			screenY: 0,
+		})
+
+		expect(tabNames()).toEqual([botName, settingsName])
+		expect(windowHost.windowOpen).not.toHaveBeenCalled()
+
+		await dragTab(botName, {
+			clientX: 0,
+			clientY: 120,
+			screenX: 640.4,
+			screenY: 120.6,
+		})
+
+		expect(windowHost.windowOpen).toHaveBeenCalledExactlyOnceWith(
+			expect.any(String),
+			{ x: 640, y: 121 },
+		)
+		expect(tabNames()).toEqual([settingsName])
 	})
 
 	it("keeps the tab and raises a notice when the new window cannot open", async () => {
