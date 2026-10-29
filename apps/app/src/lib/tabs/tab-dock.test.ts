@@ -2,6 +2,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+import { createOnThisComputerBus } from "./on-this-computer-test-bus"
 import { createTabDock } from "./tab-dock"
 
 import type { TabDrag } from "../bindings"
@@ -12,6 +13,7 @@ const host = vi.hoisted(() => ({
 	readWindowOrigin: vi.fn(),
 	revealWindow: vi.fn(),
 	emitOnThisComputer: vi.fn(),
+	listenOnThisComputer: vi.fn(),
 }))
 
 vi.mock("../bindings", async (importOriginal) => {
@@ -31,6 +33,7 @@ vi.mock("../host", async (importOriginal) => ({
 	readWindowOrigin: host.readWindowOrigin,
 	revealWindow: host.revealWindow,
 	emitOnThisComputer: host.emitOnThisComputer,
+	listenOnThisComputer: host.listenOnThisComputer,
 }))
 
 const SPACE = "space-home"
@@ -88,6 +91,21 @@ const answerOf = (isTaken: boolean) => [
 	{ windowLabel: THIS_WINDOW, originTabId: ORIGIN_TAB, isTaken },
 ]
 
+const SETTLE_EVENT = "window://tab-dock-settled"
+
+let bus = createOnThisComputerBus()
+
+const settleFromOrigin = (isTaken: boolean, move = {}) =>
+	bus.emit(SETTLE_EVENT, {
+		windowLabel: THIS_WINDOW,
+		originTabId: ORIGIN_TAB,
+		isTaken,
+		...move,
+	})
+
+const answered = () =>
+	vi.waitFor(() => expect(host.emitOnThisComputer).toHaveBeenCalled())
+
 const dockOf = (shownSpaceId = SPACE) => {
 	const receive = vi.fn()
 	const dock = createTabDock({
@@ -109,7 +127,9 @@ beforeEach(() => {
 	host.windowReportStrip.mockResolvedValue(undefined)
 	host.readWindowOrigin.mockReturnValue(WINDOW_ORIGIN)
 	host.revealWindow.mockResolvedValue(undefined)
-	host.emitOnThisComputer.mockResolvedValue(undefined)
+	bus = createOnThisComputerBus()
+	host.emitOnThisComputer.mockImplementation(bus.emit)
+	host.listenOnThisComputer.mockImplementation(bus.listen)
 	mountStrip()
 })
 
@@ -187,31 +207,131 @@ describe("a drag of another Space", () => {
 	})
 })
 
+describe("the settle of a held drag", () => {
+	it("is heard as soon as this window holds the drag, before any drop", async () => {
+		holding()
+
+		await vi.waitFor(() => expect(bus.listenerCount()).toBe(1))
+		expect(host.emitOnThisComputer).not.toHaveBeenCalled()
+	})
+
+	it.each([false, true])(
+		"ends the hold when heard before the drop (taken: %s), so the drop answers and takes nothing",
+		async (isTaken) => {
+			const { dock, receive } = holding()
+
+			dock.follow(moved(OVER_STRIP.x, OVER_STRIP.y))
+			await vi.waitFor(() => expect(bus.listenerCount()).toBe(1))
+			await settleFromOrigin(isTaken)
+			await vi.waitFor(() => expect(dock.getState()).toBeNull())
+			dock.follow(dropped(OVER_STRIP.x, OVER_STRIP.y))
+
+			expect(host.emitOnThisComputer).not.toHaveBeenCalled()
+			expect(receive).not.toHaveBeenCalled()
+			expect(bus.listenerCount()).toBe(0)
+		},
+	)
+
+	it("stops being heard when the drag is cancelled", async () => {
+		const { dock } = holding()
+		await vi.waitFor(() => expect(bus.listenerCount()).toBe(1))
+
+		dock.follow({ kind: "cancelled", originLabel: ORIGIN_WINDOW })
+
+		await vi.waitFor(() => expect(bus.listenerCount()).toBe(0))
+	})
+})
+
 describe("a tab dropped on the parted strip", () => {
-	it("answers taken, then takes the tab at the parted index and focuses this window", async () => {
+	it("answers taken and holds the tab without inserting it until the origin settles", async () => {
+		const { dock, receive } = holding()
+
+		dock.follow(moved(OVER_STRIP.x, OVER_STRIP.y))
+		dock.follow(dropped(OVER_STRIP.x, OVER_STRIP.y))
+		await answered()
+
+		expect(dock.getState()).toBeNull()
+		expect(host.emitOnThisComputer).toHaveBeenCalledExactlyOnceWith(
+			...answerOf(true),
+		)
+		expect(receive).not.toHaveBeenCalled()
+		expect(host.revealWindow).not.toHaveBeenCalled()
+	})
+
+	it("takes the tab at the parted index and focuses this window once the origin settles it taken", async () => {
 		const { dock, receive } = holding()
 
 		dock.follow(moved(OVER_STRIP.x, OVER_STRIP.y))
 		dock.placeIncoming(2)
 		dock.follow(dropped(OVER_STRIP.x, OVER_STRIP.y))
+		await answered()
+		await settleFromOrigin(true)
 
-		expect(dock.getState()).toBeNull()
-		await vi.waitFor(() => expect(receive).toHaveBeenCalledOnce())
-		expect(receive).toHaveBeenCalledWith(
+		await vi.waitFor(() =>
+			expect(host.revealWindow).toHaveBeenCalledExactlyOnceWith({
+				withFocus: true,
+			}),
+		)
+		expect(receive).toHaveBeenCalledExactlyOnceWith(
 			expect.objectContaining({
 				entries: [expect.objectContaining({ href: HREF })],
 			}),
 			2,
 		)
-		expect(host.emitOnThisComputer).toHaveBeenCalledExactlyOnceWith(
-			...answerOf(true),
+		expect(bus.listenerCount()).toBe(0)
+	})
+
+	it("takes nothing and stops listening when the origin settles it reclaimed", async () => {
+		const { dock, receive } = holding()
+
+		dock.follow(dropped(OVER_STRIP.x, OVER_STRIP.y))
+		await answered()
+		await settleFromOrigin(false)
+		await settleFromOrigin(true)
+
+		expect(receive).not.toHaveBeenCalled()
+		expect(host.revealWindow).not.toHaveBeenCalled()
+		expect(bus.listenerCount()).toBe(0)
+	})
+
+	it("takes it once when the settle arrives twice", async () => {
+		const { dock, receive } = holding()
+
+		dock.follow(dropped(OVER_STRIP.x, OVER_STRIP.y))
+		await answered()
+		await settleFromOrigin(true)
+		await vi.waitFor(() => expect(receive).toHaveBeenCalledOnce())
+		await settleFromOrigin(true)
+
+		expect(receive).toHaveBeenCalledOnce()
+	})
+
+	it("ignores a settle addressed to another window or another tab", async () => {
+		const { dock, receive } = holding()
+
+		dock.follow(dropped(OVER_STRIP.x, OVER_STRIP.y))
+		await answered()
+		await settleFromOrigin(true, { windowLabel: "window-2" })
+		await settleFromOrigin(true, { originTabId: "another-tab" })
+
+		expect(receive).not.toHaveBeenCalled()
+		expect(bus.listenerCount()).toBe(1)
+	})
+
+	it("stops hearing an unsettled move once the next drag starts", async () => {
+		const { dock, receive } = holding()
+
+		dock.follow(dropped(OVER_STRIP.x, OVER_STRIP.y))
+		await answered()
+		dock.follow(started())
+		dock.follow(dropped(OVER_STRIP.x, OVER_STRIP.y))
+		await vi.waitFor(() =>
+			expect(host.emitOnThisComputer).toHaveBeenCalledTimes(2),
 		)
-		expect(host.emitOnThisComputer.mock.invocationCallOrder[0]).toBeLessThan(
-			receive.mock.invocationCallOrder[0] ?? 0,
-		)
-		expect(host.revealWindow).toHaveBeenCalledExactlyOnceWith({
-			withFocus: true,
-		})
+		await settleFromOrigin(true)
+
+		await vi.waitFor(() => expect(receive).toHaveBeenCalledOnce())
+		expect(bus.listenerCount()).toBe(0)
 	})
 
 	it("takes it once when the drop reaches two listeners", async () => {
@@ -220,12 +340,14 @@ describe("a tab dropped on the parted strip", () => {
 		dock.follow(moved(OVER_STRIP.x, OVER_STRIP.y))
 		dock.follow(dropped(OVER_STRIP.x, OVER_STRIP.y))
 		dock.follow(dropped(OVER_STRIP.x, OVER_STRIP.y))
+		await answered()
+		await settleFromOrigin(true)
 
 		await vi.waitFor(() => expect(receive).toHaveBeenCalledOnce())
 		expect(host.emitOnThisComputer).toHaveBeenCalledOnce()
 	})
 
-	it("answers not taken and takes nothing when dropped off the strip", async () => {
+	it("answers not taken, holds nothing and takes nothing when dropped off the strip", async () => {
 		const { dock, receive } = holding()
 
 		dock.follow(moved(OVER_STRIP.x, OVER_STRIP.y))
@@ -236,19 +358,34 @@ describe("a tab dropped on the parted strip", () => {
 				...answerOf(false),
 			),
 		)
+		await vi.waitFor(() => expect(bus.listenerCount()).toBe(0))
+		await settleFromOrigin(true)
 		expect(receive).not.toHaveBeenCalled()
 		expect(host.revealWindow).not.toHaveBeenCalled()
 	})
 
-	it("takes nothing when its answer cannot be sent", async () => {
+	it("takes nothing and stops listening when its answer cannot be sent", async () => {
 		vi.spyOn(console, "error").mockImplementation(() => undefined)
 		host.emitOnThisComputer.mockRejectedValue(new Error("no channel"))
 		const { dock, receive } = holding()
 
 		dock.follow(dropped(OVER_STRIP.x, OVER_STRIP.y))
 
-		await vi.waitFor(() => expect(host.emitOnThisComputer).toHaveBeenCalled())
-		await Promise.resolve()
+		await answered()
+		await vi.waitFor(() => expect(bus.listenerCount()).toBe(0))
+		await settleFromOrigin(true)
+		expect(receive).not.toHaveBeenCalled()
+	})
+
+	it("answers nothing and takes nothing when it cannot listen for the settle", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => undefined)
+		host.listenOnThisComputer.mockRejectedValue(new Error("no channel"))
+		const { dock, receive } = holding()
+
+		dock.follow(dropped(OVER_STRIP.x, OVER_STRIP.y))
+
+		await vi.waitFor(() => expect(console.error).toHaveBeenCalled())
+		expect(host.emitOnThisComputer).not.toHaveBeenCalled()
 		expect(receive).not.toHaveBeenCalled()
 	})
 })

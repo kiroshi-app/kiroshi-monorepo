@@ -6,6 +6,8 @@ import { emitOnThisComputer, listenOnThisComputer } from "../host"
 
 const DOCK_ANSWER_EVENT = "window://tab-dock-answered"
 
+const DOCK_SETTLE_EVENT = "window://tab-dock-settled"
+
 const DOCK_ANSWER_TIMEOUT_MS = 2000
 
 export type DockedTab = {
@@ -13,14 +15,22 @@ export type DockedTab = {
 	tab: Tab
 }
 
-type DockAnswer = {
+type DockMove = {
 	windowLabel: string
 	originTabId: string
+}
+
+export type DockMessage = DockMove & {
 	isTaken: boolean
 }
 
 type DockAnswerAwaited = {
 	answer: Promise<boolean>
+}
+
+export type DockMessageHeard = {
+	heard: Promise<boolean>
+	end: (isTaken: boolean) => void
 }
 
 export const packDockedTab = (tab: Tab): Json => ({
@@ -37,33 +47,57 @@ export const unpackDockedTab = (packed: Json): DockedTab | null => {
 	return typeof originTabId === "string" && tab ? { originTabId, tab } : null
 }
 
-export const answerDock = (answer: DockAnswer) =>
+const isOfMove = (message: DockMessage, move: DockMove) =>
+	message.windowLabel === move.windowLabel &&
+	message.originTabId === move.originTabId
+
+const hearFirst = async (
+	event: string,
+	move: DockMove,
+): Promise<DockMessageHeard> => {
+	let end: (isTaken: boolean) => void = () => undefined
+	const hearing = new Promise<boolean>((resolve) => {
+		end = resolve
+	})
+	const stopListening = await listenOnThisComputer<DockMessage>(
+		event,
+		({ payload }) => {
+			if (isOfMove(payload, move)) {
+				end(payload.isTaken)
+			}
+		},
+	)
+	return { heard: hearing.finally(stopListening), end }
+}
+
+const reportUnsettled = (reason: unknown) => {
+	console.error("the tab dock could not be settled", reason)
+	return false
+}
+
+const settleDock = (settled: DockMessage) =>
+	emitOnThisComputer(DOCK_SETTLE_EVENT, settled).then(
+		() => settled.isTaken,
+		reportUnsettled,
+	)
+
+export const answerDock = (answer: DockMessage) =>
 	emitOnThisComputer(DOCK_ANSWER_EVENT, answer)
+
+export const awaitDockSettle = (windowLabel: string, originTabId: string) =>
+	hearFirst(DOCK_SETTLE_EVENT, { windowLabel, originTabId })
 
 export const awaitDockAnswer = async (
 	windowLabel: string,
 	originTabId: string,
 ): Promise<DockAnswerAwaited> => {
-	let settle: (isTaken: boolean) => void = () => undefined
-	const answering = new Promise<boolean>((resolve) => {
-		settle = resolve
-	})
-	const stopListening = await listenOnThisComputer<DockAnswer>(
-		DOCK_ANSWER_EVENT,
-		({ payload }) => {
-			if (
-				payload.windowLabel === windowLabel &&
-				payload.originTabId === originTabId
-			) {
-				settle(payload.isTaken)
-			}
-		},
-	)
-	const timeout = setTimeout(() => settle(false), DOCK_ANSWER_TIMEOUT_MS)
+	const move = { windowLabel, originTabId }
+	const { heard, end } = await hearFirst(DOCK_ANSWER_EVENT, move)
+	const timeout = setTimeout(() => end(false), DOCK_ANSWER_TIMEOUT_MS)
 	return {
-		answer: answering.finally(() => {
+		answer: heard.then((isTaken) => {
 			clearTimeout(timeout)
-			stopListening()
+			return settleDock({ ...move, isTaken })
 		}),
 	}
 }
