@@ -106,8 +106,8 @@ struct SpaceStoreTests {
 
         #expect(store.presence(of: hosted) == .shared)
         #expect(store.presence(of: homeLab) == .online)
-        #expect(store.presence(of: studio) == .notConnected)
-        #expect(store.presence(of: sideProject) == .notConnected)
+        #expect(store.presence(of: studio) == .offline)
+        #expect(store.presence(of: sideProject) == .offline)
     }
 
     @Test func theCurrentSpaceConnectsOnlyUntilItsHostFirstAnswers() async {
@@ -120,13 +120,13 @@ struct SpaceStoreTests {
         #expect(store.presence(of: homeLab) == .online)
 
         first.close(RelayClosure.hostOffline)
-        await waitUntil { current() == .notConnected }
+        await waitUntil { current() == .offline }
 
         var sleeps = clock.sleeps.makeAsyncIterator()
         await sleeps.next()?.wake.yield()
         let second = await relay.nextOpening()
         for _ in 0..<10 { await Task.yield() }
-        #expect(current() == .notConnected)
+        #expect(current() == .offline)
 
         second.accept(ScriptedRelaySocket(sharedSpaceId: "s-1"))
         await waitUntil { current() == .shared }
