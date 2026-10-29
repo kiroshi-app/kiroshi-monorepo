@@ -1061,6 +1061,71 @@ const chat = {
 		arrival: {
 			failure: "{{name}} n’a pas pu dire bonjour",
 		},
+		intro: {
+			skip: "Passer l’intro",
+			next: "Suivant",
+			getStarted: "Commencer",
+			companions: {
+				title: "Des compagnons travaillent avec vous",
+				body: "Chaque compagnon a un nom, un métier et sa propre mémoire. Confiez-lui quelque chose et il s’y tient, sur votre ordinateur.",
+				atlas: { name: "Atlas", job: "Relit le code" },
+				juniper: { name: "Juniper", job: "Tient la documentation" },
+				wren: { name: "Wren", job: "Rédige les notes de version" },
+			},
+			conversations: {
+				title: "Des conversations, puis des missions",
+				body: "Parlez avec un compagnon ou plusieurs à la fois. Un long travail devient une mission que vous suivez pendant que vous faites autre chose.",
+				thread: "Semaine de lancement",
+				ask: "Vous pouvez préparer tous les deux la documentation et les notes de version pour vendredi ?",
+				reply:
+					"C’est parti. Je lance les notes de version en mission pour que vous puissiez suivre.",
+				mission: "Notes de version de la 2.4",
+				missionDetail: "Mission · Wren · 3 sections sur 5 rédigées",
+				status: "En cours",
+			},
+			tools: {
+				title: "Vos outils, là où vous les autorisez",
+				body: "Donnez à un compagnon un Dossier où travailler, les Applications qu’il peut utiliser et les Secrets dont il a besoin. Rien au-delà de ce que vous lui confiez.",
+				folders: "Dossiers",
+				foldersDetail: "~/Code/orbit-web",
+				applications: "Applications",
+				applicationsDetail: "GitHub, Linear, Notion",
+				secrets: "Secrets",
+				secretsDetail: "LINEAR_API_KEY",
+			},
+		},
+		connect: {
+			foundIn: "{{plan}} · trouvé dans Claude Code",
+			provider: {
+				title: "Connecter le fournisseur de modèle",
+				body: "Vos compagnons ont besoin d’un modèle pour réfléchir. Utilisez votre abonnement Claude, ou une clé.",
+			},
+			browser: {
+				body: "Votre navigateur a ouvert claude.ai. Connectez-vous avec votre abonnement Pro ou Max.",
+				waiting: "En attente de votre connexion, dans votre navigateur…",
+				checking: "Vérification du code avec Claude…",
+				placeholder: "Code de Claude",
+				reopen: "Rouvrir la page de connexion",
+			},
+			continue: "Continuer",
+			connecting: "Connexion…",
+			failed: {
+				cancelled:
+					"La connexion a été annulée. Réessayez, ou collez une clé à la place.",
+				timedOut:
+					"La connexion a expiré. Réessayez, ou collez une clé à la place.",
+				linkRefused:
+					"Le lien de connexion a été refusé. Réessayez, ou collez une clé à la place.",
+			},
+			agentMissing: {
+				title: "Impossible de trouver l’agent",
+				body: "Kiroshi ne peut pas démarrer sans lui. Réinstallez Kiroshi, puis rouvrez-le.",
+				download: "Télécharger Kiroshi à nouveau",
+			},
+			key: {
+				body: "Paiement à l’usage, sans connexion. Créez une clé dans la console Anthropic.",
+			},
+		},
 	},
 } as const
 

@@ -177,6 +177,21 @@ export const slotIn = (root: Element, slot: string) => {
 	return node
 }
 
+export const expectNoHorizontalScrollAt = async (
+	root: HTMLElement,
+	width: number,
+	slot: string,
+) => {
+	const previousWidth = root.style.width
+	root.style.width = `${width}px`
+	try {
+		const scroller = slotIn(root, slot)
+		await expect(scroller.scrollWidth).toBeLessThanOrEqual(scroller.clientWidth)
+	} finally {
+		root.style.width = previousWidth
+	}
+}
+
 type HeldKeys = Pick<MouseEventInit, "metaKey" | "ctrlKey" | "shiftKey">
 
 const MIDDLE_BUTTON = 1
