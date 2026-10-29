@@ -109,7 +109,7 @@ async fn stored_until_now(
 ) -> Result<Vec<StoredMessage>, TranscriptStoreError> {
 	let mut stored = database
 		.messages()
-		.window_messages(MessageWindowQuery {
+		.settled_window_messages(MessageWindowQuery {
 			conversation_id: conversation_id.to_owned(),
 			after_seq: checkpoint.map_or(0, |checkpoint| checkpoint.last_message_seq),
 			before_seq: i64::MAX,
@@ -3104,6 +3104,164 @@ mod tests {
 		assert_eq!(recent.lines().count(), RECENT_TAIL as usize, "{context}");
 		assert!(recent.ends_with("assistant: message 30"), "{context}");
 		assert_eq!(section(&context, PROMPT_LABEL), Some(unnamed_asked("p1").as_str()));
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	async fn left_at(
+		database: &Database,
+		conversation_id: &str,
+		bot_id: &str,
+		id: &str,
+		text: &str,
+		ending: Option<TerminalState>,
+	) {
+		database
+			.messages()
+			.open_assistant_message(NewAssistantMessage {
+				id: id.to_owned(),
+				conversation_id: conversation_id.to_owned(),
+				turn_id: TURN.to_owned(),
+				author_bot_id: Some(bot_id.to_owned()),
+				replied_to_message_id: None,
+				created_at: 70,
+			})
+			.await
+			.expect("the reply is opened");
+		if !text.is_empty() {
+			database
+				.messages()
+				.append_text(id.to_owned(), text.to_owned())
+				.await
+				.expect("the reply streams");
+		}
+		if let Some(ending) = ending {
+			database
+				.messages()
+				.finalize_message(id.to_owned(), ending, None)
+				.await
+				.expect("the reply ends");
+		}
+	}
+
+	#[tokio::test]
+	async fn a_reply_another_bot_still_streams_after_the_prompt_stays_out_of_the_recent_section() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let conversation = a_conversation(&database).await;
+		another_bot(&database, &conversation, "second").await;
+		said_by(&database, &conversation, "second", "the roof is slate").await;
+		written_by_steve(&database, &conversation, "p1", "and the garden?", None).await;
+		left_at(&database, &conversation, "second", "s2", "the garden is half", None).await;
+
+		let context = context_for_default(&database, &conversation, "p1").await;
+
+		assert_eq!(
+			section(&context, RECENT_LABEL),
+			Some("Second: the roof is slate"),
+			"a half reply reached the context: {context}"
+		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_reply_still_pending_stays_out_of_the_recent_section() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let conversation = a_conversation(&database).await;
+		another_bot(&database, &conversation, "second").await;
+		said_by(&database, &conversation, "second", "the roof is slate").await;
+		written_by_steve(&database, &conversation, "p1", "and the garden?", None).await;
+		left_at(&database, &conversation, "second", "s2", "", None).await;
+
+		let context = context_for_default(&database, &conversation, "p1").await;
+
+		assert_eq!(
+			section(&context, RECENT_LABEL),
+			Some("Second: the roof is slate"),
+			"an opened reply reached the context as an empty line: {context}"
+		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_message_of_whitespace_alone_stays_out_of_the_recent_section() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let conversation = a_conversation(&database).await;
+		spoken_so_far(&database, &conversation, 1).await;
+		left_at(
+			&database,
+			&conversation,
+			"default",
+			"blank",
+			" \n\t ",
+			Some(TerminalState::Complete),
+		)
+		.await;
+		prompt(&database, &conversation, "p1", None).await;
+
+		let context = context_for_default(&database, &conversation, "p1").await;
+
+		assert_eq!(
+			section(&context, RECENT_LABEL),
+			Some("user · from an unknown computer: message 1"),
+			"a blank message reached the context: {context}"
+		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn the_rows_left_out_still_leave_a_full_tail_of_the_rest() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let conversation = a_conversation(&database).await;
+		spoken_so_far(&database, &conversation, SPOKEN).await;
+		prompt(&database, &conversation, "p1", None).await;
+		left_at(&database, &conversation, "default", "open", "", None).await;
+		left_at(&database, &conversation, "default", "half", "half a reply", None).await;
+		left_at(&database, &conversation, "default", "blank", "  ", Some(TerminalState::Complete))
+			.await;
+
+		let context = context_for_default(&database, &conversation, "p1").await;
+
+		let recent = section(&context, RECENT_LABEL).expect("the tail is carried");
+		assert_eq!(recent.lines().count(), RECENT_TAIL as usize, "{context}");
+		assert!(recent.starts_with("user · from an unknown computer: message 11\n"), "{context}");
+		assert!(recent.ends_with("assistant: message 30"), "{context}");
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_reply_ended_short_with_words_in_it_stays_in_the_recent_section() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let conversation = a_conversation(&database).await;
+		for (id, ending) in [
+			("cancelled", TerminalState::Cancelled),
+			("failed", TerminalState::Failed),
+			("interrupted", TerminalState::Interrupted),
+		] {
+			left_at(&database, &conversation, "default", id, id, Some(ending)).await;
+		}
+		prompt(&database, &conversation, "p1", None).await;
+
+		let context = context_for_default(&database, &conversation, "p1").await;
+
+		assert_eq!(
+			section(&context, RECENT_LABEL),
+			Some("assistant: cancelled\nassistant: failed\nassistant: interrupted"),
+			"a reply ended short was dropped: {context}"
+		);
 
 		drop(database);
 		fs::remove_dir_all(&dir).expect("cleanup");
