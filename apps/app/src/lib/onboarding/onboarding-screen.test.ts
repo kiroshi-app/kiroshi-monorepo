@@ -12,6 +12,7 @@ const AWAY_FROM_SHOTO: OnboardingFlowState = {
 	round: 0,
 	isBusy: false,
 	isWithShoto: false,
+	isAtAccount: false,
 	shotoId: null,
 	firstCompanion: null,
 }
@@ -32,6 +33,12 @@ describe("the onboarding screen shown", () => {
 
 	it("shows the workspace once the onboarding is done", () => {
 		expect(onboardingScreenStepOf("done", AWAY_FROM_SHOTO)).toBeNull()
+	})
+
+	it("holds Account once Shoto marked the first run done, whatever the host read says", () => {
+		expect(
+			onboardingScreenStepOf("done", { ...AWAY_FROM_SHOTO, isAtAccount: true }),
+		).toBe("account")
 	})
 
 	it("shows the workspace while the person talks to Shoto", () => {

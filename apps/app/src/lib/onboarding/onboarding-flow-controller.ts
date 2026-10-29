@@ -4,6 +4,7 @@ import { i18n } from "@workspace/ui/lib/i18n"
 import { exitDetailOf } from "./onboarding-failure"
 import type { OnboardingPort } from "./onboarding-port"
 import {
+	isSummonedIn,
 	onboardingSummonsFor,
 	type SummonOutcome,
 	summonOutcomeOf,
@@ -28,6 +29,7 @@ export type OnboardingFlowState = {
 	round: number
 	isBusy: boolean
 	isWithShoto: boolean
+	isAtAccount: boolean
 	shotoId: string | null
 	firstCompanion: CompanionCreated | null
 }
@@ -40,6 +42,7 @@ export type OnboardingFlowWorld = {
 	homeBotId: () => string | null
 	openConversation: (botId: string) => Promise<void>
 	sendTo: (botId: string, text: string) => Promise<void>
+	hasSummoned: (botId: string, summons: string) => boolean
 	outcomeOf: (botId: string, summons: string) => Promise<SummonOutcome>
 }
 
@@ -70,17 +73,16 @@ const initialOnboardingFlowState: OnboardingFlowState = {
 	round: 0,
 	isBusy: false,
 	isWithShoto: false,
+	isAtAccount: false,
 	shotoId: null,
 	firstCompanion: null,
 }
 
-type StoredOnboarding = Pick<UserPreferences, "onboardingStep" | "firstRunDone">
+type StoredOnboarding = Pick<UserPreferences, "onboardingStep">
 
 export const onboardingStepOf = ({
 	onboardingStep,
-	firstRunDone,
-}: StoredOnboarding): OnboardingStep =>
-	onboardingStep ?? (firstRunDone ? "done" : "welcome")
+}: StoredOnboarding): OnboardingStep => onboardingStep ?? "done"
 
 export const onboardingCreationOf = ({
 	isWithShoto,
@@ -123,14 +125,20 @@ export const createOnboardingFlowController = (
 
 	const store = (step: OnboardingStep) => persisted(() => world.storeStep(step))
 
+	const summonOnce = async (shotoId: string, summons: string) => {
+		if (!world.hasSummoned(shotoId, summons)) {
+			await world.sendTo(shotoId, summons)
+		}
+	}
+
 	const meetShoto = async (shotoId: string) => {
 		const greeting = onboardingSummonsFor("greeting")
 		try {
 			await world.openConversation(shotoId)
-			await world.sendTo(shotoId, greeting)
+			await summonOnce(shotoId, greeting)
 			const outcome = await world.outcomeOf(shotoId, greeting)
 			if (outcome.kind === "answered") {
-				await world.sendTo(shotoId, onboardingSummonsFor("firstCompanion"))
+				await summonOnce(shotoId, onboardingSummonsFor("firstCompanion"))
 			}
 		} catch (reason) {
 			reportUnsent(reason)
@@ -211,6 +219,7 @@ export const createOnboardingFlowController = (
 			if (!(await store("done"))) {
 				return
 			}
+			set({ isAtAccount: false })
 			await world.markFirstRunDone()
 			await land()
 		},
@@ -232,9 +241,9 @@ export const createOnboardingFlowController = (
 			if (!current().isWithShoto) {
 				return
 			}
-			set({ isWithShoto: false })
+			set({ isWithShoto: false, isAtAccount: true })
 			if (!(await store("account"))) {
-				set({ isWithShoto: true })
+				set({ isWithShoto: true, isAtAccount: false })
 			}
 		},
 	}
@@ -280,5 +289,6 @@ export const onboardingFlowWorldOf = ({
 		roster.select(botId)
 	},
 	sendTo: (botId, text) => chat.sendTo(botId, text),
+	hasSummoned: (botId, summons) => isSummonedIn(chat.stateFor(botId), summons),
 	outcomeOf: (botId, summons) => settledOutcomeOf(chat, botId, summons),
 })

@@ -12,6 +12,7 @@ export type FakeFlowWorld = OnboardingFlowWorld & {
 	stored: OnboardingStep[]
 	opened: string[]
 	sent: Sent[]
+	threadHistory: Sent[]
 	replays: number
 	firstRunDone: number
 	refusesStep: boolean
@@ -24,6 +25,7 @@ export const createFakeFlowWorld = (): FakeFlowWorld => {
 		stored: [],
 		opened: [],
 		sent: [],
+		threadHistory: [],
 		replays: 0,
 		firstRunDone: 0,
 		refusesStep: false,
@@ -51,6 +53,10 @@ export const createFakeFlowWorld = (): FakeFlowWorld => {
 		sendTo: async (botId, text) => {
 			fake.sent.push({ botId, text })
 		},
+		hasSummoned: (botId, summons) =>
+			[...fake.threadHistory, ...fake.sent].some(
+				(sent) => sent.botId === botId && sent.text === summons,
+			),
 		outcomeOf: async () => fake.greetingOutcome,
 	}
 

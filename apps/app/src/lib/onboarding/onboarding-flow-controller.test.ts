@@ -18,6 +18,7 @@ import {
 	onboardingCreationOf,
 	onboardingStepOf,
 } from "./onboarding-flow-controller"
+import { onboardingScreenStepOf } from "./onboarding-screen"
 import { onboardingSummonsFor } from "./onboarding-summons"
 
 import type { AccountReport } from "../agent/contract"
@@ -55,14 +56,11 @@ const connectedThroughLogin = async () => {
 
 describe("the stored onboarding step", () => {
 	it("reads the step the host stored", () => {
-		expect(
-			onboardingStepOf({ onboardingStep: "import", firstRunDone: false }),
-		).toBe("import")
+		expect(onboardingStepOf({ onboardingStep: "import" })).toBe("import")
 	})
 
-	it("reads the step the first-run flag implies before the host answered", () => {
-		expect(onboardingStepOf({ firstRunDone: true })).toBe("done")
-		expect(onboardingStepOf({ firstRunDone: false })).toBe("welcome")
+	it("leaves the workspace in place until the host answered", () => {
+		expect(onboardingStepOf({})).toBe("done")
 	})
 })
 
@@ -183,6 +181,29 @@ describe("connecting without a ~/.claude folder", () => {
 		])
 	})
 
+	it("greets once when the app reopens on connect after Shoto already greeted", async () => {
+		world.threadHistory = [
+			{ botId: SHOTO, text: onboardingSummonsFor("greeting") },
+		]
+
+		await connectedThroughLogin()
+
+		expect(world.sent).toEqual([
+			{ botId: SHOTO, text: onboardingSummonsFor("firstCompanion") },
+		])
+	})
+
+	it("summons nothing again once Shoto already holds both summons", async () => {
+		world.threadHistory = [
+			{ botId: SHOTO, text: onboardingSummonsFor("greeting") },
+			{ botId: SHOTO, text: onboardingSummonsFor("firstCompanion") },
+		]
+
+		await connectedThroughLogin()
+
+		expect(world.sent).toEqual([])
+	})
+
 	it("summons nothing more when the greeting failed", async () => {
 		world.greetingOutcome = { kind: "failed", detail: "the agent stopped" }
 
@@ -213,6 +234,46 @@ describe("connecting without a ~/.claude folder", () => {
 		expect(world.stored).toEqual(["connect", "account"])
 		expect(controller.getState().isWithShoto).toBe(false)
 		expect(onboardingCreationOf(controller.getState())).toBeNull()
+	})
+
+	it("shows Account when a preferences read answers done after the account write", async () => {
+		await connectedThroughLogin()
+		await controller.noteFirstRunDone()
+
+		world.step = "done"
+
+		expect(onboardingScreenStepOf(world.step, controller.getState())).toBe(
+			"account",
+		)
+	})
+
+	it("shows Account when a preferences read answers done before the account write", async () => {
+		await connectedThroughLogin()
+		world.step = "done"
+
+		await controller.noteFirstRunDone()
+
+		expect(world.step).toBe("account")
+		expect(onboardingScreenStepOf(world.step, controller.getState())).toBe(
+			"account",
+		)
+	})
+
+	it("opens the created companion on Skip even after a read answered done", async () => {
+		await connectedThroughLogin()
+		controller.noteCreated(SCOUT)
+		await controller.noteFirstRunDone()
+		world.step = "done"
+		world.opened = []
+		world.sent = []
+
+		await controller.finish()
+
+		expect(onboardingScreenStepOf(world.step, controller.getState())).toBeNull()
+		expect(world.opened).toEqual([SCOUT.id])
+		expect(world.sent).toEqual([
+			{ botId: SCOUT.id, text: onboardingSummonsFor("arrival") },
+		])
 	})
 
 	it("stays with Shoto when the account step isn't stored", async () => {
