@@ -25,6 +25,13 @@ const drag = vi.hoisted(() => ({
 
 const raiseReportedFailure = vi.hoisted(() => vi.fn())
 
+const awaitDockAnswer = vi.hoisted(() => vi.fn())
+
+vi.mock("./tab-dock-channel", async (importOriginal) => ({
+	...(await importOriginal<typeof import("./tab-dock-channel")>()),
+	awaitDockAnswer,
+}))
+
 vi.mock("../bindings", async (importOriginal) => {
 	const bindings = await importOriginal<typeof import("../bindings")>()
 	return { ...bindings, commands: { ...bindings.commands, ...ghost, ...drag } }
@@ -93,8 +100,12 @@ const sessionWithMoves = () => {
 
 const drawGhost = vi.fn(() => TAB)
 
+const targetAnswers = (isTaken: boolean) =>
+	awaitDockAnswer.mockResolvedValue({ answer: Promise.resolve(isTaken) })
+
 beforeEach(() => {
 	answerEveryDragCommand(ACCEPTED)
+	targetAnswers(true)
 	drag.windowStripAt.mockResolvedValue(null)
 	window.innerWidth = 1200
 	window.innerHeight = 800
@@ -110,6 +121,7 @@ afterEach(() => {
 		command.mockReset()
 	}
 	raiseReportedFailure.mockReset()
+	awaitDockAnswer.mockReset()
 	drawGhost.mockClear()
 	localStorage.clear()
 })
@@ -394,7 +406,7 @@ describe("a torn-off tab moving over the windows", () => {
 })
 
 describe("a torn-off tab dropped on a strip of the same Space", () => {
-	it("drops it on the host at the point, removes it from the origin and opens no window", async () => {
+	it("drops it on the host at the point, removes it from the origin once the target took it, and opens no window", async () => {
 		answerEveryGhostCommand(SUPPORTED)
 		stripsAt(SAME_SPACE_STRIP, SAME_SPACE_STRIP)
 		const { moves, session } = sessionWithMoves()
@@ -413,6 +425,13 @@ describe("a torn-off tab dropped on a strip of the same Space", () => {
 			x: 300,
 			y: 40,
 		})
+		expect(awaitDockAnswer).toHaveBeenCalledExactlyOnceWith(
+			SAME_SPACE_STRIP.label,
+			TAB.tabId,
+		)
+		expect(awaitDockAnswer.mock.invocationCallOrder[0]).toBeLessThan(
+			drag.windowTabDragDrop.mock.invocationCallOrder[0] ?? 0,
+		)
 		expect(drag.windowTabDragCancel).not.toHaveBeenCalled()
 		expect(moves.moveTornOff).not.toHaveBeenCalled()
 		expect(moves.moveUnghosted).not.toHaveBeenCalled()
@@ -437,6 +456,48 @@ describe("a torn-off tab dropped on a strip of the same Space", () => {
 		expect(moves.removeDocked).not.toHaveBeenCalled()
 		expect(moves.moveTornOff).not.toHaveBeenCalled()
 		expect(moves.moveUnghosted).not.toHaveBeenCalled()
+	})
+})
+
+describe("a torn-off tab the target does not confirm", () => {
+	it("keeps the tab in the origin and raises the notice when the target did not take it", async () => {
+		answerEveryGhostCommand(SUPPORTED)
+		targetAnswers(false)
+		stripsAt(SAME_SPACE_STRIP)
+		const { moves, session } = sessionWithMoves()
+
+		session.start(at(10, 10), drawGhost)
+		session.drop(at(300, 40))
+
+		await vi.waitFor(() =>
+			expect(raiseReportedFailure).toHaveBeenCalledExactlyOnceWith(
+				REDOCK_NOTICE,
+				{ raisedIn: "tab-tear-off" },
+			),
+		)
+		expect(drag.windowTabDragDrop).toHaveBeenCalledOnce()
+		expect(moves.removeDocked).not.toHaveBeenCalled()
+		expect(moves.moveTornOff).not.toHaveBeenCalled()
+	})
+
+	it("ends the drag without dropping and keeps the tab when the answer cannot be heard", async () => {
+		answerEveryGhostCommand(SUPPORTED)
+		awaitDockAnswer.mockRejectedValue(new Error("no channel"))
+		stripsAt(SAME_SPACE_STRIP)
+		const { moves, session } = sessionWithMoves()
+
+		session.start(at(10, 10), drawGhost)
+		session.drop(at(300, 40))
+
+		await vi.waitFor(() =>
+			expect(drag.windowTabDragCancel).toHaveBeenCalledOnce(),
+		)
+		expect(raiseReportedFailure).toHaveBeenCalledExactlyOnceWith(
+			REDOCK_NOTICE,
+			{ raisedIn: "tab-tear-off" },
+		)
+		expect(drag.windowTabDragDrop).not.toHaveBeenCalled()
+		expect(moves.removeDocked).not.toHaveBeenCalled()
 	})
 })
 

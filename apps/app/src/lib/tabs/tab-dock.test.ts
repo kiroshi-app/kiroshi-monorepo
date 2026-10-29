@@ -11,6 +11,7 @@ const host = vi.hoisted(() => ({
 	windowReportStrip: vi.fn(),
 	readWindowOrigin: vi.fn(),
 	revealWindow: vi.fn(),
+	emitOnThisComputer: vi.fn(),
 }))
 
 vi.mock("../bindings", async (importOriginal) => {
@@ -29,6 +30,7 @@ vi.mock("../host", async (importOriginal) => ({
 	...(await importOriginal<typeof import("../host")>()),
 	readWindowOrigin: host.readWindowOrigin,
 	revealWindow: host.revealWindow,
+	emitOnThisComputer: host.emitOnThisComputer,
 }))
 
 const SPACE = "space-home"
@@ -39,7 +41,12 @@ const ORIGIN_WINDOW = "main"
 
 const HREF = "/?conversation=torn"
 
-const PACKED = { href: HREF, isPinned: false, entries: [HREF], index: 0 }
+const ORIGIN_TAB = "torn"
+
+const PACKED = {
+	originTabId: ORIGIN_TAB,
+	kept: { href: HREF, isPinned: false, entries: [HREF], index: 0 },
+}
 
 const STRIP = { x: 80, y: 0, width: 600, height: 36 }
 
@@ -68,12 +75,18 @@ const OVER_STRIP = { x: 1300, y: 215 }
 
 const BELOW_STRIP = { x: 1300, y: 600 }
 
-const mountStrip = () => {
+const mountStrip = (bounds = STRIP) => {
+	document.body.replaceChildren()
 	const strip = document.createElement("div")
 	strip.dataset.slot = "title-bar-tabs"
-	strip.getBoundingClientRect = () => DOMRect.fromRect(STRIP)
+	strip.getBoundingClientRect = () => DOMRect.fromRect(bounds)
 	document.body.append(strip)
 }
+
+const answerOf = (isTaken: boolean) => [
+	"window://tab-dock-answered",
+	{ windowLabel: THIS_WINDOW, originTabId: ORIGIN_TAB, isTaken },
+]
 
 const dockOf = (shownSpaceId = SPACE) => {
 	const receive = vi.fn()
@@ -98,6 +111,7 @@ beforeEach(() => {
 	host.windowReportStrip.mockResolvedValue(undefined)
 	host.readWindowOrigin.mockResolvedValue(WINDOW_ORIGIN)
 	host.revealWindow.mockResolvedValue(undefined)
+	host.emitOnThisComputer.mockResolvedValue(undefined)
 	mountStrip()
 })
 
@@ -159,35 +173,47 @@ describe("the pointer over the strip during a drag of the same Space", () => {
 })
 
 describe("a drag of another Space", () => {
-	it("never parts the strip and takes nothing on drop", async () => {
+	it("never parts the strip, answers not taken and takes nothing on drop", async () => {
 		const { dock, receive } = await holding(SPACE, "space-away")
 
 		dock.follow(moved(OVER_STRIP.x, OVER_STRIP.y))
 		dock.follow(dropped(OVER_STRIP.x, OVER_STRIP.y))
 
+		await vi.waitFor(() =>
+			expect(host.emitOnThisComputer).toHaveBeenCalledExactlyOnceWith(
+				...answerOf(false),
+			),
+		)
 		expect(dock.getState()).toBeNull()
 		expect(receive).not.toHaveBeenCalled()
 	})
 })
 
 describe("a tab dropped on the parted strip", () => {
-	it("takes the tab at the parted index, focuses this window and closes the parting", async () => {
+	it("answers taken, then takes the tab at the parted index and focuses this window", async () => {
 		const { dock, receive } = await holding()
 
 		dock.follow(moved(OVER_STRIP.x, OVER_STRIP.y))
 		dock.placeIncoming(2)
 		dock.follow(dropped(OVER_STRIP.x, OVER_STRIP.y))
 
-		expect(receive).toHaveBeenCalledExactlyOnceWith(
+		expect(dock.getState()).toBeNull()
+		await vi.waitFor(() => expect(receive).toHaveBeenCalledOnce())
+		expect(receive).toHaveBeenCalledWith(
 			expect.objectContaining({
 				entries: [expect.objectContaining({ href: HREF })],
 			}),
 			2,
 		)
+		expect(host.emitOnThisComputer).toHaveBeenCalledExactlyOnceWith(
+			...answerOf(true),
+		)
+		expect(host.emitOnThisComputer.mock.invocationCallOrder[0]).toBeLessThan(
+			receive.mock.invocationCallOrder[0] ?? 0,
+		)
 		expect(host.revealWindow).toHaveBeenCalledExactlyOnceWith({
 			withFocus: true,
 		})
-		expect(dock.getState()).toBeNull()
 	})
 
 	it("takes it once when the drop reaches two listeners", async () => {
@@ -197,16 +223,75 @@ describe("a tab dropped on the parted strip", () => {
 		dock.follow(dropped(OVER_STRIP.x, OVER_STRIP.y))
 		dock.follow(dropped(OVER_STRIP.x, OVER_STRIP.y))
 
-		expect(receive).toHaveBeenCalledOnce()
+		await vi.waitFor(() => expect(receive).toHaveBeenCalledOnce())
+		expect(host.emitOnThisComputer).toHaveBeenCalledOnce()
 	})
 
-	it("takes nothing when dropped off the strip", async () => {
+	it("answers not taken and takes nothing when dropped off the strip", async () => {
 		const { dock, receive } = await holding()
 
 		dock.follow(moved(OVER_STRIP.x, OVER_STRIP.y))
 		dock.follow(dropped(BELOW_STRIP.x, BELOW_STRIP.y))
 
+		await vi.waitFor(() =>
+			expect(host.emitOnThisComputer).toHaveBeenCalledExactlyOnceWith(
+				...answerOf(false),
+			),
+		)
 		expect(receive).not.toHaveBeenCalled()
 		expect(host.revealWindow).not.toHaveBeenCalled()
+	})
+
+	it("takes nothing when its answer cannot be sent", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => undefined)
+		host.emitOnThisComputer.mockRejectedValue(new Error("no channel"))
+		const { dock, receive } = await holding()
+
+		dock.follow(dropped(OVER_STRIP.x, OVER_STRIP.y))
+
+		await vi.waitFor(() => expect(host.emitOnThisComputer).toHaveBeenCalled())
+		await Promise.resolve()
+		expect(receive).not.toHaveBeenCalled()
+	})
+})
+
+describe("the drop decision", () => {
+	it("measures the strip at the drop, not at the start of the drag", async () => {
+		const { dock, receive } = await holding()
+		mountStrip({ ...STRIP, y: 400 })
+
+		dock.follow(dropped(OVER_STRIP.x, OVER_STRIP.y))
+
+		await vi.waitFor(() =>
+			expect(host.emitOnThisComputer).toHaveBeenCalledExactlyOnceWith(
+				...answerOf(false),
+			),
+		)
+		expect(receive).not.toHaveBeenCalled()
+	})
+
+	it("reads the window origin at the drop, even when it was never read before", async () => {
+		host.readWindowOrigin.mockReturnValueOnce(new Promise(() => undefined))
+		const { dock, receive } = dockOf()
+		dock.follow(started())
+
+		dock.follow(dropped(OVER_STRIP.x, OVER_STRIP.y))
+
+		await vi.waitFor(() => expect(receive).toHaveBeenCalledOnce())
+		expect(host.readWindowOrigin).toHaveBeenCalledTimes(2)
+	})
+
+	it("reads the window origin again when the window moved during the drag", async () => {
+		const { dock, receive } = await holding()
+		host.readWindowOrigin.mockResolvedValue({ x: 0, y: 0 })
+
+		dock.follow(dropped(OVER_STRIP.x, OVER_STRIP.y))
+
+		await vi.waitFor(() =>
+			expect(host.emitOnThisComputer).toHaveBeenCalledExactlyOnceWith(
+				...answerOf(false),
+			),
+		)
+		expect(receive).not.toHaveBeenCalled()
 	})
 })

@@ -51,10 +51,37 @@ const tabDragHost = vi.hoisted(() => ({
 	revealWindow: vi.fn(),
 }))
 
+const computerBus = vi.hoisted(() => {
+	const listeners = new Map<
+		string,
+		Set<(event: { payload: unknown }) => void>
+	>()
+	return {
+		listeners,
+		emit: (event: string, payload: unknown) => {
+			for (const listener of listeners.get(event) ?? []) {
+				listener({ payload })
+			}
+			return Promise.resolve()
+		},
+		listen: (
+			event: string,
+			listener: (event: { payload: unknown }) => void,
+		) => {
+			const held = listeners.get(event) ?? new Set()
+			held.add(listener)
+			listeners.set(event, held)
+			return Promise.resolve(() => held.delete(listener))
+		},
+	}
+})
+
 vi.mock("../host", async (importOriginal) => ({
 	...(await importOriginal<typeof import("../host")>()),
 	readWindowOrigin: tabDragHost.readWindowOrigin,
 	revealWindow: tabDragHost.revealWindow,
+	emitOnThisComputer: computerBus.emit,
+	listenOnThisComputer: computerBus.listen,
 	usesCommandKey: () => commandKey.isUsed,
 	carriesNativeMenu: () => fileMenu.isCarried,
 	watchFileMenu: (act: (action: FileMenuAction) => void) => {
@@ -195,6 +222,7 @@ afterEach(() => {
 		command.mockReset()
 	}
 	document.body.replaceChildren()
+	computerBus.listeners.clear()
 })
 
 describe("a Space without stored tabs", () => {
@@ -1849,6 +1877,37 @@ describe("a tab dragged onto the strip of another window of its Space", () => {
 		})
 		expect(windowHost.windowOpen).not.toHaveBeenCalled()
 		expect(windowHost.raiseReportedFailure).not.toHaveBeenCalled()
+	})
+
+	it("keeps the tab in the origin and raises the notice when the target strip moved off the drop point", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => undefined)
+		mountTargetStrip()
+		const origin = tabsOn(threadOf("torn"), threadOf("kept"))
+		const target = tabsOfWindow(SECONDARY, threadOf("there"))
+		joinWindows(target)
+		const tabId = idOfTabOn(origin, threadOf("torn"))
+		const tearOff = { tabId, ...OVER_TARGET_STRIP }
+		origin.tearOffSession.start(tearOff, () => ({
+			tabId,
+			href: "/",
+			title: "Torn",
+		}))
+		await vi.waitFor(() =>
+			expect(tabDragHost.readWindowOrigin).toHaveBeenCalled(),
+		)
+		tabDragHost.readWindowOrigin.mockResolvedValue({ x: 2000, y: 0 })
+
+		origin.tearOffSession.drop(tearOff)
+
+		await vi.waitFor(() =>
+			expect(windowHost.raiseReportedFailure).toHaveBeenCalledOnce(),
+		)
+		expect(shownHrefs(origin)).toEqual([
+			"/",
+			threadOf("torn"),
+			threadOf("kept"),
+		])
+		expect(shownHrefs(target)).toEqual([threadOf("there")])
 	})
 
 	it("keeps the target page shown when its leave guard holds, with the tab placed", async () => {

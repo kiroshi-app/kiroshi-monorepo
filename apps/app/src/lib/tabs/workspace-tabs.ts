@@ -8,6 +8,7 @@ import { i18n } from "@workspace/ui/lib/i18n"
 
 import { goneMissionIdsOf, type ReadMission } from "./restored-missions"
 import { createTabDock, type TabDock } from "./tab-dock"
+import { packDockedTab } from "./tab-dock-channel"
 import { EMPTY_LIST_HREF, HREF_BASE, pageOf, rowIdsNamedBy } from "./tab-pages"
 import {
 	createTabTearOff,
@@ -23,7 +24,6 @@ import {
 	forgetWindow,
 	handOverWindow,
 	keepCarriedTab,
-	keptTabOf,
 	MAIN_WINDOW_LABEL,
 	openWindowLabels,
 	readCarriedTab,
@@ -549,7 +549,7 @@ export const createWorkspaceTabs = (
 		const torn = tabs.find((tab) => tab.id === id)
 		return torn
 			? {
-					packed: keptTabOf(torn),
+					packed: packDockedTab(torn),
 					spaceId: store.getState().spaceId,
 					isOnlyTab: tabs.length === 1,
 				}

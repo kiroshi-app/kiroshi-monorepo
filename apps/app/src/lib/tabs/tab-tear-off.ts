@@ -1,6 +1,7 @@
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { setGhostNotAllowed } from "./ghost-thumbnail"
+import { awaitDockAnswer } from "./tab-dock-channel"
 
 import {
 	commands,
@@ -44,6 +45,11 @@ type GhostAnswer = Awaited<ReturnType<typeof commands.dragGhostShow>>
 type HostAnswer = { status: "ok" } | { status: "error" }
 
 type DockTarget = "outside" | "sameSpace" | "otherSpace"
+
+type DockSite = {
+	target: DockTarget
+	label: string | null
+}
 
 type DragView = {
 	ghostTab: DragGhostTab
@@ -122,18 +128,19 @@ const reportUnknownTarget = (reason: unknown) => {
 	return null
 }
 
-const dockTargetAt = (
+const dockSiteAt = (
 	point: ScreenPosition,
 	spaceId: string,
-): Promise<DockTarget | null> =>
+): Promise<DockSite | null> =>
 	commands.windowStripAt(point).then((strip) => {
 		if (strip === null) {
-			return "outside"
+			return { target: "outside", label: null }
 		}
-		return strip.spaceId === spaceId ? "sameSpace" : "otherSpace"
+		const target = strip.spaceId === spaceId ? "sameSpace" : "otherSpace"
+		return { target, label: strip.label }
 	}, reportUnknownTarget)
 
-const raiseDragFailure = (command: string) => {
+const raiseDragFailure = (command?: string) => {
 	void raiseReportedFailure(
 		{
 			title: i18n.t("common:titleBar.redockTabFailed.title"),
@@ -143,7 +150,7 @@ const raiseDragFailure = (command: string) => {
 	)
 }
 
-const failOnce = (drag: TabDrag, command: string) => {
+const failOnce = (drag: TabDrag, command?: string) => {
 	if (drag.hasFailed) {
 		return
 	}
@@ -225,15 +232,15 @@ const movedView = async (
 	if (drag.hasFailed) {
 		return ghostFollowing(drag, view, point)
 	}
-	const [isMoved, target] = await Promise.all([
+	const [isMoved, site] = await Promise.all([
 		isAccepted(commands.windowTabDragMove(point)),
-		dockTargetAt(point, drag.spaceId),
+		dockSiteAt(point, drag.spaceId),
 	])
-	if (!isMoved || target === null) {
+	if (!isMoved || site === null) {
 		failOnce(drag, isMoved ? "window_strip_at" : "window_tab_drag_move")
 		return ghostOver(drag, view, point, "outside")
 	}
-	return ghostOver(drag, view, point, target)
+	return ghostOver(drag, view, point, site.target)
 }
 
 const cancelAnnounced = async (drag: TabDrag, view: DragView) => {
@@ -262,12 +269,29 @@ export const createTabTearOff = ({
 		return ended
 	}
 
-	const dock = async (ended: TabDrag, point: ScreenPosition) => {
-		if (await isAccepted(commands.windowTabDragDrop(point))) {
+	const dock = async (
+		ended: TabDrag,
+		view: DragView,
+		point: ScreenPosition,
+		targetLabel: string,
+	) => {
+		const awaited = await awaitDockAnswer(targetLabel, ended.tabId).catch(
+			reportUnknownTarget,
+		)
+		if (!awaited) {
+			failOnce(ended)
+			await cancelAnnounced(ended, view)
+			return
+		}
+		if (!(await isAccepted(commands.windowTabDragDrop(point)))) {
+			failOnce(ended, "window_tab_drag_drop")
+			return
+		}
+		if (await awaited.answer) {
 			removeDocked(ended.spaceId, ended.tabId)
 			return
 		}
-		failOnce(ended, "window_tab_drag_drop")
+		failOnce(ended)
 	}
 
 	const leaveOutside = async (
@@ -292,13 +316,13 @@ export const createTabTearOff = ({
 			return
 		}
 		const point = pointOf(tearOff)
-		const target = await dockTargetAt(point, ended.spaceId)
-		if (target === null) {
+		const site = await dockSiteAt(point, ended.spaceId)
+		if (site === null) {
 			failOnce(ended, "window_strip_at")
 		}
-		if (target === "sameSpace") {
-			await dock(ended, point)
-		} else if (target === "outside") {
+		if (site?.target === "sameSpace" && site.label !== null) {
+			await dock(ended, view, point, site.label)
+		} else if (site?.target === "outside") {
 			await leaveOutside(ended, view, tearOff)
 		} else {
 			await cancelAnnounced(ended, view)
