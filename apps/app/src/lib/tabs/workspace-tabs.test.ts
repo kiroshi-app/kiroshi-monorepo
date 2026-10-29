@@ -1624,7 +1624,7 @@ describe("the File menu", () => {
 		choose("newWindow")
 
 		await vi.waitFor(() =>
-			expect(windowHost.windowOpen).toHaveBeenCalledExactlyOnceWith("/"),
+			expect(windowHost.windowOpen).toHaveBeenCalledExactlyOnceWith("/", null),
 		)
 		expect(shownHrefs(tabs)).toEqual(["/", threadOf("kept")])
 		expect(windowHost.raiseReportedFailure).not.toHaveBeenCalled()
