@@ -221,6 +221,7 @@ const openGroupThread = () => {
 			onMessageStored: NO_LIVE_EVENTS,
 			announceReportTurn: NO_ANNOUNCEMENTS,
 			onReconnected: NO_RECONNECTIONS,
+			onSummonsDropped: NO_LIVE_EVENTS,
 		},
 	)
 	const opened = controller.open(GROUP)

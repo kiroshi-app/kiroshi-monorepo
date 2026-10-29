@@ -52,6 +52,17 @@ type ForeignTranscript = Pick<
 	"append" | "stream" | "settle"
 >
 
+type DroppedRun = {
+	conversationId: string
+	turnId: string
+	botId: string
+}
+
+const isDroppedRun = ({ scope, turnId }: ForeignTurn, dropped: DroppedRun) =>
+	turnId === dropped.turnId &&
+	scope.conversationId === dropped.conversationId &&
+	scope.botId === dropped.botId
+
 export type ForeignTurns = {
 	claim: (scope: RuntimeScope) => void
 	render: (scope: RuntimeScope, turn: EventTurn, event: AgentEvent) => void
@@ -60,6 +71,7 @@ export type ForeignTurns = {
 	questionAsking: (id: string) => ForeignQuestion | null
 	release: (scope: RuntimeScope, id: string) => void
 	keepOnly: (conversationId: string, openBotIds: string[]) => void
+	fail: (dropped: DroppedRun) => void
 	dispose: () => void
 }
 
@@ -374,6 +386,13 @@ export const createForeignTurns = (
 					!openBotIds.includes(scope.botId)
 				) {
 					forget(key)
+				}
+			}
+		},
+		fail: (dropped) => {
+			for (const turn of [...turns.values()]) {
+				if (isDroppedRun(turn, dropped)) {
+					end(turn, "failed")
 				}
 			}
 		},
