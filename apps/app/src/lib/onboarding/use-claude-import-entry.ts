@@ -52,7 +52,7 @@ export const useClaudeImportEntry = (
 	const isOfferedAtStart =
 		!hasLeftStartOffer &&
 		isImportOfferedAtStart(input.user.state.preferences, inventory)
-	const shownVariant = opened ?? (isOfferedAtStart ? "onboarding" : null)
+	const shownVariant = opened ?? (isOfferedAtStart ? "atStart" : null)
 	const leave = () => {
 		setOpened(null)
 		setLeftStartOffer(true)

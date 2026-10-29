@@ -314,6 +314,36 @@ describe("the variant from Settings", () => {
 	})
 })
 
+describe("the leave action", () => {
+	const REFUSED: ClaudeInventory = { kind: "refused", cause: "denied" }
+
+	it.each<[ClaudeImportVariant, string]>([
+		["onboarding", "Skip for now"],
+		["atStart", "Not now"],
+		["fromSettings", "Cancel"],
+	])(
+		"on the %s screen reads %s on the select and unreadable steps",
+		(variant, label) => {
+			const select = propsOf({ variant })
+			const unreadable = propsOf({ variant, inventory: REFUSED })
+
+			expect(select.step).toBe("select")
+			expect(select.secondary?.label).toBe(label)
+			expect(unreadable.step).toBe("unreadable")
+			expect(unreadable.secondary?.label).toBe(label)
+		},
+	)
+
+	it("keeps the onboarding title and body on the screen shown at start", () => {
+		const props = propsOf({ variant: "atStart" })
+
+		expect(props.title).toBe("Bring in your Claude Code setup")
+		expect(subtitleIn(props)).toBe(
+			"Found in ~/.claude on your computer. Everything is selected; uncheck what you’d rather leave behind.",
+		)
+	})
+})
+
 describe("whether the import is offered", () => {
 	it("offers it on a found item or a refused folder, never on an absent or empty one", () => {
 		expect(offersClaudeImport(FULL)).toBe(true)

@@ -16,7 +16,7 @@ import type {
 	UserPreferences,
 } from "@/lib/bindings"
 
-export type ClaudeImportVariant = "onboarding" | "fromSettings"
+export type ClaudeImportVariant = "onboarding" | "atStart" | "fromSettings"
 
 export type ClaudeImportView = {
 	variant: ClaudeImportVariant
@@ -155,16 +155,21 @@ const sectionsOf = (
 	return sections.filter((section) => section.items.length > 0)
 }
 
+const leaveLabelOf = (variant: ClaudeImportVariant) => {
+	switch (variant) {
+		case "onboarding":
+			return i18n.t("common:claudeImport.select.skip")
+		case "atStart":
+			return i18n.t("common:claudeImport.select.notNow")
+		case "fromSettings":
+			return i18n.t("common:claudeImport.fromSettings.cancel")
+	}
+}
+
 const leaveActionOf = (
 	variant: ClaudeImportVariant,
 	onLeave: () => void,
-): ImportAction => ({
-	label:
-		variant === "fromSettings"
-			? i18n.t("common:claudeImport.fromSettings.cancel")
-			: i18n.t("common:claudeImport.select.skip"),
-	onPress: onLeave,
-})
+): ImportAction => ({ label: leaveLabelOf(variant), onPress: onLeave })
 
 const selectSubtitleOf = (
 	{ variant, inventory }: ClaudeImportView,
