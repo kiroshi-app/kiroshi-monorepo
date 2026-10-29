@@ -139,6 +139,7 @@ export const useWorkspaceAssembly = () => {
 	const whatsNew = useWhatsNew({ user: core.user, runningVersion })
 	const claudeImport = useClaudeImportEntry({
 		roster: core.roster.controller,
+		spaces: core.spaces.controller,
 		user: core.user,
 	})
 	const about = aboutFieldsOf({

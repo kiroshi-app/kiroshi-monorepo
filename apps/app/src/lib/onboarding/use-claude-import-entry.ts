@@ -9,13 +9,16 @@ import {
 	isImportOfferedAtStart,
 	offersClaudeImport,
 } from "./claude-import-screen"
+import { importSpaceIdOf } from "./claude-import-space"
 import { useClaudeInventory } from "./use-claude-inventory"
 
 import type { RosterController } from "../bots/roster-controller"
+import type { SpacesController } from "../spaces/spaces-controller"
 import type { User } from "../user/use-user"
 
 type ClaudeImportEntryInput = {
 	roster: RosterController
+	spaces: SpacesController
 	user: User
 }
 
@@ -28,12 +31,14 @@ export type ClaudeImportEntry = {
 
 const sceneOf = ({
 	roster,
+	spaces,
 	user,
 }: ClaudeImportEntryInput): ClaudeImportScene => ({
-	spaceId: () => {
-		const { spaceRowId } = roster.getState()
-		return spaceRowId && roster.hostSpaceIdOf(spaceRowId)
-	},
+	spaceId: () =>
+		importSpaceIdOf(
+			roster.getState().spaceRowId,
+			spaces.getState().spaces.map((space) => space.id),
+		),
 	markSeen: user.controller.markOnboardingImportSeen,
 })
 

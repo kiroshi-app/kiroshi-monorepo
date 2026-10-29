@@ -64,7 +64,7 @@ const resultsOf = (outcomes: ClaudeImportOutcome[]): ClaudeImportResults =>
 const spaceIdIn = (world: ClaudeImportWorld) => {
 	const spaceId = world.spaceId()
 	if (!spaceId) {
-		throw new Error("No open space to import into")
+		throw new Error("No space on this computer to import into")
 	}
 	return spaceId
 }

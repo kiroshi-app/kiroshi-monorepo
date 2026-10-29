@@ -146,7 +146,7 @@ describe("an import", () => {
 		})
 	})
 
-	it("reports an import without an open space", async () => {
+	it("reports an import with no local space and keeps the selection", async () => {
 		controller = createClaudeImportController(
 			{ run, onProgress: async () => () => undefined },
 			{ spaceId: () => null, markSeen, leave },
@@ -157,5 +157,9 @@ describe("an import", () => {
 
 		expect(run).not.toHaveBeenCalled()
 		expect(reportFailure).toHaveBeenCalledOnce()
+		expect(controller.getState()).toMatchObject({
+			selection: [],
+			isImporting: false,
+		})
 	})
 })
