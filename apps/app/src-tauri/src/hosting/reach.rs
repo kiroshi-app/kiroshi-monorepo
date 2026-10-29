@@ -407,7 +407,7 @@ pub(super) const AUDIENCES: &[(&str, Audience)] = &[
 	(crate::companions::contract::FIRST_RUN_DONE_EVENT, Audience::HostOnly),
 	(crate::window_controls::MAXIMIZE_BUTTON_EVENT, Audience::HostOnly),
 	(crate::updates::contract::CHANGED_EVENT, Audience::HostOnly),
-	(crate::menu::FILE_MENU_EVENT, Audience::HostOnly),
+	(crate::menu_contract::FILE_MENU_EVENT, Audience::HostOnly),
 ];
 
 pub(super) fn reach_of(command: &str) -> Option<Reach> {

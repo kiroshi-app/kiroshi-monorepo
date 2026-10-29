@@ -1,8 +1,10 @@
-use serde::Serialize;
 use tauri::{AppHandle, Manager, Runtime, WebviewWindow};
 
 #[cfg(target_os = "macos")]
 use crate::events;
+use crate::menu_contract::FileMenuAction;
+#[cfg(target_os = "macos")]
+use crate::menu_contract::FileMenuChosen;
 use crate::window_controls;
 #[cfg(target_os = "macos")]
 use std::{
@@ -15,24 +17,6 @@ use tauri::menu::{Menu, MenuEvent, MenuItem, MenuItemKind, PredefinedMenuItem, S
 use tauri::WindowEvent;
 #[cfg(target_os = "macos")]
 use tauri_plugin_opener::OpenerExt;
-
-pub const FILE_MENU_EVENT: &str = "menu-file-chosen";
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-pub enum FileMenuAction {
-	NewTab,
-	NewWindow,
-	ReopenClosedTab,
-	CloseTab,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
-#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-pub struct FileMenuChosen {
-	pub action: FileMenuAction,
-}
 
 #[cfg(target_os = "macos")]
 const WEBSITE: &str = "https://kiroshi.app";
@@ -427,9 +411,8 @@ mod tests {
 	use tauri::test::mock_builder;
 	use tauri::{WebviewUrl, WebviewWindowBuilder};
 
-	use super::{
-		open_app_windows, submenus, zoomed, Entry, FileMenuAction, FileMenuChosen, FILE_ENTRIES,
-	};
+	use super::{open_app_windows, submenus, zoomed, Entry, FILE_ENTRIES};
+	use crate::menu_contract::{FileMenuAction, FileMenuChosen};
 	use crate::test_app::an_app_of_its_own;
 
 	#[test]
