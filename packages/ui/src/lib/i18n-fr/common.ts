@@ -64,6 +64,11 @@ const common = {
 			descriptionWithReason:
 				"L’onglet est resté ici ({{reason}}). Choisissez Déplacer dans une nouvelle fenêtre dans le menu de l’onglet pour réessayer.",
 		},
+		redockTabFailed: {
+			title: "Impossible de déplacer l’onglet",
+			description:
+				"L’onglet est resté ici. Faites-le de nouveau glisser vers l’autre fenêtre.",
+		},
 		reopenWindowFailed: {
 			title: "Impossible de rouvrir une fenêtre",
 			description:

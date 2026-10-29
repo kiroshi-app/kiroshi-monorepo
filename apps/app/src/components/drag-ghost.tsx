@@ -15,7 +15,7 @@ export const DragGhost = ({ view }: DragGhostProps) => {
 	if (!tab || thumbnail?.tabId !== tab.tabId) {
 		return null
 	}
-	const { companionName, messages, size, faces } = thumbnail
+	const { companionName, messages, size, faces, isNotAllowed } = thumbnail
 	return (
 		<TabDragThumbnail
 			companionName={companionName}
@@ -26,6 +26,7 @@ export const DragGhost = ({ view }: DragGhostProps) => {
 			}
 			height={size.height}
 			icon={tabFaceOf(tab.href, faces).icon}
+			isNotAllowed={isNotAllowed}
 			messages={messages}
 			title={tab.title}
 			width={size.width}

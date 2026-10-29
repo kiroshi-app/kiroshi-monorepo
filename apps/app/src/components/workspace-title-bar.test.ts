@@ -27,11 +27,26 @@ const harness = vi.hoisted((): { store: TranscriptStore | null } => ({
 
 const windowHost = vi.hoisted(() => ({ windowOpen: vi.fn() }))
 
+const tabDragHost = vi.hoisted(() => {
+	const accepted = () => Promise.resolve({ status: "ok", data: null })
+	return {
+		windowTabDragStart: accepted,
+		windowTabDragMove: accepted,
+		windowTabDragDrop: accepted,
+		windowTabDragCancel: accepted,
+		windowStripAt: () => Promise.resolve(null),
+	}
+})
+
 vi.mock("@/lib/bindings", async (importOriginal) => {
 	const bindings = await importOriginal<typeof import("@/lib/bindings")>()
 	return {
 		...bindings,
-		commands: { ...bindings.commands, windowOpen: windowHost.windowOpen },
+		commands: {
+			...bindings.commands,
+			...tabDragHost,
+			windowOpen: windowHost.windowOpen,
+		},
 	}
 })
 

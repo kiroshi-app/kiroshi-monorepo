@@ -25,6 +25,13 @@ type KeptTab = {
 	index?: unknown
 }
 
+type PackedTab = {
+	href: string
+	isPinned: boolean
+	entries: string[]
+	index: number
+}
+
 type KeptSpaceTabs = {
 	tabs: KeptTab[]
 	activeIndex: number
@@ -85,7 +92,7 @@ const restoredTabOf = (kept: KeptTab): Tab => ({
 	isPinned: kept.isPinned,
 })
 
-const keptTabOf = (tab: Tab): KeptTab => ({
+export const keptTabOf = (tab: Tab): PackedTab => ({
 	href: currentHrefOf(tab),
 	isPinned: tab.isPinned,
 	entries: tab.entries.map((entry) => entry.href),
@@ -195,10 +202,11 @@ export const forgetCarriedTab = (tabId: string) => {
 	localStorage.removeItem(carriedTabKeyOf(tabId))
 }
 
-export const readCarriedTab = (tabId: string): Tab | null => {
-	const kept = parseKept(localStorage.getItem(carriedTabKeyOf(tabId)))
-	return isKeptTab(kept) ? restoredTabOf(kept) : null
-}
+export const tabKeptIn = (value: unknown): Tab | null =>
+	isKeptTab(value) ? restoredTabOf(value) : null
+
+export const readCarriedTab = (tabId: string): Tab | null =>
+	tabKeptIn(parseKept(localStorage.getItem(carriedTabKeyOf(tabId))))
 
 export const discardCarriedTabs = () => {
 	removeKeys(keysStartingWith(CARRIED_TAB_KEY_PREFIX))

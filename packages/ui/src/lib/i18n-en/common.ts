@@ -64,6 +64,10 @@ const common = {
 			descriptionWithReason:
 				"The tab stayed here ({{reason}}). Choose Move to new window from the tab’s menu to try again.",
 		},
+		redockTabFailed: {
+			title: "Couldn’t move the tab",
+			description: "The tab stayed here. Drag it to the other window again.",
+		},
 		reopenWindowFailed: {
 			title: "Couldn’t reopen a window",
 			description: "Its tabs were closed. Open them again from the sidebar.",
