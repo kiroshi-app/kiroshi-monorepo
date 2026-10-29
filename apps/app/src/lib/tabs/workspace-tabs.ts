@@ -184,6 +184,9 @@ const moveFailureOf = (reason: string | undefined) => ({
 				}),
 })
 
+const raiseTornOffFailure = (reason: unknown) =>
+	raiseWindowFailure(moveFailureOf(reasonOf(reason)))
+
 export const openNewWindow = async () => {
 	const opening = await openWindowOn(EMPTY_LIST_HREF)
 	if (opening.isOpened) {
@@ -588,7 +591,11 @@ export const createWorkspaceTabs = (
 		moveToNewWindow: (id) => moveToWindowAt(id, null),
 		tearOff,
 		moveTornOff,
-		tearOffSession: createTabTearOff({ moveUnghosted: tearOff, moveTornOff }),
+		tearOffSession: createTabTearOff({
+			moveUnghosted: tearOff,
+			moveTornOff,
+			raiseMoveFailure: raiseTornOffFailure,
+		}),
 		reopenClosed,
 		reorder: (ids) => change((space) => reorderTabs(space, ids)),
 		dropAbsentRestored: async (spaceId, { isRowPresent, readMission }) => {
