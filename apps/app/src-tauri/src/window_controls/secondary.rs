@@ -137,6 +137,12 @@ struct Extent {
 	height: f64,
 }
 
+impl Placement {
+	fn extent(self) -> Extent {
+		Extent { width: self.width, height: self.height }
+	}
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Area {
 	x: f64,
@@ -329,7 +335,7 @@ fn no_smaller_than_the_minimum(size: WindowSize, main: &WindowConfig) -> Extent 
 }
 
 fn beside(caller: Placement, extent: Option<Extent>) -> Placement {
-	let extent = extent.unwrap_or(Extent { width: caller.width, height: caller.height });
+	let extent = extent.unwrap_or(caller.extent());
 	Placement {
 		width: extent.width,
 		height: extent.height,
@@ -379,11 +385,10 @@ fn work_area_holding(point: ScreenPosition, screens: &[Screen]) -> Option<Area> 
 }
 
 fn at(caller: Placement, extent: Option<Extent>, point: ScreenPosition, area: Area) -> Placement {
-	let Extent { width, height } =
-		extent.map_or(Extent { width: caller.width, height: caller.height }, |extent| Extent {
-			width: extent.width.min(area.width),
-			height: extent.height.min(area.height),
-		});
+	let Extent { width, height } = extent.map_or(caller.extent(), |extent| Extent {
+		width: extent.width.min(area.width),
+		height: extent.height.min(area.height),
+	});
 	Placement {
 		width,
 		height,

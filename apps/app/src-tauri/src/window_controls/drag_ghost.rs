@@ -145,7 +145,7 @@ mod rehearsal {
 	use std::time::Duration;
 
 	use tauri::window::Color;
-	use tauri::{AppHandle, Manager, Runtime};
+	use tauri::{AppHandle, Manager, Runtime, WebviewWindow};
 
 	use super::{drag_ghost_hide, drag_ghost_move, drag_ghost_show, DragGhostTab, DRAG_GHOST};
 	use crate::window_controls::secondary::{ScreenPosition, WindowSize};
@@ -179,23 +179,22 @@ mod rehearsal {
 			href: "/".to_owned(),
 			title: "Rehearsal".to_owned(),
 		};
-		drag_ghost_show(app.clone(), pointer(app)?, SIZE, tab)
+		drag_ghost_show(app.clone(), pointer(app, &ghost)?, SIZE, tab)
 			.map_err(|failure| format!("{failure:?}"))?;
 		for _ in 0..FRAMES {
 			thread::sleep(FRAME);
-			drag_ghost_move(app.clone(), pointer(app)?)
+			drag_ghost_move(app.clone(), pointer(app, &ghost)?)
 				.map_err(|failure| format!("{failure:?}"))?;
 		}
 		drag_ghost_hide(app.clone()).map_err(|failure| format!("{failure:?}"))?;
 		ghost.set_background_color(Some(CLEAR)).map_err(|failure| failure.to_string())
 	}
 
-	fn pointer<R: Runtime>(app: &AppHandle<R>) -> Result<ScreenPosition, String> {
-		let scale = app
-			.get_webview_window(DRAG_GHOST)
-			.ok_or("the drag ghost is not open")?
-			.scale_factor()
-			.map_err(|failure| failure.to_string())?;
+	fn pointer<R: Runtime>(
+		app: &AppHandle<R>,
+		ghost: &WebviewWindow<R>,
+	) -> Result<ScreenPosition, String> {
+		let scale = ghost.scale_factor().map_err(|failure| failure.to_string())?;
 		let at =
 			app.cursor_position().map_err(|failure| failure.to_string())?.to_logical::<f64>(scale);
 		Ok(ScreenPosition { x: at.x.round() as i32, y: at.y.round() as i32 })
