@@ -114,6 +114,19 @@ describe("the Welcome screens", () => {
 		).toBeTruthy()
 	})
 
+	it("steps back a screen on Back without moving the host step", async () => {
+		await renderOnboarding()
+		await press("Next")
+		await press("Next")
+
+		await press("Back")
+		expect(heading()).toBe("Conversations, then missions")
+		await press("Back")
+		expect(heading()).toBe("Companions do the work with you")
+
+		expect(world.stored).toEqual([])
+	})
+
 	it("leaves the intro on Skip intro from the first screen", async () => {
 		await renderOnboarding()
 

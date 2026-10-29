@@ -38,6 +38,7 @@ const OnboardingWelcome = ({ flow }: OnboardingStepProps) => {
 
 	return (
 		<OnboardingWelcomeScreen
+			onBack={() => setPage(page - 1)}
 			onNext={page === LAST_WELCOME_PAGE ? leaveIntro : () => setPage(page + 1)}
 			onSkip={leaveIntro}
 			step={WELCOME_STEPS[page] ?? "companions"}

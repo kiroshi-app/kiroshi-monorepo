@@ -13,6 +13,7 @@ type OnboardingWelcomeFooterProps = {
 	total: number
 	actionLabel: string
 	onSkip: () => void
+	onBack: () => void
 	onAction: () => void
 }
 
@@ -21,18 +22,20 @@ const OnboardingWelcomeFooter = ({
 	total,
 	actionLabel,
 	onSkip,
+	onBack,
 	onAction,
 }: OnboardingWelcomeFooterProps) => {
 	const { t } = useTranslation("chat")
+	const isFirstStep = step === 1
 	const isLastStep = step === total
 
 	return (
 		<div
-			className="flex h-22 w-full shrink-0 items-center justify-between gap-3 px-6 sm:px-8"
+			className="flex flex-wrap items-center justify-center gap-x-8 gap-y-4"
 			data-slot="onboarding-welcome-footer"
 		>
 			<div
-				className={cn("flex w-40 min-w-0", isLastStep && "invisible")}
+				className={cn("flex", isLastStep && "invisible")}
 				data-slot="onboarding-welcome-skip"
 			>
 				<OnboardingLink onClick={onSkip}>
@@ -59,7 +62,15 @@ const OnboardingWelcomeFooter = ({
 					{t("onboarding.step", { step, total })}
 				</p>
 			</div>
-			<div className="flex w-40 min-w-0 justify-end">
+			<div className="flex items-center gap-3">
+				<div
+					className={cn("flex", isFirstStep && "invisible")}
+					data-slot="onboarding-welcome-back"
+				>
+					<OnboardingButton onClick={onBack} variant="outline">
+						{t("onboarding.intro.back")}
+					</OnboardingButton>
+				</div>
 				<OnboardingButton onClick={onAction}>{actionLabel}</OnboardingButton>
 			</div>
 		</div>

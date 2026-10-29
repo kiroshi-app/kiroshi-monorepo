@@ -1033,6 +1033,7 @@ const chat = {
 		},
 		intro: {
 			skip: "Skip intro",
+			back: "Back",
 			next: "Next",
 			getStarted: "Get started",
 			companions: {
