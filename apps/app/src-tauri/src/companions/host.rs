@@ -666,7 +666,14 @@ impl<R: Runtime> Host for CompanionHost<R> {
 				.await?;
 				let companion = CompanionCreated { id: created.id, name: created.name };
 				self.announce(COMPANION_CREATED, companion.clone())?;
-				database.user().claim_onboarding_first_companion(companion.id.clone()).await?;
+				if let Err(failure) =
+					database.user().claim_onboarding_first_companion(companion.id.clone()).await
+				{
+					log::warn!(
+						"the companion {} was not stored as the first companion: {failure:?}",
+						companion.id
+					);
+				}
 				Self::answered(companion)
 			}
 			Operation::FirstRunDone => {
@@ -1343,6 +1350,25 @@ mod tests {
 			stored_preferences(&app).await.onboarding_first_companion_id.map(Value::String),
 			Some(first["id"].clone())
 		);
+	}
+
+	#[tokio::test]
+	async fn a_first_companion_that_cannot_be_stored_still_answers_the_created_companion() {
+		let app = a_host("first-companion-refused").await;
+		planted(
+			&app,
+			"CREATE TRIGGER refuse_first_companion BEFORE INSERT ON app_settings
+				WHEN NEW.key = 'user.onboarding_first_companion_id'
+				BEGIN SELECT RAISE(ABORT, 'the first companion is refused'); END;",
+		)
+		.await;
+		let arriving = heard(&app, COMPANION_CREATED.name());
+
+		let created = serving(&app, "c1").answer(a_create(json!({}))).await.expect("it is created");
+
+		assert_eq!(announced(&arriving)["id"], created["id"]);
+		assert!(worn(&app).await.iter().any(|bot| json!(bot.id) == created["id"]));
+		assert_eq!(stored_preferences(&app).await.onboarding_first_companion_id, None);
 	}
 
 	#[tokio::test]
