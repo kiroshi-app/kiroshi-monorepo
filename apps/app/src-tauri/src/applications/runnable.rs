@@ -175,23 +175,20 @@ pub(crate) mod tests {
 		let directory = home.join(format!("kiroshi-runners-{}", commands.join("-")));
 		fs::create_dir_all(&directory).expect("the runner directory is made");
 		for command in commands {
-			let held = directory.join(command);
-			fs::write(&held, "").expect("the runner is written");
-			runnable_from_now_on(&held);
+			a_runner(&directory.join(command));
 		}
 		directory.into_os_string()
 	}
 
 	#[cfg(unix)]
-	fn runnable_from_now_on(held: &Path) {
-		use std::os::unix::fs::PermissionsExt;
-
-		fs::set_permissions(held, fs::Permissions::from_mode(0o755))
-			.expect("the runner is executable");
+	fn a_runner(held: &Path) {
+		crate::executable_script::an_executable_script(held, "");
 	}
 
 	#[cfg(not(unix))]
-	fn runnable_from_now_on(_held: &Path) {}
+	fn a_runner(held: &Path) {
+		fs::write(held, "").expect("the runner is written");
+	}
 
 	pub(crate) async fn serving(status: StatusCode) -> (Runners, Arc<Held>, RemovedOnDrop) {
 		let held = Arc::new(Held { status, asked: Mutex::new(Vec::new()) });
