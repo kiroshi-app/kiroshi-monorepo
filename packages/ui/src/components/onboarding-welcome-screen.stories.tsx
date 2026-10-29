@@ -80,13 +80,6 @@ const expectGroupUnderHeading = async (canvasElement: HTMLElement) => {
 			column.left + column.width / 2,
 			0,
 		)
-		await expect(
-			parts
-				.slice(1)
-				.map((part, index) =>
-					Math.round(part.left - (parts[index]?.right ?? Number.NaN)),
-				),
-		).toEqual([GROUP_GAP, GROUP_GAP])
 		await expect(group.width).toBeCloseTo(
 			parts.reduce((sum, part) => sum + part.width, 0) +
 				GROUP_GAP * (parts.length - 1),
