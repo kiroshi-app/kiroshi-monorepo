@@ -44,7 +44,7 @@ const measuredStrip = (): StripBounds | null => {
 	return { x, y, width, height }
 }
 
-const isUnread = (reason: unknown) => {
+const isUnsent = (reason: unknown) => {
 	reportDockFailure(reason)
 	return false
 }
@@ -125,7 +125,7 @@ export const createTabDock = (
 			windowLabel,
 			originTabId: drag.originTabId,
 			isTaken,
-		}).then(() => true, isUnread)
+		}).then(() => true, isUnsent)
 		if (!isTaken || !isAnswered) {
 			return
 		}
