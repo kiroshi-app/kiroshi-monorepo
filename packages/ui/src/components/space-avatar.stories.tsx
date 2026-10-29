@@ -111,13 +111,13 @@ const RAIL_EDGE = 16
 
 const MENU_WIDTH = 232
 
-const MENU_ROW_HEIGHT = 28
+const MENU_ROW_HEIGHT = RAIL_PITCH
 
-const MENU_AVATAR = 14
+const MENU_AVATAR = RAIL_TILE
 
 const MENU_AVATAR_INSET = 8
 
-const MENU_NAME_OFFSET = 30
+const MENU_NAME_OFFSET = 42
 
 const OFFLINE_GROUP_OPACITY: Record<SpaceAvatarTheme, string> = {
 	light: "0.8",
@@ -168,7 +168,7 @@ const MENU =
 	"flex w-58 flex-col rounded-control border border-border bg-[#ffffff] p-1.5 dark:bg-[#141414]"
 
 const MENU_ROW =
-	"flex h-7 items-center gap-2 rounded-sm px-2 font-normal text-compact text-foreground leading-4 aria-[current=true]:bg-[#f2f2f2] dark:aria-[current=true]:bg-[#222222]"
+	"flex h-10 items-center gap-2 rounded-sm px-2 font-normal text-compact text-foreground leading-4 aria-[current=true]:bg-[#f2f2f2] dark:aria-[current=true]:bg-[#222222]"
 
 const avatarsIn = (root: HTMLElement) => slotsIn(root, "space-avatar")
 
@@ -565,7 +565,7 @@ export const RailMixedStates = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard F, the rail, in both themes: from top to bottom Atelier local in hue 250, Harbour Studio online in hue 236, Personal local with no colour, Fieldwork offline and Quarry Labs online in hue 28, at 26px. The rail is a 52px panel in the sidebar fill with a 1px border, a 14px radius and 12px of block padding, its tiles centred at a 40px pitch, 16px from its top and bottom edges. Check Personal draws its initial in the neutral ink and Fieldwork drops its colour for the hatched neutral tile. Pick `SpacesMenuMixedStates` for the 14px rows.",
+					"Artboard F, the rail, in both themes: from top to bottom Atelier local in hue 250, Harbour Studio online in hue 236, Personal local with no colour, Fieldwork offline and Quarry Labs online in hue 28, at 26px. The rail is a 52px panel in the sidebar fill with a 1px border, a 14px radius and 12px of block padding, its tiles centred at a 40px pitch, 16px from its top and bottom edges. Check Personal draws its initial in the neutral ink and Fieldwork drops its colour for the hatched neutral tile. Pick `SpacesMenuMixedStates` for the menu rows.",
 			},
 		},
 	},
@@ -622,7 +622,7 @@ export const SpacesMenuMixedStates = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard F, the Spaces menu, in both themes: the same five Spaces in the same hues, Atelier 250, Harbour Studio 236, Personal with no colour, Fieldwork offline and Quarry Labs 28, at 14px beside their names. The menu is a 232px panel in the menu fill with a 1px border, a 12px radius, 6px of padding and no shadow, holding 28px rows with a 6px radius, the avatar 8px from the row start and the name 8px after it in 13px regular type on a 16px line. Only Atelier, the current Space, wears the highlight fill. Check every initial reads at 10px bold, the laptop badges of Atelier and Personal, the green dots of Harbour Studio and Quarry Labs, and the plain red dot with no cross on the hatched Fieldwork tile. Pick `RailMixedStates` for 26px.",
+					"Artboard F, the Spaces menu, in both themes: the same five Spaces in the same hues, Atelier 250, Harbour Studio 236, Personal with no colour, Fieldwork offline and Quarry Labs 28, at 26px, the rail size, beside their names. The menu is a 232px panel in the menu fill with a 1px border, a 12px radius, 6px of padding and no shadow, holding 40px rows, the rail pitch, with a 6px radius, the avatar 8px from the row start and 7px from its top and the name 8px after it in 13px regular type on a 16px line. Only Atelier, the current Space, wears the highlight fill. Check every initial reads at 13px semibold, the laptop badges of Atelier and Personal, the green dots of Harbour Studio and Quarry Labs, and the crossed red dot on the hatched Fieldwork tile.",
 			},
 		},
 	},

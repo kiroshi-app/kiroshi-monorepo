@@ -61,6 +61,8 @@ const MENU_INVITED = "w-70"
 
 const ROW_NAME = "min-w-0 grow truncate"
 
+const SPACE_ROW = "h-10 min-h-10"
+
 const DOT = "h-2.5 w-2.5 shrink-0 rounded-full"
 
 const DOTS =
@@ -191,7 +193,7 @@ const SpaceMenuRows = ({
 				const rowHost = hostBySpaceId?.[space.id]
 				return (
 					<ContextMenuRadioItem
-						className={rowClassName}
+						className={cn(rowClassName, SPACE_ROW)}
 						closeOnClick
 						key={space.id}
 						label={space.name}
@@ -201,7 +203,7 @@ const SpaceMenuRows = ({
 							colour={space.colour}
 							hasAttention={badgesBySpaceId?.[space.id] === "attention"}
 							name={space.name}
-							size={14}
+							size={26}
 							spaceId={space.avatarSeed}
 							state={spaceAvatarStateOf(rowHost)}
 						/>
