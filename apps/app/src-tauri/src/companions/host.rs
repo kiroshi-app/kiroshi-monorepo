@@ -659,13 +659,14 @@ impl<R: Runtime> Host for CompanionHost<R> {
 				let space_id = self.space(database).await?;
 				let created = conversation_create_bot_from_draft(
 					self.app.clone(),
-					state,
+					state.clone(),
 					asked.into(),
 					space_id,
 				)
 				.await?;
 				let companion = CompanionCreated { id: created.id, name: created.name };
 				self.announce(COMPANION_CREATED, companion.clone())?;
+				database.user().claim_onboarding_first_companion(companion.id.clone()).await?;
 				Self::answered(companion)
 			}
 			Operation::FirstRunDone => {
@@ -1328,6 +1329,31 @@ mod tests {
 		let created = serving(&app, "c1").answer(a_create(json!({}))).await.expect("it is created");
 
 		assert_eq!(announced(&arriving)["id"], created["id"]);
+	}
+
+	#[tokio::test]
+	async fn the_first_companion_created_during_the_onboarding_is_stored_as_the_first_one() {
+		let app = a_host("first-companion").await;
+		let host = serving(&app, "c1");
+
+		let first = host.answer(a_create(json!({}))).await.expect("the first is created");
+		host.answer(a_create(json!({}))).await.expect("the second is created");
+
+		assert_eq!(
+			stored_preferences(&app).await.onboarding_first_companion_id.map(Value::String),
+			Some(first["id"].clone())
+		);
+	}
+
+	#[tokio::test]
+	async fn a_companion_created_after_the_onboarding_is_not_stored_as_the_first_one() {
+		let app = a_host("first-companion-done").await;
+		let host = serving(&app, "c1");
+		host.answer(asking("firstRunDone")).await.expect("the first run is recorded");
+
+		host.answer(a_create(json!({}))).await.expect("it is created");
+
+		assert_eq!(stored_preferences(&app).await.onboarding_first_companion_id, None);
 	}
 
 	#[tokio::test]

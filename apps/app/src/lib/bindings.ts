@@ -269,6 +269,7 @@ export const commands = {
 	userSetProfilePicture: (bytes: number[]) => typedError<UserPreferences, UserPreferencesError>(__TAURI_INVOKE("user_set_profile_picture", { bytes })),
 	userSetOnboardingStep: (step: OnboardingStep) => typedError<UserPreferences, UserPreferencesError>(__TAURI_INVOKE("user_set_onboarding_step", { step })),
 	userReplayOnboarding: () => typedError<UserPreferences, UserPreferencesError>(__TAURI_INVOKE("user_replay_onboarding")),
+	userSetOnboardingFirstCompanion: (botId: string) => typedError<UserPreferences, UserPreferencesError>(__TAURI_INVOKE("user_set_onboarding_first_companion", { botId })),
 	userMarkOnboardingImportSeen: () => typedError<UserPreferences, UserPreferencesError>(__TAURI_INVOKE("user_mark_onboarding_import_seen")),
 	updateState: () => __TAURI_INVOKE<UpdateState>("update_state"),
 	checkForUpdates: () => __TAURI_INVOKE<UpdateState>("check_for_updates"),
@@ -1902,9 +1903,11 @@ export type UserPreferences = {
 	lastSeenVersion?: string | null,
 	onboardingStep?: OnboardingStep,
 	onboardingImportSeen?: boolean,
+	onboardingShotoId?: string | null,
+	onboardingFirstCompanionId?: string | null,
 };
 
-export type UserPreferencesError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "rejectedProfilePicture"; reason: AvatarRejection };
+export type UserPreferencesError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "rejectedProfilePicture"; reason: AvatarRejection } | { kind: "unknownBot"; id: string };
 
 export type WindowFrameError = { kind: "unsupported" } | { kind: "invalidBounds" } | { kind: "unavailable" } | { kind: "overlayFailed" };
 

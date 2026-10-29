@@ -260,6 +260,7 @@ fn commands<R: Runtime>() -> Commands<R> {
 		user::commands::user_set_profile_picture::<tauri::Wry>,
 		user::commands::user_set_onboarding_step::<tauri::Wry>,
 		user::commands::user_replay_onboarding::<tauri::Wry>,
+		user::commands::user_set_onboarding_first_companion::<tauri::Wry>,
 		user::commands::user_mark_onboarding_import_seen::<tauri::Wry>,
 		updates::commands::update_state,
 		updates::commands::check_for_updates::<tauri::Wry>,

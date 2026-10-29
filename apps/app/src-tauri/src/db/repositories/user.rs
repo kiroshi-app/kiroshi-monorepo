@@ -5,6 +5,7 @@ use std::sync::LazyLock;
 use rusqlite::types::Type;
 use rusqlite::{Connection, Transaction, TransactionBehavior};
 
+use super::conversations::is_live_bot;
 use super::settings::Settings;
 use crate::db::{Access, DatabaseError};
 
@@ -28,6 +29,8 @@ const SHOW_WHATS_NEW_KEY: &str = "user.show_whats_new";
 const LAST_SEEN_VERSION_KEY: &str = "user.last_seen_version";
 const ONBOARDING_STEP_KEY: &str = "user.onboarding_step";
 const ONBOARDING_IMPORT_SEEN_KEY: &str = "user.onboarding_import_seen";
+const ONBOARDING_SHOTO_ID_KEY: &str = "user.onboarding_shoto_id";
+const ONBOARDING_FIRST_COMPANION_ID_KEY: &str = "user.onboarding_first_companion_id";
 
 const FIRST_COMPANION_SEEDED_KEY: &str = "app.first_companion_seeded";
 const LAST_WINDOW_RANK_KEY: &str = "app.last_window_rank";
@@ -187,6 +190,8 @@ pub struct Preferences {
 	pub last_seen_version: Option<String>,
 	pub onboarding_step: OnboardingStep,
 	pub onboarding_import_seen: bool,
+	pub onboarding_shoto_id: Option<String>,
+	pub onboarding_first_companion_id: Option<String>,
 }
 
 impl Default for Preferences {
@@ -211,7 +216,21 @@ impl Default for Preferences {
 			last_seen_version: None,
 			onboarding_step: OnboardingStep::default(),
 			onboarding_import_seen: false,
+			onboarding_shoto_id: None,
+			onboarding_first_companion_id: None,
 		}
+	}
+}
+
+#[derive(Debug)]
+pub enum UserError {
+	Database(DatabaseError),
+	UnknownBot { id: String },
+}
+
+impl From<DatabaseError> for UserError {
+	fn from(error: DatabaseError) -> Self {
+		Self::Database(error)
 	}
 }
 
@@ -277,6 +296,21 @@ impl UserRepository {
 		self.mark_switch_on(FIRST_COMPANION_SEEDED_KEY).await
 	}
 
+	pub async fn mark_first_companion_seeded_as_shoto(
+		&self,
+		shoto_id: String,
+	) -> Result<(), DatabaseError> {
+		self.access
+			.call_mut(move |connection| {
+				let transaction = write_transaction(connection)?;
+				write_switch_in(&transaction, FIRST_COMPANION_SEEDED_KEY, true)?;
+				SETTINGS.write(&transaction, None, ONBOARDING_SHOTO_ID_KEY, &shoto_id)?;
+				transaction.commit()?;
+				Ok(())
+			})
+			.await
+	}
+
 	pub async fn mark_first_run_done(&self) -> Result<(), DatabaseError> {
 		self.access
 			.call_mut(|connection| {
@@ -294,6 +328,52 @@ impl UserRepository {
 		step: OnboardingStep,
 	) -> Result<Preferences, DatabaseError> {
 		self.write_then_read(move |transaction| write_onboarding_step_in(transaction, step)).await
+	}
+
+	pub async fn replay_onboarding(&self) -> Result<Preferences, DatabaseError> {
+		self.write_then_read(|transaction| {
+			write_onboarding_step_in(transaction, OnboardingStep::Welcome)?;
+			SETTINGS.clear(transaction, None, ONBOARDING_FIRST_COMPANION_ID_KEY)
+		})
+		.await
+	}
+
+	pub async fn set_onboarding_first_companion(
+		&self,
+		bot_id: String,
+	) -> Result<Preferences, UserError> {
+		self.access
+			.call_mut(move |connection| {
+				let transaction = write_transaction(connection)?;
+				if !is_live_bot(&transaction, &bot_id)? {
+					return Ok(Err(UserError::UnknownBot { id: bot_id }));
+				}
+				write_first_companion_in(&transaction, &bot_id)?;
+				let stored = stored_in(&transaction)?;
+				transaction.commit()?;
+				Ok(Ok(stored))
+			})
+			.await?
+	}
+
+	pub async fn claim_onboarding_first_companion(
+		&self,
+		bot_id: String,
+	) -> Result<(), DatabaseError> {
+		self.access
+			.call_mut(move |connection| {
+				let transaction = write_transaction(connection)?;
+				let stored = stored_in(&transaction)?;
+				if stored.onboarding_step == OnboardingStep::Done
+					|| stored.onboarding_first_companion_id.is_some()
+				{
+					return Ok(());
+				}
+				write_first_companion_in(&transaction, &bot_id)?;
+				transaction.commit()?;
+				Ok(())
+			})
+			.await
 	}
 
 	pub async fn mark_onboarding_import_seen(&self) -> Result<Preferences, DatabaseError> {
@@ -377,7 +457,22 @@ fn stored_in(connection: &Connection) -> Result<Preferences, DatabaseError> {
 			.and_then(|stored| OnboardingStep::known(&stored))
 			.unwrap_or(OnboardingStep::implied_by(first_run_done)),
 		onboarding_import_seen: switch_on_in(connection, ONBOARDING_IMPORT_SEEN_KEY)?,
+		onboarding_shoto_id: live_bot_setting_in(connection, ONBOARDING_SHOTO_ID_KEY)?,
+		onboarding_first_companion_id: live_bot_setting_in(
+			connection,
+			ONBOARDING_FIRST_COMPANION_ID_KEY,
+		)?,
 	})
+}
+
+fn live_bot_setting_in(
+	connection: &Connection,
+	key: &str,
+) -> Result<Option<String>, DatabaseError> {
+	let Some(bot_id) = setting_in(connection, key)? else {
+		return Ok(None);
+	};
+	Ok(is_live_bot(connection, &bot_id)?.then_some(bot_id))
 }
 
 fn switch_in(connection: &Connection, key: &str) -> Result<bool, DatabaseError> {
@@ -453,6 +548,13 @@ fn write_onboarding_step_in(
 	SETTINGS.write(transaction, None, ONBOARDING_STEP_KEY, step.as_stored())
 }
 
+fn write_first_companion_in(
+	transaction: &Transaction<'_>,
+	bot_id: &str,
+) -> Result<(), DatabaseError> {
+	SETTINGS.write(transaction, None, ONBOARDING_FIRST_COMPANION_ID_KEY, bot_id)
+}
+
 fn write_picture_in(
 	transaction: &Transaction<'_>,
 	path: Option<&str>,
@@ -475,6 +577,7 @@ fn write_optional_in(
 mod tests {
 	use super::*;
 	use crate::db::connection::temp_dir;
+	use crate::db::repositories::conversations::{BotIdentity, ConversationDraft};
 	use crate::db::{open, Database};
 
 	fn a_record() -> Preferences {
@@ -501,6 +604,8 @@ mod tests {
 			last_seen_version: Some("0.24.1".to_owned()),
 			onboarding_step: OnboardingStep::Done,
 			onboarding_import_seen: false,
+			onboarding_shoto_id: None,
+			onboarding_first_companion_id: None,
 		}
 	}
 
@@ -537,6 +642,8 @@ mod tests {
 				last_seen_version: None,
 				onboarding_step: OnboardingStep::Welcome,
 				onboarding_import_seen: false,
+				onboarding_shoto_id: None,
+				onboarding_first_companion_id: None,
 			}
 		);
 	}
@@ -897,6 +1004,205 @@ mod tests {
 		database.user().set_preferences(Preferences::default()).await.expect("the write");
 
 		assert!(database.user().is_first_companion_seeded().await.expect("the marker"));
+	}
+
+	async fn a_companion(database: &Database, name: &str) -> String {
+		let identity = BotIdentity {
+			name: name.to_owned(),
+			title: String::new(),
+			model: "sonnet".to_owned(),
+			avatar_blot: None,
+			avatar_image_path: None,
+			instructions: String::new(),
+			denied_tools: Vec::new(),
+			effort: None,
+		};
+		database
+			.conversations()
+			.create_bot(identity, Some("personal".to_owned()), None)
+			.await
+			.expect("the companion is created")
+			.id
+	}
+
+	#[tokio::test]
+	async fn a_profile_written_before_the_onboarding_ids_reads_both_absent() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		planted(&database, FIRST_RUN_DONE_KEY, SWITCH_ON).await;
+		planted(&database, ONBOARDING_STEP_KEY, "account").await;
+		a_companion(&database, "Nyx").await;
+
+		let read = database.user().preferences().await.expect("the record");
+
+		assert_eq!(read.onboarding_shoto_id, None);
+		assert_eq!(read.onboarding_first_companion_id, None);
+	}
+
+	#[tokio::test]
+	async fn the_seed_stores_shoto_beside_its_marker_and_both_survive_a_reopen() {
+		let dir = temp_dir();
+		let shoto = {
+			let database = open(&dir);
+			let shoto = a_companion(&database, "Shoto").await;
+			database
+				.user()
+				.mark_first_companion_seeded_as_shoto(shoto.clone())
+				.await
+				.expect("the mark");
+			shoto
+		};
+
+		let database = open(&dir);
+
+		assert!(database.user().is_first_companion_seeded().await.expect("the marker"));
+		let read = database.user().preferences().await.expect("the record");
+		assert_eq!(read.onboarding_shoto_id, Some(shoto.clone()));
+		assert_eq!(setting(&database, ONBOARDING_SHOTO_ID_KEY).await, Some(shoto));
+	}
+
+	#[tokio::test]
+	async fn a_companion_created_during_the_onboarding_is_claimed_as_the_first_one() {
+		let dir = temp_dir();
+		let first = {
+			let database = open(&dir);
+			database.user().set_onboarding_step(OnboardingStep::Connect).await.expect("the step");
+			let first = a_companion(&database, "Nyx").await;
+			database
+				.user()
+				.claim_onboarding_first_companion(first.clone())
+				.await
+				.expect("the claim");
+			first
+		};
+
+		let database = open(&dir);
+
+		let read = database.user().preferences().await.expect("the record");
+		assert_eq!(read.onboarding_first_companion_id, Some(first.clone()));
+		assert_eq!(setting(&database, ONBOARDING_FIRST_COMPANION_ID_KEY).await, Some(first));
+	}
+
+	#[tokio::test]
+	async fn a_second_companion_created_during_the_onboarding_leaves_the_first_one_claimed() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let first = a_companion(&database, "Nyx").await;
+		let second = a_companion(&database, "Ada").await;
+		database.user().claim_onboarding_first_companion(first.clone()).await.expect("the claim");
+
+		database.user().claim_onboarding_first_companion(second).await.expect("the second claim");
+
+		let read = database.user().preferences().await.expect("the record");
+		assert_eq!(read.onboarding_first_companion_id, Some(first));
+	}
+
+	#[tokio::test]
+	async fn a_companion_created_after_the_onboarding_is_never_claimed() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		database.user().set_onboarding_step(OnboardingStep::Done).await.expect("the step");
+		let created = a_companion(&database, "Nyx").await;
+
+		database.user().claim_onboarding_first_companion(created).await.expect("the claim");
+
+		assert_eq!(setting(&database, ONBOARDING_FIRST_COMPANION_ID_KEY).await, None);
+	}
+
+	#[tokio::test]
+	async fn a_first_companion_set_by_hand_is_answered_and_stored() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let first = a_companion(&database, "Nyx").await;
+
+		let answered =
+			database.user().set_onboarding_first_companion(first.clone()).await.expect("the write");
+
+		assert_eq!(answered.onboarding_first_companion_id, Some(first.clone()));
+		assert_eq!(setting(&database, ONBOARDING_FIRST_COMPANION_ID_KEY).await, Some(first));
+	}
+
+	#[tokio::test]
+	async fn a_first_companion_naming_no_bot_is_refused_and_stores_nothing() {
+		let dir = temp_dir();
+		let database = open(&dir);
+
+		let refused = database.user().set_onboarding_first_companion("ghost".to_owned()).await;
+
+		assert!(
+			matches!(refused, Err(UserError::UnknownBot { ref id }) if id == "ghost"),
+			"got {refused:?}"
+		);
+		assert_eq!(setting(&database, ONBOARDING_FIRST_COMPANION_ID_KEY).await, None);
+	}
+
+	#[tokio::test]
+	async fn a_replayed_onboarding_starts_on_welcome_forgets_the_first_companion_and_keeps_shoto() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let shoto = a_companion(&database, "Shoto").await;
+		let first = a_companion(&database, "Nyx").await;
+		database.user().mark_first_companion_seeded_as_shoto(shoto.clone()).await.expect("seed");
+		database.user().set_onboarding_first_companion(first).await.expect("the first companion");
+		database.user().mark_first_run_done().await.expect("the first run");
+
+		let replayed = database.user().replay_onboarding().await.expect("the replay");
+
+		assert_eq!(replayed.onboarding_step, OnboardingStep::Welcome);
+		assert_eq!(replayed.onboarding_first_companion_id, None);
+		assert_eq!(replayed.onboarding_shoto_id, Some(shoto));
+		assert_eq!(setting(&database, ONBOARDING_FIRST_COMPANION_ID_KEY).await, None);
+		assert_eq!(database.user().preferences().await.expect("the record"), replayed);
+	}
+
+	#[tokio::test]
+	async fn a_write_of_the_record_leaves_both_onboarding_ids_as_stored() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let shoto = a_companion(&database, "Shoto").await;
+		let first = a_companion(&database, "Nyx").await;
+		database.user().mark_first_companion_seeded_as_shoto(shoto.clone()).await.expect("seed");
+
+		let answered = database
+			.user()
+			.set_preferences(Preferences {
+				onboarding_shoto_id: Some(first.clone()),
+				onboarding_first_companion_id: Some(first),
+				..a_record()
+			})
+			.await
+			.expect("the write");
+
+		assert_eq!(answered.onboarding_shoto_id, Some(shoto));
+		assert_eq!(answered.onboarding_first_companion_id, None);
+	}
+
+	#[tokio::test]
+	async fn a_stored_id_naming_no_live_bot_reads_absent_and_stays_in_the_file() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let retired = a_companion(&database, "Nyx").await;
+		database
+			.conversations()
+			.create_conversation(ConversationDraft {
+				space_id: "personal".to_owned(),
+				section_id: None,
+				title: "A mission".to_owned(),
+				icon: None,
+				bot_ids: vec![retired.clone()],
+			})
+			.await
+			.expect("the mission seats it");
+		database.conversations().delete_bot(retired.clone()).await.expect("the retirement");
+		planted(&database, ONBOARDING_SHOTO_ID_KEY, "ghost").await;
+		database.user().claim_onboarding_first_companion(retired.clone()).await.expect("claim");
+
+		let read = database.user().preferences().await.expect("the record");
+
+		assert_eq!(read.onboarding_shoto_id, None);
+		assert_eq!(read.onboarding_first_companion_id, None);
+		assert_eq!(setting(&database, ONBOARDING_SHOTO_ID_KEY).await, Some("ghost".to_owned()));
+		assert_eq!(setting(&database, ONBOARDING_FIRST_COMPANION_ID_KEY).await, Some(retired));
 	}
 
 	#[tokio::test]

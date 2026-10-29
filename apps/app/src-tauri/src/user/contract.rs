@@ -135,6 +135,10 @@ pub struct UserPreferences {
 	pub onboarding_step: OnboardingStep,
 	#[serde(default)]
 	pub onboarding_import_seen: bool,
+	#[serde(default)]
+	pub onboarding_shoto_id: Option<String>,
+	#[serde(default)]
+	pub onboarding_first_companion_id: Option<String>,
 }
 
 fn shows_whats_new_unless_told_otherwise() -> bool {
@@ -169,6 +173,8 @@ impl UserPreferences {
 			last_seen_version: preferences.last_seen_version,
 			onboarding_step: preferences.onboarding_step.into(),
 			onboarding_import_seen: preferences.onboarding_import_seen,
+			onboarding_shoto_id: preferences.onboarding_shoto_id,
+			onboarding_first_companion_id: preferences.onboarding_first_companion_id,
 		}
 	}
 }
@@ -195,6 +201,8 @@ impl From<UserPreferences> for user::Preferences {
 			last_seen_version: preferences.last_seen_version,
 			onboarding_step: preferences.onboarding_step.into(),
 			onboarding_import_seen: preferences.onboarding_import_seen,
+			onboarding_shoto_id: preferences.onboarding_shoto_id,
+			onboarding_first_companion_id: preferences.onboarding_first_companion_id,
 		}
 	}
 }
@@ -208,11 +216,22 @@ pub enum UserPreferencesError {
 	Storage { failure: StorageFailure },
 	#[serde(rename_all = "camelCase")]
 	RejectedProfilePicture { reason: AvatarRejection },
+	#[serde(rename_all = "camelCase")]
+	UnknownBot { id: String },
 }
 
 impl From<DatabaseError> for UserPreferencesError {
 	fn from(error: DatabaseError) -> Self {
 		UserPreferencesError::Storage { failure: StorageFailure::from(&error) }
+	}
+}
+
+impl From<user::UserError> for UserPreferencesError {
+	fn from(error: user::UserError) -> Self {
+		match error {
+			user::UserError::Database(failure) => failure.into(),
+			user::UserError::UnknownBot { id } => UserPreferencesError::UnknownBot { id },
+		}
 	}
 }
 

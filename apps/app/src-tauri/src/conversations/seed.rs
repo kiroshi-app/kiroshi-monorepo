@@ -138,7 +138,7 @@ async fn furnished(root: &Path, database: &db::Database, bot_id: &str) -> Result
 			Refusal::Store(TranscriptStoreError::UnknownBot { id: bot_id.to_owned() })
 		})?;
 	bundles::write_skills(root, &stored, &shoto::SKILLS)?;
-	Ok(database.user().mark_first_companion_seeded().await?)
+	Ok(database.user().mark_first_companion_seeded_as_shoto(stored.id).await?)
 }
 
 async fn withdrawn(
@@ -313,7 +313,10 @@ mod tests {
 		assert_eq!(shoto.instructions, shoto::persona());
 		assert_eq!(shoto.avatar_blot, None);
 		assert!(database.user().is_first_companion_seeded().await.expect("the marker"));
-		assert!(!database.user().preferences().await.expect("the preferences").first_run_done);
+		let preferences = database.user().preferences().await.expect("the preferences");
+		assert!(!preferences.first_run_done);
+		assert_eq!(preferences.onboarding_shoto_id, Some(shoto.id.clone()));
+		assert_eq!(preferences.onboarding_first_companion_id, None);
 	}
 
 	#[tokio::test]
@@ -475,6 +478,8 @@ mod tests {
 
 		assert_eq!(database.conversations().bots(None).await.expect("the roster").len(), 0);
 		assert!(!database.user().is_first_companion_seeded().await.expect("the marker"));
+		let preferences = database.user().preferences().await.expect("the preferences");
+		assert_eq!(preferences.onboarding_shoto_id, None);
 		let dir = avatars::Avatars::dir(app.handle()).expect("the avatars directory");
 		assert_eq!(fs::read_dir(&dir).expect("the directory reads").count(), 0);
 		let reasons = payloads::<CompanionSeedRefused>(&refused);
@@ -522,6 +527,7 @@ mod tests {
 		let preferences = database.user().preferences().await.expect("the preferences");
 		assert!(preferences.first_run_done);
 		assert_eq!(preferences.onboarding_step, OnboardingStep::Done);
+		assert_eq!(preferences.onboarding_shoto_id, None);
 		assert_eq!(payloads::<CompanionCreated>(&created), Vec::new());
 		assert_eq!(payloads::<CompanionSeedRefused>(&refused), Vec::new());
 		assert_eq!(outcome_of(&app), LaunchOutcome::default());
