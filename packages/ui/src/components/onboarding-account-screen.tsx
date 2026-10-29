@@ -40,7 +40,8 @@ const OnboardingAccountScreen = ({
 	onContinue,
 }: OnboardingAccountScreenProps) => {
 	const { t } = useTranslation("settings")
-	const Mark = account.status === "signedIn" ? Icons.Check : Icons.User
+	const isSignedIn = account.status === "signedIn"
+	const Mark = isSignedIn ? Icons.Check : Icons.User
 
 	return (
 		<FullWindowLayout
@@ -53,9 +54,7 @@ const OnboardingAccountScreen = ({
 						aria-hidden="true"
 						className={cn(
 							"size-6",
-							account.status === "signedIn"
-								? "text-success"
-								: "text-foreground",
+							isSignedIn ? "text-success" : "text-foreground",
 						)}
 					/>
 				</span>
