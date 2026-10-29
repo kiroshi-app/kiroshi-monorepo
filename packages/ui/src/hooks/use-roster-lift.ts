@@ -24,7 +24,7 @@ export const dropAreaAt = (x: number, y: number) =>
 		?.closest(`[${DROP_AREA_ATTRIBUTE}]`)
 		?.getAttribute(DROP_AREA_ATTRIBUTE) ?? null
 
-interface Point {
+export interface Point {
 	x: number
 	y: number
 }
@@ -81,7 +81,7 @@ export interface RosterLift<Landing> extends Lifter {
 	landing: LandingStore<Landing>
 }
 
-interface UseRosterLiftOptions<Landing> {
+export interface UseRosterLiftOptions<Landing> {
 	isEnabled: boolean
 	landingAt: (x: number, y: number, id: string) => Landing | null
 	isSameLanding?: (one: Landing | null, other: Landing | null) => boolean

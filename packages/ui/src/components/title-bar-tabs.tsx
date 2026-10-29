@@ -32,8 +32,14 @@ import {
 import {
 	type RosterLift,
 	useLiftLanding,
-	useRosterLift,
 } from "@workspace/ui/hooks/use-roster-lift"
+import {
+	SHIFTABLE,
+	SLIDING,
+	type SlideGeometry,
+	type SlideShift,
+	useSlidingLift,
+} from "@workspace/ui/hooks/use-sliding-lift"
 import { useStableCallback } from "@workspace/ui/hooks/use-stable-callback"
 import { middleClickHandlers } from "@workspace/ui/lib/click-modifiers"
 import { STILL_UNDER_REDUCED_MOTION } from "@workspace/ui/lib/reduced-motion"
@@ -129,20 +135,12 @@ const INCOMING_TAB = cn(TAB, LIFTED_SURFACE, "absolute top-0")
 const INCOMING_CLOSE =
 	"absolute inset-y-0 end-1.25 my-auto grid size-4.5 place-items-center text-muted-foreground [&_svg]:size-3"
 
-const SHIFTABLE =
-	"data-[shift=start]:-translate-x-(--tab-shift) data-[shift=end]:translate-x-(--tab-shift)"
-
-const SLIDING =
-	"transition-[translate] duration-150 ease-out motion-reduce:transition-none"
-
-type TabShift = "start" | "end"
-
 const TAB_TITLE =
 	"min-w-0 select-none truncate font-medium text-compact leading-4"
 
 const TAB_NEEDS_YOU = cn(NEEDS_YOU_GLYPH, "size-3.25")
 
-const CLOSE_SLOT = cn("flex h-7 items-center justify-end pe-1.25", SHIFTABLE)
+const CLOSE_SLOT = cn("flex h-7 items-center justify-end pe-1.25", SHIFTABLE.x)
 
 const CLOSE_BUTTON =
 	"pointer-events-auto grid size-4.5 place-items-center rounded-[5px] text-muted-foreground hover:bg-title-bar-highlight hover:text-foreground focus-visible:outline-2 focus-visible:outline-foreground focus-visible:outline-offset-1 [&_svg]:size-3"
@@ -171,7 +169,7 @@ const TAB_MENU_SHORTCUTS = {
 
 const UNPINNED_TAB = '[data-slot="title-bar-tab"]'
 
-const PINNED_TAB_SLOT = '[data-slot="title-bar-pinned-tab"]'
+const TAB_SLOT = `[data-slot="title-bar-pinned-tab"], ${UNPINNED_TAB}`
 
 const widthOf = (element: Element) => element.getBoundingClientRect().width
 
@@ -267,55 +265,8 @@ const TORN_OFF = "torn-off"
 
 type TabLanding = number | typeof TORN_OFF
 
-type LiftGeometry = {
-	pressX: number
-	restLeft: number
-	slotLefts: number[]
-	minShift: number
-	maxShift: number
-	tearOffAbove: number
-	tearOffBelow: number
-}
-
-const measureLift = (
-	row: HTMLElement,
-	slot: string,
-	origin: number,
-	pressX: number,
-): LiftGeometry => {
-	const boxes = [...row.querySelectorAll(slot)].map((node) =>
-		node.getBoundingClientRect(),
-	)
-	const own = boxes[origin]
-	const list = row.querySelector('[role="tablist"]')
-	const gap = list ? pixelsOf(getComputedStyle(list).columnGap) : 0
-	const geometry = {
-		pressX,
-		restLeft: own.left,
-		slotLefts: boxes.map((box) => box.left),
-		minShift: boxes[0].left - own.left,
-		maxShift: boxes[boxes.length - 1].right - own.right,
-		tearOffAbove: own.top - own.height,
-		tearOffBelow: own.bottom + own.height,
-	}
-	row.style.setProperty("--tab-shift", `${own.width + gap}px`)
-	row.style.setProperty("--lift-min", `${geometry.minShift}px`)
-	row.style.setProperty("--lift-max", `${geometry.maxShift}px`)
-	return geometry
-}
-
-const landingIn = (geometry: LiftGeometry, x: number, y: number) => {
-	if (y < geometry.tearOffAbove || y > geometry.tearOffBelow) return TORN_OFF
-	const shift = Math.min(
-		Math.max(x - geometry.pressX, geometry.minShift),
-		geometry.maxShift,
-	)
-	const left = geometry.restLeft + shift
-	const distances = geometry.slotLefts.map((slotLeft) =>
-		Math.abs(slotLeft - left),
-	)
-	return distances.indexOf(Math.min(...distances))
-}
+const tearOffOf = (_x: number, y: number, { rest }: SlideGeometry) =>
+	y < rest.top - rest.height || y > rest.bottom + rest.height ? TORN_OFF : null
 
 type IncomingSlots = {
 	rowLeft: number
@@ -352,7 +303,7 @@ const nearestIndexOf = (boundaries: number[], x: number) => {
 type TabShiftOf = (
 	id: string,
 	landing: TabLanding | null,
-) => TabShift | undefined
+) => SlideShift | undefined
 
 type TabLiftSource = Pick<
 	TitleBarTabsProps,
@@ -529,7 +480,6 @@ const useTabLift = ({
 	const [move, setMove] = useState<TabMove | null>(null)
 	const [isSnapping, setIsSnapping] = useState(false)
 	if (isSnapping && incomingIndex !== null) setIsSnapping(false)
-	const geometry = useRef<LiftGeometry | null>(null)
 	const isTornOff = useRef(false)
 
 	const moveByKey = (id: string, event: KeyboardEvent<HTMLElement>) => {
@@ -548,22 +498,16 @@ const useTabLift = ({
 		onReorderTabs(reorderedIds(tabs, zone, id, to))
 	}
 
-	const lift = useRosterLift<TabLanding>({
+	const slide = useSlidingLift<typeof TORN_OFF>({
+		axis: "x",
+		slot: TAB_SLOT,
+		zones: [pinned.map((tab) => tab.id), kept.map((tab) => tab.id)],
+		containerRef: rowRef,
+		landingOutside: tearOffOf,
 		isEnabled: Boolean(onReorderTabs),
-		landingAt: (x, y) =>
-			geometry.current ? landingIn(geometry.current, x, y) : null,
-		onLift: (id, from) => {
+		onLift: () => {
 			setIsSnapping(false)
 			isTornOff.current = false
-			const row = rowRef.current
-			geometry.current = row
-				? measureLift(
-						row,
-						isPinned(id) ? PINNED_TAB_SLOT : UNPINNED_TAB,
-						rankOf(id),
-						from.x,
-					)
-				: null
 		},
 		onMove: (id, landing, moved) => {
 			const wasTornOff = isTornOff.current
@@ -584,6 +528,7 @@ const useTabLift = ({
 		},
 	})
 
+	const { lift } = slide
 	const liftedId = lift.lift?.id
 
 	const rowRankOf = (id: string) =>
@@ -592,24 +537,19 @@ const useTabLift = ({
 	const shiftOf = (
 		id: string,
 		landing: TabLanding | null,
-	): TabShift | undefined => {
+	): SlideShift | undefined => {
 		if (!liftedId) {
 			const rank = kept.findIndex((tab) => tab.id === id)
 			return incomingIndex !== null && rank >= incomingIndex ? "end" : undefined
 		}
 		if (landing === TORN_OFF)
 			return rowRankOf(id) > rowRankOf(liftedId) ? "start" : undefined
-		if (typeof landing !== "number") return undefined
-		const zone = zoneOf(liftedId)
-		const origin = rankOf(liftedId)
-		const rank = zone.findIndex((tab) => tab.id === id)
-		if (rank < 0 || rank === origin) return undefined
-		if (rank > origin && rank <= landing) return "start"
-		if (rank < origin && rank >= landing) return "end"
-		return undefined
+		return slide.shiftOf(id, landing)
 	}
 
-	const dividerShiftOf = (landing: TabLanding | null): TabShift | undefined =>
+	const dividerShiftOf = (
+		landing: TabLanding | null,
+	): SlideShift | undefined =>
 		liftedId && isPinned(liftedId) && landing === TORN_OFF ? "start" : undefined
 
 	const isRowSliding = Boolean(liftedId) || isSnapping || incomingIndex !== null
@@ -701,7 +641,7 @@ const TitleBarTabItem = ({
 						}
 						className={cn(
 							tab.isPinned ? PINNED_TAB : TAB,
-							SHIFTABLE,
+							SHIFTABLE.x,
 							width,
 							isSliding && SLIDING,
 							isLifted && LIFTED_TAB,
@@ -822,7 +762,7 @@ const TitleBarTabItem = ({
 
 type PinnedDividerProps = {
 	lift: RosterLift<TabLanding>
-	shiftOf: (landing: TabLanding | null) => TabShift | undefined
+	shiftOf: (landing: TabLanding | null) => SlideShift | undefined
 	isSliding: boolean
 }
 
@@ -834,7 +774,7 @@ const PinnedDivider = ({ lift, shiftOf, isSliding }: PinnedDividerProps) => {
 			className={cn(
 				DIVIDER,
 				"bg-title-bar-divider",
-				SHIFTABLE,
+				SHIFTABLE.x,
 				isSliding && SLIDING,
 			)}
 			data-shift={shift}
