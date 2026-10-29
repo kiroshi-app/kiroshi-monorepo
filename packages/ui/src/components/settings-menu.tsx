@@ -438,6 +438,7 @@ const SettingsMenuSpace = ({
 				media={
 					<SpaceAvatar
 						colour={colour}
+						name={name}
 						size={14}
 						spaceId={spaceId}
 						state={isInvitation ? "invitation" : spaceAvatarStateOf(host)}

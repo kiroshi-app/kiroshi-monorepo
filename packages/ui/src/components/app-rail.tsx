@@ -273,6 +273,7 @@ const AppRail = ({
 	const spaceLogo = (
 		<SpaceAvatar
 			colour={space?.colour}
+			name={space?.name ?? ""}
 			size={26}
 			spaceId={space?.avatarSeed ?? ""}
 			state={spaceAvatarStateOf(spaceHost)}

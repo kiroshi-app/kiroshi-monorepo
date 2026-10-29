@@ -132,6 +132,7 @@ const SpaceInvitationRow = ({
 				<SpaceAvatar
 					className={AVATAR}
 					colour={isMuted ? null : colour}
+					name={name}
 					size={14}
 					spaceId={id}
 					state={isAccepting ? "joining" : "invitation"}

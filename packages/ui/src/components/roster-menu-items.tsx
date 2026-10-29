@@ -205,6 +205,7 @@ const SpacesBranch = ({
 						>
 							<SpaceAvatar
 								colour={space.colour}
+								name={space.name}
 								size={14}
 								spaceId={space.avatarSeed}
 							/>

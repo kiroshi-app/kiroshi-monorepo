@@ -91,6 +91,7 @@ const meta = preview.meta({
 		avatar: (
 			<SpaceAvatar
 				colour={BLOT_HUES.blue}
+				name="Release desk"
 				size={36}
 				spaceId="release-desk"
 				state="online"
@@ -184,7 +185,12 @@ export const OpensWithClickModifiers = meta.story({
 	tags: ["test-only"],
 	args: {
 		avatar: (
-			<SpaceAvatar colour={BLOT_HUES.orange} size={36} spaceId="studio" />
+			<SpaceAvatar
+				colour={BLOT_HUES.orange}
+				name="Studio"
+				size={36}
+				spaceId="studio"
+			/>
 		),
 		name: "Ada Martin",
 		subtitle: "User settings",
@@ -256,7 +262,12 @@ const titleRowOf = (menu: HTMLElement, title: string) =>
 export const SpaceSections = meta.story({
 	args: {
 		avatar: (
-			<SpaceAvatar colour={BLOT_HUES.orange} size={36} spaceId="studio" />
+			<SpaceAvatar
+				colour={BLOT_HUES.orange}
+				name="Studio"
+				size={36}
+				spaceId="studio"
+			/>
 		),
 		name: "Ada Martin",
 		subtitle: "User settings",
@@ -341,7 +352,7 @@ export const SpaceSections = meta.story({
 		await expect(heightOf(studio)).toBe(36)
 		await expect(studio).toHaveAttribute("aria-current", "true")
 		await expect(heightOf(slotIn(studio, "space-avatar"))).toBe(14)
-		await expect(heightOf(slotIn(studio, "space-avatar-dot"))).toBe(6)
+		await expect(heightOf(slotIn(studio, "space-avatar-dot"))).toBe(8)
 		const account = within(menu).getByRole("button", { name: "Account" })
 		const leftOf = (element: Element) => element.getBoundingClientRect().left
 		await expect(leftOf(slotIn(studio, "roster-row-name"))).toBe(
@@ -410,7 +421,9 @@ const expectCompanionsCount = async (canvasElement: HTMLElement) => {
 
 export const FreeHue = meta.story({
 	args: {
-		avatar: <SpaceAvatar colour={210} size={36} spaceId="studio" />,
+		avatar: (
+			<SpaceAvatar colour={210} name="Studio" size={36} spaceId="studio" />
+		),
 		name: "Studio",
 		children: (
 			<SettingsMenuSection title="Spaces">
@@ -732,6 +745,7 @@ export const ConnectingSpaceDark = meta.story({
 		avatar: (
 			<SpaceAvatar
 				colour={BLOT_HUES.pink}
+				name="Release desk"
 				size={36}
 				spaceId="release-desk"
 				state="connecting"
@@ -762,6 +776,7 @@ const HEADER_MENUS = [
 		avatar: (
 			<SpaceAvatar
 				colour={BLOT_HUES.blue}
+				name="Release desk"
 				size={36}
 				spaceId="release-desk"
 				state="online"

@@ -39,8 +39,14 @@ branding-ditheredfieldavatar--without-ground
 branding-outlinedhexagon--filled-with-the-glaze-border
 branding-outlinedhexagon--filled-with-the-glaze-border-dark
 branding-spaceavatar--free-hue
+branding-spaceavatar--local
+branding-spaceavatar--offline
+branding-spaceavatar--rail-mixed-states
+branding-spaceavatar--shared-online
 branding-spaceavatar--sizes
+branding-spaceavatar--spaces-menu-mixed-states
 branding-spaceavatar--states
+branding-spaceavatar--without-name
 branding-spacetint--default
 branding-spacetint--free-hue
 branding-spacetint--untinted

@@ -1,6 +1,6 @@
 "use client"
 
-import { useId } from "react"
+import { type SVGProps, useId } from "react"
 
 import {
 	COMPACT_EDGE,
@@ -13,13 +13,24 @@ import {
 import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import {
 	COMPACT_RADII,
+	CROSS_GLYPH,
 	dashArray,
 	dotCentre,
+	GLYPH_GRID,
+	type Glyph,
+	HATCH_INK,
+	hatchPath,
 	isCompact,
+	LAPTOP_GLYPH,
+	LOCAL_BADGE_FILL,
+	markMetricsOf,
+	OFFLINE_BADGE_FILL,
 	type SpaceAvatarSize,
 	type SpaceAvatarTheme,
 	STATE_METRICS,
 	spaceArcs,
+	spaceInitial,
+	spaceInk,
 	spacePalette,
 	superellipsePath,
 	superellipsePerimeter,
@@ -38,6 +49,9 @@ type SpaceAvatarState =
 const AVATAR = "pointer-events-none inline-block shrink-0"
 
 const DRAWING = "block overflow-visible"
+
+const INITIAL =
+	"flex size-full items-center justify-center font-sans tracking-[-0.02em] before:content-[attr(data-initial)]"
 
 const FILL_FRAME = { width: "100%", height: "100%" }
 
@@ -65,8 +79,12 @@ const isFilled = (state: SpaceAvatarState) =>
 const hasDot = (state: SpaceAvatarState) =>
 	state === "shared" || state === "online"
 
+const hasBadge = (state: SpaceAvatarState) =>
+	state === "local" || state === "offline" || hasDot(state)
+
 type SpaceAvatarProps = {
 	spaceId: string
+	name: string
 	colour?: number | null
 	size: SpaceAvatarSize
 	state?: SpaceAvatarState
@@ -76,6 +94,7 @@ type SpaceAvatarProps = {
 
 const SpaceAvatar = ({
 	spaceId,
+	name,
 	colour,
 	size,
 	state = "local",
@@ -97,7 +116,11 @@ const SpaceAvatar = ({
 	const { anchor, radii: seededRadii } = spaceArcs(spaceId)
 	const radii = isCompactRecipe ? COMPACT_RADII : seededRadii
 	const metrics = STATE_METRICS[size]
-	const dot = hasDot(state) ? metrics.dot : undefined
+	const mark = markMetricsOf(size)
+	const badge = hasBadge(state) ? mark.badge : undefined
+	const badgeCentre = dotCentre(size, mark.badge.diameter)
+	const badgeRadius = mark.badge.diameter / 2
+	const initial = isFilled(state) ? spaceInitial(name) : ""
 	const edgeWidth = edgeWidthOf(size)
 	const arcCentre = { cx: anchor.x * size, cy: anchor.y * size }
 	const outlineHalf = centre - metrics.invitationStroke / 2
@@ -151,33 +174,81 @@ const SpaceAvatar = ({
 		</>
 	)
 
+	const hatch = (theme: SpaceAvatarTheme) => (
+		<path
+			d={hatchPath(size, mark.hatch.spacing)}
+			data-slot="space-avatar-hatch"
+			fill="none"
+			stroke={HATCH_INK[theme].colour}
+			strokeOpacity={HATCH_INK[theme].opacity}
+			strokeWidth={mark.hatch.stroke}
+		/>
+	)
+
+	const glyph = (path: string, { scale, stroke }: Glyph) => {
+		const origin = badgeCentre - (GLYPH_GRID / 2) * scale
+		return (
+			<path
+				d={path}
+				fill="none"
+				stroke="#ffffff"
+				strokeLinecap="round"
+				strokeLinejoin="round"
+				strokeWidth={stroke}
+				transform={`translate(${origin} ${origin}) scale(${scale})`}
+			/>
+		)
+	}
+
+	const disc = (props: SVGProps<SVGCircleElement>) => (
+		<circle cx={badgeCentre} cy={badgeCentre} r={badgeRadius} {...props} />
+	)
+
 	const filled = (theme: SpaceAvatarTheme, tones: string[]) => (
-		<g
-			clipPath={`url(#${ids.shape})`}
-			opacity={state === "offline" ? OFFLINE_OPACITY[theme] : undefined}
-		>
-			<rect fill={tones[0]} height={size} width={size} />
-			{radii
-				.map((radius, index) => (
-					<circle
-						{...arcCentre}
-						fill={tones[tones.length - 1 - index]}
-						key={radius}
-						r={radius * size}
+		<>
+			<g
+				clipPath={`url(#${ids.shape})`}
+				opacity={state === "offline" ? OFFLINE_OPACITY[theme] : undefined}
+			>
+				<rect fill={tones[0]} height={size} width={size} />
+				{radii
+					.map((radius, index) => (
+						<circle
+							{...arcCentre}
+							fill={tones[tones.length - 1 - index]}
+							key={radius}
+							r={radius * size}
+						/>
+					))
+					.reverse()}
+				{state === "offline" ? hatch(theme) : null}
+				{isGlazed ? glaze(theme) : null}
+				{isCompactRecipe ? (
+					<path
+						d={shape}
+						fill="none"
+						stroke={COMPACT_EDGE[theme].colour}
+						strokeOpacity={COMPACT_EDGE[theme].opacity}
+						strokeWidth={2 * edgeWidth}
 					/>
-				))
-				.reverse()}
-			{isGlazed ? glaze(theme) : null}
-			{isCompactRecipe ? (
-				<path
-					d={shape}
-					fill="none"
-					stroke={COMPACT_EDGE[theme].colour}
-					strokeOpacity={COMPACT_EDGE[theme].opacity}
-					strokeWidth={2 * edgeWidth}
-				/>
+				) : null}
+			</g>
+			{initial ? (
+				<foreignObject height={size} width={size}>
+					<div
+						className={INITIAL}
+						data-initial={initial}
+						data-slot="space-avatar-initial"
+						style={{
+							color: spaceInk(theme, state === "offline" ? null : colour),
+							fontSize: mark.initial.fontSize,
+							fontWeight: mark.initial.weight,
+							lineHeight: `${mark.initial.fontSize}px`,
+						}}
+					/>
+				</foreignObject>
 			) : null}
-		</g>
+		</>
 	)
 
 	const drawing = (theme: SpaceAvatarTheme) => {
@@ -226,14 +297,14 @@ const SpaceAvatar = ({
 					<clipPath id={ids.shape}>
 						<path d={shape} />
 					</clipPath>
-					{dot ? (
+					{badge ? (
 						<mask id={ids.cutOut} maskUnits="userSpaceOnUse" {...fullFrame}>
 							<rect {...fullFrame} fill="#ffffff" />
 							<circle
-								cx={dotCentre(size, dot.diameter)}
-								cy={dotCentre(size, dot.diameter)}
+								cx={badgeCentre}
+								cy={badgeCentre}
 								fill="#000000"
-								r={dot.diameter / 2 + dot.cutOut}
+								r={badge.diameter / 2 + badge.cutOut}
 							/>
 						</mask>
 					) : null}
@@ -260,7 +331,7 @@ const SpaceAvatar = ({
 						</>
 					) : null}
 				</defs>
-				<g mask={dot ? `url(#${ids.cutOut})` : undefined}>
+				<g mask={badge ? `url(#${ids.cutOut})` : undefined}>
 					{GLAZE_THEMES.map((theme) => (
 						<g className={THEME_LAYER[theme]} data-theme={theme} key={theme}>
 							{drawing(theme)}
@@ -279,14 +350,30 @@ const SpaceAvatar = ({
 						/>
 					) : null}
 				</g>
-				{dot ? (
+				{hasDot(state) ? (
 					<circle
 						className="fill-presence-online"
-						cx={dotCentre(size, dot.diameter)}
-						cy={dotCentre(size, dot.diameter)}
+						cx={badgeCentre}
+						cy={badgeCentre}
 						data-slot="space-avatar-dot"
-						r={dot.diameter / 2}
+						r={badgeRadius}
 					/>
+				) : null}
+				{state === "local" ? (
+					<g data-slot="space-avatar-local">
+						{disc({ fill: LOCAL_BADGE_FILL })}
+						{glyph(LAPTOP_GLYPH, mark.laptop)}
+					</g>
+				) : null}
+				{state === "offline" ? (
+					<g data-slot="space-avatar-offline">
+						{GLAZE_THEMES.map((theme) => (
+							<g className={THEME_LAYER[theme]} key={theme}>
+								{disc({ fill: OFFLINE_BADGE_FILL[theme] })}
+							</g>
+						))}
+						{mark.cross ? glyph(CROSS_GLYPH, mark.cross) : null}
+					</g>
 				) : null}
 			</svg>
 		</span>

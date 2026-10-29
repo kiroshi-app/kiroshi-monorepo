@@ -144,6 +144,7 @@ const FocusedSpacePage = ({
 			>
 				<SpaceAvatar
 					colour={value.colour}
+					name={value.name}
 					size={48}
 					spaceId={spaceId}
 					state={avatarStateOf(space, host)}
