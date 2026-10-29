@@ -25,7 +25,6 @@ const hostedMarksOf = (
 			.map((spaceId) => [spaceId, hostedHostOf(hostingBySpaceId[spaceId])]),
 	)
 
-// TODO: OPE-1523 hands these marks to the reworked SpaceAvatar state prop
 export const spaceHostMarksOf = ({
 	sharedBySpaceId,
 	hostingBySpaceId,
