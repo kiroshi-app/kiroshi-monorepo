@@ -195,7 +195,6 @@ export const useSlidingLift = <Landing = never>({
 		geometry.current = container
 			? measureSlide(container, axis, slot, zones, id, press)
 			: null
-		return geometry.current
 	}
 
 	const landingAt = (x: number, y: number) =>
