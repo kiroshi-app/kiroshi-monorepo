@@ -1,3 +1,5 @@
+import { i18n } from "@workspace/ui/lib/i18n"
+
 const NOT_RUNNING = "notRunning"
 
 const NO_REASON = "the agent gave no reason"
@@ -15,7 +17,9 @@ const SENTENCE_OF: Record<string, string> = {
 	startupTimeout: "the agent didn’t start in time",
 	crashed: "the agent stopped",
 	unknownSpace: "the roster is in no space",
-	unknownBot: "the companion isn’t on this machine",
+	get unknownBot() {
+		return i18n.t("chat:onboarding.arrival.unknownCompanion")
+	},
 }
 
 export type ConnectFailure =
