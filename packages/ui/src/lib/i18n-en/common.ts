@@ -137,7 +137,7 @@ const common = {
 	claudeImport: {
 		listLabel: "Your Claude Code setup",
 		sections: {
-			companions: "Companions",
+			companions: "Agents",
 			instructionsAndSkills: "Instructions and skills",
 		},
 		select: {
@@ -156,8 +156,8 @@ const common = {
 			import: "Import",
 			importItems_one: "Import {{count}} item",
 			importItems_other: "Import {{count}} items",
-			importCompanions_one: "Import {{count}} companion",
-			importCompanions_other: "Import {{count}} companions",
+			importCompanions_one: "Import {{count}} agent",
+			importCompanions_other: "Import {{count}} agents",
 			skip: "Skip for now",
 		},
 		fromSettings: {

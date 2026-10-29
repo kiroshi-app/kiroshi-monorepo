@@ -140,7 +140,7 @@ const common = {
 	claudeImport: {
 		listLabel: "Votre configuration Claude Code",
 		sections: {
-			companions: "Compagnons",
+			companions: "Agents",
 			instructionsAndSkills: "Instructions et compétences",
 		},
 		select: {
@@ -160,9 +160,9 @@ const common = {
 			importItems_one: "Importer {{count}} élément",
 			importItems_many: "Importer {{count}} éléments",
 			importItems_other: "Importer {{count}} éléments",
-			importCompanions_one: "Importer {{count}} compagnon",
-			importCompanions_many: "Importer {{count}} compagnons",
-			importCompanions_other: "Importer {{count}} compagnons",
+			importCompanions_one: "Importer {{count}} agent",
+			importCompanions_many: "Importer {{count}} agents",
+			importCompanions_other: "Importer {{count}} agents",
 			skip: "Passer pour l’instant",
 		},
 		fromSettings: {

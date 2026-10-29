@@ -164,7 +164,7 @@ const DONE: Artboard = {
 	},
 }
 
-const ONLY_COMPANIONS: Artboard = {
+const ONLY_AGENTS: Artboard = {
 	...LIST,
 	sections: [companionsOf([ATLAS, WREN])],
 	primary: {
@@ -352,7 +352,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"Import from Claude Code: what Kiroshi found in ~/.claude on the reader's computer, the companions in one card and the CLAUDE.md instructions with the skills in another, every row checked by default. Four steps: `select` with a checkbox per row, `importing` with a status icon per row, `done` with or without the rows and their final status, and `unreadable` when the folder could not be opened. Copy comes in as props, from the `common:claudeImport` catalogue. The primary action is disabled while importing and while nothing is checked. A list taller than the window scrolls alone, the actions stay in view. Measured against the Paper file `Kiroshi, Onboarding v2`, artboards 3.1 to 3.3 and C01 to C08, light and dark.",
+					"Import from Claude Code: what Kiroshi found in ~/.claude on the reader's computer, the agents in one card and the CLAUDE.md instructions with the skills in another, every row checked by default. Four steps: `select` with a checkbox per row, `importing` with a status icon per row, `done` with or without the rows and their final status, and `unreadable` when the folder could not be opened. Copy comes in as props, from the `common:claudeImport` catalogue. The primary action is disabled while importing and while nothing is checked. A list taller than the window scrolls alone, the actions stay in view. Measured against the Paper file `Kiroshi, Onboarding v2`, artboards 3.1 to 3.3 and C01 to C08, light and dark.",
 			},
 		},
 	},
@@ -362,7 +362,7 @@ export const List = meta.story({
 	name: "3.1 List",
 	args: LIST,
 	parameters: describe(
-		"The nominal onboarding case: two companions, CLAUDE.md and four skills, all checked. Check that both cards share the 560 px column, the checkboxes wear the Space accent, and that unchecking a row hands its id to `onToggle`.",
+		"The nominal onboarding case: two agents, CLAUDE.md and four skills, all checked. Check that both cards share the 560 px column, the checkboxes wear the Space accent, and that unchecking a row hands its id to `onToggle`.",
 	),
 	play: async ({ canvasElement, args }) => {
 		const canvas = within(canvasElement)
@@ -449,7 +449,7 @@ export const Done = meta.story({
 	name: "3.3 Done",
 	args: DONE,
 	parameters: describe(
-		"Everything the reader picked came in, every picked row kept with its done mark. Check that the summary names the companions and counts the skills from the rows shown. Pick `PartlyFailed` when a row did not come in.",
+		"Everything the reader picked came in, every picked row kept with its done mark. Check that the summary names the agents and counts the skills from the rows shown. Pick `PartlyFailed` when a row did not come in.",
 	),
 	play: async ({ canvasElement }) => {
 		const canvas = within(canvasElement)
@@ -477,7 +477,7 @@ export const DoneOneCompanion = meta.story({
 	tags: ["test-only"],
 	args: DONE_ONE_COMPANION,
 	parameters: describe(
-		"Proves the done summary turns singular when one companion came in.",
+		"Proves the done summary turns singular when one agent came in.",
 	),
 	play: async ({ canvasElement }) => {
 		await expect(
@@ -503,26 +503,32 @@ export const DoneWithoutInstructions = meta.story({
 	},
 })
 
-export const OnlyCompanions = meta.story({
-	name: "C01 Only companions",
-	args: ONLY_COMPANIONS,
+export const OnlyAgents = meta.story({
+	name: "C01 Only agents",
+	args: ONLY_AGENTS,
 	parameters: describe(
-		"~/.claude holds companions and nothing else. Check that the single card centres with the whole column in the window.",
+		"~/.claude holds agents and nothing else. Check that the single card centres with the whole column in the window.",
 	),
+	play: async ({ canvasElement }) => {
+		await expect(
+			within(canvasElement).getByRole("heading", { name: "Agents" }),
+		).toBeVisible()
+		await expect(primaryIn(canvasElement, "Import 2 agents")).toBeVisible()
+	},
 })
 
-export const OnlyCompanionsDark = meta.story({
-	name: "C01 Only companions, dark",
-	args: ONLY_COMPANIONS,
+export const OnlyAgentsDark = meta.story({
+	name: "C01 Only agents, dark",
+	args: ONLY_AGENTS,
 	globals: DARK,
-	parameters: describe("C01 Only companions on the dark scheme."),
+	parameters: describe("C01 Only agents on the dark scheme."),
 })
 
 export const OnlyInstructionsAndSkills = meta.story({
 	name: "C02 Only instructions and skills",
 	args: ONLY_FILES,
 	parameters: describe(
-		"~/.claude holds a CLAUDE.md and skills but no companion. Check that CLAUDE.md is set in Geist Mono and the skills carry the sparkles icon.",
+		"~/.claude holds a CLAUDE.md and skills but no agent. Check that CLAUDE.md is set in Geist Mono and the skills carry the sparkles icon.",
 	),
 })
 
@@ -537,7 +543,7 @@ export const LongListScrolled = meta.story({
 	name: "C03 Long list scrolled",
 	args: LONG_LIST,
 	parameters: describe(
-		"Ten companions and more, taller than the window. Check that the list alone scrolls under a 40 px fade into the page background, and that Import 15 items and Skip for now stay in view.",
+		"Ten agents and more, taller than the window. Check that the list alone scrolls under a 40 px fade into the page background, and that Import 15 items and Skip for now stay in view.",
 	),
 	play: async ({ canvasElement }) => {
 		await expect(
@@ -602,8 +608,11 @@ export const NameAlreadyTaken = meta.story({
 	name: "C05 Name already taken",
 	args: NAME_ALREADY_TAKEN,
 	parameters: describe(
-		"Two companions share a name with something already in Kiroshi. Check that each renamed row says what it comes in as, and that its detail wraps inside the card.",
+		"Two agents share a name with something already in Kiroshi. Check that each renamed row says what it comes in as, and that its detail wraps inside the card.",
 	),
+	play: async ({ canvasElement }) => {
+		await expect(primaryIn(canvasElement, "Import 3 agents")).toBeVisible()
+	},
 })
 
 export const NameAlreadyTakenDark = meta.story({
@@ -673,7 +682,7 @@ export const PartlyFailedCompanion = meta.story({
 	tags: ["test-only"],
 	args: partlyFailedOn(WREN),
 	parameters: describe(
-		"Proves a failed companion is named in the body and the retry link without the word skill.",
+		"Proves a failed agent is named in the body and the retry link without the word skill.",
 	),
 	play: async ({ canvasElement }) => {
 		const canvas = within(canvasElement)

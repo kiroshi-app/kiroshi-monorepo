@@ -676,8 +676,8 @@ feedback-importscreen--name-already-taken
 feedback-importscreen--name-already-taken-dark
 feedback-importscreen--nothing-selected
 feedback-importscreen--nothing-selected-dark
-feedback-importscreen--only-companions
-feedback-importscreen--only-companions-dark
+feedback-importscreen--only-agents
+feedback-importscreen--only-agents-dark
 feedback-importscreen--only-instructions-and-skills
 feedback-importscreen--only-instructions-and-skills-dark
 feedback-importscreen--partly-failed
