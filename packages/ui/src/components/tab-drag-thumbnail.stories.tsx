@@ -170,3 +170,135 @@ export const T31NotAllowedDark = meta.story({
 	},
 	play: playNotAllowed,
 })
+
+const playNoCompanion = async ({ canvasElement }: ThumbnailPlayContext) => {
+	const header = slotIn(thumbnailIn(canvasElement), "tab-drag-thumbnail-header")
+	await expect(header.children).toHaveLength(2)
+	await expect(header).toHaveTextContent(/^Release notes for 2\.4$/)
+}
+
+export const T14NoCompanion = meta.story({
+	args: { companionName: "", composerPlaceholder: "Message" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"1.4, light: a tab with no agent behind it. Check the header ends on the title, with no dot and no agent name after it.",
+			},
+		},
+	},
+	play: playNoCompanion,
+})
+
+export const T14NoCompanionDark = meta.story({
+	args: { companionName: "", composerPlaceholder: "Message" },
+	globals: DARK,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"1.4, dark: the header with no agent. Pick `T14NoCompanion` for the light theme.",
+			},
+		},
+	},
+	play: playNoCompanion,
+})
+
+const UNBREAKABLE_RUN_ID =
+	"9f2c4e7a1b3d5f6e8a0c2e4f6a8b0d2c4e6f8a0b2d4f6a8c0e2a4c6e8f0a2b4d6f89f2c4e7a1b3d5f6e8a0c2e4f6a8b0d2c4e6f8"
+
+const LONG_MESSAGES: TabDragThumbnailMessage[] = [
+	{
+		id: "ask",
+		author: "user",
+		text: "Can you draft the release notes for 2.4 from the merged pull requests? Group them by area and keep the internal refactors out.",
+	},
+	{
+		id: "draft",
+		author: "companion",
+		text: "Here's a first pass. Sync: the initial sync of a large Space now finishes in a third of the time, and resuming after sleep no longer replays the whole history. Fixes: the sidebar keeps its width after a restart, pasted images keep their names, and a stalled upload now shows its retry. Settings: a new switch mutes notifications while a call is running.",
+	},
+	{
+		id: "run",
+		author: "user",
+		text: `The build for the notes failed, run ${UNBREAKABLE_RUN_ID}`,
+	},
+	{
+		id: "reply",
+		author: "companion",
+		text: "That run stopped on the changelog check: two pull requests had no release label, so the generator refused to place them. I labelled both as fixes and started the run again. It passed, and the notes now list all eleven changes. Want me to tighten the wording before you share it?",
+	},
+]
+
+const playLongMessage = async ({ canvasElement }: ThumbnailPlayContext) => {
+	const card = thumbnailIn(canvasElement)
+	const header = slotIn(card, "tab-drag-thumbnail-header")
+	const body = slotIn(card, "tab-drag-thumbnail-body")
+	const composer = slotIn(card, "tab-drag-thumbnail-composer")
+	const messages = slotsIn(card, "tab-drag-thumbnail-message")
+	const cardBox = card.getBoundingClientRect()
+	const headerBox = header.getBoundingClientRect()
+	const bodyBox = body.getBoundingClientRect()
+	const composerBox = composer.getBoundingClientRect()
+	const firstBox = messages[0].getBoundingClientRect()
+	const latestBox = messages[messages.length - 1].getBoundingClientRect()
+
+	await expect(getComputedStyle(body).overflow).toBe("hidden")
+	await expect(firstBox.top).toBeLessThan(bodyBox.top)
+	await expect(bodyBox.top).toBeGreaterThanOrEqual(headerBox.bottom)
+	for (const x of [0.1, 0.5, 0.9]) {
+		const hit = document.elementFromPoint(
+			headerBox.left + headerBox.width * x,
+			headerBox.top + headerBox.height / 2,
+		)
+		await expect(header.contains(hit)).toBe(true)
+	}
+	await expect(Math.round(bodyBox.bottom - composerBox.bottom)).toBe(18)
+	await expect(latestBox.top).toBeGreaterThanOrEqual(bodyBox.top)
+	await expect(latestBox.bottom).toBeLessThanOrEqual(composerBox.top)
+	await expect(messages[messages.length - 1]).toHaveTextContent(
+		/tighten the wording/,
+	)
+
+	const unbreakable = messages[2]
+	await expect(unbreakable).toHaveTextContent(UNBREAKABLE_RUN_ID)
+	await expect(unbreakable.getBoundingClientRect().width).toBeLessThanOrEqual(
+		290,
+	)
+	await expect(unbreakable.getBoundingClientRect().height).toBeGreaterThan(
+		3 * 14,
+	)
+	for (const message of messages) {
+		const box = message.getBoundingClientRect()
+		await expect(message.scrollWidth).toBeLessThanOrEqual(message.clientWidth)
+		await expect(box.left).toBeGreaterThanOrEqual(cardBox.left)
+		await expect(box.right).toBeLessThanOrEqual(cardBox.right)
+	}
+}
+
+export const T14LongMessage = meta.story({
+	args: { messages: LONG_MESSAGES },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"1.4, light: a Conversation taller than the mini window, with a run id that has no break. Check the oldest message cut at the top of the body, the header untouched, the latest reply and the composer anchored at the bottom, and the run id wrapped inside its bubble.",
+			},
+		},
+	},
+	play: playLongMessage,
+})
+
+export const T14LongMessageDark = meta.story({
+	args: { messages: LONG_MESSAGES },
+	globals: DARK,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"1.4, dark: the overflowing Conversation. Pick `T14LongMessage` for the light theme.",
+			},
+		},
+	},
+	play: playLongMessage,
+})
