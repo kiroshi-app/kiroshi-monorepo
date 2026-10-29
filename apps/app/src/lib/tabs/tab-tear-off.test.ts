@@ -39,7 +39,7 @@ const answerEveryGhostCommand = (answer: unknown) => {
 
 const sessionWithMoves = () => {
 	const moves = {
-		moveUnghosted: vi.fn(),
+		moveUnghosted: vi.fn().mockResolvedValue(undefined),
 		moveTornOff: vi.fn().mockResolvedValue(undefined),
 		raiseMoveFailure: vi.fn(),
 	}
@@ -264,6 +264,24 @@ describe("a torn-off tab released outside any strip", () => {
 		expect(moves.moveTornOff).not.toHaveBeenCalled()
 	})
 
+	it("hides the shown ghost before moving another tab dropped without a ghost", async () => {
+		answerEveryGhostCommand(SUPPORTED)
+		const { moves, session } = sessionWithMoves()
+		const other = { ...at(500, 300), tabId: "other" }
+
+		session.start(at(10, 10), drawGhost)
+		session.drop(other)
+
+		await vi.waitFor(() =>
+			expect(moves.moveUnghosted).toHaveBeenCalledExactlyOnceWith(other),
+		)
+		expect(ghost.dragGhostHide).toHaveBeenCalledOnce()
+		expect(ghost.dragGhostHide.mock.invocationCallOrder[0]).toBeLessThan(
+			moves.moveUnghosted.mock.invocationCallOrder[0] ?? 0,
+		)
+		expect(moves.moveTornOff).not.toHaveBeenCalled()
+	})
+
 	it("falls back to the move without a ghost when the drag never crossed the threshold", () => {
 		const { moves, session } = sessionWithMoves()
 
@@ -305,6 +323,18 @@ describe("a tab torn off after a tear-off whose move failed", () => {
 		)
 		expect(ghost.dragGhostHide).toHaveBeenCalledOnce()
 		expect(moves.raiseMoveFailure).toHaveBeenCalledOnce()
+	})
+
+	it("raises one notice when the move without a ghost rejects", async () => {
+		const failure = new Error("window lost")
+		const { moves, session } = sessionWithMoves()
+		moves.moveUnghosted.mockRejectedValueOnce(failure)
+
+		session.drop(at(500, 300))
+
+		await vi.waitFor(() =>
+			expect(moves.raiseMoveFailure).toHaveBeenCalledExactlyOnceWith(failure),
+		)
 	})
 
 	it("raises one notice when opening the torn-off window rejects", async () => {

@@ -516,8 +516,11 @@ export const createWorkspaceTabs = (
 	const moveToWindowAt = (id: string, position: ScreenPosition | null) =>
 		moveToWindowBy(id, (moved) => openWindowOn(currentHrefOf(moved), position))
 
+	const moveUnghosted = (torn: TabTearOff) =>
+		moveToWindowAt(torn.tabId, pointOf(torn))
+
 	const tearOff = (torn: TabTearOff): true => {
-		void moveToWindowAt(torn.tabId, pointOf(torn))
+		void moveUnghosted(torn)
 		return true
 	}
 
@@ -592,7 +595,7 @@ export const createWorkspaceTabs = (
 		tearOff,
 		moveTornOff,
 		tearOffSession: createTabTearOff({
-			moveUnghosted: tearOff,
+			moveUnghosted,
 			moveTornOff,
 			raiseMoveFailure: raiseTornOffFailure,
 		}),
