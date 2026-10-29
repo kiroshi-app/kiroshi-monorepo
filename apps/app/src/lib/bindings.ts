@@ -34,6 +34,8 @@ export const commands = {
 } | null>("application_runnable", { config }),
 	chatStoreAttachments: (conversationId: string, attachments: SubmittedAttachment[]) => typedError<string[], AttachmentStoreError>(__TAURI_INVOKE("chat_store_attachments", { conversationId, attachments })),
 	badgeSet: (count: number) => typedError<null, string>(__TAURI_INVOKE("badge_set", { count })),
+	claudeImportInventory: () => typedError<ClaudeInventory, TranscriptStoreError>(__TAURI_INVOKE("claude_import_inventory")),
+	claudeImportRun: (selection: string[], spaceId: string) => typedError<ClaudeImportOutcome[], TranscriptStoreError>(__TAURI_INVOKE("claude_import_run", { selection, spaceId })),
 	agentCheck: (scope: {
 	conversationId: string,
 	botId: string,
@@ -276,6 +278,8 @@ export const ACCOUNT_CHANGED_EVENT = "account://changed" as const;
 export const ARCHIVE_EXTENSION = "kiroshi" as const;
 
 export const ARCHIVE_FILTER_NAME = "Kiroshi space" as const;
+
+export const CLAUDE_IMPORT_PROGRESS_EVENT = "claude-import://progress" as const;
 
 export const DEVICE_APPROVAL_CHANGED_EVENT = "device://approval-changed" as const;
 
@@ -713,6 +717,31 @@ export type CheckReport_Serialize = {
 	authenticated: boolean,
 	authMethod?: string | null,
 	error: TransportError | null,
+};
+
+export type ClaudeImportOutcome = {
+	key: string,
+	result: ClaudeImportResult,
+};
+
+export type ClaudeImportProgress = {
+	key: string,
+	result: ClaudeImportResult,
+	done: number,
+	total: number,
+};
+
+export type ClaudeImportResult = { kind: "imported"; id: string; name: string } | { kind: "skipped"; reason: ClaudeImportSkip } | { kind: "failed"; cause: string };
+
+export type ClaudeImportSkip = "alreadyImported";
+
+export type ClaudeInventory = { kind: "absent" } | { kind: "refused"; cause: string } | { kind: "found"; agents: ClaudeItem[]; skills: ClaudeItem[]; claudeMd: ClaudeItem | null };
+
+export type ClaudeItem = {
+	key: string,
+	name: string,
+	description: string,
+	alreadyImported: boolean,
 };
 
 export type ColorScheme = "system" | "light" | "dark";

@@ -6,8 +6,8 @@ use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 use tokio::sync::broadcast;
 
 use crate::{
-	account, agent, applications, companions, conversations, devices, hosting, invitations,
-	joined_spaces, menu_contract, missions, notifications, routines, spaces, updates,
+	account, agent, applications, claude_import, companions, conversations, devices, hosting,
+	invitations, joined_spaces, menu_contract, missions, notifications, routines, spaces, updates,
 	window_controls,
 };
 
@@ -69,6 +69,8 @@ declared! {
 	APPLICATION_INSTALLED: applications::contract::ApplicationInstalled =
 		applications::contract::INSTALLED_EVENT,
 	APPLICATION_DIRECTORY_REFRESHED: () = applications::contract::DIRECTORY_REFRESHED_EVENT,
+	CLAUDE_IMPORT_PROGRESS: claude_import::contract::ClaudeImportProgress =
+		claude_import::contract::PROGRESS_EVENT,
 	COMPANION_CREATED: companions::contract::CompanionCreated = companions::contract::CREATED_EVENT,
 	COMPANION_UPDATED: companions::contract::CompanionUpdated = companions::contract::UPDATED_EVENT,
 	COMPANION_DELETED: companions::contract::CompanionDeleted = companions::contract::DELETED_EVENT,

@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use std::sync::LazyLock;
 
@@ -31,6 +31,7 @@ const ONBOARDING_IMPORT_SEEN_KEY: &str = "user.onboarding_import_seen";
 
 const FIRST_COMPANION_SEEDED_KEY: &str = "app.first_companion_seeded";
 const LAST_WINDOW_RANK_KEY: &str = "app.last_window_rank";
+const CLAUDE_IMPORTED_KEY: &str = "app.claude_imported";
 
 const UNREADABLE_WINDOW_RANK: &str = "the last window rank does not read as a count";
 
@@ -315,6 +316,24 @@ impl UserRepository {
 			.await
 	}
 
+	pub async fn claude_imported(&self) -> Result<BTreeSet<String>, DatabaseError> {
+		self.access.call(claude_imported_in).await
+	}
+
+	pub async fn mark_claude_imported(&self, key: String) -> Result<(), DatabaseError> {
+		self.access
+			.call_mut(move |connection| {
+				let transaction = write_transaction(connection)?;
+				let mut imported = claude_imported_in(&transaction)?;
+				imported.insert(key);
+				let stored = serde_json::to_string(&imported).map_err(unreadable_mark)?;
+				SETTINGS.write(&transaction, None, CLAUDE_IMPORTED_KEY, &stored)?;
+				transaction.commit()?;
+				Ok(())
+			})
+			.await
+	}
+
 	async fn write_then_read<F>(&self, write: F) -> Result<Preferences, DatabaseError>
 	where
 		F: FnOnce(&Transaction<'_>) -> Result<(), DatabaseError> + Send + 'static,
@@ -390,6 +409,17 @@ fn switch_on_in(connection: &Connection, key: &str) -> Result<bool, DatabaseErro
 
 fn setting_in(connection: &Connection, key: &str) -> Result<Option<String>, DatabaseError> {
 	SETTINGS.read(connection, None, key)
+}
+
+fn claude_imported_in(connection: &Connection) -> Result<BTreeSet<String>, DatabaseError> {
+	let Some(stored) = setting_in(connection, CLAUDE_IMPORTED_KEY)? else {
+		return Ok(BTreeSet::new());
+	};
+	serde_json::from_str(&stored).map_err(unreadable_mark)
+}
+
+fn unreadable_mark(failure: serde_json::Error) -> DatabaseError {
+	rusqlite::Error::FromSqlConversionFailure(0, Type::Text, failure.into()).into()
 }
 
 fn rank_after(last: Option<String>) -> Result<u64, DatabaseError> {
@@ -1137,5 +1167,40 @@ mod tests {
 
 		assert!(database.user().hand_out_window_rank().await.is_err());
 		assert_eq!(setting(&database, LAST_WINDOW_RANK_KEY).await.as_deref(), Some("many"));
+	}
+
+	#[tokio::test]
+	async fn the_claude_import_mark_gathers_every_key_once() {
+		let dir = temp_dir();
+		let database = open(&dir);
+
+		assert_eq!(database.user().claude_imported().await.expect("the mark"), BTreeSet::new());
+		for key in ["agents/one.md", "CLAUDE.md", "agents/one.md"] {
+			database.user().mark_claude_imported(key.to_owned()).await.expect("the key is kept");
+		}
+
+		assert_eq!(
+			database.user().claude_imported().await.expect("the mark"),
+			BTreeSet::from(["CLAUDE.md".to_owned(), "agents/one.md".to_owned()])
+		);
+	}
+
+	#[tokio::test]
+	async fn a_claude_import_mark_that_does_not_read_fails_and_stays() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		database
+			.call_mut(|connection| {
+				let transaction = write_transaction(connection)?;
+				SETTINGS.write(&transaction, None, CLAUDE_IMPORTED_KEY, "{not json")?;
+				transaction.commit()?;
+				Ok(())
+			})
+			.await
+			.expect("the planted value");
+
+		assert!(database.user().claude_imported().await.is_err());
+		assert!(database.user().mark_claude_imported("CLAUDE.md".to_owned()).await.is_err());
+		assert_eq!(setting(&database, CLAUDE_IMPORTED_KEY).await.as_deref(), Some("{not json"));
 	}
 }

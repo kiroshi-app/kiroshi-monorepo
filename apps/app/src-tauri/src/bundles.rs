@@ -315,6 +315,24 @@ fn settled(root: &Path, bot: &Bot, held: PathBuf) -> PathBuf {
 	}
 }
 
+pub struct Fronted {
+	pub name: Option<String>,
+	pub description: String,
+	pub body: String,
+}
+
+pub fn fronted(text: &str) -> std::io::Result<Fronted> {
+	let parts = checked_front(text)?;
+	let keyed = front::mapped_lines(&parts.front);
+	let text_at =
+		|key: &str| keyed.get(key).map(front::as_text).map(|value| value.trim().to_owned());
+	Ok(Fronted {
+		name: text_at(NAME_KEY).filter(|name| !name.is_empty()),
+		description: text_at(DESCRIPTION_KEY).unwrap_or_default(),
+		body: parts.body.trim().to_owned(),
+	})
+}
+
 pub fn slug(name: &str) -> String {
 	let mut slug = String::new();
 	for character in name.chars() {
