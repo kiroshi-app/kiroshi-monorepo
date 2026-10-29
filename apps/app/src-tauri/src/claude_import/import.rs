@@ -133,7 +133,7 @@ impl<R: Runtime> Importer<'_, R> {
 			.map(|bot| bot.name)
 			.collect();
 		let draft = BotDraft {
-			name: unworn(&wanted, &worn),
+			name: unworn_name(&wanted, &worn),
 			job: String::new(),
 			description: fronted.body,
 		};
@@ -170,7 +170,7 @@ impl<R: Runtime> Importer<'_, R> {
 	}
 }
 
-fn unworn(wanted: &str, worn: &[String]) -> String {
+fn unworn_name(wanted: &str, worn: &[String]) -> String {
 	let is_worn = |name: &str| worn.iter().any(|held| held.to_lowercase() == name.to_lowercase());
 	if !is_worn(wanted) {
 		return wanted.to_owned();
