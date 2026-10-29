@@ -137,14 +137,14 @@ const common = {
 	claudeImport: {
 		listLabel: "Your Claude Code setup",
 		sections: {
-			companions: "Companions",
+			companions: "Agents",
 			instructionsAndSkills: "Instructions and skills",
 		},
 		select: {
 			title: "Bring in your Claude Code setup",
-			body: "Found in ~/.claude on your computer. Everything is selected; uncheck what you'd rather leave behind.",
+			body: "Found in ~/.claude on your computer. Everything is selected; uncheck what you’d rather leave behind.",
 			bodyMany:
-				"Found {{count}} companions and more in ~/.claude. Everything is selected; uncheck what you'd rather leave behind.",
+				"Found {{count}} agents and more in ~/.claude. Everything is selected; uncheck what you’d rather leave behind.",
 			nothingSelected:
 				"Nothing is selected. Check what you want to bring in, or skip for now.",
 			namesTaken: {
@@ -156,13 +156,13 @@ const common = {
 			import: "Import",
 			importItems_one: "Import {{count}} item",
 			importItems_other: "Import {{count}} items",
-			importCompanions_one: "Import {{count}} companion",
-			importCompanions_other: "Import {{count}} companions",
+			importCompanions_one: "Import {{count}} agent",
+			importCompanions_other: "Import {{count}} agents",
 			skip: "Skip for now",
 		},
 		fromSettings: {
 			title: "Import from Claude Code",
-			body: "Found in ~/.claude. What's already in Kiroshi stays as it is; only what's new is selected.",
+			body: "Found in ~/.claude. What’s already in Kiroshi stays as it is; only what’s new is selected.",
 			cancel: "Cancel",
 		},
 		importing: {
@@ -172,29 +172,43 @@ const common = {
 		},
 		done: {
 			title: "Your setup is in",
-			body_one:
-				"{{companions}} are ready, with your CLAUDE.md and {{count}} skill.",
-			body_other:
-				"{{companions}} are ready, with your CLAUDE.md and {{count}} skills.",
+			companions_one: "{{companions}} is ready.",
+			companions_other: "{{companions}} are ready.",
+			companionsWith_one: "{{companions}} is ready, with {{extras}}.",
+			companionsWith_other: "{{companions}} are ready, with {{extras}}.",
+			instructions: "your CLAUDE.md",
+			instructionsAndSkills_one:
+				"Your CLAUDE.md and {{count}} skill are ready.",
+			instructionsAndSkills_other:
+				"Your CLAUDE.md and {{count}} skills are ready.",
+			onlyInstructions: "Your CLAUDE.md is ready.",
+			onlySkills_one: "{{count}} skill is ready.",
+			onlySkills_other: "{{count}} skills are ready.",
 			continue: "Continue",
 		},
 		partlyFailed: {
 			title: "Most of your setup is in",
-			body: "The {{name}} skill didn't come in. Try it again, or add it later from Settings.",
+			body: "The {{name}} skill didn’t come in. Try it again, or add it later from Settings.",
+			bodyNamed:
+				"{{name}} didn’t come in. Try it again, or add it later from Settings.",
 			retry: "Try {{name}} again",
 		},
 		unreadable: {
-			title: "Couldn't read ~/.claude",
-			body: "Kiroshi wasn't allowed to open that folder, so nothing came in. Let your account read it, then try again.",
+			title: "Couldn’t read ~/.claude",
+			body: "Kiroshi wasn’t allowed to open that folder, so nothing came in. Let your account read it, then try again.",
 			retry: "Try again",
 		},
 		row: {
-			inKiroshi: "Already in Kiroshi",
+			inKiroshi: "Already in Kiroshi.",
+			skills_one: "{{count}} skill",
+			skills_other: "{{count}} skills",
+			newSkills_one: "{{count}} new skill",
+			newSkills_other: "{{count}} new skills",
 			nameTaken:
 				"{{name}} already lives in Kiroshi, so this one comes in as {{renamed}}. Rename it after.",
 			companionNameTaken:
 				"You already have a companion named {{name}}, so this one comes in as {{renamed}}.",
-			unparsable: "Couldn't bring it in: its {{file}} doesn't parse.",
+			unparsable: "Couldn’t bring it in: its {{file}} doesn’t parse.",
 			status: {
 				done: "Done",
 				pending: "In progress",

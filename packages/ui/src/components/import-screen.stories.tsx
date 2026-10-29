@@ -27,7 +27,7 @@ const ATLAS: ImportItem = {
 	id: "atlas",
 	kind: "companion",
 	title: "Atlas",
-	detail: "Reviews pull requests and keeps the tests green",
+	detail: "Reviews pull requests and flags risky changes.",
 	checked: true,
 }
 
@@ -35,7 +35,7 @@ const WREN: ImportItem = {
 	id: "wren",
 	kind: "companion",
 	title: "Wren",
-	detail: "Writes and tidies the docs",
+	detail: "Writes release notes from merged work.",
 	hue: 150,
 	checked: true,
 }
@@ -44,50 +44,38 @@ const CLAUDE_MD: ImportItem = {
 	id: "claude-md",
 	kind: "instructions",
 	title: "CLAUDE.md",
-	detail: "Your instructions for every project",
+	detail:
+		"Your standing instructions, 42 lines. Kept as yours, for every companion.",
 	checked: true,
 }
 
-const SKILLS: ImportItem[] = [
-	{
-		id: "changelog",
+const skillsOf = (names: string[]): ImportItem[] =>
+	names.map((name) => ({
+		id: name,
 		kind: "skill",
-		title: "changelog",
-		detail: "Writes the changelog from merged pull requests",
+		title: name,
+		detail: name,
 		checked: true,
-	},
-	{
-		id: "release-notes",
-		kind: "skill",
-		title: "release-notes",
-		detail: "Drafts the notes for the next release",
-		checked: true,
-	},
-	{
-		id: "triage",
-		kind: "skill",
-		title: "triage",
-		detail: "Sorts new issues by area and urgency",
-		checked: true,
-	},
-	{
-		id: "review",
-		kind: "skill",
-		title: "review",
-		detail: "Reads a diff and flags what breaks",
-		checked: true,
-	},
-]
+	}))
+
+const SKILLS = skillsOf([
+	"commit-style",
+	"test-first",
+	"review-checklist",
+	"changelog",
+])
+
+const NEW_SKILLS = skillsOf(["pr-template", "release-checklist"])
 
 const MORE_COMPANIONS: ImportItem[] = [
-	["orion", "Orion", "Keeps the release branch green", 30],
-	["juno", "Juno", "Answers questions about the codebase", 280],
-	["pike", "Pike", "Plans the work for the week", 200],
-	["sable", "Sable", "Watches the error logs", 340],
-	["tamsin", "Tamsin", "Migrates the database", 60],
-	["vale", "Vale", "Reviews the design tokens", 100],
-	["quill", "Quill", "Writes the onboarding copy", 240],
-	["rook", "Rook", "Runs the nightly benchmarks", 180],
+	["bramble", "Bramble", "Triages new issues every morning.", 30],
+	["cedar", "Cedar", "Keeps the API reference in sync.", 280],
+	["dune", "Dune", "Watches the deploys and pings on failures.", 200],
+	["fern", "Fern", "Drafts the weekly team update.", 340],
+	["harbor", "Harbor", "Answers support tickets from the queue.", 60],
+	["ivy", "Ivy", "Reviews copy before anything ships.", 100],
+	["kestrel", "Kestrel", "Tracks flaky tests and opens fixes.", 240],
+	["lumen", "Lumen", "Plans sprints from the roadmap.", 180],
 ].map(([id, title, detail, hue]) => ({
 	id: String(id),
 	kind: "companion" as const,
@@ -117,7 +105,7 @@ const withStatus = (
 const FILES = [CLAUDE_MD, ...SKILLS]
 
 const FAILED_CHANGELOG: ImportItem = {
-	...SKILLS[0],
+	...SKILLS[3],
 	detail: i18n.t("common:claudeImport.row.unparsable", { file: "SKILL.md" }),
 	status: "failed",
 }
@@ -176,7 +164,7 @@ const DONE: Artboard = {
 	},
 }
 
-const ONLY_COMPANIONS: Artboard = {
+const ONLY_AGENTS: Artboard = {
 	...LIST,
 	sections: [companionsOf([ATLAS, WREN])],
 	primary: {
@@ -268,8 +256,8 @@ const PARTLY_FAILED: Artboard = {
 		companionsOf(withStatus([ATLAS, WREN], () => "done")),
 		filesOf([
 			{ ...CLAUDE_MD, status: "done" },
+			...withStatus(SKILLS.slice(0, 3), () => "done"),
 			FAILED_CHANGELOG,
-			...withStatus(SKILLS.slice(1), () => "done"),
 		]),
 	],
 	primary: {
@@ -294,10 +282,7 @@ const AGAIN_FROM_SETTINGS: Artboard = {
 	onToggle: fn(),
 	sections: [
 		companionsOf(alreadyIn([ATLAS, WREN])),
-		filesOf([
-			...alreadyIn([CLAUDE_MD, ...SKILLS.slice(0, 2)]),
-			...SKILLS.slice(2),
-		]),
+		filesOf([...alreadyIn([CLAUDE_MD, ...SKILLS]), ...NEW_SKILLS]),
 	],
 	primary: {
 		label: i18n.t("common:claudeImport.select.importItems", { count: 2 }),
@@ -308,6 +293,42 @@ const AGAIN_FROM_SETTINGS: Artboard = {
 		onPress: fn(),
 	},
 }
+
+const DONE_ONE_COMPANION: Artboard = {
+	...DONE,
+	sections: [
+		companionsOf([{ ...ATLAS, status: "done" }]),
+		filesOf(withStatus(FILES, () => "done")),
+	],
+}
+
+const DONE_WITHOUT_INSTRUCTIONS: Artboard = {
+	...DONE,
+	sections: [
+		companionsOf(withStatus([ATLAS, WREN], () => "done")),
+		filesOf(withStatus(SKILLS, () => "done")),
+	],
+}
+
+const partlyFailedOn = (failed: ImportItem): Artboard => ({
+	...PARTLY_FAILED,
+	sections: [
+		companionsOf(
+			withStatus([ATLAS, WREN], (item) =>
+				item.id === failed.id ? "failed" : "done",
+			),
+		),
+		filesOf(
+			withStatus(FILES, (item) => (item.id === failed.id ? "failed" : "done")),
+		),
+	],
+	secondary: {
+		label: i18n.t("common:claudeImport.partlyFailed.retry", {
+			name: failed.title,
+		}),
+		onPress: fn(),
+	},
+})
 
 const describe = (story: string) => ({ docs: { description: { story } } })
 
@@ -331,7 +352,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"Import from Claude Code: what Kiroshi found in ~/.claude on the reader's computer, the companions in one card and the CLAUDE.md instructions with the skills in another, every row checked by default. Four steps: `select` with a checkbox per row, `importing` with a status icon per row, `done` with or without the rows and their final status, and `unreadable` when the folder could not be opened. Copy comes in as props, from the `common:claudeImport` catalogue. The primary action is disabled while importing and while nothing is checked. A list taller than the window scrolls alone, the actions stay in view. Measured against the Paper file `Kiroshi, Onboarding v2`, artboards 3.1 to 3.3 and C01 to C08, light and dark.",
+					"Import from Claude Code: what Kiroshi found in ~/.claude on the reader's computer, the agents in one card and the CLAUDE.md instructions with the skills in another, every row checked by default. Four steps: `select` with a checkbox per row, `importing` with a status icon per row, `done` with or without the rows and their final status, and `unreadable` when the folder could not be opened. Copy comes in as props, from the `common:claudeImport` catalogue. The primary action is disabled while importing and while nothing is checked. A list taller than the window scrolls alone, the actions stay in view. Measured against the Paper file `Kiroshi, Onboarding v2`, artboards 3.1 to 3.3 and C01 to C08, light and dark.",
 			},
 		},
 	},
@@ -341,7 +362,7 @@ export const List = meta.story({
 	name: "3.1 List",
 	args: LIST,
 	parameters: describe(
-		"The nominal onboarding case: two companions, CLAUDE.md and four skills, all checked. Check that both cards share the 560 px column, the checkboxes wear the Space accent, and that unchecking a row hands its id to `onToggle`.",
+		"The nominal onboarding case: two agents, CLAUDE.md and four skills, all checked. Check that both cards share the 560 px column, the checkboxes wear the Space accent, and that unchecking a row hands its id to `onToggle`.",
 	),
 	play: async ({ canvasElement, args }) => {
 		const canvas = within(canvasElement)
@@ -377,19 +398,15 @@ export const Importing = meta.story({
 	name: "3.2 Importing",
 	args: IMPORTING,
 	parameters: describe(
-		"The import is running, three of seven done. Check that no checkbox is left, that each row carries a done or in progress icon with its label, and that the primary action is disabled with no Skip link.",
+		"The import is running, three of seven done, the four skills still in progress on their one row. Check that no checkbox is left, that each row carries a done or in progress icon with its label, that the body counts each skill, and that the primary action is disabled with no Skip link.",
 	),
 	play: async ({ canvasElement, args }) => {
 		const canvas = within(canvasElement)
 		await expect(canvas.queryByRole("checkbox")).toBeNull()
 		await expect(canvas.getAllByRole("img", { name: "Done" })).toHaveLength(3)
+		await expect(canvas.getByRole("img", { name: "In progress" })).toBeVisible()
 		await expect(
-			canvas.getAllByRole("img", { name: "In progress" }),
-		).toHaveLength(4)
-		await expect(
-			canvas.getByText(
-				i18n.t("common:claudeImport.importing.body", { done: 3, count: 7 }),
-			),
+			canvas.getByText("3 of 7 done. This takes a few seconds."),
 		).toBeVisible()
 		const primary = primaryIn(
 			canvasElement,
@@ -412,16 +429,14 @@ export const ImportingPickedOnly = meta.story({
 	tags: ["test-only"],
 	args: IMPORTING_PICKED_ONLY,
 	parameters: describe(
-		"Proves the importing list keeps only what the reader picked: Wren was unchecked and CLAUDE.md is already in Kiroshi, both carrying a status the host never should have sent. Check that neither row nor its status icon renders, and that the body counts the five rows left.",
+		"Proves the importing list keeps only what the reader picked: Wren was unchecked and CLAUDE.md is already in Kiroshi, both carrying a status the host never should have sent. Check that neither row nor its status icon renders, and that the body counts Atlas and the four skills left.",
 	),
 	play: async ({ canvasElement }) => {
 		const canvas = within(canvasElement)
 		await expect(canvas.queryByText(WREN.title)).toBeNull()
 		await expect(canvas.queryByText(CLAUDE_MD.title)).toBeNull()
 		await expect(canvas.getAllByRole("img", { name: "Done" })).toHaveLength(1)
-		await expect(
-			canvas.getAllByRole("img", { name: "In progress" }),
-		).toHaveLength(4)
+		await expect(canvas.getByRole("img", { name: "In progress" })).toBeVisible()
 		await expect(
 			canvas.getByText(
 				i18n.t("common:claudeImport.importing.body", { done: 1, count: 5 }),
@@ -434,8 +449,21 @@ export const Done = meta.story({
 	name: "3.3 Done",
 	args: DONE,
 	parameters: describe(
-		"Everything the reader picked came in, every row done. Check that the summary names the companions and counts the skills from the rows shown. Pick `PartlyFailed` when a row did not come in.",
+		"Everything the reader picked came in, every picked row kept with its done mark. Check that the summary names the agents and counts the skills from the rows shown. Pick `PartlyFailed` when a row did not come in.",
 	),
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement)
+		await expect(
+			canvas.getByText(
+				"Atlas and Wren are ready, with your CLAUDE.md and 4 skills.",
+			),
+		).toBeVisible()
+		await expect(canvas.getAllByRole("img", { name: "Done" })).toHaveLength(4)
+		await expect(canvas.getByText("4 skills")).toBeVisible()
+		await expect(
+			canvas.getByText("commit-style, test-first, review-checklist, changelog"),
+		).toBeVisible()
+	},
 })
 
 export const DoneDark = meta.story({
@@ -445,26 +473,62 @@ export const DoneDark = meta.story({
 	parameters: describe("3.3 Done on the dark scheme."),
 })
 
-export const OnlyCompanions = meta.story({
-	name: "C01 Only companions",
-	args: ONLY_COMPANIONS,
+export const DoneOneCompanion = meta.story({
+	tags: ["test-only"],
+	args: DONE_ONE_COMPANION,
 	parameters: describe(
-		"~/.claude holds companions and nothing else. Check that the single card centres with the whole column in the window.",
+		"Proves the done summary turns singular when one agent came in.",
 	),
+	play: async ({ canvasElement }) => {
+		await expect(
+			within(canvasElement).getByText(
+				"Atlas is ready, with your CLAUDE.md and 4 skills.",
+			),
+		).toBeVisible()
+	},
 })
 
-export const OnlyCompanionsDark = meta.story({
-	name: "C01 Only companions, dark",
-	args: ONLY_COMPANIONS,
+export const DoneWithoutInstructions = meta.story({
+	tags: ["test-only"],
+	args: DONE_WITHOUT_INSTRUCTIONS,
+	parameters: describe(
+		"Proves the done summary leaves CLAUDE.md out when none came in.",
+	),
+	play: async ({ canvasElement }) => {
+		await expect(
+			within(canvasElement).getByText(
+				"Atlas and Wren are ready, with 4 skills.",
+			),
+		).toBeVisible()
+	},
+})
+
+export const OnlyAgents = meta.story({
+	name: "C01 Only agents",
+	args: ONLY_AGENTS,
+	parameters: describe(
+		"~/.claude holds agents and nothing else. Check that the single card centres with the whole column in the window.",
+	),
+	play: async ({ canvasElement }) => {
+		await expect(
+			within(canvasElement).getByRole("heading", { name: "Agents" }),
+		).toBeVisible()
+		await expect(primaryIn(canvasElement, "Import 2 agents")).toBeVisible()
+	},
+})
+
+export const OnlyAgentsDark = meta.story({
+	name: "C01 Only agents, dark",
+	args: ONLY_AGENTS,
 	globals: DARK,
-	parameters: describe("C01 Only companions on the dark scheme."),
+	parameters: describe("C01 Only agents on the dark scheme."),
 })
 
 export const OnlyInstructionsAndSkills = meta.story({
 	name: "C02 Only instructions and skills",
 	args: ONLY_FILES,
 	parameters: describe(
-		"~/.claude holds a CLAUDE.md and skills but no companion. Check that CLAUDE.md is set in Geist Mono and the skills carry the sparkles icon.",
+		"~/.claude holds a CLAUDE.md and skills but no agent. Check that CLAUDE.md is set in Geist Mono and the skills carry the sparkles icon.",
 	),
 })
 
@@ -479,9 +543,14 @@ export const LongListScrolled = meta.story({
 	name: "C03 Long list scrolled",
 	args: LONG_LIST,
 	parameters: describe(
-		"Ten companions and more, taller than the window. Check that the list alone scrolls under a 40 px fade into the page background, and that Import 15 items and Skip for now stay in view.",
+		"Ten agents and more, taller than the window. Check that the list alone scrolls under a 40 px fade into the page background, and that Import 15 items and Skip for now stay in view.",
 	),
 	play: async ({ canvasElement }) => {
+		await expect(
+			within(canvasElement).getByText(
+				"Found 10 agents and more in ~/.claude. Everything is selected; uncheck what you’d rather leave behind.",
+			),
+		).toBeVisible()
 		const list = slotIn(canvasElement, "import-list")
 		await expect(list.scrollHeight).toBeGreaterThan(list.clientHeight)
 		await expect(
@@ -539,8 +608,11 @@ export const NameAlreadyTaken = meta.story({
 	name: "C05 Name already taken",
 	args: NAME_ALREADY_TAKEN,
 	parameters: describe(
-		"Two companions share a name with something already in Kiroshi. Check that each renamed row says what it comes in as, and that its detail wraps inside the card.",
+		"Two agents share a name with something already in Kiroshi. Check that each renamed row says what it comes in as, and that its detail wraps inside the card.",
 	),
+	play: async ({ canvasElement }) => {
+		await expect(primaryIn(canvasElement, "Import 3 agents")).toBeVisible()
+	},
 })
 
 export const NameAlreadyTakenDark = meta.story({
@@ -584,6 +656,18 @@ export const PartlyFailed = meta.story({
 		await expect(getComputedStyle(cause).color).not.toBe(
 			getComputedStyle(canvas.getByText("Atlas")).color,
 		)
+		await expect(canvas.getByText("3 skills")).toBeVisible()
+		await expect(
+			canvas.getByText("commit-style, test-first, review-checklist"),
+		).toBeVisible()
+		await expect(
+			canvas.getByText(
+				"The changelog skill didn’t come in. Try it again, or add it later from Settings.",
+			),
+		).toBeVisible()
+		await expect(
+			canvas.getByRole("button", { name: "Try changelog again" }),
+		).toBeVisible()
 	},
 })
 
@@ -594,11 +678,49 @@ export const PartlyFailedDark = meta.story({
 	parameters: describe("C07 Partly failed on the dark scheme."),
 })
 
+export const PartlyFailedCompanion = meta.story({
+	tags: ["test-only"],
+	args: partlyFailedOn(WREN),
+	parameters: describe(
+		"Proves a failed agent is named in the body and the retry link without the word skill.",
+	),
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement)
+		await expect(
+			canvas.getByText(
+				"Wren didn’t come in. Try it again, or add it later from Settings.",
+			),
+		).toBeVisible()
+		await expect(
+			canvas.getByRole("button", { name: "Try Wren again" }),
+		).toBeVisible()
+	},
+})
+
+export const PartlyFailedInstructions = meta.story({
+	tags: ["test-only"],
+	args: partlyFailedOn(CLAUDE_MD),
+	parameters: describe(
+		"Proves a failed CLAUDE.md is named in the body and the retry link without the word skill.",
+	),
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement)
+		await expect(
+			canvas.getByText(
+				"CLAUDE.md didn’t come in. Try it again, or add it later from Settings.",
+			),
+		).toBeVisible()
+		await expect(
+			canvas.getByRole("button", { name: "Try CLAUDE.md again" }),
+		).toBeVisible()
+	},
+})
+
 export const AgainFromSettings = meta.story({
 	name: "C08 Again from Settings",
 	args: AGAIN_FROM_SETTINGS,
 	parameters: describe(
-		"Opened from Settings after a first import. Check that every row already in Kiroshi reads so, stays unchecked and cannot be toggled, and that only the two new skills are checked.",
+		"Opened from Settings after a first import. Check that every row already in Kiroshi reads so, stays unchecked and cannot be toggled, and that the two new skills share one checked row.",
 	),
 	play: async ({ canvasElement, args }) => {
 		const atlas = within(canvasElement).getByRole("checkbox", {
@@ -608,6 +730,16 @@ export const AgainFromSettings = meta.story({
 		await userEvent.click(atlas, { pointerEventsCheck: 0 })
 		await expect(atlas).not.toBeChecked()
 		await expect(toggleOf(args)).not.toHaveBeenCalled()
+		const newSkills = within(canvasElement).getByRole("checkbox", {
+			name: "2 new skills",
+		})
+		await expect(newSkills).toBeChecked()
+		await userEvent.click(newSkills)
+		await expect(toggleOf(args)).toHaveBeenCalledWith("pr-template", false)
+		await expect(toggleOf(args)).toHaveBeenCalledWith(
+			"release-checklist",
+			false,
+		)
 	},
 })
 
