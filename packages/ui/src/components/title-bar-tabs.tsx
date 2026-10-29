@@ -843,10 +843,15 @@ const PinnedDivider = ({ lift, shiftOf, isSliding }: PinnedDividerProps) => {
 	)
 }
 
+type IncomingBox = {
+	left: number
+	width: number | null
+}
+
 type IncomingTabProps = {
 	tab: TitleBarTab
 	widthClass: string
-	box: { left: number; width: number | null }
+	box: IncomingBox
 }
 
 const IncomingTab = ({ tab, widthClass, box }: IncomingTabProps) => (
@@ -916,7 +921,7 @@ const useIncomingIndex = ({
 	useLayoutEffect(() => {
 		if (tabsIndex !== null) reportIndex(tabsIndex)
 	}, [tabsIndex, reportIndex])
-	const incomingBox =
+	const incomingBox: IncomingBox | null =
 		slots && incomingIndex !== null
 			? { left: slots.boundaries[incomingIndex], width: slots.tabWidth }
 			: null
