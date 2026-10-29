@@ -307,6 +307,7 @@ const chat = {
 			failed: "Couldn’t send that request",
 			stopFailed: "Couldn’t stop the agent",
 			stopFailedNamed: "Couldn’t stop {{name}}",
+			dockBadgeFailed: "Couldn’t update the count on the Kiroshi icon",
 			questionRunFailed: {
 				title: "{{name}} stopped before you answered",
 				description:

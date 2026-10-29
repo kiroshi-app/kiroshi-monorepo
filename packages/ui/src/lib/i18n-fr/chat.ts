@@ -323,6 +323,8 @@ const chat = {
 			failed: "Impossible d’envoyer cette demande",
 			stopFailed: "Impossible d’arrêter l’agent",
 			stopFailedNamed: "Impossible d’arrêter {{name}}",
+			dockBadgeFailed:
+				"Impossible de mettre à jour le nombre sur l’icône de Kiroshi",
 			questionRunFailed: {
 				title: "L’exécution de {{name}} a échoué avant votre réponse",
 				description:

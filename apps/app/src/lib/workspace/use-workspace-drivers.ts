@@ -5,6 +5,7 @@ import { useEvolution } from "../bots/use-evolution"
 import { useBotBadges } from "../chat/use-bot-badges"
 import { useCompanionSpokeDriver } from "../conversations/use-companion-spoke-driver"
 import { useConversationBadges } from "../conversations/use-conversation-badges"
+import { useDockBadge } from "../dock-badge/use-dock-badge"
 import { useExternalLinks } from "../links/use-external-links"
 import { useMissionMarks } from "../missions/use-mission-marks"
 import { useMissionRunDriver } from "../missions/use-mission-run-driver"
@@ -111,6 +112,13 @@ export const useWorkspaceDrivers = (
 		runtimes: conversationRuntimes,
 		roster: roster.controller,
 		spokenWords,
+		isDriverWindow,
+	})
+
+	useDockBadge({
+		roster: roster.controller,
+		botBadges: badges,
+		conversationBadges,
 		isDriverWindow,
 	})
 
