@@ -30,6 +30,7 @@ const PAYLOADS: &[(&str, Definition)] = &[
 	payload_of(events::COMPANION_UPDATED),
 	payload_of(events::COMPANION_ARRIVED),
 	payload_of(events::COMPANION_SPOKE),
+	payload_of(events::SUMMONS_DROPPED),
 	payload_of(events::CONVERSATION_CREATED),
 	payload_of(events::CONVERSATION_DELETED),
 	payload_of(events::MESSAGE_STORED),

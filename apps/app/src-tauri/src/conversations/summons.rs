@@ -1,7 +1,14 @@
-use super::context::mentioned_bot_ids;
+use serde::{Deserialize, Serialize};
+use tauri::{AppHandle, Runtime};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum SummonsDropReason {
+use super::context::mentioned_bot_ids;
+use super::contract::SummonsDropped;
+use crate::agent::contract::TransportError;
+use crate::events::{self, SUMMONS_DROPPED};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum SummonsDropReason {
 	SelfMention,
 	Cancelled,
 	NotSeated,
@@ -68,7 +75,12 @@ pub(crate) fn note_started(run: &SummonsRun<'_>) {
 	);
 }
 
-pub(crate) fn note_dropped(run: &SummonsRun<'_>, reason: SummonsDropReason) {
+pub(crate) fn note_dropped<R: Runtime>(
+	app: &AppHandle<R>,
+	run: &SummonsRun<'_>,
+	reason: SummonsDropReason,
+	error: Option<TransportError>,
+) {
 	log::warn!(
 		"summons dropped | conversation: {} | turn: {} | bot: {} | reason: {}",
 		run.conversation_id,
@@ -76,6 +88,24 @@ pub(crate) fn note_dropped(run: &SummonsRun<'_>, reason: SummonsDropReason) {
 		run.bot_id,
 		reason.name()
 	);
+	if reason == SummonsDropReason::Cancelled {
+		return;
+	}
+	let dropped = SummonsDropped {
+		conversation_id: run.conversation_id.to_owned(),
+		turn_id: run.turn_id.to_owned(),
+		bot_id: run.bot_id.to_owned(),
+		reason,
+		error,
+	};
+	if let Err(failure) = events::emit(app, SUMMONS_DROPPED, dropped) {
+		log::warn!(
+			"the dropped summons of bot {} in turn {} of conversation {} was not announced: {failure}",
+			run.bot_id,
+			run.turn_id,
+			run.conversation_id
+		);
+	}
 }
 
 #[cfg(test)]
@@ -134,5 +164,13 @@ mod tests {
 			.collect();
 
 		assert!(undeclared.is_empty(), "the front declares no {undeclared:?}");
+	}
+
+	#[test]
+	fn every_summons_drop_reason_crosses_under_the_name_it_logs() {
+		for reason in SummonsDropReason::ALL {
+			let crossed = serde_json::to_value(reason).expect("the reason serialises");
+			assert_eq!(crossed, serde_json::json!(reason.name()));
+		}
 	}
 }

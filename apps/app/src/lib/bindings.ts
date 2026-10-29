@@ -319,6 +319,8 @@ export const MAXIMIZE_BUTTON_EVENT = "window-maximize-button" as const;
 
 export const SPACE_DESCRIBED_EVENT = "space://described" as const;
 
+export const SUMMONS_DROPPED_EVENT = "conversation://summons-dropped" as const;
+
 export const TAB_DRAG_EVENT = "window://tab-drag" as const;
 
 export const UPDATE_CHANGED_EVENT = "update://changed" as const;
@@ -1793,6 +1795,16 @@ export type SuggestedBot = {
 	job: string,
 	description: string,
 	blurb: string,
+};
+
+export type SummonsDropReason = "selfMention" | "cancelled" | "notSeated" | "startFailed" | "neverStarted" | "lostQueue" | "interrupted";
+
+export type SummonsDropped = {
+	conversationId: string,
+	turnId: string,
+	botId: string,
+	reason: SummonsDropReason,
+	error: TransportError | null,
 };
 
 export type TabDrag = { kind: "started"; originLabel: string; originSpaceId: string; tab: Json } | { kind: "moved"; originLabel: string; point: ScreenPosition } | { kind: "dropped"; originLabel: string; point: ScreenPosition } | { kind: "cancelled"; originLabel: string };

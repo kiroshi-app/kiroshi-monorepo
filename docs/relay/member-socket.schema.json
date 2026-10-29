@@ -7631,6 +7631,51 @@
       ],
       "type": "object"
     },
+    "SummonsDropReason": {
+      "enum": [
+        "selfMention",
+        "cancelled",
+        "notSeated",
+        "startFailed",
+        "neverStarted",
+        "lostQueue",
+        "interrupted"
+      ]
+    },
+    "SummonsDropped": {
+      "properties": {
+        "botId": {
+          "type": "string"
+        },
+        "conversationId": {
+          "type": "string"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TransportError"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reason": {
+          "$ref": "#/$defs/SummonsDropReason"
+        },
+        "turnId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "conversationId",
+        "turnId",
+        "botId",
+        "reason",
+        "error"
+      ],
+      "type": "object"
+    },
     "TerminalCompletion": {
       "enum": [
         "complete",
@@ -12049,6 +12094,11 @@
     "conversation://state-changed": {
       "payload": {
         "$ref": "#/$defs/ConversationStateChanged"
+      }
+    },
+    "conversation://summons-dropped": {
+      "payload": {
+        "$ref": "#/$defs/SummonsDropped"
       }
     },
     "conversation://updated": {

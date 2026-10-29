@@ -147,7 +147,7 @@ impl<R: Runtime> HeldTurn<R> {
 				turn_id: &self.turn_id,
 				bot_id,
 			};
-			summons::note_dropped(&run, SummonsDropReason::NeverStarted);
+			summons::note_dropped(&self.app, &run, SummonsDropReason::NeverStarted, None);
 			announce_conversation(&self.app, database, CONVERSATION_UPDATED, &self.conversation_id)
 				.await;
 			forget_settled_turns(&self.app).await;
@@ -168,7 +168,7 @@ mod tests {
 	use tokio::sync::mpsc;
 
 	use super::*;
-	use crate::conversations::contract::UPDATED_EVENT;
+	use crate::conversations::contract::{SummonsDropped, SUMMONS_DROPPED_EVENT, UPDATED_EVENT};
 	use crate::db;
 	use crate::db::repositories::conversations::DEFAULT_BOT_ID;
 	use crate::db::repositories::messages::NewTurn;
@@ -225,5 +225,46 @@ mod tests {
 
 		assert_eq!(first, Some(json!({ "bots": [{ "botId": "early", "startedAt": 1 }] })));
 		assert!(updates.try_recv().is_err(), "the started run announced an update");
+	}
+
+	#[tokio::test]
+	async fn a_turn_run_never_started_by_its_start_deadline_is_announced_dropped() {
+		let app = an_app_of_its_own("turn-run-deadline-dropped", mock_builder());
+		app.manage(db::bootstrap(app.handle()));
+		app.manage(TurnRunDeadlines::after(Duration::ZERO));
+		let database = database(app.handle()).expect("the database opens");
+		database.conversations().ensure_default_bot().await.expect("the bot is seeded");
+		let chat = database
+			.conversations()
+			.ensure_chat(DEFAULT_BOT_ID.to_owned(), None)
+			.await
+			.expect("the chat is seeded");
+		let messages = database.messages();
+		let turn = NewTurn { id: "t1".to_owned(), conversation_id: chat.id.clone(), started_at: 1 };
+		messages.start_turn(turn).await.expect("the turn opens");
+		let late = vec!["late".to_owned()];
+		messages.await_runs("t1".to_owned(), late.clone()).await.expect("the run waits");
+		let (announced, mut drops) = mpsc::unbounded_channel();
+		app.handle().listen(SUMMONS_DROPPED_EVENT, move |event| {
+			let dropped: SummonsDropped =
+				serde_json::from_str(event.payload()).expect("a dropped summons");
+			announced.send(dropped).expect("the test listens");
+		});
+
+		arm_start_deadlines(app.handle(), &chat.id, "t1", &late);
+		let first = time::timeout(Duration::from_secs(60), drops.recv())
+			.await
+			.expect("the drop announced in time");
+
+		let never_started = SummonsDropped {
+			conversation_id: chat.id.clone(),
+			turn_id: "t1".to_owned(),
+			bot_id: "late".to_owned(),
+			reason: SummonsDropReason::NeverStarted,
+			error: None,
+		};
+		assert_eq!(first, Some(never_started));
+		time::sleep(Duration::from_millis(100)).await;
+		assert!(drops.try_recv().is_err(), "the drop was announced twice");
 	}
 }
