@@ -809,7 +809,9 @@ const AVATAR_STATE_OF_HOST: Record<SpaceHost, string> = {
 	down: "offline",
 }
 
-const MENU_DOT = 6
+const MENU_DOT = 8
+
+const TRIGGER_DOT = 6.857
 
 const avatarOn = (root: HTMLElement) => slotsIn(root, "space-avatar")[0]
 
@@ -831,11 +833,11 @@ const expectRowAvatar = async (root: HTMLElement, host: SpaceHost | null) => {
 	const box = presenceDotOn(root).getBoundingClientRect()
 	await expect(box.width).toBe(MENU_DOT)
 	await expect(corner.right - (box.left + box.width / 2)).toBeCloseTo(
-		0.32 * MENU_DOT,
+		0.36 * MENU_DOT,
 		1,
 	)
 	await expect(corner.bottom - (box.top + box.height / 2)).toBeCloseTo(
-		0.32 * MENU_DOT,
+		0.36 * MENU_DOT,
 		1,
 	)
 }
@@ -895,7 +897,7 @@ export const ThemesLocalSpaceMenu = meta.story({
 		a11y: SIDE_BY_SIDE_MENU_A11Y,
 		docs: {
 			description: {
-				story: `${MOCKUP} The menu of a local space beside shared and joined ones (A7 rows). Check every row carries its 14px SpaceAvatar in the state of its host: the 6px green dot cut out of the bottom end corner for the shared and the reachable rows, lines for the connecting one and greys for the one that does not answer, every name shown in full and no state pill: the avatar is the only connection signal, and assistive technology reads the state after the name. No globe and no \`Unreachable\` remain, and a single rule then \`Create a space\` close the menu. Pick \`ThemesJoinedSpaceMenu\` for the menu of a joined space.`,
+				story: `${MOCKUP} The menu of a local space beside shared and joined ones (A7 rows). Check every row carries its 14px SpaceAvatar in the state of its host: the grey laptop badge for the local row, the 8px green dot cut out of the bottom end corner for the shared and the reachable rows, lines for the connecting one and hatched greys under a plain red dot for the one that does not answer, every name shown in full and no state pill: the avatar is the only connection signal, and assistive technology reads the state after the name. No globe and no \`Unreachable\` remain, and a single rule then \`Create a space\` close the menu. Pick \`ThemesJoinedSpaceMenu\` for the menu of a joined space.`,
 			},
 		},
 	},
@@ -1474,7 +1476,7 @@ export const M5Joined = meta.story({
 		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		docs: {
 			description: {
-				story: `${INVITED_ARTBOARD} M5, artboard 3.7 of the Mockup page: the invitation is accepted and Studio is open. At rest the menu is closed and the trigger shows Studio, its 12px avatar online, too small for the dot, and no invitation dot. Check that, then that the menu lists Studio under Personal with the online dot on its row's avatar and no Invitations group, and that Escape leaves the menu closed again.`,
+				story: `${INVITED_ARTBOARD} M5, artboard 3.7 of the Mockup page: the invitation is accepted and Studio is open. At rest the menu is closed and the trigger shows Studio, its 12px avatar online with the presence dot scaled down from 14px, and no invitation dot. Check that, then that the menu lists Studio under Personal with the online dot on its row's avatar and no Invitations group, and that Escape leaves the menu closed again.`,
 			},
 		},
 	},
@@ -1484,7 +1486,9 @@ export const M5Joined = meta.story({
 		})
 		await expect(invitationDotOn(trigger)).toBeUndefined()
 		await expect(avatarOn(trigger).dataset.state).toBe("online")
-		await expect(presenceDotOn(trigger)).toBeUndefined()
+		await expect(
+			presenceDotOn(trigger).getBoundingClientRect().width,
+		).toBeCloseTo(TRIGGER_DOT, 2)
 		const menu = await openSwitcher(canvasElement)
 		await expectRowAvatar(rowNamed(menu, "Studio"), "up")
 		await expect(slotsIn(menu, "space-invitations")).toHaveLength(0)

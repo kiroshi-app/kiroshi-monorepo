@@ -19,8 +19,19 @@ type SpacePalette = { full: string[]; compact: string[] }
 
 type SpaceArcs = { anchor: Point; radii: number[] }
 
+type DrawnSize = 14 | 26 | 48
+
+type Glyph = { scale: number; stroke: number }
+
+type MarkMetrics = {
+	initial: { fontSize: number; weight: number }
+	badge: { diameter: number; cutOut: number }
+	laptop: Glyph
+	cross?: Glyph
+	hatch: { spacing: number; stroke: number }
+}
+
 type StateMetrics = {
-	dot?: { diameter: number; cutOut: number }
 	attention: { gap: number; width: number }
 	invitationStroke: number
 	lineStroke: number
@@ -87,38 +98,90 @@ const STATE_METRICS: Record<SpaceAvatarSize, StateMetrics> = {
 		lineStroke: 1,
 	},
 	14: {
-		dot: { diameter: 6, cutOut: 1.5 },
 		attention: { gap: 1, width: 1.5 },
 		invitationStroke: 1.5,
 		lineStroke: 1,
 	},
 	26: {
-		dot: { diameter: 8, cutOut: 2 },
 		attention: { gap: 1.5, width: 2 },
 		invitationStroke: 1.5,
 		lineStroke: 1,
 	},
 	36: {
-		dot: { diameter: 10, cutOut: 2 },
 		attention: { gap: 1.5, width: 2 },
 		invitationStroke: 2,
 		lineStroke: 1.125,
 	},
 	48: {
-		dot: { diameter: 12, cutOut: 2.5 },
 		attention: { gap: 2, width: 2.5 },
 		invitationStroke: 2,
 		lineStroke: 1.5,
 	},
 	64: {
-		dot: { diameter: 14, cutOut: 3 },
 		attention: { gap: 2, width: 3 },
 		invitationStroke: 2.5,
 		lineStroke: 2,
 	},
 }
 
-const DOT_CENTRE_INSET = 0.32
+const DRAWN_MARKS: Record<DrawnSize, MarkMetrics> = {
+	14: {
+		initial: { fontSize: 10, weight: 700 },
+		badge: { diameter: 8, cutOut: 1.5 },
+		laptop: { scale: 0.258, stroke: 3.677 },
+		hatch: { spacing: 3, stroke: 0.8 },
+	},
+	26: {
+		initial: { fontSize: 13, weight: 600 },
+		badge: { diameter: 12, cutOut: 2 },
+		laptop: { scale: 0.35, stroke: 3.143 },
+		cross: { scale: 0.34, stroke: 3.2 },
+		hatch: { spacing: 4, stroke: 1 },
+	},
+	48: {
+		initial: { fontSize: 24, weight: 600 },
+		badge: { diameter: 18, cutOut: 2.5 },
+		laptop: { scale: 0.51, stroke: 2.941 },
+		cross: { scale: 0.51, stroke: 3.2 },
+		hatch: { spacing: 6, stroke: 1.5 },
+	},
+}
+
+const NEAREST_DRAWN: Record<SpaceAvatarSize, DrawnSize> = {
+	12: 14,
+	14: 14,
+	26: 26,
+	36: 26,
+	48: 48,
+	64: 48,
+}
+
+const INK: Record<SpaceAvatarTheme, LightnessChroma> = {
+	light: [0.36, 0.09],
+	dark: [0.96, 0.03],
+}
+
+const LOCAL_BADGE_FILL = "#737373"
+
+const OFFLINE_BADGE_FILL: Record<SpaceAvatarTheme, string> = {
+	light: "#dc2626",
+	dark: "#ef4444",
+}
+
+const HATCH_INK: Record<SpaceAvatarTheme, { colour: string; opacity: number }> =
+	{
+		light: { colour: "#000000", opacity: 0.2 },
+		dark: { colour: "#ffffff", opacity: 0.2 },
+	}
+
+const GLYPH_GRID = 24
+
+const LAPTOP_GLYPH =
+	"M4 16V6C4 4.8954 4.8954 4 6 4H18C19.1046 4 20 4.8954 20 6V16M2.5 16H21.5C21.7761 16 22 16.2239 22 16.5V18C22 19.1046 21.1046 20 20 20H4C2.8954 20 2 19.1046 2 18V16.5C2 16.2239 2.2239 16 2.5 16Z"
+
+const CROSS_GLYPH = "M7.5 7.5L16.5 16.5M16.5 7.5L7.5 16.5"
+
+const DOT_CENTRE_INSET = 0.36
 
 const DASH_SHARE = 0.55
 
@@ -178,6 +241,47 @@ const toneHex = ([lightness, chroma]: LightnessChroma, hue = 0) => {
 	return hexOfLinear(linearSrgbOf(lightness, fitted, hue))
 }
 
+const spaceInk = (theme: SpaceAvatarTheme, hue?: number | null) => {
+	const [lightness, chroma] = INK[theme]
+	return hue === undefined || hue === null
+		? toneHex([lightness, 0])
+		: toneHex([lightness, chroma], (hue * Math.PI) / 180)
+}
+
+const spaceInitial = (name: string) => {
+	const [first] = new Intl.Segmenter().segment(name.trim())
+	return first?.segment.toUpperCase() ?? ""
+}
+
+const markMetricsOf = (size: SpaceAvatarSize): MarkMetrics => {
+	const drawn = NEAREST_DRAWN[size]
+	const { initial, badge, laptop, cross, hatch } = DRAWN_MARKS[drawn]
+	const scaled = (value: number) => round((value * size) / drawn)
+	const scaledGlyph = ({ scale, stroke }: Glyph) => ({
+		scale: scaled(scale),
+		stroke,
+	})
+	return {
+		initial: { fontSize: scaled(initial.fontSize), weight: initial.weight },
+		badge: { diameter: scaled(badge.diameter), cutOut: scaled(badge.cutOut) },
+		laptop: scaledGlyph(laptop),
+		cross: cross ? scaledGlyph(cross) : undefined,
+		hatch: { spacing: scaled(hatch.spacing), stroke: scaled(hatch.stroke) },
+	}
+}
+
+const hatchPath = (size: number, spacing: number, stroke: number) => {
+	const first = Math.SQRT2 * (stroke / 2)
+	const step = Math.SQRT2 * spacing
+	return Array.from(
+		{ length: Math.ceil((2 * size - first) / step) },
+		(_, index) => {
+			const offset = round(first + index * step)
+			return `M${offset} 0L0 ${offset}`
+		},
+	).join("")
+}
+
 const spacePalette = (
 	theme: SpaceAvatarTheme,
 	hue?: number | null,
@@ -234,9 +338,18 @@ const dotCentre = (size: SpaceAvatarSize, diameter: number) =>
 
 export {
 	COMPACT_RADII,
+	CROSS_GLYPH,
 	dashArray,
 	dotCentre,
+	GLYPH_GRID,
+	type Glyph,
+	HATCH_INK,
+	hatchPath,
 	isCompact,
+	LAPTOP_GLYPH,
+	LOCAL_BADGE_FILL,
+	markMetricsOf,
+	OFFLINE_BADGE_FILL,
 	SPACE_AVATAR_SIZES,
 	type SpaceArcs,
 	type SpaceAvatarSize,
@@ -244,6 +357,8 @@ export {
 	type SpacePalette,
 	STATE_METRICS,
 	spaceArcs,
+	spaceInitial,
+	spaceInk,
 	spacePalette,
 	superellipsePath,
 	superellipsePerimeter,

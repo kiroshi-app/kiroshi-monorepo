@@ -610,6 +610,7 @@ const SpaceSettingsScreen = (props: SpaceSettingsScreenProps) => {
 			avatar={
 				<SpaceAvatar
 					colour={settings.value.colour}
+					name={settings.value.name}
 					size={36}
 					spaceId={spaceId}
 					state={avatarStateOf(space, host)}

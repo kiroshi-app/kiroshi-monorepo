@@ -200,6 +200,7 @@ const SpaceMenuRows = ({
 						<SpaceAvatar
 							colour={space.colour}
 							hasAttention={badgesBySpaceId?.[space.id] === "attention"}
+							name={space.name}
 							size={14}
 							spaceId={space.avatarSeed}
 							state={spaceAvatarStateOf(rowHost)}
@@ -287,6 +288,7 @@ const SpaceSwitcher = ({
 					>
 						<SpaceAvatar
 							colour={selected.colour}
+							name={selected.name}
 							size={12}
 							spaceId={selected.avatarSeed}
 							state={spaceAvatarStateOf(host)}

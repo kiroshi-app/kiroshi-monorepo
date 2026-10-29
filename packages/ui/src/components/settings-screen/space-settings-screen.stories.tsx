@@ -844,11 +844,11 @@ const avatarStatesIn = (menu: HTMLElement, main: HTMLElement) =>
 
 const expectPresenceDots = async (menu: HTMLElement, main: HTMLElement) => {
 	for (const [area, diameter] of [
-		[menu, 10],
-		[main, 12],
+		[menu, 16.615],
+		[main, 18],
 	] as const) {
 		const dot = slotIn(area, "space-avatar-dot")
-		await expect(dot.getBoundingClientRect().width).toBe(diameter)
+		await expect(dot.getBoundingClientRect().width).toBeCloseTo(diameter, 2)
 		await expect(getComputedStyle(dot).fill).toBe(INK.online)
 	}
 }

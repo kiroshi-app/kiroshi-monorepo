@@ -4,9 +4,14 @@ import { oklabOf, srgbOfHex } from "@workspace/ui/components/companion-avatar"
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import {
 	dashArray,
+	dotCentre,
+	hatchPath,
 	isCompact,
+	markMetricsOf,
 	SPACE_AVATAR_SIZES,
 	spaceArcs,
+	spaceInitial,
+	spaceInk,
 	spacePalette,
 	superellipsePerimeter,
 } from "@workspace/ui/components/space-avatar-recipe"
@@ -89,5 +94,71 @@ describe("recipe", () => {
 		expect(
 			Math.round(superellipsePerimeter(6, 5.25) / period),
 		).toBeGreaterThanOrEqual(8)
+	})
+})
+
+describe("spaceInitial", () => {
+	it("takes the first grapheme, uppercased", () => {
+		expect(spaceInitial("atelier")).toBe("A")
+		expect(spaceInitial("  harbour Studio")).toBe("H")
+		expect(spaceInitial("\u{1F468}\u200D\u{1F4BB} lab")).toBe(
+			"\u{1F468}\u200D\u{1F4BB}",
+		)
+		expect(spaceInitial("e\u0301tude")).toBe("E\u0301")
+	})
+
+	it("is empty for an empty or blank name", () => {
+		expect(spaceInitial("")).toBe("")
+		expect(spaceInitial(" \t ")).toBe("")
+	})
+})
+
+describe("spaceInk", () => {
+	it("draws the neutral ink of artboard F without a colour", () => {
+		expect(spaceInk("light", null)).toBe("#3d3d3d")
+		expect(spaceInk("dark", undefined)).toBe("#f2f2f2")
+	})
+
+	it("keeps the Space hue at L 0.36 in light and 0.96 in dark", () => {
+		for (const theme of ["light", "dark"] as const) {
+			const ink = spaceInk(theme, BLOT_HUES.green)
+			expect(oklabOf(srgbOfHex(ink)).lightness).toBeCloseTo(
+				theme === "light" ? 0.36 : 0.96,
+				2,
+			)
+			expect(hueDegreesOf(ink)).toBeCloseTo(BLOT_HUES.green, -1)
+		}
+	})
+})
+
+describe("markMetricsOf", () => {
+	it("draws the badge of artboard F at 48, 26 and 14", () => {
+		for (const [size, diameter, centre] of [
+			[48, 18, 41.52],
+			[26, 12, 21.68],
+			[14, 8, 11.12],
+		] as const) {
+			const { badge } = markMetricsOf(size)
+			expect(badge.diameter).toBe(diameter)
+			expect(dotCentre(size, badge.diameter)).toBeCloseTo(centre, 6)
+		}
+	})
+
+	it("scales 12 from 14, 36 from 26 and 64 from 48", () => {
+		expect(markMetricsOf(12).initial).toEqual({ fontSize: 8.571, weight: 700 })
+		expect(markMetricsOf(36).initial).toEqual({ fontSize: 18, weight: 600 })
+		expect(markMetricsOf(64).badge).toEqual({ diameter: 24, cutOut: 3.333 })
+		expect(markMetricsOf(12).cross).toBeUndefined()
+		expect(markMetricsOf(36).cross?.stroke).toBe(3.2)
+	})
+})
+
+describe("hatchPath", () => {
+	it("runs one line per spacing across the whole tile", () => {
+		const lines = hatchPath(48, 6, 1.5).split("M").filter(Boolean)
+		expect(lines).toHaveLength(
+			Math.ceil((96 - 0.75 * Math.SQRT2) / (6 * Math.SQRT2)),
+		)
+		expect(lines[0]).toBe("1.061 0L0 1.061")
 	})
 })
