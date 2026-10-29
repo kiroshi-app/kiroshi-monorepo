@@ -174,6 +174,17 @@ const moveFailureOf = (reason: string | undefined) => ({
 				}),
 })
 
+export const openNewWindow = async () => {
+	const opening = await openWindowOn(EMPTY_LIST_HREF)
+	if (opening.isOpened) {
+		return
+	}
+	raiseWindowFailure(
+		{ title: i18n.t("common:titleBar.moveTabFailed.title") },
+		"window_open",
+	)
+}
+
 const isOnlyTab = (space: SpaceTabs | undefined, id: string) =>
 	space?.tabs.length === 1 && space.tabs[0]?.id === id
 
