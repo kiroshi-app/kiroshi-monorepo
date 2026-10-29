@@ -319,25 +319,30 @@ const landingIn = (geometry: LiftGeometry, x: number, y: number) => {
 
 type IncomingSlots = {
 	rowLeft: number
+	tabWidth: number | null
 	boundaries: number[]
 }
 
 const measureIncomingSlots = (row: HTMLElement): IncomingSlots => {
 	const list = row.querySelector('[role="tablist"]')
 	const gap = list ? pixelsOf(getComputedStyle(list).columnGap) : 0
-	const boxes = [...row.querySelectorAll(UNPINNED_TAB)].map((node) =>
-		node.getBoundingClientRect(),
-	)
-	const rowBox = row.getBoundingClientRect()
-	const last = boxes.at(-1) ?? list?.lastElementChild?.getBoundingClientRect()
-	const end = last ? last.right + gap : rowBox.left
-	const step = boxes[0] ? boxes[0].width + gap : 0
-	row.style.setProperty("--tab-shift", `${step}px`)
+	const tabs = [...row.querySelectorAll<HTMLElement>(UNPINNED_TAB)]
+	const last = tabs.at(-1) ?? (list?.lastElementChild as HTMLElement | null)
+	const end = last ? last.offsetLeft + last.offsetWidth + gap : 0
+	const tabWidth = tabs[0] ? widthOf(tabs[0]) : null
+	row.style.setProperty("--tab-shift", `${(tabWidth ?? 0) + gap}px`)
 	return {
-		rowLeft: rowBox.left,
-		boundaries: [...boxes.map((box) => box.left), end],
+		rowLeft: row.getBoundingClientRect().left,
+		tabWidth,
+		boundaries: [...tabs.map((tab) => tab.offsetLeft), end],
 	}
 }
+
+const isSameSlots = (one: IncomingSlots | null, other: IncomingSlots) =>
+	one !== null &&
+	one.rowLeft === other.rowLeft &&
+	one.tabWidth === other.tabWidth &&
+	one.boundaries.join() === other.boundaries.join()
 
 const nearestIndexOf = (boundaries: number[], x: number) => {
 	const distances = boundaries.map((boundary) => Math.abs(boundary - x))
@@ -522,7 +527,8 @@ const useTabLift = ({
 	const zoneOf = (id: string) => (isPinned(id) ? pinned : kept)
 	const rankOf = (id: string) => zoneOf(id).findIndex((tab) => tab.id === id)
 	const [move, setMove] = useState<TabMove | null>(null)
-	const [snappingId, setSnappingId] = useState<string | null>(null)
+	const [isSnapping, setIsSnapping] = useState(false)
+	if (isSnapping && incomingIndex !== null) setIsSnapping(false)
 	const geometry = useRef<LiftGeometry | null>(null)
 	const isTornOff = useRef(false)
 
@@ -547,7 +553,7 @@ const useTabLift = ({
 		landingAt: (x, y) =>
 			geometry.current ? landingIn(geometry.current, x, y) : null,
 		onLift: (id, from) => {
-			setSnappingId(null)
+			setIsSnapping(false)
 			isTornOff.current = false
 			const row = rowRef.current
 			geometry.current = row
@@ -569,7 +575,8 @@ const useTabLift = ({
 		onCancel: (id) => onTearOffCancel?.(id),
 		onLand: (id, landing, released) => {
 			if (landing === TORN_OFF) {
-				if (onTearOffTab?.(tearOffAt(id, released)) !== true) setSnappingId(id)
+				if (onTearOffTab?.(tearOffAt(id, released)) !== true)
+					setIsSnapping(true)
 				return
 			}
 			if (landing === rankOf(id)) return
@@ -605,13 +612,15 @@ const useTabLift = ({
 	const dividerShiftOf = (landing: TabLanding | null): TabShift | undefined =>
 		liftedId && isPinned(liftedId) && landing === TORN_OFF ? "start" : undefined
 
-	const isSliding = (id: string) =>
-		liftedId ? id !== liftedId : incomingIndex !== null || id === snappingId
+	const isRowSliding = Boolean(liftedId) || isSnapping || incomingIndex !== null
+
+	const isSliding = (id: string) => isRowSliding && id !== liftedId
 
 	return {
 		lift,
 		shiftOf,
 		dividerShiftOf,
+		isRowSliding,
 		isSliding,
 		move,
 		moveByKey,
@@ -836,16 +845,16 @@ const PinnedDivider = ({ lift, shiftOf, isSliding }: PinnedDividerProps) => {
 
 type IncomingTabProps = {
 	tab: TitleBarTab
-	width: string
-	left: number
+	widthClass: string
+	box: { left: number; width: number | null }
 }
 
-const IncomingTab = ({ tab, width, left }: IncomingTabProps) => (
+const IncomingTab = ({ tab, widthClass, box }: IncomingTabProps) => (
 	<span
 		aria-hidden="true"
-		className={cn(INCOMING_TAB, width)}
+		className={cn(INCOMING_TAB, widthClass)}
 		data-slot="title-bar-incoming-tab"
-		style={{ left }}
+		style={{ left: box.left, width: box.width ?? undefined }}
 	>
 		<span className={TAB_ICON}>{tab.icon}</span>
 		<span className={TAB_TITLE}>{tab.title}</span>
@@ -883,13 +892,19 @@ const useIncomingIndex = ({
 	const rowRef = useRef<HTMLDivElement>(null)
 	const [slots, setSlots] = useState<IncomingSlots | null>(null)
 	const isHovering = Boolean(incomingTab)
-	useLayoutEffect(() => {
+	const measure = useStableCallback(() => {
 		const row = rowRef.current
-		setSlots(isHovering && row ? measureIncomingSlots(row) : null)
-	}, [isHovering])
+		if (!isHovering || !row) {
+			if (slots) setSlots(null)
+			return
+		}
+		const next = measureIncomingSlots(row)
+		if (!isSameSlots(slots, next)) setSlots(next)
+	})
+	useLayoutEffect(measure)
 	const incomingIndex =
 		incomingTab && slots
-			? nearestIndexOf(slots.boundaries, incomingTab.clientX)
+			? nearestIndexOf(slots.boundaries, incomingTab.clientX - slots.rowLeft)
 			: null
 	const tabsIndex =
 		incomingIndex === null
@@ -901,11 +916,11 @@ const useIncomingIndex = ({
 	useLayoutEffect(() => {
 		if (tabsIndex !== null) reportIndex(tabsIndex)
 	}, [tabsIndex, reportIndex])
-	const incomingLeft =
+	const incomingBox =
 		slots && incomingIndex !== null
-			? slots.boundaries[incomingIndex] - slots.rowLeft
+			? { left: slots.boundaries[incomingIndex], width: slots.tabWidth }
 			: null
-	return { rowRef, incomingIndex, incomingLeft }
+	return { rowRef, incomingIndex, incomingBox }
 }
 
 type OverflowChipProps = {
@@ -984,26 +999,33 @@ const TitleBarTabs = ({
 	const { kept, overflowing } = splitAtFit(unpinned, fittingCount, activeTabId)
 	const tabWidth = overflowing.length > 0 ? TAB_WIDTH_AT_FLOOR : TAB_WIDTH
 	const hasDivider = pinned.length > 0 && unpinned.length > 0
-	const { rowRef, incomingIndex, incomingLeft } = useIncomingIndex({
+	const { rowRef, incomingIndex, incomingBox } = useIncomingIndex({
 		tabs,
 		pinned,
 		kept,
 		incomingTab,
 		onIncomingTabIndexChange,
 	})
-	const { lift, shiftOf, dividerShiftOf, isSliding, move, moveByKey } =
-		useTabLift({
-			tabs,
-			pinned,
-			kept,
-			incomingIndex,
-			rowRef,
-			onReorderTabs,
-			onTearOffTab,
-			onTearOffStart,
-			onTearOffMove,
-			onTearOffCancel,
-		})
+	const {
+		lift,
+		shiftOf,
+		dividerShiftOf,
+		isRowSliding,
+		isSliding,
+		move,
+		moveByKey,
+	} = useTabLift({
+		tabs,
+		pinned,
+		kept,
+		incomingIndex,
+		rowRef,
+		onReorderTabs,
+		onTearOffTab,
+		onTearOffStart,
+		onTearOffMove,
+		onTearOffCancel,
+	})
 	const { isHovered, isRevealed, revealNow, tabRevealFor, closeRevealFor } =
 		useCloseReveal()
 	const showsClose = (id: string) =>
@@ -1082,7 +1104,7 @@ const TitleBarTabs = ({
 					{pinned.map((tab) => tabItem(tab, PINNED_WIDTH))}
 					{hasDivider ? (
 						<PinnedDivider
-							isSliding={Boolean(lift.lift)}
+							isSliding={isRowSliding}
 							lift={lift}
 							shiftOf={dividerShiftOf}
 						/>
@@ -1113,11 +1135,11 @@ const TitleBarTabs = ({
 						</TabCloseSlot>
 					))}
 				</div>
-				{incomingTab && incomingLeft !== null ? (
+				{incomingTab && incomingBox ? (
 					<IncomingTab
-						left={incomingLeft}
+						box={incomingBox}
 						tab={incomingTab.tab}
-						width={tabWidth}
+						widthClass={tabWidth}
 					/>
 				) : null}
 			</Tabs.Root>

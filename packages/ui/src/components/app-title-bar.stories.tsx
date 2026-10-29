@@ -1276,6 +1276,71 @@ export const T16BackInTheRowDark = meta.story({
 	play: playT16BackInTheRow,
 })
 
+const playRefusedTearOff = async ({ args, canvasElement }: DragPlayContext) => {
+	const bar = barIn(canvasElement)
+	const [release, login, weekly, invoice] = unpinnedTabsIn(canvasElement)
+	const zone = [release, login, weekly, invoice]
+	const resting = zone.map(boxOf)
+	const step = resting[1].width + rowGapIn(bar)
+	const offBar = boxOf(bar).bottom + 60
+
+	carryOffTheBar(bar, login, 640, 420)
+	await waitFor(() =>
+		expect(neighbourOffsetsOf(zone, resting, login)).toEqual([0, -step, -step]),
+	)
+	fireEvent.pointerUp(
+		document.body,
+		screenPointerAt(middleOf(login), offBar, 640, 420),
+	)
+
+	await expect(args.onTearOffTab).toHaveBeenCalledOnce()
+	await waitFor(() => expect(isLifted(login)).toBe(false))
+	const snap = getComputedStyle(login)
+	for (const tab of [release, weekly, invoice]) {
+		const settle = getComputedStyle(tab)
+		await expect(settle.transitionProperty).toBe(snap.transitionProperty)
+		await expect(settle.transitionDuration).toBe(snap.transitionDuration)
+		await expect(settle.transitionTimingFunction).toBe(
+			snap.transitionTimingFunction,
+		)
+	}
+	await expectSlidingUnlessReduced(weekly)
+	await expectSlideWithoutColour(zone)
+	await expectRowAtRest(canvasElement, zone, resting)
+	await expect(Math.round(boxOf(login).left)).toBe(Math.round(resting[1].left))
+	await expect(login).not.toHaveAttribute("data-torn-off")
+	await expect(getComputedStyle(login).opacity).toBe("1")
+	await expect(args.onReorderTabs).not.toHaveBeenCalled()
+	await expect(args.onTearOffCancel).not.toHaveBeenCalled()
+}
+
+export const RefusedTearOffBackAtRest = meta.story({
+	args: A7,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A tear-off drop the app refuses, light: Fix the login redirect carried past the threshold, its gap closed, then released off the bar while the handler does not take it. Check every tab slides back to rest with the same settle as the dropped tab, Fix the login redirect back in its slot, and no order or cancel reported.",
+			},
+		},
+	},
+	play: playRefusedTearOff,
+})
+
+export const RefusedTearOffBackAtRestDark = meta.story({
+	args: A7,
+	globals: DARK,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A refused tear-off drop, dark: every tab back at rest. Pick `RefusedTearOffBackAtRest` for the light theme.",
+			},
+		},
+	},
+	play: playRefusedTearOff,
+})
+
 type ReceivingTitleBarProps = AppTitleBarProps & {
 	incoming: TitleBarTab
 }
@@ -1308,6 +1373,10 @@ const ReceivingTitleBar = ({ incoming, ...args }: ReceivingTitleBarProps) => {
 				incomingTab={
 					hoverX === null ? undefined : { tab: incoming, clientX: hoverX }
 				}
+				onCloseTab={(id) => {
+					args.onCloseTab?.(id)
+					setTabs(tabs.filter((tab) => tab.id !== id))
+				}}
 				onIncomingTabIndexChange={(index) => {
 					insertionIndex.current = index
 					args.onIncomingTabIndexChange?.(index)
@@ -1523,6 +1592,72 @@ export const T43LastTabPartedDark = meta.story({
 		},
 	},
 	play: playTabsPartedAt(0, 0),
+})
+
+const SHRUNK_TABS = [
+	RELEASE_NOTES,
+	LOGIN_REDIRECT,
+	WEEKLY_PLANNING,
+	INVOICE_EXPORT,
+	SUPPORT_TRIAGE,
+	DESIGN_REVIEW,
+	HIRING_PLAN,
+	BUG_BASH,
+]
+
+const expectGapUnder = async (canvasElement: HTMLElement, x: number) => {
+	const bar = barIn(canvasElement)
+	const gap = rowGapIn(bar)
+	await waitFor(() => {
+		const incoming = incomingTabIn(canvasElement)
+		expect(incoming).not.toBeNull()
+		const box = boxOf(incoming as HTMLElement)
+		const tabs = unpinnedTabsIn(canvasElement)
+		const [first] = shiftsIn(bar)
+		const previous = tabs[tabs.indexOf(first) - 1]
+		expect(Math.abs(box.width - boxOf(tabs[0]).width)).toBeLessThan(1)
+		expect(Math.abs(boxOf(first).left - box.right - gap)).toBeLessThanOrEqual(1)
+		if (previous)
+			expect(
+				Math.abs(box.left - boxOf(previous).right - gap),
+			).toBeLessThanOrEqual(1)
+		expect(x).toBeGreaterThanOrEqual(box.left - (box.width + gap) / 2)
+		expect(x).toBeLessThanOrEqual(box.right)
+	})
+}
+
+export const IncomingTabFollowsTheStrip = meta.story({
+	tags: ["test-only"],
+	args: { tabs: SHRUNK_TABS, activeTabId: RELEASE_NOTES.id },
+	render: (args) => <ReceivingTitleBar {...args} incoming={ROADMAP} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"An incoming tab held over a strip of shrunk tabs while one of them closes. Check the gap opens under the pointer at the width of the tabs, and that once the tabs widen it is measured again, still under the pointer and as wide as the tabs.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const bar = barIn(canvasElement)
+		const resting = unpinnedTabsIn(canvasElement).map(boxOf)
+		const x = resting[3].left + 10
+		await expect(resting[0].width).toBeLessThan(TAB_WIDTH)
+
+		hoverTheStrip(canvasElement, x)
+		await expectGapUnder(canvasElement, x)
+
+		fireEvent.click(
+			within(bar).getByRole("button", {
+				name: `Close ${RELEASE_NOTES.title}`,
+			}),
+		)
+		await waitFor(() => expect(unpinnedTabsIn(canvasElement)).toHaveLength(7))
+		await expect(boxOf(unpinnedTabsIn(canvasElement)[0]).width).toBeGreaterThan(
+			resting[0].width,
+		)
+		await expectGapUnder(canvasElement, x)
+	},
 })
 
 export const WithWindowControls = meta.story({

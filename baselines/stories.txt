@@ -1121,11 +1121,14 @@ navigation-apptitlebar--escape-cancels-drag
 navigation-apptitlebar--escape-cancels-drag-dark
 navigation-apptitlebar--inactive-tab-hover
 navigation-apptitlebar--inactive-tab-hover-dark
+navigation-apptitlebar--incoming-tab-follows-the-strip
 navigation-apptitlebar--keyboard-reorder
 navigation-apptitlebar--keyboard-reorder-dark
 navigation-apptitlebar--keyboard-reorder-without-handler
 navigation-apptitlebar--middle-click-closes-tab
 navigation-apptitlebar--overflow-follows-the-strip
+navigation-apptitlebar--refused-tear-off-back-at-rest
+navigation-apptitlebar--refused-tear-off-back-at-rest-dark
 navigation-apptitlebar--release-outside-then-hover
 navigation-apptitlebar--t-13-gap-closed
 navigation-apptitlebar--t-13-gap-closed-dark
