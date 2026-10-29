@@ -584,21 +584,24 @@ describe("SpaceSettingsScreen on a space other than the current one", () => {
 		).toBe(`Meta+${rank}`)
 	})
 
-	it("reads it as shared from its host mark", async () => {
-		const gear = await gearWithGarage()
-		const dialog = render(
-			createElement(SpaceSettingsHarness, {
-				...gear,
-				spaceId: gear.home.id,
-				hostBySpaceId: { [gear.home.id]: "shared" },
-			}),
-			{ wrapper: createQueryTestWrapper().wrapper },
-		).container
+	it.each<SpaceHost>(["up", "down"])(
+		"reads it as shared while its host mark is %s",
+		async (host) => {
+			const gear = await gearWithGarage()
+			const dialog = render(
+				createElement(SpaceSettingsHarness, {
+					...gear,
+					spaceId: gear.home.id,
+					hostBySpaceId: { [gear.home.id]: host },
+				}),
+				{ wrapper: createQueryTestWrapper().wrapper },
+			).container
 
-		expect(
-			within(dialog).getByText(i18n.t("settings:space.standing.yoursShared")),
-		).toBeTruthy()
-	})
+			expect(
+				within(dialog).getByText(i18n.t("settings:space.standing.yoursShared")),
+			).toBeTruthy()
+		},
+	)
 
 	it("switches to that space and closes the page on Open", async () => {
 		const { gear, office, dialog } = await openOtherSpaceOf()

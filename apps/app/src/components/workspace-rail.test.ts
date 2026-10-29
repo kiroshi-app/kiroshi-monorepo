@@ -10,7 +10,7 @@ import {
 	screen,
 	within,
 } from "@testing-library/react"
-import { createElement } from "react"
+import { createElement, type ReactElement } from "react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { AppRail } from "@workspace/ui/components/app-rail"
@@ -186,11 +186,14 @@ const railLogoTint = () => railLogo()?.dataset.colour
 
 afterEach(cleanup)
 
+const renderWithQueries = (screen: ReactElement) =>
+	render(screen, { wrapper: createQueryTestWrapper().wrapper })
+
 describe.each(SETTINGS_RAILS)(
 	"the rail on the %s settings screen",
 	(railSettings) => {
 		it("wears the colour of the owned Space that is open", () => {
-			render(
+			renderWithQueries(
 				createElement(RailHarness, { selectedSpaceId: HOME.id, railSettings }),
 			)
 
@@ -198,7 +201,7 @@ describe.each(SETTINGS_RAILS)(
 		})
 
 		it("wears the host colour of the joined Space that is open", () => {
-			render(
+			renderWithQueries(
 				createElement(RailHarness, {
 					selectedSpaceId: "studio",
 					railSettings,
@@ -209,7 +212,7 @@ describe.each(SETTINGS_RAILS)(
 		})
 
 		it("repaints its logo when another Space is selected", () => {
-			const { rerender } = render(
+			const { rerender } = renderWithQueries(
 				createElement(RailHarness, { selectedSpaceId: HOME.id, railSettings }),
 			)
 			expect(railLogoTint()).toBe(String(BLOT_HUES.red))
@@ -228,13 +231,13 @@ describe.each(SETTINGS_RAILS)(
 
 describe("the rail on a settings screen", () => {
 	it("falls back to the first Space when none matches the selection", () => {
-		render(createElement(RailHarness, { selectedSpaceId: "gone" }))
+		renderWithQueries(createElement(RailHarness, { selectedSpaceId: "gone" }))
 
 		expect(railLogoTint()).toBe(String(BLOT_HUES.red))
 	})
 
 	it("draws the open Space in the host state the switcher reads", () => {
-		const { rerender } = render(
+		const { rerender } = renderWithQueries(
 			createElement(RailHarness, { selectedSpaceId: HOME.id }),
 		)
 		expect(railLogo()?.dataset.state).toBe("local")
@@ -246,7 +249,7 @@ describe("the rail on a settings screen", () => {
 
 	it("opens the Spaces menu from its logo, its Space settings opening the selected Space settings", () => {
 		const openSpaceSettings = vi.fn()
-		render(
+		renderWithQueries(
 			createElement(RailHarness, {
 				selectedSpaceId: GARAGE.id,
 				navigation: { openSpaceSettings },
@@ -266,7 +269,7 @@ describe("the rail on a settings screen", () => {
 
 	it("switches to the Space picked in its Spaces menu", () => {
 		const onSelectSpace = vi.fn()
-		render(
+		renderWithQueries(
 			createElement(RailHarness, { selectedSpaceId: HOME.id, onSelectSpace }),
 		)
 
@@ -281,7 +284,7 @@ describe("the rail on a settings screen", () => {
 	})
 
 	it("offers to create a space in its Spaces menu", () => {
-		render(createElement(RailHarness, { selectedSpaceId: HOME.id }))
+		renderWithQueries(createElement(RailHarness, { selectedSpaceId: HOME.id }))
 
 		const menu = openSpacesMenu()
 
@@ -331,35 +334,37 @@ const produceRailFor = ({
 	selectedSpaceId,
 	connections,
 }: Pick<ProducedSpace, "selectedSpaceId" | "connections">) =>
-	renderHook(() =>
-		useWorkspaceRail({
-			collapsedSectionIds: [],
-			core: NO_SECTIONS_CORE,
-			navigation: {} as SettingsNavigation,
-			overlay: {} as WorkspaceOverlay,
-			panels: {} as SettingsPanels,
-			rosterLines: { sidebarActions: {} } as RosterLines,
-			rosterLists: {} as RosterLists,
-			sidebarTab: { openTab: "conversations" } as ReturnType<
-				typeof useSidebarPanelSwitch
-			>,
-			switcher: useSwitcherSpaces(
-				{ spaces: [HOME, GARAGE], selectedSpaceId },
-				{
-					state: {
-						joinedSpaces: [STUDIO],
-						hasFailedToLoad: false,
-						openId: selectedSpaceId === STUDIO_ROW_ID ? STUDIO.id : null,
-						departed: null,
+	renderHook(
+		() =>
+			useWorkspaceRail({
+				collapsedSectionIds: [],
+				core: NO_SECTIONS_CORE,
+				navigation: {} as SettingsNavigation,
+				overlay: {} as WorkspaceOverlay,
+				panels: {} as SettingsPanels,
+				rosterLines: { sidebarActions: {} } as RosterLines,
+				rosterLists: {} as RosterLists,
+				sidebarTab: { openTab: "conversations" } as ReturnType<
+					typeof useSidebarPanelSwitch
+				>,
+				switcher: useSwitcherSpaces(
+					{ spaces: [HOME, GARAGE], selectedSpaceId },
+					{
+						state: {
+							joinedSpaces: [STUDIO],
+							hasFailedToLoad: false,
+							openId: selectedSpaceId === STUDIO_ROW_ID ? STUDIO.id : null,
+							departed: null,
+						},
+						controller: {} as JoinedSpacesController,
+						hosts: { active: null, connections },
 					},
-					controller: {} as JoinedSpacesController,
-					hosts: { active: null, connections },
-				},
-				NO_INVITATIONS,
-			),
-			tabs: createWorkspaceTabs(),
-			onSelectSpace: () => undefined,
-		}),
+					NO_INVITATIONS,
+				),
+				tabs: createWorkspaceTabs(),
+				onSelectSpace: () => undefined,
+			}),
+		{ wrapper: createQueryTestWrapper().wrapper },
 	).result.current
 
 describe.each(PRODUCED_SPACES)(

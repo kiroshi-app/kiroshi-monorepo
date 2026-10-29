@@ -6,4 +6,7 @@ export const hostQueryKeys = {
 	hosting: () => [...hostQueryKeys.all, "hosting"] as const,
 	hostingOf: (spaceId: string | undefined) =>
 		[...hostQueryKeys.hosting(), spaceId] as const,
+	hostingStates: () => [...hostQueryKeys.all, "hostingStates"] as const,
+	hostingStateOf: (spaceId: string) =>
+		[...hostQueryKeys.hostingStates(), spaceId] as const,
 }

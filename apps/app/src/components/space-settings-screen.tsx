@@ -260,7 +260,7 @@ export const SpaceSettingsScreen = ({
 				{...membersPropsOf(space.name)}
 				{...openingProps}
 				spaceState="yours"
-				isShared={hostBySpaceId[space.id] === "shared"}
+				isShared={hostBySpaceId[space.id] !== undefined}
 				isDeletable={spaces.state.spaces.length > 1}
 				onDelete={() => {
 					void spaces.controller.remove(space.id)

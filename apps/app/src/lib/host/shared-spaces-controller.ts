@@ -1,5 +1,3 @@
-import type { SpaceHost } from "@workspace/ui/components/host-pill"
-
 import {
 	type HostedMember,
 	isExpired,
@@ -88,12 +86,3 @@ export const createSharedSpacesController = (
 		watch,
 	}
 }
-
-export const sharedMarksOf = (
-	sharedBySpaceId: Record<string, boolean>,
-): Record<string, SpaceHost> =>
-	Object.fromEntries(
-		Object.keys(sharedBySpaceId)
-			.filter((spaceId) => sharedBySpaceId[spaceId])
-			.map((spaceId) => [spaceId, "shared"]),
-	)
