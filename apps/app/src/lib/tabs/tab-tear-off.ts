@@ -481,6 +481,11 @@ export const createTabTearOff = ({
 		await releasedWindow(move, await move.view)
 	}
 
+	const showAfterFailure = (reason: unknown) => {
+		raiseMoveFailure(reason)
+		return isAccepted(commands.windowShow())
+	}
+
 	const moveWindow = (tabId: string, torn: TornTab) => {
 		const moving = isAccepted(commands.windowStartNativeMove())
 		const move: WindowMove = {
@@ -495,10 +500,7 @@ export const createTabTearOff = ({
 		)
 		moving
 			.then((isMoved) => releaseWindow(move, watching, isMoved))
-			.catch((reason: unknown) => {
-				raiseMoveFailure(reason)
-				return isAccepted(commands.windowShow())
-			})
+			.catch(showAfterFailure)
 	}
 
 	const startTabDrag = (
