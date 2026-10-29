@@ -6,10 +6,11 @@ import { afterEach, expect, it, vi } from "vitest"
 
 import "@workspace/ui/lib/i18n"
 
-import type { ClaudeImportOutcome, ClaudeInventory } from "@/lib/bindings"
+import type { ClaudeInventory } from "@/lib/bindings"
 import { createFakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
+import type { ClaudeImportPort } from "@/lib/onboarding/claude-import-controller"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 import type { UserPreferences } from "@/lib/user/preferences-contract"
 
@@ -26,12 +27,7 @@ const harness = vi.hoisted(
 )
 
 const importRun = vi.hoisted(() => ({
-	run: vi.fn<
-		(
-			selection: string[],
-			spaceId: string | null,
-		) => Promise<ClaudeImportOutcome[]>
-	>(async () => []),
+	run: vi.fn<ClaudeImportPort["run"]>(async () => []),
 }))
 
 const ATLAS = {
