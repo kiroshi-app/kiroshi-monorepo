@@ -287,21 +287,21 @@ export const createTabTearOff = ({
 
 	const land = async (ended: TabDrag, tearOff: TabTearOff) => {
 		const view = await ghostLeft(await ended.view)
-		const point = pointOf(tearOff)
-		const target = ended.hasFailed
-			? null
-			: await dockTargetAt(point, ended.spaceId)
-		if (target === null) {
-			failOnce(ended, "window_strip_at")
+		if (ended.hasFailed) {
 			await cancelAnnounced(ended, view)
 			return
 		}
+		const point = pointOf(tearOff)
+		const target = await dockTargetAt(point, ended.spaceId)
+		if (target === null) {
+			failOnce(ended, "window_strip_at")
+		}
 		if (target === "sameSpace") {
 			await dock(ended, point)
-		} else if (target === "otherSpace") {
-			await cancelAnnounced(ended, view)
-		} else {
+		} else if (target === "outside") {
 			await leaveOutside(ended, view, tearOff)
+		} else {
+			await cancelAnnounced(ended, view)
 		}
 	}
 
