@@ -56,8 +56,7 @@ const endOf = (box: SlotBox, axis: SlideAxis) =>
 const sizeOf = (box: SlotBox, axis: SlideAxis) =>
 	axis === "x" ? box.width : box.height
 
-const isRendered = (box: SlotBox | null): box is SlotBox =>
-	box !== null && box.width > 0 && box.height > 0
+const hasArea = (box: SlotBox) => box.width > 0 && box.height > 0
 
 type SlideGeometrySource = {
 	axis: SlideAxis
@@ -78,10 +77,11 @@ export const slideGeometryOf = ({
 }: SlideGeometrySource): SlideGeometry | null => {
 	const origin = zone.indexOf(liftedId)
 	const rest = origin < 0 ? null : boxes[origin]
-	if (!isRendered(rest)) return null
+	if (!rest) return null
+	const isLaidOut = hasArea(rest)
 	const slots = zone.flatMap((id, rank) => {
 		const box = boxes[rank]
-		return isRendered(box)
+		return box && (!isLaidOut || hasArea(box))
 			? [{ id, rank, start: startOf(box, axis), end: endOf(box, axis) }]
 			: []
 	})

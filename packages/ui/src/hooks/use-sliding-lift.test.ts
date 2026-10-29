@@ -166,14 +166,24 @@ describe.each([
 })
 
 describe("sliding lift from a slot that is not rendered", () => {
-	it.each([
-		{ lifted: "a zero-box slot", size: 0 },
-		{ lifted: "a zone id with no node", size: null },
-	])("measures no geometry for $lifted", ({ size }) => {
-		expect(measuredOf("y", [28, size, 28, 28], "b", 14)).toBeNull()
+	it("measures no geometry for a zone id with no node", () => {
+		expect(measuredOf("y", [28, null, 28, 28], "b", 14)).toBeNull()
 	})
 
 	it("measures no geometry for an id outside the zone", () => {
 		expect(measuredOf("x", [100, 100, 100, 100], "z", 150)).toBeNull()
+	})
+})
+
+describe("sliding lift without layout", () => {
+	const geometry = geometryOf("x", [0, 0, 0, 0], "c", 0)
+
+	it("keeps every zero-box slot", () => {
+		expect(geometry.slots.map((slot) => slot.id)).toEqual(ZONE)
+	})
+
+	it("lands on the first slot from anywhere, as the strip always has", () => {
+		expect(slideLandingIn(geometry, ...pointAt("x", -40))).toBe(0)
+		expect(slideLandingIn(geometry, ...pointAt("x", 500))).toBe(0)
 	})
 })
