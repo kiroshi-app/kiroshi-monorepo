@@ -87,8 +87,6 @@ const ConnectScreenHoldingItsFields = (props: OnboardingConnectScreenProps) => {
 	)
 }
 
-const RING_OF_KEYBOARD_FOCUS = /\b3px\b/
-
 const meta = preview.meta({
 	title: "Feedback/OnboardingConnectScreen",
 	component: OnboardingConnectScreen,
@@ -228,9 +226,7 @@ export const ConnectNothingFoundLight = meta.story({
 		await userEvent.tab({ shift: true })
 		const signIn = canvas.getByRole("button", { name: "Sign in with Claude" })
 		await expect(signIn).toHaveFocus()
-		await expect(getComputedStyle(signIn).boxShadow).toMatch(
-			RING_OF_KEYBOARD_FOCUS,
-		)
+		await expect(getComputedStyle(signIn).boxShadow).toMatch(/\b3px\b/)
 
 		const pasteKey = canvas.getByRole("button", { name: "Paste an API key" })
 		const { userEvent: pointer } = await import("vitest/browser")
