@@ -27,7 +27,6 @@ fn written_by_a_child_process(path: &Path, body: &str) -> io::Result<()> {
 	std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))
 }
 
-#[cfg(test)]
 mod tests {
 	use std::process::Command;
 
