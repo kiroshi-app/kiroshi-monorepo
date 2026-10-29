@@ -5,7 +5,7 @@ use std::sync::LazyLock;
 use rusqlite::types::Type;
 use rusqlite::{Connection, Transaction, TransactionBehavior};
 
-use super::conversations::is_live_bot;
+use super::conversations::{is_live_bot, oldest_live_bot_named, titled_if_untitled};
 use super::settings::Settings;
 use crate::db::{Access, DatabaseError};
 
@@ -35,6 +35,7 @@ const ONBOARDING_FIRST_COMPANION_ID_KEY: &str = "user.onboarding_first_companion
 const FIRST_COMPANION_SEEDED_KEY: &str = "app.first_companion_seeded";
 const LAST_WINDOW_RANK_KEY: &str = "app.last_window_rank";
 const CLAUDE_IMPORTED_KEY: &str = "app.claude_imported";
+const SHOTO_TITLE_BACKFILLED_KEY: &str = "app.shoto_title_backfilled";
 
 const UNREADABLE_WINDOW_RANK: &str = "the last window rank does not read as a count";
 
@@ -312,6 +313,27 @@ impl UserRepository {
 			.await
 	}
 
+	pub async fn backfill_shoto_title(
+		&self,
+		shoto_name: &'static str,
+		title: &'static str,
+	) -> Result<(), DatabaseError> {
+		self.access
+			.call_mut(move |connection| {
+				let transaction = write_transaction(connection)?;
+				if switch_on_in(&transaction, SHOTO_TITLE_BACKFILLED_KEY)? {
+					return Ok(());
+				}
+				if let Some(shoto_id) = shoto_in(&transaction, shoto_name)? {
+					titled_if_untitled(&transaction, &shoto_id, title)?;
+				}
+				write_switch_in(&transaction, SHOTO_TITLE_BACKFILLED_KEY, true)?;
+				transaction.commit()?;
+				Ok(())
+			})
+			.await
+	}
+
 	pub async fn mark_first_run_done(&self) -> Result<(), DatabaseError> {
 		self.access
 			.call_mut(|connection| {
@@ -492,6 +514,13 @@ fn live_bot_setting_in(
 		return Ok(None);
 	};
 	Ok(is_live_bot(connection, &bot_id)?.then_some(bot_id))
+}
+
+fn shoto_in(connection: &Connection, shoto_name: &str) -> Result<Option<String>, DatabaseError> {
+	if let Some(shoto_id) = live_bot_setting_in(connection, ONBOARDING_SHOTO_ID_KEY)? {
+		return Ok(Some(shoto_id));
+	}
+	Ok(oldest_live_bot_named(connection, shoto_name)?)
 }
 
 fn switch_in(connection: &Connection, key: &str) -> Result<bool, DatabaseError> {

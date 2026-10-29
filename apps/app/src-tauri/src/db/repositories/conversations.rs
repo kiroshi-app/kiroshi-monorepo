@@ -39,7 +39,9 @@ use bots::{
 	set_permissions, stored_default_bot, updated_bot, BOT_COLUMNS, RANKED_BY_PRESENCE_IN_SPACE,
 };
 
-pub(in crate::db::repositories) use bots::{bots_of, deleted_chat_in, is_live_bot, retired_bot};
+pub(in crate::db::repositories) use bots::{
+	bots_of, deleted_chat_in, is_live_bot, oldest_live_bot_named, retired_bot, titled_if_untitled,
+};
 
 pub const DEFAULT_BOT_ID: &str = "default";
 const DEFAULT_BOT_NAME: &str = "Claude";

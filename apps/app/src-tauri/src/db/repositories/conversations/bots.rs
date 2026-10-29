@@ -86,6 +86,29 @@ pub(in crate::db::repositories) fn is_live_bot(
 	connection.query_row(LIVE_BOT, [id], |row| row.get(0))
 }
 
+pub(in crate::db::repositories) fn oldest_live_bot_named(
+	connection: &Connection,
+	name: &str,
+) -> rusqlite::Result<Option<String>> {
+	connection
+		.query_row(
+			"SELECT id FROM bots WHERE name = ?1 AND deleted_at IS NULL
+				ORDER BY created_at ASC, id ASC LIMIT 1",
+			[name],
+			|row| row.get(0),
+		)
+		.optional()
+}
+
+pub(in crate::db::repositories) fn titled_if_untitled(
+	transaction: &Transaction<'_>,
+	id: &str,
+	title: &str,
+) -> rusqlite::Result<usize> {
+	transaction
+		.execute("UPDATE bots SET title = ?2 WHERE id = ?1 AND title = ''", params![id, title])
+}
+
 pub(super) fn ensured_default_bot(connection: &mut Connection) -> Result<Bot, ConversationError> {
 	if let Some(stored) = stored_default_bot(connection)? {
 		return Ok(stored);
