@@ -11,7 +11,12 @@ import {
 	type WindowSize,
 } from "../bindings"
 import { raiseReportedFailure } from "../failure-report"
-import { readPointerPosition, watchWindowMoves } from "../host"
+import {
+	currentWindowLabel,
+	readPointerPosition,
+	watchNativeMoveEnded,
+	watchWindowMoves,
+} from "../host"
 
 export type TabTearOff = {
 	tabId: string
@@ -94,7 +99,13 @@ type WindowMove = DockedDrag & {
 	spaceId: string
 	isReleased: boolean
 	view: Promise<WindowView>
+	unwatchers: Promise<(() => void) | null>[]
+	endWait?: ReturnType<typeof setTimeout>
 }
+
+type PointReader = () => Promise<ScreenPosition | null>
+
+export const NATIVE_MOVE_END_WAIT_MS = 5000
 
 export const pointOf = ({ screenX, screenY }: TabTearOff): ScreenPosition => ({
 	x: Math.round(screenX),
@@ -345,11 +356,17 @@ const followedWindow = async (
 	return windowOver(move, view, site.target)
 }
 
-const windowDockSite = async (move: WindowMove, view: WindowView) => {
+const noPoint: PointReader = async () => null
+
+const windowDockSite = async (
+	move: WindowMove,
+	view: WindowView,
+	readPoint: PointReader,
+) => {
 	if (move.hasFailed || view.target !== "sameSpace") {
 		return null
 	}
-	const point = await pointerNow()
+	const point = await readPoint()
 	const site = point && (await dockSiteAt(point, move.spaceId))
 	return point && site?.target === "sameSpace" && site.label !== null
 		? { point, label: site.label }
@@ -451,8 +468,12 @@ export const createTabTearOff = ({
 		}
 	}
 
-	const releasedWindow = async (move: WindowMove, view: WindowView) => {
-		const site = await windowDockSite(move, view)
+	const releasedWindow = async (
+		move: WindowMove,
+		view: WindowView,
+		readPoint: PointReader,
+	) => {
+		const site = await windowDockSite(move, view, readPoint)
 		if (!site) {
 			await cancelAnnounced(move, view)
 			await windowOver(move, view, "outside")
@@ -466,41 +487,88 @@ export const createTabTearOff = ({
 		}
 	}
 
-	// TODO: the host emits no native window move ended event at mouse-up carrying the release point, so the settling of window_start_native_move stands in for the release. It settles before the drag on Windows and Linux, where the drag then ends unhidden.
-	const releaseWindow = async (
-		move: WindowMove,
-		watching: Promise<() => void>,
-		isMoved: boolean,
-	) => {
-		move.isReleased = true
-		const stopWatching = await watching
-		stopWatching()
-		if (!isMoved) {
-			failOnce(move, "window_start_native_move")
-		}
-		await releasedWindow(move, await move.view)
-	}
-
 	const showAfterFailure = (reason: unknown) => {
 		raiseMoveFailure(reason)
 		return isAccepted(commands.windowShow())
 	}
 
-	const moveWindow = (tabId: string, torn: TornTab) => {
-		const moving = isAccepted(commands.windowStartNativeMove())
+	const releaseWindow = async (move: WindowMove, readPoint: PointReader) => {
+		clearTimeout(move.endWait)
+		for (const stopWatching of await Promise.all(move.unwatchers)) {
+			stopWatching?.()
+		}
+		await releasedWindow(move, await move.view, readPoint)
+	}
+
+	const releaseOnce = (move: WindowMove, readPoint: PointReader) => {
+		if (move.isReleased) {
+			return
+		}
+		move.isReleased = true
+		releaseWindow(move, readPoint).catch(showAfterFailure)
+	}
+
+	const awaitMoveEnd = (move: WindowMove) => {
+		if (move.isReleased) {
+			return
+		}
+		clearTimeout(move.endWait)
+		move.endWait = setTimeout(
+			() => releaseOnce(move, noPoint),
+			NATIVE_MOVE_END_WAIT_MS,
+		)
+	}
+
+	const followMovedWindow = (move: WindowMove) => {
+		followWindow(move)
+		if (move.endWait !== undefined) {
+			awaitMoveEnd(move)
+		}
+	}
+
+	const watchMoveEnd = (move: WindowMove) => {
+		const watching = watchNativeMoveEnded(({ label, point }) => {
+			if (label === currentWindowLabel()) {
+				releaseOnce(move, async () => point)
+			}
+		}).catch((reason: unknown) => {
+			raiseMoveFailure(reason)
+			return null
+		})
+		move.unwatchers.push(watching)
+		return watching
+	}
+
+	const settleMove = (
+		move: WindowMove,
+		isMoved: boolean,
+		isEndWatched: boolean,
+	) => {
+		if (isMoved && isEndWatched) {
+			awaitMoveEnd(move)
+			return
+		}
+		if (!isMoved) {
+			failOnce(move, "window_start_native_move")
+		}
+		releaseOnce(move, pointerNow)
+	}
+
+	const moveWindow = async (tabId: string, torn: TornTab) => {
 		const move: WindowMove = {
 			tabId,
 			spaceId: torn.spaceId,
 			hasFailed: false,
 			isReleased: false,
 			view: Promise.resolve().then(() => announcedWindow(move, torn)),
+			unwatchers: [],
 		}
-		const watching = watchWindowMoves(() => followWindow(move)).catch(
-			reportUnwatched,
+		move.unwatchers.push(
+			watchWindowMoves(() => followMovedWindow(move)).catch(reportUnwatched),
 		)
-		moving
-			.then((isMoved) => releaseWindow(move, watching, isMoved))
-			.catch(showAfterFailure)
+		const isEndWatched = (await watchMoveEnd(move)) !== null
+		const isMoved = await isAccepted(commands.windowStartNativeMove())
+		settleMove(move, isMoved, isEndWatched)
 	}
 
 	const startTabDrag = (
@@ -529,7 +597,7 @@ export const createTabTearOff = ({
 			}
 			if (torn.isOnlyTab) {
 				drag = { kind: "window", tabId: tearOff.tabId }
-				moveWindow(tearOff.tabId, torn)
+				moveWindow(tearOff.tabId, torn).catch(showAfterFailure)
 				return
 			}
 			startTabDrag(tearOff, torn, drawGhost)
