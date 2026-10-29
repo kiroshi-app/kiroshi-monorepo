@@ -57,7 +57,7 @@ const expectWelcome = async ({
 	await expect(within(footer).getByText(step)).toBeVisible()
 	await expect(dots[0]?.parentElement).toHaveAttribute("aria-hidden", "true")
 	await expect(dots.map((dot) => dot.getBoundingClientRect().width)).toEqual(
-		[1, 2, 3].map((dot) => (dot === current ? 18 : 6)),
+		[1, 2, 3, 4].map((dot) => (dot === current ? 18 : 6)),
 	)
 	await expectGroupUnderHeading(canvasElement)
 	await expectNoHorizontalScrollAt(canvasElement, 320, "onboarding-shell")
@@ -277,7 +277,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The three Welcome screens a reader meets before connecting a model provider: an illustration, a title, a body and one footer group in one centred column on the onboarding shell. The group sits under the heading and moves with it, spans its own content only, and holds Skip intro, the step dots with the step count, Back and the primary action. The current dot is the wide one; the dots are hidden from assistive technology, which reads the step count instead. On the first step Back keeps its slot but is gone from sight, from assistive technology and from the tab order; on the last step Skip intro does the same, and the action reads Get started. Back is an outline pill as tall as the primary action, which wears the Space colour.",
+					"The four Welcome screens a reader meets before connecting a model provider: an illustration, a title, a body and one footer group in one centred column on the onboarding shell. The group sits under the heading and moves with it, spans its own content only, and holds Skip intro, the step dots with the step count, Back and the primary action. The current dot is the wide one; the dots are hidden from assistive technology, which reads the step count instead. On the first step Back keeps its slot but is gone from sight, from assistive technology and from the tab order; on the last step Skip intro does the same, and the action reads Get started. Back is an outline pill as tall as the primary action, which wears the Space colour.",
 			},
 		},
 	},
@@ -294,7 +294,7 @@ export const WelcomeCompanionsLight = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${ARTBOARD} Artboard 1.1: three companions on bot avatars, 96, 132 and 96, the middle one lifted. Check the names, each job on the roster title pill centred under its name, the first dot wide, 1 of 3, Back gone with its slot kept, and Next calling back. Pick the Dark twin for the other theme.`,
+				story: `${ARTBOARD} Artboard 1.1: three companions on bot avatars, 96, 132 and 96, the middle one lifted. Check the names, each job on the roster title pill centred under its name, the first dot wide, 1 of 4, Back gone with its slot kept, and Next calling back. Pick the Dark twin for the other theme.`,
 			},
 		},
 	},
@@ -303,7 +303,7 @@ export const WelcomeCompanionsLight = meta.story({
 			canvasElement,
 			title: "Companions do the work with you",
 			action: "Next",
-			step: "1 of 3",
+			step: "1 of 4",
 			current: 1,
 		})
 		await expect(
@@ -341,7 +341,7 @@ export const WelcomeCompanionsDark = meta.story({
 			canvasElement,
 			title: "Companions do the work with you",
 			action: "Next",
-			step: "1 of 3",
+			step: "1 of 4",
 			current: 1,
 		})
 		await expectCompanionRoles(canvasElement)
@@ -424,7 +424,7 @@ export const WelcomeConversationsLight = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${ARTBOARD} Artboard 1.2: a group Conversation card, the person's bubble in the Space colour and the reply on muted, then a mission row with its Working pill. Check the second dot wide, 2 of 3, and Back as an outline pill calling back. Pick the Dark twin for the other theme.`,
+				story: `${ARTBOARD} Artboard 1.2: a group Conversation card, the person's bubble in the Space colour and the reply on muted, then a mission row with its Working pill. Check the second dot wide, 2 of 4, and Back as an outline pill calling back. Pick the Dark twin for the other theme.`,
 			},
 		},
 	},
@@ -433,7 +433,7 @@ export const WelcomeConversationsLight = meta.story({
 			canvasElement,
 			title: "Conversations, then missions",
 			action: "Next",
-			step: "2 of 3",
+			step: "2 of 4",
 			current: 2,
 		})
 		await expect(canvas.getByText("Release notes for 2.4")).toBeVisible()
@@ -466,7 +466,7 @@ export const WelcomeConversationsDark = meta.story({
 			canvasElement,
 			title: "Conversations, then missions",
 			action: "Next",
-			step: "2 of 3",
+			step: "2 of 4",
 			current: 2,
 		})
 		await expectBack({ canvasElement, onBack: args.onBack })
@@ -484,13 +484,71 @@ const expectLastStep = async (canvasElement: HTMLElement) => {
 	).toBe("hidden")
 }
 
+export const WelcomeSpacesLight = meta.story({
+	name: "Welcome / Spaces / Light",
+	args: { step: "spaces" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"No artboard draws this slide: it takes the anatomy of the others. Two Space cards, Orbit web and Newsletter, each with its Space avatar, its companions and its Conversation count. Check the Space avatars in two colours, the third dot wide, 3 of 4, Skip intro and Back as on the Conversations slide, and Next calling forward. Pick the Dark twin for the other theme.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		await expectWelcome({
+			canvasElement,
+			title: "Spaces keep things apart",
+			action: "Next",
+			step: "3 of 4",
+			current: 3,
+		})
+		await expect(slotsIn(canvasElement, "space-avatar")).toHaveLength(2)
+
+		await userEvent.tab()
+		await expect(
+			canvas.getByRole("button", { name: "Skip intro" }),
+		).toHaveFocus()
+		await userEvent.tab()
+		await expect(canvas.getByRole("button", { name: "Back" })).toHaveFocus()
+
+		await userEvent.click(canvas.getByRole("button", { name: "Next" }))
+		await expect(args.onNext).toHaveBeenCalledOnce()
+		await expectBack({ canvasElement, onBack: args.onBack })
+	},
+})
+
+export const WelcomeSpacesDark = meta.story({
+	name: "Welcome / Spaces / Dark",
+	args: { step: "spaces" },
+	globals: { theme: "dark" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The Spaces slide, dark. Check the cards on the dark card surface, both Space avatars in their dark tone, the third dot wide, 3 of 4, and Back with its focus ring on the dark page. Pick the Light twin for the other theme.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		await expectWelcome({
+			canvasElement,
+			title: "Spaces keep things apart",
+			action: "Next",
+			step: "3 of 4",
+			current: 3,
+		})
+		await expectBack({ canvasElement, onBack: args.onBack })
+	},
+})
+
 export const WelcomeYourToolsLight = meta.story({
 	name: "Welcome / Your tools / Light",
 	args: { step: "tools" },
 	parameters: {
 		docs: {
 			description: {
-				story: `${ARTBOARD} Artboard 1.3: three equal cards, Folders, Applications and Secrets. Check Skip intro gone from sight and from assistive technology with its slot kept, the third dot wide, 3 of 3, Back calling back and Get started. Pick the Dark twin for the other theme.`,
+				story: `${ARTBOARD} Artboard 1.3: three equal cards, Folders, Applications and Secrets. Check Skip intro gone from sight and from assistive technology with its slot kept, the fourth dot wide, 4 of 4, Back calling back and Get started. Pick the Dark twin for the other theme.`,
 			},
 		},
 	},
@@ -499,8 +557,8 @@ export const WelcomeYourToolsLight = meta.story({
 			canvasElement,
 			title: "Your tools, where you allow them",
 			action: "Get started",
-			step: "3 of 3",
-			current: 3,
+			step: "4 of 4",
+			current: 4,
 		})
 		await expectLastStep(canvasElement)
 		await expectBack({ canvasElement, onBack: args.onBack })
@@ -526,8 +584,8 @@ export const WelcomeYourToolsDark = meta.story({
 			canvasElement,
 			title: "Your tools, where you allow them",
 			action: "Get started",
-			step: "3 of 3",
-			current: 3,
+			step: "4 of 4",
+			current: 4,
 		})
 		await expectLastStep(canvasElement)
 		await expectBack({ canvasElement, onBack: args.onBack })
@@ -542,6 +600,7 @@ export const WelcomeEverySlide = meta.story({
 		<>
 			<OnboardingWelcomeScreen {...args} step="companions" />
 			<OnboardingWelcomeScreen {...args} step="conversations" />
+			<OnboardingWelcomeScreen {...args} step="spaces" />
 			<OnboardingWelcomeScreen {...args} step="tools" />
 		</>
 	),
@@ -549,7 +608,7 @@ export const WelcomeEverySlide = meta.story({
 		docs: {
 			description: {
 				story:
-					"The three Welcome slides stacked in one window. Check the footer group at the same left edge and the same width on all three, Get started included: Back keeps its slot on the first slide, Skip intro on the last, and the primary action is as wide as its longer label on every slide.",
+					"The four Welcome slides stacked in one window. Check the footer group at the same left edge and the same width on all four, Get started included: Back keeps its slot on the first slide, Skip intro on the last, and the primary action is as wide as its longer label on every slide.",
 			},
 		},
 	},
@@ -558,7 +617,7 @@ export const WelcomeEverySlide = meta.story({
 			(group) => group.getBoundingClientRect(),
 		)
 
-		await expect(groups).toHaveLength(3)
+		await expect(groups).toHaveLength(4)
 		await expect(groups.map(({ left, width }) => ({ left, width }))).toEqual(
 			groups.map(() => ({ left: groups[0]?.left, width: groups[0]?.width })),
 		)
