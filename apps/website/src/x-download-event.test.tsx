@@ -38,9 +38,6 @@ const openHome = async () => {
 	return downloadLink
 }
 
-const downloadEventCalls = () =>
-	twq.mock.calls.filter(([command]) => command === "event")
-
 beforeEach(() => {
 	twq = vi.fn()
 	vi.stubGlobal("twq", twq)
@@ -64,7 +61,7 @@ describe("a download CTA click", () => {
 		fireEvent.click(downloadLink)
 		fireEvent.click(downloadLink)
 
-		expect(downloadEventCalls()).toEqual([
+		expect(twq.mock.calls).toEqual([
 			["event", X_DOWNLOAD_EVENT_ID, {}],
 			["event", X_DOWNLOAD_EVENT_ID, {}],
 		])
@@ -76,7 +73,7 @@ describe("a download CTA click", () => {
 
 		fireEvent.click(downloadLink)
 
-		expect(downloadEventCalls()).toEqual([["event", X_DOWNLOAD_EVENT_ID, {}]])
+		expect(twq.mock.calls).toEqual([["event", X_DOWNLOAD_EVENT_ID, {}]])
 	})
 
 	it("reports nothing while the event id is empty", async () => {
