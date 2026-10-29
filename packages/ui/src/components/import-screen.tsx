@@ -58,8 +58,7 @@ type ImportScreenProps = {
 const LINK_CLASS =
 	"relative rounded-xs font-medium text-compact text-foreground leading-4.5 underline decoration-1 underline-offset-2 outline-offset-2 after:absolute after:-inset-1"
 
-const isPicked = (item: ImportItem) =>
-	Boolean(item.checked && !item.isInKiroshi)
+const isPicked = (item: ImportItem) => item.checked && !item.isInKiroshi
 
 const hasPickedItem = (sections: ImportSection[]) =>
 	sections.some((section) => section.items.some(isPicked))
