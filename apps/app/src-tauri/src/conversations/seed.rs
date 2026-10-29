@@ -213,6 +213,7 @@ mod tests {
 	};
 	use crate::companions::launch::LaunchOutcomeState;
 	use crate::db::repositories::conversations::{Bot as StoredBot, ConversationDraft};
+	use crate::db::repositories::user::OnboardingStep;
 	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 
 	fn a_bare_host(name: &str) -> AppOfItsOwn {
@@ -518,7 +519,9 @@ mod tests {
 			"a bundle was written"
 		);
 		assert!(database.user().is_first_companion_seeded().await.expect("the marker"));
-		assert!(database.user().preferences().await.expect("the preferences").first_run_done);
+		let preferences = database.user().preferences().await.expect("the preferences");
+		assert!(preferences.first_run_done);
+		assert_eq!(preferences.onboarding_step, OnboardingStep::Done);
 		assert_eq!(payloads::<CompanionCreated>(&created), Vec::new());
 		assert_eq!(payloads::<CompanionSeedRefused>(&refused), Vec::new());
 		assert_eq!(outcome_of(&app), LaunchOutcome::default());

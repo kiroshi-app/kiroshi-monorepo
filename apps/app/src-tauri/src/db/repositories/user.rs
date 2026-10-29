@@ -26,6 +26,8 @@ const DROPPED_LAST_BOT_ID_KEY: &str = "user.last_bot_id";
 const UPDATE_CHANNEL_KEY: &str = "user.update_channel";
 const SHOW_WHATS_NEW_KEY: &str = "user.show_whats_new";
 const LAST_SEEN_VERSION_KEY: &str = "user.last_seen_version";
+const ONBOARDING_STEP_KEY: &str = "user.onboarding_step";
+const ONBOARDING_IMPORT_SEEN_KEY: &str = "user.onboarding_import_seen";
 
 const FIRST_COMPANION_SEEDED_KEY: &str = "app.first_companion_seeded";
 const LAST_WINDOW_RANK_KEY: &str = "app.last_window_rank";
@@ -123,6 +125,47 @@ impl UpdateChannel {
 	}
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum OnboardingStep {
+	#[default]
+	Welcome,
+	Connect,
+	Import,
+	Account,
+	Done,
+}
+
+impl OnboardingStep {
+	fn as_stored(self) -> &'static str {
+		match self {
+			OnboardingStep::Welcome => "welcome",
+			OnboardingStep::Connect => "connect",
+			OnboardingStep::Import => "import",
+			OnboardingStep::Account => "account",
+			OnboardingStep::Done => "done",
+		}
+	}
+
+	fn known(stored: &str) -> Option<Self> {
+		match stored {
+			"welcome" => Some(OnboardingStep::Welcome),
+			"connect" => Some(OnboardingStep::Connect),
+			"import" => Some(OnboardingStep::Import),
+			"account" => Some(OnboardingStep::Account),
+			"done" => Some(OnboardingStep::Done),
+			_ => None,
+		}
+	}
+
+	fn implied_by(is_first_run_done: bool) -> Self {
+		if is_first_run_done {
+			OnboardingStep::Done
+		} else {
+			OnboardingStep::Welcome
+		}
+	}
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Preferences {
 	pub display_name: String,
@@ -142,6 +185,8 @@ pub struct Preferences {
 	pub update_channel: UpdateChannel,
 	pub show_whats_new: bool,
 	pub last_seen_version: Option<String>,
+	pub onboarding_step: OnboardingStep,
+	pub onboarding_import_seen: bool,
 }
 
 impl Default for Preferences {
@@ -164,6 +209,8 @@ impl Default for Preferences {
 			update_channel: UpdateChannel::default(),
 			show_whats_new: true,
 			last_seen_version: None,
+			onboarding_step: OnboardingStep::default(),
+			onboarding_import_seen: false,
 		}
 	}
 }
@@ -231,7 +278,29 @@ impl UserRepository {
 	}
 
 	pub async fn mark_first_run_done(&self) -> Result<(), DatabaseError> {
-		self.mark_switch_on(FIRST_RUN_DONE_KEY).await
+		self.access
+			.call_mut(|connection| {
+				let transaction = write_transaction(connection)?;
+				write_switch_in(&transaction, FIRST_RUN_DONE_KEY, true)?;
+				write_onboarding_step_in(&transaction, OnboardingStep::Done)?;
+				transaction.commit()?;
+				Ok(())
+			})
+			.await
+	}
+
+	pub async fn set_onboarding_step(
+		&self,
+		step: OnboardingStep,
+	) -> Result<Preferences, DatabaseError> {
+		self.write_then_read(move |transaction| write_onboarding_step_in(transaction, step)).await
+	}
+
+	pub async fn mark_onboarding_import_seen(&self) -> Result<Preferences, DatabaseError> {
+		self.write_then_read(|transaction| {
+			write_switch_in(transaction, ONBOARDING_IMPORT_SEEN_KEY, true)
+		})
+		.await
 	}
 
 	pub async fn hand_out_window_rank(&self) -> Result<u64, DatabaseError> {
@@ -242,6 +311,21 @@ impl UserRepository {
 				SETTINGS.write(&transaction, None, LAST_WINDOW_RANK_KEY, &rank.to_string())?;
 				transaction.commit()?;
 				Ok(rank)
+			})
+			.await
+	}
+
+	async fn write_then_read<F>(&self, write: F) -> Result<Preferences, DatabaseError>
+	where
+		F: FnOnce(&Transaction<'_>) -> Result<(), DatabaseError> + Send + 'static,
+	{
+		self.access
+			.call_mut(move |connection| {
+				let transaction = write_transaction(connection)?;
+				write(&transaction)?;
+				let stored = stored_in(&transaction)?;
+				transaction.commit()?;
+				Ok(stored)
 			})
 			.await
 	}
@@ -264,6 +348,7 @@ fn write_transaction(connection: &mut Connection) -> Result<Transaction<'_>, Dat
 
 fn stored_in(connection: &Connection) -> Result<Preferences, DatabaseError> {
 	let defaults = Preferences::default();
+	let first_run_done = switch_on_in(connection, FIRST_RUN_DONE_KEY)?;
 	Ok(Preferences {
 		display_name: setting_in(connection, DISPLAY_NAME_KEY)?.unwrap_or(defaults.display_name),
 		avatar_image_path: setting_in(connection, AVATAR_IMAGE_PATH_KEY)?,
@@ -279,7 +364,7 @@ fn stored_in(connection: &Connection) -> Result<Preferences, DatabaseError> {
 		sidebar_tab: setting_in(connection, SIDEBAR_TAB_KEY)?
 			.map_or(defaults.sidebar_tab, |stored| SidebarTab::of(&stored)),
 		activity_panel_open: switch_on_in(connection, ACTIVITY_PANEL_OPEN_KEY)?,
-		first_run_done: switch_on_in(connection, FIRST_RUN_DONE_KEY)?,
+		first_run_done,
 		last_space_id: setting_in(connection, LAST_SPACE_ID_KEY)?,
 		last_bot_id_by_space: setting_in(connection, LAST_BOT_ID_BY_SPACE_KEY)?
 			.and_then(|stored| serde_json::from_str(&stored).ok())
@@ -288,6 +373,10 @@ fn stored_in(connection: &Connection) -> Result<Preferences, DatabaseError> {
 			.map_or(defaults.update_channel, |stored| UpdateChannel::of(&stored)),
 		show_whats_new: switch_in(connection, SHOW_WHATS_NEW_KEY)?,
 		last_seen_version: setting_in(connection, LAST_SEEN_VERSION_KEY)?,
+		onboarding_step: setting_in(connection, ONBOARDING_STEP_KEY)?
+			.and_then(|stored| OnboardingStep::known(&stored))
+			.unwrap_or(OnboardingStep::implied_by(first_run_done)),
+		onboarding_import_seen: switch_on_in(connection, ONBOARDING_IMPORT_SEEN_KEY)?,
 	})
 }
 
@@ -357,6 +446,13 @@ fn write_switch_in(
 	SETTINGS.write(transaction, None, key, switch_as_stored(is_on))
 }
 
+fn write_onboarding_step_in(
+	transaction: &Transaction<'_>,
+	step: OnboardingStep,
+) -> Result<(), DatabaseError> {
+	SETTINGS.write(transaction, None, ONBOARDING_STEP_KEY, step.as_stored())
+}
+
 fn write_picture_in(
 	transaction: &Transaction<'_>,
 	path: Option<&str>,
@@ -403,6 +499,8 @@ mod tests {
 			update_channel: UpdateChannel::Beta,
 			show_whats_new: false,
 			last_seen_version: Some("0.24.1".to_owned()),
+			onboarding_step: OnboardingStep::Done,
+			onboarding_import_seen: false,
 		}
 	}
 
@@ -437,6 +535,8 @@ mod tests {
 				update_channel: UpdateChannel::Stable,
 				show_whats_new: true,
 				last_seen_version: None,
+				onboarding_step: OnboardingStep::Welcome,
+				onboarding_import_seen: false,
 			}
 		);
 	}
@@ -627,6 +727,148 @@ mod tests {
 		let database = open(&dir);
 
 		assert!(database.user().preferences().await.expect("the record").first_run_done);
+	}
+
+	async fn planted(database: &Database, key: &'static str, value: &'static str) {
+		database
+			.call_mut(move |connection| {
+				let transaction = write_transaction(connection)?;
+				SETTINGS.write(&transaction, None, key, value)?;
+				transaction.commit()?;
+				Ok(())
+			})
+			.await
+			.expect("the planted value");
+	}
+
+	#[tokio::test]
+	async fn a_set_onboarding_step_is_answered_and_still_set_after_the_file_is_reopened() {
+		let dir = temp_dir();
+		{
+			let database = open(&dir);
+			let answered = database
+				.user()
+				.set_onboarding_step(OnboardingStep::Import)
+				.await
+				.expect("the write");
+			assert_eq!(answered.onboarding_step, OnboardingStep::Import);
+		}
+
+		let database = open(&dir);
+
+		let read = database.user().preferences().await.expect("the record");
+		assert_eq!(read.onboarding_step, OnboardingStep::Import);
+	}
+
+	#[tokio::test]
+	async fn an_onboarding_set_back_to_welcome_leaves_the_first_run_and_the_import_mark_alone() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		database.user().mark_first_run_done().await.expect("the first run");
+		database.user().mark_onboarding_import_seen().await.expect("the import mark");
+
+		let replayed =
+			database.user().set_onboarding_step(OnboardingStep::Welcome).await.expect("the replay");
+
+		assert_eq!(replayed.onboarding_step, OnboardingStep::Welcome);
+		assert!(replayed.first_run_done);
+		assert!(replayed.onboarding_import_seen);
+	}
+
+	#[tokio::test]
+	async fn a_marked_import_is_answered_seen_and_still_seen_after_the_file_is_reopened() {
+		let dir = temp_dir();
+		{
+			let database = open(&dir);
+			let answered = database.user().mark_onboarding_import_seen().await.expect("the mark");
+			assert!(answered.onboarding_import_seen);
+		}
+
+		let database = open(&dir);
+
+		assert!(database.user().preferences().await.expect("the record").onboarding_import_seen);
+	}
+
+	#[tokio::test]
+	async fn without_a_stored_step_a_finished_first_run_reads_as_a_finished_onboarding() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		planted(&database, FIRST_RUN_DONE_KEY, SWITCH_ON).await;
+
+		let read = database.user().preferences().await.expect("the record");
+
+		assert_eq!(read.onboarding_step, OnboardingStep::Done);
+		assert!(!read.onboarding_import_seen);
+	}
+
+	#[tokio::test]
+	async fn without_a_stored_step_an_unfinished_first_run_reads_as_the_welcome_step() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		planted(&database, FIRST_RUN_DONE_KEY, SWITCH_OFF).await;
+
+		let read = database.user().preferences().await.expect("the record");
+
+		assert_eq!(read.onboarding_step, OnboardingStep::Welcome);
+		assert!(!read.onboarding_import_seen);
+	}
+
+	#[tokio::test]
+	async fn a_step_outside_the_vocabulary_after_a_finished_first_run_reads_as_done() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		planted(&database, FIRST_RUN_DONE_KEY, SWITCH_ON).await;
+		planted(&database, ONBOARDING_STEP_KEY, "tour").await;
+
+		let read = database.user().preferences().await.expect("the record");
+
+		assert_eq!(read.onboarding_step, OnboardingStep::Done);
+	}
+
+	#[tokio::test]
+	async fn a_step_outside_the_vocabulary_before_a_finished_first_run_reads_as_welcome() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		planted(&database, FIRST_RUN_DONE_KEY, SWITCH_OFF).await;
+		planted(&database, ONBOARDING_STEP_KEY, "tour").await;
+
+		let read = database.user().preferences().await.expect("the record");
+
+		assert_eq!(read.onboarding_step, OnboardingStep::Welcome);
+	}
+
+	#[tokio::test]
+	async fn a_write_of_the_record_leaves_the_onboarding_step_and_the_import_mark_alone() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		database.user().set_onboarding_step(OnboardingStep::Account).await.expect("the step");
+
+		let answered = database
+			.user()
+			.set_preferences(Preferences {
+				onboarding_step: OnboardingStep::Done,
+				onboarding_import_seen: true,
+				..a_record()
+			})
+			.await
+			.expect("the write");
+
+		assert_eq!(answered.onboarding_step, OnboardingStep::Account);
+		assert!(!answered.onboarding_import_seen);
+	}
+
+	#[tokio::test]
+	async fn a_first_run_marked_done_stores_a_finished_onboarding_beside_it() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		database.user().set_onboarding_step(OnboardingStep::Account).await.expect("the step");
+
+		database.user().mark_first_run_done().await.expect("the mark");
+
+		let read = database.user().preferences().await.expect("the record");
+		assert!(read.first_run_done);
+		assert_eq!(read.onboarding_step, OnboardingStep::Done);
+		assert_eq!(setting(&database, ONBOARDING_STEP_KEY).await, Some("done".to_owned()));
 	}
 
 	#[tokio::test]

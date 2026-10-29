@@ -69,6 +69,41 @@ impl From<SidebarTab> for user::SidebarTab {
 	}
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum OnboardingStep {
+	#[default]
+	Welcome,
+	Connect,
+	Import,
+	Account,
+	Done,
+}
+
+impl From<user::OnboardingStep> for OnboardingStep {
+	fn from(step: user::OnboardingStep) -> Self {
+		match step {
+			user::OnboardingStep::Welcome => OnboardingStep::Welcome,
+			user::OnboardingStep::Connect => OnboardingStep::Connect,
+			user::OnboardingStep::Import => OnboardingStep::Import,
+			user::OnboardingStep::Account => OnboardingStep::Account,
+			user::OnboardingStep::Done => OnboardingStep::Done,
+		}
+	}
+}
+
+impl From<OnboardingStep> for user::OnboardingStep {
+	fn from(step: OnboardingStep) -> Self {
+		match step {
+			OnboardingStep::Welcome => user::OnboardingStep::Welcome,
+			OnboardingStep::Connect => user::OnboardingStep::Connect,
+			OnboardingStep::Import => user::OnboardingStep::Import,
+			OnboardingStep::Account => user::OnboardingStep::Account,
+			OnboardingStep::Done => user::OnboardingStep::Done,
+		}
+	}
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct UserPreferences {
@@ -96,6 +131,10 @@ pub struct UserPreferences {
 	pub show_whats_new: bool,
 	#[serde(default)]
 	pub last_seen_version: Option<String>,
+	#[serde(default)]
+	pub onboarding_step: OnboardingStep,
+	#[serde(default)]
+	pub onboarding_import_seen: bool,
 }
 
 fn shows_whats_new_unless_told_otherwise() -> bool {
@@ -128,6 +167,8 @@ impl UserPreferences {
 			update_channel: preferences.update_channel.into(),
 			show_whats_new: preferences.show_whats_new,
 			last_seen_version: preferences.last_seen_version,
+			onboarding_step: preferences.onboarding_step.into(),
+			onboarding_import_seen: preferences.onboarding_import_seen,
 		}
 	}
 }
@@ -152,6 +193,8 @@ impl From<UserPreferences> for user::Preferences {
 			update_channel: preferences.update_channel.into(),
 			show_whats_new: preferences.show_whats_new,
 			last_seen_version: preferences.last_seen_version,
+			onboarding_step: preferences.onboarding_step.into(),
+			onboarding_import_seen: preferences.onboarding_import_seen,
 		}
 	}
 }
