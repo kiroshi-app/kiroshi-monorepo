@@ -58,27 +58,66 @@ const ARTBOARD_F: Record<
 }
 
 const MIXED_SPACES: MixedSpace[] = [
-	{ id: "atelier", name: "Atelier", colour: BLOT_HUES.blue, state: "local" },
+	{ id: "atelier", name: "Atelier", colour: 250, state: "local" },
 	{
 		id: "harbour-studio",
 		name: "Harbour Studio",
-		colour: BLOT_HUES.green,
+		colour: 236,
 		state: "online",
 	},
 	{ id: "personal", name: "Personal", colour: null, state: "local" },
-	{
-		id: "fieldwork",
-		name: "Fieldwork",
-		colour: BLOT_HUES.orange,
-		state: "offline",
-	},
-	{
-		id: "quarry-labs",
-		name: "Quarry Labs",
-		colour: BLOT_HUES.red,
-		state: "online",
-	},
+	{ id: "fieldwork", name: "Fieldwork", colour: 145, state: "offline" },
+	{ id: "quarry-labs", name: "Quarry Labs", colour: 28, state: "online" },
 ]
+
+const CURRENT_SPACE_ID = "atelier"
+
+const CONTEXT_COLOURS: Record<
+	SpaceAvatarTheme,
+	{
+		railFill: string
+		railBorder: string
+		menuFill: string
+		menuBorder: string
+		highlight: string
+		name: string
+	}
+> = {
+	light: {
+		railFill: "#f7f7f7",
+		railBorder: "#e5e5e5",
+		menuFill: "#ffffff",
+		menuBorder: "#e5e5e5",
+		highlight: "#f2f2f2",
+		name: "#0a0a0a",
+	},
+	dark: {
+		railFill: "#1a1a1a",
+		railBorder: "#212224",
+		menuFill: "#141414",
+		menuBorder: "#212224",
+		highlight: "#222222",
+		name: "#f5f5f5",
+	},
+}
+
+const RAIL_WIDTH = 52
+
+const RAIL_TILE = 26
+
+const RAIL_PITCH = 40
+
+const RAIL_EDGE = 16
+
+const MENU_WIDTH = 232
+
+const MENU_ROW_HEIGHT = 28
+
+const MENU_AVATAR = 14
+
+const MENU_AVATAR_INSET = 8
+
+const MENU_NAME_OFFSET = 30
 
 const OFFLINE_GROUP_OPACITY: Record<SpaceAvatarTheme, string> = {
 	light: "0.8",
@@ -120,19 +159,24 @@ const GRID = "grid items-center justify-items-center gap-x-5 gap-y-4"
 
 const LABEL = "text-foreground text-xs"
 
-const RAIL = "flex flex-col items-center gap-3"
+const RAIL =
+	"flex w-13 flex-col items-center gap-2 rounded-xl border border-sidebar-border bg-sidebar py-3"
 
-const MENU = "flex w-48 flex-col gap-1"
+const RAIL_SLOT = "flex size-8 items-center justify-center"
 
-const MENU_ROW = "flex items-center gap-2 px-2 py-1 text-foreground text-sm"
+const MENU =
+	"flex w-58 flex-col rounded-control border border-border bg-[#ffffff] p-1.5 dark:bg-[#141414]"
+
+const MENU_ROW =
+	"flex h-7 items-center gap-2 rounded-sm px-2 font-normal text-compact text-foreground leading-4 aria-[current=true]:bg-[#f2f2f2] dark:aria-[current=true]:bg-[#222222]"
 
 const avatarsIn = (root: HTMLElement) => slotsIn(root, "space-avatar")
 
 const rgbOf = (hex: string) =>
 	`rgb(${[1, 3, 5].map((start) => Number.parseInt(hex.slice(start, start + 2), 16)).join(", ")})`
 
-const themeOf = (avatar: HTMLElement): SpaceAvatarTheme =>
-	avatar.closest(".dark") ? "dark" : "light"
+const themeOf = (element: Element): SpaceAvatarTheme =>
+	element.closest(".dark") ? "dark" : "light"
 
 const inThemeLayer = (avatar: HTMLElement, slot: string) =>
 	Array.from(
@@ -190,6 +234,30 @@ const expectArtboardF = async (canvasElement: HTMLElement) => {
 		)
 		await expect(avatar.textContent).toBe("")
 	}
+}
+
+const panelsInBothThemes = async (root: HTMLElement, slot: string) => {
+	const panels = slotsIn(root, slot)
+	await expect(panels.map(themeOf).sort()).toEqual(["dark", "light"])
+	return panels
+}
+
+const expectMixedSpacesIn = async (panel: HTMLElement) => {
+	const avatars = avatarsIn(panel)
+	await expect(
+		avatars.map((avatar) => ({
+			initial: inThemeLayer(avatar, "space-avatar-initial")[0]?.dataset.initial,
+			colour: avatar.dataset.colour,
+			state: avatar.dataset.state,
+		})),
+	).toEqual(
+		MIXED_SPACES.map(({ name, colour, state }) => ({
+			initial: name[0],
+			colour: colour === null ? undefined : `${colour}`,
+			state,
+		})),
+	)
+	return avatars
 }
 
 const sizeRow = (
@@ -423,7 +491,7 @@ export const Offline = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard F, a joined Space whose host does not answer at 48, 26 and 14px, in both themes. Check the neutral tile crossed by 45 degree lines from bottom left to top right, one through the diagonal, fading with the tile, the initial in the neutral ink whatever the Space colour, and the red badge with a white cross at 48 and 26, a plain red dot at 14.",
+					"Artboard F, a joined Space whose host does not answer at 48, 26 and 14px, in both themes. Check the neutral tile crossed by 45 degree lines from bottom left to top right, fading with the tile: every 6px with a 1.5px stroke at 48, where one line runs along the tile diagonal; every 4px with a 1px stroke at 26, where the diagonal falls midway between two lines; every 3px with a 0.8px stroke at 14, where the diagonal falls 2px after one line and 1px before the next. Check the initial in the neutral ink whatever the Space colour, and the red badge with a white cross at 48 and 26, a plain red dot at 14.",
 			},
 		},
 	},
@@ -471,16 +539,17 @@ export const WithoutName = meta.story({
 
 export const RailMixedStates = meta.story({
 	render: () => (
-		<div className={RAIL}>
+		<div className={RAIL} data-slot="mixed-rail">
 			{MIXED_SPACES.map((space) => (
-				<SpaceAvatar
-					colour={space.colour}
-					key={space.id}
-					name={space.name}
-					size={26}
-					spaceId={space.id}
-					state={space.state}
-				/>
+				<div className={RAIL_SLOT} key={space.id}>
+					<SpaceAvatar
+						colour={space.colour}
+						name={space.name}
+						size={RAIL_TILE}
+						spaceId={space.id}
+						state={space.state}
+					/>
+				</div>
 			))}
 		</div>
 	),
@@ -488,29 +557,53 @@ export const RailMixedStates = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard F, the rail: Atelier local in blue, Harbour Studio online, Personal local with no colour, Fieldwork offline and Quarry Labs online in red, at 26px. Check Personal draws its initial in the neutral ink and Fieldwork drops its colour for the hatched neutral tile. Pick `SpacesMenuMixedStates` for the 14px rows.",
+					"Artboard F, the rail, in both themes: from top to bottom Atelier local in hue 250, Harbour Studio online in hue 236, Personal local with no colour, Fieldwork offline and Quarry Labs online in hue 28, at 26px. The rail is a 52px panel in the sidebar fill with a 1px border, a 14px radius and 12px of block padding, its tiles centred at a 40px pitch, 16px from its top and bottom edges. Check Personal draws its initial in the neutral ink and Fieldwork drops its colour for the hatched neutral tile. Pick `SpacesMenuMixedStates` for the 14px rows.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
 		await expect(avatarsIn(canvasElement)).toHaveLength(2 * MIXED_SPACES.length)
 		await expectArtboardF(canvasElement)
+		for (const rail of await panelsInBothThemes(canvasElement, "mixed-rail")) {
+			const colours = CONTEXT_COLOURS[themeOf(rail)]
+			const style = getComputedStyle(rail)
+			await expect(style.backgroundColor).toBe(rgbOf(colours.railFill))
+			await expect(style.borderTopColor).toBe(rgbOf(colours.railBorder))
+			await expect(style.borderTopWidth).toBe("1px")
+			await expect(style.paddingTop).toBe("12px")
+			await expect(style.borderTopLeftRadius).toBe("14px")
+			const frame = rail.getBoundingClientRect()
+			await expect(frame.width).toBe(RAIL_WIDTH)
+			const tiles = (await expectMixedSpacesIn(rail)).map((avatar) =>
+				avatar.getBoundingClientRect(),
+			)
+			for (const [index, tile] of tiles.entries()) {
+				await expect(tile.width).toBe(RAIL_TILE)
+				await expect(tile.left - frame.left).toBe((RAIL_WIDTH - RAIL_TILE) / 2)
+				await expect(tile.top - frame.top).toBe(RAIL_EDGE + index * RAIL_PITCH)
+			}
+			await expect(frame.bottom - (tiles.at(-1)?.bottom ?? 0)).toBe(RAIL_EDGE)
+		}
 	},
 })
 
 export const SpacesMenuMixedStates = meta.story({
 	render: () => (
-		<ul className={MENU}>
+		<ul className={MENU} data-slot="mixed-menu">
 			{MIXED_SPACES.map((space) => (
-				<li className={MENU_ROW} key={space.id}>
+				<li
+					aria-current={space.id === CURRENT_SPACE_ID || undefined}
+					className={MENU_ROW}
+					key={space.id}
+				>
 					<SpaceAvatar
 						colour={space.colour}
 						name={space.name}
-						size={14}
+						size={MENU_AVATAR}
 						spaceId={space.id}
 						state={space.state}
 					/>
-					{space.name}
+					<span>{space.name}</span>
 				</li>
 			))}
 		</ul>
@@ -519,12 +612,58 @@ export const SpacesMenuMixedStates = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard F, the Spaces menu: the same five Spaces at 14px beside their names. Check every initial reads at 10px bold, the laptop badges of Atelier and Personal, the green dots of Harbour Studio and Quarry Labs, and the plain red dot with no cross on the hatched Fieldwork tile. Pick `RailMixedStates` for 26px.",
+					"Artboard F, the Spaces menu, in both themes: the same five Spaces in the same hues, Atelier 250, Harbour Studio 236, Personal with no colour, Fieldwork offline and Quarry Labs 28, at 14px beside their names. The menu is a 232px panel in the menu fill with a 1px border, a 12px radius, 6px of padding and no shadow, holding 28px rows with a 6px radius, the avatar 8px from the row start and the name 8px after it in 13px regular type on a 16px line. Only Atelier, the current Space, wears the highlight fill. Check every initial reads at 10px bold, the laptop badges of Atelier and Personal, the green dots of Harbour Studio and Quarry Labs, and the plain red dot with no cross on the hatched Fieldwork tile. Pick `RailMixedStates` for 26px.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
 		await expect(avatarsIn(canvasElement)).toHaveLength(2 * MIXED_SPACES.length)
 		await expectArtboardF(canvasElement)
+		for (const menu of await panelsInBothThemes(canvasElement, "mixed-menu")) {
+			const colours = CONTEXT_COLOURS[themeOf(menu)]
+			const style = getComputedStyle(menu)
+			await expect(style.backgroundColor).toBe(rgbOf(colours.menuFill))
+			await expect(style.borderTopColor).toBe(rgbOf(colours.menuBorder))
+			await expect(style.borderTopWidth).toBe("1px")
+			await expect(style.paddingTop).toBe("6px")
+			await expect(style.borderTopLeftRadius).toBe("12px")
+			await expect(style.boxShadow).toBe("none")
+			await expect(menu.getBoundingClientRect().width).toBe(MENU_WIDTH)
+			const avatars = await expectMixedSpacesIn(menu)
+			const rows = Array.from(menu.children) as HTMLElement[]
+			await expect(rows.map((row) => row.tagName)).toEqual(
+				MIXED_SPACES.map(() => "LI"),
+			)
+			for (const [index, row] of rows.entries()) {
+				const space = MIXED_SPACES[index]
+				const isCurrent = space?.id === CURRENT_SPACE_ID
+				const rowStyle = getComputedStyle(row)
+				const frame = row.getBoundingClientRect()
+				const avatar = avatars[index]?.getBoundingClientRect()
+				const name = row.lastElementChild as HTMLElement
+				const nameStyle = getComputedStyle(name)
+				await expect(frame.height).toBe(MENU_ROW_HEIGHT)
+				await expect(rowStyle.borderTopLeftRadius).toBe("6px")
+				await expect(rowStyle.paddingInlineEnd).toBe("8px")
+				await expect(rowStyle.backgroundColor).toBe(
+					isCurrent ? rgbOf(colours.highlight) : "rgba(0, 0, 0, 0)",
+				)
+				await expect(row.getAttribute("aria-current")).toBe(
+					isCurrent ? "true" : null,
+				)
+				await expect((avatar?.left ?? 0) - frame.left).toBe(MENU_AVATAR_INSET)
+				await expect((avatar?.top ?? 0) - frame.top).toBe(
+					(MENU_ROW_HEIGHT - MENU_AVATAR) / 2,
+				)
+				await expect(name.textContent).toBe(space?.name)
+				await expect(name.getBoundingClientRect().left - frame.left).toBe(
+					MENU_NAME_OFFSET,
+				)
+				await expect(nameStyle.fontSize).toBe("13px")
+				await expect(nameStyle.lineHeight).toBe("16px")
+				await expect(nameStyle.fontWeight).toBe("400")
+				await expect(nameStyle.color).toBe(rgbOf(colours.name))
+			}
+		}
 	},
 })
