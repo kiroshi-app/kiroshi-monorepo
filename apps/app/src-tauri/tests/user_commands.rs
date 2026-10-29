@@ -107,6 +107,8 @@ fn a_record(picture: Value) -> Value {
 		"updateChannel": "stable",
 		"showWhatsNew": false,
 		"lastSeenVersion": "0.24.1",
+		"onboardingStep": "done",
+		"onboardingImportSeen": false,
 	})
 }
 
@@ -146,6 +148,12 @@ fn a_host_without_a_database_answers_every_preferences_command_with_why_there_is
 		call(&window, "user_set_profile_picture", json!({ "bytes": a_png(24, 24) })),
 		unavailable
 	);
+	assert_eq!(
+		call(&window, "user_set_onboarding_step", json!({ "step": "connect" })),
+		unavailable
+	);
+	assert_eq!(call(&window, "user_replay_onboarding", json!({})), unavailable);
+	assert_eq!(call(&window, "user_mark_onboarding_import_seen", json!({})), unavailable);
 }
 
 #[test]
@@ -174,6 +182,8 @@ fn a_record_nobody_has_written_crosses_as_the_defaults() {
 			"updateChannel": "stable",
 			"showWhatsNew": true,
 			"lastSeenVersion": null,
+			"onboardingStep": "welcome",
+			"onboardingImportSeen": false,
 		})
 	);
 }
@@ -369,4 +379,91 @@ fn a_picture_the_host_refuses_leaves_the_record_on_the_one_it_held() {
 	assert_eq!(read(&window)["profilePicturePath"], json!(held), "a refusal moved the record");
 	assert!(Path::new(&held).exists(), "a refusal took the picture the record held");
 	assert_eq!(stored_avatars(&app).len(), 1, "a refused picture reached the disk");
+}
+
+#[test]
+fn a_set_onboarding_step_is_answered_and_read_back_after_the_host_reopens() {
+	let home = Home::new();
+	{
+		let app = home.app();
+		let window = window(&app);
+
+		let answered = call(&window, "user_set_onboarding_step", json!({ "step": "account" }))
+			.expect("the step is stored");
+
+		assert_eq!(answered["onboardingStep"], json!("account"));
+		assert_eq!(read(&window)["onboardingStep"], json!("account"));
+	}
+
+	let app = home.app();
+	let window = window(&app);
+
+	assert_eq!(read(&window)["onboardingStep"], json!("account"));
+}
+
+#[test]
+fn a_step_outside_the_vocabulary_never_reaches_the_record() {
+	let home = Home::new();
+	let app = home.app();
+	let window = window(&app);
+
+	assert!(
+		call(&window, "user_set_onboarding_step", json!({ "step": "tour" })).is_err(),
+		"a step this build does not know was accepted"
+	);
+	assert_eq!(read(&window)["onboardingStep"], json!("welcome"));
+}
+
+#[test]
+fn a_replayed_onboarding_starts_on_welcome_and_keeps_the_first_run_and_the_import_mark() {
+	let home = Home::new();
+	let app = home.app();
+	let window = window(&app);
+	call(&window, "user_set_preferences", json!({ "preferences": a_record(Value::Null) }))
+		.expect("the record is stored");
+	call(&window, "user_mark_onboarding_import_seen", json!({})).expect("the import is marked");
+
+	let answered = call(&window, "user_replay_onboarding", json!({})).expect("the replay");
+
+	assert_eq!(answered["onboardingStep"], json!("welcome"));
+	assert_eq!(answered["firstRunDone"], json!(true));
+	assert_eq!(answered["onboardingImportSeen"], json!(true));
+	assert_eq!(read(&window), answered);
+}
+
+#[test]
+fn a_marked_import_is_answered_seen_and_read_back_after_the_host_reopens() {
+	let home = Home::new();
+	{
+		let app = home.app();
+		let window = window(&app);
+
+		let answered = call(&window, "user_mark_onboarding_import_seen", json!({}))
+			.expect("the import is marked");
+
+		assert_eq!(answered["onboardingImportSeen"], json!(true));
+	}
+
+	let app = home.app();
+	let window = window(&app);
+
+	assert_eq!(read(&window)["onboardingImportSeen"], json!(true));
+}
+
+#[test]
+fn a_written_record_leaves_the_onboarding_step_and_the_import_mark_as_stored() {
+	let home = Home::new();
+	let app = home.app();
+	let window = window(&app);
+	call(&window, "user_set_onboarding_step", json!({ "step": "connect" })).expect("the step");
+	let mut claiming = a_record(Value::Null);
+	claiming["onboardingStep"] = json!("done");
+	claiming["onboardingImportSeen"] = json!(true);
+
+	let answered = call(&window, "user_set_preferences", json!({ "preferences": claiming }))
+		.expect("the record is stored");
+
+	assert_eq!(answered["onboardingStep"], json!("connect"));
+	assert_eq!(answered["onboardingImportSeen"], json!(false));
+	assert_eq!(read(&window), answered);
 }

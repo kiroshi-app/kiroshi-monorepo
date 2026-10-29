@@ -881,6 +881,7 @@ mod tests {
 	use crate::conversations::contract::{COMPANION_ARRIVED_EVENT, COMPANION_SPOKE_EVENT};
 	use crate::db::repositories::conversations::{conversation_icons, DEFAULT_BOT_MODEL};
 	use crate::db::repositories::search::MAX_HITS;
+	use crate::db::repositories::user::{OnboardingStep, Preferences};
 	use crate::search::contract::{MAX_MATCHES_PER_LIST, MAX_QUERY_CHARS};
 	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 
@@ -1210,14 +1211,17 @@ mod tests {
 			.collect()
 	}
 
-	async fn is_first_run_done(app: &App<MockRuntime>) -> bool {
+	async fn stored_preferences(app: &App<MockRuntime>) -> Preferences {
 		ready(&app.state::<db::DatabaseState>())
 			.expect("the database opens")
 			.user()
 			.preferences()
 			.await
 			.expect("the preferences read")
-			.first_run_done
+	}
+
+	async fn is_first_run_done(app: &App<MockRuntime>) -> bool {
+		stored_preferences(app).await.first_run_done
 	}
 
 	fn heard(app: &App<MockRuntime>, event: &str) -> mpsc::Receiver<String> {
@@ -1335,6 +1339,7 @@ mod tests {
 		serving(&app, "c1").answer(asking("firstRunDone")).await.expect("it is recorded");
 
 		assert!(is_first_run_done(&app).await);
+		assert_eq!(stored_preferences(&app).await.onboarding_step, OnboardingStep::Done);
 		assert_eq!(announced(&arriving), Value::Null);
 	}
 

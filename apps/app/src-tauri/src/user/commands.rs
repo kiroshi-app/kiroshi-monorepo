@@ -1,6 +1,6 @@
 use tauri::{AppHandle, Runtime, State};
 
-use super::contract::{UserPreferences, UserPreferencesError};
+use super::contract::{OnboardingStep, UserPreferences, UserPreferencesError};
 use crate::account::session;
 use crate::avatars;
 use crate::db;
@@ -65,4 +65,36 @@ pub async fn user_set_profile_picture<R: Runtime>(
 	}
 	avatars::Avatars::sweep_referenced(database, Some(&dir)).await;
 	Ok(UserPreferences::of(swapped.stored, Some(&dir)))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn user_set_onboarding_step<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	step: OnboardingStep,
+) -> Result<UserPreferences, UserPreferencesError> {
+	let dir = avatars::Avatars::dir(&app);
+	let stored = ready(&state)?.user().set_onboarding_step(step.into()).await?;
+	Ok(UserPreferences::of(stored, dir.as_deref()))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn user_replay_onboarding<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+) -> Result<UserPreferences, UserPreferencesError> {
+	user_set_onboarding_step(app, state, OnboardingStep::Welcome).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn user_mark_onboarding_import_seen<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+) -> Result<UserPreferences, UserPreferencesError> {
+	let dir = avatars::Avatars::dir(&app);
+	let stored = ready(&state)?.user().mark_onboarding_import_seen().await?;
+	Ok(UserPreferences::of(stored, dir.as_deref()))
 }
