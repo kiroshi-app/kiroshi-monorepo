@@ -9,6 +9,8 @@ const SIGN_IN_STARTED_CHANNEL = "agent://sign-in-started"
 
 const API_KEY_CONNECTION = "apiKey"
 
+const DOWNLOAD_PAGE_URL = "https://kiroshi.app"
+
 type SignInStarted = { url: string }
 
 export const onboardingTransport: OnboardingPort = {
@@ -32,4 +34,9 @@ export const onboardingTransport: OnboardingPort = {
 		listen<SignInStarted>(SIGN_IN_STARTED_CHANNEL, ({ payload }) =>
 			onStarted(payload.url),
 		),
+
+	// TODO: read ~/.claude on the host once the Claude Code import inventory lands
+	hasClaudeHome: () => Promise.resolve(false),
+
+	openDownloadPage: () => openUrl(DOWNLOAD_PAGE_URL),
 }

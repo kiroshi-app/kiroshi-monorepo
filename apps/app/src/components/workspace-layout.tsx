@@ -7,11 +7,14 @@ import { NoticeSurface } from "@workspace/ui/components/notice-surface"
 import { probeRender } from "@workspace/ui/lib/render-probe"
 
 import { AppDialogs } from "@/components/app-dialogs"
+import { OnboardingScreen } from "@/components/onboarding-screen"
 import { StartupScreen } from "@/components/startup-screen"
 import { ConversationApplicationsContext } from "@/lib/applications/use-conversation-installs"
 import { SessionApplicationsContext } from "@/lib/applications/use-session-application"
 import { ThreadAuthorshipContext } from "@/lib/chat/thread-authorship"
 import { ConversationSeatingContext } from "@/lib/conversations/use-conversation-seating"
+import { onboardingStepOf } from "@/lib/onboarding/onboarding-flow-controller"
+import { onboardingScreenStepOf } from "@/lib/onboarding/onboarding-screen"
 import { useInvokePhaseEnd } from "@/lib/perf/use-invoke-phase-end"
 import { OpenJoinedHostContext } from "@/lib/spaces/open-joined-host"
 import { useWorkspaceAssembly } from "@/lib/workspace/use-workspace-assembly"
@@ -24,6 +27,7 @@ export const WorkspaceLayout = () => {
 		authorship,
 		companionMenu,
 		core,
+		drivers,
 		joinedHost,
 		loadSpaces,
 		newDevice,
@@ -65,6 +69,25 @@ export const WorkspaceLayout = () => {
 						: roster.controller.retryLoad
 				}
 			/>
+		)
+	}
+
+	const onboardingStep = onboardingScreenStepOf(
+		onboardingStepOf(core.preferences),
+		drivers.onboarding.state,
+	)
+
+	if (onboardingStep) {
+		return (
+			<>
+				<OnboardingScreen
+					account={core.account}
+					flow={drivers.onboarding}
+					readerName={core.preferences.displayName}
+					step={onboardingStep}
+				/>
+				<NoticeSurface />
+			</>
 		)
 	}
 

@@ -13,6 +13,7 @@ import { AppHeader } from "@workspace/ui/components/app-header"
 import type { BotStopProps } from "@workspace/ui/components/bot-identity-avatar"
 import { ChatEmptyState } from "@workspace/ui/components/chat-empty-state"
 import {
+	BotCreatedRow,
 	type ConversationArrivalInviter,
 	ConversationArrivalRow,
 } from "@workspace/ui/components/conversation-arrival-row"
@@ -207,13 +208,12 @@ import {
 import { useLiveMissions } from "@/lib/missions/use-live-missions"
 import { useMissionSendFailure } from "@/lib/missions/use-mission-failure-notices"
 import { useMissions } from "@/lib/missions/use-missions"
+import type { OnboardingCreation } from "@/lib/onboarding/onboarding-flow-controller"
 import { withoutOnboardingSummons } from "@/lib/onboarding/onboarding-summons"
 import {
 	type OnboardingTail,
-	onboardingTailOf,
 	signInTailOf,
 } from "@/lib/onboarding/onboarding-tail"
-import type { Onboarding } from "@/lib/onboarding/use-onboarding"
 import { usePostedOnboardingStep } from "@/lib/onboarding/use-posted-onboarding-step"
 import type { SignIn } from "@/lib/onboarding/use-sign-in"
 import { useInvokePhaseEnd } from "@/lib/perf/use-invoke-phase-end"
@@ -858,6 +858,43 @@ const arrivalRowsAfter = (placed: PlacedArrival[], bots: Bot[]): RowsAfterRun =>
 		]
 	})
 
+type CreatedRowsSource = {
+	bots: Bot[]
+	creation: OnboardingCreation | undefined
+	lastRunIndex: number
+	thread: LoadedThread
+}
+
+const createdRowsAfter = ({
+	bots,
+	creation,
+	lastRunIndex,
+	thread,
+}: CreatedRowsSource): RowsAfterRun => {
+	const created =
+		creation &&
+		thread.kind === "bot" &&
+		thread.bot.id === creation.shotoId &&
+		botIn(bots, creation.companionId)
+	if (!created) {
+		return () => []
+	}
+	return (runIndex) =>
+		runIndex === lastRunIndex
+			? [
+					{
+						key: `created-${created.id}`,
+						render: () => (
+							<BotCreatedRow
+								bot={faceOfBot(created)}
+								creator={thread.bot.name}
+							/>
+						),
+					},
+				]
+			: []
+}
+
 type InstallRowsSource = {
 	placed: PlacedBySeq<ApplicationInstall>[]
 	applications: ConversationApplications | null
@@ -1126,15 +1163,11 @@ const ConversationThreadTail = ({
 	)
 }
 
-const onboardingTailFor = (
+const signInTailFor = (
 	thread: LoadedThread,
-	onboarding: Onboarding | undefined,
 	signIn: SignIn | undefined,
 ): OnboardingTail | null =>
-	thread.kind === "bot"
-		? (onboardingTailOf(onboarding, thread.state, thread.bot.id) ??
-			signInTailOf(signIn, thread.bot.id))
-		: null
+	thread.kind === "bot" ? signInTailOf(signIn, thread.bot.id) : null
 
 const signInOfferOf = (
 	signIn: SignIn | undefined,
@@ -1223,7 +1256,7 @@ type ThreadViewProps = {
 	drafts: DraftsController
 	landings: MessageLandingController
 	readerName: string
-	onboarding?: Onboarding
+	onboardingCreation?: OnboardingCreation
 	signIn?: SignIn
 	onOpenMission: OpenMission
 	onOpenMissionInNewTab: OpenMissionInNewTab
@@ -1532,7 +1565,7 @@ const threadRowsOf = (
 	{
 		thread,
 		bots: known,
-		onboarding,
+		onboardingCreation,
 		signIn,
 		onOpenMission,
 		onOpenMissionInNewTab,
@@ -1646,8 +1679,15 @@ const threadRowsOf = (
 		sessionApplications,
 	})
 	const daySeparatorsAfter = daySeparatorRowsAfter(runs, clock)
+	const createdAfter = createdRowsAfter({
+		bots: known,
+		creation: onboardingCreation,
+		lastRunIndex: runs.length - 1,
+		thread,
+	})
 	const transcriptRows = interleavedWithRuns(runRows, (runIndex) => [
 		...arrivalsAfter(runIndex),
+		...createdAfter(runIndex),
 		...installsAfter(runIndex),
 		...missionRowsAfter(runIndex),
 		...daySeparatorsAfter(runIndex),
@@ -1655,7 +1695,7 @@ const threadRowsOf = (
 	const refusedTarget = repliedToRefusal
 		? quotes.get(repliedToRefusal)
 		: undefined
-	const onboardingTail = onboardingTailFor(thread, onboarding, signIn)
+	const onboardingTail = signInTailFor(thread, signIn)
 
 	return { onboardingTail, refusedTarget, transcriptRows }
 }
@@ -1862,7 +1902,7 @@ type ThreadScreenProps = {
 	drafts: DraftsController
 	landings: MessageLandingController
 	readerName: string
-	onboarding?: Onboarding
+	onboardingCreation?: OnboardingCreation
 	signIn?: SignIn
 	onOpenMission: OpenMission
 	onOpenMissionInNewTab: OpenMissionInNewTab
@@ -1922,7 +1962,7 @@ function BotThreadView({
 	drafts,
 	landings,
 	readerName,
-	onboarding,
+	onboardingCreation,
 	signIn,
 	onOpenMission,
 	onOpenMissionInNewTab,
@@ -1943,7 +1983,7 @@ function BotThreadView({
 			bots={bots}
 			drafts={drafts}
 			landings={landings}
-			onboarding={onboarding}
+			onboardingCreation={onboardingCreation}
 			onOpenMission={onOpenMission}
 			onOpenMissionInNewTab={onOpenMissionInNewTab}
 			readerName={readerName}
@@ -1964,7 +2004,7 @@ export function ThreadScreen({
 	drafts,
 	landings,
 	readerName,
-	onboarding,
+	onboardingCreation,
 	signIn,
 	onOpenMission,
 	onOpenMissionInNewTab,
@@ -1997,7 +2037,7 @@ export function ThreadScreen({
 			drafts={drafts}
 			key={thread.bot.id}
 			landings={landings}
-			onboarding={onboarding}
+			onboardingCreation={onboardingCreation}
 			onOpenMission={onOpenMission}
 			onOpenMissionInNewTab={onOpenMissionInNewTab}
 			readerName={readerName}

@@ -38,18 +38,11 @@ import {
 	ConversationIcons,
 } from "@workspace/ui/components/icons"
 import type { MissionEventModel } from "@workspace/ui/components/mission"
-import {
-	type NoticeMessage,
-	NoticeSurface,
-} from "@workspace/ui/components/notice-surface"
+import { NoticeSurface } from "@workspace/ui/components/notice-surface"
 import "@workspace/ui/lib/i18n"
 
 import { ThreadScreen } from "@/components/thread-screen"
-import type {
-	AccountReport,
-	AgentEvent,
-	CheckReport,
-} from "@/lib/agent/contract"
+import type { AgentEvent, CheckReport } from "@/lib/agent/contract"
 import type {
 	Application,
 	ApplicationInstall,
@@ -123,21 +116,12 @@ import {
 	createFakeOnboardingPort,
 	type FakeOnboardingPort,
 } from "@/lib/onboarding/fake-onboarding-port"
-import {
-	createFakeOnboardingWorld,
-	type FakeOnboardingWorld,
-} from "@/lib/onboarding/fake-onboarding-world"
-import {
-	createOnboardingController,
-	type OnboardingController,
-} from "@/lib/onboarding/onboarding-controller"
-import { onboardingSummonsFor } from "@/lib/onboarding/onboarding-summons"
+import type { OnboardingCreation } from "@/lib/onboarding/onboarding-flow-controller"
 import {
 	createSignInController,
 	type SignInController,
 	signInWorldOf,
 } from "@/lib/onboarding/sign-in-controller"
-import type { Onboarding } from "@/lib/onboarding/use-onboarding"
 import { type FakeLayout, fakeLayout } from "@/lib/perf/fake-layout"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 import { createOpenedRoutineController } from "@/lib/routines/opened-routine-controller"
@@ -414,7 +398,7 @@ type ThreadScreenHarnessProps = {
 	thread: Thread
 	bots: Bot[]
 	landings: MessageLandingController
-	onboarding?: OnboardingController
+	onboardingCreation?: OnboardingCreation
 	signIn?: SignInController
 	onOpenMission: (missionId: string) => void
 	onOpenMissionInNewTab?: (missionId: string) => void
@@ -425,17 +409,13 @@ const ThreadScreenHarness = ({
 	thread,
 	bots,
 	landings,
-	onboarding,
+	onboardingCreation,
 	signIn,
 	onOpenMission,
 	onOpenMissionInNewTab = () => undefined,
 	staging = attachments,
 }: ThreadScreenHarnessProps) => {
 	const [isOpen, setOpen] = useState(false)
-	const onboardingState = useSyncExternalStore(
-		onboarding ? onboarding.subscribe : NEVER_CHANGES,
-		onboarding ? onboarding.getState : NO_ONBOARDING_STATE,
-	)
 	const signInState = useSyncExternalStore(
 		signIn ? signIn.subscribe : NEVER_CHANGES,
 		signIn ? signIn.getState : NO_SIGN_IN_STATE,
@@ -451,13 +431,7 @@ const ThreadScreenHarness = ({
 		bots,
 		drafts: createDraftsController(),
 		landings,
-		onboarding:
-			onboarding && onboardingState
-				? ({
-						state: onboardingState,
-						controller: onboarding,
-					} satisfies Onboarding)
-				: undefined,
+		onboardingCreation,
 		onOpenMission,
 		onOpenMissionInNewTab,
 		readerName: "Reader",
@@ -473,8 +447,6 @@ const ThreadScreenHarness = ({
 
 const NEVER_CHANGES = () => () => undefined
 
-const NO_ONBOARDING_STATE = () => null
-
 const NO_SIGN_IN_STATE = () => null
 
 const screenOf = (
@@ -482,13 +454,13 @@ const screenOf = (
 	bots: Bot[] = NO_BOT_RECORDS,
 	onOpenMission: (missionId: string) => void = () => undefined,
 	landings: MessageLandingController = createMessageLandingController(),
-	onboarding?: OnboardingController,
+	onboardingCreation?: OnboardingCreation,
 	signIn?: SignInController,
 ) =>
 	createElement(ThreadScreenHarness, {
 		bots,
 		landings,
-		onboarding,
+		onboardingCreation,
 		onOpenMission,
 		signIn,
 		thread,
@@ -3337,51 +3309,11 @@ describe("ThreadScreen application left out of a session", () => {
 
 const SIGN_IN_LINK = "https://claude.ai/oauth/authorize?code=true"
 
-const WELCOME_QUESTION = "Ready to start?"
-
-const ACCOUNT_QUESTION = "Use the account already on this machine?"
-
 const CODE_QUESTION = "Paste the code Claude gave you"
 
 const KEY_QUESTION = "Paste your Anthropic API key"
 
 const SIGN_IN_FAILED_QUESTION = "Try again, or use a key instead?"
-
-const FIRST_REPLY_QUESTION = "That’s it working. Ready for the last one?"
-
-const EMPTY_STATE_TITLE = "Start with the agent"
-
-const ONBOARDING_EMAIL = "reader@example.com"
-
-const ONBOARDING_KEY = "sk-ant-kept-out"
-
-const AUTHENTICATED_ANONYMOUSLY = {
-	connection: "ready",
-	binaryVersion: null,
-	authenticated: true,
-	error: null,
-	account: { email: null, plan: null },
-} satisfies AccountReport
-
-type OnboardingFixture = {
-	port: FakeOnboardingPort
-	world: FakeOnboardingWorld
-	controller: OnboardingController
-	reportFailure: Mock<(notice: NoticeMessage) => void>
-	solo: Solo
-}
-
-const onboardingOf = async (): Promise<OnboardingFixture> => {
-	const solo = await soloOf({})
-	const port = createFakeOnboardingPort()
-	const world = createFakeOnboardingWorld()
-	world.homeBot = solo.thread().bot.id
-	world.send = (text) => solo.thread().chat.controller.send(text)
-	const reportFailure = vi.fn<(notice: NoticeMessage) => void>()
-	const controller = createOnboardingController(port, world, { reportFailure })
-
-	return { port, world, controller, reportFailure, solo }
-}
 
 const press = async (name: string) => {
 	await act(async () => {
@@ -3410,15 +3342,6 @@ type OnboardingScreen = {
 	press: (name: string) => Promise<void>
 	type: (label: string, text: string) => Promise<void>
 }
-
-const onboardingScreen = ({ controller, solo }: OnboardingFixture) =>
-	screenOf(
-		solo.thread(),
-		NO_BOT_RECORDS,
-		() => undefined,
-		createMessageLandingController(),
-		controller,
-	)
 
 const renderAsking = async (
 	view: () => ReturnType<typeof screenOf>,
@@ -3459,9 +3382,6 @@ const renderAsking = async (
 	}
 }
 
-const renderOnboarding = (fixture: OnboardingFixture) =>
-	renderAsking(() => onboardingScreen(fixture))
-
 const TYPED_MESSAGE = "Hello, what can you do?"
 
 const GUEST_ACCOUNT = "account-guest"
@@ -3488,11 +3408,6 @@ const isAnchored = (content: Element) =>
 		.closest("[data-scroll-anchor]")
 		?.getAttribute("data-scroll-anchor") === "true"
 
-const isBefore = (earlier: Element, later: Element) =>
-	(earlier.compareDocumentPosition(later) &
-		Node.DOCUMENT_POSITION_FOLLOWING) !==
-	0
-
 describe("the first run in a solo thread", () => {
 	let layout: FakeLayout
 
@@ -3509,41 +3424,6 @@ describe("the first run in a solo thread", () => {
 	afterEach(() => {
 		cleanup()
 		layout.restore()
-	})
-
-	it("asks the welcome step instead of the chat empty state", async () => {
-		const fixture = await onboardingOf()
-		await renderOnboarding(fixture)
-
-		expect(isAsking(WELCOME_QUESTION)).toBe(true)
-		expect(screen.queryByText(EMPTY_STATE_TITLE)).toBeNull()
-		expect(screen.queryByRole("button", { name: "Dismiss" })).toBeNull()
-	})
-
-	it("keeps the answered welcome step above the account step", async () => {
-		const fixture = await onboardingOf()
-		fixture.port.report = {
-			...AUTHENTICATED_ANONYMOUSLY,
-			account: { email: ONBOARDING_EMAIL, plan: "Max" },
-		}
-		const shown = await renderOnboarding(fixture)
-
-		await shown.choose("Start")
-
-		const [welcome] = screen.getAllByText(WELCOME_QUESTION)
-		const account = screen.getByRole("form", { name: ACCOUNT_QUESTION })
-		expect(isAsking(WELCOME_QUESTION)).toBe(false)
-		expect(screen.getByText("Start")).toBeTruthy()
-		expect(welcome && isBefore(welcome, account)).toBe(true)
-	})
-
-	it("leaves the answer of a posted step unanchored so it rests at the end", async () => {
-		const fixture = await onboardingOf()
-		const shown = await renderOnboarding(fixture)
-
-		await shown.choose("Start")
-
-		expect(isAnchored(screen.getByText("Start"))).toBe(false)
 	})
 
 	it("leaves a message typed before the thread mounted unanchored", async () => {
@@ -3655,131 +3535,22 @@ describe("the first run in a solo thread", () => {
 		expect(screen.queryByText("Lea")).toBeNull()
 	})
 
-	it("offers the sign-in when nobody is authenticated", async () => {
-		const fixture = await onboardingOf()
-		const shown = await renderOnboarding(fixture)
+	const SCOUT = botOf("bot-scout", "Scout")
 
-		await shown.choose("Start")
-
-		expect(
-			screen.getByRole("radio", {
-				name: (name) => name.startsWith("Sign in with Claude"),
+	it("posts no question card in Shoto's thread and names the companion he created", async () => {
+		const solo = await soloOf({})
+		const shoto = solo.thread().bot
+		render(
+			screenOf(solo.thread(), [SCOUT], () => undefined, undefined, {
+				shotoId: shoto.id,
+				companionId: SCOUT.id,
 			}),
-		).toBeTruthy()
-	})
+			{ wrapper: createQueryTestWrapper().wrapper },
+		)
+		await settle()
 
-	const waitingOnCode = async () => {
-		const fixture = await onboardingOf()
-		const shown = await renderOnboarding(fixture)
-		await shown.choose("Start")
-		await shown.choose("Sign in with Claude")
-		await act(async () => {
-			fixture.port.announceStarted(SIGN_IN_LINK)
-		})
-		await shown.refresh()
-
-		return { ...fixture, shown }
-	}
-
-	it("asks for the code on the url the sign-in announced", async () => {
-		const fixture = await waitingOnCode()
-
-		expect(isAsking(CODE_QUESTION)).toBe(true)
-		expect(fixture.port.calls).toContainEqual({
-			command: "openSignInUrl",
-			value: SIGN_IN_LINK,
-		})
-	})
-
-	it("withdraws the code step the reader leaves for a key", async () => {
-		const { shown } = await waitingOnCode()
-
-		await shown.press("Paste a key instead")
-
-		expect(screen.queryByText(CODE_QUESTION)).toBeNull()
-		expect(isAsking(KEY_QUESTION)).toBe(true)
-	})
-
-	it("keeps the key the reader typed out of the thread", async () => {
-		const fixture = await onboardingOf()
-		const shown = await renderOnboarding(fixture)
-		await shown.choose("Start")
-		await shown.choose("Paste an API key")
-
-		await shown.type("Key", ONBOARDING_KEY)
-
-		expect(fixture.port.calls).toContainEqual({
-			command: "holdApiKey",
-			value: ONBOARDING_KEY,
-		})
-		expect(screen.queryByText(ONBOARDING_KEY)).toBeNull()
-		expect(screen.queryByDisplayValue(ONBOARDING_KEY)).toBeNull()
-	})
-
-	it("names the refusal in the step asked after a refused sign-in", async () => {
-		const fixture = await onboardingOf()
-		const shown = await renderOnboarding(fixture)
-		await shown.choose("Start")
-		await shown.choose("Sign in with Claude")
-
-		await act(async () => {
-			fixture.port.refuseSignIn({
-				kind: "failed",
-				detail: "auth login exited with 1",
-			})
-		})
-		await shown.refresh()
-
-		expect(isAsking(SIGN_IN_FAILED_QUESTION)).toBe(true)
-		expect(screen.getByText("Couldn’t sign you in")).toBeTruthy()
-		expect(screen.getByText("auth login exited with 1")).toBeTruthy()
-	})
-
-	it("keeps the summons out of the rows and asks the first reply step under the answer", async () => {
-		const fixture = await onboardingOf()
-		fixture.port.report = AUTHENTICATED_ANONYMOUSLY
-		const shown = await renderOnboarding(fixture)
-		await shown.choose("Start")
-
-		await fixture.solo.push(SAID_AND_LANDED)
-		await shown.refresh()
-
-		expect(screen.queryByText(onboardingSummonsFor("greeting"))).toBeNull()
-		expect(screen.getByText("the walls hold")).toBeTruthy()
-		expect(isAsking(FIRST_REPLY_QUESTION)).toBe(true)
-	})
-
-	it("summons Shoto out of sight and asks nothing more when the reader picks a companion", async () => {
-		const fixture = await onboardingOf()
-		fixture.port.report = AUTHENTICATED_ANONYMOUSLY
-		const shown = await renderOnboarding(fixture)
-		await shown.choose("Start")
-		await fixture.solo.push(SAID_AND_LANDED)
-		await shown.refresh()
-
-		await shown.choose("Pick my first agent")
-
-		expect(
-			screen.queryByText(onboardingSummonsFor("firstCompanion")),
-		).toBeNull()
-		expect(isAsking(FIRST_REPLY_QUESTION)).toBe(false)
-		expect(fixture.world.firstRunDone).toBe(1)
-	})
-
-	it("leaves the answered first reply step in the thread once the reader keeps talking", async () => {
-		const fixture = await onboardingOf()
-		fixture.port.report = AUTHENTICATED_ANONYMOUSLY
-		const shown = await renderOnboarding(fixture)
-		await shown.choose("Start")
-		await fixture.solo.push(SAID_AND_LANDED)
-		await shown.refresh()
-
-		await shown.choose("Keep talking first")
-
-		expect(fixture.world.firstRunDone).toBe(1)
-		expect(isAsking(FIRST_REPLY_QUESTION)).toBe(false)
-		expect(screen.getAllByText(FIRST_REPLY_QUESTION).length).toBeGreaterThan(0)
-		expect(screen.getByText("Keep talking first")).toBeTruthy()
+		expect(screen.queryByRole("form")).toBeNull()
+		expect(screen.getByText(`${shoto.name} created ${SCOUT.name}`)).toBeTruthy()
 	})
 })
 
@@ -3870,17 +3641,14 @@ const signedOutOf = async (
 	}
 }
 
-const renderSignIn = (
-	fixture: SignedOutFixture,
-	onboarding?: OnboardingController,
-) =>
+const renderSignIn = (fixture: SignedOutFixture) =>
 	renderAsking(() =>
 		screenOf(
 			fixture.thread(),
 			NO_BOT_RECORDS,
 			() => undefined,
 			createMessageLandingController(),
-			onboarding,
+			undefined,
 			fixture.signIn,
 		),
 	)
@@ -3910,18 +3678,6 @@ const askedToConnect = async (fixture: SignedOutFixture) => {
 
 const choice = (label: string) =>
 	screen.getByRole("radio", { name: (name) => name.startsWith(label) })
-
-const firstRunElsewhere = async () => {
-	const world = createFakeOnboardingWorld()
-	const onboarding = createOnboardingController(
-		createFakeOnboardingPort(),
-		world,
-	)
-	await act(async () => {
-		await onboarding.start()
-	})
-	return { world, onboarding }
-}
 
 describe("signing in from a companion's solo thread", () => {
 	let layout: FakeLayout
@@ -3961,16 +3717,6 @@ describe("signing in from a companion's solo thread", () => {
 			within(emptyState()).getByRole("heading", { name: UNAVAILABLE_TITLE }),
 		).toBeTruthy()
 		expect(screen.queryByText(NOT_CONNECTED_TITLE)).toBeNull()
-	})
-
-	it("draws the not-connected empty state while the first run goes on in another companion", async () => {
-		const fixture = await signedOutOf()
-		const { onboarding } = await firstRunElsewhere()
-		await renderSignIn(fixture, onboarding)
-
-		expect(
-			within(emptyState()).getByRole("heading", { name: NOT_CONNECTED_TITLE }),
-		).toBeTruthy()
 	})
 
 	it("asks the question the onboarding asks when nobody is authenticated", async () => {
@@ -4061,25 +3807,6 @@ describe("signing in from a companion's solo thread", () => {
 		await pressInNotice(NOT_CONNECTED_TITLE, SIGN_IN)
 		await shown.refresh()
 		expect(isAsking(ACCESS_QUESTION)).toBe(true)
-	})
-
-	it("leaves the first run alone and summons nobody while connecting", async () => {
-		const fixture = await signedOutOf()
-		const { world, onboarding } = await firstRunElsewhere()
-		const shown = await renderSignIn(fixture, onboarding)
-		await pressWithin(shown, emptyState(), SIGN_IN)
-		await shown.choose("Paste an API key")
-
-		fixture.port.report = AUTHENTICATED_ANONYMOUSLY
-		fixture.agent.checked = SIGNED_IN
-		await shown.type("Key", ONBOARDING_KEY)
-
-		expect(isAsking(KEY_QUESTION)).toBe(false)
-		expect(fixture.agent.sessionsOpened).toBe(1)
-		expect(world.firstRunDone).toBe(0)
-		expect(world.sent).toEqual([])
-		expect(world.greetings).toEqual([])
-		expect(fixture.driver.submissions).toEqual([])
 	})
 })
 

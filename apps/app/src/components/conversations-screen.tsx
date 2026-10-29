@@ -3,6 +3,7 @@ import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 import { WorkspaceBody } from "@/components/workspace-body"
 import { WorkspaceSidebar } from "@/components/workspace-sidebar"
 import { isSidebarResizable } from "@/lib/host"
+import { onboardingCreationOf } from "@/lib/onboarding/onboarding-flow-controller"
 import { useWorkspace } from "@/lib/workspace/workspace-context"
 
 export const ConversationsScreen = () => {
@@ -62,7 +63,9 @@ export const ConversationsScreen = () => {
 				isOverlayOpen={overlay.isOverlayOpen}
 				landings={core.messageLandings}
 				missions={core.openedMission}
-				onboarding={preferences.firstRunDone ? undefined : drivers.onboarding}
+				onboardingCreation={
+					onboardingCreationOf(drivers.onboarding.state) ?? undefined
+				}
 				onOpenConversationSettings={
 					rosterLines.sidebarActions.onOpenConversationSettings
 				}

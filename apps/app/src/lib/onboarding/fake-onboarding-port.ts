@@ -9,6 +9,7 @@ type OnboardingCommand =
 	| "cancelSignIn"
 	| "holdApiKey"
 	| "openSignInUrl"
+	| "openDownloadPage"
 
 type OnboardingCall = {
 	command: OnboardingCommand
@@ -23,6 +24,7 @@ type PendingSignIn = {
 export type FakeOnboardingPort = OnboardingPort & {
 	calls: OnboardingCall[]
 	report: AccountReport
+	hasClaudeFolder: boolean
 	refusals: Partial<Record<OnboardingCommand, unknown>>
 	announceStarted: (url: string) => void
 	completeSignIn: () => void
@@ -59,6 +61,7 @@ export const createFakeOnboardingPort = (): FakeOnboardingPort => {
 	const fake: FakeOnboardingPort = {
 		calls: [],
 		report: NOT_AUTHENTICATED,
+		hasClaudeFolder: false,
 		refusals: {},
 
 		account: async () => {
@@ -97,6 +100,12 @@ export const createFakeOnboardingPort = (): FakeOnboardingPort => {
 					announce = null
 				}
 			}
+		},
+
+		hasClaudeHome: async () => fake.hasClaudeFolder,
+
+		openDownloadPage: async () => {
+			answer({ command: "openDownloadPage" })
 		},
 
 		announceStarted: (url) => announce?.(url),

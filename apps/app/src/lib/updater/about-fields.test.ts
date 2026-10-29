@@ -44,6 +44,8 @@ const userOf = (preferences: Partial<User["state"]["preferences"]> = {}) =>
 		},
 	}) as unknown as User
 
+const onReplayOnboarding = vi.fn()
+
 const fieldsOf = (
 	updater = updaterOf(stateOf()),
 	user = userOf({ updateChannel: "beta", showWhatsNew: false }),
@@ -53,6 +55,7 @@ const fieldsOf = (
 		user,
 		runningVersion: "0.25.0",
 		onWhatsNew: vi.fn(),
+		onReplayOnboarding,
 	})
 
 describe("toAboutUpdate", () => {
@@ -137,8 +140,15 @@ describe("aboutFieldsOf", () => {
 				user: userOf(),
 				runningVersion: null,
 				onWhatsNew: vi.fn(),
+				onReplayOnboarding,
 			}),
 		).toBeUndefined()
+	})
+
+	it("replays the onboarding from Getting started", () => {
+		fieldsOf()?.gettingStarted?.onReplayOnboarding()
+
+		expect(onReplayOnboarding).toHaveBeenCalledOnce()
 	})
 
 	it("shows the running version, the stored channel and the stored switch", () => {

@@ -17,7 +17,7 @@ import type { Bot, Conversation } from "@/lib/conversations/store-contract"
 import type { MissionLanding } from "@/lib/missions/mission-actions"
 import type { OpenedMissionController } from "@/lib/missions/opened-mission-controller"
 import type { ThreadSearch } from "@/lib/navigation/thread-search"
-import type { Onboarding } from "@/lib/onboarding/use-onboarding"
+import type { OnboardingCreation } from "@/lib/onboarding/onboarding-flow-controller"
 import type { SignIn } from "@/lib/onboarding/use-sign-in"
 import type { MessageLandingController } from "@/lib/search/message-landing-controller"
 
@@ -40,7 +40,7 @@ type WorkspaceBodyProps = {
 	onOpenConversationSettings: (conversationId: string) => void
 	onOpenThreadInNewTab: (thread: ThreadSearch) => void
 	missions: OpenedMissionController
-	onboarding?: Onboarding
+	onboardingCreation?: OnboardingCreation
 	signIn: SignIn
 	spaceId: string | null
 }
@@ -160,7 +160,7 @@ export function WorkspaceBody(props: WorkspaceBodyProps) {
 			bots={props.bots}
 			drafts={props.drafts}
 			landings={props.landings}
-			onboarding={props.onboarding}
+			onboardingCreation={props.onboardingCreation}
 			onOpenMission={openMission}
 			onOpenMissionInNewTab={openMissionInNewTab}
 			readerName={props.readerName}
