@@ -139,7 +139,7 @@ const ImportScreen = ({
 	const Mark = isUnreadable ? Icons.AlertCircle : Icons.FolderOpen
 
 	return (
-		<FullWindowLayout data-slot="import-screen" data-step={step}>
+		<FullWindowLayout data-slot="import-screen">
 			<FullWindowContent className="min-h-0 gap-5 px-6 pt-10 pb-6">
 				<span
 					className={cn(

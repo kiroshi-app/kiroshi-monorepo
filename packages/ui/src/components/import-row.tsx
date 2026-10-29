@@ -83,11 +83,7 @@ const ImportRow = ({
 	const titleId = useId()
 
 	return (
-		<div
-			data-slot="import-row"
-			data-status={status}
-			className="flex items-center gap-3 p-3"
-		>
+		<div data-slot="import-row" className="flex items-center gap-3 p-3">
 			<span className="flex size-4 shrink-0 items-center justify-center">
 				{status ? (
 					<ImportRowStatusIcon status={status} />
