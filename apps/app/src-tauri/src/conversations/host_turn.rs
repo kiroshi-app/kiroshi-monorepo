@@ -1537,9 +1537,21 @@ mod tests {
 			assert_eq!(summons_dropped(&refused.told), Vec::new());
 		}
 
-		#[tokio::test]
-		async fn a_handover_to_a_bot_not_seated_drops_the_summons_as_not_seated() {
-			let app = an_app_of_its_own("drop-not-seated", mock_builder());
+		struct HandedOver {
+			_app: crate::test_app::AppOfItsOwn,
+			room: Room,
+			waiting: Vec<Summons>,
+			told: Vec<(String, Value)>,
+		}
+
+		impl HandedOver {
+			fn ada(&self) -> &str {
+				&self.room.bot_ids[0]
+			}
+		}
+
+		async fn ada_handing_over(name: &str, naming: fn(&str) -> String) -> HandedOver {
+			let app = an_app_of_its_own(name, mock_builder());
 			app.manage(db::bootstrap(app.handle()));
 			let room = a_room_running(app.handle(), &["Ada"]).await;
 			speaking_in(app.handle(), &room, &room.bot_ids).await;
@@ -1547,10 +1559,7 @@ mod tests {
 			a_streaming_reply(app.handle(), &room, ada).await;
 			let reply = format!("reply-of-{ada}");
 			let messages = database(app.handle()).expect("the database opens").messages();
-			messages
-				.append_text(reply.clone(), " <@b-ghost> over to you".to_owned())
-				.await
-				.expect("it streams");
+			messages.append_text(reply.clone(), naming(ada)).await.expect("it streams");
 			let mut announced = events::subscribed(app.handle());
 			let (_stop, stopped) = watch::channel(false);
 			let host_turn = a_host_turn(app.handle(), &room, stopped);
@@ -1560,11 +1569,56 @@ mod tests {
 
 			host_turn.note_handovers(&done, &mut waiting).await;
 
-			assert!(waiting.is_empty(), "a bot not seated was handed the turn");
+			let told = told(&mut announced);
+			HandedOver { _app: app, room, waiting, told }
+		}
+
+		#[tokio::test]
+		async fn a_handover_to_a_bot_not_seated_drops_the_summons_as_not_seated() {
+			let handed =
+				ada_handing_over("drop-not-seated", |_| " <@b-ghost> over".to_owned()).await;
+
+			assert!(handed.waiting.is_empty(), "a bot not seated was handed the turn");
 			let not_seated = SummonsDropReason::NotSeated;
 			assert_eq!(
+				summons_dropped(&handed.told),
+				vec![dropped_in(&handed.room, "b-ghost", not_seated, None)]
+			);
+		}
+
+		#[tokio::test]
+		async fn a_group_reply_naming_its_own_bot_drops_the_summons_as_a_self_mention() {
+			let handed =
+				ada_handing_over("drop-self-mention", |ada| format!(" <@{ada}> again")).await;
+
+			assert!(handed.waiting.is_empty(), "the bot was handed its own turn");
+			let self_mention = SummonsDropReason::SelfMention;
+			assert_eq!(
+				summons_dropped(&handed.told),
+				vec![dropped_in(&handed.room, handed.ada(), self_mention, None)]
+			);
+		}
+
+		#[tokio::test]
+		async fn a_queued_run_whose_place_cannot_be_read_drops_the_summons_as_start_failed() {
+			let app = an_app_of_its_own("drop-unread-place", mock_builder());
+			app.manage(db::bootstrap(app.handle()));
+			let room = a_room_running(app.handle(), &["Ada"]).await;
+			let ada = scope_in(&room, &room.bot_ids[0]);
+			let mut announced = events::subscribed(app.handle());
+			let (_stop, stopped) = watch::channel(false);
+			let host_turn = a_host_turn(app.handle(), &room, stopped);
+			let queued = Speaker { scope: ada.clone(), written: Vec::new(), is_in_line: true };
+			let mut waiting = Vec::new();
+
+			let kept = host_turn.reconciled(vec![queued], &mut waiting).await;
+
+			assert!(kept.is_empty(), "the unreadable queued run was kept");
+			let unread = TransportError::WriteFailed { detail: NO_AGENT.to_owned() };
+			let start_failed = SummonsDropReason::StartFailed;
+			assert_eq!(
 				summons_dropped(&told(&mut announced)),
-				vec![dropped_in(&room, "b-ghost", not_seated, None)]
+				vec![dropped_in(&room, &ada.bot_id, start_failed, Some(unread))]
 			);
 		}
 	}

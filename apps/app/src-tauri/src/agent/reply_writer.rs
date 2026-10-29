@@ -964,6 +964,7 @@ mod tests {
 	use super::super::contract::{ActivityEvent, ActivityKind, ActivityStatus};
 	use super::*;
 	use crate::agent::commands;
+	use crate::conversations::contract::{SummonsDropped, SUMMONS_DROPPED_EVENT};
 	use crate::conversations::turn_run_deadline::TurnRunDeadlines;
 	use crate::db::repositories::conversations::{
 		BotIdentity, ConversationDraft, DEFAULT_BOT_ID, DEFAULT_BOT_MODEL,
@@ -2107,6 +2108,86 @@ mod tests {
 			written.conversation_id
 		);
 		assert_eq!(infos_naming(&needle).await.len(), 1);
+	}
+
+	fn listen_to_drops(written: &Written) -> Arc<Mutex<Vec<SummonsDropped>>> {
+		let heard = Arc::new(Mutex::new(Vec::new()));
+		let kept = heard.clone();
+		written.app.handle().listen(SUMMONS_DROPPED_EVENT, move |event| {
+			let dropped = serde_json::from_str(event.payload()).expect("a dropped summons");
+			kept.lock().expect("the list is kept").push(dropped);
+		});
+		heard
+	}
+
+	fn drops_heard(heard: &Mutex<Vec<SummonsDropped>>) -> Vec<SummonsDropped> {
+		heard.lock().expect("the list is kept").clone()
+	}
+
+	fn dropped_in_t1(written: &Written, bot_id: &str, reason: SummonsDropReason) -> SummonsDropped {
+		SummonsDropped {
+			conversation_id: written.conversation_id.clone(),
+			turn_id: "t1".to_owned(),
+			bot_id: bot_id.to_owned(),
+			reason,
+			error: None,
+		}
+	}
+
+	#[tokio::test]
+	async fn a_reply_naming_its_author_announces_a_self_mention_drop() {
+		let (written, _) = Written::in_a_room_of_two("announced-self").await;
+		let heard = listen_to_drops(&written);
+
+		a_reply_ended(&written, &format!("<@{DEFAULT_BOT_ID}> noted"), turn_ended()).await;
+
+		let self_mention = dropped_in_t1(&written, DEFAULT_BOT_ID, SummonsDropReason::SelfMention);
+		assert_eq!(drops_heard(&heard), vec![self_mention]);
+	}
+
+	#[tokio::test]
+	async fn a_reply_naming_a_bot_not_seated_announces_a_not_seated_drop() {
+		let (written, _) = Written::in_a_room_of_two("announced-not-seated").await;
+		let heard = listen_to_drops(&written);
+
+		a_reply_ended(&written, "<@ghost> over to you", turn_ended()).await;
+
+		let not_seated = dropped_in_t1(&written, "ghost", SummonsDropReason::NotSeated);
+		assert_eq!(drops_heard(&heard), vec![not_seated]);
+	}
+
+	#[tokio::test]
+	async fn a_reply_whose_handover_cannot_be_read_announces_a_start_failed_drop() {
+		let (written, ada) = Written::in_a_room_of_two("announced-unread-handover").await;
+		written.prompt("t1", "p1").await;
+		let heard = listen_to_drops(&written);
+		let mut lead = written.desk_of(DEFAULT_BOT_ID);
+		lead.open_turn(submitted("t1", "p1")).await;
+		lead.record(&completed("m1", &format!("<@{ada}> over to you"), 2)).await;
+		written
+			.database()
+			.call(|connection| {
+				Ok(connection.execute_batch(
+					"ALTER TABLE conversation_participants RENAME TO unread_participants",
+				)?)
+			})
+			.await
+			.expect("the seats become unreadable");
+
+		lead.record(&turn_ended()).await;
+
+		let start_failed = dropped_in_t1(&written, &ada, SummonsDropReason::StartFailed);
+		assert_eq!(drops_heard(&heard), vec![start_failed]);
+	}
+
+	#[tokio::test]
+	async fn a_cancelled_reply_announces_no_drop() {
+		let (written, ada) = Written::in_a_room_of_two("announced-cancelled").await;
+		let heard = listen_to_drops(&written);
+
+		a_reply_ended(&written, &format!("<@{ada}> over to you"), cancelled_turn()).await;
+
+		assert_eq!(drops_heard(&heard), Vec::new());
 	}
 
 	#[test]
