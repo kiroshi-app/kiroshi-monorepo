@@ -99,13 +99,9 @@ pub async fn window_open<R: Runtime>(
 		eprintln!("the geometry of the window {} could not be read: {failure}", window.label());
 		WindowOpenError::Unavailable
 	})?;
-	let placement = match position {
-		None => beside(caller),
-		Some(point) => match work_area_for(&window, point) {
-			Some(area) => at(caller, point, area),
-			None => beside(caller),
-		},
-	};
+	let placement = position
+		.and_then(|point| work_area_for(&window, point).map(|area| at(caller, point, area)))
+		.unwrap_or_else(|| beside(caller));
 	let config = secondary_config(main, fresh_label(app).await?, placement);
 	opened_windows(app).initial_hrefs().insert(config.label.clone(), href);
 	match built(app, &config) {
@@ -176,12 +172,10 @@ fn beside(caller: Placement) -> Placement {
 fn work_area_for<R: Runtime>(window: &WebviewWindow<R>, point: ScreenPosition) -> Option<Area> {
 	let found = window.available_monitors().and_then(|monitors| {
 		let screens: Vec<Screen> = monitors.iter().map(screen_of).collect();
-		match work_area_holding(point, &screens) {
-			Some(area) => Ok(Some(area)),
-			None => {
-				Ok(window.current_monitor()?.as_ref().map(|monitor| screen_of(monitor).work_area))
-			}
+		if let Some(area) = work_area_holding(point, &screens) {
+			return Ok(Some(area));
 		}
+		Ok(window.current_monitor()?.as_ref().map(|monitor| screen_of(monitor).work_area))
 	});
 	match found {
 		Ok(Some(area)) => Some(area),
