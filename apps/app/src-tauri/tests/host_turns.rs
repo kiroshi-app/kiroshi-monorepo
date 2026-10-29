@@ -16,7 +16,7 @@ use ed25519_dalek::{Signature, VerifyingKey};
 use kiroshi_app::account::session::{restore, AccountSession};
 use kiroshi_app::agent::commands::{
 	agent_cancel_turn, agent_live_sessions, agent_respond_to_permission,
-	agent_start_or_resume_session, agent_submit_prompt, shutdown_session, terminate_session,
+	agent_start_or_resume_session, shutdown_session, submit_prompt, terminate_session,
 };
 use kiroshi_app::agent::contract::{
 	CancelOutcome, LiveSession, PermissionDecision, RuntimeScope, SubmittedTurn,
@@ -603,7 +603,7 @@ impl Host {
 		.await
 		.expect("the host message is stored");
 		let turn = SubmittedTurn { turn_id: turn_id.to_owned(), prompt_id: id.to_owned() };
-		agent_submit_prompt(self.app.state(), scope.clone(), content.to_owned(), Some(turn))
+		submit_prompt(self.app.state(), scope.clone(), content.to_owned(), Some(turn))
 			.await
 			.expect("the host prompt is submitted");
 	}

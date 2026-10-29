@@ -17,6 +17,7 @@ use super::contract::{
 use super::session::{Drained, EventSink};
 use super::translate::now_ms;
 use crate::attachments::attachment_block;
+use crate::conversations::awaited_runs::serve_handed;
 use crate::conversations::commands::{announce_conversation, ready};
 use crate::conversations::context::mentioned_bot_ids;
 use crate::conversations::contract::TranscriptStoreError;
@@ -718,7 +719,19 @@ impl<R: Runtime> Store<R> {
 		database.messages().end_run(ended).await?;
 		self.announce_updated(database).await;
 		arm_start_deadlines(&self.app, &self.conversation_id, id, &handed_to);
+		if !handed_to.is_empty() {
+			self.serve_when_left(id).await;
+		}
 		Ok(())
+	}
+
+	async fn serve_when_left(&self, turn_id: &str) {
+		if let Err(error) = serve_handed(&self.app, &self.conversation_id, turn_id).await {
+			log::warn!(
+				"turn {turn_id} of conversation {} could not serve the runs it handed over: {error:?}",
+				self.conversation_id
+			);
+		}
 	}
 
 	async fn handover(

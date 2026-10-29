@@ -53,6 +53,7 @@ import {
 	emitOnThisComputer,
 	invoke,
 	invokeOn,
+	invokeOnThisComputer,
 	listen,
 } from "../host"
 import type { AgentCommand } from "@/lib/agent/contract"
@@ -80,6 +81,9 @@ export const arrivalsTransport = {
 		listen<CompanionSpoke>(COMPANION_SPOKE_EVENT, ({ payload }, side) =>
 			listener(payload, side),
 		),
+
+	serveAwaitedRuns: () =>
+		invokeOnThisComputer<null>("conversation_serve_awaited_runs"),
 }
 
 const conversationReadsThrough = (call: Invoke) => ({

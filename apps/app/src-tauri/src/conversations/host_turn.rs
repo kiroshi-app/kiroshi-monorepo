@@ -27,6 +27,7 @@ use crate::agent::translate::now_ms;
 use crate::agent::AgentState;
 use crate::db;
 use crate::db::repositories::conversations::Seat;
+use crate::db::repositories::messages::AwaitedRun;
 use crate::db::repositories::runtime_context::{ParticipantKey, RuntimeSession};
 use crate::events::CONVERSATION_UPDATED;
 use crate::routines::runner::{
@@ -315,6 +316,32 @@ pub(crate) async fn run<R: Runtime>(
 		prompt_id: message.id,
 		stopped: held.stopped.clone(),
 	};
+	drive_from(turn, held, first).await;
+}
+
+pub(crate) async fn serve_awaited<R: Runtime>(
+	app: AppHandle<R>,
+	held: HeldTurn,
+	awaited: Vec<AwaitedRun>,
+) {
+	let Some(first) = awaited.first() else {
+		return;
+	};
+	let turn = HostTurn {
+		app,
+		conversation_id: first.conversation_id.clone(),
+		turn_id: first.turn_id.clone(),
+		prompt_id: first.prompt_id.clone(),
+		stopped: held.stopped.clone(),
+	};
+	let summoned = awaited
+		.into_iter()
+		.map(|run| Summons { bot_id: run.bot_id, prompt_id: run.prompt_id })
+		.collect();
+	drive_from(turn, held, summoned).await;
+}
+
+async fn drive_from<R: Runtime>(turn: HostTurn<R>, held: HeldTurn, first: Vec<Summons>) {
 	let (mut listening, heard) = turn.listening();
 	let speaking = turn.wave(&held, first).await;
 	tauri::async_runtime::spawn(async move {
@@ -1685,6 +1712,14 @@ done
 			app: &AppHandle<MockRuntime>,
 			scope: &RuntimeScope,
 		) -> HeldSession {
+			a_session_running(app, scope, OPENING_SIDECAR).await
+		}
+
+		async fn a_session_running(
+			app: &AppHandle<MockRuntime>,
+			scope: &RuntimeScope,
+			sidecar_script: &str,
+		) -> HeldSession {
 			use std::os::unix::fs::PermissionsExt;
 
 			let script = RemovedOnDrop(std::env::temp_dir().join(format!(
@@ -1692,7 +1727,7 @@ done
 				std::process::id(),
 				uuid::Uuid::new_v4()
 			)));
-			std::fs::write(&*script, OPENING_SIDECAR).expect("the sidecar script is written");
+			std::fs::write(&*script, sidecar_script).expect("the sidecar script is written");
 			std::fs::set_permissions(&*script, std::fs::Permissions::from_mode(0o755))
 				.expect("the sidecar script runs");
 			let sidecar = Sidecar::start(SidecarOptions::new(script.to_path_buf()))
@@ -1830,6 +1865,163 @@ done
 			let told = told(&mut announced);
 			assert!(told_in_turn(&told, &ada).is_empty(), "the ended turn was failed");
 			assert_eq!(shut_down_scopes(&agent_events(&told)), vec![ada.clone()]);
+		}
+
+		mod serving_awaited_runs {
+			use super::*;
+			use crate::conversations::awaited_runs::{serve_handed, serve_on_driving, TurnWindows};
+			use crate::db::repositories::messages::EndedRun;
+
+			const MAIN: &str = "main";
+
+			struct Served {
+				app: crate::test_app::AppOfItsOwn,
+				room: Room,
+				grace: HeldSession,
+				prompts: RemovedOnDrop,
+			}
+
+			impl Served {
+				fn handle(&self) -> &AppHandle<MockRuntime> {
+					self.app.handle()
+				}
+
+				fn windows(&self) -> State<'_, TurnWindows> {
+					self.app.state::<TurnWindows>()
+				}
+
+				async fn drive_from(&self, window: &str) {
+					let agent = self.app.state::<AgentState>();
+					serve_on_driving(self.handle(), &self.windows(), &agent, window)
+						.await
+						.expect("the awaited runs are served");
+				}
+
+				fn prompts_heard(&self) -> usize {
+					std::fs::read_to_string(&*self.prompts).map_or(0, |heard| heard.lines().count())
+				}
+
+				async fn grace_place(&self) -> LinePlace {
+					self.grace.session.place_of("t1").await
+				}
+
+				async fn grace_runs_t1(&self) {
+					time::timeout(Duration::from_secs(10), async {
+						while self.grace_place().await != LinePlace::Running {
+							time::sleep(Duration::from_millis(10)).await;
+						}
+					})
+					.await
+					.expect("grace started the awaited run");
+				}
+
+				async fn ada_hands_over_to_grace(&self) {
+					let messages = database(self.handle()).expect("the database opens").messages();
+					let ended = EndedRun {
+						turn_id: "t1".to_owned(),
+						bot_id: self.room.bot_ids[0].clone(),
+						handed_to: vec![self.room.bot_ids[1].clone()],
+						ended_at: 3,
+					};
+					messages.end_run(ended).await.expect("ada hands over");
+				}
+			}
+
+			async fn ada_ran_t1_from_the_main_window(name: &str) -> Served {
+				let app = an_app_of_its_own(name, mock_builder());
+				app.manage(db::bootstrap(app.handle()));
+				app.manage(AgentState::default());
+				app.manage(TurnRunDeadlines::default());
+				app.manage(TurnWindows::default());
+				let room = a_room_running(app.handle(), &["Ada", "Grace"]).await;
+				speaking_in(app.handle(), &room, &room.bot_ids[..1]).await;
+				a_streaming_reply(app.handle(), &room, &room.bot_ids[0]).await;
+				app.state::<TurnWindows>().submitted_from(MAIN, "t1");
+				let prompts = RemovedOnDrop(std::env::temp_dir().join(format!(
+					"kiroshi-prompts-{}-{}",
+					std::process::id(),
+					uuid::Uuid::new_v4()
+				)));
+				let counting = OPENING_SIDECAR.replace(
+					"\tesac",
+					&format!(
+						"\t*'\"type\":\"prompt\"'*)\n\t\techo heard >> '{}'\n\t\t;;\n\tesac",
+						prompts.display()
+					),
+				);
+				let grace_scope = scope_in(&room, &room.bot_ids[1]);
+				let grace = a_session_running(app.handle(), &grace_scope, &counting).await;
+				Served { app, room, grace, prompts }
+			}
+
+			#[tokio::test]
+			async fn a_summons_received_while_its_window_reloads_starts_once_the_window_drives_again(
+			) {
+				let served = ada_ran_t1_from_the_main_window("serve-after-reload").await;
+				served.windows().forget_window(MAIN);
+				served.ada_hands_over_to_grace().await;
+				serve_handed(served.handle(), &served.room.id, "t1").await.expect("nothing fails");
+				let before_driving = served.grace_place().await;
+
+				tokio::join!(served.drive_from(MAIN), served.drive_from("window-1"));
+				served.grace_runs_t1().await;
+				served.drive_from(MAIN).await;
+				time::sleep(Duration::from_millis(200)).await;
+
+				assert_eq!(before_driving, LinePlace::Absent, "grace started with no window");
+				assert_eq!(served.prompts_heard(), 1, "grace was not started exactly once");
+			}
+
+			#[tokio::test]
+			async fn a_summons_handed_after_its_window_reloaded_starts_at_once_under_a_driving_window(
+			) {
+				let served = ada_ran_t1_from_the_main_window("serve-on-handover").await;
+				served.windows().forget_window(MAIN);
+				served.drive_from(MAIN).await;
+
+				served.ada_hands_over_to_grace().await;
+				serve_handed(served.handle(), &served.room.id, "t1").await.expect("served");
+				served.grace_runs_t1().await;
+
+				assert_eq!(served.prompts_heard(), 1, "grace was not started exactly once");
+			}
+
+			#[tokio::test]
+			async fn a_summons_its_live_window_runs_is_left_to_that_window() {
+				let served = ada_ran_t1_from_the_main_window("serve-left-to-window").await;
+				served.drive_from(MAIN).await;
+
+				served.ada_hands_over_to_grace().await;
+				serve_handed(served.handle(), &served.room.id, "t1").await.expect("nothing fails");
+				served.drive_from(MAIN).await;
+				time::sleep(Duration::from_millis(200)).await;
+
+				assert_eq!(served.grace_place().await, LinePlace::Absent);
+				assert_eq!(served.prompts_heard(), 0);
+			}
+
+			#[tokio::test]
+			async fn an_awaited_run_claimed_after_it_started_is_refused_and_starts_nothing() {
+				let served = ada_ran_t1_from_the_main_window("serve-already-started").await;
+				served.windows().forget_window(MAIN);
+				served.ada_hands_over_to_grace().await;
+				database(served.handle())
+					.expect("the database opens")
+					.messages()
+					.start_run(turn_in(&served.room), served.room.bot_ids[1].clone())
+					.await
+					.expect("grace started elsewhere");
+
+				served.drive_from(MAIN).await;
+				time::sleep(Duration::from_millis(200)).await;
+
+				assert_eq!(served.prompts_heard(), 0, "a started run was started again");
+				let host_turns = served.app.state::<AgentState>();
+				assert!(
+					host_turns.host_turns().hold(&served.room.id, "t1").is_ok(),
+					"the refused claim kept the turn held"
+				);
+			}
 		}
 	}
 }

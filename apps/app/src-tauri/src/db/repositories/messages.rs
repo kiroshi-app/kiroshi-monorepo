@@ -59,6 +59,14 @@ pub struct NewTurn {
 	pub started_at: i64,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AwaitedRun {
+	pub conversation_id: String,
+	pub turn_id: String,
+	pub bot_id: String,
+	pub prompt_id: String,
+}
+
 pub struct EndedRun {
 	pub turn_id: String,
 	pub bot_id: String,
@@ -204,6 +212,15 @@ const OPEN_RUNS_OF_BOT: &str = "SELECT DISTINCT turn_runs.turn_id FROM turn_runs
 	WHERE turns.conversation_id = ?1 AND turn_runs.bot_id = ?2";
 const RUN_IN_STATE: &str = "SELECT EXISTS (SELECT 1 FROM turn_runs
 	WHERE turn_id = ?1 AND bot_id = ?2 AND state = ?3)";
+const AWAITED_RUNS: &str = "SELECT conversation_id, turn_id, bot_id, prompt_id FROM (
+		SELECT turns.conversation_id, run.turn_id, run.bot_id,
+			(SELECT messages.id FROM messages
+				WHERE messages.turn_id = run.turn_id AND messages.author_bot_id IS NOT run.bot_id
+				ORDER BY messages.seq DESC LIMIT 1) AS prompt_id
+		FROM turn_runs AS run JOIN turns ON turns.id = run.turn_id
+		WHERE run.state = ?1)
+	WHERE prompt_id IS NOT NULL
+	ORDER BY turn_id, bot_id";
 const RELEASE_RUNS_OF_BOT: &str = "DELETE FROM turn_runs WHERE turn_id = ?1 AND bot_id = ?2";
 const AWAITED: &str = "awaited";
 const RUNNING: &str = "running";
@@ -384,6 +401,26 @@ impl MessagesRepository {
 			})
 			.await
 			.at("is_run_awaited", "turn_runs")?)
+	}
+
+	pub async fn awaited_runs(&self) -> Result<Vec<AwaitedRun>, TranscriptError> {
+		Ok(self
+			.call(|connection| {
+				let mut statement = connection.prepare_cached(AWAITED_RUNS)?;
+				let runs = statement
+					.query_map(params![AWAITED], |row| {
+						Ok(AwaitedRun {
+							conversation_id: row.get(0)?,
+							turn_id: row.get(1)?,
+							bot_id: row.get(2)?,
+							prompt_id: row.get(3)?,
+						})
+					})?
+					.collect::<Result<Vec<_>, _>>()?;
+				Ok(runs)
+			})
+			.await
+			.at("awaited_runs", "turn_runs")?)
 	}
 
 	pub async fn abandon_run(
@@ -2256,6 +2293,37 @@ mod tests {
 			states(&stored),
 			vec![MessageState::Cancelled, MessageState::Complete, MessageState::Streaming]
 		);
+	}
+
+	#[tokio::test]
+	async fn the_awaited_runs_name_the_last_message_their_bot_did_not_write_and_no_running_run() {
+		let dir = temp_dir();
+		let database = seeded(&dir).await;
+		let turn = || NewTurn { id: "t1".into(), conversation_id: "c1".into(), started_at: 1 };
+		let messages = database.messages();
+		messages.send_user_message(a_user_message("m0", "hi", 1), None).await.expect("sent");
+		messages.start_run(turn(), "b1".into()).await.expect("b1 runs");
+		messages.open_assistant_message(a_reply("m1", Some("m0"))).await.expect("b1 replies");
+		let handing = EndedRun {
+			turn_id: "t1".into(),
+			bot_id: "b1".into(),
+			handed_to: vec!["b2".into(), "b1".into()],
+			ended_at: 3,
+		};
+		messages.end_run(handing).await.expect("b1 hands over");
+		messages.start_run(turn(), "b1".into()).await.expect("b1 runs again");
+
+		let awaited = messages.awaited_runs().await.expect("the awaited runs read");
+
+		let of_b2 = AwaitedRun {
+			conversation_id: "c1".into(),
+			turn_id: "t1".into(),
+			bot_id: "b2".into(),
+			prompt_id: "m1".into(),
+		};
+		assert_eq!(awaited, vec![of_b2]);
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
 	#[tokio::test]

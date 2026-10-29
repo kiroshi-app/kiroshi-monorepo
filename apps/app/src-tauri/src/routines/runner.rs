@@ -15,7 +15,7 @@ use super::contract::{RoutineError, RunClosing, RunOutcome, RunRequested};
 use super::core::{Clock, RunSink, SystemClock};
 use super::run::{read_run_report, run_output_schema, run_prompt_for, RunReport};
 use crate::agent::commands::{
-	agent_shutdown, agent_start_or_resume_session, agent_submit_prompt, cancel_session_turn,
+	agent_shutdown, agent_start_or_resume_session, cancel_session_turn, submit_prompt,
 	EVENT_CHANNEL,
 };
 use crate::agent::contract::{
@@ -291,7 +291,7 @@ async fn started<R: Runtime>(
 	)
 	.await
 	.map_err(|error| detail_of(&error))?;
-	agent_submit_prompt(managed(app, NO_AGENT)?, scope.clone(), run_prompt_for(requested), None)
+	submit_prompt(managed(app, NO_AGENT)?, scope.clone(), run_prompt_for(requested), None)
 		.await
 		.map_err(|error| detail_of(&error))
 }

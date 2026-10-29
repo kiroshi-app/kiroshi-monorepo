@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, MutexGuard, PoisonError};
 
 use serde::de::DeserializeOwned;
-use tauri::{AppHandle, Manager, Runtime, State};
+use tauri::{AppHandle, Manager, Runtime, State, Webview};
 use tokio::sync::{broadcast, Mutex};
 
 use super::contract::{
@@ -25,6 +25,7 @@ use crate::applications::host::ApplicationHost;
 use crate::bundles;
 use crate::bundles::host::BundleHost;
 use crate::companions::host::CompanionHost;
+use crate::conversations::awaited_runs::TurnWindows;
 use crate::conversations::commands::{announce_conversation, ready, space_of_the_conversation};
 use crate::conversations::contract::{PendingPrompt, PendingPromptKind, TranscriptStoreError};
 use crate::conversations::host_turn::{ended_as, HostTurns};
@@ -37,7 +38,7 @@ use crate::environment::connection;
 use crate::environment::contract::{EnvError, EnvOwner, ResolvedEnv, Values};
 use crate::environment::store as environment;
 use crate::events::{self, Frame, AGENT_EVENT, CONVERSATION_UPDATED};
-use crate::hosting::authorship;
+use crate::hosting::authorship::{self, Caller};
 use crate::json::JsonValue;
 use crate::logging;
 use crate::mcp_oauth::refresh;
@@ -1362,7 +1363,25 @@ pub async fn start_with_fallback(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn agent_submit_prompt(
+pub async fn agent_submit_prompt<R: Runtime>(
+	webview: Webview<R>,
+	caller: Caller,
+	state: State<'_, AgentState>,
+	scope: RuntimeScope,
+	text: String,
+	turn: Option<SubmittedTurn>,
+) -> Result<(), TransportError> {
+	let turn_id = turn.as_ref().map(|handed| handed.turn_id.clone());
+	submit_prompt(state, scope, text, turn).await?;
+	if let (Some(turn_id), Caller::Host, Some(windows)) =
+		(turn_id, caller, webview.try_state::<TurnWindows>())
+	{
+		windows.submitted_from(webview.window().label(), &turn_id);
+	}
+	Ok(())
+}
+
+pub async fn submit_prompt(
 	state: State<'_, AgentState>,
 	scope: RuntimeScope,
 	text: String,

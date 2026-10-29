@@ -74,6 +74,7 @@ type Front = {
 	facts: (ReporterFacts | undefined)[]
 	spoken: SpokenWord[]
 	hear: (spoken: CompanionSpoke, side?: ConversationSource) => void
+	servings: () => number
 	stop: () => void
 }
 
@@ -105,6 +106,7 @@ const startFront = async (
 	let heard:
 		| ((spoken: CompanionSpoke, side: ConversationSource) => void)
 		| null = null
+	let servings = 0
 	const stop = startCompanionSpokeDriver({
 		runtimes,
 		roster,
@@ -115,6 +117,10 @@ const startFront = async (
 				return Promise.resolve(() => {
 					heard = null
 				})
+			},
+			serveAwaitedRuns: () => {
+				servings += 1
+				return Promise.resolve(null)
 			},
 		},
 		thisComputer: {
@@ -138,7 +144,16 @@ const startFront = async (
 		heard?.(spoken, side)
 	}
 
-	return { runtimes, roster, notices, facts, spoken, hear, stop }
+	return {
+		runtimes,
+		roster,
+		notices,
+		facts,
+		spoken,
+		hear,
+		servings: () => servings,
+		stop,
+	}
 }
 
 const createRoom = async (
@@ -380,6 +395,43 @@ describe("a companion speaking in a room the front never opened", () => {
 			spokenWords: createSpokenWords(),
 			companions: {
 				onCompanionSpoke: () => Promise.reject(new Error("refused")),
+				serveAwaitedRuns: () => Promise.resolve(null),
+			},
+			thisComputer: {
+				conversation: () => Promise.resolve(null),
+				missionThread: noMissionThread,
+				writes: () => store,
+			},
+			relayed: new Set(),
+			reportFailure: (notice) => {
+				notices.push(notice)
+			},
+		})
+		await settled()
+
+		expect(notices).toHaveLength(1)
+	})
+
+	it("asks the host once to serve the runs awaited while no window drove them", async () => {
+		const front = await startFront(
+			createFakeTranscriptStore(),
+			createScriptedDriver(),
+		)
+
+		expect(front.servings()).toBe(1)
+		expect(front.notices).toEqual([])
+	})
+
+	it("raises a failure when the host cannot serve the awaited runs", async () => {
+		const notices: UnreportedFailureNotice[] = []
+		const store = createFakeTranscriptStore()
+		startCompanionSpokeDriver({
+			runtimes: createConversationRuntimes(createScriptedDriver(), store),
+			roster: mountRoster(store, { reportFailure: () => undefined }),
+			spokenWords: createSpokenWords(),
+			companions: {
+				onCompanionSpoke: () => Promise.resolve(() => undefined),
+				serveAwaitedRuns: () => Promise.reject(new Error("refused")),
 			},
 			thisComputer: {
 				conversation: () => Promise.resolve(null),

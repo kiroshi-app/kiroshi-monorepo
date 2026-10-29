@@ -11,7 +11,7 @@ use bundled::bundled_bots;
 use common::removed_on_drop::RemovedOnDrop;
 use common::{an_app_of_its_own, AppOfItsOwn};
 use kiroshi_app::agent::commands::{
-	agent_shutdown, agent_start_or_resume_session, agent_submit_prompt, shutdown_session,
+	agent_shutdown, agent_start_or_resume_session, shutdown_session, submit_prompt,
 	terminate_session, EVENT_CHANNEL,
 };
 use kiroshi_app::agent::contract::{RuntimeScope, SessionHandle, SubmittedTurn, TransportError};
@@ -213,7 +213,7 @@ fn a_quit_during_a_start_sweeps_the_group_and_closes_the_gate_for_good() {
 		);
 		assert!(live_groups().is_empty(), "the quit left a group behind");
 		assert_eq!(
-			agent_submit_prompt(app.state::<AgentState>(), scope(), "salut".into(), None).await,
+			submit_prompt(app.state::<AgentState>(), scope(), "salut".into(), None).await,
 			Err(TransportError::NotStarted),
 			"a session reached the state after the quit"
 		);
@@ -257,7 +257,7 @@ fn a_quit_inside_a_restart_never_installs_the_session_it_was_building() {
 		);
 		assert!(live_groups().is_empty(), "the sidecar outlived the sweep");
 		assert_eq!(
-			agent_submit_prompt(app.state::<AgentState>(), scope(), "salut".into(), None).await,
+			submit_prompt(app.state::<AgentState>(), scope(), "salut".into(), None).await,
 			Err(TransportError::NotStarted),
 			"a session reached the state after the quit"
 		);
@@ -286,7 +286,7 @@ fn a_quit_ends_every_bots_session_and_not_only_the_last_one_started() {
 			"the sidecar the host believes it holds is not running: {running:?}"
 		);
 		assert_eq!(
-			agent_submit_prompt(app.state::<AgentState>(), scope(), "salut".into(), None).await,
+			submit_prompt(app.state::<AgentState>(), scope(), "salut".into(), None).await,
 			Ok(()),
 			"starting the second bot replaced the first one's session"
 		);
@@ -369,7 +369,7 @@ async fn a_turn_running(app: &App<MockRuntime>) {
 		.expect("the conversation is planted");
 	start(app).await.expect("the session under test starts");
 	let turn = SubmittedTurn { turn_id: "t1".to_owned(), prompt_id: "p1".to_owned() };
-	agent_submit_prompt(app.state::<AgentState>(), scope(), "take your time".into(), Some(turn))
+	submit_prompt(app.state::<AgentState>(), scope(), "take your time".into(), Some(turn))
 		.await
 		.expect("the prompt is taken");
 	let deadline = tokio::time::Instant::now() + DEADLINE;
