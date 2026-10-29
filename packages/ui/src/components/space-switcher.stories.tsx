@@ -828,17 +828,15 @@ const expectRowAvatar = async (root: HTMLElement, host: SpaceHost | null) => {
 		host ? AVATAR_STATE_OF_HOST[host] : "local",
 	)
 	const row = root.getBoundingClientRect()
+	const corner = avatar.getBoundingClientRect()
 	await expect(row.height).toBe(ROW_HEIGHT)
-	await expect(avatar.getBoundingClientRect().width).toBe(ROW_AVATAR)
-	await expect(avatar.getBoundingClientRect().top - row.top).toBe(
-		(ROW_HEIGHT - ROW_AVATAR) / 2,
-	)
+	await expect(corner.width).toBe(ROW_AVATAR)
+	await expect(corner.top - row.top).toBe((ROW_HEIGHT - ROW_AVATAR) / 2)
 	await expect(slotsIn(root, "host-pill")).toHaveLength(0)
 	if (host !== "up" && host !== "shared") {
 		await expect(presenceDotOn(root)).toBeUndefined()
 		return
 	}
-	const corner = avatar.getBoundingClientRect()
 	const box = presenceDotOn(root).getBoundingClientRect()
 	await expect(box.width).toBe(MENU_DOT)
 	await expect(corner.right - (box.left + box.width / 2)).toBeCloseTo(
