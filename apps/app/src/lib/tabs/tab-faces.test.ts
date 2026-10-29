@@ -11,7 +11,7 @@ import { type TabFaceSources, tabFaceOf } from "./tab-faces"
 
 const NOVA = { id: "nova", name: "Nova" }
 
-const ROOM = { id: "room", name: "Round table" }
+const ROOM = { id: "room", name: "Round table", color: null }
 
 const SOURCES: TabFaceSources = {
 	bots: [NOVA],
@@ -21,6 +21,11 @@ const SOURCES: TabFaceSources = {
 
 const markupOf = (icon: unknown) =>
 	render(icon as ReactElement).container.innerHTML
+
+const subjectIconIn = (icon: unknown) =>
+	render(icon as ReactElement).container.querySelector(
+		'[data-slot="conversation-subject-icon"]',
+	)
 
 afterEach(cleanup)
 
@@ -37,6 +42,26 @@ describe("the face of a tab", () => {
 
 		expect(face.title).toBe(ROOM.name)
 		expect(markupOf(face.icon)).toContain("conversation-subject-icon")
+	})
+
+	it.each([186, 210])(
+		"draws the subject icon of a room in its colour %s",
+		(color) => {
+			const face = tabFaceOf("/?conversation=room", {
+				...SOURCES,
+				conversations: [{ ...ROOM, color }],
+			})
+
+			expect(subjectIconIn(face.icon)?.getAttribute("data-hue")).toBe(
+				String(color),
+			)
+		},
+	)
+
+	it("draws the subject icon of a room with no colour untinted", () => {
+		const face = tabFaceOf("/?conversation=room", SOURCES)
+
+		expect(subjectIconIn(face.icon)?.getAttribute("data-hue")).toBe("")
 	})
 
 	it("draws the flag and the ticket title for a mission thread, the row title while the mission is unread", () => {
