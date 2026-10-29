@@ -19,10 +19,17 @@ import {
 	type WorkspaceTabs,
 } from "./workspace-tabs"
 
+import type { FileMenuAction } from "../bindings"
 import type { ObservedState } from "../conversations/store-contract"
 import { validateThreadSearch } from "../navigation/thread-search"
 
 const commandKey = vi.hoisted(() => ({ isUsed: true }))
+
+const fileMenu = vi.hoisted(() => ({
+	isCarried: false,
+	choose: undefined as ((action: FileMenuAction) => void) | undefined,
+	unwatch: vi.fn(),
+}))
 
 const windowHost = vi.hoisted(() => ({
 	windowOpen: vi.fn(),
@@ -35,6 +42,11 @@ const windowHost = vi.hoisted(() => ({
 vi.mock("../host", async (importOriginal) => ({
 	...(await importOriginal<typeof import("../host")>()),
 	usesCommandKey: () => commandKey.isUsed,
+	carriesNativeMenu: () => fileMenu.isCarried,
+	watchFileMenu: (act: (action: FileMenuAction) => void) => {
+		fileMenu.choose = act
+		return Promise.resolve(fileMenu.unwatch)
+	},
 	closeWindow: windowHost.closeWindow,
 	watchCloseRequest: windowHost.watchCloseRequest,
 	liveWindowLabels: windowHost.liveWindowLabels,
@@ -150,6 +162,9 @@ const NEEDS_YOU: ObservedState = {
 
 afterEach(() => {
 	commandKey.isUsed = true
+	fileMenu.isCarried = false
+	fileMenu.choose = undefined
+	fileMenu.unwatch.mockReset()
 	cleanup()
 	localStorage.clear()
 	vi.restoreAllMocks()
@@ -1535,5 +1550,119 @@ describe("the windows open at quit", () => {
 		)
 		expect(keysOf(SECONDARY)).toEqual([])
 		expect(await relaunch()).toEqual([])
+	})
+})
+
+const choose = (action: FileMenuAction) =>
+	act(() => {
+		if (!fileMenu.choose) {
+			throw new Error("the File menu is not watched")
+		}
+		fileMenu.choose(action)
+	})
+
+const withFileMenu = () => {
+	fileMenu.isCarried = true
+}
+
+describe("the File menu", () => {
+	it("runs each tab action the matching chord runs", () => {
+		withFileMenu()
+		const tabs = tabsOn(threadOf("first"), threadOf("second"))
+
+		choose("newTab")
+		expect(shownHrefs(tabs)).toEqual([
+			"/",
+			threadOf("first"),
+			threadOf("second"),
+			"/",
+		])
+
+		choose("closeTab")
+		expect(shownHrefs(tabs)).toEqual([
+			"/",
+			threadOf("first"),
+			threadOf("second"),
+		])
+
+		choose("reopenClosedTab")
+		expect(shownHrefs(tabs)).toEqual([
+			"/",
+			threadOf("first"),
+			threadOf("second"),
+			"/",
+		])
+	})
+
+	it("leaves the menu chords to the menu, so one gesture runs one action", () => {
+		withFileMenu()
+		const tabs = tabsOn(threadOf("first"))
+
+		pressMod("t")
+		pressMod("w")
+		press({ key: "t", metaKey: true, shiftKey: true })
+
+		expect(shownHrefs(tabs)).toEqual(["/", threadOf("first")])
+	})
+
+	it("keeps the main window open when its last tab closes", () => {
+		withFileMenu()
+		closesWindows()
+		const tabs = tabsOfSpace()
+
+		choose("closeTab")
+
+		expect(windowHost.closeWindow).not.toHaveBeenCalled()
+		expect(shownHrefs(tabs)).toEqual(["/"])
+	})
+
+	it("opens a new window on one empty tab", async () => {
+		withFileMenu()
+		opensWindows()
+		const tabs = tabsOn(threadOf("kept"))
+
+		choose("newWindow")
+
+		await vi.waitFor(() =>
+			expect(windowHost.windowOpen).toHaveBeenCalledExactlyOnceWith("/", null),
+		)
+		expect(shownHrefs(tabs)).toEqual(["/", threadOf("kept")])
+		expect(windowHost.raiseReportedFailure).not.toHaveBeenCalled()
+	})
+
+	it("raises the window failure when the new window does not open", async () => {
+		withFileMenu()
+		windowHost.windowOpen.mockResolvedValue({
+			status: "error",
+			error: { kind: "unavailable" },
+		})
+		tabsOfSpace()
+
+		choose("newWindow")
+
+		await vi.waitFor(() =>
+			expect(windowHost.raiseReportedFailure).toHaveBeenCalledExactlyOnceWith(
+				{ title: "Couldn’t open a new window" },
+				{ raisedIn: "workspace-tabs", command: "window_open" },
+			),
+		)
+	})
+
+	it("stops listening when the window unmounts", async () => {
+		withFileMenu()
+		tabsOfSpace()
+
+		cleanup()
+
+		await vi.waitFor(() => expect(fileMenu.unwatch).toHaveBeenCalledOnce())
+	})
+
+	it("is not watched where no native menu is carried", () => {
+		const tabs = tabsOfSpace()
+
+		pressMod("t")
+
+		expect(shownHrefs(tabs)).toEqual(["/", "/"])
+		expect(fileMenu.choose).toBeUndefined()
 	})
 })

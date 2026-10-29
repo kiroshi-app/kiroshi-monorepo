@@ -1,9 +1,14 @@
 import { useEffect } from "react"
 
 import { activeTabOf } from "./tabs-model"
-import { shownTabsOf, type WorkspaceTabs } from "./workspace-tabs"
+import {
+	openNewWindow,
+	shownTabsOf,
+	type WorkspaceTabs,
+} from "./workspace-tabs"
 
-import { usesCommandKey } from "../host"
+import type { FileMenuAction } from "../bindings"
+import { carriesNativeMenu, usesCommandKey, watchFileMenu } from "../host"
 
 type TabKeyPress = (tabs: WorkspaceTabs) => void
 
@@ -22,11 +27,24 @@ const togglePinOfActive: TabKeyPress = (tabs) => {
 	}
 }
 
+const fileMenuActions: Record<FileMenuAction, TabKeyPress> = {
+	newTab: (tabs) => tabs.openEmptyTab(),
+	newWindow: () => {
+		void openNewWindow()
+	},
+	reopenClosedTab: (tabs) => tabs.reopenClosed(),
+	closeTab: (tabs) => tabs.closeActive(),
+}
+
+const fileMenuChordsWith = (mod: string): [string, TabKeyPress][] => [
+	[`${mod}+t`, fileMenuActions.newTab],
+	[`${mod}+w`, fileMenuActions.closeTab],
+	[`${mod}+shift+t`, fileMenuActions.reopenClosedTab],
+]
+
 const pressesWith = (mod: string) =>
 	new Map<string, TabKeyPress>([
-		[`${mod}+t`, (tabs) => tabs.openEmptyTab()],
-		[`${mod}+w`, (tabs) => tabs.closeActive()],
-		[`${mod}+shift+t`, (tabs) => tabs.reopenClosed()],
+		...(carriesNativeMenu() ? [] : fileMenuChordsWith(mod)),
 		[`${mod}+alt+w`, closeAllButActive],
 		["ctrl+shift+p", togglePinOfActive],
 	])
@@ -47,7 +65,26 @@ const chordOf = (event: KeyboardEvent) =>
 		.filter(Boolean)
 		.join("+")
 
+const watchFileMenuFor = (tabs: WorkspaceTabs) => {
+	const detach = watchFileMenu((action) => fileMenuActions[action](tabs)).catch(
+		(reason: unknown) => {
+			console.error("tabs: the File menu could not be listened to", reason)
+			return undefined
+		},
+	)
+	return () => {
+		void detach.then((stop) => stop?.())
+	}
+}
+
 export const useTabKeys = (tabs: WorkspaceTabs) => {
+	useEffect(() => {
+		if (!carriesNativeMenu()) {
+			return
+		}
+		return watchFileMenuFor(tabs)
+	}, [tabs])
+
 	useEffect(() => {
 		const presses = pressesWith(usesCommandKey() ? "meta" : "ctrl")
 

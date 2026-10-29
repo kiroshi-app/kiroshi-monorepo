@@ -162,6 +162,8 @@ fn built<R: Runtime>(app: &AppHandle<R>, config: &WindowConfig) -> tauri::Result
 	closed_per_platform(&window);
 	#[cfg(target_os = "windows")]
 	crate::badge::wear_whenever_shown(&window);
+	#[cfg(target_os = "macos")]
+	crate::menu::follow_in_window_menu(&window);
 	if draws_native_windows::<R>() {
 		let dressed = window.clone();
 		if let Err(failure) = window.run_on_main_thread(move || dress(&dressed)) {

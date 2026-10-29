@@ -24,6 +24,7 @@ pub mod logging;
 pub mod mcp_oauth;
 #[cfg(any(target_os = "macos", test))]
 mod menu;
+mod menu_contract;
 pub mod missions;
 pub mod notifications;
 pub mod plugins;

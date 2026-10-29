@@ -18,6 +18,9 @@ import { listenOnThisWindow } from "./window-listen"
 
 import {
 	commands,
+	FILE_MENU_EVENT,
+	type FileMenuAction,
+	type FileMenuChosen,
 	MAXIMIZE_BUTTON_EVENT,
 	type MaximizeButtonPointer,
 	type MaximizeButtonState,
@@ -86,6 +89,9 @@ export const isSidebarResizable = (): boolean =>
 export const usesCommandKey = (): boolean =>
 	!isDesktopHost() || platform() === "macos"
 
+export const carriesNativeMenu = (): boolean =>
+	isDesktopHost() && platform() === "macos"
+
 export const hasCaptionWindowControls = (): boolean =>
 	isDesktopHost() && platform() === "windows"
 
@@ -152,6 +158,13 @@ export const watchMaximizeButton = (
 	listenOnThisWindow<MaximizeButtonPointer>(
 		MAXIMIZE_BUTTON_EVENT,
 		({ payload }) => report(payload.state),
+	)
+
+export const watchFileMenu = (
+	act: (action: FileMenuAction) => void,
+): Promise<() => void> =>
+	listenOnThisWindow<FileMenuChosen>(FILE_MENU_EVENT, ({ payload }) =>
+		act(payload.action),
 	)
 
 export type MaximizeButtonBounds = NonNullable<

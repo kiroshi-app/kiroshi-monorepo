@@ -3,8 +3,8 @@ use tauri_specta::{collect_commands, Builder, Commands};
 
 use crate::{
 	account, agent, applications, attachments, badge, companions, conversations, crypto, devices,
-	environment, hosting, invitations, joined_spaces, logging, mcp_oauth, missions, notifications,
-	plugins, routines, search, sections, spaces, updates, user, window_controls,
+	environment, hosting, invitations, joined_spaces, logging, mcp_oauth, menu_contract, missions,
+	notifications, plugins, routines, search, sections, spaces, updates, user, window_controls,
 };
 
 pub fn builder() -> Builder<tauri::Wry> {
@@ -29,6 +29,7 @@ pub fn builder() -> Builder<tauri::Wry> {
 		.constant("JOIN_LINK_OPENED_EVENT", joined_spaces::deep_link::OPENED_EVENT)
 		.constant("SPACE_DESCRIBED_EVENT", spaces::contract::DESCRIBED_EVENT)
 		.constant("UPDATE_CHANGED_EVENT", updates::contract::CHANGED_EVENT)
+		.constant("FILE_MENU_EVENT", menu_contract::FILE_MENU_EVENT)
 		.typ::<window_controls::MaximizeButtonPointer>()
 		.typ::<devices::contract::DeviceApproval>()
 		.typ::<devices::contract::DeviceApprovalRequested>()
@@ -44,6 +45,7 @@ pub fn builder() -> Builder<tauri::Wry> {
 		.typ::<applications::contract::ApplicationInstalled>()
 		.typ::<missions::commands::MissionChanged>()
 		.typ::<spaces::contract::SpaceDescribed>()
+		.typ::<menu_contract::FileMenuChosen>()
 }
 
 // `tauri::test::mock_builder` only ever yields a `Builder<MockRuntime>`, so the handler the

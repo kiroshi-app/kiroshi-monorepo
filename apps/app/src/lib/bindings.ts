@@ -267,6 +267,8 @@ export const DEVICE_APPROVAL_REQUESTED_EVENT = "device://approval-requested" as 
 
 export const DEVICE_APPROVAL_SETTLED_EVENT = "device://approval-settled" as const;
 
+export const FILE_MENU_EVENT = "menu-file-chosen" as const;
+
 export const HOSTING_CHANGED_EVENT = "hosting://changed" as const;
 
 export const HOSTING_MEMBERS_CHANGED_EVENT = "hosting://members-changed" as const;
@@ -873,6 +875,12 @@ export type EventTurn = {
 export type EvolvedBundle = "bot" | "user" | "space";
 
 export type FieldType = "string" | "number" | "boolean" | "datetime";
+
+export type FileMenuAction = "newTab" | "newWindow" | "reopenClosedTab" | "closeTab";
+
+export type FileMenuChosen = {
+	action: FileMenuAction,
+};
 
 export type Filter = Filter_Serialize | Filter_Deserialize;
 
