@@ -172,6 +172,12 @@ const rowGapIn = (bar: HTMLElement) =>
 const offsetsOf = (tabs: HTMLElement[], resting: DOMRect[]) =>
 	tabs.map((tab, rank) => Math.round(boxOf(tab).left - resting[rank].left))
 
+const neighbourOffsetsOf = (
+	zone: HTMLElement[],
+	resting: DOMRect[],
+	lifted: HTMLElement,
+) => offsetsOf(zone, resting).filter((_, rank) => zone[rank] !== lifted)
+
 const spaceBetween = (before: Element, after: Element) =>
 	Math.round(boxOf(after).left - boxOf(before).right)
 
@@ -818,10 +824,7 @@ const playA7DragWithinTabs = async ({
 
 	await waitFor(() =>
 		expect(
-			offsetsOf(
-				[release, weekly, invoice],
-				[resting[0], resting[2], resting[3]],
-			),
+			neighbourOffsetsOf([release, login, weekly, invoice], resting, login),
 		).toEqual([0, -step, 0]),
 	)
 	await expect(spaceBetween(weekly, invoice)).toBe(resting[1].width + 2 * gap)
@@ -892,10 +895,9 @@ const playA7DragWithinPinnedTabs = async ({
 	liftTo(inbox, middleOf(inbox) + step)
 
 	await waitFor(() =>
-		expect(offsetsOf([roadmap, standup], [resting[1], resting[2]])).toEqual([
-			-step,
-			0,
-		]),
+		expect(
+			neighbourOffsetsOf([inbox, roadmap, standup], resting, inbox),
+		).toEqual([-step, 0]),
 	)
 	await expect(spaceBetween(roadmap, standup)).toBe(resting[0].width + 2 * gap)
 	await expect(offsetsOf(unpinned, unpinnedResting)).toEqual(
@@ -949,10 +951,7 @@ const playA7DragAtTheDivider = async ({
 
 	await waitFor(() =>
 		expect(
-			offsetsOf(
-				[release, weekly, invoice],
-				[resting[0], resting[2], resting[3]],
-			),
+			neighbourOffsetsOf([release, login, weekly, invoice], resting, login),
 		).toEqual([step, 0, 0]),
 	)
 	await expect(spaceBetween(divider, release)).toBe(resting[1].width + 2 * gap)
@@ -1008,10 +1007,7 @@ const playA7TornOffTab = async ({ args, canvasElement }: DragPlayContext) => {
 	await waitFor(() => expect(shiftsIn(bar)).toEqual([]))
 	await waitFor(() =>
 		expect(
-			offsetsOf(
-				[release, weekly, invoice],
-				[resting[0], resting[2], resting[3]],
-			),
+			neighbourOffsetsOf([release, login, weekly, invoice], resting, login),
 		).toEqual([0, 0, 0]),
 	)
 	await expect(spaceBetween(release, weekly)).toBe(resting[1].width + 2 * gap)
