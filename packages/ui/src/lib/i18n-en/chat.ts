@@ -1059,7 +1059,7 @@ const chat = {
 			},
 			spaces: {
 				title: "Spaces keep things apart",
-				body: "A Space holds one project’s companions and conversations, with its own skills, applications and secrets. What a companion learns stays with it.",
+				body: "A Space holds one project’s companions and conversations, and keeps its own skills, applications and secrets. A companion keeps its own too: what it learns stays with it.",
 				orbit: { name: "Orbit web", detail: "8 conversations" },
 				newsletter: { name: "Newsletter", detail: "3 conversations" },
 			},
