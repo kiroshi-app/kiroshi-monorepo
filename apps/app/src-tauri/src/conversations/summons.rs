@@ -7,16 +7,20 @@ pub(crate) enum SummonsDropReason {
 	NotSeated,
 	StartFailed,
 	NeverStarted,
+	LostQueue,
+	Interrupted,
 }
 
 impl SummonsDropReason {
 	#[cfg(test)]
-	const ALL: [SummonsDropReason; 5] = [
+	const ALL: [SummonsDropReason; 7] = [
 		Self::SelfMention,
 		Self::Cancelled,
 		Self::NotSeated,
 		Self::StartFailed,
 		Self::NeverStarted,
+		Self::LostQueue,
+		Self::Interrupted,
 	];
 
 	fn name(self) -> &'static str {
@@ -26,6 +30,8 @@ impl SummonsDropReason {
 			Self::NotSeated => "notSeated",
 			Self::StartFailed => "startFailed",
 			Self::NeverStarted => "neverStarted",
+			Self::LostQueue => "lostQueue",
+			Self::Interrupted => "interrupted",
 		}
 	}
 }
@@ -70,6 +76,30 @@ pub(crate) fn note_dropped(run: &SummonsRun<'_>, reason: SummonsDropReason) {
 		run.bot_id,
 		reason.name()
 	);
+}
+
+#[cfg(test)]
+pub(crate) fn traced_steps(conversation_id: &str, bot_id: &str) -> Vec<String> {
+	let of_the_bot = format!("| bot: {bot_id}");
+	let of_the_bot_and_more = format!("{of_the_bot} |");
+	let mut steps: Vec<String> =
+		crate::test_log::logged_naming(&format!("| conversation: {conversation_id} |"))
+			.into_iter()
+			.filter(|line| line.starts_with("summons "))
+			.filter(|line| line.ends_with(&of_the_bot) || line.contains(&of_the_bot_and_more))
+			.map(|line| step_of(&line))
+			.collect();
+	steps.sort();
+	steps
+}
+
+#[cfg(test)]
+fn step_of(line: &str) -> String {
+	let step = line.split(' ').nth(1).unwrap_or(line);
+	match line.split("| reason: ").nth(1) {
+		Some(reason) => format!("{step} {reason}"),
+		None => step.to_owned(),
+	}
 }
 
 #[cfg(test)]

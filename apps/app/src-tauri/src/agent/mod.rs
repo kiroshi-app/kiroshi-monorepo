@@ -8,6 +8,8 @@ pub mod reply_writer;
 pub mod session;
 pub mod sidecar;
 pub mod sign_in;
+#[cfg(test)]
+pub(crate) mod stub_session;
 pub mod translate;
 
 pub use commands::AgentState;

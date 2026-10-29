@@ -1,4 +1,5 @@
 use tauri::{AppHandle, Manager, Runtime, State};
+use uuid::Uuid;
 
 use super::super::contract::{
 	MessageReference, NewAssistantMessage, NewTurn, NewUserMessage, PinnedBubble, SentMessage,
@@ -9,10 +10,11 @@ use super::super::state as conversation_state;
 use super::super::{context, host_turn, summons};
 use super::bot::ready;
 use super::room::announce_conversation;
-use crate::agent::reply_writer::HostWrites;
+use crate::agent::reply_writer::{settled_mentions, HostWrites};
+use crate::agent::translate::now_ms;
 use crate::agent::AgentState;
 use crate::db;
-use crate::db::repositories::messages::{MessagePageQuery, MessagesAroundQuery};
+use crate::db::repositories::messages::{MessagePageQuery, MessagesAroundQuery, TerminalState};
 use crate::events::{self, CONVERSATION_UPDATED, MESSAGE_STORED};
 use crate::hosting::authorship::Caller;
 
@@ -190,6 +192,57 @@ pub async fn conversation_send_turn<R: Runtime>(
 	let seq = store_sent(&app, database, caller, message.clone().into(), &summoned).await?;
 	host_turn::run(app, held, message, summoned).await;
 	Ok(seq)
+}
+
+pub(crate) struct HandedTurn {
+	pub(crate) conversation_id: String,
+	pub(crate) turn_id: String,
+	pub(crate) author_bot_id: String,
+	pub(crate) text: String,
+	pub(crate) summoned: String,
+}
+
+pub(crate) async fn run_handed_turn<R: Runtime>(
+	app: &AppHandle<R>,
+	database: &db::Database,
+	agent: &AgentState,
+	handed: HandedTurn,
+) -> Result<(), TranscriptStoreError> {
+	let HandedTurn { conversation_id, turn_id, author_bot_id, text, summoned } = handed;
+	let id = Uuid::new_v4().to_string();
+	let created_at = now_ms();
+	let held = agent.host_turns().hold(&conversation_id, &turn_id)?;
+	let content = settled_mentions(database, &conversation_id, &text).await?.unwrap_or(text);
+	let messages = database.messages();
+	let turn = NewTurn {
+		id: turn_id.clone(),
+		conversation_id: conversation_id.clone(),
+		started_at: created_at,
+	};
+	messages.start_turn(turn.into()).await?;
+	let handing = NewAssistantMessage {
+		id: id.clone(),
+		conversation_id: conversation_id.clone(),
+		turn_id: turn_id.clone(),
+		author_bot_id: Some(author_bot_id),
+		replied_to_message_id: None,
+		created_at,
+	};
+	messages.open_assistant_message(handing.into()).await?;
+	messages.append_text(id.clone(), content.clone()).await?;
+	messages.finalize_message(id.clone(), TerminalState::Complete, None).await?;
+	announce_stored(app, database, conversation_id.clone(), id.clone()).await;
+	announce_conversation(app, database, CONVERSATION_UPDATED, &conversation_id).await;
+	let message = SentMessage {
+		id,
+		conversation_id,
+		turn_id,
+		content,
+		created_at,
+		replied_to_message_id: None,
+	};
+	tauri::async_runtime::spawn(host_turn::run(app.clone(), held, message, vec![summoned]));
+	Ok(())
 }
 
 async fn store_sent<R: Runtime>(

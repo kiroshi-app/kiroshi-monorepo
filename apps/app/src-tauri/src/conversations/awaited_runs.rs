@@ -8,7 +8,6 @@ use super::contract::TranscriptStoreError;
 use super::host_turn;
 use crate::agent::AgentState;
 use crate::db;
-use crate::db::repositories::conversations::MISSION_KIND;
 use crate::db::repositories::messages::AwaitedRun;
 use crate::routines::runner::database;
 
@@ -151,12 +150,6 @@ async fn serve_turn<R: Runtime>(
 		return Ok(());
 	}
 	let database = database(app)?;
-	if is_a_mission_thread(database, conversation_id).await? {
-		log::info!(
-			"turn {turn_id} of conversation {conversation_id} is on a mission thread, its awaited runs stay with the mission run driver"
-		);
-		return Ok(());
-	}
 	let held = match agent.host_turns().hold(conversation_id, turn_id) {
 		Ok(held) => held,
 		Err(TranscriptStoreError::TurnAlreadyRunning { .. }) => return Ok(()),
@@ -174,14 +167,6 @@ async fn serve_turn<R: Runtime>(
 	Ok(())
 }
 
-async fn is_a_mission_thread(
-	database: &db::Database,
-	conversation_id: &str,
-) -> Result<bool, TranscriptStoreError> {
-	let kind = database.conversations().kind(conversation_id.to_owned()).await?;
-	Ok(kind.as_deref() == Some(MISSION_KIND))
-}
-
 async fn claimed_runs_of(
 	database: &db::Database,
 	turn_id: &str,
@@ -197,8 +182,12 @@ async fn claimed_runs_of(
 }
 
 pub fn forget_on_page_load<R: Runtime>(webview: &Webview<R>, payload: &PageLoadPayload<'_>) {
-	if payload.event() == PageLoadEvent::Started {
-		forget(&webview.window());
+	forget_on_page_event(&webview.window(), payload.event());
+}
+
+pub(super) fn forget_on_page_event<R: Runtime>(window: &Window<R>, event: PageLoadEvent) {
+	if event == PageLoadEvent::Started {
+		forget(window);
 	}
 }
 
@@ -219,10 +208,11 @@ mod tests {
 	use std::time::Duration;
 
 	use tauri::test::{mock_builder, MockRuntime};
-	use tauri::{AppHandle, Manager};
+	use tauri::webview::PageLoadEvent;
+	use tauri::{AppHandle, Manager, WebviewWindow, WebviewWindowBuilder, WindowEvent};
 	use tokio::time;
 
-	use super::{forget_settled_turns, TurnWindows};
+	use super::{forget_on_destroyed, forget_on_page_event, forget_settled_turns, TurnWindows};
 	use crate::conversations::turn_run_deadline::{arm_start_deadlines, TurnRunDeadlines};
 	use crate::db;
 	use crate::db::repositories::conversations::DEFAULT_BOT_ID;
@@ -293,6 +283,46 @@ mod tests {
 		})
 		.await
 		.expect("the expired turn was forgotten");
+	}
+
+	fn a_window_that_ran_t1(name: &str) -> (AppOfItsOwn, WebviewWindow<MockRuntime>) {
+		let app = an_app_of_its_own(name, mock_builder());
+		app.manage(TurnWindows::default());
+		let main = WebviewWindowBuilder::new(&*app, "main", Default::default())
+			.build()
+			.expect("the window builds");
+		let windows = app.state::<TurnWindows>();
+		windows.submitted_from("main", "t1");
+		windows.start_driving("main");
+		(app, main)
+	}
+
+	#[test]
+	fn a_page_that_starts_loading_leaves_its_turns_to_the_host_and_a_finished_load_does_not() {
+		let (app, main) = a_window_that_ran_t1("forget-page-load");
+		let windows = app.state::<TurnWindows>();
+		windows.start_driving("window-1");
+
+		forget_on_page_event(&main.as_ref().window(), PageLoadEvent::Finished);
+		let after_a_finished_load = windows.is_left_to_the_host("t1");
+		forget_on_page_event(&main.as_ref().window(), PageLoadEvent::Started);
+
+		assert!(!after_a_finished_load, "a finished load left the turn to the host");
+		assert!(windows.is_left_to_the_host("t1"));
+	}
+
+	#[test]
+	fn a_destroyed_window_leaves_its_turns_to_the_host_and_another_event_does_not() {
+		let (app, main) = a_window_that_ran_t1("forget-destroyed");
+		let windows = app.state::<TurnWindows>();
+		windows.start_driving("window-1");
+
+		forget_on_destroyed(&main.as_ref().window(), &WindowEvent::Focused(false));
+		let after_a_blur = windows.is_left_to_the_host("t1");
+		forget_on_destroyed(&main.as_ref().window(), &WindowEvent::Destroyed);
+
+		assert!(!after_a_blur, "a blur left the turn to the host");
+		assert!(windows.is_left_to_the_host("t1"));
 	}
 
 	#[test]

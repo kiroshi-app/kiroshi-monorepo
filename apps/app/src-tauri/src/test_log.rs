@@ -62,6 +62,12 @@ async fn lines_naming(kept: &Mutex<Vec<String>>, needle: &str) -> Vec<String> {
 		.unwrap_or_else(|_| panic!("no line named {needle} within {PATIENCE:?}"))
 }
 
+pub(crate) fn logged_naming(needle: &str) -> Vec<String> {
+	let mut named = named_in(&INFOS, needle);
+	named.extend(named_in(&WARNINGS, needle));
+	named
+}
+
 fn named_in(kept: &Mutex<Vec<String>>, needle: &str) -> Vec<String> {
 	let lines = kept.lock().unwrap_or_else(PoisonError::into_inner);
 	lines.iter().filter(|line| line.contains(needle)).cloned().collect()
