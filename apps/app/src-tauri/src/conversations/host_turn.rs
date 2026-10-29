@@ -9,6 +9,7 @@ use tauri::{AppHandle, Runtime, State};
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio::time;
 
+use super::awaited_runs::forget_settled_turns;
 use super::commands::announce_conversation;
 use super::context::{bounded_context, headed_message, mentioned_bot_ids};
 use super::contract::{SentMessage, TranscriptStoreError};
@@ -648,6 +649,7 @@ impl<R: Runtime> HostTurn<R> {
 		}
 		announce_conversation(&self.app, database, CONVERSATION_UPDATED, &self.conversation_id)
 			.await;
+		forget_settled_turns(&self.app).await;
 		Ok(())
 	}
 
@@ -875,6 +877,7 @@ impl<R: Runtime> HostTurn<R> {
 		messages.abandon_run(self.turn_id.clone(), bot_id.to_owned(), now_ms()).await?;
 		announce_conversation(&self.app, database, CONVERSATION_UPDATED, &self.conversation_id)
 			.await;
+		forget_settled_turns(&self.app).await;
 		Ok(())
 	}
 
@@ -1869,15 +1872,33 @@ done
 
 		mod serving_awaited_runs {
 			use super::*;
+			use crate::agent::commands::submit_claimed_prompt;
 			use crate::conversations::awaited_runs::{serve_handed, serve_on_driving, TurnWindows};
+			use crate::db::repositories::conversations::MISSION_KIND;
 			use crate::db::repositories::messages::EndedRun;
 
 			const MAIN: &str = "main";
 
+			const ANSWERING_SIDECAR: &str = r#"#!/bin/sh
+printf '%s\n' '{"type":"ready","provider":"stub","version":"0"}'
+while IFS= read -r line; do
+	key=$(printf '%s' "$line" | sed -n 's/.*"session":"\([^"]*\)".*/\1/p')
+	case "$line" in
+	*'"type":"open"'*)
+		printf '{"session":"%s","frame":{"type":"opened"}}\n' "$key"
+		;;
+	*'"type":"prompt"'*)
+		echo heard >> 'PROMPTS_HEARD'
+		printf '{"session":"%s","frame":{"type":"result","subtype":"success","session_id":"sdk-1","is_error":false}}\n' "$key"
+		;;
+	esac
+done
+"#;
+
 			struct Served {
 				app: crate::test_app::AppOfItsOwn,
 				room: Room,
-				grace: HeldSession,
+				_grace: HeldSession,
 				prompts: RemovedOnDrop,
 			}
 
@@ -1890,6 +1911,10 @@ done
 					self.app.state::<TurnWindows>()
 				}
 
+				fn grace(&self) -> RuntimeScope {
+					scope_in(&self.room, &self.room.bot_ids[1])
+				}
+
 				async fn drive_from(&self, window: &str) {
 					let agent = self.app.state::<AgentState>();
 					serve_on_driving(self.handle(), &self.windows(), &agent, window)
@@ -1897,22 +1922,35 @@ done
 						.expect("the awaited runs are served");
 				}
 
+				async fn grace_started_by_another_starter(&self) -> Result<(), TransportError> {
+					let turn = SubmittedTurn {
+						turn_id: "t1".to_owned(),
+						prompt_id: "reply-of-ada".to_owned(),
+					};
+					let database = self.app.state::<db::DatabaseState>();
+					let agent = self.app.state::<AgentState>();
+					let text = "your turn".to_owned();
+					submit_claimed_prompt(Some(&database), agent, self.grace(), text, Some(turn))
+						.await
+				}
+
 				fn prompts_heard(&self) -> usize {
 					std::fs::read_to_string(&*self.prompts).map_or(0, |heard| heard.lines().count())
 				}
 
-				async fn grace_place(&self) -> LinePlace {
-					self.grace.session.place_of("t1").await
-				}
-
-				async fn grace_runs_t1(&self) {
+				async fn grace_heard_a_prompt(&self) {
 					time::timeout(Duration::from_secs(10), async {
-						while self.grace_place().await != LinePlace::Running {
+						while self.prompts_heard() == 0 {
 							time::sleep(Duration::from_millis(10)).await;
 						}
 					})
 					.await
-					.expect("grace started the awaited run");
+					.expect("grace heard the awaited prompt");
+				}
+
+				async fn settled(&self) -> usize {
+					time::sleep(Duration::from_millis(300)).await;
+					self.prompts_heard()
 				}
 
 				async fn ada_hands_over_to_grace(&self) {
@@ -1924,6 +1962,17 @@ done
 						ended_at: 3,
 					};
 					messages.end_run(ended).await.expect("ada hands over");
+				}
+
+				async fn run(&self, sql: &'static str) {
+					let room_id = self.room.id.clone();
+					database(self.handle())
+						.expect("the database opens")
+						.call(move |connection| {
+							Ok(connection.execute_batch(&sql.replace("ROOM", &room_id))?)
+						})
+						.await
+						.expect("the statement runs");
 				}
 			}
 
@@ -1942,34 +1991,33 @@ done
 					std::process::id(),
 					uuid::Uuid::new_v4()
 				)));
-				let counting = OPENING_SIDECAR.replace(
-					"\tesac",
-					&format!(
-						"\t*'\"type\":\"prompt\"'*)\n\t\techo heard >> '{}'\n\t\t;;\n\tesac",
-						prompts.display()
-					),
-				);
+				let answering =
+					ANSWERING_SIDECAR.replace("PROMPTS_HEARD", &prompts.display().to_string());
 				let grace_scope = scope_in(&room, &room.bot_ids[1]);
-				let grace = a_session_running(app.handle(), &grace_scope, &counting).await;
-				Served { app, room, grace, prompts }
+				let grace = a_session_running(app.handle(), &grace_scope, &answering).await;
+				Served { app, room, _grace: grace, prompts }
+			}
+
+			async fn handed_over_after_a_reload(name: &str) -> Served {
+				let served = ada_ran_t1_from_the_main_window(name).await;
+				served.windows().forget_window(MAIN);
+				served.ada_hands_over_to_grace().await;
+				served
 			}
 
 			#[tokio::test]
 			async fn a_summons_received_while_its_window_reloads_starts_once_the_window_drives_again(
 			) {
-				let served = ada_ran_t1_from_the_main_window("serve-after-reload").await;
-				served.windows().forget_window(MAIN);
-				served.ada_hands_over_to_grace().await;
+				let served = handed_over_after_a_reload("serve-after-reload").await;
 				serve_handed(served.handle(), &served.room.id, "t1").await.expect("nothing fails");
-				let before_driving = served.grace_place().await;
+				let before_driving = served.settled().await;
 
 				tokio::join!(served.drive_from(MAIN), served.drive_from("window-1"));
-				served.grace_runs_t1().await;
+				served.grace_heard_a_prompt().await;
 				served.drive_from(MAIN).await;
-				time::sleep(Duration::from_millis(200)).await;
 
-				assert_eq!(before_driving, LinePlace::Absent, "grace started with no window");
-				assert_eq!(served.prompts_heard(), 1, "grace was not started exactly once");
+				assert_eq!(before_driving, 0, "grace started with no window driving");
+				assert_eq!(served.settled().await, 1, "grace was not started exactly once");
 			}
 
 			#[tokio::test]
@@ -1981,9 +2029,9 @@ done
 
 				served.ada_hands_over_to_grace().await;
 				serve_handed(served.handle(), &served.room.id, "t1").await.expect("served");
-				served.grace_runs_t1().await;
+				served.grace_heard_a_prompt().await;
 
-				assert_eq!(served.prompts_heard(), 1, "grace was not started exactly once");
+				assert_eq!(served.settled().await, 1, "grace was not started exactly once");
 			}
 
 			#[tokio::test]
@@ -1994,17 +2042,102 @@ done
 				served.ada_hands_over_to_grace().await;
 				serve_handed(served.handle(), &served.room.id, "t1").await.expect("nothing fails");
 				served.drive_from(MAIN).await;
-				time::sleep(Duration::from_millis(200)).await;
 
-				assert_eq!(served.grace_place().await, LinePlace::Absent);
-				assert_eq!(served.prompts_heard(), 0);
+				assert_eq!(served.settled().await, 0);
+			}
+
+			#[tokio::test]
+			async fn an_awaited_run_the_host_served_refuses_any_other_starter() {
+				let served = handed_over_after_a_reload("serve-then-another").await;
+				served.drive_from(MAIN).await;
+				served.grace_heard_a_prompt().await;
+				let idle_again = served.settled().await;
+
+				let refused = served.grace_started_by_another_starter().await;
+
+				assert_eq!(idle_again, 1);
+				assert_eq!(refused, Err(TransportError::TurnAlreadyRunning));
+				assert_eq!(served.settled().await, 1, "grace heard a second prompt");
+			}
+
+			#[tokio::test]
+			async fn an_awaited_run_another_starter_claimed_first_is_not_served_again() {
+				let served = handed_over_after_a_reload("another-then-serve").await;
+				served.grace_started_by_another_starter().await.expect("the starter claims");
+
+				served.drive_from(MAIN).await;
+
+				assert_eq!(served.settled().await, 1, "grace heard a second prompt");
+			}
+
+			#[tokio::test]
+			async fn the_host_and_another_starter_at_once_send_grace_one_prompt() {
+				let served = handed_over_after_a_reload("serve-and-another-at-once").await;
+
+				let (_, other) = tokio::join!(
+					served.drive_from(MAIN),
+					served.grace_started_by_another_starter()
+				);
+				served.grace_heard_a_prompt().await;
+
+				assert!(
+					matches!(other, Ok(()) | Err(TransportError::TurnAlreadyRunning)),
+					"the other starter answered {other:?}"
+				);
+				assert_eq!(served.settled().await, 1, "grace was not started exactly once");
+			}
+
+			#[tokio::test]
+			async fn an_awaited_run_on_a_mission_thread_is_left_to_the_mission_run_driver() {
+				let served = handed_over_after_a_reload("serve-mission-thread").await;
+				let room_id = served.room.id.clone();
+				database(served.handle())
+					.expect("the database opens")
+					.call(move |connection| {
+						connection.execute(
+							"UPDATE conversations SET kind = ?1 WHERE id = ?2",
+							rusqlite::params![MISSION_KIND, room_id],
+						)?;
+						Ok(())
+					})
+					.await
+					.expect("the room becomes a mission thread");
+
+				served.drive_from(MAIN).await;
+
+				assert_eq!(served.settled().await, 0, "the host started a mission thread bot");
+			}
+
+			#[tokio::test]
+			async fn a_turn_that_fails_to_serve_leaves_the_other_turns_served() {
+				let served = handed_over_after_a_reload("serve-past-a-failure").await;
+				served
+					.run(
+						"INSERT INTO turns (id, conversation_id, seq, started_at)
+							VALUES ('t-broken', 'ROOM', 99, 1);
+						INSERT INTO messages (id, conversation_id, turn_id, seq, role, content,
+							completion_state, created_at)
+							VALUES ('m-broken', 'ROOM', 't-broken', 99, 'user', 'hi', 'complete', 1);
+						CREATE TRIGGER a_broken_claim BEFORE UPDATE ON turn_runs
+							WHEN OLD.turn_id = 't-broken'
+							BEGIN SELECT RAISE(ABORT, 'the claim breaks'); END;",
+					)
+					.await;
+				let messages = database(served.handle()).expect("the database opens").messages();
+				let grace = served.room.bot_ids[1].clone();
+				messages.await_runs("t-broken".to_owned(), vec![grace]).await.expect("awaited");
+				served.windows().submitted_from(MAIN, "t-broken");
+				served.windows().forget_window(MAIN);
+
+				served.drive_from(MAIN).await;
+				served.grace_heard_a_prompt().await;
+
+				assert_eq!(served.settled().await, 1, "the turn after the failure was not served");
 			}
 
 			#[tokio::test]
 			async fn an_awaited_run_claimed_after_it_started_is_refused_and_starts_nothing() {
-				let served = ada_ran_t1_from_the_main_window("serve-already-started").await;
-				served.windows().forget_window(MAIN);
-				served.ada_hands_over_to_grace().await;
+				let served = handed_over_after_a_reload("serve-already-started").await;
 				database(served.handle())
 					.expect("the database opens")
 					.messages()
@@ -2013,12 +2146,11 @@ done
 					.expect("grace started elsewhere");
 
 				served.drive_from(MAIN).await;
-				time::sleep(Duration::from_millis(200)).await;
 
-				assert_eq!(served.prompts_heard(), 0, "a started run was started again");
-				let host_turns = served.app.state::<AgentState>();
+				assert_eq!(served.settled().await, 0, "a started run was started again");
+				let agent = served.app.state::<AgentState>();
 				assert!(
-					host_turns.host_turns().hold(&served.room.id, "t1").is_ok(),
+					agent.host_turns().hold(&served.room.id, "t1").is_ok(),
 					"the refused claim kept the turn held"
 				);
 			}

@@ -5,6 +5,7 @@ use std::time::Duration;
 use tauri::{AppHandle, Runtime};
 use tokio::time;
 
+use super::awaited_runs::forget_settled_turns;
 use super::commands::announce_conversation;
 use super::contract::TranscriptStoreError;
 use super::summons::{self, SummonsDropReason, SummonsRun};
@@ -149,6 +150,7 @@ impl<R: Runtime> HeldTurn<R> {
 			summons::note_dropped(&run, SummonsDropReason::NeverStarted);
 			announce_conversation(&self.app, database, CONVERSATION_UPDATED, &self.conversation_id)
 				.await;
+			forget_settled_turns(&self.app).await;
 		}
 		Ok(())
 	}

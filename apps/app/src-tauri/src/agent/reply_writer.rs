@@ -17,7 +17,7 @@ use super::contract::{
 use super::session::{Drained, EventSink};
 use super::translate::now_ms;
 use crate::attachments::attachment_block;
-use crate::conversations::awaited_runs::serve_handed;
+use crate::conversations::awaited_runs::{forget_settled_turns, serve_handed};
 use crate::conversations::commands::{announce_conversation, ready};
 use crate::conversations::context::mentioned_bot_ids;
 use crate::conversations::contract::TranscriptStoreError;
@@ -722,6 +722,7 @@ impl<R: Runtime> Store<R> {
 		if !handed_to.is_empty() {
 			self.serve_when_left(id).await;
 		}
+		forget_settled_turns(&self.app).await;
 		Ok(())
 	}
 

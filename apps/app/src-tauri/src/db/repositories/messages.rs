@@ -67,6 +67,12 @@ pub struct AwaitedRun {
 	pub prompt_id: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RunClaim {
+	FromAwaited,
+	Fresh,
+}
+
 pub struct EndedRun {
 	pub turn_id: String,
 	pub bot_id: String,
@@ -221,6 +227,9 @@ const AWAITED_RUNS: &str = "SELECT conversation_id, turn_id, bot_id, prompt_id F
 		WHERE run.state = ?1)
 	WHERE prompt_id IS NOT NULL
 	ORDER BY turn_id, bot_id";
+const MOVE_RUN: &str = "UPDATE turn_runs SET state = ?3
+	WHERE turn_id = ?1 AND bot_id = ?2 AND state = ?4";
+const OPEN_RUN_TURNS: &str = "SELECT DISTINCT turn_id FROM turn_runs";
 const RELEASE_RUNS_OF_BOT: &str = "DELETE FROM turn_runs WHERE turn_id = ?1 AND bot_id = ?2";
 const AWAITED: &str = "awaited";
 const RUNNING: &str = "running";
@@ -401,6 +410,51 @@ impl MessagesRepository {
 			})
 			.await
 			.at("is_run_awaited", "turn_runs")?)
+	}
+
+	pub async fn claim_awaited_run(
+		&self,
+		turn_id: String,
+		bot_id: String,
+	) -> Result<bool, TranscriptError> {
+		self.call_mut(move |connection| Ok(claimed_awaited_run(connection, &turn_id, &bot_id)))
+			.await?
+			.at("claim_awaited_run", "turn_runs")
+	}
+
+	pub async fn claim_run(
+		&self,
+		turn: NewTurn,
+		bot_id: String,
+	) -> Result<Option<RunClaim>, TranscriptError> {
+		self.call_mut(move |connection| Ok(claimed_run(connection, &turn, &bot_id)))
+			.await?
+			.at("claim_run", "turn_runs")
+	}
+
+	pub async fn unclaim_run(
+		&self,
+		turn_id: String,
+		bot_id: String,
+		claim: RunClaim,
+		released_at: i64,
+	) -> Result<(), TranscriptError> {
+		self.call_mut(move |connection| {
+			Ok(unclaimed_run(connection, &turn_id, &bot_id, claim, released_at))
+		})
+		.await?
+		.at("unclaim_run", "turn_runs")
+	}
+
+	pub async fn open_run_turns(&self) -> Result<Vec<String>, TranscriptError> {
+		Ok(self
+			.call(|connection| {
+				let mut statement = connection.prepare_cached(OPEN_RUN_TURNS)?;
+				let ids = statement.query_map([], |row| row.get(0))?.collect::<Result<_, _>>()?;
+				Ok(ids)
+			})
+			.await
+			.at("open_run_turns", "turn_runs")?)
 	}
 
 	pub async fn awaited_runs(&self) -> Result<Vec<AwaitedRun>, TranscriptError> {
@@ -1014,6 +1068,61 @@ fn started_run(
 	Ok(())
 }
 
+fn claimed_awaited_run(
+	connection: &mut Connection,
+	turn_id: &str,
+	bot_id: &str,
+) -> Result<bool, TranscriptError> {
+	let transaction = write_transaction(connection)?;
+	let claimed = transaction.execute(MOVE_RUN, params![turn_id, bot_id, RUNNING, AWAITED])? > 0;
+	transaction.commit()?;
+	Ok(claimed)
+}
+
+fn claimed_run(
+	connection: &mut Connection,
+	turn: &NewTurn,
+	bot_id: &str,
+) -> Result<Option<RunClaim>, TranscriptError> {
+	let transaction = write_transaction(connection)?;
+	let is_running: bool =
+		transaction.query_row(RUN_IN_STATE, params![turn.id, bot_id, RUNNING], |row| row.get(0))?;
+	if is_running {
+		return Ok(None);
+	}
+	insert_turn_once(&transaction, turn)?;
+	let claim = if transaction.execute(MOVE_RUN, params![turn.id, bot_id, RUNNING, AWAITED])? > 0 {
+		RunClaim::FromAwaited
+	} else {
+		transaction.execute(HOLD_RUN, params![turn.id, bot_id, RUNNING])?;
+		RunClaim::Fresh
+	};
+	transaction.execute(REOPEN_TURN, [&turn.id])?;
+	transaction.commit()?;
+	Ok(Some(claim))
+}
+
+fn unclaimed_run(
+	connection: &mut Connection,
+	turn_id: &str,
+	bot_id: &str,
+	claim: RunClaim,
+	released_at: i64,
+) -> Result<(), TranscriptError> {
+	let transaction = write_transaction(connection)?;
+	match claim {
+		RunClaim::FromAwaited => {
+			transaction.execute(MOVE_RUN, params![turn_id, bot_id, AWAITED, RUNNING])?;
+		}
+		RunClaim::Fresh => {
+			transaction.execute(RELEASE_RUN, params![turn_id, bot_id, RUNNING])?;
+			transaction.execute(COMPLETE_TURN_NO_BOT_RUNS_ON, params![turn_id, released_at])?;
+		}
+	}
+	transaction.commit()?;
+	Ok(())
+}
+
 fn ended_run(connection: &mut Connection, ended: &EndedRun) -> Result<(), TranscriptError> {
 	let transaction = write_transaction(connection)?;
 	transaction.execute(RELEASE_RUN, params![ended.turn_id, ended.bot_id, RUNNING])?;
@@ -1045,7 +1154,7 @@ fn abandoned_run(
 	abandoned_at: i64,
 ) -> Result<(), TranscriptError> {
 	let transaction = write_transaction(connection)?;
-	transaction.execute(RELEASE_RUN, params![turn_id, bot_id, AWAITED])?;
+	transaction.execute(RELEASE_RUNS_OF_BOT, params![turn_id, bot_id])?;
 	transaction.execute(COMPLETE_TURN_NO_BOT_RUNS_ON, params![turn_id, abandoned_at])?;
 	transaction.commit()?;
 	Ok(())
@@ -2322,6 +2431,100 @@ mod tests {
 			prompt_id: "m1".into(),
 		};
 		assert_eq!(awaited, vec![of_b2]);
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	async fn run_states_of_t1(database: &Database) -> Vec<(String, String)> {
+		database
+			.call(|connection| {
+				let mut runs = connection.prepare(
+					"SELECT bot_id, state FROM turn_runs WHERE turn_id = 't1' ORDER BY bot_id",
+				)?;
+				let rows = runs.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
+				Ok(rows.collect::<Result<Vec<_>, _>>()?)
+			})
+			.await
+			.expect("the runs read")
+	}
+
+	fn run_of(bot_id: &str, state: &str) -> (String, String) {
+		(bot_id.to_owned(), state.to_owned())
+	}
+
+	#[tokio::test]
+	async fn an_awaited_run_is_claimed_once_and_a_run_no_longer_awaited_never() {
+		let dir = temp_dir();
+		let database = seeded(&dir).await;
+		a_turn(&database, "t1", "c1").await;
+		let messages = database.messages();
+		messages.await_runs("t1".into(), vec!["b1".into()]).await.expect("b1 is awaited");
+
+		let first = messages.claim_awaited_run("t1".into(), "b1".into()).await.expect("claimed");
+		let second = messages.claim_awaited_run("t1".into(), "b1".into()).await.expect("refused");
+		let absent = messages.claim_awaited_run("t1".into(), "b2".into()).await.expect("refused");
+
+		assert!(first, "the awaited run was not claimed");
+		assert!(!second, "a running run was claimed again");
+		assert!(!absent, "a run nobody awaited was claimed");
+		assert_eq!(run_states_of_t1(&database).await, vec![run_of("b1", RUNNING)]);
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_starter_claims_a_run_awaited_or_absent_and_never_one_already_running() {
+		let dir = temp_dir();
+		let database = seeded(&dir).await;
+		let turn = || NewTurn { id: "t1".into(), conversation_id: "c1".into(), started_at: 1 };
+		a_turn(&database, "t1", "c1").await;
+		let messages = database.messages();
+		messages.await_runs("t1".into(), vec!["b1".into()]).await.expect("b1 is awaited");
+
+		let awaited = messages.claim_run(turn(), "b1".into()).await.expect("claimed");
+		let fresh = messages.claim_run(turn(), "b2".into()).await.expect("claimed");
+		let again = messages.claim_run(turn(), "b1".into()).await.expect("refused");
+
+		assert_eq!(awaited, Some(RunClaim::FromAwaited));
+		assert_eq!(fresh, Some(RunClaim::Fresh));
+		assert_eq!(again, None, "a running run was claimed by a second starter");
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_claim_given_back_leaves_the_run_as_the_starter_found_it() {
+		let dir = temp_dir();
+		let database = seeded(&dir).await;
+		let turn = || NewTurn { id: "t1".into(), conversation_id: "c1".into(), started_at: 1 };
+		a_turn(&database, "t1", "c1").await;
+		let messages = database.messages();
+		messages.await_runs("t1".into(), vec!["b1".into()]).await.expect("b1 is awaited");
+		let awaited = messages.claim_run(turn(), "b1".into()).await.expect("claimed");
+		let fresh = messages.claim_run(turn(), "b2".into()).await.expect("claimed");
+
+		for (bot_id, claim) in [("b1", awaited), ("b2", fresh)] {
+			let claim = claim.expect("the run was claimed");
+			messages.unclaim_run("t1".into(), bot_id.into(), claim, 5).await.expect("given back");
+		}
+
+		assert_eq!(run_states_of_t1(&database).await, vec![run_of("b1", AWAITED)]);
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn abandoning_a_claimed_run_that_never_started_releases_it() {
+		let dir = temp_dir();
+		let database = seeded(&dir).await;
+		a_turn(&database, "t1", "c1").await;
+		let messages = database.messages();
+		messages.await_runs("t1".into(), vec!["b1".into()]).await.expect("b1 is awaited");
+		messages.claim_awaited_run("t1".into(), "b1".into()).await.expect("claimed");
+
+		messages.abandon_run("t1".into(), "b1".into(), 5).await.expect("abandoned");
+
+		assert_eq!(run_states_of_t1(&database).await, Vec::new());
 		drop(database);
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
