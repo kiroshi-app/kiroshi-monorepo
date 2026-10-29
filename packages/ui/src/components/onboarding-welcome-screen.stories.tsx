@@ -363,8 +363,6 @@ const expectLastStep = async (canvasElement: HTMLElement) => {
 	).toBe("hidden")
 }
 
-const SPACES_TITLE = "Spaces keep things apart"
-
 export const WelcomeSpacesLight = meta.story({
 	name: "Welcome / Spaces / Light",
 	args: { step: "spaces" },
@@ -379,7 +377,7 @@ export const WelcomeSpacesLight = meta.story({
 	play: async ({ args, canvas, canvasElement, userEvent }) => {
 		await expectWelcome({
 			canvasElement,
-			title: SPACES_TITLE,
+			title: "Spaces keep things apart",
 			action: "Next",
 			step: "3 of 4",
 			current: 3,
@@ -414,7 +412,7 @@ export const WelcomeSpacesDark = meta.story({
 	play: async ({ args, canvasElement }) => {
 		await expectWelcome({
 			canvasElement,
-			title: SPACES_TITLE,
+			title: "Spaces keep things apart",
 			action: "Next",
 			step: "3 of 4",
 			current: 3,

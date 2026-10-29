@@ -171,7 +171,6 @@ const SpacesIllustration = () => {
 				>
 					<div className="flex items-center gap-3">
 						<SpaceAvatar
-							className="shrink-0"
 							colour={hue}
 							name={t(`onboarding.intro.spaces.${id}.name`)}
 							size={36}
