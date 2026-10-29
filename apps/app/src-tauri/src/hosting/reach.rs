@@ -406,6 +406,7 @@ pub(super) const AUDIENCES: &[(&str, Audience)] = &[
 	(crate::companions::contract::UPDATED_EVENT, Audience::Scoped(child(Bot, "/id"))),
 	(crate::conversations::contract::COMPANION_ARRIVED_EVENT, IN_THE_CONVERSATION),
 	(crate::conversations::contract::COMPANION_SPOKE_EVENT, IN_THE_CONVERSATION),
+	(crate::conversations::contract::SUMMONS_DROPPED_EVENT, IN_THE_CONVERSATION),
 	(crate::conversations::contract::CREATED_EVENT, IN_THE_SPACE),
 	(crate::conversations::contract::DELETED_EVENT, IN_THE_SPACE),
 	(crate::conversations::contract::MESSAGE_STORED_EVENT, IN_THE_CONVERSATION),

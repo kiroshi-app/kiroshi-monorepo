@@ -470,7 +470,7 @@ async fn summon<R: Runtime>(
 		return Ok(());
 	};
 	let run = SummonsRun { conversation_id: thread_id, turn_id: &turn_id, bot_id: &successor.id };
-	summons::note_dropped(&run, SummonsDropReason::StartFailed);
+	summons::note_dropped(app, &run, SummonsDropReason::StartFailed, None);
 	log::error!(
 		"mission {} changed owner to {} and the summons of its handoff was not written: {failure:?}",
 		mission.id,

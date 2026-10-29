@@ -91,6 +91,8 @@ declared! {
 		conversations::contract::COMPANION_ARRIVED_EVENT,
 	COMPANION_SPOKE: conversations::contract::CompanionSpoke =
 		conversations::contract::COMPANION_SPOKE_EVENT,
+	SUMMONS_DROPPED: conversations::contract::SummonsDropped =
+		conversations::contract::SUMMONS_DROPPED_EVENT,
 	DEVICE_APPROVAL_CHANGED: devices::contract::DeviceApproval =
 		devices::contract::APPROVAL_CHANGED_EVENT,
 	DEVICE_APPROVAL_REQUESTED: devices::contract::DeviceApprovalRequested =

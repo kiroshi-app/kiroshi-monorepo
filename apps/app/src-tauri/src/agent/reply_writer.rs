@@ -507,7 +507,7 @@ impl<R: Runtime> Desk<R> {
 				turn_id: &turn.id,
 				bot_id,
 			};
-			summons::note_dropped(&run, *reason);
+			summons::note_dropped(&self.store.app, &run, *reason, None);
 		}
 		handover.handed
 	}

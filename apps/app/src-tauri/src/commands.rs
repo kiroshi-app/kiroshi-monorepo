@@ -35,6 +35,7 @@ pub fn builder() -> Builder<tauri::Wry> {
 		.constant("FILE_MENU_EVENT", menu_contract::FILE_MENU_EVENT)
 		.constant("TAB_DRAG_EVENT", window_controls::tab_drag::TAB_DRAG_EVENT)
 		.constant("CLAUDE_IMPORT_PROGRESS_EVENT", claude_import::contract::PROGRESS_EVENT)
+		.constant("SUMMONS_DROPPED_EVENT", conversations::contract::SUMMONS_DROPPED_EVENT)
 		.typ::<window_controls::MaximizeButtonPointer>()
 		.typ::<window_controls::drag_ghost::DragGhostTab>()
 		.typ::<devices::contract::DeviceApproval>()
@@ -54,6 +55,7 @@ pub fn builder() -> Builder<tauri::Wry> {
 		.typ::<menu_contract::FileMenuChosen>()
 		.typ::<window_controls::tab_drag::TabDrag>()
 		.typ::<claude_import::contract::ClaudeImportProgress>()
+		.typ::<conversations::contract::SummonsDropped>()
 }
 
 // `tauri::test::mock_builder` only ever yields a `Builder<MockRuntime>`, so the handler the

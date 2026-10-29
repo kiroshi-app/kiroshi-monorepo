@@ -1459,6 +1459,12 @@ mod tests {
 		)
 		.await;
 		let host = serving(&app, &opened.thread_conversation_id);
+		let (announced, drops) = channel();
+		app.listen(crate::conversations::contract::SUMMONS_DROPPED_EVENT, move |event| {
+			let dropped: crate::conversations::contract::SummonsDropped =
+				serde_json::from_str(event.payload()).expect("a dropped summons");
+			announced.send(dropped).expect("the test listens");
+		});
 
 		host.answer(asking("handoff", json!({ "id": opened.id, "companion": "Fourth" })))
 			.await
@@ -1473,6 +1479,16 @@ mod tests {
 			warnings_naming(&format!("summons dropped | conversation: {thread_id} |")).await;
 		assert_eq!(dropped.len(), 1, "{dropped:?}");
 		assert!(dropped[0].ends_with("| bot: b4 | reason: startFailed"), "{dropped:?}");
+		let announced: Vec<_> = drops.try_iter().collect();
+		assert_eq!(announced.len(), 1, "{announced:?}");
+		assert_eq!(announced[0].conversation_id, *thread_id);
+		assert_eq!(announced[0].bot_id, "b4");
+		assert_eq!(
+			announced[0].reason,
+			crate::conversations::summons::SummonsDropReason::StartFailed
+		);
+		assert_eq!(announced[0].error, None);
+		assert!(dropped[0].contains(&format!("| turn: {} |", announced[0].turn_id)), "{dropped:?}");
 		let named = warnings_naming(&format!("mission {} changed owner", opened.id)).await;
 		assert!(named[0].contains("the turn breaks"), "{named:?}");
 	}

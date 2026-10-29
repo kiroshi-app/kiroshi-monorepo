@@ -492,8 +492,10 @@ impl<R: Runtime> HostTurn<R> {
 		match (done.is_in_line, end) {
 			(true, SpeakerEnd::HandsOver) => self.lost_from_line(&done.scope).await,
 			(true, SpeakerEnd::Cancelled) => summons::note_dropped(
+				&self.app,
 				&self.run_of(&done.scope.bot_id),
 				SummonsDropReason::Cancelled,
+				None,
 			),
 			(false, SpeakerEnd::HandsOver) => self.note_handovers(done, waiting).await,
 			(false, SpeakerEnd::Cancelled) => {}
@@ -601,13 +603,15 @@ impl<R: Runtime> HostTurn<R> {
 			} else if self.withdrew(&speaker.scope).await {
 				self.rejected(&speaker.scope, reason.clone(), interrupted).await;
 			} else {
-				summons::note_dropped(&self.run_of(&speaker.scope.bot_id), interrupted);
+				let run = self.run_of(&speaker.scope.bot_id);
+				summons::note_dropped(&self.app, &run, interrupted, Some(reason.clone()));
 				running.push(speaker);
 			}
 		}
 		self.cancel_running(running).await;
 		for summons in &waiting {
-			summons::note_dropped(&self.run_of(&summons.bot_id), interrupted);
+			let run = self.run_of(&summons.bot_id);
+			summons::note_dropped(&self.app, &run, interrupted, Some(reason.clone()));
 		}
 		join_all(waiting.iter().map(|summons| self.abandon(&summons.bot_id))).await;
 	}
@@ -633,7 +637,12 @@ impl<R: Runtime> HostTurn<R> {
 		reason: TransportError,
 		dropped: SummonsDropReason,
 	) {
-		summons::note_dropped(&self.run_of(&scope.bot_id), dropped);
+		summons::note_dropped(
+			&self.app,
+			&self.run_of(&scope.bot_id),
+			dropped,
+			Some(reason.clone()),
+		);
 		log::warn!(
 			"{} rejects the queued turn of {}: {}",
 			self.label(),
@@ -695,7 +704,8 @@ impl<R: Runtime> HostTurn<R> {
 	async fn started_wave(&self, summoned: Vec<Summons>) -> Vec<Speaker> {
 		if self.has_stopped() {
 			for held in &summoned {
-				summons::note_dropped(&self.run_of(&held.bot_id), SummonsDropReason::Cancelled);
+				let run = self.run_of(&held.bot_id);
+				summons::note_dropped(&self.app, &run, SummonsDropReason::Cancelled, None);
 			}
 			join_all(summoned.iter().map(|summons| self.abandon(&summons.bot_id))).await;
 			return Vec::new();
@@ -857,11 +867,14 @@ impl<R: Runtime> HostTurn<R> {
 	}
 
 	async fn refused(&self, bot_id: &str, refusal: Refusal) {
-		let reason = match refusal {
-			Refusal::Stopped(_) => SummonsDropReason::Cancelled,
-			_ => SummonsDropReason::StartFailed,
+		let (reason, error) = match &refusal {
+			Refusal::Stopped(_) => (SummonsDropReason::Cancelled, None),
+			Refusal::Unopened(_) => (SummonsDropReason::StartFailed, None),
+			Refusal::Unready(error)
+			| Refusal::Unstarted(_, error)
+			| Refusal::Unsubmitted(_, error) => (SummonsDropReason::StartFailed, Some(error.clone())),
 		};
-		summons::note_dropped(&self.run_of(bot_id), reason);
+		summons::note_dropped(&self.app, &self.run_of(bot_id), reason, error);
 		let (scope, detail) = match refusal {
 			Refusal::Unready(error) => (None, Some(detail_of(&error))),
 			Refusal::Unopened(error) => (None, Some(detail_of(&error))),
@@ -917,7 +930,7 @@ impl<R: Runtime> HostTurn<R> {
 				for held in handed {
 					let bot_id = held.bot_id.clone();
 					if let Some(reason) = hand_over(waiting, &done.scope.bot_id, held) {
-						summons::note_dropped(&self.run_of(&bot_id), reason);
+						summons::note_dropped(&self.app, &self.run_of(&bot_id), reason, None);
 					}
 				}
 			}
@@ -942,7 +955,8 @@ impl<R: Runtime> HostTurn<R> {
 			};
 			for bot_id in mentioned_bot_ids(&reply.content) {
 				if !present.contains(&bot_id) {
-					summons::note_dropped(&self.run_of(bot_id), SummonsDropReason::NotSeated);
+					let run = self.run_of(bot_id);
+					summons::note_dropped(&self.app, &run, SummonsDropReason::NotSeated, None);
 					continue;
 				}
 				handed.push(Summons { bot_id: bot_id.to_owned(), prompt_id: id.clone() });
@@ -1105,6 +1119,7 @@ mod tests {
 	use crate::agent::contract::ConnectionState;
 	use crate::conversations::contract::StorageFailure;
 	use crate::conversations::contract::UPDATED_EVENT;
+	use crate::conversations::contract::{SummonsDropped, SUMMONS_DROPPED_EVENT};
 	use crate::conversations::turn_run_deadline::TurnRunDeadlines;
 	use crate::db::repositories::conversations::{
 		BotIdentity, ConversationDraft, DEFAULT_BOT_ID, DEFAULT_BOT_MODEL,
@@ -1169,6 +1184,28 @@ mod tests {
 			.filter(|(name, _)| name == UPDATED_EVENT)
 			.map(|(_, payload)| payload["conversation"]["activeTurn"].clone())
 			.collect()
+	}
+
+	fn summons_dropped(told: &[(String, Value)]) -> Vec<SummonsDropped> {
+		told.iter()
+			.filter(|(name, _)| name == SUMMONS_DROPPED_EVENT)
+			.map(|(_, payload)| serde_json::from_value(payload.clone()).expect("a dropped summons"))
+			.collect()
+	}
+
+	fn dropped_in(
+		room: &Room,
+		bot_id: &str,
+		reason: SummonsDropReason,
+		error: Option<TransportError>,
+	) -> SummonsDropped {
+		SummonsDropped {
+			conversation_id: room.id.clone(),
+			turn_id: "t1".to_owned(),
+			bot_id: bot_id.to_owned(),
+			reason,
+			error,
+		}
 	}
 
 	fn shut_down_scopes(events: &[ScopedEvent]) -> Vec<RuntimeScope> {
@@ -1380,6 +1417,157 @@ mod tests {
 			vec![json!({ "bots": [{ "botId": waiter, "startedAt": 1 }] }), Value::Null]
 		);
 		assert_eq!(shut_down_scopes(&agent_events(&told)), vec![scope_in(&room, &speaker)]);
+		let unheard = TransportError::WriteFailed {
+			detail: format!("the host stopped hearing the run: {closed}"),
+		};
+		let interrupted = SummonsDropReason::Interrupted;
+		assert_eq!(
+			summons_dropped(&told),
+			vec![dropped_in(&room, &waiter, interrupted, Some(unheard))]
+		);
+	}
+
+	mod announced_drops {
+		use super::*;
+
+		struct Refused {
+			_app: crate::test_app::AppOfItsOwn,
+			room: Room,
+			told: Vec<(String, Value)>,
+		}
+
+		impl Refused {
+			fn ada(&self) -> &str {
+				&self.room.bot_ids[0]
+			}
+		}
+
+		async fn refused_as(name: &str, refusal: fn(RuntimeScope) -> Refusal) -> Refused {
+			let app = an_app_of_its_own(name, mock_builder());
+			app.manage(db::bootstrap(app.handle()));
+			app.manage(AgentState::default());
+			let room = a_room_running(app.handle(), &["Ada"]).await;
+			let ada = scope_in(&room, &room.bot_ids[0]);
+			let mut announced = events::subscribed(app.handle());
+			let (_stop, stopped) = watch::channel(false);
+			let host_turn = a_host_turn(app.handle(), &room, stopped);
+
+			host_turn.refused(&ada.bot_id, refusal(ada.clone())).await;
+
+			let told = told(&mut announced);
+			Refused { _app: app, room, told }
+		}
+
+		fn unreachable_store() -> TranscriptStoreError {
+			TranscriptStoreError::Unavailable { failure: StorageFailure::AppDataDir }
+		}
+
+		fn unwritten() -> TransportError {
+			TransportError::WriteFailed { detail: "the prompt was not written".to_owned() }
+		}
+
+		#[tokio::test]
+		async fn an_unready_agent_drops_the_summons_as_start_failed_with_its_error() {
+			let refused =
+				refused_as("drop-unready", |_| Refusal::Unready(TransportError::NotStarted)).await;
+
+			let expected = SummonsDropReason::StartFailed;
+			assert_eq!(
+				summons_dropped(&refused.told),
+				vec![dropped_in(
+					&refused.room,
+					refused.ada(),
+					expected,
+					Some(TransportError::NotStarted)
+				)]
+			);
+		}
+
+		#[tokio::test]
+		async fn an_unopened_session_drops_the_summons_as_start_failed_with_no_error() {
+			let refused =
+				refused_as("drop-unopened", |_| Refusal::Unopened(unreachable_store())).await;
+
+			let expected = SummonsDropReason::StartFailed;
+			assert_eq!(
+				summons_dropped(&refused.told),
+				vec![dropped_in(&refused.room, refused.ada(), expected, None)]
+			);
+		}
+
+		#[tokio::test]
+		async fn an_unstarted_session_drops_the_summons_as_start_failed_with_its_error() {
+			let refused = refused_as("drop-unstarted", |scope| {
+				Refusal::Unstarted(scope, TransportError::NotStarted)
+			})
+			.await;
+
+			let expected = SummonsDropReason::StartFailed;
+			assert_eq!(
+				summons_dropped(&refused.told),
+				vec![dropped_in(
+					&refused.room,
+					refused.ada(),
+					expected,
+					Some(TransportError::NotStarted)
+				)]
+			);
+		}
+
+		#[tokio::test]
+		async fn an_unsubmitted_prompt_drops_the_summons_and_still_fails_the_session() {
+			let refused =
+				refused_as("drop-unsubmitted", |scope| Refusal::Unsubmitted(scope, unwritten()))
+					.await;
+
+			let expected = SummonsDropReason::StartFailed;
+			assert_eq!(
+				summons_dropped(&refused.told),
+				vec![dropped_in(&refused.room, refused.ada(), expected, Some(unwritten()))]
+			);
+			let failed = AgentEvent::Failed { error: unwritten() };
+			let heard: Vec<AgentEvent> =
+				agent_events(&refused.told).into_iter().map(|scoped| scoped.event).collect();
+			assert_eq!(heard, vec![failed]);
+		}
+
+		#[tokio::test]
+		async fn a_stopped_summons_announces_no_drop() {
+			let refused = refused_as("drop-stopped", Refusal::Stopped).await;
+
+			assert_eq!(summons_dropped(&refused.told), Vec::new());
+		}
+
+		#[tokio::test]
+		async fn a_handover_to_a_bot_not_seated_drops_the_summons_as_not_seated() {
+			let app = an_app_of_its_own("drop-not-seated", mock_builder());
+			app.manage(db::bootstrap(app.handle()));
+			let room = a_room_running(app.handle(), &["Ada"]).await;
+			speaking_in(app.handle(), &room, &room.bot_ids).await;
+			let ada = &room.bot_ids[0];
+			a_streaming_reply(app.handle(), &room, ada).await;
+			let reply = format!("reply-of-{ada}");
+			let messages = database(app.handle()).expect("the database opens").messages();
+			messages
+				.append_text(reply.clone(), " <@b-ghost> over to you".to_owned())
+				.await
+				.expect("it streams");
+			let mut announced = events::subscribed(app.handle());
+			let (_stop, stopped) = watch::channel(false);
+			let host_turn = a_host_turn(app.handle(), &room, stopped);
+			let done =
+				Speaker { scope: scope_in(&room, ada), written: vec![reply], is_in_line: false };
+			let mut waiting = Vec::new();
+
+			host_turn.note_handovers(&done, &mut waiting).await;
+
+			assert!(waiting.is_empty(), "a bot not seated was handed the turn");
+			let not_seated = SummonsDropReason::NotSeated;
+			assert_eq!(
+				summons_dropped(&told(&mut announced)),
+				vec![dropped_in(&room, "b-ghost", not_seated, None)]
+			);
+		}
 	}
 
 	#[tokio::test]
@@ -1896,6 +2084,12 @@ mod tests {
 			assert_eq!(heard[1], ended_as(TurnOutcome::Failed));
 			assert_eq!(open_runs(app.handle()).await, 0, "the claimed run was left open");
 			assert_eq!(summons_steps(&room, &ada.bot_id), vec!["dropped lostQueue"]);
+			let lost = TransportError::WriteFailed { detail: LOST_QUEUE.to_owned() };
+			let lost_queue = SummonsDropReason::LostQueue;
+			assert_eq!(
+				summons_dropped(&told),
+				vec![dropped_in(&room, &ada.bot_id, lost_queue, Some(lost))]
+			);
 		}
 
 		#[tokio::test]

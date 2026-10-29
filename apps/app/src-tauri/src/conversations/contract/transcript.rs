@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::agent::contract::TransportError;
+use crate::conversations::summons::SummonsDropReason;
 use crate::db::repositories::{arrivals, messages};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
@@ -209,6 +211,18 @@ pub struct CompanionSpoke {
 	pub conversation_id: String,
 	pub author_bot_id: String,
 	pub text: String,
+}
+
+pub const SUMMONS_DROPPED_EVENT: &str = "conversation://summons-dropped";
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SummonsDropped {
+	pub conversation_id: String,
+	pub turn_id: String,
+	pub bot_id: String,
+	pub reason: SummonsDropReason,
+	pub error: Option<TransportError>,
 }
 
 impl From<arrivals::Arrival> for CompanionArrival {
