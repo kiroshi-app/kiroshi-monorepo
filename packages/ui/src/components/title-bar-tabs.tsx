@@ -501,6 +501,7 @@ const useTabLift = ({
 	const slide = useSlidingLift<typeof TORN_OFF>({
 		axis: "x",
 		slot: TAB_SLOT,
+		idAttribute: CLOSE_PAIR,
 		zones: [pinned.map((tab) => tab.id), kept.map((tab) => tab.id)],
 		containerRef: rowRef,
 		landingOutside: tearOffOf,

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
 	type SlideAxis,
+	type SlideGeometry,
 	type SlotBox,
 	slideGeometryOf,
 	slideLandingIn,
@@ -38,20 +39,22 @@ const boxAt = (axis: SlideAxis, start: number, size: number): SlotBox =>
 				height: size,
 			}
 
-const laidOut = (axis: SlideAxis, sizes: number[]) => {
+const laidOut = (axis: SlideAxis, sizes: (number | null)[]) => {
 	let start = 0
 	return sizes.map((size) => {
-		const box = size === 0 ? HIDDEN : boxAt(axis, start, size)
-		if (size > 0) start += size + GAP
+		if (size === null) return null
+		if (size === 0) return HIDDEN
+		const box = boxAt(axis, start, size)
+		start += size + GAP
 		return box
 	})
 }
 
 const ZONE = ["a", "b", "c", "d"]
 
-const geometryOf = (
+const measuredOf = (
 	axis: SlideAxis,
-	sizes: number[],
+	sizes: (number | null)[],
 	liftedId: string,
 	pressAlong: number,
 ) =>
@@ -64,10 +67,16 @@ const geometryOf = (
 		gap: GAP,
 	})
 
+const geometryOf = (...measured: Parameters<typeof measuredOf>) => {
+	const geometry = measuredOf(...measured)
+	if (!geometry) throw new Error("The lifted slot is not rendered.")
+	return geometry
+}
+
 const pointAt = (axis: SlideAxis, along: number): [number, number] =>
 	axis === "x" ? [along, 10] : [10, along]
 
-const shiftsFor = (geometry: ReturnType<typeof geometryOf>, landing: number) =>
+const shiftsFor = (geometry: SlideGeometry, landing: number) =>
 	ZONE.map((id) => slideShiftIn(geometry, id, landing))
 
 describe("sliding lift on axis x", () => {
@@ -130,8 +139,11 @@ describe("sliding lift on axis y", () => {
 	})
 })
 
-describe("sliding lift with a hidden slot", () => {
-	const geometry = geometryOf("y", [28, 0, 28, 28], "a", 14)
+describe.each([
+	{ slot: "a zero-box slot", size: 0 },
+	{ slot: "a zone id with no node", size: null },
+])("sliding lift with $slot", ({ size }) => {
+	const geometry = geometryOf("y", [28, size, 28, 28], "a", 14)
 
 	it("leaves the hidden slot out of the measure", () => {
 		expect(geometry.slots.map((slot) => slot.id)).toEqual(["a", "c", "d"])
@@ -150,5 +162,18 @@ describe("sliding lift with a hidden slot", () => {
 			"start",
 			"start",
 		])
+	})
+})
+
+describe("sliding lift from a slot that is not rendered", () => {
+	it.each([
+		{ lifted: "a zero-box slot", size: 0 },
+		{ lifted: "a zone id with no node", size: null },
+	])("measures no geometry for $lifted", ({ size }) => {
+		expect(measuredOf("y", [28, size, 28, 28], "b", 14)).toBeNull()
+	})
+
+	it("measures no geometry for an id outside the zone", () => {
+		expect(measuredOf("x", [100, 100, 100, 100], "z", 150)).toBeNull()
 	})
 })

@@ -56,12 +56,13 @@ const endOf = (box: SlotBox, axis: SlideAxis) =>
 const sizeOf = (box: SlotBox, axis: SlideAxis) =>
 	axis === "x" ? box.width : box.height
 
-const isRendered = (box: SlotBox) => box.width > 0 && box.height > 0
+const isRendered = (box: SlotBox | null): box is SlotBox =>
+	box !== null && box.width > 0 && box.height > 0
 
 type SlideGeometrySource = {
 	axis: SlideAxis
 	zone: readonly string[]
-	boxes: readonly SlotBox[]
+	boxes: readonly (SlotBox | null)[]
 	liftedId: string
 	press: Point
 	gap: number
@@ -74,18 +75,16 @@ export const slideGeometryOf = ({
 	liftedId,
 	press,
 	gap,
-}: SlideGeometrySource): SlideGeometry => {
+}: SlideGeometrySource): SlideGeometry | null => {
 	const origin = zone.indexOf(liftedId)
-	const rest = boxes[origin]
-	const slots = zone
-		.map((id, rank) => ({ id, rank, box: boxes[rank] }))
-		.filter(({ box }) => isRendered(box))
-		.map(({ id, rank, box }) => ({
-			id,
-			rank,
-			start: startOf(box, axis),
-			end: endOf(box, axis),
-		}))
+	const rest = origin < 0 ? null : boxes[origin]
+	if (!isRendered(rest)) return null
+	const slots = zone.flatMap((id, rank) => {
+		const box = boxes[rank]
+		return isRendered(box)
+			? [{ id, rank, start: startOf(box, axis), end: endOf(box, axis) }]
+			: []
+	})
 	return {
 		axis,
 		liftedId,
@@ -133,31 +132,39 @@ export const slideShiftIn = (
 
 const pixelsOf = (value: string) => Number.parseFloat(value) || 0
 
+type SlideLayout = {
+	axis: SlideAxis
+	slot: string
+	idAttribute: string
+	zones: readonly (readonly string[])[]
+}
+
 const measureSlide = (
 	container: HTMLElement,
-	axis: SlideAxis,
-	slot: string,
-	zones: readonly (readonly string[])[],
+	{ axis, slot, idAttribute, zones }: SlideLayout,
 	liftedId: string,
 	press: Point,
 ) => {
-	const nodes = [...container.querySelectorAll(slot)]
-	const zone = zones.find((ids) => ids.includes(liftedId)) ?? []
-	const offset = zones.flat().indexOf(zone[0])
-	const zoneNodes = nodes.slice(offset, offset + zone.length)
-	const parent = zoneNodes[zone.indexOf(liftedId)].parentElement
+	const zone = zones.find((ids) => ids.includes(liftedId))
+	const nodes = new Map(
+		[...container.querySelectorAll(slot)].map((node) => [
+			node.getAttribute(idAttribute),
+			node,
+		]),
+	)
+	const parent = nodes.get(liftedId)?.parentElement
+	if (!zone || !parent) return null
 	const geometry = slideGeometryOf({
 		axis,
 		zone,
-		boxes: zoneNodes.map((node) => node.getBoundingClientRect()),
+		boxes: zone.map((id) => nodes.get(id)?.getBoundingClientRect() ?? null),
 		liftedId,
 		press,
-		gap: parent
-			? pixelsOf(
-					getComputedStyle(parent)[axis === "x" ? "columnGap" : "rowGap"],
-				)
-			: 0,
+		gap: pixelsOf(
+			getComputedStyle(parent)[axis === "x" ? "columnGap" : "rowGap"],
+		),
 	})
+	if (!geometry) return null
 	container.style.setProperty(SHIFT_VARIABLE[axis], `${geometry.shift}px`)
 	container.style.setProperty("--lift-min", `${geometry.minShift}px`)
 	container.style.setProperty("--lift-max", `${geometry.maxShift}px`)
@@ -170,6 +177,7 @@ type UseSlidingLiftOptions<Landing> = Omit<
 > & {
 	axis: SlideAxis
 	slot: string
+	idAttribute: string
 	zones: readonly (readonly string[])[]
 	containerRef: RefObject<HTMLElement | null>
 	landingOutside?: (
@@ -182,6 +190,7 @@ type UseSlidingLiftOptions<Landing> = Omit<
 export const useSlidingLift = <Landing = never>({
 	axis,
 	slot,
+	idAttribute,
 	zones,
 	containerRef,
 	landingOutside,
@@ -193,7 +202,7 @@ export const useSlidingLift = <Landing = never>({
 	const measure = (id: string, press: Point) => {
 		const container = containerRef.current
 		geometry.current = container
-			? measureSlide(container, axis, slot, zones, id, press)
+			? measureSlide(container, { axis, slot, idAttribute, zones }, id, press)
 			: null
 	}
 
