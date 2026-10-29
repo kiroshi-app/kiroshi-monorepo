@@ -1337,21 +1337,6 @@ mod tests {
 		messages.page_messages(query).await.expect("the thread reads").messages
 	}
 
-	fn summons_traced_in(thread_id: &str) -> Vec<String> {
-		let mut steps: Vec<String> =
-			crate::test_log::logged_naming(&format!("| conversation: {thread_id} |"))
-				.into_iter()
-				.filter(|line| line.starts_with("summons "))
-				.map(|line| {
-					let step = line.split(' ').nth(1).unwrap_or_default().to_owned();
-					let bot = line.split("| bot: ").nth(1).unwrap_or_default().to_owned();
-					format!("{step} {bot}")
-				})
-				.collect();
-		steps.sort();
-		steps
-	}
-
 	const A_FOURTH_COMPANION: &str = "
 		INSERT INTO bots (id, name, model, created_at) VALUES ('b4', 'Fourth', 'sonnet', 1);
 		INSERT INTO bot_spaces (bot_id, space_id, joined_at) VALUES ('b4', 'personal', 1);
@@ -1418,8 +1403,8 @@ mod tests {
 		assert!(summons.content.starts_with("<@b4> "), "got {}", summons.content);
 		assert!(summons.content.ends_with("Held"), "got {}", summons.content);
 		assert_eq!(
-			summons_traced_in(&opened.thread_conversation_id),
-			vec!["dropped b4 | reason: startFailed", "received b4"],
+			crate::conversations::summons::traced_steps(&opened.thread_conversation_id, "b4"),
+			vec!["dropped startFailed", "received"],
 			"the summons of a companion that cannot start did not end dropped"
 		);
 	}

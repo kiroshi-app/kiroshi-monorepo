@@ -1115,7 +1115,7 @@ mod tests {
 	use crate::events::{self, Frame};
 	use crate::routines::runner::read;
 	use crate::test_app::an_app_of_its_own;
-	use crate::test_log::{capturing, logged_naming};
+	use crate::test_log::capturing;
 	fn speaking_as(scope: RuntimeScope) -> Speaker {
 		Speaker { scope, written: Vec::new(), is_in_line: false }
 	}
@@ -1273,22 +1273,7 @@ mod tests {
 	}
 
 	fn summons_steps(room: &Room, bot_id: &str) -> Vec<String> {
-		let of_the_bot = format!("| bot: {bot_id}");
-		let mut steps: Vec<String> = logged_naming(&format!("| conversation: {} |", room.id))
-			.into_iter()
-			.filter(|line| line.starts_with("summons ") && line.contains(&of_the_bot))
-			.map(|line| step_of(&line))
-			.collect();
-		steps.sort();
-		steps
-	}
-
-	fn step_of(line: &str) -> String {
-		let step = line.split(' ').nth(1).unwrap_or(line);
-		match line.split("| reason: ").nth(1) {
-			Some(reason) => format!("{step} {reason}"),
-			None => step.to_owned(),
-		}
+		summons::traced_steps(&room.id, bot_id)
 	}
 
 	fn received_from_ada(room: &Room) {
