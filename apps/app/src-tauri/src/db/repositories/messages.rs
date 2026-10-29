@@ -263,6 +263,13 @@ const MESSAGE_WINDOW: &str = "SELECT id, turn_id, author_bot_id, replied_to_mess
 		author_name, written_from, author_email, author_computer
 	FROM messages WHERE conversation_id = ?1 AND seq > ?2 AND seq < ?3
 	ORDER BY seq DESC LIMIT ?4";
+const SETTLED_MESSAGE_WINDOW: &str = "SELECT id, turn_id, author_bot_id, replied_to_message_id,
+		seq, role, content, completion_state, created_at, runtime_session_id, author_account_id,
+		author_name, written_from, author_email, author_computer
+	FROM messages WHERE conversation_id = ?1 AND seq > ?2 AND seq < ?3
+		AND completion_state NOT IN ('pending', 'streaming')
+		AND trim(content, char(32, 9, 10, 13)) <> ''
+	ORDER BY seq DESC LIMIT ?4";
 const LATEST_MESSAGE_ASIDE_BOT: &str = "SELECT id, turn_id, author_bot_id, replied_to_message_id,
 		seq, role, content, completion_state, created_at, runtime_session_id, author_account_id,
 		author_name, written_from, author_email, author_computer
@@ -670,9 +677,25 @@ impl MessagesRepository {
 		&self,
 		query: MessageWindowQuery,
 	) -> Result<Vec<StoredMessage>, TranscriptError> {
+		self.window_of(MESSAGE_WINDOW, query, "window_messages").await
+	}
+
+	pub async fn settled_window_messages(
+		&self,
+		query: MessageWindowQuery,
+	) -> Result<Vec<StoredMessage>, TranscriptError> {
+		self.window_of(SETTLED_MESSAGE_WINDOW, query, "settled_window_messages").await
+	}
+
+	async fn window_of(
+		&self,
+		sql: &'static str,
+		query: MessageWindowQuery,
+		operation: &'static str,
+	) -> Result<Vec<StoredMessage>, TranscriptError> {
 		Ok(self
 			.call(move |connection| {
-				let mut statement = connection.prepare_cached(MESSAGE_WINDOW)?;
+				let mut statement = connection.prepare_cached(sql)?;
 				let mut messages = statement
 					.query_map(
 						params![
@@ -688,7 +711,7 @@ impl MessagesRepository {
 				Ok(messages)
 			})
 			.await
-			.at("window_messages", "messages")?)
+			.at(operation, "messages")?)
 	}
 
 	pub async fn latest_message(
