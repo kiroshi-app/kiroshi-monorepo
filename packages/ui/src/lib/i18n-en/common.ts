@@ -159,6 +159,7 @@ const common = {
 			importCompanions_one: "Import {{count}} agent",
 			importCompanions_other: "Import {{count}} agents",
 			skip: "Skip for now",
+			notNow: "Not now",
 		},
 		fromSettings: {
 			title: "Import from Claude Code",

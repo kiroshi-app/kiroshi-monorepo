@@ -670,6 +670,8 @@ feedback-importscreen--importing-dark
 feedback-importscreen--importing-picked-only
 feedback-importscreen--list
 feedback-importscreen--list-dark
+feedback-importscreen--list-existing-profile
+feedback-importscreen--list-existing-profile-dark
 feedback-importscreen--long-list-scrolled
 feedback-importscreen--long-list-scrolled-dark
 feedback-importscreen--name-already-taken
