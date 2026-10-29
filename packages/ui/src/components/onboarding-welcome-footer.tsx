@@ -8,7 +8,7 @@ import {
 } from "@workspace/ui/components/onboarding-shell"
 import { cn } from "@workspace/ui/lib/utils"
 
-const ACTION_LABELS = [
+const ACTION_LABEL_KEYS = [
 	"onboarding.intro.next",
 	"onboarding.intro.getStarted",
 ] as const
@@ -31,7 +31,7 @@ const OnboardingWelcomeFooter = ({
 	const { t } = useTranslation("chat")
 	const isFirstStep = step === 1
 	const isLastStep = step === total
-	const actionLabel = isLastStep
+	const actionLabelKey = isLastStep
 		? "onboarding.intro.getStarted"
 		: "onboarding.intro.next"
 
@@ -79,16 +79,16 @@ const OnboardingWelcomeFooter = ({
 				</div>
 				<OnboardingButton onClick={onAction}>
 					<span className="grid justify-items-center">
-						{ACTION_LABELS.map((label) => (
+						{ACTION_LABEL_KEYS.map((labelKey) => (
 							<span
-								aria-hidden={label !== actionLabel || undefined}
+								aria-hidden={labelKey !== actionLabelKey || undefined}
 								className={cn(
 									"col-start-1 row-start-1",
-									label !== actionLabel && "invisible",
+									labelKey !== actionLabelKey && "invisible",
 								)}
-								key={label}
+								key={labelKey}
 							>
-								{t(label)}
+								{t(labelKey)}
 							</span>
 						))}
 					</span>
