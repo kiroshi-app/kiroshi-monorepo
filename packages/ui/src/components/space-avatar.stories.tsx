@@ -232,6 +232,10 @@ const expectArtboardF = async (canvasElement: HTMLElement) => {
 				),
 			),
 		)
+		const arcs = inThemeLayer(avatar, "space-avatar-arc")
+		await expect(arcs).toHaveLength(avatar.dataset.recipe === "compact" ? 2 : 3)
+		for (const arc of arcs)
+			await expect(arc).toHaveAttribute("fill-opacity", "0.45")
 		await expect(avatar.textContent).toBe("")
 	}
 }
@@ -295,7 +299,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The mark of a Space, 8A Horizon Glaze: a superellipse with three arcs drawn from one corner, picked with their radii from the Space id, so a Space keeps its mark whatever its colour. From 20px it wears four tones of its colour under a glaze; under 20px a compact recipe with two arcs and three tones. Personal, a Space with no colour, wears the same arcs in greys. It carries the first letter of the Space name, in a deep ink of its colour. The state is drawn on the mark: a grey laptop badge while local, the green dot while shared or online, lines while connecting, hatched greys under a red badge while not connected, a dashed outline for an invitation. The mark is decorative: the surface that draws it carries the Space's name and state in its accessible name.",
+					"The mark of a Space, 8A Horizon Glaze: a superellipse with three arcs drawn from one corner at 45 percent over an opaque ground, picked with their radii from the Space id, so a Space keeps its mark whatever its colour. From 20px it wears four tones of its colour under a glaze; under 20px a compact recipe with two arcs and three tones. Personal, a Space with no colour, wears the same arcs in greys. It carries the first letter of the Space name, in a deep ink of its colour. The state is drawn on the mark: a grey laptop badge while local, the green dot while shared or online, lines while connecting, hatched greys under a red badge while not connected, a dashed outline for an invitation. The mark is decorative: the surface that draws it carries the Space's name and state in its accessible name.",
 			},
 		},
 	},
@@ -505,6 +509,10 @@ export const Offline = meta.story({
 			await expect(
 				hatches[0]?.closest("[opacity]")?.getAttribute("opacity"),
 			).toBe(OFFLINE_GROUP_OPACITY[themeOf(avatar)])
+			for (const arc of inThemeLayer(avatar, "space-avatar-arc"))
+				await expect(arc.closest("[opacity]")).toBe(
+					hatches[0]?.closest("[opacity]"),
+				)
 			await expect(
 				slotIn(avatar, "space-avatar-offline").querySelectorAll("path"),
 			).toHaveLength(avatar.dataset.size === "14" ? 0 : 1)

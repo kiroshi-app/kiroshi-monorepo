@@ -161,6 +161,8 @@ const INK: Record<SpaceAvatarTheme, LightnessChroma> = {
 	dark: [0.96, 0.03],
 }
 
+const ARC_OPACITY = 0.45
+
 const LOCAL_BADGE_FILL = "#737373"
 
 const OFFLINE_BADGE_FILL: Record<SpaceAvatarTheme, string> = {
@@ -331,6 +333,7 @@ const dotCentre = (size: SpaceAvatarSize, diameter: number) =>
 	size - DOT_CENTRE_INSET * diameter
 
 export {
+	ARC_OPACITY,
 	COMPACT_RADII,
 	CROSS_GLYPH,
 	dashArray,
