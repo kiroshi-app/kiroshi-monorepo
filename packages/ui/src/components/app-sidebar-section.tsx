@@ -1,7 +1,15 @@
-import { type ReactNode, useCallback, useId, useRef, useState } from "react"
+import {
+	type KeyboardEvent,
+	type ReactNode,
+	useCallback,
+	useId,
+	useRef,
+	useState,
+} from "react"
 import { useTranslation } from "react-i18next"
 
 import type { AppSidebarSection } from "@workspace/ui/components/app-sidebar-model"
+import { rosterSlot } from "@workspace/ui/components/app-sidebar-roster-parts"
 import { Icons } from "@workspace/ui/components/icons"
 import {
 	ContextMenu,
@@ -23,7 +31,7 @@ const SECTION_GROUP = "px-0 py-0"
 const SECTION_PAD = "px-[4.5px] pb-[4.5px]"
 
 const SECTION_CARD =
-	"rounded-xl [@media(hover:hover)]:has-[[data-slot=roster-section-trigger]:hover]:bg-sidebar-accent/70"
+	"rounded-xl group-data-[receiving]/roster-drop:-mb-(--row-shift) group-data-[receiving]/roster-drop:pb-(--row-shift) [@media(hover:hover)]:has-[[data-slot=roster-section-trigger]:hover]:bg-sidebar-accent/70"
 
 const SECTION_CARD_OPEN =
 	"bg-sidebar-accent/50 group-data-[landing]/roster-drop:bg-sidebar-accent"
@@ -48,16 +56,22 @@ const SECTION_BODY_CLOSED = "invisible grid-rows-[0fr]"
 
 const SECTION_BODY_INNER = "min-h-0 overflow-hidden"
 
+const SECTION_BODY_INNER_OPEN =
+	"group-data-[lifting]/roster-lift:overflow-visible"
+
 const SECTION_FIELD =
 	"w-full min-w-0 border-none bg-transparent px-[10.5px] py-2.5 text-sidebar-foreground text-xs outline-none"
 
 interface SectionLabelProps {
-	ref?: (node: HTMLElement | null) => void
+	slotId?: string
 	children: ReactNode
 }
 
-const SectionLabel = ({ ref, children }: SectionLabelProps) => (
-	<SidebarGroupLabel className={SECTION_LABEL} ref={ref}>
+const SectionLabel = ({ slotId, children }: SectionLabelProps) => (
+	<SidebarGroupLabel
+		{...(slotId ? rosterSlot(slotId) : undefined)}
+		className={SECTION_LABEL}
+	>
 		{children}
 	</SidebarGroupLabel>
 )
@@ -122,7 +136,8 @@ interface RosterSectionProps {
 	onMove?: (id: string, by: number) => void
 	onDelete?: (id: string) => void
 	lift: Lifter
-	headRef?: (node: HTMLElement | null) => void
+	slotId?: string
+	onMoveKey?: (event: KeyboardEvent<HTMLElement>) => void
 	children: ReactNode
 }
 
@@ -133,7 +148,8 @@ const RosterSection = ({
 	isOpen,
 	onOpenChange,
 	lift,
-	headRef,
+	slotId,
+	onMoveKey,
 	onRename,
 	onMove,
 	onDelete,
@@ -147,7 +163,7 @@ const RosterSection = ({
 		<SidebarGroup
 			className={cn(SECTION_GROUP, SECTION_CARD, isOpen && SECTION_CARD_OPEN)}
 		>
-			<SectionLabel ref={headRef}>
+			<SectionLabel slotId={slotId}>
 				{isRenaming ? (
 					<SectionNameField
 						ariaLabel={t("roster.section.renameField", { name: section.name })}
@@ -172,6 +188,7 @@ const RosterSection = ({
 										if (lift.hasJustDropped()) return
 										onOpenChange(!isOpen)
 									}}
+									onKeyDown={onMoveKey}
 									type="button"
 								>
 									<span
@@ -227,7 +244,9 @@ const RosterSection = ({
 				)}
 				id={bodyId}
 			>
-				<div className={SECTION_BODY_INNER}>
+				<div
+					className={cn(SECTION_BODY_INNER, isOpen && SECTION_BODY_INNER_OPEN)}
+				>
 					<div className={SECTION_PAD}>{children}</div>
 				</div>
 			</SidebarGroupContent>

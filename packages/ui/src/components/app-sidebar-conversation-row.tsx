@@ -9,10 +9,9 @@ import {
 	workingBotOf,
 } from "@workspace/ui/components/app-sidebar-model"
 import {
-	InsertionLine,
 	missionStripsOf,
-	ROW_ITEM,
 	type RosterRowSlot,
+	rosterRowSlotOf,
 } from "@workspace/ui/components/app-sidebar-roster-parts"
 import { ConversationBotPile } from "@workspace/ui/components/conversation-bot-pile"
 import { ConversationSubjectIcon } from "@workspace/ui/components/conversation-subject-icon"
@@ -53,8 +52,11 @@ const ConversationRosterRow = ({
 	isSelected,
 	sections,
 	lift,
-	insertion,
-	slotRef,
+	shift,
+	isSliding,
+	isLifted,
+	onMoveKey,
+	keepFocus,
 	isPinned,
 	onPin,
 	onUnpin,
@@ -70,11 +72,16 @@ const ConversationRosterRow = ({
 	return (
 		<SidebarMenuItem
 			{...(isPinned ? dropArea(conversation.id) : undefined)}
-			className={ROW_ITEM}
+			{...rosterRowSlotOf(conversation.id, {
+				isLifted,
+				isPinned,
+				isSliding,
+				onMoveKey,
+				shift,
+			})}
 			data-tauri-drag-region="false"
-			ref={slotRef}
+			ref={(node) => keepFocus?.(conversation.id, node)}
 		>
-			<InsertionLine edge={insertion} />
 			<ContextMenu>
 				<ContextMenuTrigger>
 					<SidebarListRow

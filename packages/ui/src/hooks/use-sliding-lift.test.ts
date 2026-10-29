@@ -187,3 +187,60 @@ describe("sliding lift without layout", () => {
 		expect(slideLandingIn(geometry, ...pointAt("x", 500))).toBe(0)
 	})
 })
+
+describe("sliding lift entering a zone from outside it", () => {
+	const ENTERING = boxAt("y", 300, 40)
+
+	const enteringOf = (zone: string[], sizes: number[]) =>
+		slideGeometryOf({
+			axis: "y",
+			zone,
+			boxes: laidOut("y", sizes),
+			liftedId: "z",
+			press: { x: 10, y: 320 },
+			gap: GAP,
+			entering: ENTERING,
+		})
+
+	const geometry = enteringOf(ZONE, [28, 28, 28, 28])
+	if (!geometry) throw new Error("The entering slot is not measured.")
+
+	it("shifts the zone by the entering row's own height plus the gap", () => {
+		expect(geometry.shift).toBe(44)
+	})
+
+	it("reaches from its rest up to the start of the zone", () => {
+		expect(geometry.minShift).toBe(-300)
+		expect(geometry.maxShift).toBe(0)
+	})
+
+	it("lands on the nearest slot, or after the last one", () => {
+		expect(slideLandingIn(geometry, 10, 20)).toBe(0)
+		expect(slideLandingIn(geometry, 10, 84)).toBe(2)
+		expect(slideLandingIn(geometry, 10, 150)).toBe(4)
+		expect(slideLandingIn(geometry, 10, 900)).toBe(4)
+	})
+
+	it("opens the gap by sliding every slot from the landing on towards the end", () => {
+		expect(shiftsFor(geometry, 1)).toEqual([undefined, "end", "end", "end"])
+		expect(shiftsFor(geometry, 4)).toEqual([
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+		])
+	})
+
+	it("lands on the nearest slot the caller accepts", () => {
+		expect(slideLandingIn(geometry, 10, 84, (rank) => rank !== 2)).toBe(1)
+		expect(slideLandingIn(geometry, 10, 84, (rank) => rank > 2)).toBe(3)
+		expect(slideLandingIn(geometry, 10, 84, () => false)).toBe(2)
+	})
+
+	it("stays put over an empty zone", () => {
+		const empty = enteringOf([], [])
+		expect(empty?.minShift).toBe(0)
+		expect(empty?.maxShift).toBe(0)
+		expect(empty && slideLandingIn(empty, 10, 0)).toBe(0)
+	})
+})

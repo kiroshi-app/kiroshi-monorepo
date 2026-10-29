@@ -40,6 +40,9 @@ const bots = {
 		pin: "Épingler",
 		pinDrop: "Déposer ici pour épingler",
 		unpin: "Détacher",
+		moved: "{{name}} déplacé en position {{position}} sur {{count}}",
+		movedInSection:
+			"{{name}} déplacé en position {{position}} sur {{count}} dans {{section}}",
 		delete: "Supprimer",
 		needsYou: "Vous attend",
 		working: "{{pose}}…",

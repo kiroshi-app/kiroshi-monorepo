@@ -1,9 +1,9 @@
-import type { ReactNode } from "react"
+import type { KeyboardEvent, ReactNode } from "react"
+import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 
 import {
 	type AppSidebarBot,
-	type AppSidebarConversation,
 	type AppSidebarRowMission,
 	isBusy,
 	poseOf,
@@ -11,12 +11,30 @@ import {
 } from "@workspace/ui/components/app-sidebar-model"
 import { BotMissionStrip } from "@workspace/ui/components/bot-badge"
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
-import { ConversationSubjectIcon } from "@workspace/ui/components/conversation-subject-icon"
 import { DitheredFieldAvatar } from "@workspace/ui/components/dithered-field-avatar"
 import { dropArea } from "@workspace/ui/hooks/use-roster-lift"
+import {
+	SHIFTABLE,
+	SLIDING,
+	type SlideShift,
+} from "@workspace/ui/hooks/use-sliding-lift"
 import { cn } from "@workspace/ui/lib/utils"
 
 const ROW_ITEM = "flex flex-col gap-1"
+
+const ROSTER_SLOT = "data-roster-slot"
+
+const LIFT_FRAME = "group/roster-lift contents"
+
+const LIFTED =
+	"pointer-events-none relative z-10 rounded-2xl bg-sidebar shadow-lg"
+
+const LIFTED_IN_ZONE = cn(
+	LIFTED,
+	"translate-y-[clamp(var(--lift-min),var(--lift-dy,0px),var(--lift-max))]",
+)
+
+const LIFTED_LOOSE = cn(LIFTED, "translate-y-(--lift-dy)")
 
 const SECTION_DROP =
 	"flex items-center justify-center gap-2 rounded-xl border border-sidebar-border border-dashed px-3 py-3 text-center text-muted-foreground text-xs"
@@ -27,21 +45,8 @@ const DROP_AREA = "group/roster-drop relative rounded-2xl"
 
 const DROP_AREA_LANDING = "bg-sidebar-accent/60"
 
-const DROP_AREA_LIFTED =
-	"pointer-events-none z-10 origin-top scale-90 bg-sidebar shadow-lg translate-y-[var(--lift-dy,0px)]"
-
-const INSERTION_LINE =
-	"pointer-events-none absolute inset-x-2 z-20 h-0.5 rounded-full bg-sidebar-primary"
-
 const ZONE_SEPARATOR =
 	"mx-1.5 my-1 block h-px shrink-0 rounded-full bg-sidebar-border"
-
-const INSERTION_ABOVE = "-top-0.5"
-
-const INSERTION_BELOW = "-bottom-0.5"
-
-const LIFTED_BOT =
-	"pointer-events-none fixed top-0 left-0 z-[100] drop-shadow-lg translate-x-[calc(var(--lift-x,0px)-50%)] translate-y-[calc(var(--lift-y,0px)-50%)]"
 
 const DROP_AVATAR_SIZE = 28
 
@@ -74,22 +79,90 @@ const BotRowAvatar = ({ bot }: BotRowAvatarProps) => (
 	/>
 )
 
-type InsertionEdge = "above" | "below"
+const rosterSlot = (id: string) => ({ [ROSTER_SLOT]: id })
 
-interface InsertionLineProps {
-	edge?: InsertionEdge
+interface RosterSlide {
+	shift?: SlideShift
+	isSliding?: boolean
+	isLifted?: boolean
 }
 
-const InsertionLine = ({ edge }: InsertionLineProps) =>
-	edge ? (
+const slideClassOf = (
+	{ shift, isSliding = false, isLifted = false }: RosterSlide,
+	lifted: string,
+) => ({
+	className: cn(SHIFTABLE.y, isSliding && SLIDING, isLifted && lifted),
+	"data-shift": shift,
+	"data-lifted": isLifted || undefined,
+})
+
+interface RosterRowSlot extends RosterSlide {
+	isPinned: boolean
+	keepFocus?: (id: string, node: HTMLElement | null) => void
+	onMoveKey?: (id: string, event: KeyboardEvent<HTMLElement>) => void
+}
+
+const rosterRowSlotOf = (id: string, row: RosterRowSlot) => {
+	const slide = slideClassOf(row, row.isPinned ? LIFTED_IN_ZONE : LIFTED_LOOSE)
+	return {
+		...rosterSlot(id),
+		...slide,
+		className: cn(ROW_ITEM, slide.className),
+		onKeyDown: row.onMoveKey
+			? (event: KeyboardEvent<HTMLElement>) => row.onMoveKey?.(id, event)
+			: undefined,
+	}
+}
+
+interface RosterLiftFrameProps {
+	isLifting: boolean
+	ref: (node: HTMLDivElement | null) => void
+	children: ReactNode
+}
+
+const RosterLiftFrame = ({
+	isLifting,
+	ref,
+	children,
+}: RosterLiftFrameProps) => (
+	<div
+		className={LIFT_FRAME}
+		data-lifting={isLifting || undefined}
+		data-slot="roster-lift-frame"
+		ref={ref}
+	>
+		{children}
+	</div>
+)
+
+type RosterMove = {
+	name: string
+	position: number
+	count: number
+	section?: string
+}
+
+interface RosterMoveAnnouncementProps {
+	move: RosterMove | null
+}
+
+const RosterMoveAnnouncement = ({ move }: RosterMoveAnnouncementProps) => {
+	const { t } = useTranslation("bots")
+	return createPortal(
 		<span
-			className={cn(
-				INSERTION_LINE,
-				edge === "above" ? INSERTION_ABOVE : INSERTION_BELOW,
-			)}
-			data-slot="roster-insertion"
-		/>
-	) : null
+			aria-live="polite"
+			className="sr-only"
+			data-slot="roster-move-announcement"
+		>
+			{move?.section
+				? t("roster.movedInSection", { ...move, section: move.section })
+				: move
+					? t("roster.moved", move)
+					: ""}
+		</span>,
+		document.body,
+	)
+}
 
 const RosterZoneSeparator = () => (
 	<span
@@ -99,22 +172,21 @@ const RosterZoneSeparator = () => (
 	/>
 )
 
-interface RosterRowSlot {
-	insertion?: InsertionEdge
-	isPinned: boolean
-	slotRef?: (node: HTMLElement | null) => void
-}
-
 interface SectionDropZoneProps {
 	name: string
 	label?: string
+	slotId?: string
 }
 
-const SectionDropZone = ({ name, label }: SectionDropZoneProps) => {
+const SectionDropZone = ({ name, label, slotId }: SectionDropZoneProps) => {
 	const { t } = useTranslation("bots")
 
 	return (
-		<div className={SECTION_DROP} data-slot="roster-section-drop">
+		<div
+			{...(slotId ? rosterSlot(slotId) : undefined)}
+			className={SECTION_DROP}
+			data-slot="roster-section-drop"
+		>
 			<span aria-hidden="true" className={SECTION_DROP_AVATAR}>
 				<DitheredFieldAvatar name={name} size={DROP_AVATAR_SIZE} />
 			</span>
@@ -123,11 +195,11 @@ const SectionDropZone = ({ name, label }: SectionDropZoneProps) => {
 	)
 }
 
-interface RosterDropAreaProps {
+interface RosterDropAreaProps extends RosterSlide {
 	landing: string
 	isLanding: boolean
-	isLifted?: boolean
-	insertion?: InsertionEdge
+	isReceiving?: boolean
+	slotId?: string
 	className?: string
 	ref?: (node: HTMLElement | null) => void
 	children: ReactNode
@@ -136,78 +208,47 @@ interface RosterDropAreaProps {
 const RosterDropArea = ({
 	landing,
 	isLanding,
-	isLifted = false,
-	insertion,
+	isReceiving = false,
+	slotId,
 	className,
 	ref,
 	children,
-}: RosterDropAreaProps) => (
-	<div
-		{...dropArea(landing)}
-		className={cn(
-			DROP_AREA,
-			isLanding && DROP_AREA_LANDING,
-			isLifted && DROP_AREA_LIFTED,
-			className,
-		)}
-		data-landing={isLanding || undefined}
-		data-slot="roster-drop-area"
-		data-tauri-drag-region="false"
-		ref={ref}
-	>
-		<InsertionLine edge={insertion} />
-		{children}
-	</div>
-)
-
-interface LiftedConversationMarkProps {
-	conversation: AppSidebarConversation
-}
-
-const LiftedConversationMark = ({
-	conversation,
-}: LiftedConversationMarkProps) =>
-	conversation.participants.length > 1 ? (
-		<ConversationSubjectIcon
-			hue={conversation.color}
-			icon={conversation.icon}
-			side={ROW_AVATAR_SIZE}
-		/>
-	) : (
-		conversation.participants.map((bot) => (
-			<BotRowAvatar bot={bot} key={bot.id} />
-		))
+	...slide
+}: RosterDropAreaProps) => {
+	const slid = slideClassOf(slide, LIFTED_IN_ZONE)
+	return (
+		<div
+			{...dropArea(landing)}
+			{...(slotId ? rosterSlot(slotId) : undefined)}
+			{...slid}
+			className={cn(
+				DROP_AREA,
+				isLanding && DROP_AREA_LANDING,
+				slid.className,
+				className,
+			)}
+			data-landing={isLanding || undefined}
+			data-receiving={isReceiving || undefined}
+			data-slot="roster-drop-area"
+			data-tauri-drag-region="false"
+			ref={ref}
+		>
+			{children}
+		</div>
 	)
-
-interface LiftedRowProps {
-	bot?: AppSidebarBot
-	conversation?: AppSidebarConversation
-	ref: (node: HTMLElement | null) => void
 }
-
-const LiftedRow = ({ bot, conversation, ref }: LiftedRowProps) => (
-	<span
-		aria-hidden="true"
-		className={LIFTED_BOT}
-		data-slot="roster-lifted-bot"
-		ref={ref}
-	>
-		{conversation ? (
-			<LiftedConversationMark conversation={conversation} />
-		) : null}
-		{bot ? <BotRowAvatar bot={bot} /> : null}
-	</span>
-)
 
 export {
 	BotRowAvatar,
-	type InsertionEdge,
-	InsertionLine,
-	LiftedRow,
 	missionStripsOf,
-	ROW_ITEM,
+	ROSTER_SLOT,
 	RosterDropArea,
+	RosterLiftFrame,
+	type RosterMove,
+	RosterMoveAnnouncement,
 	type RosterRowSlot,
 	RosterZoneSeparator,
+	rosterRowSlotOf,
+	rosterSlot,
 	SectionDropZone,
 }

@@ -1,4 +1,4 @@
-import { createPortal } from "react-dom"
+import { useRef } from "react"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -28,8 +28,9 @@ import {
 	recentMenuOf,
 } from "@workspace/ui/components/app-sidebar-roster-menu"
 import {
-	LiftedRow,
 	RosterDropArea,
+	RosterLiftFrame,
+	RosterMoveAnnouncement,
 	RosterZoneSeparator,
 	SectionDropZone,
 } from "@workspace/ui/components/app-sidebar-roster-parts"
@@ -49,6 +50,7 @@ import {
 	SidebarGroupContent,
 } from "@workspace/ui/components/ui/sidebar"
 import { useStableCallback } from "@workspace/ui/hooks/use-stable-callback"
+import { mergeRefs } from "@workspace/ui/lib/utils"
 
 const EMPTY_COPY = "px-3 py-4 text-center text-sidebar-foreground/70 text-sm"
 
@@ -151,15 +153,22 @@ const BotRoster = ({
 	const fileRow = useStableCallback(moves.fileRow)
 	const pinLast = useStableCallback(moves.pinLast)
 	const unpin = useStableCallback(moves.unpin)
-	const drag = useRosterDrag({ entries, onLand: land })
+	const moveSection = useStableCallback(moves.moveSection)
+	const frameRef = useRef<HTMLDivElement>(null)
+	const drag = useRosterDrag({
+		collapsedSectionIds,
+		containerRef: frameRef,
+		entries,
+		onLand: land,
+		onMoveSection: moveSection,
+	})
 	const { isNamed, sortedBots, sortedConversations, topLevel } = entries
 	const { liftedEntry, rosterLift } = drag
-	const { followRef } = rosterLift
 
 	const rows: RosterRowsContext = {
 		activeBotId: selectedConversationId ? undefined : selectedBotId,
-		edgeAt: drag.edgeAt,
 		lift: rosterLift,
+		liftedId: drag.liftedId,
 		membershipsOf,
 		onAddBotToSpace,
 		onCreateSectionFor: onCreateSection
@@ -169,6 +178,7 @@ const BotRoster = ({
 		onDeleteConversation,
 		onDuplicateBot,
 		onEditBot,
+		onMoveKey: onPinRoster ? drag.moveRowByKey : undefined,
 		onMoveToSection: onPinRoster && sections.length > 0 ? fileRow : undefined,
 		onOpenBotInNewTab,
 		onOpenConversationInNewTab,
@@ -180,7 +190,8 @@ const BotRoster = ({
 		onUnpin: onPinRoster ? unpin : undefined,
 		sections,
 		selectedConversationId,
-		slotFor: drag.slotFor,
+		shiftOf: drag.rowShiftOf,
+		keepFocus: drag.keepFocus,
 		spaceId,
 		spaces,
 	}
@@ -218,28 +229,36 @@ const BotRoster = ({
 
 	return (
 		<>
-			{hasPinnedZone ? (
-				<PinnedZone
-					collapsedSectionIds={collapsedSectionIds}
-					drag={drag}
-					entries={entries}
-					onCollapseSection={onCollapseSection}
-					onDeleteSection={onDeleteSection}
-					onMoveSection={moves.moveSection}
-					onRenameSection={onRenameSection}
-					rows={rows}
-				/>
-			) : null}
-			{hasPinnedZone ? <RosterZoneSeparator /> : null}
-			{hasSortedRows || isLifting ? (
-				<RosterDropArea isLanding={drag.isLandingSorted} landing={SORTED_ZONE}>
-					{hasSortedRows ? (
-						recentMenuOf(sortedConversations, sortedBots, rows)
-					) : (
-						<SectionDropZone name={t("roster.label")} />
-					)}
-				</RosterDropArea>
-			) : null}
+			<RosterLiftFrame
+				isLifting={drag.isLifting}
+				ref={mergeRefs(frameRef, rosterLift.followRef)}
+			>
+				{hasPinnedZone ? (
+					<PinnedZone
+						collapsedSectionIds={collapsedSectionIds}
+						drag={drag}
+						entries={entries}
+						onCollapseSection={onCollapseSection}
+						onDeleteSection={onDeleteSection}
+						onMoveSection={moveSection}
+						onRenameSection={onRenameSection}
+						rows={rows}
+					/>
+				) : null}
+				{hasPinnedZone ? <RosterZoneSeparator /> : null}
+				{hasSortedRows || isLifting ? (
+					<RosterDropArea
+						isLanding={drag.isLandingSorted}
+						landing={SORTED_ZONE}
+					>
+						{hasSortedRows ? (
+							recentMenuOf(sortedConversations, sortedBots, rows)
+						) : (
+							<SectionDropZone name={t("roster.label")} />
+						)}
+					</RosterDropArea>
+				) : null}
+			</RosterLiftFrame>
 			<ListEndSlot listEnd={listEnd} row={sidebarRowAt(0)} />
 			{naming ? (
 				<SectionNamingGroup
@@ -253,16 +272,7 @@ const BotRoster = ({
 				/>
 			) : null}
 			<RosterSurface {...surface} />
-			{isLifting
-				? createPortal(
-						<LiftedRow
-							bot={liftedEntry?.bot}
-							conversation={liftedEntry?.conversation}
-							ref={followRef}
-						/>,
-						document.body,
-					)
-				: null}
+			<RosterMoveAnnouncement move={drag.move} />
 		</>
 	)
 }
