@@ -657,21 +657,15 @@ fn recent_spoken(recent: &[StoredMessage], room: Option<&Room>) -> String {
 	lines.join("\n")
 }
 
-struct CardQuestion<'a> {
-	lines: Vec<&'a str>,
-}
-
-fn card_questions(message: &StoredMessage) -> Option<Vec<CardQuestion<'_>>> {
+fn card_questions(message: &StoredMessage) -> Option<Vec<Vec<&str>>> {
 	if message.role != MessageRole::Assistant || !message.id.starts_with(QUESTION_ID_PREFIX) {
 		return None;
 	}
-	let mut questions: Vec<CardQuestion<'_>> = Vec::new();
+	let mut questions: Vec<Vec<&str>> = Vec::new();
 	for line in message.content.lines() {
 		match (line.starts_with(QUESTION_LINE_PREFIX), questions.last_mut()) {
-			(true, _) => questions.push(CardQuestion { lines: vec![line] }),
-			(false, Some(question)) if line.starts_with(OPTION_LINE_PREFIX) => {
-				question.lines.push(line)
-			}
+			(true, _) => questions.push(vec![line]),
+			(false, Some(question)) if line.starts_with(OPTION_LINE_PREFIX) => question.push(line),
 			_ => return None,
 		}
 	}
@@ -688,21 +682,19 @@ fn answer_to<'a>(recent: &'a [StoredMessage], card: &StoredMessage) -> Option<&'
 
 fn card_spoken(
 	card: &StoredMessage,
-	questions: &[CardQuestion<'_>],
+	questions: &[Vec<&str>],
 	answer: Option<&StoredMessage>,
 	room: Option<&Room>,
 ) -> String {
 	let mut lines = vec![format!("{}{CARD_ASKED}", author_of(card, room))];
 	let Some(answer) = answer else {
-		lines.extend(
-			questions.iter().flat_map(|question| &question.lines).map(|line| spelled(room, line)),
-		);
+		lines.extend(questions.iter().flatten().map(|line| spelled(room, line)));
 		lines.push(CARD_WAITING.to_owned());
 		return lines.join("\n");
 	};
 	let person = author_of(answer, room);
 	for (question, reply) in questions.iter().zip(replies_of(&answer.content, questions.len())) {
-		lines.extend(question.lines.iter().map(|line| spelled(room, line)));
+		lines.extend(question.iter().map(|line| spelled(room, line)));
 		lines.extend(reply.map(|reply| format!("{person}: {}", spelled(room, reply))));
 	}
 	lines.join("\n")
