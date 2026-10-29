@@ -98,8 +98,6 @@ const COMPANION_ROLES = [
 	"Writes release notes",
 ]
 
-const NARROW_COLUMN = 96
-
 const FRENCH_COMPANION_ROLES = [
 	"Relit le code",
 	"Tient la documentation",
@@ -284,12 +282,14 @@ export const WelcomeCompanionsFrench = meta.story({
 			"Rédige les notes de version",
 		)
 		const card = longest.parentElement as HTMLElement
-		const singleLine = longest.getBoundingClientRect().height
-		card.style.width = `${NARROW_COLUMN}px`
+		const lineHeight = Number.parseFloat(getComputedStyle(longest).lineHeight)
 		try {
-			await expect(longest.getBoundingClientRect().height).toBeGreaterThan(
-				singleLine,
-			)
+			card.style.width = "max-content"
+			const singleLine = longest.getBoundingClientRect()
+			card.style.width = `${Math.floor(singleLine.width / 2)}px`
+			await expect(
+				longest.getBoundingClientRect().height,
+			).toBeGreaterThanOrEqual(singleLine.height + lineHeight)
 			await expect(longest.scrollWidth).toBeLessThanOrEqual(longest.clientWidth)
 		} finally {
 			card.style.width = ""
