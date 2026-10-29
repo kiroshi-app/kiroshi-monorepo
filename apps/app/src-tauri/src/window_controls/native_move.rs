@@ -172,7 +172,7 @@ mod x11 {
 
 	use gtk::gdk::prelude::*;
 	use gtk::gdk::{Display, ModifierType};
-	use tauri::{AppHandle, LogicalPosition, PhysicalPosition, Runtime};
+	use tauri::{AppHandle, LogicalPosition, Runtime};
 
 	use super::{PrimaryButton, Unobservable};
 
