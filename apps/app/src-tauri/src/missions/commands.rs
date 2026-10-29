@@ -21,6 +21,7 @@ use crate::conversations::commands::{
 };
 use crate::conversations::contract::{Bot, PendingPrompt};
 use crate::conversations::state as conversation_state;
+use crate::conversations::summons::{self, SummonsDropReason, SummonsRun};
 use crate::db;
 use crate::db::repositories::keyset;
 use crate::events::{self, MISSION_CHANGED};
@@ -456,14 +457,35 @@ async fn summon<R: Runtime>(
 	from_bot_id: String,
 	successor: Successor,
 ) -> Result<(), MissionError> {
-	let Some(agent) = app.try_state::<AgentState>() else {
-		return Err(MissionError::Undeliverable { detail: NO_AGENT.to_owned() });
-	};
+	let thread_id = &mission.thread_conversation_id;
+	let turn_id = uuid::Uuid::new_v4().to_string();
 	let handed = HandedTurn {
-		conversation_id: mission.thread_conversation_id.clone(),
+		conversation_id: thread_id.clone(),
+		turn_id: turn_id.clone(),
 		author_bot_id: from_bot_id,
 		text: format!("@{} {HANDED_OVER} {}", successor.name, mission.objective),
-		summoned: successor.id,
+		summoned: successor.id.clone(),
+	};
+	let Err(failure) = handed_over(app, database, handed).await else {
+		return Ok(());
+	};
+	let run = SummonsRun { conversation_id: thread_id, turn_id: &turn_id, bot_id: &successor.id };
+	summons::note_dropped(&run, SummonsDropReason::StartFailed);
+	log::error!(
+		"mission {} changed owner to {} and the summons of its handoff was not written: {failure:?}",
+		mission.id,
+		successor.id
+	);
+	Err(failure)
+}
+
+async fn handed_over<R: Runtime>(
+	app: &AppHandle<R>,
+	database: &db::Database,
+	handed: HandedTurn,
+) -> Result<(), MissionError> {
+	let Some(agent) = app.try_state::<AgentState>() else {
+		return Err(MissionError::Undeliverable { detail: NO_AGENT.to_owned() });
 	};
 	Ok(run_handed_turn(app, database, &agent, handed).await?)
 }

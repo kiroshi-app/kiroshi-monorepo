@@ -1115,7 +1115,7 @@ mod tests {
 	use crate::events::{self, Frame};
 	use crate::routines::runner::read;
 	use crate::test_app::an_app_of_its_own;
-	use crate::test_log::capturing;
+	use crate::test_log::{capturing, infos_naming};
 	fn speaking_as(scope: RuntimeScope) -> Speaker {
 		Speaker { scope, written: Vec::new(), is_in_line: false }
 	}
@@ -1723,67 +1723,8 @@ mod tests {
 	#[cfg(unix)]
 	mod in_a_session_queue {
 		use super::*;
-		use crate::agent::commands::a_session_held_by_the_app;
-		use crate::agent::session::{EventSink, Session, SessionOptions};
-		use crate::agent::sidecar::{Sidecar, SidecarOptions};
+		use crate::agent::stub_session::{a_session_held_for, a_session_running, HeldSession};
 		use crate::removed_on_drop::RemovedOnDrop;
-
-		const OPENING_SIDECAR: &str = r#"#!/bin/sh
-printf '%s\n' '{"type":"ready","provider":"stub","version":"0"}'
-while IFS= read -r line; do
-	case "$line" in
-	*'"type":"open"'*)
-		key=$(printf '%s' "$line" | sed -n 's/.*"session":"\([^"]*\)".*/\1/p')
-		printf '{"session":"%s","frame":{"type":"opened"}}\n' "$key"
-		;;
-	esac
-done
-"#;
-
-		struct Unheard;
-
-		impl EventSink for Unheard {
-			fn emit(&self, _event: AgentEvent) {}
-		}
-
-		struct HeldSession {
-			session: Arc<Session>,
-			_sidecar: RemovedOnDrop,
-		}
-
-		async fn a_session_held_for(
-			app: &AppHandle<MockRuntime>,
-			scope: &RuntimeScope,
-		) -> HeldSession {
-			a_session_running(app, scope, OPENING_SIDECAR).await
-		}
-
-		async fn a_session_running(
-			app: &AppHandle<MockRuntime>,
-			scope: &RuntimeScope,
-			sidecar_script: &str,
-		) -> HeldSession {
-			use std::os::unix::fs::PermissionsExt;
-
-			let script = RemovedOnDrop(std::env::temp_dir().join(format!(
-				"kiroshi-opening-sidecar-{}-{}.sh",
-				std::process::id(),
-				uuid::Uuid::new_v4()
-			)));
-			std::fs::write(&*script, sidecar_script).expect("the sidecar script is written");
-			std::fs::set_permissions(&*script, std::fs::Permissions::from_mode(0o755))
-				.expect("the sidecar script runs");
-			let sidecar = Sidecar::start(SidecarOptions::new(script.to_path_buf()))
-				.await
-				.expect("the sidecar is ready");
-			let options = SessionOptions::new(std::env::temp_dir());
-			let session = Session::start(sidecar, options, Arc::new(Unheard))
-				.await
-				.expect("the session opens");
-			let session = Arc::new(session);
-			a_session_held_by_the_app(app, scope, session.clone());
-			HeldSession { session, _sidecar: script }
-		}
 
 		fn submitted(turn_id: &str, prompt_id: &str) -> SubmittedTurn {
 			SubmittedTurn { turn_id: turn_id.to_owned(), prompt_id: prompt_id.to_owned() }
@@ -2004,6 +1945,7 @@ done
 			let _idle = a_session_held_for(app.handle(), &grace).await;
 			let handed = HandedTurn {
 				conversation_id: room.id.clone(),
+				turn_id: "t-handed".to_owned(),
 				author_bot_id: room.bot_ids[0].clone(),
 				text: "@Grace this mission is yours now".to_owned(),
 				summoned: grace.bot_id.clone(),
@@ -2020,6 +1962,7 @@ done
 			let handing = page.messages.last().expect("the handoff is written");
 			assert_eq!(handing.author_bot_id.as_deref(), Some(room.bot_ids[0].as_str()));
 			assert!(handing.content.starts_with(&format!("<@{}>", grace.bot_id)), "{handing:?}");
+			infos_naming(&format!("summons started | conversation: {} |", room.id)).await;
 			assert_eq!(summons_steps(&room, &grace.bot_id), vec!["received", "started"]);
 		}
 
@@ -2119,6 +2062,21 @@ done
 					};
 					messages.end_run(ended).await.expect("ada hands over");
 					received_from_ada(&self.room);
+				}
+
+				async fn becomes_a_mission_thread(&self) {
+					let room_id = self.room.id.clone();
+					database(self.handle())
+						.expect("the database opens")
+						.call(move |connection| {
+							connection.execute(
+								"UPDATE conversations SET kind = ?1 WHERE id = ?2",
+								rusqlite::params![MISSION_KIND, room_id],
+							)?;
+							Ok(())
+						})
+						.await
+						.expect("the room becomes a mission thread");
 				}
 
 				fn summons_of_grace(&self) -> Vec<String> {
@@ -2351,24 +2309,35 @@ done
 			async fn an_awaited_run_on_a_mission_thread_is_served_like_any_room() {
 				capturing();
 				let served = handed_over_after_a_reload("serve-mission-thread").await;
-				let room_id = served.room.id.clone();
-				database(served.handle())
-					.expect("the database opens")
-					.call(move |connection| {
-						connection.execute(
-							"UPDATE conversations SET kind = ?1 WHERE id = ?2",
-							rusqlite::params![MISSION_KIND, room_id],
-						)?;
-						Ok(())
-					})
-					.await
-					.expect("the room becomes a mission thread");
+				served.becomes_a_mission_thread().await;
 
 				served.drive_from(MAIN).await;
 				served.grace_heard_a_prompt().await;
 
 				assert_eq!(served.settled().await, 1, "grace was not started exactly once");
 				assert_eq!(served.summons_of_grace(), vec!["received", "started"]);
+			}
+
+			#[tokio::test]
+			async fn on_a_mission_thread_the_host_and_a_window_starting_the_same_run_send_one_prompt(
+			) {
+				capturing();
+				let served = handed_over_after_a_reload("serve-mission-and-window").await;
+				served.becomes_a_mission_thread().await;
+
+				let (_, from_the_window) = tokio::join!(
+					served.drive_from(MAIN),
+					served.grace_started_by_another_starter()
+				);
+				served.grace_heard_a_prompt().await;
+
+				assert_eq!(served.settled().await, 1, "grace was not started exactly once");
+				let host_traced = match from_the_window {
+					Ok(()) => vec!["received"],
+					Err(TransportError::TurnAlreadyRunning) => vec!["received", "started"],
+					Err(other) => panic!("the window starter answered {other:?}"),
+				};
+				assert_eq!(served.summons_of_grace(), host_traced);
 			}
 
 			#[tokio::test]

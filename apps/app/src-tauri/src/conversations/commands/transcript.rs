@@ -196,6 +196,7 @@ pub async fn conversation_send_turn<R: Runtime>(
 
 pub(crate) struct HandedTurn {
 	pub(crate) conversation_id: String,
+	pub(crate) turn_id: String,
 	pub(crate) author_bot_id: String,
 	pub(crate) text: String,
 	pub(crate) summoned: String,
@@ -207,8 +208,7 @@ pub(crate) async fn run_handed_turn<R: Runtime>(
 	agent: &AgentState,
 	handed: HandedTurn,
 ) -> Result<(), TranscriptStoreError> {
-	let HandedTurn { conversation_id, author_bot_id, text, summoned } = handed;
-	let turn_id = Uuid::new_v4().to_string();
+	let HandedTurn { conversation_id, turn_id, author_bot_id, text, summoned } = handed;
 	let id = Uuid::new_v4().to_string();
 	let created_at = now_ms();
 	let held = agent.host_turns().hold(&conversation_id, &turn_id)?;
@@ -241,7 +241,7 @@ pub(crate) async fn run_handed_turn<R: Runtime>(
 		created_at,
 		replied_to_message_id: None,
 	};
-	host_turn::run(app.clone(), held, message, vec![summoned]).await;
+	tauri::async_runtime::spawn(host_turn::run(app.clone(), held, message, vec![summoned]));
 	Ok(())
 }
 

@@ -426,7 +426,12 @@ mod tests {
 	use super::super::contract::{MissionEvent, MissionState};
 	use super::*;
 	use crate::removed_on_drop::RemovedOnDrop;
+	use std::time::Duration;
+
+	use crate::agent::contract::RuntimeScope;
+	use crate::agent::stub_session::a_session_held_for;
 	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
+	use crate::test_log::{capturing, infos_naming, warnings_naming};
 
 	const A_SPACE: &str = "
 		INSERT INTO bots (id, name, model, created_at)
@@ -1348,7 +1353,7 @@ mod tests {
 		planted(&app, A_FOURTH_COMPANION).await;
 		let opened = a_mission_of(&app, "c1", "b1").await;
 		let host = serving(&app, &opened.thread_conversation_id);
-		crate::test_log::capturing();
+		capturing();
 
 		let handed = host
 			.answer(asking("handoff", json!({ "id": opened.id, "companion": "fourth" })))
@@ -1402,11 +1407,74 @@ mod tests {
 		assert_eq!(summons.author_bot_id.as_deref(), Some("b1"));
 		assert!(summons.content.starts_with("<@b4> "), "got {}", summons.content);
 		assert!(summons.content.ends_with("Held"), "got {}", summons.content);
+		let thread_id = &opened.thread_conversation_id;
+		warnings_naming(&format!("summons dropped | conversation: {thread_id} |")).await;
 		assert_eq!(
 			crate::conversations::summons::traced_steps(&opened.thread_conversation_id, "b4"),
 			vec!["dropped startFailed", "received"],
 			"the summons of a companion that cannot start did not end dropped"
 		);
+	}
+
+	#[tokio::test]
+	async fn a_handoff_answers_while_the_turn_of_its_successor_still_runs() {
+		capturing();
+		let app = a_host("handoff-running").await;
+		planted(&app, A_FOURTH_COMPANION).await;
+		let opened = a_mission_of(&app, "c1", "b1").await;
+		let thread_id = opened.thread_conversation_id.clone();
+		let fourth = RuntimeScope {
+			conversation_id: thread_id.clone(),
+			bot_id: "b4".to_owned(),
+			runtime_session_id: "session-of-b4".to_owned(),
+			epoch: 1,
+		};
+		let successor = a_session_held_for(app.handle(), &fourth).await;
+		let host = serving(&app, &thread_id);
+
+		let asked = asking("handoff", json!({ "id": opened.id, "companion": "Fourth" }));
+		let answered = tokio::time::timeout(Duration::from_secs(10), host.answer(asked))
+			.await
+			.expect("the handoff waited for the turn of its successor");
+
+		assert_eq!(answered.expect("the mission is handed off")["botId"], json!("b4"));
+		infos_naming(&format!("summons started | conversation: {thread_id} |")).await;
+		assert!(!successor.session.is_idle().await, "the turn of the successor ended");
+		assert_eq!(
+			crate::conversations::summons::traced_steps(&thread_id, "b4"),
+			vec!["received", "started"]
+		);
+	}
+
+	#[tokio::test]
+	async fn a_handoff_whose_summons_cannot_be_written_drops_it_and_names_the_mission() {
+		capturing();
+		let app = a_host("handoff-unwritten").await;
+		planted(&app, A_FOURTH_COMPANION).await;
+		let opened = a_mission_of(&app, "c1", "b1").await;
+		planted(
+			&app,
+			"CREATE TRIGGER no_handing_turn BEFORE INSERT ON turns
+				BEGIN SELECT RAISE(ABORT, 'the turn breaks'); END;",
+		)
+		.await;
+		let host = serving(&app, &opened.thread_conversation_id);
+
+		host.answer(asking("handoff", json!({ "id": opened.id, "companion": "Fourth" })))
+			.await
+			.expect_err("the unwritten summons is answered as a failure");
+
+		let held = mission_detail(app.handle().clone(), app.state(), opened.id.clone())
+			.await
+			.expect("it reads");
+		assert_eq!(held.mission.bot_id, "b4");
+		let thread_id = &opened.thread_conversation_id;
+		let dropped =
+			warnings_naming(&format!("summons dropped | conversation: {thread_id} |")).await;
+		assert_eq!(dropped.len(), 1, "{dropped:?}");
+		assert!(dropped[0].ends_with("| bot: b4 | reason: startFailed"), "{dropped:?}");
+		let named = warnings_naming(&format!("mission {} changed owner", opened.id)).await;
+		assert!(named[0].contains("the turn breaks"), "{named:?}");
 	}
 
 	#[tokio::test]
