@@ -1267,7 +1267,7 @@ export const createConversationController = (
 		...(botIds.length === 1 ? { botId: botIds[0], botName: names[0] } : {}),
 	})
 
-	const unnoticedIn = (turnId: string, botIds: string[]) => {
+	const claimUnnoticedRuns = (turnId: string, botIds: string[]) => {
 		const unnoticed = botIds.filter(
 			(botId) => !noticedRuns.has(runKeyOf(turnId, botId)),
 		)
@@ -1282,7 +1282,7 @@ export const createConversationController = (
 		summoned: string[],
 		error: TransportError | null = null,
 	) => {
-		const botIds = unnoticedIn(run.turnId, summoned)
+		const botIds = claimUnnoticedRuns(run.turnId, summoned)
 		if (!conversation || botIds.length === 0) {
 			return
 		}
