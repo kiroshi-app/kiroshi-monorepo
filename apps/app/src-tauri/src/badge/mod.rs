@@ -95,7 +95,7 @@ mod tests {
 	}
 
 	#[test]
-	fn a_badge_set_reaches_every_open_app_window_and_is_stored() {
+	fn a_badge_set_with_app_windows_open_succeeds_and_is_stored() {
 		let app = badged_app("badge-windows");
 		for label in [window_controls::MAIN_WINDOW, "window-1"] {
 			WebviewWindowBuilder::new(&*app, label, Default::default())
