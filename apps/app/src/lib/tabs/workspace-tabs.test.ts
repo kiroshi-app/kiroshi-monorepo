@@ -1120,6 +1120,7 @@ describe("Move to new window", () => {
 
 		expect(windowHost.windowOpen).toHaveBeenCalledExactlyOnceWith(
 			threadOf("moved"),
+			null,
 		)
 		expect(shownHrefs(tabs)).toEqual(["/", threadOf("kept")])
 		expect(windowHost.raiseReportedFailure).not.toHaveBeenCalled()

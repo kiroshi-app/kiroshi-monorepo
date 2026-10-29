@@ -87,7 +87,10 @@ export const commands = {
 	width: number,
 	height: number,
 } | null) => typedError<null, WindowFrameError>(__TAURI_INVOKE("window_declare_maximize_button", { bounds })),
-	windowOpen: (href: string) => typedError<null, WindowOpenError>(__TAURI_INVOKE("window_open", { href })),
+	windowOpen: (href: string, position: {
+	x: number,
+	y: number,
+} | null) => typedError<null, WindowOpenError>(__TAURI_INVOKE("window_open", { href, position })),
 	windowIdentity: () => __TAURI_INVOKE<WindowIdentity>("window_identity"),
 	conversationDuplicateBot: (botId: string, spaceId: string | null) => typedError<Bot, TranscriptStoreError>(__TAURI_INVOKE("conversation_duplicate_bot", { botId, spaceId })),
 	conversationUpdateBot: (id: string, identity: BotIdentity) => typedError<Bot, TranscriptStoreError>(__TAURI_INVOKE("conversation_update_bot", { id, identity })),
@@ -1553,6 +1556,11 @@ export type ScopedEvent_Serialize = {
 	scope: RuntimeScope | null,
 	turn?: EventTurn | null,
 	event: AgentEvent_Serialize,
+};
+
+export type ScreenPosition = {
+	x: number,
+	y: number,
 };
 
 export type Section = {
