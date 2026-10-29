@@ -195,6 +195,25 @@ const ConnectField = ({
 	)
 }
 
+type ConnectFormProps = {
+	value: string
+	onSubmit: (value: string) => void
+	children: ReactNode
+}
+
+const ConnectForm = ({ value, onSubmit, children }: ConnectFormProps) => (
+	<form
+		className={COLUMN_CLASS}
+		noValidate
+		onSubmit={(event) => {
+			event.preventDefault()
+			if (value.length > 0) onSubmit(value)
+		}}
+	>
+		{children}
+	</form>
+)
+
 type ConnectOptionProps = {
 	number: number
 	label: string
@@ -215,7 +234,7 @@ const ConnectOption = ({
 		<button
 			aria-describedby={descriptionId}
 			aria-labelledby={labelId}
-			className="flex items-start gap-3 rounded-control bg-card p-3 text-start outline-offset-2"
+			className="flex items-start gap-3 rounded-control bg-card p-3 text-start outline-none hover:bg-card-raised focus-visible:ring-3 focus-visible:ring-ring/30 active:bg-muted"
 			data-slot="onboarding-connect-option"
 			onClick={onClick}
 			type="button"
@@ -357,13 +376,10 @@ const OnboardingConnectScreen = ({
 			</div>
 		),
 		waitingForCode: (
-			<div className={COLUMN_CLASS}>
+			<ConnectForm onSubmit={onSubmitCode} value={code}>
 				<ConnectStatus>{t("onboarding.connect.browser.waiting")}</ConnectStatus>
 				{codeField}
-				<OnboardingButton
-					disabled={code.length === 0}
-					onClick={() => onSubmitCode(code)}
-				>
+				<OnboardingButton disabled={code.length === 0} type="submit">
 					{t("onboarding.connect.continue")}
 				</OnboardingButton>
 				<div className={LINKS_CLASS}>
@@ -372,7 +388,7 @@ const OnboardingConnectScreen = ({
 					</OnboardingLink>
 					{pasteKeyInstead}
 				</div>
-			</div>
+			</ConnectForm>
 		),
 		connecting: (
 			<div className={COLUMN_CLASS}>
@@ -396,16 +412,13 @@ const OnboardingConnectScreen = ({
 			</div>
 		),
 		keyField: (
-			<div className={COLUMN_CLASS}>
+			<ConnectForm onSubmit={onSubmitKey} value={apiKey}>
 				{keyField}
-				<OnboardingButton
-					disabled={apiKey.length === 0}
-					onClick={() => onSubmitKey(apiKey)}
-				>
+				<OnboardingButton disabled={apiKey.length === 0} type="submit">
 					{t("onboarding.connect.continue")}
 				</OnboardingButton>
 				<div className={LINKS_CLASS}>{signInInstead}</div>
-			</div>
+			</ConnectForm>
 		),
 		keyRefused: (
 			<div className={COLUMN_CLASS}>

@@ -155,7 +155,7 @@ export const WelcomeConversationsLight = meta.story({
 		await userEvent.tab()
 		const skip = canvas.getByRole("button", { name: "Skip intro" })
 		await expect(skip).toHaveFocus()
-		await expect(getComputedStyle(skip).outlineStyle).not.toBe("none")
+		await expect(getComputedStyle(skip).boxShadow).toMatch(/\b3px\b/)
 	},
 })
 

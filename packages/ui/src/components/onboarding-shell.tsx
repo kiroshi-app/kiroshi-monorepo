@@ -55,7 +55,7 @@ type OnboardingLinkProps = Omit<ComponentProps<"button">, "type">
 const OnboardingLink = ({ className, ...props }: OnboardingLinkProps) => (
 	<button
 		className={cn(
-			"relative rounded-xs font-medium text-compact text-foreground leading-4.5 underline decoration-1 underline-offset-2 outline-offset-2 after:absolute after:-inset-1",
+			"relative rounded-xs font-medium text-compact text-foreground leading-4.5 underline decoration-1 underline-offset-2 outline-none after:absolute focus-visible:ring-3 focus-visible:ring-ring/30 after:-inset-1",
 			className,
 		)}
 		type="button"

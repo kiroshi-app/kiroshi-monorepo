@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { expect, fn, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
@@ -9,7 +10,10 @@ import {
 	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
 import { type Icon, Icons } from "@workspace/ui/components/icons"
-import { OnboardingConnectScreen } from "@workspace/ui/components/onboarding-connect-screen"
+import {
+	OnboardingConnectScreen,
+	type OnboardingConnectScreenProps,
+} from "@workspace/ui/components/onboarding-connect-screen"
 import { OnboardingShell } from "@workspace/ui/components/onboarding-shell"
 
 const ARTBOARD =
@@ -62,10 +66,34 @@ const expectSpinnerStillUnderReducedMotion = async (
 	)
 }
 
+const ConnectScreenHoldingItsFields = (props: OnboardingConnectScreenProps) => {
+	const [code, setCode] = useState(props.code)
+	const [apiKey, setApiKey] = useState(props.apiKey)
+
+	return (
+		<OnboardingConnectScreen
+			{...props}
+			apiKey={apiKey}
+			code={code}
+			onApiKeyChange={(value) => {
+				props.onApiKeyChange(value)
+				setApiKey(value)
+			}}
+			onCodeChange={(value) => {
+				props.onCodeChange(value)
+				setCode(value)
+			}}
+		/>
+	)
+}
+
+const RING_OF_KEYBOARD_FOCUS = /\b3px\b/
+
 const meta = preview.meta({
 	title: "Feedback/OnboardingConnectScreen",
 	component: OnboardingConnectScreen,
 	subcomponents: { OnboardingShell },
+	render: (args) => <ConnectScreenHoldingItsFields {...args} />,
 	decorators: [
 		(Story) => (
 			<div {...hueScopeOf("blue")}>
@@ -200,7 +228,20 @@ export const ConnectNothingFoundLight = meta.story({
 		await userEvent.tab({ shift: true })
 		const signIn = canvas.getByRole("button", { name: "Sign in with Claude" })
 		await expect(signIn).toHaveFocus()
-		await expect(getComputedStyle(signIn).outlineStyle).not.toBe("none")
+		await expect(getComputedStyle(signIn).boxShadow).toMatch(
+			RING_OF_KEYBOARD_FOCUS,
+		)
+
+		const pasteKey = canvas.getByRole("button", { name: "Paste an API key" })
+		const { userEvent: pointer } = await import("vitest/browser")
+		await pointer.hover(signIn)
+		await expect(getComputedStyle(signIn).backgroundColor).not.toBe(
+			getComputedStyle(pasteKey).backgroundColor,
+		)
+		await withMotionAllowed(() =>
+			expect(getComputedStyle(signIn).transitionDuration).toBe("0s"),
+		)
+		await pointer.unhover(signIn)
 	},
 })
 
@@ -249,8 +290,12 @@ export const ConnectWaitingForTheCodeLight = meta.story({
 
 		await userEvent.click(field)
 		await expect(getComputedStyle(field).boxShadow).not.toBe("none")
-		await userEvent.type(field, "k")
-		await expect(args.onCodeChange).toHaveBeenCalledWith("k")
+		await userEvent.keyboard("{Enter}")
+		await expect(args.onSubmitCode).not.toHaveBeenCalled()
+		await userEvent.type(field, `${PASTED_CODE}{Enter}`)
+		await expect(args.onCodeChange).toHaveBeenLastCalledWith(PASTED_CODE)
+		await expect(args.onSubmitCode).toHaveBeenCalledOnce()
+		await expect(args.onSubmitCode).toHaveBeenCalledWith(PASTED_CODE)
 		await userEvent.click(
 			canvas.getByRole("button", { name: "Open the sign-in page again" }),
 		)
@@ -315,9 +360,15 @@ export const ConnectConnectingLight = meta.story({
 			},
 		},
 	},
-	play: async ({ canvasElement }) => {
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
 		await expectConnecting(canvasElement)
 		await expectSpinnerStillUnderReducedMotion(canvasElement)
+
+		await userEvent.click(
+			canvas.getByLabelText("Paste the code Claude gave you"),
+		)
+		await userEvent.keyboard("{Enter}")
+		await expect(args.onSubmitCode).not.toHaveBeenCalled()
 	},
 })
 
@@ -543,6 +594,13 @@ export const ConnectKeyFieldLight = meta.story({
 		await expect(
 			canvas.getByRole("button", { name: "Continue" }),
 		).toHaveAttribute("aria-disabled", "true")
+
+		await userEvent.click(field)
+		await userEvent.keyboard("{Enter}")
+		await expect(args.onSubmitKey).not.toHaveBeenCalled()
+		await userEvent.type(field, `${REFUSED_KEY}{Enter}`)
+		await expect(args.onSubmitKey).toHaveBeenCalledOnce()
+		await expect(args.onSubmitKey).toHaveBeenCalledWith(REFUSED_KEY)
 
 		await userEvent.click(
 			canvas.getByRole("button", { name: "Sign in instead" }),
