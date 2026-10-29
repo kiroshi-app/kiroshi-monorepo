@@ -146,13 +146,14 @@ impl OnboardingStep {
 		}
 	}
 
-	fn of(stored: &str) -> Self {
+	fn known(stored: &str) -> Option<Self> {
 		match stored {
-			"connect" => OnboardingStep::Connect,
-			"import" => OnboardingStep::Import,
-			"account" => OnboardingStep::Account,
-			"done" => OnboardingStep::Done,
-			_ => OnboardingStep::Welcome,
+			"welcome" => Some(OnboardingStep::Welcome),
+			"connect" => Some(OnboardingStep::Connect),
+			"import" => Some(OnboardingStep::Import),
+			"account" => Some(OnboardingStep::Account),
+			"done" => Some(OnboardingStep::Done),
+			_ => None,
 		}
 	}
 
@@ -373,9 +374,8 @@ fn stored_in(connection: &Connection) -> Result<Preferences, DatabaseError> {
 		show_whats_new: switch_in(connection, SHOW_WHATS_NEW_KEY)?,
 		last_seen_version: setting_in(connection, LAST_SEEN_VERSION_KEY)?,
 		onboarding_step: setting_in(connection, ONBOARDING_STEP_KEY)?
-			.map_or(OnboardingStep::implied_by(first_run_done), |stored| {
-				OnboardingStep::of(&stored)
-			}),
+			.and_then(|stored| OnboardingStep::known(&stored))
+			.unwrap_or(OnboardingStep::implied_by(first_run_done)),
 		onboarding_import_seen: switch_on_in(connection, ONBOARDING_IMPORT_SEEN_KEY)?,
 	})
 }
@@ -814,10 +814,22 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn a_step_outside_the_vocabulary_reads_as_the_welcome_step() {
+	async fn a_step_outside_the_vocabulary_after_a_finished_first_run_reads_as_done() {
 		let dir = temp_dir();
 		let database = open(&dir);
 		planted(&database, FIRST_RUN_DONE_KEY, SWITCH_ON).await;
+		planted(&database, ONBOARDING_STEP_KEY, "tour").await;
+
+		let read = database.user().preferences().await.expect("the record");
+
+		assert_eq!(read.onboarding_step, OnboardingStep::Done);
+	}
+
+	#[tokio::test]
+	async fn a_step_outside_the_vocabulary_before_a_finished_first_run_reads_as_welcome() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		planted(&database, FIRST_RUN_DONE_KEY, SWITCH_OFF).await;
 		planted(&database, ONBOARDING_STEP_KEY, "tour").await;
 
 		let read = database.user().preferences().await.expect("the record");
