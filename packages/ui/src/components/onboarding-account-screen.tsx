@@ -30,6 +30,8 @@ type OnboardingAccountScreenProps = {
 const SKIP_CLASS =
 	"relative rounded-xs font-medium text-compact text-foreground leading-4.5 underline decoration-1 underline-offset-2 outline-offset-2 after:absolute after:-inset-1"
 
+const PERSON_MARK_STROKE = 1.8
+
 const OnboardingAccountScreen = ({
 	account,
 	image,
@@ -49,13 +51,17 @@ const OnboardingAccountScreen = ({
 			data-status={account.status}
 		>
 			<FullWindowContent className="gap-5 p-6">
-				<span className="grid size-14 shrink-0 place-items-center rounded-[1rem] bg-muted/40">
+				<span
+					className="grid size-14 shrink-0 place-items-center rounded-[1rem] bg-muted/40"
+					data-slot="onboarding-account-mark"
+				>
 					<Mark
 						aria-hidden="true"
 						className={cn(
 							"size-6",
 							isSignedIn ? "text-success" : "text-foreground",
 						)}
+						strokeWidth={isSignedIn ? undefined : PERSON_MARK_STROKE}
 					/>
 				</span>
 				{account.status === "signedIn" ? (
