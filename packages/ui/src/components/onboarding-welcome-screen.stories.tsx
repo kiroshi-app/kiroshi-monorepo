@@ -91,6 +91,40 @@ const expectGroupUnderHeading = async (canvasElement: HTMLElement) => {
 	}
 }
 
+const COMPANION_ROLES = [
+	"Reviews code",
+	"Keeps the docs",
+	"Writes release notes",
+]
+
+const expectCompanionRoles = async (canvasElement: HTMLElement) => {
+	for (const role of COMPANION_ROLES) {
+		const badge = within(canvasElement).getByText(role)
+		const card = badge.parentElement as HTMLElement
+		const name = badge.previousElementSibling as HTMLElement
+		const pill = badge.getBoundingClientRect()
+		const column = card.getBoundingClientRect()
+
+		await expect(badge).toBeVisible()
+		await expect(badge).toHaveAttribute("data-slot", "bot-title-badge")
+		await expect(pill.height).toBeGreaterThan(0)
+		await expect(badge.scrollWidth).toBeLessThanOrEqual(badge.clientWidth)
+		await expect(getComputedStyle(badge).backgroundColor).not.toBe(
+			getComputedStyle(card).backgroundColor,
+		)
+		await expect(pill.top).toBeGreaterThanOrEqual(
+			name.getBoundingClientRect().bottom,
+		)
+		await expect(pill.left + pill.width / 2).toBeCloseTo(
+			column.left + column.width / 2,
+			0,
+		)
+		await withMotionAllowed(() =>
+			expect(colourTransitionsOf(badge)).toEqual([]),
+		)
+	}
+}
+
 const expectBackHidden = async (canvasElement: HTMLElement) => {
 	const back = slotIn(canvasElement, "onboarding-welcome-back")
 
@@ -160,7 +194,7 @@ export const WelcomeCompanionsLight = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${ARTBOARD} Artboard 1.1: three companions on bot avatars, 96, 132 and 96, the middle one lifted. Check the names and jobs, the first dot wide, 1 of 3, Back gone with its slot kept, and Next calling back. Pick the Dark twin for the other theme.`,
+				story: `${ARTBOARD} Artboard 1.1: three companions on bot avatars, 96, 132 and 96, the middle one lifted. Check the names, each job on the roster title pill centred under its name, the first dot wide, 1 of 3, Back gone with its slot kept, and Next calling back. Pick the Dark twin for the other theme.`,
 			},
 		},
 	},
@@ -177,6 +211,7 @@ export const WelcomeCompanionsLight = meta.story({
 				(avatar) => avatar.getBoundingClientRect().width,
 			),
 		).toEqual([96, 132, 96])
+		await expectCompanionRoles(canvasElement)
 		await expectBackHidden(canvasElement)
 
 		await userEvent.tab()
@@ -197,7 +232,7 @@ export const WelcomeCompanionsDark = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${ARTBOARD} Artboard 1.1, dark. Check the same layout on the dark page, the wide dot in the foreground colour, Back gone. Pick the Light twin for the other theme.`,
+				story: `${ARTBOARD} Artboard 1.1, dark. Check the same layout on the dark page, the job pills legible on it, the wide dot in the foreground colour, Back gone. Pick the Light twin for the other theme.`,
 			},
 		},
 	},
@@ -209,6 +244,7 @@ export const WelcomeCompanionsDark = meta.story({
 			step: "1 of 3",
 			current: 1,
 		})
+		await expectCompanionRoles(canvasElement)
 		await expectBackHidden(canvasElement)
 	},
 })
