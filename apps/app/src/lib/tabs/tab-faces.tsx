@@ -27,7 +27,7 @@ export type TabBot = Pick<AppSidebarBot, "id" | "name" | "blot" | "image">
 
 export type TabConversation = Pick<
 	AppSidebarConversation,
-	"id" | "name" | "icon"
+	"id" | "name" | "icon" | "color"
 >
 
 export type TabFaceSources = {
@@ -76,7 +76,11 @@ const botFaceOf = (bot: TabBot): TabFace => ({
 const conversationFaceOf = (conversation: TabConversation): TabFace => ({
 	title: conversation.name,
 	icon: (
-		<ConversationSubjectIcon icon={conversation.icon} side={TAB_ICON_SIDE} />
+		<ConversationSubjectIcon
+			hue={conversation.color}
+			icon={conversation.icon}
+			side={TAB_ICON_SIDE}
+		/>
 	),
 })
 

@@ -418,7 +418,7 @@ const ThreadHeader = ({
 					/>
 				) : (
 					<HeaderConversationButton
-						icon={toConversationLook(thread.conversation).icon}
+						{...toConversationLook(thread.conversation)}
 						bots={present}
 						name={thread.conversation.title}
 						onOpenSettings={() => thread.onOpenSettings(thread.conversation.id)}
@@ -547,7 +547,7 @@ const ConversationEmptySlot = ({
 
 	return (
 		<ConversationEmptyState
-			icon={toConversationLook(conversation).icon}
+			{...toConversationLook(conversation)}
 			bots={present}
 			onSuggestedBotPress={(bot) => promptRef.current?.mention(bot.name)}
 			suggestedBots={suggestedBots}

@@ -38,10 +38,24 @@ const openSpace = (name: string) =>
 
 const switchToPersonal = () => openSpace(SCENE_COPY.spaces.personal)
 
-const conversationIconHues = () =>
-	[...scene().querySelectorAll("[data-slot=conversation-subject-icon]")].map(
-		(icon) => icon.getAttribute("data-hue"),
+const conversationIcons = () => [
+	...scene().querySelectorAll("[data-slot=conversation-subject-icon]"),
+]
+
+const ICON_OWNER = [
+	"[data-slot=sidebar-menu-button]",
+	"[data-slot=title-bar-tab]",
+	"[data-slot=header-conversation-button]",
+].join(", ")
+
+const conversationOwning = (icon: Element) => {
+	const label = icon.closest(ICON_OWNER)?.textContent ?? ""
+	return SCENE_SPACES.flatMap((space) => space.conversations).find(({ name }) =>
+		label.includes(name),
 	)
+}
+
+const hueOf = (color?: number | null) => (color == null ? "" : String(color))
 
 const conversationPictograms = () =>
 	[
@@ -164,10 +178,16 @@ describe("the landing scene", () => {
 		expect(tabNamed(triage).getAttribute("aria-selected")).toBe("true")
 	})
 
-	it("draws every conversation icon neutral, each with its own pictogram", () => {
+	it("draws every conversation icon in the colour of its look, each with its own pictogram", () => {
 		renderScene()
 
-		expect(conversationIconHues().filter((hue) => hue !== null)).toEqual([])
+		const icons = conversationIcons()
+		expect(icons).not.toHaveLength(0)
+		for (const icon of icons) {
+			const conversation = conversationOwning(icon)
+			expect(conversation).toBeDefined()
+			expect(icon.getAttribute("data-hue")).toBe(hueOf(conversation?.color))
+		}
 		expect(new Set(conversationPictograms()).size).toBeGreaterThanOrEqual(
 			WORK.conversations.length,
 		)

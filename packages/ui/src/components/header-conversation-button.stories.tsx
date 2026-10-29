@@ -31,6 +31,8 @@ const CELL_SIDE = 24
 const LONG_NAME =
 	"Migration of the legacy billing workspace and every archive it still answers for"
 
+const FREE_HUE = 210
+
 const meta = preview.meta({
 	title: "Navigation/HeaderConversationButton",
 	component: HeaderConversationButton,
@@ -145,27 +147,42 @@ export const ThemesGroup = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this to read a room of several companions with no colour picked, in light and dark at once. Check that a 24px subject icon on the neutral pair of each theme leads the button, the message square centred in it. Pick `ThemesGroupPickedIcon` for a room with a picked icon.",
+					"Reach for this to read a room of several companions with no colour picked, in light and dark at once. Check that a 24px subject icon on the neutral pair of each theme leads the button, the message square centred in it. Pick `ThemesGroupPickedIcon` for a preset hue, `ThemesGroupFreeHue` for a free hue.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) =>
-		expectSubjectIconInBothThemes(canvasElement, CELL_SIDE),
+		expectSubjectIconInBothThemes(canvasElement, undefined, CELL_SIDE),
 })
 
 export const ThemesGroupPickedIcon = meta.story({
 	globals: { theme_layout: "side-by-side" },
-	args: { icon: "ShieldKey" },
+	args: { color: BLOT_HUES.red, icon: "ShieldKey" },
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Reach for this to read a room of several companions that picked the shield key, in light and dark at once. Check that the 24px subject icon keeps the neutral pair of each theme, whatever colour the room carries, and shows the picked pictogram. Pick `ThemesGroup` for the default icon.",
+					"Reach for this to read a room of several companions coloured red, in light and dark at once. Check that the 24px subject icon wears the red pair of each theme and the picked pictogram. Pick `ThemesGroup` for a room with no colour.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) =>
-		expectSubjectIconInBothThemes(canvasElement, CELL_SIDE),
+		expectSubjectIconInBothThemes(canvasElement, BLOT_HUES.red, CELL_SIDE),
+})
+
+export const ThemesGroupFreeHue = meta.story({
+	globals: { theme_layout: "side-by-side" },
+	args: { color: FREE_HUE },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this to read a room of several companions coloured at a hue outside the eight presets, 210, in light and dark at once. Check that the 24px subject icon wears the recipe tones of 210 in each theme rather than the nearest preset. Pick `ThemesGroupPickedIcon` for a preset hue.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) =>
+		expectSubjectIconInBothThemes(canvasElement, FREE_HUE, CELL_SIDE),
 })
 
 export const LongContent = meta.story({

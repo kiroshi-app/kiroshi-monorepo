@@ -84,7 +84,12 @@ const ConversationRosterRow = ({
 						isActive={isSelected}
 						isMiddleClickSelectable
 						isWorking={Boolean(workingBotOf(conversation))}
-						media={<ConversationSubjectIcon icon={conversation.icon} />}
+						media={
+							<ConversationSubjectIcon
+								hue={conversation.color}
+								icon={conversation.icon}
+							/>
+						}
 						name={conversation.name}
 						onSelect={(modifiers) => {
 							if (lift.hasJustDropped()) return

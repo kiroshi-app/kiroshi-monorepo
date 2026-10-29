@@ -1,4 +1,6 @@
 import conversationIcons from "@workspace/shared/conversation-icons.json"
+import { hueStyle } from "@workspace/ui/components/hue-palette"
+import { HUE_THEMES } from "@workspace/ui/components/hue-recipe"
 import {
 	type ConversationIconName,
 	ConversationIcons,
@@ -11,8 +13,23 @@ const PICTOGRAM = "relative"
 
 type ConversationSubjectIconProps = {
 	icon?: string
+	hue?: number | null
 	side?: number
 }
+
+const UNTINTED_SCOPE_STYLE = Object.fromEntries(
+	HUE_THEMES.flatMap((theme) =>
+		["conversation-icon", "conversation-icon-foreground"].map((role) => [
+			`--hue-${theme}-${role}`,
+			"initial",
+		]),
+	),
+)
+
+const hueScopeOf = (hue: number | null | undefined) =>
+	hue == null
+		? { "data-hue": "", style: UNTINTED_SCOPE_STYLE }
+		: { "data-hue": hue, style: hueStyle(hue) }
 
 const isConversationIcon = (
 	icon: string | undefined,
@@ -24,16 +41,20 @@ const conversationIconOf = (icon: string | undefined): ConversationIconName =>
 
 const ConversationSubjectIcon = ({
 	icon,
+	hue,
 	side = 40,
 }: ConversationSubjectIconProps) => {
 	const Pictogram = ConversationIcons[conversationIconOf(icon)]
+	const scope = hueScopeOf(hue)
 
 	return (
 		<span
 			aria-hidden="true"
 			className={CELL}
+			data-hue={scope["data-hue"]}
 			data-slot="conversation-subject-icon"
 			style={{
+				...scope.style,
 				color: "var(--conversation-icon-foreground)",
 				width: side,
 				height: side,

@@ -168,7 +168,11 @@ const LiftedConversationMark = ({
 	conversation,
 }: LiftedConversationMarkProps) =>
 	conversation.participants.length > 1 ? (
-		<ConversationSubjectIcon icon={conversation.icon} side={ROW_AVATAR_SIZE} />
+		<ConversationSubjectIcon
+			hue={conversation.color}
+			icon={conversation.icon}
+			side={ROW_AVATAR_SIZE}
+		/>
 	) : (
 		conversation.participants.map((bot) => (
 			<BotRowAvatar bot={bot} key={bot.id} />
