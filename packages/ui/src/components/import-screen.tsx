@@ -97,11 +97,13 @@ const rowsOf = (items: ImportItem[], t: TFunction<"common">) => {
 	const failedSkills = skills.filter((skill) => skill.status === "failed")
 	const comingIn = skills.filter((skill) => skill.status !== "failed")
 	const newSkills = comingIn.filter((skill) => !skill.isInKiroshi)
-	const isOnlyNewShown =
-		newSkills.length > 0 && newSkills.length < comingIn.length
-	const grouped = newSkills.length > 0 ? newSkills : comingIn
+	const hasNewSkill = newSkills.length > 0
+	const grouped = hasNewSkill ? newSkills : comingIn
+	const hasSkillInKiroshi = newSkills.length < comingIn.length
 	const groupedTitle = t(
-		isOnlyNewShown ? "claudeImport.row.newSkills" : "claudeImport.row.skills",
+		hasNewSkill && hasSkillInKiroshi
+			? "claudeImport.row.newSkills"
+			: "claudeImport.row.skills",
 		{ count: grouped.length },
 	)
 
