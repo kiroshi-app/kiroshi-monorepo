@@ -29,8 +29,7 @@ const ICON =
 const TITLE =
 	"min-w-0 truncate font-medium text-compact text-foreground leading-4"
 
-const COMPANION =
-	"min-w-0 shrink-0 truncate text-muted-foreground text-xs leading-4"
+const COMPANION = "min-w-0 truncate text-muted-foreground text-xs leading-4"
 
 const DOT =
 	"shrink-0 text-muted-foreground text-xs leading-4 before:content-['·']"
@@ -77,7 +76,6 @@ const TabDragThumbnail = ({
 			{messages.map((message) => (
 				<p
 					className={message.author === "user" ? USER_BUBBLE : COMPANION_TEXT}
-					data-author={message.author}
 					data-slot="tab-drag-thumbnail-message"
 					key={message.id}
 				>
