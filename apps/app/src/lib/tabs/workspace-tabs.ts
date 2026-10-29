@@ -146,7 +146,7 @@ const reasonOf = (error: unknown) =>
 	error == null ? undefined : describeFailure(error).trim() || undefined
 
 const openWindowOn = (href: string): Promise<WindowOpening> =>
-	commands.windowOpen(href).then(
+	commands.windowOpen(href, null).then(
 		(opened) =>
 			opened.status === "ok"
 				? { isOpened: true }
