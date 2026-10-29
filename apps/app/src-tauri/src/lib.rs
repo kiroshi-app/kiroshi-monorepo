@@ -65,7 +65,10 @@ pub fn run() {
 						| tauri_plugin_window_state::StateFlags::POSITION
 						| tauri_plugin_window_state::StateFlags::MAXIMIZED,
 				)
-				.with_denylist(&[host_api::invoke::DISPATCHER_WEBVIEW])
+				.with_denylist(&[
+					host_api::invoke::DISPATCHER_WEBVIEW,
+					window_controls::drag_ghost::DRAG_GHOST,
+				])
 				.with_filter(|label| !window_controls::is_secondary(label))
 				.build(),
 		)
@@ -106,6 +109,7 @@ pub fn run() {
 			app.manage(crypto::commands::space_keys(app.handle()));
 			if !window_controls::is_headless(std::env::args()) {
 				window_controls::open_main(app.handle());
+				window_controls::drag_ghost::open(app.handle());
 			}
 			joined_spaces::deep_link::install(app.handle());
 			app.manage(routines::sentinel::spawn(app.handle().clone()));

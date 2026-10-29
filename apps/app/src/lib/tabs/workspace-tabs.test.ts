@@ -1137,6 +1137,7 @@ describe("Move to new window", () => {
 			threadOf("moved"),
 			null,
 			null,
+			null,
 		)
 		expect(shownHrefs(tabs)).toEqual(["/", threadOf("kept")])
 		expect(windowHost.raiseReportedFailure).not.toHaveBeenCalled()
@@ -1233,6 +1234,7 @@ describe("Tear off", () => {
 		expect(windowHost.windowOpen).toHaveBeenCalledExactlyOnceWith(
 			threadOf("torn"),
 			{ x: 640, y: 121 },
+			null,
 			null,
 		)
 		expect(windowHost.raiseReportedFailure).not.toHaveBeenCalled()
@@ -1628,6 +1630,7 @@ describe("the File menu", () => {
 		await vi.waitFor(() =>
 			expect(windowHost.windowOpen).toHaveBeenCalledExactlyOnceWith(
 				"/",
+				null,
 				null,
 				null,
 			),
