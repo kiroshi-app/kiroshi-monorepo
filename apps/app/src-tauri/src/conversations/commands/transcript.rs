@@ -6,7 +6,7 @@ use super::super::contract::{
 	MESSAGE_STORED_EVENT, UPDATED_EVENT,
 };
 use super::super::state as conversation_state;
-use super::super::{context, host_turn};
+use super::super::{context, host_turn, summons};
 use super::bot::ready;
 use super::room::announce_conversation;
 use crate::agent::reply_writer::HostWrites;
@@ -224,6 +224,7 @@ async fn announce_stored<R: Runtime>(
 ) {
 	let failure = match database.messages().message(conversation_id.clone(), id.clone()).await {
 		Ok(Some(stored)) => {
+			summons::note_received(&conversation_id, &id, &stored.content);
 			let message = TranscriptMessage::of(&conversation_id, stored);
 			match events::emit(app, MESSAGE_STORED, message) {
 				Ok(()) => return,

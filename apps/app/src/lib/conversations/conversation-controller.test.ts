@@ -25,6 +25,7 @@ import type {
 	AgentEvent,
 	ConversationNaming,
 	TransportError,
+	TurnOutcome,
 } from "../agent/contract"
 import type { ChatDriver } from "../chat/driver"
 import { attachmentBlock } from "../chat/message-attachments"
@@ -60,6 +61,13 @@ const TURN_ENDED: AgentEvent = {
 	type: "turnEnded",
 	ended: { sessionId: null, outcome: "completed" },
 }
+
+const endedAs = (events: AgentEvent[], outcome: TurnOutcome): AgentEvent[] =>
+	events.map((event) =>
+		event.type === "turnEnded"
+			? { ...event, ended: { ...event.ended, outcome } }
+			: event,
+	)
 
 const completedAs = (id: string, text: string): AgentEvent => ({
 	type: "messageCompleted",
@@ -524,7 +532,7 @@ describe("createConversationController", () => {
 		expect(submittedIn(harness)).toEqual([nyx, iris, ada])
 	})
 
-	it("starts no second run in the turn for a companion a wave mate named", async () => {
+	it("runs once more, after its running turn ends, a companion a wave mate named", async () => {
 		const ada = idOf(harness.conversation, "Ada")
 		const nyx = idOf(harness.conversation, "Nyx")
 		await harness.controller.send("@Ada then @Nyx")
@@ -533,13 +541,49 @@ describe("createConversationController", () => {
 		harness.driver.pushTo(ada, spoke(ada, `over to <@${nyx}>`))
 		await harness.settled()
 
-		expect(harness.controller.getState().waitingBotIds).toEqual([])
+		expect(harness.controller.getState().waitingBotIds).toEqual([nyx])
+		expect(submittedIn(harness)).toEqual([ada, nyx])
 
 		harness.driver.pushTo(nyx, spoke(nyx, "walls up"))
 		await harness.settled()
 
-		expect(submittedIn(harness)).toEqual([ada, nyx])
+		expect(submittedIn(harness)).toEqual([ada, nyx, nyx])
+
+		harness.driver.pushTo(nyx, spoke(nyx, "and the gates too"))
+		await harness.settled()
+
+		expect(submittedIn(harness)).toEqual([ada, nyx, nyx])
 		expect(runningIn(harness.controller)).toEqual([])
+	})
+
+	it("runs once more a companion named while its running turn ends on an error", async () => {
+		const ada = idOf(harness.conversation, "Ada")
+		const nyx = idOf(harness.conversation, "Nyx")
+		await harness.controller.send("@Ada then @Nyx")
+		await harness.settled()
+
+		harness.driver.pushTo(ada, spoke(ada, `over to <@${nyx}>`))
+		await harness.settled()
+		harness.driver.pushTo(nyx, endedAs(spoke(nyx, "walls up"), "failed"))
+		await harness.settled()
+
+		expect(submittedIn(harness)).toEqual([ada, nyx, nyx])
+	})
+
+	it("serves in one more run two summons of a companion named while it runs", async () => {
+		const ada = idOf(harness.conversation, "Ada")
+		const iris = idOf(harness.conversation, "Iris")
+		const nyx = idOf(harness.conversation, "Nyx")
+		await harness.controller.send("@Ada @Iris @Nyx")
+		await harness.settled()
+
+		harness.driver.pushTo(ada, spoke(ada, `over to <@${nyx}>`))
+		harness.driver.pushTo(iris, spoke(iris, `and to <@${nyx}> too`))
+		await harness.settled()
+		harness.driver.pushTo(nyx, spoke(nyx, "walls up"))
+		await harness.settled()
+
+		expect(submittedIn(harness)).toEqual([ada, iris, nyx, nyx])
 	})
 
 	it("keeps the named order of the companions yet to publish while a wave mate publishes", async () => {
@@ -2865,6 +2909,17 @@ describe("the mentions a finished turn carries", () => {
 		await room.sent("@Ada take the walls")
 
 		await room.spoken(room.ada, "over to <@ghost>")
+
+		expect(room.controller.getState().unresolvedMentions).toEqual([
+			{ botId: "ghost", name: null },
+		])
+		room.detach()
+	})
+
+	it("names in the room the unseated companion a typed literal token summons", async () => {
+		const room = await roomSeating()
+
+		await room.sent("<@ghost> take the walls")
 
 		expect(room.controller.getState().unresolvedMentions).toEqual([
 			{ botId: "ghost", name: null },

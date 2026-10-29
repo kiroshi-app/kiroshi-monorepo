@@ -22,6 +22,7 @@ use crate::conversations::context::mentioned_bot_ids;
 use crate::conversations::contract::TranscriptStoreError;
 use crate::conversations::host_turn::present_bot_ids;
 use crate::conversations::state as conversation_state;
+use crate::conversations::summons;
 use crate::conversations::turn_run_deadline::arm_start_deadlines;
 use crate::db;
 use crate::db::repositories::conversations::{PendingPrompt, PromptKind, MISSION_KIND, TOPIC_KIND};
@@ -491,6 +492,9 @@ impl<R: Runtime> Desk<R> {
 
 impl<R: Runtime> Desk<R> {
 	async fn handed_to(&self, turn: &OpenTurn) -> Vec<String> {
+		for (id, text) in &turn.written {
+			summons::note_received(&self.store.conversation_id, id, text);
+		}
 		match self.store.handed_to(turn.written.values()).await {
 			Ok(handed_to) => handed_to,
 			Err(error) => {

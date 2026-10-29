@@ -7,6 +7,7 @@ use tokio::time;
 
 use super::commands::announce_conversation;
 use super::contract::TranscriptStoreError;
+use super::summons::{self, SummonsDropReason, SummonsRun};
 use crate::agent::translate::now_ms;
 use crate::events::CONVERSATION_UPDATED;
 use crate::routines::runner::{database, managed};
@@ -140,6 +141,12 @@ impl<R: Runtime> HeldTurn<R> {
 			.expire_awaited_run(self.turn_id.clone(), bot_id.to_owned(), now_ms())
 			.await?;
 		if expired {
+			let run = SummonsRun {
+				conversation_id: &self.conversation_id,
+				turn_id: &self.turn_id,
+				bot_id,
+			};
+			summons::note_dropped(&run, SummonsDropReason::NeverStarted);
 			announce_conversation(&self.app, database, CONVERSATION_UPDATED, &self.conversation_id)
 				.await;
 		}

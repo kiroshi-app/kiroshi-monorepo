@@ -12,6 +12,7 @@ use tokio::time;
 use super::commands::announce_conversation;
 use super::context::{bounded_context, headed_message, mentioned_bot_ids};
 use super::contract::{SentMessage, TranscriptStoreError};
+use super::summons::{self, SummonsDropReason, SummonsRun};
 use super::turn_run_deadline::{arm_start_deadlines, suspend_start_deadline};
 use crate::agent::commands::{
 	agent_shutdown, announce, announce_in_turn, cancel_session_turn, line_place_of, live_run_of,
@@ -634,6 +635,9 @@ impl<R: Runtime> HostTurn<R> {
 
 	async fn started_wave(&self, summoned: Vec<Summons>) -> Vec<Speaker> {
 		if self.has_stopped() {
+			for held in &summoned {
+				summons::note_dropped(&self.run_of(&held.bot_id), SummonsDropReason::Cancelled);
+			}
 			join_all(summoned.iter().map(|summons| self.abandon(&summons.bot_id))).await;
 			return Vec::new();
 		}
@@ -668,8 +672,12 @@ impl<R: Runtime> HostTurn<R> {
 			Err(error) => return Err(Refusal::Unsubmitted(ridden.scope, error)),
 		};
 		let is_in_line = handed == Handed::Queued;
+		let run = self.run_of(&summons.bot_id);
 		if is_in_line {
+			summons::note_queued(&run, &ridden.scope.runtime_session_id);
 			suspend_start_deadline(&self.app, &self.turn_id, &summons.bot_id);
+		} else {
+			summons::note_started(&run, &ridden.scope.runtime_session_id);
 		}
 		Ok(Speaker { scope: ridden.scope, written: Vec::new(), is_in_line })
 	}
@@ -790,6 +798,11 @@ impl<R: Runtime> HostTurn<R> {
 	}
 
 	async fn refused(&self, bot_id: &str, refusal: Refusal) {
+		let reason = match refusal {
+			Refusal::Stopped(_) => SummonsDropReason::Cancelled,
+			_ => SummonsDropReason::StartFailed,
+		};
+		summons::note_dropped(&self.run_of(bot_id), reason);
 		let (scope, detail) = match refusal {
 			Refusal::Unready(error) => (None, Some(detail_of(&error))),
 			Refusal::Unopened(error) => (None, Some(detail_of(&error))),
@@ -841,8 +854,11 @@ impl<R: Runtime> HostTurn<R> {
 	async fn note_handovers(&self, done: &Speaker, waiting: &mut Vec<Summons>) {
 		match self.handed_by(done).await {
 			Ok(handed) => {
-				for summons in handed {
-					hand_over(waiting, &done.scope.bot_id, summons);
+				for held in handed {
+					let bot_id = held.bot_id.clone();
+					if let Some(reason) = hand_over(waiting, &done.scope.bot_id, held) {
+						summons::note_dropped(&self.run_of(&bot_id), reason);
+					}
 				}
 			}
 			Err(error) => log::warn!(
@@ -864,11 +880,13 @@ impl<R: Runtime> HostTurn<R> {
 			else {
 				continue;
 			};
-			handed.extend(
-				seated_mentions(&reply.content, &present)
-					.into_iter()
-					.map(|bot_id| Summons { bot_id: bot_id.to_owned(), prompt_id: id.clone() }),
-			);
+			for bot_id in mentioned_bot_ids(&reply.content) {
+				if !present.contains(&bot_id) {
+					summons::note_dropped(&self.run_of(bot_id), SummonsDropReason::NotSeated);
+					continue;
+				}
+				handed.push(Summons { bot_id: bot_id.to_owned(), prompt_id: id.clone() });
+			}
 		}
 		Ok(handed)
 	}
@@ -976,14 +994,24 @@ impl<R: Runtime> HostTurn<R> {
 	fn label(&self) -> String {
 		format!("host turn {} of conversation {}", self.turn_id, self.conversation_id)
 	}
+
+	fn run_of<'a>(&'a self, bot_id: &'a str) -> SummonsRun<'a> {
+		SummonsRun { conversation_id: &self.conversation_id, turn_id: &self.turn_id, bot_id }
+	}
 }
 
-fn hand_over(waiting: &mut Vec<Summons>, from: &str, summons: Summons) {
-	let is_held = waiting.iter().any(|held| held.bot_id == summons.bot_id);
-	if summons.bot_id == from || is_held {
-		return;
+fn hand_over(
+	waiting: &mut Vec<Summons>,
+	from: &str,
+	summons: Summons,
+) -> Option<SummonsDropReason> {
+	if summons.bot_id == from {
+		return Some(SummonsDropReason::SelfMention);
 	}
-	waiting.push(summons);
+	if !waiting.iter().any(|held| held.bot_id == summons.bot_id) {
+		waiting.push(summons);
+	}
+	None
 }
 
 pub(crate) fn ended_as(outcome: TurnOutcome) -> AgentEvent {
