@@ -304,6 +304,15 @@ describe("the gate", () => {
 		).toEqual(["Build sidecar", "Clippy", "Library tests", "Integration tests"])
 	})
 
+	it("checks the colour set names against tokens.json before tokens:build rewrites the catalogue", () => {
+		const commands = GATE.lint.map((step) => step.command)
+
+		expect(commands.indexOf("bun run tokens:check-sets")).toBeGreaterThan(-1)
+		expect(commands.indexOf("bun run tokens:check-sets")).toBeLessThan(
+			commands.indexOf("bun run tokens:build"),
+		)
+	})
+
 	it("builds the website with the command the Render deploy runs", () => {
 		expect(GATE.website.map((step) => step.command)).toEqual([
 			"bun run build:website",

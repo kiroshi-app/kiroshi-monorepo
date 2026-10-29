@@ -118,6 +118,10 @@ export const GATE = {
 			command: "bun run test:ci-changes",
 		},
 		{ name: "Red main reporter unit tests", command: "bun run test:red-main" },
+		{
+			name: "Colour set check unit tests",
+			command: "bun run test:colour-sets",
+		},
 		PR_DEQUEUE_UNIT_TESTS,
 		PR_ENQUEUE_UNIT_TESTS,
 		PR_REQUEUE_CHECK_UNIT_TESTS,
@@ -127,6 +131,10 @@ export const GATE = {
 			command: "bun run baseline lint",
 		},
 		{ name: "Types", command: "bun run types" },
+		{
+			name: "Colour sets match tokens.json",
+			command: "bun run tokens:check-sets",
+		},
 		{ name: "Regenerate the colour tokens", command: "bun run tokens:build" },
 		{
 			name: "Colour CSS matches tokens.json",
