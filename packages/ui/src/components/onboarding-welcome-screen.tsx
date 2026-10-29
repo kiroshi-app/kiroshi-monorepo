@@ -32,12 +32,10 @@ const JUNIPER_HUE = hueOf("green")
 const WREN_HUE = hueOf("pink")
 
 const COMPANIONS = [
-	{ id: "atlas", hue: ATLAS_HUE, size: 96 },
-	{ id: "juniper", hue: JUNIPER_HUE, size: 132 },
-	{ id: "wren", hue: WREN_HUE, size: 96 },
+	{ id: "atlas", hue: ATLAS_HUE, isFeatured: false },
+	{ id: "juniper", hue: JUNIPER_HUE, isFeatured: true },
+	{ id: "wren", hue: WREN_HUE, isFeatured: false },
 ] as const
-
-const FEATURED_SIZE = 132
 
 const CARD_CLASS = "rounded-bubble border border-border bg-card"
 
@@ -46,18 +44,18 @@ const CompanionsIllustration = () => {
 
 	return (
 		<div className="flex max-w-full flex-wrap items-end justify-center gap-x-7 gap-y-4">
-			{COMPANIONS.map(({ id, hue, size }) => (
+			{COMPANIONS.map(({ id, hue, isFeatured }) => (
 				<div
 					className={cn(
 						"flex w-35 flex-col items-center gap-1.5 text-center",
-						size === FEATURED_SIZE && "pb-7",
+						isFeatured && "pb-7",
 					)}
 					key={id}
 				>
 					<BotIdentityAvatar
 						hue={hue}
 						name={t(`onboarding.intro.companions.${id}.name`)}
-						size={size}
+						size={isFeatured ? 132 : 96}
 					/>
 					<p className="pt-2 font-medium text-compact text-foreground leading-4.5">
 						{t(`onboarding.intro.companions.${id}.name`)}

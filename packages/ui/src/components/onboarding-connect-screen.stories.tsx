@@ -10,6 +10,7 @@ import {
 } from "@workspace/storybook/story-utils"
 import { type Icon, Icons } from "@workspace/ui/components/icons"
 import { OnboardingConnectScreen } from "@workspace/ui/components/onboarding-connect-screen"
+import { OnboardingShell } from "@workspace/ui/components/onboarding-shell"
 
 const ARTBOARD =
 	"Measured against the Paper file `Kiroshi, Onboarding v2`, 1200 by 760, in a blue Space."
@@ -64,6 +65,7 @@ const expectSpinnerStillUnderReducedMotion = async (
 const meta = preview.meta({
 	title: "Feedback/OnboardingConnectScreen",
 	component: OnboardingConnectScreen,
+	subcomponents: { OnboardingShell },
 	decorators: [
 		(Story) => (
 			<div {...hueScopeOf("blue")}>

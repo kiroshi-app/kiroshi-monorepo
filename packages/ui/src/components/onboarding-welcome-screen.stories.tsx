@@ -8,7 +8,8 @@ import {
 	slotsIn,
 	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
-import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
+import { OnboardingShell } from "@workspace/ui/components/onboarding-shell"
+import { OnboardingWelcomeFooter } from "@workspace/ui/components/onboarding-welcome-footer"
 import { OnboardingWelcomeScreen } from "@workspace/ui/components/onboarding-welcome-screen"
 
 const ARTBOARD =
@@ -55,7 +56,7 @@ const expectWelcome = async ({
 const meta = preview.meta({
 	title: "Feedback/OnboardingWelcomeScreen",
 	component: OnboardingWelcomeScreen,
-	subcomponents: { BotIdentityAvatar },
+	subcomponents: { OnboardingShell, OnboardingWelcomeFooter },
 	decorators: [
 		(Story) => (
 			<div {...hueScopeOf("blue")}>
