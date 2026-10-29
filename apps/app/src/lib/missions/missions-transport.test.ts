@@ -187,7 +187,7 @@ describe("the mission calls of the run driver while a joined space is active", (
 	})
 
 	it("reads a mission of the screens from the joined host", async () => {
-		await missionsTransport.detail("m-1")
+		await missionsTransport.detail("m-only-on-the-joined-host")
 
 		expect(commandsSentToTheJoinedHost()).toEqual(["mission_detail"])
 	})

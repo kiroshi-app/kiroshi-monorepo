@@ -94,19 +94,44 @@ const heldIdsOf = (args?: InvokeArgs): string[] => {
 	]
 }
 
-const conversationIdsNamedIn = (value: unknown): string[] => {
-	if (Array.isArray(value)) {
-		return value.flatMap(conversationIdsNamedIn)
+const idsNamedUnder =
+	(keys: ReadonlySet<string>) =>
+	(value: unknown): string[] => {
+		if (Array.isArray(value)) {
+			return value.flatMap(idsNamedUnder(keys))
+		}
+		if (!isFields(value)) {
+			return []
+		}
+		return Object.entries(value).flatMap(([key, inner]) =>
+			keys.has(key) && isText(inner) ? [inner] : idsNamedUnder(keys)(inner),
+		)
 	}
-	if (!isFields(value)) {
-		return []
-	}
-	return Object.entries(value).flatMap(([key, inner]) =>
-		ANSWERED_CONVERSATION_ID_KEYS.has(key) && isText(inner)
-			? [inner]
-			: conversationIdsNamedIn(inner),
+
+const conversationIdsNamedIn = idsNamedUnder(ANSWERED_CONVERSATION_ID_KEYS)
+
+const OWNED_ID_KEYS = ["missionId", "routineId"]
+
+const ANSWERED_OWNED_ID_KEYS: ReadonlySet<string> = new Set([
+	"id",
+	...OWNED_ID_KEYS,
+])
+
+const COMMAND_FAMILIES_ANSWERING_OWNED_IDS = [
+	"mission_",
+	"routine_",
+	"section_",
+]
+
+const ownedIdsNamedIn = idsNamedUnder(ANSWERED_OWNED_ID_KEYS)
+
+const answersOwnedIds = (command: string): boolean =>
+	COMMAND_FAMILIES_ANSWERING_OWNED_IDS.some((family) =>
+		command.startsWith(family),
 	)
-}
+
+const ownedIdsOf = (args?: InvokeArgs): string[] =>
+	isFields(args) ? OWNED_ID_KEYS.map((key) => args[key]).filter(isText) : []
 
 const ownIdsOf = (answer: unknown): string[] =>
 	[answer]
@@ -128,6 +153,7 @@ const idsAnswered = (command: string, answer: unknown) => [
 	...(ANSWERS_NAMING_THEIR_IDS.has(command) ? ownIdsOf(answer) : []),
 	...(command === PAGE_COMMAND ? pagedIdsOf(answer) : []),
 	...(command === LOCAL_IDS_COMMAND ? listedIdsOf(answer) : []),
+	...(answersOwnedIds(command) ? ownedIdsNamedIn(answer) : []),
 	...conversationIdsNamedIn(answer),
 ]
 
@@ -168,9 +194,11 @@ export const createConversationProvenance = () => {
 
 	const sourcesNamedIn = (args?: InvokeArgs): Set<ConversationSource> =>
 		new Set(
-			[...conversationIdsOf(args), ...writeIdsOf(args)].flatMap((id) => [
-				...(sourcesById.get(id) ?? []),
-			]),
+			[
+				...conversationIdsOf(args),
+				...writeIdsOf(args),
+				...ownedIdsOf(args),
+			].flatMap((id) => [...(sourcesById.get(id) ?? [])]),
 		)
 
 	const isAnsweredOnlyHere =
