@@ -536,6 +536,7 @@ type ProbedProperty =
 	| "backgroundColor"
 	| "borderTopColor"
 	| "borderTopLeftRadius"
+	| "boxShadow"
 	| "fontFamily"
 	| "lineHeight"
 	| "rowGap"

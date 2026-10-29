@@ -29,6 +29,7 @@ const LEFT_OUT_OF_THE_SIDEBAR: Record<string, string> = {
 	rosterSkeleton: "the scene roster never loads",
 	updateBadge: "the scene shows an app that is up to date",
 	openSettings: "no settings screen opens in the scene",
+	incomingTab: "no tab arrives from another window on a web page",
 }
 
 const LEFT_OUT_OF_THE_SHELL: Record<string, string> = {
