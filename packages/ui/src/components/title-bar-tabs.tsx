@@ -95,7 +95,7 @@ const TAB =
 	"relative flex h-7 touch-none select-none items-center gap-1.5 rounded-md bg-title-bar-tab ps-2 pe-7.25 text-foreground hover:bg-title-bar-tab-hover focus-visible:outline-2 focus-visible:outline-foreground focus-visible:outline-offset-1 data-pointer-within:bg-title-bar-tab-hover aria-selected:bg-title-bar-tab-selected"
 
 const PINNED_TAB =
-	"relative grid touch-none select-none place-items-center rounded-md bg-title-bar-pinned text-muted-foreground hover:bg-title-bar-tab-hover hover:text-foreground focus-visible:outline-2 focus-visible:outline-foreground focus-visible:outline-offset-1 aria-selected:bg-title-bar-tab-selected aria-selected:text-foreground"
+	"relative grid touch-none select-none place-items-center rounded-md bg-title-bar-pinned text-foreground hover:bg-title-bar-tab-hover focus-visible:outline-2 focus-visible:outline-foreground focus-visible:outline-offset-1 aria-selected:bg-title-bar-tab-selected"
 
 const LIFTED_TAB =
 	"pointer-events-none z-10 bg-title-bar-menu text-foreground drop-shadow-md translate-x-[var(--lift-dx,0px)] translate-y-[var(--lift-dy,0px)] aria-selected:bg-title-bar-menu"
@@ -121,7 +121,7 @@ const CLOSE_BUTTON =
 	"pointer-events-auto grid size-4.5 place-items-center rounded-[5px] text-muted-foreground hover:bg-title-bar-highlight hover:text-foreground focus-visible:outline-2 focus-visible:outline-foreground focus-visible:outline-offset-1 [&_svg]:size-3"
 
 const OVERFLOW_CHIP =
-	"flex h-7 shrink-0 items-center gap-1 rounded-md bg-title-bar-chip ps-2 pe-1.5 font-medium text-foreground text-xs hover:bg-title-bar-tab-selected focus-visible:outline-2 focus-visible:outline-foreground focus-visible:outline-offset-1 aria-expanded:bg-title-bar-tab-selected [&_svg]:size-3"
+	"flex h-7 shrink-0 items-center gap-1 rounded-md bg-title-bar-chip ps-2 pe-1.5 font-medium text-foreground text-xs hover:bg-rail-item-selected focus-visible:outline-2 focus-visible:outline-foreground focus-visible:outline-offset-1 aria-expanded:bg-rail-item-selected [&_svg]:size-3"
 
 const OVERFLOW_ICON =
 	"grid size-4 shrink-0 place-items-center [&>svg]:size-3.75!"

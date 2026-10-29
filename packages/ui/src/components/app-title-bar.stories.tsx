@@ -647,6 +647,9 @@ const playA4 = async ({ canvasElement }: { canvasElement: HTMLElement }) => {
 	await expect(getComputedStyle(pinned).backgroundColor).toBe(
 		tokenStyleIn(pinned, "bg-title-bar-tab", "backgroundColor"),
 	)
+	await expect(getComputedStyle(pinned).color).toBe(
+		tokenStyleIn(pinned, "text-foreground", "color"),
+	)
 	if (isInBrowserRunner()) await expectRealHoverOnThePinnedTab(pinned)
 	const divider = slotIn(bar, "title-bar-pinned-divider")
 	await expect(boxOf(divider).width).toBe(1)
@@ -674,7 +677,7 @@ export const A4PinnedTab = meta.story({
 		docs: {
 			description: {
 				story:
-					"A4, light: a pinned tab at the start of the row, its menu open. Check the pinned tab is a 28px icon-only square named by its title, on the 8% black rest fill and the 12% fill under the pointer, followed by the 1px by 16px divider, that the unpinned tabs follow, and that its menu, at least 220px wide and wider when a row needs it, offers Unpin tab in place of Pin tab with Close tab greyed out, since a pinned tab does not close. Pick `A1Tabs` for a row with nothing pinned.",
+					"A4, light: a pinned tab at the start of the row, its menu open. Check the pinned tab is a 28px icon-only square named by its title, on the 8% black rest fill and the 12% fill under the pointer, its icon in the foreground colour, followed by the 1px by 16px divider, that the unpinned tabs follow, and that its menu, at least 220px wide and wider when a row needs it, offers Unpin tab in place of Pin tab with Close tab greyed out, since a pinned tab does not close. Pick `A1Tabs` for a row with nothing pinned.",
 			},
 		},
 	},
@@ -689,7 +692,7 @@ export const A4PinnedTabDark = meta.story({
 		docs: {
 			description: {
 				story:
-					"A4, dark: the pinned tab on its 8% white fill and the 12% white divider. Pick `A4PinnedTab` for the light theme.",
+					"A4, dark: the pinned tab on its 8% white fill in the foreground colour and the 12% white divider. Pick `A4PinnedTab` for the light theme.",
 			},
 		},
 	},
