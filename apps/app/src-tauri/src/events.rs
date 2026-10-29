@@ -118,6 +118,7 @@ declared! {
 		window_controls::MAXIMIZE_BUTTON_EVENT,
 	UPDATE_CHANGED: updates::contract::UpdateState = updates::contract::CHANGED_EVENT,
 	FILE_MENU: menu_contract::FileMenuChosen = menu_contract::FILE_MENU_EVENT,
+	TAB_DRAG: window_controls::tab_drag::TabDrag = window_controls::tab_drag::TAB_DRAG_EVENT,
 }
 
 pub fn emit<R: Runtime, P: Serialize + Clone>(
@@ -137,6 +138,14 @@ pub fn emit_to<R: Runtime, P: Serialize + Clone>(
 ) -> tauri::Result<()> {
 	publish(&relay(app), event.name(), &payload);
 	app.emit_to(label, event.name(), payload)
+}
+
+pub fn emit_to_windows<R: Runtime, P: Serialize + Clone>(
+	app: &AppHandle<R>,
+	event: Event<P>,
+	payload: P,
+) -> tauri::Result<()> {
+	app.emit(event.name(), payload)
 }
 
 pub fn frame<P: Serialize>(event: Event<P>, payload: &P) -> serde_json::Result<Frame> {
