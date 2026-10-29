@@ -188,7 +188,6 @@ const OnboardingWelcomeScreen = ({
 	const { t } = useTranslation("chat")
 	const Illustration = ILLUSTRATIONS[step]
 	const position = STEPS.indexOf(step) + 1
-	const isLastStep = position === STEPS.length
 
 	return (
 		<OnboardingShell
@@ -203,9 +202,6 @@ const OnboardingWelcomeScreen = ({
 				variant="welcome"
 			/>
 			<OnboardingWelcomeFooter
-				actionLabel={t(
-					isLastStep ? "onboarding.intro.getStarted" : "onboarding.intro.next",
-				)}
 				onAction={onNext}
 				onBack={onBack}
 				onSkip={onSkip}

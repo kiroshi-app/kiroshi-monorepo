@@ -127,6 +127,15 @@ describe("the Welcome screens", () => {
 		expect(world.stored).toEqual([])
 	})
 
+	it("stays on the first screen when Back fires there", async () => {
+		await renderOnboarding()
+
+		await press("Back")
+		expect(heading()).toBe("Companions do the work with you")
+		await press("Next")
+		expect(heading()).toBe("Conversations, then missions")
+	})
+
 	it("leaves the intro on Skip intro from the first screen", async () => {
 		await renderOnboarding()
 

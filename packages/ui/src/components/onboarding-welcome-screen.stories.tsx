@@ -326,3 +326,37 @@ export const WelcomeYourToolsDark = meta.story({
 		await expectBack({ canvasElement, onBack: args.onBack })
 	},
 })
+
+export const WelcomeEverySlide = meta.story({
+	name: "Welcome / Every slide",
+	tags: ["test-only"],
+	args: { step: "companions" },
+	render: (args) => (
+		<>
+			<OnboardingWelcomeScreen {...args} step="companions" />
+			<OnboardingWelcomeScreen {...args} step="conversations" />
+			<OnboardingWelcomeScreen {...args} step="tools" />
+		</>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The three Welcome slides stacked in one window. Check the footer group at the same left edge and the same width on all three, Get started included: Back keeps its slot on the first slide, Skip intro on the last, and the primary action is as wide as its longer label on every slide.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const groups = slotsIn(canvasElement, "onboarding-welcome-footer").map(
+			(group) => group.getBoundingClientRect(),
+		)
+
+		await expect(groups).toHaveLength(3)
+		await expect(groups.map(({ left, width }) => ({ left, width }))).toEqual(
+			groups.map(() => ({ left: groups[0]?.left, width: groups[0]?.width })),
+		)
+		await expect(
+			within(canvasElement).getByRole("button", { name: "Get started" }),
+		).toBeVisible()
+	},
+})
