@@ -4,7 +4,11 @@ import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
 import { Icons } from "@workspace/ui/components/icons"
-import { InitialsAvatar } from "@workspace/ui/components/initials-avatar"
+import {
+	AvatarFrame,
+	displayNameOf,
+	initialsOf,
+} from "@workspace/ui/components/initials-avatar"
 import { SkeletonBar } from "@workspace/ui/components/list-skeleton"
 import { Badge } from "@workspace/ui/components/ui/badge"
 import { Button } from "@workspace/ui/components/ui/button"
@@ -44,6 +48,9 @@ type AccountPictureProps = {
 }
 
 const ACCOUNT_AVATAR_SIZE = 40
+
+const ACCOUNT_INITIALS_CLASS =
+	"grid size-full place-items-center bg-person-avatar font-medium text-foreground text-sm uppercase"
 
 const PANEL_CLASS = "flex flex-col gap-5 px-3 py-2"
 
@@ -226,12 +233,17 @@ const AccountCard = ({ name, email, plan, image }: AccountCardProps) => {
 			className="flex items-center gap-3 rounded-xl border border-border p-3.5"
 			data-slot="account-card"
 		>
-			<InitialsAvatar
+			<AvatarFrame
 				className="shrink-0"
 				image={image}
-				name={name}
+				shape="round"
 				size={ACCOUNT_AVATAR_SIZE}
-			/>
+				slot="user-avatar"
+			>
+				<span aria-hidden="true" className={ACCOUNT_INITIALS_CLASS}>
+					{initialsOf(displayNameOf(name))}
+				</span>
+			</AvatarFrame>
 			<div className="flex min-w-0 flex-1 flex-col">
 				<p className="wrap-break-word font-medium text-foreground text-sm">
 					{name}

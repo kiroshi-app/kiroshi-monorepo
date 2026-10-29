@@ -1,7 +1,11 @@
 import { expect, fn, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { slotIn, slotsIn } from "@workspace/storybook/story-utils"
+import {
+	resolvedChannelsOf,
+	slotIn,
+	slotsIn,
+} from "@workspace/storybook/story-utils"
 import { OnboardingAccountScreen } from "@workspace/ui/components/onboarding-account-screen"
 import type { AccountState } from "@workspace/ui/components/user-settings-dialog/account-panel"
 import { en } from "@workspace/ui/lib/i18n-en"
@@ -21,6 +25,34 @@ const lightScreenIn = (canvasElement: HTMLElement) => {
 const expectRingOnFocus = async (control: HTMLElement) => {
 	await expect(control).toHaveFocus()
 	await expect(getComputedStyle(control).outlineStyle).not.toBe("none")
+}
+
+const expectPersonMarkStroke = async (canvasElement: HTMLElement) => {
+	const marks = slotsIn(canvasElement, "onboarding-account-mark")
+	await expect(marks).toHaveLength(2)
+	for (const mark of marks) {
+		await expect(mark.querySelector("svg")).toHaveAttribute(
+			"stroke-width",
+			"1.8",
+		)
+	}
+}
+
+const expectPersonAvatarInitials = async (canvasElement: HTMLElement) => {
+	for (const screen of slotsIn(canvasElement, "onboarding-account-screen")) {
+		const initials = slotIn(screen, "avatar-fallback")
+			.firstElementChild as HTMLElement
+		const { backgroundColor, fontSize, lineHeight, fontWeight } =
+			getComputedStyle(initials)
+		await expect(resolvedChannelsOf(backgroundColor, screen)).toEqual(
+			resolvedChannelsOf("var(--person-avatar)", screen),
+		)
+		await expect({ fontSize, lineHeight, fontWeight }).toEqual({
+			fontSize: "14px",
+			lineHeight: "20px",
+			fontWeight: "500",
+		})
+	}
 }
 
 const meta = preview.meta({
@@ -51,7 +83,7 @@ export const AccountEmpty = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard 4.1: no account yet. Check the person mark, that the body opens on Optional, that Sign in with your browser carries the external link mark and calls `onSignIn`, that the caption says where the account lives, and that Skip for now is a button the keyboard reaches with a visible ring and calls `onSkip`. Pick `AccountWaiting` once the browser is open.",
+					"Artboard 4.1: no account yet. Check the person mark, the Keyline user glyph at a 1.8 stroke in light and dark, that the body opens on Optional, that Sign in with your browser carries the external link mark and calls `onSignIn`, that the caption says where the account lives, and that Skip for now is a button the keyboard reaches with a visible ring and calls `onSkip`. Pick `AccountWaiting` once the browser is open.",
 			},
 		},
 	},
@@ -63,6 +95,7 @@ export const AccountEmpty = meta.story({
 		).toBeVisible()
 		await expect(screen.getByText(ONBOARDING.body)).toBeVisible()
 		await expect(screen.getByText(ACCOUNT.signedOut.caption)).toBeVisible()
+		await expectPersonMarkStroke(canvasElement)
 
 		await userEvent.click(
 			screen.getByRole("button", { name: ACCOUNT.signedOut.signIn }),
@@ -84,7 +117,7 @@ export const AccountWaiting = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard 4.2: the browser is open and the screen waits for it. Check that the primary button is dimmed, spins its mark and names the wait, that it stays in the tab order without calling back, that Cancel calls `onCancel`, that the caption says where to finish, and that Copy the sign-in link and Skip for now are buttons the keyboard reaches with a visible ring. The mark holds still for a reader who asked for reduced motion.",
+					"Artboard 4.2: the browser is open and the screen waits for it. Check the same person mark as `AccountEmpty`, that the primary button is dimmed, spins its mark and names the wait, that it stays in the tab order without calling back, that Cancel calls `onCancel`, that the caption says where to finish, and that Copy the sign-in link and Skip for now are buttons the keyboard reaches with a visible ring. The mark holds still for a reader who asked for reduced motion.",
 			},
 		},
 	},
@@ -105,6 +138,7 @@ export const AccountWaiting = meta.story({
 			asksForStillness ? "none" : "spin",
 		)
 
+		await expectPersonMarkStroke(canvasElement)
 		await expect(screen.getByText(ACCOUNT.waiting.caption)).toBeVisible()
 		await expect(
 			screen.getByText(ACCOUNT.waiting.browserDidNotOpen),
@@ -144,7 +178,7 @@ export const AccountSignedIn = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard 4.3: the browser handed the account back. Check the green check mark, the card the Account panel draws, with the initials, the name, the email and the Pro plan behind Free during the beta, that Continue calls `onContinue`, and that Skip for now is gone.",
+					"Artboard 4.3: the browser handed the account back. Check the green check mark, the card the Account panel draws, with the initials on the person avatar fill at 14/20 medium in light and dark, the name, the email and the Pro plan behind Free during the beta, that Continue calls `onContinue`, and that Skip for now is gone.",
 			},
 		},
 	},
@@ -160,6 +194,7 @@ export const AccountSignedIn = meta.story({
 		).toBeVisible()
 		const card = within(slotIn(light, "account-card"))
 		await expect(slotIn(light, "user-avatar")).toHaveTextContent("AM")
+		await expectPersonAvatarInitials(canvasElement)
 		await expect(card.getByText("Ada Martin")).toBeVisible()
 		await expect(card.getByText("ada.martin@example.com")).toBeVisible()
 		await expect(card.getByText(ACCOUNT.signedIn.plan.beta)).toBeVisible()

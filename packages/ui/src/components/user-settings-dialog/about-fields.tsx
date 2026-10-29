@@ -78,7 +78,7 @@ const statusLineOf = (
 	switch (update.status) {
 		case "upToDate":
 			return {
-				icon: Icons.Check,
+				icon: Icons.Success,
 				tone: "success",
 				text: t("about.status.upToDate", {
 					when: toRelativeTime(update.checkedAt, Date.now()),

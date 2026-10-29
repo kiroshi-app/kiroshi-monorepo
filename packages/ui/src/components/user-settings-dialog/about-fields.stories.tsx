@@ -2,7 +2,11 @@ import { useState } from "react"
 import { expect, fn, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { slotIn, slotsIn } from "@workspace/storybook/story-utils"
+import {
+	resolvedChannelsOf,
+	slotIn,
+	slotsIn,
+} from "@workspace/storybook/story-utils"
 import {
 	AboutFields,
 	type AboutFieldsProps,
@@ -48,6 +52,26 @@ const expectHeadline = async (
 	await expect(fontWeight).toBe(isEmphasized ? "500" : "400")
 	await expect(color).toBe(getComputedStyle(isEmphasized ? icon : status).color)
 	return { headline, icon }
+}
+
+const CIRCLED_CHECK_PATHS = [
+	"M12 2C17.5228 2 22 6.47715 22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2Z",
+	"M8 12L10.6667 15L16 9",
+]
+
+const expectCircledSuccessCheck = async (canvasElement: HTMLElement) => {
+	const statuses = slotsIn(canvasElement, "about-update-status")
+	await expect(statuses).toHaveLength(2)
+	for (const status of statuses) {
+		const icon = status.querySelector("svg") as SVGElement
+		const paths = Array.from(icon.querySelectorAll("path"), (path) =>
+			path.getAttribute("d"),
+		)
+		await expect(paths).toEqual(CIRCLED_CHECK_PATHS)
+		await expect(
+			resolvedChannelsOf(getComputedStyle(icon).color, status),
+		).toEqual(resolvedChannelsOf("var(--success)", status))
+	}
 }
 
 const renderAbout = (args: AboutFieldsProps) => (
@@ -98,7 +122,7 @@ export const UpToDate = meta.story({
 		docs: {
 			description: {
 				story:
-					"A1, nothing to fetch. Check the green check and the muted line naming when Kiroshi last looked, and that Check for updates is an outline button that calls `onCheck` once. The switch hands back its new value, What's new calls `onWhatsNew`, and Release notes says it opens outside the app. Pick `Checking` for the look in flight.",
+					"A1, nothing to fetch. Check the circled check in the success green, light and dark, and the muted line naming when Kiroshi last looked, and that Check for updates is an outline button that calls `onCheck` once. The switch hands back its new value, What's new calls `onWhatsNew`, and Release notes says it opens outside the app. Pick `Checking` for the look in flight.",
 			},
 		},
 	},
@@ -108,6 +132,7 @@ export const UpToDate = meta.story({
 			"Up to date · Checked 2 minutes ago",
 		)
 		await expectHeadline(canvasElement, false)
+		await expectCircledSuccessCheck(canvasElement)
 		await expect(panel.getByText("Kiroshi 0.23.3")).toBeVisible()
 
 		await userEvent.click(
