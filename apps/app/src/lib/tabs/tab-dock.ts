@@ -1,4 +1,10 @@
-import { answerDock, type DockedTab, unpackDockedTab } from "./tab-dock-channel"
+import {
+	answerDock,
+	awaitDockSettle,
+	type DockedTab,
+	type DockMessage,
+	unpackDockedTab,
+} from "./tab-dock-channel"
 import type { Tab } from "./tabs-model"
 
 import {
@@ -69,6 +75,7 @@ export const createTabDock = (
 	const store = createStore<IncomingTab | null>(null)
 	let held: HeldDrag | null = null
 	let incomingIndex: number | null = null
+	let endHolding: (isTaken: boolean) => void = () => undefined
 
 	const part = (incoming: IncomingTab | null) => {
 		if (!incoming) {
@@ -117,16 +124,26 @@ export const createTabDock = (
 		return holds(strip, point.x - origin.x, point.y - origin.y)
 	}
 
+	const holdUntilSettled = async (answer: DockMessage) => {
+		endHolding(false)
+		const settle = await awaitDockSettle(windowLabel, answer.originTabId)
+		endHolding = settle.end
+		if (!(await answerDock(answer).then(() => true, isUnsent))) {
+			settle.end(false)
+		}
+		return settle.heard
+	}
+
 	const take = async (drag: HeldDrag, point: ScreenPosition) => {
 		const index = incomingIndex ?? Number.POSITIVE_INFINITY
 		release()
 		const isTaken = isOverStripNow(drag, point)
-		const isAnswered = await answerDock({
-			windowLabel,
-			originTabId: drag.originTabId,
-			isTaken,
-		}).then(() => true, isUnsent)
-		if (!isTaken || !isAnswered) {
+		const answer = { windowLabel, originTabId: drag.originTabId, isTaken }
+		if (!isTaken) {
+			await answerDock(answer).catch(reportDockFailure)
+			return
+		}
+		if (!(await holdUntilSettled(answer).catch(isUnsent))) {
 			return
 		}
 		receive(drag.tab, index)
