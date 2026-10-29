@@ -53,14 +53,10 @@ const ignorePress = () => undefined
 const foundIn = (inventory: ClaudeInventory | null): FoundInventory =>
 	inventory?.kind === "found" ? inventory : NO_ITEMS
 
-const filesOf = ({ claudeMd, skills }: FoundInventory) => [
+const itemsOf = ({ agents, claudeMd, skills }: FoundInventory) => [
+	...agents,
 	...(claudeMd ? [claudeMd] : []),
 	...skills,
-]
-
-const itemsOf = (inventory: FoundInventory) => [
-	...inventory.agents,
-	...filesOf(inventory),
 ]
 
 export const offersClaudeImport = (inventory: ClaudeInventory | null) =>
@@ -136,33 +132,24 @@ const sectionsOf = (
 	session: ClaudeImportSession,
 ): ImportSection[] => {
 	const itemOf = session.selection.length > 0 ? importedItemOf : selectedItemOf
-	const files: ImportItem[] = [
-		...(inventory.claudeMd
-			? [
-					{
-						...itemOf(inventory.claudeMd, session),
-						kind: "instructions" as const,
-					},
-				]
-			: []),
-		...inventory.skills.map((skill) => ({
-			...itemOf(skill, session),
-			kind: "skill" as const,
-		})),
-	]
+	const rowsOf = (items: ClaudeItem[], kind: ImportItem["kind"]) =>
+		items.map((item) => ({ ...itemOf(item, session), kind }))
 	const sections: ImportSection[] = [
 		{
 			id: "companions",
 			label: i18n.t("common:claudeImport.sections.companions"),
-			items: inventory.agents.map((agent) => ({
-				...itemOf(agent, session),
-				kind: "companion" as const,
-			})),
+			items: rowsOf(inventory.agents, "companion"),
 		},
 		{
 			id: "instructions-and-skills",
 			label: i18n.t("common:claudeImport.sections.instructionsAndSkills"),
-			items: files,
+			items: [
+				...rowsOf(
+					inventory.claudeMd ? [inventory.claudeMd] : [],
+					"instructions",
+				),
+				...rowsOf(inventory.skills, "skill"),
+			],
 		},
 	]
 	return sections.filter((section) => section.items.length > 0)
