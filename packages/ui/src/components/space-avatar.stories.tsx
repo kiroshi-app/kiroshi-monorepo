@@ -128,12 +128,15 @@ const MENU_ROW = "flex items-center gap-2 px-2 py-1 text-foreground text-sm"
 
 const avatarsIn = (root: HTMLElement) => slotsIn(root, "space-avatar")
 
+const rgbOf = (hex: string) =>
+	`rgb(${[1, 3, 5].map((start) => Number.parseInt(hex.slice(start, start + 2), 16)).join(", ")})`
+
 const themeOf = (avatar: HTMLElement): SpaceAvatarTheme =>
 	avatar.closest(".dark") ? "dark" : "light"
 
 const inThemeLayer = (avatar: HTMLElement, slot: string) =>
 	Array.from(
-		avatar.querySelectorAll(
+		avatar.querySelectorAll<HTMLElement>(
 			`[data-theme="${themeOf(avatar)}"] [data-slot="${slot}"]`,
 		),
 	)
@@ -165,19 +168,27 @@ const expectArtboardF = async (canvasElement: HTMLElement) => {
 		).toBeCloseTo(artboard.badge / 2 + artboard.cutOut, 3)
 		const [initial] = inThemeLayer(avatar, "space-avatar-initial")
 		if (!initial) throw new Error("the avatar draws no initial in its theme")
-		await expect(initial).toHaveAttribute("font-size", `${artboard.fontSize}`)
-		await expect(initial).toHaveAttribute("font-weight", `${artboard.weight}`)
+		const type = getComputedStyle(initial)
+		await expect(type.fontSize).toBe(`${artboard.fontSize}px`)
+		await expect(type.lineHeight).toBe(`${artboard.fontSize}px`)
+		await expect(type.fontWeight).toBe(`${artboard.weight}`)
+		await expect(type.letterSpacing).toBe(`${-0.02 * artboard.fontSize}px`)
+		await expect(getComputedStyle(initial, "::before").content).toBe(
+			`"${initial.dataset.initial}"`,
+		)
 		await expect(
 			initial.compareDocumentPosition(badge) & Node.DOCUMENT_POSITION_FOLLOWING,
 		).toBeTruthy()
 		const colour = avatar.dataset.colour
-		await expect(initial).toHaveAttribute(
-			"fill",
-			spaceInk(
-				themeOf(avatar),
-				state === "offline" || colour === undefined ? null : Number(colour),
+		await expect(type.color).toBe(
+			rgbOf(
+				spaceInk(
+					themeOf(avatar),
+					state === "offline" || colour === undefined ? null : Number(colour),
+				),
 			),
 		)
+		await expect(avatar.textContent).toBe("")
 	}
 }
 
@@ -267,6 +278,7 @@ export const Sizes = meta.story({
 		await expect(avatars).toHaveLength(2 * 2 * SPACE_AVATAR_SIZES.length)
 		for (const avatar of avatars) {
 			const size = Number(avatar.dataset.size)
+			await expect(avatar.textContent).toBe("")
 			await expect(avatar.getBoundingClientRect().width).toBe(size)
 			await expect(avatar.dataset.recipe).toBe(size < 20 ? "compact" : "glaze")
 		}
@@ -337,6 +349,7 @@ export const States = meta.story({
 		await expect(avatars).toHaveLength(2 * VARIANTS.length * STATES.length)
 		for (const avatar of avatars) {
 			const { state } = avatar.dataset
+			await expect(avatar.textContent).toBe("")
 			const hasDot = state === "shared" || state === "online"
 			const isOutlined = state === "invitation" || state === "joining"
 			await expect(slotsIn(avatar, "space-avatar-dot")).toHaveLength(

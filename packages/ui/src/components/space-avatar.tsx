@@ -50,7 +50,8 @@ const AVATAR = "pointer-events-none inline-block shrink-0"
 
 const DRAWING = "block overflow-visible"
 
-const INITIAL = "font-sans"
+const INITIAL =
+	"flex size-full items-center justify-center font-sans tracking-[-0.02em] before:content-[attr(data-initial)]"
 
 const FILL_FRAME = { width: "100%", height: "100%" }
 
@@ -233,20 +234,19 @@ const SpaceAvatar = ({
 				) : null}
 			</g>
 			{initial ? (
-				<text
-					className={INITIAL}
-					data-slot="space-avatar-initial"
-					dominantBaseline="central"
-					fill={spaceInk(theme, state === "offline" ? null : colour)}
-					fontSize={mark.initial.fontSize}
-					fontWeight={mark.initial.weight}
-					letterSpacing="-0.02em"
-					textAnchor="middle"
-					x={centre}
-					y={centre}
-				>
-					{initial}
-				</text>
+				<foreignObject height={size} width={size}>
+					<div
+						className={INITIAL}
+						data-initial={initial}
+						data-slot="space-avatar-initial"
+						style={{
+							color: spaceInk(theme, state === "offline" ? null : colour),
+							fontSize: mark.initial.fontSize,
+							fontWeight: mark.initial.weight,
+							lineHeight: `${mark.initial.fontSize}px`,
+						}}
+					/>
+				</foreignObject>
 			) : null}
 		</>
 	)
