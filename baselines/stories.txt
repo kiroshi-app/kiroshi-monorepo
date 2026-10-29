@@ -1097,8 +1097,14 @@ navigation-apptitlebar--a-5-needs-you
 navigation-apptitlebar--a-5-needs-you-dark
 navigation-apptitlebar--a-6-empty-tab
 navigation-apptitlebar--a-6-empty-tab-dark
-navigation-apptitlebar--a-7-dragging-tab
-navigation-apptitlebar--a-7-dragging-tab-dark
+navigation-apptitlebar--a-7-drag-at-the-divider
+navigation-apptitlebar--a-7-drag-at-the-divider-dark
+navigation-apptitlebar--a-7-drag-within-pinned-tabs
+navigation-apptitlebar--a-7-drag-within-pinned-tabs-dark
+navigation-apptitlebar--a-7-drag-within-tabs
+navigation-apptitlebar--a-7-drag-within-tabs-dark
+navigation-apptitlebar--a-7-torn-off-tab
+navigation-apptitlebar--a-7-torn-off-tab-dark
 navigation-apptitlebar--drag-across-the-divider
 navigation-apptitlebar--drag-commits-the-strip-twice
 navigation-apptitlebar--drag-diagonally-off-the-bar
@@ -1115,6 +1121,7 @@ navigation-apptitlebar--middle-click-closes-tab
 navigation-apptitlebar--overflow-follows-the-strip
 navigation-apptitlebar--release-outside-then-hover
 navigation-apptitlebar--tab-gestures
+navigation-apptitlebar--tear-off-reports-the-tab
 navigation-apptitlebar--unpinned-tab-menu
 navigation-apptitlebar--unpinned-tab-menu-dark
 navigation-apptitlebar--with-window-controls

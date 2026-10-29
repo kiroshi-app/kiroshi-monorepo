@@ -6,7 +6,6 @@ import {
 	type KeyboardEvent,
 	type PointerEvent,
 	type ReactNode,
-	type RefObject,
 	useLayoutEffect,
 	useRef,
 	useState,
@@ -47,6 +46,12 @@ type TitleBarTab = {
 	isNeedingYou?: boolean
 }
 
+type TitleBarTabTearOff = {
+	tabId: string
+	screenX: number
+	screenY: number
+}
+
 type TitleBarTabsProps = {
 	tabs?: TitleBarTab[]
 	activeTabId?: string
@@ -62,6 +67,7 @@ type TitleBarTabsProps = {
 	onReopenClosedTab?: () => void
 	onMoveTabToNewWindow?: (id: string) => void
 	onReorderTabs?: (ids: string[]) => void
+	onTearOffTab?: (tearOff: TitleBarTabTearOff) => unknown
 	onNewTab?: () => void
 	onGoBack?: () => void
 	onGoForward?: () => void
@@ -98,24 +104,22 @@ const PINNED_TAB =
 	"relative grid touch-none select-none place-items-center rounded-md bg-title-bar-pinned text-foreground hover:bg-title-bar-tab-hover focus-visible:outline-2 focus-visible:outline-foreground focus-visible:outline-offset-1 aria-selected:bg-title-bar-tab-selected"
 
 const LIFTED_TAB =
-	"pointer-events-none z-10 bg-title-bar-menu text-foreground drop-shadow-md translate-x-[var(--lift-dx,0px)] translate-y-[var(--lift-dy,0px)] aria-selected:bg-title-bar-menu"
+	"pointer-events-none z-10 bg-title-bar-menu text-foreground drop-shadow-md translate-x-[clamp(var(--lift-min),var(--lift-dx,0px),var(--lift-max))] aria-selected:bg-title-bar-menu"
 
-const INSERTION_LINE =
-	"pointer-events-none absolute inset-y-1 z-20 w-0.5 rounded-full bg-foreground"
+const SHIFTABLE =
+	"data-[shift=start]:-translate-x-(--tab-shift) data-[shift=end]:translate-x-(--tab-shift)"
 
-const INSERTION_EDGE = {
-	start: "-start-0.75",
-	end: "-end-0.75",
-} as const
+const SLIDING =
+	"transition-[translate] duration-150 ease-out motion-reduce:transition-none"
 
-type InsertionEdge = keyof typeof INSERTION_EDGE
+type TabShift = "start" | "end"
 
 const TAB_TITLE =
 	"min-w-0 select-none truncate font-medium text-compact leading-4"
 
 const TAB_NEEDS_YOU = cn(NEEDS_YOU_GLYPH, "size-3.25")
 
-const CLOSE_SLOT = "flex h-7 items-center justify-end pe-1.25"
+const CLOSE_SLOT = cn("flex h-7 items-center justify-end pe-1.25", SHIFTABLE)
 
 const CLOSE_BUTTON =
 	"pointer-events-auto grid size-4.5 place-items-center rounded-[5px] text-muted-foreground hover:bg-title-bar-highlight hover:text-foreground focus-visible:outline-2 focus-visible:outline-foreground focus-visible:outline-offset-1 [&_svg]:size-3"
@@ -236,23 +240,71 @@ const reorderedIds = (
 	return ids
 }
 
-const middlesOf = (strip: HTMLElement | null, slot: string) =>
-	[...(strip?.querySelectorAll(slot) ?? [])].map((node) => {
-		const box = node.getBoundingClientRect()
-		return box.left + box.width / 2
-	})
+const TORN_OFF = "torn-off"
 
-type SlotMiddles = {
-	count: number
-	middles: number[]
+type TabLanding = number | typeof TORN_OFF
+
+type LiftGeometry = {
+	pressX: number
+	restLeft: number
+	slotLefts: number[]
+	minShift: number
+	maxShift: number
+	tearOffAbove: number
+	tearOffBelow: number
 }
+
+const measureLift = (
+	row: HTMLElement,
+	slot: string,
+	origin: number,
+	pressX: number,
+): LiftGeometry => {
+	const boxes = [...row.querySelectorAll(slot)].map((node) =>
+		node.getBoundingClientRect(),
+	)
+	const own = boxes[origin]
+	const list = row.querySelector('[role="tablist"]')
+	const gap = list ? pixelsOf(getComputedStyle(list).columnGap) : 0
+	const geometry = {
+		pressX,
+		restLeft: own.left,
+		slotLefts: boxes.map((box) => box.left),
+		minShift: boxes[0].left - own.left,
+		maxShift: boxes[boxes.length - 1].right - own.right,
+		tearOffAbove: own.top - own.height,
+		tearOffBelow: own.bottom + own.height,
+	}
+	row.style.setProperty("--tab-shift", `${own.width + gap}px`)
+	row.style.setProperty("--lift-min", `${geometry.minShift}px`)
+	row.style.setProperty("--lift-max", `${geometry.maxShift}px`)
+	return geometry
+}
+
+const landingIn = (geometry: LiftGeometry, x: number, y: number) => {
+	if (y < geometry.tearOffAbove || y > geometry.tearOffBelow) return TORN_OFF
+	const shift = Math.min(
+		Math.max(x - geometry.pressX, geometry.minShift),
+		geometry.maxShift,
+	)
+	const left = geometry.restLeft + shift
+	const distances = geometry.slotLefts.map((slotLeft) =>
+		Math.abs(slotLeft - left),
+	)
+	return distances.indexOf(Math.min(...distances))
+}
+
+type TabShiftOf = (
+	id: string,
+	landing: TabLanding | null,
+) => TabShift | undefined
 
 type TabLiftSource = {
 	tabs: TitleBarTab[]
 	pinned: TitleBarTab[]
 	kept: TitleBarTab[]
-	stripRef: RefObject<HTMLDivElement | null>
 	onReorderTabs?: (ids: string[]) => void
+	onTearOffTab?: (tearOff: TitleBarTabTearOff) => unknown
 }
 
 const stepOf = (event: KeyboardEvent<HTMLElement>) => {
@@ -343,6 +395,7 @@ const TabCloseButton = ({
 			aria-label={t("titleBar.closeTabNamed", { title })}
 			className={CLOSE_BUTTON}
 			data-slot="title-bar-tab-close"
+			data-tauri-drag-region="false"
 			hidden={!isShown}
 			onClick={onClose}
 			onKeyDown={onKeyDown}
@@ -350,6 +403,34 @@ const TabCloseButton = ({
 		>
 			<Icons.Close aria-hidden="true" />
 		</button>
+	)
+}
+
+type TabCloseSlotProps = {
+	id: string
+	width: string
+	lift: RosterLift<TabLanding>
+	shiftOf: TabShiftOf
+	isSliding: boolean
+	children: ReactNode
+}
+
+const TabCloseSlot = ({
+	id,
+	width,
+	lift,
+	shiftOf,
+	isSliding,
+	children,
+}: TabCloseSlotProps) => {
+	const shift = useLiftLanding(lift, (landing) => shiftOf(id, landing))
+	return (
+		<span
+			className={cn(CLOSE_SLOT, width, isSliding && SLIDING)}
+			data-shift={shift}
+		>
+			{children}
+		</span>
 	)
 }
 
@@ -363,12 +444,16 @@ const useTabLift = ({
 	tabs,
 	pinned,
 	kept,
-	stripRef,
 	onReorderTabs,
+	onTearOffTab,
 }: TabLiftSource) => {
 	const isPinned = (id: string) => pinned.some((tab) => tab.id === id)
 	const zoneOf = (id: string) => (isPinned(id) ? pinned : kept)
+	const rankOf = (id: string) => zoneOf(id).findIndex((tab) => tab.id === id)
 	const [move, setMove] = useState<TabMove | null>(null)
+	const [snappingId, setSnappingId] = useState<string | null>(null)
+	const rowRef = useRef<HTMLDivElement>(null)
+	const geometry = useRef<LiftGeometry | null>(null)
 
 	const moveByKey = (id: string, event: KeyboardEvent<HTMLElement>) => {
 		const step = stepOf(event)
@@ -386,61 +471,57 @@ const useTabLift = ({
 		onReorderTabs(reorderedIds(tabs, zone, id, to))
 	}
 
-	const measured = useRef<SlotMiddles | null>(null)
-	const forgetSlots = () => {
-		measured.current = null
-	}
-	const middlesFor = (id: string) => {
-		if (measured.current?.count !== tabs.length)
-			measured.current = {
-				count: tabs.length,
-				middles: middlesOf(
-					stripRef.current,
-					isPinned(id) ? PINNED_TAB_SLOT : UNPINNED_TAB,
-				),
-			}
-		return measured.current.middles
-	}
-
-	useLayoutEffect(() => {
-		const strip = stripRef.current
-		if (!strip) return
-		const observer = new ResizeObserver(() => {
-			measured.current = null
-		})
-		observer.observe(strip)
-		return () => observer.disconnect()
-	}, [stripRef])
-
-	const lift = useRosterLift({
+	const lift = useRosterLift<TabLanding>({
 		isEnabled: Boolean(onReorderTabs),
-		landingAt: (x, _y, id) => {
-			const middles = middlesFor(id)
-			return zoneOf(id).filter(
-				(tab, rank) => tab.id !== id && middles[rank] < x,
-			).length
+		landingAt: (x, y) =>
+			geometry.current ? landingIn(geometry.current, x, y) : null,
+		onLift: (id, from) => {
+			setSnappingId(null)
+			const row = rowRef.current
+			geometry.current = row
+				? measureLift(
+						row,
+						isPinned(id) ? PINNED_TAB_SLOT : UNPINNED_TAB,
+						rankOf(id),
+						from.x,
+					)
+				: null
 		},
-		onLift: forgetSlots,
-		onLand: (id, at: number) => {
-			const zone = zoneOf(id)
-			if (at === zone.findIndex((tab) => tab.id === id)) return
-			onReorderTabs?.(reorderedIds(tabs, zone, id, at))
+		onLand: (id, landing, released) => {
+			if (landing === TORN_OFF) {
+				const tearOff = {
+					tabId: id,
+					screenX: released.screenX,
+					screenY: released.screenY,
+				}
+				if (onTearOffTab?.(tearOff) !== true) setSnappingId(id)
+				return
+			}
+			if (landing === rankOf(id)) return
+			onReorderTabs?.(reorderedIds(tabs, zoneOf(id), id, landing))
 		},
 	})
 
 	const liftedId = lift.lift?.id
 
-	const insertionOn = (id: string, at: number | null) => {
-		if (!liftedId || at === null) return undefined
+	const shiftOf = (
+		id: string,
+		landing: TabLanding | null,
+	): TabShift | undefined => {
+		if (!liftedId || typeof landing !== "number") return undefined
 		const zone = zoneOf(liftedId)
-		if (at === zone.findIndex((tab) => tab.id === liftedId)) return undefined
-		const others = zone.filter((tab) => tab.id !== liftedId)
-		if (others[at]?.id === id) return "start"
-		if (at === others.length && others[at - 1]?.id === id) return "end"
+		const origin = rankOf(liftedId)
+		const rank = zone.findIndex((tab) => tab.id === id)
+		if (rank < 0 || rank === origin) return undefined
+		if (rank > origin && rank <= landing) return "start"
+		if (rank < origin && rank >= landing) return "end"
 		return undefined
 	}
 
-	return { lift, insertionOn, move, moveByKey }
+	const isSliding = (id: string) =>
+		liftedId ? id !== liftedId : id === snappingId
+
+	return { lift, rowRef, shiftOf, isSliding, move, moveByKey }
 }
 
 type TabGestures = Pick<
@@ -460,28 +541,12 @@ type TitleBarTabItemProps = TabGestures & {
 	tab: TitleBarTab
 	isActive: boolean
 	width: string
-	lift: RosterLift<number>
-	insertionOn: (id: string, at: number | null) => InsertionEdge | undefined
+	lift: RosterLift<TabLanding>
+	shiftOf: TabShiftOf
+	isSliding: boolean
 	onMoveKey: (event: KeyboardEvent<HTMLElement>) => void
 	revealHandlers: CloseRevealHandlers
 	isPointerWithin: boolean
-}
-
-type TabInsertionLineProps = {
-	lift: RosterLift<number>
-	onEdge: (at: number | null) => InsertionEdge | undefined
-}
-
-const TabInsertionLine = ({ lift, onEdge }: TabInsertionLineProps) => {
-	const edge = useLiftLanding(lift, onEdge)
-	if (!edge) return null
-	return (
-		<span
-			aria-hidden="true"
-			className={cn(INSERTION_LINE, INSERTION_EDGE[edge])}
-			data-slot="title-bar-tab-insertion"
-		/>
-	)
 }
 
 const TitleBarTabItem = ({
@@ -490,7 +555,8 @@ const TitleBarTabItem = ({
 	width,
 	hasClosedTab = false,
 	lift,
-	insertionOn,
+	shiftOf,
+	isSliding,
 	onMoveKey,
 	revealHandlers,
 	isPointerWithin,
@@ -506,6 +572,7 @@ const TitleBarTabItem = ({
 	const { t } = useTranslation("common")
 	const needsYou = Boolean(tab.isNeedingYou) && !isActive
 	const isLifted = lift.lift?.id === tab.id
+	const shift = useLiftLanding(lift, (landing) => shiftOf(tab.id, landing))
 	const PinIcon = tab.isPinned ? Icons.Unpin : Icons.Pin
 
 	return (
@@ -527,11 +594,15 @@ const TitleBarTabItem = ({
 						}
 						className={cn(
 							tab.isPinned ? PINNED_TAB : TAB,
+							SHIFTABLE,
 							width,
+							isSliding && SLIDING,
 							isLifted && LIFTED_TAB,
 						)}
 						data-pointer-within={isPointerWithin || undefined}
+						data-shift={shift}
 						data-slot={tab.isPinned ? "title-bar-pinned-tab" : "title-bar-tab"}
+						data-tauri-drag-region="false"
 						onClick={(event) => {
 							if (lift.hasJustDropped()) event.preventBaseUIHandler()
 						}}
@@ -541,10 +612,6 @@ const TitleBarTabItem = ({
 					/>
 				}
 			>
-				<TabInsertionLine
-					lift={lift}
-					onEdge={(at) => insertionOn(tab.id, at)}
-				/>
 				<span aria-hidden="true" className={TAB_ICON}>
 					{tab.icon}
 				</span>
@@ -703,6 +770,7 @@ const TitleBarTabs = ({
 	onReopenClosedTab,
 	onMoveTabToNewWindow,
 	onReorderTabs,
+	onTearOffTab,
 	onNewTab,
 	onGoBack,
 	onGoForward,
@@ -714,12 +782,12 @@ const TitleBarTabs = ({
 	const { kept, overflowing } = splitAtFit(unpinned, fittingCount, activeTabId)
 	const tabWidth = overflowing.length > 0 ? TAB_WIDTH_AT_FLOOR : TAB_WIDTH
 	const hasDivider = pinned.length > 0 && unpinned.length > 0
-	const { lift, insertionOn, move, moveByKey } = useTabLift({
+	const { lift, rowRef, shiftOf, isSliding, move, moveByKey } = useTabLift({
 		tabs,
 		pinned,
 		kept,
-		stripRef,
 		onReorderTabs,
+		onTearOffTab,
 	})
 	const { isHovered, isRevealed, revealNow, tabRevealFor, closeRevealFor } =
 		useCloseReveal()
@@ -743,7 +811,6 @@ const TitleBarTabs = ({
 	}
 	const tabItem = (tab: TitleBarTab, width: string) => (
 		<TitleBarTabItem
-			insertionOn={insertionOn}
 			isActive={tab.id === activeTabId}
 			hasClosedTab={hasClosedTab}
 			key={tab.id}
@@ -751,6 +818,7 @@ const TitleBarTabs = ({
 			onCloseOtherTabs={onCloseOtherTabs}
 			onCloseTab={onCloseTab}
 			onDuplicateTab={onDuplicateTab}
+			isSliding={isSliding(tab.id)}
 			isPointerWithin={
 				tab.id !== activeTabId && !lift.lift && isHovered(tab.id)
 			}
@@ -761,6 +829,7 @@ const TitleBarTabs = ({
 			onReopenClosedTab={onReopenClosedTab}
 			onUnpinTab={onUnpinTab}
 			revealHandlers={tabRevealFor(tab.id)}
+			shiftOf={shiftOf}
 			tab={tab}
 			width={width}
 		/>
@@ -791,6 +860,7 @@ const TitleBarTabs = ({
 			<Tabs.Root
 				className={TABS}
 				onValueChange={(id: string) => onSelectTab?.(id)}
+				ref={rowRef}
 				value={activeTabId ?? null}
 			>
 				<Tabs.List aria-label={t("titleBar.tabs")} className={TAB_ROW}>
@@ -810,7 +880,14 @@ const TitleBarTabs = ({
 					))}
 					{hasDivider ? <span className={DIVIDER} /> : null}
 					{kept.map((tab) => (
-						<span className={cn(CLOSE_SLOT, tabWidth)} key={tab.id}>
+						<TabCloseSlot
+							id={tab.id}
+							isSliding={isSliding(tab.id)}
+							key={tab.id}
+							lift={lift}
+							shiftOf={shiftOf}
+							width={tabWidth}
+						>
 							<TabCloseButton
 								isShown={showsClose(tab.id)}
 								onClose={() => onCloseTab?.(tab.id)}
@@ -818,7 +895,7 @@ const TitleBarTabs = ({
 								revealHandlers={closeRevealFor(tab.id)}
 								title={tab.title}
 							/>
-						</span>
+						</TabCloseSlot>
 					))}
 				</div>
 			</Tabs.Root>
@@ -848,4 +925,9 @@ const TitleBarTabs = ({
 	)
 }
 
-export { type TitleBarTab, TitleBarTabs, type TitleBarTabsProps }
+export {
+	type TitleBarTab,
+	TitleBarTabs,
+	type TitleBarTabsProps,
+	type TitleBarTabTearOff,
+}

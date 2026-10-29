@@ -85,8 +85,8 @@ interface UseRosterLiftOptions<Landing> {
 	isEnabled: boolean
 	landingAt: (x: number, y: number, id: string) => Landing | null
 	isSameLanding?: (one: Landing | null, other: Landing | null) => boolean
-	onLift?: (id: string) => void
-	onLand: (id: string, landing: Landing) => void
+	onLift?: (id: string, from: Point) => void
+	onLand: (id: string, landing: Landing, released: PointerEvent) => void
 }
 
 export const useLiftLanding = <Landing, Selected = Landing | null>(
@@ -113,7 +113,9 @@ export const useRosterLift = <Landing>({
 	const hasDropped = useRef(false)
 	const landingFor = useStableCallback(landingAt)
 	const isSame = useStableCallback(isSameLanding)
-	const lifted = useStableCallback((id: string) => onLift?.(id))
+	const lifted = useStableCallback((id: string, from: Point) =>
+		onLift?.(id, from),
+	)
 	const land = useStableCallback(onLand)
 
 	const followRef = useCallback((node: HTMLElement | null) => {
@@ -156,7 +158,7 @@ export const useRosterLift = <Landing>({
 				capturePointer(element, pointerId)
 				element.addEventListener("lostpointercapture", cancel)
 				window.addEventListener("keydown", cancelOnEscape, true)
-				lifted(id)
+				lifted(id, from)
 				setLift({ id })
 			}
 			place(followed.current, at.current, from)
@@ -170,7 +172,7 @@ export const useRosterLift = <Landing>({
 				? landingFor(released.clientX, released.clientY, id)
 				: null
 			end()
-			if (dropped !== null) land(id, dropped)
+			if (dropped !== null) land(id, dropped, released)
 		}
 
 		const cancel = (cancelled: PointerEvent) => {
