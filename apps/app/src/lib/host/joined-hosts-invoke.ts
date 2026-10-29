@@ -33,6 +33,8 @@ export const LOCAL_COMMANDS: ReadonlySet<string> = new Set([
 	"user_set_onboarding_step",
 	"user_replay_onboarding",
 	"user_mark_onboarding_import_seen",
+	"claude_import_inventory",
+	"claude_import_run",
 	"window_declare_maximize_button",
 	"window_open",
 	"window_identity",
