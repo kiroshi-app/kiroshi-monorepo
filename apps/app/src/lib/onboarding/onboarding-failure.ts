@@ -15,6 +15,7 @@ const SENTENCE_OF: Record<string, string> = {
 	startupTimeout: "the agent didn’t start in time",
 	crashed: "the agent stopped",
 	unknownSpace: "the roster is in no space",
+	unknownBot: "the companion isn’t on this machine",
 }
 
 export type ConnectFailure =

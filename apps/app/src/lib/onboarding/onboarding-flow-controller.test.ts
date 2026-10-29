@@ -16,12 +16,17 @@ import {
 	createOnboardingFlowController,
 	type OnboardingFlowController,
 	onboardingCreationOf,
+	onboardingFlowWorldOf,
 	onboardingStepOf,
 } from "./onboarding-flow-controller"
 import { onboardingScreenStepOf } from "./onboarding-screen"
 import { onboardingSummonsFor } from "./onboarding-summons"
 
 import type { AccountReport } from "../agent/contract"
+import type { RosterController } from "../bots/roster-controller"
+import type { ChatController } from "../chat/chat-controller"
+import { initialChatState } from "../chat/chat-state"
+import type { UserController } from "../user/preferences-controller"
 
 const SCOUT = { id: "bot-scout", name: "Scout" }
 
@@ -43,6 +48,7 @@ const flushed = () => new Promise((resolve) => setTimeout(resolve, 0))
 beforeEach(() => {
 	port = createFakeOnboardingPort()
 	world = createFakeFlowWorld()
+	world.names = { [SCOUT.id]: SCOUT.name }
 	reportFailure = vi.fn<(notice: NoticeMessage) => void>()
 	controller = createOnboardingFlowController(port, world, { reportFailure })
 })
@@ -181,6 +187,19 @@ describe("connecting without a ~/.claude folder", () => {
 		])
 	})
 
+	it("summons no companion and names the failure when no Shoto is stored", async () => {
+		world.shoto = null
+
+		await connectedThroughLogin()
+
+		expect(world.opened).toEqual([])
+		expect(world.sent).toEqual([])
+		expect(reportFailure).toHaveBeenCalledWith({
+			title: "Couldn’t send that request",
+			description: "the companion isn’t on this machine",
+		})
+	})
+
 	it("greets once when the app reopens on connect after Shoto already greeted", async () => {
 		world.threadHistory = [
 			{ botId: SHOTO, text: onboardingSummonsFor("greeting") },
@@ -223,6 +242,38 @@ describe("connecting without a ~/.claude folder", () => {
 			shotoId: SHOTO,
 			companionId: SCOUT.id,
 		})
+	})
+
+	it("stores the created companion as the first one before the account step", async () => {
+		let release = () => {}
+		const storing = new Promise<void>((resolve) => {
+			release = resolve
+		})
+		world.storeFirstCompanion = async (botId) => {
+			await storing
+			world.firstCompanion = botId
+		}
+		await connectedThroughLogin()
+		controller.noteCreated(SCOUT)
+
+		const reachingAccount = controller.noteFirstRunDone()
+		await flushed()
+
+		expect(world.stored).toEqual(["connect"])
+		release()
+		await reachingAccount
+		expect(world.firstCompanion).toBe(SCOUT.id)
+		expect(world.stored).toEqual(["connect", "account"])
+	})
+
+	it("keeps the first companion the preferences already hold", async () => {
+		world.firstCompanion = "bot-atlas"
+		await connectedThroughLogin()
+
+		controller.noteCreated(SCOUT)
+		await controller.noteFirstRunDone()
+
+		expect(world.firstCompanion).toBe("bot-atlas")
 	})
 
 	it("stores account once Shoto marks the first run done", async () => {
@@ -335,6 +386,31 @@ describe("finishing on Account", () => {
 		})
 	})
 
+	it("lands once on the stored first companion when the app relaunched on Account", async () => {
+		world.step = "account"
+		world.firstCompanion = SCOUT.id
+
+		await controller.finish()
+		await controller.finish()
+
+		expect(world.opened).toEqual([SCOUT.id, SCOUT.id])
+		expect(world.sent).toEqual([
+			{ botId: SCOUT.id, text: onboardingSummonsFor("arrival") },
+		])
+	})
+
+	it("sends no arrival greeting already in the companion's conversation", async () => {
+		world.firstCompanion = SCOUT.id
+		world.threadHistory = [
+			{ botId: SCOUT.id, text: onboardingSummonsFor("arrival") },
+		]
+
+		await controller.finish()
+
+		expect(world.opened).toEqual([SCOUT.id])
+		expect(world.sent).toEqual([])
+	})
+
 	it("opens nothing when no companion was created in this run", async () => {
 		await controller.finish()
 
@@ -356,5 +432,48 @@ describe("replaying", () => {
 			isWithShoto: false,
 			firstCompanion: null,
 		})
+	})
+
+	it("runs the journey with the stored Shoto while another companion is selected", async () => {
+		const opened: string[] = []
+		const sent: string[] = []
+		const selected: string[] = []
+		const user = {
+			getState: () => ({
+				preferences: { onboardingShotoId: SHOTO, onboardingStep: "done" },
+			}),
+			setOnboardingStep: async () => {},
+			replayOnboarding: async () => {},
+		} as unknown as UserController
+		const roster = {
+			getState: () => ({ selectedBotId: SCOUT.id, spaceRowId: null, bots: [] }),
+			select: (botId: string) => selected.push(botId),
+		} as unknown as RosterController
+		const chat = {
+			openAside: async (botId: string) => {
+				opened.push(botId)
+			},
+			sendTo: async (_botId: string, text: string) => {
+				sent.push(text)
+			},
+			stateFor: () => ({ ...initialChatState, turn: "failed" }),
+			subscribe: () => () => {},
+		} as unknown as ChatController
+		const replayed = createOnboardingFlowController(
+			port,
+			onboardingFlowWorldOf({ chat, roster, user }),
+			{ reportFailure },
+		)
+		port.report = LOGGED_IN
+
+		await replayed.replay()
+		await replayed.leaveIntro()
+		await replayed.acceptAccount()
+		await flushed()
+
+		expect(replayed.getState().shotoId).toBe(SHOTO)
+		expect(opened).toEqual([SHOTO])
+		expect(selected).toEqual([SHOTO])
+		expect(sent).toEqual([onboardingSummonsFor("greeting")])
 	})
 })

@@ -27,3 +27,8 @@ export const changeOnboardingStep = (
 
 export const replayOnboarding = (): Promise<UserPreferences> =>
 	enqueue(() => userPreferencesStore.replayOnboarding())
+
+export const changeOnboardingFirstCompanion = (
+	botId: string,
+): Promise<UserPreferences> =>
+	enqueue(() => userPreferencesStore.setOnboardingFirstCompanion(botId))
