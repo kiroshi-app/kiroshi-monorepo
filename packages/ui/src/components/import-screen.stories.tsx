@@ -394,6 +394,43 @@ export const ListDark = meta.story({
 	parameters: describe("3.1 List on the dark scheme."),
 })
 
+const LIST_EXISTING_PROFILE: Artboard = {
+	...LIST,
+	secondary: {
+		label: i18n.t("common:claudeImport.select.notNow"),
+		onPress: fn(),
+	},
+}
+
+export const ListExistingProfile = meta.story({
+	name: "3.1 List, existing profile",
+	args: LIST_EXISTING_PROFILE,
+	parameters: describe(
+		"3.1 List as a profile that already exists sees it once at start: the same list, with Not now in place of Skip for now.",
+	),
+	play: async ({ canvasElement, args }) => {
+		const canvas = within(canvasElement)
+		await expect(
+			canvas.queryByRole("button", {
+				name: i18n.t("common:claudeImport.select.skip"),
+			}),
+		).toBeNull()
+		await userEvent.click(
+			canvas.getByRole("button", {
+				name: i18n.t("common:claudeImport.select.notNow"),
+			}),
+		)
+		await expect(args.secondary?.onPress).toHaveBeenCalledOnce()
+	},
+})
+
+export const ListExistingProfileDark = meta.story({
+	name: "3.1 List, existing profile, dark",
+	args: LIST_EXISTING_PROFILE,
+	globals: DARK,
+	parameters: describe("3.1 List, existing profile on the dark scheme."),
+})
+
 export const Importing = meta.story({
 	name: "3.2 Importing",
 	args: IMPORTING,
