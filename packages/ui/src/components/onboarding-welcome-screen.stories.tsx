@@ -135,6 +135,95 @@ const expectCompanionRoles = async (
 	}
 }
 
+const WRAPPED_ROLE = "Reviews pull requests and test plans"
+
+const ATLAS_JOB_KEY = "onboarding.intro.companions.atlas.job"
+
+const ONE_LINE_PILL_HEIGHT = 14
+
+const withWrappedAtlasRole = () => {
+	const role = i18n.t(ATLAS_JOB_KEY)
+	i18n.addResource(DEFAULT_LANGUAGE, "chat", ATLAS_JOB_KEY, WRAPPED_ROLE)
+	return () => {
+		i18n.addResource(DEFAULT_LANGUAGE, "chat", ATLAS_JOB_KEY, role)
+	}
+}
+
+const lineBoxesOf = (badge: HTMLElement) => {
+	const range = document.createRange()
+	range.selectNodeContents(badge)
+	return [...range.getClientRects()]
+}
+
+const isInsideCorner = (
+	x: number,
+	y: number,
+	cornerX: number,
+	cornerY: number,
+	radius: number,
+) => {
+	const centreX = cornerX + Math.sign(x - cornerX) * radius
+	const centreY = cornerY + Math.sign(y - cornerY) * radius
+	const isInCornerZone =
+		Math.abs(x - cornerX) < radius && Math.abs(y - cornerY) < radius
+	return !isInCornerZone || Math.hypot(x - centreX, y - centreY) <= radius
+}
+
+const expectWrappedCompanionRole = async (canvasElement: HTMLElement) => {
+	const canvas = within(canvasElement)
+	const wrapped = canvas.getByText(WRAPPED_ROLE)
+	const oneLine = canvas.getByText("Keeps the docs")
+	const wrappedStyle = getComputedStyle(wrapped)
+	const oneLineStyle = getComputedStyle(oneLine)
+	const lineHeight = Number.parseFloat(wrappedStyle.lineHeight)
+	const pill = wrapped.getBoundingClientRect()
+	const oneLinePill = oneLine.getBoundingClientRect()
+	const lines = lineBoxesOf(wrapped)
+	const [oneLineText] = lineBoxesOf(oneLine)
+	const radius = Number.parseFloat(wrappedStyle.borderTopLeftRadius)
+
+	await expectCompanionRoles(canvasElement, [
+		WRAPPED_ROLE,
+		"Keeps the docs",
+		"Writes release notes",
+	])
+	await expect(lineHeight).toBeGreaterThan(
+		Number.parseFloat(wrappedStyle.fontSize),
+	)
+	await expect(wrappedStyle.paddingTop).toBe(oneLineStyle.paddingTop)
+	await expect(wrappedStyle.paddingBottom).toBe(oneLineStyle.paddingBottom)
+	await expect(oneLinePill.height).toBe(ONE_LINE_PILL_HEIGHT)
+	await expect(lines).toHaveLength(2)
+	await expect(pill.height).toBeCloseTo(
+		2 * lineHeight +
+			Number.parseFloat(wrappedStyle.paddingTop) +
+			Number.parseFloat(wrappedStyle.paddingBottom),
+		1,
+	)
+	await expect(lines[1]?.top).toBeGreaterThan(lines[0]?.bottom ?? Infinity)
+	await expect((lines[0]?.top ?? 0) - pill.top).toBeCloseTo(
+		(oneLineText?.top ?? 0) - oneLinePill.top,
+		1,
+	)
+	await expect(pill.bottom - (lines[1]?.bottom ?? 0)).toBeCloseTo(
+		oneLinePill.bottom - (oneLineText?.bottom ?? 0),
+		1,
+	)
+	await expect(wrapped.scrollHeight).toBeLessThanOrEqual(wrapped.clientHeight)
+	for (const line of lines) {
+		for (const [x, y] of [
+			[line.left, line.top],
+			[line.right, line.top],
+			[line.left, line.bottom],
+			[line.right, line.bottom],
+		] as const) {
+			const cornerX = x < pill.left + pill.width / 2 ? pill.left : pill.right
+			const cornerY = y < pill.top + pill.height / 2 ? pill.top : pill.bottom
+			await expect(isInsideCorner(x, y, cornerX, cornerY, radius)).toBe(true)
+		}
+	}
+}
+
 const expectBackHidden = async (canvasElement: HTMLElement) => {
 	const back = slotIn(canvasElement, "onboarding-welcome-back")
 
@@ -295,6 +384,37 @@ export const WelcomeCompanionsFrench = meta.story({
 			card.style.width = ""
 		}
 	},
+})
+
+export const WelcomeCompanionsWrappedRoleLight = meta.story({
+	name: "Welcome / Companions / Wrapped role / Light",
+	args: { step: "companions" },
+	beforeEach: withWrappedAtlasRole,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The Companions slide with a job too long for its column next to two one-line jobs. Check the long job whole on two lines with space between them, as much space above and below as in a one-line pill, every glyph inside the pill corners, and the one-line pills as on the plain slide. Pick the Dark twin for the other theme.",
+			},
+		},
+	},
+	play: ({ canvasElement }) => expectWrappedCompanionRole(canvasElement),
+})
+
+export const WelcomeCompanionsWrappedRoleDark = meta.story({
+	name: "Welcome / Companions / Wrapped role / Dark",
+	args: { step: "companions" },
+	globals: { theme: "dark" },
+	beforeEach: withWrappedAtlasRole,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The wrapped job on the dark page. Check the two lines legible and spaced inside the pill, the same breathing room as the one-line pills. Pick the Light twin for the other theme.",
+			},
+		},
+	},
+	play: ({ canvasElement }) => expectWrappedCompanionRole(canvasElement),
 })
 
 export const WelcomeConversationsLight = meta.story({

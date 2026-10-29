@@ -743,6 +743,8 @@ feedback-onboardingconnectscreen--connect-waiting-for-the-code-light
 feedback-onboardingwelcomescreen--welcome-companions-dark
 feedback-onboardingwelcomescreen--welcome-companions-french
 feedback-onboardingwelcomescreen--welcome-companions-light
+feedback-onboardingwelcomescreen--welcome-companions-wrapped-role-dark
+feedback-onboardingwelcomescreen--welcome-companions-wrapped-role-light
 feedback-onboardingwelcomescreen--welcome-conversations-dark
 feedback-onboardingwelcomescreen--welcome-conversations-light
 feedback-onboardingwelcomescreen--welcome-every-slide
