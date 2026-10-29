@@ -10,6 +10,8 @@ const DOCK_SETTLE_EVENT = "window://tab-dock-settled"
 
 const DOCK_ANSWER_TIMEOUT_MS = 2000
 
+const DOCK_SETTLE_TIMEOUT_MS = DOCK_ANSWER_TIMEOUT_MS + 1000
+
 export type DockedTab = {
 	originTabId: string
 	tab: Tab
@@ -86,6 +88,11 @@ export const answerDock = (answer: DockMessage) =>
 
 export const awaitDockSettle = (windowLabel: string, originTabId: string) =>
 	hearFirst(DOCK_SETTLE_EVENT, { windowLabel, originTabId })
+
+export const awaitSettleWithinBound = ({ heard, end }: DockMessageHeard) => {
+	const timeout = setTimeout(() => end(false), DOCK_SETTLE_TIMEOUT_MS)
+	return heard.finally(() => clearTimeout(timeout))
+}
 
 export const awaitDockAnswer = async (
 	windowLabel: string,

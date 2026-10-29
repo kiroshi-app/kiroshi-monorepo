@@ -74,6 +74,17 @@ const dropped = (x: number, y: number): TabDrag => ({
 	point: { x, y },
 })
 
+const THIRD_WINDOW = "window-3"
+
+const startedInThirdWindow: TabDrag = {
+	kind: "started",
+	originLabel: THIRD_WINDOW,
+	originSpaceId: SPACE,
+	tab: { ...PACKED, originTabId: "another-tab" },
+}
+
+const ORIGIN_ANSWER_WAIT_MS = 2000
+
 const OVER_STRIP = { x: 1300, y: 215 }
 
 const BELOW_STRIP = { x: 1300, y: 600 }
@@ -134,6 +145,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+	vi.useRealTimers()
 	document.body.replaceChildren()
 	for (const mock of Object.values(host)) {
 		mock.mockReset()
@@ -318,20 +330,55 @@ describe("a tab dropped on the parted strip", () => {
 		expect(bus.listenerCount()).toBe(1)
 	})
 
-	it("stops hearing an unsettled move once the next drag starts", async () => {
+	it("keeps hearing the settle of a taken tab when another window starts a drag before it", async () => {
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
 		const { dock, receive } = holding()
 
 		dock.follow(dropped(OVER_STRIP.x, OVER_STRIP.y))
 		await answered()
-		dock.follow(started())
-		dock.follow(dropped(OVER_STRIP.x, OVER_STRIP.y))
-		await vi.waitFor(() =>
-			expect(host.emitOnThisComputer).toHaveBeenCalledTimes(2),
-		)
+		dock.follow(startedInThirdWindow)
+		await vi.waitFor(() => expect(bus.listenerCount()).toBe(2))
+		await settleFromOrigin(true)
+		await vi.waitFor(() => expect(receive).toHaveBeenCalledOnce())
 		await settleFromOrigin(true)
 
+		expect(receive).toHaveBeenCalledOnce()
+		expect(bus.listenerCount()).toBe(1)
+		expect(vi.getTimerCount()).toBe(0)
+	})
+
+	it("keeps hearing the settle of a taken tab when a third window cancels its drag before it", async () => {
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+		const { dock, receive } = holding()
+
+		dock.follow(dropped(OVER_STRIP.x, OVER_STRIP.y))
+		await answered()
+		dock.follow({ kind: "cancelled", originLabel: THIRD_WINDOW })
+		await vi.advanceTimersByTimeAsync(0)
+		await settleFromOrigin(true)
 		await vi.waitFor(() => expect(receive).toHaveBeenCalledOnce())
+		await settleFromOrigin(true)
+
+		expect(receive).toHaveBeenCalledOnce()
 		expect(bus.listenerCount()).toBe(0)
+		expect(vi.getTimerCount()).toBe(0)
+	})
+
+	it("takes nothing and stops listening once the origin stays silent past its own answer wait", async () => {
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+		const { dock, receive } = holding()
+
+		dock.follow(dropped(OVER_STRIP.x, OVER_STRIP.y))
+		await answered()
+		await vi.waitFor(() => expect(vi.getTimerCount()).toBe(1))
+		await vi.advanceTimersByTimeAsync(ORIGIN_ANSWER_WAIT_MS)
+		expect(bus.listenerCount()).toBe(1)
+		await vi.advanceTimersByTimeAsync(ORIGIN_ANSWER_WAIT_MS)
+		await settleFromOrigin(true)
+
+		expect(receive).not.toHaveBeenCalled()
+		expect(bus.listenerCount()).toBe(0)
+		expect(vi.getTimerCount()).toBe(0)
 	})
 
 	it("takes it once when the drop reaches two listeners", async () => {

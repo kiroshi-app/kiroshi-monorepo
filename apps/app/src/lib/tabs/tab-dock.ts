@@ -1,6 +1,7 @@
 import {
 	answerDock,
 	awaitDockSettle,
+	awaitSettleWithinBound,
 	type DockedTab,
 	type DockMessage,
 	type DockMessageHeard,
@@ -167,12 +168,13 @@ export const createTabDock = (
 		if (!(await answerDock(answer).then(() => true, isUnsent))) {
 			settle.end(false)
 		}
-		return settle.heard
+		return awaitSettleWithinBound(settle)
 	}
 
 	const take = async (drag: HeldDrag, point: ScreenPosition) => {
 		const index = incomingIndex ?? Number.POSITIVE_INFINITY
 		const heldHearing = hearing
+		hearing = Promise.resolve(null)
 		release()
 		const isTaken = isOverStripNow(drag, point)
 		const answer = { windowLabel, originTabId: drag.originTabId, isTaken }
