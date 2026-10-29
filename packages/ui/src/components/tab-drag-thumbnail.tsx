@@ -18,10 +18,10 @@ type TabDragThumbnailProps = {
 }
 
 const CARD =
-	"flex flex-col overflow-hidden rounded-lg shadow-[0_0_0_1px_#00000012,0_2px_4px_#00000014,0_16px_40px_#00000033] dark:shadow-[0_0_0_1px_#ffffff1a,0_16px_40px_#000000b3] data-[state=not-allowed]:opacity-75 data-[state=not-allowed]:grayscale"
+	"flex flex-col overflow-hidden rounded-lg shadow-tab-thumbnail data-[state=not-allowed]:opacity-75 data-[state=not-allowed]:grayscale"
 
 const HEADER =
-	"flex h-8 shrink-0 items-center gap-1.5 border-shell-border border-b bg-background px-2.5 dark:bg-[#101011]"
+	"flex h-8 shrink-0 items-center gap-1.5 border-shell-border border-b bg-tab-thumbnail-header px-2.5"
 
 const ICON =
 	"grid size-4 shrink-0 place-items-center text-foreground [&>svg]:size-3.75"

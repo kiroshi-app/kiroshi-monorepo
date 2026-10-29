@@ -23,6 +23,9 @@
 	--popover-shadow:
 		0 0 0 1px rgb(0 0 0 / 0.06), 0 1px 2px rgb(0 0 0 / 0.06),
 		0 12px 28px rgb(0 0 0 / 0.12);
+	--tab-thumbnail-header: var(--background);
+	--tab-thumbnail-shadow:
+		0 0 0 1px #00000012, 0 2px 4px #00000014, 0 16px 40px #00000033;
 	--icon-stroke: 0.09em;
 	--question-segment-foreground: color-mix(
 		in oklab,
@@ -36,6 +39,8 @@
 	--popover-shadow:
 		0 0 0 1px rgb(255 255 255 / 0.1), 0 0 1px rgb(255 255 255 / 0.16),
 		0 12px 28px rgb(0 0 0 / 0.7);
+	--tab-thumbnail-header: #101011;
+	--tab-thumbnail-shadow: 0 0 0 1px #ffffff1a, 0 16px 40px #000000b3;
 	--question-segment-foreground: var(--muted-foreground);
 }
 
@@ -47,6 +52,8 @@
 	--color-popover: var(--popover);
 	--color-popover-foreground: var(--popover-foreground);
 	--shadow-popover: var(--popover-shadow);
+	--color-tab-thumbnail-header: var(--tab-thumbnail-header);
+	--shadow-tab-thumbnail: var(--tab-thumbnail-shadow);
 	--color-primary: var(--primary);
 	--color-primary-foreground: var(--primary-foreground);
 	--color-primary-strong: var(--primary-strong);

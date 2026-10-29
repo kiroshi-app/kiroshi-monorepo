@@ -68,6 +68,17 @@ const expectThumbnailAnatomy = async (canvasElement: HTMLElement) => {
 	await expect(getComputedStyle(card).borderRadius).toBe("10px")
 	await expect(getComputedStyle(card).overflow).toBe("hidden")
 	await expect(header.getBoundingClientRect().height).toBe(32)
+	await expect(getComputedStyle(card).boxShadow).toBe(
+		tokenStyleIn(card, "shadow-tab-thumbnail", "boxShadow"),
+	)
+	await expect(getComputedStyle(header).backgroundColor).toBe(
+		tokenStyleIn(card, "bg-tab-thumbnail-header", "backgroundColor"),
+	)
+	await expect(getComputedStyle(header).backgroundColor).toBe(
+		card.closest(".dark")
+			? "rgb(16, 16, 17)"
+			: tokenStyleIn(card, "bg-background", "backgroundColor"),
+	)
 	await expect(getComputedStyle(header).borderBottomWidth).toBe("1px")
 	await expect(getComputedStyle(body).justifyContent).toBe("flex-end")
 	await expect(getComputedStyle(body).rowGap).toBe("9px")
