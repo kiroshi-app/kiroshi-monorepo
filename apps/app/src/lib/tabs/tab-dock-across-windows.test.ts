@@ -85,6 +85,8 @@ const BELOW_STRIP = { x: 1300, y: 600 }
 
 const DOCK_WAIT_MS = 2000
 
+const ANSWER_EVENT = "window://tab-dock-answered"
+
 const SETTLE_EVENT = "window://tab-dock-settled"
 
 let bus = createOnThisComputerBus()
@@ -139,7 +141,9 @@ const twoWindows = () => {
 	return { origin, target, receive, removeDocked }
 }
 
-const dropOnTarget = ({ origin }: ReturnType<typeof twoWindows>) => {
+type TwoWindows = ReturnType<typeof twoWindows>
+
+const dropFromOrigin = ({ origin }: TwoWindows) => {
 	const dropReached = new Promise<void>((resolve) => {
 		host.windowTabDragDrop.mockImplementation(async () => {
 			resolve()
@@ -151,10 +155,8 @@ const dropOnTarget = ({ origin }: ReturnType<typeof twoWindows>) => {
 	return dropReached
 }
 
-const targetDrops = (
-	{ target }: ReturnType<typeof twoWindows>,
-	point = OVER_STRIP,
-) => target.follow(droppedAt(point))
+const targetDrops = ({ target }: TwoWindows, point = OVER_STRIP) =>
+	target.follow(droppedAt(point))
 
 const settlesSent = () =>
 	host.emitOnThisComputer.mock.calls.filter(([event]) => event === SETTLE_EVENT)
@@ -196,7 +198,7 @@ describe("a tab dropped on another window of its Space that confirms at once", (
 		const windows = twoWindows()
 		windows.target.placeIncoming(1)
 
-		await dropOnTarget(windows)
+		await dropFromOrigin(windows)
 		targetDrops(windows)
 
 		await vi.waitFor(() =>
@@ -219,15 +221,16 @@ describe("a tab dropped on another window that confirms after the wait", () => {
 		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
 		const windows = twoWindows()
 
-		await dropOnTarget(windows)
+		await dropFromOrigin(windows)
 		await waitPastTheDockWait()
 		targetDrops(windows)
 
 		await vi.waitFor(() =>
-			expect(host.emitOnThisComputer).toHaveBeenCalledWith(
-				"window://tab-dock-answered",
-				{ windowLabel: TARGET_WINDOW, originTabId: TAB_ID, isTaken: true },
-			),
+			expect(host.emitOnThisComputer).toHaveBeenCalledWith(ANSWER_EVENT, {
+				windowLabel: TARGET_WINDOW,
+				originTabId: TAB_ID,
+				isTaken: true,
+			}),
 		)
 		await vi.waitFor(() =>
 			expect(host.raiseReportedFailure).toHaveBeenCalledOnce(),
@@ -248,7 +251,7 @@ describe("a tab dropped on another window that never confirms", () => {
 		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
 		const windows = twoWindows()
 
-		await dropOnTarget(windows)
+		await dropFromOrigin(windows)
 		await waitPastTheDockWait()
 
 		await vi.waitFor(() =>
@@ -263,7 +266,7 @@ describe("a tab dropped on another window that never confirms", () => {
 		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
 		const windows = twoWindows()
 
-		await dropOnTarget(windows)
+		await dropFromOrigin(windows)
 		await answerDock({
 			windowLabel: "window-2",
 			originTabId: TAB_ID,
@@ -287,7 +290,7 @@ describe("a tab dropped on another window that refuses it", () => {
 	it("stays in the origin window only", async () => {
 		const windows = twoWindows()
 
-		await dropOnTarget(windows)
+		await dropFromOrigin(windows)
 		targetDrops(windows, BELOW_STRIP)
 
 		await vi.waitFor(() =>
