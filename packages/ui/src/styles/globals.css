@@ -83,6 +83,7 @@
 	--color-presence-online: var(--presence-online);
 	--color-presence-offline: var(--presence-offline);
 	--color-title-bar-tab: var(--title-bar-tab);
+	--color-title-bar-tab-hover: var(--title-bar-tab-hover);
 	--color-title-bar-tab-selected: var(--title-bar-tab-selected);
 	--color-title-bar-pinned: var(--title-bar-pinned);
 	--color-title-bar-chip: var(--title-bar-chip);
