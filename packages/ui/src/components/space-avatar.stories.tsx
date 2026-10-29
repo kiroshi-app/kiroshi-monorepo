@@ -233,7 +233,7 @@ const expectArtboardF = async (canvasElement: HTMLElement) => {
 			),
 		)
 		const arcs = inThemeLayer(avatar, "space-avatar-arc")
-		await expect(arcs).toHaveLength(size === 14 ? 2 : 3)
+		await expect(arcs).toHaveLength(avatar.dataset.recipe === "compact" ? 2 : 3)
 		for (const arc of arcs)
 			await expect(arc).toHaveAttribute("fill-opacity", "0.45")
 		await expect(avatar.textContent).toBe("")
