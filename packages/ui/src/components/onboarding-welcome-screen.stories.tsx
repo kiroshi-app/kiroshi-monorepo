@@ -13,6 +13,7 @@ import {
 import { OnboardingShell } from "@workspace/ui/components/onboarding-shell"
 import { OnboardingWelcomeFooter } from "@workspace/ui/components/onboarding-welcome-footer"
 import { OnboardingWelcomeScreen } from "@workspace/ui/components/onboarding-welcome-screen"
+import { DEFAULT_LANGUAGE, i18n } from "@workspace/ui/lib/i18n"
 
 const ARTBOARD =
 	"Measured against the Paper file `Kiroshi, Onboarding v2`, pages `With Claude Code` and `Without Claude Code`, which draw the Welcome screens alike, 1200 by 760, in a blue Space. The footer group under the heading and its Back button follow OPE-1561, not the artboards, which draw a bottom bar and no Back."
@@ -91,6 +92,49 @@ const expectGroupUnderHeading = async (canvasElement: HTMLElement) => {
 	}
 }
 
+const COMPANION_ROLES = [
+	"Reviews code",
+	"Keeps the docs",
+	"Writes release notes",
+]
+
+const FRENCH_COMPANION_ROLES = [
+	"Relit le code",
+	"Tient la documentation",
+	"Rédige les notes de version",
+]
+
+const expectCompanionRoles = async (
+	canvasElement: HTMLElement,
+	roles = COMPANION_ROLES,
+) => {
+	for (const role of roles) {
+		const badge = within(canvasElement).getByText(role)
+		const card = badge.parentElement as HTMLElement
+		const name = badge.previousElementSibling as HTMLElement
+		const pill = badge.getBoundingClientRect()
+		const column = card.getBoundingClientRect()
+
+		await expect(badge).toBeVisible()
+		await expect(badge).toHaveAttribute("data-slot", "bot-title-badge")
+		await expect(pill.height).toBeGreaterThan(0)
+		await expect(badge.scrollWidth).toBeLessThanOrEqual(badge.clientWidth)
+		await expect(getComputedStyle(badge).backgroundColor).not.toBe(
+			getComputedStyle(card).backgroundColor,
+		)
+		await expect(pill.top).toBeGreaterThanOrEqual(
+			name.getBoundingClientRect().bottom,
+		)
+		await expect(pill.left + pill.width / 2).toBeCloseTo(
+			column.left + column.width / 2,
+			0,
+		)
+		await withMotionAllowed(() =>
+			expect(colourTransitionsOf(badge)).toEqual([]),
+		)
+	}
+}
+
 const expectBackHidden = async (canvasElement: HTMLElement) => {
 	const back = slotIn(canvasElement, "onboarding-welcome-back")
 
@@ -160,7 +204,7 @@ export const WelcomeCompanionsLight = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${ARTBOARD} Artboard 1.1: three companions on bot avatars, 96, 132 and 96, the middle one lifted. Check the names and jobs, the first dot wide, 1 of 3, Back gone with its slot kept, and Next calling back. Pick the Dark twin for the other theme.`,
+				story: `${ARTBOARD} Artboard 1.1: three companions on bot avatars, 96, 132 and 96, the middle one lifted. Check the names, each job on the roster title pill centred under its name, the first dot wide, 1 of 3, Back gone with its slot kept, and Next calling back. Pick the Dark twin for the other theme.`,
 			},
 		},
 	},
@@ -177,6 +221,7 @@ export const WelcomeCompanionsLight = meta.story({
 				(avatar) => avatar.getBoundingClientRect().width,
 			),
 		).toEqual([96, 132, 96])
+		await expectCompanionRoles(canvasElement)
 		await expectBackHidden(canvasElement)
 
 		await userEvent.tab()
@@ -197,7 +242,7 @@ export const WelcomeCompanionsDark = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${ARTBOARD} Artboard 1.1, dark. Check the same layout on the dark page, the wide dot in the foreground colour, Back gone. Pick the Light twin for the other theme.`,
+				story: `${ARTBOARD} Artboard 1.1, dark. Check the same layout on the dark page, the job pills legible on it, the wide dot in the foreground colour, Back gone. Pick the Light twin for the other theme.`,
 			},
 		},
 	},
@@ -209,7 +254,46 @@ export const WelcomeCompanionsDark = meta.story({
 			step: "1 of 3",
 			current: 1,
 		})
+		await expectCompanionRoles(canvasElement)
 		await expectBackHidden(canvasElement)
+	},
+})
+
+export const WelcomeCompanionsFrench = meta.story({
+	name: "Welcome / Companions / French",
+	tags: ["test-only"],
+	args: { step: "companions" },
+	beforeEach: async () => {
+		await i18n.changeLanguage("fr")
+		return () => i18n.changeLanguage(DEFAULT_LANGUAGE)
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The Companions slide in French, whose jobs run longer than the English ones. Check each job whole in its pill, wrapped rather than cut when wider than the column, centred under its name.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expectCompanionRoles(canvasElement, FRENCH_COMPANION_ROLES)
+
+		const longest = within(canvasElement).getByText(
+			"Rédige les notes de version",
+		)
+		const card = longest.parentElement as HTMLElement
+		const lineHeight = Number.parseFloat(getComputedStyle(longest).lineHeight)
+		try {
+			card.style.width = "max-content"
+			const singleLine = longest.getBoundingClientRect()
+			card.style.width = `${Math.floor(singleLine.width / 2)}px`
+			await expect(
+				longest.getBoundingClientRect().height,
+			).toBeGreaterThanOrEqual(singleLine.height + lineHeight)
+			await expect(longest.scrollWidth).toBeLessThanOrEqual(longest.clientWidth)
+		} finally {
+			card.style.width = ""
+		}
 	},
 })
 

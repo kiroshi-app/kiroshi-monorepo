@@ -3,6 +3,7 @@
 import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
+import { BotTitleBadge } from "@workspace/ui/components/bot-badge"
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
 import { hueOf } from "@workspace/ui/components/companion-colour"
 import { Icons } from "@workspace/ui/components/icons"
@@ -61,9 +62,10 @@ const CompanionsIllustration = () => {
 					<p className="pt-2 font-medium text-compact text-foreground leading-4.5">
 						{t(`onboarding.intro.companions.${id}.name`)}
 					</p>
-					<p className="text-muted-foreground text-xs">
-						{t(`onboarding.intro.companions.${id}.job`)}
-					</p>
+					<BotTitleBadge
+						className="grow-0 basis-auto whitespace-normal"
+						title={t(`onboarding.intro.companions.${id}.job`)}
+					/>
 				</div>
 			))}
 		</div>
