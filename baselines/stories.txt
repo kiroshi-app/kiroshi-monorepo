@@ -1020,6 +1020,7 @@ navigation-appsidebar--space-switching-off
 navigation-appsidebar--space-switching-off-in-missions
 navigation-appsidebar--space-tinted
 navigation-appsidebar--spaces-without-rosters
+navigation-appsidebar--title-bar-tear-off-reports-the-tab
 navigation-appsidebar--unreadable-roster
 navigation-appsidebar--uploaded-pictures
 navigation-appsidebar--window-controls-reserved
