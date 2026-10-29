@@ -1105,10 +1105,7 @@ export const createConversationController = (
 			turnId: held.turn.id,
 			promptId: held.turn.promptId,
 		})
-		traceSummonsStarted(
-			summonsRunOf(held.turn.id, held.botId),
-			scope.runtimeSessionId,
-		)
+		traceSummonsStarted(summonsRunOf(held.turn.id, held.botId))
 	}
 
 	const newSpeaker = (

@@ -44,19 +44,18 @@ pub(crate) fn note_received(conversation_id: &str, message_id: &str, content: &s
 	}
 }
 
-pub(crate) fn note_queued(run: &SummonsRun<'_>, running_session_id: &str) {
+pub(crate) fn note_queued(run: &SummonsRun<'_>) {
 	log::info!(
-		"summons queued | conversation: {} | turn: {} | bot: {} | behind the running turn of session: {running_session_id} | of conversation: {}",
+		"summons queued | conversation: {} | turn: {} | bot: {}",
 		run.conversation_id,
 		run.turn_id,
-		run.bot_id,
-		run.conversation_id
+		run.bot_id
 	);
 }
 
-pub(crate) fn note_started(run: &SummonsRun<'_>, session_id: &str) {
+pub(crate) fn note_started(run: &SummonsRun<'_>) {
 	log::info!(
-		"summons started | conversation: {} | turn: {} | bot: {} | session: {session_id}",
+		"summons started | conversation: {} | turn: {} | bot: {}",
 		run.conversation_id,
 		run.turn_id,
 		run.bot_id

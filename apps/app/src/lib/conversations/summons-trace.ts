@@ -27,14 +27,11 @@ const lineOf = (step: string, run: SummonsRun, extra: string[]) =>
 
 export const traceSummonsQueued = (run: SummonsRun, runningTurnId: string) =>
 	console.info(
-		lineOf("queued", run, [
-			`behind the running turn: ${runningTurnId}`,
-			`of conversation: ${run.conversationId}`,
-		]),
+		lineOf("queued", run, [`behind the running turn: ${runningTurnId}`]),
 	)
 
-export const traceSummonsStarted = (run: SummonsRun, sessionId: string) =>
-	console.info(lineOf("started", run, [`session: ${sessionId}`]))
+export const traceSummonsStarted = (run: SummonsRun) =>
+	console.info(lineOf("started", run, []))
 
 export const traceSummonsDropped = (
 	run: SummonsRun,
