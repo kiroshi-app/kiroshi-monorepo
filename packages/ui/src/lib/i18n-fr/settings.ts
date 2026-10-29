@@ -71,6 +71,15 @@ const settings = {
 			manage: "Gérer le compte",
 			signOut: "Se déconnecter",
 		},
+		onboarding: {
+			body: "Facultatif. Hébergez un espace pour des personnes hors de votre réseau, ou rejoignez celui qu’on héberge pour vous.",
+			skip: "Passer pour l’instant",
+			signedIn: {
+				title: "Vous êtes connecté",
+				body: "Vos conversations restent sur votre ordinateur. Le compte vous relie seulement aux espaces et aux appareils au-delà de votre réseau.",
+				continue: "Continuer",
+			},
+		},
 		signedOutFromTheSite: {
 			title: "Vous avez été déconnecté sur kiroshi.app",
 			description:
@@ -226,6 +235,21 @@ const settings = {
 			label: "Montrer les nouveautés après une mise à jour",
 			description:
 				"La première fois que Kiroshi s’ouvre sur une nouvelle version, il montre ce qui a changé.",
+		},
+		gettingStarted: {
+			label: "Premiers pas",
+			importFromClaudeCode: {
+				label: "Importer depuis Claude Code",
+				description:
+					"Récupère les agents, les compétences et CLAUDE.md depuis ~/.claude. Vous choisissez ce qui arrive.",
+				nothingToImport:
+					"Rien à récupérer : il n’y a pas de dossier ~/.claude sur cet ordinateur.",
+			},
+			replayOnboarding: {
+				label: "Revoir l’accueil",
+				description:
+					"Montre de nouveau les écrans d’accueil. Vos agents, vos conversations et votre compte restent tels quels.",
+			},
 		},
 		kiroshi: {
 			label: "Kiroshi",

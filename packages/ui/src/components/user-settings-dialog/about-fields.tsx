@@ -32,6 +32,12 @@ type UpdateState =
 const hasPendingUpdate = (update: UpdateState) =>
 	update.status !== "upToDate" && update.status !== "checking"
 
+type GettingStartedProps = {
+	canImportFromClaudeCode: boolean
+	onImportFromClaudeCode: () => void
+	onReplayOnboarding: () => void
+}
+
 type AboutFieldsProps = {
 	version: string
 	channel: UpdateChannel
@@ -44,6 +50,7 @@ type AboutFieldsProps = {
 	onRestart: () => void
 	onWhatsNew: () => void
 	onReleaseNotes: () => void
+	gettingStarted?: GettingStartedProps
 	className?: string
 }
 
@@ -309,6 +316,47 @@ const BetaNotice = () => {
 	)
 }
 
+const GettingStarted = ({
+	canImportFromClaudeCode,
+	onImportFromClaudeCode,
+	onReplayOnboarding,
+}: GettingStartedProps) => {
+	const { t } = useTranslation("settings")
+	const nothingToImportTitle = (
+		<span className="text-muted-foreground">
+			{t("about.gettingStarted.importFromClaudeCode.label")}
+		</span>
+	)
+
+	return (
+		<SettingsGroup grid="gap-2" label={t("about.gettingStarted.label")}>
+			<SettingsRows>
+				{canImportFromClaudeCode ? (
+					<SettingsLinkRow
+						detail={t("about.gettingStarted.importFromClaudeCode.description")}
+						icon={Icons.Next}
+						label={t("about.gettingStarted.importFromClaudeCode.label")}
+						onClick={onImportFromClaudeCode}
+					/>
+				) : (
+					<SettingsRow
+						detail={t(
+							"about.gettingStarted.importFromClaudeCode.nothingToImport",
+						)}
+						title={nothingToImportTitle}
+					/>
+				)}
+				<SettingsLinkRow
+					detail={t("about.gettingStarted.replayOnboarding.description")}
+					icon={Icons.Next}
+					label={t("about.gettingStarted.replayOnboarding.label")}
+					onClick={onReplayOnboarding}
+				/>
+			</SettingsRows>
+		</SettingsGroup>
+	)
+}
+
 const AboutFields = ({
 	version,
 	channel,
@@ -321,6 +369,7 @@ const AboutFields = ({
 	onRestart,
 	onWhatsNew,
 	onReleaseNotes,
+	gettingStarted,
 	className,
 }: AboutFieldsProps) => {
 	const { t } = useTranslation("settings")
@@ -381,6 +430,7 @@ const AboutFields = ({
 				</SettingsRows>
 				{channel === "beta" ? <BetaNotice /> : null}
 			</SettingsGroup>
+			{gettingStarted ? <GettingStarted {...gettingStarted} /> : null}
 			<SettingsGroup grid="gap-2" label={t("about.kiroshi.label")}>
 				<SettingsRows>
 					<SettingsLinkRow
@@ -403,6 +453,7 @@ const AboutFields = ({
 export {
 	AboutFields,
 	type AboutFieldsProps,
+	type GettingStartedProps,
 	hasPendingUpdate,
 	type UpdateChannel,
 	type UpdateState,

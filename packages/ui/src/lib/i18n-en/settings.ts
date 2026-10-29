@@ -69,6 +69,15 @@ const settings = {
 			manage: "Manage account",
 			signOut: "Sign out",
 		},
+		onboarding: {
+			body: "Optional. Host a space for people who aren’t on your network, or join one someone hosts for you.",
+			skip: "Skip for now",
+			signedIn: {
+				title: "You’re signed in",
+				body: "Your conversations stay on your computer. The account only connects you to spaces and devices beyond your network.",
+				continue: "Continue",
+			},
+		},
 		signedOutFromTheSite: {
 			title: "You were signed out on kiroshi.app",
 			description:
@@ -216,6 +225,21 @@ const settings = {
 			label: "Show what’s new after an update",
 			description:
 				"The first time Kiroshi opens on a new version, it shows what changed.",
+		},
+		gettingStarted: {
+			label: "Getting started",
+			importFromClaudeCode: {
+				label: "Import from Claude Code",
+				description:
+					"Brings in agents, skills and CLAUDE.md from ~/.claude. You choose what comes in.",
+				nothingToImport:
+					"Nothing to bring in: there’s no ~/.claude folder on this computer.",
+			},
+			replayOnboarding: {
+				label: "Replay onboarding",
+				description:
+					"Shows the welcome screens again. Your agents, conversations and account stay as they are.",
+			},
 		},
 		kiroshi: {
 			label: "Kiroshi",

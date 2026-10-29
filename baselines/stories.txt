@@ -146,6 +146,7 @@ conversation-message-conversationarrivalrow--default
 conversation-message-conversationarrivalrow--in-transcript
 conversation-message-conversationarrivalrow--invited-by-agent
 conversation-message-conversationarrivalrow--long-content
+conversation-message-conversationarrivalrow--shoto-created-arrival-row
 conversation-message-conversationemptystate--default
 conversation-message-conversationemptystate--empty
 conversation-message-conversationemptystate--empty-with-long-suggestion-name
@@ -401,6 +402,9 @@ conversation-missions-missionturn--with-an-unknown-tool
 conversation-missions-missionturn--without-tools
 conversation-missions-missionturn--working
 conversation-missions-missionturn--working-without-tools
+conversation-onboarding-onboardingaccountscreen--account-empty
+conversation-onboarding-onboardingaccountscreen--account-signed-in
+conversation-onboarding-onboardingaccountscreen--account-waiting
 conversation-prompt-promptattachbutton--default
 conversation-prompt-promptattachbutton--states
 conversation-prompt-promptattachments--default
@@ -1895,6 +1899,8 @@ settings-space-spacesettingsdialog--members-withdraw-pending
 settings-space-spacesettingsdialog--opens-on-an-application
 settings-space-spacesettingsdialog--skills
 settings-space-spacesettingsdialog--transfer
+settings-user-aboutfields--about-getting-started
+settings-user-aboutfields--about-nothing-to-import
 settings-user-aboutfields--beta-available
 settings-user-aboutfields--checking
 settings-user-aboutfields--companions-still-running
