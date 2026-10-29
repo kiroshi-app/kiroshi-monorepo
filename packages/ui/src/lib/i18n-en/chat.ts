@@ -1057,6 +1057,12 @@ const chat = {
 				missionDetail: "Mission · Wren · 3 of 5 sections drafted",
 				status: "Working",
 			},
+			spaces: {
+				title: "Spaces keep things apart",
+				body: "A Space holds one project’s companions and conversations, with its own skills, applications and secrets. What a companion learns stays with it.",
+				orbit: { name: "Orbit web", detail: "8 conversations" },
+				newsletter: { name: "Newsletter", detail: "3 conversations" },
+			},
 			tools: {
 				title: "Your tools, where you allow them",
 				body: "Give a companion a Folder to work in, the Applications it may use and the Secrets it needs. Nothing beyond what you hand it.",

@@ -16,9 +16,10 @@ import {
 	OnboardingShell,
 } from "@workspace/ui/components/onboarding-shell"
 import { OnboardingWelcomeFooter } from "@workspace/ui/components/onboarding-welcome-footer"
+import { SpaceAvatar } from "@workspace/ui/components/space-avatar"
 import { cn } from "@workspace/ui/lib/utils"
 
-type OnboardingWelcomeStep = "companions" | "conversations" | "tools"
+type OnboardingWelcomeStep = "companions" | "conversations" | "spaces" | "tools"
 
 type OnboardingWelcomeScreenProps = {
 	step: OnboardingWelcomeStep
@@ -27,7 +28,12 @@ type OnboardingWelcomeScreenProps = {
 	onNext: () => void
 }
 
-const STEPS: OnboardingWelcomeStep[] = ["companions", "conversations", "tools"]
+const STEPS: OnboardingWelcomeStep[] = [
+	"companions",
+	"conversations",
+	"spaces",
+	"tools",
+]
 
 const ATLAS_HUE = hueOf("cyan")
 const JUNIPER_HUE = hueOf("green")
@@ -134,6 +140,69 @@ const ConversationsIllustration = () => {
 	)
 }
 
+const SPACES = [
+	{
+		id: "orbit",
+		hue: hueOf("blue"),
+		companions: [
+			{ id: "atlas", hue: ATLAS_HUE },
+			{ id: "juniper", hue: JUNIPER_HUE },
+		],
+	},
+	{
+		id: "newsletter",
+		hue: hueOf("orange"),
+		companions: [{ id: "wren", hue: WREN_HUE }],
+	},
+] as const
+
+const SpacesIllustration = () => {
+	const { t } = useTranslation("chat")
+
+	return (
+		<div className="flex w-110 max-w-full flex-wrap gap-3">
+			{SPACES.map(({ id, hue, companions }) => (
+				<div
+					className={cn(
+						"flex min-w-36 flex-1 flex-col gap-3.5 p-4.5",
+						CARD_CLASS,
+					)}
+					key={id}
+				>
+					<div className="flex items-center gap-3">
+						<SpaceAvatar
+							className="shrink-0"
+							colour={hue}
+							name={t(`onboarding.intro.spaces.${id}.name`)}
+							size={36}
+							spaceId={id}
+						/>
+						<p className="min-w-0 break-words font-semibold text-foreground text-sm">
+							{t(`onboarding.intro.spaces.${id}.name`)}
+						</p>
+					</div>
+					<div className="flex items-center gap-2">
+						<div className="flex shrink-0 items-center">
+							{companions.map((companion, index) => (
+								<BotIdentityAvatar
+									className={cn(index > 0 && "-ms-1.5")}
+									hue={companion.hue}
+									key={companion.id}
+									name={t(`onboarding.intro.companions.${companion.id}.name`)}
+									size={24}
+								/>
+							))}
+						</div>
+						<p className="min-w-0 text-muted-foreground text-xs">
+							{t(`onboarding.intro.spaces.${id}.detail`)}
+						</p>
+					</div>
+				</div>
+			))}
+		</div>
+	)
+}
+
 const TOOLS = [
 	{ id: "folders", Icon: Icons.Folder, isMono: true },
 	{ id: "applications", Icon: Icons.Server, isMono: false },
@@ -178,6 +247,7 @@ const ToolsIllustration = () => {
 const ILLUSTRATIONS: Record<OnboardingWelcomeStep, () => ReactNode> = {
 	companions: CompanionsIllustration,
 	conversations: ConversationsIllustration,
+	spaces: SpacesIllustration,
 	tools: ToolsIllustration,
 }
 

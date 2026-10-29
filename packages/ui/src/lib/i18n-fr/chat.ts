@@ -1099,6 +1099,12 @@ const chat = {
 				missionDetail: "Mission · Wren · 3 sections sur 5 rédigées",
 				status: "En cours",
 			},
+			spaces: {
+				title: "Les Spaces séparent les choses",
+				body: "Un Space réunit les compagnons et les conversations d’un projet, avec ses propres compétences, applications et secrets. Ce qu’un compagnon apprend reste avec lui.",
+				orbit: { name: "Orbit web", detail: "8 conversations" },
+				newsletter: { name: "Newsletter", detail: "3 conversations" },
+			},
 			tools: {
 				title: "Vos outils, là où vous les autorisez",
 				body: "Donnez à un compagnon un Dossier où travailler, les Applications qu’il peut utiliser et les Secrets dont il a besoin. Rien au-delà de ce que vous lui confiez.",
