@@ -2191,3 +2191,108 @@ describe("the commands reach.rs keeps on the host", () => {
 		},
 	)
 })
+
+describe("a command naming only an id another joined host owns", () => {
+	const OWNED = "attic-owned"
+
+	const hostUrlOf = (id: string) => `http://${id}.local:45367`
+
+	const joinedAt = async (id: string) => ({
+		status: "ok" as const,
+		data: {
+			id,
+			hostUrl: hostUrlOf(id),
+			token: "joined",
+			remoteSpaceId: null,
+			name: id,
+		},
+	})
+
+	const answering = (answer: unknown) => () =>
+		new Response(JSON.stringify(answer), {
+			headers: { "content-type": "application/json" },
+		})
+
+	const MISSION = { id: OWNED, originConversationId: "attic-chat" }
+
+	it.each([
+		["mission_close", "mission_detail", { mission: MISSION, events: [] }],
+		["mission_reopen", "mission_list", { open: [], done: [MISSION] }],
+		[
+			"mission_reported",
+			"mission_space_page",
+			{ missions: [{ mission: MISSION }], nextCursor: null },
+		],
+		["mission_answered", "mission_space_feed", [{ mission: MISSION }]],
+		["mission_detail", "mission_detail", { mission: MISSION, events: [] }],
+		["routine_runs", "routine_list", [{ id: OWNED }]],
+		["section_rename", "section_list", [{ id: OWNED }]],
+		["section_delete", "section_create", { id: OWNED }],
+	])(
+		"sends %s to the host whose %s answer named the id, not to the active host",
+		async (command, learnedBy, answer) => {
+			const { hosts, fetch, local } = joinedHostsOf({
+				join: joinedAt,
+				answer: answering(answer),
+			})
+			await hosts.activate("attic")
+			await hosts.invoke(learnedBy, { spaceId: "a" })
+			await hosts.activate("garage")
+			fetch.mockClear()
+
+			await hosts.invoke(command, {
+				missionId: OWNED,
+				routineId: OWNED,
+				id: OWNED,
+			})
+
+			expect(fetch).toHaveBeenCalledWith(
+				new URL(`${hostUrlOf("attic")}/api/invoke/${command}`),
+				expect.anything(),
+			)
+			expect(fetch).toHaveBeenCalledOnce()
+			expect(localCommands(local)).not.toContain(command)
+		},
+	)
+
+	it("completes a turn on the host it was started on, not on the active host", async () => {
+		const { hosts, fetch } = joinedHostsOf({
+			join: joinedAt,
+			answer: answering(1),
+		})
+		await hosts.activate("attic")
+		await hosts.invoke("conversation_start_turn", {
+			turn: { id: OWNED, conversationId: "attic-chat" },
+		})
+		await hosts.activate("garage")
+		fetch.mockClear()
+
+		await hosts.invoke("conversation_complete_turn", {
+			id: OWNED,
+			completedAt: 1,
+		})
+
+		expect(fetch).toHaveBeenCalledWith(
+			new URL(`${hostUrlOf("attic")}/api/invoke/conversation_complete_turn`),
+			expect.anything(),
+		)
+		expect(fetch).toHaveBeenCalledOnce()
+	})
+
+	it("serves a mission this Mac answered with locally while a joined host is active", async () => {
+		const { hosts, local, fetch } = joinedHostsOf({ join: joinedAt })
+		local.invoke.mockImplementation(
+			async () => ({ mission: MISSION, events: [] }) as never,
+		)
+		await hosts.invoke("mission_detail", { missionId: OWNED })
+		await hosts.activate("garage")
+		fetch.mockClear()
+
+		await hosts.invoke("mission_close", { missionId: OWNED })
+
+		expect(local.invoke).toHaveBeenLastCalledWith("mission_close", {
+			missionId: OWNED,
+		})
+		expect(fetch).not.toHaveBeenCalled()
+	})
+})

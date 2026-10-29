@@ -1082,7 +1082,11 @@ const missionRoomOf = async ({
 				mission,
 				events,
 				now: 4 * A_MINUTE,
-				opening: { missionId: mission.id, rowId: room.thread.conversation.id },
+				opening: {
+					missionId: mission.id,
+					rowId: room.thread.conversation.id,
+					spaceId: SPACE,
+				},
 				onLeave: () => undefined,
 			},
 		},
@@ -1217,7 +1221,7 @@ const selectTargetInMissionOf = (botId: string): CompanionSelectTarget => {
 		getState: () => ({ selectedBotId: botId, selectedConversationId: null }),
 		subscribe: () => () => undefined,
 	})
-	missions.open({ missionId: SOLO_MISSION.id, rowId: botId })
+	missions.open({ missionId: SOLO_MISSION.id, rowId: botId, spaceId: SPACE })
 
 	return { select: vi.fn(), missions }
 }

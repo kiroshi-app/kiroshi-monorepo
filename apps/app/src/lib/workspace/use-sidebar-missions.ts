@@ -143,16 +143,11 @@ export const useSidebarMissions = ({
 	const openMission = useCallback(
 		(missionId: string, landing?: MissionLanding) => {
 			const row = missionRowOf(missionId)
-			if (!row) {
+			if (!row || spaceRowId === null) {
 				return
 			}
 			const { rowId, isConversation } = row
-			openedMission.open({
-				missionId,
-				rowId,
-				spaceId: spaceRowId ?? undefined,
-				landing,
-			})
+			openedMission.open({ missionId, rowId, spaceId: spaceRowId, landing })
 			if (isConversation) {
 				roster.controller.selectConversation(rowId)
 			} else {

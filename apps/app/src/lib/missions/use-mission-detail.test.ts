@@ -8,13 +8,16 @@ import { missionsTransport } from "./missions-transport"
 import { useMissionDetail } from "./use-mission-detail"
 
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
+import { joinedRowIdOf } from "@/lib/spaces/joined-spaces-controller"
 
 vi.mock("./missions-transport", async (importOriginal) => ({
 	...(await importOriginal<typeof import("./missions-transport")>()),
-	missionsTransport: { detail: vi.fn(), onChanged: vi.fn() },
+	missionsTransport: { detailOn: vi.fn(), onChanged: vi.fn() },
 }))
 
-const readDetail = vi.mocked(missionsTransport.detail)
+const readDetail = vi.mocked(missionsTransport.detailOn)
+
+const SPACE_ROW = "s-1"
 const onChanged = vi.mocked(missionsTransport.onChanged)
 
 const DETAIL: MissionDetail = {
@@ -73,19 +76,30 @@ beforeEach(() => {
 afterEach(cleanup)
 
 it("reads the mission it is opened on", async () => {
-	const { result } = renderHook(() => useMissionDetail("m-1"), {
+	const { result } = renderHook(() => useMissionDetail("m-1", SPACE_ROW), {
 		wrapper: createQueryTestWrapper().wrapper,
 	})
 
 	await waitFor(() => expect(result.current.isReading).toBe(false))
 
-	expect(readDetail).toHaveBeenCalledWith("m-1")
+	expect(readDetail).toHaveBeenCalledWith(null, "m-1")
 	expect(result.current.read?.mission).toEqual(DETAIL.mission)
 	expect(result.current.read?.events).toHaveLength(1)
 })
 
+it("reads a mission of a joined Space on the host of that Space", async () => {
+	const { result } = renderHook(
+		() => useMissionDetail("m-1", joinedRowIdOf("attic")),
+		{ wrapper: createQueryTestWrapper().wrapper },
+	)
+
+	await waitFor(() => expect(result.current.isReading).toBe(false))
+
+	expect(readDetail).toHaveBeenCalledWith("attic", "m-1")
+})
+
 it("leaves the mission alone when a change names another one", async () => {
-	const { result } = renderHook(() => useMissionDetail("m-1"), {
+	const { result } = renderHook(() => useMissionDetail("m-1", SPACE_ROW), {
 		wrapper: createQueryTestWrapper().wrapper,
 	})
 
@@ -106,7 +120,7 @@ it("leaves the mission alone when a change names another one", async () => {
 it("reports a failed read and reads again on retry", async () => {
 	readDetail.mockRejectedValueOnce({ kind: "unknownMission", id: "m-1" })
 
-	const { result } = renderHook(() => useMissionDetail("m-1"), {
+	const { result } = renderHook(() => useMissionDetail("m-1", SPACE_ROW), {
 		wrapper: createQueryTestWrapper().wrapper,
 	})
 
@@ -119,7 +133,7 @@ it("reports a failed read and reads again on retry", async () => {
 })
 
 it("applies the activity of a change naming it before the reread returns", async () => {
-	const { result } = renderHook(() => useMissionDetail("m-1"), {
+	const { result } = renderHook(() => useMissionDetail("m-1", SPACE_ROW), {
 		wrapper: createQueryTestWrapper().wrapper,
 	})
 	await waitFor(() => expect(result.current.isReading).toBe(false))
@@ -155,7 +169,7 @@ describe("when changes arrive in a burst", () => {
 	}
 
 	const mountSettled = async () => {
-		const mounted = renderHook(() => useMissionDetail("m-1"), {
+		const mounted = renderHook(() => useMissionDetail("m-1", SPACE_ROW), {
 			wrapper: createQueryTestWrapper().wrapper,
 		})
 		await act(() => vi.advanceTimersByTimeAsync(0))
@@ -236,7 +250,7 @@ describe("when changes arrive in a burst", () => {
 
 describe("the skeleton of the mission detail", () => {
 	const mountDetail = () =>
-		renderHook(() => useMissionDetail("m-1"), {
+		renderHook(() => useMissionDetail("m-1", SPACE_ROW), {
 			wrapper: createQueryTestWrapper().wrapper,
 		})
 

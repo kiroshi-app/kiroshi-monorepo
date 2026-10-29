@@ -68,6 +68,7 @@ export const useWorkspaceTabs = ({ tabs, ...needs }: WorkspaceTabsSource) => {
 	const active = activeTabOf(space)
 
 	return {
+		spaceId: state.spaceId,
 		tabs: space.tabs.map((tab) => tabViewOf(tab, needingYou)),
 		activeId: active.id,
 		canGoBack: active.index > 0,

@@ -103,7 +103,7 @@ vi.mock("@/lib/missions/missions-transport", async (importOriginal) => {
 		missionsTransport: {
 			...actual.missionsTransport,
 			spacePage: async () => pageOf(harness.missions),
-			detail: async (missionId: string) => ({
+			detailOn: async (_hostId: string | null, missionId: string) => ({
 				mission: heldMission(missionId),
 				events: [],
 			}),
