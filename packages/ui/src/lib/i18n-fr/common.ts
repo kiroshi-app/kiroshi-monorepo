@@ -137,6 +137,77 @@ const common = {
 			},
 		},
 	},
+	claudeImport: {
+		sections: {
+			companions: "Compagnons",
+			instructionsAndSkills: "Instructions et compétences",
+		},
+		select: {
+			title: "Récupérez votre configuration Claude Code",
+			body: "Trouvé dans ~/.claude sur votre ordinateur. Tout est sélectionné ; décochez ce que vous préférez laisser.",
+			bodyMany:
+				"{{count}} compagnons et plus trouvés dans ~/.claude. Tout est sélectionné ; décochez ce que vous préférez laisser.",
+			nothingSelected:
+				"Rien n’est sélectionné. Cochez ce que vous voulez récupérer, ou passez cette étape.",
+			namesTaken: {
+				one: "Un nom est déjà pris dans Kiroshi. Il arrive avec un numéro ; rien n’est remplacé.",
+				two: "Deux noms sont déjà pris dans Kiroshi. Ils arrivent avec un numéro ; rien n’est remplacé.",
+				other:
+					"{{count}} noms sont déjà pris dans Kiroshi. Ils arrivent avec un numéro ; rien n’est remplacé.",
+			},
+			import: "Importer",
+			importItems_one: "Importer {{count}} élément",
+			importItems_many: "Importer {{count}} éléments",
+			importItems_other: "Importer {{count}} éléments",
+			importCompanions_one: "Importer {{count}} compagnon",
+			importCompanions_many: "Importer {{count}} compagnons",
+			importCompanions_other: "Importer {{count}} compagnons",
+			skip: "Passer pour l’instant",
+		},
+		fromSettings: {
+			title: "Importer depuis Claude Code",
+			body: "Trouvé dans ~/.claude. Ce qui est déjà dans Kiroshi reste tel quel ; seul ce qui est nouveau est sélectionné.",
+			cancel: "Annuler",
+		},
+		importing: {
+			title: "Récupération de votre configuration",
+			body: "{{done}} sur {{count}} terminés. Cela prend quelques secondes.",
+			action: "Import en cours…",
+		},
+		done: {
+			title: "Votre configuration est là",
+			body_one:
+				"{{companions}} sont prêts, avec votre CLAUDE.md et {{count}} compétence.",
+			body_many:
+				"{{companions}} sont prêts, avec votre CLAUDE.md et {{count}} compétences.",
+			body_other:
+				"{{companions}} sont prêts, avec votre CLAUDE.md et {{count}} compétences.",
+			continue: "Continuer",
+		},
+		partlyFailed: {
+			title: "L’essentiel de votre configuration est là",
+			body: "La compétence {{name}} n’a pas été récupérée. Réessayez, ou ajoutez-la plus tard depuis les Réglages.",
+			retry: "Réessayer {{name}}",
+		},
+		unreadable: {
+			title: "Impossible de lire ~/.claude",
+			body: "Kiroshi n’a pas eu le droit d’ouvrir ce dossier, donc rien n’a été récupéré. Autorisez votre compte à le lire, puis réessayez.",
+			retry: "Réessayer",
+		},
+		row: {
+			inKiroshi: "Déjà dans Kiroshi",
+			nameTaken:
+				"{{name}} existe déjà dans Kiroshi, donc celui-ci arrive sous le nom {{renamed}}. Renommez-le ensuite.",
+			companionNameTaken:
+				"Vous avez déjà un compagnon nommé {{name}}, donc celui-ci arrive sous le nom {{renamed}}.",
+			unparsable: "Impossible de le récupérer : son {{file}} est illisible.",
+			status: {
+				done: "Terminé",
+				pending: "En cours",
+				failed: "Échec",
+			},
+		},
+	},
 	notification: {
 		question: "Vous a posé une question",
 		approval: "Demande votre autorisation",

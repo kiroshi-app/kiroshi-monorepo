@@ -134,6 +134,73 @@ const common = {
 			},
 		},
 	},
+	claudeImport: {
+		sections: {
+			companions: "Companions",
+			instructionsAndSkills: "Instructions and skills",
+		},
+		select: {
+			title: "Bring in your Claude Code setup",
+			body: "Found in ~/.claude on your computer. Everything is selected; uncheck what you'd rather leave behind.",
+			bodyMany:
+				"Found {{count}} companions and more in ~/.claude. Everything is selected; uncheck what you'd rather leave behind.",
+			nothingSelected:
+				"Nothing is selected. Check what you want to bring in, or skip for now.",
+			namesTaken: {
+				one: "One name is already taken in Kiroshi. It comes in with a number; nothing gets replaced.",
+				two: "Two names are already taken in Kiroshi. Those come in with a number; nothing gets replaced.",
+				other:
+					"{{count}} names are already taken in Kiroshi. Those come in with a number; nothing gets replaced.",
+			},
+			import: "Import",
+			importItems_one: "Import {{count}} item",
+			importItems_other: "Import {{count}} items",
+			importCompanions_one: "Import {{count}} companion",
+			importCompanions_other: "Import {{count}} companions",
+			skip: "Skip for now",
+		},
+		fromSettings: {
+			title: "Import from Claude Code",
+			body: "Found in ~/.claude. What's already in Kiroshi stays as it is; only what's new is selected.",
+			cancel: "Cancel",
+		},
+		importing: {
+			title: "Bringing in your setup",
+			body: "{{done}} of {{count}} done. This takes a few seconds.",
+			action: "Importing…",
+		},
+		done: {
+			title: "Your setup is in",
+			body_one:
+				"{{companions}} are ready, with your CLAUDE.md and {{count}} skill.",
+			body_other:
+				"{{companions}} are ready, with your CLAUDE.md and {{count}} skills.",
+			continue: "Continue",
+		},
+		partlyFailed: {
+			title: "Most of your setup is in",
+			body: "The {{name}} skill didn't come in. Try it again, or add it later from Settings.",
+			retry: "Try {{name}} again",
+		},
+		unreadable: {
+			title: "Couldn't read ~/.claude",
+			body: "Kiroshi wasn't allowed to open that folder, so nothing came in. Let your account read it, then try again.",
+			retry: "Try again",
+		},
+		row: {
+			inKiroshi: "Already in Kiroshi",
+			nameTaken:
+				"{{name}} already lives in Kiroshi, so this one comes in as {{renamed}}. Rename it after.",
+			companionNameTaken:
+				"You already have a companion named {{name}}, so this one comes in as {{renamed}}.",
+			unparsable: "Couldn't bring it in: its {{file}} doesn't parse.",
+			status: {
+				done: "Done",
+				pending: "In progress",
+				failed: "Failed",
+			},
+		},
+	},
 	notification: {
 		question: "Asked you a question",
 		approval: "Wants your approval",
