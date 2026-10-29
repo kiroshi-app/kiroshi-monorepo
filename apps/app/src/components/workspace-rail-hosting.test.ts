@@ -143,7 +143,10 @@ const mountRail = async (boundaries: HostBoundaries) => {
 	const { queryClient, wrapper } = createQueryTestWrapper()
 	render(createElement(RailOfSpaceHostedHere), { wrapper })
 	await waitFor(() => {
-		expect(readMembers).toHaveBeenCalledWith(HOSTED_HERE.id)
+		expect(readMembers.mock.settledResults).toContainEqual({
+			type: "fulfilled",
+			value: { status: "ok", data: host.members },
+		})
 		expect(
 			queryClient.getQueryState(hostQueryKeys.hostingStateOf(HOSTED_HERE.id))
 				?.status,
@@ -165,18 +168,18 @@ describe("the rail logo of a Space hosted from this computer", () => {
 	it("is online when the Space has members and its hosting reads online", async () => {
 		await mountRail({ members: [OWNER, MEMBER], hosting: { kind: "online" } })
 
-		await waitFor(() => expect(railSpaceAvatarState()).toBe("online"))
+		expect(railSpaceAvatarState()).toBe("online")
 	})
 
 	it("is offline when the Space has members and its hosting reads stopped", async () => {
 		await mountRail({ members: [OWNER, MEMBER], hosting: { kind: "off" } })
 
-		await waitFor(() => expect(railSpaceAvatarState()).toBe("offline"))
+		expect(railSpaceAvatarState()).toBe("offline")
 	})
 
 	it("is local when the Space has no members", async () => {
 		await mountRail({ members: [OWNER], hosting: { kind: "online" } })
 
-		await waitFor(() => expect(railSpaceAvatarState()).toBe("local"))
+		expect(railSpaceAvatarState()).toBe("local")
 	})
 })
