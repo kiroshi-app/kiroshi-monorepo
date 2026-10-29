@@ -29,6 +29,7 @@ const tabOf = (space: SceneSpace, rowId: string): TitleBarTab | undefined => {
 			title: conversation.name,
 			icon: (
 				<ConversationSubjectIcon
+					hue={conversation.color}
 					icon={conversation.icon}
 					side={TAB_ICON_SIDE}
 				/>
