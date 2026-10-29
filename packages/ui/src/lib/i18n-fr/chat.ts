@@ -1101,7 +1101,7 @@ const chat = {
 			},
 			spaces: {
 				title: "Les Spaces séparent les choses",
-				body: "Un Space réunit les compagnons et les conversations d’un projet, et garde ses propres compétences, applications et secrets. Un compagnon garde aussi les siennes : ce qu’il apprend reste avec lui.",
+				body: "Un Space réunit les compagnons et les conversations d’un projet, et garde ses propres compétences, applications et secrets. Un compagnon garde aussi les siens : ce qu’il apprend reste avec lui.",
 				orbit: { name: "Orbit web", detail: "8 conversations" },
 				newsletter: { name: "Newsletter", detail: "3 conversations" },
 			},
