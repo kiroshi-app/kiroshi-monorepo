@@ -27,6 +27,15 @@ import {
 	tokenLengthOf,
 } from "@workspace/storybook/story-utils"
 import {
+	barIn,
+	boxOf,
+	isLifted,
+	liftTo,
+	middleOf,
+	pointerAt,
+	unpinnedTabsIn,
+} from "@workspace/storybook/tab-drag-gesture"
+import {
 	AppSidebar,
 	type AppSidebarBot,
 	type AppSidebarConversation,
@@ -38,6 +47,10 @@ import {
 	type Space,
 	type UserChipIdentity,
 } from "@workspace/ui/components/app-sidebar"
+import {
+	LOGIN_REDIRECT,
+	RELEASE_NOTES,
+} from "@workspace/ui/components/app-title-bar.fixtures"
 import type {
 	BotMissionState,
 	BotMissionTicket,
@@ -6235,5 +6248,44 @@ export const NoSearch = meta.story({
 		await expect(canvas.getByRole("button", { name: CREATE })).toHaveFocus()
 		await userEvent.tab()
 		await expect(rowButton(first)).toHaveFocus()
+	},
+})
+
+export const TitleBarTearOffReportsTheTab = meta.story({
+	tags: ["test-only"],
+	args: {
+		tabs: [RELEASE_NOTES, LOGIN_REDIRECT],
+		activeTabId: RELEASE_NOTES.id,
+		onReorderTabs: fn(),
+		onTearOffTab: fn(),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A tab of the sidebar title bar carried off the strip and released. Check the release reaches the `onTearOffTab` given to the sidebar once, with the tab and the screen point, and reports no order.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		const [, login] = unpinnedTabsIn(canvasElement)
+		const carriedTo = middleOf(login)
+		const offBar = boxOf(barIn(canvasElement)).bottom + 60
+
+		liftTo(login, carriedTo)
+		fireEvent.pointerMove(document.body, pointerAt(carriedTo, offBar))
+		await waitFor(() => expect(isLifted(login)).toBe(true))
+		fireEvent.pointerUp(document.body, {
+			...pointerAt(carriedTo, offBar),
+			screenX: 900,
+			screenY: 700,
+		})
+		await expect(args.onTearOffTab).toHaveBeenCalledOnce()
+		await expect(args.onTearOffTab).toHaveBeenCalledWith({
+			tabId: LOGIN_REDIRECT.id,
+			screenX: 900,
+			screenY: 700,
+		})
+		await expect(args.onReorderTabs).not.toHaveBeenCalled()
 	},
 })

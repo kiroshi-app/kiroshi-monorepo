@@ -22,6 +22,17 @@ import {
 	tokenStyleIn,
 } from "@workspace/storybook/story-utils"
 import {
+	barIn,
+	boxOf,
+	isLifted,
+	liftTo,
+	middleOf,
+	POINTER,
+	pointAt,
+	pointerAt,
+	unpinnedTabsIn,
+} from "@workspace/storybook/tab-drag-gesture"
+import {
 	AppTitleBar,
 	type AppTitleBarProps,
 } from "@workspace/ui/components/app-title-bar"
@@ -104,14 +115,6 @@ const meta = preview.meta({
 	),
 })
 
-const barIn = (canvasElement: HTMLElement) =>
-	slotIn(canvasElement, "app-title-bar")
-
-const boxOf = (element: Element) => element.getBoundingClientRect()
-
-const unpinnedTabsIn = (canvasElement: HTMLElement) =>
-	slotsIn(canvasElement, "title-bar-tab")
-
 const titleOf = (tab: HTMLElement) =>
 	tab.querySelector<HTMLElement>("span:last-child") ?? tab
 
@@ -122,31 +125,6 @@ const closeButtonsIn = (canvasElement: HTMLElement) =>
 
 const openMenu = async () => settled(await screen.findByRole("menu"))
 
-const POINTER = {
-	button: 0,
-	isPrimary: true,
-	pointerId: 1,
-	pointerType: "mouse",
-}
-
-const pointerAt = (clientX: number, clientY: number) => ({
-	...POINTER,
-	clientX: Math.round(clientX),
-	clientY: Math.round(clientY),
-})
-
-const pointAt = (clientX: number, onto: Element) =>
-	pointerAt(clientX, boxOf(onto).top + boxOf(onto).height / 2)
-
-const middleOf = (element: Element) =>
-	boxOf(element).left + boxOf(element).width / 2
-
-const liftTo = (handle: HTMLElement, clientX: number) => {
-	fireEvent.pointerDown(handle, pointAt(middleOf(handle), handle))
-	fireEvent.pointerMove(handle, pointAt(middleOf(handle) + 8, handle))
-	fireEvent.pointerMove(handle, pointAt(clientX, handle))
-}
-
 const dropAt = (handle: HTMLElement, clientX: number) => {
 	fireEvent.pointerUp(handle, pointAt(clientX, handle))
 	fireEvent.click(handle)
@@ -155,9 +133,6 @@ const dropAt = (handle: HTMLElement, clientX: number) => {
 const shiftsIn = (root: HTMLElement) => [
 	...root.querySelectorAll<HTMLElement>('[role="tab"][data-shift]'),
 ]
-
-const isLifted = (tab: HTMLElement) =>
-	getComputedStyle(tab).pointerEvents === "none"
 
 const nextFrames = async () => {
 	await new Promise(requestAnimationFrame)
