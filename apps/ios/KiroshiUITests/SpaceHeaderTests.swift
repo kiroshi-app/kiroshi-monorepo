@@ -38,7 +38,7 @@ final class SpaceHeaderTests: XCTestCase {
 
         missions.space.tap()
 
-        XCTAssertTrue(app.buttons["Side project, Not connected"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Side project, Offline"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Home lab, Online"].exists)
         XCTAssertTrue(app.buttons["Studio, Shared"].exists)
     }

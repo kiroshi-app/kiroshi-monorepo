@@ -16,6 +16,9 @@ enum KiroshiColor: String, CaseIterable, Sendable {
     case destructive
     case presenceOnline = "presence-online"
     case presenceOffline = "presence-offline"
+    case spaceAvatarLocalBadge = "space-avatar-local-badge"
+    case spaceAvatarOfflineBadge = "space-avatar-offline-badge"
+    case spaceAvatarHatch = "space-avatar-hatch"
     case railAvatar = "rail-avatar"
     case imageOutline = "image-outline"
     case userBubble = "user-bubble"

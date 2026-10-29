@@ -30,9 +30,69 @@ struct SpaceAvatarPalette: Equatable, Sendable {
     let compact: [SpaceAvatarRGB]
 }
 
-struct SpaceAvatarDot: Equatable, Sendable {
-    let diameter: Double
-    let cutOut: Double
+enum SpaceAvatarState: CaseIterable, Sendable {
+    case local
+    case shared
+    case online
+    case connecting
+    case offline
+
+    init(presence: SpacePresence?) {
+        switch presence {
+        case nil: self = .local
+        case .shared: self = .shared
+        case .online: self = .online
+        case .connecting: self = .connecting
+        case .offline: self = .offline
+        }
+    }
+
+    var isFilled: Bool { self != .connecting }
+
+    var hasDot: Bool { self == .shared || self == .online }
+
+    var isGlazed: Bool { self == .local || hasDot }
+}
+
+struct SpaceAvatarGlyph: Equatable, Sendable {
+    let scale: Double
+    let stroke: Double
+}
+
+struct SpaceAvatarMarks: Equatable, Sendable {
+    struct Initial: Equatable, Sendable {
+        let fontSize: Double
+        let weight: Int
+    }
+
+    struct Badge: Equatable, Sendable {
+        let diameter: Double
+        let cutOut: Double
+    }
+
+    struct Hatch: Equatable, Sendable {
+        let spacing: Double
+        let stroke: Double
+    }
+
+    let initial: Initial
+    let badge: Badge
+    let laptop: SpaceAvatarGlyph
+    let cross: SpaceAvatarGlyph?
+    let hatch: Hatch
+
+    func scaled(from drawn: Double, to size: Double) -> SpaceAvatarMarks {
+        let scaled = { (value: Double) in SpaceAvatarRecipe.rounded(value * size / drawn) }
+        let glyph = { (glyph: SpaceAvatarGlyph) in
+            SpaceAvatarGlyph(scale: scaled(glyph.scale), stroke: glyph.stroke)
+        }
+        return SpaceAvatarMarks(
+            initial: Initial(fontSize: scaled(initial.fontSize), weight: initial.weight),
+            badge: Badge(diameter: scaled(badge.diameter), cutOut: scaled(badge.cutOut)),
+            laptop: glyph(laptop),
+            cross: cross.map(glyph),
+            hatch: Hatch(spacing: scaled(hatch.spacing), stroke: scaled(hatch.stroke)))
+    }
 }
 
 enum SpaceAvatarSize: Int, CaseIterable, Sendable {
@@ -47,14 +107,31 @@ enum SpaceAvatarSize: Int, CaseIterable, Sendable {
 
     var isCompact: Bool { rawValue < SpaceAvatarRecipe.compactBelow }
 
-    var dot: SpaceAvatarDot? {
+    var marks: SpaceAvatarMarks {
+        let drawn = drawnMarks
+        return drawn.marks.scaled(from: drawn.size.points, to: points)
+    }
+
+    var badgeCentre: Double {
+        points - SpaceAvatarRecipe.badgeCentreInset * marks.badge.diameter
+    }
+
+    var badgeOverhang: Double {
+        max(0, badgeCentre + marks.badge.diameter / 2 - points)
+    }
+
+    var hatchOffsets: [Double] {
+        let spacing = marks.hatch.spacing
+        return (0...Int((2 * points / spacing).rounded(.down))).map {
+            SpaceAvatarRecipe.rounded(Double($0) * spacing)
+        }
+    }
+
+    private var drawnMarks: (size: SpaceAvatarSize, marks: SpaceAvatarMarks) {
         switch self {
-        case .switcher: nil
-        case .menu: SpaceAvatarDot(diameter: 6, cutOut: 1.5)
-        case .rail: SpaceAvatarDot(diameter: 8, cutOut: 2)
-        case .settings: SpaceAvatarDot(diameter: 10, cutOut: 2)
-        case .page: SpaceAvatarDot(diameter: 12, cutOut: 2.5)
-        case .large: SpaceAvatarDot(diameter: 14, cutOut: 3)
+        case .switcher, .menu: (.menu, SpaceAvatarRecipe.menuMarks)
+        case .rail, .settings: (.rail, SpaceAvatarRecipe.railMarks)
+        case .page, .large: (.page, SpaceAvatarRecipe.pageMarks)
         }
     }
 
@@ -66,16 +143,34 @@ enum SpaceAvatarSize: Int, CaseIterable, Sendable {
         case .large: 2
         }
     }
-
-    func dotCentre(_ dot: SpaceAvatarDot) -> Double {
-        points - SpaceAvatarRecipe.dotCentreInset * dot.diameter
-    }
 }
 
 enum SpaceAvatarRecipe {
     static let compactBelow = 20
     static let compactRadii = [0.44, 0.8]
-    static let dotCentreInset = 0.32
+    static let badgeCentreInset = 0.36
+    static let glyphGrid = 24.0
+    static let laptopGlyph =
+        "M4 16V6C4 4.8954 4.8954 4 6 4H18C19.1046 4 20 4.8954 20 6V16M2.5 16H21.5C21.7761 16 22 16.2239 22 16.5V18C22 19.1046 21.1046 20 20 20H4C2.8954 20 2 19.1046 2 18V16.5C2 16.2239 2.2239 16 2.5 16Z"
+    static let crossGlyph = "M7.5 7.5L16.5 16.5M16.5 7.5L7.5 16.5"
+    static let menuMarks = SpaceAvatarMarks(
+        initial: .init(fontSize: 10, weight: 700),
+        badge: .init(diameter: 8, cutOut: 1.5),
+        laptop: SpaceAvatarGlyph(scale: 0.258, stroke: 3.677),
+        cross: nil,
+        hatch: .init(spacing: 3, stroke: 0.8))
+    static let railMarks = SpaceAvatarMarks(
+        initial: .init(fontSize: 13, weight: 600),
+        badge: .init(diameter: 12, cutOut: 2),
+        laptop: SpaceAvatarGlyph(scale: 0.35, stroke: 3.143),
+        cross: SpaceAvatarGlyph(scale: 0.34, stroke: 3.2),
+        hatch: .init(spacing: 4, stroke: 1))
+    static let pageMarks = SpaceAvatarMarks(
+        initial: .init(fontSize: 24, weight: 600),
+        badge: .init(diameter: 18, cutOut: 2.5),
+        laptop: SpaceAvatarGlyph(scale: 0.51, stroke: 2.941),
+        cross: SpaceAvatarGlyph(scale: 0.51, stroke: 3.2),
+        hatch: .init(spacing: 6, stroke: 1.5))
 
     private static let superellipseExponent = 4.6
     private static let outlinePoints = 96
@@ -95,6 +190,11 @@ enum SpaceAvatarRecipe {
     private static let fnvPrime: UInt32 = 0x0100_0193
 
     private typealias Tone = (lightness: Double, chroma: Double)
+
+    private static let ink: [SpaceAvatarTheme: Tone] = [
+        .light: (0.36, 0.09),
+        .dark: (0.96, 0.03),
+    ]
 
     private static let tones: [SpaceAvatarTheme: (full: [Tone], compact: [Tone])] = [
         .light: (
@@ -130,6 +230,21 @@ enum SpaceAvatarRecipe {
         }
         let recipe = tones[theme] ?? (full: [], compact: [])
         return SpaceAvatarPalette(full: recipe.full.map(tone), compact: recipe.compact.map(tone))
+    }
+
+    static func ink(_ theme: SpaceAvatarTheme, colour: Hue?) -> SpaceAvatarRGB {
+        let tone = ink[theme] ?? (0, 0)
+        return fitted(
+            lightness: tone.lightness, chroma: colour == nil ? 0 : tone.chroma,
+            hue: colour.map { Double($0.degrees) * .pi / 180 } ?? 0)
+    }
+
+    static func initial(of name: String) -> String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines).first.map { $0.uppercased() } ?? ""
+    }
+
+    static func rounded(_ value: Double) -> Double {
+        (value * 1000).rounded() / 1000
     }
 
     static func outline(centre: Double, half: Double) -> [SpaceAvatarPoint] {

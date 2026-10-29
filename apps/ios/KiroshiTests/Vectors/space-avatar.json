@@ -208,12 +208,77 @@
 			"compact": ["#1c4a4d", "#188489", "#5dcbd1"]
 		}
 	],
+	"inks": [
+		{ "theme": "light", "colour": null, "ink": "#3d3d3d" },
+		{ "theme": "light", "colour": 42, "ink": "#632a11" },
+		{ "theme": "light", "colour": 63, "ink": "#5b3200" },
+		{ "theme": "light", "colour": 82, "ink": "#503800" },
+		{ "theme": "light", "colour": 132, "ink": "#2a460c" },
+		{ "theme": "light", "colour": 186, "ink": "#034742" },
+		{ "theme": "light", "colour": 257, "ink": "#1b3d6b" },
+		{ "theme": "light", "colour": 296, "ink": "#423166" },
+		{ "theme": "light", "colour": 358, "ink": "#61263d" },
+		{ "theme": "light", "colour": 17, "ink": "#64262c" },
+		{ "theme": "light", "colour": 200, "ink": "#034649" },
+		{ "theme": "dark", "colour": null, "ink": "#f2f2f2" },
+		{ "theme": "dark", "colour": 42, "ink": "#feeee8" },
+		{ "theme": "dark", "colour": 63, "ink": "#feefe2" },
+		{ "theme": "dark", "colour": 82, "ink": "#fcf0dc" },
+		{ "theme": "dark", "colour": 132, "ink": "#eaf6e2" },
+		{ "theme": "dark", "colour": 186, "ink": "#dcf9f5" },
+		{ "theme": "dark", "colour": 257, "ink": "#eaf3fe" },
+		{ "theme": "dark", "colour": 296, "ink": "#f3effe" },
+		{ "theme": "dark", "colour": 358, "ink": "#feedf2" },
+		{ "theme": "dark", "colour": 17, "ink": "#feeded" },
+		{ "theme": "dark", "colour": 200, "ink": "#dcf8fa" }
+	],
+	"initials": [
+		{ "name": "Atelier", "initial": "A" },
+		{ "name": "harbour Studio", "initial": "H" },
+		{ "name": "  personal", "initial": "P" },
+		{ "name": "Fieldwork", "initial": "F" },
+		{ "name": "quarry Labs", "initial": "Q" },
+		{ "name": "espace-été", "initial": "E" },
+		{ "name": "étude", "initial": "É" },
+		{ "name": "👨‍💻 lab", "initial": "👨‍💻" },
+		{ "name": "🚀-launch", "initial": "🚀" },
+		{ "name": "straße", "initial": "S" },
+		{ "name": "", "initial": "" },
+		{ "name": " \t ", "initial": "" }
+	],
+	"glyphs": {
+		"grid": 24,
+		"laptop": "M4 16V6C4 4.8954 4.8954 4 6 4H18C19.1046 4 20 4.8954 20 6V16M2.5 16H21.5C21.7761 16 22 16.2239 22 16.5V18C22 19.1046 21.1046 20 20 20H4C2.8954 20 2 19.1046 2 18V16.5C2 16.2239 2.2239 16 2.5 16Z",
+		"cross": "M7.5 7.5L16.5 16.5M16.5 7.5L7.5 16.5"
+	},
+	"badges": {
+		"light": {
+			"local": "#737373",
+			"offline": "#dc2626",
+			"hatch": { "colour": "#000000", "opacity": 0.2 }
+		},
+		"dark": {
+			"local": "#737373",
+			"offline": "#ef4444",
+			"hatch": { "colour": "#ffffff", "opacity": 0.2 }
+		}
+	},
 	"sizes": [
 		{
 			"size": 12,
 			"isCompact": true,
 			"lineStroke": 1,
-			"dot": null,
+			"mark": {
+				"initial": { "fontSize": 8.571, "weight": 700 },
+				"badge": { "diameter": 6.857, "cutOut": 1.286 },
+				"laptop": { "scale": 0.221, "stroke": 3.677 },
+				"cross": null,
+				"hatch": { "spacing": 2.571, "stroke": 0.686 },
+				"badgeCentre": 9.53148,
+				"hatchOffsets": [
+					0, 2.571, 5.142, 7.713, 10.284, 12.855, 15.426, 17.997, 20.568, 23.139
+				]
+			},
 			"outline": [
 				[12, 6],
 				[11.994, 7.833],
@@ -317,7 +382,15 @@
 			"size": 14,
 			"isCompact": true,
 			"lineStroke": 1,
-			"dot": { "diameter": 6, "cutOut": 1.5, "centre": 12.08 },
+			"mark": {
+				"initial": { "fontSize": 10, "weight": 700 },
+				"badge": { "diameter": 8, "cutOut": 1.5 },
+				"laptop": { "scale": 0.258, "stroke": 3.677 },
+				"cross": null,
+				"hatch": { "spacing": 3, "stroke": 0.8 },
+				"badgeCentre": 11.120000000000001,
+				"hatchOffsets": [0, 3, 6, 9, 12, 15, 18, 21, 24, 27]
+			},
 			"outline": [
 				[14, 7],
 				[13.993, 9.139],
@@ -421,7 +494,15 @@
 			"size": 26,
 			"isCompact": false,
 			"lineStroke": 1,
-			"dot": { "diameter": 8, "cutOut": 2, "centre": 23.44 },
+			"mark": {
+				"initial": { "fontSize": 13, "weight": 600 },
+				"badge": { "diameter": 12, "cutOut": 2 },
+				"laptop": { "scale": 0.35, "stroke": 3.143 },
+				"cross": { "scale": 0.34, "stroke": 3.2 },
+				"hatch": { "spacing": 4, "stroke": 1 },
+				"badgeCentre": 21.68,
+				"hatchOffsets": [0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52]
+			},
 			"outline": [
 				[26, 13],
 				[25.988, 16.972],
@@ -525,7 +606,18 @@
 			"size": 36,
 			"isCompact": false,
 			"lineStroke": 1.125,
-			"dot": { "diameter": 10, "cutOut": 2, "centre": 32.8 },
+			"mark": {
+				"initial": { "fontSize": 18, "weight": 600 },
+				"badge": { "diameter": 16.615, "cutOut": 2.769 },
+				"laptop": { "scale": 0.485, "stroke": 3.143 },
+				"cross": { "scale": 0.471, "stroke": 3.2 },
+				"hatch": { "spacing": 5.538, "stroke": 1.385 },
+				"badgeCentre": 30.0186,
+				"hatchOffsets": [
+					0, 5.538, 11.076, 16.614, 22.152, 27.69, 33.228, 38.766, 44.304,
+					49.842, 55.38, 60.918, 66.456, 71.994
+				]
+			},
 			"outline": [
 				[36, 18],
 				[35.983, 23.499],
@@ -629,7 +721,17 @@
 			"size": 48,
 			"isCompact": false,
 			"lineStroke": 1.5,
-			"dot": { "diameter": 12, "cutOut": 2.5, "centre": 44.16 },
+			"mark": {
+				"initial": { "fontSize": 24, "weight": 600 },
+				"badge": { "diameter": 18, "cutOut": 2.5 },
+				"laptop": { "scale": 0.51, "stroke": 2.941 },
+				"cross": { "scale": 0.51, "stroke": 3.2 },
+				"hatch": { "spacing": 6, "stroke": 1.5 },
+				"badgeCentre": 41.52,
+				"hatchOffsets": [
+					0, 6, 12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90, 96
+				]
+			},
 			"outline": [
 				[48, 24],
 				[47.978, 31.333],
@@ -733,7 +835,17 @@
 			"size": 64,
 			"isCompact": false,
 			"lineStroke": 2,
-			"dot": { "diameter": 14, "cutOut": 3, "centre": 59.519999999999996 },
+			"mark": {
+				"initial": { "fontSize": 32, "weight": 600 },
+				"badge": { "diameter": 24, "cutOut": 3.333 },
+				"laptop": { "scale": 0.68, "stroke": 2.941 },
+				"cross": { "scale": 0.68, "stroke": 3.2 },
+				"hatch": { "spacing": 8, "stroke": 2 },
+				"badgeCentre": 55.36,
+				"hatchOffsets": [
+					0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128
+				]
+			},
 			"outline": [
 				[64, 32],
 				[63.97, 41.777],

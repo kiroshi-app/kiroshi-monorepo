@@ -18,11 +18,21 @@ import {
 import { HUE_TONES } from "../../../packages/ui/src/components/hue-tones"
 import {
 	COMPACT_RADII,
+	CROSS_GLYPH,
 	dotCentre,
+	GLYPH_GRID,
+	HATCH_INK,
+	hatchPath,
 	isCompact,
+	LAPTOP_GLYPH,
+	LOCAL_BADGE_FILL,
+	markMetricsOf,
+	OFFLINE_BADGE_FILL,
 	SPACE_AVATAR_SIZES,
 	STATE_METRICS,
 	spaceArcs,
+	spaceInitial,
+	spaceInk,
 	spacePalette,
 	superellipsePath,
 } from "../../../packages/ui/src/components/space-avatar-recipe"
@@ -65,6 +75,24 @@ const SPACE_IDS = [
 
 const THEMES = ["light", "dark"] as const
 
+const SPACE_NAMES = [
+	"Atelier",
+	"harbour Studio",
+	"  personal",
+	"Fieldwork",
+	"quarry Labs",
+	"espace-été",
+	"e\u0301tude",
+	"\u{1F468}\u200D\u{1F4BB} lab",
+	"🚀-launch",
+	"straße",
+	"",
+	" \t ",
+]
+
+const hatchOffsetsOf = (path: string) =>
+	[...path.matchAll(/L(-?[\d.]+) 0/g)].map(([, offset]) => Number(offset))
+
 const pointsOf = (path: string) =>
 	[...path.matchAll(/[ML](-?[\d.]+) (-?[\d.]+)/g)].map(([, x, y]) => [
 		Number(x),
@@ -85,13 +113,41 @@ const vectors = {
 			...spacePalette(theme, colour),
 		})),
 	),
+	inks: THEMES.flatMap((theme) =>
+		PALETTE_HUES.map((colour) => ({
+			theme,
+			colour,
+			ink: spaceInk(theme, colour),
+		})),
+	),
+	initials: SPACE_NAMES.map((name) => ({
+		name,
+		initial: spaceInitial(name),
+	})),
+	glyphs: { grid: GLYPH_GRID, laptop: LAPTOP_GLYPH, cross: CROSS_GLYPH },
+	badges: Object.fromEntries(
+		THEMES.map((theme) => [
+			theme,
+			{
+				local: LOCAL_BADGE_FILL,
+				offline: OFFLINE_BADGE_FILL[theme],
+				hatch: HATCH_INK[theme],
+			},
+		]),
+	),
 	sizes: SPACE_AVATAR_SIZES.map((size) => {
-		const { dot, lineStroke } = STATE_METRICS[size]
+		const { lineStroke } = STATE_METRICS[size]
+		const mark = markMetricsOf(size)
 		return {
 			size,
 			isCompact: isCompact(size),
 			lineStroke,
-			dot: dot ? { ...dot, centre: dotCentre(size, dot.diameter) } : null,
+			mark: {
+				...mark,
+				cross: mark.cross ?? null,
+				badgeCentre: dotCentre(size, mark.badge.diameter),
+				hatchOffsets: hatchOffsetsOf(hatchPath(size, mark.hatch.spacing)),
+			},
 			outline: pointsOf(superellipsePath(size / 2, size / 2)),
 		}
 	}),
@@ -133,7 +189,7 @@ await Bun.write(HUE_OUTPUT, JSON.stringify(hueTones))
 await Bun.write(BORDER_OUTPUT, JSON.stringify(borders))
 await $`bunx biome format --write ${OUTPUT.pathname} ${BORDER_OUTPUT.pathname} ${HUE_OUTPUT.pathname}`.quiet()
 console.log(
-	`${vectors.arcs.length} ids, ${vectors.palettes.length} palettes, ${vectors.sizes.length} sizes -> ${OUTPUT.pathname}`,
+	`${vectors.arcs.length} ids, ${vectors.palettes.length} palettes, ${vectors.inks.length} inks, ${vectors.initials.length} initials, ${vectors.sizes.length} sizes -> ${OUTPUT.pathname}`,
 )
 console.log(`${borders.borders.length} borders -> ${BORDER_OUTPUT.pathname}`)
 console.log(`${hueTones.hues.length} hues -> ${HUE_OUTPUT.pathname}`)

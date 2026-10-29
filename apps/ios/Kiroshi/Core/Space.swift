@@ -23,13 +23,13 @@ enum SpacePresence: Equatable, Sendable {
     case shared
     case online
     case connecting
-    case notConnected
+    case offline
 }
 
 extension Space {
     func presence(isAwaitingHost: Bool) -> SpacePresence {
         if isAwaitingHost { return .connecting }
-        guard isHostOnline else { return .notConnected }
+        guard isHostOnline else { return .offline }
         return role == .owner ? .shared : .online
     }
 }

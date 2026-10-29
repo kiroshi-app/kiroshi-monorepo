@@ -28,11 +28,25 @@ final class SpaceSelectorTests: XCTestCase {
 
             XCTAssertTrue(app.buttons["Studio, Shared"].waitForExistence(timeout: 5))
             XCTAssertTrue(app.buttons["Home lab, Online"].exists)
-            XCTAssertTrue(app.buttons["Side project, Not connected"].exists)
+            XCTAssertTrue(app.buttons["Side project, Offline"].exists)
             keep("Space selector, \(appearance)")
             try audit(app)
             app.terminate()
         }
+    }
+
+    func testEachRowReadsItsStateOnceAtTheLargestTextSize() throws {
+        let app = try launch(
+            "2.1", in: .dark, Self.colours[0], Self.colours[1],
+            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL")
+        openTheMenu(of: "Studio", in: app)
+
+        XCTAssertTrue(app.buttons["Side project, Offline"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Studio, Shared"].exists)
+        XCTAssertTrue(app.buttons["Home lab, Online"].exists)
+        XCTAssertFalse(app.images["S"].exists)
+        keep("Space selector at the largest text size, dark")
+        try audit(app) { issue in issue.auditType == .textClipped && issue.element == nil }
     }
 
     func testTheSpaceWhoseHostHasNotAnsweredIsConnecting() throws {

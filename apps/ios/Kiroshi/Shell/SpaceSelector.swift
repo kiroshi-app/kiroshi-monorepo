@@ -65,7 +65,8 @@ struct SpaceSelector: View {
 
     private func avatar(of space: Space, _ presence: SpacePresence) -> UIImage {
         SpaceAvatar(
-            spaceId: space.id, colour: space.colour, size: Self.avatarSize, presence: presence
+            spaceId: space.id, name: space.name, colour: space.colour, size: Self.avatarSize,
+            state: SpaceAvatarState(presence: presence)
         )
         .image(in: colorScheme, scale: displayScale)
     }
@@ -91,7 +92,7 @@ extension SpacePresence {
         case .shared: "Shared"
         case .online: "Online"
         case .connecting: "Connecting…"
-        case .notConnected: "Not connected"
+        case .offline: "Offline"
         }
     }
 }
