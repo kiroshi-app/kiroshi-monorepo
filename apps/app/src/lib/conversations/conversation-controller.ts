@@ -59,6 +59,11 @@ import {
 	type TurnQueue,
 } from "./turn-queue"
 
+import {
+	failureReporterIn,
+	type ReporterFacts,
+	type UnreportedFailureNotice,
+} from "../failure-report"
 import { createQueue } from "../queue"
 import { createStore } from "../store"
 import type {
@@ -124,11 +129,6 @@ export type RefusedMessage = {
 	repliedToMessageId: string | null
 }
 
-export type UnresolvedMention = {
-	botId: string
-	name: string | null
-}
-
 export type PendingPrompt =
 	| { kind: "question"; botId: string; request: QuestionRequest }
 	| { kind: "permission"; botId: string; request: PermissionRequest }
@@ -156,7 +156,6 @@ export type ConversationState = {
 	pendingPrompt: PendingPrompt | null
 	latestError: ChatError | null
 	reportedCauses: ReportedRunsByTurnId
-	unresolvedMentions: UnresolvedMention[]
 }
 
 export type ConversationController = {
@@ -179,7 +178,6 @@ export type ConversationController = {
 	unpin: (messageId: string, blockIndex: number) => Promise<void>
 	pins: () => Promise<MessagePin[]>
 	dismissError: (id: string) => void
-	dismissUnresolvedMentions: () => void
 	answer: (id: string, answers: QuestionAnswers) => Promise<void>
 	respond: (id: string, decision: PermissionDecision) => Promise<void>
 	stop: () => Promise<void>
@@ -201,6 +199,10 @@ export type ConversationControllerOptions = {
 	onReconnected?: ReconnectionListener
 	rereadConversation?: (conversationId: string) => void
 	senderAccountId?: () => string | null
+	reportFailure?: (
+		notice: UnreportedFailureNotice,
+		facts?: ReporterFacts,
+	) => unknown
 }
 
 type Seating = "held" | "unknown" | "unreadable"
@@ -256,8 +258,6 @@ const NO_PINS: MessagePin[] = []
 
 const NO_SPEAKERS: SpeakingBot[] = []
 
-const NO_UNRESOLVED_MENTIONS: UnresolvedMention[] = []
-
 const isSameWork = (left: WorkingState | null, right: WorkingState | null) =>
 	left?.kind === right?.kind &&
 	left?.label === right?.label &&
@@ -291,8 +291,7 @@ const isSameState = (left: ConversationState, right: ConversationState) =>
 	left.refusedMessage === right.refusedMessage &&
 	left.pendingPrompt === right.pendingPrompt &&
 	left.latestError === right.latestError &&
-	left.reportedCauses === right.reportedCauses &&
-	left.unresolvedMentions === right.unresolvedMentions
+	left.reportedCauses === right.reportedCauses
 
 const promptWork = (pending: PendingPrompt): WorkingState => ({
 	kind: "waiting",
@@ -325,7 +324,6 @@ const initialState: ConversationState = {
 	pendingPrompt: null,
 	latestError: null,
 	reportedCauses: NO_REPORTED_RUNS,
-	unresolvedMentions: NO_UNRESOLVED_MENTIONS,
 }
 
 export const createConversationController = (
@@ -345,6 +343,8 @@ export const createConversationController = (
 	const announceReportTurn =
 		options.announceReportTurn ?? createReportTurnAnnouncer()
 	const onReconnected = options.onReconnected ?? createReconnectionListener()
+	const reportFailure =
+		options.reportFailure ?? failureReporterIn("conversation-controller")
 	const transcript = createTranscriptController(store)
 	const hearSilence = ({ conversationId }: RuntimeScope) => {
 		sync()
@@ -365,7 +365,6 @@ export const createConversationController = (
 	let reportedCauses: ReportedRunsByTurnId = NO_REPORTED_RUNS
 	let latestError: ChatError | null = null
 	let arrivedBotIds: string[] = []
-	let unresolvedMentions: UnresolvedMention[] = NO_UNRESOLVED_MENTIONS
 	let errorCount = 0
 	let detach: Promise<() => void> | null = null
 	let stopArrivals: Promise<() => void> | null = null
@@ -557,7 +556,6 @@ export const createConversationController = (
 			pendingPrompt: oldestPrompt(),
 			latestError,
 			reportedCauses,
-			unresolvedMentions,
 		})
 	}
 
@@ -722,27 +720,6 @@ export const createConversationController = (
 		seated?.participants.find((participant) => participant.botId === botId)
 			?.name ?? null
 
-	const isBetterThan = (
-		found: UnresolvedMention,
-		known: UnresolvedMention | undefined,
-	) => !known || (found.name !== null && known.name === null)
-
-	const rememberUnresolved = (missed: UnresolvedMention[]) => {
-		const held = new Map(
-			unresolvedMentions.map((mention) => [mention.botId, mention]),
-		)
-		const fresh = missed.filter((found) =>
-			isBetterThan(found, held.get(found.botId)),
-		)
-		if (fresh.length === 0) {
-			return
-		}
-		for (const found of fresh) {
-			held.set(found.botId, found)
-		}
-		unresolvedMentions = [...held.values()]
-	}
-
 	const summonsRunOf = (turnId: string, botId: string): SummonsRun => ({
 		conversationId: conversation?.id ?? NO_CONVERSATION,
 		turnId,
@@ -781,19 +758,13 @@ export const createConversationController = (
 			? presentParticipants(seated).map(({ botId }) => botId)
 			: []
 		const found: HandedMention[] = []
-		const missed: UnresolvedMention[] = []
 		for (const mention of handed) {
 			if (present.includes(mention.botId)) {
 				found.push(mention)
 				continue
 			}
 			traceSummonsDropped(summonsRunOf(turnId, mention.botId), "notSeated")
-			missed.push({
-				botId: mention.botId,
-				name: nameSeatedIn(seated, mention.botId),
-			})
 		}
-		rememberUnresolved(missed)
 		return found
 	}
 
@@ -1234,6 +1205,51 @@ export const createConversationController = (
 		return answering.map((botId) => ({ botId, promptId: said.id }))
 	}
 
+	const rosterNamesIn = async (spaceId: string | null) => {
+		try {
+			return new Map(
+				(await store.bots(spaceId)).map(({ id, name }) => [id, name]),
+			)
+		} catch (reason) {
+			noteFailure(toReadError(reason))
+			sync()
+			return new Map<string, string>()
+		}
+	}
+
+	const namesOf = async (seated: StoredConversation, botIds: string[]) => {
+		const fromSeats = botIds.map((botId) => nameSeatedIn(seated, botId))
+		const roster = fromSeats.includes(null)
+			? await rosterNamesIn(seated.spaceId)
+			: null
+		return botIds.map(
+			(botId, index) =>
+				fromSeats[index] ??
+				roster?.get(botId) ??
+				i18n.t("chat:transcript.mention.unknown"),
+		)
+	}
+
+	const raiseNotStarted = async (said: TranscriptMessage, botIds: string[]) => {
+		if (!conversation) {
+			return
+		}
+		const names = await namesOf(conversation, botIds)
+		const count = names.length
+		reportFailure(
+			{
+				title: i18n.t("chat:transcript.mention.notStarted.title", {
+					count,
+					names: names.join(i18n.t("chat:namelessConversation.separator")),
+				}),
+				description: i18n.t("chat:transcript.mention.notStarted.description", {
+					count,
+				}),
+			},
+			{ conversation: said.conversationId, turn: said.turnId },
+		)
+	}
+
 	const noteUnseatedIn = (said: TranscriptMessage) => {
 		const { unresolved } = addresseesIn(said.content, presentBotIds())
 		dropAll(
@@ -1241,12 +1257,9 @@ export const createConversationController = (
 			said.turnId,
 			"notSeated",
 		)
-		rememberUnresolved(
-			unresolved.map((botId) => ({
-				botId,
-				name: nameSeatedIn(conversation, botId),
-			})),
-		)
+		if (unresolved.length > 0) {
+			void raiseNotStarted(said, unresolved)
+		}
 	}
 
 	const nameFrom = async (conversationId: string, text: string) => {
@@ -1690,7 +1703,6 @@ export const createConversationController = (
 		refused = null
 		reportedCauses = NO_REPORTED_RUNS
 		arrivedBotIds = []
-		unresolvedMentions = NO_UNRESOLVED_MENTIONS
 		forgetFailure()
 		sync()
 		void routePendingQuestions(next.id)
@@ -1720,14 +1732,6 @@ export const createConversationController = (
 			return
 		}
 		forgetFailure()
-		sync()
-	}
-
-	const dismissUnresolvedMentions = () => {
-		if (unresolvedMentions.length === 0) {
-			return
-		}
-		unresolvedMentions = NO_UNRESOLVED_MENTIONS
 		sync()
 	}
 
@@ -1846,7 +1850,6 @@ export const createConversationController = (
 		unpin,
 		pins,
 		dismissError,
-		dismissUnresolvedMentions,
 		answer,
 		respond,
 		stop,

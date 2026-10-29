@@ -16,7 +16,6 @@ import type {
 	ConversationState,
 	PendingPrompt,
 	RefusedMessage,
-	UnresolvedMention,
 } from "../conversations/conversation-controller"
 import type { ConversationRuntimes } from "../conversations/conversation-runtimes"
 import type { Bot, Conversation } from "../conversations/store-contract"
@@ -105,17 +104,11 @@ export type ThreadFacts = {
 	causes: ReportedRunsByTurnId
 	mission: ThreadMission | null
 	arrivals: CompanionArrival[]
-	unresolvedMentions: UnresolvedMention[]
-	dismissUnresolvedMentions: () => void
 }
 
 const NO_WORKING_BOT_IDS: (string | null)[] = []
 
 const NO_ARRIVALS: CompanionArrival[] = []
-
-const NO_UNRESOLVED_MENTIONS: UnresolvedMention[] = []
-
-const DISMISS_NOTHING = () => undefined
 
 const questionIn = (prompt: PendingPrompt | null): QuestionRequest | null =>
 	prompt?.kind === "question" ? prompt.request : null
@@ -158,8 +151,6 @@ const botFactsOf = (thread: LoadedBotThread): ThreadFacts => {
 		causes: thread.state.reportedCauses,
 		mission: null,
 		arrivals: NO_ARRIVALS,
-		unresolvedMentions: NO_UNRESOLVED_MENTIONS,
-		dismissUnresolvedMentions: DISMISS_NOTHING,
 	}
 }
 
@@ -191,8 +182,6 @@ const conversationFactsOf = (
 	causes: thread.state.reportedCauses,
 	mission: thread.mission ?? null,
 	arrivals: thread.state.arrivals,
-	unresolvedMentions: thread.state.unresolvedMentions,
-	dismissUnresolvedMentions: thread.controller.dismissUnresolvedMentions,
 })
 
 export const factsOf = (thread: LoadedThread): ThreadFacts =>

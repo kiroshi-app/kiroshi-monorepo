@@ -105,6 +105,17 @@ const chat = {
 				description_other:
 					"{{names}} ont été nommés mais n’ont pas de siège dans cette conversation.",
 			},
+			notStarted: {
+				title_one: "{{names}} n’a pas démarré",
+				title_many: "{{names}} n’ont pas démarré",
+				title_other: "{{names}} n’ont pas démarré",
+				description_one:
+					"Faites-le venir dans cette conversation, ou choisissez un autre agent.",
+				description_many:
+					"Faites-les venir dans cette conversation, ou choisissez d’autres agents.",
+				description_other:
+					"Faites-les venir dans cette conversation, ou choisissez d’autres agents.",
+			},
 		},
 	},
 	turn: {
