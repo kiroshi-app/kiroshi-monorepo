@@ -80,7 +80,7 @@ export const createTabTearOff = ({
 	moveTornOff,
 }: TearOffMoves): TabTearOffSession => {
 	let drag: TornOffDrag | null = null
-	let isGhostSettled: Promise<unknown> = Promise.resolve()
+	let ghostSettling: Promise<unknown> = Promise.resolve()
 
 	const endDrag = () => {
 		const ended = drag
@@ -92,7 +92,7 @@ export const createTabTearOff = ({
 		ended: TornOffDrag,
 		afterHiding: (wasShown: boolean) => void,
 	) => {
-		isGhostSettled = ended.isGhosted.then(async (isShown) => {
+		ghostSettling = ended.isGhosted.then(async (isShown) => {
 			if (isShown) {
 				await hideGhost()
 			}
@@ -104,7 +104,7 @@ export const createTabTearOff = ({
 		start: (tearOff, drawGhost) => {
 			drag = {
 				tabId: tearOff.tabId,
-				isGhosted: isGhostSettled.then(() => showGhost(tearOff, drawGhost)),
+				isGhosted: ghostSettling.then(() => showGhost(tearOff, drawGhost)),
 			}
 		},
 		move: (tearOff) => {
