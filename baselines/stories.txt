@@ -1297,6 +1297,10 @@ navigation-spaceswitcher--themes-local-space-menu
 navigation-spaceswitcher--themes-title-bar-hosts
 navigation-spaceswitcher--with-dots
 navigation-spaceswitcher--wrapped-dots
+navigation-tabdragthumbnail--t-14-thumbnail
+navigation-tabdragthumbnail--t-14-thumbnail-dark
+navigation-tabdragthumbnail--t-31-not-allowed
+navigation-tabdragthumbnail--t-31-not-allowed-dark
 navigation-tabs--default
 navigation-tabs--long-content
 navigation-tabs--on-dark-surface
