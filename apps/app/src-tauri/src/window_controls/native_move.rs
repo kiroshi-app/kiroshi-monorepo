@@ -73,19 +73,13 @@ impl<R: Runtime> Watch<R> {
 		let Some(window) = self.app.get_webview_window(&self.label) else {
 			return;
 		};
-		let scale = match window.scale_factor() {
-			Ok(scale) => scale,
-			Err(failure) => {
-				return eprintln!(
-					"the native move of the window {} ended unannounced: {failure}",
-					self.label
-				);
-			}
-		};
-		let at = at.to_logical::<f64>(scale);
-		let point = ScreenPosition { x: at.x.round() as i32, y: at.y.round() as i32 };
-		let ended = NativeMoveEnded { label: self.label.clone(), point };
-		if let Err(failure) = events::emit_to(&self.app, &self.label, NATIVE_MOVE_ENDED, ended) {
+		let announced = window.scale_factor().and_then(|scale| {
+			let at = at.to_logical::<f64>(scale);
+			let point = ScreenPosition { x: at.x.round() as i32, y: at.y.round() as i32 };
+			let ended = NativeMoveEnded { label: self.label.clone(), point };
+			events::emit_to(&self.app, &self.label, NATIVE_MOVE_ENDED, ended)
+		});
+		if let Err(failure) = announced {
 			eprintln!("the native move of the window {} ended unannounced: {failure}", self.label);
 		}
 	}
@@ -113,29 +107,29 @@ pub(super) fn stop_when_destroyed<R: Runtime>(window: &WebviewWindow<R>) {
 #[cfg(target_os = "macos")]
 pub(super) fn follow_release<R: Runtime>(watch: Watch<R>) {
 	let app = watch.app.clone();
-	watch.until_released(|| macos::released_once_dragging_returned(&app));
+	watch.until_released(|| {
+		app.cursor_position().map(PrimaryButton::Released).map_err(|failure| Unobservable {
+			platform: "macos",
+			reason: format!("the cursor position could not be read: {failure}"),
+		})
+	});
 }
 
 #[cfg(any(windows, target_os = "linux"))]
 pub(super) fn follow_release<R: Runtime>(watch: Watch<R>) {
 	let label = watch.label.clone();
 	let spawned = thread::Builder::new().name("native-move-watch".to_owned()).spawn(move || {
-		let app = watch.app.clone();
-		watch.until_released(|| primary_button(&app));
+		#[cfg(windows)]
+		watch.until_released(win32::primary_button);
+		#[cfg(target_os = "linux")]
+		{
+			let app = watch.app.clone();
+			watch.until_released(|| x11::primary_button(&app));
+		}
 	});
 	if let Err(failure) = spawned {
 		Unobservable { platform: std::env::consts::OS, reason: failure.to_string() }.report(&label);
 	}
-}
-
-#[cfg(windows)]
-fn primary_button<R: Runtime>(_app: &AppHandle<R>) -> Result<PrimaryButton, Unobservable> {
-	win32::primary_button()
-}
-
-#[cfg(target_os = "linux")]
-fn primary_button<R: Runtime>(app: &AppHandle<R>) -> Result<PrimaryButton, Unobservable> {
-	x11::primary_button(app)
 }
 
 fn watched_moves<R: Runtime>(app: &AppHandle<R>) -> State<'_, WatchedMoves> {
@@ -143,22 +137,6 @@ fn watched_moves<R: Runtime>(app: &AppHandle<R>) -> State<'_, WatchedMoves> {
 		app.manage(WatchedMoves::default());
 	}
 	app.state::<WatchedMoves>()
-}
-
-#[cfg(target_os = "macos")]
-mod macos {
-	use tauri::{AppHandle, Runtime};
-
-	use super::{PrimaryButton, Unobservable};
-
-	pub(super) fn released_once_dragging_returned<R: Runtime>(
-		app: &AppHandle<R>,
-	) -> Result<PrimaryButton, Unobservable> {
-		app.cursor_position().map(PrimaryButton::Released).map_err(|failure| Unobservable {
-			platform: "macos",
-			reason: format!("the cursor position could not be read: {failure}"),
-		})
-	}
 }
 
 #[cfg(windows)]
