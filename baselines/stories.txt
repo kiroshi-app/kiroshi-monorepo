@@ -1209,8 +1209,6 @@ navigation-conversationbotpile--edged-members
 navigation-conversationbotpile--edged-members-dark
 navigation-conversationbotpile--five-bots-show-two-and-a-counter
 navigation-conversationbotpile--one-bot
-navigation-conversationbotpile--side-by-side-five-bots-show-two-and-a-counter
-navigation-conversationbotpile--side-by-side-three-bots
 navigation-conversationbotpile--three-bots
 navigation-conversationbotpile--two-bots
 navigation-conversationsubjecticon--border-at-every-size
