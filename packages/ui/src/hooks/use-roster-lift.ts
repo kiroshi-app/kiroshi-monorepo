@@ -86,6 +86,8 @@ interface UseRosterLiftOptions<Landing> {
 	landingAt: (x: number, y: number, id: string) => Landing | null
 	isSameLanding?: (one: Landing | null, other: Landing | null) => boolean
 	onLift?: (id: string, from: Point) => void
+	onMove?: (id: string, landing: Landing | null, moved: PointerEvent) => void
+	onCancel?: (id: string) => void
 	onLand: (id: string, landing: Landing, released: PointerEvent) => void
 }
 
@@ -103,6 +105,8 @@ export const useRosterLift = <Landing>({
 	landingAt,
 	isSameLanding = Object.is,
 	onLift,
+	onMove,
+	onCancel,
 	onLand,
 }: UseRosterLiftOptions<Landing>): RosterLift<Landing> => {
 	const [lift, setLift] = useState<Lift | null>(null)
@@ -116,6 +120,11 @@ export const useRosterLift = <Landing>({
 	const lifted = useStableCallback((id: string, from: Point) =>
 		onLift?.(id, from),
 	)
+	const moved = useStableCallback(
+		(id: string, next: Landing | null, event: PointerEvent) =>
+			onMove?.(id, next, event),
+	)
+	const cancelled = useStableCallback((id: string) => onCancel?.(id))
 	const land = useStableCallback(onLand)
 
 	const followRef = useCallback((node: HTMLElement | null) => {
@@ -145,9 +154,9 @@ export const useRosterLift = <Landing>({
 			setLift(null)
 		}
 
-		const follow = (moved: PointerEvent) => {
-			if (moved.pointerId !== pointerId) return
-			at.current = { x: moved.clientX, y: moved.clientY }
+		const follow = (event: PointerEvent) => {
+			if (event.pointerId !== pointerId) return
+			at.current = { x: event.clientX, y: event.clientY }
 			if (!isLifted) {
 				const travelled = Math.hypot(
 					at.current.x - from.x,
@@ -164,6 +173,7 @@ export const useRosterLift = <Landing>({
 			place(followed.current, at.current, from)
 			const next = landingFor(at.current.x, at.current.y, id)
 			if (!isSame(landing.read(), next)) landing.write(next)
+			moved(id, next, event)
 		}
 
 		const release = (released: PointerEvent) => {
@@ -175,15 +185,21 @@ export const useRosterLift = <Landing>({
 			if (dropped !== null) land(id, dropped, released)
 		}
 
-		const cancel = (cancelled: PointerEvent) => {
-			if (cancelled.pointerId === pointerId) end()
+		const abandon = () => {
+			const wasLifted = isLifted
+			end()
+			if (wasLifted) cancelled(id)
+		}
+
+		const cancel = (event: PointerEvent) => {
+			if (event.pointerId === pointerId) abandon()
 		}
 
 		const cancelOnEscape = (event: KeyboardEvent) => {
 			if (event.key !== "Escape") return
 			event.preventDefault()
 			event.stopPropagation()
-			end()
+			abandon()
 		}
 
 		window.addEventListener("pointermove", follow)

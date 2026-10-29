@@ -1127,6 +1127,16 @@ navigation-apptitlebar--keyboard-reorder-without-handler
 navigation-apptitlebar--middle-click-closes-tab
 navigation-apptitlebar--overflow-follows-the-strip
 navigation-apptitlebar--release-outside-then-hover
+navigation-apptitlebar--t-13-gap-closed
+navigation-apptitlebar--t-13-gap-closed-dark
+navigation-apptitlebar--t-16-back-in-the-row
+navigation-apptitlebar--t-16-back-in-the-row-dark
+navigation-apptitlebar--t-22-tabs-parted
+navigation-apptitlebar--t-22-tabs-parted-dark
+navigation-apptitlebar--t-23-inserted
+navigation-apptitlebar--t-23-inserted-dark
+navigation-apptitlebar--t-43-last-tab-parted
+navigation-apptitlebar--t-43-last-tab-parted-dark
 navigation-apptitlebar--tab-gestures
 navigation-apptitlebar--tear-off-reports-the-tab
 navigation-apptitlebar--unpinned-tab-menu
