@@ -977,15 +977,32 @@ const playA7 = async ({
 	for (const [rank, space] of SPACE_LIST.entries()) {
 		await expect(rows[rank]).toHaveAccessibleName(new RegExp(`^${space.name}`))
 		await expect(rows[rank]).toHaveTextContent(`⌘${rank + 1}`)
-		await expect(rows[rank].getBoundingClientRect().height).toBe(32)
+		const row = rows[rank].getBoundingClientRect()
+		const avatarSlot = slotIn(rows[rank], "space-avatar")
+		const avatar = avatarSlot.getBoundingClientRect()
+		const drawing = avatarSlot.querySelector("svg")?.getBoundingClientRect()
+		const avatarCentre = centreOf(avatar).y
+		await expect(row.height).toBe(40)
+		await expect([avatar.width, drawing?.width, drawing?.height]).toEqual([
+			26, 26, 26,
+		])
+		await expect(avatar.top - row.top).toBe(7)
+		for (const label of [
+			within(rows[rank]).getByText(space.name),
+			slotIn(rows[rank], "context-menu-shortcut"),
+		])
+			await expect(centreOf(label.getBoundingClientRect()).y).toBeCloseTo(
+				avatarCentre,
+				1,
+			)
 		await expect(rows[rank]).toHaveAttribute(
 			"aria-checked",
 			space.id === CURRENT_SPACE.id ? "true" : "false",
 		)
 	}
-	const avatar = slotIn(rows[0], "space-avatar")
-	await expect(avatar.getBoundingClientRect().width).toBe(14)
-	await expect(avatar.dataset.colour).toBe(String(STUDIO.colour))
+	await expect(slotIn(rows[0], "space-avatar").dataset.colour).toBe(
+		String(STUDIO.colour),
+	)
 	await expect(
 		within(menu)
 			.getAllByRole("menuitem")
@@ -1002,7 +1019,7 @@ export const A7SpacesMenu = meta.story({
 		docs: {
 			description: {
 				story:
-					"A7, light: the Spaces menu the rail's Space logo opens, in a 1280px window under the tab bar. Check the logo rests on no fill and takes the selected rail fill while its menu is open, that the 248px menu lists the four spaces with their 10px swatch, their name and their shortcut, the current one checked, then a rule, Space settings and Create a space. Pick `SpaceLogoHovered` for the logo itself.",
+					"A7, light: the Spaces menu the rail's Space logo opens, in a 1280px window under the tab bar. Check the logo rests on no fill and takes the selected rail fill while its menu is open, that the 248px menu lists the four spaces with their 26px avatar 7px from the top of a 40px row, their name and their shortcut centred on it, the current one checked, then a rule, Space settings and Create a space. Pick `SpaceLogoHovered` for the logo itself.",
 			},
 		},
 	},

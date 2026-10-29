@@ -809,7 +809,11 @@ const AVATAR_STATE_OF_HOST: Record<SpaceHost, string> = {
 	down: "offline",
 }
 
-const MENU_DOT = 8
+const MENU_DOT = 12
+
+const ROW_AVATAR = 26
+
+const ROW_HEIGHT = 40
 
 const TRIGGER_DOT = 6.857
 
@@ -823,13 +827,16 @@ const expectRowAvatar = async (root: HTMLElement, host: SpaceHost | null) => {
 	await expect(avatar.dataset.state).toBe(
 		host ? AVATAR_STATE_OF_HOST[host] : "local",
 	)
-	await expect(avatar.getBoundingClientRect().width).toBe(14)
+	const row = root.getBoundingClientRect()
+	const corner = avatar.getBoundingClientRect()
+	await expect(row.height).toBe(ROW_HEIGHT)
+	await expect(corner.width).toBe(ROW_AVATAR)
+	await expect(corner.top - row.top).toBe((ROW_HEIGHT - ROW_AVATAR) / 2)
 	await expect(slotsIn(root, "host-pill")).toHaveLength(0)
 	if (host !== "up" && host !== "shared") {
 		await expect(presenceDotOn(root)).toBeUndefined()
 		return
 	}
-	const corner = avatar.getBoundingClientRect()
 	const box = presenceDotOn(root).getBoundingClientRect()
 	await expect(box.width).toBe(MENU_DOT)
 	await expect(corner.right - (box.left + box.width / 2)).toBeCloseTo(
@@ -897,7 +904,7 @@ export const ThemesLocalSpaceMenu = meta.story({
 		a11y: SIDE_BY_SIDE_MENU_A11Y,
 		docs: {
 			description: {
-				story: `${MOCKUP} The menu of a local space beside shared and joined ones (A7 rows). Check every row carries its 14px SpaceAvatar in the state of its host: the grey laptop badge for the local row, the 8px green dot cut out of the bottom end corner for the shared and the reachable rows, lines for the connecting one and hatched greys under a plain red dot for the one that does not answer, every name shown in full and no state pill: the avatar is the only connection signal, and assistive technology reads the state after the name. No globe and no \`Unreachable\` remain, and a single rule then \`Create a space\` close the menu. Pick \`ThemesJoinedSpaceMenu\` for the menu of a joined space.`,
+				story: `${MOCKUP} The menu of a local space beside shared and joined ones (A7 rows). Check every 40px row carries its 26px SpaceAvatar, 7px from the row top, in the state of its host: the grey laptop badge for the local row, the 12px green dot cut out of the bottom end corner for the shared and the reachable rows, lines for the connecting one and hatched greys under a crossed red dot for the one that does not answer, every name shown in full and no state pill: the avatar is the only connection signal, and assistive technology reads the state after the name. No globe and no \`Unreachable\` remain, and a single rule then \`Create a space\` close the menu. Pick \`ThemesJoinedSpaceMenu\` for the menu of a joined space.`,
 			},
 		},
 	},

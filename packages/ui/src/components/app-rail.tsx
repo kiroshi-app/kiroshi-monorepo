@@ -83,7 +83,7 @@ const AVATAR_SIZE = 26
 const RAIL_SPACES_TRIGGER =
 	"transition-none aria-expanded:bg-rail-item-selected aria-expanded:text-foreground dark:aria-expanded:bg-rail-item-selected"
 
-const SPACES_MENU_ROW = "gap-2.5 ps-2.5 pe-8 [&_svg]:size-3.5!"
+const SPACES_MENU_ROW = "gap-2.5 ps-2.5 pe-8 [&>span:first-child_svg]:size-3.5!"
 
 const SPACES_MENU_ICON = "size-3.5"
 
