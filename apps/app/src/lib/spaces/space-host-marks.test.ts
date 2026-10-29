@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { hostMarksOf, joinedRowIdOf } from "./joined-spaces-controller"
+import { hostMarksOf } from "./joined-spaces-controller"
 import { spaceHostMarksOf } from "./space-host-marks"
 
 import type { HostingState, JoinedSpace } from "../bindings"
@@ -86,7 +86,6 @@ describe("the host mark of every Space", () => {
 			}),
 		).toEqual({
 			home: "down",
-			[joinedRowIdOf(GARAGE.id)]: "up",
 			...hostMarksOf([GARAGE], connections),
 		})
 	})

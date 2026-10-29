@@ -1,7 +1,7 @@
 import { type UseQueryResult, useQueries } from "@tanstack/react-query"
 
 import { hostQueryKeys } from "./host-query-keys"
-import { type HostingTransport, hostingTransport } from "./hosting-transport"
+import { hostingTransport } from "./hosting-transport"
 import { isDesktopHost } from "./index"
 
 import {
@@ -12,10 +12,9 @@ import {
 import { useInvalidateOnHostEvent } from "../query/host-invalidations"
 
 const readHostingOf =
-	(transport: Pick<HostingTransport, "read">, spaceId: string) =>
-	async (): Promise<HostingChanged> => ({
+	(spaceId: string) => async (): Promise<HostingChanged> => ({
 		spaceId,
-		state: await transport.read(spaceId),
+		state: await hostingTransport.read(spaceId),
 	})
 
 const hostingBySpaceIdOf = (
@@ -27,12 +26,11 @@ const hostingBySpaceIdOf = (
 
 export const useHostingStates = (
 	spaceIds: string[],
-	transport: Pick<HostingTransport, "read"> = hostingTransport,
 ): Record<string, HostingState> => {
 	const hostingBySpaceId = useQueries({
 		queries: spaceIds.map((spaceId) => ({
 			queryKey: hostQueryKeys.hostingStateOf(spaceId),
-			queryFn: readHostingOf(transport, spaceId),
+			queryFn: readHostingOf(spaceId),
 			enabled: isDesktopHost(),
 			meta: { rendersErrorInline: true as const },
 		})),
