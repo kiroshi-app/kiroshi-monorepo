@@ -156,9 +156,14 @@ const raiseCloseFailure = () =>
 		title: i18n.t("common:windowControls.failure.close"),
 	})
 
-const closeThisWindow = () => {
-	closeWindow().catch(raiseCloseFailure)
-}
+const closeThisWindow = () =>
+	closeWindow().then(
+		() => true,
+		() => {
+			raiseCloseFailure()
+			return false
+		},
+	)
 
 type WindowOpening = { isOpened: true } | { isOpened: false; reason?: string }
 
@@ -495,11 +500,10 @@ export const createWorkspaceTabs = (
 
 	const removeMoved = (spaceId: string, id: string) => {
 		if (!isMainWindow && isOnlyTab(store.getState().bySpace[spaceId], id)) {
-			closeThisWindow()
-			return true
+			return closeThisWindow()
 		}
 		changeIn(spaceId, (space) => closeTab(space, id))
-		return false
+		return Promise.resolve(false)
 	}
 
 	const moveToWindowBy = async (

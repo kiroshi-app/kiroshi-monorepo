@@ -39,7 +39,7 @@ type TearOffMoves = {
 	moveTornOff: (tearOff: TabTearOff, size: WindowSize) => Promise<void>
 	raiseMoveFailure: (reason: unknown) => void
 	tornTabOf: (tabId: string) => TornTab | null
-	removeDocked: (spaceId: string, tabId: string) => boolean
+	removeDocked: (spaceId: string, tabId: string) => Promise<boolean>
 }
 
 type GhostAnswer = Awaited<ReturnType<typeof commands.dragGhostShow>>
@@ -460,12 +460,13 @@ export const createTabTearOff = ({
 		}
 		const isWindowClosed =
 			(await dock(move, view, site.point, site.label)) &&
-			removeDocked(move.spaceId, move.tabId)
+			(await removeDocked(move.spaceId, move.tabId))
 		if (!isWindowClosed) {
 			await windowOver(move, view, "outside")
 		}
 	}
 
+	// TODO: the host emits no native window move ended event at mouse-up carrying the release point, so the settling of window_start_native_move stands in for the release. It settles before the drag on Windows and Linux, where the drag then ends unhidden.
 	const releaseWindow = async (
 		move: WindowMove,
 		watching: Promise<() => void>,
@@ -494,7 +495,10 @@ export const createTabTearOff = ({
 		)
 		moving
 			.then((isMoved) => releaseWindow(move, watching, isMoved))
-			.catch(raiseMoveFailure)
+			.catch((reason: unknown) => {
+				raiseMoveFailure(reason)
+				return isAccepted(commands.windowShow())
+			})
 	}
 
 	const startTabDrag = (
