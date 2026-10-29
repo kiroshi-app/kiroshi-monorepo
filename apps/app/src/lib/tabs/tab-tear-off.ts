@@ -123,7 +123,7 @@ const reportHostFailure = (reason: unknown) => {
 const isAccepted = (asking: Promise<HostAnswer>) =>
 	asking.then((answer) => answer.status === "ok", reportHostFailure)
 
-const reportUnknownTarget = (reason: unknown) => {
+const reportUnanswered = (reason: unknown) => {
 	reportHostFailure(reason)
 	return null
 }
@@ -138,7 +138,7 @@ const dockSiteAt = (
 		}
 		const target = strip.spaceId === spaceId ? "sameSpace" : "otherSpace"
 		return { target, label: strip.label }
-	}, reportUnknownTarget)
+	}, reportUnanswered)
 
 const raiseDragFailure = (command?: string) => {
 	void raiseReportedFailure(
@@ -276,7 +276,7 @@ export const createTabTearOff = ({
 		targetLabel: string,
 	) => {
 		const awaited = await awaitDockAnswer(targetLabel, ended.tabId).catch(
-			reportUnknownTarget,
+			reportUnanswered,
 		)
 		if (!awaited) {
 			failOnce(ended)
