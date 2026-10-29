@@ -70,11 +70,7 @@ pub fn window_tab_drag_move<R: Runtime>(
 	window: WebviewWindow<R>,
 	point: ScreenPosition,
 ) -> Result<(), TabDragError> {
-	let origin_label = {
-		let state = drag_origin(window.app_handle());
-		let held = state.held();
-		dragged_by(&held, window.label())?
-	};
+	let origin_label = dragged_by(&drag_origin(window.app_handle()).held(), window.label())?;
 	broadcast(window.app_handle(), TabDrag::Moved { origin_label, point })
 }
 
@@ -116,17 +112,11 @@ pub fn window_show<R: Runtime>(window: WebviewWindow<R>) -> Result<(), NativeWin
 }
 
 pub(super) fn cancel_when_origin_destroyed<R: Runtime>(window: &WebviewWindow<R>) {
-	let app = window.app_handle();
-	{
-		let state = drag_origin(app);
-		let mut held = state.held();
-		if held.as_deref() != Some(window.label()) {
-			return;
-		}
-		*held = None;
-	}
-	let cancelled = TabDrag::Cancelled { origin_label: window.label().to_owned() };
-	if let Err(failure) = events::emit_to_windows(app, TAB_DRAG, cancelled) {
+	let Ok(origin_label) = ended_by(window) else {
+		return;
+	};
+	let cancelled = TabDrag::Cancelled { origin_label };
+	if let Err(failure) = events::emit_to_windows(window.app_handle(), TAB_DRAG, cancelled) {
 		eprintln!(
 			"the drag of the destroyed window {} ended unannounced: {failure}",
 			window.label()
