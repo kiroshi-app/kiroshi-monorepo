@@ -128,11 +128,13 @@ export const createOnboardingFlowController = (
 
 	const store = (step: OnboardingStep) => persisted(() => world.storeStep(step))
 
-	let firstCompanionStored: Promise<boolean> = Promise.resolve(true)
+	let firstCompanionStored = Promise.resolve()
 
-	const claimFirstCompanion = (botId: string) =>
-		world.firstCompanionId() !== null ||
-		persisted(() => world.storeFirstCompanion(botId))
+	const claimFirstCompanion = async (botId: string) => {
+		if (world.firstCompanionId() === null) {
+			await persisted(() => world.storeFirstCompanion(botId))
+		}
+	}
 
 	const summonOnce = async (shotoId: string, summons: string) => {
 		if (!world.hasSummoned(shotoId, summons)) {
