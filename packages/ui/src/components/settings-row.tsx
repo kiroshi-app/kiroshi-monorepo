@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import { type ReactNode, useId } from "react"
 
 import type { Icon } from "@workspace/ui/components/icons"
 import { cn } from "@workspace/ui/lib/utils"
@@ -57,6 +57,7 @@ const SettingsRow = ({
 
 type SettingsLinkRowProps = {
 	label: string
+	detail?: string
 	icon: Icon
 	onClick: () => void
 	"aria-label"?: string
@@ -64,27 +65,48 @@ type SettingsLinkRowProps = {
 
 const SettingsLinkRow = ({
 	label,
+	detail,
 	icon: TrailingIcon,
 	onClick,
 	"aria-label": accessibleName,
-}: SettingsLinkRowProps) => (
-	<button
-		aria-label={accessibleName}
-		className={cn(
-			ROW_TITLE_CLASS,
-			"flex w-full cursor-pointer items-center gap-4 p-3 text-start outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
-		)}
-		data-slot="settings-link-row"
-		onClick={onClick}
-		type="button"
-	>
-		<span className="min-w-0 flex-1 wrap-break-word">{label}</span>
-		<TrailingIcon
-			aria-hidden="true"
-			className="pointer-events-none size-4 shrink-0 text-muted-foreground"
-		/>
-	</button>
-)
+}: SettingsLinkRowProps) => {
+	const id = useId()
+	const labelId = `${id}-label`
+	const detailId = `${id}-detail`
+
+	return (
+		<button
+			aria-describedby={detail ? detailId : undefined}
+			aria-label={accessibleName}
+			aria-labelledby={detail && !accessibleName ? labelId : undefined}
+			className={cn(
+				ROW_TITLE_CLASS,
+				"flex w-full cursor-pointer items-center gap-4 p-3 text-start outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+			)}
+			data-slot="settings-link-row"
+			onClick={onClick}
+			type="button"
+		>
+			<span className="flex min-w-0 flex-1 flex-col gap-0.5">
+				<span className="wrap-break-word" id={labelId}>
+					{label}
+				</span>
+				{detail ? (
+					<span
+						className="wrap-break-word font-normal text-muted-foreground text-xs"
+						id={detailId}
+					>
+						{detail}
+					</span>
+				) : null}
+			</span>
+			<TrailingIcon
+				aria-hidden="true"
+				className="pointer-events-none size-4 shrink-0 text-muted-foreground"
+			/>
+		</button>
+	)
+}
 
 export {
 	SettingsLinkRow,

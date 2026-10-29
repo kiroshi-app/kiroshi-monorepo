@@ -38,6 +38,7 @@ const chat = {
 	conversationArrival: {
 		invitedByPerson: "{{name}} joined this conversation, invited by you",
 		invitedByAgent: "{{name}} joined this conversation, invited by {{inviter}}",
+		createdBy: "{{creator}} created {{name}}",
 	},
 	connection: {
 		checking: "Checking {{name}}…",

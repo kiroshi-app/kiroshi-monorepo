@@ -1,9 +1,14 @@
 import { expect } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { botIdentityAvatars, slotIn } from "@workspace/storybook/story-utils"
+import {
+	botIdentityAvatars,
+	slotIn,
+	slotsIn,
+} from "@workspace/storybook/story-utils"
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import {
+	BotCreatedRow,
 	type ConversationArrivalInviter,
 	ConversationArrivalRow,
 } from "@workspace/ui/components/conversation-arrival-row"
@@ -22,6 +27,11 @@ const HAPPY: RosterBot = {
 	id: "bot_3a7c48",
 	name: "Happy",
 	blot: BLOT_HUES.orange,
+}
+const JUNIPER: RosterBot = {
+	id: "bot_8b2f61",
+	name: "Juniper",
+	blot: BLOT_HUES.green,
 }
 const LONG_NAMED: RosterBot = {
 	id: "bot_6f0b27",
@@ -200,5 +210,28 @@ export const LongContent = meta.story({
 		await expect(frame.scrollWidth).toBeLessThanOrEqual(frame.clientWidth)
 		await expect(sentence.textContent).toContain(LONG_NAMED.name)
 		await expect(sentence.textContent).toContain(LONG_NAMED_INVITER.name)
+	},
+})
+
+export const ShotoCreatedArrivalRow = meta.story({
+	globals: { theme_layout: "side-by-side" },
+	render: () => <BotCreatedRow bot={JUNIPER} creator="Shoto" />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The line a conversation opens on when the reader just created its agent, drawn from the Paper file `Kiroshi, Onboarding v2`. Same anatomy as the arrival row, the face of the created agent then one muted sentence naming who created it, on a row at least 36 pixels tall with 12 pixels of inline padding. Light and dark side by side.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const rows = slotsIn(canvasElement, "bot-created-row")
+		await expect(rows).toHaveLength(2)
+		const [row] = rows
+		await expect(row).toHaveTextContent("Shoto created Juniper")
+		await expect(row.getBoundingClientRect().height).toBeGreaterThanOrEqual(36)
+		await expect(getComputedStyle(row).paddingInlineStart).toBe("12px")
+		const [avatar] = botIdentityAvatars(row)
+		await expect(avatar.getBoundingClientRect().width).toBe(16)
 	},
 })

@@ -331,3 +331,88 @@ export const BetaAvailable = meta.story({
 		await expect(panel.queryByText("Beta builds are tested less")).toBe(null)
 	},
 })
+
+const IMPORT_FROM_CLAUDE_CODE = "Import from Claude Code"
+
+const REPLAY_ONBOARDING = "Replay onboarding"
+
+export const AboutGettingStarted = meta.story({
+	args: {
+		gettingStarted: {
+			canImportFromClaudeCode: true,
+			onImportFromClaudeCode: fn(),
+			onReplayOnboarding: fn(),
+		},
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The Getting started group between Updates and Kiroshi, drawn from the Paper file `Kiroshi, Onboarding v2`. Check that each row names its gesture over one muted line saying what it does, carries a chevron, and calls its own callback: Import from Claude Code `onImportFromClaudeCode`, Replay onboarding `onReplayOnboarding`. Pick `AboutNothingToImport` for a computer with no `~/.claude` folder.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const panel = lightPanelIn(canvasElement)
+		const group = within(panel.getByRole("group", { name: "Getting started" }))
+
+		const importRow = group.getByRole("button", {
+			name: IMPORT_FROM_CLAUDE_CODE,
+		})
+		await expect(importRow).toHaveAccessibleDescription(
+			"Brings in agents, skills and CLAUDE.md from ~/.claude. You choose what comes in.",
+		)
+		await userEvent.click(importRow)
+		await expect(
+			args.gettingStarted?.onImportFromClaudeCode,
+		).toHaveBeenCalledOnce()
+
+		await userEvent.click(
+			group.getByRole("button", { name: REPLAY_ONBOARDING }),
+		)
+		await expect(args.gettingStarted?.onReplayOnboarding).toHaveBeenCalledOnce()
+		await expect(
+			args.gettingStarted?.onImportFromClaudeCode,
+		).toHaveBeenCalledOnce()
+	},
+})
+
+export const AboutNothingToImport = meta.story({
+	args: {
+		gettingStarted: {
+			canImportFromClaudeCode: false,
+			onImportFromClaudeCode: fn(),
+			onReplayOnboarding: fn(),
+		},
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A computer with no `~/.claude` folder. Check that Import from Claude Code reads muted, says there is nothing to bring in, draws no chevron and is neither a button nor a stop in the tab order, while Replay onboarding stays as in `AboutGettingStarted`.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const panel = lightPanelIn(canvasElement)
+		const group = within(panel.getByRole("group", { name: "Getting started" }))
+
+		await expect(
+			group.queryByRole("button", { name: IMPORT_FROM_CLAUDE_CODE }),
+		).toBeNull()
+		const title = group.getByText(IMPORT_FROM_CLAUDE_CODE)
+		await expect(getComputedStyle(title).color).toBe(
+			getComputedStyle(
+				group.getByText(
+					"Nothing to bring in: there’s no ~/.claude folder on this computer.",
+				),
+			).color,
+		)
+		const row = title.closest("[data-slot='settings-row']") as HTMLElement
+		await expect(row.querySelector("svg")).toBeNull()
+		await expect(row.querySelector("[tabindex], button, a")).toBeNull()
+		await expect(
+			group.getByRole("button", { name: REPLAY_ONBOARDING }),
+		).toBeVisible()
+	},
+})

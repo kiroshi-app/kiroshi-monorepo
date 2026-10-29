@@ -40,6 +40,7 @@ const chat = {
 			"{{name}} a rejoint cette conversation, sur votre invitation",
 		invitedByAgent:
 			"{{name}} a rejoint cette conversation, à l’invitation de {{inviter}}",
+		createdBy: "{{creator}} a créé {{name}}",
 	},
 	connection: {
 		checking: "Vérification de {{name}}…",
