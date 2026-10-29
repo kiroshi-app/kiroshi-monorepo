@@ -1283,6 +1283,74 @@ describe("Tear off", () => {
 	})
 })
 
+const ORIGIN_SIZE = { width: 1200, height: 800 }
+
+const moveTornOff = (tabs: WorkspaceTabs, href: string) =>
+	tabs.moveTornOff({ tabId: idOfTabOn(tabs, href), ...RELEASE }, ORIGIN_SIZE)
+
+const openedHref = () => String(windowHost.windowOpen.mock.calls[0]?.[0])
+
+describe("a tab dropped past the strip", () => {
+	it("opens one window at the rounded drop point with the origin size and Space, then removes the tab", async () => {
+		opensWindows()
+		const tabs = tabsOn(threadOf("torn"), threadOf("kept"))
+
+		await moveTornOff(tabs, threadOf("torn"))
+
+		expect(shownHrefs(tabs)).toEqual(["/", threadOf("kept")])
+		expect(windowHost.windowOpen).toHaveBeenCalledExactlyOnceWith(
+			expect.stringMatching(/^\/\?conversation=torn&carriedTab=/),
+			{ x: 640, y: 121 },
+			SPACE,
+			ORIGIN_SIZE,
+		)
+		expect(windowHost.raiseReportedFailure).not.toHaveBeenCalled()
+	})
+
+	it("hands the new window the page of the tab with its back and forward history", async () => {
+		opensWindows()
+		const tabs = tabsOn(threadOf("first"))
+		tabs.history.push(threadOf("second"))
+		tabs.history.back()
+
+		await moveTornOff(tabs, threadOf("first"))
+		const opened = tabsOfWindow(SECONDARY, openedHref())
+
+		expect(activeHref(opened)).toBe(threadOf("first"))
+		expect(shownHrefs(opened)).toEqual([threadOf("first")])
+		expect(viewOf(opened)).toMatchObject({
+			canGoBack: true,
+			canGoForward: true,
+		})
+		opened.forward()
+		expect(activeHref(opened)).toBe(threadOf("second"))
+	})
+
+	it("keeps the tab in its slot, raises the move notice and carries nothing when the window fails to open", async () => {
+		windowHost.windowOpen.mockRejectedValue(new Error("window lost"))
+		const tabs = tabsOn(threadOf("first"), threadOf("stays"))
+
+		await moveTornOff(tabs, threadOf("stays"))
+		const opened = tabsOfWindow(SECONDARY, openedHref())
+
+		expect(shownHrefs(tabs)).toEqual([
+			"/",
+			threadOf("first"),
+			threadOf("stays"),
+		])
+		expect(windowHost.raiseReportedFailure).toHaveBeenCalledExactlyOnceWith(
+			{
+				title: "Couldn’t open a new window",
+				description:
+					"The tab stayed here (window lost). Choose Move to new window from the tab’s menu to try again.",
+			},
+			{ raisedIn: "workspace-tabs", command: "window_open" },
+		)
+		expect(shownHrefs(opened)).toEqual([threadOf("stays")])
+		expect(viewOf(opened).canGoBack).toBe(false)
+	})
+})
+
 describe("the windows", () => {
 	it("shows the page a secondary window opened on as its single tab, ignoring its kept tabs", () => {
 		const before = tabsOfWindow(SECONDARY, threadOf("earlier"))

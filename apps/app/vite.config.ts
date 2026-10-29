@@ -27,6 +27,12 @@ export default defineConfig({
 		cssTarget: "safari16.4",
 		minify: !process.env.TAURI_ENV_DEBUG,
 		sourcemap: Boolean(process.env.TAURI_ENV_DEBUG),
+		rolldownOptions: {
+			input: {
+				main: resolve(__dirname, "index.html"),
+				dragGhost: resolve(__dirname, "drag-ghost.html"),
+			},
+		},
 	},
 	resolve: {
 		alias: {

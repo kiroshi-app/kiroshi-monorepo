@@ -16,6 +16,8 @@ const WINDOW_TABS_KEY_PREFIX = "windowTabs:"
 
 const OPEN_WINDOW_KEY_PREFIX = "openWindow:"
 
+const CARRIED_TAB_KEY_PREFIX = "carriedTab:"
+
 type KeptTab = {
 	href: string
 	isPinned: boolean
@@ -38,6 +40,8 @@ const keyOf = (windowLabel: string, spaceId: string) =>
 
 const openWindowKeyOf = (windowLabel: string) =>
 	`${OPEN_WINDOW_KEY_PREFIX}${windowLabel}`
+
+const carriedTabKeyOf = (tabId: string) => `${CARRIED_TAB_KEY_PREFIX}${tabId}`
 
 const isKeptHref = (value: unknown): value is string =>
 	typeof value === "string" && isTabHref(value)
@@ -181,4 +185,21 @@ export const discardUnlistedWindowTabs = () => {
 			(key) => !listedPrefixes.some((prefix) => key.startsWith(prefix)),
 		),
 	)
+}
+
+export const keepCarriedTab = (tab: Tab) => {
+	localStorage.setItem(carriedTabKeyOf(tab.id), JSON.stringify(keptTabOf(tab)))
+}
+
+export const forgetCarriedTab = (tabId: string) => {
+	localStorage.removeItem(carriedTabKeyOf(tabId))
+}
+
+export const readCarriedTab = (tabId: string): Tab | null => {
+	const kept = parseKept(localStorage.getItem(carriedTabKeyOf(tabId)))
+	return isKeptTab(kept) ? restoredTabOf(kept) : null
+}
+
+export const discardCarriedTabs = () => {
+	removeKeys(keysStartingWith(CARRIED_TAB_KEY_PREFIX))
 }
