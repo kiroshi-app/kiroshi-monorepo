@@ -663,6 +663,8 @@ feedback-importscreen--again-from-settings
 feedback-importscreen--again-from-settings-dark
 feedback-importscreen--done
 feedback-importscreen--done-dark
+feedback-importscreen--done-one-companion
+feedback-importscreen--done-without-instructions
 feedback-importscreen--importing
 feedback-importscreen--importing-dark
 feedback-importscreen--importing-picked-only
@@ -679,7 +681,9 @@ feedback-importscreen--only-companions-dark
 feedback-importscreen--only-instructions-and-skills
 feedback-importscreen--only-instructions-and-skills-dark
 feedback-importscreen--partly-failed
+feedback-importscreen--partly-failed-companion
 feedback-importscreen--partly-failed-dark
+feedback-importscreen--partly-failed-instructions
 feedback-importscreen--unreadable
 feedback-importscreen--unreadable-dark
 feedback-listskeleton--bottom-anchored

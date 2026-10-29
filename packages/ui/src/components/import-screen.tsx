@@ -1,5 +1,6 @@
 "use client"
 
+import type { TFunction } from "i18next"
 import { useCallback, useState } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -74,6 +75,84 @@ const sectionsOf = (props: ImportScreenProps) => {
 	return pickedSectionsOf(props.sections)
 }
 
+type ImportListRow = Omit<ImportItem, "id"> & { ids: string[] }
+
+const rowOf = ({ id, ...item }: ImportItem): ImportListRow => ({
+	...item,
+	ids: [id],
+})
+
+const skillsRowOf = (skills: ImportItem[], title: string): ImportListRow => ({
+	ids: skills.map((skill) => skill.id),
+	kind: "skill",
+	title,
+	detail: skills.map((skill) => skill.title).join(", "),
+	checked: skills.every((skill) => skill.checked),
+	isInKiroshi: skills.every((skill) => skill.isInKiroshi),
+	status: skills.every((skill) => skill.status === "done") ? "done" : "pending",
+})
+
+const rowsOf = (items: ImportItem[], t: TFunction<"common">) => {
+	const skills = items.filter((item) => item.kind === "skill")
+	const failedSkills = skills.filter((skill) => skill.status === "failed")
+	const comingIn = skills.filter((skill) => skill.status !== "failed")
+	const newSkills = comingIn.filter((skill) => !skill.isInKiroshi)
+	const isOnlyNewShown =
+		newSkills.length > 0 && newSkills.length < comingIn.length
+	const grouped = newSkills.length > 0 ? newSkills : comingIn
+	const groupedTitle = t(
+		isOnlyNewShown ? "claudeImport.row.newSkills" : "claudeImport.row.skills",
+		{ count: grouped.length },
+	)
+
+	return [
+		...items.filter((item) => item.kind !== "skill").map(rowOf),
+		...(grouped.length > 0 ? [skillsRowOf(grouped, groupedTitle)] : []),
+		...failedSkills.map(rowOf),
+	]
+}
+
+const doneSummaryOf = (
+	items: ImportItem[],
+	t: TFunction<"common">,
+	language: string,
+) => {
+	const listOf = (parts: string[]) =>
+		new Intl.ListFormat(language, { type: "conjunction" }).format(parts)
+	const companions = items
+		.filter((item) => item.kind === "companion")
+		.map((item) => item.title)
+	const hasInstructions = items.some((item) => item.kind === "instructions")
+	const skillCount = items.filter((item) => item.kind === "skill").length
+
+	if (companions.length === 0) {
+		if (!hasInstructions) {
+			return t("claudeImport.done.onlySkills", { count: skillCount })
+		}
+		if (skillCount === 0) return t("claudeImport.done.onlyInstructions")
+		return t("claudeImport.done.instructionsAndSkills", { count: skillCount })
+	}
+
+	const extras = [
+		...(hasInstructions ? [t("claudeImport.done.instructions")] : []),
+		...(skillCount > 0
+			? [t("claudeImport.row.skills", { count: skillCount })]
+			: []),
+	]
+	const names = listOf(companions)
+	if (extras.length === 0) {
+		return t("claudeImport.done.companions", {
+			companions: names,
+			count: companions.length,
+		})
+	}
+	return t("claudeImport.done.companionsWith", {
+		companions: names,
+		count: companions.length,
+		extras: listOf(extras),
+	})
+}
+
 const useSubtitle = (props: ImportScreenProps, sections: ImportSection[]) => {
 	const { t, i18n } = useTranslation("common")
 	if (props.step === "select" || props.step === "unreadable") {
@@ -90,18 +169,15 @@ const useSubtitle = (props: ImportScreenProps, sections: ImportSection[]) => {
 
 	const failed = items.find((item) => item.status === "failed")
 	if (failed) {
-		return t("claudeImport.partlyFailed.body", { name: failed.title })
+		return t(
+			failed.kind === "skill"
+				? "claudeImport.partlyFailed.body"
+				: "claudeImport.partlyFailed.bodyNamed",
+			{ name: failed.title },
+		)
 	}
 
-	const companions = items
-		.filter((item) => item.kind === "companion")
-		.map((item) => item.title)
-	return t("claudeImport.done.body", {
-		companions: new Intl.ListFormat(i18n.language, {
-			type: "conjunction",
-		}).format(companions),
-		count: items.filter((item) => item.kind === "skill").length,
-	})
+	return doneSummaryOf(items, t, i18n.language)
 }
 
 const useOverflow = () => {
@@ -151,13 +227,15 @@ const ImportList = ({ step, sections, onToggle }: ImportListProps) => {
 							{section.label}
 						</h2>
 						<div className="flex flex-col overflow-hidden rounded-xl border border-border bg-muted/40 [&>*+*]:border-border [&>*+*]:border-t">
-							{section.items.map(({ id, ...item }) => (
+							{rowsOf(section.items, t).map(({ ids, ...row }) => (
 								<ImportRow
-									{...item}
-									key={id}
-									onCheckedChange={(checked) => onToggle?.(id, checked)}
+									{...row}
+									key={ids.join()}
+									onCheckedChange={(checked) => {
+										for (const id of ids) onToggle?.(id, checked)
+									}}
 									status={
-										step === "select" ? undefined : (item.status ?? "pending")
+										step === "select" ? undefined : (row.status ?? "pending")
 									}
 								/>
 							))}

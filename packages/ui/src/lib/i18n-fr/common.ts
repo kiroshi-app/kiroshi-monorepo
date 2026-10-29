@@ -147,7 +147,7 @@ const common = {
 			title: "Récupérez votre configuration Claude Code",
 			body: "Trouvé dans ~/.claude sur votre ordinateur. Tout est sélectionné ; décochez ce que vous préférez laisser.",
 			bodyMany:
-				"{{count}} compagnons et plus trouvés dans ~/.claude. Tout est sélectionné ; décochez ce que vous préférez laisser.",
+				"{{count}} agents et plus trouvés dans ~/.claude. Tout est sélectionné ; décochez ce que vous préférez laisser.",
 			nothingSelected:
 				"Rien n’est sélectionné. Cochez ce que vous voulez récupérer, ou passez cette étape.",
 			namesTaken: {
@@ -177,17 +177,30 @@ const common = {
 		},
 		done: {
 			title: "Votre configuration est là",
-			body_one:
-				"{{companions}} sont prêts, avec votre CLAUDE.md et {{count}} compétence.",
-			body_many:
-				"{{companions}} sont prêts, avec votre CLAUDE.md et {{count}} compétences.",
-			body_other:
-				"{{companions}} sont prêts, avec votre CLAUDE.md et {{count}} compétences.",
+			companions_one: "{{companions}} est prêt.",
+			companions_many: "{{companions}} sont prêts.",
+			companions_other: "{{companions}} sont prêts.",
+			companionsWith_one: "{{companions}} est prêt, avec {{extras}}.",
+			companionsWith_many: "{{companions}} sont prêts, avec {{extras}}.",
+			companionsWith_other: "{{companions}} sont prêts, avec {{extras}}.",
+			instructions: "votre CLAUDE.md",
+			instructionsAndSkills_one:
+				"Votre CLAUDE.md et {{count}} compétence sont prêts.",
+			instructionsAndSkills_many:
+				"Votre CLAUDE.md et {{count}} compétences sont prêts.",
+			instructionsAndSkills_other:
+				"Votre CLAUDE.md et {{count}} compétences sont prêts.",
+			onlyInstructions: "Votre CLAUDE.md est prêt.",
+			onlySkills_one: "{{count}} compétence est prête.",
+			onlySkills_many: "{{count}} compétences sont prêtes.",
+			onlySkills_other: "{{count}} compétences sont prêtes.",
 			continue: "Continuer",
 		},
 		partlyFailed: {
 			title: "L’essentiel de votre configuration est là",
 			body: "La compétence {{name}} n’a pas été récupérée. Réessayez, ou ajoutez-la plus tard depuis les Réglages.",
+			bodyNamed:
+				"{{name}} n’a pas été récupéré. Réessayez, ou ajoutez-le plus tard depuis les Réglages.",
 			retry: "Réessayer {{name}}",
 		},
 		unreadable: {
@@ -196,7 +209,13 @@ const common = {
 			retry: "Réessayer",
 		},
 		row: {
-			inKiroshi: "Déjà dans Kiroshi",
+			inKiroshi: "Déjà dans Kiroshi.",
+			skills_one: "{{count}} compétence",
+			skills_many: "{{count}} compétences",
+			skills_other: "{{count}} compétences",
+			newSkills_one: "{{count}} nouvelle compétence",
+			newSkills_many: "{{count}} nouvelles compétences",
+			newSkills_other: "{{count}} nouvelles compétences",
 			nameTaken:
 				"{{name}} existe déjà dans Kiroshi, donc celui-ci arrive sous le nom {{renamed}}. Renommez-le ensuite.",
 			companionNameTaken:

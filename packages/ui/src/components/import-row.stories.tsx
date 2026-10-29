@@ -25,7 +25,7 @@ const meta = preview.meta({
 	args: {
 		kind: "companion" as const,
 		title: "Atlas",
-		detail: "Reviews pull requests and keeps the tests green",
+		detail: "Reviews pull requests and flags risky changes.",
 		checked: true,
 		onCheckedChange: fn(),
 	},
@@ -59,22 +59,40 @@ export const States = meta.story({
 	render: (args) => (
 		<div className="flex w-140 flex-col overflow-hidden rounded-xl border border-border bg-muted/40 [&>*+*]:border-border [&>*+*]:border-t">
 			<ImportRow {...args} />
-			<ImportRow {...args} checked={false} title="Wren" />
 			<ImportRow
 				{...args}
-				detail="Your instructions for every project"
+				checked={false}
+				detail="Writes release notes from merged work."
+				hue={150}
+				title="Wren"
+			/>
+			<ImportRow
+				{...args}
+				detail="Your standing instructions, 42 lines. Kept as yours, for every companion."
+				isInKiroshi
 				kind="instructions"
 				title="CLAUDE.md"
 			/>
 			<ImportRow
 				{...args}
-				detail="Writes the changelog from merged pull requests"
-				isInKiroshi
+				detail="commit-style, test-first, review-checklist, changelog"
 				kind="skill"
-				title="changelog"
+				title={i18n.t("common:claudeImport.row.skills", { count: 4 })}
 			/>
-			<ImportRow {...args} status="done" title="Orion" />
-			<ImportRow {...args} status="pending" title="Juno" />
+			<ImportRow
+				{...args}
+				detail="Triages new issues every morning."
+				hue={30}
+				status="done"
+				title="Bramble"
+			/>
+			<ImportRow
+				{...args}
+				detail="Keeps the API reference in sync."
+				hue={280}
+				status="pending"
+				title="Cedar"
+			/>
 			<ImportRow
 				{...args}
 				detail={i18n.t("common:claudeImport.row.unparsable", {
@@ -82,7 +100,7 @@ export const States = meta.story({
 				})}
 				kind="skill"
 				status="failed"
-				title="release-notes"
+				title="changelog"
 			/>
 		</div>
 	),
@@ -90,18 +108,18 @@ export const States = meta.story({
 		docs: {
 			description: {
 				story:
-					"Every lead the row takes, top to bottom: checked, unchecked, the CLAUDE.md row in Geist Mono, a skill already in Kiroshi, then done, in progress and failed once the import runs. Check that the row already in Kiroshi stays unchecked when clicked, and that each status icon carries its label.",
+					"Every lead the row takes, top to bottom: checked, unchecked, the CLAUDE.md row in Geist Mono already in Kiroshi, the skills on one row titled with their count, then done, in progress and failed once the import runs. Check that the row already in Kiroshi stays unchecked when clicked, and that each status icon carries its label.",
 			},
 		},
 	},
 	play: async ({ canvasElement, args }) => {
 		const canvas = within(canvasElement)
-		const alreadyIn = canvas.getByRole("checkbox", { name: "changelog" })
+		const alreadyIn = canvas.getByRole("checkbox", { name: "CLAUDE.md" })
 		await expect(alreadyIn).not.toBeChecked()
 		await userEvent.click(alreadyIn, { pointerEventsCheck: 0 })
 		await expect(alreadyIn).not.toBeChecked()
 		await expect(args.onCheckedChange).not.toHaveBeenCalled()
-		await expect(canvas.getByText("Already in Kiroshi")).toBeVisible()
+		await expect(canvas.getByText("Already in Kiroshi.")).toBeVisible()
 		await expect(canvas.getByRole("img", { name: "Done" })).toBeVisible()
 		await expect(canvas.getByRole("img", { name: "In progress" })).toBeVisible()
 		await expect(canvas.getByRole("img", { name: "Failed" })).toBeVisible()
