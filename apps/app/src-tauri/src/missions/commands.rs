@@ -16,13 +16,16 @@ use crate::agent::commands::AgentState;
 use crate::avatars;
 use crate::bundles;
 use crate::companions::host::picked;
-use crate::conversations::commands::{bot_row, ready, seat_participant};
-use crate::conversations::contract::{Bot, CompanionSpoke, PendingPrompt};
+use crate::conversations::commands::{
+	bot_row, ready, run_handed_turn, seat_participant, HandedTurn,
+};
+use crate::conversations::contract::{Bot, PendingPrompt};
 use crate::conversations::state as conversation_state;
 use crate::db;
 use crate::db::repositories::keyset;
-use crate::events::{self, COMPANION_SPOKE, MISSION_CHANGED};
+use crate::events::{self, MISSION_CHANGED};
 use crate::file_store::FileStore;
+use crate::routines::runner::NO_AGENT;
 use crate::routines::webhook::{Webhook, HEADER};
 
 pub const CHANGED_EVENT: &str = "mission://changed";
@@ -425,7 +428,7 @@ pub async fn mission_handoff<R: Runtime>(
 	};
 	let written = announce_change(&app, database.missions().hand_off(mission_id, handoff).await?)?;
 	if written.closed_at.is_none() {
-		summon(&app, &written, from_bot_id, &successor.name)?;
+		summon(&app, database, &written, from_bot_id, successor).await?;
 	}
 	Ok(written)
 }
@@ -446,19 +449,23 @@ async fn successor_of(
 	Ok(Successor { id: picked.id.clone(), name: picked.name.clone() })
 }
 
-fn summon<R: Runtime>(
+async fn summon<R: Runtime>(
 	app: &AppHandle<R>,
+	database: &db::Database,
 	mission: &Mission,
 	from_bot_id: String,
-	successor: &str,
+	successor: Successor,
 ) -> Result<(), MissionError> {
-	let spoken = CompanionSpoke {
+	let Some(agent) = app.try_state::<AgentState>() else {
+		return Err(MissionError::Undeliverable { detail: NO_AGENT.to_owned() });
+	};
+	let handed = HandedTurn {
 		conversation_id: mission.thread_conversation_id.clone(),
 		author_bot_id: from_bot_id,
-		text: format!("@{successor} {HANDED_OVER} {}", mission.objective),
+		text: format!("@{} {HANDED_OVER} {}", successor.name, mission.objective),
+		summoned: successor.id,
 	};
-	events::emit(app, COMPANION_SPOKE, spoken)
-		.map_err(|error| MissionError::Undeliverable { detail: error.to_string() })
+	Ok(run_handed_turn(app, database, &agent, handed).await?)
 }
 
 async fn appended<R: Runtime>(

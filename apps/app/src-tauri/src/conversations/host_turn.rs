@@ -476,9 +476,7 @@ impl<R: Runtime> HostTurn<R> {
 				continue;
 			};
 			let done = speaking.remove(at);
-			if end == SpeakerEnd::HandsOver {
-				self.note_handovers(&done, &mut waiting).await;
-			}
+			self.ended(&done, end, &mut waiting).await;
 			if speaking.is_empty() && waiting.is_empty() {
 				drop(held);
 				return self.release(done.scope).await;
@@ -488,6 +486,23 @@ impl<R: Runtime> HostTurn<R> {
 				speaking = self.wave(&held, mem::take(&mut waiting)).await;
 			}
 		}
+	}
+
+	async fn ended(&self, done: &Speaker, end: SpeakerEnd, waiting: &mut Vec<Summons>) {
+		match (done.is_in_line, end) {
+			(true, SpeakerEnd::HandsOver) => self.lost_from_line(&done.scope).await,
+			(true, SpeakerEnd::Cancelled) => summons::note_dropped(
+				&self.run_of(&done.scope.bot_id),
+				SummonsDropReason::Cancelled,
+			),
+			(false, SpeakerEnd::HandsOver) => self.note_handovers(done, waiting).await,
+			(false, SpeakerEnd::Cancelled) => {}
+		}
+	}
+
+	async fn lost_from_line(&self, scope: &RuntimeScope) {
+		let reason = TransportError::WriteFailed { detail: LOST_QUEUE.to_owned() };
+		self.rejected(scope, reason, SummonsDropReason::LostQueue).await;
 	}
 
 	fn listening(&self) -> (RelayReader, mpsc::UnboundedReceiver<ScopedEvent>) {
@@ -500,6 +515,7 @@ impl<R: Runtime> HostTurn<R> {
 
 	fn delivered(&self, scope: &RuntimeScope) {
 		log::info!("{} delivers the queued turn of {}", self.label(), scope.bot_id);
+		summons::note_started(&self.run_of(&scope.bot_id));
 		let bot_ids = [scope.bot_id.clone()];
 		arm_start_deadlines(&self.app, &self.conversation_id, &self.turn_id, &bot_ids);
 	}
@@ -524,7 +540,9 @@ impl<R: Runtime> HostTurn<R> {
 					kept.push(speaker);
 				}
 				Ok(LinePlace::Absent) => self.ended_unheard(speaker, waiting).await,
-				Err(error) if speaker.is_in_line => self.rejected(&speaker.scope, error).await,
+				Err(error) if speaker.is_in_line => {
+					self.rejected(&speaker.scope, error, SummonsDropReason::StartFailed).await
+				}
 				Err(error) => {
 					log::warn!(
 						"{} lost the run of {}: {}",
@@ -542,8 +560,7 @@ impl<R: Runtime> HostTurn<R> {
 
 	async fn ended_unheard(&self, speaker: Speaker, waiting: &mut Vec<Summons>) {
 		if speaker.is_in_line && self.is_still_awaited(&speaker.scope.bot_id).await {
-			let reason = TransportError::WriteFailed { detail: LOST_QUEUE.to_owned() };
-			return self.rejected(&speaker.scope, reason).await;
+			return self.lost_from_line(&speaker.scope).await;
 		}
 		self.note_handovers(&speaker, waiting).await;
 		self.release(speaker.scope).await;
@@ -577,14 +594,21 @@ impl<R: Runtime> HostTurn<R> {
 			detail: format!("the host stopped hearing the run: {failure}"),
 		};
 		let mut running = Vec::new();
+		let interrupted = SummonsDropReason::Interrupted;
 		for speaker in speaking {
-			if speaker.is_in_line && self.withdrew(&speaker.scope).await {
-				self.rejected(&speaker.scope, reason.clone()).await;
+			if !speaker.is_in_line {
+				running.push(speaker);
+			} else if self.withdrew(&speaker.scope).await {
+				self.rejected(&speaker.scope, reason.clone(), interrupted).await;
 			} else {
+				summons::note_dropped(&self.run_of(&speaker.scope.bot_id), interrupted);
 				running.push(speaker);
 			}
 		}
 		self.cancel_running(running).await;
+		for summons in &waiting {
+			summons::note_dropped(&self.run_of(&summons.bot_id), interrupted);
+		}
 		join_all(waiting.iter().map(|summons| self.abandon(&summons.bot_id))).await;
 	}
 
@@ -603,7 +627,13 @@ impl<R: Runtime> HostTurn<R> {
 		}
 	}
 
-	async fn rejected(&self, scope: &RuntimeScope, reason: TransportError) {
+	async fn rejected(
+		&self,
+		scope: &RuntimeScope,
+		reason: TransportError,
+		dropped: SummonsDropReason,
+	) {
+		summons::note_dropped(&self.run_of(&scope.bot_id), dropped);
 		log::warn!(
 			"{} rejects the queued turn of {}: {}",
 			self.label(),
@@ -1085,6 +1115,7 @@ mod tests {
 	use crate::events::{self, Frame};
 	use crate::routines::runner::read;
 	use crate::test_app::an_app_of_its_own;
+	use crate::test_log::{capturing, logged_naming};
 	fn speaking_as(scope: RuntimeScope) -> Speaker {
 		Speaker { scope, written: Vec::new(), is_in_line: false }
 	}
@@ -1239,6 +1270,30 @@ mod tests {
 			.await
 			.expect("the transcript reads");
 		page.messages.iter().map(|message| message.state).collect()
+	}
+
+	fn summons_steps(room: &Room, bot_id: &str) -> Vec<String> {
+		let of_the_bot = format!("| bot: {bot_id}");
+		let mut steps: Vec<String> = logged_naming(&format!("| conversation: {} |", room.id))
+			.into_iter()
+			.filter(|line| line.starts_with("summons ") && line.contains(&of_the_bot))
+			.map(|line| step_of(&line))
+			.collect();
+		steps.sort();
+		steps
+	}
+
+	fn step_of(line: &str) -> String {
+		let step = line.split(' ').nth(1).unwrap_or(line);
+		match line.split("| reason: ").nth(1) {
+			Some(reason) => format!("{step} {reason}"),
+			None => step.to_owned(),
+		}
+	}
+
+	fn received_from_ada(room: &Room) {
+		let handing = format!("<@{}> over to you", room.bot_ids[1]);
+		summons::note_received(&room.id, &format!("reply-of-{}", room.bot_ids[0]), &handing);
 	}
 
 	fn scope_in(room: &Room, bot_id: &str) -> RuntimeScope {
@@ -1870,10 +1925,126 @@ done
 			assert_eq!(shut_down_scopes(&agent_events(&told)), vec![ada.clone()]);
 		}
 
+		fn heard_in_turn(
+			host_turn: &HostTurn<MockRuntime>,
+			scope: &RuntimeScope,
+			told: Vec<AgentEvent>,
+		) -> (mpsc::UnboundedReceiver<ScopedEvent>, RelayReader) {
+			let (events, heard) = mpsc::unbounded_channel();
+			for event in told {
+				let scoped = ScopedEvent {
+					scope: Some(scope.clone()),
+					turn: Some(host_turn.event_turn()),
+					event,
+				};
+				events.send(scoped).expect("the turn listens");
+			}
+			let (reading, _lagging) = a_lagging_reader();
+			(heard, reading)
+		}
+
+		#[tokio::test]
+		async fn a_queued_turn_its_session_ends_unrun_is_rejected_as_a_lost_queue() {
+			capturing();
+			let app = an_app_of_its_own("host-turn-ended-in-line", mock_builder());
+			app.manage(db::bootstrap(app.handle()));
+			app.manage(AgentState::default());
+			let room = a_room_running(app.handle(), &["Ada"]).await;
+			let ada = scope_in(&room, &room.bot_ids[0]);
+			an_awaited_run(app.handle(), &room, &ada.bot_id).await;
+			let messages = database(app.handle()).expect("the database opens").messages();
+			let claimed = messages.claim_awaited_run("t1".to_owned(), ada.bot_id.clone()).await;
+			assert!(claimed.expect("the claim is written"), "the host did not claim the run");
+			let mut announced = events::subscribed(app.handle());
+			let held = app.state::<AgentState>().host_turns().hold(&room.id, "t1").expect("held");
+			let host_turn = a_host_turn(app.handle(), &room, held.stopped.clone());
+			let (heard, mut reading) =
+				heard_in_turn(&host_turn, &ada, vec![ended_as(TurnOutcome::Failed)]);
+
+			host_turn.drive(held, vec![in_line(ada.clone())], heard, &mut reading).await;
+
+			let told = told(&mut announced);
+			let heard = told_in_turn(&told, &ada);
+			assert_eq!(heard.len(), 2, "the member heard {heard:?}");
+			assert_eq!(failure_detail(&heard[0]), LOST_QUEUE);
+			assert_eq!(heard[1], ended_as(TurnOutcome::Failed));
+			assert_eq!(open_runs(app.handle()).await, 0, "the claimed run was left open");
+			assert_eq!(summons_steps(&room, &ada.bot_id), vec!["dropped lostQueue"]);
+		}
+
+		#[tokio::test]
+		async fn scenario_b_running_in_the_same_room_queues_the_summons_and_starts_it_once_delivered(
+		) {
+			capturing();
+			let app = an_app_of_its_own("scenario-same-room", mock_builder());
+			app.manage(db::bootstrap(app.handle()));
+			app.manage(AgentState::default());
+			let room = a_room_running(app.handle(), &["Ada", "Grace"]).await;
+			let grace = scope_in(&room, &room.bot_ids[1]);
+			speaking_in(app.handle(), &room, &room.bot_ids[..1]).await;
+			a_streaming_reply(app.handle(), &room, &room.bot_ids[0]).await;
+			let busy = a_session_held_for(app.handle(), &grace).await;
+			busy.session.submit("an earlier turn", Some(submitted("t0", "h1"))).await.expect("t0");
+			received_from_ada(&room);
+			let held = app.state::<AgentState>().host_turns().hold(&room.id, "t1").expect("held");
+			let host_turn = a_host_turn(app.handle(), &room, held.stopped.clone());
+			let handed = Summons {
+				bot_id: grace.bot_id.clone(),
+				prompt_id: format!("reply-of-{}", room.bot_ids[0]),
+			};
+
+			let speaking = host_turn.wave(&held, vec![handed]).await;
+			let while_queued = summons_steps(&room, &grace.bot_id);
+			let delivered = vec![
+				AgentEvent::TurnChanged { state: TurnState::Submitting },
+				ended_as(TurnOutcome::Completed),
+			];
+			let (heard, mut reading) = heard_in_turn(&host_turn, &grace, delivered);
+			host_turn.drive(held, speaking, heard, &mut reading).await;
+
+			assert_eq!(while_queued, vec!["queued", "received"]);
+			assert_eq!(summons_steps(&room, &grace.bot_id), vec!["queued", "received", "started"]);
+		}
+
+		#[tokio::test]
+		async fn a_handed_turn_starts_its_companion_with_no_window_tracking_it() {
+			use crate::conversations::commands::{run_handed_turn, HandedTurn};
+
+			capturing();
+			let app = an_app_of_its_own("host-turn-handed", mock_builder());
+			app.manage(db::bootstrap(app.handle()));
+			app.manage(AgentState::default());
+			let room = a_room_running(app.handle(), &["Ada", "Grace"]).await;
+			let grace = scope_in(&room, &room.bot_ids[1]);
+			let _idle = a_session_held_for(app.handle(), &grace).await;
+			let handed = HandedTurn {
+				conversation_id: room.id.clone(),
+				author_bot_id: room.bot_ids[0].clone(),
+				text: "@Grace this mission is yours now".to_owned(),
+				summoned: grace.bot_id.clone(),
+			};
+			let database = database(app.handle()).expect("the database opens");
+
+			run_handed_turn(app.handle(), database, &app.state::<AgentState>(), handed)
+				.await
+				.expect("the handed turn runs");
+
+			let query =
+				MessagePageQuery { conversation_id: room.id.clone(), before_seq: None, limit: 10 };
+			let page = database.messages().page_messages(query).await.expect("it reads");
+			let handing = page.messages.last().expect("the handoff is written");
+			assert_eq!(handing.author_bot_id.as_deref(), Some(room.bot_ids[0].as_str()));
+			assert!(handing.content.starts_with(&format!("<@{}>", grace.bot_id)), "{handing:?}");
+			assert_eq!(summons_steps(&room, &grace.bot_id), vec!["received", "started"]);
+		}
+
 		mod serving_awaited_runs {
 			use super::*;
 			use crate::agent::commands::submit_claimed_prompt;
-			use crate::conversations::awaited_runs::{serve_handed, serve_on_driving, TurnWindows};
+			use crate::conversations::awaited_runs::{
+				forget_on_destroyed, forget_on_page_event, serve_handed, serve_on_driving,
+				TurnWindows,
+			};
 			use crate::db::repositories::conversations::MISSION_KIND;
 			use crate::db::repositories::messages::EndedRun;
 
@@ -1962,6 +2133,42 @@ done
 						ended_at: 3,
 					};
 					messages.end_run(ended).await.expect("ada hands over");
+					received_from_ada(&self.room);
+				}
+
+				fn summons_of_grace(&self) -> Vec<String> {
+					summons_steps(&self.room, &self.room.bot_ids[1])
+				}
+
+				fn main_window(&self) -> tauri::Window<MockRuntime> {
+					let main =
+						tauri::WebviewWindowBuilder::new(self.handle(), MAIN, Default::default())
+							.build()
+							.expect("the main window builds");
+					main.as_ref().window()
+				}
+
+				async fn grace_busy_in_another_room(&self) -> HeldSession {
+					let conversations = database(self.handle()).expect("it opens").conversations();
+					let elsewhere = conversations
+						.create_conversation(ConversationDraft {
+							space_id: "personal".to_owned(),
+							section_id: None,
+							title: "Elsewhere".to_owned(),
+							icon: None,
+							bot_ids: vec![self.room.bot_ids[1].clone()],
+						})
+						.await
+						.expect("the other room is created");
+					let grace_elsewhere = RuntimeScope {
+						conversation_id: elsewhere.id,
+						runtime_session_id: "session-of-grace-elsewhere".to_owned(),
+						..self.grace()
+					};
+					let busy = a_session_held_for(self.handle(), &grace_elsewhere).await;
+					let elsewhere_turn = Some(submitted("t-elsewhere", "h1"));
+					busy.session.submit("busy elsewhere", elsewhere_turn).await.expect("it runs");
+					busy
 				}
 
 				async fn run(&self, sql: &'static str) {
@@ -2088,7 +2295,76 @@ done
 			}
 
 			#[tokio::test]
-			async fn an_awaited_run_on_a_mission_thread_is_left_to_the_mission_run_driver() {
+			async fn scenario_b_idle_starts_the_summons_once() {
+				capturing();
+				let served = ada_ran_t1_from_the_main_window("scenario-b-idle").await;
+				served.windows().forget_window(MAIN);
+				served.drive_from(MAIN).await;
+
+				served.ada_hands_over_to_grace().await;
+				serve_handed(served.handle(), &served.room.id, "t1").await.expect("served");
+				served.grace_heard_a_prompt().await;
+
+				assert_eq!(served.settled().await, 1, "grace was not started exactly once");
+				assert_eq!(served.summons_of_grace(), vec!["received", "started"]);
+			}
+
+			#[tokio::test]
+			async fn scenario_b_running_in_another_room_starts_the_summons_at_once() {
+				capturing();
+				let served = ada_ran_t1_from_the_main_window("scenario-b-elsewhere").await;
+				let _busy = served.grace_busy_in_another_room().await;
+				served.windows().forget_window(MAIN);
+				served.drive_from(MAIN).await;
+
+				served.ada_hands_over_to_grace().await;
+				serve_handed(served.handle(), &served.room.id, "t1").await.expect("served");
+				served.grace_heard_a_prompt().await;
+
+				assert_eq!(served.settled().await, 1, "grace was not started exactly once");
+				assert_eq!(served.summons_of_grace(), vec!["received", "started"]);
+			}
+
+			#[tokio::test]
+			async fn scenario_a_second_window_open_and_main_closed_starts_the_summons_once() {
+				capturing();
+				let served = ada_ran_t1_from_the_main_window("scenario-main-closed").await;
+				let main = served.main_window();
+				served.drive_from("window-1").await;
+
+				forget_on_destroyed(&main, &tauri::WindowEvent::Destroyed);
+				served.ada_hands_over_to_grace().await;
+				serve_handed(served.handle(), &served.room.id, "t1").await.expect("served");
+				served.grace_heard_a_prompt().await;
+
+				assert_eq!(served.settled().await, 1, "grace was not started exactly once");
+				assert_eq!(served.summons_of_grace(), vec!["received", "started"]);
+			}
+
+			#[tokio::test]
+			async fn scenario_main_reloaded_during_the_turn_of_a_starts_the_summons_once_it_drives()
+			{
+				capturing();
+				let served = ada_ran_t1_from_the_main_window("scenario-main-reloaded").await;
+				let main = served.main_window();
+
+				forget_on_page_event(&main, tauri::webview::PageLoadEvent::Started);
+				served.ada_hands_over_to_grace().await;
+				serve_handed(served.handle(), &served.room.id, "t1").await.expect("nothing fails");
+				let while_reloading = served.settled().await;
+				let traced_while_reloading = served.summons_of_grace();
+				served.drive_from(MAIN).await;
+				served.grace_heard_a_prompt().await;
+
+				assert_eq!(while_reloading, 0, "grace started with no window driving");
+				assert_eq!(traced_while_reloading, vec!["received"]);
+				assert_eq!(served.settled().await, 1, "grace was not started exactly once");
+				assert_eq!(served.summons_of_grace(), vec!["received", "started"]);
+			}
+
+			#[tokio::test]
+			async fn an_awaited_run_on_a_mission_thread_is_served_like_any_room() {
+				capturing();
 				let served = handed_over_after_a_reload("serve-mission-thread").await;
 				let room_id = served.room.id.clone();
 				database(served.handle())
@@ -2104,8 +2380,10 @@ done
 					.expect("the room becomes a mission thread");
 
 				served.drive_from(MAIN).await;
+				served.grace_heard_a_prompt().await;
 
-				assert_eq!(served.settled().await, 0, "the host started a mission thread bot");
+				assert_eq!(served.settled().await, 1, "grace was not started exactly once");
+				assert_eq!(served.summons_of_grace(), vec!["received", "started"]);
 			}
 
 			#[tokio::test]

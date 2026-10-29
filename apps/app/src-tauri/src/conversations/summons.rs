@@ -7,16 +7,20 @@ pub(crate) enum SummonsDropReason {
 	NotSeated,
 	StartFailed,
 	NeverStarted,
+	LostQueue,
+	Interrupted,
 }
 
 impl SummonsDropReason {
 	#[cfg(test)]
-	const ALL: [SummonsDropReason; 5] = [
+	const ALL: [SummonsDropReason; 7] = [
 		Self::SelfMention,
 		Self::Cancelled,
 		Self::NotSeated,
 		Self::StartFailed,
 		Self::NeverStarted,
+		Self::LostQueue,
+		Self::Interrupted,
 	];
 
 	fn name(self) -> &'static str {
@@ -26,6 +30,8 @@ impl SummonsDropReason {
 			Self::NotSeated => "notSeated",
 			Self::StartFailed => "startFailed",
 			Self::NeverStarted => "neverStarted",
+			Self::LostQueue => "lostQueue",
+			Self::Interrupted => "interrupted",
 		}
 	}
 }

@@ -6,6 +6,7 @@ const SUMMONS_DROP_REASONS = [
 	"notSeated",
 	"startFailed",
 	"neverStarted",
+	"lostQueue",
 ] as const
 
 export type SummonsDropReason = (typeof SUMMONS_DROP_REASONS)[number]

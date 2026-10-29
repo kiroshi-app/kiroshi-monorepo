@@ -452,6 +452,7 @@ mod tests {
 	async fn a_host(name: &str) -> AppOfItsOwn {
 		let app = an_app_of_its_own(&format!("mission-host-{name}"), mock_builder());
 		app.manage(db::bootstrap(app.handle()));
+		app.manage(crate::agent::AgentState::default());
 		ready(&app.state::<db::DatabaseState>())
 			.expect("the database opens")
 			.call_mut(|connection| Ok(connection.execute_batch(A_SPACE)?))
@@ -1322,6 +1323,35 @@ mod tests {
 		assert_eq!(title_of(&app, &opened.thread_conversation_id).await, "Held");
 	}
 
+	async fn thread_messages(
+		app: &App<MockRuntime>,
+		thread_id: &str,
+	) -> Vec<crate::db::repositories::messages::StoredMessage> {
+		let query = crate::db::repositories::messages::MessagePageQuery {
+			conversation_id: thread_id.to_owned(),
+			before_seq: None,
+			limit: 10,
+		};
+		let state = app.state::<db::DatabaseState>();
+		let messages = ready(&state).expect("it opens").messages();
+		messages.page_messages(query).await.expect("the thread reads").messages
+	}
+
+	fn summons_traced_in(thread_id: &str) -> Vec<String> {
+		let mut steps: Vec<String> =
+			crate::test_log::logged_naming(&format!("| conversation: {thread_id} |"))
+				.into_iter()
+				.filter(|line| line.starts_with("summons "))
+				.map(|line| {
+					let step = line.split(' ').nth(1).unwrap_or_default().to_owned();
+					let bot = line.split("| bot: ").nth(1).unwrap_or_default().to_owned();
+					format!("{step} {bot}")
+				})
+				.collect();
+		steps.sort();
+		steps
+	}
+
 	const A_FOURTH_COMPANION: &str = "
 		INSERT INTO bots (id, name, model, created_at) VALUES ('b4', 'Fourth', 'sonnet', 1);
 		INSERT INTO bot_spaces (bot_id, space_id, joined_at) VALUES ('b4', 'personal', 1);
@@ -1333,7 +1363,7 @@ mod tests {
 		planted(&app, A_FOURTH_COMPANION).await;
 		let opened = a_mission_of(&app, "c1", "b1").await;
 		let host = serving(&app, &opened.thread_conversation_id);
-		let spoken = listening(&app, crate::conversations::contract::COMPANION_SPOKE_EVENT);
+		crate::test_log::capturing();
 
 		let handed = host
 			.answer(asking("handoff", json!({ "id": opened.id, "companion": "fourth" })))
@@ -1382,12 +1412,16 @@ mod tests {
 			),
 			"got {topic:?}"
 		);
-		let summons = spoken.try_iter().last().expect("the new owner is summoned");
-		assert_eq!(summons["conversationId"], json!(opened.thread_conversation_id));
-		assert_eq!(summons["authorBotId"], json!("b1"));
-		let text = summons["text"].as_str().expect("the summons carries a text");
-		assert!(text.starts_with("@Fourth "), "got {text}");
-		assert!(text.ends_with("Held"), "got {text}");
+		let written = thread_messages(&app, &opened.thread_conversation_id).await;
+		let summons = written.last().expect("the new owner is summoned");
+		assert_eq!(summons.author_bot_id.as_deref(), Some("b1"));
+		assert!(summons.content.starts_with("<@b4> "), "got {}", summons.content);
+		assert!(summons.content.ends_with("Held"), "got {}", summons.content);
+		assert_eq!(
+			summons_traced_in(&opened.thread_conversation_id),
+			vec!["dropped b4 | reason: startFailed", "received b4"],
+			"the summons of a companion that cannot start did not end dropped"
+		);
 	}
 
 	#[tokio::test]
@@ -1396,7 +1430,7 @@ mod tests {
 		let opened = a_mission_of(&app, "c1", "b1").await;
 		let host = serving(&app, "c1");
 		closed_through(&host, &opened.id).await;
-		let spoken = listening(&app, crate::conversations::contract::COMPANION_SPOKE_EVENT);
+		let before = thread_messages(&app, &opened.thread_conversation_id).await.len();
 
 		let handed = host
 			.answer(asking("handoff", json!({ "id": opened.id, "companion": "b2" })))
@@ -1404,7 +1438,8 @@ mod tests {
 			.expect("the closed mission is handed off");
 
 		assert_eq!(handed["botId"], json!("b2"));
-		assert!(spoken.try_recv().is_err(), "a closed mission summoned its new owner");
+		let after = thread_messages(&app, &opened.thread_conversation_id).await.len();
+		assert_eq!(after, before, "a closed mission summoned its new owner");
 	}
 
 	#[tokio::test]
