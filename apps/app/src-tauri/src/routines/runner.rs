@@ -28,6 +28,7 @@ use crate::conversations::commands::{
 	announce_conversation, conversation_open_runtime_session, ready,
 };
 use crate::conversations::contract::TranscriptStoreError;
+use crate::conversations::summons;
 use crate::db;
 use crate::db::repositories::messages::{NewAssistantMessage, NewTurn, TerminalState};
 use crate::events::{self, Frame, AGENT_EVENT, CONVERSATION_UPDATED};
@@ -214,6 +215,7 @@ async fn write_report<R: Runtime>(
 		.await?;
 	messages.append_text(message_id.clone(), text.clone()).await?;
 	messages.finalize_message(message_id.clone(), TerminalState::Complete, None).await?;
+	summons::note_received(&scope.conversation_id, &message_id, &text);
 	messages.complete_turn(turn_id.clone(), SystemClock.now_ms()).await?;
 	announce_conversation(app, database, CONVERSATION_UPDATED, &scope.conversation_id).await;
 	announce_report(

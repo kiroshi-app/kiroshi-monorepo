@@ -26,6 +26,13 @@ import type {
 	NewUserMessage,
 } from "./store-contract"
 import type { TranscriptStore } from "./store-port"
+import {
+	type SummonsDropReason,
+	type SummonsRun,
+	traceSummonsDropped,
+	traceSummonsQueued,
+	traceSummonsStarted,
+} from "./summons-trace"
 import type {
 	CompanionArrival,
 	CompanionSpoke,
@@ -43,8 +50,10 @@ import {
 } from "./transcript-state"
 import {
 	emptyQueue,
+	endedIn,
 	handedOver,
 	openedWave,
+	refusalOf,
 	reopenedFor,
 	type Summons,
 	type TurnQueue,
@@ -234,10 +243,12 @@ type Speaker = {
 	pending: PendingPrompt | null
 	askedAt: number
 	startedAt: number
-	isDropped: boolean
+	droppedFor: SummonsDropReason | null
 }
 
 const NO_MESSAGES: TranscriptMessage[] = []
+
+const NO_CONVERSATION = "none"
 
 const NO_ARRIVALS: CompanionArrival[] = []
 
@@ -732,8 +743,31 @@ export const createConversationController = (
 		unresolvedMentions = [...held.values()]
 	}
 
+	const summonsRunOf = (turnId: string, botId: string): SummonsRun => ({
+		conversationId: conversation?.id ?? NO_CONVERSATION,
+		turnId,
+		botId,
+	})
+
+	const dropAll = (
+		handed: Pick<Summons, "botId">[],
+		turnId: string,
+		reason: SummonsDropReason,
+	) => {
+		for (const { botId } of handed) {
+			traceSummonsDropped(summonsRunOf(turnId, botId), reason)
+		}
+	}
+
+	const dropWaiting = (reason: SummonsDropReason) => {
+		if (activeTurn) {
+			dropAll(queue.waiting, activeTurn.id, reason)
+		}
+	}
+
 	const seatedFromStore = async (
 		handed: HandedMention[],
+		turnId: string,
 	): Promise<HandedMention[]> => {
 		const conversationId = conversation?.id
 		if (handed.length === 0 || !conversationId) {
@@ -753,6 +787,7 @@ export const createConversationController = (
 				found.push(mention)
 				continue
 			}
+			traceSummonsDropped(summonsRunOf(turnId, mention.botId), "notSeated")
 			missed.push({
 				botId: mention.botId,
 				name: nameSeatedIn(seated, mention.botId),
@@ -762,9 +797,20 @@ export const createConversationController = (
 		return found
 	}
 
-	const handOver = (handed: HandedMention[]) => {
+	const handOver = (handed: HandedMention[], turnId: string) => {
 		for (const { fromBotId, botId, promptId } of handed) {
-			queue = handedOver(queue, fromBotId, { botId, promptId })
+			const summons = { botId, promptId }
+			const run = summonsRunOf(turnId, botId)
+			const refusal = refusalOf(queue, fromBotId, summons)
+			if (refusal) {
+				traceSummonsDropped(run, refusal)
+				continue
+			}
+			const running = speakers.get(botId)
+			if (running) {
+				traceSummonsQueued(run, running.turn.id)
+			}
+			queue = handedOver(queue, fromBotId, summons)
 		}
 	}
 
@@ -779,8 +825,14 @@ export const createConversationController = (
 		const unseated: HandedMention[] = []
 		for (const [promptId, text] of held.written) {
 			const { named, unresolved } = addresseesIn(text, present)
-			handOver(mentionsHandedBy(held.botId, promptId, named))
-			unseated.push(...mentionsHandedBy(held.botId, promptId, unresolved))
+			const handed = mentionsHandedBy(held.botId, promptId, named)
+			const missed = mentionsHandedBy(held.botId, promptId, unresolved)
+			if (held.droppedFor) {
+				dropAll([...handed, ...missed], held.turn.id, held.droppedFor)
+				continue
+			}
+			handOver(handed, held.turn.id)
+			unseated.push(...missed)
 		}
 		return unseated
 	}
@@ -795,15 +847,16 @@ export const createConversationController = (
 			return
 		}
 		speakers.delete(held.botId)
+		queue = endedIn(queue, held.botId)
 		settleOpenReplies(held, completion)
 		void shutdownSpeaker(held)
-		const handed = held.isDropped ? [] : noteHandovers(held)
+		const handed = noteHandovers(held)
 		if (handed.length === 0) {
 			syncAndDrive()
 			return
 		}
-		void seatedFromStore(handed).then((seated) => {
-			handOver(seated)
+		void seatedFromStore(handed, held.turn.id).then((seated) => {
+			handOver(seated, held.turn.id)
 			syncAndDrive()
 		})
 	}
@@ -1052,6 +1105,10 @@ export const createConversationController = (
 			turnId: held.turn.id,
 			promptId: held.turn.promptId,
 		})
+		traceSummonsStarted(
+			summonsRunOf(held.turn.id, held.botId),
+			scope.runtimeSessionId,
+		)
 	}
 
 	const newSpeaker = (
@@ -1070,7 +1127,7 @@ export const createConversationController = (
 		pending: null,
 		askedAt: 0,
 		startedAt: now(),
-		isDropped: false,
+		droppedFor: null,
 	})
 
 	const openWave = (): Speaker[] => {
@@ -1095,6 +1152,7 @@ export const createConversationController = (
 		} catch (reason) {
 			speakers.delete(held.botId)
 			void shutdownSpeaker(held)
+			traceSummonsDropped(summonsRunOf(held.turn.id, held.botId), "startFailed")
 			noteSpeakerFailure(held.botId, toTransportError(reason))
 		}
 		sync()
@@ -1176,6 +1234,21 @@ export const createConversationController = (
 		return answering.map((botId) => ({ botId, promptId: said.id }))
 	}
 
+	const noteUnseatedIn = (said: TranscriptMessage) => {
+		const { unresolved } = addresseesIn(said.content, presentBotIds())
+		dropAll(
+			unresolved.map((botId) => ({ botId })),
+			said.turnId,
+			"notSeated",
+		)
+		rememberUnresolved(
+			unresolved.map((botId) => ({
+				botId,
+				name: nameSeatedIn(conversation, botId),
+			})),
+		)
+	}
+
 	const nameFrom = async (conversationId: string, text: string) => {
 		const naming = await driver.namingFor(text).catch(() => null)
 		if (naming?.title) {
@@ -1194,7 +1267,7 @@ export const createConversationController = (
 
 	const interruptRunningTurn = () => {
 		for (const held of speakers.values()) {
-			held.isDropped = true
+			held.droppedFor = "interrupted"
 		}
 	}
 
@@ -1232,7 +1305,9 @@ export const createConversationController = (
 			void nameFrom(conversationId, trimmed)
 		}
 		transcript.append(said)
+		noteUnseatedIn(said)
 		interruptRunningTurn()
+		dropWaiting("interrupted")
 		queue = reopenedFor(queue, summoned)
 		activeTurn = turn
 		sync()
@@ -1317,12 +1392,13 @@ export const createConversationController = (
 			...mentionsHandedBy(author, reported.id, named),
 			...(await seatedFromStore(
 				mentionsHandedBy(author, reported.id, unresolved),
+				reported.turnId,
 			)),
 		]
 		if (summoned.length === 0 || !(await openReportTurn(reported))) {
 			return
 		}
-		handOver(summoned)
+		handOver(summoned, activeTurn?.id ?? reported.turnId)
 		sync()
 		drive()
 	}
@@ -1565,7 +1641,7 @@ export const createConversationController = (
 		)
 
 	const cancelSpeaker = async (held: Speaker) => {
-		held.isDropped = true
+		held.droppedFor = "cancelled"
 		if (held.pending) {
 			await respond(held.pending.request.id, "deny")
 		}
@@ -1584,6 +1660,7 @@ export const createConversationController = (
 
 	const stop = async () => {
 		const running = [...speakers.values()]
+		dropWaiting("cancelled")
 		queue = reopenedFor(queue, [])
 		sync()
 		await Promise.all(running.map(cancelSpeaker))

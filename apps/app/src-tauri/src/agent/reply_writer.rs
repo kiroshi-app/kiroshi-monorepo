@@ -22,6 +22,7 @@ use crate::conversations::context::mentioned_bot_ids;
 use crate::conversations::contract::TranscriptStoreError;
 use crate::conversations::host_turn::present_bot_ids;
 use crate::conversations::state as conversation_state;
+use crate::conversations::summons::{self, SummonsDropReason, SummonsRun};
 use crate::conversations::turn_run_deadline::arm_start_deadlines;
 use crate::db;
 use crate::db::repositories::conversations::{PendingPrompt, PromptKind, MISSION_KIND, TOPIC_KIND};
@@ -474,10 +475,7 @@ impl<R: Runtime> Desk<R> {
 			return;
 		};
 		self.show_attachments(&turn).await;
-		let handed_to = match completion {
-			TerminalState::Cancelled => Vec::new(),
-			_ => self.handed_to(&turn).await,
-		};
+		let handed_to = self.handed_to(&turn, completion).await;
 		if let Err(error) = self.store.end_run(&turn.id, handed_to).await {
 			self.store.report(&turn.id, &error);
 			let detail = format!("the end of turn {} could not be written: {error:?}", turn.id);
@@ -490,14 +488,27 @@ impl<R: Runtime> Desk<R> {
 }
 
 impl<R: Runtime> Desk<R> {
-	async fn handed_to(&self, turn: &OpenTurn) -> Vec<String> {
-		match self.store.handed_to(turn.written.values()).await {
-			Ok(handed_to) => handed_to,
+	async fn handed_to(&self, turn: &OpenTurn, completion: TerminalState) -> Vec<String> {
+		for (id, text) in &turn.written {
+			summons::note_received(&self.store.conversation_id, id, text);
+		}
+		let named = named_in(turn.written.values());
+		let handover = match self.store.handover(&named, completion).await {
+			Ok(handover) => handover,
 			Err(error) => {
 				self.store.report(&turn.id, &error);
-				Vec::new()
+				unread_handover(&self.store.bot_id, &named)
 			}
+		};
+		for (bot_id, reason) in &handover.dropped {
+			let run = SummonsRun {
+				conversation_id: &self.store.conversation_id,
+				turn_id: &turn.id,
+				bot_id,
+			};
+			summons::note_dropped(&run, *reason);
 		}
+		handover.handed
 	}
 
 	async fn show_attachments(&self, turn: &OpenTurn) {
@@ -710,23 +721,16 @@ impl<R: Runtime> Store<R> {
 		Ok(())
 	}
 
-	async fn handed_to(
+	async fn handover(
 		&self,
-		written: impl Iterator<Item = &String>,
-	) -> Result<Vec<String>, TranscriptStoreError> {
-		let mut mentioned: Vec<&str> = written
-			.flat_map(|text| mentioned_bot_ids(text))
-			.filter(|bot_id| *bot_id != self.bot_id)
-			.collect();
-		if mentioned.is_empty() {
-			return Ok(Vec::new());
+		named: &[&str],
+		completion: TerminalState,
+	) -> Result<Handover, TranscriptStoreError> {
+		if named.iter().all(|bot_id| *bot_id == self.bot_id) {
+			return Ok(handover_of(&self.bot_id, named, &[], completion));
 		}
 		let seats = self.database()?.conversations().seats(self.conversation_id.clone()).await?;
-		let present = present_bot_ids(&seats);
-		mentioned.retain(|bot_id| present.contains(bot_id));
-		mentioned.sort_unstable();
-		mentioned.dedup();
-		Ok(mentioned.into_iter().map(str::to_owned).collect())
+		Ok(handover_of(&self.bot_id, named, &present_bot_ids(&seats), completion))
 	}
 
 	async fn settled_mentions(
@@ -735,6 +739,57 @@ impl<R: Runtime> Store<R> {
 	) -> Result<Option<String>, TranscriptStoreError> {
 		settled_mentions(self.database()?, &self.conversation_id, written).await
 	}
+}
+
+#[derive(Debug, Default, PartialEq, Eq)]
+struct Handover {
+	handed: Vec<String>,
+	dropped: Vec<(String, SummonsDropReason)>,
+}
+
+fn named_in<'a>(written: impl Iterator<Item = &'a String>) -> Vec<&'a str> {
+	let mut named: Vec<&str> = written.flat_map(|text| mentioned_bot_ids(text)).collect();
+	named.sort_unstable();
+	named.dedup();
+	named
+}
+
+fn handover_of(
+	author: &str,
+	named: &[&str],
+	present: &[&str],
+	completion: TerminalState,
+) -> Handover {
+	let mut handover = Handover::default();
+	for bot_id in named {
+		let reason = if *bot_id == author {
+			SummonsDropReason::SelfMention
+		} else if !present.contains(bot_id) {
+			SummonsDropReason::NotSeated
+		} else if completion == TerminalState::Cancelled {
+			SummonsDropReason::Cancelled
+		} else {
+			handover.handed.push((*bot_id).to_owned());
+			continue;
+		};
+		handover.dropped.push(((*bot_id).to_owned(), reason));
+	}
+	handover
+}
+
+fn unread_handover(author: &str, named: &[&str]) -> Handover {
+	let dropped = named
+		.iter()
+		.map(|bot_id| {
+			let reason = if *bot_id == author {
+				SummonsDropReason::SelfMention
+			} else {
+				SummonsDropReason::StartFailed
+			};
+			((*bot_id).to_owned(), reason)
+		})
+		.collect();
+	Handover { handed: Vec::new(), dropped }
 }
 
 pub(crate) async fn settled_mentions(
@@ -903,6 +958,7 @@ mod tests {
 		MessageRole, MessageState, NewUserMessage, StoredMessage, WrittenFrom,
 	};
 	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
+	use crate::test_log::{capturing, infos_naming, warnings_naming};
 
 	const RUNTIME_SESSION_ID: &str = "rs1";
 
@@ -1977,6 +2033,83 @@ mod tests {
 			assert_eq!(after_the_second, json!(null), "{name}");
 			assert!(written.completed_at("t1").await.is_some(), "the last run left it open");
 		}
+	}
+
+	async fn a_reply_ended(written: &Written, text: &str, ending: AgentEvent) {
+		capturing();
+		written.prompt("t1", "p1").await;
+		let mut lead = written.desk_of(DEFAULT_BOT_ID);
+		lead.open_turn(submitted("t1", "p1")).await;
+		lead.record(&completed("m1", text, 2)).await;
+		lead.record(&ending).await;
+	}
+
+	async fn summons_dropped_for(written: &Written, bot_id: &str) -> Vec<String> {
+		let needle = format!(
+			"summons dropped | conversation: {} | turn: t1 | bot: {bot_id} |",
+			written.conversation_id
+		);
+		warnings_naming(&needle).await
+	}
+
+	#[tokio::test]
+	async fn a_reply_naming_a_bot_not_seated_drops_its_summons_as_not_seated() {
+		let (written, _) = Written::in_a_room_of_two("summons-not-seated").await;
+
+		a_reply_ended(&written, "<@ghost> over to you", turn_ended()).await;
+
+		let dropped = summons_dropped_for(&written, "ghost").await;
+		assert!(dropped.iter().all(|line| line.ends_with("reason: notSeated")), "{dropped:?}");
+	}
+
+	#[tokio::test]
+	async fn a_reply_naming_its_author_drops_its_summons_as_a_self_mention() {
+		let (written, _) = Written::in_a_room_of_two("summons-self").await;
+
+		a_reply_ended(&written, &format!("<@{DEFAULT_BOT_ID}> noted"), turn_ended()).await;
+
+		let dropped = summons_dropped_for(&written, DEFAULT_BOT_ID).await;
+		assert!(dropped.iter().all(|line| line.ends_with("reason: selfMention")), "{dropped:?}");
+	}
+
+	#[tokio::test]
+	async fn a_cancelled_reply_drops_the_summons_of_a_seated_bot_as_cancelled() {
+		let (written, ada) = Written::in_a_room_of_two("summons-cancelled").await;
+
+		a_reply_ended(&written, &format!("<@{ada}> over to you"), cancelled_turn()).await;
+
+		let dropped = summons_dropped_for(&written, &ada).await;
+		assert!(dropped.iter().all(|line| line.ends_with("reason: cancelled")), "{dropped:?}");
+	}
+
+	#[tokio::test]
+	async fn a_cancelled_reply_notes_each_summons_received_once() {
+		let (written, ada) = Written::in_a_room_of_two("summons-received-cancelled").await;
+
+		a_reply_ended(&written, &format!("<@{ada}> over to you"), cancelled_turn()).await;
+
+		let needle = format!(
+			"summons received | conversation: {} | message: m1 | bot: {ada}",
+			written.conversation_id
+		);
+		assert_eq!(infos_naming(&needle).await.len(), 1);
+	}
+
+	#[test]
+	fn unread_seats_drop_every_summons_of_the_reply_as_start_failed() {
+		let handover = unread_handover("lead", &["ada", "ghost", "lead"]);
+
+		assert_eq!(
+			handover,
+			Handover {
+				handed: Vec::new(),
+				dropped: vec![
+					("ada".to_owned(), SummonsDropReason::StartFailed),
+					("ghost".to_owned(), SummonsDropReason::StartFailed),
+					("lead".to_owned(), SummonsDropReason::SelfMention),
+				],
+			}
+		);
 	}
 
 	#[tokio::test]

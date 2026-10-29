@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest"
 import {
 	droppedWaiting,
 	emptyQueue,
+	endedIn,
 	handedOver,
 	openedWave,
+	refusalOf,
 	reopenedFor,
 	type Summons,
 } from "./turn-queue"
@@ -56,24 +58,23 @@ describe("handedOver", () => {
 		expect(waitingIn(queue)).toEqual(["ada", "nyx"])
 	})
 
-	it("holds no summons for a companion that already ran in the turn", () => {
-		const queue = handedOver(
-			openedWave(opened(["ada", "nyx"])),
-			"ada",
-			summons("nyx"),
-		)
-		expect(waitingIn(queue)).toEqual([])
+	it("holds for its next run a companion still running in the open wave", () => {
+		const running = endedIn(openedWave(opened(["ada", "nyx"])), "ada")
+		const queue = handedOver(running, "ada", summons("nyx"))
+		expect(waitingIn(queue)).toEqual(["nyx"])
+		expect(refusalOf(running, "ada", summons("nyx"))).toBeNull()
 	})
 
-	it("holds no summons for a companion of an earlier wave of the turn", () => {
-		const first = openedWave(opened(["ada"]))
+	it("holds no summons for a companion that already ended its run in the turn", () => {
+		const first = endedIn(openedWave(opened(["ada"])), "ada")
 		const second = openedWave(handedOver(first, "ada", summons("nyx")))
 		const queue = handedOver(second, "nyx", summons("ada"))
 		expect(waitingIn(queue)).toEqual([])
+		expect(refusalOf(second, "nyx", summons("ada"))).toBe("ranInTurn")
 	})
 
 	it("holds again a companion that ran in the turn before", () => {
-		const earlier = openedWave(opened(["ada"]))
+		const earlier = endedIn(openedWave(opened(["ada"])), "ada")
 		const queue = handedOver(
 			openedWave(reopenedFor(earlier, [summons("nyx")])),
 			"nyx",
@@ -90,8 +91,10 @@ describe("handedOver", () => {
 	})
 
 	it("ignores a companion naming itself", () => {
-		const queue = handedOver(openedWave(opened(["ada"])), "ada", summons("ada"))
+		const running = openedWave(opened(["ada"]))
+		const queue = handedOver(running, "ada", summons("ada"))
 		expect(queue.waiting).toEqual([])
+		expect(refusalOf(running, "ada", summons("ada"))).toBe("selfMention")
 	})
 })
 

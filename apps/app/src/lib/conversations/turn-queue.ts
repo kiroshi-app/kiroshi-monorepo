@@ -1,3 +1,5 @@
+import type { SummonsDropReason } from "./summons-trace"
+
 export type Summons = {
 	botId: string
 	promptId: string
@@ -6,13 +8,13 @@ export type Summons = {
 export type TurnQueue = {
 	wave: Summons[]
 	waiting: Summons[]
-	ranBotIds: string[]
+	endedBotIds: string[]
 }
 
 export const emptyQueue: TurnQueue = {
 	wave: [],
 	waiting: [],
-	ranBotIds: [],
+	endedBotIds: [],
 }
 
 export const reopenedFor = (
@@ -21,20 +23,29 @@ export const reopenedFor = (
 ): TurnQueue => ({
 	...queue,
 	waiting: [...summoned],
-	ranBotIds: [],
+	endedBotIds: [],
 })
 
 export const openedWave = (queue: TurnQueue): TurnQueue =>
 	queue.waiting.length === 0
 		? queue
-		: {
-				wave: queue.waiting,
-				waiting: [],
-				ranBotIds: [
-					...queue.ranBotIds,
-					...queue.waiting.map(({ botId }) => botId),
-				],
-			}
+		: { ...queue, wave: queue.waiting, waiting: [] }
+
+export const endedIn = (queue: TurnQueue, botId: string): TurnQueue =>
+	queue.endedBotIds.includes(botId)
+		? queue
+		: { ...queue, endedBotIds: [...queue.endedBotIds, botId] }
+
+export const refusalOf = (
+	queue: TurnQueue,
+	from: string,
+	{ botId }: Summons,
+): SummonsDropReason | null => {
+	if (botId === from) {
+		return "selfMention"
+	}
+	return queue.endedBotIds.includes(botId) ? "ranInTurn" : null
+}
 
 export const handedOver = (
 	queue: TurnQueue,
@@ -42,8 +53,7 @@ export const handedOver = (
 	summons: Summons,
 ): TurnQueue => {
 	const isHeld = queue.waiting.some(({ botId }) => botId === summons.botId)
-	const hasRun = queue.ranBotIds.includes(summons.botId)
-	if (summons.botId === from || isHeld || hasRun) {
+	if (isHeld || refusalOf(queue, from, summons)) {
 		return queue
 	}
 	return {
