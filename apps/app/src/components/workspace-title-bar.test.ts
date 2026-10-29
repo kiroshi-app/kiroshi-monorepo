@@ -349,6 +349,7 @@ describe("the title bar", () => {
 			expect.any(String),
 			{ x: 640, y: 121 },
 			null,
+			null,
 		)
 		expect(tabNames()).toEqual([settingsName])
 	})

@@ -91,7 +91,10 @@ export const commands = {
 	windowOpen: (href: string, position: {
 	x: number,
 	y: number,
-} | null, originSpaceId: string | null) => typedError<null, WindowOpenError>(__TAURI_INVOKE("window_open", { href, position, originSpaceId })),
+} | null, originSpaceId: string | null, size: {
+	width: number,
+	height: number,
+} | null) => typedError<null, WindowOpenError>(__TAURI_INVOKE("window_open", { href, position, originSpaceId, size })),
 	windowIdentity: () => __TAURI_INVOKE<WindowIdentity>("window_identity"),
 	windowReportSpace: (spaceId: string) => __TAURI_INVOKE<void>("window_report_space", { spaceId }),
 	windowReportStrip: (bounds: StripBounds) => __TAURI_INVOKE<void>("window_report_strip", { bounds }),
@@ -106,6 +109,9 @@ export const commands = {
 	windowStartNativeMove: () => typedError<null, NativeWindowError>(__TAURI_INVOKE("window_start_native_move")),
 	windowHide: () => typedError<null, NativeWindowError>(__TAURI_INVOKE("window_hide")),
 	windowShow: () => typedError<null, NativeWindowError>(__TAURI_INVOKE("window_show")),
+	dragGhostShow: (at: ScreenPosition, size: WindowSize, tab: DragGhostTab) => typedError<DragGhostSupport, DragGhostError>(__TAURI_INVOKE("drag_ghost_show", { at, size, tab })),
+	dragGhostMove: (at: ScreenPosition) => typedError<DragGhostSupport, DragGhostError>(__TAURI_INVOKE("drag_ghost_move", { at })),
+	dragGhostHide: () => typedError<DragGhostSupport, DragGhostError>(__TAURI_INVOKE("drag_ghost_hide")),
 	conversationDuplicateBot: (botId: string, spaceId: string | null) => typedError<Bot, TranscriptStoreError>(__TAURI_INVOKE("conversation_duplicate_bot", { botId, spaceId })),
 	conversationUpdateBot: (id: string, identity: BotIdentity) => typedError<Bot, TranscriptStoreError>(__TAURI_INVOKE("conversation_update_bot", { id, identity })),
 	conversationDeleteBot: (id: string) => typedError<null, TranscriptStoreError>(__TAURI_INVOKE("conversation_delete_bot", { id })),
@@ -282,6 +288,10 @@ export const DEVICE_APPROVAL_CHANGED_EVENT = "device://approval-changed" as cons
 export const DEVICE_APPROVAL_REQUESTED_EVENT = "device://approval-requested" as const;
 
 export const DEVICE_APPROVAL_SETTLED_EVENT = "device://approval-settled" as const;
+
+export const DRAG_GHOST_ROUTE = "/drag-ghost.html" as const;
+
+export const DRAG_GHOST_TAB_EVENT = "drag-ghost-tab" as const;
 
 export const FILE_MENU_EVENT = "menu-file-chosen" as const;
 
@@ -855,6 +865,18 @@ export type Disconnected_Deserialize = {
 export type Disconnected_Serialize = {
 	revoked: boolean,
 	detail?: string | null,
+};
+
+export type DragGhostError = { kind: "unavailable" };
+
+export type DragGhostSupport = {
+	supported: boolean,
+};
+
+export type DragGhostTab = {
+	tabId: string,
+	href: string,
+	title: string,
 };
 
 export type EffortLevel = "low" | "medium" | "high" | "xhigh" | "max";
@@ -1892,6 +1914,11 @@ export type WindowIdentity = {
 };
 
 export type WindowOpenError = { kind: "notAnAppPage" } | { kind: "unavailable" };
+
+export type WindowSize = {
+	width: number,
+	height: number,
+};
 
 export type WorkingBot = {
 	botId: string,

@@ -393,3 +393,43 @@ fn the_hit_test_finds_the_latest_strip_of_another_window_and_none_elsewhere() {
 fn strip(x: f64, y: f64, width: f64, height: f64) -> Value {
 	json!({ "x": x, "y": y, "width": width, "height": height })
 }
+
+const DRAG_GHOST: &str = "drag-ghost";
+
+const GHOST_SUPPORTED: bool = cfg!(any(target_os = "macos", windows));
+
+#[test]
+fn the_drag_ghost_shows_moves_and_hides_then_stays_for_the_next_drag() {
+	let directory = DataDirectory::new();
+	let app = directory.launch_without_a_store();
+	let main = main_window(&app);
+	WebviewWindowBuilder::new(&app, DRAG_GHOST, Default::default())
+		.visible(false)
+		.build()
+		.expect("the drag ghost builds");
+	let support = Ok(json!({ "supported": GHOST_SUPPORTED }));
+	let shown = json!({
+		"at": { "x": 400, "y": 300 },
+		"size": { "width": 320, "height": 200 },
+		"tab": { "tabId": "t1", "href": PAGE, "title": "Conversation" },
+	});
+
+	assert_eq!(call(&main, "drag_ghost_show", shown), support);
+	assert_eq!(call(&main, "drag_ghost_move", json!({ "at": { "x": 410, "y": 305 } })), support);
+	assert_eq!(call(&main, "drag_ghost_hide", json!({})), support);
+	assert!(app.get_webview_window(DRAG_GHOST).is_some(), "the drag ghost was not kept");
+}
+
+#[test]
+fn a_drag_ghost_that_never_opened_is_unavailable_where_the_platform_supports_it() {
+	let directory = DataDirectory::new();
+	let app = directory.launch_without_a_store();
+	let main = main_window(&app);
+	let expected = if GHOST_SUPPORTED {
+		Err(json!({ "kind": "unavailable" }))
+	} else {
+		Ok(json!({ "supported": false }))
+	};
+
+	assert_eq!(call(&main, "drag_ghost_move", json!({ "at": { "x": 0, "y": 0 } })), expected);
+}

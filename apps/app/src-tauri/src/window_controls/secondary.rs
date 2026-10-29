@@ -57,6 +57,13 @@ pub struct StripTarget {
 	pub space_id: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct WindowSize {
+	pub width: u32,
+	pub height: u32,
+}
+
 #[derive(Default)]
 pub struct OpenedWindows(Mutex<Registry>);
 
@@ -125,6 +132,12 @@ struct Placement {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
+struct Extent {
+	width: f64,
+	height: f64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
 struct Area {
 	x: f64,
 	y: f64,
@@ -158,6 +171,7 @@ pub async fn window_open<R: Runtime>(
 	href: String,
 	position: Option<ScreenPosition>,
 	origin_space_id: Option<String>,
+	size: Option<WindowSize>,
 ) -> Result<(), WindowOpenError> {
 	if !is_app_page(&href) {
 		return Err(WindowOpenError::NotAnAppPage);
@@ -171,9 +185,10 @@ pub async fn window_open<R: Runtime>(
 		eprintln!("the geometry of the window {} could not be read: {failure}", window.label());
 		WindowOpenError::Unavailable
 	})?;
+	let extent = size.map(|size| no_smaller_than_the_minimum(size, &main));
 	let placement = position
-		.and_then(|point| work_area_for(&window, point).map(|area| at(caller, point, area)))
-		.unwrap_or_else(|| beside(caller));
+		.and_then(|point| work_area_for(&window, point).map(|area| at(caller, extent, point, area)))
+		.unwrap_or_else(|| beside(caller, extent));
 	let config = secondary_config(main, fresh_label(app).await?, placement);
 	let opened = OpenedWindow {
 		initial_href: Some(href),
@@ -306,8 +321,21 @@ fn placement_of<R: Runtime>(window: &WebviewWindow<R>) -> tauri::Result<Placemen
 	Ok(Placement { width: size.width, height: size.height, x: position.x, y: position.y })
 }
 
-fn beside(caller: Placement) -> Placement {
-	Placement { x: caller.x + CASCADE_OFFSET, y: caller.y + CASCADE_OFFSET, ..caller }
+fn no_smaller_than_the_minimum(size: WindowSize, main: &WindowConfig) -> Extent {
+	Extent {
+		width: f64::from(size.width).max(main.min_width.unwrap_or(0.0)),
+		height: f64::from(size.height).max(main.min_height.unwrap_or(0.0)),
+	}
+}
+
+fn beside(caller: Placement, extent: Option<Extent>) -> Placement {
+	let extent = extent.unwrap_or(Extent { width: caller.width, height: caller.height });
+	Placement {
+		width: extent.width,
+		height: extent.height,
+		x: caller.x + CASCADE_OFFSET,
+		y: caller.y + CASCADE_OFFSET,
+	}
 }
 
 fn work_area_for<R: Runtime>(window: &WebviewWindow<R>, point: ScreenPosition) -> Option<Area> {
@@ -350,11 +378,17 @@ fn work_area_holding(point: ScreenPosition, screens: &[Screen]) -> Option<Area> 
 	screens.iter().find(|screen| screen.bounds.holds(point)).map(|screen| screen.work_area)
 }
 
-fn at(caller: Placement, point: ScreenPosition, area: Area) -> Placement {
+fn at(caller: Placement, extent: Option<Extent>, point: ScreenPosition, area: Area) -> Placement {
+	let Extent { width, height } =
+		extent.map_or(Extent { width: caller.width, height: caller.height }, |extent| Extent {
+			width: extent.width.min(area.width),
+			height: extent.height.min(area.height),
+		});
 	Placement {
-		x: clamped(f64::from(point.x), caller.width, area.x, area.width),
-		y: clamped(f64::from(point.y), caller.height, area.y, area.height),
-		..caller
+		width,
+		height,
+		x: clamped(f64::from(point.x), width, area.x, area.width),
+		y: clamped(f64::from(point.y), height, area.y, area.height),
 	}
 }
 
@@ -387,9 +421,9 @@ mod tests {
 	use tauri::{Listener, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent};
 
 	use super::{
-		at, beside, follow, is_app_page, is_secondary, secondary_config, secondary_label,
-		work_area_holding, Area, OpenedWindow, Placed, Placement, Registry, Screen, ScreenPosition,
-		StripTarget,
+		at, beside, follow, is_app_page, is_secondary, no_smaller_than_the_minimum,
+		secondary_config, secondary_label, work_area_holding, Area, Extent, OpenedWindow, Placed,
+		Placement, Registry, Screen, ScreenPosition, StripTarget, WindowSize,
 	};
 	use crate::events::TAB_DRAG;
 	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
@@ -419,27 +453,82 @@ mod tests {
 
 	#[test]
 	fn a_window_opened_at_a_point_keeps_the_size_of_its_caller_with_its_top_left_there() {
-		assert_eq!(at(CALLER, point(200, 80), WORK_AREA), placed(200.0, 80.0));
+		assert_eq!(at(CALLER, None, point(200, 80), WORK_AREA), placed(200.0, 80.0));
 	}
 
 	#[test]
 	fn a_window_crossing_the_right_or_bottom_edge_moves_back_inside_the_work_area() {
-		assert_eq!(at(CALLER, point(1000, 80), WORK_AREA), placed(328.0, 80.0));
-		assert_eq!(at(CALLER, point(200, 500), WORK_AREA), placed(200.0, 137.0));
-		assert_eq!(at(CALLER, point(1700, 1100), WORK_AREA), placed(328.0, 137.0));
+		assert_eq!(at(CALLER, None, point(1000, 80), WORK_AREA), placed(328.0, 80.0));
+		assert_eq!(at(CALLER, None, point(200, 500), WORK_AREA), placed(200.0, 137.0));
+		assert_eq!(at(CALLER, None, point(1700, 1100), WORK_AREA), placed(328.0, 137.0));
 	}
 
 	#[test]
 	fn a_point_left_of_or_above_the_work_area_lands_on_its_left_or_top_edge() {
-		assert_eq!(at(CALLER, point(-40, 80), WORK_AREA), placed(0.0, 80.0));
-		assert_eq!(at(CALLER, point(200, 10), WORK_AREA), placed(200.0, 25.0));
+		assert_eq!(at(CALLER, None, point(-40, 80), WORK_AREA), placed(0.0, 80.0));
+		assert_eq!(at(CALLER, None, point(200, 10), WORK_AREA), placed(200.0, 25.0));
 	}
 
 	#[test]
 	fn a_window_larger_than_the_work_area_sits_on_its_left_and_top_edges() {
 		let wide = Placement { width: 2000.0, height: 1200.0, ..CALLER };
 
-		assert_eq!(at(wide, point(300, 300), WORK_AREA), Placement { x: 0.0, y: 25.0, ..wide });
+		assert_eq!(
+			at(wide, None, point(300, 300), WORK_AREA),
+			Placement { x: 0.0, y: 25.0, ..wide }
+		);
+	}
+
+	const TORN_OFF: Extent = Extent { width: 1100.0, height: 700.0 };
+
+	#[test]
+	fn a_window_given_a_size_on_screen_takes_it_with_its_top_left_at_the_point() {
+		assert_eq!(
+			at(CALLER, Some(TORN_OFF), point(200, 80), WORK_AREA),
+			Placement { width: 1100.0, height: 700.0, x: 200.0, y: 80.0 }
+		);
+	}
+
+	#[test]
+	fn a_window_given_a_size_near_the_right_edge_moves_back_inside_the_work_area() {
+		assert_eq!(
+			at(CALLER, Some(TORN_OFF), point(1700, 400), WORK_AREA),
+			Placement { width: 1100.0, height: 700.0, x: 628.0, y: 337.0 }
+		);
+	}
+
+	#[test]
+	fn a_size_larger_than_the_work_area_shrinks_to_it() {
+		let huge = Extent { width: 3000.0, height: 2000.0 };
+
+		assert_eq!(
+			at(CALLER, Some(huge), point(300, 300), WORK_AREA),
+			Placement { width: 1728.0, height: 1012.0, x: 0.0, y: 25.0 }
+		);
+		assert_eq!(
+			at(CALLER, Some(huge), point(2000, 0), EXTERNAL.work_area),
+			Placement { width: 2560.0, height: 1415.0, x: 1728.0, y: -175.0 }
+		);
+	}
+
+	#[test]
+	fn a_window_given_a_size_and_no_point_opens_beside_its_caller_with_that_size() {
+		assert_eq!(
+			beside(CALLER, Some(TORN_OFF)),
+			Placement { width: 1100.0, height: 700.0, x: 150.0, y: 94.0 }
+		);
+	}
+
+	#[test]
+	fn a_size_below_the_minimum_of_the_main_window_grows_to_it() {
+		let small = WindowSize { width: 320, height: 200 };
+		let roomy = WindowSize { width: 1100, height: 700 };
+
+		assert_eq!(
+			no_smaller_than_the_minimum(small, &main_config()),
+			Extent { width: 1024.0, height: 680.0 }
+		);
+		assert_eq!(no_smaller_than_the_minimum(roomy, &main_config()), TORN_OFF);
 	}
 
 	#[test]
@@ -472,12 +561,15 @@ mod tests {
 
 	#[test]
 	fn a_window_opens_with_the_size_of_its_caller_thirty_points_right_and_down() {
-		assert_eq!(beside(CALLER), Placement { width: 1400.0, height: 900.0, x: 150.0, y: 94.0 });
+		assert_eq!(
+			beside(CALLER, None),
+			Placement { width: 1400.0, height: 900.0, x: 150.0, y: 94.0 }
+		);
 	}
 
 	#[test]
 	fn a_secondary_window_keeps_the_main_entry_and_takes_its_own_label_and_place() {
-		let config = secondary_config(main_config(), "window-3".to_owned(), beside(CALLER));
+		let config = secondary_config(main_config(), "window-3".to_owned(), beside(CALLER, None));
 
 		assert_eq!(
 			config,
