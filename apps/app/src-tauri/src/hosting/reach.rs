@@ -248,6 +248,7 @@ pub(super) const REACHES: &[(&str, Reach)] = &[
 			child(Bot, "/summoned"),
 		]),
 	),
+	("conversation_serve_awaited_runs", Reach::HostOnly),
 	("conversation_open_assistant_message", Reach::Scoped(NEW_MESSAGE)),
 	("conversation_append_text", Reach::Scoped(MESSAGE_AS_ID)),
 	("conversation_finalize_message", Reach::Scoped(MESSAGE_AS_ID)),

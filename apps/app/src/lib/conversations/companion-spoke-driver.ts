@@ -19,6 +19,7 @@ type CompanionSpokePort = {
 	onCompanionSpoke: (
 		listener: (spoken: CompanionSpoke, side: ConversationSource) => void,
 	) => Promise<() => void>
+	serveAwaitedRuns: () => Promise<unknown>
 }
 
 type RosteredConversation = {
@@ -215,6 +216,8 @@ export const startCompanionSpokeDriver = ({
 		raiseFailure(reason)
 		return () => undefined
 	})
+
+	void companions.serveAwaitedRuns().catch(raiseFailure)
 
 	return () => {
 		isStopped = true

@@ -31,6 +31,7 @@ vi.mock("./store-transport", () => ({
 				heard.delete(listener)
 			}
 		},
+		serveAwaitedRuns: async () => null,
 	},
 	conversationReadsOn: () => ({}),
 	missionThreadReadOn: () => async () => ({}),

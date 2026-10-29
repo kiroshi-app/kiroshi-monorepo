@@ -59,6 +59,7 @@ export const LOCAL_COMMANDS: ReadonlySet<string> = new Set([
 	"mission_unreported",
 	"mission_run_claim",
 	"mission_run_release",
+	"conversation_serve_awaited_runs",
 	"notification_show",
 	"badge_set",
 	"companion_launch_outcome",

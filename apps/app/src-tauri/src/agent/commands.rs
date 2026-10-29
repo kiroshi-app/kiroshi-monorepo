@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, MutexGuard, PoisonError};
 
 use serde::de::DeserializeOwned;
-use tauri::{AppHandle, Manager, Runtime, State};
+use tauri::{AppHandle, Manager, Runtime, State, Webview};
 use tokio::sync::{broadcast, Mutex};
 
 use super::contract::{
@@ -25,19 +25,21 @@ use crate::applications::host::ApplicationHost;
 use crate::bundles;
 use crate::bundles::host::BundleHost;
 use crate::companions::host::CompanionHost;
+use crate::conversations::awaited_runs::{forget_settled_turns, TurnWindows};
 use crate::conversations::commands::{announce_conversation, ready, space_of_the_conversation};
 use crate::conversations::contract::{PendingPrompt, PendingPromptKind, TranscriptStoreError};
 use crate::conversations::host_turn::{ended_as, HostTurns};
 use crate::conversations::state as conversation_state;
 use crate::db;
 use crate::db::repositories::conversations::{Bot as StoredBot, ConversationError, MISSION_KIND};
+use crate::db::repositories::messages::{NewTurn, RunClaim};
 use crate::db::repositories::runtime_context::ParticipantKey;
 use crate::db::repositories::space_children::SpaceChild;
 use crate::environment::connection;
 use crate::environment::contract::{EnvError, EnvOwner, ResolvedEnv, Values};
 use crate::environment::store as environment;
 use crate::events::{self, Frame, AGENT_EVENT, CONVERSATION_UPDATED};
-use crate::hosting::authorship;
+use crate::hosting::authorship::{self, Caller};
 use crate::json::JsonValue;
 use crate::logging;
 use crate::mcp_oauth::refresh;
@@ -1362,7 +1364,93 @@ pub async fn start_with_fallback(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn agent_submit_prompt(
+pub async fn agent_submit_prompt<R: Runtime>(
+	webview: Webview<R>,
+	caller: Caller,
+	state: State<'_, AgentState>,
+	scope: RuntimeScope,
+	text: String,
+	turn: Option<SubmittedTurn>,
+) -> Result<(), TransportError> {
+	let turn_id = turn.as_ref().map(|handed| handed.turn_id.clone());
+	let database = webview.try_state::<db::DatabaseState>();
+	submit_claimed_prompt(database.as_deref(), state, scope, text, turn).await?;
+	if let (Some(turn_id), Caller::Host, Some(windows)) =
+		(turn_id, caller, webview.try_state::<TurnWindows>())
+	{
+		windows.submitted_from(webview.window().label(), &turn_id);
+	}
+	Ok(())
+}
+
+pub(crate) async fn submit_claimed_prompt(
+	database: Option<&db::DatabaseState>,
+	state: State<'_, AgentState>,
+	scope: RuntimeScope,
+	text: String,
+	turn: Option<SubmittedTurn>,
+) -> Result<(), TransportError> {
+	let (Some(database), Some(turn_id)) =
+		(database, turn.as_ref().map(|handed| handed.turn_id.clone()))
+	else {
+		return submit_prompt(state, scope, text, turn).await;
+	};
+	let database = ready(database).map_err(|unready| unclaimed(&scope, &turn_id, &unready))?;
+	let claim = claim_run(database, &scope, &turn_id).await?;
+	let submitted = submit_prompt(state, scope.clone(), text, turn).await;
+	if submitted.is_err() {
+		give_back_run(database, &scope, &turn_id, claim).await;
+	}
+	submitted
+}
+
+async fn claim_run(
+	database: &db::Database,
+	scope: &RuntimeScope,
+	turn_id: &str,
+) -> Result<RunClaim, TransportError> {
+	let turn = NewTurn {
+		id: turn_id.to_owned(),
+		conversation_id: scope.conversation_id.clone(),
+		started_at: now_ms(),
+	};
+	database
+		.messages()
+		.claim_run(turn, scope.bot_id.clone())
+		.await
+		.map_err(|failure| unclaimed(scope, turn_id, &failure))?
+		.ok_or(TransportError::TurnAlreadyRunning)
+}
+
+fn unclaimed(scope: &RuntimeScope, turn_id: &str, failure: &dyn std::fmt::Debug) -> TransportError {
+	TransportError::WriteFailed {
+		detail: format!(
+			"the run of {} in turn {turn_id} could not be claimed: {failure:?}",
+			scope.bot_id
+		),
+	}
+}
+
+async fn give_back_run(
+	database: &db::Database,
+	scope: &RuntimeScope,
+	turn_id: &str,
+	claim: RunClaim,
+) {
+	let given_back = database
+		.messages()
+		.unclaim_run(turn_id.to_owned(), scope.bot_id.clone(), claim, now_ms())
+		.await;
+	if let Err(failure) = given_back {
+		log::warn!(
+			"the run of {} in turn {turn_id} of conversation {} kept its claim after its prompt was refused: {failure:?}",
+			scope.bot_id,
+			scope.conversation_id
+		);
+	}
+}
+
+pub async fn submit_prompt(
 	state: State<'_, AgentState>,
 	scope: RuntimeScope,
 	text: String,
@@ -1477,6 +1565,7 @@ async fn close_stored_runs<R: Runtime>(
 		.await?;
 	if closed > 0 {
 		announce(app, Some(scope.clone()), ended_as(TurnOutcome::Cancelled));
+		forget_settled_turns(app).await;
 	}
 	if has_completed || closed > 0 {
 		announce_conversation(app, database, CONVERSATION_UPDATED, conversation_id).await;
