@@ -215,16 +215,19 @@ const RosterDropArea = ({
 	children,
 	...slide
 }: RosterDropAreaProps) => {
-	const slid = slideClassOf(slide, LIFTED_IN_ZONE)
+	const { className: slideClass, ...slideState } = slideClassOf(
+		slide,
+		LIFTED_IN_ZONE,
+	)
 	return (
 		<div
 			{...dropArea(landing)}
 			{...(slotId ? rosterSlot(slotId) : undefined)}
-			{...slid}
+			{...slideState}
 			className={cn(
 				DROP_AREA,
 				isLanding && DROP_AREA_LANDING,
-				slid.className,
+				slideClass,
 				className,
 			)}
 			data-landing={isLanding || undefined}
