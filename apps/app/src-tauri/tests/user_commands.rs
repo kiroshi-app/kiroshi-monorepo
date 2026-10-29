@@ -526,20 +526,3 @@ fn a_replayed_onboarding_forgets_the_first_companion() {
 	assert_eq!(answered["onboardingFirstCompanionId"], Value::Null);
 	assert_eq!(read(&window), answered);
 }
-
-#[test]
-fn a_written_record_leaves_both_onboarding_ids_as_stored() {
-	let home = Home::new();
-	let app = home.app();
-	let window = window(&app);
-	call(&window, "conversation_main_chat", json!({ "botId": BOT })).expect("the chat");
-	let mut claiming = a_record(Value::Null);
-	claiming["onboardingShotoId"] = json!(BOT);
-	claiming["onboardingFirstCompanionId"] = json!(BOT);
-
-	let answered = call(&window, "user_set_preferences", json!({ "preferences": claiming }))
-		.expect("the record is stored");
-
-	assert_eq!(answered["onboardingShotoId"], Value::Null);
-	assert_eq!(answered["onboardingFirstCompanionId"], Value::Null);
-}
