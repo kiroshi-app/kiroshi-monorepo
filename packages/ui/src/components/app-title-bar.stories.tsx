@@ -257,7 +257,7 @@ const A1 = {
 
 const alphaOf = (color: string) => {
 	const alpha = color.match(/\/\s*([\d.]+)(%?)\)$/)
-	if (!alpha) return 1
+	if (!alpha) throw new Error(`No alpha channel in ${color}`)
 	return Number(alpha[1]) / (alpha[2] ? 100 : 1)
 }
 
