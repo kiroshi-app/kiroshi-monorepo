@@ -40,9 +40,13 @@ pub struct ScreenPosition {
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct StripBounds {
+	#[specta(type = u32)]
 	pub x: f64,
+	#[specta(type = u32)]
 	pub y: f64,
+	#[specta(type = u32)]
 	pub width: f64,
+	#[specta(type = u32)]
 	pub height: f64,
 }
 

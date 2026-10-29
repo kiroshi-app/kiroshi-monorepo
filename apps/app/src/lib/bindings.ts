@@ -1707,10 +1707,10 @@ export type SpacePreferences = {
 export type StorageFailure = { kind: "appDataDir" } | { kind: "journalMode"; mode: string } | { kind: "poisonedConnection" } | { kind: "callInterrupted" } | { kind: "staleWrite" } | { kind: "sqlite"; detail: string; operation?: string | null; table?: string | null; code?: string | null };
 
 export type StripBounds = {
-	x: number | null,
-	y: number | null,
-	width: number | null,
-	height: number | null,
+	x: number,
+	y: number,
+	width: number,
+	height: number,
 };
 
 export type StripTarget = {
