@@ -2,6 +2,7 @@ import { expect, fn, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
+	expectOnboardingDragStrip,
 	resolvedChannelsOf,
 	slotIn,
 	slotsIn,
@@ -56,6 +57,7 @@ const expectPersonAvatarInitials = async (canvasElement: HTMLElement) => {
 }
 
 const meta = preview.meta({
+	afterEach: ({ canvasElement }) => expectOnboardingDragStrip(canvasElement),
 	title: "Conversation/Onboarding/OnboardingAccountScreen",
 	component: OnboardingAccountScreen,
 	globals: { theme_layout: "side-by-side" },

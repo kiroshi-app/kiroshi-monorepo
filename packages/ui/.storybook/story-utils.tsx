@@ -178,6 +178,14 @@ export const slotIn = (root: Element, slot: string) => {
 	return node
 }
 
+export const expectOnboardingDragStrip = async (root: HTMLElement) => {
+	const strips = slotsIn(root, "onboarding-drag-strip")
+	await expect(strips.length).toBeGreaterThan(0)
+	for (const strip of strips) {
+		await expect(strip).toHaveAttribute("data-tauri-drag-region", "deep")
+	}
+}
+
 export const expectNoHorizontalScrollAt = async (
 	root: HTMLElement,
 	width: number,

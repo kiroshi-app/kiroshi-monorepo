@@ -168,6 +168,29 @@
 	[role="button"]:not(:disabled) {
 		cursor: pointer;
 	}
+	[data-slot="onboarding-drag-strip"]
+		~ *
+		:is(
+			a,
+			button,
+			input,
+			select,
+			textarea,
+			label,
+			summary,
+			[contenteditable]:not([contenteditable="false"]),
+			[tabindex]:not([tabindex="-1"]),
+			[role="button"],
+			[role="link"],
+			[role="checkbox"],
+			[role="radio"],
+			[role="switch"],
+			[role="option"],
+			[role="tab"],
+			[role="menuitem"]
+		) {
+		position: relative;
+	}
 }
 
 @layer base {
