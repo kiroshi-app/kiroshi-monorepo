@@ -195,16 +195,19 @@ export const openNewWindow = async () => {
 	)
 }
 
+const appHrefOf = ({ pathname, search, hash }: URL) =>
+	`${pathname}${search}${hash}`
+
 const carryingHrefOf = (tab: Tab) => {
 	const url = new URL(currentHrefOf(tab), HREF_BASE)
 	url.searchParams.set(CARRIED_TAB_PARAM, tab.id)
-	return `${url.pathname}${url.search}${url.hash}`
+	return appHrefOf(url)
 }
 
 const withoutCarriedTab = (href: string) => {
 	const url = new URL(href, HREF_BASE)
 	url.searchParams.delete(CARRIED_TAB_PARAM)
-	return `${url.pathname}${url.search}${url.hash}`
+	return appHrefOf(url)
 }
 
 const openingTabsOn = (href: string): SpaceTabs => {
@@ -510,13 +513,17 @@ export const createWorkspaceTabs = (
 	const moveToWindowAt = (id: string, position: ScreenPosition | null) =>
 		moveToWindowBy(id, (moved) => openWindowOn(currentHrefOf(moved), position))
 
-	const openCarrying =
-		(position: ScreenPosition, size: WindowSize) =>
-		async (moved: Tab, spaceId: string) => {
+	const tearOff = (torn: TabTearOff): true => {
+		void moveToWindowAt(torn.tabId, pointOf(torn))
+		return true
+	}
+
+	const moveTornOff = (torn: TabTearOff, size: WindowSize) =>
+		moveToWindowBy(torn.tabId, async (moved, spaceId) => {
 			keepCarriedTab(moved)
 			const opening = await openWindowOn(
 				carryingHrefOf(moved),
-				position,
+				pointOf(torn),
 				spaceId === NO_SPACE ? null : spaceId,
 				size,
 			)
@@ -524,15 +531,7 @@ export const createWorkspaceTabs = (
 				forgetCarriedTab(moved.id)
 			}
 			return opening
-		}
-
-	const tearOff = (torn: TabTearOff): true => {
-		void moveToWindowAt(torn.tabId, pointOf(torn))
-		return true
-	}
-
-	const moveTornOff = (torn: TabTearOff, size: WindowSize) =>
-		moveToWindowBy(torn.tabId, openCarrying(pointOf(torn), size))
+		})
 
 	const reachSpace = (spaceId: string) => {
 		const state = store.getState()
