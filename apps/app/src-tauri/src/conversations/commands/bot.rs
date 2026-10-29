@@ -237,11 +237,19 @@ pub async fn conversation_create_bot_from_draft<R: Runtime>(
 	draft: BotDraft,
 	space_id: String,
 ) -> Result<Bot, TranscriptStoreError> {
-	let database = ready(&state)?;
+	create_drafted_bot(&app, ready(&state)?, draft, space_id).await
+}
+
+pub(crate) async fn create_drafted_bot<R: Runtime>(
+	app: &AppHandle<R>,
+	database: &db::Database,
+	draft: BotDraft,
+	space_id: String,
+) -> Result<Bot, TranscriptStoreError> {
 	let worn = database.conversations().bots(Some(space_id.clone())).await?;
 	let identity = drafted_identity(draft, &worn)?;
-	let created = create_bundled_bot(&app, database, identity, Some(space_id)).await?;
-	announce_created(&app, &created);
+	let created = create_bundled_bot(app, database, identity, Some(space_id)).await?;
+	announce_created(app, &created);
 	Ok(created)
 }
 

@@ -369,6 +369,8 @@ pub(super) const REACHES: &[(&str, Reach)] = &[
 	("user_set_onboarding_step", Reach::HostOnly),
 	("user_replay_onboarding", Reach::HostOnly),
 	("user_mark_onboarding_import_seen", Reach::HostOnly),
+	("claude_import_inventory", Reach::HostOnly),
+	("claude_import_run", Reach::HostOnly),
 	("update_state", Reach::HostOnly),
 	("check_for_updates", Reach::HostOnly),
 	("install_update", Reach::HostOnly),
@@ -427,6 +429,7 @@ pub(super) const AUDIENCES: &[(&str, Audience)] = &[
 	(crate::updates::contract::CHANGED_EVENT, Audience::HostOnly),
 	(crate::menu_contract::FILE_MENU_EVENT, Audience::HostOnly),
 	(crate::window_controls::tab_drag::TAB_DRAG_EVENT, Audience::HostOnly),
+	(crate::claude_import::contract::PROGRESS_EVENT, Audience::HostOnly),
 ];
 
 pub(super) fn reach_of(command: &str) -> Option<Reach> {

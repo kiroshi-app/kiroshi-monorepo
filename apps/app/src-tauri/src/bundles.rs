@@ -39,10 +39,11 @@ pub use mcp::{
 pub use permissions::{permissions, set_permissions, BotPermissions};
 pub(in crate::bundles) use skill::drafted;
 pub use skill::{
-	create_skill, create_skill_at, is_system_skill, remove_skill, remove_skill_at,
-	remove_skill_file, remove_skill_file_at, set_skill_preloaded, set_skill_preloaded_at,
-	skill_file, skill_file_at, skills, skills_at, update_skill, update_skill_at, write_skill_file,
-	write_skill_file_at, write_skills, Skill, SkillDraft, SkillFront,
+	create_skill, create_skill_at, create_skill_with_files_at, is_system_skill, remove_skill,
+	remove_skill_at, remove_skill_file, remove_skill_file_at, set_skill_preloaded,
+	set_skill_preloaded_at, skill_file, skill_file_at, skills, skills_at, update_skill,
+	update_skill_at, write_skill_file, write_skill_file_at, write_skills, Skill, SkillDraft,
+	SkillFront,
 };
 
 const DIR_NAME: &str = "bots";
@@ -313,6 +314,24 @@ fn settled(root: &Path, bot: &Bot, held: PathBuf) -> PathBuf {
 			held
 		}
 	}
+}
+
+pub struct Fronted {
+	pub name: Option<String>,
+	pub description: String,
+	pub body: String,
+}
+
+pub fn fronted(text: &str) -> std::io::Result<Fronted> {
+	let parts = checked_front(text)?;
+	let keyed = front::mapped_lines(&parts.front);
+	let text_at =
+		|key: &str| keyed.get(key).map(front::as_text).map(|value| value.trim().to_owned());
+	Ok(Fronted {
+		name: text_at(NAME_KEY).filter(|name| !name.is_empty()),
+		description: text_at(DESCRIPTION_KEY).unwrap_or_default(),
+		body: parts.body.trim().to_owned(),
+	})
 }
 
 pub fn slug(name: &str) -> String {

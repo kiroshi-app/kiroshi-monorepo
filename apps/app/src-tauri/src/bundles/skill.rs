@@ -117,6 +117,43 @@ pub fn create_skill_at(bundle: &Path, draft: &SkillDraft) -> std::io::Result<Ski
 	Ok(skill)
 }
 
+pub fn create_skill_with_files_at(
+	bundle: &Path,
+	draft: &SkillDraft,
+	files: &[(String, Vec<u8>)],
+	reason: &str,
+) -> std::io::Result<Skill> {
+	let _serialised = serialised(bundle);
+	let path = free_skill_dir(bundle, &draft.name);
+	let recorded_skill = kept_skill_with_files(&path, draft, files).and_then(|skill| {
+		recorded(bundle, SKILL_SUBJECT, &skill.name, reason).map_err(unrecorded)?;
+		Ok(skill)
+	});
+	recorded_skill.map_err(|failure| withdrawn_skill(&path, failure))
+}
+
+fn kept_skill_with_files(
+	path: &Path,
+	draft: &SkillDraft,
+	files: &[(String, Vec<u8>)],
+) -> std::io::Result<Skill> {
+	for (relative, bytes) in files {
+		private_files::replace(&skill_file_path(path, relative)?, bytes)?;
+	}
+	kept_skill(path, drafted(None, draft)?)
+}
+
+fn withdrawn_skill(path: &Path, failure: std::io::Error) -> std::io::Error {
+	match fs::remove_dir_all(path) {
+		Ok(()) => failure,
+		Err(leftover) if leftover.kind() == std::io::ErrorKind::NotFound => failure,
+		Err(leftover) => std::io::Error::new(
+			failure.kind(),
+			format!("{failure}, and the half written skill was not taken back: {leftover}"),
+		),
+	}
+}
+
 pub fn update_skill(
 	root: &Path,
 	bot: &Bot,
@@ -469,6 +506,72 @@ mod tests {
 	};
 	use super::super::{agent_file, instructions, write, FENCE};
 	use super::*;
+
+	fn a_written_bundle(name: &str) -> (crate::removed_on_drop::RemovedOnDrop, PathBuf) {
+		let root = a_root(name);
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		let bundle = dir(&root, &bot.id).expect("the bundle is held");
+		(root, bundle)
+	}
+
+	fn titles_at(bundle: &Path) -> Vec<String> {
+		let history = super::super::history_at(bundle).expect("the history reads");
+		history.into_iter().map(|entry| entry.title).collect()
+	}
+
+	#[test]
+	fn a_skill_created_with_its_files_lands_byte_for_byte_in_one_entry() {
+		let (_root, bundle) = a_written_bundle("skill-with-files");
+		let before = titles_at(&bundle);
+		let files = vec![
+			("forms.md".to_owned(), b"Fields.".to_vec()),
+			("fonts/serif.ttf".to_owned(), vec![0x00, 0x01, 0xff, 0xfe]),
+			("scripts/fill.py".to_owned(), b"print(1)".to_vec()),
+		];
+
+		let skill = create_skill_with_files_at(
+			&bundle,
+			&a_draft("pdf", "Fills forms.", "Use the guide."),
+			&files,
+			"imported from elsewhere",
+		)
+		.expect("the skill lands");
+
+		let held = bundle.join(SKILLS_DIR).join(&skill.id);
+		for (relative, bytes) in &files {
+			assert_eq!(&fs::read(held.join(relative)).expect("the file reads"), bytes);
+		}
+		assert_eq!(skill.files, ["fonts/serif.ttf", "forms.md", "scripts/fill.py"]);
+		let after = titles_at(&bundle);
+		assert_eq!(after.len(), before.len() + 1);
+		assert_eq!(after[0], format!("{SKILL_SUBJECT} \"pdf\" imported from elsewhere"));
+	}
+
+	#[test]
+	fn a_skill_whose_file_does_not_land_leaves_no_directory_and_no_entry() {
+		let (_root, bundle) = a_written_bundle("skill-with-files-refused");
+		let before = titles_at(&bundle);
+		let files = vec![
+			("forms.md".to_owned(), b"Fields.".to_vec()),
+			("../escape.md".to_owned(), b"Out.".to_vec()),
+		];
+
+		let refused = create_skill_with_files_at(
+			&bundle,
+			&a_draft("pdf", "Fills forms.", "Use the guide."),
+			&files,
+			"imported from elsewhere",
+		);
+
+		assert_eq!(
+			refused.err().map(|failure| failure.kind()),
+			Some(std::io::ErrorKind::InvalidInput)
+		);
+		assert!(!bundle.join(SKILLS_DIR).join("pdf").exists());
+		assert!(!bundle.join("escape.md").exists());
+		assert_eq!(titles_at(&bundle), before);
+	}
 
 	#[test]
 	fn a_skill_reports_every_file_its_directory_holds_but_its_own() {

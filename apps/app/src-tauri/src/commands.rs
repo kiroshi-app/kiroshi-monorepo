@@ -2,9 +2,10 @@ use tauri::{ipc::Invoke, Runtime};
 use tauri_specta::{collect_commands, Builder, Commands};
 
 use crate::{
-	account, agent, applications, attachments, badge, companions, conversations, crypto, devices,
-	environment, hosting, invitations, joined_spaces, logging, mcp_oauth, menu_contract, missions,
-	notifications, plugins, routines, search, sections, spaces, updates, user, window_controls,
+	account, agent, applications, attachments, badge, claude_import, companions, conversations,
+	crypto, devices, environment, hosting, invitations, joined_spaces, logging, mcp_oauth,
+	menu_contract, missions, notifications, plugins, routines, search, sections, spaces, updates,
+	user, window_controls,
 };
 
 pub fn builder() -> Builder<tauri::Wry> {
@@ -33,6 +34,7 @@ pub fn builder() -> Builder<tauri::Wry> {
 		.constant("UPDATE_CHANGED_EVENT", updates::contract::CHANGED_EVENT)
 		.constant("FILE_MENU_EVENT", menu_contract::FILE_MENU_EVENT)
 		.constant("TAB_DRAG_EVENT", window_controls::tab_drag::TAB_DRAG_EVENT)
+		.constant("CLAUDE_IMPORT_PROGRESS_EVENT", claude_import::contract::PROGRESS_EVENT)
 		.typ::<window_controls::MaximizeButtonPointer>()
 		.typ::<window_controls::drag_ghost::DragGhostTab>()
 		.typ::<devices::contract::DeviceApproval>()
@@ -51,6 +53,7 @@ pub fn builder() -> Builder<tauri::Wry> {
 		.typ::<spaces::contract::SpaceDescribed>()
 		.typ::<menu_contract::FileMenuChosen>()
 		.typ::<window_controls::tab_drag::TabDrag>()
+		.typ::<claude_import::contract::ClaudeImportProgress>()
 }
 
 // `tauri::test::mock_builder` only ever yields a `Builder<MockRuntime>`, so the handler the
@@ -72,6 +75,8 @@ fn commands<R: Runtime>() -> Commands<R> {
 		applications::commands::application_runnable,
 		attachments::commands::chat_store_attachments::<tauri::Wry>,
 		badge::commands::badge_set::<tauri::Wry>,
+		claude_import::commands::claude_import_inventory,
+		claude_import::commands::claude_import_run::<tauri::Wry>,
 		agent::commands::agent_check::<tauri::Wry>,
 		agent::commands::agent_account::<tauri::Wry>,
 		agent::sign_in::agent_sign_in::<tauri::Wry>,
