@@ -282,6 +282,7 @@ pub(super) const REACHES: &[(&str, Reach)] = &[
 	("mission_run_claim", Reach::HostOnly),
 	("mission_run_release", Reach::HostOnly),
 	("notification_show", Reach::HostOnly),
+	("badge_set", Reach::HostOnly),
 	("plugin_skills", Reach::Scoped(PLUGIN_SCOPE)),
 	("plugin_create_skill", Reach::Scoped(PLUGIN_WRITE_SCOPE)),
 	("plugin_update_skill", Reach::Scoped(PLUGIN_WRITE_SCOPE)),
