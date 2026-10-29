@@ -111,7 +111,7 @@ const expectCompanionRoles = async (
 	roles = COMPANION_ROLES,
 ) => {
 	for (const role of roles) {
-		const badge = await within(canvasElement).findByText(role)
+		const badge = within(canvasElement).getByText(role)
 		const card = badge.parentElement as HTMLElement
 		const name = badge.previousElementSibling as HTMLElement
 		const pill = badge.getBoundingClientRect()
