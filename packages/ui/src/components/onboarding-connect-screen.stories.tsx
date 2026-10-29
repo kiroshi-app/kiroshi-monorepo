@@ -601,6 +601,8 @@ export const ConnectKeyFieldLight = meta.story({
 		await userEvent.type(field, `${REFUSED_KEY}{Enter}`)
 		await expect(args.onSubmitKey).toHaveBeenCalledOnce()
 		await expect(args.onSubmitKey).toHaveBeenCalledWith(REFUSED_KEY)
+		await userEvent.click(canvas.getByRole("button", { name: "Continue" }))
+		await expect(args.onSubmitKey).toHaveBeenCalledTimes(2)
 
 		await userEvent.click(
 			canvas.getByRole("button", { name: "Sign in instead" }),
