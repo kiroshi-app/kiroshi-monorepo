@@ -1072,6 +1072,9 @@ const chat = {
 		},
 		arrival: {
 			failure: "{{name}} n’a pas pu dire bonjour",
+			firstCompanionMissing:
+				"Impossible de rencontrer votre premier compagnon. Redémarrez Kiroshi, puis réessayez.",
+			unknownCompanion: "le compagnon n’est pas sur cet ordinateur",
 		},
 		intro: {
 			skip: "Passer l’intro",

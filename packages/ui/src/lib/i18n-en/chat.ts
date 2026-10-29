@@ -1030,6 +1030,9 @@ const chat = {
 		},
 		arrival: {
 			failure: "{{name}} couldn’t say hello",
+			firstCompanionMissing:
+				"Couldn’t meet your first companion. Restart Kiroshi, then try again.",
+			unknownCompanion: "the companion isn’t on this computer",
 		},
 		intro: {
 			skip: "Skip intro",

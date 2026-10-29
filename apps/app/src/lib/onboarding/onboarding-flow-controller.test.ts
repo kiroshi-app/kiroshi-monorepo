@@ -209,8 +209,9 @@ describe("connecting without a ~/.claude folder", () => {
 		expect(world.opened).toEqual([])
 		expect(world.sent).toEqual([])
 		expect(reportFailure).toHaveBeenCalledWith({
-			title: "Couldn’t send that request",
-			description: "the companion isn’t on this machine",
+			title:
+				"Couldn’t meet your first companion. Restart Kiroshi, then try again.",
+			description: "the companion isn’t on this computer",
 		})
 	})
 

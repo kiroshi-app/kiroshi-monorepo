@@ -171,7 +171,9 @@ export const createOnboardingFlowController = (
 		const shotoId = world.shotoId()
 		set({ isWithShoto: true, shotoId })
 		if (!shotoId) {
-			reportUnsent({ kind: "unknownBot" })
+			report(i18n.t("chat:onboarding.arrival.firstCompanionMissing"), {
+				kind: "unknownBot",
+			})
 			return
 		}
 		void meetShoto(shotoId)
