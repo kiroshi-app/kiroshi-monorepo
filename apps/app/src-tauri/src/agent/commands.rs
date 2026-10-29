@@ -1395,6 +1395,7 @@ pub(crate) async fn submit_claimed_prompt(
 	else {
 		return submit_prompt(state, scope, text, turn).await;
 	};
+	let database = ready(database).map_err(|unready| unclaimed(&scope, &turn_id, &unready))?;
 	let claim = claim_run(database, &scope, &turn_id).await?;
 	let submitted = submit_prompt(state, scope.clone(), text, turn).await;
 	if submitted.is_err() {
@@ -1404,7 +1405,7 @@ pub(crate) async fn submit_claimed_prompt(
 }
 
 async fn claim_run(
-	database: &db::DatabaseState,
+	database: &db::Database,
 	scope: &RuntimeScope,
 	turn_id: &str,
 ) -> Result<RunClaim, TransportError> {
@@ -1413,15 +1414,12 @@ async fn claim_run(
 		conversation_id: scope.conversation_id.clone(),
 		started_at: now_ms(),
 	};
-	let claimed = match ready(database) {
-		Ok(database) => database.messages().claim_run(turn, scope.bot_id.clone()).await,
-		Err(unready) => return Err(unclaimed(scope, turn_id, &unready)),
-	};
-	match claimed {
-		Ok(Some(claim)) => Ok(claim),
-		Ok(None) => Err(TransportError::TurnAlreadyRunning),
-		Err(failure) => Err(unclaimed(scope, turn_id, &failure)),
-	}
+	database
+		.messages()
+		.claim_run(turn, scope.bot_id.clone())
+		.await
+		.map_err(|failure| unclaimed(scope, turn_id, &failure))?
+		.ok_or(TransportError::TurnAlreadyRunning)
 }
 
 fn unclaimed(scope: &RuntimeScope, turn_id: &str, failure: &dyn std::fmt::Debug) -> TransportError {
@@ -1434,22 +1432,18 @@ fn unclaimed(scope: &RuntimeScope, turn_id: &str, failure: &dyn std::fmt::Debug)
 }
 
 async fn give_back_run(
-	database: &db::DatabaseState,
+	database: &db::Database,
 	scope: &RuntimeScope,
 	turn_id: &str,
 	claim: RunClaim,
 ) {
-	let given_back = match ready(database) {
-		Ok(database) => database
-			.messages()
-			.unclaim_run(turn_id.to_owned(), scope.bot_id.clone(), claim, now_ms())
-			.await
-			.map_err(|failure| format!("{failure:?}")),
-		Err(unready) => Err(format!("{unready:?}")),
-	};
+	let given_back = database
+		.messages()
+		.unclaim_run(turn_id.to_owned(), scope.bot_id.clone(), claim, now_ms())
+		.await;
 	if let Err(failure) = given_back {
 		log::warn!(
-			"the run of {} in turn {turn_id} of conversation {} kept its claim after its prompt was refused: {failure}",
+			"the run of {} in turn {turn_id} of conversation {} kept its claim after its prompt was refused: {failure:?}",
 			scope.bot_id,
 			scope.conversation_id
 		);
