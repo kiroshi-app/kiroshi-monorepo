@@ -179,7 +179,7 @@ const expectWrappedCompanionRole = async (canvasElement: HTMLElement) => {
 	const pill = wrapped.getBoundingClientRect()
 	const oneLinePill = oneLine.getBoundingClientRect()
 	const lines = lineBoxesOf(wrapped)
-	const [oneLineText] = lineBoxesOf(oneLine)
+	const [oneLineText] = lineBoxesOf(oneLine) as [DOMRect]
 	const radius = Number.parseFloat(wrappedStyle.borderTopLeftRadius)
 
 	await expectCompanionRoles(canvasElement, [
@@ -200,13 +200,14 @@ const expectWrappedCompanionRole = async (canvasElement: HTMLElement) => {
 			Number.parseFloat(wrappedStyle.paddingBottom),
 		1,
 	)
-	await expect(lines[1]?.top).toBeGreaterThan(lines[0]?.bottom ?? Infinity)
-	await expect((lines[0]?.top ?? 0) - pill.top).toBeCloseTo(
-		(oneLineText?.top ?? 0) - oneLinePill.top,
+	const [firstLine, secondLine] = lines as [DOMRect, DOMRect]
+	await expect(secondLine.top).toBeGreaterThan(firstLine.bottom)
+	await expect(firstLine.top - pill.top).toBeCloseTo(
+		oneLineText.top - oneLinePill.top,
 		1,
 	)
-	await expect(pill.bottom - (lines[1]?.bottom ?? 0)).toBeCloseTo(
-		oneLinePill.bottom - (oneLineText?.bottom ?? 0),
+	await expect(pill.bottom - secondLine.bottom).toBeCloseTo(
+		oneLinePill.bottom - oneLineText.bottom,
 		1,
 	)
 	await expect(wrapped.scrollHeight).toBeLessThanOrEqual(wrapped.clientHeight)
