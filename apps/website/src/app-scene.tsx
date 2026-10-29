@@ -368,6 +368,10 @@ export const AppScene = () => {
 							onReorderSpaces={engage}
 							onReorderTabs={engage}
 							onTearOffTab={engage}
+							onTearOffStart={engage}
+							onTearOffMove={engage}
+							onTearOffCancel={engage}
+							onIncomingTabIndexChange={engage}
 							onRetryInvitation={engage}
 							onSelectBot={select}
 							onSelectConversation={select}
