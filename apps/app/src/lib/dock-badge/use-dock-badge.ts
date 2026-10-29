@@ -52,12 +52,13 @@ export const useDockBadge = ({
 		},
 	})
 	const sentCount = useRef<number | undefined>(undefined)
-	const count = useSyncExternalStore(roster.subscribe, () => {
+	const readWaitingCount = () => {
 		const state = roster.getState()
 		return isDriverWindow && isRosterReady(state)
 			? countWaitingRows(state, { botBadges, conversationBadges })
 			: undefined
-	})
+	}
+	const count = useSyncExternalStore(roster.subscribe, readWaitingCount)
 
 	useEffect(() => {
 		if (count === undefined || count === sentCount.current) {
