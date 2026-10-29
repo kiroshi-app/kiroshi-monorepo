@@ -1230,24 +1230,43 @@ export const createConversationController = (
 		)
 	}
 
+	const notStartedFacts = (
+		said: TranscriptMessage,
+		spaceId: string | null,
+		botIds: string[],
+		names: string[],
+	): ReporterFacts => ({
+		conversation: said.conversationId,
+		turn: said.turnId,
+		...(spaceId ? { space: spaceId } : {}),
+		...(botIds.length === 1 ? { botId: botIds[0], botName: names[0] } : {}),
+	})
+
 	const raiseNotStarted = async (said: TranscriptMessage, botIds: string[]) => {
 		if (!conversation) {
 			return
 		}
+		const { spaceId } = conversation
 		const names = await namesOf(conversation, botIds)
 		const count = names.length
-		reportFailure(
-			{
-				title: i18n.t("chat:transcript.mention.notStarted.title", {
-					count,
-					names: names.join(i18n.t("chat:namelessConversation.separator")),
-				}),
-				description: i18n.t("chat:transcript.mention.notStarted.description", {
-					count,
-				}),
-			},
-			{ conversation: said.conversationId, turn: said.turnId },
-		)
+		try {
+			await reportFailure(
+				{
+					title: i18n.t("chat:transcript.mention.notStarted.title", {
+						count,
+						names: names.join(i18n.t("chat:namelessConversation.separator")),
+					}),
+					description: i18n.t(
+						"chat:transcript.mention.notStarted.description",
+						{ count },
+					),
+				},
+				notStartedFacts(said, spaceId, botIds, names),
+			)
+		} catch (reason) {
+			noteFailure(toTransportError(reason))
+			sync()
+		}
 	}
 
 	const noteUnseatedIn = (said: TranscriptMessage) => {

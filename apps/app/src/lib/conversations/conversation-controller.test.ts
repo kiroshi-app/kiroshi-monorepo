@@ -34,6 +34,16 @@ import type { ReportedRun } from "../routines/routine-contract"
 
 const SPACE = "personal"
 
+type RejectionListener = (reason: unknown) => void
+
+type RejectionEvents = {
+	on: (event: "unhandledRejection", listener: RejectionListener) => void
+	off: (event: "unhandledRejection", listener: RejectionListener) => void
+}
+
+const rejectionEvents = (globalThis as unknown as { process: RejectionEvents })
+	.process
+
 const SERVER_ENV_REJECTED: TransportError = {
 	kind: "serverEnvRejected",
 	detail: "PROJECT_TOKEN is undefined",
@@ -2908,9 +2918,20 @@ describe("the mentions a finished turn carries", () => {
 		room.detach()
 	})
 
-	const notStarted = (title: string, description: string) => [
+	type DroppedCompanion = { botId: string; botName: string }
+
+	const notStarted = (
+		title: string,
+		description: string,
+		companion?: DroppedCompanion,
+	) => [
 		{ title, description },
-		{ conversation: expect.any(String), turn: expect.any(String) },
+		{
+			conversation: expect.any(String),
+			turn: expect.any(String),
+			space: SPACE,
+			...companion,
+		},
 	]
 
 	it("raises no notice for a token a reply writes and no seat holds", async () => {
@@ -2943,6 +2964,7 @@ describe("the mentions a finished turn carries", () => {
 			...notStarted(
 				"Iris didn’t start",
 				"Seat it in this conversation, or pick another agent.",
+				{ botId: room.iris, botName: "Iris" },
 			),
 		)
 		expect(submittedIn(room)).toEqual([room.ada])
@@ -2964,6 +2986,7 @@ describe("the mentions a finished turn carries", () => {
 			...notStarted(
 				"Iris didn’t start",
 				"Seat it in this conversation, or pick another agent.",
+				{ botId: room.iris, botName: "Iris" },
 			),
 		)
 		room.detach()
@@ -2978,6 +3001,7 @@ describe("the mentions a finished turn carries", () => {
 			...notStarted(
 				"Unknown agent didn’t start",
 				"Seat it in this conversation, or pick another agent.",
+				{ botId: "ghost", botName: "Unknown agent" },
 			),
 		)
 		room.detach()
@@ -2995,6 +3019,25 @@ describe("the mentions a finished turn carries", () => {
 				"Seat them in this conversation, or pick other agents.",
 			),
 		)
+		room.detach()
+	})
+
+	it("lands in the latest error a notice the surface refuses to raise", async () => {
+		const room = await roomSeating()
+		const unhandled = vi.fn()
+		rejectionEvents.on("unhandledRejection", unhandled)
+		room.reportFailure.mockRejectedValueOnce(new Error("no surface"))
+
+		await room.sent("<@ghost> take the walls")
+		await new Promise((resolve) => setTimeout(resolve, 0))
+
+		rejectionEvents.off("unhandledRejection", unhandled)
+		expect(room.reportFailure).toHaveBeenCalledTimes(1)
+		expect(room.controller.getState().latestError?.error).toEqual({
+			kind: "unknownFailure",
+			detail: expect.stringContaining("no surface"),
+		})
+		expect(unhandled).not.toHaveBeenCalled()
 		room.detach()
 	})
 
