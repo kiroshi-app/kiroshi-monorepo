@@ -154,11 +154,36 @@ describe("markMetricsOf", () => {
 })
 
 describe("hatchPath", () => {
-	it("runs one line per spacing across the whole tile", () => {
-		const lines = hatchPath(48, 6, 1.5).split("M").filter(Boolean)
-		expect(lines).toHaveLength(
-			Math.ceil((96 - 0.75 * Math.SQRT2) / (6 * Math.SQRT2)),
+	const offsetsOf = (path: string) =>
+		[...path.matchAll(/L([\d.]+) 0/g)].map(([, offset]) => Number(offset))
+
+	it("draws x + y = k x spacing from 0 to twice the size, as artboard F", () => {
+		const steps = (spacing: number, last: number) =>
+			Array.from({ length: last / spacing + 1 }, (_, k) => k * spacing)
+		expect(offsetsOf(hatchPath(48, 6))).toEqual(steps(6, 96))
+		expect(offsetsOf(hatchPath(26, 4))).toEqual(steps(4, 52))
+		expect(offsetsOf(hatchPath(14, 3))).toEqual(steps(3, 27))
+	})
+
+	it("runs each line from (c - size, size) to (c, 0)", () => {
+		expect(hatchPath(48, 6).split("M").filter(Boolean)[8]).toBe("0 48L48 0")
+		expect(offsetsOf(hatchPath(26, 4))).toEqual(
+			expect.arrayContaining([24, 28]),
 		)
-		expect(lines[0]).toBe("1.061 0L0 1.061")
+		expect(offsetsOf(hatchPath(14, 3))).toEqual(
+			expect.arrayContaining([12, 15]),
+		)
+	})
+
+	it("keeps the phase at the scaled spacing of 12, 36 and 64", () => {
+		for (const size of [12, 36, 64] as const) {
+			const { spacing } = markMetricsOf(size).hatch
+			const offsets = offsetsOf(hatchPath(size, spacing))
+			expect(offsets[0]).toBe(0)
+			offsets.forEach((offset, k) => {
+				expect(offset).toBeCloseTo(k * spacing, 2)
+			})
+			expect(offsets.at(-1)).toBeLessThanOrEqual(2 * size)
+		}
 	})
 })

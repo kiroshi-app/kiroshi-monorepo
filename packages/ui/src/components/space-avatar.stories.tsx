@@ -80,6 +80,11 @@ const MIXED_SPACES: MixedSpace[] = [
 	},
 ]
 
+const OFFLINE_GROUP_OPACITY: Record<SpaceAvatarTheme, string> = {
+	light: "0.8",
+	dark: "1",
+}
+
 const BADGE_SLOT: Partial<Record<SpaceAvatarState, string>> = {
 	local: "space-avatar-local",
 	shared: "space-avatar-dot",
@@ -405,7 +410,7 @@ export const Offline = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard F, a joined Space whose host does not answer at 48, 26 and 14px, in both themes. Check the neutral tile crossed by 45 degree lines from bottom left to top right, the initial in the neutral ink whatever the Space colour, and the red badge with a white cross at 48 and 26, a plain red dot at 14.",
+					"Artboard F, a joined Space whose host does not answer at 48, 26 and 14px, in both themes. Check the neutral tile crossed by 45 degree lines from bottom left to top right, one through the diagonal, fading with the tile, the initial in the neutral ink whatever the Space colour, and the red badge with a white cross at 48 and 26, a plain red dot at 14.",
 			},
 		},
 	},
@@ -413,7 +418,12 @@ export const Offline = meta.story({
 		await expect(avatarsIn(canvasElement)).toHaveLength(2 * DRAWN_SIZES.length)
 		await expectArtboardF(canvasElement)
 		for (const avatar of avatarsIn(canvasElement)) {
-			await expect(inThemeLayer(avatar, "space-avatar-hatch")).toHaveLength(1)
+			const hatches = inThemeLayer(avatar, "space-avatar-hatch")
+			await expect(hatches).toHaveLength(1)
+			await expect(hatches[0]).toHaveAttribute("stroke-opacity", "0.2")
+			await expect(
+				hatches[0]?.closest("[opacity]")?.getAttribute("opacity"),
+			).toBe(OFFLINE_GROUP_OPACITY[themeOf(avatar)])
 			await expect(
 				slotIn(avatar, "space-avatar-offline").querySelectorAll("path"),
 			).toHaveLength(avatar.dataset.size === "14" ? 0 : 1)

@@ -270,17 +270,11 @@ const markMetricsOf = (size: SpaceAvatarSize): MarkMetrics => {
 	}
 }
 
-const hatchPath = (size: number, spacing: number, stroke: number) => {
-	const first = Math.SQRT2 * (stroke / 2)
-	const step = Math.SQRT2 * spacing
-	return Array.from(
-		{ length: Math.ceil((2 * size - first) / step) },
-		(_, index) => {
-			const offset = round(first + index * step)
-			return `M${offset} 0L0 ${offset}`
-		},
-	).join("")
-}
+const hatchPath = (size: number, spacing: number) =>
+	Array.from({ length: Math.floor((2 * size) / spacing) + 1 }, (_, step) => {
+		const offset = round(step * spacing)
+		return `M${round(offset - size)} ${size}L${offset} 0`
+	}).join("")
 
 const spacePalette = (
 	theme: SpaceAvatarTheme,

@@ -175,8 +175,7 @@ const SpaceAvatar = ({
 
 	const hatch = (theme: SpaceAvatarTheme) => (
 		<path
-			clipPath={`url(#${ids.shape})`}
-			d={hatchPath(size, mark.hatch.spacing, mark.hatch.stroke)}
+			d={hatchPath(size, mark.hatch.spacing)}
 			data-slot="space-avatar-hatch"
 			fill="none"
 			stroke={HATCH_INK[theme].colour}
@@ -221,6 +220,7 @@ const SpaceAvatar = ({
 						/>
 					))
 					.reverse()}
+				{state === "offline" ? hatch(theme) : null}
 				{isGlazed ? glaze(theme) : null}
 				{isCompactRecipe ? (
 					<path
@@ -232,7 +232,6 @@ const SpaceAvatar = ({
 					/>
 				) : null}
 			</g>
-			{state === "offline" ? hatch(theme) : null}
 			{initial ? (
 				<text
 					className={INITIAL}
