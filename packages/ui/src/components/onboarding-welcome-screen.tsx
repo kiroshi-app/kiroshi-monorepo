@@ -63,7 +63,7 @@ const CompanionsIllustration = () => {
 						{t(`onboarding.intro.companions.${id}.name`)}
 					</p>
 					<BotTitleBadge
-						className="grow-0 basis-auto whitespace-normal"
+						className="grow-0 basis-auto whitespace-normal rounded-[calc(var(--spacing)*1.75)] py-0 leading-3.5"
 						title={t(`onboarding.intro.companions.${id}.job`)}
 					/>
 				</div>
