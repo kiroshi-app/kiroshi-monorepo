@@ -38,9 +38,9 @@ const openSpace = (name: string) =>
 
 const switchToPersonal = () => openSpace(SCENE_COPY.spaces.personal)
 
-const SUBJECT_ICON = "[data-slot=conversation-subject-icon]"
-
-const conversationIcons = () => [...scene().querySelectorAll(SUBJECT_ICON)]
+const conversationIcons = () => [
+	...scene().querySelectorAll("[data-slot=conversation-subject-icon]"),
+]
 
 const ICON_OWNER = [
 	"[data-slot=sidebar-menu-button]",
