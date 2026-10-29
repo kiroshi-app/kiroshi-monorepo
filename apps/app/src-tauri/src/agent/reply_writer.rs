@@ -31,7 +31,9 @@ use crate::events::CONVERSATION_UPDATED;
 
 const MENTION_SIGN: char = '@';
 const MENTION_OPEN: char = '<';
-const QUESTION_ID_PREFIX: &str = "question-";
+pub(crate) const QUESTION_ID_PREFIX: &str = "question-";
+pub(crate) const QUESTION_LINE_PREFIX: &str = "### ";
+pub(crate) const OPTION_LINE_PREFIX: &str = "- ";
 const OPTION_SEPARATOR: char = '\u{2014}';
 
 #[derive(Default)]
@@ -806,16 +808,20 @@ fn question_message_text(request: &QuestionRequest) -> String {
 }
 
 fn asked_lines(asked: &AskedQuestion) -> impl Iterator<Item = String> + '_ {
-	std::iter::once(format!("### {}", one_line(&asked.question)))
+	std::iter::once(format!("{QUESTION_LINE_PREFIX}{}", one_line(&asked.question)))
 		.chain(asked.options.iter().map(option_line))
 }
 
 fn option_line(option: &QuestionOption) -> String {
 	match option.description.as_deref().filter(|description| !description.is_empty()) {
 		Some(description) => {
-			format!("- {} {OPTION_SEPARATOR} {}", one_line(&option.label), one_line(description))
+			format!(
+				"{OPTION_LINE_PREFIX}{} {OPTION_SEPARATOR} {}",
+				one_line(&option.label),
+				one_line(description)
+			)
 		}
-		None => format!("- {}", one_line(&option.label)),
+		None => format!("{OPTION_LINE_PREFIX}{}", one_line(&option.label)),
 	}
 }
 

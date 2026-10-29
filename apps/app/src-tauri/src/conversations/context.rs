@@ -2,6 +2,7 @@ use chrono::{DateTime, SecondsFormat};
 use serde::Serialize;
 use serde_json::Value;
 
+use crate::agent::reply_writer::{OPTION_LINE_PREFIX, QUESTION_ID_PREFIX, QUESTION_LINE_PREFIX};
 use crate::db::repositories::conversations::Seat;
 use crate::db::repositories::messages::{
 	AccountAuthor, LatestMessageQuery, MessageAuthorship, MessageRole, MessageWindowQuery,
@@ -36,6 +37,12 @@ const ELIDED: &str = "[elided]";
 const UNKNOWN_SESSION: &str = "unknown";
 
 const UNNAMED_PERSON: &str = "user";
+
+const CARD_ASKED: &str = " asked:";
+
+const CARD_WAITING: &str = "(still waiting for an answer)";
+
+const ANSWER_SEPARATOR: &str = "\n\n";
 
 const ANOTHER_COMPUTER: &str = "another computer";
 
@@ -72,15 +79,7 @@ pub async fn bounded_context(
 		.await?
 		.ok_or_else(no_such_message)?;
 	let checkpoint = database.runtime_context().latest_checkpoint(runtime_session_id).await?;
-	let recent = database
-		.messages()
-		.window_messages(MessageWindowQuery {
-			conversation_id: conversation_id.clone(),
-			after_seq: checkpoint.as_ref().map_or(0, |checkpoint| checkpoint.last_message_seq),
-			before_seq: prompt.seq,
-			limit: RECENT_TAIL,
-		})
-		.await?;
+	let recent = stored_until_now(database, &conversation_id, checkpoint.as_ref(), &prompt).await?;
 	let replied_to = replied_to_target(database, &conversation_id, &prompt).await?;
 	let room = room_around(database, &participant).await?;
 	let instructions = database.conversations().instructions(conversation_id.clone()).await?;
@@ -100,6 +99,27 @@ pub async fn bounded_context(
 		prompt: &prompt.content,
 		room: room.as_ref(),
 	}))
+}
+
+async fn stored_until_now(
+	database: &Database,
+	conversation_id: &str,
+	checkpoint: Option<&ContextCheckpoint>,
+	prompt: &StoredMessage,
+) -> Result<Vec<StoredMessage>, TranscriptStoreError> {
+	let mut stored = database
+		.messages()
+		.window_messages(MessageWindowQuery {
+			conversation_id: conversation_id.to_owned(),
+			after_seq: checkpoint.map_or(0, |checkpoint| checkpoint.last_message_seq),
+			before_seq: i64::MAX,
+			limit: RECENT_TAIL + 1,
+		})
+		.await?;
+	stored.retain(|message| message.id != prompt.id);
+	let beyond_the_tail = stored.len().saturating_sub(RECENT_TAIL as usize);
+	stored.drain(..beyond_the_tail);
+	Ok(stored)
 }
 
 pub async fn message_header(
@@ -562,9 +582,7 @@ fn compose(parts: Parts<'_>) -> String {
 		push_section(&mut sections, REPLY_LABEL, &quoted(replied_to, parts.room));
 	}
 	if !parts.recent.is_empty() {
-		let spoken: Vec<String> =
-			parts.recent.iter().map(|message| spoken(message, parts.room)).collect();
-		push_section(&mut sections, RECENT_LABEL, &spoken.join("\n"));
+		push_section(&mut sections, RECENT_LABEL, &recent_spoken(parts.recent, parts.room));
 	}
 	if sections.is_empty() {
 		return headed(parts.header, parts.prompt.to_owned());
@@ -619,6 +637,88 @@ fn quoted_speaker(
 		MessageRole::User => person(author, written_from),
 		MessageRole::Assistant => "you".to_owned(),
 	}
+}
+
+fn recent_spoken(recent: &[StoredMessage], room: Option<&Room>) -> String {
+	let mut lines = Vec::with_capacity(recent.len());
+	let mut told_with_their_card: Vec<&str> = Vec::new();
+	for message in recent {
+		if told_with_their_card.contains(&message.id.as_str()) {
+			continue;
+		}
+		let Some(questions) = card_questions(message) else {
+			lines.push(spoken(message, room));
+			continue;
+		};
+		let answer = answer_to(recent, message);
+		told_with_their_card.extend(answer.map(|answer| answer.id.as_str()));
+		lines.push(card_spoken(message, &questions, answer, room));
+	}
+	lines.join("\n")
+}
+
+struct CardQuestion<'a> {
+	lines: Vec<&'a str>,
+}
+
+fn card_questions(message: &StoredMessage) -> Option<Vec<CardQuestion<'_>>> {
+	if message.role != MessageRole::Assistant || !message.id.starts_with(QUESTION_ID_PREFIX) {
+		return None;
+	}
+	let mut questions: Vec<CardQuestion<'_>> = Vec::new();
+	for line in message.content.lines() {
+		match (line.starts_with(QUESTION_LINE_PREFIX), questions.last_mut()) {
+			(true, _) => questions.push(CardQuestion { lines: vec![line] }),
+			(false, Some(question)) if line.starts_with(OPTION_LINE_PREFIX) => {
+				question.lines.push(line)
+			}
+			_ => return None,
+		}
+	}
+	(!questions.is_empty()).then_some(questions)
+}
+
+fn answer_to<'a>(recent: &'a [StoredMessage], card: &StoredMessage) -> Option<&'a StoredMessage> {
+	recent.iter().find(|message| {
+		message.role == MessageRole::User
+			&& message.seq > card.seq
+			&& message.replied_to_message_id.as_deref() == Some(card.id.as_str())
+	})
+}
+
+fn card_spoken(
+	card: &StoredMessage,
+	questions: &[CardQuestion<'_>],
+	answer: Option<&StoredMessage>,
+	room: Option<&Room>,
+) -> String {
+	let mut lines = vec![format!("{}{CARD_ASKED}", author_of(card, room))];
+	let Some(answer) = answer else {
+		lines.extend(
+			questions.iter().flat_map(|question| &question.lines).map(|line| spelled(room, line)),
+		);
+		lines.push(CARD_WAITING.to_owned());
+		return lines.join("\n");
+	};
+	let person = author_of(answer, room);
+	for (question, reply) in questions.iter().zip(replies_of(&answer.content, questions.len())) {
+		lines.extend(question.lines.iter().map(|line| spelled(room, line)));
+		lines.extend(reply.map(|reply| format!("{person}: {}", spelled(room, reply))));
+	}
+	lines.join("\n")
+}
+
+fn replies_of(answer: &str, questions: usize) -> Vec<Option<&str>> {
+	let split: Vec<&str> = match questions {
+		1 => vec![answer],
+		_ => answer.split(ANSWER_SEPARATOR).collect(),
+	};
+	if split.len() == questions {
+		return split.into_iter().map(Some).collect();
+	}
+	let mut replies = vec![None; questions.saturating_sub(1)];
+	replies.push(Some(answer));
+	replies
 }
 
 fn spoken(message: &StoredMessage, room: Option<&Room>) -> String {
@@ -2856,6 +2956,162 @@ mod tests {
 			matches!(&refused, Err(TranscriptStoreError::UnknownMessage { id }) if id == "no such message"),
 			"a header was read for a message nobody wrote: {refused:?}"
 		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	const CARD: &str = "question-r1";
+	const TWO_QUESTIONS: &str =
+		"### Which roof?\n- Slate \u{2014} grey\n- Tile\n### Which colour?\n- Red";
+	const STEVE: &str = "Steve · from an unknown computer";
+
+	async fn context_for_default(
+		database: &Database,
+		conversation_id: &str,
+		prompt_id: &str,
+	) -> String {
+		let run = a_run_of(database, conversation_id, "default").await;
+		bounded_context(
+			database,
+			participant_of(conversation_id, "default"),
+			run,
+			prompt_id.to_owned(),
+		)
+		.await
+		.expect("the context is rebuilt")
+	}
+
+	fn answered_by_steve() -> String {
+		format!(
+			"Second asked:\n### Which roof?\n- Slate \u{2014} grey\n- Tile\n{STEVE}: Slate\n\
+			### Which colour?\n- Red\n{STEVE}: Red"
+		)
+	}
+
+	#[tokio::test]
+	async fn a_card_asked_then_answered_reads_with_each_answer_under_its_question() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let conversation = a_conversation(&database).await;
+		another_bot(&database, &conversation, "second").await;
+		said_at(&database, &conversation, "second", TWO_QUESTIONS, CARD, 50).await;
+		written_by_steve(&database, &conversation, "a1", "Slate\n\nRed", Some(CARD)).await;
+		written_by_steve(&database, &conversation, "p1", "and now?", None).await;
+
+		let context = context_for_default(&database, &conversation, "p1").await;
+
+		assert_eq!(
+			section(&context, RECENT_LABEL),
+			Some(answered_by_steve().as_str()),
+			"the card lost its answers: {context}"
+		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_card_nobody_answered_yet_reads_as_still_waiting() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let conversation = a_conversation(&database).await;
+		said_at(&database, &conversation, "default", "### Which roof?\n- Slate\n- Tile", CARD, 50)
+			.await;
+		prompt(&database, &conversation, "p1", None).await;
+
+		let context = context_for_default(&database, &conversation, "p1").await;
+
+		assert_eq!(
+			section(&context, RECENT_LABEL),
+			Some(
+				"assistant asked:\n### Which roof?\n- Slate\n- Tile\n(still waiting for an answer)"
+			),
+			"the open card did not read as waiting: {context}"
+		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_message_stored_a_second_before_the_start_reaches_the_recent_section() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let conversation = a_conversation(&database).await;
+		spoken_so_far(&database, &conversation, 1).await;
+		prompt(&database, &conversation, "p1", None).await;
+		said_at(&database, &conversation, "default", "the roof is done", "late", STEVE_AT - 1_000)
+			.await;
+
+		let context = context_for_default(&database, &conversation, "p1").await;
+
+		assert_eq!(
+			section(&context, RECENT_LABEL),
+			Some("user · from an unknown computer: message 1\nassistant: the roof is done"),
+			"a message stored after the prompt was cut: {context}"
+		);
+		assert_eq!(section(&context, PROMPT_LABEL), Some(unnamed_asked("p1").as_str()));
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_prompt_queued_before_a_card_and_its_answer_is_framed_at_delivery_with_both() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let conversation = a_conversation(&database).await;
+		another_bot(&database, &conversation, "second").await;
+		written_by_steve(&database, &conversation, "p1", "and the garden?", None).await;
+		said_at(&database, &conversation, "second", TWO_QUESTIONS, CARD, 50).await;
+		written_by_steve(&database, &conversation, "a1", "Slate\n\nRed", Some(CARD)).await;
+		said_at(&database, &conversation, "second", "Slate and red it is.", "s2", 60).await;
+
+		let context = context_for_default(&database, &conversation, "p1").await;
+
+		assert_eq!(
+			section(&context, RECENT_LABEL),
+			Some(format!("{}\nSecond: Slate and red it is.", answered_by_steve()).as_str()),
+			"the card asked after the queued prompt was cut: {context}"
+		);
+		assert_eq!(
+			section(&context, PROMPT_LABEL),
+			Some(format!("{STEVE_HEADER}\nand the garden?").as_str()),
+			"the queued prompt did not stay alone under its heading: {context}"
+		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_checkpoint_past_the_prompt_still_delivers_every_message_after_it() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let conversation = a_conversation(&database).await;
+		let run = a_run_of(&database, &conversation, "default").await;
+		prompt(&database, &conversation, "p1", None).await;
+		spoken_so_far(&database, &conversation, SPOKEN).await;
+		capture_checkpoint(&database, participant_of(&conversation, "default"), run.clone(), 7)
+			.await
+			.expect("the checkpoint is captured")
+			.expect("the conversation is long enough to fold");
+
+		let context = bounded_context(
+			&database,
+			participant_of(&conversation, "default"),
+			run,
+			"p1".to_owned(),
+		)
+		.await
+		.expect("the context is rebuilt");
+
+		let recent =
+			section(&context, RECENT_LABEL).expect("the tail after the checkpoint was cut");
+		assert_eq!(recent.lines().count(), RECENT_TAIL as usize, "{context}");
+		assert!(recent.ends_with("assistant: message 30"), "{context}");
+		assert_eq!(section(&context, PROMPT_LABEL), Some(unnamed_asked("p1").as_str()));
 
 		drop(database);
 		fs::remove_dir_all(&dir).expect("cleanup");
