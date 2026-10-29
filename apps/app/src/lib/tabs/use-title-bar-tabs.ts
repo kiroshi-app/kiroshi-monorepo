@@ -1,4 +1,4 @@
-import { useMemo } from "react"
+import { useEffect, useMemo } from "react"
 
 import type { AppSidebarConversation } from "@workspace/ui/components/app-sidebar"
 import type { TitleBarTabsProps } from "@workspace/ui/components/title-bar-tabs"
@@ -8,14 +8,18 @@ import {
 	type GhostSources,
 	type ThumbnailConversation,
 } from "./ghost-thumbnail"
+import type { TabDock } from "./tab-dock"
 import { type TabBot, type TabConversation, tabFaceOf } from "./tab-faces"
 import { pageOf } from "./tab-pages"
 import type { TabTearOff } from "./tab-tear-off"
+import { currentHrefOf } from "./tabs-model"
 import {
 	useWorkspaceTabs,
 	type WorkspaceTabsSource,
 } from "./use-workspace-tabs"
 
+import { isDesktopHost } from "../host"
+import { useControllerState } from "../use-controller"
 import { useSharedStructure } from "../use-shared-structure"
 import type { TranscriptPort } from "../conversations/transcript-port"
 import { useMissionTitles } from "../missions/use-mission-titles"
@@ -55,6 +59,23 @@ const tabConversationOf = ({
 	companionName: participants[0]?.name,
 })
 
+const reportUnwatchedDrag = (reason: unknown) => {
+	console.error("this window does not follow tab drags", reason)
+	return () => undefined
+}
+
+const useTabDockWatch = (dock: TabDock) => {
+	useEffect(() => {
+		if (!isDesktopHost()) {
+			return
+		}
+		const watching = dock.watch().catch(reportUnwatchedDrag)
+		return () => {
+			void watching.then((stop) => stop())
+		}
+	}, [dock])
+}
+
 export const useTitleBarTabs = ({
 	bots,
 	conversations,
@@ -74,6 +95,8 @@ export const useTitleBarTabs = ({
 		missionIdsOf(tabViews.map((tab) => tab.href)),
 	)
 	const { activeId, canGoBack, canGoForward, hasClosedTab } = view
+	const incoming = useControllerState(tabs.dock)
+	useTabDockWatch(tabs.dock)
 
 	return useMemo(() => {
 		const ghostSources: GhostSources = {
@@ -103,6 +126,17 @@ export const useTitleBarTabs = ({
 				isNeedingYou: tab.needsYou,
 			})),
 			activeTabId: activeId,
+			incomingTab: incoming
+				? {
+						tab: {
+							...tabFaceOf(currentHrefOf(incoming.tab), ghostSources),
+							id: incoming.tab.id,
+							isPinned: incoming.tab.isPinned,
+						},
+						clientX: incoming.clientX,
+					}
+				: undefined,
+			onIncomingTabIndexChange: tabs.dock.placeIncoming,
 			canGoBack,
 			canGoForward,
 			hasClosedTab,
@@ -132,6 +166,7 @@ export const useTitleBarTabs = ({
 		spaceId,
 		readTranscript,
 		activeId,
+		incoming,
 		canGoBack,
 		canGoForward,
 		hasClosedTab,

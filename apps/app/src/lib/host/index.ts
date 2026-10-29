@@ -201,6 +201,21 @@ export function revealWindow({ withFocus }: WindowReveal = {}): Promise<void> {
 	return withFocus ? shown.then(() => current.setFocus()) : shown
 }
 
+export type WindowOrigin = {
+	x: number
+	y: number
+}
+
+export const readWindowOrigin = async (): Promise<WindowOrigin> => {
+	const current = getCurrentWindow()
+	const [position, scale] = await Promise.all([
+		current.innerPosition(),
+		current.scaleFactor(),
+	])
+	const { x, y } = position.toLogical(scale)
+	return { x, y }
+}
+
 export function watchWindowFocus(
 	report: (isFocused: boolean) => void,
 ): Promise<() => void> {

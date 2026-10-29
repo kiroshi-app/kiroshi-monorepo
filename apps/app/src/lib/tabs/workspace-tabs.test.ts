@@ -19,7 +19,7 @@ import {
 	type WorkspaceTabs,
 } from "./workspace-tabs"
 
-import type { FileMenuAction } from "../bindings"
+import type { FileMenuAction, Json, ScreenPosition, TabDrag } from "../bindings"
 import type { ObservedState } from "../conversations/store-contract"
 import { validateThreadSearch } from "../navigation/thread-search"
 
@@ -39,8 +39,22 @@ const windowHost = vi.hoisted(() => ({
 	raiseReportedFailure: vi.fn(),
 }))
 
+const tabDragHost = vi.hoisted(() => ({
+	windowTabDragStart: vi.fn(),
+	windowTabDragMove: vi.fn(),
+	windowTabDragDrop: vi.fn(),
+	windowTabDragCancel: vi.fn(),
+	windowStripAt: vi.fn(),
+	windowReportSpace: vi.fn(),
+	windowReportStrip: vi.fn(),
+	readWindowOrigin: vi.fn(),
+	revealWindow: vi.fn(),
+}))
+
 vi.mock("../host", async (importOriginal) => ({
 	...(await importOriginal<typeof import("../host")>()),
+	readWindowOrigin: tabDragHost.readWindowOrigin,
+	revealWindow: tabDragHost.revealWindow,
 	usesCommandKey: () => commandKey.isUsed,
 	carriesNativeMenu: () => fileMenu.isCarried,
 	watchFileMenu: (act: (action: FileMenuAction) => void) => {
@@ -56,7 +70,11 @@ vi.mock("../bindings", async (importOriginal) => {
 	const bindings = await importOriginal<typeof import("../bindings")>()
 	return {
 		...bindings,
-		commands: { ...bindings.commands, windowOpen: windowHost.windowOpen },
+		commands: {
+			...bindings.commands,
+			...tabDragHost,
+			windowOpen: windowHost.windowOpen,
+		},
 	}
 })
 
@@ -173,6 +191,10 @@ afterEach(() => {
 	windowHost.watchCloseRequest.mockReset()
 	windowHost.liveWindowLabels.mockReset()
 	windowHost.raiseReportedFailure.mockReset()
+	for (const command of Object.values(tabDragHost)) {
+		command.mockReset()
+	}
+	document.body.replaceChildren()
 })
 
 describe("a Space without stored tabs", () => {
@@ -1741,5 +1763,108 @@ describe("the File menu", () => {
 
 		expect(shownHrefs(tabs)).toEqual(["/", "/"])
 		expect(fileMenu.choose).toBeUndefined()
+	})
+})
+
+const ACCEPTED = { status: "ok", data: null }
+
+const OVER_TARGET_STRIP = { screenX: 300, screenY: 10 }
+
+const mountTargetStrip = () => {
+	const strip = document.createElement("div")
+	strip.dataset.slot = "title-bar-tabs"
+	strip.getBoundingClientRect = () =>
+		DOMRect.fromRect({ x: 0, y: 0, width: 800, height: 36 })
+	document.body.append(strip)
+}
+
+const joinWindows = (target: WorkspaceTabs) => {
+	const broadcast = (drag: TabDrag) => {
+		target.dock.follow(drag)
+		return Promise.resolve(ACCEPTED)
+	}
+	const originLabel = "main"
+	tabDragHost.windowTabDragStart.mockImplementation(
+		(tab: Json, originSpaceId: string) =>
+			broadcast({ kind: "started", originLabel, originSpaceId, tab }),
+	)
+	tabDragHost.windowTabDragMove.mockImplementation((point: ScreenPosition) =>
+		broadcast({ kind: "moved", originLabel, point }),
+	)
+	tabDragHost.windowTabDragDrop.mockImplementation((point: ScreenPosition) =>
+		broadcast({ kind: "dropped", originLabel, point }),
+	)
+	tabDragHost.windowTabDragCancel.mockImplementation(() =>
+		broadcast({ kind: "cancelled", originLabel }),
+	)
+	tabDragHost.windowStripAt.mockResolvedValue({
+		label: SECONDARY,
+		spaceId: SPACE,
+	})
+	tabDragHost.windowReportSpace.mockResolvedValue(undefined)
+	tabDragHost.windowReportStrip.mockResolvedValue(undefined)
+	tabDragHost.readWindowOrigin.mockResolvedValue({ x: 0, y: 0 })
+	tabDragHost.revealWindow.mockResolvedValue(undefined)
+}
+
+const redock = async (
+	origin: WorkspaceTabs,
+	target: WorkspaceTabs,
+	tabId: string,
+	index: number,
+) => {
+	const tearOff = { tabId, ...OVER_TARGET_STRIP }
+	origin.tearOffSession.start(tearOff, () => ({
+		tabId,
+		href: "/",
+		title: "Torn",
+	}))
+	await vi.waitFor(() =>
+		expect(tabDragHost.readWindowOrigin).toHaveBeenCalled(),
+	)
+	origin.tearOffSession.move(tearOff)
+	await vi.waitFor(() => expect(target.dock.getState()).not.toBeNull())
+	target.dock.placeIncoming(index)
+	origin.tearOffSession.drop(tearOff)
+}
+
+describe("a tab dragged onto the strip of another window of its Space", () => {
+	it("leaves the origin and lands at the parted index of the target, shown and focused", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => undefined)
+		mountTargetStrip()
+		const origin = tabsOn(threadOf("torn"), threadOf("kept"))
+		const target = tabsOfWindow(SECONDARY, threadOf("there"))
+		joinWindows(target)
+
+		await redock(origin, target, idOfTabOn(origin, threadOf("torn")), 0)
+
+		await vi.waitFor(() =>
+			expect(shownHrefs(origin)).toEqual(["/", threadOf("kept")]),
+		)
+		expect(shownHrefs(target)).toEqual([threadOf("torn"), threadOf("there")])
+		expect(activeHref(target)).toBe(threadOf("torn"))
+		expect(target.dock.getState()).toBeNull()
+		expect(tabDragHost.revealWindow).toHaveBeenCalledExactlyOnceWith({
+			withFocus: true,
+		})
+		expect(windowHost.windowOpen).not.toHaveBeenCalled()
+		expect(windowHost.raiseReportedFailure).not.toHaveBeenCalled()
+	})
+
+	it("keeps the target page shown when its leave guard holds, with the tab placed", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => undefined)
+		mountTargetStrip()
+		const origin = tabsOn(threadOf("torn"), threadOf("kept"))
+		const target = tabsOfWindow(SECONDARY, threadOf("there"))
+		target.guardLeave(cancellingGuard())
+		joinWindows(target)
+
+		await redock(origin, target, idOfTabOn(origin, threadOf("torn")), 1)
+
+		await vi.waitFor(() =>
+			expect(shownHrefs(target)).toEqual([threadOf("there"), threadOf("torn")]),
+		)
+		expect(activeHref(target)).toBe(threadOf("there"))
+		expect(shownHrefs(origin)).toEqual(["/", threadOf("kept")])
 	})
 })

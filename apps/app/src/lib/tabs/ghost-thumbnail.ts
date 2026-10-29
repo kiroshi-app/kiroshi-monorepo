@@ -23,6 +23,7 @@ export type GhostThumbnail = {
 	companionName: string
 	messages: TabDragThumbnailMessage[]
 	faces: TabFaceSources
+	isNotAllowed: boolean
 }
 
 export type ThumbnailConversation = TabConversation & {
@@ -139,7 +140,8 @@ const isGhostThumbnail = (value: unknown): value is GhostThumbnail =>
 	typeof value.companionName === "string" &&
 	Array.isArray(value.messages) &&
 	value.messages.every(isThumbnailMessage) &&
-	isFaces(value.faces)
+	isFaces(value.faces) &&
+	typeof value.isNotAllowed === "boolean"
 
 const parsed = (value: string | null): unknown => {
 	try {
@@ -158,15 +160,18 @@ export const readGhostThumbnail = (): GhostThumbnail | null => {
 	return isGhostThumbnail(held) ? held : null
 }
 
-const writeGhostMessages = (
+const updateGhostThumbnail = (
 	tabId: string,
-	messages: TabDragThumbnailMessage[],
+	update: Partial<Pick<GhostThumbnail, "messages" | "isNotAllowed">>,
 ) => {
 	const held = readGhostThumbnail()
 	if (held?.tabId === tabId) {
-		writeGhostThumbnail({ ...held, messages })
+		writeGhostThumbnail({ ...held, ...update })
 	}
 }
+
+export const setGhostNotAllowed = (tabId: string, isNotAllowed: boolean) =>
+	updateGhostThumbnail(tabId, { isNotAllowed })
 
 const reportMessagesFailure = (reason: unknown) => {
 	console.error("the drag ghost could not read the last messages", reason)
@@ -180,7 +185,8 @@ const loadGhostMessages = (ghost: DragGhostTab, sources: GhostSources) => {
 	void sources
 		.readTranscript(conversationId, null)
 		.then(
-			(page) => writeGhostMessages(ghost.tabId, lastMessagesOf(page)),
+			(page) =>
+				updateGhostThumbnail(ghost.tabId, { messages: lastMessagesOf(page) }),
 			reportMessagesFailure,
 		)
 }
@@ -196,6 +202,7 @@ export const drawGhost = (
 		companionName: companionNameOf(ghost.href, sources),
 		messages: [],
 		faces: facesOf(ghost.href, sources),
+		isNotAllowed: false,
 	})
 	loadGhostMessages(ghost, sources)
 	return ghost

@@ -61,7 +61,11 @@ const indexOfTab = ({ tabs }: SpaceTabs, id: string) =>
 export const selectTab = (space: SpaceTabs, id: string): SpaceTabs =>
 	indexOfTab(space, id) === -1 ? space : { ...space, activeId: id }
 
-const insertAt = (space: SpaceTabs, position: number, tab: Tab): SpaceTabs => ({
+export const insertAt = (
+	space: SpaceTabs,
+	position: number,
+	tab: Tab,
+): SpaceTabs => ({
 	...space,
 	tabs: withPinnedFirst([
 		...space.tabs.slice(0, position),

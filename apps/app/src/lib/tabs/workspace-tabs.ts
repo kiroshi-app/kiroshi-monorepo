@@ -7,12 +7,14 @@ import {
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { goneMissionIdsOf, type ReadMission } from "./restored-missions"
+import { createTabDock, type TabDock } from "./tab-dock"
 import { EMPTY_LIST_HREF, HREF_BASE, pageOf, rowIdsNamedBy } from "./tab-pages"
 import {
 	createTabTearOff,
 	pointOf,
 	type TabTearOff,
 	type TabTearOffSession,
+	type TornTab,
 } from "./tab-tear-off"
 import {
 	discardCarriedTabs,
@@ -21,6 +23,7 @@ import {
 	forgetWindow,
 	handOverWindow,
 	keepCarriedTab,
+	keptTabOf,
 	MAIN_WINDOW_LABEL,
 	openWindowLabels,
 	readCarriedTab,
@@ -41,6 +44,7 @@ import {
 	currentHrefOf,
 	dropTabsWhere,
 	duplicateTab,
+	insertAt,
 	moveInHistory,
 	openBackgroundTab,
 	openEmptyTab,
@@ -107,6 +111,7 @@ export type WorkspaceTabs = {
 	tearOff: (tearOff: TabTearOff) => true
 	moveTornOff: (tearOff: TabTearOff, size: WindowSize) => Promise<void>
 	tearOffSession: TabTearOffSession
+	dock: TabDock
 	reopenClosed: () => void
 	reorder: (ids: string[]) => void
 	dropAbsentRestored: (spaceId: string, check: RestoredCheck) => Promise<void>
@@ -539,6 +544,23 @@ export const createWorkspaceTabs = (
 			return opening
 		})
 
+	const tornTabOf = (id: string): TornTab | null => {
+		const { tabs } = shown()
+		const torn = tabs.find((tab) => tab.id === id)
+		return torn
+			? {
+					packed: keptTabOf(torn),
+					spaceId: store.getState().spaceId,
+					isOnlyTab: tabs.length === 1,
+				}
+			: null
+	}
+
+	const receiveDocked = (tab: Tab, index: number) => {
+		change((space) => insertAt(space, index, tab))
+		askingChange((space) => selectTab(space, tab.id))
+	}
+
 	const reachSpace = (spaceId: string) => {
 		const state = store.getState()
 		const { space, isRestored } = reachedTabsOf(spaceId)
@@ -595,9 +617,15 @@ export const createWorkspaceTabs = (
 		tearOff,
 		moveTornOff,
 		tearOffSession: createTabTearOff({
-			moveUnghosted,
+			moveUnghosted: tearOff,
 			moveTornOff,
-			raiseMoveFailure: raiseTornOffFailure,
+			tornTabOf,
+			removeDocked: removeMoved,
+		}),
+		dock: createTabDock({
+			windowLabel,
+			shownSpaceId: () => store.getState().spaceId,
+			receive: receiveDocked,
 		}),
 		reopenClosed,
 		reorder: (ids) => change((space) => reorderTabs(space, ids)),
