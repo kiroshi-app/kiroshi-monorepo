@@ -659,12 +659,23 @@ export const NameAlreadyTakenDark = meta.story({
 	parameters: describe("C05 Name already taken on the dark scheme."),
 })
 
+type StoryCanvas = { canvasElement: HTMLElement }
+
+const hoverRetry = async ({ canvasElement }: StoryCanvas) => {
+	if (!isInBrowserRunner()) return
+	const { userEvent: pointer } = await import("vitest/browser")
+	await pointer.hover(
+		primaryIn(canvasElement, i18n.t("common:claudeImport.unreadable.retry")),
+	)
+}
+
 export const Unreadable = meta.story({
 	name: "C06 Couldn't read ~/.claude",
 	args: UNREADABLE,
 	parameters: describe(
 		"Kiroshi was refused ~/.claude. Check the danger tile and its alert icon, no list, then Try again above Skip for now.",
 	),
+	play: hoverRetry,
 })
 
 export const UnreadableDark = meta.story({
@@ -672,6 +683,7 @@ export const UnreadableDark = meta.story({
 	args: UNREADABLE,
 	globals: DARK,
 	parameters: describe("C06 Couldn't read ~/.claude on the dark scheme."),
+	play: hoverRetry,
 })
 
 export const PartlyFailed = meta.story({
