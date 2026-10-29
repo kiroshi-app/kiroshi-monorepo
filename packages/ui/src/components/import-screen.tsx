@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useState } from "react"
+import { useTranslation } from "react-i18next"
 
 import {
 	FullWindowContent,
@@ -40,22 +41,69 @@ type ImportAction = {
 }
 
 type ImportScreenProps = {
-	step: ImportScreenStep
 	title: string
-	subtitle: string
-	sections?: ImportSection[]
 	primary: ImportAction
 	secondary?: ImportAction
-	onToggle?: (id: string, checked: boolean) => void
-}
+} & (
+	| {
+			step: "select"
+			subtitle: string
+			sections: ImportSection[]
+			onToggle: (id: string, checked: boolean) => void
+	  }
+	| { step: "importing" | "done"; sections: ImportSection[] }
+	| { step: "unreadable"; subtitle: string }
+)
 
 const LINK_CLASS =
 	"relative rounded-xs font-medium text-compact text-foreground leading-4.5 underline decoration-1 underline-offset-2 outline-offset-2 after:absolute after:-inset-1"
 
-const hasCheckedItem = (sections: ImportSection[]) =>
-	sections.some((section) =>
-		section.items.some((item) => item.checked && !item.isInKiroshi),
-	)
+const isPicked = (item: ImportItem) =>
+	Boolean(item.checked && !item.isInKiroshi)
+
+const hasPickedItem = (sections: ImportSection[]) =>
+	sections.some((section) => section.items.some(isPicked))
+
+const pickedSectionsOf = (sections: ImportSection[]) =>
+	sections
+		.map((section) => ({ ...section, items: section.items.filter(isPicked) }))
+		.filter((section) => section.items.length > 0)
+
+const sectionsOf = (props: ImportScreenProps) => {
+	if (props.step === "unreadable") return []
+	if (props.step === "select") return props.sections
+	return pickedSectionsOf(props.sections)
+}
+
+const useSubtitle = (props: ImportScreenProps, sections: ImportSection[]) => {
+	const { t, i18n } = useTranslation("common")
+	if (props.step === "select" || props.step === "unreadable") {
+		return props.subtitle
+	}
+
+	const items = sections.flatMap((section) => section.items)
+	if (props.step === "importing") {
+		return t("claudeImport.importing.body", {
+			done: items.filter((item) => item.status === "done").length,
+			count: items.length,
+		})
+	}
+
+	const failed = items.find((item) => item.status === "failed")
+	if (failed) {
+		return t("claudeImport.partlyFailed.body", { name: failed.title })
+	}
+
+	const companions = items
+		.filter((item) => item.kind === "companion")
+		.map((item) => item.title)
+	return t("claudeImport.done.body", {
+		companions: new Intl.ListFormat(i18n.language, {
+			type: "conjunction",
+		}).format(companions),
+		count: items.filter((item) => item.kind === "skill").length,
+	})
+}
 
 const useOverflow = () => {
 	const [isOverflowing, setIsOverflowing] = useState(false)
@@ -83,6 +131,7 @@ type ImportListProps = {
 }
 
 const ImportList = ({ step, sections, onToggle }: ImportListProps) => {
+	const { t } = useTranslation("common")
 	const { isOverflowing, watch } = useOverflow()
 
 	return (
@@ -90,7 +139,11 @@ const ImportList = ({ step, sections, onToggle }: ImportListProps) => {
 			className="min-h-0 w-140 max-w-full overflow-y-auto pr-3 outline-offset-2"
 			data-slot="import-list"
 			ref={watch}
-			tabIndex={isOverflowing ? 0 : undefined}
+			{...(isOverflowing && {
+				"aria-label": t("claudeImport.listLabel"),
+				role: "region",
+				tabIndex: 0,
+			})}
 		>
 			<div className="flex flex-col gap-5">
 				{sections.map((section) => (
@@ -124,18 +177,13 @@ const ImportList = ({ step, sections, onToggle }: ImportListProps) => {
 	)
 }
 
-const ImportScreen = ({
-	step,
-	title,
-	subtitle,
-	sections = [],
-	primary,
-	secondary,
-	onToggle,
-}: ImportScreenProps) => {
+const ImportScreen = (props: ImportScreenProps) => {
+	const { step, title, primary, secondary } = props
+	const sections = sectionsOf(props)
+	const subtitle = useSubtitle(props, sections)
 	const isUnreadable = step === "unreadable"
 	const isPrimaryDisabled =
-		step === "importing" || (step === "select" && !hasCheckedItem(sections))
+		step === "importing" || (step === "select" && !hasPickedItem(sections))
 	const Mark = isUnreadable ? Icons.AlertCircle : Icons.FolderOpen
 
 	return (
@@ -164,7 +212,11 @@ const ImportScreen = ({
 					</p>
 				</div>
 				{sections.length > 0 ? (
-					<ImportList onToggle={onToggle} sections={sections} step={step} />
+					<ImportList
+						onToggle={props.step === "select" ? props.onToggle : undefined}
+						sections={sections}
+						step={step}
+					/>
 				) : null}
 				<div
 					className={cn(

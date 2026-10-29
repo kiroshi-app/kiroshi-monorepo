@@ -135,6 +135,7 @@ const common = {
 		},
 	},
 	claudeImport: {
+		listLabel: "Your Claude Code setup",
 		sections: {
 			companions: "Companions",
 			instructionsAndSkills: "Instructions and skills",

@@ -665,6 +665,7 @@ feedback-importscreen--done
 feedback-importscreen--done-dark
 feedback-importscreen--importing
 feedback-importscreen--importing-dark
+feedback-importscreen--importing-picked-only
 feedback-importscreen--list
 feedback-importscreen--list-dark
 feedback-importscreen--long-list-scrolled

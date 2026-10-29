@@ -16,7 +16,12 @@ import { i18n } from "@workspace/ui/lib/i18n"
 
 const DARK = { theme: "dark" } as const
 
-type Artboard = Omit<ImportScreenProps, "onToggle">
+type Artboard = ImportScreenProps
+
+const toggleOf = (args: ImportScreenProps) => {
+	if (args.step !== "select") throw new Error("Only the select step toggles")
+	return args.onToggle
+}
 
 const ATLAS: ImportItem = {
 	id: "atlas",
@@ -124,6 +129,7 @@ const LIST: Artboard = {
 	title: i18n.t("common:claudeImport.select.title"),
 	subtitle: i18n.t("common:claudeImport.select.body"),
 	sections: [companionsOf([ATLAS, WREN]), filesOf(FILES)],
+	onToggle: fn(),
 	primary: {
 		label: i18n.t("common:claudeImport.select.importItems", { count: 7 }),
 		onPress: fn(),
@@ -134,7 +140,6 @@ const LIST: Artboard = {
 const IMPORTING: Artboard = {
 	step: "importing",
 	title: i18n.t("common:claudeImport.importing.title"),
-	subtitle: i18n.t("common:claudeImport.importing.body", { done: 3, count: 7 }),
 	sections: [
 		companionsOf(withStatus([ATLAS, WREN], () => "done")),
 		filesOf(
@@ -147,16 +152,24 @@ const IMPORTING: Artboard = {
 	},
 }
 
+const IMPORTING_PICKED_ONLY: Artboard = {
+	...IMPORTING,
+	sections: [
+		companionsOf([
+			{ ...ATLAS, status: "done" },
+			{ ...WREN, checked: false, status: "done" },
+		]),
+		filesOf([{ ...CLAUDE_MD, isInKiroshi: true, status: "done" }, ...SKILLS]),
+	],
+}
+
 const DONE: Artboard = {
 	step: "done",
 	title: i18n.t("common:claudeImport.done.title"),
-	subtitle: i18n.t("common:claudeImport.done.body", {
-		companions: new Intl.ListFormat("en", { type: "conjunction" }).format([
-			ATLAS.title,
-			WREN.title,
-		]),
-		count: SKILLS.length,
-	}),
+	sections: [
+		companionsOf(withStatus([ATLAS, WREN], () => "done")),
+		filesOf(withStatus(FILES, () => "done")),
+	],
 	primary: {
 		label: i18n.t("common:claudeImport.done.continue"),
 		onPress: fn(),
@@ -251,9 +264,6 @@ const UNREADABLE: Artboard = {
 const PARTLY_FAILED: Artboard = {
 	step: "done",
 	title: i18n.t("common:claudeImport.partlyFailed.title"),
-	subtitle: i18n.t("common:claudeImport.partlyFailed.body", {
-		name: FAILED_CHANGELOG.title,
-	}),
 	sections: [
 		companionsOf(withStatus([ATLAS, WREN], () => "done")),
 		filesOf([
@@ -281,6 +291,7 @@ const AGAIN_FROM_SETTINGS: Artboard = {
 	step: "select",
 	title: i18n.t("common:claudeImport.fromSettings.title"),
 	subtitle: i18n.t("common:claudeImport.fromSettings.body"),
+	onToggle: fn(),
 	sections: [
 		companionsOf(alreadyIn([ATLAS, WREN])),
 		filesOf([
@@ -324,7 +335,6 @@ const meta = preview.meta({
 			},
 		},
 	},
-	args: { onToggle: fn() },
 })
 
 export const List = meta.story({
@@ -336,7 +346,7 @@ export const List = meta.story({
 	play: async ({ canvasElement, args }) => {
 		const canvas = within(canvasElement)
 		await userEvent.click(canvas.getByRole("checkbox", { name: "Wren" }))
-		await expect(args.onToggle).toHaveBeenCalledWith("wren", false)
+		await expect(toggleOf(args)).toHaveBeenCalledWith("wren", false)
 		if (!isInBrowserRunner()) return
 		const controls = [
 			canvas.getByRole("checkbox", { name: "Atlas" }),
@@ -376,6 +386,11 @@ export const Importing = meta.story({
 		await expect(
 			canvas.getAllByRole("img", { name: "In progress" }),
 		).toHaveLength(4)
+		await expect(
+			canvas.getByText(
+				i18n.t("common:claudeImport.importing.body", { done: 3, count: 7 }),
+			),
+		).toBeVisible()
 		const primary = primaryIn(
 			canvasElement,
 			i18n.t("common:claudeImport.importing.action"),
@@ -393,11 +408,33 @@ export const ImportingDark = meta.story({
 	parameters: describe("3.2 Importing on the dark scheme."),
 })
 
+export const ImportingPickedOnly = meta.story({
+	tags: ["test-only"],
+	args: IMPORTING_PICKED_ONLY,
+	parameters: describe(
+		"Proves the importing list keeps only what the reader picked: Wren was unchecked and CLAUDE.md is already in Kiroshi, both carrying a status the host never should have sent. Check that neither row nor its status icon renders, and that the body counts the five rows left.",
+	),
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement)
+		await expect(canvas.queryByText(WREN.title)).toBeNull()
+		await expect(canvas.queryByText(CLAUDE_MD.title)).toBeNull()
+		await expect(canvas.getAllByRole("img", { name: "Done" })).toHaveLength(1)
+		await expect(
+			canvas.getAllByRole("img", { name: "In progress" }),
+		).toHaveLength(4)
+		await expect(
+			canvas.getByText(
+				i18n.t("common:claudeImport.importing.body", { done: 1, count: 5 }),
+			),
+		).toBeVisible()
+	},
+})
+
 export const Done = meta.story({
 	name: "3.3 Done",
 	args: DONE,
 	parameters: describe(
-		"Everything came in. No list, only the summary and Continue. Pick `PartlyFailed` when a row did not come in.",
+		"Everything the reader picked came in, every row done. Check that the summary names the companions and counts the skills from the rows shown. Pick `PartlyFailed` when a row did not come in.",
 	),
 })
 
@@ -447,6 +484,12 @@ export const LongListScrolled = meta.story({
 	play: async ({ canvasElement }) => {
 		const list = slotIn(canvasElement, "import-list")
 		await expect(list.scrollHeight).toBeGreaterThan(list.clientHeight)
+		await expect(
+			within(canvasElement).getByRole("region", {
+				name: i18n.t("common:claudeImport.listLabel"),
+			}),
+		).toBe(list)
+		await expect(list).toHaveAttribute("tabindex", "0")
 		await expect(slotIn(canvasElement, "import-list-fade")).toBeInTheDocument()
 		list.scrollTop = 120
 		await expect(list.scrollTop).toBeGreaterThan(0)
@@ -564,7 +607,7 @@ export const AgainFromSettings = meta.story({
 		await expect(atlas).not.toBeChecked()
 		await userEvent.click(atlas, { pointerEventsCheck: 0 })
 		await expect(atlas).not.toBeChecked()
-		await expect(args.onToggle).not.toHaveBeenCalled()
+		await expect(toggleOf(args)).not.toHaveBeenCalled()
 	},
 })
 
