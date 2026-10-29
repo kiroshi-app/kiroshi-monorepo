@@ -1075,6 +1075,7 @@ const chat = {
 		},
 		intro: {
 			skip: "Passer l’intro",
+			back: "Retour",
 			next: "Suivant",
 			getStarted: "Commencer",
 			companions: {

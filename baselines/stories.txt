@@ -744,6 +744,7 @@ feedback-onboardingwelcomescreen--welcome-companions-dark
 feedback-onboardingwelcomescreen--welcome-companions-light
 feedback-onboardingwelcomescreen--welcome-conversations-dark
 feedback-onboardingwelcomescreen--welcome-conversations-light
+feedback-onboardingwelcomescreen--welcome-every-slide
 feedback-onboardingwelcomescreen--welcome-your-tools-dark
 feedback-onboardingwelcomescreen--welcome-your-tools-light
 feedback-progressring--default

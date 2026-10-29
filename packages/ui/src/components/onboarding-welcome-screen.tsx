@@ -22,6 +22,7 @@ type OnboardingWelcomeStep = "companions" | "conversations" | "tools"
 type OnboardingWelcomeScreenProps = {
 	step: OnboardingWelcomeStep
 	onSkip: () => void
+	onBack: () => void
 	onNext: () => void
 }
 
@@ -181,37 +182,31 @@ const ILLUSTRATIONS: Record<OnboardingWelcomeStep, () => ReactNode> = {
 const OnboardingWelcomeScreen = ({
 	step,
 	onSkip,
+	onBack,
 	onNext,
 }: OnboardingWelcomeScreenProps) => {
 	const { t } = useTranslation("chat")
 	const Illustration = ILLUSTRATIONS[step]
 	const position = STEPS.indexOf(step) + 1
-	const isLastStep = position === STEPS.length
 
 	return (
 		<OnboardingShell
 			className="gap-10"
 			data-step={step}
 			data-slot="onboarding-welcome-screen"
-			footer={
-				<OnboardingWelcomeFooter
-					actionLabel={t(
-						isLastStep
-							? "onboarding.intro.getStarted"
-							: "onboarding.intro.next",
-					)}
-					onAction={onNext}
-					onSkip={onSkip}
-					step={position}
-					total={STEPS.length}
-				/>
-			}
 		>
 			<Illustration />
 			<OnboardingHeading
 				body={t(`onboarding.intro.${step}.body`)}
 				title={t(`onboarding.intro.${step}.title`)}
 				variant="welcome"
+			/>
+			<OnboardingWelcomeFooter
+				onAction={onNext}
+				onBack={onBack}
+				onSkip={onSkip}
+				step={position}
+				total={STEPS.length}
 			/>
 		</OnboardingShell>
 	)

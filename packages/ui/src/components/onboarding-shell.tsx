@@ -1,4 +1,4 @@
-import type { ComponentProps, ReactNode } from "react"
+import type { ComponentProps } from "react"
 
 import {
 	FullWindowContent,
@@ -7,18 +7,11 @@ import {
 import { Button } from "@workspace/ui/components/ui/button"
 import { cn } from "@workspace/ui/lib/utils"
 
-type OnboardingShellProps = ComponentProps<"div"> & {
-	footer?: ReactNode
-}
+type OnboardingShellProps = ComponentProps<"div">
 
-const OnboardingShell = ({
-	footer,
-	className,
-	...props
-}: OnboardingShellProps) => (
+const OnboardingShell = ({ className, ...props }: OnboardingShellProps) => (
 	<FullWindowLayout data-slot="onboarding-shell">
 		<FullWindowContent className={cn("w-full px-6", className)} {...props} />
-		{footer}
 	</FullWindowLayout>
 )
 
@@ -66,7 +59,9 @@ const OnboardingLink = ({ className, ...props }: OnboardingLinkProps) => (
 type OnboardingButtonProps = Omit<
 	ComponentProps<typeof Button>,
 	"variant" | "size"
->
+> & {
+	variant?: "default" | "outline"
+}
 
 const OnboardingButton = ({ className, ...props }: OnboardingButtonProps) => (
 	<Button
