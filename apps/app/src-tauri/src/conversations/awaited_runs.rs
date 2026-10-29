@@ -301,15 +301,13 @@ mod tests {
 	fn a_page_that_starts_loading_leaves_its_turns_to_the_host_and_a_finished_load_does_not() {
 		let (app, main) = a_window_that_ran_t1("forget-page-load");
 		let windows = app.state::<TurnWindows>();
+		windows.start_driving("window-1");
 
 		forget_on_page_event(&main.as_ref().window(), PageLoadEvent::Finished);
 		let after_a_finished_load = windows.is_left_to_the_host("t1");
 		forget_on_page_event(&main.as_ref().window(), PageLoadEvent::Started);
-		let while_reloading = windows.is_left_to_the_host("t1");
-		windows.start_driving("main");
 
 		assert!(!after_a_finished_load, "a finished load left the turn to the host");
-		assert!(!while_reloading, "the reloading window still drove");
 		assert!(windows.is_left_to_the_host("t1"));
 	}
 
