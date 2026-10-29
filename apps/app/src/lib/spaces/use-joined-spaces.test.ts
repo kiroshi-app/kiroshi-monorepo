@@ -4,7 +4,10 @@ import { act, cleanup, renderHook, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 
 import type { InvitationsTransport } from "./invitations-transport"
-import { createJoinedSpacesController } from "./joined-spaces-controller"
+import {
+	createJoinedSpacesController,
+	type JoinedSpacesController,
+} from "./joined-spaces-controller"
 import { spaceQueryKeys } from "./space-query-keys"
 import { createSpacesController } from "./spaces-controller"
 import { useInvitations } from "./use-invitations"
@@ -16,21 +19,31 @@ import {
 
 import {
 	commands,
+	HOSTING_CHANGED_EVENT,
 	type Invitation,
 	type JoinedSpace,
 	SPACE_DESCRIBED_EVENT,
+	type Space,
+	type SpaceMembers,
 } from "../bindings"
-import { listen } from "../host"
+import { invoke, listen } from "../host"
 import { createStore } from "../store"
 import type { RosterController } from "../bots/roster-controller"
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
+import { hostingTransport } from "../host/hosting-transport"
 import type { JoinedHostState } from "../host/joined-hosts"
 import { createQueryTestWrapper } from "../query/query-test-wrapper"
 
 vi.mock("../host", async (importOriginal) => ({
 	...(await importOriginal<typeof import("../host")>()),
 	isDesktopHost: () => true,
+	invoke: vi.fn(),
 	listen: vi.fn(async () => () => undefined),
+}))
+
+vi.mock("../host/hosting-transport", async (importOriginal) => ({
+	...(await importOriginal<typeof import("../host/hosting-transport")>()),
+	hostingTransport: { read: vi.fn() },
 }))
 
 beforeEach(() => {
@@ -349,4 +362,104 @@ it("hears the descriptions of joined spaces once while mounted, across renders, 
 			.mocked(listen)
 			.mock.calls.filter(([event]) => event === SPACE_DESCRIBED_EVENT),
 	).toHaveLength(1)
+})
+
+const HOSTED_HOME: Space = {
+	id: "home",
+	name: "Home",
+	colour: 210,
+	position: 0,
+	createdAt: 0,
+	shared: false,
+	instanceId: null,
+}
+
+const HOME_WITH_A_MEMBER: SpaceMembers = {
+	members: [
+		{
+			userId: "steve",
+			name: "Steve",
+			email: "steve@example.com",
+			status: "host",
+		},
+		{ userId: "sam", name: null, email: "sam@example.com", status: "pending" },
+	],
+	invitations: [],
+}
+
+const NO_INVITATIONS = {
+	rows: [],
+	termsOf: () => undefined,
+	joinedIdOf: () => undefined,
+	accept: () => undefined,
+	decline: () => undefined,
+	sweepWithdrawn: () => undefined,
+}
+
+const hearHostingChanges = () => {
+	const announcements: (() => void)[] = []
+	const stopHearing = vi.fn()
+	vi.mocked(listen).mockImplementation(async (event, handler) => {
+		if (event !== HOSTING_CHANGED_EVENT) return () => undefined
+		announcements.push(() => handler({ event, id: 1, payload: null }, null))
+		return stopHearing
+	})
+	return {
+		announce: () =>
+			act(() => {
+				for (const announce of announcements) announce()
+			}),
+		stopHearing,
+		heardCount: () => announcements.length,
+	}
+}
+
+const renderHostedHome = () => {
+	vi.mocked(invoke).mockResolvedValue(HOME_WITH_A_MEMBER)
+	return renderHook(
+		() =>
+			useSwitcherSpaces(
+				{ spaces: [HOSTED_HOME], selectedSpaceId: HOSTED_HOME.id },
+				{
+					state: {
+						joinedSpaces: [],
+						hasFailedToLoad: false,
+						openId: null,
+						departed: null,
+					},
+					controller: {} as JoinedSpacesController,
+					hosts: { active: null, connections: {} },
+				},
+				NO_INVITATIONS,
+			),
+		{ wrapper: createQueryTestWrapper().wrapper },
+	)
+}
+
+const hostHomeAs = (kind: "online" | "off") =>
+	vi.mocked(hostingTransport.read).mockResolvedValue({ kind })
+
+it("flips a hosted Space with a member from up to down and back as its hosting changes", async () => {
+	const changes = hearHostingChanges()
+	hostHomeAs("online")
+	const { result, unmount } = renderHostedHome()
+	await waitFor(() =>
+		expect(result.current.hostBySpaceId[HOSTED_HOME.id]).toBe("up"),
+	)
+
+	hostHomeAs("off")
+	changes.announce()
+	await waitFor(() =>
+		expect(result.current.hostBySpaceId[HOSTED_HOME.id]).toBe("down"),
+	)
+
+	hostHomeAs("online")
+	changes.announce()
+	await waitFor(() =>
+		expect(result.current.hostBySpaceId[HOSTED_HOME.id]).toBe("up"),
+	)
+
+	expect(changes.heardCount()).toBe(1)
+	unmount()
+	await waitFor(() => expect(changes.stopHearing).toHaveBeenCalledOnce())
 })

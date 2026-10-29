@@ -6,7 +6,6 @@ import type { Space } from "@workspace/ui/components/space"
 import {
 	createJoinedSpacesController,
 	type DepartedSpace,
-	hostMarksOf,
 	isJoinedRowId,
 	type JoinedSpacesController,
 	type JoinedSpacesState,
@@ -20,6 +19,7 @@ import {
 	isHostOnline,
 	type OpenJoinedHost,
 } from "./open-joined-host"
+import { spaceHostMarksOf } from "./space-host-marks"
 import type { SpacesController, SpacesState } from "./spaces-controller"
 import type { Invitations } from "./use-invitations"
 
@@ -28,7 +28,7 @@ import { isDesktopHost, joinedHosts } from "../host"
 import { useController, useControllerState } from "../use-controller"
 import type { RosterController } from "../bots/roster-controller"
 import type { JoinedHostsState } from "../host/joined-hosts"
-import { sharedMarksOf } from "../host/shared-spaces-controller"
+import { useHostingStates } from "../host/use-hosting-states"
 import { useSharedSpaces } from "../host/use-shared-spaces"
 
 export type JoinedSpaces = {
@@ -74,6 +74,7 @@ export const useSwitcherSpaces = (
 	const { joinedSpaces, openId, departed } = state
 	const { connections } = hosts
 	const sharedBySpaceId = useSharedSpaces(spaces)
+	const hostingBySpaceId = useHostingStates(spaces.map((space) => space.id))
 	return useMemo(() => {
 		const switcherSpaces = switcherSpacesOf(spaces, joinedSpaces)
 		const openRowId = openRowIdOf(
@@ -85,10 +86,12 @@ export const useSwitcherSpaces = (
 			ownedSpaces: switcherSpaces.filter((space) => !isJoinedRowId(space.id)),
 			selectedSpaceId: openRowId,
 			selectedSpace: selectedSpaceOf(switcherSpaces, openRowId),
-			hostBySpaceId: {
-				...sharedMarksOf(sharedBySpaceId),
-				...hostMarksOf(joinedSpaces, connections),
-			},
+			hostBySpaceId: spaceHostMarksOf({
+				sharedBySpaceId,
+				hostingBySpaceId,
+				joinedSpaces,
+				connections,
+			}),
 			invitations: invitations.rows,
 			onAcceptInvitation: invitations.accept,
 			onDeclineInvitation: invitations.decline,
@@ -105,6 +108,7 @@ export const useSwitcherSpaces = (
 		departed,
 		connections,
 		sharedBySpaceId,
+		hostingBySpaceId,
 		invitations,
 	])
 }
