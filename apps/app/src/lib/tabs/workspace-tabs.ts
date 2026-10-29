@@ -156,7 +156,7 @@ const openWindowOn = (
 	href: string,
 	position: ScreenPosition | null = null,
 ): Promise<WindowOpening> =>
-	commands.windowOpen(href, position).then(
+	commands.windowOpen(href, position, null).then(
 		(opened) =>
 			opened.status === "ok"
 				? { isOpened: true }

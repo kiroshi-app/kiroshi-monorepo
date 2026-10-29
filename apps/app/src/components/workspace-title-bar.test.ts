@@ -348,6 +348,7 @@ describe("the title bar", () => {
 		expect(windowHost.windowOpen).toHaveBeenCalledExactlyOnceWith(
 			expect.any(String),
 			{ x: 640, y: 121 },
+			null,
 		)
 		expect(tabNames()).toEqual([settingsName])
 	})

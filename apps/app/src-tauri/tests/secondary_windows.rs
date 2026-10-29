@@ -278,6 +278,38 @@ fn a_cancelled_drag_reaches_every_window_and_ends_the_drag() {
 }
 
 #[test]
+fn a_second_drag_start_is_heard_as_the_cancel_of_the_first_then_its_own_start() {
+	let home = DataDirectory::new();
+	let app = home.launch();
+	let main = main_window(&app);
+	let first = opened_from(&app, &main, json!({ "href": TAB }));
+	call(&first, "window_tab_drag_start", json!({ "tab": {}, "spaceId": "s1" })).expect("started");
+	let heard = heard_by(&main);
+
+	assert_eq!(
+		call(&main, "window_tab_drag_start", json!({ "tab": { "href": "/" }, "spaceId": "s2" })),
+		Ok(Value::Null)
+	);
+
+	assert_eq!(
+		everything_in(&heard),
+		vec![
+			json!({ "kind": "cancelled", "originLabel": first.label() }),
+			json!({
+				"kind": "started",
+				"originLabel": MAIN,
+				"originSpaceId": "s2",
+				"tab": { "href": "/" }
+			}),
+		]
+	);
+	assert_eq!(
+		call(&first, "window_tab_drag_cancel", json!({})),
+		Err(json!({ "kind": "notTheOrigin" }))
+	);
+}
+
+#[test]
 fn a_move_drop_or_cancel_with_no_drag_in_progress_is_refused_and_announces_nothing() {
 	let home = DataDirectory::new();
 	let app = home.launch();

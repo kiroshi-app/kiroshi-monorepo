@@ -59,7 +59,10 @@ pub fn window_tab_drag_start<R: Runtime>(
 	space_id: String,
 ) -> Result<(), TabDragError> {
 	let origin_label = window.label().to_owned();
-	*drag_origin(window.app_handle()).held() = Some(origin_label.clone());
+	let superseded = drag_origin(window.app_handle()).held().replace(origin_label.clone());
+	if let Some(origin_label) = superseded {
+		broadcast(window.app_handle(), TabDrag::Cancelled { origin_label })?;
+	}
 	let started = TabDrag::Started { origin_label, origin_space_id: space_id, tab: tab.into() };
 	broadcast(window.app_handle(), started)
 }
