@@ -72,6 +72,7 @@ export const useTitleBarTabs = ({
 	)
 	const missionTitles = useMissionTitles(
 		missionIdsOf(tabViews.map((tab) => tab.href)),
+		view.spaceId,
 	)
 	const { activeId, canGoBack, canGoForward, hasClosedTab } = view
 

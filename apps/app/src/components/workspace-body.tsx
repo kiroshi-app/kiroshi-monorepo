@@ -43,6 +43,7 @@ type WorkspaceBodyProps = {
 	onboardingCreation?: OnboardingCreation
 	signIn: SignIn
 	spaceId: string | null
+	spaceRowId: string | null
 }
 
 const threadOf = ({
@@ -94,14 +95,15 @@ export function WorkspaceBody(props: WorkspaceBodyProps) {
 	const { missions } = props
 	const opened = useSyncExternalStore(missions.subscribe, missions.getState)
 	const rowId = props.conversation?.id ?? props.bot?.id ?? null
+	const { spaceRowId } = props
 
 	const openMission = useCallback(
 		(missionId: string, landing?: MissionLanding) => {
-			if (rowId) {
-				missions.open({ missionId, rowId, landing })
+			if (rowId && spaceRowId) {
+				missions.open({ missionId, rowId, spaceId: spaceRowId, landing })
 			}
 		},
-		[missions, rowId],
+		[missions, rowId, spaceRowId],
 	)
 	const { conversation, bot, onOpenThreadInNewTab } = props
 	const openMissionInNewTab = useCallback(

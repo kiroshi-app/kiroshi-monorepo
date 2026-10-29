@@ -104,7 +104,7 @@ describe("a row click while a mission is open", () => {
 			selectedBotId: null,
 			selectedConversationId: "c-1",
 		})
-		shown.openedMission.open({ missionId: "m-1", rowId: "c-1" })
+		shown.openedMission.open({ missionId: "m-1", rowId: "c-1", spaceId: "s-1" })
 
 		shown.actions().onSelectConversation("c-1")
 		shown.rerender()
@@ -118,7 +118,7 @@ describe("a row click while a mission is open", () => {
 			selectedBotId: "b-1",
 			selectedConversationId: null,
 		})
-		shown.openedMission.open({ missionId: "m-1", rowId: "b-1" })
+		shown.openedMission.open({ missionId: "m-1", rowId: "b-1", spaceId: "s-1" })
 
 		shown.actions().onSelectBot("b-1")
 		shown.rerender()
@@ -132,7 +132,7 @@ describe("a row click while a mission is open", () => {
 			selectedBotId: "b-1",
 			selectedConversationId: null,
 		})
-		shown.openedMission.open({ missionId: "m-1", rowId: "b-1" })
+		shown.openedMission.open({ missionId: "m-1", rowId: "b-1", spaceId: "s-1" })
 
 		shown.actions().onSelectConversation("c-2")
 
@@ -169,7 +169,7 @@ describe("the roster row", () => {
 const newTabFor = (selected: SelectedRow) => {
 	const roster = createStore(selected)
 	const openedMission = createOpenedMissionController(roster)
-	openedMission.open({ missionId: "m-1", rowId: "b-1" })
+	openedMission.open({ missionId: "m-1", rowId: "b-1", spaceId: "s-1" })
 	const rows = {
 		getState: roster.getState,
 		select: vi.fn(),

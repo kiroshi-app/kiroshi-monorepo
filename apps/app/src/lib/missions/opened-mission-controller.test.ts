@@ -12,7 +12,7 @@ const selectedBot = (selectedBotId: string): SelectedRow => ({
 	selectedConversationId: null,
 })
 
-const MISSION = { missionId: "m-1", rowId: "b-1" }
+const MISSION = { missionId: "m-1", rowId: "b-1", spaceId: "s-1" }
 
 it("leaves the mission once the selected row moves away from the one it was opened from", () => {
 	const roster = createStore(selectedBot("b-1"))

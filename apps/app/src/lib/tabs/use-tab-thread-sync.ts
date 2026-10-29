@@ -12,6 +12,7 @@ import type {
 	SelectedRow,
 } from "../missions/opened-mission-controller"
 import type { ThreadSearch } from "../navigation/thread-search"
+import { hostOfSpaceRow } from "../spaces/joined-spaces-controller"
 
 export type TabThreadSync = {
 	tabs: WorkspaceTabs
@@ -127,9 +128,11 @@ export const useTabThreadSync = ({
 			return
 		}
 		const present = presentRowIdsIn(roster)
+		const hostOfReadySpace = hostOfSpaceRow(readySpaceId)
 		void tabs.dropAbsentRestored(readySpaceId, {
 			isRowPresent: (id) => present.has(id),
-			readMission: missionsTransport.detail,
+			readMission: (missionId) =>
+				missionsTransport.detailOn(hostOfReadySpace, missionId),
 		})
 		if (history.location.href !== shownHref) {
 			return

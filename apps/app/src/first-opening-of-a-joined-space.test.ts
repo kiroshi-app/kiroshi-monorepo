@@ -405,3 +405,192 @@ it.each(["unknown", "known"] as const)(
 	},
 	60_000,
 )
+
+const ATTIC_URL = "http://192.168.1.21:45367"
+
+const ATTIC_MISSION = "attic-mission"
+
+const GARAGE_MISSION = "garage-mission"
+
+const hostSharingAttic = async () => {
+	const store = createFakeTranscriptStore()
+	for (const filler of ["Loft", "Cellar", "Porch"]) {
+		const space = await store.createSpace(filler)
+		const bot = await store.createBot(newBotIdentity([]), space.id)
+		await store.mainChat(bot.id, space.id)
+	}
+	const shared = await store.createSpace("Attic")
+	const bot = await store.createBot(newBotIdentity([]), shared.id)
+	return { store, shared, bot }
+}
+
+type SharedHost = Awaited<ReturnType<typeof hostSharingGarage>>
+
+const missionDetailOn = async (
+	{ store, shared, bot }: SharedHost,
+	id: string,
+	title: string,
+) => {
+	const chat = await store.mainChat(bot.id, shared.id)
+	return {
+		mission: {
+			id,
+			originConversationId: chat.id,
+			spaceId: shared.id,
+			botId: bot.id,
+			threadConversationId: chat.id,
+			objective: title,
+			ticket: {
+				platform: "linear",
+				externalId: "OPE-1577",
+				url: "https://example.com/OPE-1577",
+				title,
+			},
+			tools: [],
+			state: "working",
+			stateSeq: 1,
+			isAgentRunning: false,
+			openedAt: 1,
+			closedAt: null,
+			reportedAt: null,
+			reportedTurnId: null,
+			status: null,
+			lastActivityAt: null,
+			lastActivity: null,
+			commitsAhead: null,
+			dirtyFiles: null,
+			pullRequestUrl: null,
+			branch: null,
+			workspacePath: null,
+		},
+		events: [],
+	}
+}
+
+const missionTabOf = (botId: string, missionId: string) =>
+	JSON.stringify({
+		tabs: [{ href: `/?bot=${botId}&mission=${missionId}`, isPinned: false }],
+		activeIndex: 0,
+	})
+
+const answerOnlyItsOwn = async (
+	host: SharedHost,
+	missionId: string,
+	title: string,
+): Promise<Answer> => {
+	const detail = await missionDetailOn(host, missionId, title)
+	const answer = storeAnswer(host.store, { mission_detail: detail })
+	return async (call) => {
+		const named = call.args.missionId
+		if (named !== undefined && named !== missionId) {
+			throw new Response(OTHER_SPACE_REFUSAL, { status: 403 })
+		}
+		return answer(call)
+	}
+}
+
+const switchFromAtticToGarage = async () => {
+	const mac = await macWithLocalSpace()
+	const attic = await hostSharingAttic()
+	const garage = await hostSharingGarage()
+	const joinedAttic = {
+		id: "attic",
+		hostUrl: ATTIC_URL,
+		remoteSpaceId: attic.shared.id,
+		name: "Attic",
+	}
+	const joinedGarage = {
+		id: "garage",
+		hostUrl: HOST_URL,
+		remoteSpaceId: garage.shared.id,
+		name: "Garage",
+	}
+	const answerOnMac = storeAnswer(mac.store, {
+		joined_spaces_list: [joinedAttic, joinedGarage],
+		user_preferences: preferencesFor("joined:attic", {
+			[mac.space.id]: mac.bot.id,
+			"joined:attic": attic.bot.id,
+			"joined:garage": garage.bot.id,
+		}),
+		account_state: { kind: "signedOut" },
+		conversation_local_ids: [],
+		hosting_state: { kind: "stopped" },
+	})
+	wire.answerHere = async (call) =>
+		call.command === "joined_space_connect"
+			? {
+					...(call.args.id === "attic" ? joinedAttic : joinedGarage),
+					token: "guest",
+				}
+			: answerOnMac(call)
+	const answerOn: Record<string, Answer> = {
+		[ATTIC_URL]: await answerOnlyItsOwn(attic, ATTIC_MISSION, "Attic mission"),
+		[HOST_URL]: await answerOnlyItsOwn(
+			garage,
+			GARAGE_MISSION,
+			"Garage mission",
+		),
+	}
+	const relayedTo: Record<string, Call[]> = { [ATTIC_URL]: [], [HOST_URL]: [] }
+	vi.stubGlobal("WebSocket", OpeningSocket)
+	vi.stubGlobal("fetch", async (url: URL, init?: RequestInit) => {
+		const { origin } = new URL(String(url))
+		const call = {
+			command: decodeURIComponent(String(url).split("/").at(-1) ?? ""),
+			args: JSON.parse(String(init?.body ?? "{}")) as Fields,
+		}
+		relayedTo[origin]?.push(call)
+		try {
+			return new Response(JSON.stringify(await answerOn[origin]?.(call)), {
+				headers: { "content-type": "application/json" },
+			})
+		} catch (refusal) {
+			return refusal as Response
+		}
+	})
+	window.localStorage.setItem("lastSpaceId", "joined:attic")
+	window.localStorage.setItem("firstRunDone", "on")
+	window.localStorage.setItem(
+		"spaceTabs:joined:attic",
+		missionTabOf(attic.bot.id, ATTIC_MISSION),
+	)
+	window.localStorage.setItem(
+		"spaceTabs:joined:garage",
+		missionTabOf(garage.bot.id, GARAGE_MISSION),
+	)
+	Object.assign(window, { __TAURI_INTERNALS__: {} })
+	const { App } = await import("@/App")
+	render(createElement(App), { wrapper: createQueryTestWrapper().wrapper })
+	await screen.findByRole("tab", { name: /Attic mission/ }, { timeout: 10_000 })
+	await screen.findByRole(
+		"heading",
+		{ name: /Attic mission/ },
+		{ timeout: 10_000 },
+	)
+	await act(async () => {
+		;(await screen.findByRole("button", { name: /Garage/ })).click()
+	})
+	return relayedTo[HOST_URL] ?? []
+}
+
+it("switches from one joined Space to another without asking the new host for the missions of the first", async () => {
+	const relayedToGarage = await switchFromAtticToGarage()
+
+	await screen.findByRole(
+		"tab",
+		{ name: /Garage mission/ },
+		{ timeout: 10_000 },
+	)
+	await screen.findByRole(
+		"heading",
+		{ name: /Garage mission/ },
+		{ timeout: 10_000 },
+	)
+	await act(() => new Promise((resolve) => setTimeout(resolve, 50)))
+	expect(screen.queryByRole("tab", { name: /Attic mission/ })).toBeNull()
+	expect(
+		relayedToGarage.filter(({ args }) => args.missionId === ATTIC_MISSION),
+	).toEqual([])
+	expect(wire.refusalNotices).toEqual([])
+	expect(wire.raisedNotices).toEqual([])
+}, 60_000)

@@ -57,10 +57,10 @@ const missionCallsOn = ({ invoke, listen }: MissionHost) => ({
 
 const missionCallsOfTheActiveHost = missionCallsOn({ invoke, listen })
 
-const readMissionOfEvent = createMissionEventRead({
-	detailOn: (hostId, missionId) =>
-		invokeOn(hostId)<MissionDetail>("mission_detail", { missionId }),
-})
+const readDetailOn = (hostId: string | null, missionId: string) =>
+	invokeOn(hostId)<MissionDetail>("mission_detail", { missionId })
+
+const readMissionOfEvent = createMissionEventRead({ detailOn: readDetailOn })
 
 const readBoardOfThisMac = () =>
 	activeJoinedSpaceId() === null
@@ -71,6 +71,7 @@ export const missionsTransport = {
 	...missionCallsOfTheActiveHost,
 	board: readBoardOfThisMac,
 	read: readMissionOfEvent,
+	detailOn: readDetailOn,
 	spaceFeed: (spaceId: string, closedSince: number) =>
 		invoke<MissionInSpace[]>("mission_space_feed", { spaceId, closedSince }),
 	spacePage: (

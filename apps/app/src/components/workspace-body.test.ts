@@ -90,7 +90,7 @@ vi.mock("@/lib/routines/trigger-sources-transport", () => ({
 vi.mock("@/lib/missions/missions-transport", () => ({
 	missionsTransport: {
 		list: vi.fn(),
-		detail: vi.fn(),
+		detailOn: vi.fn(),
 		close: vi.fn(),
 		reopen: vi.fn(),
 		onChanged: vi.fn(),
@@ -101,7 +101,7 @@ const listRoutines = vi.mocked(routinesTransport.list)
 const listRuns = vi.mocked(routinesTransport.runsOfSpace)
 const listSources = vi.mocked(triggerSourcesTransport.sourcesOfSpace)
 const listMissions = vi.mocked(missionsTransport.list)
-const readMission = vi.mocked(missionsTransport.detail)
+const readMission = vi.mocked(missionsTransport.detailOn)
 const listenToMissions = vi.mocked(missionsTransport.onChanged)
 const closeMission = vi.mocked(missionsTransport.close)
 const reopenMission = vi.mocked(missionsTransport.reopen)
@@ -284,6 +284,7 @@ const workspaceOf = async (store = createFakeTranscriptStore()) => {
 			readerName: "Reader",
 			signIn: { state: signIn.getState(), controller: signIn },
 			spaceId: SPACE,
+			spaceRowId: SPACE,
 		}
 	}
 
@@ -414,7 +415,7 @@ describe("WorkspaceBody missions", () => {
 
 		await openMission()
 
-		expect(readMission).toHaveBeenCalledWith("m-1")
+		expect(readMission).toHaveBeenCalledWith(null, "m-1")
 		expect(missionHeader()?.textContent).toContain("OPE-42")
 		expect(missionHeader()?.textContent).toContain("Blocked on you")
 	})
@@ -886,7 +887,7 @@ describe("WorkspaceBody mission menu", () => {
 
 		await choose(panelCardIn("Waiting on you"), OPEN_ENTRY)
 
-		expect(readMission).toHaveBeenCalledWith("m-1")
+		expect(readMission).toHaveBeenCalledWith(null, "m-1")
 		expect(missionHeader()?.textContent).toContain("OPE-42")
 	})
 

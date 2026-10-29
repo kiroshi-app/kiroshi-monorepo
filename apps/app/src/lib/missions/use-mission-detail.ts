@@ -9,8 +9,12 @@ import { missionQueryKeys } from "./mission-query-keys"
 import { toMissionEventModels } from "./missions-model"
 import { missionsTransport } from "./missions-transport"
 
-import { useReachableHost } from "@/lib/host/use-reachable-host"
+import {
+	joinedHostIdOf,
+	useReachableHostOf,
+} from "@/lib/host/use-reachable-host"
 import { hasLastReadFailed, isFirstReadPending } from "@/lib/query/last-read"
+import { hostOfSpaceRow } from "@/lib/spaces/joined-spaces-controller"
 
 export type MissionRead = {
 	mission: Mission
@@ -26,8 +30,14 @@ export type MissionDetailRead = {
 	onRetry: () => void
 }
 
-export const readMission = async (missionId: string): Promise<MissionRead> => {
-	const detail = await missionsTransport.detail(missionId)
+export const readMission = async (
+	host: string,
+	missionId: string,
+): Promise<MissionRead> => {
+	const detail = await missionsTransport.detailOn(
+		joinedHostIdOf(host),
+		missionId,
+	)
 	return {
 		mission: detail.mission,
 		events: toMissionEventModels(detail.events),
@@ -35,15 +45,20 @@ export const readMission = async (missionId: string): Promise<MissionRead> => {
 	}
 }
 
-export const useMissionDetail = (missionId: string): MissionDetailRead => {
-	const host = useReachableHost()
-	const canRead = host !== null
+export const useMissionHost = (spaceRowId: string): string | null =>
+	useReachableHostOf(hostOfSpaceRow(spaceRowId))
+
+export const useMissionDetail = (
+	missionId: string,
+	spaceRowId: string,
+): MissionDetailRead => {
+	const host = useMissionHost(spaceRowId)
 	const [isRetrying, setRetrying] = useState(false)
 	useMissionChanges()
 
 	const detail = useQuery({
 		queryKey: missionQueryKeys.detail(missionId, host),
-		queryFn: canRead ? () => readMission(missionId) : skipToken,
+		queryFn: host === null ? skipToken : () => readMission(host, missionId),
 		meta: { rendersErrorInline: true },
 	})
 	const { data, isPending, refetch } = detail
@@ -53,12 +68,12 @@ export const useMissionDetail = (missionId: string): MissionDetailRead => {
 	const isFirstPending = isFirstReadPending(detail)
 
 	const onRetry = useCallback(() => {
-		if (!canRead) {
+		if (host === null) {
 			return
 		}
 		setRetrying(true)
 		void refetch().then(() => setRetrying(false))
-	}, [canRead, refetch])
+	}, [host, refetch])
 
 	return useMemo(
 		() => ({

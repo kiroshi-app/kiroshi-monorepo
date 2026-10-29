@@ -140,7 +140,7 @@ const mountSwitch = async ({
 		const { spaceRowId } = roster.getState()
 		const missionId =
 			shownMemory.lastMissionIn(spaceRowId) ?? `first-of-${spaceRowId}`
-		openedMission.open({ missionId, rowId: MISSION_ROW })
+		openedMission.open({ missionId, rowId: MISSION_ROW, spaceId: "s-1" })
 		roster.select(MISSION_ROW)
 	})
 	const mounted = renderHook(
@@ -211,7 +211,13 @@ describe("switching to the Missions tab", () => {
 
 	it("reopens the last mission shown after a round trip through Conversations", async () => {
 		const shown = await mountSwitch()
-		act(() => shown.openedMission.open({ missionId: "m-7", rowId: "c-1" }))
+		act(() =>
+			shown.openedMission.open({
+				missionId: "m-7",
+				rowId: "c-1",
+				spaceId: "s-1",
+			}),
+		)
 		shown.switchTo("conversations")
 
 		shown.switchTo("missions")
@@ -424,7 +430,11 @@ describe("switching to the Conversations tab", () => {
 			}),
 		)
 		act(() =>
-			shown.openedMission.open({ missionId: "m-7", rowId: MISSION_ROW }),
+			shown.openedMission.open({
+				missionId: "m-7",
+				rowId: MISSION_ROW,
+				spaceId: "s-1",
+			}),
 		)
 
 		shown.switchTo("conversations")
@@ -455,7 +465,13 @@ describe("a mission opened from a thread card", () => {
 	it("keeps the tab and the selection", async () => {
 		const shown = await mountSwitch()
 
-		act(() => shown.openedMission.open({ missionId: "m-7", rowId: "c-1" }))
+		act(() =>
+			shown.openedMission.open({
+				missionId: "m-7",
+				rowId: "c-1",
+				spaceId: "s-1",
+			}),
+		)
 
 		expect(shown.result.current.sidebarTab.openTab).toBe("conversations")
 		expect(shown.selectedRow()).toBe("c-1")
@@ -505,7 +521,11 @@ const mountTabbedSwitch = async () => {
 	const openedMission = createOpenedMissionController(roster)
 	const shownMemory = createShownMemory({ roster, openedMission })
 	const showLastMission = vi.fn(() => {
-		openedMission.open({ missionId: "m-last", rowId: MISSION_ROW })
+		openedMission.open({
+			missionId: "m-last",
+			rowId: MISSION_ROW,
+			spaceId: "s-1",
+		})
 		roster.select(MISSION_ROW)
 	})
 	const mounted = renderHook(() => {

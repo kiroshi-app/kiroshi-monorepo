@@ -142,6 +142,7 @@ export function MissionThreadScreen({
 }: MissionThreadScreenProps) {
 	const { read, isPending, hasFailedToRead, onRetry } = useMissionDetail(
 		opening.missionId,
+		opening.spaceId,
 	)
 	const detailSkeleton = useSkeletonSlot(isPending, MISSION_DETAIL_SKELETON)
 

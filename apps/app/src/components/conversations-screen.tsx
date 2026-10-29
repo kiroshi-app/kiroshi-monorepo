@@ -75,6 +75,7 @@ export const ConversationsScreen = () => {
 				readerName={preferences.displayName}
 				signIn={drivers.signIn}
 				spaceId={rosteredHostSpaceId}
+				spaceRowId={rosterView.rosteredSpaceId}
 			/>
 		</WorkspaceShell>
 	)

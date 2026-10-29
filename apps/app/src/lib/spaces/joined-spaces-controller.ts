@@ -162,6 +162,9 @@ const rowIdOf = (joined: JoinedSpace): string => joinedRowIdOf(joined.id)
 export const isJoinedRowId = (rowId: string): boolean =>
 	rowId.startsWith(JOINED_ROW_PREFIX)
 
+export const hostOfSpaceRow = (rowId: string): string | null =>
+	isJoinedRowId(rowId) ? rowId.slice(JOINED_ROW_PREFIX.length) : null
+
 const hostOfflineBodyKeyOf = (reason: JoinedSpaceWaitReason | undefined) =>
 	reason
 		? (`chat:spaceAccessBanner.offline.reasons.${reason}` as const)
