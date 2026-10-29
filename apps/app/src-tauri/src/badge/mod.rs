@@ -32,7 +32,18 @@ pub fn wear<R: Runtime>(app: &AppHandle<R>, count: u32) -> Result<(), String> {
 }
 
 #[cfg(target_os = "windows")]
-pub fn wear_on_opening<R: Runtime>(window: &WebviewWindow<R>) {
+pub fn wear_whenever_shown<R: Runtime>(window: &WebviewWindow<R>) {
+	wear_stored(window);
+	let subject = window.clone();
+	window.on_window_event(move |event| {
+		if matches!(event, tauri::WindowEvent::Focused(true)) {
+			wear_stored(&subject);
+		}
+	});
+}
+
+#[cfg(target_os = "windows")]
+fn wear_stored<R: Runtime>(window: &WebviewWindow<R>) {
 	let Some(badge) = window.try_state::<Badge>() else {
 		return;
 	};
