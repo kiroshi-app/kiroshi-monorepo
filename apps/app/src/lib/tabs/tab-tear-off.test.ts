@@ -137,6 +137,45 @@ describe("a torn-off tab brought back or let go with Esc", () => {
 	})
 })
 
+const deferredAnswer = () => {
+	let land: () => void = () => undefined
+	const answering = new Promise((resolve) => {
+		land = () => resolve(SUPPORTED)
+	})
+	return { answering, land }
+}
+
+describe("a tab torn off, brought back and torn off again in one drag", () => {
+	it("shows the ghost for the second tear-off only once the first hide has landed", async () => {
+		answerEveryGhostCommand(SUPPORTED)
+		const firstMove = deferredAnswer()
+		const firstHide = deferredAnswer()
+		ghost.dragGhostMove.mockReturnValueOnce(firstMove.answering)
+		ghost.dragGhostHide.mockReturnValueOnce(firstHide.answering)
+		const { session } = sessionWithMoves()
+
+		session.start(at(10, 10), drawGhost)
+		session.move(at(20, 20))
+		await vi.waitFor(() => expect(ghost.dragGhostMove).toHaveBeenCalledOnce())
+		session.cancel()
+		session.start(at(30, 30), drawGhost)
+		session.move(at(40, 40))
+		firstMove.land()
+		await vi.waitFor(() => expect(ghost.dragGhostHide).toHaveBeenCalledOnce())
+
+		expect(ghost.dragGhostShow).toHaveBeenCalledOnce()
+		firstHide.land()
+		await vi.waitFor(() =>
+			expect(ghost.dragGhostMove).toHaveBeenLastCalledWith({ x: 40, y: 40 }),
+		)
+		expect(ghost.dragGhostShow).toHaveBeenCalledTimes(2)
+		expect(ghost.dragGhostHide).toHaveBeenCalledOnce()
+		expect(ghost.dragGhostShow.mock.invocationCallOrder[1]).toBeGreaterThan(
+			ghost.dragGhostHide.mock.invocationCallOrder[0] ?? 0,
+		)
+	})
+})
+
 describe("a torn-off tab released outside any strip", () => {
 	it("hides the ghost, then opens the window at the drop point with the origin window size", async () => {
 		answerEveryGhostCommand(SUPPORTED)

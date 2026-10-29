@@ -80,6 +80,7 @@ export const createTabTearOff = ({
 	moveTornOff,
 }: TearOffMoves): TabTearOffSession => {
 	let drag: TornOffDrag | null = null
+	let isGhostSettled: Promise<unknown> = Promise.resolve()
 
 	const endDrag = () => {
 		const ended = drag
@@ -87,20 +88,23 @@ export const createTabTearOff = ({
 		return ended
 	}
 
-	const dropTornOff = async (ended: TornOffDrag, tearOff: TabTearOff) => {
-		if (!(await ended.isGhosted)) {
-			moveUnghosted(tearOff)
-			return
-		}
-		await hideGhost()
-		await moveTornOff(tearOff, originWindowSize())
+	const settleGhost = (
+		ended: TornOffDrag,
+		afterHiding: (wasShown: boolean) => void,
+	) => {
+		isGhostSettled = ended.isGhosted.then(async (isShown) => {
+			if (isShown) {
+				await hideGhost()
+			}
+			afterHiding(isShown)
+		})
 	}
 
 	return {
 		start: (tearOff, drawGhost) => {
 			drag = {
 				tabId: tearOff.tabId,
-				isGhosted: showGhost(tearOff, drawGhost),
+				isGhosted: isGhostSettled.then(() => showGhost(tearOff, drawGhost)),
 			}
 		},
 		move: (tearOff) => {
@@ -114,16 +118,22 @@ export const createTabTearOff = ({
 		cancel: () => {
 			const ended = endDrag()
 			if (ended) {
-				void ended.isGhosted.then((isShown) => isShown && hideGhost())
+				settleGhost(ended, () => undefined)
 			}
 		},
 		drop: (tearOff) => {
 			const ended = endDrag()
-			if (ended?.tabId === tearOff.tabId) {
-				void dropTornOff(ended, tearOff)
-			} else {
+			if (ended?.tabId !== tearOff.tabId) {
 				moveUnghosted(tearOff)
+				return true
 			}
+			settleGhost(ended, (wasShown) => {
+				if (wasShown) {
+					void moveTornOff(tearOff, originWindowSize())
+				} else {
+					moveUnghosted(tearOff)
+				}
+			})
 			return true
 		},
 	}
