@@ -1221,11 +1221,11 @@ export const createConversationController = (
 		const fromSeats = botIds.map((botId) => nameSeatedIn(seated, botId))
 		const roster = fromSeats.includes(null)
 			? await rosterNamesIn(seated.spaceId)
-			: null
+			: new Map<string, string>()
 		return botIds.map(
 			(botId, index) =>
 				fromSeats[index] ??
-				roster?.get(botId) ??
+				roster.get(botId) ??
 				i18n.t("chat:transcript.mention.unknown"),
 		)
 	}
