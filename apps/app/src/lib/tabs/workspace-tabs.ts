@@ -496,9 +496,10 @@ export const createWorkspaceTabs = (
 	const removeMoved = (spaceId: string, id: string) => {
 		if (!isMainWindow && isOnlyTab(store.getState().bySpace[spaceId], id)) {
 			closeThisWindow()
-			return
+			return true
 		}
 		changeIn(spaceId, (space) => closeTab(space, id))
+		return false
 	}
 
 	const moveToWindowBy = async (
