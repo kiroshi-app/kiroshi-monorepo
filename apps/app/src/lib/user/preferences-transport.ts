@@ -16,4 +16,7 @@ export const userPreferencesStore = {
 		invoke<UserPreferences>("user_set_onboarding_step", { step }),
 
 	replayOnboarding: () => invoke<UserPreferences>("user_replay_onboarding"),
+
+	setOnboardingFirstCompanion: (botId: string) =>
+		invoke<UserPreferences>("user_set_onboarding_first_companion", { botId }),
 }

@@ -11,6 +11,7 @@ import {
 	writeMirror,
 } from "./preferences-mirror"
 import {
+	changeOnboardingFirstCompanion,
 	changeOnboardingStep,
 	changePreferences,
 	changeProfilePicture,
@@ -59,6 +60,7 @@ export type UserController = {
 	markFirstRunDone: () => Promise<void>
 	setOnboardingStep: (step: OnboardingStep) => Promise<void>
 	replayOnboarding: () => Promise<void>
+	setOnboardingFirstCompanion: (botId: string) => Promise<void>
 	setLastBot: (opened: LastBotOpened) => Promise<void>
 	setLastSpace: (lastSpaceId: string) => Promise<void>
 	setUpdateChannel: (updateChannel: UpdateChannel) => Promise<void>
@@ -252,6 +254,9 @@ export const createUserController = (): UserController => {
 			changeOnboarding(step, () => changeOnboardingStep(step)),
 
 		replayOnboarding: () => changeOnboarding("welcome", replayOnboarding),
+
+		setOnboardingFirstCompanion: (botId: string) =>
+			changeOnboardingFirstCompanion(botId).then(apply),
 
 		setLastBot: (opened: LastBotOpened) =>
 			changeMirrored({ lastBotIdBySpace: botIdBySpaceWith(opened) }),

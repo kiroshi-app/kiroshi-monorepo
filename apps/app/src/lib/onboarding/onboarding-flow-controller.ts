@@ -39,7 +39,10 @@ export type OnboardingFlowWorld = {
 	storeStep: (step: OnboardingStep) => Promise<void>
 	replay: () => Promise<void>
 	markFirstRunDone: () => Promise<void>
-	homeBotId: () => string | null
+	shotoId: () => string | null
+	firstCompanionId: () => string | null
+	storeFirstCompanion: (botId: string) => Promise<void>
+	botNameOf: (botId: string) => string | null
 	openConversation: (botId: string) => Promise<void>
 	sendTo: (botId: string, text: string) => Promise<void>
 	hasSummoned: (botId: string, summons: string) => boolean
@@ -125,6 +128,14 @@ export const createOnboardingFlowController = (
 
 	const store = (step: OnboardingStep) => persisted(() => world.storeStep(step))
 
+	let firstCompanionStored = Promise.resolve()
+
+	const claimFirstCompanion = async (botId: string) => {
+		if (world.firstCompanionId() === null) {
+			await persisted(() => world.storeFirstCompanion(botId))
+		}
+	}
+
 	const summonOnce = async (shotoId: string, summons: string) => {
 		if (!world.hasSummoned(shotoId, summons)) {
 			await world.sendTo(shotoId, summons)
@@ -151,11 +162,13 @@ export const createOnboardingFlowController = (
 			await store("import")
 			return
 		}
-		const shotoId = world.homeBotId()
+		const shotoId = world.shotoId()
 		set({ isWithShoto: true, shotoId })
-		if (shotoId) {
-			void meetShoto(shotoId)
+		if (!shotoId) {
+			reportUnsent({ kind: "unknownBot" })
+			return
 		}
+		void meetShoto(shotoId)
 	}
 
 	const showConnection = (connection: ConnectionStep) => {
@@ -176,19 +189,25 @@ export const createOnboardingFlowController = (
 		await readAccount()
 	}
 
+	const reportArrivalFailure = (companionId: string, reason: unknown) => {
+		const name = world.botNameOf(companionId)
+		if (!name) {
+			reportUnsent(reason)
+			return
+		}
+		report(i18n.t("chat:onboarding.arrival.failure", { name }), reason)
+	}
+
 	const land = async () => {
-		const companion = current().firstCompanion
-		if (!companion) {
+		const companionId = world.firstCompanionId()
+		if (!companionId) {
 			return
 		}
 		try {
-			await world.openConversation(companion.id)
-			await world.sendTo(companion.id, onboardingSummonsFor("arrival"))
+			await world.openConversation(companionId)
+			await summonOnce(companionId, onboardingSummonsFor("arrival"))
 		} catch (reason) {
-			report(
-				i18n.t("chat:onboarding.arrival.failure", { name: companion.name }),
-				reason,
-			)
+			reportArrivalFailure(companionId, reason)
 		}
 	}
 
@@ -232,9 +251,13 @@ export const createOnboardingFlowController = (
 		downloadAgain: () => port.openDownloadPage().catch(reportUnsent),
 
 		noteCreated: (created) => {
-			if (current().isWithShoto) {
-				set({ firstCompanion: created })
+			if (!current().isWithShoto) {
+				return
 			}
+			set({ firstCompanion: created })
+			firstCompanionStored = firstCompanionStored.then(() =>
+				claimFirstCompanion(created.id),
+			)
 		},
 
 		noteFirstRunDone: async () => {
@@ -242,6 +265,7 @@ export const createOnboardingFlowController = (
 				return
 			}
 			set({ isWithShoto: false, isAtAccount: true })
+			await firstCompanionStored
 			if (!(await store("account"))) {
 				set({ isWithShoto: true, isAtAccount: false })
 			}
@@ -282,7 +306,12 @@ export const onboardingFlowWorldOf = ({
 	storeStep: user.setOnboardingStep,
 	replay: user.replayOnboarding,
 	markFirstRunDone: user.markFirstRunDone,
-	homeBotId: () => roster.getState().selectedBotId,
+	shotoId: () => user.getState().preferences.onboardingShotoId ?? null,
+	firstCompanionId: () =>
+		user.getState().preferences.onboardingFirstCompanionId ?? null,
+	storeFirstCompanion: user.setOnboardingFirstCompanion,
+	botNameOf: (botId) =>
+		roster.getState().bots.find((bot) => bot.id === botId)?.name ?? null,
 	openConversation: async (botId) => {
 		const { spaceRowId } = roster.getState()
 		await chat.openAside(botId, spaceRowId && roster.hostSpaceIdOf(spaceRowId))

@@ -56,6 +56,12 @@ const aHost = (record: UserPreferences = DEFAULTS) => {
 		if (command === "user_replay_onboarding") {
 			held = { ...held, onboardingStep: "welcome" }
 		}
+		if (command === "user_set_onboarding_first_companion") {
+			held = {
+				...held,
+				onboardingFirstCompanionId: (args as { botId: string }).botId,
+			}
+		}
 		return Promise.resolve(held)
 	})
 
@@ -503,6 +509,18 @@ describe("the onboarding step the reader reaches", () => {
 		)
 		expect(host().onboardingStep).toBe("welcome")
 		expect(controller.getState().preferences.onboardingStep).toBe("welcome")
+	})
+
+	it("stores the first companion on the host and shows it", async () => {
+		const host = aHost()
+		const controller = await loaded()
+
+		await controller.setOnboardingFirstCompanion("bot-scout")
+
+		expect(host().onboardingFirstCompanionId).toBe("bot-scout")
+		expect(controller.getState().preferences.onboardingFirstCompanionId).toBe(
+			"bot-scout",
+		)
 	})
 })
 
