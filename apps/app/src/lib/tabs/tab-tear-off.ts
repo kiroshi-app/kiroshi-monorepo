@@ -345,6 +345,23 @@ const followedWindow = async (
 	return windowOver(move, view, site.target)
 }
 
+const windowDockSite = async (move: WindowMove, view: WindowView) => {
+	if (move.hasFailed || view.target !== "sameSpace") {
+		return null
+	}
+	const point = await pointerNow()
+	const site = point && (await dockSiteAt(point, move.spaceId))
+	return point && site?.target === "sameSpace" && site.label !== null
+		? { point, label: site.label }
+		: null
+}
+
+const followWindow = (move: WindowMove) => {
+	if (!move.isReleased) {
+		move.view = move.view.then((view) => followedWindow(move, view))
+	}
+}
+
 const movingNow = async (move: () => Promise<void>) => move()
 
 export const createTabTearOff = ({
@@ -434,33 +451,18 @@ export const createTabTearOff = ({
 		}
 	}
 
-	const windowDockSite = async (move: WindowMove, view: WindowView) => {
-		if (move.hasFailed || view.target !== "sameSpace") {
-			return null
-		}
-		const point = await pointerNow()
-		const site = point && (await dockSiteAt(point, move.spaceId))
-		return point && site?.target === "sameSpace" && site.label !== null
-			? { point, label: site.label }
-			: null
-	}
-
 	const releasedWindow = async (move: WindowMove, view: WindowView) => {
 		const site = await windowDockSite(move, view)
 		if (!site) {
 			await cancelAnnounced(move, view)
-		} else if (
-			(await dock(move, view, site.point, site.label)) &&
-			removeDocked(move.spaceId, move.tabId)
-		) {
+			await windowOver(move, view, "outside")
 			return
 		}
-		await windowOver(move, view, "outside")
-	}
-
-	const followWindow = (move: WindowMove) => {
-		if (!move.isReleased) {
-			move.view = move.view.then((view) => followedWindow(move, view))
+		const isWindowClosed =
+			(await dock(move, view, site.point, site.label)) &&
+			removeDocked(move.spaceId, move.tabId)
+		if (!isWindowClosed) {
+			await windowOver(move, view, "outside")
 		}
 	}
 
