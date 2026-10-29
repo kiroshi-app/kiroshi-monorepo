@@ -91,8 +91,21 @@ export const commands = {
 	windowOpen: (href: string, position: {
 	x: number,
 	y: number,
-} | null) => typedError<null, WindowOpenError>(__TAURI_INVOKE("window_open", { href, position })),
+} | null, originSpaceId: string | null) => typedError<null, WindowOpenError>(__TAURI_INVOKE("window_open", { href, position, originSpaceId })),
 	windowIdentity: () => __TAURI_INVOKE<WindowIdentity>("window_identity"),
+	windowReportSpace: (spaceId: string) => __TAURI_INVOKE<void>("window_report_space", { spaceId }),
+	windowReportStrip: (bounds: StripBounds) => __TAURI_INVOKE<void>("window_report_strip", { bounds }),
+	windowStripAt: (point: ScreenPosition) => __TAURI_INVOKE<{
+	label: string,
+	spaceId: string | null,
+} | null>("window_strip_at", { point }),
+	windowTabDragStart: (tab: Json, spaceId: string) => typedError<null, TabDragError>(__TAURI_INVOKE("window_tab_drag_start", { tab, spaceId })),
+	windowTabDragMove: (point: ScreenPosition) => typedError<null, TabDragError>(__TAURI_INVOKE("window_tab_drag_move", { point })),
+	windowTabDragDrop: (point: ScreenPosition) => typedError<null, TabDragError>(__TAURI_INVOKE("window_tab_drag_drop", { point })),
+	windowTabDragCancel: () => typedError<null, TabDragError>(__TAURI_INVOKE("window_tab_drag_cancel")),
+	windowStartNativeMove: () => typedError<null, NativeWindowError>(__TAURI_INVOKE("window_start_native_move")),
+	windowHide: () => typedError<null, NativeWindowError>(__TAURI_INVOKE("window_hide")),
+	windowShow: () => typedError<null, NativeWindowError>(__TAURI_INVOKE("window_show")),
 	conversationDuplicateBot: (botId: string, spaceId: string | null) => typedError<Bot, TranscriptStoreError>(__TAURI_INVOKE("conversation_duplicate_bot", { botId, spaceId })),
 	conversationUpdateBot: (id: string, identity: BotIdentity) => typedError<Bot, TranscriptStoreError>(__TAURI_INVOKE("conversation_update_bot", { id, identity })),
 	conversationDeleteBot: (id: string) => typedError<null, TranscriptStoreError>(__TAURI_INVOKE("conversation_delete_bot", { id })),
@@ -286,6 +299,8 @@ export const JOIN_LINK_OPENED_EVENT = "join-link://opened" as const;
 export const MAXIMIZE_BUTTON_EVENT = "window-maximize-button" as const;
 
 export const SPACE_DESCRIBED_EVENT = "space://described" as const;
+
+export const TAB_DRAG_EVENT = "window://tab-drag" as const;
 
 export const UPDATE_CHANGED_EVENT = "update://changed" as const;
 
@@ -1251,6 +1266,8 @@ export type MissionStatus = {
 	writtenAt: number,
 };
 
+export type NativeWindowError = { kind: "unavailable" };
+
 export type NewAssistantMessage = {
 	id: string,
 	conversationId: string,
@@ -1689,6 +1706,18 @@ export type SpacePreferences = {
 
 export type StorageFailure = { kind: "appDataDir" } | { kind: "journalMode"; mode: string } | { kind: "poisonedConnection" } | { kind: "callInterrupted" } | { kind: "staleWrite" } | { kind: "sqlite"; detail: string; operation?: string | null; table?: string | null; code?: string | null };
 
+export type StripBounds = {
+	x: number,
+	y: number,
+	width: number,
+	height: number,
+};
+
+export type StripTarget = {
+	label: string,
+	spaceId: string | null,
+};
+
 export type SubmittedAttachment = {
 	name: string,
 	bytes?: number[] | null,
@@ -1707,6 +1736,10 @@ export type SuggestedBot = {
 	description: string,
 	blurb: string,
 };
+
+export type TabDrag = { kind: "started"; originLabel: string; originSpaceId: string; tab: Json } | { kind: "moved"; originLabel: string; point: ScreenPosition } | { kind: "dropped"; originLabel: string; point: ScreenPosition } | { kind: "cancelled"; originLabel: string };
+
+export type TabDragError = { kind: "noDragInProgress" } | { kind: "notTheOrigin" } | { kind: "unavailable" };
 
 export type TerminalCompletion = "complete" | "cancelled" | "failed" | "interrupted";
 
@@ -1848,6 +1881,7 @@ export type WindowFrameError = { kind: "unsupported" } | { kind: "invalidBounds"
 export type WindowIdentity = {
 	label: string,
 	initialHref: string | null,
+	spaceId: string | null,
 };
 
 export type WindowOpenError = { kind: "notAnAppPage" } | { kind: "unavailable" };

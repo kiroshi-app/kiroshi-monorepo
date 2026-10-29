@@ -8,7 +8,7 @@ use tauri::{
 	WindowEvent,
 };
 
-use super::{built, main_config};
+use super::{built, is_app_window, main_config, tab_drag};
 use crate::db::DatabaseState;
 
 const SECONDARY_PREFIX: &str = "window-";
@@ -27,21 +27,92 @@ pub enum WindowOpenError {
 pub struct WindowIdentity {
 	pub label: String,
 	pub initial_href: Option<String>,
+	pub space_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, specta::Type)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ScreenPosition {
 	pub x: i32,
 	pub y: i32,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct StripBounds {
+	#[specta(type = u32)]
+	pub x: f64,
+	#[specta(type = u32)]
+	pub y: f64,
+	#[specta(type = u32)]
+	pub width: f64,
+	#[specta(type = u32)]
+	pub height: f64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct StripTarget {
+	pub label: String,
+	pub space_id: Option<String>,
+}
+
 #[derive(Default)]
-pub struct OpenedWindows(Mutex<HashMap<String, String>>);
+pub struct OpenedWindows(Mutex<Registry>);
 
 impl OpenedWindows {
-	fn initial_hrefs(&self) -> MutexGuard<'_, HashMap<String, String>> {
+	fn registry(&self) -> MutexGuard<'_, Registry> {
 		self.0.lock().unwrap_or_else(PoisonError::into_inner)
+	}
+}
+
+#[derive(Default)]
+struct Registry {
+	windows: HashMap<String, OpenedWindow>,
+	last_focus_rank: u64,
+}
+
+#[derive(Debug, Default)]
+struct OpenedWindow {
+	initial_href: Option<String>,
+	space_id: Option<String>,
+	strip: Option<Area>,
+	focus_rank: u64,
+}
+
+struct Placed {
+	label: String,
+	is_shown: bool,
+	x: f64,
+	y: f64,
+}
+
+impl Registry {
+	fn of(&mut self, label: &str) -> &mut OpenedWindow {
+		self.windows.entry(label.to_owned()).or_default()
+	}
+
+	fn focused(&mut self, label: &str) {
+		self.last_focus_rank += 1;
+		let rank = self.last_focus_rank;
+		self.of(label).focus_rank = rank;
+	}
+
+	fn strip_at(&self, point: ScreenPosition, placed: &[Placed]) -> Option<StripTarget> {
+		placed
+			.iter()
+			.filter(|window| window.is_shown)
+			.filter_map(|window| {
+				let opened = self.windows.get(&window.label)?;
+				let strip = opened.strip?;
+				let on_screen = Area { x: window.x + strip.x, y: window.y + strip.y, ..strip };
+				on_screen.holds(point).then_some((window, opened))
+			})
+			.max_by_key(|(_, opened)| opened.focus_rank)
+			.map(|(window, opened)| StripTarget {
+				label: window.label.clone(),
+				space_id: opened.space_id.clone(),
+			})
 	}
 }
 
@@ -86,6 +157,7 @@ pub async fn window_open<R: Runtime>(
 	window: WebviewWindow<R>,
 	href: String,
 	position: Option<ScreenPosition>,
+	origin_space_id: Option<String>,
 ) -> Result<(), WindowOpenError> {
 	if !is_app_page(&href) {
 		return Err(WindowOpenError::NotAnAppPage);
@@ -103,14 +175,16 @@ pub async fn window_open<R: Runtime>(
 		.and_then(|point| work_area_for(&window, point).map(|area| at(caller, point, area)))
 		.unwrap_or_else(|| beside(caller));
 	let config = secondary_config(main, fresh_label(app).await?, placement);
-	opened_windows(app).initial_hrefs().insert(config.label.clone(), href);
+	let opened = OpenedWindow {
+		initial_href: Some(href),
+		space_id: origin_space_id,
+		..OpenedWindow::default()
+	};
+	opened_windows(app).registry().windows.insert(config.label.clone(), opened);
 	match built(app, &config) {
-		Ok(opened) => {
-			forgotten_once_destroyed(&opened);
-			Ok(())
-		}
+		Ok(_) => Ok(()),
 		Err(failure) => {
-			opened_windows(app).initial_hrefs().remove(&config.label);
+			opened_windows(app).registry().windows.remove(&config.label);
 			eprintln!("the window {} did not open: {failure}", config.label);
 			Err(WindowOpenError::Unavailable)
 		}
@@ -121,8 +195,75 @@ pub async fn window_open<R: Runtime>(
 #[specta::specta]
 pub fn window_identity<R: Runtime>(window: WebviewWindow<R>) -> WindowIdentity {
 	let label = window.label().to_owned();
-	let initial_href = opened_windows(window.app_handle()).initial_hrefs().get(&label).cloned();
-	WindowIdentity { label, initial_href }
+	let state = opened_windows(window.app_handle());
+	let registry = state.registry();
+	let opened = registry.windows.get(&label);
+	WindowIdentity {
+		initial_href: opened.and_then(|opened| opened.initial_href.clone()),
+		space_id: opened.and_then(|opened| opened.space_id.clone()),
+		label,
+	}
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn window_report_space<R: Runtime>(window: WebviewWindow<R>, space_id: String) {
+	opened_windows(window.app_handle()).registry().of(window.label()).space_id = Some(space_id);
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn window_report_strip<R: Runtime>(window: WebviewWindow<R>, bounds: StripBounds) {
+	let strip = Area { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height };
+	opened_windows(window.app_handle()).registry().of(window.label()).strip = Some(strip);
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn window_strip_at<R: Runtime>(
+	window: WebviewWindow<R>,
+	point: ScreenPosition,
+) -> Option<StripTarget> {
+	let app = window.app_handle();
+	let others: Vec<Placed> = app
+		.webview_windows()
+		.into_iter()
+		.filter(|(label, _)| label != window.label() && is_app_window(label))
+		.filter_map(|(_, other)| placed(&other))
+		.collect();
+	opened_windows(app).registry().strip_at(point, &others)
+}
+
+pub(super) fn followed<R: Runtime>(window: &WebviewWindow<R>) {
+	let subject = window.clone();
+	window.on_window_event(move |event| follow(&subject, event));
+}
+
+fn follow<R: Runtime>(window: &WebviewWindow<R>, event: &WindowEvent) {
+	match event {
+		WindowEvent::Focused(true) => {
+			opened_windows(window.app_handle()).registry().focused(window.label());
+		}
+		WindowEvent::Destroyed => {
+			opened_windows(window.app_handle()).registry().windows.remove(window.label());
+			tab_drag::cancel_when_origin_destroyed(window);
+		}
+		_ => {}
+	}
+}
+
+fn placed<R: Runtime>(window: &WebviewWindow<R>) -> Option<Placed> {
+	let read = || -> tauri::Result<Placed> {
+		let scale = window.scale_factor()?;
+		let origin = window.inner_position()?.to_logical::<f64>(scale);
+		let is_shown = window.is_visible()? && !window.is_minimized()?;
+		Ok(Placed { label: window.label().to_owned(), is_shown, x: origin.x, y: origin.y })
+	};
+	read()
+		.inspect_err(|failure| {
+			eprintln!("the place of the window {} could not be read: {failure}", window.label());
+		})
+		.ok()
 }
 
 fn is_app_page(href: &str) -> bool {
@@ -235,23 +376,23 @@ fn secondary_config(main: WindowConfig, label: String, placement: Placement) -> 
 	}
 }
 
-fn forgotten_once_destroyed<R: Runtime>(window: &WebviewWindow<R>) {
-	let subject = window.clone();
-	window.on_window_event(move |event| {
-		if matches!(event, WindowEvent::Destroyed) {
-			opened_windows(subject.app_handle()).initial_hrefs().remove(subject.label());
-		}
-	});
-}
-
 #[cfg(test)]
 mod tests {
 	use tauri::utils::config::WindowConfig;
 
+	use serde_json::{json, Value};
+	use tauri::ipc::CallbackFn;
+	use tauri::test::{get_ipc_response, mock_builder, MockRuntime, INVOKE_KEY};
+	use tauri::webview::InvokeRequest;
+	use tauri::{Listener, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent};
+
 	use super::{
-		at, beside, is_app_page, is_secondary, secondary_config, secondary_label,
-		work_area_holding, Area, Placement, Screen, ScreenPosition,
+		at, beside, follow, is_app_page, is_secondary, secondary_config, secondary_label,
+		work_area_holding, Area, OpenedWindow, Placed, Placement, Registry, Screen, ScreenPosition,
+		StripTarget,
 	};
+	use crate::events::TAB_DRAG;
+	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 	use crate::window_controls::is_app_window;
 
 	const CALLER: Placement = Placement { width: 1400.0, height: 900.0, x: 120.0, y: 64.0 };
@@ -382,5 +523,126 @@ mod tests {
 		] {
 			assert!(!is_app_page(href), "{href:?} was accepted");
 		}
+	}
+
+	fn app() -> AppOfItsOwn {
+		an_app_of_its_own(
+			"window-registry",
+			mock_builder().invoke_handler(crate::commands::invoke_handler()),
+		)
+	}
+
+	fn window_of(app: &AppOfItsOwn, label: &str) -> WebviewWindow<MockRuntime> {
+		WebviewWindowBuilder::new(app.handle(), label, WebviewUrl::default())
+			.build()
+			.expect("the window opens")
+	}
+
+	fn invoked(window: &WebviewWindow<MockRuntime>, command: &str, body: Value) -> Value {
+		get_ipc_response(
+			window,
+			InvokeRequest {
+				cmd: command.into(),
+				callback: CallbackFn(0),
+				error: CallbackFn(1),
+				url: "tauri://localhost".parse().expect("a url"),
+				body: body.into(),
+				headers: Default::default(),
+				invoke_key: INVOKE_KEY.to_string(),
+			},
+		)
+		.unwrap_or_else(|error| panic!("{command} was refused: {error:?}"))
+		.deserialize::<Value>()
+		.unwrap_or(Value::Null)
+	}
+
+	fn reported_strip(window: &WebviewWindow<MockRuntime>, x: f64, width: f64) {
+		let bounds = json!({ "x": x, "y": 0.0, "width": width, "height": 40.0 });
+		invoked(window, "window_report_strip", json!({ "bounds": bounds }));
+	}
+
+	fn strip_at(window: &WebviewWindow<MockRuntime>, x: i32) -> Value {
+		invoked(window, "window_strip_at", json!({ "point": { "x": x, "y": 20 } }))
+	}
+
+	#[test]
+	fn on_overlapping_strips_the_hit_test_answers_the_most_recently_focused_window() {
+		let app = app();
+		let (main, first, caller) =
+			(window_of(&app, "main"), window_of(&app, "window-1"), window_of(&app, "window-2"));
+		invoked(&main, "window_report_space", json!({ "spaceId": "s1" }));
+		invoked(&first, "window_report_space", json!({ "spaceId": "s2" }));
+		reported_strip(&main, 0.0, 800.0);
+		reported_strip(&first, 100.0, 800.0);
+
+		follow(&main, &WindowEvent::Focused(true));
+		follow(&first, &WindowEvent::Focused(true));
+		let first_on_top = strip_at(&caller, 300);
+		follow(&first, &WindowEvent::Focused(false));
+		follow(&main, &WindowEvent::Focused(true));
+		let main_on_top = strip_at(&caller, 300);
+
+		assert_eq!(first_on_top, json!({ "label": "window-1", "spaceId": "s2" }));
+		assert_eq!(main_on_top, json!({ "label": "main", "spaceId": "s1" }));
+		assert_eq!(strip_at(&caller, 50), json!({ "label": "main", "spaceId": "s1" }));
+	}
+
+	#[test]
+	fn a_destroyed_window_leaves_its_space_its_strip_and_its_focus_behind() {
+		let app = app();
+		let (main, gone) = (window_of(&app, "main"), window_of(&app, "window-1"));
+		invoked(&gone, "window_report_space", json!({ "spaceId": "s2" }));
+		reported_strip(&gone, 0.0, 800.0);
+		follow(&gone, &WindowEvent::Focused(true));
+
+		follow(&gone, &WindowEvent::Destroyed);
+
+		assert_eq!(strip_at(&main, 300), Value::Null);
+		assert_eq!(invoked(&gone, "window_identity", json!({}))["spaceId"], Value::Null);
+		assert!(super::opened_windows(app.handle()).registry().windows.is_empty());
+	}
+
+	#[test]
+	fn destroying_the_origin_of_a_drag_cancels_it_for_every_remaining_window() {
+		let app = app();
+		let (main, origin) = (window_of(&app, "main"), window_of(&app, "window-1"));
+		let (told, heard) = std::sync::mpsc::channel();
+		main.listen(TAB_DRAG.name(), move |event| {
+			told.send(event.payload().to_owned()).expect("the test listens");
+		});
+		invoked(&origin, "window_tab_drag_start", json!({ "tab": {}, "spaceId": "s1" }));
+
+		follow(&main, &WindowEvent::Destroyed);
+		follow(&origin, &WindowEvent::Destroyed);
+
+		let heard: Vec<Value> =
+			heard.try_iter().map(|payload| serde_json::from_str(&payload).expect("JSON")).collect();
+		assert_eq!(heard.len(), 2, "heard {heard:?}");
+		assert_eq!(heard[1], json!({ "kind": "cancelled", "originLabel": "window-1" }));
+	}
+
+	#[test]
+	fn a_hidden_window_is_never_the_target_of_the_hit_test() {
+		let strip = Area { x: 0.0, y: 0.0, width: 800.0, height: 40.0 };
+		let mut registry = Registry::default();
+		for label in ["main", "window-1"] {
+			registry.windows.insert(
+				label.to_owned(),
+				OpenedWindow { strip: Some(strip), ..OpenedWindow::default() },
+			);
+		}
+		registry.focused("main");
+		let at = |label: &str, is_shown: bool| Placed {
+			label: label.to_owned(),
+			is_shown,
+			x: 0.0,
+			y: 0.0,
+		};
+
+		let behind = registry.strip_at(point(100, 20), &[at("main", false), at("window-1", true)]);
+		let alone = registry.strip_at(point(100, 20), &[at("main", false)]);
+
+		assert_eq!(behind, Some(StripTarget { label: "window-1".to_owned(), space_id: None }));
+		assert_eq!(alone, None);
 	}
 }

@@ -30,6 +30,7 @@ pub fn builder() -> Builder<tauri::Wry> {
 		.constant("SPACE_DESCRIBED_EVENT", spaces::contract::DESCRIBED_EVENT)
 		.constant("UPDATE_CHANGED_EVENT", updates::contract::CHANGED_EVENT)
 		.constant("FILE_MENU_EVENT", menu_contract::FILE_MENU_EVENT)
+		.constant("TAB_DRAG_EVENT", window_controls::tab_drag::TAB_DRAG_EVENT)
 		.typ::<window_controls::MaximizeButtonPointer>()
 		.typ::<devices::contract::DeviceApproval>()
 		.typ::<devices::contract::DeviceApprovalRequested>()
@@ -46,6 +47,7 @@ pub fn builder() -> Builder<tauri::Wry> {
 		.typ::<missions::commands::MissionChanged>()
 		.typ::<spaces::contract::SpaceDescribed>()
 		.typ::<menu_contract::FileMenuChosen>()
+		.typ::<window_controls::tab_drag::TabDrag>()
 }
 
 // `tauri::test::mock_builder` only ever yields a `Builder<MockRuntime>`, so the handler the
@@ -107,6 +109,16 @@ fn commands<R: Runtime>() -> Commands<R> {
 		window_controls::window_declare_maximize_button::<tauri::Wry>,
 		window_controls::secondary::window_open::<tauri::Wry>,
 		window_controls::secondary::window_identity::<tauri::Wry>,
+		window_controls::secondary::window_report_space::<tauri::Wry>,
+		window_controls::secondary::window_report_strip::<tauri::Wry>,
+		window_controls::secondary::window_strip_at::<tauri::Wry>,
+		window_controls::tab_drag::window_tab_drag_start::<tauri::Wry>,
+		window_controls::tab_drag::window_tab_drag_move::<tauri::Wry>,
+		window_controls::tab_drag::window_tab_drag_drop::<tauri::Wry>,
+		window_controls::tab_drag::window_tab_drag_cancel::<tauri::Wry>,
+		window_controls::tab_drag::window_start_native_move::<tauri::Wry>,
+		window_controls::tab_drag::window_hide::<tauri::Wry>,
+		window_controls::tab_drag::window_show::<tauri::Wry>,
 		conversations::commands::conversation_duplicate_bot::<tauri::Wry>,
 		conversations::commands::conversation_update_bot::<tauri::Wry>,
 		conversations::commands::conversation_delete_bot::<tauri::Wry>,

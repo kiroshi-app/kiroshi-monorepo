@@ -14,6 +14,7 @@ mod overlays;
 #[cfg(any(windows, test))]
 mod pointer;
 pub(crate) mod secondary;
+pub(crate) mod tab_drag;
 #[cfg(windows)]
 mod win32;
 #[cfg(windows)]
@@ -160,6 +161,7 @@ fn main_config<R: Runtime>(app: &AppHandle<R>) -> Option<WindowConfig> {
 fn built<R: Runtime>(app: &AppHandle<R>, config: &WindowConfig) -> tauri::Result<WebviewWindow<R>> {
 	let window = WebviewWindowBuilder::from_config(app, config)?.build()?;
 	closed_per_platform(&window);
+	secondary::followed(&window);
 	#[cfg(target_os = "windows")]
 	crate::badge::wear_whenever_shown(&window);
 	#[cfg(target_os = "macos")]

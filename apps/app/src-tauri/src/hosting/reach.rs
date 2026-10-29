@@ -164,6 +164,16 @@ pub(super) const REACHES: &[(&str, Reach)] = &[
 	("window_declare_maximize_button", Reach::HostOnly),
 	("window_open", Reach::HostOnly),
 	("window_identity", Reach::HostOnly),
+	("window_report_space", Reach::HostOnly),
+	("window_report_strip", Reach::HostOnly),
+	("window_strip_at", Reach::HostOnly),
+	("window_tab_drag_start", Reach::HostOnly),
+	("window_tab_drag_move", Reach::HostOnly),
+	("window_tab_drag_drop", Reach::HostOnly),
+	("window_tab_drag_cancel", Reach::HostOnly),
+	("window_start_native_move", Reach::HostOnly),
+	("window_hide", Reach::HostOnly),
+	("window_show", Reach::HostOnly),
 	("diagnostics", Reach::HostOnly),
 	("log_tail", Reach::HostOnly),
 	("log_reveal", Reach::HostOnly),
@@ -408,6 +418,7 @@ pub(super) const AUDIENCES: &[(&str, Audience)] = &[
 	(crate::window_controls::MAXIMIZE_BUTTON_EVENT, Audience::HostOnly),
 	(crate::updates::contract::CHANGED_EVENT, Audience::HostOnly),
 	(crate::menu_contract::FILE_MENU_EVENT, Audience::HostOnly),
+	(crate::window_controls::tab_drag::TAB_DRAG_EVENT, Audience::HostOnly),
 ];
 
 pub(super) fn reach_of(command: &str) -> Option<Reach> {
