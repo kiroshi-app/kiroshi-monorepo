@@ -33,6 +33,7 @@ export const commands = {
 	reason: string,
 } | null>("application_runnable", { config }),
 	chatStoreAttachments: (conversationId: string, attachments: SubmittedAttachment[]) => typedError<string[], AttachmentStoreError>(__TAURI_INVOKE("chat_store_attachments", { conversationId, attachments })),
+	badgeSet: (count: number) => typedError<null, string>(__TAURI_INVOKE("badge_set", { count })),
 	agentCheck: (scope: {
 	conversationId: string,
 	botId: string,

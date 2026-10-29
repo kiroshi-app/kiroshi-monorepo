@@ -2,7 +2,7 @@ use tauri::{ipc::Invoke, Runtime};
 use tauri_specta::{collect_commands, Builder, Commands};
 
 use crate::{
-	account, agent, applications, attachments, companions, conversations, crypto, devices,
+	account, agent, applications, attachments, badge, companions, conversations, crypto, devices,
 	environment, hosting, invitations, joined_spaces, logging, mcp_oauth, missions, notifications,
 	plugins, routines, search, sections, spaces, updates, user, window_controls,
 };
@@ -64,6 +64,7 @@ fn commands<R: Runtime>() -> Commands<R> {
 		applications::commands::application_installs,
 		applications::commands::application_runnable,
 		attachments::commands::chat_store_attachments::<tauri::Wry>,
+		badge::commands::badge_set::<tauri::Wry>,
 		agent::commands::agent_check::<tauri::Wry>,
 		agent::commands::agent_account::<tauri::Wry>,
 		agent::sign_in::agent_sign_in::<tauri::Wry>,
