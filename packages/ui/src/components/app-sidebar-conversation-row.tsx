@@ -93,12 +93,7 @@ const ConversationRosterRow = ({
 						pendingQuestion={conversation.pendingQuestion}
 						preview={previewOf(t, conversation) ?? ""}
 						previewTrailing={
-							<ConversationBotPile
-								bots={heldBotsOf(conversation)}
-								layout={
-									conversation.pendingQuestion ? "side-by-side" : "overlapping"
-								}
-							/>
+							<ConversationBotPile bots={heldBotsOf(conversation)} />
 						}
 						strips={missionStripsOf(conversation.missions)}
 						timestamp={conversation.timestamp ?? ""}

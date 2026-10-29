@@ -25,7 +25,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The bots of a conversation as a row of 14px hexagons on a 16px line, 10px apart. Each later hexagon sits over the earlier one behind a 1.5px knockout cut through to whatever lies beneath, so the ring always wears the row's own colour. Four bots or more show two and a counter. Every hexagon wears the compact C edge, a translucent line inside its outline. The `side-by-side` layout, worn by the Needs you line, draws 16px hexagons 2px apart with no overlap or knockout.",
+					"The bots of a conversation as a row of 14px hexagons on a 16px line, 10px apart. Each later hexagon sits over the earlier one behind a 1.5px knockout cut through to whatever lies beneath, so the ring always wears the row's own colour. Four bots or more show two and a counter. Every hexagon wears the compact C edge, a translucent line inside its outline.",
 			},
 		},
 	},
@@ -107,81 +107,22 @@ export const FiveBotsShowTwoAndACounter = meta.story({
 	},
 })
 
-const sideBySideBoxesOf = (canvasElement: HTMLElement) => {
-	const pile = slotIn(canvasElement, "conversation-bot-pile")
-	const origin = pile.getBoundingClientRect().left
-	return [
-		...slotsIn(pile, "conversation-bot-pile-bot"),
-		...slotsIn(pile, "conversation-bot-pile-overflow"),
-	].map((slot) => {
-		const box = slot.getBoundingClientRect()
-		return [box.left - origin, box.width, box.height]
-	})
-}
-
-export const SideBySideThreeBots = meta.story({
-	args: { bots: BOTS.slice(0, 3), layout: "side-by-side" },
-	play: async ({ canvasElement }) => {
-		await expect(sideBySideBoxesOf(canvasElement)).toEqual([
-			[0, 16, 16],
-			[18, 16, 16],
-			[36, 16, 16],
-		])
-		await expect(widthOf(canvasElement)).toBe(52)
-		await expect(coveredIn(canvasElement)).toEqual([false, false, false])
-		await expect(
-			slotIn(canvasElement, "conversation-bot-pile"),
-		).toHaveAttribute("aria-hidden", "true")
-	},
-})
-
-export const SideBySideFiveBotsShowTwoAndACounter = meta.story({
-	args: { bots: [...BOTS], layout: "side-by-side" },
-	play: async ({ canvasElement }) => {
-		const pile = slotIn(canvasElement, "conversation-bot-pile")
-		await expect(sideBySideBoxesOf(canvasElement)).toEqual([
-			[0, 16, 16],
-			[18, 16, 16],
-			[36, 16, 16],
-		])
-		await expect(coveredIn(canvasElement)).toEqual([false, false])
-		await expect(
-			slotIn(pile, "conversation-bot-pile-overflow"),
-		).toHaveTextContent("+3")
-		await expect(within(canvasElement).getByRole("img", { name: "+3" })).toBe(
-			pile,
-		)
-	},
-})
-
-const BothLayouts = () => (
-	<span className="flex flex-col gap-3">
-		<ConversationBotPile bots={[...BOTS]} />
-		<ConversationBotPile bots={[...BOTS]} layout="side-by-side" />
-	</span>
-)
-
 const expectEdgedMembers = async (
 	canvasElement: HTMLElement,
 	theme: GlazeTheme,
 ) => {
-	const [overlapping, sideBySide] = slotsIn(
-		canvasElement,
-		"conversation-bot-pile",
-	)
-	await expect(slotsIn(overlapping, "outlined-hexagon")).toHaveLength(3)
-	await expect(slotsIn(sideBySide, "outlined-hexagon")).toHaveLength(3)
-	await expect(coveredIn(overlapping)).toEqual([true, true])
+	await expect(slotsIn(canvasElement, "outlined-hexagon")).toHaveLength(3)
+	await expect(coveredIn(canvasElement)).toEqual([true, true])
 	await expectGlazeBorders(canvasElement, theme)
 }
 
 export const EdgedMembers = meta.story({
-	render: () => <BothLayouts />,
+	args: { bots: [...BOTS] },
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Both layouts of a five bot pile: each member and the counter wear the compact C edge, no lip, and the overlapping layout keeps its knockout. Pick `EdgedMembersDark` for the dark theme.",
+					"A five bot pile: each member and the counter wear the compact C edge, no lip, and the pile keeps its knockout. Pick `EdgedMembersDark` for the dark theme.",
 			},
 		},
 	},
@@ -190,11 +131,11 @@ export const EdgedMembers = meta.story({
 
 export const EdgedMembersDark = meta.story({
 	globals: { theme: "dark" },
-	render: () => <BothLayouts />,
+	args: { bots: [...BOTS] },
 	parameters: {
 		docs: {
 			description: {
-				story: "The same piles in the dark theme, edged in white.",
+				story: "The same pile in the dark theme, edged in white.",
 			},
 		},
 	},

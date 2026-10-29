@@ -476,22 +476,21 @@ const expectPileAfterTheQuestion = async (row: HTMLElement) => {
 	)
 }
 
-const expectBotsSideBySide = async (row: HTMLElement) => {
+const expectBotsOverlapping = async (row: HTMLElement) => {
 	const pile = slotIn(row, "conversation-bot-pile")
+	const origin = pile.getBoundingClientRect().left
 	const slots = [
 		...slotsIn(pile, "conversation-bot-pile-bot"),
 		...slotsIn(pile, "conversation-bot-pile-overflow"),
 	]
 	const boxes = slots.map((slot) => slot.getBoundingClientRect())
 	for (const box of boxes) {
-		await expect([box.width, box.height]).toEqual([16, 16])
+		await expect([box.width, box.height]).toEqual([14, 14])
 	}
-	for (const [index, box] of boxes.slice(1).entries()) {
-		await expect(box.left - boxes[index].right).toBe(2)
-	}
-	for (const slot of slots) {
-		await expect(getComputedStyle(slot).maskImage).toBe("none")
-	}
+	await expect(boxes.map((box) => box.left - origin)).toEqual(
+		slots.map((_, index) => index * 10),
+	)
+	await expectKnockoutCutToTheRow(row)
 	await expect(slotsIn(pile, "outlined-hexagon")).toHaveLength(slots.length)
 }
 
@@ -501,7 +500,7 @@ const expectLongQuestionBesideAWholePile = async (
 	const row = rowIn(canvasElement)
 	await expectQuestionCutInsideTheRow(row)
 	await expectPileAfterTheQuestion(row)
-	await expectBotsSideBySide(row)
+	await expectBotsOverlapping(row)
 	await expectTwoBotsAndACounter(row)
 	await expectPileWhole(row, canvasElement)
 }
@@ -510,8 +509,9 @@ const expectConversationNeedingYou = async (canvasElement: HTMLElement) => {
 	const row = rowIn(canvasElement)
 	await expectNeedingYou(row, PENDING_QUESTION)
 	await expectPileAfterTheQuestion(row)
-	await expectBotsSideBySide(row)
+	await expectBotsOverlapping(row)
 	await expect(slotsIn(row, "conversation-bot-pile-bot")).toHaveLength(2)
+	await expectPileWhole(row, canvasElement)
 }
 
 const expectConversationAnswered = async (canvasElement: HTMLElement) => {
