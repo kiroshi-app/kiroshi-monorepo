@@ -48,6 +48,9 @@ const bots = {
 		pin: "Pin",
 		pinDrop: "Drop here to pin",
 		unpin: "Unpin",
+		moved: "{{name}} moved to position {{position}} of {{count}}",
+		movedInSection:
+			"{{name}} moved to position {{position}} of {{count}} in {{section}}",
 		delete: "Delete",
 		needsYou: "Needs you",
 		working: "{{pose}}…",

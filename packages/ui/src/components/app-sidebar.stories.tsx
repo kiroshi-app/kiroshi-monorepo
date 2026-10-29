@@ -4912,7 +4912,9 @@ const dropAreaFor = (canvasElement: HTMLElement, landing: string) => {
 }
 
 const isLightened = (node: HTMLElement) =>
-	getComputedStyle(node).backgroundColor !== "rgba(0, 0, 0, 0)"
+	[getComputedStyle(node), getComputedStyle(node, "::before")].some(
+		({ backgroundColor }) => backgroundColor !== "rgba(0, 0, 0, 0)",
+	)
 
 const POINTER = {
 	button: 0,
@@ -4929,8 +4931,9 @@ const centreOf = (node: Element) => {
 	}
 }
 
-const liftedBot = () =>
-	document.querySelector<HTMLElement>('[data-slot="roster-lifted-bot"]')
+const liftedSlot = () => document.querySelector<HTMLElement>("[data-lifted]")
+
+const shiftOf = (node: Element) => node.getAttribute("data-shift")
 
 const lift = (handle: HTMLElement) => {
 	const from = centreOf(handle)
@@ -5032,7 +5035,7 @@ export const DragBotToSection = meta.story({
 		docs: {
 			description: {
 				story:
-					'Filing a companion by hand. A press on a row that then moves lifts the companion: it is reduced to its avatar alone, which follows the pointer, while the row itself stays exactly where it stood — the roster is the host\'s to redraw, so nothing is torn out of the list on the strength of a gesture that has not landed yet. The area the companion would land in lightens under it, header and rows together, so the target is a whole section rather than a slot between two rows: a section is always ordered by last message, so a drop changes which group a companion belongs to and nothing else. Releasing reports the companion and the section, the same call the `Move to section` branch makes, and the click that a release would otherwise fire is swallowed so a drag never doubles as a selection. The row and every drop area carry `data-tauri-drag-region="false"`, which is what keeps the gesture on the companion instead of on the frameless window the panel is mounted in. Keyboard readers are not asked to drag: `MoveBotToSection` is the same move from the menu.',
+					'Filing a companion by hand. A press on a row that then moves lifts the row itself, raised on the panel fill with a shadow under it, and it rides the pointer up into the pinned zone while every pinned row from the slot it would take slides down to open the gap. The roster is the host\'s to redraw, so nothing is torn out of the list on the strength of a gesture that has not landed yet. The section the companion would land in lightens under it, header and rows together, so the reader sees which section the gap belongs to. Releasing reports the companion and the section, the same call the `Move to section` branch makes, and the click that a release would otherwise fire is swallowed so a drag never doubles as a selection. The row and every drop area carry `data-tauri-drag-region="false"`, which is what keeps the gesture on the companion instead of on the frameless window the panel is mounted in. Keyboard readers are not asked to drag: `MoveBotToSection` is the same move from the menu.',
 			},
 		},
 	},
@@ -5041,14 +5044,12 @@ export const DragBotToSection = meta.story({
 		const shipping = dropAreaFor(canvasElement, "shipping")
 
 		lift(handle)
-		await expect(liftedBot()).not.toBeNull()
+		await expect(liftedSlot()).toBe(rowFor(canvasElement, "Atlas"))
 		await expect(rowNames(canvasElement)).toEqual(GROUPED_ORDER)
 
 		moveOver(handle, shipping)
-		const ghost = liftedBot()
-		if (!ghost) throw new Error("Nothing is lifted")
 		await expect(
-			Math.abs(centreOf(ghost).clientY - centreOf(shipping).clientY),
+			Math.abs(centreOf(handle).clientY - centreOf(shipping).clientY),
 		).toBeLessThanOrEqual(1)
 		await expect(isLightened(shipping)).toBe(true)
 		await expect(isLightened(dropAreaFor(canvasElement, "research"))).toBe(
@@ -5058,7 +5059,7 @@ export const DragBotToSection = meta.story({
 		dropOver(handle, shipping)
 		await expect(args.onPinRoster).toHaveBeenCalledTimes(1)
 		await expect(args.onSelectBot).not.toHaveBeenCalled()
-		await expect(liftedBot()).toBeNull()
+		await expect(liftedSlot()).toBeNull()
 		await expect(rowNames(canvasElement)).toEqual(GROUPED_ORDER)
 	},
 })
@@ -5144,27 +5145,44 @@ export const DragBotToTheEndOfASection = meta.story({
 		docs: {
 			description: {
 				story:
-					"The line that tells the two ends apart. Landing last inside a section and landing under it are one rank apart and would draw the same mark, so the line is attached to the row it belongs beside rather than to the rank: under Research's last row while the hand is over the card, above the next card once the hand is in the gutter. Without it the reader aims at the bottom of a group and reads a mark drawn outside it. Check both marks from the same two pixels of travel. `DragBotUnderASection` is what each one reports on release.",
+					"The two ends a gap cannot tell apart on its own. Landing last inside a section and landing under it open the gap at the same place, so the card says which one it is: while the hand is over Research the card lightens and grows by the lifted row to hold the gap, and once the hand passes under the grown card into the gutter the card shrinks back and the gap sits outside it, above Shipping. Check both, and that the release over the card files Atlas last in Research. `DragBotUnderASection` is the release in the gutter.",
 			},
 		},
 	},
-	play: async ({ canvasElement }) => {
+	play: async ({ args, canvasElement }) => {
 		const handle = rowButton(rowFor(canvasElement, "Atlas"))
 		const research = dropAreaFor(canvasElement, "research")
+		const shipping = dropAreaFor(canvasElement, "shipping")
 		const ember = rowFor(canvasElement, "Ember")
 
 		lift(handle)
 		fireEvent.pointerMove(handle, { ...POINTER, ...under(research) })
-		await expect(slotIn(canvasElement, "roster-insertion").parentElement).toBe(
-			ember,
-		)
+		await expect(research).toHaveAttribute("data-receiving")
+		await expect(isLightened(research)).toBe(true)
+		await expect(shiftOf(ember)).toBeNull()
+		await expect(shiftOf(shipping)).toBe("end")
 
 		fireEvent.pointerMove(handle, {
 			...POINTER,
-			...inTheGutterUnder(research),
+			...inTheGutterUnder(slotIn(research, "sidebar-group")),
 		})
-		await expect(slotIn(canvasElement, "roster-insertion").parentElement).toBe(
-			dropAreaFor(canvasElement, "shipping"),
+		await expect(research).not.toHaveAttribute("data-receiving")
+		await expect(isLightened(research)).toBe(false)
+		await expect(shiftOf(shipping)).toBe("end")
+
+		fireEvent.pointerUp(handle, { ...POINTER, ...under(research) })
+		await expect(args.onPinRoster).toHaveBeenCalledWith(
+			HOME,
+			pinsFor([
+				["research", null],
+				["beacon", "research"],
+				["ember", "research"],
+				["atlas", "research"],
+				["shipping", null],
+				["dune", "shipping"],
+				["flint", "shipping"],
+				["archive", null],
+			]),
 		)
 	},
 })
@@ -5219,9 +5237,9 @@ export const DragBotNowhere = meta.story({
 		await expect(args.onPinRoster).not.toHaveBeenCalled()
 
 		lift(handle)
-		await expect(liftedBot()).not.toBeNull()
+		await expect(liftedSlot()).not.toBeNull()
 		fireEvent.pointerCancel(handle, POINTER)
-		await expect(liftedBot()).toBeNull()
+		await expect(liftedSlot()).toBeNull()
 		await expect(args.onPinRoster).not.toHaveBeenCalled()
 
 		lift(handle)
@@ -5236,7 +5254,7 @@ export const DragBotNowhere = meta.story({
 			button: 2,
 		})
 		moveOver(handle, dropAreaFor(canvasElement, "shipping"))
-		await expect(liftedBot()).toBeNull()
+		await expect(liftedSlot()).toBeNull()
 	},
 })
 
@@ -5247,7 +5265,7 @@ export const DragSectionToPlace = meta.story({
 		docs: {
 			description: {
 				story:
-					"Placing a section by hand. A section is not filed into anything — it takes a place in an order — so this gesture is not the one that files a companion: there is no zone to land in and nothing lightens. The header is the handle, a press that moves lifts the whole group, companions and all, and it comes off the panel as a card — a shade smaller, with a shadow under it — so what it passes over stays readable. A line is drawn at the boundary the section would take, above whichever section its middle has not yet passed, or under the last one when it has passed them all. Letting go reports the full new order of section ids — the same call the menu's `Move up` and `Move down` make, which stay exactly where they were for keyboard readers and for a reader who would rather not drag at all. A section released where it already stood reports nothing, an interrupted pointer reports nothing, and a press that never moves is still the plain click that folds the group. The companions holding no section are never a target: they stay pinned above every section, so the first boundary a section can take is under them.",
+					"Placing a section by hand. A section is not filed into anything, it takes a place in an order, so this gesture is not the one that files a companion: there is no zone to land in and nothing lightens. The header is the handle, a press that moves lifts the whole group, companions and all, in place on the panel fill with a shadow under it, and it rides the pointer within the pinned zone while the other sections slide aside by its height to open the gap it would take. Letting go reports the full new order of section ids, the same call the menu's `Move up` and `Move down` make, which stay exactly where they were for keyboard readers and for a reader who would rather not drag at all. A section released where it already stood reports nothing, an interrupted pointer reports nothing, and a press that never moves is still the plain click that folds the group. The companions holding no section are never a target: they stay pinned above every section, so the first boundary a section can take is under them.",
 			},
 		},
 	},
@@ -5267,13 +5285,14 @@ export const DragSectionToPlace = meta.story({
 		)
 		await expect(dune.getBoundingClientRect().top).toBeGreaterThan(restsAt)
 
-		moveOver(handle, research)
-		await expect(slotIn(canvasElement, "roster-insertion").parentElement).toBe(
-			research,
-		)
+		const overResearch = { ...POINTER, ...centreOf(research) }
+		fireEvent.pointerMove(handle, overResearch)
+		await expect(shiftOf(research)).toBe("end")
+		await expect(shiftOf(dropAreaFor(canvasElement, "archive"))).toBeNull()
 		await expect(isLightened(research)).toBe(false)
 
-		dropOver(handle, research)
+		fireEvent.pointerUp(handle, overResearch)
+		fireEvent.click(handle)
 		await expect(args.onPinRoster).toHaveBeenCalledWith(
 			HOME,
 			pinsFor([
@@ -5296,9 +5315,8 @@ export const DragSectionToPlace = meta.story({
 		const archive = dropAreaFor(canvasElement, "archive")
 		lift(handle)
 		moveUnder(handle, archive)
-		await expect(slotIn(canvasElement, "roster-insertion").parentElement).toBe(
-			archive,
-		)
+		await expect(shiftOf(archive)).toBe("start")
+		await expect(shiftOf(research)).toBeNull()
 		fireEvent.pointerUp(handle, { ...POINTER, ...under(archive) })
 		await expect(args.onPinRoster).toHaveBeenLastCalledWith(
 			HOME,
@@ -6141,7 +6159,7 @@ export const DragConversationToSection = meta.story({
 		docs: {
 			description: {
 				story:
-					"Filing a room by hand, which is the gesture a companion row already answers to. A press that then moves lifts the room: it is reduced to the stack of its companions, which follows the pointer while the row stays where it stood. Releasing reports the whole pinned zone through `onPinRoster` — the same call the menu branch makes for a companion, so a host writes one order rather than telling rooms and companions apart. The click a release would fire is swallowed, so a drag never doubles as opening the room.",
+					"Filing a room by hand, which is the gesture a companion row already answers to. A press that then moves lifts the room row itself, which follows the pointer while the pinned rows slide aside to open its gap. Releasing reports the whole pinned zone through `onPinRoster`, the same call the menu branch makes for a companion, so a host writes one order rather than telling rooms and companions apart. The click a release would fire is swallowed, so a drag never doubles as opening the room.",
 			},
 		},
 	},
@@ -6150,7 +6168,7 @@ export const DragConversationToSection = meta.story({
 		const shipping = dropAreaFor(canvasElement, "shipping")
 
 		lift(handle)
-		await expect(liftedBot()).not.toBeNull()
+		await expect(liftedSlot()).not.toBeNull()
 
 		moveOver(handle, shipping)
 		await expect(isLightened(shipping)).toBe(true)
@@ -6158,7 +6176,7 @@ export const DragConversationToSection = meta.story({
 		dropOver(handle, shipping)
 		await expect(args.onPinRoster).toHaveBeenCalledTimes(1)
 		await expect(args.onSelectConversation).not.toHaveBeenCalled()
-		await expect(liftedBot()).toBeNull()
+		await expect(liftedSlot()).toBeNull()
 	},
 })
 

@@ -6,7 +6,7 @@ import {
 	useImperativeHandle,
 	useState,
 } from "react"
-import { expect, fn, waitFor, within } from "storybook/test"
+import { expect, fireEvent, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
@@ -18,6 +18,7 @@ import {
 	slotIn,
 	slotsIn,
 } from "@workspace/storybook/story-utils"
+import { boxOf, pointerAt } from "@workspace/storybook/tab-drag-gesture"
 import {
 	ATLAS,
 	BEACON,
@@ -30,7 +31,13 @@ import {
 } from "@workspace/ui/components/app-sidebar.fixtures"
 import { BotRosterRow } from "@workspace/ui/components/app-sidebar-bot-row"
 import { ConversationRosterRow } from "@workspace/ui/components/app-sidebar-conversation-row"
+import type {
+	AppSidebarBot,
+	AppSidebarSection,
+	RosterPin,
+} from "@workspace/ui/components/app-sidebar-model"
 import { BotRoster } from "@workspace/ui/components/app-sidebar-roster"
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import type { GlazeTheme } from "@workspace/ui/components/glaze-border"
 
 const meta = preview.meta({
@@ -353,5 +360,527 @@ export const RowRendersOnlyWhenItsOwnPropsChange = meta.story({
 		await expect(
 			await rowsRenderedBy(canvasElement, beaconJoinsEverySpace),
 		).toEqual([BEACON.id])
+	},
+})
+
+const EMBER: AppSidebarBot = {
+	...ATLAS,
+	id: "ember",
+	blot: BLOT_HUES.green,
+	name: "Ember",
+	title: "Design",
+	lastMessage: "The two layouts are side by side in the board.",
+	sectionId: SIDEBAR_SECTION.id,
+	pinPosition: 3,
+}
+
+const DUNE: AppSidebarBot = {
+	...ATLAS,
+	id: "dune",
+	blot: BLOT_HUES.red,
+	name: "Dune",
+	title: "Review",
+	lastMessage: "Two comments left on the migration.",
+	sectionId: "review",
+	pinPosition: 5,
+}
+
+const REVIEW: AppSidebarSection = { id: "review", name: "Review", position: 4 }
+
+const LIFT_ROSTER = {
+	bots: [ATLAS, { ...BEACON, pinPosition: 2 }, EMBER, DUNE],
+	conversations: [{ ...DESK_ROOM, pinPosition: 0 }],
+	sections: [{ ...SIDEBAR_SECTION, position: 1 }, REVIEW],
+}
+
+const DARK = { theme: "dark", theme_layout: "single" } as const
+
+const itemOf = (canvasElement: HTMLElement, name: string) =>
+	rosterRowOf(canvasElement, name).closest("li") as HTMLElement
+
+const cardOf = (canvasElement: HTMLElement, id: string) => {
+	const card = canvasElement.querySelector<HTMLElement>(
+		`[data-roster-drop="${id}"]`,
+	)
+	if (!card) throw new Error(`No drop area for ${id}`)
+	return card
+}
+
+const headerOf = (canvasElement: HTMLElement, id: string) =>
+	slotIn(cardOf(canvasElement, id), "roster-section-trigger")
+
+const middleOf = (box: DOMRect) => ({
+	x: box.left + box.width / 2,
+	y: box.top + box.height / 2,
+})
+
+const carry = (handle: HTMLElement, toY: number) => {
+	const from = middleOf(boxOf(handle))
+	fireEvent.pointerDown(handle, pointerAt(from.x, from.y))
+	fireEvent.pointerMove(handle, pointerAt(from.x, from.y + 8))
+	fireEvent.pointerMove(handle, pointerAt(from.x, toY))
+	return pointerAt(from.x, toY)
+}
+
+const offsetsOf = (nodes: Element[], resting: DOMRect[]) =>
+	nodes.map((node, rank) => Math.round(boxOf(node).top - resting[rank].top))
+
+const rowGapOf = (node: Element) =>
+	Number.parseFloat(getComputedStyle(node.parentElement as Element).rowGap)
+
+const shiftedIn = (canvasElement: HTMLElement) =>
+	canvasElement.querySelectorAll("[data-shift]")
+
+const expectSlidingNeighbour = async (node: Element) =>
+	expect(getComputedStyle(node).transitionProperty).toBe(
+		matchMedia("(prefers-reduced-motion: reduce)").matches
+			? "none"
+			: "translate",
+	)
+
+const expectLiftedSurface = async (node: Element) => {
+	await expect(node).toHaveAttribute("data-lifted", "true")
+	await expect(getComputedStyle(node).pointerEvents).toBe("none")
+	await expect(getComputedStyle(node).boxShadow).not.toBe("none")
+	await expect(getComputedStyle(node).backgroundColor).not.toBe(
+		"rgba(0, 0, 0, 0)",
+	)
+}
+
+const playLiftedRowWithNeighboursShifted = async ({
+	args,
+	canvasElement,
+}: {
+	args: BotRosterProps
+	canvasElement: HTMLElement
+}) => {
+	const beacon = itemOf(canvasElement, BEACON.name)
+	const ember = itemOf(canvasElement, EMBER.name)
+	const still = [
+		itemOf(canvasElement, DESK_ROOM.name),
+		itemOf(canvasElement, DUNE.name),
+		itemOf(canvasElement, ATLAS.name),
+		slotIn(canvasElement, "roster-zone-separator"),
+	]
+	const [beaconAt, emberAt] = [beacon, ember].map(boxOf)
+	const stillAt = still.map(boxOf)
+	const step = Math.round(beaconAt.height + rowGapOf(beacon))
+
+	carry(rosterRowOf(canvasElement, BEACON.name), middleOf(emberAt).y)
+
+	await waitFor(() =>
+		expect(Math.round(boxOf(ember).top - emberAt.top)).toBe(-step),
+	)
+	await expect(ember).toHaveAttribute("data-shift", "start")
+	await expect(offsetsOf(still, stillAt)).toEqual(still.map(() => 0))
+	await expect(Math.round(boxOf(beacon).top - beaconAt.top)).toBe(step)
+	await expect(Math.round(boxOf(beacon).left - beaconAt.left)).toBe(0)
+	await expectLiftedSurface(beacon)
+	await expectSlidingNeighbour(ember)
+	await expect(args.onPinRoster).not.toHaveBeenCalled()
+}
+
+export const LiftedRowWithNeighboursShifted = meta.story({
+	args: LIFT_ROSTER,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A pinned row held one slot down, light. Check Beacon lifts in place on the panel fill with a shadow under it and rides the pointer only up and down, that Ember slid up by Beacon's own height plus the row gap to open the gap, and that Launch room, Dune, Atlas and the rule between the zones kept their place. Pick `LiftedRowWithNeighboursShiftedDark` for the dark theme.",
+			},
+		},
+	},
+	play: playLiftedRowWithNeighboursShifted,
+})
+
+export const LiftedRowWithNeighboursShiftedDark = meta.story({
+	args: LIFT_ROSTER,
+	globals: DARK,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A pinned row held one slot down, dark: Beacon lifted on the dark panel fill, Ember slid up. Pick `LiftedRowWithNeighboursShifted` for the light theme.",
+			},
+		},
+	},
+	play: playLiftedRowWithNeighboursShifted,
+})
+
+const playLiftedSection = async ({
+	args,
+	canvasElement,
+}: {
+	args: BotRosterProps
+	canvasElement: HTMLElement
+}) => {
+	const review = cardOf(canvasElement, REVIEW.id)
+	const desk = cardOf(canvasElement, SIDEBAR_SECTION.id)
+	const room = itemOf(canvasElement, DESK_ROOM.name)
+	const [reviewAt, deskAt, roomAt] = [review, desk, room].map(boxOf)
+	const step = Math.round(reviewAt.height + rowGapOf(review))
+
+	carry(
+		headerOf(canvasElement, REVIEW.id),
+		middleOf(boxOf(headerOf(canvasElement, SIDEBAR_SECTION.id))).y,
+	)
+
+	await waitFor(() =>
+		expect(Math.round(boxOf(desk).top - deskAt.top)).toBe(step),
+	)
+	await expect(desk).toHaveAttribute("data-shift", "end")
+	await expect(Math.round(boxOf(review).top)).toBe(Math.round(deskAt.top))
+	await expect(Math.round(boxOf(room).top - roomAt.top)).toBe(0)
+	await expect(itemOf(canvasElement, DUNE.name)).not.toHaveAttribute(
+		"data-shift",
+	)
+	await expectLiftedSurface(review)
+	await expectSlidingNeighbour(desk)
+	await expect(args.onPinRoster).not.toHaveBeenCalled()
+}
+
+export const LiftedSection = meta.story({
+	args: LIFT_ROSTER,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A section held one slot up by its header, light. Check Review lifts whole, header and Dune together, on the panel fill with a shadow, and sits where Desk stood, that Desk slid down by Review's height plus the gap between sections, and that Launch room above them kept its place. Pick `LiftedSectionDark` for the dark theme.",
+			},
+		},
+	},
+	play: playLiftedSection,
+})
+
+export const LiftedSectionDark = meta.story({
+	args: LIFT_ROSTER,
+	globals: DARK,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A section held one slot up, dark: Review lifted whole, Desk slid down. Pick `LiftedSection` for the light theme.",
+			},
+		},
+	},
+	play: playLiftedSection,
+})
+
+const playDragOverTheSortedZone = async ({
+	args,
+	canvasElement,
+}: {
+	args: BotRosterProps
+	canvasElement: HTMLElement
+}) => {
+	const sorted = cardOf(canvasElement, "__sorted__")
+	const pinned = cardOf(canvasElement, "__pinned__")
+	const separator = slotIn(canvasElement, "roster-zone-separator")
+	const beacon = itemOf(canvasElement, BEACON.name)
+	const separatorAt = boxOf(separator)
+
+	carry(
+		rosterRowOf(canvasElement, BEACON.name),
+		middleOf(boxOf(itemOf(canvasElement, ATLAS.name))).y,
+	)
+
+	await waitFor(() => expect(sorted).toHaveAttribute("data-landing", "true"))
+	await expect(getComputedStyle(sorted).backgroundColor).not.toBe(
+		"rgba(0, 0, 0, 0)",
+	)
+	await expect(shiftedIn(canvasElement)).toHaveLength(0)
+	await expect(Math.round(boxOf(separator).top)).toBe(
+		Math.round(separatorAt.top),
+	)
+	await expect(boxOf(beacon).bottom).toBeLessThanOrEqual(
+		boxOf(pinned).bottom + 0.5,
+	)
+	await expectLiftedSurface(beacon)
+	await expect(args.onPinRoster).not.toHaveBeenCalled()
+}
+
+export const DragOverTheSortedZone = meta.story({
+	args: LIFT_ROSTER,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A pinned row held over the activity-sorted zone, light. That zone has no order to drop into, so the whole zone lightens and no gap opens anywhere: Atlas keeps its place, every pinned row is back at rest, and the rule between the zones never moves. Check Beacon stays lifted inside the pinned zone, stopped at its bottom edge however far the pointer goes. A release here unpins it. Pick `DragOverTheSortedZoneDark` for the dark theme.",
+			},
+		},
+	},
+	play: playDragOverTheSortedZone,
+})
+
+export const DragOverTheSortedZoneDark = meta.story({
+	args: LIFT_ROSTER,
+	globals: DARK,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A pinned row held over the activity-sorted zone, dark: the zone lightened whole, no gap. Pick `DragOverTheSortedZone` for the light theme.",
+			},
+		},
+	},
+	play: playDragOverTheSortedZone,
+})
+
+const COLLAPSED_DESK = {
+	...LIFT_ROSTER,
+	collapsedSectionIds: [SIDEBAR_SECTION.id],
+}
+
+const playCollapsedSectionSkipped = async ({
+	args,
+	canvasElement,
+}: {
+	args: BotRosterProps
+	canvasElement: HTMLElement
+}) => {
+	const desk = cardOf(canvasElement, SIDEBAR_SECTION.id)
+	const review = cardOf(canvasElement, REVIEW.id)
+	const hidden = [BEACON, EMBER].map(({ name }) => itemOf(canvasElement, name))
+	const handle = rosterRowOf(canvasElement, DESK_ROOM.name)
+	const gutter = (boxOf(desk).bottom + boxOf(review).top) / 2
+
+	const released = carry(handle, gutter)
+	await waitFor(() => expect(desk).toHaveAttribute("data-shift", "start"))
+	for (const row of hidden) await expect(row).not.toHaveAttribute("data-shift")
+	await expect(review).not.toHaveAttribute("data-shift")
+	await expect(desk).not.toHaveAttribute("data-landing")
+	fireEvent.pointerUp(handle, released)
+	await expect(args.onPinRoster).toHaveBeenCalledWith(SIDEBAR_SPACES[0].id, [
+		{ id: SIDEBAR_SECTION.id, sectionId: null },
+		{ id: BEACON.id, sectionId: SIDEBAR_SECTION.id },
+		{ id: EMBER.id, sectionId: SIDEBAR_SECTION.id },
+		{ id: DESK_ROOM.id, sectionId: null },
+		{ id: REVIEW.id, sectionId: null },
+		{ id: DUNE.id, sectionId: REVIEW.id },
+	])
+
+	carry(handle, gutter)
+	await waitFor(() => expect(desk).toHaveAttribute("data-shift", "start"))
+}
+
+export const CollapsedSectionSkipped = meta.story({
+	args: COLLAPSED_DESK,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A pinned row carried past a collapsed section, light. The rows Desk hides are no slots: the whole Desk card slides up as one under Launch room, Beacon and Ember never move inside it, and the gap opens straight under Desk. Check the release in the gutter files Launch room after Desk and both of its hidden rows, then the row lifted again and held there. Pick `CollapsedSectionSkippedDark` for the dark theme.",
+			},
+		},
+	},
+	play: playCollapsedSectionSkipped,
+})
+
+export const CollapsedSectionSkippedDark = meta.story({
+	args: COLLAPSED_DESK,
+	globals: DARK,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A pinned row carried past a collapsed section, dark: Desk slides up whole, its hidden rows skipped. Pick `CollapsedSectionSkipped` for the light theme.",
+			},
+		},
+	},
+	play: playCollapsedSectionSkipped,
+})
+
+const visibleBottomOf = (card: HTMLElement) => {
+	const group = slotIn(card, "sidebar-group")
+	const [clip] = getComputedStyle(group, "::before").clipPath.split("round")
+	const [top = 0, , bottom = top] = (clip.match(/-?[\d.]+/g) ?? []).map(Number)
+	return boxOf(group).bottom - bottom
+}
+
+const playPinnedRowLiftedOutOfItsSection = async ({
+	args,
+	canvasElement,
+}: {
+	args: BotRosterProps
+	canvasElement: HTMLElement
+}) => {
+	const desk = cardOf(canvasElement, SIDEBAR_SECTION.id)
+	const fill = slotIn(desk, "sidebar-group")
+	const below = [
+		cardOf(canvasElement, REVIEW.id),
+		itemOf(canvasElement, DUNE.name),
+		slotIn(canvasElement, "roster-zone-separator"),
+		itemOf(canvasElement, ATLAS.name),
+	]
+	const ember = itemOf(canvasElement, EMBER.name)
+	const step = Math.round(boxOf(ember).height + rowGapOf(ember))
+	const fullBottom = visibleBottomOf(desk)
+	const handle = rosterRowOf(canvasElement, EMBER.name)
+	const backInDesk = middleOf(boxOf(rosterRowOf(canvasElement, BEACON.name)))
+	const intoReview = middleOf(boxOf(headerOf(canvasElement, REVIEW.id))).y
+
+	const held = carry(handle, intoReview)
+	await waitFor(() => expect(desk).toHaveAttribute("data-giving", "true"))
+	await waitFor(() =>
+		expect(Math.round(fullBottom - visibleBottomOf(desk))).toBe(step),
+	)
+	await waitFor(async () => {
+		for (const node of below)
+			await expect(boxOf(node).top).toBeGreaterThanOrEqual(
+				visibleBottomOf(desk) - 0.5,
+			)
+	})
+	const closing = getComputedStyle(fill, "::before")
+	if (matchMedia("(prefers-reduced-motion: reduce)").matches)
+		await expect(closing.transitionDuration).toBe("0s")
+	else await expect(closing.transitionProperty).toBe("clip-path")
+
+	fireEvent.pointerMove(handle, pointerAt(backInDesk.x, backInDesk.y))
+	await waitFor(() => expect(desk).not.toHaveAttribute("data-giving"))
+	await waitFor(() =>
+		expect(Math.round(visibleBottomOf(desk))).toBe(Math.round(fullBottom)),
+	)
+
+	fireEvent.pointerMove(handle, held)
+	await waitFor(() => expect(desk).toHaveAttribute("data-giving", "true"))
+	await expect(args.onPinRoster).not.toHaveBeenCalled()
+}
+
+export const PinnedRowLiftedOutOfItsSection = meta.story({
+	args: LIFT_ROSTER,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A pinned row carried out of its section into the next one, light. Ember leaves Desk, so Desk's fill closes from the bottom by Ember's height plus the row gap while Review slides up by the same amount: nothing below Desk ever overlaps it, and no layout moves. Check the fill opens back to its full height the moment Ember is back over what Desk shows, then closes again once it is carried out. Pick `PinnedRowLiftedOutOfItsSectionDark` for the dark theme.",
+			},
+		},
+	},
+	play: playPinnedRowLiftedOutOfItsSection,
+})
+
+export const PinnedRowLiftedOutOfItsSectionDark = meta.story({
+	args: LIFT_ROSTER,
+	globals: DARK,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A pinned row carried out of its section, dark: Desk's fill closed by the row it lost, Review slid up under it. Pick `PinnedRowLiftedOutOfItsSection` for the light theme.",
+			},
+		},
+	},
+	play: playPinnedRowLiftedOutOfItsSection,
+})
+
+const pinnedIn = (props: BotRosterProps, pins: RosterPin[]) => {
+	const rankOf = (id: string) => pins.findIndex((pin) => pin.id === id)
+	const placed = <Row extends { id: string }>(row: Row) => {
+		const rank = rankOf(row.id)
+		return {
+			...row,
+			pinPosition: rank < 0 ? null : rank,
+			sectionId: rank < 0 ? null : pins[rank].sectionId,
+		}
+	}
+	return {
+		...props,
+		bots: props.bots.map(placed),
+		conversations: props.conversations.map(placed),
+		sections: props.sections.map((section) => ({
+			...section,
+			position: rankOf(section.id),
+		})),
+	}
+}
+
+const LiveRoster = (args: BotRosterProps) => {
+	const [shown, setShown] = useState(args)
+	return (
+		<BotRoster
+			{...shown}
+			onPinRoster={(spaceId, pins) => {
+				args.onPinRoster?.(spaceId, pins)
+				setShown((held) => pinnedIn(held, pins))
+			}}
+		/>
+	)
+}
+
+const moveAnnouncement = () =>
+	document.querySelector('[data-slot="roster-move-announcement"]')
+
+export const KeyboardMovesAPinnedRowOrSection = meta.story({
+	tags: ["test-only"],
+	args: LIFT_ROSTER,
+	render: (args) => <LiveRoster {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Moving a pinned row or a section from the keyboard, the pattern of the title bar tabs. Check Option+Down on the focused Launch room files it first in Desk, keeps the focus on it and announces its new place politely, that Option+Up takes it back out, that plain arrows move nothing, and that Option+Up on the Review header moves the whole section above Desk with the focus kept on its header. Option+arrows on a sorted row, on the first pinned place going up and on the last going down call nothing and leave the key to the browser.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const room = () => rosterRowOf(canvasElement, DESK_ROOM.name)
+
+		room().focus()
+		await userEvent.keyboard("{Alt>}{ArrowDown}{/Alt}")
+		await expect(args.onPinRoster).toHaveBeenCalledTimes(1)
+		await waitFor(() =>
+			expect(room().closest('[data-roster-drop="desk"]')).not.toBeNull(),
+		)
+		await expect(room()).toHaveFocus()
+		await expect(moveAnnouncement()).toHaveAttribute("aria-live", "polite")
+		await expect(moveAnnouncement()).toHaveTextContent(
+			`${DESK_ROOM.name} moved to position 1 of 3 in ${SIDEBAR_SECTION.name}`,
+		)
+
+		await userEvent.keyboard("{Alt>}{ArrowUp}{/Alt}")
+		await expect(args.onPinRoster).toHaveBeenCalledTimes(2)
+		await waitFor(() =>
+			expect(room().closest('[data-roster-drop="desk"]')).toBeNull(),
+		)
+		await expect(room()).toHaveFocus()
+		await expect(moveAnnouncement()).toHaveTextContent(
+			`${DESK_ROOM.name} moved to position 1 of 3`,
+		)
+
+		await userEvent.keyboard("{ArrowDown}")
+		await expect(args.onPinRoster).toHaveBeenCalledTimes(2)
+
+		const altArrow = (key: string) => ({ key, altKey: true })
+		const atlas = rosterRowOf(canvasElement, ATLAS.name)
+		await expect(fireEvent.keyDown(room(), altArrow("ArrowUp"))).toBe(true)
+		await expect(fireEvent.keyDown(atlas, altArrow("ArrowUp"))).toBe(true)
+		await expect(fireEvent.keyDown(atlas, altArrow("ArrowDown"))).toBe(true)
+		const review = headerOf(canvasElement, REVIEW.id)
+		await expect(fireEvent.keyDown(review, altArrow("ArrowDown"))).toBe(true)
+		await expect(args.onPinRoster).toHaveBeenCalledTimes(2)
+
+		review.focus()
+		await userEvent.keyboard("{Alt>}{ArrowUp}{/Alt}")
+		await expect(args.onPinRoster).toHaveBeenCalledTimes(3)
+		await waitFor(() =>
+			expect(
+				cardOf(canvasElement, REVIEW.id).compareDocumentPosition(
+					cardOf(canvasElement, SIDEBAR_SECTION.id),
+				),
+			).toBe(Node.DOCUMENT_POSITION_FOLLOWING),
+		)
+		await expect(headerOf(canvasElement, REVIEW.id)).toHaveFocus()
+		await expect(moveAnnouncement()).toHaveTextContent(
+			`${REVIEW.name} moved to position 2 of 3`,
+		)
+
+		const ember = () => rosterRowOf(canvasElement, EMBER.name)
+		await expect(fireEvent.keyDown(ember(), altArrow("ArrowDown"))).toBe(false)
+		await waitFor(() =>
+			expect(ember().closest('[data-roster-drop="desk"]')).toBeNull(),
+		)
+		await expect(args.onPinRoster).toHaveBeenCalledTimes(4)
+		await expect(fireEvent.keyDown(ember(), altArrow("ArrowDown"))).toBe(true)
+		await expect(args.onPinRoster).toHaveBeenCalledTimes(4)
 	},
 })

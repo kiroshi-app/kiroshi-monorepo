@@ -21,11 +21,15 @@ import {
 	type PinnedEntry,
 	waitingFirst,
 } from "@workspace/ui/components/app-sidebar-pins"
-import type { RosterDrag } from "@workspace/ui/components/app-sidebar-roster-drag"
+import {
+	emptySlotOf,
+	headSlotOf,
+	type RosterDrag,
+} from "@workspace/ui/components/app-sidebar-roster-drag"
 import type { RosterEntries } from "@workspace/ui/components/app-sidebar-roster-layout"
 import {
-	type InsertionEdge,
 	RosterDropArea,
+	type RosterRowSlot,
 	SectionDropZone,
 } from "@workspace/ui/components/app-sidebar-roster-parts"
 import { RosterSection } from "@workspace/ui/components/app-sidebar-section"
@@ -33,6 +37,7 @@ import type { RosterPinActions } from "@workspace/ui/components/roster-menu-item
 import type { Space } from "@workspace/ui/components/space"
 import { SidebarMenu } from "@workspace/ui/components/ui/sidebar"
 import type { Lifter } from "@workspace/ui/hooks/use-roster-lift"
+import type { SlideShift } from "@workspace/ui/hooks/use-sliding-lift"
 
 interface RosterRowsContext
 	extends BotRosterActions,
@@ -45,8 +50,10 @@ interface RosterRowsContext
 	sections: AppSidebarSection[]
 	membershipsOf: (botId: string) => string[]
 	lift: Lifter
-	edgeAt: (id: string) => InsertionEdge | undefined
-	slotFor: (id: string) => (node: HTMLElement | null) => void
+	liftedId?: string
+	shiftOf: (entry: PinnedEntry) => SlideShift | undefined
+	keepFocus: (id: string, node: HTMLElement | null) => void
+	onMoveKey: RosterRowSlot["onMoveKey"]
 	onCreateSectionFor?: (id: string) => void
 	onMoveToSection?: (id: string, sectionId: string | null) => void
 }
@@ -69,20 +76,24 @@ interface RosterRowProps {
 }
 
 const RosterRow = ({ entry, isSlotted, rows }: RosterRowProps) => {
-	const { edgeAt, slotFor, membershipsOf } = rows
+	const { liftedId, membershipsOf } = rows
 	const memberships = useSameSpaceIds(
 		entry.bot ? membershipsOf(entry.bot.id) : NO_SPACE_IDS,
 	)
+	const isLifted = entry.id === liftedId
 	const shared = {
-		insertion: isSlotted ? edgeAt(entry.id) : undefined,
+		isLifted,
 		isPinned: isSlotted,
+		isSliding: isSlotted && Boolean(liftedId) && !isLifted,
 		lift: rows.lift,
 		onCreateSectionFor: rows.onCreateSectionFor,
 		onMoveToSection: rows.onMoveToSection,
 		onPin: rows.onPin,
 		onUnpin: rows.onUnpin,
+		onMoveKey: isSlotted ? rows.onMoveKey : undefined,
 		sections: rows.sections,
-		slotRef: isSlotted ? slotFor(entry.id) : undefined,
+		shift: isSlotted ? rows.shiftOf(entry) : undefined,
+		keepFocus: rows.keepFocus,
 	}
 	if (entry.conversation)
 		return (
@@ -178,8 +189,9 @@ const PinnedZone = ({
 	return (
 		<RosterDropArea
 			className={PINNED_ZONE_STACK}
-			isLanding={topLevel.length === 0 && drag.insertion !== null}
+			isLanding={topLevel.length === 0 && drag.isPinnedLanding}
 			landing={PINNED_ZONE}
+			slotId={topLevel.length === 0 ? PINNED_ZONE : undefined}
 		>
 			{topLevel.length > 0 ? (
 				inRuns(topLevel).map((run) => {
@@ -190,39 +202,43 @@ const PinnedZone = ({
 								{rosterMenuOf(run, true, rows)}
 							</Fragment>
 						)
+					const { id } = entry.section
 					const rank = topLevel.indexOf(entry)
-					const heldRows = rowsOf(entry.section.id)
-					const isLifted = entry.section.id === drag.liftedSectionId
+					const heldRows = rowsOf(id)
+					const isLifted = id === drag.liftedSectionId
 					return (
 						<RosterDropArea
-							insertion={drag.edgeAt(entry.id)}
-							isLanding={drag.landingSection === entry.section.id}
+							isGiving={drag.isGiving(id)}
+							isLanding={drag.landingSection === id}
 							isLifted={isLifted}
+							isReceiving={drag.isReceiving(id)}
+							isSliding={drag.isLifting && !isLifted}
 							key={entry.id}
 							landing={entry.id}
-							ref={(node) => {
-								drag.cardFor(entry.id)(node)
-								if (isLifted) drag.rosterLift.followRef(node)
-							}}
+							ref={(node) => drag.keepFocus(id, node)}
+							shift={drag.cardShiftOf(id)}
+							slotId={id}
 						>
 							<RosterSection
-								headRef={drag.slotFor(entry.id)}
 								isFirst={rank === 0}
 								isLast={rank === topLevel.length - 1}
-								isOpen={!collapsedSectionIds.includes(entry.section.id)}
+								isOpen={!collapsedSectionIds.includes(id)}
 								lift={drag.rosterLift}
-								onOpenChange={(isOpen) =>
-									onCollapseSection?.(entry.section?.id ?? "", !isOpen)
-								}
+								onOpenChange={(isOpen) => onCollapseSection?.(id, !isOpen)}
 								onDelete={onDeleteSection}
 								onMove={onMoveSection}
+								onMoveKey={(event) => drag.moveSectionByKey(id, event)}
 								onRename={onRenameSection}
 								section={entry.section}
+								slotId={headSlotOf(id)}
 							>
 								{heldRows.length > 0 ? (
 									rosterMenuOf(heldRows, true, rows)
 								) : (
-									<SectionDropZone name={entry.section.name} />
+									<SectionDropZone
+										name={entry.section.name}
+										slotId={emptySlotOf(id)}
+									/>
 								)}
 							</RosterSection>
 						</RosterDropArea>

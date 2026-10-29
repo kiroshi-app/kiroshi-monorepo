@@ -1,3 +1,4 @@
+import { useRef } from "react"
 import { expect, mocked, spyOn, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
@@ -43,7 +44,14 @@ const LivePinnedZone = ({
 		naming: null,
 		sections,
 	})
-	const drag = useRosterDrag({ entries, onLand: () => undefined })
+	const frameRef = useRef<HTMLDivElement>(null)
+	const drag = useRosterDrag({
+		collapsedSectionIds: [],
+		containerRef: frameRef,
+		entries,
+		onLand: () => undefined,
+		onMoveSection: () => undefined,
+	})
 
 	return (
 		<PinnedZone
@@ -52,11 +60,13 @@ const LivePinnedZone = ({
 			entries={entries}
 			onMoveSection={() => undefined}
 			rows={{
-				edgeAt: drag.edgeAt,
 				lift: drag.rosterLift,
+				liftedId: drag.liftedId,
 				membershipsOf: () => [],
+				onMoveKey: undefined,
 				sections,
-				slotFor: drag.slotFor,
+				shiftOf: drag.rowShiftOf,
+				keepFocus: drag.keepFocus,
 				spaces: SIDEBAR_SPACES,
 			}}
 		/>

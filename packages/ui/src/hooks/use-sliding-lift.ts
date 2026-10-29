@@ -65,6 +65,7 @@ type SlideGeometrySource = {
 	liftedId: string
 	press: Point
 	gap: number
+	entering?: SlotBox
 }
 
 export const slideGeometryOf = ({
@@ -74,17 +75,26 @@ export const slideGeometryOf = ({
 	liftedId,
 	press,
 	gap,
+	entering,
 }: SlideGeometrySource): SlideGeometry | null => {
-	const origin = zone.indexOf(liftedId)
-	const rest = origin < 0 ? null : boxes[origin]
+	const origin = entering ? zone.length : zone.indexOf(liftedId)
+	const rest = entering ?? (origin < 0 ? null : boxes[origin])
 	if (!rest) return null
 	const isLaidOut = hasArea(rest)
+	const size = sizeOf(rest, axis)
 	const slots = zone.flatMap((id, rank) => {
 		const box = boxes[rank]
 		return box && (!isLaidOut || hasArea(box))
 			? [{ id, rank, start: startOf(box, axis), end: endOf(box, axis) }]
 			: []
 	})
+	if (entering) {
+		const last = slots.at(-1)
+		const start = last ? last.end + gap : startOf(rest, axis)
+		slots.push({ id: liftedId, rank: origin, start, end: start + size })
+	}
+	const minShift = slots[0].start - startOf(rest, axis)
+	const maxShift = slots[slots.length - 1].end - endOf(rest, axis)
 	return {
 		axis,
 		liftedId,
@@ -92,9 +102,9 @@ export const slideGeometryOf = ({
 		rest,
 		press: press[axis],
 		slots,
-		minShift: slots[0].start - startOf(rest, axis),
-		maxShift: slots[slots.length - 1].end - endOf(rest, axis),
-		shift: sizeOf(rest, axis) + gap,
+		minShift: entering ? Math.min(minShift, 0) : minShift,
+		maxShift: entering ? Math.max(maxShift, 0) : maxShift,
+		shift: size + gap,
 	}
 }
 
@@ -102,8 +112,11 @@ export const slideLandingIn = (
 	geometry: SlideGeometry,
 	x: number,
 	y: number,
+	accepts: (rank: number) => boolean = () => true,
 ) => {
-	const { axis, origin, rest, slots } = geometry
+	const { axis, origin, rest } = geometry
+	const accepted = geometry.slots.filter((slot) => accepts(slot.rank))
+	const slots = accepted.length > 0 ? accepted : geometry.slots
 	const travel = Math.min(
 		Math.max((axis === "x" ? x : y) - geometry.press, geometry.minShift),
 		geometry.maxShift,
@@ -137,23 +150,25 @@ type SlideLayout = {
 	slot: string
 	idAttribute: string
 	zones: readonly (readonly string[])[]
+	entryZone?: readonly string[]
 }
 
 const measureSlide = (
 	container: HTMLElement,
-	{ axis, slot, idAttribute, zones }: SlideLayout,
+	{ axis, slot, idAttribute, zones, entryZone }: SlideLayout,
 	liftedId: string,
 	press: Point,
 ) => {
-	const zone = zones.find((ids) => ids.includes(liftedId))
+	const zone = zones.find((ids) => ids.includes(liftedId)) ?? entryZone
 	const nodes = new Map(
 		[...container.querySelectorAll(slot)].map((node) => [
 			node.getAttribute(idAttribute),
 			node,
 		]),
 	)
-	const parent = nodes.get(liftedId)?.parentElement
-	if (!zone || !parent) return null
+	const lifted = nodes.get(liftedId)
+	const parent = lifted?.parentElement
+	if (!zone || !lifted || !parent) return null
 	const geometry = slideGeometryOf({
 		axis,
 		zone,
@@ -163,6 +178,9 @@ const measureSlide = (
 		gap: pixelsOf(
 			getComputedStyle(parent)[axis === "x" ? "columnGap" : "rowGap"],
 		),
+		entering: zone.includes(liftedId)
+			? undefined
+			: lifted.getBoundingClientRect(),
 	})
 	if (!geometry) return null
 	container.style.setProperty(SHIFT_VARIABLE[axis], `${geometry.shift}px`)
@@ -189,6 +207,7 @@ export const useSlidingLift = <Landing = never>({
 	slot,
 	idAttribute,
 	zones,
+	entryZone,
 	containerRef,
 	landingOutside,
 	onLift,
@@ -199,7 +218,12 @@ export const useSlidingLift = <Landing = never>({
 	const measure = (id: string, press: Point) => {
 		const container = containerRef.current
 		geometry.current = container
-			? measureSlide(container, { axis, slot, idAttribute, zones }, id, press)
+			? measureSlide(
+					container,
+					{ axis, slot, idAttribute, zones, entryZone },
+					id,
+					press,
+				)
 			: null
 	}
 

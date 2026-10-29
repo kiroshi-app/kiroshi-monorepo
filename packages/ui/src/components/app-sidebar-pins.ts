@@ -25,13 +25,6 @@ const SORTED = "sorted"
 
 type Landing = typeof SORTED | { at: number; holder: string | null }
 
-const isSameLanding = (one: Landing | null, other: Landing | null) => {
-	if (one === other) return true
-	if (one === null || other === null || one === SORTED || other === SORTED)
-		return false
-	return one.at === other.at && one.holder === other.holder
-}
-
 interface PinnedEntry {
 	id: string
 	sectionId: string | null
@@ -102,7 +95,6 @@ export {
 	conversationEntry,
 	endOfSection,
 	inRuns,
-	isSameLanding,
 	type Landing,
 	PINNED_ZONE,
 	type PinnedEntry,
