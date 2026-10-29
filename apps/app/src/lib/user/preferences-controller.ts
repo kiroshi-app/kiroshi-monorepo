@@ -15,6 +15,7 @@ import {
 	changeOnboardingStep,
 	changePreferences,
 	changeProfilePicture,
+	markOnboardingImportSeen,
 	readPreferences,
 	replayOnboarding,
 } from "./preferences-queue"
@@ -61,6 +62,7 @@ export type UserController = {
 	setOnboardingStep: (step: OnboardingStep) => Promise<void>
 	replayOnboarding: () => Promise<void>
 	setOnboardingFirstCompanion: (botId: string) => Promise<void>
+	markOnboardingImportSeen: () => Promise<void>
 	setLastBot: (opened: LastBotOpened) => Promise<void>
 	setLastSpace: (lastSpaceId: string) => Promise<void>
 	setUpdateChannel: (updateChannel: UpdateChannel) => Promise<void>
@@ -257,6 +259,8 @@ export const createUserController = (): UserController => {
 
 		setOnboardingFirstCompanion: (botId: string) =>
 			changeOnboardingFirstCompanion(botId).then(apply),
+
+		markOnboardingImportSeen: () => markOnboardingImportSeen().then(apply),
 
 		setLastBot: (opened: LastBotOpened) =>
 			changeMirrored({ lastBotIdBySpace: botIdBySpaceWith(opened) }),

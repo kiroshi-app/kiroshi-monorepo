@@ -1,6 +1,5 @@
 import { useState } from "react"
 
-import { ImportScreen } from "@workspace/ui/components/import-screen"
 import { OnboardingAccountScreen } from "@workspace/ui/components/onboarding-account-screen"
 import { OnboardingConnectScreen } from "@workspace/ui/components/onboarding-connect-screen"
 import { OnboardingShell } from "@workspace/ui/components/onboarding-shell"
@@ -8,9 +7,10 @@ import {
 	OnboardingWelcomeScreen,
 	type OnboardingWelcomeStep,
 } from "@workspace/ui/components/onboarding-welcome-screen"
-import { i18n } from "@workspace/ui/lib/i18n"
 
+import { ClaudeImport } from "@/components/claude-import"
 import { useAccount, type WatchedAccount } from "@/lib/account/use-account"
+import type { ClaudeImportScene } from "@/lib/onboarding/claude-import-controller"
 import {
 	connectAccountOf,
 	connectStepOf,
@@ -25,8 +25,6 @@ const WELCOME_STEPS: OnboardingWelcomeStep[] = [
 ]
 
 const LAST_WELCOME_PAGE = WELCOME_STEPS.length - 1
-
-const ignoreToggle = () => undefined
 
 type OnboardingStepProps = {
 	flow: OnboardingFlow
@@ -86,27 +84,19 @@ const OnboardingConnect = ({ flow }: OnboardingStepProps) => {
 	)
 }
 
-const OnboardingImport = ({ flow }: OnboardingStepProps) => {
-	const skip = {
-		label: i18n.t("common:claudeImport.select.skip"),
-		onPress: () => void flow.controller.skipImport(),
-	}
-
-	return (
-		<ImportScreen
-			onToggle={ignoreToggle}
-			primary={{
-				label: i18n.t("common:claudeImport.select.import"),
-				onPress: skip.onPress,
-			}}
-			secondary={skip}
-			sections={[]}
-			step="select"
-			subtitle={i18n.t("common:claudeImport.select.body")}
-			title={i18n.t("common:claudeImport.select.title")}
-		/>
-	)
+type OnboardingImportProps = OnboardingStepProps & {
+	importScene: ClaudeImportScene
 }
+
+const OnboardingImport = ({ flow, importScene }: OnboardingImportProps) => (
+	<ClaudeImport
+		variant="onboarding"
+		world={{
+			...importScene,
+			leave: () => void flow.controller.skipImport(),
+		}}
+	/>
+)
 
 type OnboardingAccountProps = OnboardingStepProps & {
 	account: WatchedAccount
@@ -135,6 +125,7 @@ const OnboardingAccount = ({
 
 type OnboardingScreenProps = OnboardingAccountProps & {
 	step: OnboardingScreenStep
+	importScene: ClaudeImportScene
 }
 
 export const OnboardingScreen = ({
@@ -142,6 +133,7 @@ export const OnboardingScreen = ({
 	flow,
 	account,
 	readerName,
+	importScene,
 }: OnboardingScreenProps) => {
 	switch (step) {
 		case "welcome":
@@ -149,7 +141,7 @@ export const OnboardingScreen = ({
 		case "connect":
 			return <OnboardingConnect flow={flow} />
 		case "import":
-			return <OnboardingImport flow={flow} />
+			return <OnboardingImport flow={flow} importScene={importScene} />
 		case "account":
 			return (
 				<OnboardingAccount

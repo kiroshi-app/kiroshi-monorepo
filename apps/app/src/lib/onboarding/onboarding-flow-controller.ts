@@ -156,9 +156,15 @@ export const createOnboardingFlowController = (
 		}
 	}
 
+	const offersImport = () =>
+		port.hasClaudeHome().catch((reason: unknown) => {
+			report(i18n.t("common:claudeImport.unreadable.title"), reason)
+			return false
+		})
+
 	const settle = async () => {
 		set({ connection: null, round: current().round + 1 })
-		if (await port.hasClaudeHome()) {
+		if (await offersImport()) {
 			await store("import")
 			return
 		}

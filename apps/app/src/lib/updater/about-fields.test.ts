@@ -46,6 +46,8 @@ const userOf = (preferences: Partial<User["state"]["preferences"]> = {}) =>
 
 const onReplayOnboarding = vi.fn()
 
+const onImportFromClaudeCode = vi.fn()
+
 const fieldsOf = (
 	updater = updaterOf(stateOf()),
 	user = userOf({ updateChannel: "beta", showWhatsNew: false }),
@@ -56,6 +58,8 @@ const fieldsOf = (
 		runningVersion: "0.25.0",
 		onWhatsNew: vi.fn(),
 		onReplayOnboarding,
+		canImportFromClaudeCode: true,
+		onImportFromClaudeCode,
 	})
 
 describe("toAboutUpdate", () => {
@@ -141,8 +145,33 @@ describe("aboutFieldsOf", () => {
 				runningVersion: null,
 				onWhatsNew: vi.fn(),
 				onReplayOnboarding,
+				canImportFromClaudeCode: true,
+				onImportFromClaudeCode,
 			}),
 		).toBeUndefined()
+	})
+
+	it("offers the Claude Code import and opens it from Getting started", () => {
+		const gettingStarted = fieldsOf()?.gettingStarted
+
+		gettingStarted?.onImportFromClaudeCode()
+
+		expect(gettingStarted?.canImportFromClaudeCode).toBe(true)
+		expect(onImportFromClaudeCode).toHaveBeenCalledOnce()
+	})
+
+	it("hides the Claude Code import when there is nothing to import", () => {
+		const fields = aboutFieldsOf({
+			updater: updaterOf(stateOf()),
+			user: userOf(),
+			runningVersion: "0.25.0",
+			onWhatsNew: vi.fn(),
+			onReplayOnboarding,
+			canImportFromClaudeCode: false,
+			onImportFromClaudeCode,
+		})
+
+		expect(fields?.gettingStarted?.canImportFromClaudeCode).toBe(false)
 	})
 
 	it("replays the onboarding from Getting started", () => {

@@ -32,3 +32,6 @@ export const changeOnboardingFirstCompanion = (
 	botId: string,
 ): Promise<UserPreferences> =>
 	enqueue(() => userPreferencesStore.setOnboardingFirstCompanion(botId))
+
+export const markOnboardingImportSeen = (): Promise<UserPreferences> =>
+	enqueue(() => userPreferencesStore.markOnboardingImportSeen())
