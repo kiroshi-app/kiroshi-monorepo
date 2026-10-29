@@ -368,19 +368,50 @@ async fn a_corrupted_agent_fails_alone() {
 	assert_eq!(mark, BTreeSet::from(["agents/reviewer.md".to_owned()]));
 }
 
+const LOGO: [u8; 6] = [0x89, 0x50, 0x4e, 0x47, 0xff, 0xfe];
+
+fn titles_of(app: &App<MockRuntime>) -> Vec<String> {
+	let history = bundles::plugin::history(&person_of(app)).expect("the history reads");
+	history.into_iter().map(|entry| entry.title).collect()
+}
+
 #[tokio::test]
-async fn a_skill_holding_a_file_that_does_not_read_fails_and_leaves_no_skill() {
+async fn a_skill_holding_a_file_that_is_not_text_imports_it_byte_for_byte() {
 	let app = a_host("skill-binary");
 	let root = a_claude_root();
-	fs::write(root.join("skills/pdf/logo.png"), [0x89, 0x50, 0xff, 0xfe])
-		.expect("the image stands");
-	let skills_before = bundles::plugin::skills(&person_of(&app)).len();
+	fs::write(root.join("skills/pdf/logo.png"), LOGO).expect("the image stands");
 
-	let outcomes = imported(&app, &root, &["skills/pdf", "skills/notes"]).await;
+	let outcomes = imported(&app, &root, &["skills/pdf"]).await;
 
-	assert!(cause_of(&outcomes[0]).starts_with("skills/pdf/logo.png did not read"), "{outcomes:?}");
-	assert_eq!(imported_named(&outcomes[1]), "Meeting notes");
-	assert_eq!(bundles::plugin::skills(&person_of(&app)).len(), skills_before + 1);
+	let ClaudeImportResult::Imported { id, .. } = &outcomes[0].result else {
+		panic!("the skill was not imported: {outcomes:?}");
+	};
+	let held = person_of(&app).join("skills").join(id);
+	assert_eq!(fs::read(held.join("logo.png")).expect("the image reads"), LOGO);
+	assert_eq!(
+		fs::read(held.join("forms.md")).expect("the guide reads"),
+		b"Field one is the name.\n"
+	);
+}
+
+#[tokio::test]
+async fn each_imported_skill_or_claude_md_lands_as_one_entry_named_as_an_import() {
+	let app = a_host("one-entry");
+	let root = a_claude_root();
+	fs::write(root.join("skills/pdf/logo.png"), LOGO).expect("the image stands");
+	let before = titles_of(&app);
+
+	let outcomes = imported(&app, &root, &["skills/pdf", "CLAUDE.md"]).await;
+
+	assert_eq!(outcomes.iter().map(imported_named).collect::<Vec<_>>(), ["pdf", "CLAUDE.md"]);
+	let after = titles_of(&app);
+	assert_eq!(
+		after[..after.len() - before.len()],
+		[
+			"Skill \"CLAUDE.md\" imported from Claude Code".to_owned(),
+			"Skill \"pdf\" imported from Claude Code".to_owned(),
+		]
+	);
 }
 
 #[tokio::test]

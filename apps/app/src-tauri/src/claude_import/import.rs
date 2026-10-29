@@ -16,6 +16,7 @@ use crate::events::CLAUDE_IMPORT_PROGRESS;
 
 const CLAUDE_MD_DESCRIPTION: &str = "The person's own instructions, carried over from CLAUDE.md.";
 const FINDER_LITTER: &str = ".DS_Store";
+const IMPORT_REASON: &str = "imported from Claude Code";
 
 pub(super) struct Importer<'a, R: Runtime> {
 	pub(super) app: &'a AppHandle<R>,
@@ -37,7 +38,6 @@ enum Unimported {
 	Linked { relative: String },
 	Store(TranscriptStoreError),
 	Unwritten(std::io::Error),
-	LeftBehind { failure: std::io::Error, leftover: std::io::Error },
 }
 
 impl Unimported {
@@ -55,9 +55,6 @@ impl Unimported {
 			}
 			Unimported::Store(failure) => format!("the store refused: {failure:?}"),
 			Unimported::Unwritten(failure) => format!("the skill was not written: {failure}"),
-			Unimported::LeftBehind { failure, leftover } => format!(
-				"the skill was not written: {failure}, and its half was not taken back: {leftover}"
-			),
 		}
 	}
 }
@@ -193,7 +190,7 @@ fn unread(relative: &str) -> impl FnOnce(std::io::Error) -> Unimported + '_ {
 	move |failure| Unimported::Unread { relative: relative.to_owned(), failure }
 }
 
-fn skill_files(key: &str, dir: &Path) -> Result<Vec<(String, String)>, Unimported> {
+fn skill_files(key: &str, dir: &Path) -> Result<Vec<(String, Vec<u8>)>, Unimported> {
 	let mut files = Vec::new();
 	gather(key, dir, Path::new(""), &mut files)?;
 	files.sort();
@@ -204,7 +201,7 @@ fn gather(
 	key: &str,
 	dir: &Path,
 	relative: &Path,
-	files: &mut Vec<(String, String)>,
+	files: &mut Vec<(String, Vec<u8>)>,
 ) -> Result<(), Unimported> {
 	let shown = |found: &Path| format!("{key}/{}", found.to_string_lossy().replace('\\', "/"));
 	let listed = fs::read_dir(dir.join(relative))
@@ -219,8 +216,8 @@ fn gather(
 		if kind.is_dir() {
 			gather(key, dir, &found, files)?;
 		} else if found != Path::new(SKILL_FILE) && entry.file_name() != FINDER_LITTER {
-			let text = read(&shown(&found), &dir.join(&found))?;
-			files.push((found.to_string_lossy().replace('\\', "/"), text));
+			let bytes = fs::read(dir.join(&found)).map_err(unread(&shown(&found)))?;
+			files.push((found.to_string_lossy().replace('\\', "/"), bytes));
 		}
 	}
 	Ok(())
@@ -229,20 +226,9 @@ fn gather(
 fn written(
 	person: &Path,
 	draft: &SkillDraft,
-	files: &[(String, String)],
+	files: &[(String, Vec<u8>)],
 ) -> Result<Created, Unimported> {
-	let skill = bundles::create_skill_at(person, draft).map_err(Unimported::Unwritten)?;
-	for (relative, text) in files {
-		if let Err(failure) = bundles::write_skill_file_at(person, &skill.id, relative, text) {
-			return Err(withdrawn(person, &skill.id, failure));
-		}
-	}
+	let skill = bundles::create_skill_with_files_at(person, draft, files, IMPORT_REASON)
+		.map_err(Unimported::Unwritten)?;
 	Ok(Created { id: skill.id, name: skill.name })
-}
-
-fn withdrawn(person: &Path, skill_id: &str, failure: std::io::Error) -> Unimported {
-	match bundles::remove_skill_at(person, skill_id) {
-		Ok(()) => Unimported::Unwritten(failure),
-		Err(leftover) => Unimported::LeftBehind { failure, leftover },
-	}
 }
