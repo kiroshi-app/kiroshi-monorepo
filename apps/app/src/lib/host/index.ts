@@ -1,6 +1,6 @@
 import { TauriEvent } from "@tauri-apps/api/event"
 import { getAllWebviewWindows } from "@tauri-apps/api/webviewWindow"
-import { getCurrentWindow } from "@tauri-apps/api/window"
+import { cursorPosition, getCurrentWindow } from "@tauri-apps/api/window"
 import { platform } from "@tauri-apps/plugin-os"
 
 import { createHostedSpaces } from "./hosted-spaces"
@@ -106,6 +106,20 @@ export const liveWindowLabels = async (): Promise<string[]> =>
 	(await getAllWebviewWindows()).map((window) => window.label)
 
 export const currentWindowLabel = (): string => getCurrentWindow().label
+
+export type PointerPosition = {
+	x: number
+	y: number
+}
+
+export const readPointerPosition = async (): Promise<PointerPosition> => {
+	const pointer = await cursorPosition()
+	const { x, y } = pointer.toLogical(window.devicePixelRatio)
+	return { x: Math.round(x), y: Math.round(y) }
+}
+
+export const watchWindowMoves = (onMove: () => void): Promise<() => void> =>
+	getCurrentWindow().onMoved(onMove)
 
 export type LiveWindowsWatch = {
 	report: (labels: string[]) => void

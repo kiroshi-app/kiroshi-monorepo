@@ -11,6 +11,7 @@ import {
 	type WindowSize,
 } from "../bindings"
 import { raiseReportedFailure } from "../failure-report"
+import { readPointerPosition, watchWindowMoves } from "../host"
 
 export type TabTearOff = {
 	tabId: string
@@ -38,7 +39,7 @@ type TearOffMoves = {
 	moveTornOff: (tearOff: TabTearOff, size: WindowSize) => Promise<void>
 	raiseMoveFailure: (reason: unknown) => void
 	tornTabOf: (tabId: string) => TornTab | null
-	removeDocked: (spaceId: string, tabId: string) => void
+	removeDocked: (spaceId: string, tabId: string) => Promise<boolean>
 }
 
 type GhostAnswer = Awaited<ReturnType<typeof commands.dragGhostShow>>
@@ -60,18 +61,39 @@ type DragView = {
 	target: DockTarget
 }
 
-type TabDrag = {
-	kind: "tab"
+type Failing = {
+	hasFailed: boolean
+}
+
+type Announced = {
+	isAnnounced: boolean
+}
+
+type DockedDrag = Failing & {
 	tabId: string
+}
+
+type TabDrag = DockedDrag & {
+	kind: "tab"
 	spaceId: string
 	size: WindowSize
-	hasFailed: boolean
 	view: Promise<DragView>
 }
 
 type WindowDrag = {
 	kind: "window"
 	tabId: string
+}
+
+type WindowView = Announced & {
+	isHidden: boolean
+	target: DockTarget
+}
+
+type WindowMove = DockedDrag & {
+	spaceId: string
+	isReleased: boolean
+	view: Promise<WindowView>
 }
 
 export const pointOf = ({ screenX, screenY }: TabTearOff): ScreenPosition => ({
@@ -151,18 +173,12 @@ const raiseDragFailure = (command?: string) => {
 	)
 }
 
-const failOnce = (drag: TabDrag, command?: string) => {
+const failOnce = (drag: Failing, command?: string) => {
 	if (drag.hasFailed) {
 		return
 	}
 	drag.hasFailed = true
 	raiseDragFailure(command)
-}
-
-const startWindowMove = async () => {
-	if (!(await isAccepted(commands.windowStartNativeMove()))) {
-		raiseDragFailure("window_start_native_move")
-	}
 }
 
 const ghostLeft = async (view: DragView): Promise<DragView> => {
@@ -253,7 +269,7 @@ const movedView = async (
 	return ghostOver(drag, view, point, site.target)
 }
 
-const cancelAnnounced = async (drag: TabDrag, view: DragView) => {
+const cancelAnnounced = async (drag: Failing, view: Announced) => {
 	if (!view.isAnnounced) {
 		return true
 	}
@@ -262,6 +278,88 @@ const cancelAnnounced = async (drag: TabDrag, view: DragView) => {
 		failOnce(drag, "window_tab_drag_cancel")
 	}
 	return isCancelled
+}
+
+const pointerNow = () =>
+	readPointerPosition().catch((reason: unknown) => {
+		reportHostFailure(reason)
+		return null
+	})
+
+const reportUnwatched = (reason: unknown) => {
+	reportHostFailure(reason)
+	return () => undefined
+}
+
+const windowOver = async (
+	move: WindowMove,
+	view: WindowView,
+	target: DockTarget,
+): Promise<WindowView> => {
+	const shouldHide = target === "sameSpace"
+	if (shouldHide === view.isHidden) {
+		return { ...view, target }
+	}
+	const isDone = await isAccepted(
+		shouldHide ? commands.windowHide() : commands.windowShow(),
+	)
+	if (!isDone) {
+		failOnce(move, shouldHide ? "window_hide" : "window_show")
+	}
+	return { ...view, target, isHidden: isDone ? shouldHide : view.isHidden }
+}
+
+const announcedWindow = async (
+	move: WindowMove,
+	torn: TornTab,
+): Promise<WindowView> => {
+	const isAnnounced = await isAccepted(
+		commands.windowTabDragStart(torn.packed, torn.spaceId),
+	)
+	if (!isAnnounced) {
+		failOnce(move, "window_tab_drag_start")
+	}
+	return { isAnnounced, isHidden: false, target: "outside" }
+}
+
+const followedWindow = async (
+	move: WindowMove,
+	view: WindowView,
+): Promise<WindowView> => {
+	if (move.hasFailed) {
+		return windowOver(move, view, "outside")
+	}
+	const point = await pointerNow()
+	if (point === null) {
+		failOnce(move, "cursor_position")
+		return windowOver(move, view, "outside")
+	}
+	const [isMoved, site] = await Promise.all([
+		isAccepted(commands.windowTabDragMove(point)),
+		dockSiteAt(point, move.spaceId),
+	])
+	if (!isMoved || site === null) {
+		failOnce(move, isMoved ? "window_strip_at" : "window_tab_drag_move")
+		return windowOver(move, view, "outside")
+	}
+	return windowOver(move, view, site.target)
+}
+
+const windowDockSite = async (move: WindowMove, view: WindowView) => {
+	if (move.hasFailed || view.target !== "sameSpace") {
+		return null
+	}
+	const point = await pointerNow()
+	const site = point && (await dockSiteAt(point, move.spaceId))
+	return point && site?.target === "sameSpace" && site.label !== null
+		? { point, label: site.label }
+		: null
+}
+
+const followWindow = (move: WindowMove) => {
+	if (!move.isReleased) {
+		move.view = move.view.then((view) => followedWindow(move, view))
+	}
 }
 
 const movingNow = async (move: () => Promise<void>) => move()
@@ -283,8 +381,8 @@ export const createTabTearOff = ({
 	}
 
 	const dock = async (
-		ended: TabDrag,
-		view: DragView,
+		ended: DockedDrag,
+		view: Announced,
 		point: ScreenPosition,
 		targetLabel: string,
 	) => {
@@ -294,17 +392,17 @@ export const createTabTearOff = ({
 		if (!awaited) {
 			failOnce(ended)
 			await cancelAnnounced(ended, view)
-			return
+			return false
 		}
 		if (!(await isAccepted(commands.windowTabDragDrop(point)))) {
 			failOnce(ended, "window_tab_drag_drop")
-			return
+			return false
 		}
 		if (await awaited.answer) {
-			removeDocked(ended.spaceId, ended.tabId)
-			return
+			return true
 		}
 		failOnce(ended)
+		return false
 	}
 
 	const startMove = (move: () => Promise<void>) => {
@@ -343,12 +441,66 @@ export const createTabTearOff = ({
 			failOnce(ended, "window_strip_at")
 		}
 		if (site?.target === "sameSpace" && site.label !== null) {
-			await dock(ended, view, point, site.label)
+			if (await dock(ended, view, point, site.label)) {
+				removeDocked(ended.spaceId, ended.tabId)
+			}
 		} else if (site?.target === "outside") {
 			await leaveOutside(ended, view, tearOff)
 		} else {
 			await cancelAnnounced(ended, view)
 		}
+	}
+
+	const releasedWindow = async (move: WindowMove, view: WindowView) => {
+		const site = await windowDockSite(move, view)
+		if (!site) {
+			await cancelAnnounced(move, view)
+			await windowOver(move, view, "outside")
+			return
+		}
+		const isWindowClosed =
+			(await dock(move, view, site.point, site.label)) &&
+			(await removeDocked(move.spaceId, move.tabId))
+		if (!isWindowClosed) {
+			await windowOver(move, view, "outside")
+		}
+	}
+
+	// TODO: the host emits no native window move ended event at mouse-up carrying the release point, so the settling of window_start_native_move stands in for the release. It settles before the drag on Windows and Linux, where the drag then ends unhidden.
+	const releaseWindow = async (
+		move: WindowMove,
+		watching: Promise<() => void>,
+		isMoved: boolean,
+	) => {
+		move.isReleased = true
+		const stopWatching = await watching
+		stopWatching()
+		if (!isMoved) {
+			failOnce(move, "window_start_native_move")
+		}
+		await releasedWindow(move, await move.view)
+	}
+
+	const showAfterFailure = (reason: unknown) => {
+		raiseMoveFailure(reason)
+		return isAccepted(commands.windowShow())
+	}
+
+	const moveWindow = (tabId: string, torn: TornTab) => {
+		const moving = isAccepted(commands.windowStartNativeMove())
+		const move: WindowMove = {
+			tabId,
+			spaceId: torn.spaceId,
+			hasFailed: false,
+			isReleased: false,
+			view: Promise.resolve().then(() => announcedWindow(move, torn)),
+		}
+		const watching = watchWindowMoves(() => followWindow(move)).catch(
+			reportUnwatched,
+		)
+		moving
+			.then((isMoved) => releaseWindow(move, watching, isMoved))
+			.catch(showAfterFailure)
 	}
 
 	const startTabDrag = (
@@ -377,7 +529,7 @@ export const createTabTearOff = ({
 			}
 			if (torn.isOnlyTab) {
 				drag = { kind: "window", tabId: tearOff.tabId }
-				void startWindowMove()
+				moveWindow(tearOff.tabId, torn)
 				return
 			}
 			startTabDrag(tearOff, torn, drawGhost)

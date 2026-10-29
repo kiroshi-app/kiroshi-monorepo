@@ -21,11 +21,23 @@ const drag = vi.hoisted(() => ({
 	windowTabDragCancel: vi.fn(),
 	windowStripAt: vi.fn(),
 	windowStartNativeMove: vi.fn(),
+	windowHide: vi.fn(),
+	windowShow: vi.fn(),
 }))
 
 const raiseReportedFailure = vi.hoisted(() => vi.fn())
 
 const awaitDockAnswer = vi.hoisted(() => vi.fn())
+
+const host = vi.hoisted(() => ({
+	readPointerPosition: vi.fn(),
+	watchWindowMoves: vi.fn(),
+}))
+
+vi.mock("../host", async (importOriginal) => ({
+	...(await importOriginal<typeof import("../host")>()),
+	...host,
+}))
 
 vi.mock("./tab-dock-channel", async (importOriginal) => ({
 	...(await importOriginal<typeof import("./tab-dock-channel")>()),
@@ -80,6 +92,8 @@ const answerEveryDragCommand = (answer: unknown) => {
 	drag.windowTabDragDrop.mockResolvedValue(answer)
 	drag.windowTabDragCancel.mockResolvedValue(answer)
 	drag.windowStartNativeMove.mockResolvedValue(answer)
+	drag.windowHide.mockResolvedValue(answer)
+	drag.windowShow.mockResolvedValue(answer)
 }
 
 const answerEveryGhostCommand = (answer: unknown) => {
@@ -94,7 +108,7 @@ const sessionWithMoves = () => {
 		moveTornOff: vi.fn().mockResolvedValue(undefined),
 		raiseMoveFailure: vi.fn(),
 		tornTabOf: vi.fn(() => TORN),
-		removeDocked: vi.fn(),
+		removeDocked: vi.fn().mockResolvedValue(false),
 	}
 	return { moves, session: createTabTearOff(moves) }
 }
@@ -108,6 +122,8 @@ beforeEach(() => {
 	answerEveryDragCommand(ACCEPTED)
 	targetAnswers(true)
 	drag.windowStripAt.mockResolvedValue(null)
+	host.watchWindowMoves.mockResolvedValue(() => undefined)
+	host.readPointerPosition.mockResolvedValue({ x: 0, y: 0 })
 	window.innerWidth = 1200
 	window.innerHeight = 800
 	vi.spyOn(console, "error").mockImplementation(() => undefined)
@@ -123,6 +139,8 @@ afterEach(() => {
 	}
 	raiseReportedFailure.mockReset()
 	awaitDockAnswer.mockReset()
+	host.readPointerPosition.mockReset()
+	host.watchWindowMoves.mockReset()
 	drawGhost.mockClear()
 	localStorage.clear()
 })
@@ -566,11 +584,58 @@ describe("a host drag command that rejects", () => {
 	})
 })
 
+const OVER_SAME_SPACE_STRIP = { x: 100, y: 20 }
+
+const OVER_OTHER_SPACE_STRIP = { x: 900, y: 20 }
+
+const OUTSIDE_ANY_STRIP = { x: 500, y: 500 }
+
+const stripAt = ({ x, y }: { x: number; y: number }) => {
+	if (y >= 50) {
+		return null
+	}
+	return x < 600 ? SAME_SPACE_STRIP : OTHER_SPACE_STRIP
+}
+
+const lastTabSession = () => {
+	const started = sessionWithMoves()
+	started.moves.tornTabOf.mockReturnValue({ ...TORN, isOnlyTab: true })
+	return started
+}
+
+const nativeWindowMove = () => {
+	let release: (answer: unknown) => void = () => undefined
+	let moveWindow: () => void = () => undefined
+	const stopWatching = vi.fn()
+	drag.windowStartNativeMove.mockReturnValue(
+		new Promise((resolve) => {
+			release = resolve
+		}),
+	)
+	host.watchWindowMoves.mockImplementation(async (onMove: () => void) => {
+		moveWindow = onMove
+		return stopWatching
+	})
+	drag.windowStripAt.mockImplementation(async (point) => stripAt(point))
+	const pointAt = (point: { x: number; y: number }) =>
+		host.readPointerPosition.mockResolvedValue(point)
+	return {
+		stopWatching,
+		moveTo: (point: { x: number; y: number }) => {
+			pointAt(point)
+			moveWindow()
+		},
+		releaseAt: (point: { x: number; y: number }) => {
+			pointAt(point)
+			release(ACCEPTED)
+		},
+	}
+}
+
 describe("the only tab of its window torn off", () => {
-	it("shows no thumbnail, moves the window itself and leaves it where it is released", async () => {
+	it("shows no thumbnail and moves the window itself", async () => {
 		answerEveryGhostCommand(SUPPORTED)
-		const { moves, session } = sessionWithMoves()
-		moves.tornTabOf.mockReturnValue({ ...TORN, isOnlyTab: true })
+		const { moves, session } = lastTabSession()
 
 		session.start(at(10, 10), drawGhost)
 		session.move(at(300, 40))
@@ -581,15 +646,13 @@ describe("the only tab of its window torn off", () => {
 		)
 		expect(ghost.dragGhostShow).not.toHaveBeenCalled()
 		expect(drawGhost).not.toHaveBeenCalled()
-		expect(drag.windowTabDragStart).not.toHaveBeenCalled()
 		expect(moves.moveTornOff).not.toHaveBeenCalled()
 		expect(moves.moveUnghosted).not.toHaveBeenCalled()
 	})
 
 	it("raises the notice when the window cannot move", async () => {
 		drag.windowStartNativeMove.mockResolvedValue(REFUSED)
-		const { moves, session } = sessionWithMoves()
-		moves.tornTabOf.mockReturnValue({ ...TORN, isOnlyTab: true })
+		const { session } = lastTabSession()
 
 		session.start(at(10, 10), drawGhost)
 
@@ -599,6 +662,158 @@ describe("the only tab of its window torn off", () => {
 				{ raisedIn: "tab-tear-off", command: "window_start_native_move" },
 			),
 		)
+	})
+})
+
+describe("the only tab of its window dragged over the strips", () => {
+	it("announces the tab, then hides the window over a strip of its Space", async () => {
+		const pointer = nativeWindowMove()
+		const { session } = lastTabSession()
+
+		session.start(at(10, 10), drawGhost)
+		pointer.moveTo(OVER_SAME_SPACE_STRIP)
+
+		await vi.waitFor(() => expect(drag.windowHide).toHaveBeenCalledOnce())
+		expect(drag.windowTabDragStart).toHaveBeenCalledExactlyOnceWith(
+			TORN.packed,
+			SPACE,
+		)
+		expect(drag.windowTabDragMove).toHaveBeenCalledExactlyOnceWith(
+			OVER_SAME_SPACE_STRIP,
+		)
+	})
+
+	it("shows the window again once the pointer leaves that strip", async () => {
+		const pointer = nativeWindowMove()
+		const { session } = lastTabSession()
+
+		session.start(at(10, 10), drawGhost)
+		pointer.moveTo(OVER_SAME_SPACE_STRIP)
+		await vi.waitFor(() => expect(drag.windowHide).toHaveBeenCalledOnce())
+		pointer.moveTo(OUTSIDE_ANY_STRIP)
+
+		await vi.waitFor(() => expect(drag.windowShow).toHaveBeenCalledOnce())
+		expect(drag.windowTabDragMove).toHaveBeenLastCalledWith(OUTSIDE_ANY_STRIP)
+	})
+
+	it("keeps the window shown over a strip of another Space", async () => {
+		const pointer = nativeWindowMove()
+		const { session } = lastTabSession()
+
+		session.start(at(10, 10), drawGhost)
+		pointer.moveTo(OVER_OTHER_SPACE_STRIP)
+
+		await vi.waitFor(() =>
+			expect(drag.windowTabDragMove).toHaveBeenCalledExactlyOnceWith(
+				OVER_OTHER_SPACE_STRIP,
+			),
+		)
+		await vi.waitFor(() => expect(drag.windowStripAt).toHaveBeenCalled())
+		expect(drag.windowHide).not.toHaveBeenCalled()
+	})
+
+	it("docks the tab into the strip it is released on and closes its window", async () => {
+		const pointer = nativeWindowMove()
+		const { moves, session } = lastTabSession()
+		moves.removeDocked.mockResolvedValue(true)
+
+		session.start(at(10, 10), drawGhost)
+		pointer.moveTo(OVER_SAME_SPACE_STRIP)
+		pointer.releaseAt(OVER_SAME_SPACE_STRIP)
+
+		await vi.waitFor(() =>
+			expect(moves.removeDocked).toHaveBeenCalledExactlyOnceWith(
+				SPACE,
+				TAB.tabId,
+			),
+		)
+		expect(awaitDockAnswer).toHaveBeenCalledExactlyOnceWith(
+			SAME_SPACE_STRIP.label,
+			TAB.tabId,
+		)
+		expect(drag.windowTabDragDrop).toHaveBeenCalledExactlyOnceWith(
+			OVER_SAME_SPACE_STRIP,
+		)
+		expect(drag.windowShow).not.toHaveBeenCalled()
+		expect(drag.windowTabDragCancel).not.toHaveBeenCalled()
+		expect(raiseReportedFailure).not.toHaveBeenCalled()
+	})
+
+	it("shows the main window again once its only tab is docked away", async () => {
+		const pointer = nativeWindowMove()
+		const { moves, session } = lastTabSession()
+		moves.removeDocked.mockResolvedValue(false)
+
+		session.start(at(10, 10), drawGhost)
+		pointer.moveTo(OVER_SAME_SPACE_STRIP)
+		pointer.releaseAt(OVER_SAME_SPACE_STRIP)
+
+		await vi.waitFor(() => expect(drag.windowShow).toHaveBeenCalledOnce())
+		expect(moves.removeDocked).toHaveBeenCalledOnce()
+	})
+
+	it("leaves the window and its tab where they are released outside any strip", async () => {
+		const pointer = nativeWindowMove()
+		const { moves, session } = lastTabSession()
+
+		session.start(at(10, 10), drawGhost)
+		pointer.moveTo(OUTSIDE_ANY_STRIP)
+		pointer.releaseAt(OUTSIDE_ANY_STRIP)
+
+		await vi.waitFor(() =>
+			expect(drag.windowTabDragCancel).toHaveBeenCalledOnce(),
+		)
+		expect(pointer.stopWatching).toHaveBeenCalledOnce()
+		expect(drag.windowHide).not.toHaveBeenCalled()
+		expect(drag.windowTabDragDrop).not.toHaveBeenCalled()
+		expect(moves.removeDocked).not.toHaveBeenCalled()
+	})
+
+	it("ends the drag unhidden when the native move settles before the window moves", async () => {
+		const pointer = nativeWindowMove()
+		const { session } = lastTabSession()
+
+		session.start(at(10, 10), drawGhost)
+		pointer.releaseAt(OVER_SAME_SPACE_STRIP)
+		await vi.waitFor(() =>
+			expect(drag.windowTabDragCancel).toHaveBeenCalledOnce(),
+		)
+		pointer.moveTo(OVER_SAME_SPACE_STRIP)
+
+		await vi.waitFor(() => expect(pointer.stopWatching).toHaveBeenCalledOnce())
+		expect(drag.windowTabDragMove).not.toHaveBeenCalled()
+		expect(drag.windowHide).not.toHaveBeenCalled()
+		expect(drag.windowTabDragDrop).not.toHaveBeenCalled()
+	})
+
+	it("shows the window again when its release fails unexpectedly", async () => {
+		const pointer = nativeWindowMove()
+		const { moves, session } = lastTabSession()
+		moves.removeDocked.mockRejectedValue(new Error("store gone"))
+
+		session.start(at(10, 10), drawGhost)
+		pointer.moveTo(OVER_SAME_SPACE_STRIP)
+		pointer.releaseAt(OVER_SAME_SPACE_STRIP)
+
+		await vi.waitFor(() => expect(drag.windowShow).toHaveBeenCalledOnce())
+		expect(moves.raiseMoveFailure).toHaveBeenCalledOnce()
+	})
+
+	it("shows the window again with its tab and raises the notice once when the target does not answer", async () => {
+		targetAnswers(false)
+		const pointer = nativeWindowMove()
+		const { moves, session } = lastTabSession()
+
+		session.start(at(10, 10), drawGhost)
+		pointer.moveTo(OVER_SAME_SPACE_STRIP)
+		pointer.releaseAt(OVER_SAME_SPACE_STRIP)
+
+		await vi.waitFor(() => expect(drag.windowShow).toHaveBeenCalledOnce())
+		expect(raiseReportedFailure).toHaveBeenCalledExactlyOnceWith(
+			REDOCK_NOTICE,
+			{ raisedIn: "tab-tear-off", command: undefined },
+		)
+		expect(moves.removeDocked).not.toHaveBeenCalled()
 	})
 })
 
