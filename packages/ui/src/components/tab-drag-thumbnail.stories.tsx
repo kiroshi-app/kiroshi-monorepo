@@ -241,7 +241,8 @@ const playLongMessage = async ({ canvasElement }: ThumbnailPlayContext) => {
 	const bodyBox = body.getBoundingClientRect()
 	const composerBox = composer.getBoundingClientRect()
 	const firstBox = messages[0].getBoundingClientRect()
-	const latestBox = messages[messages.length - 1].getBoundingClientRect()
+	const latest = messages[messages.length - 1]
+	const latestBox = latest.getBoundingClientRect()
 
 	await expect(getComputedStyle(body).overflow).toBe("hidden")
 	await expect(firstBox.top).toBeLessThan(bodyBox.top)
@@ -256,9 +257,7 @@ const playLongMessage = async ({ canvasElement }: ThumbnailPlayContext) => {
 	await expect(Math.round(bodyBox.bottom - composerBox.bottom)).toBe(18)
 	await expect(latestBox.top).toBeGreaterThanOrEqual(bodyBox.top)
 	await expect(latestBox.bottom).toBeLessThanOrEqual(composerBox.top)
-	await expect(messages[messages.length - 1]).toHaveTextContent(
-		/tighten the wording/,
-	)
+	await expect(latest).toHaveTextContent(/tighten the wording/)
 
 	const unbreakable = messages[2]
 	await expect(unbreakable).toHaveTextContent(UNBREAKABLE_RUN_ID)
