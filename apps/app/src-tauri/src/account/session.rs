@@ -312,16 +312,33 @@ pub async fn restore<R: Runtime>(app: AppHandle<R>) {
 	}
 }
 
+enum NameToSend {
+	Stored,
+	Renamed(String),
+}
+
 pub fn stored_name_sent<R: Runtime>(app: &AppHandle<R>) {
+	name_queued(app, NameToSend::Stored);
+}
+
+pub fn renamed_name_sent<R: Runtime>(app: &AppHandle<R>, display_name: String) {
+	name_queued(app, NameToSend::Renamed(display_name));
+}
+
+fn name_queued<R: Runtime>(app: &AppHandle<R>, to_send: NameToSend) {
 	let Some(session) = app.try_state::<AccountSession>() else {
 		return;
 	};
 	let mut naming = session.naming.lock().unwrap_or_else(PoisonError::into_inner);
 	let previous = naming.take();
-	*naming = Some(tauri::async_runtime::spawn(sent_after(app.clone(), previous)));
+	*naming = Some(tauri::async_runtime::spawn(sent_after(app.clone(), previous, to_send)));
 }
 
-async fn sent_after<R: Runtime>(app: AppHandle<R>, previous: Option<Naming>) -> Option<SentName> {
+async fn sent_after<R: Runtime>(
+	app: AppHandle<R>,
+	previous: Option<Naming>,
+	to_send: NameToSend,
+) -> Option<SentName> {
 	let last_sent = match previous {
 		Some(previous) => previous.await.unwrap_or_else(|error| {
 			eprintln!("the previous display name send ended abnormally: {error}");
@@ -329,19 +346,24 @@ async fn sent_after<R: Runtime>(app: AppHandle<R>, previous: Option<Naming>) -> 
 		}),
 		None => None,
 	};
-	name_sent(&app, last_sent).await
+	name_sent(&app, last_sent, to_send).await
 }
 
 async fn name_sent<R: Runtime>(
 	app: &AppHandle<R>,
 	last_sent: Option<SentName>,
+	to_send: NameToSend,
 ) -> Option<SentName> {
 	let session = app.state::<AccountSession>();
 	let AccountState::SignedIn(account) = session.current() else {
 		return last_sent;
 	};
-	let Some(display_name) = stored_display_name(app).await else {
-		return last_sent;
+	let display_name = match to_send {
+		NameToSend::Renamed(display_name) => display_name,
+		NameToSend::Stored => match stored_display_name(app).await {
+			Some(display_name) => display_name,
+			None => return last_sent,
+		},
 	};
 	let sending =
 		SentName { account_id: account.id, name: trimmed_to(&display_name, DISPLAY_NAME_LIMIT) };
@@ -1368,6 +1390,29 @@ mod tests {
 			assert_eq!(cloudy.renamed(), vec![json!({ "name": "Ada" })]);
 			held.add_permits(2);
 			harness.names_settled().await;
+			assert_eq!(
+				cloudy.renamed(),
+				vec![json!({ "name": "Ada" }), json!({ "name": "Grace" })]
+			);
+		});
+	}
+
+	#[test]
+	fn a_rename_queued_behind_a_held_send_sends_its_own_name_not_a_later_one() {
+		run(async {
+			let held = Arc::new(Semaphore::new(0));
+			let cloudy = Cloudy { rename_held: Some(Arc::clone(&held)), ..Cloudy::default() };
+			let harness = Harness::new("named-held-then-emptied", &stub(cloudy.clone()).await);
+			harness.named_as("Ada").await;
+			harness.store(BEARER);
+			restore(harness.app.handle().clone()).await;
+			assert_eq!(cloudy.renamed_once().await, vec![json!({ "name": "Ada" })]);
+
+			harness.renamed_to("Grace").await;
+			harness.renamed_to("  ").await;
+			held.add_permits(2);
+			harness.names_settled().await;
+
 			assert_eq!(
 				cloudy.renamed(),
 				vec![json!({ "name": "Ada" }), json!({ "name": "Grace" })]
