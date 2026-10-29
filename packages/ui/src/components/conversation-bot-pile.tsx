@@ -16,7 +16,6 @@ const PILE_LIMIT = 3
 const HEXAGON_SIDE = 14
 const STEP = 10
 const KNOCKOUT_WIDTH = 1.5
-const COUNTER_FONT_RATIO = 0.45
 
 const HEXAGON = hexagonOfWidth(HEXAGON_SIDE)
 
@@ -37,8 +36,7 @@ const KNOCKED_OUT_UNDER_NEXT: CSSProperties = {
 	maskComposite: "exclude",
 }
 
-const COUNTER_FONT_SIZE = HEXAGON_SIDE * COUNTER_FONT_RATIO
-
+const COUNTER_FONT_SIZE = HEXAGON_SIDE * 0.45
 const COUNTER_TEXT = "font-bold tabular-nums"
 
 type ConversationParticipant = Pick<
