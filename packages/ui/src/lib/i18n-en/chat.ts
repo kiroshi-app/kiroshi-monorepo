@@ -1031,6 +1031,70 @@ const chat = {
 		arrival: {
 			failure: "{{name}} couldn’t say hello",
 		},
+		intro: {
+			skip: "Skip intro",
+			next: "Next",
+			getStarted: "Get started",
+			companions: {
+				title: "Companions do the work with you",
+				body: "Each companion has a name, a job and a memory of its own. Hand it something and it keeps at it, on your computer.",
+				atlas: { name: "Atlas", job: "Reviews code" },
+				juniper: { name: "Juniper", job: "Keeps the docs" },
+				wren: { name: "Wren", job: "Writes release notes" },
+			},
+			conversations: {
+				title: "Conversations, then missions",
+				body: "Talk with one companion or several at once. Long work becomes a mission you can follow while you do something else.",
+				thread: "Launch week",
+				ask: "Can you two get the docs and the release notes ready for Friday?",
+				reply:
+					"On it. I’ll start the release notes as a mission so you can follow along.",
+				mission: "Release notes for 2.4",
+				missionDetail: "Mission · Wren · 3 of 5 sections drafted",
+				status: "Working",
+			},
+			tools: {
+				title: "Your tools, where you allow them",
+				body: "Give a companion a Folder to work in, the Applications it may use and the Secrets it needs. Nothing beyond what you hand it.",
+				folders: "Folders",
+				foldersDetail: "~/Code/orbit-web",
+				applications: "Applications",
+				applicationsDetail: "GitHub, Linear, Notion",
+				secrets: "Secrets",
+				secretsDetail: "LINEAR_API_KEY",
+			},
+		},
+		connect: {
+			foundIn: "{{plan}} · found in Claude Code",
+			provider: {
+				title: "Connect the model provider",
+				body: "Your companions need a model to think with. Use your Claude subscription, or a key.",
+			},
+			browser: {
+				body: "Your browser opened claude.ai. Sign in there with your Pro or Max subscription.",
+				waiting: "Waiting for you to sign in, in your browser…",
+				checking: "Checking the code with Claude…",
+				placeholder: "Code from Claude",
+				reopen: "Open the sign-in page again",
+			},
+			continue: "Continue",
+			connecting: "Connecting…",
+			failed: {
+				cancelled:
+					"The sign-in was cancelled. Try again, or paste a key instead.",
+				timedOut: "The sign-in timed out. Try again, or paste a key instead.",
+				linkRefused:
+					"The sign-in link was refused. Try again, or paste a key instead.",
+			},
+			agentMissing: {
+				title: "Couldn’t find the agent",
+				body: "Kiroshi can’t start without it. Reinstall Kiroshi, then open it again.",
+				download: "Download Kiroshi again",
+			},
+			key: {
+				body: "Pay per use, with nothing to sign in to. Create a key in the Anthropic Console.",
+			},
+		},
 	},
 } as const
 
