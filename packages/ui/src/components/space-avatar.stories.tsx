@@ -582,7 +582,9 @@ export const RailMixedStates = meta.story({
 				await expect(tile.left - frame.left).toBe((RAIL_WIDTH - RAIL_TILE) / 2)
 				await expect(tile.top - frame.top).toBe(RAIL_EDGE + index * RAIL_PITCH)
 			}
-			await expect(frame.bottom - (tiles.at(-1)?.bottom ?? 0)).toBe(RAIL_EDGE)
+			await expect(frame.height).toBe(
+				2 * RAIL_EDGE + (tiles.length - 1) * RAIL_PITCH + RAIL_TILE,
+			)
 		}
 	},
 })
@@ -629,7 +631,7 @@ export const SpacesMenuMixedStates = meta.story({
 			await expect(style.borderTopLeftRadius).toBe("12px")
 			await expect(style.boxShadow).toBe("none")
 			await expect(menu.getBoundingClientRect().width).toBe(MENU_WIDTH)
-			const avatars = await expectMixedSpacesIn(menu)
+			await expectMixedSpacesIn(menu)
 			const rows = Array.from(menu.children) as HTMLElement[]
 			await expect(rows.map((row) => row.tagName)).toEqual(
 				MIXED_SPACES.map(() => "LI"),
@@ -639,7 +641,7 @@ export const SpacesMenuMixedStates = meta.story({
 				const isCurrent = space?.id === CURRENT_SPACE_ID
 				const rowStyle = getComputedStyle(row)
 				const frame = row.getBoundingClientRect()
-				const avatar = avatars[index]?.getBoundingClientRect()
+				const avatar = slotIn(row, "space-avatar").getBoundingClientRect()
 				const name = row.lastElementChild as HTMLElement
 				const nameStyle = getComputedStyle(name)
 				await expect(frame.height).toBe(MENU_ROW_HEIGHT)
@@ -651,8 +653,8 @@ export const SpacesMenuMixedStates = meta.story({
 				await expect(row.getAttribute("aria-current")).toBe(
 					isCurrent ? "true" : null,
 				)
-				await expect((avatar?.left ?? 0) - frame.left).toBe(MENU_AVATAR_INSET)
-				await expect((avatar?.top ?? 0) - frame.top).toBe(
+				await expect(avatar.left - frame.left).toBe(MENU_AVATAR_INSET)
+				await expect(avatar.top - frame.top).toBe(
 					(MENU_ROW_HEIGHT - MENU_AVATAR) / 2,
 				)
 				await expect(name.textContent).toBe(space?.name)
