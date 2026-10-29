@@ -1,5 +1,5 @@
 use serde::Serialize;
-use tauri::{AppHandle, Manager, Runtime};
+use tauri::{AppHandle, Manager, Runtime, WebviewWindow};
 
 #[cfg(target_os = "macos")]
 use crate::events;
@@ -12,7 +12,7 @@ use std::{
 #[cfg(target_os = "macos")]
 use tauri::menu::{Menu, MenuEvent, MenuItem, MenuItemKind, PredefinedMenuItem, Submenu};
 #[cfg(target_os = "macos")]
-use tauri::{WebviewWindow, WindowEvent};
+use tauri::WindowEvent;
 #[cfg(target_os = "macos")]
 use tauri_plugin_opener::OpenerExt;
 
@@ -270,7 +270,7 @@ fn open_app_windows<R: Runtime>(
 	open
 }
 
-fn shown_title<R: Runtime>(window: &tauri::WebviewWindow<R>) -> tauri::Result<Option<String>> {
+fn shown_title<R: Runtime>(window: &WebviewWindow<R>) -> tauri::Result<Option<String>> {
 	window.is_visible()?.then(|| window.title()).transpose()
 }
 
@@ -427,7 +427,9 @@ mod tests {
 	use tauri::test::mock_builder;
 	use tauri::{WebviewUrl, WebviewWindowBuilder};
 
-	use super::{open_app_windows, submenus, zoomed, Entry, FileMenuAction, FILE_ENTRIES};
+	use super::{
+		open_app_windows, submenus, zoomed, Entry, FileMenuAction, FileMenuChosen, FILE_ENTRIES,
+	};
 	use crate::test_app::an_app_of_its_own;
 
 	#[test]
@@ -578,7 +580,7 @@ mod tests {
 
 	#[test]
 	fn the_file_tab_action_reaches_the_front_in_camel_case() {
-		let chosen = super::FileMenuChosen { action: FileMenuAction::ReopenClosedTab };
+		let chosen = FileMenuChosen { action: FileMenuAction::ReopenClosedTab };
 
 		assert_eq!(
 			serde_json::to_value(chosen).expect("the payload serializes"),
