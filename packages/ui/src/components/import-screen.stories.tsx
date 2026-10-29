@@ -2,6 +2,7 @@ import { expect, fn, userEvent, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
+	expectOnboardingDragStrip,
 	isInBrowserRunner,
 	slotIn,
 	withMotionAllowed,
@@ -336,6 +337,7 @@ const primaryIn = (canvasElement: HTMLElement, name: string) =>
 	within(slotIn(canvasElement, "import-screen")).getByRole("button", { name })
 
 const meta = preview.meta({
+	afterEach: ({ canvasElement }) => expectOnboardingDragStrip(canvasElement),
 	title: "Feedback/ImportScreen",
 	component: ImportScreen,
 	globals: { viewport: { value: "window" } },

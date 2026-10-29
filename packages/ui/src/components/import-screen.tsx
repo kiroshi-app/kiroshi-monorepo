@@ -14,6 +14,7 @@ import {
 	type ImportRowKind,
 	type ImportRowStatus,
 } from "@workspace/ui/components/import-row"
+import { OnboardingDragStrip } from "@workspace/ui/components/onboarding-shell"
 import { Button } from "@workspace/ui/components/ui/button"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -267,6 +268,7 @@ const ImportScreen = (props: ImportScreenProps) => {
 
 	return (
 		<FullWindowLayout data-slot="import-screen">
+			<OnboardingDragStrip />
 			<FullWindowContent className="min-h-0 gap-5 px-6 pt-10 pb-6">
 				<span
 					className={cn(

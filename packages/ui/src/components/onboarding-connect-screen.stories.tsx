@@ -4,6 +4,7 @@ import { expect, fn, within } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	expectNoHorizontalScrollAt,
+	expectOnboardingDragStrip,
 	glyphIn,
 	hueScopeOf,
 	slotIn,
@@ -88,6 +89,7 @@ const ConnectScreenHoldingItsFields = (props: OnboardingConnectScreenProps) => {
 }
 
 const meta = preview.meta({
+	afterEach: ({ canvasElement }) => expectOnboardingDragStrip(canvasElement),
 	title: "Feedback/OnboardingConnectScreen",
 	component: OnboardingConnectScreen,
 	subcomponents: { OnboardingShell },

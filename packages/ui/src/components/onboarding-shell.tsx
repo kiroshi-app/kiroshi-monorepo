@@ -7,10 +7,20 @@ import {
 import { Button } from "@workspace/ui/components/ui/button"
 import { cn } from "@workspace/ui/lib/utils"
 
+const OnboardingDragStrip = () => (
+	<div
+		aria-hidden="true"
+		className="sticky top-0 -mb-12 h-12 shrink-0"
+		data-slot="onboarding-drag-strip"
+		data-tauri-drag-region="deep"
+	/>
+)
+
 type OnboardingShellProps = ComponentProps<"div">
 
 const OnboardingShell = ({ className, ...props }: OnboardingShellProps) => (
 	<FullWindowLayout data-slot="onboarding-shell">
+		<OnboardingDragStrip />
 		<FullWindowContent className={cn("w-full px-6", className)} {...props} />
 	</FullWindowLayout>
 )
@@ -78,6 +88,7 @@ const OnboardingButton = ({ className, ...props }: OnboardingButtonProps) => (
 export {
 	OnboardingButton,
 	type OnboardingButtonProps,
+	OnboardingDragStrip,
 	OnboardingHeading,
 	type OnboardingHeadingProps,
 	OnboardingLink,

@@ -4,6 +4,7 @@ import preview from "@workspace/storybook/preview"
 import {
 	colourTransitionsOf,
 	expectNoHorizontalScrollAt,
+	expectOnboardingDragStrip,
 	hueScopeOf,
 	slotIn,
 	slotsIn,
@@ -126,6 +127,7 @@ const expectBack = async ({ canvasElement, onBack }: BackPlayContext) => {
 }
 
 const meta = preview.meta({
+	afterEach: ({ canvasElement }) => expectOnboardingDragStrip(canvasElement),
 	title: "Feedback/OnboardingWelcomeScreen",
 	component: OnboardingWelcomeScreen,
 	subcomponents: { OnboardingShell, OnboardingWelcomeFooter },

@@ -7,6 +7,7 @@ import {
 	FullWindowLayout,
 } from "@workspace/ui/components/full-window-layout"
 import { Icons } from "@workspace/ui/components/icons"
+import { OnboardingDragStrip } from "@workspace/ui/components/onboarding-shell"
 import { Button } from "@workspace/ui/components/ui/button"
 import {
 	ACCOUNT_ACTION_CLASS,
@@ -50,6 +51,7 @@ const OnboardingAccountScreen = ({
 			data-slot="onboarding-account-screen"
 			data-status={account.status}
 		>
+			<OnboardingDragStrip />
 			<FullWindowContent className="gap-5 p-6">
 				<span
 					className="grid size-14 shrink-0 place-items-center rounded-[1rem] bg-muted/40"
