@@ -13,7 +13,6 @@ import type { ClaudeInventory } from "@/lib/bindings"
 import type { RosterController } from "@/lib/bots/roster-controller"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 import type { SpacesController } from "@/lib/spaces/spaces-controller"
-import type { ReaderPreferences } from "@/lib/user/preferences-controller"
 import type { User } from "@/lib/user/use-user"
 
 const INVENTORY: ClaudeInventory = {
@@ -48,27 +47,16 @@ const spaces = {
 
 const markOnboardingImportSeen = vi.fn(async () => undefined)
 
-const userWith = (preferences: Partial<ReaderPreferences>) =>
-	({
-		state: { preferences },
-		controller: { markOnboardingImportSeen },
-	}) as unknown as User
+const existingProfile = {
+	state: {
+		preferences: { onboardingStep: "done", onboardingImportSeen: false },
+	},
+	controller: { markOnboardingImportSeen },
+} as unknown as User
 
-type StartHarnessProps = { user: User }
-
-const StartHarness = ({ user }: StartHarnessProps) => {
-	const entry = useClaudeImportEntry({ roster, spaces, user })
+const StartHarness = () => {
+	const entry = useClaudeImportEntry({ roster, spaces, user: existingProfile })
 	return entry.shown ? createElement(ClaudeImport, entry.shown) : null
-}
-
-const renderAtStart = (preferences: Partial<ReaderPreferences>) =>
-	render(createElement(StartHarness, { user: userWith(preferences) }), {
-		wrapper: createQueryTestWrapper().wrapper,
-	})
-
-const EXISTING_PROFILE: Partial<ReaderPreferences> = {
-	onboardingStep: "done",
-	onboardingImportSeen: false,
 }
 
 afterEach(() => {
@@ -78,7 +66,9 @@ afterEach(() => {
 
 describe("the import screen shown once at start", () => {
 	it("offers Not now to an existing profile, then marks the offer seen and closes", async () => {
-		renderAtStart(EXISTING_PROFILE)
+		render(createElement(StartHarness), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 
 		const notNow = await screen.findByRole("button", { name: "Not now" })
 		expect(
