@@ -98,6 +98,13 @@ const chat = {
 				description_other:
 					"{{names}} were named but hold no seat in this conversation.",
 			},
+			notStarted: {
+				title_one: "{{names}} didn’t start",
+				title_other: "{{names}} didn’t start",
+				description_one: "Seat it in this conversation, or pick another agent.",
+				description_other:
+					"Seat them in this conversation, or pick other agents.",
+			},
 		},
 	},
 	turn: {

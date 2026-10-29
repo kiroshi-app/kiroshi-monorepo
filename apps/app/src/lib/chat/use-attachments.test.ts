@@ -55,7 +55,6 @@ const conversationState: ConversationState = {
 	pendingPrompt: null,
 	latestError: null,
 	reportedCauses: new Map(),
-	unresolvedMentions: [],
 }
 
 const unseatedThread: LoadedConversationThread = {

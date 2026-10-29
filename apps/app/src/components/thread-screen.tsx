@@ -51,11 +51,7 @@ import { FaceAvatar } from "@/components/face-avatar"
 import { useMissionCardMenus } from "@/components/mission-card-menu"
 import { type PromptHandle, ThreadComposer } from "@/components/thread-composer"
 import { botThreadMenu, conversationThreadMenu } from "@/components/thread-menu"
-import {
-	PinsNotice,
-	ThreadNotice,
-	UnresolvedMentionsNotice,
-} from "@/components/thread-notice"
+import { PinsNotice, ThreadNotice } from "@/components/thread-notice"
 import {
 	AnsweredPrompt,
 	ApprovalPrompt,
@@ -1191,21 +1187,14 @@ const ThreadTail = ({
 type ThreadNoticesProps = {
 	staged: StagedFiles
 	pins: PinnedBubbles
-	facts: ThreadFacts
 }
 
-const ThreadNotices = ({ staged, pins, facts }: ThreadNoticesProps) => (
+const ThreadNotices = ({ staged, pins }: ThreadNoticesProps) => (
 	<ThreadNotice
 		onDismissRefusal={staged.dismissRefusal}
 		refusal={staged.refusal}
 	>
 		{pins.hasFailed ? <PinsNotice onDismiss={pins.dismissFailure} /> : null}
-		{facts.unresolvedMentions.length > 0 ? (
-			<UnresolvedMentionsNotice
-				mentions={facts.unresolvedMentions}
-				onDismiss={facts.dismissUnresolvedMentions}
-			/>
-		) : null}
 	</ThreadNotice>
 )
 
@@ -1773,11 +1762,7 @@ function ThreadView(props: ThreadViewProps) {
 						waitReason={access.waitReason}
 					/>
 				) : (
-					<ThreadNotices
-						facts={view.facts}
-						pins={view.pins}
-						staged={view.staged}
-					/>
+					<ThreadNotices pins={view.pins} staged={view.staged} />
 				)
 			}
 			countsNewMessages={!view.isSoloThread}

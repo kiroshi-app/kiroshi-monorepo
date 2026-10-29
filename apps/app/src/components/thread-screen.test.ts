@@ -2108,7 +2108,7 @@ describe("ThreadScreen", () => {
 		expect(screen.queryByText(PINS_TITLE)).toBeNull()
 	})
 
-	it("tells the reader which token of a finished turn nobody answered", async () => {
+	it("shows no notice for a token a finished turn wrote and nobody answered", async () => {
 		const room = await roomOf({ names: ["Ada"] })
 		render(screenOf(room.thread), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
@@ -2119,16 +2119,8 @@ describe("ThreadScreen", () => {
 		})
 		await settle()
 
-		expect(screen.getByText(UNRESOLVED_MENTION_TITLE)).toBeTruthy()
-		expect(
-			screen.getByText(
-				"Unknown agent was named but holds no seat in this conversation.",
-			),
-		).toBeTruthy()
-
-		fireEvent.click(screen.getByRole("button", { name: "Dismiss notice" }))
-
 		expect(screen.queryByText(UNRESOLVED_MENTION_TITLE)).toBeNull()
+		expect(screen.queryByText(/didn’t start/)).toBeNull()
 	})
 
 	it("writes the title of the companion record next to the author of that companion id", async () => {
