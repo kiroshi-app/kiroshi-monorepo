@@ -1,4 +1,4 @@
-export const SUMMONS_DROP_REASONS = [
+const SUMMONS_DROP_REASONS = [
 	"selfMention",
 	"ranInTurn",
 	"interrupted",

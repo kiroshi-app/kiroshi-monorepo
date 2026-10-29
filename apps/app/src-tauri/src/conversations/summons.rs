@@ -88,7 +88,7 @@ mod tests {
 			.join("conversations")
 			.join("summons-trace.ts");
 		let mirror = std::fs::read_to_string(&path).expect("the mirror reads");
-		let opening = "export const SUMMONS_DROP_REASONS = [";
+		let opening = "const SUMMONS_DROP_REASONS = [";
 		let start = mirror.find(opening).expect("the mirror lists the reasons") + opening.len();
 		let body = &mirror[start..];
 		let body = body.split(']').next().unwrap_or(body);
