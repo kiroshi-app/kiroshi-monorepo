@@ -90,8 +90,9 @@ const answerEveryGhostCommand = (answer: unknown) => {
 
 const sessionWithMoves = () => {
 	const moves = {
-		moveUnghosted: vi.fn(),
+		moveUnghosted: vi.fn().mockResolvedValue(undefined),
 		moveTornOff: vi.fn().mockResolvedValue(undefined),
+		raiseMoveFailure: vi.fn(),
 		tornTabOf: vi.fn(() => TORN),
 		removeDocked: vi.fn(),
 	}
@@ -598,5 +599,102 @@ describe("the only tab of its window torn off", () => {
 				{ raisedIn: "tab-tear-off", command: "window_start_native_move" },
 			),
 		)
+	})
+})
+
+describe("a torn-off tab whose ghost or move fails", () => {
+	it("falls back to the move without a ghost when drawing the ghost throws", async () => {
+		answerEveryGhostCommand(SUPPORTED)
+		drawGhost.mockImplementationOnce(() => {
+			throw new Error("tab gone")
+		})
+		const { moves, session } = sessionWithMoves()
+
+		session.start(at(10, 10), drawGhost)
+		session.drop(at(500, 300))
+
+		await vi.waitFor(() =>
+			expect(moves.moveUnghosted).toHaveBeenCalledExactlyOnceWith(at(500, 300)),
+		)
+		expect(ghost.dragGhostShow).not.toHaveBeenCalled()
+		expect(moves.moveTornOff).not.toHaveBeenCalled()
+	})
+
+	it("hides the shown ghost and ends the host drag before moving another tab dropped without a ghost", async () => {
+		answerEveryGhostCommand(SUPPORTED)
+		const { moves, session } = sessionWithMoves()
+		const other = { ...at(500, 300), tabId: "other" }
+
+		session.start(at(10, 10), drawGhost)
+		session.drop(other)
+
+		await vi.waitFor(() =>
+			expect(moves.moveUnghosted).toHaveBeenCalledExactlyOnceWith(other),
+		)
+		expect(ghost.dragGhostHide).toHaveBeenCalledOnce()
+		expect(drag.windowTabDragCancel).toHaveBeenCalledOnce()
+		expect(ghost.dragGhostHide.mock.invocationCallOrder[0]).toBeLessThan(
+			moves.moveUnghosted.mock.invocationCallOrder[0] ?? 0,
+		)
+		expect(moves.moveTornOff).not.toHaveBeenCalled()
+	})
+
+	it("raises one notice after a failed move, then shows the ghost and opens the window at the next drop", async () => {
+		answerEveryGhostCommand(UNSUPPORTED)
+		const failure = new Error("window lost")
+		const { moves, session } = sessionWithMoves()
+		moves.moveUnghosted.mockImplementationOnce(() => {
+			throw failure
+		})
+
+		session.start(at(10, 10), drawGhost)
+		session.drop(at(100, 100))
+		await vi.waitFor(() =>
+			expect(moves.raiseMoveFailure).toHaveBeenCalledExactlyOnceWith(failure),
+		)
+		answerEveryGhostCommand(SUPPORTED)
+		session.start(at(20, 20), drawGhost)
+		session.drop(at(500, 300))
+
+		await vi.waitFor(() =>
+			expect(moves.moveTornOff).toHaveBeenCalledExactlyOnceWith(at(500, 300), {
+				width: 1200,
+				height: 800,
+			}),
+		)
+		expect(ghost.dragGhostShow).toHaveBeenLastCalledWith(
+			{ x: 20, y: 20 },
+			{ width: 600, height: 400 },
+			TAB,
+		)
+		expect(ghost.dragGhostHide).toHaveBeenCalledOnce()
+		expect(moves.raiseMoveFailure).toHaveBeenCalledOnce()
+	})
+
+	it("raises one notice when the move without a ghost rejects", async () => {
+		const failure = new Error("window lost")
+		const { moves, session } = sessionWithMoves()
+		moves.moveUnghosted.mockRejectedValueOnce(failure)
+
+		session.drop(at(500, 300))
+
+		await vi.waitFor(() =>
+			expect(moves.raiseMoveFailure).toHaveBeenCalledExactlyOnceWith(failure),
+		)
+	})
+
+	it("raises one notice when opening the torn-off window rejects", async () => {
+		answerEveryGhostCommand(SUPPORTED)
+		const failure = new Error("carried tab lost")
+		const { moves, session } = sessionWithMoves()
+		moves.moveTornOff.mockRejectedValueOnce(failure)
+
+		session.start(at(10, 10), drawGhost)
+		session.drop(at(500, 300))
+
+		await vi.waitFor(() =>
+			expect(moves.raiseMoveFailure).toHaveBeenCalledExactlyOnceWith(failure),
+		)
+		expect(ghost.dragGhostHide).toHaveBeenCalledOnce()
 	})
 })

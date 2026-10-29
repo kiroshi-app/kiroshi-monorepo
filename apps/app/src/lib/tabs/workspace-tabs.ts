@@ -617,8 +617,9 @@ export const createWorkspaceTabs = (
 		tearOff,
 		moveTornOff,
 		tearOffSession: createTabTearOff({
-			moveUnghosted: tearOff,
+			moveUnghosted,
 			moveTornOff,
+			raiseMoveFailure: raiseTornOffFailure,
 			tornTabOf,
 			removeDocked: removeMoved,
 		}),

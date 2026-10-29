@@ -34,8 +34,9 @@ export type TornTab = {
 }
 
 type TearOffMoves = {
-	moveUnghosted: (tearOff: TabTearOff) => void
+	moveUnghosted: (tearOff: TabTearOff) => Promise<void>
 	moveTornOff: (tearOff: TabTearOff, size: WindowSize) => Promise<void>
+	raiseMoveFailure: (reason: unknown) => void
 	tornTabOf: (tabId: string) => TornTab | null
 	removeDocked: (spaceId: string, tabId: string) => void
 }
@@ -52,7 +53,7 @@ type DockSite = {
 }
 
 type DragView = {
-	ghostTab: DragGhostTab
+	ghostTab: DragGhostTab | null
 	isGhostSupported: boolean
 	isGhostShown: boolean
 	isAnnounced: boolean
@@ -177,7 +178,7 @@ const ghostFollowing = async (
 	view: DragView,
 	point: ScreenPosition,
 ): Promise<DragView> => {
-	if (!view.isGhostSupported) {
+	if (!view.isGhostSupported || !view.ghostTab) {
 		return view
 	}
 	const isShown = view.isGhostShown
@@ -201,15 +202,24 @@ const ghostOver = (
 		: ghostFollowing(drag, shown, point)
 }
 
+const drawnGhost = (drawGhost: DrawGhost, size: WindowSize) => {
+	try {
+		return drawGhost(size)
+	} catch (reason) {
+		reportGhostFailure(reason)
+		return null
+	}
+}
+
 const announcedView = async (
 	drag: TabDrag,
 	torn: TornTab,
 	point: ScreenPosition,
 	drawGhost: DrawGhost,
 ): Promise<DragView> => {
-	const ghostTab = drawGhost(drag.size)
+	const ghostTab = drawnGhost(drawGhost, drag.size)
 	const [isShown, isAnnounced] = await Promise.all([
-		showGhost(point, drag.size, ghostTab),
+		ghostTab ? showGhost(point, drag.size, ghostTab) : false,
 		isAccepted(commands.windowTabDragStart(torn.packed, torn.spaceId)),
 	])
 	if (!isAnnounced) {
@@ -254,9 +264,12 @@ const cancelAnnounced = async (drag: TabDrag, view: DragView) => {
 	return isCancelled
 }
 
+const movingNow = async (move: () => Promise<void>) => move()
+
 export const createTabTearOff = ({
 	moveUnghosted,
 	moveTornOff,
+	raiseMoveFailure,
 	tornTabOf,
 	removeDocked,
 }: TearOffMoves): TabTearOffSession => {
@@ -294,6 +307,15 @@ export const createTabTearOff = ({
 		failOnce(ended)
 	}
 
+	const startMove = (move: () => Promise<void>) => {
+		movingNow(move).catch(raiseMoveFailure)
+	}
+
+	const abandon = (ended: TabDrag) =>
+		ended.view.then(async (view) =>
+			cancelAnnounced(ended, await ghostLeft(view)),
+		)
+
 	const leaveOutside = async (
 		ended: TabDrag,
 		view: DragView,
@@ -302,11 +324,11 @@ export const createTabTearOff = ({
 		if (!(await cancelAnnounced(ended, view))) {
 			return
 		}
-		if (view.isGhostSupported) {
-			void moveTornOff(tearOff, originWindowSize())
-		} else {
-			moveUnghosted(tearOff)
-		}
+		startMove(() =>
+			view.isGhostSupported
+				? moveTornOff(tearOff, originWindowSize())
+				: moveUnghosted(tearOff),
+		)
 	}
 
 	const land = async (ended: TabDrag, tearOff: TabTearOff) => {
@@ -374,18 +396,19 @@ export const createTabTearOff = ({
 			if (ended?.kind !== "tab") {
 				return
 			}
-			ghostSettling = ended.view.then(async (view) =>
-				cancelAnnounced(ended, await ghostLeft(view)),
-			)
+			ghostSettling = abandon(ended)
 		},
 		drop: (tearOff) => {
 			const ended = endDrag()
-			if (ended?.tabId !== tearOff.tabId) {
-				moveUnghosted(tearOff)
-				return true
-			}
-			if (ended.kind === "tab") {
-				ghostSettling = land(ended, tearOff)
+			const isDraggedTab = ended?.tabId === tearOff.tabId
+			if (ended?.kind === "tab" && isDraggedTab) {
+				ghostSettling = land(ended, tearOff).catch(raiseMoveFailure)
+			} else if (ended?.kind === "tab") {
+				ghostSettling = abandon(ended).then(() =>
+					startMove(() => moveUnghosted(tearOff)),
+				)
+			} else if (!isDraggedTab) {
+				startMove(() => moveUnghosted(tearOff))
 			}
 			return true
 		},
