@@ -21,6 +21,7 @@ import type { OnboardingFlow } from "@/lib/onboarding/use-onboarding-flow"
 const WELCOME_STEPS: OnboardingWelcomeStep[] = [
 	"companions",
 	"conversations",
+	"spaces",
 	"tools",
 ]
 
