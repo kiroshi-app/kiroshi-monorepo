@@ -430,6 +430,8 @@ mod tests {
 
 	use crate::agent::contract::RuntimeScope;
 	use crate::agent::stub_session::a_session_held_for;
+	use crate::conversations::contract::{SummonsDropped, SUMMONS_DROPPED_EVENT};
+	use crate::conversations::summons::SummonsDropReason;
 	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 	use crate::test_log::{capturing, infos_naming, warnings_naming};
 
@@ -1460,8 +1462,8 @@ mod tests {
 		.await;
 		let host = serving(&app, &opened.thread_conversation_id);
 		let (announced, drops) = channel();
-		app.listen(crate::conversations::contract::SUMMONS_DROPPED_EVENT, move |event| {
-			let dropped: crate::conversations::contract::SummonsDropped =
+		app.listen(SUMMONS_DROPPED_EVENT, move |event| {
+			let dropped: SummonsDropped =
 				serde_json::from_str(event.payload()).expect("a dropped summons");
 			announced.send(dropped).expect("the test listens");
 		});
@@ -1483,10 +1485,7 @@ mod tests {
 		assert_eq!(announced.len(), 1, "{announced:?}");
 		assert_eq!(announced[0].conversation_id, *thread_id);
 		assert_eq!(announced[0].bot_id, "b4");
-		assert_eq!(
-			announced[0].reason,
-			crate::conversations::summons::SummonsDropReason::StartFailed
-		);
+		assert_eq!(announced[0].reason, SummonsDropReason::StartFailed);
 		assert_eq!(announced[0].error, None);
 		assert!(dropped[0].contains(&format!("| turn: {} |", announced[0].turn_id)), "{dropped:?}");
 		let named = warnings_naming(&format!("mission {} changed owner", opened.id)).await;

@@ -1118,8 +1118,7 @@ mod tests {
 	use crate::agent::commands::{agent_cancel_turn, EVENT_CHANNEL};
 	use crate::agent::contract::ConnectionState;
 	use crate::conversations::contract::StorageFailure;
-	use crate::conversations::contract::UPDATED_EVENT;
-	use crate::conversations::contract::{SummonsDropped, SUMMONS_DROPPED_EVENT};
+	use crate::conversations::contract::{SummonsDropped, SUMMONS_DROPPED_EVENT, UPDATED_EVENT};
 	use crate::conversations::turn_run_deadline::TurnRunDeadlines;
 	use crate::db::repositories::conversations::{
 		BotIdentity, ConversationDraft, DEFAULT_BOT_ID, DEFAULT_BOT_MODEL,
