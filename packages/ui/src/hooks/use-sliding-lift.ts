@@ -174,18 +174,15 @@ const measureSlide = (
 type UseSlidingLiftOptions<Landing> = Omit<
 	UseRosterLiftOptions<number | Landing>,
 	"landingAt"
-> & {
-	axis: SlideAxis
-	slot: string
-	idAttribute: string
-	zones: readonly (readonly string[])[]
-	containerRef: RefObject<HTMLElement | null>
-	landingOutside?: (
-		x: number,
-		y: number,
-		geometry: SlideGeometry,
-	) => Landing | null
-}
+> &
+	SlideLayout & {
+		containerRef: RefObject<HTMLElement | null>
+		landingOutside?: (
+			x: number,
+			y: number,
+			geometry: SlideGeometry,
+		) => Landing | null
+	}
 
 export const useSlidingLift = <Landing = never>({
 	axis,
