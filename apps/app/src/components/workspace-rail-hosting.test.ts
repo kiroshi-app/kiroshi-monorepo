@@ -32,8 +32,9 @@ const host = vi.hoisted(
 	(): HostBoundaries => ({ members: [], hosting: { kind: "off" } }),
 )
 
-const readMembers = vi.hoisted(() => vi.fn())
-const readHosting = vi.hoisted(() => vi.fn())
+const readMembers = vi.hoisted(() =>
+	vi.fn(async () => ({ status: "ok" as const, data: host.members })),
+)
 
 vi.mock("@/lib/host/index", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/lib/host/index")>()),
@@ -43,10 +44,6 @@ vi.mock("@/lib/host/index", async (importOriginal) => ({
 vi.mock("@/lib/host/members-transport", async (importOriginal) => {
 	const original =
 		await importOriginal<typeof import("@/lib/host/members-transport")>()
-	readMembers.mockImplementation(async () => ({
-		status: "ok",
-		data: host.members,
-	}))
 	return {
 		...original,
 		membersTransport: {
@@ -60,10 +57,12 @@ vi.mock("@/lib/host/members-transport", async (importOriginal) => {
 vi.mock("@/lib/host/hosting-transport", async (importOriginal) => {
 	const original =
 		await importOriginal<typeof import("@/lib/host/hosting-transport")>()
-	readHosting.mockImplementation(async () => host.hosting)
 	return {
 		...original,
-		hostingTransport: { ...original.hostingTransport, read: readHosting },
+		hostingTransport: {
+			...original.hostingTransport,
+			read: async () => host.hosting,
+		},
 	}
 })
 
@@ -160,7 +159,6 @@ const railSpaceAvatarState = () =>
 afterEach(() => {
 	cleanup()
 	readMembers.mockClear()
-	readHosting.mockClear()
 })
 
 describe("the rail logo of a Space hosted from this computer", () => {
