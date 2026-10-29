@@ -406,7 +406,7 @@ export const ListExistingProfile = meta.story({
 	name: "3.1 List, existing profile",
 	args: LIST_EXISTING_PROFILE,
 	parameters: describe(
-		"3.1 List as a profile that already exists sees it once at start: the same list, with Not now in place of Skip for now.",
+		"An existing profile sees 3.1 List once at start: the same list, with Not now in place of Skip for now.",
 	),
 	play: async ({ canvasElement, args }) => {
 		const canvas = within(canvasElement)
