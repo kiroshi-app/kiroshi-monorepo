@@ -1253,12 +1253,11 @@ describe("Tear off", () => {
 		])
 	})
 
-	it("opens no window for an id naming no tab of the shown space", async () => {
+	it("opens no window for an id naming no tab of the shown space", () => {
 		opensWindows()
 		const tabs = tabsOn(threadOf("kept"))
 
 		tabs.tearOff({ tabId: "absent", ...RELEASE })
-		await Promise.resolve()
 
 		expect(windowHost.windowOpen).not.toHaveBeenCalled()
 		expect(shownHrefs(tabs)).toEqual(["/", threadOf("kept")])

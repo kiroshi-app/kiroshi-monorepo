@@ -465,14 +465,6 @@ export const createWorkspaceTabs = (
 		raiseWindowFailure(moveFailureOf(opening.reason), "window_open")
 	}
 
-	const tearOff = ({ tabId, screenX, screenY }: TabTearOff) => {
-		void moveToWindowAt(tabId, {
-			x: Math.round(screenX),
-			y: Math.round(screenY),
-		})
-		return true as const
-	}
-
 	const reachSpace = (spaceId: string) => {
 		const state = store.getState()
 		const { space, isRestored } = reachedTabsOf(spaceId)
@@ -526,7 +518,13 @@ export const createWorkspaceTabs = (
 		closeOthers: (id) => closingChange((space) => closeOtherTabs(space, id)),
 		duplicate: (id) => change((space) => duplicateTab(space, id)),
 		moveToNewWindow: (id) => moveToWindowAt(id, null),
-		tearOff,
+		tearOff: ({ tabId, screenX, screenY }) => {
+			void moveToWindowAt(tabId, {
+				x: Math.round(screenX),
+				y: Math.round(screenY),
+			})
+			return true
+		},
 		reopenClosed,
 		reorder: (ids) => change((space) => reorderTabs(space, ids)),
 		dropAbsentRestored: async (spaceId, { isRowPresent, readMission }) => {
