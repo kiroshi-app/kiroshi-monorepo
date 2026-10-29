@@ -81,7 +81,14 @@ pub(super) async fn plant_first_companion<R: Runtime>(
 			None
 		}
 	};
+	backfill_shoto_title(database).await;
 	launch::settle(app, created, unlaid);
+}
+
+async fn backfill_shoto_title(database: &db::Database) {
+	if let Err(failure) = database.user().backfill_shoto_title(shoto::NAME, shoto::TITLE).await {
+		log::warn!("the title of {} was not backfilled: {failure:?}", shoto::NAME);
+	}
 }
 
 async fn seed<R: Runtime>(
@@ -184,7 +191,7 @@ fn personal_space() -> Option<String> {
 fn identity(picture: &Path) -> BotIdentity {
 	BotIdentity {
 		name: shoto::NAME.to_owned(),
-		title: String::new(),
+		title: shoto::TITLE.to_owned(),
 		model: DEFAULT_BOT_MODEL.to_owned(),
 		avatar_blot: None,
 		avatar_image_path: Some(picture.to_string_lossy().into_owned()),
@@ -212,7 +219,9 @@ mod tests {
 		CompanionSeedRefused, LaunchOutcome, CREATED_EVENT, SEED_REFUSED_EVENT,
 	};
 	use crate::companions::launch::LaunchOutcomeState;
-	use crate::db::repositories::conversations::{Bot as StoredBot, ConversationDraft};
+	use crate::db::repositories::conversations::{
+		Bot as StoredBot, BotIdentity as StoredIdentity, ConversationDraft,
+	};
 	use crate::db::repositories::user::OnboardingStep;
 	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 
@@ -286,6 +295,50 @@ mod tests {
 			.expect("the companion is created")
 	}
 
+	async fn a_bot(database: &db::Database, name: &str, title: &str) -> StoredBot {
+		let mut identity = identity(Path::new("held.png"));
+		identity.name = name.to_owned();
+		identity.title = title.to_owned();
+		database
+			.conversations()
+			.create_bot(identity.into(), personal_space(), None)
+			.await
+			.expect("the bot is created")
+	}
+
+	async fn an_existing_shoto_titled(database: &db::Database, title: &str) -> StoredBot {
+		let shoto = a_bot(database, shoto::NAME, title).await;
+		database
+			.user()
+			.mark_first_companion_seeded_as_shoto(shoto.id.clone())
+			.await
+			.expect("the seed marker");
+		shoto
+	}
+
+	async fn retitled(database: &db::Database, bot: &StoredBot, title: &str) {
+		let mut identity = StoredIdentity::from(
+			database
+				.conversations()
+				.bot(bot.id.clone())
+				.await
+				.expect("the bot reads")
+				.expect("the bot is held"),
+		);
+		identity.title = title.to_owned();
+		database.conversations().update_bot(bot.id.clone(), identity).await.expect("the update");
+	}
+
+	async fn title_of(database: &db::Database, bot: &StoredBot) -> String {
+		database
+			.conversations()
+			.bot(bot.id.clone())
+			.await
+			.expect("the bot reads")
+			.expect("the bot is held")
+			.title
+	}
+
 	fn bundle_of(app: &App<MockRuntime>, bot: &StoredBot) -> PathBuf {
 		bundles::dir(&bundles::root(app.handle()).expect("the bundle root"), &bot.id)
 			.expect("the bundle is held")
@@ -310,6 +363,7 @@ mod tests {
 		let shoto = roster.first().expect("Shoto is planted");
 		assert_eq!(roster.len(), 1);
 		assert_eq!(shoto.name, shoto::NAME);
+		assert_eq!(shoto.title, shoto::TITLE);
 		assert_eq!(shoto.instructions, shoto::persona());
 		assert_eq!(shoto.avatar_blot, None);
 		assert!(database.user().is_first_companion_seeded().await.expect("the marker"));
@@ -545,5 +599,79 @@ mod tests {
 		assert_eq!(database.conversations().bots(None).await.expect("the roster").len(), 0);
 		assert!(database.user().is_first_companion_seeded().await.expect("the marker"));
 		assert!(database.user().preferences().await.expect("the preferences").first_run_done);
+	}
+
+	#[tokio::test]
+	async fn an_existing_shoto_without_a_title_receives_guide_once_and_no_other_bot_moves() {
+		let app = a_host("backfill-empty");
+		let database = database_of(&app);
+		let shoto = an_existing_shoto_titled(database, "").await;
+		let other = a_bot(database, "Kept", "").await;
+
+		seeded(&app, database).await;
+
+		assert_eq!(title_of(database, &shoto).await, shoto::TITLE);
+		assert_eq!(title_of(database, &other).await, "");
+	}
+
+	#[tokio::test]
+	async fn an_existing_shoto_whose_title_was_changed_keeps_it() {
+		let app = a_host("backfill-kept");
+		let database = database_of(&app);
+		let shoto = an_existing_shoto_titled(database, "Mentor").await;
+
+		seeded(&app, database).await;
+
+		assert_eq!(title_of(database, &shoto).await, "Mentor");
+		retitled(database, &shoto, "").await;
+		seeded(&app, database).await;
+		assert_eq!(title_of(database, &shoto).await, "", "a recorded backfill ran again");
+	}
+
+	#[tokio::test]
+	async fn a_title_cleared_after_the_backfill_stays_empty_on_the_next_start() {
+		let app = a_host("backfill-cleared");
+		let database = database_of(&app);
+		let shoto = an_existing_shoto_titled(database, "").await;
+		seeded(&app, database).await;
+		retitled(database, &shoto, "").await;
+
+		seeded(&app, database).await;
+
+		assert_eq!(title_of(database, &shoto).await, "");
+	}
+
+	#[tokio::test]
+	async fn without_a_recorded_shoto_the_oldest_bot_named_shoto_receives_guide() {
+		let app = a_host("backfill-oldest");
+		let database = database_of(&app);
+		let oldest = a_bot(database, shoto::NAME, "").await;
+		tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+		let younger = a_bot(database, shoto::NAME, "").await;
+		database.user().mark_first_companion_seeded().await.expect("the seed marker");
+
+		seeded(&app, database).await;
+
+		assert_eq!(
+			database.user().preferences().await.expect("the preferences").onboarding_shoto_id,
+			None
+		);
+		assert_eq!(title_of(database, &oldest).await, shoto::TITLE);
+		assert_eq!(title_of(database, &younger).await, "");
+	}
+
+	#[tokio::test]
+	async fn a_profile_without_any_shoto_records_the_backfill_and_titles_nobody() {
+		let app = a_host("backfill-none");
+		let database = database_of(&app);
+		let other = a_bot(database, "Kept", "").await;
+		database.user().mark_first_companion_seeded().await.expect("the seed marker");
+		seeded(&app, database).await;
+		let late = a_bot(database, shoto::NAME, "").await;
+
+		seeded(&app, database).await;
+
+		assert_eq!(title_of(database, &other).await, "");
+		assert_eq!(title_of(database, &late).await, "", "a recorded backfill ran again");
 	}
 }

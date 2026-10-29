@@ -1,5 +1,7 @@
 pub const NAME: &str = "Shoto";
 
+pub const TITLE: &str = "Guide";
+
 pub const AVATAR: &[u8] = include_bytes!("../../plugins/shoto/avatar.jpeg");
 
 const PERSONA: &[u8] = include_bytes!("../../plugins/shoto/persona.md");
