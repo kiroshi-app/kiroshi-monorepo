@@ -15,6 +15,8 @@ mod descriptors;
 pub mod devices;
 pub mod environment;
 pub mod events;
+#[cfg(all(test, unix))]
+mod executable_script;
 pub mod file_store;
 pub mod host_api;
 pub mod hosting;

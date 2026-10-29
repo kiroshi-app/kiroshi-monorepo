@@ -281,13 +281,12 @@ mod tests {
 	#[cfg(unix)]
 	#[tokio::test]
 	async fn a_git_read_past_its_limit_is_abandoned() {
-		use std::os::unix::fs::PermissionsExt as _;
+		use crate::executable_script::an_executable_script;
 
 		let root = temp_dir();
 		let checkout = a_checkout(&root);
 		let monitor = root.join("slow-monitor.sh");
-		fs::write(&monitor, "#!/bin/sh\nsleep 30\n").expect("the monitor lands");
-		fs::set_permissions(&monitor, fs::Permissions::from_mode(0o755)).expect("it runs");
+		an_executable_script(&monitor, "#!/bin/sh\nsleep 30\n");
 		git(&checkout, &["config", "core.fsmonitor", &monitor.to_string_lossy()]);
 
 		let started = std::time::Instant::now();

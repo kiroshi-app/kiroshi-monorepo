@@ -7,6 +7,7 @@ use crate::agent::commands::a_session_held_by_the_app;
 use crate::agent::contract::{AgentEvent, RuntimeScope};
 use crate::agent::session::{EventSink, Session, SessionOptions};
 use crate::agent::sidecar::{Sidecar, SidecarOptions};
+use crate::executable_script::an_executable_script;
 use crate::removed_on_drop::RemovedOnDrop;
 
 const OPENING_SIDECAR: &str = r#"#!/bin/sh
@@ -44,16 +45,12 @@ pub(crate) async fn a_session_running(
 	scope: &RuntimeScope,
 	sidecar_script: &str,
 ) -> HeldSession {
-	use std::os::unix::fs::PermissionsExt;
-
 	let script = RemovedOnDrop(std::env::temp_dir().join(format!(
 		"kiroshi-opening-sidecar-{}-{}.sh",
 		std::process::id(),
 		uuid::Uuid::new_v4()
 	)));
-	std::fs::write(&*script, sidecar_script).expect("the sidecar script is written");
-	std::fs::set_permissions(&*script, std::fs::Permissions::from_mode(0o755))
-		.expect("the sidecar script runs");
+	an_executable_script(&script, sidecar_script);
 	let sidecar = Sidecar::start(SidecarOptions::new(script.to_path_buf()))
 		.await
 		.expect("the sidecar is ready");
