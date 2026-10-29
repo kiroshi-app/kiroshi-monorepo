@@ -473,21 +473,21 @@ const missionTabOf = (botId: string, missionId: string) =>
 		activeIndex: 0,
 	})
 
-const answerOnlyItsOwn = async (
+type MissionHost = { missionId: string; answer: Answer }
+
+const missionHostOf = async (
 	host: SharedHost,
 	missionId: string,
 	title: string,
-): Promise<Answer> => {
-	const detail = await missionDetailOn(host, missionId, title)
-	const answer = storeAnswer(host.store, { mission_detail: detail })
-	return async (call) => {
-		const named = call.args.missionId
-		if (named !== undefined && named !== missionId) {
-			throw new Response(OTHER_SPACE_REFUSAL, { status: 403 })
-		}
-		return answer(call)
-	}
-}
+): Promise<MissionHost> => ({
+	missionId,
+	answer: storeAnswer(host.store, {
+		mission_detail: await missionDetailOn(host, missionId, title),
+	}),
+})
+
+const namesAnotherMission = ({ args }: Call, { missionId }: MissionHost) =>
+	args.missionId !== undefined && args.missionId !== missionId
 
 const switchFromAtticToGarage = async () => {
 	const mac = await macWithLocalSpace()
@@ -523,13 +523,9 @@ const switchFromAtticToGarage = async () => {
 					token: "guest",
 				}
 			: answerOnMac(call)
-	const answerOn: Record<string, Answer> = {
-		[ATTIC_URL]: await answerOnlyItsOwn(attic, ATTIC_MISSION, "Attic mission"),
-		[HOST_URL]: await answerOnlyItsOwn(
-			garage,
-			GARAGE_MISSION,
-			"Garage mission",
-		),
+	const missionHosts: Record<string, MissionHost> = {
+		[ATTIC_URL]: await missionHostOf(attic, ATTIC_MISSION, "Attic mission"),
+		[HOST_URL]: await missionHostOf(garage, GARAGE_MISSION, "Garage mission"),
 	}
 	const relayedTo: Record<string, Call[]> = { [ATTIC_URL]: [], [HOST_URL]: [] }
 	vi.stubGlobal("WebSocket", OpeningSocket)
@@ -540,13 +536,13 @@ const switchFromAtticToGarage = async () => {
 			args: JSON.parse(String(init?.body ?? "{}")) as Fields,
 		}
 		relayedTo[origin]?.push(call)
-		try {
-			return new Response(JSON.stringify(await answerOn[origin]?.(call)), {
-				headers: { "content-type": "application/json" },
-			})
-		} catch (refusal) {
-			return refusal as Response
+		const missionHost = missionHosts[origin]
+		if (!missionHost || namesAnotherMission(call, missionHost)) {
+			return new Response(OTHER_SPACE_REFUSAL, { status: 403 })
 		}
+		return new Response(JSON.stringify(await missionHost.answer(call)), {
+			headers: { "content-type": "application/json" },
+		})
 	})
 	window.localStorage.setItem("lastSpaceId", "joined:attic")
 	window.localStorage.setItem("firstRunDone", "on")
