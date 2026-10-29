@@ -3192,7 +3192,7 @@ describe("the mentions a finished turn carries", () => {
 		room.detach()
 	})
 
-	it("describes a dropped summons with no error with the not-started copy", async () => {
+	it("describes a dropped summons with no error as a session that never ran", async () => {
 		const room = await roomSeating()
 
 		await room.drop({ botId: room.iris, reason: "neverStarted" })
@@ -3200,7 +3200,7 @@ describe("the mentions a finished turn carries", () => {
 		expect(room.reportFailure).toHaveBeenCalledWith(
 			...notStarted(
 				"Iris didn’t start",
-				"Seat it in this conversation, or pick another agent.",
+				"No session is running. Start a session to continue.",
 				{ botId: room.iris, botName: "Iris" },
 			),
 		)

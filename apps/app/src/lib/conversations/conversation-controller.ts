@@ -263,6 +263,8 @@ const NO_PINS: MessagePin[] = []
 
 const NO_SPEAKERS: SpeakingBot[] = []
 
+const NO_SESSION: TransportError = { kind: "notStarted" }
+
 const UNNOTICED_DROPS: SummonsDropped["reason"][] = ["selfMention", "notSeated"]
 
 type RunPlace = Pick<TranscriptMessage, "conversationId" | "turnId">
@@ -1327,7 +1329,7 @@ export const createConversationController = (
 		}
 		foreignTurns.fail(dropped)
 		sync()
-		void raiseNotStarted(dropped, [dropped.botId], dropped.error)
+		void raiseNotStarted(dropped, [dropped.botId], dropped.error ?? NO_SESSION)
 	}
 
 	const nameFrom = async (conversationId: string, text: string) => {
