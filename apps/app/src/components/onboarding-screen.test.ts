@@ -143,12 +143,14 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe("the Welcome screens", () => {
-	it("walks the three screens, then stores connect and offers the two ways in", async () => {
+	it("walks the four screens, then stores connect and offers the two ways in", async () => {
 		await renderOnboarding()
 		expect(heading()).toBe("Companions do the work with you")
 
 		await press("Next")
 		expect(heading()).toBe("Conversations, then missions")
+		await press("Next")
+		expect(heading()).toBe("Spaces keep things apart")
 		await press("Next")
 		expect(heading()).toBe("Your tools, where you allow them")
 		await press("Get started")
@@ -167,7 +169,10 @@ describe("the Welcome screens", () => {
 		await renderOnboarding()
 		await press("Next")
 		await press("Next")
+		await press("Next")
 
+		await press("Back")
+		expect(heading()).toBe("Spaces keep things apart")
 		await press("Back")
 		expect(heading()).toBe("Conversations, then missions")
 		await press("Back")
