@@ -118,6 +118,8 @@ declared! {
 		notifications::commands::ACTIVATED_EVENT,
 	ROUTINE_CHANGED: routines::commands::RoutineChanged = routines::commands::CHANGED_EVENT,
 	SPACE_DESCRIBED: spaces::contract::SpaceDescribed = spaces::contract::DESCRIBED_EVENT,
+	NATIVE_MOVE_ENDED: window_controls::native_move::NativeMoveEnded =
+		window_controls::native_move::NATIVE_MOVE_ENDED_EVENT,
 	MAXIMIZE_BUTTON: window_controls::MaximizeButtonPointer =
 		window_controls::MAXIMIZE_BUTTON_EVENT,
 	DRAG_GHOST_TAB: window_controls::drag_ghost::DragGhostTab =

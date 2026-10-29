@@ -34,6 +34,7 @@ pub fn builder() -> Builder<tauri::Wry> {
 		.constant("UPDATE_CHANGED_EVENT", updates::contract::CHANGED_EVENT)
 		.constant("FILE_MENU_EVENT", menu_contract::FILE_MENU_EVENT)
 		.constant("TAB_DRAG_EVENT", window_controls::tab_drag::TAB_DRAG_EVENT)
+		.constant("NATIVE_MOVE_ENDED_EVENT", window_controls::native_move::NATIVE_MOVE_ENDED_EVENT)
 		.constant("CLAUDE_IMPORT_PROGRESS_EVENT", claude_import::contract::PROGRESS_EVENT)
 		.constant("SUMMONS_DROPPED_EVENT", conversations::contract::SUMMONS_DROPPED_EVENT)
 		.typ::<window_controls::MaximizeButtonPointer>()
@@ -54,6 +55,7 @@ pub fn builder() -> Builder<tauri::Wry> {
 		.typ::<spaces::contract::SpaceDescribed>()
 		.typ::<menu_contract::FileMenuChosen>()
 		.typ::<window_controls::tab_drag::TabDrag>()
+		.typ::<window_controls::native_move::NativeMoveEnded>()
 		.typ::<claude_import::contract::ClaudeImportProgress>()
 		.typ::<conversations::contract::SummonsDropped>()
 }

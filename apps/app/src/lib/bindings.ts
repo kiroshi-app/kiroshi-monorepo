@@ -317,6 +317,8 @@ export const JOIN_LINK_OPENED_EVENT = "join-link://opened" as const;
 
 export const MAXIMIZE_BUTTON_EVENT = "window-maximize-button" as const;
 
+export const NATIVE_MOVE_ENDED_EVENT = "window://native-move-ended" as const;
+
 export const SPACE_DESCRIBED_EVENT = "space://described" as const;
 
 export const SUMMONS_DROPPED_EVENT = "conversation://summons-dropped" as const;
@@ -1322,6 +1324,11 @@ export type MissionState = "working" | "waiting_bot" | "waiting_human" | "ready_
 export type MissionStatus = {
 	text: string,
 	writtenAt: number,
+};
+
+export type NativeMoveEnded = {
+	label: string,
+	point: ScreenPosition,
 };
 
 export type NativeWindowError = { kind: "unavailable" };

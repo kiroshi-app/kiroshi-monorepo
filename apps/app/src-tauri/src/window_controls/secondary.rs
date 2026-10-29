@@ -8,7 +8,7 @@ use tauri::{
 	WindowEvent,
 };
 
-use super::{built, is_app_window, main_config, tab_drag};
+use super::{built, is_app_window, main_config, native_move, tab_drag};
 use crate::db::DatabaseState;
 
 const SECONDARY_PREFIX: &str = "window-";
@@ -268,6 +268,7 @@ fn follow<R: Runtime>(window: &WebviewWindow<R>, event: &WindowEvent) {
 		WindowEvent::Destroyed => {
 			opened_windows(window.app_handle()).registry().windows.remove(window.label());
 			tab_drag::cancel_when_origin_destroyed(window);
+			native_move::stop_when_destroyed(window);
 		}
 		_ => {}
 	}
