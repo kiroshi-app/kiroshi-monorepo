@@ -9,7 +9,7 @@ import {
 	TAB_DRAG_EVENT,
 	type TabDrag,
 } from "../bindings"
-import { readWindowOrigin, revealWindow, type WindowOrigin } from "../host"
+import { readWindowOrigin, revealWindow } from "../host"
 import { createStore } from "../store"
 import { listenOnThisWindow } from "../host/window-listen"
 
@@ -29,7 +29,6 @@ type TabDockSource = {
 type HeldDrag = DockedTab & {
 	originSpaceId: string
 	strip: StripBounds | null
-	origin: WindowOrigin | null
 }
 
 const reportDockFailure = (reason: unknown) => {
@@ -84,32 +83,24 @@ export const createTabDock = (
 		drag.originSpaceId !== "" && drag.originSpaceId === shownSpaceId()
 
 	const partingAt = (point: ScreenPosition): IncomingTab | null => {
-		if (!held?.strip || !held.origin || !isSameSpace(held)) {
+		if (!held?.strip || !isSameSpace(held)) {
 			return null
 		}
-		const clientX = point.x - held.origin.x
-		const clientY = point.y - held.origin.y
+		const origin = readWindowOrigin()
+		const clientX = point.x - origin.x
+		const clientY = point.y - origin.y
 		return holds(held.strip, clientX, clientY)
 			? { tab: held.tab, clientX }
 			: null
 	}
 
-	const readOrigin = (drag: HeldDrag) => {
-		readWindowOrigin().then((origin) => {
-			drag.origin = origin
-		}, reportDockFailure)
-	}
-
 	const hold = (originSpaceId: string, packed: Json) => {
 		const docked = unpackDockedTab(packed)
-		held = docked
-			? { ...docked, originSpaceId, strip: measuredStrip(), origin: null }
-			: null
+		held = docked ? { ...docked, originSpaceId, strip: measuredStrip() } : null
 		if (!held) {
 			return
 		}
 		reportPlace(shownSpaceId(), held.strip)
-		readOrigin(held)
 	}
 
 	const release = () => {
@@ -117,21 +108,19 @@ export const createTabDock = (
 		part(null)
 	}
 
-	const isOverStripNow = async (drag: HeldDrag, point: ScreenPosition) => {
+	const isOverStripNow = (drag: HeldDrag, point: ScreenPosition) => {
 		const strip = measuredStrip()
 		if (!strip || !isSameSpace(drag)) {
 			return false
 		}
-		return readWindowOrigin().then(
-			(origin) => holds(strip, point.x - origin.x, point.y - origin.y),
-			isUnread,
-		)
+		const origin = readWindowOrigin()
+		return holds(strip, point.x - origin.x, point.y - origin.y)
 	}
 
 	const take = async (drag: HeldDrag, point: ScreenPosition) => {
 		const index = incomingIndex ?? Number.POSITIVE_INFINITY
 		release()
-		const isTaken = await isOverStripNow(drag, point)
+		const isTaken = isOverStripNow(drag, point)
 		const isAnswered = await answerDock({
 			windowLabel,
 			originTabId: drag.originTabId,

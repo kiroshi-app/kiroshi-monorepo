@@ -1831,7 +1831,7 @@ const joinWindows = (target: WorkspaceTabs) => {
 	})
 	tabDragHost.windowReportSpace.mockResolvedValue(undefined)
 	tabDragHost.windowReportStrip.mockResolvedValue(undefined)
-	tabDragHost.readWindowOrigin.mockResolvedValue({ x: 0, y: 0 })
+	tabDragHost.readWindowOrigin.mockReturnValue({ x: 0, y: 0 })
 	tabDragHost.revealWindow.mockResolvedValue(undefined)
 }
 
@@ -1848,7 +1848,7 @@ const redock = async (
 		title: "Torn",
 	}))
 	await vi.waitFor(() =>
-		expect(tabDragHost.readWindowOrigin).toHaveBeenCalled(),
+		expect(tabDragHost.windowReportSpace).toHaveBeenCalled(),
 	)
 	origin.tearOffSession.move(tearOff)
 	await vi.waitFor(() => expect(target.dock.getState()).not.toBeNull())
@@ -1893,9 +1893,9 @@ describe("a tab dragged onto the strip of another window of its Space", () => {
 			title: "Torn",
 		}))
 		await vi.waitFor(() =>
-			expect(tabDragHost.readWindowOrigin).toHaveBeenCalled(),
+			expect(tabDragHost.windowReportSpace).toHaveBeenCalled(),
 		)
-		tabDragHost.readWindowOrigin.mockResolvedValue({ x: 2000, y: 0 })
+		tabDragHost.readWindowOrigin.mockReturnValue({ x: 2000, y: 0 })
 
 		origin.tearOffSession.drop(tearOff)
 

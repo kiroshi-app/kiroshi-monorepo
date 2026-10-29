@@ -98,18 +98,16 @@ const dockOf = (shownSpaceId = SPACE) => {
 	return { dock, receive }
 }
 
-const holding = async (shownSpaceId = SPACE, originSpaceId = SPACE) => {
+const holding = (shownSpaceId = SPACE, originSpaceId = SPACE) => {
 	const held = dockOf(shownSpaceId)
 	held.dock.follow(started(originSpaceId))
-	await vi.waitFor(() => expect(host.readWindowOrigin).toHaveBeenCalled())
-	await Promise.resolve()
 	return held
 }
 
 beforeEach(() => {
 	host.windowReportSpace.mockResolvedValue(undefined)
 	host.windowReportStrip.mockResolvedValue(undefined)
-	host.readWindowOrigin.mockResolvedValue(WINDOW_ORIGIN)
+	host.readWindowOrigin.mockReturnValue(WINDOW_ORIGIN)
 	host.revealWindow.mockResolvedValue(undefined)
 	host.emitOnThisComputer.mockResolvedValue(undefined)
 	mountStrip()
@@ -143,7 +141,7 @@ describe("a tab drag started in another window", () => {
 
 describe("the pointer over the strip during a drag of the same Space", () => {
 	it("parts the strip at the pointer x with the incoming tab", async () => {
-		const { dock } = await holding()
+		const { dock } = holding()
 
 		dock.follow(moved(OVER_STRIP.x, OVER_STRIP.y))
 
@@ -154,7 +152,7 @@ describe("the pointer over the strip during a drag of the same Space", () => {
 	})
 
 	it("closes the parting once the pointer leaves the strip", async () => {
-		const { dock } = await holding()
+		const { dock } = holding()
 
 		dock.follow(moved(OVER_STRIP.x, OVER_STRIP.y))
 		dock.follow(moved(BELOW_STRIP.x, BELOW_STRIP.y))
@@ -163,7 +161,7 @@ describe("the pointer over the strip during a drag of the same Space", () => {
 	})
 
 	it("closes the parting when the drag is cancelled", async () => {
-		const { dock } = await holding()
+		const { dock } = holding()
 
 		dock.follow(moved(OVER_STRIP.x, OVER_STRIP.y))
 		dock.follow({ kind: "cancelled", originLabel: ORIGIN_WINDOW })
@@ -174,7 +172,7 @@ describe("the pointer over the strip during a drag of the same Space", () => {
 
 describe("a drag of another Space", () => {
 	it("never parts the strip, answers not taken and takes nothing on drop", async () => {
-		const { dock, receive } = await holding(SPACE, "space-away")
+		const { dock, receive } = holding(SPACE, "space-away")
 
 		dock.follow(moved(OVER_STRIP.x, OVER_STRIP.y))
 		dock.follow(dropped(OVER_STRIP.x, OVER_STRIP.y))
@@ -191,7 +189,7 @@ describe("a drag of another Space", () => {
 
 describe("a tab dropped on the parted strip", () => {
 	it("answers taken, then takes the tab at the parted index and focuses this window", async () => {
-		const { dock, receive } = await holding()
+		const { dock, receive } = holding()
 
 		dock.follow(moved(OVER_STRIP.x, OVER_STRIP.y))
 		dock.placeIncoming(2)
@@ -217,7 +215,7 @@ describe("a tab dropped on the parted strip", () => {
 	})
 
 	it("takes it once when the drop reaches two listeners", async () => {
-		const { dock, receive } = await holding()
+		const { dock, receive } = holding()
 
 		dock.follow(moved(OVER_STRIP.x, OVER_STRIP.y))
 		dock.follow(dropped(OVER_STRIP.x, OVER_STRIP.y))
@@ -228,7 +226,7 @@ describe("a tab dropped on the parted strip", () => {
 	})
 
 	it("answers not taken and takes nothing when dropped off the strip", async () => {
-		const { dock, receive } = await holding()
+		const { dock, receive } = holding()
 
 		dock.follow(moved(OVER_STRIP.x, OVER_STRIP.y))
 		dock.follow(dropped(BELOW_STRIP.x, BELOW_STRIP.y))
@@ -245,7 +243,7 @@ describe("a tab dropped on the parted strip", () => {
 	it("takes nothing when its answer cannot be sent", async () => {
 		vi.spyOn(console, "error").mockImplementation(() => undefined)
 		host.emitOnThisComputer.mockRejectedValue(new Error("no channel"))
-		const { dock, receive } = await holding()
+		const { dock, receive } = holding()
 
 		dock.follow(dropped(OVER_STRIP.x, OVER_STRIP.y))
 
@@ -257,7 +255,7 @@ describe("a tab dropped on the parted strip", () => {
 
 describe("the drop decision", () => {
 	it("measures the strip at the drop, not at the start of the drag", async () => {
-		const { dock, receive } = await holding()
+		const { dock, receive } = holding()
 		mountStrip({ ...STRIP, y: 400 })
 
 		dock.follow(dropped(OVER_STRIP.x, OVER_STRIP.y))
@@ -270,20 +268,9 @@ describe("the drop decision", () => {
 		expect(receive).not.toHaveBeenCalled()
 	})
 
-	it("reads the window origin at the drop, even when it was never read before", async () => {
-		host.readWindowOrigin.mockReturnValueOnce(new Promise(() => undefined))
-		const { dock, receive } = dockOf()
-		dock.follow(started())
-
-		dock.follow(dropped(OVER_STRIP.x, OVER_STRIP.y))
-
-		await vi.waitFor(() => expect(receive).toHaveBeenCalledOnce())
-		expect(host.readWindowOrigin).toHaveBeenCalledTimes(2)
-	})
-
 	it("reads the window origin again when the window moved during the drag", async () => {
-		const { dock, receive } = await holding()
-		host.readWindowOrigin.mockResolvedValue({ x: 0, y: 0 })
+		const { dock, receive } = holding()
+		host.readWindowOrigin.mockReturnValue({ x: 0, y: 0 })
 
 		dock.follow(dropped(OVER_STRIP.x, OVER_STRIP.y))
 

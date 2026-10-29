@@ -206,15 +206,10 @@ export type WindowOrigin = {
 	y: number
 }
 
-export const readWindowOrigin = async (): Promise<WindowOrigin> => {
-	const current = getCurrentWindow()
-	const [position, scale] = await Promise.all([
-		current.innerPosition(),
-		current.scaleFactor(),
-	])
-	const { x, y } = position.toLogical(scale)
-	return { x, y }
-}
+export const readWindowOrigin = (): WindowOrigin => ({
+	x: window.screenX,
+	y: window.screenY,
+})
 
 export function watchWindowFocus(
 	report: (isFocused: boolean) => void,
