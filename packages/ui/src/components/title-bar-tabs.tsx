@@ -67,7 +67,7 @@ type TitleBarTabsProps = {
 	onReopenClosedTab?: () => void
 	onMoveTabToNewWindow?: (id: string) => void
 	onReorderTabs?: (ids: string[]) => void
-	onTearOffTab?: (tearOff: TitleBarTabTearOff) => boolean | undefined
+	onTearOffTab?: (tearOff: TitleBarTabTearOff) => unknown
 	onNewTab?: () => void
 	onGoBack?: () => void
 	onGoForward?: () => void
@@ -304,7 +304,7 @@ type TabLiftSource = {
 	pinned: TitleBarTab[]
 	kept: TitleBarTab[]
 	onReorderTabs?: (ids: string[]) => void
-	onTearOffTab?: (tearOff: TitleBarTabTearOff) => boolean | undefined
+	onTearOffTab?: (tearOff: TitleBarTabTearOff) => unknown
 }
 
 const stepOf = (event: KeyboardEvent<HTMLElement>) => {
