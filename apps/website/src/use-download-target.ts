@@ -1,6 +1,7 @@
 import { type MouseEvent, useEffect, useState } from "react"
 
 import { LATEST_RELEASE_URL, RELEASES_URL } from "./copy"
+import { X_DOWNLOAD_EVENT_ID } from "./x-ads"
 
 export type DownloadPlatform = "macos" | "windows" | "linux" | "other"
 
@@ -70,6 +71,11 @@ const resolvedTarget = () =>
 		.then((assets) => platformAssetUrl(assets) ?? RELEASES_URL)
 		.catch(() => RELEASES_URL)
 
+const reportDownloadToX = () => {
+	if (X_DOWNLOAD_EVENT_ID === "") return
+	window.twq?.("event", X_DOWNLOAD_EVENT_ID, {})
+}
+
 export const useDownloadTarget = () => {
 	const [target, setTarget] = useState<string | null>(
 		OFFERS_NO_ASSET ? RELEASES_URL : null,
@@ -87,6 +93,7 @@ export const useDownloadTarget = () => {
 	}, [])
 
 	const transferOnceResolved = (event: MouseEvent<HTMLAnchorElement>) => {
+		reportDownloadToX()
 		if (target !== null) return
 		event.preventDefault()
 		resolvedTarget().then((url) => {

@@ -194,6 +194,21 @@
 			}
 		},
 		{
+			"includes": ["apps/website/index.html"],
+			"linter": {
+				"rules": {
+					"complexity": {
+						"noArguments": "off",
+						"noCommaOperator": "off",
+						"useArrowFunction": "off"
+					},
+					"suspicious": {
+						"noAssignInExpressions": "off"
+					}
+				}
+			}
+		},
+		{
 			"includes": ["**/prisma.config.ts"],
 			"linter": {
 				"rules": {
