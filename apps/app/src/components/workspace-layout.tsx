@@ -7,6 +7,7 @@ import { NoticeSurface } from "@workspace/ui/components/notice-surface"
 import { probeRender } from "@workspace/ui/lib/render-probe"
 
 import { AppDialogs } from "@/components/app-dialogs"
+import { ClaudeImport } from "@/components/claude-import"
 import { OnboardingScreen } from "@/components/onboarding-screen"
 import { StartupScreen } from "@/components/startup-screen"
 import { ConversationApplicationsContext } from "@/lib/applications/use-conversation-installs"
@@ -25,6 +26,7 @@ export const WorkspaceLayout = () => {
 	const workspace = useWorkspaceAssembly()
 	const {
 		authorship,
+		claudeImport,
 		companionMenu,
 		core,
 		drivers,
@@ -83,9 +85,19 @@ export const WorkspaceLayout = () => {
 				<OnboardingScreen
 					account={core.account}
 					flow={drivers.onboarding}
+					importScene={claudeImport.scene}
 					readerName={core.preferences.displayName}
 					step={onboardingStep}
 				/>
+				<NoticeSurface />
+			</>
+		)
+	}
+
+	if (claudeImport.shown) {
+		return (
+			<>
+				<ClaudeImport {...claudeImport.shown} />
 				<NoticeSurface />
 			</>
 		)

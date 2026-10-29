@@ -18,6 +18,7 @@ import { useWorkspaceSubscriptions } from "./use-workspace-subscriptions"
 import { useNewDevice } from "../devices/use-new-device"
 import { useOpenSettings } from "../navigation/open-settings"
 import { useSettingsNavigation } from "../navigation/use-settings-navigation"
+import { useClaudeImportEntry } from "../onboarding/use-claude-import-entry"
 import { useCompanionMenuLookup } from "../sidebar/companion-menu"
 import { useCompanionSelectGuard } from "../sidebar/companion-select"
 import {
@@ -136,17 +137,24 @@ export const useWorkspaceAssembly = () => {
 	const newDevice = useNewDevice(core.account)
 	const runningVersion = useRunningVersion()
 	const whatsNew = useWhatsNew({ user: core.user, runningVersion })
+	const claudeImport = useClaudeImportEntry({
+		roster: core.roster.controller,
+		user: core.user,
+	})
 	const about = aboutFieldsOf({
 		updater: drivers.updater,
 		user: core.user,
 		runningVersion,
 		onWhatsNew: whatsNew.openFromAbout,
 		onReplayOnboarding: () => void drivers.onboarding.controller.replay(),
+		canImportFromClaudeCode: claudeImport.canImport,
+		onImportFromClaudeCode: claudeImport.openFromSettings,
 	})
 
 	return {
 		about,
 		authorship,
+		claudeImport,
 		collapsedSectionIds,
 		companionMenu,
 		core,

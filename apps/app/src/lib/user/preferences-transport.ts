@@ -19,4 +19,7 @@ export const userPreferencesStore = {
 
 	setOnboardingFirstCompanion: (botId: string) =>
 		invoke<UserPreferences>("user_set_onboarding_first_companion", { botId }),
+
+	markOnboardingImportSeen: () =>
+		invoke<UserPreferences>("user_mark_onboarding_import_seen"),
 }

@@ -1,5 +1,7 @@
 import { openUrl } from "@tauri-apps/plugin-opener"
 
+import { offersClaudeImport } from "./claude-import-screen"
+import { readClaudeInventory } from "./claude-import-transport"
 import type { OnboardingPort } from "./onboarding-port"
 
 import { invoke, listen } from "../host"
@@ -35,8 +37,7 @@ export const onboardingTransport: OnboardingPort = {
 			onStarted(payload.url),
 		),
 
-	// TODO: read ~/.claude on the host once the Claude Code import inventory lands
-	hasClaudeHome: () => Promise.resolve(false),
+	hasClaudeHome: () => readClaudeInventory().then(offersClaudeImport),
 
 	openDownloadPage: () => openUrl(DOWNLOAD_PAGE_URL),
 }

@@ -2,14 +2,18 @@
 
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { createElement, useState } from "react"
-import { afterEach, beforeEach, describe, expect, it } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import "@workspace/ui/lib/i18n"
 
 import { OnboardingScreen } from "@/components/onboarding-screen"
 import type { WatchedAccount } from "@/lib/account/use-account"
 import type { AccountReport } from "@/lib/agent/contract"
-import type { OnboardingStep } from "@/lib/bindings"
+import type {
+	ClaudeImportOutcome,
+	ClaudeInventory,
+	OnboardingStep,
+} from "@/lib/bindings"
 import {
 	createFakeFlowWorld,
 	type FakeFlowWorld,
@@ -21,6 +25,44 @@ import {
 import { onboardingScreenStepOf } from "@/lib/onboarding/onboarding-screen"
 import { useOnboardingFlow } from "@/lib/onboarding/use-onboarding-flow"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
+
+const inventoryRead = vi.hoisted(() => ({
+	inventory: { kind: "absent" } as ClaudeInventory,
+}))
+
+const importRun = vi.hoisted(() => ({
+	run: vi.fn<
+		(selection: string[], spaceId: string) => Promise<ClaudeImportOutcome[]>
+	>(),
+}))
+
+vi.mock("@/lib/onboarding/claude-import-transport", () => ({
+	readClaudeInventory: async () => inventoryRead.inventory,
+	claudeImportTransport: {
+		run: importRun.run,
+		onProgress: async () => () => undefined,
+	},
+}))
+
+const SPACE_ID = "space-home"
+
+const itemOf = (key: string, name: string) => ({
+	key,
+	name,
+	description: `${name} description`,
+	alreadyImported: false,
+})
+
+const FOUND: ClaudeInventory = {
+	kind: "found",
+	agents: [itemOf("agent:atlas", "Atlas")],
+	skills: [itemOf("skill:changelog", "changelog")],
+	claudeMd: null,
+}
+
+const markSeen = vi.fn(async () => undefined)
+
+const IMPORT_SCENE = { spaceId: () => SPACE_ID, markSeen }
 
 const SIGNED_OUT: WatchedAccount = {
 	state: { kind: "signedOut", reason: null },
@@ -55,6 +97,7 @@ const OnboardingHarness = ({ port, world }: HarnessProps) => {
 		? createElement(OnboardingScreen, {
 				account: SIGNED_OUT,
 				flow,
+				importScene: IMPORT_SCENE,
 				readerName: "Reader",
 				step: shown,
 			})
@@ -89,6 +132,9 @@ const heading = () => screen.getByRole("heading", { level: 1 }).textContent
 beforeEach(() => {
 	port = createFakeOnboardingPort()
 	world = createFakeFlowWorld()
+	inventoryRead.inventory = FOUND
+	importRun.run.mockReset()
+	markSeen.mockClear()
 })
 
 afterEach(cleanup)
@@ -208,6 +254,52 @@ describe("the Import and Account screens", () => {
 		expect(world.stored.at(-1)).toBe("done")
 		expect(world.firstRunDone).toBe(1)
 		expect(screen.queryByRole("heading")).toBeNull()
+	})
+
+	it("imports the checked items into the current space, then continues as Skip does", async () => {
+		importRun.run.mockResolvedValue([
+			{
+				key: "agent:atlas",
+				result: { kind: "imported", id: "bot-atlas", name: "Atlas 2" },
+			},
+			{
+				key: "skill:changelog",
+				result: { kind: "imported", id: "skill-changelog", name: "changelog" },
+			},
+		])
+		world.step = "import"
+		await renderOnboarding()
+
+		expect(screen.getByRole("checkbox", { name: "Atlas" })).toBeTruthy()
+		await press("Import 2 items")
+
+		expect(importRun.run).toHaveBeenCalledWith(
+			["agent:atlas", "skill:changelog"],
+			SPACE_ID,
+		)
+		expect(heading()).toBe("Your setup is in")
+		expect(
+			screen.getByText(
+				"Atlas already lives in Kiroshi, so this one comes in as Atlas 2. Rename it after.",
+			),
+		).toBeTruthy()
+
+		await press("Continue")
+
+		expect(world.stored.at(-1)).toBe("account")
+		expect(markSeen).toHaveBeenCalledOnce()
+	})
+
+	it("keeps the import screen open on Skip when the import is refused", async () => {
+		importRun.run.mockRejectedValue(new Error("database locked"))
+		world.step = "import"
+		await renderOnboarding()
+
+		await press("Import 2 items")
+
+		expect(heading()).toBe("Bring in your Claude Code setup")
+		await press("Skip for now")
+		expect(world.stored.at(-1)).toBe("account")
 	})
 
 	it("resumes on the stored step", async () => {

@@ -174,6 +174,20 @@ describe("connecting with a ~/.claude folder", () => {
 	})
 })
 
+describe("connecting while the ~/.claude read is refused", () => {
+	it("reports the failure and hands the workspace to Shoto", async () => {
+		port.hasClaudeHome = () => Promise.reject(new Error("host gone"))
+
+		await connectedThroughLogin()
+
+		expect(reportFailure).toHaveBeenCalledWith(
+			expect.objectContaining({ title: "Couldn’t read ~/.claude" }),
+		)
+		expect(world.stored).toEqual(["connect"])
+		expect(controller.getState().isWithShoto).toBe(true)
+	})
+})
+
 describe("connecting without a ~/.claude folder", () => {
 	it("opens Shoto's conversation and summons his greeting, then the first companion", async () => {
 		await connectedThroughLogin()
