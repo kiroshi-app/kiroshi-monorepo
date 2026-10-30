@@ -83,15 +83,18 @@ const ImportRow = ({
 	const titleId = useId()
 
 	return (
-		<div data-slot="import-row" className="flex items-center gap-3 p-3">
-			<span className="flex size-4 shrink-0 items-center justify-center">
+		<div
+			className="flex items-center gap-3.5 px-3.5 py-2.75"
+			data-slot="import-row"
+		>
+			<span className="flex size-4.5 shrink-0 items-center justify-center">
 				{status ? (
 					<ImportRowStatusIcon status={status} />
 				) : (
 					<Checkbox
 						aria-labelledby={titleId}
 						checked={checked && !isInKiroshi}
-						className="transition-none data-disabled:opacity-50"
+						className="size-4.5 transition-none data-disabled:opacity-50"
 						disabled={isInKiroshi}
 						onCheckedChange={(next) => onCheckedChange?.(next)}
 					/>
@@ -103,7 +106,7 @@ const ImportRow = ({
 			<span className="flex min-w-0 flex-1 flex-col gap-0.5 wrap-break-word">
 				<span
 					className={cn(
-						"font-medium text-foreground text-xs leading-5",
+						"font-medium text-compact text-foreground leading-4.5",
 						kind === "instructions" && "font-mono",
 					)}
 					id={titleId}
@@ -118,6 +121,9 @@ const ImportRow = ({
 				>
 					{isInKiroshi ? t("claudeImport.row.inKiroshi") : detail}
 				</span>
+			</span>
+			<span className="shrink-0 text-muted-foreground text-xs">
+				{t(`claudeImport.row.type.${kind}`)}
 			</span>
 		</div>
 	)

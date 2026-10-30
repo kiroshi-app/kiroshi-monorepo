@@ -6,7 +6,11 @@ import {
 	FullWindowContent,
 	FullWindowLayout,
 } from "@workspace/ui/components/full-window-layout"
-import { Icons } from "@workspace/ui/components/icons"
+import {
+	INNER,
+	OUTER,
+	roundedHexagonPath,
+} from "@workspace/ui/components/kiroshi-hexagon"
 import { OnboardingDragStrip } from "@workspace/ui/components/onboarding-shell"
 import { Button } from "@workspace/ui/components/ui/button"
 import {
@@ -31,7 +35,21 @@ type OnboardingAccountScreenProps = {
 const SKIP_CLASS =
 	"relative rounded-xs font-medium text-compact text-foreground leading-4.5 underline decoration-1 underline-offset-2 outline-offset-2 after:absolute after:-inset-1"
 
-const PERSON_MARK_STROKE = 1.8
+const RING_VIEW_BOX = `0 ${OUTER.halfWidth - OUTER.halfHeight} ${OUTER.halfWidth * 2} ${OUTER.halfHeight * 2}`
+
+const RING_PATH = `${roundedHexagonPath(OUTER)} ${roundedHexagonPath(INNER, OUTER.halfWidth)}`
+
+const KiroshiRing = () => (
+	<svg
+		aria-hidden="true"
+		className="pointer-events-none h-29 w-32 shrink-0 text-foreground"
+		data-slot="onboarding-account-mark"
+		fill="currentColor"
+		viewBox={RING_VIEW_BOX}
+	>
+		<path d={RING_PATH} fillRule="evenodd" />
+	</svg>
+)
 
 const OnboardingAccountScreen = ({
 	account,
@@ -44,7 +62,6 @@ const OnboardingAccountScreen = ({
 }: OnboardingAccountScreenProps) => {
 	const { t } = useTranslation("settings")
 	const isSignedIn = account.status === "signedIn"
-	const Mark = isSignedIn ? Icons.Check : Icons.User
 
 	return (
 		<FullWindowLayout
@@ -53,49 +70,40 @@ const OnboardingAccountScreen = ({
 		>
 			<OnboardingDragStrip />
 			<FullWindowContent className="gap-5 p-6">
-				<span
-					className="grid size-14 shrink-0 place-items-center rounded-[1rem] bg-muted/40"
-					data-slot="onboarding-account-mark"
-				>
-					<Mark
-						aria-hidden="true"
-						className={cn(
-							"size-6",
-							isSignedIn ? "text-success" : "text-foreground",
+				<div className="flex flex-col items-center gap-8">
+					<KiroshiRing />
+					<AccountIntro
+						body={t(
+							isSignedIn
+								? "account.onboarding.signedIn.body"
+								: "account.onboarding.body",
 						)}
-						strokeWidth={isSignedIn ? undefined : PERSON_MARK_STROKE}
+						layout="screen"
+						title={t(
+							isSignedIn
+								? "account.onboarding.signedIn.title"
+								: "account.signedOut.title",
+						)}
 					/>
-				</span>
+				</div>
 				{account.status === "signedIn" ? (
-					<>
-						<AccountIntro
-							body={t("account.onboarding.signedIn.body")}
-							layout="screen"
-							title={t("account.onboarding.signedIn.title")}
+					<div className="flex w-110 max-w-full flex-col gap-5">
+						<AccountCard
+							email={account.email}
+							image={image}
+							name={account.name}
+							plan={account.plan}
 						/>
-						<div className="flex w-110 max-w-full flex-col gap-5">
-							<AccountCard
-								email={account.email}
-								image={image}
-								name={account.name}
-								plan={account.plan}
-							/>
-							<Button
-								className={cn(ACCOUNT_ACTION_CLASS.screen, "self-center")}
-								onClick={onContinue}
-								size="lg"
-							>
-								{t("account.onboarding.signedIn.continue")}
-							</Button>
-						</div>
-					</>
+						<Button
+							className={cn(ACCOUNT_ACTION_CLASS.screen, "self-center")}
+							onClick={onContinue}
+							size="lg"
+						>
+							{t("account.onboarding.signedIn.continue")}
+						</Button>
+					</div>
 				) : (
 					<>
-						<AccountIntro
-							body={t("account.onboarding.body")}
-							layout="screen"
-							title={t("account.signedOut.title")}
-						/>
 						<SignInActions
 							isWaiting={account.status === "waiting"}
 							layout="screen"

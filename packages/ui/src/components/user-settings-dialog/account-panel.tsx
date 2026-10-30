@@ -160,7 +160,9 @@ const SignInActions = ({
 						/>
 					</Button>
 				}
-				caption={t("account.signedOut.caption")}
+				caption={
+					layout === "panel" ? t("account.signedOut.caption") : undefined
+				}
 				layout={layout}
 			/>
 		)

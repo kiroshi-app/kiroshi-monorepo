@@ -9,6 +9,7 @@ type HexagonMetrics = {
 }
 
 const OUTER: RoundedHexagon = { halfWidth: 200.5, halfHeight: 181.5 }
+const INNER: RoundedHexagon = { halfWidth: 134.5, halfHeight: 123.5 }
 const COS_30 = Math.cos(Math.PI / 6)
 const TAN_30 = Math.tan(Math.PI / 6)
 const EDGE_NORMAL = { x: -COS_30, y: 0.5 }
@@ -49,10 +50,12 @@ const isInsideRoundedHexagon = (
 	return hexagonDistance(x, y, apothem) <= rounding
 }
 
-const roundedHexagonPath = (shape: RoundedHexagon) => {
+const roundedHexagonPath = (
+	shape: RoundedHexagon,
+	centre = shape.halfWidth,
+) => {
 	const { apothem, rounding } = hexagonMetrics(shape)
 	const reach = apothem / COS_30
-	const centre = shape.halfWidth
 	const at = (angle: number, radius: number, from: { x: number; y: number }) =>
 		`${(from.x + radius * Math.cos(angle)).toFixed(2)} ${(from.y + radius * Math.sin(angle)).toFixed(2)}`
 	const corner = (index: number) => ({
@@ -70,6 +73,7 @@ const roundedHexagonPath = (shape: RoundedHexagon) => {
 
 export {
 	hexagonOfWidth,
+	INNER,
 	isInsideRoundedHexagon,
 	OUTER,
 	type RoundedHexagon,

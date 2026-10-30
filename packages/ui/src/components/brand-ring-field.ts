@@ -4,13 +4,12 @@ import {
 } from "@workspace/ui/components/companion-avatar"
 import { squareGrid } from "@workspace/ui/components/field-grid"
 import {
+	INNER,
 	isInsideRoundedHexagon,
 	OUTER,
-	type RoundedHexagon,
 } from "@workspace/ui/components/kiroshi-hexagon"
 
 const REFERENCE_WIDTH = 401
-const INNER: RoundedHexagon = { halfWidth: 134.5, halfHeight: 123.5 }
 const MARGIN_CELLS = 1
 const brandRingField = (seed: number, cells: number): DensityField => {
 	const scale = (REFERENCE_WIDTH * cells) / (cells - 2 * MARGIN_CELLS)

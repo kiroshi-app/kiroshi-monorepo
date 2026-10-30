@@ -140,10 +140,6 @@ const common = {
 	},
 	claudeImport: {
 		listLabel: "Your Claude Code setup",
-		sections: {
-			companions: "Agents",
-			instructionsAndSkills: "Instructions and skills",
-		},
 		select: {
 			title: "Bring in your Claude Code setup",
 			body: "Found in ~/.claude on your computer. Everything is selected; uncheck what you’d rather leave behind.",
@@ -191,6 +187,17 @@ const common = {
 			onlySkills_other: "{{count}} skills are ready.",
 			continue: "Continue",
 		},
+		landing: {
+			companions_one:
+				"You’re set up. {{companions}} came over from Claude Code.",
+			companions_other:
+				"You’re set up. {{companions}} came over from Claude Code.",
+			companionsWith_one:
+				"You’re set up. {{companions}} came over from Claude Code, with {{extras}}.",
+			companionsWith_other:
+				"You’re set up. {{companions}} came over from Claude Code, with {{extras}}.",
+			extras: "You’re set up, with {{extras}} from Claude Code.",
+		},
 		partlyFailed: {
 			title: "Most of your setup is in",
 			body: "The {{name}} skill didn’t come in. Try it again, or add it later from Settings.",
@@ -214,6 +221,11 @@ const common = {
 			companionNameTaken:
 				"You already have a companion named {{name}}, so this one comes in as {{renamed}}.",
 			unparsable: "Couldn’t bring it in: its {{file}} doesn’t parse.",
+			type: {
+				companion: "Agent",
+				instructions: "Instructions",
+				skill: "Skills",
+			},
 			status: {
 				done: "Done",
 				pending: "In progress",
