@@ -10,7 +10,7 @@ const SUMMONS_OF = {
 	purpose:
 		"Say what you are for and what you can do here, before anything else.",
 	firstCompanion:
-		"Help the person who just connected you choose and add their first companion.",
+		"Help the person who just connected you choose and add their first agent.",
 	arrival:
 		"Introduce yourself to the person who just added you, in a sentence or two, and say what you can start on.",
 } as const

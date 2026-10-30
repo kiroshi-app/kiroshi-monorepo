@@ -284,7 +284,7 @@ const SUGGESTED_BOTS: SuggestedBot[] = [
 	{
 		id: "coder",
 		name: "Byte",
-		job: "a coding companion",
+		job: "a coding agent",
 		description:
 			"Pair with me on code. Read the project before changing it, keep changes small, and lay out the tradeoffs when there is more than one way.",
 		blurb: "Reads, writes and reviews code.",
