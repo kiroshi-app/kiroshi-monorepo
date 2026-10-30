@@ -189,16 +189,14 @@ const WelcomeWalk = (props: WalkProps) => {
 	return (
 		<OnboardingWelcomeScreen
 			{...props}
-			onBack={() => setIndex((previous) => Math.max(previous - 1, 0))}
-			onNext={() =>
-				setIndex((previous) => Math.min(previous + 1, SLIDES.length - 1))
-			}
+			onBack={() => setIndex((previous) => previous - 1)}
+			onNext={() => setIndex((previous) => previous + 1)}
 			step={SLIDES[index] ?? "companions"}
 		/>
 	)
 }
 
-type RowTops = { stepper: number; action: number }
+const spreadOf = (values: number[]) => Math.max(...values) - Math.min(...values)
 
 const expectRowFixedAcrossTheWalk = (
 	canvasElement: HTMLElement,
@@ -206,7 +204,8 @@ const expectRowFixedAcrossTheWalk = (
 ) =>
 	atArtboardWidth(canvasElement, async () => {
 		const screen = slotIn(canvasElement, "onboarding-welcome-screen")
-		const tops: RowTops[] = []
+		const stepperTops: number[] = []
+		const actionTops: number[] = []
 
 		for (const [index, slide] of SLIDES.entries()) {
 			await waitFor(() => expect(screen).toHaveAttribute("data-step", slide))
@@ -216,13 +215,13 @@ const expectRowFixedAcrossTheWalk = (
 					slotIn(canvasElement, "onboarding-welcome-text"),
 				].map((zone) => zone.getBoundingClientRect().height),
 			).toEqual([VISUAL_ZONE_HEIGHT, TEXT_ZONE_HEIGHT])
-			tops.push({
-				stepper: slotIn(
+			stepperTops.push(
+				slotIn(
 					canvasElement,
 					"onboarding-welcome-stepper",
 				).getBoundingClientRect().top,
-				action: actionOf(canvasElement).getBoundingClientRect().top,
-			})
+			)
+			actionTops.push(actionOf(canvasElement).getBoundingClientRect().top)
 			if (index < SLIDES.length - 1) {
 				await userEvent.click(
 					within(canvasElement).getByRole("button", { name: next }),
@@ -230,15 +229,8 @@ const expectRowFixedAcrossTheWalk = (
 			}
 		}
 
-		const [first] = tops
-		for (const { stepper, action } of tops) {
-			await expect(
-				Math.abs(stepper - (first?.stepper ?? 0)),
-			).toBeLessThanOrEqual(1)
-			await expect(Math.abs(action - (first?.action ?? 0))).toBeLessThanOrEqual(
-				1,
-			)
-		}
+		await expect(spreadOf(stepperTops)).toBeLessThanOrEqual(1)
+		await expect(spreadOf(actionTops)).toBeLessThanOrEqual(1)
 	})
 
 const inFrench = async () => {
