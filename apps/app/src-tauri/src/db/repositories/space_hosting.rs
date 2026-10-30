@@ -143,11 +143,7 @@ mod tests {
 
 		assert_eq!(
 			read.expect("the registration reads"),
-			Registration {
-				name: "Personal".to_owned(),
-				colour: Hue::named("red"),
-				instance_id: None
-			}
+			Registration { name: "Personal".to_owned(), colour: None, instance_id: None }
 		);
 	}
 

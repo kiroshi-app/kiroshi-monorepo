@@ -1350,6 +1350,9 @@ ALTER TABLE bots RENAME COLUMN avatar_color_hue TO avatar_color;
 DROP TABLE temp.preset_hues;
 ";
 
+const FRESH_INSTALL_UNTINTED_PERSONAL_SPACE: &str =
+	"UPDATE spaces SET colour = NULL WHERE id = 'personal';";
+
 pub fn latest_version() -> u32 {
 	MIGRATIONS.last().map_or(0, |migration| migration.version)
 }
@@ -1370,12 +1373,16 @@ fn apply_pending(
 	migrations: &[Migration],
 ) -> Result<(), DatabaseError> {
 	let mut installed = version(connection)?;
+	let is_fresh_install = installed == 0;
 	for migration in migrations {
 		if installed >= migration.version {
 			continue;
 		}
 		let transaction = connection.transaction()?;
 		transaction.execute_batch(migration.statements)?;
+		if is_fresh_install && migration.version == latest_version() {
+			transaction.execute_batch(FRESH_INSTALL_UNTINTED_PERSONAL_SPACE)?;
+		}
 		transaction.pragma_update(None, "user_version", migration.version)?;
 		transaction.commit()?;
 		installed = migration.version;
@@ -2904,7 +2911,8 @@ mod tests {
 
 		assert_eq!(
 			spaces_of(&connection),
-			vec![("personal".to_owned(), "Personal".to_owned(), Some(42), 0)]
+			vec![("personal".to_owned(), "Personal".to_owned(), None, 0)],
+			"a fresh file came out with its one space wearing a colour"
 		);
 		assert_eq!(
 			connection
@@ -2912,6 +2920,33 @@ mod tests {
 				.expect("the foreign key switch"),
 			1,
 			"the steps left the file with nothing holding its references together"
+		);
+
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[test]
+	fn a_file_stopped_before_the_hue_step_keeps_its_red_personal_space_as_hue_42() {
+		let dir = temp_dir();
+		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
+		apply_each(&mut connection, shipped_before(HUE_COLOURS_STEP))
+			.expect("the shipped schema installs");
+		assert_eq!(
+			connection
+				.query_row("SELECT colour FROM spaces WHERE id = 'personal'", [], |row| {
+					row.get::<_, String>(0)
+				})
+				.expect("query"),
+			"red"
+		);
+
+		apply(&mut connection).expect("the file comes up to this build");
+
+		assert_eq!(
+			spaces_of(&connection),
+			vec![("personal".to_owned(), "Personal".to_owned(), Some(42), 0)],
+			"an upgraded file lost the colour its one space wore"
 		);
 
 		drop(connection);
