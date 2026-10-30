@@ -11,6 +11,7 @@ import {
 import {
 	OnboardingContent,
 	OnboardingControls,
+	OnboardingSecondaryButton,
 	OnboardingShell,
 } from "@workspace/ui/components/onboarding-shell"
 import { Button } from "@workspace/ui/components/ui/button"
@@ -31,9 +32,6 @@ type OnboardingAccountScreenProps = {
 	onSkip: () => void
 	onContinue: () => void
 }
-
-const SKIP_CLASS =
-	"relative rounded-xs font-medium text-compact text-foreground leading-4.5 underline decoration-1 underline-offset-2 outline-offset-2 after:absolute after:-inset-1"
 
 const RING_VIEW_BOX = `0 ${OUTER.halfWidth - OUTER.halfHeight} ${OUTER.halfWidth * 2} ${OUTER.halfHeight * 2}`
 
@@ -133,9 +131,9 @@ const OnboardingAccountScreen = ({
 							onCopySignInLink={onCopySignInLink}
 							onSignIn={onSignIn}
 						/>
-						<button className={SKIP_CLASS} onClick={onSkip} type="button">
+						<OnboardingSecondaryButton onClick={onSkip}>
 							{t("account.onboarding.skip")}
-						</button>
+						</OnboardingSecondaryButton>
 					</>
 				)}
 			</OnboardingControls>

@@ -3,6 +3,8 @@ import { expect, fn, within } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	expectOnboardingDragStrip,
+	expectOnboardingSecondaryAction,
+	expectOnboardingSecondaryRing,
 	resolvedChannelsOf,
 	slotIn,
 	slotsIn,
@@ -86,7 +88,7 @@ export const AccountEmpty = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard 4.1: no account yet. Check the Kiroshi hexagon ring, 128 by 116 in the foreground colour, hidden from assistive tech, in light and dark, that the body opens on Optional, that Sign in with your browser carries the external link mark and calls `onSignIn` with no caption under it, and that Skip for now is a button the keyboard reaches with a visible ring and calls `onSkip`. Pick `AccountWaiting` once the browser is open.",
+					"Artboard 4.1: no account yet. Check the Kiroshi hexagon ring, 128 by 116 in the foreground colour, hidden from assistive tech, in light and dark, that the body opens on Optional, that Sign in with your browser carries the external link mark and calls `onSignIn` with no caption under it, and that Skip for now is the ghost pill of Use another account on Connect, filled on hover with no colour transition in light and dark, that the keyboard reaches with its focus ring and that calls `onSkip`. Pick `AccountWaiting` once the browser is open.",
 			},
 		},
 	},
@@ -106,11 +108,17 @@ export const AccountEmpty = meta.story({
 		await expect(args.onSignIn).toHaveBeenCalledOnce()
 
 		await userEvent.tab()
-		await expectRingOnFocus(
+		await expectOnboardingSecondaryRing(
 			screen.getByRole("button", { name: ONBOARDING.skip }),
 		)
 		await userEvent.keyboard("{Enter}")
 		await expect(args.onSkip).toHaveBeenCalledOnce()
+
+		for (const skip of within(canvasElement).getAllByRole("button", {
+			name: ONBOARDING.skip,
+		})) {
+			await expectOnboardingSecondaryAction(skip)
+		}
 	},
 })
 
@@ -160,7 +168,7 @@ export const AccountWaiting = meta.story({
 		await expect(args.onCopySignInLink).toHaveBeenCalledOnce()
 
 		await userEvent.tab()
-		await expectRingOnFocus(
+		await expectOnboardingSecondaryRing(
 			screen.getByRole("button", { name: ONBOARDING.skip }),
 		)
 		await userEvent.keyboard("{Enter}")

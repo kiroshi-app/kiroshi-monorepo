@@ -12,6 +12,7 @@ import {
 import {
 	OnboardingContent,
 	OnboardingControls,
+	OnboardingSecondaryButton,
 	OnboardingShell,
 } from "@workspace/ui/components/onboarding-shell"
 import { Button } from "@workspace/ui/components/ui/button"
@@ -48,9 +49,6 @@ type ImportScreenProps = {
 	| { step: "importing" | "done"; items: ImportItem[] }
 	| { step: "unreadable"; subtitle: string }
 )
-
-const LINK_CLASS =
-	"relative rounded-xs font-medium text-compact text-foreground leading-4.5 underline decoration-1 underline-offset-2 outline-offset-2 after:absolute after:-inset-1"
 
 const isPicked = (item: ImportItem) => item.checked && !item.isInKiroshi
 
@@ -266,13 +264,9 @@ const ImportScreen = (props: ImportScreenProps) => {
 					{primary.label}
 				</Button>
 				{secondary && step !== "importing" ? (
-					<button
-						className={LINK_CLASS}
-						onClick={secondary.onPress}
-						type="button"
-					>
+					<OnboardingSecondaryButton onClick={secondary.onPress}>
 						{secondary.label}
-					</button>
+					</OnboardingSecondaryButton>
 				) : null}
 			</OnboardingControls>
 		</OnboardingShell>

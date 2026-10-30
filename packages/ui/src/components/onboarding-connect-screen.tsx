@@ -9,6 +9,7 @@ import {
 	OnboardingContent,
 	OnboardingControls,
 	OnboardingHeading,
+	OnboardingSecondaryButton,
 	OnboardingShell,
 } from "@workspace/ui/components/onboarding-shell"
 import { Input } from "@workspace/ui/components/ui/input"
@@ -111,14 +112,6 @@ type ConnectButtonProps = Omit<OnboardingButtonProps, "variant">
 const ConnectPrimary = ({ className, ...props }: ConnectButtonProps) => (
 	<OnboardingButton
 		className={cn("h-10 px-6 data-disabled:opacity-45", className)}
-		{...props}
-	/>
-)
-
-const ConnectSecondary = ({ className, ...props }: ConnectButtonProps) => (
-	<OnboardingButton
-		className={cn("h-10 px-6 text-muted-foreground", className)}
-		variant="ghost"
 		{...props}
 	/>
 )
@@ -357,15 +350,15 @@ const OnboardingConnectScreen = ({
 	)
 
 	const pasteKeyInstead = (
-		<ConnectSecondary onClick={onPasteKey}>
+		<OnboardingSecondaryButton onClick={onPasteKey}>
 			{t("onboarding.code.exit")}
-		</ConnectSecondary>
+		</OnboardingSecondaryButton>
 	)
 
 	const signInInstead = (
-		<ConnectSecondary onClick={onSignIn}>
+		<OnboardingSecondaryButton onClick={onSignIn}>
 			{t("onboarding.apiKey.exit")}
-		</ConnectSecondary>
+		</OnboardingSecondaryButton>
 	)
 
 	const codeField = (
@@ -411,9 +404,9 @@ const OnboardingConnectScreen = ({
 					<ConnectPrimary onClick={onUseAccount}>
 						{t("onboarding.account.use.label")}
 					</ConnectPrimary>
-					<ConnectSecondary onClick={onUseAnotherAccount}>
+					<OnboardingSecondaryButton onClick={onUseAnotherAccount}>
 						{t("onboarding.account.another.label")}
-					</ConnectSecondary>
+					</OnboardingSecondaryButton>
 				</>
 			),
 		},
@@ -436,9 +429,9 @@ const OnboardingConnectScreen = ({
 						{t("onboarding.connect.continue")}
 					</ConnectPrimary>
 					<div className={SECONDARY_ROW_CLASS}>
-						<ConnectSecondary onClick={onReopenSignIn}>
+						<OnboardingSecondaryButton onClick={onReopenSignIn}>
 							{t("onboarding.connect.browser.reopen")}
-						</ConnectSecondary>
+						</OnboardingSecondaryButton>
 						{pasteKeyInstead}
 					</div>
 				</>

@@ -1,8 +1,17 @@
 import { OverlayScrollbars } from "overlayscrollbars"
 import type { ComponentType, CSSProperties, ReactNode } from "react"
+import { flushSync } from "react-dom"
+import { createRoot } from "react-dom/client"
 import { renderToStaticMarkup } from "react-dom/server"
 import type { ExtraProps } from "react-markdown"
-import { expect, fireEvent, type Mock, waitFor, within } from "storybook/test"
+import {
+	expect,
+	fireEvent,
+	fn,
+	type Mock,
+	waitFor,
+	within,
+} from "storybook/test"
 
 import {
 	BLOT_HUES,
@@ -23,6 +32,7 @@ import {
 	MARKDOWN_TYPESET_CLASS,
 	MARKDOWN_WHITESPACE_CLASS,
 } from "@workspace/ui/components/markdown/prose"
+import { OnboardingConnectScreen } from "@workspace/ui/components/onboarding-connect-screen"
 import type { ScreenLayoutWidth } from "@workspace/ui/components/screen-layout"
 import { spaceAvatarStateOf } from "@workspace/ui/components/space-avatar"
 import {
@@ -36,6 +46,7 @@ import {
 	type ClickModifiers,
 	NO_CLICK_MODIFIERS,
 } from "@workspace/ui/lib/click-modifiers"
+import { en } from "@workspace/ui/lib/i18n-en"
 import { cn } from "@workspace/ui/lib/utils"
 
 export const withStoryProps = <Props,>(component: ComponentType<never>) =>
@@ -184,6 +195,53 @@ export const expectOnboardingDragStrip = async (root: HTMLElement) => {
 	for (const strip of strips) {
 		await expect(strip).toHaveAttribute("data-tauri-drag-region", "deep")
 	}
+}
+
+const anotherAccountClassName = () => {
+	const host = document.createElement("div")
+	const root = createRoot(host)
+	flushSync(() =>
+		root.render(
+			<OnboardingConnectScreen
+				apiKey=""
+				code=""
+				onApiKeyChange={fn()}
+				onCodeChange={fn()}
+				onDownloadAgain={fn()}
+				onPasteKey={fn()}
+				onReopenSignIn={fn()}
+				onSignIn={fn()}
+				onSubmitCode={fn()}
+				onSubmitKey={fn()}
+				onTryAnotherKey={fn()}
+				onUseAccount={fn()}
+				onUseAnotherAccount={fn()}
+				step="loginFound"
+			/>,
+		),
+	)
+	const { className } = within(host).getByRole("button", {
+		name: en.chat.onboarding.account.another.label,
+	})
+	root.unmount()
+	return className
+}
+
+export const expectOnboardingSecondaryAction = async (action: HTMLElement) => {
+	await expect(action.className).toBe(anotherAccountClassName())
+	await expect(colourTransitionsOf(action)).toEqual([])
+	if (!isInBrowserRunner()) return
+	const { userEvent: pointer } = await import("vitest/browser")
+	await pointer.hover(action)
+	await expect(getComputedStyle(action).backgroundColor).not.toBe(
+		"rgba(0, 0, 0, 0)",
+	)
+	await pointer.unhover(action)
+}
+
+export const expectOnboardingSecondaryRing = async (action: HTMLElement) => {
+	await expect(action).toHaveFocus()
+	await expect(getComputedStyle(action).boxShadow).toMatch(/\b3px\b/)
 }
 
 export const expectNoHorizontalScrollAt = async (
