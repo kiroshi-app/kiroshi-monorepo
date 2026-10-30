@@ -25,6 +25,35 @@ const OnboardingShell = ({ className, ...props }: OnboardingShellProps) => (
 	</FullWindowLayout>
 )
 
+type OnboardingContentProps = ComponentProps<"div">
+
+const OnboardingContent = ({ className, ...props }: OnboardingContentProps) => (
+	<div
+		className={cn(
+			"flex h-88 min-h-0 w-full shrink-0 flex-col items-center justify-end",
+			className,
+		)}
+		data-slot="onboarding-content"
+		{...props}
+	/>
+)
+
+type OnboardingControlsProps = ComponentProps<"div">
+
+const OnboardingControls = ({
+	className,
+	...props
+}: OnboardingControlsProps) => (
+	<div
+		className={cn(
+			"flex h-30 w-full shrink-0 flex-col items-center gap-3 pt-3",
+			className,
+		)}
+		data-slot="onboarding-controls"
+		{...props}
+	/>
+)
+
 type OnboardingHeadingProps = {
 	variant: "welcome" | "connect"
 	title: string
@@ -40,8 +69,8 @@ const OnboardingHeading = ({
 }: OnboardingHeadingProps) => (
 	<div
 		className={cn(
-			"flex w-105 max-w-full flex-col text-center",
-			variant === "welcome" ? "gap-2.5" : "gap-2",
+			"flex max-w-full shrink-0 flex-col gap-2.5 text-center",
+			variant === "welcome" ? "w-105" : "w-120",
 		)}
 	>
 		<h1 className="font-semibold text-[22px] text-foreground leading-7 tracking-[-0.01em]">
@@ -88,6 +117,10 @@ const OnboardingButton = ({ className, ...props }: OnboardingButtonProps) => (
 export {
 	OnboardingButton,
 	type OnboardingButtonProps,
+	OnboardingContent,
+	type OnboardingContentProps,
+	OnboardingControls,
+	type OnboardingControlsProps,
 	OnboardingDragStrip,
 	OnboardingHeading,
 	type OnboardingHeadingProps,

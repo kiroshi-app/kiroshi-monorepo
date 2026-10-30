@@ -36,6 +36,8 @@ const expectKiroshiRing = async (canvasElement: HTMLElement) => {
 		const { width, height } = ring.getBoundingClientRect()
 		await expect({ width, height }).toEqual({ width: 128, height: 116 })
 	}
+	await expect(slotsIn(canvasElement, "onboarding-content")).toHaveLength(2)
+	await expect(slotsIn(canvasElement, "onboarding-controls")).toHaveLength(2)
 }
 
 const expectPersonAvatarInitials = async (canvasElement: HTMLElement) => {

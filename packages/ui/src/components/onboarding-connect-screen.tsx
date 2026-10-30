@@ -1,20 +1,26 @@
 "use client"
 
-import { type ReactNode, useId } from "react"
+import { type ReactNode, useId, useState } from "react"
 import { useTranslation } from "react-i18next"
 
-import { type Icon, Icons } from "@workspace/ui/components/icons"
 import {
 	OnboardingButton,
+	type OnboardingButtonProps,
+	OnboardingContent,
+	OnboardingControls,
 	OnboardingHeading,
-	OnboardingLink,
 	OnboardingShell,
 } from "@workspace/ui/components/onboarding-shell"
 import { Input } from "@workspace/ui/components/ui/input"
+import {
+	RadioGroup,
+	RadioGroupItem,
+} from "@workspace/ui/components/ui/radio-group"
 import { cn } from "@workspace/ui/lib/utils"
 
 type OnboardingConnectStep =
 	| "loginFound"
+	| "anotherAccount"
 	| "nothingFound"
 	| "waitingForCode"
 	| "connecting"
@@ -49,30 +55,14 @@ type OnboardingConnectScreenProps = {
 	onDownloadAgain: () => void
 }
 
-type Tile = { Glyph: Icon; isFailure: boolean }
-
-const LINK_TILE: Tile = { Glyph: Icons.Link, isFailure: false }
-const BROWSER_TILE: Tile = { Glyph: Icons.Web, isFailure: false }
-const KEY_TILE: Tile = { Glyph: Icons.Key, isFailure: false }
-const FAILURE_TILE: Tile = { Glyph: Icons.AlertCircle, isFailure: true }
-
-const TILES: Record<OnboardingConnectStep, Tile> = {
-	loginFound: LINK_TILE,
-	nothingFound: LINK_TILE,
-	waitingForCode: BROWSER_TILE,
-	connecting: BROWSER_TILE,
-	cancelled: FAILURE_TILE,
-	timedOut: FAILURE_TILE,
-	linkRefused: FAILURE_TILE,
-	agentMissing: FAILURE_TILE,
-	keyField: KEY_TILE,
-	keyRefused: FAILURE_TILE,
-}
-
 const HEADINGS = {
 	loginFound: {
 		title: "onboarding.account.question",
 		body: "onboarding.account.use.description",
+	},
+	anotherAccount: {
+		title: "onboarding.access.question",
+		body: "onboarding.account.another.description",
 	},
 	nothingFound: {
 		title: "onboarding.connect.provider.title",
@@ -112,36 +102,32 @@ const HEADINGS = {
 	},
 } as const satisfies Record<OnboardingConnectStep, unknown>
 
-const COLUMN_CLASS = "flex w-100 max-w-full flex-col items-center gap-4"
+const COLUMN_CLASS = "flex w-105 max-w-full shrink-0 flex-col gap-2.5 pt-7"
 
-const LINKS_CLASS = "flex flex-wrap justify-center gap-x-5 gap-y-2 pt-1"
+const SECONDARY_ROW_CLASS = "flex flex-wrap justify-center"
 
-type ConnectTileProps = { tile: Tile }
+type ConnectButtonProps = Omit<OnboardingButtonProps, "variant">
 
-const ConnectTile = ({ tile: { Glyph, isFailure } }: ConnectTileProps) => (
-	<span
-		className={cn(
-			"grid size-14 shrink-0 place-items-center rounded-[1rem]",
-			isFailure ? "bg-destructive-tint" : "bg-muted/40",
-		)}
-		data-slot="onboarding-connect-tile"
-	>
-		<Glyph
-			aria-hidden="true"
-			className={cn(
-				"size-6",
-				isFailure ? "text-destructive" : "text-foreground",
-			)}
-			strokeWidth={1.8}
-		/>
-	</span>
+const ConnectPrimary = ({ className, ...props }: ConnectButtonProps) => (
+	<OnboardingButton
+		className={cn("h-10 px-6 data-disabled:opacity-45", className)}
+		{...props}
+	/>
+)
+
+const ConnectSecondary = ({ className, ...props }: ConnectButtonProps) => (
+	<OnboardingButton
+		className={cn("h-10 px-6 text-muted-foreground", className)}
+		variant="ghost"
+		{...props}
+	/>
 )
 
 type ConnectStatusProps = { children: string }
 
 const ConnectStatus = ({ children }: ConnectStatusProps) => (
 	<p
-		className="flex items-center gap-2 text-compact text-muted-foreground leading-4.5"
+		className="mb-1.5 flex items-center justify-center gap-2 text-compact text-muted-foreground leading-4.5"
 		role="status"
 	>
 		<span
@@ -175,15 +161,18 @@ const ConnectField = ({
 	const id = useId()
 
 	return (
-		<div className="flex w-full flex-col gap-1.5">
-			<label className="font-medium text-foreground text-xs" htmlFor={id}>
+		<div className="flex w-full flex-col gap-2.5">
+			<label
+				className="font-medium text-compact text-foreground leading-4.5"
+				htmlFor={id}
+			>
 				{label}
 			</label>
 			<Input
 				aria-describedby={describedBy}
 				aria-invalid={isInvalid || undefined}
 				autoComplete="off"
-				className="h-9.5 rounded-control border-input bg-muted px-3 font-mono text-compact text-foreground leading-4.5 transition-none placeholder:font-sans placeholder:text-sm md:text-compact aria-invalid:ring-destructive/30 dark:aria-invalid:border-destructive dark:aria-invalid:ring-destructive/30"
+				className="h-11 rounded-control border-input bg-muted px-3.5 font-mono text-compact text-foreground leading-4.5 transition-none placeholder:font-sans placeholder:text-sm md:text-compact aria-invalid:ring-destructive/30 dark:aria-invalid:border-destructive dark:aria-invalid:ring-destructive/30"
 				id={id}
 				onChange={(event) => onChange(event.target.value)}
 				placeholder={placeholder}
@@ -196,14 +185,16 @@ const ConnectField = ({
 }
 
 type ConnectFormProps = {
+	id: string
 	value: string
 	onSubmit: (value: string) => void
 	children: ReactNode
 }
 
-const ConnectForm = ({ value, onSubmit, children }: ConnectFormProps) => (
+const ConnectForm = ({ id, value, onSubmit, children }: ConnectFormProps) => (
 	<form
 		className={COLUMN_CLASS}
+		id={id}
 		noValidate
 		onSubmit={(event) => {
 			event.preventDefault()
@@ -214,49 +205,122 @@ const ConnectForm = ({ value, onSubmit, children }: ConnectFormProps) => (
 	</form>
 )
 
+type ConnectMethod = "signIn" | "apiKey"
+
+const CONNECT_METHODS: ConnectMethod[] = ["signIn", "apiKey"]
+
 type ConnectOptionProps = {
-	number: number
-	label: string
-	description: string
-	onClick: () => void
+	method: ConnectMethod
 }
 
-const ConnectOption = ({
-	number,
-	label,
-	description,
-	onClick,
-}: ConnectOptionProps) => {
+const ConnectOption = ({ method }: ConnectOptionProps) => {
+	const { t } = useTranslation("chat")
+	const id = useId()
 	const labelId = useId()
 	const descriptionId = useId()
 
 	return (
-		<button
-			aria-describedby={descriptionId}
-			aria-labelledby={labelId}
-			className="flex items-start gap-3 rounded-control bg-card p-3 text-start outline-none hover:bg-card-raised focus-visible:ring-3 focus-visible:ring-ring/30 active:bg-muted"
+		<label
+			className="flex cursor-pointer items-start gap-3 rounded-control border border-border bg-card px-4 py-3.5 text-start has-focus-visible:ring-3 has-focus-visible:ring-ring/30 has-data-checked:border-primary"
 			data-slot="onboarding-connect-option"
-			onClick={onClick}
-			type="button"
+			htmlFor={id}
+		>
+			<RadioGroupItem
+				aria-describedby={descriptionId}
+				aria-labelledby={labelId}
+				className="mt-px size-4.5 border-[1.5px] border-input bg-transparent focus-visible:ring-0 data-checked:border-primary data-checked:bg-transparent dark:data-checked:bg-transparent [&_[data-slot=radio-group-indicator]>span]:size-2 [&_[data-slot=radio-group-indicator]>span]:bg-foreground"
+				id={id}
+				value={method}
+			/>
+			<span className="flex min-w-0 flex-1 flex-col gap-0.5">
+				<span
+					className="font-medium text-foreground text-sm leading-5"
+					id={labelId}
+				>
+					{t(`onboarding.access.${method}.label`)}
+				</span>
+				<span
+					className="text-compact text-muted-foreground leading-4.5"
+					id={descriptionId}
+				>
+					{t(`onboarding.access.${method}.description`)}
+				</span>
+			</span>
+		</label>
+	)
+}
+
+type ConnectMethodChoiceProps = {
+	heading: ReactNode
+	label: string
+	onSignIn: () => void
+	onPasteKey: () => void
+}
+
+const ConnectMethodChoice = ({
+	heading,
+	label,
+	onSignIn,
+	onPasteKey,
+}: ConnectMethodChoiceProps) => {
+	const { t } = useTranslation("chat")
+	const [method, setMethod] = useState<ConnectMethod>("signIn")
+
+	return (
+		<>
+			<OnboardingContent className="gap-6 pb-5">
+				{heading}
+				<RadioGroup
+					aria-label={label}
+					className="w-105 max-w-full gap-2"
+					onValueChange={(value) =>
+						setMethod(value === "apiKey" ? "apiKey" : "signIn")
+					}
+					value={method}
+				>
+					{CONNECT_METHODS.map((option) => (
+						<ConnectOption key={option} method={option} />
+					))}
+				</RadioGroup>
+			</OnboardingContent>
+			<OnboardingControls>
+				<ConnectPrimary onClick={method === "signIn" ? onSignIn : onPasteKey}>
+					{t("onboarding.connect.continue")}
+				</ConnectPrimary>
+			</OnboardingControls>
+		</>
+	)
+}
+
+type ConnectSlots = {
+	aboveHeading?: ReactNode
+	belowHeading?: ReactNode
+	controls: ReactNode
+}
+
+type ConnectAccountCardProps = { account: OnboardingConnectAccount }
+
+const ConnectAccountCard = ({ account }: ConnectAccountCardProps) => {
+	const { t } = useTranslation("chat")
+
+	return (
+		<div
+			className="flex w-90 max-w-full shrink-0 flex-col items-center gap-1.5 rounded-2xl border border-border bg-card px-6 py-7 text-center"
+			data-slot="onboarding-connect-account"
 		>
 			<span
 				aria-hidden="true"
-				className="grid size-5 shrink-0 place-items-center rounded-sm bg-muted font-medium text-[11px] text-muted-foreground leading-3"
+				className="mb-2.5 grid size-22 shrink-0 place-items-center rounded-full bg-muted font-semibold text-[28px] text-foreground leading-8"
 			>
-				{number}
+				{account.initials}
 			</span>
-			<span className="flex min-w-0 flex-1 flex-col gap-0.5">
-				<span className="font-medium text-foreground text-sm" id={labelId}>
-					{label}
-				</span>
-				<span
-					className="text-compact text-muted-foreground leading-5"
-					id={descriptionId}
-				>
-					{description}
-				</span>
-			</span>
-		</button>
+			<p className="w-full break-words font-semibold text-base text-foreground leading-5.5">
+				{account.email}
+			</p>
+			<p className="text-muted-foreground text-xs leading-4">
+				{t("onboarding.connect.foundIn", { plan: account.plan })}
+			</p>
+		</div>
 	)
 }
 
@@ -279,18 +343,29 @@ const OnboardingConnectScreen = ({
 }: OnboardingConnectScreenProps) => {
 	const { t } = useTranslation("chat")
 	const bodyId = useId()
+	const formId = useId()
 	const heading = HEADINGS[step]
+	const title = t(heading.title)
+
+	const headingNode = (
+		<OnboardingHeading
+			body={t(heading.body)}
+			bodyId={bodyId}
+			title={title}
+			variant="connect"
+		/>
+	)
 
 	const pasteKeyInstead = (
-		<OnboardingLink onClick={onPasteKey}>
+		<ConnectSecondary onClick={onPasteKey}>
 			{t("onboarding.code.exit")}
-		</OnboardingLink>
+		</ConnectSecondary>
 	)
 
 	const signInInstead = (
-		<OnboardingLink onClick={onSignIn}>
+		<ConnectSecondary onClick={onSignIn}>
 			{t("onboarding.apiKey.exit")}
-		</OnboardingLink>
+		</ConnectSecondary>
 	)
 
 	const codeField = (
@@ -314,137 +389,140 @@ const OnboardingConnectScreen = ({
 		/>
 	)
 
-	const signInFailed = (
-		<div className={COLUMN_CLASS}>
-			<OnboardingButton onClick={onSignIn}>
-				{t("onboarding.signInFailed.retry.label")}
-			</OnboardingButton>
-			<div className={LINKS_CLASS}>{pasteKeyInstead}</div>
-		</div>
-	)
-
-	const actions: Record<OnboardingConnectStep, ReactNode> = {
-		loginFound: (
+	const signInFailed: ConnectSlots = {
+		controls: (
 			<>
-				<div className="flex w-110 max-w-full flex-col items-center gap-5">
-					{account ? (
-						<div
-							className="flex w-full items-center gap-3 rounded-xl bg-muted/40 px-3.5 py-3"
-							data-slot="onboarding-connect-account"
-						>
-							<span
-								aria-hidden="true"
-								className="grid size-9 shrink-0 place-items-center rounded-full bg-person-avatar font-semibold text-compact text-soft-foreground leading-4"
-							>
-								{account.initials}
-							</span>
-							<div className="flex min-w-0 flex-1 flex-col gap-0.5">
-								<p className="break-words font-medium text-foreground text-sm">
-									{account.email}
-								</p>
-								<p className="text-muted-foreground text-xs">
-									{t("onboarding.connect.foundIn", { plan: account.plan })}
-								</p>
-							</div>
-						</div>
-					) : null}
-					<OnboardingButton onClick={onUseAccount}>
-						{t("onboarding.account.use.label")}
-					</OnboardingButton>
-				</div>
-				<div className={LINKS_CLASS}>
-					<OnboardingLink onClick={onUseAnotherAccount}>
-						{t("onboarding.account.another.label")}
-					</OnboardingLink>
-				</div>
+				<ConnectPrimary onClick={onSignIn}>
+					{t("onboarding.signInFailed.retry.label")}
+				</ConnectPrimary>
+				{pasteKeyInstead}
 			</>
-		),
-		nothingFound: (
-			<div className="flex w-105 max-w-full flex-col gap-1.5">
-				<ConnectOption
-					description={t("onboarding.access.signIn.description")}
-					label={t("onboarding.access.signIn.label")}
-					number={1}
-					onClick={onSignIn}
-				/>
-				<ConnectOption
-					description={t("onboarding.access.apiKey.description")}
-					label={t("onboarding.access.apiKey.label")}
-					number={2}
-					onClick={onPasteKey}
-				/>
-			</div>
-		),
-		waitingForCode: (
-			<ConnectForm onSubmit={onSubmitCode} value={code}>
-				<ConnectStatus>{t("onboarding.connect.browser.waiting")}</ConnectStatus>
-				{codeField}
-				<OnboardingButton disabled={code.length === 0} type="submit">
-					{t("onboarding.connect.continue")}
-				</OnboardingButton>
-				<div className={LINKS_CLASS}>
-					<OnboardingLink onClick={onReopenSignIn}>
-						{t("onboarding.connect.browser.reopen")}
-					</OnboardingLink>
-					{pasteKeyInstead}
-				</div>
-			</ConnectForm>
-		),
-		connecting: (
-			<div className={COLUMN_CLASS}>
-				<ConnectStatus>
-					{t("onboarding.connect.browser.checking")}
-				</ConnectStatus>
-				{codeField}
-				<OnboardingButton aria-busy="true" disabled>
-					{t("onboarding.connect.connecting")}
-				</OnboardingButton>
-			</div>
-		),
-		cancelled: signInFailed,
-		timedOut: signInFailed,
-		linkRefused: signInFailed,
-		agentMissing: (
-			<div className={COLUMN_CLASS}>
-				<OnboardingButton onClick={onDownloadAgain}>
-					{t("onboarding.connect.agentMissing.download")}
-				</OnboardingButton>
-			</div>
-		),
-		keyField: (
-			<ConnectForm onSubmit={onSubmitKey} value={apiKey}>
-				{keyField}
-				<OnboardingButton disabled={apiKey.length === 0} type="submit">
-					{t("onboarding.connect.continue")}
-				</OnboardingButton>
-				<div className={LINKS_CLASS}>{signInInstead}</div>
-			</ConnectForm>
-		),
-		keyRefused: (
-			<div className={COLUMN_CLASS}>
-				{keyField}
-				<OnboardingButton onClick={onTryAnotherKey}>
-					{t("onboarding.connection.keyFailed.anotherKey")}
-				</OnboardingButton>
-				<div className={LINKS_CLASS}>{signInInstead}</div>
-			</div>
 		),
 	}
 
+	const slots: Record<
+		Exclude<OnboardingConnectStep, "anotherAccount" | "nothingFound">,
+		ConnectSlots
+	> = {
+		loginFound: {
+			aboveHeading: account ? <ConnectAccountCard account={account} /> : null,
+			controls: (
+				<>
+					<ConnectPrimary onClick={onUseAccount}>
+						{t("onboarding.account.use.label")}
+					</ConnectPrimary>
+					<ConnectSecondary onClick={onUseAnotherAccount}>
+						{t("onboarding.account.another.label")}
+					</ConnectSecondary>
+				</>
+			),
+		},
+		waitingForCode: {
+			belowHeading: (
+				<ConnectForm id={formId} onSubmit={onSubmitCode} value={code}>
+					<ConnectStatus>
+						{t("onboarding.connect.browser.waiting")}
+					</ConnectStatus>
+					{codeField}
+				</ConnectForm>
+			),
+			controls: (
+				<>
+					<ConnectPrimary
+						disabled={code.length === 0}
+						form={formId}
+						type="submit"
+					>
+						{t("onboarding.connect.continue")}
+					</ConnectPrimary>
+					<div className={SECONDARY_ROW_CLASS}>
+						<ConnectSecondary onClick={onReopenSignIn}>
+							{t("onboarding.connect.browser.reopen")}
+						</ConnectSecondary>
+						{pasteKeyInstead}
+					</div>
+				</>
+			),
+		},
+		connecting: {
+			belowHeading: (
+				<div className={COLUMN_CLASS}>
+					<ConnectStatus>
+						{t("onboarding.connect.browser.checking")}
+					</ConnectStatus>
+					{codeField}
+				</div>
+			),
+			controls: (
+				<ConnectPrimary aria-busy="true" disabled>
+					{t("onboarding.connect.connecting")}
+				</ConnectPrimary>
+			),
+		},
+		cancelled: signInFailed,
+		timedOut: signInFailed,
+		linkRefused: signInFailed,
+		agentMissing: {
+			controls: (
+				<ConnectPrimary onClick={onDownloadAgain}>
+					{t("onboarding.connect.agentMissing.download")}
+				</ConnectPrimary>
+			),
+		},
+		keyField: {
+			belowHeading: (
+				<ConnectForm id={formId} onSubmit={onSubmitKey} value={apiKey}>
+					{keyField}
+				</ConnectForm>
+			),
+			controls: (
+				<>
+					<ConnectPrimary
+						disabled={apiKey.length === 0}
+						form={formId}
+						type="submit"
+					>
+						{t("onboarding.connect.continue")}
+					</ConnectPrimary>
+					{signInInstead}
+				</>
+			),
+		},
+		keyRefused: {
+			belowHeading: <div className={COLUMN_CLASS}>{keyField}</div>,
+			controls: (
+				<>
+					<ConnectPrimary onClick={onTryAnotherKey}>
+						{t("onboarding.connection.keyFailed.anotherKey")}
+					</ConnectPrimary>
+					{signInInstead}
+				</>
+			),
+		},
+	}
+
 	return (
-		<OnboardingShell
-			className="gap-5 py-6"
-			data-step={step}
-			data-slot="onboarding-connect-screen"
-		>
-			<ConnectTile tile={TILES[step]} />
-			<OnboardingHeading
-				body={t(heading.body)}
-				bodyId={bodyId}
-				title={t(heading.title)}
-				variant="connect"
-			/>
-			{actions[step]}
+		<OnboardingShell data-step={step} data-slot="onboarding-connect-screen">
+			{step === "anotherAccount" || step === "nothingFound" ? (
+				<ConnectMethodChoice
+					heading={headingNode}
+					key={step}
+					label={title}
+					onPasteKey={onPasteKey}
+					onSignIn={onSignIn}
+				/>
+			) : (
+				<>
+					<OnboardingContent
+						className={step === "loginFound" ? "gap-8" : "pb-5"}
+					>
+						{slots[step].aboveHeading}
+						{headingNode}
+						{slots[step].belowHeading}
+					</OnboardingContent>
+					<OnboardingControls>{slots[step].controls}</OnboardingControls>
+				</>
+			)}
 		</OnboardingShell>
 	)
 }

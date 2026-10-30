@@ -158,11 +158,9 @@ describe("the Welcome screens", () => {
 		expect(world.stored).toEqual(["connect"])
 		expect(heading()).toBe("Connect the model provider")
 		expect(
-			screen.getByRole("button", { name: /Sign in with Claude/ }),
+			screen.getByRole("radio", { name: /Sign in with Claude/ }),
 		).toBeTruthy()
-		expect(
-			screen.getByRole("button", { name: /Paste an API key/ }),
-		).toBeTruthy()
+		expect(screen.getByRole("radio", { name: /Paste an API key/ })).toBeTruthy()
 	})
 
 	it("steps back a screen on Back without moving the host step", async () => {

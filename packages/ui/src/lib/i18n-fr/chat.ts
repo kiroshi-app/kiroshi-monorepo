@@ -1001,7 +1001,7 @@ const chat = {
 		},
 		account: {
 			header: "Votre compte Claude",
-			question: "Utiliser le compte déjà présent sur cette machine ?",
+			question: "Utiliser le compte déjà présent sur votre ordinateur ?",
 			use: {
 				label: "Utiliser ce compte",
 				description:
@@ -1124,7 +1124,7 @@ const chat = {
 				body: "Vos compagnons ont besoin d’un modèle pour réfléchir. Utilisez votre abonnement Claude, ou une clé.",
 			},
 			browser: {
-				body: "Votre navigateur a ouvert claude.ai. Connectez-vous avec votre abonnement Pro ou Max.",
+				body: "Votre navigateur a ouvert claude.ai. Connectez-vous avec votre abonnement Pro ou Max, puis collez le code qu’il vous affiche.",
 				waiting: "En attente de votre connexion, dans votre navigateur…",
 				checking: "Vérification du code avec Claude…",
 				placeholder: "Code de Claude",

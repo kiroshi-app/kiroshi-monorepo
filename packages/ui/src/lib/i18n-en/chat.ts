@@ -959,7 +959,7 @@ const chat = {
 		},
 		account: {
 			header: "Your Claude account",
-			question: "Use the account already on this machine?",
+			question: "Use the account already on your computer?",
 			use: {
 				label: "Use this account",
 				description:
@@ -1082,7 +1082,7 @@ const chat = {
 				body: "Your companions need a model to think with. Use your Claude subscription, or a key.",
 			},
 			browser: {
-				body: "Your browser opened claude.ai. Sign in there with your Pro or Max subscription.",
+				body: "Your browser opened claude.ai. Sign in there with your Pro or Max subscription, then paste the code it shows you.",
 				waiting: "Waiting for you to sign in, in your browser…",
 				checking: "Checking the code with Claude…",
 				placeholder: "Code from Claude",

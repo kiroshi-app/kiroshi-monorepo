@@ -12,6 +12,8 @@ import {
 	MessageBubbleContent,
 } from "@workspace/ui/components/message-bubble"
 import {
+	OnboardingContent,
+	OnboardingControls,
 	OnboardingHeading,
 	OnboardingShell,
 } from "@workspace/ui/components/onboarding-shell"
@@ -46,6 +48,8 @@ const COMPANIONS = [
 ] as const
 
 const CARD_CLASS = "rounded-bubble border border-border bg-card"
+
+const ILLUSTRATION_BUBBLE_CLASS = "px-3 py-2 leading-5"
 
 const CompanionsIllustration = () => {
 	const { t } = useTranslation("chat")
@@ -102,17 +106,17 @@ const ConversationsIllustration = () => {
 				</div>
 				<MessageBubble
 					align="end"
-					className="max-w-75 self-end"
+					className="max-w-85 self-end"
 					variant="solid"
 				>
-					<MessageBubbleContent>
+					<MessageBubbleContent className={ILLUSTRATION_BUBBLE_CLASS}>
 						{t("onboarding.intro.conversations.ask")}
 					</MessageBubbleContent>
 				</MessageBubble>
 				<div className="flex items-end gap-2">
 					<BotIdentityAvatar hue={WREN_HUE} name={wren} size={24} />
-					<MessageBubble className="min-w-0 max-w-80" variant="soft">
-						<MessageBubbleContent>
+					<MessageBubble className="min-w-0 max-w-85" variant="soft">
+						<MessageBubbleContent className={ILLUSTRATION_BUBBLE_CLASS}>
 							{t("onboarding.intro.conversations.reply")}
 						</MessageBubbleContent>
 					</MessageBubble>
@@ -262,29 +266,23 @@ const OnboardingWelcomeScreen = ({
 
 	return (
 		<OnboardingShell data-step={step} data-slot="onboarding-welcome-screen">
-			<div
-				className="flex min-h-82 w-full items-end justify-center"
-				data-slot="onboarding-welcome-visual"
-			>
+			<OnboardingContent className="gap-8">
 				<Illustration />
-			</div>
-			<div
-				className="flex h-44.5 w-full justify-center pt-10"
-				data-slot="onboarding-welcome-text"
-			>
 				<OnboardingHeading
 					body={t(`onboarding.intro.${step}.body`)}
 					title={t(`onboarding.intro.${step}.title`)}
 					variant="welcome"
 				/>
-			</div>
-			<OnboardingWelcomeFooter
-				onBack={onBack}
-				onNext={onNext}
-				onSkip={onSkip}
-				step={position}
-				total={STEPS.length}
-			/>
+			</OnboardingContent>
+			<OnboardingControls>
+				<OnboardingWelcomeFooter
+					onBack={onBack}
+					onNext={onNext}
+					onSkip={onSkip}
+					step={position}
+					total={STEPS.length}
+				/>
+			</OnboardingControls>
 		</OnboardingShell>
 	)
 }

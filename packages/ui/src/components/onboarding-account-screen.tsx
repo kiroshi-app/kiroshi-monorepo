@@ -4,15 +4,15 @@ import { useId } from "react"
 import { useTranslation } from "react-i18next"
 
 import {
-	FullWindowContent,
-	FullWindowLayout,
-} from "@workspace/ui/components/full-window-layout"
-import {
 	INNER,
 	OUTER,
 	roundedHexagonPath,
 } from "@workspace/ui/components/kiroshi-hexagon"
-import { OnboardingDragStrip } from "@workspace/ui/components/onboarding-shell"
+import {
+	OnboardingContent,
+	OnboardingControls,
+	OnboardingShell,
+} from "@workspace/ui/components/onboarding-shell"
 import { Button } from "@workspace/ui/components/ui/button"
 import {
 	ACCOUNT_ACTION_CLASS,
@@ -21,7 +21,6 @@ import {
 	type AccountState,
 	SignInActions,
 } from "@workspace/ui/components/user-settings-dialog/account-panel"
-import { cn } from "@workspace/ui/lib/utils"
 
 type OnboardingAccountScreenProps = {
 	account: AccountState
@@ -92,12 +91,11 @@ const OnboardingAccountScreen = ({
 		account.status === "signedIn" ? SIGNED_IN_INTRO : SIGNED_OUT_INTRO
 
 	return (
-		<FullWindowLayout
+		<OnboardingShell
 			data-slot="onboarding-account-screen"
 			data-status={account.status}
 		>
-			<OnboardingDragStrip />
-			<FullWindowContent className="gap-5 p-6">
+			<OnboardingContent className="gap-5">
 				<div className="flex flex-col items-center gap-8">
 					<KiroshiRing />
 					<AccountIntro
@@ -107,21 +105,25 @@ const OnboardingAccountScreen = ({
 					/>
 				</div>
 				{account.status === "signedIn" ? (
-					<div className="flex w-110 max-w-full flex-col gap-5">
+					<div className="flex w-110 max-w-full flex-col">
 						<AccountCard
 							email={account.email}
 							image={image}
 							name={account.name}
 							plan={account.plan}
 						/>
-						<Button
-							className={cn(ACCOUNT_ACTION_CLASS.screen, "self-center")}
-							onClick={onContinue}
-							size="lg"
-						>
-							{t("account.onboarding.signedIn.continue")}
-						</Button>
 					</div>
+				) : null}
+			</OnboardingContent>
+			<OnboardingControls>
+				{account.status === "signedIn" ? (
+					<Button
+						className={ACCOUNT_ACTION_CLASS.screen}
+						onClick={onContinue}
+						size="lg"
+					>
+						{t("account.onboarding.signedIn.continue")}
+					</Button>
 				) : (
 					<>
 						<SignInActions
@@ -131,15 +133,13 @@ const OnboardingAccountScreen = ({
 							onCopySignInLink={onCopySignInLink}
 							onSignIn={onSignIn}
 						/>
-						<div className="flex justify-center pt-1">
-							<button className={SKIP_CLASS} onClick={onSkip} type="button">
-								{t("account.onboarding.skip")}
-							</button>
-						</div>
+						<button className={SKIP_CLASS} onClick={onSkip} type="button">
+							{t("account.onboarding.skip")}
+						</button>
 					</>
 				)}
-			</FullWindowContent>
-		</FullWindowLayout>
+			</OnboardingControls>
+		</OnboardingShell>
 	)
 }
 
