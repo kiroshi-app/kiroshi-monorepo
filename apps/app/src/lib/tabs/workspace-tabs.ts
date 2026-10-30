@@ -68,7 +68,12 @@ import {
 	raiseReportedFailure,
 	type UnreportedFailureNotice,
 } from "../failure-report"
-import { closeWindow, liveWindowLabels, watchCloseRequest } from "../host"
+import {
+	closeWindow,
+	liveWindowLabels,
+	watchCloseRequest,
+	watchLiveWindows,
+} from "../host"
 import { createStore } from "../store"
 
 const NO_SPACE = ""
@@ -279,6 +284,30 @@ export const forgetWindowWhenClosed = (windowLabel: string) => {
 			.catch(raiseCloseFailure)
 	})
 	return watching
+}
+
+const logUnreadWindows = (reason: unknown) => {
+	console.error("open windows: the live windows could not be read", reason)
+}
+
+const listedWindowsGone = (seenLabels: Set<string>, liveLabels: string[]) =>
+	openWindowLabels().filter(
+		(label) => seenLabels.has(label) && !liveLabels.includes(label),
+	)
+
+export const forgetWindowsGoneWhileRunning = () => {
+	const seenLabels = new Set<string>()
+	return watchLiveWindows({
+		report: (liveLabels) => {
+			for (const label of listedWindowsGone(seenLabels, liveLabels)) {
+				forgetWindow(label)
+			}
+			for (const label of liveLabels) {
+				seenLabels.add(label)
+			}
+		},
+		onError: logUnreadWindows,
+	})
 }
 
 const startSecondaryWindow = (

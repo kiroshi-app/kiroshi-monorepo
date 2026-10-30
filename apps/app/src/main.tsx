@@ -18,6 +18,7 @@ import { invalidateOnHostReconnect } from "@/lib/query/host-invalidations"
 import { createQueryClient } from "@/lib/query/query-client"
 import { MAIN_WINDOW_LABEL } from "@/lib/tabs/tabs-mirror"
 import {
+	forgetWindowsGoneWhileRunning,
 	forgetWindowWhenClosed,
 	reopenSecondaryWindows,
 } from "@/lib/tabs/workspace-tabs"
@@ -83,6 +84,7 @@ const startWindow = (windowIdentity: WindowIdentity) => {
 			? reopenSecondaryWindows()
 			: forgetWindowWhenClosed(windowIdentity.label)
 	starting.catch(reportWindowStartFailure)
+	forgetWindowsGoneWhileRunning().catch(reportWindowStartFailure)
 }
 
 const renderAsMainWindow = (reason: unknown) => {
