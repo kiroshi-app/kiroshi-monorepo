@@ -49,13 +49,11 @@ const tabConversationOf = ({
 	id,
 	name,
 	icon,
-	color,
 	participants,
 }: TitleBarConversation): ThumbnailConversation => ({
 	id,
 	name,
 	icon,
-	color,
 	companionName: participants[0]?.name,
 })
 

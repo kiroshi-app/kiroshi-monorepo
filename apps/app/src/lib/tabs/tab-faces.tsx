@@ -3,8 +3,8 @@ import type {
 	AppSidebarConversation,
 } from "@workspace/ui/components/app-sidebar"
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
-import { ConversationSubjectIcon } from "@workspace/ui/components/conversation-subject-icon"
-import { Icons } from "@workspace/ui/components/icons"
+import { conversationIconOf } from "@workspace/ui/components/conversation-subject-icon"
+import { ConversationIcons, Icons } from "@workspace/ui/components/icons"
 import type { TitleBarTab } from "@workspace/ui/components/title-bar-tabs"
 import { i18n } from "@workspace/ui/lib/i18n"
 
@@ -19,7 +19,7 @@ import {
 
 import { APPLICATIONS_ENTRY } from "../navigation/settings-search"
 
-const TAB_ICON_SIDE = 16
+const BOT_AVATAR_SIDE = 16
 
 export type TabFace = Pick<TitleBarTab, "title" | "icon">
 
@@ -27,7 +27,7 @@ export type TabBot = Pick<AppSidebarBot, "id" | "name" | "blot" | "image">
 
 export type TabConversation = Pick<
 	AppSidebarConversation,
-	"id" | "name" | "icon" | "color"
+	"id" | "name" | "icon"
 >
 
 export type TabFaceSources = {
@@ -68,21 +68,15 @@ const botFaceOf = (bot: TabBot): TabFace => ({
 			image={bot.image}
 			name={bot.name}
 			seed={bot.id}
-			size={TAB_ICON_SIDE}
+			size={BOT_AVATAR_SIDE}
 		/>
 	),
 })
 
-const conversationFaceOf = (conversation: TabConversation): TabFace => ({
-	title: conversation.name,
-	icon: (
-		<ConversationSubjectIcon
-			hue={conversation.color}
-			icon={conversation.icon}
-			side={TAB_ICON_SIDE}
-		/>
-	),
-})
+const conversationFaceOf = (conversation: TabConversation): TabFace => {
+	const Glyph = ConversationIcons[conversationIconOf(conversation.icon)]
+	return { title: conversation.name, icon: <Glyph /> }
+}
 
 const unknownRowFace = (): TabFace => ({
 	title: i18n.t("chat:transcript.label"),
