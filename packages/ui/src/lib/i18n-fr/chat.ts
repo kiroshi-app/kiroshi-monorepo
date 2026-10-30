@@ -1072,8 +1072,8 @@ const chat = {
 		arrival: {
 			failure: "{{name}} n’a pas pu dire bonjour",
 			firstCompanionMissing:
-				"Impossible de rencontrer votre premier compagnon. Redémarrez Kiroshi, puis réessayez.",
-			unknownCompanion: "le compagnon n’est pas sur cet ordinateur",
+				"Impossible de rencontrer votre premier agent. Redémarrez Kiroshi, puis réessayez.",
+			unknownCompanion: "l’agent n’est pas sur cet ordinateur",
 		},
 		intro: {
 			skip: "Passer l’intro",
@@ -1083,15 +1083,15 @@ const chat = {
 			progress: "Progression de l’intro",
 			position: "Étape {{step}} sur {{total}}",
 			companions: {
-				title: "Des compagnons travaillent avec vous",
-				body: "Chaque compagnon a un nom, un métier et sa propre mémoire. Confiez-lui quelque chose et il s’y tient, sur votre ordinateur.",
+				title: "Des agents travaillent avec vous",
+				body: "Chaque agent a un nom, un métier et sa propre mémoire. Confiez-lui quelque chose et il s’y tient, sur votre ordinateur.",
 				atlas: { name: "Atlas", job: "Relit le code" },
 				juniper: { name: "Juniper", job: "Tient la documentation" },
 				wren: { name: "Wren", job: "Rédige les notes de version" },
 			},
 			conversations: {
 				title: "Des conversations, puis des missions",
-				body: "Parlez avec un compagnon ou plusieurs à la fois. Un long travail devient une mission que vous suivez pendant que vous faites autre chose.",
+				body: "Parlez avec un agent ou plusieurs à la fois. Un long travail devient une mission que vous suivez pendant que vous faites autre chose.",
 				thread: "Semaine de lancement",
 				ask: "Vous pouvez préparer la doc pour vendredi, tous les deux ?",
 				reply: "C’est parti. Je lance les notes de version en mission.",
@@ -1101,13 +1101,13 @@ const chat = {
 			},
 			spaces: {
 				title: "Les Spaces séparent le travail",
-				body: "Chaque Space a ses compagnons, ses conversations et sa couleur. Gardez-en un pour vous, ou partagez-le avec les personnes qui travaillent avec vous.",
+				body: "Chaque Space a ses agents, ses conversations et sa couleur. Gardez-en un pour vous, ou partagez-le avec les personnes qui travaillent avec vous.",
 				work: { name: "Travail", detail: "Partagé avec 3 personnes" },
 				personal: { name: "Perso", detail: "Vous uniquement" },
 			},
 			tools: {
 				title: "Vos outils, là où vous les autorisez",
-				body: "Donnez à un compagnon un Dossier où travailler, les Applications qu’il peut utiliser et les Secrets dont il a besoin. Rien au-delà de ce que vous lui confiez.",
+				body: "Donnez à un agent un Dossier où travailler, les Applications qu’il peut utiliser et les Secrets dont il a besoin. Rien au-delà de ce que vous lui confiez.",
 				folders: "Dossiers",
 				foldersDetail: "~/Code/orbit-web",
 				applications: "Applications",
@@ -1120,7 +1120,7 @@ const chat = {
 			foundIn: "{{plan}} · trouvé dans Claude Code",
 			provider: {
 				title: "Connecter le fournisseur de modèle",
-				body: "Vos compagnons ont besoin d’un modèle pour réfléchir. Utilisez votre abonnement Claude, ou une clé.",
+				body: "Vos agents ont besoin d’un modèle pour réfléchir. Utilisez votre abonnement Claude, ou une clé.",
 			},
 			browser: {
 				body: "Votre navigateur a ouvert claude.ai. Connectez-vous avec votre abonnement Pro ou Max, puis collez le code qu’il vous affiche.",

@@ -1030,8 +1030,8 @@ const chat = {
 		arrival: {
 			failure: "{{name}} couldn’t say hello",
 			firstCompanionMissing:
-				"Couldn’t meet your first companion. Restart Kiroshi, then try again.",
-			unknownCompanion: "the companion isn’t on this computer",
+				"Couldn’t meet your first agent. Restart Kiroshi, then try again.",
+			unknownCompanion: "the agent isn’t on this computer",
 		},
 		intro: {
 			skip: "Skip intro",
@@ -1041,15 +1041,15 @@ const chat = {
 			progress: "Intro progress",
 			position: "Step {{step}} of {{total}}",
 			companions: {
-				title: "Companions do the work with you",
-				body: "Each companion has a name, a job and a memory of its own. Hand it something and it keeps at it, on your computer.",
+				title: "Agents do the work with you",
+				body: "Each agent has a name, a job and a memory of its own. Hand it something and it keeps at it, on your computer.",
 				atlas: { name: "Atlas", job: "Reviews code" },
 				juniper: { name: "Juniper", job: "Keeps the docs" },
 				wren: { name: "Wren", job: "Writes release notes" },
 			},
 			conversations: {
 				title: "Conversations, then missions",
-				body: "Talk with one companion or several at once. Long work becomes a mission you can follow while you do something else.",
+				body: "Talk with one agent or several at once. Long work becomes a mission you can follow while you do something else.",
 				thread: "Launch week",
 				ask: "Can you two get the docs ready for Friday?",
 				reply: "On it. I’ll run the release notes as a mission.",
@@ -1059,13 +1059,13 @@ const chat = {
 			},
 			spaces: {
 				title: "Spaces keep work apart",
-				body: "Each Space has its own companions, conversations and colour. Keep one to yourself, or share it with the people you work with.",
+				body: "Each Space has its own agents, conversations and colour. Keep one to yourself, or share it with the people you work with.",
 				work: { name: "Work", detail: "Shared with 3 people" },
 				personal: { name: "Personal", detail: "Only you" },
 			},
 			tools: {
 				title: "Your tools, where you allow them",
-				body: "Give a companion a Folder to work in, the Applications it may use and the Secrets it needs. Nothing beyond what you hand it.",
+				body: "Give an agent a Folder to work in, the Applications it may use and the Secrets it needs. Nothing beyond what you hand it.",
 				folders: "Folders",
 				foldersDetail: "~/Code/orbit-web",
 				applications: "Applications",
@@ -1078,7 +1078,7 @@ const chat = {
 			foundIn: "{{plan}} · found in Claude Code",
 			provider: {
 				title: "Connect the model provider",
-				body: "Your companions need a model to think with. Use your Claude subscription, or a key.",
+				body: "Your agents need a model to think with. Use your Claude subscription, or a key.",
 			},
 			browser: {
 				body: "Your browser opened claude.ai. Sign in there with your Pro or Max subscription, then paste the code it shows you.",
