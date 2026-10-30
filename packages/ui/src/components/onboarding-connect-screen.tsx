@@ -293,7 +293,6 @@ const ConnectMethodChoice = ({
 }
 
 type ConnectSlots = {
-	contentClassName?: string
 	aboveHeading?: ReactNode
 	belowHeading?: ReactNode
 	controls: ReactNode
@@ -406,7 +405,6 @@ const OnboardingConnectScreen = ({
 		ConnectSlots
 	> = {
 		loginFound: {
-			contentClassName: "gap-8",
 			aboveHeading: account ? <ConnectAccountCard account={account} /> : null,
 			controls: (
 				<>
@@ -515,7 +513,9 @@ const OnboardingConnectScreen = ({
 				/>
 			) : (
 				<>
-					<OnboardingContent className={slots[step].contentClassName ?? "pb-5"}>
+					<OnboardingContent
+						className={step === "loginFound" ? "gap-8" : "pb-5"}
+					>
 						{slots[step].aboveHeading}
 						{headingNode}
 						{slots[step].belowHeading}
