@@ -1001,7 +1001,7 @@ const chat = {
 		},
 		account: {
 			header: "Votre compte Claude",
-			question: "Utiliser le compte déjà présent sur cette machine ?",
+			question: "Utiliser le compte déjà présent sur votre ordinateur ?",
 			use: {
 				label: "Utiliser ce compte",
 				description:
@@ -1119,9 +1119,6 @@ const chat = {
 		},
 		connect: {
 			foundIn: "{{plan}} · trouvé dans Claude Code",
-			loginFound: {
-				title: "Utiliser le compte déjà présent sur votre ordinateur ?",
-			},
 			provider: {
 				title: "Connecter le fournisseur de modèle",
 				body: "Vos compagnons ont besoin d’un modèle pour réfléchir. Utilisez votre abonnement Claude, ou une clé.",

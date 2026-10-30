@@ -49,6 +49,8 @@ const COMPANIONS = [
 
 const CARD_CLASS = "rounded-bubble border border-border bg-card"
 
+const ILLUSTRATION_BUBBLE_CLASS = "px-3 py-2 leading-5"
+
 const CompanionsIllustration = () => {
 	const { t } = useTranslation("chat")
 
@@ -104,17 +106,17 @@ const ConversationsIllustration = () => {
 				</div>
 				<MessageBubble
 					align="end"
-					className="max-w-75 self-end"
+					className="max-w-85 self-end"
 					variant="solid"
 				>
-					<MessageBubbleContent>
+					<MessageBubbleContent className={ILLUSTRATION_BUBBLE_CLASS}>
 						{t("onboarding.intro.conversations.ask")}
 					</MessageBubbleContent>
 				</MessageBubble>
 				<div className="flex items-end gap-2">
 					<BotIdentityAvatar hue={WREN_HUE} name={wren} size={24} />
-					<MessageBubble className="min-w-0 max-w-80" variant="soft">
-						<MessageBubbleContent>
+					<MessageBubble className="min-w-0 max-w-85" variant="soft">
+						<MessageBubbleContent className={ILLUSTRATION_BUBBLE_CLASS}>
 							{t("onboarding.intro.conversations.reply")}
 						</MessageBubbleContent>
 					</MessageBubble>
@@ -264,7 +266,7 @@ const OnboardingWelcomeScreen = ({
 
 	return (
 		<OnboardingShell data-step={step} data-slot="onboarding-welcome-screen">
-			<OnboardingContent className="gap-10 pb-7">
+			<OnboardingContent className="gap-8">
 				<Illustration />
 				<OnboardingHeading
 					body={t(`onboarding.intro.${step}.body`)}

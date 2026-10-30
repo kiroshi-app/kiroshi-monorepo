@@ -143,7 +143,7 @@ describe("the account step", () => {
 
 	it("offers the account found on this machine", () => {
 		expect(askedOf(stepOf()).question).toBe(
-			"Use the account already on this machine?",
+			"Use the account already on your computer?",
 		)
 		expect(labelsOf(stepOf())).toEqual([
 			"Use this account",

@@ -26,6 +26,17 @@ const ARTBOARD =
 
 const ARTBOARD_WIDTH = 1200
 
+const ILLUSTRATION_GAP = 32
+
+const CONVERSATIONS_GEOMETRY = {
+	column: 440,
+	cardGap: 12,
+	bubbleMaxWidth: 340,
+	bubblePadding: ["8px", "12px"],
+	bubbleType: ["14px", "20px"],
+	statusHeight: 24,
+}
+
 const SLIDES: OnboardingWelcomeStep[] = [
 	"companions",
 	"conversations",
@@ -118,7 +129,61 @@ const expectWelcome = async ({
 		await expect(getComputedStyle(control).boxShadow).toMatch(/\b3px\b/)
 	}
 	await expectRowOnParagraphAxis(canvasElement)
+	await expectContentSlot(canvasElement)
 	await expectNoHorizontalScrollAt(canvasElement, 320, "onboarding-shell")
+}
+
+const expectContentSlot = async (canvasElement: HTMLElement) => {
+	const content = slotIn(canvasElement, "onboarding-content")
+	const [illustration, heading] = [...content.children] as HTMLElement[]
+	const slot = content.getBoundingClientRect()
+	const drawn = illustration.getBoundingClientRect()
+	const column = heading.getBoundingClientRect()
+
+	await expect(column.top - drawn.bottom).toBe(ILLUSTRATION_GAP)
+	await expect(column.bottom).toBe(slot.bottom)
+	await expect(getComputedStyle(content).paddingBottom).toBe("0px")
+	if (
+		slotIn(canvasElement, "onboarding-welcome-screen").dataset.step ===
+		"conversations"
+	) {
+		await expectConversationsGeometry(illustration)
+		return
+	}
+	await expect(content.scrollHeight).toBeLessThanOrEqual(content.clientHeight)
+	await expect(drawn.top).toBeGreaterThanOrEqual(slot.top)
+}
+
+const expectConversationsGeometry = async (illustration: HTMLElement) => {
+	const [thread, mission] = [...illustration.children] as HTMLElement[]
+	const bubbles = slotsIn(illustration, "message-bubble-text").map(
+		(text) => text.parentElement as HTMLElement,
+	)
+	const status = mission.lastElementChild as HTMLElement
+
+	await expect(illustration.getBoundingClientRect().width).toBe(
+		CONVERSATIONS_GEOMETRY.column,
+	)
+	await expect(
+		mission.getBoundingClientRect().top - thread.getBoundingClientRect().bottom,
+	).toBe(CONVERSATIONS_GEOMETRY.cardGap)
+	await expect(bubbles).toHaveLength(2)
+	for (const bubble of bubbles) {
+		const { paddingTop, paddingLeft, fontSize, lineHeight } =
+			getComputedStyle(bubble)
+		await expect(bubble.getBoundingClientRect().width).toBeLessThanOrEqual(
+			CONVERSATIONS_GEOMETRY.bubbleMaxWidth,
+		)
+		await expect([paddingTop, paddingLeft]).toEqual(
+			CONVERSATIONS_GEOMETRY.bubblePadding,
+		)
+		await expect([fontSize, lineHeight]).toEqual(
+			CONVERSATIONS_GEOMETRY.bubbleType,
+		)
+	}
+	await expect(status.getBoundingClientRect().height).toBe(
+		CONVERSATIONS_GEOMETRY.statusHeight,
+	)
 }
 
 type ArrowPlayContext = {

@@ -59,7 +59,19 @@ const expectConnect = async ({
 	await withMotionAllowed(() =>
 		expect(getComputedStyle(primary).transitionDuration).toBe("0s"),
 	)
+	await expectInsideSlot(slotIn(canvasElement, "onboarding-content"))
+	await expectInsideSlot(slotIn(canvasElement, "onboarding-controls"))
 	await expectNoHorizontalScrollAt(canvasElement, 320, "onboarding-shell")
+}
+
+const expectInsideSlot = async (slot: HTMLElement) => {
+	const bounds = slot.getBoundingClientRect()
+	await expect(slot.scrollHeight).toBeLessThanOrEqual(slot.clientHeight)
+	for (const child of slot.children) {
+		const { top, bottom } = child.getBoundingClientRect()
+		await expect(top).toBeGreaterThanOrEqual(bounds.top)
+		await expect(bottom).toBeLessThanOrEqual(bounds.bottom)
+	}
 }
 
 const expectSpinnerStillUnderReducedMotion = async (

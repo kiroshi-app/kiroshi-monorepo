@@ -57,7 +57,7 @@ type OnboardingConnectScreenProps = {
 
 const HEADINGS = {
 	loginFound: {
-		title: "onboarding.connect.loginFound.title",
+		title: "onboarding.account.question",
 		body: "onboarding.account.use.description",
 	},
 	anotherAccount: {

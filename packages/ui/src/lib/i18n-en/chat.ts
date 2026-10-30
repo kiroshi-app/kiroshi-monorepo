@@ -959,7 +959,7 @@ const chat = {
 		},
 		account: {
 			header: "Your Claude account",
-			question: "Use the account already on this machine?",
+			question: "Use the account already on your computer?",
 			use: {
 				label: "Use this account",
 				description:
@@ -1077,9 +1077,6 @@ const chat = {
 		},
 		connect: {
 			foundIn: "{{plan}} · found in Claude Code",
-			loginFound: {
-				title: "Use the account already on your computer?",
-			},
 			provider: {
 				title: "Connect the model provider",
 				body: "Your companions need a model to think with. Use your Claude subscription, or a key.",
