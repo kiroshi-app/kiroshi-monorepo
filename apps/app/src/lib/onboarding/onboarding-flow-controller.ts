@@ -1,11 +1,7 @@
-import {
-	type NoticeMessage,
-	raiseTransientNotice,
-} from "@workspace/ui/components/notice-surface"
+import type { NoticeMessage } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import type { ClaudeImported } from "./claude-import-controller"
-import { landingTitleOf } from "./claude-import-landing"
 import { exitDetailOf } from "./onboarding-failure"
 import type { OnboardingPort } from "./onboarding-port"
 import {
@@ -69,7 +65,6 @@ export type OnboardingFlowController = SignInActions & {
 
 export type OnboardingFlowOptions = {
 	reportFailure?: (notice: NoticeMessage) => void
-	reportSuccess?: (notice: NoticeMessage) => void
 }
 
 export type OnboardingCreation = {
@@ -113,7 +108,6 @@ export const createOnboardingFlowController = (
 	world: OnboardingFlowWorld,
 	{
 		reportFailure = failureReporterIn("onboarding-flow-controller"),
-		reportSuccess = raiseTransientNotice,
 	}: OnboardingFlowOptions = {},
 ): OnboardingFlowController => {
 	const stateStore = createStore(initialOnboardingFlowState)
@@ -142,7 +136,6 @@ export const createOnboardingFlowController = (
 	const store = (step: OnboardingStep) => persisted(() => world.storeStep(step))
 
 	let firstCompanionStored = Promise.resolve()
-	let importedThisRun: ClaudeImported | null = null
 	let isImportJourney = false
 
 	const claimFirstCompanion = async (botId: string) => {
@@ -253,14 +246,6 @@ export const createOnboardingFlowController = (
 
 	const land = () => (isImportJourney ? landOnShoto() : landOnFirstCompanion())
 
-	const announceImported = () => {
-		const title = importedThisRun && landingTitleOf(importedThisRun)
-		importedThisRun = null
-		if (title) {
-			reportSuccess({ title })
-		}
-	}
-
 	return {
 		...actions,
 
@@ -281,7 +266,6 @@ export const createOnboardingFlowController = (
 		},
 
 		leaveImport: async (imported) => {
-			importedThisRun = imported
 			isImportJourney = hasImportedAny(imported)
 			await store("account")
 		},
@@ -293,12 +277,10 @@ export const createOnboardingFlowController = (
 			set({ isAtAccount: false })
 			await world.markFirstRunDone()
 			await land()
-			announceImported()
 		},
 
 		replay: async () => {
 			stateStore.setState(initialOnboardingFlowState)
-			importedThisRun = null
 			isImportJourney = false
 			await persisted(world.replay)
 		},
