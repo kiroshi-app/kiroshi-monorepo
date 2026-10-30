@@ -5,7 +5,7 @@ use std::sync::LazyLock;
 use rusqlite::types::Type;
 use rusqlite::{Connection, Transaction, TransactionBehavior};
 
-use super::conversations::{is_live_bot, oldest_live_bot_named, titled_if_untitled};
+use super::conversations::{is_live_bot, oldest_live_bot_named, retitled_from, titled_if_untitled};
 use super::settings::Settings;
 use crate::db::{Access, DatabaseError};
 
@@ -36,6 +36,7 @@ const FIRST_COMPANION_SEEDED_KEY: &str = "app.first_companion_seeded";
 const LAST_WINDOW_RANK_KEY: &str = "app.last_window_rank";
 const CLAUDE_IMPORTED_KEY: &str = "app.claude_imported";
 const SHOTO_TITLE_BACKFILLED_KEY: &str = "app.shoto_title_backfilled";
+const CODER_TITLE_BACKFILLED_KEY: &str = "app.coder_title_backfilled";
 
 const UNREADABLE_WINDOW_RANK: &str = "the last window rank does not read as a count";
 
@@ -328,6 +329,25 @@ impl UserRepository {
 					titled_if_untitled(&transaction, &shoto_id, title)?;
 				}
 				write_switch_in(&transaction, SHOTO_TITLE_BACKFILLED_KEY, true)?;
+				transaction.commit()?;
+				Ok(())
+			})
+			.await
+	}
+
+	pub async fn backfill_coder_title(
+		&self,
+		retired: &'static str,
+		title: &'static str,
+	) -> Result<(), DatabaseError> {
+		self.access
+			.call_mut(move |connection| {
+				let transaction = write_transaction(connection)?;
+				if switch_on_in(&transaction, CODER_TITLE_BACKFILLED_KEY)? {
+					return Ok(());
+				}
+				retitled_from(&transaction, retired, title)?;
+				write_switch_in(&transaction, CODER_TITLE_BACKFILLED_KEY, true)?;
 				transaction.commit()?;
 				Ok(())
 			})

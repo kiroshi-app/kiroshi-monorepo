@@ -109,6 +109,14 @@ pub(in crate::db::repositories) fn titled_if_untitled(
 		.execute("UPDATE bots SET title = ?2 WHERE id = ?1 AND title = ''", params![id, title])
 }
 
+pub(in crate::db::repositories) fn retitled_from(
+	transaction: &Transaction<'_>,
+	retired: &str,
+	title: &str,
+) -> rusqlite::Result<usize> {
+	transaction.execute("UPDATE bots SET title = ?2 WHERE title = ?1", params![retired, title])
+}
+
 pub(super) fn ensured_default_bot(connection: &mut Connection) -> Result<Bot, ConversationError> {
 	if let Some(stored) = stored_default_bot(connection)? {
 		return Ok(stored);

@@ -40,7 +40,8 @@ use bots::{
 };
 
 pub(in crate::db::repositories) use bots::{
-	bots_of, deleted_chat_in, is_live_bot, oldest_live_bot_named, retired_bot, titled_if_untitled,
+	bots_of, deleted_chat_in, is_live_bot, oldest_live_bot_named, retired_bot, retitled_from,
+	titled_if_untitled,
 };
 
 pub const DEFAULT_BOT_ID: &str = "default";
