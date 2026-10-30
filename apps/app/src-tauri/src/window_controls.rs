@@ -143,7 +143,6 @@ enum Presence {
 	Hidden,
 }
 
-#[derive(Debug, Clone, Copy)]
 struct RaiseCandidate<'a> {
 	label: &'a str,
 	focus_rank: u64,
