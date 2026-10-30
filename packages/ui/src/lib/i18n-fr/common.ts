@@ -198,19 +198,6 @@ const common = {
 			onlySkills_other: "{{count}} compétences sont prêtes.",
 			continue: "Continuer",
 		},
-		landing: {
-			companions_one: "Tout est prêt. {{companions}} vient de Claude Code.",
-			companions_many: "Tout est prêt. {{companions}} viennent de Claude Code.",
-			companions_other:
-				"Tout est prêt. {{companions}} viennent de Claude Code.",
-			companionsWith_one:
-				"Tout est prêt. {{companions}} vient de Claude Code, avec {{extras}}.",
-			companionsWith_many:
-				"Tout est prêt. {{companions}} viennent de Claude Code, avec {{extras}}.",
-			companionsWith_other:
-				"Tout est prêt. {{companions}} viennent de Claude Code, avec {{extras}}.",
-			extras: "Tout est prêt, avec {{extras}} de Claude Code.",
-		},
 		partlyFailed: {
 			title: "L’essentiel de votre configuration est là",
 			body: "La compétence {{name}} n’a pas été récupérée. Réessayez, ou ajoutez-la plus tard depuis les Réglages.",

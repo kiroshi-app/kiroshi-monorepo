@@ -139,43 +139,4 @@ describe("the runtime", () => {
 			"Messages épinglés, 1000000 épinglés",
 		)
 	})
-
-	it("says what came over from Claude Code on landing, in both languages", () => {
-		expect(
-			i18n.t("common:claudeImport.landing.companionsWith", {
-				companions: "Atlas and Wren",
-				count: 2,
-				extras: "your CLAUDE.md and 4 skills",
-			}),
-		).toBe(
-			"You’re set up. Atlas and Wren came over from Claude Code, with your CLAUDE.md and 4 skills.",
-		)
-		expect(
-			i18n.t("common:claudeImport.landing.companions", {
-				companions: "Atlas",
-				count: 1,
-			}),
-		).toBe("You’re set up. Atlas came over from Claude Code.")
-		expect(
-			i18n.t("common:claudeImport.landing.extras", { extras: "4 skills" }),
-		).toBe("You’re set up, with 4 skills from Claude Code.")
-
-		activateLanguage("fr")
-
-		expect(
-			i18n.t("common:claudeImport.landing.companionsWith", {
-				companions: "Atlas et Wren",
-				count: 2,
-				extras: "votre CLAUDE.md et 4 compétences",
-			}),
-		).toBe(
-			"Tout est prêt. Atlas et Wren viennent de Claude Code, avec votre CLAUDE.md et 4 compétences.",
-		)
-		expect(
-			i18n.t("common:claudeImport.landing.companions", {
-				companions: "Atlas",
-				count: 1,
-			}),
-		).toBe("Tout est prêt. Atlas vient de Claude Code.")
-	})
 })
