@@ -136,14 +136,74 @@ fn closing_on(os: &str, label: &str, has_another_app_window: bool) -> Closing {
 	}
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Presence {
+	Visible,
+	Minimised,
+	Hidden,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct RaiseCandidate<'a> {
+	label: &'a str,
+	focus_rank: u64,
+	presence: Presence,
+}
+
+fn window_to_raise<'a>(candidates: &[RaiseCandidate<'a>]) -> Option<&'a str> {
+	candidates
+		.iter()
+		.filter(|candidate| candidate.presence != Presence::Hidden)
+		.max_by_key(|candidate| (candidate.focus_rank, candidate.label == MAIN_WINDOW))
+		.map(|candidate| candidate.label)
+}
+
+pub fn raise_last_focused<R: Runtime>(app: &AppHandle<R>) {
+	let windows = app.webview_windows();
+	let focus_ranks = secondary::focus_ranks(app);
+	let candidates: Vec<RaiseCandidate> = windows
+		.iter()
+		.filter(|(label, _)| is_app_window(label))
+		.filter_map(|(label, window)| {
+			Some(RaiseCandidate {
+				label,
+				focus_rank: focus_ranks.get(label).copied().unwrap_or(0),
+				presence: presence_of(window)?,
+			})
+		})
+		.collect();
+	match window_to_raise(&candidates).and_then(|label| windows.get(label)) {
+		Some(window) => raise(window),
+		None => raise_main(app),
+	}
+}
+
+fn presence_of<R: Runtime>(window: &WebviewWindow<R>) -> Option<Presence> {
+	let read = || -> tauri::Result<Presence> {
+		if window.is_minimized()? {
+			return Ok(Presence::Minimised);
+		}
+		Ok(if window.is_visible()? { Presence::Visible } else { Presence::Hidden })
+	};
+	read()
+		.inspect_err(|failure| {
+			eprintln!("the state of the window {} could not be read: {failure}", window.label());
+		})
+		.ok()
+}
+
 pub fn raise_main<R: Runtime>(app: &AppHandle<R>) {
 	let Some(window) = app.get_webview_window(MAIN_WINDOW) else {
 		return open_main(app);
 	};
+	raise(&window);
+}
+
+fn raise<R: Runtime>(window: &WebviewWindow<R>) {
 	if let Err(failure) =
 		window.unminimize().and_then(|()| window.show()).and_then(|()| window.set_focus())
 	{
-		eprintln!("the main window was not raised: {failure}");
+		eprintln!("the window {} was not raised: {failure}", window.label());
 	}
 }
 
@@ -219,7 +279,10 @@ fn closed_per_platform<R: Runtime>(window: &WebviewWindow<R>) {
 
 #[cfg(test)]
 mod tests {
-	use super::{closing_on, is_app_window, is_headless, Closing, MAIN_WINDOW};
+	use super::{
+		closing_on, is_app_window, is_headless, window_to_raise, Closing, Presence, RaiseCandidate,
+		MAIN_WINDOW,
+	};
 
 	fn launched_with(args: &[&str]) -> bool {
 		is_headless(args.iter().map(|arg| (*arg).to_owned()))
@@ -270,6 +333,52 @@ mod tests {
 		assert!(is_app_window("window-7"));
 		assert!(!is_app_window("dispatcher"));
 		assert!(!is_app_window("window-"));
+	}
+
+	fn candidate(label: &str, focus_rank: u64, presence: Presence) -> RaiseCandidate<'_> {
+		RaiseCandidate { label, focus_rank, presence }
+	}
+
+	#[test]
+	fn the_last_focused_window_is_raised_when_it_is_visible_or_minimised() {
+		for presence in [Presence::Visible, Presence::Minimised] {
+			let open = [
+				candidate(MAIN_WINDOW, 1, Presence::Visible),
+				candidate("window-1", 3, presence),
+				candidate("window-2", 2, Presence::Visible),
+			];
+			assert_eq!(window_to_raise(&open), Some("window-1"), "{presence:?}");
+		}
+	}
+
+	#[test]
+	fn a_hidden_or_destroyed_last_focused_window_gives_way_to_the_next_most_recently_focused() {
+		let hidden_main = [
+			candidate(MAIN_WINDOW, 3, Presence::Hidden),
+			candidate("window-1", 1, Presence::Visible),
+			candidate("window-2", 2, Presence::Minimised),
+		];
+		let destroyed_last = [
+			candidate(MAIN_WINDOW, 1, Presence::Visible),
+			candidate("window-2", 2, Presence::Visible),
+		];
+		assert_eq!(window_to_raise(&hidden_main), Some("window-2"));
+		assert_eq!(window_to_raise(&destroyed_last), Some("window-2"));
+	}
+
+	#[test]
+	fn with_nothing_but_a_hidden_or_absent_main_window_open_main_is_raised() {
+		assert_eq!(window_to_raise(&[candidate(MAIN_WINDOW, 4, Presence::Hidden)]), None);
+		assert_eq!(window_to_raise(&[]), None);
+	}
+
+	#[test]
+	fn a_window_never_focused_ranks_below_every_focused_one_and_main_wins_among_them() {
+		let open = [
+			candidate("window-1", 0, Presence::Visible),
+			candidate(MAIN_WINDOW, 0, Presence::Visible),
+		];
+		assert_eq!(window_to_raise(&open), Some(MAIN_WINDOW));
 	}
 }
 

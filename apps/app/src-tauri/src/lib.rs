@@ -58,7 +58,7 @@ pub fn run() {
 	tauri::Builder::default()
 		.enable_macos_default_menu(false)
 		.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
-			window_controls::raise_main(app);
+			window_controls::raise_last_focused(app);
 		}))
 		.plugin(tauri_plugin_deep_link::init())
 		.plugin(
@@ -148,7 +148,7 @@ pub fn run() {
 		.run(|app, event| match event {
 			RunEvent::ExitRequested { code: None, api, .. } => api.prevent_exit(),
 			#[cfg(target_os = "macos")]
-			RunEvent::Reopen { .. } => window_controls::raise_main(app),
+			RunEvent::Reopen { .. } => window_controls::raise_last_focused(app),
 			RunEvent::Exit => {
 				if let Err(failure) = badge::wear(app, 0) {
 					eprintln!("the badge was not cleared before exit: {failure}");

@@ -262,7 +262,7 @@ pub(super) fn followed<R: Runtime>(window: &WebviewWindow<R>) {
 
 fn follow<R: Runtime>(window: &WebviewWindow<R>, event: &WindowEvent) {
 	match event {
-		WindowEvent::Focused(true) => {
+		WindowEvent::Focused(true) if is_app_window(window.label()) => {
 			opened_windows(window.app_handle()).registry().focused(window.label());
 		}
 		WindowEvent::Destroyed => {
@@ -272,6 +272,12 @@ fn follow<R: Runtime>(window: &WebviewWindow<R>, event: &WindowEvent) {
 		}
 		_ => {}
 	}
+}
+
+pub(super) fn focus_ranks<R: Runtime>(app: &AppHandle<R>) -> HashMap<String, u64> {
+	let state = opened_windows(app);
+	let registry = state.registry();
+	registry.windows.iter().map(|(label, opened)| (label.clone(), opened.focus_rank)).collect()
 }
 
 fn placed<R: Runtime>(window: &WebviewWindow<R>) -> Option<Placed> {
@@ -427,7 +433,7 @@ mod tests {
 	use tauri::{Listener, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent};
 
 	use super::{
-		at, beside, follow, is_app_page, is_secondary, no_smaller_than_the_minimum,
+		at, beside, focus_ranks, follow, is_app_page, is_secondary, no_smaller_than_the_minimum,
 		secondary_config, secondary_label, work_area_holding, Area, Extent, OpenedWindow, Placed,
 		Placement, Registry, Screen, ScreenPosition, StripTarget, WindowSize,
 	};
@@ -698,6 +704,47 @@ mod tests {
 		assert_eq!(strip_at(&main, 300), Value::Null);
 		assert_eq!(invoked(&gone, "window_identity", json!({}))["spaceId"], Value::Null);
 		assert!(super::opened_windows(app.handle()).registry().windows.is_empty());
+	}
+
+	#[test]
+	fn focusing_main_or_a_secondary_window_records_it_as_the_last_focused() {
+		let app = app();
+		let (main, first) = (window_of(&app, "main"), window_of(&app, "window-1"));
+
+		follow(&first, &WindowEvent::Focused(true));
+		follow(&main, &WindowEvent::Focused(true));
+
+		let ranks = focus_ranks(app.handle());
+		assert!(ranks["main"] > ranks["window-1"], "ranks {ranks:?}");
+	}
+
+	#[test]
+	fn focusing_the_dispatcher_or_the_drag_ghost_leaves_the_focus_record_unchanged() {
+		let app = app();
+		let first = window_of(&app, "window-1");
+		follow(&first, &WindowEvent::Focused(true));
+		let before = focus_ranks(app.handle());
+
+		for label in [
+			crate::host_api::invoke::DISPATCHER_WEBVIEW,
+			crate::window_controls::drag_ghost::DRAG_GHOST,
+		] {
+			follow(&window_of(&app, label), &WindowEvent::Focused(true));
+		}
+
+		assert_eq!(focus_ranks(app.handle()), before);
+	}
+
+	#[test]
+	fn a_destroyed_app_window_drops_out_of_the_focus_record() {
+		let app = app();
+		let (main, gone) = (window_of(&app, "main"), window_of(&app, "window-1"));
+		follow(&main, &WindowEvent::Focused(true));
+		follow(&gone, &WindowEvent::Focused(true));
+
+		follow(&gone, &WindowEvent::Destroyed);
+
+		assert_eq!(focus_ranks(app.handle()).keys().collect::<Vec<_>>(), ["main"]);
 	}
 
 	#[test]
