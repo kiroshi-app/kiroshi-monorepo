@@ -389,6 +389,11 @@ export const ListDark = meta.story({
 
 const LIST_EXISTING_PROFILE: Artboard = {
 	...LIST,
+	items: [{ ...ATLAS, isInKiroshi: true }, WREN, ...FILES],
+	primary: {
+		label: i18n.t("common:claudeImport.select.importItems", { count: 6 }),
+		onPress: fn(),
+	},
 	secondary: {
 		label: i18n.t("common:claudeImport.select.notNow"),
 		onPress: fn(),
@@ -399,10 +404,13 @@ export const ListExistingProfile = meta.story({
 	name: "3.1 List, existing profile",
 	args: LIST_EXISTING_PROFILE,
 	parameters: describe(
-		"An existing profile sees 3.1 List once at start: the same list, with Not now in place of Skip for now.",
+		"An existing profile sees 3.1 List once at start: the same list, with Not now in place of Skip for now. Atlas is already in Kiroshi, and the caller passes an Import label that leaves Atlas out. Check that its checkbox shows checked and disabled.",
 	),
 	play: async ({ canvasElement, args }) => {
 		const canvas = within(canvasElement)
+		const atlas = canvas.getByRole("checkbox", { name: "Atlas" })
+		await expect(atlas).toBeChecked()
+		await expect(atlas).toHaveAttribute("aria-disabled", "true")
 		await expect(
 			canvas.queryByRole("button", {
 				name: i18n.t("common:claudeImport.select.skip"),
@@ -764,15 +772,15 @@ export const AgainFromSettings = meta.story({
 	name: "C08 Again from Settings",
 	args: AGAIN_FROM_SETTINGS,
 	parameters: describe(
-		"Opened from Settings after a first import. Check that every row already in Kiroshi reads so, stays unchecked and cannot be toggled, and that the two new skills share one checked row.",
+		"Opened from Settings after a first import. Check that every row already in Kiroshi reads so, shows its checkbox checked and disabled and cannot be toggled, and that the two new skills share one checked row.",
 	),
 	play: async ({ canvasElement, args }) => {
 		const atlas = within(canvasElement).getByRole("checkbox", {
 			name: "Atlas",
 		})
-		await expect(atlas).not.toBeChecked()
+		await expect(atlas).toBeChecked()
 		await userEvent.click(atlas, { pointerEventsCheck: 0 })
-		await expect(atlas).not.toBeChecked()
+		await expect(atlas).toBeChecked()
 		await expect(toggleOf(args)).not.toHaveBeenCalled()
 		const newSkills = within(canvasElement).getByRole("checkbox", {
 			name: "2 new skills",

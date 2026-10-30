@@ -93,7 +93,7 @@ const ImportRow = ({
 				) : (
 					<Checkbox
 						aria-labelledby={titleId}
-						checked={checked && !isInKiroshi}
+						checked={checked || isInKiroshi}
 						className="size-4.5 transition-none data-disabled:opacity-50"
 						disabled={isInKiroshi}
 						onCheckedChange={(next) => onCheckedChange?.(next)}

@@ -18,7 +18,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"One thing found in ~/.claude on the Import from Claude Code screen: a companion, the CLAUDE.md instructions or a skill. While the reader picks, the lead slot holds a checkbox named after the row title; once the import runs it holds a status icon instead, labelled done, in progress or failed. A row already in Kiroshi keeps its checkbox unchecked and disabled, and reads Already in Kiroshi. Every row names its type at the right edge: Agent, Instructions or Skills.",
+					"One thing found in ~/.claude on the Import from Claude Code screen: a companion, the CLAUDE.md instructions or a skill. While the reader picks, the lead slot holds a checkbox named after the row title; once the import runs it holds a status icon instead, labelled done, in progress or failed. A row already in Kiroshi shows its checkbox checked and disabled whatever `checked` says, and reads Already in Kiroshi. Every row names its type at the right edge: Agent, Instructions or Skills.",
 			},
 		},
 	},
@@ -68,6 +68,7 @@ export const States = meta.story({
 			/>
 			<ImportRow
 				{...args}
+				checked={false}
 				detail="Your standing instructions, 42 lines. Kept as yours, for every companion."
 				isInKiroshi
 				kind="instructions"
@@ -108,16 +109,20 @@ export const States = meta.story({
 		docs: {
 			description: {
 				story:
-					"Every lead the row takes, top to bottom: checked, unchecked, the CLAUDE.md row in Geist Mono already in Kiroshi, the skills on one row titled with their count, then done, in progress and failed once the import runs. Check that the row already in Kiroshi stays unchecked when clicked, that each status icon carries its label, and that every row, failed and already in Kiroshi included, keeps its type at the right edge.",
+					"Every lead the row takes, top to bottom: checked, unchecked, the CLAUDE.md row in Geist Mono already in Kiroshi, the skills on one row titled with their count, then done, in progress and failed once the import runs. Check that the row already in Kiroshi shows its checkbox checked and disabled, with the accent fill and the check mark although its `checked` prop is false, and that neither a click nor Space changes it, that each status icon carries its label, and that every row, failed and already in Kiroshi included, keeps its type at the right edge.",
 			},
 		},
 	},
 	play: async ({ canvasElement, args }) => {
 		const canvas = within(canvasElement)
 		const alreadyIn = canvas.getByRole("checkbox", { name: "CLAUDE.md" })
-		await expect(alreadyIn).not.toBeChecked()
+		await expect(alreadyIn).toBeChecked()
+		await expect(alreadyIn).toHaveAttribute("data-checked")
+		await expect(alreadyIn).toHaveAttribute("aria-disabled", "true")
 		await userEvent.click(alreadyIn, { pointerEventsCheck: 0 })
-		await expect(alreadyIn).not.toBeChecked()
+		alreadyIn.focus()
+		await userEvent.keyboard(" ")
+		await expect(alreadyIn).toBeChecked()
 		await expect(args.onCheckedChange).not.toHaveBeenCalled()
 		await expect(canvas.getByText("Already in Kiroshi.")).toBeVisible()
 		await expect(canvas.getByRole("img", { name: "Done" })).toBeVisible()
@@ -127,6 +132,20 @@ export const States = meta.story({
 		await expect(canvas.getByText("Instructions")).toBeVisible()
 		await expect(canvas.getAllByText("Skills")).toHaveLength(2)
 	},
+})
+
+export const StatesDark = meta.story({
+	globals: { theme: "dark" },
+	render: States.input.render,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"States on the dark scheme. Check that the row already in Kiroshi still shows its checkbox checked and disabled.",
+			},
+		},
+	},
+	play: States.input.play,
 })
 
 export const LongContent = meta.story({
