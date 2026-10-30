@@ -153,10 +153,12 @@ describe("the landing scene", () => {
 
 	it("draws no Change space dot while the selected Space alone waits on the reader", () => {
 		renderRailOf(withoutMissionsIn(PERSONAL.id), WORK)
+		const changeSpace = screen.getByRole("button", {
+			name: `Change space, ${WORK.name} open`,
+		})
 
-		expect(
-			screen.getByRole("button", { name: `Change space, ${WORK.name} open` }),
-		).not.toBeNull()
+		expect(changeSpace).not.toBeNull()
+		expect(railDotOn(changeSpace)).toBeNull()
 	})
 
 	it("opens several tabs, the active one on the conversation shown", () => {
