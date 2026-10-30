@@ -987,7 +987,6 @@ const chat = {
 		},
 	},
 	onboarding: {
-		step: "{{step}} sur {{total}}",
 		welcome: {
 			header: "Configuration",
 			question: "Prêt à commencer ?",
@@ -1081,6 +1080,8 @@ const chat = {
 			back: "Retour",
 			next: "Suivant",
 			getStarted: "Commencer",
+			progress: "Progression de l’intro",
+			position: "Étape {{step}} sur {{total}}",
 			companions: {
 				title: "Des compagnons travaillent avec vous",
 				body: "Chaque compagnon a un nom, un métier et sa propre mémoire. Confiez-lui quelque chose et il s’y tient, sur votre ordinateur.",

@@ -261,20 +261,26 @@ const OnboardingWelcomeScreen = ({
 	const position = STEPS.indexOf(step) + 1
 
 	return (
-		<OnboardingShell
-			className="gap-10"
-			data-step={step}
-			data-slot="onboarding-welcome-screen"
-		>
-			<Illustration />
-			<OnboardingHeading
-				body={t(`onboarding.intro.${step}.body`)}
-				title={t(`onboarding.intro.${step}.title`)}
-				variant="welcome"
-			/>
+		<OnboardingShell data-step={step} data-slot="onboarding-welcome-screen">
+			<div
+				className="flex min-h-82 w-full items-end justify-center"
+				data-slot="onboarding-welcome-visual"
+			>
+				<Illustration />
+			</div>
+			<div
+				className="flex min-h-35 w-full justify-center pt-10"
+				data-slot="onboarding-welcome-text"
+			>
+				<OnboardingHeading
+					body={t(`onboarding.intro.${step}.body`)}
+					title={t(`onboarding.intro.${step}.title`)}
+					variant="welcome"
+				/>
+			</div>
 			<OnboardingWelcomeFooter
-				onAction={onNext}
 				onBack={onBack}
+				onNext={onNext}
 				onSkip={onSkip}
 				step={position}
 				total={STEPS.length}

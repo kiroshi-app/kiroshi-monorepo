@@ -70,7 +70,7 @@ type OnboardingButtonProps = Omit<
 	ComponentProps<typeof Button>,
 	"variant" | "size"
 > & {
-	variant?: "default" | "outline"
+	variant?: "default" | "outline" | "ghost"
 }
 
 const OnboardingButton = ({ className, ...props }: OnboardingButtonProps) => (

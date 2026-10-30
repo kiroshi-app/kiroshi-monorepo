@@ -1,4 +1,5 @@
-import { expect, fn, within } from "storybook/test"
+import { useState } from "react"
+import { expect, fn, userEvent, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
@@ -6,90 +7,243 @@ import {
 	expectNoHorizontalScrollAt,
 	expectOnboardingDragStrip,
 	hueScopeOf,
+	resolvedRootColor,
 	slotIn,
 	slotsIn,
 	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
 import { OnboardingShell } from "@workspace/ui/components/onboarding-shell"
 import { OnboardingWelcomeFooter } from "@workspace/ui/components/onboarding-welcome-footer"
-import { OnboardingWelcomeScreen } from "@workspace/ui/components/onboarding-welcome-screen"
+import {
+	OnboardingWelcomeScreen,
+	type OnboardingWelcomeScreenProps,
+	type OnboardingWelcomeStep,
+} from "@workspace/ui/components/onboarding-welcome-screen"
 import { DEFAULT_LANGUAGE, i18n } from "@workspace/ui/lib/i18n"
 
 const ARTBOARD =
-	"Measured against the Paper file `Kiroshi, Onboarding v2`, pages `With Claude Code` and `Without Claude Code`, which draw the Welcome screens alike, 1200 by 760, in a blue Space. The footer group under the heading and its Back button follow OPE-1561, not the artboards, which draw a bottom bar and no Back."
+	"Measured against the Paper file `Kiroshi, Onboarding v2`, page `Welcome · Bottom row directions`, artboards `M · K, stepper below`, 1200 by 760: a visual zone as tall as the tallest illustration, French included, and a text zone 140 tall, then the stepper and one action, centred on the paragraph."
 
-const WIDE_WINDOW = 1779
+const ARTBOARD_WIDTH = 1200
 
-const GROUP_GAP = 32
+const VISUAL_ZONE_HEIGHT = 328
 
-type BackPlayContext = {
-	canvasElement: HTMLElement
-	onBack: () => void
-}
+const TEXT_ZONE_HEIGHT = 140
+
+const SLIDES: OnboardingWelcomeStep[] = [
+	"companions",
+	"conversations",
+	"spaces",
+	"tools",
+]
 
 type WelcomePlayContext = {
 	canvasElement: HTMLElement
 	title: string
-	action: string
-	step: string
 	current: number
 }
+
+const footerOf = (canvasElement: HTMLElement) =>
+	slotIn(canvasElement, "onboarding-welcome-footer")
+
+const actionOf = (canvasElement: HTMLElement) =>
+	footerOf(canvasElement).lastElementChild as HTMLElement
+
+const centreOf = (element: Element) => {
+	const { left, width } = element.getBoundingClientRect()
+	return left + width / 2
+}
+
+const atArtboardWidth = async (
+	canvasElement: HTMLElement,
+	run: () => Promise<void>,
+) => {
+	const previousWidth = canvasElement.style.width
+	canvasElement.style.width = `${ARTBOARD_WIDTH}px`
+	try {
+		await run()
+	} finally {
+		canvasElement.style.width = previousWidth
+	}
+}
+
+const expectRowOnParagraphAxis = (canvasElement: HTMLElement) =>
+	atArtboardWidth(canvasElement, async () => {
+		const axis = centreOf(
+			within(canvasElement).getByRole("heading", { level: 1 })
+				.parentElement as HTMLElement,
+		)
+
+		await expect(
+			centreOf(slotIn(canvasElement, "onboarding-welcome-stepper")),
+		).toBeCloseTo(axis, 0)
+		await expect(centreOf(actionOf(canvasElement))).toBeCloseTo(axis, 0)
+	})
 
 const expectWelcome = async ({
 	canvasElement,
 	title,
-	action,
-	step,
 	current,
 }: WelcomePlayContext) => {
 	const canvas = within(canvasElement)
-	const footer = slotIn(canvasElement, "onboarding-welcome-footer")
-	const dots = slotsIn(footer, "onboarding-step-dot")
-	const primary = canvas.getByRole("button", { name: action })
+	const progress = canvas.getByRole("progressbar", { name: "Intro progress" })
+	const controls = [
+		canvas.getByRole("button", { name: "Back" }),
+		canvas.getByRole("button", { name: "Next" }),
+		actionOf(canvasElement),
+	]
 
 	await expect(
 		canvas.getByRole("heading", { level: 1, name: title }),
 	).toBeVisible()
-	await expect(primary).toBeVisible()
-	await withMotionAllowed(() =>
-		expect(getComputedStyle(primary).transitionDuration).toBe("0s"),
+	await expect(progress).toHaveAttribute("aria-valuenow", String(current))
+	await expect(progress).toHaveAttribute("aria-valuemax", "4")
+	await expect(progress).toHaveAttribute(
+		"aria-valuetext",
+		`Step ${current} of 4`,
 	)
-	await expect(within(footer).getByText(step)).toBeVisible()
-	await expect(dots[0]?.parentElement).toHaveAttribute("aria-hidden", "true")
-	await expect(dots.map((dot) => dot.getBoundingClientRect().width)).toEqual(
-		[1, 2, 3, 4].map((dot) => (dot === current ? 18 : 6)),
-	)
-	await expectGroupUnderHeading(canvasElement)
+	await expect(
+		slotsIn(progress, "onboarding-step-segment").map(
+			(segment) => segment.dataset.filled,
+		),
+	).toEqual([1, 2, 3, 4].map((segment) => String(segment <= current)))
+	await expect(canvas.queryByText(/\bof 4\b/)).not.toBeInTheDocument()
+	await expect(
+		getComputedStyle(actionOf(canvasElement)).textDecorationLine,
+	).toBe("none")
+	await withMotionAllowed(async () => {
+		for (const control of controls) {
+			await expect(colourTransitionsOf(control)).toEqual([])
+		}
+	})
+	for (const control of controls) {
+		control.focus({ focusVisible: true } as FocusOptions)
+		await expect(control).toHaveFocus()
+		await expect(getComputedStyle(control).boxShadow).toMatch(/\b3px\b/)
+	}
+	await expectRowOnParagraphAxis(canvasElement)
 	await expectNoHorizontalScrollAt(canvasElement, 320, "onboarding-shell")
 }
 
-const expectGroupUnderHeading = async (canvasElement: HTMLElement) => {
-	const previousWidth = canvasElement.style.width
-	canvasElement.style.width = `${WIDE_WINDOW}px`
-	try {
-		const footer = slotIn(canvasElement, "onboarding-welcome-footer")
-		const heading = within(canvasElement).getByRole("heading", { level: 1 })
-			.parentElement as HTMLElement
-		const group = footer.getBoundingClientRect()
-		const column = heading.getBoundingClientRect()
-		const parts = [...footer.children].map((part) =>
-			part.getBoundingClientRect(),
-		)
+type ArrowPlayContext = {
+	canvasElement: HTMLElement
+	name: string
+	isDisabled: boolean
+	onPress: () => void
+}
 
-		await expect(heading.nextElementSibling).toBe(footer)
-		await expect(group.top - column.bottom).toBe(40)
-		await expect(group.left + group.width / 2).toBeCloseTo(
-			column.left + column.width / 2,
-			0,
-		)
-		await expect(group.width).toBeCloseTo(
-			parts.reduce((sum, part) => sum + part.width, 0) +
-				GROUP_GAP * (parts.length - 1),
-			0,
-		)
-	} finally {
-		canvasElement.style.width = previousWidth
+const expectArrow = async ({
+	canvasElement,
+	name,
+	isDisabled,
+	onPress,
+}: ArrowPlayContext) => {
+	const arrow = within(canvasElement).getByRole("button", { name })
+
+	await expect(arrow.tabIndex).toBe(0)
+	if (isDisabled) {
+		await expect(arrow).toHaveAttribute("aria-disabled", "true")
+		await expect(getComputedStyle(arrow).opacity).toBe("0.35")
+		await userEvent.click(arrow, { pointerEventsCheck: 0 })
+		await expect(onPress).not.toHaveBeenCalled()
+		return
 	}
+	await expect(arrow).not.toHaveAttribute("aria-disabled", "true")
+	await userEvent.click(arrow)
+	await expect(onPress).toHaveBeenCalledOnce()
+}
+
+type ArrowsPlayContext = {
+	canvasElement: HTMLElement
+	args: Pick<OnboardingWelcomeScreenProps, "onBack" | "onNext">
+	current: number
+}
+
+const expectArrows = async ({
+	canvasElement,
+	args,
+	current,
+}: ArrowsPlayContext) => {
+	await expectArrow({
+		canvasElement,
+		name: "Back",
+		isDisabled: current === 1,
+		onPress: args.onBack,
+	})
+	await expectArrow({
+		canvasElement,
+		name: "Next",
+		isDisabled: current === SLIDES.length,
+		onPress: args.onNext,
+	})
+}
+
+type WalkProps = Omit<
+	OnboardingWelcomeScreenProps,
+	"step" | "onBack" | "onNext"
+>
+
+const WelcomeWalk = (props: WalkProps) => {
+	const [index, setIndex] = useState(0)
+
+	return (
+		<OnboardingWelcomeScreen
+			{...props}
+			onBack={() => setIndex((previous) => Math.max(previous - 1, 0))}
+			onNext={() =>
+				setIndex((previous) => Math.min(previous + 1, SLIDES.length - 1))
+			}
+			step={SLIDES[index] ?? "companions"}
+		/>
+	)
+}
+
+type RowTops = { stepper: number; action: number }
+
+const expectRowFixedAcrossTheWalk = (
+	canvasElement: HTMLElement,
+	next: string,
+) =>
+	atArtboardWidth(canvasElement, async () => {
+		const screen = slotIn(canvasElement, "onboarding-welcome-screen")
+		const tops: RowTops[] = []
+
+		for (const [index, slide] of SLIDES.entries()) {
+			await waitFor(() => expect(screen).toHaveAttribute("data-step", slide))
+			await expect(
+				[
+					slotIn(canvasElement, "onboarding-welcome-visual"),
+					slotIn(canvasElement, "onboarding-welcome-text"),
+				].map((zone) => zone.getBoundingClientRect().height),
+			).toEqual([VISUAL_ZONE_HEIGHT, TEXT_ZONE_HEIGHT])
+			tops.push({
+				stepper: slotIn(
+					canvasElement,
+					"onboarding-welcome-stepper",
+				).getBoundingClientRect().top,
+				action: actionOf(canvasElement).getBoundingClientRect().top,
+			})
+			if (index < SLIDES.length - 1) {
+				await userEvent.click(
+					within(canvasElement).getByRole("button", { name: next }),
+				)
+			}
+		}
+
+		const [first] = tops
+		for (const { stepper, action } of tops) {
+			await expect(
+				Math.abs(stepper - (first?.stepper ?? 0)),
+			).toBeLessThanOrEqual(1)
+			await expect(Math.abs(action - (first?.action ?? 0))).toBeLessThanOrEqual(
+				1,
+			)
+		}
+	})
+
+const inFrench = async () => {
+	await i18n.changeLanguage("fr")
+	return () => i18n.changeLanguage(DEFAULT_LANGUAGE)
 }
 
 const COMPANION_ROLES = [
@@ -225,41 +379,6 @@ const expectWrappedCompanionRole = async (canvasElement: HTMLElement) => {
 	}
 }
 
-const expectBackHidden = async (canvasElement: HTMLElement) => {
-	const back = slotIn(canvasElement, "onboarding-welcome-back")
-
-	await expect(
-		within(canvasElement).queryByRole("button", { name: "Back" }),
-	).not.toBeInTheDocument()
-	await expect(getComputedStyle(back).visibility).toBe("hidden")
-	await expect(back.getBoundingClientRect().width).toBeGreaterThan(0)
-}
-
-const expectBack = async ({ canvasElement, onBack }: BackPlayContext) => {
-	const canvas = within(canvasElement)
-	const back = canvas.getByRole("button", { name: "Back" })
-	const primary = slotIn(canvasElement, "onboarding-welcome-back")
-		.nextElementSibling as HTMLElement
-
-	await expect(back.getBoundingClientRect().height).toBe(
-		primary.getBoundingClientRect().height,
-	)
-	await expect(getComputedStyle(back).borderRadius).toBe(
-		getComputedStyle(primary).borderRadius,
-	)
-	await expect(getComputedStyle(back).backgroundColor).not.toBe(
-		getComputedStyle(primary).backgroundColor,
-	)
-	await withMotionAllowed(() => expect(colourTransitionsOf(back)).toEqual([]))
-
-	back.focus({ focusVisible: true } as FocusOptions)
-	await expect(back).toHaveFocus()
-	await expect(getComputedStyle(back).boxShadow).toMatch(/\b3px\b/)
-
-	back.click()
-	await expect(onBack).toHaveBeenCalledOnce()
-}
-
 const meta = preview.meta({
 	afterEach: ({ canvasElement }) => expectOnboardingDragStrip(canvasElement),
 	title: "Feedback/OnboardingWelcomeScreen",
@@ -277,7 +396,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The four Welcome screens a reader meets before connecting a model provider: an illustration, a title, a body and one footer group in one centred column on the onboarding shell. The group sits under the heading and moves with it, spans its own content only, and holds Skip intro, the step dots with the step count, Back and the primary action. The current dot is the wide one; the dots are hidden from assistive technology, which reads the step count instead. On the first step Back keeps its slot but is gone from sight, from assistive technology and from the tab order; on the last step Skip intro does the same, and the action reads Get started. Back is an outline pill as tall as the primary action, which wears the Space colour.",
+					"The four Welcome screens a reader meets before connecting a model provider, in one centred column on the onboarding shell: a visual zone and a text zone of one fixed height on every slide, then the stepper and one action, centred on the paragraph and at the same height on every slide. The stepper holds Back, four segments filled up to the current slide, and Next; the segments read as one progress bar, Step 2 of 4. Back is disabled on the first slide and Next on the last, both still in the tab order. The action is Skip intro as plain text on the first three slides and Get started on the last. Segments, Next and Get started wear the Kiroshi primary, whatever the Space colour.",
 			},
 		},
 	},
@@ -294,16 +413,14 @@ export const WelcomeCompanionsLight = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${ARTBOARD} Artboard 1.1: three companions on bot avatars, 96, 132 and 96, the middle one lifted. Check the names, each job on the roster title pill centred under its name, the first dot wide, 1 of 4, Back gone with its slot kept, and Next calling back. Pick the Dark twin for the other theme.`,
+				story: `${ARTBOARD} Slide 1: three companions on bot avatars, 96, 132 and 96, the middle one lifted. Check the first segment filled, Back disabled and faded, Next filled in the primary, and Skip intro as plain muted text. Pick the Dark twin for the other theme.`,
 			},
 		},
 	},
-	play: async ({ args, canvas, canvasElement, userEvent }) => {
+	play: async ({ args, canvas, canvasElement }) => {
 		await expectWelcome({
 			canvasElement,
 			title: "Companions do the work with you",
-			action: "Next",
-			step: "1 of 4",
 			current: 1,
 		})
 		await expect(
@@ -312,14 +429,16 @@ export const WelcomeCompanionsLight = meta.story({
 			),
 		).toEqual([96, 132, 96])
 		await expectCompanionRoles(canvasElement)
-		await expectBackHidden(canvasElement)
+		await expectArrows({ canvasElement, args, current: 1 })
 
-		await userEvent.tab()
+		canvas.getByRole("button", { name: "Back" }).focus()
 		await userEvent.tab()
 		await expect(canvas.getByRole("button", { name: "Next" })).toHaveFocus()
+		await userEvent.tab()
+		await expect(
+			canvas.getByRole("button", { name: "Skip intro" }),
+		).toHaveFocus()
 
-		await userEvent.click(canvas.getByRole("button", { name: "Next" }))
-		await expect(args.onNext).toHaveBeenCalledOnce()
 		await userEvent.click(canvas.getByRole("button", { name: "Skip intro" }))
 		await expect(args.onSkip).toHaveBeenCalledOnce()
 	},
@@ -332,20 +451,18 @@ export const WelcomeCompanionsDark = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${ARTBOARD} Artboard 1.1, dark. Check the same layout on the dark page, the job pills legible on it, the wide dot in the foreground colour, Back gone. Pick the Light twin for the other theme.`,
+				story: `${ARTBOARD} Slide 1, dark. Check the job pills legible on the dark page, the first segment and Next in the dark primary, Back faded. Pick the Light twin for the other theme.`,
 			},
 		},
 	},
-	play: async ({ canvasElement }) => {
+	play: async ({ args, canvasElement }) => {
 		await expectWelcome({
 			canvasElement,
 			title: "Companions do the work with you",
-			action: "Next",
-			step: "1 of 4",
 			current: 1,
 		})
 		await expectCompanionRoles(canvasElement)
-		await expectBackHidden(canvasElement)
+		await expectArrows({ canvasElement, args, current: 1 })
 	},
 })
 
@@ -353,10 +470,7 @@ export const WelcomeCompanionsFrench = meta.story({
 	name: "Welcome / Companions / French",
 	tags: ["test-only"],
 	args: { step: "companions" },
-	beforeEach: async () => {
-		await i18n.changeLanguage("fr")
-		return () => i18n.changeLanguage(DEFAULT_LANGUAGE)
-	},
+	beforeEach: inFrench,
 	parameters: {
 		docs: {
 			description: {
@@ -424,29 +538,18 @@ export const WelcomeConversationsLight = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${ARTBOARD} Artboard 1.2: a group Conversation card, the person's bubble in the Space colour and the reply on muted, then a mission row with its Working pill. Check the second dot wide, 2 of 4, and Back as an outline pill calling back. Pick the Dark twin for the other theme.`,
+				story: `${ARTBOARD} Slide 2: a group Conversation card, the person's bubble in the Space colour and the reply on muted, then a mission row with its Working pill. Check two segments filled, Back as an outline circle calling back, and Next calling forward. Pick the Dark twin for the other theme.`,
 			},
 		},
 	},
-	play: async ({ args, canvas, canvasElement, userEvent }) => {
+	play: async ({ args, canvas, canvasElement }) => {
 		await expectWelcome({
 			canvasElement,
 			title: "Conversations, then missions",
-			action: "Next",
-			step: "2 of 4",
 			current: 2,
 		})
 		await expect(canvas.getByText("Release notes for 2.4")).toBeVisible()
-
-		await userEvent.tab()
-		const skip = canvas.getByRole("button", { name: "Skip intro" })
-		await expect(skip).toHaveFocus()
-		await expect(getComputedStyle(skip).boxShadow).toMatch(/\b3px\b/)
-		await userEvent.tab()
-		await expect(canvas.getByRole("button", { name: "Back" })).toHaveFocus()
-
-		await expectBack({ canvasElement, onBack: args.onBack })
-		await expect(args.onNext).not.toHaveBeenCalled()
+		await expectArrows({ canvasElement, args, current: 2 })
 	},
 })
 
@@ -457,7 +560,7 @@ export const WelcomeConversationsDark = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${ARTBOARD} Artboard 1.2, dark. Check the cards on the dark card surface, the bubble in the Space colour's dark tone, and Back with its focus ring on the dark page. Pick the Light twin for the other theme.`,
+				story: `${ARTBOARD} Slide 2, dark. Check the cards on the dark card surface, Back's outline on the dark page, and two segments in the dark primary. Pick the Light twin for the other theme.`,
 			},
 		},
 	},
@@ -465,24 +568,11 @@ export const WelcomeConversationsDark = meta.story({
 		await expectWelcome({
 			canvasElement,
 			title: "Conversations, then missions",
-			action: "Next",
-			step: "2 of 4",
 			current: 2,
 		})
-		await expectBack({ canvasElement, onBack: args.onBack })
+		await expectArrows({ canvasElement, args, current: 2 })
 	},
 })
-
-const expectLastStep = async (canvasElement: HTMLElement) => {
-	const canvas = within(canvasElement)
-	await expect(
-		canvas.queryByRole("button", { name: "Skip intro" }),
-	).not.toBeInTheDocument()
-	await expect(
-		getComputedStyle(slotIn(canvasElement, "onboarding-welcome-skip"))
-			.visibility,
-	).toBe("hidden")
-}
 
 export const WelcomeSpacesLight = meta.story({
 	name: "Welcome / Spaces / Light",
@@ -491,30 +581,21 @@ export const WelcomeSpacesLight = meta.story({
 		docs: {
 			description: {
 				story:
-					"No artboard draws this slide: it takes the anatomy of the others. Two Space cards, Orbit web and Newsletter, each with its Space avatar, its companions and its Conversation count. Check the Space avatars in two colours, the third dot wide, 3 of 4, Skip intro and Back as on the Conversations slide, and Next calling forward. Pick the Dark twin for the other theme.",
+					"No artboard draws this slide: it takes the anatomy of the others. Two Space cards, Orbit web and Newsletter, each with its Space avatar, its companions and its Conversation count. Check the Space avatars in two colours, three segments filled, and Skip intro still in place. Pick the Dark twin for the other theme.",
 			},
 		},
 	},
-	play: async ({ args, canvas, canvasElement, userEvent }) => {
+	play: async ({ args, canvas, canvasElement }) => {
 		await expectWelcome({
 			canvasElement,
 			title: "Spaces keep things apart",
-			action: "Next",
-			step: "3 of 4",
 			current: 3,
 		})
 		await expect(slotsIn(canvasElement, "space-avatar")).toHaveLength(2)
+		await expectArrows({ canvasElement, args, current: 3 })
 
-		await userEvent.tab()
-		await expect(
-			canvas.getByRole("button", { name: "Skip intro" }),
-		).toHaveFocus()
-		await userEvent.tab()
-		await expect(canvas.getByRole("button", { name: "Back" })).toHaveFocus()
-
-		await userEvent.click(canvas.getByRole("button", { name: "Next" }))
-		await expect(args.onNext).toHaveBeenCalledOnce()
-		await expectBack({ canvasElement, onBack: args.onBack })
+		await userEvent.click(canvas.getByRole("button", { name: "Skip intro" }))
+		await expect(args.onSkip).toHaveBeenCalledOnce()
 	},
 })
 
@@ -526,7 +607,7 @@ export const WelcomeSpacesDark = meta.story({
 		docs: {
 			description: {
 				story:
-					"The Spaces slide, dark. Check the cards on the dark card surface, both Space avatars in their dark tone, the third dot wide, 3 of 4, and Back with its focus ring on the dark page. Pick the Light twin for the other theme.",
+					"The Spaces slide, dark. Check both Space avatars in their dark tone and three segments in the dark primary. Pick the Light twin for the other theme.",
 			},
 		},
 	},
@@ -534,11 +615,9 @@ export const WelcomeSpacesDark = meta.story({
 		await expectWelcome({
 			canvasElement,
 			title: "Spaces keep things apart",
-			action: "Next",
-			step: "3 of 4",
 			current: 3,
 		})
-		await expectBack({ canvasElement, onBack: args.onBack })
+		await expectArrows({ canvasElement, args, current: 3 })
 	},
 })
 
@@ -548,20 +627,20 @@ export const WelcomeYourToolsLight = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${ARTBOARD} Artboard 1.3: three equal cards, Folders, Applications and Secrets. Check Skip intro gone from sight and from assistive technology with its slot kept, the fourth dot wide, 4 of 4, Back calling back and Get started. Pick the Dark twin for the other theme.`,
+				story: `${ARTBOARD} Slide 4: three equal cards, Folders, Applications and Secrets. Check every segment filled, Next disabled on a faded muted fill, and Get started in the primary where Skip intro stood. Pick the Dark twin for the other theme.`,
 			},
 		},
 	},
-	play: async ({ args, canvas, canvasElement, userEvent }) => {
+	play: async ({ args, canvas, canvasElement }) => {
 		await expectWelcome({
 			canvasElement,
 			title: "Your tools, where you allow them",
-			action: "Get started",
-			step: "4 of 4",
 			current: 4,
 		})
-		await expectLastStep(canvasElement)
-		await expectBack({ canvasElement, onBack: args.onBack })
+		await expect(
+			canvas.queryByRole("button", { name: "Skip intro" }),
+		).not.toBeInTheDocument()
+		await expectArrows({ canvasElement, args, current: 4 })
 
 		await userEvent.click(canvas.getByRole("button", { name: "Get started" }))
 		await expect(args.onNext).toHaveBeenCalledOnce()
@@ -575,20 +654,20 @@ export const WelcomeYourToolsDark = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${ARTBOARD} Artboard 1.3, dark. Check the cards and their muted tiles on the dark page, and Back. Pick the Light twin for the other theme.`,
+				story: `${ARTBOARD} Slide 4, dark. Check the cards and their muted tiles on the dark page, Next faded, and Get started in the dark primary. Pick the Light twin for the other theme.`,
 			},
 		},
 	},
-	play: async ({ args, canvasElement }) => {
+	play: async ({ args, canvas, canvasElement }) => {
 		await expectWelcome({
 			canvasElement,
 			title: "Your tools, where you allow them",
-			action: "Get started",
-			step: "4 of 4",
 			current: 4,
 		})
-		await expectLastStep(canvasElement)
-		await expectBack({ canvasElement, onBack: args.onBack })
+		await expectArrows({ canvasElement, args, current: 4 })
+		await expect(
+			canvas.getByRole("button", { name: "Get started" }),
+		).toBeVisible()
 	},
 })
 
@@ -596,33 +675,76 @@ export const WelcomeEverySlide = meta.story({
 	name: "Welcome / Every slide",
 	tags: ["test-only"],
 	args: { step: "companions" },
-	render: (args) => (
-		<>
-			<OnboardingWelcomeScreen {...args} step="companions" />
-			<OnboardingWelcomeScreen {...args} step="conversations" />
-			<OnboardingWelcomeScreen {...args} step="spaces" />
-			<OnboardingWelcomeScreen {...args} step="tools" />
-		</>
-	),
+	render: (args) => <WelcomeWalk onSkip={args.onSkip} />,
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The four Welcome slides stacked in one window. Check the footer group at the same left edge and the same width on all four, Get started included: Back keeps its slot on the first slide, Skip intro on the last, and the primary action is as wide as its longer label on every slide.",
+					"The four slides walked with Next in an artboard-wide window. Check the visual and text zones at one height on every slide, and the stepper and the action at the same height on all four.",
 			},
 		},
 	},
-	play: async ({ canvasElement }) => {
-		const groups = slotsIn(canvasElement, "onboarding-welcome-footer").map(
-			(group) => group.getBoundingClientRect(),
-		)
+	play: ({ canvasElement }) =>
+		expectRowFixedAcrossTheWalk(canvasElement, "Next"),
+})
 
-		await expect(groups).toHaveLength(4)
-		await expect(groups.map(({ left, width }) => ({ left, width }))).toEqual(
-			groups.map(() => ({ left: groups[0]?.left, width: groups[0]?.width })),
+export const WelcomeEverySlideFrench = meta.story({
+	name: "Welcome / Every slide / French",
+	tags: ["test-only"],
+	args: { step: "companions" },
+	beforeEach: inFrench,
+	render: (args) => <WelcomeWalk onSkip={args.onSkip} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The four slides walked in French, whose bodies run longer. Check every body whole inside the text zone and the stepper and the action at the same height on all four.",
+			},
+		},
+	},
+	play: ({ canvasElement }) =>
+		expectRowFixedAcrossTheWalk(canvasElement, "Suivant"),
+})
+
+export const WelcomeInAnOrangeSpace = meta.story({
+	name: "Welcome / In an orange Space",
+	tags: ["test-only"],
+	args: { step: "companions" },
+	decorators: [
+		(Story) => (
+			<div {...hueScopeOf("orange")}>
+				<Story />
+			</div>
+		),
+	],
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The first slide under an orange Space. Check the filled segment and Next in the Kiroshi primary, not in the Space colour.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const fixedPrimary = resolvedRootColor("--primary")
+		const spaceScope = slotIn(canvasElement, "onboarding-shell")
+			.parentElement as HTMLElement
+		const spacePrimary = getComputedStyle(spaceScope)
+			.getPropertyValue("--color-primary")
+			.trim()
+		const [filled] = slotsIn(canvasElement, "onboarding-step-segment")
+
+		await expect(spacePrimary).not.toBe(
+			getComputedStyle(document.documentElement)
+				.getPropertyValue("--primary")
+				.trim(),
 		)
 		await expect(
-			within(canvasElement).getByRole("button", { name: "Get started" }),
-		).toBeVisible()
+			getComputedStyle(canvas.getByRole("button", { name: "Next" }))
+				.backgroundColor,
+		).toBe(fixedPrimary)
+		await expect(getComputedStyle(filled as HTMLElement).backgroundColor).toBe(
+			fixedPrimary,
+		)
 	},
 })
