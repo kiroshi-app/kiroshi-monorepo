@@ -4,14 +4,18 @@ import { cleanup, render } from "@testing-library/react"
 import { createElement, type ReactElement } from "react"
 import { afterEach, describe, expect, it } from "vitest"
 
-import { Icons } from "@workspace/ui/components/icons"
+import {
+	type ConversationIconName,
+	ConversationIcons,
+	Icons,
+} from "@workspace/ui/components/icons"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { type TabFaceSources, tabFaceOf } from "./tab-faces"
 
 const NOVA = { id: "nova", name: "Nova" }
 
-const ROOM = { id: "room", name: "Round table", color: null }
+const ROOM = { id: "room", name: "Round table", icon: "Bug" }
 
 const SOURCES: TabFaceSources = {
 	bots: [NOVA],
@@ -22,46 +26,60 @@ const SOURCES: TabFaceSources = {
 const markupOf = (icon: unknown) =>
 	render(icon as ReactElement).container.innerHTML
 
-const subjectIconIn = (icon: unknown) =>
-	render(icon as ReactElement).container.querySelector(
-		'[data-slot="conversation-subject-icon"]',
-	)
+const rootOf = (icon: unknown) =>
+	render(icon as ReactElement).container.firstElementChild as HTMLElement
+
+const glyphMarkupOf = (name: ConversationIconName) => {
+	const markup = markupOf(createElement(ConversationIcons[name]))
+	cleanup()
+	return markup
+}
+
+const roomFaceWith = (icon: string | undefined) =>
+	tabFaceOf("/?conversation=room", {
+		...SOURCES,
+		conversations: [{ ...ROOM, icon }],
+	})
 
 afterEach(cleanup)
 
 describe("the face of a tab", () => {
-	it("draws the bot avatar and its name for a solo conversation", () => {
+	it("draws the bot avatar at 16px and its name for a solo conversation", () => {
 		const face = tabFaceOf("/?bot=nova", SOURCES)
 
 		expect(face.title).toBe(NOVA.name)
-		expect(markupOf(face.icon)).toContain("bot-identity-avatar")
+		const avatar = rootOf(face.icon)
+		expect(avatar.dataset.slot).toBe("bot-identity-avatar")
+		expect(avatar.style.width).toBe("16px")
+		expect(avatar.style.height).toBe("16px")
 	})
 
-	it("draws the subject icon and the title for a room", () => {
-		const face = tabFaceOf("/?conversation=room", SOURCES)
+	it("draws the bare glyph of a room's icon and its title", () => {
+		const glyph = glyphMarkupOf("Bug")
+		const face = roomFaceWith("Bug")
 
 		expect(face.title).toBe(ROOM.name)
-		expect(markupOf(face.icon)).toContain("conversation-subject-icon")
+		expect(markupOf(face.icon)).toBe(glyph)
 	})
 
-	it.each([186, 210])(
-		"draws the subject icon of a room in its colour %s",
-		(color) => {
-			const face = tabFaceOf("/?conversation=room", {
-				...SOURCES,
-				conversations: [{ ...ROOM, color }],
-			})
+	it.each([undefined, "Unlisted"])(
+		"draws the bare message glyph for a room whose icon is %s",
+		(icon) => {
+			const glyph = glyphMarkupOf("MessageSquare")
 
-			expect(subjectIconIn(face.icon)?.getAttribute("data-hue")).toBe(
-				String(color),
-			)
+			expect(markupOf(roomFaceWith(icon).icon)).toBe(glyph)
 		},
 	)
 
-	it("draws the subject icon of a room with no colour untinted", () => {
-		const face = tabFaceOf("/?conversation=room", SOURCES)
-
-		expect(subjectIconIn(face.icon)?.getAttribute("data-hue")).toBe("")
+	it.each([
+		["a room", "/?conversation=room"],
+		["Settings", "/settings/user"],
+		["a mission", "/?bot=nova&mission=m-1"],
+		["an empty page", "/"],
+	])("draws %s with a bare icon for the tab icon slot to size", (_, href) => {
+		expect(rootOf(tabFaceOf(href, SOURCES).icon).tagName.toLowerCase()).toBe(
+			"svg",
+		)
 	})
 
 	it("draws the flag and the ticket title for a mission thread, the row title while the mission is unread", () => {
