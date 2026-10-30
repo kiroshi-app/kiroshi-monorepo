@@ -5,17 +5,16 @@ import { useCallback, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import {
-	FullWindowContent,
-	FullWindowLayout,
-} from "@workspace/ui/components/full-window-layout"
-import {
 	ImportRow,
 	type ImportRowKind,
 	type ImportRowStatus,
 } from "@workspace/ui/components/import-row"
-import { OnboardingDragStrip } from "@workspace/ui/components/onboarding-shell"
+import {
+	OnboardingContent,
+	OnboardingControls,
+	OnboardingShell,
+} from "@workspace/ui/components/onboarding-shell"
 import { Button } from "@workspace/ui/components/ui/button"
-import { cn } from "@workspace/ui/lib/utils"
 
 type ImportScreenStep = "select" | "importing" | "done" | "unreadable"
 
@@ -234,14 +233,12 @@ const ImportScreen = (props: ImportScreenProps) => {
 	const { step, title, primary, secondary } = props
 	const items = itemsOf(props)
 	const subtitle = useSubtitle(props, items)
-	const isUnreadable = step === "unreadable"
 	const isPrimaryDisabled =
 		step === "importing" || (step === "select" && !items.some(isPicked))
 
 	return (
-		<FullWindowLayout data-slot="import-screen">
-			<OnboardingDragStrip />
-			<FullWindowContent className="min-h-0 gap-5 px-6 pt-10 pb-6">
+		<OnboardingShell data-slot="import-screen">
+			<OnboardingContent className="gap-5">
 				<div className="flex w-120 max-w-full shrink-0 flex-col gap-2.5 text-center">
 					<h1 className="text-balance font-semibold text-[22px] text-foreground leading-7 tracking-[-0.01em]">
 						{title}
@@ -257,33 +254,28 @@ const ImportScreen = (props: ImportScreenProps) => {
 						step={step}
 					/>
 				) : null}
-				<div
-					className={cn(
-						"flex shrink-0 flex-col items-center",
-						isUnreadable ? "gap-4" : "gap-5",
-					)}
+			</OnboardingContent>
+			<OnboardingControls>
+				<Button
+					className="rounded-full px-5 leading-4.5 transition-none data-disabled:pointer-events-none data-disabled:opacity-50"
+					disabled={isPrimaryDisabled}
+					focusableWhenDisabled
+					onClick={primary.onPress}
+					size="lg"
 				>
-					<Button
-						className="rounded-full px-5 leading-4.5 transition-none data-disabled:pointer-events-none data-disabled:opacity-50"
-						disabled={isPrimaryDisabled}
-						focusableWhenDisabled
-						onClick={primary.onPress}
-						size="lg"
+					{primary.label}
+				</Button>
+				{secondary && step !== "importing" ? (
+					<button
+						className={LINK_CLASS}
+						onClick={secondary.onPress}
+						type="button"
 					>
-						{primary.label}
-					</Button>
-					{secondary && step !== "importing" ? (
-						<button
-							className={LINK_CLASS}
-							onClick={secondary.onPress}
-							type="button"
-						>
-							{secondary.label}
-						</button>
-					) : null}
-				</div>
-			</FullWindowContent>
-		</FullWindowLayout>
+						{secondary.label}
+					</button>
+				) : null}
+			</OnboardingControls>
+		</OnboardingShell>
 	)
 }
 

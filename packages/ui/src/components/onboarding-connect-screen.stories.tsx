@@ -1,16 +1,16 @@
 import { useState } from "react"
-import { expect, fn, within } from "storybook/test"
+import { expect, fn, userEvent, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
 	expectNoHorizontalScrollAt,
 	expectOnboardingDragStrip,
-	glyphIn,
 	hueScopeOf,
+	resolvedChannelsOf,
 	slotIn,
+	slotsIn,
 	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
-import { type Icon, Icons } from "@workspace/ui/components/icons"
 import {
 	OnboardingConnectScreen,
 	type OnboardingConnectScreenProps,
@@ -20,7 +20,8 @@ import { OnboardingShell } from "@workspace/ui/components/onboarding-shell"
 const ARTBOARD =
 	"Measured against the Paper file `Kiroshi, Onboarding v2`, 1200 by 760, in a blue Space."
 
-const WITH_CLAUDE_CODE = `${ARTBOARD} Page \`With Claude Code\`.`
+const FLOW_FINAL =
+	"Measured against the Paper page `Flow · Final`, 1200 by 680, in a blue Space."
 
 const WITHOUT_CLAUDE_CODE = `${ARTBOARD} Page \`Without Claude Code\`.`
 
@@ -28,18 +29,19 @@ const PASTED_CODE = "kX2v9QmTa4Lr#8bHn3Wp"
 
 const REFUSED_KEY = "sk-ant-api03-••••••••••••Qx4"
 
+const LONG_EMAIL =
+	"alexandra.montgomery-whitfield.engineering.department@example-corporation.com"
+
 type ConnectPlayContext = {
 	canvasElement: HTMLElement
 	title: string
 	action: string
-	glyph: Icon
 }
 
 const expectConnect = async ({
 	canvasElement,
 	title,
 	action,
-	glyph,
 }: ConnectPlayContext) => {
 	const canvas = within(canvasElement)
 	const primary = canvas.getByRole("button", { name: action })
@@ -48,9 +50,12 @@ const expectConnect = async ({
 		canvas.getByRole("heading", { level: 1, name: title }),
 	).toBeVisible()
 	await expect(primary).toBeVisible()
-	await expect(
-		glyphIn(slotIn(canvasElement, "onboarding-connect-tile"), glyph),
-	).not.toBe(null)
+	await expect(slotIn(canvasElement, "onboarding-controls")).toContainElement(
+		primary,
+	)
+	await expect(slotsIn(canvasElement, "onboarding-connect-tile")).toHaveLength(
+		0,
+	)
 	await withMotionAllowed(() =>
 		expect(getComputedStyle(primary).transitionDuration).toBe("0s"),
 	)
@@ -106,7 +111,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The onboarding step that connects a model provider, on the onboarding shell with no footer: a 56px tile, a title and a body, then what the step asks for. Ten steps the host chooses: a Claude login found on this machine, nothing found, waiting for the code from the browser, connecting, three sign-in failures, the agent missing, the key field and a refused key. Every field carries a visible label; a refused key marks its field invalid and ties the failure sentence to it; Connecting… is disabled and busy. The primary button wears the Space colour.",
+					"The onboarding step that connects a model provider, on the onboarding shell: a 352px content slot aligned to its bottom, holding the title, the body and what the step asks for, above a 120px controls slot holding the primary button and the secondary actions, so the controls sit at one height on every step. Eleven steps the host chooses: a Claude login found on this computer, another account, nothing found, waiting for the code from the browser, connecting, three sign-in failures, the agent missing, the key field and a refused key. The two ways to connect are a radio group the arrow keys walk, the first picked on entry. Every field carries a visible label; a refused key marks its field invalid and ties the failure sentence to it; Connecting… is disabled and busy. The primary button and the picked option wear the Space colour.",
 			},
 		},
 	},
@@ -138,22 +143,24 @@ export const ConnectLoginFoundLight = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${WITH_CLAUDE_CODE} Artboard 2A: a Claude login was found in Claude Code. Check the link tile, the account card with its initials, email and plan, Use this account and the Use another account link, with no Continue. Pick the Dark twin for the other theme.`,
+				story: `${FLOW_FINAL} Artboard 2.1: a Claude login was found in Claude Code. Check the account card above the title, with the initials the host passes, the email and the plan, then Use this account and Use another account in the controls slot, with no tile and no Continue. Pick the Dark twin for the other theme.`,
 			},
 		},
 	},
 	play: async ({ args, canvas, canvasElement, userEvent }) => {
 		await expectConnect({
 			canvasElement,
-			title: "Use the account already on this machine?",
+			title: "Use the account already on your computer?",
 			action: "Use this account",
-			glyph: Icons.Link,
 		})
-		await expect(
-			slotIn(canvasElement, "onboarding-connect-account"),
-		).toHaveTextContent(
-			"alex.martin@example.comClaude Max · found in Claude Code",
+		const card = slotIn(canvasElement, "onboarding-connect-account")
+		await expect(card).toHaveTextContent(
+			"AMalex.martin@example.comClaude Max · found in Claude Code",
 		)
+		await expect(
+			card.compareDocumentPosition(canvas.getByRole("heading", { level: 1 })) &
+				Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy()
 		await expect(
 			canvas.queryByRole("button", { name: "Continue" }),
 		).not.toBeInTheDocument()
@@ -166,6 +173,15 @@ export const ConnectLoginFoundLight = meta.story({
 			canvas.getByRole("button", { name: "Use another account" }),
 		)
 		await expect(args.onUseAnotherAccount).toHaveBeenCalledOnce()
+
+		const another = canvas.getByRole("button", { name: "Use another account" })
+		await userEvent.tab({ shift: true })
+		await userEvent.tab()
+		await expect(another).toHaveFocus()
+		await expect(getComputedStyle(another).boxShadow).toMatch(/\b3px\b/)
+		await withMotionAllowed(() =>
+			expect(getComputedStyle(another).transitionDuration).toBe("0s"),
+		)
 	},
 })
 
@@ -176,26 +192,175 @@ export const ConnectLoginFoundDark = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${WITH_CLAUDE_CODE} Artboard 2A, dark. Pick the Light twin for the other theme.`,
+				story: `${FLOW_FINAL} Artboard 2.1, dark. Pick the Light twin for the other theme.`,
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
 		await expectConnect({
 			canvasElement,
-			title: "Use the account already on this machine?",
+			title: "Use the account already on your computer?",
 			action: "Use this account",
-			glyph: Icons.Link,
 		})
 	},
 })
 
+export const ConnectLoginFoundLongEmail = meta.story({
+	name: "Connect / Login found / Long email",
+	tags: ["test-only"],
+	args: {
+		step: "loginFound",
+		account: { email: LONG_EMAIL, initials: "AM", plan: "Claude Max" },
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"An email with no break opportunity, longer than the card. Check that it wraps inside the 360px card and the card keeps its width.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const card = slotIn(canvasElement, "onboarding-connect-account")
+		const email = canvas.getByText(LONG_EMAIL)
+		await expect(card.getBoundingClientRect().width).toBe(360)
+		await expect(email.scrollWidth).toBeLessThanOrEqual(email.clientWidth)
+		await expect(email.getBoundingClientRect().height).toBeGreaterThan(22)
+	},
+})
+
+type MethodChoiceContext = {
+	canvasElement: HTMLElement
+	title: string
+	body: string
+}
+
+const expectMethodChoice = async ({
+	canvasElement,
+	title,
+	body,
+}: MethodChoiceContext) => {
+	const canvas = within(canvasElement)
+	await expectConnect({ canvasElement, title, action: "Continue" })
+	await expect(canvas.getByText(body)).toBeVisible()
+	await expect(canvas.getByRole("radiogroup", { name: title })).toBeVisible()
+	await expect(
+		canvas.getByRole("radio", { name: "Sign in with Claude" }),
+	).toBeChecked()
+	await expect(
+		canvas.getByRole("radio", { name: "Paste an API key" }),
+	).not.toBeChecked()
+	await expect(
+		canvas.queryByRole("button", { name: "Use another account" }),
+	).not.toBeInTheDocument()
+}
+
+const expectPickedInPrimary = async (canvasElement: HTMLElement) => {
+	const [picked, other] = slotsIn(canvasElement, "onboarding-connect-option")
+	const primary = resolvedChannelsOf("var(--primary)", picked)
+	const radioOf = (option: HTMLElement) => slotIn(option, "radio-group-item")
+	await expect(
+		resolvedChannelsOf(getComputedStyle(picked).borderTopColor, picked),
+	).toEqual(primary)
+	await expect(
+		resolvedChannelsOf(
+			getComputedStyle(radioOf(picked)).borderTopColor,
+			picked,
+		),
+	).toEqual(primary)
+	await expect(
+		resolvedChannelsOf(getComputedStyle(other).borderTopColor, other),
+	).not.toEqual(primary)
+	await withMotionAllowed(() =>
+		expect(getComputedStyle(picked).transitionDuration).toBe("0s"),
+	)
+}
+
+type MethodChoicePlayContext = {
+	args: OnboardingConnectScreenProps
+	canvasElement: HTMLElement
+}
+
+const playMethodChoice = async ({
+	args,
+	canvasElement,
+}: MethodChoicePlayContext) => {
+	const canvas = within(canvasElement)
+	const signIn = canvas.getByRole("radio", { name: "Sign in with Claude" })
+	const pasteKey = canvas.getByRole("radio", { name: "Paste an API key" })
+	const proceed = () =>
+		userEvent.click(canvas.getByRole("button", { name: "Continue" }))
+
+	await expect(signIn).toHaveAccessibleDescription(
+		"Opens your browser once. Works with your Pro or Max subscription.",
+	)
+	await expectPickedInPrimary(canvasElement)
+
+	await userEvent.tab()
+	await expect(signIn).toHaveFocus()
+	await expect(
+		getComputedStyle(slotsIn(canvasElement, "onboarding-connect-option")[0])
+			.boxShadow,
+	).toMatch(/\b3px\b/)
+	await userEvent.keyboard("{ArrowDown}")
+	await expect(pasteKey).toBeChecked()
+	await expect(pasteKey).toHaveFocus()
+	await proceed()
+	await expect(args.onPasteKey).toHaveBeenCalledOnce()
+	await expect(args.onSignIn).not.toHaveBeenCalled()
+
+	await userEvent.click(signIn)
+	await expect(signIn).toBeChecked()
+	await proceed()
+	await expect(args.onSignIn).toHaveBeenCalledOnce()
+}
+
+export const ConnectAnotherAccountLight = meta.story({
+	name: "Connect / Another account / Light",
+	args: { step: "anotherAccount" },
+	parameters: {
+		docs: {
+			description: {
+				story: `${FLOW_FINAL} Artboard 2.2: the reader wants another account. Check the two options as a radio group, Sign in with Claude picked on entry with its card border and radio ring in the Space colour, the arrow keys moving the pick, and Continue calling the picked way. Pick the Dark twin for the other theme.`,
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		await expectMethodChoice({
+			canvasElement,
+			title: "How do you want to connect?",
+			body: "Sign in again with a different one.",
+		})
+		await playMethodChoice({ args, canvasElement })
+	},
+})
+
+export const ConnectAnotherAccountDark = meta.story({
+	name: "Connect / Another account / Dark",
+	args: { step: "anotherAccount" },
+	globals: { theme: "dark" },
+	parameters: {
+		docs: {
+			description: {
+				story: `${FLOW_FINAL} Artboard 2.2, dark. Pick the Light twin for the other theme.`,
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expectMethodChoice({
+			canvasElement,
+			title: "How do you want to connect?",
+			body: "Sign in again with a different one.",
+		})
+		await expectPickedInPrimary(canvasElement)
+	},
+})
+
 const expectNothingFound = async (canvasElement: HTMLElement) =>
-	expectConnect({
+	expectMethodChoice({
 		canvasElement,
 		title: "Connect the model provider",
-		action: "Sign in with Claude",
-		glyph: Icons.Link,
+		body: "Your companions need a model to think with. Use your Claude subscription, or a key.",
 	})
 
 export const ConnectNothingFoundLight = meta.story({
@@ -204,42 +369,13 @@ export const ConnectNothingFoundLight = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${WITHOUT_CLAUDE_CODE} Artboard 2B.1: no login on this machine. Check the two numbered options on the card surface, Sign in with Claude and Paste an API key, each calling back. The first option stands for the primary action, since the artboard draws no button. Pick the Dark twin for the other theme.`,
+				story: `${FLOW_FINAL} Artboard 2.3: no login on this computer. Check the same radio group as 2.2 under its own title, with Continue alone in the controls slot. Pick the Dark twin for the other theme.`,
 			},
 		},
 	},
-	play: async ({ args, canvas, canvasElement, userEvent }) => {
+	play: async ({ args, canvasElement }) => {
 		await expectNothingFound(canvasElement)
-
-		await expect(
-			canvas.getByRole("button", { name: "Sign in with Claude" }),
-		).toHaveAccessibleDescription(
-			"Opens your browser once. Works with your Pro or Max subscription.",
-		)
-		await userEvent.click(
-			canvas.getByRole("button", { name: "Sign in with Claude" }),
-		)
-		await expect(args.onSignIn).toHaveBeenCalledOnce()
-		await userEvent.click(
-			canvas.getByRole("button", { name: "Paste an API key" }),
-		)
-		await expect(args.onPasteKey).toHaveBeenCalledOnce()
-
-		await userEvent.tab({ shift: true })
-		const signIn = canvas.getByRole("button", { name: "Sign in with Claude" })
-		await expect(signIn).toHaveFocus()
-		await expect(getComputedStyle(signIn).boxShadow).toMatch(/\b3px\b/)
-
-		const pasteKey = canvas.getByRole("button", { name: "Paste an API key" })
-		const { userEvent: pointer } = await import("vitest/browser")
-		await pointer.hover(signIn)
-		await expect(getComputedStyle(signIn).backgroundColor).not.toBe(
-			getComputedStyle(pasteKey).backgroundColor,
-		)
-		await withMotionAllowed(() =>
-			expect(getComputedStyle(signIn).transitionDuration).toBe("0s"),
-		)
-		await pointer.unhover(signIn)
+		await playMethodChoice({ args, canvasElement })
 	},
 })
 
@@ -250,12 +386,13 @@ export const ConnectNothingFoundDark = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${WITHOUT_CLAUDE_CODE} Artboard 2B.1, dark. Pick the Light twin for the other theme.`,
+				story: `${FLOW_FINAL} Artboard 2.3, dark. Pick the Light twin for the other theme.`,
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
 		await expectNothingFound(canvasElement)
+		await expectPickedInPrimary(canvasElement)
 	},
 })
 
@@ -265,7 +402,7 @@ export const ConnectWaitingForTheCodeLight = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${WITHOUT_CLAUDE_CODE} Artboard 2B.2: the browser opened claude.ai. Check the globe tile, the spinner beside the waiting line announced politely and still under reduced motion, the labelled code field, Continue disabled yet focusable while the field is empty, and the two links. Pick the Dark twin for the other theme.`,
+				story: `${FLOW_FINAL} Artboard 2.4: the browser opened claude.ai. Check the full paragraph, the spinner beside the waiting line announced politely and still under reduced motion, the labelled code field, Continue disabled at 45% yet focusable while the field is empty, and the two secondary actions side by side. Pick the Dark twin for the other theme.`,
 			},
 		},
 	},
@@ -274,17 +411,28 @@ export const ConnectWaitingForTheCodeLight = meta.story({
 			canvasElement,
 			title: "Sign in with Claude",
 			action: "Continue",
-			glyph: Icons.Web,
 		})
+		await expect(
+			canvas.getByText(
+				"Your browser opened claude.ai. Sign in there with your Pro or Max subscription, then paste the code it shows you.",
+			),
+		).toBeVisible()
 		await expect(canvas.getByRole("status")).toHaveTextContent(
 			"Waiting for you to sign in, in your browser…",
 		)
 		await expectSpinnerStillUnderReducedMotion(canvasElement)
 		const field = canvas.getByLabelText("Paste the code Claude gave you")
 		await expect(field).toHaveAttribute("placeholder", "Code from Claude")
-		await expect(
-			canvas.getByRole("button", { name: "Continue" }),
-		).toHaveAttribute("aria-disabled", "true")
+		const proceed = canvas.getByRole("button", { name: "Continue" })
+		await expect(proceed).toHaveAttribute("aria-disabled", "true")
+		await expect(getComputedStyle(proceed).opacity).toBe("0.45")
+		const reopen = canvas.getByRole("button", {
+			name: "Open the sign-in page again",
+		})
+		const pasteKey = canvas.getByRole("button", { name: "Paste a key instead" })
+		await expect(reopen.getBoundingClientRect().top).toBe(
+			pasteKey.getBoundingClientRect().top,
+		)
 
 		await userEvent.click(field)
 		await expect(getComputedStyle(field).boxShadow).not.toBe("none")
@@ -312,7 +460,7 @@ export const ConnectWaitingForTheCodeDark = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${WITHOUT_CLAUDE_CODE} Artboard 2B.2, dark. Pick the Light twin for the other theme.`,
+				story: `${FLOW_FINAL} Artboard 2.4, dark. Pick the Light twin for the other theme.`,
 			},
 		},
 	},
@@ -321,7 +469,6 @@ export const ConnectWaitingForTheCodeDark = meta.story({
 			canvasElement,
 			title: "Sign in with Claude",
 			action: "Continue",
-			glyph: Icons.Web,
 		})
 	},
 })
@@ -332,7 +479,6 @@ const expectConnecting = async (canvasElement: HTMLElement) => {
 		canvasElement,
 		title: "Sign in with Claude",
 		action: "Connecting…",
-		glyph: Icons.Web,
 	})
 	const button = canvas.getByRole("button", { name: "Connecting…" })
 	await expect(button).toHaveAttribute("aria-disabled", "true")
@@ -396,7 +542,6 @@ const expectSignInFailed = async ({
 		canvasElement,
 		title: "Couldn’t sign you in",
 		action: "Try again",
-		glyph: Icons.AlertCircle,
 	})
 	await expect(within(canvasElement).getByText(body)).toBeVisible()
 }
@@ -524,7 +669,6 @@ const expectAgentMissing = async (canvasElement: HTMLElement) => {
 		canvasElement,
 		title: "Couldn’t find the agent",
 		action: "Download Kiroshi again",
-		glyph: Icons.AlertCircle,
 	})
 	await expect(
 		within(canvasElement)
@@ -584,7 +728,6 @@ export const ConnectKeyFieldLight = meta.story({
 			canvasElement,
 			title: "Paste your Anthropic API key",
 			action: "Continue",
-			glyph: Icons.Key,
 		})
 		const field = canvas.getByLabelText("Key")
 		await expect(field).toHaveAttribute("placeholder", "sk-ant-…")
@@ -625,7 +768,6 @@ export const ConnectKeyFieldDark = meta.story({
 			canvasElement,
 			title: "Paste your Anthropic API key",
 			action: "Continue",
-			glyph: Icons.Key,
 		})
 	},
 })
@@ -636,7 +778,6 @@ const expectKeyRefused = async (canvasElement: HTMLElement) => {
 		canvasElement,
 		title: "Couldn’t use that key",
 		action: "Try another key",
-		glyph: Icons.AlertCircle,
 	})
 	const field = canvas.getByLabelText("Key")
 	await expect(field).toHaveValue(REFUSED_KEY)
@@ -679,5 +820,39 @@ export const ConnectKeyRefusedDark = meta.story({
 	},
 	play: async ({ canvasElement }) => {
 		await expectKeyRefused(canvasElement)
+	},
+})
+
+const STEPS_SHARING_THE_CONTROLS_ROW = [
+	"loginFound",
+	"nothingFound",
+	"waitingForCode",
+] as const
+
+export const ConnectControlsAtOneHeight = meta.story({
+	name: "Connect / Controls at one height",
+	tags: ["test-only"],
+	render: (args) => (
+		<div className="grid grid-cols-3">
+			{STEPS_SHARING_THE_CONTROLS_ROW.map((step) => (
+				<OnboardingConnectScreen {...args} key={step} step={step} />
+			))}
+		</div>
+	),
+	args: { step: "loginFound" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Artboards 2.1, 2.3 and 2.4 side by side. Check that the controls slot starts at the same height on all three, whatever the content above it holds.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const tops = slotsIn(canvasElement, "onboarding-controls").map(
+			(controls) => controls.getBoundingClientRect().top,
+		)
+		await expect(tops).toHaveLength(STEPS_SHARING_THE_CONTROLS_ROW.length)
+		await expect(new Set(tops).size).toBe(1)
 	},
 })

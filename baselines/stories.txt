@@ -720,8 +720,11 @@ feedback-notice--variants
 feedback-notice--with-description
 feedback-notice--with-retry
 feedback-notice--with-retry-label
+feedback-onboardingconnectscreen--connect-another-account-dark
+feedback-onboardingconnectscreen--connect-another-account-light
 feedback-onboardingconnectscreen--connect-connecting-dark
 feedback-onboardingconnectscreen--connect-connecting-light
+feedback-onboardingconnectscreen--connect-controls-at-one-height
 feedback-onboardingconnectscreen--connect-failed-agent-missing-dark
 feedback-onboardingconnectscreen--connect-failed-agent-missing-light
 feedback-onboardingconnectscreen--connect-failed-cancelled-dark
@@ -736,6 +739,7 @@ feedback-onboardingconnectscreen--connect-key-refused-dark
 feedback-onboardingconnectscreen--connect-key-refused-light
 feedback-onboardingconnectscreen--connect-login-found-dark
 feedback-onboardingconnectscreen--connect-login-found-light
+feedback-onboardingconnectscreen--connect-login-found-long-email
 feedback-onboardingconnectscreen--connect-nothing-found-dark
 feedback-onboardingconnectscreen--connect-nothing-found-light
 feedback-onboardingconnectscreen--connect-waiting-for-the-code-dark

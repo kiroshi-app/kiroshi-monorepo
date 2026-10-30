@@ -12,6 +12,8 @@ import {
 	MessageBubbleContent,
 } from "@workspace/ui/components/message-bubble"
 import {
+	OnboardingContent,
+	OnboardingControls,
 	OnboardingHeading,
 	OnboardingShell,
 } from "@workspace/ui/components/onboarding-shell"
@@ -262,29 +264,23 @@ const OnboardingWelcomeScreen = ({
 
 	return (
 		<OnboardingShell data-step={step} data-slot="onboarding-welcome-screen">
-			<div
-				className="flex min-h-82 w-full items-end justify-center"
-				data-slot="onboarding-welcome-visual"
-			>
+			<OnboardingContent className="gap-10 pb-7">
 				<Illustration />
-			</div>
-			<div
-				className="flex h-44.5 w-full justify-center pt-10"
-				data-slot="onboarding-welcome-text"
-			>
 				<OnboardingHeading
 					body={t(`onboarding.intro.${step}.body`)}
 					title={t(`onboarding.intro.${step}.title`)}
 					variant="welcome"
 				/>
-			</div>
-			<OnboardingWelcomeFooter
-				onBack={onBack}
-				onNext={onNext}
-				onSkip={onSkip}
-				step={position}
-				total={STEPS.length}
-			/>
+			</OnboardingContent>
+			<OnboardingControls>
+				<OnboardingWelcomeFooter
+					onBack={onBack}
+					onNext={onNext}
+					onSkip={onSkip}
+					step={position}
+					total={STEPS.length}
+				/>
+			</OnboardingControls>
 		</OnboardingShell>
 	)
 }

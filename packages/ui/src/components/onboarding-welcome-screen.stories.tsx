@@ -200,24 +200,17 @@ const expectRowFixedAcrossTheWalk = (
 ) =>
 	atArtboardWidth(canvasElement, async () => {
 		const screen = slotIn(canvasElement, "onboarding-welcome-screen")
-		const visualHeights: number[] = []
-		const textHeights: number[] = []
+		const contentHeights: number[] = []
 		const stepperTops: number[] = []
 		const actionTops: number[] = []
 
 		for (const [index, slide] of SLIDES.entries()) {
 			await waitFor(() => expect(screen).toHaveAttribute("data-step", slide))
-			const textZone = slotIn(canvasElement, "onboarding-welcome-text")
-			await expect(textZone.scrollHeight).toBeLessThanOrEqual(
-				textZone.clientHeight,
+			const content = slotIn(canvasElement, "onboarding-content")
+			await expect(content.scrollHeight).toBeLessThanOrEqual(
+				content.clientHeight,
 			)
-			textHeights.push(textZone.getBoundingClientRect().height)
-			visualHeights.push(
-				slotIn(
-					canvasElement,
-					"onboarding-welcome-visual",
-				).getBoundingClientRect().height,
-			)
+			contentHeights.push(content.getBoundingClientRect().height)
 			stepperTops.push(
 				slotIn(
 					canvasElement,
@@ -232,8 +225,7 @@ const expectRowFixedAcrossTheWalk = (
 			}
 		}
 
-		await expect(spreadOf(visualHeights)).toBe(0)
-		await expect(spreadOf(textHeights)).toBe(0)
+		await expect(spreadOf(contentHeights)).toBe(0)
 		await expect(spreadOf(stepperTops)).toBeLessThanOrEqual(1)
 		await expect(spreadOf(actionTops)).toBeLessThanOrEqual(1)
 	})

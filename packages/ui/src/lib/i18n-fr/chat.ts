@@ -1119,12 +1119,15 @@ const chat = {
 		},
 		connect: {
 			foundIn: "{{plan}} · trouvé dans Claude Code",
+			loginFound: {
+				title: "Utiliser le compte déjà présent sur votre ordinateur ?",
+			},
 			provider: {
 				title: "Connecter le fournisseur de modèle",
 				body: "Vos compagnons ont besoin d’un modèle pour réfléchir. Utilisez votre abonnement Claude, ou une clé.",
 			},
 			browser: {
-				body: "Votre navigateur a ouvert claude.ai. Connectez-vous avec votre abonnement Pro ou Max.",
+				body: "Votre navigateur a ouvert claude.ai. Connectez-vous avec votre abonnement Pro ou Max, puis collez le code qu’il vous affiche.",
 				waiting: "En attente de votre connexion, dans votre navigateur…",
 				checking: "Vérification du code avec Claude…",
 				placeholder: "Code de Claude",
