@@ -689,18 +689,16 @@ mod tests {
 		let app = a_host("coder-backfill");
 		let database = database_of(&app);
 		let coder = a_bot(database, "Byte", RETIRED_CODER_JOB).await;
-		let near_misses = [
-			a_bot(database, "Capital", "A coding companion").await,
-			a_bot(database, "Spaced", "a coding companion ").await,
-			a_bot(database, "Other", "a reviewer").await,
-		];
+		let near_titles = ["A coding companion", "a coding companion ", "a reviewer"];
+		let mut near_misses = Vec::new();
+		for title in near_titles {
+			near_misses.push(a_bot(database, "Other", title).await);
+		}
 
 		seeded(&app, database).await;
 
 		assert_eq!(title_of(database, &coder).await, CODER_JOB);
-		for (bot, title) in
-			near_misses.iter().zip(["A coding companion", "a coding companion ", "a reviewer"])
-		{
+		for (bot, title) in near_misses.iter().zip(near_titles) {
 			assert_eq!(title_of(database, bot).await, title);
 		}
 		retitled(database, &coder, RETIRED_CODER_JOB).await;
