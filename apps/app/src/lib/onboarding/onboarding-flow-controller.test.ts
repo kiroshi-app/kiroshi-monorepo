@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, type Mock, vi } from "vitest"
 
 import "@workspace/ui/lib/i18n"
+
 import type { NoticeMessage } from "@workspace/ui/components/notice-surface"
 
 import type {
@@ -27,6 +28,7 @@ import {
 import { onboardingScreenStepOf } from "./onboarding-screen"
 import { onboardingSummonsFor } from "./onboarding-summons"
 
+import type { ClaudeInventory } from "@/lib/bindings"
 import type { AccountReport } from "../agent/contract"
 import type { RosterController } from "../bots/roster-controller"
 import type { ChatController } from "../chat/chat-controller"
@@ -462,12 +464,26 @@ describe("landing after an import", () => {
 		isImporting: false,
 	}
 
-	const itemOf = (key: string, name: string) => ({
-		key,
-		name,
-		description: "",
-		alreadyImported: false,
-	})
+	const ATLAS_AND_CHANGELOG: ClaudeInventory = {
+		kind: "found",
+		agents: [
+			{
+				key: "agent:atlas",
+				name: "Atlas",
+				description: "",
+				alreadyImported: false,
+			},
+		],
+		skills: [
+			{
+				key: "skill:changelog",
+				name: "changelog",
+				description: "",
+				alreadyImported: false,
+			},
+		],
+		claudeMd: null,
+	}
 
 	const finishedAfter = async (imported: ClaudeImported) => {
 		port.hasClaudeFolder = true
@@ -517,14 +533,7 @@ describe("landing after an import", () => {
 	})
 
 	it("says nothing when every item failed to come in", async () => {
-		const inventory = {
-			kind: "found" as const,
-			agents: [itemOf("agent:atlas", "Atlas")],
-			skills: [itemOf("skill:changelog", "changelog")],
-			claudeMd: null,
-		}
-
-		await finishedAfter(importedOf(inventory, ALL_FAILED))
+		await finishedAfter(importedOf(ATLAS_AND_CHANGELOG, ALL_FAILED))
 
 		expect(world.stored.at(-1)).toBe("done")
 		expect(reportSuccess).not.toHaveBeenCalled()
