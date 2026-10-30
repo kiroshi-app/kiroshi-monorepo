@@ -51,6 +51,16 @@ const KiroshiRing = () => (
 	</svg>
 )
 
+const SIGNED_OUT_INTRO = {
+	title: "account.signedOut.title",
+	body: "account.onboarding.body",
+} as const
+
+const SIGNED_IN_INTRO = {
+	title: "account.onboarding.signedIn.title",
+	body: "account.onboarding.signedIn.body",
+} as const
+
 const OnboardingAccountScreen = ({
 	account,
 	image,
@@ -61,7 +71,8 @@ const OnboardingAccountScreen = ({
 	onContinue,
 }: OnboardingAccountScreenProps) => {
 	const { t } = useTranslation("settings")
-	const isSignedIn = account.status === "signedIn"
+	const intro =
+		account.status === "signedIn" ? SIGNED_IN_INTRO : SIGNED_OUT_INTRO
 
 	return (
 		<FullWindowLayout
@@ -73,17 +84,9 @@ const OnboardingAccountScreen = ({
 				<div className="flex flex-col items-center gap-8">
 					<KiroshiRing />
 					<AccountIntro
-						body={t(
-							isSignedIn
-								? "account.onboarding.signedIn.body"
-								: "account.onboarding.body",
-						)}
+						body={t(intro.body)}
 						layout="screen"
-						title={t(
-							isSignedIn
-								? "account.onboarding.signedIn.title"
-								: "account.signedOut.title",
-						)}
+						title={t(intro.title)}
 					/>
 				</div>
 				{account.status === "signedIn" ? (
