@@ -11,6 +11,7 @@ import type { AccountReport } from "../agent/contract"
 export type ConnectionStep =
 	| { state: "detected"; email: string; plan: string | null }
 	| { state: "offer" }
+	| { state: "anotherAccount" }
 	| { state: "waiting"; signInUrl: string }
 	| { state: "apiKey" }
 	| { state: "signInFailed"; exitDetail: string; failure: ConnectFailure }
@@ -160,7 +161,7 @@ export const createSignInFlow = (
 		actions: {
 			acceptAccount: settle,
 
-			changeAccount: () => showConnection({ state: "offer" }),
+			changeAccount: () => showConnection({ state: "anotherAccount" }),
 
 			askApiKey,
 

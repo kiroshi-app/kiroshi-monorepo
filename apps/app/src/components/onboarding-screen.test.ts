@@ -129,6 +129,13 @@ const press = async (name: string) => {
 
 const heading = () => screen.getByRole("heading", { level: 1 }).textContent
 
+const openAnotherAccount = async () => {
+	port.report = LOGGED_IN
+	await renderOnboarding()
+	await press("Skip intro")
+	await press("Use another account")
+}
+
 const importScreen = () =>
 	screen.findByRole("heading", { name: "Bring in your Claude Code setup" })
 
@@ -211,6 +218,32 @@ describe("the Connect screen", () => {
 		expect(
 			screen.getByRole("button", { name: "Use another account" }),
 		).toBeTruthy()
+	})
+
+	it("asks how to connect again on Use another account", async () => {
+		await openAnotherAccount()
+
+		expect(heading()).toBe("How do you want to connect?")
+		expect(screen.queryByText("reader@example.com")).toBeNull()
+	})
+
+	it("signs in from another account on Continue, as when nothing is found", async () => {
+		await openAnotherAccount()
+
+		await press("Continue")
+
+		expect(port.calls.map(({ command }) => command)).toContain("signIn")
+	})
+
+	it("asks for a key from another account on Paste an API key, then Continue", async () => {
+		await openAnotherAccount()
+
+		await act(async () => {
+			fireEvent.click(screen.getByRole("radio", { name: /Paste an API key/ }))
+		})
+		await press("Continue")
+
+		expect(heading()).toBe("Paste your Anthropic API key")
 	})
 
 	it("names a missing agent and opens the download page", async () => {

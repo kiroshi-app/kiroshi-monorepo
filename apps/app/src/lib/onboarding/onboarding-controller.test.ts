@@ -184,7 +184,9 @@ describe("the detected account", () => {
 	it("offers the sign-in when the reader wants another account", () => {
 		controller.changeAccount()
 
-		expect(controller.getState().connection).toEqual({ state: "offer" })
+		expect(controller.getState().connection).toEqual({
+			state: "anotherAccount",
+		})
 	})
 })
 

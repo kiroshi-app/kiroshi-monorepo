@@ -301,6 +301,7 @@ export const connectionStepOf = (
 		case "detected":
 			return accountStep(id, controller)
 		case "offer":
+		case "anotherAccount":
 			return accessStep(id, controller)
 		case "waiting":
 			return codeStep(id, connection.signInUrl, controller)

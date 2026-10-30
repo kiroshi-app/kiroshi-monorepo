@@ -160,7 +160,9 @@ describe("the account step", () => {
 	it("offers the sign-in on Use another account", async () => {
 		await answer(stepOf(), "Use another account")
 
-		expect(controller.getState().connection).toEqual({ state: "offer" })
+		expect(controller.getState().connection).toEqual({
+			state: "anotherAccount",
+		})
 	})
 })
 
