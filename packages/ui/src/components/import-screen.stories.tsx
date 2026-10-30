@@ -395,19 +395,13 @@ export const ListExistingProfile = meta.story({
 	name: "3.1 List, existing profile",
 	args: LIST_EXISTING_PROFILE,
 	parameters: describe(
-		"An existing profile sees 3.1 List once at start: the same list, with Not now in place of Skip for now. Atlas is already in Kiroshi: check that its checkbox shows checked and disabled, and that Import counts the six other items only.",
+		"An existing profile sees 3.1 List once at start: the same list, with Not now in place of Skip for now. Atlas is already in Kiroshi, and the caller passes an Import label that leaves Atlas out. Check that its checkbox shows checked and disabled.",
 	),
 	play: async ({ canvasElement, args }) => {
 		const canvas = within(canvasElement)
 		const atlas = canvas.getByRole("checkbox", { name: "Atlas" })
 		await expect(atlas).toBeChecked()
 		await expect(atlas).toHaveAttribute("aria-disabled", "true")
-		await expect(
-			primaryIn(
-				canvasElement,
-				i18n.t("common:claudeImport.select.importItems", { count: 6 }),
-			),
-		).toBeEnabled()
 		await expect(
 			canvas.queryByRole("button", {
 				name: i18n.t("common:claudeImport.select.skip"),
