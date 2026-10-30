@@ -102,6 +102,12 @@ export const onboardingCreationOf = ({
 		? { shotoId, companionId: firstCompanion.id }
 		: null
 
+const hasImportedAny = ({
+	companions,
+	hasInstructions,
+	skillCount,
+}: ClaudeImported) => companions.length > 0 || hasInstructions || skillCount > 0
+
 export const createOnboardingFlowController = (
 	port: OnboardingPort,
 	world: OnboardingFlowWorld,
@@ -137,6 +143,7 @@ export const createOnboardingFlowController = (
 
 	let firstCompanionStored = Promise.resolve()
 	let importedThisRun: ClaudeImported | null = null
+	let isImportJourney = false
 
 	const claimFirstCompanion = async (botId: string) => {
 		if (world.firstCompanionId() === null) {
@@ -170,6 +177,11 @@ export const createOnboardingFlowController = (
 			return false
 		})
 
+	const reportShotoMissing = () =>
+		report(i18n.t("chat:onboarding.arrival.firstCompanionMissing"), {
+			kind: "unknownBot",
+		})
+
 	const settle = async () => {
 		set({ connection: null, round: current().round + 1 })
 		if (await offersImport()) {
@@ -179,9 +191,7 @@ export const createOnboardingFlowController = (
 		const shotoId = world.shotoId()
 		set({ isWithShoto: true, shotoId })
 		if (!shotoId) {
-			report(i18n.t("chat:onboarding.arrival.firstCompanionMissing"), {
-				kind: "unknownBot",
-			})
+			reportShotoMissing()
 			return
 		}
 		void meetShoto(shotoId)
@@ -214,7 +224,21 @@ export const createOnboardingFlowController = (
 		report(i18n.t("chat:onboarding.arrival.failure", { name }), reason)
 	}
 
-	const land = async () => {
+	const landOnShoto = async () => {
+		const shotoId = world.shotoId()
+		if (!shotoId) {
+			reportShotoMissing()
+			return
+		}
+		try {
+			await world.openConversation(shotoId)
+			await summonOnce(shotoId, onboardingSummonsFor("greeting"))
+		} catch (reason) {
+			reportArrivalFailure(shotoId, reason)
+		}
+	}
+
+	const landOnFirstCompanion = async () => {
 		const companionId = world.firstCompanionId()
 		if (!companionId) {
 			return
@@ -226,6 +250,8 @@ export const createOnboardingFlowController = (
 			reportArrivalFailure(companionId, reason)
 		}
 	}
+
+	const land = () => (isImportJourney ? landOnShoto() : landOnFirstCompanion())
 
 	const announceImported = () => {
 		const title = importedThisRun && landingTitleOf(importedThisRun)
@@ -256,6 +282,7 @@ export const createOnboardingFlowController = (
 
 		leaveImport: async (imported) => {
 			importedThisRun = imported
+			isImportJourney = hasImportedAny(imported)
 			await store("account")
 		},
 
@@ -272,6 +299,7 @@ export const createOnboardingFlowController = (
 		replay: async () => {
 			stateStore.setState(initialOnboardingFlowState)
 			importedThisRun = null
+			isImportJourney = false
 			await persisted(world.replay)
 		},
 
