@@ -18,7 +18,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"One thing found in ~/.claude on the Import from Claude Code screen: a companion, the CLAUDE.md instructions or a skill. While the reader picks, the lead slot holds a checkbox named after the row title; once the import runs it holds a status icon instead, labelled done, in progress or failed. A row already in Kiroshi shows its checkbox checked and disabled, whatever `checked` says, cannot be toggled, and reads Already in Kiroshi. Every row names its type at the right edge: Agent, Instructions or Skills.",
+					"One thing found in ~/.claude on the Import from Claude Code screen: a companion, the CLAUDE.md instructions or a skill. While the reader picks, the lead slot holds a checkbox named after the row title; once the import runs it holds a status icon instead, labelled done, in progress or failed. A row already in Kiroshi shows its checkbox checked and disabled whatever `checked` says, and reads Already in Kiroshi. Every row names its type at the right edge: Agent, Instructions or Skills.",
 			},
 		},
 	},
