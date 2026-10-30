@@ -40,7 +40,7 @@ import type { UserController } from "../user/preferences-controller"
 
 vi.mock("@workspace/ui/components/notice-surface", async (importOriginal) => ({
 	...(await importOriginal()),
-	raiseTransientNotice: vi.fn(() => "notice-1"),
+	raiseTransientNotice: vi.fn(),
 }))
 
 const SCOUT = { id: "bot-scout", name: "Scout" }
@@ -504,15 +504,9 @@ describe("landing after an import", () => {
 			{ companions: ["Atlas"], hasInstructions: true, skillCount: 1 },
 		],
 		["nothing", NOTHING_IMPORTED],
+		["items that all failed", importedOf(ATLAS_AND_CHANGELOG, ALL_FAILED)],
 	])("raises no notice after importing %s", async (_, imported) => {
 		await finishedAfter(imported)
-
-		expect(world.stored.at(-1)).toBe("done")
-		expect(raiseTransientNotice).not.toHaveBeenCalled()
-	})
-
-	it("raises no notice when every item failed to come in", async () => {
-		await finishedAfter(importedOf(ATLAS_AND_CHANGELOG, ALL_FAILED))
 
 		expect(world.stored.at(-1)).toBe("done")
 		expect(raiseTransientNotice).not.toHaveBeenCalled()
