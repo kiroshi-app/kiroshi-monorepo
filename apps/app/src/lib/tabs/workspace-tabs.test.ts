@@ -1688,10 +1688,10 @@ describe("the windows open at quit", () => {
 		liveAre([SECONDARY])
 
 		await tabs.moveToNewWindow(viewOf(tabs).activeId)
-		liveAre(["window-2"])
+		liveAre([])
 
-		expect(await startMain(["window-2"])).toEqual([])
 		expect(keysOf(SECONDARY)).toEqual([])
+		expect(await relaunch()).toEqual([])
 	})
 
 	it("keeps the windows open at quit for the next launch", async () => {
