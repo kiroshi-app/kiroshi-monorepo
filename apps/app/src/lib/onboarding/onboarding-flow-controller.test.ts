@@ -554,16 +554,109 @@ describe("landing after an import", () => {
 		expect(reportSuccess).not.toHaveBeenCalled()
 	})
 
-	it("still opens the first companion and summons its arrival greeting", async () => {
+	it("opens Shoto rather than the stored first companion and greets him once", async () => {
+		world.firstCompanion = SCOUT.id
+
+		await finishedAfter({ ...NOTHING_IMPORTED, skillCount: 1 })
+
+		expect(world.opened).toEqual([SHOTO])
+		expect(world.sent).toEqual([
+			{ botId: SHOTO, text: onboardingSummonsFor("greeting") },
+		])
+	})
+
+	it("says it is set up once Shoto's conversation is open", async () => {
+		const openedWhenAnnounced: string[][] = []
+		reportSuccess.mockImplementation(() => {
+			openedWhenAnnounced.push([...world.opened])
+		})
+
+		await finishedAfter({ ...NOTHING_IMPORTED, companions: ["Atlas"] })
+
+		expect(openedWhenAnnounced).toEqual([[SHOTO]])
+	})
+
+	it("greets Shoto once however many times the run finishes", async () => {
+		await finishedAfter({ ...NOTHING_IMPORTED, companions: ["Atlas"] })
+		await controller.finish()
+
+		expect(world.opened).toEqual([SHOTO, SHOTO])
+		expect(world.sent).toEqual([
+			{ botId: SHOTO, text: onboardingSummonsFor("greeting") },
+		])
+	})
+
+	it("sends no greeting already in Shoto's conversation", async () => {
+		world.threadHistory = [
+			{ botId: SHOTO, text: onboardingSummonsFor("greeting") },
+		]
+
+		await finishedAfter({ ...NOTHING_IMPORTED, companions: ["Atlas"] })
+
+		expect(world.opened).toEqual([SHOTO])
+		expect(world.sent).toEqual([])
+	})
+
+	it("opens nothing and names the failure when no Shoto is stored", async () => {
+		world.shoto = null
 		world.firstCompanion = SCOUT.id
 
 		await finishedAfter({ ...NOTHING_IMPORTED, companions: ["Atlas"] })
+
+		expect(world.opened).toEqual([])
+		expect(world.sent).toEqual([])
+		expect(reportFailure).toHaveBeenCalledWith({
+			title:
+				"Couldn’t meet your first companion. Restart Kiroshi, then try again.",
+			description: "the companion isn’t on this computer",
+		})
+	})
+
+	it("names Shoto when he couldn't say hello", async () => {
+		world.names = { [SHOTO]: "Shoto" }
+		world.sendTo = () => Promise.reject(new Error("socket closed"))
+
+		await finishedAfter({ ...NOTHING_IMPORTED, companions: ["Atlas"] })
+
+		expect(reportFailure).toHaveBeenCalledWith({
+			title: "Shoto couldn’t say hello",
+			description: "socket closed",
+		})
+	})
+
+	it("still lands on the stored first companion when the import was skipped", async () => {
+		world.firstCompanion = SCOUT.id
+
+		await finishedAfter(NOTHING_IMPORTED)
 
 		expect(world.opened).toEqual([SCOUT.id])
 		expect(world.sent).toEqual([
 			{ botId: SCOUT.id, text: onboardingSummonsFor("arrival") },
 		])
-		expect(reportSuccess).toHaveBeenCalledOnce()
+	})
+
+	it("lands on the stored first companion when the app relaunched after the import", async () => {
+		world.step = "account"
+		world.firstCompanion = SCOUT.id
+
+		await controller.finish()
+
+		expect(world.opened).toEqual([SCOUT.id])
+		expect(world.sent).toEqual([
+			{ botId: SCOUT.id, text: onboardingSummonsFor("arrival") },
+		])
+	})
+
+	it("lands on the stored first companion again after a replay", async () => {
+		port.hasClaudeFolder = true
+		await connectedThroughLogin()
+		await controller.leaveImport({ ...NOTHING_IMPORTED, companions: ["Atlas"] })
+		await controller.replay()
+		world.firstCompanion = SCOUT.id
+
+		await controller.finish()
+
+		expect(world.opened).toEqual([SCOUT.id])
 	})
 })
 
