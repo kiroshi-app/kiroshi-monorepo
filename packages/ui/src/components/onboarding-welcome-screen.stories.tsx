@@ -798,9 +798,10 @@ export const WelcomeSpacesLight = meta.story({
 		await expectArrows({ canvasElement, args, current: 3 })
 		await expectPlainSkip(canvasElement)
 
-		await userEvent.click(canvas.getByRole("button", { name: "Skip intro" }))
+		const skip = canvas.getByRole("button", { name: "Skip intro" })
+		await userEvent.click(skip)
 		await expect(args.onSkip).toHaveBeenCalledOnce()
-		canvas.getByRole("button", { name: "Skip intro" }).focus()
+		skip.focus()
 		await userEvent.keyboard("{Enter}")
 		await expect(args.onSkip).toHaveBeenCalledTimes(2)
 	},
