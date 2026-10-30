@@ -129,6 +129,13 @@ const press = async (name: string) => {
 
 const heading = () => screen.getByRole("heading", { level: 1 }).textContent
 
+const openAnotherAccount = async () => {
+	port.report = LOGGED_IN
+	await renderOnboarding()
+	await press("Skip intro")
+	await press("Use another account")
+}
+
 const importScreen = () =>
 	screen.findByRole("heading", { name: "Bring in your Claude Code setup" })
 
@@ -214,21 +221,14 @@ describe("the Connect screen", () => {
 	})
 
 	it("asks how to connect again on Use another account", async () => {
-		port.report = LOGGED_IN
-		await renderOnboarding()
-		await press("Skip intro")
-
-		await press("Use another account")
+		await openAnotherAccount()
 
 		expect(heading()).toBe("How do you want to connect?")
 		expect(screen.queryByText("reader@example.com")).toBeNull()
 	})
 
 	it("signs in from another account on Continue, as when nothing is found", async () => {
-		port.report = LOGGED_IN
-		await renderOnboarding()
-		await press("Skip intro")
-		await press("Use another account")
+		await openAnotherAccount()
 
 		await press("Continue")
 
@@ -236,10 +236,7 @@ describe("the Connect screen", () => {
 	})
 
 	it("asks for a key from another account on Paste an API key, then Continue", async () => {
-		port.report = LOGGED_IN
-		await renderOnboarding()
-		await press("Skip intro")
-		await press("Use another account")
+		await openAnotherAccount()
 
 		await act(async () => {
 			fireEvent.click(screen.getByRole("radio", { name: /Paste an API key/ }))
