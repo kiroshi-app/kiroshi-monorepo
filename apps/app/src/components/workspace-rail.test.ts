@@ -122,6 +122,7 @@ type RailHarnessProps = {
 	railSettings?: SettingsPanels["railSettings"]
 	navigation?: Partial<SettingsNavigation>
 	onSelectSpace?: (id: string) => void
+	badgesBySpaceId?: RosterLists["badgesBySpaceId"]
 }
 
 const RailHarness = ({
@@ -129,6 +130,7 @@ const RailHarness = ({
 	railSettings = "space",
 	navigation = {},
 	onSelectSpace = () => undefined,
+	badgesBySpaceId = {},
 }: RailHarnessProps) => {
 	const switcher = useSwitcherSpaces(
 		{ spaces: [HOME, GARAGE], selectedSpaceId },
@@ -153,7 +155,7 @@ const RailHarness = ({
 		rosterLines: {
 			sidebarActions: { onCreateSpace: () => undefined },
 		} as RosterLines,
-		rosterLists: { badgesBySpaceId: {} } as RosterLists,
+		rosterLists: { badgesBySpaceId } as RosterLists,
 		sidebarTab: { openTab: "conversations" } as ReturnType<
 			typeof useSidebarPanelSwitch
 		>,
@@ -183,6 +185,11 @@ const openSpacesMenu = () => {
 }
 
 const railLogoTint = () => railLogo()?.dataset.colour
+
+const spacesButtonBadge = () =>
+	railLogo()
+		?.closest("button")
+		?.querySelector<HTMLElement>("[data-slot='app-rail-dot']")?.dataset.badge
 
 afterEach(cleanup)
 
@@ -293,6 +300,40 @@ describe("the rail on a settings screen", () => {
 				name: i18n.t("bots:spaces.create"),
 			}),
 		).toBeTruthy()
+	})
+})
+
+describe("the Spaces button of the rail", () => {
+	it.each([
+		[{ [GARAGE.id]: "failed" }, "failed"],
+		[
+			{ [GARAGE.id]: "failed", [joinedRowIdOf(STUDIO.id)]: "attention" },
+			"attention",
+		],
+		[{ [HOME.id]: "failed", [GARAGE.id]: "attention" }, "attention"],
+	] as const)(
+		"shows the strongest badge %j of the other Spaces as %s",
+		(badgesBySpaceId, badge) => {
+			renderWithQueries(
+				createElement(RailHarness, {
+					selectedSpaceId: HOME.id,
+					badgesBySpaceId,
+				}),
+			)
+
+			expect(spacesButtonBadge()).toBe(badge)
+		},
+	)
+
+	it("shows no badge when only the current Space carries one", () => {
+		renderWithQueries(
+			createElement(RailHarness, {
+				selectedSpaceId: HOME.id,
+				badgesBySpaceId: { [HOME.id]: "attention" },
+			}),
+		)
+
+		expect(spacesButtonBadge()).toBeUndefined()
 	})
 })
 
