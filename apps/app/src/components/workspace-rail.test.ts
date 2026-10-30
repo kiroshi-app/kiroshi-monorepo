@@ -186,11 +186,6 @@ const openSpacesMenu = () => {
 
 const railLogoTint = () => railLogo()?.dataset.colour
 
-const spacesButtonBadge = () =>
-	railLogo()
-		?.closest("button")
-		?.querySelector<HTMLElement>("[data-slot='app-rail-dot']")?.dataset.badge
-
 afterEach(cleanup)
 
 const renderWithQueries = (screen: ReactElement) =>
@@ -304,36 +299,22 @@ describe("the rail on a settings screen", () => {
 })
 
 describe("the Spaces button of the rail", () => {
-	it.each([
-		[{ [GARAGE.id]: "failed" }, "failed"],
-		[
-			{ [GARAGE.id]: "failed", [joinedRowIdOf(STUDIO.id)]: "attention" },
-			"attention",
-		],
-		[{ [HOME.id]: "failed", [GARAGE.id]: "attention" }, "attention"],
-	] as const)(
-		"shows the strongest badge %j of the other Spaces as %s",
-		(badgesBySpaceId, badge) => {
-			renderWithQueries(
-				createElement(RailHarness, {
-					selectedSpaceId: HOME.id,
-					badgesBySpaceId,
-				}),
-			)
-
-			expect(spacesButtonBadge()).toBe(badge)
-		},
-	)
-
-	it("shows no badge when only the current Space carries one", () => {
+	it("carries no dot while other Spaces carry attention and failed", () => {
 		renderWithQueries(
 			createElement(RailHarness, {
 				selectedSpaceId: HOME.id,
-				badgesBySpaceId: { [HOME.id]: "attention" },
+				badgesBySpaceId: {
+					[GARAGE.id]: "failed",
+					[joinedRowIdOf(STUDIO.id)]: "attention",
+				},
 			}),
 		)
 
-		expect(spacesButtonBadge()).toBeUndefined()
+		expect(
+			railLogo()
+				?.closest("button")
+				?.querySelector("[data-slot='app-rail-dot']"),
+		).toBeNull()
 	})
 })
 
