@@ -3,6 +3,7 @@ import { expect, fn, userEvent, within } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	expectOnboardingDragStrip,
+	expectOnboardingSecondaryAction,
 	isInBrowserRunner,
 	slotIn,
 	withMotionAllowed,
@@ -340,11 +341,16 @@ const meta = preview.meta({
 	},
 })
 
+const skipIn = (canvasElement: HTMLElement) =>
+	within(canvasElement).getByRole("button", {
+		name: i18n.t("common:claudeImport.select.skip"),
+	})
+
 export const List = meta.story({
 	name: "3.1 List",
 	args: LIST,
 	parameters: describe(
-		"The nominal onboarding case: two agents, CLAUDE.md and four skills, all checked. Check that one 560 px card holds every row with no heading and no tile above the title, that each row names its type at the right edge, the checkboxes wear the Space accent, and that unchecking a row hands its id to `onToggle`.",
+		"The nominal onboarding case: two agents, CLAUDE.md and four skills, all checked. Check that one 560 px card holds every row with no heading and no tile above the title, that each row names its type at the right edge, the checkboxes wear the Space accent, that unchecking a row hands its id to `onToggle`, and that Skip for now is the ghost pill of Use another account on Connect, filled on hover with no colour transition.",
 	),
 	play: async ({ canvasElement, args }) => {
 		const canvas = within(canvasElement)
@@ -352,6 +358,7 @@ export const List = meta.story({
 		await expectTypeLabels(canvasElement)
 		await userEvent.click(canvas.getByRole("checkbox", { name: "Wren" }))
 		await expect(toggleOf(args)).toHaveBeenCalledWith("wren", false)
+		await expectOnboardingSecondaryAction(skipIn(canvasElement))
 		if (!isInBrowserRunner()) return
 		const controls = [
 			canvas.getByRole("checkbox", { name: "Atlas" }),
@@ -359,9 +366,7 @@ export const List = meta.story({
 				canvasElement,
 				i18n.t("common:claudeImport.select.importItems", { count: 7 }),
 			),
-			canvas.getByRole("button", {
-				name: i18n.t("common:claudeImport.select.skip"),
-			}),
+			skipIn(canvasElement),
 		]
 		await withMotionAllowed(async () => {
 			for (const control of controls) {
@@ -375,7 +380,11 @@ export const ListDark = meta.story({
 	name: "3.1 List, dark",
 	args: LIST,
 	globals: DARK,
-	parameters: describe("3.1 List on the dark scheme."),
+	parameters: describe(
+		"3.1 List on the dark scheme. Check that Skip for now is the ghost pill of Use another account on Connect, filled on hover.",
+	),
+	play: ({ canvasElement }) =>
+		expectOnboardingSecondaryAction(skipIn(canvasElement)),
 })
 
 const LIST_EXISTING_PROFILE: Artboard = {
@@ -419,7 +428,7 @@ export const Importing = meta.story({
 	name: "3.2 Importing",
 	args: IMPORTING,
 	parameters: describe(
-		"The import is running, three of seven done, the four skills still in progress on their one row. Check that no checkbox is left, that each row carries a done or in progress icon with its label and keeps its type at the right edge, that the body counts each skill, and that the primary action is disabled with no Skip link.",
+		"The import is running, three of seven done, the four skills still in progress on their one row. Check that no checkbox is left, that each row carries a done or in progress icon with its label and keeps its type at the right edge, that the body counts each skill, and that the primary action is disabled with no Skip for now.",
 	),
 	play: async ({ canvasElement, args }) => {
 		const canvas = within(canvasElement)

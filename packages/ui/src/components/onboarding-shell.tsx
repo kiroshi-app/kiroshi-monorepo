@@ -114,6 +114,19 @@ const OnboardingButton = ({ className, ...props }: OnboardingButtonProps) => (
 	/>
 )
 
+type OnboardingSecondaryButtonProps = Omit<
+	OnboardingButtonProps,
+	"variant" | "className"
+>
+
+const OnboardingSecondaryButton = (props: OnboardingSecondaryButtonProps) => (
+	<OnboardingButton
+		className="h-10 px-6 text-muted-foreground"
+		variant="ghost"
+		{...props}
+	/>
+)
+
 export {
 	OnboardingButton,
 	type OnboardingButtonProps,
@@ -126,6 +139,8 @@ export {
 	type OnboardingHeadingProps,
 	OnboardingLink,
 	type OnboardingLinkProps,
+	OnboardingSecondaryButton,
+	type OnboardingSecondaryButtonProps,
 	OnboardingShell,
 	type OnboardingShellProps,
 }

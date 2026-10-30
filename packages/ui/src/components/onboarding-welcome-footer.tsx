@@ -3,7 +3,10 @@
 import { useTranslation } from "react-i18next"
 
 import { Icons } from "@workspace/ui/components/icons"
-import { OnboardingButton } from "@workspace/ui/components/onboarding-shell"
+import {
+	OnboardingButton,
+	OnboardingSecondaryButton,
+} from "@workspace/ui/components/onboarding-shell"
 import { Button } from "@workspace/ui/components/ui/button"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -95,16 +98,9 @@ const OnboardingWelcomeFooter = ({
 					{t("onboarding.intro.getStarted")}
 				</OnboardingButton>
 			) : (
-				<OnboardingButton
-					className={cn(
-						ACTION_CLASS,
-						"text-muted-foreground hover:bg-transparent hover:text-muted-foreground dark:hover:bg-transparent",
-					)}
-					onClick={onSkip}
-					variant="ghost"
-				>
+				<OnboardingSecondaryButton onClick={onSkip}>
 					{t("onboarding.intro.skip")}
-				</OnboardingButton>
+				</OnboardingSecondaryButton>
 			)}
 		</div>
 	)

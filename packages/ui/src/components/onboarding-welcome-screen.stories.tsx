@@ -6,6 +6,8 @@ import {
 	colourTransitionsOf,
 	expectNoHorizontalScrollAt,
 	expectOnboardingDragStrip,
+	expectOnboardingSecondaryAction,
+	expectOnboardingSecondaryRing,
 	hueScopeOf,
 	resolvedRootColor,
 	slotIn,
@@ -309,28 +311,20 @@ const SKIP_GEOMETRY = {
 	type: ["14px", "18px", "500"],
 }
 
-const expectPlainSkip = async (canvasElement: HTMLElement) => {
-	const skip = within(canvasElement).getByRole("button", { name: "Skip intro" })
+const skipIn = (canvasElement: HTMLElement) =>
+	within(canvasElement).getByRole("button", { name: "Skip intro" })
+
+const expectSkipPill = async (canvasElement: HTMLElement) => {
+	const skip = skipIn(canvasElement)
 	skip.blur()
-	const muted = getComputedStyle(skip).color
-	const expectBare = async () => {
-		const { backgroundColor, borderColor, color } = getComputedStyle(skip)
-		await expect([backgroundColor, borderColor, color]).toEqual([
-			TRANSPARENT,
-			TRANSPARENT,
-			muted,
-		])
-	}
 	const { fontSize, lineHeight, fontWeight, paddingInlineStart } =
 		getComputedStyle(skip)
 
 	await expect(skip.getBoundingClientRect().height).toBe(SKIP_GEOMETRY.height)
 	await expect(paddingInlineStart).toBe(SKIP_GEOMETRY.paddingInline)
 	await expect([fontSize, lineHeight, fontWeight]).toEqual(SKIP_GEOMETRY.type)
-	await expectBare()
-	await userEvent.hover(skip)
-	await expectBare()
-	await userEvent.unhover(skip)
+	await expect(getComputedStyle(skip).backgroundColor).toBe(TRANSPARENT)
+	await expectOnboardingSecondaryAction(skip)
 }
 
 type ArrowPlayContext = {
@@ -597,7 +591,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The four Welcome screens a reader meets before connecting a model provider, in one centred column on the onboarding shell: a visual zone and a text zone of one fixed height on every slide, then the stepper and one action, centred on the paragraph and at the same height on every slide. The stepper holds Back, four segments filled up to the current slide, and Next; the segments read as one progress bar, Step 2 of 4. Back is disabled on the first slide and Next on the last, both still in the tab order. The action is Skip intro as plain text on the first three slides and Get started on the last. Segments, Next and Get started wear the Kiroshi primary, whatever the Space colour.",
+					"The four Welcome screens a reader meets before connecting a model provider, in one centred column on the onboarding shell: a visual zone and a text zone of one fixed height on every slide, then the stepper and one action, centred on the paragraph and at the same height on every slide. The stepper holds Back, four segments filled up to the current slide, and Next; the segments read as one progress bar, Step 2 of 4. Back is disabled on the first slide and Next on the last, both still in the tab order. The action is Skip intro, the ghost pill of Use another account on Connect, on the first three slides and Get started on the last. Segments, Next and Get started wear the Kiroshi primary, whatever the Space colour.",
 			},
 		},
 	},
@@ -614,7 +608,7 @@ export const WelcomeCompanionsLight = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${ARTBOARD} Slide 1: three companions on bot avatars, 96, 132 and 96, the middle one lifted. Check the first segment filled, Back disabled and faded, Next filled in the primary, and Skip intro as plain muted text. Pick the Dark twin for the other theme.`,
+				story: `${ARTBOARD} Slide 1: three companions on bot avatars, 96, 132 and 96, the middle one lifted. Check the first segment filled, Back disabled and faded, Next filled in the primary, and Skip intro as the ghost pill of Use another account on Connect, muted at rest, filled on hover with no colour transition, with its focus ring. Pick the Dark twin for the other theme.`,
 			},
 		},
 	},
@@ -636,12 +630,11 @@ export const WelcomeCompanionsLight = meta.story({
 		await userEvent.tab()
 		await expect(canvas.getByRole("button", { name: "Next" })).toHaveFocus()
 		await userEvent.tab()
-		await expect(
-			canvas.getByRole("button", { name: "Skip intro" }),
-		).toHaveFocus()
+		await expectOnboardingSecondaryRing(skipIn(canvasElement))
 
-		await userEvent.click(canvas.getByRole("button", { name: "Skip intro" }))
+		await userEvent.click(skipIn(canvasElement))
 		await expect(args.onSkip).toHaveBeenCalledOnce()
+		await expectSkipPill(canvasElement)
 	},
 })
 
@@ -652,7 +645,7 @@ export const WelcomeCompanionsDark = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${ARTBOARD} Slide 1, dark. Check the job pills legible on the dark page, the first segment and Next in the dark primary, Back faded. Pick the Light twin for the other theme.`,
+				story: `${ARTBOARD} Slide 1, dark. Check the job pills legible on the dark page, the first segment and Next in the dark primary, Back faded, and Skip intro with no fill at rest and the dark muted fill on hover. Pick the Light twin for the other theme.`,
 			},
 		},
 	},
@@ -664,6 +657,7 @@ export const WelcomeCompanionsDark = meta.story({
 		})
 		await expectCompanionRoles(canvasElement)
 		await expectArrows({ canvasElement, args, current: 1 })
+		await expectSkipPill(canvasElement)
 	},
 })
 
@@ -783,7 +777,7 @@ export const WelcomeSpacesLight = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${SPACES_ARTBOARD} Two Space cards of one width in a 520 px row: Work, blue, with Atlas and Wren, Shared with 3 people; Personal, green, with Juniper alone, Only you. Both Space avatars wear the computer badge, as the artboard draws them. Check three segments filled and Skip intro as plain muted text, with no fill and no border at rest or on hover. Pick the Dark twin for the other theme.`,
+				story: `${SPACES_ARTBOARD} Two Space cards of one width in a 520 px row: Work, blue, with Atlas and Wren, Shared with 3 people; Personal, green, with Juniper alone, Only you. Both Space avatars wear the computer badge, as the artboard draws them. Check three segments filled and Skip intro as the ghost pill of Use another account on Connect, with no fill at rest and the muted fill on hover. Pick the Dark twin for the other theme.`,
 			},
 		},
 	},
@@ -796,7 +790,7 @@ export const WelcomeSpacesLight = meta.story({
 		await expectSpacesCopy(canvasElement)
 		await expectSpaceCards(canvasElement)
 		await expectArrows({ canvasElement, args, current: 3 })
-		await expectPlainSkip(canvasElement)
+		await expectSkipPill(canvasElement)
 
 		const skip = canvas.getByRole("button", { name: "Skip intro" })
 		await userEvent.click(skip)
@@ -814,7 +808,7 @@ export const WelcomeSpacesDark = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${SPACES_ARTBOARD} The Spaces slide, dark, as the artboard draws it. Check both Space avatars in their dark tone, the cards on the dark card surface, three segments in the dark primary and Skip intro bare at rest and on hover. Pick the Light twin for the other theme.`,
+				story: `${SPACES_ARTBOARD} The Spaces slide, dark, as the artboard draws it. Check both Space avatars in their dark tone, the cards on the dark card surface, three segments in the dark primary and Skip intro with no fill at rest and the dark muted fill on hover. Pick the Light twin for the other theme.`,
 			},
 		},
 	},
@@ -827,7 +821,7 @@ export const WelcomeSpacesDark = meta.story({
 		await expectSpacesCopy(canvasElement)
 		await expectSpaceCards(canvasElement)
 		await expectArrows({ canvasElement, args, current: 3 })
-		await expectPlainSkip(canvasElement)
+		await expectSkipPill(canvasElement)
 	},
 })
 
