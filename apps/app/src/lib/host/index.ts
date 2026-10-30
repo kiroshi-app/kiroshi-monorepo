@@ -24,6 +24,8 @@ import {
 	MAXIMIZE_BUTTON_EVENT,
 	type MaximizeButtonPointer,
 	type MaximizeButtonState,
+	NATIVE_MOVE_ENDED_EVENT,
+	type NativeMoveEnded,
 } from "../bindings"
 import { reportLocalWhen } from "../failure-report"
 
@@ -172,6 +174,13 @@ export const watchMaximizeButton = (
 	listenOnThisWindow<MaximizeButtonPointer>(
 		MAXIMIZE_BUTTON_EVENT,
 		({ payload }) => report(payload.state),
+	)
+
+export const watchNativeMoveEnded = (
+	report: (ended: NativeMoveEnded) => void,
+): Promise<() => void> =>
+	listenOnThisWindow<NativeMoveEnded>(NATIVE_MOVE_ENDED_EVENT, ({ payload }) =>
+		report(payload),
 	)
 
 export const watchFileMenu = (
