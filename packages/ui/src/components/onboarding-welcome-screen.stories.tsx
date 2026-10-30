@@ -781,7 +781,7 @@ export const WelcomeSpacesLight = meta.story({
 			},
 		},
 	},
-	play: async ({ args, canvas, canvasElement }) => {
+	play: async ({ args, canvasElement }) => {
 		await expectWelcome({
 			canvasElement,
 			title: "Spaces keep work apart",
@@ -792,7 +792,7 @@ export const WelcomeSpacesLight = meta.story({
 		await expectArrows({ canvasElement, args, current: 3 })
 		await expectSkipPill(canvasElement)
 
-		const skip = canvas.getByRole("button", { name: "Skip intro" })
+		const skip = skipIn(canvasElement)
 		await userEvent.click(skip)
 		await expect(args.onSkip).toHaveBeenCalledOnce()
 		skip.focus()
