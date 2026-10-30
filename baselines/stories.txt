@@ -659,6 +659,7 @@ feedback-connectionstatus--zero-value
 feedback-importrow--default
 feedback-importrow--long-content
 feedback-importrow--states
+feedback-importrow--states-dark
 feedback-importscreen--again-from-settings
 feedback-importscreen--again-from-settings-dark
 feedback-importscreen--done
