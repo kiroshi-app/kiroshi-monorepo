@@ -50,12 +50,10 @@ const isInsideRoundedHexagon = (
 	return hexagonDistance(x, y, apothem) <= rounding
 }
 
-const roundedHexagonPath = (
-	shape: RoundedHexagon,
-	centre = shape.halfWidth,
-) => {
+const roundedHexagonPath = (shape: RoundedHexagon) => {
 	const { apothem, rounding } = hexagonMetrics(shape)
 	const reach = apothem / COS_30
+	const centre = shape.halfWidth
 	const at = (angle: number, radius: number, from: { x: number; y: number }) =>
 		`${(from.x + radius * Math.cos(angle)).toFixed(2)} ${(from.y + radius * Math.sin(angle)).toFixed(2)}`
 	const corner = (index: number) => ({

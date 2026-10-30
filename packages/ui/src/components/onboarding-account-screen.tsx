@@ -1,5 +1,6 @@
 "use client"
 
+import { useId } from "react"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -37,19 +38,35 @@ const SKIP_CLASS =
 
 const RING_VIEW_BOX = `0 ${OUTER.halfWidth - OUTER.halfHeight} ${OUTER.halfWidth * 2} ${OUTER.halfHeight * 2}`
 
-const RING_PATH = `${roundedHexagonPath(OUTER)} ${roundedHexagonPath(INNER, OUTER.halfWidth)}`
+const OUTER_PATH = roundedHexagonPath(OUTER)
 
-const KiroshiRing = () => (
-	<svg
-		aria-hidden="true"
-		className="pointer-events-none h-29 w-32 shrink-0 text-foreground"
-		data-slot="onboarding-account-mark"
-		fill="currentColor"
-		viewBox={RING_VIEW_BOX}
-	>
-		<path d={RING_PATH} fillRule="evenodd" />
-	</svg>
-)
+const INNER_PATH = roundedHexagonPath(INNER)
+
+const INNER_OFFSET = OUTER.halfWidth - INNER.halfWidth
+
+const KiroshiRing = () => {
+	const holeId = useId()
+
+	return (
+		<svg
+			aria-hidden="true"
+			className="pointer-events-none h-29 w-32 shrink-0 text-foreground"
+			data-slot="onboarding-account-mark"
+			fill="currentColor"
+			viewBox={RING_VIEW_BOX}
+		>
+			<mask id={holeId}>
+				<path d={OUTER_PATH} fill="white" />
+				<path
+					d={INNER_PATH}
+					fill="black"
+					transform={`translate(${INNER_OFFSET} ${INNER_OFFSET})`}
+				/>
+			</mask>
+			<path d={OUTER_PATH} mask={`url(#${holeId})`} />
+		</svg>
+	)
+}
 
 const SIGNED_OUT_INTRO = {
 	title: "account.signedOut.title",
