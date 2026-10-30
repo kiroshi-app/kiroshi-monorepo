@@ -4,7 +4,7 @@ use std::path::Path;
 
 use tauri::{AppHandle, Runtime};
 
-use super::commands::create_bundled_bot;
+use super::commands::{create_bundled_bot, CODER_JOB};
 use super::contract::{BotIdentity, TranscriptStoreError};
 use crate::avatars;
 use crate::bundles;
@@ -17,6 +17,7 @@ use crate::db::DatabaseError;
 use crate::file_store::FileStore;
 
 const PERSONAL_SPACE_ID: &str = "personal";
+const RETIRED_CODER_JOB: &str = "a coding companion";
 
 #[derive(Debug)]
 enum Refusal {
@@ -82,12 +83,19 @@ pub(super) async fn plant_first_companion<R: Runtime>(
 		}
 	};
 	backfill_shoto_title(database).await;
+	backfill_coder_title(database).await;
 	launch::settle(app, created, unlaid);
 }
 
 async fn backfill_shoto_title(database: &db::Database) {
 	if let Err(failure) = database.user().backfill_shoto_title(shoto::NAME, shoto::TITLE).await {
 		log::warn!("the title of {} was not backfilled: {failure:?}", shoto::NAME);
+	}
+}
+
+async fn backfill_coder_title(database: &db::Database) {
+	if let Err(failure) = database.user().backfill_coder_title(RETIRED_CODER_JOB, CODER_JOB).await {
+		log::warn!("the title of the coding agents was not backfilled: {failure:?}");
 	}
 }
 
@@ -667,5 +675,70 @@ mod tests {
 
 		assert_eq!(title_of(database, &other).await, "");
 		assert_eq!(title_of(database, &late).await, "", "a recorded backfill ran again");
+	}
+
+	async fn planted_sql(database: &db::Database, batch: &'static str) {
+		database
+			.call_mut(move |connection| Ok(connection.execute_batch(batch)?))
+			.await
+			.expect("the fixture is planted");
+	}
+
+	#[tokio::test]
+	async fn a_coding_companion_becomes_a_coding_agent_once_and_no_other_title_moves() {
+		let app = a_host("coder-backfill");
+		let database = database_of(&app);
+		let coder = a_bot(database, "Byte", RETIRED_CODER_JOB).await;
+		let near_titles = ["A coding companion", "a coding companion ", "a reviewer"];
+		let mut near_misses = Vec::new();
+		for title in near_titles {
+			near_misses.push(a_bot(database, "Other", title).await);
+		}
+
+		seeded(&app, database).await;
+
+		assert_eq!(title_of(database, &coder).await, CODER_JOB);
+		for (bot, title) in near_misses.iter().zip(near_titles) {
+			assert_eq!(title_of(database, bot).await, title);
+		}
+		retitled(database, &coder, RETIRED_CODER_JOB).await;
+		let late = a_bot(database, "Late", RETIRED_CODER_JOB).await;
+		seeded(&app, database).await;
+		assert_eq!(
+			title_of(database, &coder).await,
+			RETIRED_CODER_JOB,
+			"a recorded backfill ran again"
+		);
+		assert_eq!(
+			title_of(database, &late).await,
+			RETIRED_CODER_JOB,
+			"a recorded backfill ran again"
+		);
+	}
+
+	#[tokio::test]
+	async fn a_coder_backfill_that_fails_lets_the_launch_settle_and_records_nothing() {
+		let app = a_host("coder-backfill-refused");
+		let database = database_of(&app);
+		let coder = a_bot(database, "Byte", RETIRED_CODER_JOB).await;
+		planted_sql(
+			database,
+			"CREATE TRIGGER refuse_coder_title BEFORE UPDATE OF title ON bots
+				WHEN NEW.title = 'a coding agent'
+				BEGIN SELECT RAISE(ABORT, 'the coder title is refused'); END;",
+		)
+		.await;
+
+		plant_first_companion(app.handle(), database, vec!["unlaid".to_owned()]).await;
+
+		assert_eq!(
+			outcome_of(&app).refused,
+			Some(CompanionSeedRefused { reason: "unlaid".to_owned() }),
+			"the launch did not settle"
+		);
+		assert_eq!(title_of(database, &coder).await, RETIRED_CODER_JOB);
+		planted_sql(database, "DROP TRIGGER refuse_coder_title;").await;
+		seeded(&app, database).await;
+		assert_eq!(title_of(database, &coder).await, CODER_JOB, "the failed backfill was recorded");
 	}
 }

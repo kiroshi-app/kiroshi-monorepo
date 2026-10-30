@@ -22,6 +22,8 @@ use crate::file_store::FileStore;
 
 const DUPLICATE_SUFFIX: &str = " copy";
 
+pub(crate) const CODER_JOB: &str = "a coding agent";
+
 const SUGGESTED_BOTS: [SuggestedBot; 4] = [
 	SuggestedBot {
 		id: "writer",
@@ -40,7 +42,7 @@ const SUGGESTED_BOTS: [SuggestedBot; 4] = [
 	SuggestedBot {
 		id: "coder",
 		name: "Byte",
-		job: "a coding companion",
+		job: CODER_JOB,
 		description: "Pair with me on code. Read the project before changing it, keep changes small, and lay out the tradeoffs when there is more than one way.",
 		blurb: "Reads, writes and reviews code.",
 	},
@@ -899,6 +901,21 @@ mod tests {
 				(bot.name, bot.job, bot.description)
 			);
 		}
+	}
+
+	#[tokio::test]
+	async fn the_coder_suggestion_creates_a_coding_agent() {
+		let app = a_host("suggested-coder");
+		let coder = conversation_suggested_bots()
+			.into_iter()
+			.find(|bot| bot.id == "coder")
+			.expect("the coder is suggested");
+
+		let created = created_from(&app, a_draft(coder.name, coder.job, coder.description))
+			.await
+			.expect("the coder is created");
+
+		assert_eq!((coder.job, created.title.as_str()), ("a coding agent", "a coding agent"));
 	}
 
 	#[test]
