@@ -949,10 +949,8 @@ navigation-appframe--offline-space-dark
 navigation-appframe--offline-space-with-space-settings-open
 navigation-appframe--online-space
 navigation-appframe--shared-space
-navigation-apprail--a-7-spaces-badge
-navigation-apprail--a-7-spaces-badge-dark
-navigation-apprail--a-7-spaces-done-elsewhere
 navigation-apprail--a-7-spaces-menu
+navigation-apprail--a-7-spaces-menu-attention-row
 navigation-apprail--a-7-spaces-menu-dark
 navigation-apprail--attention-dot
 navigation-apprail--attention-dot-dark

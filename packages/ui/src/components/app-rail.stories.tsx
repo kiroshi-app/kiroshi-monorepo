@@ -627,23 +627,22 @@ export const RemovedPanelFallsBackToConversations = meta.story({
 })
 
 export const SpaceLogoHovered = meta.story({
-	args: { dots: { settings: true } },
+	args: { dots: { you: true } },
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The current space's logo, first in the rail, under the pointer, carrying a dot. Check it is the 26px SpaceAvatar in the space colour, with no icon and no presence dot, that no gear is left in the rail, that the tooltip reads Space settings, that the name spoken for it is Space settings followed by the news it carries, and that a press opens the space settings. Pick `SpaceLogoWithoutSpace` for the logo before a space is known.",
+					"The current space's logo, first in the rail, under the pointer. Check it is the 26px SpaceAvatar in the space colour, with no icon, no presence dot and no dot of its own even while another entry carries one, that no gear is left in the rail, that the tooltip and the name spoken for it read Space settings alone, and that a press opens the space settings. Pick `SpaceLogoWithoutSpace` for the logo before a space is known.",
 			},
 		},
 	},
 	play: async ({ args, canvasElement, userEvent }) => {
-		const name = `${SPACE_SETTINGS}, new activity`
-		await expectSpaceLogoFirstWithoutGear(canvasElement, name)
-		const logo = entryNamed(canvasElement, name)
+		await expectSpaceLogoFirstWithoutGear(canvasElement, SPACE_SETTINGS)
+		const logo = entryNamed(canvasElement, SPACE_SETTINGS)
 		await expect(slotIn(logo, "space-avatar").dataset.colour).toBe(
 			String(BLOT_HUES.blue),
 		)
-		await expect(slotIn(logo, "app-rail-dot")).toBeVisible()
+		await expect(logo.querySelector('[data-slot="app-rail-dot"]')).toBeNull()
 		await userEvent.hover(logo)
 		await expect(await screen.findByRole("tooltip")).toHaveTextContent(
 			SPACE_SETTINGS,
@@ -1045,77 +1044,36 @@ export const A7SpacesMenuDark = meta.story({
 const A7_BADGE = {
 	...A7,
 	badgesBySpaceId: {
-		[CURRENT_SPACE.id]: "attention",
-		[STUDIO.id]: "done",
+		[CURRENT_SPACE.id]: "done",
+		[STUDIO.id]: "attention",
 		[GARAGE.id]: "failed",
 	},
 } satisfies Partial<AppRailProps>
 
-const playA7Badge = async ({
-	canvasElement,
-}: {
-	canvasElement: HTMLElement
-}) => {
-	const logo = entryNamed(canvasElement, `${SPACES_MENU}, ${DOT_NEWS.failed}`)
-	const box = logo.getBoundingClientRect()
-	await expect(box.width).toBe(RAIL_BUTTON)
-	await expect(slotIn(logo, "space-avatar").getBoundingClientRect().width).toBe(
-		SPACE_LOGO,
-	)
-	const dot = slotIn(logo, "app-rail-dot")
-	const dotBox = dot.getBoundingClientRect()
-	await expect(dotBox.width).toBe(8)
-	await expect(dotBox.top).toBe(box.top)
-	await expect(dotBox.right).toBe(box.right)
-	await expect(getComputedStyle(dot).backgroundColor).toBe(
-		tokenStyleIn(logo, DOT_TOKEN.failed, "backgroundColor"),
-	)
-}
-
-export const A7SpacesBadge = meta.story({
+export const A7SpacesMenuAttentionRow = meta.story({
 	args: A7_BADGE,
 	render: renderSpacesWindow,
 	parameters: {
+		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		docs: {
 			description: {
 				story:
-					"A7, light: the rail's Space logo carrying the strongest badge of the other spaces, attention over failed, the rule the Space switcher uses. The current space waits on the reader, which the logo leaves out, Studio finished, which the logo leaves out too, and Garage failed. Check the 8px failed dot sits flush with the top and trailing corner of the 44px button, the way the other rail entries carry theirs, and that the button's name ends on activity failed. The artboard draws no badge here. Pick `A7SpacesDoneElsewhere` for a done alone, `A7SpacesMenu` for the logo with no news.",
+					"A7, light: Studio waits on the reader and Garage failed while Vocca is open. Check the rail's Space logo stays bare, with no dot at its trailing corner and the plain Change space name, and that the Spaces menu it opens rings Studio's avatar for attention while the rows with no attention carry no ring: the menu is where the reader learns which space needs them. Pick `A7SpacesMenu` for the menu with no news.",
 			},
 		},
 	},
-	play: playA7Badge,
-})
-
-export const A7SpacesBadgeDark = meta.story({
-	args: A7_BADGE,
-	globals: { theme: "dark" },
-	render: renderSpacesWindow,
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"A7, dark: the failed dot on the Space logo, ringed in the dark window ground, the finished Studio leaving no mark of its own. Pick `A7SpacesBadge` for the light theme.",
-			},
-		},
-	},
-	play: playA7Badge,
-})
-
-export const A7SpacesDoneElsewhere = meta.story({
-	args: { ...A7, badgesBySpaceId: { [STUDIO.id]: "done" } },
-	render: renderSpacesWindow,
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"A7, light: the only news in the other spaces is Studio finishing a run. Check the Space logo stays bare, with no dot at its trailing corner, and that its name is the plain Change space line with no activity at its end: a done asks nothing of the reader, and a green dot here read as news about the space already open. Pick `A7SpacesBadge` for the dot attention and failed still bring.",
-			},
-		},
-	},
-	play: async ({ canvasElement }) => {
+	play: async ({ canvasElement, userEvent }) => {
 		const logo = entryNamed(canvasElement, SPACES_MENU)
 		await expect(logo).toHaveAccessibleName(SPACES_MENU)
 		await expect(logo.querySelector('[data-slot="app-rail-dot"]')).toBeNull()
+		await userEvent.click(logo)
+		const menu = await settled(
+			await screen.findByRole("menu", { name: "Spaces" }),
+		)
+		const rows = within(menu).getAllByRole("menuitemradio")
+		await expect(
+			rows.map((row) => slotIn(row, "space-avatar").dataset.attention),
+		).toEqual(["", undefined, undefined, undefined])
 	},
 })
 

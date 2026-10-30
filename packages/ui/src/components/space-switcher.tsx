@@ -436,10 +436,4 @@ const SpaceDots = ({
 	)
 }
 
-export {
-	badgeElsewhere,
-	SpaceDots,
-	SpaceMenuRows,
-	SpaceSwitcher,
-	type SpaceSwitcherProps,
-}
+export { SpaceDots, SpaceMenuRows, SpaceSwitcher, type SpaceSwitcherProps }

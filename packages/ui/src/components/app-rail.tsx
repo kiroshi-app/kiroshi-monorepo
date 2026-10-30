@@ -27,10 +27,7 @@ import {
 	type SpaceInvitationCallbacks,
 	SpaceInvitations,
 } from "@workspace/ui/components/space-invitations"
-import {
-	badgeElsewhere,
-	SpaceMenuRows,
-} from "@workspace/ui/components/space-switcher"
+import { SpaceMenuRows } from "@workspace/ui/components/space-switcher"
 import {
 	TITLE_BAR_MENU,
 	TITLE_BAR_MENU_ROW,
@@ -51,7 +48,7 @@ type AppRailPanel = "conversations" | "missions"
 type AppRailSettings = "space" | "you"
 
 type AppRailDots = Partial<
-	Record<AppRailPanel, BotBadge> & Record<"settings" | "you", boolean>
+	Record<AppRailPanel, BotBadge> & Record<"you", boolean>
 >
 
 const PANEL_ICON = {
@@ -300,9 +297,7 @@ const AppRail = ({
 			<ul className={RAIL_GROUP}>
 				{spaces ? (
 					<RailItem
-						badge={badgeElsewhere(spaces, space?.id, badgesBySpaceId)}
 						className={RAIL_SPACES_TRIGGER}
-						hasDot={dots?.settings}
 						isSelected={openSettings === "space"}
 						name={
 							space
@@ -330,9 +325,7 @@ const AppRail = ({
 						{spaceLogo}
 					</RailItem>
 				) : (
-					// TODO: OPE-1334 drops this Space settings dot once apps/app passes spaces to every rail.
 					<RailItem
-						hasDot={dots?.settings}
 						isSelected={openSettings === "space"}
 						name={t("rail.spaceSettings")}
 						onPress={onOpenSpaceSettings}
