@@ -146,17 +146,17 @@ const ConversationsIllustration = () => {
 
 const SPACES = [
 	{
-		id: "orbit",
+		id: "work",
 		hue: hueOf("blue"),
 		companions: [
 			{ id: "atlas", hue: ATLAS_HUE },
-			{ id: "juniper", hue: JUNIPER_HUE },
+			{ id: "wren", hue: WREN_HUE },
 		],
 	},
 	{
-		id: "newsletter",
-		hue: hueOf("orange"),
-		companions: [{ id: "wren", hue: WREN_HUE }],
+		id: "personal",
+		hue: hueOf("green"),
+		companions: [{ id: "juniper", hue: JUNIPER_HUE }],
 	},
 ] as const
 
@@ -164,7 +164,7 @@ const SpacesIllustration = () => {
 	const { t } = useTranslation("chat")
 
 	return (
-		<div className="flex w-110 max-w-full flex-wrap gap-3">
+		<div className="flex w-130 max-w-full flex-wrap gap-3">
 			{SPACES.map(({ id, hue, companions }) => (
 				<div
 					className={cn(

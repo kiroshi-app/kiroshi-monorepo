@@ -96,7 +96,10 @@ const OnboardingWelcomeFooter = ({
 				</OnboardingButton>
 			) : (
 				<OnboardingButton
-					className={cn(ACTION_CLASS, "text-muted-foreground")}
+					className={cn(
+						ACTION_CLASS,
+						"text-muted-foreground hover:bg-transparent hover:text-muted-foreground dark:hover:bg-transparent",
+					)}
 					onClick={onSkip}
 					variant="ghost"
 				>
