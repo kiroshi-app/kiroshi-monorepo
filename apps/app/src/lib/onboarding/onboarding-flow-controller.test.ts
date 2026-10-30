@@ -3,6 +3,11 @@ import { beforeEach, describe, expect, it, type Mock, vi } from "vitest"
 import "@workspace/ui/lib/i18n"
 import type { NoticeMessage } from "@workspace/ui/components/notice-surface"
 
+import type {
+	ClaudeImported,
+	ClaudeImportSession,
+} from "./claude-import-controller"
+import { importedOf } from "./claude-import-screen"
 import {
 	createFakeFlowWorld,
 	type FakeFlowWorld,
@@ -30,6 +35,12 @@ import type { UserController } from "../user/preferences-controller"
 
 const SCOUT = { id: "bot-scout", name: "Scout" }
 
+const NOTHING_IMPORTED: ClaudeImported = {
+	companions: [],
+	hasInstructions: false,
+	skillCount: 0,
+}
+
 const LOGGED_IN: AccountReport = {
 	connection: "ready",
 	binaryVersion: null,
@@ -42,6 +53,7 @@ let port: FakeOnboardingPort
 let world: FakeFlowWorld
 let controller: OnboardingFlowController
 let reportFailure: Mock<(notice: NoticeMessage) => void>
+let reportSuccess: Mock<(notice: NoticeMessage) => void>
 
 const flushed = () => new Promise((resolve) => setTimeout(resolve, 0))
 
@@ -50,7 +62,11 @@ beforeEach(() => {
 	world = createFakeFlowWorld()
 	world.names = { [SCOUT.id]: SCOUT.name }
 	reportFailure = vi.fn<(notice: NoticeMessage) => void>()
-	controller = createOnboardingFlowController(port, world, { reportFailure })
+	reportSuccess = vi.fn<(notice: NoticeMessage) => void>()
+	controller = createOnboardingFlowController(port, world, {
+		reportFailure,
+		reportSuccess,
+	})
 })
 
 const connectedThroughLogin = async () => {
@@ -168,7 +184,7 @@ describe("connecting with a ~/.claude folder", () => {
 	it("stores account when the import is skipped", async () => {
 		await connectedThroughLogin()
 
-		await controller.skipImport()
+		await controller.leaveImport(NOTHING_IMPORTED)
 
 		expect(world.stored.at(-1)).toBe("account")
 	})
@@ -432,6 +448,113 @@ describe("finishing on Account", () => {
 		expect(world.stored).toEqual(["done"])
 		expect(world.opened).toEqual([])
 		expect(world.sent).toEqual([])
+	})
+})
+
+describe("landing after an import", () => {
+	const ALL_FAILED: ClaudeImportSession = {
+		unchecked: [],
+		selection: ["agent:atlas", "skill:changelog"],
+		results: {
+			"agent:atlas": { kind: "failed", cause: "unparsable" },
+			"skill:changelog": { kind: "failed", cause: "unparsable" },
+		},
+		isImporting: false,
+	}
+
+	const itemOf = (key: string, name: string) => ({
+		key,
+		name,
+		description: "",
+		alreadyImported: false,
+	})
+
+	const finishedAfter = async (imported: ClaudeImported) => {
+		port.hasClaudeFolder = true
+		await connectedThroughLogin()
+		await controller.leaveImport(imported)
+		await controller.finish()
+	}
+
+	it("says which companions came over, with CLAUDE.md and the skills", async () => {
+		await finishedAfter({
+			companions: ["Atlas", "Wren"],
+			hasInstructions: true,
+			skillCount: 4,
+		})
+
+		expect(reportSuccess).toHaveBeenCalledExactlyOnceWith({
+			title:
+				"You’re set up. Atlas and Wren came over from Claude Code, with your CLAUDE.md and 4 skills.",
+		})
+	})
+
+	it("names the companion alone when nothing else came over", async () => {
+		await finishedAfter({ ...NOTHING_IMPORTED, companions: ["Atlas"] })
+
+		expect(reportSuccess).toHaveBeenCalledExactlyOnceWith({
+			title: "You’re set up. Atlas came over from Claude Code.",
+		})
+	})
+
+	it("says only CLAUDE.md and the skills came over without a companion", async () => {
+		await finishedAfter({
+			...NOTHING_IMPORTED,
+			hasInstructions: true,
+			skillCount: 1,
+		})
+
+		expect(reportSuccess).toHaveBeenCalledExactlyOnceWith({
+			title: "You’re set up, with your CLAUDE.md and 1 skill from Claude Code.",
+		})
+	})
+
+	it("says nothing when the import was skipped", async () => {
+		await finishedAfter(NOTHING_IMPORTED)
+
+		expect(world.stored.at(-1)).toBe("done")
+		expect(reportSuccess).not.toHaveBeenCalled()
+	})
+
+	it("says nothing when every item failed to come in", async () => {
+		const inventory = {
+			kind: "found" as const,
+			agents: [itemOf("agent:atlas", "Atlas")],
+			skills: [itemOf("skill:changelog", "changelog")],
+			claudeMd: null,
+		}
+
+		await finishedAfter(importedOf(inventory, ALL_FAILED))
+
+		expect(world.stored.at(-1)).toBe("done")
+		expect(reportSuccess).not.toHaveBeenCalled()
+	})
+
+	it("says it once however many times the run finishes", async () => {
+		await finishedAfter({ ...NOTHING_IMPORTED, companions: ["Atlas"] })
+		await controller.finish()
+
+		expect(reportSuccess).toHaveBeenCalledOnce()
+	})
+
+	it("says nothing when the app relaunched after the import", async () => {
+		world.step = "account"
+
+		await controller.finish()
+
+		expect(reportSuccess).not.toHaveBeenCalled()
+	})
+
+	it("still opens the first companion and summons its arrival greeting", async () => {
+		world.firstCompanion = SCOUT.id
+
+		await finishedAfter({ ...NOTHING_IMPORTED, companions: ["Atlas"] })
+
+		expect(world.opened).toEqual([SCOUT.id])
+		expect(world.sent).toEqual([
+			{ botId: SCOUT.id, text: onboardingSummonsFor("arrival") },
+		])
+		expect(reportSuccess).toHaveBeenCalledOnce()
 	})
 })
 

@@ -94,7 +94,7 @@ const OnboardingImport = ({ flow, importScene }: OnboardingImportProps) => (
 		variant="onboarding"
 		world={{
 			...importScene,
-			leave: () => void flow.controller.skipImport(),
+			leave: (imported) => void flow.controller.leaveImport(imported),
 		}}
 	/>
 )

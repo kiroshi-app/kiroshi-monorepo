@@ -1,6 +1,11 @@
-import type { NoticeMessage } from "@workspace/ui/components/notice-surface"
+import {
+	type NoticeMessage,
+	raiseTransientNotice,
+} from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
+import type { ClaudeImported } from "./claude-import-controller"
+import { landingTitleOf } from "./claude-import-landing"
 import { exitDetailOf } from "./onboarding-failure"
 import type { OnboardingPort } from "./onboarding-port"
 import {
@@ -54,7 +59,7 @@ export type OnboardingFlowController = SignInActions & {
 	subscribe: (listener: () => void) => () => void
 	resume: () => Promise<void>
 	leaveIntro: () => Promise<void>
-	skipImport: () => Promise<void>
+	leaveImport: (imported: ClaudeImported) => Promise<void>
 	finish: () => Promise<void>
 	replay: () => Promise<void>
 	downloadAgain: () => Promise<void>
@@ -64,6 +69,7 @@ export type OnboardingFlowController = SignInActions & {
 
 export type OnboardingFlowOptions = {
 	reportFailure?: (notice: NoticeMessage) => void
+	reportSuccess?: (notice: NoticeMessage) => void
 }
 
 export type OnboardingCreation = {
@@ -101,6 +107,7 @@ export const createOnboardingFlowController = (
 	world: OnboardingFlowWorld,
 	{
 		reportFailure = failureReporterIn("onboarding-flow-controller"),
+		reportSuccess = raiseTransientNotice,
 	}: OnboardingFlowOptions = {},
 ): OnboardingFlowController => {
 	const stateStore = createStore(initialOnboardingFlowState)
@@ -129,6 +136,7 @@ export const createOnboardingFlowController = (
 	const store = (step: OnboardingStep) => persisted(() => world.storeStep(step))
 
 	let firstCompanionStored = Promise.resolve()
+	let importedThisRun: ClaudeImported | null = null
 
 	const claimFirstCompanion = async (botId: string) => {
 		if (world.firstCompanionId() === null) {
@@ -219,6 +227,14 @@ export const createOnboardingFlowController = (
 		}
 	}
 
+	const announceImported = () => {
+		const title = importedThisRun && landingTitleOf(importedThisRun)
+		importedThisRun = null
+		if (title) {
+			reportSuccess({ title })
+		}
+	}
+
 	return {
 		...actions,
 
@@ -238,7 +254,8 @@ export const createOnboardingFlowController = (
 			}
 		},
 
-		skipImport: async () => {
+		leaveImport: async (imported) => {
+			importedThisRun = imported
 			await store("account")
 		},
 
@@ -249,10 +266,12 @@ export const createOnboardingFlowController = (
 			set({ isAtAccount: false })
 			await world.markFirstRunDone()
 			await land()
+			announceImported()
 		},
 
 		replay: async () => {
 			stateStore.setState(initialOnboardingFlowState)
+			importedThisRun = null
 			await persisted(world.replay)
 		},
 
