@@ -13,6 +13,7 @@ import { useTabsFollowingSpace } from "./use-tab-thread-sync"
 import { useWorkspaceTabs } from "./use-workspace-tabs"
 import {
 	createWorkspaceTabs,
+	forgetWindowsGoneWhileRunning,
 	forgetWindowWhenClosed,
 	reopenSecondaryWindows,
 	shownTabsOf,
@@ -20,6 +21,7 @@ import {
 } from "./workspace-tabs"
 
 import type { FileMenuAction, Json, ScreenPosition, TabDrag } from "../bindings"
+import type { LiveWindowsWatch } from "../host"
 import type { ObservedState } from "../conversations/store-contract"
 import { validateThreadSearch } from "../navigation/thread-search"
 
@@ -36,6 +38,7 @@ const windowHost = vi.hoisted(() => ({
 	closeWindow: vi.fn(),
 	watchCloseRequest: vi.fn(),
 	liveWindowLabels: vi.fn(),
+	watchLiveWindows: vi.fn(),
 	raiseReportedFailure: vi.fn(),
 }))
 
@@ -91,6 +94,7 @@ vi.mock("../host", async (importOriginal) => ({
 	closeWindow: windowHost.closeWindow,
 	watchCloseRequest: windowHost.watchCloseRequest,
 	liveWindowLabels: windowHost.liveWindowLabels,
+	watchLiveWindows: windowHost.watchLiveWindows,
 }))
 
 vi.mock("../bindings", async (importOriginal) => {
@@ -217,6 +221,7 @@ afterEach(() => {
 	windowHost.closeWindow.mockReset()
 	windowHost.watchCloseRequest.mockReset()
 	windowHost.liveWindowLabels.mockReset()
+	windowHost.watchLiveWindows.mockReset()
 	windowHost.raiseReportedFailure.mockReset()
 	for (const command of Object.values(tabDragHost)) {
 		command.mockReset()
@@ -1551,6 +1556,16 @@ const requestClose = async (label: string) => {
 	await vi.waitFor(() => expect(windowHost.closeWindow).toHaveBeenCalled())
 }
 
+const watchWindowsGoing = async () => {
+	let report: LiveWindowsWatch["report"] = () => undefined
+	windowHost.watchLiveWindows.mockImplementation((watch: LiveWindowsWatch) => {
+		report = watch.report
+		return Promise.resolve(() => undefined)
+	})
+	await forgetWindowsGoneWhileRunning()
+	return (liveLabels: string[]) => report(["main", ...liveLabels])
+}
+
 describe("the windows open at quit", () => {
 	it("reopens one window per secondary window open at quit", async () => {
 		opensWindows()
@@ -1651,6 +1666,69 @@ describe("the windows open at quit", () => {
 				{ raisedIn: "workspace-tabs", command: undefined },
 			),
 		)
+	})
+
+	it("forgets a window that goes away while the app keeps running", async () => {
+		opensWindows()
+		tabsOfWindow(SECONDARY, threadOf("gone"))
+		const liveAre = await watchWindowsGoing()
+		liveAre([SECONDARY])
+
+		liveAre([])
+
+		expect(keysOf(SECONDARY)).toEqual([])
+		expect(await relaunch()).toEqual([])
+	})
+
+	it("forgets a window that closes itself once its last tab moves away", async () => {
+		opensWindows()
+		closesWindows()
+		const liveAre = await watchWindowsGoing()
+		const tabs = tabsOfWindow(SECONDARY, threadOf("last"))
+		liveAre([SECONDARY])
+
+		await tabs.moveToNewWindow(viewOf(tabs).activeId)
+		liveAre(["window-2"])
+
+		expect(await startMain(["window-2"])).toEqual([])
+		expect(keysOf(SECONDARY)).toEqual([])
+	})
+
+	it("keeps the windows open at quit for the next launch", async () => {
+		opensWindows()
+		tabsOfWindow(SECONDARY, threadOf("kept"))
+		const liveAre = await watchWindowsGoing()
+
+		liveAre([])
+
+		expect(await relaunch()).toEqual(["/?handover=window-1"])
+	})
+
+	it("leaves no entry for a reopened window, nor its predecessor, once it goes away", async () => {
+		opensWindows()
+		tabsOfWindow(SECONDARY, threadOf("stale"))
+		const liveAre = await watchWindowsGoing()
+		const [href = ""] = await relaunch()
+		reopenedAs("window-2", href)
+		liveAre(["window-2"])
+
+		liveAre([])
+
+		expect(keysOf(SECONDARY)).toEqual([])
+		expect(keysOf("window-2")).toEqual([])
+		expect(await relaunch()).toEqual([])
+	})
+
+	it("reopens a window open at every quit once per launch", async () => {
+		opensWindows()
+		tabsOfWindow(SECONDARY, threadOf("kept"))
+
+		for (const successor of ["window-2", "window-3", "window-4"]) {
+			const hrefs = await relaunch()
+			expect(hrefs).toHaveLength(1)
+			const after = reopenedAs(successor, hrefs[0] ?? "")
+			expect(shownHrefs(after)).toEqual([threadOf("kept")])
+		}
 	})
 
 	it("forgets a window that fails to reopen and says so", async () => {
