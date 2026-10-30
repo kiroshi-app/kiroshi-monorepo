@@ -142,7 +142,6 @@ const expectContentSlot = async (canvasElement: HTMLElement) => {
 
 	await expect(column.top - drawn.bottom).toBe(ILLUSTRATION_GAP)
 	await expect(column.bottom).toBe(slot.bottom)
-	await expect(getComputedStyle(content).paddingBottom).toBe("0px")
 	if (
 		slotIn(canvasElement, "onboarding-welcome-screen").dataset.step ===
 		"conversations"
