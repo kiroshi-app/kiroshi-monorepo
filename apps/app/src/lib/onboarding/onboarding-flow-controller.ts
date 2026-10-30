@@ -215,8 +215,8 @@ export const createOnboardingFlowController = (
 		await readAccount()
 	}
 
-	const reportArrivalFailure = (companionId: string, reason: unknown) => {
-		const name = world.botNameOf(companionId)
+	const reportArrivalFailure = (botId: string, reason: unknown) => {
+		const name = world.botNameOf(botId)
 		if (!name) {
 			reportUnsent(reason)
 			return
