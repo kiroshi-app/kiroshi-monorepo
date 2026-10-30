@@ -11,6 +11,7 @@ import {
 	type ClaudeImportActions,
 	type ClaudeImportVariant,
 	hasNewClaudeItem,
+	importedOf,
 	importScreenPropsOf,
 	isImportOfferedAtStart,
 	offersClaudeImport,
@@ -335,6 +336,45 @@ describe("the leave action", () => {
 		expect(subtitleIn(props)).toBe(
 			"Found in ~/.claude on your computer. Everything is selected; uncheck what you’d rather leave behind.",
 		)
+	})
+})
+
+describe("what came in", () => {
+	const COMMIT_STYLE = "skill:commit-style"
+
+	it("names the companions under their imported name and counts CLAUDE.md and skills", () => {
+		const session = sessionOf({
+			selection: [ATLAS.key, WREN.key, CLAUDE_MD.key, COMMIT_STYLE],
+			results: {
+				[ATLAS.key]: { kind: "imported", id: "bot-atlas", name: "Atlas 2" },
+				[WREN.key]: { kind: "imported", id: "bot-wren", name: "Wren" },
+				[CLAUDE_MD.key]: { kind: "imported", id: "md", name: "CLAUDE.md" },
+				[COMMIT_STYLE]: { kind: "imported", id: "s", name: "commit" },
+			},
+		})
+
+		expect(importedOf(FULL, session)).toEqual({
+			companions: ["Atlas 2", "Wren"],
+			hasInstructions: true,
+			skillCount: 1,
+		})
+	})
+
+	it("leaves out what failed or was already in Kiroshi", () => {
+		const session = sessionOf({
+			selection: [ATLAS.key, CLAUDE_MD.key, COMMIT_STYLE],
+			results: {
+				[ATLAS.key]: { kind: "failed", cause: "unparsable" },
+				[CLAUDE_MD.key]: { kind: "skipped", reason: "alreadyImported" },
+				[COMMIT_STYLE]: { kind: "failed", cause: "unparsable" },
+			},
+		})
+
+		expect(importedOf(FULL, session)).toEqual({
+			companions: [],
+			hasInstructions: false,
+			skillCount: 0,
+		})
 	})
 })
 

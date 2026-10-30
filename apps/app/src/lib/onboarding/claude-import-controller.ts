@@ -20,6 +20,12 @@ export type ClaudeImportSession = {
 	isImporting: boolean
 }
 
+export type ClaudeImported = {
+	companions: string[]
+	hasInstructions: boolean
+	skillCount: number
+}
+
 export type ClaudeImportPort = {
 	run: (selection: string[], spaceId: string) => Promise<ClaudeImportOutcome[]>
 	onProgress: (
@@ -30,7 +36,7 @@ export type ClaudeImportPort = {
 export type ClaudeImportWorld = {
 	spaceId: () => string | null
 	markSeen: () => Promise<void>
-	leave: () => void
+	leave: (imported: ClaudeImported) => void
 }
 
 export type ClaudeImportScene = Omit<ClaudeImportWorld, "leave">
@@ -41,7 +47,7 @@ export type ClaudeImportController = {
 	toggle: (key: string, isChecked: boolean) => void
 	importPicked: (keys: string[]) => Promise<void>
 	retryFailed: () => Promise<void>
-	leave: () => void
+	leave: (imported: ClaudeImported) => void
 }
 
 export type ClaudeImportOptions = {
@@ -134,12 +140,12 @@ export const createClaudeImportController = (
 		retryFailed: () =>
 			runImport(failedKeysOf(current().results), current().selection),
 
-		leave: () => {
+		leave: (imported) => {
 			if (!hasMarkedSeen) {
 				hasMarkedSeen = true
 				world.markSeen().catch(report)
 			}
-			world.leave()
+			world.leave(imported)
 		},
 	}
 }

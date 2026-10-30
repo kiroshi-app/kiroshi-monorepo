@@ -5,7 +5,10 @@ import type {
 } from "@workspace/ui/components/import-screen"
 import { i18n } from "@workspace/ui/lib/i18n"
 
-import type { ClaudeImportSession } from "./claude-import-controller"
+import type {
+	ClaudeImported,
+	ClaudeImportSession,
+} from "./claude-import-controller"
 import { onboardingStepOf } from "./onboarding-flow-controller"
 
 import type {
@@ -138,6 +141,28 @@ const listItemsOf = (
 		...rowsOf(inventory.claudeMd ? [inventory.claudeMd] : [], "instructions"),
 		...rowsOf(inventory.skills, "skill"),
 	]
+}
+
+const importedNamesOf = (
+	items: ClaudeItem[],
+	{ results }: ClaudeImportSession,
+) =>
+	items.flatMap((item) => {
+		const result = results[item.key]
+		return result?.kind === "imported" ? [result.name] : []
+	})
+
+export const importedOf = (
+	inventory: ClaudeInventory,
+	session: ClaudeImportSession,
+): ClaudeImported => {
+	const { agents, claudeMd, skills } = foundIn(inventory)
+	return {
+		companions: importedNamesOf(agents, session),
+		hasInstructions:
+			importedNamesOf(claudeMd ? [claudeMd] : [], session).length > 0,
+		skillCount: importedNamesOf(skills, session).length,
+	}
 }
 
 const leaveLabelOf = (variant: ClaudeImportVariant) => {

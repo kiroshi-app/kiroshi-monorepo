@@ -6,6 +6,7 @@ import {
 } from "./claude-import-controller"
 import {
 	type ClaudeImportVariant,
+	importedOf,
 	importScreenPropsOf,
 	pickedKeysOf,
 } from "./claude-import-screen"
@@ -42,7 +43,7 @@ export const useClaudeImport = ({
 				importThen(controller.importPicked(pickedKeysOf(inventory, state))),
 			onRetryFailed: () => importThen(controller.retryFailed()),
 			onReadAgain: readAgain,
-			onLeave: controller.leave,
+			onLeave: () => controller.leave(importedOf(inventory, state)),
 		},
 	)
 }

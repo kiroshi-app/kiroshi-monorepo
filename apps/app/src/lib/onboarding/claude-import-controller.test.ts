@@ -5,7 +5,9 @@ import type { NoticeMessage } from "@workspace/ui/components/notice-surface"
 
 import {
 	type ClaudeImportController,
+	type ClaudeImported,
 	type ClaudeImportPort,
+	type ClaudeImportWorld,
 	createClaudeImportController,
 } from "./claude-import-controller"
 
@@ -13,10 +15,16 @@ import type { ClaudeImportOutcome, ClaudeImportProgress } from "@/lib/bindings"
 
 const SPACE_ID = "space-home"
 
+const NOTHING_IMPORTED: ClaudeImported = {
+	companions: [],
+	hasInstructions: false,
+	skillCount: 0,
+}
+
 let announce: (progress: ClaudeImportProgress) => void
 let run: Mock<ClaudeImportPort["run"]>
 let markSeen: Mock<() => Promise<void>>
-let leave: Mock<() => void>
+let leave: Mock<ClaudeImportWorld["leave"]>
 let reportFailure: Mock<(notice: NoticeMessage) => void>
 let controller: ClaudeImportController
 
@@ -53,8 +61,8 @@ beforeEach(() => {
 
 describe("the seen mark", () => {
 	it("is written once however many times the screen is left", async () => {
-		controller.leave()
-		controller.leave()
+		controller.leave(NOTHING_IMPORTED)
+		controller.leave(NOTHING_IMPORTED)
 		await Promise.resolve()
 
 		expect(markSeen).toHaveBeenCalledOnce()
@@ -64,7 +72,7 @@ describe("the seen mark", () => {
 	it("reports a refused mark and still leaves", async () => {
 		markSeen.mockRejectedValue(new Error("database locked"))
 
-		controller.leave()
+		controller.leave(NOTHING_IMPORTED)
 		await vi.waitFor(() => expect(reportFailure).toHaveBeenCalledOnce())
 
 		expect(leave).toHaveBeenCalledOnce()
