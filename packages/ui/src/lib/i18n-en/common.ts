@@ -219,7 +219,7 @@ const common = {
 			nameTaken:
 				"{{name}} already lives in Kiroshi, so this one comes in as {{renamed}}. Rename it after.",
 			companionNameTaken:
-				"You already have a companion named {{name}}, so this one comes in as {{renamed}}.",
+				"You already have an agent named {{name}}, so this one comes in as {{renamed}}.",
 			unparsable: "Couldn’t bring it in: its {{file}} doesn’t parse.",
 			type: {
 				companion: "Agent",

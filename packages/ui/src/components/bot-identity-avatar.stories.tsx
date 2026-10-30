@@ -85,7 +85,7 @@ const Changing = (props: BotIdentityAvatarProps) => {
 				image={wearing ? UPLOADED_AVATAR_IMAGE : undefined}
 			/>
 			<Button onClick={() => setWearing(!wearing)} size="sm" variant="outline">
-				Change the companion
+				Change the agent
 			</Button>
 		</div>
 	)
@@ -549,9 +549,7 @@ export const BoundToOneBot = meta.story({
 	play: async ({ canvas, canvasElement, userEvent }) => {
 		const drawn = () => botIdentityAvatars(canvasElement)
 		const change = () =>
-			userEvent.click(
-				canvas.getByRole("button", { name: "Change the companion" }),
-			)
+			userEvent.click(canvas.getByRole("button", { name: "Change the agent" }))
 
 		for (const avatar of drawn()) await expectGlyph(avatar, "idle")
 

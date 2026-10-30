@@ -69,7 +69,7 @@ export const States = meta.story({
 			<ImportRow
 				{...args}
 				checked={false}
-				detail="Your standing instructions, 42 lines. Kept as yours, for every companion."
+				detail="Your standing instructions, 42 lines. Kept as yours, for every agent."
 				isInKiroshi
 				kind="instructions"
 				title="CLAUDE.md"

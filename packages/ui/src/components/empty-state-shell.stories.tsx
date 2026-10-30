@@ -64,7 +64,7 @@ export const Default = meta.story({
 
 export const WithAction = meta.story({
 	args: {
-		action: <Button onClick={fn()}>Companion settings</Button>,
+		action: <Button onClick={fn()}>Agent settings</Button>,
 	},
 	parameters: {
 		docs: {
@@ -76,7 +76,7 @@ export const WithAction = meta.story({
 	},
 	play: async ({ canvas }) => {
 		await expect(
-			canvas.getByRole("button", { name: "Companion settings" }),
+			canvas.getByRole("button", { name: "Agent settings" }),
 		).toBeVisible()
 		await expect(
 			canvas.getByText(/Type your first prompt in the composer below/),
@@ -111,7 +111,7 @@ export const LongContent = meta.story({
 		title:
 			"Ship the December release, then plan the January retrospective with everyone involved",
 		description:
-			"Six companions are here and waiting on your first message, and every one of them reads the whole room before answering.",
+			"Six agents are here and waiting on your first message, and every one of them reads the whole room before answering.",
 	},
 	parameters: {
 		docs: {

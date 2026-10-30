@@ -1030,7 +1030,7 @@ const StopFailedNotice = () => {
 
 	return (
 		<NoticeDemo
-			label="Stop the companion"
+			label="Stop the agent"
 			raise={() =>
 				raiseFailureNotice({
 					title: t("screen.notice.stopFailedNamed", {
@@ -1055,7 +1055,7 @@ export const StopFailedNamed = meta.story({
 	},
 	play: async ({ canvas, userEvent }) => {
 		await userEvent.click(
-			canvas.getByRole("button", { name: "Stop the companion" }),
+			canvas.getByRole("button", { name: "Stop the agent" }),
 		)
 
 		await failureNotice()
@@ -1439,12 +1439,12 @@ export const WithDialog = meta.story({
 		<>
 			<DialogRoot>
 				<Trigger className={buttonVariants({ variant: "outline" })}>
-					Companion settings
+					Agent settings
 				</Trigger>
 				<DialogSurface>
-					<DialogTitle>Companion settings</DialogTitle>
+					<DialogTitle>Agent settings</DialogTitle>
 					<DialogDescription>
-						Name the companion, point it at a folder and tell it how to behave.
+						Name the agent, point it at a folder and tell it how to behave.
 					</DialogDescription>
 				</DialogSurface>
 			</DialogRoot>
@@ -1461,7 +1461,7 @@ export const WithDialog = meta.story({
 	},
 	play: async ({ canvas, userEvent }) => {
 		await userEvent.click(
-			canvas.getByRole("button", { name: "Companion settings" }),
+			canvas.getByRole("button", { name: "Agent settings" }),
 		)
 		const dialog = await screen.findByRole("dialog")
 		await waitFor(() => expect(dialog).toBeVisible())

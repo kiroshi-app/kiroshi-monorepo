@@ -42,7 +42,7 @@ const meta = preview.meta({
 	args: {
 		label: "Cannot change anything itself",
 		description:
-			"This companion is refused the tools that edit files and run commands, so it cannot do either itself. It can still read, and anything else it carries — an MCP server, another companion it asks — is not held back by this.",
+			"This agent is refused the tools that edit files and run commands, so it cannot do either itself. It can still read, and anything else it carries — an MCP server, another companion it asks — is not held back by this.",
 		checked: false,
 		onCheckedChange: fn(),
 	},

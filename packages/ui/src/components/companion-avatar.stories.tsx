@@ -49,7 +49,7 @@ const meta = preview.meta({
 
 export const ModuleColourMatchesTheBrowser = meta.story({
 	render: () => (
-		<div aria-label="Companions" className="flex flex-wrap gap-2" role="group">
+		<div aria-label="Agents" className="flex flex-wrap gap-2" role="group">
 			{COMPANIONS.map(({ name, tint }) => (
 				<DitheredFieldAvatar
 					key={`${name} ${tint ?? "untinted"}`}

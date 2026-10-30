@@ -234,7 +234,7 @@ const common = {
 			nameTaken:
 				"{{name}} existe déjà dans Kiroshi, donc celui-ci arrive sous le nom {{renamed}}. Renommez-le ensuite.",
 			companionNameTaken:
-				"Vous avez déjà un compagnon nommé {{name}}, donc celui-ci arrive sous le nom {{renamed}}.",
+				"Vous avez déjà un agent nommé {{name}}, donc celui-ci arrive sous le nom {{renamed}}.",
 			unparsable: "Impossible de le récupérer : son {{file}} est illisible.",
 			type: {
 				companion: "Agent",

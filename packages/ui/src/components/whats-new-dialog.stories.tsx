@@ -104,7 +104,7 @@ const routineVisual = (palette: VignettePalette): WhatsNewDialogVisual => ({
 
 const W1_NOTES = [
 	"Search across conversations is faster.",
-	"Renaming a companion no longer closes the app.",
+	"Renaming an agent no longer closes the app.",
 ]
 
 const W2_NOTES = [
@@ -116,15 +116,15 @@ const W3_NOTES = [
 	...W1_NOTES,
 	"Routines can run on a schedule you pick from a calendar.",
 	"Applications show when they need you to sign in again.",
-	"History lists what each companion kept, newest first.",
+	"History lists what each agent kept, newest first.",
 	"Pinned messages stay at the top of a conversation, even after you scroll far back.",
 	"Missions waiting on you move to the top of the list.",
 	"Secrets can be set for one space only.",
-	"Approvals show how long a companion has been waiting.",
+	"Approvals show how long an agent has been waiting.",
 	"Skills can be turned off without deleting them.",
 	"Spaces list who joined them, newest first.",
 	"Attachments keep their names when you send them.",
-	"Conversations show when a companion is still writing.",
+	"Conversations show when an agent is still writing.",
 	"Missions link to the branch they're watching.",
 	"Routines skip a run while the computer is asleep.",
 	"Notifications open the conversation they came from.",
@@ -134,7 +134,7 @@ const W3_NOTES = [
 ]
 
 const W4_NOTES = [
-	"Approvals name the companion that's asking.",
+	"Approvals name the agent that's asking.",
 	"Removing an attachment no longer clears the draft.",
 ]
 
@@ -152,7 +152,7 @@ const FIRST_LAUNCH: WhatsNewDialogProps = {
 	version: "0.24.0",
 	visual: missionVisual(LIGHT_VIGNETTE),
 	headline: "Missions show the branch they're watching",
-	subline: "See where the work lands without asking the companion.",
+	subline: "See where the work lands without asking the agent.",
 	notes: bulletsOf(W1_NOTES),
 	releaseNotesUrl: RELEASE_NOTES_URL,
 	variant: "first-launch",
@@ -231,7 +231,7 @@ export const WithoutAVisual = meta.story({
 	args: {
 		version: "0.24.1",
 		visual: undefined,
-		headline: "Approvals name the companion that's asking",
+		headline: "Approvals name the agent that's asking",
 		subline: "Know who wants what before you answer.",
 		notes: bulletsOf(W2_NOTES),
 	},
@@ -432,7 +432,7 @@ export const BetaChannel = meta.story({
 		channel: "beta",
 		headline: "Routines can run on a weekday schedule",
 		subline:
-			"Pick the days, and the companion runs it at the same time on each one.",
+			"Pick the days, and the agent runs it at the same time on each one.",
 		notes: bulletsOf(W5_NOTES),
 	},
 	parameters: {

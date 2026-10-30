@@ -49,8 +49,7 @@ const scaleStepRadius = (host: HTMLElement, token: string) => {
 
 const PANEL_TITLE = "Release notes"
 
-const PANEL_NOTE =
-	"Companions keep their transcript when the window is reopened."
+const PANEL_NOTE = "Agents keep their transcript when the window is reopened."
 
 const PANEL = (
 	<>

@@ -6,7 +6,7 @@ import { Icons } from "@workspace/ui/components/icons"
 import { TooltipButton } from "@workspace/ui/components/tooltip-button"
 
 const LONG_TOOLTIP =
-	"Sends the prompt to the companion currently holding the conversation, then waits for its first token"
+	"Sends the prompt to the agent currently holding the conversation, then waits for its first token"
 
 const meta = preview.meta({
 	title: "Primitives/TooltipButton",
@@ -118,9 +118,9 @@ export const LongContent = meta.story({
 
 export const WithSide = meta.story({
 	args: {
-		"aria-label": "New companion",
+		"aria-label": "New agent",
 		size: "icon-sm",
-		tooltip: "New companion",
+		tooltip: "New agent",
 		tooltipSide: "bottom",
 		variant: "ghost",
 		children: <Icons.Add />,
@@ -134,7 +134,7 @@ export const WithSide = meta.story({
 		},
 	},
 	play: async ({ canvas, userEvent }) => {
-		const button = canvas.getByRole("button", { name: "New companion" })
+		const button = canvas.getByRole("button", { name: "New agent" })
 
 		await userEvent.hover(button)
 		await waitFor(async () => {

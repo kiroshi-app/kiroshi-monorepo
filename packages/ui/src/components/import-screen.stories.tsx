@@ -46,7 +46,7 @@ const CLAUDE_MD: ImportItem = {
 	kind: "instructions",
 	title: "CLAUDE.md",
 	detail:
-		"Your standing instructions, 42 lines. Kept as yours, for every companion.",
+		"Your standing instructions, 42 lines. Kept as yours, for every agent.",
 	checked: true,
 }
 
