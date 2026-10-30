@@ -179,7 +179,7 @@ export const ReadOnly = meta.story({
 		readOnly: true,
 		rows: 4,
 		value:
-			"# Environment\n\nPlatform: darwin 24.5.0\nShell: /bin/zsh\n\nRead from the machine each time this companion starts.",
+			"# Environment\n\nPlatform: darwin 24.5.0\nShell: /bin/zsh\n\nRead from the machine each time this agent starts.",
 	},
 	parameters: {
 		docs: {

@@ -149,7 +149,7 @@ export const LongContent = meta.story({
 	play: async ({ canvas }) => {
 		await expect(
 			canvas.getByRole("button", {
-				name: "Dismiss Incident triage and on-call handover companion",
+				name: "Dismiss Incident triage and on-call handover agent",
 			}),
 		).toBeVisible()
 	},

@@ -372,7 +372,7 @@ const expectNothingFound = async (canvasElement: HTMLElement) =>
 	expectMethodChoice({
 		canvasElement,
 		title: "Connect the model provider",
-		body: "Your companions need a model to think with. Use your Claude subscription, or a key.",
+		body: "Your agents need a model to think with. Use your Claude subscription, or a key.",
 	})
 
 export const ConnectNothingFoundLight = meta.story({

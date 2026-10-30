@@ -1532,7 +1532,7 @@ const FIRST_REPLY_STEP: ToolQuestionItem = {
 
 const FIRST_COMPANION_STEP: ToolQuestionItem = {
 	question: "Who should join first?",
-	header: "First companion",
+	header: "First agent",
 	options: [
 		{
 			label: "Scout, who looks things up",
@@ -2085,12 +2085,11 @@ const APPLICATION_SCOPE_STEP: ToolQuestionItem = {
 	options: [
 		{
 			label: "Only Shoto",
-			description:
-				"Shoto reads and files Linear issues. No other companion does.",
+			description: "Shoto reads and files Linear issues. No other agent does.",
 		},
 		{
-			label: "Every companion",
-			description: "Linear joins every companion, and every one you add later.",
+			label: "Every agent",
+			description: "Linear joins every agent, and every one you add later.",
 		},
 		{
 			label: "Don't install",
@@ -2135,9 +2134,7 @@ export const ApplicationScope = meta.story({
 		await expect(send).toHaveAttribute("aria-disabled", "true")
 		await expect(send.getBoundingClientRect().height).toBe(32)
 
-		await userEvent.click(
-			canvas.getByRole("radio", { name: /Every companion/ }),
-		)
+		await userEvent.click(canvas.getByRole("radio", { name: /Every agent/ }))
 		await expect(send).not.toHaveAttribute("aria-disabled")
 	},
 })

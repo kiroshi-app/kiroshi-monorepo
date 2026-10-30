@@ -310,7 +310,7 @@ export const LongNameAndTitle = meta.story({
 		companions: [
 			{
 				...JUNIPER,
-				name: "Juniper the long-winded release notes companion",
+				name: "Juniper the long-winded release notes agent",
 				title: "Writer of every changelog and announcement",
 			},
 			SPACE_COMPANIONS[1],

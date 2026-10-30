@@ -128,7 +128,7 @@ export const Empty = meta.story({
 
 export const Error = meta.story({
 	args: {
-		error: "This model is not available on the plan this companion runs on.",
+		error: "This model is not available on the plan this agent runs on.",
 		value: "claude-opus",
 	},
 	parameters: {
@@ -142,7 +142,7 @@ export const Error = meta.story({
 	play: async ({ canvas }) => {
 		const trigger = canvas.getByRole("combobox")
 		const message = canvas.getByText(
-			"This model is not available on the plan this companion runs on.",
+			"This model is not available on the plan this agent runs on.",
 		)
 
 		await expect(trigger).toHaveAttribute("aria-invalid", "true")

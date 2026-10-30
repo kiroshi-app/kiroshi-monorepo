@@ -18,7 +18,7 @@ const LONG_NAMED_BOTS: RosterBot[] = [
 	},
 	{
 		id: "bot-triage",
-		name: "Incident triage and on-call handover companion",
+		name: "Incident triage and on-call handover agent",
 		blot: BLOT_HUES.red,
 	},
 ]

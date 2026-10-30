@@ -130,7 +130,7 @@ export const WithLabel = meta.story({
 					className="text-muted-foreground text-xs"
 					id="toggle-switch-preload-hint"
 				>
-					A preloaded skill is in this companion's prompt on every turn.
+					A preloaded skill is in this agent's prompt on every turn.
 				</p>
 			</div>
 			<ToggleSwitchHost

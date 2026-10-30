@@ -59,7 +59,7 @@ const pause = (duration: number) =>
 
 export const OneScreenForEveryAgent = meta.story({
 	render: () => (
-		<div aria-label="Companions" className="flex flex-wrap gap-4" role="group">
+		<div aria-label="Agents" className="flex flex-wrap gap-4" role="group">
 			{NAMES.map((name, index) => (
 				<div className="flex flex-col items-center gap-2" key={name}>
 					<DitheredFieldAvatar

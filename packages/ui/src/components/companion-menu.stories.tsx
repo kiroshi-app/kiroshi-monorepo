@@ -36,7 +36,7 @@ const MENU_LABEL = "Actions for Atlas"
 const SURFACE =
 	"flex h-32 w-64 items-center justify-center rounded-xl border border-border border-dashed bg-card text-muted-foreground text-sm"
 
-const TRIGGER_LABEL = "Right-click this companion"
+const TRIGGER_LABEL = "Right-click this agent"
 
 const ITEMS_IN_ORDER = [
 	"Pin",

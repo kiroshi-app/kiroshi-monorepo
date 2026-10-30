@@ -204,7 +204,7 @@ const SPACES_ARTBOARD =
 const expectSpacesCopy = async (canvasElement: HTMLElement) =>
 	expect(
 		within(canvasElement).getByText(
-			"Each Space has its own companions, conversations and colour. Keep one to yourself, or share it with the people you work with.",
+			"Each Space has its own agents, conversations and colour. Keep one to yourself, or share it with the people you work with.",
 		),
 	).toBeVisible()
 
@@ -603,7 +603,7 @@ const meta = preview.meta({
 })
 
 export const WelcomeCompanionsLight = meta.story({
-	name: "Welcome / Companions / Light",
+	name: "Welcome / Agents / Light",
 	args: { step: "companions" },
 	parameters: {
 		docs: {
@@ -615,7 +615,7 @@ export const WelcomeCompanionsLight = meta.story({
 	play: async ({ args, canvas, canvasElement }) => {
 		await expectWelcome({
 			canvasElement,
-			title: "Companions do the work with you",
+			title: "Agents do the work with you",
 			current: 1,
 		})
 		await expect(
@@ -639,7 +639,7 @@ export const WelcomeCompanionsLight = meta.story({
 })
 
 export const WelcomeCompanionsDark = meta.story({
-	name: "Welcome / Companions / Dark",
+	name: "Welcome / Agents / Dark",
 	args: { step: "companions" },
 	globals: { theme: "dark" },
 	parameters: {
@@ -652,7 +652,7 @@ export const WelcomeCompanionsDark = meta.story({
 	play: async ({ args, canvasElement }) => {
 		await expectWelcome({
 			canvasElement,
-			title: "Companions do the work with you",
+			title: "Agents do the work with you",
 			current: 1,
 		})
 		await expectCompanionRoles(canvasElement)
@@ -662,7 +662,7 @@ export const WelcomeCompanionsDark = meta.story({
 })
 
 export const WelcomeCompanionsFrench = meta.story({
-	name: "Welcome / Companions / French",
+	name: "Welcome / Agents / French",
 	tags: ["test-only"],
 	args: { step: "companions" },
 	beforeEach: inFrench,
@@ -697,7 +697,7 @@ export const WelcomeCompanionsFrench = meta.story({
 })
 
 export const WelcomeCompanionsWrappedRoleLight = meta.story({
-	name: "Welcome / Companions / Wrapped role / Light",
+	name: "Welcome / Agents / Wrapped role / Light",
 	args: { step: "companions" },
 	beforeEach: withWrappedAtlasRole,
 	parameters: {
@@ -712,7 +712,7 @@ export const WelcomeCompanionsWrappedRoleLight = meta.story({
 })
 
 export const WelcomeCompanionsWrappedRoleDark = meta.story({
-	name: "Welcome / Companions / Wrapped role / Dark",
+	name: "Welcome / Agents / Wrapped role / Dark",
 	args: { step: "companions" },
 	globals: { theme: "dark" },
 	beforeEach: withWrappedAtlasRole,

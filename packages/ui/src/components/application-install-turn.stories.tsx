@@ -38,7 +38,7 @@ const RECEIPT: ApplicationCardProps = {
 }
 
 const NARROW_SENTENCE =
-	"Shoto has Sentry in every conversation, and so does every companion you add later."
+	"Shoto has Sentry in every conversation, and so does every agent you add later."
 
 const NARROW_RECEIPT: ApplicationCardProps = {
 	...RECEIPT,

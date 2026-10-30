@@ -5,7 +5,7 @@ import { Row } from "@workspace/storybook/story-utils"
 import { Switch } from "@workspace/ui/components/ui/switch"
 
 const LONG_LABEL =
-	"Preload every skill this companion owns into the prompt on every single turn"
+	"Preload every skill this agent owns into the prompt on every single turn"
 
 const meta = preview.meta({
 	title: "Forms/Switch",

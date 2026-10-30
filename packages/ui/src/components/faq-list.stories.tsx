@@ -7,7 +7,7 @@ const ARTBOARD_ITEMS: readonly FaqItem[] = [
 	{
 		question: "What is Kiroshi?",
 		answer:
-			"A desktop app where you keep a team of companions. Each one has its own skills, memory and history, works in your tools, and keeps going while you do something else.",
+			"A desktop app where you keep a team of agents. Each one has its own skills, memory and history, works in your tools, and keeps going while you do something else.",
 	},
 	{
 		question: "Do I need a subscription?",
@@ -17,7 +17,7 @@ const ARTBOARD_ITEMS: readonly FaqItem[] = [
 	{
 		question: "Where do my conversations live?",
 		answer:
-			"On your computer. Conversations, companions and what they learn are kept in a local folder, and they're all there on the next launch. Replies are written by the agent, so what you send goes through your model provider.",
+			"On your computer. Conversations, agents and what they learn are kept in a local folder, and they're all there on the next launch. Replies are written by the agent, so what you send goes through your model provider.",
 	},
 	{
 		question: "Which macOS versions can run it?",
@@ -29,9 +29,9 @@ const ARTBOARD_ITEMS: readonly FaqItem[] = [
 			"Yes. Windows and Linux builds are also available for download, on the Download page.",
 	},
 	{
-		question: "Can I undo what a companion learned?",
+		question: "Can I undo what an agent learned?",
 		answer:
-			"Yes. Everything a companion writes down is saved as its own change in that companion's History, where you can read it and undo it, one change at a time.",
+			"Yes. Everything an agent writes down is saved as its own change in that agent's History, where you can read it and undo it, one change at a time.",
 	},
 	{
 		question: "Is Kiroshi open source?",
