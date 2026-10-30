@@ -1,8 +1,7 @@
 import { beforeEach, describe, expect, it, type Mock, vi } from "vitest"
 
-import "@workspace/ui/lib/i18n"
-
 import type { NoticeMessage } from "@workspace/ui/components/notice-surface"
+import { i18n } from "@workspace/ui/lib/i18n"
 
 import type {
 	ClaudeImported,
@@ -33,6 +32,7 @@ import type { AccountReport } from "../agent/contract"
 import type { RosterController } from "../bots/roster-controller"
 import type { ChatController } from "../chat/chat-controller"
 import { initialChatState } from "../chat/chat-state"
+import { message } from "../conversations/transcript-fixtures"
 import type { UserController } from "../user/preferences-controller"
 
 const SCOUT = { id: "bot-scout", name: "Scout" }
@@ -227,9 +227,8 @@ describe("connecting without a ~/.claude folder", () => {
 		expect(world.opened).toEqual([])
 		expect(world.sent).toEqual([])
 		expect(reportFailure).toHaveBeenCalledWith({
-			title:
-				"Couldn’t meet your first companion. Restart Kiroshi, then try again.",
-			description: "the companion isn’t on this computer",
+			title: i18n.t("chat:onboarding.arrival.firstCompanionMissing"),
+			description: i18n.t("chat:onboarding.arrival.unknownCompanion"),
 		})
 	})
 
@@ -606,9 +605,8 @@ describe("landing after an import", () => {
 		expect(world.opened).toEqual([])
 		expect(world.sent).toEqual([])
 		expect(reportFailure).toHaveBeenCalledWith({
-			title:
-				"Couldn’t meet your first companion. Restart Kiroshi, then try again.",
-			description: "the companion isn’t on this computer",
+			title: i18n.t("chat:onboarding.arrival.firstCompanionMissing"),
+			description: i18n.t("chat:onboarding.arrival.unknownCompanion"),
 		})
 	})
 
@@ -715,5 +713,64 @@ describe("replaying", () => {
 		expect(opened).toEqual([SHOTO])
 		expect(selected).toEqual([SHOTO])
 		expect(sent).toEqual([onboardingSummonsFor("greeting")])
+	})
+})
+
+describe("a Shoto thread holding the previous first agent summons", () => {
+	it("sends nothing again once the greeting is answered", async () => {
+		const sent: string[] = []
+		const previousFirstCompanion = onboardingSummonsFor(
+			"firstCompanion",
+		).replace("their first agent.", "their first companion.")
+		const user = {
+			getState: () => ({
+				preferences: { onboardingShotoId: SHOTO, onboardingStep: "done" },
+			}),
+			setOnboardingStep: async () => {},
+			replayOnboarding: async () => {},
+		} as unknown as UserController
+		const roster = {
+			getState: () => ({ selectedBotId: SHOTO, spaceRowId: null, bots: [] }),
+			select: () => {},
+		} as unknown as RosterController
+		const chat = {
+			openAside: async () => {},
+			sendTo: async (_botId: string, text: string) => {
+				sent.push(text)
+			},
+			stateFor: () => ({
+				...initialChatState,
+				messages: [
+					message({
+						id: "m-greeting",
+						turnId: "t-greeting",
+						role: "user",
+						content: onboardingSummonsFor("greeting"),
+					}),
+					message({ id: "m-hello", turnId: "t-greeting", content: "Hello." }),
+					message({
+						id: "m-first",
+						turnId: "t-first",
+						role: "user",
+						content: previousFirstCompanion,
+					}),
+				],
+			}),
+			subscribe: () => () => {},
+		} as unknown as ChatController
+		const replayed = createOnboardingFlowController(
+			port,
+			onboardingFlowWorldOf({ chat, roster, user }),
+			{ reportFailure },
+		)
+		port.report = LOGGED_IN
+
+		await replayed.replay()
+		await replayed.leaveIntro()
+		await replayed.acceptAccount()
+		await flushed()
+
+		expect(sent).toEqual([])
+		expect(reportFailure).not.toHaveBeenCalled()
 	})
 })

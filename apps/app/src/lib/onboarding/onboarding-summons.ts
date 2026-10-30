@@ -17,7 +17,18 @@ const SUMMONS_OF = {
 
 export type OnboardingSummons = keyof typeof SUMMONS_OF
 
-const SUMMONS_TEXTS: string[] = Object.values(SUMMONS_OF)
+const PREVIOUS_WORDINGS_OF: Record<string, string[]> = {
+	[SUMMONS_OF.firstCompanion]: [
+		"Help the person who just connected you choose and add their first companion.",
+	],
+}
+
+const wordingsOf = (summons: string): string[] => [
+	summons,
+	...(PREVIOUS_WORDINGS_OF[summons] ?? []),
+]
+
+const SUMMONS_TEXTS: string[] = Object.values(SUMMONS_OF).flatMap(wordingsOf)
 
 export const onboardingSummonsFor = (kind: OnboardingSummons): string =>
 	SUMMONS_OF[kind]
@@ -57,7 +68,8 @@ const answerTo = (
 
 export const isSummonedIn = (chat: ChatState, summons: string): boolean =>
 	chat.messages.some(
-		(message) => message.role === "user" && message.content === summons,
+		(message) =>
+			message.role === "user" && wordingsOf(summons).includes(message.content),
 	)
 
 export const summonOutcomeOf = (
