@@ -12,6 +12,7 @@ import {
 	slotsIn,
 	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
+import { hueOf } from "@workspace/ui/components/companion-colour"
 import { OnboardingShell } from "@workspace/ui/components/onboarding-shell"
 import { OnboardingWelcomeFooter } from "@workspace/ui/components/onboarding-welcome-footer"
 import {
@@ -183,6 +184,153 @@ const expectConversationsGeometry = async (illustration: HTMLElement) => {
 	await expect(status.getBoundingClientRect().height).toBe(
 		CONVERSATIONS_GEOMETRY.statusHeight,
 	)
+}
+
+const expectConversationsBubbles = async (canvasElement: HTMLElement) => {
+	const canvas = within(canvasElement)
+	await expect(
+		canvas.getByText("Can you two get the docs ready for Friday?"),
+	).toBeVisible()
+	await expect(
+		canvas.getByText("On it. I’ll run the release notes as a mission."),
+	).toBeVisible()
+}
+
+const SPACES_ARTBOARD =
+	"Measured against the Paper file `Kiroshi, Onboarding v2`, page `Flow · Final`, artboard `1.3`, drawn in dark."
+
+const expectSpacesCopy = async (canvasElement: HTMLElement) =>
+	expect(
+		within(canvasElement).getByText(
+			"Each Space has its own companions, conversations and colour. Keep one to yourself, or share it with the people you work with.",
+		),
+	).toBeVisible()
+
+const SPACES_GEOMETRY = {
+	row: 520,
+	cardGap: 12,
+	cardPadding: "18px",
+	cardStackGap: "14px",
+	headerGap: "12px",
+	companionsGap: "8px",
+	avatar: 36,
+	companion: 24,
+	companionOverlap: 6,
+	nameType: ["14px", "20px", "600"],
+	legendType: ["12px", "16px"],
+}
+
+const SPACE_CARDS = [
+	{
+		name: "Work",
+		initial: "W",
+		colour: hueOf("blue"),
+		companions: 2,
+		legend: "Shared with 3 people",
+	},
+	{
+		name: "Personal",
+		initial: "P",
+		colour: hueOf("green"),
+		companions: 1,
+		legend: "Only you",
+	},
+]
+
+const expectSpaceCards = (canvasElement: HTMLElement) =>
+	atArtboardWidth(canvasElement, async () => {
+		const avatars = slotsIn(canvasElement, "space-avatar")
+		const cards = avatars.map(
+			(avatar) => avatar.parentElement?.parentElement as HTMLElement,
+		)
+		const row = cards[0].parentElement as HTMLElement
+		const [first, second] = cards.map((card) => card.getBoundingClientRect())
+
+		await expect(row.getBoundingClientRect().width).toBe(SPACES_GEOMETRY.row)
+		await expect(second.left - first.right).toBe(SPACES_GEOMETRY.cardGap)
+		await expect(first.width).toBe(second.width)
+		await expect(first.top).toBe(second.top)
+
+		for (const [index, card] of cards.entries()) {
+			const expected = SPACE_CARDS[index]
+			const [header, companionsRow] = [...card.children] as HTMLElement[]
+			const name = header.lastElementChild as HTMLElement
+			const legend = companionsRow.lastElementChild as HTMLElement
+			const companions = slotsIn(companionsRow, "bot-identity-avatar")
+			const cardStyle = getComputedStyle(card)
+			const nameStyle = getComputedStyle(name)
+			const legendStyle = getComputedStyle(legend)
+
+			await expect(name).toHaveTextContent(expected.name)
+			await expect(legend).toHaveTextContent(expected.legend)
+			await expect(avatars[index].dataset.colour).toBe(String(expected.colour))
+			await expect(
+				slotIn(avatars[index], "space-avatar-initial").dataset.initial,
+			).toBe(expected.initial)
+			await expect(avatars[index].getBoundingClientRect().width).toBe(
+				SPACES_GEOMETRY.avatar,
+			)
+			await expect(cardStyle.padding).toBe(SPACES_GEOMETRY.cardPadding)
+			await expect(cardStyle.rowGap).toBe(SPACES_GEOMETRY.cardStackGap)
+			await expect(getComputedStyle(header).columnGap).toBe(
+				SPACES_GEOMETRY.headerGap,
+			)
+			await expect(getComputedStyle(companionsRow).columnGap).toBe(
+				SPACES_GEOMETRY.companionsGap,
+			)
+			await expect([
+				nameStyle.fontSize,
+				nameStyle.lineHeight,
+				nameStyle.fontWeight,
+			]).toEqual(SPACES_GEOMETRY.nameType)
+			await expect([legendStyle.fontSize, legendStyle.lineHeight]).toEqual(
+				SPACES_GEOMETRY.legendType,
+			)
+			await expect(companions).toHaveLength(expected.companions)
+			for (const companion of companions) {
+				await expect(companion.getBoundingClientRect().width).toBe(
+					SPACES_GEOMETRY.companion,
+				)
+			}
+			if (companions.length > 1) {
+				await expect(
+					companions[0].getBoundingClientRect().right -
+						companions[1].getBoundingClientRect().left,
+				).toBe(SPACES_GEOMETRY.companionOverlap)
+			}
+		}
+	})
+
+const TRANSPARENT = "rgba(0, 0, 0, 0)"
+
+const SKIP_GEOMETRY = {
+	height: 40,
+	paddingInline: "24px",
+	type: ["14px", "18px", "500"],
+}
+
+const expectPlainSkip = async (canvasElement: HTMLElement) => {
+	const skip = within(canvasElement).getByRole("button", { name: "Skip intro" })
+	skip.blur()
+	const muted = getComputedStyle(skip).color
+	const expectBare = async () => {
+		const { backgroundColor, borderColor, color } = getComputedStyle(skip)
+		await expect([backgroundColor, borderColor, color]).toEqual([
+			TRANSPARENT,
+			TRANSPARENT,
+			muted,
+		])
+	}
+	const { fontSize, lineHeight, fontWeight, paddingInlineStart } =
+		getComputedStyle(skip)
+
+	await expect(skip.getBoundingClientRect().height).toBe(SKIP_GEOMETRY.height)
+	await expect(paddingInlineStart).toBe(SKIP_GEOMETRY.paddingInline)
+	await expect([fontSize, lineHeight, fontWeight]).toEqual(SKIP_GEOMETRY.type)
+	await expectBare()
+	await userEvent.hover(skip)
+	await expectBare()
+	await userEvent.unhover(skip)
 }
 
 type ArrowPlayContext = {
@@ -602,6 +750,7 @@ export const WelcomeConversationsLight = meta.story({
 			current: 2,
 		})
 		await expect(canvas.getByText("Release notes for 2.4")).toBeVisible()
+		await expectConversationsBubbles(canvasElement)
 		await expectArrows({ canvasElement, args, current: 2 })
 	},
 })
@@ -623,6 +772,7 @@ export const WelcomeConversationsDark = meta.story({
 			title: "Conversations, then missions",
 			current: 2,
 		})
+		await expectConversationsBubbles(canvasElement)
 		await expectArrows({ canvasElement, args, current: 2 })
 	},
 })
@@ -633,22 +783,27 @@ export const WelcomeSpacesLight = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story:
-					"No artboard draws this slide: it takes the anatomy of the others. Two Space cards, Orbit web and Newsletter, each with its Space avatar, its companions and its Conversation count. Check the Space avatars in two colours, three segments filled, and Skip intro still in place. Pick the Dark twin for the other theme.",
+				story: `${SPACES_ARTBOARD} Two Space cards of one width in a 520 px row: Work, blue, with Atlas and Wren, Shared with 3 people; Personal, green, with Juniper alone, Only you. Both Space avatars wear the computer badge, as the artboard draws them. Check three segments filled and Skip intro as plain muted text, with no fill and no border at rest or on hover. Pick the Dark twin for the other theme.`,
 			},
 		},
 	},
 	play: async ({ args, canvas, canvasElement }) => {
 		await expectWelcome({
 			canvasElement,
-			title: "Spaces keep things apart",
+			title: "Spaces keep work apart",
 			current: 3,
 		})
-		await expect(slotsIn(canvasElement, "space-avatar")).toHaveLength(2)
+		await expectSpacesCopy(canvasElement)
+		await expectSpaceCards(canvasElement)
 		await expectArrows({ canvasElement, args, current: 3 })
+		await expectPlainSkip(canvasElement)
 
-		await userEvent.click(canvas.getByRole("button", { name: "Skip intro" }))
+		const skip = canvas.getByRole("button", { name: "Skip intro" })
+		await userEvent.click(skip)
 		await expect(args.onSkip).toHaveBeenCalledOnce()
+		skip.focus()
+		await userEvent.keyboard("{Enter}")
+		await expect(args.onSkip).toHaveBeenCalledTimes(2)
 	},
 })
 
@@ -659,18 +814,20 @@ export const WelcomeSpacesDark = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story:
-					"The Spaces slide, dark. Check both Space avatars in their dark tone and three segments in the dark primary. Pick the Light twin for the other theme.",
+				story: `${SPACES_ARTBOARD} The Spaces slide, dark, as the artboard draws it. Check both Space avatars in their dark tone, the cards on the dark card surface, three segments in the dark primary and Skip intro bare at rest and on hover. Pick the Light twin for the other theme.`,
 			},
 		},
 	},
 	play: async ({ args, canvasElement }) => {
 		await expectWelcome({
 			canvasElement,
-			title: "Spaces keep things apart",
+			title: "Spaces keep work apart",
 			current: 3,
 		})
+		await expectSpacesCopy(canvasElement)
+		await expectSpaceCards(canvasElement)
 		await expectArrows({ canvasElement, args, current: 3 })
+		await expectPlainSkip(canvasElement)
 	},
 })
 
