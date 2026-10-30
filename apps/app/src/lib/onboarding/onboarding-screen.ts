@@ -32,6 +32,8 @@ export const connectStepOf = (
 			return "loginFound"
 		case "offer":
 			return "nothingFound"
+		case "anotherAccount":
+			return "anotherAccount"
 		case "waiting":
 			return isBusy ? "connecting" : "waitingForCode"
 		case "apiKey":
@@ -43,13 +45,26 @@ export const connectStepOf = (
 	}
 }
 
+const LOCAL_PART_SEPARATORS = /[._+-]/
+
+const initialsOf = (email: string): string => {
+	const [localPart = ""] = email.split("@")
+	const [first = "", second] = localPart
+		.split(LOCAL_PART_SEPARATORS)
+		.filter((part) => part.length > 0)
+	const initials = second
+		? first.charAt(0) + second.charAt(0)
+		: first.slice(0, 2)
+	return initials.toUpperCase()
+}
+
 export const connectAccountOf = (
 	connection: ConnectionStep,
 ): OnboardingConnectAccount | undefined =>
 	connection.state === "detected" && connection.plan
 		? {
 				email: connection.email,
-				initials: connection.email.charAt(0).toUpperCase(),
+				initials: initialsOf(connection.email),
 				plan: connection.plan,
 			}
 		: undefined

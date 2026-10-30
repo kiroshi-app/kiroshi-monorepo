@@ -57,9 +57,23 @@ describe("the connect step drawn", () => {
 		expect(connectStepOf(found, false)).toBe("loginFound")
 		expect(connectAccountOf(found)).toEqual({
 			email: "reader@example.com",
-			initials: "R",
+			initials: "RE",
 			plan: "Max",
 		})
+	})
+
+	it.each([
+		["ada.lovelace@example.com", "AL"],
+		["ada_lovelace@example.com", "AL"],
+		["ada-lovelace@example.com", "AL"],
+		["ada+work@example.com", "AW"],
+		["ada.byron.lovelace@example.com", "AB"],
+		[".ada@example.com", "AD"],
+		["a@example.com", "A"],
+	])("draws the initials of %s as %s", (email, initials) => {
+		expect(
+			connectAccountOf({ state: "detected", email, plan: "Max" })?.initials,
+		).toBe(initials)
 	})
 
 	it("draws no account card for a login with no plan", () => {
@@ -93,5 +107,11 @@ describe("the connect step drawn", () => {
 	it("offers the two ways in when nothing is found, and the key field", () => {
 		expect(connectStepOf({ state: "offer" }, false)).toBe("nothingFound")
 		expect(connectStepOf({ state: "apiKey" }, false)).toBe("keyField")
+	})
+
+	it("offers the two ways in again for another account", () => {
+		expect(connectStepOf({ state: "anotherAccount" }, false)).toBe(
+			"anotherAccount",
+		)
 	})
 })

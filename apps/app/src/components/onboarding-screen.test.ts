@@ -213,6 +213,42 @@ describe("the Connect screen", () => {
 		).toBeTruthy()
 	})
 
+	it("asks how to connect again on Use another account", async () => {
+		port.report = LOGGED_IN
+		await renderOnboarding()
+		await press("Skip intro")
+
+		await press("Use another account")
+
+		expect(heading()).toBe("How do you want to connect?")
+		expect(screen.queryByText("reader@example.com")).toBeNull()
+	})
+
+	it("signs in from another account on Continue, as when nothing is found", async () => {
+		port.report = LOGGED_IN
+		await renderOnboarding()
+		await press("Skip intro")
+		await press("Use another account")
+
+		await press("Continue")
+
+		expect(port.calls.map(({ command }) => command)).toContain("signIn")
+	})
+
+	it("asks for a key from another account on Paste an API key, then Continue", async () => {
+		port.report = LOGGED_IN
+		await renderOnboarding()
+		await press("Skip intro")
+		await press("Use another account")
+
+		await act(async () => {
+			fireEvent.click(screen.getByRole("radio", { name: /Paste an API key/ }))
+		})
+		await press("Continue")
+
+		expect(heading()).toBe("Paste your Anthropic API key")
+	})
+
 	it("names a missing agent and opens the download page", async () => {
 		port.report = {
 			...LOGGED_IN,
