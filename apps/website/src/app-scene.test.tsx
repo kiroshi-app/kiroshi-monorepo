@@ -80,10 +80,11 @@ const missionTools = () =>
 		tool.getAttribute("aria-label"),
 	)
 
-const waitingChangeSpaceButton = (name: string) =>
-	within(scene()).getByRole("button", {
-		name: `Change space, ${name} open, waiting for you`,
-	})
+const changeSpaceButton = (name: string) =>
+	within(scene()).getByRole("button", { name: `Change space, ${name} open` })
+
+const railDotOn = (button: HTMLElement) =>
+	button.querySelector("[data-slot=app-rail-dot]")
 
 const withoutMissionsIn = (spaceId: string): SceneSpace[] =>
 	SCENE_SPACES.map((space) =>
@@ -138,16 +139,16 @@ describe("the landing scene", () => {
 		).toBe("true")
 	})
 
-	it("draws the Space logo local and lights Change space for the other Space's waiting mission", () => {
+	it("draws the Space logo local and bare while the other Space holds a waiting mission", () => {
 		renderScene()
 
 		expect(presenceDots()).toHaveLength(0)
-		expect(waitingChangeSpaceButton(WORK.name)).not.toBeNull()
+		expect(railDotOn(changeSpaceButton(WORK.name))).toBeNull()
 
 		switchToPersonal()
 
 		expect(presenceDots()).toHaveLength(0)
-		expect(waitingChangeSpaceButton(PERSONAL.name)).not.toBeNull()
+		expect(railDotOn(changeSpaceButton(PERSONAL.name))).toBeNull()
 	})
 
 	it("draws no Change space dot while the selected Space alone waits on the reader", () => {
