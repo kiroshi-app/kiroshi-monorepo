@@ -22,13 +22,9 @@ import {
 import { DEFAULT_LANGUAGE, i18n } from "@workspace/ui/lib/i18n"
 
 const ARTBOARD =
-	"Measured against the Paper file `Kiroshi, Onboarding v2`, page `Welcome · Bottom row directions`, artboards `M · K, stepper below`, 1200 by 760: a visual zone as tall as the tallest illustration, French included, and a text zone 140 tall, then the stepper and one action, centred on the paragraph."
+	"Measured against the Paper file `Kiroshi, Onboarding v2`, page `Welcome · Bottom row directions`, artboards `M · K, stepper below`, 1200 by 760: a visual zone as tall as the tallest illustration and a text zone as tall as the tallest body plus one line, French included, then the stepper and one action, centred on the paragraph."
 
 const ARTBOARD_WIDTH = 1200
-
-const VISUAL_ZONE_HEIGHT = 328
-
-const TEXT_ZONE_HEIGHT = 140
 
 const SLIDES: OnboardingWelcomeStep[] = [
 	"companions",
@@ -204,17 +200,24 @@ const expectRowFixedAcrossTheWalk = (
 ) =>
 	atArtboardWidth(canvasElement, async () => {
 		const screen = slotIn(canvasElement, "onboarding-welcome-screen")
+		const visualHeights: number[] = []
+		const textHeights: number[] = []
 		const stepperTops: number[] = []
 		const actionTops: number[] = []
 
 		for (const [index, slide] of SLIDES.entries()) {
 			await waitFor(() => expect(screen).toHaveAttribute("data-step", slide))
-			await expect(
-				[
-					slotIn(canvasElement, "onboarding-welcome-visual"),
-					slotIn(canvasElement, "onboarding-welcome-text"),
-				].map((zone) => zone.getBoundingClientRect().height),
-			).toEqual([VISUAL_ZONE_HEIGHT, TEXT_ZONE_HEIGHT])
+			const textZone = slotIn(canvasElement, "onboarding-welcome-text")
+			await expect(textZone.scrollHeight).toBeLessThanOrEqual(
+				textZone.clientHeight,
+			)
+			textHeights.push(textZone.getBoundingClientRect().height)
+			visualHeights.push(
+				slotIn(
+					canvasElement,
+					"onboarding-welcome-visual",
+				).getBoundingClientRect().height,
+			)
 			stepperTops.push(
 				slotIn(
 					canvasElement,
@@ -229,6 +232,8 @@ const expectRowFixedAcrossTheWalk = (
 			}
 		}
 
+		await expect(spreadOf(visualHeights)).toBe(0)
+		await expect(spreadOf(textHeights)).toBe(0)
 		await expect(spreadOf(stepperTops)).toBeLessThanOrEqual(1)
 		await expect(spreadOf(actionTops)).toBeLessThanOrEqual(1)
 	})
@@ -672,7 +677,7 @@ export const WelcomeEverySlide = meta.story({
 		docs: {
 			description: {
 				story:
-					"The four slides walked with Next in an artboard-wide window. Check the visual and text zones at one height on every slide, and the stepper and the action at the same height on all four.",
+					"The four slides walked with Next in an artboard-wide window. Check the visual and text zones at one height on every slide, each body whole inside its zone, and the stepper and the action at the same height on all four.",
 			},
 		},
 	},

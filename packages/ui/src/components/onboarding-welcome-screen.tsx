@@ -269,7 +269,7 @@ const OnboardingWelcomeScreen = ({
 				<Illustration />
 			</div>
 			<div
-				className="flex min-h-35 w-full justify-center pt-10"
+				className="flex h-44.5 w-full justify-center pt-10"
 				data-slot="onboarding-welcome-text"
 			>
 				<OnboardingHeading
