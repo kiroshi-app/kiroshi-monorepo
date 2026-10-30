@@ -2,23 +2,24 @@
 
 import { useTranslation } from "react-i18next"
 
-import {
-	OnboardingButton,
-	OnboardingLink,
-} from "@workspace/ui/components/onboarding-shell"
+import { Icons } from "@workspace/ui/components/icons"
+import { OnboardingButton } from "@workspace/ui/components/onboarding-shell"
+import { Button } from "@workspace/ui/components/ui/button"
 import { cn } from "@workspace/ui/lib/utils"
 
-const ACTION_LABEL_KEYS = [
-	"onboarding.intro.next",
-	"onboarding.intro.getStarted",
-] as const
+const CHEVRON_STROKE = 1.6
+
+const ARROW_CLASS =
+	"size-8 rounded-full bg-clip-border transition-none data-disabled:pointer-events-none data-disabled:text-muted-foreground data-disabled:opacity-35"
+
+const ACTION_CLASS = "h-10 px-6"
 
 type OnboardingWelcomeFooterProps = {
 	step: number
 	total: number
 	onSkip: () => void
 	onBack: () => void
-	onAction: () => void
+	onNext: () => void
 }
 
 const OnboardingWelcomeFooter = ({
@@ -26,74 +27,82 @@ const OnboardingWelcomeFooter = ({
 	total,
 	onSkip,
 	onBack,
-	onAction,
+	onNext,
 }: OnboardingWelcomeFooterProps) => {
 	const { t } = useTranslation("chat")
 	const isFirstStep = step === 1
 	const isLastStep = step === total
-	const actionLabelKey = isLastStep
-		? "onboarding.intro.getStarted"
-		: "onboarding.intro.next"
 
 	return (
 		<div
-			className="flex flex-wrap items-center justify-center gap-x-8 gap-y-4"
+			className="flex flex-col items-center [--color-primary:var(--hue-blue-accent)] [--primary:var(--hue-blue-accent)]"
 			data-slot="onboarding-welcome-footer"
 		>
 			<div
-				className={cn("flex", isLastStep && "invisible")}
-				data-slot="onboarding-welcome-skip"
+				className="flex items-center gap-4 pt-3 pb-6"
+				data-slot="onboarding-welcome-stepper"
 			>
-				<OnboardingLink onClick={onSkip}>
-					{t("onboarding.intro.skip")}
-				</OnboardingLink>
-			</div>
-			<div className="flex items-center gap-3">
-				<div aria-hidden="true" className="flex items-center gap-1.5">
-					{Array.from({ length: total }, (_, index) => index + 1).map((dot) => (
-						<span
-							className={cn(
-								"h-1.5 rounded-full",
-								dot === step
-									? "w-4.5 bg-foreground"
-									: "w-1.5 bg-muted-foreground/30",
-							)}
-							data-current={dot === step}
-							data-slot="onboarding-step-dot"
-							key={dot}
-						/>
-					))}
-				</div>
-				<p className="whitespace-nowrap text-compact text-muted-foreground tabular-nums leading-4.5">
-					{t("onboarding.step", { step, total })}
-				</p>
-			</div>
-			<div className="flex items-center gap-3">
-				<div
-					className={cn("flex", isFirstStep && "invisible")}
-					data-slot="onboarding-welcome-back"
+				<Button
+					aria-label={t("onboarding.intro.back")}
+					className={cn(
+						ARROW_CLASS,
+						"bg-transparent text-foreground data-disabled:border-transparent dark:bg-transparent",
+					)}
+					disabled={isFirstStep}
+					focusableWhenDisabled
+					onClick={onBack}
+					size="icon"
+					variant="outline"
 				>
-					<OnboardingButton onClick={onBack} variant="outline">
-						{t("onboarding.intro.back")}
-					</OnboardingButton>
-				</div>
-				<OnboardingButton onClick={onAction}>
-					<span className="grid justify-items-center">
-						{ACTION_LABEL_KEYS.map((labelKey) => (
+					<Icons.Previous aria-hidden="true" strokeWidth={CHEVRON_STROKE} />
+				</Button>
+				<div
+					aria-label={t("onboarding.intro.progress")}
+					aria-valuemax={total}
+					aria-valuemin={1}
+					aria-valuenow={step}
+					aria-valuetext={t("onboarding.intro.position", { step, total })}
+					className="flex items-center gap-1.5"
+					role="progressbar"
+				>
+					{Array.from({ length: total }, (_, index) => index + 1).map(
+						(segment) => (
 							<span
-								aria-hidden={labelKey !== actionLabelKey || undefined}
 								className={cn(
-									"col-start-1 row-start-1",
-									labelKey !== actionLabelKey && "invisible",
+									"h-1 w-11 rounded-full",
+									segment <= step ? "bg-primary" : "bg-border",
 								)}
-								key={labelKey}
-							>
-								{t(labelKey)}
-							</span>
-						))}
-					</span>
-				</OnboardingButton>
+								data-filled={segment <= step}
+								data-slot="onboarding-step-segment"
+								key={segment}
+							/>
+						),
+					)}
+				</div>
+				<Button
+					aria-label={t("onboarding.intro.next")}
+					className={cn(ARROW_CLASS, "data-disabled:bg-muted")}
+					disabled={isLastStep}
+					focusableWhenDisabled
+					onClick={onNext}
+					size="icon"
+				>
+					<Icons.Next aria-hidden="true" strokeWidth={CHEVRON_STROKE} />
+				</Button>
 			</div>
+			{isLastStep ? (
+				<OnboardingButton className={ACTION_CLASS} onClick={onNext}>
+					{t("onboarding.intro.getStarted")}
+				</OnboardingButton>
+			) : (
+				<OnboardingButton
+					className={cn(ACTION_CLASS, "text-muted-foreground")}
+					onClick={onSkip}
+					variant="ghost"
+				>
+					{t("onboarding.intro.skip")}
+				</OnboardingButton>
+			)}
 		</div>
 	)
 }

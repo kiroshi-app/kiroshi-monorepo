@@ -748,6 +748,8 @@ feedback-onboardingwelcomescreen--welcome-companions-wrapped-role-light
 feedback-onboardingwelcomescreen--welcome-conversations-dark
 feedback-onboardingwelcomescreen--welcome-conversations-light
 feedback-onboardingwelcomescreen--welcome-every-slide
+feedback-onboardingwelcomescreen--welcome-every-slide-french
+feedback-onboardingwelcomescreen--welcome-in-an-orange-space
 feedback-onboardingwelcomescreen--welcome-spaces-dark
 feedback-onboardingwelcomescreen--welcome-spaces-light
 feedback-onboardingwelcomescreen--welcome-your-tools-dark
