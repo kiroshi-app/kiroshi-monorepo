@@ -152,7 +152,7 @@ afterEach(cleanup)
 describe("the Welcome screens", () => {
 	it("walks the four screens, then stores connect and offers the two ways in", async () => {
 		await renderOnboarding()
-		expect(heading()).toBe("Companions do the work with you")
+		expect(heading()).toBe("Agents do the work with you")
 
 		await press("Next")
 		expect(heading()).toBe("Conversations, then missions")
@@ -181,7 +181,7 @@ describe("the Welcome screens", () => {
 		await press("Back")
 		expect(heading()).toBe("Conversations, then missions")
 		await press("Back")
-		expect(heading()).toBe("Companions do the work with you")
+		expect(heading()).toBe("Agents do the work with you")
 
 		expect(world.stored).toEqual([])
 	})
@@ -190,7 +190,7 @@ describe("the Welcome screens", () => {
 		await renderOnboarding()
 
 		await press("Back")
-		expect(heading()).toBe("Companions do the work with you")
+		expect(heading()).toBe("Agents do the work with you")
 		await press("Next")
 		expect(heading()).toBe("Conversations, then missions")
 	})
