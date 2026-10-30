@@ -157,7 +157,7 @@ describe("the Welcome screens", () => {
 		await press("Next")
 		expect(heading()).toBe("Conversations, then missions")
 		await press("Next")
-		expect(heading()).toBe("Spaces keep things apart")
+		expect(heading()).toBe("Spaces keep work apart")
 		await press("Next")
 		expect(heading()).toBe("Your tools, where you allow them")
 		await press("Get started")
@@ -177,7 +177,7 @@ describe("the Welcome screens", () => {
 		await press("Next")
 
 		await press("Back")
-		expect(heading()).toBe("Spaces keep things apart")
+		expect(heading()).toBe("Spaces keep work apart")
 		await press("Back")
 		expect(heading()).toBe("Conversations, then missions")
 		await press("Back")
