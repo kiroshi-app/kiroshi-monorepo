@@ -18,7 +18,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"One thing found in ~/.claude on the Import from Claude Code screen: a companion, the CLAUDE.md instructions or a skill. While the reader picks, the lead slot holds a checkbox named after the row title; once the import runs it holds a status icon instead, labelled done, in progress or failed. A row already in Kiroshi keeps its checkbox unchecked and disabled, and reads Already in Kiroshi.",
+					"One thing found in ~/.claude on the Import from Claude Code screen: a companion, the CLAUDE.md instructions or a skill. While the reader picks, the lead slot holds a checkbox named after the row title; once the import runs it holds a status icon instead, labelled done, in progress or failed. A row already in Kiroshi keeps its checkbox unchecked and disabled, and reads Already in Kiroshi. Every row names its type at the right edge: Agent, Instructions or Skills.",
 			},
 		},
 	},
@@ -30,7 +30,7 @@ const meta = preview.meta({
 		onCheckedChange: fn(),
 	},
 	render: (args) => (
-		<div className="w-140 rounded-xl border border-border bg-muted/40">
+		<div className="w-140 rounded-xl border border-border bg-card">
 			<ImportRow {...args} />
 		</div>
 	),
@@ -57,7 +57,7 @@ export const Default = meta.story({
 
 export const States = meta.story({
 	render: (args) => (
-		<div className="flex w-140 flex-col overflow-hidden rounded-xl border border-border bg-muted/40 [&>*+*]:border-border [&>*+*]:border-t">
+		<div className="flex w-140 flex-col overflow-hidden rounded-xl border border-border bg-card [&>*+*]:border-border [&>*+*]:border-t">
 			<ImportRow {...args} />
 			<ImportRow
 				{...args}
@@ -108,7 +108,7 @@ export const States = meta.story({
 		docs: {
 			description: {
 				story:
-					"Every lead the row takes, top to bottom: checked, unchecked, the CLAUDE.md row in Geist Mono already in Kiroshi, the skills on one row titled with their count, then done, in progress and failed once the import runs. Check that the row already in Kiroshi stays unchecked when clicked, and that each status icon carries its label.",
+					"Every lead the row takes, top to bottom: checked, unchecked, the CLAUDE.md row in Geist Mono already in Kiroshi, the skills on one row titled with their count, then done, in progress and failed once the import runs. Check that the row already in Kiroshi stays unchecked when clicked, that each status icon carries its label, and that every row, failed and already in Kiroshi included, keeps its type at the right edge.",
 			},
 		},
 	},
@@ -123,6 +123,9 @@ export const States = meta.story({
 		await expect(canvas.getByRole("img", { name: "Done" })).toBeVisible()
 		await expect(canvas.getByRole("img", { name: "In progress" })).toBeVisible()
 		await expect(canvas.getByRole("img", { name: "Failed" })).toBeVisible()
+		await expect(canvas.getAllByText("Agent")).toHaveLength(4)
+		await expect(canvas.getByText("Instructions")).toBeVisible()
+		await expect(canvas.getAllByText("Skills")).toHaveLength(2)
 	},
 })
 

@@ -144,10 +144,6 @@ const common = {
 	},
 	claudeImport: {
 		listLabel: "Votre configuration Claude Code",
-		sections: {
-			companions: "Agents",
-			instructionsAndSkills: "Instructions et compétences",
-		},
 		select: {
 			title: "Récupérez votre configuration Claude Code",
 			body: "Trouvé dans ~/.claude sur votre ordinateur. Tout est sélectionné ; décochez ce que vous préférez laisser.",
@@ -202,6 +198,19 @@ const common = {
 			onlySkills_other: "{{count}} compétences sont prêtes.",
 			continue: "Continuer",
 		},
+		landing: {
+			companions_one: "Tout est prêt. {{companions}} vient de Claude Code.",
+			companions_many: "Tout est prêt. {{companions}} viennent de Claude Code.",
+			companions_other:
+				"Tout est prêt. {{companions}} viennent de Claude Code.",
+			companionsWith_one:
+				"Tout est prêt. {{companions}} vient de Claude Code, avec {{extras}}.",
+			companionsWith_many:
+				"Tout est prêt. {{companions}} viennent de Claude Code, avec {{extras}}.",
+			companionsWith_other:
+				"Tout est prêt. {{companions}} viennent de Claude Code, avec {{extras}}.",
+			extras: "Tout est prêt, avec {{extras}} de Claude Code.",
+		},
 		partlyFailed: {
 			title: "L’essentiel de votre configuration est là",
 			body: "La compétence {{name}} n’a pas été récupérée. Réessayez, ou ajoutez-la plus tard depuis les Réglages.",
@@ -227,6 +236,11 @@ const common = {
 			companionNameTaken:
 				"Vous avez déjà un compagnon nommé {{name}}, donc celui-ci arrive sous le nom {{renamed}}.",
 			unparsable: "Impossible de le récupérer : son {{file}} est illisible.",
+			type: {
+				companion: "Agent",
+				instructions: "Instructions",
+				skill: "Compétences",
+			},
 			status: {
 				done: "Terminé",
 				pending: "En cours",

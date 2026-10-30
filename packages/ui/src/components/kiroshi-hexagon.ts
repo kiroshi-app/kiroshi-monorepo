@@ -9,6 +9,7 @@ type HexagonMetrics = {
 }
 
 const OUTER: RoundedHexagon = { halfWidth: 200.5, halfHeight: 181.5 }
+const INNER: RoundedHexagon = { halfWidth: 134.5, halfHeight: 123.5 }
 const COS_30 = Math.cos(Math.PI / 6)
 const TAN_30 = Math.tan(Math.PI / 6)
 const EDGE_NORMAL = { x: -COS_30, y: 0.5 }
@@ -70,6 +71,7 @@ const roundedHexagonPath = (shape: RoundedHexagon) => {
 
 export {
 	hexagonOfWidth,
+	INNER,
 	isInsideRoundedHexagon,
 	OUTER,
 	type RoundedHexagon,

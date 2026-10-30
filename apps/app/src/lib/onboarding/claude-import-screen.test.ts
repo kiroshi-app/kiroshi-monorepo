@@ -85,11 +85,12 @@ const propsOf = ({
 }: PropsInput = {}) =>
 	importScreenPropsOf({ variant, inventory, session }, actions)
 
-const sectionsIn = (props: ImportScreenProps) =>
-	"sections" in props ? props.sections : []
-
 const itemsIn = (props: ImportScreenProps) =>
-	sectionsIn(props).flatMap((section) => section.items)
+	"items" in props ? props.items : []
+
+const kindsIn = (props: ImportScreenProps) => [
+	...new Set(itemsIn(props).map((item) => item.kind)),
+]
 
 const itemIn = (props: ImportScreenProps, id: string) =>
 	itemsIn(props).find((item) => item.id === id)
@@ -110,10 +111,7 @@ describe("the select step", () => {
 
 		expect(props.step).toBe("select")
 		expect(props.title).toBe("Bring in your Claude Code setup")
-		expect(sectionsIn(props).map((section) => section.label)).toEqual([
-			"Agents",
-			"Instructions and skills",
-		])
+		expect(kindsIn(props)).toEqual(["companion", "instructions", "skill"])
 		expect(itemsIn(props).map((item) => item.id)).toEqual(allKeys)
 		expect(itemsIn(props).every((item) => item.checked)).toBe(true)
 		expect(itemIn(props, "claude-md")?.kind).toBe("instructions")
@@ -137,9 +135,7 @@ describe("the select step", () => {
 	it("C01 lists only the agents card and counts agents", () => {
 		const props = propsOf({ inventory: found({ agents: [ATLAS, WREN] }) })
 
-		expect(sectionsIn(props).map((section) => section.id)).toEqual([
-			"companions",
-		])
+		expect(kindsIn(props)).toEqual(["companion"])
 		expect(props.primary.label).toBe("Import 2 agents")
 	})
 
@@ -148,9 +144,7 @@ describe("the select step", () => {
 			inventory: found({ skills: SKILLS, claudeMd: CLAUDE_MD }),
 		})
 
-		expect(sectionsIn(props).map((section) => section.id)).toEqual([
-			"instructions-and-skills",
-		])
+		expect(kindsIn(props)).toEqual(["instructions", "skill"])
 		expect(props.primary.label).toBe("Import 5 items")
 	})
 

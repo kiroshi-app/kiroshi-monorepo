@@ -11,7 +11,6 @@ import {
 	type ImportItem,
 	ImportScreen,
 	type ImportScreenProps,
-	type ImportSection,
 } from "@workspace/ui/components/import-screen"
 import { i18n } from "@workspace/ui/lib/i18n"
 
@@ -86,18 +85,6 @@ const MORE_COMPANIONS: ImportItem[] = [
 	checked: true,
 }))
 
-const companionsOf = (items: ImportItem[]): ImportSection => ({
-	id: "companions",
-	label: i18n.t("common:claudeImport.sections.companions"),
-	items,
-})
-
-const filesOf = (items: ImportItem[]): ImportSection => ({
-	id: "instructions-and-skills",
-	label: i18n.t("common:claudeImport.sections.instructionsAndSkills"),
-	items,
-})
-
 const withStatus = (
 	items: ImportItem[],
 	status: (item: ImportItem, index: number) => ImportItem["status"],
@@ -117,7 +104,7 @@ const LIST: Artboard = {
 	step: "select",
 	title: i18n.t("common:claudeImport.select.title"),
 	subtitle: i18n.t("common:claudeImport.select.body"),
-	sections: [companionsOf([ATLAS, WREN]), filesOf(FILES)],
+	items: [ATLAS, WREN, ...FILES],
 	onToggle: fn(),
 	primary: {
 		label: i18n.t("common:claudeImport.select.importItems", { count: 7 }),
@@ -129,11 +116,9 @@ const LIST: Artboard = {
 const IMPORTING: Artboard = {
 	step: "importing",
 	title: i18n.t("common:claudeImport.importing.title"),
-	sections: [
-		companionsOf(withStatus([ATLAS, WREN], () => "done")),
-		filesOf(
-			withStatus(FILES, (_, index) => (index === 0 ? "done" : "pending")),
-		),
+	items: [
+		...withStatus([ATLAS, WREN], () => "done"),
+		...withStatus(FILES, (_, index) => (index === 0 ? "done" : "pending")),
 	],
 	primary: {
 		label: i18n.t("common:claudeImport.importing.action"),
@@ -143,21 +128,20 @@ const IMPORTING: Artboard = {
 
 const IMPORTING_PICKED_ONLY: Artboard = {
 	...IMPORTING,
-	sections: [
-		companionsOf([
-			{ ...ATLAS, status: "done" },
-			{ ...WREN, checked: false, status: "done" },
-		]),
-		filesOf([{ ...CLAUDE_MD, isInKiroshi: true, status: "done" }, ...SKILLS]),
+	items: [
+		{ ...ATLAS, status: "done" },
+		{ ...WREN, checked: false, status: "done" },
+		{ ...CLAUDE_MD, isInKiroshi: true, status: "done" },
+		...SKILLS,
 	],
 }
 
 const DONE: Artboard = {
 	step: "done",
 	title: i18n.t("common:claudeImport.done.title"),
-	sections: [
-		companionsOf(withStatus([ATLAS, WREN], () => "done")),
-		filesOf(withStatus(FILES, () => "done")),
+	items: [
+		...withStatus([ATLAS, WREN], () => "done"),
+		...withStatus(FILES, () => "done"),
 	],
 	primary: {
 		label: i18n.t("common:claudeImport.done.continue"),
@@ -167,7 +151,7 @@ const DONE: Artboard = {
 
 const ONLY_AGENTS: Artboard = {
 	...LIST,
-	sections: [companionsOf([ATLAS, WREN])],
+	items: [ATLAS, WREN],
 	primary: {
 		label: i18n.t("common:claudeImport.select.importCompanions", { count: 2 }),
 		onPress: fn(),
@@ -176,7 +160,7 @@ const ONLY_AGENTS: Artboard = {
 
 const ONLY_FILES: Artboard = {
 	...LIST,
-	sections: [filesOf(FILES)],
+	items: FILES,
 	primary: {
 		label: i18n.t("common:claudeImport.select.importItems", { count: 5 }),
 		onPress: fn(),
@@ -186,7 +170,7 @@ const ONLY_FILES: Artboard = {
 const LONG_LIST: Artboard = {
 	...LIST,
 	subtitle: i18n.t("common:claudeImport.select.bodyMany", { count: 10 }),
-	sections: [companionsOf([ATLAS, WREN, ...MORE_COMPANIONS]), filesOf(FILES)],
+	items: [ATLAS, WREN, ...MORE_COMPANIONS, ...FILES],
 	primary: {
 		label: i18n.t("common:claudeImport.select.importItems", { count: 15 }),
 		onPress: fn(),
@@ -199,7 +183,7 @@ const unchecked = (items: ImportItem[]) =>
 const NOTHING_SELECTED: Artboard = {
 	...LIST,
 	subtitle: i18n.t("common:claudeImport.select.nothingSelected"),
-	sections: [companionsOf(unchecked([ATLAS, WREN])), filesOf(unchecked(FILES))],
+	items: unchecked([ATLAS, WREN, ...FILES]),
 	primary: {
 		label: i18n.t("common:claudeImport.select.import"),
 		onPress: fn(),
@@ -209,29 +193,27 @@ const NOTHING_SELECTED: Artboard = {
 const NAME_ALREADY_TAKEN: Artboard = {
 	...LIST,
 	subtitle: i18n.t("common:claudeImport.select.namesTaken.two"),
-	sections: [
-		companionsOf([
-			{
-				id: "shoto",
-				kind: "companion",
-				title: "Shoto 2",
-				detail: i18n.t("common:claudeImport.row.nameTaken", {
-					name: "Shoto",
-					renamed: "Shoto 2",
-				}),
-				hue: 320,
-				checked: true,
-			},
-			{
-				...ATLAS,
-				title: "Atlas 2",
-				detail: i18n.t("common:claudeImport.row.companionNameTaken", {
-					name: "Atlas",
-					renamed: "Atlas 2",
-				}),
-			},
-			WREN,
-		]),
+	items: [
+		{
+			id: "shoto",
+			kind: "companion",
+			title: "Shoto 2",
+			detail: i18n.t("common:claudeImport.row.nameTaken", {
+				name: "Shoto",
+				renamed: "Shoto 2",
+			}),
+			hue: 320,
+			checked: true,
+		},
+		{
+			...ATLAS,
+			title: "Atlas 2",
+			detail: i18n.t("common:claudeImport.row.companionNameTaken", {
+				name: "Atlas",
+				renamed: "Atlas 2",
+			}),
+		},
+		WREN,
 	],
 	primary: {
 		label: i18n.t("common:claudeImport.select.importCompanions", { count: 3 }),
@@ -253,13 +235,11 @@ const UNREADABLE: Artboard = {
 const PARTLY_FAILED: Artboard = {
 	step: "done",
 	title: i18n.t("common:claudeImport.partlyFailed.title"),
-	sections: [
-		companionsOf(withStatus([ATLAS, WREN], () => "done")),
-		filesOf([
-			{ ...CLAUDE_MD, status: "done" },
-			...withStatus(SKILLS.slice(0, 3), () => "done"),
-			FAILED_CHANGELOG,
-		]),
+	items: [
+		...withStatus([ATLAS, WREN], () => "done"),
+		{ ...CLAUDE_MD, status: "done" },
+		...withStatus(SKILLS.slice(0, 3), () => "done"),
+		FAILED_CHANGELOG,
 	],
 	primary: {
 		label: i18n.t("common:claudeImport.done.continue"),
@@ -281,9 +261,10 @@ const AGAIN_FROM_SETTINGS: Artboard = {
 	title: i18n.t("common:claudeImport.fromSettings.title"),
 	subtitle: i18n.t("common:claudeImport.fromSettings.body"),
 	onToggle: fn(),
-	sections: [
-		companionsOf(alreadyIn([ATLAS, WREN])),
-		filesOf([...alreadyIn([CLAUDE_MD, ...SKILLS]), ...NEW_SKILLS]),
+	items: [
+		...alreadyIn([ATLAS, WREN]),
+		...alreadyIn([CLAUDE_MD, ...SKILLS]),
+		...NEW_SKILLS,
 	],
 	primary: {
 		label: i18n.t("common:claudeImport.select.importItems", { count: 2 }),
@@ -297,30 +278,22 @@ const AGAIN_FROM_SETTINGS: Artboard = {
 
 const DONE_ONE_COMPANION: Artboard = {
 	...DONE,
-	sections: [
-		companionsOf([{ ...ATLAS, status: "done" }]),
-		filesOf(withStatus(FILES, () => "done")),
-	],
+	items: [{ ...ATLAS, status: "done" }, ...withStatus(FILES, () => "done")],
 }
 
 const DONE_WITHOUT_INSTRUCTIONS: Artboard = {
 	...DONE,
-	sections: [
-		companionsOf(withStatus([ATLAS, WREN], () => "done")),
-		filesOf(withStatus(SKILLS, () => "done")),
+	items: [
+		...withStatus([ATLAS, WREN], () => "done"),
+		...withStatus(SKILLS, () => "done"),
 	],
 }
 
 const partlyFailedOn = (failed: ImportItem): Artboard => ({
 	...PARTLY_FAILED,
-	sections: [
-		companionsOf(
-			withStatus([ATLAS, WREN], (item) =>
-				item.id === failed.id ? "failed" : "done",
-			),
-		),
-		filesOf(
-			withStatus(FILES, (item) => (item.id === failed.id ? "failed" : "done")),
+	items: [
+		...withStatus([ATLAS, WREN, ...FILES], (item) =>
+			item.id === failed.id ? "failed" : "done",
 		),
 	],
 	secondary: {
@@ -332,6 +305,13 @@ const partlyFailedOn = (failed: ImportItem): Artboard => ({
 })
 
 const describe = (story: string) => ({ docs: { description: { story } } })
+
+const expectTypeLabels = async (canvasElement: HTMLElement) => {
+	const canvas = within(slotIn(canvasElement, "import-list"))
+	await expect(canvas.getAllByText("Agent")).toHaveLength(2)
+	await expect(canvas.getByText("Instructions")).toBeVisible()
+	await expect(canvas.getByText("Skills")).toBeVisible()
+}
 
 const primaryIn = (canvasElement: HTMLElement, name: string) =>
 	within(slotIn(canvasElement, "import-screen")).getByRole("button", { name })
@@ -354,7 +334,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"Import from Claude Code: what Kiroshi found in ~/.claude on the reader's computer, the agents in one card and the CLAUDE.md instructions with the skills in another, every row checked by default. Four steps: `select` with a checkbox per row, `importing` with a status icon per row, `done` with or without the rows and their final status, and `unreadable` when the folder could not be opened. Copy comes in as props, from the `common:claudeImport` catalogue. The primary action is disabled while importing and while nothing is checked. A list taller than the window scrolls alone, the actions stay in view. Measured against the Paper file `Kiroshi, Onboarding v2`, artboards 3.1 to 3.3 and C01 to C08, light and dark.",
+					"Import from Claude Code: what Kiroshi found in ~/.claude on the reader's computer, every row in one card with no heading, the agents first, then CLAUDE.md, then the skills on one row, each row naming its type at the right edge, every row checked by default. Four steps: `select` with a checkbox per row, `importing` with a status icon per row, `done` with or without the rows and their final status, and `unreadable` when the folder could not be opened. Copy comes in as props, from the `common:claudeImport` catalogue. The primary action is disabled while importing and while nothing is checked. A list taller than the window scrolls alone, the actions stay in view. Measured against the Paper file `Kiroshi, Onboarding v2`, artboards 3.1 to 3.3 and C01 to C08, and page Flow · Final, artboard 3, light and dark.",
 			},
 		},
 	},
@@ -364,10 +344,12 @@ export const List = meta.story({
 	name: "3.1 List",
 	args: LIST,
 	parameters: describe(
-		"The nominal onboarding case: two agents, CLAUDE.md and four skills, all checked. Check that both cards share the 560 px column, the checkboxes wear the Space accent, and that unchecking a row hands its id to `onToggle`.",
+		"The nominal onboarding case: two agents, CLAUDE.md and four skills, all checked. Check that one 560 px card holds every row with no heading and no tile above the title, that each row names its type at the right edge, the checkboxes wear the Space accent, and that unchecking a row hands its id to `onToggle`.",
 	),
 	play: async ({ canvasElement, args }) => {
 		const canvas = within(canvasElement)
+		await expect(canvas.queryByRole("heading", { level: 2 })).toBeNull()
+		await expectTypeLabels(canvasElement)
 		await userEvent.click(canvas.getByRole("checkbox", { name: "Wren" }))
 		await expect(toggleOf(args)).toHaveBeenCalledWith("wren", false)
 		if (!isInBrowserRunner()) return
@@ -437,11 +419,12 @@ export const Importing = meta.story({
 	name: "3.2 Importing",
 	args: IMPORTING,
 	parameters: describe(
-		"The import is running, three of seven done, the four skills still in progress on their one row. Check that no checkbox is left, that each row carries a done or in progress icon with its label, that the body counts each skill, and that the primary action is disabled with no Skip link.",
+		"The import is running, three of seven done, the four skills still in progress on their one row. Check that no checkbox is left, that each row carries a done or in progress icon with its label and keeps its type at the right edge, that the body counts each skill, and that the primary action is disabled with no Skip link.",
 	),
 	play: async ({ canvasElement, args }) => {
 		const canvas = within(canvasElement)
 		await expect(canvas.queryByRole("checkbox")).toBeNull()
+		await expectTypeLabels(canvasElement)
 		await expect(canvas.getAllByRole("img", { name: "Done" })).toHaveLength(3)
 		await expect(canvas.getByRole("img", { name: "In progress" })).toBeVisible()
 		await expect(
@@ -488,7 +471,7 @@ export const Done = meta.story({
 	name: "3.3 Done",
 	args: DONE,
 	parameters: describe(
-		"Everything the reader picked came in, every picked row kept with its done mark. Check that the summary names the agents and counts the skills from the rows shown. Pick `PartlyFailed` when a row did not come in.",
+		"Everything the reader picked came in, every picked row kept with its done mark and its type. Check that the summary names the agents and counts the skills from the rows shown. Pick `PartlyFailed` when a row did not come in.",
 	),
 	play: async ({ canvasElement }) => {
 		const canvas = within(canvasElement)
@@ -498,6 +481,7 @@ export const Done = meta.story({
 			),
 		).toBeVisible()
 		await expect(canvas.getAllByRole("img", { name: "Done" })).toHaveLength(4)
+		await expectTypeLabels(canvasElement)
 		await expect(canvas.getByText("4 skills")).toBeVisible()
 		await expect(
 			canvas.getByText("commit-style, test-first, review-checklist, changelog"),
@@ -546,12 +530,12 @@ export const OnlyAgents = meta.story({
 	name: "C01 Only agents",
 	args: ONLY_AGENTS,
 	parameters: describe(
-		"~/.claude holds agents and nothing else. Check that the single card centres with the whole column in the window.",
+		"~/.claude holds agents and nothing else. Check that the card holds the two agents alone, with no heading, and centres with the whole column in the window.",
 	),
 	play: async ({ canvasElement }) => {
-		await expect(
-			within(canvasElement).getByRole("heading", { name: "Agents" }),
-		).toBeVisible()
+		const canvas = within(canvasElement)
+		await expect(canvas.queryByRole("heading", { level: 2 })).toBeNull()
+		await expect(canvas.getAllByText("Agent")).toHaveLength(2)
 		await expect(primaryIn(canvasElement, "Import 2 agents")).toBeVisible()
 	},
 })
@@ -675,7 +659,7 @@ export const Unreadable = meta.story({
 	name: "C06 Couldn't read ~/.claude",
 	args: UNREADABLE,
 	parameters: describe(
-		"Kiroshi was refused ~/.claude. Check the danger tile and its alert icon, no list, then Try again above Skip for now.",
+		"Kiroshi was refused ~/.claude. Check that the title opens the column with no tile above it, no list, then Try again above Skip for now.",
 	),
 	play: hoverRetry,
 })

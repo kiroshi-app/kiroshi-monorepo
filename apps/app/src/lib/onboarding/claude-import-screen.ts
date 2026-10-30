@@ -2,7 +2,6 @@ import type {
 	ImportAction,
 	ImportItem,
 	ImportScreenProps,
-	ImportSection,
 } from "@workspace/ui/components/import-screen"
 import { i18n } from "@workspace/ui/lib/i18n"
 
@@ -127,32 +126,18 @@ const importedItemOf = (
 	}
 }
 
-const sectionsOf = (
+const listItemsOf = (
 	inventory: FoundInventory,
 	session: ClaudeImportSession,
-): ImportSection[] => {
+): ImportItem[] => {
 	const itemOf = session.selection.length > 0 ? importedItemOf : selectedItemOf
 	const rowsOf = (items: ClaudeItem[], kind: ImportItem["kind"]) =>
 		items.map((item) => ({ ...itemOf(item, session), kind }))
-	const sections: ImportSection[] = [
-		{
-			id: "companions",
-			label: i18n.t("common:claudeImport.sections.companions"),
-			items: rowsOf(inventory.agents, "companion"),
-		},
-		{
-			id: "instructions-and-skills",
-			label: i18n.t("common:claudeImport.sections.instructionsAndSkills"),
-			items: [
-				...rowsOf(
-					inventory.claudeMd ? [inventory.claudeMd] : [],
-					"instructions",
-				),
-				...rowsOf(inventory.skills, "skill"),
-			],
-		},
+	return [
+		...rowsOf(inventory.agents, "companion"),
+		...rowsOf(inventory.claudeMd ? [inventory.claudeMd] : [], "instructions"),
+		...rowsOf(inventory.skills, "skill"),
 	]
-	return sections.filter((section) => section.items.length > 0)
 }
 
 const leaveLabelOf = (variant: ClaudeImportVariant) => {
@@ -209,7 +194,7 @@ const selectPropsOf = (
 				? i18n.t("common:claudeImport.fromSettings.title")
 				: i18n.t("common:claudeImport.select.title"),
 		subtitle: selectSubtitleOf(view, picked.length),
-		sections: sectionsOf(inventory, view.session),
+		items: listItemsOf(inventory, view.session),
 		onToggle: actions.onToggle,
 		primary: {
 			label: importLabelOf(inventory, picked),
@@ -219,17 +204,15 @@ const selectPropsOf = (
 	}
 }
 
-const firstFailedNameOf = (sections: ImportSection[]) =>
-	sections
-		.flatMap((section) => section.items)
-		.find((item) => item.status === "failed")?.title
+const firstFailedNameOf = (items: ImportItem[]) =>
+	items.find((item) => item.status === "failed")?.title
 
 const donePropsOf = (
 	{ inventory, session }: ClaudeImportView,
 	actions: ClaudeImportActions,
 ): ImportScreenProps => {
-	const sections = sectionsOf(foundIn(inventory), session)
-	const failedName = firstFailedNameOf(sections)
+	const items = listItemsOf(foundIn(inventory), session)
+	const failedName = firstFailedNameOf(items)
 	const primary = {
 		label: i18n.t("common:claudeImport.done.continue"),
 		onPress: actions.onLeave,
@@ -238,14 +221,14 @@ const donePropsOf = (
 		return {
 			step: "done",
 			title: i18n.t("common:claudeImport.done.title"),
-			sections,
+			items,
 			primary,
 		}
 	}
 	return {
 		step: "done",
 		title: i18n.t("common:claudeImport.partlyFailed.title"),
-		sections,
+		items,
 		primary,
 		secondary: {
 			label: i18n.t("common:claudeImport.partlyFailed.retry", {
@@ -265,7 +248,7 @@ export const importScreenPropsOf = (
 		return {
 			step: "importing",
 			title: i18n.t("common:claudeImport.importing.title"),
-			sections: sectionsOf(foundIn(inventory), session),
+			items: listItemsOf(foundIn(inventory), session),
 			primary: {
 				label: i18n.t("common:claudeImport.importing.action"),
 				onPress: ignorePress,

@@ -8,7 +8,6 @@ import {
 	FullWindowContent,
 	FullWindowLayout,
 } from "@workspace/ui/components/full-window-layout"
-import { Icons } from "@workspace/ui/components/icons"
 import {
 	ImportRow,
 	type ImportRowKind,
@@ -31,12 +30,6 @@ type ImportItem = {
 	status?: ImportRowStatus
 }
 
-type ImportSection = {
-	id: string
-	label: string
-	items: ImportItem[]
-}
-
 type ImportAction = {
 	label: string
 	onPress: () => void
@@ -50,10 +43,10 @@ type ImportScreenProps = {
 	| {
 			step: "select"
 			subtitle: string
-			sections: ImportSection[]
+			items: ImportItem[]
 			onToggle: (id: string, checked: boolean) => void
 	  }
-	| { step: "importing" | "done"; sections: ImportSection[] }
+	| { step: "importing" | "done"; items: ImportItem[] }
 	| { step: "unreadable"; subtitle: string }
 )
 
@@ -62,18 +55,10 @@ const LINK_CLASS =
 
 const isPicked = (item: ImportItem) => item.checked && !item.isInKiroshi
 
-const hasPickedItem = (sections: ImportSection[]) =>
-	sections.some((section) => section.items.some(isPicked))
-
-const pickedSectionsOf = (sections: ImportSection[]) =>
-	sections
-		.map((section) => ({ ...section, items: section.items.filter(isPicked) }))
-		.filter((section) => section.items.length > 0)
-
-const sectionsOf = (props: ImportScreenProps) => {
+const itemsOf = (props: ImportScreenProps) => {
 	if (props.step === "unreadable") return []
-	if (props.step === "select") return props.sections
-	return pickedSectionsOf(props.sections)
+	if (props.step === "select") return props.items
+	return props.items.filter(isPicked)
 }
 
 type ImportListRow = Omit<ImportItem, "id"> & { ids: string[] }
@@ -156,13 +141,12 @@ const doneSummaryOf = (
 	})
 }
 
-const useSubtitle = (props: ImportScreenProps, sections: ImportSection[]) => {
+const useSubtitle = (props: ImportScreenProps, items: ImportItem[]) => {
 	const { t, i18n } = useTranslation("common")
 	if (props.step === "select" || props.step === "unreadable") {
 		return props.subtitle
 	}
 
-	const items = sections.flatMap((section) => section.items)
 	if (props.step === "importing") {
 		return t("claudeImport.importing.body", {
 			done: items.filter((item) => item.status === "done").length,
@@ -204,17 +188,17 @@ const useOverflow = () => {
 
 type ImportListProps = {
 	step: ImportScreenStep
-	sections: ImportSection[]
+	items: ImportItem[]
 	onToggle?: (id: string, checked: boolean) => void
 }
 
-const ImportList = ({ step, sections, onToggle }: ImportListProps) => {
+const ImportList = ({ step, items, onToggle }: ImportListProps) => {
 	const { t } = useTranslation("common")
 	const { isOverflowing, watch } = useOverflow()
 
 	return (
 		<div
-			className="min-h-0 w-140 max-w-full overflow-y-auto pr-3 outline-offset-2"
+			className="min-h-0 w-146 max-w-full overflow-y-auto px-3 outline-offset-2"
 			data-slot="import-list"
 			ref={watch}
 			{...(isOverflowing && {
@@ -223,27 +207,16 @@ const ImportList = ({ step, sections, onToggle }: ImportListProps) => {
 				tabIndex: 0,
 			})}
 		>
-			<div className="flex flex-col gap-5">
-				{sections.map((section) => (
-					<section className="flex flex-col gap-2" key={section.id}>
-						<h2 className="font-medium text-muted-foreground text-xs">
-							{section.label}
-						</h2>
-						<div className="flex flex-col overflow-hidden rounded-xl border border-border bg-muted/40 [&>*+*]:border-border [&>*+*]:border-t">
-							{rowsOf(section.items, t).map(({ ids, ...row }) => (
-								<ImportRow
-									{...row}
-									key={ids.join()}
-									onCheckedChange={(checked) => {
-										for (const id of ids) onToggle?.(id, checked)
-									}}
-									status={
-										step === "select" ? undefined : (row.status ?? "pending")
-									}
-								/>
-							))}
-						</div>
-					</section>
+			<div className="flex flex-col overflow-hidden rounded-xl border border-border bg-card [&>*+*]:border-border [&>*+*]:border-t">
+				{rowsOf(items, t).map(({ ids, ...row }) => (
+					<ImportRow
+						{...row}
+						key={ids.join()}
+						onCheckedChange={(checked) => {
+							for (const id of ids) onToggle?.(id, checked)
+						}}
+						status={step === "select" ? undefined : (row.status ?? "pending")}
+					/>
 				))}
 			</div>
 			{isOverflowing ? (
@@ -259,32 +232,17 @@ const ImportList = ({ step, sections, onToggle }: ImportListProps) => {
 
 const ImportScreen = (props: ImportScreenProps) => {
 	const { step, title, primary, secondary } = props
-	const sections = sectionsOf(props)
-	const subtitle = useSubtitle(props, sections)
+	const items = itemsOf(props)
+	const subtitle = useSubtitle(props, items)
 	const isUnreadable = step === "unreadable"
 	const isPrimaryDisabled =
-		step === "importing" || (step === "select" && !hasPickedItem(sections))
-	const Mark = isUnreadable ? Icons.AlertCircle : Icons.FolderOpen
+		step === "importing" || (step === "select" && !items.some(isPicked))
 
 	return (
 		<FullWindowLayout data-slot="import-screen">
 			<OnboardingDragStrip />
 			<FullWindowContent className="min-h-0 gap-5 px-6 pt-10 pb-6">
-				<span
-					className={cn(
-						"grid size-14 shrink-0 place-items-center rounded-[1rem]",
-						isUnreadable ? "bg-destructive-tint" : "bg-muted/40",
-					)}
-				>
-					<Mark
-						aria-hidden="true"
-						className={cn(
-							"size-6",
-							isUnreadable ? "text-destructive" : "text-foreground",
-						)}
-					/>
-				</span>
-				<div className="flex w-105 max-w-full shrink-0 flex-col gap-2 text-center">
+				<div className="flex w-120 max-w-full shrink-0 flex-col gap-2.5 text-center">
 					<h1 className="text-balance font-semibold text-[22px] text-foreground leading-7 tracking-[-0.01em]">
 						{title}
 					</h1>
@@ -292,10 +250,10 @@ const ImportScreen = (props: ImportScreenProps) => {
 						{subtitle}
 					</p>
 				</div>
-				{sections.length > 0 ? (
+				{items.length > 0 ? (
 					<ImportList
+						items={items}
 						onToggle={props.step === "select" ? props.onToggle : undefined}
-						sections={sections}
 						step={step}
 					/>
 				) : null}
@@ -335,5 +293,4 @@ export {
 	ImportScreen,
 	type ImportScreenProps,
 	type ImportScreenStep,
-	type ImportSection,
 }
