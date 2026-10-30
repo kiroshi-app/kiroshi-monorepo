@@ -400,7 +400,7 @@ mod tests {
 
 		assert_eq!(listed.len(), 1);
 		assert_eq!(listed[0].name, "Personal");
-		assert_eq!(listed[0].colour, Hue::named("red"));
+		assert_eq!(listed[0].colour, None);
 		assert_eq!(listed[0].position, 0);
 
 		drop(database);

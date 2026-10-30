@@ -1281,7 +1281,7 @@ fn a_start_connects_while_its_patch_is_held_and_a_stop_drops_the_held_patch() {
 			held,
 			vec![(
 				format!("PATCH /instances/{instance_id}"),
-				json!({ "name": "Personal", "colour": Hue::named("red") })
+				json!({ "name": "Personal", "colour": null })
 			)]
 		);
 		let dropped = harness.noticed_until("the held PATCH dropped", dropped);

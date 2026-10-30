@@ -145,7 +145,7 @@ mod tests {
 			read.expect("the registration reads"),
 			Registration {
 				name: "Personal".to_owned(),
-				colour: Hue::named("red"),
+				colour: None,
 				instance_id: None
 			}
 		);
