@@ -82,6 +82,13 @@ const connectedThroughLogin = async () => {
 	await flushed()
 }
 
+const relaunch = () => {
+	port = createFakeOnboardingPort()
+	world.opened = []
+	world.sent = []
+	controller = createOnboardingFlowController(port, world, { reportFailure })
+}
+
 describe("the stored onboarding step", () => {
 	it("reads the step the host stored", () => {
 		expect(onboardingStepOf({ onboardingStep: "import" })).toBe("import")
@@ -152,6 +159,84 @@ describe("resuming", () => {
 	})
 })
 
+describe("relaunching after the account was accepted", () => {
+	it("resumes Shoto with no onboarding screen and no login read when no ~/.claude folder was found", async () => {
+		await connectedThroughLogin()
+		world.threadHistory = [...world.sent]
+
+		relaunch()
+		await controller.resume()
+		await flushed()
+
+		expect(port.calls).toEqual([])
+		expect(onboardingScreenStepOf(world.step, controller.getState())).toBeNull()
+		expect(controller.getState().isWithShoto).toBe(true)
+		expect(world.opened).toEqual([SHOTO])
+		expect(world.sent).toEqual([])
+	})
+
+	it("opens Shoto's conversation once when resumed twice at once", async () => {
+		await connectedThroughLogin()
+		relaunch()
+
+		await Promise.all([controller.resume(), controller.resume()])
+		await flushed()
+
+		expect(world.opened).toEqual([SHOTO])
+	})
+
+	it("lands on the first companion once Shoto marks the first run done after the relaunch", async () => {
+		await connectedThroughLogin()
+		relaunch()
+		await controller.resume()
+		controller.noteCreated(SCOUT)
+		await controller.noteFirstRunDone()
+
+		expect(onboardingScreenStepOf(world.step, controller.getState())).toBe(
+			"account",
+		)
+
+		world.opened = []
+		world.sent = []
+		await controller.finish()
+
+		expect(onboardingScreenStepOf(world.step, controller.getState())).toBeNull()
+		expect(world.opened).toEqual([SCOUT.id])
+		expect(world.sent).toEqual([
+			{ botId: SCOUT.id, text: onboardingSummonsFor("arrival") },
+		])
+	})
+
+	it("resumes the import with no login read when a ~/.claude folder was found", async () => {
+		port.hasClaudeFolder = true
+		await connectedThroughLogin()
+
+		relaunch()
+		await controller.resume()
+
+		expect(port.calls).toEqual([])
+		expect(onboardingScreenStepOf(world.step, controller.getState())).toBe(
+			"import",
+		)
+		expect(controller.getState().isWithShoto).toBe(false)
+	})
+
+	it("resumes nothing once the first run is done", async () => {
+		await connectedThroughLogin()
+		controller.noteCreated(SCOUT)
+		await controller.noteFirstRunDone()
+		await controller.finish()
+
+		relaunch()
+		await controller.resume()
+
+		expect(port.calls).toEqual([])
+		expect(onboardingScreenStepOf(world.step, controller.getState())).toBeNull()
+		expect(controller.getState().isWithShoto).toBe(false)
+		expect(world.opened).toEqual([])
+	})
+})
+
 describe("a sign-in that fails", () => {
 	it("names the failure the connect screen draws", async () => {
 		await controller.leaveIntro()
@@ -205,7 +290,7 @@ describe("connecting while the ~/.claude read is refused", () => {
 		expect(reportFailure).toHaveBeenCalledWith(
 			expect.objectContaining({ title: "Couldn’t read ~/.claude" }),
 		)
-		expect(world.stored).toEqual(["connect"])
+		expect(world.stored).toEqual(["connect", "done"])
 		expect(controller.getState().isWithShoto).toBe(true)
 	})
 })
@@ -214,13 +299,36 @@ describe("connecting without a ~/.claude folder", () => {
 	it("opens Shoto's conversation and summons his greeting, then the first companion", async () => {
 		await connectedThroughLogin()
 
-		expect(world.stored).toEqual(["connect"])
+		expect(world.stored).toEqual(["connect", "done"])
 		expect(controller.getState().isWithShoto).toBe(true)
 		expect(world.opened).toEqual([SHOTO])
 		expect(world.sent).toEqual([
 			{ botId: SHOTO, text: onboardingSummonsFor("greeting") },
 			{ botId: SHOTO, text: onboardingSummonsFor("firstCompanion") },
 		])
+	})
+
+	it("keeps the Connect screen and names the failure when the step isn't stored", async () => {
+		port.report = LOGGED_IN
+		await controller.leaveIntro()
+		world.refusesStep = true
+
+		await controller.acceptAccount()
+		await flushed()
+
+		expect(reportFailure).toHaveBeenCalledWith({
+			title: "Couldn’t send that request",
+			description: "disk full",
+		})
+		expect(onboardingScreenStepOf(world.step, controller.getState())).toBe(
+			"connect",
+		)
+		expect(controller.getState().connection).toEqual({
+			state: "detected",
+			email: "reader@example.com",
+			plan: "Max",
+		})
+		expect(world.opened).toEqual([])
 	})
 
 	it("summons no companion and names the failure when no Shoto is stored", async () => {
@@ -295,11 +403,11 @@ describe("connecting without a ~/.claude folder", () => {
 		const reachingAccount = controller.noteFirstRunDone()
 		await flushed()
 
-		expect(world.stored).toEqual(["connect"])
+		expect(world.stored).toEqual(["connect", "done"])
 		release()
 		await reachingAccount
 		expect(world.firstCompanion).toBe(SCOUT.id)
-		expect(world.stored).toEqual(["connect", "account"])
+		expect(world.stored).toEqual(["connect", "done", "account"])
 	})
 
 	it("keeps the first companion the preferences already hold", async () => {
@@ -318,7 +426,7 @@ describe("connecting without a ~/.claude folder", () => {
 
 		await controller.noteFirstRunDone()
 
-		expect(world.stored).toEqual(["connect", "account"])
+		expect(world.stored).toEqual(["connect", "done", "account"])
 		expect(controller.getState().isWithShoto).toBe(false)
 		expect(onboardingCreationOf(controller.getState())).toBeNull()
 	})
@@ -406,6 +514,58 @@ describe("finishing on Account", () => {
 		expect(world.sent).toEqual([
 			{ botId: SCOUT.id, text: onboardingSummonsFor("arrival") },
 		])
+	})
+
+	it("marks the first run done before storing done", async () => {
+		const order: string[] = []
+		world.markFirstRunDone = async () => {
+			order.push("firstRunDone")
+		}
+		world.storeStep = async (step) => {
+			order.push(step)
+		}
+
+		await controller.finish()
+
+		expect(order).toEqual(["firstRunDone", "done"])
+	})
+
+	it("keeps Account and names the failure when the first run can't be marked done", async () => {
+		await connectedThroughLogin()
+		controller.noteCreated(SCOUT)
+		await controller.noteFirstRunDone()
+		world.opened = []
+		world.refusesFirstRunDone = true
+
+		await controller.finish()
+
+		expect(reportFailure).toHaveBeenCalledWith({
+			title: "Couldn’t send that request",
+			description: "disk full",
+		})
+		expect(world.step).toBe("account")
+		expect(onboardingScreenStepOf(world.step, controller.getState())).toBe(
+			"account",
+		)
+		expect(world.opened).toEqual([])
+	})
+
+	it("shows Account and leaves Shoto closed on a relaunch after the first run couldn't be marked done", async () => {
+		port.hasClaudeFolder = true
+		await connectedThroughLogin()
+		await controller.leaveImport(NOTHING_IMPORTED)
+		world.refusesFirstRunDone = true
+		await controller.finish()
+		relaunch()
+
+		await controller.resume()
+		await flushed()
+
+		expect(onboardingScreenStepOf(world.step, controller.getState())).toBe(
+			"account",
+		)
+		expect(port.calls).toEqual([])
+		expect(world.opened).toEqual([])
 	})
 
 	it("names the companion that couldn't say hello", async () => {

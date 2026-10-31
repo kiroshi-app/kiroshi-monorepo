@@ -37,6 +37,7 @@ export type OnboardingFlowState = {
 
 export type OnboardingFlowWorld = {
 	storedStep: () => OnboardingStep
+	isFirstRunDone: () => boolean
 	storeStep: (step: OnboardingStep) => Promise<void>
 	replay: () => Promise<void>
 	markFirstRunDone: () => Promise<void>
@@ -175,12 +176,7 @@ export const createOnboardingFlowController = (
 			kind: "unknownBot",
 		})
 
-	const settle = async () => {
-		set({ connection: null, round: current().round + 1 })
-		if (await offersImport()) {
-			await store("import")
-			return
-		}
+	const joinShoto = () => {
 		const shotoId = world.shotoId()
 		set({ isWithShoto: true, shotoId })
 		if (!shotoId) {
@@ -188,6 +184,23 @@ export const createOnboardingFlowController = (
 			return
 		}
 		void meetShoto(shotoId)
+	}
+
+	const isShotoPhaseStored = () =>
+		world.storedStep() === "done" && !world.isFirstRunDone()
+
+	const settle = async () => {
+		const { connection } = current()
+		set({ connection: null, round: current().round + 1 })
+		if (await offersImport()) {
+			await store("import")
+			return
+		}
+		if (!(await store("done"))) {
+			set({ connection })
+			return
+		}
+		joinShoto()
 	}
 
 	const showConnection = (connection: ConnectionStep) => {
@@ -257,6 +270,9 @@ export const createOnboardingFlowController = (
 			if (world.storedStep() === "connect") {
 				await enterConnect()
 			}
+			if (isShotoPhaseStored() && !current().isWithShoto) {
+				joinShoto()
+			}
 		},
 
 		leaveIntro: async () => {
@@ -271,11 +287,13 @@ export const createOnboardingFlowController = (
 		},
 
 		finish: async () => {
+			if (!(await persisted(world.markFirstRunDone))) {
+				return
+			}
 			if (!(await store("done"))) {
 				return
 			}
 			set({ isAtAccount: false })
-			await world.markFirstRunDone()
 			await land()
 		},
 
@@ -340,6 +358,7 @@ export const onboardingFlowWorldOf = ({
 	user,
 }: OnboardingScene): OnboardingFlowWorld => ({
 	storedStep: () => onboardingStepOf(user.getState().preferences),
+	isFirstRunDone: () => user.getState().preferences.firstRunDone === true,
 	storeStep: user.setOnboardingStep,
 	replay: user.replayOnboarding,
 	markFirstRunDone: user.markFirstRunDone,

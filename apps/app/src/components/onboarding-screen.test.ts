@@ -270,7 +270,7 @@ describe("the Connect screen", () => {
 		await press("Use this account")
 
 		expect(screen.queryByRole("heading")).toBeNull()
-		expect(world.stored).toEqual(["connect"])
+		expect(world.stored).toEqual(["connect", "done"])
 	})
 })
 
