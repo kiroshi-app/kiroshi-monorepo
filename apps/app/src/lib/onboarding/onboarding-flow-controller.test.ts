@@ -153,19 +153,19 @@ describe("resuming", () => {
 })
 
 describe("relaunching after the account was accepted", () => {
-	const relaunched = () => {
+	const relaunch = () => {
 		port = createFakeOnboardingPort()
 		world.opened = []
 		world.sent = []
 		controller = createOnboardingFlowController(port, world, { reportFailure })
-		return controller.resume()
 	}
 
 	it("resumes Shoto with no onboarding screen and no login read when no ~/.claude folder was found", async () => {
 		await connectedThroughLogin()
 		world.threadHistory = [...world.sent]
 
-		await relaunched()
+		relaunch()
+		await controller.resume()
 		await flushed()
 
 		expect(port.calls).toEqual([])
@@ -177,9 +177,7 @@ describe("relaunching after the account was accepted", () => {
 
 	it("opens Shoto's conversation once when resumed twice at once", async () => {
 		await connectedThroughLogin()
-		port = createFakeOnboardingPort()
-		world.opened = []
-		controller = createOnboardingFlowController(port, world, { reportFailure })
+		relaunch()
 
 		await Promise.all([controller.resume(), controller.resume()])
 		await flushed()
@@ -189,7 +187,8 @@ describe("relaunching after the account was accepted", () => {
 
 	it("lands on the first companion once Shoto marks the first run done after the relaunch", async () => {
 		await connectedThroughLogin()
-		await relaunched()
+		relaunch()
+		await controller.resume()
 		controller.noteCreated(SCOUT)
 		await controller.noteFirstRunDone()
 
@@ -212,7 +211,8 @@ describe("relaunching after the account was accepted", () => {
 		port.hasClaudeFolder = true
 		await connectedThroughLogin()
 
-		await relaunched()
+		relaunch()
+		await controller.resume()
 
 		expect(port.calls).toEqual([])
 		expect(onboardingScreenStepOf(world.step, controller.getState())).toBe(
@@ -227,7 +227,8 @@ describe("relaunching after the account was accepted", () => {
 		await controller.noteFirstRunDone()
 		await controller.finish()
 
-		await relaunched()
+		relaunch()
+		await controller.resume()
 
 		expect(port.calls).toEqual([])
 		expect(onboardingScreenStepOf(world.step, controller.getState())).toBeNull()

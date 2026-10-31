@@ -269,7 +269,6 @@ export const createOnboardingFlowController = (
 		resume: async () => {
 			if (world.storedStep() === "connect") {
 				await enterConnect()
-				return
 			}
 			if (isShotoPhaseStored() && !current().isWithShoto) {
 				joinShoto()
