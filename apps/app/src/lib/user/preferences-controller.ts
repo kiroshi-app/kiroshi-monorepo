@@ -37,9 +37,11 @@ type LastBotOpened = {
 
 export type ReaderPreferences = UserPreferences & MirroredPreferences
 
-type ReportedPreferences = Pick<
-	UserPreferences,
-	"updateChannel" | "showWhatsNew" | "lastSeenVersion"
+type ReportedPreferences = Partial<
+	Pick<
+		UserPreferences,
+		"updateChannel" | "showWhatsNew" | "lastSeenVersion" | "firstRunDone"
+	>
 >
 
 export type UserState = {
@@ -250,7 +252,7 @@ export const createUserController = (): UserController => {
 		setActivityPanelOpen: (activityPanelOpen: boolean) =>
 			changeMirrored({ activityPanelOpen }),
 
-		markFirstRunDone: () => changeMirrored({ firstRunDone: true }),
+		markFirstRunDone: () => changeReported({ firstRunDone: true }),
 
 		setOnboardingStep: (step: OnboardingStep) =>
 			changeOnboarding(step, () => changeOnboardingStep(step)),

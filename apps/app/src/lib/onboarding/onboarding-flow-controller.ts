@@ -287,11 +287,13 @@ export const createOnboardingFlowController = (
 		},
 
 		finish: async () => {
+			if (!(await persisted(world.markFirstRunDone))) {
+				return
+			}
 			if (!(await store("done"))) {
 				return
 			}
 			set({ isAtAccount: false })
-			await world.markFirstRunDone()
 			await land()
 		},
 

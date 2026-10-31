@@ -641,6 +641,21 @@ describe("the first run the reader has been through", () => {
 	})
 })
 
+describe("a first run that can't be marked done", () => {
+	it("rejects and keeps the first run pending", async () => {
+		aHost()
+		const controller = await loaded()
+		hostInvoke.mockRejectedValue({
+			kind: "storage",
+			failure: { kind: "sqlite", detail: "disk I/O error" },
+		})
+
+		await expect(controller.markFirstRunDone()).rejects.toBeDefined()
+
+		expect(controller.getState().preferences.firstRunDone).toBe(false)
+	})
+})
+
 describe("the update preferences of the About tab", () => {
 	const REFUSED = {
 		kind: "storage",

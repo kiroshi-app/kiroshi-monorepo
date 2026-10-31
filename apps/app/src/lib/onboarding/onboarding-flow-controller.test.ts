@@ -516,6 +516,60 @@ describe("finishing on Account", () => {
 		])
 	})
 
+	it("marks the first run done before storing done", async () => {
+		const order: string[] = []
+		world.markFirstRunDone = async () => {
+			order.push("firstRunDone")
+		}
+		world.storeStep = async (step) => {
+			order.push(step)
+		}
+
+		await controller.finish()
+
+		expect(order).toEqual(["firstRunDone", "done"])
+	})
+
+	it("keeps Account and names the failure when the first run can't be marked done", async () => {
+		await connectedThroughLogin()
+		controller.noteCreated(SCOUT)
+		await controller.noteFirstRunDone()
+		world.opened = []
+		world.refusesFirstRunDone = true
+
+		await controller.finish()
+
+		expect(reportFailure).toHaveBeenCalledWith({
+			title: "Couldn’t send that request",
+			description: "disk full",
+		})
+		expect(world.step).toBe("account")
+		expect(onboardingScreenStepOf(world.step, controller.getState())).toBe(
+			"account",
+		)
+		expect(world.opened).toEqual([])
+	})
+
+	it("shows Account and leaves Shoto closed on a relaunch after the first run couldn't be marked done", async () => {
+		port.hasClaudeFolder = true
+		await connectedThroughLogin()
+		await controller.leaveImport(NOTHING_IMPORTED)
+		world.refusesFirstRunDone = true
+		await controller.finish()
+		port = createFakeOnboardingPort()
+		world.opened = []
+		controller = createOnboardingFlowController(port, world, { reportFailure })
+
+		await controller.resume()
+		await flushed()
+
+		expect(onboardingScreenStepOf(world.step, controller.getState())).toBe(
+			"account",
+		)
+		expect(port.calls).toEqual([])
+		expect(world.opened).toEqual([])
+	})
+
 	it("names the companion that couldn't say hello", async () => {
 		await connectedThroughLogin()
 		controller.noteCreated(SCOUT)
