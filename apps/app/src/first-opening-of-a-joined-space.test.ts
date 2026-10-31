@@ -325,7 +325,10 @@ const sharedSpaceCheck =
 		})
 	}
 
-const launchOnGarage = async (listedRemoteSpaceId: "unknown" | "known") => {
+const launchOnGarage = async (
+	listedRemoteSpaceId: "unknown" | "known",
+	onboardingOf: (macBotId: string) => Fields = () => ({}),
+) => {
 	const mac = await macWithLocalSpace()
 	const host = await hostSharingGarage()
 	const joined = {
@@ -337,15 +340,20 @@ const launchOnGarage = async (listedRemoteSpaceId: "unknown" | "known") => {
 	let isSharedSpaceLearned = listedRemoteSpaceId === "known"
 	const answerOnMac = storeAnswer(mac.store, {
 		joined_space_connect: { ...joined, token: "guest" },
-		user_preferences: preferencesFor("joined:garage", {
-			[mac.space.id]: mac.bot.id,
-			"joined:garage": host.bot.id,
-		}),
+		user_preferences: {
+			...preferencesFor("joined:garage", {
+				[mac.space.id]: mac.bot.id,
+				"joined:garage": host.bot.id,
+			}),
+			...onboardingOf(mac.bot.id),
+		},
 		account_state: { kind: "signedOut" },
 		conversation_local_ids: [],
 		hosting_state: { kind: "stopped" },
 	})
+	const local: Call[] = []
 	wire.answerHere = async (call) => {
+		local.push(call)
 		if (call.command === "joined_spaces_list") {
 			return [
 				isSharedSpaceLearned ? joined : { ...joined, remoteSpaceId: null },
@@ -377,7 +385,7 @@ const launchOnGarage = async (listedRemoteSpaceId: "unknown" | "known") => {
 		{ timeout: 10_000 },
 	)
 	await act(() => new Promise((resolve) => setTimeout(resolve, 50)))
-	return { relayed, sharedSpaceId: host.shared.id }
+	return { relayed, local, sharedSpaceId: host.shared.id, macBotId: mac.bot.id }
 }
 
 const spaceIdsIn = (calls: Call[]) => [
@@ -588,5 +596,28 @@ it("switches from one joined Space to another without asking the new host for th
 		relayedToGarage.filter(({ args }) => args.missionId === ATTIC_MISSION),
 	).toEqual([])
 	expect(wire.refusalNotices).toEqual([])
+	expect(wire.raisedNotices).toEqual([])
+}, 60_000)
+
+const inTheShotoPhase = (shotoId: string) => ({
+	firstRunDone: false,
+	onboardingStep: "done",
+	onboardingShotoId: shotoId,
+})
+
+it("relaunches in the Shoto phase on a joined Space with no onboarding screen and opens Shoto once", async () => {
+	const { local, relayed, macBotId } = await launchOnGarage(
+		"known",
+		inTheShotoPhase,
+	)
+
+	const shotoOpenings = [...local, ...relayed].filter(
+		({ command, args }) =>
+			command === "conversation_main_chat" && args.botId === macBotId,
+	)
+	expect(
+		screen.getAllByRole("button", { name: /Garage/ }).length,
+	).toBeGreaterThan(0)
+	expect(shotoOpenings).toHaveLength(1)
 	expect(wire.raisedNotices).toEqual([])
 }, 60_000)
