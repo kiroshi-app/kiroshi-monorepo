@@ -19,7 +19,7 @@
     },
     "apps/app": {
       "name": "app",
-      "version": "0.26.0-beta.3",
+      "version": "0.26.0",
       "dependencies": {
         "@tanstack/react-query": "^5.104.2",
         "@tanstack/react-query-devtools": "^5.104.2",
