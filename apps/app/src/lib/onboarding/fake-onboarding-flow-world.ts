@@ -38,6 +38,7 @@ export const createFakeFlowWorld = (): FakeFlowWorld => {
 		greetingOutcome: { kind: "answered" },
 
 		storedStep: () => fake.step,
+		isFirstRunDone: () => fake.firstRunDone > 0,
 		storeStep: async (step) => {
 			if (fake.refusesStep) {
 				throw { kind: "storage", detail: "disk full" }
