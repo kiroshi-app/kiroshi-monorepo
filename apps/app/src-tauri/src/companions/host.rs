@@ -1383,6 +1383,26 @@ mod tests {
 	}
 
 	#[tokio::test]
+	async fn a_companion_created_once_the_step_is_done_but_the_first_run_is_not_is_stored_first() {
+		let app = a_host("first-companion-step-done").await;
+		ready(&app.state::<db::DatabaseState>())
+			.expect("the database opens")
+			.user()
+			.set_onboarding_step(OnboardingStep::Done)
+			.await
+			.expect("the step");
+
+		let created = serving(&app, "c1").answer(a_create(json!({}))).await.expect("it is created");
+
+		let stored = stored_preferences(&app).await;
+		assert!(!stored.first_run_done);
+		assert_eq!(
+			stored.onboarding_first_companion_id.map(Value::String),
+			Some(created["id"].clone())
+		);
+	}
+
+	#[tokio::test]
 	async fn the_first_run_is_recorded_under_the_setting_the_app_reads_and_announced() {
 		let app = a_host("first-run").await;
 		let arriving = heard(&app, FIRST_RUN_DONE.name());

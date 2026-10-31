@@ -375,6 +375,7 @@ impl UserRepository {
 
 	pub async fn replay_onboarding(&self) -> Result<Preferences, DatabaseError> {
 		self.write_then_read(|transaction| {
+			write_switch_in(transaction, FIRST_RUN_DONE_KEY, false)?;
 			write_onboarding_step_in(transaction, OnboardingStep::Welcome)?;
 			SETTINGS.clear(transaction, None, ONBOARDING_FIRST_COMPANION_ID_KEY)
 		})
@@ -407,9 +408,7 @@ impl UserRepository {
 			.call_mut(move |connection| {
 				let transaction = write_transaction(connection)?;
 				let stored = stored_in(&transaction)?;
-				if stored.onboarding_step == OnboardingStep::Done
-					|| stored.onboarding_first_companion_id.is_some()
-				{
+				if stored.first_run_done || stored.onboarding_first_companion_id.is_some() {
 					return Ok(());
 				}
 				write_first_companion_in(&transaction, &bot_id)?;
@@ -947,18 +946,35 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn an_onboarding_set_back_to_welcome_leaves_the_first_run_and_the_import_mark_alone() {
+	async fn a_replayed_onboarding_reopens_the_first_run_and_leaves_the_import_mark_alone() {
 		let dir = temp_dir();
 		let database = open(&dir);
 		database.user().mark_first_run_done().await.expect("the first run");
 		database.user().mark_onboarding_import_seen().await.expect("the import mark");
 
-		let replayed =
-			database.user().set_onboarding_step(OnboardingStep::Welcome).await.expect("the replay");
+		let replayed = database.user().replay_onboarding().await.expect("the replay");
 
 		assert_eq!(replayed.onboarding_step, OnboardingStep::Welcome);
-		assert!(replayed.first_run_done);
+		assert!(!replayed.first_run_done);
 		assert!(replayed.onboarding_import_seen);
+	}
+
+	#[tokio::test]
+	async fn a_replayed_onboarding_still_reads_as_an_unfinished_first_run_after_the_file_is_reopened(
+	) {
+		let dir = temp_dir();
+		{
+			let database = open(&dir);
+			database.user().mark_first_run_done().await.expect("the first run");
+			database.user().replay_onboarding().await.expect("the replay");
+		}
+
+		let database = open(&dir);
+
+		let read = database.user().preferences().await.expect("the record");
+		assert!(!read.first_run_done);
+		assert_eq!(read.onboarding_step, OnboardingStep::Welcome);
+		assert_eq!(read.onboarding_first_companion_id, None);
 	}
 
 	#[tokio::test]
@@ -1177,15 +1193,29 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn a_companion_created_after_the_onboarding_is_never_claimed() {
+	async fn a_companion_created_after_the_first_run_is_never_claimed() {
 		let dir = temp_dir();
 		let database = open(&dir);
-		database.user().set_onboarding_step(OnboardingStep::Done).await.expect("the step");
+		database.user().mark_first_run_done().await.expect("the first run");
 		let created = a_companion(&database, "Nyx").await;
 
 		database.user().claim_onboarding_first_companion(created).await.expect("the claim");
 
 		assert_eq!(setting(&database, ONBOARDING_FIRST_COMPANION_ID_KEY).await, None);
+	}
+
+	#[tokio::test]
+	async fn a_companion_created_once_the_step_is_done_but_the_first_run_is_not_is_claimed() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		database.user().set_onboarding_step(OnboardingStep::Done).await.expect("the step");
+		let created = a_companion(&database, "Nyx").await;
+
+		database.user().claim_onboarding_first_companion(created.clone()).await.expect("the claim");
+
+		let read = database.user().preferences().await.expect("the record");
+		assert!(!read.first_run_done);
+		assert_eq!(read.onboarding_first_companion_id, Some(created));
 	}
 
 	#[tokio::test]
@@ -1228,6 +1258,7 @@ mod tests {
 		let replayed = database.user().replay_onboarding().await.expect("the replay");
 
 		assert_eq!(replayed.onboarding_step, OnboardingStep::Welcome);
+		assert!(!replayed.first_run_done);
 		assert_eq!(replayed.onboarding_first_companion_id, None);
 		assert_eq!(replayed.onboarding_shoto_id, Some(shoto));
 		assert_eq!(setting(&database, ONBOARDING_FIRST_COMPANION_ID_KEY).await, None);
