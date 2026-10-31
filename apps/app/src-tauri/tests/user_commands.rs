@@ -423,7 +423,7 @@ fn a_step_outside_the_vocabulary_never_reaches_the_record() {
 }
 
 #[test]
-fn a_replayed_onboarding_starts_on_welcome_and_keeps_the_first_run_and_the_import_mark() {
+fn a_replayed_onboarding_starts_on_welcome_reopens_the_first_run_and_keeps_the_import_mark() {
 	let home = Home::new();
 	let app = home.app();
 	let window = window(&app);
@@ -434,7 +434,7 @@ fn a_replayed_onboarding_starts_on_welcome_and_keeps_the_first_run_and_the_impor
 	let answered = call(&window, "user_replay_onboarding", json!({})).expect("the replay");
 
 	assert_eq!(answered["onboardingStep"], json!("welcome"));
-	assert_eq!(answered["firstRunDone"], json!(true));
+	assert_eq!(answered["firstRunDone"], json!(false));
 	assert_eq!(answered["onboardingImportSeen"], json!(true));
 	assert_eq!(read(&window), answered);
 }
