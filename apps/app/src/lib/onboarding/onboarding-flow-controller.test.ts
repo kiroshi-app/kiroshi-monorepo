@@ -82,6 +82,13 @@ const connectedThroughLogin = async () => {
 	await flushed()
 }
 
+const relaunch = () => {
+	port = createFakeOnboardingPort()
+	world.opened = []
+	world.sent = []
+	controller = createOnboardingFlowController(port, world, { reportFailure })
+}
+
 describe("the stored onboarding step", () => {
 	it("reads the step the host stored", () => {
 		expect(onboardingStepOf({ onboardingStep: "import" })).toBe("import")
@@ -153,13 +160,6 @@ describe("resuming", () => {
 })
 
 describe("relaunching after the account was accepted", () => {
-	const relaunch = () => {
-		port = createFakeOnboardingPort()
-		world.opened = []
-		world.sent = []
-		controller = createOnboardingFlowController(port, world, { reportFailure })
-	}
-
 	it("resumes Shoto with no onboarding screen and no login read when no ~/.claude folder was found", async () => {
 		await connectedThroughLogin()
 		world.threadHistory = [...world.sent]
@@ -556,9 +556,7 @@ describe("finishing on Account", () => {
 		await controller.leaveImport(NOTHING_IMPORTED)
 		world.refusesFirstRunDone = true
 		await controller.finish()
-		port = createFakeOnboardingPort()
-		world.opened = []
-		controller = createOnboardingFlowController(port, world, { reportFailure })
+		relaunch()
 
 		await controller.resume()
 		await flushed()
