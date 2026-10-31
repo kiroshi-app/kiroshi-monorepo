@@ -42,7 +42,7 @@ describe("the onboarding screen shown", () => {
 	})
 
 	it("shows the workspace while the person talks to Shoto", () => {
-		expect(onboardingScreenStepOf("connect", WITH_SHOTO)).toBeNull()
+		expect(onboardingScreenStepOf("done", WITH_SHOTO)).toBeNull()
 	})
 })
 

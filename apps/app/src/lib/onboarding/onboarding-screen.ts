@@ -12,12 +12,12 @@ export type OnboardingScreenStep = Exclude<OnboardingStep, "done">
 
 export const onboardingScreenStepOf = (
 	step: OnboardingStep,
-	{ isWithShoto, isAtAccount }: OnboardingFlowState,
+	{ isAtAccount }: OnboardingFlowState,
 ): OnboardingScreenStep | null => {
 	if (isAtAccount) {
 		return "account"
 	}
-	if (step === "done" || (step === "connect" && isWithShoto)) {
+	if (step === "done") {
 		return null
 	}
 	return step
