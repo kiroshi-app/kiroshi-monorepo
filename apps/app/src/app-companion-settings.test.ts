@@ -908,7 +908,7 @@ type HeldRuntimeWrite = {
 	modelsSessionsStartedOn: string[]
 }
 
-const holdingRuntimeWrite = (isRefused = false): HeldRuntimeWrite => {
+const holdingRuntimeWrite = (): HeldRuntimeWrite => {
 	const gate = Promise.withResolvers<void>()
 	const steps: string[] = []
 	const modelsSessionsStartedOn: string[] = []
@@ -917,9 +917,7 @@ const holdingRuntimeWrite = (isRefused = false): HeldRuntimeWrite => {
 		updateBot: async (id, identity) => {
 			await gate.promise
 			steps.push("write settled")
-			return isRefused
-				? Promise.reject({ kind: "storage" })
-				: store.updateBot(id, identity)
+			return store.updateBot(id, identity)
 		},
 		openRuntimeSession: async (conversationId, botId, ...rest) => {
 			steps.push("session started")
@@ -967,8 +965,8 @@ it("starts the session of a prompt sent during a runtime write only once the wri
 
 it("starts the session on the stored model and raises a notice when the held runtime write is refused", async () => {
 	harness.models = RUNTIME_MODELS
-	const held = holdingRuntimeWrite(true)
-	await mountApp(held.change)
+	const held = holdingRuntimeWrite()
+	await mountApp((store) => held.change(refusingUpdates(store)))
 	await pickSonnetThenSend(held)
 
 	expect(held.steps).toEqual([])
