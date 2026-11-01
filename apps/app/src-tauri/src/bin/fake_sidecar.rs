@@ -100,16 +100,49 @@ fn scenario_on_file(path: Option<&str>) -> Option<String> {
 	(!named.is_empty()).then_some(named)
 }
 
+fn agent_file_in_the_bundle(command: &Value) -> Option<String> {
+	let path = command["pluginPath"].as_str()?;
+	let agent = command["agent"].as_str()?.rsplit(':').next()?;
+	let file = std::path::Path::new(path).join("agents").join(format!("{agent}.md"));
+	std::fs::read_to_string(file).ok()
+}
+
 fn instructions_in_the_bundle(command: &Value) -> String {
 	let read = || {
-		let path = command["pluginPath"].as_str()?;
-		let agent = command["agent"].as_str()?.rsplit(':').next()?;
-		let file = std::path::Path::new(path).join("agents").join(format!("{agent}.md"));
-		let text = std::fs::read_to_string(file).ok()?;
+		let text = agent_file_in_the_bundle(command)?;
 		let body = text.split("---").last()?.trim().to_owned();
 		(!body.is_empty()).then_some(body)
 	};
 	read().unwrap_or_else(|| "none".to_owned())
+}
+
+fn runtime_in_the_bundle(command: &Value) -> String {
+	let text = agent_file_in_the_bundle(command).unwrap_or_default();
+	let front = text.split("---").nth(1).unwrap_or_default();
+	let keyed = |key: &str| {
+		front
+			.lines()
+			.find_map(|line| line.strip_prefix(key))
+			.map_or("none", |value| value.trim().trim_matches('"'))
+			.to_owned()
+	};
+	format!("model<{}> effort<{}>", keyed("model:"), keyed("effort:"))
+}
+
+fn record_the_runtime_opened(run: &Run, command: &Value) {
+	let Ok(path) = std::env::var("FAKE_AGENT_OPENED_RUNTIME_FILE") else {
+		return;
+	};
+	let bot = Path::new(&run.cwd).file_name().unwrap_or_default().to_string_lossy();
+	let line = format!("{bot} {}\n", runtime_in_the_bundle(command));
+	let appended = std::fs::OpenOptions::new()
+		.create(true)
+		.append(true)
+		.open(path)
+		.and_then(|mut file| file.write_all(line.as_bytes()));
+	if let Err(error) = appended {
+		eprintln!("the fake did not record the runtime it opened on: {error}");
+	}
 }
 
 fn servers_in_the_bundle(command: &Value) -> String {
@@ -363,6 +396,7 @@ fn emit_closed(key: &str, detail: &str) {
 
 fn on_open(key: &str, runs: &mut HashMap<String, Run>, command: &Value) {
 	let mut run = Run::open(command);
+	record_the_runtime_opened(&run, command);
 
 	match run.scenario.as_str() {
 		"startup_timeout" => return,

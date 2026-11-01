@@ -1,7 +1,9 @@
 #[path = "../src/removed_on_drop.rs"]
 mod removed_on_drop;
+mod runtime_pick;
 
 use std::path::PathBuf;
+use std::pin::pin;
 use std::sync::{Arc, Barrier, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
@@ -23,10 +25,10 @@ use kiroshi_app::agent::contract::{
 };
 use kiroshi_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
 use kiroshi_app::agent::AgentState;
-use kiroshi_app::bundles;
+use kiroshi_app::bundles::{self, EffortLevel};
 use kiroshi_app::commands::invoke_handler;
 use kiroshi_app::conversations::commands::{
-	conversation_open_runtime_session, conversation_send_user_message,
+	conversation_open_runtime_session, conversation_send_user_message, conversation_update_bot,
 };
 use kiroshi_app::conversations::contract::NewUserMessage;
 use kiroshi_app::conversations::turn_run_deadline::TurnRunDeadlines;
@@ -50,6 +52,7 @@ use kiroshi_app::missions::commands::MissionChanged;
 use kiroshi_app::missions::contract::{MissionLiveness, MissionState};
 use kiroshi_app::routines::webhook::{self, Webhook};
 use removed_on_drop::RemovedOnDrop;
+use runtime_pick::{picked, record_named, OpenedRuntimes, HELD_FOR};
 use serde_json::{json, Value};
 use tauri::async_runtime::block_on;
 use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime};
@@ -183,6 +186,10 @@ async fn served(router: Router) -> String {
 		axum::serve(listener, router).await.expect("the fake serves");
 	});
 	format!("http://{address}")
+}
+
+fn opened_runtimes(name: &str) -> OpenedRuntimes<RemovedOnDrop> {
+	OpenedRuntimes::recorded_in(RemovedOnDrop(record_named(name)))
 }
 
 fn serial() -> MutexGuard<'static, ()> {
@@ -446,12 +453,17 @@ impl Host {
 		timeout(PATIENCE, closed).await.expect("the turn closed in time");
 	}
 
-	async fn called(&mut self, command: &str, args: Value) -> Value {
+	async fn asked(&mut self, command: &str, args: Value) -> u64 {
 		self.calls += 1;
 		let id = self.calls;
 		let frame = json!({ "id": id, "command": command, "args": args });
 		let sealed = self.guest.sealed(&frame.to_string());
 		self.member.send(Message::Text(sealed.into())).await.expect("the frame leaves");
+		id
+	}
+
+	async fn called(&mut self, command: &str, args: Value) -> Value {
+		let id = self.asked(command, args).await;
 		self.heard_until(|frames| frames.iter().any(|frame| frame["id"] == id)).await;
 		self.frames.iter().find(|frame| frame["id"] == id).cloned().expect("the call is answered")
 	}
@@ -1382,6 +1394,43 @@ fn a_queued_member_turn_whose_session_is_gone_after_a_lag_fails_to_the_member() 
 			replies_of(&transcript, ADA).iter().all(|reply| reply.turn_id != "t1"),
 			"the failed turn was answered: {transcript:#?}"
 		);
+		host.quit().await;
+	});
+}
+
+#[test]
+fn a_member_turn_sent_during_a_runtime_write_opens_on_the_written_model_and_effort() {
+	let _serial = serial();
+	let opened = opened_runtimes("member-written");
+	block_on(async {
+		let mut host = Host::hosting("runtime-write", "room_reply").await;
+		let app = host.app.handle().clone();
+		let stored = database_of(&host.app)
+			.conversations()
+			.bot(ADA.to_owned())
+			.await
+			.expect("the bot reads")
+			.expect("the bot is planted");
+		let pick = picked(stored, "opus", EffortLevel::High);
+		let earlier_write = bundles::holding_the_memory(ADA).await;
+		let mut writing =
+			pin!(conversation_update_bot(app.clone(), app.state(), ADA.to_owned(), pick));
+
+		let landed = timeout(HELD_FOR, writing.as_mut()).await;
+		assert!(landed.is_err(), "the pick landed past the write in flight");
+		let args = json!({ "message": sent("p1", "t1", "what changed tonight?"), "summoned": [] });
+		host.asked("conversation_send_turn", args).await;
+		tokio::time::sleep(HELD_FOR).await;
+		assert_eq!(
+			opened.on(ADA),
+			Vec::<String>::new(),
+			"the turn opened before the write committed"
+		);
+		drop(earlier_write);
+		writing.await.expect("the pick lands");
+		host.turn_ended_for(ADA).await;
+
+		assert_eq!(opened.on(ADA), vec!["model<opus> effort<high>"]);
 		host.quit().await;
 	});
 }

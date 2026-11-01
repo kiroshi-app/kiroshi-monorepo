@@ -513,6 +513,22 @@ pub async fn conversation_update_bot<R: Runtime>(
 	id: String,
 	identity: BotIdentity,
 ) -> Result<Bot, TranscriptStoreError> {
+	let _memory = bundles::holding_the_memory(&id).await;
+	let written = rewritten_bot(app, state, id.clone(), identity).await;
+	if let Err(refusal) = &written {
+		log::warn!(
+			"the write of bot {id} did not land, its sessions open on what is stored: {refusal:?}"
+		);
+	}
+	written
+}
+
+async fn rewritten_bot<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	id: String,
+	identity: BotIdentity,
+) -> Result<Bot, TranscriptStoreError> {
 	let dir = avatars::Avatars::dir(&app);
 	let bundle_root = bundles::root(&app);
 	let database = ready(&state)?;
