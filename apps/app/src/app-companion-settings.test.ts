@@ -898,3 +898,85 @@ it("raises a notice and puts the stored model back on the selector when the writ
 	expect(raisedNoticeTitles()).toContain(i18n.t("bots:roster.settingsUnsaved"))
 	expect(modelSelectOf().textContent).toBe("opus")
 })
+
+const NEXT_PROMPT = "which model answers now"
+
+type HeldRuntimeWrite = {
+	change: StoreChange
+	release: () => void
+	steps: string[]
+	modelsSessionsStartedOn: string[]
+}
+
+const holdingRuntimeWrite = (isRefused = false): HeldRuntimeWrite => {
+	const gate = Promise.withResolvers<void>()
+	const steps: string[] = []
+	const modelsSessionsStartedOn: string[] = []
+	const change: StoreChange = (store) => ({
+		...store,
+		updateBot: async (id, identity) => {
+			await gate.promise
+			steps.push("write settled")
+			return isRefused
+				? Promise.reject({ kind: "storage" })
+				: store.updateBot(id, identity)
+		},
+		openRuntimeSession: async (conversationId, botId, ...rest) => {
+			steps.push("session started")
+			const bots = await store.bots(null)
+			const model = bots.find(({ id }) => id === botId)?.model
+			if (model) modelsSessionsStartedOn.push(model)
+			return store.openRuntimeSession(conversationId, botId, ...rest)
+		},
+	})
+	return { change, release: gate.resolve, steps, modelsSessionsStartedOn }
+}
+
+const sendInAtlasThread = async (text: string) => {
+	await pressBack(i18n.t("settings:screen.back"))
+	await openRow(ATLAS)
+	fireEvent.change(composerOf(), { target: { value: text } })
+	await act(async () => {
+		fireEvent.keyDown(composerOf(), { key: "Enter" })
+	})
+	await settle()
+}
+
+const pickSonnetThenSend = async (held: HeldRuntimeWrite) => {
+	await openRuntimeOf(ATLAS)
+	await pickIn(modelSelectOf(), "sonnet")
+	held.steps.length = 0
+	held.modelsSessionsStartedOn.length = 0
+	await sendInAtlasThread(NEXT_PROMPT)
+}
+
+it("starts the session of a prompt sent during a runtime write only once the write lands, on the picked model", async () => {
+	harness.models = RUNTIME_MODELS
+	const held = holdingRuntimeWrite()
+	await mountApp(held.change)
+	await pickSonnetThenSend(held)
+
+	expect(held.steps).toEqual([])
+
+	held.release()
+	await settle()
+
+	expect(held.steps.slice(0, 2)).toEqual(["write settled", "session started"])
+	expect(held.modelsSessionsStartedOn[0]).toBe("sonnet")
+})
+
+it("starts the session on the stored model and raises a notice when the held runtime write is refused", async () => {
+	harness.models = RUNTIME_MODELS
+	const held = holdingRuntimeWrite(true)
+	await mountApp(held.change)
+	await pickSonnetThenSend(held)
+
+	expect(held.steps).toEqual([])
+
+	held.release()
+	await settle()
+
+	expect(held.steps.slice(0, 2)).toEqual(["write settled", "session started"])
+	expect(held.modelsSessionsStartedOn[0]).toBe("opus")
+	expect(raisedNoticeTitles()).toContain(i18n.t("bots:roster.settingsUnsaved"))
+})

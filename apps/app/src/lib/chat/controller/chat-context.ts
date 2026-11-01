@@ -52,6 +52,7 @@ export const createChatContext = (
 	const announceReportTurn =
 		options.announceReportTurn ?? createReportTurnAnnouncer()
 	const onReconnected = options.onReconnected ?? createReconnectionListener()
+	const settingsSettled = options.settingsSettled ?? (() => Promise.resolve())
 	const transcript = createTranscriptController(store)
 	const hearSilence = ({ conversationId }: RuntimeScope) => {
 		botsShowing(conversationId).forEach(showForeignTurn)
@@ -170,6 +171,7 @@ export const createChatContext = (
 		onMessageStored,
 		announceReportTurn,
 		onReconnected,
+		settingsSettled,
 		transcript,
 		foreignTurns,
 		bots,

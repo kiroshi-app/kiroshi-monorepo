@@ -38,6 +38,7 @@ export const createSessionRunner = (
 		announce,
 		report,
 		reportStore,
+		settingsSettled,
 		showForeignTurn,
 	}: ChatContext,
 	{
@@ -92,6 +93,7 @@ export const createSessionRunner = (
 		rotatedFor: RotationReason | null = null,
 		origin: StartOrigin = "asked",
 	) => {
+		await settingsSettled(bot.id)
 		const conversationId = await landedConversationOf(bot)
 		if (!conversationId) {
 			return null

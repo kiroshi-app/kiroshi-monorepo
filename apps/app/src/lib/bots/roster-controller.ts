@@ -201,6 +201,7 @@ export type RosterController = {
 	holdHostState: (origin: SpaceOnHost, changed: ConversationStateChange) => void
 	rereadSpaceSoon: (origin: SpaceOnHost) => void
 	rereadSpacesOfBotSoon: (botId: string) => void
+	settingsSettled: (botId: string) => Promise<void>
 	catchUpWithHost: (hostId: string) => void
 	rereadConversationRow: (conversationId: string) => void
 	forgetConversation: (conversationId: string) => void
@@ -1225,6 +1226,8 @@ export const createRosterController = (
 				admit(written, destination)
 				return written
 			}).catch(reloadAndYield),
+
+		settingsSettled: (id: string) => writes.settled(id),
 
 		describe: (id: string, value: BotSettingsValue) => {
 			unsavedSettings.set(id, value)

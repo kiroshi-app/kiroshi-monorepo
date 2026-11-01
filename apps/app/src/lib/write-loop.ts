@@ -9,6 +9,7 @@ type WriteLoopOptions<Value, Written> = {
 
 export type WriteLoop<Value> = {
 	push: (key: string, value: Value) => void
+	settled: (key: string) => Promise<void>
 	drop: (key: string) => void
 	clear: () => void
 }
@@ -19,7 +20,7 @@ export const createWriteLoop = <Value, Written>({
 	apply,
 	onRefused,
 }: WriteLoopOptions<Value, Written>): WriteLoop<Value> => {
-	const running = new Set<string>()
+	const running = new Map<string, Promise<void>>()
 	const pending = new Map<string, Value>()
 
 	const flush = async (key: string): Promise<void> => {
@@ -41,13 +42,17 @@ export const createWriteLoop = <Value, Written>({
 			if (running.has(key)) {
 				return
 			}
-			running.add(key)
-			void enqueue(() => flush(key))
-				.catch((reason: unknown) => onRefused(key, reason))
-				.finally(() => {
-					running.delete(key)
-				})
+			running.set(
+				key,
+				enqueue(() => flush(key))
+					.catch((reason: unknown) => onRefused(key, reason))
+					.finally(() => {
+						running.delete(key)
+					}),
+			)
 		},
+
+		settled: (key) => running.get(key) ?? Promise.resolve(),
 
 		drop: (key) => {
 			pending.delete(key)
