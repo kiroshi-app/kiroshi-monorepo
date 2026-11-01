@@ -9,7 +9,7 @@ type WriteLoopOptions<Value, Written> = {
 
 export type WriteLoop<Value> = {
 	push: (key: string, value: Value) => void
-	settled: (key: string) => Promise<void>
+	settled: (key: string) => Promise<void> | undefined
 	drop: (key: string) => void
 	clear: () => void
 }
@@ -52,7 +52,7 @@ export const createWriteLoop = <Value, Written>({
 			)
 		},
 
-		settled: (key) => running.get(key) ?? Promise.resolve(),
+		settled: (key) => running.get(key),
 
 		drop: (key) => {
 			pending.delete(key)
