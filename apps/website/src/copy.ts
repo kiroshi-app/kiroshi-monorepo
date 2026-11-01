@@ -6,6 +6,7 @@ export const WEBSITE_COPY = {
 	downloadActionWindows: "Download for Windows",
 	downloadActionLinux: "Download for Linux",
 	githubAction: "View on GitHub",
+	productHuntBadge: "Kiroshi - Your team of agents | Product Hunt",
 	mobileNote:
 		"Desktop today, mobile soon. Open this page on your computer to download.",
 	fineprint: "Runs on the model provider you choose · MIT",
@@ -398,3 +399,12 @@ export const SCENE_COPY = {
 export const TICKET_PLATFORM = "linear"
 
 export const ROUTINE_TRIGGER_SOURCE = "schedule"
+
+export const PRODUCT_HUNT_URL =
+	"https://www.producthunt.com/products/kiroshi?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-kiroshi"
+
+export const PRODUCT_HUNT_BADGE_LIGHT_SRC =
+	"https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1299478&theme=light&t=1793522267725"
+
+export const PRODUCT_HUNT_BADGE_DARK_SRC =
+	"https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1299478&theme=dark&t=1793522267725"
