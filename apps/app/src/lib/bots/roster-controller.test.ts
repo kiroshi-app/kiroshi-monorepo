@@ -436,15 +436,11 @@ describe("createRosterController", () => {
 		const controller = await loaded(store)
 		const id = "default"
 		const write = store.updateBot
-		let landWrite: () => void = () => undefined
-		vi.spyOn(store, "updateBot").mockImplementation(
-			(botId, identity) =>
-				new Promise((resolve, reject) => {
-					landWrite = () => {
-						write(botId, identity).then(resolve, reject)
-					}
-				}),
-		)
+		const gate = Promise.withResolvers<void>()
+		vi.spyOn(store, "updateBot").mockImplementation(async (botId, identity) => {
+			await gate.promise
+			return write(botId, identity)
+		})
 
 		controller.describe(
 			id,
@@ -461,7 +457,7 @@ describe("createRosterController", () => {
 			effort: "high",
 		})
 
-		landWrite()
+		gate.resolve()
 		await vi.waitFor(async () =>
 			expect((await reloaded(store)).bots[0]).toMatchObject({
 				model: "sonnet",
