@@ -13,6 +13,8 @@ const bots = {
 			"Impossible de charger vos agents. Redémarrez Kiroshi pour réessayer.",
 		previewUnreadable:
 			"Impossible de charger les derniers messages. Redémarrez Kiroshi pour réessayer.",
+		settingsUnsaved:
+			"Impossible d’enregistrer les réglages de cet agent. Refaites la modification pour réessayer.",
 		conversationUnsaved:
 			"Impossible d’enregistrer votre modification de cette conversation. Refaites-la pour réessayer.",
 		mission: {

@@ -74,3 +74,20 @@ it("keeps a failed read in state and raises it as a failure notice once", async 
 		}),
 	})
 })
+
+it("keeps the models it read when a later read fails", async () => {
+	const models = [{ value: "opus", supportedEffortLevels: ["high" as const] }]
+	vi.mocked(readModelCatalogue).mockResolvedValue(models)
+
+	const { queryClient, wrapper } = createQueryTestWrapper()
+
+	const { result } = renderHook(() => useModelCatalogue(), { wrapper })
+	await waitFor(() => expect(result.current.models).toEqual(models))
+
+	vi.mocked(readModelCatalogue).mockRejectedValue(new Error("host restarting"))
+	await queryClient.invalidateQueries()
+
+	await waitFor(() =>
+		expect(result.current).toEqual({ models, hasFailedToLoad: true }),
+	)
+})

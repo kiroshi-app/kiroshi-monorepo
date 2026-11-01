@@ -142,6 +142,11 @@ const PREVIEW_FAILURE: FailureMeta = {
 	raisedIn: "use-roster",
 }
 
+const BOT_SETTINGS_WRITE_FAILURE: FailureMeta = {
+	failureNotice: () => ({ title: i18n.t("bots:roster.settingsUnsaved") }),
+	raisedIn: "roster-controller",
+}
+
 const CONVERSATION_WRITE_FAILURE: FailureMeta = {
 	failureNotice: () => ({ title: i18n.t("bots:roster.conversationUnsaved") }),
 	raisedIn: "roster-controller",
@@ -573,12 +578,21 @@ export const createRosterController = (
 	const commit = <Result>(write: () => Promise<Result>) =>
 		enqueue(() => runMutation(queryClient, write))
 
-	const readBotsAt = (
+	const unsavedSettings = new Map<string, BotSettingsValue>()
+
+	const withUnsavedSettings = (bot: Bot): Bot => {
+		const value = unsavedSettings.get(bot.id)
+		return value ? { ...bot, ...toIdentity(value, bot) } : bot
+	}
+
+	const readBotsAt = async (
 		spaceId: string,
 		cursor: string | null,
 		signal?: AbortSignal,
 	) =>
-		cursor === null ? store.bots(spaceId, signal) : Promise.resolve(NO_BOTS)
+		cursor === null
+			? (await store.bots(spaceId, signal)).map(withUnsavedSettings)
+			: NO_BOTS
 
 	const readRosterPageIn = async (
 		spaceId: string,
@@ -983,14 +997,22 @@ export const createRosterController = (
 		enqueue,
 		write: (id, value) => {
 			const bot = held(id)
-			return bot
-				? runMutation(queryClient, () =>
-						store.updateBot(id, toIdentity(value, bot)),
-					)
-				: Promise.resolve(null)
+			if (!bot) {
+				unsavedSettings.delete(id)
+				return Promise.resolve(null)
+			}
+			return runMutation(
+				queryClient,
+				() => store.updateBot(id, toIdentity(value, bot)),
+				BOT_SETTINGS_WRITE_FAILURE,
+			)
 		},
-		apply: (_id, written) => apply(written),
-		onRefused: () => {
+		apply: (id, written) => {
+			unsavedSettings.delete(id)
+			apply(written)
+		},
+		onRefused: (id) => {
+			unsavedSettings.delete(id)
 			void reload()
 		},
 	})
@@ -1205,6 +1227,7 @@ export const createRosterController = (
 			}).catch(reloadAndYield),
 
 		describe: (id: string, value: BotSettingsValue) => {
+			unsavedSettings.set(id, value)
 			preview(id, value)
 			writes.push(id, value)
 		},
@@ -1317,6 +1340,7 @@ export const createRosterController = (
 			commit(async () => {
 				await store.deleteBot(id)
 				writes.drop(id)
+				unsavedSettings.delete(id)
 				const state = current()
 				const bots = state.bots.filter((bot) => bot.id !== id)
 				const conversations = withSeatsOf(state.conversations, id, {
