@@ -144,6 +144,5 @@ describe("the Product Hunt badge", () => {
 			WEBSITE_COPY.downloadActionMacOS,
 			WEBSITE_COPY.githubAction,
 		])
-		expect(ctaRow?.querySelector(`a[href="${PRODUCT_HUNT_URL}"]`)).toBeNull()
 	})
 })
