@@ -36,10 +36,8 @@ it("opens a room speaker's session only once the runtime write picked for it lan
 			botIdentity({ name: "Ada", model: "sonnet", effort: "high" }),
 		),
 	)
-	const settingsSettled = async (botId: string) => {
-		if (botId === ada.id) {
-			await pickedWrite
-		}
+	const settingsSettled = async () => {
+		await pickedWrite
 	}
 	const opened: OpenedRuntime[] = []
 	const scripted = createScriptedDriver()
