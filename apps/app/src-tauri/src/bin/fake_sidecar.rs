@@ -133,8 +133,8 @@ fn record_the_runtime_opened(run: &Run, command: &Value) {
 	let Ok(path) = std::env::var("FAKE_AGENT_OPENED_RUNTIME_FILE") else {
 		return;
 	};
-	let bot = Path::new(&run.cwd).file_name().map(|name| name.to_string_lossy().into_owned());
-	let line = format!("{} {}\n", bot.unwrap_or_default(), runtime_in_the_bundle(command));
+	let bot = Path::new(&run.cwd).file_name().unwrap_or_default().to_string_lossy();
+	let line = format!("{bot} {}\n", runtime_in_the_bundle(command));
 	let appended = std::fs::OpenOptions::new()
 		.create(true)
 		.append(true)
