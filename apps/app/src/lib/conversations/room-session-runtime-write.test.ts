@@ -73,9 +73,8 @@ it("opens a room speaker's session only once the runtime write picked for it lan
 })
 
 it("opens a room speaker's session once on the stored model and effort when the runtime write picked for it is refused", async () => {
-	const base = createFakeTranscriptStore()
 	const store: TranscriptStore = {
-		...base,
+		...createFakeTranscriptStore(),
 		updateBot: () => Promise.reject({ kind: "storage" }),
 	}
 	const [ada] = await seatBots(store, SPACE, ["Ada"])
