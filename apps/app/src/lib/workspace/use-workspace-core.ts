@@ -19,6 +19,7 @@ import { createAttachmentsPort } from "../chat/attachments-port"
 import { createChatDriver } from "../chat/create-driver"
 import { createDraftsController } from "../chat/drafts-controller"
 import { useChat } from "../chat/use-chat"
+import { withSettledSettings } from "../chat/with-settled-settings"
 import { createConversationRuntimes } from "../conversations/conversation-runtimes"
 import { createTranscriptStore } from "../conversations/create-store"
 import { pluginScopeOf } from "../conversations/plugin-scope"
@@ -40,14 +41,20 @@ import { useUser } from "../user/use-user"
 
 export const useWorkspaceCore = (openSettings: OpenSettings | null) => {
 	const store = useMemo(createTranscriptStore, [])
-	const driver = useMemo(() => createChatDriver(store), [store])
 	const account = useWatchedAccount()
 	const senderAccountId = useSignedInAccountId()
 	const roster = useRoster(store)
+	const driver = useMemo(
+		() =>
+			withSettledSettings(
+				createChatDriver(store),
+				roster.controller.settingsSettled,
+			),
+		[store, roster.controller],
+	)
 	const chat = useChat(driver, store, {
 		senderAccountId,
 		rereadConversation: roster.controller.rereadConversationRow,
-		settingsSettled: roster.controller.settingsSettled,
 	})
 	const conversationRuntimes = useMemo(
 		() =>

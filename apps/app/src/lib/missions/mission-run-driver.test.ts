@@ -21,6 +21,7 @@ import { FAILURE_BURST_MS } from "./mission-run-failure"
 import type { AgentEvent, RuntimeScope, TurnEnded } from "../agent/contract"
 import { createChatController } from "../chat/chat-controller"
 import type { ChatState } from "../chat/chat-state"
+import { withSettledSettings } from "../chat/with-settled-settings"
 import type { ConversationState } from "../conversations/conversation-controller"
 import { createConversationRuntimes } from "../conversations/conversation-runtimes"
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
@@ -30,7 +31,7 @@ import {
 } from "../conversations/scripted-driver"
 import type { Conversation } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
-import { seatBots } from "../conversations/transcript-fixtures"
+import { botIdentity, seatBots } from "../conversations/transcript-fixtures"
 import { joinFakeHost, leaveFakeHost } from "../host/fake-joined-hosts"
 import { hostOfflineOf } from "../host/host-offline"
 
@@ -101,6 +102,7 @@ type HarnessSeed = {
 	soloOrigin?: boolean
 	firstStartFails?: boolean
 	claimedElsewhere?: boolean
+	settingsSettled?: (botId: string) => Promise<void>
 }
 
 const CLOSING_INSTANT = 9
@@ -123,6 +125,7 @@ const createHarness = async ({
 	soloOrigin = false,
 	firstStartFails = false,
 	claimedElsewhere = false,
+	settingsSettled,
 }: HarnessSeed = {}): Promise<Harness> => {
 	const scripted = createScriptedDriver()
 	const starts: Started[] = []
@@ -167,8 +170,11 @@ const createHarness = async ({
 		title: "The war room",
 		botIds: [bot.id, guestBot.id],
 	})
-	const runtimes = createConversationRuntimes(driver, store)
-	const chat = createChatController(driver, store)
+	const opening = settingsSettled
+		? withSettledSettings(driver, settingsSettled)
+		: driver
+	const runtimes = createConversationRuntimes(opening, store)
+	const chat = createChatController(opening, store)
 	const soloChat = await base.mainChat(bot.id)
 	const missions = createFakeMissions()
 	vi.spyOn(missions, "board")
@@ -223,7 +229,7 @@ const createHarness = async ({
 	}
 
 	const stop = startMissionRunDriver({
-		driver,
+		driver: opening,
 		store,
 		runtimes,
 		chat,
@@ -518,6 +524,38 @@ describe("startMissionRunDriver", () => {
 			conversationId: harness.origin.id,
 			botId: harness.mission.botId,
 		})
+	})
+
+	it("opens a mission run only once the runtime write picked for its companion lands, on the picked model and effort", async () => {
+		const landing = Promise.withResolvers<void>()
+		let hasLandedBeforeAnyRun = false
+		const pickedWrite = landing.promise.then(async () => {
+			await harness.store.updateBot(
+				harness.mission.botId,
+				botIdentity({ name: "Ada", model: "sonnet", effort: "high" }),
+			)
+			hasLandedBeforeAnyRun = harness.originStarts().length === 0
+		})
+		await restart({
+			settingsSettled: async (botId) => {
+				if (botId === harness.mission.botId) {
+					await pickedWrite
+				}
+			},
+		})
+
+		await harness.enter("done", closedBy("poller"))
+
+		expect(harness.originStarts()).toEqual([])
+
+		landing.resolve()
+		await settled()
+
+		const bots = await harness.store.bots(SPACE)
+		const companion = bots.find(({ id }) => id === harness.mission.botId)
+		expect(hasLandedBeforeAnyRun).toBe(true)
+		expect(harness.originStarts()).toHaveLength(1)
+		expect(companion).toMatchObject({ model: "sonnet", effort: "high" })
 	})
 
 	it("asks a closing run for a report and nothing else", async () => {

@@ -110,7 +110,6 @@ export type ChatControllerOptions = {
 	announceReportTurn?: ReportTurnAnnouncer
 	onReconnected?: ReconnectionListener
 	rereadConversation?: (conversationId: string) => void
-	settingsSettled?: (botId: string) => Promise<void>
 }
 
 export function createChatController(
