@@ -57,7 +57,7 @@ const PRODUCT_HUNT_BADGE_SIZE = "h-[54px] w-[250px] max-w-none"
 
 const ProductHuntBadge = () => (
 	<a
-		className={`${FOCUS_RING} shrink-0 rounded-sm lg:self-center`}
+		className={`${FOCUS_RING} shrink-0 rounded-sm`}
 		href={PRODUCT_HUNT_URL}
 		rel="noopener noreferrer"
 		target="_blank"
@@ -274,11 +274,14 @@ export const WebsitePage = ({ children }: WebsitePageProps) => (
 		<div
 			className={`${PAGE_COLUMN} flex flex-col items-start gap-[18px] pt-[88px] pb-16 wrap-break-word`}
 		>
-			<img
-				alt=""
-				className="h-[67px] w-[74px] shrink-0 dark:invert"
-				src={HEXAGON_SRC}
-			/>
+			<div className="flex w-full flex-wrap items-center justify-between gap-[18px]">
+				<img
+					alt=""
+					className="h-[67px] w-[74px] shrink-0 dark:invert"
+					src={HEXAGON_SRC}
+				/>
+				<ProductHuntBadge />
+			</div>
 			<h1 className="font-heading text-[28px] text-balance leading-[34px] font-medium tracking-[-0.028em] text-foreground lg:text-[54px] lg:leading-[60px]">
 				{WEBSITE_COPY.headline}
 			</h1>
@@ -292,7 +295,6 @@ export const WebsitePage = ({ children }: WebsitePageProps) => (
 					</p>
 					<DownloadAction />
 					<GithubAction label={WEBSITE_COPY.githubAction} />
-					<ProductHuntBadge />
 				</div>
 				<p className="font-mono text-xs leading-4 tracking-[0.08em] text-muted-foreground uppercase">
 					{WEBSITE_COPY.fineprint}
