@@ -132,4 +132,18 @@ describe("the Product Hunt badge", () => {
 			PRODUCT_HUNT_DARK_SRC,
 		])
 	})
+
+	it("sits outside the CTA row, which holds only Download and GitHub", async () => {
+		vi.stubGlobal("fetch", vi.fn(neverAnswer))
+		const downloadLink = await openHome()
+
+		const ctaRow = downloadLink?.parentElement
+		const ctaLinks = Array.from(ctaRow?.querySelectorAll("a") ?? [])
+
+		expect(ctaLinks.map((link) => link.textContent)).toEqual([
+			WEBSITE_COPY.downloadActionMacOS,
+			WEBSITE_COPY.githubAction,
+		])
+		expect(ctaRow?.querySelector(`a[href="${PRODUCT_HUNT_URL}"]`)).toBeNull()
+	})
 })
