@@ -19,6 +19,7 @@ import type { MissionInSpace, OfferedModel_Serialize } from "@/lib/bindings"
 import { botQueryKeys } from "@/lib/bots/bot-query-keys"
 import { newBotIdentity } from "@/lib/bots/bot-settings"
 import { readModelCatalogue } from "@/lib/bots/model-catalogue"
+import type { ChatDriver } from "@/lib/chat/driver"
 import { createFakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
@@ -32,6 +33,7 @@ type Harness = {
 	missions: MissionInSpace[]
 	models: OfferedModel_Serialize[]
 	announceArrival: () => void
+	startingSession: (botId: string) => Promise<void>
 }
 
 const harness = vi.hoisted(
@@ -41,6 +43,7 @@ const harness = vi.hoisted(
 		missions: [],
 		models: [],
 		announceArrival: () => undefined,
+		startingSession: async () => undefined,
 	}),
 )
 
@@ -73,8 +76,19 @@ vi.mock("@/lib/chat/create-driver", async () => {
 		"@/lib/conversations/fake-host-writes"
 	)
 	return {
-		createChatDriver: (store: TranscriptStore) =>
-			withFakeHostWrites(createFakeChatDriver({ stepMs: 1 }), store),
+		createChatDriver: (store: TranscriptStore): ChatDriver => {
+			const driver = withFakeHostWrites(
+				createFakeChatDriver({ stepMs: 1 }),
+				store,
+			)
+			return {
+				...driver,
+				startOrResumeSession: async (scope, ...opening) => {
+					await harness.startingSession(scope.botId)
+					return driver.startOrResumeSession(scope, ...opening)
+				},
+			}
+		},
 	}
 })
 
@@ -287,6 +301,7 @@ afterEach(() => {
 	harness.installs = []
 	harness.missions = []
 	harness.models = []
+	harness.startingSession = async () => undefined
 })
 
 const settle = async () => {
@@ -919,14 +934,13 @@ const holdingRuntimeWrite = (): HeldRuntimeWrite => {
 			steps.push("write settled")
 			return store.updateBot(id, identity)
 		},
-		openRuntimeSession: async (conversationId, botId, ...rest) => {
-			steps.push("session started")
-			const bots = await store.bots(null)
-			const model = bots.find(({ id }) => id === botId)?.model
-			if (model) modelsSessionsStartedOn.push(model)
-			return store.openRuntimeSession(conversationId, botId, ...rest)
-		},
 	})
+	harness.startingSession = async (botId) => {
+		steps.push("session started")
+		const bots = (await harness.store?.bots(null)) ?? []
+		const model = bots.find(({ id }) => id === botId)?.model
+		if (model) modelsSessionsStartedOn.push(model)
+	}
 	return { change, release: gate.resolve, steps, modelsSessionsStartedOn }
 }
 
