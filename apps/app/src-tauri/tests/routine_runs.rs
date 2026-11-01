@@ -1,5 +1,6 @@
 mod bundled;
 mod common;
+mod runtime_pick;
 
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
@@ -10,9 +11,11 @@ use common::{an_app_of_its_own, AppOfItsOwn};
 use kiroshi_app::agent::commands::{agent_live_sessions, terminate_session};
 use kiroshi_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
 use kiroshi_app::agent::AgentState;
-use kiroshi_app::conversations::commands::conversation_main_chat;
+use kiroshi_app::bundles::{self, EffortLevel};
+use kiroshi_app::conversations::commands::{conversation_main_chat, conversation_update_bot};
 use kiroshi_app::conversations::contract::UPDATED_EVENT;
 use kiroshi_app::db;
+use kiroshi_app::db::repositories::conversations::Bot;
 use kiroshi_app::db::repositories::messages::{MessagePageQuery, MessageState, StoredMessage};
 use kiroshi_app::routines::commands::{routine_run_now, CHANGED_EVENT};
 use kiroshi_app::routines::contract::{
@@ -22,10 +25,12 @@ use kiroshi_app::routines::contract::{
 use kiroshi_app::routines::core::{self, Clock, SystemClock};
 use kiroshi_app::routines::runner::{RunTiming, Runner, RUN_TIMING};
 use kiroshi_app::routines::schedule::{self, Occurrence};
+use runtime_pick::{picked, record_named, OpenedRuntimes, HELD_FOR};
 use serde_json::{json, Value};
 use tauri::async_runtime::block_on;
 use tauri::test::{mock_builder, MockRuntime};
 use tauri::{App, Listener, Manager};
+use tokio::time::timeout;
 
 const FAKE_SIDECAR: &str = env!("CARGO_BIN_EXE_fake_sidecar");
 const SCENARIO_ENV: &str = "FAKE_AGENT_SCENARIO_FILE";
@@ -44,6 +49,10 @@ struct Host {
 	changed: Arc<Mutex<Vec<String>>>,
 	updated: Arc<Mutex<Vec<Value>>>,
 	_scenario: RemovedOnDrop,
+}
+
+fn opened_runtimes(name: &str) -> OpenedRuntimes<RemovedOnDrop> {
+	OpenedRuntimes::recorded_in(RemovedOnDrop(record_named(name)))
 }
 
 fn serial() -> MutexGuard<'static, ()> {
@@ -169,6 +178,12 @@ fn the_schedule_source() -> TriggerSource {
 impl Host {
 	fn database(&self) -> &db::Database {
 		database_of(&self.app)
+	}
+
+	fn stored_bot(&self, bot_id: &str) -> Bot {
+		block_on(self.database().conversations().bot(bot_id.to_owned()))
+			.expect("the bot reads")
+			.expect("the bot is seated")
 	}
 
 	fn runner(&self) -> Runner<MockRuntime> {
@@ -550,6 +565,71 @@ fn two_bots_running_a_routine_at_once_each_report_their_own_turn_on_their_own_co
 
 	assert_reported_its_own_turn(&host, &host.routine);
 	assert_reported_its_own_turn(&host, &second);
+	host.wait_for_no_live_session();
+	host.quit();
+}
+
+#[test]
+fn a_run_now_fired_during_a_runtime_write_opens_on_the_written_model_and_effort() {
+	let _serial = serial();
+	let opened = opened_runtimes("routine-written");
+	let host = launch("runtime-write", "routine_report");
+	let app = host.app.handle().clone();
+	let pick = picked(host.stored_bot(BOT), "sonnet", EffortLevel::High);
+	let earlier_write = block_on(bundles::holding_the_memory(BOT));
+	let mut writing =
+		Box::pin(conversation_update_bot(app.clone(), app.state(), BOT.to_owned(), pick));
+
+	let landed = block_on(async { timeout(HELD_FOR, writing.as_mut()).await });
+	assert!(landed.is_err(), "the pick landed past the write in flight");
+	assert!(is_started(&host.run_now()));
+	std::thread::sleep(HELD_FOR);
+	assert_eq!(opened.on(BOT), Vec::<String>::new(), "the run opened before the write committed");
+	drop(earlier_write);
+	block_on(writing).expect("the pick lands");
+
+	assert_reported(&host, &host.closed_run());
+	assert_eq!(opened.on(BOT), vec!["model<sonnet> effort<high>"]);
+	host.wait_for_no_live_session();
+	host.quit();
+}
+
+#[test]
+fn a_run_now_with_no_runtime_write_pending_opens_on_the_stored_model_and_effort() {
+	let _serial = serial();
+	let opened = opened_runtimes("routine-stored");
+	let host = launch("no-runtime-write", "routine_report");
+
+	assert!(is_started(&host.run_now()));
+
+	assert_reported(&host, &host.closed_run());
+	assert_eq!(opened.on(BOT), vec!["model<opus> effort<none>"]);
+	host.wait_for_no_live_session();
+	host.quit();
+}
+
+#[test]
+fn a_runtime_write_held_on_one_bot_holds_no_run_of_another() {
+	let _serial = serial();
+	let opened = opened_runtimes("routine-other-bot");
+	let host = launch("runtime-write-other-bot", "routine_report_own");
+	bundled_bots(&host.app, &[SECOND_BOT]);
+	let second_chat = block_on(conversation_main_chat(
+		host.app.handle().clone(),
+		host.app.state(),
+		SECOND_BOT.to_owned(),
+		None,
+	))
+	.expect("the second bot's main chat opens");
+	let second = routine_on(&host.app, &second_chat.id, SECOND_BOT, "runtime-write-other-bot");
+	let write_in_flight = block_on(bundles::holding_the_memory(BOT));
+
+	assert!(is_started(&host.run_routine_now(&second, RUN_TIMING)));
+
+	assert_reported_its_own_turn(&host, &second);
+	assert_eq!(opened.on(SECOND_BOT), vec!["model<sonnet> effort<none>"]);
+	assert_eq!(opened.on(BOT), Vec::<String>::new());
+	drop(write_in_flight);
 	host.wait_for_no_live_session();
 	host.quit();
 }
