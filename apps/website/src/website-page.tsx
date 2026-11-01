@@ -4,7 +4,13 @@ import { FaqList } from "@workspace/ui/components/faq-list"
 import { Icons } from "@workspace/ui/components/icons"
 import { Badge } from "@workspace/ui/components/ui/badge"
 
-import { REPOSITORY_URL, WEBSITE_COPY } from "./copy"
+import {
+	PRODUCT_HUNT_BADGE_DARK_SRC,
+	PRODUCT_HUNT_BADGE_LIGHT_SRC,
+	PRODUCT_HUNT_URL,
+	REPOSITORY_URL,
+	WEBSITE_COPY,
+} from "./copy"
 import { DownloadMark } from "./page-marks"
 import { FOCUS_RING, HEXAGON_SRC, PAGE_COLUMN, SiteMain } from "./site-chrome"
 import { type DownloadPlatform, useDownloadTarget } from "./use-download-target"
@@ -44,6 +50,32 @@ const GithubAction = ({ label }: ActionProps) => (
 	>
 		{label}
 		<Icons.GitHub size={15} />
+	</a>
+)
+
+const PRODUCT_HUNT_BADGE_SIZE = "h-[54px] w-[250px] max-w-none"
+
+const ProductHuntBadge = () => (
+	<a
+		className={`${FOCUS_RING} shrink-0 rounded-sm lg:self-center`}
+		href={PRODUCT_HUNT_URL}
+		rel="noopener noreferrer"
+		target="_blank"
+	>
+		<img
+			alt={WEBSITE_COPY.productHuntBadge}
+			className={`${PRODUCT_HUNT_BADGE_SIZE} dark:hidden`}
+			height={54}
+			src={PRODUCT_HUNT_BADGE_LIGHT_SRC}
+			width={250}
+		/>
+		<img
+			alt={WEBSITE_COPY.productHuntBadge}
+			className={`${PRODUCT_HUNT_BADGE_SIZE} hidden dark:block`}
+			height={54}
+			src={PRODUCT_HUNT_BADGE_DARK_SRC}
+			width={250}
+		/>
 	</a>
 )
 
@@ -260,6 +292,7 @@ export const WebsitePage = ({ children }: WebsitePageProps) => (
 					</p>
 					<DownloadAction />
 					<GithubAction label={WEBSITE_COPY.githubAction} />
+					<ProductHuntBadge />
 				</div>
 				<p className="font-mono text-xs leading-4 tracking-[0.08em] text-muted-foreground uppercase">
 					{WEBSITE_COPY.fineprint}

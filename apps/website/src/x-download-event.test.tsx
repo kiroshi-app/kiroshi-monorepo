@@ -22,6 +22,13 @@ const answerLatestRelease = async () =>
 		],
 	})
 
+const PRODUCT_HUNT_URL =
+	"https://www.producthunt.com/products/kiroshi?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-kiroshi"
+const PRODUCT_HUNT_LIGHT_SRC =
+	"https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1299478&theme=light&t=1793522267725"
+const PRODUCT_HUNT_DARK_SRC =
+	"https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1299478&theme=dark&t=1793522267725"
+
 const neverAnswer = () => new Promise<Response>(() => {})
 
 const openHome = async () => {
@@ -100,5 +107,29 @@ describe("a download CTA click", () => {
 		expect(fireEvent.click(downloadLink)).toBe(true)
 		window.removeEventListener("error", thrown)
 		expect(thrown).not.toHaveBeenCalled()
+	})
+})
+
+describe("the Product Hunt badge", () => {
+	it("links to the Kiroshi product page in a new tab with both scheme images", async () => {
+		vi.stubGlobal("fetch", vi.fn(neverAnswer))
+		await openHome()
+
+		const badgeImages = screen.getAllByAltText(
+			"Kiroshi - Your team of agents | Product Hunt",
+		)
+		const badgeLink = badgeImages[0]?.closest("a")
+
+		expect(badgeLink?.getAttribute("href")).toBe(PRODUCT_HUNT_URL)
+		expect(badgeLink?.getAttribute("target")).toBe("_blank")
+		expect(badgeLink?.getAttribute("rel")).toBe("noopener noreferrer")
+		expect(badgeImages.map((image) => image.closest("a"))).toEqual([
+			badgeLink,
+			badgeLink,
+		])
+		expect(badgeImages.map((image) => image.getAttribute("src"))).toEqual([
+			PRODUCT_HUNT_LIGHT_SRC,
+			PRODUCT_HUNT_DARK_SRC,
+		])
 	})
 })
