@@ -8,10 +8,8 @@ export const withSettledSettings = (
 ): ChatDriver => ({
 	...driver,
 	startOrResumeSession: (scope, ...opening) => {
+		const open = () => driver.startOrResumeSession(scope, ...opening)
 		const settling = settingsSettled(scope.botId)
-		if (!settling) {
-			return driver.startOrResumeSession(scope, ...opening)
-		}
-		return settling.then(() => driver.startOrResumeSession(scope, ...opening))
+		return settling ? settling.then(open) : open()
 	},
 })
