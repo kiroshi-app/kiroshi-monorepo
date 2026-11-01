@@ -24,5 +24,5 @@ export const useModelCatalogue = (): ModelCatalogue => {
 		},
 	})
 
-	return { models: isError ? NO_MODELS : data, hasFailedToLoad: isError }
+	return { models: data, hasFailedToLoad: isError }
 }

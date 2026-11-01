@@ -47,6 +47,7 @@ export const useWorkspaceCore = (openSettings: OpenSettings | null) => {
 	const chat = useChat(driver, store, {
 		senderAccountId,
 		rereadConversation: roster.controller.rereadConversationRow,
+		settingsSettled: roster.controller.settingsSettled,
 	})
 	const conversationRuntimes = useMemo(
 		() =>

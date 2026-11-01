@@ -15,8 +15,10 @@ import { BLANK_BOT_PERMISSIONS } from "@workspace/ui/components/bot-settings"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import type { ApplicationInstall } from "@/lib/applications/application-port"
-import type { MissionInSpace } from "@/lib/bindings"
+import type { MissionInSpace, OfferedModel_Serialize } from "@/lib/bindings"
+import { botQueryKeys } from "@/lib/bots/bot-query-keys"
 import { newBotIdentity } from "@/lib/bots/bot-settings"
+import { readModelCatalogue } from "@/lib/bots/model-catalogue"
 import { createFakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
@@ -28,6 +30,7 @@ type Harness = {
 	store: TranscriptStore | null
 	installs: ApplicationInstall[]
 	missions: MissionInSpace[]
+	models: OfferedModel_Serialize[]
 	announceArrival: () => void
 }
 
@@ -36,9 +39,14 @@ const harness = vi.hoisted(
 		store: null,
 		installs: [],
 		missions: [],
+		models: [],
 		announceArrival: () => undefined,
 	}),
 )
+
+vi.mock("@/lib/bots/model-catalogue", () => ({
+	readModelCatalogue: vi.fn(async () => harness.models),
+}))
 
 vi.mock(
 	"@/lib/conversations/use-companion-arrivals",
@@ -261,9 +269,15 @@ const mountApp = async (change: StoreChange = (store) => store) => {
 	const seeded = await seed(store)
 	vi.useFakeTimers()
 	harness.store = store
-	render(createElement(App), { wrapper: createQueryTestWrapper().wrapper })
+	const { queryClient } = launchApp()
 	await settle()
-	return seeded
+	return { ...seeded, queryClient }
+}
+
+const launchApp = () => {
+	const query = createQueryTestWrapper()
+	render(createElement(App), { wrapper: query.wrapper })
+	return query
 }
 
 afterEach(() => {
@@ -272,6 +286,7 @@ afterEach(() => {
 	vi.useRealTimers()
 	harness.installs = []
 	harness.missions = []
+	harness.models = []
 })
 
 const settle = async () => {
@@ -743,4 +758,223 @@ it("returns to the conversations when the companion whose settings are open no l
 
 	expect(settingsMenuOf()).toBeNull()
 	expect(rosterRowOf(NOVA)).toBeTruthy()
+})
+
+const RUNTIME_MODELS: OfferedModel_Serialize[] = [
+	{ value: "opus", supportedEffortLevels: ["low", "medium", "high"] },
+	{ value: "sonnet", supportedEffortLevels: ["low", "medium", "high"] },
+	{ value: "haiku", supportedEffortLevels: [] },
+]
+
+const HIGH = i18n.t("bots:runtime.effort.option.high")
+
+const DEFAULT_EFFORT = i18n.t("bots:runtime.effort.option.default")
+
+const runtimeSelectOf = (label: string) =>
+	screen.getByRole("combobox", { name: label })
+
+const modelSelectOf = () => runtimeSelectOf(i18n.t("bots:runtime.model.label"))
+
+const effortSelectOf = () =>
+	runtimeSelectOf(i18n.t("bots:runtime.effort.label"))
+
+const shownRuntime = () => ({
+	model: modelSelectOf().textContent,
+	effort: effortSelectOf().textContent,
+})
+
+const pickIn = async (select: HTMLElement, option: string) => {
+	await press(select)
+	const choice = screen.getByRole("option", { name: option })
+	await act(async () => {
+		fireEvent.pointerDown(choice, { pointerType: "mouse" })
+	})
+	await press(choice)
+}
+
+const openRuntimeOf = async (name: string) => {
+	await openContextMenuOn(rosterRowOf(name))
+	await chooseInMenu(i18n.t("bots:roster.settings"))
+	await press(menuEntryOf(i18n.t("bots:dialog.tab.runtime")))
+}
+
+const pickSonnetOnHigh = async () => {
+	await pickIn(modelSelectOf(), "sonnet")
+	await pickIn(effortSelectOf(), HIGH)
+}
+
+const storedRuntimeOf = async (botId: string) => {
+	const bots = (await harness.store?.bots(null)) ?? []
+	const bot = bots.find(({ id }) => id === botId)
+	return { model: bot?.model, effort: bot?.effort }
+}
+
+const SONNET_ON_HIGH = { model: "sonnet", effort: HIGH }
+
+const refusingUpdates: StoreChange = (store) => ({
+	...store,
+	updateBot: () => Promise.reject({ kind: "storage" }),
+})
+
+it("writes a picked model then effort to the store and keeps both on the selectors", async () => {
+	harness.models = RUNTIME_MODELS
+	const seeded = await mountApp()
+	await openRuntimeOf(ATLAS)
+
+	await pickSonnetOnHigh()
+
+	expect(await storedRuntimeOf(seeded.atlasId)).toEqual({
+		model: "sonnet",
+		effort: "high",
+	})
+	expect(shownRuntime()).toEqual(SONNET_ON_HIGH)
+})
+
+it("shows the picked model and effort once the settings are closed and reopened", async () => {
+	harness.models = RUNTIME_MODELS
+	await mountApp()
+	await openRuntimeOf(ATLAS)
+	await pickSonnetOnHigh()
+
+	await pressBack(i18n.t("settings:screen.back"))
+	await openRuntimeOf(ATLAS)
+
+	expect(shownRuntime()).toEqual(SONNET_ON_HIGH)
+})
+
+it("shows the picked model and effort read from storage after a relaunch", async () => {
+	harness.models = RUNTIME_MODELS
+	await mountApp()
+	await openRuntimeOf(ATLAS)
+	await pickSonnetOnHigh()
+
+	cleanup()
+	launchApp()
+	await settle()
+
+	expect(shownScreenOf()?.entry).toBe(i18n.t("bots:dialog.tab.runtime"))
+	expect(shownRuntime()).toEqual(SONNET_ON_HIGH)
+})
+
+it("saves no effort and shows Default once the picked model does not support the held one", async () => {
+	harness.models = RUNTIME_MODELS
+	const seeded = await mountApp()
+	await openRuntimeOf(ATLAS)
+	await pickSonnetOnHigh()
+
+	await pickIn(modelSelectOf(), "haiku")
+
+	expect(await storedRuntimeOf(seeded.atlasId)).toEqual({
+		model: "haiku",
+		effort: null,
+	})
+	expect(shownRuntime()).toEqual({ model: "haiku", effort: DEFAULT_EFFORT })
+})
+
+it("keeps the picked model and effort on the selectors when the model catalogue is read again and fails", async () => {
+	harness.models = RUNTIME_MODELS
+	const { queryClient } = await mountApp()
+	await openRuntimeOf(ATLAS)
+	await pickSonnetOnHigh()
+
+	vi.mocked(readModelCatalogue).mockRejectedValueOnce(new Error("restarting"))
+	await act(async () => {
+		await queryClient.invalidateQueries({
+			queryKey: botQueryKeys.modelCatalogue(),
+		})
+	})
+	await settle()
+
+	expect(shownRuntime()).toEqual(SONNET_ON_HIGH)
+})
+
+it("raises a notice and puts the stored model back on the selector when the write fails", async () => {
+	harness.models = RUNTIME_MODELS
+	await mountApp(refusingUpdates)
+	await openRuntimeOf(ATLAS)
+
+	await pickIn(modelSelectOf(), "sonnet")
+
+	expect(raisedNoticeTitles()).toContain(i18n.t("bots:roster.settingsUnsaved"))
+	expect(modelSelectOf().textContent).toBe("opus")
+})
+
+const NEXT_PROMPT = "which model answers now"
+
+type HeldRuntimeWrite = {
+	change: StoreChange
+	release: () => void
+	steps: string[]
+	modelsSessionsStartedOn: string[]
+}
+
+const holdingRuntimeWrite = (): HeldRuntimeWrite => {
+	const gate = Promise.withResolvers<void>()
+	const steps: string[] = []
+	const modelsSessionsStartedOn: string[] = []
+	const change: StoreChange = (store) => ({
+		...store,
+		updateBot: async (id, identity) => {
+			await gate.promise
+			steps.push("write settled")
+			return store.updateBot(id, identity)
+		},
+		openRuntimeSession: async (conversationId, botId, ...rest) => {
+			steps.push("session started")
+			const bots = await store.bots(null)
+			const model = bots.find(({ id }) => id === botId)?.model
+			if (model) modelsSessionsStartedOn.push(model)
+			return store.openRuntimeSession(conversationId, botId, ...rest)
+		},
+	})
+	return { change, release: gate.resolve, steps, modelsSessionsStartedOn }
+}
+
+const sendInAtlasThread = async (text: string) => {
+	await pressBack(i18n.t("settings:screen.back"))
+	await openRow(ATLAS)
+	fireEvent.change(composerOf(), { target: { value: text } })
+	await act(async () => {
+		fireEvent.keyDown(composerOf(), { key: "Enter" })
+	})
+	await settle()
+}
+
+const pickSonnetThenSend = async (held: HeldRuntimeWrite) => {
+	await openRuntimeOf(ATLAS)
+	await pickIn(modelSelectOf(), "sonnet")
+	held.steps.length = 0
+	held.modelsSessionsStartedOn.length = 0
+	await sendInAtlasThread(NEXT_PROMPT)
+}
+
+it("starts the session of a prompt sent during a runtime write only once the write lands, on the picked model", async () => {
+	harness.models = RUNTIME_MODELS
+	const held = holdingRuntimeWrite()
+	await mountApp(held.change)
+	await pickSonnetThenSend(held)
+
+	expect(held.steps).toEqual([])
+
+	held.release()
+	await settle()
+
+	expect(held.steps.slice(0, 2)).toEqual(["write settled", "session started"])
+	expect(held.modelsSessionsStartedOn[0]).toBe("sonnet")
+})
+
+it("starts the session on the stored model and raises a notice when the held runtime write is refused", async () => {
+	harness.models = RUNTIME_MODELS
+	const held = holdingRuntimeWrite()
+	await mountApp((store) => held.change(refusingUpdates(store)))
+	await pickSonnetThenSend(held)
+
+	expect(held.steps).toEqual([])
+
+	held.release()
+	await settle()
+
+	expect(held.steps.slice(0, 2)).toEqual(["write settled", "session started"])
+	expect(held.modelsSessionsStartedOn[0]).toBe("opus")
+	expect(raisedNoticeTitles()).toContain(i18n.t("bots:roster.settingsUnsaved"))
 })

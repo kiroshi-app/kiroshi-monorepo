@@ -431,6 +431,68 @@ describe("createRosterController", () => {
 		expect(written.mock.calls.length).toBeLessThan(3)
 	})
 
+	it("keeps a picked runtime on screen through a roster read that lands before its write", async () => {
+		const store = createFakeTranscriptStore()
+		const controller = await loaded(store)
+		const id = "default"
+		const write = store.updateBot
+		const gate = Promise.withResolvers<void>()
+		vi.spyOn(store, "updateBot").mockImplementation(async (botId, identity) => {
+			await gate.promise
+			return write(botId, identity)
+		})
+
+		controller.describe(
+			id,
+			edited(toSettingsValue(held(controller, id)), {
+				model: "sonnet",
+				effort: "high",
+			}),
+		)
+		await vi.waitFor(() => expect(store.updateBot).toHaveBeenCalled())
+		await controller.reload()
+
+		expect(held(controller, id)).toMatchObject({
+			model: "sonnet",
+			effort: "high",
+		})
+
+		gate.resolve()
+		await vi.waitFor(async () =>
+			expect((await reloaded(store)).bots[0]).toMatchObject({
+				model: "sonnet",
+				effort: "high",
+			}),
+		)
+	})
+
+	it("raises a notice and puts the stored runtime back when its write is refused", async () => {
+		const store = createFakeTranscriptStore()
+		const controller = await loaded(store)
+		const id = "default"
+		const stored = held(controller, id)
+		vi.spyOn(store, "updateBot").mockRejectedValue({ kind: "storage" })
+
+		controller.describe(
+			id,
+			edited(toSettingsValue(stored), { model: "sonnet", effort: "high" }),
+		)
+
+		await vi.waitFor(() => {
+			expect(held(controller, id)).toMatchObject({
+				model: stored.model,
+				effort: stored.effort,
+			})
+			expect(raiseFailureNotice).toHaveBeenCalledWith(
+				expect.objectContaining({
+					title:
+						"Couldn’t save this agent’s settings. Make the change again to retry.",
+				}),
+			)
+		})
+		expect(raiseFailureNotice).toHaveBeenCalledTimes(1)
+	})
+
 	it("writes the style the reader picked without losing what was typed", async () => {
 		const store = createFakeTranscriptStore()
 		const controller = await loaded(store)

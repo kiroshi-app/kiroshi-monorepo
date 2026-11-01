@@ -21,6 +21,8 @@ const bots = {
 		unavailable: "Couldn’t load your agents. Restart Kiroshi to retry.",
 		previewUnreadable:
 			"Couldn’t load the latest messages. Restart Kiroshi to retry.",
+		settingsUnsaved:
+			"Couldn’t save this agent’s settings. Make the change again to retry.",
 		conversationUnsaved:
 			"Couldn’t save your change to this conversation. Make it again to retry.",
 		mission: {
