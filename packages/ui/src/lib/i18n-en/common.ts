@@ -299,7 +299,8 @@ const common = {
 				preview:
 					"# Meeting notes\n\n## Decisions\n\n- One line per decision\n- The reason behind it\n\n## Next steps\n\nWho does what, and by when.",
 				description: "Decisions and next steps, dated today.",
-				title: "Meeting notes, {{day}} {{month}}",
+				title:
+					"Meeting notes, {{date, datetime(day: numeric)}} {{date, datetime(month: long)}}",
 				intro: "Who was there, and what the meeting was for.",
 				decisions: {
 					heading: "Decisions",

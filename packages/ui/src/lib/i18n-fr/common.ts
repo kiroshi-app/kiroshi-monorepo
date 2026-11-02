@@ -317,7 +317,8 @@ const common = {
 				preview:
 					"# Notes de réunion\n\n## Décisions\n\n- Une ligne par décision\n- La raison qui la porte\n\n## Prochaines étapes\n\nQui fait quoi, et pour quand.",
 				description: "Les décisions et les prochaines étapes, datées du jour.",
-				title: "Notes de réunion, {{day}} {{month}}",
+				title:
+					"Notes de réunion, {{date, datetime(day: numeric)}} {{date, datetime(month: long)}}",
 				intro: "Qui était là, et à quoi servait la réunion.",
 				decisions: {
 					heading: "Décisions",

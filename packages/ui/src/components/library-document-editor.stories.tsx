@@ -3,7 +3,31 @@ import { expect, fn, within } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import { hueScopeOf, slotIn } from "@workspace/storybook/story-utils"
 import { ContentCard } from "@workspace/ui/components/content-card"
-import { LibraryDocumentEditor } from "@workspace/ui/components/library-document-editor"
+import {
+	LibraryDocumentEditor,
+	libraryDocumentStartOf,
+} from "@workspace/ui/components/library-document-editor"
+import { i18n } from "@workspace/ui/lib/i18n"
+
+const t = i18n.getFixedT("en", "common")
+
+const CREATED_ON = new Date(2026, 10, 2)
+
+const BLANK = libraryDocumentStartOf("blank", CREATED_ON, t)
+
+const MEETING_NOTES = libraryDocumentStartOf("meetingNotes", CREATED_ON, t)
+
+const LAUNCH_REVIEW = {
+	title: "Launch review",
+	detail: "38 words · Edited today at 10:41",
+	body: [
+		"We met to agree the launch date and who signs off the copy.",
+		"## Decisions",
+		"- Ship on the 14th\n- Copy is final on the 7th",
+		"## Next steps",
+		"Screenshots land on the 10th.",
+	].join("\n\n"),
+}
 
 const PLACEHOLDER_INK = "rgb(115, 115, 115)"
 
@@ -29,8 +53,8 @@ const meta = preview.meta({
 	},
 	globals: { theme: "dark" },
 	args: {
+		...BLANK,
 		template: "blank" as const,
-		createdAt: new Date(2026, 10, 2),
 		onTitleChange: fn(),
 		onBodyChange: fn(),
 		onBack: fn(),
@@ -88,7 +112,7 @@ export const Blank = meta.story({
 })
 
 export const FromMeetingNotes = meta.story({
-	args: { template: "meetingNotes" },
+	args: { ...MEETING_NOTES, template: "meetingNotes" },
 	parameters: {
 		docs: {
 			description: {
@@ -98,6 +122,11 @@ export const FromMeetingNotes = meta.story({
 		},
 	},
 	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		await expect(MEETING_NOTES).toEqual({
+			title: "Meeting notes, 2 November",
+			body: "## Decisions\n\n## Next steps",
+			detail: "Created just now from Meeting notes",
+		})
 		const title = canvas.getByRole("textbox", { name: "Title" })
 		await expect(title).toHaveValue("Meeting notes, 2 November")
 		await expect(
@@ -186,5 +215,56 @@ export const WithTypedText = meta.story({
 		await expect(
 			items.map((item) => (item as HTMLTextAreaElement).value),
 		).toEqual(["Ship on the 14th", "Copy is final on the 7th"])
+	},
+})
+
+export const ExistingDocument = meta.story({
+	args: { ...LAUNCH_REVIEW, template: undefined },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A Library document opened to edit, from its title and its markdown. Check that each heading, paragraph and list item lands in its own line, that nothing is reported before the first edit, and that undoing an edit reports the body it opened on.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		await expect(canvas.getByRole("textbox", { name: "Title" })).toHaveValue(
+			"Launch review",
+		)
+		await expect(canvas.getByText(LAUNCH_REVIEW.detail)).toBeVisible()
+		const fields = within(
+			slotIn(canvasElement, "library-document-body"),
+		).getAllByRole("textbox")
+		await expect(
+			fields.map((field) => [
+				field.getAttribute("aria-label"),
+				(field as HTMLTextAreaElement).value,
+			]),
+		).toEqual([
+			["Text", "We met to agree the launch date and who signs off the copy."],
+			["Heading", "Decisions"],
+			["List item", "Ship on the 14th"],
+			["List item", "Copy is final on the 7th"],
+			["Heading", "Next steps"],
+			["Text", "Screenshots land on the 10th."],
+		])
+		await expect(args.onTitleChange).not.toHaveBeenCalled()
+		await expect(args.onBodyChange).not.toHaveBeenCalled()
+
+		const ship = fields[2] as HTMLElement
+		await userEvent.type(ship, ", after the review")
+		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+			LAUNCH_REVIEW.body.replace(
+				"Ship on the 14th",
+				"Ship on the 14th, after the review",
+			),
+		)
+		await userEvent.type(
+			ship,
+			"{Backspace}".repeat(", after the review".length),
+		)
+		await expect(args.onBodyChange).toHaveBeenLastCalledWith(LAUNCH_REVIEW.body)
+		await expect(args.onTitleChange).not.toHaveBeenCalled()
 	},
 })

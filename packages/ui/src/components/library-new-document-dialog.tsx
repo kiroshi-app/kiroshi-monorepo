@@ -202,7 +202,7 @@ const TemplatePicker = ({ defaultTemplate, onCreate }: TemplatePickerProps) => {
 		<div className="flex flex-col gap-6">
 			<RadioGroup
 				aria-label={t("library.picker.templates")}
-				className="flex w-auto gap-4"
+				className="flex w-auto flex-wrap gap-4"
 				onValueChange={(value) => setTemplate(value as LibraryDocumentTemplate)}
 				value={template}
 			>
@@ -210,11 +210,11 @@ const TemplatePicker = ({ defaultTemplate, onCreate }: TemplatePickerProps) => {
 					<TemplateTile key={each} template={each} />
 				))}
 			</RadioGroup>
-			<div className="flex items-center justify-between gap-4">
-				<p className="min-w-0 text-compact text-muted-foreground leading-4.5">
+			<div className="flex flex-wrap items-center justify-between gap-4">
+				<p className="min-w-0 flex-[1_1_15rem] text-compact text-muted-foreground leading-4.5">
 					{t(`library.templates.${template}.description`)}
 				</p>
-				<div className="flex shrink-0 gap-2">
+				<div className="ms-auto flex shrink-0 gap-2">
 					<DialogClose
 						render={
 							<Button

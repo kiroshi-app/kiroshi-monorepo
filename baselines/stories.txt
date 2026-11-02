@@ -1336,12 +1336,14 @@ navigation-headeridentitybutton--preset-hue
 navigation-headeridentitybutton--variants
 navigation-headeridentitybutton--working
 navigation-librarydocumenteditor--blank
+navigation-librarydocumenteditor--existing-document
 navigation-librarydocumenteditor--from-meeting-notes
 navigation-librarydocumenteditor--with-typed-text
 navigation-librarydocumentview--default
 navigation-librarydocumentview--member
 navigation-librarynewdocumentdialog--blank-selected
 navigation-librarynewdocumentdialog--meeting-notes-selected
+navigation-librarynewdocumentdialog--narrow-window
 navigation-librarypanel--added-to-the-grid
 navigation-librarypanel--dropping-files
 navigation-librarypanel--dropping-one-file

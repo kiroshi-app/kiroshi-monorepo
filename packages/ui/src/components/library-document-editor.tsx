@@ -17,7 +17,6 @@ import {
 	LibraryDocumentColumn,
 } from "@workspace/ui/components/library-document-view"
 import type { LibraryDocumentTemplate } from "@workspace/ui/components/library-new-document-dialog"
-import { formatDateTime } from "@workspace/ui/lib/time-format"
 import { cn } from "@workspace/ui/lib/utils"
 
 type BlockKind = "paragraph" | "heading" | "item"
@@ -27,6 +26,8 @@ type Block = {
 	kind: BlockKind
 	text: string
 	placeholder?: string
+	prefix?: string
+	isTight?: boolean
 }
 
 const MARKDOWN_PREFIX: Record<BlockKind, string> = {
@@ -55,11 +56,22 @@ const BLOCK_LABEL = {
 	item: "library.editor.item",
 } as const
 
+const HEADING_LINE = /^(#{1,6} +)(.*)$/
+
+const ITEM_LINE = /^([-*+] +)(.*)$/
+
 const blockOf = (
 	kind: BlockKind,
 	text: string,
 	placeholder?: string,
 ): Block => ({ id: crypto.randomUUID(), kind, text, placeholder })
+
+const asKind = ({ id, text, placeholder }: Block, kind: BlockKind): Block => ({
+	id,
+	kind,
+	text,
+	placeholder,
+})
 
 const sectionOf = (heading: string, placeholder: string) => [
 	blockOf("heading", heading),
@@ -104,29 +116,82 @@ const startingBlocks = (
 	}
 }
 
-const startingTitle = (
-	template: LibraryDocumentTemplate,
-	createdAt: Date,
-	t: TFunction<"common">,
-) =>
-	template === "meetingNotes"
-		? t("library.templates.meetingNotes.title", {
-				day: formatDateTime(createdAt, { day: "numeric" }),
-				month: formatDateTime(createdAt, { month: "long" }),
-			})
-		: ""
-
 const markdownOf = (blocks: Block[]) =>
 	blocks
 		.filter((block) => block.text.trim() !== "")
 		.reduce((markdown, block, index, written) => {
-			const line = `${MARKDOWN_PREFIX[block.kind]}${block.text}`
+			const line = `${block.prefix ?? MARKDOWN_PREFIX[block.kind]}${block.text}`
 			if (index === 0) return line
 
-			const isListContinued =
-				block.kind === "item" && written[index - 1]?.kind === "item"
-			return `${markdown}${isListContinued ? "\n" : "\n\n"}${line}`
+			const isTight =
+				block.isTight ??
+				(block.kind === "item" && written[index - 1]?.kind === "item")
+			return `${markdown}${isTight ? "\n" : "\n\n"}${line}`
 		}, "")
+
+const blocksOfChunk = (chunk: string) =>
+	chunk.split("\n").reduce<Block[]>((blocks, line) => {
+		const isTight = blocks.length > 0
+		const heading = HEADING_LINE.exec(line)
+		const item = heading ? null : ITEM_LINE.exec(line)
+		const marked = heading ?? item
+		if (marked) {
+			const [, prefix = "", text = ""] = marked
+			const kind = heading ? "heading" : "item"
+			return [...blocks, { ...blockOf(kind, text), prefix, isTight }]
+		}
+
+		const previous = blocks.at(-1)
+		if (previous?.kind === "paragraph") {
+			previous.text = `${previous.text}\n${line}`
+			return blocks
+		}
+		return [...blocks, { ...blockOf("paragraph", line), isTight }]
+	}, [])
+
+const blocksOf = (body: string) =>
+	body.trim() === ""
+		? []
+		: body
+				.trimEnd()
+				.split(/\n{2,}/)
+				.flatMap(blocksOfChunk)
+
+const openingBlocks = (
+	body: string,
+	template: LibraryDocumentTemplate | undefined,
+	t: TFunction<"common">,
+) => {
+	const templateBlocks = template ? startingBlocks(template, t) : []
+	if (template && body === markdownOf(templateBlocks)) return templateBlocks
+
+	const blocks = blocksOf(body)
+	return blocks.length > 0 ? blocks : startingBlocks("blank", t)
+}
+
+type LibraryDocumentStart = {
+	title: string
+	body: string
+	detail: string
+}
+
+const libraryDocumentStartOf = (
+	template: LibraryDocumentTemplate,
+	createdAt: Date,
+	t: TFunction<"common">,
+): LibraryDocumentStart => ({
+	title:
+		template === "meetingNotes"
+			? t("library.templates.meetingNotes.title", { date: createdAt })
+			: "",
+	body: markdownOf(startingBlocks(template, t)),
+	detail:
+		template === "blank"
+			? t("library.editor.created")
+			: t("library.editor.createdFrom", {
+					template: t(`library.templates.${template}.name`),
+				}),
+})
 
 const runsOf = (blocks: Block[]) =>
 	blocks.reduce<Block[][]>((runs, block) => {
@@ -176,8 +241,10 @@ const GrowingField = ({
 )
 
 type LibraryDocumentEditorProps = {
-	template: LibraryDocumentTemplate
-	createdAt: Date
+	title: string
+	body: string
+	detail: string
+	template?: LibraryDocumentTemplate
 	onTitleChange: (title: string) => void
 	onBodyChange: (markdown: string) => void
 	onBack: () => void
@@ -185,18 +252,19 @@ type LibraryDocumentEditorProps = {
 }
 
 const LibraryDocumentEditor = ({
+	title: openingTitle,
+	body,
+	detail,
 	template,
-	createdAt,
 	onTitleChange,
 	onBodyChange,
 	onBack,
 	onMore,
 }: LibraryDocumentEditorProps) => {
 	const { t } = useTranslation("common")
-	const [title, setTitle] = useState(() =>
-		startingTitle(template, createdAt, t),
-	)
-	const [blocks, setBlocks] = useState(() => startingBlocks(template, t))
+	const [title, setTitle] = useState(openingTitle)
+	const [blocks, setBlocks] = useState(() => openingBlocks(body, template, t))
+	const [ending] = useState(() => /\s*$/.exec(body)?.[0] ?? "")
 	const fields = useRef(new Map<string, HTMLTextAreaElement>())
 
 	const focusAt = (id: string | undefined, caret: number | "end") => {
@@ -208,9 +276,14 @@ const LibraryDocumentEditor = ({
 		field.setSelectionRange(position, position)
 	}
 
-	const commit = (next: Block[]) => {
+	const bodyOf = (next: Block[]) => {
 		const markdown = markdownOf(next)
-		const hasBodyChanged = markdown !== markdownOf(blocks)
+		return markdown === "" ? "" : `${markdown}${ending}`
+	}
+
+	const commit = (next: Block[]) => {
+		const markdown = bodyOf(next)
+		const hasBodyChanged = markdown !== bodyOf(blocks)
 		flushSync(() => setBlocks(next))
 		if (hasBodyChanged) onBodyChange(markdown)
 	}
@@ -241,9 +314,9 @@ const LibraryDocumentEditor = ({
 		const [prefix, kind] = shortcut
 		commit(
 			replaceAt(index, {
-				id: block.id,
-				kind,
+				...asKind(block, kind),
 				text: singleLine(value.slice(prefix.length)),
+				placeholder: undefined,
 			}),
 		)
 		focusAt(block.id, Math.max(0, caret - prefix.length))
@@ -254,14 +327,17 @@ const LibraryDocumentEditor = ({
 		if (!block) return
 
 		if (block.kind === "item" && block.text === "") {
-			commit(replaceAt(index, { ...block, kind: "paragraph" }))
+			commit(replaceAt(index, asKind(block, "paragraph")))
 			return
 		}
 
-		const after = blockOf(
-			block.kind === "item" ? "item" : "paragraph",
-			block.text.slice(field.selectionEnd),
-		)
+		const after =
+			block.kind === "item"
+				? {
+						...blockOf("item", block.text.slice(field.selectionEnd)),
+						prefix: block.prefix,
+					}
+				: blockOf("paragraph", block.text.slice(field.selectionEnd))
 		commit(
 			replaceAt(
 				index,
@@ -278,7 +354,7 @@ const LibraryDocumentEditor = ({
 		if (!block) return
 
 		if (block.kind !== "paragraph") {
-			commit(replaceAt(index, { ...block, kind: "paragraph" }))
+			commit(replaceAt(index, asKind(block, "paragraph")))
 			return
 		}
 		if (!previous) return
@@ -360,13 +436,7 @@ const LibraryDocumentEditor = ({
 				onMore={onMore}
 			/>
 			<LibraryDocumentColumn
-				detail={
-					template === "blank"
-						? t("library.editor.created")
-						: t("library.editor.createdFrom", {
-								template: t(`library.templates.${template}.name`),
-							})
-				}
+				detail={detail}
 				heading={
 					<GrowingField
 						aria-label={t("library.editor.title")}
@@ -409,4 +479,9 @@ const LibraryDocumentEditor = ({
 	)
 }
 
-export { LibraryDocumentEditor, type LibraryDocumentEditorProps }
+export {
+	LibraryDocumentEditor,
+	type LibraryDocumentEditorProps,
+	type LibraryDocumentStart,
+	libraryDocumentStartOf,
+}
