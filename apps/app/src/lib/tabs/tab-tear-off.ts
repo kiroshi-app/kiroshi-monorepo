@@ -1,10 +1,15 @@
 import { i18n } from "@workspace/ui/lib/i18n"
 
-import { setGhostNotAllowed } from "./ghost-thumbnail"
+import {
+	DRAG_GHOST_STATE_EVENT,
+	DRAG_GHOST_WINDOW,
+	type DragGhostState,
+} from "./drag-ghost-state"
 import { awaitDockAnswer } from "./tab-dock-channel"
 
 import {
 	commands,
+	type DragGhostEnded,
 	type DragGhostTab,
 	type Json,
 	type ScreenPosition,
@@ -13,8 +18,11 @@ import {
 import { raiseReportedFailure } from "../failure-report"
 import {
 	currentWindowLabel,
+	emitToWindow,
 	readPointerPosition,
+	watchDragGhostEnded,
 	watchNativeMoveEnded,
+	watchNativeMoveFailed,
 	watchWindowMoves,
 } from "../host"
 
@@ -66,7 +74,11 @@ type DragView = {
 	target: DockTarget
 }
 
-type Failing = {
+type Noticed = {
+	isNoticed: boolean
+}
+
+type Failing = Noticed & {
 	hasFailed: boolean
 }
 
@@ -82,7 +94,9 @@ type TabDrag = DockedDrag & {
 	kind: "tab"
 	spaceId: string
 	size: WindowSize
+	lastPoint: ScreenPosition
 	view: Promise<DragView>
+	unwatchEnded: Promise<() => void>
 }
 
 type WindowDrag = {
@@ -135,18 +149,70 @@ const answerOf = (asking: Promise<GhostAnswer>) =>
 
 const hideGhost = () => answerOf(commands.dragGhostHide())
 
-const showGhost = (
-	point: ScreenPosition,
-	size: WindowSize,
-	ghostTab: DragGhostTab,
-) => answerOf(commands.dragGhostShow(point, size, ghostTab))
+const raiseNoticeOnce = (
+	drag: Noticed,
+	notice: () => Parameters<typeof raiseReportedFailure>[0],
+	command?: string,
+) => {
+	if (drag.isNoticed) {
+		return
+	}
+	drag.isNoticed = true
+	void raiseReportedFailure(notice(), { raisedIn: "tab-tear-off", command })
+}
 
-const moveGhost = async (point: ScreenPosition) => {
-	if (await answerOf(commands.dragGhostMove(point))) {
+const ghostFailureNotice = () => ({
+	title: i18n.t("common:titleBar.redockTabFailed.title"),
+})
+
+const failGhost = (drag: Noticed, command: string, reason: unknown) => {
+	reportGhostFailure(reason)
+	raiseNoticeOnce(drag, ghostFailureNotice, command)
+	return false
+}
+
+const ghostAnswered = (
+	drag: Noticed,
+	command: string,
+	asking: Promise<GhostAnswer>,
+) =>
+	asking.then(
+		(answer) =>
+			answer.status === "ok"
+				? answer.data.supported
+				: failGhost(drag, command, answer.error),
+		(reason: unknown) => failGhost(drag, command, reason),
+	)
+
+const showGhost = (
+	drag: TabDrag,
+	point: ScreenPosition,
+	ghostTab: DragGhostTab,
+) =>
+	ghostAnswered(
+		drag,
+		"drag_ghost_show",
+		commands.dragGhostShow(point, drag.size, ghostTab),
+	)
+
+const moveGhost = async (drag: TabDrag, point: ScreenPosition) => {
+	if (
+		await ghostAnswered(drag, "drag_ghost_move", commands.dragGhostMove(point))
+	) {
 		return true
 	}
 	await hideGhost()
 	return false
+}
+
+const reportGhostStateFailure = (reason: unknown) => {
+	console.error("the drag ghost did not hear its state", reason)
+}
+
+const sendGhostState = (state: DragGhostState) => {
+	emitToWindow(DRAG_GHOST_WINDOW, DRAG_GHOST_STATE_EVENT, state).catch(
+		reportGhostStateFailure,
+	)
 }
 
 const reportHostFailure = (reason: unknown) => {
@@ -174,22 +240,14 @@ const dockSiteAt = (
 		return { target, label: strip.label }
 	}, reportUnanswered)
 
-const raiseDragFailure = (command?: string) => {
-	void raiseReportedFailure(
-		{
-			title: i18n.t("common:titleBar.redockTabFailed.title"),
-			description: i18n.t("common:titleBar.redockTabFailed.description"),
-		},
-		{ raisedIn: "tab-tear-off", command },
-	)
-}
+const dragFailureNotice = () => ({
+	title: i18n.t("common:titleBar.redockTabFailed.title"),
+	description: i18n.t("common:titleBar.redockTabFailed.description"),
+})
 
 const failOnce = (drag: Failing, command?: string) => {
-	if (drag.hasFailed) {
-		return
-	}
 	drag.hasFailed = true
-	raiseDragFailure(command)
+	raiseNoticeOnce(drag, dragFailureNotice, command)
 }
 
 const ghostLeft = async (view: DragView): Promise<DragView> => {
@@ -200,6 +258,16 @@ const ghostLeft = async (view: DragView): Promise<DragView> => {
 	return { ...view, isGhostShown: false }
 }
 
+const hiddenByHost = (view: DragView): DragView => ({
+	...view,
+	isGhostShown: false,
+})
+
+const tearOffAt = (
+	{ tabId }: TabDrag,
+	{ x, y }: ScreenPosition,
+): TabTearOff => ({ tabId, screenX: x, screenY: y })
+
 const ghostFollowing = async (
 	drag: TabDrag,
 	view: DragView,
@@ -209,8 +277,8 @@ const ghostFollowing = async (
 		return view
 	}
 	const isShown = view.isGhostShown
-		? await moveGhost(point)
-		: await showGhost(point, drag.size, view.ghostTab)
+		? await moveGhost(drag, point)
+		: await showGhost(drag, point, view.ghostTab)
 	return { ...view, isGhostSupported: isShown, isGhostShown: isShown }
 }
 
@@ -221,7 +289,10 @@ const ghostOver = (
 	target: DockTarget,
 ) => {
 	if (view.isGhostSupported && target !== view.target) {
-		setGhostNotAllowed(drag.tabId, target === "otherSpace")
+		sendGhostState({
+			tabId: drag.tabId,
+			isNotAllowed: target === "otherSpace",
+		})
 	}
 	const shown = { ...view, target }
 	return target === "sameSpace"
@@ -246,7 +317,7 @@ const announcedView = async (
 ): Promise<DragView> => {
 	const ghostTab = drawnGhost(drawGhost, drag.size)
 	const [isShown, isAnnounced] = await Promise.all([
-		ghostTab ? showGhost(point, drag.size, ghostTab) : false,
+		ghostTab ? showGhost(drag, point, ghostTab) : false,
 		isAccepted(commands.windowTabDragStart(torn.packed, torn.spaceId)),
 	])
 	if (!isAnnounced) {
@@ -390,10 +461,14 @@ export const createTabTearOff = ({
 }: TearOffMoves): TabTearOffSession => {
 	let drag: TabDrag | WindowDrag | null = null
 	let ghostSettling: Promise<unknown> = Promise.resolve()
+	let releasedByHost: string | null = null
 
 	const endDrag = () => {
 		const ended = drag
 		drag = null
+		if (ended?.kind === "tab") {
+			void ended.unwatchEnded.then((stopWatching) => stopWatching())
+		}
 		return ended
 	}
 
@@ -526,6 +601,18 @@ export const createTabTearOff = ({
 		}
 	}
 
+	const watchMoveFailed = (move: WindowMove) => {
+		const watching = watchNativeMoveFailed(({ label, error }) => {
+			if (label !== currentWindowLabel()) {
+				return
+			}
+			console.error("the window move failed on the host", error)
+			failOnce(move, "window_start_native_move")
+			releaseOnce(move, noPoint)
+		}).catch(reportUnwatched)
+		move.unwatchers.push(watching)
+	}
+
 	const watchMoveEnd = (move: WindowMove) => {
 		const watching = watchNativeMoveEnded(({ label, point }) => {
 			if (label === currentWindowLabel()) {
@@ -559,6 +646,7 @@ export const createTabTearOff = ({
 			tabId,
 			spaceId: torn.spaceId,
 			hasFailed: false,
+			isNoticed: false,
 			isReleased: false,
 			view: Promise.resolve().then(() => announcedWindow(move, torn)),
 			unwatchers: [],
@@ -566,9 +654,43 @@ export const createTabTearOff = ({
 		move.unwatchers.push(
 			watchWindowMoves(() => followMovedWindow(move)).catch(reportUnwatched),
 		)
+		watchMoveFailed(move)
 		const isEndWatched = (await watchMoveEnd(move)) !== null
 		const isMoved = await isAccepted(commands.windowStartNativeMove())
 		settleMove(move, isMoved, isEndWatched)
+	}
+
+	const endByHost = (ended: TabDrag) => {
+		endDrag()
+		releasedByHost = ended.tabId
+		ended.view = ended.view.then(hiddenByHost)
+	}
+
+	const releaseByHost = (released: TabDrag, point: ScreenPosition) => {
+		endByHost(released)
+		ghostSettling = land(released, tearOffAt(released, point)).catch(
+			raiseMoveFailure,
+		)
+	}
+
+	const loseByHost = (lost: TabDrag, error: unknown) => {
+		failGhost(lost, "drag_ghost_follow", error)
+		endByHost(lost)
+		const tearOff = tearOffAt(lost, lost.lastPoint)
+		ghostSettling = lost.view
+			.then((view) => leaveOutside(lost, view, tearOff))
+			.catch(raiseMoveFailure)
+	}
+
+	const hearGhostEnded = (started: TabDrag, ended: DragGhostEnded) => {
+		if (drag !== started) {
+			return
+		}
+		if (ended.kind === "released") {
+			releaseByHost(started, ended.point)
+		} else if (ended.kind === "lost") {
+			loseByHost(started, ended.error)
+		}
 	}
 
 	const startTabDrag = (
@@ -576,14 +698,21 @@ export const createTabTearOff = ({
 		torn: TornTab,
 		drawGhost: DrawGhost,
 	) => {
+		const point = pointOf(tearOff)
+		const unwatchEnded = watchDragGhostEnded((ended) =>
+			hearGhostEnded(started, ended),
+		).catch(reportUnwatched)
 		const started: TabDrag = {
 			kind: "tab",
 			tabId: tearOff.tabId,
 			spaceId: torn.spaceId,
 			size: ghostSizeOf(originWindowSize()),
+			lastPoint: point,
 			hasFailed: false,
-			view: ghostSettling.then(() =>
-				announcedView(started, torn, pointOf(tearOff), drawGhost),
+			isNoticed: false,
+			unwatchEnded,
+			view: Promise.all([ghostSettling, unwatchEnded]).then(() =>
+				announcedView(started, torn, point, drawGhost),
 			),
 		}
 		drag = started
@@ -595,6 +724,7 @@ export const createTabTearOff = ({
 			if (!torn) {
 				return
 			}
+			releasedByHost = null
 			if (torn.isOnlyTab) {
 				drag = { kind: "window", tabId: tearOff.tabId }
 				moveWindow(tearOff.tabId, torn).catch(showAfterFailure)
@@ -607,6 +737,7 @@ export const createTabTearOff = ({
 			if (moving?.kind !== "tab" || moving.tabId !== tearOff.tabId) {
 				return
 			}
+			moving.lastPoint = pointOf(tearOff)
 			moving.view = moving.view.then((view) =>
 				movedView(moving, view, pointOf(tearOff)),
 			)
@@ -619,6 +750,10 @@ export const createTabTearOff = ({
 			ghostSettling = abandon(ended)
 		},
 		drop: (tearOff) => {
+			if (releasedByHost === tearOff.tabId) {
+				releasedByHost = null
+				return true
+			}
 			const ended = endDrag()
 			const isDraggedTab = ended?.tabId === tearOff.tabId
 			if (ended?.kind === "tab" && isDraggedTab) {
