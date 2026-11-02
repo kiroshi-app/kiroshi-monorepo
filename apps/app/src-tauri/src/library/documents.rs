@@ -89,9 +89,7 @@ impl Documents {
 		checked_on_a_copy(doc, &file.text, update, name)?;
 		let before = doc.transact().state_vector();
 		took_as_host_edit(doc, &file.text);
-		doc.transact_mut()
-			.apply_update(incoming)
-			.map_err(|error| undecodable(name, error.to_string()))?;
+		merged_into(doc, name, incoming)?;
 		let change = doc.transact().encode_state_as_update_v1(&before);
 		store_state(root, space_id, name, doc)?;
 		private_files::replace_atomically(&file.path, text_of(doc).as_bytes())
@@ -132,14 +130,16 @@ fn decoded(name: &str, update: &[u8]) -> Result<Update, LibraryError> {
 	Update::decode_v1(update).map_err(|error| undecodable(name, error.to_string()))
 }
 
+fn merged_into(doc: &Doc, name: &str, update: Update) -> Result<(), LibraryError> {
+	doc.transact_mut().apply_update(update).map_err(|error| undecodable(name, error.to_string()))
+}
+
 fn loaded_from_disk(root: &Path, space_id: &str, name: &str) -> Result<Loaded, LibraryError> {
 	let doc = Doc::new();
 	let Some(stored) = stored_state(root, space_id, name)? else {
 		return Ok(Loaded { doc, was_stored: false });
 	};
-	doc.transact_mut()
-		.apply_update(decoded(name, &stored)?)
-		.map_err(|error| undecodable(name, error.to_string()))?;
+	merged_into(&doc, name, decoded(name, &stored)?)?;
 	Ok(Loaded { doc, was_stored: true })
 }
 
@@ -150,13 +150,9 @@ fn checked_on_a_copy(
 	name: &str,
 ) -> Result<(), LibraryError> {
 	let copy = Doc::with_client_id(doc.client_id().get());
-	copy.transact_mut()
-		.apply_update(decoded(name, &full_state(doc))?)
-		.map_err(|error| undecodable(name, error.to_string()))?;
+	merged_into(&copy, name, decoded(name, &full_state(doc))?)?;
 	took_as_host_edit(&copy, file_text);
-	copy.transact_mut()
-		.apply_update(decoded(name, update)?)
-		.map_err(|error| undecodable(name, error.to_string()))?;
+	merged_into(&copy, name, decoded(name, update)?)?;
 	within(name, text_of(&copy).len() as u64, MAX_DOCUMENT_BYTES)
 }
 
