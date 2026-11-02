@@ -6,9 +6,6 @@ import type {
 	AppRailPanel,
 	AppRailSettings,
 } from "@workspace/ui/components/app-rail"
-
-type AppSidebarOpenPanel = Exclude<AppRailPanel, "library">
-
 import type {
 	BotBadge,
 	BotMissionState,
@@ -29,6 +26,8 @@ import type { TitleBarTabsProps } from "@workspace/ui/components/title-bar-tabs"
 import type { Sidebar } from "@workspace/ui/components/ui/sidebar"
 import type { UserChipIdentity } from "@workspace/ui/components/user-chip"
 import { toPlainText } from "@workspace/ui/lib/plain-text"
+
+type AppSidebarOpenPanel = Exclude<AppRailPanel, "library">
 
 const ROW_AVATAR_SIZE = 40
 

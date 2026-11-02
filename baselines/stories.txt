@@ -983,6 +983,7 @@ navigation-apprail--update-waiting
 navigation-apprail--update-waiting-dark
 navigation-apprail--user-settings-over-missions
 navigation-apprail--with-dot
+navigation-apprail--without-library-handler
 navigation-appsidebar--badges
 navigation-appsidebar--bare-rows
 navigation-appsidebar--caption-window-controls

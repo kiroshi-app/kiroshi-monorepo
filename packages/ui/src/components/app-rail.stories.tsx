@@ -503,6 +503,23 @@ export const LibrarySelected = meta.story({
 	},
 })
 
+export const WithoutLibraryHandler = meta.story({
+	tags: ["test-only"],
+	args: { onSelectLibrary: undefined },
+	play: async ({ canvasElement }) => {
+		await expect(topGroupEntriesIn(canvasElement)).toEqual([
+			SPACE_SETTINGS,
+			ENTRY_NAMES.conversations,
+			ENTRY_NAMES.missions,
+		])
+		await expect(
+			within(slotIn(canvasElement, "app-rail")).queryByRole("button", {
+				name: ENTRY_NAMES.library,
+			}),
+		).toBeNull()
+	},
+})
+
 const SelectableRail = (args: AppRailProps) => {
 	const [selected, setSelected] = useState(args.selected)
 	return renderRail({

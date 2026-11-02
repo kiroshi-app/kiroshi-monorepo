@@ -341,7 +341,9 @@ const AppRail = ({
 					onPress={onSelectConversations}
 				/>
 				<RailItem {...panelEntry("missions")} onPress={onSelectMissions} />
-				<RailItem {...panelEntry("library")} onPress={onSelectLibrary} />
+				{onSelectLibrary ? (
+					<RailItem {...panelEntry("library")} onPress={onSelectLibrary} />
+				) : null}
 			</ul>
 			<ul className={RAIL_GROUP}>
 				{updateBadge ? (
