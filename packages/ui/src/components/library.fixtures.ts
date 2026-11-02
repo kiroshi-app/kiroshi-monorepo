@@ -211,7 +211,7 @@ export const LIBRARY_ITEMS_AFTER_IMPORT: LibraryItem[] = [
 ]
 
 export const LIBRARY_AGENTS = {
-	atlas: { id: "atlas", name: "Atlas", hue: BLOT_HUES.orange },
+	atlas: { id: "atlas", name: "Atlas", hue: 41 },
 	mira: { id: "mira", name: "Mira", hue: BLOT_HUES.green },
 	sol: { id: "sol", name: "Sol", hue: BLOT_HUES.blue },
 	ivo: { id: "ivo", name: "Ivo", hue: BLOT_HUES.pink },
@@ -222,11 +222,9 @@ export const LIBRARY_AGENTS = {
 	},
 } satisfies Record<string, LibraryDocumentAgent>
 
-const ATLAS_SENTENCE =
-	"Every page closes on the same invitation, so the site, the screenshots and the notes all point to one place."
+const ATLAS_SENTENCE = "and the agent says why it asks"
 
-const MIRA_SENTENCE =
-	"We also count the Spaces that open a document twice in their first week."
+const MIRA_SENTENCE = "We also count how often someone stops an agent in its"
 
 export const LIBRARY_AGENT_DOCUMENT: LibraryDocument = {
 	id: "brief",
@@ -234,10 +232,15 @@ export const LIBRARY_AGENT_DOCUMENT: LibraryDocument = {
 	detail: "1,262 words · Edited just now",
 	body: [
 		"The spring launch puts the Library in front of every team on the 14th. This brief collects what we're shipping, who it's for and the three messages every page repeats.",
-		"## Messages",
-		`Everything the Space holds, in one place: images and documents side by side, searchable by name, with nothing to set up. ${ATLAS_SENTENCE}`,
+		"## What changes",
+		[
+			"- Every document opens in place of the grid, one click from the Library.",
+			"- Agents write straight into the document you have open.",
+			`- Notifications wait for the first finished task, ${ATLAS_SENTENCE}`,
+		].join("\n"),
 		"## What we measure",
-		`Weekly active Spaces is the one number we report on launch day, read against the four weeks before it. ${MIRA_SENTENCE}`,
+		"Weekly active Spaces is the one number we report on launch day, read against the four weeks before it.",
+		MIRA_SENTENCE,
 		"## Timeline",
 		"Copy is final on the 7th, screenshots land on the 10th, and the release notes go out with the build on the morning of the 14th.",
 	].join("\n\n"),
@@ -256,7 +259,7 @@ export const LIBRARY_WRITERS: LibraryDocumentWriter[] = [
 		...editOf(LIBRARY_AGENTS.atlas, ATLAS_SENTENCE),
 		elapsedSeconds: 44,
 		sentenceCount: 1,
-		section: "Messages",
+		section: "What changes",
 	},
 	{
 		...editOf(LIBRARY_AGENTS.mira, MIRA_SENTENCE),

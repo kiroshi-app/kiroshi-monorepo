@@ -381,7 +381,7 @@ const LibraryDocumentFinishedBar = ({
 			{onUndoAll ? (
 				<Button
 					className={cn(
-						"h-9 rounded-full px-3.5 transition-none",
+						"h-9 rounded-full border-input px-3.5 transition-none",
 						FOCUS_OUTLINE,
 					)}
 					onClick={onUndoAll}

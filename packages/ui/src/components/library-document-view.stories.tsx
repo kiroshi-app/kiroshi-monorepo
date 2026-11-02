@@ -121,6 +121,32 @@ const AGENT_CALLBACKS = {
 const flagNamed = (name: string) =>
 	screen.getByRole("button", { name: `${name} is writing` })
 
+const textRectsIn = (root: HTMLElement, outside: HTMLElement) => {
+	const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+	const rects: DOMRect[] = []
+	for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+		if (outside.contains(node) || !node.textContent?.trim()) continue
+		const range = document.createRange()
+		range.selectNodeContents(node)
+		rects.push(...range.getClientRects())
+	}
+	return rects
+}
+
+const coversText = (flag: HTMLElement, root: HTMLElement) => {
+	const box = flag.getBoundingClientRect()
+	return textRectsIn(root, flag).some(
+		(rect) =>
+			rect.left < box.right &&
+			rect.right > box.left &&
+			rect.top < box.bottom &&
+			rect.bottom > box.top,
+	)
+}
+
+const blurActiveElement = () =>
+	(document.activeElement as HTMLElement | null)?.blur()
+
 const isTruncatedOnOneLine = (element: HTMLElement) =>
 	element.scrollWidth > element.clientWidth &&
 	element.offsetHeight ===
@@ -161,6 +187,10 @@ export const AgentsWriting = meta.story({
 			height: 24,
 		})
 
+		const markdown = slotIn(canvasElement, "markdown")
+		await expect(coversText(flagNamed("Atlas"), markdown)).toBe(false)
+		await expect(coversText(flagNamed("Mira"), markdown)).toBe(false)
+
 		const flag = flagNamed("Mira")
 		await expect(flag).toHaveTextContent("Mira")
 		await expect(flag.getBoundingClientRect().height).toBe(20)
@@ -188,8 +218,11 @@ export const AgentsWriting = meta.story({
 		await expect(args.onOpenConversation).toHaveBeenCalledWith(
 			LIBRARY_AGENTS.mira,
 		)
+		blurActiveElement()
+		await userEvent.hover(canvas.getByRole("heading", { level: 1 }))
 		await userEvent.hover(flag)
 		await screen.findByRole("dialog", { name: "Mira is writing…" })
+		await expect(document.activeElement).toBe(document.body)
 	},
 })
 
@@ -217,9 +250,9 @@ export const AgentFinished = meta.story({
 		const [atlasRun] = canvasElement.querySelectorAll<HTMLElement>(
 			"[data-slot='library-document-run']",
 		)
-		const paragraph = (atlasRun as HTMLElement).closest("p") as HTMLElement
+		const block = (atlasRun as HTMLElement).closest("li, p") as HTMLElement
 		await expect(getComputedStyle(atlasRun as HTMLElement).color).not.toBe(
-			getComputedStyle(paragraph).color,
+			getComputedStyle(block).color,
 		)
 		await expect(
 			getComputedStyle(atlasRun as HTMLElement).backgroundColor,
@@ -237,6 +270,8 @@ export const AgentFinished = meta.story({
 		await expect(args.onUndoAll).toHaveBeenCalledOnce()
 		await userEvent.click(canvas.getByRole("button", { name: "Done" }))
 		await expect(args.onDone).toHaveBeenCalledOnce()
+		blurActiveElement()
+		await expect(document.activeElement).toBe(document.body)
 	},
 })
 
