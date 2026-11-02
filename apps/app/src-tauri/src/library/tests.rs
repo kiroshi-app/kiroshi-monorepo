@@ -962,6 +962,75 @@ impl YjsClient {
 	}
 }
 
+fn stored_state_of(root: &Path, name: &str) -> Vec<u8> {
+	fs::read(root.join(".documents").join(SPACE).join(format!("{name}.yjs")))
+		.expect("the state is stored")
+}
+
+fn file_text(root: &Path, name: &str) -> String {
+	fs::read_to_string(space_dir(root, SPACE).join(name)).expect("the file reads")
+}
+
+fn opened_text(documents: &Documents, root: &Path, name: &str) -> String {
+	let state = documents.open(root, SPACE, name).expect("opens").state;
+	YjsClient::of(&BASE64_STANDARD.encode(state)).text()
+}
+
+fn an_update_and_the_one_it_depends_on(documents: &Documents, root: &Path) -> (Vec<u8>, Vec<u8>) {
+	put(root, SPACE, "notes.md", b"base");
+	let served = documents.open(root, SPACE, "notes.md").expect("opens").state;
+	let member = YjsClient::of(&BASE64_STANDARD.encode(served));
+	let first = member.inserted(4, " first");
+	let second = member.inserted(10, " second");
+	(bytes_of(&first), bytes_of(&second))
+}
+
+#[test]
+fn an_update_ahead_of_the_one_it_depends_on_is_kept_until_that_one_arrives() {
+	let root = temp_root();
+	let documents = Documents::default();
+	let (first, second) = an_update_and_the_one_it_depends_on(&documents, &root);
+
+	documents.apply(&root, SPACE, "notes.md", &second).expect("the update is kept");
+	let while_waiting = file_text(&root, "notes.md");
+	documents.apply(&root, SPACE, "notes.md", &first).expect("the update merges");
+
+	assert_eq!(while_waiting, "base");
+	assert_eq!(file_text(&root, "notes.md"), "base first second");
+	assert_eq!(opened_text(&documents, &root, "notes.md"), "base first second");
+}
+
+#[test]
+fn an_update_ahead_of_the_one_it_depends_on_is_kept_across_a_restart() {
+	let root = temp_root();
+	let before_restart = Documents::default();
+	let (first, second) = an_update_and_the_one_it_depends_on(&before_restart, &root);
+	before_restart.apply(&root, SPACE, "notes.md", &second).expect("the update is kept");
+
+	let restarted = Documents::default();
+	restarted.apply(&root, SPACE, "notes.md", &first).expect("the update merges");
+
+	assert_eq!(file_text(&root, "notes.md"), "base first second");
+	assert_eq!(opened_text(&restarted, &root, "notes.md"), "base first second");
+}
+
+#[test]
+fn outside_edits_land_on_the_held_document_under_its_one_host_client() {
+	let root = temp_root();
+	put(&root, SPACE, "notes.md", b"base");
+	let documents = Documents::default();
+	documents.open(&root, SPACE, "notes.md").expect("opens");
+	put(&root, SPACE, "notes.md", b"base, once");
+	documents.open(&root, SPACE, "notes.md").expect("opens");
+	put(&root, SPACE, "notes.md", b"base, once, twice");
+	let served = documents.open(&root, SPACE, "notes.md").expect("opens").state;
+
+	let clients: Vec<_> = state_vector_of(&served).iter().map(|(client, _)| *client).collect();
+
+	assert_eq!(clients.len(), 1, "{clients:?}");
+	assert_eq!(opened_text(&documents, &root, "notes.md"), "base, once, twice");
+}
+
 fn state_vector_of(state: &[u8]) -> StateVector {
 	Update::decode_v1(state).expect("a yjs update").state_vector()
 }
@@ -1171,6 +1240,7 @@ fn an_undecodable_update_leaves_the_document_and_the_file_unchanged() {
 	put(&root, SPACE, "notes.md", b"base");
 	let documents = Documents::default();
 	let served = documents.open(&root, SPACE, "notes.md").expect("opens").state;
+	let stored = stored_state_of(&root, "notes.md");
 
 	let refused = documents.apply(&root, SPACE, "notes.md", &[1, 2, 3]);
 
@@ -1180,6 +1250,7 @@ fn an_undecodable_update_leaves_the_document_and_the_file_unchanged() {
 	);
 	assert_eq!(documents.open(&root, SPACE, "notes.md").expect("opens").state, served);
 	assert_eq!(fs::read(space_dir(&root, SPACE).join("notes.md")).expect("read"), b"base");
+	assert_eq!(stored_state_of(&root, "notes.md"), stored);
 }
 
 #[test]
@@ -1189,6 +1260,7 @@ fn an_update_past_the_size_limit_leaves_the_document_and_the_file_unchanged() {
 	put(&root, SPACE, "big.md", base.as_bytes());
 	let documents = Documents::default();
 	let served = documents.open(&root, SPACE, "big.md").expect("opens").state;
+	let stored = stored_state_of(&root, "big.md");
 	let grown = YjsClient::of(&BASE64_STANDARD.encode(&served)).inserted(0, "xyz");
 
 	let refused =
@@ -1204,6 +1276,7 @@ fn an_update_past_the_size_limit_leaves_the_document_and_the_file_unchanged() {
 	);
 	assert_eq!(documents.open(&root, SPACE, "big.md").expect("opens").state, served);
 	assert_eq!(fs::read_to_string(space_dir(&root, SPACE).join("big.md")).expect("read"), base);
+	assert_eq!(stored_state_of(&root, "big.md"), stored);
 }
 
 fn bytes_of(update: &str) -> Vec<u8> {

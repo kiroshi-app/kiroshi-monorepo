@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use yrs::updates::decoder::Decode;
-use yrs::{Doc, GetString, ReadTxn, StateVector, Text, TextRef, Transact, TransactionMut, Update};
+use yrs::{Doc, GetString, ReadTxn, StateVector, Text, Transact, Update};
 
 use super::contract::LibraryError;
 use super::{
@@ -29,12 +29,13 @@ pub(crate) struct Opened {
 	pub(crate) host_edit: Option<Vec<u8>>,
 }
 
-struct Merged {
-	doc: Doc,
+struct DocumentFile {
 	path: PathBuf,
 	text: String,
-	change: Vec<u8>,
-	is_host_edited: bool,
+}
+
+struct Loaded {
+	doc: Doc,
 	was_stored: bool,
 }
 
@@ -45,14 +46,27 @@ impl Documents {
 		space_id: &str,
 		name: &str,
 	) -> Result<Opened, LibraryError> {
+		let file = document_file(root, space_id, name)?;
 		let mut documents = self.held();
-		let merged = merged(&documents, root, space_id, name, None)?;
-		if merged.is_host_edited || !merged.was_stored {
-			store_state(root, space_id, name, &merged.doc)?;
+		let key = key(space_id, name);
+		let mut loaded = None;
+		let (doc, was_stored) = match documents.get(&key) {
+			Some(held) => (held, true),
+			None => {
+				let loaded = loaded.insert(loaded_from_disk(root, space_id, name)?);
+				(&loaded.doc, loaded.was_stored)
+			}
+		};
+		let before = doc.transact().state_vector();
+		let is_host_edited = took_as_host_edit(doc, &file.text);
+		if is_host_edited || !was_stored {
+			store_state(root, space_id, name, doc)?;
 		}
-		let state = merged.doc.transact().encode_state_as_update_v1(&StateVector::default());
-		let host_edit = merged.is_host_edited.then_some(merged.change);
-		documents.insert(key(space_id, name), merged.doc);
+		let host_edit = is_host_edited.then(|| doc.transact().encode_state_as_update_v1(&before));
+		let state = full_state(doc);
+		if let Some(loaded) = loaded {
+			documents.insert(key, loaded.doc);
+		}
 		Ok(Opened { state, host_edit })
 	}
 
@@ -63,15 +77,29 @@ impl Documents {
 		name: &str,
 		update: &[u8],
 	) -> Result<Vec<u8>, LibraryError> {
-		let incoming =
-			Update::decode_v1(update).map_err(|error| undecodable(name, error.to_string()))?;
+		let incoming = decoded(name, update)?;
+		let file = document_file(root, space_id, name)?;
 		let mut documents = self.held();
-		let merged = merged(&documents, root, space_id, name, Some(incoming))?;
-		store_state(root, space_id, name, &merged.doc)?;
-		private_files::replace_atomically(&merged.path, merged.text.as_bytes())
+		let key = key(space_id, name);
+		let mut loaded = None;
+		let doc = match documents.get(&key) {
+			Some(held) => held,
+			None => &loaded.insert(loaded_from_disk(root, space_id, name)?).doc,
+		};
+		checked_on_a_copy(doc, &file.text, update, name)?;
+		let before = doc.transact().state_vector();
+		took_as_host_edit(doc, &file.text);
+		doc.transact_mut()
+			.apply_update(incoming)
+			.map_err(|error| undecodable(name, error.to_string()))?;
+		let change = doc.transact().encode_state_as_update_v1(&before);
+		store_state(root, space_id, name, doc)?;
+		private_files::replace_atomically(&file.path, text_of(doc).as_bytes())
 			.map_err(unwritable)?;
-		documents.insert(key(space_id, name), merged.doc);
-		Ok(merged.change)
+		if let Some(loaded) = loaded {
+			documents.insert(key, loaded.doc);
+		}
+		Ok(change)
 	}
 
 	pub(crate) fn forget(&self, root: &Path, space_id: &str) -> io::Result<()> {
@@ -91,58 +119,67 @@ fn key(space_id: &str, name: &str) -> Key {
 	(space_id.to_owned(), name.to_owned())
 }
 
-fn merged(
-	documents: &HashMap<Key, Doc>,
-	root: &Path,
-	space_id: &str,
-	name: &str,
-	incoming: Option<Update>,
-) -> Result<Merged, LibraryError> {
+fn document_file(root: &Path, space_id: &str, name: &str) -> Result<DocumentFile, LibraryError> {
 	let item = resolve(root, space_id, name)?;
 	if !matches!(item.accepted, AcceptedType::Document(_)) {
 		return Err(LibraryError::NotADocument { name: name.to_owned() });
 	}
-	let file_text = document_text(&item, name)?;
-	let (base, was_stored) = match documents.get(&key(space_id, name)) {
-		Some(held) => {
-			(Some(held.transact().encode_state_as_update_v1(&StateVector::default())), true)
-		}
-		None => {
-			let stored = stored_state(root, space_id, name)?;
-			let was_stored = stored.is_some();
-			(stored, was_stored)
-		}
-	};
-	let doc = Doc::new();
-	let text = doc.get_or_insert_text(TEXT_NAME);
-	let mut txn = doc.transact_mut();
-	if let Some(base) = base {
-		let base =
-			Update::decode_v1(&base).map_err(|error| undecodable(name, error.to_string()))?;
-		txn.apply_update(base).map_err(|error| undecodable(name, error.to_string()))?;
-	}
-	let before = txn.state_vector();
-	let is_host_edited = took_as_host_edit(&text, &mut txn, &file_text);
-	if let Some(incoming) = incoming {
-		txn.apply_update(incoming).map_err(|error| undecodable(name, error.to_string()))?;
-	}
-	let merged_text = text.get_string(&txn);
-	within(name, merged_text.len() as u64, MAX_DOCUMENT_BYTES)?;
-	let change = txn.encode_state_as_update_v1(&before);
-	drop(txn);
-	Ok(Merged { doc, path: item.path, text: merged_text, change, is_host_edited, was_stored })
+	let text = document_text(&item, name)?;
+	Ok(DocumentFile { path: item.path, text })
 }
 
-fn took_as_host_edit(text: &TextRef, txn: &mut TransactionMut, wanted: &str) -> bool {
-	let current = text.get_string(txn);
+fn decoded(name: &str, update: &[u8]) -> Result<Update, LibraryError> {
+	Update::decode_v1(update).map_err(|error| undecodable(name, error.to_string()))
+}
+
+fn loaded_from_disk(root: &Path, space_id: &str, name: &str) -> Result<Loaded, LibraryError> {
+	let doc = Doc::new();
+	let Some(stored) = stored_state(root, space_id, name)? else {
+		return Ok(Loaded { doc, was_stored: false });
+	};
+	doc.transact_mut()
+		.apply_update(decoded(name, &stored)?)
+		.map_err(|error| undecodable(name, error.to_string()))?;
+	Ok(Loaded { doc, was_stored: true })
+}
+
+fn checked_on_a_copy(
+	doc: &Doc,
+	file_text: &str,
+	update: &[u8],
+	name: &str,
+) -> Result<(), LibraryError> {
+	let copy = Doc::with_client_id(doc.client_id().get());
+	copy.transact_mut()
+		.apply_update(decoded(name, &full_state(doc))?)
+		.map_err(|error| undecodable(name, error.to_string()))?;
+	took_as_host_edit(&copy, file_text);
+	copy.transact_mut()
+		.apply_update(decoded(name, update)?)
+		.map_err(|error| undecodable(name, error.to_string()))?;
+	within(name, text_of(&copy).len() as u64, MAX_DOCUMENT_BYTES)
+}
+
+fn full_state(doc: &Doc) -> Vec<u8> {
+	doc.transact().encode_state_as_update_v1(&StateVector::default())
+}
+
+fn text_of(doc: &Doc) -> String {
+	doc.get_or_insert_text(TEXT_NAME).get_string(&doc.transact())
+}
+
+fn took_as_host_edit(doc: &Doc, wanted: &str) -> bool {
+	let text = doc.get_or_insert_text(TEXT_NAME);
+	let mut txn = doc.transact_mut();
+	let current = text.get_string(&txn);
 	if current == wanted {
 		return false;
 	}
 	let prefix = shared_bytes(current.chars(), wanted.chars());
 	let suffix = shared_bytes(current[prefix..].chars().rev(), wanted[prefix..].chars().rev());
 	let removed = current.len() - prefix - suffix;
-	text.remove_range(txn, prefix as u32, removed as u32);
-	text.insert(txn, prefix as u32, &wanted[prefix..wanted.len() - suffix]);
+	text.remove_range(&mut txn, prefix as u32, removed as u32);
+	text.insert(&mut txn, prefix as u32, &wanted[prefix..wanted.len() - suffix]);
 	true
 }
 
