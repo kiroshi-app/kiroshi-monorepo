@@ -15,7 +15,10 @@ import {
 	titleOf,
 	toShownItem,
 } from "@/lib/library/library-items"
-import { useLibraryActions } from "@/lib/library/use-library-actions"
+import {
+	useJoinedLibraryActions,
+	useLibraryActions,
+} from "@/lib/library/use-library-actions"
 import { useLibraryDocument } from "@/lib/library/use-library-document"
 import { useLibraryImageSources } from "@/lib/library/use-library-image-sources"
 import {
@@ -55,10 +58,12 @@ type NamedItem = { id: string }
 export const LibraryScreen = ({ spaceId, isJoined }: LibraryScreenProps) => {
 	const library = useLibraryItems(spaceId)
 	const sourceOf = useLibraryImageSources(spaceId, library.items, isJoined)
-	const actions = useLibraryActions(spaceId)
-	const save = isJoined ? ignore : ({ id }: NamedItem) => actions.save(id)
-	const reveal = isJoined ? ignore : ({ id }: NamedItem) => actions.reveal(id)
-	const copy = isJoined ? ignore : ({ id }: NamedItem) => actions.copy(id)
+	const localActions = useLibraryActions(spaceId)
+	const joinedActions = useJoinedLibraryActions(spaceId)
+	const actions = isJoined ? { ...joinedActions, reveal: ignore } : localActions
+	const save = ({ id }: NamedItem) => actions.save(id)
+	const reveal = ({ id }: NamedItem) => actions.reveal(id)
+	const copy = ({ id }: NamedItem) => actions.copy(id)
 	const [filter, setFilter] = useState<LibraryFilter>("all")
 	const [query, setQuery] = useState("")
 	const [opened, setOpened] = useState<OpenedItem>(null)
