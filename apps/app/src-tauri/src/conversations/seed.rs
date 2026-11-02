@@ -531,14 +531,14 @@ mod tests {
 		let database = database_of(&app);
 		let roster = planted(&app, database).await;
 		let bundle = bundle_of(&app, &roster[0]);
-		let connect = bundle.join("skills").join(shoto::RETIRED_SKILL).join("SKILL.md");
-		fs::create_dir_all(connect.parent().expect("a parent")).expect("the skill directory");
-		fs::write(&connect, b"---\nname: \"connect\"\ndescription: \"Connect.\"\n---\n")
+		let connect = bundle.join("skills").join(shoto::RETIRED_SKILL);
+		let old_skill = b"---\nname: \"connect\"\ndescription: \"Connect.\"\n---\n";
+		crate::private_files::replace(&connect.join("SKILL.md"), old_skill)
 			.expect("the old skill is planted");
 
 		seeded(&app, database).await;
 
-		assert!(!bundle.join("skills").join(shoto::RETIRED_SKILL).exists());
+		assert!(!connect.exists(), "the connect skill is still on disk");
 		for (id, body) in shoto::SKILLS {
 			assert_eq!(skill_body(&bundle, id), body, "the skill {id} moved");
 		}
