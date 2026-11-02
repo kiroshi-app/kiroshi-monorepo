@@ -184,11 +184,18 @@ where
 	Choose: FnOnce(&str) -> Chosen,
 	Chosen: Future<Output = Result<Option<PathBuf>, LibraryError>>,
 {
-	let item = resolve(root, space_id, name)?;
+	resolve(root, space_id, name)?;
 	let Some(destination) = choose_destination(name).await? else {
 		return Ok(None);
 	};
-	copy_to(&item, &destination)?;
+	let (root, space_id, name) = (root.to_owned(), space_id.to_owned(), name.to_owned());
+	let target = destination.clone();
+	tokio::task::spawn_blocking(move || {
+		let item = resolve(&root, &space_id, &name)?;
+		copy_to(&item, &target)
+	})
+	.await
+	.map_err(|error| LibraryError::Unwritable { detail: error.to_string() })??;
 	Ok(Some(destination))
 }
 

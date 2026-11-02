@@ -70,7 +70,10 @@ pub async fn library_copy<R: Runtime>(
 	name: String,
 ) -> Result<(), LibraryError> {
 	known_space(&state, &space_id).await?;
-	let payload = clipboard_payload(&root(&app)?, &space_id, &name)?;
+	let root = root(&app)?;
+	let payload = tokio::task::spawn_blocking(move || clipboard_payload(&root, &space_id, &name))
+		.await
+		.map_err(|error| LibraryError::Unreadable { detail: error.to_string() })??;
 	put_on_clipboard(&app, payload)
 }
 

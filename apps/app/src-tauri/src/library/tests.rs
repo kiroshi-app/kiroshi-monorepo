@@ -354,6 +354,47 @@ async fn saving_an_item_onto_itself_keeps_its_bytes() {
 	assert_eq!(fs::read(&itself).expect("the item reads"), b"notes");
 }
 
+#[cfg(unix)]
+#[tokio::test]
+async fn an_item_swapped_for_a_link_out_of_the_folder_while_the_dialog_is_open_is_not_copied() {
+	let root = temp_root();
+	let elsewhere = temp_root();
+	fs::create_dir_all(&*elsewhere).expect("the destination folder lands");
+	put(&root, SPACE, "notes.md", b"notes");
+	put(&root, "s2", "theirs.md", b"theirs");
+	let item = space_dir(&root, SPACE).join("notes.md");
+	let destination = elsewhere.join("picked.md");
+
+	let saved = save(&root, SPACE, "notes.md", |_| {
+		fs::remove_file(&item).expect("the item goes");
+		std::os::unix::fs::symlink(space_dir(&root, "s2").join("theirs.md"), &item)
+			.expect("the link lands");
+		std::future::ready(Ok(Some(destination.clone())))
+	})
+	.await;
+
+	assert_eq!(saved, Err(LibraryError::InvalidName { name: "notes.md".to_owned() }));
+	assert!(!destination.exists());
+}
+
+#[tokio::test]
+async fn an_item_deleted_while_the_dialog_is_open_is_missing() {
+	let root = temp_root();
+	let elsewhere = temp_root();
+	fs::create_dir_all(&*elsewhere).expect("the destination folder lands");
+	put(&root, SPACE, "notes.md", b"notes");
+	let destination = elsewhere.join("picked.md");
+
+	let saved = save(&root, SPACE, "notes.md", |_| {
+		fs::remove_file(space_dir(&root, SPACE).join("notes.md")).expect("the item goes");
+		std::future::ready(Ok(Some(destination.clone())))
+	})
+	.await;
+
+	assert_eq!(saved, Err(LibraryError::Missing { name: "notes.md".to_owned() }));
+	assert!(!destination.exists());
+}
+
 #[tokio::test]
 async fn a_refused_name_never_opens_the_save_dialog() {
 	let root = temp_root();
