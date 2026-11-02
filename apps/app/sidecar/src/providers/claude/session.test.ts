@@ -1657,18 +1657,29 @@ const pendingOf = (count: number): SessionFrame => ({
 	count,
 })
 
+const SETTLER_FRAMES = ["turn_settled", "tasks_pending"]
+
 const settling = () => {
+	const relayed: SessionFrame[] = []
 	const frames: SessionFrame[] = []
 	const settler = createTurnSettler((frame) => {
-		frames.push(frame)
+		relayed.push(frame)
+		if (SETTLER_FRAMES.includes(frame.type as string)) {
+			frames.push(frame)
+		}
 	}, GRACE_MS)
 	const play = (...messages: SessionFrame[]) => {
 		for (const message of messages) {
-			settler.observe(message)
+			settler.relay(message)
 		}
 	}
-	return { frames, settler, play }
+	return { relayed, frames, settler, play }
 }
+
+const assistantOf = (text: string): SessionFrame => ({
+	type: "assistant",
+	message: { content: [{ type: "text", text }] },
+})
 
 const outlastTheGrace = () =>
 	new Promise((resolve) => setTimeout(resolve, GRACE_MS * 3))
@@ -1745,6 +1756,30 @@ describe("createTurnSettler", () => {
 		settler.prompted()
 		play(running, resultOf("second"), idle)
 		expect(frames.at(-1)).toEqual(settledOn("second"))
+	})
+
+	it("relays the stream of the session until a stop settles it, and nothing of the follow-up turn after", () => {
+		const { relayed, settler, play } = settling()
+
+		play(running, tasks({ task_id: "b1" }), resultOf("first"), idle)
+		settler.stopped()
+		const settledAt = relayed.length
+		play(running, assistantOf("the shell finished"), resultOf("follow-up"))
+		play(idle, tasks())
+
+		expect(relayed.slice(0, settledAt)).toEqual([
+			running,
+			tasks({ task_id: "b1" }),
+			resultOf("first"),
+			pendingOf(1),
+			idle,
+			settledOn("first"),
+		])
+		expect(relayed).toHaveLength(settledAt)
+
+		settler.prompted()
+		play(running)
+		expect(relayed.at(-1)).toEqual(running)
 	})
 
 	it("settles on the first result after a stop, whatever task still runs", () => {

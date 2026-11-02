@@ -712,6 +712,24 @@ fn a_background_task_that_never_ends_fails_the_run_at_its_bound_and_closes_the_s
 }
 
 #[test]
+fn a_result_held_with_no_task_and_no_idle_fails_the_run_at_its_bound() {
+	let _serial = serial();
+	let stored = launch_stored_with(
+		"unsettled-result",
+		"unsettled_result",
+		AgentState::leasing(SHORT_TASK_BOUND),
+	);
+	stored.start();
+
+	stored.submit("t1", "p1");
+	stored.completed("t1");
+
+	assert_eq!(stored.turn_endings(), vec![TurnOutcome::Failed]);
+	assert_eq!(stored.awaited_lapses(&[Lapse::TasksPending]), vec![Lapse::TasksPending]);
+	stored.close();
+}
+
+#[test]
 fn a_run_waiting_on_the_person_outlives_its_lease() {
 	let _serial = serial();
 	let stored = launch_leased("lease-permission", "permission");

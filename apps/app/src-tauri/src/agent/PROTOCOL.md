@@ -471,8 +471,8 @@ The frame is an `SDKMessage` verbatim, plus the ones the sidecar adds itself.
 | `stream_event` | `SDKPartialAssistantMessage` — one Messages API streaming event | `messageStarted` / `messageDelta` / `activity` |
 | `assistant` | `SDKAssistantMessage` — `text` and/or `tool_use` blocks | `messageCompleted` / `activity` |
 | `user` | `SDKUserMessage` — `tool_result` with `is_error` | `activity` (succeeded / failed) |
-| `result` | `SDKResultMessage`: `subtype`, `session_id`, `is_error` | nothing but the SDK session id: the turn ends on `turn_settled` |
-| `tasks_pending` | the sidecar, once a `result` has arrived, on every change of `count`, the live background tasks not flagged `ambient` | nothing on the front: it starts or lifts the background task bound of the running run, which stays `running` |
+| `result` | `SDKResultMessage`: `subtype`, `session_id`, `is_error` | nothing on the front: it records the SDK session id and starts the held result bound of the running run; the turn ends on `turn_settled` |
+| `tasks_pending` | the sidecar, once a `result` has arrived, on every change of `count`, the live background tasks not flagged `ambient` | nothing on the front: the host logs the reason `N background tasks` and the run stays `running` |
 | `turn_settled` | the sidecar, once the turn is settled (see below): every field of the last `result`, its `type` renamed; or the sidecar when a stop lands on a prompt still held | `turnEnded` |
 | `host_request` | the sidecar, from `askHost` | nothing — it is answered, not read |
 | `heartbeat` | the sidecar, every `HEARTBEAT_INTERVAL_MS` while a query of the session is in flight | nothing: it renews the lease of the running run |
@@ -508,7 +508,9 @@ The sidecar writes one `turn_settled`, carrying every field of the last `result`
 - on the `result` of the follow-up turn, whose stream events reach the front live as any
   other turn's do;
 - on a stop while a `result` is held, at once, or on the first `result` after the stop
-  otherwise. Nothing settles again until the next `prompt`.
+  otherwise. Until the next `prompt`, the sidecar then forwards no SDK message of the
+  session: a follow-up turn the CLI still runs when a task ends reaches the host neither
+  as a stream nor as a `result`. `heartbeat`, `closed` and the control frames still pass.
 
 While a `result` has arrived and tasks are counted, the sidecar writes `tasks_pending`
 with the count on every change, `0` included. The host keeps the run `running`, logs the
@@ -736,9 +738,11 @@ its own bundle through `Edit`, `Write` or `Bash`. It takes `path`, `text`,
   run leaves `turn_runs`, the turn completes when no other run holds it. A non fatal
   `failed` with `runLapsed` follows, naming the lapse (`silent`, `interruptUnanswered` or
   `tasksPending`) and its bound in `boundMs`.
-- A run whose `tasks_pending` count stays above zero for `TASKS_PENDING_BOUND` (10 min),
-  counted from the first non zero count and lifted by a count of `0`, lapses the same way
-  with `tasksPending`.
+- A run that holds a `result` unsettled for `TASKS_PENDING_BOUND` (10 min), whatever
+  holds it (tasks counted, the CLI busy on a follow-up turn, an `idle` that never comes),
+  lapses the same way with `tasksPending`. The bound counts from the first `result` of the
+  turn, no count change and no follow-up turn resets it, and only the end of the turn
+  lifts it.
 - The silence bound sleeps while a permission or a question waits on the person.
 - A lapse closes the sidecar session of the lapsed query and opens a new one under a new
   key, resuming the same SDK session id. The host detaches the lapsed key first, so

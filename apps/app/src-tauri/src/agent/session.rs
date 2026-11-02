@@ -307,9 +307,14 @@ impl Shared {
 		}
 	}
 
+	fn result_held(&mut self) {
+		if let Some(liveness) = self.liveness() {
+			liveness.result_held(tokio::time::Instant::now());
+		}
+	}
+
 	fn tasks_pending(&mut self, count: u32) -> Option<AgentEvent> {
-		let running = self.running.as_mut()?;
-		running.liveness.tasks_pending(tokio::time::Instant::now(), count);
+		let running = self.running.as_ref()?;
 		log::info!(
 			"the turn holds for its background tasks session={} turn={:?} reason={count} background tasks",
 			self.key,
@@ -860,7 +865,6 @@ async fn read_loop(
 				}
 				guard.tasks_pending(pending.count)
 			};
-			rearmed.notify_one();
 			if let Some(event) = entering {
 				sink.emit(event);
 			}
@@ -878,12 +882,19 @@ async fn read_loop(
 				}
 				_ => None,
 			};
+			let holds_a_result = matches!(frame, Frame::Result(_));
+			if holds_a_result {
+				guard.result_held();
+			}
 			let events = guard.translator.ingest(frame);
 			let outcome = turn_outcome(&events);
 			if let Some(outcome) = outcome {
 				guard.turn_ended(&desk.key, outcome);
 			}
 			let ending = outcome.and_then(|outcome| guard.set_turn(outcome.into()));
+			if holds_a_result {
+				rearmed.notify_one();
+			}
 			for event in entering.into_iter().chain(events).chain(ending) {
 				sink.emit(event);
 			}

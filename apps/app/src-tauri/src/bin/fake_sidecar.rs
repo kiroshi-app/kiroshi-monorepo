@@ -513,7 +513,7 @@ fn on_prompt(key: &str, runs: &mut HashMap<String, Run>, text: &str) {
 			emit_tasks_pending(key, 1);
 			finish_background_task(key, run);
 		}
-		"endless_task" if run.resumed => {
+		"endless_task" | "unsettled_result" if run.resumed => {
 			emit_text_turn(key, run, &format!("resumed {} :: {text}", run.session_id));
 			emit_result(key, run, "success", false);
 		}
@@ -521,6 +521,10 @@ fn on_prompt(key: &str, runs: &mut HashMap<String, Run>, text: &str) {
 			emit_text_turn(key, run, "a background shell runs");
 			emit(key, result_of(&run.session_id, "success", false));
 			emit_tasks_pending(key, 1);
+		}
+		"unsettled_result" => {
+			emit_text_turn(key, run, "a follow-up turn that never goes idle");
+			emit(key, result_of(&run.session_id, "success", false));
 		}
 		"stdout_eof" => close_stdout(),
 		"sidecar_exit" => {

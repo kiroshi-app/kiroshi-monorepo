@@ -294,15 +294,22 @@ export const createTurnSettler = (
 		}
 	}
 
+	const observe = (message: SessionFrame) => {
+		if (message.type === "result") {
+			onResult(message)
+		} else if (isSystem(message, "background_tasks_changed")) {
+			onTasks(liveTasks(message))
+		} else if (isSystem(message, "session_state_changed")) {
+			onState(message.state)
+		}
+	}
+
 	return {
-		observe: (message: SessionFrame) => {
-			if (message.type === "result") {
-				onResult(message)
-			} else if (isSystem(message, "background_tasks_changed")) {
-				onTasks(liveTasks(message))
-			} else if (isSystem(message, "session_state_changed")) {
-				onState(message.state)
+		relay: (message: SessionFrame) => {
+			if (stop !== "settled") {
+				emit(message)
 			}
+			observe(message)
 		},
 		prompted: () => {
 			stop = "none"
@@ -491,9 +498,7 @@ export const openClaudeSession = async (
 		try {
 			for await (const message of run) {
 				reminder.observe(message)
-				const frame = message as unknown as SessionFrame
-				emit(frame)
-				settler.observe(frame)
+				settler.relay(message as unknown as SessionFrame)
 			}
 			return ENDED
 		} catch (error) {

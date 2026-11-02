@@ -56,7 +56,7 @@ impl fmt::Display for Lapse {
 				write!(f, "the agent lost its liveness: no result within the interrupt bound")
 			}
 			Lapse::TasksPending => {
-				write!(f, "the agent's background tasks outlasted the background task bound")
+				write!(f, "the agent held its turn unsettled past the background task bound")
 			}
 		}
 	}
@@ -66,12 +66,12 @@ impl fmt::Display for Lapse {
 pub(crate) struct Liveness {
 	heard_at: Instant,
 	interrupted_at: Option<Instant>,
-	tasks_pending_since: Option<Instant>,
+	result_held_since: Option<Instant>,
 }
 
 impl Liveness {
 	pub(crate) fn since(now: Instant) -> Self {
-		Self { heard_at: now, interrupted_at: None, tasks_pending_since: None }
+		Self { heard_at: now, interrupted_at: None, result_held_since: None }
 	}
 
 	pub(crate) fn heard(&mut self, now: Instant) {
@@ -82,12 +82,8 @@ impl Liveness {
 		self.interrupted_at.get_or_insert(now);
 	}
 
-	pub(crate) fn tasks_pending(&mut self, now: Instant, count: u32) {
-		if count == 0 {
-			self.tasks_pending_since = None;
-			return;
-		}
-		self.tasks_pending_since.get_or_insert(now);
+	pub(crate) fn result_held(&mut self, now: Instant) {
+		self.result_held_since.get_or_insert(now);
 	}
 
 	pub(crate) fn deadline(
@@ -100,8 +96,8 @@ impl Liveness {
 		});
 		let silent = (!waiting_on_person).then(|| (self.heard_at + lease.silence, Lapse::Silent));
 		let outlasted = self
-			.tasks_pending_since
-			.map(|pending_since| (pending_since + lease.tasks_pending, Lapse::TasksPending));
+			.result_held_since
+			.map(|held_since| (held_since + lease.tasks_pending, Lapse::TasksPending));
 		unanswered.into_iter().chain(silent).chain(outlasted).min_by_key(|(at, _)| *at)
 	}
 }
@@ -173,25 +169,23 @@ mod tests {
 	}
 
 	#[test]
-	fn background_tasks_pending_past_their_bound_lapse_however_often_the_count_moves() {
+	fn a_held_result_lapses_at_its_bound_counted_from_the_first_result_of_the_turn() {
 		let start = Instant::now();
 		let mut liveness = Liveness::since(start);
 
-		liveness.tasks_pending(after(start, 30), 1);
-		liveness.tasks_pending(after(start, 200), 2);
+		liveness.result_held(after(start, 30));
+		liveness.result_held(after(start, 200));
 		liveness.heard(after(start, 610));
 
 		assert_eq!(liveness.deadline(LEASE, false), Some((after(start, 630), Lapse::TasksPending)));
 	}
 
 	#[test]
-	fn background_tasks_that_all_end_lift_their_bound() {
+	fn a_held_result_lapses_even_while_the_person_is_asked() {
 		let start = Instant::now();
 		let mut liveness = Liveness::since(start);
 
-		liveness.tasks_pending(start, 1);
-		liveness.tasks_pending(after(start, 5), 0);
-		liveness.tasks_pending(after(start, 20), 1);
+		liveness.result_held(after(start, 20));
 
 		assert_eq!(liveness.deadline(LEASE, true), Some((after(start, 620), Lapse::TasksPending)));
 	}
