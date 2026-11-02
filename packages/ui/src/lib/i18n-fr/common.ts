@@ -283,6 +283,11 @@ const common = {
 			images: "Images",
 			documents: "Documents",
 		},
+		noResult: {
+			images: "Aucune image dans cette Bibliothèque pour l’instant.",
+			documents: "Aucun document dans cette Bibliothèque pour l’instant.",
+			search: "Rien ne correspond à « {{query}} ».",
+		},
 		start: "Commencer un document",
 		templates: {
 			blank: { name: "Document vierge" },

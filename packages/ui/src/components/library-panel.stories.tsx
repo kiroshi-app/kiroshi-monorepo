@@ -108,6 +108,9 @@ export const GridAll = meta.story({
 			.getPropertyValue("--primary")
 			.trim()
 		await expect(getComputedStyle(all).backgroundColor).toBe(rgbOf(accent))
+		await userEvent.hover(all)
+		await expect(getComputedStyle(all).backgroundColor).toBe(rgbOf(accent))
+		await userEvent.unhover(all)
 		await expect(
 			getComputedStyle(slotIn(canvasElement, "library-thumbnail"))
 				.backgroundColor,
@@ -178,6 +181,51 @@ export const GridDocuments = meta.story({
 		await expect(
 			canvasElement.querySelector("[data-slot=library-thumbnail] img"),
 		).toBe(null)
+	},
+})
+
+export const FilterWithNoMatch = meta.story({
+	args: {
+		items: LIBRARY_ITEMS.filter((item) => item.kind === "image"),
+		filter: "documents",
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A Library holding only images, read through the Documents filter. Check that the filters stay so the reader can step back to All, and that one muted line says there are no documents instead of an empty grid. `Empty` stories cover a Library with nothing in it at all.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		await expect(
+			canvas.getByRole("radio", { name: "Documents 0" }),
+		).toHaveAttribute("aria-checked", "true")
+		await expect(slotsIn(canvasElement, "library-item")).toHaveLength(0)
+		await expect(canvas.getByRole("status")).toHaveTextContent(
+			"No documents in this Library yet.",
+		)
+	},
+})
+
+export const SearchWithNoMatch = meta.story({
+	args: { items: [], searchQuery: "quarterly roadmap" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A search the Library has nothing for: the app hands over no items with the query still set. Check that the search field keeps the query, that the empty state does not take over, and that one muted line names the query that found nothing.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		await expect(canvas.getByRole("searchbox")).toHaveValue("quarterly roadmap")
+		await expect(canvas.queryByRole("button", { name: "Blank document" })).toBe(
+			null,
+		)
+		await expect(canvas.getByRole("status")).toHaveTextContent(
+			"Nothing matches “quarterly roadmap”.",
+		)
 	},
 })
 

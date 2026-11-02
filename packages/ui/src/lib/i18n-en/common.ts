@@ -266,6 +266,11 @@ const common = {
 			images: "Images",
 			documents: "Documents",
 		},
+		noResult: {
+			images: "No images in this Library yet.",
+			documents: "No documents in this Library yet.",
+			search: "Nothing matches “{{query}}”.",
+		},
 		start: "Start a document",
 		templates: {
 			blank: { name: "Blank document" },

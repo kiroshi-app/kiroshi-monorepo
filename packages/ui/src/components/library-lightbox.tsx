@@ -38,6 +38,12 @@ const ZOOM_CONTROL = cn(ROUND, "size-7 hover:bg-foreground/8")
 
 const DIVIDER = "w-px shrink-0 bg-foreground/12"
 
+const ZOOM_SLOT = "library-lightbox-zoom"
+
+const isInZoomScroller = (target: EventTarget) =>
+	target instanceof Element &&
+	target.closest(`[data-slot=${ZOOM_SLOT}]`) !== null
+
 type ZoomStageProps = {
 	image: LibraryLightboxImage
 	position: number
@@ -73,7 +79,7 @@ const ZoomStage = ({ image, position, count }: ZoomStageProps) => {
 		<>
 			<div
 				className="flex min-h-0 flex-1 overflow-auto rounded-md focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring"
-				data-slot="library-lightbox-zoom"
+				data-slot={ZOOM_SLOT}
 				tabIndex={zoom === null ? undefined : 0}
 			>
 				<img
@@ -175,6 +181,7 @@ const LibraryLightbox = ({
 	const isLast = position >= count
 
 	const stepWithArrows = (event: KeyboardEvent) => {
+		if (isInZoomScroller(event.target)) return
 		if (event.key === "ArrowLeft" && !isFirst) onPrevious()
 		if (event.key === "ArrowRight" && !isLast) onNext()
 	}

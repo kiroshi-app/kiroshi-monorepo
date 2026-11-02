@@ -2,7 +2,11 @@ import { useState } from "react"
 import { expect, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { hueScopeOf, withStoryProps } from "@workspace/storybook/story-utils"
+import {
+	hueScopeOf,
+	isInBrowserRunner,
+	withStoryProps,
+} from "@workspace/storybook/story-utils"
 import { ContentCard } from "@workspace/ui/components/content-card"
 import {
 	LIBRARY_ITEMS,
@@ -83,6 +87,7 @@ const LibraryWithLightbox = ({
 const lightbox = async () => {
 	const popup = await screen.findByRole("dialog")
 	await waitFor(() => expect(popup).toBeVisible())
+	await waitFor(() => expect(popup.contains(document.activeElement)).toBe(true))
 	return popup
 }
 
@@ -216,7 +221,7 @@ export const Zoomed = meta.story({
 			},
 		},
 	},
-	play: async ({ userEvent }) => {
+	play: async ({ args, userEvent }) => {
 		const popup = await lightbox()
 		const fit = within(popup).getByRole("button", { name: "Fit to the window" })
 		await expect(fit).toHaveTextContent("Fit")
@@ -249,5 +254,33 @@ export const Zoomed = meta.story({
 		await expect(
 			within(popup).getByRole("button", { name: /%, fit to the window$/ }),
 		).toBeVisible()
+
+		const scroller = popup.querySelector<HTMLElement>(
+			"[data-slot=library-lightbox-zoom]",
+		) as HTMLElement
+		scroller.focus()
+		await userEvent.keyboard("{ArrowRight}")
+		await userEvent.keyboard("{ArrowLeft}")
+		await expect(args.onNext).not.toHaveBeenCalled()
+		await expect(args.onPrevious).not.toHaveBeenCalled()
+
+		if (isInBrowserRunner()) {
+			const { userEvent: browserKeys } = await import("vitest/browser")
+			await browserKeys.keyboard("{ArrowRight}")
+			await waitFor(() => expect(scroller.scrollLeft).toBeGreaterThan(0))
+			await expect(args.onNext).not.toHaveBeenCalled()
+		}
+
+		within(popup).getByRole("button", { name: "Download" }).focus()
+		await userEvent.keyboard("{ArrowRight}")
+		await expect(args.onNext).toHaveBeenCalledOnce()
+		await expect(popup).toHaveTextContent("harbour-at-night.jpg")
+
+		await userEvent.click(
+			within(popup).getByRole("button", { name: "Zoom in" }),
+		)
+		await userEvent.click(
+			within(popup).getByRole("button", { name: "Zoom in" }),
+		)
 	},
 })

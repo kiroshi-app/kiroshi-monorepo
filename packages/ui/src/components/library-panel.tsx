@@ -61,7 +61,7 @@ type FilterPillProps = {
 
 const FilterPill = ({ value, label, count }: FilterPillProps) => (
 	<RadioPrimitive.Root
-		className="group/filter inline-flex h-7 items-center gap-1.5 rounded-full border border-input px-3 font-medium text-compact text-foreground leading-4 hover:bg-foreground/5 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring focus-visible:outline-offset-2 data-checked:border-primary data-checked:bg-primary data-checked:text-primary-foreground"
+		className="group/filter inline-flex h-7 items-center gap-1.5 rounded-full border border-input px-3 font-medium text-compact text-foreground leading-4 not-data-checked:hover:bg-foreground/5 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring focus-visible:outline-offset-2 data-checked:border-primary data-checked:bg-primary data-checked:text-primary-foreground"
 		data-slot="library-filter"
 		value={value}
 	>
@@ -268,6 +268,18 @@ const LibraryPanel = ({
 							onNewDocument={onNewDocument}
 							onStartTemplate={onStartTemplate}
 						/>
+					) : shownItems.length === 0 ? (
+						<p
+							className="break-words px-10 pt-2 pb-10 text-compact text-muted-foreground leading-4.5"
+							data-slot="library-no-result"
+							role="status"
+						>
+							{searchQuery !== ""
+								? t("library.noResult.search", { query: searchQuery })
+								: filter === "images"
+									? t("library.noResult.images")
+									: t("library.noResult.documents")}
+						</p>
 					) : (
 						<LibraryGrid items={shownItems} onOpenItem={onOpenItem} />
 					)}
