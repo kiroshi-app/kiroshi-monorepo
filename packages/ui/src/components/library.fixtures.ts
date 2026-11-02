@@ -174,3 +174,30 @@ export const LIBRARY_LIGHTBOX_IMAGES: LibraryLightboxImage[] = [
 		src: HARBOUR,
 	},
 ]
+
+export const LIBRARY_DROPPED_NAMES = [
+	"usage-march.png",
+	"pricing-grid.png",
+	"release-notes.md",
+]
+
+export const LIBRARY_DRAG_PREVIEW = DASHBOARD
+
+export const LIBRARY_ITEMS_AFTER_IMPORT: LibraryItem[] = [
+	{
+		kind: "image",
+		id: "pricing-grid",
+		name: "pricing-grid.png",
+		detail: "PNG · 186 KB · Just now",
+		src: SKETCH,
+	},
+	{
+		kind: "image",
+		id: "usage-march",
+		name: "usage-march.png",
+		detail: "PNG · 540 KB · Just now",
+		src: DASHBOARD,
+		importProgress: 0.64,
+	},
+	...LIBRARY_ITEMS,
+]
