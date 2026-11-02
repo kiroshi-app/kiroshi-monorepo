@@ -53,6 +53,10 @@ const ENTRY_NAMES: Record<AppRailPanel, string> = {
 
 const SPACE_SETTINGS = "Space settings"
 
+const SEARCH = "Search"
+
+const SEARCH_CHORD = "⌘K"
+
 const CURRENT_SPACE: Space = {
 	id: "vocca",
 	name: "Vocca",
@@ -76,7 +80,11 @@ const REMOVED_PANEL = "companions"
 
 const PANELS = Object.keys(ENTRY_NAMES) as AppRailPanel[]
 
-const TOP_GROUP = [SPACE_SETTINGS, ...PANELS.map((panel) => ENTRY_NAMES[panel])]
+const TOP_GROUP = [
+	SPACE_SETTINGS,
+	SEARCH,
+	...PANELS.map((panel) => ENTRY_NAMES[panel]),
+]
 
 const renderRail = (args: AppRailProps) => (
 	<div className="flex h-[32rem] bg-background">
@@ -195,7 +203,7 @@ const expectSpaceLogoFirstWithoutGear = async (
 		railIn(canvasElement).querySelectorAll(
 			`ul:first-of-type svg:not(${SPACE_AVATAR} svg)`,
 		),
-	).toHaveLength(PANELS.length)
+	).toHaveLength(PANELS.length + 1)
 }
 
 const iconColourOf = (entry: HTMLElement) =>
@@ -261,7 +269,11 @@ const expectFootLikeIdlePanel = async (
 	if (!idlePanel) throw new Error("No idle panel entry")
 	const idle = entryNamed(canvasElement, ENTRY_NAMES[idlePanel])
 	const logo = entryNamed(canvasElement, SPACE_SETTINGS)
-	for (const entry of [logo, entryNamed(canvasElement, READER.name)]) {
+	for (const entry of [
+		logo,
+		entryNamed(canvasElement, SEARCH),
+		entryNamed(canvasElement, READER.name),
+	]) {
 		await expect(entry).not.toHaveAttribute("aria-current")
 		await expect(getComputedStyle(entry).color).toBe(
 			getComputedStyle(idle).color,
@@ -419,7 +431,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The 60px column of 44px icons down the left edge of the window: the current space's logo first, a 26px square in its colour that opens the space settings, then the three panels a reader moves between, Conversations, Missions then Library, and the reader at the foot. The rail draws and reports; which panel is open, which settings is open over it and the dot on each entry are props, and each entry reports its own press. An entry is a button named by its panel, the open one marked `aria-current`, and the news it carries is spoken in its name, so a dot never rides on colour alone. While a settings is open, its entry is the current one and no panel entry is.",
+					"The 60px column of 44px icons down the left edge of the window: the current space's logo first, a 26px square in its colour that opens the space settings, the search that opens the Cmd/Ctrl+K palette right under it, then the three panels a reader moves between, Conversations, Missions then Library, and the reader at the foot. The rail draws and reports; which panel is open, which settings is open over it and the dot on each entry are props, and each entry reports its own press. An entry is a button named by its panel, the open one marked `aria-current`, and the news it carries is spoken in its name, so a dot never rides on colour alone. While a settings is open, its entry is the current one and no panel entry is. The palette is not a panel: while it is open the search entry wears the selected fill through `aria-expanded`, never `aria-current`, and the open panel keeps its mark.",
 			},
 		},
 	},
@@ -430,6 +442,7 @@ const meta = preview.meta({
 		onSelectConversations: fn(),
 		onSelectMissions: fn(),
 		onSelectLibrary: fn(),
+		onOpenSearch: fn(),
 		onOpenSpaceSettings: fn(),
 		onOpenYou: fn(),
 	},
@@ -450,7 +463,7 @@ export const Conversations = meta.story({
 		docs: {
 			description: {
 				story:
-					"E1, Conversations. The rail as the app opens it, the current entry beside idle ones. Check the rail is 60px wide and every entry a 44px square on the `radius-lg` corner, that the conversation bubble sits on the 10% fill in the foreground colour while the Space logo, Missions, Library and the reader sit on no fill with Library fourth in the top group, after Missions, that the Space logo sits first, above Conversations, and that the reader's initial alone holds the foot of the rail.",
+					"E1, Conversations. The rail as the app opens it, the current entry beside idle ones. Check the rail is 60px wide and every entry a 44px square on the `radius-lg` corner, that the conversation bubble sits on the 10% fill in the foreground colour while the Space logo, Search, Missions, Library and the reader sit on no fill with Library last in the top group, after Missions, that the Space logo sits first, then Search, above Conversations, and that the reader's initial alone holds the foot of the rail.",
 			},
 		},
 	},
@@ -497,7 +510,7 @@ export const LibrarySelected = meta.story({
 		docs: {
 			description: {
 				story:
-					"Library open. Check Library, fourth in the top group after Missions, is the only panel entry marked `aria-current`, on the selected fill with the filled book in the foreground ink, and that Conversations and Missions sit on no fill with their stroked icons.",
+					"Library open. Check Library, last in the top group after Missions, is the only panel entry marked `aria-current`, on the selected fill with the filled book in the foreground ink, and that Conversations and Missions sit on no fill with their stroked icons.",
 			},
 		},
 	},
@@ -509,6 +522,7 @@ export const WithoutLibraryHandler = meta.story({
 	play: async ({ canvasElement }) => {
 		await expect(topGroupEntriesIn(canvasElement)).toEqual([
 			SPACE_SETTINGS,
+			SEARCH,
 			ENTRY_NAMES.conversations,
 			ENTRY_NAMES.missions,
 		])
@@ -626,6 +640,152 @@ export const IdleEntryHovered = meta.story({
 	},
 	play: async ({ canvasElement }) => {
 		await expectHoverBetweenIdleAndCurrent(canvasElement)
+	},
+})
+
+const expectSearchLikeMissions = async (canvasElement: HTMLElement) => {
+	const search = entryNamed(canvasElement, SEARCH)
+	const missions = entryNamed(canvasElement, ENTRY_NAMES.missions)
+	const searchIcon = getComputedStyle(iconOf(search))
+	const missionsIcon = getComputedStyle(iconOf(missions))
+	await expect(search.getBoundingClientRect().width).toBe(RAIL_BUTTON)
+	await expect(search.getBoundingClientRect().height).toBe(RAIL_BUTTON)
+	await expect(getComputedStyle(search).borderTopLeftRadius).toBe(
+		getComputedStyle(missions).borderTopLeftRadius,
+	)
+	await expect(searchIcon.strokeWidth).toBe(missionsIcon.strokeWidth)
+	await expect(iconOffsetIn(search)).toEqual(iconOffsetIn(missions))
+}
+
+const expectSearchTooltipBeside = async (search: HTMLElement) => {
+	const tooltip = await screen.findByRole("tooltip")
+	await expect(tooltip).toHaveTextContent(SEARCH)
+	const chord = tooltip.querySelector('[data-slot="kbd"]')
+	await expect(chord).toHaveTextContent(SEARCH_CHORD)
+	await waitFor(() =>
+		expect(tooltip.getBoundingClientRect().left).toBeGreaterThanOrEqual(
+			search.getBoundingClientRect().right,
+		),
+	)
+}
+
+export const SearchEntryAtRest = meta.story({
+	args: { isSearchOpen: false },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A1, the search entry at rest, second in the top group, right under the Space logo and above Conversations. Check it is the same 44px square on the `radius-lg` corner as Missions, its magnifier the size of the Missions flag, at the same 1.75 stroke and the same offset, in the muted ink on no fill, named Search, never marked `aria-current` and reporting the palette closed. Pick `SearchEntryHovered` for its hint, `SearchPaletteOpen` for the entry while the palette is up.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expect(topGroupEntriesIn(canvasElement)).toEqual(TOP_GROUP)
+		const search = entryNamed(canvasElement, SEARCH)
+		const rail = railIn(canvasElement)
+		await expectSearchLikeMissions(canvasElement)
+		await expect(search).not.toHaveAttribute("aria-current")
+		await expect(search).toHaveAttribute("aria-expanded", "false")
+		await expect(search).toHaveAttribute("aria-haspopup", "dialog")
+		await expect(fillOf(search)).toBe(NO_FILL)
+		await expect(iconColourOf(search)).toBe(
+			tokenStyleIn(rail, "text-muted-foreground", "color"),
+		)
+		await expect(iconStyleOf(search)).toBe("stroke")
+	},
+})
+
+export const SearchEntryHovered = meta.story({
+	args: { isSearchOpen: false },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A2, the search entry under the pointer. Check it takes half the selected fill with the magnifier in the foreground ink, as every idle rail entry does, that its hint opens on its right and reads Search then the Cmd/Ctrl+K chord in a Kbd chip, and that a press asks the host to open the palette once without selecting any panel.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const search = entryNamed(canvasElement, SEARCH)
+		const rail = railIn(canvasElement)
+		if (isInBrowserRunner()) {
+			const hoverFill = tokenStyleIn(
+				rail,
+				"bg-rail-item-selected/50",
+				"backgroundColor",
+			)
+			const hoverInk = tokenStyleIn(rail, "text-foreground", "color")
+			const pointer = await realPointer()
+			await pointer.hover(search)
+			await waitFor(() => expect(fillOf(search)).toBe(hoverFill))
+			await expect(iconColourOf(search)).toBe(hoverInk)
+			await pointer.unhover(search)
+		}
+		await userEvent.hover(search)
+		await expectSearchTooltipBeside(search)
+		await userEvent.click(search)
+		await expect(args.onOpenSearch).toHaveBeenCalledTimes(1)
+		await expect(args.onSelectConversations).not.toHaveBeenCalled()
+		await expect(args.onSelectMissions).not.toHaveBeenCalled()
+		await expect(args.onSelectLibrary).not.toHaveBeenCalled()
+	},
+})
+
+const playPaletteOpen = async ({
+	canvasElement,
+}: {
+	canvasElement: HTMLElement
+}) => {
+	const search = entryNamed(canvasElement, SEARCH)
+	const conversations = entryNamed(canvasElement, ENTRY_NAMES.conversations)
+	const rail = railIn(canvasElement)
+	const selectedFill = tokenStyleIn(
+		rail,
+		"bg-rail-item-selected",
+		"backgroundColor",
+	)
+	const selectedInk = tokenStyleIn(rail, "text-foreground", "color")
+	await expect(search).toHaveAttribute("aria-expanded", "true")
+	await expect(search).not.toHaveAttribute("aria-current")
+	await expect(conversations).toHaveAttribute("aria-current", "true")
+	await waitFor(async () => {
+		await expect(fillOf(search)).toBe(selectedFill)
+		await expect(iconColourOf(search)).toBe(selectedInk)
+		await expect(fillOf(conversations)).toBe(selectedFill)
+	})
+	await expect(iconStyleOf(conversations)).toBe("fill")
+	await expect(rail.querySelectorAll('[aria-current="true"]')).toHaveLength(1)
+}
+
+export const SearchPaletteOpen = meta.story({
+	args: { isSearchOpen: true },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A3, the palette open over Conversations. Check the search entry wears the full selected fill with the magnifier in the foreground ink and reports the palette expanded, that it is not marked `aria-current`, and that Conversations keeps its own current mark, its fill and its filled bubble, the one entry `aria-current` in the rail. Pick `SearchPaletteOpenDark` for the same state in dark.",
+			},
+		},
+	},
+	play: playPaletteOpen,
+})
+
+export const SearchPaletteOpenDark = meta.story({
+	args: { isSearchOpen: true },
+	globals: { theme: "dark" },
+	play: playPaletteOpen,
+})
+
+export const WithoutSearchHandler = meta.story({
+	tags: ["test-only"],
+	args: { onOpenSearch: undefined },
+	play: async ({ canvasElement }) => {
+		await expect(topGroupEntriesIn(canvasElement)).toEqual(
+			TOP_GROUP.filter((name) => name !== SEARCH),
+		)
+		await expect(
+			within(railIn(canvasElement)).queryByRole("button", { name: SEARCH }),
+		).toBeNull()
 	},
 })
 
@@ -890,6 +1050,13 @@ export const KeyboardReach = meta.story({
 			SPACE_SETTINGS,
 		)
 		await userEvent.tab()
+		const search = entryNamed(canvasElement, SEARCH)
+		await expect(search).toHaveFocus()
+		await expect(getComputedStyle(search).boxShadow).not.toBe("none")
+		await expectSearchTooltipBeside(search)
+		await userEvent.keyboard("{Enter}")
+		await expect(args.onOpenSearch).toHaveBeenCalledTimes(1)
+		await userEvent.tab()
 		const conversations = entryNamed(canvasElement, "Conversations")
 		await expect(conversations).toHaveFocus()
 		await expect(getComputedStyle(conversations).boxShadow).not.toBe("none")
@@ -905,7 +1072,7 @@ export const KeyboardReach = meta.story({
 		await expect(iconStyleOf(library)).toBe("stroke")
 		await userEvent.keyboard("{Enter}")
 		await expect(args.onSelectLibrary).toHaveBeenCalledTimes(1)
-		for (const entry of railEntriesIn(canvasElement).slice(PANELS.length + 1)) {
+		for (const entry of railEntriesIn(canvasElement).slice(PANELS.length + 2)) {
 			await userEvent.tab()
 			await expect(entry).toHaveFocus()
 			await expect(getComputedStyle(entry).boxShadow).not.toBe("none")

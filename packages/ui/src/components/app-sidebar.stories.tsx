@@ -441,20 +441,13 @@ const missionsPanelOf = (open: MissionsPanelMission[]): MissionsPanelProps => ({
 
 const SEARCH = "Search"
 
-const RAIL_STOPS = 4
+const RAIL_STOPS = 5
 
 type Tabbing = { tab: () => Promise<void> }
 
 const tabAcrossRail = async (userEvent: Tabbing) => {
 	for (let stop = 0; stop < RAIL_STOPS; stop += 1) await userEvent.tab()
 }
-
-const SEARCH_CHORD = "⌘K"
-
-const searchButtonIn = (canvasElement: HTMLElement) =>
-	within(slotIn(canvasElement, "sidebar-header")).getByRole("button", {
-		name: SEARCH,
-	})
 
 const querySearchButtonIn = (canvasElement: HTMLElement) =>
 	within(slotIn(canvasElement, "sidebar-header")).queryByRole("button", {
@@ -714,7 +707,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The roster panel of an agent app, mounted whole: the animated sidebar shell around every companion the reader owns. Its pinned region carries the space switcher, the search button and the create menu, and it clears the window controls when `insetWindowControls` says a transparent title bar sits over it, and the `WorkspaceShell` above it keeps it expanded at one fixed width: no collapse, no trigger, no resize edge. A row is the companion avatar, its name, an optional title badge and the time of its last message, over one clipped line of that message. A companion at rest holds the pose it was given in its settings, drawn as a still frame; a companion that is running holds its work pose, animates, and wears an activity dot. A companion wearing a picture its reader uploaded shows that instead, and it never moves — the dot is what says it is working. Under the list it pins the reader's own chip beside a slot the host fills, and at rest that slot draws nothing, so the resting row is the chip alone. Settings, duplicate and delete live behind a right-click on the row — there is no actions button to reveal — and selection and running state are props, so a host maps its store onto `botsBySpaceId` and `selectedBotId` and nothing here polls the transport.",
+					"The roster panel of an agent app, mounted whole: the animated sidebar shell around every companion the reader owns. Its pinned region carries the title and the create menu, the search entry living in the rail, and it clears the window controls when `insetWindowControls` says a transparent title bar sits over it, and the `WorkspaceShell` above it keeps it expanded at one fixed width: no collapse, no trigger, no resize edge. A row is the companion avatar, its name, an optional title badge and the time of its last message, over one clipped line of that message. A companion at rest holds the pose it was given in its settings, drawn as a still frame; a companion that is running holds its work pose, animates, and wears an activity dot. A companion wearing a picture its reader uploaded shows that instead, and it never moves — the dot is what says it is working. Under the list it pins the reader's own chip beside a slot the host fills, and at rest that slot draws nothing, so the resting row is the chip alone. Settings, duplicate and delete live behind a right-click on the row — there is no actions button to reveal — and selection and running state are props, so a host maps its store onto `botsBySpaceId` and `selectedBotId` and nothing here polls the transport.",
 			},
 		},
 	},
@@ -754,7 +747,7 @@ export const WithUser = meta.story({
 		docs: {
 			description: {
 				story:
-					"The reader themselves, alone at the foot of the rail, the open space's logo first at the top. The reader is the only way into their own settings, so a host that has an account to show always hands one down. Check that the reader is a 26px round picture centred in a 44px slot, named by their name, that it is the last stop of the rail, that activating it opens the user settings and that the Space logo, in the open space's colour, opens the Spaces menu whose Space settings opens the space settings. Check then the lane the roster draws: its rows sit 8px in from both inner edges of the panel, the panel's own inline padding and nothing more. Pick `WithSearch` for the search button in the header.",
+					"The reader themselves, alone at the foot of the rail, the open space's logo first at the top. The reader is the only way into their own settings, so a host that has an account to show always hands one down. Check that the reader is a 26px round picture centred in a 44px slot, named by their name, that it is the last stop of the rail, that activating it opens the user settings and that the Space logo, in the open space's colour, opens the Spaces menu whose Space settings opens the space settings. Check then the lane the roster draws: its rows sit 8px in from both inner edges of the panel, the panel's own inline padding and nothing more. Pick `ConversationsHeaderWithoutSearch` for the header that carries the create button alone.",
 			},
 		},
 	},
@@ -799,7 +792,7 @@ export const Roster = meta.story({
 		docs: {
 			description: {
 				story:
-					"A dozen companions, some with a title badge and some without, each wearing the blot it was given. Check that the avatars, the names and the timestamps each hold one column down the whole list — a row without a badge must not slide its name or its preview out of line with the row above it — and that every row is the same height whatever it carries. The message and the time read as muted and read alike, on the selected row as on the rest, so a row says its name first and dates itself second; the name is the only line in the row drawn at full strength. The roster sits in the panel the app mounts: one space, its own roster, the search button and the create menu above it, so the carousel holds a single panel and there is no dot strip to count. The list is walked with Tab and a row is its own only stop, since the actions carry no button: New tab in the title bar, the rail, then the search button and the create menu, then one stop per row, and Enter on a row reports the selection rather than taking it. Pick `LongContent` for the same list under names and messages that do not fit, `RowContextMenu` for the actions behind a row, `Identities` for the blots at rest.",
+					"A dozen companions, some with a title badge and some without, each wearing the blot it was given. Check that the avatars, the names and the timestamps each hold one column down the whole list — a row without a badge must not slide its name or its preview out of line with the row above it — and that every row is the same height whatever it carries. The message and the time read as muted and read alike, on the selected row as on the rest, so a row says its name first and dates itself second; the name is the only line in the row drawn at full strength. The roster sits in the panel the app mounts: one space, its own roster, the create menu above it, so the carousel holds a single panel and there is no dot strip to count. The list is walked with Tab and a row is its own only stop, since the actions carry no button: New tab in the title bar, the rail with its search entry, then the create menu, then one stop per row, and Enter on a row reports the selection rather than taking it. Pick `LongContent` for the same list under names and messages that do not fit, `RowContextMenu` for the actions behind a row, `Identities` for the blots at rest.",
 			},
 		},
 	},
@@ -832,8 +825,6 @@ export const Roster = meta.story({
 			}),
 		).toHaveFocus()
 		await tabAcrossRail(userEvent)
-		await userEvent.tab()
-		await expect(searchButtonIn(canvasElement)).toHaveFocus()
 		await userEvent.tab()
 		await expect(create).toHaveFocus()
 		await userEvent.keyboard("{Enter}")
@@ -905,7 +896,6 @@ export const CreateLabel = meta.story({
 		await userEvent.tab()
 		await tabAcrossRail(userEvent)
 		await userEvent.tab()
-		await userEvent.tab()
 		await expect(create).toHaveFocus()
 		await opensBelow()
 	},
@@ -954,7 +944,6 @@ export const Empty = meta.story({
 		await userEvent.tab()
 		await userEvent.tab()
 		await tabAcrossRail(userEvent)
-		await userEvent.tab()
 		await userEvent.tab()
 		await expect(create).toHaveFocus()
 		await expect(create.matches(":focus-visible")).toBe(true)
@@ -2057,7 +2046,6 @@ export const RowContextMenu = meta.story({
 		await userEvent.tab()
 		await userEvent.tab()
 		await userEvent.tab()
-		await userEvent.tab()
 		await expect(trigger).toHaveFocus()
 
 		fireEvent.contextMenu(trigger)
@@ -2227,7 +2215,6 @@ export const ReducedMotion = meta.story({
 		await tabAcrossRail(userEvent)
 		await userEvent.tab()
 		await userEvent.tab()
-		await userEvent.tab()
 		const first = rowButton(rowsIn(canvasElement)[0])
 		await expect(first).toHaveFocus()
 		await expect(first.matches(":focus-visible")).toBe(true)
@@ -2319,7 +2306,7 @@ export const ConversationsPanel = meta.story({
 		docs: {
 			description: {
 				story:
-					"The V1 shell as the app opens it, drawn against the reference artboard: the title bar with the space switcher, the rail on the window ground with Conversations selected, a still green dot on Conversations and a pulsing warning dot on Missions, then the shell card holding the Conversations panel and the conversation. Check the rail is 60px wide, the panel 304px with its 1px divider, the panel header 32px with the 15px semibold title and the search and create buttons, the card on its 12px radius with a 1px border 34px under the top of the window and 4px off the trailing and bottom edges, and the roster below the header exactly as the list has always drawn it.",
+					"The V1 shell as the app opens it, drawn against the reference artboard: the title bar with the space switcher, the rail on the window ground with Conversations selected, a still green dot on Conversations and a pulsing warning dot on Missions, then the shell card holding the Conversations panel and the conversation. Check the rail is 60px wide, the panel 304px with its 1px divider, the panel header 32px with the 15px semibold title and the create button alone, the card on its 12px radius with a 1px border 34px under the top of the window and 4px off the trailing and bottom edges, and the roster below the header exactly as the list has always drawn it.",
 			},
 		},
 	},
@@ -6070,7 +6057,6 @@ export const CreateMenu = meta.story({
 		await userEvent.tab()
 		await tabAcrossRail(userEvent)
 		await userEvent.tab()
-		await userEvent.tab()
 		await expect(create).toHaveFocus()
 		await userEvent.keyboard("{Enter}")
 
@@ -6180,77 +6166,31 @@ export const DragConversationToSection = meta.story({
 	},
 })
 
-const HEADER_ACTION_GAP = 2
-
-const focusRingOf = (control: HTMLElement) => {
-	for (const transition of control.getAnimations()) transition.finish()
-	return getComputedStyle(control).boxShadow
-}
-
-export const WithSearch = meta.story({
+export const ConversationsHeaderWithoutSearch = meta.story({
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The search button in the pinned header, a ghost icon button 2px before the create menu and drawn like it, the two held tight as one group apart from the space switcher, so the header reads as one row of controls and the roster starts straight under it with no search row in between. Check the button is named Search, sits left of the create menu, wears the same focus ring as the create menu under the keyboard, and shows a hint carrying its name and the Cmd/Ctrl+K chord on focus. Pressing it reports and nothing else: the palette it opens is the host's to mount. Pick `NoSearch` for the panel of a host that passes no `onOpenSearch` and gets no button.",
-			},
-		},
-	},
-	play: async ({ args, canvas, canvasElement, userEvent }) => {
-		const search = searchButtonIn(canvasElement)
-		const create = canvas.getByRole("button", { name: CREATE })
-
-		await expect(search).toHaveAccessibleName(SEARCH)
-		await expect(
-			search.compareDocumentPosition(create) & Node.DOCUMENT_POSITION_FOLLOWING,
-		).toBeTruthy()
-		await expect(
-			create.getBoundingClientRect().left -
-				search.getBoundingClientRect().right,
-		).toBeCloseTo(HEADER_ACTION_GAP, 0)
-
-		const header = slotIn(canvasElement, "sidebar-header")
-		const [first] = rowsIn(canvasElement)
-		await expect(
-			rowButton(first).getBoundingClientRect().top,
-		).toBeGreaterThanOrEqual(header.getBoundingClientRect().bottom)
-
-		await userEvent.tab()
-		await userEvent.tab()
-		await tabAcrossRail(userEvent)
-		await userEvent.tab()
-		await expect(search).toHaveFocus()
-		await expect(search.matches(":focus-visible")).toBe(true)
-		const tooltip = await screen.findByRole("tooltip")
-		await expect(tooltip).toHaveTextContent(SEARCH)
-		await expect(tooltip).toHaveTextContent(SEARCH_CHORD)
-		const searchRing = focusRingOf(search)
-		await expect(searchRing).not.toBe("none")
-
-		await userEvent.tab()
-		await expect(create).toHaveFocus()
-		await expect(focusRingOf(create)).toBe(searchRing)
-
-		await userEvent.click(search)
-		await expect(args.onOpenSearch).toHaveBeenCalledTimes(1)
-	},
-})
-
-export const NoSearch = meta.story({
-	tags: ["test-only"],
-	args: { onOpenSearch: undefined },
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"The panel given no `onOpenSearch`. No search button is drawn at all rather than a dead control a press would do nothing with, so Tab goes from the space switcher straight to the create menu. The app always passes the callback, so this one is kept as a test and out of the catalogue. Pick `WithSearch` for the button the app mounts.",
+					"D, after. The Conversations header carries its title and the create button alone: the search that opens the Cmd/Ctrl+K palette moved to the rail, right under the Space logo. Check the header holds no button named Search and one control only, the create menu, that the rail draws the search entry between the Space logo and Conversations, and that Tab runs through the rail, search included, then lands on the create menu and then the first row. Pick `AppRail/SearchEntryHovered` for the entry and its hint.",
 			},
 		},
 	},
 	play: async ({ canvas, canvasElement, userEvent }) => {
-		await expect(querySearchButtonIn(canvasElement)).toBeNull()
-
 		const header = slotIn(canvasElement, "sidebar-header")
+		const create = canvas.getByRole("button", { name: CREATE })
+		await expect(querySearchButtonIn(canvasElement)).toBeNull()
+		await expect(within(header).getAllByRole("button")).toEqual([create])
+
+		const rail = slotIn(canvasElement, "app-rail")
+		const search = within(rail).getByRole("button", { name: SEARCH })
+		const conversations = within(rail).getByRole("button", {
+			name: "Conversations",
+		})
+		await expect(
+			search.compareDocumentPosition(conversations) &
+				Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy()
+
 		const [first] = rowsIn(canvasElement)
 		await expect(
 			rowButton(first).getBoundingClientRect().top,
@@ -6258,9 +6198,15 @@ export const NoSearch = meta.story({
 
 		await userEvent.tab()
 		await userEvent.tab()
-		await tabAcrossRail(userEvent)
 		await userEvent.tab()
-		await expect(canvas.getByRole("button", { name: CREATE })).toHaveFocus()
+		await userEvent.tab()
+		await expect(search).toHaveFocus()
+		await userEvent.tab()
+		await expect(conversations).toHaveFocus()
+		await userEvent.tab()
+		await userEvent.tab()
+		await userEvent.tab()
+		await expect(create).toHaveFocus()
 		await userEvent.tab()
 		await expect(rowButton(first)).toHaveFocus()
 	},

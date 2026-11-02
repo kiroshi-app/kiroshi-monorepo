@@ -1,10 +1,11 @@
 "use client"
 
-import type {
-	ComponentProps,
-	HTMLAttributes,
-	ReactElement,
-	ReactNode,
+import {
+	type ComponentProps,
+	cloneElement,
+	type HTMLAttributes,
+	type ReactElement,
+	type ReactNode,
 } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -39,6 +40,7 @@ import {
 	ContextMenuItem,
 	ContextMenuSeparator,
 } from "@workspace/ui/components/ui/context-menu"
+import { Kbd } from "@workspace/ui/components/ui/kbd"
 import type { UserChipIdentity } from "@workspace/ui/components/user-chip"
 import { STILL_UNDER_REDUCED_MOTION } from "@workspace/ui/lib/reduced-motion"
 import { cn } from "@workspace/ui/lib/utils"
@@ -78,8 +80,10 @@ const RAIL_AVATAR =
 
 const AVATAR_SIZE = 26
 
-const RAIL_SPACES_TRIGGER =
-	"transition-none aria-expanded:bg-rail-item-selected aria-expanded:text-foreground dark:aria-expanded:bg-rail-item-selected"
+const RAIL_ITEM_EXPANDED =
+	"aria-expanded:bg-rail-item-selected aria-expanded:text-foreground dark:aria-expanded:bg-rail-item-selected"
+
+const RAIL_SPACES_TRIGGER = `transition-none ${RAIL_ITEM_EXPANDED}`
 
 const SPACES_MENU_ROW = "gap-2.5 ps-2.5 pe-8 [&>span:first-child_svg]:size-3.5!"
 
@@ -89,6 +93,7 @@ type RailButton = ReactElement<HTMLAttributes<HTMLElement>>
 
 type RailItemProps = {
 	name: string
+	tooltip?: ReactNode
 	badge?: BotBadge
 	hasDot?: boolean
 	isSelected?: boolean
@@ -100,6 +105,7 @@ type RailItemProps = {
 
 const RailItem = ({
 	name,
+	tooltip = name,
 	badge,
 	hasDot,
 	isSelected,
@@ -123,7 +129,7 @@ const RailItem = ({
 			data-slot="app-rail-item"
 			onClick={onPress}
 			size="icon-lg"
-			tooltip={name}
+			tooltip={tooltip}
 			tooltipSide="right"
 			variant="ghost"
 		>
@@ -142,6 +148,38 @@ const RailItem = ({
 	)
 
 	return <li>{renderButton ? renderButton(button) : button}</li>
+}
+
+type RailSearchItemProps = {
+	isOpen?: boolean
+	onOpen: () => void
+}
+
+const RailSearchItem = ({ isOpen, onOpen }: RailSearchItemProps) => {
+	const { t } = useTranslation("search")
+	const name = t("open")
+
+	return (
+		<RailItem
+			className={RAIL_ITEM_EXPANDED}
+			name={name}
+			onPress={onOpen}
+			renderButton={(button) =>
+				cloneElement(button, {
+					"aria-expanded": isOpen,
+					"aria-haspopup": "dialog",
+				})
+			}
+			tooltip={
+				<>
+					{name}
+					<Kbd>{t("chord")}</Kbd>
+				</>
+			}
+		>
+			<Icons.Search aria-hidden="true" />
+		</RailItem>
+	)
 }
 
 type RailAvatarProps = UserChipIdentity
@@ -239,6 +277,8 @@ type AppRailProps = Omit<ComponentProps<"nav">, "children"> &
 		onSelectConversations?: () => void
 		onSelectMissions?: () => void
 		onSelectLibrary?: () => void
+		onOpenSearch?: () => void
+		isSearchOpen?: boolean
 		onOpenSpaceSettings?: () => void
 		onOpenYou?: () => void
 	}
@@ -264,6 +304,8 @@ const AppRail = ({
 	onSelectConversations,
 	onSelectMissions,
 	onSelectLibrary,
+	onOpenSearch,
+	isSearchOpen,
 	onOpenSpaceSettings,
 	onOpenYou,
 	className,
@@ -336,6 +378,9 @@ const AppRail = ({
 						{spaceLogo}
 					</RailItem>
 				)}
+				{onOpenSearch ? (
+					<RailSearchItem isOpen={isSearchOpen} onOpen={onOpenSearch} />
+				) : null}
 				<RailItem
 					{...panelEntry("conversations")}
 					onPress={onSelectConversations}

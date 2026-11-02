@@ -971,6 +971,10 @@ navigation-apprail--library-selected
 navigation-apprail--missions-selected
 navigation-apprail--on-tinted-space
 navigation-apprail--removed-panel-falls-back-to-conversations
+navigation-apprail--search-entry-at-rest
+navigation-apprail--search-entry-hovered
+navigation-apprail--search-palette-open
+navigation-apprail--search-palette-open-dark
 navigation-apprail--selection-moves-to-missions
 navigation-apprail--space-logo-hovered
 navigation-apprail--space-logo-without-space
@@ -984,6 +988,7 @@ navigation-apprail--update-waiting-dark
 navigation-apprail--user-settings-over-missions
 navigation-apprail--with-dot
 navigation-apprail--without-library-handler
+navigation-apprail--without-search-handler
 navigation-appsidebar--badges
 navigation-appsidebar--bare-rows
 navigation-appsidebar--caption-window-controls
@@ -997,6 +1002,7 @@ navigation-appsidebar--conversation-row-opens-in-a-new-tab
 navigation-appsidebar--conversation-selected
 navigation-appsidebar--conversation-working
 navigation-appsidebar--conversations
+navigation-appsidebar--conversations-header-without-search
 navigation-appsidebar--conversations-left-column
 navigation-appsidebar--conversations-left-column-dark
 navigation-appsidebar--conversations-panel
@@ -1057,7 +1063,6 @@ navigation-appsidebar--nine-spaces
 navigation-appsidebar--no-collapse
 navigation-appsidebar--no-footer
 navigation-appsidebar--no-history
-navigation-appsidebar--no-search
 navigation-appsidebar--no-titles
 navigation-appsidebar--no-window-controls-reserve
 navigation-appsidebar--one-space
@@ -1106,7 +1111,6 @@ navigation-appsidebar--title-bar-tear-off-reports-the-tab
 navigation-appsidebar--unreadable-roster
 navigation-appsidebar--uploaded-pictures
 navigation-appsidebar--window-controls-reserved
-navigation-appsidebar--with-search
 navigation-appsidebar--with-user
 navigation-appsidebar--working
 navigation-appsidebar--working-long-summary

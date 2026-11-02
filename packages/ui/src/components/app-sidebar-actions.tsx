@@ -11,7 +11,6 @@ import {
 	ContextMenuItem,
 	ContextMenuTrigger,
 } from "@workspace/ui/components/ui/context-menu"
-import { Kbd } from "@workspace/ui/components/ui/kbd"
 import { SidebarHeader } from "@workspace/ui/components/ui/sidebar"
 import { STILL_UNDER_REDUCED_MOTION } from "@workspace/ui/lib/reduced-motion"
 
@@ -28,32 +27,6 @@ const HEADER_ACTIONS = "flex items-center gap-0.5"
 const HEADER_ACTION = "rounded-md text-muted-foreground [&_svg]:stroke-2!"
 
 const ROSTER_SURFACE = "min-h-10 flex-1"
-
-type SidebarSearchButtonProps = { onOpenSearch: () => void }
-
-const SidebarSearchButton = ({ onOpenSearch }: SidebarSearchButtonProps) => {
-	const { t } = useTranslation("search")
-	const label = t("open")
-
-	return (
-		<TooltipButton
-			aria-label={label}
-			className={HEADER_ACTION}
-			onClick={onOpenSearch}
-			size="icon-sm"
-			tooltip={
-				<>
-					{label}
-					<Kbd>{t("chord")}</Kbd>
-				</>
-			}
-			tooltipSide="bottom"
-			variant="ghost"
-		>
-			<Icons.Search aria-hidden="true" />
-		</TooltipButton>
-	)
-}
 
 interface CreateItemsProps {
 	onCreateBot?: () => void
@@ -156,24 +129,16 @@ const CreateMenu = (items: CreateItemsProps) => {
 	)
 }
 
-interface RosterHeaderActionsProps extends CreateItemsProps {
-	onOpenSearch?: () => void
-}
-
 const RosterHeaderActions = ({
-	onOpenSearch,
 	onCreateBot,
 	onCreateConversation,
 	onCreateSection,
-}: RosterHeaderActionsProps) => {
+}: CreateItemsProps) => {
 	const { t } = useTranslation("bots")
 	const createLabel = t("roster.create")
 
 	return (
 		<div className={HEADER_ACTIONS}>
-			{onOpenSearch ? (
-				<SidebarSearchButton onOpenSearch={onOpenSearch} />
-			) : null}
 			{onCreateConversation ? (
 				<CreateMenu
 					onCreateBot={onCreateBot}
@@ -223,7 +188,7 @@ const MissionsHeaderActions = ({
 	)
 }
 
-interface AppSidebarHeaderProps extends RosterHeaderActionsProps {
+interface AppSidebarHeaderProps extends CreateItemsProps {
 	panel: AppRailPanel
 	onSearchMissions?: () => void
 }
