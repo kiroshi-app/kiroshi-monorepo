@@ -11,6 +11,7 @@ use crate::db;
 use crate::environment;
 use crate::events;
 use crate::hosting;
+use crate::library;
 
 pub(crate) fn ready(state: &db::DatabaseState) -> Result<&db::Database, SpaceError> {
 	state.as_ref().map_err(|failure| SpaceError::Unavailable { failure: failure.into() })
@@ -103,6 +104,7 @@ pub async fn space_delete<R: Runtime>(
 	hosting::forgotten(&app, &id).await;
 	let held_bots = database.spaces().delete(id.clone()).await?;
 	bundles::space::remove(&app, &id);
+	library::forget_space(&app, &id);
 	forget_bundles(bundles::root(&app).as_deref(), database, &held_bots).await;
 	environment::store::forget_space(&app, &id, &held_bots);
 	Ok(())

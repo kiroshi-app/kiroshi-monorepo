@@ -33,6 +33,8 @@ export const commands = {
 	reason: string,
 } | null>("application_runnable", { config }),
 	chatStoreAttachments: (conversationId: string, attachments: SubmittedAttachment[]) => typedError<string[], AttachmentStoreError>(__TAURI_INVOKE("chat_store_attachments", { conversationId, attachments })),
+	libraryList: (spaceId: string) => typedError<LibraryItem[], LibraryError>(__TAURI_INVOKE("library_list", { spaceId })),
+	libraryReadDocument: (spaceId: string, name: string) => typedError<LibraryDocument, LibraryError>(__TAURI_INVOKE("library_read_document", { spaceId, name })),
 	badgeSet: (count: number) => typedError<null, string>(__TAURI_INVOKE("badge_set", { count })),
 	claudeImportInventory: () => typedError<ClaudeInventory, TranscriptStoreError>(__TAURI_INVOKE("claude_import_inventory")),
 	claudeImportRun: (selection: string[], spaceId: string) => typedError<ClaudeImportOutcome[], TranscriptStoreError>(__TAURI_INVOKE("claude_import_run", { selection, spaceId })),
@@ -1130,6 +1132,27 @@ export type LaunchOutcome = {
 	created: CompanionCreated | null,
 	refused: CompanionSeedRefused | null,
 };
+
+export type LibraryDocument = {
+	name: string,
+	format: LibraryDocumentFormat,
+	content: string,
+};
+
+export type LibraryDocumentFormat = "markdown" | "text";
+
+export type LibraryError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "unknownSpace"; id: string } | { kind: "invalidName"; name: string } | { kind: "missing"; name: string } | { kind: "notADocument"; name: string } | { kind: "notUtf8"; name: string } | { kind: "tooLarge"; name: string; bytes: number; limit: number } | { kind: "unreadable"; detail: string };
+
+export type LibraryItem = {
+	name: string,
+	kind: LibraryItemKind,
+	path: string,
+	bytes: number,
+	modifiedAt: number,
+	createdAt: number | null,
+};
+
+export type LibraryItemKind = "image" | "document";
 
 export type LiveSession = {
 	botId: string,

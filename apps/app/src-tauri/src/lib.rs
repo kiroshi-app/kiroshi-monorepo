@@ -23,6 +23,7 @@ pub mod hosting;
 pub mod invitations;
 pub mod joined_spaces;
 pub mod json;
+pub mod library;
 pub mod logging;
 pub mod mcp_oauth;
 #[cfg(any(target_os = "macos", test))]

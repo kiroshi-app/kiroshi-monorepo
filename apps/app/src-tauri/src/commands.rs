@@ -3,7 +3,7 @@ use tauri_specta::{collect_commands, Builder, Commands};
 
 use crate::{
 	account, agent, applications, attachments, badge, claude_import, companions, conversations,
-	crypto, devices, environment, hosting, invitations, joined_spaces, logging, mcp_oauth,
+	crypto, devices, environment, hosting, invitations, joined_spaces, library, logging, mcp_oauth,
 	menu_contract, missions, notifications, plugins, routines, search, sections, spaces, updates,
 	user, window_controls,
 };
@@ -79,6 +79,8 @@ fn commands<R: Runtime>() -> Commands<R> {
 		applications::commands::application_installs,
 		applications::commands::application_runnable,
 		attachments::commands::chat_store_attachments::<tauri::Wry>,
+		library::commands::library_list::<tauri::Wry>,
+		library::commands::library_read_document::<tauri::Wry>,
 		badge::commands::badge_set::<tauri::Wry>,
 		claude_import::commands::claude_import_inventory,
 		claude_import::commands::claude_import_run::<tauri::Wry>,
