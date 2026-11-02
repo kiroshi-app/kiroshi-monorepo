@@ -4,7 +4,7 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 use tauri::webview::{PageLoadEvent, PageLoadPayload};
 use tauri::{AppHandle, Manager, Runtime, State, Webview, Window, WindowEvent};
 
-use super::contract::TranscriptStoreError;
+use super::contract::{SummonsDropped, TranscriptStoreError};
 use super::host_turn;
 use crate::agent::AgentState;
 use crate::db;
@@ -19,6 +19,7 @@ struct Windows {
 	submitted: HashMap<String, String>,
 	orphaned: HashSet<String>,
 	drivers: HashSet<String>,
+	unseen_drops: Vec<SummonsDropped>,
 }
 
 impl TurnWindows {
@@ -38,7 +39,7 @@ impl TurnWindows {
 
 	pub(crate) fn forget_window(&self, window: &str) {
 		let mut held = self.held();
-		let Windows { submitted, orphaned, drivers } = &mut *held;
+		let Windows { submitted, orphaned, drivers, .. } = &mut *held;
 		drivers.remove(window);
 		submitted.retain(|turn_id, submitter| {
 			let is_left = submitter == window;
@@ -52,6 +53,22 @@ impl TurnWindows {
 	fn is_left_to_the_host(&self, turn_id: &str) -> bool {
 		let held = self.held();
 		!held.drivers.is_empty() && held.orphaned.contains(turn_id)
+	}
+
+	pub(crate) fn keep_unless_driven(&self, dropped: SummonsDropped) {
+		let mut held = self.held();
+		if held.drivers.is_empty() {
+			held.unseen_drops.push(dropped);
+		}
+	}
+
+	fn claim_unseen_drops(&self, conversation_id: &str) -> Vec<SummonsDropped> {
+		let mut held = self.held();
+		let (claimed, kept) = std::mem::take(&mut held.unseen_drops)
+			.into_iter()
+			.partition(|dropped| dropped.conversation_id == conversation_id);
+		held.unseen_drops = kept;
+		claimed
 	}
 
 	fn served(&self, turn_id: &str) {
@@ -81,6 +98,15 @@ pub async fn conversation_serve_awaited_runs<R: Runtime>(
 	agent: State<'_, AgentState>,
 ) -> Result<(), TranscriptStoreError> {
 	serve_on_driving(&app, &windows, &agent, webview.window().label()).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn conversation_claim_unseen_drops(
+	windows: State<'_, TurnWindows>,
+	conversation_id: String,
+) -> Vec<SummonsDropped> {
+	windows.claim_unseen_drops(&conversation_id)
 }
 
 pub(crate) async fn serve_on_driving<R: Runtime>(

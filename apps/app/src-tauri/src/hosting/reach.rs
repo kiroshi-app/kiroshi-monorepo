@@ -252,6 +252,15 @@ pub(super) const REACHES: &[(&str, Reach)] = &[
 		]),
 	),
 	("conversation_serve_awaited_runs", Reach::HostOnly),
+	("conversation_claim_unseen_drops", Reach::Scoped(CONVERSATION_ID)),
+	(
+		"conversation_drop_summons",
+		Reach::Scoped(&[
+			child(Conversation, "/conversationId"),
+			child(Turn, "/turnId"),
+			child(Bot, "/botId"),
+		]),
+	),
 	("conversation_open_assistant_message", Reach::Scoped(NEW_MESSAGE)),
 	("conversation_append_text", Reach::Scoped(MESSAGE_AS_ID)),
 	("conversation_finalize_message", Reach::Scoped(MESSAGE_AS_ID)),

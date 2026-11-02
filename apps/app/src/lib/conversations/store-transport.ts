@@ -33,6 +33,7 @@ import type {
 	SuggestedBot,
 } from "./store-contract"
 import type { TranscriptStore } from "./store-port"
+import type { SummonsRun } from "./summons-trace"
 import {
 	COMPANION_ARRIVED_EVENT,
 	COMPANION_SPOKE_EVENT,
@@ -57,7 +58,11 @@ import {
 	listen,
 } from "../host"
 import type { AgentCommand } from "@/lib/agent/contract"
-import { SUMMONS_DROPPED_EVENT, type SummonsDropped } from "@/lib/bindings"
+import {
+	SUMMONS_DROPPED_EVENT,
+	type SummonsDropped,
+	type SummonsDropReason,
+} from "@/lib/bindings"
 import type { ConversationSource } from "../host/conversation-provenance"
 import type { Invoke } from "../host/joined-hosts-invoke"
 import type { ReportTurnWrites } from "../routines/run-report"
@@ -562,4 +567,20 @@ export const conversationStore: TranscriptStore = {
 
 	sendUserMessage: (message: NewUserMessage, summoned: string[]) =>
 		invoke<number>("conversation_send_user_message", { message, summoned }),
+
+	dropSummons: (
+		{ conversationId, turnId, botId }: SummonsRun,
+		reason: SummonsDropReason,
+	) =>
+		invoke<boolean>("conversation_drop_summons", {
+			conversationId,
+			turnId,
+			botId,
+			reason,
+		}),
+
+	claimUnseenDrops: (conversationId: string) =>
+		invoke<SummonsDropped[]>("conversation_claim_unseen_drops", {
+			conversationId,
+		}),
 }

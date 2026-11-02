@@ -37,6 +37,7 @@ pub fn builder() -> Builder<tauri::Wry> {
 		.constant("NATIVE_MOVE_ENDED_EVENT", window_controls::native_move::NATIVE_MOVE_ENDED_EVENT)
 		.constant("CLAUDE_IMPORT_PROGRESS_EVENT", claude_import::contract::PROGRESS_EVENT)
 		.constant("SUMMONS_DROPPED_EVENT", conversations::contract::SUMMONS_DROPPED_EVENT)
+		.constant("MAX_SUMMONS_PER_CHAIN", conversations::summons::MAX_SUMMONS_PER_CHAIN)
 		.typ::<window_controls::MaximizeButtonPointer>()
 		.typ::<window_controls::drag_ghost::DragGhostTab>()
 		.typ::<devices::contract::DeviceApproval>()
@@ -171,6 +172,8 @@ fn commands<R: Runtime>() -> Commands<R> {
 		conversations::commands::conversation_send_user_message::<tauri::Wry>,
 		conversations::commands::conversation_send_turn::<tauri::Wry>,
 		conversations::awaited_runs::conversation_serve_awaited_runs::<tauri::Wry>,
+		conversations::awaited_runs::conversation_claim_unseen_drops,
+		conversations::turn_run_deadline::conversation_drop_summons::<tauri::Wry>,
 		conversations::commands::conversation_open_assistant_message::<tauri::Wry>,
 		conversations::commands::conversation_append_text::<tauri::Wry>,
 		conversations::commands::conversation_finalize_message::<tauri::Wry>,

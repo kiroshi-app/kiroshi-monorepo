@@ -13,8 +13,8 @@ use super::awaited_runs::forget_settled_turns;
 use super::commands::announce_conversation;
 use super::context::{bounded_context, headed_message, mentioned_bot_ids};
 use super::contract::{SentMessage, TranscriptStoreError};
-use super::summons::{self, SummonsDropReason, SummonsRun};
-use super::turn_run_deadline::{arm_start_deadlines, suspend_start_deadline};
+use super::summons::{self, SummonsDropReason, SummonsRun, MAX_SUMMONS_PER_CHAIN};
+use super::turn_run_deadline::{arm_start_deadlines, drop_awaited_run, suspend_start_deadline};
 use crate::agent::commands::{
 	agent_shutdown, announce, announce_in_turn, cancel_session_turn, line_place_of, live_run_of,
 	run_is_idle, start_run, submit_in_line, withdraw_queued, Lineage, RunStart,
@@ -316,6 +316,7 @@ pub(crate) async fn run<R: Runtime>(
 		turn_id: message.turn_id,
 		prompt_id: message.id,
 		stopped: held.stopped.clone(),
+		handed_bot_ids: Mutex::default(),
 	};
 	drive_from(turn, held, first).await;
 }
@@ -334,6 +335,7 @@ pub(crate) async fn serve_awaited<R: Runtime>(
 		turn_id: first.turn_id.clone(),
 		prompt_id: first.prompt_id.clone(),
 		stopped: held.stopped.clone(),
+		handed_bot_ids: Mutex::default(),
 	};
 	let summoned = awaited
 		.into_iter()
@@ -431,6 +433,7 @@ struct HostTurn<R: Runtime> {
 	turn_id: String,
 	prompt_id: String,
 	stopped: watch::Receiver<bool>,
+	handed_bot_ids: Mutex<Vec<String>>,
 }
 
 impl<R: Runtime> HostTurn<R> {
@@ -929,8 +932,16 @@ impl<R: Runtime> HostTurn<R> {
 			Ok(handed) => {
 				for held in handed {
 					let bot_id = held.bot_id.clone();
-					if let Some(reason) = hand_over(waiting, &done.scope.bot_id, held) {
-						summons::note_dropped(&self.app, &self.run_of(&bot_id), reason, None);
+					let from = &done.scope.bot_id;
+					let refusal = hand_over(waiting, &mut locked(&self.handed_bot_ids), from, held);
+					match refusal {
+						Some(SummonsDropReason::SummonLimit) => {
+							self.refuse_past_the_bound(&bot_id).await
+						}
+						Some(reason) => {
+							summons::note_dropped(&self.app, &self.run_of(&bot_id), reason, None)
+						}
+						None => {}
 					}
 				}
 			}
@@ -940,6 +951,23 @@ impl<R: Runtime> HostTurn<R> {
 				done.scope.bot_id
 			),
 		}
+	}
+
+	async fn refuse_past_the_bound(&self, bot_id: &str) {
+		let run = self.run_of(bot_id);
+		let reason = SummonsDropReason::SummonLimit;
+		match drop_awaited_run(&self.app, &run, reason).await {
+			Ok(true) => {}
+			Ok(false) => summons::note_dropped(&self.app, &run, reason, None),
+			Err(error) => {
+				log::warn!(
+					"{} could not release the awaited run of {bot_id} past the bound: {error:?}",
+					self.label()
+				);
+				summons::note_dropped(&self.app, &run, reason, None);
+			}
+		}
+		summons::keep_for_the_room(&self.app, &run, reason);
 	}
 
 	async fn handed_by(&self, done: &Speaker) -> Result<Vec<Summons>, TranscriptStoreError> {
@@ -1076,15 +1104,22 @@ impl<R: Runtime> HostTurn<R> {
 
 fn hand_over(
 	waiting: &mut Vec<Summons>,
+	handed_bot_ids: &mut Vec<String>,
 	from: &str,
 	summons: Summons,
 ) -> Option<SummonsDropReason> {
 	if summons.bot_id == from {
 		return Some(SummonsDropReason::SelfMention);
 	}
-	if !waiting.iter().any(|held| held.bot_id == summons.bot_id) {
-		waiting.push(summons);
+	if waiting.iter().any(|held| held.bot_id == summons.bot_id) {
+		return None;
 	}
+	let times_handed = handed_bot_ids.iter().filter(|handed| **handed == summons.bot_id).count();
+	if times_handed >= MAX_SUMMONS_PER_CHAIN {
+		return Some(SummonsDropReason::SummonLimit);
+	}
+	handed_bot_ids.push(summons.bot_id.clone());
+	waiting.push(summons);
 	None
 }
 
@@ -1352,6 +1387,7 @@ mod tests {
 			turn_id: "t1".to_owned(),
 			prompt_id: "p1".to_owned(),
 			stopped,
+			handed_bot_ids: Mutex::default(),
 		}
 	}
 
@@ -1673,6 +1709,7 @@ mod tests {
 			turn_id: "t1".to_owned(),
 			prompt_id: "p1".to_owned(),
 			stopped,
+			handed_bot_ids: Mutex::default(),
 		};
 		let summoned: Vec<Summons> = [DEFAULT_BOT_ID, ada.as_str()]
 			.into_iter()

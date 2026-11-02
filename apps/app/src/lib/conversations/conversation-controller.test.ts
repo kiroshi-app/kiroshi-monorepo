@@ -20,9 +20,8 @@ import {
 	TRANSCRIPT_WINDOW_SIZE,
 } from "./transcript-contract"
 import { message, seatBots } from "./transcript-fixtures"
-import { MAX_SUMMONS_PER_CHAIN } from "./turn-queue"
 
-import type { SummonsDropped } from "../bindings"
+import { MAX_SUMMONS_PER_CHAIN, type SummonsDropped } from "../bindings"
 import type {
 	ActivityStatus,
 	AgentEvent,
@@ -3237,28 +3236,93 @@ describe("the mentions a finished turn carries", () => {
 		room.detach()
 	})
 
-	it("raises no second notice when the host drops the run the loop bound stopped", async () => {
+	const summonLimitOf = (name: string) =>
+		`Agents already handed ${name} the turn ${MAX_SUMMONS_PER_CHAIN} times in this exchange, so the exchange stops here. Mention ${name} yourself to carry on.`
+
+	it("hands the run the loop bound stopped to the host and raises the one notice the host announces", async () => {
 		const room = await roomSeating()
+		const dropSummons = vi
+			.spyOn(room.store, "dropSummons")
+			.mockResolvedValue(true)
 		await pingPong(room)
-		const [, facts] = room.reportFailure.mock.calls[0]
+		const [[dropped]] = dropSummons.mock.calls
 
-		await room.drop({
-			botId: room.iris,
-			turnId: facts.turn,
-			reason: "neverStarted",
-		})
+		const noticedBeforeTheHost = room.reportFailure.mock.calls.length
+		await room.drop({ ...dropped, reason: "summonLimit" })
 
+		expect(dropSummons).toHaveBeenCalledTimes(1)
+		expect(dropSummons).toHaveBeenCalledWith(
+			expect.objectContaining({
+				conversationId: room.conversation.id,
+				botId: room.iris,
+			}),
+			"summonLimit",
+		)
+		expect(noticedBeforeTheHost).toBe(0)
 		expect(room.reportFailure).toHaveBeenCalledTimes(1)
+		expect(room.reportFailure).toHaveBeenCalledWith(
+			...notStarted("Iris didn’t start", summonLimitOf("Iris"), {
+				botId: room.iris,
+				botName: "Iris",
+			}),
+		)
 		room.detach()
 	})
 
-	it("raises one notice for a run dropped twice", async () => {
+	it("raises the bound notice itself when the host cannot take the drop", async () => {
+		const room = await roomSeating()
+		vi.spyOn(room.store, "dropSummons").mockRejectedValue(new Error("gone"))
+
+		await pingPong(room)
+
+		expect(room.reportFailure).toHaveBeenCalledTimes(1)
+		expect(room.controller.getState().latestError).not.toBeNull()
+		room.detach()
+	})
+
+	it("raises one notice per failed run of one agent in one turn", async () => {
 		const room = await roomSeating()
 
 		await room.drop({ botId: room.iris })
-		await room.drop({ botId: room.iris, reason: "lostQueue" })
+		await room.drop({ botId: room.iris, reason: "summonLimit" })
 
+		expect(room.reportFailure).toHaveBeenCalledTimes(2)
+		room.detach()
+	})
+
+	it("raises the notice of a drop the host kept while no window was open, once the room opens", async () => {
+		const room = await roomSeating()
+		const gates = await room.store.createConversation({
+			spaceId: SPACE,
+			sectionId: null,
+			title: "Gates",
+			botIds: [room.ada],
+		})
+		const claim = vi
+			.spyOn(room.store, "claimUnseenDrops")
+			.mockResolvedValueOnce([
+				{
+					conversationId: gates.id,
+					turnId: "turn-left",
+					botId: room.ada,
+					reason: "summonLimit",
+					error: null,
+				},
+			])
+
+		await room.controller.open(gates)
+		await room.controller.open(room.conversation)
+		await room.controller.open(gates)
+		await settled()
+
+		expect(claim).toHaveBeenCalledWith(gates.id)
 		expect(room.reportFailure).toHaveBeenCalledTimes(1)
+		expect(room.reportFailure).toHaveBeenCalledWith(
+			...notStarted("Ada didn’t start", summonLimitOf("Ada"), {
+				botId: room.ada,
+				botName: "Ada",
+			}),
+		)
 		room.detach()
 	})
 

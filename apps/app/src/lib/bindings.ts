@@ -169,6 +169,8 @@ export const commands = {
 	conversationSendUserMessage: (message: NewUserMessage, summoned: string[]) => typedError<number, TranscriptStoreError>(__TAURI_INVOKE("conversation_send_user_message", { message, summoned })),
 	conversationSendTurn: (message: SentMessage, summoned: string[]) => typedError<number, TranscriptStoreError>(__TAURI_INVOKE("conversation_send_turn", { message, summoned })),
 	conversationServeAwaitedRuns: () => typedError<null, TranscriptStoreError>(__TAURI_INVOKE("conversation_serve_awaited_runs")),
+	conversationClaimUnseenDrops: (conversationId: string) => __TAURI_INVOKE<SummonsDropped[]>("conversation_claim_unseen_drops", { conversationId }),
+	conversationDropSummons: (conversationId: string, turnId: string, botId: string, reason: SummonsDropReason) => typedError<boolean, TranscriptStoreError>(__TAURI_INVOKE("conversation_drop_summons", { conversationId, turnId, botId, reason })),
 	conversationOpenAssistantMessage: (message: NewAssistantMessage) => typedError<number, TranscriptStoreError>(__TAURI_INVOKE("conversation_open_assistant_message", { message })),
 	conversationAppendText: (id: string, delta: string) => typedError<null, TranscriptStoreError>(__TAURI_INVOKE("conversation_append_text", { id, delta })),
 	conversationFinalizeMessage: (id: string, completion: TerminalCompletion, settledText: string | null) => typedError<null, TranscriptStoreError>(__TAURI_INVOKE("conversation_finalize_message", { id, completion, settledText })),
@@ -316,6 +318,8 @@ export const JOINED_SPACE_REMOVED_EVENT = "joined-space://removed" as const;
 export const JOIN_LINK_OPENED_EVENT = "join-link://opened" as const;
 
 export const MAXIMIZE_BUTTON_EVENT = "window-maximize-button" as const;
+
+export const MAX_SUMMONS_PER_CHAIN = 5 as const;
 
 export const NATIVE_MOVE_ENDED_EVENT = "window://native-move-ended" as const;
 
@@ -1804,7 +1808,7 @@ export type SuggestedBot = {
 	blurb: string,
 };
 
-export type SummonsDropReason = "selfMention" | "cancelled" | "notSeated" | "startFailed" | "neverStarted" | "lostQueue" | "interrupted";
+export type SummonsDropReason = "selfMention" | "summonLimit" | "cancelled" | "notSeated" | "startFailed" | "neverStarted" | "lostQueue" | "interrupted";
 
 export type SummonsDropped = {
 	conversationId: string,
