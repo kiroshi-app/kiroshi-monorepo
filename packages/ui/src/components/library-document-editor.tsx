@@ -40,11 +40,13 @@ const SHORTCUTS: [prefix: string, kind: BlockKind][] = [
 	["- ", "item"],
 ]
 
+const BODY_TYPE = "text-reading text-soft-foreground leading-6"
+
 const BLOCK_TYPE: Record<BlockKind, string> = {
-	paragraph: "text-reading text-soft-foreground leading-6",
+	paragraph: BODY_TYPE,
 	heading:
 		"font-heading font-semibold text-[1.0625rem] text-foreground leading-6 not-first:mt-2.5",
-	item: "text-reading text-soft-foreground leading-6",
+	item: BODY_TYPE,
 }
 
 const BLOCK_LABEL = {
@@ -59,6 +61,11 @@ const blockOf = (
 	placeholder?: string,
 ): Block => ({ id: crypto.randomUUID(), kind, text, placeholder })
 
+const sectionOf = (heading: string, placeholder: string) => [
+	blockOf("heading", heading),
+	blockOf("paragraph", "", placeholder),
+]
+
 const startingBlocks = (
 	template: LibraryDocumentTemplate,
 	t: TFunction<"common">,
@@ -71,34 +78,24 @@ const startingBlocks = (
 		case "brief":
 			return [
 				blockOf("paragraph", "", t("library.templates.brief.intro")),
-				blockOf("heading", t("library.templates.brief.goal.heading")),
-				blockOf("paragraph", "", t("library.templates.brief.goal.placeholder")),
-				blockOf("heading", t("library.templates.brief.doneWhen.heading")),
-				blockOf(
-					"paragraph",
-					"",
+				...sectionOf(
+					t("library.templates.brief.goal.heading"),
+					t("library.templates.brief.goal.placeholder"),
+				),
+				...sectionOf(
+					t("library.templates.brief.doneWhen.heading"),
 					t("library.templates.brief.doneWhen.placeholder"),
 				),
 			]
 		case "meetingNotes":
 			return [
 				blockOf("paragraph", "", t("library.templates.meetingNotes.intro")),
-				blockOf(
-					"heading",
+				...sectionOf(
 					t("library.templates.meetingNotes.decisions.heading"),
-				),
-				blockOf(
-					"paragraph",
-					"",
 					t("library.templates.meetingNotes.decisions.placeholder"),
 				),
-				blockOf(
-					"heading",
+				...sectionOf(
 					t("library.templates.meetingNotes.nextSteps.heading"),
-				),
-				blockOf(
-					"paragraph",
-					"",
 					t("library.templates.meetingNotes.nextSteps.placeholder"),
 				),
 			]
