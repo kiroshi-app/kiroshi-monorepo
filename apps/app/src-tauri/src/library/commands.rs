@@ -1,8 +1,16 @@
+use std::path::PathBuf;
+
+use tauri::image::Image;
 use tauri::{AppHandle, Runtime, State};
+use tauri_plugin_clipboard_manager::ClipboardExt;
+use tauri_plugin_dialog::DialogExt;
+use tauri_plugin_opener::OpenerExt;
+use tokio::sync::oneshot;
 
 use super::contract::{LibraryDocument, LibraryError, LibraryItem};
-use super::{list, read_document, root};
+use super::{clipboard_payload, list, read_document, resolve, root, save, ClipboardPayload};
 use crate::db;
+use crate::logging::scrub::scrubbed;
 
 async fn known_space(state: &db::DatabaseState, space_id: &str) -> Result<(), LibraryError> {
 	let database =
@@ -35,4 +43,85 @@ pub async fn library_read_document<R: Runtime>(
 ) -> Result<LibraryDocument, LibraryError> {
 	known_space(&state, &space_id).await?;
 	read_document(&root(&app)?, &space_id, &name)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn library_save<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	space_id: String,
+	name: String,
+) -> Result<Option<String>, LibraryError> {
+	known_space(&state, &space_id).await?;
+	let saved = save(&root(&app)?, &space_id, &name, |suggested| {
+		chosen_destination(&app, suggested.to_owned())
+	})
+	.await?;
+	Ok(saved.map(|path| path.to_string_lossy().into_owned()))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn library_copy<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	space_id: String,
+	name: String,
+) -> Result<(), LibraryError> {
+	known_space(&state, &space_id).await?;
+	let root = root(&app)?;
+	let payload = tokio::task::spawn_blocking(move || clipboard_payload(&root, &space_id, &name))
+		.await
+		.map_err(|error| LibraryError::Unreadable { detail: error.to_string() })??;
+	put_on_clipboard(&app, payload)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn library_reveal<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	space_id: String,
+	name: String,
+) -> Result<(), LibraryError> {
+	known_space(&state, &space_id).await?;
+	let item = resolve(&root(&app)?, &space_id, &name)?;
+	app.opener()
+		.reveal_item_in_dir(&item.path)
+		.map_err(|error| LibraryError::Unrevealed { detail: scrubbed(&error.to_string()) })
+}
+
+async fn chosen_destination<R: Runtime>(
+	app: &AppHandle<R>,
+	suggested: String,
+) -> Result<Option<PathBuf>, LibraryError> {
+	let (answer, answered) = oneshot::channel();
+	app.dialog().file().set_file_name(suggested).save_file(move |chosen| {
+		if answer.send(chosen).is_err() {
+			log::warn!("a library save dialog answered after its command was dropped");
+		}
+	});
+	let chosen = answered.await.map_err(|_| LibraryError::Unwritable {
+		detail: "the save dialog closed without an answer".to_owned(),
+	})?;
+	chosen
+		.map(|path| {
+			path.into_path().map_err(|error| LibraryError::Unwritable { detail: error.to_string() })
+		})
+		.transpose()
+}
+
+fn put_on_clipboard<R: Runtime>(
+	app: &AppHandle<R>,
+	payload: ClipboardPayload,
+) -> Result<(), LibraryError> {
+	let clipboard = app.clipboard();
+	let written = match payload {
+		ClipboardPayload::Text(text) => clipboard.write_text(text),
+		ClipboardPayload::Image { rgba, width, height } => {
+			clipboard.write_image(&Image::new_owned(rgba, width, height))
+		}
+	};
+	written.map_err(|error| LibraryError::ClipboardRefused { detail: error.to_string() })
 }

@@ -111,6 +111,9 @@ pub(super) const REACHES: &[(&str, Reach)] = &[
 	("chat_store_attachments", Reach::Scoped(CONVERSATION_ID)),
 	("library_list", Reach::HostOnly),
 	("library_read_document", Reach::HostOnly),
+	("library_save", Reach::HostOnly),
+	("library_copy", Reach::HostOnly),
+	("library_reveal", Reach::HostOnly),
 	(
 		"agent_check",
 		Reach::Scoped(&[

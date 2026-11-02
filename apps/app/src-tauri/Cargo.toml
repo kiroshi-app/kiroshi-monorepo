@@ -44,6 +44,7 @@ tauri-plugin-opener = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-os = "2"
 tauri-plugin-dialog = "2"
+tauri-plugin-clipboard-manager = "2"
 # Writes the one rotated log file of the install to the app log directory.
 tauri-plugin-log = "2"
 # The one route from the Rust command surface to the TypeScript the front reads: the
@@ -57,7 +58,7 @@ serde_json = "1"
 tokio = { version = "1", features = ["macros", "process", "io-util", "net", "signal", "sync", "time", "rt-multi-thread"] }
 uuid = { version = "1", features = ["v4"] }
 rusqlite = { version = "0.40", features = ["bundled"] }
-image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
 # Every bundle is its own repository and no machine is asked for a `git` binary:
 # libgit2 is compiled in, and no transport is — nothing here ever leaves the disk.
 git2 = { version = "0.21", default-features = false, features = ["vendored-libgit2"] }
@@ -171,7 +172,7 @@ gtk = "0.18"
 tauri = { version = "2", features = ["test"] }
 # Already a dependency; named again so an integration test can build the pictures it
 # uploads and decode the ones the host stored, rather than checking bytes in.
-image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
 tokio = { version = "1", features = ["macros", "process", "io-util", "sync", "time", "rt-multi-thread", "test-util"] }
 libc = "0.2"
 # Already in the tree through tauri-specta; named so the member socket schema applies the

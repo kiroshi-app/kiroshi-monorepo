@@ -1,12 +1,16 @@
 use std::fs::{self, File};
-use std::path::Path;
+use std::io::Cursor;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
+use image::{DynamicImage, ImageFormat, Rgb, RgbImage};
 use tauri::test::{mock_builder, MockRuntime};
 use tauri::{App, Manager};
 use uuid::Uuid;
 
-use super::commands::{library_list, library_read_document};
+use super::commands::{
+	library_copy, library_list, library_read_document, library_reveal, library_save,
+};
 use super::contract::{LibraryDocumentFormat, LibraryError, LibraryItemKind};
 use super::*;
 use crate::db;
@@ -279,4 +283,288 @@ async fn deleting_a_space_removes_its_library_folder_only() {
 
 	assert!(!space_dir(&root, &deleted).exists());
 	assert_eq!(names(&root, &kept), ["kept.md"]);
+}
+
+fn encoded(format: ImageFormat) -> Vec<u8> {
+	let picture = DynamicImage::ImageRgb8(RgbImage::from_pixel(3, 2, Rgb([200, 40, 10])));
+	let mut bytes = Cursor::new(Vec::new());
+	picture.write_to(&mut bytes, format).expect("the picture encodes");
+	bytes.into_inner()
+}
+
+fn chosen(
+	destination: Option<PathBuf>,
+) -> impl FnOnce(&str) -> std::future::Ready<Result<Option<PathBuf>, LibraryError>> {
+	move |_| std::future::ready(Ok(destination))
+}
+
+#[tokio::test]
+async fn a_save_opens_the_dialog_on_the_item_name_and_copies_it_where_the_person_chose() {
+	let root = temp_root();
+	let elsewhere = temp_root();
+	fs::create_dir_all(&*elsewhere).expect("the destination folder lands");
+	put(&root, SPACE, "cover.png", &encoded(ImageFormat::Png));
+	let destination = elsewhere.join("picked.png");
+	let mut suggested = None;
+
+	let saved = save(&root, SPACE, "cover.png", |name| {
+		suggested = Some(name.to_owned());
+		std::future::ready(Ok(Some(destination.clone())))
+	})
+	.await;
+
+	assert_eq!(saved, Ok(Some(destination.clone())));
+	assert_eq!(suggested.as_deref(), Some("cover.png"));
+	assert_eq!(fs::read(&destination).expect("the copy reads"), encoded(ImageFormat::Png));
+}
+
+#[tokio::test]
+async fn a_cancelled_save_writes_nothing() {
+	let root = temp_root();
+	put(&root, SPACE, "notes.md", b"notes");
+	let before = fs::read_dir(space_dir(&root, SPACE)).expect("the folder lists").count();
+
+	let saved = save(&root, SPACE, "notes.md", chosen(None)).await;
+
+	assert_eq!(saved, Ok(None));
+	assert_eq!(fs::read_dir(space_dir(&root, SPACE)).expect("the folder lists").count(), before);
+}
+
+#[tokio::test]
+async fn a_destination_that_cannot_be_written_says_why() {
+	let root = temp_root();
+	let elsewhere = temp_root();
+	put(&root, SPACE, "notes.md", b"notes");
+
+	let saved =
+		save(&root, SPACE, "notes.md", chosen(Some(elsewhere.join("absent/notes.md")))).await;
+
+	assert!(matches!(saved, Err(LibraryError::Unwritable { detail }) if !detail.is_empty()));
+}
+
+#[tokio::test]
+async fn saving_an_item_onto_itself_keeps_its_bytes() {
+	let root = temp_root();
+	put(&root, SPACE, "notes.md", b"notes");
+	let itself = space_dir(&root, SPACE).join("notes.md");
+
+	let saved = save(&root, SPACE, "notes.md", chosen(Some(itself.clone()))).await;
+
+	assert_eq!(saved, Ok(Some(itself.clone())));
+	assert_eq!(fs::read(&itself).expect("the item reads"), b"notes");
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn an_item_swapped_for_a_link_out_of_the_folder_while_the_dialog_is_open_is_not_copied() {
+	let root = temp_root();
+	let elsewhere = temp_root();
+	fs::create_dir_all(&*elsewhere).expect("the destination folder lands");
+	put(&root, SPACE, "notes.md", b"notes");
+	put(&root, "s2", "theirs.md", b"theirs");
+	let item = space_dir(&root, SPACE).join("notes.md");
+	let destination = elsewhere.join("picked.md");
+
+	let saved = save(&root, SPACE, "notes.md", |_| {
+		fs::remove_file(&item).expect("the item goes");
+		std::os::unix::fs::symlink(space_dir(&root, "s2").join("theirs.md"), &item)
+			.expect("the link lands");
+		std::future::ready(Ok(Some(destination.clone())))
+	})
+	.await;
+
+	assert_eq!(saved, Err(LibraryError::InvalidName { name: "notes.md".to_owned() }));
+	assert!(!destination.exists());
+}
+
+#[tokio::test]
+async fn an_item_deleted_while_the_dialog_is_open_is_missing() {
+	let root = temp_root();
+	let elsewhere = temp_root();
+	fs::create_dir_all(&*elsewhere).expect("the destination folder lands");
+	put(&root, SPACE, "notes.md", b"notes");
+	let destination = elsewhere.join("picked.md");
+
+	let saved = save(&root, SPACE, "notes.md", |_| {
+		fs::remove_file(space_dir(&root, SPACE).join("notes.md")).expect("the item goes");
+		std::future::ready(Ok(Some(destination.clone())))
+	})
+	.await;
+
+	assert_eq!(saved, Err(LibraryError::Missing { name: "notes.md".to_owned() }));
+	assert!(!destination.exists());
+}
+
+#[tokio::test]
+async fn a_refused_name_never_opens_the_save_dialog() {
+	let root = temp_root();
+	put(&root, "s2", "theirs.md", b"theirs");
+
+	let saved = save(&root, SPACE, "../s2/theirs.md", |_| -> std::future::Ready<_> {
+		panic!("the dialog opened for a refused name")
+	})
+	.await;
+
+	assert_eq!(saved, Err(LibraryError::InvalidName { name: "../s2/theirs.md".to_owned() }));
+}
+
+#[test]
+fn a_document_copies_as_its_text() {
+	let root = temp_root();
+	put(&root, SPACE, "notes.md", "# Notes é".as_bytes());
+
+	assert_eq!(
+		clipboard_payload(&root, SPACE, "notes.md"),
+		Ok(ClipboardPayload::Text("# Notes é".to_owned()))
+	);
+}
+
+#[test]
+fn a_document_copy_keeps_the_read_refusals() {
+	let root = temp_root();
+	put(&root, SPACE, "broken.txt", &[0xff, 0xfe, 0x00]);
+	let big = File::create(space_dir(&root, SPACE).join("big.md")).expect("the file lands");
+	big.set_len(MAX_DOCUMENT_BYTES + 1).expect("the file grows");
+
+	assert_eq!(
+		clipboard_payload(&root, SPACE, "broken.txt"),
+		Err(LibraryError::NotUtf8 { name: "broken.txt".to_owned() })
+	);
+	assert_eq!(
+		clipboard_payload(&root, SPACE, "big.md"),
+		Err(LibraryError::TooLarge {
+			name: "big.md".to_owned(),
+			bytes: MAX_DOCUMENT_BYTES + 1,
+			limit: MAX_DOCUMENT_BYTES
+		})
+	);
+}
+
+#[test]
+fn each_image_type_copies_as_its_decoded_pixels() {
+	let root = temp_root();
+	let lossless =
+		[("a.png", ImageFormat::Png), ("b.gif", ImageFormat::Gif), ("c.webp", ImageFormat::WebP)];
+	for (name, format) in lossless {
+		put(&root, SPACE, name, &encoded(format));
+
+		assert_eq!(
+			clipboard_payload(&root, SPACE, name),
+			Ok(ClipboardPayload::Image { rgba: [200, 40, 10, 255].repeat(6), width: 3, height: 2 }),
+			"{name}"
+		);
+	}
+	for name in ["d.jpg", "e.JPEG"] {
+		put(&root, SPACE, name, &encoded(ImageFormat::Jpeg));
+
+		let Ok(ClipboardPayload::Image { rgba, width, height }) =
+			clipboard_payload(&root, SPACE, name)
+		else {
+			panic!("{name} copies as an image");
+		};
+		assert_eq!((width, height, rgba.len()), (3, 2, 24), "{name}");
+		assert!(rgba.chunks(4).all(|pixel| pixel[3] == 255), "{name}");
+	}
+}
+
+#[test]
+fn an_image_that_fails_to_decode_or_is_too_large_is_refused_by_name() {
+	let root = temp_root();
+	put(&root, SPACE, "broken.png", b"not a png");
+	put(&root, SPACE, "mislabelled.gif", &encoded(ImageFormat::Png));
+	let big = File::create(space_dir(&root, SPACE).join("big.webp")).expect("the file lands");
+	big.set_len(MAX_IMAGE_BYTES + 1).expect("the file grows");
+
+	for name in ["broken.png", "mislabelled.gif"] {
+		assert!(
+			matches!(
+				clipboard_payload(&root, SPACE, name),
+				Err(LibraryError::Undecodable { name: refused, .. }) if refused == name
+			),
+			"{name}"
+		);
+	}
+	assert_eq!(
+		clipboard_payload(&root, SPACE, "big.webp"),
+		Err(LibraryError::TooLarge {
+			name: "big.webp".to_owned(),
+			bytes: MAX_IMAGE_BYTES + 1,
+			limit: MAX_IMAGE_BYTES
+		})
+	);
+}
+
+#[tokio::test]
+async fn an_unknown_space_is_refused_by_save_copy_and_reveal() {
+	let app = a_host("unknown-actions");
+	let refused = Err(LibraryError::UnknownSpace { id: "nowhere".to_owned() });
+
+	assert_eq!(
+		refusals_of_each_action(&app, "nowhere", "a.md").await,
+		[refused.clone(), refused.clone(), refused]
+	);
+}
+
+async fn refusals_of_each_action(
+	app: &App<MockRuntime>,
+	space_id: &str,
+	name: &str,
+) -> [Result<(), LibraryError>; 3] {
+	let saved =
+		library_save(app.handle().clone(), app.state(), space_id.to_owned(), name.to_owned())
+			.await
+			.map(|_| ());
+	let copied =
+		library_copy(app.handle().clone(), app.state(), space_id.to_owned(), name.to_owned()).await;
+	let revealed =
+		library_reveal(app.handle().clone(), app.state(), space_id.to_owned(), name.to_owned())
+			.await;
+	[saved, copied, revealed]
+}
+
+#[tokio::test]
+async fn a_name_that_leaves_the_folder_is_refused_by_save_copy_and_reveal() {
+	let app = a_host("escape-actions");
+	let mine = a_space(&app, "Mine").await;
+	let theirs = a_space(&app, "Theirs").await;
+	let root = root(app.handle()).expect("the library root resolves");
+	put(&root, &mine, "notes.md", b"notes");
+	put(&root, &theirs, "theirs.md", b"theirs");
+
+	for name in [
+		"".to_owned(),
+		".".to_owned(),
+		"..".to_owned(),
+		format!("../{theirs}/theirs.md"),
+		format!("..\\{theirs}\\theirs.md"),
+	] {
+		let refused = Err(LibraryError::InvalidName { name: name.clone() });
+		assert_eq!(
+			refusals_of_each_action(&app, &mine, &name).await,
+			[refused.clone(), refused.clone(), refused],
+			"{name}"
+		);
+	}
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_link_out_of_the_folder_is_refused_by_save_copy_and_reveal() {
+	let app = a_host("link-actions");
+	let mine = a_space(&app, "Mine").await;
+	let theirs = a_space(&app, "Theirs").await;
+	let root = root(app.handle()).expect("the library root resolves");
+	put(&root, &theirs, "theirs.png", &encoded(ImageFormat::Png));
+	fs::create_dir_all(space_dir(&root, &mine)).expect("the space folder lands");
+	std::os::unix::fs::symlink(
+		space_dir(&root, &theirs).join("theirs.png"),
+		space_dir(&root, &mine).join("out.png"),
+	)
+	.expect("the link lands");
+	let refused = Err(LibraryError::InvalidName { name: "out.png".to_owned() });
+
+	assert_eq!(
+		refusals_of_each_action(&app, &mine, "out.png").await,
+		[refused.clone(), refused.clone(), refused]
+	);
 }

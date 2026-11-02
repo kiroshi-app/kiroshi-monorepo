@@ -2,11 +2,13 @@ pub mod commands;
 pub mod contract;
 
 use std::fs::{self, Metadata};
-use std::io;
+use std::future::Future;
+use std::io::{self, Cursor};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use chrono::{DateTime, Utc};
+use image::{ImageFormat, ImageReader, Limits};
 use tauri::{AppHandle, Manager, Runtime};
 
 use contract::{
@@ -17,9 +19,25 @@ const DIR_NAME: &str = "library";
 
 const MAX_DOCUMENT_BYTES: u64 = 5 * 1024 * 1024;
 
+const MAX_IMAGE_BYTES: u64 = 20 * 1024 * 1024;
+
+const MAX_DECODED_IMAGE_BYTES: u64 = 256 * 1024 * 1024;
+
 enum AcceptedType {
 	Image,
 	Document(LibraryDocumentFormat),
+}
+
+struct ResolvedItem {
+	path: PathBuf,
+	accepted: AcceptedType,
+	bytes: u64,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum ClipboardPayload {
+	Text(String),
+	Image { rgba: Vec<u8>, width: u32, height: u32 },
 }
 
 fn root<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, LibraryError> {
@@ -79,7 +97,7 @@ fn item_at(path: &Path, name: String) -> Result<Option<LibraryItem>, LibraryErro
 	}))
 }
 
-fn read_document(root: &Path, space_id: &str, name: &str) -> Result<LibraryDocument, LibraryError> {
+fn resolve(root: &Path, space_id: &str, name: &str) -> Result<ResolvedItem, LibraryError> {
 	let missing = || LibraryError::Missing { name: name.to_owned() };
 	if !is_plain_name(name) {
 		return Err(LibraryError::InvalidName { name: name.to_owned() });
@@ -92,24 +110,106 @@ fn read_document(root: &Path, space_id: &str, name: &str) -> Result<LibraryDocum
 		return Err(LibraryError::InvalidName { name: name.to_owned() });
 	}
 	let metadata = fs::symlink_metadata(&path).map_err(|error| refusal(&error, missing()))?;
-	let format = match (metadata.is_file(), accepted_type(name)) {
-		(true, Some(AcceptedType::Document(format))) => format,
-		(true, Some(AcceptedType::Image)) => {
-			return Err(LibraryError::NotADocument { name: name.to_owned() })
+	match (metadata.is_file(), accepted_type(name)) {
+		(true, Some(accepted)) => {
+			Ok(ResolvedItem { path: resolved, accepted, bytes: metadata.len() })
 		}
-		_ => return Err(missing()),
+		_ => Err(missing()),
+	}
+}
+
+fn read_document(root: &Path, space_id: &str, name: &str) -> Result<LibraryDocument, LibraryError> {
+	let item = resolve(root, space_id, name)?;
+	let AcceptedType::Document(format) = item.accepted else {
+		return Err(LibraryError::NotADocument { name: name.to_owned() });
 	};
-	if metadata.len() > MAX_DOCUMENT_BYTES {
+	let content = document_text(&item, name)?;
+	Ok(LibraryDocument { name: name.to_owned(), format, content })
+}
+
+fn document_text(item: &ResolvedItem, name: &str) -> Result<String, LibraryError> {
+	if item.bytes > MAX_DOCUMENT_BYTES {
 		return Err(LibraryError::TooLarge {
 			name: name.to_owned(),
-			bytes: metadata.len(),
+			bytes: item.bytes,
 			limit: MAX_DOCUMENT_BYTES,
 		});
 	}
-	let bytes = fs::read(&path).map_err(|error| refusal(&error, missing()))?;
-	let content =
-		String::from_utf8(bytes).map_err(|_| LibraryError::NotUtf8 { name: name.to_owned() })?;
-	Ok(LibraryDocument { name: name.to_owned(), format, content })
+	let bytes = fs::read(&item.path)
+		.map_err(|error| refusal(&error, LibraryError::Missing { name: name.to_owned() }))?;
+	String::from_utf8(bytes).map_err(|_| LibraryError::NotUtf8 { name: name.to_owned() })
+}
+
+fn clipboard_payload(
+	root: &Path,
+	space_id: &str,
+	name: &str,
+) -> Result<ClipboardPayload, LibraryError> {
+	let item = resolve(root, space_id, name)?;
+	match item.accepted {
+		AcceptedType::Document(_) => document_text(&item, name).map(ClipboardPayload::Text),
+		AcceptedType::Image => decoded_image(&item, name),
+	}
+}
+
+fn decoded_image(item: &ResolvedItem, name: &str) -> Result<ClipboardPayload, LibraryError> {
+	if item.bytes > MAX_IMAGE_BYTES {
+		return Err(LibraryError::TooLarge {
+			name: name.to_owned(),
+			bytes: item.bytes,
+			limit: MAX_IMAGE_BYTES,
+		});
+	}
+	let undecodable = |detail: String| LibraryError::Undecodable { name: name.to_owned(), detail };
+	let format =
+		ImageFormat::from_path(&item.path).map_err(|error| undecodable(error.to_string()))?;
+	let bytes = fs::read(&item.path)
+		.map_err(|error| refusal(&error, LibraryError::Missing { name: name.to_owned() }))?;
+	let mut limits = Limits::no_limits();
+	limits.max_alloc = Some(MAX_DECODED_IMAGE_BYTES);
+	let mut reader = ImageReader::with_format(Cursor::new(bytes), format);
+	reader.limits(limits);
+	let rgba = reader.decode().map_err(|error| undecodable(error.to_string()))?.into_rgba8();
+	let (width, height) = rgba.dimensions();
+	Ok(ClipboardPayload::Image { rgba: rgba.into_raw(), width, height })
+}
+
+async fn save<Choose, Chosen>(
+	root: &Path,
+	space_id: &str,
+	name: &str,
+	choose_destination: Choose,
+) -> Result<Option<PathBuf>, LibraryError>
+where
+	Choose: FnOnce(&str) -> Chosen,
+	Chosen: Future<Output = Result<Option<PathBuf>, LibraryError>>,
+{
+	resolve(root, space_id, name)?;
+	let Some(destination) = choose_destination(name).await? else {
+		return Ok(None);
+	};
+	let (root, space_id, name) = (root.to_owned(), space_id.to_owned(), name.to_owned());
+	let target = destination.clone();
+	tokio::task::spawn_blocking(move || {
+		let item = resolve(&root, &space_id, &name)?;
+		copy_to(&item, &target)
+	})
+	.await
+	.map_err(|error| LibraryError::Unwritable { detail: error.to_string() })??;
+	Ok(Some(destination))
+}
+
+fn copy_to(item: &ResolvedItem, destination: &Path) -> Result<(), LibraryError> {
+	if is_the_item_itself(item, destination) {
+		return Ok(());
+	}
+	fs::copy(&item.path, destination)
+		.map(|_| ())
+		.map_err(|error| LibraryError::Unwritable { detail: error.to_string() })
+}
+
+fn is_the_item_itself(item: &ResolvedItem, destination: &Path) -> bool {
+	fs::canonicalize(destination).is_ok_and(|resolved| resolved == item.path)
 }
 
 pub fn forget_space<R: Runtime>(app: &AppHandle<R>, space_id: &str) {
