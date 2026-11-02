@@ -9,7 +9,9 @@ import {
 } from "@workspace/storybook/story-utils"
 import { Callout } from "@workspace/ui/components/answer-blocks/callout"
 
-const Stack = ({ children }: { children: ReactNode }) => (
+type StackProps = { children: ReactNode }
+
+const Stack = ({ children }: StackProps) => (
 	<div className="flex w-full flex-col gap-2.5">{children}</div>
 )
 

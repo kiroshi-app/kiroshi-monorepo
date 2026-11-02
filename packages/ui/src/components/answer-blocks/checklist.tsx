@@ -96,7 +96,6 @@ const Checklist = ({
 	return (
 		<div
 			data-slot="checklist"
-			data-all-done={isAllDone || undefined}
 			className={cn(
 				"flex w-full min-w-0 flex-col gap-2.5 rounded-xl border border-shell-divider bg-card-raised p-4",
 				className,
