@@ -31,7 +31,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"One document of the Library, read-only, in place of the grid. The bar carries the breadcrumb back to the Library and a More button that only reports the document to `onMore`; the body is the document's markdown, rendered by the repo renderer in a 640 wide column.",
+					"One document of the Library, read-only, in place of the grid. The bar carries the breadcrumb back to the Library and a More button, drawn only when `onMore` is given, that only reports the document to it; the body is the document's markdown, rendered by the repo renderer in a 640 wide column.",
 			},
 		},
 	},
@@ -82,5 +82,21 @@ export const Default = meta.story({
 		await expect(canvas.getByRole("heading", { level: 1 })).toHaveTextContent(
 			"Spring launch brief",
 		)
+	},
+})
+
+export const Member = meta.story({
+	args: { onMore: undefined },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A document open in a joined Space, where More has no action for a member. Check that the bar keeps the breadcrumb and draws no More.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		await expect(canvas.getByRole("button", { name: "Library" })).toBeVisible()
+		await expect(canvas.queryByRole("button", { name: "More" })).toBe(null)
 	},
 })

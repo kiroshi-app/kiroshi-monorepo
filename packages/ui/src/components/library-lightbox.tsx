@@ -160,7 +160,7 @@ type LibraryLightboxProps = {
 	onNext: () => void
 	onDownload: (image: LibraryLightboxImage) => void
 	onCopy: (image: LibraryLightboxImage) => void
-	onMore: (image: LibraryLightboxImage) => void
+	onMore?: (image: LibraryLightboxImage) => void
 }
 
 const LibraryLightbox = ({
@@ -240,17 +240,19 @@ const LibraryLightbox = ({
 								>
 									<Icons.Copy aria-hidden="true" />
 								</TooltipButton>
-								<TooltipButton
-									aria-label={t("library.lightbox.more")}
-									className={ACTION}
-									onClick={() => onMore(image)}
-									size="icon"
-									tooltip={t("library.lightbox.more")}
-									tooltipSide="bottom"
-									variant="ghost"
-								>
-									<Icons.More aria-hidden="true" />
-								</TooltipButton>
+								{onMore ? (
+									<TooltipButton
+										aria-label={t("library.lightbox.more")}
+										className={ACTION}
+										onClick={() => onMore(image)}
+										size="icon"
+										tooltip={t("library.lightbox.more")}
+										tooltipSide="bottom"
+										variant="ghost"
+									>
+										<Icons.More aria-hidden="true" />
+									</TooltipButton>
+								) : null}
 								<span aria-hidden="true" className={cn(DIVIDER, "h-5")} />
 								<DialogClose
 									render={
