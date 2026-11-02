@@ -241,7 +241,7 @@ describe("useSpaceMissions", () => {
 
 		it("keeps the feed it holds while it reads it again", async () => {
 			const { result } = mountFeed()
-			await waitFor(() => expect(result.current.hasLoaded).toBe(true))
+			await waitFor(() => expect(result.current.isPending).toBe(false))
 			readSpacePage.mockReturnValue(new Promise(() => undefined))
 
 			act(() => result.current.reload())

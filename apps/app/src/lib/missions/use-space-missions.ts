@@ -45,7 +45,6 @@ const spaceMissionsReadOf = ({ pages }: SpaceFeed): SpaceMissionsRead => ({
 
 export type SpaceMissionsView = SpaceMissionGroups & {
 	waitingCount: number
-	hasLoaded: boolean
 	isPending: boolean
 	hasFailed: boolean
 	isFailureRaised: boolean
@@ -80,7 +79,6 @@ export const useSpaceMissions = (spaceId: string | null): SpaceMissionsView => {
 		void refetch().then(() => setRetrying(false))
 	}, [canRead, refetch])
 
-	const hasLoaded = data !== undefined
 	const isPending = isFirstReadPending(feed)
 	const groups = useMemo(
 		() => (data ? toSpaceMissionGroups(data) : NO_GROUPS),
@@ -93,13 +91,12 @@ export const useSpaceMissions = (spaceId: string | null): SpaceMissionsView => {
 		() => ({
 			...groups,
 			waitingCount: groups.waitingOnYou.length,
-			hasLoaded,
 			isPending,
 			hasFailed,
 			isFailureRaised,
 			listEnd,
 			reload,
 		}),
-		[groups, hasLoaded, isPending, hasFailed, isFailureRaised, listEnd, reload],
+		[groups, isPending, hasFailed, isFailureRaised, listEnd, reload],
 	)
 }

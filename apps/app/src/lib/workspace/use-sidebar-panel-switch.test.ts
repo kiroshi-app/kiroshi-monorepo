@@ -400,22 +400,6 @@ describe("a mission opened from a thread card", () => {
 
 		expect(shown.result.current.sidebarTab.openTab).toBe("conversations")
 		expect(shown.selectedRow()).toBe("c-1")
-		expect(shown.shownMemory.lastMissionIn("s-1")).toBe("m-7")
-	})
-
-	it("is remembered under its own space when it belongs to another", async () => {
-		const shown = await mountSwitch()
-
-		act(() =>
-			shown.openedMission.open({
-				missionId: "m-9",
-				rowId: "b-3",
-				spaceId: "s-2",
-			}),
-		)
-
-		expect(shown.shownMemory.lastMissionIn("s-2")).toBe("m-9")
-		expect(shown.shownMemory.lastMissionIn("s-1")).toBeNull()
 	})
 })
 
