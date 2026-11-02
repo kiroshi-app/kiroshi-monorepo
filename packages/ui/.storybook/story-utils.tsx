@@ -32,6 +32,11 @@ import {
 	MARKDOWN_TYPESET_CLASS,
 	MARKDOWN_WHITESPACE_CLASS,
 } from "@workspace/ui/components/markdown/prose"
+import {
+	Message,
+	MessageAuthor,
+	MessageContent,
+} from "@workspace/ui/components/message"
 import { OnboardingConnectScreen } from "@workspace/ui/components/onboarding-connect-screen"
 import type { ScreenLayoutWidth } from "@workspace/ui/components/screen-layout"
 import { spaceAvatarStateOf } from "@workspace/ui/components/space-avatar"
@@ -148,6 +153,35 @@ export const settled = async (element: HTMLElement) => {
 export const Row = ({ children }: { children: React.ReactNode }) => (
 	<div className="flex flex-wrap items-center gap-3">{children}</div>
 )
+
+type AgentAnswerFrameProps = {
+	children: ReactNode
+	intro: string
+	width?: number
+}
+
+export const AgentAnswerFrame = ({
+	children,
+	intro,
+	width = 680,
+}: AgentAnswerFrameProps) => (
+	<div data-slot="agent-answer-frame" className="max-w-full" style={{ width }}>
+		<Message from="assistant">
+			<MessageContent className="gap-3">
+				<MessageAuthor
+					author={{ id: "bot-atlas", name: "Atlas", isLead: true }}
+				/>
+				<p className="text-base leading-6.5">{intro}</p>
+				{children}
+			</MessageContent>
+		</Message>
+	</div>
+)
+
+export const expectAnswerInsideFrame = async (root: HTMLElement) => {
+	const frame = slotIn(root, "agent-answer-frame")
+	await expect(frame.scrollWidth).toBeLessThanOrEqual(frame.clientWidth)
+}
 
 type SidebarFrameProps = {
 	children: ReactNode
