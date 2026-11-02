@@ -273,22 +273,65 @@ const common = {
 		},
 		start: "Start a document",
 		templates: {
-			blank: { name: "Blank document" },
+			blank: {
+				name: "Blank document",
+				description: "An empty page, with nothing to fill in.",
+				placeholder: "Start writing. Use # for a heading and - for a list.",
+			},
 			brief: {
 				name: "Brief",
 				preview:
-					"# Brief\n\nWhat we’re making, who it’s for and why it matters now.\n\n## Goals\n\nThe outcome this work commits to, in a sentence or two.",
+					"# Brief\n\nWhat we’re making, who it’s for and why it matters now.\n\n## Goal\n\nThe outcome this work commits to.\n\n## Done when\n\nWhat has to be true to call it finished.",
+				description: "Goal and done when, for a piece of work.",
+				intro: "What you’re making, who it’s for and why now.",
+				goal: {
+					heading: "Goal",
+					placeholder:
+						"The outcome this work commits to, in a sentence or two.",
+				},
+				doneWhen: {
+					heading: "Done when",
+					placeholder: "What has to be true to call it finished.",
+				},
 			},
 			meetingNotes: {
 				name: "Meeting notes",
 				preview:
-					"# Meeting notes\n\nWho joined, what was decided and what happens next.\n\n## Decisions\n\n- One line per decision\n- Owner and date beside it",
+					"# Meeting notes\n\n## Decisions\n\n- One line per decision\n- The reason behind it\n\n## Next steps\n\nWho does what, and by when.",
+				description: "Decisions and next steps, dated today.",
+				title: "Meeting notes, {{day}} {{month}}",
+				intro: "Who was there, and what the meeting was for.",
+				decisions: {
+					heading: "Decisions",
+					placeholder: "One line per decision, with the reason behind it.",
+				},
+				nextSteps: {
+					heading: "Next steps",
+					placeholder: "Who does what, and by when.",
+				},
 			},
 			checklist: {
 				name: "Checklist",
 				preview:
-					"# Checklist\n\n- Draft the outline\n- Gather the references\n- Review with the team\n- Ship the final version",
+					"# Checklist\n\n- Draft the outline\n- Gather the references\n- Ship the final version",
+				description: "Things to tick off, one per line.",
+				item: "One thing to do per line.",
 			},
+		},
+		picker: {
+			subtitle: "Start blank, or from a template you can change afterwards.",
+			templates: "Templates",
+			cancel: "Cancel",
+			create: "Create document",
+		},
+		editor: {
+			untitled: "Untitled",
+			created: "Created just now",
+			createdFrom: "Created just now from {{template}}",
+			title: "Title",
+			paragraph: "Text",
+			heading: "Heading",
+			item: "List item",
 		},
 		bringIn: {
 			title: "Bring in files",

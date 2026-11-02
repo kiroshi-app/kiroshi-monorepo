@@ -171,6 +171,7 @@ const LibraryEmptyState = ({
 }
 
 export {
+	LIBRARY_TEMPLATES,
 	LibraryEmptyState,
 	type LibraryEmptyStateProps,
 	type LibraryTemplate,

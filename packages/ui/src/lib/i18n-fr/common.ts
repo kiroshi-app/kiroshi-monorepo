@@ -290,22 +290,67 @@ const common = {
 		},
 		start: "Commencer un document",
 		templates: {
-			blank: { name: "Document vierge" },
+			blank: {
+				name: "Document vierge",
+				description: "Une page vide, sans rien à remplir.",
+				placeholder:
+					"Commencez à écrire. Tapez # pour un titre et - pour une liste.",
+			},
 			brief: {
 				name: "Brief",
 				preview:
-					"# Brief\n\nCe que l’on fabrique, pour qui et pourquoi maintenant.\n\n## Objectifs\n\nLe résultat sur lequel ce travail s’engage, en une ou deux phrases.",
+					"# Brief\n\nCe que l’on fabrique, pour qui et pourquoi maintenant.\n\n## Objectif\n\nLe résultat sur lequel ce travail s’engage.\n\n## Terminé quand\n\nCe qui doit être vrai pour le dire fini.",
+				description: "L’objectif et quand c’est terminé, pour un travail.",
+				intro: "Ce que l’on fabrique, pour qui et pourquoi maintenant.",
+				goal: {
+					heading: "Objectif",
+					placeholder:
+						"Le résultat sur lequel ce travail s’engage, en une ou deux phrases.",
+				},
+				doneWhen: {
+					heading: "Terminé quand",
+					placeholder: "Ce qui doit être vrai pour le dire fini.",
+				},
 			},
 			meetingNotes: {
 				name: "Notes de réunion",
 				preview:
-					"# Notes de réunion\n\nQui était là, ce qui a été décidé et la suite.\n\n## Décisions\n\n- Une ligne par décision\n- Le responsable et la date à côté",
+					"# Notes de réunion\n\n## Décisions\n\n- Une ligne par décision\n- La raison qui la porte\n\n## Prochaines étapes\n\nQui fait quoi, et pour quand.",
+				description: "Les décisions et les prochaines étapes, datées du jour.",
+				title: "Notes de réunion, {{day}} {{month}}",
+				intro: "Qui était là, et à quoi servait la réunion.",
+				decisions: {
+					heading: "Décisions",
+					placeholder: "Une ligne par décision, avec la raison qui la porte.",
+				},
+				nextSteps: {
+					heading: "Prochaines étapes",
+					placeholder: "Qui fait quoi, et pour quand.",
+				},
 			},
 			checklist: {
 				name: "Liste de contrôle",
 				preview:
-					"# Liste de contrôle\n\n- Rédiger le plan\n- Réunir les références\n- Relire avec l’équipe\n- Livrer la version finale",
+					"# Liste de contrôle\n\n- Rédiger le plan\n- Réunir les références\n- Livrer la version finale",
+				description: "Des choses à cocher, une par ligne.",
+				item: "Une chose à faire par ligne.",
 			},
+		},
+		picker: {
+			subtitle:
+				"Partez d’une page vierge, ou d’un modèle que vous pourrez changer ensuite.",
+			templates: "Modèles",
+			cancel: "Annuler",
+			create: "Créer le document",
+		},
+		editor: {
+			untitled: "Sans titre",
+			created: "Créé à l’instant",
+			createdFrom: "Créé à l’instant à partir de {{template}}",
+			title: "Titre",
+			paragraph: "Texte",
+			heading: "Titre de section",
+			item: "Élément de liste",
 		},
 		bringIn: {
 			title: "Importer des fichiers",

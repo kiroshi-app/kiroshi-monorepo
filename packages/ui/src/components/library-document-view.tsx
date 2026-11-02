@@ -1,5 +1,6 @@
 "use client"
 
+import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
 import { Icons } from "@workspace/ui/components/icons"
@@ -21,6 +22,88 @@ const DOCUMENT_TYPE = cn(
 	"[&_li]:mt-1.5 [&_li]:ps-1",
 )
 
+const DOCUMENT_TITLE =
+	"break-words font-heading font-semibold text-[1.75rem] text-foreground leading-[2.125rem] tracking-[-0.02em]"
+
+type LibraryDocumentBarProps = {
+	name: string
+	onBack: () => void
+	onMore?: () => void
+}
+
+const LibraryDocumentBar = ({
+	name,
+	onBack,
+	onMore,
+}: LibraryDocumentBarProps) => {
+	const { t } = useTranslation("common")
+
+	return (
+		<div className="flex h-13 shrink-0 items-center justify-between gap-4 px-3">
+			<nav className="flex min-w-0 items-center gap-1.5">
+				<Button
+					className="h-7 shrink-0 gap-1 rounded-full ps-1.5 pe-2.5 font-medium text-compact text-muted-foreground leading-4 transition-none hover:bg-foreground/6 hover:text-foreground dark:hover:bg-foreground/6"
+					onClick={onBack}
+					variant="ghost"
+				>
+					<Icons.Previous aria-hidden="true" />
+					{t("library.document.back")}
+				</Button>
+				<span
+					aria-hidden="true"
+					className="text-compact text-muted-foreground leading-4"
+				>
+					/
+				</span>
+				<span
+					aria-current="page"
+					className="truncate ps-1 font-medium text-compact text-foreground leading-4"
+					title={name}
+				>
+					{name}
+				</span>
+			</nav>
+			{onMore ? (
+				<TooltipButton
+					aria-label={t("library.document.more")}
+					className="size-8 shrink-0 rounded-full border-input bg-foreground/3 transition-none hover:bg-foreground/8 dark:bg-foreground/3 dark:hover:bg-foreground/8"
+					onClick={onMore}
+					size="icon"
+					tooltip={t("library.document.more")}
+					tooltipSide="bottom"
+					variant="outline"
+				>
+					<Icons.More aria-hidden="true" />
+				</TooltipButton>
+			) : null}
+		</div>
+	)
+}
+
+type LibraryDocumentColumnProps = {
+	heading: ReactNode
+	detail: string
+	children: ReactNode
+}
+
+const LibraryDocumentColumn = ({
+	heading,
+	detail,
+	children,
+}: LibraryDocumentColumnProps) => (
+	<div className="min-h-0 flex-1 overflow-y-auto px-10 pt-10 pb-10">
+		<article className="mx-auto flex w-full max-w-160 flex-col gap-3.5">
+			<header className="flex flex-col gap-1.5 pb-1.5">
+				{heading}
+				<p className="text-compact text-muted-foreground leading-4.5 tabular-nums">
+					{detail}
+				</p>
+			</header>
+			{children}
+		</article>
+	</div>
+)
+
 type LibraryDocumentViewProps = {
 	document: LibraryDocument
 	onBack: () => void
@@ -31,71 +114,30 @@ const LibraryDocumentView = ({
 	document,
 	onBack,
 	onMore,
-}: LibraryDocumentViewProps) => {
-	const { t } = useTranslation("common")
-
-	return (
-		<div
-			className="flex size-full min-h-0 flex-col"
-			data-slot="library-document-view"
+}: LibraryDocumentViewProps) => (
+	<div
+		className="flex size-full min-h-0 flex-col"
+		data-slot="library-document-view"
+	>
+		<LibraryDocumentBar
+			name={document.name}
+			onBack={onBack}
+			onMore={onMore ? () => onMore(document) : undefined}
+		/>
+		<LibraryDocumentColumn
+			detail={document.detail}
+			heading={<h1 className={DOCUMENT_TITLE}>{document.name}</h1>}
 		>
-			<div className="flex h-13 shrink-0 items-center justify-between gap-4 px-3">
-				<nav className="flex min-w-0 items-center gap-1.5">
-					<Button
-						className="h-7 shrink-0 gap-1 rounded-full ps-1.5 pe-2.5 font-medium text-compact text-muted-foreground leading-4 transition-none hover:bg-foreground/6 hover:text-foreground dark:hover:bg-foreground/6"
-						onClick={onBack}
-						variant="ghost"
-					>
-						<Icons.Previous aria-hidden="true" />
-						{t("library.document.back")}
-					</Button>
-					<span
-						aria-hidden="true"
-						className="text-compact text-muted-foreground leading-4"
-					>
-						/
-					</span>
-					<span
-						aria-current="page"
-						className="truncate ps-1 font-medium text-compact text-foreground leading-4"
-						title={document.name}
-					>
-						{document.name}
-					</span>
-				</nav>
-				{onMore ? (
-					<TooltipButton
-						aria-label={t("library.document.more")}
-						className="size-8 shrink-0 rounded-full border-input bg-foreground/3 transition-none hover:bg-foreground/8 dark:bg-foreground/3 dark:hover:bg-foreground/8"
-						onClick={() => onMore(document)}
-						size="icon"
-						tooltip={t("library.document.more")}
-						tooltipSide="bottom"
-						variant="outline"
-					>
-						<Icons.More aria-hidden="true" />
-					</TooltipButton>
-				) : null}
-			</div>
-			<div className="min-h-0 flex-1 overflow-y-auto px-10 pt-10 pb-10">
-				<article className="mx-auto flex w-full max-w-160 flex-col gap-3.5">
-					<header className="flex flex-col gap-1.5 pb-1.5">
-						<h1 className="break-words font-heading font-semibold text-[1.75rem] text-foreground leading-[2.125rem] tracking-[-0.02em]">
-							{document.name}
-						</h1>
-						<p className="text-compact text-muted-foreground leading-4.5 tabular-nums">
-							{document.detail}
-						</p>
-					</header>
-					<Markdown className={DOCUMENT_TYPE}>{document.body}</Markdown>
-				</article>
-			</div>
-		</div>
-	)
-}
+			<Markdown className={DOCUMENT_TYPE}>{document.body}</Markdown>
+		</LibraryDocumentColumn>
+	</div>
+)
 
 export {
+	DOCUMENT_TITLE,
 	type LibraryDocument,
+	LibraryDocumentBar,
+	LibraryDocumentColumn,
 	LibraryDocumentView,
 	type LibraryDocumentViewProps,
 }

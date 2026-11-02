@@ -62,6 +62,10 @@
 	--color-muted: var(--muted);
 	--color-muted-foreground: var(--muted-foreground);
 	--color-soft-foreground: var(--soft-foreground);
+	--color-placeholder-foreground: var(--placeholder-foreground);
+	--color-title-placeholder-foreground: var(--title-placeholder-foreground);
+	--color-sketch-line: var(--sketch-line);
+	--color-sketch-mark: var(--sketch-mark);
 	--color-accent: var(--accent);
 	--color-accent-foreground: var(--accent-foreground);
 	--color-destructive: var(--destructive);
