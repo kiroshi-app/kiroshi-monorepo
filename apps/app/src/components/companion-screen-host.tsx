@@ -11,12 +11,12 @@ import { toEnvironmentRows } from "@/lib/environment/environment-rows"
 import { failureReporterIn } from "@/lib/failure-report"
 import type { CompanionSettingsSearch } from "@/lib/navigation/settings-search"
 import type { SettingsNavigation } from "@/lib/navigation/use-settings-navigation"
-import type { SettingsFrame } from "@/lib/workspace/settings-frame"
 import type { ApplicationScopes } from "@/lib/workspace/use-application-scopes"
 import type { RosterLines } from "@/lib/workspace/use-roster-lines"
 import type { RosterView } from "@/lib/workspace/use-roster-view"
 import type { SettingsPanels } from "@/lib/workspace/use-settings-panels"
 import type { WorkspaceCore } from "@/lib/workspace/use-workspace-core"
+import type { WorkspaceFrame } from "@/lib/workspace/workspace-frame"
 
 const GENERAL_ENTRY = "general"
 
@@ -24,7 +24,7 @@ const reportFailure = failureReporterIn("companion-screen-host")
 
 type CompanionScreenHostProps = {
 	core: WorkspaceCore
-	frame: SettingsFrame
+	frame: WorkspaceFrame
 	navigation: SettingsNavigation
 	panels: SettingsPanels
 	rosterLines: RosterLines

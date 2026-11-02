@@ -246,3 +246,25 @@ describe("the Library page of a tab", () => {
 		expect(selectedRailEntries()).toEqual(["library"])
 	})
 })
+
+const railSearch = () =>
+	screen.getByRole("button", { name: i18n.t("search:open") })
+
+describe("the search entry of the rail", () => {
+	it.each([
+		["the Library", "/library"],
+		["the user settings", "/settings/user"],
+	] as const)("opens search on %s", async (_page, path) => {
+		const { router } = await mountApp()
+		await act(async () => router.navigate({ to: path }))
+		await settle()
+
+		const search = railSearch()
+
+		await click(search)
+
+		expect(router.state.location.pathname).toBe(path)
+		expect(search.getAttribute("aria-expanded")).toBe("true")
+		expect(screen.getByRole("dialog")).toBeInstanceOf(HTMLElement)
+	})
+})

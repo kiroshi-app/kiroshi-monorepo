@@ -18,7 +18,7 @@ const REPOSITORY = resolve(import.meta.dirname, "../../..")
 
 const APP_SIDEBAR_CALL = "apps/app/src/components/workspace-sidebar.tsx"
 const WORKSPACE_SHELL_CALL = "apps/app/src/components/conversations-screen.tsx"
-const SETTINGS_TITLE_BAR_CALL = "apps/app/src/components/workspace-settings.tsx"
+const TITLE_BAR_CALL = "apps/app/src/components/workspace-frame.tsx"
 const SCENE = "apps/website/src/app-scene.tsx"
 const SIDEBAR_BADGES = "apps/app/src/lib/chat/sidebar-badges.ts"
 const MISSIONS_MODEL = "apps/app/src/lib/missions/missions-model.ts"
@@ -139,7 +139,7 @@ describe("the landing scene against apps/app", () => {
 		reader = createPropReader([
 			APP_SIDEBAR_CALL,
 			WORKSPACE_SHELL_CALL,
-			SETTINGS_TITLE_BAR_CALL,
+			TITLE_BAR_CALL,
 			SCENE,
 		])
 	}, SLOW_PROGRAM_MS)
@@ -155,17 +155,14 @@ describe("the landing scene against apps/app", () => {
 		).toEqual([])
 	})
 
-	it("passes AppTitleBar, through AppSidebar, every prop the app's settings title bar takes", () => {
+	it("passes AppTitleBar, through AppSidebar, every prop the app's title bar takes", () => {
 		const scene = [
 			...reader.propsPassedTo(SCENE, "AppSidebar"),
 			...Object.keys(LEFT_OUT_OF_THE_SIDEBAR),
 		]
 
 		expect(
-			missingFrom(
-				scene,
-				reader.propsOfObject(SETTINGS_TITLE_BAR_CALL, "titleBar"),
-			),
+			missingFrom(scene, reader.propsOfObject(TITLE_BAR_CALL, "titleBar")),
 		).toEqual([])
 	})
 

@@ -7,13 +7,13 @@ import type { useSwitcherSpaces } from "@/lib/spaces/use-joined-spaces"
 import { isLibraryPage, pageOf } from "@/lib/tabs/tab-pages"
 import type { WorkspaceTabs } from "@/lib/tabs/workspace-tabs"
 import type { SidebarPanel } from "@/lib/user/use-sidebar-tab"
-import type { SettingsFrame } from "@/lib/workspace/settings-frame"
 import type { RosterLines } from "@/lib/workspace/use-roster-lines"
 import type { RosterLists } from "@/lib/workspace/use-roster-lists"
 import type { SettingsPanels } from "@/lib/workspace/use-settings-panels"
 import type { useSidebarPanelSwitch } from "@/lib/workspace/use-sidebar-panel-switch"
 import type { WorkspaceCore } from "@/lib/workspace/use-workspace-core"
 import type { WorkspaceOverlay } from "@/lib/workspace/use-workspace-overlay"
+import type { WorkspaceFrame } from "@/lib/workspace/workspace-frame"
 
 type WorkspaceRailOptions = {
 	collapsedSectionIds: string[]
@@ -30,7 +30,7 @@ type WorkspaceRailOptions = {
 }
 
 type WorkspaceRail = Pick<
-	SettingsFrame,
+	WorkspaceFrame,
 	"rail" | "currentSpace" | "currentSpaceHost"
 >
 
@@ -39,9 +39,11 @@ type AppSidebarRail = Pick<
 	| "badgesBySpaceId"
 	| "hostBySpaceId"
 	| "invitations"
+	| "isSearchOpen"
 	| "onAcceptInvitation"
 	| "onCreateSpace"
 	| "onDeclineInvitation"
+	| "onOpenSearch"
 	| "onOpenSpaceSettings"
 	| "onOpenUserSettings"
 	| "onRetryInvitation"
@@ -80,6 +82,7 @@ export const useWorkspaceRail = ({
 	const { updateBadge } = rosterLines
 	const user = overlay.userSettings
 	const openSettings = panels.railSettings
+	const search = overlay.search
 	const isLibraryShown = useSyncExternalStore(tabs.history.subscribe, () =>
 		isLibraryPage(pageOf(tabs.history.location.href)),
 	)
@@ -103,9 +106,11 @@ export const useWorkspaceRail = ({
 				dots: railSignals,
 				hostBySpaceId: switcher.hostBySpaceId,
 				invitations: switcher.invitations,
+				isSearchOpen: search.isOpen,
 				onAcceptInvitation: switcher.onAcceptInvitation,
 				onCreateSpace,
 				onDeclineInvitation: switcher.onDeclineInvitation,
+				onOpenSearch: search.open,
 				onRetryInvitation: switcher.onRetryInvitation,
 				onSelectSpace: (id) => tabs.leaveAsked(() => onSelectSpace(id)),
 				onSpacesMenuOpenChange: switcher.onSpaceSwitcherOpenChange,
@@ -136,6 +141,8 @@ export const useWorkspaceRail = ({
 		railSignals,
 		rosterBotsBySpace,
 		rosterConversationsBySpace,
+		search.isOpen,
+		search.open,
 		sectionsBySpaceId,
 		sidebarTab,
 		switcher,
@@ -153,9 +160,11 @@ export const appSidebarRailOf = ({
 	badgesBySpaceId: rail.badgesBySpaceId,
 	hostBySpaceId: rail.hostBySpaceId,
 	invitations: rail.invitations,
+	isSearchOpen: rail.isSearchOpen,
 	onAcceptInvitation: rail.onAcceptInvitation,
 	onCreateSpace: rail.onCreateSpace,
 	onDeclineInvitation: rail.onDeclineInvitation,
+	onOpenSearch: rail.onOpenSearch,
 	onOpenSpaceSettings: rail.onOpenSpaceSettings,
 	onOpenUserSettings: rail.onOpenYou,
 	onRetryInvitation: rail.onRetryInvitation,

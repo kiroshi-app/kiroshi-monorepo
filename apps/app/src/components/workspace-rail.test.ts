@@ -150,7 +150,9 @@ const RailHarness = ({
 		collapsedSectionIds: [],
 		core: NO_SECTIONS_CORE,
 		navigation: navigation as SettingsNavigation,
-		overlay: {} as WorkspaceOverlay,
+		overlay: {
+			search: { isOpen: false, open: () => {} },
+		} as unknown as WorkspaceOverlay,
 		panels: { railSettings } as SettingsPanels,
 		rosterLines: {
 			sidebarActions: { onCreateSpace: () => undefined },
@@ -362,7 +364,9 @@ const produceRailFor = ({
 				collapsedSectionIds: [],
 				core: NO_SECTIONS_CORE,
 				navigation: {} as SettingsNavigation,
-				overlay: {} as WorkspaceOverlay,
+				overlay: {
+					search: { isOpen: false, open: () => {} },
+				} as unknown as WorkspaceOverlay,
 				panels: {} as SettingsPanels,
 				rosterLines: { sidebarActions: {} } as RosterLines,
 				rosterLists: {} as RosterLists,

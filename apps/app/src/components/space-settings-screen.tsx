@@ -35,12 +35,12 @@ import {
 	type LeftSpace,
 	useLeftSpaceNotice,
 } from "@/lib/spaces/use-left-space-notice"
-import type { SettingsFrame } from "@/lib/workspace/settings-frame"
 import type { ApplicationScopes } from "@/lib/workspace/use-application-scopes"
 import type { RosterLines } from "@/lib/workspace/use-roster-lines"
 import type { RosterView } from "@/lib/workspace/use-roster-view"
 import type { SettingsPanels } from "@/lib/workspace/use-settings-panels"
 import type { WorkspaceCore } from "@/lib/workspace/use-workspace-core"
+import type { WorkspaceFrame } from "@/lib/workspace/workspace-frame"
 
 type MemberView = Pick<MembersPanelProps, "viewerId" | "blockedBy">
 
@@ -101,7 +101,7 @@ const useSpaceOpening = ({
 
 type SpaceSettingsScreenProps = {
 	core: WorkspaceCore
-	frame: SettingsFrame
+	frame: WorkspaceFrame
 	hostBySpaceId: Record<string, SpaceHost>
 	navigation: SettingsNavigation
 	page: ShownSpacePage
