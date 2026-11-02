@@ -510,7 +510,6 @@ const SelectableRail = (args: AppRailProps) => {
 		selected,
 		onSelectConversations: () => setSelected("conversations"),
 		onSelectMissions: () => setSelected("missions"),
-		onSelectLibrary: () => setSelected("library"),
 	})
 }
 
