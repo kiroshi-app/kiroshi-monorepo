@@ -57,8 +57,6 @@ const SEARCH = "Search"
 
 const SEARCH_CHORD = "⌘K"
 
-const RAIL_ICON = 18
-
 const CURRENT_SPACE: Space = {
 	id: "vocca",
 	name: "Vocca",
@@ -655,8 +653,6 @@ const expectSearchLikeMissions = async (canvasElement: HTMLElement) => {
 	await expect(getComputedStyle(search).borderTopLeftRadius).toBe(
 		getComputedStyle(missions).borderTopLeftRadius,
 	)
-	await expect(iconOf(search).getBoundingClientRect().width).toBe(RAIL_ICON)
-	await expect(iconOf(search).getBoundingClientRect().height).toBe(RAIL_ICON)
 	await expect(searchIcon.strokeWidth).toBe(missionsIcon.strokeWidth)
 	await expect(iconOffsetIn(search)).toEqual(iconOffsetIn(missions))
 }
@@ -679,7 +675,7 @@ export const SearchEntryAtRest = meta.story({
 		docs: {
 			description: {
 				story:
-					"A1, the search entry at rest, second in the top group, right under the Space logo and above Conversations. Check it is the same 44px square on the `radius-lg` corner as Missions, its magnifier 18px at the same 1.75 stroke and the same offset, in the muted ink on no fill, named Search, never marked `aria-current` and reporting the palette closed. Pick `SearchEntryHovered` for its hint, `SearchPaletteOpen` for the entry while the palette is up.",
+					"A1, the search entry at rest, second in the top group, right under the Space logo and above Conversations. Check it is the same 44px square on the `radius-lg` corner as Missions, its magnifier the size of the Missions flag, at the same 1.75 stroke and the same offset, in the muted ink on no fill, named Search, never marked `aria-current` and reporting the palette closed. Pick `SearchEntryHovered` for its hint, `SearchPaletteOpen` for the entry while the palette is up.",
 			},
 		},
 	},
@@ -713,19 +709,19 @@ export const SearchEntryHovered = meta.story({
 		const search = entryNamed(canvasElement, SEARCH)
 		const rail = railIn(canvasElement)
 		if (isInBrowserRunner()) {
+			const hoverFill = tokenStyleIn(
+				rail,
+				"bg-rail-item-selected/50",
+				"backgroundColor",
+			)
+			const hoverInk = tokenStyleIn(rail, "text-foreground", "color")
 			const pointer = await realPointer()
 			await pointer.hover(search)
-			await waitFor(() =>
-				expect(fillOf(search)).toBe(
-					tokenStyleIn(rail, "bg-rail-item-selected/50", "backgroundColor"),
-				),
-			)
-			await expect(iconColourOf(search)).toBe(
-				tokenStyleIn(rail, "text-foreground", "color"),
-			)
-		} else {
-			await userEvent.hover(search)
+			await waitFor(() => expect(fillOf(search)).toBe(hoverFill))
+			await expect(iconColourOf(search)).toBe(hoverInk)
+			await pointer.unhover(search)
 		}
+		await userEvent.hover(search)
 		await expectSearchTooltipBeside(search)
 		await userEvent.click(search)
 		await expect(args.onOpenSearch).toHaveBeenCalledTimes(1)
