@@ -8,7 +8,8 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import type { AppRailPanel } from "@workspace/ui/components/app-rail"
 import { i18n } from "@workspace/ui/lib/i18n"
 
-import type { MissionInSpace } from "@/lib/bindings"
+import { LibraryScreen } from "@/components/library-screen"
+import type { LibraryItem, MissionInSpace } from "@/lib/bindings"
 import { newBotIdentity } from "@/lib/bots/bot-settings"
 import { createFakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
@@ -21,9 +22,18 @@ import { readMirror, writeMirror } from "@/lib/user/preferences-mirror"
 type Harness = {
 	store: TranscriptStore | null
 	missions: MissionInSpace[]
+	libraryItems: LibraryItem[]
 }
 
-const harness = vi.hoisted((): Harness => ({ store: null, missions: [] }))
+const harness = vi.hoisted(
+	(): Harness => ({ store: null, missions: [], libraryItems: [] }),
+)
+
+const LIBRARY_READS: Record<string, (name: string) => unknown> = {
+	library_list: () => harness.libraryItems,
+	library_read_document: (name) => ({ name, format: "text", content: "Notes" }),
+	library_read_image: (name) => ({ name, mimeType: "image/png", content: "" }),
+}
 
 vi.mock("@/lib/conversations/create-store", () => ({
 	createTranscriptStore: () => harness.store,
@@ -31,12 +41,19 @@ vi.mock("@/lib/conversations/create-store", () => ({
 
 vi.mock("@/lib/host/index", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("@/lib/host/index")>()
-	const invoke: Invoke = <T>(...call: Parameters<Invoke>) =>
-		call[0] === "library_list"
-			? Promise.resolve([] as T)
-			: actual.invoke<T>(...call)
+	const invoke: Invoke = <T>(...call: Parameters<Invoke>) => {
+		const [command, args] = call
+		const read = LIBRARY_READS[command]
+		const name = (args as { name?: string } | undefined)?.name ?? ""
+		return read ? Promise.resolve(read(name) as T) : actual.invoke<T>(...call)
+	}
 	return { ...actual, invoke, isDesktopHost: () => false }
 })
+
+vi.mock("@/lib/host/tauri", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@/lib/host/tauri")>()),
+	convertFileSrc: (path: string) => `asset://${path}`,
+}))
 
 vi.mock("@/lib/chat/create-driver", async () => {
 	const { withFakeHostWrites } = await import(
@@ -90,6 +107,7 @@ afterEach(() => {
 	vi.useRealTimers()
 	harness.store = null
 	harness.missions = []
+	harness.libraryItems = []
 })
 
 const settle = async () => {
@@ -266,5 +284,88 @@ describe("the search entry of the rail", () => {
 		expect(router.state.location.pathname).toBe(path)
 		expect(search.getAttribute("aria-expanded")).toBe("true")
 		expect(screen.getByRole("dialog")).toBeInstanceOf(HTMLElement)
+	})
+})
+
+const libraryItemOf = (name: string, kind: LibraryItem["kind"]) => ({
+	name,
+	kind,
+	path: `/library/${name}`,
+	bytes: 1024,
+	modifiedAt: 0,
+	createdAt: null,
+})
+
+const IMAGE_NAME = "diagram.png"
+
+const DOCUMENT_NAME = "notes.txt"
+
+const mountLibraryScreen = async (isJoined: boolean) => {
+	harness.libraryItems = [
+		libraryItemOf(IMAGE_NAME, "image"),
+		libraryItemOf(DOCUMENT_NAME, "document"),
+	]
+	render(createElement(LibraryScreen, { spaceId: "space", isJoined }), {
+		wrapper: createQueryTestWrapper().wrapper,
+	})
+	await screen.findByRole("heading", { level: 1, name: LIBRARY_NAME })
+}
+
+const openLibraryItem = async (name: string) => {
+	const tile = (await screen.findAllByRole("button")).find((button) =>
+		button.textContent?.includes(name.slice(0, name.lastIndexOf("."))),
+	)
+	await act(async () => {
+		fireEvent.click(tile as HTMLElement, { detail: 1 })
+	})
+}
+
+const buttonNamed = (name: string) => screen.queryByRole("button", { name })
+
+const findButtonNamed = (name: string) => screen.findByRole("button", { name })
+
+describe("the More action of an opened Library item", () => {
+	it("shows Download and Copy but no More on an image of a joined Space", async () => {
+		await mountLibraryScreen(true)
+
+		await openLibraryItem(IMAGE_NAME)
+
+		expect(
+			await findButtonNamed(i18n.t("common:library.lightbox.download")),
+		).toBeInstanceOf(HTMLElement)
+		expect(buttonNamed(i18n.t("common:library.lightbox.copy"))).toBeInstanceOf(
+			HTMLElement,
+		)
+		expect(buttonNamed(i18n.t("common:library.lightbox.more"))).toBeNull()
+	})
+
+	it("shows no More on a document of a joined Space", async () => {
+		await mountLibraryScreen(true)
+
+		await openLibraryItem(DOCUMENT_NAME)
+
+		expect(
+			await findButtonNamed(i18n.t("common:library.document.back")),
+		).toBeInstanceOf(HTMLElement)
+		expect(buttonNamed(i18n.t("common:library.document.more"))).toBeNull()
+	})
+
+	it("keeps More on an image and a document of the host's own Space", async () => {
+		await mountLibraryScreen(false)
+
+		await openLibraryItem(IMAGE_NAME)
+		expect(
+			await findButtonNamed(i18n.t("common:library.lightbox.more")),
+		).toBeInstanceOf(HTMLElement)
+
+		await act(async () => {
+			fireEvent.click(
+				buttonNamed(i18n.t("common:library.lightbox.close")) as HTMLElement,
+			)
+		})
+		await openLibraryItem(DOCUMENT_NAME)
+		expect(
+			await findButtonNamed(i18n.t("common:library.document.more")),
+		).toBeInstanceOf(HTMLElement)
 	})
 })
