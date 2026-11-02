@@ -88,7 +88,9 @@ impl fmt::Display for FollowFailure {
 	fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match self {
 			Self::Unobservable(unobservable) => unobservable.fmt(formatter),
-			Self::Unplaced(failure) => write!(formatter, "the window was not placed: {failure}"),
+			Self::Unplaced(failure) => {
+				write!(formatter, "the window was not placed or located: {failure}")
+			}
 		}
 	}
 }

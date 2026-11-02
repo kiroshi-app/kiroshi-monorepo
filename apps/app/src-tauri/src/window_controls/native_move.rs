@@ -57,22 +57,25 @@ impl<R: Runtime> Watch<R> {
 
 	pub(super) fn until_released(
 		self,
-		grab: LogicalPosition<f64>,
 		probe: impl FnMut() -> Result<Cursor, Unobservable>,
 		place: impl FnMut(&Cursor) -> tauri::Result<()>,
+		position_at: impl FnOnce(&Cursor) -> tauri::Result<LogicalPosition<f64>>,
 	) {
 		match cursor::follow(|| self.is_live(), probe, place) {
 			Followed::Stopped => {}
-			Followed::Released(cursor) => self.ended_at(&cursor, grab),
+			Followed::Released(cursor) => match position_at(&cursor) {
+				Ok(position) => self.ended_at(&cursor, position),
+				Err(failure) => self.lost(FollowFailure::Unplaced(failure)),
+			},
 			Followed::Lost(failure) => self.lost(failure),
 		}
 	}
 
-	fn ended_at(&self, cursor: &Cursor, grab: LogicalPosition<f64>) {
+	fn ended_at(&self, cursor: &Cursor, position: LogicalPosition<f64>) {
 		let ended = NativeMoveEnded {
 			label: self.label.clone(),
 			point: cursor.point(),
-			position: cursor::rounded(cursor.origin_at(grab)),
+			position: cursor::rounded(position),
 		};
 		if let Err(failure) = events::emit_to(&self.app, &self.label, NATIVE_MOVE_ENDED, ended) {
 			log::error!(
@@ -119,25 +122,56 @@ pub(super) fn stop_when_destroyed<R: Runtime>(window: &WebviewWindow<R>) {
 	watched_moves(window.app_handle()).held().remove(window.label());
 }
 
+#[cfg(target_os = "macos")]
 pub(super) fn follow_cursor<R: Runtime>(
 	window: &WebviewWindow<R>,
 	watch: Watch<R>,
 ) -> Result<(), NativeWindowError> {
 	let grab = grab_of(window, &cursor::read(window)?)?;
 	let moved = window.clone();
+	watched_apart(move || {
+		watch.until_released(
+			|| cursor::read(&moved),
+			|cursor| moved.set_position(cursor.placement(grab)),
+			|cursor| Ok(cursor.origin_at(grab)),
+		);
+	})
+}
+
+#[cfg(any(not(target_os = "macos"), test))]
+pub(super) fn follow_native_drag<R: Runtime>(
+	window: &WebviewWindow<R>,
+	watch: Watch<R>,
+) -> Result<(), NativeWindowError> {
+	window
+		.start_dragging()
+		.map_err(|failure| NativeWindowError::NotMoved { reason: failure.to_string() })?;
+	let moved = window.clone();
+	watched_apart(move || released_natively(watch, &moved, || cursor::read(&moved)))
+}
+
+#[cfg(any(not(target_os = "macos"), test))]
+fn released_natively<R: Runtime>(
+	watch: Watch<R>,
+	moved: &WebviewWindow<R>,
+	probe: impl FnMut() -> Result<Cursor, Unobservable>,
+) {
+	watch.until_released(
+		probe,
+		|_| Ok(()),
+		|cursor| Ok(moved.outer_position()?.to_logical(cursor.scale)),
+	);
+}
+
+fn watched_apart(watching: impl FnOnce() + Send + 'static) -> Result<(), NativeWindowError> {
 	thread::Builder::new()
 		.name("native-move".to_owned())
-		.spawn(move || {
-			watch.until_released(
-				grab,
-				|| cursor::read(&moved),
-				|cursor| moved.set_position(cursor.placement(grab)),
-			);
-		})
+		.spawn(watching)
 		.map(drop)
 		.map_err(|failure| NativeWindowError::NotMoved { reason: failure.to_string() })
 }
 
+#[cfg(target_os = "macos")]
 fn grab_of<R: Runtime>(
 	window: &WebviewWindow<R>,
 	cursor: &Cursor,
@@ -160,6 +194,7 @@ fn watched_moves<R: Runtime>(app: &AppHandle<R>) -> State<'_, WatchedMoves> {
 mod tests {
 	use std::cell::RefCell;
 	use std::sync::mpsc;
+	use std::time::Duration;
 
 	use serde_json::{json, Value};
 	use tauri::test::{mock_builder, MockRuntime};
@@ -168,7 +203,9 @@ mod tests {
 		WebviewWindowBuilder,
 	};
 
-	use super::{stop_when_destroyed, watch, Cursor, Unobservable};
+	use super::{
+		follow_native_drag, released_natively, stop_when_destroyed, watch, Cursor, Unobservable,
+	};
 	use crate::events::{NATIVE_MOVE_ENDED, NATIVE_MOVE_FAILED};
 	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 
@@ -212,7 +249,6 @@ mod tests {
 
 		let watched = watch(&origin).expect("no move of the origin is watched yet");
 		watched.until_released(
-			GRAB,
 			probed(vec![
 				cursor_at(1000.0, 400.0, true),
 				cursor_at(1100.0, 420.0, true),
@@ -222,6 +258,7 @@ mod tests {
 				placed.borrow_mut().push(cursor.origin_at(GRAB));
 				Ok(())
 			},
+			|cursor| Ok(cursor.origin_at(GRAB)),
 		);
 
 		assert_eq!(
@@ -268,13 +305,13 @@ mod tests {
 
 		let watched = watch(&origin).expect("no move of the origin is watched yet");
 		watched.until_released(
-			GRAB,
 			move || {
 				let reading = readings();
 				stop_when_destroyed(&destroyed);
 				reading
 			},
 			|_| Ok(()),
+			|cursor| Ok(cursor.origin_at(GRAB)),
 		);
 
 		assert_eq!(heard.try_iter().count(), 0);
@@ -290,9 +327,9 @@ mod tests {
 
 		let watched = watch(&origin).expect("no move of the origin is watched yet");
 		watched.until_released(
-			GRAB,
 			|| Err(Unobservable { platform: "test", reason: "no pointer".to_owned() }),
 			|_| Ok(()),
+			|cursor| Ok(cursor.origin_at(GRAB)),
 		);
 
 		assert_eq!(ended.try_iter().count(), 0);
@@ -308,6 +345,48 @@ mod tests {
 			})]
 		);
 		assert!(watch(&origin).is_some(), "the watcher outlived the unobservable release");
+	}
+
+	#[test]
+	fn a_native_drag_is_watched_without_placing_and_ends_at_the_position_the_os_left_the_window() {
+		let app = app();
+		let origin = window_of(&app, "window-1");
+		let heard = heard_by(&origin, NATIVE_MOVE_ENDED.name());
+
+		let watched = watch(&origin).expect("no move of the origin is watched yet");
+		released_natively(
+			watched,
+			&origin,
+			probed(vec![cursor_at(1000.0, 400.0, true), cursor_at(1280.8, 425.2, false)]),
+		);
+
+		let heard: Vec<Value> = heard.try_iter().collect();
+		assert_eq!(
+			heard,
+			vec![json!({
+				"label": "window-1",
+				"point": { "x": 640, "y": 213 },
+				"position": { "x": 0, "y": 0 },
+			})]
+		);
+		assert!(watch(&origin).is_some(), "the watch ended with the release");
+	}
+
+	#[test]
+	fn a_native_drag_whose_cursor_cannot_be_read_tells_the_origin_and_leaves_the_window_to_the_os()
+	{
+		let app = app();
+		let origin = window_of(&app, "window-1");
+		let ended = heard_by(&origin, NATIVE_MOVE_ENDED.name());
+		let failed = heard_by(&origin, NATIVE_MOVE_FAILED.name());
+
+		let watched = watch(&origin).expect("no move of the origin is watched yet");
+		follow_native_drag(&origin, watched).expect("the os drag starts");
+
+		let failure = failed.recv_timeout(Duration::from_secs(5)).expect("the failure is told");
+		assert_eq!(failure["label"], "window-1");
+		assert_eq!(failure["error"]["kind"], "cursorUnreadable");
+		assert_eq!(ended.try_iter().count(), 0);
 	}
 
 	#[cfg(target_os = "macos")]

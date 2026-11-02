@@ -105,7 +105,11 @@ pub fn window_start_native_move<R: Runtime>(
 	let Some(watch) = native_move::watch(&window) else {
 		return Ok(());
 	};
-	native_move::follow_cursor(&window, watch).inspect_err(|failure| {
+	#[cfg(target_os = "macos")]
+	let moved = native_move::follow_cursor(&window, watch);
+	#[cfg(not(target_os = "macos"))]
+	let moved = native_move::follow_native_drag(&window, watch);
+	moved.inspect_err(|failure| {
 		log::error!("the window {} was not moved: {failure:?}", window.label());
 	})
 }
