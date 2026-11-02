@@ -50,9 +50,9 @@ export const Default = meta.story({
 	play: async ({ canvasElement }) => {
 		const line = slotIn(canvasElement, "author-line")
 		await expect(line.getBoundingClientRect().height).toBe(20)
-		await expect(slotIn(canvasElement, "author-line-role")).toHaveTextContent(
-			"Planner",
-		)
+		await expect(
+			slotIn(slotIn(canvasElement, "author-line"), "bot-title-badge"),
+		).toHaveTextContent("Planner")
 	},
 })
 

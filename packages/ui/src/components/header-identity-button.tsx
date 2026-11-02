@@ -2,6 +2,7 @@
 
 import { useTranslation } from "react-i18next"
 
+import { BotTitleBadge } from "@workspace/ui/components/bot-badge"
 import {
 	type ActivityIndicatorKind,
 	BotIdentityAvatar,
@@ -20,6 +21,7 @@ const HEADER_IDENTITY_CLASS = "h-9 min-w-0 shrink gap-2 pr-2.5 pl-1.5"
 
 type HeaderIdentityButtonProps = {
 	name: string
+	title?: string
 	blot?: number | null
 	seed?: string
 	image?: string
@@ -34,6 +36,7 @@ type HeaderIdentityButtonProps = {
 
 const HeaderIdentityButton = ({
 	name,
+	title,
 	blot,
 	seed,
 	image,
@@ -66,6 +69,7 @@ const HeaderIdentityButton = ({
 				working={working}
 			/>
 			<span className="min-w-0 truncate">{name}</span>
+			<BotTitleBadge title={title} variant="line" />
 			<ConnectionStatus
 				className="shrink-0"
 				name={name}

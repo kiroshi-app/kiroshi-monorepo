@@ -151,15 +151,35 @@ const BotMissionStrip = ({
 const BOT_TITLE_BADGE =
 	"min-w-6 max-w-max grow basis-0 truncate rounded-full bg-foreground/10 px-1.5 py-0.5 font-medium text-[10px] text-foreground/80 leading-none"
 
+type BotTitleBadgeVariant = "pill" | "line" | "plain"
+
+const BOT_TITLE_BADGE_VARIANT = {
+	pill: "",
+	line: "shrink-0 grow-0 basis-auto rounded-sm bg-foreground/8 py-0 font-normal text-soft-foreground text-xs leading-5",
+	plain:
+		"rounded-none bg-transparent px-0 py-0 font-normal text-compact text-muted-foreground leading-5",
+} as const satisfies Record<BotTitleBadgeVariant, string>
+
 type BotTitleBadgeProps = Omit<ComponentPropsWithRef<"span">, "title"> & {
 	title?: string
+	variant?: BotTitleBadgeVariant
 }
 
-const BotTitleBadge = ({ title, className, ...props }: BotTitleBadgeProps) =>
+const BotTitleBadge = ({
+	title,
+	variant = "pill",
+	className,
+	...props
+}: BotTitleBadgeProps) =>
 	title ? (
 		<span
 			data-slot="bot-title-badge"
-			className={cn(BOT_TITLE_BADGE, className)}
+			data-variant={variant}
+			className={cn(
+				BOT_TITLE_BADGE,
+				BOT_TITLE_BADGE_VARIANT[variant],
+				className,
+			)}
 			{...props}
 		>
 			{title}
@@ -175,5 +195,6 @@ export {
 	BotMissionStrip,
 	type BotMissionTicket,
 	BotTitleBadge,
+	type BotTitleBadgeVariant,
 	botBadgeRingVariants,
 }

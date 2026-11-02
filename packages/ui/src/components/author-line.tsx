@@ -1,8 +1,9 @@
 "use client"
 
-import type { ReactNode } from "react"
+import { type ReactNode, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
+import { BotTitleBadge } from "@workspace/ui/components/bot-badge"
 import { hueStyle } from "@workspace/ui/components/hue-palette"
 import { Icons } from "@workspace/ui/components/icons"
 import { Button } from "@workspace/ui/components/ui/button"
@@ -32,10 +33,6 @@ type AuthorLineNameProps = {
 	hue?: number | null
 }
 
-type AuthorLineBadgeProps = {
-	badge: string
-}
-
 type AuthorLineActionsProps = {
 	actions: ReactNode
 	isOnOwnBubble: boolean
@@ -51,8 +48,39 @@ type AuthorLineQueuedProps = {
 
 const AUTHOR_LINE = "flex h-5 min-w-0 max-w-full items-center gap-2"
 
+const STUCK_INSET = 18
+
 const AUTHOR_LINE_STICKY =
-	"sticky bottom-0 -mx-4.5 -mb-4.5 h-13 rounded-b-2xl border-foreground/6 border-t bg-author-line-sticky px-4.5"
+	"sticky bottom-4.5 z-10 before:pointer-events-none before:absolute before:-inset-x-4.5 before:-top-3.5 before:-bottom-4.5 before:-z-10 before:hidden before:rounded-b-2xl before:border-foreground/6 before:border-t before:bg-author-line-sticky data-[stuck=true]:before:block"
+
+const TRANSCRIPT_VIEWPORT = '[data-slot="message-scroller-viewport"]'
+
+const useStuckToBottom = (isSticky: boolean) => {
+	const markerRef = useRef<HTMLSpanElement>(null)
+	const [isStuck, setIsStuck] = useState(false)
+
+	useEffect(() => {
+		const marker = markerRef.current
+		if (!isSticky || !marker) return
+
+		const root = marker.closest<HTMLElement>(TRANSCRIPT_VIEWPORT)
+		const observer = new IntersectionObserver(
+			([entry]) => {
+				const edge =
+					(entry.rootBounds?.bottom ?? window.innerHeight) - STUCK_INSET
+				setIsStuck(
+					!entry.isIntersecting && entry.boundingClientRect.top >= edge,
+				)
+			},
+			{ root, rootMargin: `0px 0px -${STUCK_INSET}px 0px` },
+		)
+		observer.observe(marker)
+
+		return () => observer.disconnect()
+	}, [isSticky])
+
+	return { markerRef, isStuck }
+}
 
 const NAME_TONE = {
 	agent: "text-primary",
@@ -97,15 +125,6 @@ const AuthorLineName = ({ tone, name, hue }: AuthorLineNameProps) => {
 		</span>
 	)
 }
-
-const AuthorLineBadge = ({ badge }: AuthorLineBadgeProps) => (
-	<span
-		data-slot="author-line-role"
-		className="shrink-0 rounded-sm bg-foreground/8 px-1.5 text-soft-foreground text-xs leading-5"
-	>
-		{badge}
-	</span>
-)
 
 const AuthorLineActions = ({
 	actions,
@@ -196,29 +215,42 @@ const AuthorLine = ({
 	const actionRow = actions ? (
 		<AuthorLineActions actions={actions} isOnOwnBubble={isOnOwnBubble} />
 	) : null
+	const { markerRef, isStuck } = useStuckToBottom(isSticky)
 
 	return (
-		<div
-			data-slot="author-line"
-			data-tone={tone}
-			className={cn(
-				AUTHOR_LINE,
-				isEndSide && "justify-end self-end",
-				isSticky && AUTHOR_LINE_STICKY,
-				className,
-			)}
-		>
-			{isEndSide ? actionRow : null}
-			<span className="flex size-5 shrink-0 items-center justify-center">
-				{avatar}
-			</span>
-			<AuthorLineName tone={tone} name={name} hue={hue} />
-			{badge && tone === "agent" ? <AuthorLineBadge badge={badge} /> : null}
-			{shownTime}
-			{end === "stopped" ? <AuthorLineStopped /> : null}
-			{end === "failed" ? <AuthorLineFailed onRetry={onRetry} /> : null}
-			{isEndSide ? null : actionRow}
-		</div>
+		<>
+			<div
+				data-slot="author-line"
+				data-tone={tone}
+				data-stuck={isSticky ? isStuck : undefined}
+				className={cn(
+					AUTHOR_LINE,
+					isEndSide && "justify-end self-end",
+					isSticky && AUTHOR_LINE_STICKY,
+					className,
+				)}
+			>
+				{isEndSide ? actionRow : null}
+				<span className="flex size-5 shrink-0 items-center justify-center">
+					{avatar}
+				</span>
+				<AuthorLineName tone={tone} name={name} hue={hue} />
+				{tone === "agent" ? (
+					<BotTitleBadge title={badge} variant="line" />
+				) : null}
+				{shownTime}
+				{end === "stopped" ? <AuthorLineStopped /> : null}
+				{end === "failed" ? <AuthorLineFailed onRetry={onRetry} /> : null}
+				{isEndSide ? null : actionRow}
+			</div>
+			{isSticky ? (
+				<span
+					ref={markerRef}
+					aria-hidden="true"
+					className="-mt-1.5 block h-0"
+				/>
+			) : null}
+		</>
 	)
 }
 

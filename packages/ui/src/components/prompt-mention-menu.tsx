@@ -3,6 +3,7 @@
 import { type ReactNode, useId, useMemo } from "react"
 import { useTranslation } from "react-i18next"
 
+import { BotTitleBadge } from "@workspace/ui/components/bot-badge"
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
 import { Icons } from "@workspace/ui/components/icons"
 import {
@@ -110,14 +111,7 @@ const PromptMentionMenu = ({
 						<span className="truncate" data-slot="prompt-mention-name">
 							{bot.name}
 						</span>
-						{bot.title ? (
-							<span
-								data-slot="bot-title-badge"
-								className="min-w-6 truncate ps-1 font-normal text-compact text-muted-foreground"
-							>
-								{bot.title}
-							</span>
-						) : null}
+						<BotTitleBadge className="ms-1" title={bot.title} variant="plain" />
 						{count > 0 ? (
 							<>
 								<span

@@ -701,9 +701,9 @@ export const Speakers = meta.story({
 			person.getBoundingClientRect().right,
 		)
 		await expect(person.getBoundingClientRect().width).toBeLessThanOrEqual(480)
-		await expect(slotIn(canvasElement, "author-line-role")).toHaveTextContent(
-			"Planner",
-		)
+		await expect(
+			slotIn(slotIn(canvasElement, "author-line"), "bot-title-badge"),
+		).toHaveTextContent("Planner")
 		await expect(
 			pxOf(
 				getComputedStyle(slotsIn(canvasElement, "message-bubble-text")[0])

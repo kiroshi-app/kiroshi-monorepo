@@ -107,11 +107,17 @@ const PinnedMessages = ({
 			<PopoverPanelTrigger>
 				<Button
 					data-slot="pinned-messages-trigger"
-					size="icon-sm"
+					size={hasPins ? "sm" : "icon-sm"}
 					variant="ghost"
 					aria-label={hasPins ? t("pinned.counted", { count }) : title}
+					className={
+						hasPins
+							? "h-7 gap-1 px-2 text-muted-foreground text-xs tabular-nums"
+							: undefined
+					}
 				>
 					<Icons.Pin />
+					{hasPins ? count : null}
 				</Button>
 			</PopoverPanelTrigger>
 			<PopoverPanelContent

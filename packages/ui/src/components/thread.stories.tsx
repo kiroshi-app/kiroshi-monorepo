@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { expect, fn } from "storybook/test"
+import { expect, fn, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { hueScopeOf, slotIn, slotsIn } from "@workspace/storybook/story-utils"
@@ -30,6 +30,10 @@ import {
 } from "@workspace/ui/components/message-bubble"
 import { MessageSideContext } from "@workspace/ui/components/message-side-context"
 import { MissionEventRow } from "@workspace/ui/components/mission-event-row"
+import {
+	type PinnedMessage,
+	PinnedMessages,
+} from "@workspace/ui/components/pinned-messages"
 import { PromptAttachButton } from "@workspace/ui/components/prompt-attach-button"
 import { PromptAttachments } from "@workspace/ui/components/prompt-attachments"
 import { PROMPT_ATTACHMENTS } from "@workspace/ui/components/prompt-attachments.fixtures"
@@ -163,6 +167,16 @@ const DONE_ROW = rowOf({
 	time: at(9, 41),
 })
 
+const PINNED: PinnedMessage[] = [
+	{
+		id: "c1",
+		author: "Atlas",
+		avatar: <BotIdentityAvatar hue={ATLAS.blot} seed="atlas" size={20} />,
+		timestamp: "09:20",
+		excerpt: "Yes, all 14 checks passed at 9:12.",
+	},
+]
+
 type PanelProps = {
 	face: MessageAuthor
 	rows?: TranscriptItem[]
@@ -191,7 +205,11 @@ const Panel = ({
 								connection="ready"
 								name={face.name}
 								seed={face.id}
+								title={face.title}
 							/>
+						}
+						trailing={
+							<PinnedMessages messages={PINNED} onJump={noop} onUnpin={noop} />
 						}
 					/>
 				}
@@ -419,7 +437,17 @@ Three places fit 12 people on those dates. My pick is **Casa do Rio**: it's the 
 
 1. **Thursday**: arrive by 15:00, dinner on the terrace at 20:00.
 2. **Friday**: planning day in the big room, 9:30 to 17:00, lunch delivered.
-3. **Saturday**: free morning, checkout at 12:00.`
+3. **Saturday**: free morning, checkout at 12:00.
+
+### What I still need from you
+
+- The headcount by Friday, so I can confirm the room at Casa do Rio.
+- Whether anyone arrives on Wednesday night, for the extra night.
+- Dietary needs for the terrace dinner, the kitchen asks a week ahead.
+
+### Getting there
+
+Everyone flies into Lisbon. Casa do Rio is twenty minutes from the airport by taxi, about €25 a car, or forty minutes on the metro with one change at Alameda. I can book three cars for 14:00 on Thursday if you want everyone to arrive together.`
 
 export const Conversations4 = meta.story({
 	render: () => (
@@ -451,9 +479,29 @@ export const Conversations4 = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard Conversations 4: an answer taller than the viewport, with a heading, a table and a list. Check the bubble keeps padding 18 around rich content. The sticky author line the artboard draws at the viewport edge is not wired yet: `AuthorLine` carries the `isSticky` drawing, the turn does not pin it.",
+					"Artboard Conversations 4: an answer taller than the transcript, with a heading, a table and a list, read from its top. Check the bubble keeps padding 18 around rich content and that its author line stays pinned to the bottom edge on the sticky fill, with its top rule and rounded foot, until the bubble's own end scrolls into view.",
 			},
 		},
+	},
+	play: async ({ canvasElement }) => {
+		const viewport = slotIn(canvasElement, "message-scroller-viewport")
+		await waitFor(() =>
+			expect(viewport.scrollHeight).toBeGreaterThan(viewport.clientHeight),
+		)
+		await waitFor(
+			() => {
+				viewport.scrollTop = 0
+				expect(stuckLinesIn(canvasElement)).toHaveLength(1)
+			},
+			{ timeout: 3000 },
+		)
+		const [line] = stuckLinesIn(canvasElement)
+		await expect(
+			Math.round(
+				viewport.getBoundingClientRect().bottom -
+					line.getBoundingClientRect().bottom,
+			),
+		).toBe(18)
 	},
 })
 
@@ -780,6 +828,14 @@ export const ComponentsMessageBubble = meta.story({
 	},
 })
 
+const STICKY_ANSWER =
+	"Three places fit 12 people on those dates. My pick is Casa do Rio: it's the only one with a room for the whole team and a kitchen we can use, and it leaves €1,050 in the budget."
+
+const stuckLinesIn = (canvasElement: HTMLElement) =>
+	slotsIn(canvasElement, "author-line").filter(
+		(line) => line.dataset.stuck === "true",
+	)
+
 export const ComponentsAuthorLineAndWorkLine = meta.story({
 	render: () => (
 		<div className="flex flex-col gap-8 p-14" {...hueScopeOf("blue")}>
@@ -864,19 +920,37 @@ export const ComponentsAuthorLineAndWorkLine = meta.story({
 			<Caption>Queued · stuck to the viewport</Caption>
 			<div className="flex items-center gap-10">
 				<AuthorLineQueued onCancel={noop} />
-				<div className="relative w-90 rounded-2xl bg-bubble p-4.5 pt-12">
-					<AuthorLine
-						tone="agent"
-						name="Atlas"
-						badge="Planner"
-						hue={ATLAS.blot}
-						avatar={
-							<BotIdentityAvatar hue={ATLAS.blot} seed="atlas" size={20} />
-						}
-						time="14:12"
-						isSticky
-					/>
-				</div>
+				<section
+					aria-label="Stuck author line"
+					data-slot="message-scroller-viewport"
+					className="h-26 w-90 overflow-y-auto"
+					// biome-ignore lint/a11y/noNoninteractiveTabindex: a scrolling region takes keyboard focus so it can be scrolled
+					tabIndex={0}
+				>
+					<MessageBubble variant="soft">
+						<MessageBubbleContent
+							foot={
+								<AuthorLine
+									tone="agent"
+									name="Atlas"
+									badge="Planner"
+									hue={ATLAS.blot}
+									avatar={
+										<BotIdentityAvatar
+											hue={ATLAS.blot}
+											seed="atlas"
+											size={20}
+										/>
+									}
+									time="14:12"
+									isSticky
+								/>
+							}
+						>
+							{STICKY_ANSWER}
+						</MessageBubbleContent>
+					</MessageBubble>
+				</section>
 			</div>
 		</div>
 	),
@@ -891,6 +965,7 @@ export const ComponentsAuthorLineAndWorkLine = meta.story({
 	play: async ({ canvasElement }) => {
 		for (const line of slotsIn(canvasElement, "bot-working"))
 			await expect(line.getBoundingClientRect().height).toBe(20)
+		await waitFor(() => expect(stuckLinesIn(canvasElement)).toHaveLength(1))
 	},
 })
 

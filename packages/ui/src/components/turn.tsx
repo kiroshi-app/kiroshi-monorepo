@@ -407,7 +407,9 @@ function UserTurn({
 		<AuthorLine
 			tone="you"
 			name={t("turn.you")}
-			avatar={<InitialsAvatar name={name} size={AUTHOR_AVATAR_SIZE} />}
+			avatar={
+				<InitialsAvatar name={name} size={AUTHOR_AVATAR_SIZE} isOnOwnBubble />
+			}
 			time={sentTimeOf(sentAt, now)}
 			actions={turnActionsOf(actions)}
 		/>
@@ -565,6 +567,7 @@ function AssistantTurn(props: AssistantTurnProps) {
 			end={end}
 			onRetry={onRetry}
 			actions={turnActionsOf(actions)}
+			isSticky
 		/>
 	) : null
 	const shownFooter = !face && end ? t(FOOTER_KEY[end]) : null
