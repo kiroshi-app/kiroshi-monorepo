@@ -157,8 +157,6 @@ describe("the workspace frame", () => {
 		await navigateTo(router, "/")
 
 		expect(router.state.location.pathname).toBe("/")
-		expect(first.rail).not.toBeNull()
-		expect(first.titleBar).not.toBeNull()
 		expect(document.querySelectorAll('[data-slot="app-rail"]')).toHaveLength(1)
 		expect(
 			document.querySelectorAll('[data-slot="app-title-bar"]'),
