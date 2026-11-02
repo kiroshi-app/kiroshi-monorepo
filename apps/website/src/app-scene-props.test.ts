@@ -30,6 +30,8 @@ const LEFT_OUT_OF_THE_SIDEBAR: Record<string, string> = {
 	updateBadge: "the scene shows an app that is up to date",
 	openSettings: "no settings screen opens in the scene",
 	incomingTab: "no tab arrives from another window on a web page",
+	isSearchOpen:
+		"the scene opens no search palette, its rail entry stays at rest",
 }
 
 const LEFT_OUT_OF_THE_SHELL: Record<string, string> = {
