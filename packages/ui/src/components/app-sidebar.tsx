@@ -19,6 +19,7 @@ import { AppSidebarPanel } from "@workspace/ui/components/app-sidebar-panel"
 import type { ListEnd } from "@workspace/ui/components/list-skeleton"
 import { type Space, spaceAtRank } from "@workspace/ui/components/space"
 import { SpaceDots } from "@workspace/ui/components/space-switcher"
+import type { TitleBarTabsProps } from "@workspace/ui/components/title-bar-tabs"
 import { SidebarFooter } from "@workspace/ui/components/ui/sidebar"
 import type { UserChipIdentity } from "@workspace/ui/components/user-chip"
 import { useSpaceShortcut } from "@workspace/ui/hooks/use-space-shortcut"
@@ -36,14 +37,83 @@ const SpaceDotsFooter = (dots: ComponentProps<typeof SpaceDots>) =>
 const railPanelOf = (panel: string): AppRailPanel =>
 	panel === "missions" || panel === "library" ? panel : "conversations"
 
-const AppSidebarBase = ({
+type AppSidebarFrameKey =
+	| keyof TitleBarTabsProps
+	| "space"
+	| "onCreateSpace"
+	| "hostBySpaceId"
+	| "spaceHost"
+	| "invitations"
+	| "onAcceptInvitation"
+	| "onDeclineInvitation"
+	| "onRetryInvitation"
+	| "onSpaceSwitcherOpenChange"
+	| "onOpenSpaceSettings"
+	| "updateBadge"
+	| "user"
+	| "onOpenUserSettings"
+	| "onOpenSearch"
+	| "isSearchOpen"
+	| "insetWindowControls"
+	| "windowControls"
+	| "railDots"
+	| "openPanel"
+	| "openSettings"
+	| "onOpenPanelChange"
+	| "onSelectLibrary"
+	| "data-tauri-drag-region"
+
+type AppSidebarBodyProps = Omit<AppSidebarProps, AppSidebarFrameKey> & {
+	openPanel?: AppSidebarOpenPanel
+}
+
+const AppSidebarBody = ({
 	badgesBySpaceId,
-	space,
 	spaces = [],
 	selectedSpaceId,
 	isSpaceSwitchingEnabled = true,
 	onSelectSpace,
 	onReorderSpaces,
+	openPanel = "conversations",
+	...sidebar
+}: AppSidebarBodyProps) => {
+	const selectRank = (rank: number) => {
+		const space = spaceAtRank(spaces, rank)
+		if (space) onSelectSpace?.(space.id)
+	}
+
+	useSpaceShortcut({
+		count: spaces.length,
+		isEnabled: isSpaceSwitchingEnabled,
+		onRank: selectRank,
+	})
+
+	return (
+		<AppSidebarPanel
+			{...sidebar}
+			footer={
+				<SpaceDotsFooter
+					badgesBySpaceId={badgesBySpaceId}
+					onReorderSpaces={onReorderSpaces}
+					onSelectSpace={onSelectSpace}
+					selectedSpaceId={selectedSpaceId}
+					spaces={spaces}
+				/>
+			}
+			isSpaceSwitchingEnabled={isSpaceSwitchingEnabled}
+			onSelectSpace={onSelectSpace}
+			openPanel={openPanel}
+			selectedSpaceId={selectedSpaceId}
+			spaces={spaces}
+		/>
+	)
+}
+
+const AppSidebarBase = ({
+	badgesBySpaceId,
+	space,
+	spaces = [],
+	onSelectSpace,
 	onCreateSpace,
 	hostBySpaceId,
 	spaceHost,
@@ -102,17 +172,6 @@ const AppSidebarBase = ({
 			}
 		: undefined
 
-	const selectRank = (rank: number) => {
-		const space = spaceAtRank(spaces, rank)
-		if (space) onSelectSpace?.(space.id)
-	}
-
-	useSpaceShortcut({
-		count: spaces.length,
-		isEnabled: isSpaceSwitchingEnabled,
-		onRank: selectRank,
-	})
-
 	return (
 		<AppFrame
 			rail={{
@@ -166,21 +225,11 @@ const AppSidebarBase = ({
 				windowControls,
 			}}
 		>
-			<AppSidebarPanel
+			<AppSidebarBody
 				{...sidebar}
-				footer={
-					<SpaceDotsFooter
-						badgesBySpaceId={badgesBySpaceId}
-						onReorderSpaces={onReorderSpaces}
-						onSelectSpace={onSelectSpace}
-						selectedSpaceId={selectedSpaceId}
-						spaces={spaces}
-					/>
-				}
-				isSpaceSwitchingEnabled={isSpaceSwitchingEnabled}
+				badgesBySpaceId={badgesBySpaceId}
 				onSelectSpace={onSelectSpace}
 				openPanel={openPanel}
-				selectedSpaceId={selectedSpaceId}
 				spaces={spaces}
 			/>
 		</AppFrame>
@@ -191,6 +240,8 @@ const AppSidebar = memo(AppSidebarBase)
 
 export {
 	AppSidebar,
+	AppSidebarBody,
+	type AppSidebarBodyProps,
 	type AppSidebarBot,
 	type AppSidebarConversation,
 	type AppSidebarProps,

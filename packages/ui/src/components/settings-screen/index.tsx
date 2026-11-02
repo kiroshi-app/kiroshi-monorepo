@@ -2,6 +2,7 @@
 
 import {
 	type ReactNode,
+	useCallback,
 	useEffect,
 	useEffectEvent,
 	useRef,
@@ -10,8 +11,8 @@ import {
 import { useTranslation } from "react-i18next"
 
 import {
-	AppFrame,
 	type AppFrameRailProps,
+	AppFrameShell,
 } from "@workspace/ui/components/app-frame"
 import { AppHeader } from "@workspace/ui/components/app-header"
 import type { AppTitleBarProps } from "@workspace/ui/components/app-title-bar"
@@ -28,6 +29,7 @@ import { BotInstructionsFields } from "@workspace/ui/components/bot-settings-dia
 import { PermissionsPanel } from "@workspace/ui/components/bot-settings-dialog/permissions-panel"
 import { RuntimeFields } from "@workspace/ui/components/bot-settings-dialog/runtime-fields"
 import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
+import { ContentCard } from "@workspace/ui/components/content-card"
 import {
 	ConversationGeneralFields,
 	ConversationInstructionsField,
@@ -81,7 +83,6 @@ import {
 	type UserSettingsProps,
 	useUserSettings,
 } from "@workspace/ui/components/user-settings-dialog/use-user-settings"
-import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 import { useOverlayScrollbars } from "@workspace/ui/hooks/use-overlay-scrollbars"
 import {
 	type ClickModifiers,
@@ -129,22 +130,31 @@ type PageSessions = {
 
 type SettingsScreenRequestLeave = (navigate: () => void) => void
 
-type SettingsScreenNavigation = {
+type SettingsScreenGuardLeave = (
+	requestLeave: SettingsScreenRequestLeave,
+) => () => void
+
+type SettingsScreenBodyNavigation = {
 	entry: string
 	onEntryChange: (entry: string, modifiers: ClickModifiers) => void
 	onOpenApplication?: (name: string, modifiers: ClickModifiers) => void
 	onBack: () => void
 	backLabel?: string
+	guardLeave?: SettingsScreenGuardLeave
+}
+
+type SettingsScreenFrame = {
 	rail: AppFrameRailProps
 	currentSpace?: Space
 	currentSpaceHost?: SpaceHost
-	guardLeave?: (requestLeave: SettingsScreenRequestLeave) => () => void
 	titleBar?: AppTitleBarProps
 	width?: number
 	onWidthChange?: (width: number) => void
 	isResizable?: boolean
 	spaceTint?: number | null
 }
+
+type MaybeFramed<Props> = Props & Partial<SettingsScreenFrame>
 
 type SpaceState = FocusedSpace["state"]
 
@@ -167,7 +177,7 @@ type InvitedSpace = {
 	onDecline: () => void
 }
 
-type SpaceSettingsScreenProps = SettingsScreenNavigation &
+type SpaceSettingsScreenBodyProps = SettingsScreenBodyNavigation &
 	SpaceSettingsProps &
 	(OwnedOrJoinedSpace | InvitedSpace) & {
 		target: "space"
@@ -187,7 +197,7 @@ type UserSpace = Space & {
 	hasAttention?: boolean
 }
 
-type UserSettingsScreenProps = SettingsScreenNavigation &
+type UserSettingsScreenBodyProps = SettingsScreenBodyNavigation &
 	UserSettingsProps & {
 		target: "user"
 		ownedSpaces?: UserSpace[]
@@ -198,18 +208,33 @@ type UserSettingsScreenProps = SettingsScreenNavigation &
 		onCreateSpace?: () => void
 	}
 
+type SpaceSettingsScreenProps = SpaceSettingsScreenBodyProps &
+	SettingsScreenFrame
+
+type UserSettingsScreenProps = UserSettingsScreenBodyProps & SettingsScreenFrame
+
+type SettingsScreenBodyProps =
+	| SpaceSettingsScreenBodyProps
+	| UserSettingsScreenBodyProps
+
 type SettingsScreenProps = SpaceSettingsScreenProps | UserSettingsScreenProps
 
-type CompanionSettingsScreenProps = SettingsScreenNavigation &
+type CompanionSettingsScreenBodyProps = SettingsScreenBodyNavigation &
 	Omit<
 		BotSettingsDialogProps,
 		"open" | "onClose" | "tab" | "showDanger" | "className"
 	>
 
-type ConversationSettingsScreenProps = SettingsScreenNavigation &
+type CompanionSettingsScreenProps = CompanionSettingsScreenBodyProps &
+	SettingsScreenFrame
+
+type ConversationSettingsScreenBodyProps = SettingsScreenBodyNavigation &
 	Omit<ConversationSettingsDialogProps, "open" | "onClose" | "className">
 
-type SettingsScreenLayoutProps = SettingsScreenNavigation & {
+type ConversationSettingsScreenProps = ConversationSettingsScreenBodyProps &
+	SettingsScreenFrame
+
+type SettingsScreenBodyLayoutProps = SettingsScreenBodyNavigation & {
 	avatar: ReactNode
 	name: string
 	subtitle: string
@@ -279,21 +304,49 @@ const railAskingBeforeLeaving = (
 	onSelectLibrary: askedFirst(requestLeave, rail.onSelectLibrary),
 })
 
-const SettingsScreenLayout = ({
+type SettingsLeaveGuard = {
+	rail: AppFrameRailProps
+	titleBar?: AppTitleBarProps
+	guardLeave?: SettingsScreenGuardLeave
+}
+
+const leaveAtOnce: SettingsScreenRequestLeave = (navigate) => navigate()
+
+const useSettingsLeaveGuard = ({
+	rail,
+	titleBar,
+	guardLeave,
+}: SettingsLeaveGuard) => {
+	const [requestLeave, setRequestLeave] = useState<SettingsScreenRequestLeave>(
+		() => leaveAtOnce,
+	)
+
+	const guardBodyLeave = useCallback<SettingsScreenGuardLeave>(
+		(askBeforeLeaving) => {
+			setRequestLeave(() => askBeforeLeaving)
+			const release = guardLeave?.(askBeforeLeaving)
+			return () => {
+				setRequestLeave(() => leaveAtOnce)
+				release?.()
+			}
+		},
+		[guardLeave],
+	)
+
+	return {
+		rail: railAskingBeforeLeaving(rail, requestLeave),
+		titleBar: askingBeforeLeaving(titleBar, requestLeave),
+		guardLeave: guardBodyLeave,
+	}
+}
+
+const SettingsScreenBodyLayout = ({
 	entry,
 	onEntryChange,
 	onOpenApplication,
 	onBack,
 	backLabel,
-	rail,
-	currentSpace,
-	currentSpaceHost,
 	guardLeave,
-	titleBar,
-	width,
-	onWidthChange,
-	isResizable,
-	spaceTint,
 	avatar,
 	name,
 	subtitle,
@@ -304,7 +357,7 @@ const SettingsScreenLayout = ({
 	pinnedAction,
 	isCompanionPage = false,
 	spaces,
-}: SettingsScreenLayoutProps) => {
+}: SettingsScreenBodyLayoutProps) => {
 	const scroller = useRef<HTMLElement | null>(null)
 	useOverlayScrollbars(scroller)
 
@@ -403,85 +456,112 @@ const SettingsScreenLayout = ({
 	)
 
 	return (
-		<WorkspaceShell
-			isResizable={isResizable}
-			spaceTint={spaceTint}
-			onWidthChange={onWidthChange}
-			sidebar={
-				<AppFrame
-					rail={railAskingBeforeLeaving(rail, leaveThen)}
-					space={currentSpace}
-					spaceHost={currentSpaceHost}
-					titleBar={askingBeforeLeaving(titleBar, leaveThen)}
-				>
-					<SettingsMenu
-						isCompanionPage={isCompanionPage}
-						avatar={avatar}
-						backLabel={backLabel}
-						footer={
-							pinned.length > 0 || pinnedAction ? (
-								<>
-									{pinned.map(entryFor)}
-									{pinnedAction}
-								</>
-							) : undefined
-						}
-						name={name}
-						onBack={() => leaveThen(onBack)}
-						resizeHandle={<SidebarResizeHandle side="left" />}
-						subtitle={subtitle}
-					>
-						<SettingsMenuSection
-							title={t(
-								spaces
-									? "settings:screen.group.settings"
-									: "settings:screen.group.subjectSettings",
-							)}
-						>
-							{ordinary.map(entryFor)}
-						</SettingsMenuSection>
-						{spaces?.(leaveThen)}
-					</SettingsMenu>
-				</AppFrame>
-			}
-			width={width}
-		>
-			<ScreenLayout
-				contentClassName={shown.value === SPACE_ENTRY ? "gap-6" : "gap-4"}
-				data-entry={shown.value}
-				data-slot="settings-screen-page"
-				header={
-					<AppHeader
-						className="pl-6"
-						data-tauri-drag-region="deep"
-						leading={<h2 className="truncate">{shown.label}</h2>}
-					/>
+		<>
+			<SettingsMenu
+				isCompanionPage={isCompanionPage}
+				avatar={avatar}
+				backLabel={backLabel}
+				footer={
+					pinned.length > 0 || pinnedAction ? (
+						<>
+							{pinned.map(entryFor)}
+							{pinnedAction}
+						</>
+					) : undefined
 				}
-				ref={(layout) => {
-					scroller.current =
-						layout?.querySelector<HTMLElement>(
-							'[data-slot="screen-layout-scroller"]',
-						) ?? null
-				}}
-				width={pageWidth}
+				name={name}
+				onBack={() => leaveThen(onBack)}
+				resizeHandle={<SidebarResizeHandle side="left" />}
+				subtitle={subtitle}
 			>
-				{page ?? shown.panel}
-			</ScreenLayout>
-			<ConfirmDialog
-				confirmLabel={t(`${wordedKind}.leave.action`)}
-				description={t(`${wordedKind}.leave.description`)}
-				onConfirm={() => pendingLeave?.()}
-				onOpenChange={(isOpen) => {
-					if (!isOpen) setPendingLeave(null)
-				}}
-				open={pendingLeave !== null}
-				title={t(`${wordedKind}.leave.title`)}
-			/>
-		</WorkspaceShell>
+				<SettingsMenuSection
+					title={t(
+						spaces
+							? "settings:screen.group.settings"
+							: "settings:screen.group.subjectSettings",
+					)}
+				>
+					{ordinary.map(entryFor)}
+				</SettingsMenuSection>
+				{spaces?.(leaveThen)}
+			</SettingsMenu>
+			<ContentCard>
+				<ScreenLayout
+					contentClassName={shown.value === SPACE_ENTRY ? "gap-6" : "gap-4"}
+					data-entry={shown.value}
+					data-slot="settings-screen-page"
+					header={
+						<AppHeader
+							className="pl-6"
+							data-tauri-drag-region="deep"
+							leading={<h2 className="truncate">{shown.label}</h2>}
+						/>
+					}
+					ref={(layout) => {
+						scroller.current =
+							layout?.querySelector<HTMLElement>(
+								'[data-slot="screen-layout-scroller"]',
+							) ?? null
+					}}
+					width={pageWidth}
+				>
+					{page ?? shown.panel}
+				</ScreenLayout>
+				<ConfirmDialog
+					confirmLabel={t(`${wordedKind}.leave.action`)}
+					description={t(`${wordedKind}.leave.description`)}
+					onConfirm={() => pendingLeave?.()}
+					onOpenChange={(isOpen) => {
+						if (!isOpen) setPendingLeave(null)
+					}}
+					open={pendingLeave !== null}
+					title={t(`${wordedKind}.leave.title`)}
+				/>
+			</ContentCard>
+		</>
 	)
 }
 
-const focusedSpaceOf = (props: SpaceSettingsScreenProps): FocusedSpace => {
+type SettingsScreenLayoutProps = MaybeFramed<SettingsScreenBodyLayoutProps>
+
+const FramedSettingsScreenLayout = ({
+	rail,
+	currentSpace,
+	currentSpaceHost,
+	titleBar,
+	width,
+	onWidthChange,
+	isResizable,
+	spaceTint,
+	guardLeave,
+	...body
+}: SettingsScreenBodyLayoutProps & SettingsScreenFrame) => {
+	const frame = useSettingsLeaveGuard({ rail, titleBar, guardLeave })
+
+	return (
+		<AppFrameShell
+			isResizable={isResizable}
+			onWidthChange={onWidthChange}
+			rail={frame.rail}
+			space={currentSpace}
+			spaceHost={currentSpaceHost}
+			spaceTint={spaceTint}
+			titleBar={frame.titleBar}
+			width={width}
+		>
+			<SettingsScreenBodyLayout {...body} guardLeave={frame.guardLeave} />
+		</AppFrameShell>
+	)
+}
+
+const SettingsScreenLayout = ({ rail, ...props }: SettingsScreenLayoutProps) =>
+	rail ? (
+		<FramedSettingsScreenLayout {...props} rail={rail} />
+	) : (
+		<SettingsScreenBodyLayout {...props} />
+	)
+
+const focusedSpaceOf = (props: SpaceSettingsScreenBodyProps): FocusedSpace => {
 	if (props.spaceState === "invitation") {
 		return { state: "invitation", ...props.invitation }
 	}
@@ -496,7 +576,9 @@ const focusedSpaceOf = (props: SpaceSettingsScreenProps): FocusedSpace => {
 		: { state, isShared: props.isShared ?? false }
 }
 
-const SpaceSettingsScreen = (props: SpaceSettingsScreenProps) => {
+const SpaceSettingsScreen = (
+	props: MaybeFramed<SpaceSettingsScreenBodyProps>,
+) => {
 	const {
 		entry,
 		onEntryChange,
@@ -668,7 +750,7 @@ const UserSettingsScreen = ({
 	onCreateSpace,
 	target: _target,
 	...settings
-}: UserSettingsScreenProps) => {
+}: MaybeFramed<UserSettingsScreenBodyProps>) => {
 	const { t } = useTranslation("settings")
 	const { name, pages, sessions, entries } = useUserSettings({
 		...settings,
@@ -747,7 +829,7 @@ const UserSettingsScreen = ({
 	)
 }
 
-const CompanionSettingsScreen = ({
+const CompanionSettingsContent = ({
 	entry,
 	onEntryChange,
 	onOpenApplication,
@@ -781,7 +863,7 @@ const CompanionSettingsScreen = ({
 	working,
 	workingKind,
 	...sessionProps
-}: CompanionSettingsScreenProps) => {
+}: MaybeFramed<CompanionSettingsScreenBodyProps>) => {
 	const { t } = useTranslation("bots")
 	const { t: tSettings } = useTranslation("settings")
 	const name = value.name.trim() || t("dialog.untitled")
@@ -993,7 +1075,7 @@ const CompanionSettingsScreen = ({
 	)
 }
 
-const ConversationSettingsScreen = ({
+const ConversationSettingsContent = ({
 	value,
 	onValueChange,
 	icon,
@@ -1006,7 +1088,7 @@ const ConversationSettingsScreen = ({
 	onDismiss,
 	onDelete,
 	...navigation
-}: ConversationSettingsScreenProps) => {
+}: MaybeFramed<ConversationSettingsScreenBodyProps>) => {
 	const { t } = useTranslation("chat")
 	const { t: tSettings } = useTranslation("settings")
 	const name = value.name.trim() || t("conversationSettings.untitled")
@@ -1100,22 +1182,53 @@ const ConversationSettingsScreen = ({
 	)
 }
 
-const SettingsScreen = (props: SettingsScreenProps) =>
+const settingsScreenOf = (props: MaybeFramed<SettingsScreenBodyProps>) =>
 	props.target === "space" ? (
 		<SpaceSettingsScreen {...props} />
 	) : (
 		<UserSettingsScreen {...props} />
 	)
 
+const SettingsScreen = (props: SettingsScreenProps) => settingsScreenOf(props)
+
+const SettingsScreenBody = (props: SettingsScreenBodyProps) =>
+	settingsScreenOf(props)
+
+const CompanionSettingsScreen: (
+	props: CompanionSettingsScreenProps,
+) => ReactNode = CompanionSettingsContent
+
+const CompanionSettingsScreenBody: (
+	props: CompanionSettingsScreenBodyProps,
+) => ReactNode = CompanionSettingsContent
+
+const ConversationSettingsScreen: (
+	props: ConversationSettingsScreenProps,
+) => ReactNode = ConversationSettingsContent
+
+const ConversationSettingsScreenBody: (
+	props: ConversationSettingsScreenBodyProps,
+) => ReactNode = ConversationSettingsContent
+
 export {
 	CompanionSettingsScreen,
+	CompanionSettingsScreenBody,
+	type CompanionSettingsScreenBodyProps,
 	type CompanionSettingsScreenProps,
 	ConversationSettingsScreen,
+	ConversationSettingsScreenBody,
+	type ConversationSettingsScreenBodyProps,
 	type ConversationSettingsScreenProps,
 	SettingsScreen,
+	SettingsScreenBody,
+	type SettingsScreenBodyProps,
+	type SettingsScreenGuardLeave,
 	type SettingsScreenProps,
 	type SettingsScreenRequestLeave,
+	type SpaceSettingsScreenBodyProps,
 	type SpaceSettingsScreenProps,
+	type UserSettingsScreenBodyProps,
 	type UserSettingsScreenProps,
 	type UserSpace,
+	useSettingsLeaveGuard,
 }
