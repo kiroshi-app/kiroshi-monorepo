@@ -263,14 +263,13 @@ describe("a mission of the sidebar missions list", () => {
 	it("opens in a new background tab on Cmd-click", async () => {
 		const { router } = await mountApp()
 		await showMissions()
+		const activeHref = router.state.location.href
 
 		await click(missionRowOf(SECOND_OBJECTIVE), { metaKey: true })
 
 		expect(tabsOf()).toHaveLength(2)
 		expect(activeTabIndex()).toBe(0)
-		expect(router.state.location.search.mission).toBe(
-			missionIdOf(FIRST_OBJECTIVE),
-		)
+		expect(router.state.location.href).toBe(activeHref)
 
 		await click(tabsOf()[1] as HTMLElement)
 
