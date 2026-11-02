@@ -1,8 +1,9 @@
 import { type ReactNode, useState } from "react"
-import { expect, fn } from "storybook/test"
+import { expect, fn, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
+	FRAME_POLL,
 	isInBrowserRunner,
 	lineHeightOf,
 	withMotionAllowed,
@@ -321,7 +322,7 @@ export const ThumbFocusRing = meta.story({
 		const restingShadow = getComputedStyle(thumb).boxShadow
 
 		await userEvent.click(thumb)
-		await expect(input).toHaveFocus()
+		await waitFor(() => expect(input).toHaveFocus(), FRAME_POLL)
 		await expect(getComputedStyle(thumb).boxShadow).toBe(restingShadow)
 
 		await userEvent.tab({ shift: true })
