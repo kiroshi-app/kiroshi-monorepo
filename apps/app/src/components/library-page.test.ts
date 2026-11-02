@@ -5,6 +5,7 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { createElement } from "react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
+import type { AppRailPanel } from "@workspace/ui/components/app-rail"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import type { MissionInSpace } from "@/lib/bindings"
@@ -21,8 +22,6 @@ type Harness = {
 	store: TranscriptStore | null
 	missions: MissionInSpace[]
 }
-
-type RailEntry = "conversations" | "missions" | "library"
 
 const harness = vi.hoisted((): Harness => ({ store: null, missions: [] }))
 
@@ -154,7 +153,7 @@ const rosterRowOf = (name: string) =>
 		.find((label) => label.textContent === name)
 		?.closest("button")
 
-const railButton = (entry: RailEntry) =>
+const railButton = (entry: AppRailPanel) =>
 	screen.getByRole("button", { name: i18n.t(`bots:rail.${entry}`) })
 
 const selectedRailEntries = () =>
@@ -169,9 +168,7 @@ const tabTitled = (title: string) =>
 		.getAllByRole("tab")
 		.find((tab) => tab.textContent?.includes(title)) as HTMLElement
 
-const showOtherRoom = async () => {
-	await click(rosterRowOf(OTHER_ROOM_TITLE) as HTMLElement)
-}
+const showOtherRoom = () => click(rosterRowOf(OTHER_ROOM_TITLE) as HTMLElement)
 
 describe("the Library page of a tab", () => {
 	it("opens from the rail as a new entry of the current tab, titled Library, without the conversation list", async () => {
