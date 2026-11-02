@@ -107,6 +107,8 @@ vi.mock("@/lib/bindings", async (importOriginal) => {
 			librarySave: vi.fn(),
 			libraryCopy: vi.fn(),
 			libraryReveal: vi.fn(),
+			librarySaveBytes: vi.fn(),
+			libraryCopyBytes: vi.fn(),
 		},
 	}
 })
@@ -114,6 +116,7 @@ const libraryHost = vi.hoisted(() => ({
 	list: vi.fn(),
 	readDocument: vi.fn(),
 	readImage: vi.fn(),
+	readFile: vi.fn(),
 }))
 vi.mock("@/lib/host/index", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("@/lib/host/index")>()
@@ -122,6 +125,7 @@ vi.mock("@/lib/host/index", async (importOriginal) => {
 			library_list: libraryHost.list,
 			library_read_document: libraryHost.readDocument,
 			library_read_image: libraryHost.readImage,
+			library_read_file: libraryHost.readFile,
 		}
 	const invoke: Invoke = <T>(...call: Parameters<Invoke>) => {
 		const [command, args] = call
@@ -1175,6 +1179,8 @@ describe("WorkspaceBody library", () => {
 	const save = vi.mocked(commands.librarySave)
 	const copyToClipboard = vi.mocked(commands.libraryCopy)
 	const reveal = vi.mocked(commands.libraryReveal)
+	const saveBytes = vi.mocked(commands.librarySaveBytes)
+	const copyBytes = vi.mocked(commands.libraryCopyBytes)
 	const OTHER_SPACE = "studio"
 	const JOINED_ROW = joinedRowIdOf("garage")
 	const HOST_SPACE = "garage-space"
@@ -1220,6 +1226,12 @@ describe("WorkspaceBody library", () => {
 	const readDocumentOf = async ({ name }: NamedRead) =>
 		name === NOTES.name ? Promise.reject(refusal) : documentOf(name)
 
+	const fileOf = ({ name }: NamedRead) => ({
+		name: `host ${name}`,
+		mimeType: "image/png",
+		content: btoa(name),
+	})
+
 	const imageOf = ({ name }: NamedRead) => ({
 		name,
 		mimeType: "image/png",
@@ -1238,7 +1250,14 @@ describe("WorkspaceBody library", () => {
 		libraryHost.readImage.mockImplementation(async (read: NamedRead) =>
 			imageOf(read),
 		)
+		libraryHost.readFile.mockImplementation(async (read: NamedRead) =>
+			fileOf(read),
+		)
 		save.mockResolvedValue(answered("/Users/reader/Downloads/hero-dunes.png"))
+		saveBytes.mockResolvedValue(
+			answered("/Users/reader/Downloads/hero-dunes.png"),
+		)
+		copyBytes.mockResolvedValue(answered(null))
 		copyToClipboard.mockResolvedValue(answered(null))
 		reveal.mockResolvedValue(answered(null))
 	})
@@ -1575,6 +1594,22 @@ describe("WorkspaceBody library", () => {
 		await noticeTitled(REVEAL_FAILURE)
 	})
 
+	it("keeps Download, Copy and More on the file of this computer, never on host bytes", async () => {
+		await openLibrary()
+		await open("hero-dunes.png")
+
+		await press("Download")
+		await press("Copy")
+		await press("More")
+
+		expect(save).toHaveBeenCalledExactlyOnceWith(SPACE, HERO.name)
+		expect(copyToClipboard).toHaveBeenCalledExactlyOnceWith(SPACE, HERO.name)
+		expect(reveal).toHaveBeenCalledExactlyOnceWith(SPACE, HERO.name)
+		expect(libraryHost.readFile).not.toHaveBeenCalled()
+		expect(saveBytes).not.toHaveBeenCalled()
+		expect(copyBytes).not.toHaveBeenCalled()
+	})
+
 	describe("in a joined Space", () => {
 		it("lists and reads the Library of the host Space", async () => {
 			await openJoinedLibrary()
@@ -1605,13 +1640,15 @@ describe("WorkspaceBody library", () => {
 
 		const IMAGE_FAILURE = "Couldn’t show an image of the Library"
 
-		const announcedImageFailures = async () => {
-			await noticeTitled(IMAGE_FAILURE)
+		const announced = async (failure: string) => {
+			await noticeTitled(failure)
 			await settle()
 			return screen
-				.getAllByText(IMAGE_FAILURE)
+				.getAllByText(failure)
 				.filter((title) => !title.closest('[aria-hidden="true"]'))
 		}
+
+		const announcedImageFailures = () => announced(IMAGE_FAILURE)
 
 		it("raises one notice when several images cannot be read from the host", async () => {
 			libraryHost.readImage.mockRejectedValue(refusal)
@@ -1641,23 +1678,123 @@ describe("WorkspaceBody library", () => {
 			expect(await announcedImageFailures()).toHaveLength(1)
 		})
 
-		it("leaves Download, Copy and More inactive, with no notice", async () => {
+		const expectNoPathCommand = () => {
+			expect(save).not.toHaveBeenCalled()
+			expect(copyToClipboard).not.toHaveBeenCalled()
+			expect(reveal).not.toHaveBeenCalled()
+		}
+
+		const expectNoLibraryNotice = () => {
+			for (const failure of [SAVE_FAILURE, COPY_FAILURE, REVEAL_FAILURE]) {
+				expect(screen.queryByText(failure)).toBeNull()
+			}
+		}
+
+		it("downloads an image from the bytes the host answers, saved on this computer", async () => {
 			await openJoinedLibrary()
 			await open("hero-dunes.png")
+
 			await press("Download")
+
+			expect(libraryHost.readFile).toHaveBeenCalledExactlyOnceWith({
+				spaceId: HOST_SPACE,
+				name: HERO.name,
+			})
+			expect(saveBytes).toHaveBeenCalledExactlyOnceWith(
+				`host ${HERO.name}`,
+				btoa(HERO.name),
+			)
+			expectNoPathCommand()
+			expectNoLibraryNotice()
+		})
+
+		it("copies an image from the bytes the host answers, through this computer's clipboard", async () => {
+			await openJoinedLibrary()
+			await open("fern-study.jpg")
+
 			await press("Copy")
+
+			expect(libraryHost.readFile).toHaveBeenCalledExactlyOnceWith({
+				spaceId: HOST_SPACE,
+				name: FERN.name,
+			})
+			expect(copyBytes).toHaveBeenCalledExactlyOnceWith(
+				`host ${FERN.name}`,
+				btoa(FERN.name),
+			)
+			expectNoPathCommand()
+			expectNoLibraryNotice()
+		})
+
+		it("raises no notice when the member cancels the save dialog", async () => {
+			saveBytes.mockResolvedValue(answered(null))
+			await openJoinedLibrary()
+			await open("hero-dunes.png")
+
+			await press("Download")
+
+			expect(saveBytes).toHaveBeenCalledOnce()
+			expectNoLibraryNotice()
+		})
+
+		it("leaves More inert on an image and a document, with no notice", async () => {
+			await openJoinedLibrary()
+			await open("hero-dunes.png")
 			await press("More")
 			await press("Close")
 
 			await open("Spring launch brief")
 			await press("More")
 
-			expect(save).not.toHaveBeenCalled()
-			expect(copyToClipboard).not.toHaveBeenCalled()
-			expect(reveal).not.toHaveBeenCalled()
-			for (const failure of [SAVE_FAILURE, COPY_FAILURE, REVEAL_FAILURE]) {
-				expect(screen.queryByText(failure)).toBeNull()
-			}
+			expect(libraryHost.readFile).not.toHaveBeenCalled()
+			expect(saveBytes).not.toHaveBeenCalled()
+			expect(copyBytes).not.toHaveBeenCalled()
+			expectNoPathCommand()
+			expectNoLibraryNotice()
+		})
+
+		it.each([
+			["Download", SAVE_FAILURE],
+			["Copy", COPY_FAILURE],
+		])(
+			"raises one notice when the host cannot read the file to %s",
+			async (action, failure) => {
+				libraryHost.readFile.mockRejectedValue(refusal)
+				await openJoinedLibrary()
+				await open("hero-dunes.png")
+
+				await press(action)
+
+				expect(await announced(failure)).toHaveLength(1)
+				expect(saveBytes).not.toHaveBeenCalled()
+				expect(copyBytes).not.toHaveBeenCalled()
+				expectNoPathCommand()
+			},
+		)
+
+		it("raises one save notice when this computer cannot save the bytes", async () => {
+			saveBytes.mockResolvedValue(failed("read-only volume"))
+			await openJoinedLibrary()
+			await open("hero-dunes.png")
+
+			await press("Download")
+
+			expect(await announced(SAVE_FAILURE)).toHaveLength(1)
+			expectNoPathCommand()
+		})
+
+		it("raises one copy notice when the clipboard refuses the bytes", async () => {
+			copyBytes.mockResolvedValue({
+				status: "error",
+				error: { kind: "clipboardRefused", detail: "denied" },
+			})
+			await openJoinedLibrary()
+			await open("hero-dunes.png")
+
+			await press("Copy")
+
+			expect(await announced(COPY_FAILURE)).toHaveLength(1)
+			expectNoPathCommand()
 		})
 	})
 })

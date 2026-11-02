@@ -1,4 +1,9 @@
-import type { LibraryDocument, LibraryImage, LibraryItem } from "../bindings"
+import type {
+	LibraryDocument,
+	LibraryFile,
+	LibraryImage,
+	LibraryItem,
+} from "../bindings"
 import { invoke } from "../host/index"
 
 export const readLibraryItems = (spaceId: string) =>
@@ -9,3 +14,6 @@ export const readLibraryDocument = (spaceId: string, name: string) =>
 
 export const readLibraryImage = (spaceId: string, name: string) =>
 	invoke<LibraryImage>("library_read_image", { spaceId, name })
+
+export const readLibraryFile = (spaceId: string, name: string) =>
+	invoke<LibraryFile>("library_read_file", { spaceId, name })
