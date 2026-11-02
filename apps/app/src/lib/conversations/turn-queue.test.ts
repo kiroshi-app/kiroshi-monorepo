@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest"
 import {
 	droppedWaiting,
 	emptyQueue,
-	endedIn,
 	handedOver,
+	MAX_SUMMONS_PER_CHAIN,
 	openedWave,
 	refusalOf,
 	reopenedFor,
@@ -59,28 +59,51 @@ describe("handedOver", () => {
 	})
 
 	it("holds for its next run a companion still running in the open wave", () => {
-		const running = endedIn(openedWave(opened(["ada", "nyx"])), "ada")
+		const running = openedWave(opened(["ada", "nyx"]))
 		const queue = handedOver(running, "ada", summons("nyx"))
 		expect(waitingIn(queue)).toEqual(["nyx"])
 		expect(refusalOf(running, "ada", summons("nyx"))).toBeNull()
 	})
 
-	it("holds no summons for a companion that already ended its run in the turn", () => {
-		const first = endedIn(openedWave(opened(["ada"])), "ada")
+	it("holds again the companion named back by the one it named", () => {
+		const first = openedWave(opened(["ada"]))
 		const second = openedWave(handedOver(first, "ada", summons("nyx")))
 		const queue = handedOver(second, "nyx", summons("ada"))
-		expect(waitingIn(queue)).toEqual([])
-		expect(refusalOf(second, "nyx", summons("ada"))).toBe("ranInTurn")
+		expect(waitingIn(queue)).toEqual(["ada"])
+		expect(refusalOf(second, "nyx", summons("ada"))).toBeNull()
 	})
 
-	it("holds again a companion that ran in the turn before", () => {
-		const earlier = endedIn(openedWave(opened(["ada"])), "ada")
-		const queue = handedOver(
-			openedWave(reopenedFor(earlier, [summons("nyx")])),
+	it("refuses a companion handed the turn as many times as the chain allows", () => {
+		let queue = openedWave(opened(["ada"]))
+		for (let i = 0; i < MAX_SUMMONS_PER_CHAIN; i++) {
+			queue = openedWave(handedOver(queue, "ada", summons("nyx")))
+			queue = openedWave(handedOver(queue, "nyx", summons("ada")))
+		}
+		expect(waveIn(queue)).toEqual(["ada"])
+		expect(refusalOf(queue, "ada", summons("nyx"))).toBe("summonLimit")
+		expect(waitingIn(handedOver(queue, "ada", summons("nyx")))).toEqual([])
+	})
+
+	it("counts once a companion named twice before its next run", () => {
+		let queue = opened(["ada", "iris"])
+		for (let i = 0; i < MAX_SUMMONS_PER_CHAIN - 1; i++) {
+			queue = handedOver(openedWave(queue), "ada", summons("nyx"))
+		}
+		queue = openedWave(queue)
+		const named = handedOver(queue, "ada", summons("nyx"))
+		expect(refusalOf(named, "iris", summons("nyx"))).toBeNull()
+		expect(waitingIn(handedOver(named, "iris", summons("nyx")))).toEqual([
 			"nyx",
-			summons("ada"),
-		)
-		expect(waitingIn(queue)).toEqual(["ada"])
+		])
+	})
+
+	it("counts the handovers again from the next message", () => {
+		let queue = openedWave(opened(["ada"]))
+		for (let i = 0; i < MAX_SUMMONS_PER_CHAIN; i++) {
+			queue = openedWave(handedOver(queue, "ada", summons("nyx")))
+		}
+		const next = openedWave(reopenedFor(queue, [summons("ada")]))
+		expect(refusalOf(next, "ada", summons("nyx"))).toBeNull()
 	})
 
 	it("opens a second wave with the companion the first one named", () => {

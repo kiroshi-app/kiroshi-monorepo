@@ -20,6 +20,7 @@ import {
 	TRANSCRIPT_WINDOW_SIZE,
 } from "./transcript-contract"
 import { message, seatBots } from "./transcript-fixtures"
+import { MAX_SUMMONS_PER_CHAIN } from "./turn-queue"
 
 import type { SummonsDropped } from "../bindings"
 import type {
@@ -906,7 +907,7 @@ describe("createConversationController", () => {
 		expect(runningIn(harness.controller)).toEqual([ada])
 	})
 
-	it("starts no second run in the turn for a companion handed the turn back", async () => {
+	it("starts a second run in the turn for a companion handed the turn back", async () => {
 		const ada = idOf(harness.conversation, "Ada")
 		const nyx = idOf(harness.conversation, "Nyx")
 		await harness.controller.send("and now?")
@@ -917,8 +918,8 @@ describe("createConversationController", () => {
 		harness.driver.pushTo(nyx, spoke(nyx, `two <@${ada}>`))
 		await harness.settled()
 
-		expect(submittedIn(harness)).toEqual([ada, nyx])
-		expect(runningIn(harness.controller)).toEqual([])
+		expect(submittedIn(harness)).toEqual([ada, nyx, ada])
+		expect(runningIn(harness.controller)).toEqual([ada])
 	})
 
 	it("leaves what the companion in flight wrote in place when the turn is stopped", async () => {
@@ -3204,6 +3205,50 @@ describe("the mentions a finished turn carries", () => {
 				{ botId: room.iris, botName: "Iris" },
 			),
 		)
+		room.detach()
+	})
+
+	const pingPong = async (room: Awaited<ReturnType<typeof roomSeating>>) => {
+		await room.sent("@Ada take the walls")
+		await room.seat(room.iris)
+		room.announce(room.iris)
+		for (let i = 0; i < MAX_SUMMONS_PER_CHAIN; i++) {
+			await room.spoken(room.ada, `over to <@${room.iris}>`)
+			await room.spoken(room.iris, `back to <@${room.ada}>`)
+		}
+		await room.spoken(room.ada, `over to <@${room.iris}>`)
+	}
+
+	it("stops a mutual mention loop once a companion was handed the turn as often as a chain allows", async () => {
+		const room = await roomSeating()
+
+		await pingPong(room)
+
+		expect(submittedIn(room)).toHaveLength(2 * MAX_SUMMONS_PER_CHAIN + 1)
+		expect(room.controller.getState().waitingBotIds).toEqual([])
+		expect(room.reportFailure).toHaveBeenCalledTimes(1)
+		expect(room.reportFailure).toHaveBeenCalledWith(
+			...notStarted(
+				"Iris didn’t start",
+				`Agents already handed Iris the turn ${MAX_SUMMONS_PER_CHAIN} times in this exchange, so the exchange stops here. Mention Iris yourself to carry on.`,
+				{ botId: room.iris, botName: "Iris" },
+			),
+		)
+		room.detach()
+	})
+
+	it("raises no second notice when the host drops the run the loop bound stopped", async () => {
+		const room = await roomSeating()
+		await pingPong(room)
+		const [, facts] = room.reportFailure.mock.calls[0]
+
+		await room.drop({
+			botId: room.iris,
+			turnId: facts.turn,
+			reason: "neverStarted",
+		})
+
+		expect(room.reportFailure).toHaveBeenCalledTimes(1)
 		room.detach()
 	})
 
