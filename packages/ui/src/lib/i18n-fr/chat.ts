@@ -310,6 +310,22 @@ const chat = {
 		done: "Fait",
 		todo: "À faire",
 	},
+	answerBlock: {
+		checklist: {
+			copy: "Copier la liste",
+		},
+		sourcedImage: {
+			save: "Enregistrer l’image",
+		},
+		webPage: {
+			open: "Ouvrir comme page",
+		},
+		gallery: {
+			more_one: "{{count}} photo de plus",
+			more_many: "{{count}} photos de plus",
+			more_other: "{{count}} photos de plus",
+		},
+	},
 	screen: {
 		label: "Conversation avec l’agent",
 		identity: "{{name}} · réglages de l’agent",

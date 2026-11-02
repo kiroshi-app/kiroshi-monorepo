@@ -291,6 +291,21 @@ const chat = {
 		done: "Done",
 		todo: "To do",
 	},
+	answerBlock: {
+		checklist: {
+			copy: "Copy the list",
+		},
+		sourcedImage: {
+			save: "Save the image",
+		},
+		webPage: {
+			open: "Open as page",
+		},
+		gallery: {
+			more_one: "{{count}} more photo",
+			more_other: "{{count}} more photos",
+		},
+	},
 	screen: {
 		label: "Agent conversation",
 		identity: "{{name}} · agent settings",
