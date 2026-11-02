@@ -183,4 +183,4 @@ function ActivityIndicator(props: ActivityIndicatorProps) {
 }
 
 export type { ActivityIndicatorKind, ActivityIndicatorWait }
-export { ActivityIndicator }
+export { ActivityIndicator, formatElapsed }

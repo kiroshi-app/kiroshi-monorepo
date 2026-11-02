@@ -1,3 +1,11 @@
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
+import type {
+	LibraryDocumentAgent,
+	LibraryDocumentEdit,
+	LibraryDocumentFinished,
+	LibraryDocumentWriter,
+} from "@workspace/ui/components/library-document-agents"
+import type { LibraryDocument } from "@workspace/ui/components/library-document-view"
 import type { LibraryItem } from "@workspace/ui/components/library-grid"
 import type { LibraryLightboxImage } from "@workspace/ui/components/library-lightbox"
 
@@ -201,3 +209,92 @@ export const LIBRARY_ITEMS_AFTER_IMPORT: LibraryItem[] = [
 	},
 	...LIBRARY_ITEMS,
 ]
+
+export const LIBRARY_AGENTS = {
+	atlas: { id: "atlas", name: "Atlas", hue: BLOT_HUES.orange },
+	mira: { id: "mira", name: "Mira", hue: BLOT_HUES.green },
+	sol: { id: "sol", name: "Sol", hue: BLOT_HUES.blue },
+	ivo: { id: "ivo", name: "Ivo", hue: BLOT_HUES.pink },
+	longName: {
+		id: "long-name",
+		name: "Atlas Quarterly Planning and Review Lead",
+		hue: BLOT_HUES.orange,
+	},
+} satisfies Record<string, LibraryDocumentAgent>
+
+const ATLAS_SENTENCE =
+	"Every page closes on the same invitation, so the site, the screenshots and the notes all point to one place."
+
+const MIRA_SENTENCE =
+	"We also count the Spaces that open a document twice in their first week."
+
+export const LIBRARY_AGENT_DOCUMENT: LibraryDocument = {
+	id: "brief",
+	name: "Spring launch brief",
+	detail: "1,262 words · Edited just now",
+	body: [
+		"The spring launch puts the Library in front of every team on the 14th. This brief collects what we're shipping, who it's for and the three messages every page repeats.",
+		"## Messages",
+		`Everything the Space holds, in one place: images and documents side by side, searchable by name, with nothing to set up. ${ATLAS_SENTENCE}`,
+		"## What we measure",
+		`Weekly active Spaces is the one number we report on launch day, read against the four weeks before it. ${MIRA_SENTENCE}`,
+		"## Timeline",
+		"Copy is final on the 7th, screenshots land on the 10th, and the release notes go out with the build on the morning of the 14th.",
+	].join("\n\n"),
+}
+
+const editOf = (
+	agent: LibraryDocumentAgent,
+	sentence: string,
+): LibraryDocumentEdit => {
+	const start = LIBRARY_AGENT_DOCUMENT.body.indexOf(sentence)
+	return { agent, start, end: start + sentence.length }
+}
+
+export const LIBRARY_WRITERS: LibraryDocumentWriter[] = [
+	{
+		...editOf(LIBRARY_AGENTS.atlas, ATLAS_SENTENCE),
+		elapsedSeconds: 44,
+		sentenceCount: 1,
+		section: "Messages",
+	},
+	{
+		...editOf(LIBRARY_AGENTS.mira, MIRA_SENTENCE),
+		elapsedSeconds: 64,
+		sentenceCount: 1,
+		section: "What we measure",
+	},
+]
+
+export const LIBRARY_FINISHED: LibraryDocumentFinished = {
+	edits: [
+		editOf(LIBRARY_AGENTS.atlas, ATLAS_SENTENCE),
+		editOf(LIBRARY_AGENTS.mira, MIRA_SENTENCE),
+	],
+	sentenceCount: 2,
+	elapsedSeconds: 108,
+}
+
+const TIMELINE_SENTENCE = "Copy is final on the 7th"
+
+const LAUNCH_SENTENCE = "The spring launch puts the Library"
+
+export const LIBRARY_LONG_NAME_WRITERS: LibraryDocumentWriter[] = [
+	{
+		...editOf(LIBRARY_AGENTS.longName, MIRA_SENTENCE),
+		elapsedSeconds: 64,
+		sentenceCount: 1,
+		section: "What we measure",
+	},
+]
+
+export const LIBRARY_LONG_NAME_FINISHED: LibraryDocumentFinished = {
+	edits: [
+		editOf(LIBRARY_AGENTS.longName, MIRA_SENTENCE),
+		editOf(LIBRARY_AGENTS.mira, ATLAS_SENTENCE),
+		editOf(LIBRARY_AGENTS.sol, TIMELINE_SENTENCE),
+		editOf(LIBRARY_AGENTS.ivo, LAUNCH_SENTENCE),
+	],
+	sentenceCount: 4,
+	elapsedSeconds: 312,
+}

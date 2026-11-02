@@ -374,6 +374,28 @@ const common = {
 		document: {
 			back: "Library",
 			more: "More",
+			agents: {
+				writing_one: "{{count}} agent writing",
+				writing_other: "{{count}} agents writing",
+				stopAll: "Stop all",
+				caret: "{{name}} is writing",
+				title: "{{name}} is writing…",
+				summary_one: "{{count}} sentence added to “{{section}}”",
+				summary_other: "{{count}} sentences added to “{{section}}”",
+				stop: "Stop {{name}}",
+				openConversation: "Open conversation",
+				finished: {
+					one: "{{name}} finished",
+					two: "{{first}} and {{second}} finished",
+					more_one: "{{first}}, {{second}} and {{count}} other finished",
+					more_other: "{{first}}, {{second}} and {{count}} others finished",
+				},
+				added_one: "{{count}} sentence added",
+				added_other: "{{count}} sentences added",
+				detail: "{{added}} · {{elapsed}}",
+				undoAll: "Undo all",
+				done: "Done",
+			},
 		},
 		failure: {
 			list: "Couldn’t open the Library",
