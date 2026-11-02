@@ -14,10 +14,7 @@ import { useWorkspaceSpaceSwitch } from "@/components/workspace-settings"
 import { hasOverlayWindowControls, isSidebarResizable } from "@/lib/host"
 import type { WorkspaceTabs } from "@/lib/tabs/workspace-tabs"
 import type { SidebarPanel } from "@/lib/user/use-sidebar-tab"
-import {
-	type RosterLists,
-	useRosterLists,
-} from "@/lib/workspace/use-roster-lists"
+import { useRosterLists } from "@/lib/workspace/use-roster-lists"
 import { useWorkspaceTitleBarTabs } from "@/lib/workspace/use-workspace-title-bar-tabs"
 import { useWorkspace } from "@/lib/workspace/workspace-context"
 import {
@@ -74,20 +71,13 @@ type RailPanelGestures = Pick<
 	"onSelectConversations" | "onSelectMissions"
 >
 
-const useConversationsRailPanels = (
-	rosterLists: RosterLists,
-): RailPanelGestures | undefined => {
-	const { collapsedSectionIds, core, sidebarTab } = useWorkspace()
+const useConversationsRailPanels = (): RailPanelGestures | undefined => {
+	const { sidebarTab } = useWorkspace()
 	const conversations = useMatch({ from: "/", shouldThrow: false })
 
 	if (!conversations) return undefined
 	const switchTo = (panel: SidebarPanel) => () =>
-		sidebarTab.openSidebarTab(panel, {
-			botsBySpaceId: rosterLists.rosterBotsBySpace,
-			conversationsBySpaceId: rosterLists.rosterConversationsBySpace,
-			sectionsBySpaceId: core.sections.state.sections,
-			collapsedSectionIds,
-		})
+		sidebarTab.openSidebarTab(panel)
 	return {
 		onSelectConversations: switchTo("conversations"),
 		onSelectMissions: switchTo("missions"),
@@ -114,8 +104,6 @@ const useWorkspaceFrameRead = (): WorkspaceFrameRead => {
 	const askedGestures = useMemo(() => gesturesAskedByLeaveGuard(tabs), [tabs])
 	const onSelectSpace = useRailSpaceSelection()
 	const rail = useWorkspaceRail({
-		collapsedSectionIds: workspace.collapsedSectionIds,
-		core,
 		navigation: workspace.navigation,
 		overlay: workspace.overlay,
 		panels: workspace.panels,
@@ -127,7 +115,7 @@ const useWorkspaceFrameRead = (): WorkspaceFrameRead => {
 		onSelectSpace,
 	})
 
-	const conversationsRailPanels = useConversationsRailPanels(rosterLists)
+	const conversationsRailPanels = useConversationsRailPanels()
 
 	const frame: WorkspaceFrame = {
 		...rail,

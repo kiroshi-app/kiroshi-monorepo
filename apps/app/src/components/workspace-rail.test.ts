@@ -35,7 +35,6 @@ import type { RosterLines } from "@/lib/workspace/use-roster-lines"
 import type { RosterLists } from "@/lib/workspace/use-roster-lists"
 import type { SettingsPanels } from "@/lib/workspace/use-settings-panels"
 import type { useSidebarPanelSwitch } from "@/lib/workspace/use-sidebar-panel-switch"
-import type { WorkspaceCore } from "@/lib/workspace/use-workspace-core"
 import type { WorkspaceOverlay } from "@/lib/workspace/use-workspace-overlay"
 
 type MountedApp = {
@@ -113,10 +112,6 @@ const NO_INVITATIONS = {
 	sweepWithdrawn: () => undefined,
 }
 
-const NO_SECTIONS_CORE = {
-	sections: { state: { sections: {} } },
-} as WorkspaceCore
-
 type RailHarnessProps = {
 	selectedSpaceId: string
 	railSettings?: SettingsPanels["railSettings"]
@@ -147,8 +142,6 @@ const RailHarness = ({
 		NO_INVITATIONS,
 	)
 	const { rail, currentSpace, currentSpaceHost } = useWorkspaceRail({
-		collapsedSectionIds: [],
-		core: NO_SECTIONS_CORE,
 		navigation: navigation as SettingsNavigation,
 		overlay: {
 			search: { isOpen: false, open: () => {} },
@@ -361,8 +354,6 @@ const produceRailFor = ({
 	renderHook(
 		() =>
 			useWorkspaceRail({
-				collapsedSectionIds: [],
-				core: NO_SECTIONS_CORE,
 				navigation: {} as SettingsNavigation,
 				overlay: {
 					search: { isOpen: false, open: () => {} },

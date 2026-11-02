@@ -476,6 +476,9 @@ const installOf = (
 const missionsEntryOf = () =>
 	within(railOf()).getByRole("button", { name: i18n.t("bots:rail.missions") })
 
+const missionCardOf = (objective: string) =>
+	screen.getByRole("button", { name: new RegExp(objective) })
+
 const raisedNoticeTitles = () =>
 	[...document.querySelectorAll('[data-slot="toast-title"]')].map(
 		(title) => title.textContent,
@@ -748,6 +751,7 @@ it("keeps the companion screen open on the Danger zone and raises a notice when 
 it("brings back the open mission thread and its draft on Back to conversations", async () => {
 	await mountApp()
 	await press(missionsEntryOf())
+	await press(missionCardOf(MISSION_OBJECTIVE))
 	expect(screen.getByText(MISSION_SAID)).toBeTruthy()
 	fireEvent.change(composerOf(), { target: { value: MISSION_DRAFT } })
 	await openContextMenuOn(gutterOf(MISSION_SAID))
