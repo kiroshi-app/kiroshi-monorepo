@@ -8,14 +8,14 @@ type LibraryResult<Data> =
 	| { status: "ok"; data: Data }
 	| { status: "error"; error: LibraryError }
 
-type LibraryAction = keyof typeof ACTION_COMMANDS
-
 const ACTION_COMMANDS = {
 	save: (spaceId: string, name: string) => commands.librarySave(spaceId, name),
 	copy: (spaceId: string, name: string) => commands.libraryCopy(spaceId, name),
 	reveal: (spaceId: string, name: string) =>
 		commands.libraryReveal(spaceId, name),
 }
+
+type LibraryAction = keyof typeof ACTION_COMMANDS
 
 const dataOf = <Data>(result: LibraryResult<Data>): Data => {
 	if (result.status === "error") {
