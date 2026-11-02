@@ -97,7 +97,8 @@ export const MeetingNotesSelected = meta.story({
 		await expect(meetingNotes).toBeChecked()
 
 		await userEvent.click(create)
-		await expect(args.onCreate).toHaveBeenCalledExactlyOnceWith("meetingNotes")
+		await expect(args.onCreate).toHaveBeenCalledOnce()
+		await expect(args.onCreate).toHaveBeenCalledWith("meetingNotes")
 		await expect(args.onDismiss).not.toHaveBeenCalled()
 	},
 })
@@ -132,6 +133,7 @@ export const BlankSelected = meta.story({
 		await userEvent.click(
 			within(dialog).getByRole("button", { name: "Create document" }),
 		)
-		await expect(args.onCreate).toHaveBeenCalledExactlyOnceWith("blank")
+		await expect(args.onCreate).toHaveBeenCalledOnce()
+		await expect(args.onCreate).toHaveBeenCalledWith("blank")
 	},
 })

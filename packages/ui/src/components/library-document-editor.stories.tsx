@@ -29,7 +29,7 @@ const meta = preview.meta({
 	},
 	globals: { theme: "dark" },
 	args: {
-		template: "blank",
+		template: "blank" as const,
 		createdAt: new Date(2026, 10, 2),
 		onTitleChange: fn(),
 		onBodyChange: fn(),
