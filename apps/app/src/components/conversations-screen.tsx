@@ -2,9 +2,9 @@ import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 
 import { WorkspaceBody } from "@/components/workspace-body"
 import { WorkspaceSidebar } from "@/components/workspace-sidebar"
-import { isSidebarResizable } from "@/lib/host"
 import { onboardingCreationOf } from "@/lib/onboarding/onboarding-flow-controller"
 import { useWorkspace } from "@/lib/workspace/workspace-context"
+import { useWorkspaceFrame } from "@/lib/workspace/workspace-frame"
 
 export const ConversationsScreen = () => {
 	const {
@@ -14,38 +14,33 @@ export const ConversationsScreen = () => {
 		loadSpaces,
 		navigation,
 		overlay,
-		panels,
 		rosterLines,
 		rosterView,
 		rosteredHostSpaceId,
-		scopes,
 		sidebarMissions,
 		sidebarTab,
 		switcher,
-		tabs,
 	} = useWorkspace()
+	const { frame } = useWorkspaceFrame()
 	const { preferences, spaces } = core
 
 	return (
 		<WorkspaceShell
-			spaceTint={scopes.spaceHue}
-			width={preferences.sidebarWidth ?? undefined}
-			onWidthChange={overlay.changeSidebarWidth}
-			isResizable={isSidebarResizable()}
+			spaceTint={frame.spaceTint}
+			width={frame.width}
+			onWidthChange={frame.onWidthChange}
+			isResizable={frame.isResizable}
 			sidebar={
 				<WorkspaceSidebar
 					collapsedSectionIds={collapsedSectionIds}
 					core={core}
-					drivers={drivers}
 					navigation={navigation}
 					overlay={overlay}
-					panels={panels}
 					rosterLines={rosterLines}
 					rosterView={rosterView}
 					sidebarMissions={sidebarMissions}
 					sidebarTab={sidebarTab}
 					switcher={switcher}
-					tabs={tabs}
 				/>
 			}
 		>

@@ -10,9 +10,9 @@ import {
 } from "@/lib/conversations/roster-conversations"
 import type { SettingsSearch } from "@/lib/navigation/settings-search"
 import type { SettingsNavigation } from "@/lib/navigation/use-settings-navigation"
-import type { SettingsFrame } from "@/lib/workspace/settings-frame"
 import type { RosterLines } from "@/lib/workspace/use-roster-lines"
 import type { WorkspaceCore } from "@/lib/workspace/use-workspace-core"
+import type { WorkspaceFrame } from "@/lib/workspace/workspace-frame"
 
 const GENERAL_ENTRY = "general"
 
@@ -20,7 +20,7 @@ type ConversationScreenHostProps = {
 	bots: Bot[]
 	conversation: Conversation
 	core: WorkspaceCore
-	frame: SettingsFrame
+	frame: WorkspaceFrame
 	navigation: SettingsNavigation
 	rosterLines: RosterLines
 	search: SettingsSearch

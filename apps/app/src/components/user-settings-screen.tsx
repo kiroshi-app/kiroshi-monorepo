@@ -11,7 +11,6 @@ import { isRelaySpace } from "@/lib/spaces/joined-spaces-controller"
 import type { SettingsSpaces } from "@/lib/spaces/settings-spaces"
 import { diagnosticsActions } from "@/lib/user/diagnostics-actions"
 import { toNotificationChange } from "@/lib/user/user-settings"
-import type { SettingsFrame } from "@/lib/workspace/settings-frame"
 import type { ApplicationScopes } from "@/lib/workspace/use-application-scopes"
 import {
 	ACCOUNT_TAB,
@@ -20,11 +19,12 @@ import {
 import type { WorkspaceCore } from "@/lib/workspace/use-workspace-core"
 import type { WorkspaceOverlay } from "@/lib/workspace/use-workspace-overlay"
 import { USER_OWNER } from "@/lib/workspace/user-owner"
+import type { WorkspaceFrame } from "@/lib/workspace/workspace-frame"
 
 type UserSettingsScreenProps = {
 	about: AboutFieldsProps | undefined
 	core: WorkspaceCore
-	frame: SettingsFrame
+	frame: WorkspaceFrame
 	navigation: SettingsNavigation
 	overlay: WorkspaceOverlay
 	panels: SettingsPanels

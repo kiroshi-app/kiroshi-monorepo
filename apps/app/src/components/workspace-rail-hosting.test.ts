@@ -118,7 +118,9 @@ const RailOfSpaceHostedHere = () => {
 		collapsedSectionIds: [],
 		core: { sections: { state: { sections: {} } } } as WorkspaceCore,
 		navigation: {} as SettingsNavigation,
-		overlay: {} as WorkspaceOverlay,
+		overlay: {
+			search: { isOpen: false, open: () => {} },
+		} as unknown as WorkspaceOverlay,
 		panels: { railSettings: undefined } as SettingsPanels,
 		rosterLines: {
 			sidebarActions: { onCreateSpace: () => undefined },

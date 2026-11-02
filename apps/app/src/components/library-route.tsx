@@ -4,13 +4,13 @@ import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 
 import { BareAppHeader } from "@/components/bare-app-header"
 import { LibraryScreen } from "@/components/library-screen"
-import { useSettingsFrame } from "@/components/workspace-settings"
 import { isJoinedRowId } from "@/lib/spaces/joined-spaces-controller"
 import { useWorkspace } from "@/lib/workspace/workspace-context"
+import { useWorkspaceFrame } from "@/lib/workspace/workspace-frame"
 
 export const LibraryRoute = () => {
-	const { rosteredHostSpaceId, rosterLines, rosterView } = useWorkspace()
-	const { frame } = useSettingsFrame(rosterLines.sidebarActions.onSelectSpace)
+	const { rosteredHostSpaceId, rosterView } = useWorkspace()
+	const { frame } = useWorkspaceFrame()
 	const spaceRowId = rosterView.rosteredSpaceId
 
 	return (

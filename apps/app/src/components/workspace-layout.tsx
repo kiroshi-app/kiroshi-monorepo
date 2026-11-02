@@ -1,5 +1,3 @@
-import { Outlet } from "@tanstack/react-router"
-
 import { CompanionMenuProvider } from "@workspace/ui/components/companion-menu"
 import { CompanionSelectProvider } from "@workspace/ui/components/companion-select"
 import { NewDeviceScreen } from "@workspace/ui/components/new-device-screen"
@@ -10,6 +8,7 @@ import { AppDialogs } from "@/components/app-dialogs"
 import { ClaudeImport } from "@/components/claude-import"
 import { OnboardingScreen } from "@/components/onboarding-screen"
 import { StartupScreen } from "@/components/startup-screen"
+import { WorkspaceFrameOutlet } from "@/components/workspace-frame"
 import { ConversationApplicationsContext } from "@/lib/applications/use-conversation-installs"
 import { SessionApplicationsContext } from "@/lib/applications/use-session-application"
 import { ThreadAuthorshipContext } from "@/lib/chat/thread-authorship"
@@ -118,7 +117,7 @@ export const WorkspaceLayout = () => {
 									value={panels.conversationApplications}
 								>
 									<ThreadAuthorshipContext.Provider value={authorship}>
-										<Outlet />
+										<WorkspaceFrameOutlet />
 									</ThreadAuthorshipContext.Provider>
 								</ConversationApplicationsContext.Provider>
 							</SessionApplicationsContext.Provider>

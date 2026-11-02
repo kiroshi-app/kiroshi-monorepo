@@ -59,12 +59,12 @@ import {
 } from "@/lib/spaces/spaces-controller"
 import type { Invitations } from "@/lib/spaces/use-invitations"
 import { useControllerState } from "@/lib/use-controller"
-import type { SettingsFrame } from "@/lib/workspace/settings-frame"
 import type { ApplicationScopes } from "@/lib/workspace/use-application-scopes"
 import type { RosterLines } from "@/lib/workspace/use-roster-lines"
 import type { RosterView } from "@/lib/workspace/use-roster-view"
 import type { SettingsPanels } from "@/lib/workspace/use-settings-panels"
 import type { WorkspaceCore } from "@/lib/workspace/use-workspace-core"
+import type { WorkspaceFrame } from "@/lib/workspace/workspace-frame"
 
 vi.mock("@/lib/host/index", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/lib/host/index")>()),
@@ -253,7 +253,7 @@ const SpaceSettingsHarness = ({
 					core,
 					frame: {
 						rail: { selected: "conversations" },
-					} as unknown as SettingsFrame,
+					} as unknown as WorkspaceFrame,
 					hostBySpaceId,
 					navigation,
 					page,
