@@ -1,8 +1,12 @@
 "use client"
 
 import type { TFunction } from "i18next"
-import type { CSSProperties, FocusEvent, ReactNode } from "react"
-import { useState } from "react"
+import {
+	type CSSProperties,
+	type FocusEvent,
+	type ReactNode,
+	useState,
+} from "react"
 import { useTranslation } from "react-i18next"
 
 import { formatElapsed } from "@workspace/ui/components/activity-indicator"

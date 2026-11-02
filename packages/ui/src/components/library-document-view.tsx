@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next"
 
 import { Icons } from "@workspace/ui/components/icons"
 import {
-	type LibraryDocumentAgent,
+	type LibraryDocumentEdit,
 	type LibraryDocumentFinished,
 	LibraryDocumentFinishedBar,
 	LibraryDocumentFinishedRun,
@@ -138,9 +138,8 @@ type LibraryDocumentViewProps = WriterActions & {
 	onDone?: () => void
 }
 
-const runsOf = (
-	edits: { agent: LibraryDocumentAgent; start: number; end: number }[],
-) => edits.map(({ agent, start, end }) => ({ id: agent.id, start, end }))
+const runsOf = (edits: LibraryDocumentEdit[]) =>
+	edits.map(({ agent, start, end }) => ({ id: agent.id, start, end }))
 
 const LibraryDocumentView = ({
 	document,
