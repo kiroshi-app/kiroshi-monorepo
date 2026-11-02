@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test"
+import { readFileSync } from "node:fs"
 
 import {
 	DELEGATE_TOOL,
@@ -19,6 +20,30 @@ const scope: KiroshiScope = {
 	managedSettings: {},
 	session: "k1",
 }
+
+const systemSkill = (id: string) =>
+	readFileSync(
+		new URL(
+			`../../../../src-tauri/plugins/kiroshi/skills/${id}/SKILL.md`,
+			import.meta.url,
+		),
+		"utf8",
+	)
+
+const SKILL_TOOL = /\b(?:conversation|companion|mission)_[a-z_]+/g
+
+const toolsNamedIn = (skill: string) => new Set(skill.match(SKILL_TOOL))
+
+const registeredNames = kiroshiTools(scope).map((held) => held.name)
+
+const SKILLS = [
+	{
+		id: "conversations",
+		covers: (name: string) =>
+			name.startsWith("conversation_") || name === "companion_list",
+	},
+	{ id: "missions", covers: (name: string) => name.startsWith("mission_") },
+]
 
 const NAMES_A_SECRET = /key|secret|token|password|credential|value|header/i
 
@@ -86,4 +111,17 @@ describe("kiroshiServer", () => {
 			"bundle_write",
 		])
 	})
+
+	for (const { id, covers } of SKILLS) {
+		it(`names in the ${id} skill every tool of its set the server registers, and none it does not`, () => {
+			const named = toolsNamedIn(systemSkill(id))
+
+			expect(
+				registeredNames.filter(covers).filter((name) => !named.has(name)),
+			).toEqual([])
+			expect(
+				[...named].filter((name) => !registeredNames.includes(name)),
+			).toEqual([])
+		})
+	}
 })
