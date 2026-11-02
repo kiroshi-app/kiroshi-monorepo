@@ -12,7 +12,7 @@ type Source<State> = {
 
 export type ShownMemorySources = {
 	roster: Source<ShownRoster>
-	openedMission: Source<OpenedMission | null>
+	openedMission: Pick<Source<OpenedMission | null>, "getState">
 }
 
 export type ShownMemory = {
