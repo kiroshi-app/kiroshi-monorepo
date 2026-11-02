@@ -15,6 +15,7 @@ import { createFakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import type { Invoke } from "@/lib/host/joined-hosts-invoke"
+import { titleOf } from "@/lib/library/library-items"
 import { aMission } from "@/lib/missions/mission-fixtures"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 import { readMirror, writeMirror } from "@/lib/user/preferences-mirror"
@@ -287,7 +288,10 @@ describe("the search entry of the rail", () => {
 	})
 })
 
-const libraryItemOf = (name: string, kind: LibraryItem["kind"]) => ({
+const libraryItemOf = (
+	name: string,
+	kind: LibraryItem["kind"],
+): LibraryItem => ({
 	name,
 	kind,
 	path: `/library/${name}`,
@@ -296,24 +300,21 @@ const libraryItemOf = (name: string, kind: LibraryItem["kind"]) => ({
 	createdAt: null,
 })
 
-const IMAGE_NAME = "diagram.png"
+const IMAGE = libraryItemOf("diagram.png", "image")
 
-const DOCUMENT_NAME = "notes.txt"
+const DOCUMENT = libraryItemOf("notes.txt", "document")
 
 const mountLibraryScreen = async (isJoined: boolean) => {
-	harness.libraryItems = [
-		libraryItemOf(IMAGE_NAME, "image"),
-		libraryItemOf(DOCUMENT_NAME, "document"),
-	]
+	harness.libraryItems = [IMAGE, DOCUMENT]
 	render(createElement(LibraryScreen, { spaceId: "space", isJoined }), {
 		wrapper: createQueryTestWrapper().wrapper,
 	})
 	await screen.findByRole("heading", { level: 1, name: LIBRARY_NAME })
 }
 
-const openLibraryItem = async (name: string) => {
+const openLibraryItem = async (item: LibraryItem) => {
 	const tile = (await screen.findAllByRole("button")).find((button) =>
-		button.textContent?.includes(name.slice(0, name.lastIndexOf("."))),
+		button.textContent?.includes(titleOf(item)),
 	)
 	await act(async () => {
 		fireEvent.click(tile as HTMLElement, { detail: 1 })
@@ -328,7 +329,7 @@ describe("the More action of an opened Library item", () => {
 	it("shows Download and Copy but no More on an image of a joined Space", async () => {
 		await mountLibraryScreen(true)
 
-		await openLibraryItem(IMAGE_NAME)
+		await openLibraryItem(IMAGE)
 
 		expect(
 			await findButtonNamed(i18n.t("common:library.lightbox.download")),
@@ -342,7 +343,7 @@ describe("the More action of an opened Library item", () => {
 	it("shows no More on a document of a joined Space", async () => {
 		await mountLibraryScreen(true)
 
-		await openLibraryItem(DOCUMENT_NAME)
+		await openLibraryItem(DOCUMENT)
 
 		expect(
 			await findButtonNamed(i18n.t("common:library.document.back")),
@@ -353,7 +354,7 @@ describe("the More action of an opened Library item", () => {
 	it("keeps More on an image and a document of the host's own Space", async () => {
 		await mountLibraryScreen(false)
 
-		await openLibraryItem(IMAGE_NAME)
+		await openLibraryItem(IMAGE)
 		expect(
 			await findButtonNamed(i18n.t("common:library.lightbox.more")),
 		).toBeInstanceOf(HTMLElement)
@@ -363,7 +364,7 @@ describe("the More action of an opened Library item", () => {
 				buttonNamed(i18n.t("common:library.lightbox.close")) as HTMLElement,
 			)
 		})
-		await openLibraryItem(DOCUMENT_NAME)
+		await openLibraryItem(DOCUMENT)
 		expect(
 			await findButtonNamed(i18n.t("common:library.document.more")),
 		).toBeInstanceOf(HTMLElement)
