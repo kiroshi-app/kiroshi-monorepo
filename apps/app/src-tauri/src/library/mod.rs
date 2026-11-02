@@ -15,25 +15,25 @@ use contract::{
 
 const DIR_NAME: &str = "library";
 
-pub const MAX_DOCUMENT_BYTES: u64 = 5 * 1024 * 1024;
+const MAX_DOCUMENT_BYTES: u64 = 5 * 1024 * 1024;
 
 enum AcceptedType {
 	Image,
 	Document(LibraryDocumentFormat),
 }
 
-pub fn root<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, LibraryError> {
+fn root<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, LibraryError> {
 	app.path()
 		.app_data_dir()
 		.map(|data| data.join(DIR_NAME))
 		.map_err(|error| LibraryError::Unreadable { detail: error.to_string() })
 }
 
-pub fn space_dir(root: &Path, space_id: &str) -> PathBuf {
+fn space_dir(root: &Path, space_id: &str) -> PathBuf {
 	root.join(space_id)
 }
 
-pub fn list(root: &Path, space_id: &str) -> Result<Vec<LibraryItem>, LibraryError> {
+fn list(root: &Path, space_id: &str) -> Result<Vec<LibraryItem>, LibraryError> {
 	let entries = match fs::read_dir(space_dir(root, space_id)) {
 		Ok(entries) => entries,
 		Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
@@ -79,11 +79,7 @@ fn item_at(path: &Path, name: String) -> Result<Option<LibraryItem>, LibraryErro
 	}))
 }
 
-pub fn read_document(
-	root: &Path,
-	space_id: &str,
-	name: &str,
-) -> Result<LibraryDocument, LibraryError> {
+fn read_document(root: &Path, space_id: &str, name: &str) -> Result<LibraryDocument, LibraryError> {
 	let missing = || LibraryError::Missing { name: name.to_owned() };
 	if !is_plain_name(name) {
 		return Err(LibraryError::InvalidName { name: name.to_owned() });
@@ -124,7 +120,7 @@ pub fn forget_space<R: Runtime>(app: &AppHandle<R>, space_id: &str) {
 	}
 }
 
-pub fn remove_space_dir(root: &Path, space_id: &str) -> io::Result<()> {
+fn remove_space_dir(root: &Path, space_id: &str) -> io::Result<()> {
 	match fs::remove_dir_all(space_dir(root, space_id)) {
 		Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
 		removed => removed,
