@@ -3215,14 +3215,14 @@ fn a_member_is_answered_from_the_library_folder_of_the_shared_space() {
 		let image =
 			guest.called("library_read_image", a_library_entry_of("cover.png")(PERSONAL)).await;
 
-		let names: Vec<&Value> = listed["body"]
+		let mut names: Vec<&str> = listed["body"]
 			.as_array()
 			.expect("a listing")
 			.iter()
-			.map(|item| &item["name"])
+			.filter_map(|item| item["name"].as_str())
 			.collect();
-		assert_eq!(names.len(), 2, "{listed}");
-		assert!(names.contains(&&json!("notes.md")) && names.contains(&&json!("cover.png")));
+		names.sort_unstable();
+		assert_eq!(names, ["cover.png", "notes.md"], "{listed}");
 		assert_eq!(
 			document["body"],
 			json!({ "name": "notes.md", "format": "markdown", "content": "notes of personal" })
