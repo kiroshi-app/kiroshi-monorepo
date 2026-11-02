@@ -217,6 +217,7 @@ mod x11 {
 	}
 
 	fn probed() -> Result<Cursor, Unobservable> {
+		refuse_unless_gdk_is_ready()?;
 		let display = Display::default()
 			.ok_or_else(|| unobservable("linux", "no display is open".to_owned()))?;
 		if !display.backend().is_x11() {
@@ -244,6 +245,18 @@ mod x11 {
 			scale,
 			is_primary_pressed: held.contains(ModifierType::BUTTON1_MASK),
 		})
+	}
+
+	fn refuse_unless_gdk_is_ready() -> Result<(), Unobservable> {
+		if gtk::is_initialized_main_thread() {
+			return Ok(());
+		}
+		let reason = if gtk::is_initialized() {
+			"GDK is initialized on another thread than the one probing the pointer"
+		} else {
+			"GDK is not initialized"
+		};
+		Err(unobservable("linux", reason.to_owned()))
 	}
 }
 
