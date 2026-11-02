@@ -1,0 +1,168 @@
+"use client"
+
+import {
+	ListSkeleton,
+	SkeletonBar,
+} from "@workspace/ui/components/list-skeleton"
+import { Markdown } from "@workspace/ui/components/markdown"
+import { cn } from "@workspace/ui/lib/utils"
+
+type LibraryImageItem = {
+	kind: "image"
+	id: string
+	name: string
+	detail: string
+	src: string
+}
+
+type LibraryDocumentItem = {
+	kind: "document"
+	id: string
+	name: string
+	detail: string
+	excerpt: string
+}
+
+type LibraryItem = LibraryImageItem | LibraryDocumentItem
+
+const GRID_COLUMNS =
+	"grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-x-4"
+
+const SPACE_GROUND = "bg-(--bot-avatar-ground)"
+
+const PAGE_SHADOW =
+	"shadow-[0_1px_2px_rgb(0_0_0/0.4),0_6px_16px_rgb(0_0_0/0.4)]"
+
+const PAGE_TYPE = cn(
+	"max-w-none text-[7.5px] text-muted-foreground leading-[11px] [--typeset-flow:0.375rem] [&>:first-child]:mt-0",
+	"[&_h1]:text-[11px] [&_h1]:leading-[14px] [&_h2]:mt-1.5 [&_h2]:text-[8px] [&_h2]:leading-[11px] [&_:is(h1,h2)+*]:mt-1.5",
+	"[&_li]:mt-0.5 [&_li]:ps-0.5 [&_ul]:ps-3",
+)
+
+type LibraryPageProps = {
+	excerpt: string
+	className: string
+}
+
+const LibraryPage = ({ excerpt, className }: LibraryPageProps) => (
+	<div
+		aria-hidden="true"
+		className={cn(
+			"pointer-events-none absolute h-42.5 overflow-hidden rounded-sm bg-card-raised p-4",
+			PAGE_SHADOW,
+			className,
+		)}
+		data-slot="library-page"
+	>
+		<Markdown className={PAGE_TYPE}>{excerpt}</Markdown>
+	</div>
+)
+
+type LibraryThumbnailProps = {
+	item: LibraryItem
+}
+
+const LibraryThumbnail = ({ item }: LibraryThumbnailProps) => (
+	<span
+		className={cn(
+			"relative block h-45 overflow-hidden rounded-control border border-shell-border group-hover/library-item:border-input",
+			SPACE_GROUND,
+		)}
+		data-slot="library-thumbnail"
+	>
+		{item.kind === "image" ? (
+			<img
+				alt=""
+				className="size-full object-cover"
+				draggable={false}
+				src={item.src}
+			/>
+		) : (
+			<LibraryPage className="start-9 top-5.5 w-49.75" excerpt={item.excerpt} />
+		)}
+	</span>
+)
+
+type LibraryGridItemProps = {
+	item: LibraryItem
+	onOpen: (item: LibraryItem) => void
+}
+
+const LibraryGridItem = ({ item, onOpen }: LibraryGridItemProps) => (
+	<button
+		className="group/library-item flex min-w-0 flex-col gap-2.5 rounded-control text-start focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring focus-visible:outline-offset-2"
+		data-slot="library-item"
+		onClick={(event) => {
+			event.currentTarget.focus()
+			onOpen(item)
+		}}
+		type="button"
+	>
+		<LibraryThumbnail item={item} />
+		<span className="flex min-w-0 flex-col gap-0.5">
+			<span
+				className="truncate font-medium text-compact text-foreground leading-4.5"
+				title={item.name}
+			>
+				{item.name}
+			</span>
+			<span className="truncate text-muted-foreground text-xs tabular-nums">
+				{item.detail}
+			</span>
+		</span>
+	</button>
+)
+
+type LibraryGridProps = {
+	items: LibraryItem[]
+	onOpenItem: (item: LibraryItem) => void
+}
+
+const LibraryGrid = ({ items, onOpenItem }: LibraryGridProps) => (
+	<ul
+		className={cn(GRID_COLUMNS, "gap-y-7 px-10 pt-2 pb-10")}
+		data-slot="library-grid"
+	>
+		{items.map((item) => (
+			<li className="flex min-w-0 flex-col" key={item.id}>
+				<LibraryGridItem item={item} onOpen={onOpenItem} />
+			</li>
+		))}
+	</ul>
+)
+
+const SKELETON_TILE_KEYS = Array.from(
+	{ length: 12 },
+	(_, index) => `tile-${index}`,
+)
+
+const SkeletonGridRow = () => (
+	<div
+		className={cn(
+			GRID_COLUMNS,
+			"grid-rows-[auto] auto-rows-[0] overflow-hidden",
+		)}
+	>
+		{SKELETON_TILE_KEYS.map((key) => (
+			<div className="flex flex-col gap-2.5" key={key}>
+				<div className="h-45 rounded-control bg-border" />
+				<div className="flex flex-col gap-0.5">
+					<div className="flex h-4.5 items-center">
+						<SkeletonBar className="w-32" />
+					</div>
+					<div className="flex h-4 items-center">
+						<SkeletonBar className="w-44" isFaint />
+					</div>
+				</div>
+			</div>
+		))}
+	</div>
+)
+
+const LibraryGridSkeleton = () => (
+	<div className="min-h-0 flex-1 px-10 pt-2" data-slot="library-grid-skeleton">
+		<ListSkeleton className="gap-7" row={<SkeletonGridRow />} />
+	</div>
+)
+
+export { LibraryGrid, LibraryGridSkeleton, type LibraryItem, LibraryPage }
