@@ -163,7 +163,7 @@ export const useSidebarPanelSwitch = ({
 	const switchPanel = useCallback(
 		(panel: SidebarPanel, sidebarRosters: SidebarRosters) => {
 			openSidebarTab(panel)
-			if (panel === "missions") {
+			if (panel !== "conversations") {
 				return
 			}
 			missionsShownForSpaceId.current = null
@@ -173,5 +173,11 @@ export const useSidebarPanelSwitch = ({
 		[openSidebarTab, openedMission, roster.controller, shownMemory],
 	)
 
-	return { openTab, openSidebarTab: switchPanel }
+	const closeLibrary = useCallback(() => {
+		if (openTab === "library") {
+			openSidebarTab("conversations")
+		}
+	}, [openTab, openSidebarTab])
+
+	return { openTab, openSidebarTab: switchPanel, closeLibrary }
 }

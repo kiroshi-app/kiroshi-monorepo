@@ -23,7 +23,12 @@ import "@workspace/ui/lib/i18n"
 
 import type { ActivityPanel } from "@/components/thread-routines"
 import { WorkspaceBody } from "@/components/workspace-body"
-import type { Json } from "@/lib/bindings"
+import {
+	commands,
+	type Json,
+	type LibraryDocument,
+	type LibraryItem,
+} from "@/lib/bindings"
 import { createAttachmentsController } from "@/lib/chat/attachments-controller"
 import { createAttachmentsPort } from "@/lib/chat/attachments-port"
 import { createChatController } from "@/lib/chat/chat-controller"
@@ -84,6 +89,22 @@ vi.mock("@/lib/routines/routines-transport", async (importOriginal) => {
 		},
 	}
 })
+vi.mock("@/lib/bindings", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("@/lib/bindings")>()
+
+	return {
+		...actual,
+		commands: {
+			...actual.commands,
+			libraryList: vi.fn(),
+			libraryReadDocument: vi.fn(),
+		},
+	}
+})
+vi.mock("@/lib/host/tauri", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@/lib/host/tauri")>()),
+	convertFileSrc: (path: string) => `asset://localhost${path}`,
+}))
 vi.mock("@/lib/routines/trigger-sources-transport", () => ({
 	triggerSourcesTransport: { sourcesOfSpace: vi.fn() },
 }))
@@ -273,6 +294,7 @@ const workspaceOf = async (store = createFakeTranscriptStore()) => {
 			conversationRuntimes: runtimes,
 			drafts: createDraftsController(),
 			haveSpacesFailed: false,
+			isLibraryOpen: false,
 			isMissionsPanelOpen: false,
 			isOverlayOpen: false,
 			landings: createMessageLandingController(),
@@ -1117,5 +1139,397 @@ describe("WorkspaceBody mission menu", () => {
 		await settle()
 
 		expect(closeMission).not.toHaveBeenCalled()
+	})
+})
+
+describe("WorkspaceBody library", () => {
+	const listLibrary = vi.mocked(commands.libraryList)
+	const readDocument = vi.mocked(commands.libraryReadDocument)
+	const OTHER_SPACE = "studio"
+	const EXCERPT = "What we ship in April."
+
+	const itemOf = (
+		kind: LibraryItem["kind"],
+		name: string,
+		minutesAgo: number,
+		bytes: number,
+	): LibraryItem => ({
+		name,
+		kind,
+		path: `/library/${name}`,
+		bytes,
+		modifiedAt: Date.now() - minutesAgo * A_MINUTE,
+		createdAt: null,
+	})
+
+	const HERO = itemOf("image", "hero-dunes.png", 8, 253_952)
+	const BRIEF = itemOf("document", "Spring launch brief.md", 21, 4_096)
+	const FERN = itemOf("image", "fern-study.jpg", 30, 884_736)
+	const DUSK = itemOf("image", "dusk.png", 40, 2_048)
+	const NOTES = itemOf("document", "notes.txt", 50, 512)
+
+	const listed = (items: LibraryItem[]) => ({
+		status: "ok" as const,
+		data: items,
+	})
+
+	const refused = {
+		status: "error" as const,
+		error: { kind: "unreadable" as const, detail: "denied" },
+	}
+
+	const documentRead = (name: string) => {
+		const data: LibraryDocument = {
+			name,
+			format: "markdown",
+			content: `# Spring launch\n\n${EXCERPT}`,
+		}
+		return { status: "ok" as const, data }
+	}
+
+	beforeEach(() => {
+		vi.clearAllMocks()
+		listRoutines.mockResolvedValue([])
+		listRuns.mockResolvedValue([])
+		listSources.mockResolvedValue([])
+		listenToMissions.mockResolvedValue(() => undefined)
+		listMissions.mockResolvedValue({ open: [], done: [] })
+		listLibrary.mockResolvedValue(listed([HERO, BRIEF, FERN, DUSK, NOTES]))
+		readDocument.mockImplementation(async (_spaceId, name) =>
+			name === NOTES.name ? refused : documentRead(name),
+		)
+	})
+
+	afterEach(() => {
+		cleanup()
+		vi.restoreAllMocks()
+		vi.unstubAllGlobals()
+	})
+
+	const libraryBody = (workspace: Workspace, overrides = {}) =>
+		workspace.body({ overrides: { isLibraryOpen: true, ...overrides } })
+
+	const openLibrary = async () => {
+		const workspace = await workspaceOf()
+		const view = render(libraryBody(workspace))
+		render(createElement(NoticeSurface))
+		await settle()
+		return { workspace, view }
+	}
+
+	const shownNames = () =>
+		[...document.querySelectorAll('[data-slot="library-item"] [title]')]
+			.map((name) => name.getAttribute("title"))
+			.sort()
+
+	const itemNamed = (name: string) => {
+		const item = screen.getByTitle(name).closest("button")
+		if (!item) throw new Error(`no Library item named ${name}`)
+		return item
+	}
+
+	const isBusy = () =>
+		document.querySelector('[data-slot="library-panel"] [aria-busy="true"]') !==
+		null
+
+	const search = async (query: string) => {
+		fireEvent.change(screen.getByRole("searchbox"), {
+			target: { value: query },
+		})
+		await settle()
+	}
+
+	const open = async (name: string) => {
+		fireEvent.click(itemNamed(name))
+		await settle()
+	}
+
+	const noticeTitled = (title: string) => screen.findAllByText(title)
+
+	it("lists the Library of the Space once it has loaded", async () => {
+		const workspace = await workspaceOf()
+		render(libraryBody(workspace))
+
+		expect(isBusy()).toBe(true)
+
+		await settle()
+
+		expect(listLibrary).toHaveBeenCalledWith(SPACE)
+		expect(isBusy()).toBe(false)
+		expect(shownNames()).toEqual(
+			[
+				"hero-dunes.png",
+				"Spring launch brief",
+				"fern-study.jpg",
+				"dusk.png",
+				"notes",
+			].sort(),
+		)
+	})
+
+	it("shows an empty Library with no action to take", async () => {
+		listLibrary.mockResolvedValue(listed([]))
+		await openLibrary()
+
+		const panel = document.querySelector<HTMLElement>(
+			'[data-slot="library-panel"]',
+		)
+		if (!panel) throw new Error("no Library panel")
+		expect(within(panel).getByRole("heading", { level: 1 }).textContent).toBe(
+			"Library",
+		)
+		expect(within(panel).queryAllByRole("button")).toHaveLength(0)
+		expect(within(panel).queryByRole("radiogroup")).toBeNull()
+		expect(within(panel).queryByRole("searchbox")).toBeNull()
+	})
+
+	it("draws an image from its file and a document from its excerpt, an unreadable one left blank", async () => {
+		await openLibrary()
+
+		expect(itemNamed("hero-dunes.png").querySelector("img")?.src).toBe(
+			"asset://localhost/library/hero-dunes.png",
+		)
+		await waitFor(() =>
+			expect(
+				itemNamed("Spring launch brief").querySelector(
+					'[data-slot="library-page"]',
+				)?.textContent,
+			).toContain(EXCERPT),
+		)
+		expect(
+			itemNamed("notes").querySelector('[data-slot="library-page"]')
+				?.textContent,
+		).toBe("")
+	})
+
+	it("details each item by format, size and time since it changed", async () => {
+		await openLibrary()
+
+		expect(itemNamed("hero-dunes.png").textContent).toContain(
+			"PNG · 248 KB · 8 minutes ago",
+		)
+		expect(itemNamed("Spring launch brief").textContent).toContain(
+			"MD · 4 KB · 21 minutes ago",
+		)
+		expect(itemNamed("fern-study.jpg").textContent).toContain(
+			"JPG · 864 KB · 30 minutes ago",
+		)
+	})
+
+	it("shows only the items matching the filter and the query", async () => {
+		await openLibrary()
+
+		await search("DUN")
+		expect(shownNames()).toEqual(["hero-dunes.png"])
+
+		await search("")
+		fireEvent.click(screen.getByRole("radio", { name: /^Images/ }))
+		await settle()
+
+		expect(shownNames()).toEqual(
+			["hero-dunes.png", "fern-study.jpg", "dusk.png"].sort(),
+		)
+		expect(screen.getByRole("radio", { name: /^Images/ }).textContent).toBe(
+			"Images3",
+		)
+		expect(screen.getByRole("radio", { name: /^Documents/ }).textContent).toBe(
+			"Documents2",
+		)
+	})
+
+	it("lists the folder again when the window regains focus or the panel opens again", async () => {
+		listLibrary.mockResolvedValueOnce(listed([HERO]))
+		const { workspace, view } = await openLibrary()
+		expect(shownNames()).toEqual(["hero-dunes.png"])
+
+		fireEvent(window, new Event("focus"))
+		await settle()
+
+		expect(shownNames()).toContain("dusk.png")
+
+		view.rerender(libraryBody(workspace, { isLibraryOpen: false }))
+		view.rerender(libraryBody(workspace))
+		await settle()
+
+		expect(listLibrary).toHaveBeenCalledTimes(3)
+	})
+
+	it("never shows the items of the previous Space once the Space changes", async () => {
+		const { workspace, view } = await openLibrary()
+		listLibrary.mockReturnValue(new Promise(() => undefined))
+
+		view.rerender(libraryBody(workspace, { spaceRowId: OTHER_SPACE }))
+
+		expect(shownNames()).toEqual([])
+		expect(isBusy()).toBe(true)
+		expect(listLibrary).toHaveBeenLastCalledWith(OTHER_SPACE)
+	})
+
+	it("steps through the images of the filtered order in the lightbox", async () => {
+		await openLibrary()
+		await search(".png")
+
+		await open("hero-dunes.png")
+		expect(screen.getByRole("dialog", { name: "hero-dunes.png" })).toBeTruthy()
+		expect(screen.getByText("1 of 2")).toBeTruthy()
+
+		fireEvent.click(screen.getByRole("button", { name: "Next image" }))
+		await settle()
+
+		expect(screen.getByRole("dialog", { name: "dusk.png" })).toBeTruthy()
+		expect(
+			screen
+				.getByRole("button", { name: "Next image" })
+				.hasAttribute("disabled"),
+		).toBe(true)
+
+		fireEvent.click(screen.getByRole("button", { name: "Previous image" }))
+		await settle()
+
+		expect(screen.getByRole("dialog", { name: "hero-dunes.png" })).toBeTruthy()
+	})
+
+	it("reads an opened document and returns to the grid with its filter and query kept", async () => {
+		await openLibrary()
+		await search("brief")
+		fireEvent.click(screen.getByRole("radio", { name: /^Documents/ }))
+		await settle()
+
+		await open("Spring launch brief")
+
+		expect(readDocument).toHaveBeenCalledWith(SPACE, BRIEF.name)
+		expect(
+			screen.getByRole("heading", { level: 1, name: "Spring launch brief" }),
+		).toBeTruthy()
+		expect(screen.getByText(EXCERPT)).toBeTruthy()
+		expect(screen.queryByRole("searchbox")).toBeNull()
+
+		fireEvent.click(screen.getByRole("button", { name: "Library" }))
+		await settle()
+
+		expect(screen.getByRole("searchbox")).toHaveProperty("value", "brief")
+		expect(
+			screen
+				.getByRole("radio", { name: /^Documents/ })
+				.getAttribute("aria-checked"),
+		).toBe("true")
+		expect(shownNames()).toEqual(["Spring launch brief"])
+	})
+
+	it("raises what failed when the Library cannot be listed", async () => {
+		listLibrary.mockResolvedValue(refused)
+		await openLibrary()
+
+		await noticeTitled("Couldn’t send that request")
+		expect(isBusy()).toBe(true)
+	})
+
+	it("raises what failed when a document cannot be read and keeps the grid", async () => {
+		await openLibrary()
+
+		await open("notes")
+
+		await noticeTitled("Couldn’t open this file. Retry.")
+		expect(shownNames()).toContain("notes")
+	})
+
+	const SPARK = itemOf("image", "spark.gif", 5, 1_024)
+	const WAVE = itemOf("image", "wave.webp", 6, 1_024)
+	const COPY_FAILURE = "Couldn’t copy to the clipboard"
+
+	const aClipboard = () => {
+		const fetched = vi
+			.spyOn(globalThis, "fetch")
+			.mockImplementation(async () => new Response(new Blob(["pixels"])))
+		const decode = vi.fn(async () => ({
+			width: 2,
+			height: 2,
+			close: () => undefined,
+		}))
+		const encodedTypes: string[] = []
+		vi.stubGlobal("createImageBitmap", decode)
+		vi.stubGlobal(
+			"OffscreenCanvas",
+			class {
+				getContext = () => ({ drawImage: () => undefined })
+				convertToBlob = async ({ type }: { type: string }) => {
+					encodedTypes.push(type)
+					return new Blob(["png"], { type })
+				}
+			},
+		)
+		const copiedTypes: string[][] = []
+		const write = vi
+			.spyOn(navigator.clipboard, "write")
+			.mockImplementation(async ([item]) => {
+				await item?.getType("image/png")
+				copiedTypes.push([...(item?.types ?? [])])
+			})
+		vi.spyOn(console, "error").mockImplementation(() => undefined)
+		return { fetched, decode, encodedTypes, copiedTypes, write }
+	}
+
+	const copy = async () => {
+		fireEvent.click(screen.getByRole("button", { name: "Copy" }))
+		await settle()
+	}
+
+	const next = async () => {
+		fireEvent.click(screen.getByRole("button", { name: "Next image" }))
+		await settle()
+	}
+
+	it("copies a JPG, a GIF and a WebP image to the clipboard as PNG, with no notice", async () => {
+		listLibrary.mockResolvedValue(listed([FERN, SPARK, WAVE]))
+		const clipboard = aClipboard()
+		await openLibrary()
+		await open("fern-study.jpg")
+
+		await copy()
+		await next()
+		await copy()
+		await next()
+		await copy()
+
+		expect(clipboard.fetched.mock.calls.map(([src]) => src)).toEqual([
+			"asset://localhost/library/fern-study.jpg",
+			"asset://localhost/library/spark.gif",
+			"asset://localhost/library/wave.webp",
+		])
+		expect(clipboard.decode).toHaveBeenCalledTimes(3)
+		expect(clipboard.encodedTypes).toEqual([
+			"image/png",
+			"image/png",
+			"image/png",
+		])
+		expect(clipboard.copiedTypes).toEqual([
+			["image/png"],
+			["image/png"],
+			["image/png"],
+		])
+		expect(screen.queryByText(COPY_FAILURE)).toBeNull()
+	})
+
+	it("raises the copy failure notice when the image cannot be decoded", async () => {
+		const clipboard = aClipboard()
+		clipboard.decode.mockRejectedValueOnce(new Error("undecodable"))
+		await openLibrary()
+		await open("fern-study.jpg")
+
+		await copy()
+
+		await noticeTitled(COPY_FAILURE)
+		expect(clipboard.copiedTypes).toEqual([])
+	})
+
+	it("raises the copy failure notice when the clipboard refuses the image", async () => {
+		const clipboard = aClipboard()
+		clipboard.write.mockRejectedValueOnce(new Error("refused"))
+		await openLibrary()
+		await open("hero-dunes.png")
+
+		await copy()
+
+		await noticeTitled(COPY_FAILURE)
 	})
 })

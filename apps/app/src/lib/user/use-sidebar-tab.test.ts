@@ -105,6 +105,21 @@ describe("the sidebar tab the reader opens", () => {
 		expect(second.result.current.sidebarTab.openTab).toBe("missions")
 	})
 
+	it("opens the Library in this window only, leaving the stored tab as it was", async () => {
+		const host = aHost({ ...STORED, sidebarTab: "missions" })
+		const { result } = await mountSidebarTab()
+
+		act(() => result.current.sidebarTab.openSidebarTab("library"))
+
+		expect(result.current.sidebarTab.openTab).toBe("library")
+		expect(
+			hostInvoke.mock.calls.some(
+				([command]) => command === "user_set_preferences",
+			),
+		).toBe(false)
+		expect(host().sidebarTab).toBe("missions")
+	})
+
 	it("keeps the clicked tab shown and restores the record when the write is refused", async () => {
 		aRefusingHost()
 		const { result } = await mountSidebarTab()
