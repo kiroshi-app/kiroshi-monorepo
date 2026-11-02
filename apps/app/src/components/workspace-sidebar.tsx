@@ -5,6 +5,7 @@ import { appSidebarRailOf, useWorkspaceRail } from "@/components/workspace-rail"
 import { hasOverlayWindowControls } from "@/lib/host"
 import type { SettingsNavigation } from "@/lib/navigation/use-settings-navigation"
 import type { useSwitcherSpaces } from "@/lib/spaces/use-joined-spaces"
+import { opensInNewTab } from "@/lib/tabs/new-tab-clicks"
 import type { WorkspaceTabs } from "@/lib/tabs/workspace-tabs"
 import { railPanelOf } from "@/lib/user/use-sidebar-tab"
 import type { RosterLines } from "@/lib/workspace/use-roster-lines"
@@ -74,6 +75,14 @@ export const WorkspaceSidebar = ({
 		tabs,
 		onSelectSpace: rosterLines.sidebarActions.onSelectSpace,
 	})
+	const { onSelectBot, onSelectConversation } = rosterLines.sidebarActions
+	const closeLibraryUnless = (
+		modifiers: Parameters<typeof opensInNewTab>[0],
+	) => {
+		if (!opensInNewTab(modifiers)) {
+			sidebarTab.closeLibrary()
+		}
+	}
 	const sidebarRosters = {
 		botsBySpaceId: rosterLists.rosterBotsBySpace,
 		conversationsBySpaceId: rosterLists.rosterConversationsBySpace,
@@ -106,6 +115,14 @@ export const WorkspaceSidebar = ({
 			{...rosterLines.sidebarActions}
 			{...appSidebarRailOf(rail)}
 			onCreateConversation={rosterLines.startConversation}
+			onSelectBot={(id, modifiers) => {
+				closeLibraryUnless(modifiers)
+				onSelectBot(id, modifiers)
+			}}
+			onSelectConversation={(id, modifiers) => {
+				closeLibraryUnless(modifiers)
+				onSelectConversation(id, modifiers)
+			}}
 			selectedBotId={rosterView.selectedBotId ?? undefined}
 			selectedConversationId={rosterView.selectedConversationId ?? undefined}
 			selectedSpaceId={switcher.selectedSpaceId ?? undefined}
