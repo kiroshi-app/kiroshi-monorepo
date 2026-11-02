@@ -372,6 +372,12 @@ const stripsAt = (...strips: unknown[]) => {
 	}
 }
 
+const ghostState = (target: string) => ({
+	tabId: TAB.tabId,
+	spaceId: SPACE,
+	target,
+})
+
 describe("a torn-off tab moving over the windows", () => {
 	it("announces the drag with its tab and Space, then asks the host which strip lies under every move", async () => {
 		answerEveryGhostCommand(SUPPORTED)
@@ -397,51 +403,55 @@ describe("a torn-off tab moving over the windows", () => {
 		])
 	})
 
-	it("hides the ghost over a strip of the same Space and shows it again once the pointer leaves", async () => {
+	it("keeps the ghost following over a strip of the same Space, telling the ghost window to draw nothing until the pointer leaves", async () => {
 		answerEveryGhostCommand(SUPPORTED)
 		stripsAt(SAME_SPACE_STRIP, null)
 		const { session } = sessionWithMoves()
 
 		session.start(at(10, 10), drawGhost)
 		session.move(at(300, 40))
-		await vi.waitFor(() => expect(ghost.dragGhostHide).toHaveBeenCalledOnce())
-		session.move(at(500, 400))
-
-		await vi.waitFor(() => expect(ghost.dragGhostShow).toHaveBeenCalledTimes(2))
-		expect(ghost.dragGhostShow).toHaveBeenLastCalledWith(
-			{ x: 500, y: 400 },
-			{ width: 600, height: 400 },
-			TAB,
-		)
-		expect(drawGhost).toHaveBeenCalledOnce()
-		expect(ghost.dragGhostMove).not.toHaveBeenCalled()
-	})
-
-	it("sends the ghost window the not-allowed state over a window of another Space, and clears it past it", async () => {
-		answerEveryGhostCommand(SUPPORTED)
-		stripsAt(OTHER_SPACE_STRIP, null)
-		const { session } = sessionWithMoves()
-
-		session.start(at(10, 10), drawGhost)
-		session.move(at(300, 40))
 		await vi.waitFor(() =>
-			expect(host.emitToWindow).toHaveBeenCalledExactlyOnceWith(
+			expect(host.emitToWindow).toHaveBeenLastCalledWith(
 				DRAG_GHOST_WINDOW,
 				DRAG_GHOST_STATE_EVENT,
-				{ tabId: TAB.tabId, isNotAllowed: true },
+				ghostState("sameSpace"),
 			),
 		)
-		expect(ghost.dragGhostHide).not.toHaveBeenCalled()
 		session.move(at(500, 400))
 
 		await vi.waitFor(() =>
 			expect(host.emitToWindow).toHaveBeenLastCalledWith(
 				DRAG_GHOST_WINDOW,
 				DRAG_GHOST_STATE_EVENT,
-				{ tabId: TAB.tabId, isNotAllowed: false },
+				ghostState("outside"),
 			),
 		)
-		expect(host.emitToWindow).toHaveBeenCalledTimes(2)
+		expect(ghost.dragGhostHide).not.toHaveBeenCalled()
+		expect(ghost.dragGhostShow).toHaveBeenCalledOnce()
+		expect(drawGhost).toHaveBeenCalledOnce()
+	})
+
+	it("tells the ghost window its tab, its Space and every target it crosses, from the start of the drag", async () => {
+		answerEveryGhostCommand(SUPPORTED)
+		stripsAt(OTHER_SPACE_STRIP, OTHER_SPACE_STRIP, null)
+		const { session } = sessionWithMoves()
+
+		session.start(at(10, 10), drawGhost)
+		session.move(at(300, 40))
+		session.move(at(320, 40))
+		session.move(at(500, 400))
+
+		await vi.waitFor(() =>
+			expect(host.emitToWindow.mock.calls).toEqual([
+				[DRAG_GHOST_WINDOW, DRAG_GHOST_STATE_EVENT, ghostState("outside")],
+				[DRAG_GHOST_WINDOW, DRAG_GHOST_STATE_EVENT, ghostState("otherSpace")],
+				[DRAG_GHOST_WINDOW, DRAG_GHOST_STATE_EVENT, ghostState("outside")],
+			]),
+		)
+		expect(ghost.dragGhostHide).not.toHaveBeenCalled()
+		expect(host.emitToWindow.mock.invocationCallOrder[0]).toBeLessThan(
+			ghost.dragGhostShow.mock.invocationCallOrder[0] ?? 0,
+		)
 	})
 
 	it("writes nothing about the ghost in localStorage", async () => {
@@ -1233,7 +1243,7 @@ describe("a torn-off tab the host releases", () => {
 		)
 	})
 
-	it("keeps dragging when the ghost is hidden over a window of its Space", async () => {
+	it("re-docks from the release over a window of its Space when the origin never hears the pointer-up", async () => {
 		answerEveryGhostCommand(SUPPORTED)
 		stripsAt(SAME_SPACE_STRIP, SAME_SPACE_STRIP)
 		const ended = ghostEnds()
@@ -1241,9 +1251,14 @@ describe("a torn-off tab the host releases", () => {
 
 		session.start(at(10, 10), drawGhost)
 		session.move(at(300, 40))
-		await vi.waitFor(() => expect(ghost.dragGhostHide).toHaveBeenCalledOnce())
-		ended.hide({ x: 300, y: 40 })
-		session.drop(at(300, 40))
+		await vi.waitFor(() =>
+			expect(host.emitToWindow).toHaveBeenLastCalledWith(
+				DRAG_GHOST_WINDOW,
+				DRAG_GHOST_STATE_EVENT,
+				ghostState("sameSpace"),
+			),
+		)
+		ended.releaseAt({ x: 310, y: 42 })
 
 		await vi.waitFor(() =>
 			expect(moves.removeDocked).toHaveBeenCalledExactlyOnceWith(
@@ -1251,6 +1266,11 @@ describe("a torn-off tab the host releases", () => {
 				TAB.tabId,
 			),
 		)
+		expect(drag.windowTabDragDrop).toHaveBeenCalledExactlyOnceWith({
+			x: 310,
+			y: 42,
+		})
+		expect(ghost.dragGhostHide).not.toHaveBeenCalled()
 		expect(moves.moveTornOff).not.toHaveBeenCalled()
 	})
 

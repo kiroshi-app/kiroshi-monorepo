@@ -11,8 +11,9 @@ import { listenOnThisWindow } from "../host/window-listen"
 
 type DragGhostView = {
 	tab: DragGhostTab | null
-	isNotAllowed: boolean
+	state: DragGhostState | null
 	size: WindowSize
+	showCount: number
 }
 
 type GhostTabReader = () => Promise<DragGhostTab | null>
@@ -32,17 +33,18 @@ export const createDragGhostView = (
 ) => {
 	const store = createStore<DragGhostView>({
 		tab: null,
-		isNotAllowed: false,
+		state: null,
 		size: ghostWindowSize(),
+		showCount: 0,
 	})
 
 	const showTab = (tab: DragGhostTab) => {
 		const held = store.getState()
-		const isSameTab = held.tab?.tabId === tab.tabId
 		store.setState({
+			...held,
 			tab,
-			isNotAllowed: isSameTab && held.isNotAllowed,
 			size: ghostWindowSize(),
+			showCount: held.showCount + 1,
 		})
 	}
 
@@ -52,12 +54,8 @@ export const createDragGhostView = (
 		}
 	}
 
-	const showState = ({ tabId, isNotAllowed }: DragGhostState) => {
-		const held = store.getState()
-		if (held.tab?.tabId === tabId) {
-			store.setState({ ...held, isNotAllowed })
-		}
-	}
+	const showState = (state: DragGhostState) =>
+		store.setState({ ...store.getState(), state })
 
 	const showSize = () =>
 		store.setState({ ...store.getState(), size: ghostWindowSize() })

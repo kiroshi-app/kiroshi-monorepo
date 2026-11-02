@@ -1,9 +1,9 @@
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import {
+	type DockTarget,
 	DRAG_GHOST_STATE_EVENT,
 	DRAG_GHOST_WINDOW,
-	type DragGhostState,
 } from "./drag-ghost-state"
 import { awaitDockAnswer } from "./tab-dock-channel"
 
@@ -59,15 +59,12 @@ type GhostAnswer = Awaited<ReturnType<typeof commands.dragGhostShow>>
 
 type HostAnswer = { status: "ok" } | { status: "error" }
 
-type DockTarget = "outside" | "sameSpace" | "otherSpace"
-
 type DockSite = {
 	target: DockTarget
 	label: string | null
 }
 
 type DragView = {
-	ghostTab: DragGhostTab | null
 	isGhostSupported: boolean
 	isGhostShown: boolean
 	isAnnounced: boolean
@@ -209,7 +206,8 @@ const reportGhostStateFailure = (reason: unknown) => {
 	console.error("the drag ghost did not hear its state", reason)
 }
 
-const sendGhostState = (state: DragGhostState) => {
+const sendGhostState = (drag: TabDrag, target: DockTarget) => {
+	const state = { tabId: drag.tabId, spaceId: drag.spaceId, target }
 	emitToWindow(DRAG_GHOST_WINDOW, DRAG_GHOST_STATE_EVENT, state).catch(
 		reportGhostStateFailure,
 	)
@@ -273,12 +271,10 @@ const ghostFollowing = async (
 	view: DragView,
 	point: ScreenPosition,
 ): Promise<DragView> => {
-	if (!view.isGhostSupported || !view.ghostTab) {
+	if (!view.isGhostShown) {
 		return view
 	}
-	const isShown = view.isGhostShown
-		? await moveGhost(drag, point)
-		: await showGhost(drag, point, view.ghostTab)
+	const isShown = await moveGhost(drag, point)
 	return { ...view, isGhostSupported: isShown, isGhostShown: isShown }
 }
 
@@ -288,16 +284,10 @@ const ghostOver = (
 	point: ScreenPosition,
 	target: DockTarget,
 ) => {
-	if (view.isGhostSupported && target !== view.target) {
-		sendGhostState({
-			tabId: drag.tabId,
-			isNotAllowed: target === "otherSpace",
-		})
+	if (view.isGhostShown && target !== view.target) {
+		sendGhostState(drag, target)
 	}
-	const shown = { ...view, target }
-	return target === "sameSpace"
-		? ghostLeft(shown)
-		: ghostFollowing(drag, shown, point)
+	return ghostFollowing(drag, { ...view, target }, point)
 }
 
 const drawnGhost = (drawGhost: DrawGhost, size: WindowSize) => {
@@ -316,6 +306,9 @@ const announcedView = async (
 	drawGhost: DrawGhost,
 ): Promise<DragView> => {
 	const ghostTab = drawnGhost(drawGhost, drag.size)
+	if (ghostTab) {
+		sendGhostState(drag, "outside")
+	}
 	const [isShown, isAnnounced] = await Promise.all([
 		ghostTab ? showGhost(drag, point, ghostTab) : false,
 		isAccepted(commands.windowTabDragStart(torn.packed, torn.spaceId)),
@@ -324,7 +317,6 @@ const announcedView = async (
 		failOnce(drag, "window_tab_drag_start")
 	}
 	return {
-		ghostTab,
 		isGhostSupported: isShown,
 		isGhostShown: isShown,
 		isAnnounced,
