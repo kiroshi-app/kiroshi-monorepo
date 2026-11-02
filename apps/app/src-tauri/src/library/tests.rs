@@ -9,10 +9,12 @@ use tauri::{App, Manager};
 use uuid::Uuid;
 
 use super::commands::{
-	library_copy, library_list, library_read_document, library_read_image, library_reveal,
-	library_save,
+	library_copy, library_list, library_read_document, library_read_file, library_read_image,
+	library_reveal, library_save,
 };
-use super::contract::{LibraryDocumentFormat, LibraryError, LibraryImage, LibraryItemKind};
+use super::contract::{
+	LibraryDocumentFormat, LibraryError, LibraryFile, LibraryImage, LibraryItemKind,
+};
 use super::*;
 use crate::db;
 use crate::removed_on_drop::RemovedOnDrop;
@@ -319,7 +321,7 @@ fn an_oversized_image_is_refused_without_reading_its_bytes() {
 		.write(true)
 		.open(&path)
 		.expect("the file opens")
-		.set_len(MAX_READ_IMAGE_BYTES + 1)
+		.set_len(MAX_READ_BYTES + 1)
 		.expect("the file grows");
 	fs::set_permissions(&path, fs::Permissions::from_mode(0o000)).expect("the file locks");
 
@@ -327,8 +329,8 @@ fn an_oversized_image_is_refused_without_reading_its_bytes() {
 		read_an_image(&root, "huge.png"),
 		Err(LibraryError::TooLarge {
 			name: "huge.png".to_owned(),
-			bytes: MAX_READ_IMAGE_BYTES + 1,
-			limit: MAX_READ_IMAGE_BYTES
+			bytes: MAX_READ_BYTES + 1,
+			limit: MAX_READ_BYTES
 		})
 	);
 }
@@ -364,10 +366,18 @@ async fn an_unknown_space_is_refused_by_every_command() {
 		"cover.png".to_owned(),
 	)
 	.await;
+	let file = library_read_file(
+		app.handle().clone(),
+		app.state(),
+		"nowhere".to_owned(),
+		"notes.md".to_owned(),
+	)
+	.await;
 
 	assert_eq!(listed, Err(LibraryError::UnknownSpace { id: "nowhere".to_owned() }));
 	assert_eq!(read, Err(LibraryError::UnknownSpace { id: "nowhere".to_owned() }));
 	assert_eq!(image, Err(LibraryError::UnknownSpace { id: "nowhere".to_owned() }));
+	assert_eq!(file, Err(LibraryError::UnknownSpace { id: "nowhere".to_owned() }));
 }
 
 #[tokio::test]
@@ -704,4 +714,218 @@ async fn a_link_out_of_the_folder_is_refused_by_save_copy_and_reveal() {
 		refusals_of_each_action(&app, &mine, "out.png").await,
 		[refused.clone(), refused.clone(), refused]
 	);
+}
+
+fn read_a_file(root: &Path, name: &str) -> Result<LibraryFile, LibraryError> {
+	read_file(root, SPACE, name)
+}
+
+#[test]
+fn any_accepted_item_reads_as_base64_with_the_mime_type_of_its_extension() {
+	let root = temp_root();
+	let expected = [
+		("cover.png", "image/png"),
+		("photo.JPG", "image/jpeg"),
+		("notes.md", "text/markdown"),
+		("long.markdown", "text/markdown"),
+		("todo.txt", "text/plain"),
+	];
+	for (name, _) in expected {
+		put(&root, SPACE, name, b"bytes");
+	}
+
+	for (name, mime_type) in expected {
+		assert_eq!(
+			read_a_file(&root, name),
+			Ok(LibraryFile {
+				name: name.to_owned(),
+				mime_type: mime_type.to_owned(),
+				content: "Ynl0ZXM=".to_owned(),
+			})
+		);
+	}
+}
+
+#[test]
+fn a_file_read_refuses_what_an_image_read_refuses() {
+	let root = temp_root();
+	put(&root, SPACE, "notes.md", b"notes");
+	put(&root, SPACE, "script.sh", b"echo");
+	put(&root, "s2", "theirs.png", b"theirs");
+
+	for name in ["", ".", "..", "../s2/theirs.png", "nested/notes.md", "..\\s2\\theirs.png"] {
+		assert_eq!(
+			read_a_file(&root, name),
+			Err(LibraryError::InvalidName { name: name.to_owned() }),
+			"{name}"
+		);
+	}
+	for name in ["script.sh", "absent.md"] {
+		assert_eq!(read_a_file(&root, name), Err(LibraryError::Missing { name: name.to_owned() }));
+	}
+}
+
+#[cfg(unix)]
+#[test]
+fn a_file_link_out_of_the_folder_is_refused() {
+	let root = temp_root();
+	put(&root, "s2", "theirs.md", b"theirs");
+	fs::create_dir_all(space_dir(&root, SPACE)).expect("the space folder lands");
+	std::os::unix::fs::symlink(
+		space_dir(&root, "s2").join("theirs.md"),
+		space_dir(&root, SPACE).join("out.md"),
+	)
+	.expect("the link lands");
+
+	assert_eq!(
+		read_a_file(&root, "out.md"),
+		Err(LibraryError::InvalidName { name: "out.md".to_owned() })
+	);
+}
+
+#[cfg(unix)]
+#[test]
+fn an_oversized_file_is_refused_without_reading_its_bytes() {
+	use std::os::unix::fs::PermissionsExt;
+
+	let root = temp_root();
+	for name in ["huge.md", "huge.png"] {
+		let path = space_dir(&root, SPACE).join(name);
+		put(&root, SPACE, name, b"");
+		File::options()
+			.write(true)
+			.open(&path)
+			.expect("the file opens")
+			.set_len(MAX_READ_BYTES + 1)
+			.expect("the file grows");
+		fs::set_permissions(&path, fs::Permissions::from_mode(0o000)).expect("the file locks");
+
+		assert_eq!(
+			read_a_file(&root, name),
+			Err(LibraryError::TooLarge {
+				name: name.to_owned(),
+				bytes: MAX_READ_BYTES + 1,
+				limit: MAX_READ_BYTES
+			})
+		);
+	}
+}
+
+fn base64_of(bytes: &[u8]) -> String {
+	BASE64_STANDARD.encode(bytes)
+}
+
+#[test]
+fn received_bytes_copy_as_text_for_a_document_and_as_pixels_for_an_image() {
+	assert_eq!(
+		clipboard_payload_of_bytes("notes.md", &base64_of("# Notes é".as_bytes())),
+		Ok(ClipboardPayload::Text("# Notes é".to_owned()))
+	);
+	assert_eq!(
+		clipboard_payload_of_bytes("cover.png", &base64_of(&encoded(ImageFormat::Png))),
+		Ok(ClipboardPayload::Image { rgba: [200, 40, 10, 255].repeat(6), width: 3, height: 2 })
+	);
+}
+
+#[test]
+fn received_bytes_keep_the_copy_refusals() {
+	let too_big_document = vec![b'a'; MAX_DOCUMENT_BYTES as usize + 1];
+	let too_big_image = vec![0; MAX_IMAGE_BYTES as usize + 1];
+
+	assert_eq!(
+		clipboard_payload_of_bytes("broken.txt", &base64_of(&[0xff, 0xfe, 0x00])),
+		Err(LibraryError::NotUtf8 { name: "broken.txt".to_owned() })
+	);
+	assert_eq!(
+		clipboard_payload_of_bytes("big.md", &base64_of(&too_big_document)),
+		Err(LibraryError::TooLarge {
+			name: "big.md".to_owned(),
+			bytes: MAX_DOCUMENT_BYTES + 1,
+			limit: MAX_DOCUMENT_BYTES
+		})
+	);
+	assert_eq!(
+		clipboard_payload_of_bytes("big.webp", &base64_of(&too_big_image)),
+		Err(LibraryError::TooLarge {
+			name: "big.webp".to_owned(),
+			bytes: MAX_IMAGE_BYTES + 1,
+			limit: MAX_IMAGE_BYTES
+		})
+	);
+	for (name, bytes) in
+		[("broken.png", b"not a png".to_vec()), ("mislabelled.gif", encoded(ImageFormat::Png))]
+	{
+		assert!(
+			matches!(
+				clipboard_payload_of_bytes(name, &base64_of(&bytes)),
+				Err(LibraryError::Undecodable { name: refused, .. }) if refused == name
+			),
+			"{name}"
+		);
+	}
+	for name in ["script.sh", "../notes.md", "nested/cover.png", ".hidden.md"] {
+		assert_eq!(
+			clipboard_payload_of_bytes(name, &base64_of(b"notes")),
+			Err(LibraryError::InvalidName { name: name.to_owned() })
+		);
+	}
+}
+
+#[test]
+fn received_content_that_is_not_base64_is_undecodable() {
+	for name in ["notes.md", "cover.png"] {
+		assert!(
+			matches!(
+				clipboard_payload_of_bytes(name, "not base64!"),
+				Err(LibraryError::Undecodable { name: refused, .. }) if refused == name
+			),
+			"{name}"
+		);
+	}
+}
+
+#[tokio::test]
+async fn received_bytes_save_where_the_person_chose_under_the_item_name() {
+	let elsewhere = temp_root();
+	fs::create_dir_all(&*elsewhere).expect("the destination folder lands");
+	let destination = elsewhere.join("picked.png");
+	let mut suggested = None;
+
+	let saved = save_bytes("cover.png", &base64_of(&encoded(ImageFormat::Png)), |name| {
+		suggested = Some(name.to_owned());
+		std::future::ready(Ok(Some(destination.clone())))
+	})
+	.await;
+
+	assert_eq!(saved, Ok(Some(destination.clone())));
+	assert_eq!(suggested.as_deref(), Some("cover.png"));
+	assert_eq!(fs::read(&destination).expect("the copy reads"), encoded(ImageFormat::Png));
+}
+
+#[tokio::test]
+async fn a_cancelled_save_of_received_bytes_writes_nothing() {
+	assert_eq!(save_bytes("notes.md", &base64_of(b"notes"), chosen(None)).await, Ok(None));
+}
+
+#[tokio::test]
+async fn received_bytes_that_cannot_be_written_say_why() {
+	let missing_folder = temp_root().join("absent").join("notes.md");
+
+	let saved = save_bytes("notes.md", &base64_of(b"notes"), chosen(Some(missing_folder))).await;
+
+	assert!(matches!(saved, Err(LibraryError::Unwritable { .. })), "{saved:?}");
+}
+
+#[tokio::test]
+async fn undecodable_content_or_a_refused_name_never_opens_the_save_dialog() {
+	let never_opened = |_: &str| -> std::future::Ready<_> { panic!("the dialog opened") };
+
+	let undecodable = save_bytes("notes.md", "not base64!", never_opened).await;
+	let refused = save_bytes("../notes.md", &base64_of(b"notes"), never_opened).await;
+
+	assert!(
+		matches!(&undecodable, Err(LibraryError::Undecodable { name, .. }) if name == "notes.md"),
+		"{undecodable:?}"
+	);
+	assert_eq!(refused, Err(LibraryError::InvalidName { name: "../notes.md".to_owned() }));
 }

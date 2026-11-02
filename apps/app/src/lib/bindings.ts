@@ -39,6 +39,9 @@ export const commands = {
 	libraryCopy: (spaceId: string, name: string) => typedError<null, LibraryError>(__TAURI_INVOKE("library_copy", { spaceId, name })),
 	libraryReveal: (spaceId: string, name: string) => typedError<null, LibraryError>(__TAURI_INVOKE("library_reveal", { spaceId, name })),
 	libraryReadImage: (spaceId: string, name: string) => typedError<LibraryImage, LibraryError>(__TAURI_INVOKE("library_read_image", { spaceId, name })),
+	libraryReadFile: (spaceId: string, name: string) => typedError<LibraryFile, LibraryError>(__TAURI_INVOKE("library_read_file", { spaceId, name })),
+	librarySaveBytes: (name: string, content: string) => typedError<string | null, LibraryError>(__TAURI_INVOKE("library_save_bytes", { name, content })),
+	libraryCopyBytes: (name: string, content: string) => typedError<null, LibraryError>(__TAURI_INVOKE("library_copy_bytes", { name, content })),
 	badgeSet: (count: number) => typedError<null, string>(__TAURI_INVOKE("badge_set", { count })),
 	claudeImportInventory: () => typedError<ClaudeInventory, TranscriptStoreError>(__TAURI_INVOKE("claude_import_inventory")),
 	claudeImportRun: (selection: string[], spaceId: string) => typedError<ClaudeImportOutcome[], TranscriptStoreError>(__TAURI_INVOKE("claude_import_run", { selection, spaceId })),
@@ -1146,6 +1149,12 @@ export type LibraryDocument = {
 export type LibraryDocumentFormat = "markdown" | "text";
 
 export type LibraryError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "unknownSpace"; id: string } | { kind: "invalidName"; name: string } | { kind: "missing"; name: string } | { kind: "notADocument"; name: string } | { kind: "notAnImage"; name: string } | { kind: "notUtf8"; name: string } | { kind: "tooLarge"; name: string; bytes: number; limit: number } | { kind: "unreadable"; detail: string } | { kind: "undecodable"; name: string; detail: string } | { kind: "unwritable"; detail: string } | { kind: "clipboardRefused"; detail: string } | { kind: "unrevealed"; detail: string };
+
+export type LibraryFile = {
+	name: string,
+	mimeType: string,
+	content: string,
+};
 
 export type LibraryImage = {
 	name: string,

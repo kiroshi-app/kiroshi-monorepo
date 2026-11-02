@@ -13,7 +13,7 @@ use image::{ImageFormat, ImageReader, Limits};
 use tauri::{AppHandle, Manager, Runtime};
 
 use contract::{
-	LibraryDocument, LibraryDocumentFormat, LibraryError, LibraryImage, LibraryItem,
+	LibraryDocument, LibraryDocumentFormat, LibraryError, LibraryFile, LibraryImage, LibraryItem,
 	LibraryItemKind,
 };
 
@@ -25,11 +25,21 @@ const MAX_IMAGE_BYTES: u64 = 20 * 1024 * 1024;
 
 const MAX_DECODED_IMAGE_BYTES: u64 = 256 * 1024 * 1024;
 
-const MAX_READ_IMAGE_BYTES: u64 = 10 * 1024 * 1024;
+const MAX_READ_BYTES: u64 = 10 * 1024 * 1024;
 
 enum AcceptedType {
 	Image { mime_type: &'static str },
 	Document(LibraryDocumentFormat),
+}
+
+impl AcceptedType {
+	fn mime_type(&self) -> &'static str {
+		match self {
+			AcceptedType::Image { mime_type } => mime_type,
+			AcceptedType::Document(LibraryDocumentFormat::Markdown) => "text/markdown",
+			AcceptedType::Document(LibraryDocumentFormat::Text) => "text/plain",
+		}
+	}
 }
 
 struct ResolvedItem {
@@ -136,15 +146,11 @@ pub(crate) fn read_document(
 }
 
 fn document_text(item: &ResolvedItem, name: &str) -> Result<String, LibraryError> {
-	if item.bytes > MAX_DOCUMENT_BYTES {
-		return Err(LibraryError::TooLarge {
-			name: name.to_owned(),
-			bytes: item.bytes,
-			limit: MAX_DOCUMENT_BYTES,
-		});
-	}
-	let bytes = fs::read(&item.path)
-		.map_err(|error| refusal(&error, LibraryError::Missing { name: name.to_owned() }))?;
+	within(name, item.bytes, MAX_DOCUMENT_BYTES)?;
+	utf8_text(name, read_bytes(item, name)?)
+}
+
+fn utf8_text(name: &str, bytes: Vec<u8>) -> Result<String, LibraryError> {
 	String::from_utf8(bytes).map_err(|_| LibraryError::NotUtf8 { name: name.to_owned() })
 }
 
@@ -157,20 +163,41 @@ pub(crate) fn read_image(
 	let AcceptedType::Image { mime_type } = item.accepted else {
 		return Err(LibraryError::NotAnImage { name: name.to_owned() });
 	};
-	if item.bytes > MAX_READ_IMAGE_BYTES {
-		return Err(LibraryError::TooLarge {
-			name: name.to_owned(),
-			bytes: item.bytes,
-			limit: MAX_READ_IMAGE_BYTES,
-		});
-	}
-	let bytes = fs::read(&item.path)
-		.map_err(|error| refusal(&error, LibraryError::Missing { name: name.to_owned() }))?;
 	Ok(LibraryImage {
 		name: name.to_owned(),
 		mime_type: mime_type.to_owned(),
-		content: BASE64_STANDARD.encode(bytes),
+		content: encoded_content(&item, name)?,
 	})
+}
+
+pub(crate) fn read_file(
+	root: &Path,
+	space_id: &str,
+	name: &str,
+) -> Result<LibraryFile, LibraryError> {
+	let item = resolve(root, space_id, name)?;
+	Ok(LibraryFile {
+		name: name.to_owned(),
+		mime_type: item.accepted.mime_type().to_owned(),
+		content: encoded_content(&item, name)?,
+	})
+}
+
+fn encoded_content(item: &ResolvedItem, name: &str) -> Result<String, LibraryError> {
+	within(name, item.bytes, MAX_READ_BYTES)?;
+	Ok(BASE64_STANDARD.encode(read_bytes(item, name)?))
+}
+
+fn read_bytes(item: &ResolvedItem, name: &str) -> Result<Vec<u8>, LibraryError> {
+	fs::read(&item.path)
+		.map_err(|error| refusal(&error, LibraryError::Missing { name: name.to_owned() }))
+}
+
+fn within(name: &str, bytes: u64, limit: u64) -> Result<(), LibraryError> {
+	if bytes > limit {
+		return Err(LibraryError::TooLarge { name: name.to_owned(), bytes, limit });
+	}
+	Ok(())
 }
 
 fn clipboard_payload(
@@ -185,26 +212,59 @@ fn clipboard_payload(
 	}
 }
 
-fn decoded_image(item: &ResolvedItem, name: &str) -> Result<ClipboardPayload, LibraryError> {
-	if item.bytes > MAX_IMAGE_BYTES {
-		return Err(LibraryError::TooLarge {
-			name: name.to_owned(),
-			bytes: item.bytes,
-			limit: MAX_IMAGE_BYTES,
-		});
+fn clipboard_payload_of_bytes(name: &str, content: &str) -> Result<ClipboardPayload, LibraryError> {
+	let accepted = accepted_name(name)?;
+	let bytes = decoded_content(name, content)?;
+	let length = bytes.len() as u64;
+	match accepted {
+		AcceptedType::Document(_) => {
+			within(name, length, MAX_DOCUMENT_BYTES)?;
+			utf8_text(name, bytes).map(ClipboardPayload::Text)
+		}
+		AcceptedType::Image { .. } => {
+			within(name, length, MAX_IMAGE_BYTES)?;
+			decoded_pixels(name, image_format(Path::new(name), name)?, bytes)
+		}
 	}
-	let undecodable = |detail: String| LibraryError::Undecodable { name: name.to_owned(), detail };
-	let format =
-		ImageFormat::from_path(&item.path).map_err(|error| undecodable(error.to_string()))?;
-	let bytes = fs::read(&item.path)
-		.map_err(|error| refusal(&error, LibraryError::Missing { name: name.to_owned() }))?;
+}
+
+fn decoded_image(item: &ResolvedItem, name: &str) -> Result<ClipboardPayload, LibraryError> {
+	within(name, item.bytes, MAX_IMAGE_BYTES)?;
+	let format = image_format(&item.path, name)?;
+	decoded_pixels(name, format, read_bytes(item, name)?)
+}
+
+fn image_format(path: &Path, name: &str) -> Result<ImageFormat, LibraryError> {
+	ImageFormat::from_path(path).map_err(|error| undecodable(name, error.to_string()))
+}
+
+fn decoded_pixels(
+	name: &str,
+	format: ImageFormat,
+	bytes: Vec<u8>,
+) -> Result<ClipboardPayload, LibraryError> {
 	let mut limits = Limits::no_limits();
 	limits.max_alloc = Some(MAX_DECODED_IMAGE_BYTES);
 	let mut reader = ImageReader::with_format(Cursor::new(bytes), format);
 	reader.limits(limits);
-	let rgba = reader.decode().map_err(|error| undecodable(error.to_string()))?.into_rgba8();
+	let rgba = reader.decode().map_err(|error| undecodable(name, error.to_string()))?.into_rgba8();
 	let (width, height) = rgba.dimensions();
 	Ok(ClipboardPayload::Image { rgba: rgba.into_raw(), width, height })
+}
+
+fn undecodable(name: &str, detail: String) -> LibraryError {
+	LibraryError::Undecodable { name: name.to_owned(), detail }
+}
+
+fn accepted_name(name: &str) -> Result<AcceptedType, LibraryError> {
+	match accepted_type(name) {
+		Some(accepted) if is_plain_name(name) => Ok(accepted),
+		_ => Err(LibraryError::InvalidName { name: name.to_owned() }),
+	}
+}
+
+fn decoded_content(name: &str, content: &str) -> Result<Vec<u8>, LibraryError> {
+	BASE64_STANDARD.decode(content).map_err(|error| undecodable(name, error.to_string()))
 }
 
 async fn save<Choose, Chosen>(
@@ -229,6 +289,28 @@ where
 	})
 	.await
 	.map_err(|error| LibraryError::Unwritable { detail: error.to_string() })??;
+	Ok(Some(destination))
+}
+
+async fn save_bytes<Choose, Chosen>(
+	name: &str,
+	content: &str,
+	choose_destination: Choose,
+) -> Result<Option<PathBuf>, LibraryError>
+where
+	Choose: FnOnce(&str) -> Chosen,
+	Chosen: Future<Output = Result<Option<PathBuf>, LibraryError>>,
+{
+	accepted_name(name)?;
+	let bytes = decoded_content(name, content)?;
+	let Some(destination) = choose_destination(name).await? else {
+		return Ok(None);
+	};
+	let target = destination.clone();
+	tokio::task::spawn_blocking(move || fs::write(target, bytes))
+		.await
+		.map_err(|error| LibraryError::Unwritable { detail: error.to_string() })?
+		.map_err(|error| LibraryError::Unwritable { detail: error.to_string() })?;
 	Ok(Some(destination))
 }
 

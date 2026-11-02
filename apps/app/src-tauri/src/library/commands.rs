@@ -7,9 +7,10 @@ use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 use tokio::sync::oneshot;
 
-use super::contract::{LibraryDocument, LibraryError, LibraryImage, LibraryItem};
+use super::contract::{LibraryDocument, LibraryError, LibraryFile, LibraryImage, LibraryItem};
 use super::{
-	clipboard_payload, list, read_document, read_image, resolve, root, save, ClipboardPayload,
+	clipboard_payload, clipboard_payload_of_bytes, list, read_document, read_file, read_image,
+	resolve, root, save, save_bytes, ClipboardPayload,
 };
 use crate::db;
 use crate::logging::scrub::scrubbed;
@@ -61,6 +62,18 @@ pub async fn library_read_image<R: Runtime>(
 
 #[tauri::command]
 #[specta::specta]
+pub async fn library_read_file<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	space_id: String,
+	name: String,
+) -> Result<LibraryFile, LibraryError> {
+	known_space(&state, &space_id).await?;
+	read_file(&root(&app)?, &space_id, &name)
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn library_save<R: Runtime>(
 	app: AppHandle<R>,
 	state: State<'_, db::DatabaseState>,
@@ -86,6 +99,32 @@ pub async fn library_copy<R: Runtime>(
 	known_space(&state, &space_id).await?;
 	let root = root(&app)?;
 	let payload = tokio::task::spawn_blocking(move || clipboard_payload(&root, &space_id, &name))
+		.await
+		.map_err(|error| LibraryError::Unreadable { detail: error.to_string() })??;
+	put_on_clipboard(&app, payload)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn library_save_bytes<R: Runtime>(
+	app: AppHandle<R>,
+	name: String,
+	content: String,
+) -> Result<Option<String>, LibraryError> {
+	let saved =
+		save_bytes(&name, &content, |suggested| chosen_destination(&app, suggested.to_owned()))
+			.await?;
+	Ok(saved.map(|path| path.to_string_lossy().into_owned()))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn library_copy_bytes<R: Runtime>(
+	app: AppHandle<R>,
+	name: String,
+	content: String,
+) -> Result<(), LibraryError> {
+	let payload = tokio::task::spawn_blocking(move || clipboard_payload_of_bytes(&name, &content))
 		.await
 		.map_err(|error| LibraryError::Unreadable { detail: error.to_string() })??;
 	put_on_clipboard(&app, payload)
