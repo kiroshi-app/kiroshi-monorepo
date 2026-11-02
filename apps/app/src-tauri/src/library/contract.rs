@@ -45,6 +45,14 @@ pub struct LibraryImage {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryFile {
+	pub name: String,
+	pub mime_type: String,
+	pub content: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum LibraryError {
 	#[serde(rename_all = "camelCase")]

@@ -3825,6 +3825,25 @@
         }
       ]
     },
+    "LibraryFile": {
+      "properties": {
+        "content": {
+          "type": "string"
+        },
+        "mimeType": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "mimeType",
+        "content"
+      ],
+      "type": "object"
+    },
     "LibraryImage": {
       "properties": {
         "content": {
@@ -11252,6 +11271,29 @@
       },
       "ok": {
         "$ref": "#/$defs/LibraryDocument"
+      }
+    },
+    "library_read_file": {
+      "args": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "spaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spaceId",
+          "name"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/LibraryError"
+      },
+      "ok": {
+        "$ref": "#/$defs/LibraryFile"
       }
     },
     "library_read_image": {

@@ -668,6 +668,12 @@ async fn host_effect_applied(
 				.expect("the host reads");
 			return answered_json(StatusCode::OK, json!(read));
 		}
+		"library_read_file" => {
+			return match library::read_file(&effects.library(), &text("spaceId"), &text("name")) {
+				Ok(read) => answered_json(StatusCode::OK, json!(read)),
+				Err(refused) => answered_json(StatusCode::INTERNAL_SERVER_ERROR, json!(refused)),
+			};
+		}
 		"joined_space_remove" => {
 			database.joined_spaces().remove(text("id")).await.expect("the host leaves");
 		}
@@ -3202,6 +3208,71 @@ fn a_member_reads_a_library_document_of_the_shared_space_only() {
 #[test]
 fn a_member_reads_a_library_image_of_the_shared_space_only() {
 	run(kept_in_the_space_named("library_read_image", a_library_entry_of("cover.png")));
+}
+
+#[test]
+fn a_member_reads_a_library_file_of_the_shared_space_only() {
+	run(kept_in_the_space_named("library_read_file", a_library_entry_of("notes.md")));
+}
+
+#[test]
+fn a_member_reads_the_bytes_of_a_document_and_an_image_of_the_shared_space() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("library-file").await;
+
+		let document =
+			guest.called("library_read_file", a_library_entry_of("notes.md")(PERSONAL)).await;
+		let image =
+			guest.called("library_read_file", a_library_entry_of("cover.png")(PERSONAL)).await;
+
+		assert_eq!(
+			document["body"],
+			json!({
+				"name": "notes.md",
+				"mimeType": "text/markdown",
+				"content": BASE64_STANDARD.encode("notes of personal")
+			})
+		);
+		assert_eq!(
+			image["body"],
+			json!({
+				"name": "cover.png",
+				"mimeType": "image/png",
+				"content": BASE64_STANDARD.encode(PERSONAL)
+			})
+		);
+	});
+}
+
+#[test]
+fn a_member_is_refused_an_oversized_or_escaping_library_file() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("library-file-refusals").await;
+		let shelf = guest.effects.library().join(PERSONAL);
+		std::fs::File::create(shelf.join("huge.png"))
+			.expect("the file lands")
+			.set_len(10 * 1024 * 1024 + 1)
+			.expect("the file grows");
+		let escaping = format!("../{ELSEWHERE}/notes.md");
+
+		let oversized =
+			guest.called("library_read_file", a_library_entry_of("huge.png")(PERSONAL)).await;
+		let escaped = guest
+			.called("library_read_file", json!({ "spaceId": PERSONAL, "name": escaping }))
+			.await;
+
+		assert_eq!(
+			oversized["body"],
+			json!({
+				"kind": "tooLarge",
+				"name": "huge.png",
+				"bytes": 10 * 1024 * 1024 + 1,
+				"limit": 10 * 1024 * 1024
+			})
+		);
+		assert_eq!(escaped["body"], json!({ "kind": "invalidName", "name": escaping }));
+		assert_eq!(guest.effects.reached(), ["library_read_file", "library_read_file"]);
+	});
 }
 
 #[test]
