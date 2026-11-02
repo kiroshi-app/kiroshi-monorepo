@@ -1,5 +1,8 @@
 import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
-import { SettingsScreen } from "@workspace/ui/components/settings-screen"
+import {
+	SettingsScreenBody,
+	type SettingsScreenGuardLeave,
+} from "@workspace/ui/components/settings-screen"
 import type { AboutFieldsProps } from "@workspace/ui/components/user-settings-dialog/about-fields"
 
 import { signOutLeavingOf, useAccount } from "@/lib/account/use-account"
@@ -19,12 +22,11 @@ import {
 import type { WorkspaceCore } from "@/lib/workspace/use-workspace-core"
 import type { WorkspaceOverlay } from "@/lib/workspace/use-workspace-overlay"
 import { USER_OWNER } from "@/lib/workspace/user-owner"
-import type { WorkspaceFrame } from "@/lib/workspace/workspace-frame"
 
 type UserSettingsScreenProps = {
 	about: AboutFieldsProps | undefined
 	core: WorkspaceCore
-	frame: WorkspaceFrame
+	guardLeave: SettingsScreenGuardLeave
 	navigation: SettingsNavigation
 	overlay: WorkspaceOverlay
 	panels: SettingsPanels
@@ -38,7 +40,7 @@ type UserSettingsScreenProps = {
 export const UserSettingsScreen = ({
 	about,
 	core,
-	frame,
+	guardLeave,
 	navigation,
 	overlay,
 	panels,
@@ -72,8 +74,8 @@ export const UserSettingsScreen = ({
 
 	return (
 		<>
-			<SettingsScreen
-				{...frame}
+			<SettingsScreenBody
+				guardLeave={guardLeave}
 				target="user"
 				entry={search.entry ?? ACCOUNT_TAB}
 				onEntryChange={navigation.showEntry}

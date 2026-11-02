@@ -16,6 +16,7 @@ import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import { NoticeSurface } from "@workspace/ui/components/notice-surface"
 import { MembersPanel } from "@workspace/ui/components/space-settings-dialog/members-panel"
 import { COMPANIONS_ENTRY } from "@workspace/ui/components/space-settings-dialog/use-space-settings"
+import { WorkspaceShellRoot } from "@workspace/ui/components/workspace-shell"
 import { NO_CLICK_MODIFIERS } from "@workspace/ui/lib/click-modifiers"
 import { i18n } from "@workspace/ui/lib/i18n"
 
@@ -64,7 +65,6 @@ import type { RosterLines } from "@/lib/workspace/use-roster-lines"
 import type { RosterView } from "@/lib/workspace/use-roster-view"
 import type { SettingsPanels } from "@/lib/workspace/use-settings-panels"
 import type { WorkspaceCore } from "@/lib/workspace/use-workspace-core"
-import type { WorkspaceFrame } from "@/lib/workspace/workspace-frame"
 
 vi.mock("@/lib/host/index", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/lib/host/index")>()),
@@ -249,30 +249,32 @@ const SpaceSettingsHarness = ({
 		Fragment,
 		null,
 		isOpen && isShown(page)
-			? createElement(SpaceSettingsScreen, {
-					core,
-					frame: {
-						rail: { selected: "conversations" },
-					} as unknown as WorkspaceFrame,
-					hostBySpaceId,
-					navigation,
-					page,
-					panels,
-					rosterLines: {
-						sidebarActions: {
-							onCreateBot: vi.fn(),
-							onSelectSpace: joined.selectSpace,
-						},
-					} as unknown as RosterLines,
-					rosterView: { bots } as unknown as RosterView,
-					scopes,
-					search,
-					spaceId,
-					switcherSpaces: switcherSpacesOf(
-						spacesState.spaces,
-						joinedState.joinedSpaces,
-					),
-				})
+			? createElement(
+					WorkspaceShellRoot,
+					null,
+					createElement(SpaceSettingsScreen, {
+						core,
+						guardLeave: () => () => undefined,
+						hostBySpaceId,
+						navigation,
+						page,
+						panels,
+						rosterLines: {
+							sidebarActions: {
+								onCreateBot: vi.fn(),
+								onSelectSpace: joined.selectSpace,
+							},
+						} as unknown as RosterLines,
+						rosterView: { bots } as unknown as RosterView,
+						scopes,
+						search,
+						spaceId,
+						switcherSpaces: switcherSpacesOf(
+							spacesState.spaces,
+							joinedState.joinedSpaces,
+						),
+					}),
+				)
 			: null,
 		createElement(NoticeSurface),
 	)
@@ -1539,12 +1541,9 @@ const deferredCounts = () => {
 }
 
 const buttonStartingWith = (label: string) => {
-	const rail = screen.getByRole("navigation", {
-		name: i18n.t("bots:rail.label"),
+	const [button] = screen.getAllByRole("button", {
+		name: new RegExp(`^${label}`),
 	})
-	const [button] = screen
-		.getAllByRole("button", { name: new RegExp(`^${label}`) })
-		.filter((candidate) => !rail.contains(candidate))
 	return button
 }
 

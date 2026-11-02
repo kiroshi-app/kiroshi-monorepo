@@ -1,7 +1,5 @@
 import { useMemo, useSyncExternalStore } from "react"
 
-import type { AppSidebarProps } from "@workspace/ui/components/app-sidebar-model"
-
 import type { SettingsNavigation } from "@/lib/navigation/use-settings-navigation"
 import type { useSwitcherSpaces } from "@/lib/spaces/use-joined-spaces"
 import { isLibraryPage, pageOf } from "@/lib/tabs/tab-pages"
@@ -32,30 +30,6 @@ type WorkspaceRailOptions = {
 type WorkspaceRail = Pick<
 	WorkspaceFrame,
 	"rail" | "currentSpace" | "currentSpaceHost"
->
-
-type AppSidebarRail = Pick<
-	AppSidebarProps,
-	| "badgesBySpaceId"
-	| "hostBySpaceId"
-	| "invitations"
-	| "isSearchOpen"
-	| "onAcceptInvitation"
-	| "onCreateSpace"
-	| "onDeclineInvitation"
-	| "onOpenSearch"
-	| "onOpenSpaceSettings"
-	| "onOpenUserSettings"
-	| "onRetryInvitation"
-	| "onSelectSpace"
-	| "onSpaceSwitcherOpenChange"
-	| "openSettings"
-	| "railDots"
-	| "space"
-	| "spaceHost"
-	| "spaces"
-	| "updateBadge"
-	| "user"
 >
 
 export const useWorkspaceRail = ({
@@ -151,30 +125,3 @@ export const useWorkspaceRail = ({
 		user,
 	])
 }
-
-export const appSidebarRailOf = ({
-	rail,
-	currentSpace,
-	currentSpaceHost,
-}: WorkspaceRail): AppSidebarRail => ({
-	badgesBySpaceId: rail.badgesBySpaceId,
-	hostBySpaceId: rail.hostBySpaceId,
-	invitations: rail.invitations,
-	isSearchOpen: rail.isSearchOpen,
-	onAcceptInvitation: rail.onAcceptInvitation,
-	onCreateSpace: rail.onCreateSpace,
-	onDeclineInvitation: rail.onDeclineInvitation,
-	onOpenSearch: rail.onOpenSearch,
-	onOpenSpaceSettings: rail.onOpenSpaceSettings,
-	onOpenUserSettings: rail.onOpenYou,
-	onRetryInvitation: rail.onRetryInvitation,
-	onSelectSpace: rail.onSelectSpace,
-	onSpaceSwitcherOpenChange: rail.onSpacesMenuOpenChange,
-	openSettings: rail.openSettings,
-	railDots: rail.dots,
-	space: currentSpace,
-	spaceHost: currentSpaceHost,
-	spaces: rail.spaces,
-	updateBadge: rail.updateBadge,
-	user: rail.user,
-})

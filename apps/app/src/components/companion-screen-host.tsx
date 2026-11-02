@@ -1,5 +1,8 @@
 import { readBotOutputStyle } from "@workspace/ui/components/bot-settings"
-import { CompanionSettingsScreen } from "@workspace/ui/components/settings-screen"
+import {
+	CompanionSettingsScreenBody,
+	type SettingsScreenGuardLeave,
+} from "@workspace/ui/components/settings-screen"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import {
@@ -16,7 +19,6 @@ import type { RosterLines } from "@/lib/workspace/use-roster-lines"
 import type { RosterView } from "@/lib/workspace/use-roster-view"
 import type { SettingsPanels } from "@/lib/workspace/use-settings-panels"
 import type { WorkspaceCore } from "@/lib/workspace/use-workspace-core"
-import type { WorkspaceFrame } from "@/lib/workspace/workspace-frame"
 
 const GENERAL_ENTRY = "general"
 
@@ -24,7 +26,7 @@ const reportFailure = failureReporterIn("companion-screen-host")
 
 type CompanionScreenHostProps = {
 	core: WorkspaceCore
-	frame: WorkspaceFrame
+	guardLeave: SettingsScreenGuardLeave
 	navigation: SettingsNavigation
 	panels: SettingsPanels
 	rosterLines: RosterLines
@@ -35,7 +37,7 @@ type CompanionScreenHostProps = {
 
 export const CompanionScreenHost = ({
 	core,
-	frame,
+	guardLeave,
 	navigation,
 	panels,
 	rosterLines,
@@ -66,8 +68,8 @@ export const CompanionScreenHost = ({
 	}
 
 	return (
-		<CompanionSettingsScreen
-			{...frame}
+		<CompanionSettingsScreenBody
+			guardLeave={guardLeave}
 			backLabel={
 				search.isFromSpaceSettings
 					? i18n.t("settings:screen.backToAgents")

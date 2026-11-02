@@ -52,7 +52,7 @@ export const SpaceSettingsRoute = () => {
 	return (
 		<SpaceSettingsScreen
 			core={core}
-			frame={frame}
+			guardLeave={frame.guardLeave}
 			hostBySpaceId={switcher.hostBySpaceId}
 			navigation={navigation}
 			page={page}
@@ -77,7 +77,7 @@ export const UserSettingsRoute = () => {
 		<UserSettingsScreen
 			about={workspace.about}
 			core={workspace.core}
-			frame={frame}
+			guardLeave={frame.guardLeave}
 			navigation={workspace.navigation}
 			overlay={workspace.overlay}
 			panels={workspace.panels}
@@ -110,7 +110,7 @@ export const CompanionSettingsRoute = () => {
 	return (
 		<CompanionScreenHost
 			core={workspace.core}
-			frame={frame}
+			guardLeave={frame.guardLeave}
 			navigation={navigation}
 			panels={workspace.panels}
 			rosterLines={rosterLines}
@@ -136,7 +136,7 @@ export const ConversationSettingsRoute = () => {
 			bots={workspace.rosterView.bots}
 			conversation={conversation}
 			core={workspace.core}
-			frame={frame}
+			guardLeave={frame.guardLeave}
 			navigation={workspace.navigation}
 			rosterLines={workspace.rosterLines}
 			search={search}

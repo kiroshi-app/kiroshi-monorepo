@@ -1,4 +1,7 @@
-import { ConversationSettingsScreen } from "@workspace/ui/components/settings-screen"
+import {
+	ConversationSettingsScreenBody,
+	type SettingsScreenGuardLeave,
+} from "@workspace/ui/components/settings-screen"
 
 import type { Bot, Conversation } from "@/lib/bindings"
 import {
@@ -12,7 +15,6 @@ import type { SettingsSearch } from "@/lib/navigation/settings-search"
 import type { SettingsNavigation } from "@/lib/navigation/use-settings-navigation"
 import type { RosterLines } from "@/lib/workspace/use-roster-lines"
 import type { WorkspaceCore } from "@/lib/workspace/use-workspace-core"
-import type { WorkspaceFrame } from "@/lib/workspace/workspace-frame"
 
 const GENERAL_ENTRY = "general"
 
@@ -20,7 +22,7 @@ type ConversationScreenHostProps = {
 	bots: Bot[]
 	conversation: Conversation
 	core: WorkspaceCore
-	frame: WorkspaceFrame
+	guardLeave: SettingsScreenGuardLeave
 	navigation: SettingsNavigation
 	rosterLines: RosterLines
 	search: SettingsSearch
@@ -30,7 +32,7 @@ export const ConversationScreenHost = ({
 	bots,
 	conversation,
 	core,
-	frame,
+	guardLeave,
 	navigation,
 	rosterLines,
 	search,
@@ -39,8 +41,8 @@ export const ConversationScreenHost = ({
 	const { id } = conversation
 
 	return (
-		<ConversationSettingsScreen
-			{...frame}
+		<ConversationSettingsScreenBody
+			guardLeave={guardLeave}
 			entry={search.entry ?? GENERAL_ENTRY}
 			onBack={navigation.back}
 			onEntryChange={navigation.showEntry}

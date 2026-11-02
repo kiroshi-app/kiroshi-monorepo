@@ -1,7 +1,6 @@
-import { AppSidebar } from "@workspace/ui/components/app-sidebar"
+import { AppSidebarBody } from "@workspace/ui/components/app-sidebar"
 
-import { appSidebarRailOf } from "@/components/workspace-rail"
-import type { SettingsNavigation } from "@/lib/navigation/use-settings-navigation"
+import type { SidebarActions } from "@/lib/sidebar/use-sidebar-actions"
 import type { useSwitcherSpaces } from "@/lib/spaces/use-joined-spaces"
 import type { RosterLines } from "@/lib/workspace/use-roster-lines"
 import type { RosterView } from "@/lib/workspace/use-roster-view"
@@ -14,7 +13,6 @@ import { useWorkspaceFrame } from "@/lib/workspace/workspace-frame"
 type WorkspaceSidebarProps = {
 	collapsedSectionIds: string[]
 	core: WorkspaceCore
-	navigation: SettingsNavigation
 	overlay: WorkspaceOverlay
 	rosterLines: RosterLines
 	rosterView: RosterView
@@ -23,10 +21,16 @@ type WorkspaceSidebarProps = {
 	switcher: ReturnType<typeof useSwitcherSpaces>
 }
 
+const bodyActionsOf = ({
+	onCreateSpace: _onCreateSpace,
+	onOpenSpaceSettings: _onOpenSpaceSettings,
+	onOpenUserSettings: _onOpenUserSettings,
+	...bodyActions
+}: SidebarActions) => bodyActions
+
 export const WorkspaceSidebar = ({
 	collapsedSectionIds,
 	core,
-	navigation,
 	overlay,
 	rosterLines,
 	rosterView,
@@ -36,16 +40,9 @@ export const WorkspaceSidebar = ({
 }: WorkspaceSidebarProps) => {
 	const { roster, sections } = core
 	const { frame, rosterLists } = useWorkspaceFrame()
-	const sidebarRosters = {
-		botsBySpaceId: rosterLists.rosterBotsBySpace,
-		conversationsBySpaceId: rosterLists.rosterConversationsBySpace,
-		sectionsBySpaceId: sections.state.sections,
-		collapsedSectionIds,
-	}
 
 	return (
-		<AppSidebar
-			{...frame.titleBar}
+		<AppSidebarBody
 			bots={rosterLists.rosterBots}
 			haveBotsFailedToLoad={roster.state.hasFailedToLoad}
 			rosterSkeleton={rosterLists.rosterSkeleton}
@@ -55,15 +52,13 @@ export const WorkspaceSidebar = ({
 			conversationsBySpaceId={rosterLists.rosterConversationsBySpace}
 			missionsBySpaceId={sidebarMissions.panelsBySpaceId}
 			openPanel={sidebarTab.openTab}
-			onOpenPanelChange={(panel) =>
-				sidebarTab.openSidebarTab(panel, sidebarRosters)
-			}
-			onSelectLibrary={navigation.openLibrary}
 			collapsedSectionIds={collapsedSectionIds}
 			sectionsBySpaceId={sections.state.sections}
 			isSpaceSwitchingEnabled={!overlay.isOverlayOpen}
-			{...rosterLines.sidebarActions}
-			{...appSidebarRailOf(frame)}
+			{...bodyActionsOf(rosterLines.sidebarActions)}
+			badgesBySpaceId={frame.rail.badgesBySpaceId}
+			onSelectSpace={frame.rail.onSelectSpace}
+			spaces={frame.rail.spaces}
 			onCreateConversation={rosterLines.startConversation}
 			selectedBotId={rosterView.selectedBotId ?? undefined}
 			selectedConversationId={rosterView.selectedConversationId ?? undefined}

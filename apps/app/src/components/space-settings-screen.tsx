@@ -1,6 +1,9 @@
 import type { EnvironmentWrite } from "@workspace/ui/components/environment-panel"
 import type { SpaceHost } from "@workspace/ui/components/host-pill"
-import { SettingsScreen } from "@workspace/ui/components/settings-screen"
+import {
+	SettingsScreenBody,
+	type SettingsScreenGuardLeave,
+} from "@workspace/ui/components/settings-screen"
 import { type Space, spaceAtRank } from "@workspace/ui/components/space"
 import type { SpaceSettingsValue } from "@workspace/ui/components/space-settings"
 import {
@@ -40,7 +43,6 @@ import type { RosterLines } from "@/lib/workspace/use-roster-lines"
 import type { RosterView } from "@/lib/workspace/use-roster-view"
 import type { SettingsPanels } from "@/lib/workspace/use-settings-panels"
 import type { WorkspaceCore } from "@/lib/workspace/use-workspace-core"
-import type { WorkspaceFrame } from "@/lib/workspace/workspace-frame"
 
 type MemberView = Pick<MembersPanelProps, "viewerId" | "blockedBy">
 
@@ -101,7 +103,7 @@ const useSpaceOpening = ({
 
 type SpaceSettingsScreenProps = {
 	core: WorkspaceCore
-	frame: WorkspaceFrame
+	guardLeave: SettingsScreenGuardLeave
 	hostBySpaceId: Record<string, SpaceHost>
 	navigation: SettingsNavigation
 	page: ShownSpacePage
@@ -116,7 +118,7 @@ type SpaceSettingsScreenProps = {
 
 export const SpaceSettingsScreen = ({
 	core,
-	frame,
+	guardLeave,
 	hostBySpaceId,
 	navigation,
 	page,
@@ -199,7 +201,7 @@ export const SpaceSettingsScreen = ({
 	}
 
 	const sharedProps = {
-		...frame,
+		guardLeave,
 		target: "space" as const,
 		spaceId: avatarSeedOfRow(switcherSpaces, spaceId),
 		spaceHost: hostBySpaceId[spaceId],
@@ -239,7 +241,7 @@ export const SpaceSettingsScreen = ({
 	if (page.state === "invitation") {
 		const decline = () => invitations.decline(spaceId)
 		return (
-			<SettingsScreen
+			<SettingsScreenBody
 				{...sharedProps}
 				spaceState="invitation"
 				invitation={page.terms}
@@ -254,7 +256,7 @@ export const SpaceSettingsScreen = ({
 	if (page.state === "yours") {
 		const { space } = page
 		return (
-			<SettingsScreen
+			<SettingsScreenBody
 				{...sharedProps}
 				{...hostingProps}
 				{...membersPropsOf(space.name)}
@@ -278,7 +280,7 @@ export const SpaceSettingsScreen = ({
 
 	const { joined } = page
 	return (
-		<SettingsScreen
+		<SettingsScreenBody
 			{...sharedProps}
 			{...membersPropsOf(
 				joined.name,

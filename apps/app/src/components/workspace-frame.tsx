@@ -1,6 +1,11 @@
 import { Outlet, useMatch } from "@tanstack/react-router"
 import { useMemo } from "react"
 
+import {
+	type AppFrameRailProps,
+	AppFrameShell,
+} from "@workspace/ui/components/app-frame"
+import { useSettingsLeaveGuard } from "@workspace/ui/components/settings-screen"
 import type { TitleBarTabsProps } from "@workspace/ui/components/title-bar-tabs"
 
 import { titleBarWindowControls } from "@/components/window-caption-controls"
@@ -8,7 +13,11 @@ import { useWorkspaceRail } from "@/components/workspace-rail"
 import { useWorkspaceSpaceSwitch } from "@/components/workspace-settings"
 import { hasOverlayWindowControls, isSidebarResizable } from "@/lib/host"
 import type { WorkspaceTabs } from "@/lib/tabs/workspace-tabs"
-import { useRosterLists } from "@/lib/workspace/use-roster-lists"
+import type { SidebarPanel } from "@/lib/user/use-sidebar-tab"
+import {
+	type RosterLists,
+	useRosterLists,
+} from "@/lib/workspace/use-roster-lists"
 import { useWorkspaceTitleBarTabs } from "@/lib/workspace/use-workspace-title-bar-tabs"
 import { useWorkspace } from "@/lib/workspace/workspace-context"
 import {
@@ -60,6 +69,31 @@ const useRailSpaceSelection = () => {
 	return rosterLines.sidebarActions.onSelectSpace
 }
 
+type RailPanelGestures = Pick<
+	AppFrameRailProps,
+	"onSelectConversations" | "onSelectMissions"
+>
+
+const useConversationsRailPanels = (
+	rosterLists: RosterLists,
+): RailPanelGestures | undefined => {
+	const { collapsedSectionIds, core, sidebarTab } = useWorkspace()
+	const conversations = useMatch({ from: "/", shouldThrow: false })
+
+	if (!conversations) return undefined
+	const switchTo = (panel: SidebarPanel) => () =>
+		sidebarTab.openSidebarTab(panel, {
+			botsBySpaceId: rosterLists.rosterBotsBySpace,
+			conversationsBySpaceId: rosterLists.rosterConversationsBySpace,
+			sectionsBySpaceId: core.sections.state.sections,
+			collapsedSectionIds,
+		})
+	return {
+		onSelectConversations: switchTo("conversations"),
+		onSelectMissions: switchTo("missions"),
+	}
+}
+
 const useWorkspaceFrameRead = (): WorkspaceFrameRead => {
 	const workspace = useWorkspace()
 	const { core, drivers, rosterLines, rosterView, sidebarMissions, tabs } =
@@ -93,8 +127,15 @@ const useWorkspaceFrameRead = (): WorkspaceFrameRead => {
 		onSelectSpace,
 	})
 
+	const conversationsRailPanels = useConversationsRailPanels(rosterLists)
+
 	const frame: WorkspaceFrame = {
 		...rail,
+		rail: {
+			...rail.rail,
+			"data-tauri-drag-region": "deep",
+			...conversationsRailPanels,
+		},
 		guardLeave: tabs.guardLeave,
 		titleBar: {
 			"data-tauri-drag-region": "deep",
@@ -112,11 +153,26 @@ const useWorkspaceFrameRead = (): WorkspaceFrameRead => {
 }
 
 export const WorkspaceFrameOutlet = () => {
-	const workspaceFrame = useWorkspaceFrameRead()
+	const { frame, rosterLists } = useWorkspaceFrameRead()
+	const leaveGuard = useSettingsLeaveGuard(frame)
+	const guardedFrame: WorkspaceFrame = { ...frame, ...leaveGuard }
 
 	return (
-		<WorkspaceFrameContext.Provider value={workspaceFrame}>
-			<Outlet />
+		<WorkspaceFrameContext.Provider
+			value={{ frame: guardedFrame, rosterLists }}
+		>
+			<AppFrameShell
+				isResizable={guardedFrame.isResizable}
+				onWidthChange={guardedFrame.onWidthChange}
+				rail={guardedFrame.rail}
+				space={guardedFrame.currentSpace}
+				spaceHost={guardedFrame.currentSpaceHost}
+				spaceTint={guardedFrame.spaceTint}
+				titleBar={guardedFrame.titleBar}
+				width={guardedFrame.width}
+			>
+				<Outlet />
+			</AppFrameShell>
 		</WorkspaceFrameContext.Provider>
 	)
 }

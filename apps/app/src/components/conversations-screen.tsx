@@ -1,10 +1,9 @@
-import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
+import { ContentCard } from "@workspace/ui/components/content-card"
 
 import { WorkspaceBody } from "@/components/workspace-body"
 import { WorkspaceSidebar } from "@/components/workspace-sidebar"
 import { onboardingCreationOf } from "@/lib/onboarding/onboarding-flow-controller"
 import { useWorkspace } from "@/lib/workspace/workspace-context"
-import { useWorkspaceFrame } from "@/lib/workspace/workspace-frame"
 
 export const ConversationsScreen = () => {
 	const {
@@ -21,57 +20,50 @@ export const ConversationsScreen = () => {
 		sidebarTab,
 		switcher,
 	} = useWorkspace()
-	const { frame } = useWorkspaceFrame()
 	const { preferences, spaces } = core
 
 	return (
-		<WorkspaceShell
-			spaceTint={frame.spaceTint}
-			width={frame.width}
-			onWidthChange={frame.onWidthChange}
-			isResizable={frame.isResizable}
-			sidebar={
-				<WorkspaceSidebar
-					collapsedSectionIds={collapsedSectionIds}
-					core={core}
-					navigation={navigation}
-					overlay={overlay}
-					rosterLines={rosterLines}
-					rosterView={rosterView}
-					sidebarMissions={sidebarMissions}
-					sidebarTab={sidebarTab}
-					switcher={switcher}
-				/>
-			}
-		>
-			<WorkspaceBody
-				activityPanel={overlay.activityPanel}
-				attachments={core.attachments}
-				bot={rosterView.selected}
-				bots={rosterView.bots}
-				chat={core.chat}
-				conversation={rosterView.selectedConversation}
-				conversationRuntimes={core.conversationRuntimes}
-				drafts={core.drafts}
-				haveSpacesFailed={spaces.state.hasFailedToLoad}
-				isMissionsPanelOpen={sidebarTab.openTab === "missions"}
-				isOverlayOpen={overlay.isOverlayOpen}
-				landings={core.messageLandings}
-				missions={core.openedMission}
-				onboardingCreation={
-					onboardingCreationOf(drivers.onboarding.state) ?? undefined
-				}
-				onOpenConversationSettings={
-					rosterLines.sidebarActions.onOpenConversationSettings
-				}
-				onOpenThreadInNewTab={navigation.openThreadInNewTab}
-				onRetrySpaces={loadSpaces}
-				onToggleSettings={overlay.toggleSettings}
-				readerName={preferences.displayName}
-				signIn={drivers.signIn}
-				spaceId={rosteredHostSpaceId}
-				spaceRowId={rosterView.rosteredSpaceId}
+		<>
+			<WorkspaceSidebar
+				collapsedSectionIds={collapsedSectionIds}
+				core={core}
+				overlay={overlay}
+				rosterLines={rosterLines}
+				rosterView={rosterView}
+				sidebarMissions={sidebarMissions}
+				sidebarTab={sidebarTab}
+				switcher={switcher}
 			/>
-		</WorkspaceShell>
+			<ContentCard>
+				<WorkspaceBody
+					activityPanel={overlay.activityPanel}
+					attachments={core.attachments}
+					bot={rosterView.selected}
+					bots={rosterView.bots}
+					chat={core.chat}
+					conversation={rosterView.selectedConversation}
+					conversationRuntimes={core.conversationRuntimes}
+					drafts={core.drafts}
+					haveSpacesFailed={spaces.state.hasFailedToLoad}
+					isMissionsPanelOpen={sidebarTab.openTab === "missions"}
+					isOverlayOpen={overlay.isOverlayOpen}
+					landings={core.messageLandings}
+					missions={core.openedMission}
+					onboardingCreation={
+						onboardingCreationOf(drivers.onboarding.state) ?? undefined
+					}
+					onOpenConversationSettings={
+						rosterLines.sidebarActions.onOpenConversationSettings
+					}
+					onOpenThreadInNewTab={navigation.openThreadInNewTab}
+					onRetrySpaces={loadSpaces}
+					onToggleSettings={overlay.toggleSettings}
+					readerName={preferences.displayName}
+					signIn={drivers.signIn}
+					spaceId={rosteredHostSpaceId}
+					spaceRowId={rosterView.rosteredSpaceId}
+				/>
+			</ContentCard>
+		</>
 	)
 }
