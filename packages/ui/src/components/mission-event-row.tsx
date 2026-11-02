@@ -101,7 +101,10 @@ const MissionMachineLine = ({ event, label, now }: MissionEventLineProps) => {
 		>
 			<span
 				aria-hidden="true"
-				className="size-1.5 shrink-0 rounded-full bg-success"
+				className={cn(
+					"size-1.5 shrink-0 rounded-full",
+					event.kind === "ready" ? "bg-success" : "bg-muted-foreground",
+				)}
 			/>
 			<span className="min-w-0 truncate">
 				{t(`missions.event.line.${event.kind}`, { source: label })}
