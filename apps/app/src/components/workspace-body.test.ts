@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 
+import type { InvokeArgs } from "@tauri-apps/api/core"
 import {
 	act,
 	cleanup,
@@ -46,6 +47,7 @@ import {
 import type { Bot, Conversation } from "@/lib/conversations/store-contract"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { seatBots } from "@/lib/conversations/transcript-fixtures"
+import type { Invoke } from "@/lib/host/joined-hosts-invoke"
 import type {
 	Mission,
 	MissionChanged,
@@ -65,6 +67,7 @@ import { createOpenedRoutineController } from "@/lib/routines/opened-routine-con
 import { routinesTransport } from "@/lib/routines/routines-transport"
 import { triggerSourcesTransport } from "@/lib/routines/trigger-sources-transport"
 import { createMessageLandingController } from "@/lib/search/message-landing-controller"
+import { joinedRowIdOf } from "@/lib/spaces/joined-spaces-controller"
 
 let queries = createQueryTestWrapper()
 
@@ -96,10 +99,31 @@ vi.mock("@/lib/bindings", async (importOriginal) => {
 		...actual,
 		commands: {
 			...actual.commands,
-			libraryList: vi.fn(),
-			libraryReadDocument: vi.fn(),
+			librarySave: vi.fn(),
+			libraryCopy: vi.fn(),
+			libraryReveal: vi.fn(),
 		},
 	}
+})
+const libraryHost = vi.hoisted(() => ({
+	list: vi.fn(),
+	readDocument: vi.fn(),
+	readImage: vi.fn(),
+}))
+vi.mock("@/lib/host/index", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("@/lib/host/index")>()
+	const libraryReads: Record<string, (args?: InvokeArgs) => Promise<unknown>> =
+		{
+			library_list: libraryHost.list,
+			library_read_document: libraryHost.readDocument,
+			library_read_image: libraryHost.readImage,
+		}
+	const invoke: Invoke = <T>(...call: Parameters<Invoke>) => {
+		const [command, args] = call
+		const read = libraryReads[command]
+		return read ? (read(args) as Promise<T>) : actual.invoke<T>(...call)
+	}
+	return { ...actual, invoke }
 })
 vi.mock("@/lib/host/tauri", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/lib/host/tauri")>()),
@@ -1143,9 +1167,12 @@ describe("WorkspaceBody mission menu", () => {
 })
 
 describe("WorkspaceBody library", () => {
-	const listLibrary = vi.mocked(commands.libraryList)
-	const readDocument = vi.mocked(commands.libraryReadDocument)
+	const save = vi.mocked(commands.librarySave)
+	const copyToClipboard = vi.mocked(commands.libraryCopy)
+	const reveal = vi.mocked(commands.libraryReveal)
 	const OTHER_SPACE = "studio"
+	const JOINED_ROW = joinedRowIdOf("garage")
+	const HOST_SPACE = "garage-space"
 	const EXCERPT = "What we ship in April."
 
 	const itemOf = (
@@ -1168,24 +1195,31 @@ describe("WorkspaceBody library", () => {
 	const DUSK = itemOf("image", "dusk.png", 40, 2_048)
 	const NOTES = itemOf("document", "notes.txt", 50, 512)
 
-	const listed = (items: LibraryItem[]) => ({
-		status: "ok" as const,
-		data: items,
+	const refusal = { kind: "unreadable" as const, detail: "denied" }
+
+	const answered = <Data>(data: Data) => ({ status: "ok" as const, data })
+
+	const failed = (detail: string) => ({
+		status: "error" as const,
+		error: { kind: "unwritable" as const, detail },
 	})
 
-	const refused = {
-		status: "error" as const,
-		error: { kind: "unreadable" as const, detail: "denied" },
-	}
+	type NamedRead = { spaceId: string; name: string }
 
-	const documentRead = (name: string) => {
-		const data: LibraryDocument = {
-			name,
-			format: "markdown",
-			content: `# Spring launch\n\n${EXCERPT}`,
-		}
-		return { status: "ok" as const, data }
-	}
+	const documentOf = (name: string): LibraryDocument => ({
+		name,
+		format: "markdown",
+		content: `# Spring launch\n\n${EXCERPT}`,
+	})
+
+	const readDocumentOf = async ({ name }: NamedRead) =>
+		name === NOTES.name ? Promise.reject(refusal) : documentOf(name)
+
+	const imageOf = ({ name }: NamedRead) => ({
+		name,
+		mimeType: "image/png",
+		content: btoa(name),
+	})
 
 	beforeEach(() => {
 		vi.clearAllMocks()
@@ -1194,28 +1228,34 @@ describe("WorkspaceBody library", () => {
 		listSources.mockResolvedValue([])
 		listenToMissions.mockResolvedValue(() => undefined)
 		listMissions.mockResolvedValue({ open: [], done: [] })
-		listLibrary.mockResolvedValue(listed([HERO, BRIEF, FERN, DUSK, NOTES]))
-		readDocument.mockImplementation(async (_spaceId, name) =>
-			name === NOTES.name ? refused : documentRead(name),
+		libraryHost.list.mockResolvedValue([HERO, BRIEF, FERN, DUSK, NOTES])
+		libraryHost.readDocument.mockImplementation(readDocumentOf)
+		libraryHost.readImage.mockImplementation(async (read: NamedRead) =>
+			imageOf(read),
 		)
+		save.mockResolvedValue(answered("/Users/reader/Downloads/hero-dunes.png"))
+		copyToClipboard.mockResolvedValue(answered(null))
+		reveal.mockResolvedValue(answered(null))
 	})
 
 	afterEach(() => {
 		cleanup()
 		vi.restoreAllMocks()
-		vi.unstubAllGlobals()
 	})
 
 	const libraryBody = (workspace: Workspace, overrides = {}) =>
 		workspace.body({ overrides: { isLibraryOpen: true, ...overrides } })
 
-	const openLibrary = async () => {
+	const openLibrary = async (overrides = {}) => {
 		const workspace = await workspaceOf()
-		const view = render(libraryBody(workspace))
+		const view = render(libraryBody(workspace, overrides))
 		render(createElement(NoticeSurface))
 		await settle()
 		return { workspace, view }
 	}
+
+	const openJoinedLibrary = () =>
+		openLibrary({ spaceId: HOST_SPACE, spaceRowId: JOINED_ROW })
 
 	const shownNames = () =>
 		[...document.querySelectorAll('[data-slot="library-item"] [title]')]
@@ -1244,6 +1284,11 @@ describe("WorkspaceBody library", () => {
 		await settle()
 	}
 
+	const press = async (name: string) => {
+		fireEvent.click(screen.getByRole("button", { name }))
+		await settle()
+	}
+
 	const noticeTitled = (title: string) => screen.findAllByText(title)
 
 	it("lists the Library of the Space once it has loaded", async () => {
@@ -1254,7 +1299,7 @@ describe("WorkspaceBody library", () => {
 
 		await settle()
 
-		expect(listLibrary).toHaveBeenCalledWith(SPACE)
+		expect(libraryHost.list).toHaveBeenCalledWith({ spaceId: SPACE })
 		expect(isBusy()).toBe(false)
 		expect(shownNames()).toEqual(
 			[
@@ -1268,7 +1313,7 @@ describe("WorkspaceBody library", () => {
 	})
 
 	it("shows an empty Library with no action to take", async () => {
-		listLibrary.mockResolvedValue(listed([]))
+		libraryHost.list.mockResolvedValue([])
 		await openLibrary()
 
 		const panel = document.querySelector<HTMLElement>(
@@ -1289,6 +1334,7 @@ describe("WorkspaceBody library", () => {
 		expect(itemNamed("hero-dunes.png").querySelector("img")?.src).toBe(
 			"asset://localhost/library/hero-dunes.png",
 		)
+		expect(libraryHost.readImage).not.toHaveBeenCalled()
 		await waitFor(() =>
 			expect(
 				itemNamed("Spring launch brief").querySelector(
@@ -1338,7 +1384,7 @@ describe("WorkspaceBody library", () => {
 	})
 
 	it("lists the folder again when the window regains focus or the panel opens again", async () => {
-		listLibrary.mockResolvedValueOnce(listed([HERO]))
+		libraryHost.list.mockResolvedValueOnce([HERO])
 		const { workspace, view } = await openLibrary()
 		expect(shownNames()).toEqual(["hero-dunes.png"])
 
@@ -1351,18 +1397,23 @@ describe("WorkspaceBody library", () => {
 		view.rerender(libraryBody(workspace))
 		await settle()
 
-		expect(listLibrary).toHaveBeenCalledTimes(3)
+		expect(libraryHost.list).toHaveBeenCalledTimes(3)
 	})
 
 	it("never shows the items of the previous Space once the Space changes", async () => {
 		const { workspace, view } = await openLibrary()
-		listLibrary.mockReturnValue(new Promise(() => undefined))
+		libraryHost.list.mockReturnValue(new Promise(() => undefined))
 
-		view.rerender(libraryBody(workspace, { spaceRowId: OTHER_SPACE }))
+		view.rerender(
+			libraryBody(workspace, {
+				spaceId: OTHER_SPACE,
+				spaceRowId: OTHER_SPACE,
+			}),
+		)
 
 		expect(shownNames()).toEqual([])
 		expect(isBusy()).toBe(true)
-		expect(listLibrary).toHaveBeenLastCalledWith(OTHER_SPACE)
+		expect(libraryHost.list).toHaveBeenLastCalledWith({ spaceId: OTHER_SPACE })
 	})
 
 	it("steps through the images of the filtered order in the lightbox", async () => {
@@ -1373,8 +1424,7 @@ describe("WorkspaceBody library", () => {
 		expect(screen.getByRole("dialog", { name: "hero-dunes.png" })).toBeTruthy()
 		expect(screen.getByText("1 of 2")).toBeTruthy()
 
-		fireEvent.click(screen.getByRole("button", { name: "Next image" }))
-		await settle()
+		await press("Next image")
 
 		expect(screen.getByRole("dialog", { name: "dusk.png" })).toBeTruthy()
 		expect(
@@ -1383,8 +1433,7 @@ describe("WorkspaceBody library", () => {
 				.hasAttribute("disabled"),
 		).toBe(true)
 
-		fireEvent.click(screen.getByRole("button", { name: "Previous image" }))
-		await settle()
+		await press("Previous image")
 
 		expect(screen.getByRole("dialog", { name: "hero-dunes.png" })).toBeTruthy()
 	})
@@ -1397,15 +1446,17 @@ describe("WorkspaceBody library", () => {
 
 		await open("Spring launch brief")
 
-		expect(readDocument).toHaveBeenCalledWith(SPACE, BRIEF.name)
+		expect(libraryHost.readDocument).toHaveBeenCalledWith({
+			spaceId: SPACE,
+			name: BRIEF.name,
+		})
 		expect(
 			screen.getByRole("heading", { level: 1, name: "Spring launch brief" }),
 		).toBeTruthy()
 		expect(screen.getByText(EXCERPT)).toBeTruthy()
 		expect(screen.queryByRole("searchbox")).toBeNull()
 
-		fireEvent.click(screen.getByRole("button", { name: "Library" }))
-		await settle()
+		await press("Library")
 
 		expect(screen.getByRole("searchbox")).toHaveProperty("value", "brief")
 		expect(
@@ -1416,12 +1467,12 @@ describe("WorkspaceBody library", () => {
 		expect(shownNames()).toEqual(["Spring launch brief"])
 	})
 
-	it("raises what failed when the Library cannot be listed", async () => {
-		listLibrary.mockResolvedValue(refused)
+	it("raises what failed when the Library cannot be listed and leaves the loading state", async () => {
+		libraryHost.list.mockRejectedValue(refusal)
 		await openLibrary()
 
-		await noticeTitled("Couldn’t send that request")
-		expect(isBusy()).toBe(true)
+		await noticeTitled("Couldn’t open the Library")
+		expect(isBusy()).toBe(false)
 	})
 
 	it("raises what failed when a document cannot be read and keeps the grid", async () => {
@@ -1433,103 +1484,171 @@ describe("WorkspaceBody library", () => {
 		expect(shownNames()).toContain("notes")
 	})
 
-	const SPARK = itemOf("image", "spark.gif", 5, 1_024)
-	const WAVE = itemOf("image", "wave.webp", 6, 1_024)
-	const COPY_FAILURE = "Couldn’t copy to the clipboard"
+	const SAVE_FAILURE = "Couldn’t save the file"
+	const COPY_FAILURE = "Couldn’t copy the image"
+	const REVEAL_FAILURE = "Couldn’t show the file in its folder"
 
-	const aClipboard = () => {
-		const fetched = vi
-			.spyOn(globalThis, "fetch")
-			.mockImplementation(async () => new Response(new Blob(["pixels"])))
-		const decode = vi.fn(async () => ({
-			width: 2,
-			height: 2,
-			close: () => undefined,
-		}))
-		const encodedTypes: string[] = []
-		vi.stubGlobal("createImageBitmap", decode)
-		vi.stubGlobal(
-			"OffscreenCanvas",
-			class {
-				getContext = () => ({ drawImage: () => undefined })
-				convertToBlob = async ({ type }: { type: string }) => {
-					encodedTypes.push(type)
-					return new Blob(["png"], { type })
-				}
-			},
-		)
-		const copiedTypes: string[][] = []
-		const write = vi
-			.spyOn(navigator.clipboard, "write")
-			.mockImplementation(async ([item]) => {
-				await item?.getType("image/png")
-				copiedTypes.push([...(item?.types ?? [])])
-			})
-		vi.spyOn(console, "error").mockImplementation(() => undefined)
-		return { fetched, decode, encodedTypes, copiedTypes, write }
-	}
+	it("saves the opened image, and raises no notice when the person cancels", async () => {
+		save.mockResolvedValue(answered(null))
+		await openLibrary()
+		await open("hero-dunes.png")
 
-	const copy = async () => {
-		fireEvent.click(screen.getByRole("button", { name: "Copy" }))
-		await settle()
-	}
+		await press("Download")
 
-	const next = async () => {
-		fireEvent.click(screen.getByRole("button", { name: "Next image" }))
-		await settle()
-	}
+		expect(save).toHaveBeenCalledExactlyOnceWith(SPACE, HERO.name)
+		expect(screen.queryByText(SAVE_FAILURE)).toBeNull()
+	})
 
-	it("copies a JPG, a GIF and a WebP image to the clipboard as PNG, with no notice", async () => {
-		listLibrary.mockResolvedValue(listed([FERN, SPARK, WAVE]))
-		const clipboard = aClipboard()
+	it("raises the save failure notice when the file cannot be saved", async () => {
+		save.mockResolvedValue(failed("read-only volume"))
+		await openLibrary()
+		await open("hero-dunes.png")
+
+		await press("Download")
+
+		await noticeTitled(SAVE_FAILURE)
+	})
+
+	it("copies the opened image through this computer's clipboard, with no notice", async () => {
 		await openLibrary()
 		await open("fern-study.jpg")
 
-		await copy()
-		await next()
-		await copy()
-		await next()
-		await copy()
+		await press("Copy")
+		await press("Next image")
+		await press("Copy")
 
-		expect(clipboard.fetched.mock.calls.map(([src]) => src)).toEqual([
-			"asset://localhost/library/fern-study.jpg",
-			"asset://localhost/library/spark.gif",
-			"asset://localhost/library/wave.webp",
-		])
-		expect(clipboard.decode).toHaveBeenCalledTimes(3)
-		expect(clipboard.encodedTypes).toEqual([
-			"image/png",
-			"image/png",
-			"image/png",
-		])
-		expect(clipboard.copiedTypes).toEqual([
-			["image/png"],
-			["image/png"],
-			["image/png"],
+		expect(copyToClipboard.mock.calls).toEqual([
+			[SPACE, FERN.name],
+			[SPACE, DUSK.name],
 		])
 		expect(screen.queryByText(COPY_FAILURE)).toBeNull()
 	})
 
-	it("raises the copy failure notice when the image cannot be decoded", async () => {
-		const clipboard = aClipboard()
-		clipboard.decode.mockRejectedValueOnce(new Error("undecodable"))
-		await openLibrary()
-		await open("fern-study.jpg")
-
-		await copy()
-
-		await noticeTitled(COPY_FAILURE)
-		expect(clipboard.copiedTypes).toEqual([])
-	})
-
 	it("raises the copy failure notice when the clipboard refuses the image", async () => {
-		const clipboard = aClipboard()
-		clipboard.write.mockRejectedValueOnce(new Error("refused"))
+		copyToClipboard.mockResolvedValue({
+			status: "error",
+			error: { kind: "clipboardRefused", detail: "denied" },
+		})
 		await openLibrary()
 		await open("hero-dunes.png")
 
-		await copy()
+		await press("Copy")
 
 		await noticeTitled(COPY_FAILURE)
+	})
+
+	it("reveals the opened image and the opened document in their folder", async () => {
+		await openLibrary()
+		await open("hero-dunes.png")
+		await press("More")
+		await press("Close")
+
+		await open("Spring launch brief")
+		await press("More")
+
+		expect(reveal.mock.calls).toEqual([
+			[SPACE, HERO.name],
+			[SPACE, BRIEF.name],
+		])
+		expect(screen.queryByText(REVEAL_FAILURE)).toBeNull()
+	})
+
+	it("raises the reveal failure notice when the file cannot be shown", async () => {
+		reveal.mockResolvedValue({
+			status: "error",
+			error: { kind: "unrevealed", detail: "no file manager" },
+		})
+		await openLibrary()
+		await open("hero-dunes.png")
+
+		await press("More")
+
+		await noticeTitled(REVEAL_FAILURE)
+	})
+
+	describe("in a joined Space", () => {
+		it("lists and reads the Library of the host Space", async () => {
+			await openJoinedLibrary()
+
+			expect(libraryHost.list).toHaveBeenCalledWith({ spaceId: HOST_SPACE })
+
+			await open("Spring launch brief")
+
+			expect(libraryHost.readDocument).toHaveBeenCalledWith({
+				spaceId: HOST_SPACE,
+				name: BRIEF.name,
+			})
+		})
+
+		it("draws each image from the bytes the host answers, not from a file path", async () => {
+			await openJoinedLibrary()
+
+			expect(libraryHost.readImage).toHaveBeenCalledWith({
+				spaceId: HOST_SPACE,
+				name: HERO.name,
+			})
+			await waitFor(() =>
+				expect(itemNamed("hero-dunes.png").querySelector("img")?.src).toBe(
+					`data:image/png;base64,${btoa(HERO.name)}`,
+				),
+			)
+		})
+
+		const IMAGE_FAILURE = "Couldn’t show an image of the Library"
+
+		const announcedImageFailures = async () => {
+			await noticeTitled(IMAGE_FAILURE)
+			await settle()
+			return screen
+				.getAllByText(IMAGE_FAILURE)
+				.filter((title) => !title.closest('[aria-hidden="true"]'))
+		}
+
+		it("raises one notice when several images cannot be read from the host", async () => {
+			libraryHost.readImage.mockRejectedValue(refusal)
+			await openJoinedLibrary()
+
+			expect(libraryHost.readImage).toHaveBeenCalledTimes(3)
+			expect(await announcedImageFailures()).toHaveLength(1)
+			expect(shownNames()).toContain("hero-dunes.png")
+		})
+
+		it("shows an image read after an earlier failure, with no new notice", async () => {
+			const changedHero = { ...HERO, modifiedAt: HERO.modifiedAt + A_MINUTE }
+			libraryHost.list.mockResolvedValueOnce([HERO])
+			libraryHost.list.mockResolvedValue([changedHero])
+			libraryHost.readImage.mockRejectedValueOnce(refusal)
+			await openJoinedLibrary()
+			expect(await announcedImageFailures()).toHaveLength(1)
+
+			fireEvent(window, new Event("focus"))
+			await settle()
+
+			await waitFor(() =>
+				expect(itemNamed("hero-dunes.png").querySelector("img")?.src).toBe(
+					`data:image/png;base64,${btoa(HERO.name)}`,
+				),
+			)
+			expect(await announcedImageFailures()).toHaveLength(1)
+		})
+
+		it("leaves Download, Copy and More inactive, with no notice", async () => {
+			await openJoinedLibrary()
+			await open("hero-dunes.png")
+			await press("Download")
+			await press("Copy")
+			await press("More")
+			await press("Close")
+
+			await open("Spring launch brief")
+			await press("More")
+
+			expect(save).not.toHaveBeenCalled()
+			expect(copyToClipboard).not.toHaveBeenCalled()
+			expect(reveal).not.toHaveBeenCalled()
+			for (const failure of [SAVE_FAILURE, COPY_FAILURE, REVEAL_FAILURE]) {
+				expect(screen.queryByText(failure)).toBeNull()
+			}
+		})
 	})
 })

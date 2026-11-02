@@ -264,6 +264,7 @@ interface AppSidebarProps
 	openPanel?: string
 	openSettings?: AppRailSettings
 	onOpenPanelChange?: (panel: AppSidebarOpenPanel) => void
+	onSelectLibrary?: () => void
 	"data-tauri-drag-region"?: string
 }
 

@@ -32,6 +32,7 @@ const LEFT_OUT_OF_THE_SIDEBAR: Record<string, string> = {
 	incomingTab: "no tab arrives from another window on a web page",
 	isSearchOpen:
 		"the scene opens no search palette, its rail entry stays at rest",
+	onSelectLibrary: "the scene opens no Library, so its rail draws no entry",
 }
 
 const LEFT_OUT_OF_THE_SHELL: Record<string, string> = {

@@ -3,6 +3,7 @@
 import { type ComponentProps, memo, useState } from "react"
 
 import { AppFrame } from "@workspace/ui/components/app-frame"
+import type { AppRailPanel } from "@workspace/ui/components/app-rail"
 import {
 	type AppSidebarBot,
 	type AppSidebarConversation,
@@ -31,6 +32,9 @@ const SpaceDotsFooter = (dots: ComponentProps<typeof SpaceDots>) =>
 			<SpaceDots {...dots} />
 		</SidebarFooter>
 	) : null
+
+const railPanelOf = (panel: string): AppRailPanel =>
+	panel === "missions" || panel === "library" ? panel : "conversations"
 
 const AppSidebarBase = ({
 	badgesBySpaceId,
@@ -78,17 +82,25 @@ const AppSidebarBase = ({
 	openPanel: controlledPanel,
 	openSettings,
 	onOpenPanelChange,
+	onSelectLibrary,
 	"data-tauri-drag-region": dragRegion,
 	...sidebar
 }: AppSidebarProps) => {
 	probeRender("AppSidebar")
-	const [ownPanel, setOwnPanel] = useState<AppSidebarOpenPanel>("conversations")
+	const [ownPanel, setOwnPanel] = useState<AppRailPanel>("conversations")
+	const selectedPanel = railPanelOf(controlledPanel ?? ownPanel)
 	const openPanel: AppSidebarOpenPanel =
-		(controlledPanel ?? ownPanel) === "missions" ? "missions" : "conversations"
+		selectedPanel === "missions" ? "missions" : "conversations"
 	const setOpenPanel = (next: AppSidebarOpenPanel) => {
 		setOwnPanel(next)
 		onOpenPanelChange?.(next)
 	}
+	const selectLibrary = onSelectLibrary
+		? () => {
+				setOwnPanel("library")
+				onSelectLibrary()
+			}
+		: undefined
 
 	const selectRank = (rank: number) => {
 		const space = spaceAtRank(spaces, rank)
@@ -118,11 +130,12 @@ const AppSidebarBase = ({
 				onOpenYou: onOpenUserSettings,
 				onRetryInvitation,
 				onSelectConversations: () => setOpenPanel("conversations"),
+				onSelectLibrary: selectLibrary,
 				onSelectMissions: () => setOpenPanel("missions"),
 				onSelectSpace,
 				onSpacesMenuOpenChange: onSpaceSwitcherOpenChange,
 				openSettings,
-				selected: openPanel,
+				selected: selectedPanel,
 				spaces,
 				updateBadge,
 				user,

@@ -2,11 +2,12 @@ import type { LibraryItem as ShownLibraryItem } from "@workspace/ui/components/l
 import { toRelativeTime } from "@workspace/ui/lib/time-format"
 
 import type { LibraryItem } from "../bindings"
-import { convertFileSrc } from "../host/tauri"
 
 const SIZE_UNITS = ["B", "KB", "MB", "GB"]
 
 const DETAIL_SEPARATOR = " · "
+
+type ItemContent = { excerpt: string; src: string }
 
 const extensionAt = (name: string) => name.lastIndexOf(".")
 
@@ -37,7 +38,7 @@ export const detailOf = (item: LibraryItem, now: number) =>
 
 export const toShownItem = (
 	item: LibraryItem,
-	excerpt: string,
+	{ excerpt, src }: ItemContent,
 	now: number,
 ): ShownLibraryItem => {
 	const shared = {
@@ -46,7 +47,7 @@ export const toShownItem = (
 		detail: detailOf(item, now),
 	}
 	return item.kind === "image"
-		? { ...shared, kind: "image", src: convertFileSrc(item.path) }
+		? { ...shared, kind: "image", src }
 		: { ...shared, kind: "document", excerpt }
 }
 

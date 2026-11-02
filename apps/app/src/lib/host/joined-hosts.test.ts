@@ -350,6 +350,45 @@ describe("the local command list", () => {
 	})
 })
 
+const LIBRARY_READS = [
+	"library_list",
+	"library_read_document",
+	"library_read_image",
+]
+
+const LIBRARY_ACTIONS = ["library_save", "library_copy", "library_reveal"]
+
+describe("the Library of a joined space", () => {
+	it("is read from the joined host", async () => {
+		const { hosts, local, fetch } = joinedHostsOf()
+		await hosts.activate("garage")
+
+		for (const command of LIBRARY_READS) {
+			await hosts.invoke(command, { spaceId: "garage", name: "hero.png" })
+		}
+
+		expect(local.invoke).not.toHaveBeenCalled()
+		for (const command of LIBRARY_READS) {
+			expect(fetch).toHaveBeenCalledWith(
+				new URL(`${HOST}/api/invoke/${command}`),
+				expect.anything(),
+			)
+		}
+	})
+
+	it("saves, copies and reveals on this computer", async () => {
+		const { hosts, local, fetch } = joinedHostsOf()
+		await hosts.activate("garage")
+
+		for (const command of LIBRARY_ACTIONS) {
+			await hosts.invoke(command, { spaceId: "garage", name: "hero.png" })
+		}
+
+		expect(localCommands(local)).toEqual(LIBRARY_ACTIONS)
+		expect(fetch).not.toHaveBeenCalled()
+	})
+})
+
 const SIGN_IN_COMMANDS = [
 	"agent_sign_in",
 	"agent_sign_in_code",

@@ -12,6 +12,7 @@ import { newBotIdentity } from "@/lib/bots/bot-settings"
 import { createFakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
+import type { Invoke } from "@/lib/host/joined-hosts-invoke"
 import { aMission } from "@/lib/missions/mission-fixtures"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 import { readMirror, writeMirror } from "@/lib/user/preferences-mirror"
@@ -31,10 +32,14 @@ vi.mock("@/lib/conversations/create-store", () => ({
 	createTranscriptStore: () => harness.store,
 }))
 
-vi.mock("@/lib/host/index", async (importOriginal) => ({
-	...(await importOriginal<typeof import("@/lib/host/index")>()),
-	isDesktopHost: () => false,
-}))
+vi.mock("@/lib/host/index", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("@/lib/host/index")>()
+	const invoke: Invoke = <T>(...call: Parameters<Invoke>) =>
+		call[0] === "library_list"
+			? Promise.resolve([] as T)
+			: actual.invoke<T>(...call)
+	return { ...actual, invoke, isDesktopHost: () => false }
+})
 
 vi.mock("@/lib/chat/create-driver", async () => {
 	const { withFakeHostWrites } = await import(
@@ -66,17 +71,6 @@ vi.mock("@/lib/missions/missions-transport", async (importOriginal) => {
 				mission: heldMission(missionId),
 				events: [],
 			}),
-		},
-	}
-})
-
-vi.mock("@/lib/bindings", async (importOriginal) => {
-	const actual = await importOriginal<typeof import("@/lib/bindings")>()
-	return {
-		...actual,
-		commands: {
-			...actual.commands,
-			libraryList: async () => ({ status: "ok", data: [] }),
 		},
 	}
 })
@@ -181,8 +175,13 @@ const rosterRowOf = (name: string) =>
 		.find((label) => label.textContent === name)
 		?.closest("button") as HTMLElement
 
-const railButton = (entry: "conversations" | "missions") =>
+const railButton = (entry: SidebarPanel) =>
 	screen.getByRole("button", { name: i18n.t(`bots:rail.${entry}`) })
+
+const selectedRailEntries = () =>
+	(["conversations", "missions", "library"] as const).filter(
+		(entry) => railButton(entry).getAttribute("aria-current") === "true",
+	)
 
 describe("the Library panel", () => {
 	it("opens over the thread from code", async () => {
@@ -231,16 +230,34 @@ describe("the Library panel", () => {
 		)
 	})
 
-	it("closes on Conversations in the rail, though Conversations reads as selected", async () => {
+	it("opens from the Library entry of the rail, which reads as selected", async () => {
 		await mountApp()
-		await openLibrary()
-		expect(railButton("conversations").getAttribute("aria-current")).toBe(
-			"true",
-		)
+
+		await click(railButton("library"))
+
+		expect(libraryHeading()).not.toBeNull()
+		expect(shownThread()).toBeNull()
+		expect(selectedRailEntries()).toEqual(["library"])
+	})
+
+	it("closes on Conversations in the rail, which then reads as selected", async () => {
+		await mountApp()
+		await click(railButton("library"))
 
 		await click(railButton("conversations"))
 
 		expect(libraryHeading()).toBeNull()
 		expect(shownThread()).not.toBeNull()
+		expect(selectedRailEntries()).toEqual(["conversations"])
+	})
+
+	it("closes on Missions in the rail, which then reads as selected", async () => {
+		await mountApp()
+		await click(railButton("library"))
+
+		await click(railButton("missions"))
+
+		expect(libraryHeading()).toBeNull()
+		expect(selectedRailEntries()).toEqual(["missions"])
 	})
 })

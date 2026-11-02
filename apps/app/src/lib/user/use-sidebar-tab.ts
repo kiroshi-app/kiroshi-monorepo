@@ -1,7 +1,5 @@
 import { useCallback, useState } from "react"
 
-import type { AppRailPanel } from "@workspace/ui/components/app-rail"
-
 import type { User } from "./use-user"
 
 import type { SidebarTab } from "@/lib/bindings"
@@ -15,9 +13,6 @@ const panelOf = (tab: SidebarTab): PersistedPanel =>
 
 const isPersisted = (panel: SidebarPanel): panel is PersistedPanel =>
 	panel !== "library"
-
-export const railPanelOf = (panel: SidebarPanel): AppRailPanel =>
-	isPersisted(panel) ? panel : "conversations"
 
 export const useSidebarTab = ({ controller, state }: User) => {
 	const [clickedTab, setClickedTab] = useState<SidebarPanel | null>(null)

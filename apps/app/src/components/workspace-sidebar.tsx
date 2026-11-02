@@ -7,7 +7,6 @@ import type { SettingsNavigation } from "@/lib/navigation/use-settings-navigatio
 import type { useSwitcherSpaces } from "@/lib/spaces/use-joined-spaces"
 import { opensInNewTab } from "@/lib/tabs/new-tab-clicks"
 import type { WorkspaceTabs } from "@/lib/tabs/workspace-tabs"
-import { railPanelOf } from "@/lib/user/use-sidebar-tab"
 import type { RosterLines } from "@/lib/workspace/use-roster-lines"
 import { useRosterLists } from "@/lib/workspace/use-roster-lists"
 import type { RosterView } from "@/lib/workspace/use-roster-view"
@@ -104,9 +103,12 @@ export const WorkspaceSidebar = ({
 			conversations={rosterLists.rosterConversations}
 			conversationsBySpaceId={rosterLists.rosterConversationsBySpace}
 			missionsBySpaceId={sidebarMissions.panelsBySpaceId}
-			openPanel={railPanelOf(sidebarTab.openTab)}
+			openPanel={sidebarTab.openTab}
 			onOpenPanelChange={(panel) =>
 				sidebarTab.openSidebarTab(panel, sidebarRosters)
+			}
+			onSelectLibrary={() =>
+				sidebarTab.openSidebarTab("library", sidebarRosters)
 			}
 			collapsedSectionIds={collapsedSectionIds}
 			sectionsBySpaceId={sections.state.sections}
