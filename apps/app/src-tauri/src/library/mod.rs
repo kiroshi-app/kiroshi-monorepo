@@ -1,5 +1,7 @@
 pub mod commands;
 pub mod contract;
+mod documents;
+mod templates;
 
 use std::fs::{self, Metadata};
 use std::future::Future;
@@ -10,12 +12,15 @@ use std::time::SystemTime;
 use base64::prelude::{Engine as _, BASE64_STANDARD};
 use chrono::{DateTime, Utc};
 use image::{ImageFormat, ImageReader, Limits};
-use tauri::{AppHandle, Manager, Runtime};
+use tauri::{AppHandle, Manager, Runtime, State};
 
 use contract::{
-	LibraryDocument, LibraryDocumentFormat, LibraryError, LibraryFile, LibraryImage, LibraryItem,
-	LibraryItemKind,
+	LibraryDocument, LibraryDocumentFormat, LibraryDocumentState, LibraryDocumentUpdated,
+	LibraryError, LibraryFile, LibraryImage, LibraryItem, LibraryItemKind,
 };
+use documents::Documents;
+
+use crate::{events, private_files};
 
 const DIR_NAME: &str = "library";
 
@@ -331,9 +336,82 @@ fn is_the_item_itself(item: &ResolvedItem, destination: &Path) -> bool {
 	fs::canonicalize(destination).is_ok_and(|resolved| resolved == item.path)
 }
 
+pub(crate) fn create_document(
+	root: &Path,
+	space_id: &str,
+	name: &str,
+	template_id: Option<&str>,
+) -> Result<LibraryItem, LibraryError> {
+	let content = match template_id {
+		Some(id) => templates::markdown_of(id)?,
+		None => "",
+	};
+	let is_markdown = matches!(
+		accepted_type(name),
+		Some(AcceptedType::Document(LibraryDocumentFormat::Markdown))
+	);
+	if !is_markdown || !is_plain_name(name) {
+		return Err(LibraryError::InvalidName { name: name.to_owned() });
+	}
+	let path = space_dir(root, space_id).join(name);
+	private_files::write(&path, content.as_bytes()).map_err(|error| match error.kind() {
+		io::ErrorKind::AlreadyExists => LibraryError::AlreadyExists { name: name.to_owned() },
+		_ => unwritable(error),
+	})?;
+	item_at(&path, name.to_owned())?.ok_or_else(|| LibraryError::Missing { name: name.to_owned() })
+}
+
+pub(crate) fn open_document<R: Runtime>(
+	app: &AppHandle<R>,
+	root: &Path,
+	space_id: &str,
+	name: &str,
+) -> Result<LibraryDocumentState, LibraryError> {
+	let opened = documents(app).open(root, space_id, name)?;
+	if let Some(host_edit) = opened.host_edit {
+		announce(app, space_id, name, &host_edit);
+	}
+	Ok(LibraryDocumentState { name: name.to_owned(), update: BASE64_STANDARD.encode(opened.state) })
+}
+
+pub(crate) fn apply_update<R: Runtime>(
+	app: &AppHandle<R>,
+	root: &Path,
+	space_id: &str,
+	name: &str,
+	update: &str,
+) -> Result<(), LibraryError> {
+	let update = decoded_content(name, update)?;
+	let change = documents(app).apply(root, space_id, name, &update)?;
+	announce(app, space_id, name, &change);
+	Ok(())
+}
+
+fn announce<R: Runtime>(app: &AppHandle<R>, space_id: &str, name: &str, update: &[u8]) {
+	let updated = LibraryDocumentUpdated {
+		space_id: space_id.to_owned(),
+		name: name.to_owned(),
+		update: BASE64_STANDARD.encode(update),
+	};
+	if let Err(error) = events::emit(app, events::LIBRARY_DOCUMENT_UPDATED, updated) {
+		log::warn!(
+			"an update of a library document of space {space_id} was not announced: {error}"
+		);
+	}
+}
+
+fn documents<R: Runtime>(app: &AppHandle<R>) -> State<'_, Documents> {
+	if app.try_state::<Documents>().is_none() {
+		app.manage(Documents::default());
+	}
+	app.state::<Documents>()
+}
+
 pub fn forget_space<R: Runtime>(app: &AppHandle<R>, space_id: &str) {
-	let removed = root(app)
-		.and_then(|root| remove_space_dir(&root, space_id).map_err(|error| unreadable(&error)));
+	let removed = root(app).and_then(|root| {
+		documents(app).forget(&root, space_id).map_err(|error| unreadable(&error))?;
+		remove_space_dir(&root, space_id).map_err(|error| unreadable(&error))
+	});
 	if let Err(error) = removed {
 		log::warn!("the library of space {space_id} was left on disk: {error:?}");
 	}
@@ -386,4 +464,4 @@ fn created_where_recorded(metadata: &Metadata) -> Option<i64> {
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

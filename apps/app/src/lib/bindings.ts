@@ -42,6 +42,10 @@ export const commands = {
 	libraryReadFile: (spaceId: string, name: string) => typedError<LibraryFile, LibraryError>(__TAURI_INVOKE("library_read_file", { spaceId, name })),
 	librarySaveBytes: (name: string, content: string) => typedError<string | null, LibraryError>(__TAURI_INVOKE("library_save_bytes", { name, content })),
 	libraryCopyBytes: (name: string, content: string) => typedError<null, LibraryError>(__TAURI_INVOKE("library_copy_bytes", { name, content })),
+	libraryTemplates: () => __TAURI_INVOKE<LibraryTemplate[]>("library_templates"),
+	libraryCreateDocument: (spaceId: string, name: string, templateId: string | null) => typedError<LibraryItem, LibraryError>(__TAURI_INVOKE("library_create_document", { spaceId, name, templateId })),
+	libraryOpenDocument: (spaceId: string, name: string) => typedError<LibraryDocumentState, LibraryError>(__TAURI_INVOKE("library_open_document", { spaceId, name })),
+	libraryApplyUpdate: (spaceId: string, name: string, update: string) => typedError<null, LibraryError>(__TAURI_INVOKE("library_apply_update", { spaceId, name, update })),
 	badgeSet: (count: number) => typedError<null, string>(__TAURI_INVOKE("badge_set", { count })),
 	claudeImportInventory: () => typedError<ClaudeInventory, TranscriptStoreError>(__TAURI_INVOKE("claude_import_inventory")),
 	claudeImportRun: (selection: string[], spaceId: string) => typedError<ClaudeImportOutcome[], TranscriptStoreError>(__TAURI_INVOKE("claude_import_run", { selection, spaceId })),
@@ -334,6 +338,8 @@ export const JOINED_SPACE_RECONNECTED_EVENT = "joined-space://reconnected" as co
 export const JOINED_SPACE_REMOVED_EVENT = "joined-space://removed" as const;
 
 export const JOIN_LINK_OPENED_EVENT = "join-link://opened" as const;
+
+export const LIBRARY_DOCUMENT_UPDATED_EVENT = "library://document-updated" as const;
 
 export const MAXIMIZE_BUTTON_EVENT = "window-maximize-button" as const;
 
@@ -1168,7 +1174,18 @@ export type LibraryDocument = {
 
 export type LibraryDocumentFormat = "markdown" | "text";
 
-export type LibraryError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "unknownSpace"; id: string } | { kind: "invalidName"; name: string } | { kind: "missing"; name: string } | { kind: "notADocument"; name: string } | { kind: "notAnImage"; name: string } | { kind: "notUtf8"; name: string } | { kind: "tooLarge"; name: string; bytes: number; limit: number } | { kind: "unreadable"; detail: string } | { kind: "undecodable"; name: string; detail: string } | { kind: "unwritable"; detail: string } | { kind: "clipboardRefused"; detail: string } | { kind: "unrevealed"; detail: string };
+export type LibraryDocumentState = {
+	name: string,
+	update: string,
+};
+
+export type LibraryDocumentUpdated = {
+	spaceId: string,
+	name: string,
+	update: string,
+};
+
+export type LibraryError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "unknownSpace"; id: string } | { kind: "invalidName"; name: string } | { kind: "missing"; name: string } | { kind: "alreadyExists"; name: string } | { kind: "unknownTemplate"; id: string } | { kind: "notADocument"; name: string } | { kind: "notAnImage"; name: string } | { kind: "notUtf8"; name: string } | { kind: "tooLarge"; name: string; bytes: number; limit: number } | { kind: "unreadable"; detail: string } | { kind: "undecodable"; name: string; detail: string } | { kind: "unwritable"; detail: string } | { kind: "clipboardRefused"; detail: string } | { kind: "unrevealed"; detail: string };
 
 export type LibraryFile = {
 	name: string,
@@ -1192,6 +1209,11 @@ export type LibraryItem = {
 };
 
 export type LibraryItemKind = "image" | "document";
+
+export type LibraryTemplate = {
+	id: string,
+	title: string,
+};
 
 export type LiveSession = {
 	botId: string,

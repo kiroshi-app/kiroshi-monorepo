@@ -7,8 +7,8 @@ use tokio::sync::broadcast;
 
 use crate::{
 	account, agent, applications, claude_import, companions, conversations, devices, hosting,
-	invitations, joined_spaces, menu_contract, missions, notifications, routines, spaces, updates,
-	window_controls,
+	invitations, joined_spaces, library, menu_contract, missions, notifications, routines, spaces,
+	updates, window_controls,
 };
 
 pub const BUFFERED_FRAMES: usize = 1024;
@@ -113,6 +113,8 @@ declared! {
 		joined_spaces::members::MEMBERS_CHANGED_EVENT,
 	JOIN_LINK_OPENED: joined_spaces::deep_link::JoinLinkOpened =
 		joined_spaces::deep_link::OPENED_EVENT,
+	LIBRARY_DOCUMENT_UPDATED: library::contract::LibraryDocumentUpdated =
+		library::contract::DOCUMENT_UPDATED_EVENT,
 	MISSION_CHANGED: missions::commands::MissionChanged = missions::commands::CHANGED_EVENT,
 	NOTIFICATION_ACTIVATED: notifications::commands::NotificationTarget =
 		notifications::commands::ACTIVATED_EVENT,

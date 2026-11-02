@@ -1,19 +1,24 @@
 use std::fs::{self, File};
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
+use std::sync::mpsc;
 use std::time::{Duration, SystemTime};
 
 use image::{DynamicImage, ImageFormat, Rgb, RgbImage};
 use tauri::test::{mock_builder, MockRuntime};
-use tauri::{App, Manager};
+use tauri::{App, Listener, Manager};
 use uuid::Uuid;
+use yrs::updates::decoder::Decode;
+use yrs::{Doc, GetString, ReadTxn, StateVector, Text, Transact, Update};
 
 use super::commands::{
-	library_copy, library_list, library_read_document, library_read_file, library_read_image,
-	library_reveal, library_save,
+	library_apply_update, library_copy, library_create_document, library_list,
+	library_open_document, library_read_document, library_read_file, library_read_image,
+	library_reveal, library_save, library_templates,
 };
 use super::contract::{
-	LibraryDocumentFormat, LibraryError, LibraryFile, LibraryImage, LibraryItemKind,
+	LibraryDocumentFormat, LibraryDocumentUpdated, LibraryError, LibraryFile, LibraryImage,
+	LibraryItemKind, LibraryTemplate,
 };
 use super::*;
 use crate::db;
@@ -928,4 +933,386 @@ async fn undecodable_content_or_a_refused_name_never_opens_the_save_dialog() {
 		"{undecodable:?}"
 	);
 	assert_eq!(refused, Err(LibraryError::InvalidName { name: "../notes.md".to_owned() }));
+}
+
+pub(crate) struct YjsClient(Doc);
+
+impl YjsClient {
+	pub(crate) fn of(state: &str) -> Self {
+		let client = Self(Doc::new());
+		client.applied(state);
+		client
+	}
+
+	pub(crate) fn applied(&self, update: &str) {
+		let bytes = BASE64_STANDARD.decode(update).expect("a base64 update");
+		let update = Update::decode_v1(&bytes).expect("a yjs update");
+		self.0.transact_mut().apply_update(update).expect("the update applies");
+	}
+
+	pub(crate) fn inserted(&self, index: u32, chunk: &str) -> String {
+		let text = self.0.get_or_insert_text("markdown");
+		let before = self.0.transact().state_vector();
+		text.insert(&mut self.0.transact_mut(), index, chunk);
+		BASE64_STANDARD.encode(self.0.transact().encode_state_as_update_v1(&before))
+	}
+
+	pub(crate) fn text(&self) -> String {
+		self.0.get_or_insert_text("markdown").get_string(&self.0.transact())
+	}
+}
+
+fn state_vector_of(state: &[u8]) -> StateVector {
+	Update::decode_v1(state).expect("a yjs update").state_vector()
+}
+
+fn heard_updates(app: &App<MockRuntime>) -> mpsc::Receiver<LibraryDocumentUpdated> {
+	let (told, heard) = mpsc::channel();
+	app.listen_any(events::LIBRARY_DOCUMENT_UPDATED.name(), move |event| {
+		let updated = serde_json::from_str(event.payload()).expect("an update payload");
+		told.send(updated).expect("the test listens");
+	});
+	heard
+}
+
+fn heard_count(
+	heard: &mpsc::Receiver<LibraryDocumentUpdated>,
+	count: usize,
+) -> Vec<LibraryDocumentUpdated> {
+	(0..count)
+		.map(|_| heard.recv_timeout(Duration::from_secs(5)).expect("an update was announced"))
+		.collect()
+}
+
+async fn opened(app: &App<MockRuntime>, space_id: &str, name: &str) -> String {
+	library_open_document(app.handle().clone(), app.state(), space_id.to_owned(), name.to_owned())
+		.await
+		.expect("the document opens")
+		.update
+}
+
+async fn applied(
+	app: &App<MockRuntime>,
+	space_id: &str,
+	name: &str,
+	update: &str,
+) -> Result<(), LibraryError> {
+	library_apply_update(
+		app.handle().clone(),
+		app.state(),
+		space_id.to_owned(),
+		name.to_owned(),
+		update.to_owned(),
+	)
+	.await
+}
+
+async fn created(
+	app: &App<MockRuntime>,
+	space_id: &str,
+	name: &str,
+	template_id: Option<&str>,
+) -> Result<contract::LibraryItem, LibraryError> {
+	library_create_document(
+		app.handle().clone(),
+		app.state(),
+		space_id.to_owned(),
+		name.to_owned(),
+		template_id.map(str::to_owned),
+	)
+	.await
+}
+
+#[test]
+fn the_templates_list_as_id_and_title() {
+	let ids: Vec<(String, String)> =
+		library_templates().into_iter().map(|LibraryTemplate { id, title }| (id, title)).collect();
+
+	assert_eq!(
+		ids,
+		[
+			("meeting-notes", "Meeting notes"),
+			("project-brief", "Project brief"),
+			("decision-record", "Decision record"),
+			("weekly-update", "Weekly update"),
+		]
+		.map(|(id, title)| (id.to_owned(), title.to_owned()))
+	);
+}
+
+#[tokio::test]
+async fn a_blank_document_is_an_empty_markdown_file_listed_as_a_document() {
+	let app = a_host("create-blank");
+	let space_id = a_space(&app, "Work").await;
+	let root = root(app.handle()).expect("the library root resolves");
+
+	let item = created(&app, &space_id, "Plan.md", None).await.expect("the document lands");
+
+	assert_eq!(
+		(item.name.as_str(), item.kind, item.bytes),
+		("Plan.md", LibraryItemKind::Document, 0)
+	);
+	assert_eq!(fs::read_to_string(space_dir(&root, &space_id).join("Plan.md")).expect("read"), "");
+	assert_eq!(names(&root, &space_id), ["Plan.md"]);
+}
+
+#[tokio::test]
+async fn a_document_from_a_template_holds_the_template_markdown() {
+	let app = a_host("create-template");
+	let space_id = a_space(&app, "Work").await;
+	let root = root(app.handle()).expect("the library root resolves");
+
+	let item = created(&app, &space_id, "Brief.md", Some("project-brief")).await.expect("lands");
+
+	let content = fs::read_to_string(space_dir(&root, &space_id).join("Brief.md")).expect("read");
+	assert_eq!(content, templates::markdown_of("project-brief").expect("a template"));
+	assert!(content.starts_with("# Project brief\n"), "{content}");
+	assert_eq!((item.kind, item.bytes), (LibraryItemKind::Document, content.len() as u64));
+	assert_eq!(names(&root, &space_id), ["Brief.md"]);
+}
+
+#[tokio::test]
+async fn a_taken_unsafe_or_unknown_creation_is_refused_and_writes_nothing() {
+	let app = a_host("create-refused");
+	let space_id = a_space(&app, "Work").await;
+	let root = root(app.handle()).expect("the library root resolves");
+	put(&root, &space_id, "Plan.md", b"kept");
+
+	let refusals = [
+		("Plan.md", None, LibraryError::AlreadyExists { name: "Plan.md".to_owned() }),
+		("../Plan.md", None, LibraryError::InvalidName { name: "../Plan.md".to_owned() }),
+		(".hidden.md", None, LibraryError::InvalidName { name: ".hidden.md".to_owned() }),
+		("notes.txt", None, LibraryError::InvalidName { name: "notes.txt".to_owned() }),
+		("Fresh.md", Some("nope"), LibraryError::UnknownTemplate { id: "nope".to_owned() }),
+	];
+	for (name, template_id, refusal) in refusals {
+		assert_eq!(created(&app, &space_id, name, template_id).await, Err(refusal));
+	}
+	let unknown = created(&app, "nowhere", "Plan.md", None).await;
+
+	assert_eq!(unknown, Err(LibraryError::UnknownSpace { id: "nowhere".to_owned() }));
+	assert_eq!(names(&root, &space_id), ["Plan.md"]);
+	assert_eq!(fs::read(space_dir(&root, &space_id).join("Plan.md")).expect("read"), b"kept");
+	assert!(!root.join("Plan.md").exists());
+}
+
+async fn merged_in_order(is_host_first: bool) {
+	let app = a_host(&format!("merge-{is_host_first}"));
+	let space_id = a_space(&app, "Work").await;
+	let root = root(app.handle()).expect("the library root resolves");
+	put(&root, &space_id, "notes.md", b"base");
+	let heard = heard_updates(&app);
+	let base = opened(&app, &space_id, "notes.md").await;
+	let host = YjsClient::of(&base).inserted(0, "Host. ");
+	let member = YjsClient::of(&base).inserted(4, " Member.");
+
+	let ordered = if is_host_first { [&host, &member] } else { [&member, &host] };
+	for update in ordered {
+		applied(&app, &space_id, "notes.md", update).await.expect("the update merges");
+	}
+
+	let merged = "Host. base Member.";
+	let read = library_read_document(
+		app.handle().clone(),
+		app.state(),
+		space_id.clone(),
+		"notes.md".to_owned(),
+	)
+	.await
+	.expect("the document reads");
+	assert_eq!(read.content, merged);
+	assert_eq!(
+		fs::read_to_string(space_dir(&root, &space_id).join("notes.md")).expect("read"),
+		merged
+	);
+	let announced = heard_count(&heard, 3);
+	let observer = YjsClient::of(&base);
+	for updated in &announced {
+		assert_eq!(
+			(updated.space_id.as_str(), updated.name.as_str()),
+			(space_id.as_str(), "notes.md")
+		);
+		observer.applied(&updated.update);
+	}
+	assert_eq!(observer.text(), merged);
+	assert!(heard.try_recv().is_err());
+}
+
+#[tokio::test]
+async fn host_and_member_edits_on_one_base_merge_with_the_host_first() {
+	merged_in_order(true).await;
+}
+
+#[tokio::test]
+async fn host_and_member_edits_on_one_base_merge_with_the_member_first() {
+	merged_in_order(false).await;
+}
+
+#[tokio::test]
+async fn an_unknown_space_is_refused_an_open_or_an_update() {
+	let app = a_host("documents-unknown");
+
+	let open = library_open_document(
+		app.handle().clone(),
+		app.state(),
+		"nowhere".to_owned(),
+		"notes.md".to_owned(),
+	)
+	.await;
+	let update = applied(&app, "nowhere", "notes.md", "AAA=").await;
+
+	assert_eq!(open, Err(LibraryError::UnknownSpace { id: "nowhere".to_owned() }));
+	assert_eq!(update, Err(LibraryError::UnknownSpace { id: "nowhere".to_owned() }));
+}
+
+#[test]
+fn an_undecodable_update_leaves_the_document_and_the_file_unchanged() {
+	let root = temp_root();
+	put(&root, SPACE, "notes.md", b"base");
+	let documents = Documents::default();
+	let served = documents.open(&root, SPACE, "notes.md").expect("opens").state;
+
+	let refused = documents.apply(&root, SPACE, "notes.md", &[1, 2, 3]);
+
+	assert!(
+		matches!(&refused, Err(LibraryError::Undecodable { name, .. }) if name == "notes.md"),
+		"{refused:?}"
+	);
+	assert_eq!(documents.open(&root, SPACE, "notes.md").expect("opens").state, served);
+	assert_eq!(fs::read(space_dir(&root, SPACE).join("notes.md")).expect("read"), b"base");
+}
+
+#[test]
+fn an_update_past_the_size_limit_leaves_the_document_and_the_file_unchanged() {
+	let root = temp_root();
+	let base = "a".repeat(MAX_DOCUMENT_BYTES as usize - 2);
+	put(&root, SPACE, "big.md", base.as_bytes());
+	let documents = Documents::default();
+	let served = documents.open(&root, SPACE, "big.md").expect("opens").state;
+	let grown = YjsClient::of(&BASE64_STANDARD.encode(&served)).inserted(0, "xyz");
+
+	let refused =
+		documents.apply(&root, SPACE, "big.md", &BASE64_STANDARD.decode(grown).expect("base64"));
+
+	assert_eq!(
+		refused,
+		Err(LibraryError::TooLarge {
+			name: "big.md".to_owned(),
+			bytes: MAX_DOCUMENT_BYTES + 1,
+			limit: MAX_DOCUMENT_BYTES
+		})
+	);
+	assert_eq!(documents.open(&root, SPACE, "big.md").expect("opens").state, served);
+	assert_eq!(fs::read_to_string(space_dir(&root, SPACE).join("big.md")).expect("read"), base);
+}
+
+fn bytes_of(update: &str) -> Vec<u8> {
+	BASE64_STANDARD.decode(update).expect("base64")
+}
+
+#[test]
+fn an_update_made_before_a_restart_still_merges_after_it() {
+	let root = temp_root();
+	put(&root, SPACE, "notes.md", b"base");
+	let served = Documents::default().open(&root, SPACE, "notes.md").expect("opens").state;
+	let member = YjsClient::of(&BASE64_STANDARD.encode(&served)).inserted(4, " member");
+
+	let restarted = Documents::default();
+	restarted.apply(&root, SPACE, "notes.md", &bytes_of(&member)).expect("the update merges");
+
+	assert_eq!(
+		fs::read_to_string(space_dir(&root, SPACE).join("notes.md")).expect("read"),
+		"base member"
+	);
+}
+
+#[test]
+fn a_file_edited_outside_is_taken_as_one_host_edit_that_still_merges_with_members() {
+	let root = temp_root();
+	put(&root, SPACE, "notes.md", b"base");
+	let documents = Documents::default();
+	let served = documents.open(&root, SPACE, "notes.md").expect("opens").state;
+	let member = YjsClient::of(&BASE64_STANDARD.encode(&served)).inserted(0, "Member: ");
+	put(&root, SPACE, "notes.md", b"base, edited outside");
+
+	let reopened = documents.open(&root, SPACE, "notes.md").expect("opens");
+	documents.apply(&root, SPACE, "notes.md", &bytes_of(&member)).expect("the update merges");
+
+	assert!(reopened.host_edit.is_some());
+	assert_eq!(
+		YjsClient::of(&BASE64_STANDARD.encode(&reopened.state)).text(),
+		"base, edited outside"
+	);
+	assert_eq!(
+		fs::read_to_string(space_dir(&root, SPACE).join("notes.md")).expect("read"),
+		"Member: base, edited outside"
+	);
+}
+
+#[test]
+fn an_unchanged_file_opens_without_a_host_edit() {
+	let root = temp_root();
+	put(&root, SPACE, "notes.md", b"base");
+	let documents = Documents::default();
+	documents.open(&root, SPACE, "notes.md").expect("opens");
+
+	let reopened = documents.open(&root, SPACE, "notes.md").expect("opens");
+	let after_restart = Documents::default().open(&root, SPACE, "notes.md").expect("opens");
+
+	assert!(reopened.host_edit.is_none());
+	assert!(after_restart.host_edit.is_none());
+	assert_eq!(state_vector_of(&after_restart.state), state_vector_of(&reopened.state));
+}
+
+#[test]
+fn the_stored_state_stays_out_of_the_library_folder_and_its_listing() {
+	let root = temp_root();
+	put(&root, SPACE, "notes.md", b"base");
+	let documents = Documents::default();
+	let served = documents.open(&root, SPACE, "notes.md").expect("opens").state;
+	let member = YjsClient::of(&BASE64_STANDARD.encode(&served)).inserted(4, " member");
+	documents.apply(&root, SPACE, "notes.md", &bytes_of(&member)).expect("the update merges");
+
+	let in_the_folder: Vec<String> = fs::read_dir(space_dir(&root, SPACE))
+		.expect("the folder reads")
+		.map(|entry| entry.expect("an entry").file_name().to_string_lossy().into_owned())
+		.collect();
+
+	assert_eq!(names(&root, SPACE), ["notes.md"]);
+	assert_eq!(in_the_folder, ["notes.md"]);
+}
+
+#[test]
+fn a_forgotten_space_drops_its_documents_and_their_stored_state() {
+	let root = temp_root();
+	put(&root, SPACE, "notes.md", b"base");
+	put(&root, "kept", "notes.md", b"kept");
+	let documents = Documents::default();
+	let first = documents.open(&root, SPACE, "notes.md").expect("opens").state;
+	let kept = documents.open(&root, "kept", "notes.md").expect("opens").state;
+	let stored = fs::read_dir(root.join(".documents")).expect("the state folder reads").count();
+
+	documents.forget(&root, SPACE).expect("the space is forgotten");
+
+	assert_eq!(stored, 2);
+	assert!(!root.join(".documents").join(SPACE).exists());
+	let second = documents.open(&root, SPACE, "notes.md").expect("opens").state;
+	assert_ne!(state_vector_of(&second), state_vector_of(&first));
+	assert_eq!(documents.open(&root, "kept", "notes.md").expect("opens").state, kept);
+}
+
+#[tokio::test]
+async fn deleting_a_space_removes_the_stored_state_of_its_documents() {
+	let app = a_host("documents-deleted");
+	let space_id = a_space(&app, "Gone").await;
+	let root = root(app.handle()).expect("the library root resolves");
+	put(&root, &space_id, "notes.md", b"base");
+	opened(&app, &space_id, "notes.md").await;
+	assert!(root.join(".documents").join(&space_id).exists());
+
+	space_delete(app.handle().clone(), app.state(), space_id.clone())
+		.await
+		.expect("the space is deleted");
+
+	assert!(!root.join(".documents").join(&space_id).exists());
 }

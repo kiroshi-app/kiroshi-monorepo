@@ -7,10 +7,14 @@ use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 use tokio::sync::oneshot;
 
-use super::contract::{LibraryDocument, LibraryError, LibraryFile, LibraryImage, LibraryItem};
+use super::contract::{
+	LibraryDocument, LibraryDocumentState, LibraryError, LibraryFile, LibraryImage, LibraryItem,
+	LibraryTemplate,
+};
 use super::{
-	clipboard_payload, clipboard_payload_of_bytes, list, read_document, read_file, read_image,
-	resolve, root, save, save_bytes, ClipboardPayload,
+	apply_update, clipboard_payload, clipboard_payload_of_bytes, create_document, list,
+	open_document, read_document, read_file, read_image, resolve, root, save, save_bytes,
+	templates, ClipboardPayload,
 };
 use crate::db;
 use crate::logging::scrub::scrubbed;
@@ -70,6 +74,50 @@ pub async fn library_read_file<R: Runtime>(
 ) -> Result<LibraryFile, LibraryError> {
 	known_space(&state, &space_id).await?;
 	read_file(&root(&app)?, &space_id, &name)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn library_templates() -> Vec<LibraryTemplate> {
+	templates::listed()
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn library_create_document<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	space_id: String,
+	name: String,
+	template_id: Option<String>,
+) -> Result<LibraryItem, LibraryError> {
+	known_space(&state, &space_id).await?;
+	create_document(&root(&app)?, &space_id, &name, template_id.as_deref())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn library_open_document<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	space_id: String,
+	name: String,
+) -> Result<LibraryDocumentState, LibraryError> {
+	known_space(&state, &space_id).await?;
+	open_document(&app, &root(&app)?, &space_id, &name)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn library_apply_update<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	space_id: String,
+	name: String,
+	update: String,
+) -> Result<(), LibraryError> {
+	known_space(&state, &space_id).await?;
+	apply_update(&app, &root(&app)?, &space_id, &name, &update)
 }
 
 #[tauri::command]

@@ -3597,6 +3597,40 @@
         "text"
       ]
     },
+    "LibraryDocumentState": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "update": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "update"
+      ],
+      "type": "object"
+    },
+    "LibraryDocumentUpdated": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "spaceId": {
+          "type": "string"
+        },
+        "update": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "spaceId",
+        "name",
+        "update"
+      ],
+      "type": "object"
+    },
     "LibraryError": {
       "anyOf": [
         {
@@ -3671,6 +3705,36 @@
           "required": [
             "kind",
             "name"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "alreadyExists"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "name"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "unknownTemplate"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
           ],
           "type": "object"
         },
@@ -3907,6 +3971,21 @@
         "image",
         "document"
       ]
+    },
+    "LibraryTemplate": {
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title"
+      ],
+      "type": "object"
     },
     "LiveSession": {
       "properties": {
@@ -11228,6 +11307,66 @@
         "$ref": "#/$defs/SpaceMembers"
       }
     },
+    "library_apply_update": {
+      "args": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "spaceId": {
+            "type": "string"
+          },
+          "update": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spaceId",
+          "name",
+          "update"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/LibraryError"
+      },
+      "ok": {
+        "type": "null"
+      }
+    },
+    "library_create_document": {
+      "args": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "spaceId": {
+            "type": "string"
+          },
+          "templateId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "spaceId",
+          "name"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/LibraryError"
+      },
+      "ok": {
+        "$ref": "#/$defs/LibraryItem"
+      }
+    },
     "library_list": {
       "args": {
         "properties": {
@@ -11248,6 +11387,29 @@
           "$ref": "#/$defs/LibraryItem"
         },
         "type": "array"
+      }
+    },
+    "library_open_document": {
+      "args": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "spaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spaceId",
+          "name"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/LibraryError"
+      },
+      "ok": {
+        "$ref": "#/$defs/LibraryDocumentState"
       }
     },
     "library_read_document": {
@@ -11317,6 +11479,19 @@
       },
       "ok": {
         "$ref": "#/$defs/LibraryImage"
+      }
+    },
+    "library_templates": {
+      "args": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "ok": {
+        "items": {
+          "$ref": "#/$defs/LibraryTemplate"
+        },
+        "type": "array"
       }
     },
     "mcp_application_status": {
@@ -12573,6 +12748,11 @@
     "hosting://members-changed": {
       "payload": {
         "$ref": "#/$defs/MembersChanged"
+      }
+    },
+    "library://document-updated": {
+      "payload": {
+        "$ref": "#/$defs/LibraryDocumentUpdated"
       }
     },
     "mission://changed": {

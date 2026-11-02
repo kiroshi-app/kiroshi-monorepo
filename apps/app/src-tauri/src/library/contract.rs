@@ -52,6 +52,30 @@ pub struct LibraryFile {
 	pub content: String,
 }
 
+pub const DOCUMENT_UPDATED_EVENT: &str = "library://document-updated";
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryTemplate {
+	pub id: String,
+	pub title: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryDocumentState {
+	pub name: String,
+	pub update: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryDocumentUpdated {
+	pub space_id: String,
+	pub name: String,
+	pub update: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum LibraryError {
@@ -65,6 +89,10 @@ pub enum LibraryError {
 	InvalidName { name: String },
 	#[serde(rename_all = "camelCase")]
 	Missing { name: String },
+	#[serde(rename_all = "camelCase")]
+	AlreadyExists { name: String },
+	#[serde(rename_all = "camelCase")]
+	UnknownTemplate { id: String },
 	#[serde(rename_all = "camelCase")]
 	NotADocument { name: String },
 	#[serde(rename_all = "camelCase")]

@@ -120,6 +120,7 @@ sha2 = "0.10"
 # Zeroes every copy of a device secret and a subkey on drop. Already in the tree under the dalek
 # crates; named here so no crate enters the lockfile through this line.
 zeroize = "1"
+yrs = "0.28"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
