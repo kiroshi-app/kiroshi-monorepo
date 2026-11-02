@@ -210,11 +210,8 @@ import { useMissionSendFailure } from "@/lib/missions/use-mission-failure-notice
 import { useMissions } from "@/lib/missions/use-missions"
 import type { OnboardingCreation } from "@/lib/onboarding/onboarding-flow-controller"
 import { withoutOnboardingSummons } from "@/lib/onboarding/onboarding-summons"
-import {
-	type OnboardingTail,
-	signInTailOf,
-} from "@/lib/onboarding/onboarding-tail"
-import { usePostedOnboardingStep } from "@/lib/onboarding/use-posted-onboarding-step"
+import { type SignInStep, signInStepOf } from "@/lib/onboarding/sign-in-steps"
+import { usePostedSignInStep } from "@/lib/onboarding/use-posted-sign-in-step"
 import type { SignIn } from "@/lib/onboarding/use-sign-in"
 import { useInvokePhaseEnd } from "@/lib/perf/use-invoke-phase-end"
 import { useSkeletonSlot } from "@/lib/query/use-skeleton-slot"
@@ -1053,31 +1050,31 @@ const missionEventRowsAfter = ({
 		},
 	])
 
-type BotThreadTailProps = {
+type SoloThreadTailProps = {
 	thread: LoadedBotThread
 	face: ThreadFace
 	botWork: WorkingState | null
-	onboarding: OnboardingTail | null
+	signInStep: SignInStep | null
 	readerName: string
 	onStop: () => void
 }
 
-const BotThreadTail = ({
+const SoloThreadTail = ({
 	thread,
 	face,
 	botWork,
-	onboarding,
+	signInStep,
 	readerName,
 	onStop,
-}: BotThreadTailProps) => {
+}: SoloThreadTailProps) => {
 	const isStoppable =
 		canStopTurn(thread.state.turn) || thread.state.foreignTurn !== null
 	const stop: BotStopProps = isStoppable ? { stoppable: true, onStop } : {}
-	usePostedOnboardingStep({
+	usePostedSignInStep({
 		controller: thread.controller,
 		botId: thread.bot.id,
 		pendingId: thread.state.question?.id ?? null,
-		step: onboarding?.step ?? null,
+		step: signInStep,
 	})
 
 	return (
@@ -1163,11 +1160,11 @@ const ConversationThreadTail = ({
 	)
 }
 
-const signInTailFor = (
+const signInStepFor = (
 	thread: LoadedThread,
 	signIn: SignIn | undefined,
-): OnboardingTail | null =>
-	thread.kind === "bot" ? signInTailOf(signIn, thread.bot.id) : null
+): SignInStep | null =>
+	thread.kind === "bot" ? signInStepOf(signIn, thread.bot.id) : null
 
 const signInOfferOf = (
 	signIn: SignIn | undefined,
@@ -1176,15 +1173,15 @@ const signInOfferOf = (
 
 const showsEmptyState = (
 	rows: TranscriptItem[],
-	onboarding: OnboardingTail | null,
+	signInStep: SignInStep | null,
 	isFirstLoadPending: boolean,
-) => rows.length === 0 && !onboarding && !isFirstLoadPending
+) => rows.length === 0 && !signInStep && !isFirstLoadPending
 
 type ThreadTailProps = {
 	thread: LoadedThread
 	botWork: WorkingState | null
 	bots: RosterBot[]
-	onboarding: OnboardingTail | null
+	signInStep: SignInStep | null
 	readerName: string
 	refusedQuote?: QuotedMessage
 	onStop: () => void
@@ -1194,18 +1191,18 @@ const ThreadTail = ({
 	thread,
 	botWork,
 	bots,
-	onboarding,
+	signInStep,
 	readerName,
 	refusedQuote,
 	onStop,
 }: ThreadTailProps) =>
 	thread.kind === "bot" ? (
-		<BotThreadTail
+		<SoloThreadTail
 			botWork={botWork}
 			face={faceOfBot(thread.bot)}
-			onboarding={onboarding}
 			onStop={onStop}
 			readerName={readerName}
+			signInStep={signInStep}
 			thread={thread}
 		/>
 	) : (
@@ -1695,9 +1692,9 @@ const threadRowsOf = (
 	const refusedTarget = repliedToRefusal
 		? quotes.get(repliedToRefusal)
 		: undefined
-	const onboardingTail = signInTailFor(thread, signIn)
+	const signInStep = signInStepFor(thread, signIn)
 
-	return { onboardingTail, refusedTarget, transcriptRows }
+	return { refusedTarget, signInStep, transcriptRows }
 }
 
 const useThreadView = (props: ThreadViewProps) => {
@@ -1846,7 +1843,7 @@ function ThreadView(props: ThreadViewProps) {
 		>
 			{showsEmptyState(
 				view.transcriptRows,
-				view.onboardingTail,
+				view.signInStep,
 				view.facts.isFirstLoadPending,
 			) ? (
 				<ThreadEmptyState
@@ -1863,12 +1860,12 @@ function ThreadView(props: ThreadViewProps) {
 			<ThreadTail
 				botWork={view.facts.botWork}
 				bots={view.bots}
-				onboarding={view.onboardingTail}
 				onStop={view.stop}
 				readerName={view.reader}
 				refusedQuote={
 					view.refusedTarget ? view.toQuote(view.refusedTarget) : undefined
 				}
+				signInStep={view.signInStep}
 				thread={thread}
 			/>
 		</ThreadLayout>

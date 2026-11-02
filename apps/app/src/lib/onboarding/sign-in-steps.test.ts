@@ -7,38 +7,22 @@ import {
 	type FakeOnboardingPort,
 } from "./fake-onboarding-port"
 import {
-	createFakeOnboardingWorld,
-	type FakeOnboardingWorld,
-} from "./fake-onboarding-world"
-import {
-	createOnboardingController,
-	type OnboardingController,
-} from "./onboarding-controller"
-import {
-	type OnboardingStepQuestion,
-	onboardingStepOf,
-} from "./onboarding-steps"
-import { onboardingSummonsFor, type SummonOutcome } from "./onboarding-summons"
+	createSignInController,
+	type SignInController,
+} from "./sign-in-controller"
+import { type SignInStep, signInStepOf } from "./sign-in-steps"
 
 import type { AccountReport } from "../agent/contract"
+
+const BOT = "bot-1"
+
+const OTHER_BOT = "bot-other"
 
 const SIGN_IN_URL = "https://claude.ai/oauth/authorize?code=true"
 
 const CODE = "code#state"
 
 const API_KEY = "sk-ant-secret"
-
-const PENDING: SummonOutcome = { kind: "pending" }
-
-const ANSWERED: SummonOutcome = { kind: "answered" }
-
-const NOT_AUTHENTICATED: AccountReport = {
-	connection: "ready",
-	binaryVersion: null,
-	authenticated: false,
-	error: { kind: "notAuthenticated" },
-	account: null,
-}
 
 const DETECTED: AccountReport = {
 	connection: "ready",
@@ -49,20 +33,25 @@ const DETECTED: AccountReport = {
 }
 
 let port: FakeOnboardingPort
-let world: FakeOnboardingWorld
-let controller: OnboardingController
+let controller: SignInController
+let reopened: string[]
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0))
 
-const stepOf = (outcome: SummonOutcome = PENDING): OnboardingStepQuestion => {
-	const step = onboardingStepOf(controller.getState(), outcome, controller)
+const signInOf = (signInController: SignInController) => ({
+	state: signInController.getState(),
+	controller: signInController,
+})
+
+const stepOf = (): SignInStep => {
+	const step = signInStepOf(signInOf(controller), BOT)
 	if (!step) {
-		throw new Error("The onboarding asks nothing")
+		throw new Error("The sign-in asks nothing")
 	}
 	return step
 }
 
-const askedOf = (step: OnboardingStepQuestion) => {
+const askedOf = (step: SignInStep) => {
 	const [asked] = step.request.questions
 	if (!asked) {
 		throw new Error("The step holds no question")
@@ -70,10 +59,10 @@ const askedOf = (step: OnboardingStepQuestion) => {
 	return asked
 }
 
-const labelsOf = (step: OnboardingStepQuestion) =>
+const labelsOf = (step: SignInStep) =>
 	askedOf(step).options.map(({ label }) => label)
 
-const answer = (step: OnboardingStepQuestion, value: string) =>
+const answer = (step: SignInStep, value: string) =>
 	step.onAnswers({ [askedOf(step).question]: value })
 
 const commands = () => port.calls.map(({ command }) => command)
@@ -89,56 +78,38 @@ const waitingOnCode = async () => {
 	await flush()
 }
 
-beforeEach(async () => {
+beforeEach(() => {
 	port = createFakeOnboardingPort()
-	world = createFakeOnboardingWorld()
-	controller = createOnboardingController(port, world, {
-		reportFailure: () => undefined,
+	reopened = []
+	controller = createSignInController(port, {
+		reopen: async (botId) => {
+			reopened.push(botId)
+		},
 	})
+	controller.offer(BOT)
 })
 
-describe("the welcome step", () => {
-	it("is asked by options alone", () => {
-		const step = stepOf()
+describe("the sign-in step of a thread", () => {
+	it("asks nothing before the sign-in is offered", () => {
+		const idle = createSignInController(port, { reopen: async () => {} })
 
-		expect(askedOf(step).question).toBe("Ready to start?")
-		expect(askedOf(step).optionsOnly).toBe(true)
-		expect(labelsOf(step)).toEqual(["Start", "Tell me more first"])
-		expect(step.request.isPosted).toBe(true)
+		expect(signInStepOf(signInOf(idle), BOT)).toBeNull()
 	})
 
-	it("refuses an answer matching no option and asks on", async () => {
-		const step = stepOf()
-
-		await expect(answer(step, "with an API key")).rejects.toEqual({
-			kind: "unmatchedChoice",
-		})
-		expect(commands()).toEqual([])
-		expect(controller.getState().step).toBe("welcome")
+	it("asks nothing without a sign-in", () => {
+		expect(signInStepOf(undefined, BOT)).toBeNull()
 	})
 
-	it("starts on Start", async () => {
-		port.report = NOT_AUTHENTICATED
-
-		await answer(stepOf(), "Start")
-
-		expect(commands()).toEqual(["account"])
-		expect(controller.getState().connection).toEqual({ state: "offer" })
-	})
-
-	it("asks what the companion is for on Tell me more first", async () => {
-		port.report = { ...DETECTED, account: { email: null, plan: null } }
-
-		await answer(stepOf(), "Tell me more first")
-
-		expect(world.sent).toEqual([onboardingSummonsFor("purpose")])
+	it("asks nothing in another bot's thread", () => {
+		expect(signInStepOf(signInOf(controller), OTHER_BOT)).toBeNull()
 	})
 })
 
 describe("the account step", () => {
 	beforeEach(async () => {
 		port.report = DETECTED
-		await controller.start()
+		controller.askApiKey()
+		await answer(stepOf(), API_KEY)
 	})
 
 	it("offers the account found on this machine", () => {
@@ -154,7 +125,8 @@ describe("the account step", () => {
 	it("settles on Use this account", async () => {
 		await answer(stepOf(), "Use this account")
 
-		expect(controller.getState().step).toBe("summoned")
+		expect(controller.getState().connection).toBeNull()
+		expect(reopened).toEqual([BOT])
 	})
 
 	it("offers the sign-in on Use another account", async () => {
@@ -167,16 +139,17 @@ describe("the account step", () => {
 })
 
 describe("the access step", () => {
-	beforeEach(async () => {
-		port.report = NOT_AUTHENTICATED
-		await controller.start()
-	})
-
 	it("forks between signing in and pasting a key", () => {
 		expect(labelsOf(stepOf())).toEqual([
 			"Sign in with Claude",
 			"Paste an API key",
 		])
+	})
+
+	it("refuses an answer matching no option", async () => {
+		await expect(answer(stepOf(), "Something else")).rejects.toEqual({
+			kind: "unmatchedChoice",
+		})
 	})
 
 	it("signs in on Sign in with Claude", async () => {
@@ -197,11 +170,7 @@ describe("the access step", () => {
 })
 
 describe("the code step", () => {
-	beforeEach(async () => {
-		port.report = NOT_AUTHENTICATED
-		await controller.start()
-		await waitingOnCode()
-	})
+	beforeEach(waitingOnCode)
 
 	it("carries the announced url as its link", () => {
 		const asked = askedOf(stepOf())
@@ -234,9 +203,7 @@ describe("the code step", () => {
 })
 
 describe("the key step", () => {
-	beforeEach(async () => {
-		port.report = NOT_AUTHENTICATED
-		await controller.start()
+	beforeEach(() => {
 		controller.askApiKey()
 	})
 
@@ -311,8 +278,6 @@ describe("a refused sign-in whose run is still alive", () => {
 		"https://claude.ai/oauth/authorize?code=true&state=again"
 
 	beforeEach(async () => {
-		port.report = NOT_AUTHENTICATED
-		await controller.start()
 		await signingIn()
 		port.refusals.openSignInUrl = { kind: "refusedUrl" }
 		port.announceStarted(SIGN_IN_URL)
@@ -337,14 +302,12 @@ describe("a refused sign-in whose run is still alive", () => {
 
 		port.completeSignIn()
 		await flush()
-		expect(world.sent).toHaveLength(1)
+		expect(reopened).toEqual([BOT])
 	})
 })
 
 describe("the refused sign-in", () => {
 	beforeEach(async () => {
-		port.report = NOT_AUTHENTICATED
-		await controller.start()
 		await signingIn()
 		port.refuseSignIn({ kind: "failed", detail: "auth login exited with 1" })
 		await flush()
@@ -374,37 +337,5 @@ describe("the refused sign-in", () => {
 		await answer(stepOf(), "Paste an API key")
 
 		expect(controller.getState().connection).toEqual({ state: "apiKey" })
-	})
-})
-
-describe("the first reply step", () => {
-	beforeEach(async () => {
-		port.report = { ...DETECTED, account: { email: null, plan: null } }
-		await controller.start()
-	})
-
-	it("asks nothing before the reply came back", () => {
-		expect(
-			onboardingStepOf(controller.getState(), PENDING, controller),
-		).toBeNull()
-	})
-
-	it("summons Shoto for the first companion on Pick my first agent", async () => {
-		await answer(stepOf(ANSWERED), "Pick my first agent")
-
-		expect(world.sent.at(-1)).toBe(onboardingSummonsFor("firstCompanion"))
-		expect(controller.getState().step).toBe("done")
-		expect(world.firstRunDone).toBe(1)
-	})
-
-	it("ends the first run on Keep talking first", async () => {
-		await answer(stepOf(ANSWERED), "Keep talking first")
-
-		expect(controller.getState().step).toBe("done")
-		expect(world.firstRunDone).toBe(1)
-	})
-
-	it("keeps its id while it stays on screen", () => {
-		expect(stepOf(ANSWERED).request.id).toBe(stepOf(ANSWERED).request.id)
 	})
 })

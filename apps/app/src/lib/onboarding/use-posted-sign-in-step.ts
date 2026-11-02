@@ -1,22 +1,22 @@
 import { useEffect } from "react"
 
-import type { OnboardingStepQuestion } from "./onboarding-steps"
+import type { SignInStep } from "./sign-in-steps"
 
 import type { ChatController } from "../chat/chat-controller"
 
-type PostedOnboardingStepInput = {
+type PostedSignInStepInput = {
 	controller: ChatController
 	botId: string
 	pendingId: string | null
-	step: OnboardingStepQuestion | null
+	step: SignInStep | null
 }
 
-export const usePostedOnboardingStep = ({
+export const usePostedSignInStep = ({
 	controller,
 	botId,
 	pendingId,
 	step,
-}: PostedOnboardingStepInput) => {
+}: PostedSignInStepInput) => {
 	useEffect(() => {
 		if (pendingId && pendingId !== step?.request.id) {
 			controller.withdrawQuestion(botId, pendingId)

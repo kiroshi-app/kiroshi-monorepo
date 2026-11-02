@@ -387,7 +387,7 @@ describe("raiseReportedFailure", () => {
 				description:
 					"spawn /Users/ada/.kiroshi/agent failed for ada@example.com",
 			},
-			{ raisedIn: "onboarding-controller" },
+			{ raisedIn: "onboarding-flow-controller" },
 		)
 
 		expect((await raisedNotice()).description).toBe(
