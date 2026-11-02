@@ -117,6 +117,10 @@ const chat = {
 				description_other:
 					"Faites-les venir dans cette conversation, ou choisissez d’autres agents.",
 			},
+			summonLimit: {
+				description:
+					"Des agents ont déjà passé la main à {{name}} {{limit}} fois dans cet échange, alors l’échange s’arrête ici. Mentionnez {{name}} vous-même pour continuer.",
+			},
 		},
 	},
 	turn: {

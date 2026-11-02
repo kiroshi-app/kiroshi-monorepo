@@ -1,6 +1,6 @@
 const SUMMONS_DROP_REASONS = [
 	"selfMention",
-	"ranInTurn",
+	"summonLimit",
 	"interrupted",
 	"cancelled",
 	"notSeated",

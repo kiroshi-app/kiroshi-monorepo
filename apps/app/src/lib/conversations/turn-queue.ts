@@ -8,13 +8,15 @@ export type Summons = {
 export type TurnQueue = {
 	wave: Summons[]
 	waiting: Summons[]
-	endedBotIds: string[]
+	handedBotIds: string[]
 }
+
+export const MAX_SUMMONS_PER_CHAIN = 5
 
 export const emptyQueue: TurnQueue = {
 	wave: [],
 	waiting: [],
-	endedBotIds: [],
+	handedBotIds: [],
 }
 
 export const reopenedFor = (
@@ -23,7 +25,7 @@ export const reopenedFor = (
 ): TurnQueue => ({
 	...queue,
 	waiting: [...summoned],
-	endedBotIds: [],
+	handedBotIds: [],
 })
 
 export const openedWave = (queue: TurnQueue): TurnQueue =>
@@ -31,10 +33,11 @@ export const openedWave = (queue: TurnQueue): TurnQueue =>
 		? queue
 		: { ...queue, wave: queue.waiting, waiting: [] }
 
-export const endedIn = (queue: TurnQueue, botId: string): TurnQueue =>
-	queue.endedBotIds.includes(botId)
-		? queue
-		: { ...queue, endedBotIds: [...queue.endedBotIds, botId] }
+const isHeld = (queue: TurnQueue, botId: string) =>
+	queue.waiting.some((summons) => summons.botId === botId)
+
+const timesHanded = (queue: TurnQueue, botId: string) =>
+	queue.handedBotIds.filter((handed) => handed === botId).length
 
 export const refusalOf = (
 	queue: TurnQueue,
@@ -44,7 +47,12 @@ export const refusalOf = (
 	if (botId === from) {
 		return "selfMention"
 	}
-	return queue.endedBotIds.includes(botId) ? "ranInTurn" : null
+	if (isHeld(queue, botId)) {
+		return null
+	}
+	return timesHanded(queue, botId) >= MAX_SUMMONS_PER_CHAIN
+		? "summonLimit"
+		: null
 }
 
 export const handedOver = (
@@ -52,13 +60,13 @@ export const handedOver = (
 	from: string,
 	summons: Summons,
 ): TurnQueue => {
-	const isHeld = queue.waiting.some(({ botId }) => botId === summons.botId)
-	if (isHeld || refusalOf(queue, from, summons)) {
+	if (isHeld(queue, summons.botId) || refusalOf(queue, from, summons)) {
 		return queue
 	}
 	return {
 		...queue,
 		waiting: [...queue.waiting, summons],
+		handedBotIds: [...queue.handedBotIds, summons.botId],
 	}
 }
 

@@ -52,8 +52,8 @@ import {
 } from "./transcript-state"
 import {
 	emptyQueue,
-	endedIn,
 	handedOver,
+	MAX_SUMMONS_PER_CHAIN,
 	openedWave,
 	refusalOf,
 	reopenedFor,
@@ -265,7 +265,11 @@ const NO_SPEAKERS: SpeakingBot[] = []
 
 const NO_SESSION: TransportError = { kind: "notStarted" }
 
-const UNNOTICED_DROPS: SummonsDropped["reason"][] = ["selfMention", "notSeated"]
+const UNNOTICED_DROPS: SummonsDropReason[] = ["selfMention", "notSeated"]
+
+type NoticedDrop = Omit<SummonsDropped, "reason"> & {
+	reason: SummonsDropReason
+}
 
 type RunPlace = Pick<TranscriptMessage, "conversationId" | "turnId">
 
@@ -280,6 +284,19 @@ const notStartedDescriptionOf = (
 		: i18n.t("chat:transcript.mention.notStarted.description", {
 				count: names.length,
 			})
+
+const summonLimitDescriptionOf = (names: string[]) =>
+	i18n.t("chat:transcript.mention.summonLimit.description", {
+		name: names[0],
+		limit: MAX_SUMMONS_PER_CHAIN,
+	})
+
+const dropDescriberOf =
+	({ reason, error }: NoticedDrop) =>
+	(names: string[]) =>
+		reason === "summonLimit"
+			? summonLimitDescriptionOf(names)
+			: notStartedDescriptionOf(error ?? NO_SESSION, names)
 
 const isSameWork = (left: WorkingState | null, right: WorkingState | null) =>
 	left?.kind === right?.kind &&
@@ -802,6 +819,7 @@ export const createConversationController = (
 			const refusal = refusalOf(queue, fromBotId, summons)
 			if (refusal) {
 				traceSummonsDropped(run, refusal)
+				noteFrontDrop(turnId, botId, refusal)
 				continue
 			}
 			const running = speakers.get(botId)
@@ -845,7 +863,6 @@ export const createConversationController = (
 			return
 		}
 		speakers.delete(held.botId)
-		queue = endedIn(queue, held.botId)
 		settleOpenReplies(held, completion)
 		void shutdownSpeaker(held)
 		const handed = noteHandovers(held)
@@ -1282,7 +1299,8 @@ export const createConversationController = (
 	const raiseNotStarted = async (
 		run: RunPlace,
 		summoned: string[],
-		error: TransportError | null = null,
+		describe: (names: string[]) => string = (names) =>
+			notStartedDescriptionOf(null, names),
 	) => {
 		const botIds = claimUnnoticedRuns(run.turnId, summoned)
 		if (!conversation || botIds.length === 0) {
@@ -1298,7 +1316,7 @@ export const createConversationController = (
 						count,
 						names: names.join(i18n.t("chat:namelessConversation.separator")),
 					}),
-					description: notStartedDescriptionOf(error, names),
+					description: describe(names),
 				},
 				notStartedFacts(run, spaceId, botIds, names),
 			)
@@ -1320,7 +1338,7 @@ export const createConversationController = (
 		}
 	}
 
-	const noteDropped = (dropped: SummonsDropped) => {
+	const noteDropped = (dropped: NoticedDrop) => {
 		if (
 			!isOpenConversation(dropped.conversationId) ||
 			UNNOTICED_DROPS.includes(dropped.reason)
@@ -1329,7 +1347,24 @@ export const createConversationController = (
 		}
 		foreignTurns.fail(dropped)
 		sync()
-		void raiseNotStarted(dropped, [dropped.botId], dropped.error ?? NO_SESSION)
+		void raiseNotStarted(dropped, [dropped.botId], dropDescriberOf(dropped))
+	}
+
+	const noteFrontDrop = (
+		turnId: string,
+		botId: string,
+		reason: SummonsDropReason,
+	) => {
+		if (!conversation) {
+			return
+		}
+		noteDropped({
+			conversationId: conversation.id,
+			turnId,
+			botId,
+			reason,
+			error: null,
+		})
 	}
 
 	const nameFrom = async (conversationId: string, text: string) => {
