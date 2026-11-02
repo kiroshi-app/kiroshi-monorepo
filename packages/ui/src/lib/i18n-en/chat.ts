@@ -257,6 +257,18 @@ const chat = {
 		byViewer: "You answered",
 		byMember: "{{name}} answered",
 	},
+	interactiveView: {
+		madeBy: "View made by {{name}}",
+		modes: "View mode",
+		inline: "Inline",
+		pinned: "Pin",
+		fullscreen: "Full screen",
+	},
+	selectionQuote: {
+		label: "Selection · {{name}}",
+		group: "Selection quoted from {{name}}",
+		remove: "Remove the selection",
+	},
 	applicationInstall: {
 		openSettings: "Open Settings",
 		receipt: {
