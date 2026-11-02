@@ -7,7 +7,7 @@ use tauri::{LogicalPosition, PhysicalPosition, Position, Runtime, WebviewWindow}
 
 use super::secondary::ScreenPosition;
 
-pub(super) const FRAME: Duration = Duration::from_millis(16);
+const FRAME: Duration = Duration::from_millis(16);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
