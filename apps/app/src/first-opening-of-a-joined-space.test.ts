@@ -33,6 +33,7 @@ const wire = vi.hoisted(() => {
 vi.mock("@/lib/host/tauri", () => ({
 	invoke: wire.invokeHere,
 	emit: async () => undefined,
+	emitTo: async () => undefined,
 	listen: async () => () => undefined,
 	convertFileSrc: (path: string) => path,
 }))
