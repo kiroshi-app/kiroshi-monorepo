@@ -13,6 +13,11 @@ import {
 	type TranscriptNewer,
 	type TranscriptOlder,
 } from "@workspace/ui/components/transcript"
+import { cn } from "@workspace/ui/lib/utils"
+
+const THREAD_COLUMN = "mx-auto max-w-182"
+
+const THREAD_PROMPT_COLUMN = "mx-auto max-w-182 px-1"
 
 interface ThreadLayoutProps {
 	header?: ReactNode
@@ -70,7 +75,7 @@ function ThreadLayout({
 			ref={rootRef}
 			data-slot="chat-layout"
 			className={className}
-			contentClassName={contentClassName}
+			contentClassName={cn(THREAD_COLUMN, contentClassName)}
 			header={header}
 			scroller={(columnClassName) =>
 				skeleton ? (
@@ -112,7 +117,7 @@ function ThreadLayout({
 					</>
 				) : null
 			}
-			footerClassName={composer ? undefined : "px-12 pb-6"}
+			footerClassName={composer ? THREAD_PROMPT_COLUMN : "px-12 pb-6"}
 		/>
 	)
 }

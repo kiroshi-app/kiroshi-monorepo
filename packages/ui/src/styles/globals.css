@@ -105,6 +105,7 @@
 	--color-user-bubble: var(--user-bubble);
 	--color-user-bubble-foreground: var(--user-bubble-foreground);
 	--color-user-bubble-hover: var(--user-bubble-hover);
+	--color-user-bubble-muted-foreground: var(--user-bubble-muted-foreground);
 	--color-bubble: var(--bubble);
 	--color-bubble-hover: var(--bubble-hover);
 	--color-bubble-foreground: var(--bubble-foreground);

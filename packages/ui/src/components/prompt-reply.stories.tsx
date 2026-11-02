@@ -172,10 +172,10 @@ export const Alignment = meta.story({
 		await expect(dismiss.right).toBeCloseTo(send.right, 1)
 		await expect(quote.left).toBeCloseTo(placeholderLeft, 1)
 		await expect(quote.top - frame.getBoundingClientRect().top).toBeCloseTo(
-			8,
+			12,
 			1,
 		)
-		await expect((composer?.top ?? 0) - quote.bottom).toBeCloseTo(8, 1)
+		await expect((composer?.top ?? 0) - quote.bottom).toBeCloseTo(12, 1)
 	},
 })
 

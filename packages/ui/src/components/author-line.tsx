@@ -38,6 +38,7 @@ type AuthorLineBadgeProps = {
 
 type AuthorLineActionsProps = {
 	actions: ReactNode
+	isOnOwnBubble: boolean
 }
 
 type AuthorLineFailedProps = {
@@ -56,15 +57,27 @@ const AUTHOR_LINE_STICKY =
 const NAME_TONE = {
 	agent: "text-primary",
 	person: "text-soft-foreground",
-	you: "text-foreground",
+	you: "text-user-bubble-foreground",
 	deleted: "text-muted-foreground",
 } as const satisfies Record<AuthorLineTone, string>
 
 const REVEALS_WITH_BUBBLE =
 	"hidden group-focus-within/bubble-content:flex group-hover/bubble-content:flex"
 
-const AuthorLineDivider = () => (
-	<span aria-hidden="true" className="h-3 w-px shrink-0 bg-foreground/12" />
+type AuthorLineDividerProps = {
+	isOnOwnBubble?: boolean
+}
+
+const AuthorLineDivider = ({
+	isOnOwnBubble = false,
+}: AuthorLineDividerProps) => (
+	<span
+		aria-hidden="true"
+		className={cn(
+			"h-3 w-px shrink-0",
+			isOnOwnBubble ? "bg-user-bubble-foreground/12" : "bg-foreground/12",
+		)}
+	/>
 )
 
 const AuthorLineName = ({ tone, name, hue }: AuthorLineNameProps) => {
@@ -94,12 +107,19 @@ const AuthorLineBadge = ({ badge }: AuthorLineBadgeProps) => (
 	</span>
 )
 
-const AuthorLineActions = ({ actions }: AuthorLineActionsProps) => (
+const AuthorLineActions = ({
+	actions,
+	isOnOwnBubble,
+}: AuthorLineActionsProps) => (
 	<span
 		data-slot="author-line-actions"
-		className={cn("shrink-0 items-center gap-2", REVEALS_WITH_BUBBLE)}
+		className={cn(
+			"shrink-0 items-center gap-2",
+			REVEALS_WITH_BUBBLE,
+			isOnOwnBubble && "[&_button]:text-user-bubble-muted-foreground",
+		)}
 	>
-		<AuthorLineDivider />
+		<AuthorLineDivider isOnOwnBubble={isOnOwnBubble} />
 		<span className="flex items-center gap-0.5">{actions}</span>
 	</span>
 )
@@ -159,13 +179,23 @@ const AuthorLine = ({
 	className,
 }: AuthorLineProps) => {
 	const isEndSide = tone === "person" || tone === "you"
+	const isOnOwnBubble = tone === "you"
 	const shownTime =
 		time && end !== "failed" ? (
-			<span className="shrink-0 text-muted-foreground text-xs leading-5">
+			<span
+				className={cn(
+					"shrink-0 text-xs leading-5",
+					isOnOwnBubble
+						? "text-user-bubble-muted-foreground"
+						: "text-muted-foreground",
+				)}
+			>
 				{time}
 			</span>
 		) : null
-	const actionRow = actions ? <AuthorLineActions actions={actions} /> : null
+	const actionRow = actions ? (
+		<AuthorLineActions actions={actions} isOnOwnBubble={isOnOwnBubble} />
+	) : null
 
 	return (
 		<div

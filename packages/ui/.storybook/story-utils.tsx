@@ -708,7 +708,7 @@ export const expectSkeletonClippedAtBottomOf = async (surface: HTMLElement) => {
 
 const surfaceOf = (frame: HTMLElement) => frame.parentElement ?? document.body
 
-export const expectFieldFrame = async (
+const expectFieldFrame = async (
 	frame: HTMLElement,
 	outline: "border-input" | "border-border" = "border-input",
 ) => {

@@ -521,7 +521,7 @@ export const WithAttachments = meta.story({
 		docs: {
 			description: {
 				story:
-					"Files staged for the turn: the chips take the top of the composer, inside the same container as the text, and the composer holds its expanded shape whatever the prompt is worth. This is also the story for the two silent ways in — a drop on the composer and a paste into the textarea both report their files to `onAttach` and suppress the browser's own handling, while a drop carrying no file and a paste carrying text are handed straight back to it. Check that the row never overlaps the text, that dropping is suppressed rather than opening the file in a new tab, and that the composer folds back to the pill once the last chip is taken back — `PromptAttachments → InComposer` does the removing. " +
+					"Files staged for the turn: the chips take the top of the composer, inside the same container as the text, and the text keeps one row with the add and send buttons beside it, as artboard PromptInput states draws it. This is also the story for the two silent ways in — a drop on the composer and a paste into the textarea both report their files to `onAttach` and suppress the browser's own handling, while a drop carrying no file and a paste carrying text are handed straight back to it. Check that the row never overlaps the text and that dropping is suppressed rather than opening the file in a new tab. " +
 					MOUNTED_BY_THE_COMPOSER,
 			},
 		},
@@ -531,7 +531,7 @@ export const WithAttachments = meta.story({
 		const form = formOf(textarea)
 		const chip = canvas.getAllByRole("listitem")[0]
 
-		await expect(isExpanded(textarea)).toBe(true)
+		await expect(isExpanded(textarea)).toBe(false)
 		await expect(box(chip).bottom).toBeLessThanOrEqual(box(textarea).top)
 
 		await expect(drag("drop", form, draggingFile())).toBe(true)

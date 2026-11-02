@@ -145,10 +145,15 @@
 	);
 	--user-bubble-muted-strength: 70%;
 	--user-bubble-hover: color-mix(in oklab, var(--user-bubble) 92%, black);
+	--user-bubble-muted-foreground: color-mix(
+		in oklab,
+		var(--user-bubble-foreground) var(--user-bubble-muted-strength),
+		var(--user-bubble)
+	);
 	--bubble: oklch(0 0 0 / 4%);
 	--bubble-hover: oklch(0 0 0 / 7%);
 	--bubble-foreground: var(--foreground);
-	--faint-foreground: #707075;
+	--faint-foreground: #67676c;
 	--disabled-foreground: #a3a3a8;
 	--on-foreground: #ffffff;
 	--waiting-foreground: #8a6400;

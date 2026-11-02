@@ -379,6 +379,7 @@ const NotSent = ({ reason, onRetry }: NotSentProps) => {
 
 function UserTurn({
 	children,
+	name,
 	state = "complete",
 	sentAt,
 	now,
@@ -404,7 +405,7 @@ function UserTurn({
 		<AuthorLine
 			tone="you"
 			name={t("turn.you")}
-			avatar={<InitialsAvatar size={AUTHOR_AVATAR_SIZE} />}
+			avatar={<InitialsAvatar name={name} size={AUTHOR_AVATAR_SIZE} />}
 			time={sentTimeOf(sentAt, now)}
 			actions={turnActionsOf(actions)}
 		/>

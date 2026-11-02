@@ -210,20 +210,24 @@ export const InWave = meta.story({
 		docs: {
 			description: {
 				story:
-					"A wave of three companions working at once, each with a start instant of its own. Check that all three labels are readable with the pointer off the panel, that each row carries exactly one clock and that the three clocks line up on the end edge — the tabular figures are there so a digit rolling over does not move the column. Pick `MarkPerBot` for a wave where only one companion holds the turn.",
+					"A wave of three companions working at once, each with a start instant of its own. Check that all three labels are readable with the pointer off the panel, that each row carries exactly one clock and that each clock sits 8 after its own label, in tabular figures so a digit rolling over does not shake the line. Pick `MarkPerBot` for a wave where only one companion holds the turn.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
 		const clocks = slotsIn(canvasElement, "bot-working-elapsed")
-		const ends = clocks.map((clock) =>
-			Math.round(clock.getBoundingClientRect().right),
-		)
+		const labels = slotsIn(canvasElement, "bot-working-label")
 
 		await expect(clocks).toHaveLength(ROOM_BOTS.length)
-		await expect(new Set(ends).size).toBe(1)
-		for (const label of slotsIn(canvasElement, "bot-working-label"))
+		for (const [index, label] of labels.entries()) {
 			await expect(label).toBeVisible()
+			await expect(
+				Math.round(
+					clocks[index].getBoundingClientRect().left -
+						label.getBoundingClientRect().right,
+				),
+			).toBe(8)
+		}
 	},
 })
 

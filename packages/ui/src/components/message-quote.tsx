@@ -37,7 +37,7 @@ const QUOTE_SIZE = {
 	},
 	md: {
 		body: "gap-1 p-1",
-		row: "gap-1 px-[calc(0.5rem+1px)] py-2",
+		row: "gap-3 px-[calc(0.5rem+1px)] py-2",
 		glyphBox: "size-8",
 		glyph: "size-4",
 	},

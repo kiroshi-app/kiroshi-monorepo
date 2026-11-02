@@ -115,7 +115,7 @@ export const InComposer = meta.story({
 		docs: {
 			description: {
 				story:
-					"The row in its only host, with the attach button in the composer's `leading` slot. Check that the chips sit inside the composer above the text rather than over or under it, that the composer stays in its expanded shape while a chip is staged, and that removing the last chip folds it back into the pill. Removal is live here, so the row can be emptied by hand. `apps/app/src/components/thread-composer.tsx:117` is the composer this row sits in, with the attach button of `apps/app/src/components/thread-composer.tsx:127` beside it.",
+					"The row in its only host, with the attach button in the composer's `leading` slot. Check that the chips sit inside the composer above the text rather than over or under it, that the text keeps one row beside the add and send buttons while a chip is staged, and that removing the last chip leaves the pill as it was. Removal is live here, so the row can be emptied by hand. `apps/app/src/components/thread-composer.tsx:117` is the composer this row sits in, with the attach button of `apps/app/src/components/thread-composer.tsx:127` beside it.",
 			},
 		},
 	},
@@ -123,7 +123,7 @@ export const InComposer = meta.story({
 		const composer = canvas.getByRole("textbox", { name: "Message" })
 		const form = composer.closest("form")
 
-		await expect(form?.dataset.expanded).toBe("true")
+		await expect(form?.dataset.expanded).toBe("false")
 		await expect(
 			canvas.getByRole("button", { name: "Attach files" }),
 		).toBeEnabled()

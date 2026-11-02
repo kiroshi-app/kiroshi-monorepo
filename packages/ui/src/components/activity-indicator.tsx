@@ -203,7 +203,7 @@ function ActivityIndicator(props: ActivityIndicatorProps) {
 				<span
 					data-slot="bot-working-label"
 					className={cn(
-						"block min-w-0 max-w-full flex-1 truncate text-compact leading-5",
+						"block min-w-0 max-w-full truncate text-compact leading-5",
 						labelToneOf(kind, waitingOn),
 						props.stoppable &&
 							"group-focus-within/work:hidden group-hover/work:hidden",

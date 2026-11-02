@@ -140,6 +140,9 @@ const chat = {
 		notSent: "Non envoyé.",
 		notSentBecause: "Non envoyé. {{reason}}",
 	},
+	richBlock: {
+		building: "Construction de la vue…",
+	},
 	queue: {
 		title_one:
 			"En file · {{count}} · part une fois la réponse de {{name}} terminée",

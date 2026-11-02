@@ -129,6 +129,9 @@ const chat = {
 		notSent: "Not sent.",
 		notSentBecause: "Not sent. {{reason}}",
 	},
+	richBlock: {
+		building: "Building the view…",
+	},
 	queue: {
 		title_one: "Queued · {{count}} · goes once {{name}}’s answer is done",
 		title_other: "Queued · {{count}} · go once {{name}}’s answer is done",
