@@ -22,9 +22,11 @@ const CONVERSATIONS: &str = "skills/conversations/SKILL.md";
 
 const INSTALLS: &str = "skills/applications/SKILL.md";
 
+const RICH_ANSWERS: &str = "skills/rich-answers/SKILL.md";
+
 const TRIGGERS: &str = ".triggers.json";
 
-const FILES: [(&str, &[u8]); 10] = [
+const FILES: [(&str, &[u8]); 11] = [
 	(MANIFEST, include_bytes!("../../plugins/kiroshi/.claude-plugin/plugin.json")),
 	(TRIGGERS, include_bytes!("../../plugins/kiroshi/.triggers.json")),
 	(LEARN, include_bytes!("../../plugins/kiroshi/skills/learn/SKILL.md")),
@@ -32,6 +34,7 @@ const FILES: [(&str, &[u8]); 10] = [
 	(INSTALLS, include_bytes!("../../plugins/kiroshi/skills/applications/SKILL.md")),
 	(MISSIONS, include_bytes!("../../plugins/kiroshi/skills/missions/SKILL.md")),
 	(CONVERSATIONS, include_bytes!("../../plugins/kiroshi/skills/conversations/SKILL.md")),
+	(RICH_ANSWERS, include_bytes!("../../plugins/kiroshi/skills/rich-answers/SKILL.md")),
 	(
 		"skills/learn/references/skills.md",
 		include_bytes!("../../plugins/kiroshi/skills/learn/references/skills.md"),
@@ -316,6 +319,91 @@ mod tests {
 			"One offer per subject, never a second application.",
 			"Never call `application_install` here.",
 			"When the person has turned an offer down, you never raise it again in this conversation.",
+		] {
+			assert!(said_in_one_breath.contains(said), "{said} is missing");
+		}
+	}
+
+	fn rich_answer_reference() -> String {
+		let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+			.join("../../../docs/chat/rich-answer-blocks.md");
+		fs::read_to_string(path).expect("the rich answer reference reads")
+	}
+
+	fn block_sections(reference: &str) -> Vec<&str> {
+		reference
+			.split("\n## Blocks\n")
+			.nth(1)
+			.expect("the reference lists its blocks")
+			.split("\n## ")
+			.next()
+			.expect("the blocks section ends")
+			.split("\n### ")
+			.skip(1)
+			.collect()
+	}
+
+	fn line_after<'a>(section: &'a str, prefix: &str) -> &'a str {
+		section
+			.lines()
+			.find_map(|line| line.strip_prefix(prefix))
+			.unwrap_or_else(|| panic!("{prefix} is missing from {section}"))
+	}
+
+	fn form_of(section: &str) -> &str {
+		line_after(section, "Form: `")
+			.strip_suffix('`')
+			.map(str::trim)
+			.unwrap_or_else(|| panic!("the form of {section} closes its code span"))
+	}
+
+	fn example_of(section: &str) -> &str {
+		section
+			.split("````markdown\n")
+			.nth(1)
+			.and_then(|rest| rest.split("\n````").next())
+			.unwrap_or_else(|| panic!("the example of {section} is missing"))
+	}
+
+	#[test]
+	fn the_rich_answers_skill_is_preloaded_and_names_every_block_of_the_reference() {
+		let text = String::from_utf8_lossy(embedded(RICH_ANSWERS));
+		let reference = rich_answer_reference();
+		let sections = block_sections(&reference);
+
+		assert!(text.contains("disable-model-invocation: true"), "got {text}");
+		assert!(text.contains("preload: true"), "got {text}");
+		assert_eq!(sections.len(), 11, "the reference names eleven blocks");
+		for section in sections {
+			let form = form_of(section);
+			assert!(text.contains(form), "{form} is missing");
+		}
+	}
+
+	#[test]
+	fn the_rich_answers_skill_states_the_syntax_of_the_reference() {
+		let text = String::from_utf8_lossy(embedded(RICH_ANSWERS));
+		let reference = rich_answer_reference();
+
+		for section in block_sections(&reference) {
+			let example = example_of(section);
+			assert!(text.contains(example), "{example} is missing");
+		}
+		let functions = line_after(&reference, "Functions: ");
+		assert!(text.contains(&format!("Functions: {functions}")), "{functions} is missing");
+	}
+
+	#[test]
+	fn the_rich_answers_skill_picks_a_block_only_for_its_shape() {
+		let text = String::from_utf8_lossy(embedded(RICH_ANSWERS));
+		let said_in_one_breath = text.split_whitespace().collect::<Vec<_>>().join(" ");
+
+		for said in [
+			"Pick a block only when the content has that shape, and answer in plain prose otherwise.",
+			"When a person asks for a checklist of steps, write the checklist block.",
+			"When a person asks for options to explore, write the options card.",
+			"never JSON and never HTML",
+			"Never put a script, HTML, a network fetch, a storage access or a name that is not a declared slider in it.",
 		] {
 			assert!(said_in_one_breath.contains(said), "{said} is missing");
 		}
