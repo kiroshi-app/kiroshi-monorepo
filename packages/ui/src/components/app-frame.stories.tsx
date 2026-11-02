@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { expect, fn, waitFor, within } from "storybook/test"
+import { expect, fn, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { slotIn } from "@workspace/storybook/story-utils"
@@ -333,9 +333,7 @@ const holding = (page: FramePage) => ({
 			await expect(shown.rails).toHaveLength(1)
 			await expect(shown.titleBars[0]).toBe(titleBar)
 			await expect(shown.rails[0]).toBe(rail)
-			await waitFor(() =>
-				expect(geometryOf(titleBar)).toEqual(titleBarGeometry),
-			)
+			await expect(geometryOf(titleBar)).toEqual(titleBarGeometry)
 			await expect(geometryOf(rail)).toEqual(railGeometry)
 		}
 	},
