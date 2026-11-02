@@ -12,13 +12,14 @@ use yrs::updates::decoder::Decode;
 use yrs::{Doc, GetString, ReadTxn, StateVector, Text, Transact, Update};
 
 use super::commands::{
-	library_apply_update, library_copy, library_create_document, library_list,
-	library_open_document, library_read_document, library_read_file, library_read_image,
-	library_reveal, library_save, library_templates,
+	library_apply_update, library_copy, library_create_document, library_import,
+	library_import_paths, library_list, library_open_document, library_read_document,
+	library_read_file, library_read_image, library_read_thumbnail, library_reveal, library_save,
+	library_templates,
 };
 use super::contract::{
 	LibraryDocumentFormat, LibraryDocumentUpdated, LibraryError, LibraryFile, LibraryImage,
-	LibraryItemKind, LibraryTemplate,
+	LibraryImport, LibraryItem, LibraryItemKind, LibraryTemplate,
 };
 use super::*;
 use crate::db;
@@ -1419,4 +1420,369 @@ async fn deleting_a_space_removes_the_stored_state_of_its_documents() {
 		.expect("the space is deleted");
 
 	assert!(!root.join(".documents").join(&space_id).exists());
+}
+
+fn picture(width: u32, height: u32, red: u8) -> Vec<u8> {
+	let picture = DynamicImage::ImageRgb8(RgbImage::from_pixel(width, height, Rgb([red, 40, 10])));
+	let mut bytes = Cursor::new(Vec::new());
+	picture.write_to(&mut bytes, ImageFormat::Png).expect("the picture encodes");
+	bytes.into_inner()
+}
+
+fn imported_as(root: &Path, name: &str, bytes: &[u8]) -> Result<LibraryItem, LibraryError> {
+	import(root, SPACE, name, &base64_of(bytes))
+}
+
+fn entries(root: &Path) -> Vec<String> {
+	let Ok(listed) = fs::read_dir(space_dir(root, SPACE)) else {
+		return Vec::new();
+	};
+	let mut names: Vec<String> = listed
+		.map(|entry| entry.expect("the entry reads").file_name().to_string_lossy().into_owned())
+		.collect();
+	names.sort();
+	names
+}
+
+fn thumbnails(root: &Path) -> usize {
+	fs::read_dir(space_dir(root, SPACE).join(THUMBNAILS_DIR)).map_or(0, Iterator::count)
+}
+
+fn thumbnail_pixels(thumbnail: &LibraryImage) -> DynamicImage {
+	let png = BASE64_STANDARD.decode(&thumbnail.content).expect("the thumbnail is base64");
+	image::load_from_memory_with_format(&png, ImageFormat::Png).expect("the thumbnail decodes")
+}
+
+#[test]
+fn an_imported_image_and_document_are_listed_and_the_image_has_a_thumbnail_of_at_most_512() {
+	let root = temp_root();
+
+	let image = imported_as(&root, "cover.png", &picture(1200, 800, 200)).expect("the image lands");
+	let document = imported_as(&root, "notes.md", b"# notes").expect("the document lands");
+	let thumbnail = read_thumbnail(&root, SPACE, "cover.png").expect("the thumbnail reads");
+
+	let mut listed = list(&root, SPACE).expect("the library lists");
+	listed.sort_by(|a, b| a.name.cmp(&b.name));
+	assert_eq!(listed, [image, document]);
+	assert_eq!(thumbnails(&root), 1);
+	assert_eq!(entries(&root), [THUMBNAILS_DIR, "cover.png", "notes.md"]);
+	assert_eq!(thumbnail.mime_type, "image/png");
+	assert_eq!(
+		(thumbnail_pixels(&thumbnail).width(), thumbnail_pixels(&thumbnail).height()),
+		(512, 341)
+	);
+	assert_eq!(
+		read_document(&root, SPACE, "notes.md").expect("the document reads").content,
+		"# notes"
+	);
+}
+
+#[test]
+fn an_image_under_512_keeps_its_size_in_its_thumbnail() {
+	let root = temp_root();
+	imported_as(&root, "small.png", &picture(30, 20, 9)).expect("the image lands");
+
+	let thumbnail = read_thumbnail(&root, SPACE, "small.png").expect("the thumbnail reads");
+
+	assert_eq!(
+		(thumbnail_pixels(&thumbnail).width(), thumbnail_pixels(&thumbnail).height()),
+		(30, 20)
+	);
+}
+
+#[test]
+fn a_taken_name_lands_under_the_next_free_number_and_the_older_file_keeps_its_bytes() {
+	let root = temp_root();
+	put(&root, SPACE, "notes.md", b"first");
+
+	let second = imported_as(&root, "notes.md", b"second").expect("the second lands");
+	let third = imported_as(&root, "notes.md", b"third").expect("the third lands");
+	let image = imported_as(&root, "cover.png", &picture(2, 2, 1)).expect("the image lands");
+	let image_again = imported_as(&root, "cover.png", &picture(2, 2, 1)).expect("it lands again");
+
+	assert_eq!((second.name.as_str(), third.name.as_str()), ("notes (2).md", "notes (3).md"));
+	assert_eq!((image.name.as_str(), image_again.name.as_str()), ("cover.png", "cover (2).png"));
+	assert_eq!(read(&root, "notes.md").expect("the first reads").content, "first");
+	assert_eq!(read(&root, "notes (2).md").expect("the second reads").content, "second");
+	assert_eq!(read(&root, "notes (3).md").expect("the third reads").content, "third");
+}
+
+#[test]
+fn concurrent_imports_of_one_name_each_land_under_their_own_name() {
+	let root = temp_root();
+	let landed: Vec<(String, String)> = std::thread::scope(|scope| {
+		let imports: Vec<_> = (0..8)
+			.map(|index| {
+				let root = &root;
+				scope.spawn(move || {
+					let content = format!("import {index}");
+					let item = imported_as(root, "same.md", content.as_bytes()).expect("it lands");
+					(item.name, content)
+				})
+			})
+			.collect();
+		imports.into_iter().map(|import| import.join().expect("the import ends")).collect()
+	});
+
+	let mut names: Vec<&str> = landed.iter().map(|(name, _)| name.as_str()).collect();
+	names.sort_unstable();
+	names.dedup();
+	assert_eq!(names.len(), 8);
+	for (name, content) in &landed {
+		assert_eq!(&read(&root, name).expect("the import reads").content, content);
+	}
+	assert_eq!(entries(&root).len(), 8);
+}
+
+#[test]
+fn each_refused_import_says_why_and_writes_nothing() {
+	let root = temp_root();
+	let named = |name: &str| name.to_owned();
+	let document_limit = MAX_DOCUMENT_BYTES;
+	let relayed_limit = MAX_RELAYED_IMPORT_BYTES;
+
+	assert_eq!(
+		imported_as(&root, "../escape.md", b"x"),
+		Err(LibraryError::InvalidName { name: named("../escape.md") })
+	);
+	assert_eq!(
+		imported_as(&root, "song.mp3", b"x"),
+		Err(LibraryError::Unsupported { name: named("song.mp3") })
+	);
+	assert_eq!(
+		imported_as(&root, ".hidden.md", b"x"),
+		Err(LibraryError::Unsupported { name: named(".hidden.md") })
+	);
+	assert_eq!(
+		imported_as(&root, "big.md", &vec![b'a'; document_limit as usize + 1]),
+		Err(LibraryError::TooLarge {
+			name: named("big.md"),
+			bytes: document_limit + 1,
+			limit: document_limit
+		})
+	);
+	assert_eq!(
+		imported_as(&root, "big.png", &vec![0; relayed_limit as usize + 1]),
+		Err(LibraryError::TooLarge {
+			name: named("big.png"),
+			bytes: relayed_limit + 1,
+			limit: relayed_limit
+		})
+	);
+	assert!(matches!(
+		imported_as(&root, "broken.png", b"not a png"),
+		Err(LibraryError::Undecodable { name, .. }) if name == "broken.png"
+	));
+	assert!(matches!(
+		import(&root, SPACE, "notes.md", "not base64!"),
+		Err(LibraryError::Undecodable { name, .. }) if name == "notes.md"
+	));
+	assert_eq!(
+		imported_as(&root, "latin.md", &[0xff, 0xfe]),
+		Err(LibraryError::NotUtf8 { name: named("latin.md") })
+	);
+	assert!(entries(&root).is_empty());
+}
+
+#[test]
+fn a_link_that_fails_after_staging_removes_the_staged_file() {
+	let root = temp_root();
+	let longest = format!("{}.md", "a".repeat(252));
+	put(&root, SPACE, &longest, b"kept");
+
+	let refused = imported_as(&root, &longest, b"new");
+
+	assert!(matches!(refused, Err(LibraryError::Unwritable { .. })), "{refused:?}");
+	assert_eq!(entries(&root), [longest.as_str()]);
+	assert_eq!(read(&root, &longest).expect("the older file reads").content, "kept");
+}
+
+#[test]
+fn a_thumbnail_that_fails_to_store_takes_the_landed_image_back_out() {
+	let root = temp_root();
+	put(&root, SPACE, THUMBNAILS_DIR, b"a file where the folder goes");
+
+	let refused = imported_as(&root, "cover.png", &picture(4, 4, 1));
+
+	assert!(matches!(refused, Err(LibraryError::Unwritable { .. })), "{refused:?}");
+	assert_eq!(entries(&root), [THUMBNAILS_DIR]);
+}
+
+#[test]
+fn a_missing_thumbnail_is_produced_once_and_a_replaced_image_never_answers_the_older_one() {
+	let root = temp_root();
+	put(&root, SPACE, "cover.png", &picture(900, 300, 250));
+	touch(&root, SPACE, "cover.png", 1_000);
+
+	let first = read_thumbnail(&root, SPACE, "cover.png").expect("the thumbnail is produced");
+	let again = read_thumbnail(&root, SPACE, "cover.png").expect("the thumbnail is stored");
+	let stored = thumbnails(&root);
+	put(&root, SPACE, "cover.png", &picture(900, 300, 5));
+	touch(&root, SPACE, "cover.png", 2_000);
+	let replaced = read_thumbnail(&root, SPACE, "cover.png").expect("the new thumbnail reads");
+
+	assert_eq!(first, again);
+	assert_eq!(stored, 1);
+	assert_eq!((thumbnail_pixels(&first).width(), thumbnail_pixels(&first).height()), (512, 171));
+	assert_eq!(thumbnail_pixels(&first).to_rgb8().get_pixel(0, 0)[0], 250);
+	assert_eq!(thumbnail_pixels(&replaced).to_rgb8().get_pixel(0, 0)[0], 5);
+	assert_eq!(names(&root, SPACE), ["cover.png"]);
+}
+
+#[test]
+fn a_thumbnail_read_keeps_the_image_read_refusals() {
+	let root = temp_root();
+	put(&root, SPACE, "notes.md", b"notes");
+	put(&root, SPACE, "broken.png", b"not a png");
+
+	assert_eq!(
+		read_thumbnail(&root, SPACE, "notes.md"),
+		Err(LibraryError::NotAnImage { name: "notes.md".to_owned() })
+	);
+	assert_eq!(
+		read_thumbnail(&root, SPACE, "absent.png"),
+		Err(LibraryError::Missing { name: "absent.png".to_owned() })
+	);
+	assert_eq!(
+		read_thumbnail(&root, SPACE, "../s2/cover.png"),
+		Err(LibraryError::InvalidName { name: "../s2/cover.png".to_owned() })
+	);
+	assert!(matches!(
+		read_thumbnail(&root, SPACE, "broken.png"),
+		Err(LibraryError::Undecodable { name, .. }) if name == "broken.png"
+	));
+	assert_eq!(thumbnails(&root), 0);
+}
+
+#[test]
+fn dropped_paths_answer_one_result_each_in_their_order() {
+	let root = temp_root();
+	let dropped = temp_root();
+	fs::create_dir_all(&*dropped).expect("the drop folder lands");
+	fs::write(dropped.join("notes.md"), "dropped notes").expect("the document lands");
+	fs::write(dropped.join("song.mp3"), "la").expect("the song lands");
+	fs::write(dropped.join("cover.png"), picture(3, 3, 1)).expect("the image lands");
+	File::create(dropped.join("huge.md"))
+		.expect("the file lands")
+		.set_len(MAX_DOCUMENT_BYTES + 1)
+		.expect("the file grows");
+	let paths = ["notes.md", "song.mp3", "absent.png", "huge.md", "cover.png"]
+		.map(|name| dropped.join(name))
+		.to_vec();
+
+	let outcomes = import_paths(&root, SPACE, &paths);
+
+	let landed = |name: &str| {
+		let item = list(&root, SPACE)
+			.expect("the library lists")
+			.into_iter()
+			.find(|item| item.name == name);
+		LibraryImport::Imported { item: item.expect("the import is listed") }
+	};
+	assert_eq!(
+		outcomes,
+		[
+			landed("notes.md"),
+			LibraryImport::Refused {
+				error: LibraryError::Unsupported { name: "song.mp3".to_owned() }
+			},
+			LibraryImport::Refused {
+				error: LibraryError::Missing { name: "absent.png".to_owned() }
+			},
+			LibraryImport::Refused {
+				error: LibraryError::TooLarge {
+					name: "huge.md".to_owned(),
+					bytes: MAX_DOCUMENT_BYTES + 1,
+					limit: MAX_DOCUMENT_BYTES
+				}
+			},
+			landed("cover.png"),
+		]
+	);
+	assert_eq!(read(&root, "notes.md").expect("the document reads").content, "dropped notes");
+	assert_eq!(thumbnails(&root), 1);
+}
+
+#[test]
+fn a_dropped_image_takes_the_local_limit_above_the_relayed_one() {
+	let root = temp_root();
+	let dropped = temp_root();
+	fs::create_dir_all(&*dropped).expect("the drop folder lands");
+	let huge = dropped.join("huge.png");
+	File::create(&huge).expect("the file lands").set_len(MAX_IMAGE_BYTES + 1).expect("it grows");
+
+	let outcomes = import_paths(&root, SPACE, &[huge]);
+
+	assert_eq!(
+		outcomes,
+		[LibraryImport::Refused {
+			error: LibraryError::TooLarge {
+				name: "huge.png".to_owned(),
+				bytes: MAX_IMAGE_BYTES + 1,
+				limit: MAX_IMAGE_BYTES
+			}
+		}]
+	);
+}
+
+#[tokio::test]
+async fn the_import_commands_refuse_an_unknown_space_and_land_in_a_known_one() {
+	let app = a_host("import");
+	let space_id = a_space(&app, "Work").await;
+	let dropped = temp_root();
+	fs::create_dir_all(&*dropped).expect("the drop folder lands");
+	fs::write(dropped.join("dropped.md"), "dropped").expect("the document lands");
+	let unknown = || LibraryError::UnknownSpace { id: "nowhere".to_owned() };
+	let handle = || app.handle().clone();
+
+	let refused = library_import(
+		handle(),
+		app.state(),
+		"nowhere".to_owned(),
+		"notes.md".to_owned(),
+		base64_of(b"x"),
+	)
+	.await;
+	let refused_paths = library_import_paths(
+		handle(),
+		app.state(),
+		"nowhere".to_owned(),
+		vec![dropped.join("dropped.md")],
+	)
+	.await;
+	let refused_thumbnail =
+		library_read_thumbnail(handle(), app.state(), "nowhere".to_owned(), "cover.png".to_owned())
+			.await;
+	let sent = library_import(
+		handle(),
+		app.state(),
+		space_id.clone(),
+		"cover.png".to_owned(),
+		base64_of(&picture(600, 600, 1)),
+	)
+	.await
+	.expect("the sent image lands");
+	let dropped_outcomes = library_import_paths(
+		handle(),
+		app.state(),
+		space_id.clone(),
+		vec![dropped.join("dropped.md")],
+	)
+	.await
+	.expect("the drop is read");
+	let thumbnail =
+		library_read_thumbnail(handle(), app.state(), space_id.clone(), "cover.png".to_owned())
+			.await
+			.expect("the thumbnail reads");
+	let listed = library_list(handle(), app.state(), space_id).await.expect("the library lists");
+
+	assert_eq!(
+		(refused, refused_paths, refused_thumbnail),
+		(Err(unknown()), Err(unknown()), Err(unknown()))
+	);
+	assert!(
+		matches!(&dropped_outcomes[..], [LibraryImport::Imported { item }] if item.name == "dropped.md")
+	);
+	assert!(listed.contains(&sent));
+	assert_eq!(thumbnail_pixels(&thumbnail).width(), 512);
 }

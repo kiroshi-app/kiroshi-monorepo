@@ -3696,6 +3696,21 @@
         {
           "properties": {
             "kind": {
+              "const": "unsupported"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "name"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
               "const": "missing"
             },
             "name": {
@@ -11367,6 +11382,33 @@
         "$ref": "#/$defs/LibraryItem"
       }
     },
+    "library_import": {
+      "args": {
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "spaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spaceId",
+          "name",
+          "content"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/LibraryError"
+      },
+      "ok": {
+        "$ref": "#/$defs/LibraryItem"
+      }
+    },
     "library_list": {
       "args": {
         "properties": {
@@ -11459,6 +11501,29 @@
       }
     },
     "library_read_image": {
+      "args": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "spaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spaceId",
+          "name"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/LibraryError"
+      },
+      "ok": {
+        "$ref": "#/$defs/LibraryImage"
+      }
+    },
+    "library_read_thumbnail": {
       "args": {
         "properties": {
           "name": {

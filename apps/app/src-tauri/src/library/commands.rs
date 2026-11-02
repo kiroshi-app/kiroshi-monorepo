@@ -8,13 +8,13 @@ use tauri_plugin_opener::OpenerExt;
 use tokio::sync::oneshot;
 
 use super::contract::{
-	LibraryDocument, LibraryDocumentState, LibraryError, LibraryFile, LibraryImage, LibraryItem,
-	LibraryTemplate,
+	LibraryDocument, LibraryDocumentState, LibraryError, LibraryFile, LibraryImage, LibraryImport,
+	LibraryItem, LibraryTemplate,
 };
 use super::{
-	apply_update, clipboard_payload, clipboard_payload_of_bytes, create_document, list,
-	open_document, read_document, read_file, read_image, resolve, root, save, save_bytes,
-	templates, ClipboardPayload,
+	apply_update, clipboard_payload, clipboard_payload_of_bytes, create_document, import,
+	import_paths, list, open_document, read_document, read_file, read_image, read_thumbnail,
+	resolve, root, save, save_bytes, templates, ClipboardPayload,
 };
 use crate::db;
 use crate::logging::scrub::scrubbed;
@@ -118,6 +118,52 @@ pub async fn library_apply_update<R: Runtime>(
 ) -> Result<(), LibraryError> {
 	known_space(&state, &space_id).await?;
 	apply_update(&app, &root(&app)?, &space_id, &name, &update)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn library_read_thumbnail<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	space_id: String,
+	name: String,
+) -> Result<LibraryImage, LibraryError> {
+	known_space(&state, &space_id).await?;
+	let root = root(&app)?;
+	tokio::task::spawn_blocking(move || read_thumbnail(&root, &space_id, &name))
+		.await
+		.map_err(|error| LibraryError::Unreadable { detail: error.to_string() })?
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn library_import<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	space_id: String,
+	name: String,
+	content: String,
+) -> Result<LibraryItem, LibraryError> {
+	known_space(&state, &space_id).await?;
+	let root = root(&app)?;
+	tokio::task::spawn_blocking(move || import(&root, &space_id, &name, &content))
+		.await
+		.map_err(|error| LibraryError::Unwritable { detail: error.to_string() })?
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn library_import_paths<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	space_id: String,
+	paths: Vec<PathBuf>,
+) -> Result<Vec<LibraryImport>, LibraryError> {
+	known_space(&state, &space_id).await?;
+	let root = root(&app)?;
+	tokio::task::spawn_blocking(move || import_paths(&root, &space_id, &paths))
+		.await
+		.map_err(|error| LibraryError::Unwritable { detail: error.to_string() })
 }
 
 #[tauri::command]

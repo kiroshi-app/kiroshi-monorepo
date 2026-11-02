@@ -716,6 +716,24 @@ async fn host_effect_applied(
 				&text("update"),
 			));
 		}
+		"library_read_thumbnail" => {
+			let library = effects.library();
+			return answered_by_the_library(library::read_thumbnail(
+				&library,
+				&text("spaceId"),
+				&text("name"),
+			));
+		}
+		"library_import" => {
+			let library = effects.library();
+			let (space_id, name) = (text("spaceId"), text("name"));
+			return answered_by_the_library(library::import(
+				&library,
+				&space_id,
+				&name,
+				&text("content"),
+			));
+		}
 		"joined_space_remove" => {
 			database.joined_spaces().remove(text("id")).await.expect("the host leaves");
 		}
@@ -3317,6 +3335,164 @@ fn a_member_is_refused_an_oversized_or_escaping_library_file() {
 		assert_eq!(escaped["body"], json!({ "kind": "invalidName", "name": escaping }));
 		assert_eq!(guest.effects.reached(), ["library_read_file", "library_read_file"]);
 	});
+}
+
+#[test]
+fn a_member_imports_into_the_library_of_the_shared_space_only() {
+	run(kept_in_the_space_named(
+		"library_import",
+		|space_id| json!({ "spaceId": space_id, "name": "sent.md", "content": BASE64_STANDARD.encode("sent") }),
+	));
+}
+
+#[test]
+fn a_member_reads_a_library_thumbnail_of_the_shared_space_only() {
+	run(async {
+		let command = "library_read_thumbnail";
+		let mut guest = Guest::of_two_spaces(command).await;
+		let picture = BASE64_STANDARD.encode(a_png_of(800, 400));
+		let sent = json!({ "spaceId": PERSONAL, "name": "wide.png", "content": picture });
+		guest.forwarded("library_import", sent).await;
+
+		guest.refused(command, a_library_entry_of("wide.png")(ELSEWHERE)).await;
+		let read = guest.called(command, a_library_entry_of("wide.png")(PERSONAL)).await;
+
+		let png = BASE64_STANDARD.decode(read["body"]["content"].as_str().expect("base64"));
+		let thumbnail = image::load_from_memory(&png.expect("the thumbnail is base64"))
+			.expect("the thumbnail decodes");
+		assert_eq!((thumbnail.width(), thumbnail.height()), (512, 256));
+		assert_eq!(guest.effects.reached(), ["library_import", command]);
+	});
+}
+
+fn a_png_of(width: u32, height: u32) -> Vec<u8> {
+	let picture = image::RgbImage::from_pixel(width, height, image::Rgb([20, 30, 40]));
+	let mut png = std::io::Cursor::new(Vec::new());
+	picture.write_to(&mut png, image::ImageFormat::Png).expect("the picture encodes");
+	png.into_inner()
+}
+
+#[test]
+fn a_member_import_lands_in_the_host_folder_under_a_free_name() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("library-import").await;
+		let sent = |content: &str| json!({ "spaceId": PERSONAL, "name": "notes.md", "content": BASE64_STANDARD.encode(content) });
+
+		let imported = guest.called("library_import", sent("from a member")).await;
+		let refused = guest
+			.called(
+				"library_import",
+				json!({ "spaceId": PERSONAL, "name": "song.mp3", "content": "" }),
+			)
+			.await;
+
+		let shelf = guest.effects.library().join(PERSONAL);
+		assert_eq!(imported["status"], json!(200), "{imported}");
+		assert_eq!(imported["body"]["name"], json!("notes (2).md"));
+		assert_eq!(
+			std::fs::read_to_string(shelf.join("notes (2).md")).expect("the import landed"),
+			"from a member"
+		);
+		assert_eq!(
+			std::fs::read_to_string(shelf.join("notes.md")).expect("kept"),
+			"notes of personal"
+		);
+		assert_eq!(refused["body"], json!({ "kind": "unsupported", "name": "song.mp3" }));
+		assert!(!shelf.join("song.mp3").exists());
+	});
+}
+
+fn a_library_import(id: &str, name: &str) -> String {
+	let content = BASE64_STANDARD.encode(format!("{name} from a member"));
+	json!({
+		"id": id,
+		"command": "library_import",
+		"args": { "spaceId": PERSONAL, "name": name, "content": content }
+	})
+	.to_string()
+}
+
+#[test]
+fn a_device_removed_from_the_space_is_refused_a_library_import_with_nothing_written() {
+	run(async {
+		let (mut harness, effects) = Harness::applying_host_effects("library-import-removed").await;
+		harness.started().await;
+		let mut relay = harness.relay_side().await;
+		let host = harness.host_keys().signing_public();
+		let mut removed = harness.joined(&mut relay, "guest").await;
+		let mut kept = harness.joined(&mut relay, "joiner").await;
+		relay.addressed(&removed.member, "rekey").await;
+		let before =
+			called_with(&mut relay, &mut removed, &host, &a_library_import("before", "before.md"))
+				.await;
+		relay.addressed(&removed.member, "rekey").await;
+		let removed_id = removed.member.keys.device_id().to_string();
+		remove_device(harness.app.handle(), PERSONAL.to_owned(), removed_id)
+			.await
+			.expect("the device is removed");
+		let rekey = relay.addressed(&kept.member, "rekey").await;
+		let handover =
+			kept.member.rekey_opened(&rekey, &relay.instance_id, &host).expect("the rekey opens");
+		kept.space = space_key_of(&handover);
+		kept.ctr = 0;
+
+		let instance_id = relay.instance_id.clone();
+		let stale = Space { instance_id: &instance_id, key: &removed.space, host: &host };
+		removed.ctr += 1;
+		relay.sent(removed.member.sealed(&stale, removed.ctr, HELLO, None)).await;
+		removed.ctr += 1;
+		relay
+			.sent(removed.member.sealed(
+				&stale,
+				removed.ctr,
+				&a_library_import("after", "after.md"),
+				None,
+			))
+			.await;
+		let kept_call =
+			called_with(&mut relay, &mut kept, &host, &a_library_import("kept", "kept.md")).await;
+
+		let shelf = effects.library().join(PERSONAL);
+		assert_eq!(
+			(before["status"].clone(), kept_call["status"].clone()),
+			(json!(200), json!(200))
+		);
+		assert!(shelf.join("before.md").exists());
+		assert!(!shelf.join("after.md").exists());
+		assert!(!relay.has_held_any_frame_to(&removed.member));
+		assert_eq!(effects.reached(), ["library_import", "library_import"]);
+	});
+}
+
+const RELAY_FRAME_CEILING_BYTES: usize = 64 * 1024 * 1024;
+
+#[test]
+fn the_largest_member_import_seals_into_a_frame_under_the_relay_and_host_socket_ceilings() {
+	let member = SealingMember::new("guest");
+	let key = HeldSpaceKey::first().expect("randomness");
+	let host = DeviceKeys::generate().expect("randomness").signing_public();
+	let space = Space { instance_id: &uuid::Uuid::new_v4().to_string(), key: &key, host: &host };
+	let largest = library::MAX_RELAYED_IMPORT_BYTES as usize;
+	let call = json!({
+		"id": uuid::Uuid::new_v4().to_string(),
+		"command": "library_import",
+		"args": {
+			"spaceId": uuid::Uuid::new_v4().to_string(),
+			"name": format!("{}.png", "n".repeat(251)),
+			"content": BASE64_STANDARD.encode(vec![0xff; largest])
+		}
+	});
+	let host_socket_ceiling = tokio_tungstenite::tungstenite::protocol::WebSocketConfig::default()
+		.max_frame_size
+		.expect("the host socket caps a frame");
+
+	let frame = member.sealed(&space, u64::MAX, &call.to_string(), Some([0xff; CHALLENGE_LENGTH]));
+
+	assert!(
+		frame.len() < host_socket_ceiling.min(RELAY_FRAME_CEILING_BYTES),
+		"a frame of {} bytes passes neither the relay ceiling of {RELAY_FRAME_CEILING_BYTES} nor the host socket ceiling of {host_socket_ceiling}",
+		frame.len()
+	);
 }
 
 #[test]
