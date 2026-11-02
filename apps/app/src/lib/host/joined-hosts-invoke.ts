@@ -21,6 +21,8 @@ export const LOCAL_COMMANDS: ReadonlySet<string> = new Set([
 	"space_delete",
 	"space_export",
 	"space_import",
+	"library_list",
+	"library_read_document",
 	"joined_spaces_list",
 	"joined_space_connect",
 	"joined_space_members",
