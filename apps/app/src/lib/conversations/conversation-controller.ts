@@ -269,10 +269,6 @@ const NO_SESSION: TransportError = { kind: "notStarted" }
 
 const UNNOTICED_DROPS: SummonsDropReason[] = ["selfMention", "notSeated"]
 
-type NoticedDrop = Omit<SummonsDropped, "reason"> & {
-	reason: SummonsDropReason
-}
-
 type RunPlace = Pick<TranscriptMessage, "conversationId" | "turnId">
 
 const runKeyOf = (turnId: string, botId: string) => `${turnId}:${botId}`
@@ -294,7 +290,7 @@ const summonLimitDescriptionOf = (names: string[]) =>
 	})
 
 const dropDescriberOf =
-	({ reason, error }: NoticedDrop) =>
+	({ reason, error }: SummonsDropped) =>
 	(names: string[]) =>
 		reason === "summonLimit"
 			? summonLimitDescriptionOf(names)
@@ -1330,7 +1326,7 @@ export const createConversationController = (
 		void raiseNotStarted(said, unresolved)
 	}
 
-	const noteDropped = (dropped: NoticedDrop) => {
+	const noteDropped = (dropped: SummonsDropped) => {
 		if (
 			!isOpenConversation(dropped.conversationId) ||
 			UNNOTICED_DROPS.includes(dropped.reason)
@@ -1353,7 +1349,7 @@ export const createConversationController = (
 		if (!conversation || UNNOTICED_DROPS.includes(reason)) {
 			return
 		}
-		const dropped: NoticedDrop = {
+		const dropped: SummonsDropped = {
 			conversationId: conversation.id,
 			turnId,
 			botId,
