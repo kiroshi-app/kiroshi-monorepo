@@ -100,7 +100,7 @@ const RELEASE_QUESTION: ToolQuestionItem = {
 }
 
 const ASKED_BY_THE_SESSION =
-	"`apps/app/src/lib/onboarding/use-posted-sign-in-step.ts:25` posts this step as a question of its own, and `apps/app/src/components/thread-prompt.tsx:103` draws it with no Skip, since a posted request cannot be denied."
+	"`apps/app/src/lib/onboarding/use-posted-sign-in-step.ts:25` posts this step as a question of its own, and `apps/app/src/components/thread-prompt.tsx:134` draws it with no Skip, since a posted request cannot be denied."
 
 const POSTED_BY_ONBOARDING =
 	"`apps/app/src/components/thread-prompt.tsx:103` mounts the panel for the `AskUserQuestion` the session raised, inside the turn `apps/app/src/components/thread-screen.tsx:628` is asking on."
@@ -1612,7 +1612,7 @@ export const EntryNarrow = meta.story({
 		docs: {
 			description: {
 				story:
-					"The paste-a-key question in a 320px column. Check that the key field stays inside the column and that nothing in the card pushes it sideways. Pick `StepApiKeyFailed` for the same path coming back refused. " +
+					"The paste-a-key question in a 320px column. Check that the key field stays inside the column and that nothing in the card pushes it sideways. " +
 					ASKED_BY_THE_SESSION,
 			},
 		},
