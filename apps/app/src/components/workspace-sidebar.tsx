@@ -6,6 +6,7 @@ import { hasOverlayWindowControls } from "@/lib/host"
 import type { SettingsNavigation } from "@/lib/navigation/use-settings-navigation"
 import type { useSwitcherSpaces } from "@/lib/spaces/use-joined-spaces"
 import type { WorkspaceTabs } from "@/lib/tabs/workspace-tabs"
+import { railPanelOf } from "@/lib/user/use-sidebar-tab"
 import type { RosterLines } from "@/lib/workspace/use-roster-lines"
 import { useRosterLists } from "@/lib/workspace/use-roster-lists"
 import type { RosterView } from "@/lib/workspace/use-roster-view"
@@ -94,7 +95,7 @@ export const WorkspaceSidebar = ({
 			conversations={rosterLists.rosterConversations}
 			conversationsBySpaceId={rosterLists.rosterConversationsBySpace}
 			missionsBySpaceId={sidebarMissions.panelsBySpaceId}
-			openPanel={sidebarTab.openTab}
+			openPanel={railPanelOf(sidebarTab.openTab)}
 			onOpenPanelChange={(panel) =>
 				sidebarTab.openSidebarTab(panel, sidebarRosters)
 			}

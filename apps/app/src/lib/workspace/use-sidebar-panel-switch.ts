@@ -163,7 +163,7 @@ export const useSidebarPanelSwitch = ({
 	const switchPanel = useCallback(
 		(panel: SidebarPanel, sidebarRosters: SidebarRosters) => {
 			openSidebarTab(panel)
-			if (panel === "missions") {
+			if (panel !== "conversations") {
 				return
 			}
 			missionsShownForSpaceId.current = null
