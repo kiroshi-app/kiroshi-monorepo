@@ -111,8 +111,7 @@ export const NarrowLongContent = meta.story({
 		if (!card) throw new Error("No selection card drawn")
 
 		await expect(card.scrollWidth).toBe(card.clientWidth)
-		await expect(quotedTextOf(canvasElement).scrollWidth).toBe(
-			quotedTextOf(canvasElement).clientWidth,
-		)
+		const text = quotedTextOf(canvasElement)
+		await expect(text.scrollWidth).toBe(text.clientWidth)
 	},
 })
