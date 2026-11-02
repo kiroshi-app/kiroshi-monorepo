@@ -23,7 +23,7 @@ type PanelRoster = Pick<RosterController, "select" | "selectConversation"> & {
 type PanelMemory = Pick<ShownMemory, "lastRowIn">
 
 type SidebarPanelSwitchCore = {
-	openedMission: Pick<OpenedMissionController, "getState" | "leave">
+	openedMission: Pick<OpenedMissionController, "leave">
 	roster: { controller: PanelRoster }
 	shownMemory: PanelMemory
 	user: User
