@@ -17,8 +17,8 @@ import { CHIP_STATE_OF } from "../../app/src/lib/missions/mission-chip-states"
 const REPOSITORY = resolve(import.meta.dirname, "../../..")
 
 const APP_SIDEBAR_CALL = "apps/app/src/components/workspace-sidebar.tsx"
-const WORKSPACE_SHELL_CALL = "apps/app/src/components/conversations-screen.tsx"
-const TITLE_BAR_CALL = "apps/app/src/components/workspace-frame.tsx"
+const RAIL_CALL = "apps/app/src/components/workspace-rail.tsx"
+const SHELL_CALL = "apps/app/src/components/workspace-frame.tsx"
 const SCENE = "apps/website/src/app-scene.tsx"
 const SIDEBAR_BADGES = "apps/app/src/lib/chat/sidebar-badges.ts"
 const MISSIONS_MODEL = "apps/app/src/lib/missions/missions-model.ts"
@@ -34,6 +34,22 @@ const LEFT_OUT_OF_THE_SIDEBAR: Record<string, string> = {
 		"the scene opens no search palette, its rail entry stays at rest",
 	onSelectLibrary: "the scene opens no Library, so its rail draws no entry",
 }
+
+const SIDEBAR_PROP_OF_RAIL_PROP: Record<string, string> = {
+	dots: "railDots",
+	onOpenYou: "onOpenUserSettings",
+	onSelectConversations: "onOpenPanelChange",
+	onSelectMissions: "onOpenPanelChange",
+	onSpacesMenuOpenChange: "onSpaceSwitcherOpenChange",
+	selected: "openPanel",
+}
+
+const SHELL_PROPS_DRAWN_BY_THE_SIDEBAR = [
+	"rail",
+	"titleBar",
+	"space",
+	"spaceHost",
+]
 
 const LEFT_OUT_OF_THE_SHELL: Record<string, string> = {
 	width: "the scene keeps no saved sidebar width, the shell holds its own",
@@ -129,6 +145,19 @@ const createPropReader = (files: string[]): PropReader => {
 	return { propsPassedTo, propsOfObject }
 }
 
+const sidebarPropsOf = (reader: PropReader) => [
+	...reader.propsPassedTo(APP_SIDEBAR_CALL, "AppSidebarBody"),
+	...reader
+		.propsOfObject(RAIL_CALL, "rail")
+		.map((prop) => SIDEBAR_PROP_OF_RAIL_PROP[prop] ?? prop),
+	...reader.propsOfObject(SHELL_CALL, "titleBar"),
+]
+
+const shellPropsOf = (reader: PropReader) =>
+	reader
+		.propsPassedTo(SHELL_CALL, "AppFrameShell")
+		.filter((prop) => !SHELL_PROPS_DRAWN_BY_THE_SIDEBAR.includes(prop))
+
 const missingFrom = (scene: string[], app: string[]) =>
 	[...new Set(app)].filter((prop) => !scene.includes(prop)).sort()
 
@@ -136,12 +165,7 @@ describe("the landing scene against apps/app", () => {
 	let reader: PropReader
 
 	beforeAll(() => {
-		reader = createPropReader([
-			APP_SIDEBAR_CALL,
-			WORKSPACE_SHELL_CALL,
-			TITLE_BAR_CALL,
-			SCENE,
-		])
+		reader = createPropReader([APP_SIDEBAR_CALL, RAIL_CALL, SHELL_CALL, SCENE])
 	}, SLOW_PROGRAM_MS)
 
 	it("passes AppSidebar every prop the app passes it", () => {
@@ -150,9 +174,7 @@ describe("the landing scene against apps/app", () => {
 			...Object.keys(LEFT_OUT_OF_THE_SIDEBAR),
 		]
 
-		expect(
-			missingFrom(scene, reader.propsPassedTo(APP_SIDEBAR_CALL, "AppSidebar")),
-		).toEqual([])
+		expect(missingFrom(scene, sidebarPropsOf(reader))).toEqual([])
 	})
 
 	it("passes AppTitleBar, through AppSidebar, every prop the app's title bar takes", () => {
@@ -162,7 +184,7 @@ describe("the landing scene against apps/app", () => {
 		]
 
 		expect(
-			missingFrom(scene, reader.propsOfObject(TITLE_BAR_CALL, "titleBar")),
+			missingFrom(scene, reader.propsOfObject(SHELL_CALL, "titleBar")),
 		).toEqual([])
 	})
 
@@ -172,19 +194,11 @@ describe("the landing scene against apps/app", () => {
 			...Object.keys(LEFT_OUT_OF_THE_SHELL),
 		]
 
-		expect(
-			missingFrom(
-				scene,
-				reader.propsPassedTo(WORKSPACE_SHELL_CALL, "WorkspaceShell"),
-			),
-		).toEqual([])
+		expect(missingFrom(scene, shellPropsOf(reader))).toEqual([])
 	})
 
 	it("leaves out only props the app still passes and the scene does not", () => {
-		const appProps = [
-			...reader.propsPassedTo(APP_SIDEBAR_CALL, "AppSidebar"),
-			...reader.propsPassedTo(WORKSPACE_SHELL_CALL, "WorkspaceShell"),
-		]
+		const appProps = [...sidebarPropsOf(reader), ...shellPropsOf(reader)]
 		const sceneProps = [
 			...reader.propsPassedTo(SCENE, "AppSidebar"),
 			...reader.propsPassedTo(SCENE, "WorkspaceShell"),
