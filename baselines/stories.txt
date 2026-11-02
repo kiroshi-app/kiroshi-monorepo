@@ -1330,6 +1330,7 @@ navigation-headeridentitybutton--preset-hue
 navigation-headeridentitybutton--variants
 navigation-headeridentitybutton--working
 navigation-librarydocumentview--default
+navigation-librarydocumentview--member
 navigation-librarypanel--empty-with-every-callback
 navigation-librarypanel--empty-with-no-callbacks
 navigation-librarypanel--filter-with-no-match
@@ -1526,6 +1527,7 @@ overlays-dialogsurface--overflowing
 overlays-dialogsurface--sized
 overlays-librarylightbox--at-the-first-image
 overlays-librarylightbox--default
+overlays-librarylightbox--member
 overlays-librarylightbox--zoomed
 overlays-missionmenu--answer-the-question-leaves-the-card
 overlays-missionmenu--close-at-once

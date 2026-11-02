@@ -25,7 +25,7 @@ type LibraryWithLightboxProps = {
 	onNext: () => void
 	onDownload: (image: LibraryLightboxImage) => void
 	onCopy: (image: LibraryLightboxImage) => void
-	onMore: (image: LibraryLightboxImage) => void
+	onMore?: (image: LibraryLightboxImage) => void
 }
 
 const LibraryWithLightbox = ({
@@ -181,6 +181,30 @@ export const Default = meta.story({
 
 		await userEvent.click(opener)
 		await lightbox()
+	},
+})
+
+export const Member = meta.story({
+	args: { onMore: undefined },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The second image open in a joined Space, where More has no action for a member. Check that the bar keeps Download, Copy and Close and draws no More.",
+			},
+		},
+	},
+	play: async () => {
+		const popup = await lightbox()
+		await expect(
+			within(popup).getByRole("button", { name: "Download" }),
+		).toBeVisible()
+		await expect(
+			within(popup).getByRole("button", { name: "Copy" }),
+		).toBeVisible()
+		await expect(within(popup).queryByRole("button", { name: "More" })).toBe(
+			null,
+		)
 	},
 })
 

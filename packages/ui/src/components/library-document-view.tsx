@@ -24,7 +24,7 @@ const DOCUMENT_TYPE = cn(
 type LibraryDocumentViewProps = {
 	document: LibraryDocument
 	onBack: () => void
-	onMore: (document: LibraryDocument) => void
+	onMore?: (document: LibraryDocument) => void
 }
 
 const LibraryDocumentView = ({
@@ -63,17 +63,19 @@ const LibraryDocumentView = ({
 						{document.name}
 					</span>
 				</nav>
-				<TooltipButton
-					aria-label={t("library.document.more")}
-					className="size-8 shrink-0 rounded-full border-input bg-foreground/3 transition-none hover:bg-foreground/8 dark:bg-foreground/3 dark:hover:bg-foreground/8"
-					onClick={() => onMore(document)}
-					size="icon"
-					tooltip={t("library.document.more")}
-					tooltipSide="bottom"
-					variant="outline"
-				>
-					<Icons.More aria-hidden="true" />
-				</TooltipButton>
+				{onMore ? (
+					<TooltipButton
+						aria-label={t("library.document.more")}
+						className="size-8 shrink-0 rounded-full border-input bg-foreground/3 transition-none hover:bg-foreground/8 dark:bg-foreground/3 dark:hover:bg-foreground/8"
+						onClick={() => onMore(document)}
+						size="icon"
+						tooltip={t("library.document.more")}
+						tooltipSide="bottom"
+						variant="outline"
+					>
+						<Icons.More aria-hidden="true" />
+					</TooltipButton>
+				) : null}
 			</div>
 			<div className="min-h-0 flex-1 overflow-y-auto px-10 pt-10 pb-10">
 				<article className="mx-auto flex w-full max-w-160 flex-col gap-3.5">

@@ -84,3 +84,19 @@ export const Default = meta.story({
 		)
 	},
 })
+
+export const Member = meta.story({
+	args: { onMore: undefined },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A document open in a joined Space, where More has no action for a member. Check that the bar keeps the breadcrumb and draws no More.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		await expect(canvas.getByRole("button", { name: "Library" })).toBeVisible()
+		await expect(canvas.queryByRole("button", { name: "More" })).toBe(null)
+	},
+})
