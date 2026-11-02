@@ -37,12 +37,12 @@ const LONG_NAMED_ITEMS: LibraryItem[] = [
 		...LIBRARY_ITEMS[0],
 		id: "long-image",
 		name: "hero-dunes-final-final-approved-by-marketing-and-legal-v12-export-2x.png",
-	} as LibraryItem,
+	},
 	{
 		...LIBRARY_ITEMS[2],
 		id: "long-document",
 		name: "Spring launch brief for the partner newsletter, the pricing page and the onboarding emails",
-	} as LibraryItem,
+	},
 	...LIBRARY_ITEMS.slice(3, 6),
 ]
 

@@ -83,6 +83,8 @@ const LibraryThumbnail = ({ item }: LibraryThumbnailProps) => (
 	</span>
 )
 
+const holdFocusForItsReturn = (pressed: HTMLButtonElement) => pressed.focus()
+
 type LibraryGridItemProps = {
 	item: LibraryItem
 	onOpen: (item: LibraryItem) => void
@@ -93,7 +95,7 @@ const LibraryGridItem = ({ item, onOpen }: LibraryGridItemProps) => (
 		className="group/library-item flex min-w-0 flex-col gap-2.5 rounded-control text-start focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring focus-visible:outline-offset-2"
 		data-slot="library-item"
 		onClick={(event) => {
-			event.currentTarget.focus()
+			holdFocusForItsReturn(event.currentTarget)
 			onOpen(item)
 		}}
 		type="button"
