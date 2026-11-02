@@ -458,19 +458,10 @@ async fn an_unknown_space_is_refused_by_save_copy_and_reveal() {
 	let app = a_host("unknown-actions");
 	let refused = Err(LibraryError::UnknownSpace { id: "nowhere".to_owned() });
 
-	let saved =
-		library_save(app.handle().clone(), app.state(), "nowhere".to_owned(), "a.md".to_owned())
-			.await;
-	let copied =
-		library_copy(app.handle().clone(), app.state(), "nowhere".to_owned(), "a.md".to_owned())
-			.await;
-	let revealed =
-		library_reveal(app.handle().clone(), app.state(), "nowhere".to_owned(), "a.md".to_owned())
-			.await;
-
-	assert_eq!(saved, refused.clone().map(|()| None));
-	assert_eq!(copied, refused.clone());
-	assert_eq!(revealed, refused);
+	assert_eq!(
+		refusals_of_each_action(&app, "nowhere", "a.md").await,
+		[refused.clone(), refused.clone(), refused]
+	);
 }
 
 async fn refusals_of_each_action(
