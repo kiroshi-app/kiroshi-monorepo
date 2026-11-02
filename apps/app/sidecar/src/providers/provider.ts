@@ -51,6 +51,10 @@ export type PermissionDecision =
 
 export type SessionFrame = Record<string, unknown>
 
+export type TurnSettledFrame = SessionFrame & { type: "turn_settled" }
+
+export type TasksPendingFrame = { type: "tasks_pending"; count: number }
+
 export type AgentCommand = {
 	name: string
 	description?: string

@@ -20,12 +20,17 @@ import { AWAITING_AUTH, leftOut } from "./server-env"
 import type { RenewedGrant } from "./server-renewal"
 import {
 	buildOptions,
+	createTurnSettler,
 	declaredServers,
 	dialledServers,
 	reportConnections,
 	stopTurn,
 } from "./session"
-import { CLASSIFY_ASK_USER_QUESTION, CONNECTION_KEYS } from "./session-env"
+import {
+	CLASSIFY_ASK_USER_QUESTION,
+	CONNECTION_KEYS,
+	EMIT_SESSION_STATE_EVENTS,
+} from "./session-env"
 import {
 	AUTHORIZE_LINE,
 	bundleLine,
@@ -203,6 +208,14 @@ describe("buildOptions", () => {
 			expect(
 				buildOptions(spawned, undefined).env?.[CLASSIFY_ASK_USER_QUESTION],
 			).toBe("0")
+		}
+	})
+
+	it("asks the CLI for its session state events, so a turn settles on idle", () => {
+		for (const spawned of spawns) {
+			expect(
+				buildOptions(spawned, undefined).env?.[EMIT_SESSION_STATE_EVENTS],
+			).toBe("1")
 		}
 	})
 
@@ -1581,7 +1594,7 @@ describe("stopTurn", () => {
 		})
 
 		expect(frames).toEqual([
-			{ type: "result", subtype: "interrupted", is_error: false },
+			{ type: "turn_settled", subtype: "interrupted", is_error: false },
 		])
 		expect(interrupted).toBe(false)
 	})
@@ -1602,5 +1615,145 @@ describe("stopTurn", () => {
 
 		expect(frames).toEqual([])
 		expect(interrupted).toBe(true)
+	})
+})
+
+const GRACE_MS = 20
+
+const running = {
+	type: "system",
+	subtype: "session_state_changed",
+	state: "running",
+}
+
+const idle = { type: "system", subtype: "session_state_changed", state: "idle" }
+
+const tasks = (...entries: { task_id: string; ambient?: boolean }[]) => ({
+	type: "system",
+	subtype: "background_tasks_changed",
+	tasks: entries.map((entry) => ({
+		task_type: "local_bash",
+		description: "a background shell",
+		...entry,
+	})),
+})
+
+const resultOf = (turn: string): SessionFrame => ({
+	type: "result",
+	subtype: "success",
+	is_error: false,
+	session_id: "sdk-0001",
+	result: turn,
+	total_cost_usd: 0.01,
+})
+
+const settledOn = (turn: string): SessionFrame => ({
+	...resultOf(turn),
+	type: "turn_settled",
+})
+
+const pendingOf = (count: number): SessionFrame => ({
+	type: "tasks_pending",
+	count,
+})
+
+const settling = () => {
+	const frames: SessionFrame[] = []
+	const settler = createTurnSettler((frame) => {
+		frames.push(frame)
+	}, GRACE_MS)
+	const play = (...messages: SessionFrame[]) => {
+		for (const message of messages) {
+			settler.observe(message)
+		}
+	}
+	return { frames, settler, play }
+}
+
+const outlastTheGrace = () =>
+	new Promise((resolve) => setTimeout(resolve, GRACE_MS * 3))
+
+describe("createTurnSettler", () => {
+	it("settles a result with no task on the idle that follows it, with no added delay", () => {
+		const { frames, play } = settling()
+
+		play(running, resultOf("first"))
+		expect(frames).toEqual([])
+
+		play(idle)
+		expect(frames).toEqual([settledOn("first")])
+	})
+
+	it("settles a result at once from a CLI that reports no session state", () => {
+		const { frames, play } = settling()
+
+		play(resultOf("first"))
+
+		expect(frames).toEqual([settledOn("first")])
+	})
+
+	it("holds a result while a task runs, tells each count, and settles on the follow-up turn", async () => {
+		const { frames, settler, play } = settling()
+
+		play(running, tasks({ task_id: "b1" }), resultOf("first"), idle)
+		play(tasks({ task_id: "b1" }, { task_id: "b2" }))
+		play(tasks({ task_id: "b2" }))
+		expect(frames).toEqual([pendingOf(1), pendingOf(2), pendingOf(1)])
+
+		play(running, tasks())
+		await outlastTheGrace()
+		expect(frames).toEqual([
+			pendingOf(1),
+			pendingOf(2),
+			pendingOf(1),
+			pendingOf(0),
+		])
+
+		play(resultOf("follow-up"), idle)
+		expect(frames.at(-1)).toEqual(settledOn("follow-up"))
+		expect(frames).toHaveLength(5)
+		settler.forget()
+	})
+
+	it("settles on the last result when no follow-up turn starts within the grace window", async () => {
+		const { frames, play } = settling()
+
+		play(running, tasks({ task_id: "b1" }), resultOf("first"), idle, tasks())
+		expect(frames).toEqual([pendingOf(1), pendingOf(0)])
+
+		await outlastTheGrace()
+		expect(frames).toEqual([pendingOf(1), pendingOf(0), settledOn("first")])
+	})
+
+	it("counts no ambient task", () => {
+		const { frames, play } = settling()
+
+		play(running, tasks({ task_id: "w1", ambient: true }), resultOf("first"))
+		play(idle)
+
+		expect(frames).toEqual([settledOn("first")])
+	})
+
+	it("settles the held result at once when the person stops, and ignores the turns after it until the next prompt", () => {
+		const { frames, settler, play } = settling()
+
+		play(running, tasks({ task_id: "b1" }), resultOf("first"), idle)
+		settler.stopped()
+		play(running, resultOf("interrupted"), idle, tasks())
+		expect(frames).toEqual([pendingOf(1), settledOn("first")])
+
+		settler.prompted()
+		play(running, resultOf("second"), idle)
+		expect(frames.at(-1)).toEqual(settledOn("second"))
+	})
+
+	it("settles on the first result after a stop, whatever task still runs", () => {
+		const { frames, settler, play } = settling()
+
+		play(running, tasks({ task_id: "b1" }))
+		settler.stopped()
+		play(resultOf("interrupted"))
+
+		expect(frames).toEqual([settledOn("interrupted")])
 	})
 })

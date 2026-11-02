@@ -2343,7 +2343,7 @@ while IFS= read -r line; do
 		;;
 	*'"type":"prompt"'*)
 		echo heard >> 'PROMPTS_HEARD'
-		printf '{"session":"%s","frame":{"type":"result","subtype":"success","session_id":"sdk-1","is_error":false}}\n' "$key"
+		printf '{"session":"%s","frame":{"type":"turn_settled","subtype":"success","session_id":"sdk-1","is_error":false}}\n' "$key"
 		;;
 	esac
 done

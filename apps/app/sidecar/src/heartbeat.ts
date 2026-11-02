@@ -45,7 +45,7 @@ export const createHeartbeats = (write: WriteFrame, intervalMs: number) => {
 	}
 
 	const observe = (session: string, frame: SessionFrame) => {
-		if (frame.type === "result") {
+		if (frame.type === "turn_settled") {
 			answered(session)
 		}
 		if (frame.type === "closed") {

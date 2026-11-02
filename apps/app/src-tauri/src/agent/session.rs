@@ -307,6 +307,20 @@ impl Shared {
 		}
 	}
 
+	fn tasks_pending(&mut self, count: u32) -> Option<AgentEvent> {
+		let running = self.running.as_mut()?;
+		running.liveness.tasks_pending(tokio::time::Instant::now(), count);
+		log::info!(
+			"the turn holds for its background tasks session={} turn={:?} reason={count} background tasks",
+			self.key,
+			running.id
+		);
+		match self.turn {
+			TurnState::Submitting => self.set_turn(TurnState::Running),
+			_ => None,
+		}
+	}
+
 	fn lease_deadline(&self) -> Option<(tokio::time::Instant, Lapse)> {
 		let running = self.running.as_ref()?;
 		running.liveness.deadline(self.lease, self.translator.is_waiting_on_person())
@@ -835,6 +849,21 @@ async fn read_loop(
 		}
 
 		if let Frame::Heartbeat = frame {
+			continue;
+		}
+
+		if let Frame::TasksPending(pending) = frame {
+			let entering = {
+				let mut guard = shared.lock().await;
+				if guard.shutting_down {
+					return;
+				}
+				guard.tasks_pending(pending.count)
+			};
+			rearmed.notify_one();
+			if let Some(event) = entering {
+				sink.emit(event);
+			}
 			continue;
 		}
 

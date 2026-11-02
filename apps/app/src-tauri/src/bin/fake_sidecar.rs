@@ -361,21 +361,56 @@ fn emit_tool_turn(key: &str) {
 	);
 }
 
+fn result_of(session_id: &str, subtype: &str, is_error: bool) -> Value {
+	json!({
+		"type": "result",
+		"subtype": subtype,
+		"is_error": is_error,
+		"session_id": session_id,
+		"num_turns": 1
+	})
+}
+
+fn emit_settled(key: &str, result: Value) {
+	let mut settled = result.clone();
+	settled["type"] = json!("turn_settled");
+	emit(key, result);
+	emit(key, settled);
+}
+
 fn emit_result(key: &str, run: &Run, subtype: &str, is_error: bool) {
-	emit(
-		key,
-		json!({
-			"type": "result",
-			"subtype": subtype,
-			"is_error": is_error,
-			"session_id": run.session_id,
-			"num_turns": 1
-		}),
-	);
+	emit_settled(key, result_of(&run.session_id, subtype, is_error));
+}
+
+fn emit_tasks_pending(key: &str, count: u32) {
+	emit(key, json!({ "type": "tasks_pending", "count": count }));
+}
+
+const BACKGROUND_TASK_RUNS_FOR: std::time::Duration = std::time::Duration::from_millis(300);
+
+fn finish_background_task(key: &str, run: &Run) {
+	let key = key.to_owned();
+	let session_id = run.session_id.clone();
+	std::thread::spawn(move || {
+		std::thread::sleep(BACKGROUND_TASK_RUNS_FOR);
+		emit_tasks_pending(&key, 0);
+		emit(
+			&key,
+			json!({
+				"type": "assistant",
+				"message": {
+					"id": next_message_id(),
+					"role": "assistant",
+					"content": [{ "type": "text", "text": "the background shell finished" }]
+				}
+			}),
+		);
+		emit_settled(&key, result_of(&session_id, "success", false));
+	});
 }
 
 fn emit_structured_result(key: &str, run: &Run, structured_output: Value) {
-	emit(
+	emit_settled(
 		key,
 		json!({
 			"type": "result",
@@ -471,6 +506,21 @@ fn on_prompt(key: &str, runs: &mut HashMap<String, Run>, text: &str) {
 			emit_text_stream(key, &format!("echo :: {text}"));
 			emit_closed(key, "the agent exited unexpectedly");
 			dropped = true;
+		}
+		"background_task" => {
+			emit_text_turn(key, run, "a background shell runs");
+			emit(key, result_of(&run.session_id, "success", false));
+			emit_tasks_pending(key, 1);
+			finish_background_task(key, run);
+		}
+		"endless_task" if run.resumed => {
+			emit_text_turn(key, run, &format!("resumed {} :: {text}", run.session_id));
+			emit_result(key, run, "success", false);
+		}
+		"endless_task" => {
+			emit_text_turn(key, run, "a background shell runs");
+			emit(key, result_of(&run.session_id, "success", false));
+			emit_tasks_pending(key, 1);
 		}
 		"stdout_eof" => close_stdout(),
 		"sidecar_exit" => {

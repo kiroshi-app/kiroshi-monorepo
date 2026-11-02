@@ -548,8 +548,19 @@ impl Stored {
 	}
 }
 
-const SHORT_LEASE: RunLease =
-	RunLease { silence: Duration::from_millis(800), interrupt_answer: Duration::from_millis(200) };
+const SHORT_LEASE: RunLease = RunLease {
+	silence: Duration::from_millis(800),
+	interrupt_answer: Duration::from_millis(200),
+	tasks_pending: Duration::from_secs(600),
+};
+
+const SHORT_TASK_BOUND: RunLease = RunLease {
+	silence: Duration::from_secs(30),
+	interrupt_answer: Duration::from_millis(200),
+	tasks_pending: Duration::from_millis(400),
+};
+
+const FOLLOW_UP: &str = "the background shell finished";
 
 fn launch_leased(name: &str, played: &str) -> Stored {
 	launch_stored_with(name, played, AgentState::leasing(SHORT_LEASE))
@@ -635,6 +646,84 @@ fn a_run_ending_before_its_lease_stays_completed() {
 	assert_eq!(stored.completed_at("t1"), Some(completed_at));
 	assert_eq!(stored.only_reply().state, MessageState::Complete);
 	assert_eq!(stored.turn_endings(), vec![TurnOutcome::Completed]);
+	stored.close();
+}
+
+fn completed_texts(events: &[AgentEvent]) -> Vec<(usize, String)> {
+	events
+		.iter()
+		.enumerate()
+		.filter_map(|(at, event)| match event {
+			AgentEvent::MessageCompleted { message } if !message.text.is_empty() => {
+				Some((at, message.text.clone()))
+			}
+			_ => None,
+		})
+		.collect()
+}
+
+fn turn_ended_at(events: &[AgentEvent]) -> Vec<usize> {
+	events
+		.iter()
+		.enumerate()
+		.filter_map(|(at, event)| matches!(event, AgentEvent::TurnEnded { .. }).then_some(at))
+		.collect()
+}
+
+#[test]
+fn a_result_with_no_background_task_settles_its_turn_as_before() {
+	let _serial = serial();
+	let stored = launch_stored("settled-at-once", "normal");
+	stored.start();
+
+	stored.submit("t1", "p1");
+	stored.completed("t1");
+
+	assert_eq!(stored.turn_endings(), vec![TurnOutcome::Completed]);
+	assert_eq!(stored.only_reply().content, STREAMED);
+	assert_eq!(stored.only_reply().state, MessageState::Complete);
+	stored.close();
+}
+
+#[test]
+fn a_turn_holding_a_background_task_ends_only_after_the_follow_up_turn_it_runs() {
+	let _serial = serial();
+	let stored = launch_stored("background-task", "background_task");
+	stored.start();
+
+	stored.submit("t1", "p1");
+	stored.completed("t1");
+
+	let events = agent_events(&stored.log.held());
+	let follow_up = completed_texts(&events)
+		.into_iter()
+		.find(|(_, text)| text == FOLLOW_UP)
+		.expect("the follow-up turn reached the front");
+	assert_eq!(turn_ended_at(&events).len(), 1, "the turn ended more than once: {events:#?}");
+	assert!(follow_up.0 < turn_ended_at(&events)[0], "the turn ended before its follow-up");
+	assert_eq!(stored.turn_endings(), vec![TurnOutcome::Completed]);
+	assert!(stored.lapses().is_empty());
+	stored.close();
+}
+
+#[test]
+fn a_background_task_that_never_ends_fails_the_run_at_its_bound_and_closes_the_session() {
+	let _serial = serial();
+	let stored =
+		launch_stored_with("endless-task", "endless_task", AgentState::leasing(SHORT_TASK_BOUND));
+	stored.start();
+
+	stored.submit("t1", "p1");
+	stored.completed("t1");
+
+	assert_eq!(stored.turn_endings(), vec![TurnOutcome::Failed]);
+	assert_eq!(stored.awaited_lapses(&[Lapse::TasksPending]), vec![Lapse::TasksPending]);
+
+	stored.submit("t2", "p2");
+	stored.completed("t2");
+	let answered = stored.reply_of("t2").expect("the reopened session replied");
+	assert_eq!(answered.content, RESUMED);
+	assert_eq!(stored.turn_endings(), vec![TurnOutcome::Failed, TurnOutcome::Completed]);
 	stored.close();
 }
 

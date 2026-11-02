@@ -90,6 +90,8 @@ pub enum Frame {
 	Assistant(MessageFrame),
 	User(MessageFrame),
 	Result(ResultFrame),
+	TurnSettled(ResultFrame),
+	TasksPending(TasksPendingFrame),
 	Heartbeat,
 	Commands(CommandsFrame),
 	ControlRequest(ControlRequestFrame),
@@ -106,6 +108,11 @@ pub enum Frame {
 pub struct ClosedFrame {
 	#[serde(default)]
 	pub detail: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct TasksPendingFrame {
+	pub count: u32,
 }
 
 #[derive(Debug, Clone, Deserialize)]

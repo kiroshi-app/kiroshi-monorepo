@@ -460,7 +460,7 @@ Every line is an envelope:
 {"session":"<key>","frame":{…}}
 ```
 
-The frame is an `SDKMessage` verbatim, plus the four the sidecar adds itself.
+The frame is an `SDKMessage` verbatim, plus the ones the sidecar adds itself.
 
 | `frame.type` | Source | Mapped to |
 | --- | --- | --- |
@@ -471,7 +471,9 @@ The frame is an `SDKMessage` verbatim, plus the four the sidecar adds itself.
 | `stream_event` | `SDKPartialAssistantMessage` — one Messages API streaming event | `messageStarted` / `messageDelta` / `activity` |
 | `assistant` | `SDKAssistantMessage` — `text` and/or `tool_use` blocks | `messageCompleted` / `activity` |
 | `user` | `SDKUserMessage` — `tool_result` with `is_error` | `activity` (succeeded / failed) |
-| `result` | `SDKResultMessage` — `subtype`, `session_id`, `is_error`, or the sidecar when a stop lands on a prompt still held | `turnEnded` |
+| `result` | `SDKResultMessage`: `subtype`, `session_id`, `is_error` | nothing but the SDK session id: the turn ends on `turn_settled` |
+| `tasks_pending` | the sidecar, once a `result` has arrived, on every change of `count`, the live background tasks not flagged `ambient` | nothing on the front: it starts or lifts the background task bound of the running run, which stays `running` |
+| `turn_settled` | the sidecar, once the turn is settled (see below): every field of the last `result`, its `type` renamed; or the sidecar when a stop lands on a prompt still held | `turnEnded` |
 | `host_request` | the sidecar, from `askHost` | nothing — it is answered, not read |
 | `heartbeat` | the sidecar, every `HEARTBEAT_INTERVAL_MS` while a query of the session is in flight | nothing: it renews the lease of the running run |
 | `control_request` / `can_use_tool` | the sidecar, from `canUseTool` | `permissionRequested` |
@@ -482,6 +484,37 @@ The frame is an `SDKMessage` verbatim, plus the four the sidecar adds itself.
 
 Every other `SDKMessage` type is dropped: `translate.rs` reads what the contract
 needs and nothing else, so a new SDK message is inert until it is asked for.
+
+## Settling a turn
+
+A `result` no longer ends a turn: a Claude session that launched background work (Bash
+`run_in_background`, Monitor, Workflow) keeps its CLI alive until that work is delivered
+and the CLI has run its follow-up turn on the task notification. The sidecar opens every
+session with `CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS=1` and settles the turn in
+`createTurnSettler` (`sidecar/src/providers/claude/session.ts`) from three SDK messages:
+
+- `system` / `background_tasks_changed`: the live task set, replaced on each message;
+  tasks flagged `ambient` are not counted.
+- `system` / `session_state_changed`: `running` and `requires_action` mark the CLI busy,
+  `idle` marks it done. An `idle` heard while a task is still counted settles nothing.
+- `result`: held as the last result of the turn.
+
+The sidecar writes one `turn_settled`, carrying every field of the last `result`:
+
+- when a `result` arrives with no task counted and the CLI not busy, or on the `idle`
+  that follows it, with no added delay;
+- when the task count falls to zero after a `result` and no follow-up turn starts within
+  `SETTLE_GRACE_MS` (3 s), on the last `result`;
+- on the `result` of the follow-up turn, whose stream events reach the front live as any
+  other turn's do;
+- on a stop while a `result` is held, at once, or on the first `result` after the stop
+  otherwise. Nothing settles again until the next `prompt`.
+
+While a `result` has arrived and tasks are counted, the sidecar writes `tasks_pending`
+with the count on every change, `0` included. The host keeps the run `running`, logs the
+reason `N background tasks`, and emits no `turnEnded`. The host turn, the mission driver
+and the routine runner close a session on `turnEnded` alone, so none of them closes it
+while tasks are pending.
 
 ## Permissions
 
@@ -691,17 +724,21 @@ its own bundle through `Edit`, `Write` or `Bash`. It takes `path`, `text`,
 
 ### The lease of a running run
 
-- From each `prompt` until the `result` of that query, through a pending `interrupt`,
+- From each `prompt` until the `turn_settled` of that query, through a pending `interrupt`
+  and through background tasks still pending after its `result`,
   the sidecar writes `{"type":"heartbeat"}` in the envelope of the session every
   `HEARTBEAT_INTERVAL_MS` (10 s, `sidecar/src/heartbeat.ts`). Two prompts in flight keep
-  it beating until both results; `closed` and `close` stop it.
+  it beating until both settle; `closed` and `close` stop it.
 - The host counts every frame of the session, heartbeat or other, as life for its running
   run (`agent/lease.rs`). A run that hears nothing for `RUN_SILENCE_BOUND` (60 s), or
-  whose `interrupt` gets no `result` within `INTERRUPT_ANSWER_BOUND` (15 s), ends as a
+  whose `interrupt` gets no `turn_settled` within `INTERRUPT_ANSWER_BOUND` (15 s), ends as a
   provider error ends: its open reply settles `failed`, `turnEnded` with `failed`, the
   run leaves `turn_runs`, the turn completes when no other run holds it. A non fatal
-  `failed` with `runLapsed` follows, naming the lapse (`silent` or `interruptUnanswered`)
-  and its bound in `boundMs`.
+  `failed` with `runLapsed` follows, naming the lapse (`silent`, `interruptUnanswered` or
+  `tasksPending`) and its bound in `boundMs`.
+- A run whose `tasks_pending` count stays above zero for `TASKS_PENDING_BOUND` (10 min),
+  counted from the first non zero count and lifted by a count of `0`, lapses the same way
+  with `tasksPending`.
 - The silence bound sleeps while a permission or a question waits on the person.
 - A lapse closes the sidecar session of the lapsed query and opens a new one under a new
   key, resuming the same SDK session id. The host detaches the lapsed key first, so
@@ -794,6 +831,8 @@ Sidecar → host, inside the envelope of a session:
 {"type":"control_response",…}
 {"type":"heartbeat"}
 {"type":"result",…}
+{"type":"tasks_pending","count":…}
+{"type":"turn_settled",…}
 {"type":"settings_rejected","detail":"…"}
 {"type":"server_env_rejected","detail":"…"}
 {"type":"interrupt_failed","detail":"…"}

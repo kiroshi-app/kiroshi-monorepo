@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 use kiroshi_app::agent::contract::OfferedModel;
 use kiroshi_app::agent::protocol::{
 	listed, Authorized, Checked, ContentBlock, ContentDelta, ControlRequestBody, Envelope, Frame,
-	OauthFailureKind, OauthStarted, OauthStep, Ready, Revoked, SignInFailureKind, SignedIn,
-	StreamEvent, Titled,
+	OauthFailureKind, OauthStarted, OauthStep, Ready, ResultFrame, Revoked, SignInFailureKind,
+	SignedIn, StreamEvent, Titled,
 };
 use kiroshi_app::bundles;
 use kiroshi_app::bundles::EffortLevel;
@@ -112,6 +112,18 @@ fn request_name(request: ControlRequestBody) -> &'static str {
 	}
 }
 
+fn assert_settled_fields(held: &ResultFrame) {
+	assert_eq!(held.subtype.as_deref(), Some("success"));
+	assert_eq!(held.session_id.as_deref(), Some("sdk-0001"));
+	assert!(!held.is_error);
+	assert_eq!(held.structured_output, Some(json!({ "summary": "the release note is drafted" })));
+	assert_eq!(held.total_cost_usd, Some(0.0412));
+	assert_eq!(
+		held.model_usage,
+		Some(json!({ "claude-sonnet-4-5": { "inputTokens": 1200, "outputTokens": 340 } }))
+	);
+}
+
 fn frame_names(frame: Frame) -> Vec<&'static str> {
 	match frame {
 		Frame::Opened => vec!["opened"],
@@ -140,19 +152,16 @@ fn frame_names(frame: Frame) -> Vec<&'static str> {
 			names
 		}
 		Frame::Result(held) => {
-			assert_eq!(held.subtype.as_deref(), Some("success"));
-			assert_eq!(held.session_id.as_deref(), Some("sdk-0001"));
-			assert!(!held.is_error);
-			assert_eq!(
-				held.structured_output,
-				Some(json!({ "summary": "the release note is drafted" }))
-			);
-			assert_eq!(held.total_cost_usd, Some(0.0412));
-			assert_eq!(
-				held.model_usage,
-				Some(json!({ "claude-sonnet-4-5": { "inputTokens": 1200, "outputTokens": 340 } }))
-			);
+			assert_settled_fields(&held);
 			vec!["result"]
+		}
+		Frame::TurnSettled(held) => {
+			assert_settled_fields(&held);
+			vec!["turn_settled"]
+		}
+		Frame::TasksPending(held) => {
+			assert_eq!(held.count, 2);
+			vec!["tasks_pending"]
 		}
 		Frame::Commands(held) => {
 			assert_eq!(held.commands.len(), 1);
@@ -356,8 +365,10 @@ fn every_frame_the_sidecar_sends_reads_as_the_variant_the_host_matches() {
 				"stream_event/ignored",
 				"stream_event/message_start",
 				"system",
+				"tasks_pending",
 				"title",
 				"tools",
+				"turn_settled",
 				"unreadable",
 				"user",
 			]
