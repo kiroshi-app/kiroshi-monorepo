@@ -9,13 +9,10 @@ import type { RosterLines } from "@/lib/workspace/use-roster-lines"
 import type { RosterLists } from "@/lib/workspace/use-roster-lists"
 import type { SettingsPanels } from "@/lib/workspace/use-settings-panels"
 import type { useSidebarPanelSwitch } from "@/lib/workspace/use-sidebar-panel-switch"
-import type { WorkspaceCore } from "@/lib/workspace/use-workspace-core"
 import type { WorkspaceOverlay } from "@/lib/workspace/use-workspace-overlay"
 import type { WorkspaceFrame } from "@/lib/workspace/workspace-frame"
 
 type WorkspaceRailOptions = {
-	collapsedSectionIds: string[]
-	core: WorkspaceCore
 	navigation: SettingsNavigation
 	overlay: WorkspaceOverlay
 	panels: SettingsPanels
@@ -33,8 +30,6 @@ type WorkspaceRail = Pick<
 >
 
 export const useWorkspaceRail = ({
-	collapsedSectionIds,
-	core,
 	navigation,
 	overlay,
 	panels,
@@ -45,13 +40,7 @@ export const useWorkspaceRail = ({
 	tabs,
 	onSelectSpace,
 }: WorkspaceRailOptions): WorkspaceRail => {
-	const sectionsBySpaceId = core.sections.state.sections
-	const {
-		badgesBySpaceId,
-		railSignals,
-		rosterBotsBySpace,
-		rosterConversationsBySpace,
-	} = rosterLists
+	const { badgesBySpaceId, railSignals } = rosterLists
 	const { onCreateSpace } = rosterLines.sidebarActions
 	const { updateBadge } = rosterLines
 	const user = overlay.userSettings
@@ -66,12 +55,7 @@ export const useWorkspaceRail = ({
 		const leaveSettingsFor = (panel: SidebarPanel) => {
 			navigation.openConversations()
 			if (panel === sidebarTab.openTab) return
-			sidebarTab.openSidebarTab(panel, {
-				botsBySpaceId: rosterBotsBySpace,
-				conversationsBySpaceId: rosterConversationsBySpace,
-				sectionsBySpaceId,
-				collapsedSectionIds,
-			})
+			sidebarTab.openSidebarTab(panel)
 		}
 
 		return {
@@ -106,18 +90,14 @@ export const useWorkspaceRail = ({
 		}
 	}, [
 		badgesBySpaceId,
-		collapsedSectionIds,
 		isLibraryShown,
 		navigation,
 		onCreateSpace,
 		onSelectSpace,
 		openSettings,
 		railSignals,
-		rosterBotsBySpace,
-		rosterConversationsBySpace,
 		search.isOpen,
 		search.open,
-		sectionsBySpaceId,
 		sidebarTab,
 		switcher,
 		tabs,

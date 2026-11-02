@@ -20,7 +20,6 @@ import type { RosterLines } from "@/lib/workspace/use-roster-lines"
 import type { RosterLists } from "@/lib/workspace/use-roster-lists"
 import type { SettingsPanels } from "@/lib/workspace/use-settings-panels"
 import type { useSidebarPanelSwitch } from "@/lib/workspace/use-sidebar-panel-switch"
-import type { WorkspaceCore } from "@/lib/workspace/use-workspace-core"
 import type { WorkspaceOverlay } from "@/lib/workspace/use-workspace-overlay"
 
 type HostBoundaries = {
@@ -115,8 +114,6 @@ const RailOfSpaceHostedHere = () => {
 		NO_INVITATIONS,
 	)
 	const { rail, currentSpace, currentSpaceHost } = useWorkspaceRail({
-		collapsedSectionIds: [],
-		core: { sections: { state: { sections: {} } } } as WorkspaceCore,
 		navigation: {} as SettingsNavigation,
 		overlay: {
 			search: { isOpen: false, open: () => {} },
