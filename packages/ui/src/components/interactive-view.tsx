@@ -256,7 +256,7 @@ export const InteractiveView = ({
 						<ViewSlider
 							key={slider.id}
 							slider={slider}
-							value={values[slider.id] ?? slider.defaultValue}
+							value={values[slider.id]}
 							onValueChange={(value) => change(slider.id, value)}
 						/>
 					))}

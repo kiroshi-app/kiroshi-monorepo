@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { expect, fn, waitFor } from "storybook/test"
+import { expect, fn } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
@@ -172,7 +172,7 @@ export const KeyboardPick = meta.story({
 
 		inTown.focus()
 		await userEvent.keyboard(" ")
-		await waitFor(() => expect(inTown).toHaveAttribute("aria-expanded", "true"))
+		await expect(inTown).toHaveAttribute("aria-expanded", "true")
 		await expect(daLat).toHaveAttribute("aria-expanded", "false")
 		await expect(args.onPick).toHaveBeenLastCalledWith("in-town")
 	},
