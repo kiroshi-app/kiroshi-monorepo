@@ -46,8 +46,8 @@ impl Documents {
 		space_id: &str,
 		name: &str,
 	) -> Result<Opened, LibraryError> {
-		let file = document_file(root, space_id, name)?;
 		let mut documents = self.held();
+		let file = document_file(root, space_id, name)?;
 		let key = key(space_id, name);
 		let mut loaded = None;
 		let (doc, was_stored) = match documents.get(&key) {
@@ -78,8 +78,8 @@ impl Documents {
 		update: &[u8],
 	) -> Result<Vec<u8>, LibraryError> {
 		let incoming = decoded(name, update)?;
-		let file = document_file(root, space_id, name)?;
 		let mut documents = self.held();
+		let file = document_file(root, space_id, name)?;
 		let key = key(space_id, name);
 		let mut loaded = None;
 		let doc = match documents.get(&key) {

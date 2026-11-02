@@ -1015,6 +1015,37 @@ fn an_update_ahead_of_the_one_it_depends_on_is_kept_across_a_restart() {
 }
 
 #[test]
+fn updates_sent_at_once_by_many_members_all_land_in_the_file_and_the_opened_text() {
+	let root = temp_root();
+	put(&root, SPACE, "notes.md", b"base");
+	let documents = Documents::default();
+	let served = documents.open(&root, SPACE, "notes.md").expect("opens").state;
+	let base = BASE64_STANDARD.encode(served);
+	let inserts_of = |member: usize| (0..8).map(move |turn| format!("[{member}.{turn}]"));
+
+	std::thread::scope(|threads| {
+		for member in 0..6 {
+			let (documents, root, base) = (&documents, &root, &base);
+			threads.spawn(move || {
+				let client = YjsClient::of(base);
+				for insert in inserts_of(member) {
+					let update = client.inserted(client.text().len() as u32, &insert);
+					documents.apply(root, SPACE, "notes.md", &bytes_of(&update)).expect("merges");
+				}
+			});
+		}
+	});
+
+	let on_disk = file_text(&root, "notes.md");
+	let opened = opened_text(&documents, &root, "notes.md");
+	for insert in (0..6).flat_map(inserts_of) {
+		assert!(on_disk.contains(&insert), "{insert} is missing from {on_disk}");
+		assert!(opened.contains(&insert), "{insert} is missing from {opened}");
+	}
+	assert_eq!(opened, on_disk);
+}
+
+#[test]
 fn outside_edits_land_on_the_held_document_under_its_one_host_client() {
 	let root = temp_root();
 	put(&root, SPACE, "notes.md", b"base");
