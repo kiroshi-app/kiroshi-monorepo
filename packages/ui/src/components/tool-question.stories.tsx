@@ -36,7 +36,7 @@ import {
 	type ToolQuestionNotice,
 	type ToolQuestionProps,
 } from "@workspace/ui/components/tool-question"
-import { AssistantTurn, TurnGroup } from "@workspace/ui/components/turn"
+import { AssistantTurn } from "@workspace/ui/components/turn"
 import { chat } from "@workspace/ui/lib/i18n-en/chat"
 
 const FRAMEWORK_QUESTION: ToolQuestionItem = {
@@ -100,7 +100,7 @@ const RELEASE_QUESTION: ToolQuestionItem = {
 }
 
 const ASKED_BY_THE_SESSION =
-	"`apps/app/src/lib/onboarding/onboarding-steps.ts:52` posts this step as a question of its own, and `apps/app/src/components/thread-prompt.tsx:103` draws it with no Skip, since a posted request cannot be denied."
+	"`apps/app/src/lib/onboarding/use-posted-sign-in-step.ts:25` posts this step as a question of its own, and `apps/app/src/components/thread-prompt.tsx:134` draws it with no Skip, since a posted request cannot be denied."
 
 const POSTED_BY_ONBOARDING =
 	"`apps/app/src/components/thread-prompt.tsx:103` mounts the panel for the `AskUserQuestion` the session raised, inside the turn `apps/app/src/components/thread-screen.tsx:628` is asking on."
@@ -1359,19 +1359,6 @@ const askedByShoto = (args: ToolQuestionProps) => (
 	</AssistantTurn>
 )
 
-const expectAskedByShoto = async (canvasElement: HTMLElement, step: string) => {
-	const bubble = slotIn(canvasElement, "message-bubble-content")
-
-	await expect(slotIn(canvasElement, "message-gutter")).toBeVisible()
-	await expect(slotIn(canvasElement, "message-author")).toHaveTextContent(
-		"Shoto",
-	)
-	await expect(within(bubble).getByText(step)).toBeVisible()
-	await expect(
-		within(bubble).queryByRole("button", { name: chat.toolQuestion.skip }),
-	).not.toBeInTheDocument()
-}
-
 type EnterHeldThenSent = {
 	field: HTMLElement
 	composingEvent: KeyboardEventInit
@@ -1409,62 +1396,13 @@ const tokenColor = (token: string) => {
 const SIGN_IN_URL =
 	"claude.ai/oauth/authorize?code=true&client_id=9d1c250a-e61b-44d9-88ed-5944d1962f5e&response_type=code&scope=user%3Ainference&state=8f3c1a"
 
-const WELCOME_STEP: ToolQuestionItem = {
-	question: "Ready to start?",
-	header: "Setup",
-	optionsOnly: true,
-	options: [
-		{ label: "Start", description: "Three steps, about a minute." },
-		{
-			label: "Tell me more first",
-			description: "What Kiroshi is, before you connect anything.",
-		},
-	],
-}
-
-const ACCOUNT_STEP: ToolQuestionItem = {
-	question: "Use the account already on this machine?",
-	header: "Your Claude account",
-	optionsOnly: true,
-	options: [
-		{
-			label: "Use this account",
-			description:
-				"Signed in with your Claude subscription, under your own login.",
-		},
-		{
-			label: "Use another account",
-			description: "Sign in again with a different one.",
-		},
-	],
-}
-
-const ACCESS_STEP: ToolQuestionItem = {
-	question: "How do you want to connect?",
-	header: "Your Claude account",
-	optionsOnly: true,
-	options: [
-		{
-			label: "Sign in with Claude",
-			description:
-				"Opens your browser once. Works with your Pro or Max subscription.",
-		},
-		{
-			label: "Paste an API key",
-			description: "Pay per use, with nothing to sign in to.",
-		},
-	],
-}
-
-const pasteKeyInstead = fn()
-
 const CODE_STEP: ToolQuestionItem = {
 	question: "Paste the code Claude gave you",
 	header: "Sign in",
 	options: [],
 	link: { label: "Open this link and sign in", url: SIGN_IN_URL },
 	entry: { label: "Then paste the code it gives you" },
-	exit: { label: "Paste a key instead", onSelect: pasteKeyInstead },
+	exit: { label: "Paste a key instead", onSelect: fn() },
 }
 
 const KEY_STEP: ToolQuestionItem = {
@@ -1491,324 +1429,6 @@ const SIGN_IN_FAILED_STEP: ToolQuestionItem = {
 		},
 	],
 }
-
-const KEY_FAILED = chat.onboarding.connection.keyFailed
-
-const KEY_REFUSED_DETAIL = "API Error: 401 API key is invalid."
-
-const KEY_FAILED_STEP: ToolQuestionItem = {
-	question: "Try another key, or sign in?",
-	header: "API key",
-	optionsOnly: true,
-	failure: { title: KEY_FAILED.title, detail: KEY_REFUSED_DETAIL },
-	options: [
-		{
-			label: KEY_FAILED.anotherKey,
-			description: "Paste a different Anthropic API key.",
-		},
-		{
-			label: KEY_FAILED.signIn,
-			description:
-				"Opens your browser once. Works with your Pro or Max subscription.",
-		},
-	],
-}
-
-const FIRST_REPLY_STEP: ToolQuestionItem = {
-	question: "That’s it working. Ready for the last one?",
-	header: "Last step",
-	optionsOnly: true,
-	options: [
-		{
-			label: "Pick my first agent",
-			description: "One more question, then you’re set up.",
-		},
-		{
-			label: "Keep talking first",
-			description: "Ask me a few more things. I’ll wait.",
-		},
-	],
-}
-
-const FIRST_COMPANION_STEP: ToolQuestionItem = {
-	question: "Who should join first?",
-	header: "First agent",
-	options: [
-		{
-			label: "Scout, who looks things up",
-			description: "Reads long pages and reports back short.",
-		},
-		{
-			label: "Ledger, who keeps things in order",
-			description: "Watches your files and says what changed.",
-		},
-		{
-			label: "Maker, who writes code",
-			description: "Edits the folders you point it at.",
-		},
-	],
-}
-
-const HAND_OFF_STEP: ToolQuestionItem = {
-	question: "Where do you want to go?",
-	header: "Done",
-	optionsOnly: true,
-	options: [
-		{
-			label: "Open Scout",
-			description: "Say hello and give it something to look up.",
-		},
-		{
-			label: "Stay here",
-			description:
-				"Keep talking to me. Scout is in the sidebar when you want it.",
-		},
-	],
-}
-
-export const StepWelcome = meta.story({
-	args: { questions: [WELCOME_STEP] },
-	render: askedByShoto,
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"The first onboarding step, asked the way every step is asked: a question bubble from Shoto, with the gutter avatar and the name line the transcript draws. Nothing here is a card of its own: the step is the question, and the two options are the whole answer. " +
-					ASKED_BY_THE_SESSION,
-			},
-		},
-	},
-	play: async ({ canvasElement }) => {
-		await expectAskedByShoto(canvasElement, WELCOME_STEP.question)
-	},
-})
-
-export const StepAccountDetected = meta.story({
-	args: { questions: [ACCOUNT_STEP] },
-	render: askedByShoto,
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"The account already signed in on the machine, offered as the first of two options. Check that the account line reads as an option rather than as a status, since taking it is the answer. " +
-					ASKED_BY_THE_SESSION,
-			},
-		},
-	},
-	play: async ({ canvasElement }) => {
-		await expectAskedByShoto(canvasElement, ACCOUNT_STEP.question)
-	},
-})
-
-export const StepSignInOrKey = meta.story({
-	args: { questions: [ACCESS_STEP] },
-	render: askedByShoto,
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"The fork between signing in and pasting a key. Both ways out of this step are options of the question, so neither is a control the reader has to look for elsewhere. " +
-					ASKED_BY_THE_SESSION,
-			},
-		},
-	},
-	play: async ({ canvasElement }) => {
-		await expectAskedByShoto(canvasElement, ACCESS_STEP.question)
-	},
-})
-
-export const StepPasteTheCode = meta.story({
-	args: { questions: [CODE_STEP] },
-	render: askedByShoto,
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"The step that waits on the browser: the sign-in link to carry away, then the code to bring back, drawn here holding the code so `Continue` takes a press. The way out to an API key sits beside the primary control as a low emphasis control, because it leaves the step rather than answering it: pressing it reports once to the host and leaves the question and the typed code where they are. " +
-					ASKED_BY_THE_SESSION,
-			},
-		},
-	},
-	play: async ({ canvas, canvasElement, userEvent }) => {
-		pasteKeyInstead.mockClear()
-		await expectAskedByShoto(canvasElement, CODE_STEP.question)
-
-		const code = canvas.getByLabelText("Then paste the code it gives you")
-
-		await userEvent.type(code, "Xk3nQ8#7f2a1c4e")
-		await expect(canvas.getByRole("button", { name: "Continue" })).toBeEnabled()
-
-		await userEvent.click(
-			canvas.getByRole("button", { name: "Paste a key instead" }),
-		)
-		await expect(pasteKeyInstead).toHaveBeenCalledTimes(1)
-		await expect(code).toHaveValue("Xk3nQ8#7f2a1c4e")
-		await expect(canvas.getByText(CODE_STEP.question)).toBeVisible()
-	},
-})
-
-export const StepPasteAnApiKey = meta.story({
-	args: { questions: [KEY_STEP] },
-	render: askedByShoto,
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"The same bubble with a single masked field, drawn empty. `Continue` is drawn at 40% but stays operable: pressing it with no key keeps the step open, marks the field invalid, describes it with the error and puts focus back in it. The key is never drawn, so a screen share during onboarding shows the step without showing the secret. " +
-					ASKED_BY_THE_SESSION,
-			},
-		},
-	},
-	play: async ({ canvas, canvasElement, userEvent }) => {
-		await expectAskedByShoto(canvasElement, KEY_STEP.question)
-		const field = canvas.getByLabelText("Key")
-		const primary = canvas.getByRole("button", { name: "Continue" })
-		await expect(field).toHaveValue("")
-		await expect(primary).toHaveAttribute("aria-disabled", "true")
-
-		await userEvent.click(primary)
-		const error = await canvas.findByRole("alert")
-		await expect(error).toHaveTextContent("Answer this question to continue.")
-		await expect(field).toHaveAttribute("aria-invalid", "true")
-		await expect(field).toHaveAccessibleDescription(
-			"Answer this question to continue.",
-		)
-		await expect(field).toHaveFocus()
-		await expect(canvas.getByText(KEY_STEP.question)).toBeVisible()
-	},
-})
-
-export const StepSignInFailed = meta.story({
-	args: { questions: [SIGN_IN_FAILED_STEP] },
-	render: askedByShoto,
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"The sign-in that came back refused, in the very bubble that asks what to do about it. The failure is a block above the question line, not a card of its own, and the two ways forward are the options below it. " +
-					ASKED_BY_THE_SESSION,
-			},
-		},
-	},
-	play: async ({ canvasElement }) => {
-		await expectAskedByShoto(canvasElement, SIGN_IN_FAILED_STEP.question)
-	},
-})
-
-export const StepApiKeyFailed = meta.story({
-	args: { questions: [KEY_FAILED_STEP] },
-	render: (args) => (
-		<div className="w-[320px] px-6" data-testid="column">
-			<TurnGroup>
-				<AssistantTurn author={SHOTO}>{KEY_FAILED.sentence}</AssistantTurn>
-				<AssistantTurn fills>
-					<ToolQuestion {...args} onDeny={undefined} />
-				</AssistantTurn>
-			</TurnGroup>
-		</div>
-	),
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"The API key that came back refused, in a 320px column. The sentence that says what went wrong is the companion's own line above the card; inside it, the failure block with the raw agent line sits above the question, and the two ways forward are options below it. No key field and no link: the refused key is not asked for again in place. " +
-					ASKED_BY_THE_SESSION,
-			},
-		},
-	},
-	play: async ({ canvas, canvasElement }) => {
-		const column = canvas.getByTestId("column")
-		const form = canvas.getByRole("form")
-		const sentence = canvas.getByText(KEY_FAILED.sentence)
-		const failure = slotIn(canvasElement, "tool-question-failure")
-		const question = canvas.getByText(KEY_FAILED_STEP.question)
-		const detail = canvas.getByText(KEY_REFUSED_DETAIL)
-		const radios = canvas.getAllByRole("radio")
-		const follows = (a: Node, b: Node) =>
-			Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING)
-
-		await expect(follows(sentence, form)).toBe(true)
-		await expect(form).toContainElement(failure)
-		await expect(follows(failure, question)).toBe(true)
-		await expect(detail).toBeVisible()
-		await expect(form).toHaveAccessibleDescription(KEY_FAILED.title)
-
-		await expect(radios).toHaveLength(2)
-		await expect(radios[0]).toHaveAccessibleName(
-			expect.stringContaining(KEY_FAILED.anotherKey),
-		)
-		await expect(radios[1]).toHaveAccessibleName(
-			expect.stringContaining(KEY_FAILED.signIn),
-		)
-		await expect(follows(question, radios[0] as Node)).toBe(true)
-
-		await expect(canvas.queryByRole("textbox")).not.toBeInTheDocument()
-		await expect(canvas.queryByRole("link")).not.toBeInTheDocument()
-
-		const bounds = column.getBoundingClientRect()
-		for (const element of [detail, ...radios]) {
-			const rect = element.getBoundingClientRect()
-			await expect(rect.left).toBeGreaterThanOrEqual(bounds.left)
-			await expect(rect.right).toBeLessThanOrEqual(bounds.right)
-		}
-		await expect(column.scrollWidth).toBeLessThanOrEqual(column.clientWidth)
-	},
-})
-
-export const StepFirstReply = meta.story({
-	args: { questions: [FIRST_REPLY_STEP] },
-	render: askedByShoto,
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"The step after the first answer came back, asking whether to go on. Its two options are the whole answer, so no free-text field is drawn. " +
-					ASKED_BY_THE_SESSION,
-			},
-		},
-	},
-	play: async ({ canvas, canvasElement }) => {
-		await expectAskedByShoto(canvasElement, FIRST_REPLY_STEP.question)
-		await expect(
-			canvas.queryByLabelText("Other answer"),
-		).not.toBeInTheDocument()
-	},
-})
-
-export const StepFirstAgent = meta.story({
-	args: { questions: [FIRST_COMPANION_STEP] },
-	render: askedByShoto,
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"Three companions, one seat. The options carry what each one does, and the free-text field stays under them, because the reader may want a companion none of the three is. " +
-					ASKED_BY_THE_SESSION,
-			},
-		},
-	},
-	play: async ({ canvas, canvasElement }) => {
-		await expectAskedByShoto(canvasElement, FIRST_COMPANION_STEP.question)
-		await expect(canvas.getByLabelText("Other answer")).toBeVisible()
-	},
-})
-
-export const StepHandOff = meta.story({
-	args: { questions: [HAND_OFF_STEP] },
-	render: askedByShoto,
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"The last step, which hands the reader over to the app. The onboarding ends on a question like every other step, so nothing switches shape at the end. " +
-					ASKED_BY_THE_SESSION,
-			},
-		},
-	},
-	play: async ({ canvasElement }) => {
-		await expectAskedByShoto(canvasElement, HAND_OFF_STEP.question)
-	},
-})
 
 export const OptionsAsWholeAnswer = meta.story({
 	args: { questions: [{ ...FRAMEWORK_QUESTION, optionsOnly: true }] },
@@ -1992,7 +1612,7 @@ export const EntryNarrow = meta.story({
 		docs: {
 			description: {
 				story:
-					"The paste-a-key question in a 320px column. Check that the key field stays inside the column and that nothing in the card pushes it sideways. Pick `StepApiKeyFailed` for the same path coming back refused. " +
+					"The paste-a-key question in a 320px column. Check that the key field stays inside the column and that nothing in the card pushes it sideways. " +
 					ASKED_BY_THE_SESSION,
 			},
 		},
