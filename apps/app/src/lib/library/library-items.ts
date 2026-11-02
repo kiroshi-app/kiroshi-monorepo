@@ -10,8 +10,10 @@ const DETAIL_SEPARATOR = " · "
 
 const extensionAt = (name: string) => name.lastIndexOf(".")
 
-const formatOf = (name: string) =>
-	name.slice(extensionAt(name) + 1).toUpperCase()
+export const extensionOf = (name: string) =>
+	name.slice(extensionAt(name) + 1).toLowerCase()
+
+const formatOf = (name: string) => extensionOf(name).toUpperCase()
 
 const formatBytes = (bytes: number) => {
 	const unit = Math.min(

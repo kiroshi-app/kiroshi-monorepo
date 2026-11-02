@@ -1,6 +1,8 @@
 import type { LibraryLightboxImage } from "@workspace/ui/components/library-lightbox"
 import { i18n } from "@workspace/ui/lib/i18n"
 
+import { extensionOf } from "./library-items"
+
 import { raiseReportedFailure } from "../failure-report"
 
 const IMAGE_TYPES: Record<string, string> = {
@@ -12,8 +14,7 @@ const IMAGE_TYPES: Record<string, string> = {
 }
 
 const imageTypeOf = (name: string) =>
-	IMAGE_TYPES[name.slice(name.lastIndexOf(".") + 1).toLowerCase()] ??
-	"application/octet-stream"
+	IMAGE_TYPES[extensionOf(name)] ?? "application/octet-stream"
 
 const readImage = async (src: string) => {
 	const response = await fetch(src)
