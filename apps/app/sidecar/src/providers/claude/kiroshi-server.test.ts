@@ -30,7 +30,7 @@ const systemSkill = (id: string) =>
 		"utf8",
 	)
 
-const SKILL_TOOL = /\b(?:conversation|companion|mission)_[a-z_]+\b/g
+const SKILL_TOOL = /\b(?:conversation|companion|mission)_[a-z_]+/g
 
 const toolsNamedIn = (skill: string) => new Set(skill.match(SKILL_TOOL))
 
