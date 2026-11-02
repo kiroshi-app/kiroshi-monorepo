@@ -84,7 +84,27 @@ pub(super) async fn plant_first_companion<R: Runtime>(
 	};
 	backfill_shoto_title(database).await;
 	backfill_coder_title(database).await;
+	retire_shoto_connect_skill(app, database).await;
 	launch::settle(app, created, unlaid);
+}
+
+async fn retire_shoto_connect_skill<R: Runtime>(app: &AppHandle<R>, database: &db::Database) {
+	let Some(root) = bundles::root(app) else {
+		return;
+	};
+	let shoto_id = match database.user().preferences().await {
+		Ok(preferences) => preferences.onboarding_shoto_id,
+		Err(failure) => {
+			log::warn!("the {} skill was not retired: {failure:?}", shoto::RETIRED_SKILL);
+			return;
+		}
+	};
+	let Some(shoto_id) = shoto_id else {
+		return;
+	};
+	if let Err(failure) = bundles::retire_skill(&root, &shoto_id, shoto::RETIRED_SKILL) {
+		log::warn!("the {} skill of {shoto_id} was not retired: {failure}", shoto::RETIRED_SKILL);
+	}
 }
 
 async fn backfill_shoto_title(database: &db::Database) {
@@ -474,7 +494,7 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn the_bundle_carries_the_four_skills_byte_for_byte_and_an_agent_holding_the_persona() {
+	async fn the_bundle_carries_the_three_skills_byte_for_byte_and_an_agent_holding_the_persona() {
 		let app = a_host("bundle");
 		let database = database_of(&app);
 
@@ -503,6 +523,41 @@ mod tests {
 		assert_eq!(planted(&app, database).await.len(), 0, "a deleted Shoto came back");
 		assert_eq!(payloads::<CompanionCreated>(&created), Vec::new());
 		assert_eq!(outcome_of(&app), LaunchOutcome::default());
+	}
+
+	#[tokio::test]
+	async fn a_start_drops_the_connect_skill_an_older_shoto_bundle_still_holds() {
+		let app = a_host("retired-connect");
+		let database = database_of(&app);
+		let roster = planted(&app, database).await;
+		let bundle = bundle_of(&app, &roster[0]);
+		let connect = bundle.join("skills").join(shoto::RETIRED_SKILL).join("SKILL.md");
+		fs::create_dir_all(connect.parent().expect("a parent")).expect("the skill directory");
+		fs::write(&connect, b"---\nname: \"connect\"\ndescription: \"Connect.\"\n---\n")
+			.expect("the old skill is planted");
+
+		seeded(&app, database).await;
+
+		assert!(!bundle.join("skills").join(shoto::RETIRED_SKILL).exists());
+		for (id, body) in shoto::SKILLS {
+			assert_eq!(skill_body(&bundle, id), body, "the skill {id} moved");
+		}
+		assert_eq!(outcome_of(&app), LaunchOutcome::default());
+	}
+
+	#[tokio::test]
+	async fn a_start_after_the_first_run_keeps_it_over_and_the_stored_step_unchanged() {
+		let app = a_host("first-run-over");
+		let database = database_of(&app);
+		planted(&app, database).await;
+		database.user().mark_first_run_done().await.expect("the first run is over");
+		database.user().set_onboarding_step(OnboardingStep::Account).await.expect("the step");
+
+		seeded(&app, database).await;
+
+		let preferences = database.user().preferences().await.expect("the preferences");
+		assert!(preferences.first_run_done);
+		assert_eq!(preferences.onboarding_step, OnboardingStep::Account);
 	}
 
 	#[tokio::test]
