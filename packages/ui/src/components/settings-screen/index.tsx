@@ -219,16 +219,20 @@ type SettingsScreenBodyProps =
 
 type SettingsScreenProps = SpaceSettingsScreenProps | UserSettingsScreenProps
 
-type CompanionSettingsScreenProps = SettingsScreenBodyNavigation &
-	SettingsScreenFrame &
+type CompanionSettingsScreenBodyProps = SettingsScreenBodyNavigation &
 	Omit<
 		BotSettingsDialogProps,
 		"open" | "onClose" | "tab" | "showDanger" | "className"
 	>
 
-type ConversationSettingsScreenProps = SettingsScreenBodyNavigation &
-	SettingsScreenFrame &
+type CompanionSettingsScreenProps = CompanionSettingsScreenBodyProps &
+	SettingsScreenFrame
+
+type ConversationSettingsScreenBodyProps = SettingsScreenBodyNavigation &
 	Omit<ConversationSettingsDialogProps, "open" | "onClose" | "className">
+
+type ConversationSettingsScreenProps = ConversationSettingsScreenBodyProps &
+	SettingsScreenFrame
 
 type SettingsScreenBodyLayoutProps = SettingsScreenBodyNavigation & {
 	avatar: ReactNode
@@ -825,7 +829,7 @@ const UserSettingsScreen = ({
 	)
 }
 
-const CompanionSettingsScreen = ({
+const CompanionSettingsContent = ({
 	entry,
 	onEntryChange,
 	onOpenApplication,
@@ -859,7 +863,7 @@ const CompanionSettingsScreen = ({
 	working,
 	workingKind,
 	...sessionProps
-}: CompanionSettingsScreenProps) => {
+}: MaybeFramed<CompanionSettingsScreenBodyProps>) => {
 	const { t } = useTranslation("bots")
 	const { t: tSettings } = useTranslation("settings")
 	const name = value.name.trim() || t("dialog.untitled")
@@ -1071,7 +1075,7 @@ const CompanionSettingsScreen = ({
 	)
 }
 
-const ConversationSettingsScreen = ({
+const ConversationSettingsContent = ({
 	value,
 	onValueChange,
 	icon,
@@ -1084,7 +1088,7 @@ const ConversationSettingsScreen = ({
 	onDismiss,
 	onDelete,
 	...navigation
-}: ConversationSettingsScreenProps) => {
+}: MaybeFramed<ConversationSettingsScreenBodyProps>) => {
 	const { t } = useTranslation("chat")
 	const { t: tSettings } = useTranslation("settings")
 	const name = value.name.trim() || t("conversationSettings.untitled")
@@ -1190,10 +1194,30 @@ const SettingsScreen = (props: SettingsScreenProps) => settingsScreenOf(props)
 const SettingsScreenBody = (props: SettingsScreenBodyProps) =>
 	settingsScreenOf(props)
 
+const CompanionSettingsScreen: (
+	props: CompanionSettingsScreenProps,
+) => ReactNode = CompanionSettingsContent
+
+const CompanionSettingsScreenBody: (
+	props: CompanionSettingsScreenBodyProps,
+) => ReactNode = CompanionSettingsContent
+
+const ConversationSettingsScreen: (
+	props: ConversationSettingsScreenProps,
+) => ReactNode = ConversationSettingsContent
+
+const ConversationSettingsScreenBody: (
+	props: ConversationSettingsScreenBodyProps,
+) => ReactNode = ConversationSettingsContent
+
 export {
 	CompanionSettingsScreen,
+	CompanionSettingsScreenBody,
+	type CompanionSettingsScreenBodyProps,
 	type CompanionSettingsScreenProps,
 	ConversationSettingsScreen,
+	ConversationSettingsScreenBody,
+	type ConversationSettingsScreenBodyProps,
 	type ConversationSettingsScreenProps,
 	SettingsScreen,
 	SettingsScreenBody,
