@@ -9655,25 +9655,6 @@
         ]
       }
     },
-    "conversation_claim_unseen_drops": {
-      "args": {
-        "properties": {
-          "conversationId": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "conversationId"
-        ],
-        "type": "object"
-      },
-      "ok": {
-        "items": {
-          "$ref": "#/$defs/SummonsDropped"
-        },
-        "type": "array"
-      }
-    },
     "conversation_complete_turn": {
       "args": {
         "properties": {

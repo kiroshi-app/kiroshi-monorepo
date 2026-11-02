@@ -580,7 +580,7 @@ export const conversationStore: TranscriptStore = {
 		}),
 
 	claimUnseenDrops: (conversationId: string) =>
-		invoke<SummonsDropped[]>("conversation_claim_unseen_drops", {
+		invokeOnThisComputer<SummonsDropped[]>("conversation_claim_unseen_drops", {
 			conversationId,
 		}),
 }

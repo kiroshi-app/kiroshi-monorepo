@@ -24,7 +24,7 @@ pub enum SummonsDropReason {
 
 impl SummonsDropReason {
 	#[cfg(test)]
-	const ALL: [SummonsDropReason; 8] = [
+	pub(crate) const ALL: [SummonsDropReason; 8] = [
 		Self::SelfMention,
 		Self::SummonLimit,
 		Self::Cancelled,
@@ -34,6 +34,10 @@ impl SummonsDropReason {
 		Self::LostQueue,
 		Self::Interrupted,
 	];
+
+	fn is_noticed(self) -> bool {
+		!matches!(self, Self::SelfMention | Self::NotSeated | Self::Cancelled)
+	}
 
 	fn name(self) -> &'static str {
 		match self {
@@ -97,7 +101,11 @@ pub(crate) fn note_dropped<R: Runtime>(
 	if reason == SummonsDropReason::Cancelled {
 		return;
 	}
-	if let Err(failure) = events::emit(app, SUMMONS_DROPPED, dropped_of(run, reason, error)) {
+	let dropped = dropped_of(run, reason, error);
+	if reason.is_noticed() {
+		keep_for_the_room(app, dropped.clone());
+	}
+	if let Err(failure) = events::emit(app, SUMMONS_DROPPED, dropped) {
 		log::warn!(
 			"the dropped summons of bot {} in turn {} of conversation {} was not announced: {failure}",
 			run.bot_id,
@@ -107,18 +115,14 @@ pub(crate) fn note_dropped<R: Runtime>(
 	}
 }
 
-pub(crate) fn keep_for_the_room<R: Runtime>(
-	app: &AppHandle<R>,
-	run: &SummonsRun<'_>,
-	reason: SummonsDropReason,
-) {
+fn keep_for_the_room<R: Runtime>(app: &AppHandle<R>, dropped: SummonsDropped) {
 	match app.try_state::<TurnWindows>() {
-		Some(windows) => windows.keep_unless_driven(dropped_of(run, reason, None)),
+		Some(windows) => windows.keep_unless_driven(dropped),
 		None => log::error!(
 			"the dropped summons of bot {} in turn {} of conversation {} found no window state to wait in",
-			run.bot_id,
-			run.turn_id,
-			run.conversation_id
+			dropped.bot_id,
+			dropped.turn_id,
+			dropped.conversation_id
 		),
 	}
 }

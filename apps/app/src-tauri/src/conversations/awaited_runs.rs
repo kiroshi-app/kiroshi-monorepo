@@ -239,6 +239,7 @@ mod tests {
 	use tokio::time;
 
 	use super::{forget_on_destroyed, forget_on_page_event, forget_settled_turns, TurnWindows};
+	use crate::conversations::summons::{self, SummonsDropReason, SummonsRun};
 	use crate::conversations::turn_run_deadline::{arm_start_deadlines, TurnRunDeadlines};
 	use crate::db;
 	use crate::db::repositories::conversations::DEFAULT_BOT_ID;
@@ -406,5 +407,43 @@ mod tests {
 		windows.served("t1");
 
 		assert!(!windows.is_left_to_the_host("t1"));
+	}
+
+	#[test]
+	fn every_drop_the_room_notices_waits_for_it_only_while_no_window_drives() {
+		let app = an_app_of_its_own("unseen-drops", mock_builder());
+		app.manage(TurnWindows::default());
+		let windows = app.state::<TurnWindows>();
+		let run = SummonsRun { conversation_id: "c1", turn_id: "t1", bot_id: "b1" };
+		let elsewhere = SummonsRun { conversation_id: "c2", ..run };
+
+		for reason in SummonsDropReason::ALL {
+			summons::note_dropped(app.handle(), &run, reason, None);
+		}
+		summons::note_dropped(app.handle(), &elsewhere, SummonsDropReason::StartFailed, None);
+		let kept: Vec<SummonsDropReason> =
+			windows.claim_unseen_drops("c1").into_iter().map(|dropped| dropped.reason).collect();
+		let claimed_again = windows.claim_unseen_drops("c1");
+		windows.start_driving("main");
+		summons::note_dropped(app.handle(), &run, SummonsDropReason::StartFailed, None);
+
+		let noticed: Vec<SummonsDropReason> = SummonsDropReason::ALL
+			.into_iter()
+			.filter(|reason| {
+				![
+					SummonsDropReason::SelfMention,
+					SummonsDropReason::NotSeated,
+					SummonsDropReason::Cancelled,
+				]
+				.contains(reason)
+			})
+			.collect();
+		assert_eq!(kept, noticed);
+		assert!(claimed_again.is_empty(), "a kept drop was handed to the room twice");
+		assert!(
+			windows.claim_unseen_drops("c1").is_empty(),
+			"a drop under a driving window was kept"
+		);
+		assert_eq!(windows.claim_unseen_drops("c2").len(), 1, "another room lost its drop");
 	}
 }

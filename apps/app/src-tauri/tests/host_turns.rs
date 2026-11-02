@@ -27,7 +27,7 @@ use kiroshi_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
 use kiroshi_app::agent::AgentState;
 use kiroshi_app::bundles::{self, EffortLevel};
 use kiroshi_app::commands::invoke_handler;
-use kiroshi_app::conversations::awaited_runs::TurnWindows;
+use kiroshi_app::conversations::awaited_runs::{conversation_claim_unseen_drops, TurnWindows};
 use kiroshi_app::conversations::commands::{
 	conversation_open_runtime_session, conversation_send_user_message, conversation_update_bot,
 };
@@ -1491,10 +1491,10 @@ fn two_agents_mentioning_each_other_with_no_window_stop_at_the_bound_and_keep_th
 		host.heard_until(|frames| drops_of(frames, GRACE).contains(&"summonLimit")).await;
 		host.answered("t1").await;
 		tokio::time::sleep(SHORT_START_DEADLINE * 3).await;
-		let claimed =
+		let claimed_by_a_member =
 			host.called("conversation_claim_unseen_drops", json!({ "conversationId": ROOM })).await;
-		let claimed_again =
-			host.called("conversation_claim_unseen_drops", json!({ "conversationId": ROOM })).await;
+		let claimed = conversation_claim_unseen_drops(host.app.state(), ROOM.to_owned());
+		let claimed_again = conversation_claim_unseen_drops(host.app.state(), ROOM.to_owned());
 
 		assert_eq!(answer["status"], json!(200), "{answer}");
 		let transcript = host.transcript().await;
@@ -1503,8 +1503,9 @@ fn two_agents_mentioning_each_other_with_no_window_stop_at_the_bound_and_keep_th
 		assert_eq!(drops_of(&host.frames, GRACE), vec!["summonLimit"]);
 		assert!(drops_of(&host.frames, ADA).is_empty(), "{:#?}", drops_of(&host.frames, ADA));
 		assert_eq!(host.runs_of("t1").await, 0, "a run outlived the bound");
+		assert_eq!(claimed_by_a_member["status"], json!(403), "{claimed_by_a_member}");
 		assert_eq!(
-			claimed["body"],
+			serde_json::to_value(&claimed).expect("the drops serialise"),
 			json!([{
 				"conversationId": ROOM,
 				"turnId": "t1",
@@ -1512,9 +1513,8 @@ fn two_agents_mentioning_each_other_with_no_window_stop_at_the_bound_and_keep_th
 				"reason": "summonLimit",
 				"error": null,
 			}]),
-			"{claimed}"
 		);
-		assert_eq!(claimed_again["body"], json!([]), "the drop was kept twice: {claimed_again}");
+		assert!(claimed_again.is_empty(), "the drop was kept twice: {claimed_again:?}");
 		host.quit().await;
 	});
 }

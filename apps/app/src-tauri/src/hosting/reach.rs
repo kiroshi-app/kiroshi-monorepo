@@ -252,7 +252,7 @@ pub(super) const REACHES: &[(&str, Reach)] = &[
 		]),
 	),
 	("conversation_serve_awaited_runs", Reach::HostOnly),
-	("conversation_claim_unseen_drops", Reach::Scoped(CONVERSATION_ID)),
+	("conversation_claim_unseen_drops", Reach::HostOnly),
 	(
 		"conversation_drop_summons",
 		Reach::Scoped(&[

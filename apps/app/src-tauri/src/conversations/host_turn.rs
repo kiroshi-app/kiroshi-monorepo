@@ -28,7 +28,7 @@ use crate::agent::translate::now_ms;
 use crate::agent::AgentState;
 use crate::db;
 use crate::db::repositories::conversations::Seat;
-use crate::db::repositories::messages::AwaitedRun;
+use crate::db::repositories::messages::{AwaitedRun, BotReply};
 use crate::db::repositories::runtime_context::{ParticipantKey, RuntimeSession};
 use crate::events::CONVERSATION_UPDATED;
 use crate::routines::runner::{
@@ -329,19 +329,52 @@ pub(crate) async fn serve_awaited<R: Runtime>(
 	let Some(first) = awaited.first() else {
 		return;
 	};
+	let (conversation_id, turn_id) = (first.conversation_id.clone(), first.turn_id.clone());
+	let handed_bot_ids = match stored_handovers(&app, &conversation_id, &turn_id).await {
+		Ok(handed) => handed,
+		Err(error) => {
+			log::error!(
+				"turn {turn_id} of conversation {conversation_id} could not read the handovers of its window, the host counts the bound from zero: {error:?}"
+			);
+			Vec::new()
+		}
+	};
 	let turn = HostTurn {
 		app,
-		conversation_id: first.conversation_id.clone(),
-		turn_id: first.turn_id.clone(),
+		conversation_id,
+		turn_id,
 		prompt_id: first.prompt_id.clone(),
 		stopped: held.stopped.clone(),
-		handed_bot_ids: Mutex::default(),
+		handed_bot_ids: Mutex::new(handed_bot_ids),
 	};
 	let summoned = awaited
 		.into_iter()
 		.map(|run| Summons { bot_id: run.bot_id, prompt_id: run.prompt_id })
 		.collect();
 	drive_from(turn, held, summoned).await;
+}
+
+async fn stored_handovers<R: Runtime>(
+	app: &AppHandle<R>,
+	conversation_id: &str,
+	turn_id: &str,
+) -> Result<Vec<String>, TranscriptStoreError> {
+	let database = database(app)?;
+	let seats = database.conversations().seats(conversation_id.to_owned()).await?;
+	let replies = database.messages().bot_replies_of_turn(turn_id.to_owned()).await?;
+	Ok(handovers_in(&replies, &present_bot_ids(&seats)))
+}
+
+fn handovers_in(replies: &[BotReply], present: &[&str]) -> Vec<String> {
+	replies
+		.iter()
+		.flat_map(|reply| {
+			seated_mentions(&reply.content, present)
+				.into_iter()
+				.filter(|bot_id| *bot_id != reply.author_bot_id)
+				.map(str::to_owned)
+		})
+		.collect()
 }
 
 async fn drive_from<R: Runtime>(turn: HostTurn<R>, held: HeldTurn, first: Vec<Summons>) {
@@ -967,7 +1000,6 @@ impl<R: Runtime> HostTurn<R> {
 				summons::note_dropped(&self.app, &run, reason, None);
 			}
 		}
-		summons::keep_for_the_room(&self.app, &run, reason);
 	}
 
 	async fn handed_by(&self, done: &Speaker) -> Result<Vec<Summons>, TranscriptStoreError> {
@@ -1389,6 +1421,45 @@ mod tests {
 			stopped,
 			handed_bot_ids: Mutex::default(),
 		}
+	}
+
+	#[tokio::test]
+	async fn a_turn_the_host_takes_over_counts_the_handovers_its_window_stored_toward_the_bound() {
+		let app = an_app_of_its_own("host-turn-seeded-bound", mock_builder());
+		app.manage(db::bootstrap(app.handle()));
+		let room = a_room_running(app.handle(), &["Ada", "Grace"]).await;
+		let (ada, grace) = (room.bot_ids[0].as_str(), room.bot_ids[1].as_str());
+		let messages = database(app.handle()).expect("the database opens").messages();
+		messages.start_turn(turn_in(&room)).await.expect("the turn opens");
+		let window_handovers = MAX_SUMMONS_PER_CHAIN - 2;
+		for order in 0..window_handovers {
+			for (author, named) in [(ada, grace), (grace, ada)] {
+				let id = format!("reply-{order}-of-{author}");
+				let reply = NewAssistantMessage {
+					id: id.clone(),
+					conversation_id: room.id.clone(),
+					turn_id: "t1".to_owned(),
+					author_bot_id: Some(author.to_owned()),
+					replied_to_message_id: None,
+					created_at: 2,
+				};
+				messages.open_assistant_message(reply).await.expect("the reply is opened");
+				let content = format!("<@{named}> your turn, <@{author}> out");
+				messages.append_text(id, content).await.expect("the reply streams");
+			}
+		}
+		let summons =
+			|bot_id: &str| Summons { bot_id: bot_id.to_owned(), prompt_id: "p".to_owned() };
+
+		let mut handed = stored_handovers(app.handle(), &room.id, "t1").await.expect("it reads");
+		let host_refusals: Vec<Option<SummonsDropReason>> = (0..3)
+			.map(|_| {
+				let mut waiting = Vec::new();
+				hand_over(&mut waiting, &mut handed, ada, summons(grace))
+			})
+			.collect();
+
+		assert_eq!(host_refusals, vec![None, None, Some(SummonsDropReason::SummonLimit)]);
 	}
 
 	#[tokio::test]
