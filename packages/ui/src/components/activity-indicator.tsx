@@ -195,7 +195,11 @@ function ActivityIndicator(props: ActivityIndicatorProps) {
 			</span>
 			<AuthorLineName tone="agent" name={named} hue={blot} />
 			{isTool ? (
-				<span aria-hidden="true" className="text-faint-foreground text-compact">
+				<span
+					aria-hidden="true"
+					data-slot="bot-working-separator"
+					className="text-faint-foreground text-compact"
+				>
 					{t("working.line.separator")}
 				</span>
 			) : null}
