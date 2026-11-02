@@ -114,6 +114,7 @@ const chat = {
 	},
 	turn: {
 		copy: "Copy",
+		you: "You",
 		reply: "Reply",
 		pin: "Pin",
 		unpin: "Unpin",
@@ -125,9 +126,12 @@ const chat = {
 			failed: "This response failed",
 			queued: "Waiting to be sent",
 		},
+		notSent: "Not sent.",
+		notSentBecause: "Not sent. {{reason}}",
 	},
 	reply: {
 		label: "Replying to {{author}}",
+		jump: "{{author}}: {{excerpt}}",
 		dismiss: "Cancel reply",
 	},
 	pinned: {
@@ -158,6 +162,13 @@ const chat = {
 		waitingTitled: "{{name}} is waiting for you… · {{title}}",
 		upNext: "{{name}} is up next…",
 		stop: "Stop {{name}}",
+		line: {
+			state: "is {{verb}}…",
+			upNext: "is up next…",
+			waitingTitled: "is waiting for you… · {{title}}",
+			separator: "·",
+			titled: "{{name}} {{text}}",
+		},
 	},
 	notice: {
 		retry: "Retry",

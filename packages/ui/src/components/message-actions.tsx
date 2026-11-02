@@ -8,6 +8,7 @@ import { TooltipButton } from "@workspace/ui/components/tooltip-button"
 import {
 	ContextMenu,
 	ContextMenuContent,
+	ContextMenuItem,
 	ContextMenuTrigger,
 } from "@workspace/ui/components/ui/context-menu"
 import { STILL_UNDER_REDUCED_MOTION } from "@workspace/ui/lib/reduced-motion"
@@ -15,7 +16,6 @@ import { TOUCH_GESTURE_CONTENT_CLASS } from "@workspace/ui/lib/touch"
 import { cn } from "@workspace/ui/lib/utils"
 
 interface MessageActionsProps {
-	actions?: ReactNode
 	menu?: ReactNode
 	children: ReactNode
 }
@@ -23,34 +23,31 @@ interface MessageActionsProps {
 interface MessageActionProps {
 	label: string
 	onClick: () => void
-	alwaysVisible?: boolean
 	children: ReactNode
 }
 
-const HOVER_REVEAL =
-	"opacity-0 group-focus-within/message:opacity-100 group-hover/message:opacity-100"
+interface MessageMenuItemProps {
+	label: string
+	onClick: () => void
+	children: ReactNode
+}
 
-const ROW_SIDE_START = "flex max-w-full items-start gap-1"
-const ROW_SIDE_END = `${ROW_SIDE_START} flex-row-reverse`
+const MESSAGE_MENU =
+	"w-42 min-w-42! rounded-2xl bg-menu-surface p-1 shadow-popover ring-0"
 
-function MessageActions({ actions, menu, children }: MessageActionsProps) {
+const MESSAGE_MENU_ITEM =
+	"h-8 min-h-8 gap-2 rounded-xl px-2 py-0 text-compact [&_svg]:size-3.5"
+
+function MessageActions({ menu, children }: MessageActionsProps) {
 	const { t } = useTranslation("chat")
 	const side = useContext(MessageSideContext) ?? "start"
 
 	const row = (
 		<div
 			data-slot="message-actions"
-			className={side === "end" ? ROW_SIDE_END : ROW_SIDE_START}
+			className={cn("flex max-w-full", side === "end" && "justify-end")}
 		>
 			{children}
-			<div
-				className={cn(
-					"mt-2.5 flex items-center gap-0.5 empty:hidden",
-					side === "end" && "flex-row-reverse",
-				)}
-			>
-				{actions}
-			</div>
 		</div>
 	)
 
@@ -64,7 +61,7 @@ function MessageActions({ actions, menu, children }: MessageActionsProps) {
 			/>
 			<ContextMenuContent
 				aria-label={t("transcript.message.actions")}
-				className={STILL_UNDER_REDUCED_MOTION}
+				className={cn(MESSAGE_MENU, STILL_UNDER_REDUCED_MOTION)}
 			>
 				{menu}
 			</ContextMenuContent>
@@ -72,12 +69,19 @@ function MessageActions({ actions, menu, children }: MessageActionsProps) {
 	)
 }
 
-function MessageAction({
-	label,
-	onClick,
-	alwaysVisible = false,
-	children,
-}: MessageActionProps) {
+function MessageMenuItem({ label, onClick, children }: MessageMenuItemProps) {
+	return (
+		<ContextMenuItem
+			label={label}
+			onClick={onClick}
+			className={MESSAGE_MENU_ITEM}
+		>
+			{children}
+		</ContextMenuItem>
+	)
+}
+
+function MessageAction({ label, onClick, children }: MessageActionProps) {
 	return (
 		<TooltipButton
 			size="icon-xs"
@@ -85,11 +89,11 @@ function MessageAction({
 			aria-label={label}
 			tooltip={label}
 			onClick={onClick}
-			className={alwaysVisible ? undefined : HOVER_REVEAL}
+			className="h-5 w-6 rounded-sm text-muted-foreground hover:text-foreground [&_svg]:size-3.5"
 		>
 			{children}
 		</TooltipButton>
 	)
 }
 
-export { MessageAction, MessageActions }
+export { MessageAction, MessageActions, MessageMenuItem }

@@ -104,6 +104,19 @@
 	--color-title-bar-menu-border: var(--title-bar-menu-border);
 	--color-user-bubble: var(--user-bubble);
 	--color-user-bubble-foreground: var(--user-bubble-foreground);
+	--color-user-bubble-hover: var(--user-bubble-hover);
+	--color-bubble: var(--bubble);
+	--color-bubble-hover: var(--bubble-hover);
+	--color-bubble-foreground: var(--bubble-foreground);
+	--color-faint-foreground: var(--faint-foreground);
+	--color-disabled-foreground: var(--disabled-foreground);
+	--color-on-foreground: var(--on-foreground);
+	--color-waiting-foreground: var(--waiting-foreground);
+	--color-prompt-surface: var(--prompt-surface);
+	--color-prompt-surface-inert: var(--prompt-surface-inert);
+	--color-prompt-menu: var(--prompt-menu);
+	--color-menu-surface: var(--menu-surface);
+	--color-author-line-sticky: var(--author-line-sticky);
 	--color-question-segment-foreground: var(--question-segment-foreground);
 	--radius-xs: calc(var(--radius-root) * 0.2);
 	--radius-sm: calc(var(--radius-root) * 0.6);
@@ -113,7 +126,7 @@
 	--radius-2xl: calc(var(--radius-root) * 1.8);
 	--radius-3xl: calc(var(--radius-root) * 2.2);
 	--radius-4xl: calc(var(--radius-root) * 2.6);
-	--radius-bubble: calc(var(--radius-root) * 1.8);
+	--radius-bubble: calc(var(--radius-root) * 1.6);
 	--radius-control: calc(var(--radius-root) * 1.2);
 	--text-compact: 0.8125rem;
 	--text-reading: 0.9375rem;
@@ -316,20 +329,10 @@
 
 @utility surface-user-bubble {
 	background-color: var(--user-bubble);
-	transition: background-color 400ms ease-out;
-
-	@media (prefers-reduced-motion: reduce) {
-		transition: none;
-	}
 }
 
 @utility surface-user-bubble-soft {
 	background-color: color-mix(in oklab, var(--user-bubble) 10%, transparent);
-	transition: background-color 400ms ease-out;
-
-	@media (prefers-reduced-motion: reduce) {
-		transition: none;
-	}
 }
 
 @utility bg-code-surface {
@@ -371,9 +374,9 @@
 @utility text-shimmer {
 	background-image: linear-gradient(
 		110deg in oklab,
-		var(--muted-foreground) 30%,
+		var(--faint-foreground) 30%,
 		var(--foreground) 50%,
-		var(--muted-foreground) 70%
+		var(--faint-foreground) 70%
 	);
 	background-size: 200% 100%;
 	-webkit-background-clip: text;

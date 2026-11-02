@@ -36,8 +36,8 @@ const QUOTE_SIZE = {
 		glyph: "size-3.5",
 	},
 	md: {
-		body: "gap-2 p-1",
-		row: "gap-3 px-[calc(0.5rem+1px)] pt-1",
+		body: "gap-1 p-1",
+		row: "gap-1 p-2",
 		glyphBox: "size-8",
 		glyph: "size-4",
 	},
@@ -49,6 +49,37 @@ export interface MessageQuoteProps extends Partial<QuotedMessage> {
 	trailing?: ReactNode
 	children?: ReactNode
 	className?: string
+}
+
+export type MessageQuoteCardProps = Omit<QuotedMessage, "from">
+
+export function MessageQuoteCard({
+	author,
+	excerpt,
+	onJump,
+}: MessageQuoteCardProps) {
+	const { t } = useTranslation("chat")
+
+	return (
+		<button
+			type="button"
+			data-slot="message-quote-jump"
+			aria-label={t("reply.jump", { author, excerpt })}
+			onClick={onJump}
+			className="flex w-full min-w-0 items-center gap-2 rounded-[10px] bg-foreground/8 p-2 text-start outline-offset-2"
+		>
+			<Icons.Reply
+				aria-hidden="true"
+				className="size-3.5 shrink-0 opacity-70"
+			/>
+			<span className="flex min-w-0 flex-1 flex-col">
+				<span className="truncate font-semibold text-xs leading-4">
+					{author}
+				</span>
+				<span className="truncate text-xs leading-4">{excerpt}</span>
+			</span>
+		</button>
+	)
 }
 
 export function MessageQuote({

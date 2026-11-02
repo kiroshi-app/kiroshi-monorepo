@@ -125,6 +125,7 @@ const chat = {
 	},
 	turn: {
 		copy: "Copier",
+		you: "Vous",
 		reply: "Répondre",
 		pin: "Épingler",
 		unpin: "Retirer l’épingle",
@@ -136,9 +137,12 @@ const chat = {
 			failed: "Cette réponse a échoué",
 			queued: "En attente d’envoi",
 		},
+		notSent: "Non envoyé.",
+		notSentBecause: "Non envoyé. {{reason}}",
 	},
 	reply: {
 		label: "Réponse à {{author}}",
+		jump: "{{author}} : {{excerpt}}",
 		dismiss: "Annuler la réponse",
 	},
 	pinned: {
@@ -170,6 +174,13 @@ const chat = {
 		waitingTitled: "{{name}} vous attend… · {{title}}",
 		upNext: "{{name}} passe ensuite…",
 		stop: "Arrêter {{name}}",
+		line: {
+			state: "{{verb}}…",
+			upNext: "passe ensuite…",
+			waitingTitled: "vous attend… · {{title}}",
+			separator: "·",
+			titled: "{{name}} {{text}}",
+		},
 	},
 	notice: {
 		retry: "Réessayer",

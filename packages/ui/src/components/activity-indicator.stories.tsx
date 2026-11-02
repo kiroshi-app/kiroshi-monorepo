@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { expect, fn, screen, waitFor } from "storybook/test"
+import { expect, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
@@ -7,7 +7,8 @@ import {
 	companionGlyphOf,
 	companionGlyphs,
 	companionHueOf,
-	expectCompanionPictureShape,
+	isInBrowserRunner,
+	realPointer,
 	slotIn,
 	slotsIn,
 	UPLOADED_AVATAR_IMAGE,
@@ -18,7 +19,7 @@ import {
 } from "@workspace/ui/components/activity-indicator"
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { MarkProvider } from "@workspace/ui/components/mark-context"
-import { TURN_AVATAR_SIZE, UserTurn } from "@workspace/ui/components/turn"
+import { UserTurn } from "@workspace/ui/components/turn"
 import { Button } from "@workspace/ui/components/ui/button"
 
 const BUSY_BOT = { blot: BLOT_HUES.blue, seed: "bot-7" } as const
@@ -295,7 +296,7 @@ export const WithTool = meta.story({
 		const clock = slotIn(canvasElement, "bot-working-elapsed")
 		const first = clock.textContent
 
-		await expect(canvas.getByText("Atlas · Bash · npm test")).toBeVisible()
+		await expect(canvas.getByText("Bash · npm test")).toBeVisible()
 		await expect(clock).toHaveTextContent(/^\d+s$/)
 		await waitFor(() => expect(clock.textContent).not.toBe(first), {
 			timeout: 2 * SECOND,
@@ -320,9 +321,7 @@ export const WithMcpTool = meta.story({
 		},
 	},
 	play: async ({ canvas }) => {
-		await expect(
-			canvas.getByText("Atlas · linear · create_issue"),
-		).toBeVisible()
+		await expect(canvas.getByText("linear · create_issue")).toBeVisible()
 	},
 })
 
@@ -362,7 +361,7 @@ export const NoStartInstant = meta.story({
 		},
 	},
 	play: async ({ canvas, canvasElement }) => {
-		await expect(canvas.getByText("Atlas is thinking…")).toBeVisible()
+		await expect(canvas.getByText("is thinking…")).toBeVisible()
 		await expect(slotsIn(canvasElement, "bot-working-elapsed")).toHaveLength(0)
 	},
 })
@@ -457,13 +456,11 @@ export const WaitingForYou = meta.story({
 		},
 	},
 	play: async ({ canvas, canvasElement }) => {
-		const titled = canvas.getByText(
-			"Atlas is waiting for you… · Which wall holds?",
-		)
+		const titled = canvas.getByText("is waiting for you… · Which wall holds?")
 
 		await expect(titled).toBeVisible()
 		await expect(titled.textContent?.endsWith("?")).toBe(true)
-		await expect(canvas.getByText("Atlas is waiting for you…")).toBeVisible()
+		await expect(canvas.getByText("is waiting for you…")).toBeVisible()
 		await expect(slotsIn(canvasElement, "bot-working-elapsed")).toHaveLength(0)
 		await expect(slotsIn(canvasElement, "text-shimmer")).toHaveLength(0)
 	},
@@ -480,7 +477,7 @@ export const UpNext = meta.story({
 		},
 	},
 	play: async ({ canvas, canvasElement }) => {
-		await expect(canvas.getByText("Atlas is up next…")).toBeVisible()
+		await expect(canvas.getByText("is up next…")).toBeVisible()
 		await expect(slotsIn(canvasElement, "bot-working-elapsed")).toHaveLength(0)
 	},
 })
@@ -581,7 +578,7 @@ export const Default = meta.story({
 	play: async ({ canvas, canvasElement }) => {
 		const clock = slotIn(canvasElement, "bot-working-elapsed")
 
-		await expect(canvas.getByText("Atlas is searching…")).toBeVisible()
+		await expect(canvas.getByText("is searching…")).toBeVisible()
 		await expect(clock).toHaveTextContent(/^\d+s$/)
 		await expect(getComputedStyle(clock).fontVariantNumeric).toContain(
 			"tabular-nums",
@@ -644,42 +641,28 @@ export const Stop = meta.story({
 			},
 		},
 	},
-	play: async ({ args, canvas, canvasElement, userEvent }) => {
-		const [stop, uploaded] = canvas.getAllByRole("button", {
-			name: "Stop Atlas",
-		})
-		const [glyph, uploadedGlyph] = slotsIn(
-			canvasElement,
-			"bot-working-stop-glyph",
-		)
-		const label = canvas.getAllByText("Atlas · Bash · npm test")[0]
+	play: async ({ args, canvas, userEvent }) => {
+		const [stop] = canvas.getAllByRole("button", { name: "Stop Atlas" })
+		const label = canvas.getAllByText("Bash · npm test")[0]
+		const line = label.closest<HTMLElement>("[data-slot='bot-working']")
+		if (!line) throw new Error("No work line")
 
 		await expect(canvas.getAllByRole("button")).toHaveLength(2)
-		const [drawn, picture] = botIdentityAvatars(canvasElement)
+		await expect(stop.getBoundingClientRect().width).toBe(20)
+		await expect(getComputedStyle(stop).borderRadius).toBe("6px")
 
-		await expect(getComputedStyle(glyph).borderRadius).toBe(
-			getComputedStyle(drawn).borderRadius,
-		)
-		await expectCompanionPictureShape(picture)
-		await expect(getComputedStyle(uploadedGlyph).borderRadius).toBe(
-			getComputedStyle(picture).borderRadius,
-		)
-
-		await userEvent.hover(uploaded)
-		await waitFor(() => expect(uploadedGlyph).toBeVisible())
-		await userEvent.unhover(uploaded)
-
-		stop.blur()
-		await userEvent.hover(stop)
-		await waitFor(() => expect(glyph).toBeVisible())
-
-		await userEvent.hover(label)
-		await waitFor(() => expect(label).toBeVisible())
-		await waitFor(() => expect(glyph).not.toBeVisible())
+		if (isInBrowserRunner()) {
+			const pointer = await realPointer()
+			await pointer.hover(line)
+			await waitFor(() => expect(stop).toBeVisible())
+			await waitFor(() => expect(label).not.toBeVisible())
+			await expect(within(line).getByText("Stop Atlas")).toBeVisible()
+			await pointer.unhover(line)
+		}
 
 		await userEvent.tab()
 		await expect(stop).toHaveFocus()
-		await waitFor(() => expect(glyph).toBeVisible())
+		await waitFor(() => expect(stop).toBeVisible())
 
 		await userEvent.click(stop)
 		await expect(args.onStop).toHaveBeenCalledTimes(1)
@@ -720,9 +703,7 @@ export const WaitingSeatStop = meta.story({
 		const vega = canvas.getByRole("button", { name: "Stop Vega" })
 		const [glyph] = slotsIn(canvasElement, "bot-working-stop-glyph")
 
-		await expect(Math.round(orion.getBoundingClientRect().height)).toBe(
-			TURN_AVATAR_SIZE,
-		)
+		await expect(Math.round(orion.getBoundingClientRect().height)).toBe(20)
 
 		await userEvent.tab()
 		await expect(orion).toHaveFocus()
@@ -731,6 +712,6 @@ export const WaitingSeatStop = meta.story({
 		await userEvent.click(orion)
 		await expect(stopOrion).toHaveBeenCalledTimes(1)
 		await expect(stopVega).not.toHaveBeenCalled()
-		await expect(vega).toBeVisible()
+		await expect(vega).toBeInTheDocument()
 	},
 })

@@ -3,15 +3,18 @@
 import {
 	Children,
 	cloneElement,
-	createContext,
 	Fragment,
 	isValidElement,
 	type ReactElement,
 	type ReactNode,
-	useContext,
 } from "react"
 import { useTranslation } from "react-i18next"
 
+import {
+	AuthorLine,
+	type AuthorLineEnd,
+	AuthorLineQueued,
+} from "@workspace/ui/components/author-line"
 import {
 	BotIdentityAvatar,
 	BotSelectButton,
@@ -19,17 +22,12 @@ import {
 import { CompanionMenuHost } from "@workspace/ui/components/companion-menu"
 import { useCompanionSelect } from "@workspace/ui/components/companion-select"
 import { type Icon, Icons } from "@workspace/ui/components/icons"
-import {
-	AvatarFrame,
-	displayNameOf,
-	initialsOf,
-} from "@workspace/ui/components/initials-avatar"
+import { InitialsAvatar } from "@workspace/ui/components/initials-avatar"
 import { useMarkId } from "@workspace/ui/components/mark-context"
 import {
 	Message,
 	MessageAuthor,
 	MessageClock,
-	MessageContent,
 	MessageFooter,
 	MessageHeader,
 	MessageTime,
@@ -37,29 +35,29 @@ import {
 import {
 	MessageAction,
 	MessageActions,
+	MessageMenuItem,
 } from "@workspace/ui/components/message-actions"
 import {
-	MESSAGE_BUBBLE_INLINE_PADDING,
 	MessageBubble,
 	MessageBubbleContent,
 	MessageBubbleGroup,
 } from "@workspace/ui/components/message-bubble"
 import { useMessageAnchor } from "@workspace/ui/components/message-highlight-context"
 import {
-	MessageQuote,
+	MessageQuoteCard,
 	type QuotedMessage,
 } from "@workspace/ui/components/message-quote"
 import { MessageSideContext } from "@workspace/ui/components/message-side-context"
 import { SharedMark } from "@workspace/ui/components/motion/shared-mark"
 import type { RosterBot } from "@workspace/ui/components/roster"
-import {
-	ContextMenuItem,
-	ContextMenuSeparator,
-} from "@workspace/ui/components/ui/context-menu"
+import { Button } from "@workspace/ui/components/ui/button"
+import { ContextMenuSeparator } from "@workspace/ui/components/ui/context-menu"
 import { useCopyText } from "@workspace/ui/hooks/use-copy-text"
 import { cn } from "@workspace/ui/lib/utils"
 
 const TURN_AVATAR_SIZE = 40
+
+const AUTHOR_AVATAR_SIZE = 20
 
 type TurnState = "streaming" | "complete" | "cancelled" | "failed"
 
@@ -110,6 +108,7 @@ interface UserTurnProps {
 	pinned?: boolean
 	onRetry?: () => void
 	onCancel?: () => void
+	failureReason?: string
 	className?: string
 }
 
@@ -124,6 +123,7 @@ type AssistantTurnProps = {
 	repliedTo?: QuotedMessage
 	onReply?: () => void
 	onPin?: () => void
+	onRetry?: () => void
 	pinned?: boolean
 	bare?: boolean
 	framed?: boolean
@@ -133,6 +133,7 @@ type AssistantTurnProps = {
 	cause?: TurnCause
 	identity?: RosterBot
 	carriesMark?: boolean
+	work?: ReactNode
 	footer?: ReactNode
 	className?: string
 }
@@ -153,12 +154,9 @@ type PersonTurnProps = {
 	className?: string
 }
 
-const TURN_FOOTER_KEY: Partial<
-	Record<UserTurnState, `turn.footer.${"cancelled" | "failed" | "queued"}`>
-> = {
-	cancelled: "turn.footer.cancelled",
-	failed: "turn.footer.failed",
-	queued: "turn.footer.queued",
+const AUTHOR_LINE_END: Partial<Record<TurnState, AuthorLineEnd>> = {
+	cancelled: "stopped",
+	failed: "failed",
 }
 
 const HIGHLIGHT =
@@ -169,164 +167,21 @@ const ROW_BLEEDS_TO_TRANSCRIPT_EDGE = "-mx-6 w-auto px-6"
 const ROW_HIGHLIGHT =
 	"transition-colors duration-200 data-[highlighted]:bg-accent/40 motion-reduce:transition-none"
 
-const RUN_ROW_PADDING = {
-	single: "pt-2 pb-1",
-	first: "pt-2 pb-0.5",
-	middle: "py-0.5",
-	last: "pt-0.5 pb-1",
-} satisfies Record<TurnRun, string>
+const TURN_ROW = "flex flex-col gap-1.5"
 
-const RUN_RADIUS = {
-	single: "",
-	first: "rounded-bl-md",
-	middle: "rounded-tl-md rounded-bl-md",
-	last: "rounded-tl-md",
-} satisfies Record<TurnRun, string>
+const AGENT_BUBBLE_WIDTH = "max-w-145"
 
-const TurnRunContext = createContext<TurnRun>("single")
+const PEOPLE_BUBBLE_WIDTH = "max-w-120"
 
-const useTurnRunRadius = () => RUN_RADIUS[useContext(TurnRunContext)]
+const footerKeyOf = (state: TurnState) =>
+	state === "cancelled" ? "turn.footer.cancelled" : "turn.footer.failed"
 
-const READER_RUN_RADIUS = {
-	single: "",
-	first: "rounded-ee-md",
-	middle: "rounded-se-md rounded-ee-md",
-	last: "rounded-se-md",
-} satisfies Record<TurnRun, string>
-
-const TURN_ROW_GRID = "grid grid-cols-[auto_minmax(0,1fr)] gap-y-1"
-
-const READER_ROW_GRID = "grid grid-cols-[minmax(0,1fr)] gap-y-1"
-
-const READER_COLUMN = "items-end"
-
-const TURN_GUTTER = "flex w-10 shrink-0 justify-end"
-
-const TURN_AVATAR_GUTTER = cn(TURN_GUTTER, "self-end")
-
-const TURN_HOVER_TIME =
-	"text-[11px]/4 text-muted-foreground opacity-0 group-focus-within/message:opacity-100 group-hover/message:opacity-100"
-
-const TURN_GUTTER_TIME = cn("pt-3.5", TURN_HOVER_TIME)
-
-const TURN_HEAD = "h-5 items-baseline gap-1.5 self-stretch"
-
-const PERSON_INITIALS =
-	"grid size-full place-items-center bg-person-avatar font-medium text-foreground text-sm uppercase leading-none"
-
-const opensRun = (run: TurnRun) => run === "single" || run === "first"
-
-const closesRun = (run: TurnRun) => run === "single" || run === "last"
-
-const sentTimeOf = (sentAt?: number, now?: number) =>
-	sentAt === undefined || now === undefined ? null : (
-		<MessageTime at={sentAt} now={now} />
-	)
-
-interface TurnGutterTimeProps {
-	sentAt?: number
-}
-
-const TurnGutterTime = ({ sentAt }: TurnGutterTimeProps) => (
-	<span
-		data-slot="message-gutter"
-		aria-hidden={sentAt === undefined ? "true" : undefined}
-		className={cn(TURN_GUTTER, TURN_GUTTER_TIME)}
-	>
-		{sentAt === undefined ? null : <MessageClock at={sentAt} />}
-	</span>
-)
-
-interface PersonGutterProps {
-	name?: string
-	image?: string
-}
-
-const PersonGutter = ({ name, image }: PersonGutterProps) => (
-	<span
-		data-slot="message-gutter"
-		aria-hidden="true"
-		className={TURN_AVATAR_GUTTER}
-	>
-		<AvatarFrame
-			image={image}
-			shape="round"
-			size={TURN_AVATAR_SIZE}
-			slot="user-avatar"
-		>
-			<span className={PERSON_INITIALS}>{initialsOf(displayNameOf(name))}</span>
-		</AvatarFrame>
-	</span>
-)
-
-type TurnRowProps = {
-	run: TurnRun
-	messageId?: string
-	sentAt?: number
-	avatar: ReactNode
-	head: ReactNode
-	footer?: ReactNode
-	children: ReactNode
-	className?: string
-	"aria-label"?: string
-}
-
-const TurnRow = ({
-	run,
-	messageId,
-	sentAt,
-	avatar,
-	head,
-	footer,
-	children,
-	className,
-	...labelled
-}: TurnRowProps) => {
-	const anchor = useMessageAnchor(messageId)
-	const opens = opensRun(run)
-	const closes = closesRun(run)
-
-	return (
-		<Message
-			from="assistant"
-			{...labelled}
-			{...anchor}
-			className={cn(
-				TURN_ROW_GRID,
-				ROW_BLEEDS_TO_TRANSCRIPT_EDGE,
-				ROW_HIGHLIGHT,
-				RUN_ROW_PADDING[run],
-				className,
-			)}
-		>
-			{opens ? (
-				<MessageContent className="col-start-2">{head}</MessageContent>
-			) : null}
-			{closes ? avatar : <TurnGutterTime sentAt={opens ? undefined : sentAt} />}
-			<MessageContent>{children}</MessageContent>
-			{footer ? (
-				<MessageContent className="col-start-2">{footer}</MessageContent>
-			) : null}
-		</Message>
-	)
-}
-
-interface PersonHeadProps {
-	name?: string
-	sentAt?: number
-	now?: number
-}
-
-const PersonHead = ({ name, sentAt, now }: PersonHeadProps) => {
-	const shownName = displayNameOf(name)
-
-	return (
-		<MessageAuthor
-			author={{ id: shownName, name: shownName }}
-			className={cn(TURN_HEAD, MESSAGE_BUBBLE_INLINE_PADDING)}
-		>
-			{sentTimeOf(sentAt, now)}
-		</MessageAuthor>
+const sentTimeOf = (sentAt?: number, now?: number) => {
+	if (sentAt === undefined) return undefined
+	return now === undefined ? (
+		<MessageClock at={sentAt} />
+	) : (
+		<MessageTime at={sentAt} now={now} className="leading-5" />
 	)
 }
 
@@ -341,7 +196,6 @@ interface TurnAction {
 	label: string
 	icon: Icon
 	onSelect: () => void
-	alwaysVisible?: boolean
 }
 
 interface TurnActionsInput {
@@ -357,8 +211,14 @@ interface TurnActionListProps {
 
 interface TurnBodyProps {
 	repliedTo?: QuotedMessage
+	foot: ReactNode
 	className?: string
 	children: ReactNode
+}
+
+interface NotSentProps {
+	reason?: string
+	onRetry?: () => void
 }
 
 function useTurnActions({
@@ -377,7 +237,6 @@ function useTurnActions({
 			label: t(pinned ? "turn.unpin" : "turn.pin"),
 			icon: pinned ? Icons.Unpin : Icons.Pin,
 			onSelect: onPin,
-			alwaysVisible: pinned,
 		})
 	}
 
@@ -405,20 +264,15 @@ function useTurnActions({
 }
 
 function TurnActionButtons({ actions }: TurnActionListProps) {
+	if (actions.length === 0) return null
+
 	return (
 		<>
-			{actions.map(
-				({ key, label, icon: ActionIcon, onSelect, alwaysVisible }) => (
-					<MessageAction
-						key={key}
-						label={label}
-						onClick={onSelect}
-						alwaysVisible={alwaysVisible}
-					>
-						<ActionIcon />
-					</MessageAction>
-				),
-			)}
+			{actions.map(({ key, label, icon: ActionIcon, onSelect }) => (
+				<MessageAction key={key} label={label} onClick={onSelect}>
+					<ActionIcon />
+				</MessageAction>
+			))}
 		</>
 	)
 }
@@ -429,10 +283,10 @@ function TurnActionMenu({ actions }: TurnActionListProps) {
 			{actions.map(({ key, label, icon: ActionIcon, onSelect }, index) => (
 				<Fragment key={key}>
 					{actions[index - 1]?.key === "pin" ? <ContextMenuSeparator /> : null}
-					<ContextMenuItem label={label} onClick={onSelect}>
-						<ActionIcon aria-hidden="true" className="size-3.5" />
+					<MessageMenuItem label={label} onClick={onSelect}>
+						<ActionIcon aria-hidden="true" />
 						{label}
-					</ContextMenuItem>
+					</MessageMenuItem>
 				</Fragment>
 			))}
 		</>
@@ -443,17 +297,32 @@ function turnMenuOf(actions: TurnAction[]) {
 	return actions.length > 0 ? <TurnActionMenu actions={actions} /> : undefined
 }
 
-function TurnBody({ repliedTo, className, children }: TurnBodyProps) {
-	const body = (
+function turnActionsOf(actions: TurnAction[]) {
+	return actions.length > 0 ? <TurnActionButtons actions={actions} /> : null
+}
+
+function TurnBody({ repliedTo, foot, className, children }: TurnBodyProps) {
+	return (
 		<MessageBubbleContent
 			data-slot="message-bubble-content"
+			tabIndex={0}
+			foot={foot}
 			className={cn("whitespace-pre-wrap", className)}
 		>
-			{children}
+			{repliedTo ? (
+				<div className="flex flex-col gap-2">
+					<MessageQuoteCard
+						author={repliedTo.author}
+						excerpt={repliedTo.excerpt}
+						onJump={repliedTo.onJump}
+					/>
+					<div>{children}</div>
+				</div>
+			) : (
+				children
+			)}
 		</MessageBubbleContent>
 	)
-
-	return repliedTo ? <MessageQuote {...repliedTo}>{body}</MessageQuote> : body
 }
 
 function TurnGroup({
@@ -469,7 +338,7 @@ function TurnGroup({
 		<MessageBubbleGroup
 			data-slot="chat-turn-group"
 			{...anchor}
-			className={cn("gap-0", messageId && HIGHLIGHT, className)}
+			className={cn("gap-3", messageId && HIGHLIGHT, className)}
 		>
 			{turns.map((turn, index) => {
 				const row = turn as ReactElement<InjectedTurnProps>
@@ -483,20 +352,34 @@ function TurnGroup({
 	)
 }
 
-function PendingSpinner() {
+const NotSent = ({ reason, onRetry }: NotSentProps) => {
+	const { t } = useTranslation("chat")
+
 	return (
-		<Icons.Loading
-			aria-hidden="true"
-			data-slot="turn-pending-spinner"
-			className="size-4 shrink-0 animate-spin text-muted-foreground motion-reduce:animate-none"
-		/>
+		<div
+			data-slot="turn-not-sent"
+			className="flex items-center justify-end gap-3"
+		>
+			<Icons.AlertCircle
+				aria-hidden="true"
+				className="size-4 shrink-0 text-destructive"
+			/>
+			<p className="min-w-0 text-compact text-destructive leading-5">
+				{reason ? t("turn.notSentBecause", { reason }) : t("turn.notSent")}
+			</p>
+			{onRetry ? (
+				<Button variant="outline" onClick={onRetry} className="rounded-lg">
+					<Icons.Retry aria-hidden="true" className="size-3.5" />
+					{t("turn.retry")}
+				</Button>
+			) : null}
+		</div>
 	)
 }
 
 function UserTurn({
 	children,
 	state = "complete",
-	run = "single",
 	sentAt,
 	now,
 	copyText,
@@ -507,15 +390,25 @@ function UserTurn({
 	pinned = false,
 	onRetry,
 	onCancel,
+	failureReason,
 	className,
 }: UserTurnProps) {
 	const { t } = useTranslation("chat")
 	const anchor = useMessageAnchor(messageId)
-	const queued = state === "queued"
-	const footerKey = queued ? TURN_FOOTER_KEY.queued : undefined
+	const isQueued = state === "queued"
+	const isNotSent = state === "failed"
 	const actions = useTurnActions({ copyText, onReply, onPin, pinned })
-	const opens = opensRun(run)
-	const headTime = opens ? sentTimeOf(sentAt, now) : null
+	const foot = isQueued ? (
+		<AuthorLineQueued onCancel={onCancel} />
+	) : (
+		<AuthorLine
+			tone="you"
+			name={t("turn.you")}
+			avatar={<InitialsAvatar size={AUTHOR_AVATAR_SIZE} />}
+			time={sentTimeOf(sentAt, now)}
+			actions={turnActionsOf(actions)}
+		/>
+	)
 
 	return (
 		<MessageSideContext.Provider value="end">
@@ -523,71 +416,25 @@ function UserTurn({
 				from="user"
 				{...anchor}
 				className={cn(
-					READER_ROW_GRID,
+					TURN_ROW,
+					"items-end",
 					ROW_BLEEDS_TO_TRANSCRIPT_EDGE,
 					ROW_HIGHLIGHT,
-					RUN_ROW_PADDING[run],
 					className,
 				)}
 			>
-				{headTime ? (
-					<MessageContent className={READER_COLUMN}>
-						<MessageHeader
-							className={cn(
-								TURN_HEAD,
-								MESSAGE_BUBBLE_INLINE_PADDING,
-								"justify-end",
-							)}
-						>
-							{headTime}
-						</MessageHeader>
-					</MessageContent>
-				) : null}
-				<MessageContent className={READER_COLUMN}>
-					<MessageBubble variant={queued ? "tint" : "solid"}>
-						<MessageActions
-							actions={
-								<>
-									{!opens && sentAt !== undefined ? (
-										<MessageClock at={sentAt} className={TURN_HOVER_TIME} />
-									) : null}
-									{queued ? <PendingSpinner /> : null}
-									{queued && onCancel ? (
-										<MessageAction
-											alwaysVisible
-											label={t("turn.cancel")}
-											onClick={onCancel}
-										>
-											<Icons.Close />
-										</MessageAction>
-									) : null}
-									{state === "failed" && onRetry ? (
-										<MessageAction
-											alwaysVisible
-											label={t("turn.retry")}
-											onClick={onRetry}
-										>
-											<Icons.Retry />
-										</MessageAction>
-									) : null}
-									<TurnActionButtons actions={actions} />
-								</>
-							}
-							menu={turnMenuOf(actions)}
-						>
-							<TurnBody
-								repliedTo={repliedTo}
-								className={READER_RUN_RADIUS[run]}
-							>
-								{children}
-							</TurnBody>
-						</MessageActions>
-					</MessageBubble>
-				</MessageContent>
-				{footerKey ? (
-					<MessageContent className={READER_COLUMN}>
-						<MessageFooter>{t(footerKey)}</MessageFooter>
-					</MessageContent>
+				<MessageBubble
+					variant={isQueued ? "tint" : "solid"}
+					className={cn(PEOPLE_BUBBLE_WIDTH, isNotSent && "opacity-80")}
+				>
+					<MessageActions menu={turnMenuOf(actions)}>
+						<TurnBody repliedTo={repliedTo} foot={foot}>
+							{children}
+						</TurnBody>
+					</MessageActions>
+				</MessageBubble>
+				{isNotSent ? (
+					<NotSent reason={failureReason} onRetry={onRetry} />
 				) : null}
 			</Message>
 		</MessageSideContext.Provider>
@@ -649,7 +496,6 @@ function AssistantTurn(props: AssistantTurnProps) {
 	const {
 		children,
 		state = "complete",
-		run = "single",
 		sentAt,
 		now,
 		copyText,
@@ -657,6 +503,7 @@ function AssistantTurn(props: AssistantTurnProps) {
 		repliedTo,
 		onReply,
 		onPin,
+		onRetry,
 		pinned = false,
 		bare = false,
 		framed = false,
@@ -666,97 +513,94 @@ function AssistantTurn(props: AssistantTurnProps) {
 		cause,
 		identity,
 		carriesMark = false,
+		work,
 		footer,
 		className,
 	} = props
 	const { t } = useTranslation("chat")
+	const anchor = useMessageAnchor(messageId)
 	const markedBotId = carriesMark ? (botId ?? author?.id) : undefined
 	const markId = useMarkId(markedBotId)
-	const footerKey = TURN_FOOTER_KEY[state]
-	const shownFooter = footerKey ? t(footerKey) : footer
 	const actions = useTurnActions({ copyText, onReply, onPin, pinned })
 	const onSelectCompanion = useCompanionSelect()
-	const gutterBot = identity ?? author
+	const face = identity ?? author
 	const unwrapped = bare || framed
-	const mark = gutterBot ? (
+	const mark = face ? (
 		<BotIdentityAvatar
-			hue={gutterBot.blot}
-			image={gutterBot.image}
-			name={gutterBot.name}
-			seed={gutterBot.id}
-			size={TURN_AVATAR_SIZE}
+			hue={face.blot}
+			image={face.image}
+			name={face.name}
+			seed={face.id}
+			size={AUTHOR_AVATAR_SIZE}
 		/>
 	) : null
 	const control =
-		gutterBot && onSelectCompanion ? (
+		face && onSelectCompanion ? (
 			<BotSelectButton
-				image={gutterBot.image}
-				name={gutterBot.name}
-				onSelect={(modifiers) => onSelectCompanion(gutterBot.id, modifiers)}
-				size={TURN_AVATAR_SIZE}
+				image={face.image}
+				name={face.name}
+				onSelect={(modifiers) => onSelectCompanion(face.id, modifiers)}
+				size={AUTHOR_AVATAR_SIZE}
 			>
 				{mark}
 			</BotSelectButton>
 		) : null
+	const avatar = mark ? (
+		<CompanionMenuHost companionId={face?.id}>
+			<SharedMark markId={markId}>{control ?? mark}</SharedMark>
+		</CompanionMenuHost>
+	) : null
+	const authorLine = face ? (
+		<AuthorLine
+			tone={author?.isDeleted ? "deleted" : "agent"}
+			name={face.name}
+			hue={face.blot}
+			badge={(author ?? identity)?.title}
+			avatar={avatar}
+			time={sentTimeOf(sentAt, now)}
+			end={AUTHOR_LINE_END[state]}
+			onRetry={onRetry}
+			actions={turnActionsOf(actions)}
+		/>
+	) : null
+	const shownFooter =
+		!face && state !== "complete" ? t(footerKeyOf(state)) : null
 
 	return (
-		<TurnRow
-			run={run}
-			messageId={messageId}
-			sentAt={sentAt}
-			className={className}
-			avatar={
-				<CompanionMenuHost companionId={gutterBot?.id}>
-					<span
-						data-slot="message-gutter"
-						aria-hidden={control ? undefined : "true"}
-						className={TURN_AVATAR_GUTTER}
-					>
-						{mark ? (
-							<SharedMark markId={markId}>{control ?? mark}</SharedMark>
-						) : null}
-					</span>
-				</CompanionMenuHost>
-			}
-			head={
-				<TurnRunHeader
-					author={author ?? identity}
-					cause={cause}
-					className={cn(
-						TURN_HEAD,
-						unwrapped ? "px-0" : MESSAGE_BUBBLE_INLINE_PADDING,
-					)}
-				>
-					{sentTimeOf(sentAt, now)}
-				</TurnRunHeader>
-			}
-			footer={
-				shownFooter ? <MessageFooter>{shownFooter}</MessageFooter> : undefined
-			}
+		<Message
+			from="assistant"
+			{...anchor}
+			className={cn(
+				TURN_ROW,
+				"items-start",
+				ROW_BLEEDS_TO_TRANSCRIPT_EDGE,
+				ROW_HIGHLIGHT,
+				className,
+			)}
 		>
+			{cause ? <TurnRunHeader cause={cause} /> : null}
 			<MessageBubble
 				variant={unwrapped ? "bare" : "soft"}
-				className={cn("min-w-0", fills && "items-stretch")}
+				className={cn(
+					"min-w-0",
+					AGENT_BUBBLE_WIDTH,
+					fills && "w-full items-stretch",
+				)}
 			>
-				<MessageActions
-					actions={<TurnActionButtons actions={actions} />}
-					menu={turnMenuOf(actions)}
-				>
+				<MessageActions menu={turnMenuOf(actions)}>
 					<TurnBody
 						repliedTo={repliedTo}
-						className={cn(
-							unwrapped ? undefined : RUN_RADIUS[run],
-							framed && "py-0",
-							fills && "w-full",
-						)}
+						foot={work ?? authorLine}
+						className={cn(framed && "py-0", fills && "w-full")}
 					>
-						<TurnRunContext.Provider value={run}>
-							{children}
-						</TurnRunContext.Provider>
+						{children}
 					</TurnBody>
 				</MessageActions>
 			</MessageBubble>
-		</TurnRow>
+			{footer || shownFooter ? (
+				<MessageFooter>{footer ?? shownFooter}</MessageFooter>
+			) : null}
+		</Message>
 	)
 }
 
@@ -764,7 +608,6 @@ const PersonTurn = ({
 	children,
 	name,
 	image,
-	run = "single",
 	sentAt,
 	now,
 	copyText,
@@ -776,29 +619,49 @@ const PersonTurn = ({
 	className,
 }: PersonTurnProps) => {
 	const { t } = useTranslation("chat")
+	const anchor = useMessageAnchor(messageId)
 	const actions = useTurnActions({ copyText, onReply, onPin, pinned })
 
 	return (
-		<TurnRow
-			aria-label={t("transcript.message.person", { name })}
-			run={run}
-			messageId={messageId}
-			sentAt={sentAt}
-			className={className}
-			avatar={<PersonGutter name={name} image={image} />}
-			head={<PersonHead name={name} sentAt={sentAt} now={now} />}
-		>
-			<MessageBubble variant="soft" className="min-w-0">
-				<MessageActions
-					actions={<TurnActionButtons actions={actions} />}
-					menu={turnMenuOf(actions)}
-				>
-					<TurnBody repliedTo={repliedTo} className={RUN_RADIUS[run]}>
-						{children}
-					</TurnBody>
-				</MessageActions>
-			</MessageBubble>
-		</TurnRow>
+		<MessageSideContext.Provider value="end">
+			<Message
+				from="assistant"
+				aria-label={t("transcript.message.person", { name })}
+				{...anchor}
+				className={cn(
+					TURN_ROW,
+					"items-end",
+					ROW_BLEEDS_TO_TRANSCRIPT_EDGE,
+					ROW_HIGHLIGHT,
+					className,
+				)}
+			>
+				<MessageBubble variant="soft" className={PEOPLE_BUBBLE_WIDTH}>
+					<MessageActions menu={turnMenuOf(actions)}>
+						<TurnBody
+							repliedTo={repliedTo}
+							foot={
+								<AuthorLine
+									tone="person"
+									name={name}
+									avatar={
+										<InitialsAvatar
+											name={name}
+											image={image}
+											size={AUTHOR_AVATAR_SIZE}
+										/>
+									}
+									time={sentTimeOf(sentAt, now)}
+									actions={turnActionsOf(actions)}
+								/>
+							}
+						>
+							{children}
+						</TurnBody>
+					</MessageActions>
+				</MessageBubble>
+			</Message>
+		</MessageSideContext.Provider>
 	)
 }
 
@@ -812,5 +675,4 @@ export {
 	type TurnRun,
 	type TurnState,
 	UserTurn,
-	useTurnRunRadius,
 }

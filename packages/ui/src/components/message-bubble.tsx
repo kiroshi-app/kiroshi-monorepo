@@ -44,6 +44,7 @@ export interface MessageBubbleProps
 export interface MessageBubbleContentProps
 	extends ComponentPropsWithRef<"div"> {
 	render?: ReactElement
+	foot?: ReactNode
 }
 
 export interface MessageBubbleGroupProps extends ComponentPropsWithRef<"div"> {
@@ -99,26 +100,31 @@ export function MessageBubble({
 	)
 }
 
-export const MESSAGE_BUBBLE_INLINE_PADDING = "px-3.5"
+export const MESSAGE_BUBBLE_INLINE_PADDING = "px-4.5"
 
-export const MESSAGE_BUBBLE_PADDING_INSET = "-inset-x-3.5 -inset-y-2.5"
+export const MESSAGE_BUBBLE_PADDING_INSET = "-inset-4.5"
 
 export const MESSAGE_BUBBLE_INTERACTIVE =
 	"cursor-pointer text-left outline-none transition-[scale] duration-200 ease-out will-change-transform hover:brightness-[0.98] focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.98]"
 
-const MENTION_OPENING_PADDING =
-	'has-[p:first-child>[data-slot="bot-mention"]:first-child]:py-3.5'
+const BUBBLE_FOCUS_RING =
+	"outline-none focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2"
+
+const OWN_BUBBLE_FOCUS_RING = "focus-visible:outline-(--foreground)"
 
 function bubbleContentClass(
 	variant: MessageBubbleVariant,
 	interactive: boolean,
 ) {
 	return cn(
-		"relative z-0 min-w-9 break-words rounded-bubble py-2.5 text-sm leading-6 text-foreground",
-		MESSAGE_BUBBLE_INLINE_PADDING,
-		hasSurface(variant) && ["max-w-full", MENTION_OPENING_PADDING],
+		"group/bubble-content relative z-0 flex min-w-9 flex-col gap-1.5 break-words rounded-bubble p-4.5 text-base text-bubble-foreground leading-6.5",
+		BUBBLE_FOCUS_RING,
+		hasSurface(variant) && "max-w-full",
 		MARKDOWN_TYPESET_CLASS,
-		variant === "solid" && "on-user-bubble text-user-bubble-foreground",
+		variant === "solid" && [
+			"on-user-bubble text-user-bubble-foreground",
+			OWN_BUBBLE_FOCUS_RING,
+		],
 		variant === "ghost" && "w-full rounded-none px-0 py-0",
 		variant === "bare" && "w-auto rounded-none px-0 py-1",
 		variant === "danger" && "on-destructive text-destructive",
@@ -129,8 +135,10 @@ function bubbleContentClass(
 function bubbleSurfaceClass(variant: MessageBubbleVariant) {
 	return cn(
 		"pointer-events-none absolute inset-0 -z-10 rounded-[inherit]",
-		variant === "solid" && "surface-user-bubble",
-		variant === "soft" && "bg-muted",
+		variant === "solid" &&
+			"surface-user-bubble group-hover/bubble-content:bg-user-bubble-hover group-focus-visible/bubble-content:bg-user-bubble-hover",
+		variant === "soft" &&
+			"bg-bubble group-hover/bubble-content:bg-bubble-hover group-focus-visible/bubble-content:bg-bubble-hover",
 		variant === "tint" && "surface-user-bubble-soft",
 		variant === "outline" && "border border-border/70 bg-card",
 		variant === "danger" && "bg-destructive/10",
@@ -200,6 +208,7 @@ function selectMessageTextAt(
 
 export function MessageBubbleContent({
 	render,
+	foot,
 	className,
 	children,
 	ref,
@@ -219,6 +228,7 @@ export function MessageBubbleContent({
 			<div data-slot="message-bubble-text" className="relative">
 				{children}
 			</div>
+			{foot}
 		</>
 	)
 

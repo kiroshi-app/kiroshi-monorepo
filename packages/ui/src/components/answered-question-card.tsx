@@ -12,7 +12,6 @@ import {
 import { MessageClock } from "@workspace/ui/components/message"
 import { MESSAGE_BUBBLE_MAX_INLINE_SIZE } from "@workspace/ui/components/message-bubble"
 import type { ToolQuestionItem } from "@workspace/ui/components/tool-question"
-import { useTurnRunRadius } from "@workspace/ui/components/turn"
 import { cn } from "@workspace/ui/lib/utils"
 
 const AUTHOR_AVATAR_SIZE = 20
@@ -172,12 +171,10 @@ const AnsweredQuestionCard = ({
 	questions,
 	className,
 }: AnsweredQuestionCardProps) => {
-	const runRadius = useTurnRunRadius()
-
 	return (
 		<div
 			data-slot="answered-question-card"
-			className={cn(CARD_CLASS, runRadius, className)}
+			className={cn(CARD_CLASS, className)}
 		>
 			<AuthorLine author={author} answeredAt={answeredAt} />
 			{questions.map((question) => (
