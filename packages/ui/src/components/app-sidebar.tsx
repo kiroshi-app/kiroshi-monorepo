@@ -3,10 +3,10 @@
 import { type ComponentProps, memo, useState } from "react"
 
 import { AppFrame } from "@workspace/ui/components/app-frame"
-import type { AppRailPanel } from "@workspace/ui/components/app-rail"
 import {
 	type AppSidebarBot,
 	type AppSidebarConversation,
+	type AppSidebarOpenPanel,
 	type AppSidebarProps,
 	type AppSidebarRowMission,
 	type AppSidebarSection,
@@ -80,10 +80,10 @@ const AppSidebarBase = ({
 	...sidebar
 }: AppSidebarProps) => {
 	probeRender("AppSidebar")
-	const [ownPanel, setOwnPanel] = useState<AppRailPanel>("conversations")
-	const openPanel: AppRailPanel =
+	const [ownPanel, setOwnPanel] = useState<AppSidebarOpenPanel>("conversations")
+	const openPanel: AppSidebarOpenPanel =
 		(controlledPanel ?? ownPanel) === "missions" ? "missions" : "conversations"
-	const setOpenPanel = (next: AppRailPanel) => {
+	const setOpenPanel = (next: AppSidebarOpenPanel) => {
 		setOwnPanel(next)
 		onOpenPanelChange?.(next)
 	}

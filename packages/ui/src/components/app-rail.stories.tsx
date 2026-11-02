@@ -48,6 +48,7 @@ const OPENING_PANEL: AppRailPanel = "conversations"
 const ENTRY_NAMES: Record<AppRailPanel, string> = {
 	conversations: "Conversations",
 	missions: "Missions",
+	library: "Library",
 }
 
 const SPACE_SETTINGS = "Space settings"
@@ -418,7 +419,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The 60px column of 44px icons down the left edge of the window: the current space's logo first, a 26px square in its colour that opens the space settings, then the two panels a reader moves between, Conversations then Missions, and the reader at the foot. The rail draws and reports; which panel is open, which settings is open over it and the dot on each entry are props, and each entry reports its own press. An entry is a button named by its panel, the open one marked `aria-current`, and the news it carries is spoken in its name, so a dot never rides on colour alone. While a settings is open, its entry is the current one and no panel entry is.",
+					"The 60px column of 44px icons down the left edge of the window: the current space's logo first, a 26px square in its colour that opens the space settings, then the three panels a reader moves between, Conversations, Missions then Library, and the reader at the foot. The rail draws and reports; which panel is open, which settings is open over it and the dot on each entry are props, and each entry reports its own press. An entry is a button named by its panel, the open one marked `aria-current`, and the news it carries is spoken in its name, so a dot never rides on colour alone. While a settings is open, its entry is the current one and no panel entry is.",
 			},
 		},
 	},
@@ -428,6 +429,7 @@ const meta = preview.meta({
 		space: CURRENT_SPACE,
 		onSelectConversations: fn(),
 		onSelectMissions: fn(),
+		onSelectLibrary: fn(),
 		onOpenSpaceSettings: fn(),
 		onOpenYou: fn(),
 	},
@@ -448,7 +450,7 @@ export const Conversations = meta.story({
 		docs: {
 			description: {
 				story:
-					"E1, Conversations. The rail as the app opens it, the current entry beside idle ones. Check the rail is 60px wide and every entry a 44px square on the `radius-lg` corner, that the conversation bubble sits on the 10% fill in the foreground colour while the Space logo, Missions and the reader sit on no fill, that the Space logo sits first, above Conversations, and that the reader's initial alone holds the foot of the rail.",
+					"E1, Conversations. The rail as the app opens it, the current entry beside idle ones. Check the rail is 60px wide and every entry a 44px square on the `radius-lg` corner, that the conversation bubble sits on the 10% fill in the foreground colour while the Space logo, Missions, Library and the reader sit on no fill with Library fourth in the top group, after Missions, that the Space logo sits first, above Conversations, and that the reader's initial alone holds the foot of the rail.",
 			},
 		},
 	},
@@ -489,6 +491,18 @@ export const UserSettingsOverMissions = meta.story({
 
 export const MissionsSelected = meta.story(selecting("missions"))
 
+export const LibrarySelected = meta.story({
+	...selecting("library"),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Library open. Check Library, fourth in the top group after Missions, is the only panel entry marked `aria-current`, on the selected fill with the filled book in the foreground ink, and that Conversations and Missions sit on no fill with their stroked icons.",
+			},
+		},
+	},
+})
+
 const SelectableRail = (args: AppRailProps) => {
 	const [selected, setSelected] = useState(args.selected)
 	return renderRail({
@@ -496,6 +510,7 @@ const SelectableRail = (args: AppRailProps) => {
 		selected,
 		onSelectConversations: () => setSelected("conversations"),
 		onSelectMissions: () => setSelected("missions"),
+		onSelectLibrary: () => setSelected("library"),
 	})
 }
 
@@ -573,7 +588,7 @@ export const IconStatesSideBySide = meta.story({
 		docs: {
 			description: {
 				story:
-					"Each panel icon in both of its states: the left rail opens Conversations, the right one Missions. Check the current entry draws the filled glyph and the idle one the stroked glyph, at the same size and in the ink of its entry, and that the flag pole keeps the stroke width of the idle flag.",
+					"Each panel icon in both of its states: the rails open Conversations, Missions then Library, left to right. Check the current entry draws the filled glyph and the idle one the stroked glyph, at the same size and in the ink of its entry, and that the flag pole keeps the stroke width of the idle flag.",
 			},
 		},
 	},
@@ -777,6 +792,11 @@ export const FailedDotDark = meta.story({
 	globals: { theme: "dark" },
 })
 
+export const LibraryDot = meta.story({
+	tags: ["test-only"],
+	...dotsOfKind({ library: "done" }),
+})
+
 const updateWaiting = updateBadgeIn("available")
 
 export const UpdateWaiting = meta.story({
@@ -863,6 +883,12 @@ export const KeyboardReach = meta.story({
 		await expect(iconStyleOf(missions)).toBe("stroke")
 		await userEvent.keyboard("{Enter}")
 		await expect(args.onSelectMissions).toHaveBeenCalledTimes(1)
+		await userEvent.tab()
+		const library = entryNamed(canvasElement, "Library")
+		await expect(library).toHaveFocus()
+		await expect(iconStyleOf(library)).toBe("stroke")
+		await userEvent.keyboard("{Enter}")
+		await expect(args.onSelectLibrary).toHaveBeenCalledTimes(1)
 		for (const entry of railEntriesIn(canvasElement).slice(PANELS.length + 1)) {
 			await userEvent.tab()
 			await expect(entry).toHaveFocus()

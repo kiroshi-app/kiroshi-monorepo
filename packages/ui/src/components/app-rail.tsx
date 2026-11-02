@@ -43,7 +43,7 @@ import type { UserChipIdentity } from "@workspace/ui/components/user-chip"
 import { STILL_UNDER_REDUCED_MOTION } from "@workspace/ui/lib/reduced-motion"
 import { cn } from "@workspace/ui/lib/utils"
 
-type AppRailPanel = "conversations" | "missions"
+type AppRailPanel = "conversations" | "missions" | "library"
 
 type AppRailSettings = "space" | "you"
 
@@ -54,6 +54,7 @@ type AppRailDots = Partial<
 const PANEL_ICON = {
 	conversations: "Conversations",
 	missions: "Missions",
+	library: "Library",
 } as const satisfies Record<AppRailPanel, keyof typeof FillIcons>
 
 const RAIL =
@@ -237,6 +238,7 @@ type AppRailProps = Omit<ComponentProps<"nav">, "children"> &
 		updateBadge?: ReactNode
 		onSelectConversations?: () => void
 		onSelectMissions?: () => void
+		onSelectLibrary?: () => void
 		onOpenSpaceSettings?: () => void
 		onOpenYou?: () => void
 	}
@@ -261,6 +263,7 @@ const AppRail = ({
 	updateBadge,
 	onSelectConversations,
 	onSelectMissions,
+	onSelectLibrary,
 	onOpenSpaceSettings,
 	onOpenYou,
 	className,
@@ -338,6 +341,7 @@ const AppRail = ({
 					onPress={onSelectConversations}
 				/>
 				<RailItem {...panelEntry("missions")} onPress={onSelectMissions} />
+				<RailItem {...panelEntry("library")} onPress={onSelectLibrary} />
 			</ul>
 			<ul className={RAIL_GROUP}>
 				{updateBadge ? (
