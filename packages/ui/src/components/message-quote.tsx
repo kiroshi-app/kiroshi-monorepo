@@ -14,10 +14,7 @@ export interface QuotedMessage {
 	onJump: () => void
 }
 
-const QUOTE_TONE = {
-	user: "bg-foreground/5 text-foreground",
-	assistant: "bg-foreground/5 text-foreground",
-} satisfies Record<MessageFrom, string>
+const QUOTE_SURFACE = "bg-foreground/5 text-foreground"
 
 type MessageQuoteSize = "sm" | "md"
 
@@ -111,7 +108,7 @@ export function MessageQuote({
 			data-size={size}
 			className={cn(
 				quoted && "w-fit max-w-full rounded-3xl",
-				quoted && from && QUOTE_TONE[from],
+				quoted && QUOTE_SURFACE,
 				className,
 			)}
 		>

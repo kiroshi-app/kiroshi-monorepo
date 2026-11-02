@@ -173,8 +173,10 @@ const AGENT_BUBBLE_WIDTH = "max-w-145"
 
 const PEOPLE_BUBBLE_WIDTH = "max-w-120"
 
-const footerKeyOf = (state: TurnState) =>
-	state === "cancelled" ? "turn.footer.cancelled" : "turn.footer.failed"
+const FOOTER_KEY = {
+	stopped: "turn.footer.cancelled",
+	failed: "turn.footer.failed",
+} as const satisfies Record<AuthorLineEnd, string>
 
 const sentTimeOf = (sentAt?: number, now?: number) => {
 	if (sentAt === undefined) return undefined
@@ -526,6 +528,7 @@ function AssistantTurn(props: AssistantTurnProps) {
 	const onSelectCompanion = useCompanionSelect()
 	const face = identity ?? author
 	const unwrapped = bare || framed
+	const end = AUTHOR_LINE_END[state]
 	const mark = face ? (
 		<BotIdentityAvatar
 			hue={face.blot}
@@ -559,13 +562,12 @@ function AssistantTurn(props: AssistantTurnProps) {
 			badge={(author ?? identity)?.title}
 			avatar={avatar}
 			time={sentTimeOf(sentAt, now)}
-			end={AUTHOR_LINE_END[state]}
+			end={end}
 			onRetry={onRetry}
 			actions={turnActionsOf(actions)}
 		/>
 	) : null
-	const shownFooter =
-		!face && state !== "complete" ? t(footerKeyOf(state)) : null
+	const shownFooter = !face && end ? t(FOOTER_KEY[end]) : null
 
 	return (
 		<Message

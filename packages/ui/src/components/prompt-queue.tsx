@@ -1,5 +1,6 @@
 "use client"
 
+import { useId } from "react"
 import { useTranslation } from "react-i18next"
 
 import { InitialsAvatar } from "@workspace/ui/components/initials-avatar"
@@ -26,19 +27,23 @@ const PromptQueue = ({
 	className,
 }: PromptQueueProps) => {
 	const { t } = useTranslation("chat")
+	const titleId = useId()
 
 	if (items.length === 0) return null
 
 	return (
 		<section
 			data-slot="prompt-queue"
-			aria-label={t("queue.title", { count: items.length, name: agentName })}
+			aria-labelledby={titleId}
 			className={cn(
 				"mx-5 flex flex-col rounded-t-[14px] border-foreground/8 border-x border-t bg-prompt-surface-inert p-1.5",
 				className,
 			)}
 		>
-			<p className="flex h-8 items-center px-2 font-medium text-faint-foreground text-xs">
+			<p
+				id={titleId}
+				className="flex h-8 items-center px-2 font-medium text-faint-foreground text-xs"
+			>
 				{t("queue.title", { count: items.length, name: agentName })}
 			</p>
 			<ul className="flex flex-col">
