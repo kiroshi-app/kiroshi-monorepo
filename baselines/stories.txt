@@ -651,16 +651,6 @@ conversation-tools-toolquestion--reduced-motion
 conversation-tools-toolquestion--several-checked
 conversation-tools-toolquestion--several-questions
 conversation-tools-toolquestion--single-select
-conversation-tools-toolquestion--step-account-detected
-conversation-tools-toolquestion--step-api-key-failed
-conversation-tools-toolquestion--step-first-agent
-conversation-tools-toolquestion--step-first-reply
-conversation-tools-toolquestion--step-hand-off
-conversation-tools-toolquestion--step-paste-an-api-key
-conversation-tools-toolquestion--step-paste-the-code
-conversation-tools-toolquestion--step-sign-in-failed
-conversation-tools-toolquestion--step-sign-in-or-key
-conversation-tools-toolquestion--step-welcome
 conversation-tools-toolquestion--themes-link-row-at-rest
 conversation-tools-toolquestion--waiting-bar
 conversation-tools-toolquestion--waiting-bar-narrow

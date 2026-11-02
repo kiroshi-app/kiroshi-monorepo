@@ -977,18 +977,6 @@ const chat = {
 		},
 	},
 	onboarding: {
-		welcome: {
-			header: "Setup",
-			question: "Ready to start?",
-			start: {
-				label: "Start",
-				description: "Three steps, about a minute.",
-			},
-			more: {
-				label: "Tell me more first",
-				description: "What Kiroshi is, before you connect anything.",
-			},
-		},
 		account: {
 			header: "Your Claude account",
 			question: "Use the account already on your computer?",
@@ -1045,18 +1033,6 @@ const chat = {
 				anotherKey: "Try another key",
 				anotherKeyDescription: "Paste a different Anthropic API key.",
 				signIn: "Sign in instead",
-			},
-		},
-		firstReply: {
-			header: "Last step",
-			question: "That’s it working. Ready for the last one?",
-			pick: {
-				label: "Pick my first agent",
-				description: "One more question, then you’re set up.",
-			},
-			keepTalking: {
-				label: "Keep talking first",
-				description: "Ask me a few more things. I’ll wait.",
 			},
 		},
 		arrival: {
