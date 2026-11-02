@@ -31,7 +31,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"One document of the Library, read-only, in place of the grid. The bar carries the breadcrumb back to the Library and a More button that only reports the document to `onMore`; the body is the document's markdown, rendered by the repo renderer in a 640 wide column.",
+					"One document of the Library, read-only, in place of the grid. The bar carries the breadcrumb back to the Library and a More button, drawn only when `onMore` is given, that only reports the document to it; the body is the document's markdown, rendered by the repo renderer in a 640 wide column.",
 			},
 		},
 	},
