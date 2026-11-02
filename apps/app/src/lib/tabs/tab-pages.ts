@@ -12,6 +12,8 @@ const LIST_PATH = "/"
 
 export const HREF_BASE = "http://tab"
 
+const LIBRARY_PATH = "/library"
+
 const USER_SETTINGS_PATH = "/settings/user"
 
 const SPACE_SETTINGS_PATH = /^\/settings\/space\/[^/]+$/
@@ -56,6 +58,9 @@ export const pageOf = (href: string): TabPage => {
 
 export const isListPage = ({ pathname }: TabPage) => pathname === LIST_PATH
 
+export const isLibraryPage = ({ pathname }: Pick<TabPage, "pathname">) =>
+	pathname === LIBRARY_PATH
+
 export const threadRowIdOf = ({ bot, conversation }: ThreadSearch) =>
 	bot ?? conversation
 
@@ -66,6 +71,7 @@ export const isTabHref = (href: string) => {
 	const { pathname } = pageOf(href)
 	return (
 		pathname === LIST_PATH ||
+		pathname === LIBRARY_PATH ||
 		pathname === USER_SETTINGS_PATH ||
 		SPACE_SETTINGS_PATH.test(pathname) ||
 		companionIdIn(pathname) !== undefined ||

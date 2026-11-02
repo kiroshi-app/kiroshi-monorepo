@@ -51,7 +51,7 @@ type SettingsFrameRead = {
 	badgesBySpaceId: RosterLists["badgesBySpaceId"]
 }
 
-const useSettingsFrame = (
+export const useSettingsFrame = (
 	onSelectSpace: (id: string) => void,
 ): SettingsFrameRead => {
 	const workspace = useWorkspace()

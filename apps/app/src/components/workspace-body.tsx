@@ -5,7 +5,6 @@ import { ScreenLayout } from "@workspace/ui/components/screen-layout"
 import { useCommonCopy } from "@workspace/ui/hooks/use-common-copy"
 
 import { BareAppHeader } from "@/components/bare-app-header"
-import { LibraryScreen } from "@/components/library-screen"
 import { MissionThreadScreen } from "@/components/mission-thread-screen"
 import type { ActivityPanel } from "@/components/thread-routines"
 import { ThreadScreen } from "@/components/thread-screen"
@@ -21,7 +20,6 @@ import type { ThreadSearch } from "@/lib/navigation/thread-search"
 import type { OnboardingCreation } from "@/lib/onboarding/onboarding-flow-controller"
 import type { SignIn } from "@/lib/onboarding/use-sign-in"
 import type { MessageLandingController } from "@/lib/search/message-landing-controller"
-import { isJoinedRowId } from "@/lib/spaces/joined-spaces-controller"
 
 type WorkspaceBodyProps = {
 	activityPanel: ActivityPanel
@@ -38,7 +36,6 @@ type WorkspaceBodyProps = {
 	readerName: string
 	isOverlayOpen: boolean
 	onToggleSettings: () => void
-	isLibraryOpen: boolean
 	isMissionsPanelOpen: boolean
 	onOpenConversationSettings: (conversationId: string) => void
 	onOpenThreadInNewTab: (thread: ThreadSearch) => void
@@ -131,16 +128,6 @@ export function WorkspaceBody(props: WorkspaceBodyProps) {
 					title={t("spaces.unavailable.title")}
 				/>
 			</ScreenLayout>
-		)
-	}
-
-	if (props.isLibraryOpen && spaceRowId && props.spaceId) {
-		return (
-			<LibraryScreen
-				isJoined={isJoinedRowId(spaceRowId)}
-				key={spaceRowId}
-				spaceId={props.spaceId}
-			/>
 		)
 	}
 

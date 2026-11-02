@@ -1,9 +1,10 @@
-import { useMemo } from "react"
+import { useMemo, useSyncExternalStore } from "react"
 
 import type { AppSidebarProps } from "@workspace/ui/components/app-sidebar-model"
 
 import type { SettingsNavigation } from "@/lib/navigation/use-settings-navigation"
 import type { useSwitcherSpaces } from "@/lib/spaces/use-joined-spaces"
+import { isLibraryPage, pageOf } from "@/lib/tabs/tab-pages"
 import type { WorkspaceTabs } from "@/lib/tabs/workspace-tabs"
 import type { SidebarPanel } from "@/lib/user/use-sidebar-tab"
 import type { SettingsFrame } from "@/lib/workspace/settings-frame"
@@ -79,6 +80,9 @@ export const useWorkspaceRail = ({
 	const { updateBadge } = rosterLines
 	const user = overlay.userSettings
 	const openSettings = panels.railSettings
+	const isLibraryShown = useSyncExternalStore(tabs.history.subscribe, () =>
+		isLibraryPage(pageOf(tabs.history.location.href)),
+	)
 
 	return useMemo(() => {
 		const space = switcher.selectedSpace
@@ -110,10 +114,10 @@ export const useWorkspaceRail = ({
 					: undefined,
 				onOpenYou: () => navigation.openUserSettings(),
 				onSelectConversations: () => leaveSettingsFor("conversations"),
-				onSelectLibrary: () => leaveSettingsFor("library"),
+				onSelectLibrary: navigation.openLibrary,
 				onSelectMissions: () => leaveSettingsFor("missions"),
 				openSettings,
-				selected: sidebarTab.openTab,
+				selected: isLibraryShown ? "library" : sidebarTab.openTab,
 				spaces: switcher.spaces,
 				updateBadge,
 				user,
@@ -124,6 +128,7 @@ export const useWorkspaceRail = ({
 	}, [
 		badgesBySpaceId,
 		collapsedSectionIds,
+		isLibraryShown,
 		navigation,
 		onCreateSpace,
 		onSelectSpace,

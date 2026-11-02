@@ -14,6 +14,7 @@ import {
 import {
 	type ComponentProps,
 	createElement,
+	Fragment,
 	type ReactElement,
 	useState,
 } from "react"
@@ -22,6 +23,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { NoticeSurface } from "@workspace/ui/components/notice-surface"
 import "@workspace/ui/lib/i18n"
 
+import { LibraryScreen } from "@/components/library-screen"
 import type { ActivityPanel } from "@/components/thread-routines"
 import { WorkspaceBody } from "@/components/workspace-body"
 import {
@@ -67,7 +69,10 @@ import { createOpenedRoutineController } from "@/lib/routines/opened-routine-con
 import { routinesTransport } from "@/lib/routines/routines-transport"
 import { triggerSourcesTransport } from "@/lib/routines/trigger-sources-transport"
 import { createMessageLandingController } from "@/lib/search/message-landing-controller"
-import { joinedRowIdOf } from "@/lib/spaces/joined-spaces-controller"
+import {
+	isJoinedRowId,
+	joinedRowIdOf,
+} from "@/lib/spaces/joined-spaces-controller"
 
 let queries = createQueryTestWrapper()
 
@@ -1243,15 +1248,23 @@ describe("WorkspaceBody library", () => {
 		vi.restoreAllMocks()
 	})
 
-	const libraryBody = (workspace: Workspace, overrides = {}) =>
-		workspace.body({ overrides: { isLibraryOpen: true, ...overrides } })
+	type LibraryPlace = { spaceId?: string; spaceRowId?: string }
 
-	const openLibrary = async (overrides = {}) => {
-		const workspace = await workspaceOf()
-		const view = render(libraryBody(workspace, overrides))
+	const libraryScreen = ({
+		spaceId = SPACE,
+		spaceRowId = SPACE,
+	}: LibraryPlace = {}) =>
+		createElement(LibraryScreen, {
+			isJoined: isJoinedRowId(spaceRowId),
+			key: spaceRowId,
+			spaceId,
+		})
+
+	const openLibrary = async (place: LibraryPlace = {}) => {
+		const view = render(libraryScreen(place))
 		render(createElement(NoticeSurface))
 		await settle()
-		return { workspace, view }
+		return { view }
 	}
 
 	const openJoinedLibrary = () =>
@@ -1292,8 +1305,7 @@ describe("WorkspaceBody library", () => {
 	const noticeTitled = (title: string) => screen.findAllByText(title)
 
 	it("lists the Library of the Space once it has loaded", async () => {
-		const workspace = await workspaceOf()
-		render(libraryBody(workspace))
+		render(libraryScreen())
 
 		expect(isBusy()).toBe(true)
 
@@ -1385,7 +1397,7 @@ describe("WorkspaceBody library", () => {
 
 	it("lists the folder again when the window regains focus or the panel opens again", async () => {
 		libraryHost.list.mockResolvedValueOnce([HERO])
-		const { workspace, view } = await openLibrary()
+		const { view } = await openLibrary()
 		expect(shownNames()).toEqual(["hero-dunes.png"])
 
 		fireEvent(window, new Event("focus"))
@@ -1393,22 +1405,19 @@ describe("WorkspaceBody library", () => {
 
 		expect(shownNames()).toContain("dusk.png")
 
-		view.rerender(libraryBody(workspace, { isLibraryOpen: false }))
-		view.rerender(libraryBody(workspace))
+		view.rerender(createElement(Fragment))
+		view.rerender(libraryScreen())
 		await settle()
 
 		expect(libraryHost.list).toHaveBeenCalledTimes(3)
 	})
 
 	it("never shows the items of the previous Space once the Space changes", async () => {
-		const { workspace, view } = await openLibrary()
+		const { view } = await openLibrary()
 		libraryHost.list.mockReturnValue(new Promise(() => undefined))
 
 		view.rerender(
-			libraryBody(workspace, {
-				spaceId: OTHER_SPACE,
-				spaceRowId: OTHER_SPACE,
-			}),
+			libraryScreen({ spaceId: OTHER_SPACE, spaceRowId: OTHER_SPACE }),
 		)
 
 		expect(shownNames()).toEqual([])

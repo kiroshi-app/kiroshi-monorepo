@@ -124,4 +124,13 @@ describe("the face of a tab", () => {
 	it("titles the empty list New tab", () => {
 		expect(tabFaceOf("/", SOURCES).title).toBe(i18n.t("common:titleBar.newTab"))
 	})
+
+	it("draws the Library icon and the Library name for the Library page", () => {
+		const face = tabFaceOf("/library", SOURCES)
+		const libraryGlyph = markupOf(createElement(Icons.Library))
+		cleanup()
+
+		expect(face.title).toBe(i18n.t("common:library.title"))
+		expect(markupOf(face.icon)).toBe(libraryGlyph)
+	})
 })
