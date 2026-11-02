@@ -22,7 +22,6 @@ const meta = preview.meta({
 	args: {
 		panel: "conversations" as const,
 		onCreateBot: fn(),
-		onOpenSearch: fn(),
 	},
 })
 

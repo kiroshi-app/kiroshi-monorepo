@@ -33,10 +33,12 @@ type AppSidebarChromeProp =
 	| "hostBySpaceId"
 	| "insetWindowControls"
 	| "invitations"
+	| "isSearchOpen"
 	| "onAcceptInvitation"
 	| "onCreateSpace"
 	| "onDeclineInvitation"
 	| "onOpenPanelChange"
+	| "onOpenSearch"
 	| "onOpenSpaceSettings"
 	| "onOpenUserSettings"
 	| "openSettings"
@@ -112,7 +114,6 @@ const AppSidebarPanel = ({
 	selectedSpaceId,
 	isSpaceSwitchingEnabled,
 	onSelectSpace,
-	onOpenSearch,
 	missionsBySpaceId,
 	onSearchMissions,
 	openPanel,
@@ -197,7 +198,6 @@ const AppSidebarPanel = ({
 					onCreateSection={
 						onCreateSection ? () => setNaming({ rowId: null }) : undefined
 					}
-					onOpenSearch={onOpenSearch}
 					onSearchMissions={onSearchMissions}
 					panel={openPanel}
 				/>

@@ -102,6 +102,7 @@ export const WorkspaceSidebar = ({
 			sectionsBySpaceId={sections.state.sections}
 			isSpaceSwitchingEnabled={!overlay.isOverlayOpen}
 			onOpenSearch={overlay.search.open}
+			isSearchOpen={overlay.search.isOpen}
 			{...rosterLines.sidebarActions}
 			{...appSidebarRailOf(rail)}
 			onCreateConversation={rosterLines.startConversation}

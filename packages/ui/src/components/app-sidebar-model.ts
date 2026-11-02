@@ -255,6 +255,7 @@ interface AppSidebarProps
 	user?: UserChipIdentity
 	onOpenUserSettings?: () => void
 	onOpenSearch?: () => void
+	isSearchOpen?: boolean
 	missionsBySpaceId?: Record<string, MissionsPanelProps>
 	onSearchMissions?: () => void
 	insetWindowControls?: boolean
