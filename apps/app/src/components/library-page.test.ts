@@ -16,17 +16,15 @@ import type { Invoke } from "@/lib/host/joined-hosts-invoke"
 import { aMission } from "@/lib/missions/mission-fixtures"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 import { readMirror, writeMirror } from "@/lib/user/preferences-mirror"
-import type { SidebarPanel } from "@/lib/user/use-sidebar-tab"
 
 type Harness = {
 	store: TranscriptStore | null
 	missions: MissionInSpace[]
-	openSidebarTab: ((panel: SidebarPanel) => void) | null
 }
 
-const harness = vi.hoisted(
-	(): Harness => ({ store: null, missions: [], openSidebarTab: null }),
-)
+type RailEntry = "conversations" | "missions" | "library"
+
+const harness = vi.hoisted((): Harness => ({ store: null, missions: [] }))
 
 vi.mock("@/lib/conversations/create-store", () => ({
 	createTranscriptStore: () => harness.store,
@@ -75,19 +73,6 @@ vi.mock("@/lib/missions/missions-transport", async (importOriginal) => {
 	}
 })
 
-vi.mock("@/lib/user/use-sidebar-tab", async (importOriginal) => {
-	const actual =
-		await importOriginal<typeof import("@/lib/user/use-sidebar-tab")>()
-	return {
-		...actual,
-		useSidebarTab: (user: Parameters<typeof actual.useSidebarTab>[0]) => {
-			const sidebarTab = actual.useSidebarTab(user)
-			harness.openSidebarTab = sidebarTab.openSidebarTab
-			return sidebarTab
-		},
-	}
-})
-
 const { createWorkspaceRouter } = await import("@/workspace-router")
 
 const SETTLE_MS = 200
@@ -96,9 +81,9 @@ const ROOM_TITLE = "Round table"
 
 const OTHER_ROOM_TITLE = "Back room"
 
-const FIRST_OBJECTIVE = "Ship the release notes"
+const OBJECTIVE = "Ship the release notes"
 
-const SECOND_OBJECTIVE = "Tidy the changelog"
+const LIBRARY_NAME = i18n.t("common:library.title")
 
 afterEach(() => {
 	cleanup()
@@ -106,7 +91,6 @@ afterEach(() => {
 	vi.useRealTimers()
 	harness.store = null
 	harness.missions = []
-	harness.openSidebarTab = null
 })
 
 const settle = async () => {
@@ -114,8 +98,6 @@ const settle = async () => {
 		await vi.advanceTimersByTimeAsync(SETTLE_MS)
 	})
 }
-
-const missionIdOf = (objective: string) => `mission-${objective}`
 
 const mountApp = async () => {
 	writeMirror({ ...readMirror(), firstRunDone: true })
@@ -131,18 +113,20 @@ const mountApp = async () => {
 		})
 	const room = await conversationIn(ROOM_TITLE)
 	const otherRoom = await conversationIn(OTHER_ROOM_TITLE)
-	harness.missions = [FIRST_OBJECTIVE, SECOND_OBJECTIVE].map((objective) => ({
-		mission: aMission({
-			id: missionIdOf(objective),
-			botId: bot.id,
-			objective,
-			originConversationId: room.id,
-			spaceId: space.id,
-			threadConversationId: room.id,
-		}),
-		conversationId: room.id,
-		conversationTitle: room.title,
-	}))
+	harness.missions = [
+		{
+			mission: aMission({
+				id: "mission-release",
+				botId: bot.id,
+				objective: OBJECTIVE,
+				originConversationId: room.id,
+				spaceId: space.id,
+				threadConversationId: room.id,
+			}),
+			conversationId: room.id,
+			conversationTitle: room.title,
+		},
+	]
 	vi.useFakeTimers()
 	harness.store = store
 	const router = createWorkspaceRouter()
@@ -150,7 +134,7 @@ const mountApp = async () => {
 		wrapper: createQueryTestWrapper().wrapper,
 	})
 	await settle()
-	return { bot, room, otherRoom, router }
+	return { otherRoom, router }
 }
 
 const click = async (target: Element) => {
@@ -160,22 +144,17 @@ const click = async (target: Element) => {
 	await settle()
 }
 
-const openLibrary = async () => {
-	await act(async () => harness.openSidebarTab?.("library"))
-	await settle()
-}
-
 const libraryHeading = () =>
-	screen.queryByRole("heading", { level: 1, name: "Library" })
+	screen.queryByRole("heading", { level: 1, name: LIBRARY_NAME })
 
 const shownThread = () => document.querySelector('[data-slot="chat-layout"]')
 
 const rosterRowOf = (name: string) =>
 	[...document.querySelectorAll('[data-slot="roster-row-name"]')]
 		.find((label) => label.textContent === name)
-		?.closest("button") as HTMLElement
+		?.closest("button")
 
-const railButton = (entry: SidebarPanel) =>
+const railButton = (entry: RailEntry) =>
 	screen.getByRole("button", { name: i18n.t(`bots:rail.${entry}`) })
 
 const selectedRailEntries = () =>
@@ -183,75 +162,66 @@ const selectedRailEntries = () =>
 		(entry) => railButton(entry).getAttribute("aria-current") === "true",
 	)
 
-describe("the Library panel", () => {
-	it("opens over the thread from code", async () => {
-		await mountApp()
+const currentTab = () => screen.getByRole("tab", { selected: true })
 
-		await openLibrary()
+const tabTitled = (title: string) =>
+	screen
+		.getAllByRole("tab")
+		.find((tab) => tab.textContent?.includes(title)) as HTMLElement
 
-		expect(libraryHeading()).not.toBeNull()
-		expect(shownThread()).toBeNull()
-	})
+const showOtherRoom = async () => {
+	await click(rosterRowOf(OTHER_ROOM_TITLE) as HTMLElement)
+}
 
-	it("closes on the conversation selected from the sidebar", async () => {
-		const { router, otherRoom } = await mountApp()
-		await openLibrary()
-
-		await click(rosterRowOf(OTHER_ROOM_TITLE))
-
-		expect(libraryHeading()).toBeNull()
-		expect(shownThread()).not.toBeNull()
-		expect(router.state.location.search.conversation).toBe(otherRoom.id)
-	})
-
-	it("closes on the agent selected from the sidebar", async () => {
-		const { router, bot } = await mountApp()
-		await openLibrary()
-
-		await click(rosterRowOf(bot.name))
-
-		expect(libraryHeading()).toBeNull()
-		expect(shownThread()).not.toBeNull()
-		expect(router.state.location.search.bot).toBe(bot.id)
-	})
-
-	it("closes on the mission selected from the sidebar", async () => {
+describe("the Library page of a tab", () => {
+	it("opens from the rail as a new entry of the current tab, titled Library, without the conversation list", async () => {
 		const { router } = await mountApp()
-		await openLibrary()
-
-		await click(railButton("missions"))
-		await click(
-			screen.getByRole("button", { name: new RegExp(SECOND_OBJECTIVE) }),
-		)
-
-		expect(libraryHeading()).toBeNull()
-		expect(router.state.location.search.mission).toBe(
-			missionIdOf(SECOND_OBJECTIVE),
-		)
-	})
-
-	it("opens from the Library entry of the rail, which reads as selected", async () => {
-		await mountApp()
+		await showOtherRoom()
+		const tabCount = screen.getAllByRole("tab").length
 
 		await click(railButton("library"))
 
+		expect(router.state.location.pathname).toBe("/library")
+		expect(router.history.canGoBack()).toBe(true)
+		expect(screen.getAllByRole("tab")).toHaveLength(tabCount)
+		expect(currentTab().textContent).toContain(LIBRARY_NAME)
 		expect(libraryHeading()).not.toBeNull()
 		expect(shownThread()).toBeNull()
+		expect(rosterRowOf(ROOM_TITLE)).toBeUndefined()
+		expect(rosterRowOf(OTHER_ROOM_TITLE)).toBeUndefined()
 		expect(selectedRailEntries()).toEqual(["library"])
 	})
 
-	it("closes on Conversations in the rail, which then reads as selected", async () => {
-		await mountApp()
+	it("restores the conversation layout and the conversation shown before on Back", async () => {
+		const { router, otherRoom } = await mountApp()
+		await showOtherRoom()
+		await click(railButton("library"))
+
+		await act(async () => router.history.back())
+		await settle()
+
+		expect(libraryHeading()).toBeNull()
+		expect(shownThread()).not.toBeNull()
+		expect(rosterRowOf(ROOM_TITLE)).toBeInstanceOf(HTMLElement)
+		expect(router.state.location.search.conversation).toBe(otherRoom.id)
+		expect(currentTab().textContent).toContain(OTHER_ROOM_TITLE)
+		expect(selectedRailEntries()).toEqual(["conversations"])
+	})
+
+	it("restores the conversation layout and the conversation shown before on Conversations in the rail", async () => {
+		const { router, otherRoom } = await mountApp()
+		await showOtherRoom()
 		await click(railButton("library"))
 
 		await click(railButton("conversations"))
 
 		expect(libraryHeading()).toBeNull()
 		expect(shownThread()).not.toBeNull()
+		expect(router.state.location.search.conversation).toBe(otherRoom.id)
 		expect(selectedRailEntries()).toEqual(["conversations"])
 	})
 
-	it("closes on Missions in the rail, which then reads as selected", async () => {
+	it("leaves for the missions panel on Missions in the rail", async () => {
 		await mountApp()
 		await click(railButton("library"))
 
@@ -259,5 +229,23 @@ describe("the Library panel", () => {
 
 		expect(libraryHeading()).toBeNull()
 		expect(selectedRailEntries()).toEqual(["missions"])
+	})
+
+	it("shows each tab its own page when switching away from the Library and back", async () => {
+		const { router } = await mountApp()
+		await showOtherRoom()
+		await click(railButton("library"))
+
+		await act(async () => router.options.context.tabs.openEmptyTab())
+		await settle()
+		expect(libraryHeading()).toBeNull()
+		expect(selectedRailEntries()).toEqual(["conversations"])
+
+		await click(tabTitled(LIBRARY_NAME))
+
+		expect(currentTab().textContent).toContain(LIBRARY_NAME)
+		expect(libraryHeading()).not.toBeNull()
+		expect(rosterRowOf(ROOM_TITLE)).toBeUndefined()
+		expect(selectedRailEntries()).toEqual(["library"])
 	})
 })

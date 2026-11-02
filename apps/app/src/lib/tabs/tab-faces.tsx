@@ -9,6 +9,7 @@ import type { TitleBarTab } from "@workspace/ui/components/title-bar-tabs"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import {
+	isLibraryPage,
 	isListPage,
 	pageOf,
 	type SettingsTarget,
@@ -50,6 +51,11 @@ const SETTINGS_SUBTITLE_KEY = {
 	companion: "agent",
 	conversation: "conversation",
 } as const satisfies Record<SettingsTarget, string>
+
+const libraryFace = (): TabFace => ({
+	title: i18n.t("common:library.title"),
+	icon: <Icons.Library />,
+})
 
 const settingsFaceOf = (page: TabPage): TabFace => ({
 	title:
@@ -94,6 +100,9 @@ const rowFaceOf = (rowId: string, { bots, conversations }: TabFaceSources) => {
 
 export const tabFaceOf = (href: string, sources: TabFaceSources): TabFace => {
 	const page = pageOf(href)
+	if (isLibraryPage(page)) {
+		return libraryFace()
+	}
 	if (!isListPage(page)) {
 		return settingsFaceOf(page)
 	}

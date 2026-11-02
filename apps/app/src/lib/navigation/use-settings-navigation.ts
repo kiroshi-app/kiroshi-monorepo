@@ -95,6 +95,7 @@ export const useSettingsNavigation = (holder: ThreadHolder) => {
 					{ to: "/settings/space/$spaceId", params: { spaceId }, search },
 					modifiers,
 				),
+			openLibrary: () => go({ to: "/library" }),
 			openUserSettings: (search: SettingsSearch = {}) =>
 				go({ to: "/settings/user", search }),
 			openCompanionSettings: (

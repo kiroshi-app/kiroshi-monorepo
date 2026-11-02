@@ -59,7 +59,6 @@ export const ConversationsScreen = () => {
 				conversationRuntimes={core.conversationRuntimes}
 				drafts={core.drafts}
 				haveSpacesFailed={spaces.state.hasFailedToLoad}
-				isLibraryOpen={sidebarTab.openTab === "library"}
 				isMissionsPanelOpen={sidebarTab.openTab === "missions"}
 				isOverlayOpen={overlay.isOverlayOpen}
 				landings={core.messageLandings}

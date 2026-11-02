@@ -173,11 +173,5 @@ export const useSidebarPanelSwitch = ({
 		[openSidebarTab, openedMission, roster.controller, shownMemory],
 	)
 
-	const closeLibrary = useCallback(() => {
-		if (openTab === "library") {
-			openSidebarTab("conversations")
-		}
-	}, [openTab, openSidebarTab])
-
-	return { openTab, openSidebarTab: switchPanel, closeLibrary }
+	return { openTab, openSidebarTab: switchPanel }
 }

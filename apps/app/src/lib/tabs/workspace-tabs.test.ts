@@ -120,6 +120,8 @@ const OTHER_SPACE = "space-away"
 
 const USER_SETTINGS = "/settings/user"
 
+const LIBRARY = "/library"
+
 const routerOn = (tabs: WorkspaceTabs) => {
 	const root = createRootRoute()
 	const list = createRoute({
@@ -1381,6 +1383,17 @@ describe("a tab dropped past the strip", () => {
 		expect(activeHref(opened)).toBe(threadOf("second"))
 	})
 
+	it("shows the Library in the new window of a tab torn off on the Library", async () => {
+		opensWindows()
+		const tabs = tabsOn(LIBRARY, threadOf("kept"))
+
+		await moveTornOff(tabs, LIBRARY)
+		const opened = tabsOfWindow(SECONDARY, openedHref())
+
+		expect(shownHrefs(tabs)).toEqual(["/", threadOf("kept")])
+		expect(activeHref(opened)).toBe(LIBRARY)
+	})
+
 	it("keeps the tab in its slot, raises the move notice and carries nothing when the window fails to open", async () => {
 		windowHost.windowOpen.mockRejectedValue(new Error("window lost"))
 		const tabs = tabsOn(threadOf("first"), threadOf("stays"))
@@ -1460,6 +1473,24 @@ describe("the windows", () => {
 
 		expect(shownHrefs(tabs)).toEqual([threadOf("before"), USER_SETTINGS])
 		expect(activeHref(tabs)).toBe(USER_SETTINGS)
+	})
+
+	it("restores at launch a tab kept on the Library", () => {
+		localStorage.setItem(
+			`spaceTabs:${SPACE}`,
+			JSON.stringify({
+				tabs: [
+					{ href: threadOf("before"), isPinned: false },
+					{ href: LIBRARY, isPinned: false },
+				],
+				activeIndex: 1,
+			}),
+		)
+
+		const tabs = tabsOfSpace()
+
+		expect(shownHrefs(tabs)).toEqual([threadOf("before"), LIBRARY])
+		expect(activeHref(tabs)).toBe(LIBRARY)
 	})
 
 	it("discards at launch the kept tabs of every window not open at quit", () => {

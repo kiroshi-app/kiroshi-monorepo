@@ -5,6 +5,7 @@ import {
 } from "@tanstack/react-router"
 
 import { ConversationsScreen } from "@/components/conversations-screen"
+import { LibraryRoute } from "@/components/library-route"
 import { WorkspaceLayout } from "@/components/workspace-layout"
 import {
 	CompanionSettingsRoute,
@@ -37,6 +38,12 @@ const conversationsRoute = createRoute({
 	component: ConversationsScreen,
 })
 
+const libraryRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: "/library",
+	component: LibraryRoute,
+})
+
 const spaceSettingsRoute = createRoute({
 	getParentRoute: () => rootRoute,
 	path: "/settings/space/$spaceId",
@@ -67,6 +74,7 @@ const conversationSettingsRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
 	conversationsRoute,
+	libraryRoute,
 	spaceSettingsRoute,
 	userSettingsRoute,
 	companionSettingsRoute,
