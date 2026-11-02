@@ -5,13 +5,10 @@ import preview from "@workspace/storybook/preview"
 import {
 	FRAME_POLL,
 	isInBrowserRunner,
-	slotIn,
-	slotsIn,
 	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
 import { ActivityIndicator } from "@workspace/ui/components/activity-indicator"
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
-import { DaySeparator } from "@workspace/ui/components/day-separator"
 import { MarkProvider } from "@workspace/ui/components/mark-context"
 import type { RosterBot } from "@workspace/ui/components/roster"
 import {
@@ -961,76 +958,6 @@ export const RestsAfterAResize = meta.story({
 	},
 })
 
-const JOINED_NOW = new Date(2026, 9, 10, 9, 30).getTime()
-
-const JOINED_RUNS: TranscriptItem[] = [
-	{
-		key: "asked",
-		render: () => (
-			<TurnGroup>
-				<UserTurn name="Shoto Puget">Is any of that destructive?</UserTurn>
-			</TurnGroup>
-		),
-	},
-	{
-		key: "answered",
-		render: () => (
-			<TurnGroup>
-				<AssistantTurn author={{ id: "bot-atlas", name: "Atlas" }}>
-					Nothing is deleted.
-				</AssistantTurn>
-				<AssistantTurn author={{ id: "bot-atlas", name: "Atlas" }}>
-					The migration only adds a column.
-				</AssistantTurn>
-			</TurnGroup>
-		),
-	},
-	{
-		key: "day",
-		render: () => <DaySeparator at={JOINED_NOW} now={JOINED_NOW} />,
-	},
-	{
-		key: "followed-up",
-		render: () => (
-			<TurnGroup>
-				<UserTurn name="Shoto Puget">Ship it.</UserTurn>
-			</TurnGroup>
-		),
-	},
-]
-
-export const JoinsConsecutiveRuns = meta.story({
-	render: (args) => (
-		<div className={FRAME_CLASS}>
-			<Transcript
-				{...args}
-				className="flex-1"
-				contentClassName="flex flex-col px-6 py-3"
-				rows={JOINED_RUNS}
-			/>
-		</div>
-	),
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"Two message runs in a row sit on their own row padding alone, 4px under the last row of one and 8px over the head of the next, with no transcript gap between them. Every other row keeps the transcript gap: check that the day separator still stands 24px clear of the runs on both sides. " +
-					MOUNTED_BY_THE_LAYOUT,
-			},
-		},
-	},
-	play: async ({ canvasElement }) => {
-		const [asked, answered, day, followedUp] = slotsIn(
-			canvasElement,
-			"message-scroller-item",
-		).map((item) => item.getBoundingClientRect())
-
-		await expect(answered.top - asked.bottom).toBe(0)
-		await expect(day.top - answered.bottom).toBe(24)
-		await expect(followedUp.top - day.bottom).toBe(24)
-	},
-})
-
 const AT_REST_BOT: RosterBot = {
 	id: "bot-lyra",
 	name: "Lyra",
@@ -1114,19 +1041,6 @@ const AtRestDemo = (args: TranscriptProps) => {
 
 const nextFrame = () => new Promise((resolve) => requestAnimationFrame(resolve))
 
-const motionIn = (root: HTMLElement) =>
-	[root, ...root.querySelectorAll<HTMLElement>("*")].flatMap((node) => {
-		const style = getComputedStyle(node)
-		const running = node.getAnimations().length
-		const isAtRest =
-			style.opacity === "1" && style.transform === "none" && running === 0
-		return isAtRest
-			? []
-			: [
-					`${node.dataset.slot ?? node.tagName}: opacity ${style.opacity}, transform ${style.transform}, ${running} animations`,
-				]
-	})
-
 const rowOf = (canvasElement: HTMLElement, key: string) => {
 	const row = canvasElement.querySelector<HTMLElement>(
 		`[data-message-id="${key}"]`,
@@ -1135,14 +1049,14 @@ const rowOf = (canvasElement: HTMLElement, key: string) => {
 	return row
 }
 
-export const AppendsRowsAtRest = meta.story({
+export const AppendsRowsLive = meta.story({
 	tags: ["test-only"],
 	render: (args) => <AtRestDemo {...args} />,
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"A solo thread with full motion allowed: the reader sends, the working row takes the companion's mark, then the reply lands and its gutter claims it back. Each row the transcript gains, with its header line, avatar and bubble, and the working row's avatar, sit at full opacity with no transform and no running animation on the frame they mount: nothing fades, slides or scales in. " +
+					"A solo thread with full motion allowed: the reader sends, then the reply lands. Each row the transcript gains while it is open fades in and lifts 8px into place over 200ms, while the rows it showed on load stay where they were with no animation, so history never moves. Under reduced motion the same rows simply appear. " +
 					MOUNTED_BY_THE_LAYOUT,
 			},
 		},
@@ -1150,16 +1064,27 @@ export const AppendsRowsAtRest = meta.story({
 	play: async ({ canvas, canvasElement, userEvent }) => {
 		if (!isInBrowserRunner()) return
 		await withMotionAllowed(async () => {
+			await expect(rowOf(canvasElement, "answered")).not.toHaveAttribute(
+				"data-arrived",
+			)
 			await userEvent.click(canvas.getByRole("button", { name: "Send" }))
 			await nextFrame()
-			await expect(motionIn(rowOf(canvasElement, "sent"))).toEqual([])
-			await expect(
-				motionIn(slotIn(slotIn(canvasElement, "bot-working"), "shared-mark")),
-			).toEqual([])
+			const sent = rowOf(canvasElement, "sent").closest<HTMLElement>(
+				"[data-arrived]",
+			)
+			await expect(sent).not.toBeNull()
+			await expect(sent && getComputedStyle(sent).animationName).toBe(
+				"ui-thread-arrive",
+			)
+			await expect(rowOf(canvasElement, "answered")).not.toHaveAttribute(
+				"data-arrived",
+			)
 
 			await userEvent.click(canvas.getByRole("button", { name: "Reply" }))
 			await nextFrame()
-			await expect(motionIn(rowOf(canvasElement, "replied"))).toEqual([])
+			await expect(
+				rowOf(canvasElement, "replied").closest("[data-arrived]"),
+			).not.toBeNull()
 		})
 	},
 })

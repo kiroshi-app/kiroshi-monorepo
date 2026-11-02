@@ -129,10 +129,17 @@ const chat = {
 		notSent: "Not sent.",
 		notSentBecause: "Not sent. {{reason}}",
 	},
+	queue: {
+		title_one: "Queued · {{count}} · goes once {{name}}’s answer is done",
+		title_other: "Queued · {{count}} · go once {{name}}’s answer is done",
+		you: "you",
+		next: "Next, after {{name}}",
+	},
 	reply: {
 		label: "Replying to {{author}}",
 		jump: "{{author}}: {{excerpt}}",
 		dismiss: "Cancel reply",
+		dismissFrom: "Remove the reply to {{author}}",
 	},
 	pinned: {
 		title: "Pinned messages",

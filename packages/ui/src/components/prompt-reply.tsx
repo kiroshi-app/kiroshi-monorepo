@@ -31,7 +31,7 @@ export function PromptReply({ quote, children, className }: PromptReplyProps) {
 			from={quote?.from}
 			onJump={quote?.onJump}
 			size="md"
-			className={cn("w-full", quote && "rounded-4xl", className)}
+			className={cn("w-full", quote && "rounded-[29px]", className)}
 			trailing={
 				quote ? (
 					<Button
@@ -40,7 +40,7 @@ export function PromptReply({ quote, children, className }: PromptReplyProps) {
 						size="icon"
 						aria-label={t("reply.dismiss")}
 						onClick={quote.onDismiss}
-						className="rounded-full text-current opacity-70 hover:opacity-100"
+						className="size-8 rounded-full text-muted-foreground hover:text-foreground"
 					>
 						<Icons.Close />
 					</Button>

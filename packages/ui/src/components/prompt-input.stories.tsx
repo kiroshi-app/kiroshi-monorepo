@@ -3,9 +3,6 @@ import { expect, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
-	expectFieldFrame,
-	expectFocusRing,
-	expectInverseAtRest,
 	isInBrowserRunner,
 	realPointer,
 	tokenStyleIn,
@@ -384,32 +381,49 @@ export const States = meta.story({
 
 const SEND_SELECTOR = 'button[aria-label="Send"]'
 
-const INVERSE_SEND =
-	"The send button in the inverse treatment of artboards V1e and V1f, light and dark side by side: filled with the `foreground` token, its arrow drawn with the `background` token, so it reads ink on white in light and white on ink in dark. "
+const SEND_STATES =
+	"The send button of artboard PromptInput states, light and dark side by side: 32 round, white 8 percent with a grey arrow while the field is empty, the `foreground` token with an `on-foreground` arrow once there is something to send. It never turns disabled because the field is empty: an empty submit simply does nothing. "
 
 const sendsIn = (canvasElement: HTMLElement) => [
 	...canvasElement.querySelectorAll<HTMLButtonElement>(SEND_SELECTOR),
 ]
 
+const expectSendFill = async (send: HTMLButtonElement, isFilled: boolean) => {
+	const [fill, ink] = isFilled
+		? ["bg-foreground", "text-on-foreground"]
+		: ["bg-foreground/8", "text-disabled-foreground"]
+	await expect(getComputedStyle(send).backgroundColor).toBe(
+		tokenStyleIn(send, fill, "backgroundColor"),
+	)
+	await expect(getComputedStyle(send).color).toBe(
+		tokenStyleIn(send, ink, "color"),
+	)
+}
+
 export const SendIdle = meta.story({
 	globals: { theme_layout: "side-by-side" },
 	parameters: {
-		docs: { description: { story: `${INVERSE_SEND}At rest.` } },
+		docs: { description: { story: `${SEND_STATES}Empty field, at rest.` } },
 	},
 	play: async ({ canvasElement }) => {
 		const sends = sendsIn(canvasElement)
 		await expect(sends.length).toBe(2)
-		for (const send of sends) await expectInverseAtRest(send)
+		for (const send of sends) {
+			await expect(send).toBeEnabled()
+			await expect(send.getBoundingClientRect().width).toBe(32)
+			await expectSendFill(send, false)
+		}
 	},
 })
 
 export const SendHover = meta.story({
 	globals: { theme_layout: "side-by-side" },
+	args: { value: DRAFT },
 	parameters: {
 		pseudo: { hover: SEND_SELECTOR },
 		docs: {
 			description: {
-				story: `${INVERSE_SEND}Under the pointer, which the play drives only in the Vitest browser runner, the fill moves a fifth of the way toward the \`background\` token, a solid colour, so the arrow keeps its contrast.`,
+				story: `${SEND_STATES}Under the pointer, which the play drives only in the Vitest browser runner, the fill stays exactly where it was: no colour changes on a control.`,
 			},
 		},
 	},
@@ -417,15 +431,9 @@ export const SendHover = meta.story({
 		if (!isInBrowserRunner()) return
 		const pointer = await realPointer()
 		for (const send of sendsIn(canvasElement)) {
-			const rest = tokenStyleIn(send, "bg-foreground", "backgroundColor")
 			await pointer.hover(send)
 			await waitFor(() => expect(send.matches(":hover")).toBe(true))
-			await waitFor(() =>
-				expect(getComputedStyle(send).backgroundColor).not.toBe(rest),
-			)
-			await expect(getComputedStyle(send).color).toBe(
-				tokenStyleIn(send, "text-background", "color"),
-			)
+			await expectSendFill(send, true)
 			await pointer.unhover(send)
 		}
 	},
@@ -433,11 +441,12 @@ export const SendHover = meta.story({
 
 export const SendFocusVisible = meta.story({
 	globals: { theme_layout: "side-by-side" },
+	args: { value: DRAFT },
 	parameters: {
 		pseudo: { focusVisible: SEND_SELECTOR },
 		docs: {
 			description: {
-				story: `${INVERSE_SEND}Keyboard focus draws the primitive's own ring: the \`ring\` border on the fill and the translucent halo around it.`,
+				story: `${SEND_STATES}Keyboard focus draws the primitive's own ring: the \`ring\` border on the fill and the translucent halo around it.`,
 			},
 		},
 	},
@@ -449,9 +458,7 @@ export const SendFocusVisible = meta.story({
 			await waitFor(() =>
 				expect(getComputedStyle(send).borderTopColor).toBe(ring),
 			)
-			await expect(getComputedStyle(send).backgroundColor).toBe(
-				tokenStyleIn(send, "bg-foreground", "backgroundColor"),
-			)
+			await expectSendFill(send, true)
 		}
 	},
 })
@@ -462,7 +469,7 @@ export const SendDisabled = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${INVERSE_SEND}Disabled, the primitive halves the opacity of the whole button, fill and arrow together, so the arrow stays apart from its fill.`,
+				story: `${SEND_STATES}Disabled, the primitive halves the opacity of the whole button, fill and arrow together.`,
 			},
 		},
 	},
@@ -470,7 +477,7 @@ export const SendDisabled = meta.story({
 		for (const send of sendsIn(canvasElement)) {
 			await expect(send).toBeDisabled()
 			await expect(getComputedStyle(send).opacity).toBe("0.5")
-			await expectInverseAtRest(send)
+			await expectSendFill(send, true)
 		}
 	},
 })
@@ -628,15 +635,25 @@ export const FilesOnly = meta.story({
 })
 
 const ARTBOARD_COMPOSER =
-	"The composer of artboard V1e, light and dark side by side: a `muted` fill and a 1px `border` outline around the pill, 8px of padding, the plus button leading and the send button trailing. "
+	"The composer of artboard PromptInput states, light and dark side by side: the `prompt-surface` fill, a 1px outline at 10 percent of `foreground` while empty and 20 percent with text or focus, radius 25, 8px of padding, the plus button leading and the send button trailing. "
 
 const composersIn = (canvasElement: HTMLElement) => [
 	...canvasElement.querySelectorAll<HTMLElement>('[data-slot="prompt-input"]'),
 ]
 
-const expectArtboardComposer = async (composer: HTMLElement) => {
-	await expectFieldFrame(composer, "border-border")
-	await expect(getComputedStyle(composer).padding).toBe("8px")
+const expectArtboardComposer = async (
+	composer: HTMLElement,
+	outline: "border-foreground/10" | "border-foreground/20",
+) => {
+	const style = getComputedStyle(composer)
+	await expect(style.backgroundColor).toBe(
+		tokenStyleIn(composer, "bg-prompt-surface", "backgroundColor"),
+	)
+	await expect(style.borderTopColor).toBe(
+		tokenStyleIn(composer, outline, "borderTopColor"),
+	)
+	await expect(style.padding).toBe("8px")
+	await expect(style.borderTopLeftRadius).toBe("25px")
 }
 
 export const ThemesAtRest = meta.story({
@@ -648,7 +665,8 @@ export const ThemesAtRest = meta.story({
 	play: async ({ canvasElement }) => {
 		const composers = composersIn(canvasElement)
 		await expect(composers.length).toBe(2)
-		for (const composer of composers) await expectArtboardComposer(composer)
+		for (const composer of composers)
+			await expectArtboardComposer(composer, "border-foreground/10")
 	},
 })
 
@@ -660,7 +678,7 @@ export const ThemesFilled = meta.story({
 	},
 	play: async ({ canvasElement }) => {
 		for (const composer of composersIn(canvasElement))
-			await expectArtboardComposer(composer)
+			await expectArtboardComposer(composer, "border-foreground/20")
 	},
 })
 
@@ -670,14 +688,16 @@ export const ThemesFocusVisible = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${ARTBOARD_COMPOSER}Focus in the prompt keeps the existing \`ring\` outline and halo on the whole pill.`,
+				story: `${ARTBOARD_COMPOSER}Focus in the prompt raises the outline to 20 percent; the text cursor carries the focus.`,
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
 		for (const composer of composersIn(canvasElement)) {
 			composer.querySelector("textarea")?.focus()
-			await expectFocusRing(composer)
+			await waitFor(() =>
+				expectArtboardComposer(composer, "border-foreground/20"),
+			)
 		}
 	},
 })
@@ -694,7 +714,7 @@ export const ThemesDisabled = meta.story({
 	},
 	play: async ({ canvasElement }) => {
 		for (const composer of composersIn(canvasElement)) {
-			await expectArtboardComposer(composer)
+			await expectArtboardComposer(composer, "border-foreground/20")
 			await expect(getComputedStyle(composer).opacity).toBe("0.5")
 			await expect(composer).not.toHaveAttribute("aria-label")
 			await expect(within(composer).queryByRole("status")).toBeNull()
@@ -722,7 +742,7 @@ export const Offline = meta.story({
 		await expect(canvas.queryByRole("textbox")).toBeNull()
 		const wording = canvas.getByText(OFFLINE_WORDING)
 		const style = getComputedStyle(wording)
-		await expect(style.fontSize).toBe("14px")
+		await expect(style.fontSize).toBe("15px")
 		await expect(style.lineHeight).toBe("24px")
 		await expect(style.color).toBe("rgb(163, 163, 163)")
 
@@ -739,7 +759,9 @@ export const Offline = meta.story({
 		for (const control of [attach, send]) {
 			const group = control.closest<HTMLElement>("[inert]")
 			if (!group) throw new Error("The control is not blocked")
-			await expect(getComputedStyle(group).opacity).toBe("0.4")
+			const glyph = control.querySelector("svg")
+			if (!glyph) throw new Error("The control draws no glyph")
+			await expect(getComputedStyle(glyph).visibility).toBe("hidden")
 		}
 
 		await userEvent.tab()

@@ -17,7 +17,7 @@ import { cn } from "@workspace/ui/lib/utils"
 const AUTHOR_AVATAR_SIZE = 20
 
 const CARD_CLASS = cn(
-	"flex min-w-[min(--spacing(90),100%)] flex-col gap-2.5 rounded-bubble bg-muted px-4 pt-3 pb-4 text-foreground",
+	"flex min-w-[min(--spacing(90),100%)] flex-col gap-2.5 rounded-bubble bg-bubble px-4 pt-3 pb-4 text-foreground",
 	MESSAGE_BUBBLE_MAX_INLINE_SIZE,
 )
 

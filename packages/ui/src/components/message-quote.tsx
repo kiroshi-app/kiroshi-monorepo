@@ -15,8 +15,8 @@ export interface QuotedMessage {
 }
 
 const QUOTE_TONE = {
-	user: "bg-primary text-primary-foreground",
-	assistant: "bg-muted text-foreground",
+	user: "bg-foreground/5 text-foreground",
+	assistant: "bg-foreground/5 text-foreground",
 } satisfies Record<MessageFrom, string>
 
 type MessageQuoteSize = "sm" | "md"
@@ -37,7 +37,7 @@ const QUOTE_SIZE = {
 	},
 	md: {
 		body: "gap-1 p-1",
-		row: "gap-1 p-2",
+		row: "gap-1 px-[calc(0.5rem+1px)] py-2",
 		glyphBox: "size-8",
 		glyph: "size-4",
 	},
@@ -118,7 +118,7 @@ export function MessageQuote({
 			<div
 				className={cn(
 					"flex flex-col",
-					quoted && ["rounded-[inherit] bg-background/10", metrics.body],
+					quoted && ["rounded-[inherit]", metrics.body],
 				)}
 			>
 				{quoted ? (
@@ -140,10 +140,10 @@ export function MessageQuote({
 							onClick={onJump}
 							className="flex min-w-0 flex-1 flex-col items-start rounded-md text-left transition-opacity hover:opacity-70 focus-visible:outline-2 focus-visible:outline-current motion-reduce:transition-none"
 						>
-							<span className="w-full truncate font-medium text-xs leading-4">
+							<span className="w-full truncate font-semibold text-xs leading-4">
 								{author}
 							</span>
-							<span className="w-full truncate text-xs leading-4">
+							<span className="w-full truncate text-muted-foreground text-xs leading-4">
 								{excerpt}
 							</span>
 						</button>

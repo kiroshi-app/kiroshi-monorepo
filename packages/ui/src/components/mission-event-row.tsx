@@ -80,7 +80,7 @@ const MissionEventTime = ({ event, now }: MissionEventTimeProps) => {
 
 	return (
 		<time
-			className="ms-auto shrink-0 text-[11px] leading-4 tabular-nums"
+			className="shrink-0 text-xs leading-4 tabular-nums"
 			dateTime={new Date(event.createdAt).toISOString()}
 		>
 			{toRelativeTime(event.createdAt, now)}
@@ -96,12 +96,12 @@ const MissionMachineLine = ({ event, label, now }: MissionEventLineProps) => {
 	const { t } = useTranslation("chat")
 	return (
 		<p
-			className="flex h-5 w-full min-w-0 items-center gap-2 px-1 text-muted-foreground text-xs leading-4"
+			className="flex h-5 w-full min-w-0 items-center justify-center gap-2 px-1 text-muted-foreground text-xs leading-4"
 			data-slot="mission-machine-line"
 		>
 			<span
 				aria-hidden="true"
-				className="size-[5px] shrink-0 rounded-full bg-muted-foreground/45"
+				className="size-1.5 shrink-0 rounded-full bg-success"
 			/>
 			<span className="min-w-0 truncate">
 				{t(`missions.event.line.${event.kind}`, { source: label })}

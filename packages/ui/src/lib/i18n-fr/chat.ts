@@ -140,10 +140,21 @@ const chat = {
 		notSent: "Non envoyé.",
 		notSentBecause: "Non envoyé. {{reason}}",
 	},
+	queue: {
+		title_one:
+			"En file · {{count}} · part une fois la réponse de {{name}} terminée",
+		title_many:
+			"En file · {{count}} · partent une fois la réponse de {{name}} terminée",
+		title_other:
+			"En file · {{count}} · partent une fois la réponse de {{name}} terminée",
+		you: "vous",
+		next: "Ensuite, après {{name}}",
+	},
 	reply: {
 		label: "Réponse à {{author}}",
 		jump: "{{author}} : {{excerpt}}",
 		dismiss: "Annuler la réponse",
+		dismissFrom: "Retirer la réponse à {{author}}",
 	},
 	pinned: {
 		title: "Messages épinglés",

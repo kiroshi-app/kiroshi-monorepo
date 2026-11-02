@@ -32,9 +32,6 @@ import {
 } from "@workspace/ui/lib/scroll-trace"
 import { cn } from "@workspace/ui/lib/utils"
 
-const RUN_AFTER_RUN_JOINS =
-	"[[data-slot=message-scroller-item]:has(>[data-slot=chat-turn-group]:only-child)+&:has(>[data-slot=chat-turn-group]:only-child)]:-mt-6"
-
 export interface TranscriptItem {
 	key: string
 	messageIds?: string[]
@@ -118,6 +115,25 @@ const rowHolding = (rows: TranscriptItem[], messageId: string) =>
 	rows.find(
 		(row) => row.key === messageId || row.messageIds?.includes(messageId),
 	)
+
+const useLiveArrivals = (rows: TranscriptItem[]) => {
+	const seenRef = useRef<Set<string>>(new Set())
+	const arrivedRef = useRef<Set<string>>(new Set())
+	const seen = seenRef.current
+	const hadRows = seen.size > 0
+	let lastSeenIndex = -1
+
+	rows.forEach((row, index) => {
+		if (seen.has(row.key)) lastSeenIndex = index
+	})
+	rows.forEach((row, index) => {
+		if (seen.has(row.key)) return
+		if (hadRows && index > lastSeenIndex) arrivedRef.current.add(row.key)
+		seen.add(row.key)
+	})
+
+	return arrivedRef.current
+}
 
 type NewMarksInput = {
 	rows: TranscriptItem[]
@@ -353,6 +369,7 @@ const TranscriptBody = ({
 	useTranscriptHandle(scrollerRef, rows, behavior)
 
 	const anchorKey = anchorOnSend ? lastAnchorKey(rows) : undefined
+	const arrived = useLiveArrivals(rows)
 
 	return (
 		<MessageScroller className={cn("min-h-0", className)} {...props}>
@@ -375,12 +392,16 @@ const TranscriptBody = ({
 				<MessageScrollerContent
 					aria-busy={busy}
 					aria-relevant="additions text"
-					className={cn("justify-end gap-6", contentClassName)}
+					className={cn("justify-end gap-3", contentClassName)}
 				>
 					<MessageHighlightProvider messageId={highlightedMessageId}>
 						{rows.map((row) => (
 							<MessageScrollerItem
-								className={cn("flex flex-col gap-6", RUN_AFTER_RUN_JOINS)}
+								className={cn(
+									"flex flex-col gap-3",
+									arrived.has(row.key) && "animate-thread-arrive",
+								)}
+								data-arrived={arrived.has(row.key) || undefined}
 								key={row.key}
 								messageId={row.key}
 								scrollAnchor={row.key === anchorKey}
@@ -403,7 +424,7 @@ const TranscriptBody = ({
 
 			<MessageScrollerButton
 				behavior={behavior}
-				className="rounded-full shadow-xl tabular-nums"
+				className="h-8 gap-1.5 rounded-full border-foreground/10 bg-prompt-surface px-3 text-compact tabular-nums [&_svg]:size-3.5"
 				onClick={
 					newer
 						? (event) => {

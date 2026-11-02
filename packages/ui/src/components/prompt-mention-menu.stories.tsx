@@ -161,8 +161,6 @@ const NAME_TO_COUNT_GAP = 4
 
 const ROW_EDGE_PADDING = 8
 
-const TRAILING_SLOT_WIDTH = 56
-
 const PANEL_AT_REST = ["none", "matrix(1, 0, 0, 1, 0, 0)"]
 
 const panelEnteredIn = (root: HTMLElement) => {
@@ -556,7 +554,7 @@ export const LongContent = meta.story({
 		docs: {
 			description: {
 				story:
-					"Two companions named far past their row, one leading the conversation and one outside it, each with a title. Check that the title badge gives way first, then the name, each ending in an ellipsis, and that the trailing slot keeps its full width with the crown or the add glyph flush to the row's end. " +
+					"Two companions named far past their row, one leading the conversation and one outside it, each with a title. Check that the title gives way first, then the name, each ending in an ellipsis, and that the crown or Add to this conversation stays whole, flush to the row's end. " +
 					OPENED_BY_THE_COMPOSER,
 			},
 		},
@@ -573,15 +571,12 @@ export const LongContent = meta.story({
 			const [name] = slotsIn(row, "prompt-mention-name")
 			const [badge] = slotsIn(row, "bot-title-badge")
 			const [trailing] = slotsIn(row, "prompt-mention-trailing")
-			const mark = trailing.querySelector("svg") as SVGElement
 
 			await expect(name.scrollWidth).toBeGreaterThan(name.clientWidth)
 			await expect(badge.scrollWidth).toBeGreaterThan(badge.clientWidth)
-			await expect(trailing.getBoundingClientRect().width).toBe(
-				TRAILING_SLOT_WIDTH,
-			)
 			await expect(
-				row.getBoundingClientRect().right - mark.getBoundingClientRect().right,
+				row.getBoundingClientRect().right -
+					trailing.getBoundingClientRect().right,
 			).toBeCloseTo(ROW_EDGE_PADDING, 0)
 		}
 	},
