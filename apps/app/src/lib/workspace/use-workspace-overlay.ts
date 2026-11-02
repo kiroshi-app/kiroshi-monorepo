@@ -70,7 +70,6 @@ export const useWorkspaceOverlay = ({
 		spaceName: selectedSpace?.name,
 		lookups: searchLookups,
 		navigation: searchNavigation,
-		canOpen: !isDialogOpen,
 	})
 
 	const isOverlayOpen = search.isOpen || isDialogOpen

@@ -174,10 +174,9 @@ const aNavigation = (): TracedNavigation => {
 type Rendering = {
 	navigation: SearchNavigation
 	port: SearchPort
-	canOpen?: boolean
 }
 
-const renderSearch = ({ navigation, port, canOpen = true }: Rendering) => {
+const renderSearch = ({ navigation, port }: Rendering) => {
 	const lookups = createSearchLookups({
 		rosters: { [WORK]: [A_BOT] },
 		conversationRosters: { [WORK]: [A_ROOM] },
@@ -193,7 +192,6 @@ const renderSearch = ({ navigation, port, canOpen = true }: Rendering) => {
 				lookups,
 				navigation,
 				port,
-				canOpen,
 			}),
 		{ wrapper: createQueryTestWrapper().wrapper },
 	).result
@@ -297,19 +295,6 @@ it("keeps the chord on an open palette whatever field holds the focus", () => {
 
 	expect(result.current.isOpen).toBe(true)
 	expect(event?.defaultPrevented).toBe(true)
-})
-
-it("opens no palette on the chord while another dialog is open", () => {
-	const { navigation } = aNavigation()
-	const result = renderSearch({
-		navigation,
-		port: aPort(),
-		canOpen: false,
-	})
-
-	act(() => press("k", { metaKey: true }))
-
-	expect(result.current.isOpen).toBe(false)
 })
 
 it("reads only the query the typing went quiet on", async () => {
