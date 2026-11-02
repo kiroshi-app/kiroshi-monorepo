@@ -5,6 +5,7 @@ import preview from "@workspace/storybook/preview"
 import {
 	hueScopeOf,
 	isInBrowserRunner,
+	slotIn,
 	withStoryProps,
 } from "@workspace/storybook/story-utils"
 import { ContentCard } from "@workspace/ui/components/content-card"
@@ -255,9 +256,7 @@ export const Zoomed = meta.story({
 			within(popup).getByRole("button", { name: /%, fit to the window$/ }),
 		).toBeVisible()
 
-		const scroller = popup.querySelector<HTMLElement>(
-			"[data-slot=library-lightbox-zoom]",
-		) as HTMLElement
+		const scroller = slotIn(popup, "library-lightbox-zoom")
 		scroller.focus()
 		await userEvent.keyboard("{ArrowRight}")
 		await userEvent.keyboard("{ArrowLeft}")
