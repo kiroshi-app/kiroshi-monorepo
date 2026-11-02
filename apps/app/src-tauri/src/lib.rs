@@ -82,6 +82,7 @@ pub fn run() {
 		.plugin(tauri_plugin_notification::init())
 		.plugin(tauri_plugin_os::init())
 		.plugin(tauri_plugin_dialog::init())
+		.plugin(tauri_plugin_clipboard_manager::init())
 		.manage(AgentState::default())
 		.manage(companions::launch::LaunchOutcomeState::default())
 		.manage(agent::sign_in::SignInState::default())

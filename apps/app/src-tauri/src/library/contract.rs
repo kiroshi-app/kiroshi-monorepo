@@ -57,6 +57,14 @@ pub enum LibraryError {
 	TooLarge { name: String, bytes: u64, limit: u64 },
 	#[serde(rename_all = "camelCase")]
 	Unreadable { detail: String },
+	#[serde(rename_all = "camelCase")]
+	Undecodable { name: String, detail: String },
+	#[serde(rename_all = "camelCase")]
+	Unwritable { detail: String },
+	#[serde(rename_all = "camelCase")]
+	ClipboardRefused { detail: String },
+	#[serde(rename_all = "camelCase")]
+	Unrevealed { detail: String },
 }
 
 impl From<DatabaseError> for LibraryError {
@@ -112,6 +120,29 @@ mod tests {
 		assert_eq!(
 			crosses_as(LibraryError::NotADocument { name: "cover.png".to_owned() }),
 			json!({ "kind": "notADocument", "name": "cover.png" })
+		);
+	}
+
+	#[test]
+	fn a_refused_save_copy_or_reveal_crosses_under_the_names_the_frontend_reads() {
+		assert_eq!(
+			crosses_as(LibraryError::Undecodable {
+				name: "cover.png".to_owned(),
+				detail: "bad header".to_owned()
+			}),
+			json!({ "kind": "undecodable", "name": "cover.png", "detail": "bad header" })
+		);
+		assert_eq!(
+			crosses_as(LibraryError::Unwritable { detail: "denied".to_owned() }),
+			json!({ "kind": "unwritable", "detail": "denied" })
+		);
+		assert_eq!(
+			crosses_as(LibraryError::ClipboardRefused { detail: "no display".to_owned() }),
+			json!({ "kind": "clipboardRefused", "detail": "no display" })
+		);
+		assert_eq!(
+			crosses_as(LibraryError::Unrevealed { detail: "no file manager".to_owned() }),
+			json!({ "kind": "unrevealed", "detail": "no file manager" })
 		);
 	}
 }
