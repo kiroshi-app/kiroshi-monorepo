@@ -2,7 +2,7 @@ use std::collections::{HashSet, VecDeque};
 use std::net::Ipv4Addr;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
 use axum::extract::ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade};
@@ -84,6 +84,8 @@ use crate::events::{self, Event, BUFFERED_FRAMES};
 use crate::joined_spaces::contract::JoinedSpaceConnection;
 use crate::joined_spaces::relay::RelayGuests;
 use crate::library;
+use crate::library::contract::{LibraryError, DOCUMENT_UPDATED_EVENT};
+use crate::library::tests::YjsClient;
 use crate::logging::contract::InstallKind;
 use crate::mcp_oauth::asking::AuthorizationAnswers;
 use crate::mcp_oauth::commands::{mcp_application_status, McpOauthState};
@@ -607,6 +609,7 @@ struct HostEffects {
 	database: PathBuf,
 	env_root: PathBuf,
 	reached: Arc<Mutex<Vec<String>>>,
+	app: Arc<OnceLock<tauri::AppHandle<MockRuntime>>>,
 }
 
 impl HostEffects {
@@ -616,6 +619,17 @@ impl HostEffects {
 
 	fn library(&self) -> PathBuf {
 		self.env_root.join("library")
+	}
+
+	fn app(&self) -> &tauri::AppHandle<MockRuntime> {
+		self.app.get().expect("the host app is up")
+	}
+}
+
+fn answered_by_the_library<T: serde::Serialize>(result: Result<T, LibraryError>) -> Response {
+	match result {
+		Ok(answer) => answered_json(StatusCode::OK, json!(answer)),
+		Err(refused) => answered_json(StatusCode::INTERNAL_SERVER_ERROR, json!(refused)),
 	}
 }
 
@@ -673,6 +687,34 @@ async fn host_effect_applied(
 				Ok(read) => answered_json(StatusCode::OK, json!(read)),
 				Err(refused) => answered_json(StatusCode::INTERNAL_SERVER_ERROR, json!(refused)),
 			};
+		}
+		"library_templates" => {
+			return answered_json(StatusCode::OK, json!(library::commands::library_templates()));
+		}
+		"library_create_document" => {
+			return answered_by_the_library(library::create_document(
+				&effects.library(),
+				&text("spaceId"),
+				&text("name"),
+				args["templateId"].as_str(),
+			));
+		}
+		"library_open_document" => {
+			return answered_by_the_library(library::open_document(
+				effects.app(),
+				&effects.library(),
+				&text("spaceId"),
+				&text("name"),
+			));
+		}
+		"library_apply_update" => {
+			return answered_by_the_library(library::apply_update(
+				effects.app(),
+				&effects.library(),
+				&text("spaceId"),
+				&text("name"),
+				&text("update"),
+			));
 		}
 		"joined_space_remove" => {
 			database.joined_spaces().remove(text("id")).await.expect("the host leaves");
@@ -750,6 +792,7 @@ impl Harness {
 			database: database.to_path_buf(),
 			env_root: env_root.to_path_buf(),
 			reached: Arc::default(),
+			app: Arc::default(),
 		};
 		let local = Router::new()
 			.route(INVOKE_ROUTE, post(host_effect_applied))
@@ -757,6 +800,7 @@ impl Harness {
 		let every = super::members::MEMBERS_EVERY;
 		let mut harness = Self::serving(name, None, Some(BEARER), every, database, local).await;
 		harness._temporary.push(env_root);
+		assert!(effects.app.set(harness.app.handle().clone()).is_ok());
 		(harness, effects)
 	}
 
@@ -3305,6 +3349,148 @@ fn a_member_is_answered_from_the_library_folder_of_the_shared_space() {
 				"mimeType": "image/png",
 				"content": BASE64_STANDARD.encode(PERSONAL)
 			})
+		);
+	});
+}
+
+const AN_EMPTY_UPDATE: &str = "AAA=";
+
+fn a_library_update_of(update: &'static str) -> impl Fn(&str) -> Value {
+	move |space_id| json!({ "spaceId": space_id, "name": "notes.md", "update": update })
+}
+
+fn is_a_library_update(frame: &Value) -> bool {
+	frame["event"]["event"] == DOCUMENT_UPDATED_EVENT
+}
+
+impl Guest {
+	async fn called_hearing(
+		&mut self,
+		command: &str,
+		args: Value,
+		updates: usize,
+	) -> (Value, Vec<Value>) {
+		let frame = json!({ "id": command, "command": command, "args": args });
+		send(&mut self.member, &frame.to_string()).await;
+		let mut answered = None;
+		let mut heard = Vec::new();
+		while answered.is_none() || heard.len() < updates {
+			let frame = unstamped(next_json(&mut self.member).await);
+			if is_a_library_update(&frame) {
+				heard.push(frame);
+			} else if frame.get("event").is_none() {
+				answered = Some(frame);
+			}
+		}
+		(answered.expect("an answer"), heard)
+	}
+}
+
+#[test]
+fn a_member_lists_the_library_templates() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("library-templates").await;
+
+		let listed = guest.called("library_templates", json!({})).await;
+
+		assert_eq!(listed["status"], json!(200), "{listed}");
+		assert_eq!(listed["body"][0], json!({ "id": "meeting-notes", "title": "Meeting notes" }));
+		assert_eq!(listed["body"].as_array().map(Vec::len), Some(4));
+	});
+}
+
+#[test]
+fn a_member_creates_a_library_document_in_the_shared_space_only() {
+	run(kept_in_the_space_named("library_create_document", a_library_entry_of("fresh.md")));
+}
+
+#[test]
+fn a_member_opens_a_library_document_of_the_shared_space_only() {
+	run(kept_in_the_space_named("library_open_document", a_library_entry_of("notes.md")));
+}
+
+#[test]
+fn a_member_applies_a_library_update_to_the_shared_space_only() {
+	run(kept_in_the_space_named("library_apply_update", a_library_update_of(AN_EMPTY_UPDATE)));
+}
+
+#[test]
+fn a_member_creates_a_document_from_a_template_in_the_library_folder_of_the_shared_space() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("library-create").await;
+		let args =
+			json!({ "spaceId": PERSONAL, "name": "brief.md", "templateId": "project-brief" });
+
+		let created = guest.called("library_create_document", args.clone()).await;
+		let again = guest.called("library_create_document", args).await;
+
+		let file = guest.effects.library().join(PERSONAL).join("brief.md");
+		let content = std::fs::read_to_string(file).expect("the document landed");
+		assert!(content.starts_with("# Project brief\n"), "{content}");
+		assert_eq!(created["body"]["kind"], json!("document"), "{created}");
+		assert_eq!(again["body"], json!({ "kind": "alreadyExists", "name": "brief.md" }));
+	});
+}
+
+#[test]
+fn the_host_and_a_member_edit_one_library_document_and_every_update_merges_and_is_heard() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("library-shared-edit").await;
+		let app = guest.harness.app.handle().clone();
+		let library = guest.effects.library();
+		let (told, host_heard) = std::sync::mpsc::channel();
+		app.listen_any(DOCUMENT_UPDATED_EVENT, move |event| {
+			let payload: Value = serde_json::from_str(event.payload()).expect("a payload");
+			told.send(payload).expect("the test listens");
+		});
+
+		let (opened, heard_at_open) = guest
+			.called_hearing("library_open_document", a_library_entry_of("notes.md")(PERSONAL), 1)
+			.await;
+		let base = opened["body"]["update"].as_str().expect("a yjs state").to_owned();
+		let host = YjsClient::of(&base).inserted(0, "Host. ");
+		let member = YjsClient::of(&base).inserted(17, " Member.");
+		library::apply_update(&app, &library, ELSEWHERE, "notes.md", AN_EMPTY_UPDATE)
+			.expect("the other space merges");
+		library::apply_update(&app, &library, PERSONAL, "notes.md", &host)
+			.expect("the host update merges");
+		let heard_from_the_host = next_text(&mut guest.member, is_a_library_update).await;
+		let member_update = json!({ "spaceId": PERSONAL, "name": "notes.md", "update": member });
+		let (applied, heard_at_apply) =
+			guest.called_hearing("library_apply_update", member_update, 1).await;
+		let read =
+			guest.called("library_read_document", a_library_entry_of("notes.md")(PERSONAL)).await;
+
+		let merged = "Host. notes of personal Member.";
+		assert_eq!(applied["status"], json!(200), "{applied}");
+		assert_eq!(read["body"]["content"], json!(merged), "{read}");
+		let on_disk = |space_id: &str| {
+			std::fs::read_to_string(library.join(space_id).join("notes.md"))
+				.expect("the file reads")
+		};
+		assert_eq!(on_disk(PERSONAL), merged);
+		assert_eq!(on_disk(ELSEWHERE), "notes of elsewhere");
+		let member_heard: Vec<Value> = [heard_at_open, vec![heard_from_the_host], heard_at_apply]
+			.concat()
+			.into_iter()
+			.map(|frame| frame["event"]["payload"].clone())
+			.collect();
+		let observer = YjsClient::of(&base);
+		for payload in &member_heard {
+			assert_eq!(
+				(&payload["spaceId"], &payload["name"]),
+				(&json!(PERSONAL), &json!("notes.md"))
+			);
+			observer.applied(payload["update"].as_str().expect("an update"));
+		}
+		assert_eq!(observer.text(), merged);
+		let host_heard: Vec<Value> = (0..4)
+			.map(|_| host_heard.recv_timeout(PATIENCE).expect("the host window heard"))
+			.map(|payload| payload["spaceId"].clone())
+			.collect();
+		assert_eq!(
+			host_heard,
+			[PERSONAL, ELSEWHERE, PERSONAL, PERSONAL].map(|space_id| json!(space_id))
 		);
 	});
 }
@@ -7263,6 +7449,16 @@ async fn called(
 	device: &mut Joined,
 	host: &ed25519_dalek::VerifyingKey,
 ) -> Value {
+	let call = a_member_call(&format!("call-{}", device.ctr + 2));
+	called_with(relay, device, host, &call).await
+}
+
+async fn called_with(
+	relay: &mut RelaySide,
+	device: &mut Joined,
+	host: &ed25519_dalek::VerifyingKey,
+	call: &str,
+) -> Value {
 	let space = Space { instance_id: &relay.instance_id.clone(), key: &device.space, host };
 	let device_id = device.member.keys.device_id();
 	device.ctr += 1;
@@ -7271,8 +7467,7 @@ async fn called(
 	let greeting = host_frame_opened(&space, &greeting, Some(device_id)).expect("the hello opens");
 	assert_eq!(greeting.plaintext, json!({ "hello": {} }));
 	device.ctr += 1;
-	let call = a_member_call(&format!("call-{}", device.ctr));
-	relay.sent(device.member.sealed(&space, device.ctr, &call, greeting.challenge)).await;
+	relay.sent(device.member.sealed(&space, device.ctr, call, greeting.challenge)).await;
 	let answer = relay.addressed(&device.member, "ct").await;
 	host_frame_opened(&space, &answer, Some(device_id)).expect("the answer opens").plaintext
 }
@@ -7372,6 +7567,92 @@ fn removing_a_member_rekeys_the_remaining_device_while_the_removed_one_is_droppe
 				.map(|(account, _)| account)
 				.collect::<Vec<_>>(),
 			vec!["joiner".to_owned(), "owner".to_owned()]
+		);
+	});
+}
+
+#[test]
+fn a_removed_member_applying_a_library_update_is_refused_and_the_file_is_unchanged() {
+	run(async {
+		let (mut harness, effects) = Harness::applying_host_effects("library-removed").await;
+		let shelf = effects.library().join(PERSONAL);
+		std::fs::create_dir_all(&shelf).expect("the library folder lands");
+		std::fs::write(shelf.join("notes.md"), "notes").expect("the document lands");
+		harness.seed(&[
+			cloud_member("guest", "guest@example.com", "member", "pending"),
+			cloud_member("joiner", "joiner@example.com", "member", "pending"),
+		]);
+		harness.started().await;
+		let mut relay = harness.relay_side().await;
+		let host = harness.host_keys().signing_public();
+		let mut guest = harness.joined(&mut relay, "guest").await;
+		let mut joiner = harness.joined(&mut relay, "joiner").await;
+		relay.addressed(&guest.member, "rekey").await;
+		let call = |id: &str, command: &str, args: Value| {
+			json!({ "id": id, "command": command, "args": args }).to_string()
+		};
+		let entry = json!({ "spaceId": PERSONAL, "name": "notes.md" });
+		let opened = called_with(
+			&mut relay,
+			&mut guest,
+			&host,
+			&call("open", "library_open_document", entry),
+		)
+		.await;
+		let base = opened["body"]["update"].as_str().expect("a yjs state").to_owned();
+		let update = |text: &str| json!({ "spaceId": PERSONAL, "name": "notes.md", "update": YjsClient::of(&base).inserted(5, text) });
+		let applied = called_with(
+			&mut relay,
+			&mut guest,
+			&host,
+			&call("apply", "library_apply_update", update(" kept")),
+		)
+		.await;
+		harness.flagged_joined("guest");
+
+		remove(harness.app.handle(), PERSONAL.to_owned(), "guest".to_owned())
+			.await
+			.expect("the guest is removed");
+		let rekey = relay.addressed(&joiner.member, "rekey").await;
+		let handover = joiner
+			.member
+			.rekey_opened(&rekey, &relay.instance_id, &host)
+			.expect("the rekey verifies and opens");
+		joiner.space = space_key_of(&handover);
+		joiner.ctr = 0;
+		let guest_space =
+			Space { instance_id: &relay.instance_id.clone(), key: &guest.space, host: &host };
+		guest.ctr += 1;
+		relay.sent(guest.member.sealed(&guest_space, guest.ctr, HELLO, None)).await;
+		guest.ctr += 1;
+		let refused = call("refused", "library_apply_update", update(" refused"));
+		relay.sent(guest.member.sealed(&guest_space, guest.ctr, &refused, None)).await;
+		let after = called(&mut relay, &mut joiner, &host).await;
+
+		assert_eq!(applied["status"], json!(200), "{applied}");
+		assert_eq!(after["status"], json!(200), "{after}");
+		let handed_to_the_guest: Vec<u32> = relay
+			.unread
+			.iter()
+			.filter(|envelope| envelope["to"] == guest.member.relay_device_id.as_str())
+			.map(|envelope| {
+				let rekey = guest.member.rekey_opened(envelope, &relay.instance_id, &host);
+				rekey.expect("only a rekey is addressed to the guest").key_id
+			})
+			.collect();
+		assert!(
+			handed_to_the_guest.iter().all(|key_id| *key_id < handover.key_id),
+			"{handed_to_the_guest:?}"
+		);
+		let applies = effects
+			.reached()
+			.into_iter()
+			.filter(|command| command == "library_apply_update")
+			.count();
+		assert_eq!(applies, 1);
+		assert_eq!(
+			std::fs::read_to_string(shelf.join("notes.md")).expect("the file reads"),
+			"notes kept"
 		);
 	});
 }

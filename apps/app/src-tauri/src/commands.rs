@@ -31,6 +31,7 @@ pub fn builder() -> Builder<tauri::Wry> {
 		.constant("JOINED_SPACE_REMOVED_EVENT", joined_spaces::commands::REMOVED_EVENT)
 		.constant("JOINED_SPACE_RECONNECTED_EVENT", joined_spaces::commands::RECONNECTED_EVENT)
 		.constant("JOIN_LINK_OPENED_EVENT", joined_spaces::deep_link::OPENED_EVENT)
+		.constant("LIBRARY_DOCUMENT_UPDATED_EVENT", library::contract::DOCUMENT_UPDATED_EVENT)
 		.constant("SPACE_DESCRIBED_EVENT", spaces::contract::DESCRIBED_EVENT)
 		.constant("UPDATE_CHANGED_EVENT", updates::contract::CHANGED_EVENT)
 		.constant("FILE_MENU_EVENT", menu_contract::FILE_MENU_EVENT)
@@ -56,6 +57,7 @@ pub fn builder() -> Builder<tauri::Wry> {
 		.typ::<joined_spaces::commands::JoinedSpaceReconnected>()
 		.typ::<joined_spaces::members::JoinedSpaceMembersChanged>()
 		.typ::<joined_spaces::deep_link::JoinLinkOpened>()
+		.typ::<library::contract::LibraryDocumentUpdated>()
 		.typ::<agent::contract::EventTurn>()
 		.typ::<applications::contract::ApplicationInstalled>()
 		.typ::<missions::commands::MissionChanged>()
@@ -95,6 +97,10 @@ fn commands<R: Runtime>() -> Commands<R> {
 		library::commands::library_read_file::<tauri::Wry>,
 		library::commands::library_save_bytes::<tauri::Wry>,
 		library::commands::library_copy_bytes::<tauri::Wry>,
+		library::commands::library_templates,
+		library::commands::library_create_document::<tauri::Wry>,
+		library::commands::library_open_document::<tauri::Wry>,
+		library::commands::library_apply_update::<tauri::Wry>,
 		badge::commands::badge_set::<tauri::Wry>,
 		claude_import::commands::claude_import_inventory,
 		claude_import::commands::claude_import_run::<tauri::Wry>,
