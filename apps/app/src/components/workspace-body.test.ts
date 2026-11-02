@@ -1594,18 +1594,49 @@ describe("WorkspaceBody library", () => {
 			)
 		})
 
-		it("raises what failed when an image cannot be read from the host", async () => {
+		const IMAGE_FAILURE = "Couldn’t show an image of the Library"
+
+		const announcedImageFailures = async () => {
+			await noticeTitled(IMAGE_FAILURE)
+			await settle()
+			return screen
+				.getAllByText(IMAGE_FAILURE)
+				.filter((title) => !title.closest('[aria-hidden="true"]'))
+		}
+
+		it("raises one notice when several images cannot be read from the host", async () => {
 			libraryHost.readImage.mockRejectedValue(refusal)
 			await openJoinedLibrary()
 
-			await noticeTitled("Couldn’t show an image of the Library")
+			expect(libraryHost.readImage).toHaveBeenCalledTimes(3)
+			expect(await announcedImageFailures()).toHaveLength(1)
 			expect(shownNames()).toContain("hero-dunes.png")
 		})
 
-		it("leaves Download and More inactive", async () => {
+		it("shows an image read after an earlier failure, with no new notice", async () => {
+			const changedHero = { ...HERO, modifiedAt: HERO.modifiedAt + A_MINUTE }
+			libraryHost.list.mockResolvedValueOnce([HERO])
+			libraryHost.list.mockResolvedValue([changedHero])
+			libraryHost.readImage.mockRejectedValueOnce(refusal)
+			await openJoinedLibrary()
+			expect(await announcedImageFailures()).toHaveLength(1)
+
+			fireEvent(window, new Event("focus"))
+			await settle()
+
+			await waitFor(() =>
+				expect(itemNamed("hero-dunes.png").querySelector("img")?.src).toBe(
+					`data:image/png;base64,${btoa(HERO.name)}`,
+				),
+			)
+			expect(await announcedImageFailures()).toHaveLength(1)
+		})
+
+		it("leaves Download, Copy and More inactive, with no notice", async () => {
 			await openJoinedLibrary()
 			await open("hero-dunes.png")
 			await press("Download")
+			await press("Copy")
 			await press("More")
 			await press("Close")
 
@@ -1613,7 +1644,11 @@ describe("WorkspaceBody library", () => {
 			await press("More")
 
 			expect(save).not.toHaveBeenCalled()
+			expect(copyToClipboard).not.toHaveBeenCalled()
 			expect(reveal).not.toHaveBeenCalled()
+			for (const failure of [SAVE_FAILURE, COPY_FAILURE, REVEAL_FAILURE]) {
+				expect(screen.queryByText(failure)).toBeNull()
+			}
 		})
 	})
 })

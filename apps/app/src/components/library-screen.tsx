@@ -58,7 +58,7 @@ export const LibraryScreen = ({ spaceId, isJoined }: LibraryScreenProps) => {
 	const actions = useLibraryActions(spaceId)
 	const save = isJoined ? ignore : ({ id }: NamedItem) => actions.save(id)
 	const reveal = isJoined ? ignore : ({ id }: NamedItem) => actions.reveal(id)
-	const copy = ({ id }: NamedItem) => actions.copy(id)
+	const copy = isJoined ? ignore : ({ id }: NamedItem) => actions.copy(id)
 	const [filter, setFilter] = useState<LibraryFilter>("all")
 	const [query, setQuery] = useState("")
 	const [opened, setOpened] = useState<OpenedItem>(null)
