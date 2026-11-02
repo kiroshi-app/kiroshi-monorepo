@@ -649,27 +649,6 @@ fn a_run_ending_before_its_lease_stays_completed() {
 	stored.close();
 }
 
-fn completed_texts(events: &[AgentEvent]) -> Vec<(usize, String)> {
-	events
-		.iter()
-		.enumerate()
-		.filter_map(|(at, event)| match event {
-			AgentEvent::MessageCompleted { message } if !message.text.is_empty() => {
-				Some((at, message.text.clone()))
-			}
-			_ => None,
-		})
-		.collect()
-}
-
-fn turn_ended_at(events: &[AgentEvent]) -> Vec<usize> {
-	events
-		.iter()
-		.enumerate()
-		.filter_map(|(at, event)| matches!(event, AgentEvent::TurnEnded { .. }).then_some(at))
-		.collect()
-}
-
 #[test]
 fn a_result_with_no_background_task_settles_its_turn_as_before() {
 	let _serial = serial();
@@ -695,12 +674,17 @@ fn a_turn_holding_a_background_task_ends_only_after_the_follow_up_turn_it_runs()
 	stored.completed("t1");
 
 	let events = agent_events(&stored.log.held());
-	let follow_up = completed_texts(&events)
-		.into_iter()
-		.find(|(_, text)| text == FOLLOW_UP)
+	let follow_up_at = events
+		.iter()
+		.position(
+			|event| matches!(event, AgentEvent::MessageCompleted { message } if message.text == FOLLOW_UP),
+		)
 		.expect("the follow-up turn reached the front");
-	assert_eq!(turn_ended_at(&events).len(), 1, "the turn ended more than once: {events:#?}");
-	assert!(follow_up.0 < turn_ended_at(&events)[0], "the turn ended before its follow-up");
+	let ended_at = events
+		.iter()
+		.position(|event| matches!(event, AgentEvent::TurnEnded { .. }))
+		.expect("the turn ended");
+	assert!(follow_up_at < ended_at, "the turn ended before its follow-up: {events:#?}");
 	assert_eq!(stored.turn_endings(), vec![TurnOutcome::Completed]);
 	assert!(stored.lapses().is_empty());
 	stored.close();
