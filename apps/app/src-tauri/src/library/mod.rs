@@ -309,9 +309,13 @@ where
 	let target = destination.clone();
 	tokio::task::spawn_blocking(move || fs::write(target, bytes))
 		.await
-		.map_err(|error| LibraryError::Unwritable { detail: error.to_string() })?
-		.map_err(|error| LibraryError::Unwritable { detail: error.to_string() })?;
+		.map_err(unwritable)?
+		.map_err(unwritable)?;
 	Ok(Some(destination))
+}
+
+fn unwritable(error: impl ToString) -> LibraryError {
+	LibraryError::Unwritable { detail: error.to_string() }
 }
 
 fn copy_to(item: &ResolvedItem, destination: &Path) -> Result<(), LibraryError> {
