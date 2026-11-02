@@ -31,10 +31,12 @@ import type {
 	SpacePreferences,
 	SuggestedBot,
 } from "./store-contract"
+import type { SummonsRun } from "./summons-trace"
 import type { TerminalCompletion } from "./transcript-contract"
 import type { TranscriptPort } from "./transcript-port"
 
 import type { AgentCommand } from "@/lib/agent/contract"
+import type { SummonsDropped, SummonsDropReason } from "@/lib/bindings"
 
 export type TranscriptStore = TranscriptPort & {
 	spaces: () => Promise<Space[]>
@@ -213,6 +215,8 @@ export type TranscriptStore = TranscriptPort & {
 	pinnedMessages: (conversationId: string) => Promise<MessagePin[]>
 	startTurn: (turn: NewTurn) => Promise<number>
 	completeTurn: (id: string, completedAt: number) => Promise<void>
+	dropSummons: (run: SummonsRun, reason: SummonsDropReason) => Promise<boolean>
+	claimUnseenDrops: (conversationId: string) => Promise<SummonsDropped[]>
 	appendUserMessage: (message: NewUserMessage) => Promise<number>
 	sendUserMessage: (
 		message: NewUserMessage,

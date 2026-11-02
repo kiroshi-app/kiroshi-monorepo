@@ -1,15 +1,19 @@
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Runtime};
+use tauri::{AppHandle, Manager, Runtime};
 
+use super::awaited_runs::TurnWindows;
 use super::context::mentioned_bot_ids;
 use super::contract::SummonsDropped;
 use crate::agent::contract::TransportError;
 use crate::events::{self, SUMMONS_DROPPED};
 
+pub const MAX_SUMMONS_PER_CHAIN: usize = 5;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub enum SummonsDropReason {
 	SelfMention,
+	SummonLimit,
 	Cancelled,
 	NotSeated,
 	StartFailed,
@@ -20,8 +24,9 @@ pub enum SummonsDropReason {
 
 impl SummonsDropReason {
 	#[cfg(test)]
-	const ALL: [SummonsDropReason; 7] = [
+	pub(crate) const ALL: [SummonsDropReason; 8] = [
 		Self::SelfMention,
+		Self::SummonLimit,
 		Self::Cancelled,
 		Self::NotSeated,
 		Self::StartFailed,
@@ -30,9 +35,14 @@ impl SummonsDropReason {
 		Self::Interrupted,
 	];
 
+	fn is_noticed(self) -> bool {
+		!matches!(self, Self::SelfMention | Self::NotSeated | Self::Cancelled)
+	}
+
 	fn name(self) -> &'static str {
 		match self {
 			Self::SelfMention => "selfMention",
+			Self::SummonLimit => "summonLimit",
 			Self::Cancelled => "cancelled",
 			Self::NotSeated => "notSeated",
 			Self::StartFailed => "startFailed",
@@ -91,13 +101,10 @@ pub(crate) fn note_dropped<R: Runtime>(
 	if reason == SummonsDropReason::Cancelled {
 		return;
 	}
-	let dropped = SummonsDropped {
-		conversation_id: run.conversation_id.to_owned(),
-		turn_id: run.turn_id.to_owned(),
-		bot_id: run.bot_id.to_owned(),
-		reason,
-		error,
-	};
+	let dropped = dropped_of(run, reason, error);
+	if reason.is_noticed() {
+		keep_for_the_room(app, dropped.clone());
+	}
 	if let Err(failure) = events::emit(app, SUMMONS_DROPPED, dropped) {
 		log::warn!(
 			"the dropped summons of bot {} in turn {} of conversation {} was not announced: {failure}",
@@ -105,6 +112,32 @@ pub(crate) fn note_dropped<R: Runtime>(
 			run.turn_id,
 			run.conversation_id
 		);
+	}
+}
+
+fn keep_for_the_room<R: Runtime>(app: &AppHandle<R>, dropped: SummonsDropped) {
+	match app.try_state::<TurnWindows>() {
+		Some(windows) => windows.keep_unless_driven(dropped),
+		None => log::error!(
+			"the dropped summons of bot {} in turn {} of conversation {} found no window state to wait in",
+			dropped.bot_id,
+			dropped.turn_id,
+			dropped.conversation_id
+		),
+	}
+}
+
+fn dropped_of(
+	run: &SummonsRun<'_>,
+	reason: SummonsDropReason,
+	error: Option<TransportError>,
+) -> SummonsDropped {
+	SummonsDropped {
+		conversation_id: run.conversation_id.to_owned(),
+		turn_id: run.turn_id.to_owned(),
+		bot_id: run.bot_id.to_owned(),
+		reason,
+		error,
 	}
 }
 
@@ -134,37 +167,7 @@ fn step_of(line: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-	use std::collections::BTreeSet;
-	use std::path::PathBuf;
-
 	use super::SummonsDropReason;
-
-	fn mirrored_reasons() -> BTreeSet<String> {
-		let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-			.join("..")
-			.join("src")
-			.join("lib")
-			.join("conversations")
-			.join("summons-trace.ts");
-		let mirror = std::fs::read_to_string(&path).expect("the mirror reads");
-		let opening = "const SUMMONS_DROP_REASONS = [";
-		let start = mirror.find(opening).expect("the mirror lists the reasons") + opening.len();
-		let body = &mirror[start..];
-		let body = body.split(']').next().unwrap_or(body);
-		body.split('"').skip(1).step_by(2).map(str::to_owned).collect()
-	}
-
-	#[test]
-	fn every_summons_drop_reason_of_the_host_is_one_the_front_declares() {
-		let declared = mirrored_reasons();
-		let undeclared: Vec<&str> = SummonsDropReason::ALL
-			.iter()
-			.map(|reason| reason.name())
-			.filter(|name| !declared.contains(*name))
-			.collect();
-
-		assert!(undeclared.is_empty(), "the front declares no {undeclared:?}");
-	}
 
 	#[test]
 	fn every_summons_drop_reason_crosses_under_the_name_it_logs() {

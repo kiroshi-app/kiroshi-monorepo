@@ -27,11 +27,12 @@ use kiroshi_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
 use kiroshi_app::agent::AgentState;
 use kiroshi_app::bundles::{self, EffortLevel};
 use kiroshi_app::commands::invoke_handler;
+use kiroshi_app::conversations::awaited_runs::{conversation_claim_unseen_drops, TurnWindows};
 use kiroshi_app::conversations::commands::{
 	conversation_open_runtime_session, conversation_send_user_message, conversation_update_bot,
 };
 use kiroshi_app::conversations::contract::NewUserMessage;
-use kiroshi_app::conversations::turn_run_deadline::TurnRunDeadlines;
+use kiroshi_app::conversations::turn_run_deadline::{conversation_drop_summons, TurnRunDeadlines};
 use kiroshi_app::crypto::commands::{DeviceKeysState, SpaceKeys};
 use kiroshi_app::crypto::device_keys::{self, DeviceId, DeviceKeys};
 use kiroshi_app::crypto::frame::{self, Frame, Header, CHALLENGE_LENGTH};
@@ -78,6 +79,7 @@ const NYX: &str = "b-nyx";
 const AGENT_EVENT: &str = kiroshi_app::agent::commands::EVENT_CHANNEL;
 const MESSAGE_STORED: &str = kiroshi_app::conversations::contract::MESSAGE_STORED_EVENT;
 const CONVERSATION_UPDATED: &str = kiroshi_app::conversations::contract::UPDATED_EVENT;
+const SUMMONS_DROPPED: &str = kiroshi_app::conversations::contract::SUMMONS_DROPPED_EVENT;
 const PATIENCE: Duration = Duration::from_secs(60);
 const SHORT_START_DEADLINE: Duration = Duration::from_millis(300);
 
@@ -345,6 +347,7 @@ impl Host {
 			format!("com.kiroshi.host-turns-{name}-{}", std::process::id());
 		let app = mock_builder()
 			.manage(AgentState::default())
+			.manage(TurnWindows::default())
 			.invoke_handler(invoke_handler())
 			.build(context)
 			.expect("the app builds");
@@ -728,6 +731,13 @@ fn published<'a>(frames: &'a [Value], name: &'a str) -> impl Iterator<Item = &'a
 		.iter()
 		.filter(move |frame| frame["event"]["event"] == name)
 		.map(|frame| &frame["event"]["payload"])
+}
+
+fn drops_of<'a>(frames: &'a [Value], bot_id: &'a str) -> Vec<&'a str> {
+	published(frames, SUMMONS_DROPPED)
+		.filter(|dropped| dropped["botId"] == bot_id)
+		.map(|dropped| dropped["reason"].as_str().unwrap_or_default())
+		.collect()
 }
 
 fn agent_events_in<'a>(
@@ -1431,6 +1441,103 @@ fn a_member_turn_sent_during_a_runtime_write_opens_on_the_written_model_and_effo
 		host.turn_ended_for(ADA).await;
 
 		assert_eq!(opened.on(ADA), vec!["model<opus> effort<high>"]);
+		host.quit().await;
+	});
+}
+
+#[test]
+fn a_summons_the_front_drops_is_released_at_once_and_never_expires_as_never_started() {
+	let _serial = serial();
+	block_on(async {
+		let mut host = Host::hosting("front-drop", "room_handover").await;
+		host.app.manage(TurnRunDeadlines::after(SHORT_START_DEADLINE));
+		let held = host.host_run(ROOM, ADA).await;
+		host.host_says(&held, "h1", "t1", "who takes the walls?").await;
+		host.turn_ended_for(ADA).await;
+		let awaited_before = host.runs_of("t1").await;
+
+		let released = conversation_drop_summons(
+			host.app.handle().clone(),
+			ROOM.to_owned(),
+			"t1".to_owned(),
+			GRACE.to_owned(),
+			serde_json::from_value(json!("summonLimit")).expect("a drop reason"),
+		)
+		.await
+		.expect("the drop is taken");
+		let awaited_after = host.runs_of("t1").await;
+		let completed_at = host.completed_at("t1").await;
+		tokio::time::sleep(SHORT_START_DEADLINE * 3).await;
+		host.called("conversation_claim_unseen_drops", json!({ "conversationId": ROOM })).await;
+
+		assert_eq!(awaited_before, 1, "ADA did not hand the turn to Grace");
+		assert!(released, "the awaited run of Grace was not released");
+		assert_eq!(awaited_after, 0, "the dropped run is still awaited");
+		assert!(completed_at.is_some(), "the turn stayed open behind the dropped run");
+		assert_eq!(drops_of(&host.frames, GRACE), vec!["summonLimit"]);
+		host.quit().await;
+	});
+}
+
+#[test]
+fn two_agents_mentioning_each_other_with_no_window_stop_at_the_bound_and_keep_the_drop_for_the_room(
+) {
+	let _serial = serial();
+	block_on(async {
+		let mut host = Host::hosting("summon-limit", "room_ping_pong").await;
+		host.app.manage(TurnRunDeadlines::after(SHORT_START_DEADLINE));
+
+		let answer = host.send_turn(sent("p1", "t1", "<@b-ada> who takes the walls?"), &[]).await;
+		host.heard_until(|frames| drops_of(frames, GRACE).contains(&"summonLimit")).await;
+		host.answered("t1").await;
+		tokio::time::sleep(SHORT_START_DEADLINE * 3).await;
+		let claimed_by_a_member =
+			host.called("conversation_claim_unseen_drops", json!({ "conversationId": ROOM })).await;
+		let claimed = conversation_claim_unseen_drops(host.app.state(), ROOM.to_owned());
+		let claimed_again = conversation_claim_unseen_drops(host.app.state(), ROOM.to_owned());
+
+		assert_eq!(answer["status"], json!(200), "{answer}");
+		let transcript = host.transcript().await;
+		assert_eq!(replies_of(&transcript, ADA).len(), 6, "the room holds {transcript:#?}");
+		assert_eq!(replies_of(&transcript, GRACE).len(), 5, "the room holds {transcript:#?}");
+		assert_eq!(drops_of(&host.frames, GRACE), vec!["summonLimit"]);
+		assert!(drops_of(&host.frames, ADA).is_empty(), "{:#?}", drops_of(&host.frames, ADA));
+		assert_eq!(host.runs_of("t1").await, 0, "a run outlived the bound");
+		assert_eq!(claimed_by_a_member["status"], json!(403), "{claimed_by_a_member}");
+		assert_eq!(
+			serde_json::to_value(&claimed).expect("the drops serialise"),
+			json!([{
+				"conversationId": ROOM,
+				"turnId": "t1",
+				"botId": GRACE,
+				"reason": "summonLimit",
+				"error": null,
+			}]),
+		);
+		assert!(claimed_again.is_empty(), "the drop was kept twice: {claimed_again:?}");
+		host.quit().await;
+	});
+}
+
+#[test]
+fn an_agent_mentioned_back_by_the_agent_it_summoned_with_no_window_runs_again_in_the_same_turn() {
+	let _serial = serial();
+	block_on(async {
+		let mut host = Host::hosting("reply-back", "room_reply_back").await;
+
+		let answer = host.send_turn(sent("p1", "t1", "<@b-ada> who takes the walls?"), &[]).await;
+		host.answered("t1").await;
+
+		assert_eq!(answer["status"], json!(200), "{answer}");
+		let transcript = host.transcript().await;
+		let ada: Vec<&str> = replies_of(&transcript, ADA)
+			.into_iter()
+			.filter(|reply| reply.turn_id == "t1")
+			.map(|reply| reply.content.as_str())
+			.collect();
+		assert_eq!(ada, vec!["<@b-grace> over to you", "noted"], "the room holds {transcript:#?}");
+		assert_eq!(replies_of(&transcript, GRACE).len(), 1, "the room holds {transcript:#?}");
+		assert!(drops_of(&host.frames, ADA).is_empty(), "{:#?}", host.frames);
 		host.quit().await;
 	});
 }

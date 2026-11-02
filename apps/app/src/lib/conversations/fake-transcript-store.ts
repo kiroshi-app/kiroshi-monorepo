@@ -1763,6 +1763,10 @@ export const createFakeTranscriptStore = (
 
 		completeTurn: () => Promise.resolve(),
 
+		dropSummons: () => Promise.resolve(false),
+
+		claimUnseenDrops: () => Promise.resolve([]),
+
 		messageReference: (conversationId: string, messageId: string) => {
 			const stored = rows.get(messageId)
 			if (!stored || stored.conversationId !== conversationId) {

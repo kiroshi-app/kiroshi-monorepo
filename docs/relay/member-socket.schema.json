@@ -7634,6 +7634,7 @@
     "SummonsDropReason": {
       "enum": [
         "selfMention",
+        "summonLimit",
         "cancelled",
         "notSeated",
         "startFailed",
@@ -9805,6 +9806,37 @@
       },
       "ok": {
         "type": "null"
+      }
+    },
+    "conversation_drop_summons": {
+      "args": {
+        "properties": {
+          "botId": {
+            "type": "string"
+          },
+          "conversationId": {
+            "type": "string"
+          },
+          "reason": {
+            "$ref": "#/$defs/SummonsDropReason"
+          },
+          "turnId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "conversationId",
+          "turnId",
+          "botId",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/TranscriptStoreError"
+      },
+      "ok": {
+        "type": "boolean"
       }
     },
     "conversation_duplicate_bot": {

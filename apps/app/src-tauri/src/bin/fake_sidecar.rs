@@ -519,6 +519,18 @@ fn on_prompt(key: &str, runs: &mut HashMap<String, Run>, text: &str) {
 		"room_handover_held" => {
 			emit_text_stream(key, "@Ada back to you once the walls are up ");
 		}
+		"room_reply_back" if run.runs_as(ADA) && text.contains("back to you") => {
+			emit_text_turn(key, run, ROOM_REPLY);
+			emit_result(key, run, "success", false);
+		}
+		"room_ping_pong" | "room_reply_back" if run.runs_as(ADA) => {
+			emit_text_turn(key, run, "@Grace Hopper over to you");
+			emit_result(key, run, "success", false);
+		}
+		"room_ping_pong" | "room_reply_back" => {
+			emit_text_turn(key, run, "@Ada back to you");
+			emit_result(key, run, "success", false);
+		}
 		"room_lead_held" if run.runs_as(ADA) => {
 			emit_text_stream(key, "the walls first ");
 		}

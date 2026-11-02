@@ -60,6 +60,12 @@ pub struct NewTurn {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BotReply {
+	pub author_bot_id: String,
+	pub content: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AwaitedRun {
 	pub conversation_id: String,
 	pub turn_id: String,
@@ -330,6 +336,9 @@ const CONVERSATION_OF_MESSAGE: &str = "SELECT conversation_id FROM messages WHER
 const RUN_OF_TURN: &str = "SELECT runtime_session_id FROM messages
 	WHERE turn_id = ?1 AND role = 'assistant' AND runtime_session_id IS NOT NULL
 	ORDER BY seq LIMIT 1";
+const BOT_REPLIES_OF_TURN: &str = "SELECT author_bot_id, content FROM messages
+	WHERE turn_id = ?1 AND role = 'assistant' AND author_bot_id IS NOT NULL
+	ORDER BY seq";
 const LAST_MESSAGE_SEQ: &str =
 	"SELECT COALESCE(MAX(seq), 0) FROM messages WHERE conversation_id = ?1";
 
@@ -747,6 +756,24 @@ impl MessagesRepository {
 			})
 			.await
 			.at("run_of_turn", "messages")?)
+	}
+
+	pub async fn bot_replies_of_turn(
+		&self,
+		turn_id: String,
+	) -> Result<Vec<BotReply>, TranscriptError> {
+		Ok(self
+			.call(move |connection| {
+				let mut statement = connection.prepare_cached(BOT_REPLIES_OF_TURN)?;
+				let replies = statement
+					.query_map(params![turn_id], |row| {
+						Ok(BotReply { author_bot_id: row.get(0)?, content: row.get(1)? })
+					})?
+					.collect::<Result<Vec<_>, _>>()?;
+				Ok(replies)
+			})
+			.await
+			.at("bot_replies_of_turn", "messages")?)
 	}
 
 	pub async fn conversation_of_message(

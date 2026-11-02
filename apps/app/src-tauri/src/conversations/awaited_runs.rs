@@ -4,7 +4,7 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 use tauri::webview::{PageLoadEvent, PageLoadPayload};
 use tauri::{AppHandle, Manager, Runtime, State, Webview, Window, WindowEvent};
 
-use super::contract::TranscriptStoreError;
+use super::contract::{SummonsDropped, TranscriptStoreError};
 use super::host_turn;
 use crate::agent::AgentState;
 use crate::db;
@@ -19,6 +19,7 @@ struct Windows {
 	submitted: HashMap<String, String>,
 	orphaned: HashSet<String>,
 	drivers: HashSet<String>,
+	unseen_drops: Vec<SummonsDropped>,
 }
 
 impl TurnWindows {
@@ -38,7 +39,7 @@ impl TurnWindows {
 
 	pub(crate) fn forget_window(&self, window: &str) {
 		let mut held = self.held();
-		let Windows { submitted, orphaned, drivers } = &mut *held;
+		let Windows { submitted, orphaned, drivers, .. } = &mut *held;
 		drivers.remove(window);
 		submitted.retain(|turn_id, submitter| {
 			let is_left = submitter == window;
@@ -52,6 +53,22 @@ impl TurnWindows {
 	fn is_left_to_the_host(&self, turn_id: &str) -> bool {
 		let held = self.held();
 		!held.drivers.is_empty() && held.orphaned.contains(turn_id)
+	}
+
+	pub(crate) fn keep_unless_driven(&self, dropped: SummonsDropped) {
+		let mut held = self.held();
+		if held.drivers.is_empty() {
+			held.unseen_drops.push(dropped);
+		}
+	}
+
+	fn claim_unseen_drops(&self, conversation_id: &str) -> Vec<SummonsDropped> {
+		let mut held = self.held();
+		let (claimed, kept) = std::mem::take(&mut held.unseen_drops)
+			.into_iter()
+			.partition(|dropped| dropped.conversation_id == conversation_id);
+		held.unseen_drops = kept;
+		claimed
 	}
 
 	fn served(&self, turn_id: &str) {
@@ -81,6 +98,15 @@ pub async fn conversation_serve_awaited_runs<R: Runtime>(
 	agent: State<'_, AgentState>,
 ) -> Result<(), TranscriptStoreError> {
 	serve_on_driving(&app, &windows, &agent, webview.window().label()).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn conversation_claim_unseen_drops(
+	windows: State<'_, TurnWindows>,
+	conversation_id: String,
+) -> Vec<SummonsDropped> {
+	windows.claim_unseen_drops(&conversation_id)
 }
 
 pub(crate) async fn serve_on_driving<R: Runtime>(
@@ -213,6 +239,7 @@ mod tests {
 	use tokio::time;
 
 	use super::{forget_on_destroyed, forget_on_page_event, forget_settled_turns, TurnWindows};
+	use crate::conversations::summons::{self, SummonsDropReason, SummonsRun};
 	use crate::conversations::turn_run_deadline::{arm_start_deadlines, TurnRunDeadlines};
 	use crate::db;
 	use crate::db::repositories::conversations::DEFAULT_BOT_ID;
@@ -380,5 +407,43 @@ mod tests {
 		windows.served("t1");
 
 		assert!(!windows.is_left_to_the_host("t1"));
+	}
+
+	#[test]
+	fn every_drop_the_room_notices_waits_for_it_only_while_no_window_drives() {
+		let app = an_app_of_its_own("unseen-drops", mock_builder());
+		app.manage(TurnWindows::default());
+		let windows = app.state::<TurnWindows>();
+		let run = SummonsRun { conversation_id: "c1", turn_id: "t1", bot_id: "b1" };
+		let elsewhere = SummonsRun { conversation_id: "c2", ..run };
+
+		for reason in SummonsDropReason::ALL {
+			summons::note_dropped(app.handle(), &run, reason, None);
+		}
+		summons::note_dropped(app.handle(), &elsewhere, SummonsDropReason::StartFailed, None);
+		let kept: Vec<SummonsDropReason> =
+			windows.claim_unseen_drops("c1").into_iter().map(|dropped| dropped.reason).collect();
+		let claimed_again = windows.claim_unseen_drops("c1");
+		windows.start_driving("main");
+		summons::note_dropped(app.handle(), &run, SummonsDropReason::StartFailed, None);
+
+		let noticed: Vec<SummonsDropReason> = SummonsDropReason::ALL
+			.into_iter()
+			.filter(|reason| {
+				![
+					SummonsDropReason::SelfMention,
+					SummonsDropReason::NotSeated,
+					SummonsDropReason::Cancelled,
+				]
+				.contains(reason)
+			})
+			.collect();
+		assert_eq!(kept, noticed);
+		assert!(claimed_again.is_empty(), "a kept drop was handed to the room twice");
+		assert!(
+			windows.claim_unseen_drops("c1").is_empty(),
+			"a drop under a driving window was kept"
+		);
+		assert_eq!(windows.claim_unseen_drops("c2").len(), 1, "another room lost its drop");
 	}
 }

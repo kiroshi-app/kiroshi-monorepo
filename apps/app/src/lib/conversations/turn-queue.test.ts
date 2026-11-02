@@ -4,12 +4,13 @@ import {
 	droppedWaiting,
 	emptyQueue,
 	handedOver,
-	MAX_SUMMONS_PER_CHAIN,
 	openedWave,
 	refusalOf,
 	reopenedFor,
 	type Summons,
 } from "./turn-queue"
+
+import { MAX_SUMMONS_PER_CHAIN } from "../bindings"
 
 const SAID = "m-1"
 

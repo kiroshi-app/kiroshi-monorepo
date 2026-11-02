@@ -1,4 +1,4 @@
-import type { SummonsDropReason } from "./summons-trace"
+import { MAX_SUMMONS_PER_CHAIN, type SummonsDropReason } from "../bindings"
 
 export type Summons = {
 	botId: string
@@ -10,8 +10,6 @@ export type TurnQueue = {
 	waiting: Summons[]
 	handedBotIds: string[]
 }
-
-export const MAX_SUMMONS_PER_CHAIN = 5
 
 export const emptyQueue: TurnQueue = {
 	wave: [],

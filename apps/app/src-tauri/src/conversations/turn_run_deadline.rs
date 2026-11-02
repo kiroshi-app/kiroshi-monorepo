@@ -127,7 +127,11 @@ struct HeldTurn<R: Runtime> {
 
 impl<R: Runtime> HeldTurn<R> {
 	async fn release(&self, bot_id: &str) {
-		if let Err(error) = self.released(bot_id).await {
+		let run =
+			SummonsRun { conversation_id: &self.conversation_id, turn_id: &self.turn_id, bot_id };
+		if let Err(error) =
+			released_awaited_run(&self.app, &run, SummonsDropReason::NeverStarted).await
+		{
 			eprintln!(
 				"{} could not release the awaited run of {bot_id} at its start deadline: {error:?}",
 				self.label()
@@ -135,29 +139,49 @@ impl<R: Runtime> HeldTurn<R> {
 		}
 	}
 
-	async fn released(&self, bot_id: &str) -> Result<(), TranscriptStoreError> {
-		let database = database(&self.app)?;
-		let expired = database
-			.messages()
-			.expire_awaited_run(self.turn_id.clone(), bot_id.to_owned(), now_ms())
-			.await?;
-		if expired {
-			let run = SummonsRun {
-				conversation_id: &self.conversation_id,
-				turn_id: &self.turn_id,
-				bot_id,
-			};
-			summons::note_dropped(&self.app, &run, SummonsDropReason::NeverStarted, None);
-			announce_conversation(&self.app, database, CONVERSATION_UPDATED, &self.conversation_id)
-				.await;
-			forget_settled_turns(&self.app).await;
-		}
-		Ok(())
-	}
-
 	fn label(&self) -> String {
 		format!("turn {} of conversation {}", self.turn_id, self.conversation_id)
 	}
+}
+
+pub(crate) async fn drop_awaited_run<R: Runtime>(
+	app: &AppHandle<R>,
+	run: &SummonsRun<'_>,
+	reason: SummonsDropReason,
+) -> Result<bool, TranscriptStoreError> {
+	suspend_start_deadline(app, run.turn_id, run.bot_id);
+	released_awaited_run(app, run, reason).await
+}
+
+async fn released_awaited_run<R: Runtime>(
+	app: &AppHandle<R>,
+	run: &SummonsRun<'_>,
+	reason: SummonsDropReason,
+) -> Result<bool, TranscriptStoreError> {
+	let database = database(app)?;
+	let expired = database
+		.messages()
+		.expire_awaited_run(run.turn_id.to_owned(), run.bot_id.to_owned(), now_ms())
+		.await?;
+	if expired {
+		summons::note_dropped(app, run, reason, None);
+		announce_conversation(app, database, CONVERSATION_UPDATED, run.conversation_id).await;
+		forget_settled_turns(app).await;
+	}
+	Ok(expired)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn conversation_drop_summons<R: Runtime>(
+	app: AppHandle<R>,
+	conversation_id: String,
+	turn_id: String,
+	bot_id: String,
+	reason: SummonsDropReason,
+) -> Result<bool, TranscriptStoreError> {
+	let run = SummonsRun { conversation_id: &conversation_id, turn_id: &turn_id, bot_id: &bot_id };
+	drop_awaited_run(&app, &run, reason).await
 }
 
 #[cfg(test)]

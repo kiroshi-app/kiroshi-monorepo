@@ -1,15 +1,4 @@
-const SUMMONS_DROP_REASONS = [
-	"selfMention",
-	"summonLimit",
-	"interrupted",
-	"cancelled",
-	"notSeated",
-	"startFailed",
-	"neverStarted",
-	"lostQueue",
-] as const
-
-export type SummonsDropReason = (typeof SUMMONS_DROP_REASONS)[number]
+import type { SummonsDropReason } from "../bindings"
 
 export type SummonsRun = {
 	conversationId: string

@@ -29,7 +29,6 @@ import type {
 } from "./store-contract"
 import type { TranscriptStore } from "./store-port"
 import {
-	type SummonsDropReason,
 	type SummonsRun,
 	traceSummonsDropped,
 	traceSummonsQueued,
@@ -53,7 +52,6 @@ import {
 import {
 	emptyQueue,
 	handedOver,
-	MAX_SUMMONS_PER_CHAIN,
 	openedWave,
 	refusalOf,
 	reopenedFor,
@@ -61,7 +59,11 @@ import {
 	type TurnQueue,
 } from "./turn-queue"
 
-import type { SummonsDropped } from "../bindings"
+import {
+	MAX_SUMMONS_PER_CHAIN,
+	type SummonsDropped,
+	type SummonsDropReason,
+} from "../bindings"
 import {
 	failureReporterIn,
 	type ReporterFacts,
@@ -267,8 +269,8 @@ const NO_SESSION: TransportError = { kind: "notStarted" }
 
 const UNNOTICED_DROPS: SummonsDropReason[] = ["selfMention", "notSeated"]
 
-type NoticedDrop = Omit<SummonsDropped, "reason"> & {
-	reason: SummonsDropReason
+type NoticedDrop = Omit<SummonsDropped, "error"> & {
+	error: TransportError | null
 }
 
 type RunPlace = Pick<TranscriptMessage, "conversationId" | "turnId">
@@ -780,9 +782,47 @@ export const createConversationController = (
 		}
 	}
 
+	const releaseOnHost = (
+		turnId: string,
+		botId: string,
+		reason: SummonsDropReason,
+	) => {
+		if (!conversation) {
+			return
+		}
+		const echo = runKeyOf(turnId, botId)
+		const isEchoedByTheHost = reason !== "cancelled"
+		if (isEchoedByTheHost) {
+			noticedRuns.add(echo)
+		}
+		void store.dropSummons(summonsRunOf(turnId, botId), reason).then(
+			(isReleased) => {
+				if (!isReleased) {
+					noticedRuns.delete(echo)
+				}
+			},
+			(cause) => {
+				noticedRuns.delete(echo)
+				noteFailure(toTransportError(cause))
+				sync()
+			},
+		)
+	}
+
+	const abandonAll = (
+		handed: Pick<Summons, "botId">[],
+		turnId: string,
+		reason: SummonsDropReason,
+	) => {
+		dropAll(handed, turnId, reason)
+		for (const { botId } of handed) {
+			releaseOnHost(turnId, botId, reason)
+		}
+	}
+
 	const dropWaiting = (reason: SummonsDropReason) => {
 		if (activeTurn) {
-			dropAll(queue.waiting, activeTurn.id, reason)
+			abandonAll(queue.waiting, activeTurn.id, reason)
 		}
 	}
 
@@ -819,7 +859,7 @@ export const createConversationController = (
 			const refusal = refusalOf(queue, fromBotId, summons)
 			if (refusal) {
 				traceSummonsDropped(run, refusal)
-				noteFrontDrop(turnId, botId, refusal)
+				noteFrontDrop(turnId, botId, refusal, null)
 				continue
 			}
 			const running = speakers.get(botId)
@@ -844,7 +884,8 @@ export const createConversationController = (
 			const handed = mentionsHandedBy(held.botId, promptId, named)
 			const missed = mentionsHandedBy(held.botId, promptId, unresolved)
 			if (held.droppedFor) {
-				dropAll([...handed, ...missed], held.turn.id, held.droppedFor)
+				dropAll(missed, held.turn.id, held.droppedFor)
+				abandonAll(handed, held.turn.id, held.droppedFor)
 				continue
 			}
 			handOver(handed, held.turn.id)
@@ -1168,7 +1209,9 @@ export const createConversationController = (
 			speakers.delete(held.botId)
 			void shutdownSpeaker(held)
 			traceSummonsDropped(summonsRunOf(held.turn.id, held.botId), "startFailed")
-			noteSpeakerFailure(held.botId, toTransportError(reason))
+			const error = toTransportError(reason)
+			noteSpeakerFailure(held.botId, error)
+			noteFrontDrop(held.turn.id, held.botId, "startFailed", error)
 		}
 		sync()
 	}
@@ -1286,23 +1329,12 @@ export const createConversationController = (
 		...(botIds.length === 1 ? { botId: botIds[0], botName: names[0] } : {}),
 	})
 
-	const claimUnnoticedRuns = (turnId: string, botIds: string[]) => {
-		const unnoticed = botIds.filter(
-			(botId) => !noticedRuns.has(runKeyOf(turnId, botId)),
-		)
-		for (const botId of unnoticed) {
-			noticedRuns.add(runKeyOf(turnId, botId))
-		}
-		return unnoticed
-	}
-
 	const raiseNotStarted = async (
 		run: RunPlace,
-		summoned: string[],
+		botIds: string[],
 		describe: (names: string[]) => string = (names) =>
 			notStartedDescriptionOf(null, names),
 	) => {
-		const botIds = claimUnnoticedRuns(run.turnId, summoned)
 		if (!conversation || botIds.length === 0) {
 			return
 		}
@@ -1333,9 +1365,10 @@ export const createConversationController = (
 			said.turnId,
 			"notSeated",
 		)
-		if (unresolved.length > 0) {
-			void raiseNotStarted(said, unresolved)
+		for (const botId of unresolved) {
+			noticedRuns.add(runKeyOf(said.turnId, botId))
 		}
+		void raiseNotStarted(said, unresolved)
 	}
 
 	const noteDropped = (dropped: NoticedDrop) => {
@@ -1347,6 +1380,9 @@ export const createConversationController = (
 		}
 		foreignTurns.fail(dropped)
 		sync()
+		if (noticedRuns.delete(runKeyOf(dropped.turnId, dropped.botId))) {
+			return
+		}
 		void raiseNotStarted(dropped, [dropped.botId], dropDescriberOf(dropped))
 	}
 
@@ -1354,6 +1390,7 @@ export const createConversationController = (
 		turnId: string,
 		botId: string,
 		reason: SummonsDropReason,
+		error: TransportError | null,
 	) => {
 		if (!conversation) {
 			return
@@ -1363,8 +1400,22 @@ export const createConversationController = (
 			turnId,
 			botId,
 			reason,
-			error: null,
+			error,
 		})
+		if (!UNNOTICED_DROPS.includes(reason)) {
+			releaseOnHost(turnId, botId, reason)
+		}
+	}
+
+	const noteUnseenDrops = async (conversationId: string) => {
+		try {
+			const unseen = await store.claimUnseenDrops(conversationId)
+			for (const dropped of unseen) {
+				noteDropped(dropped)
+			}
+		} catch (reason) {
+			noteFailure(toReadError(reason))
+		}
 	}
 
 	const nameFrom = async (conversationId: string, text: string) => {
@@ -1816,6 +1867,7 @@ export const createConversationController = (
 				noteFailure(toReadError(reason))
 			}),
 			readCauses(next.id),
+			noteUnseenDrops(next.id),
 		])
 		sync()
 	}
