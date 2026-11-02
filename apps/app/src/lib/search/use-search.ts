@@ -30,7 +30,6 @@ import { opensInNewTab } from "../tabs/new-tab-clicks"
 export type SearchSource = {
 	spaceId: string | null
 	spaceName: string | undefined
-	canOpen: boolean
 	lookups: SearchLookups
 	navigation: SearchNavigation
 	port?: SearchPort
@@ -85,7 +84,6 @@ export const useSearchNavigation = ({
 export const useSearch = ({
 	spaceId,
 	spaceName,
-	canOpen,
 	lookups,
 	navigation,
 	port = searchPort,
@@ -155,7 +153,6 @@ export const useSearch = ({
 
 	useSearchKeys({
 		isOpen: state.isOpen,
-		canOpen,
 		onOpen: open,
 		onMove: (by) => controller.moveActive(by, visible.length, landing),
 		onEnter: () => active?.onOpen(),

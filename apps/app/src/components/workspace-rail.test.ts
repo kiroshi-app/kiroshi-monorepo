@@ -17,7 +17,7 @@ import { AppRail } from "@workspace/ui/components/app-rail"
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { i18n } from "@workspace/ui/lib/i18n"
 
-import { appSidebarRailOf, useWorkspaceRail } from "@/components/workspace-rail"
+import { useWorkspaceRail } from "@/components/workspace-rail"
 import type { JoinedSpace, Space } from "@/lib/bindings"
 import { newBotIdentity } from "@/lib/bots/bot-settings"
 import { createFakeChatDriver } from "@/lib/chat/fake-driver"
@@ -411,20 +411,11 @@ describe.each(PRODUCED_SPACES)(
 			expect(currentSpaceHost).toBe(host)
 		})
 
-		it("hands the conversations sidebar the same Space in the same connection state", () => {
-			const produced = produceRailFor({ selectedSpaceId, connections })
-			const { space: sidebarSpace, spaceHost } = appSidebarRailOf(produced)
-
-			expect({ space: sidebarSpace, spaceHost }).toEqual({
-				space: produced.currentSpace,
-				spaceHost: produced.currentSpaceHost,
-			})
-		})
-
 		it("keeps handing the Space switcher rows every Space's connection state", () => {
-			const { hostBySpaceId } = appSidebarRailOf(
-				produceRailFor({ selectedSpaceId, connections }),
-			)
+			const { hostBySpaceId } = produceRailFor({
+				selectedSpaceId,
+				connections,
+			}).rail
 
 			expect(hostBySpaceId?.[space.id]).toBe(host)
 		})

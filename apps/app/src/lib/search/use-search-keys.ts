@@ -11,7 +11,6 @@ const CONTROLS_THAT_KEEP_THEIR_KEYS =
 
 export type SearchKeys = {
 	isOpen: boolean
-	canOpen: boolean
 	onOpen: () => void
 	onMove: (by: number) => void
 	onEnter: () => void
@@ -19,11 +18,7 @@ export type SearchKeys = {
 
 type SearchKeyPress = (keys: SearchKeys) => void
 
-const OPEN_PALETTE: SearchKeyPress = ({ canOpen, onOpen }) => {
-	if (canOpen) {
-		onOpen()
-	}
-}
+const OPEN_PALETTE: SearchKeyPress = ({ onOpen }) => onOpen()
 
 const KEEP_THE_CHORD: SearchKeyPress = () => undefined
 

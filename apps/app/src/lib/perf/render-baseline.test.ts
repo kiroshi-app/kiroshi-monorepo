@@ -92,6 +92,22 @@ vi.mock(
 	},
 )
 
+vi.mock("@workspace/ui/components/app-sidebar", async (importOriginal) => {
+	const actual =
+		await importOriginal<
+			typeof import("@workspace/ui/components/app-sidebar")
+		>()
+	const { createElement: element } = await import("react")
+	const { probeRender: probe } = await import("@workspace/ui/lib/render-probe")
+	return {
+		...actual,
+		AppSidebarBody: (props: Parameters<typeof actual.AppSidebarBody>[0]) => {
+			probe("AppSidebar")
+			return element(actual.AppSidebarBody, props)
+		},
+	}
+})
+
 vi.mock("@/lib/chat/create-driver", async () => {
 	const { withFakeHostWrites } = await import(
 		"@/lib/conversations/fake-host-writes"
