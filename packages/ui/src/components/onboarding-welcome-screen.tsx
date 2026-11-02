@@ -49,7 +49,7 @@ const COMPANIONS = [
 
 const CARD_CLASS = "rounded-bubble border border-border bg-card"
 
-const ILLUSTRATION_BUBBLE_CLASS = "px-3 py-2 leading-5"
+const ILLUSTRATION_BUBBLE_CLASS = "px-3 py-2 text-sm leading-5"
 
 const CompanionsIllustration = () => {
 	const { t } = useTranslation("chat")

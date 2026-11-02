@@ -17,7 +17,7 @@ import { cn } from "@workspace/ui/lib/utils"
 
 const THREAD_COLUMN = "mx-auto max-w-182"
 
-const THREAD_PROMPT_COLUMN = "mx-auto max-w-182 px-1"
+const THREAD_PROMPT_COLUMN = "mx-auto max-w-184"
 
 interface ThreadLayoutProps {
 	header?: ReactNode

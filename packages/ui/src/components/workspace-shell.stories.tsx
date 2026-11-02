@@ -130,6 +130,8 @@ const YOU_AVATAR_INSET = 17
 
 const COMPOSER_INSET_IN_CARD = 9
 
+const THREAD_COLUMN_WIDTH = 728
+
 const expectCardAndComposerOnShellInset = async (root: HTMLElement) => {
 	const avatar = slotIn(root, "app-rail-avatar").getBoundingClientRect()
 	const card = root.querySelector<HTMLElement>("[data-content-card]")
@@ -148,7 +150,12 @@ const expectCardAndComposerOnShellInset = async (root: HTMLElement) => {
 	await expect(window.innerHeight - cardEdges.bottom).toBe(shellInset())
 	await expect(window.innerWidth - cardEdges.right).toBe(shellInset())
 	await expect(cardEdges.bottom - edges.bottom).toBe(COMPOSER_INSET_IN_CARD)
-	await expect(cardEdges.right - edges.right).toBe(COMPOSER_INSET_IN_CARD)
+	await expect(
+		Math.abs(cardEdges.right - edges.right - (edges.left - cardEdges.left)),
+	).toBeLessThanOrEqual(1)
+	await expect(cardEdges.right - edges.right).toBeGreaterThanOrEqual(
+		COMPOSER_INSET_IN_CARD,
+	)
 }
 
 const meta = preview.meta({
@@ -225,7 +232,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"The nominal workspace: an expanded sidebar holding the session list, and a live conversation in the main column. Check that the transcript takes the whole room the panel leaves it and starts where the panel ends rather than running under it, that only the transcript scrolls — the sidebar, the bar above it and the composer stay put — and that Tab reaches the sidebar before the transcript. The app assembles it at `apps/app/src/App.tsx:928`.",
+					"The nominal workspace: an expanded sidebar holding the session list, and a live conversation in the main column. Check that the transcript scrolls in the whole room the panel leaves it, its column centred there at most 728 wide (680 of reading width), and starts where the panel ends rather than running under it, that only the transcript scrolls — the sidebar, the bar above it and the composer stay put — and that Tab reaches the sidebar before the transcript. The app assembles it at `apps/app/src/App.tsx:928`.",
 			},
 		},
 	},
@@ -248,7 +255,14 @@ export const Default = meta.story({
 		await expect(viewport.getBoundingClientRect().left).toBeGreaterThanOrEqual(
 			sidebar.getBoundingClientRect().right,
 		)
-		await expect(column.clientWidth).toBe(viewport.clientWidth)
+		const room = viewport.getBoundingClientRect()
+		const columnBox = column.getBoundingClientRect()
+		await expect(column.clientWidth).toBe(
+			Math.min(viewport.clientWidth, THREAD_COLUMN_WIDTH),
+		)
+		await expect(Math.round(columnBox.left - room.left)).toBe(
+			Math.round(room.right - columnBox.right),
+		)
 		await expect(viewport.clientHeight).toBeLessThan(window.innerHeight)
 		await expect(viewport).toHaveClass("scrollbar-overlay")
 		await expect(viewport.clientWidth).toBe(viewport.offsetWidth)
@@ -302,7 +316,10 @@ const expectNeutralShellInSpace = async (
 		tokenPaintOf(surface, `--hue-${scheme}-accent`),
 	)
 	await expect(tokenPaintOf(surface, "--user-bubble")).toBe(
-		tokenPaintOf(surface, `--hue-${scheme}-bubble`),
+		tokenPaintOf(
+			surface,
+			scheme === "dark" ? "--hue-dark-accent" : `--hue-${scheme}-bubble`,
+		),
 	)
 }
 

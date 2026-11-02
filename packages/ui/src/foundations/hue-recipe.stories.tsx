@@ -17,6 +17,11 @@ const HUES = [...PRESET_HUES, ...ARBITRARY_HUES]
 
 const GAMUT_ROLES: HueRole[] = ["bubble", "accent", "avatar-ink"]
 
+const OWN_BUBBLE_ROLE: Record<HueTheme, HueRole> = {
+	light: "bubble",
+	dark: "accent",
+}
+
 const hexOfComputed = (colour: string) => {
 	const channels =
 		colour
@@ -51,7 +56,7 @@ const expectRow = async (row: HTMLElement) => {
 	}
 
 	await expect(backgroundOf(bubble), `${label} bubble`).toBe(
-		hueTone(hue, theme, "bubble").hex,
+		hueTone(hue, theme, OWN_BUBBLE_ROLE[theme]).hex,
 	)
 	await expect(textOf(accent), `${label} accent`).toBe(
 		hueTone(hue, theme, "accent").hex,
@@ -85,7 +90,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"Every colour a Space, a conversation or a companion paints, derived from one hue through the tone table in tokens.json: the bubble and its text, the accent on the card, the New line and the avatar ink on its ground, light and dark.",
+					"Every colour a Space, a conversation or a companion paints, derived from one hue through the tone table in tokens.json: the bubble and its text, the accent on the card, the New line and the avatar ink on its ground, light and dark. In the dark theme your bubble wears the accent tone, with dark ink on it.",
 			},
 		},
 	},
