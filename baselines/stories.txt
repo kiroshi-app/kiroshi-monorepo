@@ -962,6 +962,10 @@ layout-workspaceshell--space-tinted-dark
 layout-workspaceshell--tall-content
 layout-workspaceshell--tall-host
 navigation-appframe--connecting-space
+navigation-appframe--holding-conversations
+navigation-appframe--holding-library
+navigation-appframe--holding-settings
+navigation-appframe--holding-settings-dark
 navigation-appframe--local-space
 navigation-appframe--offline-space
 navigation-appframe--offline-space-dark

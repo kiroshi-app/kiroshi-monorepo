@@ -1,6 +1,9 @@
 import { type CSSProperties, type ReactNode, useId } from "react"
 
-import { ContentCard } from "@workspace/ui/components/content-card"
+import {
+	ContentCard,
+	ContentCardLandmarkId,
+} from "@workspace/ui/components/content-card"
 import { hueStyle } from "@workspace/ui/components/hue-palette"
 import { SidebarResizeProvider } from "@workspace/ui/components/sidebar-resize"
 import { SkipLink } from "@workspace/ui/components/skip-link"
@@ -31,29 +34,26 @@ const shellStyle = (width: number, hue?: number): ShellStyle => ({
 	...(hue === undefined ? undefined : hueStyle(hue)),
 })
 
-interface WorkspaceShellProps {
+interface WorkspaceShellRootProps {
 	width?: number
 	onWidthChange?: (width: number) => void
 	isResizable?: boolean
 	className?: string
-	sidebar?: ReactNode
 	spaceTint?: number | null
 	isLandmark?: boolean
 	children: ReactNode
 }
 
-const WorkspaceShell = ({
-	sidebar,
+const WorkspaceShellRoot = ({
 	spaceTint,
-	isLandmark,
+	isLandmark = true,
 	width,
 	onWidthChange,
 	isResizable,
 	children,
 	className,
-}: WorkspaceShellProps) => {
+}: WorkspaceShellRootProps) => {
 	const mainId = useId()
-	const isMain = isLandmark ?? true
 	const spaceHue = spaceTint ?? undefined
 
 	return (
@@ -70,15 +70,36 @@ const WorkspaceShell = ({
 					open
 					style={shellStyle(resize.width, spaceHue)}
 				>
-					{isMain ? <SkipLink targetId={mainId} /> : null}
-					{sidebar}
-					<ContentCard id={isMain ? mainId : undefined} isLandmark={isMain}>
+					<ContentCardLandmarkId value={isLandmark ? mainId : undefined}>
+						{isLandmark ? <SkipLink targetId={mainId} /> : null}
 						{children}
-					</ContentCard>
+					</ContentCardLandmarkId>
 				</SidebarProvider>
 			)}
 		</SidebarResizeProvider>
 	)
 }
 
-export { SHELL_GUTTER, SHELL_TITLE_BAR_HEIGHT, WorkspaceShell }
+interface WorkspaceShellProps extends WorkspaceShellRootProps {
+	sidebar?: ReactNode
+}
+
+const WorkspaceShell = ({
+	sidebar,
+	isLandmark = true,
+	children,
+	...root
+}: WorkspaceShellProps) => (
+	<WorkspaceShellRoot isLandmark={isLandmark} {...root}>
+		{sidebar}
+		<ContentCard isLandmark={isLandmark}>{children}</ContentCard>
+	</WorkspaceShellRoot>
+)
+
+export {
+	SHELL_GUTTER,
+	SHELL_TITLE_BAR_HEIGHT,
+	WorkspaceShell,
+	WorkspaceShellRoot,
+	type WorkspaceShellRootProps,
+}
