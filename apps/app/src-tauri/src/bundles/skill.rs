@@ -8,12 +8,12 @@ use super::front::{
 	split_frontmatter, with_key, without_key, written_front,
 };
 use super::{
-	dir, recorded, rewrite_agent, serialised, slug, unrecorded, AGENT_KEY, ALLOWED_TOOLS_KEY,
-	ARGUMENTS_KEY, ARGUMENT_HINT_KEY, BACKGROUND_KEY, BOT_SUBJECT, COMPATIBILITY_KEY, CONTEXT_KEY,
-	DESCRIPTION_KEY, DISALLOWED_TOOLS_KEY, EFFORT_KEY, HOOKS_KEY, INVOCATION_KEY, KIROSHI_KEY,
-	LICENSE_KEY, MARKED, METADATA_KEY, MODEL_KEY, NAME_KEY, PATHS_KEY, PRELOAD_KEY, SHELL_KEY,
-	SKILLS_DIR, SKILL_FILE_SUBJECT, SKILL_NAME, SKILL_SUBJECT, SYSTEM_KEY, USER_INVOCABLE_KEY,
-	WHEN_TO_USE_KEY,
+	dir, lookup, recorded, rewrite_agent, serialised, slug, unrecorded, AGENT_KEY,
+	ALLOWED_TOOLS_KEY, ARGUMENTS_KEY, ARGUMENT_HINT_KEY, BACKGROUND_KEY, BOT_SUBJECT,
+	COMPATIBILITY_KEY, CONTEXT_KEY, DESCRIPTION_KEY, DISALLOWED_TOOLS_KEY, EFFORT_KEY, HOOKS_KEY,
+	INVOCATION_KEY, KIROSHI_KEY, LICENSE_KEY, MARKED, METADATA_KEY, MODEL_KEY, NAME_KEY, PATHS_KEY,
+	PRELOAD_KEY, SHELL_KEY, SKILLS_DIR, SKILL_FILE_SUBJECT, SKILL_NAME, SKILL_SUBJECT, SYSTEM_KEY,
+	USER_INVOCABLE_KEY, WHEN_TO_USE_KEY,
 };
 use crate::db::repositories::conversations::Bot;
 use crate::private_files;
@@ -108,6 +108,18 @@ pub fn write_skills(root: &Path, bot: &Bot, skills: &[(&str, &[u8])]) -> std::io
 	}
 	rewrite_agent(root, bot)?;
 	recorded(&bundle, BOT_SUBJECT, &bot.name, "created at first launch").map_err(unrecorded)
+}
+
+pub fn retire_skill(root: &Path, bot_id: &str, skill_id: &str) -> std::io::Result<()> {
+	let Some(bundle) = lookup(root, bot_id)? else {
+		return Ok(());
+	};
+	let _serialised = serialised(&bundle);
+	if !bundle.join(SKILLS_DIR).join(skill_id).join(SKILL_NAME).is_file() {
+		return Ok(());
+	}
+	let name = deleted_skill(&bundle, skill_id)?;
+	recorded(&bundle, SKILL_SUBJECT, &name, "retired by the app").map_err(unrecorded)
 }
 
 pub fn create_skill_at(bundle: &Path, draft: &SkillDraft) -> std::io::Result<Skill> {

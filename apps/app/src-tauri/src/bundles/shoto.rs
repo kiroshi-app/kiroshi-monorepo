@@ -6,12 +6,13 @@ pub const AVATAR: &[u8] = include_bytes!("../../plugins/shoto/avatar.jpeg");
 
 const PERSONA: &[u8] = include_bytes!("../../plugins/shoto/persona.md");
 
-pub const SKILLS: [(&str, &[u8]); 4] = [
-	("connect", include_bytes!("../../plugins/shoto/skills/connect/SKILL.md")),
+pub const SKILLS: [(&str, &[u8]); 3] = [
 	("first-companion", include_bytes!("../../plugins/shoto/skills/first-companion/SKILL.md")),
 	("how-kiroshi-works", include_bytes!("../../plugins/shoto/skills/how-kiroshi-works/SKILL.md")),
 	("hand-off", include_bytes!("../../plugins/shoto/skills/hand-off/SKILL.md")),
 ];
+
+pub const RETIRED_SKILL: &str = "connect";
 
 pub fn persona() -> String {
 	String::from_utf8_lossy(PERSONA).trim().to_owned()
@@ -22,7 +23,10 @@ mod tests {
 	use std::fs;
 	use std::path::{Path, PathBuf};
 
-	use super::super::{SKILLS_DIR, SKILL_NAME};
+	use super::super::tests::{a_bot, a_root};
+	use super::super::{
+		dir, history_at, retire_skill, write, write_skills, SKILLS_DIR, SKILL_NAME,
+	};
 	use super::*;
 
 	const PERSONA_NAME: &str = "persona.md";
@@ -111,5 +115,29 @@ mod tests {
 			assert!(text.contains("description: \""), "{id} has no description");
 			assert!(!text.contains("preload:"), "{id} is preloaded");
 		}
+	}
+
+	#[test]
+	fn the_connect_skill_left_in_a_bundle_is_dropped_and_the_three_skills_stay_as_embedded() {
+		let root = a_root("shoto-retired-connect");
+		let bot = a_bot(NAME, &persona());
+		write(&root, &bot).expect("the bundle is written");
+		let old_connect: &[u8] = b"---\nname: \"connect\"\ndescription: \"Use when the person is not connected.\"\n---\n\nOne failure, one gesture.\n";
+		let held_before: Vec<_> =
+			SKILLS.iter().copied().chain([(RETIRED_SKILL, old_connect)]).collect();
+		write_skills(&root, &bot, &held_before).expect("the old Shoto bundle is planted");
+		let bundle = dir(&root, &bot.id).expect("the bundle is held");
+
+		retire_skill(&root, &bot.id, RETIRED_SKILL).expect("the connect skill is retired");
+
+		let skills = bundle.join(SKILLS_DIR);
+		assert!(!skills.join(RETIRED_SKILL).exists(), "the connect skill is still on disk");
+		for (id, body) in SKILLS {
+			let held = fs::read(skills.join(id).join(SKILL_NAME)).expect("the skill reads");
+			assert_eq!(held, body, "the skill {id} moved");
+		}
+		let recorded = history_at(&bundle).expect("the history reads").len();
+		retire_skill(&root, &bot.id, RETIRED_SKILL).expect("a second start retires nothing");
+		assert_eq!(history_at(&bundle).expect("the history reads").len(), recorded);
 	}
 }

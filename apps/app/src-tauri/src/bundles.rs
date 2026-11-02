@@ -40,7 +40,7 @@ pub use permissions::{permissions, set_permissions, BotPermissions};
 pub(in crate::bundles) use skill::drafted;
 pub use skill::{
 	create_skill, create_skill_at, create_skill_with_files_at, is_system_skill, remove_skill,
-	remove_skill_at, remove_skill_file, remove_skill_file_at, set_skill_preloaded,
+	remove_skill_at, remove_skill_file, remove_skill_file_at, retire_skill, set_skill_preloaded,
 	set_skill_preloaded_at, skill_file, skill_file_at, skills, skills_at, update_skill,
 	update_skill_at, write_skill_file, write_skill_file_at, write_skills, Skill, SkillDraft,
 	SkillFront,
