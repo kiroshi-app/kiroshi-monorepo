@@ -67,6 +67,8 @@ conversation-markdown-collapsiblesections--in-agent-answer
 conversation-markdown-collapsiblesections--in-narrow-column
 conversation-markdown-gallery--in-agent-answer
 conversation-markdown-gallery--in-narrow-column
+conversation-markdown-gallery--three-images
+conversation-markdown-gallery--two-images
 conversation-markdown-illustratedlist--in-agent-answer
 conversation-markdown-illustratedlist--in-narrow-column
 conversation-markdown-markdown--adjacent-blocks

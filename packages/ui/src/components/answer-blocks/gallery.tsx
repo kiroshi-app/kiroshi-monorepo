@@ -24,12 +24,26 @@ type GalleryTileProps = {
 
 const TILE_COUNT = 5
 
-const GRID_CORNERS = [
-	"",
-	"rounded-se-control",
-	"",
-	"rounded-ee-control",
-] as const
+type GridLayout = {
+	grid: string
+	tiles: readonly string[]
+}
+
+const GRID_LAYOUTS: readonly GridLayout[] = [
+	{ grid: "grid-cols-1 grid-rows-1", tiles: ["rounded-e-control"] },
+	{
+		grid: "grid-cols-1 grid-rows-2",
+		tiles: ["rounded-se-control", "rounded-ee-control"],
+	},
+	{
+		grid: "grid-cols-2 grid-rows-2",
+		tiles: ["col-span-2 rounded-se-control", "", "rounded-ee-control"],
+	},
+	{
+		grid: "grid-cols-2 grid-rows-2",
+		tiles: ["", "rounded-se-control", "", "rounded-ee-control"],
+	},
+]
 
 const GalleryTile = ({
 	image,
@@ -48,7 +62,10 @@ const GalleryTile = ({
 		<>
 			<img
 				src={image.src}
-				alt={accessibleNameOf(image, caption)}
+				alt={accessibleNameOf(
+					image,
+					t("answerBlock.gallery.tile", { caption, position: index + 1 }),
+				)}
 				className="size-full object-cover"
 			/>
 			{hiddenCount > 0 ? (
@@ -81,6 +98,7 @@ const GalleryTile = ({
 const Gallery = ({ images, caption, onOpen, className }: GalleryProps) => {
 	const [lead, ...rest] = images
 	const gridImages = rest.slice(0, TILE_COUNT - 1)
+	const layout = GRID_LAYOUTS[gridImages.length - 1]
 	const hiddenCount = Math.max(0, images.length - TILE_COUNT)
 
 	if (!lead) return null
@@ -99,20 +117,21 @@ const Gallery = ({ images, caption, onOpen, className }: GalleryProps) => {
 					onOpen={onOpen}
 					className={cn(
 						"flex-[1.4]",
-						gridImages.length > 0 ? "rounded-s-control" : "rounded-control",
+						layout ? "rounded-s-control" : "rounded-control",
 					)}
 				/>
-				{gridImages.length > 0 ? (
-					<div className="grid min-w-0 flex-1 grid-cols-2 grid-rows-2 gap-1.5">
+				{layout ? (
+					<div className={cn("grid min-w-0 flex-1 gap-1.5", layout.grid)}>
 						{gridImages.map((image, position) => (
 							<GalleryTile
-								key={image.src}
+								// biome-ignore lint/suspicious/noArrayIndexKey: a tile is a fixed slot of the layout, two images may share a src
+								key={position}
 								image={image}
 								index={position + 1}
 								caption={caption}
 								hiddenCount={position === TILE_COUNT - 2 ? hiddenCount : 0}
 								onOpen={onOpen}
-								className={GRID_CORNERS[position] ?? ""}
+								className={layout.tiles[position] ?? ""}
 							/>
 						))}
 					</div>

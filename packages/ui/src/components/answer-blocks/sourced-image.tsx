@@ -89,9 +89,10 @@ const SourcedImage = ({
 								{status}
 							</li>
 						)}
-						{chips.map((chip) => (
+						{chips.map((chip, position) => (
 							<li
-								key={chip}
+								// biome-ignore lint/suspicious/noArrayIndexKey: chips are a fixed row, two may carry the same label
+								key={position}
 								className={cn(
 									CHIP_CLASS,
 									"bg-foreground/8 text-soft-foreground",

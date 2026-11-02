@@ -33,6 +33,17 @@ const CASA_DO_RIO_PHOTOS = [
 
 const CAPTION = "9 photos from casadorio.pt · opens in the viewer"
 
+const tilesIn = (root: HTMLElement) =>
+	Array.from(root.querySelectorAll<HTMLElement>('[data-slot="gallery"] button'))
+
+const expectNoEmptyCell = async (tiles: HTMLElement[]) => {
+	const lead = tiles[0].getBoundingClientRect()
+	const row = (tiles[0].parentElement as HTMLElement).getBoundingClientRect()
+	const last = (tiles.at(-1) as HTMLElement).getBoundingClientRect()
+	await expect(Math.round(last.right)).toBe(Math.round(row.right))
+	await expect(Math.round(last.bottom)).toBe(Math.round(lead.bottom))
+}
+
 const meta = preview.meta({
 	title: "Conversation/Markdown/Gallery",
 	component: Gallery,
@@ -59,7 +70,7 @@ export const InAgentAnswer = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard 15. Nine pictures, five tiles: the last tile reads +4. The third picture carries no alt text, so it takes the caption as its name. Check a tile hands its index to `onOpen`.",
+					"Artboard 15. Nine pictures, five tiles: the last tile reads +4. The third picture carries no alt text, so it takes the caption and its position as its name. Check a tile hands its index to `onOpen`.",
 			},
 		},
 	},
@@ -67,7 +78,9 @@ export const InAgentAnswer = meta.story({
 		await expect(slotIn(canvasElement, "gallery-more")).toHaveTextContent("+4")
 		await expect(canvas.getByText("4 more photos")).toBeInTheDocument()
 		await expect(canvas.getAllByRole("img")).toHaveLength(5)
-		await expect(canvas.getByRole("img", { name: CAPTION })).toBeVisible()
+		await expect(
+			canvas.getByRole("img", { name: `${CAPTION}, photo 3` }),
+		).toBeVisible()
 		const lead = getComputedStyle(
 			canvas.getByRole("button", { name: "A double room facing the river" }),
 		)
@@ -82,6 +95,66 @@ export const InAgentAnswer = meta.story({
 			canvas.getByRole("button", { name: "The rooftop pool" }),
 		)
 		await expect(args.onOpen).toHaveBeenCalledWith(3)
+	},
+})
+
+export const TwoImages = meta.story({
+	args: {
+		images: [{ src: ROOM_RIVER_VIEW }, { src: ROOFTOP_POOL }],
+		caption: "2 photos from casadorio.pt · opens in the viewer",
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Two pictures: the large tile and one full-height tile beside it. Check no grid cell is left empty, only the four outer corners round, and each tile without alt text reads the caption with its own position.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		await expectAnswerInsideFrame(canvasElement)
+		const tiles = tilesIn(canvasElement)
+		await expect(tiles).toHaveLength(2)
+		await expectNoEmptyCell(tiles)
+		const side = getComputedStyle(tiles[1])
+		await expect(side.borderTopRightRadius).toBe("12px")
+		await expect(side.borderBottomRightRadius).toBe("12px")
+		await expect(side.borderTopLeftRadius).toBe("4px")
+		await expect(
+			canvas.getByRole("img", {
+				name: "2 photos from casadorio.pt · opens in the viewer, photo 2",
+			}),
+		).toBeVisible()
+	},
+})
+
+export const ThreeImages = meta.story({
+	args: {
+		images: [{ src: ROOM_RIVER_VIEW }, { src: LOBBY }, { src: LOBBY }],
+		caption: "3 photos from casadorio.pt · opens in the viewer",
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Three pictures, two of them the same file: the large tile and two stacked tiles beside it. Check no grid cell is left empty, only the outer corners round, and the two identical pictures still carry distinct names.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		await expectAnswerInsideFrame(canvasElement)
+		const tiles = tilesIn(canvasElement)
+		await expect(tiles).toHaveLength(3)
+		await expectNoEmptyCell(tiles)
+		await expect(getComputedStyle(tiles[1]).borderTopRightRadius).toBe("12px")
+		await expect(getComputedStyle(tiles[1]).borderBottomRightRadius).toBe("4px")
+		await expect(getComputedStyle(tiles[2]).borderBottomRightRadius).toBe(
+			"12px",
+		)
+		const names = canvas
+			.getAllByRole("img")
+			.map((image) => image.getAttribute("alt"))
+		await expect(new Set(names).size).toBe(3)
 	},
 })
 

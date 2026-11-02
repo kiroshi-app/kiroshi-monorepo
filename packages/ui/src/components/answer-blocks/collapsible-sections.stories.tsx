@@ -67,7 +67,7 @@ export const InAgentAnswer = meta.story({
 			},
 		},
 	},
-	play: async ({ canvas, userEvent }) => {
+	play: async ({ canvas, canvasElement, userEvent }) => {
 		const lodging = canvas.getByRole("button", { name: /Lodging/ })
 		const food = canvas.getByRole("button", { name: /Food/ })
 		await expect(lodging).toHaveAttribute("aria-expanded", "true")
@@ -86,6 +86,19 @@ export const InAgentAnswer = meta.story({
 
 		await userEvent.keyboard(" ")
 		await expect(food).toHaveAttribute("aria-expanded", "true")
+
+		const rotationOf = (head: HTMLElement) =>
+			getComputedStyle(head.querySelector("svg") as SVGElement).rotate
+		const transport = canvas.getByRole("button", { name: /Transport/ })
+		canvasElement.dir = "rtl"
+		try {
+			await expect(rotationOf(food)).toBe("0deg")
+			await expect(rotationOf(transport)).toBe("90deg")
+		} finally {
+			canvasElement.dir = ""
+		}
+		await expect(rotationOf(food)).toBe("0deg")
+		await expect(rotationOf(transport)).toBe("-90deg")
 	},
 })
 

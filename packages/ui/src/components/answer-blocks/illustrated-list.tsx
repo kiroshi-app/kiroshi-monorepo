@@ -1,9 +1,6 @@
 import type { ReactNode } from "react"
 
-import {
-	type AnswerImage,
-	accessibleNameOf,
-} from "@workspace/ui/components/answer-blocks/answer-image"
+import type { AnswerImage } from "@workspace/ui/components/answer-blocks/answer-image"
 import { cn } from "@workspace/ui/lib/utils"
 
 type IllustratedListItem = {
@@ -35,7 +32,7 @@ const IllustratedList = ({ items, className }: IllustratedListProps) => (
 			>
 				<img
 					src={item.image.src}
-					alt={accessibleNameOf(item.image, item.title)}
+					alt={item.image.alt ?? ""}
 					className="h-18 w-24 shrink-0 rounded-lg object-cover"
 				/>
 				<div className="flex min-w-0 flex-1 flex-col gap-1">

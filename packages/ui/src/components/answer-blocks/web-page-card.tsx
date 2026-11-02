@@ -1,9 +1,6 @@
 import { useTranslation } from "react-i18next"
 
-import {
-	type AnswerImage,
-	accessibleNameOf,
-} from "@workspace/ui/components/answer-blocks/answer-image"
+import type { AnswerImage } from "@workspace/ui/components/answer-blocks/answer-image"
 import { cn } from "@workspace/ui/lib/utils"
 
 type WebPageCardProps = {
@@ -34,7 +31,7 @@ const WebPageCard = ({
 		>
 			<img
 				src={preview.src}
-				alt={accessibleNameOf(preview, title)}
+				alt={preview.alt ?? ""}
 				className="h-50 w-full object-cover"
 			/>
 			<div className="flex items-center gap-3 border-t border-shell-divider p-3">

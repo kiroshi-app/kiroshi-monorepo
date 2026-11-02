@@ -159,17 +159,25 @@ export const ReadOnly = meta.story({
 		docs: {
 			description: {
 				story:
-					"No `onToggle` and no `onCopy`: the list a past answer shows once nothing can tick it any more. Check each item is still announced as a checkbox with its state, but takes no focus stop and shows no pointer, and that the copy button is gone.",
+					"No `onToggle` and no `onCopy`: the list a past answer shows once nothing can tick it any more. Check each row is a plain list item whose hidden state text reads Done or To do before its label, with no focus stop, no pointer, and no copy button.",
 			},
 		},
 	},
-	play: async ({ canvas }) => {
-		const items = canvas.getAllByRole("checkbox")
+	play: async ({ canvas, canvasElement }) => {
+		await expect(canvas.queryByRole("checkbox")).toBeNull()
+		const items = canvas.getAllByRole("listitem")
 		await expect(items).toHaveLength(6)
-		for (const item of items) {
-			await expect(item).toHaveAttribute("aria-readonly", "true")
-			await expect(item.tabIndex).toBe(-1)
-			await expect(getComputedStyle(item).cursor).not.toBe("pointer")
+		await expect(items[0]).toHaveTextContent(
+			/^Done\s*Book the airport transfer/,
+		)
+		await expect(items[3]).toHaveTextContent(
+			/^To do\s*Buy two Viva Viagem cards/,
+		)
+		for (const row of canvasElement.querySelectorAll<HTMLElement>(
+			'[data-slot="checklist-item"]',
+		)) {
+			await expect(row.tabIndex).toBe(-1)
+			await expect(getComputedStyle(row).cursor).not.toBe("pointer")
 		}
 		await expect(canvas.queryByRole("button")).toBeNull()
 	},

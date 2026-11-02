@@ -321,6 +321,7 @@ const chat = {
 			open: "Ouvrir comme page",
 		},
 		gallery: {
+			tile: "{{caption}}, photo {{position}}",
 			more_one: "{{count}} photo de plus",
 			more_many: "{{count}} photos de plus",
 			more_other: "{{count}} photos de plus",

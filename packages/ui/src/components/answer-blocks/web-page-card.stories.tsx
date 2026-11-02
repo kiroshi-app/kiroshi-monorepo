@@ -39,14 +39,12 @@ export const InAgentAnswer = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard 12. A 460 wide card. The preview carries no alt text, so it takes the page title as its name. Check the button reaches `onOpen`.",
+					"Artboard 12. A 460 wide card. The preview carries no alt text, so it stays decorative instead of reading the title twice. Check the button reaches `onOpen`.",
 			},
 		},
 	},
 	play: async ({ args, canvas, userEvent }) => {
-		await expect(
-			canvas.getByRole("img", { name: "Casa do Rio · Rooms and rates" }),
-		).toBeVisible()
+		await expect(canvas.queryByRole("img")).toBeNull()
 		await userEvent.click(canvas.getByRole("button", { name: "Open as page" }))
 		await expect(args.onOpen).toHaveBeenCalledOnce()
 	},

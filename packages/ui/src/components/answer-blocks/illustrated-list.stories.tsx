@@ -83,15 +83,16 @@ export const InAgentAnswer = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard 1. Check the rows against the artboard side by side: 96 by 72 thumbnails, hairline dividers, the badge on the first row only. The first thumbnail carries no alt text, so it takes the row title as its name.",
+					"Artboard 1. Check the rows against the artboard side by side: 96 by 72 thumbnails, hairline dividers, the badge on the first row only. The first thumbnail carries no alt text, so it stays decorative instead of reading the title twice.",
 			},
 		},
 	},
 	play: async ({ canvas }) => {
 		await expect(canvas.getAllByRole("listitem")).toHaveLength(3)
+		await expect(canvas.getAllByRole("img")).toHaveLength(2)
 		await expect(
-			canvas.getByRole("img", { name: "Miradouro de Santa Luzia" }),
-		).toBeVisible()
+			canvas.getByRole("presentation", { hidden: true }),
+		).toHaveAttribute("alt", "")
 		await expect(
 			canvas.getByRole("img", { name: "The twin towers of the cathedral" }),
 		).toBeVisible()

@@ -24,6 +24,7 @@ type ChecklistRowProps = {
 }
 
 const ChecklistRow = ({ item, onToggle }: ChecklistRowProps) => {
+	const { t } = useTranslation("chat")
 	const content = (
 		<>
 			<span
@@ -56,13 +57,10 @@ const ChecklistRow = ({ item, onToggle }: ChecklistRowProps) => {
 
 	if (!onToggle) {
 		return (
-			<div
-				role="checkbox"
-				aria-checked={item.isChecked}
-				aria-readonly="true"
-				data-slot="checklist-item"
-				className={rowClass}
-			>
+			<div data-slot="checklist-item" className={rowClass}>
+				<span className="sr-only">
+					{t(item.isChecked ? "task.done" : "task.todo")}
+				</span>
 				{content}
 			</div>
 		)
