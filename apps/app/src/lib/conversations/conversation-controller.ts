@@ -1355,15 +1355,16 @@ export const createConversationController = (
 		botId: string,
 		reason: SummonsDropReason,
 	) => {
-		if (conversation) {
-			noteDropped({
-				conversationId: conversation.id,
-				turnId,
-				botId,
-				reason,
-				error: null,
-			})
+		if (!conversation) {
+			return
 		}
+		noteDropped({
+			conversationId: conversation.id,
+			turnId,
+			botId,
+			reason,
+			error: null,
+		})
 	}
 
 	const nameFrom = async (conversationId: string, text: string) => {
