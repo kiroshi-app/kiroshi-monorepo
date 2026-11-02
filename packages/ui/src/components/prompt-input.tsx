@@ -127,7 +127,7 @@ export function PromptInput({
 			<div
 				ref={refs.attachments}
 				inert={isBlocked}
-				className="w-full empty:hidden"
+				className="order-first w-full empty:hidden"
 			>
 				{attachments}
 			</div>

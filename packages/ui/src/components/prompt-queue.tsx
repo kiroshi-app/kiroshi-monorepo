@@ -3,7 +3,9 @@
 import { useId } from "react"
 import { useTranslation } from "react-i18next"
 
+import { Icons } from "@workspace/ui/components/icons"
 import { InitialsAvatar } from "@workspace/ui/components/initials-avatar"
+import { Button } from "@workspace/ui/components/ui/button"
 import { cn } from "@workspace/ui/lib/utils"
 
 type QueuedPrompt = {
@@ -15,7 +17,49 @@ type PromptQueueProps = {
 	items: QueuedPrompt[]
 	agentName: string
 	readerName?: string
+	onSendNow?: (id: string) => void
+	onRemove?: (id: string) => void
 	className?: string
+}
+
+type QueuedRowActionsProps = {
+	onSendNow?: () => void
+	onRemove?: () => void
+}
+
+const REVEALS_WITH_ROW =
+	"hidden shrink-0 items-center gap-1 group-focus-within/queued:flex group-hover/queued:flex"
+
+const QueuedRowActions = ({ onSendNow, onRemove }: QueuedRowActionsProps) => {
+	const { t } = useTranslation("chat")
+
+	if (!onSendNow && !onRemove) return null
+
+	return (
+		<span className={REVEALS_WITH_ROW}>
+			{onSendNow ? (
+				<Button
+					variant="outline"
+					onClick={onSendNow}
+					className="h-7 gap-1 rounded-full px-2.5 text-xs"
+				>
+					<Icons.ArrowUp aria-hidden="true" className="size-3" />
+					{t("queue.sendNow")}
+				</Button>
+			) : null}
+			{onRemove ? (
+				<Button
+					variant="ghost"
+					size="icon-xs"
+					aria-label={t("queue.remove")}
+					onClick={onRemove}
+					className="rounded-full text-muted-foreground"
+				>
+					<Icons.Close aria-hidden="true" />
+				</Button>
+			) : null}
+		</span>
+	)
 }
 
 const QUEUE_AVATAR_SIZE = 24
@@ -24,6 +68,8 @@ const PromptQueue = ({
 	items,
 	agentName,
 	readerName,
+	onSendNow,
+	onRemove,
 	className,
 }: PromptQueueProps) => {
 	const { t } = useTranslation("chat")
@@ -51,7 +97,7 @@ const PromptQueue = ({
 					<li
 						key={item.id}
 						data-slot="prompt-queue-item"
-						className="flex h-10 items-center gap-2.5 px-2"
+						className="group/queued flex h-10 items-center gap-2.5 rounded-lg px-2 hover:bg-foreground/4 has-focus-visible:bg-foreground/4"
 					>
 						<InitialsAvatar name={readerName} size={QUEUE_AVATAR_SIZE} />
 						<span className="shrink-0 font-medium text-compact text-foreground">
@@ -61,10 +107,14 @@ const PromptQueue = ({
 							{item.text}
 						</span>
 						{index === 0 ? (
-							<span className="shrink-0 font-medium text-primary text-xs">
+							<span className="shrink-0 font-medium text-primary text-xs group-focus-within/queued:hidden group-hover/queued:hidden">
 								{t("queue.next", { name: agentName })}
 							</span>
 						) : null}
+						<QueuedRowActions
+							onSendNow={onSendNow ? () => onSendNow(item.id) : undefined}
+							onRemove={onRemove ? () => onRemove(item.id) : undefined}
+						/>
 					</li>
 				))}
 			</ul>

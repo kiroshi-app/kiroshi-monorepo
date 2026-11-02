@@ -576,7 +576,7 @@ export const CompanionSelectOnPillFocused = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `The mention reached by the keyboard inside the reader's own bubble, the surface the chip is hardest to ring on. Check that Tab lands on the chip and that its ring is drawn in the text colour of the bubble, so it holds against the bubble fill in either theme. ${SELECT_NOT_YET_RENDERED}`,
+				story: `The mention reached by the keyboard inside the reader's own bubble, the surface the chip is hardest to ring on. Check that Tab lands on the bubble, then on the chip, and that its ring is drawn in the text colour of the bubble, so it holds against the bubble fill in either theme. ${SELECT_NOT_YET_RENDERED}`,
 			},
 		},
 	},
@@ -584,6 +584,7 @@ export const CompanionSelectOnPillFocused = meta.story({
 	play: async ({ canvasElement, userEvent }) => {
 		const pill = pillIn(canvasElement)
 
+		await userEvent.tab()
 		await userEvent.tab()
 
 		await expect(pill).toHaveFocus()

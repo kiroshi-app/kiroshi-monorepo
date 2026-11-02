@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { expect, fn, waitFor } from "storybook/test"
+import { expect, fireEvent, fn, screen, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { hueScopeOf, slotIn, slotsIn } from "@workspace/storybook/story-utils"
@@ -15,6 +15,7 @@ import { ContentCard } from "@workspace/ui/components/content-card"
 import { ConversationArrivalRow } from "@workspace/ui/components/conversation-arrival-row"
 import { ConversationEmptyState } from "@workspace/ui/components/conversation-empty-state"
 import { DaySeparator } from "@workspace/ui/components/day-separator"
+import { HeaderConversationButton } from "@workspace/ui/components/header-conversation-button"
 import { HeaderIdentityButton } from "@workspace/ui/components/header-identity-button"
 import { Icons } from "@workspace/ui/components/icons"
 import { InitialsAvatar } from "@workspace/ui/components/initials-avatar"
@@ -30,6 +31,14 @@ import {
 } from "@workspace/ui/components/message-bubble"
 import { MessageSideContext } from "@workspace/ui/components/message-side-context"
 import { MissionEventRow } from "@workspace/ui/components/mission-event-row"
+import { MissionHeader } from "@workspace/ui/components/mission-header"
+import {
+	MISSION_BOT,
+	MISSION_NOW,
+	MISSION_OPENED_AT,
+	MISSION_TICKET,
+	MISSION_TOOLS,
+} from "@workspace/ui/components/missions.fixtures"
 import {
 	type PinnedMessage,
 	PinnedMessages,
@@ -184,6 +193,9 @@ type PanelProps = {
 	placeholder?: string
 	children?: ReactNode
 	overlay?: ReactNode
+	leading?: ReactNode
+	header?: ReactNode
+	hasPins?: boolean
 }
 
 const Panel = ({
@@ -193,42 +205,81 @@ const Panel = ({
 	placeholder,
 	children,
 	overlay,
+	leading,
+	header,
+	hasPins = true,
 }: PanelProps) => (
 	<div className="relative h-[847px] w-[1072px]" {...hueScopeOf("blue")}>
-		<ContentCard isLandmark={false}>
-			<ThreadLayout
-				header={
-					<AppHeader
-						leading={
-							<HeaderIdentityButton
-								blot={face.blot}
-								connection="ready"
-								name={face.name}
-								seed={face.id}
-								title={face.title}
+		<RosterProvider bots={MENTIONED_BOTS}>
+			<ContentCard isLandmark={false}>
+				<ThreadLayout
+					header={
+						header ?? (
+							<AppHeader
+								leading={
+									leading ?? (
+										<HeaderIdentityButton
+											blot={face.blot}
+											connection="ready"
+											name={face.name}
+											seed={face.id}
+											title={face.title}
+										/>
+									)
+								}
+								trailing={
+									hasPins ? (
+										<PinnedMessages
+											messages={PINNED}
+											onJump={noop}
+											onUnpin={noop}
+										/>
+									) : undefined
+								}
 							/>
-						}
-						trailing={
-							<PinnedMessages messages={PINNED} onJump={noop} onUnpin={noop} />
-						}
-					/>
-				}
-				rows={rows}
-				composer={
-					composer ?? (
-						<PromptInput
-							leading={<PromptAttachButton onAttach={noop} />}
-							onSubmit={noop}
-							placeholder={placeholder ?? `Message ${face.name}`}
-						/>
-					)
-				}
-			>
-				{children ?? null}
-			</ThreadLayout>
-		</ContentCard>
+						)
+					}
+					rows={rows}
+					composer={
+						composer ?? (
+							<PromptInput
+								leading={<PromptAttachButton onAttach={noop} />}
+								onSubmit={noop}
+								placeholder={placeholder ?? `Message ${face.name}`}
+							/>
+						)
+					}
+				>
+					{children ?? null}
+				</ThreadLayout>
+			</ContentCard>
+		</RosterProvider>
 		{overlay}
 	</div>
+)
+
+type ConversationHeaderProps = {
+	name: string
+	icon: string
+	bots?: RosterBot[]
+}
+
+const ConversationHeader = ({
+	name,
+	icon,
+	bots = [],
+}: ConversationHeaderProps) => (
+	<HeaderConversationButton
+		bots={bots}
+		color={BLOT_HUES.green}
+		icon={icon}
+		name={name}
+		onOpenSettings={noop}
+	/>
+)
+
+const LISBON_HEADER = (
+	<ConversationHeader name="Lisbon offsite" icon="Globe" bots={[ATLAS]} />
 )
 
 type WorkLineExtra = {
@@ -286,7 +337,8 @@ export const Conversations1 = meta.story({
 	},
 	play: async ({ canvasElement }) => {
 		await expect(slotsIn(canvasElement, "author-line")).toHaveLength(7)
-		const answer = slotIn(canvasElement, "markdown")
+		const answer = slotIn(canvasElement, "markdown").querySelector("p")
+		if (!answer) throw new Error("The answer draws no paragraph")
 		await expect(getComputedStyle(answer).fontSize).toBe("16px")
 		await expect(getComputedStyle(answer).lineHeight).toBe("26px")
 	},
@@ -324,7 +376,7 @@ const PRICING: Line[] = [
 		key: "p1",
 		from: "agent",
 		author: ATLAS,
-		text: "Here they are. Tandem charges **per team**, Fieldnote **per seat**, and we sit in between at **$15 per person** on the annual plan. The three are on slide 6 of [Pricing deck](https://example.com).",
+		text: "Here they are. Tandem charges **per team**, Fieldnote **per seat**, and we sit in between at **\\$15 per person** on the annual plan. The three are on slide 6 of [Pricing deck](https://example.com).",
 		time: at(10, 3),
 	},
 	{
@@ -338,7 +390,7 @@ const PRICING: Line[] = [
 		key: "p3",
 		from: "agent",
 		author: ATLAS,
-		text: "You're right. Fieldnote is **$18 per seat** since October 3, not $14. I've corrected slide 6.",
+		text: "You're right. Fieldnote is **\\$18 per seat** since October 3, not \\$14. I've corrected slide 6.",
 		time: at(10, 6),
 	},
 	{
@@ -351,7 +403,7 @@ const PRICING: Line[] = [
 		key: "p5",
 		from: "agent",
 		author: PICO,
-		text: "Done. The table is on the pricing draft behind the preview flag, with Fieldnote at $18 and the three columns Lena asked for. Nothing is live yet.",
+		text: "Done. The table is on the pricing draft behind the preview flag, with Fieldnote at \\$18 and the three columns Lena asked for. Nothing is live yet.",
 		time: at(10, 14),
 	},
 ]
@@ -360,6 +412,13 @@ export const Conversations2 = meta.story({
 	render: () => (
 		<Panel
 			face={ATLAS}
+			leading={
+				<ConversationHeader
+					name="Pricing page"
+					icon="CreditCard"
+					bots={[ATLAS, PICO]}
+				/>
+			}
 			rows={PRICING.map(rowOf)}
 			placeholder="Message Pricing page"
 		/>
@@ -453,6 +512,7 @@ export const Conversations4 = meta.story({
 	render: () => (
 		<Panel
 			face={ATLAS}
+			leading={LISBON_HEADER}
 			placeholder="Message Lisbon offsite"
 			rows={[
 				{
@@ -522,6 +582,19 @@ export const Conversations5 = meta.story({
 	render: () => (
 		<Panel
 			face={PICO}
+			header={
+				<MissionHeader
+					bot={MISSION_BOT}
+					objective="Fix the Google sign-in redirect"
+					ticket={MISSION_TICKET}
+					tools={MISSION_TOOLS}
+					state="ready_to_merge"
+					isWorking={false}
+					openedAt={MISSION_OPENED_AT}
+					now={MISSION_NOW}
+					onBack={noop}
+				/>
+			}
 			rows={[
 				rowOf({
 					key: "m1",
@@ -624,6 +697,7 @@ export const Conversations7 = meta.story({
 	render: () => (
 		<Panel
 			face={ATLAS}
+			leading={LISBON_HEADER}
 			placeholder="Message Lisbon offsite"
 			rows={[
 				rowOf({
@@ -675,7 +749,14 @@ const LISBON_BOTS: RosterBot[] = [ATLAS]
 
 export const Conversations8 = meta.story({
 	render: () => (
-		<Panel face={ATLAS} placeholder="Message Lisbon flights">
+		<Panel
+			face={ATLAS}
+			hasPins={false}
+			leading={
+				<ConversationHeader name="Lisbon flights" icon="Globe" bots={[ATLAS]} />
+			}
+			placeholder="Message Lisbon flights"
+		>
 			<ConversationEmptyState
 				bots={LISBON_BOTS}
 				icon="Rocket"
@@ -733,7 +814,11 @@ const sampleLineOf = (tone: BubbleSampleProps["tone"]) => {
 			tone={tone}
 			name={tone === "you" ? "You" : "Tom"}
 			avatar={
-				<InitialsAvatar name={tone === "you" ? "Sam" : "Tom"} size={20} />
+				<InitialsAvatar
+					name={tone === "you" ? "Sam" : "Tom"}
+					size={20}
+					isOnOwnBubble={tone === "you"}
+				/>
 			}
 			time={tone === "you" ? "09:20" : "10:05"}
 			actions={SAMPLE_ACTIONS}
@@ -747,8 +832,8 @@ const SHOWN_HOVER = {
 } as const
 
 const SHOWN_FOCUS = {
-	own: "outline-(--foreground) outline-2 outline-offset-2",
-	grey: "outline-2 outline-primary outline-offset-2",
+	own: "outline-(--foreground) outline-2 outline-offset-2 outline-solid",
+	grey: "outline-2 outline-primary outline-offset-2 outline-solid",
 } as const
 
 const BubbleSample = ({ state, tone, text }: BubbleSampleProps) => {
@@ -816,8 +901,36 @@ export const ComponentsMessageBubble = meta.story({
 					</div>
 				</section>
 			))}
+			<section className="flex flex-col gap-3">
+				<Caption>Right click · same actions as hover, in a menu</Caption>
+				<div className="w-90">
+					<AssistantTurn
+						author={ATLAS}
+						sentAt={at(9, 20)}
+						copyText={SAMPLE_TEXT.agent}
+						onPin={noop}
+						onReply={noop}
+					>
+						{SAMPLE_TEXT.agent}
+					</AssistantTurn>
+				</div>
+			</section>
 		</div>
 	),
+	play: async ({ canvasElement }) => {
+		const [, , , , , , , , , turn] = slotsIn(
+			canvasElement,
+			"message-bubble-content",
+		)
+		if (!turn) throw new Error("The right-click sample is missing")
+		const box = turn.getBoundingClientRect()
+		const at = { clientX: box.left + 12, clientY: box.top + 12 }
+		fireEvent.pointerDown(turn, { button: 2, ...at })
+		fireEvent.contextMenu(turn, at)
+		await expect(
+			await screen.findByRole("menu", { name: "Message actions" }),
+		).toBeInTheDocument()
+	},
 	parameters: {
 		docs: {
 			description: {
@@ -830,6 +943,36 @@ export const ComponentsMessageBubble = meta.story({
 
 const STICKY_ANSWER =
 	"Three places fit 12 people on those dates. My pick is Casa do Rio: it's the only one with a room for the whole team and a kitchen we can use, and it leaves €1,050 in the budget."
+
+const StuckSample = () => (
+	<section
+		aria-label="Stuck author line"
+		data-slot="message-scroller-viewport"
+		className="h-26 w-90 overflow-y-auto"
+		// biome-ignore lint/a11y/noNoninteractiveTabindex: a scrolling region takes keyboard focus so it can be scrolled
+		tabIndex={0}
+	>
+		<MessageBubble variant="soft">
+			<MessageBubbleContent
+				foot={
+					<AuthorLine
+						tone="agent"
+						name="Atlas"
+						badge="Planner"
+						hue={ATLAS.blot}
+						avatar={
+							<BotIdentityAvatar hue={ATLAS.blot} seed="atlas" size={20} />
+						}
+						time="14:12"
+						isSticky
+					/>
+				}
+			>
+				{STICKY_ANSWER}
+			</MessageBubbleContent>
+		</MessageBubble>
+	</section>
+)
 
 const stuckLinesIn = (canvasElement: HTMLElement) =>
 	slotsIn(canvasElement, "author-line").filter(
@@ -859,7 +1002,7 @@ export const ComponentsAuthorLineAndWorkLine = meta.story({
 					<AuthorLine
 						tone="you"
 						name="You"
-						avatar={<InitialsAvatar name="Sam" size={20} />}
+						avatar={<InitialsAvatar name="Sam" size={20} isOnOwnBubble />}
 						time="10:08"
 					/>
 				</span>
@@ -917,40 +1060,13 @@ export const ComponentsAuthorLineAndWorkLine = meta.story({
 					onRetry={noop}
 				/>
 			</div>
-			<Caption>Queued · stuck to the viewport</Caption>
+			<Caption>Hover or focus · queued · stuck to the viewport</Caption>
 			<div className="flex items-center gap-10">
+				<span className="[&_[data-slot=author-line-actions]]:flex">
+					{sampleLineOf("agent")}
+				</span>
 				<AuthorLineQueued onCancel={noop} />
-				<section
-					aria-label="Stuck author line"
-					data-slot="message-scroller-viewport"
-					className="h-26 w-90 overflow-y-auto"
-					// biome-ignore lint/a11y/noNoninteractiveTabindex: a scrolling region takes keyboard focus so it can be scrolled
-					tabIndex={0}
-				>
-					<MessageBubble variant="soft">
-						<MessageBubbleContent
-							foot={
-								<AuthorLine
-									tone="agent"
-									name="Atlas"
-									badge="Planner"
-									hue={ATLAS.blot}
-									avatar={
-										<BotIdentityAvatar
-											hue={ATLAS.blot}
-											seed="atlas"
-											size={20}
-										/>
-									}
-									time="14:12"
-									isSticky
-								/>
-							}
-						>
-							{STICKY_ANSWER}
-						</MessageBubbleContent>
-					</MessageBubble>
-				</section>
+				<StuckSample />
 			</div>
 		</div>
 	),
@@ -1019,6 +1135,7 @@ export const ComponentsThreadFurniture = meta.story({
 				<div className="flex flex-col gap-3">
 					<Caption>MessageQuote, inside a reply</Caption>
 					<UserTurn
+						name="Sam"
 						sentAt={at(9, 44)}
 						repliedTo={{
 							author: "Atlas",
@@ -1054,7 +1171,7 @@ export const Images1 = meta.story({
 				{
 					key: "i1",
 					render: () => (
-						<UserTurn sentAt={at(15, 2)}>
+						<UserTurn name="Sam" sentAt={at(15, 2)}>
 							<MessageAttachments
 								items={[
 									{
@@ -1109,7 +1226,7 @@ export const Images2 = meta.story({
 				{
 					key: "i3",
 					render: () => (
-						<UserTurn sentAt={at(15, 5)}>
+						<UserTurn name="Sam" sentAt={at(15, 5)}>
 							<MessageAttachments
 								items={LIBRARY_LIGHTBOX_IMAGES.slice(0, 3).map((image) => ({
 									id: image.id,
@@ -1196,7 +1313,11 @@ export const Work1 = meta.story({
 	},
 })
 
-const writingRow = (label?: string, seconds = 14): TranscriptItem => ({
+const writingRow = (
+	label?: string,
+	seconds = 14,
+	partial = ANSWER_PARTIAL,
+): TranscriptItem => ({
 	key: "w2",
 	render: () => (
 		<AssistantTurn
@@ -1207,13 +1328,25 @@ const writingRow = (label?: string, seconds = 14): TranscriptItem => ({
 				elapsedSeconds: seconds,
 			})}
 		>
-			<Markdown>{ANSWER_PARTIAL}</Markdown>
+			<Markdown>{partial}</Markdown>
 		</AssistantTurn>
 	),
 })
 
 export const Work2 = meta.story({
-	render: () => <Panel face={ATLAS} rows={[...ATLAS_ROWS, writingRow()]} />,
+	render: () => (
+		<Panel
+			face={ATLAS}
+			rows={[
+				...ATLAS_ROWS,
+				writingRow(
+					undefined,
+					9,
+					"France leads with **412** people, then Germany with 268 and Spain",
+				),
+			]}
+		/>
+	),
 	parameters: {
 		docs: {
 			description: {
@@ -1228,7 +1361,14 @@ export const Work3 = meta.story({
 	render: () => (
 		<Panel
 			face={ATLAS}
-			rows={[...ATLAS_ROWS, writingRow("Read waitlist.csv", 21)]}
+			rows={[
+				...ATLAS_ROWS,
+				writingRow(
+					"Read waitlist.csv",
+					21,
+					"France leads with **412** people, then Germany with 268 and Spain with 190. Let me check which of them signed up this week.",
+				),
+			]}
 		/>
 	),
 	parameters: {
@@ -1258,12 +1398,14 @@ export const Work4 = meta.story({
 	},
 })
 
-const MENTION_ROW: TranscriptItem = rowOf({
+const MENTION_ROW: TranscriptItem = {
 	key: "w5",
-	from: "you",
-	text: "@Pico make it a chart once Atlas is done.",
-	time: at(9, 41),
-})
+	render: () => (
+		<UserTurn name="Sam" sentAt={at(9, 41)}>
+			<Markdown>{"<@pico> make it a chart once Atlas is done."}</Markdown>
+		</UserTurn>
+	),
+}
 
 export const Work5 = meta.story({
 	render: () => (
@@ -1291,6 +1433,7 @@ export const Work6 = meta.story({
 	render: () => (
 		<Panel
 			face={ATLAS}
+			leading={LISBON_HEADER}
 			placeholder="Message Lisbon offsite"
 			rows={[
 				{
@@ -1309,6 +1452,7 @@ export const Work6 = meta.story({
 						<AssistantTurn
 							author={ATLAS}
 							state="streaming"
+							fills
 							work={workLine(ATLAS, "writing", { elapsedSeconds: 12 })}
 						>
 							<Markdown>
@@ -1336,13 +1480,25 @@ export const Queue1 = meta.story({
 	render: () => (
 		<Panel
 			face={ATLAS}
-			rows={[...ATLAS_ROWS, writingRow()]}
+			rows={[
+				...ATLAS_ROWS,
+				writingRow(
+					undefined,
+					12,
+					"France leads with **412** people, then Germany with 268 and Spain with 190. Most of this week's",
+				),
+			]}
 			composer={
 				<div className="flex flex-col">
 					<PromptQueue
 						agentName="Atlas"
-						items={[{ id: "q", text: "Can you split it by country?" }]}
+						items={[
+							{ id: "city", text: "And by city for France?" },
+							{ id: "top", text: "Top three only." },
+						]}
 						readerName="Sam"
+						onSendNow={noop}
+						onRemove={noop}
 					/>
 					<PromptInput
 						leading={<PromptAttachButton onAttach={noop} />}
@@ -1357,7 +1513,7 @@ export const Queue1 = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard Queue 1: a message sent while Atlas answers waits in the tray above the field, the field stays open.",
+					"Artboard Queue 1: two messages sent while Atlas answers wait in the tray above the field, in order, and the field stays open. Hover or focus a row for Send now and its remove button.",
 			},
 		},
 	},
@@ -1546,20 +1702,83 @@ export const PromptInputStates = meta.story({
 	},
 })
 
+type MotionRowProps = {
+	movement: string
+	before: ReactNode
+	after: ReactNode
+	curve: string
+}
+
+const MotionRow = ({ movement, before, after, curve }: MotionRowProps) => (
+	<section className="grid grid-cols-[140px_380px_380px_minmax(0,1fr)] items-center gap-6 border-foreground/8 border-t pt-6">
+		<p className="font-medium text-foreground text-sm">{movement}</p>
+		<div>{before}</div>
+		<div>{after}</div>
+		<p className="text-muted-foreground text-xs">{curve}</p>
+	</section>
+)
+
+type ArrivingBubbleProps = {
+	isBefore: boolean
+}
+
+const ArrivingBubble = ({ isBefore }: ArrivingBubbleProps) =>
+	isBefore ? (
+		<span
+			aria-hidden="true"
+			className="block h-16 w-55 translate-y-2 rounded-bubble bg-bubble opacity-30"
+		/>
+	) : (
+		<MessageBubble variant="soft" className="w-auto">
+			<MessageBubbleContent>Yes, all 14 checks passed.</MessageBubbleContent>
+		</MessageBubble>
+	)
+
 export const MotionBeforeAndAfter = meta.story({
 	render: () => (
-		<div className="flex flex-col gap-8 p-14" {...hueScopeOf("blue")}>
-			<Caption>A bubble appears · label shimmer · hover a bubble</Caption>
-			<div className="flex w-170 flex-col gap-3">
-				<AssistantTurn
-					author={ATLAS}
-					sentAt={at(9, 20)}
-					copyText="Yes, all 14 checks passed."
-				>
-					Yes, all 14 checks passed.
-				</AssistantTurn>
-				{workLine(ATLAS, "writing", { elapsedSeconds: 9 })}
-			</div>
+		<div className="flex flex-col gap-6 p-14" {...hueScopeOf("blue")}>
+			<MotionRow
+				movement="A bubble appears"
+				before={<ArrivingBubble isBefore />}
+				after={<ArrivingBubble isBefore={false} />}
+				curve="Opacity 0 to 1, translate 8 to 0, 200 ms, cubic-bezier(0.16, 1, 0.3, 1). Only for a message that arrives live, never on load or on scroll back."
+			/>
+			<MotionRow
+				movement="Label shimmer"
+				before={workLine(ATLAS, "writing", {})}
+				after={workLine(ATLAS, "writing", {})}
+				curve="Highlight sweeps left to right, 1.8 s per pass, linear, loops. Stops the moment the answer is done."
+			/>
+			<MotionRow
+				movement="Avatar at work"
+				before={<BotIdentityAvatar hue={ATLAS.blot} seed="atlas" size={32} />}
+				after={
+					<BotIdentityAvatar
+						hue={ATLAS.blot}
+						kind="writing"
+						seed="atlas"
+						size={32}
+						working
+					/>
+				}
+				curve="Moves only while the agent works. On done it settles back to the still image without a fade."
+			/>
+			<MotionRow
+				movement="Sticky author line"
+				before={<StuckSample />}
+				after={sampleLineOf("agent")}
+				curve="No animation, follows the scroll one to one (position: sticky). It leaves with its bubble."
+			/>
+			<MotionRow
+				movement="Hover a bubble"
+				before={
+					<BubbleSample state="rest" tone="agent" text={SAMPLE_TEXT.agent} />
+				}
+				after={
+					<BubbleSample state="hover" tone="agent" text={SAMPLE_TEXT.agent} />
+				}
+				curve="Instant, 0 ms: fill 5 to 8 percent white, Pin, Reply and Copy appear. No colour transition on a control."
+			/>
 		</div>
 	),
 	parameters: {
@@ -1607,12 +1826,14 @@ const MENTIONED_BOTS: RosterBot[] = [ATLAS, JUNIPER, PICO]
 
 type MarkdownAnswerProps = {
 	source: string
+	author: MessageAuthor
+	time: number
 }
 
-const MarkdownAnswer = ({ source }: MarkdownAnswerProps) => (
+const MarkdownAnswer = ({ source, author, time }: MarkdownAnswerProps) => (
 	<div className="w-170 p-14" {...hueScopeOf("blue")}>
 		<RosterProvider bots={MENTIONED_BOTS}>
-			<AssistantTurn author={ATLAS} sentAt={at(9, 41)}>
+			<AssistantTurn author={author} sentAt={time}>
 				<Markdown>{source}</Markdown>
 			</AssistantTurn>
 		</RosterProvider>
@@ -1623,7 +1844,9 @@ const MARKDOWN_CHECK =
 	"a markdown answer already shipped, shown in the Final page bubble to check it against the PNG."
 
 export const Markdown7 = meta.story({
-	render: () => <MarkdownAnswer source={MARKDOWN_7} />,
+	render: () => (
+		<MarkdownAnswer source={MARKDOWN_7} author={ATLAS} time={at(9, 41)} />
+	),
 	parameters: {
 		docs: {
 			description: {
@@ -1654,7 +1877,9 @@ At this rate the queue clears in $t = n / r = 41 / 12 \\approx 3.4$ minutes.
 $$success\\ rate = 1 - failed / attempts$$`
 
 export const Markdown8 = meta.story({
-	render: () => <MarkdownAnswer source={MARKDOWN_8} />,
+	render: () => (
+		<MarkdownAnswer source={MARKDOWN_8} author={PICO} time={at(11, 18)} />
+	),
 	parameters: {
 		docs: {
 			description: {

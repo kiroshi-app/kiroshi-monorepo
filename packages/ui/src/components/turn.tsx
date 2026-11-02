@@ -589,8 +589,7 @@ function AssistantTurn(props: AssistantTurnProps) {
 				variant={unwrapped ? "bare" : "soft"}
 				className={cn(
 					"min-w-0",
-					AGENT_BUBBLE_WIDTH,
-					fills && "w-full items-stretch",
+					fills ? "w-full max-w-full items-stretch" : AGENT_BUBBLE_WIDTH,
 				)}
 			>
 				<MessageActions menu={turnMenuOf(actions)}>

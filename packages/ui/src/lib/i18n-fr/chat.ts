@@ -147,11 +147,13 @@ const chat = {
 		title_one:
 			"En file · {{count}} · part une fois la réponse de {{name}} terminée",
 		title_many:
-			"En file · {{count}} · partent une fois la réponse de {{name}} terminée",
+			"En file · {{count}} · partent dans l’ordre, une après chaque réponse",
 		title_other:
-			"En file · {{count}} · partent une fois la réponse de {{name}} terminée",
+			"En file · {{count}} · partent dans l’ordre, une après chaque réponse",
 		you: "vous",
 		next: "Ensuite, après {{name}}",
+		sendNow: "Envoyer maintenant",
+		remove: "Retirer de la file",
 	},
 	reply: {
 		label: "Réponse à {{author}}",

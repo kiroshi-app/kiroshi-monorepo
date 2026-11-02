@@ -195,6 +195,5 @@ export {
 	BotMissionStrip,
 	type BotMissionTicket,
 	BotTitleBadge,
-	type BotTitleBadgeVariant,
 	botBadgeRingVariants,
 }

@@ -134,9 +134,11 @@ const chat = {
 	},
 	queue: {
 		title_one: "Queued · {{count}} · goes once {{name}}’s answer is done",
-		title_other: "Queued · {{count}} · go once {{name}}’s answer is done",
+		title_other: "Queued · {{count}} · sent in order, one after each answer",
 		you: "you",
 		next: "Next, after {{name}}",
+		sendNow: "Send now",
+		remove: "Remove from the queue",
 	},
 	reply: {
 		label: "Replying to {{author}}",
