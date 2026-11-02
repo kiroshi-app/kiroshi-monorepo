@@ -744,14 +744,15 @@ const playPaletteOpen = async ({
 		"bg-rail-item-selected",
 		"backgroundColor",
 	)
+	const selectedInk = tokenStyleIn(rail, "text-foreground", "color")
 	await expect(search).toHaveAttribute("aria-expanded", "true")
 	await expect(search).not.toHaveAttribute("aria-current")
-	await expect(fillOf(search)).toBe(selectedFill)
-	await expect(iconColourOf(search)).toBe(
-		tokenStyleIn(rail, "text-foreground", "color"),
-	)
 	await expect(conversations).toHaveAttribute("aria-current", "true")
-	await expect(fillOf(conversations)).toBe(selectedFill)
+	await waitFor(async () => {
+		await expect(fillOf(search)).toBe(selectedFill)
+		await expect(iconColourOf(search)).toBe(selectedInk)
+		await expect(fillOf(conversations)).toBe(selectedFill)
+	})
 	await expect(iconStyleOf(conversations)).toBe("fill")
 	await expect(
 		railIn(canvasElement).querySelectorAll('[aria-current="true"]'),
