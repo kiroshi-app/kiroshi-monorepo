@@ -1154,17 +1154,30 @@ const runRoomOf = () =>
 const turnOf = (text: string) =>
 	screen.getByText(text).closest('[data-slot="message"]')
 
-const nameLineOf = (text: string) =>
-	turnOf(text)?.querySelector('[data-slot="message-author"]')?.textContent ??
+const authorNameOf = (text: string) =>
+	turnOf(text)?.querySelector('[data-slot="author-line-name"]')?.textContent ??
 	null
 
-const gutterAvatarOf = (text: string) =>
+const authorAvatarOf = (text: string) =>
 	turnOf(text)?.querySelector(
-		'[data-slot="message-gutter"] :is([data-slot="bot-identity-avatar"], [data-slot="user-avatar"])',
+		'[data-slot="author-line"] :is([data-slot="bot-identity-avatar"], [data-slot="user-avatar"])',
 	) ?? null
 
-const gutterOf = (text: string) =>
-	turnOf(text)?.querySelector('[data-slot="message-gutter"]') ?? null
+const authorAvatarSlotOf = (text: string) =>
+	turnOf(text)?.querySelector('[data-slot="author-line"] > span:first-child') ??
+	null
+
+const workLines = () =>
+	[...document.querySelectorAll('[data-slot="bot-working"]')].map((row) =>
+		[
+			'[data-slot="author-line-name"]',
+			'[data-slot="bot-working-separator"]',
+			'[data-slot="bot-working-label"]',
+		]
+			.map((slot) => row.querySelector(slot)?.textContent)
+			.filter(Boolean)
+			.join(" "),
+	)
 
 const NO_COMPANION_ACTIONS = {
 	onAddBotToSpace: () => undefined,
@@ -1257,9 +1270,9 @@ const underCompanionSelect = (
 	target: CompanionSelectTarget,
 ) => createElement(CompanionSelectHarness, { children, companionIds, target })
 
-const clickGutterOf = (text: string) => {
-	const avatar = gutterOf(text)?.querySelector("button")
-	if (!avatar) throw new Error(`no gutter avatar for ${text}`)
+const clickAuthorAvatarOf = (text: string) => {
+	const avatar = authorAvatarSlotOf(text)?.querySelector("button")
+	if (!avatar) throw new Error(`no author line avatar for ${text}`)
 	fireEvent.click(avatar)
 }
 
@@ -1269,10 +1282,10 @@ const clickMentionOf = (text: string) => {
 	fireEvent.click(pill)
 }
 
-const rightClickGutterOf = async (text: string) => {
-	const gutter = gutterOf(text)
-	if (!gutter) throw new Error(`no gutter for ${text}`)
-	fireEvent.contextMenu(gutter, { clientX: 20, clientY: 20 })
+const rightClickAuthorAvatarOf = async (text: string) => {
+	const avatar = authorAvatarOf(text)
+	if (!avatar) throw new Error(`no author line avatar for ${text}`)
+	fireEvent.contextMenu(avatar, { clientX: 20, clientY: 20 })
 	return screen.findByRole("menu")
 }
 
@@ -2129,18 +2142,18 @@ describe("ThreadScreen", () => {
 		expect(screen.queryByText(BOT_TITLE)).toBeNull()
 	})
 
-	it("names a run of consecutive messages once and marks its gutter once", async () => {
+	it("names the author with an avatar at the foot of every message of a run", async () => {
 		const room = await runRoomOf()
 		render(screenOf(room.thread), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 
-		expect(nameLineOf(ADA_OPENS.text)).toContain("Ada")
-		expect(nameLineOf(ADA_CLOSES.text)).toBeNull()
-		expect(gutterAvatarOf(ADA_OPENS.text)).toBeNull()
-		expect(gutterAvatarOf(ADA_CLOSES.text)).not.toBeNull()
+		expect(authorNameOf(ADA_OPENS.text)).toContain("Ada")
+		expect(authorNameOf(ADA_CLOSES.text)).toContain("Ada")
+		expect(authorAvatarOf(ADA_OPENS.text)).not.toBeNull()
+		expect(authorAvatarOf(ADA_CLOSES.text)).not.toBeNull()
 	})
 
-	it("opens a second run with its own name line and gutter avatar when the author changes", async () => {
+	it("opens a second run with its own author line when the author changes", async () => {
 		const room = await runRoomOf()
 		render(screenOf(room.thread), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
@@ -2148,8 +2161,8 @@ describe("ThreadScreen", () => {
 		expect(
 			document.querySelectorAll('[data-slot="chat-turn-group"]'),
 		).toHaveLength(2)
-		expect(nameLineOf(NYX_ANSWERS.text)).toContain("Nyx")
-		expect(gutterAvatarOf(NYX_ANSWERS.text)).not.toBeNull()
+		expect(authorNameOf(NYX_ANSWERS.text)).toContain("Nyx")
+		expect(authorAvatarOf(NYX_ANSWERS.text)).not.toBeNull()
 	})
 
 	it("carries the mark of a run on the message that closes it", async () => {
@@ -2162,7 +2175,7 @@ describe("ThreadScreen", () => {
 		expect(markOf(NYX_ANSWERS.text)).not.toBeNull()
 	})
 
-	it("shapes the bubble that opens a run of user messages apart from the one that closes it", async () => {
+	it("draws every message of a run of user messages in the same bubble", async () => {
 		const room = await roomOf({
 			names: ["Ada"],
 			spoken: [ASKED_FIRST, ASKED_AGAIN],
@@ -2170,12 +2183,12 @@ describe("ThreadScreen", () => {
 		render(screenOf(room.thread), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 
-		expect(bubbleShapeOf(ASKED_FIRST.text)).not.toEqual(
+		expect(bubbleShapeOf(ASKED_FIRST.text)).toEqual(
 			bubbleShapeOf(ASKED_AGAIN.text),
 		)
 	})
 
-	it("shapes the bubble that opens a queued run apart from the one that closes it", async () => {
+	it("draws every queued message of a run in the same bubble", async () => {
 		const solo = await queuedSoloOf([QUEUED_FIRST, QUEUED_LAST])
 		render(screenOf(solo.thread()), {
 			wrapper: createQueryTestWrapper().wrapper,
@@ -2183,10 +2196,10 @@ describe("ThreadScreen", () => {
 		await settle()
 
 		expect(screen.getAllByText(WAITING_TO_BE_SENT)).toHaveLength(2)
-		expect(bubbleShapeOf(QUEUED_FIRST)).not.toEqual(bubbleShapeOf(QUEUED_LAST))
+		expect(bubbleShapeOf(QUEUED_FIRST)).toEqual(bubbleShapeOf(QUEUED_LAST))
 	})
 
-	it("shapes a lone queued bubble apart from both ends of a queued run", async () => {
+	it("draws a lone queued message in the same bubble as a queued run", async () => {
 		const grouped = await queuedSoloOf([QUEUED_FIRST, QUEUED_LAST])
 		const run = render(screenOf(grouped.thread()), {
 			wrapper: createQueryTestWrapper().wrapper,
@@ -2202,7 +2215,7 @@ describe("ThreadScreen", () => {
 		await settle()
 
 		expect(screen.getAllByText(WAITING_TO_BE_SENT)).toHaveLength(1)
-		expect(ends).not.toContain(bubbleShapeOf(QUEUED_FIRST))
+		expect(ends).toContain(bubbleShapeOf(QUEUED_FIRST))
 	})
 
 	it("names the routine on the turn its report opened", async () => {
@@ -2465,7 +2478,7 @@ describe("ThreadScreen", () => {
 		rerender(screenOf(solo.thread()))
 		await settle()
 
-		expect(screen.getByText("Ada is thinking…")).toBeTruthy()
+		expect(workLines()).toContain("Ada is thinking…")
 		expect(elapsedText()).toBe("0s")
 
 		clock.mockReturnValue(TURN_STARTED_AT + 3 * A_SECOND)
@@ -2473,7 +2486,7 @@ describe("ThreadScreen", () => {
 		rerender(screenOf(solo.thread()))
 		await settle()
 
-		expect(screen.getByText("Ada · Grep · walls")).toBeTruthy()
+		expect(workLines()).toContain("Ada · Grep · walls")
 
 		unmount()
 		render(screenOf(solo.thread()), {
@@ -2497,10 +2510,8 @@ describe("ThreadScreen", () => {
 		})
 		await settle()
 
-		expect(screen.getByText("Zoe is up next…")).toBeTruthy()
-		expect(
-			screen.getByText("Nyx is waiting for you… · Which wall holds?"),
-		).toBeTruthy()
+		expect(workLines()).toContain("Zoe is up next…")
+		expect(workLines()).toContain("Nyx is waiting for you… · Which wall holds?")
 	})
 
 	it("stops the companion whose working row carries the stop, and no other", async () => {
@@ -2571,7 +2582,7 @@ describe("ThreadScreen", () => {
 		await settle()
 
 		expect(screen.queryByText("the walls hold")).toBeNull()
-		expect(screen.getByText("Ada is thinking…")).toBeTruthy()
+		expect(workLines()).toContain("Ada is thinking…")
 		expect(stopFor("Ada")).toBeTruthy()
 	})
 
@@ -2588,7 +2599,7 @@ describe("ThreadScreen", () => {
 		await settle()
 
 		expect(screen.getByText("the walls hold")).toBeTruthy()
-		expect(screen.getByText("Ada is writing…")).toBeTruthy()
+		expect(workLines()).toContain("Ada is writing…")
 
 		expect(stopsFor("Ada")).toHaveLength(1)
 		fireEvent.click(stopsFor("Ada")[0])
@@ -2634,9 +2645,7 @@ describe("ThreadScreen", () => {
 		})
 		await settle()
 
-		expect(
-			screen.getByText("Ada is waiting for you… · Which wall holds?"),
-		).toBeTruthy()
+		expect(workLines()).toContain("Ada is waiting for you… · Which wall holds?")
 	})
 
 	it("draws one row for a speaking companion another speaker hands over to", async () => {
@@ -2652,8 +2661,10 @@ describe("ThreadScreen", () => {
 		})
 		await settle()
 
-		expect(screen.getAllByText(/^Ada is /)).toHaveLength(1)
-		expect(screen.getByText("Ada is writing…")).toBeTruthy()
+		expect(
+			workLines().filter((line) => line.startsWith("Ada is ")),
+		).toHaveLength(1)
+		expect(workLines()).toContain("Ada is writing…")
 	})
 
 	it("leaves no stop on the turn a companion has landed", async () => {
@@ -2668,7 +2679,7 @@ describe("ThreadScreen", () => {
 		await settle()
 
 		expect(screen.getByText("the walls hold")).toBeTruthy()
-		expect(screen.queryByText("Ada is writing…")).toBeNull()
+		expect(workLines()).not.toContain("Ada is writing…")
 		expect(stopFor("Ada")).toBeNull()
 	})
 
@@ -4573,7 +4584,7 @@ describe("ThreadScreen showing the applications installed", () => {
 	})
 })
 
-describe("ThreadScreen opening the companion menu of a gutter avatar", () => {
+describe("ThreadScreen opening the companion menu of an author line avatar", () => {
 	let layout: FakeLayout
 
 	beforeEach(() => {
@@ -4599,7 +4610,11 @@ describe("ThreadScreen opening the companion menu of a gutter avatar", () => {
 		})
 		await settle()
 
-		expect(await rightClickGutterOf(ADA_CLOSES.text)).toBeTruthy()
+		expect(
+			(await rightClickAuthorAvatarOf(ADA_CLOSES.text)).getAttribute(
+				"aria-label",
+			),
+		).toMatch(/^Actions for /)
 	})
 
 	it("opens it in the mission thread", async () => {
@@ -4613,7 +4628,11 @@ describe("ThreadScreen opening the companion menu of a gutter avatar", () => {
 		)
 		await settle()
 
-		expect(await rightClickGutterOf(MISSION_SAID.text)).toBeTruthy()
+		expect(
+			(await rightClickAuthorAvatarOf(MISSION_SAID.text)).getAttribute(
+				"aria-label",
+			),
+		).toMatch(/^Actions for /)
 	})
 
 	it("opens none for a companion absent from the open space roster", async () => {
@@ -4626,7 +4645,10 @@ describe("ThreadScreen opening the companion menu of a gutter avatar", () => {
 		})
 		await settle()
 
-		await expect(rightClickGutterOf(MISSION_SAID.text)).rejects.toThrow()
+		const menu = await rightClickAuthorAvatarOf(MISSION_SAID.text)
+
+		expect(menu.getAttribute("aria-label")).toBe("Message actions")
+		expect(screen.queryByRole("menu", { name: /^Actions for / })).toBeNull()
 	})
 })
 
@@ -4648,7 +4670,7 @@ describe("ThreadScreen selecting a companion from the transcript", () => {
 		layout.restore()
 	})
 
-	it("selects the companion of a gutter avatar and leaves its open mission", async () => {
+	it("selects the companion of an author line avatar and leaves its open mission", async () => {
 		const room = await missionRoomOf({
 			events: [MISSION_OPENED],
 			spoken: [MISSION_SAID],
@@ -4664,7 +4686,7 @@ describe("ThreadScreen selecting a companion from the transcript", () => {
 		)
 		await settle()
 
-		clickGutterOf(MISSION_SAID.text)
+		clickAuthorAvatarOf(MISSION_SAID.text)
 
 		expect(target.select).toHaveBeenCalledWith(room.idOf("Ada"))
 		expect(target.missions.getState()).toBeNull()
@@ -4700,7 +4722,7 @@ describe("ThreadScreen selecting a companion from the transcript", () => {
 		})
 		await settle()
 
-		clickGutterOf(MISSION_SAID.text)
+		clickAuthorAvatarOf(MISSION_SAID.text)
 
 		expect(target.select).not.toHaveBeenCalled()
 		expect(target.missions.getState()).not.toBeNull()
@@ -4753,12 +4775,12 @@ describe("ThreadScreen dating its messages in Tokyo", () => {
 		layout.restore()
 	})
 
-	it("shows the send time on the header line of every run, never under a bubble", async () => {
+	it("shows the send time in the author line at the foot of every message", async () => {
 		await renderAdaSaying(TOKYO_MIDNIGHT - A_MINUTE, TOKYO_MIDNIGHT)
 
 		const headerTimes = [
 			...document.querySelectorAll(
-				'[data-slot="message-author"] [data-slot="message-time"]',
+				'[data-slot="author-line"] [data-slot="message-time"]',
 			),
 		].map((time) => time.getAttribute("datetime"))
 

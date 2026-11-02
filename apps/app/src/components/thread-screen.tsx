@@ -410,6 +410,7 @@ const ThreadHeader = ({
 						name={thread.bot.name}
 						onOpenSettings={thread.onToggleSettings}
 						seed={thread.bot.id}
+						title={thread.bot.title}
 						version={thread.state.binaryVersion}
 						working={botWork !== null}
 					/>
