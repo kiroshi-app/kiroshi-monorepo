@@ -1737,14 +1737,15 @@ describe("WorkspaceBody library", () => {
 			expectNoLibraryNotice()
 		})
 
-		it("leaves More inert on an image and a document, with no notice", async () => {
+		it("shows no More on an image or a document, with no notice", async () => {
 			await openJoinedLibrary()
 			await open("hero-dunes.png")
-			await press("More")
+			expect(screen.queryByRole("button", { name: "More" })).toBeNull()
 			await press("Close")
 
 			await open("Spring launch brief")
-			await press("More")
+			screen.getByRole("heading", { level: 1, name: "Spring launch brief" })
+			expect(screen.queryByRole("button", { name: "More" })).toBeNull()
 
 			expect(libraryHost.readFile).not.toHaveBeenCalled()
 			expect(saveBytes).not.toHaveBeenCalled()

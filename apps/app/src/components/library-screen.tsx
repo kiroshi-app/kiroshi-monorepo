@@ -38,8 +38,6 @@ type OpenedItem =
 	| { kind: "document"; name: string }
 	| null
 
-const ignore = () => undefined
-
 const shownDocumentOf = (
 	document: LibraryDocument,
 	library: LibraryItemsRead,
@@ -60,9 +58,11 @@ export const LibraryScreen = ({ spaceId, isJoined }: LibraryScreenProps) => {
 	const sourceOf = useLibraryImageSources(spaceId, library.items, isJoined)
 	const localActions = useLibraryActions(spaceId)
 	const joinedActions = useJoinedLibraryActions(spaceId)
-	const actions = isJoined ? { ...joinedActions, reveal: ignore } : localActions
+	const actions = isJoined ? joinedActions : localActions
 	const save = ({ id }: NamedItem) => actions.save(id)
-	const reveal = ({ id }: NamedItem) => actions.reveal(id)
+	const reveal = isJoined
+		? undefined
+		: ({ id }: NamedItem) => localActions.reveal(id)
 	const copy = ({ id }: NamedItem) => actions.copy(id)
 	const [filter, setFilter] = useState<LibraryFilter>("all")
 	const [query, setQuery] = useState("")
