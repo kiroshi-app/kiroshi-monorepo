@@ -53,3 +53,41 @@ describe("the summons sent after the first agent", () => {
 		)
 	})
 })
+
+describe("the summons row", () => {
+	it("drops the summons the reader never wrote", () => {
+		const kept = withoutOnboardingSummons([
+			userRowOf(onboardingSummonsFor("greeting")),
+			{
+				...userRowOf("Hello."),
+				messageId: "m-2",
+				role: "assistant",
+				authorBotId: "bot-1",
+			},
+		])
+
+		expect(kept.map(({ text }) => text)).toEqual(["Hello."])
+	})
+
+	it("drops the summons that sent Shoto after the first companion", () => {
+		const kept = withoutOnboardingSummons([
+			userRowOf(onboardingSummonsFor("firstCompanion")),
+		])
+
+		expect(kept).toHaveLength(0)
+	})
+
+	it("drops the summons that opened the created companion thread", () => {
+		const kept = withoutOnboardingSummons([
+			userRowOf(onboardingSummonsFor("arrival")),
+		])
+
+		expect(kept).toHaveLength(0)
+	})
+
+	it("keeps a reader line that only looks like one", () => {
+		const kept = withoutOnboardingSummons([userRowOf("Say hello.")])
+
+		expect(kept).toHaveLength(1)
+	})
+})

@@ -6,12 +6,8 @@ import type {
 } from "@workspace/ui/components/tool-question"
 import { i18n } from "@workspace/ui/lib/i18n"
 
-import type {
-	OnboardingController,
-	OnboardingState,
-} from "./onboarding-controller"
-import type { SummonOutcome } from "./onboarding-summons"
 import type { ConnectionStep, SignInActions } from "./sign-in-flow"
+import type { SignIn } from "./use-sign-in"
 
 import type {
 	PostedAnswerHandler,
@@ -19,7 +15,7 @@ import type {
 	PostedRequest,
 } from "../chat/posted-question"
 
-export type OnboardingStepQuestion = {
+export type SignInStep = {
 	request: PostedRequest
 	onAnswers: PostedAnswerHandler
 }
@@ -59,7 +55,7 @@ const choiceStep = ({
 	question,
 	choices,
 	failure,
-}: ChoiceStepInput): OnboardingStepQuestion => ({
+}: ChoiceStepInput): SignInStep => ({
 	request: postedRequestOf(id, {
 		header,
 		question,
@@ -89,7 +85,7 @@ const entryStep = ({
 	entry,
 	exit,
 	submit,
-}: EntryStepInput): OnboardingStepQuestion => ({
+}: EntryStepInput): SignInStep => ({
 	request: postedRequestOf(id, {
 		header,
 		question,
@@ -117,32 +113,7 @@ const apiKeyChoice = (choose: StepChoice["choose"]): StepChoice => ({
 	choose,
 })
 
-const welcomeStep = (
-	id: string,
-	controller: OnboardingController,
-): OnboardingStepQuestion =>
-	choiceStep({
-		id,
-		header: i18n.t("chat:onboarding.welcome.header"),
-		question: i18n.t("chat:onboarding.welcome.question"),
-		choices: [
-			{
-				label: i18n.t("chat:onboarding.welcome.start.label"),
-				description: i18n.t("chat:onboarding.welcome.start.description"),
-				choose: controller.start,
-			},
-			{
-				label: i18n.t("chat:onboarding.welcome.more.label"),
-				description: i18n.t("chat:onboarding.welcome.more.description"),
-				choose: controller.tellMore,
-			},
-		],
-	})
-
-const accountStep = (
-	id: string,
-	controller: SignInActions,
-): OnboardingStepQuestion =>
+const accountStep = (id: string, controller: SignInActions): SignInStep =>
 	choiceStep({
 		id,
 		header: i18n.t("chat:onboarding.account.header"),
@@ -161,10 +132,7 @@ const accountStep = (
 		],
 	})
 
-const accessStep = (
-	id: string,
-	controller: SignInActions,
-): OnboardingStepQuestion =>
+const accessStep = (id: string, controller: SignInActions): SignInStep =>
 	choiceStep({
 		id,
 		header: i18n.t("chat:onboarding.access.header"),
@@ -182,7 +150,7 @@ const codeStep = (
 	id: string,
 	signInUrl: string,
 	controller: SignInActions,
-): OnboardingStepQuestion =>
+): SignInStep =>
 	entryStep({
 		id,
 		header: i18n.t("chat:onboarding.code.header"),
@@ -196,10 +164,7 @@ const codeStep = (
 		submit: controller.submitCode,
 	})
 
-const apiKeyStep = (
-	id: string,
-	controller: SignInActions,
-): OnboardingStepQuestion =>
+const apiKeyStep = (id: string, controller: SignInActions): SignInStep =>
 	entryStep({
 		id,
 		header: i18n.t("chat:onboarding.apiKey.header"),
@@ -219,9 +184,8 @@ const apiKeyStep = (
 const signInFailedStep = (
 	id: string,
 	exitDetail: string,
-	retry: () => Promise<void>,
 	controller: SignInActions,
-): OnboardingStepQuestion =>
+): SignInStep =>
 	choiceStep({
 		id,
 		header: i18n.t("chat:onboarding.signInFailed.header"),
@@ -234,7 +198,7 @@ const signInFailedStep = (
 			{
 				label: i18n.t("chat:onboarding.signInFailed.retry.label"),
 				description: i18n.t("chat:onboarding.signInFailed.retry.description"),
-				choose: retry,
+				choose: controller.signIn,
 			},
 			apiKeyChoice(controller.pasteKeyInstead),
 		],
@@ -244,7 +208,7 @@ const apiKeyFailedStep = (
 	id: string,
 	exitDetail: string,
 	controller: SignInActions,
-): OnboardingStepQuestion =>
+): SignInStep =>
 	choiceStep({
 		id,
 		header: i18n.t("chat:onboarding.apiKey.header"),
@@ -268,35 +232,11 @@ const apiKeyFailedStep = (
 		],
 	})
 
-const firstReplyStep = (
-	id: string,
-	controller: OnboardingController,
-): OnboardingStepQuestion =>
-	choiceStep({
-		id,
-		header: i18n.t("chat:onboarding.firstReply.header"),
-		question: i18n.t("chat:onboarding.firstReply.question"),
-		choices: [
-			{
-				label: i18n.t("chat:onboarding.firstReply.pick.label"),
-				description: i18n.t("chat:onboarding.firstReply.pick.description"),
-				choose: controller.pickCompanion,
-			},
-			{
-				label: i18n.t("chat:onboarding.firstReply.keepTalking.label"),
-				description: i18n.t(
-					"chat:onboarding.firstReply.keepTalking.description",
-				),
-				choose: controller.finish,
-			},
-		],
-	})
-
-export const connectionStepOf = (
+const connectionStepOf = (
 	connection: ConnectionStep,
 	id: string,
 	controller: SignInActions,
-): OnboardingStepQuestion => {
+): SignInStep => {
 	switch (connection.state) {
 		case "detected":
 			return accountStep(id, controller)
@@ -308,44 +248,21 @@ export const connectionStepOf = (
 		case "apiKey":
 			return apiKeyStep(id, controller)
 		case "signInFailed":
-			return signInFailedStep(
-				id,
-				connection.exitDetail,
-				controller.signIn,
-				controller,
-			)
+			return signInFailedStep(id, connection.exitDetail, controller)
 		case "apiKeyFailed":
 			return apiKeyFailedStep(id, connection.exitDetail, controller)
 	}
 }
 
-export const onboardingStepOf = (
-	state: OnboardingState,
-	outcome: SummonOutcome,
-	controller: OnboardingController,
-): OnboardingStepQuestion | null => {
-	const idOf = (name: string) => `onboarding-${name}-${state.round}`
+export const signInStepOf = (
+	signIn: SignIn | undefined,
+	botId: string,
+): SignInStep | null => {
+	const connection = signIn?.state.connection
+	if (!signIn || !connection || signIn.state.botId !== botId) {
+		return null
+	}
+	const id = `sign-in-${connection.state}-${signIn.state.round}`
 
-	if (state.step === "welcome") {
-		return welcomeStep(idOf("welcome"), controller)
-	}
-	if (state.step === "connection" && state.connection) {
-		return connectionStepOf(
-			state.connection,
-			idOf(state.connection.state),
-			controller,
-		)
-	}
-	if (outcome.kind === "failed") {
-		return signInFailedStep(
-			idOf("turnFailed"),
-			outcome.detail,
-			controller.summonAgain,
-			controller,
-		)
-	}
-	if (outcome.kind === "answered") {
-		return firstReplyStep(idOf("firstReply"), controller)
-	}
-	return null
+	return connectionStepOf(connection, id, signIn.controller)
 }
