@@ -329,9 +329,7 @@ mod tests {
 
 	use serde_json::{json, Value};
 	use tauri::test::{mock_builder, MockRuntime};
-	use tauri::{
-		Listener, Manager, PhysicalPosition, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
-	};
+	use tauri::{Listener, PhysicalPosition, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 	use super::{
 		delivered, drag_ghost_tab, followed_from, hidden_at, is_following, refuse_unless_image,
@@ -527,6 +525,7 @@ mod tests {
 		use tauri::ipc::CallbackFn;
 		use tauri::test::{get_ipc_response, INVOKE_KEY};
 		use tauri::webview::InvokeRequest;
+		use tauri::Manager;
 
 		let app = an_app_of_its_own(
 			"drag-ghost-rebuilt",
