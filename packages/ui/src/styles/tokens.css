@@ -75,7 +75,7 @@
 	--bot-badge-failed: oklch(0.62 0.22 27);
 	--warning: oklch(0.64 0.16 60);
 	--warning-foreground: #fffffc;
-	--success: #2e7d4f;
+	--success: #207144;
 	--state-connected: oklch(0.696 0.17 162.48);
 	--state-needs-authorization: var(--warning);
 	--presence-online: #239f53;
