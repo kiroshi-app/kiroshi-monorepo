@@ -7,12 +7,14 @@ use std::io::{self, Cursor};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
+use base64::prelude::{Engine as _, BASE64_STANDARD};
 use chrono::{DateTime, Utc};
 use image::{ImageFormat, ImageReader, Limits};
 use tauri::{AppHandle, Manager, Runtime};
 
 use contract::{
-	LibraryDocument, LibraryDocumentFormat, LibraryError, LibraryItem, LibraryItemKind,
+	LibraryDocument, LibraryDocumentFormat, LibraryError, LibraryImage, LibraryItem,
+	LibraryItemKind,
 };
 
 const DIR_NAME: &str = "library";
@@ -23,8 +25,10 @@ const MAX_IMAGE_BYTES: u64 = 20 * 1024 * 1024;
 
 const MAX_DECODED_IMAGE_BYTES: u64 = 256 * 1024 * 1024;
 
+const MAX_READ_IMAGE_BYTES: u64 = 10 * 1024 * 1024;
+
 enum AcceptedType {
-	Image,
+	Image { mime_type: &'static str },
 	Document(LibraryDocumentFormat),
 }
 
@@ -51,7 +55,7 @@ fn space_dir(root: &Path, space_id: &str) -> PathBuf {
 	root.join(space_id)
 }
 
-fn list(root: &Path, space_id: &str) -> Result<Vec<LibraryItem>, LibraryError> {
+pub(crate) fn list(root: &Path, space_id: &str) -> Result<Vec<LibraryItem>, LibraryError> {
 	let entries = match fs::read_dir(space_dir(root, space_id)) {
 		Ok(entries) => entries,
 		Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
@@ -87,7 +91,7 @@ fn item_at(path: &Path, name: String) -> Result<Option<LibraryItem>, LibraryErro
 	Ok(Some(LibraryItem {
 		name,
 		kind: match accepted {
-			AcceptedType::Image => LibraryItemKind::Image,
+			AcceptedType::Image { .. } => LibraryItemKind::Image,
 			AcceptedType::Document(_) => LibraryItemKind::Document,
 		},
 		path: path.to_string_lossy().into_owned(),
@@ -118,7 +122,11 @@ fn resolve(root: &Path, space_id: &str, name: &str) -> Result<ResolvedItem, Libr
 	}
 }
 
-fn read_document(root: &Path, space_id: &str, name: &str) -> Result<LibraryDocument, LibraryError> {
+pub(crate) fn read_document(
+	root: &Path,
+	space_id: &str,
+	name: &str,
+) -> Result<LibraryDocument, LibraryError> {
 	let item = resolve(root, space_id, name)?;
 	let AcceptedType::Document(format) = item.accepted else {
 		return Err(LibraryError::NotADocument { name: name.to_owned() });
@@ -140,6 +148,31 @@ fn document_text(item: &ResolvedItem, name: &str) -> Result<String, LibraryError
 	String::from_utf8(bytes).map_err(|_| LibraryError::NotUtf8 { name: name.to_owned() })
 }
 
+pub(crate) fn read_image(
+	root: &Path,
+	space_id: &str,
+	name: &str,
+) -> Result<LibraryImage, LibraryError> {
+	let item = resolve(root, space_id, name)?;
+	let AcceptedType::Image { mime_type } = item.accepted else {
+		return Err(LibraryError::NotAnImage { name: name.to_owned() });
+	};
+	if item.bytes > MAX_READ_IMAGE_BYTES {
+		return Err(LibraryError::TooLarge {
+			name: name.to_owned(),
+			bytes: item.bytes,
+			limit: MAX_READ_IMAGE_BYTES,
+		});
+	}
+	let bytes = fs::read(&item.path)
+		.map_err(|error| refusal(&error, LibraryError::Missing { name: name.to_owned() }))?;
+	Ok(LibraryImage {
+		name: name.to_owned(),
+		mime_type: mime_type.to_owned(),
+		content: BASE64_STANDARD.encode(bytes),
+	})
+}
+
 fn clipboard_payload(
 	root: &Path,
 	space_id: &str,
@@ -148,7 +181,7 @@ fn clipboard_payload(
 	let item = resolve(root, space_id, name)?;
 	match item.accepted {
 		AcceptedType::Document(_) => document_text(&item, name).map(ClipboardPayload::Text),
-		AcceptedType::Image => decoded_image(&item, name),
+		AcceptedType::Image { .. } => decoded_image(&item, name),
 	}
 }
 
@@ -233,7 +266,10 @@ fn accepted_type(name: &str) -> Option<AcceptedType> {
 	}
 	let extension = Path::new(name).extension()?.to_str()?.to_ascii_lowercase();
 	match extension.as_str() {
-		"png" | "jpg" | "jpeg" | "gif" | "webp" => Some(AcceptedType::Image),
+		"png" => Some(AcceptedType::Image { mime_type: "image/png" }),
+		"jpg" | "jpeg" => Some(AcceptedType::Image { mime_type: "image/jpeg" }),
+		"gif" => Some(AcceptedType::Image { mime_type: "image/gif" }),
+		"webp" => Some(AcceptedType::Image { mime_type: "image/webp" }),
 		"md" | "markdown" => Some(AcceptedType::Document(LibraryDocumentFormat::Markdown)),
 		"txt" => Some(AcceptedType::Document(LibraryDocumentFormat::Text)),
 		_ => None,

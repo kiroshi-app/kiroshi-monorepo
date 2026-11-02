@@ -7,8 +7,10 @@ use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 use tokio::sync::oneshot;
 
-use super::contract::{LibraryDocument, LibraryError, LibraryItem};
-use super::{clipboard_payload, list, read_document, resolve, root, save, ClipboardPayload};
+use super::contract::{LibraryDocument, LibraryError, LibraryImage, LibraryItem};
+use super::{
+	clipboard_payload, list, read_document, read_image, resolve, root, save, ClipboardPayload,
+};
 use crate::db;
 use crate::logging::scrub::scrubbed;
 
@@ -43,6 +45,18 @@ pub async fn library_read_document<R: Runtime>(
 ) -> Result<LibraryDocument, LibraryError> {
 	known_space(&state, &space_id).await?;
 	read_document(&root(&app)?, &space_id, &name)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn library_read_image<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	space_id: String,
+	name: String,
+) -> Result<LibraryImage, LibraryError> {
+	known_space(&state, &space_id).await?;
+	read_image(&root(&app)?, &space_id, &name)
 }
 
 #[tauri::command]
