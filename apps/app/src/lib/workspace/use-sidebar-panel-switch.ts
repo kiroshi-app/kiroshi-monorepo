@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react"
+import { useCallback, useEffect } from "react"
 
 import type {
 	AppSidebarBot,
@@ -40,10 +40,6 @@ type ActivatedTabs = Pick<WorkspaceTabs, "getState" | "subscribe">
 
 type SidebarPanelSwitchInput = {
 	core: SidebarPanelSwitchCore
-	sidebarMissions: {
-		loadedSpaceId: string | null
-		showLastMission: () => void
-	}
 	tabs: ActivatedTabs
 }
 
@@ -128,37 +124,11 @@ const usePanelFollowingTabs = (
 
 export const useSidebarPanelSwitch = ({
 	core,
-	sidebarMissions,
 	tabs,
 }: SidebarPanelSwitchInput) => {
 	const { openedMission, roster, shownMemory, user } = core
 	const { openTab, openSidebarTab } = useSidebarTab(user)
-	const { loadedSpaceId, showLastMission } = sidebarMissions
-	const missionsShownForSpaceId = useRef<string | null>(null)
-
-	useEffect(() => {
-		if (
-			openTab !== "missions" ||
-			loadedSpaceId === null ||
-			missionsShownForSpaceId.current === loadedSpaceId
-		) {
-			return
-		}
-		missionsShownForSpaceId.current = loadedSpaceId
-		if (!openedMission.getState()) {
-			showLastMission()
-		}
-	}, [openTab, loadedSpaceId, openedMission, showLastMission])
-
-	const followPanel = useCallback(
-		(panel: SidebarPanel) => {
-			openSidebarTab(panel)
-			missionsShownForSpaceId.current =
-				panel === "missions" ? loadedSpaceId : null
-		},
-		[openSidebarTab, loadedSpaceId],
-	)
-	usePanelFollowingTabs(tabs, followPanel)
+	usePanelFollowingTabs(tabs, openSidebarTab)
 
 	const switchPanel = useCallback(
 		(panel: SidebarPanel, sidebarRosters: SidebarRosters) => {
@@ -166,7 +136,6 @@ export const useSidebarPanelSwitch = ({
 			if (panel !== "conversations") {
 				return
 			}
-			missionsShownForSpaceId.current = null
 			openedMission.leave()
 			showLastConversation(roster.controller, shownMemory, sidebarRosters)
 		},

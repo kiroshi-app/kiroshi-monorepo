@@ -113,7 +113,6 @@ const ON_C1: Selection = { selectedBotId: null, selectedConversationId: "c-1" }
 type Mount = {
 	stored?: UserPreferences["sidebarTab"]
 	sidebarRosters?: SidebarRosters
-	loadedSpaceId?: string | null
 }
 
 const answerPreferences = (stored: UserPreferences["sidebarTab"]) =>
@@ -129,25 +128,14 @@ const answerPreferences = (stored: UserPreferences["sidebarTab"]) =>
 const mountSwitch = async ({
 	stored = "conversations",
 	sidebarRosters = ROSTERS,
-	loadedSpaceId = "s-1",
 }: Mount = {}) => {
 	answerPreferences(stored)
 	const tabs = createWorkspaceTabs()
 	const roster = aRoster("s-1", ON_C1)
 	const openedMission = createOpenedMissionController(roster)
 	const shownMemory = createShownMemory({ roster, openedMission })
-	const showLastMission = vi.fn(() => {
-		const { spaceRowId } = roster.getState()
-		const missionId =
-			shownMemory.lastMissionIn(spaceRowId) ?? `first-of-${spaceRowId}`
-		openedMission.open({ missionId, rowId: MISSION_ROW, spaceId: "s-1" })
-		roster.select(MISSION_ROW)
-	})
 	const mounted = renderHook(
-		(props: {
-			loadedSpaceId: string | null
-			sidebarRosters: SidebarRosters
-		}) => {
+		(props: { sidebarRosters: SidebarRosters }) => {
 			const user = useUser()
 			const sidebarTab = useSidebarPanelSwitch({
 				core: {
@@ -156,15 +144,11 @@ const mountSwitch = async ({
 					shownMemory,
 					user,
 				},
-				sidebarMissions: {
-					loadedSpaceId: props.loadedSpaceId,
-					showLastMission,
-				},
 				tabs,
 			})
 			return { user, sidebarTab, sidebarRosters: props.sidebarRosters }
 		},
-		{ initialProps: { loadedSpaceId, sidebarRosters } },
+		{ initialProps: { sidebarRosters } },
 	)
 	await act(() => mounted.result.current.user.controller.load())
 	roster.enter("s-1", ON_C1)
@@ -185,7 +169,6 @@ const mountSwitch = async ({
 		roster,
 		openedMission,
 		shownMemory,
-		showLastMission,
 		switchTo,
 		selectedRow,
 		shownMissionId,
@@ -200,16 +183,17 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe("switching to the Missions tab", () => {
-	it("opens the mission the missions list reopens", async () => {
+	it("opens no mission and keeps the row shown", async () => {
 		const shown = await mountSwitch()
 
 		shown.switchTo("missions")
 
 		expect(shown.result.current.sidebarTab.openTab).toBe("missions")
-		expect(shown.shownMissionId()).toBe("first-of-s-1")
+		expect(shown.shownMissionId()).toBeNull()
+		expect(shown.selectedRow()).toBe("c-1")
 	})
 
-	it("reopens the last mission shown after a round trip through Conversations", async () => {
+	it("keeps the mission already open", async () => {
 		const shown = await mountSwitch()
 		act(() =>
 			shown.openedMission.open({
@@ -218,103 +202,39 @@ describe("switching to the Missions tab", () => {
 				spaceId: "s-1",
 			}),
 		)
-		shown.switchTo("conversations")
 
 		shown.switchTo("missions")
 
 		expect(shown.shownMissionId()).toBe("m-7")
 	})
-
-	it("waits for the list of the space before opening a mission", async () => {
-		const shown = await mountSwitch({ loadedSpaceId: null })
-
-		shown.switchTo("missions")
-		expect(shown.shownMissionId()).toBeNull()
-
-		shown.rerender({ loadedSpaceId: "s-1", sidebarRosters: ROSTERS })
-
-		expect(shown.shownMissionId()).toBe("first-of-s-1")
-	})
 })
 
 describe("starting on the Missions tab", () => {
-	it("opens the first mission once the list of the space has loaded", async () => {
-		const shown = await mountSwitch({ stored: "missions", loadedSpaceId: null })
-		expect(shown.result.current.sidebarTab.openTab).toBe("missions")
-		expect(shown.shownMissionId()).toBeNull()
-
-		shown.rerender({ loadedSpaceId: "s-1", sidebarRosters: ROSTERS })
-
-		expect(shown.shownMissionId()).toBe("first-of-s-1")
-		expect(shown.showLastMission).toHaveBeenCalledTimes(1)
-	})
-
-	it("opens it once, however often the screen renders", async () => {
+	it("opens no mission, however often the screen renders", async () => {
 		const shown = await mountSwitch({ stored: "missions" })
 
-		shown.rerender({ loadedSpaceId: "s-1", sidebarRosters: ROSTERS })
-		shown.rerender({ loadedSpaceId: "s-1", sidebarRosters: ROSTERS })
+		shown.rerender({ sidebarRosters: ROSTERS })
 
-		expect(shown.showLastMission).toHaveBeenCalledTimes(1)
+		expect(shown.result.current.sidebarTab.openTab).toBe("missions")
+		expect(shown.shownMissionId()).toBeNull()
+		expect(shown.selectedRow()).toBe("c-1")
 	})
 })
 
 describe("changing space on the Missions tab", () => {
-	it("opens the last mission shown in the new space once its list has loaded", async () => {
+	it("opens no mission in the new space", async () => {
 		const shown = await mountSwitch({ stored: "missions" })
-		act(() =>
-			shown.openedMission.open({
-				missionId: "m-9",
-				rowId: "b-3",
-				spaceId: "s-2",
-			}),
-		)
-		act(() => shown.openedMission.leave())
 		act(() =>
 			shown.roster.enter("s-2", {
 				selectedBotId: "b-3",
 				selectedConversationId: null,
 			}),
 		)
+
+		shown.rerender({ sidebarRosters: ROSTERS })
+
 		expect(shown.shownMissionId()).toBeNull()
-
-		shown.rerender({ loadedSpaceId: "s-2", sidebarRosters: ROSTERS })
-
-		expect(shown.shownMissionId()).toBe("m-9")
-	})
-
-	it("opens the first mission of a space never shown", async () => {
-		const shown = await mountSwitch({ stored: "missions" })
-		act(() =>
-			shown.roster.enter("s-2", {
-				selectedBotId: "b-3",
-				selectedConversationId: null,
-			}),
-		)
-
-		shown.rerender({ loadedSpaceId: "s-2", sidebarRosters: ROSTERS })
-
-		expect(shown.shownMissionId()).toBe("first-of-s-2")
-	})
-
-	it("keeps a mission of the new space opened from elsewhere", async () => {
-		const shown = await mountSwitch({ stored: "missions" })
-		act(() => {
-			shown.roster.enter("s-2", {
-				selectedBotId: "b-3",
-				selectedConversationId: null,
-			})
-			shown.openedMission.open({
-				missionId: "m-9",
-				rowId: "b-3",
-				spaceId: "s-2",
-			})
-		})
-
-		shown.rerender({ loadedSpaceId: "s-2", sidebarRosters: ROSTERS })
-
-		expect(shown.shownMissionId()).toBe("m-9")
-		expect(shown.showLastMission).toHaveBeenCalledTimes(1)
+		expect(shown.selectedRow()).toBe("b-3")
 	})
 })
 
@@ -322,6 +242,14 @@ describe("switching to the Conversations tab", () => {
 	it("closes the mission and shows the last conversation shown", async () => {
 		const shown = await mountSwitch()
 		shown.switchTo("missions")
+		act(() =>
+			shown.openedMission.open({
+				missionId: "m-7",
+				rowId: MISSION_ROW,
+				spaceId: "s-1",
+			}),
+		)
+		act(() => shown.roster.select(MISSION_ROW))
 
 		shown.switchTo("conversations")
 
@@ -334,7 +262,6 @@ describe("switching to the Conversations tab", () => {
 		const shown = await mountSwitch()
 		shown.switchTo("missions")
 		shown.rerender({
-			loadedSpaceId: "s-1",
 			sidebarRosters: {
 				...ROSTERS,
 				conversationsBySpaceId: {},
@@ -356,7 +283,6 @@ describe("switching to the Conversations tab", () => {
 		const shown = await mountSwitch()
 		shown.switchTo("missions")
 		shown.rerender({
-			loadedSpaceId: "s-1",
 			sidebarRosters: {
 				botsBySpaceId: {
 					"s-1": [
@@ -385,7 +311,6 @@ describe("switching to the Conversations tab", () => {
 		const shown = await mountSwitch()
 		shown.switchTo("missions")
 		shown.rerender({
-			loadedSpaceId: "s-1",
 			sidebarRosters: {
 				...ROSTERS,
 				conversationsBySpaceId: {
@@ -520,14 +445,6 @@ const mountTabbedSwitch = async () => {
 	const threadRoster = threadRosterOf(roster)
 	const openedMission = createOpenedMissionController(roster)
 	const shownMemory = createShownMemory({ roster, openedMission })
-	const showLastMission = vi.fn(() => {
-		openedMission.open({
-			missionId: "m-last",
-			rowId: MISSION_ROW,
-			spaceId: "s-1",
-		})
-		roster.select(MISSION_ROW)
-	})
 	const mounted = renderHook(() => {
 		const user = useUser()
 		const selected = useSyncExternalStore(roster.subscribe, roster.getState)
@@ -546,7 +463,6 @@ const mountTabbedSwitch = async () => {
 				shownMemory,
 				user,
 			},
-			sidebarMissions: { loadedSpaceId: "s-1", showLastMission },
 			tabs,
 		})
 		return { user, sidebarTab }
@@ -570,7 +486,6 @@ const mountTabbedSwitch = async () => {
 		activate,
 		pickRow: (id: string) => act(() => roster.select(id)),
 		shownHref,
-		showLastMission,
 		openTab: () => mounted.result.current.sidebarTab.openTab,
 		selectedRow: () =>
 			roster.getState().selectedBotId ??
@@ -593,7 +508,6 @@ describe("activating a title bar tab", () => {
 		expect(shown.openTab()).toBe("missions")
 		expect(shown.shownMissionId()).toBe("m-7")
 		expect(shown.selectedRow()).toBe(MISSION_ROW)
-		expect(shown.showLastMission).not.toHaveBeenCalled()
 	})
 
 	it("puts the sidebar on Conversations and shows the thread of a companion tab", async () => {
@@ -619,14 +533,51 @@ describe("activating a title bar tab", () => {
 		expect(shown.selectedRow()).toBe("c-1")
 	})
 
-	it("keeps the sidebar on a panel picked from its switch over the href written next", async () => {
+	it("puts the sidebar on Conversations and shows the thread of a conversation tab", async () => {
+		const shown = await mountTabbedSwitch()
+		const [conversationTab = ""] = shown.tabIds()
+		shown.activate(shown.openTabOn(MISSION_HREF))
+
+		shown.activate(conversationTab)
+
+		expect(shown.openTab()).toBe("conversations")
+		expect(shown.shownHref()).toBe(C1_HREF)
+		expect(shown.shownMissionId()).toBeNull()
+		expect(shown.selectedRow()).toBe("c-1")
+	})
+
+	it("keeps the panel picked when the tab holds no thread", async () => {
+		const shown = await mountTabbedSwitch()
+		shown.switchTo("missions")
+
+		shown.activate(shown.openTabOn("/"))
+
+		expect(shown.openTab()).toBe("missions")
+	})
+})
+
+describe("opening Missions from its switch on a thread tab", () => {
+	it("keeps the href and the thread of a conversation tab", async () => {
 		const shown = await mountTabbedSwitch()
 
 		shown.switchTo("missions")
 
-		expect(shown.shownHref()).toContain("mission=m-last")
 		expect(shown.openTab()).toBe("missions")
-		expect(shown.shownMissionId()).toBe("m-last")
+		expect(shown.shownHref()).toBe(C1_HREF)
+		expect(shown.shownMissionId()).toBeNull()
+		expect(shown.selectedRow()).toBe("c-1")
+	})
+
+	it("keeps the href and the thread of a companion tab", async () => {
+		const shown = await mountTabbedSwitch()
+		shown.activate(shown.openTabOn(COMPANION_HREF))
+
+		shown.switchTo("missions")
+
+		expect(shown.openTab()).toBe("missions")
+		expect(shown.shownHref()).toBe(COMPANION_HREF)
+		expect(shown.shownMissionId()).toBeNull()
+		expect(shown.selectedRow()).toBe("b-1")
 	})
 
 	it("keeps the sidebar on Missions when the shown tab is written a conversation", async () => {

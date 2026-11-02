@@ -31,7 +31,6 @@ import { useSpaceMissionsFailure } from "../missions/use-mission-failure-notices
 import { useSpaceMissions } from "../missions/use-space-missions"
 import type { SettingsNavigation } from "../navigation/use-settings-navigation"
 import { useSkeletonSlot } from "../query/use-skeleton-slot"
-import type { ShownMemory } from "../sidebar/shown-memory"
 import { opensInNewTab } from "../tabs/new-tab-clicks"
 
 const MISSIONS_FEED_SKELETON = createElement(MissionsFeedSkeleton)
@@ -40,7 +39,7 @@ type SidebarMissionsCore = {
 	conversationRuntimes: MissionSpeakingRuntimes & StoppableRuntimes
 	openedMission: Pick<
 		OpenedMissionController,
-		"open" | "leave" | "getState" | "subscribe"
+		"open" | "getState" | "subscribe"
 	>
 	roster: {
 		state: {
@@ -50,7 +49,6 @@ type SidebarMissionsCore = {
 		}
 		controller: Pick<RosterController, "select" | "selectConversation">
 	}
-	shownMemory: Pick<ShownMemory, "lastMissionIn">
 	spaces: { state: { selectedSpaceId: string | null } }
 }
 
@@ -61,9 +59,7 @@ type SidebarMissionsInput = {
 }
 
 export type SidebarMissions = {
-	loadedSpaceId: string | null
 	panelsBySpaceId: Record<string, MissionsPanelProps>
-	showLastMission: () => void
 	waitingCount: number
 }
 
@@ -95,8 +91,7 @@ export const useSidebarMissions = ({
 	rosterLines,
 	navigation,
 }: SidebarMissionsInput): SidebarMissions => {
-	const { conversationRuntimes, openedMission, roster, shownMemory, spaces } =
-		core
+	const { conversationRuntimes, openedMission, roster, spaces } = core
 	const { now } = rosterLines
 	const feed = useSpaceMissions(spaces.state.selectedSpaceId)
 	const { spaceRowId } = roster.state
@@ -187,18 +182,6 @@ export const useSidebarMissions = ({
 		onChanged: feed.reload,
 	})
 
-	const showLastMission = useCallback(() => {
-		const lastMissionId =
-			spaceRowId === null ? null : shownMemory.lastMissionIn(spaceRowId)
-		const shown =
-			entries.find(({ mission }) => mission.id === lastMissionId) ?? entries[0]
-		if (!shown) {
-			openedMission.leave()
-			return
-		}
-		openMission(shown.mission.id)
-	}, [spaceRowId, shownMemory, entries, openedMission, openMission])
-
 	const panelsBySpaceId = useMemo(() => {
 		if (spaceRowId === null) return {}
 		const panel = {
@@ -228,9 +211,7 @@ export const useSidebarMissions = ({
 	])
 
 	return {
-		loadedSpaceId: feed.hasLoaded ? spaceRowId : null,
 		panelsBySpaceId,
-		showLastMission,
 		waitingCount: feed.waitingCount,
 	}
 }
