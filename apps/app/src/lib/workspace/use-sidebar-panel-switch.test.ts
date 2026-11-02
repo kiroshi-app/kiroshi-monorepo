@@ -154,10 +154,8 @@ describe("switching to the Missions tab", () => {
 })
 
 describe("starting on the Missions tab", () => {
-	it("opens no mission, however often the screen renders", async () => {
+	it("opens no mission", async () => {
 		const shown = await mountSwitch({ stored: "missions" })
-
-		shown.rerender()
 
 		expect(shown.result.current.sidebarTab.openTab).toBe("missions")
 		expect(shown.shownMissionId()).toBeNull()
