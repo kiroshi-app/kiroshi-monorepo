@@ -80,6 +80,15 @@ const companionNameOf = (
 	(conversation && presentParticipants(conversation)[0]?.name) ??
 	""
 
+const readSoloConversationId = async (
+	reader: GhostCardReader,
+	spaceId: string,
+	botId: string,
+) => {
+	const states = await reader.conversationSoloStates(spaceId)
+	return states.find((state) => state.botId === botId)?.conversationId ?? null
+}
+
 export const useGhostCard = ({
 	href,
 	spaceId,
@@ -111,14 +120,7 @@ export const useGhostCard = ({
 		queryFn:
 			soloSpaceId === null || bot === undefined
 				? skipToken
-				: () =>
-						reader
-							.conversationSoloStates(soloSpaceId)
-							.then(
-								(states) =>
-									states.find((state) => state.botId === bot)?.conversationId ??
-									null,
-							),
+				: () => readSoloConversationId(reader, soloSpaceId, bot),
 		staleTime: 0,
 		meta: INLINE_FAILURE,
 	})
