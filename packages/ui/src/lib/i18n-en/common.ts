@@ -296,6 +296,22 @@ const common = {
 			formats: "PNG, JPG, Markdown and plain text.",
 			action: "Import files…",
 		},
+		drop: {
+			title_one: "Drop to add {{count}} file to the Library",
+			title_other: "Drop to add {{count}} files to the Library",
+			more_one: "and {{count}} more",
+			more_other: "and {{count}} more",
+		},
+		importing: {
+			label: "Importing {{name}}",
+			detail: "Importing… {{percent}}%",
+		},
+		added: {
+			title_one: "{{count}} file added",
+			title_other: "{{count}} files added",
+			stillImporting_one: "{{name}} is still importing.",
+			stillImporting_other: "{{count}} files are still importing.",
+		},
 		lightbox: {
 			download: "Download",
 			copy: "Copy",

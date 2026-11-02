@@ -1337,12 +1337,16 @@ navigation-headeridentitybutton--variants
 navigation-headeridentitybutton--working
 navigation-librarydocumentview--default
 navigation-librarydocumentview--member
+navigation-librarypanel--added-to-the-grid
+navigation-librarypanel--dropping-files
+navigation-librarypanel--dropping-one-file
 navigation-librarypanel--empty-with-every-callback
 navigation-librarypanel--empty-with-no-callbacks
 navigation-librarypanel--filter-with-no-match
 navigation-librarypanel--grid-all
 navigation-librarypanel--grid-documents
 navigation-librarypanel--grid-images
+navigation-librarypanel--import-long-names
 navigation-librarypanel--loading
 navigation-librarypanel--long-names
 navigation-librarypanel--search-with-no-match

@@ -1,4 +1,5 @@
-import type { ReactNode } from "react"
+import { type ReactNode, useEffect } from "react"
+import { useTranslation } from "react-i18next"
 import { expect, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
@@ -11,12 +12,27 @@ import {
 import { ContentCard } from "@workspace/ui/components/content-card"
 import { hueTone } from "@workspace/ui/components/hue-palette"
 import { HUE_PRESETS } from "@workspace/ui/components/hue-tones"
-import { LIBRARY_ITEMS } from "@workspace/ui/components/library.fixtures"
+import {
+	LIBRARY_DRAG_PREVIEW,
+	LIBRARY_DROPPED_NAMES,
+	LIBRARY_ITEMS,
+	LIBRARY_ITEMS_AFTER_IMPORT,
+} from "@workspace/ui/components/library.fixtures"
 import type { LibraryItem } from "@workspace/ui/components/library-grid"
+import {
+	LibraryDragGhost,
+	LibraryDropOverlay,
+} from "@workspace/ui/components/library-import"
 import {
 	LibraryPanel,
 	type LibraryPanelProps,
 } from "@workspace/ui/components/library-panel"
+import {
+	endNotice,
+	NoticeSurface,
+	raiseTransientNotice,
+} from "@workspace/ui/components/notice-surface"
+import { i18n } from "@workspace/ui/lib/i18n"
 
 type LibraryStoryFrameProps = {
 	hue: keyof typeof HUE_PRESETS
@@ -53,6 +69,48 @@ const rgbOf = (hex: string) => {
 	const rgb = getComputedStyle(probe).color
 	probe.remove()
 	return rgb
+}
+
+const DRAG_CURSOR = { x: 742, y: 436 }
+
+const LONG_DROPPED_NAME =
+	"usage-march-final-final-approved-by-finance-and-legal-v12-export-2x.png"
+
+const LONG_DROPPED_NAMES = [
+	LONG_DROPPED_NAME,
+	...LIBRARY_DROPPED_NAMES.slice(1),
+]
+
+const LONG_NAMED_IMPORT: LibraryItem[] = [
+	{
+		...LIBRARY_ITEMS_AFTER_IMPORT[1],
+		name: LONG_DROPPED_NAME,
+	},
+	...LIBRARY_ITEMS.slice(0, 5),
+]
+
+const HeldAddedNotice = () => {
+	const { t } = useTranslation("common")
+
+	useEffect(() => {
+		const id = raiseTransientNotice({
+			title: t("library.added.title", { count: 2 }),
+			description: t("library.added.stillImporting", {
+				count: 1,
+				name: "usage-march.png",
+			}),
+		})
+		return () => endNotice(id)
+	}, [t])
+
+	return <NoticeSurface transientDelay={0} />
+}
+
+const expectOutOfFocusOrder = async (element: HTMLElement) => {
+	await expect(
+		element.querySelectorAll("a, button, input, select, textarea, [tabindex]"),
+	).toHaveLength(0)
+	await expect(getComputedStyle(element).pointerEvents).toBe("none")
 }
 
 const PANEL_STORY_ARGS: LibraryPanelProps = {
@@ -334,5 +392,212 @@ export const LongNames = meta.story({
 			getComputedStyle(slotIn(canvasElement, "library-thumbnail"))
 				.backgroundColor,
 		).toBe(rgbOf(hueTone(HUE_PRESETS.pink, "dark", "avatar-ground").hex))
+	},
+})
+
+export const DroppingFiles = meta.story({
+	args: {
+		overlay: (
+			<>
+				<LibraryDropOverlay fileCount={LIBRARY_DROPPED_NAMES.length} />
+				<LibraryDragGhost
+					names={LIBRARY_DROPPED_NAMES}
+					position={DRAG_CURSOR}
+					previewSrc={LIBRARY_DRAG_PREVIEW}
+				/>
+			</>
+		),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Three files dragged over the Library, as artboard 6 draws it: the card surface at 86% over the whole card with the grid still showing through, a dashed drop zone, its badge and the ghost count pill in the Space colour, and the ghost 14px below the cursor. Check that the drop target is announced politely, that neither the overlay nor the ghost takes focus or a pointer, and that the ghost lists the first name, and 2 more, and 3.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const panel = slotIn(canvasElement, "library-panel")
+		const overlay = slotIn(canvasElement, "library-drop-overlay")
+		const accent = rgbOf(hueTone(HUE_PRESETS.blue, "dark", "accent").hex)
+
+		await expect(overlay.getBoundingClientRect()).toEqual(
+			panel.getBoundingClientRect(),
+		)
+		await expect(slotIn(canvasElement, "library-grid")).toBeVisible()
+		await expect(getComputedStyle(overlay).backgroundColor).toMatch(
+			/\/ 0\.86\)$/,
+		)
+
+		const zone = canvas.getByRole("status")
+		await expect(zone).toHaveTextContent(
+			"Drop to add 3 files to the LibraryPNG, JPG, Markdown and plain text.",
+		)
+		await expect(getComputedStyle(zone).borderTopColor).toBe(accent)
+		await expect(getComputedStyle(zone).borderTopStyle).toBe("dashed")
+		await expect(
+			getComputedStyle(slotIn(canvasElement, "library-drop-badge"))
+				.backgroundColor,
+		).toBe(accent)
+		await expectOutOfFocusOrder(overlay)
+
+		const ghost = slotIn(canvasElement, "library-drag-ghost")
+		await expect(ghost).toHaveAttribute("aria-hidden", "true")
+		await expectOutOfFocusOrder(ghost)
+		await expect(ghost).toHaveTextContent("usage-march.pngand 2 more3")
+		await expect(
+			getComputedStyle(slotIn(canvasElement, "library-drag-count"))
+				.backgroundColor,
+		).toBe(accent)
+		const box = ghost.getBoundingClientRect()
+		await expect(box.left).toBeCloseTo(DRAG_CURSOR.x, 0)
+		await expect(box.top).toBeCloseTo(DRAG_CURSOR.y + 14, 0)
+	},
+})
+
+export const DroppingOneFile = meta.story({
+	args: {
+		overlay: (
+			<>
+				<LibraryDropOverlay fileCount={1} />
+				<LibraryDragGhost
+					names={LIBRARY_DROPPED_NAMES.slice(0, 1)}
+					position={DRAG_CURSOR}
+					previewSrc={LIBRARY_DRAG_PREVIEW}
+				/>
+			</>
+		),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"One file dragged over the Library. Check that the title reads the singular, in English and in French, and that the ghost drops its and N more line while its pill still counts 1.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		await expect(canvas.getByRole("status")).toHaveTextContent(
+			/^Drop to add 1 file to the Library/,
+		)
+		const french = i18n.getFixedT("fr", "common")
+		await expect(french("library.drop.title", { count: 1 })).toBe(
+			"Déposez pour ajouter 1 fichier à la Bibliothèque",
+		)
+		await expect(french("library.drop.title", { count: 3 })).toBe(
+			"Déposez pour ajouter 3 fichiers à la Bibliothèque",
+		)
+
+		const ghost = slotIn(canvasElement, "library-drag-ghost")
+		await expect(ghost).toHaveTextContent(/^usage-march\.png1$/)
+		await expect(within(ghost).queryByText(/more/)).toBe(null)
+	},
+})
+
+export const AddedToTheGrid = meta.story({
+	args: { items: LIBRARY_ITEMS_AFTER_IMPORT },
+	render: (args) => (
+		<LibraryStoryFrame hue="blue">
+			<LibraryPanel {...args} />
+			<HeldAddedNotice />
+		</LibraryStoryFrame>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Two files added, as artboard 7 draws it: the new items first, detail Just now, one still importing under the card surface at 72% with a Space-coloured progress fill, and the success notice above the window. Check that the importing tile exposes a named progressbar at 64, reads Importing… 64%, and does not open on a press since its file is not written yet.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		const progress = canvas.getByRole("progressbar", {
+			name: "Importing usage-march.png",
+		})
+		await expect(progress).toHaveAttribute("aria-valuenow", "64")
+		const fill = slotIn(canvasElement, "library-import-progress")
+		await expect(
+			fill.getBoundingClientRect().width /
+				progress.getBoundingClientRect().width,
+		).toBeCloseTo(0.64, 2)
+		await expect(getComputedStyle(fill).backgroundColor).toBe(
+			rgbOf(hueTone(HUE_PRESETS.blue, "dark", "accent").hex),
+		)
+		await expect(
+			getComputedStyle(slotIn(canvasElement, "library-import-scrim"))
+				.backgroundColor,
+		).toMatch(/\/ 0\.72\)$/)
+
+		const tile = progress.closest<HTMLElement>("[data-slot=library-item]")
+		if (!tile) throw new Error("The importing tile is not drawn")
+		await expect(tile).toHaveTextContent("usage-march.pngImporting… 64%")
+		await expect(canvas.queryByRole("button", { name: /usage-march/ })).toBe(
+			null,
+		)
+		await userEvent.click(tile)
+		await expect(args.onOpenItem).not.toHaveBeenCalled()
+		await expect(
+			canvas.getByRole("button", { name: /pricing-grid\.png.*Just now/ }),
+		).toBeVisible()
+
+		const notice = await within(document.body).findByText("2 files added")
+		const card = notice.closest<HTMLElement>("[data-slot=toast]")
+		if (!card) throw new Error("The notice is not drawn")
+		await Promise.all(
+			card.getAnimations({ subtree: true }).map(({ finished }) => finished),
+		)
+		await expect(
+			within(card).getByText("usage-march.png is still importing."),
+		).toBeVisible()
+		await expect(card.getBoundingClientRect().width).toBe(384)
+		await expect(
+			i18n.getFixedT("fr", "common")("library.added.stillImporting", {
+				count: 2,
+				name: "usage-march.png",
+			}),
+		).toBe("2 fichiers sont encore en cours d’importation.")
+	},
+})
+
+export const ImportLongNames = meta.story({
+	args: {
+		items: LONG_NAMED_IMPORT,
+		overlay: (
+			<LibraryDragGhost names={LONG_DROPPED_NAMES} position={DRAG_CURSOR} />
+		),
+	},
+	render: (args) => (
+		<LibraryStoryFrame hue="pink">
+			<LibraryPanel {...args} />
+		</LibraryStoryFrame>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A long file name being imported and dragged, in a pink Space. Check that the name stays on one line with an ellipsis in the importing tile and in the ghost, each keeping the full name in its title, and that the ghost pill and the progress fill follow the Space hue rather than a fixed blue.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		for (const slot of ["library-item", "library-drag-ghost"]) {
+			const name = within(slotIn(canvasElement, slot)).getByTitle(
+				LONG_DROPPED_NAME,
+			)
+			await expect(name.scrollWidth).toBeGreaterThan(name.clientWidth)
+			await expect(getComputedStyle(name).whiteSpace).toBe("nowrap")
+		}
+
+		const accent = rgbOf(hueTone(HUE_PRESETS.pink, "dark", "accent").hex)
+		await waitFor(() =>
+			expect(
+				getComputedStyle(slotIn(canvasElement, "library-drag-count"))
+					.backgroundColor,
+			).toBe(accent),
+		)
+		await expect(
+			getComputedStyle(slotIn(canvasElement, "library-import-progress"))
+				.backgroundColor,
+		).toBe(accent)
 	},
 })

@@ -1,5 +1,7 @@
 "use client"
 
+import { useTranslation } from "react-i18next"
+
 import {
 	ListSkeleton,
 	SkeletonBar,
@@ -13,6 +15,7 @@ type LibraryImageItem = {
 	name: string
 	detail: string
 	src: string
+	importProgress?: number
 }
 
 type LibraryDocumentItem = {
@@ -21,6 +24,7 @@ type LibraryDocumentItem = {
 	name: string
 	detail: string
 	excerpt: string
+	importProgress?: number
 }
 
 type LibraryItem = LibraryImageItem | LibraryDocumentItem
@@ -85,6 +89,25 @@ const LibraryThumbnail = ({ item }: LibraryThumbnailProps) => (
 
 const holdFocusForItsReturn = (pressed: HTMLButtonElement) => pressed.focus()
 
+type LibraryItemCaptionProps = {
+	name: string
+	detail: string
+}
+
+const LibraryItemCaption = ({ name, detail }: LibraryItemCaptionProps) => (
+	<span className="flex min-w-0 flex-col gap-0.5">
+		<span
+			className="truncate font-medium text-compact text-foreground leading-4.5"
+			title={name}
+		>
+			{name}
+		</span>
+		<span className="truncate text-muted-foreground text-xs tabular-nums">
+			{detail}
+		</span>
+	</span>
+)
+
 type LibraryGridItemProps = {
 	item: LibraryItem
 	onOpen: (item: LibraryItem) => void
@@ -101,19 +124,53 @@ const LibraryGridItem = ({ item, onOpen }: LibraryGridItemProps) => (
 		type="button"
 	>
 		<LibraryThumbnail item={item} />
-		<span className="flex min-w-0 flex-col gap-0.5">
-			<span
-				className="truncate font-medium text-compact text-foreground leading-4.5"
-				title={item.name}
-			>
-				{item.name}
-			</span>
-			<span className="truncate text-muted-foreground text-xs tabular-nums">
-				{item.detail}
-			</span>
-		</span>
+		<LibraryItemCaption detail={item.detail} name={item.name} />
 	</button>
 )
+
+type LibraryImportingItemProps = {
+	item: LibraryItem
+	progress: number
+}
+
+const LibraryImportingItem = ({
+	item,
+	progress,
+}: LibraryImportingItemProps) => {
+	const { t } = useTranslation("common")
+	const percent = Math.round(progress * 100)
+
+	return (
+		<div className="flex min-w-0 flex-col gap-2.5" data-slot="library-item">
+			<span className="relative block">
+				<LibraryThumbnail item={item} />
+				<span
+					className="absolute inset-0 flex items-end rounded-control bg-card/72 p-4"
+					data-slot="library-import-scrim"
+				>
+					<span
+						aria-label={t("library.importing.label", { name: item.name })}
+						aria-valuemax={100}
+						aria-valuemin={0}
+						aria-valuenow={percent}
+						className="block h-1 flex-1 overflow-hidden rounded-xs bg-foreground/12"
+						role="progressbar"
+					>
+						<span
+							className="block h-full bg-primary"
+							data-slot="library-import-progress"
+							style={{ width: `${percent}%` }}
+						/>
+					</span>
+				</span>
+			</span>
+			<LibraryItemCaption
+				detail={t("library.importing.detail", { percent })}
+				name={item.name}
+			/>
+		</div>
+	)
+}
 
 type LibraryGridProps = {
 	items: LibraryItem[]
@@ -127,7 +184,11 @@ const LibraryGrid = ({ items, onOpenItem }: LibraryGridProps) => (
 	>
 		{items.map((item) => (
 			<li className="flex min-w-0 flex-col" key={item.id}>
-				<LibraryGridItem item={item} onOpen={onOpenItem} />
+				{item.importProgress === undefined ? (
+					<LibraryGridItem item={item} onOpen={onOpenItem} />
+				) : (
+					<LibraryImportingItem item={item} progress={item.importProgress} />
+				)}
 			</li>
 		))}
 	</ul>
@@ -167,4 +228,10 @@ const LibraryGridSkeleton = () => (
 	</div>
 )
 
-export { LibraryGrid, LibraryGridSkeleton, type LibraryItem, LibraryPage }
+export {
+	LibraryGrid,
+	LibraryGridSkeleton,
+	type LibraryItem,
+	LibraryPage,
+	SPACE_GROUND,
+}

@@ -313,6 +313,28 @@ const common = {
 			formats: "PNG, JPG, Markdown et texte brut.",
 			action: "Importer des fichiers…",
 		},
+		drop: {
+			title_one: "Déposez pour ajouter {{count}} fichier à la Bibliothèque",
+			title_many: "Déposez pour ajouter {{count}} fichiers à la Bibliothèque",
+			title_other: "Déposez pour ajouter {{count}} fichiers à la Bibliothèque",
+			more_one: "et {{count}} autre",
+			more_many: "et {{count}} autres",
+			more_other: "et {{count}} autres",
+		},
+		importing: {
+			label: "Importation de {{name}}",
+			detail: "Importation… {{percent}} %",
+		},
+		added: {
+			title_one: "{{count}} fichier ajouté",
+			title_many: "{{count}} fichiers ajoutés",
+			title_other: "{{count}} fichiers ajoutés",
+			stillImporting_one: "{{name}} est encore en cours d’importation.",
+			stillImporting_many:
+				"{{count}} fichiers sont encore en cours d’importation.",
+			stillImporting_other:
+				"{{count}} fichiers sont encore en cours d’importation.",
+		},
 		lightbox: {
 			download: "Télécharger",
 			copy: "Copier",
