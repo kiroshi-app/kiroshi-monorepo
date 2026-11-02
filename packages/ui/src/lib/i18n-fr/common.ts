@@ -332,6 +332,13 @@ const common = {
 			back: "Bibliothèque",
 			more: "Plus",
 		},
+		failure: {
+			list: "Impossible d’ouvrir la Bibliothèque",
+			image: "Impossible d’afficher une image de la Bibliothèque",
+			save: "Impossible d’enregistrer le fichier",
+			copy: "Impossible de copier l’image",
+			reveal: "Impossible d’afficher le fichier dans son dossier",
+		},
 	},
 	whatsNew: {
 		firstLaunch: {

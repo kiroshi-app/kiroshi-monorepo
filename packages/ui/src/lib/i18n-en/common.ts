@@ -315,6 +315,13 @@ const common = {
 			back: "Library",
 			more: "More",
 		},
+		failure: {
+			list: "Couldn’t open the Library",
+			image: "Couldn’t show an image of the Library",
+			save: "Couldn’t save the file",
+			copy: "Couldn’t copy the image",
+			reveal: "Couldn’t show the file in its folder",
+		},
 	},
 	whatsNew: {
 		firstLaunch: {

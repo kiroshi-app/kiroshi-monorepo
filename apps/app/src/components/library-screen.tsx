@@ -9,14 +9,15 @@ import {
 } from "@workspace/ui/components/library-panel"
 
 import type { LibraryDocument } from "@/lib/bindings"
-import { copyImage } from "@/lib/library/library-clipboard"
 import {
 	detailOf,
 	matchesQuery,
 	titleOf,
 	toShownItem,
 } from "@/lib/library/library-items"
+import { useLibraryActions } from "@/lib/library/use-library-actions"
 import { useLibraryDocument } from "@/lib/library/use-library-document"
+import { useLibraryImageSources } from "@/lib/library/use-library-image-sources"
 import {
 	type LibraryItemsRead,
 	useLibraryItems,
@@ -24,6 +25,7 @@ import {
 
 type LibraryScreenProps = {
 	spaceId: string
+	isJoined: boolean
 }
 
 type ShownImage = Extract<ShownLibraryItem, { kind: "image" }>
@@ -48,8 +50,15 @@ const shownDocumentOf = (
 	}
 }
 
-export const LibraryScreen = ({ spaceId }: LibraryScreenProps) => {
+type NamedItem = { id: string }
+
+export const LibraryScreen = ({ spaceId, isJoined }: LibraryScreenProps) => {
 	const library = useLibraryItems(spaceId)
+	const sourceOf = useLibraryImageSources(spaceId, library.items, isJoined)
+	const actions = useLibraryActions(spaceId)
+	const save = isJoined ? ignore : ({ id }: NamedItem) => actions.save(id)
+	const reveal = isJoined ? ignore : ({ id }: NamedItem) => actions.reveal(id)
+	const copy = ({ id }: NamedItem) => actions.copy(id)
 	const [filter, setFilter] = useState<LibraryFilter>("all")
 	const [query, setQuery] = useState("")
 	const [opened, setOpened] = useState<OpenedItem>(null)
@@ -61,7 +70,13 @@ export const LibraryScreen = ({ spaceId }: LibraryScreenProps) => {
 
 	const shownItems = library.items
 		.filter((item) => matchesQuery(item, query))
-		.map((item) => toShownItem(item, library.excerptOf(item), library.readAt))
+		.map((item) =>
+			toShownItem(
+				item,
+				{ excerpt: library.excerptOf(item), src: sourceOf(item) },
+				library.readAt,
+			),
+		)
 	const images = shownItems.filter(
 		(item): item is ShownImage => item.kind === "image",
 	)
@@ -94,7 +109,7 @@ export const LibraryScreen = ({ spaceId }: LibraryScreenProps) => {
 			<LibraryDocumentView
 				document={shownDocumentOf(document, library)}
 				onBack={close}
-				onMore={ignore}
+				onMore={reveal}
 			/>
 		)
 	}
@@ -111,9 +126,9 @@ export const LibraryScreen = ({ spaceId }: LibraryScreenProps) => {
 					count={images.length}
 					image={images[imageIndex] ?? null}
 					onClose={close}
-					onCopy={copyImage}
-					onDownload={ignore}
-					onMore={ignore}
+					onCopy={copy}
+					onDownload={save}
+					onMore={reveal}
 					onNext={() => openImageAt(imageIndex + 1)}
 					onPrevious={() => openImageAt(imageIndex - 1)}
 					position={imageIndex + 1}

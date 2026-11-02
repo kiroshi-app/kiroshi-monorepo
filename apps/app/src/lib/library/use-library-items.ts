@@ -61,7 +61,7 @@ export const useLibraryItems = (spaceId: string): LibraryItemsRead => {
 		queryFn: () => readLibraryItems(spaceId),
 		refetchOnMount: "always",
 		meta: {
-			failureNotice: () => ({ title: i18n.t("chat:screen.notice.failed") }),
+			failureNotice: () => ({ title: i18n.t("common:library.failure.list") }),
 			raisedIn: "use-library-items",
 		},
 	})
@@ -71,7 +71,7 @@ export const useLibraryItems = (spaceId: string): LibraryItemsRead => {
 
 	return {
 		items,
-		isLoading: list.data === undefined,
+		isLoading: list.isPending,
 		readAt: list.dataUpdatedAt,
 		excerptOf,
 	}

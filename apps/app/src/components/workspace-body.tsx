@@ -21,6 +21,7 @@ import type { ThreadSearch } from "@/lib/navigation/thread-search"
 import type { OnboardingCreation } from "@/lib/onboarding/onboarding-flow-controller"
 import type { SignIn } from "@/lib/onboarding/use-sign-in"
 import type { MessageLandingController } from "@/lib/search/message-landing-controller"
+import { isJoinedRowId } from "@/lib/spaces/joined-spaces-controller"
 
 type WorkspaceBodyProps = {
 	activityPanel: ActivityPanel
@@ -133,8 +134,14 @@ export function WorkspaceBody(props: WorkspaceBodyProps) {
 		)
 	}
 
-	if (props.isLibraryOpen && spaceRowId) {
-		return <LibraryScreen key={spaceRowId} spaceId={spaceRowId} />
+	if (props.isLibraryOpen && spaceRowId && props.spaceId) {
+		return (
+			<LibraryScreen
+				isJoined={isJoinedRowId(spaceRowId)}
+				key={spaceRowId}
+				spaceId={props.spaceId}
+			/>
+		)
 	}
 
 	if (openedMission) {

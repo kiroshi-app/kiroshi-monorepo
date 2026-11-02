@@ -5,7 +5,7 @@ import type { AppSidebarProps } from "@workspace/ui/components/app-sidebar-model
 import type { SettingsNavigation } from "@/lib/navigation/use-settings-navigation"
 import type { useSwitcherSpaces } from "@/lib/spaces/use-joined-spaces"
 import type { WorkspaceTabs } from "@/lib/tabs/workspace-tabs"
-import { railPanelOf, type SidebarPanel } from "@/lib/user/use-sidebar-tab"
+import type { SidebarPanel } from "@/lib/user/use-sidebar-tab"
 import type { SettingsFrame } from "@/lib/workspace/settings-frame"
 import type { RosterLines } from "@/lib/workspace/use-roster-lines"
 import type { RosterLists } from "@/lib/workspace/use-roster-lists"
@@ -110,9 +110,10 @@ export const useWorkspaceRail = ({
 					: undefined,
 				onOpenYou: () => navigation.openUserSettings(),
 				onSelectConversations: () => leaveSettingsFor("conversations"),
+				onSelectLibrary: () => leaveSettingsFor("library"),
 				onSelectMissions: () => leaveSettingsFor("missions"),
 				openSettings,
-				selected: railPanelOf(sidebarTab.openTab),
+				selected: sidebarTab.openTab,
 				spaces: switcher.spaces,
 				updateBadge,
 				user,

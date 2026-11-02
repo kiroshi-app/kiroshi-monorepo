@@ -1,27 +1,11 @@
-import {
-	commands,
-	type LibraryDocument,
-	type LibraryError,
-	type LibraryItem,
-} from "../bindings"
+import type { LibraryDocument, LibraryImage, LibraryItem } from "../bindings"
+import { invoke } from "../host/index"
 
-type LibraryResult<Data> =
-	| { status: "ok"; data: Data }
-	| { status: "error"; error: LibraryError }
+export const readLibraryItems = (spaceId: string) =>
+	invoke<LibraryItem[]>("library_list", { spaceId })
 
-const dataOf = <Data>(result: LibraryResult<Data>): Data => {
-	if (result.status === "error") {
-		throw new Error(`library ${result.error.kind}`)
-	}
-	return result.data
-}
+export const readLibraryDocument = (spaceId: string, name: string) =>
+	invoke<LibraryDocument>("library_read_document", { spaceId, name })
 
-export const readLibraryItems = async (
-	spaceId: string,
-): Promise<LibraryItem[]> => dataOf(await commands.libraryList(spaceId))
-
-export const readLibraryDocument = async (
-	spaceId: string,
-	name: string,
-): Promise<LibraryDocument> =>
-	dataOf(await commands.libraryReadDocument(spaceId, name))
+export const readLibraryImage = (spaceId: string, name: string) =>
+	invoke<LibraryImage>("library_read_image", { spaceId, name })
