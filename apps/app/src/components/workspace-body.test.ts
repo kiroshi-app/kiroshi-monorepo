@@ -1754,18 +1754,18 @@ describe("WorkspaceBody library", () => {
 		})
 
 		it.each([
-			["Download", () => SAVE_FAILURE],
-			["Copy", () => COPY_FAILURE],
+			["Download", SAVE_FAILURE],
+			["Copy", COPY_FAILURE],
 		])(
 			"raises one notice when the host cannot read the file to %s",
-			async (action, failureOf) => {
+			async (action, failure) => {
 				libraryHost.readFile.mockRejectedValue(refusal)
 				await openJoinedLibrary()
 				await open("hero-dunes.png")
 
 				await press(action)
 
-				expect(await announced(failureOf())).toHaveLength(1)
+				expect(await announced(failure)).toHaveLength(1)
 				expect(saveBytes).not.toHaveBeenCalled()
 				expect(copyBytes).not.toHaveBeenCalled()
 				expectNoPathCommand()
