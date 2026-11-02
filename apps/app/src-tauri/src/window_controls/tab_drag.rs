@@ -41,6 +41,8 @@ pub enum TabDragError {
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum NativeWindowError {
 	Unavailable,
+	CursorUnreadable { reason: String },
+	NotMoved { reason: String },
 }
 
 #[derive(Default)]
@@ -100,12 +102,12 @@ pub fn window_tab_drag_cancel<R: Runtime>(window: WebviewWindow<R>) -> Result<()
 pub fn window_start_native_move<R: Runtime>(
 	window: WebviewWindow<R>,
 ) -> Result<(), NativeWindowError> {
-	let watch = native_move::watch(&window);
-	acted_on(&window, "moved", window.start_dragging())?;
-	if let Some(watch) = watch {
-		native_move::follow_release(watch);
-	}
-	Ok(())
+	let Some(watch) = native_move::watch(&window) else {
+		return Ok(());
+	};
+	native_move::follow_cursor(&window, watch).inspect_err(|failure| {
+		log::error!("the window {} was not moved: {failure:?}", window.label());
+	})
 }
 
 #[tauri::command]

@@ -117,6 +117,13 @@ export const commands = {
 	windowHide: () => typedError<null, NativeWindowError>(__TAURI_INVOKE("window_hide")),
 	windowShow: () => typedError<null, NativeWindowError>(__TAURI_INVOKE("window_show")),
 	dragGhostShow: (at: ScreenPosition, size: WindowSize, tab: DragGhostTab) => typedError<DragGhostSupport, DragGhostError>(__TAURI_INVOKE("drag_ghost_show", { at, size, tab })),
+	dragGhostTab: () => __TAURI_INVOKE<{
+	tabId: string,
+	href: string,
+	title: string,
+	thumbnail?: string | null,
+	grab?: GrabOffset | null,
+} | null>("drag_ghost_tab"),
 	dragGhostMove: (at: ScreenPosition) => typedError<DragGhostSupport, DragGhostError>(__TAURI_INVOKE("drag_ghost_move", { at })),
 	dragGhostHide: () => typedError<DragGhostSupport, DragGhostError>(__TAURI_INVOKE("drag_ghost_hide")),
 	conversationDuplicateBot: (botId: string, spaceId: string | null) => typedError<Bot, TranscriptStoreError>(__TAURI_INVOKE("conversation_duplicate_bot", { botId, spaceId })),
@@ -302,6 +309,8 @@ export const DEVICE_APPROVAL_REQUESTED_EVENT = "device://approval-requested" as 
 
 export const DEVICE_APPROVAL_SETTLED_EVENT = "device://approval-settled" as const;
 
+export const DRAG_GHOST_ENDED_EVENT = "drag-ghost-ended" as const;
+
 export const DRAG_GHOST_ROUTE = "/drag-ghost.html" as const;
 
 export const DRAG_GHOST_TAB_EVENT = "drag-ghost-tab" as const;
@@ -327,6 +336,8 @@ export const MAXIMIZE_BUTTON_EVENT = "window-maximize-button" as const;
 export const MAX_SUMMONS_PER_CHAIN = 5 as const;
 
 export const NATIVE_MOVE_ENDED_EVENT = "window://native-move-ended" as const;
+
+export const NATIVE_MOVE_FAILED_EVENT = "window://native-move-failed" as const;
 
 export const SPACE_DESCRIBED_EVENT = "space://described" as const;
 
@@ -911,7 +922,9 @@ export type Disconnected_Serialize = {
 	detail?: string | null,
 };
 
-export type DragGhostError = { kind: "unavailable" };
+export type DragGhostEnded = { kind: "released"; point: ScreenPosition } | { kind: "hidden"; point: ScreenPosition } | { kind: "lost"; error: DragGhostError };
+
+export type DragGhostError = { kind: "unavailable" } | { kind: "invalidThumbnail" } | { kind: "notBuilt"; reason: string } | { kind: "notClickThrough"; reason: string } | { kind: "notShown"; reason: string } | { kind: "notMoved"; reason: string } | { kind: "cursorUnreadable"; reason: string };
 
 export type DragGhostSupport = {
 	supported: boolean,
@@ -921,6 +934,8 @@ export type DragGhostTab = {
 	tabId: string,
 	href: string,
 	title: string,
+	thumbnail?: string | null,
+	grab?: GrabOffset | null,
 };
 
 export type EffortLevel = "low" | "medium" | "high" | "xhigh" | "max";
@@ -994,6 +1009,11 @@ export type Filter_Deserialize = {
 export type Filter_Serialize = {
 	matchMode: FilterMatchMode,
 	rows: FilterRow_Serialize[],
+};
+
+export type GrabOffset = {
+	x: number,
+	y: number,
 };
 
 export type HistoryAuthor = "user" | "bot";
@@ -1359,9 +1379,15 @@ export type MissionStatus = {
 export type NativeMoveEnded = {
 	label: string,
 	point: ScreenPosition,
+	position?: ScreenPosition,
 };
 
-export type NativeWindowError = { kind: "unavailable" };
+export type NativeMoveFailed = {
+	label: string,
+	error: NativeWindowError,
+};
+
+export type NativeWindowError = { kind: "unavailable" } | { kind: "cursorUnreadable"; reason: string } | { kind: "notMoved"; reason: string };
 
 export type NewAssistantMessage = {
 	id: string,

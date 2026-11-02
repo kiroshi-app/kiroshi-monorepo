@@ -180,6 +180,7 @@ pub(super) const REACHES: &[(&str, Reach)] = &[
 	("window_hide", Reach::HostOnly),
 	("window_show", Reach::HostOnly),
 	("drag_ghost_show", Reach::HostOnly),
+	("drag_ghost_tab", Reach::HostOnly),
 	("drag_ghost_move", Reach::HostOnly),
 	("drag_ghost_hide", Reach::HostOnly),
 	("diagnostics", Reach::HostOnly),
@@ -442,10 +443,12 @@ pub(super) const AUDIENCES: &[(&str, Audience)] = &[
 	(crate::companions::contract::FIRST_RUN_DONE_EVENT, Audience::HostOnly),
 	(crate::window_controls::MAXIMIZE_BUTTON_EVENT, Audience::HostOnly),
 	(crate::window_controls::drag_ghost::TAB_EVENT, Audience::HostOnly),
+	(crate::window_controls::drag_ghost::ENDED_EVENT, Audience::HostOnly),
 	(crate::updates::contract::CHANGED_EVENT, Audience::HostOnly),
 	(crate::menu_contract::FILE_MENU_EVENT, Audience::HostOnly),
 	(crate::window_controls::tab_drag::TAB_DRAG_EVENT, Audience::HostOnly),
 	(crate::window_controls::native_move::NATIVE_MOVE_ENDED_EVENT, Audience::HostOnly),
+	(crate::window_controls::native_move::NATIVE_MOVE_FAILED_EVENT, Audience::HostOnly),
 	(crate::claude_import::contract::PROGRESS_EVENT, Audience::HostOnly),
 ];
 

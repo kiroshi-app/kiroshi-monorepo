@@ -1,34 +1,33 @@
 use std::collections::HashSet;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::thread;
-use std::time::Duration;
 
 use serde::Serialize;
-use tauri::{AppHandle, Manager, PhysicalPosition, Runtime, State, WebviewWindow};
+use tauri::{AppHandle, LogicalPosition, Manager, Runtime, State, WebviewWindow};
 
+use super::cursor::{self, Cursor, FollowFailure, Followed, Unobservable};
 use super::secondary::ScreenPosition;
-use crate::events::{self, NATIVE_MOVE_ENDED};
+use super::tab_drag::NativeWindowError;
+use crate::events::{self, NATIVE_MOVE_ENDED, NATIVE_MOVE_FAILED};
 
 pub const NATIVE_MOVE_ENDED_EVENT: &str = "window://native-move-ended";
 
-const PROBE_INTERVAL: Duration = Duration::from_millis(16);
+pub const NATIVE_MOVE_FAILED_EVENT: &str = "window://native-move-failed";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct NativeMoveEnded {
 	pub label: String,
 	pub point: ScreenPosition,
+	#[specta(optional)]
+	pub position: ScreenPosition,
 }
 
-pub(super) enum PrimaryButton {
-	#[cfg_attr(target_os = "macos", allow(dead_code))]
-	Pressed,
-	Released(PhysicalPosition<f64>),
-}
-
-pub(super) struct Unobservable {
-	platform: &'static str,
-	reason: String,
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct NativeMoveFailed {
+	pub label: String,
+	pub error: NativeWindowError,
 }
 
 #[derive(Default)]
@@ -58,39 +57,55 @@ impl<R: Runtime> Watch<R> {
 
 	pub(super) fn until_released(
 		self,
-		mut probe: impl FnMut() -> Result<PrimaryButton, Unobservable>,
+		grab: LogicalPosition<f64>,
+		probe: impl FnMut() -> Result<Cursor, Unobservable>,
+		place: impl FnMut(&Cursor) -> tauri::Result<()>,
 	) {
-		while self.is_live() {
-			match probe() {
-				Ok(PrimaryButton::Pressed) => thread::sleep(PROBE_INTERVAL),
-				Ok(PrimaryButton::Released(at)) => return self.ended_at(at),
-				Err(unobservable) => return unobservable.report(&self.label),
-			}
+		match cursor::follow(|| self.is_live(), probe, place) {
+			Followed::Stopped => {}
+			Followed::Released(cursor) => self.ended_at(&cursor, grab),
+			Followed::Lost(failure) => self.lost(failure),
 		}
 	}
 
-	fn ended_at(self, at: PhysicalPosition<f64>) {
-		let Some(window) = self.app.get_webview_window(&self.label) else {
-			return;
+	fn ended_at(&self, cursor: &Cursor, grab: LogicalPosition<f64>) {
+		let ended = NativeMoveEnded {
+			label: self.label.clone(),
+			point: cursor.point(),
+			position: cursor::rounded(cursor.origin_at(grab)),
 		};
-		let announced = window.scale_factor().and_then(|scale| {
-			let at = at.to_logical::<f64>(scale);
-			let point = ScreenPosition { x: at.x.round() as i32, y: at.y.round() as i32 };
-			let ended = NativeMoveEnded { label: self.label.clone(), point };
-			events::emit_to(&self.app, &self.label, NATIVE_MOVE_ENDED, ended)
-		});
-		if let Err(failure) = announced {
-			eprintln!("the native move of the window {} ended unannounced: {failure}", self.label);
+		if let Err(failure) = events::emit_to(&self.app, &self.label, NATIVE_MOVE_ENDED, ended) {
+			log::error!(
+				"the native move of the window {} ended unannounced: {failure}",
+				self.label
+			);
+		}
+	}
+
+	fn lost(&self, failure: FollowFailure) {
+		log::error!("the native move of the window {} stopped: {failure}", self.label);
+		let failed = NativeMoveFailed { label: self.label.clone(), error: failure.into() };
+		if let Err(failure) = events::emit_to(&self.app, &self.label, NATIVE_MOVE_FAILED, failed) {
+			log::error!(
+				"the native move of the window {} failed unannounced: {failure}",
+				self.label
+			);
 		}
 	}
 }
 
-impl Unobservable {
-	fn report(&self, label: &str) {
-		eprintln!(
-			"the end of the native move of the window {label} is not observable on {}: {}",
-			self.platform, self.reason
-		);
+impl From<FollowFailure> for NativeWindowError {
+	fn from(failure: FollowFailure) -> Self {
+		match failure {
+			FollowFailure::Unobservable(unobservable) => unobservable.into(),
+			FollowFailure::Unplaced(failure) => Self::NotMoved { reason: failure.to_string() },
+		}
+	}
+}
+
+impl From<Unobservable> for NativeWindowError {
+	fn from(unobservable: Unobservable) -> Self {
+		Self::CursorUnreadable { reason: unobservable.to_string() }
 	}
 }
 
@@ -104,32 +119,34 @@ pub(super) fn stop_when_destroyed<R: Runtime>(window: &WebviewWindow<R>) {
 	watched_moves(window.app_handle()).held().remove(window.label());
 }
 
-#[cfg(target_os = "macos")]
-pub(super) fn follow_release<R: Runtime>(watch: Watch<R>) {
-	let app = watch.app.clone();
-	watch.until_released(|| {
-		app.cursor_position().map(PrimaryButton::Released).map_err(|failure| Unobservable {
-			platform: "macos",
-			reason: format!("the cursor position could not be read: {failure}"),
+pub(super) fn follow_cursor<R: Runtime>(
+	window: &WebviewWindow<R>,
+	watch: Watch<R>,
+) -> Result<(), NativeWindowError> {
+	let grab = grab_of(window, &cursor::read(window)?)?;
+	let moved = window.clone();
+	thread::Builder::new()
+		.name("native-move".to_owned())
+		.spawn(move || {
+			watch.until_released(
+				grab,
+				|| cursor::read(&moved),
+				|cursor| moved.set_position(cursor.placement(grab)),
+			);
 		})
-	});
+		.map(drop)
+		.map_err(|failure| NativeWindowError::NotMoved { reason: failure.to_string() })
 }
 
-#[cfg(any(windows, target_os = "linux"))]
-pub(super) fn follow_release<R: Runtime>(watch: Watch<R>) {
-	let label = watch.label.clone();
-	let spawned = thread::Builder::new().name("native-move-watch".to_owned()).spawn(move || {
-		#[cfg(windows)]
-		watch.until_released(win32::primary_button);
-		#[cfg(target_os = "linux")]
-		{
-			let app = watch.app.clone();
-			watch.until_released(|| x11::primary_button(&app));
-		}
-	});
-	if let Err(failure) = spawned {
-		Unobservable { platform: std::env::consts::OS, reason: failure.to_string() }.report(&label);
-	}
+fn grab_of<R: Runtime>(
+	window: &WebviewWindow<R>,
+	cursor: &Cursor,
+) -> Result<LogicalPosition<f64>, NativeWindowError> {
+	let origin = window
+		.scale_factor()
+		.and_then(|scale| Ok(window.outer_position()?.to_logical::<f64>(scale)))
+		.map_err(|failure| NativeWindowError::NotMoved { reason: failure.to_string() })?;
+	Ok(cursor.grab_from(origin))
 }
 
 fn watched_moves<R: Runtime>(app: &AppHandle<R>) -> State<'_, WatchedMoves> {
@@ -139,105 +156,23 @@ fn watched_moves<R: Runtime>(app: &AppHandle<R>) -> State<'_, WatchedMoves> {
 	app.state::<WatchedMoves>()
 }
 
-#[cfg(windows)]
-mod win32 {
-	use tauri::PhysicalPosition;
-	use windows::Win32::Foundation::POINT;
-	use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON, VK_RBUTTON};
-	use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, GetSystemMetrics, SM_SWAPBUTTON};
-
-	use super::{PrimaryButton, Unobservable};
-
-	const IS_DOWN: i16 = i16::MIN;
-
-	pub(super) fn primary_button() -> Result<PrimaryButton, Unobservable> {
-		let primary =
-			if unsafe { GetSystemMetrics(SM_SWAPBUTTON) } == 0 { VK_LBUTTON } else { VK_RBUTTON };
-		if unsafe { GetAsyncKeyState(i32::from(primary.0)) } & IS_DOWN != 0 {
-			return Ok(PrimaryButton::Pressed);
-		}
-		let mut at = POINT::default();
-		unsafe { GetCursorPos(&mut at) }.map_err(|failure| Unobservable {
-			platform: "windows",
-			reason: format!("the cursor position could not be read: {failure}"),
-		})?;
-		Ok(PrimaryButton::Released(PhysicalPosition::new(f64::from(at.x), f64::from(at.y))))
-	}
-}
-
-#[cfg(target_os = "linux")]
-mod x11 {
-	use std::sync::mpsc;
-	use std::time::Duration;
-
-	use gtk::gdk::prelude::*;
-	use gtk::gdk::{Display, ModifierType};
-	use tauri::{AppHandle, LogicalPosition, Runtime};
-
-	use super::{PrimaryButton, Unobservable};
-
-	const MAIN_THREAD_ANSWER: Duration = Duration::from_secs(1);
-
-	pub(super) fn primary_button<R: Runtime>(
-		app: &AppHandle<R>,
-	) -> Result<PrimaryButton, Unobservable> {
-		let (told, heard) = mpsc::channel();
-		app.run_on_main_thread(move || {
-			if told.send(probed()).is_err() {
-				eprintln!("the native move watcher stopped before the pointer was probed");
-			}
-		})
-		.map_err(|failure| {
-			unobservable("linux", format!("the pointer was not probed: {failure}"))
-		})?;
-		heard.recv_timeout(MAIN_THREAD_ANSWER).map_err(|failure| {
-			unobservable("linux", format!("the pointer probe did not answer: {failure}"))
-		})?
-	}
-
-	fn probed() -> Result<PrimaryButton, Unobservable> {
-		let display = Display::default()
-			.ok_or_else(|| unobservable("linux", "no display is open".to_owned()))?;
-		if !display.backend().is_x11() {
-			return Err(unobservable(
-				"linux wayland",
-				"the compositor exposes no global cursor position".to_owned(),
-			));
-		}
-		let pointer = display
-			.default_seat()
-			.and_then(|seat| seat.pointer())
-			.ok_or_else(|| unobservable("linux x11", "no pointer is attached".to_owned()))?;
-		let root = display
-			.default_screen()
-			.root_window()
-			.ok_or_else(|| unobservable("linux x11", "the screen has no root window".to_owned()))?;
-		let (_, x, y, held) = root.device_position_double(&pointer);
-		if held.contains(ModifierType::BUTTON1_MASK) {
-			return Ok(PrimaryButton::Pressed);
-		}
-		let scale = f64::from(display.default_group().scale_factor());
-		Ok(PrimaryButton::Released(LogicalPosition::new(x, y).to_physical(scale)))
-	}
-
-	fn unobservable(platform: &'static str, reason: String) -> Unobservable {
-		Unobservable { platform, reason }
-	}
-}
-
 #[cfg(test)]
 mod tests {
+	use std::cell::RefCell;
 	use std::sync::mpsc;
 
 	use serde_json::{json, Value};
 	use tauri::test::{mock_builder, MockRuntime};
-	use tauri::{Listener, PhysicalPosition, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+	use tauri::{
+		Listener, LogicalPosition, PhysicalPosition, WebviewUrl, WebviewWindow,
+		WebviewWindowBuilder,
+	};
 
-	use super::{stop_when_destroyed, watch, PrimaryButton, Unobservable};
-	use crate::events::NATIVE_MOVE_ENDED;
+	use super::{stop_when_destroyed, watch, Cursor, Unobservable};
+	use crate::events::{NATIVE_MOVE_ENDED, NATIVE_MOVE_FAILED};
 	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 
-	const RELEASE: PhysicalPosition<f64> = PhysicalPosition { x: 640.4, y: 212.6 };
+	const GRAB: LogicalPosition<f64> = LogicalPosition { x: 120.0, y: 18.0 };
 
 	fn app() -> AppOfItsOwn {
 		an_app_of_its_own("native-move", mock_builder())
@@ -249,43 +184,69 @@ mod tests {
 			.expect("the window opens")
 	}
 
-	fn heard_by(window: &WebviewWindow<MockRuntime>) -> mpsc::Receiver<Value> {
+	fn heard_by(window: &WebviewWindow<MockRuntime>, event: &'static str) -> mpsc::Receiver<Value> {
 		let (told, heard) = mpsc::channel();
-		window.listen(NATIVE_MOVE_ENDED.name(), move |event| {
+		window.listen(event, move |event| {
 			let payload = serde_json::from_str(event.payload()).expect("JSON");
 			told.send(payload).expect("the test listens");
 		});
 		heard
 	}
 
-	fn probed(
-		mut readings: Vec<PrimaryButton>,
-	) -> impl FnMut() -> Result<PrimaryButton, Unobservable> {
+	fn cursor_at(x: f64, y: f64, is_primary_pressed: bool) -> Cursor {
+		Cursor { physical: PhysicalPosition::new(x, y), scale: 2.0, is_primary_pressed }
+	}
+
+	fn probed(mut readings: Vec<Cursor>) -> impl FnMut() -> Result<Cursor, Unobservable> {
 		readings.reverse();
-		move || Ok(readings.pop().expect("the probe is read until the release"))
+		move || Ok(readings.pop().expect("the cursor is read until the release"))
 	}
 
 	#[test]
-	fn native_move_ended_reaches_the_origin_alone_once_the_probed_primary_button_is_released() {
+	fn native_move_places_the_window_from_the_cursor_then_tells_the_origin_alone_where_it_ended() {
 		let app = app();
 		let (main, origin) = (window_of(&app, "main"), window_of(&app, "window-1"));
-		let (heard_by_main, heard_by_origin) = (heard_by(&main), heard_by(&origin));
+		let heard_by_main = heard_by(&main, NATIVE_MOVE_ENDED.name());
+		let heard_by_origin = heard_by(&origin, NATIVE_MOVE_ENDED.name());
+		let placed = RefCell::new(Vec::new());
 
 		let watched = watch(&origin).expect("no move of the origin is watched yet");
-		watched.until_released(probed(vec![
-			PrimaryButton::Pressed,
-			PrimaryButton::Pressed,
-			PrimaryButton::Released(RELEASE),
-		]));
+		watched.until_released(
+			GRAB,
+			probed(vec![
+				cursor_at(1000.0, 400.0, true),
+				cursor_at(1100.0, 420.0, true),
+				cursor_at(1280.8, 425.2, false),
+			]),
+			|cursor| {
+				placed.borrow_mut().push(cursor.origin_at(GRAB));
+				Ok(())
+			},
+		);
 
+		assert_eq!(
+			placed.into_inner(),
+			vec![
+				LogicalPosition::new(380.0, 182.0),
+				LogicalPosition::new(430.0, 192.0),
+				LogicalPosition::new(520.4, 194.6),
+			]
+		);
 		let heard: Vec<Value> = heard_by_origin.try_iter().collect();
-		assert_eq!(heard, vec![json!({ "label": "window-1", "point": { "x": 640, "y": 213 } })]);
+		assert_eq!(
+			heard,
+			vec![json!({
+				"label": "window-1",
+				"point": { "x": 640, "y": 213 },
+				"position": { "x": 520, "y": 195 },
+			})]
+		);
 		assert_eq!(heard_by_main.try_iter().count(), 0);
 		assert!(watch(&origin).is_some(), "the watch ended with the release");
 	}
 
 	#[test]
-	fn native_move_is_watched_once_per_window_while_the_probed_primary_button_is_held() {
+	fn native_move_is_watched_once_per_window_while_the_primary_button_is_held() {
 		let app = app();
 		let (main, origin) = (window_of(&app, "main"), window_of(&app, "window-1"));
 
@@ -298,43 +259,60 @@ mod tests {
 	}
 
 	#[test]
-	fn native_move_of_a_window_destroyed_before_the_probed_primary_button_is_released_stays_silent()
-	{
+	fn native_move_of_a_window_destroyed_before_the_release_stays_silent() {
 		let app = app();
 		let origin = window_of(&app, "window-1");
-		let heard = heard_by(&origin);
+		let heard = heard_by(&origin, NATIVE_MOVE_ENDED.name());
 		let destroyed = origin.clone();
-		let mut readings = probed(vec![PrimaryButton::Pressed, PrimaryButton::Released(RELEASE)]);
+		let mut readings = probed(vec![cursor_at(0.0, 0.0, true), cursor_at(0.0, 0.0, false)]);
 
 		let watched = watch(&origin).expect("no move of the origin is watched yet");
-		watched.until_released(move || {
-			let reading = readings();
-			stop_when_destroyed(&destroyed);
-			reading
-		});
+		watched.until_released(
+			GRAB,
+			move || {
+				let reading = readings();
+				stop_when_destroyed(&destroyed);
+				reading
+			},
+			|_| Ok(()),
+		);
 
 		assert_eq!(heard.try_iter().count(), 0);
 		assert!(watch(&origin).is_some(), "the watcher outlived the window");
 	}
 
 	#[test]
-	fn native_move_whose_probed_primary_button_cannot_be_read_stays_silent() {
+	fn native_move_whose_cursor_cannot_be_read_ends_with_a_typed_failure_sent_to_the_origin() {
 		let app = app();
 		let origin = window_of(&app, "window-1");
-		let heard = heard_by(&origin);
+		let ended = heard_by(&origin, NATIVE_MOVE_ENDED.name());
+		let failed = heard_by(&origin, NATIVE_MOVE_FAILED.name());
 
 		let watched = watch(&origin).expect("no move of the origin is watched yet");
-		watched.until_released(|| {
-			Err(Unobservable { platform: "test", reason: "no pointer".to_owned() })
-		});
+		watched.until_released(
+			GRAB,
+			|| Err(Unobservable { platform: "test", reason: "no pointer".to_owned() }),
+			|_| Ok(()),
+		);
 
-		assert_eq!(heard.try_iter().count(), 0);
+		assert_eq!(ended.try_iter().count(), 0);
+		let heard: Vec<Value> = failed.try_iter().collect();
+		assert_eq!(
+			heard,
+			vec![json!({
+				"label": "window-1",
+				"error": {
+					"kind": "cursorUnreadable",
+					"reason": "the cursor is not observable on test: no pointer",
+				},
+			})]
+		);
 		assert!(watch(&origin).is_some(), "the watcher outlived the unobservable release");
 	}
 
 	#[cfg(target_os = "macos")]
 	#[test]
-	fn native_move_ended_reaches_the_origin_once_start_dragging_returned_on_macos() {
+	fn native_move_refuses_with_a_typed_error_when_the_host_cannot_read_the_cursor() {
 		use tauri::ipc::CallbackFn;
 		use tauri::test::{get_ipc_response, INVOKE_KEY};
 		use tauri::webview::InvokeRequest;
@@ -344,7 +322,7 @@ mod tests {
 			mock_builder().invoke_handler(crate::commands::invoke_handler()),
 		);
 		let origin = window_of(&app, "window-1");
-		let heard = heard_by(&origin);
+		let heard = heard_by(&origin, NATIVE_MOVE_ENDED.name());
 
 		let answer = get_ipc_response(
 			&origin,
@@ -359,9 +337,15 @@ mod tests {
 			},
 		);
 
-		assert!(answer.is_ok(), "the native move was refused: {answer:?}");
-		let heard: Vec<Value> = heard.try_iter().collect();
-		assert_eq!(heard, vec![json!({ "label": "window-1", "point": { "x": 0, "y": 0 } })]);
-		assert!(watch(&origin).is_some(), "the watch ended with the release");
+		let refusal = answer.expect_err("the mock runtime has no primary monitor to read under");
+		assert_eq!(
+			refusal,
+			json!({
+				"kind": "cursorUnreadable",
+				"reason": "the cursor is not observable on macos: no primary monitor is attached",
+			})
+		);
+		assert_eq!(heard.try_iter().count(), 0);
+		assert!(watch(&origin).is_some(), "the watch outlived the refusal");
 	}
 }

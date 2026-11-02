@@ -120,10 +120,14 @@ declared! {
 	SPACE_DESCRIBED: spaces::contract::SpaceDescribed = spaces::contract::DESCRIBED_EVENT,
 	NATIVE_MOVE_ENDED: window_controls::native_move::NativeMoveEnded =
 		window_controls::native_move::NATIVE_MOVE_ENDED_EVENT,
+	NATIVE_MOVE_FAILED: window_controls::native_move::NativeMoveFailed =
+		window_controls::native_move::NATIVE_MOVE_FAILED_EVENT,
 	MAXIMIZE_BUTTON: window_controls::MaximizeButtonPointer =
 		window_controls::MAXIMIZE_BUTTON_EVENT,
 	DRAG_GHOST_TAB: window_controls::drag_ghost::DragGhostTab =
 		window_controls::drag_ghost::TAB_EVENT,
+	DRAG_GHOST_ENDED: window_controls::drag_ghost::DragGhostEnded =
+		window_controls::drag_ghost::ENDED_EVENT,
 	UPDATE_CHANGED: updates::contract::UpdateState = updates::contract::CHANGED_EVENT,
 	FILE_MENU: menu_contract::FileMenuChosen = menu_contract::FILE_MENU_EVENT,
 	TAB_DRAG: window_controls::tab_drag::TabDrag = window_controls::tab_drag::TAB_DRAG_EVENT,
