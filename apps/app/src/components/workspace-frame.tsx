@@ -111,8 +111,12 @@ const useWorkspaceFrameRead = (): WorkspaceFrameRead => {
 	return { frame, rosterLists }
 }
 
-export const WorkspaceFrameOutlet = () => (
-	<WorkspaceFrameContext.Provider value={useWorkspaceFrameRead()}>
-		<Outlet />
-	</WorkspaceFrameContext.Provider>
-)
+export const WorkspaceFrameOutlet = () => {
+	const workspaceFrame = useWorkspaceFrameRead()
+
+	return (
+		<WorkspaceFrameContext.Provider value={workspaceFrame}>
+			<Outlet />
+		</WorkspaceFrameContext.Provider>
+	)
+}
