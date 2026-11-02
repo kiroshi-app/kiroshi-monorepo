@@ -195,11 +195,14 @@ mod tests {
 			"`ready_to_merge`",
 			"`failed`",
 			"`done`",
-			"`mission_list`, every mission of this conversation, of every agent, open and closed,",
-			"Narrow it to another conversation of the space, to the whole space, to a state or to an agent.",
+			"`mission_list`, the missions of this conversation, of every agent, open and closed,",
+			"The missions of this conversation or of the space, of any agent, are seen with `mission_list` and read with `mission_read`.",
+			"A mission closed too early is brought back with `mission_reopen`",
+			"An objective or a ticket the person corrects is rewritten with `mission_update`",
+			"A change of craft is a `mission_handoff`",
 			"`mission_read`, one mission of the space read in full, whoever carries it",
 			"`mission_list` and `mission_read` are open to every agent of the space.",
-			"The other six act only on a mission of yours",
+			"The other nine act only on a mission of yours",
 			"Close every mission you opened that nothing else closed, once the work is over.",
 			"When the pull request of a watched mission is merged, the mission closes as done on its",
 			"A mission reaches `ready_to_merge` and `done` from its checkout only while its branch is",
@@ -213,7 +216,10 @@ mod tests {
 			"`mission_list`",
 			"`mission_read`",
 			"`mission_status`",
-			"You hold eight tools for them, on the `kiroshi` server.",
+			"`mission_reopen`",
+			"`mission_update`",
+			"`mission_handoff`",
+			"You hold eleven tools for them, on the `kiroshi` server.",
 			"## What the conversation it came from hears",
 			"`mission_status`, where the mission stands, written every time you stop working on it.",
 			"Every time you stop working on a mission, you write its status yourself with `mission_status`, whether the work is over or only paused.",
@@ -266,7 +272,10 @@ mod tests {
 			"A room opened with nobody mentioned is a room where nothing happens.",
 			"An agent passed to `with`, `add` and `remove` is named by its name or by its id.",
 			"A name two agents of this space share is refused, and the refusal answers their ids: pass the id of the one you want in place of that name.",
-			"The room id answered by `conversation_open` is the only way back into that room, and nothing lists it later.",
+			"A room is found with `conversation_list` and read with `conversation_read` before an answer is sent in it.",
+			"A room is changed with `conversation_update`",
+			"A room you no longer belong in is left by passing yourself to `remove` on `conversation_update`.",
+			"A room whose subject is settled is closed with `conversation_close`",
 			"You speak only in a room you hold a seat in, and you seat yourself in no room.",
 			"The person does not read the new room unless they open it.",
 			"Whatever the person decides is asked in the conversation the person is talking in.",
@@ -274,7 +283,7 @@ mod tests {
 			"`conversation_attach`, one file shown to the person, here or in a room you hold a seat in, answering the path it was stored under and the id of that conversation.",
 			"Reading an image with `Read` shows it to you and never to the person.",
 			"To show a file, call `conversation_attach`.",
-			"You hold six tools for them, on the `kiroshi` server.",
+			"You hold nine tools for them, on the `kiroshi` server.",
 			"`conversation_update`, the title, the icon, the colour and the seats of a conversation you hold a seat in, every field given landing in one call or none of them, answering that conversation as it stands after the call.",
 			"The colour is a hue, a whole number from 0 to 359 around the colour wheel, or one of red, orange, yellow, green, cyan, blue, purple or pink for the hue that name stands for, or null to give the room back its default colour.",
 			"`conversation_close`, the archive of a room you lead once its subject is settled, answering the id of that room, its title and whether it is archived.",
@@ -283,7 +292,9 @@ mod tests {
 		] {
 			assert!(said_in_one_breath.contains(said), "{said} is missing");
 		}
-		for retired in ["companion_invite", "conversation_describe"] {
+		for retired in
+			["companion_invite", "conversation_describe", "the only way back", "nothing lists"]
+		{
 			assert!(!text.contains(retired), "{retired} is still named");
 		}
 	}

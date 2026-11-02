@@ -1,6 +1,6 @@
 ---
 name: "conversations"
-description: "How you open a room of this space, who you seat in it, and what you say back where the work came from. Applies when a subject belongs to agents who are not in this conversation, and when work runs long."
+description: "How you find, read, open and close a room of this space, who you seat in it, and what you say back where the work came from. Applies when a subject belongs to agents who are not in this conversation, when work runs long, and when you answer about what was said elsewhere."
 disable-model-invocation: true
 metadata:
   kiroshi:
@@ -8,28 +8,46 @@ metadata:
 ---
 
 A room is a conversation of this space with a subject of its own and a seat for each
-agent the subject belongs to. You hold six tools for them, on the `kiroshi` server.
+agent the subject belongs to. You hold nine tools for them, on the `kiroshi` server.
 
 - `conversation_open`, a new room led by you, answering the id of that room, its title and
   the agents seated in it. It takes the title and the icon of the room in the same call.
+  The agents to seat go in `with`, beside the first message.
 - `conversation_say`, one message in a room you already hold a seat in, answering the id of
-  that room and its title.
-- `companion_list`, every agent of this space, answering for each one its id, its
-  name and its job.
+  that room and its title. It takes the id of the room and the message.
+- `conversation_list`, the conversations of this space, the latest activity first, answering
+  for each one its id, its kind, its title, its icon, its colour, its agents, its last
+  message and whether it is archived, then a cursor for the next page. It takes
+  `everywhere` true to list the rooms you hold no seat in too, a `kind` of main, topic or
+  mission, a `limit` from 1 to 200 and the `cursor` of the previous page.
+- `conversation_read`, one conversation of this space, seated or not, answering its
+  details and its last messages oldest to newest, each with its seq, its author, its time
+  and its full text, then a cursor for older messages. It takes the id of the
+  conversation, a `limit` from 1 to 100 and the `before` cursor of the previous read.
+- `conversation_search`, where something was said in this space, answering the
+  conversations whose title or agent names match and the messages whose text matches,
+  each message with its room, its author, its time and a snippet around the match. It
+  takes the words to look for and a `kind` of main, topic or mission.
 - `conversation_attach`, one file shown to the person, here or in a room you hold a seat
-  in, answering the path it was stored under and the id of that conversation.
+  in, answering the path it was stored under and the id of that conversation. It takes the
+  path of the file, a caption and the id of the room, left out for this conversation.
 - `conversation_update`, the title, the icon, the colour and the seats of a conversation
   you hold a seat in, every field given landing in one call or none of them, answering that
-  conversation as it stands after the call. The icon is the name of a Keyline icon, such as
-  Rocket, spelled as listed in `packages/shared/conversation-icons.json`. The colour is a
-  hue, a whole number from 0 to 359 around the colour wheel, or one of red, orange, yellow,
-  green, cyan, blue, purple or pink for the hue that name stands for, or null to give the
-  room back its default colour. A field left out keeps what the room wears.
+  conversation as it stands after the call. It takes the id of the conversation, left out
+  for this one, and only the fields that change. The icon is the name of a Keyline icon,
+  such as Rocket, spelled as listed in `packages/shared/conversation-icons.json`. The
+  colour is a hue, a whole number from 0 to 359 around the colour wheel, or one of red,
+  orange, yellow, green, cyan, blue, purple or pink for the hue that name stands for, or
+  null to give the room back its default colour. A field left out keeps what the room
+  wears.
 - `conversation_close`, the archive of a room you lead once its subject is settled,
-  answering the id of that room, its title and whether it is archived. Every message of
-  the room is kept. A main conversation and the thread of a mission still open are never
-  closed. An archived room comes back with `archived` false on `conversation_update`, and
-  `archived` true there is refused: only `conversation_close` archives.
+  answering the id of that room, its title and whether it is archived. It takes the id of
+  the room. Every message of the room is kept. A main conversation and the thread of a
+  mission still open are never closed. An archived room comes back with `archived` false
+  on `conversation_update`, and `archived` true there is refused: only
+  `conversation_close` archives.
+- `companion_list`, every agent of this space, answering for each one its id, its
+  name and its job. It takes nothing.
 
 `conversation_update` seats agents with `add` and takes them out with `remove`, in this
 conversation, and in another room of the caller when a room id is passed.
@@ -45,6 +63,9 @@ A question you can answer on the spot opens no room: you answer it here.
 
 No room is opened for the convenience of the agent opening it. A room is not a place
 to think out loud, to park a task or to keep a note out of the way.
+
+Before you open one, look for it: a room on the same subject may already stand. Find it
+with `conversation_list` or `conversation_search`, and carry on there.
 
 ## The title and the first message
 
@@ -76,11 +97,26 @@ the subject belongs to, and mention in the message each one you expect an answer
 ## Where you speak
 
 You speak only in a room you hold a seat in, and you seat yourself in no room. Your seats
-are the ones you were given: this conversation, and every room you opened yourself.
+are the ones you were given: this conversation, every room you opened yourself, and every
+room an agent seated you in.
 
-The room id answered by `conversation_open` is the only way back into that room, and
-nothing lists it later. Carry it with you for every `conversation_say` and every
-`conversation_update` you send there.
+A room is found with `conversation_list` and read with `conversation_read` before an
+answer is sent in it. Whatever you no longer hold, the id of a room or what was said
+there, `conversation_list` lists and `conversation_read` reads again: answer from what the
+room holds, never from memory.
+
+When you answer about what was said somewhere in this space, find it with
+`conversation_search` and read the room it points to with `conversation_read`.
+
+## Changing and leaving a room
+
+A room is changed with `conversation_update`: its title with its icon, its colour, the
+agents seated in it. A room you no longer belong in is left by passing yourself to
+`remove` on `conversation_update`. You hold no seat there afterwards and say nothing more
+in it.
+
+A room whose subject is settled is closed with `conversation_close`, by the agent who
+leads it. Every message stays readable with `conversation_read`.
 
 ## What the person reads
 

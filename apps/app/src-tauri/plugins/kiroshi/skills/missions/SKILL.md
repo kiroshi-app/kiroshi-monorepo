@@ -1,6 +1,6 @@
 ---
 name: "missions"
-description: "How you carry work you own. Applies when the person hands you an objective on a ticket, when a mission of yours moves, and when its work is over and it has to be closed."
+description: "How you carry work you own. Applies when the person hands you an objective on a ticket, when a mission of yours moves, when its work is over and it has to be closed, and when you look at the missions others carry."
 disable-model-invocation: true
 metadata:
   kiroshi:
@@ -8,7 +8,7 @@ metadata:
 ---
 
 A mission is a piece of work you own: one objective, one ticket, one thread of its own. It
-stands in one of six states, and it stays yours until you close it.
+stands in one of six states, and it stays yours until you close it or hand it over.
 
 - `working`, the work is moving. You carry it on and you write down what moved.
 - `waiting_bot`, a coding session asked you something, or the checks came back red. You read
@@ -19,22 +19,60 @@ stands in one of six states, and it stays yours until you close it.
 - `failed`, closed on an objective given up.
 - `done`, closed on an objective reached.
 
-You hold eight tools for them, on the `kiroshi` server.
+You hold eleven tools for them, on the `kiroshi` server.
 
 - `mission_open`, one objective and the ticket it carries, once the person and you agree.
-- `mission_note`, one line of progress, written for whoever reads the thread.
+  It takes the objective, the ticket, the tools the mission may reach for and the checkout
+  the work happens in, and answers the mission with its own thread and one line telling
+  whether it hears its coding session.
+- `mission_note`, one line of progress, written for whoever reads the thread. It takes the
+  id of the mission and the line.
 - `mission_status`, where the mission stands, written every time you stop working on it.
+  It takes the id of the mission and a few plain lines.
 - `mission_watch`, the repository and the branch the work lands in, once that branch exists.
-- `mission_escalate`, the one question that blocks you, handed back to the person.
-- `mission_close`, the end of the work, with where it landed.
-- `mission_list`, every mission of this conversation, of every agent, open and closed,
-  with its id, its ticket and where it stands. Narrow it to another conversation of the
-  space, to the whole space, to a state or to an agent.
-- `mission_read`, one mission of the space read in full, whoever carries it: its objective,
-  its ticket, where it stands, its last status and every line written on it.
+  It takes the id of the mission, the branch and the repository, and answers the address,
+  the key and the header a call reaches the mission with.
+- `mission_escalate`, the one question that blocks you, handed back to the person. It takes
+  the id of the mission, the question and why you cannot decide it yourself.
+- `mission_close`, the end of the work, with where it landed. It takes the id of the
+  mission, the outcome, `done` or `failed`, and the summary.
+- `mission_list`, the missions of this conversation, of every agent, open and closed,
+  newest opened first, at most 200, answering for each one its id, its ticket, where it
+  stands, the agent carrying it, the conversation it came from, its thread and its last
+  status. It takes a `conversation` of the space to read that one instead, `space` true
+  for the whole space, a `state` and a `bot` to keep only one agent's missions.
+- `mission_read`, one mission of the space read in full, whoever carries it, answering its
+  objective, its ticket, where it stands, its branch and its pull request, its last status
+  and every line written on it. It takes the id of the mission.
+- `mission_reopen`, a mission of yours closed done or failed brought back, its work carrying
+  on in the same thread and watched again. It takes the id of the mission. A mission whose
+  work was merged stays closed.
+- `mission_update`, the objective, the ticket or the tools of a mission of yours rewritten.
+  It takes the id of the mission and only what changes. A new objective also becomes the
+  title of its thread.
+- `mission_handoff`, a mission of yours handed over to another agent of this space, who
+  owns it from then on and is seated in its thread and in the conversation it came from.
+  It takes the id of the mission and the name or the id of that agent.
 
-`mission_list` and `mission_read` are open to every agent of the space. The other six
+`mission_list` and `mission_read` are open to every agent of the space. The other nine
 act only on a mission of yours, from the conversation it came from or from its own thread.
+
+## Finding a mission
+
+The missions of this conversation or of the space, of any agent, are seen with
+`mission_list` and read with `mission_read`. When you no longer hold the id of a mission,
+or before you say what another agent carries, list it and read it: answer from what the
+mission holds, never from memory.
+
+## Correcting a mission
+
+A mission closed too early is brought back with `mission_reopen`, never opened a second
+time. An objective or a ticket the person corrects is rewritten with `mission_update`, on
+the same mission.
+
+A change of craft is a `mission_handoff`: when the work now belongs to another agent of
+the space, hand the mission over to that agent rather than closing it and opening another.
+You write nothing more on that mission afterwards.
 
 ## What moves without you
 
