@@ -269,6 +269,10 @@ const NO_SESSION: TransportError = { kind: "notStarted" }
 
 const UNNOTICED_DROPS: SummonsDropReason[] = ["selfMention", "notSeated"]
 
+type NoticedDrop = Omit<SummonsDropped, "error"> & {
+	error: TransportError | null
+}
+
 type RunPlace = Pick<TranscriptMessage, "conversationId" | "turnId">
 
 const runKeyOf = (turnId: string, botId: string) => `${turnId}:${botId}`
@@ -290,7 +294,7 @@ const summonLimitDescriptionOf = (names: string[]) =>
 	})
 
 const dropDescriberOf =
-	({ reason, error }: SummonsDropped) =>
+	({ reason, error }: NoticedDrop) =>
 	(names: string[]) =>
 		reason === "summonLimit"
 			? summonLimitDescriptionOf(names)
@@ -778,9 +782,47 @@ export const createConversationController = (
 		}
 	}
 
+	const releaseOnHost = (
+		turnId: string,
+		botId: string,
+		reason: SummonsDropReason,
+	) => {
+		if (!conversation) {
+			return
+		}
+		const echo = runKeyOf(turnId, botId)
+		const isEchoedByTheHost = reason !== "cancelled"
+		if (isEchoedByTheHost) {
+			noticedRuns.add(echo)
+		}
+		void store.dropSummons(summonsRunOf(turnId, botId), reason).then(
+			(isReleased) => {
+				if (!isReleased) {
+					noticedRuns.delete(echo)
+				}
+			},
+			(cause) => {
+				noticedRuns.delete(echo)
+				noteFailure(toTransportError(cause))
+				sync()
+			},
+		)
+	}
+
+	const abandonAll = (
+		handed: Pick<Summons, "botId">[],
+		turnId: string,
+		reason: SummonsDropReason,
+	) => {
+		dropAll(handed, turnId, reason)
+		for (const { botId } of handed) {
+			releaseOnHost(turnId, botId, reason)
+		}
+	}
+
 	const dropWaiting = (reason: SummonsDropReason) => {
 		if (activeTurn) {
-			dropAll(queue.waiting, activeTurn.id, reason)
+			abandonAll(queue.waiting, activeTurn.id, reason)
 		}
 	}
 
@@ -817,7 +859,7 @@ export const createConversationController = (
 			const refusal = refusalOf(queue, fromBotId, summons)
 			if (refusal) {
 				traceSummonsDropped(run, refusal)
-				noteFrontDrop(turnId, botId, refusal)
+				noteFrontDrop(turnId, botId, refusal, null)
 				continue
 			}
 			const running = speakers.get(botId)
@@ -842,7 +884,8 @@ export const createConversationController = (
 			const handed = mentionsHandedBy(held.botId, promptId, named)
 			const missed = mentionsHandedBy(held.botId, promptId, unresolved)
 			if (held.droppedFor) {
-				dropAll([...handed, ...missed], held.turn.id, held.droppedFor)
+				dropAll(missed, held.turn.id, held.droppedFor)
+				abandonAll(handed, held.turn.id, held.droppedFor)
 				continue
 			}
 			handOver(handed, held.turn.id)
@@ -1166,7 +1209,9 @@ export const createConversationController = (
 			speakers.delete(held.botId)
 			void shutdownSpeaker(held)
 			traceSummonsDropped(summonsRunOf(held.turn.id, held.botId), "startFailed")
-			noteSpeakerFailure(held.botId, toTransportError(reason))
+			const error = toTransportError(reason)
+			noteSpeakerFailure(held.botId, error)
+			noteFrontDrop(held.turn.id, held.botId, "startFailed", error)
 		}
 		sync()
 	}
@@ -1326,7 +1371,7 @@ export const createConversationController = (
 		void raiseNotStarted(said, unresolved)
 	}
 
-	const noteDropped = (dropped: SummonsDropped) => {
+	const noteDropped = (dropped: NoticedDrop) => {
 		if (
 			!isOpenConversation(dropped.conversationId) ||
 			UNNOTICED_DROPS.includes(dropped.reason)
@@ -1345,28 +1390,21 @@ export const createConversationController = (
 		turnId: string,
 		botId: string,
 		reason: SummonsDropReason,
+		error: TransportError | null,
 	) => {
-		if (!conversation || UNNOTICED_DROPS.includes(reason)) {
+		if (!conversation) {
 			return
 		}
-		const dropped: SummonsDropped = {
+		noteDropped({
 			conversationId: conversation.id,
 			turnId,
 			botId,
 			reason,
-			error: null,
+			error,
+		})
+		if (!UNNOTICED_DROPS.includes(reason)) {
+			releaseOnHost(turnId, botId, reason)
 		}
-		void store.dropSummons(dropped, reason).then(
-			(isAnnouncedByTheHost) => {
-				if (!isAnnouncedByTheHost) {
-					noteDropped(dropped)
-				}
-			},
-			(cause) => {
-				noteFailure(toTransportError(cause))
-				noteDropped(dropped)
-			},
-		)
 	}
 
 	const noteUnseenDrops = async (conversationId: string) => {

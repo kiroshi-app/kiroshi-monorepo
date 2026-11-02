@@ -3239,7 +3239,7 @@ describe("the mentions a finished turn carries", () => {
 	const summonLimitOf = (name: string) =>
 		`Agents already handed ${name} the turn ${MAX_SUMMONS_PER_CHAIN} times in this exchange, so the exchange stops here. Mention ${name} yourself to carry on.`
 
-	it("hands the run the loop bound stopped to the host and raises the one notice the host announces", async () => {
+	it("releases on the host the run the loop bound stopped and raises one notice for it, not for the host echo", async () => {
 		const room = await roomSeating()
 		const dropSummons = vi
 			.spyOn(room.store, "dropSummons")
@@ -3247,7 +3247,6 @@ describe("the mentions a finished turn carries", () => {
 		await pingPong(room)
 		const [[dropped]] = dropSummons.mock.calls
 
-		const noticedBeforeTheHost = room.reportFailure.mock.calls.length
 		await room.drop({ ...dropped, reason: "summonLimit" })
 
 		expect(dropSummons).toHaveBeenCalledTimes(1)
@@ -3258,7 +3257,6 @@ describe("the mentions a finished turn carries", () => {
 			}),
 			"summonLimit",
 		)
-		expect(noticedBeforeTheHost).toBe(0)
 		expect(room.reportFailure).toHaveBeenCalledTimes(1)
 		expect(room.reportFailure).toHaveBeenCalledWith(
 			...notStarted("Iris didn’t start", summonLimitOf("Iris"), {
@@ -3266,6 +3264,82 @@ describe("the mentions a finished turn carries", () => {
 				botName: "Iris",
 			}),
 		)
+		room.detach()
+	})
+
+	it("releases on the host the run whose start failed and raises one notice for it, not for the host echo", async () => {
+		const room = await roomSeating()
+		const dropSummons = vi
+			.spyOn(room.store, "dropSummons")
+			.mockResolvedValue(true)
+		await room.seat(room.iris)
+		room.announce(room.iris)
+		await room.sent("@Ada take the walls")
+		vi.spyOn(room.driver, "startOrResumeSession").mockRejectedValueOnce(
+			new Error("the agent exited during startup"),
+		)
+
+		await room.spoken(room.ada, `over to <@${room.iris}>`)
+		const [[dropped]] = dropSummons.mock.calls
+		await room.drop({ ...dropped, reason: "startFailed" })
+
+		expect(dropSummons).toHaveBeenCalledTimes(1)
+		expect(dropSummons).toHaveBeenCalledWith(
+			expect.objectContaining({ botId: room.iris }),
+			"startFailed",
+		)
+		expect(room.reportFailure).toHaveBeenCalledTimes(1)
+		expect(room.reportFailure).toHaveBeenCalledWith(
+			expect.objectContaining({ title: "Iris didn’t start" }),
+			expect.objectContaining({ botId: room.iris }),
+		)
+		room.detach()
+	})
+
+	const waitingBehindIris = async (
+		room: Awaited<ReturnType<typeof roomSeating>>,
+	) => {
+		await room.seat(room.iris)
+		room.announce(room.iris)
+		await room.sent(`<@${room.ada}> <@${room.iris}> take the walls`)
+		await room.spoken(room.ada, `over to <@${room.iris}>`)
+		expect(room.controller.getState().waitingBotIds).toEqual([room.iris])
+	}
+
+	it("releases on the host the waiting run a new send interrupts and raises no notice for it", async () => {
+		const room = await roomSeating()
+		const dropSummons = vi
+			.spyOn(room.store, "dropSummons")
+			.mockResolvedValue(true)
+		await waitingBehindIris(room)
+
+		await room.sent("never mind")
+		const [[dropped]] = dropSummons.mock.calls
+		await room.drop({ ...dropped, reason: "interrupted" })
+
+		expect(dropSummons).toHaveBeenCalledWith(
+			expect.objectContaining({ botId: room.iris }),
+			"interrupted",
+		)
+		expect(room.reportFailure).not.toHaveBeenCalled()
+		room.detach()
+	})
+
+	it("releases on the host the waiting run a stop cancels and raises no notice for it", async () => {
+		const room = await roomSeating()
+		const dropSummons = vi
+			.spyOn(room.store, "dropSummons")
+			.mockResolvedValue(true)
+		await waitingBehindIris(room)
+
+		await room.controller.stop()
+		await settled()
+
+		expect(dropSummons).toHaveBeenCalledWith(
+			expect.objectContaining({ botId: room.iris }),
+			"cancelled",
+		)
+		expect(room.reportFailure).not.toHaveBeenCalled()
 		room.detach()
 	})
 
