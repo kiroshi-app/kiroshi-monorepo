@@ -26,7 +26,11 @@
 			"dangerousDisableAssetCspModification": ["style-src"],
 			"assetProtocol": {
 				"enable": true,
-				"scope": ["$APPDATA/avatars/*", "$APPDATA/attachments/**"]
+				"scope": [
+					"$APPDATA/avatars/*",
+					"$APPDATA/attachments/**",
+					"$APPDATA/library/**"
+				]
 			}
 		},
 		"windows": [
