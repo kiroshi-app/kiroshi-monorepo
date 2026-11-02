@@ -9,6 +9,7 @@ pub use secondary::is_secondary;
 #[cfg(target_os = "macos")]
 pub use macos::center_in_header;
 
+pub(crate) mod cursor;
 pub(crate) mod drag_ghost;
 pub(crate) mod native_move;
 #[cfg(any(windows, test))]

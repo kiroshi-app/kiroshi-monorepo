@@ -16,6 +16,7 @@ pub fn builder() -> Builder<tauri::Wry> {
 		.constant("MAXIMIZE_BUTTON_EVENT", window_controls::MAXIMIZE_BUTTON_EVENT)
 		.constant("DRAG_GHOST_ROUTE", window_controls::drag_ghost::DRAG_GHOST_ROUTE)
 		.constant("DRAG_GHOST_TAB_EVENT", window_controls::drag_ghost::TAB_EVENT)
+		.constant("DRAG_GHOST_ENDED_EVENT", window_controls::drag_ghost::ENDED_EVENT)
 		.constant("ACCOUNT_CHANGED_EVENT", account::contract::CHANGED_EVENT)
 		.constant("DEVICE_APPROVAL_CHANGED_EVENT", devices::contract::APPROVAL_CHANGED_EVENT)
 		.constant("DEVICE_APPROVAL_REQUESTED_EVENT", devices::contract::APPROVAL_REQUESTED_EVENT)
@@ -35,11 +36,16 @@ pub fn builder() -> Builder<tauri::Wry> {
 		.constant("FILE_MENU_EVENT", menu_contract::FILE_MENU_EVENT)
 		.constant("TAB_DRAG_EVENT", window_controls::tab_drag::TAB_DRAG_EVENT)
 		.constant("NATIVE_MOVE_ENDED_EVENT", window_controls::native_move::NATIVE_MOVE_ENDED_EVENT)
+		.constant(
+			"NATIVE_MOVE_FAILED_EVENT",
+			window_controls::native_move::NATIVE_MOVE_FAILED_EVENT,
+		)
 		.constant("CLAUDE_IMPORT_PROGRESS_EVENT", claude_import::contract::PROGRESS_EVENT)
 		.constant("SUMMONS_DROPPED_EVENT", conversations::contract::SUMMONS_DROPPED_EVENT)
 		.constant("MAX_SUMMONS_PER_CHAIN", conversations::summons::MAX_SUMMONS_PER_CHAIN)
 		.typ::<window_controls::MaximizeButtonPointer>()
 		.typ::<window_controls::drag_ghost::DragGhostTab>()
+		.typ::<window_controls::drag_ghost::DragGhostEnded>()
 		.typ::<devices::contract::DeviceApproval>()
 		.typ::<devices::contract::DeviceApprovalRequested>()
 		.typ::<devices::contract::DeviceApprovalSettled>()
@@ -57,6 +63,7 @@ pub fn builder() -> Builder<tauri::Wry> {
 		.typ::<menu_contract::FileMenuChosen>()
 		.typ::<window_controls::tab_drag::TabDrag>()
 		.typ::<window_controls::native_move::NativeMoveEnded>()
+		.typ::<window_controls::native_move::NativeMoveFailed>()
 		.typ::<claude_import::contract::ClaudeImportProgress>()
 		.typ::<conversations::contract::SummonsDropped>()
 }
@@ -139,6 +146,7 @@ fn commands<R: Runtime>() -> Commands<R> {
 		window_controls::tab_drag::window_hide::<tauri::Wry>,
 		window_controls::tab_drag::window_show::<tauri::Wry>,
 		window_controls::drag_ghost::drag_ghost_show::<tauri::Wry>,
+		window_controls::drag_ghost::drag_ghost_tab::<tauri::Wry>,
 		window_controls::drag_ghost::drag_ghost_move::<tauri::Wry>,
 		window_controls::drag_ghost::drag_ghost_hide::<tauri::Wry>,
 		conversations::commands::conversation_duplicate_bot::<tauri::Wry>,
