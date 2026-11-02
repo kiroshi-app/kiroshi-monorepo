@@ -112,7 +112,6 @@ const LibraryDragGhost = ({
 }
 
 export {
-	type CursorPosition,
 	LibraryDragGhost,
 	type LibraryDragGhostProps,
 	LibraryDropOverlay,

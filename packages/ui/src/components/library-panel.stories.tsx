@@ -73,15 +73,18 @@ const rgbOf = (hex: string) => {
 
 const DRAG_CURSOR = { x: 742, y: 436 }
 
+const LONG_DROPPED_NAME =
+	"usage-march-final-final-approved-by-finance-and-legal-v12-export-2x.png"
+
 const LONG_DROPPED_NAMES = [
-	"usage-march-final-final-approved-by-finance-and-legal-v12-export-2x.png",
+	LONG_DROPPED_NAME,
 	...LIBRARY_DROPPED_NAMES.slice(1),
 ]
 
 const LONG_NAMED_IMPORT: LibraryItem[] = [
 	{
 		...LIBRARY_ITEMS_AFTER_IMPORT[1],
-		name: LONG_DROPPED_NAMES[0] ?? "",
+		name: LONG_DROPPED_NAME,
 	},
 	...LIBRARY_ITEMS.slice(0, 5),
 ]
@@ -577,9 +580,10 @@ export const ImportLongNames = meta.story({
 		},
 	},
 	play: async ({ canvasElement }) => {
-		const longName = LONG_DROPPED_NAMES[0] ?? ""
 		for (const slot of ["library-item", "library-drag-ghost"]) {
-			const name = within(slotIn(canvasElement, slot)).getByTitle(longName)
+			const name = within(slotIn(canvasElement, slot)).getByTitle(
+				LONG_DROPPED_NAME,
+			)
 			await expect(name.scrollWidth).toBeGreaterThan(name.clientWidth)
 			await expect(getComputedStyle(name).whiteSpace).toBe("nowrap")
 		}

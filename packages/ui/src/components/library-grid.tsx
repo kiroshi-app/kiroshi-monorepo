@@ -141,11 +141,7 @@ const LibraryImportingItem = ({
 	const percent = Math.round(progress * 100)
 
 	return (
-		<div
-			className="flex min-w-0 flex-col gap-2.5"
-			data-importing=""
-			data-slot="library-item"
-		>
+		<div className="flex min-w-0 flex-col gap-2.5" data-slot="library-item">
 			<span className="relative block">
 				<LibraryThumbnail item={item} />
 				<span
