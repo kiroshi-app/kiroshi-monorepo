@@ -52,6 +52,7 @@ const tabDragHost = vi.hoisted(() => ({
 	windowReportStrip: vi.fn(),
 	readWindowOrigin: vi.fn(),
 	revealWindow: vi.fn(),
+	dragGhostShow: vi.fn(),
 }))
 
 const computerBus = vi.hoisted(() => {
@@ -1942,6 +1943,10 @@ const joinWindows = (target: WorkspaceTabs) => {
 	tabDragHost.windowReportStrip.mockResolvedValue(undefined)
 	tabDragHost.readWindowOrigin.mockReturnValue({ x: 0, y: 0 })
 	tabDragHost.revealWindow.mockResolvedValue(undefined)
+	tabDragHost.dragGhostShow.mockResolvedValue({
+		status: "ok",
+		data: { supported: false },
+	})
 }
 
 const redock = async (

@@ -1,15 +1,14 @@
 import { useEffect, useMemo } from "react"
 
-import type { AppSidebarConversation } from "@workspace/ui/components/app-sidebar"
 import type { TitleBarTabsProps } from "@workspace/ui/components/title-bar-tabs"
 
-import {
-	drawGhost,
-	type GhostSources,
-	type ThumbnailConversation,
-} from "./ghost-thumbnail"
 import type { TabDock } from "./tab-dock"
-import { type TabBot, type TabConversation, tabFaceOf } from "./tab-faces"
+import {
+	type TabBot,
+	type TabConversation,
+	type TabFaceSources,
+	tabFaceOf,
+} from "./tab-faces"
 import { pageOf } from "./tab-pages"
 import type { TabTearOff } from "./tab-tear-off"
 import { currentHrefOf } from "./tabs-model"
@@ -21,16 +20,11 @@ import {
 import { isDesktopHost } from "../host"
 import { useControllerState } from "../use-controller"
 import { useSharedStructure } from "../use-shared-structure"
-import type { TranscriptPort } from "../conversations/transcript-port"
 import { useMissionTitles } from "../missions/use-mission-titles"
-
-type TitleBarConversation = TabConversation &
-	Pick<AppSidebarConversation, "participants">
 
 export type TitleBarTabsSource = WorkspaceTabsSource & {
 	bots: TabBot[]
-	conversations: TitleBarConversation[]
-	readTranscript: TranscriptPort["loadPage"]
+	conversations: TabConversation[]
 }
 
 const missionIdsOf = (hrefs: string[]) =>
@@ -49,12 +43,10 @@ const tabConversationOf = ({
 	id,
 	name,
 	icon,
-	participants,
-}: TitleBarConversation): ThumbnailConversation => ({
+}: TabConversation): TabConversation => ({
 	id,
 	name,
 	icon,
-	companionName: participants[0]?.name,
 })
 
 const reportUnwatchedDrag = (reason: unknown) => {
@@ -81,7 +73,6 @@ export const useTitleBarTabs = ({
 	hostStates,
 	soloThreads,
 	spaceId,
-	readTranscript,
 }: TitleBarTabsSource): TitleBarTabsProps => {
 	const view = useWorkspaceTabs({ tabs, hostStates, soloThreads, spaceId })
 	const tabViews = useSharedStructure(view.tabs)
@@ -98,28 +89,23 @@ export const useTitleBarTabs = ({
 	useTabDockWatch(tabs.dock)
 
 	return useMemo(() => {
-		const ghostSources: GhostSources = {
+		const faceSources: TabFaceSources = {
 			bots: tabBots,
 			conversations: tabConversations,
 			missionTitles,
-			soloThreads,
-			spaceId,
-			readTranscript,
 		}
 		const startTearOff = (tearOff: TabTearOff) => {
 			const torn = tabViews.find((tab) => tab.id === tearOff.tabId)
 			if (!torn) {
 				return
 			}
-			const { title } = tabFaceOf(torn.href, ghostSources)
+			const { title } = tabFaceOf(torn.href, faceSources)
 			const ghost = { tabId: torn.id, href: torn.href, title }
-			tabs.tearOffSession.start(tearOff, (size) =>
-				drawGhost(ghost, size, ghostSources),
-			)
+			tabs.tearOffSession.start(tearOff, () => ghost)
 		}
 		return {
 			tabs: tabViews.map((tab) => ({
-				...tabFaceOf(tab.href, ghostSources),
+				...tabFaceOf(tab.href, faceSources),
 				id: tab.id,
 				isPinned: tab.isPinned,
 				isNeedingYou: tab.needsYou,
@@ -128,7 +114,7 @@ export const useTitleBarTabs = ({
 			incomingTab: incoming
 				? {
 						tab: {
-							...tabFaceOf(currentHrefOf(incoming.tab), ghostSources),
+							...tabFaceOf(currentHrefOf(incoming.tab), faceSources),
 							id: incoming.tab.id,
 							isPinned: incoming.tab.isPinned,
 						},
@@ -161,9 +147,6 @@ export const useTitleBarTabs = ({
 		tabBots,
 		tabConversations,
 		missionTitles,
-		soloThreads,
-		spaceId,
-		readTranscript,
 		activeId,
 		incoming,
 		canGoBack,

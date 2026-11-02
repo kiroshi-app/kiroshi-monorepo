@@ -10,6 +10,7 @@ import type { Invoke } from "./joined-hosts-invoke"
 import {
 	convertFileSrc,
 	emit as tauriEmit,
+	emitTo as tauriEmitTo,
 	invoke as tauriInvoke,
 	listen as tauriListen,
 } from "./tauri"
@@ -18,6 +19,8 @@ import { listenOnThisWindow } from "./window-listen"
 
 import {
 	commands,
+	DRAG_GHOST_ENDED_EVENT,
+	type DragGhostEnded,
 	FILE_MENU_EVENT,
 	type FileMenuAction,
 	type FileMenuChosen,
@@ -25,7 +28,9 @@ import {
 	type MaximizeButtonPointer,
 	type MaximizeButtonState,
 	NATIVE_MOVE_ENDED_EVENT,
+	NATIVE_MOVE_FAILED_EVENT,
 	type NativeMoveEnded,
+	type NativeMoveFailed,
 } from "../bindings"
 import { reportLocalWhen } from "../failure-report"
 
@@ -55,6 +60,8 @@ export const invokeOn = joinedHosts.invokeOn
 export const listenOnThisComputer = tauriListen
 
 export const emitOnThisComputer = tauriEmit
+
+export const emitToWindow = tauriEmitTo
 
 export { listenOnThisWindow } from "./window-listen"
 
@@ -180,6 +187,21 @@ export const watchNativeMoveEnded = (
 	report: (ended: NativeMoveEnded) => void,
 ): Promise<() => void> =>
 	listenOnThisWindow<NativeMoveEnded>(NATIVE_MOVE_ENDED_EVENT, ({ payload }) =>
+		report(payload),
+	)
+
+export const watchNativeMoveFailed = (
+	report: (failed: NativeMoveFailed) => void,
+): Promise<() => void> =>
+	listenOnThisWindow<NativeMoveFailed>(
+		NATIVE_MOVE_FAILED_EVENT,
+		({ payload }) => report(payload),
+	)
+
+export const watchDragGhostEnded = (
+	report: (ended: DragGhostEnded) => void,
+): Promise<() => void> =>
+	listenOnThisWindow<DragGhostEnded>(DRAG_GHOST_ENDED_EVENT, ({ payload }) =>
 		report(payload),
 	)
 
