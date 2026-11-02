@@ -428,8 +428,17 @@ pub(crate) fn import(
 	content: &str,
 ) -> Result<LibraryItem, LibraryError> {
 	let accepted = importable(name)?;
+	encoded_within(name, content, relayed_import_limit(&accepted))?;
 	let bytes = decoded_content(name, content)?;
 	imported(root, space_id, name, &accepted, &bytes, relayed_import_limit)
+}
+
+fn encoded_within(name: &str, content: &str, limit: u64) -> Result<(), LibraryError> {
+	if content.len() as u64 <= limit.div_ceil(3) * 4 {
+		return Ok(());
+	}
+	let unpadded = content.trim_end_matches('=').len() as u64;
+	Err(LibraryError::TooLarge { name: name.to_owned(), bytes: unpadded * 3 / 4, limit })
 }
 
 pub(crate) fn import_paths(root: &Path, space_id: &str, paths: &[PathBuf]) -> Vec<LibraryImport> {
@@ -453,7 +462,7 @@ fn import_path(root: &Path, space_id: &str, path: &Path) -> Result<LibraryItem, 
 }
 
 fn importable(name: &str) -> Result<AcceptedType, LibraryError> {
-	if !is_plain_name(name) {
+	if !is_plain_name(name) || name.starts_with('.') {
 		return Err(LibraryError::InvalidName { name: name.to_owned() });
 	}
 	accepted_type(name).ok_or_else(|| LibraryError::Unsupported { name: name.to_owned() })

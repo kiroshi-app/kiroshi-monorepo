@@ -1551,7 +1551,7 @@ fn each_refused_import_says_why_and_writes_nothing() {
 	);
 	assert_eq!(
 		imported_as(&root, ".hidden.md", b"x"),
-		Err(LibraryError::Unsupported { name: named(".hidden.md") })
+		Err(LibraryError::InvalidName { name: named(".hidden.md") })
 	);
 	assert_eq!(
 		imported_as(&root, "big.md", &vec![b'a'; document_limit as usize + 1]),
@@ -1785,4 +1785,46 @@ async fn the_import_commands_refuse_an_unknown_space_and_land_in_a_known_one() {
 	);
 	assert!(listed.contains(&sent));
 	assert_eq!(thumbnail_pixels(&thumbnail).width(), 512);
+}
+
+#[test]
+fn an_encoded_payload_over_the_relayed_cap_is_refused_before_it_is_decoded() {
+	let root = temp_root();
+	let bound = MAX_RELAYED_IMPORT_BYTES.div_ceil(3) * 4;
+	let undecodable_over_the_bound = "!".repeat(bound as usize + 4);
+	let undecodable_at_the_bound = "!".repeat(bound as usize);
+
+	let refused = import(&root, SPACE, "big.png", &undecodable_over_the_bound);
+	let decoded = import(&root, SPACE, "big.png", &undecodable_at_the_bound);
+
+	assert_eq!(
+		refused,
+		Err(LibraryError::TooLarge {
+			name: "big.png".to_owned(),
+			bytes: (bound + 4) * 3 / 4,
+			limit: MAX_RELAYED_IMPORT_BYTES
+		})
+	);
+	assert!(matches!(decoded, Err(LibraryError::Undecodable { .. })), "{decoded:?}");
+	assert!(entries(&root).is_empty());
+}
+
+#[test]
+fn a_name_starting_with_a_dot_is_refused_by_both_imports_and_writes_nothing() {
+	let root = temp_root();
+	let dropped = temp_root();
+	fs::create_dir_all(&*dropped).expect("the drop folder lands");
+	let hidden = [".env", THUMBNAILS_DIR, ".import-staged.md"];
+	for name in hidden {
+		fs::write(dropped.join(name), "hidden").expect("the hidden file lands");
+	}
+	let paths: Vec<PathBuf> = hidden.iter().map(|name| dropped.join(name)).collect();
+	let invalid = |name: &str| LibraryError::InvalidName { name: name.to_owned() };
+
+	let sent: Vec<_> = hidden.map(|name| imported_as(&root, name, b"hidden")).to_vec();
+	let outcomes = import_paths(&root, SPACE, &paths);
+
+	assert_eq!(sent, hidden.map(|name| Err(invalid(name))));
+	assert_eq!(outcomes, hidden.map(|name| LibraryImport::Refused { error: invalid(name) }));
+	assert!(entries(&root).is_empty());
 }
