@@ -754,9 +754,7 @@ const playPaletteOpen = async ({
 		await expect(fillOf(conversations)).toBe(selectedFill)
 	})
 	await expect(iconStyleOf(conversations)).toBe("fill")
-	await expect(
-		railIn(canvasElement).querySelectorAll('[aria-current="true"]'),
-	).toHaveLength(1)
+	await expect(rail.querySelectorAll('[aria-current="true"]')).toHaveLength(1)
 }
 
 export const SearchPaletteOpen = meta.story({
