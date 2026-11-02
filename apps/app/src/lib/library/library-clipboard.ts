@@ -1,20 +1,9 @@
 import type { LibraryLightboxImage } from "@workspace/ui/components/library-lightbox"
 import { i18n } from "@workspace/ui/lib/i18n"
 
-import { extensionOf } from "./library-items"
-
 import { raiseReportedFailure } from "../failure-report"
 
-const IMAGE_TYPES: Record<string, string> = {
-	png: "image/png",
-	jpg: "image/jpeg",
-	jpeg: "image/jpeg",
-	gif: "image/gif",
-	webp: "image/webp",
-}
-
-const imageTypeOf = (name: string) =>
-	IMAGE_TYPES[extensionOf(name)] ?? "application/octet-stream"
+const CLIPBOARD_IMAGE_TYPE = "image/png"
 
 const readImage = async (src: string) => {
 	const response = await fetch(src)
@@ -24,9 +13,21 @@ const readImage = async (src: string) => {
 	return response.blob()
 }
 
-const writeImage = ({ name, src }: LibraryLightboxImage) =>
+const toPng = async (src: string) => {
+	const bitmap = await createImageBitmap(await readImage(src))
+	const canvas = new OffscreenCanvas(bitmap.width, bitmap.height)
+	const context = canvas.getContext("2d")
+	if (!context) {
+		throw new Error("library image canvas unavailable")
+	}
+	context.drawImage(bitmap, 0, 0)
+	bitmap.close()
+	return canvas.convertToBlob({ type: CLIPBOARD_IMAGE_TYPE })
+}
+
+const writeImage = ({ src }: LibraryLightboxImage) =>
 	navigator.clipboard.write([
-		new ClipboardItem({ [imageTypeOf(name)]: readImage(src) }),
+		new ClipboardItem({ [CLIPBOARD_IMAGE_TYPE]: toPng(src) }),
 	])
 
 export const copyImage = (image: LibraryLightboxImage) =>

@@ -10,7 +10,7 @@ const DETAIL_SEPARATOR = " · "
 
 const extensionAt = (name: string) => name.lastIndexOf(".")
 
-export const extensionOf = (name: string) =>
+const extensionOf = (name: string) =>
 	name.slice(extensionAt(name) + 1).toLowerCase()
 
 const formatOf = (name: string) => extensionOf(name).toUpperCase()

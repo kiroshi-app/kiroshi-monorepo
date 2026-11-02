@@ -1203,6 +1203,7 @@ describe("WorkspaceBody library", () => {
 	afterEach(() => {
 		cleanup()
 		vi.restoreAllMocks()
+		vi.unstubAllGlobals()
 	})
 
 	const libraryBody = (workspace: Workspace, overrides = {}) =>
@@ -1432,27 +1433,103 @@ describe("WorkspaceBody library", () => {
 		expect(shownNames()).toContain("notes")
 	})
 
-	it("copies an image to the clipboard, and raises a notice when the clipboard refuses it", async () => {
-		vi.spyOn(globalThis, "fetch").mockImplementation(
-			async () => new Response(new Blob(["png"], { type: "image/png" })),
+	const SPARK = itemOf("image", "spark.gif", 5, 1_024)
+	const WAVE = itemOf("image", "wave.webp", 6, 1_024)
+	const COPY_FAILURE = "Couldn’t copy to the clipboard"
+
+	const aClipboard = () => {
+		const fetched = vi
+			.spyOn(globalThis, "fetch")
+			.mockImplementation(async () => new Response(new Blob(["pixels"])))
+		const decode = vi.fn(async () => ({
+			width: 2,
+			height: 2,
+			close: () => undefined,
+		}))
+		const encodedTypes: string[] = []
+		vi.stubGlobal("createImageBitmap", decode)
+		vi.stubGlobal(
+			"OffscreenCanvas",
+			class {
+				getContext = () => ({ drawImage: () => undefined })
+				convertToBlob = async ({ type }: { type: string }) => {
+					encodedTypes.push(type)
+					return new Blob(["png"], { type })
+				}
+			},
 		)
-		const written = vi
+		const copiedTypes: string[][] = []
+		const write = vi
 			.spyOn(navigator.clipboard, "write")
-			.mockResolvedValueOnce(undefined)
-			.mockRejectedValueOnce(new Error("refused"))
+			.mockImplementation(async ([item]) => {
+				await item?.getType("image/png")
+				copiedTypes.push([...(item?.types ?? [])])
+			})
 		vi.spyOn(console, "error").mockImplementation(() => undefined)
+		return { fetched, decode, encodedTypes, copiedTypes, write }
+	}
+
+	const copy = async () => {
+		fireEvent.click(screen.getByRole("button", { name: "Copy" }))
+		await settle()
+	}
+
+	const next = async () => {
+		fireEvent.click(screen.getByRole("button", { name: "Next image" }))
+		await settle()
+	}
+
+	it("copies a JPG, a GIF and a WebP image to the clipboard as PNG, with no notice", async () => {
+		listLibrary.mockResolvedValue(listed([FERN, SPARK, WAVE]))
+		const clipboard = aClipboard()
+		await openLibrary()
+		await open("fern-study.jpg")
+
+		await copy()
+		await next()
+		await copy()
+		await next()
+		await copy()
+
+		expect(clipboard.fetched.mock.calls.map(([src]) => src)).toEqual([
+			"asset://localhost/library/fern-study.jpg",
+			"asset://localhost/library/spark.gif",
+			"asset://localhost/library/wave.webp",
+		])
+		expect(clipboard.decode).toHaveBeenCalledTimes(3)
+		expect(clipboard.encodedTypes).toEqual([
+			"image/png",
+			"image/png",
+			"image/png",
+		])
+		expect(clipboard.copiedTypes).toEqual([
+			["image/png"],
+			["image/png"],
+			["image/png"],
+		])
+		expect(screen.queryByText(COPY_FAILURE)).toBeNull()
+	})
+
+	it("raises the copy failure notice when the image cannot be decoded", async () => {
+		const clipboard = aClipboard()
+		clipboard.decode.mockRejectedValueOnce(new Error("undecodable"))
+		await openLibrary()
+		await open("fern-study.jpg")
+
+		await copy()
+
+		await noticeTitled(COPY_FAILURE)
+		expect(clipboard.copiedTypes).toEqual([])
+	})
+
+	it("raises the copy failure notice when the clipboard refuses the image", async () => {
+		const clipboard = aClipboard()
+		clipboard.write.mockRejectedValueOnce(new Error("refused"))
 		await openLibrary()
 		await open("hero-dunes.png")
 
-		fireEvent.click(screen.getByRole("button", { name: "Copy" }))
-		await settle()
+		await copy()
 
-		expect(written).toHaveBeenCalledTimes(1)
-		expect(written.mock.calls[0]?.[0][0]?.types).toEqual(["image/png"])
-		expect(screen.queryByText("Couldn’t copy to the clipboard")).toBeNull()
-
-		fireEvent.click(screen.getByRole("button", { name: "Copy" }))
-
-		await noticeTitled("Couldn’t copy to the clipboard")
+		await noticeTitled(COPY_FAILURE)
 	})
 })
