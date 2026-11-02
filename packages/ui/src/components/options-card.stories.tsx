@@ -181,3 +181,38 @@ export const KeyboardPick = meta.story({
 export const OneOpenDark = OneOpen.extend({
 	globals: { theme: "dark" },
 })
+
+const UNBREAKABLE =
+	"https://example.com/offsites/da-lat/guesthouse-above-the-lake/booking-terms"
+
+export const NarrowLongContent = meta.story({
+	tags: ["test-only"],
+	args: {
+		title:
+			"Three ways to run the offsite for the design and platform teams this June",
+		subtitle: `Open one to see what it involves. Terms live at ${UNBREAKABLE}.`,
+		defaultOpenId: "da-lat",
+		options: [
+			{
+				...OPTIONS[0],
+				label:
+					"Da Lat, in the hills above the lake, with the long workshop day",
+				description: `${OPTIONS[0].description} Booking terms: ${UNBREAKABLE}`,
+			},
+			...OPTIONS.slice(1),
+		],
+	},
+	render: (args) => (
+		<div style={{ width: 320 }}>
+			<OptionsCard {...args} />
+		</div>
+	),
+	play: async ({ canvasElement }) => {
+		const card = canvasElement.querySelector<HTMLElement>(
+			'[data-slot="options-card"]',
+		)
+		if (!card) throw new Error("No options card drawn")
+
+		await expect(card.scrollWidth).toBe(card.clientWidth)
+	},
+})

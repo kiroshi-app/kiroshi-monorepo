@@ -4,6 +4,7 @@ import { expect, fn } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	isInBrowserRunner,
+	lineHeightOf,
 	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
@@ -263,4 +264,69 @@ export const ModePick = meta.story({
 
 export const DefaultValuesDark = DefaultValues.extend({
 	globals: { theme: "dark" },
+})
+
+const NARROW_TITLE =
+	"Offsite budget for the whole design team in Da Lat this June"
+
+const sectionOf = (canvasElement: HTMLElement) => {
+	const section = canvasElement.querySelector<HTMLElement>(
+		'[data-slot="interactive-view"]',
+	)
+	if (!section) throw new Error("No interactive view drawn")
+	return section
+}
+
+export const NarrowLongContent = meta.story({
+	tags: ["test-only"],
+	args: {
+		title: NARROW_TITLE,
+		source:
+			"Room rates from the three guesthouses Atlas found, checked against https://example.com/da-lat-guesthouses-rates-for-june-team-offsites",
+	},
+	render: (args) => (
+		<div style={{ width: 320 }}>
+			<ControlledView {...args} />
+		</div>
+	),
+	play: async ({ canvas, canvasElement }) => {
+		const section = sectionOf(canvasElement)
+		const title = canvas.getByRole("heading", { name: NARROW_TITLE })
+		const modes = canvas.getByRole("group", { name: "View mode" })
+		const sectionBox = section.getBoundingClientRect()
+		const modesBox = modes.getBoundingClientRect()
+
+		await expect(section.scrollWidth).toBe(section.clientWidth)
+		await expect(title.getBoundingClientRect().height).toBeGreaterThan(
+			lineHeightOf(title) * 1.5,
+		)
+		await expect(modesBox.left).toBeGreaterThanOrEqual(sectionBox.left)
+		await expect(modesBox.right).toBeLessThanOrEqual(sectionBox.right)
+		await expect(modes.scrollWidth).toBe(modes.clientWidth)
+	},
+})
+
+export const ThumbFocusRing = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The thumb ring shows while the thumb is dragged or reached from the keyboard, never after a plain pointer press.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const input = canvas.getByRole("slider", { name: "People" })
+		const thumb = input.parentElement as HTMLElement
+		const restingShadow = getComputedStyle(thumb).boxShadow
+
+		await userEvent.click(thumb)
+		await expect(input).toHaveFocus()
+		await expect(getComputedStyle(thumb).boxShadow).toBe(restingShadow)
+
+		await userEvent.tab({ shift: true })
+		await userEvent.tab()
+		await expect(input).toHaveFocus()
+		await expect(getComputedStyle(thumb).boxShadow).not.toBe(restingShadow)
+	},
 })

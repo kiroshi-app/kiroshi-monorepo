@@ -127,7 +127,7 @@ const ViewSlider = ({ slider, value, onValueChange }: ViewSliderProps) => (
 				<Slider.Thumb
 					getAriaLabel={() => slider.label}
 					getAriaValueText={(_, thumbValue) => slider.formatValue(thumbValue)}
-					className="size-4 rounded-full bg-white shadow-sm ring-primary/25 focus-within:ring-3 data-dragging:ring-3"
+					className="size-4 rounded-full bg-white shadow-sm ring-primary/25 has-[input:focus-visible]:ring-3 data-dragging:ring-3"
 				/>
 			</Slider.Control>
 		</Slider.Root>
@@ -237,7 +237,7 @@ export const InteractiveView = ({
 				>
 					<Icons.Sliders className="size-3" />
 				</span>
-				<h3 className="shrink-0 font-semibold text-foreground text-sm">
+				<h3 className="min-w-0 wrap-break-word font-semibold text-foreground text-sm">
 					{title}
 				</h3>
 				<p

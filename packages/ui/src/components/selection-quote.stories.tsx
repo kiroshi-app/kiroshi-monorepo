@@ -92,3 +92,27 @@ export const LongContent = meta.story({
 export const LongContentDark = LongContent.extend({
 	globals: { theme: "dark" },
 })
+
+export const NarrowLongContent = meta.story({
+	tags: ["test-only"],
+	args: {
+		agentName: "Atlas, release manager for the whole desktop platform",
+		text: `${LONG_QUOTE} https://example.com/sync/logs/da-lat-laptop/2026-11-02/full-pass`,
+	},
+	render: (args) => (
+		<div style={{ width: 320 }}>
+			<SelectionQuote {...args} />
+		</div>
+	),
+	play: async ({ canvasElement }) => {
+		const card = canvasElement.querySelector<HTMLElement>(
+			'[data-slot="selection-quote"]',
+		)
+		if (!card) throw new Error("No selection card drawn")
+
+		await expect(card.scrollWidth).toBe(card.clientWidth)
+		await expect(quotedTextOf(canvasElement).scrollWidth).toBe(
+			quotedTextOf(canvasElement).clientWidth,
+		)
+	},
+})
