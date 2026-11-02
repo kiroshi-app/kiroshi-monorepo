@@ -133,12 +133,11 @@ const blocksOfChunk = (chunk: string) =>
 	chunk.split("\n").reduce<Block[]>((blocks, line) => {
 		const isTight = blocks.length > 0
 		const heading = HEADING_LINE.exec(line)
-		const item = heading ? null : ITEM_LINE.exec(line)
-		const marked = heading ?? item
+		const marked = heading ?? ITEM_LINE.exec(line)
 		if (marked) {
 			const [, prefix = "", text = ""] = marked
-			const kind = heading ? "heading" : "item"
-			return [...blocks, { ...blockOf(kind, text), prefix, isTight }]
+			const block = blockOf(heading ? "heading" : "item", text)
+			return [...blocks, { ...block, prefix, isTight }]
 		}
 
 		const previous = blocks.at(-1)
