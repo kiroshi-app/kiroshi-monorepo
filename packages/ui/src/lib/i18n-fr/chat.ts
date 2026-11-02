@@ -274,6 +274,18 @@ const chat = {
 		byViewer: "Vous avez répondu",
 		byMember: "{{name}} a répondu",
 	},
+	interactiveView: {
+		madeBy: "Vue créée par {{name}}",
+		modes: "Mode d’affichage",
+		inline: "Dans la conversation",
+		pinned: "Épingler",
+		fullscreen: "Plein écran",
+	},
+	selectionQuote: {
+		label: "Sélection · {{name}}",
+		group: "Sélection citée de {{name}}",
+		remove: "Retirer la sélection",
+	},
 	applicationInstall: {
 		openSettings: "Ouvrir les réglages",
 		receipt: {
