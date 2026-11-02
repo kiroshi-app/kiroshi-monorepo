@@ -271,6 +271,68 @@ const common = {
 			retry: "Télécharger à nouveau la mise à jour",
 		},
 	},
+	library: {
+		title: "Bibliothèque",
+		subtitle: "Chaque image et chaque document de cet espace.",
+		search: "Rechercher dans la Bibliothèque",
+		import: "Importer",
+		newDocument: "Nouveau document",
+		filters: {
+			label: "Afficher",
+			all: "Tout",
+			images: "Images",
+			documents: "Documents",
+		},
+		noResult: {
+			images: "Aucune image dans cette Bibliothèque pour l’instant.",
+			documents: "Aucun document dans cette Bibliothèque pour l’instant.",
+			search: "Rien ne correspond à « {{query}} ».",
+		},
+		start: "Commencer un document",
+		templates: {
+			blank: { name: "Document vierge" },
+			brief: {
+				name: "Brief",
+				preview:
+					"# Brief\n\nCe que l’on fabrique, pour qui et pourquoi maintenant.\n\n## Objectifs\n\nLe résultat sur lequel ce travail s’engage, en une ou deux phrases.",
+			},
+			meetingNotes: {
+				name: "Notes de réunion",
+				preview:
+					"# Notes de réunion\n\nQui était là, ce qui a été décidé et la suite.\n\n## Décisions\n\n- Une ligne par décision\n- Le responsable et la date à côté",
+			},
+			checklist: {
+				name: "Liste de contrôle",
+				preview:
+					"# Liste de contrôle\n\n- Rédiger le plan\n- Réunir les références\n- Relire avec l’équipe\n- Livrer la version finale",
+			},
+		},
+		bringIn: {
+			title: "Importer des fichiers",
+			drop: "Déposez des images ou des documents ici",
+			formats: "PNG, JPG, Markdown et texte brut.",
+			action: "Importer des fichiers…",
+		},
+		lightbox: {
+			download: "Télécharger",
+			copy: "Copier",
+			more: "Plus",
+			close: "Fermer",
+			previous: "Image précédente",
+			next: "Image suivante",
+			zoomOut: "Dézoomer",
+			zoomIn: "Zoomer",
+			fit: "Ajuster",
+			fitToStage: "Ajuster à la fenêtre",
+			zoom: "{{percent}} %",
+			zoomThenFit: "{{percent}} %, ajuster à la fenêtre",
+			position: "{{position}} sur {{count}}",
+		},
+		document: {
+			back: "Bibliothèque",
+			more: "Plus",
+		},
+	},
 	whatsNew: {
 		firstLaunch: {
 			eyebrow: "Nouveautés de la version {{version}}",

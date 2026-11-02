@@ -254,6 +254,68 @@ const common = {
 			retry: "Download the update again",
 		},
 	},
+	library: {
+		title: "Library",
+		subtitle: "Every image and document in this Space.",
+		search: "Search the Library",
+		import: "Import",
+		newDocument: "New document",
+		filters: {
+			label: "Show",
+			all: "All",
+			images: "Images",
+			documents: "Documents",
+		},
+		noResult: {
+			images: "No images in this Library yet.",
+			documents: "No documents in this Library yet.",
+			search: "Nothing matches “{{query}}”.",
+		},
+		start: "Start a document",
+		templates: {
+			blank: { name: "Blank document" },
+			brief: {
+				name: "Brief",
+				preview:
+					"# Brief\n\nWhat we’re making, who it’s for and why it matters now.\n\n## Goals\n\nThe outcome this work commits to, in a sentence or two.",
+			},
+			meetingNotes: {
+				name: "Meeting notes",
+				preview:
+					"# Meeting notes\n\nWho joined, what was decided and what happens next.\n\n## Decisions\n\n- One line per decision\n- Owner and date beside it",
+			},
+			checklist: {
+				name: "Checklist",
+				preview:
+					"# Checklist\n\n- Draft the outline\n- Gather the references\n- Review with the team\n- Ship the final version",
+			},
+		},
+		bringIn: {
+			title: "Bring in files",
+			drop: "Drop images or documents here",
+			formats: "PNG, JPG, Markdown and plain text.",
+			action: "Import files…",
+		},
+		lightbox: {
+			download: "Download",
+			copy: "Copy",
+			more: "More",
+			close: "Close",
+			previous: "Previous image",
+			next: "Next image",
+			zoomOut: "Zoom out",
+			zoomIn: "Zoom in",
+			fit: "Fit",
+			fitToStage: "Fit to the window",
+			zoom: "{{percent}}%",
+			zoomThenFit: "{{percent}}%, fit to the window",
+			position: "{{position}} of {{count}}",
+		},
+		document: {
+			back: "Library",
+			more: "More",
+		},
+	},
 	whatsNew: {
 		firstLaunch: {
 			eyebrow: "New in {{version}}",
