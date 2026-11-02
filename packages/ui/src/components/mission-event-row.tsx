@@ -20,6 +20,7 @@ import {
 	missionToolMark,
 } from "@workspace/ui/components/mission-marks"
 import { toRelativeTime } from "@workspace/ui/lib/time-format"
+import { cn } from "@workspace/ui/lib/utils"
 
 const MISSION_EVENT_GUTTER_SIZE = 40
 
