@@ -55,6 +55,7 @@ export const LOCAL_COMMANDS: ReadonlySet<string> = new Set([
 	"window_hide",
 	"window_show",
 	"drag_ghost_show",
+	"drag_ghost_tab",
 	"drag_ghost_move",
 	"drag_ghost_hide",
 	"diagnostics",
