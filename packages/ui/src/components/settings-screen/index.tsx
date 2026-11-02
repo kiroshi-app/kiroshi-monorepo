@@ -276,6 +276,7 @@ const railAskingBeforeLeaving = (
 	onOpenYou: askedFirst(requestLeave, rail.onOpenYou),
 	onSelectConversations: askedFirst(requestLeave, rail.onSelectConversations),
 	onSelectMissions: askedFirst(requestLeave, rail.onSelectMissions),
+	onSelectLibrary: askedFirst(requestLeave, rail.onSelectLibrary),
 })
 
 const SettingsScreenLayout = ({

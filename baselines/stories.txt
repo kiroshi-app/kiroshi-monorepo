@@ -966,6 +966,8 @@ navigation-apprail--first-tab-under-title-bar
 navigation-apprail--icon-states-side-by-side
 navigation-apprail--idle-entry-hovered
 navigation-apprail--keyboard-reach
+navigation-apprail--library-dot
+navigation-apprail--library-selected
 navigation-apprail--missions-selected
 navigation-apprail--on-tinted-space
 navigation-apprail--removed-panel-falls-back-to-conversations
@@ -981,6 +983,7 @@ navigation-apprail--update-waiting
 navigation-apprail--update-waiting-dark
 navigation-apprail--user-settings-over-missions
 navigation-apprail--with-dot
+navigation-apprail--without-library-handler
 navigation-appsidebar--badges
 navigation-appsidebar--bare-rows
 navigation-appsidebar--caption-window-controls

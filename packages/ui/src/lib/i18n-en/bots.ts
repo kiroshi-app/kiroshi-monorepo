@@ -90,6 +90,7 @@ const bots = {
 		label: "Navigation",
 		conversations: "Conversations",
 		missions: "Missions",
+		library: "Library",
 		searchMissions: "Search missions",
 		spaceSettings: "Space settings",
 		dot: "{{name}}, new activity",

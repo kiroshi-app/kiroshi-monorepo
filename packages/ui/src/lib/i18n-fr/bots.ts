@@ -82,6 +82,7 @@ const bots = {
 		label: "Navigation",
 		conversations: "Conversations",
 		missions: "Missions",
+		library: "Bibliothèque",
 		searchMissions: "Rechercher des missions",
 		spaceSettings: "Réglages de l’espace",
 		dot: "{{name}}, nouvelle activité",

@@ -6,6 +6,7 @@ import {
 	BanIcon,
 	BellIcon,
 	BinIcon,
+	BookIcon,
 	BookmarkIcon,
 	BookOpenIcon,
 	BracketArrowRightIcon,
@@ -91,6 +92,7 @@ import {
 } from "@keyline-icons/react"
 import {
 	BellIcon as BellFillIcon,
+	BookIcon as BookFillIcon,
 	BookOpenIcon as BookOpenFillIcon,
 	BugIcon as BugFillIcon,
 	CalendarIcon as CalendarFillIcon,
@@ -323,6 +325,7 @@ const Icons = {
 	X,
 	Conversations: MessageIcon,
 	Missions: FlagIcon,
+	Library: BookIcon,
 }
 
 const FillIcons = {
@@ -341,6 +344,7 @@ const FillIcons = {
 	Info: InfoFillIcon,
 	Json: CodeFillIcon,
 	Language: LanguageFillIcon,
+	Library: BookFillIcon,
 	Missions: FlagFillIcon,
 	Palette: PaletteFillIcon,
 	Server: ServerFillIcon,

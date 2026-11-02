@@ -27,6 +27,8 @@ import type { Sidebar } from "@workspace/ui/components/ui/sidebar"
 import type { UserChipIdentity } from "@workspace/ui/components/user-chip"
 import { toPlainText } from "@workspace/ui/lib/plain-text"
 
+type AppSidebarOpenPanel = Exclude<AppRailPanel, "library">
+
 const ROW_AVATAR_SIZE = 40
 
 type AppSidebarStatus = "idle" | "working"
@@ -260,13 +262,14 @@ interface AppSidebarProps
 	railDots?: AppRailDots
 	openPanel?: string
 	openSettings?: AppRailSettings
-	onOpenPanelChange?: (panel: AppRailPanel) => void
+	onOpenPanelChange?: (panel: AppSidebarOpenPanel) => void
 	"data-tauri-drag-region"?: string
 }
 
 export {
 	type AppSidebarBot,
 	type AppSidebarConversation,
+	type AppSidebarOpenPanel,
 	type AppSidebarProps,
 	type AppSidebarRowMission,
 	type AppSidebarSection,
