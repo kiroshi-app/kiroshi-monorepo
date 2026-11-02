@@ -26,7 +26,7 @@ const OTHER_TAB: DragGhostTab = {
 
 type Heard = (event: { payload: unknown }) => void
 
-const mountGhost = async (answered: Promise<DragGhostTab | null>) => {
+const startGhost = async (answered: Promise<DragGhostTab | null>) => {
 	const heard = new Map<string, Heard>()
 	const listen = vi.fn((event: string, handler: Heard) => {
 		heard.set(event, handler)
@@ -38,14 +38,21 @@ const mountGhost = async (answered: Promise<DragGhostTab | null>) => {
 	)
 	const watching = view.watch()
 	render(createElement(DragGhost, { view }))
-	await act(() => watching)
+	await vi.waitFor(() => expect(heard.size).toBe(2))
 	const hear = (event: string, payload: unknown) =>
 		act(() => heard.get(event)?.({ payload }))
 	return {
+		watching,
 		hearTab: (tab: DragGhostTab) => hear(DRAG_GHOST_TAB_EVENT, tab),
 		hearState: (tabId: string, isNotAllowed: boolean) =>
 			hear(DRAG_GHOST_STATE_EVENT, { tabId, isNotAllowed }),
 	}
+}
+
+const mountGhost = async (answered: Promise<DragGhostTab | null>) => {
+	const ghost = await startGhost(answered)
+	await act(() => ghost.watching)
+	return ghost
 }
 
 const thumbnailState = () =>
@@ -92,19 +99,9 @@ describe("the drag ghost page", () => {
 		const answered = new Promise<DragGhostTab | null>((resolve) => {
 			answer = resolve
 		})
-		const heard = new Map<string, Heard>()
-		const listen = vi.fn((event: string, handler: Heard) => {
-			heard.set(event, handler)
-			return Promise.resolve(() => undefined)
-		})
-		const view = createDragGhostView(
-			listen as unknown as Parameters<typeof createDragGhostView>[0],
-			() => answered,
-		)
-		const watching = view.watch()
-		render(createElement(DragGhost, { view }))
-		await vi.waitFor(() => expect(heard.has(DRAG_GHOST_TAB_EVENT)).toBe(true))
-		await act(() => heard.get(DRAG_GHOST_TAB_EVENT)?.({ payload: OTHER_TAB }))
+		const { hearTab, watching } = await startGhost(answered)
+
+		await hearTab(OTHER_TAB)
 		answer(TAB)
 		await act(() => watching)
 

@@ -89,7 +89,7 @@ export const useTitleBarTabs = ({
 	useTabDockWatch(tabs.dock)
 
 	return useMemo(() => {
-		const ghostSources: TabFaceSources = {
+		const faceSources: TabFaceSources = {
 			bots: tabBots,
 			conversations: tabConversations,
 			missionTitles,
@@ -99,13 +99,13 @@ export const useTitleBarTabs = ({
 			if (!torn) {
 				return
 			}
-			const { title } = tabFaceOf(torn.href, ghostSources)
+			const { title } = tabFaceOf(torn.href, faceSources)
 			const ghost = { tabId: torn.id, href: torn.href, title }
 			tabs.tearOffSession.start(tearOff, () => ghost)
 		}
 		return {
 			tabs: tabViews.map((tab) => ({
-				...tabFaceOf(tab.href, ghostSources),
+				...tabFaceOf(tab.href, faceSources),
 				id: tab.id,
 				isPinned: tab.isPinned,
 				isNeedingYou: tab.needsYou,
@@ -114,7 +114,7 @@ export const useTitleBarTabs = ({
 			incomingTab: incoming
 				? {
 						tab: {
-							...tabFaceOf(currentHrefOf(incoming.tab), ghostSources),
+							...tabFaceOf(currentHrefOf(incoming.tab), faceSources),
 							id: incoming.tab.id,
 							isPinned: incoming.tab.isPinned,
 						},
