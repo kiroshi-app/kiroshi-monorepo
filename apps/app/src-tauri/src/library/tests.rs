@@ -9,9 +9,10 @@ use tauri::{App, Manager};
 use uuid::Uuid;
 
 use super::commands::{
-	library_copy, library_list, library_read_document, library_reveal, library_save,
+	library_copy, library_list, library_read_document, library_read_image, library_reveal,
+	library_save,
 };
-use super::contract::{LibraryDocumentFormat, LibraryError, LibraryItemKind};
+use super::contract::{LibraryDocumentFormat, LibraryError, LibraryImage, LibraryItemKind};
 use super::*;
 use crate::db;
 use crate::removed_on_drop::RemovedOnDrop;
@@ -219,6 +220,119 @@ fn a_read_in_an_absent_folder_finds_nothing() {
 	assert!(!root.exists());
 }
 
+fn read_an_image(root: &Path, name: &str) -> Result<LibraryImage, LibraryError> {
+	read_image(root, SPACE, name)
+}
+
+#[test]
+fn an_image_reads_as_base64_with_the_mime_type_of_its_extension() {
+	let root = temp_root();
+	let pixels = [0x89, b'P', b'N', b'G', 0x00, 0xff];
+	let expected = [
+		("a.png", "image/png"),
+		("b.jpg", "image/jpeg"),
+		("c.jpeg", "image/jpeg"),
+		("d.gif", "image/gif"),
+		("e.webp", "image/webp"),
+		("F.PNG", "image/png"),
+	];
+	for (name, _) in expected {
+		put(&root, SPACE, name, &pixels);
+	}
+
+	for (name, mime_type) in expected {
+		assert_eq!(
+			read_an_image(&root, name),
+			Ok(LibraryImage {
+				name: name.to_owned(),
+				mime_type: mime_type.to_owned(),
+				content: "iVBORwD/".to_owned(),
+			})
+		);
+	}
+}
+
+#[test]
+fn an_image_name_that_leaves_the_folder_is_refused() {
+	let root = temp_root();
+	put(&root, SPACE, "cover.png", b"png");
+	put(&root, "s2", "theirs.png", b"theirs");
+
+	for name in ["", ".", "..", "../s2/theirs.png", "nested/cover.png", "..\\s2\\theirs.png"] {
+		assert_eq!(
+			read_an_image(&root, name),
+			Err(LibraryError::InvalidName { name: name.to_owned() })
+		);
+	}
+}
+
+#[cfg(unix)]
+#[test]
+fn an_image_link_out_of_the_folder_is_refused() {
+	let root = temp_root();
+	put(&root, "s2", "theirs.png", b"theirs");
+	put(&root, SPACE, "cover.png", b"png");
+	let dir = space_dir(&root, SPACE);
+	std::os::unix::fs::symlink(space_dir(&root, "s2").join("theirs.png"), dir.join("out.png"))
+		.expect("the link lands");
+	std::os::unix::fs::symlink(dir.join("cover.png"), dir.join("in.png")).expect("the link lands");
+
+	assert_eq!(
+		read_an_image(&root, "out.png"),
+		Err(LibraryError::InvalidName { name: "out.png".to_owned() })
+	);
+	assert_eq!(
+		read_an_image(&root, "in.png"),
+		Err(LibraryError::Missing { name: "in.png".to_owned() })
+	);
+}
+
+#[test]
+fn each_failed_image_read_says_why() {
+	let root = temp_root();
+	put(&root, SPACE, "notes.md", b"notes");
+	put(&root, SPACE, "report.pdf", b"pdf");
+	put(&root, SPACE, ".hidden.png", b"hidden");
+	fs::create_dir_all(space_dir(&root, SPACE).join("folder.png")).expect("the subfolder lands");
+
+	assert_eq!(
+		read_an_image(&root, "notes.md"),
+		Err(LibraryError::NotAnImage { name: "notes.md".to_owned() })
+	);
+	for name in ["gone.png", "report.pdf", ".hidden.png", "folder.png"] {
+		assert_eq!(
+			read_an_image(&root, name),
+			Err(LibraryError::Missing { name: name.to_owned() })
+		);
+	}
+}
+
+#[cfg(unix)]
+#[test]
+fn an_oversized_image_is_refused_without_reading_its_bytes() {
+	use std::os::unix::fs::PermissionsExt;
+
+	let root = temp_root();
+	let path = space_dir(&root, SPACE).join("huge.png");
+	put(&root, SPACE, "huge.png", b"");
+	File::options()
+		.write(true)
+		.open(&path)
+		.expect("the file opens")
+		.set_len(MAX_READ_IMAGE_BYTES + 1)
+		.expect("the file grows");
+	fs::set_permissions(&path, fs::Permissions::from_mode(0o000)).expect("the file locks");
+
+	assert_eq!(
+		read_an_image(&root, "huge.png"),
+		Err(LibraryError::TooLarge {
+			name: "huge.png".to_owned(),
+			bytes: MAX_READ_IMAGE_BYTES + 1,
+			limit: MAX_READ_IMAGE_BYTES
+		})
+	);
+}
+
 fn a_host(name: &str) -> AppOfItsOwn {
 	let app = an_app_of_its_own(&format!("library-{name}"), mock_builder());
 	app.manage(db::bootstrap(app.handle()));
@@ -232,7 +346,7 @@ async fn a_space(app: &App<MockRuntime>, name: &str) -> String {
 }
 
 #[tokio::test]
-async fn an_unknown_space_is_refused_by_both_commands() {
+async fn an_unknown_space_is_refused_by_every_command() {
 	let app = a_host("unknown");
 
 	let listed = library_list(app.handle().clone(), app.state(), "nowhere".to_owned()).await;
@@ -243,9 +357,17 @@ async fn an_unknown_space_is_refused_by_both_commands() {
 		"notes.md".to_owned(),
 	)
 	.await;
+	let image = library_read_image(
+		app.handle().clone(),
+		app.state(),
+		"nowhere".to_owned(),
+		"cover.png".to_owned(),
+	)
+	.await;
 
 	assert_eq!(listed, Err(LibraryError::UnknownSpace { id: "nowhere".to_owned() }));
 	assert_eq!(read, Err(LibraryError::UnknownSpace { id: "nowhere".to_owned() }));
+	assert_eq!(image, Err(LibraryError::UnknownSpace { id: "nowhere".to_owned() }));
 }
 
 #[tokio::test]
@@ -255,17 +377,32 @@ async fn a_known_space_lists_and_reads_from_its_folder_under_app_data() {
 	let root = root(app.handle()).expect("the library root resolves");
 	assert_eq!(root, app.path().app_data_dir().expect("the data folder").join("library"));
 	put(&root, &space_id, "notes.md", b"notes");
+	put(&root, &space_id, "cover.png", b"png");
+	touch(&root, &space_id, "notes.md", 2_000);
+	touch(&root, &space_id, "cover.png", 1_000);
 
 	let listed = library_list(app.handle().clone(), app.state(), space_id.clone())
 		.await
 		.expect("the library lists");
-	let read =
-		library_read_document(app.handle().clone(), app.state(), space_id, "notes.md".to_owned())
+	let read = library_read_document(
+		app.handle().clone(),
+		app.state(),
+		space_id.clone(),
+		"notes.md".to_owned(),
+	)
+	.await
+	.expect("the document reads");
+	let image =
+		library_read_image(app.handle().clone(), app.state(), space_id, "cover.png".to_owned())
 			.await
-			.expect("the document reads");
+			.expect("the image reads");
 
-	assert_eq!(listed.iter().map(|item| item.name.as_str()).collect::<Vec<_>>(), ["notes.md"]);
+	assert_eq!(
+		listed.iter().map(|item| item.name.as_str()).collect::<Vec<_>>(),
+		["notes.md", "cover.png"]
+	);
 	assert_eq!(read.content, "notes");
+	assert_eq!(image.content, "cG5n");
 }
 
 #[tokio::test]

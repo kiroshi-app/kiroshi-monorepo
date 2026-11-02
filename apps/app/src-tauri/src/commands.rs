@@ -84,6 +84,7 @@ fn commands<R: Runtime>() -> Commands<R> {
 		library::commands::library_save::<tauri::Wry>,
 		library::commands::library_copy::<tauri::Wry>,
 		library::commands::library_reveal::<tauri::Wry>,
+		library::commands::library_read_image::<tauri::Wry>,
 		badge::commands::badge_set::<tauri::Wry>,
 		claude_import::commands::claude_import_inventory,
 		claude_import::commands::claude_import_run::<tauri::Wry>,

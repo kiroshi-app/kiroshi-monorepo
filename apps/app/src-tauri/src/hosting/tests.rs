@@ -83,6 +83,7 @@ use crate::environment::store;
 use crate::events::{self, Event, BUFFERED_FRAMES};
 use crate::joined_spaces::contract::JoinedSpaceConnection;
 use crate::joined_spaces::relay::RelayGuests;
+use crate::library;
 use crate::logging::contract::InstallKind;
 use crate::mcp_oauth::asking::AuthorizationAnswers;
 use crate::mcp_oauth::commands::{mcp_application_status, McpOauthState};
@@ -612,6 +613,10 @@ impl HostEffects {
 	fn reached(&self) -> Vec<String> {
 		self.reached.lock().expect("the local api").clone()
 	}
+
+	fn library(&self) -> PathBuf {
+		self.env_root.join("library")
+	}
 }
 
 fn typed<T: serde::de::DeserializeOwned>(args: &Value, key: &str) -> T {
@@ -647,6 +652,21 @@ async fn host_effect_applied(
 			let query: MessageSearchQuery = typed(&args, "query");
 			let found = database.search().messages(query).await.expect("the host searches");
 			return answered_json(StatusCode::OK, json!(found));
+		}
+		"library_list" => {
+			let listed =
+				library::list(&effects.library(), &text("spaceId")).expect("the host lists");
+			return answered_json(StatusCode::OK, json!(listed));
+		}
+		"library_read_document" => {
+			let read = library::read_document(&effects.library(), &text("spaceId"), &text("name"))
+				.expect("the host reads");
+			return answered_json(StatusCode::OK, json!(read));
+		}
+		"library_read_image" => {
+			let read = library::read_image(&effects.library(), &text("spaceId"), &text("name"))
+				.expect("the host reads");
+			return answered_json(StatusCode::OK, json!(read));
 		}
 		"joined_space_remove" => {
 			database.joined_spaces().remove(text("id")).await.expect("the host leaves");
@@ -2971,6 +2991,13 @@ impl Guest {
 			.call_mut(|connection| Ok(connection.execute_batch(TWO_SPACES)?))
 			.await
 			.expect("the two spaces are planted");
+		for space_id in [PERSONAL, ELSEWHERE] {
+			let shelf = effects.library().join(space_id);
+			std::fs::create_dir_all(&shelf).expect("the library folder lands");
+			std::fs::write(shelf.join("notes.md"), format!("notes of {space_id}"))
+				.expect("the document lands");
+			std::fs::write(shelf.join("cover.png"), space_id).expect("the image lands");
+		}
 		harness.started().await;
 		let mut member = harness.member_of(A_JOINER).await;
 		harness.reached(HostingState::Online).await;
@@ -3156,6 +3183,59 @@ fn a_member_reads_the_live_sessions_of_the_shared_space_only() {
 #[test]
 fn a_member_reads_the_pending_questions_of_the_shared_space_only() {
 	run(kept_in_the_space_named("agent_pending_questions_in_space", space_named));
+}
+
+fn a_library_entry_of(name: &'static str) -> impl Fn(&str) -> Value {
+	move |space_id| json!({ "spaceId": space_id, "name": name })
+}
+
+#[test]
+fn a_member_lists_the_library_of_the_shared_space_only() {
+	run(kept_in_the_space_named("library_list", space_named));
+}
+
+#[test]
+fn a_member_reads_a_library_document_of_the_shared_space_only() {
+	run(kept_in_the_space_named("library_read_document", a_library_entry_of("notes.md")));
+}
+
+#[test]
+fn a_member_reads_a_library_image_of_the_shared_space_only() {
+	run(kept_in_the_space_named("library_read_image", a_library_entry_of("cover.png")));
+}
+
+#[test]
+fn a_member_is_answered_from_the_library_folder_of_the_shared_space() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("library-content").await;
+
+		let listed = guest.called("library_list", space_named(PERSONAL)).await;
+		let document =
+			guest.called("library_read_document", a_library_entry_of("notes.md")(PERSONAL)).await;
+		let image =
+			guest.called("library_read_image", a_library_entry_of("cover.png")(PERSONAL)).await;
+
+		let mut names: Vec<&str> = listed["body"]
+			.as_array()
+			.expect("a listing")
+			.iter()
+			.filter_map(|item| item["name"].as_str())
+			.collect();
+		names.sort_unstable();
+		assert_eq!(names, ["cover.png", "notes.md"], "{listed}");
+		assert_eq!(
+			document["body"],
+			json!({ "name": "notes.md", "format": "markdown", "content": "notes of personal" })
+		);
+		assert_eq!(
+			image["body"],
+			json!({
+				"name": "cover.png",
+				"mimeType": "image/png",
+				"content": BASE64_STANDARD.encode(PERSONAL)
+			})
+		);
+	});
 }
 
 #[test]
