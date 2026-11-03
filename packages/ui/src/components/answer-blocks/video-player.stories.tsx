@@ -86,7 +86,12 @@ export const WithoutPosterOrMarker = meta.story({
 			},
 		},
 	},
-	play: async ({ canvas }) => {
+	play: async ({ canvas, canvasElement }) => {
+		const player = canvasElement.querySelector("video")?.parentElement
+		if (!player) throw new Error("The player draws no surface")
+		await expect(getComputedStyle(player).backgroundImage).toBe(
+			"linear-gradient(170deg in oklab, rgb(92, 124, 140) 0%, rgb(52, 80, 95) 45%, rgb(142, 107, 76) 100%)",
+		)
 		await expect(canvas.queryByRole("button", { name: /^Go to/ })).toBeNull()
 		await expect(canvas.getByText("casa-do-rio-tour.mp4")).toBeInTheDocument()
 	},

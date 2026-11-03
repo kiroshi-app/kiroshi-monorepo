@@ -111,7 +111,12 @@ const MapCard = ({
 									maxWidth: `calc(2 * min(${x}%, ${100 - x}%))`,
 								}}
 							>
-								<span className="grid size-4 shrink-0 place-items-center rounded-full bg-on-foreground text-foreground">
+								<span
+									className={cn(
+										"grid size-4 shrink-0 place-items-center rounded-full bg-on-foreground",
+										isDestination ? "text-primary-strong" : "text-foreground",
+									)}
+								>
 									<Glyph aria-hidden="true" className="size-2.5" />
 								</span>
 								<span className="min-w-0 truncate">{place.name}</span>
@@ -126,7 +131,7 @@ const MapCard = ({
 				) : null}
 			</div>
 			<div className="flex items-center gap-3 border-t border-shell-border p-3">
-				<div className="flex min-w-0 flex-1 flex-col">
+				<div className="flex min-w-0 flex-1 flex-col gap-0.5">
 					<p className="truncate text-sm font-semibold">{title}</p>
 					{subtitle ? (
 						<p className="truncate text-xs text-muted-foreground">{subtitle}</p>

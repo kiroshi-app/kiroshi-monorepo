@@ -71,7 +71,7 @@ const VideoPlayer = ({
 			data-slot="video-player"
 			className={cn("flex w-full min-w-0 flex-col gap-2", className)}
 		>
-			<div className="relative h-89.5 w-full overflow-hidden rounded-control bg-linear-to-br from-slate-700 to-orange-900">
+			<div className="relative h-89.5 w-full overflow-hidden rounded-control bg-[linear-gradient(in_oklab_170deg,#5C7C8C_0%,#34505F_45%,#8E6B4C_100%)]">
 				{/* biome-ignore lint/a11y/useMediaCaption: a video answer block carries no caption track to point at */}
 				<video
 					ref={videoRef}

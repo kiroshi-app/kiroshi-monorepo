@@ -72,7 +72,7 @@ export const WithRoute = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard Markdown 14. Check the surface is 300 high, the route is one dotted line from the start pin to the destination pin, both pins sit inside the surface, and Open in Maps carries the link.",
+					"Artboard Markdown 14. Check the surface is 300 high, the route is one dotted line from the start pin to the destination pin, both pins sit inside the surface, each glyph wears its own chip colour on the dark disc, and Open in Maps carries the link.",
 			},
 		},
 	},
@@ -82,6 +82,13 @@ export const WithRoute = meta.story({
 		)
 		await expect(canvasElement.querySelectorAll("line")).toHaveLength(1)
 		await expectPinsInside(canvasElement)
+		for (const pin of canvasElement.querySelectorAll("li")) {
+			const disc = pin.firstElementChild
+			if (!disc) throw new Error("The pin draws no disc")
+			await expect(getComputedStyle(disc).color).toBe(
+				getComputedStyle(pin).backgroundColor,
+			)
+		}
 		await expect(
 			canvas.getByRole("link", { name: "Open in Maps" }),
 		).toHaveAttribute("href", args.link)
