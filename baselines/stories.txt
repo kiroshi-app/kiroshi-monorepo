@@ -1515,6 +1515,10 @@ navigation-tabs--long-content
 navigation-tabs--on-dark-surface
 navigation-tabs--states
 navigation-tabs--variants
+navigation-titlebartabchip--long-title
+navigation-titlebartabchip--long-title-dark
+navigation-titlebartabchip--short-title
+navigation-titlebartabchip--short-title-dark
 navigation-userchip--default
 navigation-userchip--long-content
 navigation-userchip--middle-click-ignored

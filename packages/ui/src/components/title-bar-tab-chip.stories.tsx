@@ -1,0 +1,136 @@
+import { expect } from "storybook/test"
+
+import preview from "@workspace/storybook/preview"
+import { slotIn, tokenStyleIn } from "@workspace/storybook/story-utils"
+import { Icons } from "@workspace/ui/components/icons"
+import { TitleBarTabChip } from "@workspace/ui/components/title-bar-tab-chip"
+
+const DARK = { theme: "dark" }
+
+const TITLE_MAX_WIDTH = 200
+
+const LONG_TITLE =
+	"Quarterly pricing review with the finance team and every regional lead"
+
+const meta = preview.meta({
+	title: "Navigation/TitleBarTabChip",
+	component: TitleBarTabChip,
+	parameters: {
+		layout: "centered",
+		docs: {
+			description: {
+				component:
+					"One tab lifted out of the title bar, drawn alone: its icon, its title on one line up to 200px, and a decorative close glyph, on the menu surface with its ring and shadow. The tear-off ghost follows the pointer with it; the strip draws an incoming tab through it too.",
+			},
+		},
+	},
+	args: {
+		title: "Pricing",
+		icon: <Icons.Conversations />,
+	},
+})
+
+type ChipPlayContext = { canvasElement: HTMLElement }
+
+const expectChipAnatomy = async (canvasElement: HTMLElement) => {
+	const chip = slotIn(canvasElement, "title-bar-tab-chip")
+	const title = slotIn(chip, "title-bar-tab-chip-title")
+	const close = slotIn(chip, "title-bar-tab-chip-close")
+	const style = getComputedStyle(chip)
+
+	await expect(style.backgroundColor).toBe(
+		tokenStyleIn(chip, "bg-title-bar-menu", "backgroundColor"),
+	)
+	await expect(style.backgroundColor).toBe(
+		chip.closest(".dark") ? "rgb(24, 24, 26)" : "rgb(255, 255, 255)",
+	)
+	await expect(style.boxShadow).toBe(
+		tokenStyleIn(
+			chip,
+			"shadow-tab-chip ring-1 ring-title-bar-menu-border",
+			"boxShadow",
+		),
+	)
+	await expect(style.borderRadius).toBe("8px")
+	await expect([style.paddingInlineStart, style.paddingInlineEnd]).toEqual([
+		"7px",
+		"4px",
+	])
+	await expect(style.columnGap).toBe("6px")
+	await expect(chip.getBoundingClientRect().height).toBe(28)
+	await expect(getComputedStyle(title).whiteSpace).toBe("nowrap")
+	await expect(getComputedStyle(title).textOverflow).toBe("ellipsis")
+	await expect(close).toHaveAttribute("aria-hidden", "true")
+	await expect(close.getBoundingClientRect().width).toBe(18)
+	await expect(close.querySelector("svg")?.getBoundingClientRect().width).toBe(
+		12,
+	)
+	return { chip, title }
+}
+
+const playShortTitle = async ({ canvasElement }: ChipPlayContext) => {
+	const { chip, title } = await expectChipAnatomy(canvasElement)
+	await expect(title.scrollWidth).toBe(title.clientWidth)
+	await expect(chip.getBoundingClientRect().width).toBeLessThan(
+		7 + 15 + 6 + TITLE_MAX_WIDTH + 6 + 18 + 4,
+	)
+}
+
+const playLongTitle = async ({ canvasElement }: ChipPlayContext) => {
+	const { chip, title } = await expectChipAnatomy(canvasElement)
+	await expect(title.getBoundingClientRect().width).toBe(TITLE_MAX_WIDTH)
+	await expect(title.scrollWidth).toBeGreaterThan(title.clientWidth)
+	await expect(chip.getBoundingClientRect().width).toBe(256)
+}
+
+export const ShortTitle = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Tear-off 2, light: a short title, the chip hugging it. Check the white menu surface, its ring and soft shadow, and the close glyph at the end.",
+			},
+		},
+	},
+	play: playShortTitle,
+})
+
+export const ShortTitleDark = meta.story({
+	globals: DARK,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Tear-off 2, dark: a short title on the #18181A surface. Pick `ShortTitle` for the light theme.",
+			},
+		},
+	},
+	play: playShortTitle,
+})
+
+export const LongTitle = meta.story({
+	args: { title: LONG_TITLE },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Tear-off 2, light: a title past 200px, cut with an ellipsis, the chip 256px wide.",
+			},
+		},
+	},
+	play: playLongTitle,
+})
+
+export const LongTitleDark = meta.story({
+	args: { title: LONG_TITLE },
+	globals: DARK,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Tear-off 2, dark: the chip as the artboard draws it, a title past 200px cut with an ellipsis, 256px wide. Pick `LongTitle` for the light theme.",
+			},
+		},
+	},
+	play: playLongTitle,
+})

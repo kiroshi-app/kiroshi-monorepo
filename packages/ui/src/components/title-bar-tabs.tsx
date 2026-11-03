@@ -21,6 +21,7 @@ import {
 	TITLE_BAR_MENU,
 	TITLE_BAR_MENU_ROW,
 } from "@workspace/ui/components/title-bar-menu"
+import { TitleBarTabChip } from "@workspace/ui/components/title-bar-tab-chip"
 import {
 	ContextMenu,
 	ContextMenuContent,
@@ -130,10 +131,7 @@ const LIFTED_TAB = cn(
 
 const TORN_OFF_TAB = "data-torn-off:opacity-0"
 
-const INCOMING_TAB = cn(TAB, LIFTED_SURFACE, "absolute top-0")
-
-const INCOMING_CLOSE =
-	"absolute inset-y-0 end-1.25 my-auto grid size-4.5 place-items-center text-muted-foreground [&_svg]:size-3"
+const INCOMING_TAB = "absolute top-0 z-10"
 
 const TAB_TITLE =
 	"min-w-0 select-none truncate font-medium text-compact leading-4"
@@ -796,18 +794,14 @@ type IncomingTabProps = {
 }
 
 const IncomingTab = ({ tab, widthClass, box }: IncomingTabProps) => (
-	<span
+	<TitleBarTabChip
 		aria-hidden="true"
 		className={cn(INCOMING_TAB, widthClass)}
-		data-slot="title-bar-incoming-tab"
+		icon={tab.icon}
+		placement="strip"
 		style={{ left: box.left, width: box.width ?? undefined }}
-	>
-		<span className={TAB_ICON}>{tab.icon}</span>
-		<span className={TAB_TITLE}>{tab.title}</span>
-		<span className={INCOMING_CLOSE}>
-			<Icons.Close />
-		</span>
-	</span>
+		title={tab.title}
+	/>
 )
 
 type IncomingIndexSource = {
