@@ -5,7 +5,7 @@ use std::time::Duration;
 use serde::de::DeserializeOwned;
 use serde_json::{json, Value};
 use tauri::test::{mock_builder, MockRuntime};
-use tauri::{App, Listener as _, Manager as _};
+use tauri::{App, Listener as _};
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::Encode;
 use yrs::{Doc, GetString, IndexedSequence, ReadTxn, Text, Transact, Update};
@@ -222,13 +222,10 @@ fn person_typed_at_the_end(app: &App<MockRuntime>, root: &Path, person: &Doc) {
 }
 
 #[tokio::test]
-async fn a_passage_found_zero_or_many_times_writes_nothing_and_says_which() {
+async fn a_passage_found_zero_or_many_times_writes_nothing_says_which_and_publishes_nothing() {
 	let (app, root) = a_host("passage").await;
 	put(&root, SPACE, "notes.md", "one, two, two");
-	let finishes = heard::<LibraryDocumentWriterFinished>(
-		&app,
-		events::LIBRARY_DOCUMENT_WRITER_FINISHED.name(),
-	);
+	let published = heard_in_order(&app);
 
 	let missing = the_host(&app)
 		.served(Operation::Write, json!({ "name": "notes.md", "text": "!", "after": "three" }))
@@ -240,13 +237,13 @@ async fn a_passage_found_zero_or_many_times_writes_nothing_and_says_which() {
 	assert_eq!(refusal_kind(missing), "passageNotFound");
 	assert_eq!(refusal_kind(repeated), "passageNotUnique");
 	assert_eq!(on_disk(&root, "notes.md"), "one, two, two");
-	let outcomes: Vec<_> = all_of(&finishes).into_iter().map(|finished| finished.outcome).collect();
-	assert_eq!(outcomes, [LibraryWriteOutcome::Failed, LibraryWriteOutcome::Failed]);
+	assert_eq!(all_of(&published), []);
 }
 
 #[tokio::test]
 async fn both_tools_stay_in_the_space_of_the_conversation_and_on_markdown() {
 	let (app, root) = a_host("scope").await;
+	let published = heard_in_order(&app);
 	put(&root, SPACE, "plain.txt", "plain");
 	put(&root, "work", "elsewhere.md", "not yours");
 	let host = the_host(&app);
@@ -260,6 +257,83 @@ async fn both_tools_stay_in_the_space_of_the_conversation_and_on_markdown() {
 	assert_eq!(refusal_kind(write("../work/elsewhere.md").await), "invalidName");
 	assert_eq!(refusal_kind(write("plain.txt").await), "notADocument");
 	assert_eq!(std::fs::read_to_string(root.join("work/elsewhere.md")).expect("kept"), "not yours");
+	assert_eq!(all_of(&published), []);
+}
+
+#[derive(Debug, PartialEq)]
+enum Published {
+	Writers(Vec<LibraryWriterKind>),
+	Finished(LibraryWriteOutcome),
+}
+
+fn heard_in_order(app: &App<MockRuntime>) -> Receiver<Published> {
+	let (told, heard) = channel();
+	let told_finished = told.clone();
+	app.listen_any(events::LIBRARY_DOCUMENT_PRESENCE.name(), move |event| {
+		let presence: LibraryDocumentPresence =
+			serde_json::from_str(event.payload()).expect("a presence");
+		let kinds = presence.writers.iter().map(|writer| writer.kind).collect();
+		told.send(Published::Writers(kinds)).expect("the test listens");
+	});
+	app.listen_any(events::LIBRARY_DOCUMENT_WRITER_FINISHED.name(), move |event| {
+		let finished: LibraryDocumentWriterFinished =
+			serde_json::from_str(event.payload()).expect("a finish");
+		told_finished.send(Published::Finished(finished.outcome)).expect("the test listens");
+	});
+	heard
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn two_writes_of_one_agent_at_once_run_one_after_the_other_and_each_finishes_once() {
+	let (app, root) = a_host("queued").await;
+	put(&root, SPACE, "notes.md", "Base.");
+	let published = heard_in_order(&app);
+	let first = "abcdefghijklmnopqrstuvwxyz".repeat(2);
+	let second = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".repeat(2);
+	let write = |text: &str| {
+		let host = the_host(&app);
+		let asked = json!({ "name": "notes.md", "text": text });
+		tokio::spawn(async move { host.served(Operation::Write, asked).await })
+	};
+
+	let (one, two) = tokio::join!(write(&first), write(&second));
+	one.expect("the first write ends").expect("the first write lands");
+	two.expect("the second write ends").expect("the second write lands");
+
+	let text = on_disk(&root, "notes.md");
+	assert!(
+		[format!("Base.{first}{second}"), format!("Base.{second}{first}")].contains(&text),
+		"{text}"
+	);
+	let published = all_of(&published);
+	let finished = Published::Finished(LibraryWriteOutcome::Finished);
+	assert_eq!(published.iter().filter(|event| **event == finished).count(), 2);
+	let (last, before) = published.split_last().expect("something was published");
+	assert_eq!(*last, Published::Writers(vec![]));
+	for event in before {
+		assert_ne!(*event, Published::Writers(vec![]), "the agent left early: {published:?}");
+	}
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_write_dropped_mid_way_publishes_one_failed_finish_and_leaves() {
+	let (app, root) = a_host("dropped").await;
+	put(&root, SPACE, "notes.md", "Base.");
+	let published = heard_in_order(&app);
+	let host = the_host(&app);
+	let asked = json!({ "name": "notes.md", "text": "a".repeat(200) });
+	let writing = tokio::spawn(async move { host.served(Operation::Write, asked).await });
+	tokio::time::sleep(STEP_PAUSE * 3).await;
+
+	writing.abort();
+	assert!(writing.await.expect_err("the write is dropped").is_cancelled());
+
+	let published = all_of(&published);
+	let finishes: Vec<_> =
+		published.iter().filter(|event| matches!(event, Published::Finished(_))).collect();
+	assert_eq!(finishes, [&Published::Finished(LibraryWriteOutcome::Failed)]);
+	assert_eq!(published.last(), Some(&Published::Writers(vec![])));
+	assert!(on_disk(&root, "notes.md").len() < "Base.".len() + 200);
 }
 
 #[tokio::test]

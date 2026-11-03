@@ -1,11 +1,14 @@
+use std::collections::HashMap;
 use std::path::Path;
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use base64::prelude::{Engine as _, BASE64_STANDARD};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-use tauri::{AppHandle, Runtime};
+use tauri::{AppHandle, Manager, Runtime, State};
+use tokio::sync::OwnedMutexGuard;
 
 use super::contract::{
 	LibraryDocumentFormat, LibraryDocumentWriterFinished, LibraryError, LibraryWriteOutcome,
@@ -128,14 +131,8 @@ impl<R: Runtime> LibraryHost<R> {
 		agent: &Agent,
 		asked: Write,
 	) -> Result<DocumentWritten, DocumentRefusal> {
-		let mut writing = Writing {
-			app: &self.app,
-			space_id,
-			name: &asked.name,
-			agent,
-			outcome: LibraryWriteOutcome::Failed,
-		};
 		markdown(root, space_id, &asked.name)?;
+		let _turn = turn_of(&self.app, space_id, &asked.name, &agent.id).await;
 		let opened = documents(&self.app).open(root, space_id, &asked.name)?;
 		if let Some(host_edit) = opened.host_edit {
 			announce(&self.app, space_id, &asked.name, &host_edit);
@@ -145,6 +142,13 @@ impl<R: Runtime> LibraryHost<R> {
 			Location::Caret(caret) => caret,
 			Location::PassageNotFound => return Err(ToolRefusal::PassageNotFound.into()),
 			Location::PassageNotUnique => return Err(ToolRefusal::PassageNotUnique.into()),
+		};
+		let mut writing = Writing {
+			app: &self.app,
+			space_id,
+			name: &asked.name,
+			agent,
+			outcome: LibraryWriteOutcome::Failed,
 		};
 		writing.at(&caret);
 		let writer = client_id_of(&agent.id);
@@ -228,8 +232,60 @@ impl<R: Runtime> Drop for Writing<'_, R> {
 				self.space_id
 			);
 		}
-		unseat_writer(self.app, self.space_id, self.name, &Seat::Agent(self.agent.id.clone()));
 	}
+}
+
+type WriteKey = (String, String, String);
+
+type WriteQueue = Arc<tokio::sync::Mutex<()>>;
+
+#[derive(Default)]
+struct AgentWrites(Mutex<HashMap<WriteKey, WriteQueue>>);
+
+impl AgentWrites {
+	fn held(&self) -> MutexGuard<'_, HashMap<WriteKey, WriteQueue>> {
+		self.0.lock().unwrap_or_else(PoisonError::into_inner)
+	}
+}
+
+struct Turn<'a, R: Runtime> {
+	app: &'a AppHandle<R>,
+	key: WriteKey,
+	_held: OwnedMutexGuard<()>,
+}
+
+async fn turn_of<'a, R: Runtime>(
+	app: &'a AppHandle<R>,
+	space_id: &str,
+	name: &str,
+	agent_id: &str,
+) -> Turn<'a, R> {
+	let key = (space_id.to_owned(), name.to_owned(), agent_id.to_owned());
+	let queue = writes(app).held().entry(key.clone()).or_default().clone();
+	let held = queue.lock_owned().await;
+	Turn { app, key, _held: held }
+}
+
+impl<R: Runtime> Drop for Turn<'_, R> {
+	fn drop(&mut self) {
+		let writes = writes(self.app);
+		let mut held = writes.held();
+		let is_another_queued =
+			held.get(&self.key).is_some_and(|queue| Arc::strong_count(queue) > 2);
+		if is_another_queued {
+			return;
+		}
+		held.remove(&self.key);
+		let (space_id, name, agent_id) = &self.key;
+		unseat_writer(self.app, space_id, name, &Seat::Agent(agent_id.clone()));
+	}
+}
+
+fn writes<R: Runtime>(app: &AppHandle<R>) -> State<'_, AgentWrites> {
+	if app.try_state::<AgentWrites>().is_none() {
+		app.manage(AgentWrites::default());
+	}
+	app.state::<AgentWrites>()
 }
 
 fn markdown(root: &Path, space_id: &str, name: &str) -> Result<DocumentText, LibraryError> {
