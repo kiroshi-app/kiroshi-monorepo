@@ -20,6 +20,12 @@ export const applyLibraryUpdate = (
 	update: string,
 ) => invoke<null>("library_apply_update", { spaceId, name, update })
 
+export const shareLibraryCaret = (
+	spaceId: string,
+	name: string,
+	caret: string | null,
+) => invoke<null>("library_share_caret", { spaceId, name, caret })
+
 const isRefusedAs = (reason: unknown, kind: NameRefusal) =>
 	typeof reason === "object" &&
 	reason !== null &&

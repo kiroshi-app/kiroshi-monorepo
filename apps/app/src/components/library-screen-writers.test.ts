@@ -18,6 +18,7 @@ import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { LibraryScreen } from "@/components/library-screen"
+import { accountQueryKeys } from "@/lib/account/account-query-keys"
 import {
 	type Bot,
 	LIBRARY_DOCUMENT_UPDATED_EVENT,
@@ -26,10 +27,20 @@ import {
 } from "@/lib/bindings"
 import type { Invoke } from "@/lib/host/joined-hosts-invoke"
 import { base64Of, bytesOf } from "@/lib/library/library-document-session"
-import { LIBRARY_DOCUMENT_PRESENCE_EVENT } from "@/lib/library/library-document-writers"
+import {
+	LIBRARY_DOCUMENT_PRESENCE_EVENT,
+	LIBRARY_DOCUMENT_WRITER_FINISHED_EVENT,
+} from "@/lib/library/library-document-writers"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 
-type LibraryCall = { name: string; update: string }
+type LibraryCall = {
+	spaceId: string
+	name: string
+	update: string
+	caret: string | null
+}
+
+type SharedCaret = Pick<LibraryCall, "spaceId" | "name" | "caret">
 
 type Heard = (event: Event<unknown>, hostId: string | null) => void
 
@@ -47,6 +58,10 @@ const ATLAS_ID = "bot-atlas"
 
 const ATLAS_HUE = 210
 
+const OWN_WINDOW = "main"
+
+const OWN_ACCOUNT = "account-me"
+
 const common = i18n.getFixedT(null, "common")
 
 const PARAGRAPH_FIELD = common("library.editor.paragraph")
@@ -54,6 +69,7 @@ const PARAGRAPH_FIELD = common("library.editor.paragraph")
 const host = vi.hoisted(() => ({
 	documents: new Map<string, Y.Doc>(),
 	listeners: new Map<string, Set<Heard>>(),
+	sharedCarets: [] as SharedCaret[],
 	refusesCreates: false,
 }))
 
@@ -87,6 +103,10 @@ const LIBRARY_COMMANDS: Record<string, (call: LibraryCall) => unknown> = {
 		Y.applyUpdate(documentOf(name), bytesOf(update))
 		return null
 	},
+	library_share_caret: ({ spaceId, name, caret }) => {
+		host.sharedCarets.push({ spaceId, name, caret })
+		return null
+	},
 	library_create_document: ({ name }) => {
 		if (host.refusesCreates) {
 			throw { kind: "unwritable", detail: "disk full" }
@@ -116,7 +136,13 @@ vi.mock("@/lib/host/index", async (importOriginal) => {
 			heardOn(event).delete(handler)
 		})
 	}) as typeof actual.listen
-	return { ...actual, invoke, listen, isDesktopHost: () => false }
+	return {
+		...actual,
+		invoke,
+		listen,
+		isDesktopHost: () => false,
+		currentWindowLabel: () => OWN_WINDOW,
+	}
 })
 
 vi.mock("@workspace/ui/components/notice-surface", async (importOriginal) => ({
@@ -135,6 +161,7 @@ afterEach(() => {
 	cleanup()
 	host.documents.clear()
 	host.listeners.clear()
+	host.sharedCarets = []
 	host.refusesCreates = false
 	vi.mocked(raiseFailureNotice).mockClear()
 })
@@ -210,6 +237,18 @@ const ATLAS = {
 	avatarImagePath: null,
 } as Bot
 
+const signedInWrapper = () => {
+	const { queryClient, wrapper } = createQueryTestWrapper()
+	queryClient.setQueryData(accountQueryKeys.state(), {
+		kind: "signedIn",
+		id: OWN_ACCOUNT,
+		email: "me@example.com",
+		createdAt: "2026-01-01T00:00:00Z",
+		plan: null,
+	})
+	return wrapper
+}
+
 const renderLibraryScreen = async (isJoined: boolean) => {
 	const rendered = render(
 		createElement(LibraryScreen, {
@@ -217,7 +256,7 @@ const renderLibraryScreen = async (isJoined: boolean) => {
 			isJoined,
 			bots: [ATLAS],
 		}),
-		{ wrapper: createQueryTestWrapper().wrapper },
+		{ wrapper: signedInWrapper() },
 	)
 	await screen.findByRole("heading", {
 		level: 1,
@@ -263,6 +302,11 @@ const atlasCaret = () =>
 		name: common("library.document.agents.caret", { name: "Atlas" }),
 	})
 
+const shownPeople = () =>
+	[
+		...document.querySelectorAll("[data-slot='library-document-person-caret']"),
+	].map((caret) => caret.getAttribute("aria-label"))
+
 const presenceListenerCount = () =>
 	heardOn(LIBRARY_DOCUMENT_PRESENCE_EVENT).size
 
@@ -305,7 +349,7 @@ describe.each([
 })
 
 describe("the carets of the open document", () => {
-	it("paints an agent in the hue of its roster entry, and shows no caret for the person or a member", async () => {
+	it("paints an agent in the hue of its roster entry, apart from the people carets", async () => {
 		await renderLibraryScreen(false)
 		await openDocument(NOTES)
 
@@ -327,6 +371,7 @@ describe("the carets of the open document", () => {
 		expect(
 			document.querySelectorAll("[data-slot='library-document-caret']"),
 		).toHaveLength(1)
+		expect(shownPeople()).toEqual(["Ines"])
 		expect(
 			screen.getByText(common("library.document.agents.writing", { count: 1 })),
 		).toBeInstanceOf(HTMLElement)
@@ -412,5 +457,329 @@ describe("a document the host fails to create", () => {
 			),
 		)
 		expect(screen.queryByRole("textbox", { name: PARAGRAPH_FIELD })).toBeNull()
+	})
+})
+
+const offsetOnHost = (name: string, caret: string) =>
+	Y.createAbsolutePositionFromRelativePosition(
+		Y.decodeRelativePosition(bytesOf(caret)),
+		documentOf(name),
+	)?.index
+
+const placeCaret = (field: HTMLTextAreaElement, offset: number) => {
+	act(() => {
+		field.focus()
+		field.setSelectionRange(offset, offset)
+		fireEvent.select(field)
+	})
+}
+
+const nullCaretsShared = () =>
+	host.sharedCarets.filter(({ caret }) => caret === null)
+
+const finishWriting = (
+	name: string,
+	outcome: "finished" | "failed",
+	{ spaceId = SPACE_ID, agentId = ATLAS_ID, agentName = "atlas" } = {},
+) =>
+	emit(
+		LIBRARY_DOCUMENT_WRITER_FINISHED_EVENT,
+		{ spaceId, name, agentId, agentName, outcome },
+		null,
+	)
+
+const atlasWritesThenFinishes = async (name: string) => {
+	const caret = agentWritesAtEnd(name, AGENT_TEXT, null)
+	announcePresence(name, [writerOf(ATLAS_ID, "agent", caret, "Atlas")], null)
+	announcePresence(name, [], null)
+	finishWriting(name, "finished")
+	return waitFor(() => finishedBar() as HTMLElement)
+}
+
+const finishedBar = () =>
+	document.querySelector("[data-slot='library-document-finished']")
+
+const finishedListenerCount = () =>
+	heardOn(LIBRARY_DOCUMENT_WRITER_FINISHED_EVENT).size
+
+const caretFromAnotherDocument = () =>
+	base64Of(
+		Y.encodeRelativePosition(
+			Y.createRelativePositionFromTypeIndex(
+				(() => {
+					const stranger = new Y.Doc()
+					stranger.getText("markdown").insert(0, "elsewhere")
+					return stranger.getText("markdown")
+				})(),
+				4,
+			),
+		),
+	)
+
+describe("the caret the person shares", () => {
+	it("shares the relative position of the caret the editor reports", async () => {
+		await renderLibraryScreen(false)
+		const [intro] = await openDocument(NOTES)
+
+		placeCaret(intro as HTMLTextAreaElement, 5)
+
+		await waitFor(() => expect(host.sharedCarets).toHaveLength(1))
+		const [shared] = host.sharedCarets
+		expect(shared).toMatchObject({ spaceId: SPACE_ID, name: NOTES })
+		expect(offsetOnHost(NOTES, shared?.caret as string)).toBe(5)
+	})
+
+	it("shares a null caret when the editor reports none", async () => {
+		await renderLibraryScreen(false)
+		const [intro] = await openDocument(NOTES)
+		placeCaret(intro as HTMLTextAreaElement, 5)
+
+		await act(async () => {
+			intro?.blur()
+			await new Promise((resolve) => setTimeout(resolve))
+		})
+
+		await waitFor(() => expect(host.sharedCarets.at(-1)?.caret).toBeNull())
+	})
+
+	it("withdraws the caret exactly once when the document closes", async () => {
+		await renderLibraryScreen(false)
+		const [intro] = await openDocument(NOTES)
+		placeCaret(intro as HTMLTextAreaElement, 5)
+
+		await goBack()
+		await act(async () => {
+			await new Promise((resolve) => setTimeout(resolve))
+		})
+
+		await waitFor(() =>
+			expect(nullCaretsShared()).toEqual([
+				{ spaceId: SPACE_ID, name: NOTES, caret: null },
+			]),
+		)
+	})
+
+	it("withdraws the caret once when the editor already reported none before closing", async () => {
+		await renderLibraryScreen(false)
+		const [intro] = await openDocument(NOTES)
+		placeCaret(intro as HTMLTextAreaElement, 5)
+		await act(async () => {
+			intro?.blur()
+			await new Promise((resolve) => setTimeout(resolve))
+		})
+
+		await goBack()
+
+		await waitFor(() => expect(host.sharedCarets.at(-1)?.caret).toBeNull())
+		expect(nullCaretsShared()).toHaveLength(1)
+	})
+
+	it("withdraws the caret exactly once when the screen unmounts", async () => {
+		const { unmount } = await renderLibraryScreen(true)
+		const [intro] = await openDocument(NOTES)
+		placeCaret(intro as HTMLTextAreaElement, 5)
+
+		unmount()
+		await act(async () => {
+			await new Promise((resolve) => setTimeout(resolve))
+		})
+
+		expect(nullCaretsShared()).toEqual([
+			{ spaceId: SPACE_ID, name: NOTES, caret: null },
+		])
+	})
+})
+
+describe.each([
+	{
+		place: "on the host",
+		isJoined: false,
+		hostId: null,
+		own: writerOf(OWN_WINDOW, "person", "", "Me"),
+		others: [
+			writerOf("window-2", "person", "", "Second window"),
+			writerOf("account-ines", "member", "", "Ines"),
+		],
+	},
+	{
+		place: "in a joined Space",
+		isJoined: true,
+		hostId: "host-1",
+		own: writerOf(OWN_ACCOUNT, "member", "", "Me"),
+		others: [
+			writerOf(OWN_WINDOW, "person", "", "Host"),
+			writerOf("account-ines", "member", "", "Ines"),
+		],
+	},
+])(
+	"the people seated in the open document $place",
+	({ isJoined, hostId, own, others }) => {
+		it("draws every other person at their caret, never the caller own seat", async () => {
+			await renderLibraryScreen(isJoined)
+			await openDocument(NOTES)
+
+			announcePresence(
+				NOTES,
+				[own, ...others].map((writer) => ({
+					...writer,
+					caret: caretAt(NOTES, 3),
+				})),
+				hostId,
+			)
+
+			await waitFor(() =>
+				expect(new Set(shownPeople())).toEqual(
+					new Set(others.map(({ name }) => name)),
+				),
+			)
+		})
+
+		it("leaves out a person whose caret no longer resolves", async () => {
+			await renderLibraryScreen(isJoined)
+			await openDocument(NOTES)
+			const [placed, lost] = others
+
+			announcePresence(
+				NOTES,
+				[
+					{ ...(placed as LibraryWriter), caret: caretAt(NOTES, 3) },
+					{ ...(lost as LibraryWriter), caret: caretFromAnotherDocument() },
+				],
+				hostId,
+			)
+
+			await waitFor(() => expect(shownPeople()).toEqual([placed?.name]))
+		})
+	},
+)
+
+describe("an agent that finishes writing in the open document", () => {
+	it("shows what it wrote with Undo all and Done", async () => {
+		await renderLibraryScreen(false)
+		await openDocument(NOTES)
+
+		const bar = await atlasWritesThenFinishes(NOTES)
+
+		expect(
+			within(bar).getByText(
+				common("library.document.agents.finished.one", { name: "Atlas" }),
+			),
+		).toBeInstanceOf(HTMLElement)
+		expect(bar.textContent).toContain(
+			common("library.document.agents.added", { count: 2 }),
+		)
+		expect(shownRuns()).toEqual([AGENT_TEXT])
+	})
+
+	it("removes the written text for every writer on Undo all", async () => {
+		await renderLibraryScreen(false)
+		await openDocument(NOTES)
+		const bar = await atlasWritesThenFinishes(NOTES)
+
+		await act(async () => {
+			fireEvent.click(
+				within(bar).getByRole("button", {
+					name: common("library.document.agents.undoAll"),
+				}),
+			)
+		})
+
+		await waitFor(() =>
+			expect(documentOf(NOTES).getText("markdown").toString()).toBe(OPENING),
+		)
+		expect(finishedBar()).toBeNull()
+	})
+
+	it("keeps the text on Done", async () => {
+		await renderLibraryScreen(false)
+		await openDocument(NOTES)
+		const bar = await atlasWritesThenFinishes(NOTES)
+
+		await act(async () => {
+			fireEvent.click(
+				within(bar).getByRole("button", {
+					name: common("library.document.agents.done"),
+				}),
+			)
+		})
+
+		expect(finishedBar()).toBeNull()
+		await new Promise((resolve) => setTimeout(resolve, 300))
+		expect(documentOf(NOTES).getText("markdown").toString()).toBe(
+			`${OPENING}${AGENT_TEXT}`,
+		)
+	})
+
+	it("forgets the finished state when another document opens", async () => {
+		await renderLibraryScreen(false)
+		await openDocument(NOTES)
+		await atlasWritesThenFinishes(NOTES)
+
+		await goBack()
+		await openDocument(PLAN)
+
+		expect(finishedBar()).toBeNull()
+	})
+
+	it.each([
+		{
+			about: "a known bot by its roster name",
+			agentName: "atlas",
+			shown: "Atlas",
+		},
+		{
+			about: "an unknown agent by its own name",
+			agentName: "Nova",
+			shown: "Nova",
+		},
+	])("raises the write failure naming $about", async ({ agentName, shown }) => {
+		await renderLibraryScreen(false)
+		await openDocument(NOTES)
+
+		finishWriting(NOTES, "failed", {
+			agentId: shown === "Atlas" ? ATLAS_ID : "bot-nova",
+			agentName,
+		})
+
+		await waitFor(() =>
+			expect(raiseFailureNotice).toHaveBeenCalledWith(
+				expect.objectContaining({
+					title: common("library.failure.document.write", { name: shown }),
+				}),
+			),
+		)
+		expect(finishedBar()).toBeNull()
+	})
+
+	it("ignores an agent finishing in another space or another document", async () => {
+		await renderLibraryScreen(false)
+		await openDocument(NOTES)
+		const caret = agentWritesAtEnd(NOTES, AGENT_TEXT, null)
+		announcePresence(NOTES, [writerOf(ATLAS_ID, "agent", caret, "Atlas")], null)
+
+		finishWriting(PLAN, "finished")
+		finishWriting(NOTES, "finished", { spaceId: "other-space" })
+		finishWriting(PLAN, "failed")
+		finishWriting(NOTES, "failed", { spaceId: "other-space" })
+
+		await new Promise((resolve) => setTimeout(resolve, 50))
+		expect(finishedBar()).toBeNull()
+		expect(raiseFailureNotice).not.toHaveBeenCalled()
+	})
+
+	it("listens once per open document however often the screen renders", async () => {
+		await renderLibraryScreen(false)
+		expect(finishedListenerCount()).toBe(0)
+
+		await openDocument(NOTES)
+		await waitFor(() => expect(finishedListenerCount()).toBe(1))
+		const listened = [...heardOn(LIBRARY_DOCUMENT_WRITER_FINISHED_EVENT)]
+		await atlasWritesThenFinishes(NOTES)
+		expect([...heardOn(LIBRARY_DOCUMENT_WRITER_FINISHED_EVENT)]).toEqual(
+			listened,
+		)
+
+		await goBack()
+		await waitFor(() => expect(finishedListenerCount()).toBe(0))
 	})
 })

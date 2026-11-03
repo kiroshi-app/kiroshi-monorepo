@@ -19,6 +19,7 @@ import { i18n } from "@workspace/ui/lib/i18n"
 import { LibraryDropTarget } from "@/components/library-drop-target"
 import type { Space } from "@/lib/bindings"
 import type { Bot } from "@/lib/conversations/store-contract"
+import { withoutEdits } from "@/lib/library/library-document-writers"
 import { matchesQuery, toShownItem } from "@/lib/library/library-items"
 import { useCreateLibraryDocument } from "@/lib/library/use-create-library-document"
 import {
@@ -76,15 +77,17 @@ export const LibraryScreen = ({
 	const { create, isCreating } = useCreateLibraryDocument(spaceId)
 	const { importingItems, importDropped } = useLibraryImports(spaceId, isJoined)
 	const openedDocument = opened?.kind === "document" ? opened : null
-	const { document, edit, hasFailedToOpen, closeAndRelist } =
+	const { document, edit, shareCaret, hasFailedToOpen, closeAndRelist } =
 		useLibraryDocumentSession(spaceId, openedDocument?.name ?? null)
-	const writers = useLibraryDocumentWriters({
-		spaceId,
-		name: openedDocument?.name ?? null,
-		document,
-		bots,
-		title: openedDocument?.title ?? "",
-	})
+	const { writers, people, finished, dismissFinished } =
+		useLibraryDocumentWriters({
+			spaceId,
+			name: openedDocument?.name ?? null,
+			isJoined,
+			document,
+			bots,
+			title: openedDocument?.title ?? "",
+		})
 	if (openedDocument && hasFailedToOpen) {
 		setOpened(null)
 	}
@@ -143,6 +146,12 @@ export const LibraryScreen = ({
 		void closeAndRelist()
 		close()
 	}
+	const undoAll = () => {
+		if (document && finished) {
+			edit(withoutEdits(document.markdown, finished.edits))
+		}
+		dismissFinished()
+	}
 	const retitle = (title: string) => {
 		if (openedDocument) {
 			setOpened({ ...openedDocument, title })
@@ -154,11 +163,16 @@ export const LibraryScreen = ({
 			<LibraryDocumentEditor
 				body={document.markdown}
 				detail={openedDocument.detail}
+				finished={finished}
 				key={openedDocument.name}
 				onBack={leaveDocument}
 				onBodyChange={edit}
+				onCaretChange={shareCaret}
+				onDone={dismissFinished}
 				onMore={reveal && (() => reveal({ id: openedDocument.name }))}
 				onTitleChange={retitle}
+				onUndoAll={undoAll}
+				people={people}
 				template={openedDocument.template}
 				title={openedDocument.title}
 				writers={writers}
