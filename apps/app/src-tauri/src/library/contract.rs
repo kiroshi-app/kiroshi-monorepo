@@ -54,6 +54,8 @@ pub struct LibraryFile {
 
 pub const DOCUMENT_UPDATED_EVENT: &str = "library://document-updated";
 
+pub const DOCUMENT_RENAMED_EVENT: &str = "library://document-renamed";
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LibraryTemplate {
@@ -74,6 +76,14 @@ pub struct LibraryDocumentUpdated {
 	pub space_id: String,
 	pub name: String,
 	pub update: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryDocumentRenamed {
+	pub space_id: String,
+	pub former_name: String,
+	pub name: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]

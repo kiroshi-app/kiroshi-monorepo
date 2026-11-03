@@ -49,6 +49,7 @@ export const commands = {
 	libraryReadThumbnail: (spaceId: string, name: string) => typedError<LibraryImage, LibraryError>(__TAURI_INVOKE("library_read_thumbnail", { spaceId, name })),
 	libraryImport: (spaceId: string, name: string, content: string) => typedError<LibraryItem, LibraryError>(__TAURI_INVOKE("library_import", { spaceId, name, content })),
 	libraryImportPaths: (spaceId: string, paths: string[]) => typedError<LibraryImport[], LibraryError>(__TAURI_INVOKE("library_import_paths", { spaceId, paths })),
+	libraryRenameDocument: (spaceId: string, name: string, newName: string) => typedError<LibraryItem, LibraryError>(__TAURI_INVOKE("library_rename_document", { spaceId, name, newName })),
 	badgeSet: (count: number) => typedError<null, string>(__TAURI_INVOKE("badge_set", { count })),
 	claudeImportInventory: () => typedError<ClaudeInventory, TranscriptStoreError>(__TAURI_INVOKE("claude_import_inventory")),
 	claudeImportRun: (selection: string[], spaceId: string) => typedError<ClaudeImportOutcome[], TranscriptStoreError>(__TAURI_INVOKE("claude_import_run", { selection, spaceId })),
@@ -341,6 +342,8 @@ export const JOINED_SPACE_RECONNECTED_EVENT = "joined-space://reconnected" as co
 export const JOINED_SPACE_REMOVED_EVENT = "joined-space://removed" as const;
 
 export const JOIN_LINK_OPENED_EVENT = "join-link://opened" as const;
+
+export const LIBRARY_DOCUMENT_RENAMED_EVENT = "library://document-renamed" as const;
 
 export const LIBRARY_DOCUMENT_UPDATED_EVENT = "library://document-updated" as const;
 
@@ -1176,6 +1179,12 @@ export type LibraryDocument = {
 };
 
 export type LibraryDocumentFormat = "markdown" | "text";
+
+export type LibraryDocumentRenamed = {
+	spaceId: string,
+	formerName: string,
+	name: string,
+};
 
 export type LibraryDocumentState = {
 	name: string,
