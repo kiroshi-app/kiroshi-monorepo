@@ -1613,6 +1613,10 @@ describe("WorkspaceBody library", () => {
 
 		await open("Spring launch brief")
 		await press("More")
+		fireEvent.click(
+			await screen.findByRole("menuitem", { name: "Show in folder" }),
+		)
+		await settle()
 
 		expect(reveal.mock.calls).toEqual([
 			[SPACE, HERO.name],
