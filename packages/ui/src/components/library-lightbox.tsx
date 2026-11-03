@@ -18,14 +18,6 @@ import { Separator } from "@workspace/ui/components/ui/separator"
 import { COPIED_RESET_MS } from "@workspace/ui/hooks/use-copy-text"
 import { cn } from "@workspace/ui/lib/utils"
 
-type CopyOutcome = "idle" | "copied" | "failed"
-
-const COPY_ANNOUNCEMENT_KEY = {
-	idle: null,
-	copied: "library.lightbox.copied",
-	failed: "library.lightbox.copyFailed",
-} as const satisfies Record<CopyOutcome, string | null>
-
 type LibraryLightboxImage = {
 	id: string
 	name: string
@@ -47,7 +39,7 @@ const STEP = cn(ROUND, "size-10 bg-foreground/10 hover:bg-foreground/16")
 
 const ZOOM_CONTROL = cn(ROUND, "size-7 hover:bg-foreground/8")
 
-const DIVIDER = "bg-foreground/12"
+const DIVIDER = "bg-foreground/12 data-vertical:self-center"
 
 const ZOOM_SLOT = "library-lightbox-zoom"
 
@@ -190,24 +182,29 @@ const LibraryLightbox = ({
 	const surfaceRef = useRef<HTMLDivElement>(null)
 	const isFirst = position <= 1
 	const isLast = position >= count
-	const [copyOutcome, setCopyOutcome] = useState<CopyOutcome>("idle")
-	const announcementKey = COPY_ANNOUNCEMENT_KEY[copyOutcome]
+	const [copiedImageId, setCopiedImageId] = useState<string | null>(null)
+	const [shownImageId, setShownImageId] = useState(image?.id)
+	if (image?.id !== shownImageId) {
+		setShownImageId(image?.id)
+		setCopiedImageId(null)
+	}
+	const isCopied = image !== null && copiedImageId === image.id
 
 	useEffect(() => {
-		if (copyOutcome === "idle") return
+		if (copiedImageId === null) return
 		const timer = window.setTimeout(
-			() => setCopyOutcome("idle"),
+			() => setCopiedImageId(null),
 			COPIED_RESET_MS,
 		)
 		return () => window.clearTimeout(timer)
-	}, [copyOutcome])
+	}, [copiedImageId])
 
 	const copyImage = async (shown: LibraryLightboxImage) => {
 		try {
 			await onCopy(shown)
-			setCopyOutcome("copied")
+			setCopiedImageId(shown.id)
 		} catch {
-			setCopyOutcome("failed")
+			setCopiedImageId(null)
 		}
 	}
 
@@ -271,7 +268,7 @@ const LibraryLightbox = ({
 								>
 									<IconSwap
 										icon={<Icons.Copy aria-hidden="true" />}
-										isSwapped={copyOutcome === "copied"}
+										isSwapped={isCopied}
 										swappedIcon={<Icons.Check aria-hidden="true" />}
 									/>
 								</TooltipButton>
@@ -341,7 +338,7 @@ const LibraryLightbox = ({
 							</TooltipButton>
 						</div>
 						<span aria-live="polite" className="sr-only">
-							{announcementKey ? t(announcementKey) : ""}
+							{isCopied ? t("library.lightbox.copied") : ""}
 						</span>
 					</DialogPrimitive.Popup>
 				) : null}

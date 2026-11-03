@@ -6,6 +6,8 @@ import preview from "@workspace/storybook/preview"
 import {
 	expectSkeletonFilledTo,
 	hueScopeOf,
+	isInBrowserRunner,
+	realPointer,
 	slotIn,
 	slotsIn,
 } from "@workspace/storybook/story-utils"
@@ -188,9 +190,17 @@ export const GridAll = meta.story({
 			.getPropertyValue("--primary")
 			.trim()
 		await expect(getComputedStyle(all).backgroundColor).toBe(rgbOf(accent))
-		await userEvent.hover(all)
-		await expect(getComputedStyle(all).backgroundColor).toBe(rgbOf(accent))
-		await userEvent.unhover(all)
+		if (isInBrowserRunner()) {
+			const pointer = await realPointer()
+			try {
+				await pointer.hover(all)
+				await waitFor(() => expect(all.matches(":hover")).toBe(true))
+				await expect(all).toHaveAttribute("aria-pressed", "true")
+				await expect(getComputedStyle(all).backgroundColor).toBe(rgbOf(accent))
+			} finally {
+				await pointer.unhover(all)
+			}
+		}
 		await expect(
 			getComputedStyle(slotIn(canvasElement, "library-thumbnail"))
 				.backgroundColor,

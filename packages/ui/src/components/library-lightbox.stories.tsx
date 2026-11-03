@@ -174,6 +174,15 @@ export const Default = meta.story({
 			await expect(getComputedStyle(action).transitionProperty).toBe("none")
 		}
 
+		for (const divider of within(popup).getAllByRole("separator")) {
+			const box = divider.getBoundingClientRect()
+			const row = divider.parentElement?.getBoundingClientRect()
+			await expect(box.top + box.height / 2).toBeCloseTo(
+				(row?.top ?? 0) + (row?.height ?? 0) / 2,
+				0,
+			)
+		}
+
 		await userEvent.hover(
 			within(popup).getByRole("button", { name: "Next image" }),
 		)
@@ -241,7 +250,7 @@ export const CopyCheck = meta.story({
 		docs: {
 			description: {
 				story:
-					"Copy pressed and the copy settled. Check that the copy icon swaps for a check, that a screen reader hears Copied, and that the copy icon comes back once the shared copy reset delay runs out.",
+					"Copy pressed and the copy settled. Check that the copy icon swaps for a check, that a screen reader hears Copied, that the copy icon comes back once the shared copy reset delay runs out, and that stepping to the next image after a copy shows the copy icon at once.",
 			},
 		},
 	},
@@ -280,35 +289,54 @@ export const CopyCheck = meta.story({
 			"false",
 		)
 		await expect(announcementIn(popup)).toHaveTextContent("")
+
+		await userEvent.click(within(popup).getByRole("button", { name: "Copy" }))
+		await waitFor(() =>
+			expect(copySwapIn(popup).checkLayer).toHaveAttribute(
+				"data-shown",
+				"true",
+			),
+		)
+		await userEvent.keyboard("{ArrowRight}")
+		await expect(popup).toHaveTextContent("3 of 8")
+		await expect(copySwapIn(popup).copyLayer).toHaveAttribute(
+			"data-shown",
+			"true",
+		)
+		await expect(copySwapIn(popup).checkLayer).toHaveAttribute(
+			"data-shown",
+			"false",
+		)
+		await expect(announcementIn(popup)).toHaveTextContent("")
 	},
+})
+
+const refusedCopy = fn(async () => {
+	throw new Error("The clipboard refused the image.")
 })
 
 export const CopyRefused = meta.story({
 	tags: ["test-only"],
-	args: {
-		onCopy: fn(async () => {
-			throw new Error("The clipboard refused the image.")
-		}),
-	},
+	args: { onCopy: refusedCopy },
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Copy pressed and the copy rejected. Check that the copy icon stays, that no Copied is announced, and that the failure is announced instead.",
+					"Copy pressed and the copy rejected. Check that the copy icon stays, that no check appears and that the lightbox announces nothing, the caller having raised its own failure notice.",
 			},
 		},
 	},
-	play: async ({ args, userEvent }) => {
+	play: async ({ userEvent }) => {
 		const popup = await lightbox()
 
 		await userEvent.click(within(popup).getByRole("button", { name: "Copy" }))
 
-		await expect(args.onCopy).toHaveBeenCalledWith(LIBRARY_LIGHTBOX_IMAGES[1])
-		await waitFor(() =>
-			expect(announcementIn(popup)).toHaveTextContent(
-				"Couldn’t copy the image. Press Copy again.",
-			),
+		await expect(refusedCopy).toHaveBeenCalledWith(LIBRARY_LIGHTBOX_IMAGES[1])
+		await expect(refusedCopy.mock.results[0]?.value).rejects.toThrow(
+			"The clipboard refused the image.",
 		)
+		await new Promise((settled) => window.setTimeout(settled, 100))
+		await expect(announcementIn(popup)).toHaveTextContent("")
 		await expect(copySwapIn(popup).copyLayer).toHaveAttribute(
 			"data-shown",
 			"true",

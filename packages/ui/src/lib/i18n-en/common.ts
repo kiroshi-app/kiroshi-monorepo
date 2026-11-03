@@ -360,7 +360,6 @@ const common = {
 			download: "Download",
 			copy: "Copy",
 			copied: "Copied",
-			copyFailed: "Couldn’t copy the image. Press Copy again.",
 			openFolder: "Open folder",
 			close: "Close",
 			previous: "Previous image",

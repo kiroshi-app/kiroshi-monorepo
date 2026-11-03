@@ -385,7 +385,6 @@ const common = {
 			download: "Télécharger",
 			copy: "Copier",
 			copied: "Copié",
-			copyFailed: "Impossible de copier l’image. Appuyez à nouveau sur Copier.",
 			openFolder: "Ouvrir le dossier",
 			close: "Fermer",
 			previous: "Image précédente",
