@@ -20,6 +20,7 @@ interface AnswerMarksOptions {
 export const CALLOUT_PROPERTY = "dataCallout"
 export const PENDING_PROPERTY = "dataPending"
 export const SOURCED_IMAGE_PROPERTY = "dataSourcedImage"
+export const LINKED_IMAGE_PROPERTY = "dataLinkedImage"
 
 const CALLOUT_MARKERS = { "[!NOTE]": "note", "[!WARNING]": "warning" } as const
 
@@ -147,6 +148,16 @@ const markSourcedImages = (root: HastNode) => {
 	root.children = marked
 }
 
+const markLinkedImages = (node: HastNode, isInLink: boolean) => {
+	const isLinkBelow = isInLink || isElement(node, "a")
+	for (const child of node.children ?? []) {
+		if (isLinkBelow && isElement(child, "img")) {
+			child.properties = { ...child.properties, [LINKED_IMAGE_PROPERTY]: true }
+		}
+		markLinkedImages(child, isLinkBelow)
+	}
+}
+
 const isClosedFence = (pre: HastNode, source: string) => {
 	const start = pre.position?.start.offset
 	const end = pre.position?.end.offset
@@ -162,6 +173,7 @@ export const rehypeAnswerMarks =
 		const source = String(file.value ?? "")
 
 		markSourcedImages(tree)
+		markLinkedImages(tree, false)
 		eachNode(tree, (node) => {
 			if (isElement(node, "blockquote")) markCallout(node)
 			if (isWriting && isElement(node, "pre") && !isClosedFence(node, source)) {

@@ -3,16 +3,25 @@ import { describe, expect, it } from "vitest"
 
 import { I18nProvider } from "@workspace/ui/components/i18n-provider"
 import { Markdown } from "@workspace/ui/components/markdown"
+import type { MarkdownAnswerActions } from "@workspace/ui/components/markdown/answer-actions"
 import { prepareHighlighter } from "@workspace/ui/lib/code-highlight"
 
 prepareHighlighter()
 
-type RenderOptions = { isWriting?: boolean }
+type RenderOptions = {
+	isWriting?: boolean
+	answerActions?: MarkdownAnswerActions
+}
 
-const render = (source: string, { isWriting = false }: RenderOptions = {}) =>
+const render = (
+	source: string,
+	{ isWriting = false, answerActions }: RenderOptions = {},
+) =>
 	renderToStaticMarkup(
 		<I18nProvider>
-			<Markdown isWriting={isWriting}>{source}</Markdown>
+			<Markdown answerActions={answerActions} isWriting={isWriting}>
+				{source}
+			</Markdown>
 		</I18nProvider>,
 	)
 
@@ -270,4 +279,63 @@ describe("rich answer blocks written in GFM", () => {
 		expect(html).not.toContain(slot("sourced-image"))
 		expect(html).toContain("Source: ")
 	})
+})
+
+describe("images of an agent answer", () => {
+	const ANSWER_ACTIONS: MarkdownAnswerActions = {
+		agentName: "Atlas",
+		onPickOption: () => undefined,
+		onUseValues: () => undefined,
+		onOpenImage: () => undefined,
+	}
+	const SOURCED =
+		"![The Lisbon waterfront at dusk](https://images.example.org/lisbon.jpg)\n\nSource: [Visit Lisboa](https://www.visitlisboa.com/en)"
+	const PLAIN = "Here: ![A green sofa](https://images.example.org/sofa.jpg)"
+	const LINKED =
+		"[![A green sofa](https://images.example.org/sofa.jpg)](https://shop.example.org/sofa)"
+	const opener = slot("markdown-image-open")
+
+	it("wraps a sourced image in a button naming the image", () => {
+		const html = render(SOURCED, { answerActions: ANSWER_ACTIONS })
+
+		expect(html).toMatch(
+			/<button type="button" aria-label="The Lisbon waterfront at dusk" data-slot="markdown-image-open"[^>]*><figure data-slot="sourced-image"/,
+		)
+	})
+
+	it("wraps a plain image in a button", () => {
+		const html = render(PLAIN, { answerActions: ANSWER_ACTIONS })
+
+		expect(html).toMatch(
+			/<button type="button" aria-label="A green sofa" data-slot="markdown-image-open"[^>]*><img/,
+		)
+	})
+
+	it("names a plain image without alt text as an image", () => {
+		const html = render("![](https://images.example.org/sofa.jpg)", {
+			answerActions: ANSWER_ACTIONS,
+		})
+
+		expect(html).toContain('aria-label="Image"')
+	})
+
+	it("leaves an image inside a link to its link", () => {
+		const html = render(LINKED, { answerActions: ANSWER_ACTIONS })
+
+		expect(html).not.toContain(opener)
+		expect(html).toContain("<img")
+	})
+
+	it.each([
+		["a sourced image", SOURCED],
+		["a plain image", PLAIN],
+	])(
+		"draws %s exactly as before when no answer actions are given",
+		(_, source) => {
+			const html = render(source)
+
+			expect(html).not.toContain(opener)
+			expect(html).not.toContain("<button")
+		},
+	)
 })

@@ -319,14 +319,100 @@ export const SourcedImageInAnswer = meta.story({
 		docs: {
 			description: {
 				story:
-					"A GFM image alone on its line followed by its `Source:` line, drawn as one sourced image naming the source.",
+					"A GFM image alone on its line followed by its `Source:` line, drawn as one sourced image naming the source. Check Enter on it hands that image to `onOpenImage`.",
 			},
 		},
 	},
-	play: async ({ canvas, canvasElement }) => {
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
 		await expect(slotIn(canvasElement, "sourced-image")).toHaveTextContent(
 			"Visit Lisboa",
 		)
 		await expect(canvas.queryByText(/^Source:/)).toBeNull()
+
+		canvas
+			.getByRole("button", { name: "The Lisbon waterfront at dusk" })
+			.focus()
+		await userEvent.keyboard("{Enter}")
+		await expect(args.answerActions?.onOpenImage).toHaveBeenCalledWith(
+			[
+				expect.objectContaining({
+					name: "The Lisbon waterfront at dusk",
+					detail: "Visit Lisboa",
+				}),
+			],
+			0,
+		)
+	},
+})
+
+const PLAIN_IMAGE = `The sofa I mean: ![Green velvet sofa](https://images.example.org/sofa-green.jpg)`
+
+export const PlainImageInAnswer = meta.story({
+	tags: ["test-only"],
+	args: { children: PLAIN_IMAGE },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A plain Markdown image in an answer. Check a click hands that image alone to `onOpenImage`.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Green velvet sofa" }),
+		)
+		await expect(args.answerActions?.onOpenImage).toHaveBeenCalledWith(
+			[
+				expect.objectContaining({
+					name: "Green velvet sofa",
+					src: "https://images.example.org/sofa-green.jpg",
+				}),
+			],
+			0,
+		)
+	},
+})
+
+const boxOf = (element: Element) => {
+	const { width, height } = element.getBoundingClientRect()
+	return { width, height }
+}
+
+export const ImagesLookTheSameWhenOpenable = meta.story({
+	tags: ["test-only"],
+	render: (args) => (
+		<>
+			<div data-testid="openable">
+				<Markdown answerActions={args.answerActions}>
+					{`${SOURCED_IMAGE}\n\n${PLAIN_IMAGE}`}
+				</Markdown>
+			</div>
+			<div data-testid="static">
+				<Markdown>{`${SOURCED_IMAGE}\n\n${PLAIN_IMAGE}`}</Markdown>
+			</div>
+		</>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same answer with and without answer actions. Check the button around each image changes neither the box of the sourced image, nor the box of the plain image, nor the height of the answer.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const openable = canvas.getByTestId("openable")
+		const plain = canvas.getByTestId("static")
+		await expect(openable.querySelectorAll("button")).toHaveLength(2)
+		await expect(plain.querySelector("button")).toBeNull()
+
+		for (const selector of ['[data-slot="sourced-image"]', "p img"]) {
+			const shown = openable.querySelector(selector)
+			const kept = plain.querySelector(selector)
+			if (!shown || !kept) throw new Error(`Nothing here draws ${selector}`)
+			await expect(boxOf(shown)).toEqual(boxOf(kept))
+		}
+		await expect(boxOf(openable).height).toBe(boxOf(plain).height)
 	},
 })

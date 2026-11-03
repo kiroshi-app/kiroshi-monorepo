@@ -1,6 +1,6 @@
 "use client"
 
-import type { ComponentPropsWithoutRef } from "react"
+import type { ComponentPropsWithoutRef, ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import type { ExtraProps } from "react-markdown"
 
@@ -9,16 +9,52 @@ import {
 	type CalloutTone,
 } from "@workspace/ui/components/answer-blocks/callout"
 import { SourcedImage } from "@workspace/ui/components/answer-blocks/sourced-image"
+import type { LibraryLightboxImage } from "@workspace/ui/components/library-lightbox"
+import { useMarkdownAnswerActions } from "@workspace/ui/components/markdown/answer-actions"
 import { AnswerBlockFrame } from "@workspace/ui/components/markdown/answer-block"
 import {
 	CALLOUT_PROPERTY,
+	LINKED_IMAGE_PROPERTY,
 	SOURCED_IMAGE_PROPERTY,
 } from "@workspace/ui/components/markdown/answer-marks"
+import { cn } from "@workspace/ui/lib/utils"
 
 type MarkdownBlockquoteProps = ComponentPropsWithoutRef<"blockquote"> &
 	ExtraProps
 
 type MarkdownFigureProps = ComponentPropsWithoutRef<"figure"> & ExtraProps
+
+type MarkdownImageProps = ComponentPropsWithoutRef<"img"> & ExtraProps
+
+type ImageOpenButtonProps = {
+	image: LibraryLightboxImage
+	isInline?: boolean
+	children: ReactNode
+}
+
+const ImageOpenButton = ({
+	image,
+	isInline = false,
+	children,
+}: ImageOpenButtonProps) => {
+	const actions = useMarkdownAnswerActions()
+	if (!actions) return children
+
+	return (
+		<button
+			type="button"
+			aria-label={image.name}
+			data-slot="markdown-image-open"
+			className={cn(
+				"max-w-full outline-offset-2",
+				isInline ? "inline-block" : "block w-full text-start",
+			)}
+			onClick={() => actions.onOpenImage([image], 0)}
+		>
+			{children}
+		</button>
+	)
+}
 
 const CALLOUT_TONES: readonly unknown[] = [
 	"note",
@@ -59,14 +95,45 @@ export const MarkdownFigure = ({
 	}
 
 	const alt = String(properties.alt)
+	const src = String(properties.src)
+	const sourceName = String(properties.dataSourceName)
 
 	return (
 		<AnswerBlockFrame>
-			<SourcedImage
-				image={{ src: String(properties.src), alt }}
-				source={{ domain: String(properties.dataSourceName) }}
-				title={alt}
-			/>
+			<ImageOpenButton image={{ id: src, name: alt, src, detail: sourceName }}>
+				<SourcedImage
+					image={{ src, alt }}
+					source={{ domain: sourceName }}
+					title={alt}
+				/>
+			</ImageOpenButton>
 		</AnswerBlockFrame>
+	)
+}
+
+export const MarkdownImage = ({
+	node,
+	alt,
+	src,
+	...props
+}: MarkdownImageProps) => {
+	const { t } = useTranslation("chat")
+	const image = <img {...props} alt={alt} src={src} />
+	if (typeof src !== "string" || node?.properties?.[LINKED_IMAGE_PROPERTY]) {
+		return image
+	}
+
+	return (
+		<ImageOpenButton
+			image={{
+				id: src,
+				name: alt || t("answerBlock.image.untitled"),
+				src,
+				detail: "",
+			}}
+			isInline
+		>
+			{image}
+		</ImageOpenButton>
 	)
 }

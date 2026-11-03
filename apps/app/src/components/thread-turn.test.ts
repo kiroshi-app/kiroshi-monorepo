@@ -329,6 +329,50 @@ describe("an agent answer carrying rich blocks", () => {
 		)
 	})
 
+	it("opens a sourced image of the answer in the viewer", () => {
+		const actions = actionsSpy()
+		renderTurn(
+			"assistant",
+			"The waterfront.\n\n![The Lisbon waterfront](https://images.example.org/lisbon.jpg)\n\nSource: [Visit Lisboa](https://www.visitlisboa.com)",
+			{ actions },
+		)
+
+		fireEvent.click(
+			screen.getByRole("button", { name: "The Lisbon waterfront" }),
+		)
+
+		expect(actions.openImage).toHaveBeenCalledWith(
+			[
+				expect.objectContaining({
+					name: "The Lisbon waterfront",
+					src: "https://images.example.org/lisbon.jpg",
+					detail: "Visit Lisboa",
+				}),
+			],
+			0,
+		)
+	})
+
+	it("opens a plain image of the answer in the viewer", () => {
+		const actions = actionsSpy()
+		renderTurn(
+			"assistant",
+			"This one: ![Green velvet sofa](https://images.example.org/green.jpg)",
+			{ actions },
+		)
+
+		fireEvent.click(screen.getByRole("button", { name: "Green velvet sofa" }))
+
+		expect(actions.openImage).toHaveBeenCalledWith(
+			[
+				expect.objectContaining({
+					src: "https://images.example.org/green.jpg",
+				}),
+			],
+			0,
+		)
+	})
+
 	it("quotes a selection of the answer with the name of its agent", () => {
 		const actions = actionsSpy()
 		renderTurn("assistant", "The sync dedupes on the client id.", {

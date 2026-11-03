@@ -376,6 +376,7 @@ const chat = {
 			summary: "{{values}}. {{label}} : {{result}}",
 		},
 		image: {
+			untitled: "Image",
 			copyFailed:
 				"Impossible de copier l’adresse de l’image. Appuyez de nouveau sur Copier.",
 			openFailed:
