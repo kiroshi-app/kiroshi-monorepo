@@ -1,4 +1,11 @@
-import { expect, fn, screen, waitFor, within } from "storybook/test"
+import {
+	expect,
+	fn,
+	screen,
+	type UserEventObject,
+	waitFor,
+	within,
+} from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { hueScopeOf, slotIn } from "@workspace/storybook/story-utils"
@@ -13,6 +20,7 @@ import {
 } from "@workspace/ui/components/library.fixtures"
 import {
 	type LibraryDocument,
+	LibraryDocumentBar,
 	LibraryDocumentView,
 	type LibraryDocumentViewProps,
 } from "@workspace/ui/components/library-document-view"
@@ -58,6 +66,34 @@ const barButtonNames = (bar: HTMLElement) =>
 	within(bar)
 		.getAllByRole("button")
 		.map((button) => button.getAttribute("aria-label") ?? button.textContent)
+
+const TITLE_TARGET_ID = "library-document-title-target"
+
+const titleTarget = () => document.getElementById(TITLE_TARGET_ID) ?? false
+
+const barAboveTitle =
+	(menuFinalFocus: () => HTMLElement | boolean) =>
+	({ document: item, onBack, onRename }: LibraryDocumentViewProps) => (
+		<div className="flex w-[1280px] flex-col gap-4 bg-background p-4">
+			<LibraryDocumentBar
+				item={item}
+				menuFinalFocus={menuFinalFocus}
+				onBack={onBack}
+				onRename={onRename}
+			/>
+			<input
+				aria-label="Document title"
+				defaultValue={item.name}
+				id={TITLE_TARGET_ID}
+			/>
+		</div>
+	)
+
+const pickRename = async (more: HTMLElement, userEvent: UserEventObject) => {
+	await userEvent.click(more)
+	const menu = await screen.findByRole("menu")
+	await userEvent.click(within(menu).getByRole("menuitem", { name: "Rename" }))
+}
 
 const meta = preview.meta({
 	title: "Navigation/LibraryDocumentView",
@@ -194,6 +230,77 @@ export const MoreMenu = meta.story({
 			within(menu).getByRole("menuitem", { name: "Show in folder" }),
 		)
 		await expect(args.onShowInFolder).toHaveBeenCalledWith(SPRING_BRIEF)
+	},
+})
+
+export const RenameWithFocusTarget = meta.story({
+	tags: ["test-only"],
+	render: barAboveTitle(titleTarget),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Rename picked from More while `menuFinalFocus` returns the title field. Check that the title holds focus once the menu closes and that More does not.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const more = canvas.getByRole("button", { name: "More" })
+		await pickRename(more, userEvent)
+		await expect(args.onRename).toHaveBeenCalledWith(SPRING_BRIEF)
+		const title = canvas.getByRole("textbox", { name: "Document title" })
+		await waitFor(() => expect(title).toHaveFocus())
+		await expect(more).not.toHaveFocus()
+	},
+})
+
+export const RenameWithFocusLeftInPlace = meta.story({
+	tags: ["test-only"],
+	render: barAboveTitle(() => false),
+	args: {
+		onRename: fn(() => {
+			requestAnimationFrame(() =>
+				document.getElementById(TITLE_TARGET_ID)?.focus(),
+			)
+		}),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Rename picked from More while `menuFinalFocus` returns `false`, Rename itself focusing the title field on the next frame. Check that the title keeps the focus Rename gave it once the menu closes.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const more = canvas.getByRole("button", { name: "More" })
+		await pickRename(more, userEvent)
+		const title = canvas.getByRole("textbox", { name: "Document title" })
+		await waitFor(() => expect(title).toHaveFocus())
+		await expect(more).not.toHaveFocus()
+	},
+})
+
+export const RenameWithoutFocusTarget = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Rename picked from More with no `menuFinalFocus`. Check that More holds focus once the menu closes, and again once it closes on Escape.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const more = canvas.getByRole("button", { name: "More" })
+		await pickRename(more, userEvent)
+		await expect(args.onRename).toHaveBeenCalledWith(SPRING_BRIEF)
+		await waitFor(() => expect(more).toHaveFocus())
+
+		await userEvent.click(more)
+		await screen.findByRole("menu")
+		await userEvent.keyboard("{Escape}")
+		await waitFor(() => expect(screen.queryByRole("menu")).toBe(null))
+		await expect(more).toHaveFocus()
 	},
 })
 

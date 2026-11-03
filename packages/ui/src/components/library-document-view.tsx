@@ -47,12 +47,14 @@ type LibraryDocumentBarProps<Item extends LibraryMenuSubject> =
 		item: Item
 		onBack: () => void
 		presence?: ReactNode
+		menuFinalFocus?: () => HTMLElement | boolean
 	}
 
 const LibraryDocumentBar = <Item extends LibraryMenuSubject>({
 	item,
 	onBack,
 	presence,
+	menuFinalFocus,
 	...actions
 }: LibraryDocumentBarProps<Item>) => {
 	const { t } = useTranslation("common")
@@ -86,6 +88,7 @@ const LibraryDocumentBar = <Item extends LibraryMenuSubject>({
 				actions={handlersFor(actions, item)}
 				item={item}
 				leading={presence}
+				menuFinalFocus={menuFinalFocus}
 				onClose={onBack}
 				surface="document"
 			/>

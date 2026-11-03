@@ -256,6 +256,7 @@ type LibraryItemBarActionsProps<Item extends LibraryMenuSubject> = {
 	leading?: ReactNode
 	onClose: () => void
 	onMenuOpenChange?: ComponentProps<typeof DropdownMenu>["onOpenChange"]
+	menuFinalFocus?: () => HTMLElement | boolean
 	onConfirmingDeleteChange?: (isConfirming: boolean) => void
 }
 
@@ -266,6 +267,7 @@ const LibraryItemBarActions = <Item extends LibraryMenuSubject>({
 	leading,
 	onClose,
 	onMenuOpenChange,
+	menuFinalFocus,
 	onConfirmingDeleteChange,
 }: LibraryItemBarActionsProps<Item>) => {
 	const { t } = useTranslation("common")
@@ -353,6 +355,7 @@ const LibraryItemBarActions = <Item extends LibraryMenuSubject>({
 								surface === "lightbox" && "dark",
 								STILL_UNDER_REDUCED_MOTION,
 							)}
+							finalFocus={menuFinalFocus}
 						>
 							<LibraryItemMenuItems
 								actions={menuActions}
