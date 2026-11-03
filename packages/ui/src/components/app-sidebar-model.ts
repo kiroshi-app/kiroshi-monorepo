@@ -107,11 +107,10 @@ const workingBotOf = ({ participants, lastSpeaker }: AppSidebarConversation) =>
 	participants.find(isBusy)
 
 const botPreviewOf = (t: TFunction<"bots">, bot: AppSidebarBot) => {
-	if (isBusy(bot) && bot.backgroundTasks)
+	if (!isBusy(bot)) return bot.lastMessage ? toPlainText(bot.lastMessage) : ""
+	if (bot.backgroundTasks)
 		return t("roster.backgroundTasks", { count: bot.backgroundTasks })
-	if (isBusy(bot))
-		return t("roster.working", { pose: t(`roster.pose.${poseOf(bot)}`) })
-	return bot.lastMessage ? toPlainText(bot.lastMessage) : ""
+	return t("roster.working", { pose: t(`roster.pose.${poseOf(bot)}`) })
 }
 
 const previewOf = (
