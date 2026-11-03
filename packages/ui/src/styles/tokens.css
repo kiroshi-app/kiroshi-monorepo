@@ -143,6 +143,7 @@
 		--hue-light-avatar-ground,
 		color-mix(in oklab, var(--bot-avatar-field-untinted) 25%, var(--secondary))
 	);
+	--document-ground: var(--hue-blue-avatar-ground);
 	--on-foreground: #ffffff;
 	--user-bubble-hover: color-mix(in oklab, var(--user-bubble) 92%, #000000);
 	--user-bubble-muted-foreground: color-mix(
@@ -303,6 +304,7 @@
 		--hue-dark-avatar-ground,
 		color-mix(in oklab, var(--bot-avatar-field-untinted) 35%, var(--secondary))
 	);
+	--document-ground: var(--hue-blue-avatar-ground);
 	--on-foreground: #0e0e10;
 	--user-bubble-hover: color-mix(in oklab, var(--user-bubble) 88%, #ffffff);
 	--user-bubble-muted-foreground: color-mix(

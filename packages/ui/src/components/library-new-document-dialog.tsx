@@ -172,7 +172,7 @@ const TemplateTile = ({ template }: TemplateTileProps) => {
 					"pointer-events-none relative flex h-37.5 items-center justify-center overflow-hidden rounded-control ring-offset-2 ring-offset-popover group-data-checked/tile:ring-2 group-data-checked/tile:ring-primary",
 					template === "blank"
 						? "border-[1.5px] border-input border-dashed group-hover/tile:bg-foreground/3"
-						: "border border-shell-border bg-(--bot-avatar-ground) group-hover/tile:border-input",
+						: "border border-shell-border bg-(--document-ground) group-hover/tile:border-input",
 				)}
 				data-slot="library-template-preview"
 			>

@@ -1434,6 +1434,8 @@ navigation-librarypanel--grid-actions-per-item
 navigation-librarypanel--grid-all
 navigation-librarypanel--grid-context-menu
 navigation-librarypanel--grid-documents
+navigation-librarypanel--grid-documents-across-spaces
+navigation-librarypanel--grid-documents-across-spaces-light
 navigation-librarypanel--grid-images
 navigation-librarypanel--grid-without-item-actions
 navigation-librarypanel--import-failures
