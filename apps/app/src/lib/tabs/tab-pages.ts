@@ -1,7 +1,12 @@
-import { defaultParseSearch } from "@tanstack/react-router"
+import {
+	defaultParseSearch,
+	defaultStringifySearch,
+} from "@tanstack/react-router"
 
+import type { LibraryDocumentRenamed } from "../bindings"
 import {
 	type LibraryOpening,
+	librarySearchOf,
 	openingOf,
 	validateLibrarySearch,
 } from "../navigation/library-search"
@@ -67,6 +72,28 @@ export const isListPage = ({ pathname }: TabPage) => pathname === LIST_PATH
 
 export const isLibraryPage = ({ pathname }: Pick<TabPage, "pathname">) =>
 	pathname === LIBRARY_PATH
+
+export type DocumentRename = Omit<LibraryDocumentRenamed, "spaceId">
+
+const opensDocument = ({ pathname, libraryOpening }: TabPage, name: string) =>
+	isLibraryPage({ pathname }) &&
+	libraryOpening?.kind === "document" &&
+	libraryOpening.name === name
+
+export const hrefAfterRename = (
+	href: string,
+	{ formerName, name }: DocumentRename,
+) => {
+	if (!opensDocument(pageOf(href), formerName)) {
+		return href
+	}
+	const { pathname, search, hash } = new URL(href, HREF_BASE)
+	const renamedSearch = {
+		...defaultParseSearch(search),
+		...librarySearchOf({ kind: "document", name }),
+	}
+	return `${pathname}${defaultStringifySearch(renamedSearch)}${hash}`
+}
 
 export const threadRowIdOf = ({ bot, conversation }: ThreadSearch) =>
 	bot ?? conversation

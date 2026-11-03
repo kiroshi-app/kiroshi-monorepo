@@ -4,12 +4,15 @@ import {
 	createRootRoute,
 	createRoute,
 	createRouter,
+	defaultStringifySearch,
 } from "@tanstack/react-router"
 import { act, cleanup, fireEvent, renderHook } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
+import { pageOf } from "./tab-pages"
 import { useTabKeys } from "./use-tab-keys"
 import { useTabsFollowingSpace } from "./use-tab-thread-sync"
+import { useTabsFollowingRenames } from "./use-tabs-following-renames"
 import { useWorkspaceTabs } from "./use-workspace-tabs"
 import {
 	createWorkspaceTabs,
@@ -20,7 +23,14 @@ import {
 	type WorkspaceTabs,
 } from "./workspace-tabs"
 
-import type { FileMenuAction, Json, ScreenPosition, TabDrag } from "../bindings"
+import {
+	type FileMenuAction,
+	type Json,
+	LIBRARY_DOCUMENT_RENAMED_EVENT,
+	type LibraryDocumentRenamed,
+	type ScreenPosition,
+	type TabDrag,
+} from "../bindings"
 import type { LiveWindowsWatch } from "../host"
 import type { ObservedState } from "../conversations/store-contract"
 import { validateThreadSearch } from "../navigation/thread-search"
@@ -80,8 +90,31 @@ const computerBus = vi.hoisted(() => {
 	}
 })
 
+const hostBus = vi.hoisted(() => {
+	type HostListener = (
+		event: { payload: unknown },
+		hostId: string | null,
+	) => void
+	const listeners = new Map<string, Set<HostListener>>()
+	return {
+		listeners,
+		emit: (event: string, payload: unknown, hostId: string | null) => {
+			for (const listener of listeners.get(event) ?? []) {
+				listener({ payload }, hostId)
+			}
+		},
+		listen: (event: string, listener: HostListener) => {
+			const held = listeners.get(event) ?? new Set()
+			held.add(listener)
+			listeners.set(event, held)
+			return Promise.resolve(() => held.delete(listener))
+		},
+	}
+})
+
 vi.mock("../host", async (importOriginal) => ({
 	...(await importOriginal<typeof import("../host")>()),
+	listen: hostBus.listen,
 	readWindowOrigin: tabDragHost.readWindowOrigin,
 	revealWindow: tabDragHost.revealWindow,
 	emitOnThisComputer: computerBus.emit,
@@ -231,6 +264,7 @@ afterEach(() => {
 	}
 	document.body.replaceChildren()
 	computerBus.listeners.clear()
+	hostBus.listeners.clear()
 })
 
 describe("a Space without stored tabs", () => {
@@ -2039,5 +2073,103 @@ describe("a tab dragged onto the strip of another window of its Space", () => {
 		)
 		expect(activeHref(target)).toBe(threadOf("there"))
 		expect(shownHrefs(origin)).toEqual(["/", threadOf("kept")])
+	})
+})
+
+describe("a renamed Library document", () => {
+	const libraryOn = (item: string, title?: string) =>
+		`${LIBRARY}${defaultStringifySearch({ item, kind: "document", title })}`
+
+	const FORMER = "Launch plan.md"
+
+	const RENAMED = "Roadmap.md"
+
+	const rename = (spaceId: string): LibraryDocumentRenamed => ({
+		spaceId,
+		formerName: FORMER,
+		name: RENAMED,
+	})
+
+	const announceRename = (spaceId: string, hostId: string | null = null) =>
+		act(() =>
+			hostBus.emit(LIBRARY_DOCUMENT_RENAMED_EVENT, rename(spaceId), hostId),
+		)
+
+	const tabsFollowingRenames = (spaceId = SPACE) => {
+		const tabs = tabsOfSpace(spaceId)
+		renderHook(() => useTabsFollowingRenames(tabs))
+		return tabs
+	}
+
+	const openedNames = (tabs: WorkspaceTabs) =>
+		shownHrefs(tabs).map((href) => pageOf(href).libraryOpening?.name)
+
+	it("rewrites both tabs open on it so they open and show the new name", () => {
+		const tabs = tabsFollowingRenames()
+		showInNewTab(tabs, libraryOn(FORMER))
+		showInNewTab(tabs, libraryOn(FORMER, "Launch plan"))
+		showInNewTab(tabs, threadOf("home"))
+		const { activeId } = viewOf(tabs)
+
+		announceRename(SPACE)
+
+		expect(openedNames(tabs)).toEqual([undefined, RENAMED, RENAMED, undefined])
+		expect(shownHrefs(tabs)[2]).toBe(libraryOn(RENAMED))
+		expect(viewOf(tabs).activeId).toBe(activeId)
+		expect(activeHref(tabs)).toBe(threadOf("home"))
+		act(() => tabs.history.back())
+		expect(activeHref(tabs)).toBe("/")
+	})
+
+	it("rewrites the tab shown on it and every history entry naming it", () => {
+		const tabs = tabsFollowingRenames()
+		tabs.history.push(libraryOn(FORMER))
+		tabs.history.push(threadOf("home"))
+		act(() => tabs.history.back())
+
+		announceRename(SPACE)
+
+		expect(activeHref(tabs)).toBe(libraryOn(RENAMED))
+		act(() => tabs.history.forward())
+		expect(activeHref(tabs)).toBe(threadOf("home"))
+		act(() => tabs.history.back())
+		expect(activeHref(tabs)).toBe(libraryOn(RENAMED))
+	})
+
+	it("leaves the tabs of another Space on a same-named file untouched", () => {
+		const tabs = tabsFollowingRenames()
+		showInNewTab(tabs, libraryOn(FORMER))
+		tabs.openInNewTab(libraryOn(FORMER), OTHER_SPACE)
+
+		announceRename(OTHER_SPACE)
+
+		expect(openedNames(tabs)).toEqual([undefined, FORMER])
+		act(() => tabs.showSpace(OTHER_SPACE))
+		expect(openedNames(tabs)).toEqual([undefined, RENAMED])
+	})
+
+	it("rewrites the tabs of the joined Space whose host announced it", () => {
+		const joinedRow = "joined:host-1"
+		const tabs = tabsFollowingRenames(joinedRow)
+		showInNewTab(tabs, libraryOn(FORMER))
+
+		announceRename("space-on-host", "host-1")
+
+		expect(openedNames(tabs)).toEqual([undefined, RENAMED])
+	})
+
+	it("restores the renamed tabs after a reload, even when another Space was shown", () => {
+		const before = tabsFollowingRenames()
+		showInNewTab(before, libraryOn(FORMER))
+		showInNewTab(before, libraryOn(FORMER, "Launch plan"))
+		cleanup()
+		tabsFollowingRenames(OTHER_SPACE)
+
+		announceRename(SPACE)
+		cleanup()
+
+		const after = tabsOfSpace()
+		expect(openedNames(after)).toEqual([undefined, RENAMED, RENAMED])
+		expect(activeHref(after)).toBe(libraryOn(RENAMED))
 	})
 })

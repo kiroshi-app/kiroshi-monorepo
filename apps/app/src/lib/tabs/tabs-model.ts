@@ -238,3 +238,22 @@ export const dropTabsWhere = (
 	space.tabs
 		.filter(isDropped)
 		.reduce((kept, tab) => closeTab(kept, tab.id), space)
+
+const withEntryHrefs = (tab: Tab, rewrite: (href: string) => string): Tab => {
+	const entries = tab.entries.map((entry) => {
+		const href = rewrite(entry.href)
+		return href === entry.href ? entry : { ...entry, href }
+	})
+	const isRewritten = entries.some(
+		(entry, index) => entry !== tab.entries[index],
+	)
+	return isRewritten ? { ...tab, entries } : tab
+}
+
+export const rewriteHrefs = (
+	space: SpaceTabs,
+	rewrite: (href: string) => string,
+): SpaceTabs => ({
+	...space,
+	tabs: space.tabs.map((tab) => withEntryHrefs(tab, rewrite)),
+})
