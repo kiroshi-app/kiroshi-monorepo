@@ -769,7 +769,6 @@ const LibraryDocumentEditor = ({
 		if (!field) return
 		field.focus()
 		field.setSelectionRange(field.value.length, field.value.length)
-		reportCaret()
 	}
 
 	const changeTitle = (value: string) => {
@@ -985,18 +984,14 @@ const LibraryDocumentEditor = ({
 	})
 
 	const followView = useEffectEvent((update: ViewUpdate) => {
-		const isPersonChange = update.transactions.some(
-			(transaction) =>
-				!transaction.annotation(hostChange) &&
-				(transaction.docChanged || transaction.selection),
+		const personChanges = update.transactions.filter(
+			(transaction) => !transaction.annotation(hostChange),
 		)
-		if (isPersonChange) isFormatPending.current = false
 		if (
-			update.transactions.some(
-				(transaction) =>
-					transaction.docChanged && !transaction.annotation(hostChange),
-			)
+			personChanges.some(({ docChanged, selection }) => docChanged || selection)
 		)
+			isFormatPending.current = false
+		if (personChanges.some(({ docChanged }) => docChanged))
 			onBodyChange(update.state.doc.toString())
 		if (
 			update.docChanged ||

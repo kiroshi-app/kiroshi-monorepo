@@ -96,8 +96,6 @@ class TaskWidget extends WidgetType {
 	}
 }
 
-const childrenOf = (node: SyntaxNode, name: string) => node.getChildren(name)
-
 const toggleTaskAt: ToggleTask = (view, at) => {
 	const line = view.state.doc.lineAt(at)
 	let marker: SyntaxNode | undefined
@@ -146,7 +144,7 @@ const headingDecorations = (
 	const decorations: Range<Decoration>[] = [lineLook(look).range(line.from)]
 	if (isShown(line.from, line.to)) return decorations
 
-	for (const mark of childrenOf(node, "HeaderMark")) {
+	for (const mark of node.getChildren("HeaderMark")) {
 		const isOpening = mark.from === node.from
 		const end = isOpening ? Math.min(mark.to + 1, node.to) : mark.to
 		const start = isOpening ? mark.from : Math.max(node.from, mark.from - 1)
@@ -169,7 +167,7 @@ const quoteDecorations = (
 		decorations.push(lineLook(QUOTE_LOOK).range(at))
 	if (isShown(node.from, node.to)) return decorations
 
-	for (const mark of childrenOf(node, "QuoteMark")) {
+	for (const mark of node.getChildren("QuoteMark")) {
 		const isSpaced = state.sliceDoc(mark.to, mark.to + 1) === " "
 		decorations.push(hidden.range(mark.from, mark.to + (isSpaced ? 1 : 0)))
 	}
@@ -191,8 +189,8 @@ const fenceDecorations = (
 	if (isShown(node.from, node.to)) return decorations
 
 	for (const mark of [
-		...childrenOf(node, "CodeMark"),
-		...childrenOf(node, "CodeInfo"),
+		...node.getChildren("CodeMark"),
+		...node.getChildren("CodeInfo"),
 	])
 		decorations.push(hidden.range(mark.from, mark.to))
 	return decorations
@@ -234,7 +232,7 @@ const inlineDecorations = (
 	isShown: Revealed,
 ) => {
 	const { mark, look } = INLINE_NODES[name]
-	const marks = childrenOf(node, mark)
+	const marks = node.getChildren(mark)
 	const opening = marks[0]
 	const closing = marks.at(-1)
 	if (!(opening && closing) || opening === closing) return []
@@ -251,7 +249,7 @@ const inlineDecorations = (
 }
 
 const linkDecorations = (node: SyntaxNode, isShown: Revealed) => {
-	const [opening, closing] = childrenOf(node, "LinkMark")
+	const [opening, closing] = node.getChildren("LinkMark")
 	if (!(opening && closing && opening.to < closing.from)) return []
 
 	const decorations: Range<Decoration>[] = [
