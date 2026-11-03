@@ -26,17 +26,20 @@ type MarkdownFigureProps = ComponentPropsWithoutRef<"figure"> & ExtraProps
 
 type MarkdownImageProps = ComponentPropsWithoutRef<"img"> & ExtraProps
 
+type ImageOpenButtonFit = "inline" | "block"
+
 type ImageOpenButtonProps = {
 	image: LibraryLightboxImage
-	isInline?: boolean
+	fit: ImageOpenButtonFit
 	children: ReactNode
 }
 
-const ImageOpenButton = ({
-	image,
-	isInline = false,
-	children,
-}: ImageOpenButtonProps) => {
+const FIT_CLASS: Record<ImageOpenButtonFit, string> = {
+	inline: "inline-block",
+	block: "block w-full text-start",
+}
+
+const ImageOpenButton = ({ image, fit, children }: ImageOpenButtonProps) => {
 	const actions = useMarkdownAnswerActions()
 	if (!actions) return children
 
@@ -45,10 +48,7 @@ const ImageOpenButton = ({
 			type="button"
 			aria-label={image.name}
 			data-slot="markdown-image-open"
-			className={cn(
-				"max-w-full outline-offset-2",
-				isInline ? "inline-block" : "block w-full text-start",
-			)}
+			className={cn("max-w-full outline-offset-2", FIT_CLASS[fit])}
 			onClick={() => actions.onOpenImage([image], 0)}
 		>
 			{children}
@@ -100,7 +100,10 @@ export const MarkdownFigure = ({
 
 	return (
 		<AnswerBlockFrame>
-			<ImageOpenButton image={{ id: src, name: alt, src, detail: sourceName }}>
+			<ImageOpenButton
+				fit="block"
+				image={{ id: src, name: alt, src, detail: sourceName }}
+			>
 				<SourcedImage
 					image={{ src, alt }}
 					source={{ domain: sourceName }}
@@ -131,7 +134,7 @@ export const MarkdownImage = ({
 				src,
 				detail: "",
 			}}
-			isInline
+			fit="inline"
 		>
 			{image}
 		</ImageOpenButton>
