@@ -536,6 +536,13 @@ impl Stored {
 			.collect()
 	}
 
+	fn awaited_turn_endings(&self, expected: &[TurnOutcome]) -> Vec<TurnOutcome> {
+		self.wait_for(&format!("the turn endings {expected:?}"), |stored| {
+			let endings = stored.turn_endings();
+			(endings.len() >= expected.len()).then_some(endings)
+		})
+	}
+
 	fn awaited_lapses(&self, expected: &[Lapse]) -> Vec<Lapse> {
 		self.wait_for(&format!("the lapses {expected:?}"), |stored| {
 			let lapses = stored.lapses();
@@ -658,7 +665,10 @@ fn a_result_with_no_background_task_settles_its_turn_as_before() {
 	stored.submit("t1", "p1");
 	stored.completed("t1");
 
-	assert_eq!(stored.turn_endings(), vec![TurnOutcome::Completed]);
+	assert_eq!(
+		stored.awaited_turn_endings(&[TurnOutcome::Completed]),
+		vec![TurnOutcome::Completed]
+	);
 	assert_eq!(stored.only_reply().content, STREAMED);
 	assert_eq!(stored.only_reply().state, MessageState::Complete);
 	stored.close();
@@ -672,6 +682,7 @@ fn a_turn_holding_a_background_task_ends_only_after_the_follow_up_turn_it_runs()
 
 	stored.submit("t1", "p1");
 	stored.completed("t1");
+	stored.awaited_turn_endings(&[TurnOutcome::Completed]);
 
 	let events = agent_events(&stored.log.held());
 	let follow_up_at = events
@@ -700,14 +711,17 @@ fn a_background_task_that_never_ends_fails_the_run_at_its_bound_and_closes_the_s
 	stored.submit("t1", "p1");
 	stored.completed("t1");
 
-	assert_eq!(stored.turn_endings(), vec![TurnOutcome::Failed]);
+	assert_eq!(stored.awaited_turn_endings(&[TurnOutcome::Failed]), vec![TurnOutcome::Failed]);
 	assert_eq!(stored.awaited_lapses(&[Lapse::TasksPending]), vec![Lapse::TasksPending]);
 
 	stored.submit("t2", "p2");
 	stored.completed("t2");
 	let answered = stored.reply_of("t2").expect("the reopened session replied");
 	assert_eq!(answered.content, RESUMED);
-	assert_eq!(stored.turn_endings(), vec![TurnOutcome::Failed, TurnOutcome::Completed]);
+	assert_eq!(
+		stored.awaited_turn_endings(&[TurnOutcome::Failed, TurnOutcome::Completed]),
+		vec![TurnOutcome::Failed, TurnOutcome::Completed]
+	);
 	stored.close();
 }
 
@@ -724,7 +738,7 @@ fn a_result_held_with_no_task_and_no_idle_fails_the_run_at_its_bound() {
 	stored.submit("t1", "p1");
 	stored.completed("t1");
 
-	assert_eq!(stored.turn_endings(), vec![TurnOutcome::Failed]);
+	assert_eq!(stored.awaited_turn_endings(&[TurnOutcome::Failed]), vec![TurnOutcome::Failed]);
 	assert_eq!(stored.awaited_lapses(&[Lapse::TasksPending]), vec![Lapse::TasksPending]);
 	stored.close();
 }
