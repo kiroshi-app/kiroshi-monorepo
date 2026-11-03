@@ -850,7 +850,6 @@ async fn stale_rekeyed(
 	}
 }
 
-#[derive(Clone, Copy)]
 enum Recipients<'a> {
 	Everyone,
 	Device(&'a str),
