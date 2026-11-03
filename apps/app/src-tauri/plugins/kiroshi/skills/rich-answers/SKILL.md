@@ -205,8 +205,10 @@ title: Full list of the 14 failing tests
 Form: ` ```web-page `
 
 Use it when the next thing to read is one page you opened in this session, never a URL you did
-not open. One page per block. `url` and `title` are required, `description` (one line) and
-`site` optional.
+not open. One page per block. `url` and `title` are required, `description` (one line), `site`,
+`image` and `alt` optional. `image` is the `https://` URL of the page preview and `alt` says what
+the preview shows: write `alt` only together with `image`. When you know the preview image of the
+page you opened, write both `image` and `alt`.
 
 ````markdown
 ```web-page
@@ -214,6 +216,8 @@ url: https://tauri.app/start/
 title: What is Tauri?
 description: The official introduction, with the supported platforms.
 site: Tauri
+image: https://images.example.org/tauri-start.jpg
+alt: Preview of the Tauri introduction page
 ```
 ````
 

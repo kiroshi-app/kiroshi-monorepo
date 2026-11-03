@@ -455,6 +455,16 @@ mod tests {
 	}
 
 	#[test]
+	fn the_rich_answers_skill_asks_for_the_preview_image_of_a_web_page() {
+		let text = String::from_utf8_lossy(embedded(RICH_ANSWERS));
+		let said_in_one_breath = text.split_whitespace().collect::<Vec<_>>().join(" ");
+		let said =
+			"When you know the preview image of the page you opened, write both `image` and `alt`.";
+
+		assert!(said_in_one_breath.contains(said), "{said} is missing");
+	}
+
+	#[test]
 	fn every_committed_file_is_embedded() {
 		let root = committed();
 
