@@ -796,6 +796,7 @@ const formatsOf = (block: Block | undefined, start: number, end: number) => {
 
 type LibraryDocumentEditorHandle = {
 	focusTitle: () => void
+	restoreTitle: (name: string) => void
 }
 
 type LibraryDocumentEditorProps = WriterActions &
@@ -806,6 +807,7 @@ type LibraryDocumentEditorProps = WriterActions &
 		detail: string
 		template?: LibraryDocumentTemplate
 		onTitleChange: (title: string) => void
+		onTitleConfirm?: (name: string) => void
 		onBodyChange: (markdown: string) => void
 		onBack: () => void
 		writers?: LibraryDocumentWriter[]
@@ -826,6 +828,7 @@ const LibraryDocumentEditor = ({
 	detail,
 	template,
 	onTitleChange,
+	onTitleConfirm,
 	onBodyChange,
 	onBack,
 	writers = [],
@@ -1219,6 +1222,7 @@ const LibraryDocumentEditor = ({
 
 	useImperativeHandle(ref, () => ({
 		focusTitle: () => focusAt(TITLE_FIELD, "end"),
+		restoreTitle: setTitle,
 	}))
 
 	const takeHeldTitle = () => {
@@ -1232,9 +1236,13 @@ const LibraryDocumentEditor = ({
 		field.blur()
 	}
 
-	const leaveTitle = (value: string) => {
+	const confirmTitle = (value: string) => {
 		const held = takeHeldTitle()
-		if (held && value.trim() === "") changeTitle(held)
+		if (held === undefined) return
+		const name = value.trim()
+		if (name === "") {
+			if (held) changeTitle(held)
+		} else if (name !== held) onTitleConfirm?.(name)
 	}
 
 	const writeAt = (
@@ -1711,7 +1719,7 @@ const LibraryDocumentEditor = ({
 						aria-label={t("library.editor.title")}
 						className={DOCUMENT_TITLE}
 						fieldRef={titleField}
-						onBlur={(event) => leaveTitle(event.currentTarget.value)}
+						onBlur={(event) => confirmTitle(event.currentTarget.value)}
 						onChange={(event) => changeTitle(event.target.value)}
 						onFocus={() => {
 							titleAtEditStart.current = title
@@ -1720,6 +1728,7 @@ const LibraryDocumentEditor = ({
 							if (event.nativeEvent.isComposing) return
 							if (event.key === "Enter") {
 								event.preventDefault()
+								confirmTitle(event.currentTarget.value)
 								focusAt(blocks[0]?.id, 0)
 							} else if (event.key === "Escape") {
 								event.preventDefault()

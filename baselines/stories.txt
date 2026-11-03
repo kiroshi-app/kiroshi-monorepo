@@ -1442,6 +1442,7 @@ navigation-librarydocumenteditor--title-emptied-restores
 navigation-librarydocumenteditor--title-enter-moves-to-body
 navigation-librarydocumenteditor--title-escape-restores
 navigation-librarydocumenteditor--title-focused-by-rename
+navigation-librarydocumenteditor--title-restored-after-refused-rename
 navigation-librarydocumenteditor--toolbar-after-drag
 navigation-librarydocumenteditor--toolbar-after-keyboard-selection
 navigation-librarydocumenteditor--unclosed-markers

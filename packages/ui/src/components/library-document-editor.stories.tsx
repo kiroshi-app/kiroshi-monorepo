@@ -125,6 +125,7 @@ const meta = preview.meta({
 		...BLANK,
 		template: "blank" as const,
 		onTitleChange: fn(),
+		onTitleConfirm: fn(),
 		onBodyChange: fn(),
 		onBack: fn(),
 		onShowInFolder: fn(),
@@ -683,7 +684,7 @@ export const TitleEnterMovesToBody = meta.story({
 		docs: {
 			description: {
 				story:
-					"Enter in an edited title. Check that Enter during an IME composition leaves the caret in the title, and that Enter otherwise keeps the edited title and moves the caret to the start of the body.",
+					"Enter in an edited title. Check that Enter during an IME composition leaves the caret in the title and confirms nothing, and that Enter otherwise keeps the edited title, confirms its trimmed name once through `onTitleConfirm`, never again from the blur that follows, and moves the caret to the start of the body.",
 			},
 		},
 	},
@@ -691,17 +692,20 @@ export const TitleEnterMovesToBody = meta.story({
 		const title = titleIn(canvasElement)
 		const [intro] = bodyFieldsIn(canvasElement) as [TextField]
 
-		await userEvent.type(title, " v2")
+		await userEvent.type(title, " v2 ")
 		pressComposing(title, "Enter")
 		await expect(title).toHaveFocus()
+		await expect(args.onTitleConfirm).not.toHaveBeenCalled()
 
 		await userEvent.keyboard("{Enter}")
 		await expect(bodyIn(canvasElement)).toHaveFocus()
+		await expect(args.onTitleConfirm).toHaveBeenCalledOnce()
+		await expect(args.onTitleConfirm).toHaveBeenCalledWith("Launch review v2")
 		await expect(intro.selectionStart).toBe(0)
 		await expect(intro.selectionEnd).toBe(0)
-		await expect(title).toHaveValue("Launch review v2")
+		await expect(title).toHaveValue("Launch review v2 ")
 		await expect(args.onTitleChange).toHaveBeenLastCalledWith(
-			"Launch review v2",
+			"Launch review v2 ",
 		)
 	},
 })
@@ -712,7 +716,7 @@ export const TitleEscapeRestores = meta.story({
 		docs: {
 			description: {
 				story:
-					"Escape in an edited title. Check that Escape during an IME composition changes nothing, and that Escape otherwise brings back the title held when the edit started, reports it through `onTitleChange` and leaves the field.",
+					"Escape in an edited title. Check that Escape during an IME composition changes nothing, and that Escape otherwise brings back the title held when the edit started, reports it through `onTitleChange`, leaves the field and confirms nothing through `onTitleConfirm`.",
 			},
 		},
 	},
@@ -728,6 +732,7 @@ export const TitleEscapeRestores = meta.story({
 		await expect(title).toHaveValue("Launch review")
 		await expect(args.onTitleChange).toHaveBeenLastCalledWith("Launch review")
 		await expect(title).not.toHaveFocus()
+		await expect(args.onTitleConfirm).not.toHaveBeenCalled()
 	},
 })
 
@@ -737,7 +742,7 @@ export const TitleClickAwayKeeps = meta.story({
 		docs: {
 			description: {
 				story:
-					"An edited title left by a click in the body. Check that the edited title stays and that leaving reports nothing more.",
+					"An edited title left by a click in the body. Check that the edited title stays, that leaving reports nothing more through `onTitleChange`, and that it confirms the name once through `onTitleConfirm`.",
 			},
 		},
 	},
@@ -755,6 +760,8 @@ export const TitleClickAwayKeeps = meta.story({
 		await expect(args.onTitleChange).toHaveBeenLastCalledWith(
 			"Launch review v2",
 		)
+		await expect(args.onTitleConfirm).toHaveBeenCalledOnce()
+		await expect(args.onTitleConfirm).toHaveBeenCalledWith("Launch review v2")
 	},
 })
 
@@ -764,7 +771,7 @@ export const TitleEmptiedRestores = meta.story({
 		docs: {
 			description: {
 				story:
-					"A titled document whose title is cleared to spaces, then left. Check that leaving brings back the title held when the edit started and reports it through `onTitleChange`. A document that starts untitled keeps its empty title: see Blank.",
+					"A titled document whose title is cleared to spaces, then left. Check that leaving brings back the title held when the edit started and reports it through `onTitleChange`, and that Enter or leaving confirms nothing through `onTitleConfirm`. A document that starts untitled keeps its empty title: see Blank.",
 			},
 		},
 	},
@@ -775,9 +782,74 @@ export const TitleEmptiedRestores = meta.story({
 		await userEvent.clear(title)
 		await userEvent.type(title, "   ")
 		await expect(args.onTitleChange).toHaveBeenLastCalledWith("   ")
+		await userEvent.keyboard("{Enter}")
+		await expect(title).toHaveValue("Launch review")
+		await expect(args.onTitleChange).toHaveBeenLastCalledWith("Launch review")
+
+		await userEvent.clear(title)
+		await userEvent.type(title, "   ")
 		await userEvent.click(intro)
 		await expect(title).toHaveValue("Launch review")
 		await expect(args.onTitleChange).toHaveBeenLastCalledWith("Launch review")
+		await expect(args.onTitleConfirm).not.toHaveBeenCalled()
+	},
+})
+
+const refusedRenameHandle = createRef<LibraryDocumentEditorHandle>()
+
+const refusedRenameDraft = createDraftStore(LAUNCH_REVIEW)
+
+const RefusingRenameEditor = (args: LibraryDocumentEditorProps) => {
+	const { title } = useSyncExternalStore(
+		refusedRenameDraft.subscribe,
+		refusedRenameDraft.read,
+	)
+
+	return (
+		<EditorFrame>
+			<LibraryDocumentEditor
+				{...args}
+				ref={refusedRenameHandle}
+				title={title}
+			/>
+		</EditorFrame>
+	)
+}
+
+export const TitleRestoredAfterRefusedRename = meta.story({
+	args: {
+		...LAUNCH_REVIEW,
+		template: undefined,
+		onTitleConfirm: fn(() =>
+			refusedRenameHandle.current?.restoreTitle(LAUNCH_REVIEW.title),
+		),
+	},
+	beforeEach: refusedRenameDraft.reset,
+	render: (args) => <RefusingRenameEditor {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A rename the app refuses: it calls `restoreTitle()` on the editor handle with the old name, equal to the title it still passes. Check that the field shows the old name again without reporting it through `onTitleChange` or `onTitleConfirm`, and that a title passed afterwards is shown.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const title = titleIn(canvasElement)
+
+		await userEvent.type(title, " v2")
+		const reportedWhileTyping = (args.onTitleChange as ReturnType<typeof fn>)
+			.mock.calls.length
+		await userEvent.keyboard("{Enter}")
+		await expect(args.onTitleConfirm).toHaveBeenCalledOnce()
+		await expect(args.onTitleConfirm).toHaveBeenCalledWith("Launch review v2")
+		await expect(title).toHaveValue("Launch review")
+		await expect(args.onTitleChange).toHaveBeenCalledTimes(reportedWhileTyping)
+
+		refusedRenameDraft.write({ title: "Spring launch review" })
+		await waitFor(() => expect(title).toHaveValue("Spring launch review"))
+		await expect(args.onTitleChange).toHaveBeenCalledTimes(reportedWhileTyping)
+		await expect(args.onTitleConfirm).toHaveBeenCalledOnce()
 	},
 })
 
