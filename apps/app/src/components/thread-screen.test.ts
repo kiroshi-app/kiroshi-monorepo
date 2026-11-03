@@ -27,6 +27,7 @@ import {
 	expect,
 	it,
 	type Mock,
+	onTestFinished,
 	vi,
 } from "vitest"
 
@@ -247,6 +248,12 @@ const STOPPED_BEFORE_WRITING: SpokenTurn = {
 const SAID_BEFORE: SpokenTurn = {
 	turnId: "t-before",
 	text: "the walls hold",
+	createdAt: 0,
+}
+
+const THREE_PARAGRAPHS: SpokenTurn = {
+	turnId: "t-paragraphs",
+	text: "The walls hold.\n\nThe roof leaks.\n\nThe door sticks.",
 	createdAt: 0,
 }
 
@@ -2315,6 +2322,28 @@ describe("ThreadScreen", () => {
 		expect(screen.getAllByText(CAUSES_TITLE)).toHaveLength(raised)
 	})
 
+	it("renders a three paragraph answer as one bubble with one Copy of the whole text", async () => {
+		const written = vi
+			.spyOn(navigator.clipboard, "writeText")
+			.mockResolvedValue(undefined)
+		onTestFinished(() => written.mockRestore())
+		const solo = await soloOf({ spoken: [THREE_PARAGRAPHS] })
+		render(screenOf(solo.thread()), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
+		await settle()
+
+		expect(screen.getByText("The walls hold.")).toBeTruthy()
+		expect(screen.getByText("The door sticks.")).toBeTruthy()
+		const copies = screen.getAllByRole("button", { name: "Copy" })
+		expect(copies).toHaveLength(1)
+
+		fireEvent.click(copies[0])
+		await settle()
+
+		expect(written).toHaveBeenCalledWith(THREE_PARAGRAPHS.text)
+	})
+
 	it("names the routine on the report turn of a solo thread", async () => {
 		const solo = await soloOf({
 			spoken: [REPORTED],
@@ -2570,14 +2599,14 @@ describe("ThreadScreen", () => {
 		expect(room.driver.cancelled).toEqual([room.idOf("Ada")])
 	})
 
-	it("holds a seated companion on its waiting row until it publishes a block", async () => {
+	it("holds a seated companion on its waiting row until its message shows text", async () => {
 		const room = await roomOf({ names: ["Ada"] })
 		render(screenOf(room.thread), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 
 		await room.send("@Ada now")
 		act(() => {
-			room.driver.pushTo(room.idOf("Ada"), FIRST_TOKEN)
+			room.driver.pushTo(room.idOf("Ada"), [WRITING_STARTED])
 		})
 		await settle()
 
@@ -2586,7 +2615,7 @@ describe("ThreadScreen", () => {
 		expect(stopFor("Ada")).toBeTruthy()
 	})
 
-	it("keeps the working row of a seated companion that has published a block", async () => {
+	it("keeps the working row of a seated companion whose message shows text", async () => {
 		const room = await roomOf({ names: ["Ada"] })
 		render(screenOf(room.thread), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()

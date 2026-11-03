@@ -1,27 +1,25 @@
-import { bubbleIdOf, bubbleOf, type TranscriptRow } from "./screen-model"
+import { type TranscriptRow, toTranscriptRows } from "./screen-model"
 
 import type { MessagePin } from "../conversations/store-contract"
 
 export type PinnedBubble = {
 	id: string
-	anchor: string
 	bubble: TranscriptRow
-	pin: MessagePin
+	blockIndexes: number[]
 }
 
-const shownAs = (pin: MessagePin): PinnedBubble[] => {
-	const bubble = bubbleOf(pin.message, pin.blockIndex)
+const shownAs = (pins: MessagePin[]): PinnedBubble[] => {
+	const [bubble] = toTranscriptRows([pins[0].message])
 	return bubble
 		? [
 				{
-					id: bubbleIdOf(pin.message.id, pin.blockIndex),
-					anchor: bubbleIdOf(bubble.messageId, bubble.blockIndex),
+					id: bubble.messageId,
 					bubble,
-					pin,
+					blockIndexes: pins.map((pin) => pin.blockIndex),
 				},
 			]
 		: []
 }
 
 export const pinnedBubblesOf = (pins: MessagePin[]): PinnedBubble[] =>
-	pins.flatMap(shownAs)
+	[...Map.groupBy(pins, (pin) => pin.message.id).values()].flatMap(shownAs)

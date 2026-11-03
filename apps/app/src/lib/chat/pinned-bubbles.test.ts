@@ -33,42 +33,35 @@ const rowsOf = async (store: ReturnType<typeof createFakeTranscriptStore>) =>
 	pinnedBubblesOf(await store.pinnedMessages(FAKE_CHAT_ID))
 
 describe("pinnedBubblesOf", () => {
-	it("keeps a stale pin apart from a live pin on the first bubble", async () => {
+	it("shows a pin on the whole message under the message id", async () => {
+		const store = await withTwoBlocks()
+		await store.pinMessage(FAKE_CHAT_ID, ANSWER.id, 0, 10)
+
+		const [pinned] = await rowsOf(store)
+
+		expect(pinned.id).toBe("a-1")
+		expect(pinned.bubble.text).toBe("One.\n\nTwo.")
+	})
+
+	it("shows the whole message for a stale pin on a later block", async () => {
+		const store = await withTwoBlocks()
+		await store.pinMessage(FAKE_CHAT_ID, ANSWER.id, STALE_BLOCK, 20)
+
+		const [stale] = await rowsOf(store)
+
+		expect(stale.id).toBe("a-1")
+		expect(stale.bubble.text).toBe("One.\n\nTwo.")
+		expect(stale.blockIndexes).toEqual([STALE_BLOCK])
+	})
+
+	it("shows a message pinned on two blocks once, holding both pins", async () => {
 		const store = await withTwoBlocks()
 		await store.pinMessage(FAKE_CHAT_ID, ANSWER.id, 0, 10)
 		await store.pinMessage(FAKE_CHAT_ID, ANSWER.id, STALE_BLOCK, 20)
 
 		const rows = await rowsOf(store)
 
-		expect(rows).toHaveLength(2)
-		expect(rows.map((row) => row.id)).toEqual(["a-1", `a-1#${STALE_BLOCK}`])
-		expect(new Set(rows.map((row) => row.id)).size).toBe(2)
-	})
-
-	it("shows and anchors a stale pin on the first bubble of its message", async () => {
-		const store = await withTwoBlocks()
-		await store.pinMessage(FAKE_CHAT_ID, ANSWER.id, STALE_BLOCK, 20)
-
-		const [stale] = await rowsOf(store)
-
-		expect(stale.anchor).toBe("a-1")
-		expect(stale.bubble.text).toBe("One.")
-		expect(stale.pin.blockIndex).toBe(STALE_BLOCK)
-	})
-
-	it("drops only the pin the pressed row stands for", async () => {
-		const store = await withTwoBlocks()
-		await store.pinMessage(FAKE_CHAT_ID, ANSWER.id, 0, 10)
-		await store.pinMessage(FAKE_CHAT_ID, ANSWER.id, STALE_BLOCK, 20)
-		const [, pressed] = await rowsOf(store)
-
-		expect(pressed.id).toBe(`a-1#${STALE_BLOCK}`)
-		await store.unpinMessage(
-			FAKE_CHAT_ID,
-			pressed.pin.message.id,
-			pressed.pin.blockIndex,
-		)
-
-		expect((await rowsOf(store)).map((row) => row.id)).toEqual(["a-1"])
+		expect(rows.map((row) => row.id)).toEqual(["a-1"])
+		expect(rows[0].blockIndexes).toEqual([0, STALE_BLOCK])
 	})
 })

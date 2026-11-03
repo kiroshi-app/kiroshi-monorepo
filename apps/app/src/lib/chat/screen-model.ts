@@ -4,7 +4,6 @@ import type { TurnState } from "@workspace/ui/components/turn"
 import type { ChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 
 import { type ChatState, isTurnBusy } from "./chat-state"
-import { toPublishedBlocks } from "./markdown-blocks"
 import { messageWithAttachments } from "./message-attachments"
 import type { MessageAuthorship } from "./thread-authorship"
 import { heldWorkFor, type WorkingState, workingFor } from "./working-kind"
@@ -17,7 +16,6 @@ import type {
 	TranscriptMessage,
 	TranscriptRole,
 } from "../conversations/transcript-contract"
-import { isTerminalCompletion } from "../conversations/transcript-state"
 import {
 	NO_REPORTED_RUNS,
 	type ReportedRunsByTurnId,
@@ -27,7 +25,6 @@ export type TranscriptRow = MessageAuthorship & {
 	messageId: string
 	turnId: string
 	continuesTurnId: string | null
-	blockIndex: number
 	quotedMessageId: string | null
 	authorBotId: string | null
 	role: TranscriptRole
@@ -73,16 +70,12 @@ const RUN_GAP_MS = 5 * 60_000
 
 function toRow(
 	message: TranscriptMessage,
-	fields: Pick<TranscriptRow, "text" | "completion"> & {
-		blockIndex?: number
-	},
+	fields: Pick<TranscriptRow, "text" | "completion">,
 ): TranscriptRow {
-	const { blockIndex = 0, ...rest } = fields
 	return {
 		messageId: message.id,
 		turnId: message.turnId,
 		continuesTurnId: message.continuesTurnId ?? null,
-		blockIndex,
 		quotedMessageId:
 			message.role === "user" ? message.repliedToMessageId : null,
 		authorBotId: message.authorBotId,
@@ -91,29 +84,19 @@ function toRow(
 		writtenFrom: message.writtenFrom,
 		role: message.role,
 		timestamp: message.createdAt,
-		...rest,
+		...fields,
 	}
 }
 
+export const shownTextOf = (content: string): string => content.trimEnd()
+
 function assistantRows(message: TranscriptMessage): TranscriptRow[] {
-	const unfinished = !isTerminalCompletion(message.completion)
-	const ending = TURN_STATE[message.completion]
-	const blocks = toPublishedBlocks(message.content, unfinished)
-
-	if (blocks.length === 0) {
-		return ending === "failed"
-			? [toRow(message, { text: "", completion: ending })]
-			: []
+	const text = shownTextOf(message.content)
+	const completion = TURN_STATE[message.completion]
+	if (text.length === 0 && completion !== "failed") {
+		return []
 	}
-
-	return blocks.map((text, blockIndex) => {
-		const closes = blockIndex === blocks.length - 1 && !unfinished
-		return toRow(message, {
-			blockIndex,
-			text,
-			completion: closes ? ending : "complete",
-		})
-	})
+	return [toRow(message, { text, completion })]
 }
 
 const rowsByMessage = new WeakMap<TranscriptMessage, TranscriptRow[]>()
@@ -288,17 +271,6 @@ export function quotedTargetsIn(
 		}
 	}
 	return found
-}
-
-export const bubbleIdOf = (messageId: string, blockIndex: number): string =>
-	blockIndex === 0 ? messageId : `${messageId}#${blockIndex}`
-
-export function bubbleOf(
-	message: TranscriptMessage,
-	blockIndex: number,
-): TranscriptRow | undefined {
-	const bubbles = toTranscriptRows([message])
-	return bubbles[blockIndex] ?? bubbles[0]
 }
 
 const foreignWorkFor = ({ foreignTurn }: ChatState): WorkingState | null =>

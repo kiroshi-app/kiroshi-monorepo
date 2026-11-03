@@ -19,7 +19,6 @@ const rowOf = (
 	messageId: `m-${timestamp}`,
 	turnId: `t-${timestamp}`,
 	continuesTurnId: null,
-	blockIndex: 0,
 	quotedMessageId: null,
 	authorBotId,
 	authorAccountId: null,

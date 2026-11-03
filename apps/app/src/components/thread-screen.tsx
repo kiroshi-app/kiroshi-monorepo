@@ -105,7 +105,6 @@ import type { PinnedBubble } from "@/lib/chat/pinned-bubbles"
 import { isPostedAnswer } from "@/lib/chat/posted-question"
 import { type AskedBubble, askedQuestionOf } from "@/lib/chat/question-run"
 import {
-	bubbleIdOf,
 	emptyStateStatusFor,
 	opensNewDay,
 	type ReplyTarget,
@@ -658,12 +657,11 @@ const ThreadRun = ({
 }: ThreadRunProps) => (
 	<TurnGroup carriesMark={presentation.isMarked}>
 		{run.map((row, index) => {
-			const bubble = bubbleIdOf(row.messageId, row.blockIndex)
 			const card = answered.get(row.messageId)
 
 			return (
 				<ThreadTurn
-					anchor={bubble}
+					anchor={row.messageId}
 					card={
 						card ? (
 							<AnsweredPrompt card={card} readerName={readerName} />
@@ -679,12 +677,12 @@ const ThreadRun = ({
 					botId={botFace?.id}
 					botName={botFace?.name}
 					cause={causes.get(row.turnId)}
-					key={bubble}
+					key={row.messageId}
 					now={now}
 					onPin={pins.toggle}
 					onReply={onReply}
 					onRetry={onRetry}
-					pinned={pins.isPinned(bubble)}
+					pinned={pins.isPinned(row.messageId)}
 					quoted={
 						row.quotedMessageId ? quotes.get(row.quotedMessageId) : undefined
 					}
@@ -799,8 +797,8 @@ const toRunRows = ({
 	...shared
 }: RunRowsProps): TranscriptItem[] =>
 	runs.map((run, runIndex) => ({
-		key: bubbleIdOf(run[0].messageId, run[0].blockIndex),
-		messageIds: run.map((row) => bubbleIdOf(row.messageId, row.blockIndex)),
+		key: run[0].messageId,
+		messageIds: run.map((row) => row.messageId),
 		isAnchor: run.some(
 			(row) => isSentByReader(row, personOf) && isSentInMount(row.messageId),
 		),
@@ -821,7 +819,7 @@ const daySeparatorRowsAfter =
 		const opening = runs[nextIndex][0]
 		return [
 			{
-				key: `day-${bubbleIdOf(opening.messageId, opening.blockIndex)}`,
+				key: `day-${opening.messageId}`,
 				render: () => <DaySeparator at={opening.timestamp} now={now} />,
 			},
 		]
@@ -1800,9 +1798,7 @@ function ThreadView(props: ThreadViewProps) {
 					hasRoutines={view.routinesScope.conversationId !== null}
 					liveMissionIds={view.liveMissionIds}
 					mission={view.missionSeat}
-					onJumpToPin={(bubbleId) =>
-						view.jumpToMessage(view.pins.anchorOf(bubbleId))
-					}
+					onJumpToPin={view.jumpToMessage}
 					onUnpin={view.pins.unpin}
 					pinnedRows={view.pinnedRows}
 					present={view.present}

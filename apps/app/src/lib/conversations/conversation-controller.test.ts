@@ -1758,10 +1758,10 @@ describe("what a speaking companion is doing", () => {
 		},
 	]
 
-	it("keeps a companion thinking between its first token and its first block", async () => {
+	it("keeps a companion thinking while its message shows no text yet", async () => {
 		harness.driver.pushTo(ada, [
 			...started,
-			{ type: "messageDelta", id: "msg-ada", seq: 1, text: "walls up" },
+			{ type: "messageDelta", id: "msg-ada", seq: 1, text: "\n" },
 		])
 		await harness.settled()
 
@@ -1772,10 +1772,10 @@ describe("what a speaking companion is doing", () => {
 		})
 	})
 
-	it("says a companion is writing once it has published a block", async () => {
+	it("says a companion is writing once its message shows any text", async () => {
 		harness.driver.pushTo(ada, [
 			...started,
-			{ type: "messageDelta", id: "msg-ada", seq: 1, text: "walls up\n\n" },
+			{ type: "messageDelta", id: "msg-ada", seq: 1, text: "walls up" },
 		])
 		await harness.settled()
 

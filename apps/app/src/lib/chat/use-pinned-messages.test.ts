@@ -98,7 +98,7 @@ it("reads the pins again once a pin settles", async () => {
 	const result = renderPins(controller)
 	await waitFor(() => expect(controller.pins).toHaveBeenCalledOnce())
 
-	act(() => result.current.toggle(ANSWER.id, 0))
+	act(() => result.current.toggle(ANSWER.id))
 
 	await waitFor(() => expect(pinnedIdsOf(result)).toEqual([ANSWER.id]))
 	expect(controller.pin).toHaveBeenCalledWith(ANSWER.id, 0)
@@ -118,13 +118,28 @@ it("reads the pins again once an unpin settles", async () => {
 	expect(controller.pins).toHaveBeenCalledTimes(2)
 })
 
+it("unpins every stored pin of a message, a stale block one included", async () => {
+	const { store, controller } = await controllerOver()
+	await store.pinMessage(FAKE_CHAT_ID, ANSWER.id, 0, 10)
+	await store.pinMessage(FAKE_CHAT_ID, ANSWER.id, 3, 20)
+	const result = renderPins(controller)
+	await waitFor(() => expect(pinnedIdsOf(result)).toEqual([ANSWER.id]))
+
+	act(() => result.current.toggle(ANSWER.id))
+
+	await waitFor(() => expect(pinnedIdsOf(result)).toEqual([]))
+	expect(controller.unpin).toHaveBeenCalledWith(ANSWER.id, 0)
+	expect(controller.unpin).toHaveBeenCalledWith(ANSWER.id, 3)
+	expect(controller.pin).not.toHaveBeenCalled()
+})
+
 it("reads the pins again even when a pin fails", async () => {
 	const { controller } = await controllerOver()
 	controller.pin.mockRejectedValueOnce(new Error("no pin"))
 	const result = renderPins(controller)
 	await waitFor(() => expect(controller.pins).toHaveBeenCalledOnce())
 
-	act(() => result.current.toggle(ANSWER.id, 0))
+	act(() => result.current.toggle(ANSWER.id))
 
 	await waitFor(() => expect(controller.pins).toHaveBeenCalledTimes(2))
 	expect(result.current.hasFailed).toBe(true)
@@ -150,7 +165,7 @@ it("hides a dismissed read failure until the next failure", async () => {
 
 	expect(result.current.hasFailed).toBe(false)
 
-	act(() => result.current.toggle(ANSWER.id, 0))
+	act(() => result.current.toggle(ANSWER.id))
 
 	await waitFor(() => expect(result.current.hasFailed).toBe(true))
 	expect(controller.pins).toHaveBeenCalledTimes(2)
@@ -162,13 +177,13 @@ it("hides a dismissed write failure until the next failure", async () => {
 	const result = renderPins(controller)
 	await waitFor(() => expect(controller.pins).toHaveBeenCalledOnce())
 
-	act(() => result.current.toggle(ANSWER.id, 0))
+	act(() => result.current.toggle(ANSWER.id))
 	await waitFor(() => expect(result.current.hasFailed).toBe(true))
 	act(() => result.current.dismissFailure())
 
 	expect(result.current.hasFailed).toBe(false)
 
-	act(() => result.current.toggle(ANSWER.id, 0))
+	act(() => result.current.toggle(ANSWER.id))
 
 	await waitFor(() => expect(result.current.hasFailed).toBe(true))
 	expect(controller.pin).toHaveBeenCalledTimes(2)

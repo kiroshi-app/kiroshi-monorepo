@@ -40,7 +40,7 @@ type ThreadTurnProps = {
 	pinned: boolean
 	now: number
 	toQuote: (target: ReplyTarget) => QuotedMessage
-	onPin: (messageId: string, blockIndex: number) => void
+	onPin: (messageId: string) => void
 	onReply: (target: ReplyTarget) => void
 	onRetry?: (messageId: string) => void
 }
@@ -74,7 +74,7 @@ export const ThreadTurn = memo(function ThreadTurn({
 	const content = card ?? <TurnBody attachments={attachments} text={text} />
 	const repliedTo = quoted ? toQuote(quoted) : undefined
 	const pin = () => {
-		onPin(row.messageId, row.blockIndex)
+		onPin(row.messageId)
 	}
 	const reply = () => {
 		onReply({
