@@ -99,7 +99,6 @@ const UNEXPECTED = "chat:screen.notice.joinRefused.unexpected"
 const BANNER = "chat:spaceAccessBanner.offline"
 const NAMING = { host: "Noa", space: "Studio" }
 const CHECK_YOUR_CONNECTION = /check your connection|vérifiez votre connexion/i
-const LANGUAGES = ["en", "fr"]
 
 const waitLineKeys = (reasons: string[]) =>
 	reasons.flatMap((reason) => [
@@ -110,7 +109,7 @@ const waitLineKeys = (reasons: string[]) =>
 const named = (key: string, lng: string) =>
 	i18n.getFixedT(lng)(key as never, NAMING) as string
 
-describe.each(LANGUAGES)("the joined space wait copy in %s", (lng) => {
+describe.each(["en", "fr"])("the joined space wait copy in %s", (lng) => {
 	it("asks to check the connection only when Kiroshi is unreachable", () => {
 		for (const key of waitLineKeys(["relayUnreachable"])) {
 			expect(raw(key, lng)).toMatch(CHECK_YOUR_CONNECTION)
