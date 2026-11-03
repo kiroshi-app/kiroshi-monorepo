@@ -495,7 +495,7 @@ describe("PRF5 chat open baseline", () => {
 			  "commitsToSettled": 13,
 			  "highlightCalls": 10,
 			  "highlighterBuilds": 0,
-			  "markdownProcessors": 32,
+			  "markdownProcessors": 22,
 			  "paintedRows": 20,
 			}
 		`)
