@@ -98,6 +98,7 @@ export const WithPreviewAndAltText = meta.story({
 		})
 		await expect(image.getBoundingClientRect().height).toBe(200)
 		await expect(image.getBoundingClientRect().width).toBe(card.clientWidth)
+		await expect(image).toHaveStyle({ objectFit: "cover" })
 		await expect(card.firstElementChild).toBe(image)
 	},
 })
