@@ -406,7 +406,8 @@ const GrowingField = ({
 		<textarea
 			className={cn(
 				"col-start-1 row-start-1 resize-none overflow-hidden bg-transparent outline-none",
-				drawnText && "[-webkit-text-fill-color:transparent]",
+				drawnText &&
+					"selection:bg-primary/30 [-webkit-text-fill-color:transparent]",
 				fieldClassName,
 			)}
 			placeholder={placeholder}

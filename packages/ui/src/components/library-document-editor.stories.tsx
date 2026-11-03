@@ -427,6 +427,33 @@ export const OutsideChangeWhileTyping = meta.story({
 			"Screenshots land on the 10th, the release notes on the 12th.",
 		)
 		await expect(args.onTitleChange).not.toHaveBeenCalled()
+
+		const selected = "after the review"
+		const selectedFrom = ship.value.indexOf(selected)
+		ship.setSelectionRange(
+			selectedFrom,
+			selectedFrom + selected.length,
+			"backward",
+		)
+		launchReviewDraft.write({
+			body: launchReviewDraft
+				.read()
+				.body.replace("Ship on Monday", "Ship early on Monday"),
+		})
+		await waitFor(() =>
+			expect(ship).toHaveValue(
+				"Ship early on Monday the 14th, after the review!",
+			),
+		)
+		await expect(document.activeElement).toBe(ship)
+		await expect(ship.selectionStart).toBe(selectedFrom + "early ".length)
+		await expect(ship.selectionEnd).toBe(
+			selectedFrom + "early ".length + selected.length,
+		)
+		await expect(ship.selectionDirection).toBe("backward")
+		await expect(ship.value.slice(ship.selectionStart, ship.selectionEnd)).toBe(
+			selected,
+		)
 	},
 })
 
@@ -565,6 +592,138 @@ export const AgentsWriting = meta.story({
 			),
 		)
 	},
+})
+
+type Rgba = [red: number, green: number, blue: number, alpha: number]
+
+const rgbaOf = (color: string): Rgba => {
+	const context = document.createElement("canvas").getContext("2d", {
+		willReadFrequently: true,
+	})
+	if (!context) throw new Error("No 2d canvas to read a colour with")
+	context.clearRect(0, 0, 1, 1)
+	context.fillStyle = color
+	context.fillRect(0, 0, 1, 1)
+	const [red = 0, green = 0, blue = 0, alpha = 0] = context.getImageData(
+		0,
+		0,
+		1,
+		1,
+	).data
+	return [red, green, blue, alpha / 255]
+}
+
+const over = ([red, green, blue, alpha]: Rgba, [r, g, b]: Rgba): Rgba => [
+	red * alpha + r * (1 - alpha),
+	green * alpha + g * (1 - alpha),
+	blue * alpha + b * (1 - alpha),
+	1,
+]
+
+const luminanceOf = (color: Rgba) => {
+	const [red = 0, green = 0, blue = 0] = color
+		.slice(0, 3)
+		.map((channel) => channel / 255)
+		.map((channel) =>
+			channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4,
+		)
+	return 0.2126 * red + 0.7152 * green + 0.0722 * blue
+}
+
+const contrastOf = (first: Rgba, second: Rgba) => {
+	const [light, dark] = [luminanceOf(first), luminanceOf(second)].sort(
+		(a, b) => b - a,
+	)
+	return ((light ?? 0) + 0.05) / ((dark ?? 0) + 0.05)
+}
+
+const groundOf = (element: HTMLElement): Rgba => {
+	for (
+		let node: HTMLElement | null = element;
+		node;
+		node = node.parentElement
+	) {
+		const ground = rgbaOf(getComputedStyle(node).backgroundColor)
+		if (ground[3] === 1) return ground
+	}
+	return rgbaOf("white")
+}
+
+const ATLAS_ITEM =
+	"Notifications wait for the first finished task, and the agent says why it asks"
+
+type PlayedCanvas = {
+	canvasElement: HTMLElement
+}
+
+const selectingAcrossAgentRun = (theme: "light" | "dark") => ({
+	args: {
+		title: LIBRARY_AGENT_DOCUMENT.name,
+		body: LIBRARY_AGENT_DOCUMENT.body,
+		detail: LIBRARY_AGENT_DOCUMENT.detail,
+		template: undefined,
+		writers: LIBRARY_WRITERS,
+	},
+	globals: { theme },
+	parameters: {
+		docs: {
+			description: {
+				story: `The person selects text across Atlas's run while Atlas is writing, in the ${theme} theme. The field paints its selection on a translucent ground over the drawn text, so the run, its colour and the text under the selection stay on screen. Check that the selected text reads at 4.5:1 or more against what sits under it, inside and outside the run.`,
+			},
+		},
+	},
+	play: async ({ canvasElement }: PlayedCanvas) => {
+		const item = bodyFieldsIn(canvasElement).find(
+			(field) => field.value === ATLAS_ITEM,
+		) as HTMLTextAreaElement
+		const runFrom = ATLAS_ITEM.indexOf("and the agent")
+		item.focus()
+		item.setSelectionRange(runFrom - "task, ".length, ATLAS_ITEM.length)
+		await expect(document.activeElement).toBe(item)
+		await expect(item.value.slice(item.selectionStart, item.selectionEnd)).toBe(
+			"task, and the agent says why it asks",
+		)
+
+		const drawn = slotIn(
+			item.parentElement as HTMLElement,
+			"library-document-drawn-text",
+		)
+		const run = slotIn(drawn, "library-document-run")
+		await expect(run).toHaveTextContent("and the agent says why it asks")
+		await expect(getComputedStyle(item).webkitTextFillColor).toBe(
+			"rgba(0, 0, 0, 0)",
+		)
+		const selection = rgbaOf(
+			getComputedStyle(item, "::selection").backgroundColor,
+		)
+		await expect(selection[3]).toBeGreaterThan(0)
+		await expect(selection[3]).toBeLessThan(1)
+
+		const ground = groundOf(item)
+		const runGround = over(
+			rgbaOf(getComputedStyle(run).backgroundColor),
+			ground,
+		)
+		const painted = [
+			[getComputedStyle(run).color, runGround],
+			[getComputedStyle(drawn).color, ground],
+		] as const
+		for (const [ink, under] of painted)
+			await expect(
+				contrastOf(
+					over(selection, over(rgbaOf(ink), under)),
+					over(selection, under),
+				),
+			).toBeGreaterThanOrEqual(4.5)
+	},
+})
+
+export const SelectingAcrossAgentRun = meta.story({
+	...selectingAcrossAgentRun("dark"),
+})
+
+export const SelectingAcrossAgentRunLight = meta.story({
+	...selectingAcrossAgentRun("light"),
 })
 
 type FailureNoticeProps = {
