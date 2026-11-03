@@ -1653,6 +1653,7 @@ overlays-dialogsurface--sized
 overlays-dropdownmenu--default
 overlays-librarylightbox--at-the-first-image
 overlays-librarylightbox--back-button
+overlays-librarylightbox--backdrop-click
 overlays-librarylightbox--copy-check
 overlays-librarylightbox--copy-refused
 overlays-librarylightbox--default

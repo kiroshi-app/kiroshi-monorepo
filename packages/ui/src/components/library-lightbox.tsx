@@ -51,6 +51,9 @@ const isInZoomScroller = (target: EventTarget) =>
 	target instanceof Element &&
 	target.closest(`[data-slot=${ZOOM_SLOT}]`) !== null
 
+const isBackdrop = (target: EventTarget) =>
+	target instanceof HTMLElement && "lightboxBackdrop" in target.dataset
+
 type ZoomStageProps = {
 	image: LibraryLightboxImage
 	position: number
@@ -86,6 +89,7 @@ const ZoomStage = ({ image, position, count }: ZoomStageProps) => {
 		<>
 			<div
 				className="flex min-h-0 flex-1 overflow-auto rounded-md focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring"
+				data-lightbox-backdrop
 				data-slot={ZOOM_SLOT}
 				tabIndex={zoom === null ? undefined : 0}
 			>
@@ -106,7 +110,10 @@ const ZoomStage = ({ image, position, count }: ZoomStageProps) => {
 					}
 				/>
 			</div>
-			<div className="absolute inset-x-0 bottom-0 flex h-18 items-center justify-center">
+			<div
+				className="absolute inset-x-0 bottom-0 flex h-18 items-center justify-center"
+				data-lightbox-backdrop
+			>
 				<div
 					className="flex h-9 items-center gap-0.5 rounded-[18px] bg-[#1c1c1e] p-1 shadow-[0_8px_24px_rgb(0_0_0/0.4)] ring-1 ring-foreground/10"
 					data-slot="library-lightbox-zoom-bar"
@@ -182,6 +189,9 @@ const LibraryLightbox = ({
 	const { t } = useTranslation("common")
 	const container = useLibraryOverlayContainer()
 	const surfaceRef = useRef<HTMLDivElement>(null)
+	const pressedRef = useRef<EventTarget | null>(null)
+	const lastMenuToggleRef = useRef<Event | undefined>(undefined)
+	const [isConfirmingDelete, setConfirmingDelete] = useState(false)
 	const isFirst = position <= 1
 	const isLast = position >= count
 
@@ -205,9 +215,24 @@ const LibraryLightbox = ({
 							"dark inset-0 z-50 flex flex-col bg-[#080809]/93 text-foreground outline-none",
 							container ? "absolute" : "fixed",
 						)}
+						data-lightbox-backdrop
 						data-slot="library-lightbox"
 						initialFocus={surfaceRef}
+						onClick={(event) => {
+							if (
+								event.target === pressedRef.current &&
+								isBackdrop(event.target)
+							)
+								onClose()
+						}}
 						onKeyDown={stepWithArrows}
+						onPointerDown={(event) => {
+							pressedRef.current =
+								isConfirmingDelete ||
+								event.nativeEvent === lastMenuToggleRef.current
+									? null
+									: event.target
+						}}
 						ref={surfaceRef}
 					>
 						<div className={LIBRARY_BAR}>
@@ -242,22 +267,34 @@ const LibraryLightbox = ({
 								actions={handlersFor(actions, image)}
 								item={image}
 								onClose={onClose}
+								onConfirmingDeleteChange={setConfirmingDelete}
+								onMenuOpenChange={(_open, details) => {
+									lastMenuToggleRef.current = details.event
+								}}
 								surface="lightbox"
 							/>
 						</div>
-						<div className="relative flex min-h-0 flex-1 items-center gap-5 px-5 pb-18">
-							<TooltipButton
-								aria-label={t("library.lightbox.previous")}
-								className={STEP}
-								disabled={isFirst}
-								onClick={onPrevious}
-								size="icon-lg"
-								tooltip={t("library.lightbox.previous")}
-								variant="ghost"
+						<div
+							className="relative flex min-h-0 flex-1 items-center gap-5 px-5 pb-18"
+							data-lightbox-backdrop
+						>
+							<span className="flex">
+								<TooltipButton
+									aria-label={t("library.lightbox.previous")}
+									className={STEP}
+									disabled={isFirst}
+									onClick={onPrevious}
+									size="icon-lg"
+									tooltip={t("library.lightbox.previous")}
+									variant="ghost"
+								>
+									<Icons.Previous aria-hidden="true" className="size-4.5" />
+								</TooltipButton>
+							</span>
+							<div
+								className="flex h-full min-w-0 flex-1 flex-col"
+								data-lightbox-backdrop
 							>
-								<Icons.Previous aria-hidden="true" className="size-4.5" />
-							</TooltipButton>
-							<div className="flex h-full min-w-0 flex-1 flex-col">
 								<ZoomStage
 									count={count}
 									image={image}
@@ -265,17 +302,19 @@ const LibraryLightbox = ({
 									position={position}
 								/>
 							</div>
-							<TooltipButton
-								aria-label={t("library.lightbox.next")}
-								className={STEP}
-								disabled={isLast}
-								onClick={onNext}
-								size="icon-lg"
-								tooltip={t("library.lightbox.next")}
-								variant="ghost"
-							>
-								<Icons.Next aria-hidden="true" className="size-4.5" />
-							</TooltipButton>
+							<span className="flex">
+								<TooltipButton
+									aria-label={t("library.lightbox.next")}
+									className={STEP}
+									disabled={isLast}
+									onClick={onNext}
+									size="icon-lg"
+									tooltip={t("library.lightbox.next")}
+									variant="ghost"
+								>
+									<Icons.Next aria-hidden="true" className="size-4.5" />
+								</TooltipButton>
+							</span>
 						</div>
 					</DialogPrimitive.Popup>
 				) : null}

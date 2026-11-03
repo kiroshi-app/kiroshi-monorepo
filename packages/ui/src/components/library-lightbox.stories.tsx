@@ -186,7 +186,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"One image of the Library, over the content card, opened from a grid item. It traps focus, closes on Escape and on Close, and hands focus back to the item that opened it. Left and Right arrows, like Previous and Next, ask the caller for the neighbouring image, and the two buttons disable at either end. Back, at the leading edge of the header, closes it like Close. Download and Copy are drawn only when their callback is given and `isActionShown` keeps them for the image, and More opens the item action menu, drawn only when at least one item action is shown. Copy reports the image too, then swaps its icon for a check and announces Copied once `onCopy` settles, until the shared copy reset delay runs out. The zoom pill steps the image out and in, and its middle button, Fit, shows the zoom percentage until it is pressed to fit the stage again. Render it as the `overlay` of `LibraryPanel` so it covers the card.",
+					"One image of the Library, over the content card, opened from a grid item. It traps focus, closes on Escape, on Close and on a click on the backdrop around the image, and hands focus back to the item that opened it. Left and Right arrows, like Previous and Next, ask the caller for the neighbouring image, and the two buttons disable at either end. Back, at the leading edge of the header, closes it like Close. Download and Copy are drawn only when their callback is given and `isActionShown` keeps them for the image, and More opens the item action menu, drawn only when at least one item action is shown. Copy reports the image too, then swaps its icon for a check and announces Copied once `onCopy` settles, until the shared copy reset delay runs out. The zoom pill steps the image out and in, and its middle button, Fit, shows the zoom percentage until it is pressed to fit the stage again. Render it as the `overlay` of `LibraryPanel` so it covers the card.",
 			},
 		},
 	},
@@ -533,6 +533,118 @@ export const BackButton = meta.story({
 		await userEvent.click(back)
 		await expect(args.onClose).toHaveBeenCalledOnce()
 		await waitFor(() => expect(screen.queryByRole("dialog")).toBe(null))
+	},
+})
+
+const elementAt = (x: number, y: number) => {
+	const hit = document.elementFromPoint(x, y)
+	if (hit === null) throw new Error(`Nothing drawn at ${x}, ${y}`)
+	return hit
+}
+
+const centreOf = (element: Element) => {
+	const box = element.getBoundingClientRect()
+	return elementAt(box.x + box.width / 2, box.y + box.height / 2)
+}
+
+const cornerOf = (element: Element) => {
+	const box = element.getBoundingClientRect()
+	return elementAt(box.x + 4, box.y + 4)
+}
+
+export const BackdropClick = meta.story({
+	args: { openedAt: 0 },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The first image, so Previous is disabled. Check that a click on the backdrop closes the lightbox once, beside the image in fit and in zoomed mode and in the bottom strip outside the zoom pill, and that a click on the image, the header, the zoom pill or Previous and Next, disabled or not, keeps it open. A press on the image released on the backdrop keeps it open too, and while the More menu or the delete confirmation is open, a click outside never closes the lightbox.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const reopen = async () => {
+			await userEvent.click(
+				canvas.getByRole("button", { name: /hero-dunes\.png/ }),
+			)
+			return lightbox()
+		}
+		const stageIn = (popup: HTMLElement) =>
+			popup.querySelector("[data-slot=library-lightbox-zoom]") as HTMLElement
+		const bottomStripIn = (popup: HTMLElement) =>
+			(
+				popup.querySelector(
+					"[data-slot=library-lightbox-zoom-bar]",
+				) as HTMLElement
+			).parentElement as HTMLElement
+		const closedFor = async (times: number) => {
+			await expect(args.onClose).toHaveBeenCalledTimes(times)
+			await waitFor(() => expect(screen.queryByRole("dialog")).toBe(null))
+		}
+
+		let popup = await lightbox()
+		const image = within(popup).getByRole("img", { name: "hero-dunes.png" })
+		await userEvent.click(image)
+		await expect(args.onClose).not.toHaveBeenCalled()
+
+		const headerActions = within(popup).getByRole("button", { name: "Close" })
+			.parentElement as HTMLElement
+		await userEvent.click(within(popup).getByRole("heading"))
+		await userEvent.click(within(popup).getByText("PNG · 1600 × 1000 · 248 KB"))
+		await userEvent.click(headerActions)
+		await userEvent.click(headerActions.parentElement as HTMLElement)
+		await expect(args.onClose).not.toHaveBeenCalled()
+
+		const zoomBar = popup.querySelector(
+			"[data-slot=library-lightbox-zoom-bar]",
+		) as HTMLElement
+		await userEvent.click(zoomBar)
+		await userEvent.click(within(zoomBar).getByText("1 of 8"))
+		const previous = within(popup).getByRole("button", {
+			name: "Previous image",
+		})
+		await expect(previous).toBeDisabled()
+		await userEvent.click(centreOf(previous))
+		await expect(args.onClose).not.toHaveBeenCalled()
+
+		await userEvent.pointer([
+			{ keys: "[MouseLeft>]", target: image },
+			{ target: stageIn(popup) },
+			{ keys: "[/MouseLeft]" },
+		])
+		await expect(args.onClose).not.toHaveBeenCalled()
+
+		await openMoreMenu(popup, userEvent)
+		await userEvent.click(cornerOf(bottomStripIn(popup)))
+		await waitFor(() => expect(screen.queryByRole("menu")).toBe(null))
+		await expect(args.onClose).not.toHaveBeenCalled()
+
+		const menu = await openMoreMenu(popup, userEvent)
+		await userEvent.click(
+			within(menu).getByRole("menuitem", { name: "Delete" }),
+		)
+		await screen.findByRole("alertdialog")
+		await userEvent.click(cornerOf(bottomStripIn(popup)))
+		await userEvent.keyboard("{Escape}")
+		await waitFor(() => expect(screen.queryByRole("alertdialog")).toBe(null))
+		await expect(args.onClose).not.toHaveBeenCalled()
+		await expect(popup).toBeVisible()
+
+		await userEvent.click(stageIn(popup))
+		await closedFor(1)
+
+		popup = await reopen()
+		await userEvent.click(
+			within(popup).getByRole("button", { name: "Zoom in" }),
+		)
+		await userEvent.click(stageIn(popup))
+		await closedFor(2)
+
+		popup = await reopen()
+		const bottomStrip = bottomStripIn(popup)
+		await expect(cornerOf(bottomStrip)).toBe(bottomStrip)
+		await userEvent.click(bottomStrip)
+		await closedFor(3)
 	},
 })
 
