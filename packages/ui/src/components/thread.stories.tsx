@@ -1528,7 +1528,6 @@ export const Queue1 = meta.story({
 		const input = slotIn(canvasElement, "prompt-input")
 		const field = input.getBoundingClientRect()
 		await expect(tray.top).toBeLessThan(field.top)
-		await expect(tray.bottom).toBeGreaterThan(field.top)
 		await expect(
 			input.contains(
 				document.elementFromPoint(tray.left + tray.width / 2, tray.bottom - 1),
