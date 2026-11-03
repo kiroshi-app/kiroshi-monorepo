@@ -604,6 +604,7 @@ impl Host {
 			turn_id: turn_id.to_owned(),
 			author_bot_id: None,
 			replied_to_message_id: None,
+			replied_to_message_ids: Vec::new(),
 			content: content.to_owned(),
 			created_at: 1,
 		};
@@ -869,7 +870,7 @@ fn one_member_call_stores_the_guest_message_and_the_lead_reply_with_their_live_e
 		assert_eq!(replies.len(), 1, "the room holds {transcript:#?}");
 		assert_eq!(replies[0].content, "noted");
 		assert_eq!(replies[0].turn_id, "t1");
-		assert_eq!(replies[0].replied_to_message_id.as_deref(), Some("p1"));
+		assert_eq!(replies[0].replied_to_message_ids, ["p1"]);
 		assert!(replies_of(&transcript, GRACE).is_empty(), "a companion nobody named answered");
 		assert!(host.stored_ids().contains(&json!("p1")), "the guest heard no stored message");
 		assert_eq!(completed_texts(&host.agent_events(ADA)), vec!["noted"]);
@@ -897,7 +898,7 @@ fn a_reply_naming_a_seated_companion_starts_it_in_the_next_wave() {
 		assert_eq!(answered.len(), 1, "the room holds {transcript:#?}");
 		assert_eq!(answered[0].content, "noted");
 		assert_eq!(answered[0].turn_id, "t1");
-		assert_eq!(answered[0].replied_to_message_id.as_deref(), Some("p1"));
+		assert_eq!(answered[0].replied_to_message_ids, ["p1"]);
 		assert!(handed[0].seq < answered[0].seq, "the handed companion spoke first");
 		host.quit().await;
 	});

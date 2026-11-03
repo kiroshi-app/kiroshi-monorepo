@@ -768,7 +768,7 @@ fn a_follow_up_after_a_settled_turn_is_a_continuation_of_it_read_back_after_a_re
 
 	assert_ne!(follow_up.turn_id, "t1", "the follow-up was written into the settled turn");
 	assert_eq!(follow_up.continues_turn_id.as_deref(), Some("t1"));
-	assert_eq!(follow_up.replied_to_message_id.as_deref(), Some("p1"));
+	assert_eq!(follow_up.replied_to_message_ids, ["p1"]);
 	stored.wait_for("the continuation completed", |stored| stored.completed_at(&follow_up.turn_id));
 	let named = stored.turn_named_for(FOLLOW_UP).expect("the follow-up names its turn");
 	assert_eq!(named.turn_id, follow_up.turn_id);
@@ -955,7 +955,7 @@ fn the_host_persists_a_whole_turn_with_no_window_and_no_listener() {
 	assert_eq!(reply.content, STREAMED);
 	assert_eq!(reply.state, MessageState::Complete);
 	assert_eq!(reply.turn_id, "t1");
-	assert_eq!(reply.replied_to_message_id.as_deref(), Some("p1"));
+	assert_eq!(reply.replied_to_message_ids, ["p1"]);
 	stored.close();
 }
 

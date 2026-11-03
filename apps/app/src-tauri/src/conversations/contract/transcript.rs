@@ -99,6 +99,9 @@ pub struct TranscriptMessage {
 	#[specta(optional)]
 	pub written_from: Option<WrittenFrom>,
 	pub replied_to_message_id: Option<String>,
+	#[serde(default)]
+	#[specta(optional)]
+	pub replied_to_message_ids: Vec<String>,
 	pub runtime_session_id: Option<String>,
 	#[serde(default, skip_serializing_if = "Option::is_none")]
 	#[specta(optional)]
@@ -120,7 +123,8 @@ impl TranscriptMessage {
 			content: stored.content,
 			completion: stored.state.into(),
 			created_at: stored.created_at,
-			replied_to_message_id: stored.replied_to_message_id,
+			replied_to_message_id: stored.replied_to_message_ids.first().cloned(),
+			replied_to_message_ids: stored.replied_to_message_ids,
 			runtime_session_id: stored.runtime_session_id,
 			continues_turn_id: stored.continues_turn_id,
 		}
@@ -313,6 +317,9 @@ pub struct NewUserMessage {
 	pub turn_id: String,
 	pub author_bot_id: Option<String>,
 	pub replied_to_message_id: Option<String>,
+	#[serde(default)]
+	#[specta(optional)]
+	pub replied_to_message_ids: Vec<String>,
 	pub content: String,
 	pub created_at: i64,
 }
@@ -334,7 +341,10 @@ impl NewUserMessage {
 			author_bot_id: self.author_bot_id,
 			author,
 			written_from,
-			replied_to_message_id: self.replied_to_message_id,
+			replied_to_message_ids: reply_links(
+				self.replied_to_message_id,
+				self.replied_to_message_ids,
+			),
 			content: self.content,
 			created_at: self.created_at,
 		}
@@ -350,6 +360,9 @@ pub struct SentMessage {
 	pub content: String,
 	pub created_at: i64,
 	pub replied_to_message_id: Option<String>,
+	#[serde(default)]
+	#[specta(optional)]
+	pub replied_to_message_ids: Vec<String>,
 }
 
 impl From<SentMessage> for NewUserMessage {
@@ -360,9 +373,17 @@ impl From<SentMessage> for NewUserMessage {
 			turn_id: sent.turn_id,
 			author_bot_id: None,
 			replied_to_message_id: sent.replied_to_message_id,
+			replied_to_message_ids: sent.replied_to_message_ids,
 			content: sent.content,
 			created_at: sent.created_at,
 		}
+	}
+}
+
+fn reply_links(first: Option<String>, all: Vec<String>) -> Vec<String> {
+	match all.is_empty() {
+		true => first.into_iter().collect(),
+		false => all,
 	}
 }
 
@@ -498,6 +519,7 @@ mod tests {
 			turn_id: "t1".into(),
 			author_bot_id: author_bot_id.map(Into::into),
 			replied_to_message_id: None,
+			replied_to_message_ids: Vec::new(),
 			content: "hello".into(),
 			created_at: 1,
 		};
@@ -522,6 +544,7 @@ mod tests {
 				turn_id: "t1".into(),
 				author_bot_id: None,
 				replied_to_message_id: None,
+				replied_to_message_ids: Vec::new(),
 				content: "hello".into(),
 				created_at: 1,
 			},
@@ -531,6 +554,7 @@ mod tests {
 				"turnId": "t1",
 				"authorBotId": null,
 				"repliedToMessageId": null,
+				"repliedToMessageIds": [],
 				"content": "hello",
 				"createdAt": 1
 			}),

@@ -240,6 +240,7 @@ pub(crate) async fn run_handed_turn<R: Runtime>(
 		content,
 		created_at,
 		replied_to_message_id: None,
+		replied_to_message_ids: Vec::new(),
 	};
 	tauri::async_runtime::spawn(host_turn::run(app.clone(), held, message, vec![summoned]));
 	Ok(())
@@ -516,6 +517,102 @@ mod tests {
 
 		let expected = vec![stored_report(&app).await];
 		assert_eq!(*heard.lock().expect("the list is kept"), expected);
+	}
+
+	fn a_reply_to(id: &str, targets: &[&str]) -> NewUserMessage {
+		NewUserMessage {
+			id: id.into(),
+			conversation_id: "c1".into(),
+			turn_id: format!("t-{id}"),
+			author_bot_id: None,
+			replied_to_message_id: targets.first().map(|target| (*target).to_owned()),
+			replied_to_message_ids: targets.iter().map(|target| (*target).to_owned()).collect(),
+			content: "hello".into(),
+			created_at: 1,
+		}
+	}
+
+	async fn send(app: &AppOfItsOwn, message: NewUserMessage) -> Result<i64, TranscriptStoreError> {
+		conversation_send_user_message(
+			app.handle().clone(),
+			app.state(),
+			Caller::Host,
+			message,
+			Vec::new(),
+		)
+		.await
+	}
+
+	async fn sent_targets(app: &AppOfItsOwn, ids: &[&str]) {
+		for id in ids {
+			send(app, a_reply_to(id, &[])).await.expect("the target is sent");
+		}
+	}
+
+	async fn page_of(app: &AppOfItsOwn) -> Vec<TranscriptMessage> {
+		conversation_message_page(app.state(), "c1".into(), None, 50)
+			.await
+			.expect("the page reads")
+			.messages
+	}
+
+	fn links_of<'a>(page: &'a [TranscriptMessage], id: &str) -> (Option<&'a str>, &'a [String]) {
+		let message = page.iter().find(|message| message.id == id).expect("the message is read");
+		(message.replied_to_message_id.as_deref(), &message.replied_to_message_ids)
+	}
+
+	#[tokio::test]
+	async fn a_message_replying_to_three_reads_the_three_back_in_the_order_sent() {
+		let app = a_host("three-replies").await;
+		sent_targets(&app, &["m1", "m2", "m3"]).await;
+
+		send(&app, a_reply_to("m4", &["m3", "m1", "m2"])).await.expect("the reply is sent");
+
+		let page = page_of(&app).await;
+		assert_eq!(links_of(&page, "m4"), (Some("m3"), &["m3", "m1", "m2"].map(String::from)[..]));
+		assert_eq!(links_of(&page, "m1"), (None, &[][..]));
+	}
+
+	#[tokio::test]
+	async fn a_target_named_twice_is_kept_once_at_its_first_place() {
+		let app = a_host("repeated-reply").await;
+		sent_targets(&app, &["m1", "m2"]).await;
+
+		send(&app, a_reply_to("m3", &["m2", "m1", "m2"])).await.expect("the reply is sent");
+
+		let page = page_of(&app).await;
+		assert_eq!(links_of(&page, "m3"), (Some("m2"), &["m2", "m1"].map(String::from)[..]));
+	}
+
+	#[tokio::test]
+	async fn a_payload_naming_only_its_first_target_keeps_that_one_link() {
+		let app = a_host("single-link-payload").await;
+		sent_targets(&app, &["m1"]).await;
+		let legacy: NewUserMessage = serde_json::from_value(json!({
+			"id": "m2", "conversationId": "c1", "turnId": "t-m2", "authorBotId": null,
+			"repliedToMessageId": "m1", "content": "hello", "createdAt": 1
+		}))
+		.expect("a payload without the list deserializes");
+
+		send(&app, legacy).await.expect("the reply is sent");
+
+		let page = page_of(&app).await;
+		assert_eq!(links_of(&page, "m2"), (Some("m1"), &["m1".to_owned()][..]));
+	}
+
+	#[tokio::test]
+	async fn an_unknown_target_anywhere_in_the_list_refuses_the_send_as_a_lone_one_does() {
+		let app = a_host("unknown-reply").await;
+		sent_targets(&app, &["m1"]).await;
+
+		let lone = send(&app, a_reply_to("lone", &["gone"])).await;
+		let listed = send(&app, a_reply_to("listed", &["m1", "gone"])).await;
+
+		let refused = serde_json::to_value(&lone).expect("the error serializes");
+		assert_eq!(refused["Err"]["failure"]["code"], "SQLITE_CONSTRAINT_FOREIGNKEY");
+		assert_eq!(listed, lone);
+		let ids: Vec<String> = page_of(&app).await.into_iter().map(|message| message.id).collect();
+		assert_eq!(ids, ["m1"], "a refused reply left a message behind");
 	}
 
 	#[tokio::test]

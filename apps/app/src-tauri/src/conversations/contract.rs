@@ -47,6 +47,7 @@ mod tests {
 			author_name: None,
 			written_from: None,
 			replied_to_message_id: Some("m0".into()),
+			replied_to_message_ids: vec!["m0".into()],
 			runtime_session_id: Some("run-1".into()),
 			continues_turn_id: None,
 		}
@@ -67,6 +68,7 @@ mod tests {
 			"authorName": null,
 			"writtenFrom": null,
 			"repliedToMessageId": "m0",
+			"repliedToMessageIds": ["m0"],
 			"runtimeSessionId": "run-1"
 		})
 	}

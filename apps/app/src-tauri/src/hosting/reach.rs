@@ -84,11 +84,13 @@ const NEW_MESSAGE: &[Held] = &[
 	child(Turn, "/message/turnId"),
 	optional_child(Bot, "/message/authorBotId"),
 	optional_child(Message, "/message/repliedToMessageId"),
+	optional_child(Message, "/message/repliedToMessageIds"),
 ];
 const OPENING_MESSAGE: &[Held] = &[
 	child(Conversation, "/message/conversationId"),
 	optional_child(Bot, "/message/authorBotId"),
 	optional_child(Message, "/message/repliedToMessageId"),
+	optional_child(Message, "/message/repliedToMessageIds"),
 ];
 const BOT_ID: &[Held] = &[child(Bot, "/botId")];
 const BOT_WRITE_AS_ID: &[Held] = &[child(BotHeldAlone, "/id")];
@@ -268,6 +270,7 @@ pub(super) const REACHES: &[(&str, Reach)] = &[
 		Reach::Scoped(&[
 			child(Conversation, "/message/conversationId"),
 			optional_child(Message, "/message/repliedToMessageId"),
+			optional_child(Message, "/message/repliedToMessageIds"),
 			child(Bot, "/summoned"),
 		]),
 	),
