@@ -1381,13 +1381,13 @@ const useThreadAnnotations = (
 		t,
 	} = seats
 
-	const repliedToRefusal = facts.refused?.replyLinks ?? NO_REPLY_LINKS
+	const refusalLinks = facts.refused?.replyLinks ?? NO_REPLY_LINKS
 	const alsoQuoted = useMemo(
 		() =>
-			repliedToRefusal.length > 0
-				? repliedToRefusal.map(({ messageId }) => messageId)
+			refusalLinks.length > 0
+				? refusalLinks.map(({ messageId }) => messageId)
 				: NO_QUOTED_IDS,
-		[repliedToRefusal],
+		[refusalLinks],
 	)
 	const quotes = useQuotedMessages(
 		facts.botController,
@@ -1460,7 +1460,7 @@ const useThreadAnnotations = (
 		personOf,
 		pins,
 		quotes,
-		repliedToRefusal,
+		refusalLinks,
 		routinesScope,
 		sessionApplications,
 		toQuote,
@@ -1649,7 +1649,7 @@ const threadRowsOf = (
 		personOf,
 		pins,
 		quotes,
-		repliedToRefusal,
+		refusalLinks,
 		sessionApplications,
 		toQuote,
 		wrapMissionCard,
@@ -1747,7 +1747,7 @@ const threadRowsOf = (
 		...missionRowsAfter(runIndex),
 		...daySeparatorsAfter(runIndex),
 	])
-	const refusedTargets = quotedTargetsOf(repliedToRefusal, quotes)
+	const refusedTargets = quotedTargetsOf(refusalLinks, quotes)
 	const signInStep = signInStepFor(thread, signIn)
 
 	return { refusedTargets, signInStep, transcriptRows }
