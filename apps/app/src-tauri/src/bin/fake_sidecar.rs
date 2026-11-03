@@ -374,7 +374,11 @@ fn result_of(session_id: &str, subtype: &str, is_error: bool) -> Value {
 }
 
 fn emit_settled(key: &str, result: Value) {
-	let mut settled = result.clone();
+	emit_settled_answering(key, result, None);
+}
+
+fn emit_settled_answering(key: &str, result: Value, prompt_uuid: Option<&str>) {
+	let mut settled = answering(result.clone(), prompt_uuid);
 	settled["type"] = json!("turn_settled");
 	emit(key, result);
 	emit(key, settled);
@@ -429,7 +433,7 @@ fn complete_reply(key: &str, run: &Run, message_id: &str, text: &str, prompt_uui
 		"message": { "id": message_id, "role": "assistant", "content": [{ "type": "text", "text": text }] }
 	});
 	emit(key, answering(completed, prompt_uuid));
-	emit_settled(key, answering(result_of(&run.session_id, "success", false), prompt_uuid));
+	emit_settled_answering(key, result_of(&run.session_id, "success", false), prompt_uuid);
 }
 
 fn emit_whole_reply(key: &str, run: &Run, text: &str, prompt_uuid: Option<&str>) {

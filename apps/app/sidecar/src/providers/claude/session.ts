@@ -216,6 +216,20 @@ const isSystem = (message: SessionFrame, subtype: string): boolean =>
 const answersAPrompt = (result: SessionFrame): boolean =>
 	typeof result.user_message_uuid === "string"
 
+const promptAnsweredBy = (message: SessionFrame): string | undefined =>
+	(message.type === "assistant" || message.type === "stream_event") &&
+	typeof message.user_message_uuid === "string"
+		? message.user_message_uuid
+		: undefined
+
+const stampedWith = (
+	result: SessionFrame,
+	answered: string | undefined,
+): SessionFrame => {
+	const { user_message_uuid: _sdkStamp, ...unstamped } = result
+	return answered ? { ...unstamped, user_message_uuid: answered } : unstamped
+}
+
 const liveTasks = (message: SessionFrame): number =>
 	((message.tasks as BackgroundTask[] | undefined) ?? []).filter(
 		(task) => !task.ambient,
@@ -226,6 +240,7 @@ export const createTurnSettler = (
 	graceMs = SETTLE_GRACE_MS,
 ) => {
 	let held: SessionFrame | undefined
+	let answered: string | undefined
 	let pending = 0
 	let busy = false
 	let stop: StopPhase = "none"
@@ -298,6 +313,16 @@ export const createTurnSettler = (
 		}
 	}
 
+	const stamp = (message: SessionFrame): SessionFrame => {
+		if (message.type !== "result") {
+			answered = promptAnsweredBy(message) ?? answered
+			return message
+		}
+		const result = stampedWith(message, answered)
+		answered = undefined
+		return result
+	}
+
 	const observe = (message: SessionFrame) => {
 		if (message.type === "result") {
 			onResult(message)
@@ -310,10 +335,11 @@ export const createTurnSettler = (
 
 	return {
 		relay: (message: SessionFrame) => {
+			const relayed = stamp(message)
 			if (stop !== "settled") {
-				emit(message)
+				emit(relayed)
 			}
-			observe(message)
+			observe(relayed)
 		},
 		prompted: () => {
 			stop = "none"

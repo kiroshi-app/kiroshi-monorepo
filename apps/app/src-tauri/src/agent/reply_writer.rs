@@ -224,13 +224,7 @@ async fn write_then_forward<R: Runtime>(
 			}
 			Entry::FollowUp(FollowUp::Started) => desk.open_continuation().await,
 			Entry::FollowUp(FollowUp::FoldedIn) => desk.fold_in_parked().await,
-			Entry::FollowUp(FollowUp::Settled(events)) => {
-				let turn = desk.open_turn_named();
-				for event in events {
-					desk.record_follow_up(&event).await;
-					desk.inner.emit(event, turn.clone());
-				}
-			}
+			Entry::FollowUp(FollowUp::Settled(events)) => desk.settle_follow_up(events).await,
 			Entry::Drained(written) => {
 				if written.send(()).is_err() {
 					log::warn!("a shutdown stopped waiting for the reply writer of its run");
@@ -335,8 +329,12 @@ impl<R: Runtime> Desk<R> {
 		}
 	}
 
+	fn streams_a_continuation(&self) -> bool {
+		self.turn.as_ref().is_some_and(OpenTurn::is_continuation)
+	}
+
 	async fn open_turn(&mut self, turn: SubmittedTurn) {
-		let follows_up = self.turn.as_ref().is_some_and(OpenTurn::is_continuation);
+		let follows_up = self.streams_a_continuation();
 		if !follows_up {
 			self.end(TerminalState::Cancelled).await;
 		}
@@ -384,9 +382,26 @@ impl<R: Runtime> Desk<R> {
 	}
 
 	async fn withdraw(&mut self) {
-		match self.parked.take() {
-			Some(parked) => self.close(parked, TerminalState::Failed).await,
-			None => self.end(TerminalState::Failed).await,
+		if let Some(parked) = self.parked.take() {
+			return self.close(parked, TerminalState::Failed).await;
+		}
+		if !self.streams_a_continuation() {
+			self.end(TerminalState::Failed).await;
+		}
+	}
+
+	async fn settle_follow_up(&mut self, events: Vec<AgentEvent>) {
+		if !self.streams_a_continuation() {
+			log::warn!(
+				"a follow-up of conversation {} settled with no continuation open and ends no turn",
+				self.store.conversation_id
+			);
+			return;
+		}
+		let turn = self.open_turn_named();
+		for event in events {
+			self.record_follow_up(&event).await;
+			self.inner.emit(event, turn.clone());
 		}
 	}
 
@@ -2686,5 +2701,42 @@ mod tests {
 		assert_eq!(written.settled("m2").await.content, "kept");
 		assert!(written.completed_at("t2").await.is_some(), "the withdrawn prompt was left open");
 		assert_eq!(written.assistant_rows().await, 2);
+	}
+
+	#[tokio::test]
+	async fn a_follow_up_settle_while_a_prompted_turn_is_open_leaves_that_turn_open_and_writes_nothing(
+	) {
+		let written = Written::new("follow-up-settle-prompted").await;
+		written.prompt("t1", "p1").await;
+		let entries =
+			entries_of(&said("m1", "half")).into_iter().chain([follow_up_settled()]).collect();
+
+		let heard = written.forwarded_with_turns(entries).await;
+
+		assert_eq!(written.completed_at("t1").await, None, "the prompted turn was ended");
+		assert!(heard.iter().all(|(event, _)| *event != turn_ended()), "{heard:?}");
+	}
+
+	#[tokio::test]
+	async fn a_withdrawal_with_no_prompt_parked_leaves_the_streaming_continuation_open() {
+		let written = Written::new("follow-up-withdrawn-alone").await;
+		written.prompt("t1", "p1").await;
+		let entries = entries_of(&a_spoken_turn())
+			.into_iter()
+			.chain([Entry::FollowUp(FollowUp::Started)])
+			.chain(events(vec![AgentEvent::MessageStarted { message: streaming("m2") }]))
+			.chain([Entry::Withdrawn])
+			.chain(events(vec![
+				AgentEvent::MessageDelta { id: "m2".into(), seq: 1, text: "kept".into() },
+				completed("m2", "kept", 2),
+			]))
+			.chain([follow_up_settled()])
+			.collect();
+
+		written.forwarded(entries).await;
+
+		let follow_up = written.settled("m2").await;
+		assert_eq!(follow_up.content, "kept");
+		assert_eq!(follow_up.continues_turn_id.as_deref(), Some("t1"));
 	}
 }

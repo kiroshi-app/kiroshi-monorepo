@@ -512,10 +512,17 @@ The sidecar writes one `turn_settled`, carrying every field of the last `result`
   session: a follow-up turn the CLI still runs when a task ends reaches the host neither
   as a stream nor as a `result`. `heartbeat`, `closed` and the control frames still pass.
 
-A `result` carrying no `user_message_uuid`, arriving while no `result` is held, answers
-no prompt: it ends a follow-up turn the CLI ran after the turn settled. The sidecar
-settles it at once, busy or not, unless tasks are counted, so each follow-up settles on
-its own `result`, two queued follow-ups included.
+The SDK stamps `user_message_uuid` on `assistant` frames and on the first non-ping
+`stream_event` of a turn, never on a `result`. The sidecar, not the SDK, stamps the
+`result` it relays and the `turn_settled` it writes, with the `user_message_uuid` of the
+`assistant` and `stream_event` frames seen since the previous `result`, and with none
+when no such frame carried one.
+
+A `result` stamped with a prompt's uuid is held while the CLI is busy and settles on
+the idle, as above. A `result` carrying no `user_message_uuid`, arriving while no
+`result` is held, answers no prompt: it ends a follow-up turn the CLI ran after the turn
+settled. The sidecar settles it at once, busy or not, unless tasks are counted, so each
+follow-up settles on its own `result`, two queued follow-ups included.
 
 ### Continuation turns
 
@@ -527,7 +534,10 @@ order frames arrive in:
   it as a continuation turn of the bot of the run, its `continues_turn_id` naming the last
   turn the run answered, its messages replying to that turn's prompt;
 - the `turn_settled` of a follow-up completes the continuation alone: a prompt submitted
-  while the follow-up streams stays open and waits for its own `turn_settled`;
+  while the follow-up streams stays open and waits for its own `turn_settled`. Landing
+  while no continuation is open, it ends no turn;
+- a prompt withdrawn while a follow-up streams fails only that prompt's turn, never the
+  continuation;
 - a frame stamped with the running prompt's uuid while a follow-up streams means the SDK
   folded that prompt into the follow-up: the continuation completes and what follows
   belongs to the prompted turn;
