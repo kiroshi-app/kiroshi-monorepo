@@ -86,11 +86,11 @@ const playShortTitle = async ({ canvasElement }: ChipPlayContext) => {
 
 const expectLongTitleChip = async (canvasElement: HTMLElement) => {
 	const { chip, title } = await expectChipAnatomy(canvasElement)
-	const { width, height } = chip.getBoundingClientRect()
 	await expect(title.getBoundingClientRect().width).toBe(
 		TITLE_BAR_TAB_CHIP_TITLE_MAX_WIDTH,
 	)
 	await expect(title.scrollWidth).toBeGreaterThan(title.clientWidth)
+	const { width, height } = chip.getBoundingClientRect()
 	await expect({ width, height }).toEqual(TITLE_BAR_TAB_CHIP_DRAG_SIZE)
 	return chip
 }
