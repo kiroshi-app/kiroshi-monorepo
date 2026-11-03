@@ -1,20 +1,37 @@
 // @vitest-environment happy-dom
 
 import { RouterProvider } from "@tanstack/react-router"
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
+import type { Event } from "@tauri-apps/api/event"
+import {
+	act,
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+	within,
+} from "@testing-library/react"
 import { createElement } from "react"
 import { afterEach, describe, expect, it, vi } from "vitest"
+import * as Y from "yjs"
 
 import type { AppRailPanel } from "@workspace/ui/components/app-rail"
+import { libraryDocumentStartOf } from "@workspace/ui/components/library-document-editor"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { LibraryScreen } from "@/components/library-screen"
-import type { LibraryItem, MissionInSpace } from "@/lib/bindings"
+import {
+	LIBRARY_DOCUMENT_UPDATED_EVENT,
+	type LibraryDocumentUpdated,
+	type LibraryItem,
+	type MissionInSpace,
+} from "@/lib/bindings"
 import { newBotIdentity } from "@/lib/bots/bot-settings"
 import { createFakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import type { Invoke } from "@/lib/host/joined-hosts-invoke"
+import { base64Of, bytesOf } from "@/lib/library/library-document-session"
 import { titleOf } from "@/lib/library/library-items"
 import { aMission } from "@/lib/missions/mission-fixtures"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
@@ -30,11 +47,111 @@ const harness = vi.hoisted(
 	(): Harness => ({ store: null, missions: [], libraryItems: [] }),
 )
 
+type LibraryCall = { name: string; update: string }
+
+type UpdateHeard = (event: Event<LibraryDocumentUpdated>) => void
+
+const HOSTED_CONTENT = "Notes"
+
+const LIBRARY_SPACE_ID = "space"
+
+const libraryItemOf = (
+	name: string,
+	kind: LibraryItem["kind"],
+): LibraryItem => ({
+	name,
+	kind,
+	path: `/library/${name}`,
+	bytes: 1024,
+	modifiedAt: 0,
+	createdAt: null,
+})
+
+const createFakeLibraryHost = () => {
+	const documents = new Map<string, Y.Doc>()
+	const listeners = new Set<UpdateHeard>()
+	const host = { refusesUpdates: false }
+
+	const documentOf = (name: string) => {
+		const held = documents.get(name)
+		if (held) {
+			return held
+		}
+		const doc = new Y.Doc()
+		doc.getText("markdown").insert(0, HOSTED_CONTENT)
+		documents.set(name, doc)
+		return doc
+	}
+
+	const announce = (payload: LibraryDocumentUpdated) => {
+		for (const heard of listeners) {
+			heard({ event: LIBRARY_DOCUMENT_UPDATED_EVENT, id: 0, payload })
+		}
+	}
+
+	const commands: Record<string, (call: LibraryCall) => unknown> = {
+		library_create_document: ({ name }) => {
+			if (harness.libraryItems.some((item) => item.name === name)) {
+				throw { kind: "alreadyExists", name }
+			}
+			documents.set(name, new Y.Doc())
+			const item = libraryItemOf(name, "document")
+			harness.libraryItems = [...harness.libraryItems, item]
+			return item
+		},
+		library_open_document: ({ name }) => ({
+			name,
+			update: base64Of(Y.encodeStateAsUpdate(documentOf(name))),
+		}),
+		library_apply_update: ({ name, update }) => {
+			if (host.refusesUpdates) {
+				throw { kind: "tooLarge", name, bytes: 0, limit: 0 }
+			}
+			Y.applyUpdate(documentOf(name), bytesOf(update))
+			setTimeout(() => announce({ spaceId: LIBRARY_SPACE_ID, name, update }))
+			return null
+		},
+	}
+
+	return {
+		host,
+		commands,
+		markdownOf: (name: string) =>
+			documentOf(name).getText("markdown").toString(),
+		listen: (heard: UpdateHeard) => {
+			listeners.add(heard)
+			return () => {
+				listeners.delete(heard)
+			}
+		},
+		reset: () => {
+			documents.clear()
+			listeners.clear()
+			host.refusesUpdates = false
+		},
+	}
+}
+
+const fakeLibraryHost = createFakeLibraryHost()
+
 const LIBRARY_READS: Record<string, (name: string) => unknown> = {
 	library_list: () => harness.libraryItems,
-	library_read_document: (name) => ({ name, format: "text", content: "Notes" }),
+	library_read_document: (name) => ({
+		name,
+		format: "text",
+		content: HOSTED_CONTENT,
+	}),
 	library_read_image: (name) => ({ name, mimeType: "image/png", content: "" }),
 }
+
+const answerLibraryCall = (command: string, args: unknown) => {
+	const call = args as LibraryCall
+	const read = LIBRARY_READS[command]
+	return read ? read(call.name) : fakeLibraryHost.commands[command]?.(call)
+}
+
+const isLibraryCall = (command: string) =>
+	command in LIBRARY_READS || command in fakeLibraryHost.commands
 
 vi.mock("@/lib/conversations/create-store", () => ({
 	createTranscriptStore: () => harness.store,
@@ -42,13 +159,21 @@ vi.mock("@/lib/conversations/create-store", () => ({
 
 vi.mock("@/lib/host/index", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("@/lib/host/index")>()
-	const invoke: Invoke = <T>(...call: Parameters<Invoke>) => {
+	const invoke: Invoke = async <T>(...call: Parameters<Invoke>) => {
 		const [command, args] = call
-		const read = LIBRARY_READS[command]
-		const name = (args as { name?: string } | undefined)?.name ?? ""
-		return read ? Promise.resolve(read(name) as T) : actual.invoke<T>(...call)
+		return isLibraryCall(command)
+			? (answerLibraryCall(command, args) as T)
+			: actual.invoke<T>(...call)
 	}
-	return { ...actual, invoke, isDesktopHost: () => false }
+	const listen: typeof actual.listen = (event, handler) =>
+		event === LIBRARY_DOCUMENT_UPDATED_EVENT
+			? Promise.resolve(
+					fakeLibraryHost.listen((heard) =>
+						handler(heard as Parameters<typeof handler>[0], null),
+					),
+				)
+			: actual.listen(event, handler)
+	return { ...actual, invoke, listen, isDesktopHost: () => false }
 })
 
 vi.mock("@/lib/host/tauri", async (importOriginal) => ({
@@ -109,6 +234,7 @@ afterEach(() => {
 	harness.store = null
 	harness.missions = []
 	harness.libraryItems = []
+	fakeLibraryHost.reset()
 })
 
 const settle = async () => {
@@ -288,36 +414,37 @@ describe("the search entry of the rail", () => {
 	})
 })
 
-const libraryItemOf = (
-	name: string,
-	kind: LibraryItem["kind"],
-): LibraryItem => ({
-	name,
-	kind,
-	path: `/library/${name}`,
-	bytes: 1024,
-	modifiedAt: 0,
-	createdAt: null,
-})
-
 const IMAGE = libraryItemOf("diagram.png", "image")
 
 const DOCUMENT = libraryItemOf("notes.txt", "document")
 
-const mountLibraryScreen = async (isJoined: boolean) => {
-	harness.libraryItems = [IMAGE, DOCUMENT]
-	render(createElement(LibraryScreen, { spaceId: "space", isJoined }), {
-		wrapper: createQueryTestWrapper().wrapper,
-	})
-	await screen.findByRole("heading", { level: 1, name: LIBRARY_NAME })
+const renderLibraryScreen = async (isJoined: boolean) => {
+	const { container } = render(
+		createElement(LibraryScreen, { spaceId: LIBRARY_SPACE_ID, isJoined }),
+		{ wrapper: createQueryTestWrapper().wrapper },
+	)
+	const shown = within(container)
+	await shown.findByRole("heading", { level: 1, name: LIBRARY_NAME })
+	return shown
 }
 
-const openLibraryItem = async (item: LibraryItem) => {
-	const tile = (await screen.findAllByRole("button")).find((button) =>
-		button.textContent?.includes(titleOf(item)),
-	)
+const mountLibraryScreen = (isJoined: boolean) => {
+	harness.libraryItems = [IMAGE, DOCUMENT]
+	return renderLibraryScreen(isJoined)
+}
+
+type Shown = Pick<typeof screen, "getAllByRole">
+
+const openLibraryItem = async (item: LibraryItem, shown: Shown = screen) => {
+	const tile = await waitFor(() => {
+		const found = shown
+			.getAllByRole("button")
+			.find((button) => button.textContent?.includes(titleOf(item)))
+		expect(found).toBeInstanceOf(HTMLElement)
+		return found as HTMLElement
+	})
 	await act(async () => {
-		fireEvent.click(tile as HTMLElement, { detail: 1 })
+		fireEvent.click(tile, { detail: 1 })
 	})
 }
 
@@ -368,5 +495,134 @@ describe("the More action of an opened Library item", () => {
 		expect(
 			await findButtonNamed(i18n.t("common:library.document.more")),
 		).toBeInstanceOf(HTMLElement)
+	})
+})
+
+const common = i18n.getFixedT(null, "common")
+
+const PARAGRAPH_FIELD = common("library.editor.paragraph")
+
+const press = async (target: Element) => {
+	await act(async () => {
+		fireEvent.click(target, { detail: 1 })
+	})
+}
+
+const typeInto = async (field: HTMLElement, value: string) => {
+	await act(async () => {
+		fireEvent.change(field, { target: { value } })
+	})
+}
+
+const paragraphOf = (shown: Pick<typeof screen, "getByRole">) =>
+	shown.getByRole("textbox", { name: PARAGRAPH_FIELD }) as HTMLTextAreaElement
+
+const createFromDialog = async () => {
+	const dialog = await screen.findByRole("dialog")
+	await press(
+		within(dialog).getByRole("button", {
+			name: common("library.picker.create"),
+		}),
+	)
+	return dialog
+}
+
+describe("a new Library document", () => {
+	it("creates a blank document on the host from New document, named after the first free Untitled, and lists it on Back", async () => {
+		harness.libraryItems = [DOCUMENT, libraryItemOf("Untitled.md", "document")]
+		const shown = await renderLibraryScreen(false)
+
+		await press(
+			shown.getByRole("button", { name: common("library.newDocument") }),
+		)
+		const dialog = await screen.findByRole("dialog")
+		const checked = within(dialog)
+			.getAllByRole("radio")
+			.find((radio) => radio.getAttribute("aria-checked") === "true")
+		expect(checked?.textContent).toContain(
+			common("library.templates.blank.name"),
+		)
+		await createFromDialog()
+
+		expect(
+			await screen.findByRole("textbox", {
+				name: common("library.editor.title"),
+			}),
+		).toBeInstanceOf(HTMLElement)
+		expect(fakeLibraryHost.markdownOf("Untitled 2.md")).toBe("")
+
+		await press(
+			shown.getByRole("button", { name: common("library.document.back") }),
+		)
+		await waitFor(() =>
+			expect(
+				shown
+					.getAllByRole("button")
+					.some((button) => button.textContent?.includes("Untitled 2")),
+			).toBe(true),
+		)
+	})
+
+	it("starts a template card of the empty state with that template, seeded on the host of a joined Space", async () => {
+		const start = libraryDocumentStartOf("brief", new Date(), common)
+		const shown = await renderLibraryScreen(true)
+
+		const card = await waitFor(() => {
+			const found = shown
+				.getAllByRole("button")
+				.find((button) =>
+					button.textContent?.includes(common("library.templates.brief.name")),
+				)
+			expect(found).toBeInstanceOf(HTMLElement)
+			return found as HTMLElement
+		})
+		await press(card)
+		const dialog = await screen.findByRole("dialog")
+		const checked = within(dialog)
+			.getAllByRole("radio")
+			.find((radio) => radio.getAttribute("aria-checked") === "true")
+		expect(checked?.textContent).toContain(
+			common("library.templates.brief.name"),
+		)
+		await createFromDialog()
+
+		expect(await screen.findByText(start.detail)).toBeInstanceOf(HTMLElement)
+		expect(fakeLibraryHost.markdownOf("Untitled.md")).toBe(start.body)
+	})
+})
+
+describe("an opened Library document", () => {
+	it("shows an edit made by one client in another client of the same host", async () => {
+		harness.libraryItems = [DOCUMENT]
+		const onHost = await renderLibraryScreen(false)
+		const member = await renderLibraryScreen(true)
+		await openLibraryItem(DOCUMENT, onHost)
+		await openLibraryItem(DOCUMENT, member)
+		await waitFor(() => expect(paragraphOf(member).value).toBe(HOSTED_CONTENT))
+
+		await typeInto(paragraphOf(onHost), "Notes and actions")
+
+		await waitFor(
+			() => expect(paragraphOf(member).value).toBe("Notes and actions"),
+			{ timeout: 1000 },
+		)
+		expect(fakeLibraryHost.markdownOf(DOCUMENT.name)).toBe("Notes and actions")
+		expect(paragraphOf(onHost).value).toBe("Notes and actions")
+	})
+
+	it("shows the host's markdown again when the host refuses an edit", async () => {
+		harness.libraryItems = [DOCUMENT]
+		const shown = await renderLibraryScreen(false)
+		await openLibraryItem(DOCUMENT, shown)
+		await waitFor(() => expect(paragraphOf(shown).value).toBe(HOSTED_CONTENT))
+		fakeLibraryHost.host.refusesUpdates = true
+
+		await typeInto(paragraphOf(shown), "Notes nobody keeps")
+
+		expect(paragraphOf(shown).value).toBe("Notes nobody keeps")
+		await waitFor(() => expect(paragraphOf(shown).value).toBe(HOSTED_CONTENT), {
+			timeout: 1000,
+		})
+		expect(fakeLibraryHost.markdownOf(DOCUMENT.name)).toBe(HOSTED_CONTENT)
 	})
 })

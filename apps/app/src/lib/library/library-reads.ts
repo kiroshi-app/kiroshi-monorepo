@@ -1,5 +1,6 @@
 import type {
 	LibraryDocument,
+	LibraryDocumentState,
 	LibraryFile,
 	LibraryImage,
 	LibraryItem,
@@ -17,3 +18,6 @@ export const readLibraryImage = (spaceId: string, name: string) =>
 
 export const readLibraryFile = (spaceId: string, name: string) =>
 	invoke<LibraryFile>("library_read_file", { spaceId, name })
+
+export const openLibraryDocument = (spaceId: string, name: string) =>
+	invoke<LibraryDocumentState>("library_open_document", { spaceId, name })
