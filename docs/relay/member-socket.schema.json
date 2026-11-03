@@ -146,6 +146,28 @@
         },
         {
           "properties": {
+            "hold": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/TurnHold"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": {
+              "const": "turnHeld"
+            }
+          },
+          "required": [
+            "type",
+            "hold"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
             "resumed": {
               "type": "boolean"
             },
@@ -9294,6 +9316,25 @@
         "outcome"
       ],
       "type": "object"
+    },
+    "TurnHold": {
+      "properties": {
+        "count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "reason": {
+          "$ref": "#/$defs/TurnHoldReason"
+        }
+      },
+      "required": [
+        "reason",
+        "count"
+      ],
+      "type": "object"
+    },
+    "TurnHoldReason": {
+      "const": "backgroundTasks"
     },
     "TurnOutcome": {
       "enum": [
