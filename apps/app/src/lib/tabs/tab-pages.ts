@@ -75,10 +75,10 @@ export const isLibraryPage = ({ pathname }: Pick<TabPage, "pathname">) =>
 
 export type DocumentRename = Omit<LibraryDocumentRenamed, "spaceId">
 
-const opensDocument = ({ pathname, libraryOpening }: TabPage, name: string) =>
-	isLibraryPage({ pathname }) &&
-	libraryOpening?.kind === "document" &&
-	libraryOpening.name === name
+const opensDocument = (page: TabPage, name: string) =>
+	isLibraryPage(page) &&
+	page.libraryOpening?.kind === "document" &&
+	page.libraryOpening.name === name
 
 export const hrefAfterRename = (
 	href: string,
