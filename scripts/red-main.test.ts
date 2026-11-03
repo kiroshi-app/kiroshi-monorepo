@@ -38,6 +38,7 @@ const CANCELLED_SHA = "5d7f9b1c3e5a7c9e1b3d5f7a9c1e3b5d7f9a1c3e"
 const mergedBefore: PullRequest = { number: 11, authorLogin: "hopper" }
 
 const sinceGreen: GreenRange = {
+	kind: "range",
 	greenSha: GREEN_SHA,
 	commits: [
 		{
@@ -222,6 +223,7 @@ describe("the red main issue", () => {
 			jobs: [],
 			pullRequests: [],
 			sinceGreen: {
+				kind: "range",
 				greenSha: GREEN_SHA,
 				commits: [
 					{ sha: redRun.headSha, message: "chore: bump", pullRequests: [] },
@@ -237,7 +239,7 @@ describe("the red main issue", () => {
 			run: redRun,
 			jobs: [],
 			pullRequests: [mergedBy],
-			sinceGreen: undefined,
+			sinceGreen: { kind: "none" },
 		})
 
 		expect(issue.description.split("\n\n")).toContain(
@@ -245,6 +247,20 @@ describe("the red main issue", () => {
 		)
 		expect(issue.description).not.toContain("Red: ")
 		expect(issue.description).not.toContain("Commits since the last green")
+	})
+
+	it("writes the reason the range is unavailable, distinct from no green run", () => {
+		const issue = redMainIssue({
+			run: redRun,
+			jobs: [],
+			pullRequests: [mergedBy],
+			sinceGreen: { kind: "unavailable", reason: "GitHub answered 502" },
+		})
+
+		expect(issue.description.split("\n\n")).toContain(
+			"Last green: unavailable (GitHub answered 502)",
+		)
+		expect(issue.description).not.toContain("Last green: none")
 	})
 
 	it("writes PR: none when the commit has no pull request", () => {
@@ -315,6 +331,49 @@ describe("reporting a run", () => {
 		expect(asked).toEqual([`last green before ${redRun.createdAt}`])
 		expect(descriptionSent(requests[1])).toContain("Last green: none")
 	})
+
+	it.each([
+		["readLastGreenSha", "read the last green push run on main"],
+		["readCommits", "read the commits since the last green run"],
+		["readPullRequests", "read the pull requests of the commit"],
+	] as const)(
+		"still creates the issue, the range unavailable, when %s rejects",
+		async (lookup, step) => {
+			const { linear, requests } = linearAnswering(noIssueYet, {
+				data: {
+					issueCreate: {
+						success: true,
+						issue: { identifier: "KIR-9", url: "https://linear.app/i/KIR-9" },
+					},
+				},
+			})
+			const { github } = fakeGitHub(redRun)
+			const failing = async () => {
+				throw new Error(`${step}: GitHub answered 502`)
+			}
+			const rejectsRange =
+				lookup === "readPullRequests"
+					? {
+							readPullRequests: async (sha: string) =>
+								sha === CANCELLED_SHA ? failing() : [mergedBy],
+						}
+					: { [lookup]: failing }
+
+			const outcome = await reportRedMain("101", {
+				github: { ...github, ...rejectsRange },
+				linear,
+			})
+
+			expect(outcome).toBe("created KIR-9 https://linear.app/i/KIR-9")
+			expect(descriptionSent(requests[1])?.split("\n\n")).toContain(
+				`Last green: unavailable (${step}: GitHub answered 502)`,
+			)
+			expect(descriptionSent(requests[1])).not.toContain("Last green: none")
+			expect(descriptionSent(requests[1])).not.toContain(
+				"Commits since the last green",
+			)
+		},
+	)
 
 	it("creates no issue and asks Linear nothing for a cancelled run", async () => {
 		const { linear, requests } = linearAnswering()

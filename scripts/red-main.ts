@@ -19,13 +19,22 @@ export type Commit = { sha: string; message: string }
 
 export type MergedCommit = Commit & { pullRequests: PullRequest[] }
 
-export type GreenRange = { greenSha: string; commits: MergedCommit[] }
+export type GreenRange = {
+	kind: "range"
+	greenSha: string
+	commits: MergedCommit[]
+}
+
+export type SinceGreen =
+	| GreenRange
+	| { kind: "none" }
+	| { kind: "unavailable"; reason: string }
 
 export type RunReport = {
 	run: Run
 	jobs: Job[]
 	pullRequests: PullRequest[]
-	sinceGreen: GreenRange | undefined
+	sinceGreen: SinceGreen
 }
 
 export type IssueInput = {
@@ -117,11 +126,13 @@ const pullRequestNumbers = (pullRequests: PullRequest[]) =>
 const commitLine = ({ sha, message, pullRequests }: MergedCommit) =>
 	`- ${shortSha(sha)} ${pullRequestNumbers(pullRequests)} ${firstLine(message)}`
 
-const rangeSections = (run: Run, sinceGreen: GreenRange | undefined) => {
-	if (!sinceGreen)
+const rangeSections = (run: Run, sinceGreen: SinceGreen) => {
+	if (sinceGreen.kind === "none")
 		return [
 			"Last green: none, no CI push run on main concluded success before this run",
 		]
+	if (sinceGreen.kind === "unavailable")
+		return [`Last green: unavailable (${sinceGreen.reason})`]
 	return [
 		`Last green: ${sinceGreen.greenSha}`,
 		`Red: ${run.headSha}`,
@@ -201,9 +212,9 @@ const createIssue = async (linear: LinearTransport, input: IssueInput) => {
 const readGreenRange = async (
 	github: GitHub,
 	run: Run,
-): Promise<GreenRange | undefined> => {
+): Promise<SinceGreen> => {
 	const greenSha = await github.readLastGreenSha(run.createdAt)
-	if (!greenSha) return undefined
+	if (!greenSha) return { kind: "none" }
 	const commits = await github.readCommits(greenSha, run.headSha)
 	const merged = await Promise.all(
 		commits.map(async (commit) => ({
@@ -211,7 +222,18 @@ const readGreenRange = async (
 			pullRequests: await github.readPullRequests(commit.sha),
 		})),
 	)
-	return { greenSha, commits: merged }
+	return { kind: "range", greenSha, commits: merged }
+}
+
+const readSinceGreen = async (
+	github: GitHub,
+	run: Run,
+): Promise<SinceGreen> => {
+	try {
+		return await readGreenRange(github, run)
+	} catch (failure) {
+		return { kind: "unavailable", reason: (failure as Error).message }
+	}
 }
 
 export const reportRedMain = async (
@@ -226,7 +248,7 @@ export const reportRedMain = async (
 	const [jobs, pullRequests, sinceGreen] = await Promise.all([
 		github.readJobs(runId),
 		github.readPullRequests(run.headSha),
-		readGreenRange(github, run),
+		readSinceGreen(github, run),
 	])
 	const issue = await createIssue(
 		linear,
