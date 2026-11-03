@@ -45,12 +45,22 @@ type CollapsibleBlock = {
 	content: string
 }
 
+type WebPageBlock = {
+	label: "web-page"
+	url: string
+	title: string
+	site?: string
+	image?: string
+	alt?: string
+}
+
 type AnswerBlock =
 	| OptionsBlock
 	| IllustratedListBlock
 	| GalleryBlock
 	| InteractiveBlock
 	| CollapsibleBlock
+	| WebPageBlock
 
 type AnswerBlockLabel = AnswerBlock["label"]
 
@@ -179,6 +189,20 @@ const readCollapsible = (source: string): CollapsibleBlock | null => {
 	}
 }
 
+const readWebPage = (source: string): WebPageBlock | null => {
+	const body = readShapedBody(source, {
+		fields: {
+			required: ["url", "title"],
+			optional: ["description", "site", "image", "alt"],
+			urls: ["url", "image"],
+		},
+	})
+	if (!body) return null
+
+	const { url, title, site, image, alt } = body.fields
+	return { label: "web-page", url, title, site, image, alt }
+}
+
 const READERS: Readonly<
 	Record<AnswerBlockLabel, (source: string) => AnswerBlock | null>
 > = {
@@ -187,6 +211,7 @@ const READERS: Readonly<
 	gallery: readGallery,
 	interactive: readInteractive,
 	collapsible: readCollapsible,
+	"web-page": readWebPage,
 }
 
 const isAnswerBlockLabel = (label?: string): label is AnswerBlockLabel =>

@@ -315,6 +315,10 @@ One web page, one card. Several pages are several blocks.
 | title | text, the title of the page | yes |
 | description | text, one line on what the page holds | no |
 | site | text, the name of the site, the host of the URL when left out | no |
+| image | `https://` URL of the page preview | no |
+| alt | text, what the preview shows | no |
+
+`alt` is read only alongside `image`: given alone, it is ignored.
 
 ````markdown
 ```web-page
@@ -322,6 +326,8 @@ url: https://tauri.app/start/
 title: What is Tauri?
 description: The official introduction, with the supported platforms.
 site: Tauri
+image: https://tauri.app/og.png
+alt: The Tauri logo over the words Build smaller, faster, and more secure apps
 ```
 ````
 

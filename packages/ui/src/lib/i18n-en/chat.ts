@@ -137,6 +137,7 @@ const chat = {
 			gallery: "Gallery",
 			"illustrated-list": "List",
 			collapsible: "Section",
+			"web-page": "Web page",
 		},
 	},
 	queue: {

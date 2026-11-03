@@ -7,6 +7,7 @@ type MarkdownAnswerActions = {
 	onPickOption: (option: string) => void
 	onUseValues: (summary: string) => void
 	onOpenImage: (images: LibraryLightboxImage[], index: number) => void
+	onOpenWebPage?: (url: string) => void
 }
 
 const MarkdownAnswerContext = createContext<MarkdownAnswerActions | null>(null)

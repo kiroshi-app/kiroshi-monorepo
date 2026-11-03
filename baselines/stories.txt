@@ -63,6 +63,8 @@ conversation-markdown-answerblocks--options-card-in-answer
 conversation-markdown-answerblocks--pending-while-writing
 conversation-markdown-answerblocks--plain-image-in-answer
 conversation-markdown-answerblocks--sourced-image-in-answer
+conversation-markdown-answerblocks--web-page-with-preview-in-answer
+conversation-markdown-answerblocks--web-page-without-preview-in-answer
 conversation-markdown-callout--in-agent-answer
 conversation-markdown-callout--in-narrow-column
 conversation-markdown-checklist--all-done

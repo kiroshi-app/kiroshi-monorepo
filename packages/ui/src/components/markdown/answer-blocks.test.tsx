@@ -74,6 +74,14 @@ const COLLAPSIBLE = `title: Full list of the 14 failing tests
 - \`sync dedupes on the client id\`
 - and twelve more of the same file.`
 
+const WEB_PAGE_TEXT = `url: https://www.casadorio.pt/rooms
+title: Casa do Rio, rooms and rates
+description: Eight rooms on the river, breakfast included.`
+
+const WEB_PAGE = `${WEB_PAGE_TEXT}
+image: https://images.example.org/casa-do-rio.jpg
+alt: Terrace of Casa do Rio over the river`
+
 const slot = (name: string) => `data-slot="${name}"`
 
 describe("rich answer blocks", () => {
@@ -83,6 +91,7 @@ describe("rich answer blocks", () => {
 		["gallery", GALLERY, "gallery"],
 		["interactive", INTERACTIVE, "interactive-view"],
 		["collapsible", COLLAPSIBLE, "collapsible-sections"],
+		["web-page", WEB_PAGE, "web-page-card"],
 	])("draws a %s block with its component", (label, body, component) => {
 		const html = render(fenced(label, body))
 
@@ -178,11 +187,54 @@ describe("rich answer blocks", () => {
 			"collapsible",
 			"title: Logs\n\n~~~\nerror\n~~~",
 		],
+		[
+			"a web page preview is not https",
+			"web-page",
+			`${WEB_PAGE_TEXT}\nimage: http://images.example.org/casa-do-rio.jpg`,
+		],
 	])("draws the source as a plain fence when %s", (_, label, body) => {
 		const html = render(fenced(label, body))
 
 		expect(html).toContain(slot("markdown-fence"))
 		expect(html).not.toContain(slot("markdown-answer-block"))
+	})
+
+	it("draws a web page preview with its alt text", () => {
+		expect(render(fenced("web-page", WEB_PAGE))).toContain(
+			'<img src="https://images.example.org/casa-do-rio.jpg" alt="Terrace of Casa do Rio over the river"',
+		)
+	})
+
+	it("draws a web page preview without alt text as decorative", () => {
+		const html = render(
+			fenced(
+				"web-page",
+				`${WEB_PAGE_TEXT}\nimage: https://images.example.org/casa-do-rio.jpg`,
+			),
+		)
+
+		expect(html).toContain(
+			'<img src="https://images.example.org/casa-do-rio.jpg" alt=""',
+		)
+	})
+
+	it("draws a web page without an image as a card without preview, named by its host", () => {
+		const html = render(fenced("web-page", WEB_PAGE_TEXT))
+
+		expect(html).toContain(slot("web-page-card"))
+		expect(html).not.toContain("<img")
+		expect(html).toContain(">casadorio.pt<")
+		expect(html).not.toContain("Eight rooms on the river")
+	})
+
+	it("ignores a web page alt given without an image", () => {
+		const html = render(
+			fenced("web-page", `${WEB_PAGE_TEXT}\nalt: Terrace over the river`),
+		)
+
+		expect(html).toContain(slot("web-page-card"))
+		expect(html).not.toContain("<img")
+		expect(html).not.toContain("Terrace over the river")
 	})
 
 	it("draws the pending frame while the agent is still writing a block", () => {
