@@ -143,13 +143,6 @@ struct Write {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct DocumentText {
-	name: String,
-	text: String,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
 struct Entry {
 	name: String,
 	kind: LibraryItemKind,
@@ -201,6 +194,11 @@ struct Agent {
 impl<R: Runtime> LibraryHost<R> {
 	pub fn new(app: AppHandle<R>, conversation_id: String, bot_id: String) -> Self {
 		Self { app, conversation_id, bot_id }
+	}
+
+	fn changed(&self, space_id: &str, item: LibraryItem) -> Entry {
+		announce_change(&self.app, space_id);
+		Entry::of(item)
 	}
 
 	async fn space(&self, database: &db::Database) -> Result<String, DocumentRefusal> {
@@ -316,13 +314,6 @@ impl<R: Runtime> Host for LibraryHost<R> {
 				Self::answered(Deleted { name: asked.name })
 			}
 		}
-	}
-}
-
-impl<R: Runtime> LibraryHost<R> {
-	fn changed(&self, space_id: &str, item: LibraryItem) -> Entry {
-		announce_change(&self.app, space_id);
-		Entry::of(item)
 	}
 }
 
@@ -516,12 +507,12 @@ fn writes<R: Runtime>(app: &AppHandle<R>) -> State<'_, AgentWrites> {
 	app.state::<AgentWrites>()
 }
 
-fn markdown(root: &Path, space_id: &str, name: &str) -> Result<DocumentText, LibraryError> {
+fn markdown(root: &Path, space_id: &str, name: &str) -> Result<(), LibraryError> {
 	let document = read_document(root, space_id, name)?;
 	if document.format != LibraryDocumentFormat::Markdown {
 		return Err(LibraryError::NotADocument { name: name.to_owned() });
 	}
-	Ok(DocumentText { name: document.name, text: document.content })
+	Ok(())
 }
 
 fn client_id_of(bot_id: &str) -> u64 {
