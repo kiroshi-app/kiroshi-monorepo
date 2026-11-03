@@ -7,6 +7,8 @@ const bots = {
 			create: "Démarrer une conversation",
 			others: "+{{count}}",
 			preview: "{{name}} : {{text}}",
+			you: "Vous",
+			notSent: "Non envoyé",
 		},
 		empty: "Aucun agent pour l’instant",
 		unavailable:

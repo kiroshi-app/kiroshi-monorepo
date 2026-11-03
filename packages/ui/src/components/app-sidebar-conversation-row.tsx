@@ -108,7 +108,12 @@ const ConversationRosterRow = ({
 							<ConversationBotPile bots={heldBotsOf(conversation)} />
 						}
 						strips={missionStripsOf(conversation.missions)}
-						timestamp={conversation.timestamp ?? ""}
+						isTimestampDestructive={conversation.isNotSent}
+						timestamp={
+							conversation.isNotSent
+								? t("roster.conversation.notSent")
+								: (conversation.timestamp ?? "")
+						}
 					/>
 				</ContextMenuTrigger>
 				<ContextMenuContent

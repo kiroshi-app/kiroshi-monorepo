@@ -40,6 +40,7 @@ interface SidebarListRowProps extends SidebarListRowElementProps {
 	media?: ReactNode
 	trailing?: ReactNode
 	timestamp?: string
+	isTimestampDestructive?: boolean
 	preview?: ReactNode
 	previewTrailing?: ReactNode
 	detail?: ReactNode
@@ -58,6 +59,7 @@ const SidebarListRow = ({
 	media,
 	trailing,
 	timestamp,
+	isTimestampDestructive,
 	preview,
 	previewTrailing,
 	detail,
@@ -102,6 +104,7 @@ const SidebarListRow = ({
 				previewSlot="roster-row-preview"
 				previewTrailing={previewTrailing}
 				timestamp={timestamp}
+				isTimestampDestructive={isTimestampDestructive}
 				timestampSlot="roster-row-timestamp"
 				trailing={trailing}
 			/>

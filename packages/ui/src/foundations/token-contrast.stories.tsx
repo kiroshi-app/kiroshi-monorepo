@@ -50,6 +50,8 @@ const SUFFIXED_PAIRS: TokenPair[] = SEMANTIC_TOKENS.filter((token) =>
 const CROSS_FAMILY_PAIRS: TokenPair[] = [
 	{ background: "--sidebar", foreground: "--muted-foreground" },
 	{ background: "--sidebar-accent", foreground: "--muted-foreground" },
+	{ background: "--sidebar", foreground: "--destructive" },
+	{ background: "--sidebar-accent", foreground: "--destructive" },
 	{ background: ROOT_PAIR.background, foreground: "--bot-badge-attention" },
 ]
 

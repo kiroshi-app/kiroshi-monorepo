@@ -9,7 +9,10 @@ import {
 } from "@workspace/storybook/story-utils"
 import { Icons } from "@workspace/ui/components/icons"
 import { PromptAttachButton } from "@workspace/ui/components/prompt-attach-button"
-import { PromptAttachments } from "@workspace/ui/components/prompt-attachments"
+import {
+	PromptAttachments,
+	type PromptReplyAttachment,
+} from "@workspace/ui/components/prompt-attachments"
 import {
 	DROPPED_PROMPT_FILE,
 	PASTED_PROMPT_FILE,
@@ -547,6 +550,138 @@ export const WithAttachments = meta.story({
 		)
 		await expect(pasteInto(textarea, textTransfer("plain words"))).toBe(false)
 		await expect(args.onAttach).toHaveBeenCalledTimes(2)
+	},
+})
+
+const STAGED_FILE = PROMPT_ATTACHMENTS[0]
+
+const REPLY_CHIP_WIDTH = 236
+
+const ATLAS_REPLY: PromptReplyAttachment = {
+	id: "atlas-roadmap",
+	author: "Atlas",
+	excerpt:
+		"13:30 to 17:00: the roadmap, with every team in the room, then the retro on the release train and the hiring plan for the next quarter.",
+}
+
+const BEACON_REPLY: PromptReplyAttachment = {
+	id: "beacon-dinner",
+	author: "Beacon",
+	excerpt: "Dinner at 20:00, table for six.",
+}
+
+const ReplyingComposer = ({ onRemoveReply, ...props }: ComposerProps) => {
+	const [replies, setReplies] = useState([ATLAS_REPLY])
+	const hasBeaconReply = replies.includes(BEACON_REPLY)
+
+	return (
+		<div className="flex flex-col items-start gap-3">
+			<Composer
+				{...props}
+				attachments={
+					<PromptAttachments items={[STAGED_FILE]} onRemove={fn()} />
+				}
+				onRemoveReply={(id) => {
+					setReplies((current) => current.filter((reply) => reply.id !== id))
+					onRemoveReply?.(id)
+				}}
+				replies={replies}
+			/>
+			<Button
+				disabled={hasBeaconReply}
+				onClick={() => setReplies((current) => [...current, BEACON_REPLY])}
+				size="sm"
+				type="button"
+				variant="outline"
+			>
+				Reply to Beacon
+			</Button>
+		</div>
+	)
+}
+
+const replyChipsIn = (form: HTMLElement) => [
+	...form.querySelectorAll<HTMLElement>(
+		'[data-slot="prompt-reply-attachment"]',
+	),
+]
+
+const fileChipsIn = (form: HTMLElement) => [
+	...form.querySelectorAll<HTMLElement>('[data-slot="prompt-attachment"]'),
+]
+
+const comesBefore = (element: HTMLElement, next: HTMLElement) =>
+	isBefore(element, next) || isBelow(next, element)
+
+export const WithRepliesAndAttachments = meta.story({
+	args: { leading: attachControl, onRemoveReply: fn() },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Two messages quoted for a reply and one file staged, as artboard PromptInput state 4 draws it: one chip per reply, replies first, then the file, in one wrapping row above the field. A reply chip is 236px wide and clips its excerpt to one line; its cross is named after the author and drops that reply alone. Send follows the current rule, lit by the staged file, where the artboard draws it disabled. Press `Reply to Beacon` to quote a second message.",
+			},
+		},
+	},
+	render: (args) => <ReplyingComposer {...args} />,
+	play: async ({ args, canvas, userEvent }) => {
+		const textarea = canvas.getByRole("textbox", { name: "Message" })
+		const form = formOf(textarea)
+		const addBeacon = canvas.getByRole("button", { name: "Reply to Beacon" })
+		const beaconRemove = () =>
+			canvas.getByRole("button", { name: "Remove the reply to Beacon" })
+
+		const expectStateFour = async () => {
+			const replies = replyChipsIn(form)
+			const files = fileChipsIn(form)
+			await expect(replies.map((chip) => chip.textContent)).toEqual([
+				expect.stringContaining(ATLAS_REPLY.author),
+				expect.stringContaining(BEACON_REPLY.author),
+			])
+			await expect(files).toHaveLength(1)
+			await expect(comesBefore(replies[0], replies[1])).toBe(true)
+			await expect(comesBefore(replies[1], files[0])).toBe(true)
+			for (const chip of [...replies, ...files]) {
+				await expect(box(chip).bottom).toBeLessThanOrEqual(box(textarea).top)
+			}
+		}
+
+		const expectBeaconDroppedAlone = async (removals: number) => {
+			await expect(args.onRemoveReply).toHaveBeenCalledTimes(removals)
+			await expect(args.onRemoveReply).toHaveBeenLastCalledWith(BEACON_REPLY.id)
+			await expect(replyChipsIn(form).map((chip) => chip.textContent)).toEqual([
+				expect.stringContaining(ATLAS_REPLY.author),
+			])
+			await expect(fileChipsIn(form)).toHaveLength(1)
+		}
+
+		const [atlasChip] = replyChipsIn(form)
+		const excerpt = within(atlasChip).getByText(ATLAS_REPLY.excerpt)
+		await expect(box(atlasChip).width).toBe(REPLY_CHIP_WIDTH)
+		await expect(excerpt.scrollWidth).toBeGreaterThan(excerpt.clientWidth)
+		await expect(getComputedStyle(excerpt).textOverflow).toBe("ellipsis")
+		await expect(getComputedStyle(excerpt).whiteSpace).toBe("nowrap")
+		await expect(
+			canvas.getByRole("button", { name: "Remove the reply to Atlas" }),
+		).toBeVisible()
+
+		await userEvent.click(addBeacon)
+		await expectStateFour()
+		await userEvent.click(beaconRemove())
+		await expectBeaconDroppedAlone(1)
+
+		await userEvent.click(addBeacon)
+		beaconRemove().focus()
+		await userEvent.keyboard("{Enter}")
+		await expectBeaconDroppedAlone(2)
+
+		await userEvent.click(addBeacon)
+		beaconRemove().focus()
+		await userEvent.keyboard(" ")
+		await expectBeaconDroppedAlone(3)
+
+		await userEvent.click(addBeacon)
+		await expectStateFour()
 	},
 })
 

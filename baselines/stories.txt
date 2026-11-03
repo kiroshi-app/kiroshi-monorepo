@@ -479,6 +479,7 @@ conversation-prompt-promptinput--with-long-quote
 conversation-prompt-promptinput--with-quote
 conversation-prompt-promptinput--with-quote-and-attachments
 conversation-prompt-promptinput--with-quote-blocked
+conversation-prompt-promptinput--with-replies-and-attachments
 conversation-prompt-promptmentionmenu--counted
 conversation-prompt-promptmentionmenu--counted-again
 conversation-prompt-promptmentionmenu--counted-lead
@@ -1197,6 +1198,8 @@ navigation-appsidebarconversationrow--muted-tint-row
 navigation-appsidebarconversationrow--muted-tint-row-dark
 navigation-appsidebarconversationrow--muted-tint-row-free-hue
 navigation-appsidebarconversationrow--muted-tint-row-free-hue-dark
+navigation-appsidebarconversationrow--not-sent-selected
+navigation-appsidebarconversationrow--not-sent-selected-dark
 navigation-appsidebarconversationrow--open-row-with-mission-strips
 navigation-appsidebarconversationrow--pile-whole-at-the-default-sidebar
 navigation-appsidebarconversationrow--pile-whole-at-the-narrowest-sidebar

@@ -18,6 +18,7 @@ import {
 	shown,
 	slotIn,
 	slotsIn,
+	tokenStyleIn,
 } from "@workspace/storybook/story-utils"
 import type { AppSidebarBot } from "@workspace/ui/components/app-sidebar"
 import {
@@ -733,6 +734,63 @@ export const ConversationAnsweredDark = meta.story({
 	tags: ["test-only"],
 	globals: DARK,
 	play: ({ canvasElement }) => expectConversationAnswered(canvasElement),
+})
+
+const UNSENT_MESSAGE = "The dinner, please. Book it for 20:00."
+
+const DESK_ROOM_NOT_SENT = {
+	...DESK_ROOM,
+	participants: [ATLAS, { ...BEACON, status: "idle" as const }],
+	lastMessage: UNSENT_MESSAGE,
+	lastSpeaker: "Mira",
+	isNotSent: true,
+}
+
+const expectNotSent = async (canvasElement: HTMLElement) => {
+	const row = rowIn(canvasElement)
+	const label = slotIn(row, "roster-row-timestamp")
+	const preview = slotIn(row, "roster-row-preview")
+	await expect(row).toHaveAttribute("aria-current", "page")
+	await expect(label).toHaveTextContent(/^Not sent$/)
+	await expect(row).not.toHaveTextContent(DESK_ROOM.timestamp ?? "")
+	await expect(label.scrollWidth).toBeLessThanOrEqual(label.clientWidth)
+	await expect(getComputedStyle(label).color).toBe(
+		tokenStyleIn(row, "text-destructive", "color"),
+	)
+	await expect(getComputedStyle(label).fontSize).toBe("12px")
+	await expect(preview.textContent).toBe(`You: ${UNSENT_MESSAGE}`)
+	await expect(getComputedStyle(preview).color).toBe(
+		tokenStyleIn(row, "text-muted-foreground", "color"),
+	)
+	await expect(getComputedStyle(preview).whiteSpace).toBe("nowrap")
+}
+
+const NOT_SENT_DESCRIPTION =
+	"A room whose last message did not send, selected as artboard 7 draws it. Check that `Not sent` takes the timestamp slot in the destructive red, whole, and that the preview names you as its speaker in the muted preview colour, on one line."
+
+export const NotSentSelected = meta.story({
+	args: { conversation: DESK_ROOM_NOT_SENT, isSelected: true },
+	parameters: {
+		docs: {
+			description: {
+				story: `${NOT_SENT_DESCRIPTION} Light theme. Pick \`NotSentSelectedDark\` for the dark theme.`,
+			},
+		},
+	},
+	play: ({ canvasElement }) => expectNotSent(canvasElement),
+})
+
+export const NotSentSelectedDark = meta.story({
+	globals: DARK,
+	args: { conversation: DESK_ROOM_NOT_SENT, isSelected: true },
+	parameters: {
+		docs: {
+			description: {
+				story: `${NOT_SENT_DESCRIPTION} Dark theme. Pick \`NotSentSelected\` for the light theme.`,
+			},
+		},
+	},
+	play: ({ canvasElement }) => expectNotSent(canvasElement),
 })
 
 export const ConversationLongQuestionAtTheNarrowestSidebar = meta.story({
