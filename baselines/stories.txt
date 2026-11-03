@@ -954,6 +954,7 @@ layout-screenlayout--header-content-and-footer
 layout-screenlayout--header-only
 layout-threadlayout--default
 layout-threadlayout--empty
+layout-threadlayout--empty-queue
 layout-threadlayout--error
 layout-threadlayout--forwarded-region
 layout-threadlayout--image-viewer-in-panel

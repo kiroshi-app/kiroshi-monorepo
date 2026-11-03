@@ -39,23 +39,23 @@ const QueuedRowActions = ({ onSendNow, onRemove }: QueuedRowActionsProps) => {
 		<span className={REVEALS_WITH_ROW}>
 			{onSendNow ? (
 				<Button
-					variant="outline"
+					variant="ghost"
 					onClick={onSendNow}
-					className="h-7 gap-1 rounded-full px-2.5 text-xs"
+					className="h-7 gap-1.5 rounded-full bg-foreground/8 px-2.5 text-compact text-foreground leading-4"
 				>
-					<Icons.ArrowUp aria-hidden="true" className="size-3" />
+					<Icons.ArrowUp aria-hidden="true" className="size-3.5" />
 					{t("queue.sendNow")}
 				</Button>
 			) : null}
 			{onRemove ? (
 				<Button
 					variant="ghost"
-					size="icon-xs"
+					size="icon-sm"
 					aria-label={t("queue.remove")}
 					onClick={onRemove}
-					className="rounded-full text-muted-foreground"
+					className="rounded-full text-faint-foreground"
 				>
-					<Icons.Close aria-hidden="true" />
+					<Icons.Close aria-hidden="true" className="size-3.5" />
 				</Button>
 			) : null}
 		</span>
@@ -97,10 +97,10 @@ const PromptQueue = ({
 					<li
 						key={item.id}
 						data-slot="prompt-queue-item"
-						className="group/queued flex h-10 items-center gap-2.5 rounded-lg px-2 hover:bg-prompt-surface has-focus-visible:bg-prompt-surface dark:has-focus-visible:bg-foreground/4 dark:hover:bg-foreground/4"
+						className="group/queued flex h-10 items-center gap-2.5 rounded-lg px-2 hover:bg-prompt-surface hover:pe-1.5 has-focus-visible:bg-prompt-surface has-focus-visible:pe-1.5 dark:has-focus-visible:bg-foreground/4 dark:hover:bg-foreground/4"
 					>
 						<InitialsAvatar name={readerName} size={QUEUE_AVATAR_SIZE} />
-						<span className="shrink-0 font-medium text-compact text-foreground">
+						<span className="shrink-0 font-medium text-compact text-muted-foreground leading-4">
 							{t("queue.you")}
 						</span>
 						<span className="min-w-0 flex-1 truncate text-muted-foreground text-sm">
