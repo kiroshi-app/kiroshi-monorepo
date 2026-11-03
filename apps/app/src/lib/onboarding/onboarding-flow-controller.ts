@@ -192,7 +192,7 @@ export const createOnboardingFlowController = (
 		world.clearShotoRunOwed()
 	}
 
-	const isShotoPhaseStored = () =>
+	const isShotoRunStored = () =>
 		world.storedStep() === "done" &&
 		(!world.isFirstRunDone() || world.isShotoRunOwed())
 
@@ -283,7 +283,7 @@ export const createOnboardingFlowController = (
 			if (world.storedStep() === "connect") {
 				await enterConnect()
 			}
-			if (isShotoPhaseStored() && !current().isWithShoto) {
+			if (isShotoRunStored() && !current().isWithShoto) {
 				void joinShoto()
 			}
 		},
