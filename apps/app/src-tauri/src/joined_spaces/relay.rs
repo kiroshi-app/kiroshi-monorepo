@@ -40,7 +40,7 @@ use crate::hosting::relay::{
 };
 use crate::spaces::contract::SpaceDescribed;
 
-const HOST_ABSENT: u16 = 4002;
+pub(super) const HOST_ABSENT: u16 = 4002;
 
 const MEMBERSHIP_ENDED: u16 = 4003;
 

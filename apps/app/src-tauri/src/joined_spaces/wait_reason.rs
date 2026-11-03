@@ -4,8 +4,10 @@ use tauri::{AppHandle, Manager, Runtime};
 use tokio_tungstenite::tungstenite::protocol::CloseFrame;
 
 use super::contract::{JoinedSpaceError, JoinedSpaceWait, JoinedSpaceWaitReason};
-use super::relay::RelayGuests;
+use super::relay::{RelayGuests, HOST_ABSENT};
 use crate::hosting::relay::Departure;
+
+const NO_CLOSE_CODE: &str = "no close code reached this device";
 
 #[derive(Debug)]
 pub(super) enum Stall {
@@ -57,8 +59,15 @@ pub(super) fn wait_of(stall: Stall) -> JoinedSpaceWait {
 		Stall::PongMissing(bound) => {
 			(Reason::SocketClosed, format!("no frame or pong arrived for {bound:?}"))
 		}
-		Stall::Closed(frame) => {
+		Stall::Closed(Some(frame)) if u16::from(frame.code) == HOST_ABSENT => (
+			Reason::SocketClosed,
+			format!("the relay closed the socket: the host is offline (code {HOST_ABSENT})"),
+		),
+		Stall::Closed(Some(frame)) => {
 			(Reason::SocketClosed, format!("the relay closed the socket: {frame:?}"))
+		}
+		Stall::Closed(None) => {
+			(Reason::SocketClosed, format!("the relay closed the socket and {NO_CLOSE_CODE}"))
 		}
 		Stall::Departed(Departure::SpaceDeleted) => (
 			Reason::UnknownInstance,
@@ -69,9 +78,11 @@ pub(super) fn wait_of(stall: Stall) -> JoinedSpaceWait {
 			"the relay closed the socket: the membership ended (4003)".to_owned(),
 		),
 		Stall::SocketFailed(detail) => {
-			(Reason::SocketClosed, format!("the socket failed: {detail}"))
+			(Reason::SocketClosed, format!("the socket failed and {NO_CLOSE_CODE}: {detail}"))
 		}
-		Stall::SocketEnded => (Reason::SocketClosed, "the socket ended".to_owned()),
+		Stall::SocketEnded => {
+			(Reason::SocketClosed, format!("the socket ended and {NO_CLOSE_CODE}"))
+		}
 		Stall::RekeyDropped(failure) => {
 			(Reason::RekeyNotVerified, format!("a rekey was dropped: {failure:?}"))
 		}
@@ -167,6 +178,25 @@ mod tests {
 			let wait = wait_of(stall);
 			assert_eq!(wait.reason, expected, "{named}");
 			assert!(!wait.detail.is_empty(), "{named}");
+		}
+	}
+
+	#[test]
+	fn a_4002_close_names_the_host_offline_and_a_socket_end_without_a_code_says_none_reached() {
+		let absent = CloseFrame { code: CloseCode::from(4002), reason: "".into() };
+		let unnamed = [
+			Stall::Closed(None),
+			Stall::SocketEnded,
+			Stall::SocketFailed("reset without a closing handshake".to_owned()),
+		];
+
+		assert_eq!(
+			wait_of(Stall::Closed(Some(absent))).detail,
+			"the relay closed the socket: the host is offline (code 4002)"
+		);
+		for stall in unnamed {
+			let wait = wait_of(stall);
+			assert!(wait.detail.contains("no close code reached this device"), "{}", wait.detail);
 		}
 	}
 }
