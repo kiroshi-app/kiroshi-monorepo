@@ -33,6 +33,7 @@ type IncomingTab = {
 type TabDockSource = {
 	windowLabel: string
 	shownSpaceId: () => string
+	subscribeShownSpace: (listener: () => void) => () => void
 	receive: (tab: Tab, index: number) => void
 }
 
@@ -88,18 +89,28 @@ const isUnlocated = (reason: unknown) => {
 	return false
 }
 
-const reportPlace = (spaceId: string, strip: StripBounds | null) => {
-	commands.windowReportSpace(spaceId).catch(reportDockFailure)
+const reportStrip = (strip: StripBounds | null) => {
 	if (strip) {
 		commands.windowReportStrip(strip).catch(reportDockFailure)
 	}
 }
 
+const observeStrip = () => {
+	const strip = document.querySelector(STRIP_SELECTOR)
+	if (!strip) {
+		return () => undefined
+	}
+	const observer = new ResizeObserver(() => reportStrip(measuredStrip()))
+	observer.observe(strip)
+	return () => observer.disconnect()
+}
+
 export const createTabDock = (
-	{ windowLabel, shownSpaceId, receive }: TabDockSource,
+	{ windowLabel, shownSpaceId, subscribeShownSpace, receive }: TabDockSource,
 	listen = listenOnThisWindow,
 ) => {
 	const store = createStore<IncomingTab | null>(null)
+	let reportedSpaceId: string | null = null
 	let held: HeldDrag | null = null
 	let incomingIndex: number | null = null
 	let hearing: SettleHearing = Promise.resolve(null)
@@ -111,6 +122,25 @@ export const createTabDock = (
 		if (incoming || store.getState()) {
 			store.setState(incoming)
 		}
+	}
+
+	const forgetReportedSpace = (reason: unknown) => {
+		reportedSpaceId = null
+		reportDockFailure(reason)
+	}
+
+	const reportShownSpace = () => {
+		const spaceId = shownSpaceId()
+		if (spaceId === reportedSpaceId) {
+			return
+		}
+		reportedSpaceId = spaceId
+		commands.windowReportSpace(spaceId).catch(forgetReportedSpace)
+	}
+
+	const reportPlace = (strip: StripBounds | null) => {
+		reportShownSpace()
+		reportStrip(strip)
 	}
 
 	const isSameSpace = (drag: HeldDrag) =>
@@ -156,7 +186,7 @@ export const createTabDock = (
 		}
 		locate(held)
 		hearSettleOf(held)
-		reportPlace(shownSpaceId(), held.strip)
+		reportPlace(held.strip)
 	}
 
 	const release = () => {
@@ -238,6 +268,8 @@ export const createTabDock = (
 			listen<TabDrag>(TAB_DRAG_EVENT, ({ payload }) => follow(payload)),
 			watchDockOffers(windowLabel, catchUp),
 		])
+		reportPlace(measuredStrip())
+		stops.push(subscribeShownSpace(reportShownSpace), observeStrip())
 		return () => {
 			for (const stop of stops) {
 				stop()

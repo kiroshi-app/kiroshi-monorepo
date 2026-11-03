@@ -660,6 +660,7 @@ export const createWorkspaceTabs = (
 		dock: createTabDock({
 			windowLabel,
 			shownSpaceId: () => store.getState().spaceId,
+			subscribeShownSpace: store.subscribe,
 			receive: receiveDocked,
 		}),
 		reopenClosed,

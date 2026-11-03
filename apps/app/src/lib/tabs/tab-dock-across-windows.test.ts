@@ -8,7 +8,7 @@ import { createTabDock } from "./tab-dock"
 import { answerDock } from "./tab-dock-channel"
 import { createTabTearOff, type TabTearOff } from "./tab-tear-off"
 
-import type { ScreenPosition, TabDrag } from "../bindings"
+import type { ScreenPosition, StripBounds, TabDrag } from "../bindings"
 
 const host = vi.hoisted(() => ({
 	windowTabDragStart: vi.fn(),
@@ -167,6 +167,7 @@ const twoWindows = () => {
 		{
 			windowLabel: TARGET_WINDOW,
 			shownSpaceId: () => SPACE,
+			subscribeShownSpace: () => () => undefined,
 			receive,
 		},
 		async () => () => undefined,
@@ -201,6 +202,66 @@ const dropFromOrigin = ({ origin }: TwoWindows) => {
 	origin.start(at(10, 10), () => GHOST_TAB)
 	origin.drop(at(OVER_STRIP.x, OVER_STRIP.y))
 	return dropReached
+}
+
+const forwardMovesTo = ({ target }: TwoWindows) => {
+	host.windowTabDragMove.mockImplementation(async (point: ScreenPosition) => {
+		target.follow(movedTo(point))
+		return ACCEPTED
+	})
+}
+
+const isOnStrip = (strip: StripBounds, { x, y }: ScreenPosition) =>
+	x >= WINDOW_ORIGIN.x + strip.x &&
+	x < WINDOW_ORIGIN.x + strip.x + strip.width &&
+	y >= WINDOW_ORIGIN.y + strip.y &&
+	y < WINDOW_ORIGIN.y + strip.y + strip.height
+
+const keepPlacesLikeTheHost = () => {
+	let reportedSpaceId: string | null = null
+	let reportedStrip: StripBounds | null = null
+	host.windowReportSpace.mockImplementation(async (spaceId: string) => {
+		reportedSpaceId = spaceId
+	})
+	host.windowReportStrip.mockImplementation(async (strip: StripBounds) => {
+		reportedStrip = strip
+	})
+	host.windowStripAt.mockImplementation(async (point: ScreenPosition) =>
+		reportedSpaceId !== null && reportedStrip && isOnStrip(reportedStrip, point)
+			? { label: TARGET_WINDOW, spaceId: reportedSpaceId }
+			: null,
+	)
+}
+
+const DROP_POINT = { x: OVER_STRIP.x + 4, y: OVER_STRIP.y }
+
+const hoverThenDropOnTarget = async (windows: TwoWindows) => {
+	windows.origin.move(at(OVER_STRIP.x, OVER_STRIP.y))
+	await vi.waitFor(() =>
+		expect(host.emitOnThisComputer).toHaveBeenCalledWith(
+			OFFER_EVENT,
+			expect.objectContaining({ windowLabel: TARGET_WINDOW }),
+		),
+	)
+	windows.origin.move(at(DROP_POINT.x, DROP_POINT.y))
+	await vi.waitFor(() => expect(windows.target.getState()).not.toBeNull())
+	windows.target.placeIncoming(1)
+	const dropReached = dropCommandReached()
+	windows.origin.drop(at(DROP_POINT.x, DROP_POINT.y))
+	await dropReached
+	targetDrops(windows, DROP_POINT)
+
+	await vi.waitFor(() =>
+		expect(windows.receive).toHaveBeenCalledExactlyOnceWith(
+			expect.objectContaining({
+				entries: [expect.objectContaining({ href: HREF })],
+			}),
+			1,
+		),
+	)
+	await vi.waitFor(() =>
+		expect(windows.removeDocked).toHaveBeenCalledExactlyOnceWith(SPACE, TAB_ID),
+	)
 }
 
 const targetDrops = ({ target }: TwoWindows, point = OVER_STRIP) =>
@@ -300,44 +361,35 @@ describe("a tab dropped on a window of its Space that reloaded after the drag st
 	it("lives in that window at the drop index and leaves the origin window", async () => {
 		const windows = twoWindows()
 		host.windowTabDragStart.mockResolvedValue(ACCEPTED)
-		host.windowTabDragMove.mockImplementation(async (point: ScreenPosition) => {
-			windows.target.follow(movedTo(point))
-			return ACCEPTED
-		})
 		const stopWatching = await windows.target.watch()
+		forwardMovesTo(windows)
+
+		windows.origin.start(at(10, 10), () => GHOST_TAB)
+		await hoverThenDropOnTarget(windows)
+
+		stopWatching()
+		expect(bus.listenerCount()).toBe(0)
+		expect(host.raiseReportedFailure).not.toHaveBeenCalled()
+	})
+})
+
+describe("a tab dropped on a window of its Space opened after the drag started", () => {
+	it("lives in that window at the drop index once the window reported its place to the host", async () => {
+		const windows = twoWindows()
+		keepPlacesLikeTheHost()
+		host.windowTabDragStart.mockResolvedValue(ACCEPTED)
 
 		windows.origin.start(at(10, 10), () => GHOST_TAB)
 		windows.origin.move(at(OVER_STRIP.x, OVER_STRIP.y))
-		await vi.waitFor(() =>
-			expect(host.emitOnThisComputer).toHaveBeenCalledWith(
-				OFFER_EVENT,
-				expect.objectContaining({ windowLabel: TARGET_WINDOW }),
-			),
-		)
-		windows.origin.move(at(OVER_STRIP.x + 4, OVER_STRIP.y))
-		await vi.waitFor(() => expect(windows.target.getState()).not.toBeNull())
-		windows.target.placeIncoming(1)
-		const dropReached = dropCommandReached()
-		windows.origin.drop(at(OVER_STRIP.x + 4, OVER_STRIP.y))
-		await dropReached
-		targetDrops(windows, { x: OVER_STRIP.x + 4, y: OVER_STRIP.y })
+		await vi.waitFor(() => expect(host.windowStripAt).toHaveBeenCalledOnce())
+		await expect(host.windowStripAt.mock.results[0]?.value).resolves.toBeNull()
+		const stopWatching = await windows.target.watch()
+		forwardMovesTo(windows)
+		await hoverThenDropOnTarget(windows)
 
-		await vi.waitFor(() =>
-			expect(windows.receive).toHaveBeenCalledExactlyOnceWith(
-				expect.objectContaining({
-					entries: [expect.objectContaining({ href: HREF })],
-				}),
-				1,
-			),
-		)
-		await vi.waitFor(() =>
-			expect(windows.removeDocked).toHaveBeenCalledExactlyOnceWith(
-				SPACE,
-				TAB_ID,
-			),
-		)
 		stopWatching()
-		expect(bus.listenerCount()).toBe(0)
+		expect(host.windowReportSpace).toHaveBeenCalledWith(SPACE)
+		expect(host.windowReportStrip).toHaveBeenCalledWith(STRIP)
 		expect(host.raiseReportedFailure).not.toHaveBeenCalled()
 	})
 })
