@@ -1,6 +1,7 @@
 "use client"
 
 import {
+	type ComponentProps,
 	type ComponentType,
 	Fragment,
 	type ReactElement,
@@ -254,6 +255,8 @@ type LibraryItemBarActionsProps<Item extends LibraryMenuSubject> = {
 	surface: LibraryItemBarSurface
 	leading?: ReactNode
 	onClose: () => void
+	onMenuOpenChange?: ComponentProps<typeof DropdownMenu>["onOpenChange"]
+	onConfirmingDeleteChange?: (isConfirming: boolean) => void
 }
 
 const LibraryItemBarActions = <Item extends LibraryMenuSubject>({
@@ -262,6 +265,8 @@ const LibraryItemBarActions = <Item extends LibraryMenuSubject>({
 	surface,
 	leading,
 	onClose,
+	onMenuOpenChange,
+	onConfirmingDeleteChange,
 }: LibraryItemBarActionsProps<Item>) => {
 	const { t } = useTranslation("common")
 	const [copiedItem, setCopiedItem] = useState<Item | null>(null)
@@ -275,6 +280,11 @@ const LibraryItemBarActions = <Item extends LibraryMenuSubject>({
 		const timer = window.setTimeout(() => setCopiedItem(null), COPIED_RESET_MS)
 		return () => window.clearTimeout(timer)
 	}, [copiedItem])
+
+	const confirmDelete = (isConfirming: boolean) => {
+		setConfirmingDelete(isConfirming)
+		onConfirmingDeleteChange?.(isConfirming)
+	}
 
 	const copy = async () => {
 		try {
@@ -320,7 +330,7 @@ const LibraryItemBarActions = <Item extends LibraryMenuSubject>({
 			) : null}
 			{hasLibraryItemActions(menuActions) ? (
 				<>
-					<DropdownMenu>
+					<DropdownMenu onOpenChange={onMenuOpenChange}>
 						<DropdownMenuTrigger
 							render={
 								<TooltipButton
@@ -347,7 +357,7 @@ const LibraryItemBarActions = <Item extends LibraryMenuSubject>({
 							<LibraryItemMenuItems
 								actions={menuActions}
 								item={item}
-								onPickDelete={() => setConfirmingDelete(true)}
+								onPickDelete={() => confirmDelete(true)}
 								parts={DROPDOWN_MENU_PARTS}
 							/>
 						</DropdownMenuContent>
@@ -375,7 +385,7 @@ const LibraryItemBarActions = <Item extends LibraryMenuSubject>({
 			<LibraryItemDeleteDialog
 				name={item.name}
 				onConfirm={() => onDelete?.(item)}
-				onOpenChange={setConfirmingDelete}
+				onOpenChange={confirmDelete}
 				open={isConfirmingDelete}
 			/>
 		</div>
