@@ -1,14 +1,24 @@
 // @vitest-environment happy-dom
 
-import { cleanup, render, screen, within } from "@testing-library/react"
+import {
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+	within,
+} from "@testing-library/react"
 import { type ComponentProps, createElement } from "react"
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import "@workspace/ui/lib/i18n"
 
 import type { TurnState } from "@workspace/ui/components/turn"
 
-import { ThreadTurn } from "@/components/thread-turn"
+import { RefusedTurn, ThreadTurn } from "@/components/thread-turn"
+import {
+	type AnswerActions,
+	AnswerActionsContext,
+} from "@/lib/chat/answer-actions"
 import { attachmentBlock } from "@/lib/chat/message-attachments"
 import type { TranscriptRow } from "@/lib/chat/screen-model"
 import {
@@ -48,6 +58,7 @@ type TurnSetup = {
 	authorship?: ThreadAuthorship
 	state?: TurnState
 	onRetry?: (messageId: string) => void
+	actions?: AnswerActions
 }
 
 const renderTurn = (
@@ -58,6 +69,7 @@ const renderTurn = (
 		authorship = HOSTED_SIGNED_OUT,
 		state = "complete",
 		onRetry,
+		actions,
 	}: TurnSetup = {},
 ) => {
 	const props: ComponentProps<typeof ThreadTurn> = {
@@ -79,9 +91,13 @@ const renderTurn = (
 	}
 	return render(
 		createElement(
-			ThreadAuthorshipContext.Provider,
-			{ value: authorship },
-			createElement(ThreadTurn, props),
+			AnswerActionsContext,
+			{ value: actions ?? null },
+			createElement(
+				ThreadAuthorshipContext.Provider,
+				{ value: authorship },
+				createElement(ThreadTurn, props),
+			),
 		),
 	)
 }
@@ -255,5 +271,115 @@ describe("whose user message a bubble shows", () => {
 		})
 
 		expect(shownBubble().getAttribute("aria-label")).toBe("assistant message")
+	})
+})
+
+const actionsSpy = () => ({
+	insert: vi.fn<AnswerActions["insert"]>(),
+	quote: vi.fn<AnswerActions["quote"]>(),
+	openImage: vi.fn<AnswerActions["openImage"]>(),
+})
+
+const OPTIONS_ANSWER = `Two ways forward.
+
+\`\`\`options
+question: How should the migration ship?
+- title: One release
+  text: Ten minutes of downtime.
+- title: Dual write
+  text: No downtime, two weeks of double writes.
+\`\`\``
+
+const GALLERY_ANSWER = `Two sofas.
+
+\`\`\`gallery
+- image: https://images.example.org/green.jpg
+  alt: Green velvet sofa
+  caption: 1,290 euros
+- image: https://images.example.org/grey.jpg
+  alt: Grey linen sofa
+\`\`\``
+
+describe("an agent answer carrying rich blocks", () => {
+	it("puts a picked option into the conversation input", () => {
+		const actions = actionsSpy()
+		renderTurn("assistant", OPTIONS_ANSWER, { actions })
+
+		fireEvent.click(screen.getByRole("button", { name: "Dual write" }))
+
+		expect(actions.insert).toHaveBeenCalledWith("Dual write")
+	})
+
+	it("opens a gallery image in the viewer, with every image of the gallery", () => {
+		const actions = actionsSpy()
+		renderTurn("assistant", GALLERY_ANSWER, { actions })
+
+		fireEvent.click(screen.getByRole("button", { name: "Grey linen sofa" }))
+
+		expect(actions.openImage).toHaveBeenCalledWith(
+			[
+				expect.objectContaining({
+					name: "Green velvet sofa",
+					src: "https://images.example.org/green.jpg",
+					detail: "1,290 euros",
+				}),
+				expect.objectContaining({ name: "Grey linen sofa" }),
+			],
+			1,
+		)
+	})
+
+	it("quotes a selection of the answer with the name of its agent", () => {
+		const actions = actionsSpy()
+		renderTurn("assistant", "The sync dedupes on the client id.", {
+			actions,
+			author: { authorAccountId: null, authorName: "Atlas", writtenFrom: null },
+		})
+		const passage = screen.getByText("The sync dedupes on the client id.")
+		const range = document.createRange()
+		range.selectNodeContents(passage)
+		document.getSelection()?.removeAllRanges()
+		document.getSelection()?.addRange(range)
+
+		fireEvent.pointerUp(passage)
+
+		expect(actions.quote).toHaveBeenCalledWith({
+			agentName: "Atlas",
+			text: "The sync dedupes on the client id.",
+		})
+	})
+
+	it("holds the pending frame while the agent is still writing the block", () => {
+		renderTurn("assistant", OPTIONS_ANSWER.replace(/\n```$/, ""), {
+			actions: actionsSpy(),
+			state: "streaming",
+		})
+
+		expect(
+			screen.getByRole("region", { name: "Options" }).getAttribute("aria-busy"),
+		).toBe("true")
+		expect(screen.queryByRole("button", { name: "Dual write" })).toBeNull()
+	})
+})
+
+describe("a message of yours that did not send", () => {
+	it("shows it as not sent and sends that same message again on Retry", () => {
+		const onSendAgain = vi.fn<(messageId: string) => void>()
+		render(
+			createElement(RefusedTurn, {
+				message: {
+					id: "m-9",
+					text: "Book it for 20:00.",
+					repliedToMessageId: null,
+				},
+				readerName: "Ada Moreau",
+				onSendAgain,
+			}),
+		)
+
+		expect(screen.getByText("Not sent.")).toBeTruthy()
+		fireEvent.click(screen.getByRole("button", { name: "Retry" }))
+
+		expect(onSendAgain).toHaveBeenCalledWith("m-9")
 	})
 })

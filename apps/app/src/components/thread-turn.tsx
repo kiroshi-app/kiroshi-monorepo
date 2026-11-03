@@ -13,7 +13,7 @@ import {
 } from "@workspace/ui/components/turn"
 import { probeRender } from "@workspace/ui/lib/render-probe"
 
-import { TurnBody } from "@/components/turn-body"
+import { AnswerBody, TurnBody } from "@/components/turn-body"
 import type { ChatController } from "@/lib/chat/chat-controller"
 import type { OutboxEntry } from "@/lib/chat/chat-state"
 import { messageWithAttachments } from "@/lib/chat/message-attachments"
@@ -31,6 +31,7 @@ type ThreadTurnProps = {
 	carriesMark?: boolean
 	bare?: boolean
 	botId?: string
+	botName?: string
 	author?: MessageAuthor
 	cause?: TurnCause
 	avatarFace?: ThreadFace
@@ -53,6 +54,7 @@ export const ThreadTurn = memo(function ThreadTurn({
 	carriesMark,
 	bare,
 	botId,
+	botName,
 	author,
 	cause,
 	avatarFace,
@@ -70,6 +72,14 @@ export const ThreadTurn = memo(function ThreadTurn({
 	const person = row.role === "user" ? personOf(row) : undefined
 	const { text, attachments } = messageWithAttachments(row.text)
 	const content = card ?? <TurnBody attachments={attachments} text={text} />
+	const answer = card ?? (
+		<AnswerBody
+			agentName={author?.name ?? row.authorName ?? botName ?? ""}
+			attachments={attachments}
+			isWriting={state === "streaming"}
+			text={text}
+		/>
+	)
 	const repliedTo = quoted ? toQuote(quoted) : undefined
 	const pin = () => {
 		onPin(row.messageId, row.blockIndex)
@@ -146,7 +156,7 @@ export const ThreadTurn = memo(function ThreadTurn({
 			sentAt={row.timestamp}
 			state={state}
 		>
-			{content}
+			{answer}
 		</AssistantTurn>
 	)
 })
