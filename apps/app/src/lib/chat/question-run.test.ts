@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import { questionMessageIdOf, questionMessageText } from "./question-message"
-import { bubbleIdOfRow, questionRunOf } from "./question-run"
+import { questionRunOf } from "./question-run"
 import { toRuns, toTranscriptRows } from "./screen-model"
 
 import type { AskedQuestion, QuestionRequest } from "../agent/contract"
@@ -55,15 +55,15 @@ describe("questionRunOf", () => {
 			card(ONE_QUESTION),
 		])
 
-		expect(run?.lead && bubbleIdOfRow(run.lead)).toBe("m-said")
-		expect(run && bubbleIdOfRow(run.card)).toBe("question-ask-1")
+		expect(run?.lead?.messageId).toBe("m-said")
+		expect(run?.card.messageId).toBe("question-ask-1")
 	})
 
 	it("lands nowhere when nothing was said before the card", () => {
 		const run = runOf(ONE_QUESTION, [prompt(), card(ONE_QUESTION)])
 
 		expect(run?.lead).toBeUndefined()
-		expect(run && bubbleIdOfRow(run.card)).toBe("question-ask-1")
+		expect(run?.card.messageId).toBe("question-ask-1")
 	})
 
 	it("lands on the text before a card asking two questions", () => {
@@ -73,8 +73,8 @@ describe("questionRunOf", () => {
 			card(TWO_QUESTIONS),
 		])
 
-		expect(run?.lead && bubbleIdOfRow(run.lead)).toBe("m-said")
-		expect(run && bubbleIdOfRow(run.card)).toBe("question-ask-1")
+		expect(run?.lead?.messageId).toBe("m-said")
+		expect(run?.card.messageId).toBe("question-ask-1")
 	})
 
 	it("finds nothing when the card is not in the window", () => {

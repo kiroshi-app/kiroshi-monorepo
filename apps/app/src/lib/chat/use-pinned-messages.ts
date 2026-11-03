@@ -8,7 +8,6 @@ import { useCallback, useMemo, useState } from "react"
 
 import { chatQueryKeys } from "./chat-query-keys"
 import { type PinnedBubble, pinnedBubblesOf } from "./pinned-bubbles"
-import { bubbleIdOf } from "./screen-model"
 
 import type { MessagePin } from "../conversations/store-contract"
 
@@ -24,8 +23,7 @@ export type PinnedBubbles = {
 	bubbles: PinnedBubble[]
 	hasFailed: boolean
 	isPinned: (bubbleId: string) => boolean
-	anchorOf: (bubbleId: string) => string
-	toggle: (messageId: string, blockIndex: number) => void
+	toggle: (bubbleId: string) => void
 	unpin: (bubbleId: string) => void
 	dismissFailure: () => void
 }
@@ -33,8 +31,7 @@ export type PinnedBubbles = {
 type PinWrite = {
 	conversationId: string | null
 	messageId: string
-	blockIndex: number
-	isPinned: boolean
+	heldBlockIndexes: number[]
 }
 
 type DismissedFailure = {
@@ -48,6 +45,8 @@ const NOTHING_DISMISSED: DismissedFailure = {
 }
 
 const SHOWN_INLINE = { rendersErrorInline: true } as const
+
+const WHOLE_MESSAGE_BLOCK = 0
 
 export const usePinnedMessages = (
 	controller: PinnedMessagesController,
@@ -63,10 +62,16 @@ export const usePinnedMessages = (
 	})
 
 	const write = useMutation({
-		mutationFn: ({ messageId, blockIndex, isPinned }: PinWrite) =>
-			isPinned
-				? controller.unpin(messageId, blockIndex)
-				: controller.pin(messageId, blockIndex),
+		mutationFn: async ({ messageId, heldBlockIndexes }: PinWrite) => {
+			if (heldBlockIndexes.length === 0) {
+				return controller.pin(messageId, WHOLE_MESSAGE_BLOCK)
+			}
+			await Promise.all(
+				heldBlockIndexes.map((blockIndex) =>
+					controller.unpin(messageId, blockIndex),
+				),
+			)
+		},
 		onSettled: (_result, _error, written) =>
 			queryClient.invalidateQueries({
 				queryKey: chatQueryKeys.pins(written.conversationId),
@@ -101,37 +106,24 @@ export const usePinnedMessages = (
 
 	const isPinned = useCallback((bubbleId: string) => held.has(bubbleId), [held])
 
-	const anchorOf = useCallback(
-		(bubbleId: string) => held.get(bubbleId)?.anchor ?? bubbleId,
-		[held],
-	)
-
 	const toggle = useCallback(
-		(messageId: string, blockIndex: number) => {
+		(bubbleId: string) => {
 			mutate({
 				conversationId,
-				messageId,
-				blockIndex,
-				isPinned: isPinned(bubbleIdOf(messageId, blockIndex)),
+				messageId: bubbleId,
+				heldBlockIndexes: held.get(bubbleId)?.blockIndexes ?? [],
 			})
 		},
-		[conversationId, isPinned, mutate],
+		[conversationId, held, mutate],
 	)
 
 	const unpin = useCallback(
 		(bubbleId: string) => {
-			const shown = held.get(bubbleId)
-			if (!shown) {
-				return
+			if (held.has(bubbleId)) {
+				toggle(bubbleId)
 			}
-			mutate({
-				conversationId,
-				messageId: shown.pin.message.id,
-				blockIndex: shown.pin.blockIndex,
-				isPinned: true,
-			})
 		},
-		[conversationId, held, mutate],
+		[held, toggle],
 	)
 
 	return useMemo(
@@ -139,11 +131,10 @@ export const usePinnedMessages = (
 			bubbles,
 			hasFailed,
 			isPinned,
-			anchorOf,
 			toggle,
 			unpin,
 			dismissFailure,
 		}),
-		[bubbles, hasFailed, isPinned, anchorOf, toggle, unpin, dismissFailure],
+		[bubbles, hasFailed, isPinned, toggle, unpin, dismissFailure],
 	)
 }

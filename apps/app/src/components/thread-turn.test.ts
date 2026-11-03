@@ -43,7 +43,6 @@ const rowOf = (role: TranscriptRole, text: string): TranscriptRow => ({
 	messageId: "m-1",
 	turnId: "t-1",
 	continuesTurnId: null,
-	blockIndex: 0,
 	quotedMessageId: null,
 	authorBotId: role === "assistant" ? "bot-1" : null,
 	authorAccountId: null,

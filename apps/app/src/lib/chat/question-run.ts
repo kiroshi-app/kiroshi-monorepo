@@ -1,5 +1,5 @@
 import { questionMessageIdOf } from "./question-message"
-import { bubbleIdOf, type TranscriptRow } from "./screen-model"
+import type { TranscriptRow } from "./screen-model"
 
 import type { QuestionRequest } from "../agent/contract"
 
@@ -44,9 +44,6 @@ export const questionRunOf = (
 	return null
 }
 
-export const bubbleIdOfRow = (row: TranscriptRow): string =>
-	bubbleIdOf(row.messageId, row.blockIndex)
-
 const NOTHING_ASKED: AskedQuestion = { asked: null }
 
 export const askedQuestionOf = (
@@ -60,6 +57,6 @@ export const askedQuestionOf = (
 	return {
 		asked: { messageId: run.card.messageId, request: question },
 		askerBotId: run.card.authorBotId,
-		leadId: run.lead && bubbleIdOfRow(run.lead),
+		leadId: run.lead?.messageId,
 	}
 }

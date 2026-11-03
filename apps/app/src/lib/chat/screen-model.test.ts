@@ -6,8 +6,6 @@ import { promptWithAttachments } from "./attachments"
 import { type ChatState, initialChatState } from "./chat-state"
 import { storedAttachmentPath } from "./message-attachments"
 import {
-	bubbleIdOf,
-	bubbleOf,
 	claimsComposerFocus,
 	emptyStateStatusFor,
 	markedRunsOf,
@@ -79,13 +77,27 @@ function chatState(overrides: Partial<ChatState> = {}): ChatState {
 }
 
 describe("toTranscriptRows", () => {
-	it("publishes a paragraph only once a blank line has closed it", () => {
+	it("renders a whole answer of paragraphs, a list and code as one bubble", () => {
+		const answer =
+			"Intro.\n\n- one\n\n- two\n\n```ts\nconst a = 1\n\nconst b = 2\n```\n\nDone."
+
+		expect(bubbles(answer)).toEqual([answer])
+	})
+
+	it("grows a streaming answer inside its single bubble", () => {
 		const rows = toTranscriptRows([
 			message({ content: "First paragraph.\n\nSecond one, still bei" }),
 		])
 
-		expect(rows.map((row) => row.text)).toEqual(["First paragraph."])
-		expect(rows[0].completion).toBe("complete")
+		expect(rows.map((row) => row.text)).toEqual([
+			"First paragraph.\n\nSecond one, still bei",
+		])
+		expect(rows[0].completion).toBe("streaming")
+	})
+
+	it("shows a streaming answer from its first character", () => {
+		expect(bubbles("I", "streaming")).toEqual(["I"])
+		expect(bubbles("\n", "streaming")).toEqual([])
 	})
 
 	it("hands back the same rows for a message that has not moved", () => {
@@ -105,16 +117,11 @@ describe("toTranscriptRows", () => {
 		expect(second[0]).toBe(first[0])
 	})
 
-	it("releases the trailing paragraph when the turn ends", () => {
-		const rows = toTranscriptRows([
-			message({ content: "One.\n\nTwo.", completion: "complete" }),
-		])
-
-		expect(rows.map((row) => row.text)).toEqual(["One.", "Two."])
-		expect(rows.map((row) => row.blockIndex)).toEqual([0, 1])
+	it("drops the trailing blank lines of an answer", () => {
+		expect(bubbles("One.\n\nTwo.\n\n")).toEqual(["One.\n\nTwo."])
 	})
 
-	it("carries how the turn ended on its closing row alone", () => {
+	it("carries how the turn ended on its bubble", () => {
 		const rows = toTranscriptRows([
 			message({
 				content: "Half an answer.\n\nStopped here.",
@@ -122,10 +129,9 @@ describe("toTranscriptRows", () => {
 			}),
 		])
 
-		expect(rows.map((row) => row.completion)).toEqual(["complete", "cancelled"])
+		expect(rows.map((row) => row.completion)).toEqual(["cancelled"])
 		expect(rows.map((row) => row.text)).toEqual([
-			"Half an answer.",
-			"Stopped here.",
+			"Half an answer.\n\nStopped here.",
 		])
 	})
 
@@ -150,80 +156,6 @@ describe("toTranscriptRows", () => {
 		).toEqual([])
 	})
 
-	it("keeps a fenced block whole through the blank lines inside it", () => {
-		expect(
-			bubbles("Here it is:\n\n```ts\nconst a = 1\n\nconst b = 2\n```\n\nDone."),
-		).toEqual([
-			"Here it is:",
-			"```ts\nconst a = 1\n\nconst b = 2\n```",
-			"Done.",
-		])
-	})
-
-	it("withholds a fence the answer has not closed yet", () => {
-		expect(
-			bubbles("Here it is:\n\n```ts\nconst a = 1\n\nconst b", "streaming"),
-		).toEqual(["Here it is:"])
-	})
-
-	it("keeps the items of a loose list in one bubble", () => {
-		expect(
-			bubbles("Steps:\n\n- one\n\n- two\n\n1. first\n\n2. second"),
-		).toEqual(["Steps:", "- one\n\n- two", "1. first\n\n2. second"])
-	})
-
-	it("holds the block a single newline left unfinished", () => {
-		expect(bubbles("Intro line:\n", "streaming")).toEqual([])
-		expect(bubbles("Intro line:\nsecond line.", "streaming")).toEqual([])
-	})
-
-	it("keeps a paragraph and the list under it in one bubble", () => {
-		expect(bubbles("Steps:\n- one\n\n- two")).toEqual([
-			"Steps:\n- one\n\n- two",
-		])
-	})
-
-	it("keeps an item and its indented continuation in one bubble", () => {
-		expect(bubbles("1. one\n\n   more about one\n\n2. two")).toEqual([
-			"1. one\n\n   more about one\n\n2. two",
-		])
-	})
-
-	it("hands a block its own indentation, so indented code stays code", () => {
-		expect(bubbles("Here:\n\n    const a = 1\n\nDone.")).toEqual([
-			"Here:",
-			"    const a = 1",
-			"Done.",
-		])
-	})
-
-	it("never rewrites or drops a bubble it has already published", () => {
-		const written = [
-			"Intro.",
-			"- one\n\n  more about one\n\n- two",
-			"```ts\nconst a = 1\n\nconst b = 2\n```",
-			"Done.",
-		]
-		const answer = written.join("\n\n")
-		let published: string[] = []
-
-		for (let length = 1; length <= answer.length; length += 1) {
-			const texts = bubbles(answer.slice(0, length), "streaming")
-
-			expect(texts.slice(0, published.length)).toEqual(published)
-			published = texts
-		}
-
-		expect(published).toEqual(written.slice(0, -1))
-	})
-
-	it("splits text without markdown on its blank lines alone", () => {
-		expect(bubbles("One.\nStill one.\n\n\nTwo.")).toEqual([
-			"One.\nStill one.",
-			"Two.",
-		])
-	})
-
 	it("never splits the reader's own prompt", () => {
 		const rows = toTranscriptRows([
 			message({
@@ -243,7 +175,8 @@ describe("toRuns", () => {
 	it("gathers consecutive rows from the same speaker", () => {
 		const runs = toRuns(
 			toTranscriptRows([
-				message({ id: "a", content: "One.\n\nTwo.", completion: "complete" }),
+				message({ id: "a", content: "One.", completion: "complete" }),
+				message({ id: "a2", content: "Two.", completion: "complete" }),
 				message({
 					id: "local-1",
 					role: "user",
@@ -353,14 +286,14 @@ describe("toRuns", () => {
 		expect(runs.map((run) => run.length)).toEqual([3])
 	})
 
-	it("keeps the paragraphs of one answer together", () => {
+	it("keeps the paragraphs of one answer in a single row", () => {
 		const runs = toRuns(
 			toTranscriptRows([
 				message({ content: "One.\n\nTwo.\n\nThree.", completion: "complete" }),
 			]),
 		)
 
-		expect(runs.map((run) => run.length)).toEqual([3])
+		expect(runs.map((run) => run.length)).toEqual([1])
 	})
 
 	it("keeps an empty transcript empty", () => {
@@ -748,54 +681,6 @@ describe("quoted messages", () => {
 	})
 })
 
-describe("bubbleIdOf", () => {
-	it("gives every bubble of a message an identifier of its own", () => {
-		const run = toTranscriptRows([
-			message({
-				id: "a-1",
-				content: "One.\n\nTwo.\n\nThree.",
-				completion: "complete",
-			}),
-			prompt({ id: "p-1" }),
-		])
-
-		const anchors = run.map((row) => bubbleIdOf(row.messageId, row.blockIndex))
-
-		expect(anchors).toEqual(["a-1", "a-1#1", "a-1#2", "p-1"])
-		expect(new Set(anchors).size).toBe(anchors.length)
-	})
-})
-
-describe("bubbleOf", () => {
-	it("picks the bubble a block index names", () => {
-		const split = message({
-			id: "a-1",
-			content: "One.\n\nTwo.",
-			completion: "complete",
-		})
-
-		expect(bubbleOf(split, 1)).toMatchObject({
-			messageId: "a-1",
-			blockIndex: 1,
-			text: "Two.",
-		})
-	})
-
-	it("falls back to the first bubble when the block is gone", () => {
-		const split = message({
-			id: "a-1",
-			content: "One.\n\nTwo.",
-			completion: "complete",
-		})
-
-		expect(bubbleOf(split, 7)).toMatchObject({
-			messageId: "a-1",
-			blockIndex: 0,
-			text: "One.",
-		})
-	})
-})
-
 describe("claimsComposerFocus", () => {
 	const claim = {
 		threadId: "conversation-1",
@@ -857,7 +742,8 @@ describe("markedRunsOf", () => {
 describe("runPresentationsOf", () => {
 	const soloRuns = toRuns(
 		toTranscriptRows([
-			message({ id: "a", content: "One.\n\nTwo.", completion: "complete" }),
+			message({ id: "a", content: "One.", completion: "complete" }),
+			message({ id: "a2", content: "Two.", completion: "complete" }),
 			prompt({ id: "local-1", createdAt: 6 * 60_000 }),
 			message({
 				id: "b",
@@ -890,11 +776,9 @@ describe("runPresentationsOf", () => {
 	it("hands the face to the first and the last row of a run of three, not the middle one", () => {
 		const runs = toRuns(
 			toTranscriptRows([
-				message({
-					id: "a",
-					content: "One.\n\nTwo.\n\nThree.",
-					completion: "complete",
-				}),
+				message({ id: "a", content: "One.", completion: "complete" }),
+				message({ id: "b", content: "Two.", completion: "complete" }),
+				message({ id: "c", content: "Three.", completion: "complete" }),
 			]),
 		)
 		const [presentation] = runPresentationsOf({

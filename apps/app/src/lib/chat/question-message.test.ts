@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest"
 
-import { toPublishedBlocks } from "./markdown-blocks"
 import {
 	answeredText,
 	answersFromText,
@@ -31,12 +30,6 @@ const REQUEST: QuestionRequest = {
 }
 
 describe("questionMessageText", () => {
-	it("keeps every question in a single published block", () => {
-		expect(toPublishedBlocks(questionMessageText(REQUEST), false)).toHaveLength(
-			1,
-		)
-	})
-
 	it("writes each question as a heading above its options", () => {
 		expect(questionMessageText(REQUEST)).toBe(
 			[

@@ -920,7 +920,7 @@ describe("PRF1 render baseline", () => {
 			  "quietTurn": 2,
 			  "rosterBots": 7,
 			  "rosterBotsBySpace": 7,
-			  "streamingTurn": 2,
+			  "streamingTurn": 12,
 			}
 		`)
 	})
@@ -937,7 +937,7 @@ describe("PRF1 render baseline", () => {
 			  "quietTurn": 2,
 			  "rosterBots": 7,
 			  "rosterBotsBySpace": 7,
-			  "streamingTurn": 2,
+			  "streamingTurn": 23,
 			}
 		`)
 	})

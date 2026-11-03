@@ -98,7 +98,6 @@ import {
 	toTransportError,
 } from "../chat/chat-state"
 import type { ChatDriver } from "../chat/driver"
-import { toPublishedBlocks } from "../chat/markdown-blocks"
 import {
 	answeredText,
 	questionMessageIdOf,
@@ -109,7 +108,7 @@ import {
 	ENDING_FOR_OUTCOME,
 	isWorthKeeping,
 } from "../chat/reply-endings"
-import { needsFreshSession } from "../chat/screen-model"
+import { needsFreshSession, shownTextOf } from "../chat/screen-model"
 import {
 	heldWorkFor,
 	type WorkingState,
@@ -484,15 +483,12 @@ export const createConversationController = (
 	const runningSpeakers = (): Speaker[] =>
 		queue.wave.flatMap(({ botId }) => speakers.get(botId) ?? [])
 
-	const hasPublishedBlock = (held: Speaker): boolean =>
-		[...held.written].some(
-			([id, text]) =>
-				toPublishedBlocks(text, held.openMessages.has(id)).length > 0,
-		)
+	const hasShownText = (held: Speaker): boolean =>
+		[...held.written.values()].some((text) => shownTextOf(text).length > 0)
 
 	const localSpeakingBots = (): SpeakingBot[] =>
 		runningSpeakers().map((held) => {
-			const hasPublished = hasPublishedBlock(held)
+			const hasPublished = hasShownText(held)
 			return {
 				botId: held.botId,
 				work: speakerWork(held, hasPublished),
