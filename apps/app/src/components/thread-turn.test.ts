@@ -12,6 +12,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import "@workspace/ui/lib/i18n"
 
+import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
 import type { TurnState } from "@workspace/ui/components/turn"
 
 import { RefusedTurn, ThreadTurn } from "@/components/thread-turn"
@@ -28,8 +29,25 @@ import {
 	ThreadAuthorshipContext,
 } from "@/lib/chat/thread-authorship"
 import type { TranscriptRole } from "@/lib/conversations/transcript-contract"
+import { openInBrowser } from "@/lib/links/use-external-links"
 
-afterEach(cleanup)
+vi.mock("@/lib/links/use-external-links", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@/lib/links/use-external-links")>()),
+	openInBrowser: vi.fn(() => Promise.resolve()),
+}))
+
+vi.mock("@workspace/ui/components/notice-surface", async (importOriginal) => ({
+	...(await importOriginal<
+		typeof import("@workspace/ui/components/notice-surface")
+	>()),
+	raiseFailureNotice: vi.fn(() => "notice"),
+}))
+
+afterEach(() => {
+	cleanup()
+	vi.mocked(openInBrowser).mockClear()
+	vi.mocked(raiseFailureNotice).mockClear()
+})
 
 const FIRST_NAME = "0b7c6d1e-2f3a-4b5c-8d9e-0f1a2b3c4d5e.png"
 const SECOND_NAME = "1c8d7e2f-3a4b-4c5d-9e0f-1a2b3c4d5e6f.jpg"
@@ -404,6 +422,70 @@ describe("an agent answer carrying rich blocks", () => {
 			screen.getByRole("region", { name: "Options" }).getAttribute("aria-busy"),
 		).toBe("true")
 		expect(screen.queryByRole("button", { name: "Dual write" })).toBeNull()
+	})
+})
+
+const WEB_PAGE_ANSWER = `The rooms.
+
+\`\`\`web-page
+url: https://www.casadorio.pt/rooms
+title: Casa do Rio, rooms and rates
+image: https://images.example.org/casa-do-rio.jpg
+alt: Terrace of Casa do Rio over the river
+\`\`\``
+
+const WEB_PAGE_WITHOUT_IMAGE_ANSWER = WEB_PAGE_ANSWER.replace(
+	/\nimage: .*\nalt: .*/,
+	"",
+)
+
+const openAsPage = () =>
+	fireEvent.click(screen.getByRole("button", { name: "Open as page" }))
+
+describe("an agent answer carrying a web page", () => {
+	it("shows the page preview with its image and its alt", () => {
+		renderTurn("assistant", WEB_PAGE_ANSWER, { actions: actionsSpy() })
+
+		const preview = screen.getByRole("img", {
+			name: "Terrace of Casa do Rio over the river",
+		})
+		expect(preview.getAttribute("src")).toBe(
+			"https://images.example.org/casa-do-rio.jpg",
+		)
+	})
+
+	it("shows the card with no image when the page has none", () => {
+		const { container } = renderTurn(
+			"assistant",
+			WEB_PAGE_WITHOUT_IMAGE_ANSWER,
+			{ actions: actionsSpy() },
+		)
+
+		expect(screen.getByText("Casa do Rio, rooms and rates")).toBeTruthy()
+		expect(container.querySelector("img")).toBeNull()
+	})
+
+	it("opens the page address in the browser on Open as page", () => {
+		renderTurn("assistant", WEB_PAGE_ANSWER, { actions: actionsSpy() })
+
+		openAsPage()
+
+		expect(openInBrowser).toHaveBeenCalledWith("https://www.casadorio.pt/rooms")
+	})
+
+	it("says the page did not open when the browser refuses it", async () => {
+		vi.mocked(openInBrowser).mockRejectedValueOnce(new Error("refused"))
+		renderTurn("assistant", WEB_PAGE_ANSWER, { actions: actionsSpy() })
+
+		openAsPage()
+		await vi.waitFor(() =>
+			expect(raiseFailureNotice).toHaveBeenCalledWith(
+				expect.objectContaining({
+					title:
+						"Couldn’t open the page in the browser. Press Open as page again.",
+				}),
+			),
+		)
 	})
 })
 
