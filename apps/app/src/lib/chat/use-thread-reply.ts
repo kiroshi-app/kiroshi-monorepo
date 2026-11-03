@@ -5,9 +5,10 @@ import type { TranscriptHandle } from "@workspace/ui/components/transcript"
 import { claimsComposerFocus, type ReplyTarget } from "./screen-model"
 
 type ThreadReplyInput = {
-	threadId: string
 	composerRef: RefObject<HTMLTextAreaElement | null>
 	scrollerRef: RefObject<TranscriptHandle | null>
+	readReplies: () => ReplyTarget[]
+	rememberReplies: (targets: ReplyTarget[]) => void
 	send: (text: string, repliedToMessageIds: string[]) => Promise<boolean>
 }
 
@@ -18,8 +19,6 @@ export type ThreadReply = {
 	releaseReply: (messageId: string) => void
 	submitPrompt: (text: string) => Promise<boolean>
 }
-
-type HeldReplies = Readonly<Record<string, ReplyTarget[]>>
 
 const NO_TARGETS: ReplyTarget[] = []
 
@@ -32,21 +31,20 @@ const withoutTarget = (held: ReplyTarget[], messageId: string) =>
 	held.filter((target) => target.messageId !== messageId)
 
 export function useThreadReply({
-	threadId,
 	composerRef,
 	scrollerRef,
+	readReplies,
+	rememberReplies,
 	send,
 }: ThreadReplyInput): ThreadReply {
-	const [heldReplies, setHeldReplies] = useState<HeldReplies>({})
-	const replyTargets = heldReplies[threadId] ?? NO_TARGETS
+	const [replyTargets, setReplyTargets] = useState(readReplies)
 
-	const updateTargets = useCallback(
-		(update: (held: ReplyTarget[]) => ReplyTarget[]) =>
-			setHeldReplies((replies) => ({
-				...replies,
-				[threadId]: update(replies[threadId] ?? NO_TARGETS),
-			})),
-		[threadId],
+	const holdTargets = useCallback(
+		(targets: ReplyTarget[]) => {
+			setReplyTargets(targets)
+			rememberReplies(targets)
+		},
+		[rememberReplies],
 	)
 
 	const focusComposer = useCallback(() => {
@@ -67,12 +65,12 @@ export function useThreadReply({
 				replyTargets.map(({ messageId }) => messageId),
 			)
 			if (sent) {
-				updateTargets(() => NO_TARGETS)
+				holdTargets(NO_TARGETS)
 			}
 			focusComposer()
 			return sent
 		},
-		[send, replyTargets, updateTargets, scrollerRef, focusComposer],
+		[send, replyTargets, holdTargets, scrollerRef, focusComposer],
 	)
 
 	return {
@@ -81,17 +79,17 @@ export function useThreadReply({
 		submitPrompt,
 		holdReply: useCallback(
 			(target: ReplyTarget) => {
-				updateTargets((held) => withTarget(held, target))
+				holdTargets(withTarget(replyTargets, target))
 				focusComposer()
 			},
-			[updateTargets, focusComposer],
+			[holdTargets, replyTargets, focusComposer],
 		),
 		releaseReply: useCallback(
 			(messageId: string) => {
-				updateTargets((held) => withoutTarget(held, messageId))
+				holdTargets(withoutTarget(replyTargets, messageId))
 				focusComposer()
 			},
-			[updateTargets, focusComposer],
+			[holdTargets, replyTargets, focusComposer],
 		),
 	}
 }

@@ -69,7 +69,10 @@ import {
 	chatReducer,
 	initialChatState,
 } from "@/lib/chat/chat-state"
-import { createDraftsController } from "@/lib/chat/drafts-controller"
+import {
+	createDraftsController,
+	type DraftsController,
+} from "@/lib/chat/drafts-controller"
 import {
 	type ThreadAuthorship,
 	ThreadAuthorshipContext,
@@ -412,6 +415,7 @@ type ThreadScreenHarnessProps = {
 	onOpenMission: (missionId: string) => void
 	onOpenMissionInNewTab?: (missionId: string) => void
 	staging?: AttachmentsController
+	drafts?: DraftsController
 }
 
 const ThreadScreenHarness = ({
@@ -423,6 +427,7 @@ const ThreadScreenHarness = ({
 	onOpenMission,
 	onOpenMissionInNewTab = () => undefined,
 	staging = attachments,
+	drafts = createDraftsController(),
 }: ThreadScreenHarnessProps) => {
 	const [isOpen, setOpen] = useState(false)
 	const signInState = useSyncExternalStore(
@@ -438,7 +443,7 @@ const ThreadScreenHarness = ({
 		},
 		attachments: staging,
 		bots,
-		drafts: createDraftsController(),
+		drafts,
 		landings,
 		onboardingCreation,
 		onOpenMission,
@@ -4159,6 +4164,7 @@ const exchangeOf = (id: string, name: string): BotThread => {
 const replyRoomOn = async (thread: BotThread): Promise<ReplyRoom> => {
 	const sends: ReplySend[] = []
 	let isSending = true
+	const drafts = createDraftsController()
 	const staging = createAttachmentsController({
 		store: async () => [],
 		send: (_owner, text, repliedToMessageId) => {
@@ -4170,6 +4176,7 @@ const replyRoomOn = async (thread: BotThread): Promise<ReplyRoom> => {
 		createElement(ThreadScreenHarness, {
 			bots: NO_BOT_RECORDS,
 			landings: createMessageLandingController(),
+			drafts,
 			onOpenMission: () => undefined,
 			staging,
 			thread: shown,
@@ -4269,9 +4276,10 @@ describe("ThreadScreen holding several replies", () => {
 		])
 	})
 
-	it("shows only the chips held for the thread on screen", async () => {
+	it("shows only the chips of the thread on screen, and brings them back in order on return", async () => {
 		const room = await replyRoomOn(exchangeOf("bot-1", "Nyx"))
 		await replyTo(1)
+		await replyTo(0)
 
 		room.switchTo(exchangeOf("bot-2", "Vex"))
 		await settle()
@@ -4279,8 +4287,27 @@ describe("ThreadScreen holding several replies", () => {
 		expect(replyChipNames()).toEqual([])
 
 		await replyTo(1)
+		room.switchTo(exchangeOf("bot-1", "Nyx"))
+		await settle()
 
-		expect(replyChipNames()).toEqual(["Remove the reply to Vex"])
+		expect(replyChipNames()).toEqual([
+			"Remove the reply to Nyx",
+			"Remove the reply to Reader",
+		])
+	})
+
+	it("clears the chips of the thread that sent only", async () => {
+		const room = await replyRoomOn(exchangeOf("bot-1", "Nyx"))
+		await replyTo(1)
+		room.switchTo(exchangeOf("bot-2", "Vex"))
+		await settle()
+		await replyTo(1)
+
+		await sendInComposer("to Vex")
+		room.switchTo(exchangeOf("bot-1", "Nyx"))
+		await settle()
+
+		expect(replyChipNames()).toEqual(["Remove the reply to Nyx"])
 	})
 })
 

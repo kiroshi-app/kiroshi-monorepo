@@ -1490,8 +1490,22 @@ const useThreadActions = (
 		messages: state.messages,
 		send: submitSeated,
 	})
+	const readReplies = useCallback(
+		() => drafts.readReplies(facts.id),
+		[drafts, facts.id],
+	)
+	const rememberReplies = useCallback(
+		(targets: ReplyTarget[]) => drafts.rememberReplies(facts.id, targets),
+		[drafts, facts.id],
+	)
 	const { replyTargets, focusComposer, holdReply, releaseReply, submitPrompt } =
-		useThreadReply({ threadId: facts.id, composerRef, scrollerRef, send })
+		useThreadReply({
+			composerRef,
+			scrollerRef,
+			readReplies,
+			rememberReplies,
+			send,
+		})
 
 	useComposerFocus({
 		threadId: shownConversationIdOf(thread),

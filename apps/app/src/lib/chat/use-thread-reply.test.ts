@@ -3,6 +3,10 @@
 import { act, cleanup, renderHook } from "@testing-library/react"
 import { afterEach, expect, it, vi } from "vitest"
 
+import {
+	createDraftsController,
+	type DraftsController,
+} from "./drafts-controller"
 import type { ReplyTarget } from "./screen-model"
 import { useComposerFocus, useThreadReply } from "./use-thread-reply"
 
@@ -23,9 +27,10 @@ const renderThread = (
 	renderHook(
 		({ threadId }: FocusProps) => {
 			const { focusComposer } = useThreadReply({
-				threadId: "thread-1",
 				composerRef: { current: composer },
 				scrollerRef: { current: null },
+				readReplies: () => [],
+				rememberReplies: () => undefined,
 				send: async () => true,
 			})
 			useComposerFocus({
@@ -98,26 +103,26 @@ const targetOf = (messageId: string): ReplyTarget => ({
 	writtenFrom: null,
 })
 
-type ReplyProps = {
-	threadId: string
-}
-
 type ReplyFixture = {
 	isSent: boolean
 	threadId?: string
+	drafts?: DraftsController
 }
 
-const renderReplies = ({ isSent, threadId = "thread-1" }: ReplyFixture) => {
+const renderReplies = ({
+	isSent,
+	threadId = "thread-1",
+	drafts = createDraftsController(),
+}: ReplyFixture) => {
 	const send = vi.fn(async (_text: string, _repliedTo: string[]) => isSent)
-	const rendered = renderHook(
-		(props: ReplyProps) =>
-			useThreadReply({
-				threadId: props.threadId,
-				composerRef: { current: null },
-				scrollerRef: { current: null },
-				send,
-			}),
-		{ initialProps: { threadId } },
+	const rendered = renderHook(() =>
+		useThreadReply({
+			composerRef: { current: null },
+			scrollerRef: { current: null },
+			readReplies: () => drafts.readReplies(threadId),
+			rememberReplies: (targets) => drafts.rememberReplies(threadId, targets),
+			send,
+		}),
 	)
 	return { ...rendered, send }
 }
@@ -170,14 +175,37 @@ it("keeps every held reply when the message does not send", async () => {
 	expect(heldIds(result.current)).toEqual(["m-1", "m-2"])
 })
 
-it("shows only the replies held for the thread on screen", () => {
-	const { result, rerender } = renderReplies({ isSent: true })
+it("brings back the replies of a thread mounted again, and none of another thread", () => {
+	const drafts = createDraftsController()
+	const first = renderReplies({ isSent: true, threadId: "thread-1", drafts })
+	holdAll(() => first.result.current, ["m-2", "m-1"])
+	first.unmount()
+
+	const second = renderReplies({ isSent: true, threadId: "thread-2", drafts })
+	expect(heldIds(second.result.current)).toEqual([])
+	holdAll(() => second.result.current, ["m-9"])
+	second.unmount()
+
+	const back = renderReplies({ isSent: true, threadId: "thread-1", drafts })
+	expect(heldIds(back.result.current)).toEqual(["m-2", "m-1"])
+})
+
+it("clears the replies of the thread that sent only", async () => {
+	const drafts = createDraftsController()
+	const other = renderReplies({ isSent: true, threadId: "thread-2", drafts })
+	holdAll(() => other.result.current, ["m-9"])
+	other.unmount()
+	const { result } = renderReplies({
+		isSent: true,
+		threadId: "thread-1",
+		drafts,
+	})
 	holdAll(() => result.current, ["m-1"])
 
-	rerender({ threadId: "thread-2" })
-	expect(heldIds(result.current)).toEqual([])
-	holdAll(() => result.current, ["m-9"])
+	await act(() => result.current.submitPrompt("sent"))
 
-	rerender({ threadId: "thread-1" })
-	expect(heldIds(result.current)).toEqual(["m-1"])
+	expect(drafts.readReplies("thread-1")).toEqual([])
+	expect(
+		drafts.readReplies("thread-2").map(({ messageId }) => messageId),
+	).toEqual(["m-9"])
 })
