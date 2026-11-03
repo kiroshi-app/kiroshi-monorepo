@@ -69,8 +69,6 @@ const barButtonNames = (bar: HTMLElement) =>
 
 const TITLE_TARGET_ID = "library-document-title-target"
 
-const titleTarget = () => document.getElementById(TITLE_TARGET_ID) ?? false
-
 const barAboveTitle =
 	(menuFinalFocus: () => HTMLElement | boolean) =>
 	({ document: item, onBack, onRename }: LibraryDocumentViewProps) => (
@@ -235,7 +233,9 @@ export const MoreMenu = meta.story({
 
 export const RenameWithFocusTarget = meta.story({
 	tags: ["test-only"],
-	render: barAboveTitle(titleTarget),
+	render: barAboveTitle(
+		() => document.getElementById(TITLE_TARGET_ID) ?? false,
+	),
 	parameters: {
 		docs: {
 			description: {
