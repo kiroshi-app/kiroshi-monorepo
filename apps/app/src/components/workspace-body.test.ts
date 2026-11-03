@@ -1236,12 +1236,10 @@ describe("WorkspaceBody library", () => {
 	const readDocumentOf = async ({ name }: NamedRead) =>
 		name === NOTES.name ? Promise.reject(refusal) : documentOf(name)
 
-	const openedStateOf = async ({ name }: NamedRead) => {
-		if (name === NOTES.name) {
-			throw refusal
-		}
+	const openedStateOf = async (read: NamedRead) => {
+		const { name, content } = await readDocumentOf(read)
 		const doc = new Y.Doc()
-		doc.getText("markdown").insert(0, documentOf(name).content)
+		doc.getText("markdown").insert(0, content)
 		return { name, update: base64Of(Y.encodeStateAsUpdate(doc)) }
 	}
 
