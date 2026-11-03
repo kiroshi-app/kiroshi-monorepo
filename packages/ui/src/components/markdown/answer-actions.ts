@@ -8,6 +8,9 @@ type MarkdownAnswerActions = {
 	onUseValues: (summary: string) => void
 	onOpenImage: (images: LibraryLightboxImage[], index: number) => void
 	onOpenWebPage?: (url: string) => void
+	onToggleChecklistItem?: (id: string, isChecked: boolean) => void
+	onCopyChecklist?: (list: string) => void
+	onSaveImage?: (url: string) => void
 }
 
 const MarkdownAnswerContext = createContext<MarkdownAnswerActions | null>(null)

@@ -1,5 +1,7 @@
 import {
 	type BlockRecord,
+	fitsShape,
+	type RecordShape,
 	readShapedBody,
 } from "@workspace/ui/components/markdown/block-body"
 import {
@@ -10,17 +12,35 @@ import {
 type OptionsBlock = {
 	label: "options"
 	question?: string
+	subtitle?: string
 	options: { title: string; text: string }[]
 }
 
 type IllustratedListBlock = {
 	label: "illustrated-list"
-	items: { title: string; image: string; text?: string }[]
+	items: {
+		title: string
+		image: string
+		text?: string
+		badge?: string
+		meta?: string
+	}[]
+}
+
+type ChecklistBlock = {
+	label: "checklist"
+	title: string
+	items: { text: string; isDone: boolean; assignee?: string }[]
 }
 
 type GalleryBlock = {
 	label: "gallery"
 	images: { image: string; alt: string; caption?: string }[]
+}
+
+type Measure = {
+	currency?: string
+	unit?: string
 }
 
 type InteractiveSlider = {
@@ -30,19 +50,33 @@ type InteractiveSlider = {
 	max: number
 	step: number
 	defaultValue: number
+	measure: Measure
 }
+
+type InteractiveTemplate = readonly (string | Formula)[]
 
 type InteractiveBlock = {
 	label: "interactive"
+	title?: string
 	result: Formula
 	resultLabel: string
+	measure: Measure
+	note?: InteractiveTemplate
+	meter?: { ratio: Formula; caption: InteractiveTemplate }
+	breakdown: { label: string; value: Formula }[]
+	source?: string
 	sliders: InteractiveSlider[]
+}
+
+type CollapsibleSection = {
+	title: string
+	value?: string
+	content: string
 }
 
 type CollapsibleBlock = {
 	label: "collapsible"
-	title: string
-	content: string
+	sections: CollapsibleSection[]
 }
 
 type WebPageBlock = {
@@ -82,6 +116,7 @@ type MapBlock = {
 type AnswerBlock =
 	| OptionsBlock
 	| IllustratedListBlock
+	| ChecklistBlock
 	| GalleryBlock
 	| InteractiveBlock
 	| CollapsibleBlock
@@ -96,10 +131,23 @@ const DECIMAL = /^-?\d+(?:\.\d+)?$/
 const CLOCK_TIME = /^(?:(\d+):)?([0-5]?\d):([0-5]\d)$/
 const MAX_SLIDERS = 5
 const FENCE_LINE = /^ {0,3}(?:`{3,}|~{3,})/m
+const CURRENCY_CODE = /^[A-Z]{3}$/
+const PLACEHOLDER = /\{([^{}]*)\}/
+const BRACE = /[{}]/
+const SECTION_HEAD_LINE = /^(?:title|value):/
+const DONE_STATES: Readonly<Record<string, boolean>> = { yes: true, no: false }
+
+const SLIDER_SHAPE: RecordShape = {
+	required: ["name", "label", "min", "max", "step", "default"],
+	optional: ["currency", "unit"],
+}
+const BREAKDOWN_ROW_SHAPE: RecordShape = { required: ["row", "value"] }
+
+const isPresent = <Value>(value: Value | null): value is Value => value !== null
 
 const readOptions = (source: string): OptionsBlock | null => {
 	const body = readShapedBody(source, {
-		fields: { required: [], optional: ["question"] },
+		fields: { required: [], optional: ["question", "subtitle"] },
 		item: { required: ["title", "text"] },
 	})
 	if (!body) return null
@@ -107,6 +155,7 @@ const readOptions = (source: string): OptionsBlock | null => {
 	return {
 		label: "options",
 		question: body.fields.question,
+		subtitle: body.fields.subtitle,
 		options: body.items.map(({ title, text }) => ({ title, text })),
 	}
 }
@@ -116,7 +165,7 @@ const readIllustratedList = (source: string): IllustratedListBlock | null => {
 		fields: { required: [] },
 		item: {
 			required: ["title", "image"],
-			optional: ["text", "link"],
+			optional: ["text", "link", "badge", "meta"],
 			urls: ["image", "link"],
 		},
 	})
@@ -124,8 +173,31 @@ const readIllustratedList = (source: string): IllustratedListBlock | null => {
 
 	return {
 		label: "illustrated-list",
-		items: body.items.map(({ title, image, text }) => ({ title, image, text })),
+		items: body.items.map(({ title, image, text, badge, meta }) => ({
+			title,
+			image,
+			text,
+			badge,
+			meta,
+		})),
 	}
+}
+
+const readChecklist = (source: string): ChecklistBlock | null => {
+	const body = readShapedBody(source, {
+		fields: { required: ["title"] },
+		item: { required: ["text"], optional: ["done", "assignee"] },
+	})
+	if (!body) return null
+
+	const items = body.items.map(({ text, done = "no", assignee }) =>
+		Object.hasOwn(DONE_STATES, done)
+			? { text, isDone: DONE_STATES[done], assignee }
+			: null,
+	)
+	if (!items.every(isPresent)) return null
+
+	return { label: "checklist", title: body.fields.title, items }
 }
 
 const readGallery = (source: string): GalleryBlock | null => {
@@ -149,8 +221,16 @@ const readGallery = (source: string): GalleryBlock | null => {
 	}
 }
 
+const readMeasure = ({ currency, unit }: BlockRecord): Measure | null => {
+	if (currency !== undefined && unit !== undefined) return null
+	if (currency !== undefined && !CURRENCY_CODE.test(currency)) return null
+	return { currency, unit }
+}
+
 const readSlider = (item: BlockRecord): InteractiveSlider | null => {
 	const numbers = [item.min, item.max, item.step, item.default]
+	const measure = readMeasure(item)
+	if (!fitsShape(item, SLIDER_SHAPE) || !measure) return null
 	if (!SLIDER_NAME.test(item.name)) return null
 	if (!numbers.every((value) => DECIMAL.test(value))) return null
 
@@ -159,30 +239,109 @@ const readSlider = (item: BlockRecord): InteractiveSlider | null => {
 		max > min && step > 0 && defaultValue >= min && defaultValue <= max
 
 	return holds
-		? { name: item.name, label: item.label, min, max, step, defaultValue }
+		? {
+				name: item.name,
+				label: item.label,
+				min,
+				max,
+				step,
+				defaultValue,
+				measure,
+			}
 		: null
 }
 
+const compileTemplate = (
+	source: string,
+	names: ReadonlySet<string>,
+): InteractiveTemplate | null => {
+	const parts = source
+		.split(PLACEHOLDER)
+		.map((piece, index) =>
+			index % 2 === 1
+				? compileFormula(piece, names)
+				: BRACE.test(piece)
+					? null
+					: piece,
+		)
+	return parts.every(isPresent) ? parts : null
+}
+
+const readMeter = (fields: BlockRecord, names: ReadonlySet<string>) => {
+	const { meter, "meter-caption": caption } = fields
+	if (meter === undefined && caption === undefined) return undefined
+	if (meter === undefined || caption === undefined) return null
+
+	const ratio = compileFormula(meter, names)
+	const captionTemplate = compileTemplate(caption, names)
+	return ratio && captionTemplate ? { ratio, caption: captionTemplate } : null
+}
+
+const readBreakdownRow = (item: BlockRecord, names: ReadonlySet<string>) => {
+	const value = fitsShape(item, BREAKDOWN_ROW_SHAPE)
+		? compileFormula(item.value, names)
+		: null
+	return value ? { label: item.row, value } : null
+}
+
+const isBreakdownRow = (item: BlockRecord) => Object.hasOwn(item, "row")
+
 const readInteractive = (source: string): InteractiveBlock | null => {
 	const body = readShapedBody(source, {
-		fields: { required: ["result", "result-label"] },
-		item: { required: ["name", "label", "min", "max", "step", "default"] },
+		fields: {
+			required: ["result", "result-label"],
+			optional: [
+				"title",
+				"currency",
+				"unit",
+				"note",
+				"meter",
+				"meter-caption",
+				"source",
+			],
+		},
+		item: {
+			required: [],
+			optional: [
+				...SLIDER_SHAPE.required,
+				...(SLIDER_SHAPE.optional ?? []),
+				...BREAKDOWN_ROW_SHAPE.required,
+			],
+		},
 	})
-	if (!body || body.items.length > MAX_SLIDERS) return null
+	if (!body) return null
 
-	const sliders = body.items.map(readSlider)
-	if (!sliders.every((slider) => slider !== null)) return null
+	const sliderItems = body.items.filter((item) => !isBreakdownRow(item))
+	if (sliderItems.length === 0 || sliderItems.length > MAX_SLIDERS) return null
+
+	const sliders = sliderItems.map(readSlider)
+	if (!sliders.every(isPresent)) return null
 
 	const names = new Set(sliders.map(({ name }) => name))
 	if (names.size !== sliders.length) return null
 
-	const result = compileFormula(body.fields.result, names)
-	if (!result) return null
+	const { fields } = body
+	const result = compileFormula(fields.result, names)
+	const measure = readMeasure(fields)
+	const note =
+		fields.note === undefined ? undefined : compileTemplate(fields.note, names)
+	const meter = readMeter(fields, names)
+	const breakdown = body.items
+		.filter(isBreakdownRow)
+		.map((item) => readBreakdownRow(item, names))
+	const holds = result && measure && note !== null && meter !== null
+	if (!holds || !breakdown.every(isPresent)) return null
 
 	return {
 		label: "interactive",
+		title: fields.title,
 		result,
-		resultLabel: body.fields["result-label"],
+		resultLabel: fields["result-label"],
+		measure,
+		note,
+		meter,
+		breakdown,
+		source: fields.source,
 		sliders,
 	}
 }
@@ -201,20 +360,44 @@ const splitAtFirstBlankLine = (source: string) => {
 	}
 }
 
-const readCollapsible = (source: string): CollapsibleBlock | null => {
+const readSection = (source: string): CollapsibleSection | null => {
 	const parts = splitAtFirstBlankLine(source)
 	if (!parts || parts.content === "" || FENCE_LINE.test(parts.content)) {
 		return null
 	}
 
-	const body = readShapedBody(parts.head, { fields: { required: ["title"] } })
+	const body = readShapedBody(parts.head, {
+		fields: { required: ["title"], optional: ["value"] },
+	})
 	if (!body) return null
 
-	return {
-		label: "collapsible",
-		title: body.fields.title,
-		content: parts.content,
-	}
+	const { title, value } = body.fields
+	return { title, value, content: parts.content }
+}
+
+const isSectionStart = (lines: readonly string[], index: number) => {
+	if (index > 0 && lines[index - 1].trim() !== "") return false
+	if (!lines[index].startsWith("title:")) return false
+
+	const blank = lines.findIndex(
+		(line, position) => position > index && line.trim() === "",
+	)
+	return lines
+		.slice(index, blank === -1 ? undefined : blank)
+		.every((line) => SECTION_HEAD_LINE.test(line))
+}
+
+const readCollapsible = (source: string): CollapsibleBlock | null => {
+	const lines = source.split("\n")
+	const starts = lines.flatMap((_, index) =>
+		index > 0 && isSectionStart(lines, index) ? [index] : [],
+	)
+	const sections = [0, ...starts].map((start, position) =>
+		readSection(lines.slice(start, starts[position]).join("\n")),
+	)
+	if (!sections.every(isPresent)) return null
+
+	return { label: "collapsible", sections }
 }
 
 const readWebPage = (source: string): WebPageBlock | null => {
@@ -303,6 +486,7 @@ const READERS: Readonly<
 > = {
 	options: readOptions,
 	"illustrated-list": readIllustratedList,
+	checklist: readChecklist,
 	gallery: readGallery,
 	interactive: readInteractive,
 	collapsible: readCollapsible,
@@ -321,6 +505,8 @@ export {
 	type AnswerBlock,
 	type AnswerBlockLabel,
 	type InteractiveBlock,
+	type InteractiveTemplate,
 	isAnswerBlockLabel,
+	type Measure,
 	readAnswerBlock,
 }

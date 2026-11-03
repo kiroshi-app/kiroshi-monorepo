@@ -1,8 +1,16 @@
 import { expect, fn, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { slotIn } from "@workspace/storybook/story-utils"
+import { slotIn, slotsIn } from "@workspace/storybook/story-utils"
+import {
+	CASA_DO_RIO_FAVICON,
+	CASA_DO_RIO_TERRACE,
+	SANTA_LUZIA,
+	SE_CATHEDRAL,
+	TIME_OUT_MARKET,
+} from "@workspace/ui/components/answer-blocks/answer-blocks.fixtures"
 import { Markdown } from "@workspace/ui/components/markdown"
+import type { MarkdownAnswerActions } from "@workspace/ui/components/markdown/answer-actions"
 
 const OPTIONS = `Two ways forward, pick the one that fits.
 
@@ -656,5 +664,467 @@ export const ImagesLookTheSameWhenOpenable = meta.story({
 			await expect(boxOf(shown)).toEqual(boxOf(kept))
 		}
 		await expect(boxOf(openable).height).toBe(boxOf(plain).height)
+	},
+})
+
+const FIXTURE_PICTURES: Readonly<Record<string, string>> = {
+	"https://images.example.org/taberna-da-se.jpg": SE_CATHEDRAL,
+	"https://images.example.org/casa-do-rio.jpg": CASA_DO_RIO_TERRACE,
+	"https://images.example.org/time-out-market.jpg": TIME_OUT_MARKET,
+	"https://images.example.org/senhora-do-monte.jpg": SANTA_LUZIA,
+	"https://www.visitlisboa.example/favicon.png": CASA_DO_RIO_FAVICON,
+}
+
+const showFixturePicture = (image: Element) => {
+	const picture = FIXTURE_PICTURES[image.getAttribute("src") ?? ""]
+	if (picture) image.setAttribute("src", picture)
+}
+
+const drawFixturePictures = () => {
+	const observer = new MutationObserver((mutations) => {
+		for (const { target } of mutations) {
+			if (target instanceof Element) {
+				target.querySelectorAll("img").forEach(showFixturePicture)
+			}
+		}
+	})
+	observer.observe(document.body, { childList: true, subtree: true })
+	return () => observer.disconnect()
+}
+
+const ARTBOARD_ACTIONS: MarkdownAnswerActions = {
+	agentName: "Atlas",
+	onPickOption: fn(),
+	onUseValues: fn(),
+	onOpenImage: fn(),
+	onOpenWebPage: fn(),
+	onToggleChecklistItem: fn(),
+	onCopyChecklist: fn(),
+	onSaveImage: fn(),
+}
+
+const ILLUSTRATED_LIST_ARTBOARD = `Three places for dinner, all a walk from the house.
+
+\`\`\`illustrated-list
+- title: Taberna da Se
+  image: https://images.example.org/taberna-da-se.jpg
+  badge: My pick
+  text: Petiscos under the cathedral, the table I would book first.
+  meta: 6 min on foot · Alfama
+- title: Casa do Rio
+  image: https://images.example.org/casa-do-rio.jpg
+  text: Grilled fish on the terrace and **the best view of the three**.
+  meta: 12 min on foot · Riverside
+- title: Time Out Market
+  image: https://images.example.org/time-out-market.jpg
+  text: Forty stalls under one roof, nothing to book.
+  meta: 18 min by tram · Cais do Sodre
+\`\`\``
+
+export const IllustratedListWithBadgeAndMeta = meta.story({
+	beforeEach: drawFixturePictures,
+	args: {
+		children: ILLUSTRATED_LIST_ARTBOARD,
+		answerActions: ARTBOARD_ACTIONS,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Final page, Markdown 1. An `illustrated-list` block whose items carry a `badge`, a `meta` line and text written in inline Markdown. Check each title names its picture, the first item alone wears My pick, the bold run of the second item is drawn bold with its asterisks gone, and each meta line shows.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const list = slotIn(canvasElement, "illustrated-list")
+		for (const title of ["Taberna da Se", "Casa do Rio", "Time Out Market"]) {
+			await expect(canvas.getByRole("img", { name: title })).toBeVisible()
+		}
+		await expect(canvas.getAllByText("My pick")).toHaveLength(1)
+		await expect(canvas.getByText("the best view of the three").tagName).toBe(
+			"STRONG",
+		)
+		await expect(list).not.toHaveTextContent("**")
+		await expect(canvas.getByText("6 min on foot · Alfama")).toBeVisible()
+		await expect(canvas.getByText("12 min on foot · Riverside")).toBeVisible()
+	},
+})
+
+const OPTIONS_ARTBOARD = `A few ways to spend Friday evening.
+
+\`\`\`options
+question: Four ideas for Friday
+subtitle: Open one to see what it involves.
+- title: Sunset at the miradouro
+  text: A ten minute walk uphill, then drinks on the terrace until dark.
+- title: Fado in Alfama
+  text: Dinner and two sets at a small house, booked for eight.
+- title: A boat on the river
+  text: Ninety minutes on the Tagus from the Cais do Sodre pier.
+- title: A quiet night in
+  text: Groceries delivered to the house and a long dinner there.
+\`\`\``
+
+export const OptionsWithSubtitle = meta.story({
+	args: { children: OPTIONS_ARTBOARD, answerActions: ARTBOARD_ACTIONS },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Final page, Markdown 2. An `options` block with its `question` as title and a `subtitle` under it. Check the title, the subtitle and the four options show, and opening one hands its title to `onPickOption`.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		await expect(canvas.getByText("Four ideas for Friday")).toBeVisible()
+		await expect(
+			canvas.getByText("Open one to see what it involves."),
+		).toBeVisible()
+		await expect(slotsIn(canvasElement, "options-card-option")).toHaveLength(4)
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Fado in Alfama" }),
+		)
+		await expect(args.answerActions?.onPickOption).toHaveBeenCalledWith(
+			"Fado in Alfama",
+		)
+	},
+})
+
+const checklistOf = (lastDone: "yes" | "no") => `What is left before we fly.
+
+\`\`\`checklist
+title: To sort before Thursday
+- text: Book the house
+  done: yes
+  assignee: you
+- text: Reserve the table at Taberna da Rua
+  done: yes
+  assignee: Lena
+- text: Send everyone the flight options
+  done: yes
+  assignee: Atlas
+- text: Collect dietary needs
+  done: ${lastDone}
+  assignee: Tom
+- text: Share the packing list
+  done: ${lastDone}
+  assignee: Atlas
+- text: Confirm the airport transfer
+  done: ${lastDone}
+  assignee: you
+\`\`\``
+
+const CHECKLIST_ASSIGNEES = ["you", "Lena", "Atlas", "Tom", "Atlas", "you"]
+
+const expectChecklistRows = async (
+	canvasElement: HTMLElement,
+	doneCount: number,
+) => {
+	const rows = slotsIn(canvasElement, "checklist-item")
+	await expect(rows).toHaveLength(6)
+	for (const [index, row] of rows.entries()) {
+		await expect(row).toHaveTextContent(CHECKLIST_ASSIGNEES[index])
+		await expect(row).toHaveAttribute("aria-checked", `${index < doneCount}`)
+		const label = row.querySelector(".line-through")
+		await expect(label !== null).toBe(index < doneCount)
+	}
+}
+
+export const ChecklistPartlyDone = meta.story({
+	args: { children: checklistOf("no"), answerActions: ARTBOARD_ACTIONS },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Final page, Markdown 3. A `checklist` block, three of its six rows `done: yes`. Check the title and 3/6 show, each row carries its assignee, the done rows are struck through, ticking a row hands its id and new state to `onToggleChecklistItem`, and Copy the list hands the list to `onCopyChecklist`.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		await expect(canvas.getByText("To sort before Thursday")).toBeVisible()
+		const counter = slotIn(canvasElement, "checklist-counter")
+		await expect(counter).toHaveTextContent("3/6")
+		await expectChecklistRows(canvasElement, 3)
+
+		await userEvent.click(
+			canvas.getByRole("checkbox", { name: /Collect dietary needs/ }),
+		)
+		await expect(
+			args.answerActions?.onToggleChecklistItem,
+		).toHaveBeenCalledWith("3", true)
+		await expect(counter).toHaveTextContent("4/6")
+
+		await userEvent.click(canvas.getByRole("button", { name: "Copy the list" }))
+		await expect(args.answerActions?.onCopyChecklist).toHaveBeenCalledWith(
+			expect.stringContaining("- [x] Collect dietary needs · Tom"),
+		)
+	},
+})
+
+export const ChecklistAllDone = meta.story({
+	args: { children: checklistOf("yes"), answerActions: ARTBOARD_ACTIONS },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Final page, Markdown 4. The same `checklist` block with every row `done: yes`. Check the counter reads 6/6, every row is struck through with its assignee, and Copy the list still shows.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		await expect(canvas.getByText("To sort before Thursday")).toBeVisible()
+		await expect(slotIn(canvasElement, "checklist-counter")).toHaveTextContent(
+			"6/6",
+		)
+		await expectChecklistRows(canvasElement, 6)
+		await expect(
+			canvas.getByRole("button", { name: "Copy the list" }),
+		).toBeVisible()
+	},
+})
+
+const SOURCED_IMAGE_IMAGE = "https://images.example.org/senhora-do-monte.jpg"
+
+const SOURCED_IMAGE_ARTBOARD = `The best sunset of the city, a short climb from the house.
+
+![The Miradouro da Senhora do Monte at sunset](${SOURCED_IMAGE_IMAGE})
+
+Source: [visitlisboa.example](https://www.visitlisboa.example/en/places/senhora-do-monte)
+Title: Miradouro da Senhora do Monte
+Favicon: https://www.visitlisboa.example/favicon.png
+Status: Free
+Chip: Walk: 10 min uphill
+Chip: Sunset 18:52`
+
+export const SourcedImageWithSourceDetails = meta.story({
+	beforeEach: drawFixturePictures,
+	args: { children: SOURCED_IMAGE_ARTBOARD, answerActions: ARTBOARD_ACTIONS },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Final page, Markdown 5. A sourced image whose `Source:` line is followed by its `Title:`, `Favicon:`, `Status:` and `Chip:` lines. Check the domain wears its favicon, the title, the Free status and both chips show with none of the field lines left, Save hands the image address to `onSaveImage`, and the picture still opens.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		const figure = slotIn(canvasElement, "sourced-image")
+		await expect(figure).toHaveTextContent("visitlisboa.example")
+		await expect(
+			Array.from(figure.querySelectorAll("img"), (image) =>
+				image.getAttribute("src"),
+			),
+		).toEqual([SANTA_LUZIA, CASA_DO_RIO_FAVICON])
+		await expect(
+			canvas.getByText("Miradouro da Senhora do Monte"),
+		).toBeVisible()
+		await expect(
+			slotIn(canvasElement, "sourced-image-status"),
+		).toHaveTextContent("Free")
+		await expect(canvas.getByText("Walk: 10 min uphill")).toBeVisible()
+		await expect(canvas.getByText("Sunset 18:52")).toBeVisible()
+		await expect(canvas.queryByText(/^(?:Source|Chip|Status):/)).toBeNull()
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Save the image" }),
+		)
+		await expect(args.answerActions?.onSaveImage).toHaveBeenCalledWith(
+			SOURCED_IMAGE_IMAGE,
+		)
+		await expect(args.answerActions?.onOpenImage).not.toHaveBeenCalled()
+
+		await userEvent.click(
+			canvas.getByRole("button", {
+				name: "The Miradouro da Senhora do Monte at sunset",
+			}),
+		)
+		await expect(args.answerActions?.onOpenImage).toHaveBeenCalledOnce()
+	},
+})
+
+const BUDGET_TOTAL = "1200 * nights + 45 * people * nights + flight * people"
+
+const INTERACTIVE_ARTBOARD = `Here is the budget, move the sliders and it follows.
+
+\`\`\`interactive
+title: Offsite budget
+result: ${BUDGET_TOTAL}
+result-label: Total for the trip
+currency: EUR
+note: {(${BUDGET_TOTAL}) / people} a head
+meter: (${BUDGET_TOTAL}) / 10000
+meter-caption: {10000 - (${BUDGET_TOTAL})} under the €10k budget
+source: Prices from the house listing and Taberna da Rua
+- name: people
+  label: People
+  min: 4
+  max: 20
+  step: 1
+  default: 12
+- name: nights
+  label: Nights
+  min: 1
+  max: 7
+  step: 1
+  default: 3
+- name: flight
+  label: Flight per person
+  min: 60
+  max: 400
+  step: 10
+  default: 180
+  currency: EUR
+- row: House, 3 nights
+  value: 1200 * nights
+- row: Dinners
+  value: 45 * people * nights
+- row: Flights
+  value: flight * people
+\`\`\``
+
+const breakdownOf = (canvasElement: HTMLElement) =>
+	Array.from(
+		slotIn(canvasElement, "interactive-view-result").querySelectorAll(
+			"dl > div",
+		),
+		(row) => row.textContent,
+	)
+
+export const InteractiveBudgetWithBreakdown = meta.story({
+	args: { children: INTERACTIVE_ARTBOARD, answerActions: ARTBOARD_ACTIONS },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Final page, Markdown 9. An `interactive` block with its own `title`, a `currency`, a `note`, a `meter` with its caption, three breakdown `row` items and a `source`. Check the title, the caption, €7,380, €615 a head, the meter caption, each breakdown value and the source show, the flight slider alone reads in euros, and one more person moves the total, the note, the meter caption and the breakdown together.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		const result = slotIn(canvasElement, "interactive-view-result")
+		await expect(
+			canvas.getByRole("heading", { name: "Offsite budget" }),
+		).toBeVisible()
+		await expect(result).toHaveTextContent("Total for the trip")
+		await expect(
+			slotIn(canvasElement, "interactive-view-total"),
+		).toHaveTextContent("€7,380")
+		await expect(result).toHaveTextContent("€615 a head")
+		await expect(result).toHaveTextContent("€2,620 under the €10k budget")
+		await expect(breakdownOf(canvasElement)).toEqual([
+			"House, 3 nights€3,600",
+			"Dinners€1,620",
+			"Flights€2,160",
+		])
+		await expect(
+			canvas.getByText("Prices from the house listing and Taberna da Rua"),
+		).toBeVisible()
+		await expect(
+			slotsIn(canvasElement, "interactive-view-slider-value").map(
+				(value) => value.textContent,
+			),
+		).toEqual(["12", "3", "€180"])
+
+		canvas.getByRole("slider", { name: "People" }).focus()
+		await userEvent.keyboard("{ArrowRight}")
+		await waitFor(() =>
+			expect(slotIn(canvasElement, "interactive-view-total")).toHaveTextContent(
+				"€7,695",
+			),
+		)
+		await expect(result).toHaveTextContent("€591.92 a head")
+		await expect(result).toHaveTextContent("€2,305 under the €10k budget")
+		await expect(breakdownOf(canvasElement)).toEqual([
+			"House, 3 nights€3,600",
+			"Dinners€1,755",
+			"Flights€2,340",
+		])
+	},
+})
+
+const CALLOUTS_ARTBOARD = `Two things to keep in mind before Friday.
+
+> [!NOTE] The table is held until Wednesday
+> Taberna da Rua keeps it for twelve without a deposit until then.
+
+> [!WARNING] Strike at Lisbon airport on Friday morning
+> Flights before noon may be cancelled. Land on Thursday evening if you can.`
+
+export const CalloutsWithTitles = meta.story({
+	args: { children: CALLOUTS_ARTBOARD, answerActions: ARTBOARD_ACTIONS },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Final page, Markdown 10. A `> [!NOTE]` and a `> [!WARNING]` callout, each titled by the text after its marker. Check each callout keeps its tone, shows its own title instead of Note or Warning, and keeps its body.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const [note, warning] = canvas.getAllByRole("note")
+		await expect(note).toHaveAttribute("data-tone", "note")
+		await expect(note).toHaveTextContent("The table is held until Wednesday")
+		await expect(note).toHaveTextContent("keeps it for twelve")
+		await expect(warning).toHaveAttribute("data-tone", "warning")
+		await expect(warning).toHaveTextContent(
+			"Strike at Lisbon airport on Friday morning",
+		)
+		await expect(warning).toHaveTextContent("Flights before noon")
+		await expect(canvas.queryByText(/^(?:Note|Warning)$/)).toBeNull()
+		await expect(canvas.queryByText(/\[!/)).toBeNull()
+	},
+})
+
+const COLLAPSIBLE_ARTBOARD = `Where the €7,380 goes, open a line for the detail.
+
+\`\`\`collapsible
+title: The house
+value: €3,600 · 49%
+
+Three nights at **Casa do Rio**, €1,200 a night for the twelve of us.
+
+title: Flights
+value: €2,160 · 29%
+
+Twelve returns at €180, booked together on Thursday.
+
+title: Dinners
+value: €1,620 · 22%
+
+- Taberna da Rua on the first night
+- Two nights at the house, cooked by Lena
+\`\`\``
+
+export const CollapsibleSectionsWithValues = meta.story({
+	args: { children: COLLAPSIBLE_ARTBOARD, answerActions: ARTBOARD_ACTIONS },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Final page, Markdown 11. A `collapsible` block of three sections, each a `title`, a `value` and a Markdown body. Check one card draws three rows with their label and value, and opening a row shows its body rendered as Markdown.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		await expect(slotsIn(canvasElement, "collapsible-sections")).toHaveLength(1)
+		await expect(
+			slotsIn(canvasElement, "collapsible-sections-head").map(
+				(head) => head.textContent,
+			),
+		).toEqual([
+			"The house€3,600 · 49%",
+			"Flights€2,160 · 29%",
+			"Dinners€1,620 · 22%",
+		])
+
+		await userEvent.click(canvas.getByRole("button", { name: /The house/ }))
+		await expect(await canvas.findByText("Casa do Rio")).toHaveProperty(
+			"tagName",
+			"STRONG",
+		)
+		await userEvent.click(canvas.getByRole("button", { name: /Dinners/ }))
+		await expect(
+			await canvas.findByText("Taberna da Rua on the first night"),
+		).toHaveProperty("tagName", "LI")
 	},
 })

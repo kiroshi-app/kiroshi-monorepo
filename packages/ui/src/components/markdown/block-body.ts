@@ -92,4 +92,10 @@ const readShapedBody = (source: string, shape: BodyShape) => {
 	return hasValidItems ? body : null
 }
 
-export { type BlockRecord, isHttpsUrl, readShapedBody }
+export {
+	type BlockRecord,
+	fitsShape,
+	isHttpsUrl,
+	type RecordShape,
+	readShapedBody,
+}

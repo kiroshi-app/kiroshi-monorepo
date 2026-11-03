@@ -18,13 +18,25 @@ interface AnswerMarksOptions {
 }
 
 export const CALLOUT_PROPERTY = "dataCallout"
+export const CALLOUT_TITLE_PROPERTY = "dataCalloutTitle"
 export const PENDING_PROPERTY = "dataPending"
 export const SOURCED_IMAGE_PROPERTY = "dataSourcedImage"
 export const LINKED_IMAGE_PROPERTY = "dataLinkedImage"
 
-const CALLOUT_MARKERS = { "[!NOTE]": "note", "[!WARNING]": "warning" } as const
+const CALLOUT_MARKER_LINE = /^\[!(NOTE|WARNING)\](?:[ \t]+([^\n]*))?(\n|$)/
+
+const CALLOUT_TONES = { NOTE: "note", WARNING: "warning" } as const
 
 const SOURCE_LEAD = "Source: "
+
+const SOURCED_IMAGE_FIELD = /^(Title|Favicon|Status|Chip): (.+)$/
+
+type SourcedImageFields = {
+	title?: string
+	favicon?: string
+	status?: string
+	chips: string[]
+}
 
 const CLOSING_FENCE = /^ {0,3}(?:`{3,}|~{3,})[ \t]*$/
 
@@ -47,14 +59,21 @@ const textOf = (node: HastNode): string =>
 		? (node.value ?? "")
 		: (node.children ?? []).map(textOf).join("")
 
-type CalloutMarker = keyof typeof CALLOUT_MARKERS
+type CalloutTone = keyof typeof CALLOUT_TONES
 
-const calloutMarkerOf = (lead: HastNode, followers: number) =>
-	(Object.keys(CALLOUT_MARKERS) as CalloutMarker[]).find(
-		(marker) =>
-			(lead.value === marker && followers === 0) ||
-			lead.value?.startsWith(`${marker}\n`),
-	)
+const calloutMarkerOf = (lead: HastNode, followers: number) => {
+	const match = CALLOUT_MARKER_LINE.exec(lead.value ?? "")
+	if (!match) return null
+
+	const [line, tone, title = "", lineEnd] = match
+	return lineEnd === "" && followers > 0
+		? null
+		: {
+				tone: CALLOUT_TONES[tone as CalloutTone],
+				title: title.trim(),
+				length: line.length,
+			}
+}
 
 const markCallout = (blockquote: HastNode) => {
 	const content = contentOf(blockquote)
@@ -66,7 +85,7 @@ const markCallout = (blockquote: HastNode) => {
 	const marker = calloutMarkerOf(lead, rest.length)
 	if (!marker) return
 
-	const remainder = (lead.value ?? "").slice(marker.length + 1)
+	const remainder = (lead.value ?? "").slice(marker.length)
 	const kept = remainder ? [{ ...lead, value: remainder }, ...rest] : rest
 	if (kept.length === 0 && content.length === 1) return
 
@@ -79,7 +98,8 @@ const markCallout = (blockquote: HastNode) => {
 	}
 	blockquote.properties = {
 		...blockquote.properties,
-		[CALLOUT_PROPERTY]: CALLOUT_MARKERS[marker],
+		[CALLOUT_PROPERTY]: marker.tone,
+		...(marker.title ? { [CALLOUT_TITLE_PROPERTY]: marker.title } : {}),
 	}
 }
 
@@ -90,28 +110,65 @@ const loneImageOf = (paragraph: HastNode) => {
 }
 
 const sourceLinkOf = (paragraph: HastNode) => {
-	const content = paragraph.children ?? []
-	const [lead, link] = content
+	const [lead, link, ...fieldNodes] = paragraph.children ?? []
+	const [firstField] = fieldNodes
 	const isSourceLine =
-		content.length === 2 &&
-		lead.type === "text" &&
+		lead?.type === "text" &&
 		lead.value === SOURCE_LEAD &&
-		isElement(link, "a")
-	return isSourceLine ? link : undefined
+		isElement(link, "a") &&
+		(!firstField ||
+			(firstField.type === "text" && firstField.value?.startsWith("\n")))
+	return isSourceLine ? { link, fieldNodes } : undefined
 }
+
+const withSourcedImageField = (
+	fields: SourcedImageFields,
+	line: string,
+): SourcedImageFields | null => {
+	const match = SOURCED_IMAGE_FIELD.exec(line)
+	if (!match) return null
+
+	const [, key, rawValue] = match
+	const value = rawValue.trim()
+	if (key === "Chip") return { ...fields, chips: [...fields.chips, value] }
+
+	const name =
+		key === "Title" ? "title" : key === "Favicon" ? "favicon" : "status"
+	const isTaken = fields[name] !== undefined
+	const isUnsafe = name === "favicon" && !isHttpsUrl(value)
+	return isTaken || isUnsafe ? null : { ...fields, [name]: value }
+}
+
+const sourcedImageFieldsOf = (fieldNodes: HastNode[]) =>
+	fieldNodes
+		.map(textOf)
+		.join("")
+		.split("\n")
+		.slice(1)
+		.reduce<SourcedImageFields | null>(
+			(fields, line) => (fields ? withSourcedImageField(fields, line) : null),
+			{ chips: [] },
+		)
 
 const sourcedImageOf = (paragraph: HastNode, next: HastNode | undefined) => {
 	if (!isElement(paragraph, "p") || !isElement(next, "p") || !next) return null
 
 	const image = loneImageOf(paragraph)
-	const link = sourceLinkOf(next)
-	if (!image || !link) return null
+	const sourceLine = sourceLinkOf(next)
+	if (!image || !sourceLine) return null
 
+	const { link, fieldNodes } = sourceLine
+	const fields = sourcedImageFieldsOf(fieldNodes)
 	const src = String(image.properties?.src ?? "")
 	const alt = String(image.properties?.alt ?? "").trim()
 	const href = String(link.properties?.href ?? "")
 	const name = textOf(link).trim()
-	const holds = isHttpsUrl(src) && isHttpsUrl(href) && alt !== "" && name !== ""
+	const holds =
+		fields !== null &&
+		isHttpsUrl(src) &&
+		isHttpsUrl(href) &&
+		alt !== "" &&
+		name !== ""
 
 	return holds
 		? {
@@ -122,6 +179,10 @@ const sourcedImageOf = (paragraph: HastNode, next: HastNode | undefined) => {
 					src,
 					alt,
 					dataSourceName: name,
+					dataTitle: fields.title,
+					dataFavicon: fields.favicon,
+					dataStatus: fields.status,
+					dataChips: fields.chips,
 				},
 				children: [],
 			}
