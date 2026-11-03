@@ -11,7 +11,7 @@ use super::contract::{
 	LibraryDocument, LibraryDocumentState, LibraryError, LibraryFile, LibraryImage, LibraryImport,
 	LibraryItem, LibraryTemplate,
 };
-use super::presence::{share_caret, unseat_writer, Seat};
+use super::presence::{seated_name, share_caret, unseat_writer, Seat};
 use super::{
 	apply_update, clipboard_payload, clipboard_payload_of_bytes, create_document, import,
 	import_paths, list, open_document, read_document, read_file, read_image, read_thumbnail,
@@ -152,9 +152,15 @@ pub async fn library_share_caret<R: Runtime>(
 		unseat_writer(&app, &space_id, &name, &seat);
 		return Ok(());
 	};
-	let database =
-		state.as_ref().map_err(|failure| LibraryError::Unavailable { failure: failure.into() })?;
-	let writer_name = caller.author(&app, database).await?.name;
+	let writer_name = match seated_name(&app, &space_id, &name, &seat) {
+		Some(seated) => seated,
+		None => {
+			let database = state
+				.as_ref()
+				.map_err(|failure| LibraryError::Unavailable { failure: failure.into() })?;
+			caller.author(&app, database).await?.name
+		}
+	};
 	share_caret(&app, &root(&app)?, &space_id, &name, seat, writer_name, &caret)
 }
 

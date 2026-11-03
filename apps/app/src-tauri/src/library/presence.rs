@@ -67,33 +67,27 @@ impl Presences {
 		name: &str,
 		seat: &Seat,
 	) -> Option<LibraryDocumentPresence> {
-		let mut held = self.held();
-		let key = (space_id.to_owned(), name.to_owned());
-		let writers = held.get_mut(&key)?;
-		let count = writers.len();
-		writers.retain(|held| held.seat != *seat);
-		if writers.len() == count {
-			return None;
-		}
-		let presence = presence_of(space_id, name, writers);
-		if writers.is_empty() {
-			held.remove(&key);
-		}
-		Some(presence)
+		unseated(&mut self.held(), &(space_id.to_owned(), name.to_owned()), seat)
 	}
 
 	pub(crate) fn window_closed(&self, label: &str) -> Vec<LibraryDocumentPresence> {
 		let seat = Seat::Window(label.to_owned());
-		let seated_in: Vec<Key> = self
-			.held()
+		let mut held = self.held();
+		let keys: Vec<Key> = held.keys().cloned().collect();
+		keys.iter().filter_map(|key| unseated(&mut held, key, &seat)).collect()
+	}
+
+	pub(crate) fn name_of(
+		&self,
+		space_id: &str,
+		name: &str,
+		seat: &Seat,
+	) -> Option<Option<String>> {
+		self.held()
+			.get(&(space_id.to_owned(), name.to_owned()))?
 			.iter()
-			.filter(|(_, writers)| writers.iter().any(|held| held.seat == seat))
-			.map(|(key, _)| key.clone())
-			.collect();
-		seated_in
-			.into_iter()
-			.filter_map(|(space_id, name)| self.left(&space_id, &name, &seat))
-			.collect()
+			.find(|held| held.seat == *seat)
+			.map(|held| held.name.clone())
 	}
 
 	pub(crate) fn lease(&self, space_id: &str, name: &str, seat: &Seat, now: Instant) -> Lease {
@@ -112,6 +106,24 @@ impl Presences {
 	fn held(&self) -> MutexGuard<'_, HashMap<Key, Vec<Seated>>> {
 		self.0.lock().unwrap_or_else(PoisonError::into_inner)
 	}
+}
+
+fn unseated(
+	held: &mut HashMap<Key, Vec<Seated>>,
+	key: &Key,
+	seat: &Seat,
+) -> Option<LibraryDocumentPresence> {
+	let writers = held.get_mut(key)?;
+	let count = writers.len();
+	writers.retain(|held| held.seat != *seat);
+	if writers.len() == count {
+		return None;
+	}
+	let presence = presence_of(&key.0, &key.1, writers);
+	if writers.is_empty() {
+		held.remove(key);
+	}
+	Some(presence)
 }
 
 fn presence_of(space_id: &str, name: &str, writers: &[Seated]) -> LibraryDocumentPresence {
@@ -153,6 +165,15 @@ pub(crate) fn share_caret<R: Runtime>(
 		tokio::spawn(lapsing(app.clone(), space_id.to_owned(), name.to_owned(), seat));
 	}
 	Ok(())
+}
+
+pub(crate) fn seated_name<R: Runtime>(
+	app: &AppHandle<R>,
+	space_id: &str,
+	name: &str,
+	seat: &Seat,
+) -> Option<Option<String>> {
+	presences(app).name_of(space_id, name, seat)
 }
 
 pub(crate) fn seat_writer<R: Runtime>(

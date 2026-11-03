@@ -372,11 +372,14 @@ pub(crate) fn located(
 }
 
 fn passage_ends(text: &str, passage: &str) -> Vec<usize> {
-	(0..=text.len())
-		.filter(|start| text.is_char_boundary(*start) && text[*start..].starts_with(passage))
-		.map(|start| start + passage.len())
-		.take(2)
-		.collect()
+	let Some(first) = text.find(passage) else {
+		return Vec::new();
+	};
+	let past_first = text[first..].chars().next().map_or(text.len() + 1, |c| first + c.len_utf8());
+	let second = text.get(past_first..).and_then(|rest| rest.find(passage));
+	let mut ends = vec![first + passage.len()];
+	ends.extend(second.map(|at| past_first + at + passage.len()));
+	ends
 }
 
 fn inserted_by(
