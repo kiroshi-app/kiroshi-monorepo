@@ -7,13 +7,13 @@ import {
 	tokenStyleIn,
 } from "@workspace/storybook/story-utils"
 import { Icons } from "@workspace/ui/components/icons"
-import { TitleBarTabChip } from "@workspace/ui/components/title-bar-tab-chip"
+import {
+	TITLE_BAR_TAB_CHIP_DRAG_SIZE,
+	TITLE_BAR_TAB_CHIP_TITLE_MAX_WIDTH,
+	TitleBarTabChip,
+} from "@workspace/ui/components/title-bar-tab-chip"
 
 const DARK = { theme: "dark" }
-
-const TITLE_MAX_WIDTH = 200
-
-const CHIP_WIDTH_AT_MAX_TITLE = 256
 
 const LONG_TITLE =
 	"Quarterly pricing review with the finance team and every regional lead"
@@ -25,8 +25,7 @@ const meta = preview.meta({
 		layout: "centered",
 		docs: {
 			description: {
-				component:
-					"One tab lifted out of the title bar, drawn alone: its icon, its title on one line up to 200px, and a decorative close glyph, on the menu surface with its ring and shadow. The tear-off ghost follows the pointer with it; the strip draws an incoming tab through it too.",
+				component: `One tab lifted out of the title bar, drawn alone: its icon, its title on one line up to ${TITLE_BAR_TAB_CHIP_TITLE_MAX_WIDTH}px, and a decorative close glyph, on the menu surface with its ring and shadow. The tear-off ghost follows the pointer with it; the strip draws an incoming tab through it too.`,
 			},
 		},
 	},
@@ -63,7 +62,9 @@ const expectChipAnatomy = async (canvasElement: HTMLElement) => {
 		"4px",
 	])
 	await expect(style.columnGap).toBe("6px")
-	await expect(chip.getBoundingClientRect().height).toBe(28)
+	await expect(chip.getBoundingClientRect().height).toBe(
+		TITLE_BAR_TAB_CHIP_DRAG_SIZE.height,
+	)
 	await expect(getComputedStyle(title).whiteSpace).toBe("nowrap")
 	await expect(getComputedStyle(title).textOverflow).toBe("ellipsis")
 	await expect(close).toHaveAttribute("aria-hidden", "true")
@@ -79,15 +80,18 @@ const playShortTitle = async ({ canvasElement }: ChipPlayContext) => {
 	await expect(chip).toHaveAttribute("data-state", "allowed")
 	await expect(title.scrollWidth).toBe(title.clientWidth)
 	await expect(chip.getBoundingClientRect().width).toBeLessThan(
-		CHIP_WIDTH_AT_MAX_TITLE,
+		TITLE_BAR_TAB_CHIP_DRAG_SIZE.width,
 	)
 }
 
 const expectLongTitleChip = async (canvasElement: HTMLElement) => {
 	const { chip, title } = await expectChipAnatomy(canvasElement)
-	await expect(title.getBoundingClientRect().width).toBe(TITLE_MAX_WIDTH)
+	await expect(title.getBoundingClientRect().width).toBe(
+		TITLE_BAR_TAB_CHIP_TITLE_MAX_WIDTH,
+	)
 	await expect(title.scrollWidth).toBeGreaterThan(title.clientWidth)
-	await expect(chip.getBoundingClientRect().width).toBe(CHIP_WIDTH_AT_MAX_TITLE)
+	const { width, height } = chip.getBoundingClientRect()
+	await expect({ width, height }).toEqual(TITLE_BAR_TAB_CHIP_DRAG_SIZE)
 	return chip
 }
 
@@ -135,8 +139,7 @@ export const LongTitle = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story:
-					"Tear-off 2, light: a title past 200px, cut with an ellipsis, the chip 256px wide.",
+				story: `Tear-off 2, light: a title past ${TITLE_BAR_TAB_CHIP_TITLE_MAX_WIDTH}px, cut with an ellipsis, the chip ${TITLE_BAR_TAB_CHIP_DRAG_SIZE.width}px wide.`,
 			},
 		},
 	},
@@ -149,8 +152,7 @@ export const LongTitleDark = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story:
-					"Tear-off 2, dark: the chip as the artboard draws it, a title past 200px cut with an ellipsis, 256px wide. Pick `LongTitle` for the light theme.",
+				story: `Tear-off 2, dark: the chip as the artboard draws it, a title past ${TITLE_BAR_TAB_CHIP_TITLE_MAX_WIDTH}px cut with an ellipsis, ${TITLE_BAR_TAB_CHIP_DRAG_SIZE.width}px wide. Pick \`LongTitle\` for the light theme.`,
 			},
 		},
 	},
