@@ -7,6 +7,16 @@ export const SHOTO = "bot-shoto"
 
 type Sent = { botId: string; text: string }
 
+type FakeProfile = {
+	isShotoRunOwed: boolean
+	isShotoRunHeld: boolean
+}
+
+const createFakeProfile = (): FakeProfile => ({
+	isShotoRunOwed: false,
+	isShotoRunHeld: false,
+})
+
 export type FakeFlowWorld = OnboardingFlowWorld & {
 	step: OnboardingStep
 	stored: OnboardingStep[]
@@ -17,14 +27,18 @@ export type FakeFlowWorld = OnboardingFlowWorld & {
 	firstRunDone: number
 	refusesStep: boolean
 	refusesFirstRunDone: boolean
-	shotoRunOwed: boolean
+	profile: FakeProfile
+	refusesOpen: boolean
+	unsendable: string[]
 	shoto: string | null
 	firstCompanion: string | null
 	names: Record<string, string>
 	greetingOutcome: SummonOutcome
 }
 
-export const createFakeFlowWorld = (): FakeFlowWorld => {
+export const createFakeFlowWorld = (
+	profile: FakeProfile = createFakeProfile(),
+): FakeFlowWorld => {
 	const fake: FakeFlowWorld = {
 		step: "welcome",
 		stored: [],
@@ -35,7 +49,9 @@ export const createFakeFlowWorld = (): FakeFlowWorld => {
 		firstRunDone: 0,
 		refusesStep: false,
 		refusesFirstRunDone: false,
-		shotoRunOwed: false,
+		profile,
+		refusesOpen: false,
+		unsendable: [],
 		shoto: SHOTO,
 		firstCompanion: null,
 		names: {},
@@ -61,12 +77,23 @@ export const createFakeFlowWorld = (): FakeFlowWorld => {
 			}
 			fake.firstRunDone += 1
 		},
-		isShotoRunOwed: () => fake.shotoRunOwed,
+		isShotoRunOwed: () => fake.profile.isShotoRunOwed,
 		oweShotoRun: () => {
-			fake.shotoRunOwed = true
+			fake.profile.isShotoRunOwed = true
 		},
 		clearShotoRunOwed: () => {
-			fake.shotoRunOwed = false
+			fake.profile.isShotoRunOwed = false
+		},
+		holdShotoRun: async (run) => {
+			if (fake.profile.isShotoRunHeld) {
+				return
+			}
+			fake.profile.isShotoRunHeld = true
+			try {
+				await run()
+			} finally {
+				fake.profile.isShotoRunHeld = false
+			}
 		},
 		shotoId: () => fake.shoto,
 		firstCompanionId: () => fake.firstCompanion,
@@ -75,9 +102,15 @@ export const createFakeFlowWorld = (): FakeFlowWorld => {
 		},
 		botNameOf: (botId) => fake.names[botId] ?? null,
 		openConversation: async (botId) => {
+			if (fake.refusesOpen) {
+				throw { kind: "transport", detail: "the host is unreachable" }
+			}
 			fake.opened.push(botId)
 		},
 		sendTo: async (botId, text) => {
+			if (fake.unsendable.includes(text)) {
+				throw { kind: "transport", detail: "the host is unreachable" }
+			}
 			fake.sent.push({ botId, text })
 		},
 		hasSummoned: (botId, summons) =>
