@@ -3,7 +3,10 @@ import { expect, fn, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { PromptAttachButton } from "@workspace/ui/components/prompt-attach-button"
-import { PromptAttachments } from "@workspace/ui/components/prompt-attachments"
+import {
+	PromptAttachments,
+	type PromptReplyAttachment,
+} from "@workspace/ui/components/prompt-attachments"
 import {
 	LONG_PROMPT_ATTACHMENTS,
 	PROMPT_ATTACHMENTS,
@@ -11,6 +14,54 @@ import {
 import { PromptInput } from "@workspace/ui/components/prompt-input"
 
 const attach = fn()
+
+const REPLY_MIN_WIDTH = 236
+
+const REPLY_MAX_WIDTH = 360
+
+const EXCERPT_REPLY: PromptReplyAttachment = {
+	id: "reply-drift",
+	author: "Atlas",
+	excerpt:
+		"the studio tablet came back with a clock drift of about four minutes",
+	isExcerpt: true,
+}
+
+const WHOLE_REPLY: PromptReplyAttachment = {
+	id: "reply-lost",
+	author: "Ada Martin",
+	excerpt: "Did we lose anything?",
+}
+
+const UNBREAKABLE_REPLY: PromptReplyAttachment = {
+	id: "reply-hash",
+	author: "Atlas",
+	excerpt:
+		"sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a089f86d081884c7d659a2feaa0c55ad015",
+	isExcerpt: true,
+}
+
+const replyChipsIn = (root: HTMLElement) =>
+	Array.from(
+		root.querySelectorAll<HTMLElement>('[data-slot="prompt-reply-attachment"]'),
+	)
+
+const excerptOf = (chip: HTMLElement) => {
+	const excerpt = chip.querySelector<HTMLElement>(
+		'[data-slot="prompt-reply-excerpt"]',
+	)
+	if (!excerpt) throw new Error("No excerpt drawn")
+	return excerpt
+}
+
+const expectReplySizedToContent = async (chip: HTMLElement) => {
+	const { width } = chip.getBoundingClientRect()
+	await expect(width).toBeGreaterThanOrEqual(REPLY_MIN_WIDTH)
+	await expect(width).toBeLessThanOrEqual(REPLY_MAX_WIDTH)
+	const excerpt = excerptOf(chip)
+	await expect(excerpt.getBoundingClientRect().height).toBe(14)
+	await expect(getComputedStyle(excerpt).textOverflow).toBe("ellipsis")
+}
 
 const StagedComposer = () => {
 	const [items, setItems] = useState(PROMPT_ATTACHMENTS)
@@ -136,5 +187,95 @@ export const InComposer = meta.story({
 
 		await expect(canvas.queryByRole("list")).not.toBeInTheDocument()
 		await waitFor(() => expect(form?.dataset.expanded).toBe("false"))
+	},
+})
+
+export const ReplyExcerpt = meta.story({
+	args: { items: [], replies: [EXCERPT_REPLY], onRemoveReply: fn() },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Artboard 2 of Selection and Reply: a reply to a passage selected in a message. Check that the excerpt sits inside curly quotes, that the chip grows with its content between 236 and 360 wide, the excerpt on one line ending in an ellipsis, and that its remove control reports the reply id. `ReplyWholeMessage` covers a reply to a whole message, shown bare.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		const [chip] = replyChipsIn(canvasElement)
+		await expect(excerptOf(chip)).toHaveTextContent(
+			`“${EXCERPT_REPLY.excerpt}”`,
+		)
+		await expectReplySizedToContent(chip)
+		await expect(chip.getBoundingClientRect().width).toBe(REPLY_MAX_WIDTH)
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Remove the reply to Atlas" }),
+		)
+		await expect(args.onRemoveReply).toHaveBeenCalledWith(EXCERPT_REPLY.id)
+	},
+})
+
+export const ReplyWholeMessage = meta.story({
+	args: { items: [], replies: [WHOLE_REPLY], onRemoveReply: fn() },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Artboard 3 of Selection and Reply: a reply to a whole message, from the author line or a selection of all of it. Check that the message text shows bare, with no quotes, and that a short message keeps the chip at its 236 minimum rather than shrinking it.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const [chip] = replyChipsIn(canvasElement)
+		await expect(excerptOf(chip).textContent).toBe(WHOLE_REPLY.excerpt)
+		await expectReplySizedToContent(chip)
+		await expect(chip.getBoundingClientRect().width).toBe(REPLY_MIN_WIDTH)
+	},
+})
+
+export const TwoReplies = meta.story({
+	args: {
+		items: [],
+		replies: [EXCERPT_REPLY, WHOLE_REPLY],
+		onRemoveReply: fn(),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Artboard 4 of Selection and Reply: two replies held for the next message, an excerpt and a whole message. Check that each chip keeps its own width and its own quoting, in the order they were added, 6 apart.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const [excerpt, whole] = replyChipsIn(canvasElement)
+		await expect(excerptOf(excerpt).textContent).toBe(
+			`“${EXCERPT_REPLY.excerpt}”`,
+		)
+		await expect(excerptOf(whole).textContent).toBe(WHOLE_REPLY.excerpt)
+		for (const chip of [excerpt, whole]) await expectReplySizedToContent(chip)
+		const row = excerpt.parentElement
+		if (!row) throw new Error("No chip row drawn")
+		await expect(getComputedStyle(row).columnGap).toBe("6px")
+	},
+})
+
+export const ReplyUnbreakableExcerpt = meta.story({
+	tags: ["test-only"],
+	args: { items: [], replies: [UNBREAKABLE_REPLY], onRemoveReply: fn() },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"An excerpt with no break opportunity, a hash pasted as one word. Check that the chip still stops at 360 and the excerpt still ends in an ellipsis on one line instead of widening the chip or the row.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const [chip] = replyChipsIn(canvasElement)
+		await expectReplySizedToContent(chip)
+		await expect(chip.getBoundingClientRect().width).toBe(REPLY_MAX_WIDTH)
+		const excerpt = excerptOf(chip)
+		await expect(excerpt.scrollWidth).toBeGreaterThan(excerpt.clientWidth)
 	},
 })

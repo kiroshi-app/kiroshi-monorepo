@@ -37,15 +37,22 @@ type SelectionToolbarFormat =
 	| "heading"
 	| "list"
 
-type SelectionToolbarActions = {
-	onBold?: () => void
-	onItalic?: () => void
-	onStrikethrough?: () => void
-	onCode?: () => void
-	onLink?: (url: string) => void
-	onHeading?: () => void
-	onList?: () => void
-}
+type SelectionToolbarMessageAction = "reply" | "copy"
+
+type SelectionToolbarAction =
+	| {
+			name: Exclude<SelectionToolbarFormat, "link">
+			isOn: boolean
+			onPress?: () => void
+	  }
+	| { name: "link"; isOn: boolean }
+	| { name: SelectionToolbarMessageAction; onPress: () => void }
+
+const SELECTION_TOOLBAR_SEPARATOR = "separator"
+
+type SelectionToolbarItem =
+	| SelectionToolbarAction
+	| typeof SELECTION_TOOLBAR_SEPARATOR
 
 type SelectionToolbarAnchor = {
 	centre: number
@@ -66,6 +73,11 @@ const SURFACE =
 const BUTTON =
 	"size-7 min-w-7 rounded-md px-0 transition-none hover:bg-selection-toolbar-highlight aria-pressed:bg-user-bubble/15 aria-pressed:text-user-bubble hover:aria-pressed:bg-user-bubble/15 hover:aria-pressed:text-user-bubble"
 
+const PLAIN_BUTTON = cn(
+	BUTTON,
+	"border-0 active:not-aria-[haspopup]:translate-y-0 dark:hover:bg-selection-toolbar-highlight",
+)
+
 const TOOLTIP = cn(
 	"rounded-control p-1.5 font-medium text-card break-words **:data-[slot=kbd]:rounded-md [&>[data-side]]:hidden",
 	STILL_UNDER_REDUCED_MOTION,
@@ -82,6 +94,8 @@ const NAME = {
 	link: "library.editor.toolbar.link",
 	heading: "library.editor.toolbar.heading",
 	list: "library.editor.toolbar.list",
+	reply: "chat:turn.reply",
+	copy: "chat:turn.copy",
 } as const
 
 const SHORTCUT_OF = {
@@ -92,9 +106,11 @@ const SHORTCUT_OF = {
 	link: "library.editor.toolbar.linkShortcut",
 	heading: undefined,
 	list: undefined,
-} as const satisfies Record<SelectionToolbarFormat, string | undefined>
+	reply: undefined,
+	copy: undefined,
+} as const satisfies Record<SelectionToolbarAction["name"], string | undefined>
 
-const ICON: Record<SelectionToolbarFormat, Icon> = {
+const ICON: Record<SelectionToolbarAction["name"], Icon> = {
 	bold: Icons.Bold,
 	italic: Icons.Italic,
 	strikethrough: Icons.Strikethrough,
@@ -102,25 +118,21 @@ const ICON: Record<SelectionToolbarFormat, Icon> = {
 	link: Icons.Link,
 	heading: Icons.Heading,
 	list: Icons.List,
+	reply: Icons.Reply,
+	copy: Icons.Copy,
 }
 
-type FormatButtonProps = {
-	format: SelectionToolbarFormat
-	isOn: boolean
+type ActionButtonProps = {
+	action: SelectionToolbarAction
 	onPress?: () => void
 	buttonRef?: Ref<HTMLButtonElement>
 }
 
-const FormatButton = ({
-	format,
-	isOn,
-	onPress,
-	buttonRef,
-}: FormatButtonProps) => {
-	const { t } = useTranslation("common")
-	const name = t(NAME[format])
-	const shortcut = SHORTCUT_OF[format]
-	const FormatIcon = ICON[format]
+const ActionButton = ({ action, onPress, buttonRef }: ActionButtonProps) => {
+	const { t } = useTranslation(["common", "chat"])
+	const name = t(NAME[action.name])
+	const shortcut = SHORTCUT_OF[action.name]
+	const ActionIcon = ICON[action.name]
 
 	return (
 		<Tooltip>
@@ -131,15 +143,24 @@ const FormatButton = ({
 						aria-label={name}
 						ref={buttonRef}
 						render={
-							<Toggle
-								className={BUTTON}
-								onPressedChange={() => onPress?.()}
-								pressed={isOn}
-								size="sm"
-							/>
+							"isOn" in action ? (
+								<Toggle
+									className={BUTTON}
+									onPressedChange={() => onPress?.()}
+									pressed={action.isOn}
+									size="sm"
+								/>
+							) : (
+								<Button
+									className={PLAIN_BUTTON}
+									onClick={onPress}
+									size="icon-sm"
+									variant="ghost"
+								/>
+							)
 						}
 					>
-						<FormatIcon aria-hidden="true" />
+						<ActionIcon aria-hidden="true" />
 					</Toolbar.Button>
 				}
 			/>
@@ -229,10 +250,12 @@ const LinkField = ({ link = "", onConfirm, onCancel }: LinkFieldProps) => {
 	)
 }
 
-type SelectionToolbarProps = SelectionToolbarActions & {
+type SelectionToolbarProps = {
 	anchor: SelectionToolbarAnchor
-	activeFormats?: readonly SelectionToolbarFormat[]
+	label: string
+	actions: readonly SelectionToolbarItem[]
 	link?: string
+	onLink?: (url: string) => void
 	isLinking?: boolean
 	onLinkingChange?: (isLinking: boolean) => void
 }
@@ -242,19 +265,13 @@ const keepTextSelection = (event: MouseEvent<HTMLElement>) =>
 
 const SelectionToolbar = ({
 	anchor,
-	activeFormats = [],
+	label,
+	actions,
 	link,
-	onBold,
-	onItalic,
-	onStrikethrough,
-	onCode,
 	onLink,
-	onHeading,
-	onList,
 	isLinking: isLinkingProp,
 	onLinkingChange,
 }: SelectionToolbarProps) => {
-	const { t } = useTranslation("common")
 	const [isOwnLinking, setIsOwnLinking] = useState(false)
 	const isLinking = isLinkingProp ?? isOwnLinking
 	const setIsLinking = (next: boolean) => {
@@ -270,8 +287,6 @@ const SelectionToolbar = ({
 	}, [])
 
 	const isBelow = anchor.roomAbove < height + SELECTION_GAP
-	const isOn = (format: SelectionToolbarFormat) =>
-		activeFormats.includes(format)
 
 	const returnToBar = () => {
 		flushSync(() => setIsLinking(false))
@@ -305,36 +320,29 @@ const SelectionToolbar = ({
 				/>
 			) : (
 				<Toolbar.Root
-					aria-label={t("library.editor.toolbar.label")}
+					aria-label={label}
 					className={cn("flex items-center gap-0.5", SURFACE)}
 					onMouseDown={keepTextSelection}
 				>
-					<FormatButton format="bold" isOn={isOn("bold")} onPress={onBold} />
-					<FormatButton
-						format="italic"
-						isOn={isOn("italic")}
-						onPress={onItalic}
-					/>
-					<FormatButton
-						format="strikethrough"
-						isOn={isOn("strikethrough")}
-						onPress={onStrikethrough}
-					/>
-					<FormatButton format="code" isOn={isOn("code")} onPress={onCode} />
-					<ToolbarSeparator />
-					<FormatButton
-						buttonRef={linkButton}
-						format="link"
-						isOn={isOn("link")}
-						onPress={() => setIsLinking(true)}
-					/>
-					<ToolbarSeparator />
-					<FormatButton
-						format="heading"
-						isOn={isOn("heading")}
-						onPress={onHeading}
-					/>
-					<FormatButton format="list" isOn={isOn("list")} onPress={onList} />
+					{actions.map((action, index) =>
+						action === SELECTION_TOOLBAR_SEPARATOR ? (
+							// biome-ignore lint/suspicious/noArrayIndexKey: a separator is identified by its place between two groups
+							<ToolbarSeparator key={`separator-${index}`} />
+						) : action.name === "link" ? (
+							<ActionButton
+								action={action}
+								buttonRef={linkButton}
+								key={action.name}
+								onPress={() => setIsLinking(true)}
+							/>
+						) : (
+							<ActionButton
+								action={action}
+								key={action.name}
+								onPress={action.onPress}
+							/>
+						),
+					)}
 				</Toolbar.Root>
 			)}
 		</div>
@@ -342,10 +350,12 @@ const SelectionToolbar = ({
 }
 
 export {
+	SELECTION_TOOLBAR_SEPARATOR,
 	SELECTION_TOOLBAR_SLOT,
 	SelectionToolbar,
-	type SelectionToolbarActions,
+	type SelectionToolbarAction,
 	type SelectionToolbarAnchor,
 	type SelectionToolbarFormat,
+	type SelectionToolbarItem,
 	type SelectionToolbarProps,
 }

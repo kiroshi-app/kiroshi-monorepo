@@ -116,6 +116,7 @@ const chat = {
 		copy: "Copy",
 		you: "You",
 		reply: "Reply",
+		selection: "Selected text",
 		pin: "Pin",
 		unpin: "Unpin",
 		copied: "Copied",
@@ -156,6 +157,7 @@ const chat = {
 		jump: "{{author}}: {{excerpt}}",
 		dismiss: "Cancel reply",
 		dismissFrom: "Remove the reply to {{author}}",
+		excerpt: "“{{excerpt}}”",
 	},
 	pinned: {
 		title: "Pinned messages",

@@ -58,6 +58,25 @@ const QUOTED_BOT = {
 	onJump: jumpToQuoted,
 } as const
 
+const jumpToExcerpt = fn()
+
+const jumpToWhole = fn()
+
+const QUOTED_EXCERPT = {
+	author: "Atlas",
+	excerpt: "`@workspace/ui` holds the design system",
+	isExcerpt: true,
+	from: "assistant",
+	onJump: jumpToExcerpt,
+} as const
+
+const QUOTED_WHOLE = {
+	author: "Skippy",
+	excerpt: KEPT_SKILL,
+	from: "assistant",
+	onJump: jumpToWhole,
+} as const
+
 const rightClickOn = async (target: HTMLElement) => {
 	const bounds = target.getBoundingClientRect()
 	const coords = { clientX: bounds.left + 8, clientY: bounds.top + 8 }
@@ -135,7 +154,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The transcript rows. Every message is one bubble, radius 16 and padding 18 on every side, with its author line at the foot, 6 below the words. An agent sits on the start side up to 580 wide; another person and you sit on the end side up to 480 wide, your bubble in the Space colour. The author line carries the avatar, the name (in the agent colour for an agent), the role badge of an agent and the send time. Hovering a bubble or focusing it raises its fill from white 5 to 8 percent with no transition and shows Pin, Reply and Copy in the author line; a right click opens the same three in a menu. `state` ends an answer: `cancelled` appends Stopped, `failed` appends This response failed and a Retry when `onRetry` is given. `work` swaps the author line for the work line at the same height while the agent answers. A `UserTurn` that did not send draws a dimmed bubble with the reason and a Retry under it; a `queued` one swaps its author line for the Waiting to be sent chip. `repliedTo` draws the quoted message as a card inside the bubble, above the words. `cause` names the routine or mission that opened the answer above its bubble. Neither scrolls nor animates the list: that belongs to the transcript around them.",
+					"The transcript rows. Every message is one bubble, radius 16 and padding 18 on every side, with its author line at the foot, 6 below the words. An agent sits on the start side up to 580 wide; another person and you sit on the end side up to 480 wide, your bubble in the Space colour. The author line carries the avatar, the name (in the agent colour for an agent), the role badge of an agent and the send time. Hovering a bubble or focusing it raises its fill from white 5 to 8 percent with no transition and shows Pin, Reply and Copy in the author line; a right click opens the same three in a menu. `state` ends an answer: `cancelled` appends Stopped, `failed` appends This response failed and a Retry when `onRetry` is given. `work` swaps the author line for the work line at the same height while the agent answers. A `UserTurn` that did not send draws a dimmed bubble with the reason and a Retry under it; a `queued` one swaps its author line for the Waiting to be sent chip. `repliedTo` draws one card per replied message inside the bubble, in order, above the words: a passage inside curly quotes, a whole message bare. `cause` names the routine or mission that opened the answer above its bubble. Neither scrolls nor animates the list: that belongs to the transcript around them.",
 			},
 		},
 	},
@@ -850,7 +869,7 @@ export const Working = meta.story({
 export const Quoted = meta.story({
 	render: () => (
 		<div className="mx-auto flex max-w-170 flex-col gap-3">
-			<UserTurn copyText={QUESTION} repliedTo={QUOTED_BOT}>
+			<UserTurn copyText={QUESTION} repliedTo={[QUOTED_BOT]}>
 				{QUESTION}
 			</UserTurn>
 		</div>
@@ -870,6 +889,50 @@ export const Quoted = meta.story({
 		await expect(getComputedStyle(card).borderTopLeftRadius).toBe("10px")
 		await userEvent.click(card)
 		await expect(jumpToQuoted).toHaveBeenCalledTimes(1)
+	},
+})
+
+export const RepliesToTwo = meta.story({
+	render: () => (
+		<div className="mx-auto flex max-w-170 flex-col gap-3">
+			<UserTurn copyText={QUESTION} repliedTo={[QUOTED_EXCERPT, QUOTED_WHOLE]}>
+				{QUESTION}
+			</UserTurn>
+		</div>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Artboard 5 of Selection and Reply: a message sent in reply to a passage of one message and to the whole of another. Check that one card stands per replied message, in the order they were replied to, 4 apart and 8 above the words, that the passage shows inside curly quotes while the whole message shows bare, and that pressing a card jumps to its own message. `Quoted` covers a single reply.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		jumpToExcerpt.mockClear()
+		jumpToWhole.mockClear()
+		const [excerpt, whole] = canvas.getAllByRole("button", {
+			name: /^(Atlas|Skippy): /,
+		})
+		await expect(excerpt).toHaveAccessibleName(
+			`Atlas: “${QUOTED_EXCERPT.excerpt}”`,
+		)
+		await expect(excerpt).toHaveTextContent(`“${QUOTED_EXCERPT.excerpt}”`)
+		await expect(whole).toHaveAccessibleName(`Skippy: ${KEPT_SKILL}`)
+		await expect(
+			whole.getBoundingClientRect().top -
+				excerpt.getBoundingClientRect().bottom,
+		).toBe(4)
+		await expect(
+			canvas.getByText(QUESTION).getBoundingClientRect().top -
+				whole.getBoundingClientRect().bottom,
+		).toBe(8)
+
+		await userEvent.click(whole)
+		await expect(jumpToWhole).toHaveBeenCalledOnce()
+		await expect(jumpToExcerpt).not.toHaveBeenCalled()
+		await userEvent.click(excerpt)
+		await expect(jumpToExcerpt).toHaveBeenCalledOnce()
 	},
 })
 

@@ -70,7 +70,7 @@ export const ThreadTurn = memo(function ThreadTurn({
 	const person = row.role === "user" ? personOf(row) : undefined
 	const { text, attachments } = messageWithAttachments(row.text)
 	const content = card ?? <TurnBody attachments={attachments} text={text} />
-	const repliedTo = quoted ? toQuote(quoted) : undefined
+	const repliedTo = quoted ? [toQuote(quoted)] : undefined
 	const pin = () => {
 		onPin(row.messageId)
 	}
@@ -178,7 +178,7 @@ export const RefusedTurn = ({
 			copyText={message.text}
 			name={readerName}
 			onRetry={() => onSendAgain(message.id)}
-			repliedTo={repliedTo}
+			repliedTo={repliedTo && [repliedTo]}
 			state="failed"
 		>
 			<TurnBody {...messageWithAttachments(message.text)} />

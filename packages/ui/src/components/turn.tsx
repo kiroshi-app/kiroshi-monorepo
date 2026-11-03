@@ -102,7 +102,7 @@ interface UserTurnProps {
 	now?: number
 	copyText?: string
 	messageId?: string
-	repliedTo?: QuotedMessage
+	repliedTo?: readonly QuotedMessage[]
 	onReply?: () => void
 	onPin?: () => void
 	pinned?: boolean
@@ -120,7 +120,7 @@ type AssistantTurnProps = {
 	now?: number
 	copyText?: string
 	messageId?: string
-	repliedTo?: QuotedMessage
+	repliedTo?: readonly QuotedMessage[]
 	onReply?: () => void
 	onPin?: () => void
 	onRetry?: () => void
@@ -147,7 +147,7 @@ type PersonTurnProps = {
 	now?: number
 	copyText?: string
 	messageId?: string
-	repliedTo?: QuotedMessage
+	repliedTo?: readonly QuotedMessage[]
 	onReply?: () => void
 	onPin?: () => void
 	pinned?: boolean
@@ -212,7 +212,7 @@ interface TurnActionListProps {
 }
 
 interface TurnBodyProps {
-	repliedTo?: QuotedMessage
+	repliedTo?: readonly QuotedMessage[]
 	foot: ReactNode
 	className?: string
 	children: ReactNode
@@ -311,13 +311,20 @@ function TurnBody({ repliedTo, foot, className, children }: TurnBodyProps) {
 			foot={foot}
 			className={cn("whitespace-pre-wrap", className)}
 		>
-			{repliedTo ? (
+			{repliedTo && repliedTo.length > 0 ? (
 				<div className="flex flex-col gap-2">
-					<MessageQuoteCard
-						author={repliedTo.author}
-						excerpt={repliedTo.excerpt}
-						onJump={repliedTo.onJump}
-					/>
+					<div className="flex flex-col gap-1">
+						{repliedTo.map((quoted, index) => (
+							<MessageQuoteCard
+								author={quoted.author}
+								excerpt={quoted.excerpt}
+								isExcerpt={quoted.isExcerpt}
+								// biome-ignore lint/suspicious/noArrayIndexKey: a sender may reply twice to the same message, so the place in the list is the only identity
+								key={index}
+								onJump={quoted.onJump}
+							/>
+						))}
+					</div>
 					<div>{children}</div>
 				</div>
 			) : (
