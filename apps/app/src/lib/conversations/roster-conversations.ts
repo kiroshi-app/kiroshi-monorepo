@@ -218,6 +218,7 @@ const toSeatedRows = (
 			...toParticipantRow(participant),
 			status: isWorking ? "working" : "idle",
 			pose: isWorking ? worker?.kind : undefined,
+			backgroundTasks: isWorking ? worker?.backgroundTasks : undefined,
 		}
 	})
 

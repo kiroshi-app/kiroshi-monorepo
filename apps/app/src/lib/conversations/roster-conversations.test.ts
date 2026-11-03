@@ -340,6 +340,36 @@ describe("toRosterConversations", () => {
 		])
 	})
 
+	it("carries the background tasks of a working seat and none on an idle one", () => {
+		const [row] = toRosterConversations(
+			[
+				conversation({
+					participants: [
+						participant({ botId: "b-1" }),
+						participant({ botId: "b-2", name: "Sous-chef" }),
+					],
+				}),
+			],
+			{
+				hostStates: { "c-1": { state: "working", workingBotIds: ["b-2"] } },
+				working: {
+					"c-1": [
+						{ ...working("b-1", "waiting"), backgroundTasks: 3 },
+						{ ...working("b-2", "waiting"), backgroundTasks: 2 },
+					],
+				},
+				previews: {},
+				personOf: personNamedFromRecord,
+			},
+			NOW,
+		)
+
+		expect(row.participants.map((seat) => seat.backgroundTasks)).toEqual([
+			undefined,
+			2,
+		])
+	})
+
 	it("draws a room the host reads working as working with no runtime held", () => {
 		const [row] = toRosterConversations(
 			[conversation()],

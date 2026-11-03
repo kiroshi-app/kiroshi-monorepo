@@ -1167,6 +1167,7 @@ navigation-appsidebarconversationrow--conversation-answered-dark
 navigation-appsidebarconversationrow--conversation-long-question-at-the-narrowest-sidebar
 navigation-appsidebarconversationrow--conversation-needing-you
 navigation-appsidebarconversationrow--conversation-needing-you-dark
+navigation-appsidebarconversationrow--idle-conversation-ignores-background-tasks
 navigation-appsidebarconversationrow--knockout-wears-the-row-at-rest-and-hovered
 navigation-appsidebarconversationrow--long-title-and-preview-truncate
 navigation-appsidebarconversationrow--monochrome-row
@@ -1196,6 +1197,8 @@ navigation-appsidebarconversationrow--row-with-three-bots
 navigation-appsidebarconversationrow--row-with-two-bots
 navigation-appsidebarconversationrow--row-without-icon-or-colour
 navigation-appsidebarconversationrow--working-conversation-keeps-its-timestamp
+navigation-appsidebarconversationrow--working-conversation-waiting-on-one-background-task
+navigation-appsidebarconversationrow--working-conversation-waiting-on-two-background-tasks
 navigation-appsidebarpanel--conversations-with-a-working-bot
 navigation-appsidebarroster--border-on-hovered-and-selected-rows
 navigation-appsidebarroster--border-on-hovered-and-selected-rows-dark

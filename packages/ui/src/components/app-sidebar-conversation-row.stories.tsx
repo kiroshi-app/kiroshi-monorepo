@@ -601,6 +601,55 @@ export const WorkingConversationKeepsItsTimestamp = meta.story({
 	},
 })
 
+const roomWithBeaconWaitingOn = (backgroundTasks: number) => ({
+	...DESK_ROOM,
+	participants: [ATLAS, { ...BEACON, backgroundTasks }],
+})
+
+const expectWorkingPreview = async (
+	canvasElement: HTMLElement,
+	text: string,
+) => {
+	const row = rowIn(canvasElement)
+	const preview = slotIn(row, "roster-row-preview")
+	await expect(slotIn(preview, "text-shimmer")).toBeVisible()
+	await expect(preview.textContent).toBe(text)
+	await expect(slotIn(row, "roster-row-timestamp")).toHaveTextContent(
+		DESK_ROOM.timestamp ?? "",
+	)
+	await expectPileWhole(row, canvasElement)
+}
+
+export const WorkingConversationWaitingOnTwoBackgroundTasks = meta.story({
+	args: { conversation: roomWithBeaconWaitingOn(2) },
+	play: ({ canvasElement }) =>
+		expectWorkingPreview(
+			canvasElement,
+			"Beacon: waiting on 2 background tasks",
+		),
+})
+
+export const WorkingConversationWaitingOnOneBackgroundTask = meta.story({
+	args: { conversation: roomWithBeaconWaitingOn(1) },
+	play: ({ canvasElement }) =>
+		expectWorkingPreview(canvasElement, "Beacon: waiting on 1 background task"),
+})
+
+export const IdleConversationIgnoresBackgroundTasks = meta.story({
+	tags: ["test-only"],
+	args: {
+		conversation: {
+			...DESK_ROOM,
+			participants: [ATLAS, { ...BEACON, status: "idle", backgroundTasks: 2 }],
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expect(
+			slotIn(rowIn(canvasElement), "roster-row-preview").textContent,
+		).toBe(`${DESK_ROOM.lastSpeaker}: ${DESK_ROOM.lastMessage}`)
+	},
+})
+
 const DESK_ROOM_NEEDING_YOU = {
 	...DESK_ROOM,
 	badge: "attention" as const,
