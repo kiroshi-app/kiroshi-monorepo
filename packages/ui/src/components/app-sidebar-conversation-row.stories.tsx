@@ -742,7 +742,7 @@ const DESK_ROOM_NOT_SENT = {
 	...DESK_ROOM,
 	participants: [ATLAS, { ...BEACON, status: "idle" as const }],
 	lastMessage: UNSENT_MESSAGE,
-	lastSpeaker: "Shoto",
+	lastSpeaker: "Mira",
 	isNotSent: true,
 }
 

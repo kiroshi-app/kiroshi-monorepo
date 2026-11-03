@@ -633,15 +633,15 @@ export const WithRepliesAndAttachments = meta.story({
 
 		const expectStateFour = async () => {
 			const replies = replyChipsIn(form)
-			const [file] = fileChipsIn(form)
+			const files = fileChipsIn(form)
 			await expect(replies.map((chip) => chip.textContent)).toEqual([
 				expect.stringContaining(ATLAS_REPLY.author),
 				expect.stringContaining(BEACON_REPLY.author),
 			])
-			await expect(fileChipsIn(form)).toHaveLength(1)
+			await expect(files).toHaveLength(1)
 			await expect(comesBefore(replies[0], replies[1])).toBe(true)
-			await expect(comesBefore(replies[1], file)).toBe(true)
-			for (const chip of [...replies, file]) {
+			await expect(comesBefore(replies[1], files[0])).toBe(true)
+			for (const chip of [...replies, ...files]) {
 				await expect(box(chip).bottom).toBeLessThanOrEqual(box(textarea).top)
 			}
 		}
