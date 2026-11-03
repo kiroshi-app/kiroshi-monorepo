@@ -98,6 +98,26 @@ const SOURCED_IMAGE = `This is the waterfront the hotel faces.
 
 Source: [Visit Lisboa](https://www.visitlisboa.com/en/places/waterfront)`
 
+const WEB_PAGE_URL = "https://www.casadorio.pt/rooms"
+
+const WEB_PAGE_WITH_PREVIEW = `The guesthouse I found, rooms and rates on one page.
+
+\`\`\`web-page
+url: ${WEB_PAGE_URL}
+title: Casa do Rio, rooms and rates
+description: Eight rooms on the river, breakfast included.
+image: https://images.example.org/casa-do-rio.jpg
+alt: Terrace of Casa do Rio over the river
+\`\`\``
+
+const WEB_PAGE_WITHOUT_PREVIEW = `The guesthouse I found, rooms and rates on one page.
+
+\`\`\`web-page
+url: ${WEB_PAGE_URL}
+title: Casa do Rio, rooms and rates
+description: Eight rooms on the river, breakfast included.
+\`\`\``
+
 const BROKEN = `Two ways forward.
 
 \`\`\`options
@@ -114,7 +134,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The rich blocks of `docs/chat/rich-answer-blocks.md` as an agent answer writes them, routed by `Markdown` to their components: a fenced block by its label, the callouts and the sourced image from their GFM shape. A block that breaks its syntax is drawn as its source in a plain fence, never partly. While `isWriting` is on and a block's fence is still open, its pending frame holds the place. `answerActions` carries what a block does to the conversation: the option picked, the slider values used, the image opened.",
+					"The rich blocks of `docs/chat/rich-answer-blocks.md` as an agent answer writes them, routed by `Markdown` to their components: a fenced block by its label, the callouts and the sourced image from their GFM shape. A block that breaks its syntax is drawn as its source in a plain fence, never partly. While `isWriting` is on and a block's fence is still open, its pending frame holds the place. `answerActions` carries what a block does to the conversation: the option picked, the slider values used, the image opened, the web page opened.",
 			},
 		},
 	},
@@ -125,6 +145,7 @@ const meta = preview.meta({
 			onPickOption: fn(),
 			onUseValues: fn(),
 			onOpenImage: fn(),
+			onOpenWebPage: fn(),
 		},
 	},
 	decorators: [(Story) => <div className="w-170 max-w-full">{Story()}</div>],
@@ -292,6 +313,62 @@ export const GalleryInAnswer = meta.story({
 				expect.objectContaining({ detail: "Grey linen, 990 euros" }),
 			]),
 			1,
+		)
+	},
+})
+
+export const WebPageWithPreviewInAnswer = meta.story({
+	args: { children: WEB_PAGE_WITH_PREVIEW },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A `web-page` block with `image` and `alt`: the card shows the preview, the host without `www.` and the title, never the description. Check Open as page hands the page URL to `onOpenWebPage`.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		await expect(slotIn(canvasElement, "web-page-card")).toHaveTextContent(
+			"casadorio.pt",
+		)
+		await expect(
+			canvas.getByRole("img", {
+				name: "Terrace of Casa do Rio over the river",
+			}),
+		).toBeInTheDocument()
+		await expect(
+			canvasElement.querySelector('[data-slot="markdown-fence"]'),
+		).toBeNull()
+
+		await userEvent.click(canvas.getByRole("button", { name: "Open as page" }))
+		await expect(args.answerActions?.onOpenWebPage).toHaveBeenCalledWith(
+			WEB_PAGE_URL,
+		)
+	},
+})
+
+export const WebPageWithoutPreviewInAnswer = meta.story({
+	args: { children: WEB_PAGE_WITHOUT_PREVIEW },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A `web-page` block without `image`: the card draws no preview. Check Open as page hands the page URL to `onOpenWebPage`.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		await expect(slotIn(canvasElement, "web-page-card")).toHaveTextContent(
+			"Casa do Rio, rooms and rates",
+		)
+		await expect(canvasElement.querySelector("img")).toBeNull()
+		await expect(
+			canvasElement.querySelector('[data-slot="markdown-fence"]'),
+		).toBeNull()
+
+		await userEvent.click(canvas.getByRole("button", { name: "Open as page" }))
+		await expect(args.answerActions?.onOpenWebPage).toHaveBeenCalledWith(
+			WEB_PAGE_URL,
 		)
 	},
 })

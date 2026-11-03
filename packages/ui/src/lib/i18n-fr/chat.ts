@@ -148,6 +148,7 @@ const chat = {
 			gallery: "Galerie",
 			"illustrated-list": "Liste",
 			collapsible: "Section",
+			"web-page": "Page web",
 		},
 	},
 	queue: {

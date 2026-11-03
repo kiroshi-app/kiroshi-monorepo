@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next"
 import { CollapsibleSections } from "@workspace/ui/components/answer-blocks/collapsible-sections"
 import { Gallery } from "@workspace/ui/components/answer-blocks/gallery"
 import { IllustratedList } from "@workspace/ui/components/answer-blocks/illustrated-list"
+import { WebPageCard } from "@workspace/ui/components/answer-blocks/web-page-card"
 import {
 	InteractiveView,
 	type InteractiveViewMode,
@@ -171,6 +172,21 @@ const CollapsibleBlockView = ({ block }: BlockProps<"collapsible">) => {
 	)
 }
 
+const hostOf = (url: string) => new URL(url).hostname.replace(/^www\./, "")
+
+const WebPageBlockView = ({ block }: BlockProps<"web-page">) => {
+	const onOpenWebPage = useMarkdownAnswerActions()?.onOpenWebPage
+
+	return (
+		<WebPageCard
+			domain={block.site ?? hostOf(block.url)}
+			onOpen={onOpenWebPage ? () => onOpenWebPage(block.url) : undefined}
+			preview={block.image ? { src: block.image, alt: block.alt } : undefined}
+			title={block.title}
+		/>
+	)
+}
+
 type MarkdownAnswerBlockProps = {
 	block: AnswerBlock
 }
@@ -187,6 +203,8 @@ const blockViewOf = (block: AnswerBlock) => {
 			return <IllustratedListBlockView block={block} />
 		case "collapsible":
 			return <CollapsibleBlockView block={block} />
+		case "web-page":
+			return <WebPageBlockView block={block} />
 	}
 }
 
