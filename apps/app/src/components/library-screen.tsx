@@ -316,8 +316,16 @@ export const LibraryScreen = ({
 	}
 	const deleteDocument = ({ name }: OpenedDocument) =>
 		closeAndRelist().then(() => actions.remove(name, { onSuccess: close }))
-	const focusTitleOnceMenuCloses = () => {
-		requestAnimationFrame(() => editor.current?.focusTitle())
+	const isRenamePicked = useRef(false)
+	const pickRename = () => {
+		isRenamePicked.current = true
+	}
+	const titleFieldOnceRenamePicked = () => {
+		if (!isRenamePicked.current) {
+			return true
+		}
+		isRenamePicked.current = false
+		return editor.current?.titleField() ?? false
 	}
 	const retitle = (title: string) => {
 		if (openedDocument) {
@@ -337,6 +345,7 @@ export const LibraryScreen = ({
 					isActionShownOn(openedDocument, action)
 				}
 				key={openedDocument.openedAs ?? openedDocument.name}
+				menuFinalFocus={titleFieldOnceRenamePicked}
 				onBack={leaveDocument}
 				onBodyChange={edit}
 				onCaretChange={shareCaret}
@@ -345,7 +354,7 @@ export const LibraryScreen = ({
 				onDone={dismissFinished}
 				onDownload={() => save(openedItem)}
 				onOpenInNewTab={boundTo(openedItem, openInNewTab)}
-				onRename={focusTitleOnceMenuCloses}
+				onRename={pickRename}
 				onShowInFolder={boundTo(openedItem, reveal)}
 				onTitleChange={retitle}
 				onTitleConfirm={(newTitle) => renameDocument(openedDocument, newTitle)}
