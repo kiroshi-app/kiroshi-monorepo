@@ -262,15 +262,15 @@ describe("the Connect screen", () => {
 		expect(port.calls.at(-1)).toEqual({ command: "openDownloadPage" })
 	})
 
-	it("hands the workspace to Shoto when no ~/.claude folder is found", async () => {
+	it("shows Account when no ~/.claude folder is found", async () => {
 		port.report = LOGGED_IN
 		await renderOnboarding()
 		await press("Skip intro")
 
 		await press("Use this account")
 
-		expect(screen.queryByRole("heading")).toBeNull()
-		expect(world.stored).toEqual(["connect", "done"])
+		expect(heading()).toBe("Sign in to Kiroshi")
+		expect(world.stored).toEqual(["connect", "account"])
 	})
 })
 

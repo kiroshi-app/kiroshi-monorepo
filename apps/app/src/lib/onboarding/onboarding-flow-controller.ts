@@ -196,11 +196,9 @@ export const createOnboardingFlowController = (
 			await store("import")
 			return
 		}
-		if (!(await store("done"))) {
+		if (!(await store("account"))) {
 			set({ connection })
-			return
 		}
-		joinShoto()
 	}
 
 	const showConnection = (connection: ConnectionStep) => {
@@ -244,11 +242,7 @@ export const createOnboardingFlowController = (
 		}
 	}
 
-	const landOnFirstCompanion = async () => {
-		const companionId = world.firstCompanionId()
-		if (!companionId) {
-			return
-		}
+	const landOnFirstCompanion = async (companionId: string) => {
 		try {
 			await world.openConversation(companionId)
 			await summonOnce(companionId, onboardingSummonsFor("arrival"))
@@ -257,7 +251,18 @@ export const createOnboardingFlowController = (
 		}
 	}
 
-	const land = () => (isImportJourney ? landOnShoto() : landOnFirstCompanion())
+	const land = async () => {
+		if (isImportJourney) {
+			await landOnShoto()
+			return
+		}
+		const companionId = world.firstCompanionId()
+		if (companionId === null) {
+			joinShoto()
+			return
+		}
+		await landOnFirstCompanion(companionId)
+	}
 
 	return {
 		...actions,
@@ -316,7 +321,7 @@ export const createOnboardingFlowController = (
 		},
 
 		noteFirstRunDone: async () => {
-			if (!current().isWithShoto) {
+			if (!current().isWithShoto || world.isFirstRunDone()) {
 				return
 			}
 			set({ isWithShoto: false, isAtAccount: true })
