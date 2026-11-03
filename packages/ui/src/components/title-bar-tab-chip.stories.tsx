@@ -1,7 +1,11 @@
 import { expect } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { slotIn, tokenStyleIn } from "@workspace/storybook/story-utils"
+import {
+	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+	slotIn,
+	tokenStyleIn,
+} from "@workspace/storybook/story-utils"
 import { Icons } from "@workspace/ui/components/icons"
 import { TitleBarTabChip } from "@workspace/ui/components/title-bar-tab-chip"
 
@@ -72,17 +76,33 @@ const expectChipAnatomy = async (canvasElement: HTMLElement) => {
 
 const playShortTitle = async ({ canvasElement }: ChipPlayContext) => {
 	const { chip, title } = await expectChipAnatomy(canvasElement)
+	await expect(chip).toHaveAttribute("data-state", "allowed")
 	await expect(title.scrollWidth).toBe(title.clientWidth)
 	await expect(chip.getBoundingClientRect().width).toBeLessThan(
 		CHIP_WIDTH_AT_MAX_TITLE,
 	)
 }
 
-const playLongTitle = async ({ canvasElement }: ChipPlayContext) => {
+const expectLongTitleChip = async (canvasElement: HTMLElement) => {
 	const { chip, title } = await expectChipAnatomy(canvasElement)
 	await expect(title.getBoundingClientRect().width).toBe(TITLE_MAX_WIDTH)
 	await expect(title.scrollWidth).toBeGreaterThan(title.clientWidth)
 	await expect(chip.getBoundingClientRect().width).toBe(CHIP_WIDTH_AT_MAX_TITLE)
+	return chip
+}
+
+const playLongTitle = async ({ canvasElement }: ChipPlayContext) => {
+	const chip = await expectLongTitleChip(canvasElement)
+	await expect(chip).toHaveAttribute("data-state", "allowed")
+	await expect(getComputedStyle(chip).opacity).toBe("1")
+	await expect(getComputedStyle(chip).filter).toBe("none")
+}
+
+const playNotAllowed = async ({ canvasElement }: ChipPlayContext) => {
+	const chip = await expectLongTitleChip(canvasElement)
+	await expect(chip).toHaveAttribute("data-state", "not-allowed")
+	await expect(getComputedStyle(chip).opacity).toBe("0.75")
+	await expect(getComputedStyle(chip).filter).toBe("grayscale(1)")
 }
 
 export const ShortTitle = meta.story({
@@ -135,4 +155,33 @@ export const LongTitleDark = meta.story({
 		},
 	},
 	play: playLongTitle,
+})
+
+export const NotAllowed = meta.story({
+	args: { title: LONG_TITLE, isNotAllowed: true },
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"Tear-off 4, light: the chip over a window of another Space, where the drop would be refused. Check it at 75 percent opacity and fully grey, every other property as in `LongTitle`.",
+			},
+		},
+	},
+	play: playNotAllowed,
+})
+
+export const NotAllowedDark = meta.story({
+	args: { title: LONG_TITLE, isNotAllowed: true },
+	globals: DARK,
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"Tear-off 4, dark: the chip as the artboard draws it over a window of another Space, at 75 percent opacity and fully grey. Pick `NotAllowed` for the light theme.",
+			},
+		},
+	},
+	play: playNotAllowed,
 })

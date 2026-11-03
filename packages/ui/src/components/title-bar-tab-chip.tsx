@@ -12,10 +12,11 @@ type TitleBarTabChipProps = Pick<
 	title: string
 	icon: ReactNode
 	placement?: TitleBarTabChipPlacement
+	isNotAllowed?: boolean
 }
 
 const CHIP =
-	"pointer-events-none flex h-7 w-fit select-none items-center gap-1.5 rounded-md bg-title-bar-menu text-foreground"
+	"pointer-events-none flex h-7 w-fit select-none items-center gap-1.5 rounded-md bg-title-bar-menu text-foreground data-[state=not-allowed]:opacity-75 data-[state=not-allowed]:grayscale"
 
 const CHIP_PLACEMENT: Record<TitleBarTabChipPlacement, string> = {
 	alone: "ps-1.75 pe-1 shadow-tab-chip ring-1 ring-title-bar-menu-border",
@@ -38,6 +39,7 @@ const TitleBarTabChip = ({
 	title,
 	icon,
 	placement = "alone",
+	isNotAllowed = false,
 	className,
 	...props
 }: TitleBarTabChipProps) => (
@@ -45,6 +47,7 @@ const TitleBarTabChip = ({
 		className={cn(CHIP, CHIP_PLACEMENT[placement], className)}
 		data-placement={placement}
 		data-slot="title-bar-tab-chip"
+		data-state={isNotAllowed ? "not-allowed" : "allowed"}
 		{...props}
 	>
 		<span aria-hidden="true" className={cn(ICON, ICON_PLACEMENT[placement])}>

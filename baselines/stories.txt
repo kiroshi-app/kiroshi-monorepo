@@ -1517,6 +1517,8 @@ navigation-tabs--states
 navigation-tabs--variants
 navigation-titlebartabchip--long-title
 navigation-titlebartabchip--long-title-dark
+navigation-titlebartabchip--not-allowed
+navigation-titlebartabchip--not-allowed-dark
 navigation-titlebartabchip--short-title
 navigation-titlebartabchip--short-title-dark
 navigation-userchip--default
