@@ -803,6 +803,37 @@ fn a_prompt_sent_while_a_follow_up_streams_leaves_both_replies_whole() {
 }
 
 #[test]
+fn a_follow_up_landing_while_a_prompt_is_submitting_is_a_continuation_and_leaves_the_prompt_its_own_reply(
+) {
+	let _serial = serial();
+	let stored = launch_stored("follow-up-racing", "follow_up_races_a_prompt");
+	stored.start();
+	stored.submit("t1", "p1");
+	stored.completed("t1");
+	stored.awaited_turn_endings(&[TurnOutcome::Completed]);
+
+	stored.submit("t2", "p2");
+	stored.completed("t2");
+
+	let follow_up = stored.completed_reply_reading(FOLLOW_UP);
+	assert_ne!(follow_up.turn_id, "t2", "the follow-up was written into the submitted turn");
+	assert_eq!(follow_up.continues_turn_id.as_deref(), Some("t1"));
+	let named = stored.turn_named_for(FOLLOW_UP).expect("the follow-up names its turn");
+	assert_eq!(named.turn_id, follow_up.turn_id);
+	let answers: Vec<_> =
+		stored.replies().into_iter().filter(|reply| reply.turn_id == "t2").collect();
+	assert_eq!(answers.len(), 1, "{answers:#?}");
+	assert_eq!(answers[0].content, STREAMED);
+	assert_eq!(answers[0].state, MessageState::Complete);
+	assert_eq!(answers[0].continues_turn_id, None);
+	assert_eq!(
+		stored.awaited_turn_endings(&[TurnOutcome::Completed; 3]),
+		vec![TurnOutcome::Completed; 3]
+	);
+	stored.close();
+}
+
+#[test]
 fn two_queued_follow_ups_are_two_continuations_each_with_its_own_completion() {
 	let _serial = serial();
 	let stored = launch_stored("follow-ups-queued", "two_follow_ups");

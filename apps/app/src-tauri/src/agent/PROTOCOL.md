@@ -533,6 +533,10 @@ order frames arrive in:
   running and carrying no `user_message_uuid` opens a follow-up. The reply writer writes
   it as a continuation turn of the bot of the run, its `continues_turn_id` naming the last
   turn the run answered, its messages replying to that turn's prompt;
+- a `message_start` or `assistant` frame carrying no `user_message_uuid` while a prompt
+  is still submitting, before any frame named it, opens a follow-up too: a background
+  task ended as the prompt was sent. The submitted turn waits, still submitting, and is
+  not the turn the continuation names, since the run has not answered it yet;
 - the `turn_settled` of a follow-up completes the continuation alone: a prompt submitted
   while the follow-up streams stays open and waits for its own `turn_settled`. Landing
   while no continuation is open, it ends no turn;

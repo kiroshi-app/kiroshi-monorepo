@@ -269,6 +269,10 @@ impl OpenTurn {
 		Self { continues_turn_id: Some(continued.turn_id.clone()), ..Self::new(turn) }
 	}
 
+	fn answered(&self) -> SubmittedTurn {
+		SubmittedTurn { turn_id: self.id.clone(), prompt_id: self.prompt_id.clone() }
+	}
+
 	fn is_continuation(&self) -> bool {
 		self.continues_turn_id.is_some()
 	}
@@ -289,7 +293,7 @@ struct Desk<R: Runtime> {
 	store: Store<R>,
 	turn: Option<OpenTurn>,
 	parked: Option<OpenTurn>,
-	last_prompted: Option<SubmittedTurn>,
+	last_answered: Option<SubmittedTurn>,
 	attachments: Arc<TurnAttachments>,
 	inner: Arc<dyn TurnSink>,
 	holds_prompts: bool,
@@ -301,7 +305,7 @@ impl<R: Runtime> Desk<R> {
 			store,
 			turn: None,
 			parked: None,
-			last_prompted: None,
+			last_answered: None,
 			attachments,
 			inner,
 			holds_prompts: false,
@@ -339,10 +343,7 @@ impl<R: Runtime> Desk<R> {
 			self.end(TerminalState::Cancelled).await;
 		}
 		let opened = match self.store.start_turn(&turn.turn_id).await {
-			Ok(()) => {
-				self.last_prompted = Some(turn.clone());
-				Some(OpenTurn::new(turn))
-			}
+			Ok(()) => Some(OpenTurn::new(turn)),
 			Err(error) => {
 				self.store.report(&turn.turn_id, &error);
 				None
@@ -356,10 +357,10 @@ impl<R: Runtime> Desk<R> {
 	}
 
 	async fn open_continuation(&mut self) {
-		if self.turn.is_some() {
+		if self.streams_a_continuation() {
 			return;
 		}
-		let Some(continued) = &self.last_prompted else {
+		let Some(continued) = &self.last_answered else {
 			log::warn!(
 				"a follow-up of conversation {} continues no turn this run answered and is not written",
 				self.store.conversation_id
@@ -368,7 +369,7 @@ impl<R: Runtime> Desk<R> {
 		};
 		let turn = OpenTurn::continuing(continued);
 		match self.store.start_continuation(&turn.id, &continued.turn_id).await {
-			Ok(()) => self.turn = Some(turn),
+			Ok(()) => self.parked = self.turn.replace(turn),
 			Err(error) => self.store.report(&turn.id, &error),
 		}
 	}
@@ -385,8 +386,11 @@ impl<R: Runtime> Desk<R> {
 		if let Some(parked) = self.parked.take() {
 			return self.close(parked, TerminalState::Failed).await;
 		}
-		if !self.streams_a_continuation() {
-			self.end(TerminalState::Failed).await;
+		if self.streams_a_continuation() {
+			return;
+		}
+		if let Some(withdrawn) = self.turn.take() {
+			self.close(withdrawn, TerminalState::Failed).await;
 		}
 	}
 
@@ -601,6 +605,9 @@ impl<R: Runtime> Desk<R> {
 	async fn end(&mut self, completion: TerminalState) {
 		self.settle_open(completion).await;
 		if let Some(turn) = self.turn.take() {
+			if !turn.is_continuation() {
+				self.last_answered = Some(turn.answered());
+			}
 			self.close(turn, completion).await;
 		}
 	}
@@ -2738,5 +2745,35 @@ mod tests {
 		let follow_up = written.settled("m2").await;
 		assert_eq!(follow_up.content, "kept");
 		assert_eq!(follow_up.continues_turn_id.as_deref(), Some("t1"));
+	}
+
+	#[tokio::test]
+	async fn a_follow_up_landing_while_a_prompt_is_submitting_continues_the_last_answered_turn() {
+		let written = Written::new("follow-up-racing-a-prompt").await;
+		written.prompt("t1", "p1").await;
+		written.prompt("t2", "p2").await;
+		let entries = entries_of(&a_spoken_turn())
+			.into_iter()
+			.chain([Entry::Submitted(submitted("t2", "p2")), Entry::FollowUp(FollowUp::Started)])
+			.chain(events(said("m2", "the shell finished")))
+			.chain([follow_up_settled()])
+			.chain(events(said("m3", "the answer")))
+			.chain(events(vec![turn_ended()]))
+			.collect();
+
+		let heard = written.forwarded_with_turns(entries).await;
+
+		let follow_up = written.settled("m2").await;
+		assert_eq!(follow_up.continues_turn_id.as_deref(), Some("t1"));
+		assert_eq!(follow_up.replied_to_message_id.as_deref(), Some("p1"));
+		assert_eq!(written.turn_of("m3").await, "t2");
+		assert_eq!(written.settled("m3").await.continues_turn_id, None);
+		let ended: Vec<String> = heard
+			.iter()
+			.filter(|(event, _)| *event == turn_ended())
+			.filter_map(|(_, turn)| turn.as_ref().map(|turn| turn.turn_id.clone()))
+			.collect();
+		assert_eq!(ended, ["t1".to_owned(), follow_up.turn_id, "t2".to_owned()]);
+		assert!(written.completed_at("t2").await.is_some());
 	}
 }

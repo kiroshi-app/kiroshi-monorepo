@@ -14,7 +14,8 @@ use super::contract::{
 };
 use super::lease::{Lapse, Liveness, RunLease};
 use super::protocol::{
-	self, ClosedFrame, Frame, HostAnswer, HostRequestFrame, OpenRequest, SpaceMember,
+	self, ClosedFrame, Frame, HostAnswer, HostRequestFrame, OpenRequest, SpaceMember, StreamEvent,
+	StreamEventFrame,
 };
 use super::sidecar::Sidecar;
 use super::translate::Translator;
@@ -330,11 +331,18 @@ impl Shared {
 		if self.answers_the_running_prompt(frame) {
 			return std::mem::take(&mut self.streams_a_follow_up).then_some(FollowUp::FoldedIn);
 		}
-		if self.streams_a_follow_up || self.is_mid_turn() {
+		if self.streams_a_follow_up || !self.opens_a_follow_up(frame) {
 			return None;
 		}
 		self.streams_a_follow_up = true;
 		Some(FollowUp::Started)
+	}
+
+	fn opens_a_follow_up(&self, frame: &Frame) -> bool {
+		match self.turn {
+			TurnState::Submitting => starts_a_reply(frame),
+			_ => !self.is_mid_turn(),
+		}
 	}
 
 	fn settles_the_follow_up_alone(&self, frame: &Frame) -> bool {
@@ -804,6 +812,17 @@ fn turn_outcome(events: &[AgentEvent]) -> Option<TurnOutcome> {
 
 fn is_turn_activity(frame: &Frame) -> bool {
 	matches!(frame, Frame::StreamEvent(_) | Frame::Assistant(_) | Frame::ControlRequest(_))
+}
+
+fn starts_a_reply(frame: &Frame) -> bool {
+	matches!(
+		frame,
+		Frame::Assistant(_)
+			| Frame::StreamEvent(StreamEventFrame {
+				event: Some(StreamEvent::MessageStart { .. }),
+				..
+			})
+	)
 }
 
 fn crashed(closed: &ClosedFrame) -> TransportError {
