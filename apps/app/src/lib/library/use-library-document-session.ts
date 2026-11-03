@@ -8,9 +8,13 @@ import { useEffect, useMemo, useSyncExternalStore } from "react"
 
 import { i18n } from "@workspace/ui/lib/i18n"
 
+import { createCaretSharer } from "./library-caret-sharer"
 import { createLibraryDocumentFeed } from "./library-document-feed"
 import { createLibraryDocumentSession } from "./library-document-session"
-import { applyLibraryUpdate } from "./library-document-writes"
+import {
+	applyLibraryUpdate,
+	shareLibraryCaret,
+} from "./library-document-writes"
 import { libraryQueryKeys } from "./library-query-keys"
 import { openLibraryDocument } from "./library-reads"
 
@@ -39,6 +43,10 @@ const useApplyLibraryUpdate = (spaceId: string) => {
 }
 
 const subscribeToNothing = () => () => undefined
+
+const reportUnsharedCaret = (reason: unknown) => {
+	console.error("library: the caret could not be shared", reason)
+}
 
 export const useLibraryDocumentSession = (
 	spaceId: string,
@@ -82,6 +90,28 @@ export const useLibraryDocumentSession = (
 		[openedState, apply],
 	)
 	const session = opened.isError ? null : openedSession
+	const sharer = useMemo(
+		() =>
+			openedState && openedSession
+				? createCaretSharer({
+						caretOf: openedSession.caretOf,
+						share: (caret) => {
+							shareLibraryCaret(spaceId, openedState.name, caret).catch(
+								reportUnsharedCaret,
+							)
+						},
+					})
+				: null,
+		[spaceId, openedState, openedSession],
+	)
+
+	useEffect(() => {
+		if (!sharer) {
+			return
+		}
+		sharer.open()
+		return sharer.close
+	}, [sharer])
 
 	useEffect(() => {
 		if (!session || !feed) {
@@ -114,6 +144,7 @@ export const useLibraryDocumentSession = (
 				}
 			: null,
 		edit: (markdown: string) => session?.edit(markdown),
+		shareCaret: (offset: number | null) => sharer?.share(offset),
 		hasFailedToOpen: opened.isError,
 		closeAndRelist,
 	}

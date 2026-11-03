@@ -116,6 +116,13 @@ export const createLibraryDocumentSession = ({
 		return position?.type === text ? position.index : null
 	}
 
+	const caretOf = (offset: number) =>
+		base64Of(
+			Y.encodeRelativePosition(
+				Y.createRelativePositionFromTypeIndex(text, offset, -1),
+			),
+		)
+
 	const subscribe = (onChange: () => void) => {
 		doc.on("update", onChange)
 		return () => doc.off("update", onChange)
@@ -128,5 +135,6 @@ export const createLibraryDocumentSession = ({
 		receive,
 		flush,
 		offsetOf,
+		caretOf,
 	}
 }
