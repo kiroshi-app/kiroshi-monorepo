@@ -144,8 +144,11 @@ const dropTitleOf = (count: number) => common("library.drop.title", { count })
 const importingLabelOf = (name: string) =>
 	common("library.importing.label", { name })
 
-const importFailureOf = (name: string) =>
-	expect.objectContaining({ title: common("library.failure.import", { name }) })
+const importFailureOf = (name: string, description: string) =>
+	expect.objectContaining({
+		title: common("library.failure.import", { name }),
+		description,
+	})
 
 const answerWith =
 	(added: LibraryItem): ImportAnswer =>
@@ -277,7 +280,7 @@ describe("files dropped on the Library", () => {
 
 		await waitFor(() =>
 			expect(raiseFailureNotice).toHaveBeenCalledWith(
-				importFailureOf("clip.gif"),
+				importFailureOf("clip.gif", "unsupported"),
 			),
 		)
 		await waitFor(() =>
@@ -305,7 +308,7 @@ describe("files dropped on the Library", () => {
 		await shown.findByRole("button", { name: /small/ })
 		await waitFor(() =>
 			expect(raiseFailureNotice).toHaveBeenCalledWith(
-				importFailureOf("huge.png"),
+				importFailureOf("huge.png", "tooLarge"),
 			),
 		)
 		expect(harness.imports.map(({ name }) => name)).toEqual(["small.txt"])
@@ -322,5 +325,22 @@ describe("files dropped on the Library", () => {
 		await waitFor(() =>
 			expect(harness.imports.map(({ name }) => name)).toEqual(["huge.png"]),
 		)
+	})
+
+	it("refuses a file over 20 MiB on the host before sending it", async () => {
+		const { shown, heading } = await renderLibraryScreen(false)
+		harness.answerImport = (call) =>
+			answerWith(itemNamed(call.name, "image"))(call)
+
+		dropOn(heading, { files: [imageFile("vast.png", 20 * MIB + 1)] })
+
+		await waitFor(() =>
+			expect(raiseFailureNotice).toHaveBeenCalledWith(
+				importFailureOf("vast.png", "tooLarge"),
+			),
+		)
+		expect(harness.imports).toEqual([])
+		expect(shown.queryByRole("progressbar")).toBeNull()
+		expect(raiseTransientNotice).not.toHaveBeenCalled()
 	})
 })
