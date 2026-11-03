@@ -735,7 +735,7 @@ const anchorOf = (
 }
 
 const formatsOf = (block: Block | undefined, start: number, end: number) => {
-	if (!block) return { formats: [] }
+	if (!block) return { formats: [], link: undefined }
 	const { formats, link } = formatsAround(block.text, start, end)
 	const blockFormat: SelectionToolbarFormat[] =
 		block.kind === "heading"
@@ -1214,15 +1214,27 @@ const LibraryDocumentEditor = ({
 	if (!isSameAnchors(listAnchors, heldListAnchors))
 		setHeldListAnchors(listAnchors)
 
-	const selectedBlock = selected && blocks.find(({ id }) => id === selected.id)
-	const selectedRange = selected && {
-		start: (textStarts.get(selected.id) ?? 0) + selected.start,
-		end: (textStarts.get(selected.id) ?? 0) + selected.end,
+	const toolbarFor = ({ id, start, end, anchor }: SelectedText) => {
+		const offset = textStarts.get(id) ?? 0
+		const range = { start: offset + start, end: offset + end }
+		const onRange = (action?: FormatAction) => action && (() => action(range))
+		const block = blocks.find((candidate) => candidate.id === id)
+		const { formats, link } = formatsOf(block, start, end)
+		return (
+			<SelectionToolbar
+				activeFormats={formats}
+				anchor={anchor}
+				link={link}
+				onBold={onRange(onBold)}
+				onCode={onRange(onCode)}
+				onHeading={onRange(onHeading)}
+				onItalic={onRange(onItalic)}
+				onLink={onLink && ((url) => onLink(url, range))}
+				onList={onRange(onList)}
+				onStrikethrough={onRange(onStrikethrough)}
+			/>
+		)
 	}
-	const forSelection = (action?: FormatAction) =>
-		action && selectedRange ? () => action(selectedRange) : undefined
-	const selectedFormats =
-		selected && formatsOf(selectedBlock, selected.start, selected.end)
 
 	return (
 		<div
@@ -1291,20 +1303,7 @@ const LibraryDocumentEditor = ({
 					)}
 				</div>
 			</LibraryDocumentColumn>
-			{selected && selectedRange ? (
-				<SelectionToolbar
-					activeFormats={selectedFormats?.formats}
-					anchor={selected.anchor}
-					link={selectedFormats?.link}
-					onBold={forSelection(onBold)}
-					onCode={forSelection(onCode)}
-					onHeading={forSelection(onHeading)}
-					onItalic={forSelection(onItalic)}
-					onLink={onLink && ((url) => onLink(url, selectedRange))}
-					onList={forSelection(onList)}
-					onStrikethrough={forSelection(onStrikethrough)}
-				/>
-			) : null}
+			{selected ? toolbarFor(selected) : null}
 		</div>
 	)
 }
