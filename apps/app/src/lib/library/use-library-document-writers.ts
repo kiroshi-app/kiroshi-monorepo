@@ -11,7 +11,6 @@ import {
 	LIBRARY_DOCUMENT_PRESENCE_EVENT,
 	LIBRARY_DOCUMENT_WRITER_FINISHED_EVENT,
 	peopleOf,
-	peopleSeatsOf,
 	seatsAfter,
 	writersOf,
 } from "./library-document-writers"
@@ -60,10 +59,8 @@ const reportUnheard = (event: string) => (reason: unknown) => {
 	console.error(`library: ${event} could not be listened to`, reason)
 }
 
-const isIn = (
-	{ spaceId, name }: WatchedDocument,
-	payload: Pick<LibraryDocumentPresence, "spaceId" | "name">,
-) => payload.spaceId === spaceId && payload.name === name
+const isIn = ({ spaceId, name }: WatchedDocument, payload: WatchedDocument) =>
+	payload.spaceId === spaceId && payload.name === name
 
 const useListenWhileWatched = <Payload extends WatchedDocument>(
 	watched: WatchedDocument | null,
@@ -140,8 +137,8 @@ const useDocumentPresence = (
 		LIBRARY_DOCUMENT_PRESENCE_EVENT,
 		(document, { writers }) => {
 			const seenAt = Date.now()
-			const people = peopleSeatsOf(writers).filter(
-				(writer) => !isOwnSeat(writer),
+			const people = writers.filter(
+				(writer) => writer.kind !== "agent" && !isOwnSeat(writer),
 			)
 			setHeld((current) => {
 				const previous = heldFor(current, document)

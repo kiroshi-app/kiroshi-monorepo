@@ -70,9 +70,6 @@ export const seatsAfter = (
 			}
 		})
 
-export const peopleSeatsOf = (writers: LibraryWriter[]) =>
-	writers.filter(({ kind }) => kind !== "agent")
-
 export const peopleOf = (
 	seats: LibraryWriter[],
 	document: CaretPlacedDocument,
