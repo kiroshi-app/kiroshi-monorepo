@@ -292,12 +292,12 @@ const openDocument = async (name: string) => {
 	])
 }
 
-const bodyOf = (block: HTMLElement) =>
-	block.closest("[data-slot='library-document-body']") as HTMLElement
+const bodyOf = (line: HTMLElement) =>
+	line.closest("[data-slot='library-document-body']") as HTMLElement
 
-const selectIn = (block: HTMLElement, start: number, end = start) => {
-	const text = block.firstChild as Node
-	bodyOf(block).focus()
+const selectIn = (line: HTMLElement, start: number, end = start) => {
+	const text = line.firstChild as Node
+	bodyOf(line).focus()
 	document.getSelection()?.setBaseAndExtent(text, start, text, end)
 	fireEvent(document, new Event("selectionchange"))
 }

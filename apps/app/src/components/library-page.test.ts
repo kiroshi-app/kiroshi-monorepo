@@ -12,7 +12,7 @@ import {
 	within,
 } from "@testing-library/react"
 import { createElement } from "react"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest"
 import * as Y from "yjs"
 
 import type { AppRailPanel } from "@workspace/ui/components/app-rail"
@@ -555,23 +555,85 @@ const press = async (target: Element) => {
 	})
 }
 
-const firstBlockOf = (body: HTMLElement) =>
-	body.querySelector(".cm-line") as HTMLElement
+const TASK_NOTES = "Notes\n\n\n\n- [ ] Ship the notes"
+
+const PASTED_PARAGRAPHS = "First thought.\n\nSecond thought.\n\nThird thought."
+
+const AGENT_LINE = "\n\nAtlas adds a line."
+
+const linesOf = (body: HTMLElement) => [
+	...body.querySelectorAll<HTMLElement>(".cm-line"),
+]
+
+const firstLineOf = (body: HTMLElement) => linesOf(body)[0] as HTMLElement
 
 const typeInto = async (body: HTMLElement, value: string) => {
 	await act(async () => {
 		body.focus()
-		const text = firstBlockOf(body).firstChild as Text
+		const text = firstLineOf(body).firstChild as Text
 		text.data = value
 		document.getSelection()?.collapse(text, value.length)
 	})
 }
 
+const pasteOnLine = async (body: HTMLElement, index: number, text: string) => {
+	await act(async () => {
+		body.focus()
+		document.getSelection()?.collapse(linesOf(body)[index] as HTMLElement, 0)
+		fireEvent(document, new Event("selectionchange"))
+	})
+	const clipboardData = new DataTransfer()
+	clipboardData.setData("text/plain", text)
+	await act(async () => {
+		body.dispatchEvent(
+			new ClipboardEvent("paste", {
+				bubbles: true,
+				cancelable: true,
+				clipboardData,
+			}),
+		)
+	})
+}
+
+const queueSelectionChangesAsBrowsersDo = () => {
+	const queued = new WeakSet<globalThis.Event>()
+	const queue = (event: globalThis.Event) => {
+		if (queued.has(event)) {
+			return
+		}
+		event.stopImmediatePropagation()
+		const later = new Event("selectionchange")
+		queued.add(later)
+		queueMicrotask(() => document.dispatchEvent(later))
+	}
+	window.addEventListener("selectionchange", queue, { capture: true })
+	return () =>
+		window.removeEventListener("selectionchange", queue, { capture: true })
+}
+
+const undoIn = async (body: HTMLElement) => {
+	const isMac = /Mac/.test(navigator.platform)
+	await act(async () => {
+		fireEvent.keyDown(body, { key: "z", metaKey: isMac, ctrlKey: !isMac })
+	})
+}
+
+const shownMarkdownOfLine = (line: HTMLElement) => {
+	const task = line.querySelector<HTMLInputElement>(
+		"[data-slot='library-document-task']",
+	)
+	const marker = task ? `- [${task.checked ? "x" : " "}]` : ""
+	return `${marker}${line.textContent}`
+}
+
 const paragraphOf = (shown: Pick<typeof screen, "getByRole">) =>
 	shown.getByRole("textbox", { name: BODY_FIELD })
 
+const shownMarkdownOf = (shown: Pick<typeof screen, "getByRole">) =>
+	linesOf(paragraphOf(shown)).map(shownMarkdownOfLine).join("\n")
+
 const textOf = (shown: Pick<typeof screen, "getByRole">) =>
-	firstBlockOf(paragraphOf(shown)).textContent
+	firstLineOf(paragraphOf(shown)).textContent
 
 const checkedTemplateOf = (dialog: HTMLElement) =>
 	within(dialog)
@@ -714,6 +776,53 @@ describe("an opened Library document", () => {
 
 		await waitFor(() => expect(raiseFailureNotice).toHaveBeenCalledTimes(2))
 		expect(shown.queryByRole("textbox", { name: BODY_FIELD })).toBeNull()
+	})
+
+	it("holds on the host the markdown the editor shows through typing, paste, undo, a task, an agent write and a reopen", async () => {
+		onTestFinished(queueSelectionChangesAsBrowsersDo())
+		harness.libraryItems = [DOCUMENT]
+		fakeLibraryHost.writeElsewhere(DOCUMENT.name, TASK_NOTES)
+		const shown = await renderLibraryScreen(false)
+		await openLibraryItem(DOCUMENT, shown)
+		await waitFor(() => expect(shownMarkdownOf(shown)).toBe(TASK_NOTES))
+		const body = paragraphOf(shown)
+		const holdsShownMarkdown = (markdown: string) =>
+			waitFor(
+				() => {
+					expect(shownMarkdownOf(shown)).toBe(markdown)
+					expect(fakeLibraryHost.markdownOf(DOCUMENT.name)).toBe(markdown)
+				},
+				{ timeout: 1000 },
+			)
+
+		await typeInto(body, "Notes and actions")
+		const typed = TASK_NOTES.replace("Notes", "Notes and actions")
+		await holdsShownMarkdown(typed)
+
+		await pasteOnLine(body, 2, PASTED_PARAGRAPHS)
+		await holdsShownMarkdown(
+			typed.replace("\n\n\n", `\n\n${PASTED_PARAGRAPHS}\n`),
+		)
+
+		await undoIn(body)
+		await holdsShownMarkdown(typed)
+
+		await press(
+			shown.getByRole("checkbox", { name: common("library.editor.task") }),
+		)
+		const ticked = typed.replace("- [ ]", "- [x]")
+		await holdsShownMarkdown(ticked)
+
+		fakeLibraryHost.writeElsewhere(DOCUMENT.name, `${ticked}${AGENT_LINE}`)
+		await holdsShownMarkdown(`${ticked}${AGENT_LINE}`)
+		expect(paragraphOf(shown)).toBe(body)
+
+		await press(
+			shown.getByRole("button", { name: common("library.document.back") }),
+		)
+		await openLibraryItem(DOCUMENT, shown)
+		await holdsShownMarkdown(`${ticked}${AGENT_LINE}`)
+		expect(paragraphOf(shown)).not.toBe(body)
 	})
 })
 
