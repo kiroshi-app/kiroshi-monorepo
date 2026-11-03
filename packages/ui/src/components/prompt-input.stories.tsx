@@ -49,7 +49,7 @@ const MAX_ROWS = 8
 const DRAFT = "Summarise the release notes for v0.1"
 
 const FILLING_DRAFT =
-	"Summarise the release notes and flag every public export that has moved"
+	"Summarise the release notes and flag every public export that moved"
 
 const WRAPPED_DRAFT =
 	"Summarise the release notes for v0.1 and tell me which entries changed a public export"
