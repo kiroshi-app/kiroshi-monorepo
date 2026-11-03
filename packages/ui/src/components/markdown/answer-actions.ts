@@ -8,7 +8,11 @@ type MarkdownAnswerActions = {
 	onUseValues: (summary: string) => void
 	onOpenImage: (images: LibraryLightboxImage[], index: number) => void
 	onOpenWebPage?: (url: string) => void
-	onToggleChecklistItem?: (id: string, isChecked: boolean) => void
+	onToggleChecklistItem?: (
+		checklist: string,
+		index: number,
+		isChecked: boolean,
+	) => void
 	onCopyChecklist?: (list: string) => void
 	onSaveImage?: (url: string) => void
 }

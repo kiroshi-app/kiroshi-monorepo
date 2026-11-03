@@ -249,7 +249,7 @@ const ChecklistBlockView = ({ block }: BlockProps<"checklist">) => {
 		setChecks(
 			checks.map((check, index) => (`${index}` === id ? isChecked : check)),
 		)
-		onToggleItem?.(id, isChecked)
+		onToggleItem?.(block.title, Number(id), isChecked)
 	}
 
 	const listText = () =>
