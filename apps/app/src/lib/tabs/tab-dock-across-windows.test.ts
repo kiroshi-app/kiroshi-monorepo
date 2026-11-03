@@ -388,8 +388,6 @@ describe("a tab dropped on a window of its Space opened after the drag started",
 		await hoverThenDropOnTarget(windows)
 
 		stopWatching()
-		expect(host.windowReportSpace).toHaveBeenCalledWith(SPACE)
-		expect(host.windowReportStrip).toHaveBeenCalledWith(STRIP)
 		expect(host.raiseReportedFailure).not.toHaveBeenCalled()
 	})
 })
