@@ -26,7 +26,7 @@ type LibraryMenuSubject = {
 
 type LibraryItemAction<Item> = (item: Item) => void | Promise<void>
 
-type LibraryItemActions<Item> = {
+type LibraryItemHandlers<Item> = {
 	onOpen?: LibraryItemAction<Item>
 	onOpenInNewTab?: LibraryItemAction<Item>
 	onRename?: LibraryItemAction<Item>
@@ -34,6 +34,12 @@ type LibraryItemActions<Item> = {
 	onDownload?: LibraryItemAction<Item>
 	onShowInFolder?: LibraryItemAction<Item>
 	onDelete?: LibraryItemAction<Item>
+}
+
+type LibraryItemActionName = keyof LibraryItemHandlers<unknown>
+
+type LibraryItemActions<Item> = LibraryItemHandlers<Item> & {
+	isActionShown?: (item: Item, action: LibraryItemActionName) => boolean
 }
 
 const LIBRARY_ITEM_ACTIONS = [
@@ -57,16 +63,26 @@ const LIBRARY_ITEM_ACTIONS = [
 	},
 	{ handler: "onDelete", label: "library.itemMenu.delete", Icon: Icons.Delete },
 ] as const satisfies {
-	handler: keyof LibraryItemActions<unknown>
+	handler: LibraryItemActionName
 	label: string
 	Icon: ComponentType
 }[]
 
-const shownActionsOf = <Item,>(actions: LibraryItemActions<Item>) =>
-	LIBRARY_ITEM_ACTIONS.filter(({ handler }) => actions[handler] !== undefined)
+const shownActionsOf = <Item,>(handlers: LibraryItemHandlers<Item>) =>
+	LIBRARY_ITEM_ACTIONS.filter(({ handler }) => handlers[handler] !== undefined)
 
-const hasLibraryItemActions = <Item,>(actions: LibraryItemActions<Item>) =>
-	shownActionsOf(actions).length > 0
+const hasLibraryItemActions = <Item,>(handlers: LibraryItemHandlers<Item>) =>
+	shownActionsOf(handlers).length > 0
+
+const handlersFor = <Item,>(
+	{ isActionShown = () => true, ...handlers }: LibraryItemActions<Item>,
+	item: Item,
+): LibraryItemHandlers<Item> =>
+	Object.fromEntries(
+		LIBRARY_ITEM_ACTIONS.filter(({ handler }) =>
+			isActionShown(item, handler),
+		).map(({ handler }) => [handler, handlers[handler]]),
+	)
 
 type MenuItemPartProps = {
 	onClick: () => void
@@ -81,7 +97,7 @@ type LibraryItemMenuParts = {
 
 type LibraryItemMenuItemsProps<Item> = {
 	item: Item
-	actions: LibraryItemActions<Item>
+	actions: LibraryItemHandlers<Item>
 	parts: LibraryItemMenuParts
 	onPickDelete: () => void
 }
@@ -158,8 +174,9 @@ const LibraryItemContextMenu = <Item extends LibraryMenuSubject>({
 }: LibraryItemContextMenuProps<Item>) => {
 	const { t } = useTranslation("common")
 	const [isConfirmingDelete, setConfirmingDelete] = useState(false)
+	const handlers = handlersFor(actions, item)
 
-	if (!hasLibraryItemActions(actions)) return trigger
+	if (!hasLibraryItemActions(handlers)) return trigger
 
 	return (
 		<>
@@ -170,7 +187,7 @@ const LibraryItemContextMenu = <Item extends LibraryMenuSubject>({
 					className={STILL_UNDER_REDUCED_MOTION}
 				>
 					<LibraryItemMenuItems
-						actions={actions}
+						actions={handlers}
 						item={item}
 						onPickDelete={() => setConfirmingDelete(true)}
 						parts={CONTEXT_MENU_PARTS}
@@ -179,7 +196,7 @@ const LibraryItemContextMenu = <Item extends LibraryMenuSubject>({
 			</ContextMenu>
 			<LibraryItemDeleteDialog
 				name={item.name}
-				onConfirm={() => actions.onDelete?.(item)}
+				onConfirm={() => handlers.onDelete?.(item)}
 				onOpenChange={setConfirmingDelete}
 				open={isConfirmingDelete}
 			/>
@@ -188,6 +205,7 @@ const LibraryItemContextMenu = <Item extends LibraryMenuSubject>({
 }
 
 export {
+	handlersFor,
 	hasLibraryItemActions,
 	type LibraryItemActions,
 	LibraryItemContextMenu,

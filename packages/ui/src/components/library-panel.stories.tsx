@@ -301,6 +301,52 @@ export const GridContextMenu = meta.story({
 	},
 })
 
+export const GridActionsPerItem = meta.story({
+	args: {
+		onOpen: fn(),
+		onOpenInNewTab: fn(),
+		onRename: fn(),
+		onCopy: fn(),
+		onDownload: fn(),
+		onShowInFolder: fn(),
+		onDelete: fn(),
+		isActionShown: (item, action) =>
+			action !== "onRename" || item.kind === "document",
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"An image and a document right-clicked in one grid, every item action given and Rename kept for documents. Check that the image menu lists no Rename and that the document menu lists Rename in its place.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const menuOf = async (name: string) => {
+			await userEvent.pointer({
+				keys: "[MouseRight]",
+				target: canvas.getByRole("button", { name: new RegExp(name) }),
+			})
+			const menu = await within(document.body).findByRole("menu", {
+				name: `Actions for ${name}`,
+			})
+			return within(menu)
+				.getAllByRole("menuitem")
+				.map((entry) => entry.textContent)
+		}
+
+		await expect(await menuOf("hero-dunes.png")).toEqual(
+			ITEM_ACTION_NAMES.filter((name) => name !== "Rename"),
+		)
+		await userEvent.keyboard("{Escape}")
+		await waitFor(() =>
+			expect(within(document.body).queryByRole("menu")).toBe(null),
+		)
+
+		await expect(await menuOf("Spring launch brief")).toEqual(ITEM_ACTION_NAMES)
+	},
+})
+
 export const GridWithoutItemActions = meta.story({
 	tags: ["test-only"],
 	parameters: {
