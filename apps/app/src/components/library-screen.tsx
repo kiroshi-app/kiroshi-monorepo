@@ -20,9 +20,14 @@ import { LibraryDropTarget } from "@/components/library-drop-target"
 import type { Space } from "@/lib/bindings"
 import type { Bot } from "@/lib/conversations/store-contract"
 import { withoutEdits } from "@/lib/library/library-document-writers"
-import { matchesQuery, toShownItem } from "@/lib/library/library-items"
+import {
+	documentNamedAs,
+	matchesQuery,
+	toShownItem,
+} from "@/lib/library/library-items"
 import { useCreateLibraryDocument } from "@/lib/library/use-create-library-document"
 import {
+	type LibraryRename,
 	useJoinedLibraryActions,
 	useLibraryActions,
 } from "@/lib/library/use-library-actions"
@@ -31,12 +36,16 @@ import { useLibraryDocumentWriters } from "@/lib/library/use-library-document-wr
 import { useLibraryImageSources } from "@/lib/library/use-library-image-sources"
 import { useLibraryImports } from "@/lib/library/use-library-imports"
 import { useLibraryItems } from "@/lib/library/use-library-items"
+import { useOpenOnArrival } from "@/lib/library/use-open-on-arrival"
 
 type LibraryScreenProps = {
 	spaceId: string
 	isJoined: boolean
 	bots: Bot[]
 	spaceTint?: Space["colour"]
+	openedOnArrival?: string
+	onArrivalOpened?: () => void
+	onOpenInNewTab?: (item: NamedItem) => void
 }
 
 type ShownImage = Extract<ShownLibraryItem, { kind: "image" }>
@@ -45,6 +54,7 @@ type OpenedDocument = {
 	kind: "document"
 	name: string
 	title: string
+	startTitle: string
 	detail: string
 	template?: LibraryDocumentTemplate
 }
@@ -53,11 +63,24 @@ type OpenedItem = { kind: "image"; id: string } | OpenedDocument | null
 
 type NamedItem = { id: string }
 
+const renameIfRetitled = (
+	{ name, title, startTitle }: OpenedDocument,
+	rename: (renamed: LibraryRename) => void,
+) => {
+	const newTitle = title.trim()
+	if (newTitle && newTitle !== startTitle) {
+		rename({ name, newName: documentNamedAs(name, newTitle) })
+	}
+}
+
 export const LibraryScreen = ({
 	spaceId,
 	isJoined,
 	bots,
 	spaceTint,
+	openedOnArrival,
+	onArrivalOpened,
+	onOpenInNewTab,
 }: LibraryScreenProps) => {
 	const library = useLibraryItems(spaceId)
 	const sourceOf = useLibraryImageSources(spaceId, library.items, isJoined)
@@ -69,6 +92,7 @@ export const LibraryScreen = ({
 		? undefined
 		: ({ id }: NamedItem) => localActions.reveal(id)
 	const copy = ({ id }: NamedItem) => actions.copy(id)
+	const copyAndWait = ({ id }: NamedItem) => actions.copyAndWait(id)
 	const [filter, setFilter] = useState<LibraryFilter>("all")
 	const [query, setQuery] = useState("")
 	const [opened, setOpened] = useState<OpenedItem>(null)
@@ -125,8 +149,21 @@ export const LibraryScreen = ({
 			kind: "document",
 			name: item.id,
 			title: item.name,
+			startTitle: item.name,
 			detail: item.detail,
 		})
+	}
+	useOpenOnArrival({
+		name: openedOnArrival,
+		items: shownItems,
+		isListing: library.isLoading,
+		open: openItem,
+		consume: onArrivalOpened,
+	})
+	const renameItem = (item: ShownLibraryItem) => {
+		if (item.kind === "document") {
+			openItem(item)
+		}
 	}
 	const createFrom = (template: LibraryDocumentTemplate) => {
 		if (isCreating) {
@@ -139,11 +176,18 @@ export const LibraryScreen = ({
 		)
 		create({ title, body }, (name) => {
 			setPickedTemplate(null)
-			setOpened({ kind: "document", name, title, detail, template })
+			setOpened({
+				kind: "document",
+				name,
+				title,
+				startTitle: title,
+				detail,
+				template,
+			})
 		})
 	}
-	const leaveDocument = () => {
-		void closeAndRelist()
+	const leaveDocument = (left: OpenedDocument) => {
+		void closeAndRelist().then(() => renameIfRetitled(left, actions.rename))
 		close()
 	}
 	const undoAll = () => {
@@ -165,7 +209,7 @@ export const LibraryScreen = ({
 				detail={openedDocument.detail}
 				finished={finished}
 				key={openedDocument.name}
-				onBack={leaveDocument}
+				onBack={() => leaveDocument(openedDocument)}
 				onBodyChange={edit}
 				onCaretChange={shareCaret}
 				onDone={dismissFinished}
@@ -185,9 +229,15 @@ export const LibraryScreen = ({
 			filter={filter}
 			items={[...importingItems, ...shownItems]}
 			onFilterChange={setFilter}
+			onCopy={copy}
+			onDownload={save}
 			onNewDocument={() => setPickedTemplate("blank")}
+			onOpen={openItem}
+			onOpenInNewTab={onOpenInNewTab}
 			onOpenItem={openItem}
+			onRename={renameItem}
 			onSearchQueryChange={setQuery}
+			onShowInFolder={reveal}
 			onStartTemplate={setPickedTemplate}
 			overlay={
 				<>
@@ -195,10 +245,11 @@ export const LibraryScreen = ({
 						count={images.length}
 						image={images[imageIndex] ?? null}
 						onClose={close}
-						onCopy={copy}
+						onCopy={copyAndWait}
 						onDownload={save}
 						onShowInFolder={reveal}
 						onNext={() => openImageAt(imageIndex + 1)}
+						onOpenInNewTab={onOpenInNewTab}
 						onPrevious={() => openImageAt(imageIndex - 1)}
 						position={imageIndex + 1}
 					/>

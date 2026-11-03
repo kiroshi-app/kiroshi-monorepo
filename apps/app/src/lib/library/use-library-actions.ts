@@ -1,7 +1,9 @@
-import { useMutation } from "@tanstack/react-query"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
 
 import { i18n } from "@workspace/ui/lib/i18n"
 
+import { renameLibraryDocument } from "./library-document-writes"
+import { libraryQueryKeys } from "./library-query-keys"
 import { readLibraryFile } from "./library-reads"
 
 import { commands, type LibraryError } from "../bindings"
@@ -63,19 +65,44 @@ const useLibraryAction = (
 ) => useLibraryMutation(spaceId, action, command).mutate
 
 const useLibraryCopy = (spaceId: string, command: ActionCommand) => {
-	const { mutateAsync } = useLibraryMutation(spaceId, "copy", command)
-	return async (name: string) => {
-		await mutateAsync(name)
+	const { mutate, mutateAsync } = useLibraryMutation(spaceId, "copy", command)
+	return {
+		copy: mutate,
+		copyAndWait: async (name: string) => {
+			await mutateAsync(name)
+		},
 	}
+}
+
+export type LibraryRename = { name: string; newName: string }
+
+const useLibraryRename = (spaceId: string) => {
+	const queryClient = useQueryClient()
+	return useMutation({
+		mutationFn: ({ name, newName }: LibraryRename) =>
+			renameLibraryDocument(spaceId, name, newName),
+		onSettled: () =>
+			queryClient.invalidateQueries({
+				queryKey: libraryQueryKeys.itemsOf(spaceId),
+			}),
+		meta: {
+			failureNotice: () => ({
+				title: i18n.t("common:library.failure.save"),
+			}),
+			raisedIn: "use-library-actions",
+		},
+	}).mutate
 }
 
 export const useLibraryActions = (spaceId: string) => ({
 	save: useLibraryAction(spaceId, "save", ACTION_COMMANDS.save),
-	copy: useLibraryCopy(spaceId, ACTION_COMMANDS.copy),
+	...useLibraryCopy(spaceId, ACTION_COMMANDS.copy),
 	reveal: useLibraryAction(spaceId, "reveal", ACTION_COMMANDS.reveal),
+	rename: useLibraryRename(spaceId),
 })
 
 export const useJoinedLibraryActions = (spaceId: string) => ({
 	save: useLibraryAction(spaceId, "save", saveFromHost),
-	copy: useLibraryCopy(spaceId, copyFromHost),
+	...useLibraryCopy(spaceId, copyFromHost),
+	rename: useLibraryRename(spaceId),
 })

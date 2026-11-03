@@ -20,6 +20,12 @@ export const applyLibraryUpdate = (
 	update: string,
 ) => invoke<null>("library_apply_update", { spaceId, name, update })
 
+export const renameLibraryDocument = (
+	spaceId: string,
+	name: string,
+	newName: string,
+) => invoke<LibraryItem>("library_rename_document", { spaceId, name, newName })
+
 export const shareLibraryCaret = (
 	spaceId: string,
 	name: string,
