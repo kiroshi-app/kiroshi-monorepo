@@ -3,7 +3,7 @@ set -euo pipefail
 
 readonly REPOSITORY="kiroshi-app/kiroshi-monorepo"
 readonly USAGE_ERROR=64
-readonly ARMED_STATE_QUERY='query($id: ID!) { node(id: $id) { ... on PullRequest { autoMergeRequest { enabledAt } isInMergeQueue } } }'
+readonly ARMED_STATE_QUERY='query($id: ID!) { node(id: $id) { ... on PullRequest { autoMergeRequest { enabledAt } } } }'
 
 fail() {
 	echo "pr-enqueue.sh: $1" >&2
@@ -29,9 +29,9 @@ if [ "$(wc -l <<<"$open_pull_requests")" -gt 1 ]; then
 fi
 read -r number id <<<"$open_pull_requests"
 
-gh pr merge --auto "$number" --repo "$REPOSITORY"
-is_auto_merge_armed=$(gh api graphql -f query="$ARMED_STATE_QUERY" -f id="$id" --jq '.data.node | .autoMergeRequest != null or .isInMergeQueue')
+gh pr merge --auto --squash "$number" --repo "$REPOSITORY"
+is_auto_merge_armed=$(gh api graphql -f query="$ARMED_STATE_QUERY" -f id="$id" --jq '.data.node.autoMergeRequest != null')
 echo "pr-enqueue.sh: PR #$number autoMergeArmed=$is_auto_merge_armed"
 if [ "$is_auto_merge_armed" != "true" ]; then
-	fail "PR #$number has no auto-merge armed and is not in the merge queue after gh pr merge --auto"
+	fail "PR #$number has no auto-merge armed after gh pr merge --auto --squash"
 fi

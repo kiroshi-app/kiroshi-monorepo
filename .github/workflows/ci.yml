@@ -6,8 +6,6 @@ on:
     tags: ["v*"]
   pull_request:
     branches: [main]
-  merge_group:
-    types: [checks_requested]
 
 permissions:
   contents: read
@@ -19,15 +17,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-# lint runs on every event but a push to main, without waiting on changes.
+# lint runs on every event, without waiting on changes.
 # scripts/ci-changes.ts selects every other job per event, verify requires every selected job.
 # pull_request: changes, lint, vitest on the test files the diff changed, rust on its library tests, verify.
-# merge_group: changes, lint, vitest, website, rust, storybook, verify.
-# push to main: changes, ios, verify. The merge_group run of the commit already ran every desktop job.
+# push to main: changes, lint, vitest, website, rust, storybook on the paths the push changed, ios, verify.
 # v* tag: changes, lint, vitest, website, rust, storybook, verify.
 jobs:
   lint:
-    if: github.event_name != 'push' || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -169,7 +165,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
-      BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+      BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
       CI_EVENT: ${{ startsWith(github.ref, 'refs/tags/v') && 'tag' || github.event_name }}
     outputs:
       rust: ${{ steps.filter.outputs.rust }}
@@ -186,7 +182,7 @@ jobs:
           bun-version-file: package.json
 
       - name: Fetch the base to diff against
-        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
         run: git fetch --depth=1 origin "$BASE"
 
       - name: Decide the jobs to run
@@ -234,8 +230,8 @@ jobs:
         if: needs.changes.result != 'success'
         run: exit 1
 
-      - name: Require lint to succeed on every event but a push to main, and to be skipped on it
-        if: needs.lint.result != ((github.event_name != 'push' || startsWith(github.ref, 'refs/tags/v')) && 'success' || 'skipped')
+      - name: Require lint to succeed
+        if: needs.lint.result != 'success'
         run: exit 1
 
       - name: Require vitest to succeed when changes selected it, and to be skipped otherwise

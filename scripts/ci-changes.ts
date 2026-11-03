@@ -1,4 +1,4 @@
-const CI_EVENTS = ["pull_request", "merge_group", "push", "tag"] as const
+const CI_EVENTS = ["pull_request", "push", "tag"] as const
 
 type CiEvent = (typeof CI_EVENTS)[number]
 
@@ -89,16 +89,14 @@ export const touchedJobs = (paths: string[]): FilteredJobs => {
 	}
 }
 
-const isDiffed = (event: CiEvent) =>
-	event === "pull_request" || event === "merge_group"
+const isDiffed = (event: CiEvent) => event !== "tag"
 
 export const decideJobs = ({ event, paths }: ChangeSet): FilteredJobs => {
-	if (event === "push") return { ...NO_JOB, ios: true }
 	if (event === "tag") return { ...EVERY_JOB, ios: false }
 	const touched = touchedJobs(paths)
 	if (event === "pull_request")
 		return { ...NO_JOB, vitest: touched.vitest, rust: touched.rust }
-	return { ...touched, ios: false }
+	return { ...touched, ios: true }
 }
 
 const readEvent = (name: string | undefined): CiEvent => {
@@ -108,8 +106,7 @@ const readEvent = (name: string | undefined): CiEvent => {
 }
 
 const changedPaths = (base: string | undefined) => {
-	if (!base)
-		throw new Error("BASE is required on a pull_request or a merge_group")
+	if (!base) throw new Error("BASE is required on a pull_request or a push")
 	const diff = Bun.spawnSync(["git", "diff", "--name-only", base, "HEAD"])
 	if (!diff.success)
 		throw new Error(`git diff against ${base} failed: ${diff.stderr}`)
