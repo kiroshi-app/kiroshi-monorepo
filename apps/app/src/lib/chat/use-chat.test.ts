@@ -125,8 +125,5 @@ it("follows the background task count of a held turn on its line", () => {
 
 	chat.publish(BOT, writingIn(AWAY))
 
-	expect(activityIn(result.current, AWAY)[BOT]).not.toHaveProperty(
-		"backgroundTasks",
-		1,
-	)
+	expect(activityIn(result.current, AWAY)[BOT].backgroundTasks).toBeUndefined()
 })

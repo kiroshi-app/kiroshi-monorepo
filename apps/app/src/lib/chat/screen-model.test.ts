@@ -568,10 +568,9 @@ describe("sidebarActivityFor", () => {
 	})
 
 	it("drops the count once the hold is released", () => {
-		expect(sidebarActivityFor(chatState({ hold: null }))).not.toHaveProperty(
-			"backgroundTasks",
-			expect.any(Number),
-		)
+		expect(
+			sidebarActivityFor(chatState({ hold: null })).backgroundTasks,
+		).toBeUndefined()
 	})
 
 	it("carries the pose read off the running step", () => {
