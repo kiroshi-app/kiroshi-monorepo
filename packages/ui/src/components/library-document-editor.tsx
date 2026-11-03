@@ -580,7 +580,7 @@ type InlineFieldProps = Omit<HTMLAttributes<HTMLSpanElement>, "children"> & {
 	className: string
 	fieldRef: (node: TextField | null) => (() => void) | undefined
 	drawnText?: ReactNode
-	onInsert: (text: string) => void
+	onInsert: (field: HTMLElement, text: string) => void
 }
 
 const InlineField = ({
@@ -608,7 +608,7 @@ const InlineField = ({
 			return
 
 		event.preventDefault()
-		onInsert(event.data)
+		onInsert(node, event.data)
 	})
 
 	useEffect(() => {
@@ -1036,10 +1036,7 @@ const LibraryDocumentEditor = ({
 					if (!(event.nativeEvent as InputEvent).isComposing)
 						takeTyped(index, event.currentTarget)
 				}}
-				onInsert={(text) => {
-					const field = fields.current.get(block.id)
-					if (field) insertIn(index, field, text)
-				}}
+				onInsert={(field, text) => insertIn(index, field, text)}
 				onPaste={(event) => {
 					event.preventDefault()
 					insertIn(
