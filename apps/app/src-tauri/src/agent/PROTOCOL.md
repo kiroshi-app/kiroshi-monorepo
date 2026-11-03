@@ -472,7 +472,7 @@ The frame is an `SDKMessage` verbatim, plus the ones the sidecar adds itself.
 | `assistant` | `SDKAssistantMessage` — `text` and/or `tool_use` blocks | `messageCompleted` / `activity` |
 | `user` | `SDKUserMessage` — `tool_result` with `is_error` | `activity` (succeeded / failed) |
 | `result` | `SDKResultMessage`: `subtype`, `session_id`, `is_error` | nothing on the front: it records the SDK session id and starts the held result bound of the running run; the turn ends on `turn_settled` |
-| `tasks_pending` | the sidecar, once a `result` has arrived, on every change of `count`, the live background tasks not flagged `ambient` | nothing on the front: the host logs the reason `N background tasks` and the run stays `running` |
+| `tasks_pending` | the sidecar, once a `result` has arrived, on every change of `count`, the live background tasks not flagged `ambient` | `tasksPending` with the frame's `count`, once per frame of a running run: the host logs the reason `N background tasks` and the run stays `running` |
 | `turn_settled` | the sidecar, once the turn is settled (see below): every field of the last `result`, its `type` renamed; or the sidecar when a stop lands on a prompt still held | `turnEnded` |
 | `host_request` | the sidecar, from `askHost` | nothing — it is answered, not read |
 | `heartbeat` | the sidecar, every `HEARTBEAT_INTERVAL_MS` while a query of the session is in flight | nothing: it renews the lease of the running run |
@@ -514,9 +514,20 @@ The sidecar writes one `turn_settled`, carrying every field of the last `result`
 
 While a `result` has arrived and tasks are counted, the sidecar writes `tasks_pending`
 with the count on every change, `0` included. The host keeps the run `running`, logs the
-reason `N background tasks`, and emits no `turnEnded`. The host turn, the mission driver
-and the routine runner close a session on `turnEnded` alone, so none of them closes it
-while tasks are pending.
+reason `N background tasks`, emits `{"type":"tasksPending","count":N}` to the scope's
+listeners, and emits no `turnEnded`. The host turn, the mission driver and the routine
+runner close a session on `turnEnded` alone, so none of them closes it while tasks are
+pending.
+
+The routine runner reads `tasksPending` to hold its run deadline: while the latest count
+of the run is above zero the deadline does not fire, and when the count returns to `0`
+the countdown resumes with the time it had left when the count rose. `TASKS_PENDING_BOUND`
+is then the only bound on the wait. A turn that ends `failed` while tasks are pending and
+is followed by `runLapsed` with `tasksPending` closes the run failed with the reason
+`the run's turn lapsed on tasksPending, held unsettled past the background task bound of
+N ms`. The lease of the run in `routine_runs` keeps renewing every tick meanwhile. A debug
+build reads a positive `KIROSHI_ROUTINE_DEADLINE_SECS` as the routine deadline; a release
+build ignores it.
 
 ## Permissions
 

@@ -696,6 +696,14 @@ fn a_turn_holding_a_background_task_ends_only_after_the_follow_up_turn_it_runs()
 		.position(|event| matches!(event, AgentEvent::TurnEnded { .. }))
 		.expect("the turn ended");
 	assert!(follow_up_at < ended_at, "the turn ended before its follow-up: {events:#?}");
+	let pending: Vec<u32> = events
+		.iter()
+		.filter_map(|event| match event {
+			AgentEvent::TasksPending { count } => Some(*count),
+			_ => None,
+		})
+		.collect();
+	assert_eq!(pending, vec![1, 0], "each tasks_pending frame reaches the listeners once");
 	assert_eq!(stored.turn_endings(), vec![TurnOutcome::Completed]);
 	assert!(stored.lapses().is_empty());
 	stored.close();

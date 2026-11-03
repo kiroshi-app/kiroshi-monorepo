@@ -316,6 +316,22 @@
         },
         {
           "properties": {
+            "count": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": {
+              "const": "tasksPending"
+            }
+          },
+          "required": [
+            "type",
+            "count"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
             "bundle": {
               "$ref": "#/$defs/EvolvedBundle"
             },

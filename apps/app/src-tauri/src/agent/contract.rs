@@ -503,6 +503,8 @@ pub enum AgentEvent {
 	#[serde(rename_all = "camelCase")]
 	TurnEnded { ended: TurnEnded },
 	#[serde(rename_all = "camelCase")]
+	TasksPending { count: u32 },
+	#[serde(rename_all = "camelCase")]
 	BotEvolved { bundle: EvolvedBundle, commit_id: String, title: String },
 	#[serde(rename_all = "camelCase")]
 	BotEvolutionFailed { bundle: EvolvedBundle, detail: String },
