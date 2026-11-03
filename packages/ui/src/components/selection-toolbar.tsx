@@ -233,6 +233,8 @@ type SelectionToolbarProps = SelectionToolbarActions & {
 	anchor: SelectionToolbarAnchor
 	activeFormats?: readonly SelectionToolbarFormat[]
 	link?: string
+	isLinking?: boolean
+	onLinkingChange?: (isLinking: boolean) => void
 }
 
 const keepTextSelection = (event: MouseEvent<HTMLElement>) =>
@@ -249,9 +251,16 @@ const SelectionToolbar = ({
 	onLink,
 	onHeading,
 	onList,
+	isLinking: isLinkingProp,
+	onLinkingChange,
 }: SelectionToolbarProps) => {
 	const { t } = useTranslation("common")
-	const [isLinking, setIsLinking] = useState(false)
+	const [isOwnLinking, setIsOwnLinking] = useState(false)
+	const isLinking = isLinkingProp ?? isOwnLinking
+	const setIsLinking = (next: boolean) => {
+		setIsOwnLinking(next)
+		onLinkingChange?.(next)
+	}
 	const [height, setHeight] = useState(0)
 	const frame = useRef<HTMLDivElement>(null)
 	const linkButton = useRef<HTMLButtonElement>(null)

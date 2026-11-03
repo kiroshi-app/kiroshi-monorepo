@@ -680,6 +680,29 @@ type SelectedText = {
 	anchor: SelectionToolbarAnchor
 }
 
+type ToolbarMode = "bar" | "link" | "closed"
+
+type ShortcutFormat = "bold" | "italic" | "strikethrough" | "code" | "link"
+
+const SHORTCUT_FORMAT: Record<string, ShortcutFormat> = {
+	b: "bold",
+	i: "italic",
+	"shift+s": "strikethrough",
+	e: "code",
+	k: "link",
+}
+
+const shortcutFormatOf = (event: KeyboardEvent<HTMLElement>) => {
+	if (!(event.metaKey || event.ctrlKey) || event.altKey) return
+	const key = event.key.toLowerCase()
+	return SHORTCUT_FORMAT[event.shiftKey ? `shift+${key}` : key]
+}
+
+const isSameSelected = (first?: SelectedText, second?: SelectedText) =>
+	first?.id === second?.id &&
+	first?.start === second?.start &&
+	first?.end === second?.end
+
 const COLUMN = '[data-slot="library-document-column"]'
 
 const OUTSIDE_THE_TEXT =
@@ -811,6 +834,7 @@ const LibraryDocumentEditor = ({
 	const pendingBlurReport = useRef<ReturnType<typeof setTimeout>>(undefined)
 	const frame = useRef<HTMLDivElement>(null)
 	const [selected, setSelected] = useState<SelectedText>()
+	const [toolbarMode, setToolbarMode] = useState<ToolbarMode>("bar")
 	const [heldListAnchors, setHeldListAnchors] = useState<
 		ReadonlyMap<string, string>
 	>(() => listAnchorsOf(runsOf(blocks), new Map()))
@@ -903,20 +927,12 @@ const LibraryDocumentEditor = ({
 
 		const [id, field] = focusedIn(fields.current) ?? []
 		const { start, end } = field ? selectionOf(field) : { start: 0, end: 0 }
-		if (
-			!(id && field && frame.current) ||
-			id === TITLE_FIELD ||
-			start === end
-		) {
-			setSelected(undefined)
-			return
-		}
-		setSelected({
-			id,
-			start,
-			end,
-			anchor: anchorOf(field, start, end, frame.current),
-		})
+		const next =
+			id && field && frame.current && id !== TITLE_FIELD && start !== end
+				? { id, start, end, anchor: anchorOf(field, start, end, frame.current) }
+				: undefined
+		if (!isSameSelected(selected, next)) setToolbarMode("bar")
+		setSelected(next)
 	}
 
 	const followSelection = useEffectEvent(readSelection)
@@ -1107,6 +1123,37 @@ const LibraryDocumentEditor = ({
 		focusAt(previous.id, previous.text.length)
 	}
 
+	const documentRangeOf = (id: string, start: number, end: number) => {
+		const offset = textStarts.get(id) ?? 0
+		return { start: offset + start, end: offset + end }
+	}
+
+	const openLinkField = () => {
+		readSelection()
+		setToolbarMode("link")
+	}
+
+	const formatOnShortcut = (
+		event: KeyboardEvent<HTMLElement>,
+		format: ShortcutFormat,
+		index: number,
+		{ start, end }: TextSelection,
+	) => {
+		const action = {
+			bold: onBold,
+			italic: onItalic,
+			strikethrough: onStrikethrough,
+			code: onCode,
+			link: onLink && openLinkField,
+		}[format]
+		const id = blocks[index]?.id
+		if (!(action && id)) return
+
+		event.preventDefault()
+		event.stopPropagation()
+		action(documentRangeOf(id, start, end))
+	}
+
 	const keyDownIn = (index: number) => (event: KeyboardEvent<HTMLElement>) => {
 		if (event.nativeEvent.isComposing) return
 
@@ -1117,8 +1164,14 @@ const LibraryDocumentEditor = ({
 		const isCollapsed = start === end
 		const isAtStart = isCollapsed && start <= shown.start
 		const isAtEnd = isCollapsed && end >= shown.end
+		const shortcutFormat = isCollapsed ? undefined : shortcutFormatOf(event)
 
-		if (event.key === "Enter" && !event.shiftKey) {
+		if (shortcutFormat) {
+			formatOnShortcut(event, shortcutFormat, index, selection)
+		} else if (event.key === "Escape" && selected && toolbarMode !== "closed") {
+			event.preventDefault()
+			setToolbarMode("closed")
+		} else if (event.key === "Enter" && !event.shiftKey) {
 			event.preventDefault()
 			splitAt(index, selection)
 		} else if (event.key === "Enter" && field.isContentEditable) {
@@ -1215,8 +1268,7 @@ const LibraryDocumentEditor = ({
 		setHeldListAnchors(listAnchors)
 
 	const toolbarFor = ({ id, start, end, anchor }: SelectedText) => {
-		const offset = textStarts.get(id) ?? 0
-		const range = { start: offset + start, end: offset + end }
+		const range = documentRangeOf(id, start, end)
 		const onRange = (action?: FormatAction) => action && (() => action(range))
 		const block = blocks.find((candidate) => candidate.id === id)
 		const { formats, link } = formatsOf(block, start, end)
@@ -1224,12 +1276,16 @@ const LibraryDocumentEditor = ({
 			<SelectionToolbar
 				activeFormats={formats}
 				anchor={anchor}
+				isLinking={toolbarMode === "link"}
 				link={link}
 				onBold={onRange(onBold)}
 				onCode={onRange(onCode)}
 				onHeading={onRange(onHeading)}
 				onItalic={onRange(onItalic)}
 				onLink={onLink && ((url) => onLink(url, range))}
+				onLinkingChange={(isLinking) =>
+					setToolbarMode(isLinking ? "link" : "bar")
+				}
 				onList={onRange(onList)}
 				onStrikethrough={onRange(onStrikethrough)}
 			/>
@@ -1303,7 +1359,7 @@ const LibraryDocumentEditor = ({
 					)}
 				</div>
 			</LibraryDocumentColumn>
-			{selected ? toolbarFor(selected) : null}
+			{selected && toolbarMode !== "closed" ? toolbarFor(selected) : null}
 		</div>
 	)
 }
