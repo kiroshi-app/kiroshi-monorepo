@@ -4231,6 +4231,56 @@ const replyTo = async (index: number) => {
 	await settle()
 }
 
+const refusingRoomOn = async () => {
+	const store = createFakeTranscriptStore()
+	const [ada] = await seatBots(store, SPACE, ["Ada"])
+	const conversation = await store.createConversation({
+		spaceId: SPACE,
+		sectionId: null,
+		title: "Walls",
+		botIds: [ada.id],
+	})
+	await writeTurn(store, conversation.id, ada.id, {
+		turnId: "t-1",
+		text: "walls up",
+		createdAt: 1,
+	})
+	await writeTurn(store, conversation.id, ada.id, {
+		turnId: "t-2",
+		text: "the gates hold",
+		createdAt: 2,
+	})
+	const refusing: TranscriptStore = {
+		...store,
+		sendUserMessage: () => Promise.reject(new Error("refused")),
+	}
+	const driver = createScriptedDriver()
+	const runtimes = createConversationRuntimes(driver, refusing, {})
+	render(
+		createElement(ThreadScreenHarness, {
+			bots: [ada],
+			landings: createMessageLandingController(),
+			onOpenMission: () => undefined,
+			staging: createAttachmentsController(
+				createAttachmentsPort({ chat: NO_BOT_CHAT, driver, runtimes }),
+			),
+			thread: {
+				kind: "conversation",
+				conversation,
+				runtimes,
+				onOpenSettings: () => undefined,
+			},
+		}),
+		{ wrapper: createQueryTestWrapper().wrapper },
+	)
+	await settle()
+}
+
+const repliedToCardNames = (author: string) =>
+	screen
+		.queryAllByRole("button", { name: new RegExp(`^${author}: `) })
+		.map((card) => card.getAttribute("aria-label"))
+
 describe("ThreadScreen holding several replies", () => {
 	let layout: FakeLayout
 
@@ -4317,6 +4367,20 @@ describe("ThreadScreen holding several replies", () => {
 			screen.getByRole<HTMLTextAreaElement>("textbox", { name: "Message" })
 				.value,
 		).toBe("")
+	})
+
+	it("shows one replied-to card per reply link, in link order, on a refused message held for Send again", async () => {
+		await refusingRoomOn()
+		await replyToSelection("walls up")
+		await replyTo(1)
+
+		await sendInComposer("on both")
+
+		expect(screen.getByText("Not sent.")).toBeTruthy()
+		expect(repliedToCardNames("Ada")).toEqual([
+			"Ada: “walls up”",
+			"Ada: the gates hold",
+		])
 	})
 
 	it("shows one replied-to card per reply link on a sent message", async () => {

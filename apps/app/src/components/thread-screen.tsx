@@ -304,6 +304,8 @@ type RoutinesScope = {
 
 const NO_ROUTINES: RoutinesScope = { conversationId: null, spaceId: null }
 
+const NO_REPLY_LINKS: ReplyLink[] = []
+
 const routinesScopeOf = (
 	facts: ThreadFacts,
 	mainConversationId: string | null,
@@ -1167,14 +1169,14 @@ type ConversationThreadTailProps = {
 	thread: LoadedConversationThread
 	bots: RosterBot[]
 	readerName: string
-	refusedQuote?: QuotedMessage
+	refusedQuotes?: QuotedMessage[]
 }
 
 const ConversationThreadTail = ({
 	thread,
 	bots,
 	readerName,
-	refusedQuote,
+	refusedQuotes,
 }: ConversationThreadTailProps) => {
 	const { refusedMessage, speakers, waitingBotIds } = thread.state
 
@@ -1185,7 +1187,7 @@ const ConversationThreadTail = ({
 					message={refusedMessage}
 					onSendAgain={thread.controller.sendAgain}
 					readerName={readerName}
-					repliedTo={refusedQuote}
+					repliedTo={refusedQuotes}
 				/>
 			) : null}
 			{speakingRowsIn(speakers, bots).map(({ seated, speaking }) => (
@@ -1227,7 +1229,7 @@ type ThreadTailProps = {
 	bots: RosterBot[]
 	signInStep: SignInStep | null
 	readerName: string
-	refusedQuote?: QuotedMessage
+	refusedQuotes?: QuotedMessage[]
 	onStop: () => void
 }
 
@@ -1237,7 +1239,7 @@ const ThreadTail = ({
 	bots,
 	signInStep,
 	readerName,
-	refusedQuote,
+	refusedQuotes,
 	onStop,
 }: ThreadTailProps) =>
 	thread.kind === "bot" ? (
@@ -1252,7 +1254,7 @@ const ThreadTail = ({
 		<ConversationThreadTail
 			bots={bots}
 			readerName={readerName}
-			refusedQuote={refusedQuote}
+			refusedQuotes={refusedQuotes}
 			thread={thread}
 		/>
 	)
@@ -1379,9 +1381,12 @@ const useThreadAnnotations = (
 		t,
 	} = seats
 
-	const repliedToRefusal = facts.refused?.repliedToMessageId
+	const repliedToRefusal = facts.refused?.replyLinks ?? NO_REPLY_LINKS
 	const alsoQuoted = useMemo(
-		() => (repliedToRefusal ? [repliedToRefusal] : NO_QUOTED_IDS),
+		() =>
+			repliedToRefusal.length > 0
+				? repliedToRefusal.map(({ messageId }) => messageId)
+				: NO_QUOTED_IDS,
 		[repliedToRefusal],
 	)
 	const quotes = useQuotedMessages(
@@ -1742,12 +1747,10 @@ const threadRowsOf = (
 		...missionRowsAfter(runIndex),
 		...daySeparatorsAfter(runIndex),
 	])
-	const refusedTarget = repliedToRefusal
-		? quotes.get(repliedToRefusal)
-		: undefined
+	const refusedTargets = quotedTargetsOf(repliedToRefusal, quotes)
 	const signInStep = signInStepFor(thread, signIn)
 
-	return { refusedTarget, signInStep, transcriptRows }
+	return { refusedTargets, signInStep, transcriptRows }
 }
 
 const useThreadView = (props: ThreadViewProps) => {
@@ -1924,9 +1927,7 @@ function ThreadView(props: ThreadViewProps) {
 				bots={view.bots}
 				onStop={view.stop}
 				readerName={view.reader}
-				refusedQuote={
-					view.refusedTarget ? view.toQuote(view.refusedTarget) : undefined
-				}
+				refusedQuotes={view.refusedTargets?.map(view.toQuote)}
 				signInStep={view.signInStep}
 				thread={thread}
 			/>

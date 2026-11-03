@@ -1629,6 +1629,33 @@ describe("createConversationController", () => {
 		})
 	})
 
+	it("sends again a refused message with the same reply links in the same order", async () => {
+		const said = await saidIn(harness)
+		await harness.controller.send("and then?")
+		await harness.settled()
+		const later = harness.controller
+			.getState()
+			.messages.find((message) => message.content === "and then?")
+		const replyLinks = [
+			{ messageId: later?.id ?? "", excerpt: "and then" },
+			{ messageId: said.id, excerpt: null },
+		]
+		harness.refuseNextWrite()
+		await harness.controller.send("on both", replyLinks)
+		await harness.settled()
+		const held = harness.controller.getState().refusedMessage
+		expect(held?.replyLinks).toEqual(replyLinks)
+
+		await harness.controller.sendAgain(held?.id ?? "")
+		await harness.settled()
+
+		const page = await harness.store.loadPage(harness.conversation.id, null)
+		expect(
+			page.messages.find((message) => message.content === "on both")
+				?.replyLinks,
+		).toEqual(replyLinks)
+	})
+
 	it("stores the message sent again and lets the seated companions answer it", async () => {
 		harness.refuseNextWrite()
 		await harness.controller.send("@Nyx take the walls")

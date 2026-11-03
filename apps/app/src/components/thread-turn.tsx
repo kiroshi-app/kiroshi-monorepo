@@ -175,7 +175,7 @@ export const ThreadTurn = memo(function ThreadTurn({
 type RefusedTurnProps = {
 	message: RefusedMessage
 	readerName: string
-	repliedTo?: QuotedMessage
+	repliedTo?: QuotedMessage[]
 	onSendAgain: (messageId: string) => void
 }
 
@@ -190,7 +190,7 @@ export const RefusedTurn = ({
 			copyText={message.text}
 			name={readerName}
 			onRetry={() => onSendAgain(message.id)}
-			repliedTo={repliedTo && [repliedTo]}
+			repliedTo={repliedTo}
 			state="failed"
 		>
 			<TurnBody {...messageWithAttachments(message.text)} />
