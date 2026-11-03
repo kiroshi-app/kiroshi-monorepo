@@ -42,9 +42,10 @@ const nameUnpassedSpaceVariables: PostProcessorModule = {
 	process: (value, keys, scope: TranslationScope) => {
 		const key = [keys].flat().at(-1) ?? ""
 		if (!JOINED_SPACE_LINE.test(key)) return value
-		const lng = scope.lng ?? i18n.language
 		return value.replace(UNPASSED_SPACE_VARIABLE, (_, variable) =>
-			i18n.t(`common:spaces.unnamed.${variable as "host" | "space"}`, { lng }),
+			i18n.t(`common:spaces.unnamed.${variable as "host" | "space"}`, {
+				lng: scope.lng,
+			}),
 		)
 	},
 }
