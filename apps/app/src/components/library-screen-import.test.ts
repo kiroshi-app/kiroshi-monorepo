@@ -18,6 +18,7 @@ import { i18n } from "@workspace/ui/lib/i18n"
 
 import { LibraryScreen } from "@/components/library-screen"
 import type { LibraryItem } from "@/lib/bindings"
+import { HostRefused } from "@/lib/host/host-refused"
 import type { Invoke } from "@/lib/host/joined-hosts-invoke"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 
@@ -103,7 +104,7 @@ const renderLibraryScreen = async (isJoined: boolean) => {
 			Fragment,
 			null,
 			createElement("button", { type: "button" }, OUTSIDE),
-			createElement(LibraryScreen, { spaceId: SPACE_ID, isJoined }),
+			createElement(LibraryScreen, { spaceId: SPACE_ID, isJoined, bots: [] }),
 		),
 		{ wrapper: createQueryTestWrapper().wrapper },
 	)
@@ -280,7 +281,10 @@ describe("files dropped on the Library", () => {
 
 		await waitFor(() =>
 			expect(raiseFailureNotice).toHaveBeenCalledWith(
-				importFailureOf("clip.gif", "unsupported"),
+				importFailureOf(
+					"clip.gif",
+					common("library.failure.import.unsupported"),
+				),
 			),
 		)
 		await waitFor(() =>
@@ -296,6 +300,36 @@ describe("files dropped on the Library", () => {
 		expect(raiseTransientNotice).not.toHaveBeenCalled()
 	})
 
+	it("words the reason a joined host relays for a refused file", async () => {
+		const { heading } = await renderLibraryScreen(true)
+		harness.answerImport = (call) =>
+			Promise.reject(
+				new HostRefused("notUtf8", { kind: "notUtf8", name: call.name }),
+			)
+
+		dropOn(heading, { files: [textFile("latin.txt")] })
+
+		await waitFor(() =>
+			expect(raiseFailureNotice).toHaveBeenCalledWith(
+				importFailureOf("latin.txt", common("library.failure.import.notUtf8")),
+			),
+		)
+	})
+
+	it("words a refusal it does not know with the generic sentence, never its code", async () => {
+		const { heading } = await renderLibraryScreen(false)
+		harness.answerImport = () =>
+			Promise.reject({ kind: "clipboardRefused", detail: "denied" })
+
+		dropOn(heading, { files: [textFile("odd.txt")] })
+
+		await waitFor(() =>
+			expect(raiseFailureNotice).toHaveBeenCalledWith(
+				importFailureOf("odd.txt", common("library.failure.import.generic")),
+			),
+		)
+	})
+
 	it("refuses a file over 8 MiB in a joined Space before sending it", async () => {
 		const { shown, heading } = await renderLibraryScreen(true)
 		harness.answerImport = (call) =>
@@ -308,7 +342,7 @@ describe("files dropped on the Library", () => {
 		await shown.findByRole("button", { name: /small/ })
 		await waitFor(() =>
 			expect(raiseFailureNotice).toHaveBeenCalledWith(
-				importFailureOf("huge.png", "tooLarge"),
+				importFailureOf("huge.png", common("library.failure.import.tooLarge")),
 			),
 		)
 		expect(harness.imports.map(({ name }) => name)).toEqual(["small.txt"])
@@ -336,7 +370,7 @@ describe("files dropped on the Library", () => {
 
 		await waitFor(() =>
 			expect(raiseFailureNotice).toHaveBeenCalledWith(
-				importFailureOf("vast.png", "tooLarge"),
+				importFailureOf("vast.png", common("library.failure.import.tooLarge")),
 			),
 		)
 		expect(harness.imports).toEqual([])

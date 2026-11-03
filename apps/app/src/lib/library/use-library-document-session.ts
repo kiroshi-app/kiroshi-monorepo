@@ -4,7 +4,7 @@ import {
 	useQuery,
 	useQueryClient,
 } from "@tanstack/react-query"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useSyncExternalStore } from "react"
 
 import { i18n } from "@workspace/ui/lib/i18n"
 
@@ -29,12 +29,16 @@ const useApplyLibraryUpdate = (spaceId: string) => {
 				queryKey: libraryQueryKeys.documentOf(spaceId, name),
 			}),
 		meta: {
-			failureNotice: () => ({ title: i18n.t("common:library.failure.save") }),
+			failureNotice: () => ({
+				title: i18n.t("common:library.failure.document.save"),
+			}),
 			raisedIn: "use-library-document-session",
 		},
 	})
 	return mutateAsync
 }
+
+const subscribeToNothing = () => () => undefined
 
 export const useLibraryDocumentSession = (
 	spaceId: string,
@@ -42,7 +46,6 @@ export const useLibraryDocumentSession = (
 ) => {
 	const queryClient = useQueryClient()
 	const apply = useApplyLibraryUpdate(spaceId)
-	const [remoteRevision, setRemoteRevision] = useState(0)
 	const feed = useMemo(
 		() => (name ? createLibraryDocumentFeed(spaceId, name) : null),
 		[spaceId, name],
@@ -62,7 +65,7 @@ export const useLibraryDocumentSession = (
 		meta: {
 			raisesWhenHostOffline: true,
 			failureNotice: () => ({
-				title: i18n.t("bots:skills.files.failure.read"),
+				title: i18n.t("common:library.failure.document.open"),
 			}),
 			raisedIn: "use-library-document-session",
 		},
@@ -84,16 +87,17 @@ export const useLibraryDocumentSession = (
 		if (!session || !feed) {
 			return
 		}
-		const detach = feed.attach((update) => {
-			if (session.receive(update)) {
-				setRemoteRevision((revision) => revision + 1)
-			}
-		})
+		const detach = feed.attach(session.receive)
 		return () => {
 			detach()
 			void session.flush()
 		}
 	}, [session, feed])
+
+	const markdown = useSyncExternalStore(
+		session?.subscribe ?? subscribeToNothing,
+		() => session?.markdown() ?? "",
+	)
 
 	const closeAndRelist = async () => {
 		await session?.flush()
@@ -105,8 +109,8 @@ export const useLibraryDocumentSession = (
 	return {
 		document: session
 			? {
-					markdown: session.markdown(),
-					version: `${opened.dataUpdatedAt}:${remoteRevision}`,
+					markdown,
+					offsetOf: session.offsetOf,
 				}
 			: null,
 		edit: (markdown: string) => session?.edit(markdown),
