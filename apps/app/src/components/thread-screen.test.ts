@@ -4199,17 +4199,6 @@ const replyTo = async (index: number) => {
 	await settle()
 }
 
-const sendTyped = async (text: string) => {
-	const field = screen.getByRole("textbox", { name: "Message" })
-	await act(async () => {
-		fireEvent.change(field, { target: { value: text } })
-	})
-	await act(async () => {
-		fireEvent.keyDown(field, { key: "Enter" })
-	})
-	await settle()
-}
-
 describe("ThreadScreen holding several replies", () => {
 	let layout: FakeLayout
 
@@ -4258,7 +4247,7 @@ describe("ThreadScreen holding several replies", () => {
 		await replyTo(1)
 		await replyTo(0)
 
-		await sendTyped("on both")
+		await sendInComposer("on both")
 
 		expect(room.sends).toEqual([
 			{ text: "on both", repliedToMessageId: "m-bot-1" },
@@ -4272,7 +4261,7 @@ describe("ThreadScreen holding several replies", () => {
 		await replyTo(0)
 		room.refuseSends()
 
-		await sendTyped("on both")
+		await sendInComposer("on both")
 
 		expect(replyChipNames()).toEqual([
 			"Remove the reply to Nyx",

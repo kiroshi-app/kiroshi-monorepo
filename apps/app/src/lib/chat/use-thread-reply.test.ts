@@ -102,8 +102,13 @@ type ReplyProps = {
 	threadId: string
 }
 
-const renderReplies = (sends: boolean, threadId = "thread-1") => {
-	const send = vi.fn(async (_text: string, _repliedTo: string[]) => sends)
+type ReplyFixture = {
+	isSent: boolean
+	threadId?: string
+}
+
+const renderReplies = ({ isSent, threadId = "thread-1" }: ReplyFixture) => {
+	const send = vi.fn(async (_text: string, _repliedTo: string[]) => isSent)
 	const rendered = renderHook(
 		(props: ReplyProps) =>
 			useThreadReply({
@@ -130,7 +135,7 @@ const holdAll = (
 }
 
 it("holds every message the person replies to, once each, in the order picked", () => {
-	const { result } = renderReplies(true)
+	const { result } = renderReplies({ isSent: true })
 
 	holdAll(() => result.current, ["m-1", "m-2", "m-1", "m-3"])
 
@@ -138,7 +143,7 @@ it("holds every message the person replies to, once each, in the order picked", 
 })
 
 it("drops only the reply the person removes", () => {
-	const { result } = renderReplies(true)
+	const { result } = renderReplies({ isSent: true })
 	holdAll(() => result.current, ["m-1", "m-2", "m-3"])
 
 	act(() => result.current.releaseReply("m-2"))
@@ -147,7 +152,7 @@ it("drops only the reply the person removes", () => {
 })
 
 it("sends every held reply in the order picked, then holds none", async () => {
-	const { result, send } = renderReplies(true)
+	const { result, send } = renderReplies({ isSent: true })
 	holdAll(() => result.current, ["m-2", "m-1"])
 
 	await act(() => result.current.submitPrompt("both of these"))
@@ -157,7 +162,7 @@ it("sends every held reply in the order picked, then holds none", async () => {
 })
 
 it("keeps every held reply when the message does not send", async () => {
-	const { result } = renderReplies(false)
+	const { result } = renderReplies({ isSent: false })
 	holdAll(() => result.current, ["m-1", "m-2"])
 
 	await act(() => result.current.submitPrompt("lost"))
@@ -166,7 +171,7 @@ it("keeps every held reply when the message does not send", async () => {
 })
 
 it("shows only the replies held for the thread on screen", () => {
-	const { result, rerender } = renderReplies(true, "thread-1")
+	const { result, rerender } = renderReplies({ isSent: true })
 	holdAll(() => result.current, ["m-1"])
 
 	rerender({ threadId: "thread-2" })
