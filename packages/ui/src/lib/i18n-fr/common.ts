@@ -470,6 +470,7 @@ const common = {
 			save: "Impossible d’enregistrer le fichier",
 			copy: "Impossible de copier l’image",
 			reveal: "Impossible d’afficher le fichier dans son dossier",
+			delete: "Impossible de supprimer l’élément",
 			document: {
 				create:
 					"Impossible de créer le document. Réessayez depuis Nouveau document.",

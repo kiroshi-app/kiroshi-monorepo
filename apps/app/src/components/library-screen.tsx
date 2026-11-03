@@ -73,6 +73,9 @@ const renameIfRetitled = (
 	}
 }
 
+const isActionShownOn = (item: ShownLibraryItem, action: string) =>
+	action !== "onRename" || item.kind === "document"
+
 export const LibraryScreen = ({
 	spaceId,
 	isJoined,
@@ -93,6 +96,7 @@ export const LibraryScreen = ({
 		: ({ id }: NamedItem) => localActions.reveal(id)
 	const copy = ({ id }: NamedItem) => actions.copy(id)
 	const copyAndWait = ({ id }: NamedItem) => actions.copyAndWait(id)
+	const remove = ({ id }: NamedItem) => actions.remove(id)
 	const [filter, setFilter] = useState<LibraryFilter>("all")
 	const [query, setQuery] = useState("")
 	const [opened, setOpened] = useState<OpenedItem>(null)
@@ -160,11 +164,6 @@ export const LibraryScreen = ({
 		open: openItem,
 		consume: onArrivalOpened,
 	})
-	const renameItem = (item: ShownLibraryItem) => {
-		if (item.kind === "document") {
-			openItem(item)
-		}
-	}
 	const createFrom = (template: LibraryDocumentTemplate) => {
 		if (isCreating) {
 			return
@@ -227,15 +226,17 @@ export const LibraryScreen = ({
 	return (
 		<LibraryPanel
 			filter={filter}
+			isActionShown={isActionShownOn}
 			items={[...importingItems, ...shownItems]}
 			onFilterChange={setFilter}
 			onCopy={copy}
+			onDelete={remove}
 			onDownload={save}
 			onNewDocument={() => setPickedTemplate("blank")}
 			onOpen={openItem}
 			onOpenInNewTab={onOpenInNewTab}
 			onOpenItem={openItem}
-			onRename={renameItem}
+			onRename={openItem}
 			onSearchQueryChange={setQuery}
 			onShowInFolder={reveal}
 			onStartTemplate={setPickedTemplate}
@@ -246,6 +247,7 @@ export const LibraryScreen = ({
 						image={images[imageIndex] ?? null}
 						onClose={close}
 						onCopy={copyAndWait}
+						onDelete={remove}
 						onDownload={save}
 						onShowInFolder={reveal}
 						onNext={() => openImageAt(imageIndex + 1)}
