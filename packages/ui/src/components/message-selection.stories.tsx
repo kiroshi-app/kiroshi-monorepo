@@ -6,6 +6,13 @@ import {
 	tokenStyleIn,
 } from "@workspace/storybook/story-utils"
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
+import {
+	MessageScroller,
+	MessageScrollerContent,
+	MessageScrollerItem,
+	MessageScrollerProvider,
+	MessageScrollerViewport,
+} from "@workspace/ui/components/message-scroller"
 import { MessageSelection } from "@workspace/ui/components/message-selection"
 import type { RosterBot } from "@workspace/ui/components/roster"
 import { AssistantTurn, TurnGroup } from "@workspace/ui/components/turn"
@@ -74,6 +81,11 @@ const selectAndRelease = (canvasElement: HTMLElement, phrase = SELECTED) => {
 	return range
 }
 
+const expectThemeApplied = (theme: unknown) =>
+	expect(document.documentElement.classList.contains("dark")).toBe(
+		theme === "dark",
+	)
+
 const toolbarIn = (canvasElement: HTMLElement) =>
 	within(canvasElement).findByRole("toolbar", { name: "Selected text" })
 
@@ -120,7 +132,9 @@ export const ReplyHovered = meta.story({
 			},
 		},
 	},
-	play: async ({ args, canvasElement, userEvent }) => {
+	play: async ({ args, canvasElement, globals, userEvent }) => {
+		await expectThemeApplied(globals.theme)
+		await document.fonts.ready
 		const range = selectAndRelease(canvasElement)
 		const toolbar = await toolbarIn(canvasElement)
 		const buttons = within(toolbar).getAllByRole("button")
@@ -159,6 +173,67 @@ export const ReplyHovered = meta.story({
 		const tooltip = await screen.findByRole("tooltip")
 		await expect(tooltip).toHaveTextContent(/^Reply$/)
 		await expect(tooltip.querySelector("kbd")).toBeNull()
+	},
+})
+
+export const ReplyHoveredDark = ReplyHovered.extend({
+	globals: { theme: "dark" },
+})
+
+export const FirstLineInScroller = meta.story({
+	tags: ["test-only"],
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A selection on the first line of a message sitting at the top of the transcript scroller, with the window still holding room above it. Check that the bar flips below the selection, since the scroller would clip it above: the room is measured from the scroller, not from the window.",
+			},
+		},
+	},
+	render: (args) => (
+		<div className="mx-auto flex w-full max-w-2xl flex-col px-6 pt-24">
+			<MessageScrollerProvider>
+				<div className="h-80">
+					<MessageScroller className="min-h-0">
+						<MessageScrollerViewport aria-label="Transcript">
+							<MessageScrollerContent aria-busy={false}>
+								<MessageScrollerItem messageId="answer">
+									<TurnGroup>
+										<AssistantTurn copyText={ANSWER} identity={AGENT}>
+											<MessageSelection {...args} />
+										</AssistantTurn>
+									</TurnGroup>
+								</MessageScrollerItem>
+							</MessageScrollerContent>
+						</MessageScrollerViewport>
+					</MessageScroller>
+				</div>
+			</MessageScrollerProvider>
+		</div>
+	),
+	play: async ({ canvasElement }) => {
+		await document.fonts.ready
+		const range = selectAndRelease(canvasElement, "The sync finished")
+		const toolbar = await toolbarIn(canvasElement)
+		const frame = toolbar.closest<HTMLElement>(
+			'[data-slot="selection-toolbar"]',
+		)
+		const viewport = canvasElement.querySelector(
+			'[data-slot="message-scroller-viewport"]',
+		)
+		if (!frame || !viewport) throw new Error("No bar or scroller drawn")
+		const selected = range.getBoundingClientRect()
+
+		await expect(selected.top).toBeGreaterThan(
+			toolbar.offsetHeight + SELECTION_GAP,
+		)
+		await expect(
+			selected.top - viewport.getBoundingClientRect().top,
+		).toBeLessThan(toolbar.offsetHeight + SELECTION_GAP)
+		await waitFor(() => expect(frame.dataset.placement).toBe("below"))
+		await expect(
+			toolbar.getBoundingClientRect().top - selected.bottom,
+		).toBeCloseTo(SELECTION_GAP, 0)
 	},
 })
 

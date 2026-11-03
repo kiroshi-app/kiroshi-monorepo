@@ -2,6 +2,7 @@ import { useState } from "react"
 import { expect, fn, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
+import { tokenStyleIn } from "@workspace/storybook/story-utils"
 import { PromptAttachButton } from "@workspace/ui/components/prompt-attach-button"
 import {
 	PromptAttachments,
@@ -18,6 +19,11 @@ const attach = fn()
 const REPLY_MIN_WIDTH = 236
 
 const REPLY_MAX_WIDTH = 360
+
+const expectThemeApplied = (theme: unknown) =>
+	expect(document.documentElement.classList.contains("dark")).toBe(
+		theme === "dark",
+	)
 
 const EXCERPT_REPLY: PromptReplyAttachment = {
 	id: "reply-drift",
@@ -200,8 +206,13 @@ export const ReplyExcerpt = meta.story({
 			},
 		},
 	},
-	play: async ({ args, canvas, canvasElement, userEvent }) => {
+	play: async ({ args, canvas, canvasElement, globals, userEvent }) => {
+		await expectThemeApplied(globals.theme)
 		const [chip] = replyChipsIn(canvasElement)
+		const excerpt = excerptOf(chip)
+		await expect(getComputedStyle(excerpt).color).toBe(
+			tokenStyleIn(excerpt, "text-muted-foreground", "color"),
+		)
 		await expect(excerptOf(chip)).toHaveTextContent(
 			`“${EXCERPT_REPLY.excerpt}”`,
 		)
@@ -213,6 +224,10 @@ export const ReplyExcerpt = meta.story({
 		)
 		await expect(args.onRemoveReply).toHaveBeenCalledWith(EXCERPT_REPLY.id)
 	},
+})
+
+export const ReplyExcerptDark = ReplyExcerpt.extend({
+	globals: { theme: "dark" },
 })
 
 export const ReplyWholeMessage = meta.story({
@@ -276,6 +291,39 @@ export const ReplyUnbreakableExcerpt = meta.story({
 		await expectReplySizedToContent(chip)
 		await expect(chip.getBoundingClientRect().width).toBe(REPLY_MAX_WIDTH)
 		const excerpt = excerptOf(chip)
+		await expect(excerpt.scrollWidth).toBeGreaterThan(excerpt.clientWidth)
+	},
+})
+
+export const ReplyUnbreakableExcerptInNarrowRow = meta.story({
+	tags: ["test-only"],
+	args: { items: [], replies: [UNBREAKABLE_REPLY], onRemoveReply: fn() },
+	decorators: [
+		(Story) => (
+			<div className="w-80">
+				<Story />
+			</div>
+		),
+	],
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same unbreakable excerpt in a composer 320 wide, narrower than the chip maximum. Check that the chip stops at the row edge instead of its 360 maximum, and that the excerpt still ends in an ellipsis on one line.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const [chip] = replyChipsIn(canvasElement)
+		const row = chip.parentElement
+		if (!row) throw new Error("No chip row drawn")
+		await expect(row.getBoundingClientRect().width).toBe(320)
+		await expect(chip.getBoundingClientRect().right).toBeLessThanOrEqual(
+			row.getBoundingClientRect().right,
+		)
+		const excerpt = excerptOf(chip)
+		await expect(excerpt.getBoundingClientRect().height).toBe(14)
+		await expect(getComputedStyle(excerpt).textOverflow).toBe("ellipsis")
 		await expect(excerpt.scrollWidth).toBeGreaterThan(excerpt.clientWidth)
 	},
 })

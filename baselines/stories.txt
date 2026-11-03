@@ -298,8 +298,10 @@ conversation-message-messagescroller--holds-the-reader-while-scrolling-back
 conversation-message-messagescroller--scrolled-back
 conversation-message-messageselection--copy-pressed
 conversation-message-messageselection--dismissed
+conversation-message-messageselection--first-line-in-scroller
 conversation-message-messageselection--keyboard-selection
 conversation-message-messageselection--reply-hovered
+conversation-message-messageselection--reply-hovered-dark
 conversation-message-messageselection--reply-pressed
 conversation-message-messagesidecontext--bot-side
 conversation-message-messagesidecontext--overridden-by-prop
@@ -474,7 +476,9 @@ conversation-prompt-promptattachments--empty
 conversation-prompt-promptattachments--in-composer
 conversation-prompt-promptattachments--long-content
 conversation-prompt-promptattachments--reply-excerpt
+conversation-prompt-promptattachments--reply-excerpt-dark
 conversation-prompt-promptattachments--reply-unbreakable-excerpt
+conversation-prompt-promptattachments--reply-unbreakable-excerpt-in-narrow-row
 conversation-prompt-promptattachments--reply-whole-message
 conversation-prompt-promptattachments--two-replies
 conversation-prompt-promptcommandmenu--default

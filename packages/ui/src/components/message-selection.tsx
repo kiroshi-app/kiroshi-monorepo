@@ -51,14 +51,31 @@ const selectedTextWithin = (root: HTMLElement) =>
 		? (root.ownerDocument.getSelection()?.toString().trim() ?? "")
 		: ""
 
+const SCROLLING_OVERFLOW = new Set(["auto", "scroll"])
+
+const scrollingAncestorOf = (element: HTMLElement) => {
+	for (
+		let parent = element.parentElement;
+		parent;
+		parent = parent.parentElement
+	) {
+		if (SCROLLING_OVERFLOW.has(getComputedStyle(parent).overflowY)) {
+			return parent
+		}
+	}
+	return undefined
+}
+
 const anchorOf = (range: Range, root: HTMLElement): SelectionToolbarAnchor => {
 	const selected = range.getBoundingClientRect()
 	const framed = root.getBoundingClientRect()
+	const viewportTop =
+		scrollingAncestorOf(root)?.getBoundingClientRect().top ?? 0
 	return {
 		centre: (selected.left + selected.right) / 2 - framed.left,
 		top: selected.top - framed.top,
 		bottom: selected.bottom - framed.top,
-		roomAbove: selected.top,
+		roomAbove: selected.top - viewportTop,
 	}
 }
 

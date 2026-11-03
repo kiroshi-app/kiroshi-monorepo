@@ -71,7 +71,10 @@ export function PromptAttachments({
 				<li
 					key={reply.id}
 					data-slot="prompt-reply-attachment"
-					className={cn(CHIP, "w-fit min-w-59 max-w-90")}
+					className={cn(
+						CHIP,
+						"w-fit min-w-[min(--spacing(59),100%)] max-w-[min(--spacing(90),100%)]",
+					)}
 				>
 					<span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-foreground/8 text-soft-foreground">
 						<Icons.Reply aria-hidden="true" className="size-4" />
