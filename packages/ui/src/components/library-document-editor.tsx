@@ -956,7 +956,11 @@ const LibraryDocumentEditor = ({
 		const isInDocument = (target: EventTarget | null) =>
 			target instanceof Node && frame.current?.contains(target) === true
 		const startPointerSelection = (event: PointerEvent) => {
-			if (!isInDocument(event.target) || isInToolbar(event.target as Element))
+			if (
+				event.button !== 0 ||
+				!isInDocument(event.target) ||
+				isInToolbar(event.target as Element)
+			)
 				return
 			selectingBy.current = "pointer"
 			setSelected(undefined)
@@ -969,12 +973,21 @@ const LibraryDocumentEditor = ({
 			)
 				selectingBy.current = "keys"
 		}
-		const finishSelectionBy = (gesture: SelectionGesture) => {
-			if (selectingBy.current !== gesture) return
+		const closeGesture = () => {
 			selectingBy.current = undefined
 			follow()
 		}
+		const finishSelectionBy = (gesture: SelectionGesture) => {
+			if (selectingBy.current === gesture) closeGesture()
+		}
 		const finishPointerSelection = () => finishSelectionBy("pointer")
+		const finishLostPointerSelection = (event: PointerEvent) => {
+			if (event.buttons === 0 && isInDocument(event.target))
+				finishPointerSelection()
+		}
+		const finishAnySelection = () => {
+			if (selectingBy.current) closeGesture()
+		}
 		const finishKeySelection = (event: globalThis.KeyboardEvent) => {
 			if (event.key === "Shift") finishSelectionBy("keys")
 		}
@@ -983,20 +996,24 @@ const LibraryDocumentEditor = ({
 		document.addEventListener("pointerdown", startPointerSelection)
 		document.addEventListener("pointerup", finishPointerSelection)
 		document.addEventListener("pointercancel", finishPointerSelection)
+		document.addEventListener("pointermove", finishLostPointerSelection)
 		document.addEventListener("keydown", startKeySelection)
 		document.addEventListener("keyup", finishKeySelection)
 		window.addEventListener("scroll", follow, { capture: true, passive: true })
 		window.addEventListener("resize", follow)
+		window.addEventListener("blur", finishAnySelection)
 		return () => {
 			document.removeEventListener("selectionchange", follow)
 			document.removeEventListener("focusout", followOnceFocusLands)
 			document.removeEventListener("pointerdown", startPointerSelection)
 			document.removeEventListener("pointerup", finishPointerSelection)
 			document.removeEventListener("pointercancel", finishPointerSelection)
+			document.removeEventListener("pointermove", finishLostPointerSelection)
 			document.removeEventListener("keydown", startKeySelection)
 			document.removeEventListener("keyup", finishKeySelection)
 			window.removeEventListener("scroll", follow, { capture: true })
 			window.removeEventListener("resize", follow)
+			window.removeEventListener("blur", finishAnySelection)
 		}
 	}, [])
 

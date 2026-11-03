@@ -2442,7 +2442,7 @@ export const ShortcutsWithoutCallbacks = meta.story({
 
 export const ToolbarAfterDrag = meta.story({
 	...selectionStory(
-		"A press in a paragraph, then a drag across a few words with the button held, then the release. Check that no toolbar shows while the button is down, whatever the selection under the pointer, and that the toolbar lands above the finished selection on the release.",
+		"A press in a paragraph, then a drag across a few words with the button held, then the release. Check that no toolbar shows while the button is down, whatever the selection under the pointer, that the toolbar lands above the finished selection on the release, that a right-button press and release leaves it in place, and that a new primary press hides it before its release.",
 	),
 	play: async ({ canvasElement, userEvent }) => {
 		const [opening] = bodyFieldsIn(canvasElement) as [HTMLTextAreaElement]
@@ -2459,6 +2459,25 @@ export const ToolbarAfterDrag = meta.story({
 		await expect(toolbarIn(canvasElement)).toBe(null)
 
 		await userEvent.pointer({ keys: "[/MouseLeft]", target: opening })
+		await expectToolbarAbove(canvasElement, opening)
+
+		const press = (type: string, button: number, buttons: number) =>
+			opening.dispatchEvent(
+				new PointerEvent(type, { bubbles: true, button, buttons }),
+			)
+		press("pointerdown", 2, 2)
+		await new Promise((resolve) => setTimeout(resolve, 50))
+		await expect(toolbarIn(canvasElement)).not.toBe(null)
+		press("pointerup", 2, 0)
+		await new Promise((resolve) => setTimeout(resolve, 50))
+		await expectToolbarAbove(canvasElement, opening)
+
+		press("pointerdown", 0, 1)
+		await waitFor(() => expect(toolbarIn(canvasElement)).toBe(null))
+		await expect(
+			opening.value.slice(opening.selectionStart, opening.selectionEnd),
+		).toBe("the launch date")
+		press("pointerup", 0, 0)
 		await expectToolbarAbove(canvasElement, opening)
 	},
 })
