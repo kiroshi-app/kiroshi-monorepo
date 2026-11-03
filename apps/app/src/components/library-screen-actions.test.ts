@@ -684,6 +684,29 @@ const typeInBody = async (text: string) => {
 }
 
 describe("Rename in the document bar", () => {
+	it("leaves focus in the title and not on More once the menu closes", async () => {
+		await renderLibraryScreen({ isJoined: false })
+		const field = await openNotes()
+
+		await pickInDocumentMore("rename")
+
+		await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
+		await waitFor(() => expect(document.activeElement).toBe(field))
+		expect(documentBarButton("more")).not.toBe(document.activeElement)
+	})
+
+	it("returns focus to More when the menu closes without Rename", async () => {
+		await renderLibraryScreen({ isJoined: false })
+		await openNotes()
+		await openDocumentMore()
+
+		await closeMenu()
+
+		await waitFor(() =>
+			expect(document.activeElement).toBe(documentBarButton("more")),
+		)
+	})
+
 	it("puts the caret at the end of the title", async () => {
 		await renderLibraryScreen({ isJoined: false })
 		const field = await openNotes()
