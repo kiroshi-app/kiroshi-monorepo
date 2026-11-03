@@ -30,7 +30,7 @@ const systemSkill = (id: string) =>
 		"utf8",
 	)
 
-const SKILL_TOOL = /\b(?:conversation|companion|mission)_[a-z_]+/g
+const SKILL_TOOL = /\b(?:conversation|companion|mission|document)_[a-z_]+/g
 
 const toolsNamedIn = (skill: string) => new Set(skill.match(SKILL_TOOL))
 
@@ -43,6 +43,7 @@ const SKILLS = [
 			name.startsWith("conversation_") || name === "companion_list",
 	},
 	{ id: "missions", covers: (name: string) => name.startsWith("mission_") },
+	{ id: "documents", covers: (name: string) => name.startsWith("document_") },
 ]
 
 const NAMES_A_SECRET = /key|secret|token|password|credential|value|header/i
@@ -73,7 +74,7 @@ describe("kiroshiServer", () => {
 		}
 	})
 
-	it("carries the delegate tool and every routine, mission, application, companion and bundle tool of the session", () => {
+	it("carries the delegate tool and every routine, mission, application, companion, bundle and document tool of the session", () => {
 		expect(kiroshiTools(scope).map((held) => held.name)).toEqual([
 			"delegate",
 			"routine_list",
@@ -109,6 +110,8 @@ describe("kiroshiServer", () => {
 			"conversation_search",
 			"conversation_close",
 			"bundle_write",
+			"document_read",
+			"document_write",
 		])
 	})
 

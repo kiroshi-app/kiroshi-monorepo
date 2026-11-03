@@ -95,10 +95,12 @@ pub fn run() {
 		.on_page_load(|webview, payload| {
 			missions::run_claims::forget_on_page_load(webview, payload);
 			conversations::awaited_runs::forget_on_page_load(webview, payload);
+			library::presence::forget_on_page_load(webview, payload);
 		})
 		.on_window_event(|window, event| {
 			missions::run_claims::forget_on_destroyed(window, event);
 			conversations::awaited_runs::forget_on_destroyed(window, event);
+			library::presence::forget_on_destroyed(window, event);
 		})
 		.manage(conversations::turn_run_deadline::TurnRunDeadlines::default())
 		.manage(updates::Updates::default())

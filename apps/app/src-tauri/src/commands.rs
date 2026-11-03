@@ -60,6 +60,8 @@ pub fn builder() -> Builder<tauri::Wry> {
 		.typ::<joined_spaces::deep_link::JoinLinkOpened>()
 		.typ::<library::contract::LibraryDocumentUpdated>()
 		.typ::<library::contract::LibraryDocumentRenamed>()
+		.typ::<library::contract::LibraryDocumentPresence>()
+		.typ::<library::contract::LibraryDocumentWriterFinished>()
 		.typ::<agent::contract::EventTurn>()
 		.typ::<applications::contract::ApplicationInstalled>()
 		.typ::<missions::commands::MissionChanged>()
@@ -103,6 +105,7 @@ fn commands<R: Runtime>() -> Commands<R> {
 		library::commands::library_create_document::<tauri::Wry>,
 		library::commands::library_open_document::<tauri::Wry>,
 		library::commands::library_apply_update::<tauri::Wry>,
+		library::commands::library_share_caret::<tauri::Wry>,
 		library::commands::library_read_thumbnail::<tauri::Wry>,
 		library::commands::library_import::<tauri::Wry>,
 		library::commands::library_import_paths::<tauri::Wry>,

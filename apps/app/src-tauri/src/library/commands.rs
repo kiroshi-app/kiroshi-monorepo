@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use tauri::image::Image;
-use tauri::{AppHandle, Runtime, State};
+use tauri::{AppHandle, Runtime, State, Webview};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
@@ -11,12 +11,14 @@ use super::contract::{
 	LibraryDocument, LibraryDocumentState, LibraryError, LibraryFile, LibraryImage, LibraryImport,
 	LibraryItem, LibraryTemplate,
 };
+use super::presence::{share_caret, unseat_writer, Seat};
 use super::{
 	apply_update, clipboard_payload, clipboard_payload_of_bytes, create_document, import,
 	import_paths, list, open_document, read_document, read_file, read_image, read_thumbnail,
 	rename_document, resolve, root, save, save_bytes, templates, ClipboardPayload,
 };
 use crate::db;
+use crate::hosting::authorship::Caller;
 use crate::logging::scrub::scrubbed;
 
 async fn known_space(state: &db::DatabaseState, space_id: &str) -> Result<(), LibraryError> {
@@ -131,6 +133,41 @@ pub async fn library_rename_document<R: Runtime>(
 ) -> Result<LibraryItem, LibraryError> {
 	known_space(&state, &space_id).await?;
 	rename_document(&app, &root(&app)?, &space_id, &name, &new_name)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn library_share_caret<R: Runtime>(
+	app: AppHandle<R>,
+	webview: Webview<R>,
+	caller: Caller,
+	state: State<'_, db::DatabaseState>,
+	space_id: String,
+	name: String,
+	caret: Option<String>,
+) -> Result<(), LibraryError> {
+	known_space(&state, &space_id).await?;
+	let seat = seat_of(&caller, &webview)?;
+	let Some(caret) = caret else {
+		unseat_writer(&app, &space_id, &name, &seat);
+		return Ok(());
+	};
+	let database =
+		state.as_ref().map_err(|failure| LibraryError::Unavailable { failure: failure.into() })?;
+	let writer_name = caller.author(&app, database).await?.name;
+	share_caret(&app, &root(&app)?, &space_id, &name, seat, writer_name, &caret)
+}
+
+fn seat_of<R: Runtime>(caller: &Caller, webview: &Webview<R>) -> Result<Seat, LibraryError> {
+	match caller {
+		Caller::Host => Ok(Seat::Window(webview.window().label().to_owned())),
+		Caller::Relayed(_) => caller
+			.relayed_account()
+			.map(|account| Seat::Member(account.to_owned()))
+			.ok_or_else(|| LibraryError::Unreadable {
+				detail: "the member sending this caret is not vouched for".to_owned(),
+			}),
+	}
 }
 
 #[tauri::command]

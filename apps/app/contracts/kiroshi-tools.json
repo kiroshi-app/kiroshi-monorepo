@@ -987,5 +987,50 @@
 			],
 			"additionalProperties": false
 		}
+	},
+	{
+		"name": "document_read",
+		"description": "Read a Markdown document of the Library of this Space, as it stands now with what everyone has typed in it. It answers its name and its text.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"name": {
+					"type": "string",
+					"description": "The name of the document in the Library of this Space, with its extension, such as notes.md."
+				}
+			},
+			"required": [
+				"name"
+			],
+			"additionalProperties": false
+		}
+	},
+	{
+		"name": "document_write",
+		"description": "Write text into a Markdown document of the Library of this Space, live, beside the people editing it. The text lands at the end of the document, or right after the passage you name. Nothing is replaced or removed. It answers the name and how many characters you wrote.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"name": {
+					"type": "string",
+					"description": "The name of the document in the Library of this Space, with its extension, such as notes.md."
+				},
+				"text": {
+					"type": "string",
+					"description": "The Markdown to write, with the line breaks it needs to stand on its own lines."
+				},
+				"after": {
+					"type": "string",
+					"description": "An exact passage of the document, copied from document_read, that occurs once in it: the text lands right after it. Leave it out to write at the end."
+				}
+			},
+			"required": [
+				"name",
+				"text"
+			],
+			"additionalProperties": false
+		}
 	}
 ]

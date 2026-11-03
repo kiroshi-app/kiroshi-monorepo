@@ -117,6 +117,10 @@ declared! {
 		library::contract::DOCUMENT_UPDATED_EVENT,
 	LIBRARY_DOCUMENT_RENAMED: library::contract::LibraryDocumentRenamed =
 		library::contract::DOCUMENT_RENAMED_EVENT,
+	LIBRARY_DOCUMENT_PRESENCE: library::contract::LibraryDocumentPresence =
+		library::contract::DOCUMENT_PRESENCE_EVENT,
+	LIBRARY_DOCUMENT_WRITER_FINISHED: library::contract::LibraryDocumentWriterFinished =
+		library::contract::DOCUMENT_WRITER_FINISHED_EVENT,
 	MISSION_CHANGED: missions::commands::MissionChanged = missions::commands::CHANGED_EVENT,
 	NOTIFICATION_ACTIVATED: notifications::commands::NotificationTarget =
 		notifications::commands::ACTIVATED_EVENT,

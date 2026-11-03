@@ -41,6 +41,7 @@ use crate::environment::store as environment;
 use crate::events::{self, Frame, AGENT_EVENT, CONVERSATION_UPDATED};
 use crate::hosting::authorship::{self, Caller};
 use crate::json::JsonValue;
+use crate::library::host::LibraryHost;
 use crate::logging;
 use crate::mcp_oauth::refresh;
 use crate::mcp_oauth::reports::StandingHost;
@@ -1273,6 +1274,11 @@ pub(crate) async fn start_run<R: Runtime>(
 			scope.bot_id.clone(),
 		)))
 		.hosting(hosted(BundleHost::new(app.clone(), scope.clone())))
+		.hosting(hosted(LibraryHost::new(
+			app.clone(),
+			scope.conversation_id.clone(),
+			scope.bot_id.clone(),
+		)))
 		.answering(output_schema)
 		.on_mission_thread(mission_thread)
 		.read_by(members)
