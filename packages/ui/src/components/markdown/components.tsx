@@ -1,6 +1,10 @@
 import type { Components } from "react-markdown"
 
 import {
+	MarkdownBlockquote,
+	MarkdownFigure,
+} from "@workspace/ui/components/markdown/answer-elements"
+import {
 	MarkdownCode,
 	MarkdownPre,
 } from "@workspace/ui/components/markdown/code"
@@ -11,7 +15,9 @@ import { MarkdownTaskCheckbox } from "@workspace/ui/components/markdown/task-lis
 
 export const MARKDOWN_COMPONENTS: Components = {
 	a: MarkdownLink,
+	blockquote: MarkdownBlockquote,
 	code: MarkdownCode,
+	figure: MarkdownFigure,
 	input: MarkdownTaskCheckbox,
 	pre: MarkdownPre,
 	span: MarkdownSpan,

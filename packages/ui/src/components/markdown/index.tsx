@@ -4,8 +4,14 @@ import rehypeSanitize from "rehype-sanitize"
 import remarkGfm from "remark-gfm"
 import remarkMath from "remark-math"
 
+import {
+	type MarkdownAnswerActions,
+	MarkdownAnswerContext,
+} from "@workspace/ui/components/markdown/answer-actions"
+import { rehypeAnswerMarks } from "@workspace/ui/components/markdown/answer-marks"
 import { remarkBotMentions } from "@workspace/ui/components/markdown/bot-mentions"
 import { MARKDOWN_COMPONENTS } from "@workspace/ui/components/markdown/components"
+import { NestedMarkdownContext } from "@workspace/ui/components/markdown/nested-markdown"
 import {
 	MARKDOWN_CODE_SURFACE_CLASS,
 	MARKDOWN_TYPESET_CLASS,
@@ -29,6 +35,8 @@ export interface MarkdownProps {
 	className?: string
 	runs?: MarkdownRun[]
 	renderRun?: MarkdownRunRenderer
+	isWriting?: boolean
+	answerActions?: MarkdownAnswerActions
 }
 
 const MARKDOWN_REMARK_PLUGINS = [
@@ -50,6 +58,8 @@ export const Markdown = ({
 	className,
 	runs,
 	renderRun,
+	isWriting = false,
+	answerActions,
 }: MarkdownProps) => {
 	const scope = useId()
 	const remarkPlugins = useMemo<Options["remarkPlugins"]>(
@@ -62,18 +72,23 @@ export const Markdown = ({
 
 	return (
 		<div data-slot="markdown" className={cn(MARKDOWN_CLASS, className)}>
-			<MarkdownRunContext value={renderRun ?? null}>
-				<ReactMarkdown
-					components={MARKDOWN_COMPONENTS}
-					rehypePlugins={[
-						[rehypeSanitize, MARKDOWN_SANITIZE_SCHEMA],
-						[rehypeScopeIds, { scope }],
-					]}
-					remarkPlugins={remarkPlugins}
-				>
-					{children}
-				</ReactMarkdown>
-			</MarkdownRunContext>
+			<NestedMarkdownContext value={Markdown}>
+				<MarkdownAnswerContext value={answerActions ?? null}>
+					<MarkdownRunContext value={renderRun ?? null}>
+						<ReactMarkdown
+							components={MARKDOWN_COMPONENTS}
+							rehypePlugins={[
+								[rehypeSanitize, MARKDOWN_SANITIZE_SCHEMA],
+								[rehypeScopeIds, { scope }],
+								[rehypeAnswerMarks, { isWriting }],
+							]}
+							remarkPlugins={remarkPlugins}
+						>
+							{children}
+						</ReactMarkdown>
+					</MarkdownRunContext>
+				</MarkdownAnswerContext>
+			</NestedMarkdownContext>
 		</div>
 	)
 }
