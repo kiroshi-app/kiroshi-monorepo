@@ -267,24 +267,17 @@ export function replyTargetOfReference(
 	}
 }
 
-const quotedTargetOf = (
-	link: ReplyLink,
-	quotes: ReadonlyMap<string, ReplyTarget>,
-): ReplyTarget[] => {
-	const target = quotes.get(link.messageId)
-	if (!target) {
-		return []
-	}
-	return link.excerpt
-		? [{ ...target, excerpt: link.excerpt, isExcerpt: true }]
-		: [target]
-}
+const narrowedTo = (target: ReplyTarget, { excerpt }: ReplyLink) =>
+	excerpt ? { ...target, excerpt, isExcerpt: true } : target
 
 export function quotedTargetsOf(
 	links: ReplyLink[],
 	quotes: ReadonlyMap<string, ReplyTarget>,
 ): ReplyTarget[] | undefined {
-	const targets = links.flatMap((link) => quotedTargetOf(link, quotes))
+	const targets = links.flatMap((link) => {
+		const target = quotes.get(link.messageId)
+		return target ? [narrowedTo(target, link)] : []
+	})
 	return targets.length > 0 ? targets : undefined
 }
 
