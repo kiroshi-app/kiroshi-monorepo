@@ -472,7 +472,7 @@ The frame is an `SDKMessage` verbatim, plus the ones the sidecar adds itself.
 | `assistant` | `SDKAssistantMessage` — `text` and/or `tool_use` blocks | `messageCompleted` / `activity` |
 | `user` | `SDKUserMessage` — `tool_result` with `is_error` | `activity` (succeeded / failed) |
 | `result` | `SDKResultMessage`: `subtype`, `session_id`, `is_error` | nothing on the front: it records the SDK session id and starts the held result bound of the running run; the turn ends on `turn_settled` |
-| `tasks_pending` | the sidecar, once a `result` has arrived, on every change of `count`, the live background tasks not flagged `ambient` | `tasksPending` with the frame's `count`, once per frame of a running run: the host logs the reason `N background tasks` and the run stays `running` |
+| `tasks_pending` | the sidecar, once a `result` has arrived, on every change of `count`, the live background tasks not flagged `ambient` | `tasksPending` with the frame's `count`, once per frame of a running run, then `turnHeld` when the count changes: the host logs the reason `N background tasks` and the run stays `running` |
 | `turn_settled` | the sidecar, once the turn is settled (see below): every field of the last `result`, its `type` renamed; or the sidecar when a stop lands on a prompt still held | `turnEnded` |
 | `host_request` | the sidecar, from `askHost` | nothing — it is answered, not read |
 | `heartbeat` | the sidecar, every `HEARTBEAT_INTERVAL_MS` while a query of the session is in flight | nothing: it renews the lease of the running run |
@@ -567,6 +567,17 @@ is followed by `runLapsed` with `tasksPending` closes the run failed with the re
 N ms`. The lease of the run in `routine_runs` keeps renewing every tick meanwhile. A debug
 build reads a positive `KIROSHI_ROUTINE_DEADLINE_SECS` as the routine deadline; a release
 build ignores it.
+
+The host tells the front what the run waits on with `turnHeld`, never persisted as a
+message: `hold` is `{"reason":"backgroundTasks","count":N}` while tasks are counted, and
+`null` once the hold is released.
+
+- a `tasks_pending` above `0` on a running run emits `turnHeld` with its count, once per
+  change of the count;
+- a `tasks_pending` of `0` while a hold is set emits `turnHeld` with `hold` `null`;
+- a run ending while a hold is set (`turn_settled`, a stop, a lapse, the session closed or
+  dead) emits `turnHeld` with `hold` `null` before its `turnEnded` or its failure;
+- no `turnHeld` with `hold` `null` is emitted while no hold is set.
 
 ## Permissions
 

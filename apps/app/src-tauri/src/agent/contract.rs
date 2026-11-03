@@ -181,6 +181,19 @@ pub struct TurnEnded {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
+pub enum TurnHoldReason {
+	BackgroundTasks,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TurnHold {
+	pub reason: TurnHoldReason,
+	pub count: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
 pub enum TurnOutcome {
 	Completed,
 	Cancelled,
@@ -485,6 +498,8 @@ pub enum AgentEvent {
 	ConnectionChanged { state: ConnectionState },
 	#[serde(rename_all = "camelCase")]
 	TurnChanged { state: TurnState },
+	#[serde(rename_all = "camelCase")]
+	TurnHeld { hold: Option<TurnHold> },
 	#[serde(rename_all = "camelCase")]
 	SessionReady { session_id: String, resumed: bool },
 	#[serde(rename_all = "camelCase")]

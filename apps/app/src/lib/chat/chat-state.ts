@@ -449,6 +449,7 @@ function applyEvent(state: ChatState, event: AgentEvent): ChatState {
 		case "turnEnded":
 			return applyTurnEnded(state, event.ended)
 		case "tasksPending":
+		case "turnHeld":
 		case "botEvolved":
 		case "botEvolutionFailed":
 			return state

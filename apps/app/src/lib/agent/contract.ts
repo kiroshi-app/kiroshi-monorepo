@@ -6,6 +6,7 @@ import type {
 	Json,
 	PermissionDecision,
 	RuntimeScope,
+	TurnHold,
 } from "@/lib/bindings"
 import type { HostOffline } from "@/lib/host/host-offline"
 
@@ -120,6 +121,7 @@ export type EvolvedBundle = "bot" | "user" | "space"
 export type AgentEvent =
 	| { type: "connectionChanged"; state: ConnectionState }
 	| { type: "turnChanged"; state: TurnState }
+	| { type: "turnHeld"; hold: TurnHold | null }
 	| { type: "sessionReady"; sessionId: string; resumed: boolean }
 	| { type: "commandsListed"; commands: AgentCommand_Serialize[] }
 	| { type: "messageStarted"; message: ChatMessage }

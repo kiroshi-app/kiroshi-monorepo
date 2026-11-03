@@ -538,6 +538,21 @@ impl Stored {
 			.collect()
 	}
 
+	fn holds_and_endings(&self) -> Vec<String> {
+		agent_events(&self.log.held())
+			.into_iter()
+			.filter_map(|event| match event {
+				AgentEvent::TurnHeld { hold: Some(hold) } => Some(format!("held {}", hold.count)),
+				AgentEvent::TurnHeld { hold: None } => Some("released".to_owned()),
+				AgentEvent::TurnEnded { ended } => Some(format!("ended {:?}", ended.outcome)),
+				AgentEvent::Failed { error: TransportError::RunLapsed { lapse, .. } } => {
+					Some(format!("lapsed {lapse:?}"))
+				}
+				_ => None,
+			})
+			.collect()
+	}
+
 	fn awaited_turn_endings(&self, expected: &[TurnOutcome]) -> Vec<TurnOutcome> {
 		self.wait_for(&format!("the turn endings {expected:?}"), |stored| {
 			let endings = stored.turn_endings();
@@ -737,6 +752,7 @@ fn a_turn_holding_a_background_task_ends_only_after_the_follow_up_turn_it_runs()
 	assert_eq!(pending, vec![1, 0], "each tasks_pending frame reaches the listeners once");
 	assert_eq!(stored.turn_endings(), vec![TurnOutcome::Completed]);
 	assert!(stored.lapses().is_empty());
+	assert_eq!(stored.holds_and_endings(), ["held 1", "released", "ended Completed"]);
 	stored.close();
 }
 
@@ -867,6 +883,10 @@ fn a_background_task_that_never_ends_fails_the_run_at_its_bound_and_closes_the_s
 
 	assert_eq!(stored.awaited_turn_endings(&[TurnOutcome::Failed]), vec![TurnOutcome::Failed]);
 	assert_eq!(stored.awaited_lapses(&[Lapse::TasksPending]), vec![Lapse::TasksPending]);
+	assert_eq!(
+		stored.holds_and_endings(),
+		["held 1", "released", "ended Failed", "lapsed TasksPending"]
+	);
 
 	stored.submit("t2", "p2");
 	stored.completed("t2");

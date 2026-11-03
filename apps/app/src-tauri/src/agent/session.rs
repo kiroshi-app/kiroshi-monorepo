@@ -10,7 +10,7 @@ use tokio::sync::{mpsc, oneshot, Mutex, Notify};
 
 use super::contract::{
 	AgentEvent, ConnectionState, PermissionDecision, SubmittedTurn, TransportError, TurnEnded,
-	TurnOutcome, TurnState,
+	TurnHold, TurnHoldReason, TurnOutcome, TurnState,
 };
 use super::lease::{Lapse, Liveness, RunLease};
 use super::protocol::{
@@ -294,6 +294,23 @@ struct RunningTurn {
 	prompt_uuid: String,
 	started_at: Instant,
 	liveness: Liveness,
+	pending_tasks: u32,
+}
+
+impl RunningTurn {
+	fn held_on(&mut self, count: u32) -> Option<AgentEvent> {
+		if self.pending_tasks == count {
+			return None;
+		}
+		self.pending_tasks = count;
+		let hold =
+			(count > 0).then_some(TurnHold { reason: TurnHoldReason::BackgroundTasks, count });
+		Some(AgentEvent::TurnHeld { hold })
+	}
+
+	fn released(&self) -> Option<AgentEvent> {
+		(self.pending_tasks > 0).then_some(AgentEvent::TurnHeld { hold: None })
+	}
 }
 
 impl Shared {
@@ -316,6 +333,7 @@ impl Shared {
 			prompt_uuid,
 			started_at: Instant::now(),
 			liveness: Liveness::since(tokio::time::Instant::now()),
+			pending_tasks: 0,
 		});
 	}
 
@@ -369,7 +387,7 @@ impl Shared {
 	}
 
 	fn tasks_pending(&mut self, count: u32) -> Vec<AgentEvent> {
-		let Some(running) = self.running.as_ref() else {
+		let Some(running) = self.running.as_mut() else {
 			return Vec::new();
 		};
 		log::info!(
@@ -377,11 +395,12 @@ impl Shared {
 			self.key,
 			running.id
 		);
+		let held = running.held_on(count);
 		let entering = match self.turn {
 			TurnState::Submitting => self.set_turn(TurnState::Running),
 			_ => None,
 		};
-		entering.into_iter().chain([AgentEvent::TasksPending { count }]).collect()
+		entering.into_iter().chain([AgentEvent::TasksPending { count }]).chain(held).collect()
 	}
 
 	fn lease_deadline(&self) -> Option<(tokio::time::Instant, Lapse)> {
@@ -395,8 +414,9 @@ impl Shared {
 			"the turn lost its lease session={session} turn={:?} reason={lapse}",
 			self.running.as_ref().and_then(|running| running.id.as_deref())
 		);
-		self.turn_ended(&session, TurnOutcome::Failed);
-		let mut events = self.translator.abandon_turn();
+		let mut events: Vec<AgentEvent> =
+			self.turn_ended(&session, TurnOutcome::Failed).into_iter().collect();
+		events.extend(self.translator.abandon_turn());
 		events.extend(self.set_turn(TurnState::Failed));
 		let bound_ms = self.lease.bound_of(lapse).as_millis() as u64;
 		events.push(AgentEvent::Failed { error: TransportError::RunLapsed { lapse, bound_ms } });
@@ -419,23 +439,25 @@ impl Shared {
 		(frames, written)
 	}
 
-	fn turn_ended(&mut self, session: &str, outcome: TurnOutcome) {
+	#[must_use]
+	fn turn_ended(&mut self, session: &str, outcome: TurnOutcome) -> Option<AgentEvent> {
 		self.streams_a_follow_up = false;
-		let Some(running) = self.running.take() else {
-			return;
-		};
+		let running = self.running.take()?;
 		log::info!(
 			"the turn ended session={session} turn={:?} outcome={outcome:?} took_ms={}",
 			running.id,
 			running.started_at.elapsed().as_millis()
 		);
+		running.released()
 	}
 
-	fn ended_by_shutdown(&mut self, session: &str) -> Option<AgentEvent> {
-		self.running.as_ref()?;
+	fn ended_by_shutdown(&mut self, session: &str) -> Vec<AgentEvent> {
+		if self.running.is_none() {
+			return Vec::new();
+		}
 		log::info!("the session shut down while its turn ran session={session}");
-		self.turn_ended(session, TurnOutcome::Cancelled);
-		Some(self.ended_as(TurnOutcome::Cancelled))
+		let released = self.turn_ended(session, TurnOutcome::Cancelled);
+		released.into_iter().chain([self.ended_as(TurnOutcome::Cancelled)]).collect()
 	}
 
 	fn ended_as(&self, outcome: TurnOutcome) -> AgentEvent {
@@ -504,7 +526,9 @@ impl Line<'_> {
 		}
 		let written = self.sidecar.send(protocol::prompt_command(&key, text, &prompt_uuid));
 		if written.is_err() {
-			shared.turn_ended(&key, TurnOutcome::Failed);
+			if let Some(released) = shared.turn_ended(&key, TurnOutcome::Failed) {
+				self.sink.emit(released);
+			}
 		}
 		if written.is_err() && handed {
 			self.sink.withdrawn();
@@ -766,7 +790,7 @@ impl Session {
 			let mut shared = self.shared.lock().await;
 			shared.shutting_down = true;
 			let key = shared.key.clone();
-			if let Some(ended) = shared.ended_by_shutdown(&key) {
+			for ended in shared.ended_by_shutdown(&key) {
 				self.sink.emit(ended);
 			}
 			shared.abandon_queued(TurnOutcome::Cancelled).tell(self.sink.as_ref());
@@ -977,14 +1001,12 @@ async fn read_loop(
 			}
 			let events = guard.translator.ingest(frame);
 			let outcome = turn_outcome(&events);
-			if let Some(outcome) = outcome {
-				guard.turn_ended(&desk.key, outcome);
-			}
+			let released = outcome.and_then(|outcome| guard.turn_ended(&desk.key, outcome));
 			let ending = outcome.and_then(|outcome| guard.set_turn(outcome.into()));
 			if holds_a_result {
 				rearmed.notify_one();
 			}
-			for event in entering.into_iter().chain(events).chain(ending) {
+			for event in entering.into_iter().chain(released).chain(events).chain(ending) {
 				sink.emit(event);
 			}
 			if outcome.is_some() {
@@ -1053,15 +1075,21 @@ async fn on_exit(
 	session: &str,
 	reason: Option<TransportError>,
 ) {
-	let (failing, abandoned) = {
+	let (released, failing, abandoned) = {
 		let mut guard = shared.lock().await;
 		if guard.shutting_down {
 			return;
 		}
-		guard.turn_ended(session, TurnOutcome::Failed);
-		(guard.set_turn(TurnState::Failed), guard.abandon_queued(TurnOutcome::Failed))
+		(
+			guard.turn_ended(session, TurnOutcome::Failed),
+			guard.set_turn(TurnState::Failed),
+			guard.abandon_queued(TurnOutcome::Failed),
+		)
 	};
 
+	if let Some(event) = released {
+		sink.emit(event);
+	}
 	sink.emit(AgentEvent::ConnectionChanged { state: ConnectionState::Crashed });
 	sink.emit(AgentEvent::Failed {
 		error: reason.unwrap_or(TransportError::Crashed {
@@ -1385,5 +1413,88 @@ mod tests {
 	fn a_sidecar_that_names_no_deltas_is_asked_for_whole_messages() {
 		assert!(!options().open_request(false).partial_messages);
 		assert!(options().open_request(true).partial_messages);
+	}
+
+	fn a_running_turn() -> Shared {
+		let mut shared = Shared {
+			key: "s1".to_owned(),
+			reopening: options().open_request(false),
+			translator: Translator::new(false),
+			turn: TurnState::Running,
+			shutting_down: false,
+			running: None,
+			queued: VecDeque::new(),
+			lease: RunLease::default(),
+			streams_a_follow_up: false,
+		};
+		shared.turn_started("s1", Some("t1".to_owned()), "p1".to_owned());
+		shared
+	}
+
+	fn held(count: u32) -> AgentEvent {
+		AgentEvent::TurnHeld {
+			hold: Some(TurnHold { reason: TurnHoldReason::BackgroundTasks, count }),
+		}
+	}
+
+	const RELEASED: AgentEvent = AgentEvent::TurnHeld { hold: None };
+
+	fn holds_in(events: Vec<AgentEvent>) -> Vec<AgentEvent> {
+		events.into_iter().filter(|event| matches!(event, AgentEvent::TurnHeld { .. })).collect()
+	}
+
+	#[test]
+	fn a_hold_is_told_once_per_count_change_and_released_at_zero() {
+		let mut shared = a_running_turn();
+
+		let told: Vec<AgentEvent> =
+			[2, 2, 1, 0, 0].into_iter().flat_map(|count| shared.tasks_pending(count)).collect();
+
+		assert_eq!(holds_in(told), vec![held(2), held(1), RELEASED]);
+	}
+
+	#[test]
+	fn a_hold_travels_as_its_reason_and_count_and_a_release_as_null() {
+		assert_eq!(
+			serde_json::to_value(held(3)).expect("a hold serializes"),
+			serde_json::json!({ "type": "turnHeld", "hold": { "reason": "backgroundTasks", "count": 3 } })
+		);
+		assert_eq!(
+			serde_json::to_value(RELEASED).expect("a release serializes"),
+			serde_json::json!({ "type": "turnHeld", "hold": null })
+		);
+	}
+
+	#[test]
+	fn a_turn_ending_while_held_releases_its_hold_and_an_unheld_one_releases_nothing() {
+		let mut held_turn = a_running_turn();
+		held_turn.tasks_pending(1);
+		assert_eq!(held_turn.turn_ended("s1", TurnOutcome::Completed), Some(RELEASED));
+
+		let mut unheld_turn = a_running_turn();
+		assert!(holds_in(unheld_turn.tasks_pending(0)).is_empty());
+		assert_eq!(unheld_turn.turn_ended("s1", TurnOutcome::Completed), None);
+	}
+
+	#[test]
+	fn a_turn_lapsing_while_held_releases_its_hold_before_the_failure() {
+		let mut shared = a_running_turn();
+		shared.tasks_pending(1);
+
+		let events = shared.end_lapsed(Lapse::TasksPending);
+
+		assert_eq!(events.first(), Some(&RELEASED));
+		assert!(matches!(events.last(), Some(AgentEvent::Failed { .. })));
+	}
+
+	#[test]
+	fn a_shutdown_while_held_releases_the_hold_before_the_turn_ends() {
+		let mut shared = a_running_turn();
+		shared.tasks_pending(1);
+
+		let events = shared.ended_by_shutdown("s1");
+
+		assert_eq!(events.first(), Some(&RELEASED));
+		assert!(matches!(events.get(1), Some(AgentEvent::TurnEnded { .. })));
 	}
 }
