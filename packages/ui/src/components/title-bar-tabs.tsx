@@ -46,12 +46,31 @@ import { middleClickHandlers } from "@workspace/ui/lib/click-modifiers"
 import { STILL_UNDER_REDUCED_MOTION } from "@workspace/ui/lib/reduced-motion"
 import { cn } from "@workspace/ui/lib/utils"
 
+type TitleBarTabDescriptorKind = "library-document" | "library-image"
+
+type TitleBarTabDescriptorIcon = Extract<keyof typeof Icons, "File" | "Image">
+
+type TitleBarTabDescriptor = {
+	kind: TitleBarTabDescriptorKind
+	name: string
+	icon: TitleBarTabDescriptorIcon
+}
+
 type TitleBarTab = {
 	id: string
 	title: string
 	icon: ReactNode
+	descriptor?: TitleBarTabDescriptor
 	isPinned?: boolean
 	isNeedingYou?: boolean
+}
+
+const titleOf = (tab: TitleBarTab) => tab.descriptor?.name ?? tab.title
+
+const iconOf = ({ icon, descriptor }: TitleBarTab) => {
+	if (!descriptor) return icon
+	const Glyph = Icons[descriptor.icon]
+	return <Glyph />
 }
 
 type TitleBarTabTearOff = {
@@ -489,7 +508,7 @@ const useTabLift = ({
 		const to = from + step
 		if (to < 0 || to >= zone.length) return
 		setMove({
-			title: zone[from].title,
+			title: titleOf(zone[from]),
 			position: (isPinned(id) ? 0 : pinned.length) + to + 1,
 			count: pinned.length + kept.length,
 		})
@@ -633,9 +652,9 @@ const TitleBarTabItem = ({
 						})}
 						aria-label={
 							needsYou
-								? t("titleBar.tabNeedsYou", { title: tab.title })
+								? t("titleBar.tabNeedsYou", { title: titleOf(tab) })
 								: tab.isPinned
-									? tab.title
+									? titleOf(tab)
 									: undefined
 						}
 						className={cn(
@@ -661,7 +680,7 @@ const TitleBarTabItem = ({
 				}
 			>
 				<span aria-hidden="true" className={TAB_ICON}>
-					{tab.icon}
+					{iconOf(tab)}
 				</span>
 				{tab.isPinned ? null : (
 					<>
@@ -673,7 +692,7 @@ const TitleBarTabItem = ({
 							/>
 						) : null}
 						<span className={cn(TAB_TITLE, needsYou && "text-warning")}>
-							{tab.title}
+							{titleOf(tab)}
 						</span>
 					</>
 				)}
@@ -797,10 +816,10 @@ const IncomingTab = ({ tab, widthClass, box }: IncomingTabProps) => (
 	<TitleBarTabChip
 		aria-hidden="true"
 		className={cn(INCOMING_TAB, widthClass)}
-		icon={tab.icon}
+		icon={iconOf(tab)}
 		placement="strip"
 		style={{ left: box.left, width: box.width ?? undefined }}
-		title={tab.title}
+		title={titleOf(tab)}
 	/>
 )
 
@@ -897,9 +916,9 @@ const OverflowChip = ({ tabs, onSelectTab }: OverflowChipProps) => {
 						onClick={() => onSelectTab?.(tab.id)}
 					>
 						<span aria-hidden="true" className={OVERFLOW_ICON}>
-							{tab.icon}
+							{iconOf(tab)}
 						</span>
-						<span className="min-w-0 truncate">{tab.title}</span>
+						<span className="min-w-0 truncate">{titleOf(tab)}</span>
 					</ContextMenuItem>
 				))}
 			</ContextMenuContent>
@@ -1070,7 +1089,7 @@ const TitleBarTabs = ({
 								onClose={() => onCloseTab?.(tab.id)}
 								onKeyDown={closeKeyOf(tab.id)}
 								revealHandlers={closeRevealFor(tab.id)}
-								title={tab.title}
+								title={titleOf(tab)}
 							/>
 						</TabCloseSlot>
 					))}
@@ -1112,6 +1131,7 @@ const TitleBarTabs = ({
 export {
 	type TitleBarIncomingTab,
 	type TitleBarTab,
+	type TitleBarTabDescriptor,
 	TitleBarTabs,
 	type TitleBarTabsProps,
 	type TitleBarTabTearOff,
