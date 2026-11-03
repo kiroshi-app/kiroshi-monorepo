@@ -7,6 +7,7 @@ import { listenOnThisWindow } from "../host/window-listen"
 type DragGhostView = {
 	tab: DragGhostTab | null
 	state: DragGhostState | null
+	showCount: number
 }
 
 type GhostTabReader = () => Promise<DragGhostTab | null>
@@ -19,10 +20,16 @@ export const createDragGhostView = (
 	listen = listenOnThisWindow,
 	readTab: GhostTabReader = commands.dragGhostTab,
 ) => {
-	const store = createStore<DragGhostView>({ tab: null, state: null })
+	const store = createStore<DragGhostView>({
+		tab: null,
+		state: null,
+		showCount: 0,
+	})
 
-	const showTab = (tab: DragGhostTab) =>
-		store.setState({ ...store.getState(), tab })
+	const showTab = (tab: DragGhostTab) => {
+		const held = store.getState()
+		store.setState({ ...held, tab, showCount: held.showCount + 1 })
+	}
 
 	const showAnsweredTab = (tab: DragGhostTab | null) => {
 		if (tab && store.getState().tab === null) {

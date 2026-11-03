@@ -129,12 +129,17 @@ const originWindowSize = (): WindowSize => ({
 
 const LIFTED_CHIP_SIZE: WindowSize = { width: 256, height: 28 }
 
-const LIFTED_CHIP_SHADOW_BLEED = 32
+const GHOST_PAGE_INSET = 32
 
 const GHOST_SIZE: WindowSize = {
-	width: LIFTED_CHIP_SIZE.width + LIFTED_CHIP_SHADOW_BLEED,
-	height: LIFTED_CHIP_SIZE.height + LIFTED_CHIP_SHADOW_BLEED,
+	width: LIFTED_CHIP_SIZE.width + GHOST_PAGE_INSET * 2,
+	height: LIFTED_CHIP_SIZE.height + GHOST_PAGE_INSET * 2,
 }
+
+const ghostOriginAt = ({ x, y }: ScreenPosition): ScreenPosition => ({
+	x: x - GHOST_PAGE_INSET,
+	y: y - GHOST_PAGE_INSET,
+})
 
 const isSupported = (answer: GhostAnswer) =>
 	answer.status === "ok" && answer.data.supported
@@ -192,12 +197,16 @@ const showGhost = (
 	ghostAnswered(
 		drag,
 		"drag_ghost_show",
-		commands.dragGhostShow(point, GHOST_SIZE, ghostTab),
+		commands.dragGhostShow(ghostOriginAt(point), GHOST_SIZE, ghostTab),
 	)
 
 const moveGhost = async (drag: TabDrag, point: ScreenPosition) => {
 	if (
-		await ghostAnswered(drag, "drag_ghost_move", commands.dragGhostMove(point))
+		await ghostAnswered(
+			drag,
+			"drag_ghost_move",
+			commands.dragGhostMove(ghostOriginAt(point)),
+		)
 	) {
 		return true
 	}
