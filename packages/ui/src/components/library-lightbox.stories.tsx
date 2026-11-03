@@ -562,6 +562,11 @@ const besideImage = (stage: Element, image: Element): Point => {
 		: { x: room.left + 8, y: (room.top + drawn.top) / 2 }
 }
 
+const onVerticalScrollbar = (stage: Element): Point => {
+	const box = stage.getBoundingClientRect()
+	return { x: box.right - 8, y: box.top + box.height / 2 }
+}
+
 const clickAt = (userEvent: UserEventObject, point: Point) =>
 	userEvent.pointer({
 		keys: "[MouseLeft]",
@@ -575,7 +580,7 @@ export const BackdropClick = meta.story({
 		docs: {
 			description: {
 				story:
-					"The first image, so Previous is disabled. Check that a click on the backdrop closes the lightbox once, beside the image in fit and in zoomed mode and in the bottom strip outside the zoom pill, and that a click on the image, the scrollbar of the zoomed stage where one is drawn, the header, the zoom pill or Previous and Next, disabled or not, keeps it open. A press on the image released on the backdrop keeps it open too, and while the More menu or the delete confirmation is open, a click outside never closes the lightbox.",
+					"The first image, so Previous is disabled. Check that a click on the backdrop closes the lightbox once, beside the image in fit and in zoomed mode and in the bottom strip outside the zoom pill, and that a click on the image, the classic scrollbar of the zoomed stage, its room held by a stable gutter so a headless browser keeps it, the header, the zoom pill or Previous and Next, disabled or not, keeps it open. A press on the image or on that scrollbar released on the backdrop keeps it open too, and while the More menu or the delete confirmation is open, a click outside never closes the lightbox.",
 			},
 		},
 	},
@@ -649,6 +654,44 @@ export const BackdropClick = meta.story({
 		])
 		await expect(args.onClose).not.toHaveBeenCalled()
 
+		stage.style.scrollbarGutter = "stable"
+		await userEvent.click(
+			within(popup).getByRole("button", { name: "Zoom in" }),
+		)
+		await userEvent.click(
+			within(popup).getByRole("button", { name: "Zoom in" }),
+		)
+		await expect(stage.offsetWidth).toBeGreaterThan(stage.clientWidth)
+		const onScrollbar = onVerticalScrollbar(stage)
+		await expect(
+			onScrollbar.x - stage.getBoundingClientRect().left - stage.clientLeft,
+		).toBeGreaterThanOrEqual(stage.clientWidth)
+		await userEvent.pointer({
+			keys: "[MouseLeft]",
+			target: stage,
+			coords: { clientX: onScrollbar.x, clientY: onScrollbar.y },
+		})
+		await expect(args.onClose).not.toHaveBeenCalled()
+
+		const zoomedStripCorner = cornerOf(bottomStripIn(popup))
+		await userEvent.pointer([
+			{
+				keys: "[MouseLeft>]",
+				target: stage,
+				coords: { clientX: onScrollbar.x, clientY: onScrollbar.y },
+			},
+			{
+				target: elementAt(zoomedStripCorner),
+				coords: { clientX: zoomedStripCorner.x, clientY: zoomedStripCorner.y },
+			},
+			{ keys: "[/MouseLeft]" },
+		])
+		await expect(args.onClose).not.toHaveBeenCalled()
+		await userEvent.click(
+			within(popup).getByRole("button", { name: /%, fit to the window$/ }),
+		)
+		stage.style.scrollbarGutter = ""
+
 		await openMoreMenu(popup, userEvent)
 		await clickAt(userEvent, cornerOf(bottomStripIn(popup)))
 		await waitFor(() => expect(screen.queryByRole("menu")).toBe(null))
@@ -681,6 +724,41 @@ export const BackdropClick = meta.story({
 		await expect(elementAt(stripCorner)).toBe(bottomStrip)
 		await clickAt(userEvent, stripCorner)
 		await closedFor(3)
+	},
+})
+
+export const OverlayScrollbarPress = meta.story({
+	tags: ["test-only"],
+	args: { openedAt: 0 },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The image zoomed in on a stage whose scrollbar takes no layout space, like an overlay scrollbar drawn over the content. Check that a press and release on that scrollbar, at the inline end of the stage, keeps the lightbox open.",
+			},
+		},
+	},
+	play: async ({ args, userEvent }) => {
+		const popup = await lightbox()
+		const stage = slotIn(popup, "library-lightbox-zoom")
+		stage.style.scrollbarWidth = "none"
+		await userEvent.click(
+			within(popup).getByRole("button", { name: "Zoom in" }),
+		)
+		await userEvent.click(
+			within(popup).getByRole("button", { name: "Zoom in" }),
+		)
+		await expect(stage.offsetWidth).toBe(stage.clientWidth)
+		await expect(stage.scrollHeight).toBeGreaterThan(stage.clientHeight)
+
+		const onScrollbar = onVerticalScrollbar(stage)
+		await userEvent.pointer({
+			keys: "[MouseLeft]",
+			target: stage,
+			coords: { clientX: onScrollbar.x, clientY: onScrollbar.y },
+		})
+		await expect(args.onClose).not.toHaveBeenCalled()
+		await expect(popup).toBeVisible()
 	},
 })
 

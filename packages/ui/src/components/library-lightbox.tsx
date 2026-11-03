@@ -54,13 +54,31 @@ const isInZoomScroller = (target: EventTarget) =>
 const isBackdrop = (target: EventTarget) =>
 	target instanceof HTMLElement && "lightboxBackdrop" in target.dataset
 
+const SCROLLBAR_SIZE = 16
+
+const scrollbarStart = (
+	client: number,
+	extent: number,
+	isScrolling: boolean,
+) => (isScrolling ? Math.min(client, extent - SCROLLBAR_SIZE) : client)
+
 const isOnScrollbar = (event: PointerEvent) => {
 	const { target } = event
 	if (!(target instanceof HTMLElement)) return false
 	const box = target.getBoundingClientRect()
 	const x = event.clientX - box.left - target.clientLeft
 	const y = event.clientY - box.top - target.clientTop
-	return x < 0 || y < 0 || x >= target.clientWidth || y >= target.clientHeight
+	const verticalBarStart = scrollbarStart(
+		target.clientWidth,
+		box.width - target.clientLeft,
+		target.scrollHeight > target.clientHeight,
+	)
+	const horizontalBarStart = scrollbarStart(
+		target.clientHeight,
+		box.height - target.clientTop,
+		target.scrollWidth > target.clientWidth,
+	)
+	return x < 0 || y < 0 || x >= verticalBarStart || y >= horizontalBarStart
 }
 
 type ZoomStageProps = {

@@ -1670,6 +1670,7 @@ overlays-librarylightbox--image-without-rename
 overlays-librarylightbox--member-more-menu
 overlays-librarylightbox--only-bar-actions-given
 overlays-librarylightbox--only-delete-shown
+overlays-librarylightbox--overlay-scrollbar-press
 overlays-librarylightbox--without-item-actions
 overlays-librarylightbox--zoomed
 overlays-missionmenu--answer-the-question-leaves-the-card
