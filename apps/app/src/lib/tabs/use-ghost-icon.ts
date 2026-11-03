@@ -19,7 +19,7 @@ import type { TranscriptStore } from "../conversations/store-port"
 
 export type GhostIconReader = Pick<TranscriptStore, "bots" | "conversations">
 
-export type GhostIconSource = {
+type GhostIconSource = {
 	href: string
 	spaceId: string | null
 	reader: GhostIconReader
