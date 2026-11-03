@@ -438,7 +438,33 @@ const common = {
 				open: "Impossible d’ouvrir le document. Rouvrez-le depuis la Bibliothèque.",
 				save: "Impossible d’enregistrer vos dernières modifications. Gardez le document ouvert et modifiez-le à nouveau pour réessayer.",
 			},
-			import: "Impossible d’importer {{name}}",
+			import: {
+				title: "Impossible d’importer {{name}}",
+				tooLarge:
+					"Ce fichier est trop lourd pour la Bibliothèque. Réduisez sa taille, puis importez-le à nouveau.",
+				invalidName:
+					"Le nom de ce fichier ne convient pas à la Bibliothèque. Renommez le fichier, puis importez-le à nouveau.",
+				unsupported:
+					"Ce type de fichier ne peut pas aller dans la Bibliothèque. Importez une image PNG, JPEG, GIF ou WebP, ou un document Markdown ou texte brut.",
+				undecodable:
+					"Impossible de lire le contenu de ce fichier. Enregistrez-le à nouveau depuis l’app qui l’a créé, puis importez-le à nouveau.",
+				notUtf8:
+					"Impossible de lire le texte de ce document. Enregistrez-le en texte UTF-8, puis importez-le à nouveau.",
+				missing:
+					"Impossible de retrouver le fichier dans la Bibliothèque après l’import. Importez-le à nouveau.",
+				unwritable:
+					"Impossible d’enregistrer le fichier sur l’ordinateur où tourne Kiroshi. Vérifiez qu’il reste de la place sur son disque, puis importez à nouveau le fichier.",
+				unreadable:
+					"Impossible de lire le dossier de la Bibliothèque sur l’ordinateur où tourne Kiroshi. Vérifiez que le dossier est toujours là, puis importez à nouveau le fichier.",
+				unknownSpace:
+					"Cet espace n’existe plus sur l’ordinateur où tourne Kiroshi. Ouvrez un autre espace, puis importez-y le fichier.",
+				unavailable:
+					"Impossible d’ouvrir la Bibliothèque sur l’ordinateur où tourne Kiroshi. Redémarrez Kiroshi sur cet ordinateur, puis importez à nouveau le fichier.",
+				storage:
+					"Impossible d’enregistrer le fichier dans la Bibliothèque. Importez-le à nouveau.",
+				generic:
+					"Un problème est survenu pendant l’import. Importez à nouveau le fichier.",
+			},
 		},
 	},
 	whatsNew: {

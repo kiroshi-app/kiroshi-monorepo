@@ -408,7 +408,32 @@ const common = {
 				open: "Couldn’t open the document. Open it again from the Library.",
 				save: "Couldn’t save your last changes. Keep the document open and edit again to retry.",
 			},
-			import: "Couldn’t import {{name}}",
+			import: {
+				title: "Couldn’t import {{name}}",
+				tooLarge:
+					"This file is too large for the Library. Make it smaller, then import it again.",
+				invalidName:
+					"This file’s name can’t be used in the Library. Rename the file, then import it again.",
+				unsupported:
+					"This type of file can’t go in the Library. Import a PNG, JPEG, GIF or WebP image, or a Markdown or plain text document.",
+				undecodable:
+					"Couldn’t read the content of this file. Save it again from the app that made it, then import it again.",
+				notUtf8:
+					"Couldn’t read the text of this document. Save it as UTF-8 text, then import it again.",
+				missing:
+					"Couldn’t find the file in the Library after the import. Import it again.",
+				unwritable:
+					"Couldn’t save the file on the computer where Kiroshi runs. Check that its disk has space left, then import the file again.",
+				unreadable:
+					"Couldn’t read the Library folder on the computer where Kiroshi runs. Check that the folder is still there, then import the file again.",
+				unknownSpace:
+					"This Space isn’t on the computer where Kiroshi runs anymore. Open another Space, then import the file there.",
+				unavailable:
+					"Couldn’t open the Library on the computer where Kiroshi runs. Restart Kiroshi there, then import the file again.",
+				storage: "Couldn’t record the file in the Library. Import it again.",
+				generic:
+					"Something went wrong during the import. Import the file again.",
+			},
 		},
 	},
 	whatsNew: {

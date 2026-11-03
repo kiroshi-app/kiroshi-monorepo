@@ -30,7 +30,7 @@ class LibraryImportFailure extends Error {
 const failureNoticeOf = (error: unknown) => {
 	const isImportFailure = error instanceof LibraryImportFailure
 	return {
-		title: i18n.t("common:library.failure.import", {
+		title: i18n.t("common:library.failure.import.title", {
 			name: isImportFailure ? error.fileName : "",
 		}),
 		description: isImportFailure ? error.message : undefined,

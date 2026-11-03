@@ -1356,6 +1356,7 @@ navigation-librarypanel--filter-with-no-match
 navigation-librarypanel--grid-all
 navigation-librarypanel--grid-documents
 navigation-librarypanel--grid-images
+navigation-librarypanel--import-failures
 navigation-librarypanel--import-long-names
 navigation-librarypanel--loading
 navigation-librarypanel--long-names
