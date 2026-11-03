@@ -1118,31 +1118,21 @@ describe("holding the Shoto run in a window", () => {
 		user: {} as UserController,
 	}).holdShotoRun
 
-	const runCounted = () => {
-		const run = { count: 0 }
-		return {
-			run,
-			counting: async () => {
-				run.count += 1
-			},
-		}
-	}
-
 	it("runs when no other window holds the run", async () => {
-		const { run, counting } = runCounted()
+		const run = vi.fn(async () => {})
 
-		await hold(counting)
+		await hold(run)
 
-		expect(run.count).toBe(1)
+		expect(run).toHaveBeenCalledOnce()
 	})
 
 	it("skips while another window holds the run", async () => {
-		const { run, counting } = runCounted()
+		const run = vi.fn(async () => {})
 		void hold(() => new Promise(() => {}))
 
-		await hold(counting)
+		await hold(run)
 
-		expect(run.count).toBe(0)
+		expect(run).not.toHaveBeenCalled()
 	})
 
 	it("runs without a hold in a webview that has no Web Locks", async () => {
@@ -1150,11 +1140,11 @@ describe("holding the Shoto run in a window", () => {
 			configurable: true,
 			value: null,
 		})
-		const { run, counting } = runCounted()
+		const run = vi.fn(async () => {})
 
-		await hold(counting)
+		await hold(run)
 
-		expect(run.count).toBe(1)
+		expect(run).toHaveBeenCalledOnce()
 	})
 
 	it("names the failure when the run can't be held", async () => {
