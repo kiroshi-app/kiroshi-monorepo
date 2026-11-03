@@ -2,6 +2,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+import { TITLE_BAR_TAB_CHIP_DRAG_SIZE } from "@workspace/ui/components/title-bar-tab-chip"
+
 import { DRAG_GHOST_STATE_EVENT, DRAG_GHOST_WINDOW } from "./drag-ghost-state"
 import {
 	createTabTearOff,
@@ -130,9 +132,17 @@ const sessionWithMoves = () => {
 
 const drawGhost = vi.fn(() => TAB)
 
-const CHIP_GHOST_SIZE = { width: 320, height: 92 }
+const GHOST_PAGE_INSET = 32
 
-const ghostOriginAt = (x: number, y: number) => ({ x: x - 32, y: y - 32 })
+const CHIP_GHOST_SIZE = {
+	width: TITLE_BAR_TAB_CHIP_DRAG_SIZE.width + GHOST_PAGE_INSET * 2,
+	height: TITLE_BAR_TAB_CHIP_DRAG_SIZE.height + GHOST_PAGE_INSET * 2,
+}
+
+const ghostOriginAt = (x: number, y: number) => ({
+	x: x - GHOST_PAGE_INSET,
+	y: y - GHOST_PAGE_INSET,
+})
 
 const targetAnswers = (isTaken: boolean) =>
 	awaitDockAnswer.mockResolvedValue({ answer: Promise.resolve(isTaken) })
