@@ -19,6 +19,7 @@ import { i18n } from "@workspace/ui/lib/i18n"
 import { LibraryDropTarget } from "@/components/library-drop-target"
 import type { Space } from "@/lib/bindings"
 import type { Bot } from "@/lib/conversations/store-contract"
+import { formatActionsOf } from "@/lib/library/library-document-formats"
 import { withoutEdits } from "@/lib/library/library-document-writers"
 import {
 	documentNamedAs,
@@ -204,6 +205,7 @@ export const LibraryScreen = ({
 	if (openedDocument && document) {
 		return (
 			<LibraryDocumentEditor
+				{...formatActionsOf(document.markdown, edit)}
 				body={document.markdown}
 				detail={openedDocument.detail}
 				finished={finished}
