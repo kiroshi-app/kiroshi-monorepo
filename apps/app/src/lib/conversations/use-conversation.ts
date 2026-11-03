@@ -95,7 +95,11 @@ const workersIn = (
 	)
 	return [
 		...heard.map(
-			({ botId, work }): ConversationWorker => ({ botId, kind: work.kind }),
+			({ botId, work }): ConversationWorker => ({
+				botId,
+				kind: work.kind,
+				backgroundTasks: work.backgroundTasks,
+			}),
 		),
 		...unheardIds.map(
 			(botId): ConversationWorker => ({ botId, kind: UNHEARD_KIND }),
@@ -115,6 +119,12 @@ export const useConversationWorkers = (
 		runtimes,
 		[...rows.keys()],
 		(id) => workersIn(rows.get(id), runtimes.heldFor(id)),
-		(workers) => workers.map(({ botId, kind }) => `${botId}:${kind}`).join(","),
+		(workers) =>
+			workers
+				.map(
+					({ botId, kind, backgroundTasks }) =>
+						`${botId}:${kind}:${backgroundTasks ?? ""}`,
+				)
+				.join(","),
 	)
 }

@@ -7,7 +7,7 @@ import { type ChatState, isTurnBusy } from "./chat-state"
 import { toPublishedBlocks } from "./markdown-blocks"
 import { messageWithAttachments } from "./message-attachments"
 import type { MessageAuthorship } from "./thread-authorship"
-import { type WorkingState, workingFor } from "./working-kind"
+import { heldWorkFor, type WorkingState, workingFor } from "./working-kind"
 
 import type { ConnectionState, TransportError } from "../agent/contract"
 import { agentNameOf } from "../agent/messages"
@@ -315,7 +315,7 @@ const busyWorkOf = ({
 	activities,
 }: ChatState): WorkingState => {
 	if (hold) {
-		return { kind: "working", backgroundTasks: hold.count }
+		return heldWorkFor(hold)
 	}
 	const latest = messages.at(-1)
 	const isWriting = latest?.role === "assistant" && latest.content.length > 0

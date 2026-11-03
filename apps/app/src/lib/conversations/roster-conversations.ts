@@ -34,6 +34,7 @@ type BotFace = Pick<Bot, "name" | "avatarBlot" | "avatarImagePath">
 export type ConversationWorker = {
 	botId: string
 	kind: ActivityIndicatorKind
+	backgroundTasks?: number
 }
 
 const NO_WORKERS: ConversationWorker[] = []

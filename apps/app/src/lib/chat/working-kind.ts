@@ -3,7 +3,7 @@ import type {
 	ActivityIndicatorWait,
 } from "@workspace/ui/components/activity-indicator"
 
-import type { ActivityEvent, ActivityStatus } from "../agent/contract"
+import type { ActivityEvent, ActivityStatus, TurnHold } from "../agent/contract"
 
 export type WorkingState = {
 	kind: ActivityIndicatorKind
@@ -72,3 +72,8 @@ export const workingFor = (
 	}
 	return { kind: isWriting ? "writing" : "thinking" }
 }
+
+export const heldWorkFor = ({ count }: TurnHold): WorkingState => ({
+	kind: "working",
+	backgroundTasks: count,
+})
