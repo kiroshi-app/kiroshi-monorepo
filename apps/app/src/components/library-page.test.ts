@@ -813,15 +813,16 @@ describe("an opened Library document", () => {
 		const ticked = typed.replace("- [ ]", "- [x]")
 		await holdsShownMarkdown(ticked)
 
-		fakeLibraryHost.writeElsewhere(DOCUMENT.name, `${ticked}${AGENT_LINE}`)
-		await holdsShownMarkdown(`${ticked}${AGENT_LINE}`)
+		const written = `${ticked}${AGENT_LINE}`
+		fakeLibraryHost.writeElsewhere(DOCUMENT.name, written)
+		await holdsShownMarkdown(written)
 		expect(paragraphOf(shown)).toBe(body)
 
 		await press(
 			shown.getByRole("button", { name: common("library.document.back") }),
 		)
 		await openLibraryItem(DOCUMENT, shown)
-		await holdsShownMarkdown(`${ticked}${AGENT_LINE}`)
+		await holdsShownMarkdown(written)
 		expect(paragraphOf(shown)).not.toBe(body)
 	})
 })
