@@ -208,7 +208,6 @@ const LibraryLightbox = ({
 	const isCopied = image !== null && copiedImageId === image.id
 	const [isConfirmingDelete, setConfirmingDelete] = useState(false)
 	const { onCopy, onDownload, onDelete } = actions
-	const hasActions = hasLibraryItemActions(actions)
 
 	useEffect(() => {
 		if (copiedImageId === null) return
@@ -312,46 +311,49 @@ const LibraryLightbox = ({
 										/>
 									</TooltipButton>
 								) : null}
-								{hasActions ? (
-									<DropdownMenu>
-										<DropdownMenuTrigger
-											render={
-												<TooltipButton
-													aria-label={t("library.lightbox.more")}
-													className={ACTION}
-													size="icon"
-													tooltip={t("library.lightbox.more")}
-													tooltipSide="bottom"
-													variant="ghost"
+								{hasLibraryItemActions(actions) ? (
+									<>
+										<DropdownMenu>
+											<DropdownMenuTrigger
+												render={
+													<TooltipButton
+														aria-label={t("library.lightbox.more")}
+														className={ACTION}
+														size="icon"
+														tooltip={t("library.lightbox.more")}
+														tooltipSide="bottom"
+														variant="ghost"
+													/>
+												}
+											>
+												<Icons.More aria-hidden="true" />
+											</DropdownMenuTrigger>
+											<DropdownMenuContent
+												align="end"
+												aria-label={t("library.itemMenu.label", {
+													name: image.name,
+												})}
+												className={cn(
+													"dark w-auto",
+													STILL_UNDER_REDUCED_MOTION,
+												)}
+											>
+												<LibraryItemMenuItems
+													actions={{
+														...actions,
+														onCopy: onCopy && copyImage,
+													}}
+													item={image}
+													onPickDelete={() => setConfirmingDelete(true)}
+													parts={DROPDOWN_MENU_PARTS}
 												/>
-											}
-										>
-											<Icons.More aria-hidden="true" />
-										</DropdownMenuTrigger>
-										<DropdownMenuContent
-											align="end"
-											aria-label={t("library.itemMenu.label", {
-												name: image.name,
-											})}
-											className={cn("dark w-auto", STILL_UNDER_REDUCED_MOTION)}
-										>
-											<LibraryItemMenuItems
-												actions={{
-													...actions,
-													onCopy: onCopy && copyImage,
-												}}
-												item={image}
-												onPickDelete={() => setConfirmingDelete(true)}
-												parts={DROPDOWN_MENU_PARTS}
-											/>
-										</DropdownMenuContent>
-									</DropdownMenu>
-								) : null}
-								{hasActions ? (
-									<Separator
-										className={cn(DIVIDER, "h-5")}
-										orientation="vertical"
-									/>
+											</DropdownMenuContent>
+										</DropdownMenu>
+										<Separator
+											className={cn(DIVIDER, "h-5")}
+											orientation="vertical"
+										/>
+									</>
 								) : null}
 								<DialogClose
 									render={
