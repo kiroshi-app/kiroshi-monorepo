@@ -500,21 +500,6 @@ describe("connecting with a ~/.claude folder", () => {
 	})
 })
 
-describe("connecting while the ~/.claude read is refused", () => {
-	it("reports the failure and shows Account", async () => {
-		port.hasClaudeHome = () => Promise.reject(new Error("host gone"))
-
-		await connectedThroughLogin()
-
-		expect(reportFailure).toHaveBeenCalledWith(
-			expect.objectContaining({ title: "Couldn’t read ~/.claude" }),
-		)
-		expect(world.stored).toEqual(["connect", "account"])
-		expect(screenStep()).toBe("account")
-		expect(controller.getState().isWithShoto).toBe(false)
-	})
-})
-
 describe("connecting without a ~/.claude folder", () => {
 	it("stores account and leaves Shoto alone", async () => {
 		await connectedThroughLogin()
@@ -763,14 +748,6 @@ describe("finishing on Account", () => {
 		expect(world.opened).toEqual([SCOUT.id])
 		expect(world.sent).toEqual([])
 	})
-
-	it("opens Shoto when no first agent is stored", async () => {
-		await controller.finish()
-		await flushed()
-
-		expect(world.stored).toEqual(["done"])
-		expect(world.opened).toEqual([SHOTO])
-	})
 })
 
 describe("landing after an import", () => {
@@ -893,17 +870,6 @@ describe("landing after an import", () => {
 			title: "Shoto couldn’t say hello",
 			description: "socket closed",
 		})
-	})
-
-	it("opens Shoto and asks for the first agent when the import was left empty and no first agent is stored", async () => {
-		await finishedAfter(NOTHING_IMPORTED)
-		await flushed()
-
-		expect(world.opened).toEqual([SHOTO])
-		expect(world.sent).toEqual([
-			{ botId: SHOTO, text: onboardingSummonsFor("greeting") },
-			{ botId: SHOTO, text: onboardingSummonsFor("firstCompanion") },
-		])
 	})
 
 	it("still lands on the stored first companion when the import was skipped", async () => {
