@@ -6,6 +6,7 @@ import { createOnThisComputerBus } from "./on-this-computer-test-bus"
 import { createTabDock } from "./tab-dock"
 
 import type { TabDrag } from "../bindings"
+import { createStore } from "../store"
 
 const host = vi.hoisted(() => ({
 	windowReportSpace: vi.fn(),
@@ -52,6 +53,8 @@ const PACKED = {
 }
 
 const STRIP = { x: 80, y: 0, width: 600, height: 36 }
+
+const OTHER_SPACE = "space-work"
 
 const WINDOW_ORIGIN = { x: 1000, y: 200 }
 
@@ -117,14 +120,33 @@ const settleFromOrigin = (isTaken: boolean, move = {}) =>
 const answered = () =>
 	vi.waitFor(() => expect(host.emitOnThisComputer).toHaveBeenCalled())
 
+let resizeStrip: () => void = () => undefined
+
+const StripObserver = class {
+	constructor(onResize: () => void) {
+		resizeStrip = onResize
+	}
+
+	observe() {}
+
+	disconnect() {
+		resizeStrip = () => undefined
+	}
+}
+
 const dockOf = (shownSpaceId = SPACE) => {
 	const receive = vi.fn()
-	const dock = createTabDock({
-		windowLabel: THIS_WINDOW,
-		shownSpaceId: () => shownSpaceId,
-		receive,
-	})
-	return { dock, receive }
+	const shownSpace = createStore(shownSpaceId)
+	const dock = createTabDock(
+		{
+			windowLabel: THIS_WINDOW,
+			shownSpaceId: shownSpace.getState,
+			subscribeShownSpace: shownSpace.subscribe,
+			receive,
+		},
+		async () => () => undefined,
+	)
+	return { dock, receive, shownSpace }
 }
 
 const holding = (shownSpaceId = SPACE, originSpaceId = SPACE) => {
@@ -133,10 +155,17 @@ const holding = (shownSpaceId = SPACE, originSpaceId = SPACE) => {
 	return held
 }
 
+const holdingLocated = async () => {
+	const held = holding()
+	await host.readWindowOrigin.mock.results.at(-1)?.value
+	return held
+}
+
 beforeEach(() => {
+	vi.stubGlobal("ResizeObserver", StripObserver)
 	host.windowReportSpace.mockResolvedValue(undefined)
 	host.windowReportStrip.mockResolvedValue(undefined)
-	host.readWindowOrigin.mockReturnValue(WINDOW_ORIGIN)
+	host.readWindowOrigin.mockResolvedValue(WINDOW_ORIGIN)
 	host.revealWindow.mockResolvedValue(undefined)
 	bus = createOnThisComputerBus()
 	host.emitOnThisComputer.mockImplementation(bus.emit)
@@ -145,6 +174,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+	vi.unstubAllGlobals()
 	vi.useRealTimers()
 	document.body.replaceChildren()
 	for (const mock of Object.values(host)) {
@@ -171,9 +201,68 @@ describe("a tab drag started in another window", () => {
 	})
 })
 
+describe("the place of this window", () => {
+	it("is reported to the host as soon as the window watches, with no drag in flight", async () => {
+		const { dock } = dockOf()
+
+		await dock.watch()
+
+		expect(host.windowReportSpace).toHaveBeenCalledExactlyOnceWith(SPACE)
+		expect(host.windowReportStrip).toHaveBeenCalledExactlyOnceWith(STRIP)
+	})
+
+	it("is reported again when the shown Space changes, and only then", async () => {
+		const { dock, shownSpace } = dockOf()
+		await dock.watch()
+
+		shownSpace.setState(OTHER_SPACE)
+		shownSpace.setState(OTHER_SPACE)
+
+		expect(host.windowReportSpace.mock.calls).toEqual([[SPACE], [OTHER_SPACE]])
+	})
+
+	it("reports the Space again after a report the host refused", async () => {
+		const errors = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => undefined)
+		host.windowReportSpace.mockRejectedValueOnce(new Error("no registry"))
+		const { dock, shownSpace } = dockOf()
+		await dock.watch()
+		await vi.waitFor(() => expect(errors).toHaveBeenCalled())
+
+		shownSpace.setState(SPACE)
+
+		expect(host.windowReportSpace.mock.calls).toEqual([[SPACE], [SPACE]])
+		errors.mockRestore()
+	})
+
+	it("reports the new strip bounds when the strip resizes", async () => {
+		const { dock } = dockOf()
+		await dock.watch()
+		const narrower = { ...STRIP, x: 240, width: 440 }
+		mountStrip(narrower)
+
+		resizeStrip()
+
+		expect(host.windowReportStrip.mock.calls).toEqual([[STRIP], [narrower]])
+	})
+
+	it("stops being reported once the window stops watching", async () => {
+		const { dock, shownSpace } = dockOf()
+		const stopWatching = await dock.watch()
+
+		stopWatching()
+		shownSpace.setState(OTHER_SPACE)
+		resizeStrip()
+
+		expect(host.windowReportSpace).toHaveBeenCalledOnce()
+		expect(host.windowReportStrip).toHaveBeenCalledOnce()
+	})
+})
+
 describe("the pointer over the strip during a drag of the same Space", () => {
 	it("parts the strip at the pointer x with the incoming tab", async () => {
-		const { dock } = holding()
+		const { dock } = await holdingLocated()
 
 		dock.follow(moved(OVER_STRIP.x, OVER_STRIP.y))
 
@@ -184,7 +273,7 @@ describe("the pointer over the strip during a drag of the same Space", () => {
 	})
 
 	it("closes the parting once the pointer leaves the strip", async () => {
-		const { dock } = holding()
+		const { dock } = await holdingLocated()
 
 		dock.follow(moved(OVER_STRIP.x, OVER_STRIP.y))
 		dock.follow(moved(BELOW_STRIP.x, BELOW_STRIP.y))
@@ -193,7 +282,7 @@ describe("the pointer over the strip during a drag of the same Space", () => {
 	})
 
 	it("closes the parting when the drag is cancelled", async () => {
-		const { dock } = holding()
+		const { dock } = await holdingLocated()
 
 		dock.follow(moved(OVER_STRIP.x, OVER_STRIP.y))
 		dock.follow({ kind: "cancelled", originLabel: ORIGIN_WINDOW })
@@ -230,7 +319,7 @@ describe("the settle of a held drag", () => {
 	it.each([false, true])(
 		"ends the hold when heard before the drop (taken: %s), so the drop answers and takes nothing",
 		async (isTaken) => {
-			const { dock, receive } = holding()
+			const { dock, receive } = await holdingLocated()
 
 			dock.follow(moved(OVER_STRIP.x, OVER_STRIP.y))
 			await vi.waitFor(() => expect(bus.listenerCount()).toBe(1))
@@ -454,7 +543,7 @@ describe("the drop decision", () => {
 
 	it("reads the window origin again when the window moved during the drag", async () => {
 		const { dock, receive } = holding()
-		host.readWindowOrigin.mockReturnValue({ x: 0, y: 0 })
+		host.readWindowOrigin.mockResolvedValue({ x: 0, y: 0 })
 
 		dock.follow(dropped(OVER_STRIP.x, OVER_STRIP.y))
 

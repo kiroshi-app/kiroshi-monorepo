@@ -5,7 +5,9 @@ import {
 	type DockedTab,
 	type DockMessage,
 	type DockMessageHeard,
+	type DockOffer,
 	unpackDockedTab,
+	watchDockOffers,
 } from "./tab-dock-channel"
 import type { Tab } from "./tabs-model"
 
@@ -17,7 +19,7 @@ import {
 	TAB_DRAG_EVENT,
 	type TabDrag,
 } from "../bindings"
-import { readWindowOrigin, revealWindow } from "../host"
+import { readWindowOrigin, revealWindow, type WindowOrigin } from "../host"
 import { createStore } from "../store"
 import { listenOnThisWindow } from "../host/window-listen"
 
@@ -31,6 +33,7 @@ type IncomingTab = {
 type TabDockSource = {
 	windowLabel: string
 	shownSpaceId: () => string
+	subscribeShownSpace: (listener: () => void) => () => void
 	receive: (tab: Tab, index: number) => void
 }
 
@@ -39,6 +42,7 @@ type SettleHearing = Promise<DockMessageHeard | null>
 type HeldDrag = DockedTab & {
 	originSpaceId: string
 	strip: StripBounds | null
+	origin: WindowOrigin | null
 }
 
 const reportDockFailure = (reason: unknown) => {
@@ -74,18 +78,39 @@ const holds = (strip: StripBounds, x: number, y: number) =>
 	y >= strip.y &&
 	y < strip.y + strip.height
 
-const reportPlace = (spaceId: string, strip: StripBounds | null) => {
-	commands.windowReportSpace(spaceId).catch(reportDockFailure)
+const locate = (drag: HeldDrag) => {
+	readWindowOrigin().then((origin) => {
+		drag.origin = origin
+	}, reportDockFailure)
+}
+
+const isUnlocated = (reason: unknown) => {
+	reportDockFailure(reason)
+	return false
+}
+
+const reportStrip = (strip: StripBounds | null) => {
 	if (strip) {
 		commands.windowReportStrip(strip).catch(reportDockFailure)
 	}
 }
 
+const observeStrip = () => {
+	const strip = document.querySelector(STRIP_SELECTOR)
+	if (!strip) {
+		return () => undefined
+	}
+	const observer = new ResizeObserver(() => reportStrip(measuredStrip()))
+	observer.observe(strip)
+	return () => observer.disconnect()
+}
+
 export const createTabDock = (
-	{ windowLabel, shownSpaceId, receive }: TabDockSource,
+	{ windowLabel, shownSpaceId, subscribeShownSpace, receive }: TabDockSource,
 	listen = listenOnThisWindow,
 ) => {
 	const store = createStore<IncomingTab | null>(null)
+	let reportedSpaceId: string | null = null
 	let held: HeldDrag | null = null
 	let incomingIndex: number | null = null
 	let hearing: SettleHearing = Promise.resolve(null)
@@ -99,16 +124,34 @@ export const createTabDock = (
 		}
 	}
 
+	const forgetReportedSpace = (reason: unknown) => {
+		reportedSpaceId = null
+		reportDockFailure(reason)
+	}
+
+	const reportShownSpace = () => {
+		const spaceId = shownSpaceId()
+		if (spaceId === reportedSpaceId) {
+			return
+		}
+		reportedSpaceId = spaceId
+		commands.windowReportSpace(spaceId).catch(forgetReportedSpace)
+	}
+
+	const reportPlace = (strip: StripBounds | null) => {
+		reportShownSpace()
+		reportStrip(strip)
+	}
+
 	const isSameSpace = (drag: HeldDrag) =>
 		drag.originSpaceId !== "" && drag.originSpaceId === shownSpaceId()
 
 	const partingAt = (point: ScreenPosition): IncomingTab | null => {
-		if (!held?.strip || !isSameSpace(held)) {
+		if (!held?.strip || !held.origin || !isSameSpace(held)) {
 			return null
 		}
-		const origin = readWindowOrigin()
-		const clientX = point.x - origin.x
-		const clientY = point.y - origin.y
+		const clientX = point.x - held.origin.x
+		const clientY = point.y - held.origin.y
 		return holds(held.strip, clientX, clientY)
 			? { tab: held.tab, clientX }
 			: null
@@ -135,12 +178,15 @@ export const createTabDock = (
 	const hold = (originSpaceId: string, packed: Json) => {
 		stopHearing(hearing)
 		const docked = unpackDockedTab(packed)
-		held = docked ? { ...docked, originSpaceId, strip: measuredStrip() } : null
+		held = docked
+			? { ...docked, originSpaceId, strip: measuredStrip(), origin: null }
+			: null
 		if (!held) {
 			return
 		}
+		locate(held)
 		hearSettleOf(held)
-		reportPlace(shownSpaceId(), held.strip)
+		reportPlace(held.strip)
 	}
 
 	const release = () => {
@@ -148,13 +194,15 @@ export const createTabDock = (
 		part(null)
 	}
 
-	const isOverStripNow = (drag: HeldDrag, point: ScreenPosition) => {
+	const isOverStripNow = async (drag: HeldDrag, point: ScreenPosition) => {
 		const strip = measuredStrip()
 		if (!strip || !isSameSpace(drag)) {
 			return false
 		}
-		const origin = readWindowOrigin()
-		return holds(strip, point.x - origin.x, point.y - origin.y)
+		return readWindowOrigin().then(
+			(origin) => holds(strip, point.x - origin.x, point.y - origin.y),
+			isUnlocated,
+		)
 	}
 
 	const isSettledTaken = async (
@@ -176,7 +224,7 @@ export const createTabDock = (
 		const heldHearing = hearing
 		hearing = Promise.resolve(null)
 		release()
-		const isTaken = isOverStripNow(drag, point)
+		const isTaken = await isOverStripNow(drag, point)
 		const answer = { windowLabel, originTabId: drag.originTabId, isTaken }
 		if (!isTaken) {
 			stopHearing(heldHearing)
@@ -208,6 +256,27 @@ export const createTabDock = (
 		}
 	}
 
+	const catchUp = ({ originSpaceId, tab }: DockOffer) => {
+		const offered = unpackDockedTab(tab)
+		if (offered && held?.originTabId !== offered.originTabId) {
+			hold(originSpaceId, tab)
+		}
+	}
+
+	const watch = async () => {
+		const stops = await Promise.all([
+			listen<TabDrag>(TAB_DRAG_EVENT, ({ payload }) => follow(payload)),
+			watchDockOffers(windowLabel, catchUp),
+		])
+		reportPlace(measuredStrip())
+		stops.push(subscribeShownSpace(reportShownSpace), observeStrip())
+		return () => {
+			for (const stop of stops) {
+				stop()
+			}
+		}
+	}
+
 	return {
 		getState: store.getState,
 		subscribe: store.subscribe,
@@ -215,8 +284,7 @@ export const createTabDock = (
 		placeIncoming: (index: number) => {
 			incomingIndex = index
 		},
-		watch: () =>
-			listen<TabDrag>(TAB_DRAG_EVENT, ({ payload }) => follow(payload)),
+		watch,
 	}
 }
 

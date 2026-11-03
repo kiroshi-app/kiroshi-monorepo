@@ -12,6 +12,8 @@
 		"core:window:allow-toggle-maximize",
 		"core:window:allow-close",
 		"core:window:allow-is-maximized",
+		"core:window:allow-inner-position",
+		"core:window:allow-scale-factor",
 		"updater:default",
 		"log:default",
 		"process:allow-restart",

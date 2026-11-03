@@ -8,6 +8,8 @@ const DOCK_ANSWER_EVENT = "window://tab-dock-answered"
 
 const DOCK_SETTLE_EVENT = "window://tab-dock-settled"
 
+const DOCK_OFFER_EVENT = "window://tab-dock-offered"
+
 const DOCK_ANSWER_TIMEOUT_MS = 2000
 
 const DOCK_SETTLE_TIMEOUT_MS = DOCK_ANSWER_TIMEOUT_MS + 1000
@@ -26,8 +28,23 @@ export type DockMessage = DockMove & {
 	isTaken: boolean
 }
 
+export type DockOffer = {
+	windowLabel: string
+	originSpaceId: string
+	tab: Json
+}
+
+export type DockAnswerFailure =
+	| "no answer"
+	| "refused by the receiver"
+	| "settle lost"
+
+type DockOutcome =
+	| { isTaken: true }
+	| { isTaken: false; failedStep: DockAnswerFailure }
+
 type DockAnswerAwaited = {
-	answer: Promise<boolean>
+	answer: Promise<DockOutcome>
 }
 
 export type DockMessageHeard = {
@@ -79,9 +96,48 @@ const reportUnsettled = (reason: unknown) => {
 
 const settleDock = (settled: DockMessage) =>
 	emitOnThisComputer(DOCK_SETTLE_EVENT, settled).then(
-		() => settled.isTaken,
+		() => true,
 		reportUnsettled,
 	)
+
+const failedAt = (failedStep: DockAnswerFailure): DockOutcome => ({
+	isTaken: false,
+	failedStep,
+})
+
+const outcomeOf = (isTaken: boolean | null, isSettled: boolean) => {
+	if (isTaken === null) {
+		return failedAt("no answer")
+	}
+	if (!isTaken) {
+		return failedAt("refused by the receiver")
+	}
+	return isSettled ? { isTaken } : failedAt("settle lost")
+}
+
+const answerWithinBound = ({ heard, end }: DockMessageHeard) => {
+	let timeout: ReturnType<typeof setTimeout> | undefined
+	const unanswered = new Promise<null>((resolve) => {
+		timeout = setTimeout(() => resolve(null), DOCK_ANSWER_TIMEOUT_MS)
+	})
+	return Promise.race([heard, unanswered]).finally(() => {
+		clearTimeout(timeout)
+		end(false)
+	})
+}
+
+export const offerDock = (offer: DockOffer) =>
+	emitOnThisComputer(DOCK_OFFER_EVENT, offer)
+
+export const watchDockOffers = (
+	windowLabel: string,
+	hear: (offer: DockOffer) => void,
+) =>
+	listenOnThisComputer<DockOffer>(DOCK_OFFER_EVENT, ({ payload }) => {
+		if (payload.windowLabel === windowLabel) {
+			hear(payload)
+		}
+	})
 
 export const answerDock = (answer: DockMessage) =>
 	emitOnThisComputer(DOCK_ANSWER_EVENT, answer)
@@ -99,12 +155,11 @@ export const awaitDockAnswer = async (
 	originTabId: string,
 ): Promise<DockAnswerAwaited> => {
 	const move = { windowLabel, originTabId }
-	const { heard, end } = await hearFirst(DOCK_ANSWER_EVENT, move)
-	const timeout = setTimeout(() => end(false), DOCK_ANSWER_TIMEOUT_MS)
+	const hearing = await hearFirst(DOCK_ANSWER_EVENT, move)
 	return {
-		answer: heard.then((isTaken) => {
-			clearTimeout(timeout)
-			return settleDock({ ...move, isTaken })
+		answer: answerWithinBound(hearing).then(async (isTaken) => {
+			const isSettled = await settleDock({ ...move, isTaken: isTaken === true })
+			return outcomeOf(isTaken, isSettled)
 		}),
 	}
 }
