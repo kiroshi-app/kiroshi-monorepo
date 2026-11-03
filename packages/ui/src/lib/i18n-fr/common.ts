@@ -439,6 +439,8 @@ const common = {
 				save: "Impossible d’enregistrer vos dernières modifications. Gardez le document ouvert et modifiez-le à nouveau pour réessayer.",
 				write:
 					"L’écriture de {{name}} s’est interrompue. Redemandez-la depuis la conversation.",
+				caret:
+					"Impossible de montrer aux autres où vous êtes dans le document. Continuez à modifier pour réessayer.",
 			},
 			import: {
 				title: "Impossible d’importer {{name}}",
