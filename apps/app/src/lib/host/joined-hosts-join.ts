@@ -10,6 +10,7 @@ import {
 	unexpectedJoinNotice,
 } from "./join-refusal"
 import type {
+	JoinedHostState,
 	JoinedHostsOptions,
 	JoinedHostsState,
 	RecordJoinedHost,
@@ -39,17 +40,33 @@ type JoinedHostsJoinOptions = Pick<
 	record: RecordJoinedHost
 	attachHost: (id: string, host: HttpHost) => void
 	reportJoinRefusal: NonNullable<JoinedHostsOptions["reportJoinRefusal"]>
+	isOnScreen: (id: string) => boolean
 }
 
 const JOIN_COMMAND = "joined_space_connect"
 
-const refusalFactsOf = (
-	id: string,
-	error: JoinedSpaceError,
-): ReporterFacts => ({
+type RefusedJoin = Extract<JoinedHostState, { status: "refused" }>
+
+const refusalFactsOf = (id: string): ReporterFacts => ({
 	command: JOIN_COMMAND,
-	space: error.kind === "waitingForHost" ? error.instanceId : id,
+	space: id,
 })
+
+const logJoinFailure = (id: string, reason: unknown) => {
+	console.warn(
+		[
+			"joined-hosts: couldn't connect a joined space",
+			`space: ${id}`,
+			`reason: ${describeFailure(reason)}`,
+		].join(" | "),
+	)
+}
+
+const waitReasonOf = (error: JoinedSpaceError) =>
+	error.kind === "waitingForHost" ? { wait: error.reason } : {}
+
+const isReportedJoinError = (error: JoinedSpaceError) =>
+	!isHostOffline(error) && error.kind !== "waitingForHost"
 
 const settledBefore = <T>(
 	pending: Promise<T>,
@@ -79,6 +96,7 @@ export const createJoinedHostsJoin = ({
 	openSocket,
 	reportFailure,
 	reportJoinRefusal,
+	isOnScreen,
 }: JoinedHostsJoinOptions) => {
 	const pendingJoins = new Map<string, Promise<HttpHost | null>>()
 	const reportedRefusals = new Set<string>()
@@ -88,7 +106,7 @@ export const createJoinedHostsJoin = ({
 		notice: NoticeMessage,
 		facts: ReporterFacts,
 	) => {
-		if (reportedRefusals.has(id)) {
+		if (reportedRefusals.has(id) || !isOnScreen(id)) {
 			return
 		}
 		reportedRefusals.add(id)
@@ -100,28 +118,27 @@ export const createJoinedHostsJoin = ({
 		down.markUp(id)
 	}
 
-	const refuse = (id: string, failure: string): null => {
-		record(id, { status: "refused", failure })
+	const refuse = (id: string, refusal: Omit<RefusedJoin, "status">): null => {
+		record(id, { status: "refused", ...refusal })
 		return null
 	}
 
 	const refuseJoin = (id: string, error: JoinedSpaceError): null => {
 		const notice = joinRefusalNoticeOf(error)
-		if (!isHostOffline(error)) {
-			reportRefusalOnce(id, notice, refusalFactsOf(id, error))
+		logJoinFailure(id, error)
+		if (isReportedJoinError(error)) {
+			reportRefusalOnce(id, notice, refusalFactsOf(id))
 		}
-		return refuse(id, notice.title)
+		return refuse(id, { failure: notice.title, ...waitReasonOf(error) })
 	}
 
 	const refuseRejection = (id: string, reason: unknown): null => {
 		if (isJoinedSpaceError(reason)) {
 			return refuseJoin(id, reason)
 		}
-		reportRefusalOnce(id, unexpectedJoinNotice(), {
-			command: JOIN_COMMAND,
-			space: id,
-		})
-		return refuse(id, describeFailure(reason))
+		logJoinFailure(id, reason)
+		reportRefusalOnce(id, unexpectedJoinNotice(), refusalFactsOf(id))
+		return refuse(id, { failure: describeFailure(reason) })
 	}
 
 	const openHost = (

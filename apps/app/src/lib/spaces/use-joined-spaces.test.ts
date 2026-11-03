@@ -8,6 +8,7 @@ import {
 	createJoinedSpacesController,
 	type JoinedSpacesController,
 } from "./joined-spaces-controller"
+import { spaceAccessOf } from "./open-joined-host"
 import { spaceQueryKeys } from "./space-query-keys"
 import { createSpacesController } from "./spaces-controller"
 import { useInvitations } from "./use-invitations"
@@ -242,6 +243,26 @@ it("follows the host going offline and coming back without a reload", async () =
 
 	rerender({ status: { status: "up" } })
 	expect(result.current?.isOnline).toBe(true)
+})
+
+it("shows the wait its own connect answered while the list still reads online, then drops it once up", async () => {
+	const { result, rerender } = await renderOpenHost({
+		status: "refused",
+		failure: "Waiting for the host",
+		wait: "socketClosed",
+	})
+
+	expect(result.current).toMatchObject({
+		spaceName: "Studio Nord",
+		hostName: "Lea",
+	})
+	expect(spaceAccessOf(result.current)).toEqual({
+		reason: "offline",
+		waitReason: "socketClosed",
+	})
+
+	rerender({ status: { status: "up" } })
+	expect(spaceAccessOf(result.current)).toBeUndefined()
 })
 
 it("reads no joined host while a local space is open", async () => {

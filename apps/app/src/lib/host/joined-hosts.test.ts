@@ -163,7 +163,7 @@ const refusedNoticeOf = async (refusal: JoinedSpaceError) => {
 	const { hosts, reportJoinRefusal } = joinedHostsOf({
 		join: async () => ({ status: "error", error: refusal }),
 	})
-	await hosts.connect("garage")
+	await hosts.activate("garage")
 	expect(reportJoinRefusal).toHaveBeenCalledOnce()
 	return reportJoinRefusal.mock.calls[0]?.[0] as NoticeMessage
 }
@@ -199,7 +199,7 @@ describe("a refused join", () => {
 				join: async () => ({ status: "error", error: HOST_OFFLINE_REFUSAL }),
 			})
 
-			await hosts.connect("garage")
+			await hosts.activate("garage")
 
 			expect(reportJoinRefusal).not.toHaveBeenCalled()
 			expect(reportFailure).not.toHaveBeenCalled()
@@ -239,7 +239,7 @@ const thrownJoinOf = async (thrown: unknown) => {
 			throw thrown
 		},
 	})
-	await hosts.connect("garage")
+	await hosts.activate("garage")
 	expect(reportJoinRefusal).toHaveBeenCalledOnce()
 	expect(reportFailure).not.toHaveBeenCalled()
 	return {
@@ -273,7 +273,7 @@ describe("a join that throws", () => {
 				},
 			})
 
-			await hosts.connect("garage")
+			await hosts.activate("garage")
 
 			expect(reportJoinRefusal).not.toHaveBeenCalled()
 			expect(hosts.getState().connections.garage).toEqual({
@@ -485,7 +485,7 @@ describe("connecting a joined space", () => {
 			join: async () => ({ status: "error", error: refusal }),
 		})
 
-		await hosts.connect("garage")
+		await hosts.activate("garage")
 
 		expect(hosts.getState().connections.garage).toEqual({
 			status: "refused",
@@ -501,41 +501,15 @@ describe("connecting a joined space", () => {
 		expect(reportFailure).not.toHaveBeenCalled()
 	})
 
-	it("reports a wait for the host with its instance and the join command", async () => {
-		const refusal: JoinedSpaceError = {
-			kind: "waitingForHost",
-			id: "garage",
-			instanceId: "instance-1",
-			reason: "hostSilent",
-			detail: "no verified rekey came within 15s",
-		}
-		const { hosts, reportJoinRefusal } = joinedHostsOf({
-			join: async () => ({ status: "error", error: refusal }),
-		})
-
-		await hosts.connect("garage")
-
-		expect(reportJoinRefusal.mock.calls[0]?.[1]).toEqual({
-			command: "joined_space_connect",
-			space: "instance-1",
-		})
-	})
-
 	it("reports a join refused again and again only once", async () => {
-		const refusal: JoinedSpaceError = {
-			kind: "waitingForHost",
-			id: "garage",
-			instanceId: "instance-1",
-			reason: "socketClosed",
-			detail: "the member socket closed",
-		}
+		const refusal: JoinedSpaceError = { kind: "notInRoster" }
 		const { hosts, join, reportJoinRefusal } = joinedHostsOf({
 			join: async () => ({ status: "error", error: refusal }),
 		})
 
-		await hosts.connect("garage")
-		await hosts.connect("garage")
-		await hosts.connect("garage")
+		await hosts.activate("garage")
+		await hosts.activate("garage")
+		await hosts.activate("garage")
 
 		expect(join).toHaveBeenCalledTimes(3)
 		expect(reportJoinRefusal).toHaveBeenCalledOnce()
@@ -548,8 +522,8 @@ describe("connecting a joined space", () => {
 			},
 		})
 
-		await hosts.connect("garage")
-		await hosts.connect("garage")
+		await hosts.activate("garage")
+		await hosts.activate("garage")
 
 		expect(reportJoinRefusal).toHaveBeenCalledOnce()
 	})
@@ -566,11 +540,11 @@ describe("connecting a joined space", () => {
 			.mockResolvedValueOnce(refused)
 		const { hosts, sockets, reportJoinRefusal } = joinedHostsOf({ join })
 
-		await hosts.connect("garage")
-		await hosts.connect("garage")
+		await hosts.activate("garage")
+		await hosts.activate("garage")
 		sockets[0]?.open()
 		hosts.forget("garage")
-		await hosts.connect("garage")
+		await hosts.activate("garage")
 
 		expect(reportJoinRefusal).toHaveBeenCalledTimes(2)
 	})
@@ -592,6 +566,124 @@ describe("connecting a joined space", () => {
 		expect(hosts.getState().connections.garage).toEqual({
 			status: "connecting",
 		})
+	})
+})
+
+const SOCKET_CLOSED: JoinedSpaceError = {
+	kind: "waitingForHost",
+	id: "attic",
+	instanceId: "instance-1",
+	reason: "socketClosed",
+	detail: "the member socket closed",
+}
+
+type JoinAnswer = () => ReturnType<JoinedHostsOptions["join"]>
+
+const backgroundJoinOf = (answer: JoinAnswer) => async (id: string) =>
+	id === "attic" ? answer() : joinedConnection(id)
+
+const BACKGROUND_FAILURES: [string, JoinAnswer][] = [
+	[
+		"a wait for its host",
+		async () => ({ status: "error", error: SOCKET_CLOSED }),
+	],
+	[
+		"an unexpected error",
+		async () => {
+			throw new Error(THROWN_MESSAGE)
+		},
+	],
+]
+
+describe("a joined space that is not on screen", () => {
+	beforeEach(() => {
+		vi.spyOn(console, "warn").mockImplementation(() => undefined)
+	})
+	afterEach(() => vi.restoreAllMocks())
+
+	it.each(BACKGROUND_FAILURES)(
+		"raises nothing when its connect fails with %s, and logs it",
+		async (_case, answer) => {
+			const { hosts, reportFailure, reportJoinRefusal } = joinedHostsOf({
+				join: backgroundJoinOf(answer),
+			})
+
+			await hosts.activate("garage")
+			await hosts.connect("attic")
+
+			expect(reportJoinRefusal).not.toHaveBeenCalled()
+			expect(reportFailure).not.toHaveBeenCalled()
+			expect(hosts.getState().connections.attic).toMatchObject({
+				status: "refused",
+			})
+			expect(console.warn).toHaveBeenCalledWith(
+				expect.stringContaining("space: attic"),
+			)
+		},
+	)
+
+	it("records the reason it waits for its host", async () => {
+		const { hosts } = joinedHostsOf({
+			join: async () => ({ status: "error", error: SOCKET_CLOSED }),
+		})
+
+		await hosts.connect("attic")
+
+		expect(hosts.getState().connections.attic).toMatchObject({
+			status: "refused",
+			wait: "socketClosed",
+		})
+	})
+
+	it("replays nothing once opened after a background failure", async () => {
+		const join = vi
+			.fn<JoinedHostsOptions["join"]>()
+			.mockRejectedValueOnce(new Error(THROWN_MESSAGE))
+			.mockImplementation(async (id) => joinedConnection(id))
+		const { hosts, sockets, reportJoinRefusal } = joinedHostsOf({ join })
+
+		await hosts.connect("attic")
+		await hosts.activate("attic")
+		sockets[0]?.open()
+
+		expect(reportJoinRefusal).not.toHaveBeenCalled()
+		expect(hosts.getState().connections.attic).toEqual({ status: "up" })
+	})
+})
+
+describe("a joined space on screen", () => {
+	beforeEach(() => {
+		vi.spyOn(console, "warn").mockImplementation(() => undefined)
+	})
+	afterEach(() => vi.restoreAllMocks())
+
+	it("raises nothing while it waits for its host, and records the reason", async () => {
+		const { hosts, reportFailure, reportJoinRefusal } = joinedHostsOf({
+			join: async () => ({ status: "error", error: SOCKET_CLOSED }),
+		})
+
+		await hosts.activate("attic")
+
+		expect(reportJoinRefusal).not.toHaveBeenCalled()
+		expect(reportFailure).not.toHaveBeenCalled()
+		expect(hosts.getState().connections.attic).toMatchObject({
+			wait: "socketClosed",
+		})
+	})
+
+	it("reports an unexpected connect failure once, naming the space", async () => {
+		const { hosts, reportJoinRefusal } = joinedHostsOf({
+			join: async () => {
+				throw new Error(THROWN_MESSAGE)
+			},
+		})
+
+		await hosts.activate("attic")
+
+		expect(reportJoinRefusal).toHaveBeenCalledExactlyOnceWith(
+			UNEXPECTED_NOTICES.en,
+			{ command: "joined_space_connect", space: "attic" },
+		)
 	})
 })
 
