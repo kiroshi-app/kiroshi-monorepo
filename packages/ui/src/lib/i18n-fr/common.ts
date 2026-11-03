@@ -13,6 +13,10 @@ const common = {
 				"Rien n’est supprimé sur l’hôte. Vous pourrez le rejoindre à nouveau avec une nouvelle invitation.",
 			action: "Quitter l’espace",
 		},
+		unnamed: {
+			host: "l’hôte",
+			space: "cet espace",
+		},
 	},
 	skipLink: "Passer à la conversation",
 	agent: {

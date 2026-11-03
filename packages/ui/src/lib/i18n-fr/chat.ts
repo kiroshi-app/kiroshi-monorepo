@@ -218,13 +218,13 @@ const chat = {
 			body: "Vous pouvez lire ce qui est ici. Vous pourrez de nouveau envoyer quand Kiroshi sera ouvert sur l’ordinateur de {{host}}.",
 			reasons: {
 				relayUnreachable:
-					"Vous pouvez lire ce qui est ici. Impossible de joindre Kiroshi, vérifiez votre connexion pour envoyer de nouveau.",
+					"Vous pouvez lire ce qui est ici. Impossible de joindre Kiroshi pour atteindre l’ordinateur de {{host}}, vérifiez votre connexion pour envoyer de nouveau.",
 				rekeySendFailed:
-					"Vous pouvez lire ce qui est ici. Impossible de demander la nouvelle clé à {{host}}, vérifiez votre connexion pour envoyer de nouveau.",
+					"Vous pouvez lire ce qui est ici. {{host}} n’a pas répondu à la demande de nouvelle clé, demandez-lui d’ouvrir Kiroshi sur son ordinateur.",
 				hostSilent:
 					"Vous pouvez lire ce qui est ici. {{host}} n’a pas encore répondu, demandez-lui d’ouvrir Kiroshi sur son ordinateur.",
 				socketClosed:
-					"Vous pouvez lire ce qui est ici. La connexion à Kiroshi s’est fermée, vérifiez votre connexion pour envoyer de nouveau.",
+					"Vous pouvez lire ce qui est ici. {{host}} n’a pas répondu depuis la fermeture de la connexion, demandez-lui d’ouvrir Kiroshi sur son ordinateur.",
 				rekeyNotVerified:
 					"Vous pouvez lire ce qui est ici. Impossible de vérifier la clé envoyée par {{host}}, demandez-lui un nouveau lien.",
 				notMember:
@@ -232,15 +232,15 @@ const chat = {
 				unknownInstance:
 					"Vous pouvez lire ce qui est ici. Kiroshi n’héberge plus {{space}}, demandez à {{host}} de réactiver l’hébergement.",
 				deviceKeysUnreadable:
-					"Vous pouvez lire ce qui est ici. Impossible de lire les clés de cet ordinateur, quittez Kiroshi et rouvrez-le.",
+					"Vous pouvez lire ce qui est ici. Impossible de lire les clés de cet ordinateur pour joindre {{host}}, quittez Kiroshi et rouvrez-le.",
 				deviceAwaitingApproval:
-					"Vous pouvez lire ce qui est ici. Cet ordinateur n’est pas encore approuvé, approuvez-le depuis un autre ordinateur connecté à votre compte.",
+					"Vous pouvez lire ce qui est ici. Cet ordinateur n’est pas encore approuvé pour joindre {{host}}, approuvez-le depuis un autre ordinateur connecté à votre compte.",
 				socketUrlFailed:
-					"Vous pouvez lire ce qui est ici. Impossible d’obtenir l’adresse de {{space}} auprès de Kiroshi, quittez Kiroshi et rouvrez-le.",
+					"Vous pouvez lire ce qui est ici. Impossible d’obtenir auprès de Kiroshi l’adresse de {{space}} sur l’ordinateur de {{host}}, quittez Kiroshi et rouvrez-le.",
 				rosterMissing:
 					"Vous pouvez lire ce qui est ici. {{host}} n’a pas encore envoyé la liste des membres, demandez-lui d’ouvrir Kiroshi sur son ordinateur.",
 				keychainReadFailed:
-					"Vous pouvez lire ce qui est ici. Impossible de lire la clé de {{space}} dans le stockage sécurisé de cet ordinateur, quittez Kiroshi et rouvrez-le.",
+					"Vous pouvez lire ce qui est ici. Impossible de lire la clé de {{space}} envoyée par {{host}} dans le stockage sécurisé de cet ordinateur, quittez Kiroshi et rouvrez-le.",
 			},
 		},
 	},
@@ -547,24 +547,24 @@ const chat = {
 						"Son hôte ne l’accepte plus. Demandez un nouveau lien à l’hôte pour le rejoindre.",
 				},
 				waitingForHost: {
-					title: "En attente de l’hôte",
+					title: "En attente de {{host}}",
 					description:
-						"Cet espace s’ouvrira dès que son hôte sera en ligne et acceptera cet ordinateur.",
+						"Cet espace s’ouvrira dès que {{host}} sera en ligne et acceptera cet ordinateur.",
 					reasons: {
 						relayUnreachable:
 							"Impossible de joindre Kiroshi pour ouvrir cet espace. Vérifiez votre connexion.",
 						rekeySendFailed:
-							"Impossible de demander la clé de cet espace à l’hôte. Vérifiez votre connexion.",
+							"Impossible d’obtenir la clé de cet espace, {{host}} n’a pas répondu. Demandez-lui d’ouvrir Kiroshi sur son ordinateur.",
 						hostSilent:
-							"L’hôte n’a pas encore accepté cet ordinateur. Demandez-lui d’ouvrir Kiroshi sur son ordinateur.",
+							"Cet espace n’est pas encore ouvert, {{host}} n’a pas encore accepté cet ordinateur. Demandez-lui d’ouvrir Kiroshi sur son ordinateur.",
 						socketClosed:
-							"La connexion à Kiroshi s’est fermée avant l’ouverture de cet espace. Vérifiez votre connexion.",
+							"Impossible d’ouvrir cet espace, {{host}} n’a pas répondu. Demandez-lui d’ouvrir Kiroshi sur son ordinateur.",
 						rekeyNotVerified:
-							"Impossible de vérifier la clé envoyée par l’hôte pour cet espace. Demandez un nouveau lien à l’hôte.",
+							"Impossible de vérifier la clé envoyée par {{host}} pour cet espace. Demandez-lui un nouveau lien.",
 						notMember:
-							"Kiroshi indique que ce compte n’est pas membre de cet espace. Demandez un nouveau lien à l’hôte.",
+							"Kiroshi indique que ce compte n’est pas membre de cet espace. Demandez un nouveau lien à {{host}}.",
 						unknownInstance:
-							"Kiroshi n’héberge plus cet espace. Demandez à l’hôte de réactiver l’hébergement.",
+							"Kiroshi n’héberge plus cet espace. Demandez à {{host}} de réactiver l’hébergement.",
 						deviceKeysUnreadable:
 							"Impossible de lire les clés de cet ordinateur. Quittez Kiroshi et rouvrez-le.",
 						deviceAwaitingApproval:
@@ -572,7 +572,7 @@ const chat = {
 						socketUrlFailed:
 							"Impossible d’obtenir l’adresse de cet espace auprès de Kiroshi. Quittez Kiroshi et rouvrez-le.",
 						rosterMissing:
-							"L’hôte n’a pas encore envoyé la liste des membres de cet espace. Demandez-lui d’ouvrir Kiroshi sur son ordinateur.",
+							"La liste des membres de cet espace n’a pas encore été envoyée par {{host}}. Demandez-lui d’ouvrir Kiroshi sur son ordinateur.",
 						keychainReadFailed:
 							"Impossible de lire la clé de cet espace dans le stockage sécurisé de cet ordinateur. Quittez Kiroshi, rouvrez-le et autorisez l’accès si cet ordinateur le demande.",
 					},
@@ -583,7 +583,7 @@ const chat = {
 						"Kiroshi n’a pas pu ouvrir les clés qu’il garde pour vos espaces. Redémarrez Kiroshi, puis réessayez.",
 				},
 				unexpected: {
-					title: "Un problème est survenu avec cet espace",
+					title: "Un problème est survenu avec {{space}}",
 					description:
 						"Kiroshi n’a pas pu terminer la demande. Réessayez dans un instant.",
 				},

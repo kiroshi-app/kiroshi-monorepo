@@ -93,3 +93,86 @@ describe("the invitation that landed", () => {
 		expect(sentence).not.toMatch(/couldn’t|wasn’t invited/i)
 	})
 })
+
+const WAITING = "chat:screen.notice.joinRefused.waitingForHost"
+const UNEXPECTED = "chat:screen.notice.joinRefused.unexpected"
+const BANNER = "chat:spaceAccessBanner.offline"
+const NAMING = { host: "Noa", space: "Studio" }
+const CHECK_YOUR_CONNECTION = /check your connection|vérifiez votre connexion/i
+const LANGUAGES = ["en", "fr"]
+
+const waitLineKeys = (reasons: string[]) =>
+	reasons.flatMap((reason) => [
+		`${WAITING}.reasons.${reason}`,
+		`${BANNER}.reasons.${reason}`,
+	])
+
+const named = (key: string, lng: string) =>
+	i18n.getFixedT(lng)(key as never, NAMING) as string
+
+describe.each(LANGUAGES)("the joined space wait copy in %s", (lng) => {
+	it("asks to check the connection only when Kiroshi is unreachable", () => {
+		for (const key of waitLineKeys(["relayUnreachable"])) {
+			expect(raw(key, lng)).toMatch(CHECK_YOUR_CONNECTION)
+		}
+		const others = WAIT_REASONS.filter(
+			(reason) => reason !== "relayUnreachable",
+		)
+		for (const key of waitLineKeys(others)) {
+			expect(raw(key, lng)).not.toMatch(CHECK_YOUR_CONNECTION)
+		}
+	})
+
+	it("names the host in the waiting notice title and in every banner line", () => {
+		expect(named(`${WAITING}.title`, lng)).toContain("Noa")
+		for (const reason of WAIT_REASONS) {
+			expect(named(`${BANNER}.reasons.${reason}`, lng)).toContain("Noa")
+		}
+	})
+
+	it("names the space when something unexpected went wrong", () => {
+		expect(named(`${UNEXPECTED}.title`, lng)).toContain("Studio")
+	})
+
+	it("leaves no placeholder when the host and the space are not passed", () => {
+		const keys = [
+			`${WAITING}.title`,
+			`${WAITING}.description`,
+			`${UNEXPECTED}.title`,
+			`${UNEXPECTED}.description`,
+			...waitLineKeys(WAIT_REASONS),
+		]
+		for (const key of keys) {
+			expect(i18n.getFixedT(lng)(key as never) as string).not.toMatch(/\{\{/)
+		}
+	})
+
+	it("never calls the host's computer a Mac", () => {
+		for (const key of waitLineKeys(WAIT_REASONS)) {
+			expect(raw(key, lng)).not.toMatch(/\bMac\b/)
+		}
+	})
+})
+
+describe("the host who hasn't answered", () => {
+	it.each(["socketClosed", "rekeySendFailed"])(
+		"says so on %s and asks for Kiroshi on their computer",
+		(reason) => {
+			for (const key of waitLineKeys([reason])) {
+				const line = named(key, "en")
+				expect(line).toContain("Noa hasn’t answered")
+				expect(line).toMatch(/ask them to open Kiroshi on their computer/i)
+			}
+		},
+	)
+})
+
+describe("the unnamed host and space", () => {
+	it.each([
+		["en", "Waiting for the host", "Something went wrong with this space"],
+		["fr", "En attente de l’hôte", "Un problème est survenu avec cet espace"],
+	])("read as words in %s", (lng, waiting, unexpected) => {
+		expect(i18n.getFixedT(lng)(`${WAITING}.title` as never)).toBe(waiting)
+		expect(i18n.getFixedT(lng)(`${UNEXPECTED}.title` as never)).toBe(unexpected)
+	})
+})

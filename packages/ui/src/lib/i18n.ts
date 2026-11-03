@@ -26,12 +26,33 @@ declare module "i18next" {
 
 const i18n: I18nRuntime = i18next.createInstance()
 
+const UNNAMED_VARIABLES = {
+	host: "common:spaces.unnamed.host",
+	space: "common:spaces.unnamed.space",
+} as const
+
+type InterpolationScope = { lng?: string }
+
+const nameUnpassedVariable = (
+	_text: string,
+	[placeholder, variable]: RegExpExecArray,
+	scope?: InterpolationScope,
+) => {
+	const name = variable?.trim() ?? ""
+	return Object.hasOwn(UNNAMED_VARIABLES, name)
+		? i18n.t(UNNAMED_VARIABLES[name as keyof typeof UNNAMED_VARIABLES], {
+				lng: scope?.lng,
+			})
+		: placeholder
+}
+
 i18n.use(initReactI18next).init({
 	lng: DEFAULT_LANGUAGE,
 	fallbackLng: DEFAULT_LANGUAGE,
 	defaultNS: "chat",
 	resources: catalogues,
 	interpolation: { escapeValue: false },
+	missingInterpolationHandler: nameUnpassedVariable,
 })
 
 export const languageOf = (

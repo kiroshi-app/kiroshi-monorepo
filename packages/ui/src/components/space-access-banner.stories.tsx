@@ -204,7 +204,7 @@ export const OfflineRelayUnreachable = meta.story({
 	name: "Host offline, Kiroshi unreachable",
 	...waitStory(
 		"relayUnreachable",
-		"You can read what’s here. Couldn’t reach Kiroshi, check your connection to send again.",
+		"You can read what’s here. Couldn’t reach Kiroshi to connect to Noa’s computer, check your connection to send again.",
 		"this computer couldn't reach Kiroshi",
 	),
 })
@@ -213,7 +213,7 @@ export const OfflineRekeySendFailed = meta.story({
 	name: "Host offline, key request not sent",
 	...waitStory(
 		"rekeySendFailed",
-		"You can read what’s here. Couldn’t ask Noa for the new key, check your connection to send again.",
+		"You can read what’s here. Noa hasn’t answered the request for the new key, ask them to open Kiroshi on their computer.",
 		"the request for the host's new key didn't leave this computer",
 	),
 })
@@ -231,7 +231,7 @@ export const OfflineSocketClosed = meta.story({
 	name: "Host offline, connection closed",
 	...waitStory(
 		"socketClosed",
-		"You can read what’s here. The connection to Kiroshi closed, check your connection to send again.",
+		"You can read what’s here. Noa hasn’t answered since the connection closed, ask them to open Kiroshi on their computer.",
 		"the connection to Kiroshi closed or went quiet",
 	),
 })
@@ -267,7 +267,7 @@ export const OfflineDeviceKeysUnreadable = meta.story({
 	name: "Host offline, device keys unreadable",
 	...waitStory(
 		"deviceKeysUnreadable",
-		"You can read what’s here. Couldn’t read this computer’s device keys, quit Kiroshi and open it again.",
+		"You can read what’s here. Couldn’t read this computer’s device keys to connect to Noa, quit Kiroshi and open it again.",
 		"this computer couldn't read its own device keys",
 	),
 })
@@ -276,7 +276,7 @@ export const OfflineDeviceAwaitingApproval = meta.story({
 	name: "Host offline, device awaiting approval",
 	...waitStory(
 		"deviceAwaitingApproval",
-		"You can read what’s here. This computer isn’t approved yet, approve it from another computer signed in to your account.",
+		"You can read what’s here. This computer isn’t approved to connect to Noa yet, approve it from another computer signed in to your account.",
 		"this computer still awaits approval from another device of the account",
 	),
 })
@@ -285,7 +285,7 @@ export const OfflineSocketUrlFailed = meta.story({
 	name: "Host offline, address not received",
 	...waitStory(
 		"socketUrlFailed",
-		"You can read what’s here. Couldn’t get Studio’s address from Kiroshi, quit Kiroshi and open it again.",
+		"You can read what’s here. Couldn’t get Studio’s address on Noa’s computer from Kiroshi, quit Kiroshi and open it again.",
 		"Kiroshi didn't give the address to connect to the space",
 	),
 })
@@ -303,7 +303,7 @@ export const OfflineKeychainReadFailed = meta.story({
 	name: "Host offline, secure storage unreadable",
 	...waitStory(
 		"keychainReadFailed",
-		"You can read what’s here. Couldn’t read Studio’s key from this computer’s secure storage, quit Kiroshi and open it again.",
+		"You can read what’s here. Couldn’t read the key Noa sent for Studio from this computer’s secure storage, quit Kiroshi and open it again.",
 		"the space key couldn't be read from this computer's secure storage",
 	),
 })
