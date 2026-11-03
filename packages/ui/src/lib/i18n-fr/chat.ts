@@ -594,6 +594,10 @@ const chat = {
 				"L’agent n’a pas répondu à l’arrêt, sa réponse s’est arrêtée. Renvoyez votre message.",
 			runLapsedInterruptNamed:
 				"{{name}} n’a pas répondu à l’arrêt, sa réponse s’est arrêtée. Renvoyez votre message.",
+			runLapsedTasksPending:
+				"L’agent a attendu {{minutes}} minutes son travail en arrière-plan, sa réponse s’est arrêtée. Renvoyez votre message.",
+			runLapsedTasksPendingNamed:
+				"{{name}} a attendu {{minutes}} minutes son travail en arrière-plan, sa réponse s’est arrêtée. Renvoyez votre message.",
 			readFailed:
 				"Impossible de charger les messages précédents ({{detail}}). Réessayez.",
 			unknownFailure: "Une erreur est survenue ({{detail}}). Réessayez.",

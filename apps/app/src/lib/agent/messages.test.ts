@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import { i18n } from "@workspace/ui/lib/i18n"
 
+import type { TransportError } from "./contract"
 import { describeTransportError } from "./messages"
 
 const t = i18n.getFixedT(null, "chat")
@@ -70,6 +71,21 @@ describe("describeTransportError", () => {
 			}),
 		).toBe(
 			"The agent didn’t answer the stop, so its reply ended. Send your message again.",
+		)
+	})
+
+	it("says the agent waited on its background work when that wait lapsed", () => {
+		const lapsed: TransportError = {
+			kind: "runLapsed",
+			lapse: "tasksPending",
+			boundMs: 600_000,
+		}
+
+		expect(describeTransportError(t, lapsed)).toBe(
+			"The agent waited 10 minutes on its background work, so its reply ended. Send your message again.",
+		)
+		expect(describeTransportError(t, lapsed, "Ada")).toBe(
+			"Ada waited 10 minutes on its background work, so its reply ended. Send your message again.",
 		)
 	})
 })
