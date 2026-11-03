@@ -557,6 +557,8 @@ const press = async (target: Element) => {
 
 const TASK_NOTES = "Notes\n\n\n\n- [ ] Ship the notes"
 
+const TASK_LINE = 4
+
 const PASTED_PARAGRAPHS = "First thought.\n\nSecond thought.\n\nThird thought."
 
 const AGENT_LINE = "\n\nAtlas adds a line."
@@ -610,8 +612,6 @@ const queueSelectionChangesAsBrowsersDo = () => {
 	return () =>
 		window.removeEventListener("selectionchange", queue, { capture: true })
 }
-
-const TASK_LINE = 4
 
 const placeCaretInLine = async (
 	body: HTMLElement,
@@ -843,7 +843,10 @@ describe("an opened Library document", () => {
 		await holdsShownMarkdown(ticked)
 
 		await placeCaretInLine(body, TASK_LINE, " Ship".length)
-		const caretInTask = { line: "- [x] Ship the notes", offset: 10 }
+		const caretInTask = {
+			line: "- [x] Ship the notes",
+			offset: "- [x] Ship".length,
+		}
 		expect(caretInLine(body, TASK_LINE)).toEqual(caretInTask)
 
 		const written = `${ticked}${AGENT_LINE}`
