@@ -95,11 +95,8 @@ describe("the drag ghost page", () => {
 	})
 
 	it("drops the previous tab for the next one", async () => {
-		const { hearTab, hearState } = await mountGhost(
-			Promise.resolve(CONVERSATION_TAB),
-		)
+		const { hearTab } = await mountGhost(Promise.resolve(CONVERSATION_TAB))
 
-		await hearState(BOT_TAB.tabId, "outside")
 		await hearTab(BOT_TAB)
 
 		expect(screen.getByText(BOT_TAB.title)).toBeTruthy()
