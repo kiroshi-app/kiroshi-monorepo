@@ -15,6 +15,7 @@ import {
 	toTransportError,
 } from "./chat-state"
 import type { PostedRequest } from "./posted-question"
+import { sidebarActivityFor, workingStateFor } from "./screen-model"
 
 import type { AgentEvent, ChatMessage, RuntimeScope } from "../agent/contract"
 import {
@@ -887,5 +888,25 @@ describe("the instant a turn went busy", () => {
 
 		expect(over.turnStartedAt).toBeNull()
 		expect(at(over, submitted, 2_000).turnStartedAt).toBe(2_000)
+	})
+
+	it("keeps a turn working while its background work holds it past the reply", () => {
+		const waiting = at(
+			at(busy, running, 400),
+			{
+				type: "messageCompleted",
+				message: assistantMessage({ text: "Done", completion: "complete" }),
+			},
+			900,
+		)
+
+		expect(canStopTurn(waiting.turn)).toBe(true)
+		expect(workingStateFor(waiting)?.startedAt).toBe(100)
+		expect(sidebarActivityFor(waiting).isWorking).toBe(true)
+
+		const over = at(waiting, ended, 300_000)
+
+		expect(workingStateFor(over)).toBeNull()
+		expect(sidebarActivityFor(over).isWorking).toBe(false)
 	})
 })
