@@ -38,6 +38,8 @@ type SourcedImageFields = {
 	chips: string[]
 }
 
+type SingleSourcedImageField = Exclude<keyof SourcedImageFields, "chips">
+
 const CLOSING_FENCE = /^ {0,3}(?:`{3,}|~{3,})[ \t]*$/
 
 const isElement = (node: HastNode | undefined, tagName: string) =>
@@ -132,8 +134,7 @@ const withSourcedImageField = (
 	const value = rawValue.trim()
 	if (key === "Chip") return { ...fields, chips: [...fields.chips, value] }
 
-	const name =
-		key === "Title" ? "title" : key === "Favicon" ? "favicon" : "status"
+	const name = key.toLowerCase() as SingleSourcedImageField
 	const isTaken = fields[name] !== undefined
 	const isUnsafe = name === "favicon" && !isHttpsUrl(value)
 	return isTaken || isUnsafe ? null : { ...fields, [name]: value }

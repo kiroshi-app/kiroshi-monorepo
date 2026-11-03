@@ -255,15 +255,15 @@ const compileTemplate = (
 	source: string,
 	names: ReadonlySet<string>,
 ): InteractiveTemplate | null => {
-	const parts = source
-		.split(PLACEHOLDER)
-		.map((piece, index) =>
-			index % 2 === 1
-				? compileFormula(piece, names)
-				: BRACE.test(piece)
-					? null
-					: piece,
-		)
+	const pieces = source.split(PLACEHOLDER)
+	const isText = (index: number) => index % 2 === 0
+	if (pieces.some((piece, index) => isText(index) && BRACE.test(piece))) {
+		return null
+	}
+
+	const parts = pieces.map((piece, index) =>
+		isText(index) ? piece : compileFormula(piece, names),
+	)
 	return parts.every(isPresent) ? parts : null
 }
 
