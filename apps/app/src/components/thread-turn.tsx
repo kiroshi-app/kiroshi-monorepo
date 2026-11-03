@@ -14,8 +14,6 @@ import {
 import { probeRender } from "@workspace/ui/lib/render-probe"
 
 import { AnswerBody, TurnBody } from "@/components/turn-body"
-import type { ChatController } from "@/lib/chat/chat-controller"
-import type { OutboxEntry } from "@/lib/chat/chat-state"
 import { messageWithAttachments } from "@/lib/chat/message-attachments"
 import type { ReplyTarget, TranscriptRow } from "@/lib/chat/screen-model"
 import { usePersonOf } from "@/lib/chat/thread-authorship"
@@ -159,36 +157,6 @@ export const ThreadTurn = memo(function ThreadTurn({
 		>
 			{answer}
 		</AssistantTurn>
-	)
-})
-
-type QueuedTurnProps = {
-	entry: OutboxEntry
-	controller: ChatController
-	readerName: string
-	run?: TurnRun
-}
-
-export const QueuedTurn = memo(function QueuedTurn({
-	entry,
-	controller,
-	readerName,
-	run,
-}: QueuedTurnProps) {
-	const { text, attachments } = messageWithAttachments(entry.text)
-
-	return (
-		<UserTurn
-			copyText={text}
-			name={readerName}
-			onCancel={() => {
-				controller.discard(entry.id)
-			}}
-			run={run}
-			state="queued"
-		>
-			<TurnBody attachments={attachments} text={text} />
-		</UserTurn>
 	)
 })
 
