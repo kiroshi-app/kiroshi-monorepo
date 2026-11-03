@@ -53,10 +53,15 @@ const harness = vi.hoisted(
 	(): Harness => ({ listed: [], calls: [], refused: null }),
 )
 
+const refusalOf = (args: unknown) => ({
+	kind: "missing",
+	name: (args as NamedCall).name,
+})
+
 const answerHostCall = (command: string, args: unknown) => {
 	harness.calls.push({ command, args })
 	if (command === harness.refused) {
-		return Promise.reject({ kind: "missing", name: (args as NamedCall).name })
+		return Promise.reject(refusalOf(args))
 	}
 	return Promise.resolve(null)
 }
@@ -76,12 +81,7 @@ const LIBRARY_ANSWERS: Record<string, (args: NamedCall) => unknown> = {
 	}),
 	library_apply_update: () => null,
 	library_share_caret: () => null,
-	library_rename_document: ({ name }) => {
-		if (harness.refused === "library_rename_document") {
-			throw { kind: "missing", name }
-		}
-		return itemNamed(name, "document")
-	},
+	library_rename_document: ({ name }) => itemNamed(name, "document"),
 }
 
 vi.mock("@tauri-apps/api/core", async (importOriginal) => ({
@@ -98,6 +98,9 @@ vi.mock("@/lib/host/index", async (importOriginal) => {
 			return actual.invoke<T>(...call)
 		}
 		harness.calls.push({ command, args })
+		if (command === harness.refused) {
+			throw refusalOf(args)
+		}
 		return answer(args as NamedCall) as T
 	}
 	const listen: typeof actual.listen = async () => () => undefined
