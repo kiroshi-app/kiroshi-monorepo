@@ -1154,8 +1154,11 @@ navigation-appsidebarbotrow--bot-long-question-stays-on-one-line
 navigation-appsidebarbotrow--bot-needing-you
 navigation-appsidebarbotrow--bot-needing-you-dark
 navigation-appsidebarbotrow--bot-own-row-keeps-its-avatar-and-no-pile
+navigation-appsidebarbotrow--idle-bot-ignores-its-background-tasks
 navigation-appsidebarbotrow--selected-bot
 navigation-appsidebarbotrow--working-bot-keeps-its-timestamp
+navigation-appsidebarbotrow--working-bot-waiting-on-one-background-task
+navigation-appsidebarbotrow--working-bot-waiting-on-two-background-tasks
 navigation-appsidebarcarousel--list-per-space
 navigation-appsidebarconversationrow--conversation-answered
 navigation-appsidebarconversationrow--conversation-answered-dark

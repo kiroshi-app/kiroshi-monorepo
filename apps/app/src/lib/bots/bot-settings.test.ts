@@ -440,6 +440,34 @@ describe("toRosterBots", () => {
 		expect(beacon).toMatchObject({ status: "working", pose: "searching" })
 	})
 
+	it("carries the background tasks a working companion waits on, and none it was not given", () => {
+		const [atlas, beacon] = toRosterBots(
+			roster,
+			{
+				working: {
+					"b-1": { isWorking: true, kind: "working", backgroundTasks: 2 },
+					"b-2": { isWorking: true, kind: "writing" },
+				},
+				previews: {},
+			},
+			NOW,
+		)
+
+		expect(atlas).toMatchObject({ status: "working", backgroundTasks: 2 })
+		expect(beacon.backgroundTasks).toBeUndefined()
+	})
+
+	it("leaves an idle companion with no background tasks", () => {
+		const [atlas] = toRosterBots(
+			roster,
+			{ working: { "b-1": { isWorking: false } }, previews: {} },
+			NOW,
+		)
+
+		expect(atlas).toMatchObject({ status: "idle" })
+		expect(atlas.backgroundTasks).toBeUndefined()
+	})
+
 	it("gives every companion the last word of its own conversation", () => {
 		const [atlas, beacon] = toRosterBots(
 			roster,

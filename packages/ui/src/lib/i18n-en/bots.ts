@@ -56,6 +56,8 @@ const bots = {
 		delete: "Delete",
 		needsYou: "Needs you",
 		working: "{{pose}}…",
+		backgroundTasks_one: "waiting on {{count}} background task",
+		backgroundTasks_other: "waiting on {{count}} background tasks",
 		pose: {
 			thinking: "thinking",
 			searching: "searching",

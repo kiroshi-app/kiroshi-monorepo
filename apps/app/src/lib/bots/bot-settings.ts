@@ -230,5 +230,6 @@ export const toRosterBots = (
 			lastActivityAt: lastSpokeAt(bot, activity),
 			status: working?.isWorking ? "working" : "idle",
 			pose: working?.kind,
+			backgroundTasks: working?.backgroundTasks,
 		}
 	})
