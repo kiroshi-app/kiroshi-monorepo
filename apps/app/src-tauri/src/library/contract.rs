@@ -88,6 +88,8 @@ pub enum LibraryError {
 	#[serde(rename_all = "camelCase")]
 	InvalidName { name: String },
 	#[serde(rename_all = "camelCase")]
+	Unsupported { name: String },
+	#[serde(rename_all = "camelCase")]
 	Missing { name: String },
 	#[serde(rename_all = "camelCase")]
 	AlreadyExists { name: String },
@@ -111,6 +113,15 @@ pub enum LibraryError {
 	ClipboardRefused { detail: String },
 	#[serde(rename_all = "camelCase")]
 	Unrevealed { detail: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(tag = "status", rename_all = "camelCase")]
+pub enum LibraryImport {
+	#[serde(rename_all = "camelCase")]
+	Imported { item: LibraryItem },
+	#[serde(rename_all = "camelCase")]
+	Refused { error: LibraryError },
 }
 
 impl From<DatabaseError> for LibraryError {
@@ -166,6 +177,39 @@ mod tests {
 		assert_eq!(
 			crosses_as(LibraryError::NotADocument { name: "cover.png".to_owned() }),
 			json!({ "kind": "notADocument", "name": "cover.png" })
+		);
+	}
+
+	#[test]
+	fn an_import_outcome_crosses_under_the_names_the_frontend_reads() {
+		let item = LibraryItem {
+			name: "notes (2).md".to_owned(),
+			kind: LibraryItemKind::Document,
+			path: "/data/library/s1/notes (2).md".to_owned(),
+			bytes: 3,
+			modified_at: 2,
+			created_at: Some(1),
+		};
+
+		assert_eq!(
+			crosses_as(LibraryImport::Imported { item }),
+			json!({
+				"status": "imported",
+				"item": {
+					"name": "notes (2).md",
+					"kind": "document",
+					"path": "/data/library/s1/notes (2).md",
+					"bytes": 3,
+					"modifiedAt": 2,
+					"createdAt": 1
+				}
+			})
+		);
+		assert_eq!(
+			crosses_as(LibraryImport::Refused {
+				error: LibraryError::Unsupported { name: "song.mp3".to_owned() }
+			}),
+			json!({ "status": "refused", "error": { "kind": "unsupported", "name": "song.mp3" } })
 		);
 	}
 

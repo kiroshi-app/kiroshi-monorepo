@@ -46,6 +46,9 @@ export const commands = {
 	libraryCreateDocument: (spaceId: string, name: string, templateId: string | null) => typedError<LibraryItem, LibraryError>(__TAURI_INVOKE("library_create_document", { spaceId, name, templateId })),
 	libraryOpenDocument: (spaceId: string, name: string) => typedError<LibraryDocumentState, LibraryError>(__TAURI_INVOKE("library_open_document", { spaceId, name })),
 	libraryApplyUpdate: (spaceId: string, name: string, update: string) => typedError<null, LibraryError>(__TAURI_INVOKE("library_apply_update", { spaceId, name, update })),
+	libraryReadThumbnail: (spaceId: string, name: string) => typedError<LibraryImage, LibraryError>(__TAURI_INVOKE("library_read_thumbnail", { spaceId, name })),
+	libraryImport: (spaceId: string, name: string, content: string) => typedError<LibraryItem, LibraryError>(__TAURI_INVOKE("library_import", { spaceId, name, content })),
+	libraryImportPaths: (spaceId: string, paths: string[]) => typedError<LibraryImport[], LibraryError>(__TAURI_INVOKE("library_import_paths", { spaceId, paths })),
 	badgeSet: (count: number) => typedError<null, string>(__TAURI_INVOKE("badge_set", { count })),
 	claudeImportInventory: () => typedError<ClaudeInventory, TranscriptStoreError>(__TAURI_INVOKE("claude_import_inventory")),
 	claudeImportRun: (selection: string[], spaceId: string) => typedError<ClaudeImportOutcome[], TranscriptStoreError>(__TAURI_INVOKE("claude_import_run", { selection, spaceId })),
@@ -1185,7 +1188,7 @@ export type LibraryDocumentUpdated = {
 	update: string,
 };
 
-export type LibraryError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "unknownSpace"; id: string } | { kind: "invalidName"; name: string } | { kind: "missing"; name: string } | { kind: "alreadyExists"; name: string } | { kind: "unknownTemplate"; id: string } | { kind: "notADocument"; name: string } | { kind: "notAnImage"; name: string } | { kind: "notUtf8"; name: string } | { kind: "tooLarge"; name: string; bytes: number; limit: number } | { kind: "unreadable"; detail: string } | { kind: "undecodable"; name: string; detail: string } | { kind: "unwritable"; detail: string } | { kind: "clipboardRefused"; detail: string } | { kind: "unrevealed"; detail: string };
+export type LibraryError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "unknownSpace"; id: string } | { kind: "invalidName"; name: string } | { kind: "unsupported"; name: string } | { kind: "missing"; name: string } | { kind: "alreadyExists"; name: string } | { kind: "unknownTemplate"; id: string } | { kind: "notADocument"; name: string } | { kind: "notAnImage"; name: string } | { kind: "notUtf8"; name: string } | { kind: "tooLarge"; name: string; bytes: number; limit: number } | { kind: "unreadable"; detail: string } | { kind: "undecodable"; name: string; detail: string } | { kind: "unwritable"; detail: string } | { kind: "clipboardRefused"; detail: string } | { kind: "unrevealed"; detail: string };
 
 export type LibraryFile = {
 	name: string,
@@ -1198,6 +1201,8 @@ export type LibraryImage = {
 	mimeType: string,
 	content: string,
 };
+
+export type LibraryImport = { status: "imported"; item: LibraryItem } | { status: "refused"; error: LibraryError };
 
 export type LibraryItem = {
 	name: string,

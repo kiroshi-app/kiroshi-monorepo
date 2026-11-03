@@ -5,18 +5,20 @@ mod templates;
 
 use std::fs::{self, Metadata};
 use std::future::Future;
-use std::io::{self, Cursor};
+use std::io::{self, Cursor, Write};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-use base64::prelude::{Engine as _, BASE64_STANDARD};
-use chrono::{DateTime, Utc};
-use image::{ImageFormat, ImageReader, Limits};
+use base64::prelude::{Engine as _, BASE64_STANDARD, BASE64_URL_SAFE_NO_PAD};
+use chrono::{DateTime, SecondsFormat, Utc};
+use image::imageops::FilterType;
+use image::{DynamicImage, ImageFormat, ImageReader, Limits};
+use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Manager, Runtime, State};
 
 use contract::{
 	LibraryDocument, LibraryDocumentFormat, LibraryDocumentState, LibraryDocumentUpdated,
-	LibraryError, LibraryFile, LibraryImage, LibraryItem, LibraryItemKind,
+	LibraryError, LibraryFile, LibraryImage, LibraryImport, LibraryItem, LibraryItemKind,
 };
 use documents::Documents;
 
@@ -31,6 +33,14 @@ const MAX_IMAGE_BYTES: u64 = 20 * 1024 * 1024;
 const MAX_DECODED_IMAGE_BYTES: u64 = 256 * 1024 * 1024;
 
 const MAX_READ_BYTES: u64 = 10 * 1024 * 1024;
+
+pub(crate) const MAX_RELAYED_IMPORT_BYTES: u64 = 8 * 1024 * 1024;
+
+const THUMBNAIL_EDGE: u32 = 512;
+
+const THUMBNAILS_DIR: &str = ".thumbnails";
+
+const STAGED_PREFIX: &str = ".import-";
 
 enum AcceptedType {
 	Image { mime_type: &'static str },
@@ -248,13 +258,17 @@ fn decoded_pixels(
 	format: ImageFormat,
 	bytes: Vec<u8>,
 ) -> Result<ClipboardPayload, LibraryError> {
+	let rgba = decoded(name, format, &bytes)?.into_rgba8();
+	let (width, height) = rgba.dimensions();
+	Ok(ClipboardPayload::Image { rgba: rgba.into_raw(), width, height })
+}
+
+fn decoded(name: &str, format: ImageFormat, bytes: &[u8]) -> Result<DynamicImage, LibraryError> {
 	let mut limits = Limits::no_limits();
 	limits.max_alloc = Some(MAX_DECODED_IMAGE_BYTES);
 	let mut reader = ImageReader::with_format(Cursor::new(bytes), format);
 	reader.limits(limits);
-	let rgba = reader.decode().map_err(|error| undecodable(name, error.to_string()))?.into_rgba8();
-	let (width, height) = rgba.dimensions();
-	Ok(ClipboardPayload::Image { rgba: rgba.into_raw(), width, height })
+	reader.decode().map_err(|error| undecodable(name, error.to_string()))
 }
 
 fn undecodable(name: &str, detail: String) -> LibraryError {
@@ -405,6 +419,212 @@ fn documents<R: Runtime>(app: &AppHandle<R>) -> State<'_, Documents> {
 		app.manage(Documents::default());
 	}
 	app.state::<Documents>()
+}
+
+pub(crate) fn import(
+	root: &Path,
+	space_id: &str,
+	name: &str,
+	content: &str,
+) -> Result<LibraryItem, LibraryError> {
+	let accepted = importable(name)?;
+	encoded_within(name, content, relayed_import_limit(&accepted))?;
+	let bytes = decoded_content(name, content)?;
+	imported(root, space_id, name, &accepted, &bytes, relayed_import_limit)
+}
+
+fn encoded_within(name: &str, content: &str, limit: u64) -> Result<(), LibraryError> {
+	if content.len() as u64 <= limit.div_ceil(3) * 4 {
+		return Ok(());
+	}
+	let unpadded = content.trim_end_matches('=').len() as u64;
+	Err(LibraryError::TooLarge { name: name.to_owned(), bytes: unpadded * 3 / 4, limit })
+}
+
+pub(crate) fn import_paths(root: &Path, space_id: &str, paths: &[PathBuf]) -> Vec<LibraryImport> {
+	paths
+		.iter()
+		.map(|path| match import_path(root, space_id, path) {
+			Ok(item) => LibraryImport::Imported { item },
+			Err(error) => LibraryImport::Refused { error },
+		})
+		.collect()
+}
+
+fn import_path(root: &Path, space_id: &str, path: &Path) -> Result<LibraryItem, LibraryError> {
+	let name = path.file_name().unwrap_or_default().to_string_lossy();
+	let accepted = importable(&name)?;
+	let missing = || LibraryError::Missing { name: name.clone().into_owned() };
+	let metadata = fs::metadata(path).map_err(|error| refusal(&error, missing()))?;
+	within(&name, metadata.len(), import_limit(&accepted))?;
+	let bytes = fs::read(path).map_err(|error| refusal(&error, missing()))?;
+	imported(root, space_id, &name, &accepted, &bytes, import_limit)
+}
+
+fn importable(name: &str) -> Result<AcceptedType, LibraryError> {
+	if !is_plain_name(name) || name.starts_with('.') {
+		return Err(LibraryError::InvalidName { name: name.to_owned() });
+	}
+	accepted_type(name).ok_or_else(|| LibraryError::Unsupported { name: name.to_owned() })
+}
+
+fn import_limit(accepted: &AcceptedType) -> u64 {
+	match accepted {
+		AcceptedType::Image { .. } => MAX_IMAGE_BYTES,
+		AcceptedType::Document(_) => MAX_DOCUMENT_BYTES,
+	}
+}
+
+fn relayed_import_limit(accepted: &AcceptedType) -> u64 {
+	import_limit(accepted).min(MAX_RELAYED_IMPORT_BYTES)
+}
+
+fn imported(
+	root: &Path,
+	space_id: &str,
+	name: &str,
+	accepted: &AcceptedType,
+	bytes: &[u8],
+	limit_of: fn(&AcceptedType) -> u64,
+) -> Result<LibraryItem, LibraryError> {
+	within(name, bytes.len() as u64, limit_of(accepted))?;
+	let thumbnail = match accepted {
+		AcceptedType::Image { .. } => {
+			Some(thumbnail_of(name, image_format(Path::new(name), name)?, bytes)?)
+		}
+		AcceptedType::Document(_) => {
+			std::str::from_utf8(bytes)
+				.map_err(|_| LibraryError::NotUtf8 { name: name.to_owned() })?;
+			None
+		}
+	};
+	let dir = space_dir(root, space_id);
+	fs::create_dir_all(&dir).map_err(unwritable)?;
+	let landed_name = landed(&dir, name, bytes)?;
+	let path = dir.join(&landed_name);
+	let listed = thumbnail
+		.map_or(Ok(()), |png| {
+			stored_thumbnail(&thumbnails_dir(&dir), &thumbnail_name(&landed_name, &path)?, &png)
+		})
+		.and_then(|()| item_at(&path, landed_name.clone()))
+		.and_then(|item| item.ok_or(LibraryError::Missing { name: landed_name }));
+	if listed.is_err() {
+		discarded(&path);
+	}
+	listed
+}
+
+fn landed(dir: &Path, name: &str, bytes: &[u8]) -> Result<String, LibraryError> {
+	let staged = staged_path(dir);
+	let landed =
+		staged_with(&staged, bytes).and_then(|()| linked_under_free_name(&staged, dir, name));
+	discarded(&staged);
+	landed
+}
+
+fn staged_path(dir: &Path) -> PathBuf {
+	dir.join(format!("{STAGED_PREFIX}{}", uuid::Uuid::new_v4()))
+}
+
+fn staged_with(staged: &Path, bytes: &[u8]) -> Result<(), LibraryError> {
+	let mut file =
+		fs::OpenOptions::new().write(true).create_new(true).open(staged).map_err(unwritable)?;
+	file.write_all(bytes).and_then(|()| file.sync_all()).map_err(unwritable)
+}
+
+fn linked_under_free_name(staged: &Path, dir: &Path, name: &str) -> Result<String, LibraryError> {
+	let mut copy = 1;
+	loop {
+		let candidate = numbered(name, copy);
+		match fs::hard_link(staged, dir.join(&candidate)) {
+			Ok(()) => return Ok(candidate),
+			Err(error) if error.kind() == io::ErrorKind::AlreadyExists => copy += 1,
+			Err(error) => return Err(unwritable(error)),
+		}
+	}
+}
+
+fn numbered(name: &str, copy: u32) -> String {
+	match (copy, name.rsplit_once('.')) {
+		(1, _) => name.to_owned(),
+		(_, Some((stem, extension))) => format!("{stem} ({copy}).{extension}"),
+		(_, None) => format!("{name} ({copy})"),
+	}
+}
+
+fn discarded(path: &Path) {
+	match fs::remove_file(path) {
+		Err(error) if error.kind() != io::ErrorKind::NotFound => {
+			let name = path.file_name().unwrap_or_default().to_string_lossy();
+			log::warn!("the library left {name} on disk: {error}");
+		}
+		_ => {}
+	}
+}
+
+pub(crate) fn read_thumbnail(
+	root: &Path,
+	space_id: &str,
+	name: &str,
+) -> Result<LibraryImage, LibraryError> {
+	let item = resolve(root, space_id, name)?;
+	let AcceptedType::Image { .. } = item.accepted else {
+		return Err(LibraryError::NotAnImage { name: name.to_owned() });
+	};
+	let thumbnails = thumbnails_dir(&space_dir(root, space_id));
+	let file = thumbnail_name(name, &item.path)?;
+	let png = match fs::read(thumbnails.join(&file)) {
+		Ok(png) => png,
+		Err(error) if error.kind() == io::ErrorKind::NotFound => {
+			within(name, item.bytes, MAX_IMAGE_BYTES)?;
+			let png =
+				thumbnail_of(name, image_format(&item.path, name)?, &read_bytes(&item, name)?)?;
+			stored_thumbnail(&thumbnails, &file, &png)?;
+			png
+		}
+		Err(error) => return Err(unreadable(&error)),
+	};
+	Ok(LibraryImage {
+		name: name.to_owned(),
+		mime_type: "image/png".to_owned(),
+		content: BASE64_STANDARD.encode(png),
+	})
+}
+
+fn thumbnail_of(name: &str, format: ImageFormat, bytes: &[u8]) -> Result<Vec<u8>, LibraryError> {
+	let image = decoded(name, format, bytes)?;
+	let image = if image.width().max(image.height()) > THUMBNAIL_EDGE {
+		image.resize(THUMBNAIL_EDGE, THUMBNAIL_EDGE, FilterType::Triangle)
+	} else {
+		image
+	};
+	let mut png = Vec::new();
+	image.write_to(&mut Cursor::new(&mut png), ImageFormat::Png).map_err(unwritable)?;
+	Ok(png)
+}
+
+fn thumbnails_dir(space_dir: &Path) -> PathBuf {
+	space_dir.join(THUMBNAILS_DIR)
+}
+
+fn thumbnail_name(name: &str, image: &Path) -> Result<String, LibraryError> {
+	let modified = fs::metadata(image)
+		.and_then(|metadata| metadata.modified())
+		.map_err(|error| refusal(&error, LibraryError::Missing { name: name.to_owned() }))?;
+	let stamp = DateTime::<Utc>::from(modified).to_rfc3339_opts(SecondsFormat::Nanos, true);
+	let key = Sha256::new().chain_update(name).chain_update([0]).chain_update(stamp).finalize();
+	Ok(format!("{}.png", BASE64_URL_SAFE_NO_PAD.encode(key)))
+}
+
+fn stored_thumbnail(thumbnails: &Path, file: &str, png: &[u8]) -> Result<(), LibraryError> {
+	fs::create_dir_all(thumbnails).map_err(unwritable)?;
+	let staged = staged_path(thumbnails);
+	let stored = staged_with(&staged, png)
+		.and_then(|()| fs::rename(&staged, thumbnails.join(file)).map_err(unwritable));
+	if stored.is_err() {
+		discarded(&staged);
+	}
+	stored
 }
 
 pub fn forget_space<R: Runtime>(app: &AppHandle<R>, space_id: &str) {
