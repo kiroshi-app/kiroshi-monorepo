@@ -1,5 +1,10 @@
 import { defaultParseSearch } from "@tanstack/react-router"
 
+import {
+	type LibraryOpening,
+	openingOf,
+	validateLibrarySearch,
+} from "../navigation/library-search"
 import { validateSettingsSearch } from "../navigation/settings-search"
 import {
 	type ThreadSearch,
@@ -29,6 +34,7 @@ export type TabPage = {
 	conversationId?: string
 	entry?: string
 	application?: string
+	libraryOpening?: LibraryOpening
 }
 
 const idIn = (path: RegExp, pathname: string) => {
@@ -53,6 +59,7 @@ export const pageOf = (href: string): TabPage => {
 		conversationId: conversationIdIn(pathname),
 		entry,
 		application,
+		libraryOpening: openingOf(validateLibrarySearch(parsedSearch)),
 	}
 }
 

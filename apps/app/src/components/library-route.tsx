@@ -6,26 +6,32 @@ import { ScreenLayout } from "@workspace/ui/components/screen-layout"
 
 import { BareAppHeader } from "@/components/bare-app-header"
 import { LibraryScreen } from "@/components/library-screen"
+import {
+	type LibraryOpening,
+	librarySearchOf,
+	openingOf,
+} from "@/lib/navigation/library-search"
 import { isJoinedRowId } from "@/lib/spaces/joined-spaces-controller"
 import { useWorkspace } from "@/lib/workspace/workspace-context"
 
-type LibraryItemOpened = { id: string }
-
 const useOpenLibraryItemInNewTab = () => {
 	const router = useRouter()
-	return ({ id }: LibraryItemOpened) =>
+	return (opening: LibraryOpening) =>
 		router.options.context.tabs.openInNewTab(
-			router.buildLocation({ to: "/library", search: { item: id } }).href,
+			router.buildLocation({
+				to: "/library",
+				search: librarySearchOf(opening),
+			}).href,
 		)
 }
 
-const useDropOpenedItem = () => {
+const useShowOpening = () => {
 	const navigate = useNavigate()
 	return useCallback(
-		() =>
+		(opening: LibraryOpening | undefined) =>
 			void navigate({
 				to: "/library",
-				search: (previous) => ({ ...previous, item: undefined }),
+				search: (previous) => ({ ...previous, ...librarySearchOf(opening) }),
 				replace: true,
 			}),
 		[navigate],
@@ -34,9 +40,9 @@ const useDropOpenedItem = () => {
 
 export const LibraryRoute = () => {
 	const { rosteredHostSpaceId, rosterView, scopes } = useWorkspace()
-	const { item } = useSearch({ from: "/library" })
+	const opening = openingOf(useSearch({ from: "/library" }))
 	const openInNewTab = useOpenLibraryItemInNewTab()
-	const dropOpenedItem = useDropOpenedItem()
+	const showOpening = useShowOpening()
 	const spaceRowId = rosterView.rosteredSpaceId
 
 	return (
@@ -46,9 +52,9 @@ export const LibraryRoute = () => {
 					bots={rosterView.bots}
 					isJoined={isJoinedRowId(spaceRowId)}
 					key={spaceRowId}
-					onArrivalOpened={dropOpenedItem}
 					onOpenInNewTab={openInNewTab}
-					openedOnArrival={item}
+					onOpeningChange={showOpening}
+					opening={opening}
 					spaceId={rosteredHostSpaceId}
 					spaceTint={scopes.spaceHue}
 				/>

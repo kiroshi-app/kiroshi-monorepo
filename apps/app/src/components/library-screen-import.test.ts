@@ -16,7 +16,7 @@ import {
 } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
-import { LibraryScreen } from "@/components/library-screen"
+import { LibraryScreenHoldingOpening } from "@/components/library-screen-holding-opening"
 import type { LibraryItem } from "@/lib/bindings"
 import { HostRefused } from "@/lib/host/host-refused"
 import type { Invoke } from "@/lib/host/joined-hosts-invoke"
@@ -104,7 +104,11 @@ const renderLibraryScreen = async (isJoined: boolean) => {
 			Fragment,
 			null,
 			createElement("button", { type: "button" }, OUTSIDE),
-			createElement(LibraryScreen, { spaceId: SPACE_ID, isJoined, bots: [] }),
+			createElement(LibraryScreenHoldingOpening, {
+				spaceId: SPACE_ID,
+				isJoined,
+				bots: [],
+			}),
 		),
 		{ wrapper: createQueryTestWrapper().wrapper },
 	)
