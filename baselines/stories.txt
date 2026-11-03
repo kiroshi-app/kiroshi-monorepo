@@ -1376,6 +1376,7 @@ navigation-librarydocumenteditor--caret-moves
 navigation-librarydocumenteditor--caret-share-failure
 navigation-librarydocumenteditor--click-below-the-last-line
 navigation-librarydocumenteditor--create-failure
+navigation-librarydocumenteditor--deleting-at-run-edges
 navigation-librarydocumenteditor--existing-document
 navigation-librarydocumenteditor--fields-stay-in-place
 navigation-librarydocumenteditor--from-meeting-notes

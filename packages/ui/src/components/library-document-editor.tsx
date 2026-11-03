@@ -32,6 +32,8 @@ import {
 	type WriterActions,
 } from "@workspace/ui/components/library-document-agents"
 import {
+	deletedIn,
+	deletedRangeOf,
 	hasInlineFormat,
 	inlineDrawingOf,
 	inlineNodesOf,
@@ -581,6 +583,7 @@ type InlineFieldProps = Omit<HTMLAttributes<HTMLSpanElement>, "children"> & {
 	fieldRef: (node: TextField | null) => (() => void) | undefined
 	drawnText?: ReactNode
 	onInsert: (field: HTMLElement, text: string) => void
+	onDelete: (field: HTMLElement, range: [from: number, to: number]) => void
 }
 
 const InlineField = ({
@@ -589,6 +592,7 @@ const InlineField = ({
 	fieldRef,
 	drawnText,
 	onInsert,
+	onDelete,
 	...props
 }: InlineFieldProps) => {
 	const field = useRef<HTMLSpanElement>(null)
@@ -597,23 +601,27 @@ const InlineField = ({
 		if (field.current) showInlineIn(field.current, value)
 	}, [value])
 
-	const insertTyped = useEffectEvent((event: InputEvent) => {
+	const editAroundMarkers = useEffectEvent((event: InputEvent) => {
 		const node = field.current
-		if (
-			!node ||
-			event.inputType !== "insertText" ||
-			event.data === null ||
-			isCaretOnShownText(node)
-		)
-			return
+		if (!node || event.isComposing) return
 
-		event.preventDefault()
-		onInsert(node, event.data)
+		if (event.inputType === "insertText" && event.data !== null) {
+			if (isCaretOnShownText(node)) return
+			event.preventDefault()
+			onInsert(node, event.data)
+		} else if (
+			event.inputType.startsWith("delete") &&
+			event.inputType !== "deleteByDrag"
+		) {
+			event.preventDefault()
+			const range = deletedRangeOf(node, event)
+			if (range) onDelete(node, range)
+		}
 	})
 
 	useEffect(() => {
 		const node = field.current
-		const listener = (event: InputEvent) => insertTyped(event)
+		const listener = (event: InputEvent) => editAroundMarkers(event)
 		node?.addEventListener("beforeinput", listener)
 		return () => node?.removeEventListener("beforeinput", listener)
 	}, [])
@@ -622,7 +630,6 @@ const InlineField = ({
 		<span className={cn("grid break-words", className)}>
 			{drawnText ? <DrawnText>{drawnText}</DrawnText> : null}
 			<span
-				aria-multiline="true"
 				className={cn(
 					"col-start-1 row-start-1 whitespace-pre-wrap outline-none",
 					drawnText &&
@@ -1035,6 +1042,11 @@ const LibraryDocumentEditor = ({
 				onInput={(event) => {
 					if (!(event.nativeEvent as InputEvent).isComposing)
 						takeTyped(index, event.currentTarget)
+				}}
+				aria-multiline={block.kind === "paragraph"}
+				onDelete={(field, [from, to]) => {
+					const { text, caret } = deletedIn(textFieldOf(field).value, from, to)
+					changeText(index, text, caret)
 				}}
 				onInsert={(field, text) => insertIn(index, field, text)}
 				onPaste={(event) => {

@@ -1417,6 +1417,10 @@ const inlineFormatStory = ({
 			))
 				await expect(marker).not.toBeVisible()
 			await checkLook(element, field)
+			await expect(field).toHaveAttribute(
+				"aria-multiline",
+				String(field.dataset.kind === "paragraph"),
+			)
 		}
 
 		const [heading, paragraph] = fields as [
@@ -1563,6 +1567,81 @@ export const UnclosedMarkers = meta.story({
 		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
 			UNCLOSED_MARKERS.replace("**bold", "**bold**!"),
 		)
+	},
+})
+
+const RUN_EDGES = [
+	"Ship **the launch** now",
+	"Read _the brief_ first",
+	"Run `x` now",
+	"Cut ~~the old copy~~ today",
+]
+
+export const DeletingAtRunEdges = meta.story({
+	tags: ["test-only"],
+	args: {
+		title: LAUNCH_REVIEW.title,
+		body: RUN_EDGES.join("\n\n"),
+		detail: LAUNCH_REVIEW.detail,
+		template: undefined,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The person deletes next to the hidden markers of four runs: Backspace after the last glyph of a bold run, Delete before the first glyph of an italic run, Backspace on the only glyph of a code run, then Backspace over a selection running from plain text into a struck run. Check that each deletion removes only glyphs, keeps the markers of what is left of the run, drops the markers of a run it empties, leaves the caret at the deletion point and reports the stored body.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const lines = [...RUN_EDGES]
+		const fieldAt = (index: number) =>
+			bodyFieldsIn(canvasElement)[index] as HTMLTextAreaElement
+		const deleteIn = async (
+			index: number,
+			[from, to]: [from: number, to: number],
+			key: "{Backspace}" | "{Delete}",
+		) => {
+			fieldAt(index).focus()
+			fieldAt(index).setSelectionRange(from, to)
+			await userEvent.keyboard(key)
+		}
+		const expectStored = async (index: number, line: string, caret: number) => {
+			lines[index] = line
+			const field = fieldAt(index)
+			await expect(field).toHaveValue(line)
+			await expect(document.activeElement).toBe(field)
+			await expect(field.selectionStart).toBe(caret)
+			await expect(field.selectionEnd).toBe(caret)
+			await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+				lines.join("\n\n"),
+			)
+		}
+
+		const afterLaunch = "Ship **the launch".length
+		await deleteIn(0, [afterLaunch, afterLaunch], "{Backspace}")
+		await expectStored(0, "Ship **the launc** now", afterLaunch - 1)
+		await expect(slotIn(fieldAt(0), "library-document-bold").innerText).toBe(
+			"the launc",
+		)
+
+		const beforeBrief = "Read _".length
+		await deleteIn(1, [beforeBrief, beforeBrief], "{Delete}")
+		await expectStored(1, "Read _he brief_ first", beforeBrief)
+		await expect(slotIn(fieldAt(1), "library-document-italic").innerText).toBe(
+			"he brief",
+		)
+
+		const afterX = "Run `x".length
+		await deleteIn(2, [afterX, afterX], "{Backspace}")
+		await expectStored(2, "Run  now", "Run ".length)
+		await expect(fieldAt(2).tagName).toBe("TEXTAREA")
+
+		await deleteIn(3, [3, "Cut ~~the ".length], "{Backspace}")
+		await expectStored(3, "Cut~~old copy~~ today", 3)
+		await expect(
+			slotIn(fieldAt(3), "library-document-strikethrough").innerText,
+		).toBe("old copy")
 	},
 })
 

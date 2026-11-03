@@ -183,6 +183,65 @@ const shownBoundsOf = (text: string) => {
 	}
 }
 
+const markerMaskOf = (text: string, nodes: InlineNode[]) => {
+	const mask = new Array<boolean>(text.length).fill(false)
+	const mark = (node: InlineNode) => {
+		if (node.kind === "text") return
+		if (node.kind === "marker") mask.fill(true, node.from, node.to)
+		else node.children.forEach(mark)
+	}
+	nodes.forEach(mark)
+	return mask
+}
+
+type Deletion = { text: string; caret: number }
+
+const deletedIn = (text: string, from: number, to: number): Deletion => {
+	const nodes = inlineNodesOf(text)
+	const isMarker = markerMaskOf(text, nodes)
+	const isRemoved = isMarker.map(
+		(marker, index) => !marker && index >= from && index < to,
+	)
+	const isEmptied = (spans: InlineSpan[]) =>
+		spans.every(({ from: start, to: end }) =>
+			isRemoved.slice(start, end).every(Boolean),
+		)
+	const clear = (node: InlineNode) => {
+		if (node.kind === "text" || node.kind === "marker") return
+		node.children.forEach(clear)
+		if (!isEmptied(shownSpansOf(node.children))) return
+		for (const child of node.children)
+			if (child.kind === "marker") isRemoved.fill(true, child.from, child.to)
+	}
+	nodes.forEach(clear)
+
+	return {
+		text: text
+			.split("")
+			.filter((_, index) => !isRemoved[index])
+			.join(""),
+		caret: isRemoved.slice(0, from).filter((removed) => !removed).length,
+	}
+}
+
+type DeletedRange = [from: number, to: number]
+
+const shownGlyphBeside = (
+	text: string,
+	offset: number,
+	isBackward: boolean,
+): DeletedRange | undefined => {
+	const isMarker = markerMaskOf(text, inlineNodesOf(text))
+	const glyphs = [
+		...new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(text),
+	]
+		.map(({ index, segment }): DeletedRange => [index, index + segment.length])
+		.filter(([from]) => !isMarker[from])
+	return isBackward
+		? glyphs.findLast(([, to]) => to <= offset)
+		: glyphs.find(([from]) => from >= offset)
+}
+
 type ShownOffset = { spanFrom: number; at: number }
 
 const shownOffsetOf = (spans: InlineSpan[], offset: number) => {
@@ -365,7 +424,29 @@ const textFieldOf = (element: HTMLElement): TextField => {
 	}) as TextField
 }
 
+const deletedRangeOf = (
+	field: HTMLElement,
+	event: InputEvent,
+): DeletedRange | undefined => {
+	const [target] = event.getTargetRanges()
+	if (target && !target.collapsed)
+		return [
+			offsetIn(field, target.startContainer, target.startOffset),
+			offsetIn(field, target.endContainer, target.endOffset),
+		]
+
+	const { value, selectionStart, selectionEnd } = textFieldOf(field)
+	if (selectionStart !== selectionEnd) return [selectionStart, selectionEnd]
+	return shownGlyphBeside(
+		value,
+		selectionStart,
+		event.inputType.includes("Backward"),
+	)
+}
+
 export {
+	deletedIn,
+	deletedRangeOf,
 	hasInlineFormat,
 	inlineDrawingOf,
 	inlineNodesOf,

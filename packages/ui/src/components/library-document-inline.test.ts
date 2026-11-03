@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
+	deletedIn,
 	hasInlineFormat,
 	inlineNodesOf,
 	shownBoundsOf,
@@ -52,5 +53,40 @@ describe("shownBoundsOf", () => {
 		expect(shownBoundsOf("**bold** tail")).toEqual({ start: 2, end: 13 })
 		expect(shownBoundsOf("Ship **bold**")).toEqual({ start: 0, end: 11 })
 		expect(shownBoundsOf("")).toEqual({ start: 0, end: 0 })
+	})
+})
+
+describe("deletedIn", () => {
+	it("removes the last glyph of a run and keeps both markers", () => {
+		const text = "Ship **the launch** now"
+		const at = text.indexOf("h** now")
+		expect(deletedIn(text, at, at + 1)).toEqual({
+			text: "Ship **the launc** now",
+			caret: at,
+		})
+	})
+
+	it("skips the markers inside a deleted range", () => {
+		const text = "Read _the brief_ first"
+		expect(deletedIn(text, text.indexOf("_the"), text.indexOf("he"))).toEqual({
+			text: "Read _he brief_ first",
+			caret: "Read ".length,
+		})
+	})
+
+	it("removes both markers of a run it empties, nested ones included", () => {
+		expect(deletedIn("Run `x` now", 5, 6)).toEqual({
+			text: "Run  now",
+			caret: 4,
+		})
+		expect(deletedIn("a **_b_** c", 0, 11)).toEqual({ text: "", caret: 0 })
+	})
+
+	it("keeps the markers of the part of a run left unselected", () => {
+		const text = "Cut ~~the old copy~~ today"
+		expect(deletedIn(text, 3, text.indexOf("old"))).toEqual({
+			text: "Cut~~old copy~~ today",
+			caret: 3,
+		})
 	})
 })
