@@ -23,6 +23,8 @@ import reachSource from "../../../src-tauri/src/hosting/reach.rs?raw"
 
 const HOST = "http://192.168.1.20:45367"
 
+const ATTIC_NAMING = { space: "Attic", host: "Lea" }
+
 const socketStub = () => {
 	const socket: HostSocket = {
 		onopen: null,
@@ -684,6 +686,32 @@ describe("a joined space on screen", () => {
 			UNEXPECTED_NOTICES.en,
 			{ command: "joined_space_connect", space: "attic" },
 		)
+	})
+
+	it("names the space on screen in an unexpected connect failure", async () => {
+		const { hosts, reportJoinRefusal } = joinedHostsOf({
+			join: async () => {
+				throw new Error(THROWN_MESSAGE)
+			},
+		})
+
+		await hosts.activate("attic", "attic", () => ATTIC_NAMING)
+
+		const notice = reportJoinRefusal.mock.calls[0]?.[0] as NoticeMessage
+		expect(notice.title).toBe("Something went wrong with Attic")
+		expect(textOf(notice)).not.toContain("this space")
+	})
+
+	it("names the host of the space on screen while it waits for it", async () => {
+		const { hosts } = joinedHostsOf({
+			join: async () => ({ status: "error", error: SOCKET_CLOSED }),
+		})
+
+		await hosts.activate("attic", "attic", () => ATTIC_NAMING)
+
+		expect(hosts.getState().connections.attic).toMatchObject({
+			failure: "Waiting for Lea",
+		})
 	})
 })
 

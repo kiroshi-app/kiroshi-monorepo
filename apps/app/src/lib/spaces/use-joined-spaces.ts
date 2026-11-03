@@ -150,7 +150,7 @@ export const useOpenJoinedHost = (
 		return open
 			? {
 					spaceName: open.name,
-					hostName: controller.hostNameOf(open.id),
+					hostName: controller.shownHostNameOf(open.id),
 					isOnline: isHostOnline(connections[open.id]),
 					isDown: isHostDown(connections[open.id]),
 					hostWait: hostWaitOf(open, connections[open.id]),

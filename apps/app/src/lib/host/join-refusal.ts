@@ -43,33 +43,55 @@ type NoticeKey =
 	| (typeof NOTICE_KEYS)[JoinedSpaceError["kind"]]
 	| "joinRefused.unexpected"
 
-const noticeOf = (key: NoticeKey): NoticeMessage => ({
-	title: i18n.t(`chat:screen.notice.${key}.title`),
-	description: i18n.t(`chat:screen.notice.${key}.description`),
+export type JoinedSpaceNaming = { space?: string; host?: string }
+
+const NO_NAMING: JoinedSpaceNaming = {}
+
+const variablesOf = (naming: JoinedSpaceNaming) =>
+	naming as Required<JoinedSpaceNaming>
+
+const noticeOf = (
+	key: NoticeKey,
+	naming: JoinedSpaceNaming = NO_NAMING,
+): NoticeMessage => ({
+	title: i18n.t(`chat:screen.notice.${key}.title`, variablesOf(naming)),
+	description: i18n.t(
+		`chat:screen.notice.${key}.description`,
+		variablesOf(naming),
+	),
 })
 
 const waitingForHostNoticeOf = (
 	reason: JoinedSpaceWaitReason | undefined,
+	naming: JoinedSpaceNaming,
 ): NoticeMessage => {
-	const notice = noticeOf(NOTICE_KEYS.waitingForHost)
+	const notice = noticeOf(NOTICE_KEYS.waitingForHost, naming)
 	if (!reason) return notice
 	return {
 		...notice,
 		description: i18n.t(
 			`chat:screen.notice.joinRefused.waitingForHost.reasons.${reason}`,
+			variablesOf(naming),
 		),
 	}
 }
 
-export const joinRefusalNoticeOf = (error: JoinedSpaceError): NoticeMessage =>
+export const joinRefusalNoticeOf = (
+	error: JoinedSpaceError,
+	naming: JoinedSpaceNaming = NO_NAMING,
+): NoticeMessage =>
 	error.kind === "waitingForHost"
-		? waitingForHostNoticeOf(error.reason)
-		: noticeOf(NOTICE_KEYS[error.kind])
+		? waitingForHostNoticeOf(error.reason, naming)
+		: noticeOf(NOTICE_KEYS[error.kind], naming)
 
-export const unexpectedJoinNotice = (): NoticeMessage =>
-	noticeOf("joinRefused.unexpected")
+export const unexpectedJoinNotice = (
+	naming: JoinedSpaceNaming = NO_NAMING,
+): NoticeMessage => noticeOf("joinRefused.unexpected", naming)
 
-export const joinRejectionNoticeOf = (reason: unknown): NoticeMessage =>
+export const joinRejectionNoticeOf = (
+	reason: unknown,
+	naming: JoinedSpaceNaming = NO_NAMING,
+): NoticeMessage =>
 	isJoinedSpaceError(reason)
-		? joinRefusalNoticeOf(reason)
-		: unexpectedJoinNotice()
+		? joinRefusalNoticeOf(reason, naming)
+		: unexpectedJoinNotice(naming)

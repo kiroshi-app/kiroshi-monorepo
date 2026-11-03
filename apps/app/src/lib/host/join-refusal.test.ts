@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest"
 
 import { i18n } from "@workspace/ui/lib/i18n"
 
-import { joinRefusalNoticeOf } from "./join-refusal"
+import {
+	joinRefusalNoticeOf,
+	joinRejectionNoticeOf,
+	unexpectedJoinNotice,
+} from "./join-refusal"
 
 import type { JoinedSpaceError, JoinedSpaceWaitReason } from "../bindings"
 
@@ -57,5 +61,63 @@ describe("joinRefusalNoticeOf", () => {
 		} as JoinedSpaceError)
 
 		expect(description).toBe(GENERIC_WAITING_DESCRIPTION)
+	})
+})
+
+const STUDIO_NAMING = { space: "Studio", host: "Lea" }
+
+const UNNAMED_WORDS = ["the host", "this space"]
+
+const textOf = ({
+	title,
+	description,
+}: {
+	title: string
+	description?: string
+}) => `${title} ${description ?? ""}`
+
+describe("a notice naming its joined space", () => {
+	it("names the host in the waiting title and reason line", () => {
+		const notice = joinRefusalNoticeOf(
+			waitingForHost("hostSilent"),
+			STUDIO_NAMING,
+		)
+
+		expect(notice.title).toBe("Waiting for Lea")
+		expect(notice.description).toBe(
+			"This space isn’t open yet, Lea hasn’t let this computer in. Ask them to open Kiroshi on their computer.",
+		)
+		for (const word of UNNAMED_WORDS) {
+			expect(textOf(notice)).not.toContain(word)
+		}
+	})
+
+	it("names the space in the unexpected title", () => {
+		const notice = unexpectedJoinNotice(STUDIO_NAMING)
+
+		expect(notice.title).toBe("Something went wrong with Studio")
+		for (const word of UNNAMED_WORDS) {
+			expect(textOf(notice)).not.toContain(word)
+		}
+	})
+
+	it("names the space of an unexpected rejection", () => {
+		expect(joinRejectionNoticeOf(new Error("boom"), STUDIO_NAMING).title).toBe(
+			"Something went wrong with Studio",
+		)
+	})
+
+	it("falls back to the host when only the space is known", () => {
+		const notice = joinRefusalNoticeOf(waitingForHost("hostSilent"), {
+			space: "Studio",
+		})
+
+		expect(notice.title).toBe("Waiting for the host")
+	})
+
+	it("renders as before for a caller with no space at hand", () => {
+		expect(joinRejectionNoticeOf(new Error("boom")).title).toBe(
+			"Something went wrong with this space",
+		)
 	})
 })
