@@ -2209,3 +2209,229 @@ export const A6ToolbarFlippedBelow = meta.story({
 		).toBeLessThan(1)
 	},
 })
+
+const LAUNCH_DATE = "the launch date"
+
+const pressIn = (field: HTMLElement, init: KeyboardEventInit) => {
+	const event = new KeyboardEvent("keydown", {
+		bubbles: true,
+		cancelable: true,
+		...init,
+	})
+	field.dispatchEvent(event)
+	return event
+}
+
+const selectedTextOf = (field: HTMLTextAreaElement) =>
+	field.value.slice(field.selectionStart, field.selectionEnd)
+
+type ShortcutCheck = {
+	canvasElement: HTMLElement
+	userEvent: { keyboard: (keys: string) => Promise<unknown> }
+	keys: string
+	callback: unknown
+	onBodyChange: unknown
+}
+
+const expectShortcutReports = async ({
+	canvasElement,
+	userEvent,
+	keys,
+	callback,
+	onBodyChange,
+}: ShortcutCheck) => {
+	const [opening] = bodyFieldsIn(canvasElement) as [HTMLTextAreaElement]
+	const start = selectIn(opening, LAUNCH_DATE)
+	await waitFor(() => expect(toolbarIn(canvasElement)).not.toBe(null))
+
+	await userEvent.keyboard(keys)
+	await expect(callback).toHaveBeenCalledOnce()
+	await expect(callback).toHaveBeenCalledWith({
+		start,
+		end: start + LAUNCH_DATE.length,
+	})
+	await expect(document.activeElement).toBe(opening)
+	await expect(selectedTextOf(opening)).toBe(LAUNCH_DATE)
+	await expect(onBodyChange).not.toHaveBeenCalled()
+	return { opening, start }
+}
+
+export const BoldShortcut = meta.story({
+	...selectionStory(
+		"Cmd+B on a selected range. Check that Bold is reported once with the range its toolbar button would pass, that Ctrl+B does the same with the browser default prevented, that the shortcut still works once Escape closed the toolbar, and that a collapsed selection or the title field reports nothing.",
+	),
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		const { opening, start } = await expectShortcutReports({
+			canvasElement,
+			userEvent,
+			keys: "{Meta>}b{/Meta}",
+			callback: args.onBold,
+			onBodyChange: args.onBodyChange,
+		})
+
+		const ctrlBold = pressIn(opening, { key: "b", ctrlKey: true })
+		await expect(ctrlBold.defaultPrevented).toBe(true)
+		await expect(args.onBold).toHaveBeenCalledTimes(2)
+		await expect(args.onBold).toHaveBeenLastCalledWith({
+			start,
+			end: start + LAUNCH_DATE.length,
+		})
+
+		await userEvent.keyboard("{Escape}")
+		await expect(toolbarIn(canvasElement)).toBe(null)
+		await userEvent.keyboard("{Meta>}b{/Meta}")
+		await expect(args.onBold).toHaveBeenCalledTimes(3)
+
+		opening.setSelectionRange(start, start)
+		await expect(
+			pressIn(opening, { key: "b", metaKey: true }).defaultPrevented,
+		).toBe(false)
+		const title = canvas.getByRole("textbox", {
+			name: "Title",
+		}) as HTMLTextAreaElement
+		title.focus()
+		title.setSelectionRange(0, 6)
+		await expect(
+			pressIn(title, { key: "b", metaKey: true }).defaultPrevented,
+		).toBe(false)
+		await expect(args.onBold).toHaveBeenCalledTimes(3)
+		await expect(args.onBodyChange).not.toHaveBeenCalled()
+	},
+})
+
+export const ItalicShortcut = meta.story({
+	...selectionStory(
+		"Cmd+I on a selected range. Check that Italic is reported once with the range its toolbar button would pass, and that the focus, the selection and the text stay as they were.",
+	),
+	play: async ({ args, canvasElement, userEvent }) => {
+		await expectShortcutReports({
+			canvasElement,
+			userEvent,
+			keys: "{Meta>}i{/Meta}",
+			callback: args.onItalic,
+			onBodyChange: args.onBodyChange,
+		})
+	},
+})
+
+export const StrikethroughShortcut = meta.story({
+	...selectionStory(
+		"Cmd+Shift+S on a selected range. Check that Strikethrough is reported once with the range its toolbar button would pass, and that the focus, the selection and the text stay as they were.",
+	),
+	play: async ({ args, canvasElement, userEvent }) => {
+		await expectShortcutReports({
+			canvasElement,
+			userEvent,
+			keys: "{Meta>}{Shift>}s{/Shift}{/Meta}",
+			callback: args.onStrikethrough,
+			onBodyChange: args.onBodyChange,
+		})
+	},
+})
+
+export const CodeShortcut = meta.story({
+	...selectionStory(
+		"Cmd+E on a selected range. Check that Code is reported once with the range its toolbar button would pass, and that the focus, the selection and the text stay as they were.",
+	),
+	play: async ({ args, canvasElement, userEvent }) => {
+		await expectShortcutReports({
+			canvasElement,
+			userEvent,
+			keys: "{Meta>}e{/Meta}",
+			callback: args.onCode,
+			onBodyChange: args.onBodyChange,
+		})
+	},
+})
+
+export const LinkShortcut = meta.story({
+	...selectionStory(
+		"Cmd+K on a selected range, the toolbar showing then closed by Escape. Check that the toolbar opens on its link field, focused, that Escape there returns to the bar, and that Enter reports the typed url with the selected range.",
+	),
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		const [opening] = bodyFieldsIn(canvasElement) as [HTMLTextAreaElement]
+		const start = selectIn(opening, LAUNCH_DATE)
+		await waitFor(() => expect(toolbarIn(canvasElement)).not.toBe(null))
+		const linkField = () =>
+			canvas.getByRole("textbox", { name: "Link address" })
+
+		await userEvent.keyboard("{Meta>}k{/Meta}")
+		await expect(document.activeElement).toBe(linkField())
+		await userEvent.keyboard("{Escape}")
+		await expect(canvas.getByRole("toolbar", { name: "Format" })).toBeVisible()
+		await expect(args.onLink).not.toHaveBeenCalled()
+
+		opening.focus()
+		await expect(selectedTextOf(opening)).toBe(LAUNCH_DATE)
+		await userEvent.keyboard("{Escape}")
+		await expect(toolbarIn(canvasElement)).toBe(null)
+		await userEvent.keyboard("{Meta>}k{/Meta}")
+		await expect(document.activeElement).toBe(linkField())
+		await expect(selectedTextOf(opening)).toBe(LAUNCH_DATE)
+
+		await userEvent.keyboard("https://kiroshi.app/brief{Enter}")
+		await expect(args.onLink).toHaveBeenCalledOnce()
+		await expect(args.onLink).toHaveBeenCalledWith(
+			"https://kiroshi.app/brief",
+			{
+				start,
+				end: start + LAUNCH_DATE.length,
+			},
+		)
+		await expect(args.onBodyChange).not.toHaveBeenCalled()
+	},
+})
+
+export const EscapeClosesToolbar = meta.story({
+	...selectionStory(
+		"Escape with the toolbar showing over a selected range. Check that the toolbar closes while the focus, the selection and the text stay, that selecting another range brings it back, and that a typed character still replaces the selection.",
+	),
+	play: async ({ args, canvasElement, userEvent }) => {
+		const [opening] = bodyFieldsIn(canvasElement) as [HTMLTextAreaElement]
+		const before = opening.value
+		selectIn(opening, LAUNCH_DATE)
+		await waitFor(() => expect(toolbarIn(canvasElement)).not.toBe(null))
+
+		await userEvent.keyboard("{Escape}")
+		await expect(toolbarIn(canvasElement)).toBe(null)
+		await expect(document.activeElement).toBe(opening)
+		await expect(selectedTextOf(opening)).toBe(LAUNCH_DATE)
+		await expect(opening.value).toBe(before)
+
+		selectIn(opening, "the copy")
+		await waitFor(() => expect(toolbarIn(canvasElement)).not.toBe(null))
+		await userEvent.keyboard("x")
+		await expect(opening.value).toBe(before.replace("the copy", "x"))
+		await expect(args.onBodyChange).toHaveBeenCalled()
+	},
+})
+
+export const ShortcutsWithoutCallbacks = meta.story({
+	tags: ["test-only"],
+	args: SELECTION_DOCUMENT,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"No format callback passed. Check that the five shortcuts leave the key to the browser and that Cmd+K opens no link field.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const [opening] = bodyFieldsIn(canvasElement) as [HTMLTextAreaElement]
+		selectIn(opening, LAUNCH_DATE)
+		await waitFor(() => expect(toolbarIn(canvasElement)).not.toBe(null))
+
+		for (const init of [
+			{ key: "b", metaKey: true },
+			{ key: "i", metaKey: true },
+			{ key: "S", metaKey: true, shiftKey: true },
+			{ key: "e", metaKey: true },
+			{ key: "k", metaKey: true },
+		])
+			await expect(pressIn(opening, init).defaultPrevented).toBe(false)
+		await expect(canvas.queryByRole("textbox", { name: "Link address" })).toBe(
+			null,
+		)
+	},
+})
