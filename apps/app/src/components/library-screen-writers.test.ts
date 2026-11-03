@@ -72,7 +72,7 @@ const host = vi.hoisted(() => ({
 	sharedCarets: [] as SharedCaret[],
 	refusesCreates: false,
 	refusesCaretShares: false,
-	refusedCaretShares: 0,
+	caretRefusals: 0,
 }))
 
 const itemNamed = (name: string): LibraryItem => ({
@@ -107,7 +107,7 @@ const LIBRARY_COMMANDS: Record<string, (call: LibraryCall) => unknown> = {
 	},
 	library_share_caret: ({ spaceId, name, caret }) => {
 		if (host.refusesCaretShares) {
-			host.refusedCaretShares += 1
+			host.caretRefusals += 1
 			throw { kind: "unreachable", detail: "host gone" }
 		}
 		host.sharedCarets.push({ spaceId, name, caret })
@@ -170,7 +170,7 @@ afterEach(() => {
 	host.sharedCarets = []
 	host.refusesCreates = false
 	host.refusesCaretShares = false
-	host.refusedCaretShares = 0
+	host.caretRefusals = 0
 	vi.mocked(raiseFailureNotice).mockClear()
 	vi.restoreAllMocks()
 })
@@ -619,13 +619,13 @@ const refuseCaretSharesAt = async (
 	offsets: number[],
 ) => {
 	host.refusesCaretShares = true
-	const refusedBefore = host.refusedCaretShares
+	const refusedBefore = host.caretRefusals
 	for (const offset of offsets) {
 		placeCaret(field, offset)
 		await settle()
 	}
 	await waitFor(() =>
-		expect(host.refusedCaretShares - refusedBefore).toBe(offsets.length),
+		expect(host.caretRefusals - refusedBefore).toBe(offsets.length),
 	)
 }
 
