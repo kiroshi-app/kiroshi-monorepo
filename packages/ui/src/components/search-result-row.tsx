@@ -96,9 +96,12 @@ const SearchResultIdentityMark = ({
 
 	return (
 		<BotIdentityAvatar
-			{...identity.bot}
 			badge={identity.kind === "mission" ? identity.badge : undefined}
 			className="shrink-0"
+			hue={identity.bot.blot}
+			image={identity.bot.image}
+			name={identity.bot.name}
+			seed={identity.bot.seed}
 			size={MISSION_AVATAR_SIZE}
 		/>
 	)
