@@ -275,7 +275,7 @@ describe("returning from the browser sign-in with something to import", () => {
 	})
 
 	it("shows Connect, Import, Account, then opens the first conversation", async () => {
-		const screens = []
+		const screens: ReturnType<typeof screen>[] = []
 		await controller.leaveIntro()
 		screens.push(screen())
 
