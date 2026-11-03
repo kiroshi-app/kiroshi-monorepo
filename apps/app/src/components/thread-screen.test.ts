@@ -536,7 +536,7 @@ const FIRST_TOKEN: AgentEvent[] = [
 	{ type: "messageDelta", id: "msg-writing", seq: 1, text: "the walls hold" },
 ]
 
-const BLOCK_CLOSED: AgentEvent[] = [
+const MORE_WRITTEN: AgentEvent[] = [
 	{ type: "messageDelta", id: "msg-writing", seq: 2, text: "\n\nand" },
 ]
 
@@ -2623,7 +2623,7 @@ describe("ThreadScreen", () => {
 		await room.send("@Ada now")
 		act(() => {
 			room.driver.pushTo(room.idOf("Ada"), FIRST_TOKEN)
-			room.driver.pushTo(room.idOf("Ada"), BLOCK_CLOSED)
+			room.driver.pushTo(room.idOf("Ada"), MORE_WRITTEN)
 		})
 		await settle()
 
@@ -2661,7 +2661,7 @@ describe("ThreadScreen", () => {
 		expect(screen.getByText("the walls hold")).toBeTruthy()
 	})
 
-	it("keeps the working row of a companion asking after it published a block", async () => {
+	it("keeps the working row of a companion asking after its message shows text", async () => {
 		const room = await roomOf({ names: ["Ada"] })
 		render(screenOf(room.thread), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
@@ -2669,7 +2669,7 @@ describe("ThreadScreen", () => {
 		await room.send("@Ada now")
 		act(() => {
 			room.driver.pushTo(room.idOf("Ada"), FIRST_TOKEN)
-			room.driver.pushTo(room.idOf("Ada"), BLOCK_CLOSED)
+			room.driver.pushTo(room.idOf("Ada"), MORE_WRITTEN)
 			room.driver.pushTo(room.idOf("Ada"), ASKED)
 		})
 		await settle()
@@ -2685,7 +2685,7 @@ describe("ThreadScreen", () => {
 		await room.send("@Ada @Nyx now")
 		act(() => {
 			room.driver.pushTo(room.idOf("Ada"), FIRST_TOKEN)
-			room.driver.pushTo(room.idOf("Ada"), BLOCK_CLOSED)
+			room.driver.pushTo(room.idOf("Ada"), MORE_WRITTEN)
 			room.driver.pushTo(room.idOf("Nyx"), HANDED_TO_ADA)
 		})
 		await settle()
