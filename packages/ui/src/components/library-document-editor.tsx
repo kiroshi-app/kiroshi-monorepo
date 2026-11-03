@@ -7,6 +7,7 @@ import {
 	type ReactNode,
 	type Ref,
 	type TextareaHTMLAttributes,
+	useEffect,
 	useEffectEvent,
 	useLayoutEffect,
 	useRef,
@@ -431,6 +432,24 @@ const runsOf = (blocks: Block[]) =>
 		return runs
 	}, [])
 
+const listAnchorsOf = (
+	runs: Block[][],
+	previous: ReadonlyMap<string, string>,
+) => {
+	const anchors = new Map<string, string>()
+	const claimed = new Set<string>()
+	for (const run of runs) {
+		if (run[0]?.kind !== "item") continue
+		const anchor =
+			run
+				.map(({ id }) => previous.get(id))
+				.find((id) => id !== undefined && !claimed.has(id)) ?? run[0].id
+		claimed.add(anchor)
+		for (const { id } of run) anchors.set(id, anchor)
+	}
+	return anchors
+}
+
 const singleLine = (text: string) => text.replace(/\n/g, " ")
 
 type GrowingFieldProps = TextareaHTMLAttributes<HTMLTextAreaElement> & {
@@ -540,6 +559,8 @@ const LibraryDocumentEditor = ({
 	const [restoredSelection, setRestoredSelection] = useState<FieldSelection>()
 	const fields = useRef(new Map<string, HTMLTextAreaElement>())
 	const reportedCaret = useRef<number | null>(null)
+	const pendingBlurReport = useRef<ReturnType<typeof setTimeout>>(undefined)
+	const listAnchors = useRef<ReadonlyMap<string, string>>(new Map())
 
 	const reportCaret = () => {
 		const field = document.activeElement
@@ -586,6 +607,13 @@ const LibraryDocumentEditor = ({
 				setRestoredSelection(shiftedSelection(selection, before, after))
 		}
 	}
+
+	const reportCaretAfterBlur = () => {
+		clearTimeout(pendingBlurReport.current)
+		pendingBlurReport.current = setTimeout(reportCaret)
+	}
+
+	useEffect(() => () => clearTimeout(pendingBlurReport.current), [])
 
 	const reportRestoredCaret = useEffectEvent(reportCaret)
 
@@ -768,7 +796,7 @@ const LibraryDocumentEditor = ({
 				}
 				fieldRef={fieldRefOf(block.id)}
 				key={block.id}
-				onBlur={() => setTimeout(reportCaret)}
+				onBlur={reportCaretAfterBlur}
 				onChange={(event) =>
 					changeText(index, event.target.value, event.target.selectionStart)
 				}
@@ -782,6 +810,8 @@ const LibraryDocumentEditor = ({
 	}
 
 	const untitled = t("library.editor.untitled")
+	const runs = runsOf(blocks)
+	listAnchors.current = listAnchorsOf(runs, listAnchors.current)
 
 	return (
 		<div
@@ -830,11 +860,11 @@ const LibraryDocumentEditor = ({
 					className="flex flex-col gap-3.5"
 					data-slot="library-document-body"
 				>
-					{runsOf(blocks).map((run) =>
+					{runs.flatMap((run) =>
 						run[0]?.kind === "item" ? (
 							<ul
 								className="flex list-disc flex-col gap-1.5 ps-[1.5em] text-reading leading-6 marker:text-muted-foreground"
-								key={run[0].id}
+								key={`list-${listAnchors.current.get(run[0].id)}`}
 							>
 								{run.map((block) => (
 									<li className="ps-1" key={block.id}>

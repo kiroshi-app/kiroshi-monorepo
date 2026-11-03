@@ -4,6 +4,7 @@ import {
 	useEffect,
 	useSyncExternalStore,
 } from "react"
+import { flushSync } from "react-dom"
 import { expect, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
@@ -564,6 +565,161 @@ export const CaretMoves = meta.story({
 		await expect(
 			calls.some((caret, index) => index > 0 && caret === calls[index - 1]),
 		).toBe(false)
+	},
+})
+
+const createShownStore = () => {
+	let isShown = true
+	const listeners = new Set<() => void>()
+	return {
+		read: () => isShown,
+		hide: () => {
+			isShown = false
+			for (const listener of listeners) listener()
+		},
+		reset: () => {
+			isShown = true
+		},
+		subscribe: (listener: () => void) => {
+			listeners.add(listener)
+			return () => {
+				listeners.delete(listener)
+			}
+		},
+	}
+}
+
+const editorShown = createShownStore()
+
+const UnmountableEditor = (args: LibraryDocumentEditorProps) => {
+	const isShown = useSyncExternalStore(editorShown.subscribe, editorShown.read)
+
+	return isShown ? <LiveEditor {...args} /> : null
+}
+
+export const UnmountedRightAfterBlur = meta.story({
+	tags: ["test-only"],
+	args: { ...LAUNCH_REVIEW, template: undefined, onCaretChange: fn() },
+	beforeEach: () => {
+		launchReviewDraft.reset()
+		editorShown.reset()
+	},
+	render: (args) => <UnmountableEditor {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A body field loses focus, which reports the caret on the next tick, then the editor closes before that tick. Check that a blur with the editor still open reports null once, and that a blur followed at once by the unmount never calls `onCaretChange` after the editor is gone.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const onCaretChange = args.onCaretChange as ReturnType<typeof fn>
+		const [intro] = bodyFieldsIn(canvasElement) as [HTMLTextAreaElement]
+
+		await userEvent.click(intro)
+		await expect(onCaretChange).toHaveBeenLastCalledWith(intro.selectionEnd)
+		const beforeBlur = onCaretChange.mock.calls.length
+		intro.blur()
+		await waitFor(() => expect(onCaretChange).toHaveBeenLastCalledWith(null))
+		await expect(onCaretChange).toHaveBeenCalledTimes(beforeBlur + 1)
+
+		await userEvent.click(intro)
+		await expect(onCaretChange).toHaveBeenLastCalledWith(intro.selectionEnd)
+		const beforeUnmount = onCaretChange.mock.calls.length
+		intro.blur()
+		flushSync(editorShown.hide)
+		await expect(
+			canvasElement.querySelector('[data-slot="library-document-editor"]'),
+		).toBeNull()
+
+		await new Promise((resolve) => setTimeout(resolve, 50))
+		await expect(onCaretChange).toHaveBeenCalledTimes(beforeUnmount)
+	},
+})
+
+const isSameNodes = (
+	current: HTMLTextAreaElement[],
+	held: (HTMLTextAreaElement | undefined)[],
+) =>
+	current.length === held.length &&
+	current.every((field, index) => field === held[index])
+
+export const FieldsStayInPlace = meta.story({
+	args: { ...LAUNCH_REVIEW, template: undefined },
+	beforeEach: launchReviewDraft.reset,
+	render: (args) => <LiveEditor {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The person types in the opening paragraph while someone else adds an item before the first one of the Decisions list, then removes the first item twice. Check that every field other than the one added keeps the same element throughout, and that the caret stays in the paragraph being typed, after the last typed character.",
+			},
+		},
+	},
+	play: async ({ canvasElement, userEvent }) => {
+		const fields = bodyFieldsIn(canvasElement)
+		const [intro, decisions, ship, copy, nextSteps, screenshots] = fields
+		const typed = " Notes follow."
+		const caretStaysInIntro = async () => {
+			await expect(document.activeElement).toBe(intro)
+			await expect(intro?.selectionStart).toBe(intro?.value.length)
+			await expect(intro?.selectionEnd).toBe(intro?.value.length)
+		}
+
+		await userEvent.type(intro as HTMLTextAreaElement, typed)
+		await expect(intro).toHaveValue(
+			`We met to agree the launch date and who signs off the copy.${typed}`,
+		)
+		await caretStaysInIntro()
+		await expect(isSameNodes(bodyFieldsIn(canvasElement), fields)).toBe(true)
+
+		launchReviewDraft.write({
+			body: launchReviewDraft
+				.read()
+				.body.replace(
+					"- Ship on the 14th",
+					"- Book the venue\n- Ship on the 14th",
+				),
+		})
+		await waitFor(() =>
+			expect(bodyFieldsIn(canvasElement)[2]).toHaveValue("Book the venue"),
+		)
+		const [, , venue] = bodyFieldsIn(canvasElement)
+		await expect(
+			isSameNodes(bodyFieldsIn(canvasElement), [
+				intro,
+				decisions,
+				venue,
+				ship,
+				copy,
+				nextSteps,
+				screenshots,
+			]),
+		).toBe(true)
+		await caretStaysInIntro()
+
+		launchReviewDraft.write({
+			body: launchReviewDraft.read().body.replace("- Book the venue\n", ""),
+		})
+		await waitFor(() => expect(bodyFieldsIn(canvasElement)).toHaveLength(6))
+		await expect(isSameNodes(bodyFieldsIn(canvasElement), fields)).toBe(true)
+		await caretStaysInIntro()
+
+		launchReviewDraft.write({
+			body: launchReviewDraft.read().body.replace("- Ship on the 14th\n", ""),
+		})
+		await waitFor(() => expect(bodyFieldsIn(canvasElement)).toHaveLength(5))
+		await expect(
+			isSameNodes(bodyFieldsIn(canvasElement), [
+				intro,
+				decisions,
+				copy,
+				nextSteps,
+				screenshots,
+			]),
+		).toBe(true)
+		await caretStaysInIntro()
 	},
 })
 
