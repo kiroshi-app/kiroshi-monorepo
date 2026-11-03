@@ -759,11 +759,98 @@ describe("Open in new tab on a Library item", () => {
 
 		await click(backgroundTabTitled(LIBRARY_NAME))
 
-		expect(router.state.location.search).toEqual({ item: IMAGE.name })
-		expect(
-			within(screen.getByRole("dialog")).getByRole("button", {
-				name: common("library.lightbox.download"),
-			}),
-		).toBeInstanceOf(HTMLElement)
+		expect(lightboxShown()).toBe(true)
+	})
+})
+
+const lightboxShown = () => {
+	const lightbox = screen.queryByRole("dialog")
+	return (
+		lightbox !== null &&
+		within(lightbox).queryByRole("button", {
+			name: common("library.lightbox.download"),
+		}) !== null
+	)
+}
+
+const closeLightbox = () =>
+	click(
+		within(screen.getByRole("dialog")).getByRole("button", {
+			name: common("library.lightbox.back"),
+		}),
+	)
+
+const otherTab = () =>
+	screen
+		.getAllByRole("tab")
+		.find((tab) => tab.getAttribute("aria-selected") !== "true") as HTMLElement
+
+const LIBRARY_ON_IMAGE = `/library?item=${IMAGE.name}`
+
+describe("the item a Library address names", () => {
+	it("opens it, then drops it from the address in place without closing it", async () => {
+		const { router } = await mountApp()
+		harness.libraryItems = [IMAGE]
+		const entriesBefore = router.history.length
+
+		await act(async () =>
+			router.navigate({ to: "/library", search: { item: IMAGE.name } }),
+		)
+		await settle()
+
+		expect(lightboxShown()).toBe(true)
+		expect(router.state.location.search).toEqual({})
+		expect(router.history.length).toBe(entriesBefore + 1)
+	})
+
+	it("stays closed once closed, after leaving the tab and coming back", async () => {
+		const { router } = await mountApp()
+		harness.libraryItems = [IMAGE]
+		await act(async () =>
+			router.options.context.tabs.openInNewTab(LIBRARY_ON_IMAGE),
+		)
+		await settle()
+		await click(otherTab())
+		expect(lightboxShown()).toBe(true)
+
+		await closeLightbox()
+		await click(otherTab())
+		expect(libraryHeading()).toBeNull()
+		await click(otherTab())
+
+		expect(libraryHeading()).not.toBeNull()
+		expect(router.state.location.search).toEqual({})
+		expect(screen.queryByRole("dialog")).toBeNull()
+	})
+
+	it("is dropped from the address when the Library does not list it, showing the grid", async () => {
+		const { router } = await mountApp()
+		harness.libraryItems = [IMAGE]
+
+		await act(async () =>
+			router.navigate({ to: "/library", search: { item: "gone.png" } }),
+		)
+		await settle()
+
+		expect(router.state.location.search).toEqual({})
+		expect(libraryHeading()).not.toBeNull()
+		expect(screen.queryByRole("dialog")).toBeNull()
+	})
+
+	it("opens the item of a second address landing in the same tab", async () => {
+		const { router } = await mountApp()
+		harness.libraryItems = [IMAGE]
+		const openImageByAddress = async () => {
+			await act(async () =>
+				router.navigate({ to: "/library", search: { item: IMAGE.name } }),
+			)
+			await settle()
+		}
+		await openImageByAddress()
+		await closeLightbox()
+
+		await openImageByAddress()
+
+		expect(lightboxShown()).toBe(true)
 	})
 })

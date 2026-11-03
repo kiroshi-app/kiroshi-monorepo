@@ -44,6 +44,7 @@ type LibraryScreenProps = {
 	bots: Bot[]
 	spaceTint?: Space["colour"]
 	openedOnArrival?: string
+	onArrivalOpened?: () => void
 	onOpenInNewTab?: (item: NamedItem) => void
 }
 
@@ -78,6 +79,7 @@ export const LibraryScreen = ({
 	bots,
 	spaceTint,
 	openedOnArrival,
+	onArrivalOpened,
 	onOpenInNewTab,
 }: LibraryScreenProps) => {
 	const library = useLibraryItems(spaceId)
@@ -156,6 +158,7 @@ export const LibraryScreen = ({
 		items: shownItems,
 		isListing: library.isLoading,
 		open: openItem,
+		consume: onArrivalOpened,
 	})
 	const renameItem = (item: ShownLibraryItem) => {
 		if (item.kind === "document") {

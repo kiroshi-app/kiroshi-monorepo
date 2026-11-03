@@ -1,4 +1,5 @@
-import { useRouter, useSearch } from "@tanstack/react-router"
+import { useNavigate, useRouter, useSearch } from "@tanstack/react-router"
+import { useCallback } from "react"
 
 import { ContentCard } from "@workspace/ui/components/content-card"
 import { ScreenLayout } from "@workspace/ui/components/screen-layout"
@@ -18,10 +19,24 @@ const useOpenLibraryItemInNewTab = () => {
 		)
 }
 
+const useDropOpenedItem = () => {
+	const navigate = useNavigate()
+	return useCallback(
+		() =>
+			void navigate({
+				to: "/library",
+				search: (previous) => ({ ...previous, item: undefined }),
+				replace: true,
+			}),
+		[navigate],
+	)
+}
+
 export const LibraryRoute = () => {
 	const { rosteredHostSpaceId, rosterView, scopes } = useWorkspace()
 	const { item } = useSearch({ from: "/library" })
 	const openInNewTab = useOpenLibraryItemInNewTab()
+	const dropOpenedItem = useDropOpenedItem()
 	const spaceRowId = rosterView.rosteredSpaceId
 
 	return (
@@ -30,7 +45,8 @@ export const LibraryRoute = () => {
 				<LibraryScreen
 					bots={rosterView.bots}
 					isJoined={isJoinedRowId(spaceRowId)}
-					key={`${spaceRowId}/${item ?? ""}`}
+					key={spaceRowId}
+					onArrivalOpened={dropOpenedItem}
 					onOpenInNewTab={openInNewTab}
 					openedOnArrival={item}
 					spaceId={rosteredHostSpaceId}

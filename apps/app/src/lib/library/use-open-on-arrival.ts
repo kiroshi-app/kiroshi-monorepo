@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
 type ArrivingItem = { id: string }
 
@@ -7,6 +7,7 @@ type Arrival<Item extends ArrivingItem> = {
 	items: Item[]
 	isListing: boolean
 	open: (item: Item) => void
+	consume?: () => void
 }
 
 export const useOpenOnArrival = <Item extends ArrivingItem>({
@@ -14,14 +15,20 @@ export const useOpenOnArrival = <Item extends ArrivingItem>({
 	items,
 	isListing,
 	open,
+	consume,
 }: Arrival<Item>) => {
-	const [arrival, setArrival] = useState(name)
-	if (arrival === undefined || isListing) {
-		return
+	const [arrival, setArrival] = useState<string>()
+	if (name !== arrival && !isListing) {
+		setArrival(name)
+		const arrived = items.find((item) => item.id === name)
+		if (arrived) {
+			open(arrived)
+		}
 	}
-	setArrival(undefined)
-	const arrived = items.find((item) => item.id === arrival)
-	if (arrived) {
-		open(arrived)
-	}
+
+	useEffect(() => {
+		if (arrival !== undefined) {
+			consume?.()
+		}
+	}, [arrival, consume])
 }
