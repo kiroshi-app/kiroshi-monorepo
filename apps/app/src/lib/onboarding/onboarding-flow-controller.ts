@@ -41,6 +41,9 @@ export type OnboardingFlowWorld = {
 	storeStep: (step: OnboardingStep) => Promise<void>
 	replay: () => Promise<void>
 	markFirstRunDone: () => Promise<void>
+	isShotoRunOwed: () => boolean
+	oweShotoRun: () => void
+	clearShotoRunOwed: () => void
 	shotoId: () => string | null
 	firstCompanionId: () => string | null
 	storeFirstCompanion: (botId: string) => Promise<void>
@@ -82,6 +85,8 @@ const initialOnboardingFlowState: OnboardingFlowState = {
 	shotoId: null,
 	firstCompanion: null,
 }
+
+const SHOTO_RUN_OWED_KEY = "onboardingShotoRunOwed"
 
 type StoredOnboarding = Pick<UserPreferences, "onboardingStep">
 
@@ -176,18 +181,20 @@ export const createOnboardingFlowController = (
 			kind: "unknownBot",
 		})
 
-	const joinShoto = () => {
+	const joinShoto = async () => {
 		const shotoId = world.shotoId()
 		set({ isWithShoto: true, shotoId })
-		if (!shotoId) {
+		if (shotoId) {
+			await meetShoto(shotoId)
+		} else {
 			reportShotoMissing()
-			return
 		}
-		void meetShoto(shotoId)
+		world.clearShotoRunOwed()
 	}
 
 	const isShotoPhaseStored = () =>
-		world.storedStep() === "done" && !world.isFirstRunDone()
+		world.storedStep() === "done" &&
+		(!world.isFirstRunDone() || world.isShotoRunOwed())
 
 	const settle = async () => {
 		const { connection } = current()
@@ -258,7 +265,8 @@ export const createOnboardingFlowController = (
 		}
 		const companionId = world.firstCompanionId()
 		if (companionId === null) {
-			joinShoto()
+			world.oweShotoRun()
+			void joinShoto()
 			return
 		}
 		await landOnFirstCompanion(companionId)
@@ -276,7 +284,7 @@ export const createOnboardingFlowController = (
 				await enterConnect()
 			}
 			if (isShotoPhaseStored() && !current().isWithShoto) {
-				joinShoto()
+				void joinShoto()
 			}
 		},
 
@@ -305,6 +313,7 @@ export const createOnboardingFlowController = (
 		replay: async () => {
 			stateStore.setState(initialOnboardingFlowState)
 			isImportJourney = false
+			world.clearShotoRunOwed()
 			await persisted(world.replay)
 		},
 
@@ -367,6 +376,9 @@ export const onboardingFlowWorldOf = ({
 	storeStep: user.setOnboardingStep,
 	replay: user.replayOnboarding,
 	markFirstRunDone: user.markFirstRunDone,
+	isShotoRunOwed: () => localStorage.getItem(SHOTO_RUN_OWED_KEY) !== null,
+	oweShotoRun: () => localStorage.setItem(SHOTO_RUN_OWED_KEY, ""),
+	clearShotoRunOwed: () => localStorage.removeItem(SHOTO_RUN_OWED_KEY),
 	shotoId: () => user.getState().preferences.onboardingShotoId ?? null,
 	firstCompanionId: () =>
 		user.getState().preferences.onboardingFirstCompanionId ?? null,

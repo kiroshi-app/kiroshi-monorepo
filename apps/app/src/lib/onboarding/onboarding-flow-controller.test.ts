@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, type Mock, vi } from "vitest"
 
 import {
@@ -193,9 +194,55 @@ describe("relaunching after the sign-in", () => {
 		expect(controller.getState().isWithShoto).toBe(false)
 	})
 
+	it("resumes Shoto and asks for the first agent once, when reloaded after Account before his greeting was answered", async () => {
+		const answered = world.outcomeOf
+		world.outcomeOf = () => new Promise(() => {})
+		await connectedThroughLogin()
+		await controller.finish()
+		await flushed()
+		world.threadHistory = [...world.sent]
+		world.outcomeOf = answered
+
+		relaunch()
+		await controller.resume()
+		await flushed()
+
+		expect(screenStep()).toBeNull()
+		expect(world.opened).toEqual([SHOTO])
+		expect(world.sent).toEqual([
+			{ botId: SHOTO, text: onboardingSummonsFor("firstCompanion") },
+		])
+
+		world.threadHistory = [...world.threadHistory, ...world.sent]
+		relaunch()
+		await controller.resume()
+		await flushed()
+
+		expect(world.opened).toEqual([])
+		expect(world.sent).toEqual([])
+	})
+
+	it("never asks Shoto for the first agent when reloaded after the import journey landed on him", async () => {
+		port.hasClaudeFolder = true
+		await connectedThroughLogin()
+		await controller.leaveImport({ ...NOTHING_IMPORTED, skillCount: 1 })
+		await controller.finish()
+		await flushed()
+		world.threadHistory = [...world.sent]
+
+		relaunch()
+		await controller.resume()
+		await flushed()
+
+		expect(screenStep()).toBeNull()
+		expect(world.opened).toEqual([])
+		expect(world.sent).toEqual([])
+	})
+
 	it("resumes nothing once the first run is done", async () => {
 		await connectedThroughLogin()
 		await controller.finish()
+		await flushed()
 
 		relaunch()
 		await controller.resume()
