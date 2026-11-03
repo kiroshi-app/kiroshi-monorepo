@@ -479,6 +479,8 @@ conversation-prompt-promptmentionmenu--space-matches-inside
 conversation-prompt-promptmentionmenu--space-opened
 conversation-prompt-promptmentionmenu--space-queried
 conversation-prompt-promptqueue--default
+conversation-prompt-promptqueue--row-hovered
+conversation-prompt-promptqueue--row-hovered-dark
 conversation-prompt-promptreply--alignment
 conversation-prompt-promptreply--default
 conversation-prompt-promptreply--dismissed

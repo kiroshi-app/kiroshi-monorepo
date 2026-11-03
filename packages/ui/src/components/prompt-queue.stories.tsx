@@ -1,7 +1,11 @@
-import { expect } from "storybook/test"
+import { expect, fn, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { slotsIn } from "@workspace/storybook/story-utils"
+import {
+	isInBrowserRunner,
+	realPointer,
+	slotsIn,
+} from "@workspace/storybook/story-utils"
 import { PromptQueue } from "@workspace/ui/components/prompt-queue"
 
 const meta = preview.meta({
@@ -45,5 +49,54 @@ export const Default = meta.story({
 		).toBeVisible()
 		const [row] = slotsIn(canvasElement, "prompt-queue-item")
 		await expect(row.getBoundingClientRect().height).toBe(40)
+	},
+})
+
+const TWO_QUEUED = {
+	items: [
+		{ id: "city", text: "And by city for France?" },
+		{ id: "top", text: "Top three only." },
+	],
+	onSendNow: fn(),
+	onRemove: fn(),
+}
+
+const hoverSecondRow = async (canvasElement: HTMLElement) => {
+	if (!isInBrowserRunner()) return
+	const [, second] = slotsIn(canvasElement, "prompt-queue-item")
+	await (await realPointer()).hover(second)
+	await expect(
+		within(second).getByRole("button", { name: "Send now" }),
+	).toBeVisible()
+}
+
+export const RowHovered = meta.story({
+	args: TWO_QUEUED,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Queue 1 in the light theme: the pointer rests on the second row, which lifts to the prompt surface and shows Send now and remove. Check the queued text keeps its muted colour and still reads at AA on the lifted row.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await hoverSecondRow(canvasElement)
+	},
+})
+
+export const RowHoveredDark = meta.story({
+	args: TWO_QUEUED,
+	globals: { theme: "dark" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Queue 1 as the artboard draws it: the hovered row takes white at 4% over the tray. Check the queued text reads at AA on that fill.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await hoverSecondRow(canvasElement)
 	},
 })

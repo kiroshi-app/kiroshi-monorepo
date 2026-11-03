@@ -97,7 +97,7 @@ const PromptQueue = ({
 					<li
 						key={item.id}
 						data-slot="prompt-queue-item"
-						className="group/queued flex h-10 items-center gap-2.5 rounded-lg px-2 hover:bg-foreground/4 has-focus-visible:bg-foreground/4"
+						className="group/queued flex h-10 items-center gap-2.5 rounded-lg px-2 hover:bg-prompt-surface has-focus-visible:bg-prompt-surface dark:has-focus-visible:bg-foreground/4 dark:hover:bg-foreground/4"
 					>
 						<InitialsAvatar name={readerName} size={QUEUE_AVATAR_SIZE} />
 						<span className="shrink-0 font-medium text-compact text-foreground">
