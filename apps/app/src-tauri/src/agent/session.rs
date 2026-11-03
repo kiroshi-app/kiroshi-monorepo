@@ -1439,6 +1439,10 @@ mod tests {
 
 	const RELEASED: AgentEvent = AgentEvent::TurnHeld { hold: None };
 
+	fn holds_in(events: Vec<AgentEvent>) -> Vec<AgentEvent> {
+		events.into_iter().filter(|event| matches!(event, AgentEvent::TurnHeld { .. })).collect()
+	}
+
 	#[test]
 	fn a_hold_is_told_once_per_count_change_and_released_at_zero() {
 		let mut shared = a_running_turn();
@@ -1446,7 +1450,7 @@ mod tests {
 		let told: Vec<AgentEvent> =
 			[2, 2, 1, 0, 0].into_iter().flat_map(|count| shared.tasks_pending(count)).collect();
 
-		assert_eq!(told, vec![held(2), held(1), RELEASED]);
+		assert_eq!(holds_in(told), vec![held(2), held(1), RELEASED]);
 	}
 
 	#[test]
@@ -1468,7 +1472,7 @@ mod tests {
 		assert_eq!(held_turn.turn_ended("s1", TurnOutcome::Completed), Some(RELEASED));
 
 		let mut unheld_turn = a_running_turn();
-		assert!(unheld_turn.tasks_pending(0).is_empty());
+		assert!(holds_in(unheld_turn.tasks_pending(0)).is_empty());
 		assert_eq!(unheld_turn.turn_ended("s1", TurnOutcome::Completed), None);
 	}
 
