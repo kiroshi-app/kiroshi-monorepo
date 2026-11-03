@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 import {
 	LibraryDocumentEditor,
+	type LibraryDocumentEditorHandle,
 	libraryDocumentStartOf,
 } from "@workspace/ui/components/library-document-editor"
 import type { LibraryItem as ShownLibraryItem } from "@workspace/ui/components/library-grid"
@@ -198,6 +199,7 @@ export const LibraryScreen = ({
 	const [heldDraft, setHeldDraft] = useState<DocumentDraft | null>(null)
 	const [pickedTemplate, setPickedTemplate] =
 		useState<LibraryDocumentTemplate | null>(null)
+	const editor = useRef<LibraryDocumentEditorHandle>(null)
 	const { create, isCreating } = useCreateLibraryDocument(spaceId)
 	const { importingItems, importDropped } = useLibraryImports(spaceId, isJoined)
 	const toShown = (item: LibraryItem) =>
@@ -289,6 +291,9 @@ export const LibraryScreen = ({
 	}
 	const deleteDocument = ({ name }: OpenedDocument) =>
 		closeAndRelist().then(() => actions.remove(name, { onSuccess: close }))
+	const focusTitleOnceMenuCloses = () => {
+		requestAnimationFrame(() => editor.current?.focusTitle())
+	}
 	const retitle = (title: string) => {
 		if (openedDocument) {
 			showDraft({ ...openedDocument, title })
@@ -315,10 +320,12 @@ export const LibraryScreen = ({
 				onDone={dismissFinished}
 				onDownload={() => save(openedItem)}
 				onOpenInNewTab={boundTo(openedItem, openInNewTab)}
+				onRename={focusTitleOnceMenuCloses}
 				onShowInFolder={boundTo(openedItem, reveal)}
 				onTitleChange={retitle}
 				onUndoAll={undoAll}
 				people={people}
+				ref={editor}
 				template={openedDocument.template}
 				title={openedDocument.title}
 				writers={writers}

@@ -582,6 +582,79 @@ const documentMoreItems = async () =>
 const documentOpen = () =>
 	screen.queryByRole("textbox", { name: common("library.editor.title") })
 
+const pressInTitle = async (field: HTMLInputElement, key: string) => {
+	await act(async () => {
+		fireEvent.keyDown(field, { key })
+	})
+}
+
+const retitleFromDocumentBar = async (title: string) => {
+	const field = await openNotes()
+	await pickInDocumentMore("rename")
+	await waitFor(() => expect(document.activeElement).toBe(field))
+	await act(async () => {
+		fireEvent.change(field, { target: { value: title } })
+	})
+	return field
+}
+
+const leaveDocument = () =>
+	press(screen.getByRole("button", { name: common("library.document.back") }))
+
+describe("Rename in the document bar", () => {
+	it("puts the caret at the end of the title", async () => {
+		await renderLibraryScreen({ isJoined: false })
+		const field = await openNotes()
+
+		await pickInDocumentMore("rename")
+
+		await waitFor(() => expect(document.activeElement).toBe(field))
+		expect([field.selectionStart, field.selectionEnd]).toEqual([5, 5])
+	})
+
+	it.each(SPACES)(
+		"renames the document once on %s when the person confirms the title and leaves",
+		async (_space, isJoined) => {
+			await renderLibraryScreen({ isJoined })
+
+			await pressInTitle(await retitleFromDocumentBar("Plans"), "Enter")
+			await leaveDocument()
+
+			await waitFor(() =>
+				expect(callsOf("library_rename_document")).toEqual([
+					{ spaceId: SPACE_ID, name: "notes.txt", newName: "Plans.txt" },
+				]),
+			)
+		},
+	)
+
+	it("shows the previous title and sends no rename on Escape", async () => {
+		await renderLibraryScreen({ isJoined: false })
+
+		const field = await retitleFromDocumentBar("Plans")
+		await pressInTitle(field, "Escape")
+
+		expect(field.value).toBe("notes")
+		await leaveDocument()
+		await tileOf("notes")
+		expect(callsOf("library_rename_document")).toEqual([])
+	})
+
+	it("raises the rename notice and lists the previous name when the host refuses", async () => {
+		harness.refused = "library_rename_document"
+		await renderLibraryScreen({ isJoined: false })
+
+		await pressInTitle(await retitleFromDocumentBar("Plans"), "Enter")
+		await leaveDocument()
+
+		await waitFor(() =>
+			expect(raiseFailureNotice).toHaveBeenCalledWith(failureOf("save")),
+		)
+		expect(await tileOf("notes")).toBeInstanceOf(HTMLElement)
+		expect(tileShown("Plans")).toBe(false)
+	})
+})
+
 describe("the document bar", () => {
 	it.each([
 		["the host", false, "library_copy"],
@@ -642,10 +715,10 @@ describe("the document bar", () => {
 	})
 
 	it.each([
-		["the host", false, ["openInNewTab", "showInFolder", "delete"]],
-		["a joined Space", true, ["openInNewTab", "delete"]],
+		["the host", false, ["openInNewTab", "rename", "showInFolder", "delete"]],
+		["a joined Space", true, ["openInNewTab", "rename", "delete"]],
 	] as const)(
-		"offers in More on %s neither Open nor Rename",
+		"offers in More on %s Rename and not Open",
 		async (_space, isJoined, actions) => {
 			await renderLibraryScreen({ isJoined })
 			await openNotes()
