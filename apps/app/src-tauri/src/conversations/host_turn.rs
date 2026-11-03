@@ -1451,7 +1451,7 @@ mod tests {
 		let database = database(app.handle()).expect("the database opens");
 
 		let sent = sent_in(&room, None, &format!("reply-of-{grace}"));
-		let summoned = summoned_for(&database, &sent, Vec::new()).await.expect("it resolves");
+		let summoned = summoned_for(database, &sent, Vec::new()).await.expect("it resolves");
 
 		assert_eq!(summoned, [grace]);
 	}
@@ -1470,7 +1470,7 @@ mod tests {
 
 		let replied_to = format!("reply-of-{ada}");
 		let sent = sent_in(&room, Some(&replied_to), &format!("reply-of-{grace}"));
-		let summoned = summoned_for(&database, &sent, Vec::new()).await.expect("it resolves");
+		let summoned = summoned_for(database, &sent, Vec::new()).await.expect("it resolves");
 
 		assert_eq!(summoned, [grace]);
 	}
