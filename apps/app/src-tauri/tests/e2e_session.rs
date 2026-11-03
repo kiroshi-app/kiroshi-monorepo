@@ -536,6 +536,13 @@ impl Stored {
 			.collect()
 	}
 
+	fn awaited_turn_endings(&self, expected: &[TurnOutcome]) -> Vec<TurnOutcome> {
+		self.wait_for(&format!("the turn endings {expected:?}"), |stored| {
+			let endings = stored.turn_endings();
+			(endings.len() >= expected.len()).then_some(endings)
+		})
+	}
+
 	fn awaited_lapses(&self, expected: &[Lapse]) -> Vec<Lapse> {
 		self.wait_for(&format!("the lapses {expected:?}"), |stored| {
 			let lapses = stored.lapses();
@@ -548,8 +555,19 @@ impl Stored {
 	}
 }
 
-const SHORT_LEASE: RunLease =
-	RunLease { silence: Duration::from_millis(800), interrupt_answer: Duration::from_millis(200) };
+const SHORT_LEASE: RunLease = RunLease {
+	silence: Duration::from_millis(800),
+	interrupt_answer: Duration::from_millis(200),
+	tasks_pending: Duration::from_secs(600),
+};
+
+const SHORT_TASK_BOUND: RunLease = RunLease {
+	silence: Duration::from_secs(30),
+	interrupt_answer: Duration::from_millis(200),
+	tasks_pending: Duration::from_millis(400),
+};
+
+const FOLLOW_UP: &str = "the background shell finished";
 
 fn launch_leased(name: &str, played: &str) -> Stored {
 	launch_stored_with(name, played, AgentState::leasing(SHORT_LEASE))
@@ -635,6 +653,93 @@ fn a_run_ending_before_its_lease_stays_completed() {
 	assert_eq!(stored.completed_at("t1"), Some(completed_at));
 	assert_eq!(stored.only_reply().state, MessageState::Complete);
 	assert_eq!(stored.turn_endings(), vec![TurnOutcome::Completed]);
+	stored.close();
+}
+
+#[test]
+fn a_result_with_no_background_task_settles_its_turn_as_before() {
+	let _serial = serial();
+	let stored = launch_stored("settled-at-once", "normal");
+	stored.start();
+
+	stored.submit("t1", "p1");
+	stored.completed("t1");
+
+	assert_eq!(
+		stored.awaited_turn_endings(&[TurnOutcome::Completed]),
+		vec![TurnOutcome::Completed]
+	);
+	assert_eq!(stored.only_reply().content, STREAMED);
+	assert_eq!(stored.only_reply().state, MessageState::Complete);
+	stored.close();
+}
+
+#[test]
+fn a_turn_holding_a_background_task_ends_only_after_the_follow_up_turn_it_runs() {
+	let _serial = serial();
+	let stored = launch_stored("background-task", "background_task");
+	stored.start();
+
+	stored.submit("t1", "p1");
+	stored.completed("t1");
+	stored.awaited_turn_endings(&[TurnOutcome::Completed]);
+
+	let events = agent_events(&stored.log.held());
+	let follow_up_at = events
+		.iter()
+		.position(
+			|event| matches!(event, AgentEvent::MessageCompleted { message } if message.text == FOLLOW_UP),
+		)
+		.expect("the follow-up turn reached the front");
+	let ended_at = events
+		.iter()
+		.position(|event| matches!(event, AgentEvent::TurnEnded { .. }))
+		.expect("the turn ended");
+	assert!(follow_up_at < ended_at, "the turn ended before its follow-up: {events:#?}");
+	assert_eq!(stored.turn_endings(), vec![TurnOutcome::Completed]);
+	assert!(stored.lapses().is_empty());
+	stored.close();
+}
+
+#[test]
+fn a_background_task_that_never_ends_fails_the_run_at_its_bound_and_closes_the_session() {
+	let _serial = serial();
+	let stored =
+		launch_stored_with("endless-task", "endless_task", AgentState::leasing(SHORT_TASK_BOUND));
+	stored.start();
+
+	stored.submit("t1", "p1");
+	stored.completed("t1");
+
+	assert_eq!(stored.awaited_turn_endings(&[TurnOutcome::Failed]), vec![TurnOutcome::Failed]);
+	assert_eq!(stored.awaited_lapses(&[Lapse::TasksPending]), vec![Lapse::TasksPending]);
+
+	stored.submit("t2", "p2");
+	stored.completed("t2");
+	let answered = stored.reply_of("t2").expect("the reopened session replied");
+	assert_eq!(answered.content, RESUMED);
+	assert_eq!(
+		stored.awaited_turn_endings(&[TurnOutcome::Failed, TurnOutcome::Completed]),
+		vec![TurnOutcome::Failed, TurnOutcome::Completed]
+	);
+	stored.close();
+}
+
+#[test]
+fn a_result_held_with_no_task_and_no_idle_fails_the_run_at_its_bound() {
+	let _serial = serial();
+	let stored = launch_stored_with(
+		"unsettled-result",
+		"unsettled_result",
+		AgentState::leasing(SHORT_TASK_BOUND),
+	);
+	stored.start();
+
+	stored.submit("t1", "p1");
+	stored.completed("t1");
+
+	assert_eq!(stored.awaited_turn_endings(&[TurnOutcome::Failed]), vec![TurnOutcome::Failed]);
+	assert_eq!(stored.awaited_lapses(&[Lapse::TasksPending]), vec![Lapse::TasksPending]);
 	stored.close();
 }
 

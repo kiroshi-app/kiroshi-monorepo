@@ -3475,7 +3475,8 @@
     "Lapse": {
       "enum": [
         "silent",
-        "interruptUnanswered"
+        "interruptUnanswered",
+        "tasksPending"
       ]
     },
     "LastWord": {

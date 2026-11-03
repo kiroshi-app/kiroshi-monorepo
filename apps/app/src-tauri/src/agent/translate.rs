@@ -152,9 +152,11 @@ impl Translator {
 				frame.message.map(|body| self.on_user(body.content)).unwrap_or_default()
 			}
 			Frame::Result(result) => {
-				if let Some(id) = result.session_id.clone() {
-					self.session_id.get_or_insert(id);
-				}
+				self.remember_session(&result);
+				Vec::new()
+			}
+			Frame::TurnSettled(result) => {
+				self.remember_session(&result);
 				self.on_result(result)
 			}
 			Frame::Commands(frame) => Self::on_commands(frame),
@@ -168,8 +170,15 @@ impl Translator {
 			| Frame::Closed(_)
 			| Frame::ControlResponse(_)
 			| Frame::HostRequest(_)
+			| Frame::TasksPending(_)
 			| Frame::Heartbeat
 			| Frame::Ignored => Vec::new(),
+		}
+	}
+
+	fn remember_session(&mut self, result: &ResultFrame) {
+		if let Some(id) = result.session_id.clone() {
+			self.session_id.get_or_insert(id);
 		}
 	}
 
@@ -486,8 +495,8 @@ mod tests {
 		frames
 	}
 
-	fn result(subtype: &str, is_error: bool) -> Value {
-		json!({ "type": "result", "subtype": subtype, "is_error": is_error, "session_id": "s-1" })
+	fn settled(subtype: &str, is_error: bool) -> Value {
+		json!({ "type": "turn_settled", "subtype": subtype, "is_error": is_error, "session_id": "s-1" })
 	}
 
 	fn completed(events: &[AgentEvent]) -> Vec<&ChatMessage> {
@@ -560,7 +569,7 @@ mod tests {
 		let events = ingest(
 			&mut translator,
 			vec![json!({
-				"type": "result",
+				"type": "turn_settled",
 				"subtype": "success",
 				"is_error": false,
 				"session_id": "s-1",
@@ -577,10 +586,28 @@ mod tests {
 	}
 
 	#[test]
+	fn a_result_or_a_pending_count_ends_no_turn_and_only_the_settled_turn_does() {
+		let mut translator = Translator::new(false);
+
+		let held = ingest(
+			&mut translator,
+			vec![
+				json!({ "type": "result", "subtype": "success", "session_id": "s-1" }),
+				json!({ "type": "tasks_pending", "count": 1 }),
+			],
+		);
+		let events = ingest(&mut translator, vec![settled("success", false)]);
+
+		assert!(turn_ended(&held).is_none(), "a held result ended the turn: {held:?}");
+		assert_eq!(translator.session_id(), Some("s-1"));
+		assert_eq!(turn_ended(&events).map(|ended| ended.outcome), Some(TurnOutcome::Completed));
+	}
+
+	#[test]
 	fn a_result_without_the_three_values_ends_the_turn_with_none_of_them() {
 		let mut translator = Translator::new(false);
 
-		let events = ingest(&mut translator, vec![result("success", false)]);
+		let events = ingest(&mut translator, vec![settled("success", false)]);
 
 		let ended = turn_ended(&events).expect("a turn that ended");
 		assert_eq!(ended.session_id.as_deref(), Some("s-1"));
@@ -595,7 +622,7 @@ mod tests {
 		let mut translator = Translator::new(false);
 		let mut frames: Vec<Value> = (1..=14).flat_map(tool_round).collect();
 		frames.extend(spoken_answer(ANSWER));
-		frames.push(result("success", false));
+		frames.push(settled("success", false));
 
 		let events = ingest(&mut translator, frames);
 
@@ -619,7 +646,7 @@ mod tests {
 	fn a_turn_that_ends_well_after_a_tool_finishes_no_message() {
 		let mut translator = Translator::new(false);
 		let mut frames = tool_round(1);
-		frames.push(result("success", false));
+		frames.push(settled("success", false));
 
 		let events = ingest(&mut translator, frames);
 
@@ -638,7 +665,7 @@ mod tests {
 			if cancelling {
 				translator.mark_cancelling();
 			}
-			events.extend(ingest(&mut translator, vec![result(subtype, is_error)]));
+			events.extend(ingest(&mut translator, vec![settled(subtype, is_error)]));
 
 			assert_eq!(
 				completed(&events)
@@ -828,7 +855,7 @@ mod tests {
 				is_error.clone(),
 			);
 			let ended = with_field(
-				json!({ "type": "result", "subtype": "success", "session_id": "s-1" }),
+				json!({ "type": "turn_settled", "subtype": "success", "session_id": "s-1" }),
 				"is_error",
 				is_error,
 			);
@@ -1045,7 +1072,7 @@ mod tests {
 		ingest(&mut translator, vec![control_request(ASK_USER_QUESTION, input)]);
 		ingest(
 			&mut translator,
-			vec![json!({ "type": "result", "subtype": "success", "session_id": "s-1" })],
+			vec![json!({ "type": "turn_settled", "subtype": "success", "session_id": "s-1" })],
 		);
 
 		assert!(translator.take_permission_input("req-1").is_none());

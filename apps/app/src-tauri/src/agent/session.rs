@@ -307,6 +307,25 @@ impl Shared {
 		}
 	}
 
+	fn result_held(&mut self) {
+		if let Some(liveness) = self.liveness() {
+			liveness.result_held(tokio::time::Instant::now());
+		}
+	}
+
+	fn tasks_pending(&mut self, count: u32) -> Option<AgentEvent> {
+		let running = self.running.as_ref()?;
+		log::info!(
+			"the turn holds for its background tasks session={} turn={:?} reason={count} background tasks",
+			self.key,
+			running.id
+		);
+		match self.turn {
+			TurnState::Submitting => self.set_turn(TurnState::Running),
+			_ => None,
+		}
+	}
+
 	fn lease_deadline(&self) -> Option<(tokio::time::Instant, Lapse)> {
 		let running = self.running.as_ref()?;
 		running.liveness.deadline(self.lease, self.translator.is_waiting_on_person())
@@ -838,6 +857,20 @@ async fn read_loop(
 			continue;
 		}
 
+		if let Frame::TasksPending(pending) = frame {
+			let entering = {
+				let mut guard = shared.lock().await;
+				if guard.shutting_down {
+					return;
+				}
+				guard.tasks_pending(pending.count)
+			};
+			if let Some(event) = entering {
+				sink.emit(event);
+			}
+			continue;
+		}
+
 		{
 			let mut guard = shared.lock().await;
 			if guard.shutting_down {
@@ -849,12 +882,19 @@ async fn read_loop(
 				}
 				_ => None,
 			};
+			let holds_a_result = matches!(frame, Frame::Result(_));
+			if holds_a_result {
+				guard.result_held();
+			}
 			let events = guard.translator.ingest(frame);
 			let outcome = turn_outcome(&events);
 			if let Some(outcome) = outcome {
 				guard.turn_ended(&desk.key, outcome);
 			}
 			let ending = outcome.and_then(|outcome| guard.set_turn(outcome.into()));
+			if holds_a_result {
+				rearmed.notify_one();
+			}
 			for event in entering.into_iter().chain(events).chain(ending) {
 				sink.emit(event);
 			}

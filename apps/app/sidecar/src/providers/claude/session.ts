@@ -43,7 +43,7 @@ import {
 } from "./server-env"
 import { declaringGrants, renewGrant } from "./server-renewal"
 import { recordStanding } from "./server-standing"
-import { sessionEnv } from "./session-env"
+import { EMIT_SESSION_STATE_EVENTS, sessionEnv } from "./session-env"
 import {
 	layerFor,
 	type ServerLine,
@@ -56,6 +56,8 @@ import type {
 	EmitFrame,
 	SessionFrame,
 	SessionRequest,
+	TasksPendingFrame,
+	TurnSettledFrame,
 } from "../provider"
 import { describeError } from "../../describe-error"
 
@@ -160,7 +162,10 @@ export const buildOptions = (
 			preset: "claude_code",
 			append: layerFor(request, resolved.rejections),
 		},
-		env: sessionEnv(request.connection),
+		env: {
+			...sessionEnv(request.connection),
+			[EMIT_SESSION_STATE_EVENTS]: "1",
+		},
 		managedSettings,
 		settingSources: [],
 		strictMcpConfig: true,
@@ -185,8 +190,8 @@ export type StopRequest = {
 	interrupt: () => Promise<unknown>
 }
 
-const CANCELLED: SessionFrame = {
-	type: "result",
+const CANCELLED: TurnSettledFrame = {
+	type: "turn_settled",
 	subtype: "interrupted",
 	is_error: false,
 }
@@ -197,6 +202,128 @@ export const stopTurn = async ({ dropped, emit, interrupt }: StopRequest) => {
 		return
 	}
 	await interrupt()
+}
+
+export const SETTLE_GRACE_MS = 3_000
+
+type BackgroundTask = { ambient?: boolean }
+
+type StopPhase = "none" | "requested" | "settled"
+
+const isSystem = (message: SessionFrame, subtype: string): boolean =>
+	message.type === "system" && message.subtype === subtype
+
+const liveTasks = (message: SessionFrame): number =>
+	((message.tasks as BackgroundTask[] | undefined) ?? []).filter(
+		(task) => !task.ambient,
+	).length
+
+export const createTurnSettler = (
+	emit: EmitFrame,
+	graceMs = SETTLE_GRACE_MS,
+) => {
+	let held: SessionFrame | undefined
+	let pending = 0
+	let busy = false
+	let stop: StopPhase = "none"
+	let grace: ReturnType<typeof setTimeout> | undefined
+
+	const cancelGrace = () => {
+		clearTimeout(grace)
+		grace = undefined
+	}
+
+	const settle = (result: SessionFrame) => {
+		cancelGrace()
+		held = undefined
+		const settled: TurnSettledFrame = { ...result, type: "turn_settled" }
+		emit(settled)
+	}
+
+	const tellPending = () => {
+		const frame: TasksPendingFrame = { type: "tasks_pending", count: pending }
+		emit(frame)
+	}
+
+	const onResult = (result: SessionFrame) => {
+		if (stop === "settled") {
+			return
+		}
+		if (stop === "requested") {
+			stop = "settled"
+			settle(result)
+			return
+		}
+		if (pending === 0 && !busy) {
+			settle(result)
+			return
+		}
+		held = result
+		if (pending > 0) {
+			tellPending()
+		}
+	}
+
+	const onTasks = (count: number) => {
+		if (count === pending) {
+			return
+		}
+		pending = count
+		if (!held) {
+			return
+		}
+		tellPending()
+		if (pending > 0) {
+			cancelGrace()
+			return
+		}
+		if (!busy) {
+			const result = held
+			grace = setTimeout(() => settle(result), graceMs)
+		}
+	}
+
+	const onState = (state: unknown) => {
+		busy = state !== "idle"
+		if (busy) {
+			cancelGrace()
+			return
+		}
+		if (held && pending === 0) {
+			settle(held)
+		}
+	}
+
+	const observe = (message: SessionFrame) => {
+		if (message.type === "result") {
+			onResult(message)
+		} else if (isSystem(message, "background_tasks_changed")) {
+			onTasks(liveTasks(message))
+		} else if (isSystem(message, "session_state_changed")) {
+			onState(message.state)
+		}
+	}
+
+	return {
+		relay: (message: SessionFrame) => {
+			if (stop !== "settled") {
+				emit(message)
+			}
+			observe(message)
+		},
+		prompted: () => {
+			stop = "none"
+		},
+		stopped: () => {
+			if (!held) {
+				stop = "requested"
+				return
+			}
+			stop = "settled"
+			settle(held)
+		},
+		forget: cancelGrace,
+	}
 }
 
 type WaitingLine = ServerLine & {
@@ -365,12 +492,13 @@ export const openClaudeSession = async (
 	const declared = declaredServers(options, resolved.servers)
 
 	let closing = false
+	const settler = createTurnSettler(emit)
 
 	const pump = async () => {
 		try {
 			for await (const message of run) {
 				reminder.observe(message)
-				emit(message as unknown as SessionFrame)
+				settler.relay(message as unknown as SessionFrame)
 			}
 			return ENDED
 		} catch (error) {
@@ -379,6 +507,7 @@ export const openClaudeSession = async (
 	}
 
 	const drained = pump().then((detail) => {
+		settler.forget()
 		permissions.denyAll(ABANDONED)
 		if (!closing) {
 			emit({ type: "closed", detail })
@@ -421,13 +550,19 @@ export const openClaudeSession = async (
 	})
 
 	return {
-		prompt: report.prompt,
+		prompt: (text: string) => {
+			settler.prompted()
+			report.prompt(text)
+		},
 		interrupt: () => {
 			reminder.forget()
 			return stopTurn({
 				dropped: report.drop(),
 				emit,
-				interrupt: () => run.interrupt(),
+				interrupt: () => {
+					settler.stopped()
+					return run.interrupt()
+				},
 			})
 		},
 		decide: permissions.decide,

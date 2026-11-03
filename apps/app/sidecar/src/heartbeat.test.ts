@@ -20,6 +20,7 @@ type Written = {
 type HangingQuery = {
 	provider: AgentProvider
 	answer: () => void
+	send: EmitFrame
 	interrupted: () => number
 }
 
@@ -57,7 +58,9 @@ const hangingQuery = (): HangingQuery => {
 	}
 	return {
 		provider,
-		answer: () => emit({ type: "result", subtype: "success", is_error: false }),
+		answer: () =>
+			emit({ type: "turn_settled", subtype: "success", is_error: false }),
+		send: (frame) => emit(frame),
 		interrupted: () => interrupts,
 	}
 }
@@ -93,6 +96,30 @@ describe("the heartbeat of a session", () => {
 		expect(query.interrupted()).toBe(1)
 		expect(beaten).toBeGreaterThanOrEqual(BEATS - 2)
 		expect(beaten).toBeLessThanOrEqual(BEATS)
+
+		query.answer()
+		await pause(INTERVAL_MS * BEATS)
+		expect(heartbeatsIn(written)).toBe(beaten)
+	})
+
+	it("keeps beating past a result while background tasks hold its turn open, and stops when the turn settles", async () => {
+		const written: Written[] = []
+		const query = hangingQuery()
+		const { dispatch } = createRouter(
+			query.provider,
+			(payload) => written.push(payload as Written),
+			INTERVAL_MS,
+		)
+
+		dispatch({ type: "open", session: "k1" })
+		await settled()
+		dispatch({ type: "prompt", session: "k1", text: "hello" })
+		await settled()
+		query.send({ type: "result", subtype: "success", is_error: false })
+		query.send({ type: "tasks_pending", count: 1 })
+		await pause(INTERVAL_MS * BEATS + INTERVAL_MS / 2)
+		const beaten = heartbeatsIn(written)
+		expect(beaten).toBeGreaterThanOrEqual(BEATS - 2)
 
 		query.answer()
 		await pause(INTERVAL_MS * BEATS)

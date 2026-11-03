@@ -1150,7 +1150,7 @@ export type KiroshiAccount = {
 	plan: AccountPlan | null,
 };
 
-export type Lapse = "silent" | "interruptUnanswered";
+export type Lapse = "silent" | "interruptUnanswered" | "tasksPending";
 
 export type LastWord = {
 	text: string | null,
