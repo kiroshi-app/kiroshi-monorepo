@@ -571,12 +571,12 @@ export const BackdropClick = meta.story({
 		}
 		const stageIn = (popup: HTMLElement) =>
 			popup.querySelector("[data-slot=library-lightbox-zoom]") as HTMLElement
+		const zoomBarIn = (popup: HTMLElement) =>
+			popup.querySelector(
+				"[data-slot=library-lightbox-zoom-bar]",
+			) as HTMLElement
 		const bottomStripIn = (popup: HTMLElement) =>
-			(
-				popup.querySelector(
-					"[data-slot=library-lightbox-zoom-bar]",
-				) as HTMLElement
-			).parentElement as HTMLElement
+			zoomBarIn(popup).parentElement as HTMLElement
 		const closedFor = async (times: number) => {
 			await expect(args.onClose).toHaveBeenCalledTimes(times)
 			await waitFor(() => expect(screen.queryByRole("dialog")).toBe(null))
@@ -595,9 +595,7 @@ export const BackdropClick = meta.story({
 		await userEvent.click(headerActions.parentElement as HTMLElement)
 		await expect(args.onClose).not.toHaveBeenCalled()
 
-		const zoomBar = popup.querySelector(
-			"[data-slot=library-lightbox-zoom-bar]",
-		) as HTMLElement
+		const zoomBar = zoomBarIn(popup)
 		await userEvent.click(zoomBar)
 		await userEvent.click(within(zoomBar).getByText("1 of 8"))
 		const previous = within(popup).getByRole("button", {
