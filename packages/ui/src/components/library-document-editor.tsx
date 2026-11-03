@@ -25,6 +25,7 @@ import {
 	type DecorationSet,
 	EditorView,
 	keymap,
+	ViewPlugin,
 	type ViewUpdate,
 	WidgetType,
 } from "@codemirror/view"
@@ -87,11 +88,7 @@ const BODY_LOOK =
 
 const EDITOR_THEME = EditorView.theme({
 	"&": { color: "inherit" },
-	"&.cm-focused": {
-		outline: "2px solid var(--color-ring)",
-		outlineOffset: "0.5rem",
-		borderRadius: "var(--radius-control)",
-	},
+	"&.cm-focused": { outline: "none" },
 	".cm-scroller": { fontFamily: "inherit", lineHeight: "inherit" },
 	".cm-content": {
 		padding: "0",
@@ -218,25 +215,79 @@ class PlaceholderWidget extends WidgetType {
 const placeholderAt = (text: string, at: number) =>
 	Decoration.widget({ widget: new PlaceholderWidget(text), side: 1 }).range(at)
 
-const placeholdersOf = (blankText: string) =>
-	EditorView.decorations.compute(["doc", placeholderMarks], (state) => {
-		if (state.doc.length === 0)
-			return Decoration.set([placeholderAt(blankText, 0)])
+const placeholderLinesOf = (state: EditorState) => {
+	const shown = new Map<number, Range<Decoration>>()
+	for (
+		let cursor = state.field(placeholderMarks).iter();
+		cursor.value;
+		cursor.next()
+	) {
+		const line = state.doc.lineAt(cursor.from)
+		if (shown.has(line.number) || !BLANK_LINE.test(line.text)) continue
+		shown.set(line.number, placeholderAt(cursor.value.text, line.to))
+	}
+	return shown
+}
 
-		const shown: Range<Decoration>[] = []
-		const lines = new Set<number>()
-		for (
-			let cursor = state.field(placeholderMarks).iter();
-			cursor.value;
-			cursor.next()
-		) {
-			const line = state.doc.lineAt(cursor.from)
-			if (lines.has(line.number) || !BLANK_LINE.test(line.text)) continue
-			lines.add(line.number)
-			shown.push(placeholderAt(cursor.value.text, line.to))
+const placeholdersOf = (blankText: string) =>
+	EditorView.decorations.compute(["doc", placeholderMarks], (state) =>
+		state.doc.length === 0
+			? Decoration.set([placeholderAt(blankText, 0)])
+			: Decoration.set([...placeholderLinesOf(state).values()], true),
+	)
+
+const EMPTY_LINE = /^\s*$/
+
+const BLOCK_GAP = Decoration.line({ class: "leading-3.5" })
+
+const isInFence = (state: EditorState, at: number) => {
+	for (
+		let node: SyntaxNode | null = syntaxTree(state).resolveInner(at, 1);
+		node;
+		node = node.parent
+	)
+		if (node.name === "FencedCode") return true
+	return false
+}
+
+const blockGapsOf = (view: EditorView) => {
+	const { state } = view
+	if (state.doc.length === 0) return Decoration.none
+
+	const placeholderLines = placeholderLinesOf(state)
+	const gaps: Range<Decoration>[] = []
+	for (const { from, to } of view.visibleRanges)
+		for (let at = from; at <= to; at = state.doc.lineAt(at).to + 1) {
+			const line = state.doc.lineAt(at)
+			if (
+				EMPTY_LINE.test(line.text) &&
+				!placeholderLines.has(line.number) &&
+				!isInFence(state, line.from)
+			)
+				gaps.push(BLOCK_GAP.range(line.from))
 		}
-		return Decoration.set(shown, true)
-	})
+	return Decoration.set(gaps, true)
+}
+
+const blockGaps = ViewPlugin.fromClass(
+	class {
+		decorations: DecorationSet
+
+		constructor(view: EditorView) {
+			this.decorations = blockGapsOf(view)
+		}
+
+		update(update: ViewUpdate) {
+			if (
+				update.docChanged ||
+				update.viewportChanged ||
+				syntaxTree(update.startState) !== syntaxTree(update.state)
+			)
+				this.decorations = blockGapsOf(update.view)
+		}
+	},
+	{ decorations: (gaps) => gaps.decorations },
+)
 
 type LibraryDocumentStart = {
 	title: string
@@ -1035,6 +1086,7 @@ const LibraryDocumentEditor = ({
 						placeholderMarksOf(template, receivedBody.current, t),
 					),
 					placeholdersOf(t("library.templates.blank.placeholder")),
+					blockGaps,
 					agentMarks,
 					EditorView.contentAttributes.of({
 						"aria-label": t("library.editor.body"),

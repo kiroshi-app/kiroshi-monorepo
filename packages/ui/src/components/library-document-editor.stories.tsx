@@ -1,3 +1,4 @@
+import { syntaxTree } from "@codemirror/language"
 import { EditorView } from "@codemirror/view"
 import {
 	type ComponentType,
@@ -267,7 +268,7 @@ export const Blank = meta.story({
 		docs: {
 			description: {
 				story:
-					"A blank document, as artboard 4 draws it. Check that the empty title reads Untitled in the field and in the breadcrumb, that the body is a named multi-line textbox in the reading type showing its one placeholder line, that focus draws the ring around it with no colour transition, and that clearing what was typed brings the placeholder back and reports an empty body.",
+					"A blank document, as artboard 4 draws it. Check that the empty title reads Untitled in the field and in the breadcrumb, that the body is a named multi-line textbox in the reading type showing its one placeholder line, that focus draws no outline and no ring around it, the caret being its only signal, with no colour transition, and that clearing what was typed brings the placeholder back and reports an empty body.",
 			},
 		},
 	},
@@ -302,10 +303,11 @@ export const Blank = meta.story({
 
 		selectRange(canvasElement, 0)
 		const editor = body.closest(".cm-editor") as HTMLElement
-		await waitFor(() =>
-			expect(getComputedStyle(editor).outlineStyle).toBe("solid"),
-		)
-		await expect(getComputedStyle(editor).outlineWidth).toBe("2px")
+		await waitFor(() => expect(editor).toHaveClass("cm-focused"))
+		for (const focused of [editor, body]) {
+			await expect(getComputedStyle(focused).outlineStyle).toBe("none")
+			await expect(getComputedStyle(focused).boxShadow).toBe("none")
+		}
 		if (!isInBrowserRunner()) return
 		await keyboard("Hi")
 		await expect(args.onBodyChange).toHaveBeenLastCalledWith("Hi")
@@ -988,21 +990,77 @@ export const UndoAfterOutsideEdit = meta.story({
 	},
 })
 
-export const MultiParagraphPaste = meta.story({
+const BLOCK_GAP = 14
+
+const gapsAroundLine = (canvasElement: HTMLElement, number: number) => {
+	const above = lineAt(canvasElement, number - 1).getBoundingClientRect()
+	const below = lineAt(canvasElement, number + 1).getBoundingClientRect()
+	return below.top - above.bottom
+}
+
+const blankLinesIn = (canvasElement: HTMLElement) => {
+	const { doc } = viewIn(canvasElement).state
+	return Array.from({ length: doc.lines }, (_, index) => index + 1).filter(
+		(number) => doc.line(number).text === "",
+	)
+}
+
+export const BlankLineBetweenBlocks = meta.story({
 	args: { ...LAUNCH_REVIEW, template: undefined },
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Three paragraphs pasted after the first one. Check that they land as three paragraphs separated by the blank lines of the clipboard text, and that the markdown reported carries them as pasted.",
+					"The blank line markdown keeps between two blocks. Check that it renders the 14px gap the blocks always had, never a full line, that the caret placed on it reports nothing, and that typing there writes on that line and taking it back leaves the markdown byte for byte as it opened.",
 			},
 		},
 	},
 	play: async ({ args, canvasElement }) => {
-		const pasted = "First thought.\n\nSecond thought.\n\nThird thought."
-		caretAfter(canvasElement, "signs off the copy.")
+		const blanks = blankLinesIn(canvasElement)
+		await expect(blanks).toEqual([2, 4, 7, 9])
+		for (const number of blanks)
+			await expect(gapsAroundLine(canvasElement, number)).toBe(BLOCK_GAP)
+
+		const view = viewIn(canvasElement)
+		const blank = view.state.doc.line(9)
+		selectRange(canvasElement, blank.from)
+		const caret = view.coordsAtPos(blank.from)
+		const shown = lineAt(canvasElement, 9).getBoundingClientRect()
+		const caretMiddle = ((caret?.top ?? 0) + (caret?.bottom ?? 0)) / 2
+		await expect(caretMiddle).toBeGreaterThan(shown.top)
+		await expect(caretMiddle).toBeLessThan(shown.bottom)
+		await expect(args.onBodyChange).not.toHaveBeenCalled()
+
+		if (!isInBrowserRunner()) return
+		await keyboard("Note")
+		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+			`${LAUNCH_REVIEW.body.slice(0, blank.from)}Note${LAUNCH_REVIEW.body.slice(blank.from)}`,
+		)
+		await keyboard("{Backspace}{Backspace}{Backspace}{Backspace}")
+		await expect(args.onBodyChange).toHaveBeenLastCalledWith(LAUNCH_REVIEW.body)
+		await expect(gapsAroundLine(canvasElement, 9)).toBe(BLOCK_GAP)
+	},
+})
+
+const PASTED = "First thought.\n\nSecond thought.\n\nThird thought."
+
+export const MultiParagraphPaste = meta.story({
+	args: { ...MEETING_NOTES, template: "meetingNotes" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Three paragraphs separated by blank lines, with no leading newline, pasted on the empty line under Decisions. Check that the markdown reported carries them exactly as pasted, and that they render as three paragraphs a block gap apart.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		const view = viewIn(canvasElement)
+		const empty = view.state.doc.line(3)
+		await expect(empty.text).toBe("")
+		selectRange(canvasElement, empty.from)
 		const clipboardData = new DataTransfer()
-		clipboardData.setData("text/plain", `\n\n${pasted}`)
+		clipboardData.setData("text/plain", PASTED)
 		bodyIn(canvasElement).dispatchEvent(
 			new ClipboardEvent("paste", {
 				bubbles: true,
@@ -1010,21 +1068,33 @@ export const MultiParagraphPaste = meta.story({
 				clipboardData,
 			}),
 		)
-		const expected = LAUNCH_REVIEW.body.replace(
-			"signs off the copy.",
-			`signs off the copy.\n\n${pasted}`,
-		)
+
+		const expected = `${MEETING_NOTES.body.slice(0, empty.from)}${PASTED}${MEETING_NOTES.body.slice(empty.from)}`
 		await expect(args.onBodyChange).toHaveBeenLastCalledWith(expected)
 		await expect(textIn(canvasElement)).toBe(expected)
-		await expect(linesIn(canvasElement).slice(0, 7)).toEqual([
-			"We met to agree the launch date and who signs off the copy.",
-			"",
+		const paragraphs: string[] = []
+		syntaxTree(view.state).iterate({
+			from: empty.from,
+			to: empty.from + PASTED.length,
+			enter: (node) => {
+				if (node.name === "Paragraph")
+					paragraphs.push(view.state.sliceDoc(node.from, node.to))
+			},
+		})
+		await expect(paragraphs).toEqual([
+			"First thought.",
+			"Second thought.",
+			"Third thought.",
+		])
+		await expect(linesIn(canvasElement).slice(2, 7)).toEqual([
 			"First thought.",
 			"",
 			"Second thought.",
 			"",
 			"Third thought.",
 		])
+		await expect(gapsAroundLine(canvasElement, 4)).toBe(BLOCK_GAP)
+		await expect(gapsAroundLine(canvasElement, 6)).toBe(BLOCK_GAP)
 	},
 })
 
@@ -1746,12 +1816,14 @@ export const A6ToolbarFlippedBelow = meta.story({
 				"below",
 			)
 		})
-		const selection = selectionRectIn(canvasElement)
-		const toolbar = toolbarIn(canvasElement)?.getBoundingClientRect()
-		await expect(toolbar?.top).toBeGreaterThan(selection.bottom)
-		await expect(
-			Math.abs((toolbar?.top ?? 0) - selection.bottom - SELECTION_GAP),
-		).toBeLessThan(1)
+		await waitFor(() => {
+			const selection = selectionRectIn(canvasElement)
+			const toolbar = toolbarIn(canvasElement)?.getBoundingClientRect()
+			expect(toolbar?.top).toBeGreaterThan(selection.bottom)
+			expect(
+				Math.abs((toolbar?.top ?? 0) - selection.bottom - SELECTION_GAP),
+			).toBeLessThan(1)
+		})
 	},
 })
 

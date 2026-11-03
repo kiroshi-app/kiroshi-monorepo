@@ -1398,6 +1398,7 @@ navigation-librarydocumenteditor--a-6-toolbar-flipped-below
 navigation-librarydocumenteditor--agent-finished
 navigation-librarydocumenteditor--agents-writing
 navigation-librarydocumenteditor--blank
+navigation-librarydocumenteditor--blank-line-between-blocks
 navigation-librarydocumenteditor--bold-shortcut
 navigation-librarydocumenteditor--bold-typed-markers-hidden
 navigation-librarydocumenteditor--caret-moves
