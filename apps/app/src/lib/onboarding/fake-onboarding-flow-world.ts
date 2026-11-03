@@ -5,6 +5,8 @@ import type { OnboardingStep } from "@/lib/bindings"
 
 export const SHOTO = "bot-shoto"
 
+const UNREACHABLE = { kind: "transport", detail: "the host is unreachable" }
+
 type Sent = { botId: string; text: string }
 
 type FakeProfile = {
@@ -103,13 +105,13 @@ export const createFakeFlowWorld = (
 		botNameOf: (botId) => fake.names[botId] ?? null,
 		openConversation: async (botId) => {
 			if (fake.refusesOpen) {
-				throw { kind: "transport", detail: "the host is unreachable" }
+				throw UNREACHABLE
 			}
 			fake.opened.push(botId)
 		},
 		sendTo: async (botId, text) => {
 			if (fake.unsendable.includes(text)) {
-				throw { kind: "transport", detail: "the host is unreachable" }
+				throw UNREACHABLE
 			}
 			fake.sent.push({ botId, text })
 		},
