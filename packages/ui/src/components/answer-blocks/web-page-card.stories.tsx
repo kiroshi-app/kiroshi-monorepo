@@ -96,8 +96,9 @@ export const WithPreviewAndAltText = meta.story({
 		const card = canvas.getByRole("article", {
 			name: "Casa do Rio · Rooms and rates",
 		})
-		await expect(image.getBoundingClientRect().height).toBe(200)
-		await expect(image.getBoundingClientRect().width).toBe(card.clientWidth)
+		const { height, width } = image.getBoundingClientRect()
+		await expect(height).toBe(200)
+		await expect(width).toBe(card.clientWidth)
 		await expect(image).toHaveStyle({ objectFit: "cover" })
 		await expect(card.firstElementChild).toBe(image)
 	},
