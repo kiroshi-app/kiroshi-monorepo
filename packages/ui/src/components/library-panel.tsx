@@ -292,6 +292,7 @@ const LibraryPanel = ({
 
 export {
 	type LibraryFilter,
+	LibraryOverlayContainer,
 	LibraryPanel,
 	type LibraryPanelProps,
 	type LibraryPanelState,

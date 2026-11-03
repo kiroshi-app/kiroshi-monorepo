@@ -8,6 +8,8 @@ import { ChatEmptyState } from "@workspace/ui/components/chat-empty-state"
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import type { ConnectionStatusState } from "@workspace/ui/components/connection-status"
 import { HeaderIdentityButton } from "@workspace/ui/components/header-identity-button"
+import { LIBRARY_LIGHTBOX_IMAGES } from "@workspace/ui/components/library.fixtures"
+import { LibraryLightbox } from "@workspace/ui/components/library-lightbox"
 import { Notice } from "@workspace/ui/components/notice"
 import { PinnedMessages } from "@workspace/ui/components/pinned-messages"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
@@ -241,6 +243,44 @@ export const Default = meta.story({
 			canvasElement.querySelector('[data-slot="message-scroller-older"]'),
 		).toBeNull()
 		await expectRestingAtBottom(canvasElement)
+	},
+})
+
+export const ImageViewerInPanel = meta.story({
+	args: {
+		rows: CONVERSATION_ROWS,
+		children: null,
+		overlay: (
+			<LibraryLightbox
+				count={LIBRARY_LIGHTBOX_IMAGES.length}
+				image={LIBRARY_LIGHTBOX_IMAGES[0]}
+				onClose={fn()}
+				onCopy={fn()}
+				onDownload={fn()}
+				onNext={fn()}
+				onPrevious={fn()}
+				position={1}
+			/>
+		),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"An image of an answer opened in the thread: the viewer fills the thread panel only, so the rail beside the panel stays visible, as artboard Images 3 draws it. Check the viewer sits inside the layout rather than over the whole window. The app passes it at `apps/app/src/components/thread-screen.tsx` through `overlay`.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const layout = slotIn(canvasElement, "chat-layout")
+		await waitFor(() =>
+			expect(
+				layout.querySelector('[data-slot="library-lightbox"]'),
+			).toBeVisible(),
+		)
+		await expect(
+			getComputedStyle(slotIn(layout, "library-lightbox")).position,
+		).toBe("absolute")
 	},
 })
 

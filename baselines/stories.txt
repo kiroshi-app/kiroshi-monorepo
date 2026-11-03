@@ -51,6 +51,16 @@ branding-spacetint--default
 branding-spacetint--free-hue
 branding-spacetint--untinted
 branding-spacetint--variants
+conversation-markdown-answerblocks--broken-block-as-source
+conversation-markdown-answerblocks--callouts-in-answer
+conversation-markdown-answerblocks--collapsible-in-answer
+conversation-markdown-answerblocks--gallery-in-answer
+conversation-markdown-answerblocks--illustrated-list-in-answer
+conversation-markdown-answerblocks--interactive-result-not-defined
+conversation-markdown-answerblocks--interactive-view-in-answer
+conversation-markdown-answerblocks--options-card-in-answer
+conversation-markdown-answerblocks--pending-while-writing
+conversation-markdown-answerblocks--sourced-image-in-answer
 conversation-markdown-callout--in-agent-answer
 conversation-markdown-callout--in-narrow-column
 conversation-markdown-checklist--all-done
@@ -920,6 +930,7 @@ layout-threadlayout--default
 layout-threadlayout--empty
 layout-threadlayout--error
 layout-threadlayout--forwarded-region
+layout-threadlayout--image-viewer-in-panel
 layout-threadlayout--loading-older-messages
 layout-threadlayout--long-content
 layout-threadlayout--older-messages
