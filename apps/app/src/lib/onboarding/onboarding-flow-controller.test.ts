@@ -259,6 +259,50 @@ describe("a sign-in that fails", () => {
 	})
 })
 
+describe("returning from the browser sign-in with something to import", () => {
+	const screen = () =>
+		onboardingScreenStepOf(world.storedStep(), controller.getState())
+
+	const signedInThroughBrowser = async () => {
+		const signingIn = controller.signIn()
+		await Promise.resolve()
+		port.completeSignIn()
+		await signingIn
+	}
+
+	beforeEach(() => {
+		port.hasClaudeFolder = true
+	})
+
+	it("shows Connect, Import, Account, then opens the first conversation", async () => {
+		const screens = []
+		await controller.leaveIntro()
+		screens.push(screen())
+
+		await signedInThroughBrowser()
+		screens.push(screen())
+
+		await controller.leaveImport({ ...NOTHING_IMPORTED, skillCount: 1 })
+		screens.push(screen())
+
+		await controller.finish()
+		screens.push(screen())
+
+		expect(screens).toEqual(["connect", "import", "account", null])
+		expect(world.opened).toEqual([SHOTO])
+	})
+
+	it("shows Import again when the window reloads after the sign-in", async () => {
+		await controller.leaveIntro()
+		await signedInThroughBrowser()
+
+		relaunch()
+		await controller.resume()
+
+		expect(screen()).toBe("import")
+	})
+})
+
 describe("connecting with a ~/.claude folder", () => {
 	beforeEach(() => {
 		port.hasClaudeFolder = true
