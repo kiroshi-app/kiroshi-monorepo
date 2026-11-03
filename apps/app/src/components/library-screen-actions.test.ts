@@ -19,7 +19,11 @@ import { i18n } from "@workspace/ui/lib/i18n"
 import { LibraryScreenHoldingOpening } from "@/components/library-screen-holding-opening"
 import type { LibraryItem } from "@/lib/bindings"
 import type { Invoke } from "@/lib/host/joined-hosts-invoke"
-import { base64Of } from "@/lib/library/library-document-session"
+import {
+	base64Of,
+	bytesOf,
+	SEND_INTERVAL_MS,
+} from "@/lib/library/library-document-session"
 import type { LibraryOpening } from "@/lib/navigation/library-search"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 
@@ -27,10 +31,13 @@ type HostCall = { command: string; args: unknown }
 
 type NamedCall = { name: string }
 
+type RenameCall = NamedCall & { newName: string }
+
 type Harness = {
 	listed: LibraryItem[]
 	calls: HostCall[]
 	refused: string | null
+	held: Partial<Record<string, Promise<void>>>
 }
 
 const SPACE_ID = "space"
@@ -51,7 +58,7 @@ const DOCUMENT = itemNamed("notes.txt", "document")
 const IMAGE = itemNamed("diagram.png", "image")
 
 const harness = vi.hoisted(
-	(): Harness => ({ listed: [], calls: [], refused: null }),
+	(): Harness => ({ listed: [], calls: [], refused: null, held: {} }),
 )
 
 const refusalOf = (args: unknown) => ({
@@ -67,6 +74,22 @@ const answerHostCall = (command: string, args: unknown) => {
 	return Promise.resolve(null)
 }
 
+const renameListed = ({ name, newName }: RenameCall) => {
+	const renamed = itemNamed(newName, "document")
+	harness.listed = harness.listed.map((item) =>
+		item.name === name ? renamed : item,
+	)
+	return renamed
+}
+
+const stateWith = (markdown: string) => {
+	const doc = new Y.Doc()
+	doc.getText("markdown").insert(0, markdown)
+	return Y.encodeStateAsUpdate(doc)
+}
+
+const OPENED_STATE = stateWith("Draft")
+
 const LIBRARY_ANSWERS: Record<string, (args: NamedCall) => unknown> = {
 	library_list: () => harness.listed,
 	library_read_document: ({ name }) => ({ name, format: "text", content: "" }),
@@ -78,11 +101,11 @@ const LIBRARY_ANSWERS: Record<string, (args: NamedCall) => unknown> = {
 	library_read_file: ({ name }) => ({ name, content: FILE_CONTENT }),
 	library_open_document: ({ name }) => ({
 		name,
-		update: base64Of(Y.encodeStateAsUpdate(new Y.Doc())),
+		update: base64Of(OPENED_STATE),
 	}),
 	library_apply_update: () => null,
 	library_share_caret: () => null,
-	library_rename_document: ({ name }) => itemNamed(name, "document"),
+	library_rename_document: (args) => renameListed(args as RenameCall),
 	library_delete: ({ name }) => {
 		harness.listed = harness.listed.filter((item) => item.name !== name)
 		return null
@@ -103,6 +126,7 @@ vi.mock("@/lib/host/index", async (importOriginal) => {
 			return actual.invoke<T>(...call)
 		}
 		harness.calls.push({ command, args })
+		await harness.held[command]
 		if (command === harness.refused) {
 			throw refusalOf(args)
 		}
@@ -249,17 +273,17 @@ const renameNotesTo = async (title: string) => {
 	await pickInMenuOf("notes", "rename")
 	const field = await titleField()
 	await act(async () => {
+		field.focus()
 		fireEvent.change(field, { target: { value: title } })
 	})
-	await press(
-		screen.getByRole("button", { name: common("library.document.back") }),
-	)
+	await pressInTitle(field, "Enter")
 }
 
 beforeEach(() => {
 	harness.listed = [DOCUMENT, IMAGE]
 	harness.calls = []
 	harness.refused = null
+	harness.held = {}
 	vi.mocked(raiseFailureNotice).mockClear()
 })
 
@@ -362,6 +386,7 @@ describe("Rename in the menu of a Library item", () => {
 		await renderLibraryScreen({ isJoined: false })
 
 		await renameNotesTo("notes")
+		await leaveDocument()
 
 		await tileOf("notes")
 		expect(callsOf("library_rename_document")).toEqual([])
@@ -515,7 +540,7 @@ describe("a Library action the host refuses", () => {
 		},
 	)
 
-	it("raises a notice and keeps the Library on rename", async () => {
+	it("raises a notice and puts the previous title back on rename", async () => {
 		harness.refused = "library_rename_document"
 		await renderLibraryScreen({ isJoined: false })
 
@@ -524,7 +549,7 @@ describe("a Library action the host refuses", () => {
 		await waitFor(() =>
 			expect(raiseFailureNotice).toHaveBeenCalledWith(failureOf("save")),
 		)
-		expect(libraryShown()).toBeInstanceOf(HTMLElement)
+		await waitFor(() => expect(shownTitle()).toBe("notes"))
 	})
 
 	it("raises a notice and keeps the item in the grid on delete", async () => {
@@ -582,6 +607,8 @@ const documentMoreItems = async () =>
 const documentOpen = () =>
 	screen.queryByRole("textbox", { name: common("library.editor.title") })
 
+const shownTitle = () => (documentOpen() as HTMLInputElement | null)?.value
+
 const pressInTitle = async (field: HTMLInputElement, key: string) => {
 	await act(async () => {
 		fireEvent.keyDown(field, { key })
@@ -598,8 +625,63 @@ const retitleFromDocumentBar = async (title: string) => {
 	return field
 }
 
+const holdHostCall = (command: string) => {
+	const { promise, resolve } = Promise.withResolvers<void>()
+	harness.held[command] = promise
+	return () =>
+		act(async () => {
+			resolve()
+		})
+}
+
+const settle = (waited = 0) =>
+	act(async () => {
+		await new Promise((resolve) => setTimeout(resolve, waited))
+	})
+
+const IDEAS = itemNamed("ideas.txt", "document")
+
+const openIdeas = async () => {
+	await press(await tileOf("ideas"))
+	await waitFor(() => expect(shownTitle()).toBe("ideas"))
+}
+
+type SentUpdate = NamedCall & { update: string }
+
+const textOfUpdatesTo = (name: string) => {
+	const doc = new Y.Doc()
+	Y.applyUpdate(doc, OPENED_STATE)
+	const sent = callsOf("library_apply_update") as SentUpdate[]
+	for (const { update } of sent.filter((call) => call.name === name)) {
+		Y.applyUpdate(doc, bytesOf(update))
+	}
+	return doc.getText("markdown").toString()
+}
+
+const callsAfterRename = (command: string) => {
+	const renamedAt = harness.calls.findIndex(
+		(call) => call.command === "library_rename_document",
+	)
+	return harness.calls
+		.slice(renamedAt)
+		.filter((call) => call.command === command)
+		.map((call) => call.args as NamedCall)
+}
+
 const leaveDocument = () =>
 	press(screen.getByRole("button", { name: common("library.document.back") }))
+
+const typeInBody = async (text: string) => {
+	const body = await screen.findByRole("textbox", {
+		name: common("library.editor.body"),
+	})
+	await act(async () => {
+		body.focus()
+		const line = body.querySelector(".cm-line")?.firstChild as Text
+		line.data = text
+		document.getSelection()?.collapse(line, text.length)
+	})
+}
 
 describe("Rename in the document bar", () => {
 	it("puts the caret at the end of the title", async () => {
@@ -621,15 +703,51 @@ describe("Rename in the document bar", () => {
 			await renderLibraryScreen({ isJoined })
 
 			await pressInTitle(await retitleFromDocumentBar("Plans"), "Enter")
+			await waitFor(() =>
+				expect(callsOf("library_rename_document")).toHaveLength(1),
+			)
 			await leaveDocument()
 
-			await waitFor(() =>
-				expect(callsOf("library_rename_document")).toEqual([
-					{ spaceId: SPACE_ID, name: "notes.txt", newName: "Plans.txt" },
-				]),
-			)
+			await tileOf("Plans")
+			expect(callsOf("library_rename_document")).toEqual([
+				{ spaceId: SPACE_ID, name: "notes.txt", newName: "Plans.txt" },
+			])
 		},
 	)
+
+	it.each(SPACES)(
+		"renames the document once on %s when the title loses focus",
+		async (_space, isJoined) => {
+			await renderLibraryScreen({ isJoined })
+
+			const field = await retitleFromDocumentBar("Plans")
+			await act(async () => {
+				field.blur()
+			})
+
+			await waitFor(() => expect(shownTitle()).toBe("Plans"))
+			expect(callsOf("library_rename_document")).toEqual([
+				{ spaceId: SPACE_ID, name: "notes.txt", newName: "Plans.txt" },
+			])
+		},
+	)
+
+	it("keeps the renamed document open and writes a later body edit to it", async () => {
+		await renderLibraryScreen({ isJoined: false })
+
+		await pressInTitle(await retitleFromDocumentBar("Plans"), "Enter")
+		await waitFor(() => expect(shownTitle()).toBe("Plans"))
+		await typeInBody("Rollout")
+
+		await waitFor(() =>
+			expect(callsOf("library_apply_update")).toContainEqual(
+				expect.objectContaining({ name: "Plans.txt" }),
+			),
+		)
+		expect(callsOf("library_apply_update")).not.toContainEqual(
+			expect.objectContaining({ name: "notes.txt" }),
+		)
+	})
 
 	it("shows the previous title and sends no rename on Escape", async () => {
 		await renderLibraryScreen({ isJoined: false })
@@ -655,6 +773,82 @@ describe("Rename in the document bar", () => {
 		)
 		expect(await tileOf("notes")).toBeInstanceOf(HTMLElement)
 		expect(tileShown("Plans")).toBe(false)
+	})
+})
+
+describe("a rename in flight", () => {
+	it("leaves the Library as it is when the rename lands after the person left", async () => {
+		await renderLibraryScreen({ isJoined: false })
+		const release = holdHostCall("library_rename_document")
+
+		await pressInTitle(await retitleFromDocumentBar("Plans"), "Enter")
+		await leaveDocument()
+		await release()
+
+		await tileOf("Plans")
+		expect(documentOpen()).toBeNull()
+	})
+
+	it("stays on the other document opened before the rename lands", async () => {
+		harness.listed = [DOCUMENT, IDEAS]
+		await renderLibraryScreen({ isJoined: false })
+		const release = holdHostCall("library_rename_document")
+
+		await pressInTitle(await retitleFromDocumentBar("Plans"), "Enter")
+		await leaveDocument()
+		await openIdeas()
+		await release()
+		await settle()
+
+		expect(callsOf("library_rename_document")).toHaveLength(1)
+		expect(shownTitle()).toBe("ideas")
+	})
+
+	it("only raises the notice when the host refuses after another document was opened", async () => {
+		harness.listed = [DOCUMENT, IDEAS]
+		harness.refused = "library_rename_document"
+		await renderLibraryScreen({ isJoined: false })
+		const release = holdHostCall("library_rename_document")
+
+		await pressInTitle(await retitleFromDocumentBar("Plans"), "Enter")
+		await leaveDocument()
+		await openIdeas()
+		await release()
+
+		await waitFor(() =>
+			expect(raiseFailureNotice).toHaveBeenCalledWith(failureOf("save")),
+		)
+		await settle()
+		expect(shownTitle()).toBe("ideas")
+	})
+
+	it("keeps the editor shown, without reopening, once the rename lands", async () => {
+		await renderLibraryScreen({ isJoined: false })
+		const field = await retitleFromDocumentBar("Plans")
+		holdHostCall("library_open_document")
+
+		await pressInTitle(field, "Enter")
+
+		await waitFor(() => expect(shownTitle()).toBe("Plans"))
+		await settle()
+		expect(libraryShown()).toBeNull()
+		expect(shownTitle()).toBe("Plans")
+		expect(callsAfterRename("library_open_document")).toEqual([])
+	})
+
+	it("saves the body typed during the rename to the renamed document only", async () => {
+		await renderLibraryScreen({ isJoined: false })
+		const release = holdHostCall("library_rename_document")
+
+		await pressInTitle(await retitleFromDocumentBar("Plans"), "Enter")
+		await typeInBody("Rollout")
+		await settle(2 * SEND_INTERVAL_MS)
+		await release()
+
+		await waitFor(() => expect(textOfUpdatesTo("Plans.txt")).toBe("Rollout"))
+		expect(callsAfterRename("library_apply_update")).not.toContainEqual(
+			expect.objectContaining({ name: "notes.txt" }),
+		)
 	})
 })
 

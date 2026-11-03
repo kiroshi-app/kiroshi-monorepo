@@ -77,7 +77,7 @@ const useLibraryCopy = (spaceId: string, command: ActionCommand) => {
 	}
 }
 
-export type LibraryRename = { name: string; newName: string }
+type LibraryRename = { name: string; newName: string }
 
 const useLibraryRename = (spaceId: string) => {
 	const queryClient = useQueryClient()
@@ -94,7 +94,7 @@ const useLibraryRename = (spaceId: string) => {
 			}),
 			raisedIn: "use-library-actions",
 		},
-	}).mutate
+	}).mutateAsync
 }
 
 const useLibraryDelete = (spaceId: string) => {
