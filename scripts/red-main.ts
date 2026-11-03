@@ -5,6 +5,7 @@ export type Run = {
 	headBranch: string
 	conclusion: string | null
 	headSha: string
+	createdAt: string
 	url: string
 	commitMessage: string
 	commitAuthor: string
@@ -14,10 +15,17 @@ export type Job = { name: string; conclusion: string | null }
 
 export type PullRequest = { number: number; authorLogin: string }
 
+export type Commit = { sha: string; message: string }
+
+export type MergedCommit = Commit & { pullRequests: PullRequest[] }
+
+export type GreenRange = { greenSha: string; commits: MergedCommit[] }
+
 export type RunReport = {
 	run: Run
 	jobs: Job[]
 	pullRequests: PullRequest[]
+	sinceGreen: GreenRange | undefined
 }
 
 export type IssueInput = {
@@ -33,6 +41,8 @@ export type GitHub = {
 	readRun: (runId: string) => Promise<Run>
 	readJobs: (runId: string) => Promise<Job[]>
 	readPullRequests: (sha: string) => Promise<PullRequest[]>
+	readLastGreenSha: (createdBefore: string) => Promise<string | undefined>
+	readCommits: (base: string, head: string) => Promise<Commit[]>
 }
 
 export type GraphQLRequest = {
@@ -99,6 +109,29 @@ const pullRequestLine = (pullRequests: PullRequest[]) => {
 	return `PR: #${pullRequest.number} by ${pullRequest.authorLogin}`
 }
 
+const pullRequestNumbers = (pullRequests: PullRequest[]) =>
+	pullRequests.length === 0
+		? "no PR"
+		: pullRequests.map(({ number }) => `#${number}`).join(", ")
+
+const commitLine = ({ sha, message, pullRequests }: MergedCommit) =>
+	`- ${shortSha(sha)} ${pullRequestNumbers(pullRequests)} ${firstLine(message)}`
+
+const rangeSections = (run: Run, sinceGreen: GreenRange | undefined) => {
+	if (!sinceGreen)
+		return [
+			"Last green: none, no CI push run on main concluded success before this run",
+		]
+	return [
+		`Last green: ${sinceGreen.greenSha}`,
+		`Red: ${run.headSha}`,
+		[
+			"Commits since the last green:",
+			...sinceGreen.commits.map(commitLine),
+		].join("\n"),
+	]
+}
+
 const FILED_IN = {
 	teamId: TEAM_ID,
 	projectId: PROJECT_ID,
@@ -110,6 +143,7 @@ export const redMainIssue = ({
 	run,
 	jobs,
 	pullRequests,
+	sinceGreen,
 }: RunReport): IssueInput => ({
 	...FILED_IN,
 	title: `Red main: ${failedJobNames(jobs).join(", ")} at ${shortSha(run.headSha)}`,
@@ -118,6 +152,7 @@ export const redMainIssue = ({
 		`Commit: ${firstLine(run.commitMessage)}`,
 		pullRequestLine(pullRequests),
 		`Commit author: ${run.commitAuthor}`,
+		...rangeSections(run, sinceGreen),
 		"Classify: flake or break",
 	].join("\n\n"),
 })
@@ -163,6 +198,22 @@ const createIssue = async (linear: LinearTransport, input: IssueInput) => {
 	return created.issue
 }
 
+const readGreenRange = async (
+	github: GitHub,
+	run: Run,
+): Promise<GreenRange | undefined> => {
+	const greenSha = await github.readLastGreenSha(run.createdAt)
+	if (!greenSha) return undefined
+	const commits = await github.readCommits(greenSha, run.headSha)
+	const merged = await Promise.all(
+		commits.map(async (commit) => ({
+			...commit,
+			pullRequests: await github.readPullRequests(commit.sha),
+		})),
+	)
+	return { greenSha, commits: merged }
+}
+
 export const reportRedMain = async (
 	runId: string,
 	{ github, linear }: Ports,
@@ -172,13 +223,14 @@ export const reportRedMain = async (
 	if (reason) return `no issue: ${reason}`
 	const existing = await issueReportingRun(linear, run.url)
 	if (existing) return `no issue: ${existing} already reports ${run.url}`
-	const [jobs, pullRequests] = await Promise.all([
+	const [jobs, pullRequests, sinceGreen] = await Promise.all([
 		github.readJobs(runId),
 		github.readPullRequests(run.headSha),
+		readGreenRange(github, run),
 	])
 	const issue = await createIssue(
 		linear,
-		redMainIssue({ run, jobs, pullRequests }),
+		redMainIssue({ run, jobs, pullRequests, sinceGreen }),
 	)
 	return `created ${issue.identifier} ${issue.url}`
 }
@@ -190,6 +242,7 @@ type GitHubRun = {
 	head_branch: string
 	conclusion: string | null
 	head_sha: string
+	created_at: string
 	html_url: string
 	head_commit: { message: string; author: { name: string } } | null
 }
@@ -198,6 +251,8 @@ type GitHubPullRequest = { number: number; user: { login: string } }
 
 type GitHubJob = { name: string; conclusion: string | null }
 
+type GitHubCommit = { sha: string; commit: { message: string } }
+
 const toRun = (run: GitHubRun): Run => ({
 	id: run.id,
 	name: run.name,
@@ -205,6 +260,7 @@ const toRun = (run: GitHubRun): Run => ({
 	headBranch: run.head_branch,
 	conclusion: run.conclusion,
 	headSha: run.head_sha,
+	createdAt: run.created_at,
 	url: run.html_url,
 	commitMessage: run.head_commit?.message ?? "",
 	commitAuthor: run.head_commit?.author.name ?? "unknown",
@@ -249,6 +305,30 @@ export const createGitHub = (repository: string, token: string): GitHub => {
 			return pullRequests.map(({ number, user }) => ({
 				number,
 				authorLogin: user.login,
+			}))
+		},
+		readLastGreenSha: async (createdBefore) => {
+			const filters = new URLSearchParams({
+				branch: "main",
+				event: "push",
+				status: "success",
+				created: `<${createdBefore}`,
+				per_page: "1",
+			})
+			const { workflow_runs } = await read<{ workflow_runs: GitHubRun[] }>(
+				"read the last green push run on main",
+				`/actions/workflows/ci.yml/runs?${filters}`,
+			)
+			return workflow_runs[0]?.head_sha
+		},
+		readCommits: async (base, head) => {
+			const { commits } = await read<{ commits: GitHubCommit[] }>(
+				"read the commits since the last green run",
+				`/compare/${base}...${head}`,
+			)
+			return commits.map(({ sha, commit }) => ({
+				sha,
+				message: commit.message,
 			}))
 		},
 	}
