@@ -16,6 +16,8 @@ const bots = {
 			create: "Start a conversation",
 			others: "+{{count}}",
 			preview: "{{name}}: {{text}}",
+			you: "You",
+			notSent: "Not sent",
 		},
 		empty: "No agents yet",
 		unavailable: "Couldn’t load your agents. Restart Kiroshi to retry.",

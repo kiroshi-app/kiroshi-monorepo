@@ -83,6 +83,7 @@ interface AppSidebarConversation {
 	lastMessage?: string
 	lastSpeaker?: string
 	timestamp?: string
+	isNotSent?: boolean
 	lastActivityAt?: number
 	status?: AppSidebarStatus
 	badge?: BotBadge
@@ -128,11 +129,11 @@ const previewOf = (
 		})
 	if (!conversation.lastMessage) return null
 	const text = toPlainText(conversation.lastMessage)
-	if (!conversation.lastSpeaker) return text
-	return t("roster.conversation.preview", {
-		name: conversation.lastSpeaker,
-		text,
-	})
+	const speaker = conversation.isNotSent
+		? t("roster.conversation.you")
+		: conversation.lastSpeaker
+	if (!speaker) return text
+	return t("roster.conversation.preview", { name: speaker, text })
 }
 
 const announcementFor = (

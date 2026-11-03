@@ -59,6 +59,8 @@ const PREVIEW: Record<RowGeometry, string> = {
 
 const TIMESTAMP_NEEDING_YOU = "font-medium text-warning"
 
+const TIMESTAMP_DESTRUCTIVE = "w-auto text-destructive text-xs"
+
 const NEEDS_YOU_LINE = "flex h-4 min-w-0 items-center gap-1 [&_svg]:size-full!"
 
 const NEEDS_YOU_GLYPH =
@@ -145,6 +147,7 @@ type RowAnatomyProps = RowAnatomyGeometry & {
 	media?: ReactNode
 	trailing?: ReactNode
 	timestamp?: string
+	isTimestampDestructive?: boolean
 	preview?: ReactNode
 	previewTrailing?: ReactNode
 	detail?: ReactNode
@@ -162,6 +165,7 @@ const RowAnatomy = ({
 	media,
 	trailing,
 	timestamp,
+	isTimestampDestructive = false,
 	preview,
 	previewTrailing,
 	detail,
@@ -229,6 +233,7 @@ const RowAnatomy = ({
 							className={cn(
 								TIMESTAMP[geometry],
 								pendingQuestion && TIMESTAMP_NEEDING_YOU,
+								isTimestampDestructive && TIMESTAMP_DESTRUCTIVE,
 							)}
 							data-slot={timestampSlot}
 						>
