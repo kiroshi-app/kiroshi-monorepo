@@ -2,6 +2,7 @@ import { expect } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { slotIn } from "@workspace/storybook/story-utils"
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import {
 	LATE_REPORTED_RUN,
 	REPORTED_RUN,
@@ -36,11 +37,12 @@ const meta = preview.meta({
 })
 
 export const Reported = meta.story({
+	args: { bot: { ...REPORTED_RUN.bot, blot: BLOT_HUES.purple } },
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"A morning digest that reported at 08:04. Check that the routine title reads at the foreground colour rather than muted, that no badge dot is drawn on the glyph, that the trigger, the companion and the word reported follow the routine mark, and that the row answers neither the pointer nor the keyboard. `packages/ui/src/components/routines-panel.tsx:384` lists one row per run that reported earlier today, from the rows `apps/app/src/lib/missions/missions-model.ts:174` builds.",
+					"A morning digest that reported at 08:04. Check that the agent's face wears its own blot rather than the default blue-grey, that the routine title reads at the foreground colour rather than muted, that no badge dot is drawn on the glyph, that the trigger, the agent and the word reported follow the routine mark, and that the row answers neither the pointer nor the keyboard. `packages/ui/src/components/routines-panel.tsx:384` lists one row per run that reported earlier today, from the rows `apps/app/src/lib/missions/missions-model.ts:174` builds.",
 			},
 		},
 	},
@@ -59,6 +61,10 @@ export const Reported = meta.story({
 			canvasElement.querySelector('[data-slot="bot-activity-dot"]'),
 		).toBeNull()
 		await expect(canvas.queryByRole("button")).not.toBeInTheDocument()
+		await expect(slotIn(canvasElement, "companion-field")).toHaveAttribute(
+			"data-hue",
+			String(BLOT_HUES.purple),
+		)
 	},
 })
 
@@ -72,9 +78,12 @@ export const AnotherBot = meta.story({
 			},
 		},
 	},
-	play: async ({ canvas }) => {
+	play: async ({ canvas, canvasElement }) => {
 		await expect(canvas.getByText(LATE_REPORTED_RUN.bot.name)).toBeVisible()
 		await expect(canvas.getByText("10:04")).toBeVisible()
+		await expect(slotIn(canvasElement, "companion-field")).not.toHaveAttribute(
+			"data-hue",
+		)
 	},
 })
 

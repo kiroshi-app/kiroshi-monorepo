@@ -43,8 +43,11 @@ const ReportedRunRow = ({
 					geometry="activity"
 					media={
 						<BotIdentityAvatar
-							{...bot}
 							className="shrink-0"
+							hue={bot.blot}
+							image={bot.image}
+							name={bot.name}
+							seed={bot.seed}
 							size={MISSION_AVATAR_SIZE}
 						/>
 					}

@@ -82,7 +82,10 @@ const KIND_ARGS: Record<SearchResultKind, SearchResultRowProps> = {
 		onOpen: fn(),
 	},
 	"chat-solo": {
-		identity: { kind: "chat-solo", bot: MISSION_BOT },
+		identity: {
+			kind: "chat-solo",
+			bot: { ...MISSION_BOT, blot: BLOT_HUES.purple },
+		},
 		title: [{ key: "title", text: "Release notes review" }],
 		timestamp: "Tue",
 		parts: [{ key: "bot", text: "Ada Martin" }],
@@ -248,6 +251,10 @@ export const ChatSolo = meta.story({
 		await expect(
 			slotIn(canvasElement, "search-result-row-parts").textContent,
 		).toBe("Ada Martin")
+		await expect(slotIn(canvasElement, "companion-field")).toHaveAttribute(
+			"data-hue",
+			String(BLOT_HUES.purple),
+		)
 	},
 })
 
@@ -351,6 +358,9 @@ export const Routine = meta.story({
 		await expect(titleWeightOf(canvasElement)).toBe("500")
 		await expect(canvas.getByText("Every weekday at 09:00")).toBeVisible()
 		await expect(slotIn(canvasElement, "search-result-row-glyph")).toBeVisible()
+		await expect(slotIn(canvasElement, "companion-field")).not.toHaveAttribute(
+			"data-hue",
+		)
 	},
 })
 
