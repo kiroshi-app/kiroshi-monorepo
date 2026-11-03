@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 
+import { PhysicalPosition } from "@tauri-apps/api/dpi"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { createOnThisComputerBus } from "./on-this-computer-test-bus"
@@ -11,6 +12,7 @@ import type { ScreenPosition, TabDrag } from "../bindings"
 
 const host = vi.hoisted(() => ({
 	windowTabDragStart: vi.fn(),
+	windowTabDragMove: vi.fn(),
 	windowTabDragDrop: vi.fn(),
 	windowTabDragCancel: vi.fn(),
 	windowStripAt: vi.fn(),
@@ -18,7 +20,7 @@ const host = vi.hoisted(() => ({
 	windowReportStrip: vi.fn(),
 	dragGhostShow: vi.fn(),
 	dragGhostHide: vi.fn(),
-	readWindowOrigin: vi.fn(),
+	getCurrentWindow: vi.fn(),
 	revealWindow: vi.fn(),
 	emitOnThisComputer: vi.fn(),
 	listenOnThisComputer: vi.fn(),
@@ -32,6 +34,7 @@ vi.mock("../bindings", async (importOriginal) => {
 		commands: {
 			...bindings.commands,
 			windowTabDragStart: host.windowTabDragStart,
+			windowTabDragMove: host.windowTabDragMove,
 			windowTabDragDrop: host.windowTabDragDrop,
 			windowTabDragCancel: host.windowTabDragCancel,
 			windowStripAt: host.windowStripAt,
@@ -43,9 +46,13 @@ vi.mock("../bindings", async (importOriginal) => {
 	}
 })
 
+vi.mock("@tauri-apps/api/window", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@tauri-apps/api/window")>()),
+	getCurrentWindow: host.getCurrentWindow,
+}))
+
 vi.mock("../host", async (importOriginal) => ({
 	...(await importOriginal<typeof import("../host")>()),
-	readWindowOrigin: host.readWindowOrigin,
 	revealWindow: host.revealWindow,
 	emitOnThisComputer: host.emitOnThisComputer,
 	listenOnThisComputer: host.listenOnThisComputer,
@@ -79,6 +86,10 @@ const STRIP = { x: 80, y: 0, width: 600, height: 36 }
 
 const WINDOW_ORIGIN = { x: 1000, y: 200 }
 
+const SCALE = 2
+
+const SCREEN_PLACE_SEEN_BY_WEBKIT = { x: 0, y: 1080 }
+
 const OVER_STRIP = { x: 1300, y: 215 }
 
 const BELOW_STRIP = { x: 1300, y: 600 }
@@ -89,7 +100,15 @@ const ANSWER_EVENT = "window://tab-dock-answered"
 
 const SETTLE_EVENT = "window://tab-dock-settled"
 
+const OFFER_EVENT = "window://tab-dock-offered"
+
+const REFUSED_DROP = { status: "error", error: { kind: "Unavailable" } }
+
+const MOVE_FAILURE_LOG = `the tab ${TAB_ID} did not move from ${ORIGIN_WINDOW} to ${TARGET_WINDOW}: `
+
 let bus = createOnThisComputerBus()
+
+let errors = vi.spyOn(console, "error")
 
 const GHOST_TAB = { tabId: TAB_ID, href: HREF, title: "Release notes" }
 
@@ -99,6 +118,12 @@ const startedInOrigin: TabDrag = {
 	originSpaceId: SPACE,
 	tab: PACKED,
 }
+
+const movedTo = (point: ScreenPosition): TabDrag => ({
+	kind: "moved",
+	originLabel: ORIGIN_WINDOW,
+	point,
+})
 
 const droppedAt = (point: ScreenPosition): TabDrag => ({
 	kind: "dropped",
@@ -112,6 +137,23 @@ const at = (screenX: number, screenY: number): TabTearOff => ({
 	screenY,
 })
 
+const placeWindows = () => {
+	host.getCurrentWindow.mockReturnValue({
+		label: ORIGIN_WINDOW,
+		innerPosition: async () =>
+			new PhysicalPosition(WINDOW_ORIGIN.x * SCALE, WINDOW_ORIGIN.y * SCALE),
+		scaleFactor: async () => SCALE,
+	})
+	Object.defineProperty(window, "screenX", {
+		configurable: true,
+		value: SCREEN_PLACE_SEEN_BY_WEBKIT.x,
+	})
+	Object.defineProperty(window, "screenY", {
+		configurable: true,
+		value: SCREEN_PLACE_SEEN_BY_WEBKIT.y,
+	})
+}
+
 const mountStrip = () => {
 	const strip = document.createElement("div")
 	strip.dataset.slot = "title-bar-tabs"
@@ -121,11 +163,14 @@ const mountStrip = () => {
 
 const twoWindows = () => {
 	const receive = vi.fn()
-	const target = createTabDock({
-		windowLabel: TARGET_WINDOW,
-		shownSpaceId: () => SPACE,
-		receive,
-	})
+	const target = createTabDock(
+		{
+			windowLabel: TARGET_WINDOW,
+			shownSpaceId: () => SPACE,
+			receive,
+		},
+		async () => () => undefined,
+	)
 	const removeDocked = vi.fn()
 	const origin = createTabTearOff({
 		moveUnghosted: vi.fn(),
@@ -143,13 +188,16 @@ const twoWindows = () => {
 
 type TwoWindows = ReturnType<typeof twoWindows>
 
-const dropFromOrigin = ({ origin }: TwoWindows) => {
-	const dropReached = new Promise<void>((resolve) => {
+const dropCommandReached = () =>
+	new Promise<void>((resolve) => {
 		host.windowTabDragDrop.mockImplementation(async () => {
 			resolve()
 			return ACCEPTED
 		})
 	})
+
+const dropFromOrigin = ({ origin }: TwoWindows) => {
+	const dropReached = dropCommandReached()
 	origin.start(at(10, 10), () => GHOST_TAB)
 	origin.drop(at(OVER_STRIP.x, OVER_STRIP.y))
 	return dropReached
@@ -161,6 +209,11 @@ const targetDrops = ({ target }: TwoWindows, point = OVER_STRIP) =>
 const settlesSent = () =>
 	host.emitOnThisComputer.mock.calls.filter(([event]) => event === SETTLE_EVENT)
 
+const moveFailureLogs = () =>
+	errors.mock.calls.filter(
+		([line]) => typeof line === "string" && line.startsWith(MOVE_FAILURE_LOG),
+	)
+
 const waitPastTheDockWait = async () => {
 	await vi.advanceTimersByTimeAsync(DOCK_WAIT_MS)
 	expect(vi.getTimerCount()).toBe(0)
@@ -168,6 +221,7 @@ const waitPastTheDockWait = async () => {
 }
 
 beforeEach(() => {
+	errors = vi.spyOn(console, "error").mockImplementation(() => undefined)
 	bus = createOnThisComputerBus()
 	host.emitOnThisComputer.mockImplementation(bus.emit)
 	host.listenOnThisComputer.mockImplementation(bus.listen)
@@ -177,14 +231,16 @@ beforeEach(() => {
 	host.windowReportStrip.mockResolvedValue(undefined)
 	host.dragGhostShow.mockResolvedValue(UNSUPPORTED)
 	host.dragGhostHide.mockResolvedValue(UNSUPPORTED)
-	host.readWindowOrigin.mockReturnValue(WINDOW_ORIGIN)
+	host.windowTabDragMove.mockResolvedValue(ACCEPTED)
 	host.revealWindow.mockResolvedValue(undefined)
 	window.innerWidth = 1200
 	window.innerHeight = 800
+	placeWindows()
 	mountStrip()
 })
 
 afterEach(() => {
+	errors.mockRestore()
 	vi.useRealTimers()
 	document.body.replaceChildren()
 	for (const mock of Object.values(host)) {
@@ -213,6 +269,137 @@ describe("a tab dropped on another window of its Space that confirms at once", (
 		expect(vi.getTimerCount()).toBe(0)
 		expect(bus.listenerCount()).toBe(0)
 		expect(host.raiseReportedFailure).not.toHaveBeenCalled()
+	})
+})
+
+describe("a tab dropped on another window whose page reports the screen place WebKit gives it", () => {
+	it("is taken by that window, which locates itself where the host hit-test does", async () => {
+		const windows = twoWindows()
+
+		await dropFromOrigin(windows)
+		targetDrops(windows)
+
+		await vi.waitFor(() =>
+			expect(windows.removeDocked).toHaveBeenCalledExactlyOnceWith(
+				SPACE,
+				TAB_ID,
+			),
+		)
+		expect(host.emitOnThisComputer).toHaveBeenCalledWith(ANSWER_EVENT, {
+			windowLabel: TARGET_WINDOW,
+			originTabId: TAB_ID,
+			isTaken: true,
+		})
+		expect(windows.receive).toHaveBeenCalledOnce()
+		expect(host.raiseReportedFailure).not.toHaveBeenCalled()
+		expect(moveFailureLogs()).toEqual([])
+	})
+})
+
+describe("a tab dropped on a window of its Space that reloaded after the drag started", () => {
+	it("lives in that window at the drop index and leaves the origin window", async () => {
+		const windows = twoWindows()
+		host.windowTabDragStart.mockResolvedValue(ACCEPTED)
+		host.windowTabDragMove.mockImplementation(async (point: ScreenPosition) => {
+			windows.target.follow(movedTo(point))
+			return ACCEPTED
+		})
+		const stopWatching = await windows.target.watch()
+
+		windows.origin.start(at(10, 10), () => GHOST_TAB)
+		windows.origin.move(at(OVER_STRIP.x, OVER_STRIP.y))
+		await vi.waitFor(() =>
+			expect(host.emitOnThisComputer).toHaveBeenCalledWith(
+				OFFER_EVENT,
+				expect.objectContaining({ windowLabel: TARGET_WINDOW }),
+			),
+		)
+		windows.origin.move(at(OVER_STRIP.x + 4, OVER_STRIP.y))
+		await vi.waitFor(() => expect(windows.target.getState()).not.toBeNull())
+		windows.target.placeIncoming(1)
+		const dropReached = dropCommandReached()
+		windows.origin.drop(at(OVER_STRIP.x + 4, OVER_STRIP.y))
+		await dropReached
+		targetDrops(windows, { x: OVER_STRIP.x + 4, y: OVER_STRIP.y })
+
+		await vi.waitFor(() =>
+			expect(windows.receive).toHaveBeenCalledExactlyOnceWith(
+				expect.objectContaining({
+					entries: [expect.objectContaining({ href: HREF })],
+				}),
+				1,
+			),
+		)
+		await vi.waitFor(() =>
+			expect(windows.removeDocked).toHaveBeenCalledExactlyOnceWith(
+				SPACE,
+				TAB_ID,
+			),
+		)
+		stopWatching()
+		expect(bus.listenerCount()).toBe(0)
+		expect(host.raiseReportedFailure).not.toHaveBeenCalled()
+	})
+})
+
+describe("a cross-window move that fails", () => {
+	it("logs once that the target never answered, naming both windows and the tab", async () => {
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+		const windows = twoWindows()
+
+		await dropFromOrigin(windows)
+		await waitPastTheDockWait()
+
+		await vi.waitFor(() =>
+			expect(moveFailureLogs()).toEqual([[`${MOVE_FAILURE_LOG}no answer`]]),
+		)
+	})
+
+	it("logs once that the target refused the tab", async () => {
+		const windows = twoWindows()
+
+		await dropFromOrigin(windows)
+		targetDrops(windows, BELOW_STRIP)
+
+		await vi.waitFor(() =>
+			expect(moveFailureLogs()).toEqual([
+				[`${MOVE_FAILURE_LOG}refused by the receiver`],
+			]),
+		)
+	})
+
+	it("logs once that the host refused the drop command", async () => {
+		const windows = twoWindows()
+		host.windowTabDragDrop.mockResolvedValue(REFUSED_DROP)
+
+		windows.origin.start(at(10, 10), () => GHOST_TAB)
+		windows.origin.drop(at(OVER_STRIP.x, OVER_STRIP.y))
+
+		await vi.waitFor(() =>
+			expect(moveFailureLogs()).toEqual([
+				[`${MOVE_FAILURE_LOG}drop command refused`],
+			]),
+		)
+		expect(windows.removeDocked).not.toHaveBeenCalled()
+	})
+
+	it("logs once that the settle was lost, and the tab stays in the origin window only", async () => {
+		const windows = twoWindows()
+		host.emitOnThisComputer.mockImplementation(async (event, payload) => {
+			if (event === SETTLE_EVENT) {
+				throw new Error("the settle did not leave the window")
+			}
+			return bus.emit(event, payload)
+		})
+
+		await dropFromOrigin(windows)
+		targetDrops(windows)
+
+		await vi.waitFor(() =>
+			expect(moveFailureLogs()).toEqual([[`${MOVE_FAILURE_LOG}settle lost`]]),
+		)
+		expect(windows.removeDocked).not.toHaveBeenCalled()
+		expect(windows.receive).not.toHaveBeenCalled()
 	})
 })
 

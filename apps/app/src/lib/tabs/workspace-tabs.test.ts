@@ -1941,7 +1941,7 @@ const joinWindows = (target: WorkspaceTabs) => {
 	})
 	tabDragHost.windowReportSpace.mockResolvedValue(undefined)
 	tabDragHost.windowReportStrip.mockResolvedValue(undefined)
-	tabDragHost.readWindowOrigin.mockReturnValue({ x: 0, y: 0 })
+	tabDragHost.readWindowOrigin.mockResolvedValue({ x: 0, y: 0 })
 	tabDragHost.revealWindow.mockResolvedValue(undefined)
 	tabDragHost.dragGhostShow.mockResolvedValue({
 		status: "ok",
@@ -2009,7 +2009,7 @@ describe("a tab dragged onto the strip of another window of its Space", () => {
 		await vi.waitFor(() =>
 			expect(tabDragHost.windowReportSpace).toHaveBeenCalled(),
 		)
-		tabDragHost.readWindowOrigin.mockReturnValue({ x: 2000, y: 0 })
+		tabDragHost.readWindowOrigin.mockResolvedValue({ x: 2000, y: 0 })
 
 		origin.tearOffSession.drop(tearOff)
 

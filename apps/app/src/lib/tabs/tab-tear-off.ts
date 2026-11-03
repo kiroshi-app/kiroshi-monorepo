@@ -6,7 +6,11 @@ import {
 	DRAG_GHOST_STATE_EVENT,
 	DRAG_GHOST_WINDOW,
 } from "./drag-ghost-state"
-import { awaitDockAnswer } from "./tab-dock-channel"
+import {
+	awaitDockAnswer,
+	type DockAnswerFailure,
+	offerDock,
+} from "./tab-dock-channel"
 
 import {
 	commands,
@@ -86,11 +90,15 @@ type Announced = {
 
 type DockedDrag = Failing & {
 	tabId: string
+	spaceId: string
+	packed: Json
+	offeredLabel: string | null
 }
+
+type DockFailedStep = DockAnswerFailure | "drop command refused"
 
 type TabDrag = DockedDrag & {
 	kind: "tab"
-	spaceId: string
 	lastPoint: ScreenPosition
 	view: Promise<DragView>
 	unwatchEnded: Promise<() => void>
@@ -107,7 +115,6 @@ type WindowView = Announced & {
 }
 
 type WindowMove = DockedDrag & {
-	spaceId: string
 	isReleased: boolean
 	view: Promise<WindowView>
 	unwatchers: Promise<(() => void) | null>[]
@@ -249,6 +256,37 @@ const dockSiteAt = (
 		return { target, label: strip.label }
 	}, reportUnanswered)
 
+const reportUnoffered = (reason: unknown) => {
+	console.error("the tab was not offered to the window under it", reason)
+}
+
+const offerOnEntry = (drag: DockedDrag, site: DockSite) => {
+	if (
+		site.target !== "sameSpace" ||
+		site.label === null ||
+		site.label === drag.offeredLabel
+	) {
+		return
+	}
+	drag.offeredLabel = site.label
+	const offer = {
+		windowLabel: site.label,
+		originSpaceId: drag.spaceId,
+		tab: drag.packed,
+	}
+	offerDock(offer).catch(reportUnoffered)
+}
+
+const reportMoveFailure = (
+	{ tabId }: DockedDrag,
+	targetLabel: string,
+	step: DockFailedStep,
+) => {
+	console.error(
+		`the tab ${tabId} did not move from ${currentWindowLabel()} to ${targetLabel}: ${step}`,
+	)
+}
+
 const dragFailureNotice = () => ({
 	title: i18n.t("common:titleBar.redockTabFailed.title"),
 	description: i18n.t("common:titleBar.redockTabFailed.description"),
@@ -351,6 +389,7 @@ const movedView = async (
 		failOnce(drag, isMoved ? "window_strip_at" : "window_tab_drag_move")
 		return ghostOver(drag, view, point, "outside")
 	}
+	offerOnEntry(drag, site)
 	return ghostOver(drag, view, point, site.target)
 }
 
@@ -427,6 +466,7 @@ const followedWindow = async (
 		failOnce(move, isMoved ? "window_strip_at" : "window_tab_drag_move")
 		return windowOver(move, view, "outside")
 	}
+	offerOnEntry(move, site)
 	return windowOver(move, view, site.target)
 }
 
@@ -475,6 +515,16 @@ export const createTabTearOff = ({
 		return ended
 	}
 
+	const failDock = (
+		ended: DockedDrag,
+		targetLabel: string,
+		step: DockFailedStep,
+		command?: string,
+	) => {
+		reportMoveFailure(ended, targetLabel, step)
+		failOnce(ended, command)
+	}
+
 	const dock = async (
 		ended: DockedDrag,
 		view: Announced,
@@ -485,18 +535,24 @@ export const createTabTearOff = ({
 			reportUnanswered,
 		)
 		if (!awaited) {
-			failOnce(ended)
+			failDock(ended, targetLabel, "no answer")
 			await cancelAnnounced(ended, view)
 			return false
 		}
 		if (!(await isAccepted(commands.windowTabDragDrop(point)))) {
-			failOnce(ended, "window_tab_drag_drop")
+			failDock(
+				ended,
+				targetLabel,
+				"drop command refused",
+				"window_tab_drag_drop",
+			)
 			return false
 		}
-		if (await awaited.answer) {
+		const outcome = await awaited.answer
+		if (outcome.isTaken) {
 			return true
 		}
-		failOnce(ended)
+		failDock(ended, targetLabel, outcome.failedStep)
 		return false
 	}
 
@@ -648,6 +704,8 @@ export const createTabTearOff = ({
 		const move: WindowMove = {
 			tabId,
 			spaceId: torn.spaceId,
+			packed: torn.packed,
+			offeredLabel: null,
 			hasFailed: false,
 			isNoticed: false,
 			isReleased: false,
@@ -709,6 +767,8 @@ export const createTabTearOff = ({
 			kind: "tab",
 			tabId: tearOff.tabId,
 			spaceId: torn.spaceId,
+			packed: torn.packed,
+			offeredLabel: null,
 			lastPoint: point,
 			hasFailed: false,
 			isNoticed: false,

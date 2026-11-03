@@ -133,10 +133,16 @@ const holding = (shownSpaceId = SPACE, originSpaceId = SPACE) => {
 	return held
 }
 
+const holdingLocated = async () => {
+	const held = holding()
+	await host.readWindowOrigin.mock.results.at(-1)?.value
+	return held
+}
+
 beforeEach(() => {
 	host.windowReportSpace.mockResolvedValue(undefined)
 	host.windowReportStrip.mockResolvedValue(undefined)
-	host.readWindowOrigin.mockReturnValue(WINDOW_ORIGIN)
+	host.readWindowOrigin.mockResolvedValue(WINDOW_ORIGIN)
 	host.revealWindow.mockResolvedValue(undefined)
 	bus = createOnThisComputerBus()
 	host.emitOnThisComputer.mockImplementation(bus.emit)
@@ -173,7 +179,7 @@ describe("a tab drag started in another window", () => {
 
 describe("the pointer over the strip during a drag of the same Space", () => {
 	it("parts the strip at the pointer x with the incoming tab", async () => {
-		const { dock } = holding()
+		const { dock } = await holdingLocated()
 
 		dock.follow(moved(OVER_STRIP.x, OVER_STRIP.y))
 
@@ -184,7 +190,7 @@ describe("the pointer over the strip during a drag of the same Space", () => {
 	})
 
 	it("closes the parting once the pointer leaves the strip", async () => {
-		const { dock } = holding()
+		const { dock } = await holdingLocated()
 
 		dock.follow(moved(OVER_STRIP.x, OVER_STRIP.y))
 		dock.follow(moved(BELOW_STRIP.x, BELOW_STRIP.y))
@@ -193,7 +199,7 @@ describe("the pointer over the strip during a drag of the same Space", () => {
 	})
 
 	it("closes the parting when the drag is cancelled", async () => {
-		const { dock } = holding()
+		const { dock } = await holdingLocated()
 
 		dock.follow(moved(OVER_STRIP.x, OVER_STRIP.y))
 		dock.follow({ kind: "cancelled", originLabel: ORIGIN_WINDOW })
@@ -230,7 +236,7 @@ describe("the settle of a held drag", () => {
 	it.each([false, true])(
 		"ends the hold when heard before the drop (taken: %s), so the drop answers and takes nothing",
 		async (isTaken) => {
-			const { dock, receive } = holding()
+			const { dock, receive } = await holdingLocated()
 
 			dock.follow(moved(OVER_STRIP.x, OVER_STRIP.y))
 			await vi.waitFor(() => expect(bus.listenerCount()).toBe(1))
@@ -454,7 +460,7 @@ describe("the drop decision", () => {
 
 	it("reads the window origin again when the window moved during the drag", async () => {
 		const { dock, receive } = holding()
-		host.readWindowOrigin.mockReturnValue({ x: 0, y: 0 })
+		host.readWindowOrigin.mockResolvedValue({ x: 0, y: 0 })
 
 		dock.follow(dropped(OVER_STRIP.x, OVER_STRIP.y))
 

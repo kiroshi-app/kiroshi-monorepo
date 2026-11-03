@@ -144,8 +144,13 @@ const ghostOriginAt = (x: number, y: number) => ({
 	y: y - GHOST_PAGE_INSET,
 })
 
+const outcomeOf = (isTaken: boolean) =>
+	isTaken ? { isTaken } : { isTaken, failedStep: "refused by the receiver" }
+
 const targetAnswers = (isTaken: boolean) =>
-	awaitDockAnswer.mockResolvedValue({ answer: Promise.resolve(isTaken) })
+	awaitDockAnswer.mockResolvedValue({
+		answer: Promise.resolve(outcomeOf(isTaken)),
+	})
 
 beforeEach(() => {
 	answerEveryDragCommand(ACCEPTED)
