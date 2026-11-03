@@ -73,6 +73,11 @@ const FLOATING_SHADOW =
 const CARD_SHADOW =
 	"shadow-popover dark:shadow-[0_1px_2px_rgb(0_0_0/0.4),0_12px_32px_rgb(0_0_0/0.5)]"
 
+const WRITTEN_RUN_LOOK =
+	"rounded-[3px] border-primary/50 border-b bg-primary/12 py-0.5 text-foreground box-decoration-clone"
+
+const FINISHED_RUN_LOOK = "text-primary"
+
 const agentScopeOf = ({ name, hue }: LibraryDocumentAgent) =>
 	hue === null || hue === undefined
 		? undefined
@@ -296,10 +301,7 @@ const LibraryDocumentWrittenRun = ({
 	onOpenConversation,
 }: LibraryDocumentWrittenRunProps) => (
 	<AgentScope agent={writer.agent}>
-		<span
-			className="rounded-[3px] border-primary/50 border-b bg-primary/12 py-0.5 text-foreground box-decoration-clone"
-			data-slot="library-document-run"
-		>
+		<span className={WRITTEN_RUN_LOOK} data-slot="library-document-run">
 			{children}
 		</span>
 		{isEnd ? (
@@ -348,7 +350,7 @@ const LibraryDocumentFinishedRun = ({
 	children,
 }: LibraryDocumentFinishedRunProps) => (
 	<AgentScope agent={agent}>
-		<span className="text-primary" data-slot="library-document-run">
+		<span className={FINISHED_RUN_LOOK} data-slot="library-document-run">
 			{children}
 		</span>
 	</AgentScope>
@@ -437,6 +439,9 @@ const LibraryDocumentFinishedBar = ({
 }
 
 export {
+	AgentCaret as LibraryDocumentAgentCaret,
+	agentScopeOf,
+	FINISHED_RUN_LOOK,
 	type LibraryDocumentAgent,
 	type LibraryDocumentEdit,
 	type LibraryDocumentFinished,
@@ -447,5 +452,6 @@ export {
 	LibraryDocumentPresence,
 	type LibraryDocumentWriter,
 	LibraryDocumentWrittenRun,
+	WRITTEN_RUN_LOOK,
 	type WriterActions,
 }

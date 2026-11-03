@@ -288,7 +288,7 @@ const openDocument = async (name: string) => {
 	return waitFor(() => [
 		...screen
 			.getByRole("textbox", { name: BODY_FIELD })
-			.querySelectorAll<HTMLElement>("[data-block-id]"),
+			.querySelectorAll<HTMLElement>(".cm-line"),
 	])
 }
 
@@ -354,16 +354,9 @@ describe.each([
 
 		await act(async () => {
 			bodyOf(field).focus()
-			document.getSelection()?.selectAllChildren(field)
-			fireEvent(
-				bodyOf(field),
-				new InputEvent("beforeinput", {
-					inputType: "insertText",
-					data: "Intro line, edited",
-					bubbles: true,
-					cancelable: true,
-				}),
-			)
+			const text = field.firstChild as Text
+			text.data = "Intro line, edited"
+			document.getSelection()?.collapse(text, text.data.length)
 		})
 
 		await waitFor(() =>
