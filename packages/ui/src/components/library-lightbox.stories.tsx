@@ -567,12 +567,15 @@ const onVerticalScrollbar = (stage: Element): Point => {
 	return { x: box.right - 8, y: box.top + box.height / 2 }
 }
 
-const clickAt = (userEvent: UserEventObject, point: Point) =>
+const pressAt = (userEvent: UserEventObject, target: Element, point: Point) =>
 	userEvent.pointer({
 		keys: "[MouseLeft]",
-		target: elementAt(point),
+		target,
 		coords: { clientX: point.x, clientY: point.y },
 	})
+
+const clickAt = (userEvent: UserEventObject, point: Point) =>
+	pressAt(userEvent, elementAt(point), point)
 
 export const BackdropClick = meta.story({
 	args: { openedAt: 0 },
@@ -666,11 +669,7 @@ export const BackdropClick = meta.story({
 		await expect(
 			onScrollbar.x - stage.getBoundingClientRect().left - stage.clientLeft,
 		).toBeGreaterThanOrEqual(stage.clientWidth)
-		await userEvent.pointer({
-			keys: "[MouseLeft]",
-			target: stage,
-			coords: { clientX: onScrollbar.x, clientY: onScrollbar.y },
-		})
+		await pressAt(userEvent, stage, onScrollbar)
 		await expect(args.onClose).not.toHaveBeenCalled()
 
 		const zoomedStripCorner = cornerOf(bottomStripIn(popup))
@@ -752,11 +751,7 @@ export const OverlayScrollbarPress = meta.story({
 		await expect(stage.scrollHeight).toBeGreaterThan(stage.clientHeight)
 
 		const onScrollbar = onVerticalScrollbar(stage)
-		await userEvent.pointer({
-			keys: "[MouseLeft]",
-			target: stage,
-			coords: { clientX: onScrollbar.x, clientY: onScrollbar.y },
-		})
+		await pressAt(userEvent, stage, onScrollbar)
 		await expect(args.onClose).not.toHaveBeenCalled()
 		await expect(popup).toBeVisible()
 	},
