@@ -569,12 +569,8 @@ build reads a positive `KIROSHI_ROUTINE_DEADLINE_SECS` as the routine deadline; 
 build ignores it.
 
 The host tells the front what the run waits on with `turnHeld`, never persisted as a
-message:
-
-```json
-{"type":"turnHeld","hold":{"reason":"backgroundTasks","count":2}}
-{"type":"turnHeld","hold":null}
-```
+message: `hold` is `{"reason":"backgroundTasks","count":N}` while tasks are counted, and
+`null` once the hold is released.
 
 - a `tasks_pending` above `0` on a running run emits `turnHeld` with its count, once per
   change of the count;
