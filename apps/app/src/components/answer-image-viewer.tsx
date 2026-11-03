@@ -9,7 +9,7 @@ import { i18n } from "@workspace/ui/lib/i18n"
 import { failureReporterIn } from "@/lib/failure-report"
 import { openInBrowser } from "@/lib/links/use-external-links"
 
-export type ViewedImages = {
+type ViewedImages = {
 	images: LibraryLightboxImage[]
 	index: number
 }

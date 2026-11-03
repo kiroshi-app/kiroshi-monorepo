@@ -13,7 +13,7 @@ interface HastNode {
 
 type MarkedFile = { value: unknown }
 
-export interface AnswerMarksOptions {
+interface AnswerMarksOptions {
 	isWriting: boolean
 }
 

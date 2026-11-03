@@ -165,4 +165,4 @@ export const compileFormula = (
 	}
 }
 
-export type { Formula, FormulaValues }
+export type { Formula }

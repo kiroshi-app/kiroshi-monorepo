@@ -15,11 +15,10 @@ import {
 	SOURCED_IMAGE_PROPERTY,
 } from "@workspace/ui/components/markdown/answer-marks"
 
-export type MarkdownBlockquoteProps = ComponentPropsWithoutRef<"blockquote"> &
+type MarkdownBlockquoteProps = ComponentPropsWithoutRef<"blockquote"> &
 	ExtraProps
 
-export type MarkdownFigureProps = ComponentPropsWithoutRef<"figure"> &
-	ExtraProps
+type MarkdownFigureProps = ComponentPropsWithoutRef<"figure"> & ExtraProps
 
 const CALLOUT_TONES: readonly unknown[] = [
 	"note",

@@ -1,6 +1,6 @@
 import { useContext } from "react"
 
-import { Markdown } from "@workspace/ui/components/markdown"
+import { Markdown, type MarkdownProps } from "@workspace/ui/components/markdown"
 import { MessageAttachments } from "@workspace/ui/components/message-attachments"
 import { QuotableAnswer } from "@workspace/ui/components/quotable-answer"
 
@@ -8,10 +8,22 @@ import { AnswerActionsContext } from "@/lib/chat/answer-actions"
 import type { MessageContent } from "@/lib/chat/message-attachments"
 import { openAttachment } from "@/lib/links/open-attachment"
 
-export const TurnBody = ({ attachments, text }: MessageContent) => (
+type TurnBodyProps = MessageContent &
+	Pick<MarkdownProps, "answerActions" | "isWriting">
+
+export const TurnBody = ({
+	attachments,
+	text,
+	answerActions,
+	isWriting,
+}: TurnBodyProps) => (
 	<>
 		<MessageAttachments items={attachments} onOpen={openAttachment} />
-		{text ? <Markdown>{text}</Markdown> : null}
+		{text ? (
+			<Markdown answerActions={answerActions} isWriting={isWriting}>
+				{text}
+			</Markdown>
+		) : null}
 	</>
 )
 
@@ -27,36 +39,28 @@ export const AnswerBody = ({
 	isWriting,
 }: AnswerBodyProps) => {
 	const actions = useContext(AnswerActionsContext)
-	const body = (
-		<>
-			<MessageAttachments items={attachments} onOpen={openAttachment} />
-			{text ? (
-				<Markdown
-					answerActions={
-						actions
-							? {
-									agentName,
-									onPickOption: actions.insert,
-									onUseValues: actions.insert,
-									onOpenImage: actions.openImage,
-								}
-							: undefined
-					}
-					isWriting={isWriting}
-				>
-					{text}
-				</Markdown>
-			) : null}
-		</>
-	)
 
-	if (!actions) return body
+	if (!actions) {
+		return (
+			<TurnBody attachments={attachments} isWriting={isWriting} text={text} />
+		)
+	}
 
 	return (
 		<QuotableAnswer
 			onQuote={(quote) => actions.quote({ agentName, text: quote })}
 		>
-			{body}
+			<TurnBody
+				answerActions={{
+					agentName,
+					onPickOption: actions.insert,
+					onUseValues: actions.insert,
+					onOpenImage: actions.openImage,
+				}}
+				attachments={attachments}
+				isWriting={isWriting}
+				text={text}
+			/>
 		</QuotableAnswer>
 	)
 }

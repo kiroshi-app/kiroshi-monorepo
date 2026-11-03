@@ -199,7 +199,6 @@ export {
 	type AnswerBlock,
 	type AnswerBlockLabel,
 	type InteractiveBlock,
-	type InteractiveSlider,
 	isAnswerBlockLabel,
 	readAnswerBlock,
 }

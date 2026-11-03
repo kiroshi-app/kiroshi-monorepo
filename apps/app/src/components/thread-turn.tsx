@@ -72,14 +72,6 @@ export const ThreadTurn = memo(function ThreadTurn({
 	const person = row.role === "user" ? personOf(row) : undefined
 	const { text, attachments } = messageWithAttachments(row.text)
 	const content = card ?? <TurnBody attachments={attachments} text={text} />
-	const answer = card ?? (
-		<AnswerBody
-			agentName={author?.name ?? row.authorName ?? botName ?? ""}
-			attachments={attachments}
-			isWriting={state === "streaming"}
-			text={text}
-		/>
-	)
 	const repliedTo = quoted ? toQuote(quoted) : undefined
 	const pin = () => {
 		onPin(row.messageId, row.blockIndex)
@@ -135,6 +127,15 @@ export const ThreadTurn = memo(function ThreadTurn({
 			</UserTurn>
 		)
 	}
+
+	const answer = card ?? (
+		<AnswerBody
+			agentName={author?.name ?? row.authorName ?? botName ?? ""}
+			attachments={attachments}
+			isWriting={state === "streaming"}
+			text={text}
+		/>
+	)
 
 	return (
 		<AssistantTurn
