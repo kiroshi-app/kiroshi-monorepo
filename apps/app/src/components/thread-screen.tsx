@@ -1490,10 +1490,6 @@ const useThreadActions = (
 		messages: state.messages,
 		send: submitSeated,
 	})
-	const readReplies = useCallback(
-		() => drafts.readReplies(facts.id),
-		[drafts, facts.id],
-	)
 	const rememberReplies = useCallback(
 		(targets: ReplyTarget[]) => drafts.rememberReplies(facts.id, targets),
 		[drafts, facts.id],
@@ -1502,7 +1498,7 @@ const useThreadActions = (
 		useThreadReply({
 			composerRef,
 			scrollerRef,
-			readReplies,
+			readReplies: () => drafts.readReplies(facts.id),
 			rememberReplies,
 			send,
 		})
