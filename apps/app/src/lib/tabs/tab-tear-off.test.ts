@@ -130,6 +130,8 @@ const sessionWithMoves = () => {
 
 const drawGhost = vi.fn(() => TAB)
 
+const CHIP_GHOST_SIZE = { width: 288, height: 60 }
+
 const targetAnswers = (isTaken: boolean) =>
 	awaitDockAnswer.mockResolvedValue({ answer: Promise.resolve(isTaken) })
 
@@ -167,7 +169,7 @@ afterEach(() => {
 })
 
 describe("a tab crossing the tear-off threshold", () => {
-	it("shows the ghost under the pointer at half the origin window, drawing that tab", async () => {
+	it("shows the ghost under the pointer sized to the lifted chip, whatever the origin window, drawing that tab", async () => {
 		answerEveryGhostCommand(SUPPORTED)
 		const { session } = sessionWithMoves()
 
@@ -176,14 +178,11 @@ describe("a tab crossing the tear-off threshold", () => {
 		await vi.waitFor(() =>
 			expect(ghost.dragGhostShow).toHaveBeenCalledExactlyOnceWith(
 				{ x: 640, y: 121 },
-				{ width: 600, height: 400 },
+				CHIP_GHOST_SIZE,
 				TAB,
 			),
 		)
-		expect(drawGhost).toHaveBeenCalledExactlyOnceWith({
-			width: 600,
-			height: 400,
-		})
+		expect(drawGhost).toHaveBeenCalledOnce()
 	})
 
 	it("moves the ghost to the pointer on every move, in order", async () => {
@@ -1069,7 +1068,7 @@ describe("a torn-off tab whose ghost or move fails", () => {
 		)
 		expect(ghost.dragGhostShow).toHaveBeenLastCalledWith(
 			{ x: 20, y: 20 },
-			{ width: 600, height: 400 },
+			CHIP_GHOST_SIZE,
 			TAB,
 		)
 		expect(ghost.dragGhostHide).toHaveBeenCalledOnce()
