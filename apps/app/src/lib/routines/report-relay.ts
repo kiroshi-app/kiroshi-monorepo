@@ -26,6 +26,14 @@ const scopeKeyOf = ({
 	runtimeSessionId,
 }: RuntimeScope) => [conversationId, botId, runtimeSessionId].join(SEPARATOR)
 
+const isUnknownBot = (thrown: unknown): boolean =>
+	typeof thrown === "object" &&
+	thrown !== null &&
+	"kind" in thrown &&
+	thrown.kind === "unknownBot"
+
+const isFromThisComputer = (hostId?: string | null) => !hostId
+
 export const startReportRelay = ({
 	driver,
 	store,
@@ -35,6 +43,13 @@ export const startReportRelay = ({
 	const endedRuns = new Set<string>()
 
 	const raiseFailure = (thrown: unknown) => {
+		if (isUnknownBot(thrown)) {
+			console.warn(
+				"report relay: skipped a report of an agent this computer does not hold",
+				thrown,
+			)
+			return
+		}
 		console.error("report relay:", thrown)
 		reportFailure({
 			title: i18n.t("chat:transcript.mention.unresolved.title", { count: 1 }),
@@ -63,8 +78,8 @@ export const startReportRelay = ({
 		}
 	}
 
-	const take = ({ scope, event }: ScopedEvent) => {
-		if (!scope) {
+	const take = ({ scope, event }: ScopedEvent, hostId?: string | null) => {
+		if (!scope || !isFromThisComputer(hostId)) {
 			return
 		}
 		noteRunEnded(scope, event)

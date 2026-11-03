@@ -5,7 +5,7 @@ import type { NoticeMessage } from "@workspace/ui/components/notice-surface"
 import { startReportRelay } from "./report-relay"
 import { writeReportTurn } from "./run-report"
 
-import type { RuntimeScope } from "../agent/contract"
+import type { ChatMessage, RuntimeScope } from "../agent/contract"
 import { createConversationRuntimes } from "../conversations/conversation-runtimes"
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
 import {
@@ -39,7 +39,9 @@ type Relaying = {
 	store: TranscriptStore
 	conversation: Conversation
 	notices: NoticeMessage[]
+	relayed: RuntimeScope[]
 	announce: (scope: RuntimeScope, text: string) => Promise<void>
+	reload: () => Promise<void>
 }
 
 const createRelaying = async (
@@ -54,15 +56,38 @@ const createRelaying = async (
 		botIds: bots.map((bot) => bot.id),
 	})
 	const notices: NoticeMessage[] = []
-	startReportRelay({
-		driver,
-		store,
-		runtimes: createConversationRuntimes(driver, store),
-		reportFailure: (notice) => {
-			notices.push(notice)
+	const relayed: RuntimeScope[] = []
+	const runtimes = createConversationRuntimes(driver, store)
+	const countingRuntimes = {
+		runtimeFor: (conversationId: string) => {
+			const runtime = runtimes.runtimeFor(conversationId)
+			return {
+				...runtime,
+				relayRunReport: (scope: RuntimeScope, message: ChatMessage) => {
+					relayed.push(scope)
+					return runtime.relayRunReport(scope, message)
+				},
+			}
 		},
-	})
+	}
+	const start = () =>
+		startReportRelay({
+			driver,
+			store,
+			runtimes: countingRuntimes,
+			reportFailure: (notice) => {
+				notices.push(notice)
+			},
+		})
+	let stop = start()
 	await settled()
+
+	const reload = async () => {
+		stop()
+		await settled()
+		stop = start()
+		await settled()
+	}
 
 	const announce = async (scope: RuntimeScope, text: string) => {
 		const reported = await writeReportTurn({
@@ -84,7 +109,7 @@ const createRelaying = async (
 		await settled()
 	}
 
-	return { driver, store, conversation, notices, announce }
+	return { driver, store, conversation, notices, relayed, announce, reload }
 }
 
 const runScopeOf = (conversationId: string, botId: string): RuntimeScope => ({
@@ -94,15 +119,45 @@ const runScopeOf = (conversationId: string, botId: string): RuntimeScope => ({
 	epoch: 1,
 })
 
-const endRun = (driver: ScriptedDriver, scope: RuntimeScope) =>
-	driver.emit(scope, {
-		type: "turnEnded",
-		ended: {
-			sessionId: "session",
-			outcome: "completed",
-			structuredOutput: { outcome: "report", report: "Walls are up." },
+const endRun = (
+	driver: ScriptedDriver,
+	scope: RuntimeScope,
+	hostId: string | null = null,
+) =>
+	driver.emit(
+		scope,
+		{
+			type: "turnEnded",
+			ended: {
+				sessionId: "session",
+				outcome: "completed",
+				structuredOutput: { outcome: "report", report: "Walls are up." },
+			},
 		},
-	})
+		hostId,
+	)
+
+const completeReport = (
+	driver: ScriptedDriver,
+	scope: RuntimeScope,
+	hostId: string | null = null,
+) =>
+	driver.emit(
+		scope,
+		{
+			type: "messageCompleted",
+			message: {
+				id: "foreign-report",
+				role: "assistant",
+				text: "Walls are up.",
+				completion: "complete",
+				timestamp: 1,
+			},
+		},
+		hostId,
+	)
+
+const JOINED_HOST = "http://192.168.1.20:45367"
 
 describe("a routine run report announced by the host", () => {
 	it("summons the seated companion the report names", async () => {
@@ -202,5 +257,53 @@ describe("a routine run report announced by the host", () => {
 
 		expect(notices).toHaveLength(1)
 		expect(driver.submissions).toHaveLength(0)
+	})
+
+	it("relays nothing and raises nothing for a report of an agent a joined host holds", async () => {
+		const { driver, notices, relayed } = await createRelaying()
+		const scope = runScopeOf("conversation-on-the-host", "agent-on-the-host")
+
+		endRun(driver, scope, JOINED_HOST)
+		completeReport(driver, scope, JOINED_HOST)
+		await settled()
+
+		expect(relayed).toHaveLength(0)
+		expect(driver.submissions).toHaveLength(0)
+		expect(notices).toHaveLength(0)
+	})
+
+	it("relays nothing and raises nothing when the host answers that it does not know the agent", async () => {
+		const base = createFakeTranscriptStore()
+		const { driver, conversation, notices, relayed, announce } =
+			await createRelaying({
+				...base,
+				mainChat: () => Promise.reject({ kind: "unknownBot", id: "gone" }),
+			})
+		const ada = idOf(conversation, "Ada")
+		const nyx = idOf(conversation, "Nyx")
+		const scope = runScopeOf(conversation.id, ada)
+
+		endRun(driver, scope)
+		await announce(scope, `Walls are up. <@${nyx}>, read it.`)
+
+		expect(relayed).toHaveLength(0)
+		expect(notices).toHaveLength(0)
+	})
+
+	it("relays a report once across a reload of the window", async () => {
+		const { driver, conversation, relayed, announce, reload } =
+			await createRelaying()
+		const ada = idOf(conversation, "Ada")
+		const nyx = idOf(conversation, "Nyx")
+		const scope = runScopeOf(conversation.id, ada)
+
+		endRun(driver, scope)
+		await announce(scope, `Walls are up. <@${nyx}>, read it.`)
+		await reload()
+		completeReport(driver, scope)
+		await settled()
+
+		expect(relayed).toHaveLength(1)
+		expect(driver.submissions).toHaveLength(1)
 	})
 })

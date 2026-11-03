@@ -58,7 +58,6 @@ export const useWorkspaceDrivers = (
 
 	useReportRelay({
 		driver,
-		store,
 		runtimes: conversationRuntimes,
 		isDriverWindow,
 	})
