@@ -326,8 +326,8 @@ url: https://tauri.app/start/
 title: What is Tauri?
 description: The official introduction, with the supported platforms.
 site: Tauri
-image: https://tauri.app/og.png
-alt: The Tauri logo over the words Build smaller, faster, and more secure apps
+image: https://images.example.org/tauri-start.jpg
+alt: Preview of the Tauri introduction page
 ```
 ````
 
