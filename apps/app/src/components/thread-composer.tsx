@@ -11,7 +11,6 @@ import {
 import { PromptAttachButton } from "@workspace/ui/components/prompt-attach-button"
 import { PromptAttachments } from "@workspace/ui/components/prompt-attachments"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
-import { SelectionQuote } from "@workspace/ui/components/selection-quote"
 
 import {
 	draftWithText,
@@ -140,19 +139,10 @@ export const ThreadComposer = ({
 		children: (
 			<PromptInput
 				attachments={
-					<>
-						{quoted ? (
-							<SelectionQuote
-								agentName={quoted.agentName}
-								onRemove={() => setQuoted(null)}
-								text={quoted.text}
-							/>
-						) : null}
-						<PromptAttachments
-							items={attachments}
-							onRemove={onRemoveAttachment}
-						/>
-					</>
+					<PromptAttachments
+						items={attachments}
+						onRemove={onRemoveAttachment}
+					/>
 				}
 				disabled={isDisabled}
 				dropTarget={isDropTarget}
@@ -164,6 +154,9 @@ export const ThreadComposer = ({
 				onSubmit={submit}
 				onValueChange={changePrompt}
 				placeholder={placeholder}
+				quote={
+					quoted ? { ...quoted, onRemove: () => setQuoted(null) } : undefined
+				}
 				textareaRef={composerRef}
 				value={prompt}
 			/>

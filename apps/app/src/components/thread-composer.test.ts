@@ -296,6 +296,19 @@ describe("ThreadComposer", () => {
 			expect(sentPrompts).toEqual([])
 		})
 
+		it("holds the quote in the quote slot, not among the attachments", () => {
+			renderLinked()
+
+			act(() =>
+				promptRef.current?.quote({ agentName: "Atlas", text: "Dedupe on id" }),
+			)
+
+			const quote = screen.getByRole("group", {
+				name: "Selection quoted from Atlas",
+			})
+			expect(quote.closest('[data-slot="prompt-input-quote"]')).not.toBeNull()
+		})
+
 		it("sends the quote ahead of the message, then lets it go", async () => {
 			renderLinked()
 			act(() =>
@@ -309,8 +322,9 @@ describe("ThreadComposer", () => {
 			expect(screen.queryByText("Dedupe on id")).toBeNull()
 		})
 
-		it("drops the quote when its cross is pressed", () => {
+		it("drops the quote when its cross is pressed and keeps the draft", () => {
 			renderLinked()
+			type("Why this one?")
 			act(() =>
 				promptRef.current?.quote({ agentName: "Atlas", text: "Dedupe on id" }),
 			)
@@ -320,6 +334,7 @@ describe("ThreadComposer", () => {
 			)
 
 			expect(screen.queryByText("Dedupe on id")).toBeNull()
+			expect(field().value).toBe("Why this one?")
 		})
 	})
 })
