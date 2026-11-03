@@ -609,7 +609,10 @@ describe("Rename in the document bar", () => {
 		await pickInDocumentMore("rename")
 
 		await waitFor(() => expect(document.activeElement).toBe(field))
-		expect([field.selectionStart, field.selectionEnd]).toEqual([5, 5])
+		expect([field.selectionStart, field.selectionEnd]).toEqual([
+			"notes".length,
+			"notes".length,
+		])
 	})
 
 	it.each(SPACES)(
