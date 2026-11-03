@@ -350,11 +350,14 @@ type FieldSelection = TextSelection & { id: string }
 
 const TITLE_FIELD = "title"
 
+const focusedIn = (fields: Map<string, HTMLTextAreaElement>) =>
+	[...fields].find(([, field]) => field === document.activeElement)
+
 const selectionIn = (
 	fields: Map<string, HTMLTextAreaElement>,
 ): FieldSelection | undefined => {
-	for (const [id, field] of fields)
-		if (field === document.activeElement) return { id, ...selectionOf(field) }
+	const [id, field] = focusedIn(fields) ?? []
+	return id && field ? { id, ...selectionOf(field) } : undefined
 }
 
 const fieldTextOf = (id: string, title: string, blocks: Block[]) =>
@@ -526,10 +529,12 @@ type LibraryDocumentEditorProps = WriterActions & {
 	onCaretChange?: (caret: number | null) => void
 }
 
-const caretIn = (
-	field: HTMLTextAreaElement,
-	{ start, end, direction }: TextSelection,
-) => Number(field.dataset.bodyOffset) + (direction === "backward" ? start : end)
+const caretIn = (field: HTMLTextAreaElement) => {
+	const { start, end, direction } = selectionOf(field)
+	return (
+		Number(field.dataset.bodyOffset) + (direction === "backward" ? start : end)
+	)
+}
 
 const endingOf = (body: string) => /\s*$/.exec(body)?.[0] ?? ""
 
@@ -566,10 +571,8 @@ const LibraryDocumentEditor = ({
 	>(() => listAnchorsOf(runsOf(blocks), new Map()))
 
 	const reportCaret = () => {
-		const selection = selectionIn(fields.current)
-		const field = selection && fields.current.get(selection.id)
-		const caret =
-			field && selection.id !== TITLE_FIELD ? caretIn(field, selection) : null
+		const [id, field] = focusedIn(fields.current) ?? []
+		const caret = field && id !== TITLE_FIELD ? caretIn(field) : null
 		if (caret === reportedCaret.current) return
 
 		reportedCaret.current = caret
