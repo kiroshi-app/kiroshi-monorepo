@@ -13,6 +13,15 @@ import type { ExtraProps } from "react-markdown"
 import { CodeLine } from "@workspace/ui/components/code-block"
 import { Icons } from "@workspace/ui/components/icons"
 import {
+	MarkdownAnswerBlock,
+	PendingAnswerBlock,
+} from "@workspace/ui/components/markdown/answer-block"
+import {
+	isAnswerBlockLabel,
+	readAnswerBlock,
+} from "@workspace/ui/components/markdown/answer-block-source"
+import { PENDING_PROPERTY } from "@workspace/ui/components/markdown/answer-marks"
+import {
 	MATH_LANGUAGE,
 	MarkdownMath,
 } from "@workspace/ui/components/markdown/math"
@@ -147,6 +156,13 @@ export const MarkdownPre = ({ node, children, ...props }: MarkdownPreProps) => {
 	if (language === MATH_LANGUAGE)
 		return <MarkdownMath display source={source} />
 	if (language === MERMAID_LANGUAGE) return <MarkdownMermaid source={source} />
+	if (isAnswerBlockLabel(language)) {
+		if (node?.properties?.[PENDING_PROPERTY]) {
+			return <PendingAnswerBlock label={language} />
+		}
+		const block = readAnswerBlock(language, source)
+		if (block) return <MarkdownAnswerBlock block={block} />
+	}
 
 	return <MarkdownFence code={source} language={language} />
 }

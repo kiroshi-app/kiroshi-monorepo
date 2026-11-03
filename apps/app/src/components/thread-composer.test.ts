@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from "vitest"
 import "@workspace/ui/lib/i18n"
 
 import {
+	type PromptHandle,
 	ThreadComposer,
 	type ThreadMenuSlot,
 } from "@/components/thread-composer"
@@ -24,6 +25,7 @@ type ComposerFixture = {
 	onAttach?: (files: File[]) => void
 	queryIn?: (prompt: string) => string | null
 	menu?: (slot: ThreadMenuSlot) => ReactNode
+	promptRef?: { current: PromptHandle | null }
 }
 
 const composerOf = ({
@@ -32,6 +34,7 @@ const composerOf = ({
 	onAttach = () => undefined,
 	queryIn = () => null,
 	menu = (slot) => slot.children,
+	promptRef,
 }: ComposerFixture) =>
 	createElement(ThreadComposer, {
 		attachments: NO_ATTACHMENTS,
@@ -45,6 +48,7 @@ const composerOf = ({
 		onRemoveAttachment: () => undefined,
 		onSubmitPrompt,
 		placeholder: "Ask Nyx to do something…",
+		promptRef,
 		queryIn,
 		readDraft: () => "",
 	})
@@ -240,6 +244,82 @@ describe("ThreadComposer", () => {
 			expect(screen.queryByText(OFFLINE_NOTICE)).toBeNull()
 			type("back again")
 			expect(field().value).toBe("back again")
+		})
+	})
+
+	describe("from an agent answer", () => {
+		const sentPrompts: string[] = []
+		const promptRef: { current: PromptHandle | null } = { current: null }
+		const renderLinked = () =>
+			render(
+				composerOf({
+					onSubmitPrompt: (text) => {
+						sentPrompts.push(text)
+						return Promise.resolve(true)
+					},
+					promptRef,
+				}),
+			)
+
+		afterEach(() => {
+			sentPrompts.length = 0
+		})
+
+		it("puts a picked option into an empty field and sends nothing", () => {
+			renderLinked()
+
+			act(() => promptRef.current?.insert("Dual write"))
+
+			expect(field().value).toBe("Dual write")
+			expect(sentPrompts).toEqual([])
+		})
+
+		it("keeps the draft already written when an option lands in it", () => {
+			renderLinked()
+			type("Thanks.")
+
+			act(() => promptRef.current?.insert("Dual write"))
+
+			expect(field().value).toBe("Thanks.\nDual write")
+		})
+
+		it("holds a quote over the draft, sends nothing, and keeps the draft", () => {
+			renderLinked()
+			type("Why this one?")
+
+			act(() =>
+				promptRef.current?.quote({ agentName: "Atlas", text: "Dedupe on id" }),
+			)
+
+			expect(screen.getByText("Dedupe on id")).toBeTruthy()
+			expect(field().value).toBe("Why this one?")
+			expect(sentPrompts).toEqual([])
+		})
+
+		it("sends the quote ahead of the message, then lets it go", async () => {
+			renderLinked()
+			act(() =>
+				promptRef.current?.quote({ agentName: "Atlas", text: "Dedupe on id" }),
+			)
+			type("Why this one?")
+
+			await send()
+
+			expect(sentPrompts).toEqual(["> Dedupe on id\n\nWhy this one?"])
+			expect(screen.queryByText("Dedupe on id")).toBeNull()
+		})
+
+		it("drops the quote when its cross is pressed", () => {
+			renderLinked()
+			act(() =>
+				promptRef.current?.quote({ agentName: "Atlas", text: "Dedupe on id" }),
+			)
+
+			fireEvent.click(
+				screen.getByRole("button", { name: "Remove the selection" }),
+			)
+
+			expect(screen.queryByText("Dedupe on id")).toBeNull()
 		})
 	})
 })

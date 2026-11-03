@@ -47,6 +47,10 @@ import type {
 import { type TurnCauseKind, TurnGroup } from "@workspace/ui/components/turn"
 import { type ChatCopy, useChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 
+import {
+	AnswerImageViewer,
+	useAnswerImageViewer,
+} from "@/components/answer-image-viewer"
 import { ApplicationInstallRow } from "@/components/application-install-row"
 import { FaceAvatar } from "@/components/face-avatar"
 import { useMissionCardMenus } from "@/components/mission-card-menu"
@@ -81,6 +85,10 @@ import {
 	SessionApplicationsContext,
 } from "@/lib/applications/use-session-application"
 import { useRosterClock } from "@/lib/bots/use-roster-clock"
+import {
+	type AnswerActions,
+	AnswerActionsContext,
+} from "@/lib/chat/answer-actions"
 import {
 	type AnsweredCards,
 	answeredCardsIn,
@@ -660,6 +668,7 @@ const ThreadRun = ({
 					}
 					bare={presentation.hasBareTables && isTableBlock(row.text)}
 					botId={botFace?.id}
+					botName={botFace?.name}
 					cause={causes.get(row.turnId)}
 					key={bubble}
 					now={now}
@@ -1729,6 +1738,12 @@ function ThreadView(props: ThreadViewProps) {
 		onOpenMissionInNewTab,
 	} = props
 	const view = useThreadView(props)
+	const imageViewer = useAnswerImageViewer()
+	const answerActions: AnswerActions = {
+		insert: (text) => view.promptRef.current?.insert(text),
+		quote: (selection) => view.promptRef.current?.quote(selection),
+		openImage: imageViewer.open,
+	}
 	const joinedHost = useContext(OpenJoinedHostContext)
 	const departure = joinedHost?.departure
 	const access = spaceAccessOf(joinedHost)
@@ -1821,6 +1836,13 @@ function ThreadView(props: ThreadViewProps) {
 					: undefined
 			}
 			onFollowChange={view.controller.follow}
+			overlay={
+				<AnswerImageViewer
+					onClose={imageViewer.close}
+					onStep={imageViewer.step}
+					viewed={imageViewer.viewed}
+				/>
+			}
 			pending={
 				departure ? undefined : (
 					<ThreadApproval
@@ -1884,7 +1906,9 @@ function ThreadView(props: ThreadViewProps) {
 				onOpenMissionInNewTab={onOpenMissionInNewTab}
 				wrapMissionCard={view.wrapMissionCard}
 			>
-				{layout}
+				<AnswerActionsContext value={answerActions}>
+					{layout}
+				</AnswerActionsContext>
 			</ThreadRoutines>
 		</RosterProvider>
 	)

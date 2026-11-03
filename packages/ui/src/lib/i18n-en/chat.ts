@@ -131,6 +131,13 @@ const chat = {
 	},
 	richBlock: {
 		building: "Building the view…",
+		pending: {
+			options: "Options",
+			interactive: "Interactive view",
+			gallery: "Gallery",
+			"illustrated-list": "List",
+			collapsible: "Section",
+		},
 	},
 	queue: {
 		title_one: "Queued · {{count}} · goes once {{name}}’s answer is done",
@@ -335,6 +342,25 @@ const chat = {
 		},
 		webPage: {
 			open: "Open as page",
+		},
+		options: {
+			title: "Options",
+		},
+		interactive: {
+			result: "Result",
+			notDefined: "Not defined for these values",
+			use: "Use these values",
+			summary: "{{values}}. {{label}}: {{result}}",
+		},
+		image: {
+			untitled: "Image",
+			copyFailed: "Couldn’t copy the image address. Press Copy again.",
+			openFailed:
+				"Couldn’t open the image in the browser. Press Download again.",
+		},
+		callout: {
+			note: "Note",
+			warning: "Warning",
 		},
 		gallery: {
 			tile: "{{caption}}, photo {{position}}",

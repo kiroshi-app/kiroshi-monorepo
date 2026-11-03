@@ -142,6 +142,13 @@ const chat = {
 	},
 	richBlock: {
 		building: "Construction de la vue…",
+		pending: {
+			options: "Options",
+			interactive: "Vue interactive",
+			gallery: "Galerie",
+			"illustrated-list": "Liste",
+			collapsible: "Section",
+		},
 	},
 	queue: {
 		title_one:
@@ -358,6 +365,26 @@ const chat = {
 		},
 		webPage: {
 			open: "Ouvrir comme page",
+		},
+		options: {
+			title: "Options",
+		},
+		interactive: {
+			result: "Résultat",
+			notDefined: "Non défini pour ces valeurs",
+			use: "Utiliser ces valeurs",
+			summary: "{{values}}. {{label}} : {{result}}",
+		},
+		image: {
+			untitled: "Image",
+			copyFailed:
+				"Impossible de copier l’adresse de l’image. Appuyez de nouveau sur Copier.",
+			openFailed:
+				"Impossible d’ouvrir l’image dans le navigateur. Appuyez de nouveau sur Télécharger.",
+		},
+		callout: {
+			note: "Note",
+			warning: "Attention",
 		},
 		gallery: {
 			tile: "{{caption}}, photo {{position}}",
