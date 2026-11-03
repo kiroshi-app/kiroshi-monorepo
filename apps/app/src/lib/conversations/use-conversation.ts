@@ -110,6 +110,17 @@ const workersIn = (
 	]
 }
 
+export const useNotSentConversations = (
+	runtimes: ConversationRuntimes,
+	conversations: StoredConversation[],
+): Record<string, boolean> =>
+	useHeldRecord(
+		runtimes,
+		conversations.map(({ id }) => id),
+		(id) => Boolean(runtimes.heldFor(id)?.getState().refusedMessage),
+		String,
+	)
+
 export const useConversationWorkers = (
 	runtimes: ConversationRuntimes,
 	conversations: StoredConversation[],

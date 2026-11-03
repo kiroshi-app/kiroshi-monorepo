@@ -171,6 +171,7 @@ export type ConversationRosterActivity = {
 	hostStates: ConversationHostStates
 	working: Record<string, ConversationWorker[]>
 	previews: ConversationPreviews
+	notSent: Record<string, boolean>
 	personOf: (person: LastWordAuthor) => string | undefined
 }
 
@@ -246,6 +247,7 @@ export const toRosterConversations = (
 			lastMessage: previewText(conversation, preview),
 			lastSpeaker: speakerNameAmong(seated, preview, activity.personOf),
 			timestamp: preview ? rosterTimestamp(preview.at, now) : undefined,
+			isNotSent: activity.notSent[conversation.id] ?? false,
 			lastActivityAt: lastSpokeAt(conversation, activity),
 			status: isWorking ? "working" : "idle",
 		}
