@@ -71,11 +71,14 @@ const stubWebLocks = () => {
 	const held = new Set<string>()
 	const request = async (
 		name: string,
-		_options: LockOptions,
+		options: LockOptions,
 		callback: (lock: Lock | null) => Promise<void>,
 	) => {
-		if (held.has(name)) {
+		if (held.has(name) && options.ifAvailable) {
 			return callback(null)
+		}
+		if (held.has(name)) {
+			throw new Error("waiting for a held lock isn't stubbed")
 		}
 		held.add(name)
 		try {
@@ -1105,6 +1108,69 @@ describe("landing after an import", () => {
 		await controller.finish()
 
 		expect(world.opened).toEqual([SCOUT.id])
+	})
+})
+
+describe("holding the Shoto run in a window", () => {
+	const hold = onboardingFlowWorldOf({
+		chat: {} as ChatController,
+		roster: {} as RosterController,
+		user: {} as UserController,
+	}).holdShotoRun
+
+	const runCounted = () => {
+		const run = { count: 0 }
+		return {
+			run,
+			counting: async () => {
+				run.count += 1
+			},
+		}
+	}
+
+	it("runs when no other window holds the run", async () => {
+		const { run, counting } = runCounted()
+
+		await hold(counting)
+
+		expect(run.count).toBe(1)
+	})
+
+	it("skips while another window holds the run", async () => {
+		const { run, counting } = runCounted()
+		void hold(() => new Promise(() => {}))
+
+		await hold(counting)
+
+		expect(run.count).toBe(0)
+	})
+
+	it("runs without a hold in a webview that has no Web Locks", async () => {
+		Object.defineProperty(navigator, "locks", {
+			configurable: true,
+			value: null,
+		})
+		const { run, counting } = runCounted()
+
+		await hold(counting)
+
+		expect(run.count).toBe(1)
+	})
+
+	it("names the failure when the run can't be held", async () => {
+		world.step = "account"
+		world.holdShotoRun = async () => {
+			throw { kind: "storage", detail: "the lock was refused" }
+		}
+
+		await controller.finish()
+		await flushed()
+
+		expect(world.opened).toEqual([])
+		expect(reportFailure).toHaveBeenCalledWith({
+			title: i18n.t("chat:screen.notice.failed"),
+			description: "the lock was refused",
+		})
 	})
 })
 

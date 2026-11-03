@@ -205,7 +205,7 @@ export const createOnboardingFlowController = (
 		}
 	}
 
-	const joinShoto = () => world.holdShotoRun(runShoto)
+	const joinShoto = () => world.holdShotoRun(runShoto).catch(reportUnsent)
 
 	const isShotoRunStored = () =>
 		world.storedStep() === "done" &&
@@ -395,15 +395,17 @@ export const onboardingFlowWorldOf = ({
 	oweShotoRun: () => localStorage.setItem(SHOTO_RUN_OWED_KEY, ""),
 	clearShotoRunOwed: () => localStorage.removeItem(SHOTO_RUN_OWED_KEY),
 	holdShotoRun: (run) =>
-		navigator.locks.request(
-			SHOTO_RUN_LOCK,
-			{ ifAvailable: true },
-			async (lock) => {
-				if (lock) {
-					await run()
-				}
-			},
-		),
+		navigator.locks
+			? navigator.locks.request(
+					SHOTO_RUN_LOCK,
+					{ ifAvailable: true },
+					async (lock) => {
+						if (lock) {
+							await run()
+						}
+					},
+				)
+			: run(),
 	shotoId: () => user.getState().preferences.onboardingShotoId ?? null,
 	firstCompanionId: () =>
 		user.getState().preferences.onboardingFirstCompanionId ?? null,
