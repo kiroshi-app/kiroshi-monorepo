@@ -1,7 +1,7 @@
 use std::fs::{self, File};
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc;
+use std::sync::{mpsc, Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
 use image::{DynamicImage, ImageFormat, Rgb, RgbImage};
@@ -2153,16 +2153,14 @@ async fn an_update_to_the_landed_name_racing_a_rename_returns_only_after_the_ren
 	let space_id = a_space(&app, "Work").await;
 	let root = root(app.handle()).expect("the library root resolves");
 	put(&root, &space_id, "notes.md", b"base");
-	let order = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+	let order = Arc::new(Mutex::new(Vec::new()));
 	let (told, applied) = mpsc::channel();
-	let (heard, handle, library) =
-		(std::sync::Arc::clone(&order), app.handle().clone(), root.clone());
+	let (heard, handle, library) = (Arc::clone(&order), app.handle().clone(), root.clone());
 	let shared_space = space_id.clone();
 	app.listen_any(events::LIBRARY_DOCUMENT_RENAMED.name(), move |event| {
 		let renamed: LibraryDocumentRenamed =
 			serde_json::from_str(event.payload()).expect("a rename payload");
-		let (racing, handle, library) =
-			(std::sync::Arc::clone(&heard), handle.clone(), library.clone());
+		let (racing, handle, library) = (Arc::clone(&heard), handle.clone(), library.clone());
 		let (space_id, told) = (shared_space.clone(), told.clone());
 		let landed = renamed.name.clone();
 		std::thread::spawn(move || {

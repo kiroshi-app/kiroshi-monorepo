@@ -139,8 +139,7 @@ impl Documents {
 		if !is_plain_name(new_name) || !keeps_the_format {
 			return Err(LibraryError::InvalidName { name: new_name.to_owned() });
 		}
-		let target = space_dir(root, space_id).join(new_name);
-		let landed = if is_the_item_itself(&item, &target) {
+		let landed = if is_the_item_itself(&item, &space_dir(root, space_id).join(new_name)) {
 			recased(root, space_id, &item, name, new_name)?
 		} else {
 			relinked(root, space_id, &item, name, new_name)?
