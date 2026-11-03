@@ -522,7 +522,7 @@ const chat = {
 						"This space opens once {{host}} is online and lets this computer in.",
 					reasons: {
 						relayUnreachable:
-							"Couldn’t reach Kiroshi to open this space. Check your connection.",
+							"Couldn’t reach Kiroshi to open this space on {{host}}’s computer. Check your connection.",
 						rekeySendFailed:
 							"Couldn’t get this space’s key, {{host}} hasn’t answered. Ask them to open Kiroshi on their computer.",
 						hostSilent:
@@ -536,15 +536,15 @@ const chat = {
 						unknownInstance:
 							"Kiroshi doesn’t host this space anymore. Ask {{host}} to turn hosting on again.",
 						deviceKeysUnreadable:
-							"Couldn’t read this computer’s device keys. Quit Kiroshi and open it again.",
+							"Couldn’t read this computer’s device keys to connect to {{host}}. Quit Kiroshi and open it again.",
 						deviceAwaitingApproval:
-							"This computer isn’t approved yet. Approve it from another computer signed in to your account.",
+							"This computer isn’t approved to connect to {{host}} yet. Approve it from another computer signed in to your account.",
 						socketUrlFailed:
-							"Couldn’t get this space’s address from Kiroshi. Quit Kiroshi and open it again.",
+							"Couldn’t get this space’s address on {{host}}’s computer from Kiroshi. Quit Kiroshi and open it again.",
 						rosterMissing:
 							"This space’s member list hasn’t arrived from {{host}} yet. Ask them to open Kiroshi on their computer.",
 						keychainReadFailed:
-							"Couldn’t read this space’s key from this computer’s secure storage. Quit Kiroshi, open it again, and allow access if this computer asks.",
+							"Couldn’t read the key {{host}} sent for this space from this computer’s secure storage. Quit Kiroshi, open it again, and allow access if this computer asks.",
 					},
 				},
 				keyStore: {

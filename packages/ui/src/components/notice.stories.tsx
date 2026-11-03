@@ -228,7 +228,7 @@ export const JoinWaitingRelayUnreachable = meta.story({
 	name: "Join waiting, Kiroshi unreachable",
 	...waitingForHostStory(
 		"relayUnreachable",
-		"Couldn’t reach Kiroshi to open this space. Check your connection.",
+		"Couldn’t reach Kiroshi to open this space on Noa’s computer. Check your connection.",
 		"this computer couldn't reach Kiroshi, the only reason that asks to check the connection",
 	),
 })
@@ -291,7 +291,7 @@ export const JoinWaitingDeviceKeysUnreadable = meta.story({
 	name: "Join waiting, device keys unreadable",
 	...waitingForHostStory(
 		"deviceKeysUnreadable",
-		"Couldn’t read this computer’s device keys. Quit Kiroshi and open it again.",
+		"Couldn’t read this computer’s device keys to connect to Noa. Quit Kiroshi and open it again.",
 		"this computer couldn't read its own device keys",
 	),
 })
@@ -300,7 +300,7 @@ export const JoinWaitingDeviceAwaitingApproval = meta.story({
 	name: "Join waiting, device awaiting approval",
 	...waitingForHostStory(
 		"deviceAwaitingApproval",
-		"This computer isn’t approved yet. Approve it from another computer signed in to your account.",
+		"This computer isn’t approved to connect to Noa yet. Approve it from another computer signed in to your account.",
 		"this computer still awaits approval from another device of the account",
 	),
 })
@@ -309,7 +309,7 @@ export const JoinWaitingSocketUrlFailed = meta.story({
 	name: "Join waiting, address not received",
 	...waitingForHostStory(
 		"socketUrlFailed",
-		"Couldn’t get this space’s address from Kiroshi. Quit Kiroshi and open it again.",
+		"Couldn’t get this space’s address on Noa’s computer from Kiroshi. Quit Kiroshi and open it again.",
 		"Kiroshi didn't give the address to connect to the space",
 	),
 })
@@ -327,7 +327,7 @@ export const JoinWaitingKeychainReadFailed = meta.story({
 	name: "Join waiting, secure storage unreadable",
 	...waitingForHostStory(
 		"keychainReadFailed",
-		"Couldn’t read this space’s key from this computer’s secure storage. Quit Kiroshi, open it again, and allow access if this computer asks.",
+		"Couldn’t read the key Noa sent for this space from this computer’s secure storage. Quit Kiroshi, open it again, and allow access if this computer asks.",
 		"the space key couldn't be read from this computer's secure storage",
 	),
 })

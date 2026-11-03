@@ -552,7 +552,7 @@ const chat = {
 						"Cet espace s’ouvrira dès que {{host}} sera en ligne et acceptera cet ordinateur.",
 					reasons: {
 						relayUnreachable:
-							"Impossible de joindre Kiroshi pour ouvrir cet espace. Vérifiez votre connexion.",
+							"Impossible de joindre Kiroshi pour ouvrir cet espace sur l’ordinateur de {{host}}. Vérifiez votre connexion.",
 						rekeySendFailed:
 							"Impossible d’obtenir la clé de cet espace, {{host}} n’a pas répondu. Demandez-lui d’ouvrir Kiroshi sur son ordinateur.",
 						hostSilent:
@@ -566,15 +566,15 @@ const chat = {
 						unknownInstance:
 							"Kiroshi n’héberge plus cet espace. Demandez à {{host}} de réactiver l’hébergement.",
 						deviceKeysUnreadable:
-							"Impossible de lire les clés de cet ordinateur. Quittez Kiroshi et rouvrez-le.",
+							"Impossible de lire les clés de cet ordinateur pour joindre {{host}}. Quittez Kiroshi et rouvrez-le.",
 						deviceAwaitingApproval:
-							"Cet ordinateur n’est pas encore approuvé. Approuvez-le depuis un autre ordinateur connecté à votre compte.",
+							"Cet ordinateur n’est pas encore approuvé pour joindre {{host}}. Approuvez-le depuis un autre ordinateur connecté à votre compte.",
 						socketUrlFailed:
-							"Impossible d’obtenir l’adresse de cet espace auprès de Kiroshi. Quittez Kiroshi et rouvrez-le.",
+							"Impossible d’obtenir auprès de Kiroshi l’adresse de cet espace sur l’ordinateur de {{host}}. Quittez Kiroshi et rouvrez-le.",
 						rosterMissing:
 							"La liste des membres de cet espace n’a pas encore été envoyée par {{host}}. Demandez-lui d’ouvrir Kiroshi sur son ordinateur.",
 						keychainReadFailed:
-							"Impossible de lire la clé de cet espace dans le stockage sécurisé de cet ordinateur. Quittez Kiroshi, rouvrez-le et autorisez l’accès si cet ordinateur le demande.",
+							"Impossible de lire la clé de cet espace envoyée par {{host}} dans le stockage sécurisé de cet ordinateur. Quittez Kiroshi, rouvrez-le et autorisez l’accès si cet ordinateur le demande.",
 					},
 				},
 				keyStore: {

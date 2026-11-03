@@ -122,10 +122,18 @@ describe.each(["en", "fr"])("the joined space wait copy in %s", (lng) => {
 		}
 	})
 
-	it("names the host in the waiting notice title and in every banner line", () => {
+	it("names the host in the waiting notice title and in every wait line", () => {
 		expect(named(`${WAITING}.title`, lng)).toContain("Noa")
+		for (const key of waitLineKeys(WAIT_REASONS)) {
+			expect(named(key, lng)).toContain("Noa")
+		}
+	})
+
+	it("never opens a notice sentence with the host", () => {
 		for (const reason of WAIT_REASONS) {
-			expect(named(`${BANNER}.reasons.${reason}`, lng)).toContain("Noa")
+			expect(raw(`${WAITING}.reasons.${reason}`, lng)).not.toMatch(
+				/(^|[.!?]\s+)\{\{host\}\}/,
+			)
 		}
 	})
 
@@ -173,5 +181,22 @@ describe("the unnamed host and space", () => {
 	])("read as words in %s", (lng, waiting, unexpected) => {
 		expect(i18n.getFixedT(lng)(`${WAITING}.title` as never)).toBe(waiting)
 		expect(i18n.getFixedT(lng)(`${UNEXPECTED}.title` as never)).toBe(unexpected)
+	})
+
+	it("reads as words in the language of the call on a wait line", () => {
+		expect(
+			i18n.getFixedT("fr")(`${WAITING}.reasons.socketClosed` as never),
+		).toContain("l’hôte n’a pas répondu")
+		expect(
+			i18n.getFixedT("en")(`${BANNER}.reasons.notMember` as never),
+		).toContain("isn’t in this space anymore, ask the host")
+	})
+
+	it("stays a placeholder outside the joined space lines", () => {
+		expect(
+			i18n.t("bots:applications.connection.description.connecting" as never),
+		).toBe(
+			"A tab is open at {{host}}. Authorize Kiroshi there and this screen catches up on its own.",
+		)
 	})
 })
