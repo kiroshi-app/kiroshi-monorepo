@@ -68,6 +68,7 @@ interface AppSidebarBot {
 	image?: string
 	status?: AppSidebarStatus
 	pose?: ActivityIndicatorKind
+	backgroundTasks?: number
 	badge?: BotBadge
 	pendingQuestion?: string
 	missions?: AppSidebarRowMission[]
@@ -106,6 +107,8 @@ const workingBotOf = ({ participants, lastSpeaker }: AppSidebarConversation) =>
 	participants.find(isBusy)
 
 const botPreviewOf = (t: TFunction<"bots">, bot: AppSidebarBot) => {
+	if (isBusy(bot) && bot.backgroundTasks)
+		return t("roster.backgroundTasks", { count: bot.backgroundTasks })
 	if (isBusy(bot))
 		return t("roster.working", { pose: t(`roster.pose.${poseOf(bot)}`) })
 	return bot.lastMessage ? toPlainText(bot.lastMessage) : ""

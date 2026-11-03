@@ -93,6 +93,45 @@ export const WorkingBotKeepsItsTimestamp = meta.story({
 	},
 })
 
+const expectWorkingPreview = async (
+	canvasElement: HTMLElement,
+	text: string,
+) => {
+	const row = slotIn(canvasElement, "sidebar-menu-button")
+	const preview = slotIn(row, "roster-row-preview")
+	await expect(slotIn(preview, "text-shimmer")).toBeVisible()
+	await expect(preview.textContent).toBe(text)
+	await expect(slotIn(row, "roster-row-timestamp")).toHaveTextContent(
+		BEACON.timestamp ?? "",
+	)
+}
+
+export const WorkingBotWaitingOnTwoBackgroundTasks = meta.story({
+	args: { bot: { ...BEACON, backgroundTasks: 2 }, isSelected: false },
+	play: ({ canvasElement }) =>
+		expectWorkingPreview(canvasElement, "waiting on 2 background tasks"),
+})
+
+export const WorkingBotWaitingOnOneBackgroundTask = meta.story({
+	args: { bot: { ...BEACON, backgroundTasks: 1 }, isSelected: false },
+	play: ({ canvasElement }) =>
+		expectWorkingPreview(canvasElement, "waiting on 1 background task"),
+})
+
+export const IdleBotIgnoresItsBackgroundTasks = meta.story({
+	tags: ["test-only"],
+	args: {
+		bot: { ...BEACON, status: "idle", backgroundTasks: 2 },
+		isSelected: false,
+	},
+	play: async ({ canvasElement }) => {
+		const row = slotIn(canvasElement, "sidebar-menu-button")
+		await expect(slotIn(row, "roster-row-preview").textContent).toBe(
+			BEACON.lastMessage,
+		)
+	},
+})
+
 const ATLAS_NEEDING_YOU = {
 	...ATLAS,
 	badge: "attention" as const,

@@ -48,6 +48,9 @@ const bots = {
 		delete: "Supprimer",
 		needsYou: "Vous attend",
 		working: "{{pose}}…",
+		backgroundTasks_one: "attend {{count}} tâche en arrière-plan",
+		backgroundTasks_many: "attend {{count}} tâches en arrière-plan",
+		backgroundTasks_other: "attend {{count}} tâches en arrière-plan",
 		pose: {
 			thinking: "réfléchit",
 			searching: "cherche",
