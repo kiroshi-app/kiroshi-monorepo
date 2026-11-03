@@ -11,6 +11,10 @@ import {
 import { useTranslation } from "react-i18next"
 
 import { Icons } from "@workspace/ui/components/icons"
+import {
+	PromptAttachments,
+	type PromptReplyAttachment,
+} from "@workspace/ui/components/prompt-attachments"
 import { PromptField } from "@workspace/ui/components/prompt-input-field"
 import { usePromptLayout } from "@workspace/ui/components/prompt-input-layout"
 import { usePromptTransfer } from "@workspace/ui/components/prompt-input-transfer"
@@ -22,6 +26,8 @@ import { Button } from "@workspace/ui/components/ui/button"
 import { cn, mergeRefs } from "@workspace/ui/lib/utils"
 
 const OFFLINE_CONTROLS = "[&_svg]:invisible"
+
+const NO_REPLIES: PromptReplyAttachment[] = []
 
 export type PromptInputOffline = {
 	spaceName: string
@@ -44,6 +50,8 @@ export interface PromptInputProps
 	onSubmit?: (value: string) => void
 	leading?: ReactNode
 	quote?: PromptInputQuote
+	replies?: PromptReplyAttachment[]
+	onRemoveReply?: (id: string) => void
 	attachments?: ReactNode
 	onAttach?: (files: File[]) => void
 	dropTarget?: boolean
@@ -58,6 +66,8 @@ export function PromptInput({
 	onSubmit,
 	leading,
 	quote,
+	replies = NO_REPLIES,
+	onRemoveReply,
 	attachments,
 	onAttach,
 	dropTarget = false,
@@ -76,6 +86,7 @@ export function PromptInput({
 	const currentValue = value ?? internalValue
 	const isBlocked = disabled || Boolean(offline)
 	const canAttach = Boolean(onAttach) && !isBlocked
+	const hasReplies = replies.length > 0
 
 	const { refs, isExpanded, hasAttachments } = usePromptLayout({
 		attachments,
@@ -128,7 +139,7 @@ export function PromptInput({
 				"flex w-full flex-wrap items-center gap-1 rounded-[25px] border border-foreground/10 bg-prompt-surface p-2 focus-within:border-foreground/20",
 				hasPayload && "border-foreground/20",
 				isExpanded && "rounded-3xl",
-				(hasAttachments || quote) && "rounded-[20px]",
+				(hasAttachments || hasReplies || quote) && "rounded-[20px]",
 				offline && "border-foreground/8 bg-prompt-surface-inert",
 				isDropTarget && "border-primary bg-primary/10",
 				disabled && "opacity-50",
@@ -146,11 +157,27 @@ export function PromptInput({
 			)}
 
 			<div
-				ref={refs.attachments}
 				inert={isBlocked}
-				className="order-first w-full empty:hidden"
+				className={
+					hasReplies ? "order-first flex w-full flex-wrap gap-1.5" : "contents"
+				}
 			>
-				{attachments}
+				{hasReplies && (
+					<PromptAttachments
+						className="w-auto"
+						onRemoveReply={onRemoveReply}
+						replies={replies}
+					/>
+				)}
+				<div
+					ref={refs.attachments}
+					className={cn(
+						"empty:hidden",
+						hasReplies ? "min-w-0 flex-1 basis-56" : "order-first w-full",
+					)}
+				>
+					{attachments}
+				</div>
 			</div>
 
 			<PromptField

@@ -33,8 +33,8 @@ export type PromptReplyAttachment = {
 }
 
 export interface PromptAttachmentsProps {
-	items: PromptAttachment[]
-	onRemove: (id: string) => void
+	items?: PromptAttachment[]
+	onRemove?: (id: string) => void
 	replies?: PromptReplyAttachment[]
 	onRemoveReply?: (id: string) => void
 	className?: string
@@ -45,10 +45,12 @@ const CHIP =
 
 const CHIP_REMOVE = "size-6 shrink-0 rounded-full text-muted-foreground"
 
+const NO_FILES: PromptAttachment[] = []
+
 const NO_REPLIES: PromptReplyAttachment[] = []
 
 export function PromptAttachments({
-	items,
+	items = NO_FILES,
 	onRemove,
 	replies = NO_REPLIES,
 	onRemoveReply,
@@ -120,16 +122,18 @@ export function PromptAttachments({
 							{formatSize(item.size)}
 						</span>
 					</div>
-					<Button
-						type="button"
-						variant="ghost"
-						size="icon-xs"
-						aria-label={t("attachments.remove", { name: item.name })}
-						onClick={() => onRemove(item.id)}
-						className={CHIP_REMOVE}
-					>
-						<Icons.Close />
-					</Button>
+					{onRemove ? (
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon-xs"
+							aria-label={t("attachments.remove", { name: item.name })}
+							onClick={() => onRemove(item.id)}
+							className={CHIP_REMOVE}
+						>
+							<Icons.Close />
+						</Button>
+					) : null}
 				</li>
 			))}
 		</ul>
