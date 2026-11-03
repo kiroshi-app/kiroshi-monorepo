@@ -59,6 +59,7 @@ type OpenedDocument = {
 	startTitle: string
 	detail: string
 	template?: LibraryDocumentTemplate
+	openedAs?: string
 }
 
 type DocumentDraft = Omit<OpenedDocument, "kind" | "detail"> & {
@@ -159,7 +160,13 @@ const renamedDraftOf = (
 	{ name }: LibraryItem,
 ): DocumentDraft => {
 	const title = titleOf({ kind: "document", name })
-	return { ...opened, name, title, startTitle: title }
+	return {
+		...opened,
+		name,
+		title,
+		startTitle: title,
+		openedAs: opened.openedAs ?? opened.name,
+	}
 }
 
 const boundTo = <Item,>(item: Item, action?: (item: Item) => void) =>
@@ -211,8 +218,14 @@ export const LibraryScreen = ({
 		heldDraft,
 		listedOpened && toShown(listedOpened).detail,
 	)
-	const { document, edit, shareCaret, hasFailedToOpen, closeAndRelist } =
-		useLibraryDocumentSession(spaceId, openedDocument?.name ?? null)
+	const {
+		document,
+		edit,
+		shareCaret,
+		hasFailedToOpen,
+		closeAndRelist,
+		moveDocument,
+	} = useLibraryDocumentSession(spaceId, openedDocument?.name ?? null)
 	const { writers, people, finished, dismissFinished } =
 		useLibraryDocumentWriters({
 			spaceId,
@@ -280,30 +293,20 @@ export const LibraryScreen = ({
 		void closeAndRelist()
 		close()
 	}
-	const showWhileDocumentShown = (draft: DocumentDraft) => {
-		if (editor.current) {
-			showDraft(draft)
-		}
-	}
-	const restoreTitleOf = (opened: OpenedDocument) => {
-		editor.current?.restoreTitle(opened.startTitle)
-		showWhileDocumentShown({ ...opened, title: opened.startTitle })
+	const showTitled = (draft: DocumentDraft) => {
+		editor.current?.restoreTitle(draft.title)
+		showDraft(draft)
 	}
 	const renameDocument = (opened: OpenedDocument, newTitle: string) => {
 		const newName = documentNamedAs(opened.name, newTitle)
 		if (newName === opened.name) {
 			return
 		}
-		void closeAndRelist().then(() =>
-			actions.rename(
-				{ name: opened.name, newName },
-				{
-					onSuccess: (renamed) =>
-						showWhileDocumentShown(renamedDraftOf(opened, renamed)),
-					onError: () => restoreTitleOf(opened),
-				},
-			),
-		)
+		moveDocument({
+			rename: (name) => actions.rename({ name, newName }),
+			onMoved: (renamed) => showTitled(renamedDraftOf(opened, renamed)),
+			onRefused: () => showTitled({ ...opened, title: opened.startTitle }),
+		})
 	}
 	const undoAll = () => {
 		if (document && finished) {
@@ -333,7 +336,7 @@ export const LibraryScreen = ({
 				isActionShown={(_subject, action) =>
 					isActionShownOn(openedDocument, action)
 				}
-				key={openedDocument.name}
+				key={openedDocument.openedAs ?? openedDocument.name}
 				onBack={leaveDocument}
 				onBodyChange={edit}
 				onCaretChange={shareCaret}

@@ -94,7 +94,7 @@ const useLibraryRename = (spaceId: string) => {
 			}),
 			raisedIn: "use-library-actions",
 		},
-	}).mutate
+	}).mutateAsync
 }
 
 const useLibraryDelete = (spaceId: string) => {

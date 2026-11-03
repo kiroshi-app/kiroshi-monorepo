@@ -18,6 +18,7 @@ import {
 import { libraryQueryKeys } from "./library-query-keys"
 import { openLibraryDocument } from "./library-reads"
 
+import type { LibraryDocumentState, LibraryItem } from "../bindings"
 import { failureReporterIn } from "../failure-report"
 
 type SentUpdate = {
@@ -42,6 +43,48 @@ const useApplyLibraryUpdate = (spaceId: string) => {
 		},
 	})
 	return mutateAsync
+}
+
+type SendUpdate = (sent: SentUpdate) => Promise<unknown>
+
+type RenameOnHost = (name: string) => Promise<LibraryItem>
+
+type DocumentMove = {
+	rename: RenameOnHost
+	onMoved: (renamed: LibraryItem) => void
+	onRefused: () => void
+}
+
+const createMovableSession = (
+	{ name, update: state }: LibraryDocumentState,
+	apply: SendUpdate,
+) => {
+	let destination = Promise.resolve(name)
+	let isShown = false
+	const session = createLibraryDocumentSession({
+		state,
+		send: (update) =>
+			destination.then((current) => apply({ name: current, update })),
+	})
+	const moveTo = (rename: RenameOnHost) => {
+		const flushed = session.flush()
+		const previous = destination
+		const moved = Promise.all([previous, flushed]).then(([current]) =>
+			rename(current),
+		)
+		destination = moved.then(
+			(renamed) => renamed.name,
+			() => previous,
+		)
+		return moved
+	}
+	const show = () => {
+		isShown = true
+		return () => {
+			isShown = false
+		}
+	}
+	return { ...session, moveTo, show, isShown: () => isShown }
 }
 
 const subscribeToNothing = () => () => undefined
@@ -100,31 +143,25 @@ export const useLibraryDocumentSession = (
 	})
 	const openedState = opened.data
 	const openedSession = useMemo(
-		() =>
-			openedState
-				? createLibraryDocumentSession({
-						state: openedState.update,
-						send: (update) => apply({ name: openedState.name, update }),
-					})
-				: null,
+		() => (openedState ? createMovableSession(openedState, apply) : null),
 		[openedState, apply],
 	)
 	const session = opened.isError ? null : openedSession
 	const sharer = useMemo(() => {
-		if (!openedState || !openedSession) {
+		if (!name || !openedState || !openedSession) {
 			return null
 		}
 		const burst = createCaretShareBurst(spaceId)
 		return createCaretSharer({
 			caretOf: openedSession.caretOf,
 			share: (caret) => {
-				shareLibraryCaret(spaceId, openedState.name, caret).then(
+				shareLibraryCaret(spaceId, name, caret).then(
 					burst.succeeded,
 					burst.failed,
 				)
 			},
 		})
-	}, [spaceId, openedState, openedSession])
+	}, [spaceId, name, openedState, openedSession])
 
 	useEffect(() => {
 		if (!sharer) {
@@ -133,6 +170,8 @@ export const useLibraryDocumentSession = (
 		sharer.open()
 		return sharer.close
 	}, [sharer])
+
+	useEffect(() => session?.show(), [session])
 
 	useEffect(() => {
 		if (!session || !feed) {
@@ -157,6 +196,29 @@ export const useLibraryDocumentSession = (
 		})
 	}
 
+	const moveDocument = ({ rename, onMoved, onRefused }: DocumentMove) => {
+		if (!session) {
+			return
+		}
+		session.moveTo(rename).then(
+			(renamed) => {
+				if (!session.isShown()) {
+					return
+				}
+				queryClient.setQueryData(
+					libraryQueryKeys.documentOf(spaceId, renamed.name),
+					openedState,
+				)
+				onMoved(renamed)
+			},
+			() => {
+				if (session.isShown()) {
+					onRefused()
+				}
+			},
+		)
+	}
+
 	return {
 		document: session
 			? {
@@ -168,5 +230,6 @@ export const useLibraryDocumentSession = (
 		shareCaret: (offset: number | null) => sharer?.share(offset),
 		hasFailedToOpen: opened.isError,
 		closeAndRelist,
+		moveDocument,
 	}
 }
