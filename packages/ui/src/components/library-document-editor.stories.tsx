@@ -1143,6 +1143,52 @@ export const FormatUndoneWhole = meta.story({
 	},
 })
 
+const unchangedFormatDraft = createDraftStore(LAUNCH_REVIEW)
+
+export const FormatWithoutChange = meta.story({
+	args: {
+		...LAUNCH_REVIEW,
+		template: undefined,
+		onBold: boldOn(unchangedFormatDraft),
+		onItalic: fn(() =>
+			unchangedFormatDraft.write({ body: unchangedFormatDraft.read().body }),
+		),
+	},
+	beforeEach: unchangedFormatDraft.reset,
+	render: (args) => <LiveEditor {...args} draft={unchangedFormatDraft} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The person presses Cmd+I and the host answers with the text unchanged, someone else then changes a heading, and the person turns a few words bold with Cmd+B. Check that the bold lands, that the next Cmd+Z takes the whole bold back and keeps the outside change, and that a further Cmd+Z leaves the outside change in place.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		if (!isInBrowserRunner()) return
+		selectText(canvasElement, "the launch date")
+		await pressWithCommand("i")
+		await expect(args.onItalic).toHaveBeenCalledOnce()
+		await expect(textIn(canvasElement)).toBe(LAUNCH_REVIEW.body)
+
+		const outside = LAUNCH_REVIEW.body.replace("## Next steps", "## Then")
+		unchangedFormatDraft.write({ body: outside })
+		await waitFor(() => expect(textIn(canvasElement)).toBe(outside))
+
+		selectText(canvasElement, "who signs off")
+		await pressWithCommand("b")
+		await waitFor(() =>
+			expect(textIn(canvasElement)).toBe(
+				outside.replace("who signs off", "**who signs off**"),
+			),
+		)
+		await pressWithCommand("z")
+		await expect(textIn(canvasElement)).toBe(outside)
+		await pressWithCommand("z")
+		await expect(textIn(canvasElement)).toBe(outside)
+	},
+})
+
 export const OutsideTitleChange = meta.story({
 	args: { ...LAUNCH_REVIEW, template: undefined },
 	beforeEach: launchReviewDraft.reset,

@@ -40,6 +40,7 @@ import {
 	useImperativeHandle,
 	useLayoutEffect,
 	useMemo,
+	useReducer,
 	useRef,
 	useState,
 	useSyncExternalStore,
@@ -789,6 +790,7 @@ const LibraryDocumentEditor = ({
 	const bodyHost = useRef<HTMLDivElement>(null)
 	const editor = useRef<EditorView>(undefined)
 	const isFormatPending = useRef(false)
+	const [, commitFormatWait] = useReducer((waits: number) => waits + 1, 0)
 	const reportedCaret = useRef<number | null>(null)
 	const frame = useRef<HTMLDivElement>(null)
 	const [selected, setSelected] = useState<SelectedText>()
@@ -993,14 +995,19 @@ const LibraryDocumentEditor = ({
 		}
 	}, [])
 
-	const formatWith = (action: FormatAction, range: LibraryDocumentRange) => {
+	const awaitFormat = () => {
 		isFormatPending.current = true
+		commitFormatWait()
+	}
+
+	const formatWith = (action: FormatAction, range: LibraryDocumentRange) => {
+		awaitFormat()
 		action(range)
 	}
 
 	const linkWith = (url: string, range: LibraryDocumentRange) => {
 		if (!onLink) return
-		isFormatPending.current = true
+		awaitFormat()
 		onLink(url, range)
 	}
 
@@ -1127,7 +1134,6 @@ const LibraryDocumentEditor = ({
 					Transaction.userEvent.of("input.format"),
 				]
 			: [hostChange.of(true), Transaction.addToHistory.of(false)]
-		isFormatPending.current = false
 		view.dispatch({
 			changes: changesBetween(text ?? "", nextBody),
 			annotations,
@@ -1158,6 +1164,10 @@ const LibraryDocumentEditor = ({
 		takeBody(body)
 		markAgents({ edits, writers, people })
 	}, [body, edits, writers, people])
+
+	useLayoutEffect(() => {
+		isFormatPending.current = false
+	})
 
 	const untitled = t("library.editor.untitled")
 	const shownName = title || untitled

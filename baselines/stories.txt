@@ -1409,6 +1409,7 @@ navigation-librarydocumenteditor--create-failure
 navigation-librarydocumenteditor--escape-closes-toolbar
 navigation-librarydocumenteditor--existing-document
 navigation-librarydocumenteditor--format-undone-whole
+navigation-librarydocumenteditor--format-without-change
 navigation-librarydocumenteditor--from-meeting-notes
 navigation-librarydocumenteditor--italic-shortcut
 navigation-librarydocumenteditor--link-shortcut
