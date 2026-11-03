@@ -28,6 +28,7 @@ import {
 import { useNewTabClicks } from "../tabs/new-tab-clicks"
 import { useTabKeys } from "../tabs/use-tab-keys"
 import { useTabThreadSync } from "../tabs/use-tab-thread-sync"
+import { useTabsFollowingRenames } from "../tabs/use-tabs-following-renames"
 import { useSpaceTint } from "../theme/use-space-tint"
 import { aboutFieldsOf } from "../updater/about-fields"
 import { useRunningVersion } from "../updater/use-running-version"
@@ -72,6 +73,7 @@ export const useWorkspaceAssembly = () => {
 	})
 	useTabKeys(tabs)
 	useNewTabClicks(tabs)
+	useTabsFollowingRenames(tabs)
 	useTabThreadSync({
 		tabs,
 		roster: core.roster.controller,

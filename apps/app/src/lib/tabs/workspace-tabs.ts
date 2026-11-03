@@ -9,7 +9,14 @@ import { i18n } from "@workspace/ui/lib/i18n"
 import { goneMissionIdsOf, type ReadMission } from "./restored-missions"
 import { createTabDock, type TabDock } from "./tab-dock"
 import { packDockedTab } from "./tab-dock-channel"
-import { EMPTY_LIST_HREF, HREF_BASE, pageOf, rowIdsNamedBy } from "./tab-pages"
+import {
+	type DocumentRename,
+	EMPTY_LIST_HREF,
+	HREF_BASE,
+	hrefAfterRename,
+	pageOf,
+	rowIdsNamedBy,
+} from "./tab-pages"
 import {
 	createTabTearOff,
 	pointOf,
@@ -53,6 +60,7 @@ import {
 	reopenTab,
 	reorderTabs,
 	replaceEntry,
+	rewriteHrefs,
 	type SpaceTabs,
 	selectTab,
 	spaceTabsOn,
@@ -119,6 +127,7 @@ export type WorkspaceTabs = {
 	dock: TabDock
 	reopenClosed: () => void
 	reorder: (ids: string[]) => void
+	followDocumentRename: (spaceId: string, rename: DocumentRename) => void
 	dropAbsentRestored: (spaceId: string, check: RestoredCheck) => Promise<void>
 	guardLeave: (guard: LeaveGuard) => () => void
 	leaveAsked: (gesture: () => void) => void
@@ -527,6 +536,20 @@ export const createWorkspaceTabs = (
 		keepIn(spaceId, update(space))
 	}
 
+	const changeHeldOrKept = (
+		spaceId: string,
+		update: (space: SpaceTabs) => SpaceTabs,
+	) => {
+		if (store.getState().bySpace[spaceId]) {
+			changeIn(spaceId, update)
+			return
+		}
+		const kept = readSpaceTabs(windowLabel, spaceId)
+		if (kept) {
+			writeSpaceTabs(windowLabel, spaceId, update(kept))
+		}
+	}
+
 	const removeMoved = (spaceId: string, id: string) => {
 		if (!isMainWindow && isOnlyTab(store.getState().bySpace[spaceId], id)) {
 			return closeThisWindow()
@@ -665,6 +688,10 @@ export const createWorkspaceTabs = (
 		}),
 		reopenClosed,
 		reorder: (ids) => change((space) => reorderTabs(space, ids)),
+		followDocumentRename: (spaceId, rename) =>
+			changeHeldOrKept(spaceId, (space) =>
+				rewriteHrefs(space, (href) => hrefAfterRename(href, rename)),
+			),
 		dropAbsentRestored: async (spaceId, { isRowPresent, readMission }) => {
 			const state = store.getState()
 			if (
