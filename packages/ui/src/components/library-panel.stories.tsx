@@ -20,7 +20,10 @@ import {
 	LIBRARY_ITEMS,
 	LIBRARY_ITEMS_AFTER_IMPORT,
 } from "@workspace/ui/components/library.fixtures"
-import type { LibraryItem } from "@workspace/ui/components/library-grid"
+import {
+	LibraryGrid,
+	type LibraryItem,
+} from "@workspace/ui/components/library-grid"
 import {
 	LibraryDragGhost,
 	LibraryDropOverlay,
@@ -389,7 +392,7 @@ export const GridDocuments = meta.story({
 		docs: {
 			description: {
 				story:
-					"The Documents filter checked: every thumbnail is a page drawn from the start of the document, bleeding off the bottom of a Space-tinted ground. Check that the page title, heading and body keep their artboard sizes and that no image is left in the grid.",
+					"The Documents filter checked: every thumbnail is a page drawn from the start of the document, bleeding off the bottom of the fixed blue document ground. Check that the page title, heading and body keep their artboard sizes and that no image is left in the grid.",
 			},
 		},
 	},
@@ -401,6 +404,58 @@ export const GridDocuments = meta.story({
 		await expect(
 			canvasElement.querySelector("[data-slot=library-thumbnail] img"),
 		).toBe(null)
+	},
+})
+
+const SIDE_BY_SIDE_SPACE_HUES = ["pink", "green"] as const
+
+const DOCUMENT_ITEMS = LIBRARY_ITEMS.filter((item) => item.kind === "document")
+
+export const GridDocumentsAcrossSpaces = meta.story({
+	render: (args) => (
+		<div className="flex h-[832px] w-[1280px] gap-1.5 bg-background p-2">
+			{SIDE_BY_SIDE_SPACE_HUES.map((hue) => (
+				<div className="flex min-w-0 flex-1" key={hue} {...hueScopeOf(hue)}>
+					<ContentCard isLandmark={false}>
+						<LibraryGrid items={DOCUMENT_ITEMS} onOpenItem={args.onOpenItem} />
+					</ContentCard>
+				</div>
+			))}
+		</div>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The document grid in a pink Space and a green Space side by side, dark theme. Check that every document thumbnail sits on the same blue ground in both, whatever the Space colour.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const [first, second] = Array.from(
+			canvasElement.querySelectorAll<HTMLElement>("[data-hue]"),
+		)
+		await expect(first?.dataset.hue).not.toBe(second?.dataset.hue)
+
+		const ground = rgbOf(
+			getComputedStyle(canvasElement).getPropertyValue("--document-ground"),
+		)
+		const thumbnails = slotsIn(canvasElement, "library-thumbnail")
+		await expect(thumbnails).toHaveLength(8)
+		for (const thumbnail of thumbnails)
+			await expect(getComputedStyle(thumbnail).backgroundColor).toBe(ground)
+	},
+})
+
+export const GridDocumentsAcrossSpacesLight = GridDocumentsAcrossSpaces.extend({
+	globals: { theme: "light" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The document grid in a pink Space and a green Space side by side, light theme. Check that every document thumbnail sits on the same blue ground in both, whatever the Space colour.",
+			},
+		},
 	},
 })
 
@@ -572,7 +627,7 @@ export const LongNames = meta.story({
 		docs: {
 			description: {
 				story:
-					"Names longer than their slot, in a pink Space. Check that each name stays on one line with an ellipsis and keeps the full name on hover, and that the checked filter and the thumbnail ground follow the Space hue rather than a fixed blue.",
+					"Names longer than their slot, in a pink Space. Check that each name stays on one line with an ellipsis and keeps the full name on hover, and that the checked filter and the image thumbnail ground follow the Space hue rather than a fixed blue.",
 			},
 		},
 	},

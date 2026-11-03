@@ -75,7 +75,7 @@ const LibraryThumbnail = ({ item }: LibraryThumbnailProps) => (
 	<span
 		className={cn(
 			"relative block h-45 overflow-hidden rounded-control border border-shell-border group-hover/library-item:border-input",
-			SPACE_GROUND,
+			item.kind === "image" ? SPACE_GROUND : "bg-(--document-ground)",
 		)}
 		data-slot="library-thumbnail"
 	>

@@ -126,7 +126,7 @@ const LibraryEmptyState = ({
 												excerpt={t(`library.templates.${template}.preview`)}
 											/>
 										}
-										thumbnailClassName="border border-shell-border bg-(--bot-avatar-ground) group-hover/template:border-input"
+										thumbnailClassName="border border-shell-border bg-(--document-ground) group-hover/template:border-input"
 									/>
 								))
 							: null}
