@@ -19,6 +19,7 @@ import {
 	useState,
 } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import * as Y from "yjs"
 
 import { NoticeSurface } from "@workspace/ui/components/notice-surface"
 import "@workspace/ui/lib/i18n"
@@ -50,6 +51,7 @@ import type { Bot, Conversation } from "@/lib/conversations/store-contract"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { seatBots } from "@/lib/conversations/transcript-fixtures"
 import type { Invoke } from "@/lib/host/joined-hosts-invoke"
+import { base64Of } from "@/lib/library/library-document-session"
 import type {
 	Mission,
 	MissionChanged,
@@ -115,6 +117,7 @@ vi.mock("@/lib/bindings", async (importOriginal) => {
 const libraryHost = vi.hoisted(() => ({
 	list: vi.fn(),
 	readDocument: vi.fn(),
+	openDocument: vi.fn(),
 	readImage: vi.fn(),
 	readFile: vi.fn(),
 }))
@@ -124,6 +127,7 @@ vi.mock("@/lib/host/index", async (importOriginal) => {
 		{
 			library_list: libraryHost.list,
 			library_read_document: libraryHost.readDocument,
+			library_open_document: libraryHost.openDocument,
 			library_read_image: libraryHost.readImage,
 			library_read_file: libraryHost.readFile,
 		}
@@ -132,7 +136,13 @@ vi.mock("@/lib/host/index", async (importOriginal) => {
 		const read = libraryReads[command]
 		return read ? (read(args) as Promise<T>) : actual.invoke<T>(...call)
 	}
-	return { ...actual, invoke }
+	const { LIBRARY_DOCUMENT_UPDATED_EVENT } =
+		await vi.importActual<typeof import("@/lib/bindings")>("@/lib/bindings")
+	const listen: typeof actual.listen = (event, handler) =>
+		event === LIBRARY_DOCUMENT_UPDATED_EVENT
+			? Promise.resolve(() => undefined)
+			: actual.listen(event, handler)
+	return { ...actual, invoke, listen }
 })
 vi.mock("@/lib/host/tauri", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/lib/host/tauri")>()),
@@ -1226,6 +1236,13 @@ describe("WorkspaceBody library", () => {
 	const readDocumentOf = async ({ name }: NamedRead) =>
 		name === NOTES.name ? Promise.reject(refusal) : documentOf(name)
 
+	const openedStateOf = async (read: NamedRead) => {
+		const { name, content } = await readDocumentOf(read)
+		const doc = new Y.Doc()
+		doc.getText("markdown").insert(0, content)
+		return { name, update: base64Of(Y.encodeStateAsUpdate(doc)) }
+	}
+
 	const fileOf = ({ name }: NamedRead) => ({
 		name: `host ${name}`,
 		mimeType: "image/png",
@@ -1247,6 +1264,7 @@ describe("WorkspaceBody library", () => {
 		listMissions.mockResolvedValue({ open: [], done: [] })
 		libraryHost.list.mockResolvedValue([HERO, BRIEF, FERN, DUSK, NOTES])
 		libraryHost.readDocument.mockImplementation(readDocumentOf)
+		libraryHost.openDocument.mockImplementation(openedStateOf)
 		libraryHost.readImage.mockImplementation(async (read: NamedRead) =>
 			imageOf(read),
 		)
@@ -1343,7 +1361,7 @@ describe("WorkspaceBody library", () => {
 		)
 	})
 
-	it("shows an empty Library with no action to take", async () => {
+	it("shows an empty Library offering only a new document and its templates", async () => {
 		libraryHost.list.mockResolvedValue([])
 		await openLibrary()
 
@@ -1354,7 +1372,18 @@ describe("WorkspaceBody library", () => {
 		expect(within(panel).getByRole("heading", { level: 1 }).textContent).toBe(
 			"Library",
 		)
-		expect(within(panel).queryAllByRole("button")).toHaveLength(0)
+		const actions = within(panel)
+			.queryAllByRole("button")
+			.map((button) => button.textContent ?? "")
+		expect(actions).toHaveLength(4)
+		for (const start of [
+			"Blank document",
+			"Brief",
+			"Meeting notes",
+			"Checklist",
+		]) {
+			expect(actions.some((action) => action.startsWith(start))).toBe(true)
+		}
 		expect(within(panel).queryByRole("radiogroup")).toBeNull()
 		expect(within(panel).queryByRole("searchbox")).toBeNull()
 	})
@@ -1466,7 +1495,7 @@ describe("WorkspaceBody library", () => {
 		expect(screen.getByRole("dialog", { name: "hero-dunes.png" })).toBeTruthy()
 	})
 
-	it("reads an opened document and returns to the grid with its filter and query kept", async () => {
+	it("edits an opened document and returns to the grid with its filter and query kept", async () => {
 		await openLibrary()
 		await search("brief")
 		fireEvent.click(screen.getByRole("radio", { name: /^Documents/ }))
@@ -1474,14 +1503,18 @@ describe("WorkspaceBody library", () => {
 
 		await open("Spring launch brief")
 
-		expect(libraryHost.readDocument).toHaveBeenCalledWith({
+		expect(libraryHost.openDocument).toHaveBeenCalledWith({
 			spaceId: SPACE,
 			name: BRIEF.name,
 		})
-		expect(
-			screen.getByRole("heading", { level: 1, name: "Spring launch brief" }),
-		).toBeTruthy()
-		expect(screen.getByText(EXCERPT)).toBeTruthy()
+		expect(screen.getByRole("textbox", { name: "Title" })).toHaveProperty(
+			"value",
+			"Spring launch brief",
+		)
+		expect(screen.getByRole("textbox", { name: "Text" })).toHaveProperty(
+			"value",
+			EXCERPT,
+		)
 		expect(screen.queryByRole("searchbox")).toBeNull()
 
 		await press("Library")
@@ -1744,7 +1777,7 @@ describe("WorkspaceBody library", () => {
 			await press("Close")
 
 			await open("Spring launch brief")
-			screen.getByRole("heading", { level: 1, name: "Spring launch brief" })
+			screen.getByRole("textbox", { name: "Title" })
 			expect(screen.queryByRole("button", { name: "More" })).toBeNull()
 
 			expect(libraryHost.readFile).not.toHaveBeenCalled()

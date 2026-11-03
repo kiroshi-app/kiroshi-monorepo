@@ -29,7 +29,7 @@ export const titleOf = ({ kind, name }: Pick<LibraryItem, "kind" | "name">) =>
 		? name.slice(0, extensionAt(name))
 		: name
 
-export const detailOf = (item: LibraryItem, now: number) =>
+const detailOf = (item: LibraryItem, now: number) =>
 	[
 		formatOf(item.name),
 		formatBytes(item.bytes),

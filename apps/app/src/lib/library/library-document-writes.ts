@@ -1,0 +1,52 @@
+import type { LibraryItem } from "../bindings"
+import { invoke } from "../host/index"
+
+type NameRefusal = "alreadyExists" | "invalidName"
+
+type CreateNamed = (name: string) => Promise<LibraryItem>
+
+const DOCUMENT_EXTENSION = ".md"
+
+export const createLibraryDocument = (spaceId: string, name: string) =>
+	invoke<LibraryItem>("library_create_document", {
+		spaceId,
+		name,
+		templateId: null,
+	})
+
+export const applyLibraryUpdate = (
+	spaceId: string,
+	name: string,
+	update: string,
+) => invoke<null>("library_apply_update", { spaceId, name, update })
+
+const isRefusedAs = (reason: unknown, kind: NameRefusal) =>
+	typeof reason === "object" &&
+	reason !== null &&
+	(reason as { kind?: unknown }).kind === kind
+
+const documentNameOf = (base: string, copy: number) =>
+	copy === 1
+		? `${base}${DOCUMENT_EXTENSION}`
+		: `${base} ${copy}${DOCUMENT_EXTENSION}`
+
+export const createFreelyNamed = (
+	create: CreateNamed,
+	title: string,
+	untitled: string,
+) => {
+	const attempt = async (base: string, copy: number): Promise<LibraryItem> => {
+		try {
+			return await create(documentNameOf(base, copy))
+		} catch (reason) {
+			if (isRefusedAs(reason, "alreadyExists")) {
+				return attempt(base, copy + 1)
+			}
+			if (isRefusedAs(reason, "invalidName") && base !== untitled) {
+				return attempt(untitled, 1)
+			}
+			throw reason
+		}
+	}
+	return attempt(title.trim() || untitled, 1)
+}

@@ -7,7 +7,7 @@ import { isJoinedRowId } from "@/lib/spaces/joined-spaces-controller"
 import { useWorkspace } from "@/lib/workspace/workspace-context"
 
 export const LibraryRoute = () => {
-	const { rosteredHostSpaceId, rosterView } = useWorkspace()
+	const { rosteredHostSpaceId, rosterView, scopes } = useWorkspace()
 	const spaceRowId = rosterView.rosteredSpaceId
 
 	return (
@@ -17,6 +17,7 @@ export const LibraryRoute = () => {
 					isJoined={isJoinedRowId(spaceRowId)}
 					key={spaceRowId}
 					spaceId={rosteredHostSpaceId}
+					spaceTint={scopes.spaceHue}
 				/>
 			) : (
 				<ScreenLayout header={<BareAppHeader />} />
