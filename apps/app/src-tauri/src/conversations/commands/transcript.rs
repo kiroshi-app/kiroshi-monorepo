@@ -556,9 +556,10 @@ mod tests {
 			.messages
 	}
 
-	fn links_of<'a>(page: &'a [TranscriptMessage], id: &str) -> (Option<&'a str>, &'a [String]) {
+	fn links_of<'a>(page: &'a [TranscriptMessage], id: &str) -> (Option<&'a str>, Vec<&'a str>) {
 		let message = page.iter().find(|message| message.id == id).expect("the message is read");
-		(message.replied_to_message_id.as_deref(), &message.replied_to_message_ids)
+		let listed = message.replied_to_message_ids.iter().map(String::as_str).collect();
+		(message.replied_to_message_id.as_deref(), listed)
 	}
 
 	#[tokio::test]
@@ -569,8 +570,8 @@ mod tests {
 		send(&app, a_reply_to("m4", &["m3", "m1", "m2"])).await.expect("the reply is sent");
 
 		let page = page_of(&app).await;
-		assert_eq!(links_of(&page, "m4"), (Some("m3"), &["m3", "m1", "m2"].map(String::from)[..]));
-		assert_eq!(links_of(&page, "m1"), (None, &[][..]));
+		assert_eq!(links_of(&page, "m4"), (Some("m3"), vec!["m3", "m1", "m2"]));
+		assert_eq!(links_of(&page, "m1"), (None, vec![]));
 	}
 
 	#[tokio::test]
@@ -581,7 +582,7 @@ mod tests {
 		send(&app, a_reply_to("m3", &["m2", "m1", "m2"])).await.expect("the reply is sent");
 
 		let page = page_of(&app).await;
-		assert_eq!(links_of(&page, "m3"), (Some("m2"), &["m2", "m1"].map(String::from)[..]));
+		assert_eq!(links_of(&page, "m3"), (Some("m2"), vec!["m2", "m1"]));
 	}
 
 	#[tokio::test]
@@ -597,7 +598,7 @@ mod tests {
 		send(&app, legacy).await.expect("the reply is sent");
 
 		let page = page_of(&app).await;
-		assert_eq!(links_of(&page, "m2"), (Some("m1"), &["m1".to_owned()][..]));
+		assert_eq!(links_of(&page, "m2"), (Some("m1"), vec!["m1"]));
 	}
 
 	#[tokio::test]
