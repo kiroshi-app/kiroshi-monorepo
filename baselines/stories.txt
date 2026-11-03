@@ -180,6 +180,8 @@ conversation-markdown-sourcedimage--in-agent-answer
 conversation-markdown-sourcedimage--in-narrow-column
 conversation-markdown-webpagecard--in-agent-answer
 conversation-markdown-webpagecard--in-narrow-column
+conversation-markdown-webpagecard--with-preview-and-alt-text
+conversation-markdown-webpagecard--without-preview
 conversation-message-authorline--default
 conversation-message-authorline--failed
 conversation-message-authorline--queued

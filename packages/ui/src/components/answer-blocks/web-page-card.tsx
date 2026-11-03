@@ -6,7 +6,7 @@ import { cn } from "@workspace/ui/lib/utils"
 type WebPageCardProps = {
 	domain: string
 	title: string
-	preview: AnswerImage
+	preview?: AnswerImage
 	onOpen?: () => void
 	className?: string
 }
@@ -29,13 +29,20 @@ const WebPageCard = ({
 				className,
 			)}
 		>
-			<img
-				src={preview.src}
-				alt={preview.alt ?? ""}
-				className="h-50 w-full object-cover"
-			/>
-			<div className="flex items-center gap-3 border-t border-shell-divider p-3">
-				<div className="flex min-w-0 flex-1 flex-col">
+			{preview ? (
+				<img
+					src={preview.src}
+					alt={preview.alt ?? ""}
+					className="h-50 w-full object-cover"
+				/>
+			) : null}
+			<div
+				className={cn(
+					"flex items-center gap-3 p-3",
+					preview && "border-t border-shell-border",
+				)}
+			>
+				<div className="flex min-w-0 flex-1 flex-col gap-0.5">
 					<p className="truncate text-xs text-muted-foreground">{domain}</p>
 					<p className="text-sm font-semibold wrap-anywhere">{title}</p>
 				</div>
