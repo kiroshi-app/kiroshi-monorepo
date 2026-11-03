@@ -559,8 +559,12 @@ mod tests {
 			.messages
 	}
 
+	fn read<'a>(page: &'a [TranscriptMessage], id: &str) -> &'a TranscriptMessage {
+		page.iter().find(|message| message.id == id).expect("the message is read")
+	}
+
 	fn links_of<'a>(page: &'a [TranscriptMessage], id: &str) -> (Option<&'a str>, Vec<&'a str>) {
-		let message = page.iter().find(|message| message.id == id).expect("the message is read");
+		let message = read(page, id);
 		let listed = message.replied_to_message_ids.iter().map(String::as_str).collect();
 		(message.replied_to_message_id.as_deref(), listed)
 	}
@@ -617,8 +621,7 @@ mod tests {
 	}
 
 	fn excerpts_of<'a>(page: &'a [TranscriptMessage], id: &str) -> Vec<(&'a str, Option<&'a str>)> {
-		let message = page.iter().find(|message| message.id == id).expect("the message is read");
-		message
+		read(page, id)
 			.reply_links
 			.iter()
 			.map(|link| (link.message_id.as_str(), link.excerpt.as_deref()))
