@@ -536,21 +536,38 @@ export const BackButton = meta.story({
 	},
 })
 
-const elementAt = (x: number, y: number) => {
+type Point = { x: number; y: number }
+
+const elementAt = ({ x, y }: Point) => {
 	const hit = document.elementFromPoint(x, y)
 	if (hit === null) throw new Error(`Nothing drawn at ${x}, ${y}`)
 	return hit
 }
 
-const centreOf = (element: Element) => {
+const centreOf = (element: Element): Point => {
 	const box = element.getBoundingClientRect()
-	return elementAt(box.x + box.width / 2, box.y + box.height / 2)
+	return { x: box.x + box.width / 2, y: box.y + box.height / 2 }
 }
 
-const cornerOf = (element: Element) => {
+const cornerOf = (element: Element): Point => {
 	const box = element.getBoundingClientRect()
-	return elementAt(box.x + 4, box.y + 4)
+	return { x: box.x + 4, y: box.y + 4 }
 }
+
+const besideImage = (stage: Element, image: Element): Point => {
+	const room = stage.getBoundingClientRect()
+	const drawn = image.getBoundingClientRect()
+	return drawn.left - room.left > drawn.top - room.top
+		? { x: (room.left + drawn.left) / 2, y: drawn.top + 8 }
+		: { x: room.left + 8, y: (room.top + drawn.top) / 2 }
+}
+
+const clickAt = (userEvent: UserEventObject, point: Point) =>
+	userEvent.pointer({
+		keys: "[MouseLeft]",
+		target: elementAt(point),
+		coords: { clientX: point.x, clientY: point.y },
+	})
 
 export const BackdropClick = meta.story({
 	args: { openedAt: 0 },
@@ -558,7 +575,7 @@ export const BackdropClick = meta.story({
 		docs: {
 			description: {
 				story:
-					"The first image, so Previous is disabled. Check that a click on the backdrop closes the lightbox once, beside the image in fit and in zoomed mode and in the bottom strip outside the zoom pill, and that a click on the image, the header, the zoom pill or Previous and Next, disabled or not, keeps it open. A press on the image released on the backdrop keeps it open too, and while the More menu or the delete confirmation is open, a click outside never closes the lightbox.",
+					"The first image, so Previous is disabled. Check that a click on the backdrop closes the lightbox once, beside the image in fit and in zoomed mode and in the bottom strip outside the zoom pill, and that a click on the image, the scrollbar of the zoomed stage where one is drawn, the header, the zoom pill or Previous and Next, disabled or not, keeps it open. A press on the image released on the backdrop keeps it open too, and while the More menu or the delete confirmation is open, a click outside never closes the lightbox.",
 			},
 		},
 	},
@@ -571,6 +588,14 @@ export const BackdropClick = meta.story({
 		}
 		const stageIn = (popup: HTMLElement) =>
 			popup.querySelector("[data-slot=library-lightbox-zoom]") as HTMLElement
+		const imageIn = (popup: HTMLElement) =>
+			within(popup).getByRole("img", { name: "hero-dunes.png" })
+		const clickBesideImage = async (popup: HTMLElement) => {
+			const stage = stageIn(popup)
+			const beside = besideImage(stage, imageIn(popup))
+			await expect(elementAt(beside)).toBe(stage)
+			await clickAt(userEvent, beside)
+		}
 		const zoomBarIn = (popup: HTMLElement) =>
 			popup.querySelector(
 				"[data-slot=library-lightbox-zoom-bar]",
@@ -583,7 +608,7 @@ export const BackdropClick = meta.story({
 		}
 
 		let popup = await lightbox()
-		const image = within(popup).getByRole("img", { name: "hero-dunes.png" })
+		const image = imageIn(popup)
 		await userEvent.click(image)
 		await expect(args.onClose).not.toHaveBeenCalled()
 
@@ -602,18 +627,29 @@ export const BackdropClick = meta.story({
 			name: "Previous image",
 		})
 		await expect(previous).toBeDisabled()
-		await userEvent.click(centreOf(previous))
+		await userEvent.click(elementAt(centreOf(previous)))
 		await expect(args.onClose).not.toHaveBeenCalled()
 
+		const onImage = centreOf(image)
+		const beside = besideImage(stageIn(popup), image)
+		await expect(elementAt(onImage)).toBe(image)
+		await expect(elementAt(beside)).toBe(stageIn(popup))
 		await userEvent.pointer([
-			{ keys: "[MouseLeft>]", target: image },
-			{ target: stageIn(popup) },
+			{
+				keys: "[MouseLeft>]",
+				target: image,
+				coords: { clientX: onImage.x, clientY: onImage.y },
+			},
+			{
+				target: stageIn(popup),
+				coords: { clientX: beside.x, clientY: beside.y },
+			},
 			{ keys: "[/MouseLeft]" },
 		])
 		await expect(args.onClose).not.toHaveBeenCalled()
 
 		await openMoreMenu(popup, userEvent)
-		await userEvent.click(cornerOf(bottomStripIn(popup)))
+		await clickAt(userEvent, cornerOf(bottomStripIn(popup)))
 		await waitFor(() => expect(screen.queryByRole("menu")).toBe(null))
 		await expect(args.onClose).not.toHaveBeenCalled()
 
@@ -622,26 +658,27 @@ export const BackdropClick = meta.story({
 			within(menu).getByRole("menuitem", { name: "Delete" }),
 		)
 		await screen.findByRole("alertdialog")
-		await userEvent.click(cornerOf(bottomStripIn(popup)))
+		await clickAt(userEvent, cornerOf(bottomStripIn(popup)))
 		await userEvent.keyboard("{Escape}")
 		await waitFor(() => expect(screen.queryByRole("alertdialog")).toBe(null))
 		await expect(args.onClose).not.toHaveBeenCalled()
 		await expect(popup).toBeVisible()
 
-		await userEvent.click(stageIn(popup))
+		await clickBesideImage(popup)
 		await closedFor(1)
 
 		popup = await reopen()
 		await userEvent.click(
-			within(popup).getByRole("button", { name: "Zoom in" }),
+			within(popup).getByRole("button", { name: "Zoom out" }),
 		)
-		await userEvent.click(stageIn(popup))
+		await clickBesideImage(popup)
 		await closedFor(2)
 
 		popup = await reopen()
 		const bottomStrip = bottomStripIn(popup)
-		await expect(cornerOf(bottomStrip)).toBe(bottomStrip)
-		await userEvent.click(bottomStrip)
+		const stripCorner = cornerOf(bottomStrip)
+		await expect(elementAt(stripCorner)).toBe(bottomStrip)
+		await clickAt(userEvent, stripCorner)
 		await closedFor(3)
 	},
 })

@@ -1,7 +1,12 @@
 "use client"
 
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
-import { type KeyboardEvent, useRef, useState } from "react"
+import {
+	type KeyboardEvent,
+	type PointerEvent,
+	useRef,
+	useState,
+} from "react"
 import { useTranslation } from "react-i18next"
 
 import { Icons } from "@workspace/ui/components/icons"
@@ -53,6 +58,15 @@ const isInZoomScroller = (target: EventTarget) =>
 
 const isBackdrop = (target: EventTarget) =>
 	target instanceof HTMLElement && "lightboxBackdrop" in target.dataset
+
+const isOnScrollbar = (event: PointerEvent) => {
+	const { target } = event
+	if (!(target instanceof HTMLElement)) return false
+	const box = target.getBoundingClientRect()
+	const x = event.clientX - box.left - target.clientLeft
+	const y = event.clientY - box.top - target.clientTop
+	return x < 0 || y < 0 || x >= target.clientWidth || y >= target.clientHeight
+}
 
 type ZoomStageProps = {
 	image: LibraryLightboxImage
@@ -229,7 +243,8 @@ const LibraryLightbox = ({
 						onPointerDown={(event) => {
 							pressedRef.current =
 								isConfirmingDelete ||
-								event.nativeEvent === lastMenuToggleRef.current
+								event.nativeEvent === lastMenuToggleRef.current ||
+								isOnScrollbar(event)
 									? null
 									: event.target
 						}}
