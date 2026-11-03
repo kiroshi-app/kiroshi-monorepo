@@ -5,25 +5,49 @@ import type { TranscriptHandle } from "@workspace/ui/components/transcript"
 import { claimsComposerFocus, type ReplyTarget } from "./screen-model"
 
 type ThreadReplyInput = {
+	threadId: string
 	composerRef: RefObject<HTMLTextAreaElement | null>
 	scrollerRef: RefObject<TranscriptHandle | null>
-	send: (text: string, repliedToMessageId?: string) => Promise<boolean>
+	send: (text: string, repliedToMessageIds: string[]) => Promise<boolean>
 }
 
 export type ThreadReply = {
-	replyTarget: ReplyTarget | null
+	replyTargets: ReplyTarget[]
 	focusComposer: () => void
 	holdReply: (target: ReplyTarget) => void
-	releaseReply: () => void
+	releaseReply: (messageId: string) => void
 	submitPrompt: (text: string) => Promise<boolean>
 }
 
+type HeldReplies = Readonly<Record<string, ReplyTarget[]>>
+
+const NO_TARGETS: ReplyTarget[] = []
+
+const withTarget = (held: ReplyTarget[], target: ReplyTarget) =>
+	held.some(({ messageId }) => messageId === target.messageId)
+		? held
+		: [...held, target]
+
+const withoutTarget = (held: ReplyTarget[], messageId: string) =>
+	held.filter((target) => target.messageId !== messageId)
+
 export function useThreadReply({
+	threadId,
 	composerRef,
 	scrollerRef,
 	send,
 }: ThreadReplyInput): ThreadReply {
-	const [replyTarget, setReplyTarget] = useState<ReplyTarget | null>(null)
+	const [heldReplies, setHeldReplies] = useState<HeldReplies>({})
+	const replyTargets = heldReplies[threadId] ?? NO_TARGETS
+
+	const updateTargets = useCallback(
+		(update: (held: ReplyTarget[]) => ReplyTarget[]) =>
+			setHeldReplies((replies) => ({
+				...replies,
+				[threadId]: update(replies[threadId] ?? NO_TARGETS),
+			})),
+		[threadId],
+	)
 
 	const focusComposer = useCallback(() => {
 		const composer = composerRef.current
@@ -38,31 +62,37 @@ export function useThreadReply({
 	const submitPrompt = useCallback(
 		async (text: string) => {
 			scrollerRef.current?.scrollToEnd("auto")
-			const sent = await send(text, replyTarget?.messageId)
+			const sent = await send(
+				text,
+				replyTargets.map(({ messageId }) => messageId),
+			)
 			if (sent) {
-				setReplyTarget(null)
+				updateTargets(() => NO_TARGETS)
 			}
 			focusComposer()
 			return sent
 		},
-		[send, replyTarget, scrollerRef, focusComposer],
+		[send, replyTargets, updateTargets, scrollerRef, focusComposer],
 	)
 
 	return {
-		replyTarget,
+		replyTargets,
 		focusComposer,
 		submitPrompt,
 		holdReply: useCallback(
 			(target: ReplyTarget) => {
-				setReplyTarget(target)
+				updateTargets((held) => withTarget(held, target))
 				focusComposer()
 			},
-			[focusComposer],
+			[updateTargets, focusComposer],
 		),
-		releaseReply: useCallback(() => {
-			setReplyTarget(null)
-			focusComposer()
-		}, [focusComposer]),
+		releaseReply: useCallback(
+			(messageId: string) => {
+				updateTargets((held) => withoutTarget(held, messageId))
+				focusComposer()
+			},
+			[updateTargets, focusComposer],
+		),
 	}
 }
 

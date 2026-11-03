@@ -9,7 +9,10 @@ import {
 } from "react"
 
 import { PromptAttachButton } from "@workspace/ui/components/prompt-attach-button"
-import { PromptAttachments } from "@workspace/ui/components/prompt-attachments"
+import {
+	PromptAttachments,
+	type PromptReplyAttachment,
+} from "@workspace/ui/components/prompt-attachments"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
 
 import {
@@ -47,6 +50,8 @@ type ThreadComposerProps = {
 	isDropTarget: boolean
 	onAttach: (files: File[]) => void
 	onRemoveAttachment: (id: string) => void
+	replies: PromptReplyAttachment[]
+	onRemoveReply: (messageId: string) => void
 	composerRef: RefObject<HTMLTextAreaElement | null>
 	promptRef?: RefObject<PromptHandle | null>
 	readDraft: () => string
@@ -64,6 +69,8 @@ export const ThreadComposer = ({
 	isDropTarget,
 	onAttach,
 	onRemoveAttachment,
+	replies,
+	onRemoveReply,
 	composerRef,
 	promptRef,
 	readDraft,
@@ -151,12 +158,14 @@ export const ThreadComposer = ({
 				}
 				offline={offline}
 				onAttach={canAttach ? onAttach : undefined}
+				onRemoveReply={onRemoveReply}
 				onSubmit={submit}
 				onValueChange={changePrompt}
 				placeholder={placeholder}
 				quote={
 					quoted ? { ...quoted, onRemove: () => setQuoted(null) } : undefined
 				}
+				replies={replies}
 				textareaRef={composerRef}
 				value={prompt}
 			/>

@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react"
 
-type Send = (text: string, repliedToMessageId?: string) => Promise<boolean>
+type Send = (text: string, repliedToMessageIds: string[]) => Promise<boolean>
 
 type SentInMountInput = {
 	threadId: string
@@ -30,12 +30,12 @@ export const useSentInMount = ({
 	}
 
 	const markedSend = useCallback<Send>(
-		(text, repliedToMessageId) => {
+		(text, repliedToMessageIds) => {
 			setMark({
 				threadId,
 				priorMessageIds: new Set(messages.map(({ id }) => id)),
 			})
-			return send(text, repliedToMessageId)
+			return send(text, repliedToMessageIds)
 		},
 		[threadId, messages, send],
 	)
