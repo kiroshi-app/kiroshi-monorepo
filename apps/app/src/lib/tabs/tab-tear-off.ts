@@ -32,7 +32,7 @@ export type TabTearOff = {
 	screenY: number
 }
 
-type DrawGhost = (size: WindowSize) => DragGhostTab
+type DrawGhost = () => DragGhostTab
 
 export type TabTearOffSession = {
 	start: (tearOff: TabTearOff, drawGhost: DrawGhost) => void
@@ -90,7 +90,6 @@ type DockedDrag = Failing & {
 type TabDrag = DockedDrag & {
 	kind: "tab"
 	spaceId: string
-	size: WindowSize
 	lastPoint: ScreenPosition
 	view: Promise<DragView>
 	unwatchEnded: Promise<() => void>
@@ -128,9 +127,18 @@ const originWindowSize = (): WindowSize => ({
 	height: Math.round(window.innerHeight),
 })
 
-const ghostSizeOf = ({ width, height }: WindowSize): WindowSize => ({
-	width: Math.round(width / 2),
-	height: Math.round(height / 2),
+const LIFTED_CHIP_SIZE: WindowSize = { width: 256, height: 28 }
+
+const GHOST_PAGE_INSET = 32
+
+const GHOST_SIZE: WindowSize = {
+	width: LIFTED_CHIP_SIZE.width + GHOST_PAGE_INSET * 2,
+	height: LIFTED_CHIP_SIZE.height + GHOST_PAGE_INSET * 2,
+}
+
+const ghostOriginAt = ({ x, y }: ScreenPosition): ScreenPosition => ({
+	x: x - GHOST_PAGE_INSET,
+	y: y - GHOST_PAGE_INSET,
 })
 
 const isSupported = (answer: GhostAnswer) =>
@@ -189,12 +197,16 @@ const showGhost = (
 	ghostAnswered(
 		drag,
 		"drag_ghost_show",
-		commands.dragGhostShow(point, drag.size, ghostTab),
+		commands.dragGhostShow(ghostOriginAt(point), GHOST_SIZE, ghostTab),
 	)
 
 const moveGhost = async (drag: TabDrag, point: ScreenPosition) => {
 	if (
-		await ghostAnswered(drag, "drag_ghost_move", commands.dragGhostMove(point))
+		await ghostAnswered(
+			drag,
+			"drag_ghost_move",
+			commands.dragGhostMove(ghostOriginAt(point)),
+		)
 	) {
 		return true
 	}
@@ -290,9 +302,9 @@ const ghostOver = (
 	return ghostFollowing(drag, { ...view, target }, point)
 }
 
-const drawnGhost = (drawGhost: DrawGhost, size: WindowSize) => {
+const drawnGhost = (drawGhost: DrawGhost) => {
 	try {
-		return drawGhost(size)
+		return drawGhost()
 	} catch (reason) {
 		reportGhostFailure(reason)
 		return null
@@ -305,7 +317,7 @@ const announcedView = async (
 	point: ScreenPosition,
 	drawGhost: DrawGhost,
 ): Promise<DragView> => {
-	const ghostTab = drawnGhost(drawGhost, drag.size)
+	const ghostTab = drawnGhost(drawGhost)
 	if (ghostTab) {
 		sendGhostState(drag, "outside")
 	}
@@ -698,7 +710,6 @@ export const createTabTearOff = ({
 			kind: "tab",
 			tabId: tearOff.tabId,
 			spaceId: torn.spaceId,
-			size: ghostSizeOf(originWindowSize()),
 			lastPoint: point,
 			hasFailed: false,
 			isNoticed: false,

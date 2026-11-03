@@ -1,22 +1,19 @@
 // @vitest-environment happy-dom
 
 import { act, cleanup, render, screen } from "@testing-library/react"
-import { createElement } from "react"
+import { createElement, type ReactNode } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import "@workspace/ui/lib/i18n"
 
 import { type DockTarget, DRAG_GHOST_STATE_EVENT } from "./drag-ghost-state"
 import { createDragGhostView } from "./drag-ghost-view"
-import type { GhostCardReader } from "./use-ghost-card"
+import { type TabFaceSources, tabFaceOf } from "./tab-faces"
+import type { GhostIconReader } from "./use-ghost-icon"
 
-import {
-	DRAG_GHOST_TAB_EVENT,
-	type DragGhostTab,
-	type TranscriptMessage,
-	type TranscriptPage,
-} from "../bindings"
+import { DRAG_GHOST_TAB_EVENT, type DragGhostTab } from "../bindings"
 import { DragGhost } from "@/components/drag-ghost"
+import { toBotRows } from "../conversations/roster-conversations"
 import type { Bot, Conversation } from "../conversations/store-contract"
 import { createQueryTestWrapper } from "../query/query-test-wrapper"
 
@@ -34,42 +31,10 @@ const BOT_TAB: DragGhostTab = {
 	title: "Ada",
 }
 
-const MISSION_TAB: DragGhostTab = {
-	tabId: "mission",
-	href: "/?bot=ada&mission=launch",
-	title: "Launch checklist",
-}
-
-const participantOf = (
-	botId: string,
-	name: string,
-	leftAt: number | null,
-): Conversation["participants"][number] => ({
-	botId,
-	role: "assistant",
-	joinedAt: 0,
-	leftAt,
-	name,
-	avatarBlot: null,
-	avatarImagePath: null,
-	isDeleted: false,
-})
-
-const RELEASE: Conversation = {
-	id: "release",
-	spaceId: SPACE,
-	sectionId: null,
-	pinPosition: null,
-	title: "Release notes",
-	instructions: "",
-	icon: null,
-	color: null,
-	createdAt: 0,
-	updatedAt: 0,
-	participants: [
-		participantOf("gone", "Grace", 1),
-		participantOf("ada", "Ada", null),
-	],
+const LIST_TAB: DragGhostTab = {
+	tabId: "list",
+	href: "/",
+	title: "New tab",
 }
 
 const ADA = {
@@ -79,47 +44,36 @@ const ADA = {
 	avatarImagePath: null,
 } as unknown as Bot
 
-const messageOf = (
-	id: string,
-	role: TranscriptMessage["role"],
-	content: string,
-	completion: TranscriptMessage["completion"] = "complete",
-): TranscriptMessage => ({
-	id,
-	conversationId: "release",
-	turnId: id,
-	seq: 0,
-	role,
-	content,
-	completion,
-	createdAt: 0,
-	authorBotId: role === "assistant" ? "ada" : null,
-	authorAccountId: null,
-	authorName: null,
-	repliedToMessageId: null,
-	runtimeSessionId: null,
+const RELEASE = {
+	id: "release",
+	spaceId: SPACE,
+	title: "Release notes",
+	icon: "Rocket",
+	color: null,
+	participants: [],
+} as unknown as Conversation
+
+const ORIGIN_STRIP_SOURCES: TabFaceSources = {
+	bots: toBotRows([ADA]),
+	conversations: [{ id: "release", name: "Release notes", icon: "Rocket" }],
+	missionTitles: {},
+}
+
+const NO_SOURCES: TabFaceSources = {
+	bots: [],
+	conversations: [],
+	missionTitles: {},
+}
+
+const readerAnswering = (): GhostIconReader => ({
+	bots: vi.fn().mockResolvedValue([ADA]),
+	conversations: vi.fn().mockResolvedValue([RELEASE]),
 })
 
-const transcriptOf = (
-	conversationId: string,
-	messages: TranscriptMessage[],
-): TranscriptPage => ({
-	conversationId,
-	hasMore: false,
-	arrivals: [],
-	messages,
+const failingReader = (): GhostIconReader => ({
+	bots: vi.fn().mockRejectedValue(new Error("store lost")),
+	conversations: vi.fn().mockRejectedValue(new Error("store lost")),
 })
-
-const RELEASE_PAGE = transcriptOf("release", [
-	messageOf("older", "user", "An older question"),
-	messageOf("ask", "user", "Can you draft the release notes?"),
-	messageOf("reply", "assistant", "Here's a first pass."),
-	messageOf("typing", "assistant", "Still writ", "streaming"),
-])
-
-const SOLO_PAGE = transcriptOf("solo-thread", [
-	messageOf("hello", "user", "Morning, Ada"),
-])
 
 const deferred = <T>() => {
 	let resolve: (value: T) => void = () => undefined
@@ -129,26 +83,11 @@ const deferred = <T>() => {
 	return { promise, resolve }
 }
 
-const readerAnswering = (
-	pages: Record<string, () => Promise<TranscriptPage>>,
-) => ({
-	bots: vi.fn().mockResolvedValue([ADA]),
-	spaces: vi.fn().mockResolvedValue([{ id: SPACE }]),
-	conversations: vi.fn().mockResolvedValue([RELEASE]),
-	conversationSoloStates: vi
-		.fn()
-		.mockResolvedValue([{ botId: "ada", conversationId: "solo-thread" }]),
-	loadPage: vi.fn(
-		(conversationId: string) =>
-			pages[conversationId]?.() ?? Promise.reject(new Error("no page")),
-	),
-})
-
 type Heard = (event: { payload: unknown }) => void
 
 const startGhost = async (
 	answered: Promise<DragGhostTab | null>,
-	reader: GhostCardReader = readerAnswering({}),
+	reader: GhostIconReader = readerAnswering(),
 ) => {
 	const heard = new Map<string, Heard>()
 	const listen = vi.fn((event: string, handler: Heard) => {
@@ -176,25 +115,44 @@ const startGhost = async (
 
 const mountGhost = async (
 	answered: Promise<DragGhostTab | null>,
-	reader?: GhostCardReader,
+	reader?: GhostIconReader,
 ) => {
 	const ghost = await startGhost(answered, reader)
 	await act(() => ghost.watching)
 	return ghost
 }
 
-const thumbnail = () =>
-	document.querySelector<HTMLElement>("[data-slot=tab-drag-thumbnail]")
+const chip = () =>
+	document.querySelector<HTMLElement>("[data-slot=title-bar-tab-chip]")
 
-const thumbnailState = () => thumbnail()?.getAttribute("data-state")
+const chipState = () => chip()?.getAttribute("data-state")
 
-const releaseReader = () =>
-	readerAnswering({ release: () => Promise.resolve(RELEASE_PAGE) })
+const withoutReactIds = (markup: string | undefined) =>
+	markup?.replace(/_r_\w+?_/g, "_r_")
+
+const chipIcon = () => withoutReactIds(chip()?.firstElementChild?.innerHTML)
+
+const markupOf = (icon: ReactNode) =>
+	withoutReactIds(
+		render(icon, { container: document.createElement("span") }).container
+			.innerHTML,
+	)
+
+const stripIconOf = (tab: DragGhostTab) =>
+	markupOf(tabFaceOf(tab.href, ORIGIN_STRIP_SOURCES).icon)
+
+const genericIconOf = (tab: DragGhostTab) =>
+	markupOf(tabFaceOf(tab.href, NO_SOURCES).icon)
+
+const draggedInSpace = async (tab: DragGhostTab, reader: GhostIconReader) => {
+	const ghost = await mountGhost(Promise.resolve(null), reader)
+	await ghost.hearState(tab.tabId, "outside")
+	await ghost.hearTab(tab)
+	return ghost
+}
 
 beforeEach(() => {
 	vi.spyOn(console, "error").mockImplementation(() => undefined)
-	window.innerWidth = 600
-	window.innerHeight = 400
 })
 
 afterEach(() => {
@@ -206,116 +164,79 @@ describe("the drag ghost page", () => {
 	it("draws nothing while the host holds no tab and none is heard", async () => {
 		await mountGhost(Promise.resolve(null))
 
-		expect(thumbnail()).toBeNull()
+		expect(chip()).toBeNull()
 	})
 
-	it("draws the tab the host answers on load with its agent, its face and its last two settled messages", async () => {
-		const reader = releaseReader()
+	it("draws the lifted chip alone of the tab the host answers on load, with no thumbnail", async () => {
+		await mountGhost(Promise.resolve(CONVERSATION_TAB))
 
-		await mountGhost(Promise.resolve(CONVERSATION_TAB), reader)
-
+		expect(chip()?.getAttribute("data-placement")).toBe("alone")
 		expect(screen.getByText(CONVERSATION_TAB.title)).toBeTruthy()
-		expect(
-			await screen.findByText("Can you draft the release notes?"),
-		).toBeTruthy()
-		expect(screen.getByText("Here's a first pass.")).toBeTruthy()
-		expect(screen.getByText("Ada")).toBeTruthy()
-		expect(screen.getByText("Message Ada")).toBeTruthy()
-		expect(screen.queryByText("An older question")).toBeNull()
-		expect(screen.queryByText("Still writ")).toBeNull()
-		expect(reader.loadPage).toHaveBeenCalledExactlyOnceWith("release", null)
+		expect(document.querySelector("[data-slot=tab-drag-thumbnail]")).toBeNull()
 	})
 
-	it("draws the title card while the sources load, then fills it in", async () => {
-		const page = deferred<TranscriptPage>()
-		const reader = readerAnswering({ release: () => page.promise })
+	it("draws an agent tab with the avatar the origin strip draws, read from the bots of its Space", async () => {
+		const reader = readerAnswering()
 
-		await mountGhost(Promise.resolve(CONVERSATION_TAB), reader)
+		await draggedInSpace(BOT_TAB, reader)
 
-		expect(screen.getByText(CONVERSATION_TAB.title)).toBeTruthy()
-		expect(screen.queryByText("Here's a first pass.")).toBeNull()
-		await act(async () => page.resolve(RELEASE_PAGE))
-		expect(await screen.findByText("Here's a first pass.")).toBeTruthy()
+		await vi.waitFor(() => expect(chipIcon()).toBe(stripIconOf(BOT_TAB)))
+		expect(chipIcon()).not.toBe(genericIconOf(BOT_TAB))
+		expect(reader.bots).toHaveBeenCalledExactlyOnceWith(SPACE)
+		expect(reader.conversations).not.toHaveBeenCalled()
 	})
 
-	it("keeps the title card when the sources fail", async () => {
-		const reader = readerAnswering({
-			release: () => Promise.reject(new Error("store lost")),
-		})
-		reader.conversations.mockRejectedValue(new Error("store lost"))
+	it("draws a conversation tab with the glyph the origin strip draws, read from the conversations of its Space", async () => {
+		const reader = readerAnswering()
 
-		await mountGhost(Promise.resolve(CONVERSATION_TAB), reader)
-		await vi.waitFor(() => expect(reader.loadPage).toHaveBeenCalled())
+		await draggedInSpace(CONVERSATION_TAB, reader)
+
+		await vi.waitFor(() =>
+			expect(chipIcon()).toBe(stripIconOf(CONVERSATION_TAB)),
+		)
+		expect(chipIcon()).not.toBe(genericIconOf(CONVERSATION_TAB))
+		expect(reader.conversations).toHaveBeenCalledExactlyOnceWith(SPACE)
+		expect(reader.bots).not.toHaveBeenCalled()
+	})
+
+	it("draws a list page tab with the icon the origin strip draws, reading nothing", async () => {
+		const reader = readerAnswering()
+
+		await draggedInSpace(LIST_TAB, reader)
+
+		expect(chipIcon()).toBe(stripIconOf(LIST_TAB))
+		expect(reader.bots).not.toHaveBeenCalled()
+		expect(reader.conversations).not.toHaveBeenCalled()
+	})
+
+	it("keeps the generic icon and the title when the lists fail to load", async () => {
+		const reader = failingReader()
+
+		await draggedInSpace(BOT_TAB, reader)
+		await vi.waitFor(() => expect(reader.bots).toHaveBeenCalled())
 		await act(async () => undefined)
 
-		expect(screen.getByText(CONVERSATION_TAB.title)).toBeTruthy()
-		expect(screen.getByText("Message")).toBeTruthy()
-		expect(screen.queryByText("Here's a first pass.")).toBeNull()
+		expect(chipIcon()).toBe(genericIconOf(BOT_TAB))
+		expect(screen.getByText(BOT_TAB.title)).toBeTruthy()
 	})
 
-	it("reads the solo thread of an agent tab in the Space the origin names", async () => {
-		const reader = readerAnswering({
-			"solo-thread": () => Promise.resolve(SOLO_PAGE),
-		})
-		const { hearTab, hearState } = await mountGhost(
-			Promise.resolve(null),
-			reader,
-		)
+	it("reads the lists again when the same tab is shown for a new drag", async () => {
+		const reader = readerAnswering()
+		const { hearTab } = await draggedInSpace(BOT_TAB, reader)
+		await vi.waitFor(() => expect(reader.bots).toHaveBeenCalledOnce())
 
-		await hearState(BOT_TAB.tabId, "outside")
 		await hearTab(BOT_TAB)
 
-		expect(await screen.findByText("Morning, Ada")).toBeTruthy()
-		expect(screen.getByText("Ada Lovelace")).toBeTruthy()
-		expect(reader.bots).toHaveBeenCalledWith(SPACE)
-		expect(reader.conversationSoloStates).toHaveBeenCalledExactlyOnceWith(SPACE)
+		await vi.waitFor(() => expect(reader.bots).toHaveBeenCalledTimes(2))
 	})
 
-	it("reads no messages for a mission tab", async () => {
-		const reader = readerAnswering({})
-		const { hearTab } = await mountGhost(Promise.resolve(null), reader)
+	it("drops the previous tab for the next one", async () => {
+		const { hearTab } = await mountGhost(Promise.resolve(CONVERSATION_TAB))
 
-		await hearTab(MISSION_TAB)
-
-		expect(await screen.findByText("Ada Lovelace")).toBeTruthy()
-		expect(screen.getByText(MISSION_TAB.title)).toBeTruthy()
-		expect(reader.loadPage).not.toHaveBeenCalled()
-	})
-
-	it("drops the previous tab for the next one, with no late answer from the old tab landing on it", async () => {
-		const oldPage = deferred<TranscriptPage>()
-		const reader = readerAnswering({
-			release: () => oldPage.promise,
-			"solo-thread": () => Promise.resolve(SOLO_PAGE),
-		})
-		const { hearTab, hearState } = await mountGhost(
-			Promise.resolve(CONVERSATION_TAB),
-			reader,
-		)
-		await vi.waitFor(() => expect(reader.loadPage).toHaveBeenCalledOnce())
-
-		await hearState(BOT_TAB.tabId, "outside")
 		await hearTab(BOT_TAB)
-		await act(async () => oldPage.resolve(RELEASE_PAGE))
 
-		expect(await screen.findByText("Morning, Ada")).toBeTruthy()
 		expect(screen.getByText(BOT_TAB.title)).toBeTruthy()
 		expect(screen.queryByText(CONVERSATION_TAB.title)).toBeNull()
-		expect(screen.queryByText("Here's a first pass.")).toBeNull()
-	})
-
-	it("reads the messages again when the same tab is shown for a new drag", async () => {
-		const reader = releaseReader()
-		const { hearTab } = await mountGhost(
-			Promise.resolve(CONVERSATION_TAB),
-			reader,
-		)
-		await screen.findByText("Here's a first pass.")
-
-		await hearTab(CONVERSATION_TAB)
-
-		await vi.waitFor(() => expect(reader.loadPage).toHaveBeenCalledTimes(2))
-		expect(screen.getByText("Here's a first pass.")).toBeTruthy()
 	})
 
 	it("keeps the heard tab over a late host answer", async () => {
@@ -330,17 +251,6 @@ describe("the drag ghost page", () => {
 		expect(screen.queryByText(CONVERSATION_TAB.title)).toBeNull()
 	})
 
-	it("draws a payload carrying a thumbnail rather than an empty page", async () => {
-		const { hearTab } = await mountGhost(Promise.resolve(null))
-
-		await hearTab({
-			...CONVERSATION_TAB,
-			thumbnail: "data:image/png;base64,iVBORw0KGgo=",
-		})
-
-		expect(screen.getByText(CONVERSATION_TAB.title)).toBeTruthy()
-	})
-
 	it("still listens and draws heard tabs when the host answer fails", async () => {
 		const { hearTab } = await mountGhost(Promise.reject(new Error("gone")))
 
@@ -350,28 +260,24 @@ describe("the drag ghost page", () => {
 		expect(screen.getByText(CONVERSATION_TAB.title)).toBeTruthy()
 	})
 
-	it("draws nothing over a window of the same Space, and the card again once the pointer leaves", async () => {
-		const { hearState } = await mountGhost(
-			Promise.resolve(CONVERSATION_TAB),
-			releaseReader(),
-		)
-		await screen.findByText("Here's a first pass.")
+	it("draws nothing over a window of the same Space, and the chip again once the pointer leaves", async () => {
+		const { hearState } = await mountGhost(Promise.resolve(CONVERSATION_TAB))
 
 		await hearState(CONVERSATION_TAB.tabId, "sameSpace")
-		expect(thumbnail()).toBeNull()
+		expect(chip()).toBeNull()
 
 		await hearState(CONVERSATION_TAB.tabId, "outside")
-		expect(screen.getByText("Here's a first pass.")).toBeTruthy()
+		expect(screen.getByText(CONVERSATION_TAB.title)).toBeTruthy()
 	})
 
-	it("shows the not-allowed state over a window of another Space, and clears it", async () => {
+	it("draws the chip not allowed over a window of another Space, and clears it", async () => {
 		const { hearState } = await mountGhost(Promise.resolve(CONVERSATION_TAB))
 
 		await hearState(CONVERSATION_TAB.tabId, "otherSpace")
-		expect(thumbnailState()).toBe("not-allowed")
+		expect(chipState()).toBe("not-allowed")
 
 		await hearState(CONVERSATION_TAB.tabId, "outside")
-		expect(thumbnailState()).toBe("allowed")
+		expect(chipState()).toBe("allowed")
 	})
 
 	it("ignores a state heard for another tab", async () => {
@@ -379,7 +285,7 @@ describe("the drag ghost page", () => {
 
 		await hearState(BOT_TAB.tabId, "sameSpace")
 
-		expect(thumbnailState()).toBe("allowed")
+		expect(chipState()).toBe("allowed")
 	})
 
 	it("reads nothing from localStorage and listens to no storage event", async () => {
@@ -392,12 +298,5 @@ describe("the drag ghost page", () => {
 			"storage",
 		)
 		expect(getItem).not.toHaveBeenCalled()
-	})
-
-	it("draws the card at the ghost window size", async () => {
-		await mountGhost(Promise.resolve(CONVERSATION_TAB))
-
-		expect(thumbnail()?.style.width).toBe("600px")
-		expect(thumbnail()?.style.height).toBe("400px")
 	})
 })

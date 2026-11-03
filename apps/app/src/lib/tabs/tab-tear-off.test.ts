@@ -130,6 +130,10 @@ const sessionWithMoves = () => {
 
 const drawGhost = vi.fn(() => TAB)
 
+const CHIP_GHOST_SIZE = { width: 320, height: 92 }
+
+const ghostOriginAt = (x: number, y: number) => ({ x: x - 32, y: y - 32 })
+
 const targetAnswers = (isTaken: boolean) =>
 	awaitDockAnswer.mockResolvedValue({ answer: Promise.resolve(isTaken) })
 
@@ -167,7 +171,7 @@ afterEach(() => {
 })
 
 describe("a tab crossing the tear-off threshold", () => {
-	it("shows the ghost under the pointer at half the origin window, drawing that tab", async () => {
+	it("shows the ghost sized to the lifted chip with its inset, its chip under the pointer whatever the origin window, drawing that tab", async () => {
 		answerEveryGhostCommand(SUPPORTED)
 		const { session } = sessionWithMoves()
 
@@ -175,15 +179,12 @@ describe("a tab crossing the tear-off threshold", () => {
 
 		await vi.waitFor(() =>
 			expect(ghost.dragGhostShow).toHaveBeenCalledExactlyOnceWith(
-				{ x: 640, y: 121 },
-				{ width: 600, height: 400 },
+				ghostOriginAt(640, 121),
+				CHIP_GHOST_SIZE,
 				TAB,
 			),
 		)
-		expect(drawGhost).toHaveBeenCalledExactlyOnceWith({
-			width: 600,
-			height: 400,
-		})
+		expect(drawGhost).toHaveBeenCalledOnce()
 	})
 
 	it("moves the ghost to the pointer on every move, in order", async () => {
@@ -196,8 +197,8 @@ describe("a tab crossing the tear-off threshold", () => {
 
 		await vi.waitFor(() =>
 			expect(ghost.dragGhostMove.mock.calls).toEqual([
-				[{ x: -300, y: 40 }],
-				[{ x: 2400, y: 900 }],
+				[ghostOriginAt(-300, 40)],
+				[ghostOriginAt(2400, 900)],
 			]),
 		)
 	})
@@ -271,7 +272,9 @@ describe("a tab torn off, brought back and torn off again in one drag", () => {
 		expect(ghost.dragGhostShow).toHaveBeenCalledOnce()
 		firstHide.land()
 		await vi.waitFor(() =>
-			expect(ghost.dragGhostMove).toHaveBeenLastCalledWith({ x: 40, y: 40 }),
+			expect(ghost.dragGhostMove).toHaveBeenLastCalledWith(
+				ghostOriginAt(40, 40),
+			),
 		)
 		expect(ghost.dragGhostShow).toHaveBeenCalledTimes(2)
 		expect(ghost.dragGhostHide).toHaveBeenCalledOnce()
@@ -1068,8 +1071,8 @@ describe("a torn-off tab whose ghost or move fails", () => {
 			}),
 		)
 		expect(ghost.dragGhostShow).toHaveBeenLastCalledWith(
-			{ x: 20, y: 20 },
-			{ width: 600, height: 400 },
+			ghostOriginAt(20, 20),
+			CHIP_GHOST_SIZE,
 			TAB,
 		)
 		expect(ghost.dragGhostHide).toHaveBeenCalledOnce()
