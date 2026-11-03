@@ -434,12 +434,12 @@ export const RenameFocusesTitleFromHandle = meta.story({
 			},
 		},
 	},
-	play: async ({ args, canvasElement, userEvent }) => {
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
 		await expect(titleFieldOf(createRef())()).toBe(false)
 		const title = titleIn(canvasElement)
 		await expect(renameHandle.current?.titleField()).toBe(title)
 
-		const more = within(canvasElement).getByRole("button", { name: "More" })
+		const more = canvas.getByRole("button", { name: "More" })
 		await userEvent.click(more)
 		const menu = await screen.findByRole("menu")
 		await userEvent.click(
