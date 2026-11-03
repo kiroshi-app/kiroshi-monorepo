@@ -20,16 +20,12 @@ fn icon(relative: &str) -> RgbaImage {
 }
 
 fn painted_bounds(icon: &RgbaImage) -> Option<PaintedBounds> {
-	icon.enumerate_pixels().filter(|(_, _, pixel)| pixel[3] > 0).fold(None, |bounds, (x, y, _)| {
-		Some(match bounds {
-			None => PaintedBounds { left: x, top: y, right: x, bottom: y },
-			Some(PaintedBounds { left, top, right, bottom }) => PaintedBounds {
-				left: left.min(x),
-				top: top.min(y),
-				right: right.max(x),
-				bottom: bottom.max(y),
-			},
-		})
+	let painted = || icon.enumerate_pixels().filter(|(_, _, pixel)| pixel[3] > 0);
+	Some(PaintedBounds {
+		left: painted().map(|(x, _, _)| x).min()?,
+		top: painted().map(|(_, y, _)| y).min()?,
+		right: painted().map(|(x, _, _)| x).max()?,
+		bottom: painted().map(|(_, y, _)| y).max()?,
 	})
 }
 
