@@ -2,9 +2,32 @@ import { expect, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { hueScopeOf } from "@workspace/storybook/story-utils"
-import { SelectionToolbar } from "@workspace/ui/components/selection-toolbar"
+import {
+	SELECTION_TOOLBAR_SEPARATOR,
+	SelectionToolbar,
+	type SelectionToolbarItem,
+} from "@workspace/ui/components/selection-toolbar"
 
 const NO_RING = "none"
+
+const onBold = fn()
+const onItalic = fn()
+const onStrikethrough = fn()
+const onCode = fn()
+const onHeading = fn()
+const onList = fn()
+
+const FORMAT_ACTIONS: SelectionToolbarItem[] = [
+	{ name: "bold", isOn: false, onPress: onBold },
+	{ name: "italic", isOn: true, onPress: onItalic },
+	{ name: "strikethrough", isOn: false, onPress: onStrikethrough },
+	{ name: "code", isOn: false, onPress: onCode },
+	SELECTION_TOOLBAR_SEPARATOR,
+	{ name: "link", isOn: true },
+	SELECTION_TOOLBAR_SEPARATOR,
+	{ name: "heading", isOn: false, onPress: onHeading },
+	{ name: "list", isOn: false, onPress: onList },
+]
 
 const meta = preview.meta({
 	title: "Overlays/SelectionToolbar",
@@ -14,22 +37,17 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The bar floating over a text selection in the Library document editor. It only reports intent: one callback per button, the typed url for Link, and the formats already on the selection come back in through `activeFormats`. It sits 8px above `anchor`, or 8px below when `roomAbove` cannot hold it.",
+					"The bar floating over a text selection. It draws the `actions` list it is given, in order, a `separator` between two groups: the Library document editor passes its formats, each with `isOn` for the formats already on the selection, and a message selection passes Reply then Copy. It only reports intent: one callback per button, the typed url for Link. It sits 8px above `anchor`, or 8px below when `roomAbove` cannot hold it.",
 			},
 		},
 	},
 	globals: { theme: "dark" },
 	args: {
 		anchor: { centre: 320, top: 120, bottom: 144, roomAbove: 120 },
-		activeFormats: ["italic", "link"] as const,
+		label: "Format",
+		actions: FORMAT_ACTIONS,
 		link: "https://kiroshi.app/brief",
-		onBold: fn(),
-		onItalic: fn(),
-		onStrikethrough: fn(),
-		onCode: fn(),
 		onLink: fn(),
-		onHeading: fn(),
-		onList: fn(),
 	},
 	render: (args) => (
 		<div className="relative h-60 w-160 bg-background" {...hueScopeOf("blue")}>
@@ -69,14 +87,15 @@ export const KeyboardAndPointer = meta.story({
 		await expect(button("Bold")).toHaveAttribute("aria-pressed", "false")
 
 		const calls = [
-			["Bold", args.onBold],
-			["Italic", args.onItalic],
-			["Strikethrough", args.onStrikethrough],
-			["Code", args.onCode],
-			["Heading", args.onHeading],
-			["List", args.onList],
+			["Bold", onBold],
+			["Italic", onItalic],
+			["Strikethrough", onStrikethrough],
+			["Code", onCode],
+			["Heading", onHeading],
+			["List", onList],
 		] as const
 		for (const [name, callback] of calls) {
+			callback.mockClear()
 			await userEvent.click(button(name))
 			await expect(callback).toHaveBeenCalledOnce()
 		}

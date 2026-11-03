@@ -10,6 +10,7 @@ import { cn } from "@workspace/ui/lib/utils"
 export interface QuotedMessage {
 	author: string
 	excerpt: string
+	isExcerpt?: boolean
 	from: MessageFrom
 	onJump: () => void
 }
@@ -53,15 +54,17 @@ export type MessageQuoteCardProps = Omit<QuotedMessage, "from">
 export function MessageQuoteCard({
 	author,
 	excerpt,
+	isExcerpt,
 	onJump,
 }: MessageQuoteCardProps) {
 	const { t } = useTranslation("chat")
+	const shown = isExcerpt ? t("reply.excerpt", { excerpt }) : excerpt
 
 	return (
 		<button
 			type="button"
 			data-slot="message-quote-jump"
-			aria-label={t("reply.jump", { author, excerpt })}
+			aria-label={t("reply.jump", { author, excerpt: shown })}
 			onClick={onJump}
 			className="flex w-full min-w-0 items-center gap-2 rounded-[10px] bg-foreground/8 p-2 text-start outline-offset-2"
 		>
@@ -73,7 +76,7 @@ export function MessageQuoteCard({
 				<span className="truncate font-semibold text-xs leading-4">
 					{author}
 				</span>
-				<span className="truncate text-xs leading-4">{excerpt}</span>
+				<span className="truncate text-xs leading-4">{shown}</span>
 			</span>
 		</button>
 	)

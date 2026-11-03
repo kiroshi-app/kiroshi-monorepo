@@ -17,6 +17,8 @@ import {
 	DROPPED_PROMPT_FILE,
 	PASTED_PROMPT_FILE,
 	PROMPT_ATTACHMENTS,
+	REPLY_CHIP_MAX_WIDTH,
+	REPLY_CHIP_MIN_WIDTH,
 } from "@workspace/ui/components/prompt-attachments.fixtures"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
 import { Button } from "@workspace/ui/components/ui/button"
@@ -555,8 +557,6 @@ export const WithAttachments = meta.story({
 
 const STAGED_FILE = PROMPT_ATTACHMENTS[0]
 
-const REPLY_CHIP_WIDTH = 236
-
 const ATLAS_REPLY: PromptReplyAttachment = {
 	id: "atlas-roadmap",
 	author: "Atlas",
@@ -610,6 +610,11 @@ const fileChipsIn = (form: HTMLElement) => [
 	...form.querySelectorAll<HTMLElement>('[data-slot="prompt-attachment"]'),
 ]
 
+const expectReplyChipWidth = async (chip: HTMLElement) => {
+	await expect(box(chip).width).toBeGreaterThanOrEqual(REPLY_CHIP_MIN_WIDTH)
+	await expect(box(chip).width).toBeLessThanOrEqual(REPLY_CHIP_MAX_WIDTH)
+}
+
 const comesBefore = (element: HTMLElement, next: HTMLElement) =>
 	isBefore(element, next) || isBelow(next, element)
 
@@ -619,7 +624,7 @@ export const WithRepliesAndAttachments = meta.story({
 		docs: {
 			description: {
 				story:
-					"Two messages quoted for a reply and one file staged, as artboard PromptInput state 4 draws it: one chip per reply, replies first, then the file, in one wrapping row above the field. A reply chip is 236px wide and clips its excerpt to one line; its cross is named after the author and drops that reply alone. Send follows the current rule, lit by the staged file, where the artboard draws it disabled. Press `Reply to Beacon` to quote a second message.",
+					"Two messages quoted for a reply and one file staged, as artboard PromptInput state 4 draws it: one chip per reply, replies first, then the file, in one wrapping row above the field. A reply chip fits its content between 236 and 360 wide and clips its excerpt to one line; its cross is named after the author and drops that reply alone. Send follows the current rule, lit by the staged file, where the artboard draws it disabled. Press `Reply to Beacon` to quote a second message.",
 			},
 		},
 	},
@@ -639,6 +644,7 @@ export const WithRepliesAndAttachments = meta.story({
 				expect.stringContaining(BEACON_REPLY.author),
 			])
 			await expect(files).toHaveLength(1)
+			for (const chip of replies) await expectReplyChipWidth(chip)
 			await expect(comesBefore(replies[0], replies[1])).toBe(true)
 			await expect(comesBefore(replies[1], files[0])).toBe(true)
 			for (const chip of [...replies, ...files]) {
@@ -657,7 +663,7 @@ export const WithRepliesAndAttachments = meta.story({
 
 		const [atlasChip] = replyChipsIn(form)
 		const excerpt = within(atlasChip).getByText(ATLAS_REPLY.excerpt)
-		await expect(box(atlasChip).width).toBe(REPLY_CHIP_WIDTH)
+		await expectReplyChipWidth(atlasChip)
 		await expect(excerpt.scrollWidth).toBeGreaterThan(excerpt.clientWidth)
 		await expect(getComputedStyle(excerpt).textOverflow).toBe("ellipsis")
 		await expect(getComputedStyle(excerpt).whiteSpace).toBe("nowrap")

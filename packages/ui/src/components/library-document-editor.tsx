@@ -56,6 +56,7 @@ import type {
 } from "@workspace/ui/components/library-item-menu"
 import type { LibraryDocumentTemplate } from "@workspace/ui/components/library-new-document-dialog"
 import {
+	SELECTION_TOOLBAR_SEPARATOR,
 	SELECTION_TOOLBAR_SLOT,
 	SelectionToolbar,
 	type SelectionToolbarAnchor,
@@ -1615,22 +1616,36 @@ const LibraryDocumentEditor = ({
 				? blocks.find((candidate) => candidate.id === start.id)
 				: undefined
 		const { formats, link } = formatsOf(block, start.offset, end.offset)
+		const isOn = (format: SelectionToolbarFormat) => formats.includes(format)
 		return (
 			<SelectionToolbar
-				activeFormats={formats}
+				actions={[
+					{ name: "bold", isOn: isOn("bold"), onPress: onRange(onBold) },
+					{ name: "italic", isOn: isOn("italic"), onPress: onRange(onItalic) },
+					{
+						name: "strikethrough",
+						isOn: isOn("strikethrough"),
+						onPress: onRange(onStrikethrough),
+					},
+					{ name: "code", isOn: isOn("code"), onPress: onRange(onCode) },
+					SELECTION_TOOLBAR_SEPARATOR,
+					{ name: "link", isOn: isOn("link") },
+					SELECTION_TOOLBAR_SEPARATOR,
+					{
+						name: "heading",
+						isOn: isOn("heading"),
+						onPress: onRange(onHeading),
+					},
+					{ name: "list", isOn: isOn("list"), onPress: onRange(onList) },
+				]}
 				anchor={anchor}
 				isLinking={toolbarMode === "link"}
+				label={t("library.editor.toolbar.label")}
 				link={link}
-				onBold={onRange(onBold)}
-				onCode={onRange(onCode)}
-				onHeading={onRange(onHeading)}
-				onItalic={onRange(onItalic)}
 				onLink={onLink && ((url) => onLink(url, range))}
 				onLinkingChange={(isLinking) =>
 					setToolbarMode(isLinking ? "link" : "bar")
 				}
-				onList={onRange(onList)}
-				onStrikethrough={onRange(onStrikethrough)}
 			/>
 		)
 	}

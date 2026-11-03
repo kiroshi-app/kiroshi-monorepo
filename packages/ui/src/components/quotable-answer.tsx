@@ -2,29 +2,13 @@
 
 import type { KeyboardEvent, ReactNode, SyntheticEvent } from "react"
 
+import { selectedTextWithin } from "@workspace/ui/components/message-selection"
 import { cn } from "@workspace/ui/lib/utils"
 
 export interface QuotableAnswerProps {
 	children: ReactNode
 	onQuote: (text: string) => void
 	className?: string
-}
-
-const selectedTextWithin = (root: HTMLElement) => {
-	const selection = root.ownerDocument.getSelection()
-	if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
-		return ""
-	}
-
-	const range = selection.getRangeAt(0)
-	if (
-		!root.contains(range.startContainer) ||
-		!root.contains(range.endContainer)
-	) {
-		return ""
-	}
-
-	return selection.toString().trim()
 }
 
 export const QuotableAnswer = ({

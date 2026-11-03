@@ -30,6 +30,7 @@ export type PromptReplyAttachment = {
 	id: string
 	author: string
 	excerpt: string
+	isExcerpt?: boolean
 }
 
 export interface PromptAttachmentsProps {
@@ -70,7 +71,10 @@ export function PromptAttachments({
 				<li
 					key={reply.id}
 					data-slot="prompt-reply-attachment"
-					className={cn(CHIP, "w-59")}
+					className={cn(
+						CHIP,
+						"w-fit min-w-[min(--spacing(59),100%)] max-w-[min(--spacing(90),100%)]",
+					)}
 				>
 					<span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-foreground/8 text-soft-foreground">
 						<Icons.Reply aria-hidden="true" className="size-4" />
@@ -79,8 +83,13 @@ export function PromptAttachments({
 						<span className="truncate font-medium text-foreground text-xs">
 							{reply.author}
 						</span>
-						<span className="truncate text-[11px] text-muted-foreground">
-							{reply.excerpt}
+						<span
+							data-slot="prompt-reply-excerpt"
+							className="truncate text-[11px] text-muted-foreground leading-3.5"
+						>
+							{reply.isExcerpt
+								? t("reply.excerpt", { excerpt: reply.excerpt })
+								: reply.excerpt}
 						</span>
 					</div>
 					{onRemoveReply ? (

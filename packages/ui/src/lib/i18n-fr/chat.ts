@@ -127,6 +127,7 @@ const chat = {
 		copy: "Copier",
 		you: "Vous",
 		reply: "Répondre",
+		selection: "Texte sélectionné",
 		pin: "Épingler",
 		unpin: "Retirer l’épingle",
 		copied: "Copié",
@@ -171,6 +172,7 @@ const chat = {
 		jump: "{{author}} : {{excerpt}}",
 		dismiss: "Annuler la réponse",
 		dismissFrom: "Retirer la réponse à {{author}}",
+		excerpt: "« {{excerpt}} »",
 	},
 	pinned: {
 		title: "Messages épinglés",

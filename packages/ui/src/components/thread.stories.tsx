@@ -1146,13 +1146,15 @@ export const ComponentsThreadFurniture = meta.story({
 					<UserTurn
 						name="Sam"
 						sentAt={at(9, 44)}
-						repliedTo={{
-							author: "Atlas",
-							excerpt:
-								"France leads with 412 people, then Germany with 268 and Spain with 190.",
-							from: "assistant",
-							onJump: noop,
-						}}
+						repliedTo={[
+							{
+								author: "Atlas",
+								excerpt:
+									"France leads with 412 people, then Germany with 268 and Spain with 190.",
+								from: "assistant",
+								onJump: noop,
+							},
+						]}
 					>
 						And Spain, which cities?
 					</UserTurn>
