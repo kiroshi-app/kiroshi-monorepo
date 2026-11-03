@@ -28,8 +28,6 @@ const fileNameOf = (error: unknown) =>
 const contentOf = async (file: File) =>
 	base64Of(new Uint8Array(await file.arrayBuffer()))
 
-const isOverRelayedLimit = (file: File) => file.size > MAX_RELAYED_IMPORT_BYTES
-
 const tooLargeOf = (file: File) => ({
 	kind: "tooLarge",
 	name: file.name,
@@ -37,15 +35,12 @@ const tooLargeOf = (file: File) => ({
 	limit: MAX_RELAYED_IMPORT_BYTES,
 })
 
-const sendFile = async (spaceId: string, file: File) =>
-	importLibraryFile(spaceId, file.name, await contentOf(file))
-
 const importFile = async (spaceId: string, isJoined: boolean, file: File) => {
-	if (isJoined && isOverRelayedLimit(file)) {
+	if (isJoined && file.size > MAX_RELAYED_IMPORT_BYTES) {
 		throw new LibraryImportFailure(file.name, tooLargeOf(file))
 	}
 	try {
-		return await sendFile(spaceId, file)
+		return await importLibraryFile(spaceId, file.name, await contentOf(file))
 	} catch (reason) {
 		throw new LibraryImportFailure(file.name, reason)
 	}
