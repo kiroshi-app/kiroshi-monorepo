@@ -1419,6 +1419,7 @@ navigation-librarydocumenteditor--open-failure
 navigation-librarydocumenteditor--outside-change-while-typing
 navigation-librarydocumenteditor--outside-title-change
 navigation-librarydocumenteditor--person-caret-beside-agent
+navigation-librarydocumenteditor--rename-focuses-title-from-handle
 navigation-librarydocumenteditor--round-trip-fixture
 navigation-librarydocumenteditor--save-failure
 navigation-librarydocumenteditor--shortcuts-without-callbacks
