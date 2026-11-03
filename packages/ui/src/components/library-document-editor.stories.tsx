@@ -723,6 +723,53 @@ export const FieldsStayInPlace = meta.story({
 	},
 })
 
+export const ItemTurnedIntoParagraph = meta.story({
+	args: { ...LAUNCH_REVIEW, template: undefined, onCaretChange: fn() },
+	beforeEach: launchReviewDraft.reset,
+	render: (args) => <LiveEditor {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The person presses Backspace at the start of the first item of the Decisions list, then Enter twice at the end of the last one. Check that each item turned into a paragraph keeps its text, that the caret stays in the editor at the start of that paragraph, and that `onCaretChange` ends on that caret, never on null.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const onCaretChange = args.onCaretChange as ReturnType<typeof fn>
+		const fieldAt = (index: number) =>
+			bodyFieldsIn(canvasElement)[index] as HTMLTextAreaElement
+		const caretStaysAtStartOf = async (index: number) => {
+			const paragraph = fieldAt(index)
+			await expect(paragraph.dataset.kind).toBe("paragraph")
+			await expect(document.activeElement).toBe(paragraph)
+			await expect(paragraph.selectionStart).toBe(0)
+			await expect(paragraph.selectionEnd).toBe(0)
+			await new Promise((resolve) => setTimeout(resolve, 50))
+			await expect(onCaretChange).toHaveBeenLastCalledWith(
+				Number(paragraph.dataset.bodyOffset),
+			)
+		}
+
+		await userEvent.click(fieldAt(2))
+		await userEvent.keyboard("{Home}{Backspace}")
+		await expect(fieldAt(2)).toHaveValue("Ship on the 14th")
+		await caretStaysAtStartOf(2)
+		await expect(launchReviewDraft.read().body).toContain(
+			"## Decisions\n\nShip on the 14th",
+		)
+		await expect(launchReviewDraft.read().body).not.toContain("- Ship")
+
+		await userEvent.click(fieldAt(3))
+		await userEvent.keyboard("{End}{Enter}")
+		await expect(document.activeElement).toBe(fieldAt(4))
+		await expect(fieldAt(4).dataset.kind).toBe("item")
+		await userEvent.keyboard("{Enter}")
+		await expect(fieldAt(4)).toHaveValue("")
+		await caretStaysAtStartOf(4)
+	},
+})
+
 const createRenderMoveStore = () => {
 	let pendingMove: (() => void) | undefined
 	return {

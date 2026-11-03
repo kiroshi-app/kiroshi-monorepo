@@ -687,6 +687,11 @@ const LibraryDocumentEditor = ({
 	const replaceAt = (index: number, ...replacement: Block[]) =>
 		blocks.toSpliced(index, 1, ...replacement)
 
+	const turnIntoParagraph = (index: number, block: Block) => {
+		setRestoredSelection({ id: block.id, start: 0, end: 0, direction: "none" })
+		commit(replaceAt(index, asKind(block, "paragraph")))
+	}
+
 	const changeTitle = (value: string) => {
 		const next = singleLine(value)
 		setTitle(next)
@@ -723,7 +728,7 @@ const LibraryDocumentEditor = ({
 		if (!block) return
 
 		if (block.kind === "item" && block.text === "") {
-			commit(replaceAt(index, asKind(block, "paragraph")))
+			turnIntoParagraph(index, block)
 			return
 		}
 
@@ -746,7 +751,7 @@ const LibraryDocumentEditor = ({
 		if (!block) return
 
 		if (block.kind !== "paragraph") {
-			commit(replaceAt(index, asKind(block, "paragraph")))
+			turnIntoParagraph(index, block)
 			return
 		}
 		if (!previous) return
