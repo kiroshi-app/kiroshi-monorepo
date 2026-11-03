@@ -650,8 +650,9 @@ export const ImportFailures = meta.story({
 				const line = slotsIn(document.body, "toast-description").find(
 					({ textContent }) => textContent === sentence,
 				)
+				if (!line) throw new Error(`The ${reason} sentence is not drawn`)
 				expect(line).toBeVisible()
-				return line as HTMLElement
+				return line
 			})
 			const card = shown.closest<HTMLElement>("[data-slot=toast]")
 			if (!card) throw new Error(`The ${reason} notice is not drawn`)
