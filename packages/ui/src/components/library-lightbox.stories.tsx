@@ -630,10 +630,11 @@ export const BackdropClick = meta.story({
 		await userEvent.click(elementAt(centreOf(previous)))
 		await expect(args.onClose).not.toHaveBeenCalled()
 
+		const stage = stageIn(popup)
 		const onImage = centreOf(image)
-		const beside = besideImage(stageIn(popup), image)
+		const beside = besideImage(stage, image)
 		await expect(elementAt(onImage)).toBe(image)
-		await expect(elementAt(beside)).toBe(stageIn(popup))
+		await expect(elementAt(beside)).toBe(stage)
 		await userEvent.pointer([
 			{
 				keys: "[MouseLeft>]",
@@ -641,7 +642,7 @@ export const BackdropClick = meta.story({
 				coords: { clientX: onImage.x, clientY: onImage.y },
 			},
 			{
-				target: stageIn(popup),
+				target: stage,
 				coords: { clientX: beside.x, clientY: beside.y },
 			},
 			{ keys: "[/MouseLeft]" },
