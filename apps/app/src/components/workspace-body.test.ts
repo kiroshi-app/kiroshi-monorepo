@@ -1790,7 +1790,7 @@ describe("WorkspaceBody library", () => {
 			expectNoLibraryNotice()
 		})
 
-		it("shows no Open folder on an image and no More on a document, with no notice", async () => {
+		it("shows no Show in folder on an image or a document, with no notice", async () => {
 			await openJoinedLibrary()
 			await open("hero-dunes.png")
 			await press("More")
@@ -1805,7 +1805,12 @@ describe("WorkspaceBody library", () => {
 
 			await open("Spring launch brief")
 			screen.getByRole("textbox", { name: "Title" })
-			expect(screen.queryByRole("button", { name: "More" })).toBeNull()
+			await press("More")
+			expect(
+				within(await screen.findByRole("menu")).queryByRole("menuitem", {
+					name: "Show in folder",
+				}),
+			).toBeNull()
 
 			expect(libraryHost.readFile).not.toHaveBeenCalled()
 			expect(saveBytes).not.toHaveBeenCalled()
