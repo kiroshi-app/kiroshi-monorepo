@@ -1,12 +1,29 @@
-import { expect, fn, within } from "storybook/test"
+import {
+	type ComponentType,
+	type ReactNode,
+	useEffect,
+	useSyncExternalStore,
+} from "react"
+import { expect, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { hueScopeOf, slotIn } from "@workspace/storybook/story-utils"
 import { ContentCard } from "@workspace/ui/components/content-card"
 import {
+	LIBRARY_AGENT_DOCUMENT,
+	LIBRARY_AGENTS,
+	LIBRARY_WRITERS,
+} from "@workspace/ui/components/library.fixtures"
+import {
 	LibraryDocumentEditor,
+	type LibraryDocumentEditorProps,
 	libraryDocumentStartOf,
 } from "@workspace/ui/components/library-document-editor"
+import {
+	endNotice,
+	NoticeSurface,
+	raiseFailureNotice,
+} from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 const t = i18n.getFixedT("en", "common")
@@ -39,6 +56,19 @@ const placeholderInkOf = (field: HTMLElement) =>
 const breadcrumbIn = (canvasElement: HTMLElement) =>
 	canvasElement.querySelector('[aria-current="page"]') as HTMLElement
 
+type EditorFrameProps = {
+	children?: ReactNode
+}
+
+const EditorFrame = ({ children }: EditorFrameProps) => (
+	<div
+		className="flex h-[832px] w-[1280px] bg-background ps-15 pe-1.5 pt-2 pb-2"
+		{...hueScopeOf("blue")}
+	>
+		<ContentCard isLandmark={false}>{children}</ContentCard>
+	</div>
+)
+
 const meta = preview.meta({
 	title: "Navigation/LibraryDocumentEditor",
 	component: LibraryDocumentEditor,
@@ -61,14 +91,9 @@ const meta = preview.meta({
 		onMore: fn(),
 	},
 	render: (args) => (
-		<div
-			className="flex h-[832px] w-[1280px] bg-background ps-15 pe-1.5 pt-2 pb-2"
-			{...hueScopeOf("blue")}
-		>
-			<ContentCard isLandmark={false}>
-				<LibraryDocumentEditor {...args} />
-			</ContentCard>
-		</div>
+		<EditorFrame>
+			<LibraryDocumentEditor {...args} />
+		</EditorFrame>
 	),
 })
 
@@ -267,4 +292,498 @@ export const ExistingDocument = meta.story({
 		await expect(args.onBodyChange).toHaveBeenLastCalledWith(LAUNCH_REVIEW.body)
 		await expect(args.onTitleChange).not.toHaveBeenCalled()
 	},
+})
+
+type DocumentDraft = {
+	title: string
+	body: string
+}
+
+const createDraftStore = (start: DocumentDraft) => {
+	let draft = start
+	const listeners = new Set<() => void>()
+	return {
+		read: () => draft,
+		write: (change: Partial<DocumentDraft>) => {
+			draft = { ...draft, ...change }
+			for (const listener of listeners) listener()
+		},
+		reset: () => {
+			draft = start
+		},
+		subscribe: (listener: () => void) => {
+			listeners.add(listener)
+			return () => {
+				listeners.delete(listener)
+			}
+		},
+	}
+}
+
+const launchReviewDraft = createDraftStore(LAUNCH_REVIEW)
+
+const LiveEditor = (args: LibraryDocumentEditorProps) => {
+	const { title, body } = useSyncExternalStore(
+		launchReviewDraft.subscribe,
+		launchReviewDraft.read,
+	)
+
+	return (
+		<EditorFrame>
+			<LibraryDocumentEditor
+				{...args}
+				body={body}
+				onBodyChange={(next) => {
+					launchReviewDraft.write({ body: next })
+					args.onBodyChange(next)
+				}}
+				onTitleChange={(next) => {
+					launchReviewDraft.write({ title: next })
+					args.onTitleChange(next)
+				}}
+				title={title}
+			/>
+		</EditorFrame>
+	)
+}
+
+const bodyFieldsIn = (canvasElement: HTMLElement) =>
+	within(slotIn(canvasElement, "library-document-body")).getAllByRole(
+		"textbox",
+	) as HTMLTextAreaElement[]
+
+const textBeforeCaret = (field: HTMLTextAreaElement) =>
+	field.value.slice(0, field.selectionStart)
+
+export const OutsideChangeWhileTyping = meta.story({
+	args: { ...LAUNCH_REVIEW, template: undefined },
+	beforeEach: launchReviewDraft.reset,
+	render: (args) => <LiveEditor {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Someone else writes in the document while the person types, the body arriving through the same prop the editor reports to. The story types in a list item, then lands a change in a later paragraph and a word before the caret in the item being typed. Check that the focused field stays the same element, that the caret stays after the same character of the person's text, that typing goes on where it stopped, and that neither outside change nor the echo of the person's own edits is reported back through `onBodyChange`.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const editor = slotIn(canvasElement, "library-document-editor")
+		const fields = bodyFieldsIn(canvasElement)
+		const ship = fields[2] as HTMLTextAreaElement
+		const screenshots = fields[5] as HTMLTextAreaElement
+		const typed = ", after the review"
+
+		await userEvent.type(ship, typed)
+		await expect(args.onBodyChange).toHaveBeenCalledTimes(typed.length)
+		await expect(document.activeElement).toBe(ship)
+		const caret = ship.selectionStart
+		await expect(caret).toBe(ship.value.length)
+
+		launchReviewDraft.write({
+			body: launchReviewDraft
+				.read()
+				.body.replace(
+					"Screenshots land on the 10th.",
+					"Screenshots land on the 10th, the release notes on the 12th.",
+				),
+		})
+		await waitFor(() =>
+			expect(screenshots).toHaveValue(
+				"Screenshots land on the 10th, the release notes on the 12th.",
+			),
+		)
+		await expect(document.activeElement).toBe(ship)
+		await expect(ship.selectionStart).toBe(caret)
+		await expect(ship.selectionEnd).toBe(caret)
+
+		launchReviewDraft.write({
+			body: launchReviewDraft
+				.read()
+				.body.replace("Ship on the 14th", "Ship on Monday the 14th"),
+		})
+		await waitFor(() =>
+			expect(ship).toHaveValue("Ship on Monday the 14th, after the review"),
+		)
+		await expect(document.activeElement).toBe(ship)
+		await expect(textBeforeCaret(ship)).toBe(
+			"Ship on Monday the 14th, after the review",
+		)
+		await expect(ship.selectionStart).toBe(caret + "Monday ".length)
+		await expect(ship.selectionEnd).toBe(ship.selectionStart)
+		await expect(bodyFieldsIn(canvasElement)).toEqual(fields)
+		await expect(slotIn(canvasElement, "library-document-editor")).toBe(editor)
+		await expect(args.onBodyChange).toHaveBeenCalledTimes(typed.length)
+
+		await userEvent.keyboard("!")
+		await expect(ship).toHaveValue("Ship on Monday the 14th, after the review!")
+		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+			launchReviewDraft.read().body,
+		)
+		await expect(launchReviewDraft.read().body).toContain(
+			"- Ship on Monday the 14th, after the review!",
+		)
+		await expect(launchReviewDraft.read().body).toContain(
+			"Screenshots land on the 10th, the release notes on the 12th.",
+		)
+		await expect(args.onTitleChange).not.toHaveBeenCalled()
+
+		const selected = "after the review"
+		const selectedFrom = ship.value.indexOf(selected)
+		ship.setSelectionRange(
+			selectedFrom,
+			selectedFrom + selected.length,
+			"backward",
+		)
+		launchReviewDraft.write({
+			body: launchReviewDraft
+				.read()
+				.body.replace("Ship on Monday", "Ship early on Monday"),
+		})
+		await waitFor(() =>
+			expect(ship).toHaveValue(
+				"Ship early on Monday the 14th, after the review!",
+			),
+		)
+		await expect(document.activeElement).toBe(ship)
+		await expect(ship.selectionStart).toBe(selectedFrom + "early ".length)
+		await expect(ship.selectionEnd).toBe(
+			selectedFrom + "early ".length + selected.length,
+		)
+		await expect(ship.selectionDirection).toBe("backward")
+		await expect(ship.value.slice(ship.selectionStart, ship.selectionEnd)).toBe(
+			selected,
+		)
+	},
+})
+
+export const OutsideTitleChange = meta.story({
+	args: { ...LAUNCH_REVIEW, template: undefined },
+	beforeEach: launchReviewDraft.reset,
+	render: (args) => <LiveEditor {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Someone else renames the document while the person types in its title. Check that the field and the breadcrumb show the new title without the editor remounting, that the caret stays after the same character of the person's text, and that the rename is never reported back through `onTitleChange`.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		const title = canvas.getByRole("textbox", {
+			name: "Title",
+		}) as HTMLTextAreaElement
+		const typed = " notes"
+
+		await userEvent.type(title, typed)
+		await expect(args.onTitleChange).toHaveBeenCalledTimes(typed.length)
+		await expect(title.selectionStart).toBe("Launch review notes".length)
+
+		launchReviewDraft.write({ title: "Spring launch review notes" })
+		await waitFor(() => expect(title).toHaveValue("Spring launch review notes"))
+		await expect(breadcrumbIn(canvasElement)).toHaveTextContent(
+			"Spring launch review notes",
+		)
+		await expect(canvas.getByRole("textbox", { name: "Title" })).toBe(title)
+		await expect(document.activeElement).toBe(title)
+		await expect(textBeforeCaret(title)).toBe("Spring launch review notes")
+		await expect(args.onTitleChange).toHaveBeenCalledTimes(typed.length)
+		await expect(args.onBodyChange).not.toHaveBeenCalled()
+	},
+})
+
+export const AgentsWriting = meta.story({
+	args: {
+		title: LIBRARY_AGENT_DOCUMENT.name,
+		body: LIBRARY_AGENT_DOCUMENT.body,
+		detail: LIBRARY_AGENT_DOCUMENT.detail,
+		template: undefined,
+		writers: LIBRARY_WRITERS,
+		onStopAll: fn(),
+		onStop: fn(),
+		onOpenConversation: fn(),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Atlas and Mira writing in the document while the person has it open to edit, as artboard 10 draws it and as `LibraryDocumentView` renders it. Check that the presence pill counts the writers and reports Stop all, that each added run and its named caret paint in the agent's own colour over the text it covers, that the hover card reports Stop Mira and Open conversation, and that every block, the written ones included, still takes the person's typing.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		const presence = slotIn(canvasElement, "library-document-presence")
+		await expect(presence).toHaveTextContent("2 agents writing")
+		await userEvent.click(canvas.getByRole("button", { name: "Stop all" }))
+		await expect(args.onStopAll).toHaveBeenCalledOnce()
+
+		const runs = canvasElement.querySelectorAll<HTMLElement>(
+			"[data-slot='library-document-run']",
+		)
+		const [atlasRun, miraRun] = runs
+		await expect([...runs].map((run) => run.textContent)).toEqual([
+			"and the agent says why it asks",
+			"We also count how often someone stops an agent in its",
+		])
+		await expect(
+			getComputedStyle(atlasRun as HTMLElement).backgroundColor,
+		).not.toBe(getComputedStyle(miraRun as HTMLElement).backgroundColor)
+		await expect((miraRun as HTMLElement).getBoundingClientRect().height).toBe(
+			24,
+		)
+		const carets = canvasElement.querySelectorAll<HTMLElement>(
+			"[data-slot='library-document-caret']",
+		)
+		await expect(carets).toHaveLength(2)
+		await expect(
+			(carets[0] as HTMLElement).getBoundingClientRect(),
+		).toMatchObject({
+			width: 2,
+			height: 24,
+		})
+
+		const fields = bodyFieldsIn(canvasElement)
+		const written = fields.filter((field) =>
+			field.parentElement?.querySelector(
+				"[data-slot='library-document-drawn-text']",
+			),
+		)
+		await expect(written.map((field) => field.value)).toEqual([
+			"Notifications wait for the first finished task, and the agent says why it asks",
+			"We also count how often someone stops an agent in its",
+		])
+		await expect(
+			getComputedStyle(written[1] as HTMLElement).webkitTextFillColor,
+		).toBe("rgba(0, 0, 0, 0)")
+		await expect(
+			getComputedStyle(fields[0] as HTMLElement).webkitTextFillColor,
+		).not.toBe("rgba(0, 0, 0, 0)")
+		for (const field of fields) await expect(field).toBeEnabled()
+		await expect(fields.some((field) => field.readOnly)).toBe(false)
+
+		const flag = screen.getByRole("button", { name: "Mira is writing" })
+		await expect(flag).toHaveTextContent("Mira")
+		await expect(flag.getBoundingClientRect().height).toBe(20)
+		await userEvent.hover(flag)
+		const card = await screen.findByRole("dialog", {
+			name: "Mira is writing…",
+		})
+		await expect(card).toHaveAttribute(
+			"data-hue",
+			String(LIBRARY_AGENTS.mira.hue),
+		)
+		await expect(card).toHaveTextContent(
+			"1 sentence added to “What we measure”",
+		)
+		await userEvent.click(screen.getByRole("button", { name: "Stop Mira" }))
+		await expect(args.onStop).toHaveBeenCalledWith(LIBRARY_AGENTS.mira)
+		await userEvent.click(
+			screen.getByRole("button", { name: "Open conversation" }),
+		)
+		await expect(args.onOpenConversation).toHaveBeenCalledWith(
+			LIBRARY_AGENTS.mira,
+		)
+
+		await userEvent.type(written[1] as HTMLElement, " tracks")
+		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+			LIBRARY_AGENT_DOCUMENT.body.replace(
+				"stops an agent in its",
+				"stops an agent in its tracks",
+			),
+		)
+	},
+})
+
+type Rgba = [red: number, green: number, blue: number, alpha: number]
+
+const rgbaOf = (color: string): Rgba => {
+	const context = document.createElement("canvas").getContext("2d", {
+		willReadFrequently: true,
+	})
+	if (!context) throw new Error("No 2d canvas to read a colour with")
+	context.clearRect(0, 0, 1, 1)
+	context.fillStyle = color
+	context.fillRect(0, 0, 1, 1)
+	const [red = 0, green = 0, blue = 0, alpha = 0] = context.getImageData(
+		0,
+		0,
+		1,
+		1,
+	).data
+	return [red, green, blue, alpha / 255]
+}
+
+const over = ([red, green, blue, alpha]: Rgba, [r, g, b]: Rgba): Rgba => [
+	red * alpha + r * (1 - alpha),
+	green * alpha + g * (1 - alpha),
+	blue * alpha + b * (1 - alpha),
+	1,
+]
+
+const luminanceOf = (color: Rgba) => {
+	const [red = 0, green = 0, blue = 0] = color
+		.slice(0, 3)
+		.map((channel) => channel / 255)
+		.map((channel) =>
+			channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4,
+		)
+	return 0.2126 * red + 0.7152 * green + 0.0722 * blue
+}
+
+const contrastOf = (first: Rgba, second: Rgba) => {
+	const [light, dark] = [luminanceOf(first), luminanceOf(second)].sort(
+		(a, b) => b - a,
+	)
+	return ((light ?? 0) + 0.05) / ((dark ?? 0) + 0.05)
+}
+
+const groundOf = (element: HTMLElement): Rgba => {
+	for (
+		let node: HTMLElement | null = element;
+		node;
+		node = node.parentElement
+	) {
+		const ground = rgbaOf(getComputedStyle(node).backgroundColor)
+		if (ground[3] === 1) return ground
+	}
+	return rgbaOf("white")
+}
+
+const ATLAS_ITEM =
+	"Notifications wait for the first finished task, and the agent says why it asks"
+
+type PlayedCanvas = {
+	canvasElement: HTMLElement
+}
+
+const selectingAcrossAgentRun = (theme: "light" | "dark") => ({
+	args: {
+		title: LIBRARY_AGENT_DOCUMENT.name,
+		body: LIBRARY_AGENT_DOCUMENT.body,
+		detail: LIBRARY_AGENT_DOCUMENT.detail,
+		template: undefined,
+		writers: LIBRARY_WRITERS,
+	},
+	globals: { theme },
+	parameters: {
+		docs: {
+			description: {
+				story: `The person selects text across Atlas's run while Atlas is writing, in the ${theme} theme. The field paints its selection on a translucent ground over the drawn text, so the run, its colour and the text under the selection stay on screen. Check that the selected text reads at 4.5:1 or more against what sits under it, inside and outside the run.`,
+			},
+		},
+	},
+	play: async ({ canvasElement }: PlayedCanvas) => {
+		const item = bodyFieldsIn(canvasElement).find(
+			(field) => field.value === ATLAS_ITEM,
+		) as HTMLTextAreaElement
+		const runFrom = ATLAS_ITEM.indexOf("and the agent")
+		item.focus()
+		item.setSelectionRange(runFrom - "task, ".length, ATLAS_ITEM.length)
+		await expect(document.activeElement).toBe(item)
+		await expect(item.value.slice(item.selectionStart, item.selectionEnd)).toBe(
+			"task, and the agent says why it asks",
+		)
+
+		const drawn = slotIn(
+			item.parentElement as HTMLElement,
+			"library-document-drawn-text",
+		)
+		const run = slotIn(drawn, "library-document-run")
+		await expect(run).toHaveTextContent("and the agent says why it asks")
+		await expect(getComputedStyle(item).webkitTextFillColor).toBe(
+			"rgba(0, 0, 0, 0)",
+		)
+		const selection = rgbaOf(
+			getComputedStyle(item, "::selection").backgroundColor,
+		)
+		await expect(selection[3]).toBeGreaterThan(0)
+		await expect(selection[3]).toBeLessThan(1)
+
+		const ground = groundOf(item)
+		const runGround = over(
+			rgbaOf(getComputedStyle(run).backgroundColor),
+			ground,
+		)
+		const painted = [
+			[getComputedStyle(run).color, runGround],
+			[getComputedStyle(drawn).color, ground],
+		] as const
+		for (const [ink, under] of painted)
+			await expect(
+				contrastOf(
+					over(selection, over(rgbaOf(ink), under)),
+					over(selection, under),
+				),
+			).toBeGreaterThanOrEqual(4.5)
+	},
+})
+
+export const SelectingAcrossAgentRun = meta.story({
+	...selectingAcrossAgentRun("dark"),
+})
+
+export const SelectingAcrossAgentRunLight = meta.story({
+	...selectingAcrossAgentRun("light"),
+})
+
+type FailureNoticeProps = {
+	entry: "create" | "open" | "save"
+}
+
+const DocumentFailureNotice = ({ entry }: FailureNoticeProps) => {
+	useEffect(() => {
+		const notice = raiseFailureNotice({
+			title: i18n.t(`common:library.failure.document.${entry}`),
+		})
+		return () => endNotice(notice)
+	}, [entry])
+
+	return <NoticeSurface />
+}
+
+const failureStory = (
+	entry: FailureNoticeProps["entry"],
+	title: string,
+	story: string,
+) => ({
+	decorators: [
+		(Story: ComponentType) => (
+			<>
+				<Story />
+				<DocumentFailureNotice entry={entry} />
+			</>
+		),
+	],
+	parameters: { docs: { description: { story } } },
+	play: async () => {
+		const shown = await waitFor(() => slotIn(document.body, "toast-title"))
+		await expect(shown).toHaveTextContent(title)
+	},
+})
+
+export const CreateFailure = meta.story({
+	render: () => <EditorFrame />,
+	...failureStory(
+		"create",
+		"Couldn’t create the document. Try again from New document.",
+		"The notice raised when a new document could not be created on the host of its Space, from `common:library.failure.document.create`. Check that it names what failed and sends the person back to New document.",
+	),
+})
+
+export const OpenFailure = meta.story({
+	render: () => <EditorFrame />,
+	...failureStory(
+		"open",
+		"Couldn’t open the document. Open it again from the Library.",
+		"The notice raised when a Library document could not be opened, from `common:library.failure.document.open`. Check that it names what failed and sends the person back to the Library.",
+	),
+})
+
+export const SaveFailure = meta.story({
+	args: { ...LAUNCH_REVIEW, template: undefined },
+	...failureStory(
+		"save",
+		"Couldn’t save your last changes. Keep the document open and edit again to retry.",
+		"The notice raised over the open editor when the last edits did not reach the host, from `common:library.failure.document.save`. Check that it names what failed and tells the person to keep the document open and edit again.",
+	),
 })
