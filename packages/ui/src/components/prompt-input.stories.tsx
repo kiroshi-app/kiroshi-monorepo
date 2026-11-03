@@ -591,11 +591,7 @@ export const WithQuote = meta.story({
 		await expect(canvas.getByText("Selection · Atlas")).toBeVisible()
 		await expect(canvas.getByText(QUOTE.text)).toBeVisible()
 		await expect(box(textarea).top - box(card).bottom).toBe(8)
-		await expect(box(card).width).toBe(
-			box(form).width -
-				2 * Number.parseFloat(getComputedStyle(form).borderLeftWidth) -
-				16,
-		)
+		await expect(box(card).width).toBe(form.clientWidth - 16)
 		await expect(getComputedStyle(form).borderTopLeftRadius).toBe("20px")
 		await expect(getComputedStyle(card).padding).toBe("8px")
 		await expect(getComputedStyle(card).borderTopLeftRadius).toBe("12px")
