@@ -213,9 +213,7 @@ export const ReplyExcerpt = meta.story({
 		await expect(getComputedStyle(excerpt).color).toBe(
 			tokenStyleIn(excerpt, "text-muted-foreground", "color"),
 		)
-		await expect(excerptOf(chip)).toHaveTextContent(
-			`“${EXCERPT_REPLY.excerpt}”`,
-		)
+		await expect(excerpt).toHaveTextContent(`“${EXCERPT_REPLY.excerpt}”`)
 		await expectReplySizedToContent(chip)
 		await expect(chip.getBoundingClientRect().width).toBe(REPLY_MAX_WIDTH)
 
