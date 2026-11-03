@@ -32,13 +32,14 @@ for argument in "$@"; do
 done
 if [ "$1 $2" = "pr list" ]; then
 	response=$(cat "$GH_STUB/pull-requests.json")
-elif [[ "$*" == *mutation* ]]; then
-	response='{"data":{"dequeuePullRequest":{"clientMutationId":null}}}'
+elif [ "$1 $2" = "pr merge" ]; then
+	exit 0
 else
 	reads=$(($(cat "$GH_STUB/reads" 2>/dev/null || echo 0) + 1))
 	echo "$reads" >"$GH_STUB/reads"
-	state=$(sed -n "\${reads}p" "$GH_STUB/queue-states")
-	response="{\\"data\\":{\\"node\\":{\\"isInMergeQueue\\":$state}}}"
+	state=$(sed -n "\${reads}p" "$GH_STUB/armed-states")
+	if [ "$state" = true ]; then request='{"enabledAt":"2026-10-26T00:00:00Z"}'; else request=null; fi
+	response="{\\"data\\":{\\"node\\":{\\"autoMergeRequest\\":$request}}}"
 fi
 if [ -n "$filter" ]; then jq -r "$filter" <<<"$response"; else echo "$response"; fi
 `
@@ -52,16 +53,17 @@ type Scenario = {
 	arguments?: string[]
 	branch?: string
 	pullRequests?: PullRequest[]
-	queueStates?: boolean[]
+	armedStates?: boolean[]
 }
 
-const QUEUED: PullRequest = { number: 42, id: NODE_ID }
+const ARMED: PullRequest = { number: 42, id: NODE_ID }
 
 const valueAfter = (call: string[], flag: string) =>
 	call[call.indexOf(flag) + 1]
 
 const describeCall = (call: string[]) => {
-	if (call[0] === "pr") return `pr list --head ${valueAfter(call, "--head")}`
+	if (call[1] === "list") return `pr list --head ${valueAfter(call, "--head")}`
+	if (call[0] === "pr") return call.join(" ")
 	const query = call.find((argument) => argument.startsWith("query=")) ?? ""
 	const [, kind, field] = /^query=(\w+)[^{]*\{\s*(\w+)/.exec(query) ?? []
 	const id = call.find((argument) => argument.startsWith("id="))
@@ -78,8 +80,8 @@ const ghCalls = () => {
 }
 
 const LIST = `pr list --head ${BRANCH}`
-const READ_QUEUE_STATE = `api graphql query node id=${NODE_ID}`
-const DEQUEUE = `api graphql mutation dequeuePullRequest id=${NODE_ID}`
+const READ_ARMED_STATE = `api graphql query node id=${NODE_ID}`
+const DISARM = "pr merge --disable-auto 42 --repo kiroshi-app/kiroshi-monorepo"
 
 const withoutGitContext = () => {
 	const {
@@ -95,7 +97,7 @@ const runPrDequeue = async ({
 	arguments: prDequeueArguments = [],
 	branch = BRANCH,
 	pullRequests = [],
-	queueStates = [],
+	armedStates = [],
 }: Scenario) => {
 	const initialised = Bun.spawnSync({
 		cmd: ["git", "init", "--quiet", "--initial-branch", branch, repository],
@@ -105,7 +107,7 @@ const runPrDequeue = async ({
 		throw new Error(`git init failed: ${initialised.stderr.toString()}`)
 	}
 	writeFileSync(join(stub, "pull-requests.json"), JSON.stringify(pullRequests))
-	writeFileSync(join(stub, "queue-states"), `${queueStates.join("\n")}\n`)
+	writeFileSync(join(stub, "armed-states"), `${armedStates.join("\n")}\n`)
 	const running = Bun.spawn({
 		cmd: [PR_DEQUEUE, ...prDequeueArguments],
 		cwd: repository,
@@ -138,34 +140,36 @@ afterEach(() => {
 })
 
 describe("scripts/pr-dequeue.sh", () => {
-	it("dequeues the queued PR of the branch, reads the queue state back and prints it", async () => {
+	it("disarms auto-merge on the PR of the branch, reads it back and prints it", async () => {
 		const result = await runPrDequeue({
-			pullRequests: [QUEUED],
-			queueStates: [true, false],
+			pullRequests: [ARMED],
+			armedStates: [true, false],
 		})
 
 		expect(result.exitCode).toBe(0)
-		expect(result.stdout).toBe("pr-dequeue.sh: PR #42 isInMergeQueue=false\n")
+		expect(result.stdout).toBe("pr-dequeue.sh: PR #42 autoMergeArmed=false\n")
 		expect(ghCalls()).toEqual([
 			LIST,
-			READ_QUEUE_STATE,
-			DEQUEUE,
-			READ_QUEUE_STATE,
+			READ_ARMED_STATE,
+			DISARM,
+			READ_ARMED_STATE,
 		])
 	})
 
-	it("calls no mutation and exits 0 when the PR is not queued", async () => {
+	it("disarms nothing and exits 0 when the PR has no auto-merge armed", async () => {
 		const result = await runPrDequeue({
-			pullRequests: [QUEUED],
-			queueStates: [false],
+			pullRequests: [ARMED],
+			armedStates: [false],
 		})
 
 		expect(result.exitCode).toBe(0)
-		expect(result.stdout).toBe("pr-dequeue.sh: PR #42 is not queued\n")
-		expect(ghCalls()).toEqual([LIST, READ_QUEUE_STATE])
+		expect(result.stdout).toBe(
+			"pr-dequeue.sh: PR #42 has no auto-merge armed\n",
+		)
+		expect(ghCalls()).toEqual([LIST, READ_ARMED_STATE])
 	})
 
-	it("fails naming the branch and calls no mutation when the branch has no open PR", async () => {
+	it("fails naming the branch and disarms nothing when the branch has no open PR", async () => {
 		const result = await runPrDequeue({ pullRequests: [] })
 
 		expect(result.exitCode).not.toBe(0)
@@ -175,9 +179,9 @@ describe("scripts/pr-dequeue.sh", () => {
 		expect(ghCalls()).toEqual([LIST])
 	})
 
-	it("fails and calls no mutation when the branch has several open PRs", async () => {
+	it("fails and disarms nothing when the branch has several open PRs", async () => {
 		const result = await runPrDequeue({
-			pullRequests: [QUEUED, { number: 43, id: "PR_kwDOother" }],
+			pullRequests: [ARMED, { number: 43, id: "PR_kwDOother" }],
 		})
 
 		expect(result.exitCode).not.toBe(0)
@@ -190,8 +194,8 @@ describe("scripts/pr-dequeue.sh", () => {
 	it("refuses to run on main and calls gh not at all", async () => {
 		const result = await runPrDequeue({
 			branch: "main",
-			pullRequests: [QUEUED],
-			queueStates: [true, false],
+			pullRequests: [ARMED],
+			armedStates: [true, false],
 		})
 
 		expect(result.exitCode).not.toBe(0)
@@ -199,30 +203,30 @@ describe("scripts/pr-dequeue.sh", () => {
 		expect(ghCalls()).toEqual([])
 	})
 
-	it("fails when the read-back still shows the PR in the merge queue", async () => {
+	it("fails naming the PR when the read-back still shows auto-merge armed", async () => {
 		const result = await runPrDequeue({
-			pullRequests: [QUEUED],
-			queueStates: [true, true],
+			pullRequests: [ARMED],
+			armedStates: [true, true],
 		})
 
 		expect(result.exitCode).not.toBe(0)
-		expect(result.stdout).toBe("pr-dequeue.sh: PR #42 isInMergeQueue=true\n")
+		expect(result.stdout).toBe("pr-dequeue.sh: PR #42 autoMergeArmed=true\n")
 		expect(result.stderr).toBe(
-			"pr-dequeue.sh: PR #42 is still in the merge queue\n",
+			"pr-dequeue.sh: PR #42 still has auto-merge armed after gh pr merge --disable-auto\n",
 		)
 		expect(ghCalls()).toEqual([
 			LIST,
-			READ_QUEUE_STATE,
-			DEQUEUE,
-			READ_QUEUE_STATE,
+			READ_ARMED_STATE,
+			DISARM,
+			READ_ARMED_STATE,
 		])
 	})
 
 	it("refuses a PR number argument and calls gh not at all", async () => {
 		const result = await runPrDequeue({
 			arguments: ["42"],
-			pullRequests: [QUEUED],
-			queueStates: [true, false],
+			pullRequests: [ARMED],
+			armedStates: [true, false],
 		})
 
 		expect(result.exitCode).toBe(64)

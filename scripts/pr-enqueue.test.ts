@@ -57,21 +57,15 @@ type Scenario = {
 	armedState?: ArmedState
 }
 
-type ArmedState = {
-	autoMergeRequest: { enabledAt: string } | null
-	isInMergeQueue: boolean
-}
+type ArmedState = { autoMergeRequest: { enabledAt: string } | null }
 
 const ARMED: ArmedState = {
 	autoMergeRequest: { enabledAt: "2026-10-26T00:00:00Z" },
-	isInMergeQueue: false,
 }
 
-const QUEUED: ArmedState = { autoMergeRequest: null, isInMergeQueue: true }
+const UNARMED: ArmedState = { autoMergeRequest: null }
 
-const NEITHER: ArmedState = { autoMergeRequest: null, isInMergeQueue: false }
-
-const READ_FIELDS = /\b(autoMergeRequest|isInMergeQueue)\b/g
+const READ_FIELDS = /\bautoMergeRequest\b/g
 
 const describeCall = (call: string[]) => {
 	if (call[0] === "api") {
@@ -93,8 +87,8 @@ const ghCalls = () => {
 }
 
 const LIST = `pr list --repo ${REPOSITORY} --head ${BRANCH} --state open`
-const ARM = `pr merge --auto 42 --repo ${REPOSITORY}`
-const READ_ARMED_STATE = `api graphql autoMergeRequest isInMergeQueue id=${NODE_ID}`
+const ARM = `pr merge --auto --squash 42 --repo ${REPOSITORY}`
+const READ_ARMED_STATE = `api graphql autoMergeRequest id=${NODE_ID}`
 
 const withoutGitContext = () => {
 	const {
@@ -160,7 +154,7 @@ afterEach(() => {
 })
 
 describe("scripts/pr-enqueue.sh", () => {
-	it("arms auto-merge on the PR of the branch with no merge method, reads it back and prints it", async () => {
+	it("arms auto-merge with the squash method on the PR of the branch, reads it back and prints it", async () => {
 		const result = await runPrEnqueue({ pullRequestNumbers: [42] })
 
 		expect(result.exitCode).toBe(0)
@@ -168,27 +162,16 @@ describe("scripts/pr-enqueue.sh", () => {
 		expect(ghCalls()).toEqual([LIST, ARM, READ_ARMED_STATE])
 	})
 
-	it("counts a PR already in the merge queue with no auto-merge request as armed", async () => {
+	it("fails naming the PR when the read-back shows no auto-merge armed", async () => {
 		const result = await runPrEnqueue({
 			pullRequestNumbers: [42],
-			armedState: QUEUED,
-		})
-
-		expect(result.exitCode).toBe(0)
-		expect(result.stdout).toBe("pr-enqueue.sh: PR #42 autoMergeArmed=true\n")
-		expect(ghCalls()).toEqual([LIST, ARM, READ_ARMED_STATE])
-	})
-
-	it("fails naming the PR when the read-back shows neither auto-merge armed nor the PR queued", async () => {
-		const result = await runPrEnqueue({
-			pullRequestNumbers: [42],
-			armedState: NEITHER,
+			armedState: UNARMED,
 		})
 
 		expect(result.exitCode).not.toBe(0)
 		expect(result.stdout).toBe("pr-enqueue.sh: PR #42 autoMergeArmed=false\n")
 		expect(result.stderr).toBe(
-			"pr-enqueue.sh: PR #42 has no auto-merge armed and is not in the merge queue after gh pr merge --auto\n",
+			"pr-enqueue.sh: PR #42 has no auto-merge armed after gh pr merge --auto --squash\n",
 		)
 		expect(ghCalls()).toEqual([LIST, ARM, READ_ARMED_STATE])
 	})
