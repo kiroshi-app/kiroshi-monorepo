@@ -82,6 +82,12 @@ const renameListed = ({ name, newName }: RenameCall) => {
 	return renamed
 }
 
+const OPENED_STATE = (() => {
+	const doc = new Y.Doc()
+	doc.getText("markdown").insert(0, "Draft")
+	return Y.encodeStateAsUpdate(doc)
+})()
+
 const LIBRARY_ANSWERS: Record<string, (args: NamedCall) => unknown> = {
 	library_list: () => harness.listed,
 	library_read_document: ({ name }) => ({ name, format: "text", content: "" }),
@@ -93,7 +99,7 @@ const LIBRARY_ANSWERS: Record<string, (args: NamedCall) => unknown> = {
 	library_read_file: ({ name }) => ({ name, content: FILE_CONTENT }),
 	library_open_document: ({ name }) => ({
 		name,
-		update: base64Of(Y.encodeStateAsUpdate(new Y.Doc())),
+		update: base64Of(OPENED_STATE),
 	}),
 	library_apply_update: () => null,
 	library_share_caret: () => null,
@@ -642,6 +648,7 @@ type SentUpdate = NamedCall & { update: string }
 
 const textOfUpdatesTo = (name: string) => {
 	const doc = new Y.Doc()
+	Y.applyUpdate(doc, OPENED_STATE)
 	const sent = callsOf("library_apply_update") as SentUpdate[]
 	for (const { update } of sent.filter((call) => call.name === name)) {
 		Y.applyUpdate(doc, bytesOf(update))
@@ -668,16 +675,9 @@ const typeInBody = async (text: string) => {
 	})
 	await act(async () => {
 		body.focus()
-		document.getSelection()?.selectAllChildren(body)
-		fireEvent(
-			body,
-			new InputEvent("beforeinput", {
-				inputType: "insertText",
-				data: text,
-				bubbles: true,
-				cancelable: true,
-			}),
-		)
+		const line = body.querySelector(".cm-line")?.firstChild as Text
+		line.data = text
+		document.getSelection()?.collapse(line, text.length)
 	})
 }
 
