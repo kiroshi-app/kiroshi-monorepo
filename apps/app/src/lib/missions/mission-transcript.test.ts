@@ -18,6 +18,7 @@ const rowOf = (
 ): TranscriptRow => ({
 	messageId: `m-${timestamp}`,
 	turnId: `t-${timestamp}`,
+	continuesTurnId: null,
 	blockIndex: 0,
 	quotedMessageId: null,
 	authorBotId,

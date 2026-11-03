@@ -77,7 +77,7 @@ const activitySignatureOf = (shown: LineValue<SidebarActivity>[]): string =>
 	shown
 		.map(
 			({ spaceId, botId, value }) =>
-				`${spaceId}/${botId}:${value.isWorking}:${value.kind ?? ""}`,
+				`${spaceId}/${botId}:${value.isWorking}:${value.kind ?? ""}:${value.backgroundTasks ?? ""}`,
 		)
 		.join("|")
 

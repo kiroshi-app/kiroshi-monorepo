@@ -26,6 +26,7 @@ import {
 export type TranscriptRow = MessageAuthorship & {
 	messageId: string
 	turnId: string
+	continuesTurnId: string | null
 	blockIndex: number
 	quotedMessageId: string | null
 	authorBotId: string | null
@@ -80,6 +81,7 @@ function toRow(
 	return {
 		messageId: message.id,
 		turnId: message.turnId,
+		continuesTurnId: message.continuesTurnId ?? null,
 		blockIndex,
 		quotedMessageId:
 			message.role === "user" ? message.repliedToMessageId : null,
@@ -116,10 +118,38 @@ function assistantRows(message: TranscriptMessage): TranscriptRow[] {
 
 const rowsByMessage = new WeakMap<TranscriptMessage, TranscriptRow[]>()
 
+const underContinuedTurns = (
+	messages: TranscriptMessage[],
+): TranscriptMessage[] => {
+	const shownTurnIds = new Set(
+		messages
+			.filter(({ continuesTurnId }) => !continuesTurnId)
+			.map(({ turnId }) => turnId),
+	)
+	const shownTurnContinuedBy = ({ continuesTurnId }: TranscriptMessage) =>
+		continuesTurnId && shownTurnIds.has(continuesTurnId)
+			? continuesTurnId
+			: null
+	const placed = messages.filter((message) => shownTurnContinuedBy(message))
+	if (placed.length === 0) {
+		return messages
+	}
+	const continuations = Map.groupBy(placed, shownTurnContinuedBy)
+	const kept = messages.filter((message) => !shownTurnContinuedBy(message))
+	const closingOfTurn = new Map(
+		kept.map((message) => [message.turnId, message]),
+	)
+	return kept.flatMap((message) =>
+		closingOfTurn.get(message.turnId) === message
+			? [message, ...(continuations.get(message.turnId) ?? [])]
+			: [message],
+	)
+}
+
 export function toTranscriptRows(
 	messages: TranscriptMessage[],
 ): TranscriptRow[] {
-	return messages.flatMap((message) => {
+	return underContinuedTurns(messages).flatMap((message) => {
 		const cached = rowsByMessage.get(message)
 		if (cached) {
 			return cached
@@ -146,6 +176,9 @@ const isPartedByCause = (
 	previous.turnId !== row.turnId &&
 	(causes.has(previous.turnId) || causes.has(row.turnId))
 
+const opensContinuation = (previous: TranscriptRow, row: TranscriptRow) =>
+	previous.turnId !== row.turnId && row.continuesTurnId !== null
+
 const localDayOf = (timestamp: number) => new Date(timestamp).toDateString()
 
 const isSameLocalDay = (earlier: number, later: number) =>
@@ -170,7 +203,8 @@ export function toRuns(
 			isRelayed(previous) === isRelayed(row) &&
 			row.timestamp - previous.timestamp <= RUN_GAP_MS &&
 			isSameLocalDay(previous.timestamp, row.timestamp) &&
-			!isPartedByCause(previous, row, causes)
+			!isPartedByCause(previous, row, causes) &&
+			!opensContinuation(previous, row)
 		) {
 			current.push(row)
 		} else {
@@ -275,6 +309,19 @@ const foreignWorkFor = ({ foreignTurn }: ChatState): WorkingState | null =>
 			}
 		: null
 
+const busyWorkOf = ({
+	hold,
+	messages,
+	activities,
+}: ChatState): WorkingState => {
+	if (hold) {
+		return { kind: "working", backgroundTasks: hold.count }
+	}
+	const latest = messages.at(-1)
+	const isWriting = latest?.role === "assistant" && latest.content.length > 0
+	return workingFor(activities, isWriting)
+}
+
 export function workingStateFor(state: ChatState): WorkingState | null {
 	if (!isTurnBusy(state.turn)) {
 		return foreignWorkFor(state)
@@ -286,9 +333,7 @@ export function workingStateFor(state: ChatState): WorkingState | null {
 		return { kind: "waiting", label: state.permission.title }
 	}
 
-	const latest = state.messages.at(-1)
-	const isWriting = latest?.role === "assistant" && latest.content.length > 0
-	const working = workingFor(state.activities, isWriting)
+	const working = busyWorkOf(state)
 	return state.turnStartedAt === null
 		? working
 		: { ...working, startedAt: state.turnStartedAt }
@@ -297,6 +342,7 @@ export function workingStateFor(state: ChatState): WorkingState | null {
 export type SidebarActivity = {
 	isWorking: boolean
 	kind?: ActivityIndicatorKind
+	backgroundTasks?: number
 }
 
 export function sidebarActivityFor(state: ChatState): SidebarActivity {
@@ -304,7 +350,11 @@ export function sidebarActivityFor(state: ChatState): SidebarActivity {
 	if (!working) {
 		return { isWorking: false }
 	}
-	return { isWorking: true, kind: working.kind }
+	return {
+		isWorking: true,
+		kind: working.kind,
+		backgroundTasks: working.backgroundTasks,
+	}
 }
 
 export function isSignedOut(error: TransportError): boolean {

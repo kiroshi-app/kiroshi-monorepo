@@ -240,20 +240,29 @@ type WorkingBotProps = BotStopProps & {
 	work: WorkingState
 }
 
-const WorkingBot = ({ face, work, ...stop }: WorkingBotProps) => (
-	<ActivityIndicator
-		{...stop}
-		blot={face.blot}
-		botId={face.id}
-		image={face.image}
-		kind={work.kind}
-		label={work.label}
-		name={face.name}
-		seed={face.id}
-		startedAt={work.startedAt}
-		waitingOn={work.waitingOn}
-	/>
-)
+const workLabelOf = (work: WorkingState, t: ChatCopy) =>
+	work.backgroundTasks === undefined
+		? work.label
+		: t("working.backgroundTasks", { count: work.backgroundTasks })
+
+const WorkingBot = ({ face, work, ...stop }: WorkingBotProps) => {
+	const t = useChatCopy()
+
+	return (
+		<ActivityIndicator
+			{...stop}
+			blot={face.blot}
+			botId={face.id}
+			image={face.image}
+			kind={work.kind}
+			label={workLabelOf(work, t)}
+			name={face.name}
+			seed={face.id}
+			startedAt={work.startedAt}
+			waitingOn={work.waitingOn}
+		/>
+	)
+}
 
 const UP_NEXT: WorkingState = { kind: "waiting", waitingOn: "next" }
 

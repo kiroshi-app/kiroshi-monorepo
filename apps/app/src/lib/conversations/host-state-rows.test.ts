@@ -99,6 +99,19 @@ describe("a conversation row against its host state", () => {
 		).toEqual({ "room-one": { isWorking: true, kind: "searching" } })
 	})
 
+	it("carries the background task count of a held turn", () => {
+		expect(
+			workingFromHost(
+				{ "room-one": workingBy("atlas") },
+				{
+					"room-one": { isWorking: true, kind: "working", backgroundTasks: 1 },
+				},
+			),
+		).toEqual({
+			"room-one": { isWorking: true, kind: "working", backgroundTasks: 1 },
+		})
+	})
+
 	it("is working without a pose when no runtime is held in memory", () => {
 		expect(workingFromHost({ atlas: workingBy("atlas") }, {})).toEqual({
 			atlas: { isWorking: true, kind: undefined },

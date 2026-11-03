@@ -15,6 +15,7 @@ import type {
 	RuntimeScope,
 	TransportError,
 	TurnEnded,
+	TurnHold,
 	TurnOutcome,
 	TurnState,
 } from "../agent/contract"
@@ -45,6 +46,7 @@ export type ChatState = {
 	connection: ConnectionState
 	turn: TurnState
 	turnStartedAt: number | null
+	hold: TurnHold | null
 	sessionOpen: boolean
 	sessionId: string | null
 	commands: AgentCommand[]
@@ -102,6 +104,7 @@ export const initialChatState: ChatState = {
 	connection: "checking",
 	turn: "idle",
 	turnStartedAt: null,
+	hold: null,
 	sessionOpen: false,
 	sessionId: null,
 	commands: [],
@@ -448,14 +451,25 @@ function applyEvent(state: ChatState, event: AgentEvent): ChatState {
 			return applyPermissionResolved(state, event.id, event.decision)
 		case "turnEnded":
 			return applyTurnEnded(state, event.ended)
-		case "tasksPending":
 		case "turnHeld":
+			return applyHold(state, event.hold)
+		case "tasksPending":
 		case "botEvolved":
 		case "botEvolutionFailed":
 			return state
 		case "failed":
 			return applyFailure(state, event.error)
 	}
+}
+
+const isSameHold = (left: TurnHold | null, right: TurnHold | null) =>
+	left?.reason === right?.reason && left?.count === right?.count
+
+function applyHold(state: ChatState, hold: TurnHold | null): ChatState {
+	if (!isTurnBusy(state.turn) || isSameHold(state.hold, hold)) {
+		return state
+	}
+	return { ...state, hold }
 }
 
 function applyCommands(state: ChatState, commands: AgentCommand[]): ChatState {
@@ -550,12 +564,19 @@ const withTurnInstant = (
 		: { ...next, turnStartedAt }
 }
 
+const withHoldReleased = (state: ChatState): ChatState =>
+	state.hold === null || isTurnBusy(state.turn)
+		? state
+		: { ...state, hold: null }
+
 export function chatReducer(
 	state: ChatState,
 	action: ChatAction,
 	at: number,
 ): ChatState {
-	return withTurnInstant(state, reducedChat(state, action), at)
+	return withHoldReleased(
+		withTurnInstant(state, reducedChat(state, action), at),
+	)
 }
 
 function reducedChat(state: ChatState, action: ChatAction): ChatState {

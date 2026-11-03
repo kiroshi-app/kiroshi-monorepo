@@ -922,3 +922,82 @@ describe("background tasks held by a running turn", () => {
 		expect(held).toBe(running)
 	})
 })
+
+describe("a turn held for its background tasks", () => {
+	const at = (state: ChatState, event: AgentEvent, when: number): ChatState =>
+		chatReducer(
+			state,
+			{ type: "driverEvent", scope: state.runtime, event },
+			when,
+		)
+
+	const heldOn = (count: number): AgentEvent => ({
+		type: "turnHeld",
+		hold: { reason: "backgroundTasks", count },
+	})
+	const released: AgentEvent = { type: "turnHeld", hold: null }
+	const running = at(
+		at(initialChatState, { type: "turnChanged", state: "submitting" }, 100),
+		{ type: "turnChanged", state: "running" },
+		200,
+	)
+
+	it("shows the task count as the reason the turn is still working", () => {
+		const held = at(running, heldOn(2), 900)
+
+		expect(workingStateFor(held)).toEqual({
+			kind: "working",
+			backgroundTasks: 2,
+			startedAt: 100,
+		})
+		expect(sidebarActivityFor(held)).toEqual({
+			isWorking: true,
+			kind: "working",
+			backgroundTasks: 2,
+		})
+		expect(canStopTurn(held.turn)).toBe(true)
+	})
+
+	it("updates the count without restarting the clock", () => {
+		const recounted = at(at(running, heldOn(3), 900), heldOn(1), 5_000)
+
+		expect(workingStateFor(recounted)).toMatchObject({
+			backgroundTasks: 1,
+			startedAt: 100,
+		})
+	})
+
+	it("keeps the state it had when the same count arrives again", () => {
+		const held = at(running, heldOn(2), 900)
+
+		expect(at(held, heldOn(2), 1_000)).toBe(held)
+	})
+
+	it("falls back to the indicator it showed before once the hold is released", () => {
+		const freed = at(at(running, heldOn(2), 900), released, 1_000)
+
+		expect(workingStateFor(freed)).toEqual(workingStateFor(running))
+	})
+
+	it.each<[string, AgentEvent]>([
+		[
+			"ends",
+			{ type: "turnEnded", ended: { sessionId: null, outcome: "completed" } },
+		],
+		[
+			"is stopped",
+			{ type: "turnEnded", ended: { sessionId: null, outcome: "cancelled" } },
+		],
+		["fails", { type: "turnChanged", state: "failed" }],
+	])("drops the hold when the turn %s", (_, closing) => {
+		const closed = at(at(running, heldOn(2), 900), closing, 1_000)
+		const next = at(closed, { type: "turnChanged", state: "submitting" }, 2_000)
+
+		expect(closed.hold).toBeNull()
+		expect(workingStateFor(next)).not.toHaveProperty("backgroundTasks")
+	})
+
+	it("ignores a hold arriving while no turn runs", () => {
+		expect(at(initialChatState, heldOn(2), 900)).toBe(initialChatState)
+	})
+})

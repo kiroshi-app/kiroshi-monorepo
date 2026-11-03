@@ -24,6 +24,7 @@ export type {
 	RuntimeScope,
 	SessionHandle,
 	SubmittedTurn,
+	TurnHold,
 } from "@/lib/bindings"
 
 type FrontTransportError =

@@ -178,6 +178,8 @@ const chat = {
 		state: "{{name}} is {{verb}}…",
 		labelled: "{{name}} · {{label}}",
 		mcp: "{{server}} · {{tool}}",
+		backgroundTasks_one: "waiting on {{count}} background task",
+		backgroundTasks_other: "waiting on {{count}} background tasks",
 		waitingTitled: "{{name}} is waiting for you… · {{title}}",
 		upNext: "{{name}} is up next…",
 		stop: "Stop {{name}}",

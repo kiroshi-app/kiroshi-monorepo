@@ -48,15 +48,19 @@ export const botHostStatesIn = ({
 	return botStates
 }
 
+const workingWith = (pose: SidebarActivity | undefined): SidebarActivity => ({
+	isWorking: true,
+	kind: pose?.kind,
+	backgroundTasks: pose?.backgroundTasks,
+})
+
 export const workingFromHost = (
 	hostStates: ConversationHostStates,
 	poses: Record<string, SidebarActivity>,
 ): Record<string, SidebarActivity> =>
 	Object.fromEntries(
 		Object.entries(hostStates).flatMap(([id, { state }]) =>
-			state === "working"
-				? [[id, { isWorking: true, kind: poses[id]?.kind }]]
-				: [],
+			state === "working" ? [[id, workingWith(poses[id])]] : [],
 		),
 	)
 
