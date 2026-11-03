@@ -723,6 +723,128 @@ export const FieldsStayInPlace = meta.story({
 	},
 })
 
+export const ItemTurnedIntoParagraph = meta.story({
+	args: { ...LAUNCH_REVIEW, template: undefined, onCaretChange: fn() },
+	beforeEach: launchReviewDraft.reset,
+	render: (args) => <LiveEditor {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The person presses Backspace at the start of the first item of the Decisions list, then Enter twice at the end of the last one. Check that each item turned into a paragraph keeps its text, that the caret stays in the editor at the start of that paragraph, and that `onCaretChange` ends on that caret, never on null.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const onCaretChange = args.onCaretChange as ReturnType<typeof fn>
+		const fieldAt = (index: number) =>
+			bodyFieldsIn(canvasElement)[index] as HTMLTextAreaElement
+		const caretStaysAtStartOf = async (index: number) => {
+			const paragraph = fieldAt(index)
+			await expect(paragraph.dataset.kind).toBe("paragraph")
+			await expect(document.activeElement).toBe(paragraph)
+			await expect(paragraph.selectionStart).toBe(0)
+			await expect(paragraph.selectionEnd).toBe(0)
+			await new Promise((resolve) => setTimeout(resolve, 50))
+			await expect(onCaretChange).toHaveBeenLastCalledWith(
+				Number(paragraph.dataset.bodyOffset),
+			)
+		}
+
+		await userEvent.click(fieldAt(2))
+		await userEvent.keyboard("{Home}{Backspace}")
+		await expect(fieldAt(2)).toHaveValue("Ship on the 14th")
+		await caretStaysAtStartOf(2)
+		await expect(launchReviewDraft.read().body).toContain(
+			"## Decisions\n\nShip on the 14th",
+		)
+		await expect(launchReviewDraft.read().body).not.toContain("- Ship")
+
+		await userEvent.click(fieldAt(3))
+		await userEvent.keyboard("{End}{Enter}")
+		await expect(document.activeElement).toBe(fieldAt(4))
+		await expect(fieldAt(4).dataset.kind).toBe("item")
+		await userEvent.keyboard("{Enter}")
+		await expect(fieldAt(4)).toHaveValue("")
+		await caretStaysAtStartOf(4)
+	},
+})
+
+const createRenderMoveStore = () => {
+	let pendingMove: (() => void) | undefined
+	return {
+		arm: (move: () => void) => {
+			pendingMove = move
+		},
+		runOnce: () => {
+			const move = pendingMove
+			pendingMove = undefined
+			move?.()
+		},
+		reset: () => {
+			pendingMove = undefined
+		},
+	}
+}
+
+const caretMoveInRender = createRenderMoveStore()
+
+const CaretMoverAfterEditor = () => {
+	useSyncExternalStore(launchReviewDraft.subscribe, launchReviewDraft.read)
+	caretMoveInRender.runOnce()
+	return null
+}
+
+export const CaretMovedWhileOutsideChangeRenders = meta.story({
+	tags: ["test-only"],
+	args: { ...LAUNCH_REVIEW, template: undefined },
+	beforeEach: () => {
+		launchReviewDraft.reset()
+		caretMoveInRender.reset()
+	},
+	render: (args) => (
+		<>
+			<LiveEditor {...args} />
+			<CaretMoverAfterEditor />
+		</>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Someone else writes in the item the person is in, and the person's selection moves after the editor renders that change but before it lands, as a click does while a slow render yields. A component rendering after the editor in the same pass makes that move. Check that the selection the editor keeps is the one the person holds when the change lands, shifted past the inserted word, never the caret it held when the render started.",
+			},
+		},
+	},
+	play: async ({ canvasElement, userEvent }) => {
+		const [, , ship] = bodyFieldsIn(canvasElement) as [
+			HTMLTextAreaElement,
+			HTMLTextAreaElement,
+			HTMLTextAreaElement,
+		]
+		await userEvent.click(ship)
+		await userEvent.keyboard("{End}")
+		await expect(ship.selectionStart).toBe("Ship on the 14th".length)
+
+		caretMoveInRender.arm(() =>
+			ship.setSelectionRange("Ship on the ".length, "Ship on the 14th".length),
+		)
+		launchReviewDraft.write({
+			body: launchReviewDraft
+				.read()
+				.body.replace("Ship on the 14th", "Ship on Monday the 14th"),
+		})
+		await waitFor(() => expect(ship).toHaveValue("Ship on Monday the 14th"))
+
+		await expect(document.activeElement).toBe(ship)
+		await expect(ship.selectionStart).toBe("Ship on Monday the ".length)
+		await expect(ship.selectionEnd).toBe("Ship on Monday the 14th".length)
+		await expect(ship.value.slice(ship.selectionStart, ship.selectionEnd)).toBe(
+			"14th",
+		)
+	},
+})
+
 export const AgentsWriting = meta.story({
 	args: {
 		title: LIBRARY_AGENT_DOCUMENT.name,
