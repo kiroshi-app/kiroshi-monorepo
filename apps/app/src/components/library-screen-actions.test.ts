@@ -76,6 +76,12 @@ const LIBRARY_ANSWERS: Record<string, (args: NamedCall) => unknown> = {
 	}),
 	library_apply_update: () => null,
 	library_share_caret: () => null,
+	library_rename_document: ({ name }) => {
+		if (harness.refused === "library_rename_document") {
+			throw { kind: "missing", name }
+		}
+		return itemNamed(name, "document")
+	},
 }
 
 vi.mock("@tauri-apps/api/core", async (importOriginal) => ({

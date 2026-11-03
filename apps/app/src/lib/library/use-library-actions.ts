@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 
 import { i18n } from "@workspace/ui/lib/i18n"
 
+import { renameLibraryDocument } from "./library-document-writes"
 import { libraryQueryKeys } from "./library-query-keys"
 import { readLibraryFile } from "./library-reads"
 
@@ -78,8 +79,8 @@ export type LibraryRename = { name: string; newName: string }
 const useLibraryRename = (spaceId: string) => {
 	const queryClient = useQueryClient()
 	return useMutation({
-		mutationFn: async ({ name, newName }: LibraryRename) =>
-			dataOf(await commands.libraryRenameDocument(spaceId, name, newName)),
+		mutationFn: ({ name, newName }: LibraryRename) =>
+			renameLibraryDocument(spaceId, name, newName),
 		onSettled: () =>
 			queryClient.invalidateQueries({
 				queryKey: libraryQueryKeys.itemsOf(spaceId),
