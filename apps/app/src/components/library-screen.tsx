@@ -81,9 +81,9 @@ const documentOpeningOf = ({ name, title }: DocumentDraft): LibraryOpening => ({
 })
 
 const isNamedBy =
-	({ kind, name }: LibraryOpening) =>
-	(item: LibraryItem) =>
-		item.kind === kind && item.name === name
+	(opening: LibraryOpening | undefined) =>
+	({ kind, name }: LibraryItem) =>
+		opening?.kind === kind && opening.name === name
 
 const isOpenedBy =
 	(opening: LibraryOpening | undefined) =>
@@ -206,7 +206,7 @@ export const LibraryScreen = ({
 			{ excerpt: library.excerptOf(item), src: sourceOf(item) },
 			library.readAt,
 		)
-	const listedOpened = opening && library.items.find(isNamedBy(opening))
+	const listedOpened = library.items.find(isNamedBy(opening))
 	const openedDocument = openedDocumentOf(
 		opening,
 		heldDraft,
