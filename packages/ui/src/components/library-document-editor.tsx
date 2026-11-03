@@ -2,6 +2,7 @@
 
 import type { TFunction } from "i18next"
 import {
+	Fragment,
 	type KeyboardEvent,
 	type ReactNode,
 	type Ref,
@@ -14,6 +15,12 @@ import { flushSync } from "react-dom"
 import { useTranslation } from "react-i18next"
 
 import {
+	type LibraryDocumentEdit,
+	type LibraryDocumentFinished,
+	LibraryDocumentFinishedBar,
+	LibraryDocumentFinishedRun,
+	type LibraryDocumentPerson,
+	LibraryDocumentPersonCaret,
 	LibraryDocumentPresence,
 	type LibraryDocumentWriter,
 	LibraryDocumentWrittenRun,
@@ -206,32 +213,52 @@ const reconciled = (blocks: Block[], body: string) => {
 	return next.toSpliced(at, 0, ...added)
 }
 
-type WriterPiece = {
-	writer: LibraryDocumentWriter
+type RunPiece = {
+	edit: LibraryDocumentEdit
 	from: number
 	to: number
 	isEnd: boolean
 }
 
-const piecesOf = (blocks: Block[], writers: LibraryDocumentWriter[]) => {
-	const pieces = new Map<string, WriterPiece[]>()
-	const lastPieces = new Map<string, WriterPiece>()
-	const ordered = writers.toSorted(
-		(first, second) => first.start - second.start,
+type CaretPiece = {
+	at: number
+	person: LibraryDocumentPerson
+}
+
+const textStartsOf = (blocks: Block[]) => {
+	const leads = new Map(
+		linesOf(blocks).map(({ block, lead }) => [block.id, lead.length]),
 	)
+	const starts = new Map<string, number>()
 	let offset = 0
-	for (const { block, lead } of linesOf(blocks)) {
-		const textStart = offset + lead.length
-		offset = textStart + block.text.length
+	for (const block of blocks) {
+		const lead = leads.get(block.id)
+		starts.set(block.id, offset + (lead ?? 0))
+		if (lead !== undefined) offset += lead + block.text.length
+	}
+	return starts
+}
+
+const runPiecesOf = (
+	blocks: Block[],
+	starts: Map<string, number>,
+	edits: LibraryDocumentEdit[],
+) => {
+	const pieces = new Map<string, RunPiece[]>()
+	const lastPieces = new Map<string, RunPiece>()
+	const ordered = edits.toSorted((first, second) => first.start - second.start)
+	for (const block of blocks.filter(isWritten)) {
+		const textStart = starts.get(block.id) ?? 0
+		const textEnd = textStart + block.text.length
 		let read = 0
-		for (const writer of ordered) {
-			const from = Math.max(writer.start, textStart) - textStart
-			const to = Math.min(writer.end, offset) - textStart
+		for (const edit of ordered) {
+			const from = Math.max(edit.start, textStart) - textStart
+			const to = Math.min(edit.end, textEnd) - textStart
 			if (from >= to || from < read) continue
 
-			const piece = { writer, from, to, isEnd: false }
+			const piece = { edit, from, to, isEnd: false }
 			pieces.set(block.id, [...(pieces.get(block.id) ?? []), piece])
-			lastPieces.set(writer.agent.id, piece)
+			lastPieces.set(edit.agent.id, piece)
 			read = to
 		}
 	}
@@ -239,38 +266,74 @@ const piecesOf = (blocks: Block[], writers: LibraryDocumentWriter[]) => {
 	return pieces
 }
 
+const caretPiecesOf = (
+	blocks: Block[],
+	starts: Map<string, number>,
+	people: LibraryDocumentPerson[],
+) => {
+	const carets = new Map<string, CaretPiece[]>()
+	const endOf = (block: Block) =>
+		(starts.get(block.id) ?? 0) + block.text.length
+	for (const person of people.toSorted(
+		(first, second) => first.caret - second.caret,
+	)) {
+		const block =
+			blocks.find((candidate) => endOf(candidate) >= person.caret) ??
+			blocks.at(-1)
+		if (!block) continue
+
+		const offset = person.caret - (starts.get(block.id) ?? 0)
+		const at = Math.min(Math.max(0, offset), block.text.length)
+		carets.set(block.id, [...(carets.get(block.id) ?? []), { at, person }])
+	}
+	return carets
+}
+
+type DrawRun = (piece: RunPiece, children: ReactNode, key: string) => ReactNode
+
 const drawnTextOf = (
 	text: string,
-	pieces: WriterPiece[],
-	actions: WriterActions,
+	runs: RunPiece[],
+	carets: CaretPiece[],
+	drawRun: DrawRun,
 ) => {
-	const parts: ReactNode[] = []
+	const segments: { from: number; to: number; run?: RunPiece }[] = []
 	let read = 0
-	for (const { writer, from, to, isEnd } of pieces) {
-		if (from > read)
-			parts.push(
-				<span aria-hidden="true" key={`text-${read}`}>
-					{text.slice(read, from)}
-				</span>,
-			)
-		parts.push(
-			<LibraryDocumentWrittenRun
-				{...actions}
-				isEnd={isEnd}
-				key={`run-${from}`}
-				writer={writer}
-			>
-				<span aria-hidden="true">{text.slice(from, to)}</span>
-			</LibraryDocumentWrittenRun>,
-		)
-		read = to
+	for (const run of runs) {
+		if (run.from > read) segments.push({ from: read, to: run.from })
+		segments.push({ from: run.from, to: run.to, run })
+		read = run.to
 	}
-	parts.push(
-		<span aria-hidden="true" key={`text-${read}`}>
-			{`${text.slice(read)}​`}
-		</span>,
-	)
-	return parts
+	segments.push({ from: read, to: text.length })
+
+	return segments.map(({ from, to, run }, index) => {
+		const isLast = index === segments.length - 1
+		const parts: ReactNode[] = []
+		let at = from
+		for (const caret of carets) {
+			if (caret.at < from || (caret.at >= to && !isLast)) continue
+			parts.push(
+				<span aria-hidden="true" key={`text-${parts.length}`}>
+					{text.slice(at, caret.at)}
+				</span>,
+				<LibraryDocumentPersonCaret
+					key={`caret-${caret.person.id}`}
+					person={caret.person}
+				/>,
+			)
+			at = caret.at
+		}
+		parts.push(
+			<span aria-hidden="true" key={`text-${parts.length}`}>
+				{`${text.slice(at, to)}${isLast ? "​" : ""}`}
+			</span>,
+		)
+		return run ? (
+			drawRun(run, parts, `run-${from}`)
+		) : (
+			<Fragment key={`text-${from}`}>{parts}</Fragment>
+		)
+	})
 }
 
 type FieldSelection = {
@@ -429,8 +492,23 @@ type LibraryDocumentEditorProps = WriterActions & {
 	onBack: () => void
 	onMore?: () => void
 	writers?: LibraryDocumentWriter[]
+	people?: LibraryDocumentPerson[]
+	finished?: LibraryDocumentFinished
 	onStopAll?: () => void
+	onUndoAll?: () => void
+	onDone?: () => void
+	onCaretChange?: (caret: number | null) => void
 }
+
+const isBodyField = (element: Element | null): element is HTMLTextAreaElement =>
+	element instanceof HTMLTextAreaElement &&
+	element.dataset.bodyOffset !== undefined
+
+const caretIn = (field: HTMLTextAreaElement) =>
+	Number(field.dataset.bodyOffset) +
+	(field.selectionDirection === "backward"
+		? field.selectionStart
+		: field.selectionEnd)
 
 const endingOf = (body: string) => /\s*$/.exec(body)?.[0] ?? ""
 
@@ -444,9 +522,14 @@ const LibraryDocumentEditor = ({
 	onBack,
 	onMore,
 	writers = [],
+	people = [],
+	finished,
 	onStopAll,
 	onStop,
 	onOpenConversation,
+	onUndoAll,
+	onDone,
+	onCaretChange,
 }: LibraryDocumentEditorProps) => {
 	const { t } = useTranslation("common")
 	const [title, setTitle] = useState(titleProp)
@@ -455,6 +538,16 @@ const LibraryDocumentEditor = ({
 	const [received, setReceived] = useState({ title: titleProp, body })
 	const [restoredSelection, setRestoredSelection] = useState<FieldSelection>()
 	const fields = useRef(new Map<string, HTMLTextAreaElement>())
+	const reportedCaret = useRef<number | null>(null)
+
+	const reportCaret = () => {
+		const field = document.activeElement
+		const caret = isBodyField(field) ? caretIn(field) : null
+		if (caret === reportedCaret.current) return
+
+		reportedCaret.current = caret
+		onCaretChange?.(caret)
+	}
 
 	const focusAt = (id: string | undefined, caret: number | "end") => {
 		const field = id ? fields.current.get(id) : undefined
@@ -463,6 +556,7 @@ const LibraryDocumentEditor = ({
 		const position = caret === "end" ? field.value.length : caret
 		field.focus()
 		field.setSelectionRange(position, position)
+		reportCaret()
 	}
 
 	const bodyOf = (next: Block[]) => {
@@ -510,8 +604,32 @@ const LibraryDocumentEditor = ({
 		}
 	}
 
-	const writerActions = { onStop, onOpenConversation }
-	const writerPieces = piecesOf(blocks, writers)
+	const isWriting = writers.length > 0 || people.length > 0
+	const shownFinished = isWriting ? undefined : finished
+	const edits: LibraryDocumentEdit[] =
+		writers.length > 0 ? writers : (shownFinished?.edits ?? [])
+	const textStarts = textStartsOf(blocks)
+	const runPieces = runPiecesOf(blocks, textStarts, edits)
+	const caretPieces = caretPiecesOf(blocks, textStarts, people)
+
+	const drawRun: DrawRun = ({ edit, isEnd }, children, key) => {
+		const writer = writers.find(({ agent }) => agent.id === edit.agent.id)
+		return writer ? (
+			<LibraryDocumentWrittenRun
+				isEnd={isEnd}
+				key={key}
+				onOpenConversation={onOpenConversation}
+				onStop={onStop}
+				writer={writer}
+			>
+				{children}
+			</LibraryDocumentWrittenRun>
+		) : (
+			<LibraryDocumentFinishedRun agent={edit.agent} key={key}>
+				{children}
+			</LibraryDocumentFinishedRun>
+		)
+	}
 
 	const commit = (next: Block[]) => {
 		const markdown = bodyOf(next)
@@ -630,22 +748,29 @@ const LibraryDocumentEditor = ({
 
 	const fieldOf = (block: Block) => {
 		const index = blocks.indexOf(block)
-		const pieces = writerPieces.get(block.id)
+		const runs = runPieces.get(block.id)
+		const carets = caretPieces.get(block.id)
 
 		return (
 			<GrowingField
 				aria-label={t(BLOCK_LABEL[block.kind])}
 				className={BLOCK_TYPE[block.kind]}
+				data-body-offset={textStarts.get(block.id)}
 				data-kind={block.kind}
 				drawnText={
-					pieces ? drawnTextOf(block.text, pieces, writerActions) : undefined
+					runs || carets
+						? drawnTextOf(block.text, runs ?? [], carets ?? [], drawRun)
+						: undefined
 				}
 				fieldRef={fieldRefOf(block.id)}
 				key={block.id}
+				onBlur={() => queueMicrotask(reportCaret)}
 				onChange={(event) =>
 					changeText(index, event.target.value, event.target.selectionStart)
 				}
+				onFocus={reportCaret}
 				onKeyDown={keyDownIn(index)}
+				onSelect={reportCaret}
 				placeholder={block.placeholder}
 				fieldClassName="placeholder:text-placeholder-foreground"
 				value={block.text}
@@ -672,6 +797,15 @@ const LibraryDocumentEditor = ({
 			/>
 			<LibraryDocumentColumn
 				detail={detail}
+				footer={
+					shownFinished ? (
+						<LibraryDocumentFinishedBar
+							finished={shownFinished}
+							onDone={onDone}
+							onUndoAll={onUndoAll}
+						/>
+					) : null
+				}
 				heading={
 					<GrowingField
 						aria-label={t("library.editor.title")}

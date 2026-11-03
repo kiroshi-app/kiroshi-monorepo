@@ -100,30 +100,37 @@ type LibraryDocumentColumnProps = {
 	heading: ReactNode
 	detail: string
 	children: ReactNode
-	className?: string
+	footer?: ReactNode
 }
 
 const LibraryDocumentColumn = ({
 	heading,
 	detail,
 	children,
-	className,
+	footer,
 }: LibraryDocumentColumnProps) => (
-	<div
-		className={cn(
-			"min-h-0 flex-1 overflow-y-auto px-10 pt-10 pb-10",
-			className,
-		)}
-	>
-		<article className="mx-auto flex w-full max-w-160 flex-col gap-3.5">
-			<header className="flex flex-col gap-1.5 pb-1.5">
-				{heading}
-				<p className="text-compact text-muted-foreground leading-4.5 tabular-nums">
-					{detail}
-				</p>
-			</header>
-			{children}
-		</article>
+	<div className="relative flex min-h-0 flex-1 flex-col">
+		<div
+			className={cn(
+				"min-h-0 flex-1 overflow-y-auto px-10 pt-10 pb-10",
+				footer && "pb-24",
+			)}
+		>
+			<article className="mx-auto flex w-full max-w-160 flex-col gap-3.5">
+				<header className="flex flex-col gap-1.5 pb-1.5">
+					{heading}
+					<p className="text-compact text-muted-foreground leading-4.5 tabular-nums">
+						{detail}
+					</p>
+				</header>
+				{children}
+			</article>
+		</div>
+		{footer ? (
+			<div className="pointer-events-none absolute inset-x-10 bottom-6 flex justify-center *:pointer-events-auto">
+				{footer}
+			</div>
+		) : null}
 	</div>
 )
 
@@ -195,30 +202,27 @@ const LibraryDocumentView = ({
 					) : null
 				}
 			/>
-			<div className="relative flex min-h-0 flex-1 flex-col">
-				<LibraryDocumentColumn
-					className={shownFinished ? "pb-24" : undefined}
-					detail={document.detail}
-					heading={<h1 className={DOCUMENT_TITLE}>{document.name}</h1>}
-				>
-					<Markdown
-						className={DOCUMENT_TYPE}
-						renderRun={edits.length > 0 ? renderRun : undefined}
-						runs={edits.length > 0 ? runsOf(edits) : undefined}
-					>
-						{document.body}
-					</Markdown>
-				</LibraryDocumentColumn>
-				{shownFinished ? (
-					<div className="pointer-events-none absolute inset-x-10 bottom-6 flex justify-center *:pointer-events-auto">
+			<LibraryDocumentColumn
+				detail={document.detail}
+				footer={
+					shownFinished ? (
 						<LibraryDocumentFinishedBar
 							finished={shownFinished}
 							onDone={onDone}
 							onUndoAll={onUndoAll}
 						/>
-					</div>
-				) : null}
-			</div>
+					) : null
+				}
+				heading={<h1 className={DOCUMENT_TITLE}>{document.name}</h1>}
+			>
+				<Markdown
+					className={DOCUMENT_TYPE}
+					renderRun={edits.length > 0 ? renderRun : undefined}
+					runs={edits.length > 0 ? runsOf(edits) : undefined}
+				>
+					{document.body}
+				</Markdown>
+			</LibraryDocumentColumn>
 		</div>
 	)
 }

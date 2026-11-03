@@ -12,6 +12,7 @@ import { ContentCard } from "@workspace/ui/components/content-card"
 import {
 	LIBRARY_AGENT_DOCUMENT,
 	LIBRARY_AGENTS,
+	LIBRARY_FINISHED,
 	LIBRARY_WRITERS,
 } from "@workspace/ui/components/library.fixtures"
 import {
@@ -492,6 +493,55 @@ export const OutsideTitleChange = meta.story({
 	},
 })
 
+export const CaretMoves = meta.story({
+	args: { ...LAUNCH_REVIEW, template: undefined, onCaretChange: fn() },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The person moves the caret through the body, then leaves it. Check that `onCaretChange` reports each move as an offset in the body markdown, the same coordinates as a writer's start and end, that moving to the next block reports the new offset without a null between, and that leaving the body for the title, then for outside the editor, reports null once each time.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		const reported = () =>
+			(args.onCaretChange as ReturnType<typeof fn>).mock.calls.map(
+				([caret]) => caret,
+			)
+		const [intro] = bodyFieldsIn(canvasElement) as [HTMLTextAreaElement]
+		const introEnd = intro.value.length
+		const heading = LAUNCH_REVIEW.body.indexOf("Decisions")
+
+		await userEvent.click(intro)
+		await expect(args.onCaretChange).toHaveBeenLastCalledWith(
+			intro.selectionEnd,
+		)
+		await userEvent.keyboard("{End}{ArrowLeft}")
+		await expect(args.onCaretChange).toHaveBeenLastCalledWith(introEnd - 1)
+		await userEvent.keyboard("{ArrowRight}{ArrowDown}")
+		await expect(args.onCaretChange).toHaveBeenLastCalledWith(heading)
+		await expect(reported()).not.toContain(null)
+
+		await userEvent.click(canvas.getByRole("textbox", { name: "Title" }))
+		await expect(args.onCaretChange).toHaveBeenLastCalledWith(null)
+
+		await userEvent.click(intro)
+		await expect(args.onCaretChange).toHaveBeenLastCalledWith(
+			intro.selectionEnd,
+		)
+		intro.blur()
+		await waitFor(() =>
+			expect(args.onCaretChange).toHaveBeenLastCalledWith(null),
+		)
+
+		const calls = reported()
+		await expect(calls.filter((caret) => caret === null)).toHaveLength(2)
+		await expect(
+			calls.some((caret, index) => index > 0 && caret === calls[index - 1]),
+		).toBe(false)
+	},
+})
+
 export const AgentsWriting = meta.story({
 	args: {
 		title: LIBRARY_AGENT_DOCUMENT.name,
@@ -591,6 +641,169 @@ export const AgentsWriting = meta.story({
 				"stops an agent in its tracks",
 			),
 		)
+	},
+})
+
+const LONG_AGENT_DOCUMENT = {
+	...LIBRARY_AGENT_DOCUMENT,
+	body: [
+		LIBRARY_AGENT_DOCUMENT.body,
+		"## Open questions",
+		...Array.from(
+			{ length: 10 },
+			(_, index) =>
+				`Question ${index + 1}: who reads the weekly number first, and what do they change when it drops?`,
+		),
+		"The last line of the brief stays above the finished bar.",
+	].join("\n\n"),
+}
+
+const rectsOverlap = (first: DOMRect, second: DOMRect) =>
+	first.left < second.right &&
+	second.left < first.right &&
+	first.top < second.bottom &&
+	second.top < first.bottom
+
+export const AgentFinished = meta.story({
+	args: {
+		title: LONG_AGENT_DOCUMENT.name,
+		body: LONG_AGENT_DOCUMENT.body,
+		detail: LONG_AGENT_DOCUMENT.detail,
+		template: undefined,
+		finished: LIBRARY_FINISHED,
+		onUndoAll: fn(),
+		onDone: fn(),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Atlas and Mira done writing in a long document open to edit, as artboard 11 draws it and as `LibraryDocumentView` renders it. Check that the presence pill and the carets are gone, that each added run keeps its agent's colour as plain text, that the finished bar floats centred at the bottom of the column with Undo all and Done, and that the last line of the document clears the bar once scrolled to the end.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		await expect(
+			canvasElement.querySelector("[data-slot='library-document-presence']"),
+		).toBe(null)
+		await expect(
+			canvasElement.querySelector("[data-slot='library-document-caret']"),
+		).toBe(null)
+
+		const runs = canvasElement.querySelectorAll<HTMLElement>(
+			"[data-slot='library-document-run']",
+		)
+		await expect([...runs].map((run) => run.textContent)).toEqual([
+			"and the agent says why it asks",
+			"We also count how often someone stops an agent in its",
+		])
+		const [atlasRun] = runs
+		const drawn = (atlasRun as HTMLElement).closest(
+			"[data-slot='library-document-drawn-text']",
+		) as HTMLElement
+		await expect(getComputedStyle(atlasRun as HTMLElement).color).not.toBe(
+			getComputedStyle(drawn).color,
+		)
+		await expect(
+			getComputedStyle(atlasRun as HTMLElement).backgroundColor,
+		).toBe("rgba(0, 0, 0, 0)")
+
+		const bar = slotIn(canvasElement, "library-document-finished")
+		await expect(bar).toHaveTextContent("Atlas and Mira finished")
+		await expect(bar).toHaveTextContent("2 sentences added · 1m 48s")
+		await expect(bar.getBoundingClientRect()).toMatchObject({
+			width: 640,
+			height: 52,
+		})
+
+		const fields = bodyFieldsIn(canvasElement)
+		const scroller = slotIn(canvasElement, "library-document-body").closest(
+			"article",
+		)?.parentElement as HTMLElement
+		await expect(scroller.scrollHeight).toBeGreaterThan(scroller.clientHeight)
+		scroller.scrollTop = scroller.scrollHeight
+		const lastLine = fields.at(-1) as HTMLTextAreaElement
+		await expect(lastLine.value).toBe(
+			"The last line of the brief stays above the finished bar.",
+		)
+		await expect(lastLine.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+			bar.getBoundingClientRect().top,
+		)
+
+		await userEvent.click(canvas.getByRole("button", { name: "Undo all" }))
+		await expect(args.onUndoAll).toHaveBeenCalledOnce()
+		await userEvent.click(canvas.getByRole("button", { name: "Done" }))
+		await expect(args.onDone).toHaveBeenCalledOnce()
+	},
+})
+
+const [ATLAS_WRITER] = LIBRARY_WRITERS as [(typeof LIBRARY_WRITERS)[number]]
+
+const LEA = { id: "lea", name: "Léa Martin", caret: ATLAS_WRITER.end }
+
+export const PersonCaretBesideAgent = meta.story({
+	args: {
+		title: LIBRARY_AGENT_DOCUMENT.name,
+		body: LIBRARY_AGENT_DOCUMENT.body,
+		detail: LIBRARY_AGENT_DOCUMENT.detail,
+		template: undefined,
+		writers: [ATLAS_WRITER],
+		people: [LEA],
+		finished: LIBRARY_FINISHED,
+		onStopAll: fn(),
+		onStop: fn(),
+		onUndoAll: fn(),
+		onDone: fn(),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Léa, another member of the Space, has her caret where Atlas is writing, while a finished set of edits is waiting. Check that the finished bar and the tint of the finished runs stay hidden while anyone writes, that the pill counts Atlas alone, that Léa's caret wears the Space colour with a flag holding her round avatar and her name only, hung under the line so neither flag covers the other's name, and that assistive tech reads her name on it.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		await expect(
+			canvasElement.querySelector("[data-slot='library-document-finished']"),
+		).toBe(null)
+		await expect(
+			slotIn(canvasElement, "library-document-presence"),
+		).toHaveTextContent("1 agent writing")
+		const runs = canvasElement.querySelectorAll<HTMLElement>(
+			"[data-slot='library-document-run']",
+		)
+		await expect([...runs].map((run) => run.textContent)).toEqual([
+			"and the agent says why it asks",
+		])
+
+		const personCaret = canvas.getByRole("img", { name: LEA.name })
+		await expect(personCaret.getBoundingClientRect()).toMatchObject({
+			width: 2,
+			height: 24,
+		})
+		const personFlag = slotIn(personCaret, "library-document-person-flag")
+		await expect(personFlag).toHaveTextContent(LEA.name)
+		await expect(personFlag.getBoundingClientRect().height).toBe(20)
+		const avatar = slotIn(personFlag, "user-avatar")
+		await expect(avatar.getBoundingClientRect().width).toBe(16)
+		await expect(getComputedStyle(avatar).borderRadius).not.toBe("0px")
+		await expect(personFlag.querySelector("button")).toBe(null)
+		await expect(
+			canvas.queryByRole("button", { name: new RegExp(LEA.name) }),
+		).toBe(null)
+
+		const agentCaret = slotIn(canvasElement, "library-document-caret")
+		const agentFlag = screen.getByRole("button", { name: "Atlas is writing" })
+		await expect(agentCaret.getBoundingClientRect().top).toBe(
+			personCaret.getBoundingClientRect().top,
+		)
+		await expect(
+			rectsOverlap(
+				agentFlag.getBoundingClientRect(),
+				personFlag.getBoundingClientRect(),
+			),
+		).toBe(false)
 	},
 })
 
@@ -727,13 +940,15 @@ export const SelectingAcrossAgentRunLight = meta.story({
 })
 
 type FailureNoticeProps = {
-	entry: "create" | "open" | "save"
+	entry: "create" | "open" | "save" | "write"
 }
 
 const DocumentFailureNotice = ({ entry }: FailureNoticeProps) => {
 	useEffect(() => {
 		const notice = raiseFailureNotice({
-			title: i18n.t(`common:library.failure.document.${entry}`),
+			title: i18n.t(`common:library.failure.document.${entry}`, {
+				name: LIBRARY_AGENTS.atlas.name,
+			}),
 		})
 		return () => endNotice(notice)
 	}, [entry])
@@ -785,5 +1000,19 @@ export const SaveFailure = meta.story({
 		"save",
 		"Couldn’t save your last changes. Keep the document open and edit again to retry.",
 		"The notice raised over the open editor when the last edits did not reach the host, from `common:library.failure.document.save`. Check that it names what failed and tells the person to keep the document open and edit again.",
+	),
+})
+
+export const WriteFailure = meta.story({
+	args: {
+		title: LIBRARY_AGENT_DOCUMENT.name,
+		body: LIBRARY_AGENT_DOCUMENT.body,
+		detail: LIBRARY_AGENT_DOCUMENT.detail,
+		template: undefined,
+	},
+	...failureStory(
+		"write",
+		"Atlas stopped writing before it finished. Ask again from the conversation.",
+		"The notice raised over the open editor when an agent's write broke off before it finished, from `common:library.failure.document.write`, which takes the agent's name. Check that it names the agent and sends the person back to the conversation.",
 	),
 })
