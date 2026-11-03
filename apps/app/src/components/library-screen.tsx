@@ -214,7 +214,7 @@ export const LibraryScreen = ({
 				onBodyChange={edit}
 				onCaretChange={shareCaret}
 				onDone={dismissFinished}
-				onMore={reveal && (() => reveal({ id: openedDocument.name }))}
+				onShowInFolder={reveal && (() => reveal({ id: openedDocument.name }))}
 				onTitleChange={retitle}
 				onUndoAll={undoAll}
 				people={people}

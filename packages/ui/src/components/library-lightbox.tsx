@@ -1,18 +1,18 @@
 "use client"
 
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
-import { type KeyboardEvent, useEffect, useRef, useState } from "react"
+import { type KeyboardEvent, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
-import { IconSwap } from "@workspace/ui/components/icon-swap"
 import { Icons } from "@workspace/ui/components/icons"
 import {
 	handlersFor,
-	hasLibraryItemActions,
+	LIBRARY_BAR,
+	LIBRARY_BAR_BARE,
+	LIBRARY_BAR_DIVIDER,
+	LIBRARY_BAR_ROUND,
 	type LibraryItemActions,
-	LibraryItemDeleteDialog,
-	LibraryItemMenuItems,
-	type LibraryItemMenuParts,
+	LibraryItemBarActions,
 } from "@workspace/ui/components/library-item-menu"
 import { useLibraryOverlayContainer } from "@workspace/ui/components/library-panel"
 import { TooltipButton } from "@workspace/ui/components/tooltip-button"
@@ -22,16 +22,7 @@ import {
 	DialogPortal,
 	DialogTitle,
 } from "@workspace/ui/components/ui/dialog"
-import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuItem,
-	DropdownMenuSeparator,
-	DropdownMenuTrigger,
-} from "@workspace/ui/components/ui/dropdown-menu"
 import { Separator } from "@workspace/ui/components/ui/separator"
-import { COPIED_RESET_MS } from "@workspace/ui/hooks/use-copy-text"
-import { STILL_UNDER_REDUCED_MOTION } from "@workspace/ui/lib/reduced-motion"
 import { cn } from "@workspace/ui/lib/utils"
 
 type LibraryLightboxImage = {
@@ -47,22 +38,12 @@ const MAX_ZOOM = 4
 
 const ZOOM_STEPS = [MIN_ZOOM, 0.5, 0.75, 1, 1.5, 2, 3, MAX_ZOOM]
 
-const ROUND = "rounded-full text-foreground transition-none"
+const STEP = cn(
+	LIBRARY_BAR_ROUND,
+	"size-10 bg-foreground/10 hover:bg-foreground/16",
+)
 
-const ACTION = cn(ROUND, "size-8 bg-foreground/8 hover:bg-foreground/14")
-
-const STEP = cn(ROUND, "size-10 bg-foreground/10 hover:bg-foreground/16")
-
-const ZOOM_CONTROL = cn(ROUND, "size-7 hover:bg-foreground/8")
-
-const BARE = cn(ROUND, "size-8 hover:bg-foreground/8")
-
-const DIVIDER = "bg-foreground/12 data-vertical:self-center"
-
-const DROPDOWN_MENU_PARTS: LibraryItemMenuParts = {
-	Item: DropdownMenuItem,
-	Separator: DropdownMenuSeparator,
-}
+const ZOOM_CONTROL = cn(LIBRARY_BAR_ROUND, "size-7 hover:bg-foreground/8")
 
 const ZOOM_SLOT = "library-lightbox-zoom"
 
@@ -167,7 +148,10 @@ const ZoomStage = ({ image, position, count }: ZoomStageProps) => {
 					>
 						<Icons.Add aria-hidden="true" />
 					</TooltipButton>
-					<Separator className={cn(DIVIDER, "h-4.5")} orientation="vertical" />
+					<Separator
+						className={cn(LIBRARY_BAR_DIVIDER, "h-4.5")}
+						orientation="vertical"
+					/>
 					<span className="px-2.5 text-compact text-muted-foreground leading-4 tabular-nums">
 						{t("library.lightbox.position", { position, count })}
 					</span>
@@ -200,34 +184,6 @@ const LibraryLightbox = ({
 	const surfaceRef = useRef<HTMLDivElement>(null)
 	const isFirst = position <= 1
 	const isLast = position >= count
-	const [copiedImageId, setCopiedImageId] = useState<string | null>(null)
-	const [shownImageId, setShownImageId] = useState(image?.id)
-	if (image?.id !== shownImageId) {
-		setShownImageId(image?.id)
-		setCopiedImageId(null)
-	}
-	const isCopied = image !== null && copiedImageId === image.id
-	const [isConfirmingDelete, setConfirmingDelete] = useState(false)
-	const handlers = image === null ? {} : handlersFor(actions, image)
-	const { onCopy, onDownload, onDelete } = handlers
-
-	useEffect(() => {
-		if (copiedImageId === null) return
-		const timer = window.setTimeout(
-			() => setCopiedImageId(null),
-			COPIED_RESET_MS,
-		)
-		return () => window.clearTimeout(timer)
-	}, [copiedImageId])
-
-	const copyImage = async (shown: LibraryLightboxImage) => {
-		try {
-			await onCopy?.(shown)
-			setCopiedImageId(shown.id)
-		} catch {
-			setCopiedImageId(null)
-		}
-	}
 
 	const stepWithArrows = (event: KeyboardEvent) => {
 		if (isInZoomScroller(event.target)) return
@@ -254,13 +210,13 @@ const LibraryLightbox = ({
 						onKeyDown={stepWithArrows}
 						ref={surfaceRef}
 					>
-						<div className="flex h-14 shrink-0 items-center justify-between gap-4 px-3">
+						<div className={LIBRARY_BAR}>
 							<div className="flex min-w-0 items-center gap-2">
 								<DialogClose
 									render={
 										<TooltipButton
 											aria-label={t("library.lightbox.back")}
-											className={cn(BARE, "shrink-0")}
+											className={cn(LIBRARY_BAR_BARE, "shrink-0")}
 											size="icon"
 											tooltip={t("library.lightbox.back")}
 											tooltipSide="bottom"
@@ -282,96 +238,12 @@ const LibraryLightbox = ({
 									</p>
 								</div>
 							</div>
-							<div className="flex shrink-0 items-center gap-2">
-								{onDownload ? (
-									<TooltipButton
-										aria-label={t("library.lightbox.download")}
-										className={ACTION}
-										onClick={() => onDownload(image)}
-										size="icon"
-										tooltip={t("library.lightbox.download")}
-										tooltipSide="bottom"
-										variant="ghost"
-									>
-										<Icons.Download aria-hidden="true" />
-									</TooltipButton>
-								) : null}
-								{onCopy ? (
-									<TooltipButton
-										aria-label={t("library.lightbox.copy")}
-										className={ACTION}
-										onClick={() => copyImage(image)}
-										size="icon"
-										tooltip={t("library.lightbox.copy")}
-										tooltipSide="bottom"
-										variant="ghost"
-									>
-										<IconSwap
-											icon={<Icons.Copy aria-hidden="true" />}
-											isSwapped={isCopied}
-											swappedIcon={<Icons.Check aria-hidden="true" />}
-										/>
-									</TooltipButton>
-								) : null}
-								{hasLibraryItemActions(handlers) ? (
-									<>
-										<DropdownMenu>
-											<DropdownMenuTrigger
-												render={
-													<TooltipButton
-														aria-label={t("library.lightbox.more")}
-														className={ACTION}
-														size="icon"
-														tooltip={t("library.lightbox.more")}
-														tooltipSide="bottom"
-														variant="ghost"
-													/>
-												}
-											>
-												<Icons.More aria-hidden="true" />
-											</DropdownMenuTrigger>
-											<DropdownMenuContent
-												align="end"
-												aria-label={t("library.itemMenu.label", {
-													name: image.name,
-												})}
-												className={cn(
-													"dark w-auto",
-													STILL_UNDER_REDUCED_MOTION,
-												)}
-											>
-												<LibraryItemMenuItems
-													actions={{
-														...handlers,
-														onCopy: onCopy && copyImage,
-													}}
-													item={image}
-													onPickDelete={() => setConfirmingDelete(true)}
-													parts={DROPDOWN_MENU_PARTS}
-												/>
-											</DropdownMenuContent>
-										</DropdownMenu>
-										<Separator
-											className={cn(DIVIDER, "h-5")}
-											orientation="vertical"
-										/>
-									</>
-								) : null}
-								<DialogClose
-									render={
-										<TooltipButton
-											aria-label={t("library.lightbox.close")}
-											className={BARE}
-											size="icon"
-											tooltip={t("library.lightbox.close")}
-											tooltipSide="bottom"
-											variant="ghost"
-										/>
-									}
-								>
-									<Icons.Close aria-hidden="true" />
-								</DialogClose>
-							</div>
+							<LibraryItemBarActions
+								actions={handlersFor(actions, image)}
+								item={image}
+								onClose={onClose}
+								surface="lightbox"
+							/>
 						</div>
 						<div className="relative flex min-h-0 flex-1 items-center gap-5 px-5 pb-18">
 							<TooltipButton
@@ -405,15 +277,6 @@ const LibraryLightbox = ({
 								<Icons.Next aria-hidden="true" className="size-4.5" />
 							</TooltipButton>
 						</div>
-						<span aria-live="polite" className="sr-only">
-							{isCopied ? t("library.lightbox.copied") : ""}
-						</span>
-						<LibraryItemDeleteDialog
-							name={image.name}
-							onConfirm={() => onDelete?.(image)}
-							onOpenChange={setConfirmingDelete}
-							open={isConfirmingDelete}
-						/>
 					</DialogPrimitive.Popup>
 				) : null}
 			</DialogPortal>

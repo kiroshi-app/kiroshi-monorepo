@@ -13,6 +13,7 @@ import {
 	useEffect,
 	useEffectEvent,
 	useLayoutEffect,
+	useMemo,
 	useRef,
 	useState,
 } from "react"
@@ -51,6 +52,10 @@ import {
 	LibraryDocumentBar,
 	LibraryDocumentColumn,
 } from "@workspace/ui/components/library-document-view"
+import type {
+	LibraryItemActions,
+	LibraryMenuSubject,
+} from "@workspace/ui/components/library-item-menu"
 import type { LibraryDocumentTemplate } from "@workspace/ui/components/library-new-document-dialog"
 import {
 	SELECTION_TOOLBAR_SLOT,
@@ -770,7 +775,8 @@ const formatsOf = (block: Block | undefined, start: number, end: number) => {
 }
 
 type LibraryDocumentEditorProps = WriterActions &
-	SelectionActions & {
+	SelectionActions &
+	LibraryItemActions<LibraryMenuSubject> & {
 		title: string
 		body: string
 		detail: string
@@ -778,7 +784,6 @@ type LibraryDocumentEditorProps = WriterActions &
 		onTitleChange: (title: string) => void
 		onBodyChange: (markdown: string) => void
 		onBack: () => void
-		onMore?: () => void
 		writers?: LibraryDocumentWriter[]
 		people?: LibraryDocumentPerson[]
 		finished?: LibraryDocumentFinished
@@ -805,7 +810,6 @@ const LibraryDocumentEditor = ({
 	onTitleChange,
 	onBodyChange,
 	onBack,
-	onMore,
 	writers = [],
 	people = [],
 	finished,
@@ -822,6 +826,7 @@ const LibraryDocumentEditor = ({
 	onLink,
 	onHeading,
 	onList,
+	...actions
 }: LibraryDocumentEditorProps) => {
 	const { t } = useTranslation("common")
 	const [title, setTitle] = useState(titleProp)
@@ -1262,6 +1267,8 @@ const LibraryDocumentEditor = ({
 	}
 
 	const untitled = t("library.editor.untitled")
+	const shownName = title || untitled
+	const barItem = useMemo(() => ({ name: shownName }), [shownName])
 	const runs = runsOf(blocks)
 	const listAnchors = listAnchorsOf(runs, heldListAnchors)
 	if (!isSameAnchors(listAnchors, heldListAnchors))
@@ -1299,9 +1306,9 @@ const LibraryDocumentEditor = ({
 			ref={frame}
 		>
 			<LibraryDocumentBar
-				name={title || untitled}
+				{...actions}
+				item={barItem}
 				onBack={onBack}
-				onMore={onMore}
 				presence={
 					writers.length > 0 ? (
 						<LibraryDocumentPresence onStopAll={onStopAll} writers={writers} />

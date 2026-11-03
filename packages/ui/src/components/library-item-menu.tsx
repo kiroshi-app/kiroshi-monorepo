@@ -5,12 +5,15 @@ import {
 	Fragment,
 	type ReactElement,
 	type ReactNode,
+	useEffect,
 	useState,
 } from "react"
 import { useTranslation } from "react-i18next"
 
 import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
+import { IconSwap } from "@workspace/ui/components/icon-swap"
 import { Icons } from "@workspace/ui/components/icons"
+import { TooltipButton } from "@workspace/ui/components/tooltip-button"
 import {
 	ContextMenu,
 	ContextMenuContent,
@@ -18,7 +21,17 @@ import {
 	ContextMenuSeparator,
 	ContextMenuTrigger,
 } from "@workspace/ui/components/ui/context-menu"
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "@workspace/ui/components/ui/dropdown-menu"
+import { Separator } from "@workspace/ui/components/ui/separator"
+import { COPIED_RESET_MS } from "@workspace/ui/hooks/use-copy-text"
 import { STILL_UNDER_REDUCED_MOTION } from "@workspace/ui/lib/reduced-motion"
+import { cn } from "@workspace/ui/lib/utils"
 
 type LibraryMenuSubject = {
 	name: string
@@ -204,12 +217,183 @@ const LibraryItemContextMenu = <Item extends LibraryMenuSubject>({
 	)
 }
 
+const LIBRARY_BAR = "flex h-14 shrink-0 items-center justify-between gap-4 px-3"
+
+const LIBRARY_BAR_ROUND = "rounded-full text-foreground transition-none"
+
+const LIBRARY_BAR_BARE = cn(LIBRARY_BAR_ROUND, "size-8 hover:bg-foreground/8")
+
+const LIBRARY_BAR_DIVIDER = "bg-foreground/12 data-vertical:self-center"
+
+const BAR_ACTION = cn(
+	LIBRARY_BAR_ROUND,
+	"size-8 bg-foreground/8 hover:bg-foreground/14",
+)
+
+const BAR_BUTTON_ACTIONS = new Set<string>(["onDownload", "onCopy"])
+
+const barMenuActionsOf = <Item,>(
+	handlers: LibraryItemHandlers<Item>,
+): LibraryItemHandlers<Item> =>
+	Object.fromEntries(
+		Object.entries(handlers).filter(
+			([handler]) => !BAR_BUTTON_ACTIONS.has(handler),
+		),
+	)
+
+const DROPDOWN_MENU_PARTS: LibraryItemMenuParts = {
+	Item: DropdownMenuItem,
+	Separator: DropdownMenuSeparator,
+}
+
+type LibraryItemBarSurface = "lightbox" | "document"
+
+type LibraryItemBarActionsProps<Item extends LibraryMenuSubject> = {
+	item: Item
+	actions: LibraryItemHandlers<Item>
+	surface: LibraryItemBarSurface
+	leading?: ReactNode
+	onClose: () => void
+}
+
+const LibraryItemBarActions = <Item extends LibraryMenuSubject>({
+	item,
+	actions,
+	surface,
+	leading,
+	onClose,
+}: LibraryItemBarActionsProps<Item>) => {
+	const { t } = useTranslation("common")
+	const [copiedItem, setCopiedItem] = useState<Item | null>(null)
+	const [isConfirmingDelete, setConfirmingDelete] = useState(false)
+	const isCopied = copiedItem === item
+	const { onCopy, onDownload, onDelete } = actions
+	const menuActions = barMenuActionsOf(actions)
+
+	useEffect(() => {
+		if (copiedItem === null) return
+		const timer = window.setTimeout(() => setCopiedItem(null), COPIED_RESET_MS)
+		return () => window.clearTimeout(timer)
+	}, [copiedItem])
+
+	const copy = async () => {
+		try {
+			await onCopy?.(item)
+			setCopiedItem(item)
+		} catch {
+			setCopiedItem(null)
+		}
+	}
+
+	return (
+		<div className="flex shrink-0 items-center gap-2">
+			{leading}
+			{onDownload ? (
+				<TooltipButton
+					aria-label={t(`library.${surface}.download`)}
+					className={BAR_ACTION}
+					onClick={() => onDownload(item)}
+					size="icon"
+					tooltip={t(`library.${surface}.download`)}
+					tooltipSide="bottom"
+					variant="ghost"
+				>
+					<Icons.Download aria-hidden="true" />
+				</TooltipButton>
+			) : null}
+			{onCopy ? (
+				<TooltipButton
+					aria-label={t(`library.${surface}.copy`)}
+					className={BAR_ACTION}
+					onClick={copy}
+					size="icon"
+					tooltip={t(`library.${surface}.copy`)}
+					tooltipSide="bottom"
+					variant="ghost"
+				>
+					<IconSwap
+						icon={<Icons.Copy aria-hidden="true" />}
+						isSwapped={isCopied}
+						swappedIcon={<Icons.Check aria-hidden="true" />}
+					/>
+				</TooltipButton>
+			) : null}
+			{hasLibraryItemActions(menuActions) ? (
+				<>
+					<DropdownMenu>
+						<DropdownMenuTrigger
+							render={
+								<TooltipButton
+									aria-label={t(`library.${surface}.more`)}
+									className={BAR_ACTION}
+									size="icon"
+									tooltip={t(`library.${surface}.more`)}
+									tooltipSide="bottom"
+									variant="ghost"
+								/>
+							}
+						>
+							<Icons.More aria-hidden="true" />
+						</DropdownMenuTrigger>
+						<DropdownMenuContent
+							align="end"
+							aria-label={t("library.itemMenu.label", { name: item.name })}
+							className={cn(
+								"w-auto",
+								surface === "lightbox" && "dark",
+								STILL_UNDER_REDUCED_MOTION,
+							)}
+						>
+							<LibraryItemMenuItems
+								actions={menuActions}
+								item={item}
+								onPickDelete={() => setConfirmingDelete(true)}
+								parts={DROPDOWN_MENU_PARTS}
+							/>
+						</DropdownMenuContent>
+					</DropdownMenu>
+					<Separator
+						className={cn(LIBRARY_BAR_DIVIDER, "h-5")}
+						orientation="vertical"
+					/>
+				</>
+			) : null}
+			<TooltipButton
+				aria-label={t(`library.${surface}.close`)}
+				className={LIBRARY_BAR_BARE}
+				onClick={onClose}
+				size="icon"
+				tooltip={t(`library.${surface}.close`)}
+				tooltipSide="bottom"
+				variant="ghost"
+			>
+				<Icons.Close aria-hidden="true" />
+			</TooltipButton>
+			<span aria-live="polite" className="sr-only">
+				{isCopied ? t(`library.${surface}.copied`) : ""}
+			</span>
+			<LibraryItemDeleteDialog
+				name={item.name}
+				onConfirm={() => onDelete?.(item)}
+				onOpenChange={setConfirmingDelete}
+				open={isConfirmingDelete}
+			/>
+		</div>
+	)
+}
+
 export {
 	handlersFor,
 	hasLibraryItemActions,
+	LIBRARY_BAR,
+	LIBRARY_BAR_BARE,
+	LIBRARY_BAR_DIVIDER,
+	LIBRARY_BAR_ROUND,
 	type LibraryItemActions,
+	LibraryItemBarActions,
 	LibraryItemContextMenu,
 	LibraryItemDeleteDialog,
 	LibraryItemMenuItems,
 	type LibraryItemMenuParts,
+	type LibraryMenuSubject,
 }

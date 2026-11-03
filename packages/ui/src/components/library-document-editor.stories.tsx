@@ -90,7 +90,7 @@ const meta = preview.meta({
 		onTitleChange: fn(),
 		onBodyChange: fn(),
 		onBack: fn(),
-		onMore: fn(),
+		onShowInFolder: fn(),
 	},
 	render: (args) => (
 		<EditorFrame>
