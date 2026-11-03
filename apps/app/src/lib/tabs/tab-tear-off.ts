@@ -269,12 +269,11 @@ const offerOnEntry = (drag: DockedDrag, site: DockSite) => {
 		return
 	}
 	drag.offeredLabel = site.label
-	const offer = {
+	offerDock({
 		windowLabel: site.label,
 		originSpaceId: drag.spaceId,
 		tab: drag.packed,
-	}
-	offerDock(offer).catch(reportUnoffered)
+	}).catch(reportUnoffered)
 }
 
 const reportMoveFailure = (
