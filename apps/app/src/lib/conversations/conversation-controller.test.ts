@@ -1810,11 +1810,6 @@ describe("a companion of a wave held on background tasks", () => {
 			.getState()
 			.speakers.find((speaking) => speaking.botId === botId)?.work ?? null
 
-	const backgroundTasksIn = (harness: Harness) =>
-		harness.controller
-			.getState()
-			.speakers.map(({ work }) => work.backgroundTasks)
-
 	let harness: Harness
 	let nyx: string
 	let iris: string
@@ -1882,7 +1877,7 @@ describe("a companion of a wave held on background tasks", () => {
 		await harness.settled()
 
 		expect(runningIn(harness.controller)).toEqual([iris])
-		expect(backgroundTasksIn(harness)).toEqual([undefined])
+		expect(workOf(harness, iris)?.backgroundTasks).toBeUndefined()
 	})
 
 	it("keeps a held companion waiting on the permission it wants", async () => {

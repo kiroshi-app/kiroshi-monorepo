@@ -66,7 +66,7 @@ const openWave = async () => {
 	const workersOf = () => rendered.result.current[room.id]
 	const workerOf = (botId: string) =>
 		workersOf().find((worker) => worker.botId === botId)
-	return { room, rendered, answer, workersOf, workerOf }
+	return { room, answer, workersOf, workerOf }
 }
 
 afterEach(cleanup)
