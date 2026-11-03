@@ -2,7 +2,10 @@ import type { AppTitleBarProps } from "@workspace/ui/components/app-title-bar"
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { Icons } from "@workspace/ui/components/icons"
 import type { Space } from "@workspace/ui/components/space"
-import type { TitleBarTab } from "@workspace/ui/components/title-bar-tabs"
+import type {
+	TitleBarTab,
+	TitleBarTabDescriptor,
+} from "@workspace/ui/components/title-bar-tabs"
 
 export const STUDIO: Space = {
 	id: "studio",
@@ -128,3 +131,38 @@ export const NEW_TAB: TitleBarTab = {
 	title: "New tab",
 	icon: <Icons.Conversations />,
 }
+
+export const QUARTERLY_REPORT: TitleBarTabDescriptor = {
+	kind: "library-document",
+	name: "Quarterly report.pdf",
+	icon: "File",
+}
+
+export const MOODBOARD: TitleBarTabDescriptor = {
+	kind: "library-image",
+	name: "Moodboard.png",
+	icon: "Image",
+}
+
+export const LONG_DOCUMENT_NAME: TitleBarTabDescriptor = {
+	kind: "library-document",
+	name: "Contract amendment for the regional distribution agreement, signed copy.pdf",
+	icon: "File",
+}
+
+const libraryTabOf = (
+	id: string,
+	descriptor: TitleBarTabDescriptor,
+): TitleBarTab => ({ id, title: "", icon: null, descriptor })
+
+export const QUARTERLY_REPORT_TAB = libraryTabOf(
+	"library-quarterly-report",
+	QUARTERLY_REPORT,
+)
+
+export const MOODBOARD_TAB = libraryTabOf("library-moodboard", MOODBOARD)
+
+export const LONG_DOCUMENT_NAME_TAB = libraryTabOf(
+	"library-contract-amendment",
+	LONG_DOCUMENT_NAME,
+)
