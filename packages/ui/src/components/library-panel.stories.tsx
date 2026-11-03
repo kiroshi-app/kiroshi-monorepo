@@ -411,23 +411,6 @@ const SIDE_BY_SIDE_SPACE_HUES = ["pink", "green"] as const
 
 const DOCUMENT_ITEMS = LIBRARY_ITEMS.filter((item) => item.kind === "document")
 
-const expectOneDocumentGroundAcrossSpaces = async (
-	canvasElement: HTMLElement,
-) => {
-	const [first, second] = Array.from(
-		canvasElement.querySelectorAll<HTMLElement>("[data-hue]"),
-	)
-	await expect(first?.dataset.hue).not.toBe(second?.dataset.hue)
-
-	const ground = rgbOf(
-		getComputedStyle(canvasElement).getPropertyValue("--document-ground"),
-	)
-	const thumbnails = slotsIn(canvasElement, "library-thumbnail")
-	await expect(thumbnails).toHaveLength(8)
-	for (const thumbnail of thumbnails)
-		await expect(getComputedStyle(thumbnail).backgroundColor).toBe(ground)
-}
-
 export const GridDocumentsAcrossSpaces = meta.story({
 	render: (args) => (
 		<div className="flex h-[832px] w-[1280px] gap-1.5 bg-background p-2">
@@ -448,8 +431,20 @@ export const GridDocumentsAcrossSpaces = meta.story({
 			},
 		},
 	},
-	play: async ({ canvasElement }) =>
-		expectOneDocumentGroundAcrossSpaces(canvasElement),
+	play: async ({ canvasElement }) => {
+		const [first, second] = Array.from(
+			canvasElement.querySelectorAll<HTMLElement>("[data-hue]"),
+		)
+		await expect(first?.dataset.hue).not.toBe(second?.dataset.hue)
+
+		const ground = rgbOf(
+			getComputedStyle(canvasElement).getPropertyValue("--document-ground"),
+		)
+		const thumbnails = slotsIn(canvasElement, "library-thumbnail")
+		await expect(thumbnails).toHaveLength(8)
+		for (const thumbnail of thumbnails)
+			await expect(getComputedStyle(thumbnail).backgroundColor).toBe(ground)
+	},
 })
 
 export const GridDocumentsAcrossSpacesLight = GridDocumentsAcrossSpaces.extend({
