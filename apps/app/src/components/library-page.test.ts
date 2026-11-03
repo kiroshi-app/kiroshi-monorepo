@@ -611,6 +611,35 @@ const queueSelectionChangesAsBrowsersDo = () => {
 		window.removeEventListener("selectionchange", queue, { capture: true })
 }
 
+const TASK_LINE = 4
+
+const placeCaretInLine = async (
+	body: HTMLElement,
+	index: number,
+	offset: number,
+) => {
+	const line = linesOf(body)[index] as HTMLElement
+	const text = document.createTreeWalker(line, NodeFilter.SHOW_TEXT).nextNode()
+	await act(async () => {
+		body.focus()
+		document.getSelection()?.collapse(text, offset)
+		fireEvent(document, new Event("selectionchange"))
+	})
+}
+
+const caretInLine = (body: HTMLElement, index: number) => {
+	const line = linesOf(body)[index] as HTMLElement
+	const selection = document.getSelection()
+	const anchor = selection?.anchorNode ?? null
+	if (!(selection && anchor && line.contains(anchor))) {
+		return null
+	}
+	const beforeCaret = document.createRange()
+	beforeCaret.setStart(line, 0)
+	beforeCaret.setEnd(anchor, selection.anchorOffset)
+	return { line: line.textContent, offset: beforeCaret.toString().length }
+}
+
 const undoIn = async (body: HTMLElement) => {
 	const isMac = /Mac/.test(navigator.platform)
 	await act(async () => {
@@ -813,16 +842,25 @@ describe("an opened Library document", () => {
 		const ticked = typed.replace("- [ ]", "- [x]")
 		await holdsShownMarkdown(ticked)
 
+		await placeCaretInLine(body, TASK_LINE, " Ship".length)
+		const caretInTask = { line: "- [x] Ship the notes", offset: 10 }
+		expect(caretInLine(body, TASK_LINE)).toEqual(caretInTask)
+
 		const written = `${ticked}${AGENT_LINE}`
 		fakeLibraryHost.writeElsewhere(DOCUMENT.name, written)
 		await holdsShownMarkdown(written)
 		expect(paragraphOf(shown)).toBe(body)
+		expect(caretInLine(body, TASK_LINE)).toEqual(caretInTask)
+
+		await undoIn(body)
+		const unticked = `${typed}${AGENT_LINE}`
+		await holdsShownMarkdown(unticked)
 
 		await press(
 			shown.getByRole("button", { name: common("library.document.back") }),
 		)
 		await openLibraryItem(DOCUMENT, shown)
-		await holdsShownMarkdown(written)
+		await holdsShownMarkdown(unticked)
 		expect(paragraphOf(shown)).not.toBe(body)
 	})
 })
