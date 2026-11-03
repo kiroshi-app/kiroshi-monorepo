@@ -104,7 +104,7 @@ const PLACEHOLDER_LOOK =
 
 const CARET_SLOT_LOOK = "[&_[data-slot=library-document-caret]]:-me-0.5"
 
-const BLANK_LINE = /^\s*(?:[-*+]|\d+[.)])?\s*$/
+const UNWRITTEN_LINE = /^\s*(?:[-*+]|\d+[.)])?\s*$/
 
 type TemplateLine = {
 	text: string
@@ -223,7 +223,7 @@ const placeholderLinesOf = (state: EditorState) => {
 		cursor.next()
 	) {
 		const line = state.doc.lineAt(cursor.from)
-		if (shown.has(line.number) || !BLANK_LINE.test(line.text)) continue
+		if (shown.has(line.number) || !UNWRITTEN_LINE.test(line.text)) continue
 		shown.set(line.number, placeholderAt(cursor.value.text, line.to))
 	}
 	return shown
