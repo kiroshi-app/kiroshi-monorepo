@@ -345,18 +345,18 @@ const failureContextOf = (
 const shownConversationIdOf = (thread: LoadedThread): string | null =>
 	thread.kind === "bot" ? thread.state.conversationId : thread.conversation.id
 
-const replyChipOf =
-	(toQuote: ThreadNaming["toQuote"]) =>
-	(target: ReplyTarget): PromptReplyAttachment => {
-		const { author, excerpt } = toQuote(target)
-		return { id: target.messageId, author, excerpt }
-	}
-
 const useReplyChips = (
 	targets: ReplyTarget[],
 	toQuote: ThreadNaming["toQuote"],
 ): PromptReplyAttachment[] =>
-	useMemo(() => targets.map(replyChipOf(toQuote)), [targets, toQuote])
+	useMemo(
+		() =>
+			targets.map((target) => {
+				const { author, excerpt } = toQuote(target)
+				return { id: target.messageId, author, excerpt }
+			}),
+		[targets, toQuote],
+	)
 
 const isClosedMission = (seat: ThreadMission | null): boolean =>
 	seat !== null && seat.mission.closedAt !== null
