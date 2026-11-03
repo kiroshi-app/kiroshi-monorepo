@@ -556,21 +556,14 @@ const press = async (target: Element) => {
 }
 
 const firstBlockOf = (body: HTMLElement) =>
-	body.querySelector("[data-block-id]") as HTMLElement
+	body.querySelector(".cm-line") as HTMLElement
 
 const typeInto = async (body: HTMLElement, value: string) => {
 	await act(async () => {
 		body.focus()
-		document.getSelection()?.selectAllChildren(firstBlockOf(body))
-		fireEvent(
-			body,
-			new InputEvent("beforeinput", {
-				inputType: "insertText",
-				data: value,
-				bubbles: true,
-				cancelable: true,
-			}),
-		)
+		const text = firstBlockOf(body).firstChild as Text
+		text.data = value
+		document.getSelection()?.collapse(text, value.length)
 	})
 }
 
