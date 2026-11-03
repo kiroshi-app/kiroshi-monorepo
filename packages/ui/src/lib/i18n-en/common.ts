@@ -408,6 +408,7 @@ const common = {
 				open: "Couldn’t open the document. Open it again from the Library.",
 				save: "Couldn’t save your last changes. Keep the document open and edit again to retry.",
 			},
+			import: "Couldn’t import {{name}}",
 		},
 	},
 	whatsNew: {

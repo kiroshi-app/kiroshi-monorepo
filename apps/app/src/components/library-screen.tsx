@@ -16,6 +16,7 @@ import {
 } from "@workspace/ui/components/library-panel"
 import { i18n } from "@workspace/ui/lib/i18n"
 
+import { LibraryDropTarget } from "@/components/library-drop-target"
 import type { Space } from "@/lib/bindings"
 import { matchesQuery, toShownItem } from "@/lib/library/library-items"
 import { useCreateLibraryDocument } from "@/lib/library/use-create-library-document"
@@ -25,6 +26,7 @@ import {
 } from "@/lib/library/use-library-actions"
 import { useLibraryDocumentSession } from "@/lib/library/use-library-document-session"
 import { useLibraryImageSources } from "@/lib/library/use-library-image-sources"
+import { useLibraryImports } from "@/lib/library/use-library-imports"
 import { useLibraryItems } from "@/lib/library/use-library-items"
 
 type LibraryScreenProps = {
@@ -68,6 +70,7 @@ export const LibraryScreen = ({
 	const [pickedTemplate, setPickedTemplate] =
 		useState<LibraryDocumentTemplate | null>(null)
 	const { create, isCreating } = useCreateLibraryDocument(spaceId)
+	const { importingItems, importDropped } = useLibraryImports(spaceId, isJoined)
 	const openedDocument = opened?.kind === "document" ? opened : null
 	const { document, edit, hasFailedToOpen, closeAndRelist } =
 		useLibraryDocumentSession(spaceId, openedDocument?.name ?? null)
@@ -154,7 +157,7 @@ export const LibraryScreen = ({
 	return (
 		<LibraryPanel
 			filter={filter}
-			items={shownItems}
+			items={[...importingItems, ...shownItems]}
 			onFilterChange={setFilter}
 			onNewDocument={() => setPickedTemplate("blank")}
 			onOpenItem={openItem}
@@ -180,6 +183,7 @@ export const LibraryScreen = ({
 						open={pickedTemplate !== null}
 						spaceTint={spaceTint}
 					/>
+					<LibraryDropTarget onDrop={importDropped} />
 				</>
 			}
 			searchQuery={query}

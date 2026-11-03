@@ -53,3 +53,20 @@ export const toShownItem = (
 
 export const matchesQuery = (item: LibraryItem, query: string) =>
 	item.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())
+
+export type DroppedFile = { id: string; file: File }
+
+export const toImportingItem = ({
+	id,
+	file,
+}: DroppedFile): ShownLibraryItem => {
+	const importing = { id, detail: "", importProgress: 0 }
+	return file.type.startsWith("image/")
+		? { ...importing, kind: "image", name: file.name, src: "" }
+		: {
+				...importing,
+				kind: "document",
+				name: titleOf({ kind: "document", name: file.name }),
+				excerpt: "",
+			}
+}
