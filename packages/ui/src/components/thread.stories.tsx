@@ -1,8 +1,14 @@
 import type { ReactNode } from "react"
-import { expect, fireEvent, fn, screen, waitFor } from "storybook/test"
+import { expect, fireEvent, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { hueScopeOf, slotIn, slotsIn } from "@workspace/storybook/story-utils"
+import {
+	hueScopeOf,
+	isInBrowserRunner,
+	realPointer,
+	slotIn,
+	slotsIn,
+} from "@workspace/storybook/story-utils"
 import { ActivityIndicator } from "@workspace/ui/components/activity-indicator"
 import { AppHeader } from "@workspace/ui/components/app-header"
 import {
@@ -189,6 +195,7 @@ const PINNED: PinnedMessage[] = [
 type PanelProps = {
 	face: MessageAuthor
 	rows?: TranscriptItem[]
+	queue?: ReactNode
 	composer?: ReactNode
 	placeholder?: string
 	children?: ReactNode
@@ -201,6 +208,7 @@ type PanelProps = {
 const Panel = ({
 	face,
 	rows,
+	queue,
 	composer,
 	placeholder,
 	children,
@@ -240,6 +248,7 @@ const Panel = ({
 						)
 					}
 					rows={rows}
+					queue={queue}
 					composer={
 						composer ?? (
 							<PromptInput
@@ -1476,6 +1485,10 @@ export const Work6 = meta.story({
 	},
 })
 
+const sendQueuedNow = fn()
+
+const removeQueued = fn()
+
 export const Queue1 = meta.story({
 	render: () => (
 		<Panel
@@ -1488,24 +1501,17 @@ export const Queue1 = meta.story({
 					"France leads with **412** people, then Germany with 268 and Spain with 190. Most of this week's",
 				),
 			]}
-			composer={
-				<div className="flex flex-col">
-					<PromptQueue
-						agentName="Atlas"
-						items={[
-							{ id: "city", text: "And by city for France?" },
-							{ id: "top", text: "Top three only." },
-						]}
-						readerName="Sam"
-						onSendNow={noop}
-						onRemove={noop}
-					/>
-					<PromptInput
-						leading={<PromptAttachButton onAttach={noop} />}
-						onSubmit={noop}
-						placeholder="Message Atlas"
-					/>
-				</div>
+			queue={
+				<PromptQueue
+					agentName="Atlas"
+					items={[
+						{ id: "city", text: "And by city for France?" },
+						{ id: "top", text: "Top three only." },
+					]}
+					readerName="Sam"
+					onSendNow={sendQueuedNow}
+					onRemove={removeQueued}
+				/>
 			}
 		/>
 	),
@@ -1516,6 +1522,33 @@ export const Queue1 = meta.story({
 					"Artboard Queue 1: two messages sent while Atlas answers wait in the tray above the field, in order, and the field stays open. Hover or focus a row for Send now and its remove button.",
 			},
 		},
+	},
+	play: async ({ canvasElement }) => {
+		const tray = slotIn(canvasElement, "prompt-queue").getBoundingClientRect()
+		const input = slotIn(canvasElement, "prompt-input")
+		const field = input.getBoundingClientRect()
+		await expect(tray.top).toBeLessThan(field.top)
+		await expect(tray.bottom).toBeGreaterThan(field.top)
+		await expect(
+			input.contains(
+				document.elementFromPoint(tray.left + tray.width / 2, tray.bottom - 1),
+			),
+		).toBe(true)
+
+		if (!isInBrowserRunner()) return
+		const pointer = await realPointer()
+		const [, second] = slotsIn(canvasElement, "prompt-queue-item")
+		await pointer.hover(second)
+		await pointer.click(
+			within(second).getByRole("button", { name: "Send now" }),
+		)
+		await pointer.click(
+			within(second).getByRole("button", { name: "Remove from the queue" }),
+		)
+		await expect(sendQueuedNow).toHaveBeenCalledOnce()
+		await expect(sendQueuedNow).toHaveBeenCalledWith("top")
+		await expect(removeQueued).toHaveBeenCalledOnce()
+		await expect(removeQueued).toHaveBeenCalledWith("top")
 	},
 })
 
@@ -1529,19 +1562,12 @@ export const Queue2 = meta.story({
 				MENTION_ROW,
 				standalone("up", workLine(PICO, "waiting", { waitingOn: "next" })),
 			]}
-			composer={
-				<div className="flex flex-col">
-					<PromptQueue
-						agentName="Pico"
-						items={[{ id: "q", text: "Use the same blue as the deck." }]}
-						readerName="Sam"
-					/>
-					<PromptInput
-						leading={<PromptAttachButton onAttach={noop} />}
-						onSubmit={noop}
-						placeholder="Message Atlas"
-					/>
-				</div>
+			queue={
+				<PromptQueue
+					agentName="Pico"
+					items={[{ id: "q", text: "Use the same blue as the deck." }]}
+					readerName="Sam"
+				/>
 			}
 		/>
 	),
@@ -1664,18 +1690,26 @@ export const PromptInputStates = meta.story({
 				</div>
 			</StateCell>
 			<StateCell caption="6 · While an agent works · the queue sits above the field">
-				<div className="flex flex-col">
-					<PromptQueue
-						agentName="Atlas"
-						items={[{ id: "q", text: "Can you split it by country?" }]}
-						readerName="Sam"
-					/>
-					<PromptInput
-						leading={ATTACH}
-						onSubmit={noop}
-						defaultValue="And by city for France?"
-					/>
-				</div>
+				<ThreadLayout
+					className="-mx-2 -mb-2 h-auto"
+					contentClassName="p-0"
+					queue={
+						<PromptQueue
+							agentName="Atlas"
+							items={[{ id: "q", text: "Can you split it by country?" }]}
+							readerName="Sam"
+						/>
+					}
+					composer={
+						<PromptInput
+							leading={ATTACH}
+							onSubmit={noop}
+							defaultValue="And by city for France?"
+						/>
+					}
+				>
+					{null}
+				</ThreadLayout>
 			</StateCell>
 			<StateCell caption="7 · Space offline · read only">
 				<PromptInput

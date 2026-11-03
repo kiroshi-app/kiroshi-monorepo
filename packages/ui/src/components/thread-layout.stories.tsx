@@ -13,6 +13,7 @@ import { LibraryLightbox } from "@workspace/ui/components/library-lightbox"
 import { Notice } from "@workspace/ui/components/notice"
 import { PinnedMessages } from "@workspace/ui/components/pinned-messages"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
+import { PromptQueue } from "@workspace/ui/components/prompt-queue"
 import type { RosterBot } from "@workspace/ui/components/roster"
 import {
 	ThreadLayout,
@@ -514,6 +515,31 @@ export const Pending = meta.story({
 
 		await expect(card).toHaveFocus()
 		await expect(scroller?.contains(card)).toBe(false)
+	},
+})
+
+export const EmptyQueue = meta.story({
+	tags: ["test-only"],
+	args: {
+		rows: CONVERSATION_ROWS,
+		children: null,
+		queue: <PromptQueue agentName="Atlas" items={[]} />,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The queue slot handed a PromptQueue with no rows. Check that no tray is drawn and that the composer sits exactly where `Default` puts it, with nothing above it in its dock.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expect(
+			canvasElement.querySelector('[data-slot="prompt-queue"]'),
+		).toBeNull()
+		await expect(
+			slotIn(canvasElement, "message-quote").previousElementSibling,
+		).toBeNull()
 	},
 })
 

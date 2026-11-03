@@ -24,6 +24,7 @@ interface ThreadLayoutProps {
 	header?: ReactNode
 	notice?: ReactNode
 	pending?: ReactNode
+	queue?: ReactNode
 	composer?: ReactNode
 	skeleton?: ReactNode
 	reply?: ReplyQuote
@@ -51,6 +52,7 @@ function ThreadLayout({
 	header,
 	notice,
 	pending,
+	queue,
 	composer,
 	skeleton,
 	reply,
@@ -118,7 +120,12 @@ function ThreadLayout({
 							{notice}
 							{pending}
 							{composer ? (
-								<PromptReply quote={reply}>{composer}</PromptReply>
+								<div className="flex flex-col">
+									{queue}
+									<PromptReply quote={reply} className="relative">
+										{composer}
+									</PromptReply>
+								</div>
 							) : null}
 						</>
 					) : null
