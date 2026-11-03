@@ -605,7 +605,7 @@ const caretNotices = () =>
 		.mock.calls.map(([notice]) => notice)
 		.filter(
 			({ title, report }) =>
-				title === i18n.t("chat:screen.notice.failed") &&
+				title === common("library.failure.document.caret") &&
 				report?.context?.raisedIn === "use-library-document-session",
 		)
 
@@ -641,6 +641,9 @@ describe("a caret the host refuses to share", () => {
 		await refuseCaretSharesAt(intro as HTMLTextAreaElement, [2, 5, 8])
 
 		await waitFor(() => expect(caretNotices()).toHaveLength(1))
+		expect(caretNotices()[0]?.title).toBe(
+			"Couldn’t show others where you are in the document. Keep editing to try again.",
+		)
 		expect(caretNotices()[0]?.report?.context?.space).toBe(SPACE_ID)
 		expect(
 			consoleError.mock.calls.filter(

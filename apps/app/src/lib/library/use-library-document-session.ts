@@ -61,7 +61,7 @@ const createCaretShareBurst = (spaceId: string) => {
 			}
 			hasRaisedNotice = true
 			void reportFailure(
-				{ title: i18n.t("chat:screen.notice.failed") },
+				{ title: i18n.t("common:library.failure.document.caret") },
 				{ space: spaceId },
 			)
 		},
