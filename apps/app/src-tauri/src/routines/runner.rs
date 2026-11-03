@@ -200,8 +200,11 @@ async fn named_by_its_lapse(
 	arriving: &mut mpsc::UnboundedReceiver<ScopedEvent>,
 ) -> RunClosing {
 	match time::timeout(LAPSE_HEARD_WITHIN, tasks_pending_lapse(arriving)).await {
-		Ok(Some(bound_ms)) => RunClosing { reason: Some(tasks_pending_reason(bound_ms)), ..failed },
-		Ok(None) | Err(_) => failed,
+		Ok(Some(bound_ms)) => RunClosing {
+			reason: Some(format!("{TASKS_PENDING_REASON} of {bound_ms} ms")),
+			..failed
+		},
+		_ => failed,
 	}
 }
 
@@ -215,10 +218,6 @@ async fn tasks_pending_lapse(arriving: &mut mpsc::UnboundedReceiver<ScopedEvent>
 		}
 	}
 	None
-}
-
-fn tasks_pending_reason(bound_ms: u64) -> String {
-	format!("{TASKS_PENDING_REASON} of {bound_ms} ms")
 }
 
 async fn lost(reading: &mut RelayReader) -> RunClosing {
