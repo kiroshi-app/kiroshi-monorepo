@@ -432,6 +432,12 @@ const common = {
 			save: "Impossible d’enregistrer le fichier",
 			copy: "Impossible de copier l’image",
 			reveal: "Impossible d’afficher le fichier dans son dossier",
+			document: {
+				create:
+					"Impossible de créer le document. Réessayez depuis Nouveau document.",
+				open: "Impossible d’ouvrir le document. Rouvrez-le depuis la Bibliothèque.",
+				save: "Impossible d’enregistrer vos dernières modifications. Gardez le document ouvert et modifiez-le à nouveau pour réessayer.",
+			},
 		},
 	},
 	whatsNew: {

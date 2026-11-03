@@ -403,6 +403,11 @@ const common = {
 			save: "Couldn’t save the file",
 			copy: "Couldn’t copy the image",
 			reveal: "Couldn’t show the file in its folder",
+			document: {
+				create: "Couldn’t create the document. Try again from New document.",
+				open: "Couldn’t open the document. Open it again from the Library.",
+				save: "Couldn’t save your last changes. Keep the document open and edit again to retry.",
+			},
 		},
 	},
 	whatsNew: {
