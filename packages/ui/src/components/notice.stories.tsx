@@ -1,8 +1,10 @@
-import { expect, fn } from "storybook/test"
+import { useTranslation } from "react-i18next"
+import { expect, fn, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { listExhaustively } from "@workspace/storybook/story-utils"
 import { Notice, type NoticeTone } from "@workspace/ui/components/notice"
+import type { SpaceWaitReason } from "@workspace/ui/components/space-access-banner"
 
 const CHAT_NOTICE_TONES = listExhaustively<NoticeTone>({
 	warning: true,
@@ -182,6 +184,184 @@ export const LongContent = meta.story({
 					"Reach for this when checking layout under a wrapping title and a multi-line description. Check that both wrap instead of pushing the icon or the Retry button off the surface, and that the button stays under the text rather than beside it.",
 			},
 		},
+	},
+})
+
+const JOINED_SPACE = { host: "Noa", space: "Studio" }
+
+type WaitingForHostNoticeProps = { reason: SpaceWaitReason }
+
+const WaitingForHostNotice = ({ reason }: WaitingForHostNoticeProps) => {
+	const { t } = useTranslation("chat")
+	return (
+		<Notice
+			title={t("screen.notice.joinRefused.waitingForHost.title", JOINED_SPACE)}
+			description={t(
+				`screen.notice.joinRefused.waitingForHost.reasons.${reason}`,
+				JOINED_SPACE,
+			)}
+		/>
+	)
+}
+
+const waitingForHostStory = (
+	reason: SpaceWaitReason,
+	description: string,
+	because: string,
+) => ({
+	render: () => <WaitingForHostNotice reason={reason} />,
+	parameters: {
+		docs: {
+			description: {
+				story: `The notice a joined space raises when it can't open because ${because}. Check that the title names the host, and that the description says what failed and what to do.`,
+			},
+		},
+	},
+	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+		const canvas = within(canvasElement)
+		await expect(canvas.getByText("Waiting for Noa")).toBeVisible()
+		await expect(canvas.getByText(description)).toBeVisible()
+	},
+})
+
+export const JoinWaitingRelayUnreachable = meta.story({
+	name: "Join waiting, Kiroshi unreachable",
+	...waitingForHostStory(
+		"relayUnreachable",
+		"Couldn’t reach Kiroshi to open this space on Noa’s computer. Check your connection.",
+		"this computer couldn't reach Kiroshi, the only reason that asks to check the connection",
+	),
+})
+
+export const JoinWaitingRekeySendFailed = meta.story({
+	name: "Join waiting, key request unanswered",
+	...waitingForHostStory(
+		"rekeySendFailed",
+		"Couldn’t get this space’s key, Noa hasn’t answered. Ask them to open Kiroshi on their computer.",
+		"the request for the space key got no answer from the host",
+	),
+})
+
+export const JoinWaitingHostSilent = meta.story({
+	name: "Join waiting, host silent",
+	...waitingForHostStory(
+		"hostSilent",
+		"This space isn’t open yet, Noa hasn’t let this computer in. Ask them to open Kiroshi on their computer.",
+		"the host hasn't answered with a verified key yet",
+	),
+})
+
+export const JoinWaitingSocketClosed = meta.story({
+	name: "Join waiting, connection closed",
+	...waitingForHostStory(
+		"socketClosed",
+		"Couldn’t open this space, Noa hasn’t answered. Ask them to open Kiroshi on their computer.",
+		"the connection closed before the host answered",
+	),
+})
+
+export const JoinWaitingRekeyNotVerified = meta.story({
+	name: "Join waiting, key not verified",
+	...waitingForHostStory(
+		"rekeyNotVerified",
+		"Couldn’t verify the key Noa sent for this space. Ask them for a new link.",
+		"a key the host sent failed verification",
+	),
+})
+
+export const JoinWaitingNotMember = meta.story({
+	name: "Join waiting, not a member",
+	...waitingForHostStory(
+		"notMember",
+		"Kiroshi says this account isn’t a member of this space. Ask Noa for a new link.",
+		"Kiroshi answered that this account isn't a member",
+	),
+})
+
+export const JoinWaitingUnknownInstance = meta.story({
+	name: "Join waiting, space not hosted",
+	...waitingForHostStory(
+		"unknownInstance",
+		"Kiroshi doesn’t host this space anymore. Ask Noa to turn hosting on again.",
+		"Kiroshi no longer knows the hosted space",
+	),
+})
+
+export const JoinWaitingDeviceKeysUnreadable = meta.story({
+	name: "Join waiting, device keys unreadable",
+	...waitingForHostStory(
+		"deviceKeysUnreadable",
+		"Couldn’t read this computer’s device keys to connect to Noa. Quit Kiroshi and open it again.",
+		"this computer couldn't read its own device keys",
+	),
+})
+
+export const JoinWaitingDeviceAwaitingApproval = meta.story({
+	name: "Join waiting, device awaiting approval",
+	...waitingForHostStory(
+		"deviceAwaitingApproval",
+		"This computer isn’t approved to connect to Noa yet. Approve it from another computer signed in to your account.",
+		"this computer still awaits approval from another device of the account",
+	),
+})
+
+export const JoinWaitingSocketUrlFailed = meta.story({
+	name: "Join waiting, address not received",
+	...waitingForHostStory(
+		"socketUrlFailed",
+		"Couldn’t get this space’s address on Noa’s computer from Kiroshi. Quit Kiroshi and open it again.",
+		"Kiroshi didn't give the address to connect to the space",
+	),
+})
+
+export const JoinWaitingRosterMissing = meta.story({
+	name: "Join waiting, member list missing",
+	...waitingForHostStory(
+		"rosterMissing",
+		"This space’s member list hasn’t arrived from Noa yet. Ask them to open Kiroshi on their computer.",
+		"the space key is held but no verified member list is",
+	),
+})
+
+export const JoinWaitingKeychainReadFailed = meta.story({
+	name: "Join waiting, secure storage unreadable",
+	...waitingForHostStory(
+		"keychainReadFailed",
+		"Couldn’t read the key Noa sent for this space from this computer’s secure storage. Quit Kiroshi, open it again, and allow access if this computer asks.",
+		"the space key couldn't be read from this computer's secure storage",
+	),
+})
+
+const UnexpectedJoinNotice = () => {
+	const { t } = useTranslation("chat")
+	return (
+		<Notice
+			title={t("screen.notice.joinRefused.unexpected.title", JOINED_SPACE)}
+			description={t("screen.notice.joinRefused.unexpected.description")}
+		/>
+	)
+}
+
+export const JoinUnexpected = meta.story({
+	name: "Join failed, unexpected",
+	render: () => <UnexpectedJoinNotice />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The notice a joined space raises when opening it failed for a reason Kiroshi doesn't name. Check that the title names the space and that the description asks to try again.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		await expect(
+			canvas.getByText("Something went wrong with Studio"),
+		).toBeVisible()
+		await expect(
+			canvas.getByText(
+				"Kiroshi couldn’t finish the request. Try again in a moment.",
+			),
+		).toBeVisible()
 	},
 })
 

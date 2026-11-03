@@ -13,6 +13,10 @@ const common = {
 				"Nothing is deleted on the host. You can join again with a new invitation.",
 			action: "Leave space",
 		},
+		unnamed: {
+			host: "the host",
+			space: "this space",
+		},
 	},
 	skipLink: "Skip to the conversation",
 	agent: {

@@ -1,4 +1,7 @@
-import i18next, { type i18n as I18nRuntime } from "i18next"
+import i18next, {
+	type i18n as I18nRuntime,
+	type PostProcessorModule,
+} from "i18next"
 import { initReactI18next } from "react-i18next"
 
 import { en } from "@workspace/ui/lib/i18n-en"
@@ -26,13 +29,38 @@ declare module "i18next" {
 
 const i18n: I18nRuntime = i18next.createInstance()
 
-i18n.use(initReactI18next).init({
-	lng: DEFAULT_LANGUAGE,
-	fallbackLng: DEFAULT_LANGUAGE,
-	defaultNS: "chat",
-	resources: catalogues,
-	interpolation: { escapeValue: false },
-})
+const JOINED_SPACE_LINE =
+	/^(?:chat:)?(?:screen\.notice\.joinRefused\.(?:waitingForHost\..+|unexpected\.title)|spaceAccessBanner\.offline\.reasons\..+)$/
+
+const UNPASSED_SPACE_VARIABLE = /\{\{\s*(host|space)\s*\}\}/g
+
+type TranslationScope = { lng?: string }
+
+const nameUnpassedSpaceVariables: PostProcessorModule = {
+	type: "postProcessor",
+	name: "nameUnpassedSpaceVariables",
+	process: (value, keys, scope: TranslationScope) => {
+		const key = [keys].flat().at(-1) ?? ""
+		if (!JOINED_SPACE_LINE.test(key)) return value
+		return value.replace(UNPASSED_SPACE_VARIABLE, (_, variable) =>
+			i18n.t(`common:spaces.unnamed.${variable as "host" | "space"}`, {
+				lng: scope.lng,
+			}),
+		)
+	},
+}
+
+i18n
+	.use(nameUnpassedSpaceVariables)
+	.use(initReactI18next)
+	.init({
+		lng: DEFAULT_LANGUAGE,
+		fallbackLng: DEFAULT_LANGUAGE,
+		defaultNS: "chat",
+		resources: catalogues,
+		interpolation: { escapeValue: false },
+		postProcess: [nameUnpassedSpaceVariables.name],
+	})
 
 export const languageOf = (
 	name: string | null | undefined,
