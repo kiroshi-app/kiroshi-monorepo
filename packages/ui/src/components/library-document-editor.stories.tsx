@@ -145,7 +145,7 @@ export const Blank = meta.story({
 	},
 	play: async ({ args, canvas, canvasElement, userEvent }) => {
 		const title = canvas.getByRole("textbox", { name: "Title" })
-		const body = canvas.getByRole("textbox", { name: "Text" })
+		const body = canvas.getByRole("textbox", { name: "Document text" })
 		const [line] = bodyFieldsIn(canvasElement) as [TextField]
 		await expect(body).toHaveAttribute("aria-multiline", "true")
 		await expect(title).toHaveAttribute("placeholder", "Untitled")
@@ -268,7 +268,7 @@ export const WithTypedText = meta.story({
 		await expect(breadcrumbIn(canvasElement)).toHaveTextContent("Launch review")
 
 		await userEvent.type(
-			canvas.getByRole("textbox", { name: "Text" }),
+			canvas.getByRole("textbox", { name: "Document text" }),
 			"We agreed the date.{Enter}# Decisions{Enter}- Ship on the 14th{Enter}Copy is final on the 7th",
 		)
 		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
@@ -2522,10 +2522,13 @@ export const ToolbarAfterKeyboardSelection = meta.story({
 	},
 })
 
-const pressSelectAll = async () => {
-	const modifier = navigator.userAgent.includes("Mac") ? "Meta" : "Control"
-	await (await realPointer()).keyboard(`{${modifier}>}a{/${modifier}}`)
+const COMMAND = navigator.userAgent.includes("Mac") ? "Meta" : "Control"
+
+const pressWithCommand = async (keys: string) => {
+	await (await realPointer()).keyboard(`{${COMMAND}>}${keys}{/${COMMAND}}`)
 }
+
+const pressSelectAll = () => pressWithCommand("a")
 
 const liveRange = () => {
 	const live = document.getSelection()
@@ -2696,5 +2699,175 @@ export const EditingOverSeveralBlocks = meta.story({
 		)
 		await userEvent.keyboard("{Delete}")
 		await expectBlocks([["paragraph", "We land on the 10th."]], 2)
+	},
+})
+
+export const UndoAfterDeletingAcrossBlocks = meta.story({
+	args: { ...LAUNCH_REVIEW, template: undefined },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The person deletes a selection running over three blocks, types a word and starts a new line, then steps back with Cmd+Z, Ctrl+Z on Windows and Linux, and forward again with Cmd+Shift+Z. Check that each undo takes back one edit, the new line first, then the whole typed word, then the deletion, which brings the three blocks back with the same selection, and that redo reapplies the deletion.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		const fieldAt = (index: number) =>
+			bodyFieldsIn(canvasElement)[index] as TextField
+		const lastBody = () =>
+			(args.onBodyChange as ReturnType<typeof fn>).mock.calls.at(-1)?.at(0)
+		const joined = [
+			["paragraph", "We met the 14th"],
+			["item", "Copy is final on the 7th"],
+			["heading", "Next steps"],
+			["paragraph", "Screenshots land on the 10th."],
+		]
+		if (!isInBrowserRunner()) return
+		const keys = await realPointer()
+
+		selectAcross(canvasElement, [fieldAt(0), "We met".length], [fieldAt(2), 7])
+		await keys.keyboard("{Backspace}")
+		await expect(kindsAndValuesOf(bodyFieldsIn(canvasElement))).toEqual(joined)
+		const deleted = lastBody()
+
+		await keys.keyboard(" today{Enter}")
+		await expect(fieldAt(0)).toHaveValue("We met today")
+		await expect(fieldAt(1)).toHaveValue(" the 14th")
+
+		await pressWithCommand("z")
+		await expect(fieldAt(0)).toHaveValue("We met today the 14th")
+		await expect(fieldAt(0).selectionStart).toBe("We met today".length)
+		await pressWithCommand("z")
+		await expect(kindsAndValuesOf(bodyFieldsIn(canvasElement))).toEqual(joined)
+		await expect(lastBody()).toBe(deleted)
+		await expect(fieldAt(0).selectionStart).toBe("We met".length)
+
+		await pressWithCommand("z")
+		await expect(kindsAndValuesOf(bodyFieldsIn(canvasElement))).toEqual([
+			[
+				"paragraph",
+				"We met to agree the launch date and who signs off the copy.",
+			],
+			["heading", "Decisions"],
+			["item", "Ship on the 14th"],
+			["item", "Copy is final on the 7th"],
+			["heading", "Next steps"],
+			["paragraph", "Screenshots land on the 10th."],
+		])
+		await expect(lastBody()).toBe(LAUNCH_REVIEW.body)
+		await expect(document.activeElement).toBe(bodyIn(canvasElement))
+		const selected = document.getSelection()?.toString() ?? ""
+		await expect(selected.startsWith(" to agree the launch date")).toBe(true)
+		await expect(selected.endsWith("Ship on")).toBe(true)
+
+		await pressWithCommand("{Shift>}z{/Shift}")
+		await expect(kindsAndValuesOf(bodyFieldsIn(canvasElement))).toEqual(joined)
+		await expect(lastBody()).toBe(deleted)
+	},
+})
+
+const inputOver = (
+	canvasElement: HTMLElement,
+	inputType: string,
+	[from, fromOffset]: [TextField, number],
+	[to, toOffset]: [TextField, number],
+	text: string,
+) => {
+	const target = new StaticRange({
+		startContainer: pointAt(from, fromOffset)[0],
+		startOffset: pointAt(from, fromOffset)[1],
+		endContainer: pointAt(to, toOffset)[0],
+		endOffset: pointAt(to, toOffset)[1],
+	})
+	const dataTransfer = new DataTransfer()
+	dataTransfer.setData("text/plain", text)
+	const event = new InputEvent("beforeinput", {
+		inputType,
+		dataTransfer,
+		targetRanges: [target],
+		bubbles: true,
+		cancelable: true,
+	})
+	bodyIn(canvasElement).dispatchEvent(event)
+	return event
+}
+
+export const ReplacedAndDroppedText = meta.story({
+	tags: ["test-only"],
+	args: { ...LAUNCH_REVIEW, template: undefined },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A spellcheck replacement lands on a word away from the caret, text arrives dropped from outside, then the person drags words from one block to another. Check that the replacement rewrites the word the browser names and not the caret, that a drop from outside writes at the drop point, and that a drag inside the body moves the words in one edit that a single undo takes back.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const fieldAt = (index: number) =>
+			bodyFieldsIn(canvasElement)[index] as TextField
+		const intro = "We met to agree the launch date and who signs off the copy."
+		const agree = intro.indexOf("agree")
+
+		selectInField(canvasElement, fieldAt(0), intro.length)
+		const replaced = inputOver(
+			canvasElement,
+			"insertReplacementText",
+			[fieldAt(0), agree],
+			[fieldAt(0), agree + "agree".length],
+			"settle",
+		)
+		await expect(replaced.defaultPrevented).toBe(true)
+		await expect(fieldAt(0)).toHaveValue(intro.replace("agree", "settle"))
+
+		inputOver(
+			canvasElement,
+			"insertFromDrop",
+			[fieldAt(5), 0],
+			[fieldAt(5), 0],
+			"Draft: ",
+		)
+		await expect(fieldAt(5)).toHaveValue("Draft: Screenshots land on the 10th.")
+
+		const moved = "on the 10th"
+		const movedFrom = fieldAt(5).value.indexOf(moved)
+		selectInField(
+			canvasElement,
+			fieldAt(5),
+			movedFrom,
+			movedFrom + moved.length,
+		)
+		const dataTransfer = new DataTransfer()
+		bodyIn(canvasElement).dispatchEvent(
+			new DragEvent("dragstart", { bubbles: true, dataTransfer }),
+		)
+		await expect(dataTransfer.getData("text/plain")).toBe(moved)
+		inputOver(
+			canvasElement,
+			"deleteByDrag",
+			[fieldAt(5), movedFrom],
+			[fieldAt(5), movedFrom + moved.length],
+			"",
+		)
+		await expect(fieldAt(5)).toHaveValue("Draft: Screenshots land on the 10th.")
+		inputOver(
+			canvasElement,
+			"insertFromDrop",
+			[fieldAt(1), 0],
+			[fieldAt(1), 0],
+			moved,
+		)
+		await expect(fieldAt(1)).toHaveValue(`${moved}Decisions`)
+		await expect(fieldAt(5)).toHaveValue("Draft: Screenshots land .")
+		const body = LAUNCH_REVIEW.body
+			.replace("agree", "settle")
+			.replace("## Decisions", `## ${moved}Decisions`)
+			.replace("Screenshots land on the 10th.", "Draft: Screenshots land .")
+		await expect(args.onBodyChange).toHaveBeenLastCalledWith(body)
+
+		await userEvent.keyboard(`{${COMMAND}>}z{/${COMMAND}}`)
+		await expect(fieldAt(1)).toHaveValue("Decisions")
+		await expect(fieldAt(5)).toHaveValue("Draft: Screenshots land on the 10th.")
 	},
 })

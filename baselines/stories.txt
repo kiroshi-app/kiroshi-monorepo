@@ -1414,6 +1414,7 @@ navigation-librarydocumenteditor--outside-format-while-typing
 navigation-librarydocumenteditor--outside-title-change
 navigation-librarydocumenteditor--person-caret-beside-agent
 navigation-librarydocumenteditor--person-caret-in-formatted-text
+navigation-librarydocumenteditor--replaced-and-dropped-text
 navigation-librarydocumenteditor--save-failure
 navigation-librarydocumenteditor--select-all-takes-every-block
 navigation-librarydocumenteditor--selecting-across-agent-run
@@ -1424,6 +1425,7 @@ navigation-librarydocumenteditor--struck-through-text
 navigation-librarydocumenteditor--toolbar-after-drag
 navigation-librarydocumenteditor--toolbar-after-keyboard-selection
 navigation-librarydocumenteditor--unclosed-markers
+navigation-librarydocumenteditor--undo-after-deleting-across-blocks
 navigation-librarydocumenteditor--unmounted-right-after-blur
 navigation-librarydocumenteditor--with-typed-text
 navigation-librarydocumenteditor--write-failure

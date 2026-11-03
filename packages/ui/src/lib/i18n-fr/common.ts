@@ -353,7 +353,7 @@ const common = {
 			created: "Créé à l’instant",
 			createdFrom: "Créé à l’instant à partir de {{template}}",
 			title: "Titre",
-			paragraph: "Texte",
+			body: "Texte du document",
 			toolbar: {
 				label: "Mise en forme",
 				bold: "Gras",

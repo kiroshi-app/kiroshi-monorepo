@@ -64,7 +64,7 @@ const OWN_ACCOUNT = "account-me"
 
 const common = i18n.getFixedT(null, "common")
 
-const PARAGRAPH_FIELD = common("library.editor.paragraph")
+const BODY_FIELD = common("library.editor.body")
 
 const host = vi.hoisted(() => ({
 	documents: new Map<string, Y.Doc>(),
@@ -285,12 +285,21 @@ const openDocument = async (name: string) => {
 	await act(async () => {
 		fireEvent.click(tile, { detail: 1 })
 	})
-	return waitFor(
-		() =>
-			screen.getAllByRole("textbox", {
-				name: PARAGRAPH_FIELD,
-			}) as HTMLTextAreaElement[],
-	)
+	return waitFor(() => [
+		...screen
+			.getByRole("textbox", { name: BODY_FIELD })
+			.querySelectorAll<HTMLElement>("[data-block-id]"),
+	])
+}
+
+const bodyOf = (block: HTMLElement) =>
+	block.closest("[data-slot='library-document-body']") as HTMLElement
+
+const selectIn = (block: HTMLElement, start: number, end = start) => {
+	const text = block.firstChild as Node
+	bodyOf(block).focus()
+	document.getSelection()?.setBaseAndExtent(text, start, text, end)
+	fireEvent(document, new Event("selectionchange"))
 }
 
 const goBack = async () => {
@@ -326,11 +335,8 @@ describe.each([
 	it("draws its text arriving live under its named caret while the person keeps typing and selecting elsewhere", async () => {
 		await renderLibraryScreen(isJoined)
 		const [intro] = await openDocument(NOTES)
-		const field = intro as HTMLTextAreaElement
-		act(() => {
-			field.focus()
-			field.setSelectionRange(2, 5)
-		})
+		const field = intro as HTMLElement
+		act(() => selectIn(field, 2, 5))
 
 		const caret = agentWritesAtEnd(NOTES, AGENT_TEXT, hostId)
 		announcePresence(
@@ -341,11 +347,23 @@ describe.each([
 
 		await waitFor(() => expect(shownRuns()).toEqual([AGENT_TEXT]))
 		expect(atlasCaret()).toBeInstanceOf(HTMLElement)
-		expect(document.activeElement).toBe(field)
-		expect([field.selectionStart, field.selectionEnd]).toEqual([2, 5])
+		const live = document.getSelection()
+		expect(document.activeElement).toBe(bodyOf(field))
+		expect(field.contains(live?.anchorNode ?? null)).toBe(true)
+		expect([live?.anchorOffset, live?.focusOffset]).toEqual([2, 5])
 
 		await act(async () => {
-			fireEvent.change(field, { target: { value: "Intro line, edited" } })
+			bodyOf(field).focus()
+			document.getSelection()?.selectAllChildren(field)
+			fireEvent(
+				bodyOf(field),
+				new InputEvent("beforeinput", {
+					inputType: "insertText",
+					data: "Intro line, edited",
+					bubbles: true,
+					cancelable: true,
+				}),
+			)
 		})
 
 		await waitFor(() =>
@@ -465,7 +483,7 @@ describe("a document the host fails to create", () => {
 				}),
 			),
 		)
-		expect(screen.queryByRole("textbox", { name: PARAGRAPH_FIELD })).toBeNull()
+		expect(screen.queryByRole("textbox", { name: BODY_FIELD })).toBeNull()
 	})
 })
 
@@ -475,12 +493,8 @@ const offsetOnHost = (name: string, caret: string) =>
 		documentOf(name),
 	)?.index
 
-const placeCaret = (field: HTMLTextAreaElement, offset: number) => {
-	act(() => {
-		field.focus()
-		field.setSelectionRange(offset, offset)
-		fireEvent.select(field)
-	})
+const placeCaret = (field: HTMLElement, offset: number) => {
+	act(() => selectIn(field, offset))
 }
 
 const nullCaretsShared = () =>
@@ -530,7 +544,7 @@ describe("the caret the person shares", () => {
 		await renderLibraryScreen(false)
 		const [intro] = await openDocument(NOTES)
 
-		placeCaret(intro as HTMLTextAreaElement, 5)
+		placeCaret(intro as HTMLElement, 5)
 
 		await waitFor(() => expect(host.sharedCarets).toHaveLength(1))
 		const [shared] = host.sharedCarets
@@ -541,10 +555,10 @@ describe("the caret the person shares", () => {
 	it("shares a null caret when the editor reports none", async () => {
 		await renderLibraryScreen(false)
 		const [intro] = await openDocument(NOTES)
-		placeCaret(intro as HTMLTextAreaElement, 5)
+		placeCaret(intro as HTMLElement, 5)
 
 		await act(async () => {
-			intro?.blur()
+			bodyOf(intro as HTMLElement).blur()
 			await new Promise((resolve) => setTimeout(resolve))
 		})
 
@@ -554,7 +568,7 @@ describe("the caret the person shares", () => {
 	it("withdraws the caret exactly once when the document closes", async () => {
 		await renderLibraryScreen(false)
 		const [intro] = await openDocument(NOTES)
-		placeCaret(intro as HTMLTextAreaElement, 5)
+		placeCaret(intro as HTMLElement, 5)
 
 		await goBack()
 		await act(async () => {
@@ -571,9 +585,9 @@ describe("the caret the person shares", () => {
 	it("withdraws the caret once when the editor already reported none before closing", async () => {
 		await renderLibraryScreen(false)
 		const [intro] = await openDocument(NOTES)
-		placeCaret(intro as HTMLTextAreaElement, 5)
+		placeCaret(intro as HTMLElement, 5)
 		await act(async () => {
-			intro?.blur()
+			bodyOf(intro as HTMLElement).blur()
 			await new Promise((resolve) => setTimeout(resolve))
 		})
 
@@ -586,7 +600,7 @@ describe("the caret the person shares", () => {
 	it("withdraws the caret exactly once when the screen unmounts", async () => {
 		const { unmount } = await renderLibraryScreen(true)
 		const [intro] = await openDocument(NOTES)
-		placeCaret(intro as HTMLTextAreaElement, 5)
+		placeCaret(intro as HTMLElement, 5)
 
 		unmount()
 		await act(async () => {
@@ -614,10 +628,7 @@ const settle = () =>
 		await new Promise((resolve) => setTimeout(resolve))
 	})
 
-const refuseCaretSharesAt = async (
-	field: HTMLTextAreaElement,
-	offsets: number[],
-) => {
+const refuseCaretSharesAt = async (field: HTMLElement, offsets: number[]) => {
 	host.refusesCaretShares = true
 	const refusedBefore = host.caretRefusals
 	for (const offset of offsets) {
@@ -638,7 +649,7 @@ describe("a caret the host refuses to share", () => {
 		await renderLibraryScreen(false)
 		const [intro] = await openDocument(NOTES)
 
-		await refuseCaretSharesAt(intro as HTMLTextAreaElement, [2, 5, 8])
+		await refuseCaretSharesAt(intro as HTMLElement, [2, 5, 8])
 
 		await waitFor(() => expect(caretNotices()).toHaveLength(1))
 		expect(caretNotices()[0]?.title).toBe(
@@ -656,7 +667,7 @@ describe("a caret the host refuses to share", () => {
 		silenceConsoleErrors()
 		await renderLibraryScreen(false)
 		const [intro] = await openDocument(NOTES)
-		const field = intro as HTMLTextAreaElement
+		const field = intro as HTMLElement
 		await refuseCaretSharesAt(field, [2, 5])
 		await waitFor(() => expect(caretNotices()).toHaveLength(1))
 
@@ -672,13 +683,13 @@ describe("a caret the host refuses to share", () => {
 		silenceConsoleErrors()
 		await renderLibraryScreen(false)
 		const [intro] = await openDocument(NOTES)
-		await refuseCaretSharesAt(intro as HTMLTextAreaElement, [2, 5])
+		await refuseCaretSharesAt(intro as HTMLElement, [2, 5])
 		await goBack()
 		await settle()
 		await waitFor(() => expect(caretNotices()).toHaveLength(1))
 
 		const [plan] = await openDocument(PLAN)
-		await refuseCaretSharesAt(plan as HTMLTextAreaElement, [4])
+		await refuseCaretSharesAt(plan as HTMLElement, [4])
 
 		await waitFor(() => expect(caretNotices()).toHaveLength(2))
 	})

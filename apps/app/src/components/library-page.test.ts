@@ -540,7 +540,7 @@ describe("the More action of an opened Library item", () => {
 
 const common = i18n.getFixedT(null, "common")
 
-const PARAGRAPH_FIELD = common("library.editor.paragraph")
+const BODY_FIELD = common("library.editor.body")
 
 const press = async (target: Element) => {
 	await act(async () => {
@@ -548,14 +548,30 @@ const press = async (target: Element) => {
 	})
 }
 
-const typeInto = async (field: HTMLElement, value: string) => {
+const firstBlockOf = (body: HTMLElement) =>
+	body.querySelector("[data-block-id]") as HTMLElement
+
+const typeInto = async (body: HTMLElement, value: string) => {
 	await act(async () => {
-		fireEvent.change(field, { target: { value } })
+		body.focus()
+		document.getSelection()?.selectAllChildren(firstBlockOf(body))
+		fireEvent(
+			body,
+			new InputEvent("beforeinput", {
+				inputType: "insertText",
+				data: value,
+				bubbles: true,
+				cancelable: true,
+			}),
+		)
 	})
 }
 
 const paragraphOf = (shown: Pick<typeof screen, "getByRole">) =>
-	shown.getByRole("textbox", { name: PARAGRAPH_FIELD }) as HTMLTextAreaElement
+	shown.getByRole("textbox", { name: BODY_FIELD })
+
+const textOf = (shown: Pick<typeof screen, "getByRole">) =>
+	firstBlockOf(paragraphOf(shown)).textContent
 
 const checkedTemplateOf = (dialog: HTMLElement) =>
 	within(dialog)
@@ -626,29 +642,28 @@ describe("an opened Library document", () => {
 		const member = await renderLibraryScreen(true)
 		await openLibraryItem(DOCUMENT, onHost)
 		await openLibraryItem(DOCUMENT, member)
-		await waitFor(() => expect(paragraphOf(member).value).toBe(HOSTED_CONTENT))
+		await waitFor(() => expect(textOf(member)).toBe(HOSTED_CONTENT))
 
 		await typeInto(paragraphOf(onHost), "Notes and actions")
 
-		await waitFor(
-			() => expect(paragraphOf(member).value).toBe("Notes and actions"),
-			{ timeout: 1000 },
-		)
+		await waitFor(() => expect(textOf(member)).toBe("Notes and actions"), {
+			timeout: 1000,
+		})
 		expect(fakeLibraryHost.markdownOf(DOCUMENT.name)).toBe("Notes and actions")
-		expect(paragraphOf(onHost).value).toBe("Notes and actions")
+		expect(textOf(onHost)).toBe("Notes and actions")
 	})
 
 	it("shows the host's markdown again when the host refuses an edit", async () => {
 		harness.libraryItems = [DOCUMENT]
 		const shown = await renderLibraryScreen(false)
 		await openLibraryItem(DOCUMENT, shown)
-		await waitFor(() => expect(paragraphOf(shown).value).toBe(HOSTED_CONTENT))
+		await waitFor(() => expect(textOf(shown)).toBe(HOSTED_CONTENT))
 		fakeLibraryHost.host.refusesUpdates = true
 
 		await typeInto(paragraphOf(shown), "Notes nobody keeps")
 
-		expect(paragraphOf(shown).value).toBe("Notes nobody keeps")
-		await waitFor(() => expect(paragraphOf(shown).value).toBe(HOSTED_CONTENT), {
+		expect(textOf(shown)).toBe("Notes nobody keeps")
+		await waitFor(() => expect(textOf(shown)).toBe(HOSTED_CONTENT), {
 			timeout: 1000,
 		})
 		expect(fakeLibraryHost.markdownOf(DOCUMENT.name)).toBe(HOSTED_CONTENT)
@@ -659,7 +674,7 @@ describe("an opened Library document", () => {
 		const onHost = await renderLibraryScreen(false)
 		const member = await renderLibraryScreen(true)
 		await openLibraryItem(DOCUMENT, onHost)
-		await waitFor(() => expect(paragraphOf(onHost).value).toBe(HOSTED_CONTENT))
+		await waitFor(() => expect(textOf(onHost)).toBe(HOSTED_CONTENT))
 		fakeLibraryHost.host.onOpened = (name) => {
 			fakeLibraryHost.host.onOpened = null
 			fakeLibraryHost.writeElsewhere(name, "Notes from elsewhere")
@@ -667,14 +682,12 @@ describe("an opened Library document", () => {
 
 		await openLibraryItem(DOCUMENT, member)
 
-		await waitFor(
-			() => expect(paragraphOf(member).value).toBe("Notes from elsewhere"),
-			{ timeout: 1000 },
-		)
+		await waitFor(() => expect(textOf(member)).toBe("Notes from elsewhere"), {
+			timeout: 1000,
+		})
 		await typeInto(paragraphOf(onHost), "Notes from elsewhere and here")
 		await waitFor(
-			() =>
-				expect(paragraphOf(member).value).toBe("Notes from elsewhere and here"),
+			() => expect(textOf(member)).toBe("Notes from elsewhere and here"),
 			{ timeout: 1000 },
 		)
 	})
@@ -695,12 +708,12 @@ describe("an opened Library document", () => {
 		expect(
 			shown.getByRole("heading", { level: 1, name: LIBRARY_NAME }),
 		).toBeInstanceOf(HTMLElement)
-		expect(shown.queryByRole("textbox", { name: PARAGRAPH_FIELD })).toBeNull()
+		expect(shown.queryByRole("textbox", { name: BODY_FIELD })).toBeNull()
 
 		await openLibraryItem(DOCUMENT, shown)
 
 		await waitFor(() => expect(raiseFailureNotice).toHaveBeenCalledTimes(2))
-		expect(shown.queryByRole("textbox", { name: PARAGRAPH_FIELD })).toBeNull()
+		expect(shown.queryByRole("textbox", { name: BODY_FIELD })).toBeNull()
 	})
 })
 
@@ -716,7 +729,7 @@ describe("a new Library document the host refuses to seed", () => {
 		await createFromDialog()
 
 		expect(await screen.findByText(start.detail)).toBeInstanceOf(HTMLElement)
-		expect(paragraphOf(screen).value).toBe("")
+		expect(textOf(screen)).toBe("")
 		expect(fakeLibraryHost.markdownOf("Untitled.md")).toBe("")
 		await waitFor(() =>
 			expect(raiseFailureNotice).toHaveBeenCalledWith(

@@ -487,6 +487,14 @@ const isCollapsed = ({ start, end }: BodyRange) =>
 const isSamePoint = (first: BodyPoint, second?: BodyPoint) =>
 	first.id === second?.id && first.offset === second.offset
 
+type BodySnapshot = {
+	blocks: Block[]
+	selection?: BodySelection
+}
+
+const IS_MAC =
+	typeof navigator !== "undefined" && /Mac/.test(navigator.userAgent)
+
 const shiftedOffset = (before: string, after: string, offset: number) => {
 	const limit = Math.min(before.length, after.length)
 	let head = 0
@@ -843,6 +851,10 @@ const LibraryDocumentEditor = ({
 	const reportedCaret = useRef<number | null>(null)
 	const pendingBlurReport = useRef<ReturnType<typeof setTimeout>>(undefined)
 	const frame = useRef<HTMLDivElement>(null)
+	const undoSteps = useRef<BodySnapshot[]>([])
+	const redoSteps = useRef<BodySnapshot[]>([])
+	const typedUpTo = useRef<BodyPoint>(undefined)
+	const draggedFrom = useRef<BodyRange>(undefined)
 	const [selected, setSelected] = useState<SelectedText>()
 	const [toolbarMode, setToolbarMode] = useState<ToolbarMode>("bar")
 	const selectingBy = useRef<SelectionGesture>(undefined)
@@ -852,17 +864,27 @@ const LibraryDocumentEditor = ({
 
 	const indexOf = (id: string) => blocks.findIndex((block) => block.id === id)
 
+	const isBefore = (first: BodyPoint, second: BodyPoint) =>
+		first.id === second.id
+			? first.offset < second.offset
+			: indexOf(first.id) < indexOf(second.id)
+
 	const bodyRange = (): BodyRange | undefined => {
 		const held = bodySelectionIn(host.current)
 		if (!held) return undefined
 		const { anchor, focus } = held
-		const isBackward =
-			anchor.id === focus.id
-				? focus.offset < anchor.offset
-				: indexOf(focus.id) < indexOf(anchor.id)
-		return isBackward
+		return isBefore(focus, anchor)
 			? { start: focus, end: anchor }
 			: { start: anchor, end: focus }
+	}
+
+	const targetRangeOf = (event: InputEvent): BodyRange | undefined => {
+		const [target] = event.getTargetRanges()
+		const node = host.current
+		if (!(target && node)) return undefined
+		const start = bodyPointOf(node, target.startContainer, target.startOffset)
+		const end = bodyPointOf(node, target.endContainer, target.endOffset)
+		return start && end ? { start, end } : undefined
 	}
 
 	const reportCaret = () => {
@@ -968,6 +990,8 @@ const LibraryDocumentEditor = ({
 					nextBlocks.length > 0 ? nextBlocks : startingBlocks("blank", t),
 				)
 				setEnding(endingOf(nextBody))
+				undoSteps.current = []
+				redoSteps.current = []
 			}
 			if (held?.field === "title") {
 				const { selection } = held
@@ -1132,12 +1156,45 @@ const LibraryDocumentEditor = ({
 		)
 	}
 
-	const commit = (next: Block[]) => {
+	const show = (next: Block[]) => {
 		const markdown = bodyOf(next)
 		const hasBodyChanged = markdown !== bodyOf(blocks)
 		flushSync(() => setBlocks(next))
 		if (hasBodyChanged) onBodyChange(markdown)
 	}
+
+	const commit = (next: Block[], isTyping = false) => {
+		const selection = bodySelectionIn(host.current)
+		const isSameTypingRun =
+			isTyping &&
+			selection !== undefined &&
+			isSamePoint(selection.anchor, typedUpTo.current) &&
+			isSamePoint(selection.focus, typedUpTo.current)
+		if (!isSameTypingRun) undoSteps.current.push({ blocks, selection })
+		redoSteps.current = []
+		typedUpTo.current = undefined
+		show(next)
+	}
+
+	const stepBetween = (from: BodySnapshot[], to: BodySnapshot[]) => {
+		const step = from.pop()
+		if (!step) return
+
+		to.push({ blocks, selection: bodySelectionIn(host.current) })
+		typedUpTo.current = undefined
+		show(step.blocks)
+		if (step.selection) {
+			selectBody(step.selection)
+			blockTexts.current
+				.get(step.selection.focus.id)
+				?.scrollIntoView({ block: "nearest" })
+		}
+		reportCaret()
+	}
+
+	const undo = () => stepBetween(undoSteps.current, redoSteps.current)
+
+	const redo = () => stepBetween(redoSteps.current, undoSteps.current)
 
 	const turnIntoParagraph = (source: Block[], index: number, block: Block) => {
 		const point = { id: block.id, offset: 0 }
@@ -1156,6 +1213,7 @@ const LibraryDocumentEditor = ({
 		index: number,
 		value: string,
 		caret: number,
+		isTyping = false,
 	) => {
 		const block = source[index]
 		if (!block) return
@@ -1166,8 +1224,9 @@ const LibraryDocumentEditor = ({
 				: undefined
 		if (!shortcut) {
 			const text = block.kind === "paragraph" ? value : singleLine(value)
-			commit(source.toSpliced(index, 1, { ...block, text }))
+			commit(source.toSpliced(index, 1, { ...block, text }), isTyping)
 			focusAt(block.id, caret)
+			if (isTyping) typedUpTo.current = { id: block.id, offset: caret }
 			return
 		}
 
@@ -1202,7 +1261,11 @@ const LibraryDocumentEditor = ({
 		}
 	}
 
-	const replaceSelection = (range: BodyRange, typed: string) => {
+	const replaceSelection = (
+		range: BodyRange,
+		typed: string,
+		isTyping = false,
+	) => {
 		const { start, end } = range
 		if (start.id === end.id) {
 			const index = indexOf(start.id)
@@ -1212,6 +1275,7 @@ const LibraryDocumentEditor = ({
 				index,
 				`${value.slice(0, start.offset)}${typed}${value.slice(end.offset)}`,
 				start.offset + typed.length,
+				isTyping,
 			)
 			return
 		}
@@ -1354,19 +1418,61 @@ const LibraryDocumentEditor = ({
 		writeAt(blocks, index, kept, caret)
 	}
 
+	const dropInto = (at: BodyPoint, text: string, from?: BodyRange) => {
+		if (!from) {
+			replaceSelection({ start: at, end: at }, text)
+			return
+		}
+		if (!(isBefore(at, from.start) || isBefore(from.end, at))) return
+
+		const first = indexOf(from.start.id)
+		const last = indexOf(from.end.id)
+		const head = blocks[first]
+		const tail = blocks[last]
+		if (!(head && tail)) return
+
+		const source = blocks.toSpliced(first, last - first + 1, {
+			...head,
+			text: `${head.text.slice(0, from.start.offset)}${tail.text.slice(from.end.offset)}`,
+		})
+		const target =
+			at.id === from.end.id && !isBefore(at, from.start)
+				? {
+						id: from.start.id,
+						offset: from.start.offset + at.offset - from.end.offset,
+					}
+				: at
+		const index = source.findIndex(({ id }) => id === target.id)
+		const value = source[index]?.text ?? ""
+		writeAt(
+			source,
+			index,
+			`${value.slice(0, target.offset)}${text}${value.slice(target.offset)}`,
+			target.offset + text.length,
+		)
+	}
+
 	const editFrom = useEffectEvent((event: InputEvent) => {
 		if (event.isComposing || event.inputType.includes("Composition")) return
 
 		event.preventDefault()
+		const { inputType } = event
+		const text = event.data ?? event.dataTransfer?.getData("text/plain") ?? ""
+		if (inputType === "historyUndo") return undo()
+		if (inputType === "historyRedo") return redo()
+		if (inputType === "insertFromDrop") {
+			const at = targetRangeOf(event)?.start
+			if (at) dropInto(at, text, draggedFrom.current)
+			draggedFrom.current = undefined
+			return
+		}
+
 		const range = bodyRange()
 		if (!range) return
-
-		const { inputType } = event
-		if (inputType === "insertText" || inputType === "insertReplacementText")
-			replaceSelection(
-				range,
-				event.data ?? event.dataTransfer?.getData("text/plain") ?? "",
-			)
+		if (inputType === "insertText")
+			replaceSelection(range, text, isCollapsed(range))
+		else if (inputType === "insertReplacementText")
+			replaceSelection(targetRangeOf(event) ?? range, text)
 		else if (inputType.startsWith("delete") && inputType !== "deleteByDrag")
 			deleteOver(range, event)
 	})
@@ -1382,7 +1488,13 @@ const LibraryDocumentEditor = ({
 		const focus = bodySelectionIn(host.current)?.focus
 		const text = focus && blockTexts.current.get(focus.id)
 		if (focus && text)
-			writeAt(blocks, indexOf(focus.id), text.textContent ?? "", focus.offset)
+			writeAt(
+				blocks,
+				indexOf(focus.id),
+				text.textContent ?? "",
+				focus.offset,
+				true,
+			)
 	}
 
 	const documentRangeOf = ({ start, end }: BodyRange) => ({
@@ -1416,6 +1528,21 @@ const LibraryDocumentEditor = ({
 
 	const keyDown = (event: KeyboardEvent<HTMLElement>) => {
 		if (event.nativeEvent.isComposing) return
+
+		const isCommand = IS_MAC ? event.metaKey : event.ctrlKey
+		const key = event.key.toLowerCase()
+		const isRedo =
+			isCommand && ((key === "z" && event.shiftKey) || (!IS_MAC && key === "y"))
+		if (isCommand && key === "z" && !event.shiftKey) {
+			event.preventDefault()
+			undo()
+			return
+		}
+		if (isRedo) {
+			event.preventDefault()
+			redo()
+			return
+		}
 
 		const range = bodyRange()
 		const index = range ? indexOf(range.end.id) : -1
@@ -1558,7 +1685,7 @@ const LibraryDocumentEditor = ({
 				}
 			>
 				<div
-					aria-label={t("library.editor.paragraph")}
+					aria-label={t("library.editor.body")}
 					aria-multiline
 					className="flex flex-col gap-3.5 outline-none"
 					contentEditable
@@ -1576,6 +1703,15 @@ const LibraryDocumentEditor = ({
 							replaceSelection(range, "")
 					}}
 					onCopy={copyFrom}
+					onDragEnd={() => {
+						draggedFrom.current = undefined
+					}}
+					onDragStart={(event) => {
+						const range = bodyRange()
+						if (!range || isCollapsed(range)) return
+						draggedFrom.current = range
+						event.dataTransfer.setData("text/plain", copiedOf(range))
+					}}
 					onCut={(event) => {
 						const range = copyFrom(event)
 						if (range) replaceSelection(range, "")
