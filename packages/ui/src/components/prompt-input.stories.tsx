@@ -533,6 +533,7 @@ export const WithAttachments = meta.story({
 
 		await expect(isExpanded(textarea)).toBe(false)
 		await expect(box(chip).bottom).toBeLessThanOrEqual(box(textarea).top)
+		await expect(quoteSlotIn(form)).toBeNull()
 
 		await expect(drag("drop", form, draggingFile())).toBe(true)
 		await expect(pasteInto(textarea, filesTransfer([PASTED_PROMPT_FILE]))).toBe(
@@ -546,6 +547,165 @@ export const WithAttachments = meta.story({
 		)
 		await expect(pasteInto(textarea, textTransfer("plain words"))).toBe(false)
 		await expect(args.onAttach).toHaveBeenCalledTimes(2)
+	},
+})
+
+const QUOTE = {
+	agentName: "Atlas",
+	text: "13:30 to 17:00: the roadmap, with every team in the room.",
+}
+
+const QUOTE_REPLY = "Can we start this at 14:00? Lunch runs long."
+
+const LONG_QUOTE = `${"The sync finished, but two devices needed a full pass instead of the usual delta, and the studio tablet came back with a clock drift of about four minutes. ".repeat(3)}https://example.com/sync/logs/da-lat-laptop/2026-11-02/full-pass-with-a-very-long-unbreakable-path`
+
+const quoteSlotIn = (form: HTMLElement) =>
+	form.querySelector<HTMLElement>('[data-slot="prompt-input-quote"]')
+
+const quoteCardIn = (form: HTMLElement) =>
+	within(form).getByRole("group", { name: "Selection quoted from Atlas" })
+
+export const WithQuote = meta.story({
+	globals: { theme: "dark" },
+	args: {
+		value: QUOTE_REPLY,
+		leading: attachControl,
+		quote: { ...QUOTE, onRemove: fn() },
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A selection quoted from an agent answer, waiting above the reply, as artboard 6 · Quoting a selection draws it, dark only. The quote takes a row of its own at the top of the composer, 8px above the field row, and the composer takes the 20px radius it wears with files staged. The card keeps 8px of padding on every side, where the artboard draws 4px inline, so its X and Y padding stay equal. A quote alone does not make the turn worth sending: the send button waits for text. Check that the cross removes the quote by pointer, Enter and Space, once each time.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const textarea = canvas.getByRole("textbox", { name: "Message" })
+		const form = formOf(textarea)
+		const slot = quoteSlotIn(form)
+		if (!slot) throw new Error("The composer drew no quote slot")
+		const card = quoteCardIn(form)
+
+		await expect(slot).toContainElement(card)
+		await expect(canvas.getByText("Selection · Atlas")).toBeVisible()
+		await expect(canvas.getByText(QUOTE.text)).toBeVisible()
+		await expect(box(textarea).top - box(card).bottom).toBe(8)
+		await expect(box(card).width).toBe(form.clientWidth - 16)
+		await expect(getComputedStyle(form).borderTopLeftRadius).toBe("20px")
+		await expect(getComputedStyle(card).padding).toBe("8px")
+		await expect(getComputedStyle(card).borderTopLeftRadius).toBe("12px")
+
+		const remove = canvas.getByRole("button", { name: "Remove the selection" })
+		await userEvent.click(remove)
+		await expect(args.quote?.onRemove).toHaveBeenCalledTimes(1)
+		remove.focus()
+		await userEvent.keyboard("{Enter}")
+		await expect(args.quote?.onRemove).toHaveBeenCalledTimes(2)
+		await userEvent.keyboard(" ")
+		await expect(args.quote?.onRemove).toHaveBeenCalledTimes(3)
+		await expect(args.onSubmit).not.toHaveBeenCalled()
+	},
+})
+
+export const WithQuoteAndAttachments = meta.story({
+	args: {
+		value: DRAFT,
+		leading: attachControl,
+		quote: { ...QUOTE, onRemove: fn() },
+		attachments: stagedFiles,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A quoted selection and staged files together: the quote takes the top row, the chips the row below it, each in a slot of its own, and the chips draw exactly as `WithAttachments` draws them.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const textarea = canvas.getByRole("textbox", { name: "Message" })
+		const form = formOf(textarea)
+		const card = quoteCardIn(form)
+		const chip = canvas.getAllByRole("listitem")[0]
+
+		await expect(quoteSlotIn(form)).not.toContainElement(chip)
+		await expect(box(card).bottom).toBeLessThanOrEqual(box(chip).top)
+		await expect(box(chip).bottom).toBeLessThanOrEqual(box(textarea).top)
+		await expect(getComputedStyle(form).borderTopLeftRadius).toBe("20px")
+	},
+})
+
+export const WithLongQuote = meta.story({
+	args: {
+		leading: attachControl,
+		quote: { agentName: "Atlas", text: LONG_QUOTE, onRemove: fn() },
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A quote far longer than the card, ending on an unbreakable link, in a 320px column: it stops at two lines and the composer keeps the width of its column.",
+			},
+		},
+	},
+	render: (args) => (
+		<div style={{ width: 320 }}>
+			<Composer {...args} />
+		</div>
+	),
+	play: async ({ canvas, canvasElement }) => {
+		const form = formOf(canvas.getByRole("textbox"))
+		const text = canvasElement.querySelector<HTMLElement>(
+			'[data-slot="selection-quote-text"]',
+		)
+		if (!text) throw new Error("The card drew no quoted text")
+
+		await expect(box(text).height).toBeLessThanOrEqual(
+			Number.parseFloat(getComputedStyle(text).lineHeight) * 2,
+		)
+		await expect(text.scrollHeight).toBeGreaterThan(text.clientHeight)
+		await expect(box(form).width).toBe(320)
+		await expect(form.scrollWidth).toBe(form.clientWidth)
+	},
+})
+
+export const WithQuoteBlocked = meta.story({
+	args: {
+		value: DRAFT,
+		leading: attachControl,
+		quote: { ...QUOTE, onRemove: fn() },
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A quote waiting in a composer that cannot send, offline then disabled: the quote stays in view but its cross is out of reach, as the staged files are.",
+			},
+		},
+	},
+	render: (args) => (
+		<div className="flex flex-col gap-4">
+			<Composer {...args} offline={OFFLINE_HOST} />
+			<Composer {...args} disabled />
+		</div>
+	),
+	play: async ({ canvasElement }) => {
+		const composers = composersIn(canvasElement)
+		await expect(composers.length).toBe(2)
+		for (const composer of composers) {
+			const slot = quoteSlotIn(composer)
+			if (!slot) throw new Error("The composer drew no quote slot")
+			await expect(slot).toHaveAttribute("inert")
+			await expect(quoteCardIn(composer)).toBeVisible()
+
+			const remove = within(slot).getByRole("button", {
+				hidden: true,
+				name: "Remove the selection",
+			})
+			remove.focus()
+			await expect(remove).not.toHaveFocus()
+		}
 	},
 })
 

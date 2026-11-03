@@ -36,7 +36,7 @@ export const SelectionQuote = ({
 			>
 				<Icons.Quote className="size-4" />
 			</span>
-			<div className="flex min-w-0 flex-1 flex-col">
+			<div className="flex min-w-0 flex-1 flex-col gap-0.5">
 				<span className="truncate font-medium text-muted-foreground text-xs leading-4">
 					{t("selectionQuote.label", { name: agentName })}
 				</span>

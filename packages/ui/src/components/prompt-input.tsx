@@ -14,6 +14,10 @@ import { Icons } from "@workspace/ui/components/icons"
 import { PromptField } from "@workspace/ui/components/prompt-input-field"
 import { usePromptLayout } from "@workspace/ui/components/prompt-input-layout"
 import { usePromptTransfer } from "@workspace/ui/components/prompt-input-transfer"
+import {
+	SelectionQuote,
+	type SelectionQuoteProps,
+} from "@workspace/ui/components/selection-quote"
 import { Button } from "@workspace/ui/components/ui/button"
 import { cn, mergeRefs } from "@workspace/ui/lib/utils"
 
@@ -23,6 +27,11 @@ export type PromptInputOffline = {
 	spaceName: string
 	hostName: string
 }
+
+type PromptInputQuote = Pick<
+	SelectionQuoteProps,
+	"agentName" | "text" | "onRemove"
+>
 
 export interface PromptInputProps
 	extends Omit<
@@ -34,6 +43,7 @@ export interface PromptInputProps
 	onValueChange?: (value: string) => void
 	onSubmit?: (value: string) => void
 	leading?: ReactNode
+	quote?: PromptInputQuote
 	attachments?: ReactNode
 	onAttach?: (files: File[]) => void
 	dropTarget?: boolean
@@ -47,6 +57,7 @@ export function PromptInput({
 	onValueChange,
 	onSubmit,
 	leading,
+	quote,
 	attachments,
 	onAttach,
 	dropTarget = false,
@@ -117,13 +128,23 @@ export function PromptInput({
 				"flex w-full flex-wrap items-center gap-1 rounded-[25px] border border-foreground/10 bg-prompt-surface p-2 focus-within:border-foreground/20",
 				hasPayload && "border-foreground/20",
 				isExpanded && "rounded-3xl",
-				hasAttachments && "rounded-[20px]",
+				(hasAttachments || quote) && "rounded-[20px]",
 				offline && "border-foreground/8 bg-prompt-surface-inert",
 				isDropTarget && "border-primary bg-primary/10",
 				disabled && "opacity-50",
 				className,
 			)}
 		>
+			{quote && (
+				<div
+					data-slot="prompt-input-quote"
+					inert={isBlocked}
+					className="order-first w-full min-w-0 pb-1"
+				>
+					<SelectionQuote {...quote} />
+				</div>
+			)}
+
 			<div
 				ref={refs.attachments}
 				inert={isBlocked}

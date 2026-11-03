@@ -473,6 +473,10 @@ conversation-prompt-promptinput--themes-filled
 conversation-prompt-promptinput--themes-focus-visible
 conversation-prompt-promptinput--with-attachments
 conversation-prompt-promptinput--with-controls
+conversation-prompt-promptinput--with-long-quote
+conversation-prompt-promptinput--with-quote
+conversation-prompt-promptinput--with-quote-and-attachments
+conversation-prompt-promptinput--with-quote-blocked
 conversation-prompt-promptmentionmenu--counted
 conversation-prompt-promptmentionmenu--counted-again
 conversation-prompt-promptmentionmenu--counted-lead
