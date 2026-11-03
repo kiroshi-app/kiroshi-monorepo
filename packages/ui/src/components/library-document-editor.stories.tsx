@@ -640,7 +640,7 @@ export const UnmountedRightAfterBlur = meta.story({
 
 const isSameNodes = (
 	current: HTMLTextAreaElement[],
-	held: (HTMLTextAreaElement | undefined)[],
+	held: HTMLTextAreaElement[],
 ) =>
 	current.length === held.length &&
 	current.every((field, index) => field === held[index])
@@ -663,11 +663,11 @@ export const FieldsStayInPlace = meta.story({
 		const typed = " Notes follow."
 		const caretStaysInIntro = async () => {
 			await expect(document.activeElement).toBe(intro)
-			await expect(intro?.selectionStart).toBe(intro?.value.length)
-			await expect(intro?.selectionEnd).toBe(intro?.value.length)
+			await expect(intro.selectionStart).toBe(intro.value.length)
+			await expect(intro.selectionEnd).toBe(intro.value.length)
 		}
 
-		await userEvent.type(intro as HTMLTextAreaElement, typed)
+		await userEvent.type(intro, typed)
 		await expect(intro).toHaveValue(
 			`We met to agree the launch date and who signs off the copy.${typed}`,
 		)
