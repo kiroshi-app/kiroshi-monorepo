@@ -99,7 +99,7 @@ const MessageSelection = ({
 		if (isInToolbar(event.target)) return
 		const element = event.currentTarget
 		const range = rangeWithin(element)
-		const text = selectedTextWithin(element)
+		const text = range && selectedTextWithin(element)
 		setHeld(
 			range && text ? { text, anchor: anchorOf(range, element) } : undefined,
 		)

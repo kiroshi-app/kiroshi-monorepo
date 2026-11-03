@@ -311,7 +311,7 @@ function TurnBody({ repliedTo, foot, className, children }: TurnBodyProps) {
 			foot={foot}
 			className={cn("whitespace-pre-wrap", className)}
 		>
-			{repliedTo && repliedTo.length > 0 ? (
+			{repliedTo?.length ? (
 				<div className="flex flex-col gap-2">
 					<div className="flex flex-col gap-1">
 						{repliedTo.map((quoted, index) => (
