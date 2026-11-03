@@ -1446,6 +1446,9 @@ navigation-librarydocumentview--member
 navigation-librarydocumentview--more-menu
 navigation-librarydocumentview--one-agent-writing
 navigation-librarydocumentview--only-bar-actions-given
+navigation-librarydocumentview--rename-with-focus-left-in-place
+navigation-librarydocumentview--rename-with-focus-target
+navigation-librarydocumentview--rename-without-focus-target
 navigation-librarynewdocumentdialog--blank-selected
 navigation-librarynewdocumentdialog--meeting-notes-selected
 navigation-librarynewdocumentdialog--narrow-window

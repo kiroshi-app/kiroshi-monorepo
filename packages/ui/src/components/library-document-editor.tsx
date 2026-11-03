@@ -745,6 +745,7 @@ type LibraryDocumentEditorProps = WriterActions &
 		onUndoAll?: () => void
 		onDone?: () => void
 		onCaretChange?: (caret: number | null) => void
+		menuFinalFocus?: () => HTMLElement | boolean
 		ref?: Ref<LibraryDocumentEditorHandle>
 	}
 
@@ -773,6 +774,7 @@ const LibraryDocumentEditor = ({
 	onLink,
 	onHeading,
 	onList,
+	menuFinalFocus,
 	ref,
 	...actions
 }: LibraryDocumentEditorProps) => {
@@ -1224,6 +1226,7 @@ const LibraryDocumentEditor = ({
 			<LibraryDocumentBar
 				{...actions}
 				item={barItem}
+				menuFinalFocus={menuFinalFocus}
 				onBack={onBack}
 				presence={
 					writers.length > 0 ? (
