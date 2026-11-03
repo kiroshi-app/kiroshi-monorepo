@@ -147,6 +147,7 @@ const chat = {
 			interactive: "Vue interactive",
 			gallery: "Galerie",
 			"illustrated-list": "Liste",
+			checklist: "Liste de tâches",
 			collapsible: "Section",
 			"web-page": "Page web",
 			video: "Vidéo",

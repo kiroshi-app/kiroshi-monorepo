@@ -2,7 +2,10 @@
 
 import { type ReactNode, useContext, useState } from "react"
 import { useTranslation } from "react-i18next"
+import ReactMarkdown, { type Components } from "react-markdown"
+import remarkGfm from "remark-gfm"
 
+import { Checklist } from "@workspace/ui/components/answer-blocks/checklist"
 import { CollapsibleSections } from "@workspace/ui/components/answer-blocks/collapsible-sections"
 import { Gallery } from "@workspace/ui/components/answer-blocks/gallery"
 import { IllustratedList } from "@workspace/ui/components/answer-blocks/illustrated-list"
@@ -12,6 +15,7 @@ import { WebPageCard } from "@workspace/ui/components/answer-blocks/web-page-car
 import {
 	InteractiveView,
 	type InteractiveViewMode,
+	type InteractiveViewResult,
 	type InteractiveViewValues,
 } from "@workspace/ui/components/interactive-view"
 import { useMarkdownAnswerActions } from "@workspace/ui/components/markdown/answer-actions"
@@ -19,7 +23,10 @@ import type {
 	AnswerBlock,
 	AnswerBlockLabel,
 	InteractiveBlock,
+	InteractiveTemplate,
+	Measure,
 } from "@workspace/ui/components/markdown/answer-block-source"
+import { MarkdownLink } from "@workspace/ui/components/markdown/link"
 import { NestedMarkdownContext } from "@workspace/ui/components/markdown/nested-markdown"
 import { MARKDOWN_ESCAPED_BLOCK_CLASS } from "@workspace/ui/components/markdown/prose"
 import { OptionsCard } from "@workspace/ui/components/options-card"
@@ -33,9 +40,47 @@ type AnswerBlockFrameProps = {
 	children: ReactNode
 }
 
+type InlineMarkdownProps = {
+	children: string
+}
+
+type NumberFormat = (value: number) => string
+
 const RESULT_FORMAT = new Intl.NumberFormat("en", { maximumFractionDigits: 2 })
 
-const formatNumber = (value: number) => RESULT_FORMAT.format(value)
+const formatNumber: NumberFormat = (value) => RESULT_FORMAT.format(value)
+
+const formatOf = ({ currency, unit }: Measure): NumberFormat => {
+	if (currency) {
+		const format = new Intl.NumberFormat("en", {
+			style: "currency",
+			currency,
+			trailingZeroDisplay: "stripIfInteger",
+		})
+		return (value) => format.format(value)
+	}
+	return unit ? (value) => `${formatNumber(value)} ${unit}` : formatNumber
+}
+
+const INLINE_ELEMENTS = ["p", "strong", "em", "del", "code", "a"]
+
+const INLINE_PLUGINS = [remarkGfm]
+
+const INLINE_COMPONENTS: Components = {
+	p: ({ children }) => children,
+	a: MarkdownLink,
+}
+
+const InlineMarkdown = ({ children }: InlineMarkdownProps) => (
+	<ReactMarkdown
+		allowedElements={INLINE_ELEMENTS}
+		components={INLINE_COMPONENTS}
+		remarkPlugins={INLINE_PLUGINS}
+		unwrapDisallowed
+	>
+		{children}
+	</ReactMarkdown>
+)
 
 export const AnswerBlockFrame = ({ children }: AnswerBlockFrameProps) => (
 	<div
@@ -63,6 +108,7 @@ const OptionsBlockView = ({ block }: BlockProps<"options">) => {
 				label: title,
 				description: text,
 			}))}
+			subtitle={block.subtitle}
 			title={block.question ?? t("answerBlock.options.title")}
 		/>
 	)
@@ -76,28 +122,59 @@ const sliderViewsOf = ({ sliders }: InteractiveBlock) =>
 		max: slider.max,
 		step: slider.step,
 		defaultValue: slider.defaultValue,
-		formatValue: formatNumber,
+		formatValue: formatOf(slider.measure),
 	}))
 
 const InteractiveBlockView = ({ block }: BlockProps<"interactive">) => {
 	const { t } = useTranslation("chat")
 	const actions = useMarkdownAnswerActions()
 	const [mode, setMode] = useState<InteractiveViewMode>("inline")
+	const sliders = sliderViewsOf(block)
+	const formatResult = formatOf(block.measure)
 
-	const totalAt = (values: InteractiveViewValues) => {
-		const value = block.result(values)
-		return Number.isFinite(value)
-			? formatNumber(value)
+	const shown = (value: number) =>
+		Number.isFinite(value)
+			? formatResult(value)
 			: t("answerBlock.interactive.notDefined")
+
+	const filled = (
+		template: InteractiveTemplate,
+		values: InteractiveViewValues,
+	) =>
+		template
+			.map((part) => (typeof part === "string" ? part : shown(part(values))))
+			.join("")
+
+	const resultAt = (values: InteractiveViewValues): InteractiveViewResult => {
+		const ratio = block.meter?.ratio(values) ?? 0
+		return {
+			caption:
+				block.title === undefined
+					? t("answerBlock.interactive.result")
+					: block.resultLabel,
+			total: shown(block.result(values)),
+			totalNote: block.note && filled(block.note, values),
+			meter: block.meter && {
+				ratio: Number.isFinite(ratio) ? ratio : 0,
+				caption: filled(block.meter.caption, values),
+			},
+			breakdown: block.breakdown.map(({ label, value }) => ({
+				label,
+				value: shown(value(values)),
+			})),
+		}
 	}
 
 	const summaryOf = (values: InteractiveViewValues) =>
 		t("answerBlock.interactive.summary", {
-			values: block.sliders
-				.map(({ name, label }) => `${label}: ${formatNumber(values[name])}`)
+			values: sliders
+				.map(
+					({ id, label, formatValue }) =>
+						`${label}: ${formatValue(values[id])}`,
+				)
 				.join(", "),
 			label: block.resultLabel,
-			result: totalAt(values),
+			result: shown(block.result(values)),
 		})
 
 	return (
@@ -106,13 +183,11 @@ const InteractiveBlockView = ({ block }: BlockProps<"interactive">) => {
 			mode={mode}
 			onModeChange={setMode}
 			onSend={(values) => actions?.onUseValues(summaryOf(values))}
-			result={(values) => ({
-				caption: t("answerBlock.interactive.result"),
-				total: totalAt(values),
-			})}
+			result={resultAt}
 			sendLabel={t("answerBlock.interactive.use")}
-			sliders={sliderViewsOf(block)}
-			title={block.resultLabel}
+			sliders={sliders}
+			source={block.source}
+			title={block.title ?? block.resultLabel}
 		/>
 	)
 }
@@ -145,31 +220,71 @@ const IllustratedListBlockView = ({
 	block,
 }: BlockProps<"illustrated-list">) => (
 	<IllustratedList
-		items={block.items.map(({ title, image, text }, index) => ({
+		items={block.items.map(({ title, image, text, badge, meta }, index) => ({
 			id: `${index}`,
 			title,
 			image: { src: image, alt: title },
-			description: text,
+			badge,
+			description: text ? <InlineMarkdown>{text}</InlineMarkdown> : undefined,
+			meta,
 		}))}
 	/>
 )
+
+const ChecklistBlockView = ({ block }: BlockProps<"checklist">) => {
+	const actions = useMarkdownAnswerActions()
+	const [checks, setChecks] = useState(() =>
+		block.items.map(({ isDone }) => isDone),
+	)
+	const items = block.items.map(({ text, assignee }, index) => ({
+		id: `${index}`,
+		label: text,
+		isChecked: checks[index],
+		assignee,
+	}))
+	const onToggleItem = actions?.onToggleChecklistItem
+	const onCopyList = actions?.onCopyChecklist
+
+	const toggle = (id: string, isChecked: boolean) => {
+		const row = Number(id)
+		setChecks(checks.map((check, index) => (index === row ? isChecked : check)))
+		onToggleItem?.(block.title, row, isChecked)
+	}
+
+	const listText = () =>
+		[
+			block.title,
+			...items.map(
+				({ label, isChecked, assignee }) =>
+					`- [${isChecked ? "x" : " "}] ${label}${assignee ? ` · ${assignee}` : ""}`,
+			),
+		].join("\n")
+
+	return (
+		<Checklist
+			items={items}
+			onCopy={onCopyList ? () => onCopyList(listText()) : undefined}
+			onToggle={onToggleItem ? toggle : undefined}
+			title={block.title}
+		/>
+	)
+}
 
 const CollapsibleBlockView = ({ block }: BlockProps<"collapsible">) => {
 	const NestedMarkdown = useContext(NestedMarkdownContext)
 
 	return (
 		<CollapsibleSections
-			sections={[
-				{
-					id: "content",
-					label: block.title,
-					body: NestedMarkdown ? (
-						<NestedMarkdown>{block.content}</NestedMarkdown>
-					) : (
-						block.content
-					),
-				},
-			]}
+			sections={block.sections.map(({ title, value, content }, index) => ({
+				id: `${index}`,
+				label: title,
+				value,
+				body: NestedMarkdown ? (
+					<NestedMarkdown>{content}</NestedMarkdown>
+				) : (
+					content
+				),
+			}))}
 		/>
 	)
 }
@@ -227,6 +342,8 @@ const blockViewOf = (block: AnswerBlock) => {
 			return <GalleryBlockView block={block} />
 		case "illustrated-list":
 			return <IllustratedListBlockView block={block} />
+		case "checklist":
+			return <ChecklistBlockView block={block} />
 		case "collapsible":
 			return <CollapsibleBlockView block={block} />
 		case "web-page":
