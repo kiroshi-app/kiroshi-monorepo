@@ -52,7 +52,7 @@ const common = i18n.getFixedT(null, "common")
 const PARAGRAPH_FIELD = common("library.editor.paragraph")
 
 const host = vi.hoisted(() => ({
-	documents: new Map<string, unknown>(),
+	documents: new Map<string, Y.Doc>(),
 	listeners: new Map<string, Set<Heard>>(),
 	refusesCreates: false,
 }))
@@ -67,7 +67,7 @@ const itemNamed = (name: string): LibraryItem => ({
 })
 
 const documentOf = (name: string) => {
-	const held = host.documents.get(name) as Y.Doc | undefined
+	const held = host.documents.get(name)
 	if (held) {
 		return held
 	}
