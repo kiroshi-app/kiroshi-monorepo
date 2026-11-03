@@ -1419,7 +1419,7 @@ const hoverTheStrip = (canvasElement: HTMLElement, clientX: number) => {
 
 const incomingTabIn = (canvasElement: HTMLElement) =>
 	barIn(canvasElement).querySelector<HTMLElement>(
-		'[data-slot="title-bar-incoming-tab"]',
+		'[data-slot="title-bar-tab-chip"]',
 	)
 
 const expectPartedAt = async (
