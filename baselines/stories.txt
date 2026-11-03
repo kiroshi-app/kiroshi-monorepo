@@ -1328,6 +1328,7 @@ navigation-librarydocumenteditor--blank
 navigation-librarydocumenteditor--caret-moves
 navigation-librarydocumenteditor--create-failure
 navigation-librarydocumenteditor--existing-document
+navigation-librarydocumenteditor--fields-stay-in-place
 navigation-librarydocumenteditor--from-meeting-notes
 navigation-librarydocumenteditor--open-failure
 navigation-librarydocumenteditor--outside-change-while-typing
@@ -1336,6 +1337,7 @@ navigation-librarydocumenteditor--person-caret-beside-agent
 navigation-librarydocumenteditor--save-failure
 navigation-librarydocumenteditor--selecting-across-agent-run
 navigation-librarydocumenteditor--selecting-across-agent-run-light
+navigation-librarydocumenteditor--unmounted-right-after-blur
 navigation-librarydocumenteditor--with-typed-text
 navigation-librarydocumenteditor--write-failure
 navigation-librarydocumentview--agent-finished
