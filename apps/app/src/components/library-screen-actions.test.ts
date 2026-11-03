@@ -231,6 +231,11 @@ const closeMenu = async () => {
 	await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
 }
 
+const renameInMenuOf = async (title: string) =>
+	within(await openMenuOf(title)).queryByRole("menuitem", {
+		name: menuItemOf("rename"),
+	})
+
 const tileShown = (title: string) =>
 	screen
 		.queryAllByRole("button")
@@ -333,17 +338,9 @@ describe("Rename in the menu of a Library item", () => {
 		async (_space, isJoined) => {
 			await renderLibraryScreen({ isJoined })
 
-			expect(
-				within(await openMenuOf("notes")).queryByRole("menuitem", {
-					name: menuItemOf("rename"),
-				}),
-			).toBeInstanceOf(HTMLElement)
+			expect(await renameInMenuOf("notes")).toBeInstanceOf(HTMLElement)
 			await closeMenu()
-			expect(
-				within(await openMenuOf("diagram.png")).queryByRole("menuitem", {
-					name: menuItemOf("rename"),
-				}),
-			).toBeNull()
+			expect(await renameInMenuOf("diagram.png")).toBeNull()
 			await closeMenu()
 
 			await openImage()
