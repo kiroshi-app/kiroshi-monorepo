@@ -73,7 +73,7 @@ const useLibraryCopy = (spaceId: string, command: ActionCommand) => {
 	}
 }
 
-type LibraryRename = { name: string; newName: string }
+export type LibraryRename = { name: string; newName: string }
 
 const useLibraryRename = (spaceId: string) => {
 	const queryClient = useQueryClient()

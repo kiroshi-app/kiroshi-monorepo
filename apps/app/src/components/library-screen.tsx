@@ -27,6 +27,7 @@ import {
 } from "@/lib/library/library-items"
 import { useCreateLibraryDocument } from "@/lib/library/use-create-library-document"
 import {
+	type LibraryRename,
 	useJoinedLibraryActions,
 	useLibraryActions,
 } from "@/lib/library/use-library-actions"
@@ -61,11 +62,9 @@ type OpenedItem = { kind: "image"; id: string } | OpenedDocument | null
 
 type NamedItem = { id: string }
 
-type DocumentRename = { name: string; newName: string }
-
 const renameIfRetitled = (
 	{ name, title, startTitle }: OpenedDocument,
-	rename: (renamed: DocumentRename) => void,
+	rename: (renamed: LibraryRename) => void,
 ) => {
 	const newTitle = title.trim()
 	if (newTitle && newTitle !== startTitle) {
