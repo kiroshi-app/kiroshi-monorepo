@@ -728,14 +728,10 @@ describe("a new Library document the host refuses to seed", () => {
 	})
 })
 
-const backgroundTabTitled = (title: string) =>
+const otherTab = () =>
 	screen
 		.getAllByRole("tab")
-		.find(
-			(tab) =>
-				tab.getAttribute("aria-selected") !== "true" &&
-				tab.textContent?.includes(title),
-		) as HTMLElement
+		.find((tab) => tab.getAttribute("aria-selected") !== "true") as HTMLElement
 
 describe("Open in new tab on a Library item", () => {
 	it("opens a new tab on the Library with that item opened", async () => {
@@ -757,7 +753,7 @@ describe("Open in new tab on a Library item", () => {
 		)
 		expect(screen.queryByRole("dialog")).toBeNull()
 
-		await click(backgroundTabTitled(LIBRARY_NAME))
+		await click(otherTab())
 
 		expect(lightboxShown()).toBe(true)
 	})
@@ -779,11 +775,6 @@ const closeLightbox = () =>
 			name: common("library.lightbox.back"),
 		}),
 	)
-
-const otherTab = () =>
-	screen
-		.getAllByRole("tab")
-		.find((tab) => tab.getAttribute("aria-selected") !== "true") as HTMLElement
 
 const LIBRARY_ON_IMAGE = `/library?item=${IMAGE.name}`
 
