@@ -84,6 +84,7 @@ import type {
 	RuntimeScope,
 	ScopedEvent,
 	TransportError,
+	TurnHold,
 } from "../agent/contract"
 import { describeTransportError } from "../agent/messages"
 import type { ChatError } from "../chat/chat-state"
@@ -110,6 +111,7 @@ import {
 } from "../chat/reply-endings"
 import { needsFreshSession } from "../chat/screen-model"
 import {
+	heldWorkFor,
 	type WorkingState,
 	withActivity,
 	workingFor,
@@ -249,6 +251,7 @@ type Speaker = {
 	heldReply: ChatMessage | null
 	written: Map<string, string>
 	activities: ActivityEvent[]
+	hold: TurnHold | null
 	pending: PendingPrompt | null
 	askedAt: number
 	startedAt: number
@@ -303,6 +306,7 @@ const dropDescriberOf =
 const isSameWork = (left: WorkingState | null, right: WorkingState | null) =>
 	left?.kind === right?.kind &&
 	left?.label === right?.label &&
+	left?.backgroundTasks === right?.backgroundTasks &&
 	left?.startedAt === right?.startedAt
 
 const isSameOrder = (left: string[], right: string[]) =>
@@ -343,13 +347,13 @@ const promptWork = (pending: PendingPrompt): WorkingState => ({
 			: pending.request.title,
 })
 
+const busySpeakerWork = (held: Speaker, hasPublished: boolean) =>
+	held.hold ? heldWorkFor(held.hold) : workingFor(held.activities, hasPublished)
+
 const speakerWork = (held: Speaker, hasPublished: boolean): WorkingState =>
 	held.pending
 		? promptWork(held.pending)
-		: {
-				...workingFor(held.activities, hasPublished),
-				startedAt: held.startedAt,
-			}
+		: { ...busySpeakerWork(held, hasPublished), startedAt: held.startedAt }
 
 const initialState: ConversationState = {
 	conversationId: null,
@@ -918,6 +922,7 @@ export const createConversationController = (
 	}
 
 	const failSpeaker = (held: Speaker, error: TransportError) => {
+		held.hold = null
 		if (held.pending?.kind === "question") {
 			noteQuestionRunFailure(held.botId, error)
 		} else {
@@ -932,6 +937,11 @@ export const createConversationController = (
 
 	const noteActivity = (held: Speaker, activity: ActivityEvent) => {
 		held.activities = withActivity(held.activities, activity)
+		sync()
+	}
+
+	const noteHold = (held: Speaker, hold: TurnHold | null) => {
+		held.hold = hold
 		sync()
 	}
 
@@ -1002,6 +1012,8 @@ export const createConversationController = (
 				})
 			case "permissionResolved":
 				return releasePrompt(held, event.id)
+			case "turnHeld":
+				return noteHold(held, event.hold)
 			case "turnEnded":
 				return closeSpeaker(held, ENDING_FOR_OUTCOME[event.ended.outcome])
 			case "failed":
@@ -1180,6 +1192,7 @@ export const createConversationController = (
 		heldReply: null,
 		written: new Map(),
 		activities: [],
+		hold: null,
 		pending: null,
 		askedAt: 0,
 		startedAt: now(),

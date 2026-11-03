@@ -1797,6 +1797,111 @@ describe("what a speaking companion is doing", () => {
 	})
 })
 
+describe("a companion of a wave held on background tasks", () => {
+	const held = (count: number): AgentEvent => ({
+		type: "turnHeld",
+		hold: { reason: "backgroundTasks", count },
+	})
+
+	const RELEASED: AgentEvent = { type: "turnHeld", hold: null }
+
+	const workOf = (harness: Harness, botId: string) =>
+		harness.controller
+			.getState()
+			.speakers.find((speaking) => speaking.botId === botId)?.work ?? null
+
+	let harness: Harness
+	let nyx: string
+	let iris: string
+
+	beforeEach(async () => {
+		harness = await createHarness(["Ada", "Nyx", "Iris"])
+		nyx = idOf(harness.conversation, "Nyx")
+		iris = idOf(harness.conversation, "Iris")
+		await harness.controller.send("@Nyx then @Iris")
+		await harness.settled()
+	})
+
+	it("says a held companion is working on the tasks it waits on", async () => {
+		harness.driver.pushTo(nyx, [held(2)])
+		await harness.settled()
+
+		expect(workOf(harness, nyx)).toEqual({
+			kind: "working",
+			backgroundTasks: 2,
+			startedAt: expect.any(Number),
+		})
+	})
+
+	it("follows the count of tasks a held companion waits on", async () => {
+		harness.driver.pushTo(nyx, [held(2), held(1)])
+		await harness.settled()
+
+		expect(workOf(harness, nyx)?.backgroundTasks).toBe(1)
+	})
+
+	it("leaves the other companions of the wave as they were", async () => {
+		const before = workOf(harness, iris)
+
+		harness.driver.pushTo(nyx, [held(2)])
+		await harness.settled()
+
+		expect(workOf(harness, iris)).toEqual(before)
+	})
+
+	it("drops the tasks once the companion is released", async () => {
+		harness.driver.pushTo(nyx, [held(2), RELEASED])
+		await harness.settled()
+
+		expect(workOf(harness, nyx)).toEqual({
+			kind: "thinking",
+			startedAt: expect.any(Number),
+		})
+	})
+
+	it("drops the tasks when the held turn fails", async () => {
+		harness.driver.pushTo(nyx, [
+			held(2),
+			{ type: "failed", error: { kind: "writeFailed", detail: "pipe" } },
+		])
+		await harness.settled()
+
+		expect(workOf(harness, nyx)).toEqual({
+			kind: "thinking",
+			startedAt: expect.any(Number),
+		})
+	})
+
+	it("drops the tasks when the held turn ends", async () => {
+		harness.driver.pushTo(nyx, [held(2), ...spoke(nyx, "walls up")])
+		await harness.settled()
+
+		expect(runningIn(harness.controller)).toEqual([iris])
+		expect(workOf(harness, iris)?.backgroundTasks).toBeUndefined()
+	})
+
+	it("keeps a held companion waiting on the permission it wants", async () => {
+		harness.driver.pushTo(nyx, [
+			held(2),
+			{
+				type: "permissionRequested",
+				request: {
+					id: "let-1",
+					toolName: "Bash",
+					title: "Run the mason",
+					detail: "mason --build",
+				},
+			},
+		])
+		await harness.settled()
+
+		expect(workOf(harness, nyx)).toEqual({
+			kind: "waiting",
+			label: "Run the mason",
+		})
+	})
+})
+
 describe("naming a conversation from its first message", () => {
 	const namelessWith = (namingFor: () => Promise<ConversationNaming | null>) =>
 		createHarness(["Ada"], { title: "", namingFor })
