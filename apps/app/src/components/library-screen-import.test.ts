@@ -146,7 +146,7 @@ const importingLabelOf = (name: string) =>
 
 const importFailureOf = (name: string, description: string) =>
 	expect.objectContaining({
-		title: common("library.failure.import", { name }),
+		title: common("library.failure.import.title", { name }),
 		description,
 	})
 

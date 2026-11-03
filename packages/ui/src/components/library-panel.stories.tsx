@@ -30,6 +30,7 @@ import {
 import {
 	endNotice,
 	NoticeSurface,
+	raiseFailureNotice,
 	raiseTransientNotice,
 } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
@@ -105,6 +106,25 @@ const HeldAddedNotice = () => {
 
 	return <NoticeSurface transientDelay={0} />
 }
+
+const IMPORT_FAILURE_REASONS = [
+	"tooLarge",
+	"invalidName",
+	"unsupported",
+	"undecodable",
+	"notUtf8",
+	"missing",
+	"unwritable",
+	"unreadable",
+	"unknownSpace",
+	"unavailable",
+	"storage",
+	"generic",
+] as const
+
+const RAW_REASON_CODE = new RegExp(
+	`\\b(${IMPORT_FAILURE_REASONS.join("|")})\\b`,
+)
 
 const expectOutOfFocusOrder = async (element: HTMLElement) => {
 	await expect(
@@ -599,5 +619,51 @@ export const ImportLongNames = meta.story({
 			getComputedStyle(slotIn(canvasElement, "library-import-progress"))
 				.backgroundColor,
 		).toBe(accent)
+	},
+})
+
+export const ImportFailures = meta.story({
+	render: (args) => (
+		<LibraryStoryFrame hue="blue">
+			<LibraryPanel {...args} />
+			<NoticeSurface />
+		</LibraryStoryFrame>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The notice raised when a file fails to import, once per reason the host or the size check can answer, then the generic sentence for any other failure, which stays on screen. The title names the file from `common:library.failure.import.title`, the second line is `common:library.failure.import.<reason>`. Check that each second line says what went wrong and the gesture that fixes it, and that no raw reason code reaches the screen.",
+			},
+		},
+	},
+	play: async () => {
+		const en = i18n.getFixedT("en", "common")
+		const fr = i18n.getFixedT("fr", "common")
+		const title = en("library.failure.import.title", { name: "launch-plan.md" })
+
+		for (const [index, reason] of IMPORT_FAILURE_REASONS.entries()) {
+			const sentence = en(`library.failure.import.${reason}`)
+			const notice = raiseFailureNotice({ title, description: sentence })
+
+			const shown = await waitFor(() => {
+				const line = slotsIn(document.body, "toast-description").find(
+					({ textContent }) => textContent === sentence,
+				)
+				if (!line) throw new Error(`The ${reason} sentence is not drawn`)
+				expect(line).toBeVisible()
+				return line
+			})
+			const card = shown.closest<HTMLElement>("[data-slot=toast]")
+			if (!card) throw new Error(`The ${reason} notice is not drawn`)
+			await Promise.all(
+				card.getAnimations({ subtree: true }).map(({ finished }) => finished),
+			)
+			await expect(card).toHaveTextContent(title)
+			await expect(card.textContent).not.toMatch(RAW_REASON_CODE)
+			await expect(fr(`library.failure.import.${reason}`)).not.toBe(sentence)
+
+			if (index < IMPORT_FAILURE_REASONS.length - 1) endNotice(notice)
+		}
 	},
 })
