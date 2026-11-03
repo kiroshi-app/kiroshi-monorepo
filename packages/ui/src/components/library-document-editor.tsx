@@ -1533,14 +1533,10 @@ const LibraryDocumentEditor = ({
 		const key = event.key.toLowerCase()
 		const isRedo =
 			isCommand && ((key === "z" && event.shiftKey) || (!IS_MAC && key === "y"))
-		if (isCommand && key === "z" && !event.shiftKey) {
+		if (isRedo || (isCommand && key === "z")) {
 			event.preventDefault()
-			undo()
-			return
-		}
-		if (isRedo) {
-			event.preventDefault()
-			redo()
+			if (isRedo) redo()
+			else undo()
 			return
 		}
 
