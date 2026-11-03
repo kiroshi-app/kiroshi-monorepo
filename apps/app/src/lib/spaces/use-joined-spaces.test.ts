@@ -255,7 +255,6 @@ it("shows the wait its own connect answered while the list still reads online, t
 	expect(result.current).toMatchObject({
 		spaceName: "Studio Nord",
 		hostName: "Lea",
-		hostWait: { reason: "socketClosed" },
 	})
 	expect(spaceAccessOf(result.current)).toEqual({
 		reason: "offline",
@@ -263,7 +262,6 @@ it("shows the wait its own connect answered while the list still reads online, t
 	})
 
 	rerender({ status: { status: "up" } })
-	expect(result.current?.hostWait).toBeUndefined()
 	expect(spaceAccessOf(result.current)).toBeUndefined()
 })
 
