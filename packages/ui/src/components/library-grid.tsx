@@ -7,6 +7,7 @@ import {
 	SkeletonBar,
 } from "@workspace/ui/components/list-skeleton"
 import { Markdown } from "@workspace/ui/components/markdown"
+import { Skeleton } from "@workspace/ui/components/ui/skeleton"
 import { cn } from "@workspace/ui/lib/utils"
 
 type LibraryImageItem = {
@@ -208,7 +209,7 @@ const SkeletonGridRow = () => (
 	>
 		{SKELETON_TILE_KEYS.map((key) => (
 			<div className="flex flex-col gap-2.5" key={key}>
-				<div className="h-45 rounded-control bg-border" />
+				<Skeleton className="h-45 animate-none rounded-control bg-border" />
 				<div className="flex flex-col gap-0.5">
 					<div className="flex h-4.5 items-center">
 						<SkeletonBar className="w-32" />

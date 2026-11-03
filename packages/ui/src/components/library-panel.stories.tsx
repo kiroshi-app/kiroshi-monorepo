@@ -6,6 +6,8 @@ import preview from "@workspace/storybook/preview"
 import {
 	expectSkeletonFilledTo,
 	hueScopeOf,
+	isInBrowserRunner,
+	realPointer,
 	slotIn,
 	slotsIn,
 } from "@workspace/storybook/story-utils"
@@ -154,7 +156,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The Library tab of a Space: every image and document the Space holds, read-only. The header carries the search, Import and New document, each drawn only when its callback is passed; the filters are one radio group whose checked pill wears the Space colour; each grid item is a single button that hands the item to `onOpenItem`. A Library with nothing in it trades the grid for the Start a document templates and the Bring in files strip, and while the Library loads a grid skeleton fills the card. Pass a `LibraryLightbox` as `overlay` so it covers the card.",
+					"The Library tab of a Space: every image and document the Space holds, read-only. The header carries the search, Import and New document, each drawn only when its callback is passed; the filters are one single-selection toggle group whose pressed pill wears the Space colour; each grid item is a single button that hands the item to `onOpenItem`. A Library with nothing in it trades the grid for the Start a document templates and the Bring in files strip, and while the Library loads a grid skeleton fills the card. Pass a `LibraryLightbox` as `overlay` so it covers the card.",
 			},
 		},
 	},
@@ -177,18 +179,28 @@ export const GridAll = meta.story({
 		},
 	},
 	play: async ({ args, canvas, canvasElement, userEvent }) => {
-		const filters = canvas.getByRole("radiogroup", { name: "Show" })
-		const all = within(filters).getByRole("radio", { name: "All" })
-		await expect(all).toHaveAttribute("aria-checked", "true")
+		const filters = canvas.getByRole("group", { name: "Show" })
+		const all = within(filters).getByRole("button", { name: "All" })
+		await expect(all).toHaveAttribute("aria-pressed", "true")
 		await expect(all).toHaveTextContent(/^All$/)
+		await expect(all.getBoundingClientRect().height).toBe(28)
+		await expect(getComputedStyle(all).transitionProperty).toBe("none")
 
 		const accent = getComputedStyle(slotIn(canvasElement, "library-panel"))
 			.getPropertyValue("--primary")
 			.trim()
 		await expect(getComputedStyle(all).backgroundColor).toBe(rgbOf(accent))
-		await userEvent.hover(all)
-		await expect(getComputedStyle(all).backgroundColor).toBe(rgbOf(accent))
-		await userEvent.unhover(all)
+		if (isInBrowserRunner()) {
+			const pointer = await realPointer()
+			try {
+				await pointer.hover(all)
+				await waitFor(() => expect(all.matches(":hover")).toBe(true))
+				await expect(all).toHaveAttribute("aria-pressed", "true")
+				await expect(getComputedStyle(all).backgroundColor).toBe(rgbOf(accent))
+			} finally {
+				await pointer.unhover(all)
+			}
+		}
 		await expect(
 			getComputedStyle(slotIn(canvasElement, "library-thumbnail"))
 				.backgroundColor,
@@ -199,6 +211,12 @@ export const GridAll = meta.story({
 		).gridTemplateColumns.split(" ")
 		await expect(columns).toHaveLength(4)
 		await expect(Number.parseFloat(columns[0] ?? "")).toBeCloseTo(271, 0)
+
+		for (let press = 0; press < 8 && document.activeElement !== all; press++)
+			await userEvent.tab()
+		await expect(all).toHaveFocus()
+		await expect(all.matches(":focus-visible")).toBe(true)
+		await expect(getComputedStyle(all).boxShadow).not.toBe("none")
 
 		const first = canvas.getByRole("button", { name: /hero-dunes\.png/ })
 		for (let press = 0; press < 8 && document.activeElement !== first; press++)
@@ -216,9 +234,13 @@ export const GridAll = meta.story({
 		await expect(args.onOpenItem).toHaveBeenCalledWith(LIBRARY_ITEMS[0])
 
 		await userEvent.click(
-			within(filters).getByRole("radio", { name: /Images/ }),
+			within(filters).getByRole("button", { name: /Images/ }),
 		)
-		await expect(args.onFilterChange).toHaveBeenCalledWith("images")
+		await expect(args.onFilterChange).toHaveBeenLastCalledWith("images")
+
+		await userEvent.click(all)
+		await expect(args.onFilterChange).toHaveBeenLastCalledWith("all")
+		await expect(all).toHaveAttribute("aria-pressed", "true")
 	},
 })
 
@@ -234,8 +256,8 @@ export const GridImages = meta.story({
 	},
 	play: async ({ canvas, canvasElement }) => {
 		await expect(
-			canvas.getByRole("radio", { name: "Images 8" }),
-		).toHaveAttribute("aria-checked", "true")
+			canvas.getByRole("button", { name: "Images 8" }),
+		).toHaveAttribute("aria-pressed", "true")
 		await expect(slotsIn(canvasElement, "library-item")).toHaveLength(8)
 		await expect(slotsIn(canvasElement, "library-page")).toHaveLength(0)
 	},
@@ -253,8 +275,8 @@ export const GridDocuments = meta.story({
 	},
 	play: async ({ canvas, canvasElement }) => {
 		await expect(
-			canvas.getByRole("radio", { name: "Documents 4" }),
-		).toHaveAttribute("aria-checked", "true")
+			canvas.getByRole("button", { name: "Documents 4" }),
+		).toHaveAttribute("aria-pressed", "true")
 		await expect(slotsIn(canvasElement, "library-page")).toHaveLength(4)
 		await expect(
 			canvasElement.querySelector("[data-slot=library-thumbnail] img"),
@@ -277,8 +299,8 @@ export const FilterWithNoMatch = meta.story({
 	},
 	play: async ({ canvas, canvasElement }) => {
 		await expect(
-			canvas.getByRole("radio", { name: "Documents 0" }),
-		).toHaveAttribute("aria-checked", "true")
+			canvas.getByRole("button", { name: "Documents 0" }),
+		).toHaveAttribute("aria-pressed", "true")
 		await expect(slotsIn(canvasElement, "library-item")).toHaveLength(0)
 		await expect(canvas.getByRole("status")).toHaveTextContent(
 			"No documents in this Library yet.",
@@ -307,6 +329,49 @@ export const SearchWithNoMatch = meta.story({
 	},
 })
 
+export const SearchFilled = meta.story({
+	args: {
+		items: LIBRARY_ITEMS.filter((item) => item.name.includes("dashboard")),
+		searchQuery: "dashboard",
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A search that found items: the app hands over the matching items with the query set. Check that the field is a 32 px pill led by the search icon, that the query sits at 13 px on an 18 px line, that the field keeps its name and placeholder, and that a keyboard reader reaching it sees its focus ring.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		const search = canvas.getByRole("searchbox", { name: "Search the Library" })
+		await expect(search).toHaveValue("dashboard")
+		await expect(search).toHaveAttribute("placeholder", "Search the Library")
+		await expect(search.getBoundingClientRect().height).toBe(32)
+		await expect(getComputedStyle(search).fontSize).toBe("13px")
+		await expect(getComputedStyle(search).lineHeight).toBe("18px")
+		await expect(getComputedStyle(search).transitionProperty).toBe("none")
+
+		const icon = slotIn(canvasElement, "library-search").querySelector("svg")
+		await expect(icon?.getBoundingClientRect().left).toBeLessThan(
+			search.getBoundingClientRect().left + 16,
+		)
+		await expect(slotsIn(canvasElement, "library-item").length).toBeGreaterThan(
+			0,
+		)
+
+		for (let press = 0; press < 4 && document.activeElement !== search; press++)
+			await userEvent.tab()
+		await expect(search).toHaveFocus()
+		await expect(search.matches(":focus-visible")).toBe(true)
+		await expect(getComputedStyle(search).boxShadow).not.toBe("none")
+
+		await userEvent.type(search, "s")
+		await expect(args.onSearchQueryChange).toHaveBeenLastCalledWith(
+			"dashboards",
+		)
+	},
+})
+
 export const EmptyWithNoCallbacks = meta.story({
 	args: {
 		items: [],
@@ -325,7 +390,7 @@ export const EmptyWithNoCallbacks = meta.story({
 	},
 	play: async ({ canvas, canvasElement }) => {
 		await expect(canvas.queryAllByRole("button")).toHaveLength(0)
-		await expect(canvas.queryByRole("radiogroup")).toBe(null)
+		await expect(canvas.queryByRole("group", { name: "Show" })).toBe(null)
 		await expect(canvas.queryByRole("searchbox")).toBe(null)
 		await expect(canvas.queryByRole("heading", { level: 2 })).toBe(null)
 		await expect(
@@ -345,7 +410,7 @@ export const EmptyWithEveryCallback = meta.story({
 		},
 	},
 	play: async ({ args, canvas, userEvent }) => {
-		await expect(canvas.queryByRole("radiogroup")).toBe(null)
+		await expect(canvas.queryByRole("group", { name: "Show" })).toBe(null)
 		await expect(canvas.queryByRole("searchbox")).toBe(null)
 		await expect(canvas.queryByRole("button", { name: "Import" })).toBe(null)
 
@@ -404,7 +469,7 @@ export const LongNames = meta.story({
 
 		await waitFor(() =>
 			expect(
-				getComputedStyle(canvas.getByRole("radio", { name: "All" }))
+				getComputedStyle(canvas.getByRole("button", { name: "All" }))
 					.backgroundColor,
 			).toBe(rgbOf(hueTone(HUE_PRESETS.pink, "dark", "accent").hex)),
 		)

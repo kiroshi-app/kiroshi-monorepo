@@ -1430,16 +1430,16 @@ describe("WorkspaceBody library", () => {
 		expect(shownNames()).toEqual(["hero-dunes.png"])
 
 		await search("")
-		fireEvent.click(screen.getByRole("radio", { name: /^Images/ }))
+		fireEvent.click(screen.getByRole("button", { name: /^Images/ }))
 		await settle()
 
 		expect(shownNames()).toEqual(
 			["hero-dunes.png", "fern-study.jpg", "dusk.png"].sort(),
 		)
-		expect(screen.getByRole("radio", { name: /^Images/ }).textContent).toBe(
+		expect(screen.getByRole("button", { name: /^Images/ }).textContent).toBe(
 			"Images3",
 		)
-		expect(screen.getByRole("radio", { name: /^Documents/ }).textContent).toBe(
+		expect(screen.getByRole("button", { name: /^Documents/ }).textContent).toBe(
 			"Documents2",
 		)
 	})
@@ -1499,7 +1499,7 @@ describe("WorkspaceBody library", () => {
 	it("edits an opened document and returns to the grid with its filter and query kept", async () => {
 		await openLibrary()
 		await search("brief")
-		fireEvent.click(screen.getByRole("radio", { name: /^Documents/ }))
+		fireEvent.click(screen.getByRole("button", { name: /^Documents/ }))
 		await settle()
 
 		await open("Spring launch brief")
@@ -1523,8 +1523,8 @@ describe("WorkspaceBody library", () => {
 		expect(screen.getByRole("searchbox")).toHaveProperty("value", "brief")
 		expect(
 			screen
-				.getByRole("radio", { name: /^Documents/ })
-				.getAttribute("aria-checked"),
+				.getByRole("button", { name: /^Documents/ })
+				.getAttribute("aria-pressed"),
 		).toBe("true")
 		expect(shownNames()).toEqual(["Spring launch brief"])
 	})
@@ -1604,7 +1604,7 @@ describe("WorkspaceBody library", () => {
 	it("reveals the opened image and the opened document in their folder", async () => {
 		await openLibrary()
 		await open("hero-dunes.png")
-		await press("More")
+		await press("Open folder")
 		await press("Close")
 
 		await open("Spring launch brief")
@@ -1625,18 +1625,18 @@ describe("WorkspaceBody library", () => {
 		await openLibrary()
 		await open("hero-dunes.png")
 
-		await press("More")
+		await press("Open folder")
 
 		await noticeTitled(REVEAL_FAILURE)
 	})
 
-	it("keeps Download, Copy and More on the file of this computer, never on host bytes", async () => {
+	it("keeps Download, Copy and Open folder on the file of this computer, never on host bytes", async () => {
 		await openLibrary()
 		await open("hero-dunes.png")
 
 		await press("Download")
 		await press("Copy")
-		await press("More")
+		await press("Open folder")
 
 		expect(save).toHaveBeenCalledExactlyOnceWith(SPACE, HERO.name)
 		expect(copyToClipboard).toHaveBeenCalledExactlyOnceWith(SPACE, HERO.name)
@@ -1773,10 +1773,10 @@ describe("WorkspaceBody library", () => {
 			expectNoLibraryNotice()
 		})
 
-		it("shows no More on an image or a document, with no notice", async () => {
+		it("shows no Open folder on an image and no More on a document, with no notice", async () => {
 			await openJoinedLibrary()
 			await open("hero-dunes.png")
-			expect(screen.queryByRole("button", { name: "More" })).toBeNull()
+			expect(screen.queryByRole("button", { name: "Open folder" })).toBeNull()
 			await press("Close")
 
 			await open("Spring launch brief")

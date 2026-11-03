@@ -16,13 +16,11 @@ type ViewedImages = {
 
 const reportFailure = failureReporterIn("answer-image-viewer")
 
-const copyAddress = ({ src }: LibraryLightboxImage) => {
-	void navigator.clipboard
-		.writeText(src)
-		.catch(() =>
-			reportFailure({ title: i18n.t("chat:answerBlock.image.copyFailed") }),
-		)
-}
+const copyAddress = ({ src }: LibraryLightboxImage) =>
+	navigator.clipboard.writeText(src).catch((error: unknown) => {
+		reportFailure({ title: i18n.t("chat:answerBlock.image.copyFailed") })
+		throw error
+	})
 
 const openOriginal = ({ src }: LibraryLightboxImage) => {
 	void openInBrowser(src).catch(() =>

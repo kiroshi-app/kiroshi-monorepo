@@ -915,6 +915,8 @@ forms-slider--default
 forms-switch--default
 forms-switch--long-content
 forms-switch--states
+forms-toggle--default
+forms-togglegroup--single-selection
 forms-toggleswitch--default
 forms-toggleswitch--reduced-motion
 forms-toggleswitch--states
@@ -1391,6 +1393,7 @@ navigation-librarypanel--import-failures
 navigation-librarypanel--import-long-names
 navigation-librarypanel--loading
 navigation-librarypanel--long-names
+navigation-librarypanel--search-filled
 navigation-librarypanel--search-with-no-match
 navigation-missionspanel--complete
 navigation-missionspanel--complete-dark
@@ -1584,6 +1587,8 @@ overlays-dialogsurface--long-title
 overlays-dialogsurface--overflowing
 overlays-dialogsurface--sized
 overlays-librarylightbox--at-the-first-image
+overlays-librarylightbox--copy-check
+overlays-librarylightbox--copy-refused
 overlays-librarylightbox--default
 overlays-librarylightbox--member
 overlays-librarylightbox--zoomed

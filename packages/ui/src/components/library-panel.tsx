@@ -1,6 +1,5 @@
 "use client"
 
-import { Radio as RadioPrimitive } from "@base-ui/react/radio"
 import {
 	createContext,
 	type ReactNode,
@@ -22,7 +21,12 @@ import {
 	type LibraryItem,
 } from "@workspace/ui/components/library-grid"
 import { Button } from "@workspace/ui/components/ui/button"
-import { RadioGroup } from "@workspace/ui/components/ui/radio-group"
+import { Input } from "@workspace/ui/components/ui/input"
+import { Skeleton } from "@workspace/ui/components/ui/skeleton"
+import {
+	ToggleGroup,
+	ToggleGroupItem,
+} from "@workspace/ui/components/ui/toggle-group"
 import { cn } from "@workspace/ui/lib/utils"
 
 type LibraryFilter = "all" | "images" | "documents"
@@ -48,7 +52,10 @@ const FiltersSkeleton = () => (
 		data-slot="library-filters-skeleton"
 	>
 		{SKELETON_FILTER_WIDTHS.map((width) => (
-			<div className={cn("h-7 rounded-full bg-border", width)} key={width} />
+			<Skeleton
+				className={cn("h-7 animate-none rounded-full bg-border", width)}
+				key={width}
+			/>
 		))}
 	</div>
 )
@@ -60,18 +67,20 @@ type FilterPillProps = {
 }
 
 const FilterPill = ({ value, label, count }: FilterPillProps) => (
-	<RadioPrimitive.Root
-		className="group/filter inline-flex h-7 items-center gap-1.5 rounded-full border border-input px-3 font-medium text-compact text-foreground leading-4 not-data-checked:hover:bg-foreground/5 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring focus-visible:outline-offset-2 data-checked:border-primary data-checked:bg-primary data-checked:text-primary-foreground"
+	<ToggleGroupItem
+		className="gap-1.5 rounded-full px-3 text-compact text-foreground leading-4 transition-none hover:bg-foreground/5 aria-pressed:border-primary aria-pressed:bg-primary aria-pressed:text-primary-foreground"
 		data-slot="library-filter"
+		size="sm"
 		value={value}
+		variant="outline"
 	>
 		{label}
 		{count === undefined ? null : (
-			<span className="font-normal text-muted-foreground tabular-nums group-data-checked/filter:text-primary-foreground">
+			<span className="font-normal text-muted-foreground tabular-nums group-aria-pressed/toggle:text-primary-foreground">
 				{count}
 			</span>
 		)}
-	</RadioPrimitive.Root>
+	</ToggleGroupItem>
 )
 
 type LibraryFiltersProps = {
@@ -88,12 +97,15 @@ const LibraryFilters = ({
 	const { t } = useTranslation("common")
 
 	return (
-		<RadioGroup
+		<ToggleGroup
 			aria-label={t("library.filters.label")}
-			className="flex w-auto flex-wrap gap-1.5"
+			className="flex-wrap"
 			data-slot="library-filters"
-			onValueChange={(value) => onFilterChange(value as LibraryFilter)}
-			value={filter}
+			onValueChange={([pressed]) =>
+				onFilterChange((pressed as LibraryFilter | undefined) ?? filter)
+			}
+			spacing={1.5}
+			value={[filter]}
 		>
 			<FilterPill label={t("library.filters.all")} value="all" />
 			<FilterPill
@@ -106,7 +118,7 @@ const LibraryFilters = ({
 				label={t("library.filters.documents")}
 				value="documents"
 			/>
-		</RadioGroup>
+		</ToggleGroup>
 	)
 }
 
@@ -119,23 +131,20 @@ const LibrarySearch = ({ query, onQueryChange }: LibrarySearchProps) => {
 	const { t } = useTranslation("common")
 
 	return (
-		<label
-			className="flex h-8 w-55 items-center gap-2 rounded-full border border-input bg-foreground/3 px-3 focus-within:outline-2 focus-within:outline-solid focus-within:outline-ring focus-within:outline-offset-2"
-			data-slot="library-search"
-		>
+		<div className="relative w-55" data-slot="library-search">
 			<Icons.Search
 				aria-hidden="true"
-				className="size-3.75 shrink-0 text-muted-foreground"
+				className="pointer-events-none absolute inset-y-0 start-3 my-auto size-3.75 text-muted-foreground"
 			/>
-			<input
+			<Input
 				aria-label={t("library.search")}
-				className="min-w-0 flex-1 bg-transparent text-compact text-foreground leading-4 outline-none placeholder:text-muted-foreground"
+				className="rounded-full border-input bg-foreground/3 ps-8.75 pe-3 text-compact text-foreground leading-4.5 transition-none md:text-compact"
 				onChange={(event) => onQueryChange(event.target.value)}
 				placeholder={t("library.search")}
 				type="search"
 				value={query}
 			/>
-		</label>
+		</div>
 	)
 }
 

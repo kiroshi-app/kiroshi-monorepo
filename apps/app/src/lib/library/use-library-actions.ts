@@ -41,12 +41,12 @@ const dataOf = <Data>(result: LibraryResult<Data>): Data => {
 	return result.data
 }
 
-const useLibraryAction = (
+const useLibraryMutation = (
 	spaceId: string,
 	action: LibraryAction,
 	command: ActionCommand,
-) => {
-	const { mutate } = useMutation({
+) =>
+	useMutation({
 		mutationFn: async (name: string) => dataOf(await command(spaceId, name)),
 		meta: {
 			failureNotice: () => ({
@@ -55,16 +55,27 @@ const useLibraryAction = (
 			raisedIn: "use-library-actions",
 		},
 	})
-	return mutate
+
+const useLibraryAction = (
+	spaceId: string,
+	action: LibraryAction,
+	command: ActionCommand,
+) => useLibraryMutation(spaceId, action, command).mutate
+
+const useLibraryCopy = (spaceId: string, command: ActionCommand) => {
+	const { mutateAsync } = useLibraryMutation(spaceId, "copy", command)
+	return async (name: string) => {
+		await mutateAsync(name)
+	}
 }
 
 export const useLibraryActions = (spaceId: string) => ({
 	save: useLibraryAction(spaceId, "save", ACTION_COMMANDS.save),
-	copy: useLibraryAction(spaceId, "copy", ACTION_COMMANDS.copy),
+	copy: useLibraryCopy(spaceId, ACTION_COMMANDS.copy),
 	reveal: useLibraryAction(spaceId, "reveal", ACTION_COMMANDS.reveal),
 })
 
 export const useJoinedLibraryActions = (spaceId: string) => ({
 	save: useLibraryAction(spaceId, "save", saveFromHost),
-	copy: useLibraryAction(spaceId, "copy", copyFromHost),
+	copy: useLibraryCopy(spaceId, copyFromHost),
 })
