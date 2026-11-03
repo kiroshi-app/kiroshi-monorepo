@@ -9,6 +9,8 @@ const DARK = { theme: "dark" }
 
 const TITLE_MAX_WIDTH = 200
 
+const CHIP_WIDTH_AT_MAX_TITLE = 256
+
 const LONG_TITLE =
 	"Quarterly pricing review with the finance team and every regional lead"
 
@@ -72,7 +74,7 @@ const playShortTitle = async ({ canvasElement }: ChipPlayContext) => {
 	const { chip, title } = await expectChipAnatomy(canvasElement)
 	await expect(title.scrollWidth).toBe(title.clientWidth)
 	await expect(chip.getBoundingClientRect().width).toBeLessThan(
-		7 + 15 + 6 + TITLE_MAX_WIDTH + 6 + 18 + 4,
+		CHIP_WIDTH_AT_MAX_TITLE,
 	)
 }
 
@@ -80,7 +82,7 @@ const playLongTitle = async ({ canvasElement }: ChipPlayContext) => {
 	const { chip, title } = await expectChipAnatomy(canvasElement)
 	await expect(title.getBoundingClientRect().width).toBe(TITLE_MAX_WIDTH)
 	await expect(title.scrollWidth).toBeGreaterThan(title.clientWidth)
-	await expect(chip.getBoundingClientRect().width).toBe(256)
+	await expect(chip.getBoundingClientRect().width).toBe(CHIP_WIDTH_AT_MAX_TITLE)
 }
 
 export const ShortTitle = meta.story({
