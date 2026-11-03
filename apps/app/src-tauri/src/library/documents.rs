@@ -137,9 +137,10 @@ impl Documents {
 		if !is_plain_name(new_name) || !keeps_the_format {
 			return Err(LibraryError::InvalidName { name: new_name.to_owned() });
 		}
-		let landed = linked_under_free_name(&item.path, &space_dir(root, space_id), new_name)?;
+		let dir = space_dir(root, space_id);
+		let landed = linked_under_free_name(&item.path, &dir, new_name)?;
 		if let Err(error) = moved_from(root, space_id, &item.path, name, &landed) {
-			discarded(&space_dir(root, space_id).join(&landed));
+			discarded(&dir.join(&landed));
 			return Err(unwritable(error));
 		}
 		held.moved(space_id, name, &landed);
