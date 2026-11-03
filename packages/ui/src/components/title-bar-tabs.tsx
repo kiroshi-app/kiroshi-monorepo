@@ -639,6 +639,7 @@ const TitleBarTabItem = ({
 		(landing) => isLifted && landing === TORN_OFF,
 	)
 	const PinIcon = tab.isPinned ? Icons.Unpin : Icons.Pin
+	const title = titleOf(tab)
 
 	return (
 		<ContextMenu>
@@ -652,9 +653,9 @@ const TitleBarTabItem = ({
 						})}
 						aria-label={
 							needsYou
-								? t("titleBar.tabNeedsYou", { title: titleOf(tab) })
+								? t("titleBar.tabNeedsYou", { title })
 								: tab.isPinned
-									? titleOf(tab)
+									? title
 									: undefined
 						}
 						className={cn(
@@ -692,7 +693,7 @@ const TitleBarTabItem = ({
 							/>
 						) : null}
 						<span className={cn(TAB_TITLE, needsYou && "text-warning")}>
-							{titleOf(tab)}
+							{title}
 						</span>
 					</>
 				)}
