@@ -1,5 +1,12 @@
-import { describe, expect, it } from "bun:test"
-import { readFileSync } from "node:fs"
+import { afterAll, describe, expect, it } from "bun:test"
+import {
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs"
+import { tmpdir } from "node:os"
 import { dirname, join, relative } from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -56,12 +63,64 @@ const filesSrcTauriEmbeds = () =>
 		embeddedPathsOf,
 	)
 
+const runChangeDetectorIn = (cwd: string, ...args: string[]) =>
+	Bun.spawnSync(
+		[
+			process.execPath,
+			new URL("./ci-changes.ts", import.meta.url).pathname,
+			...args,
+		],
+		{ cwd },
+	)
+
 const runChangeDetector = (...args: string[]) =>
-	Bun.spawnSync([
-		process.execPath,
-		new URL("./ci-changes.ts", import.meta.url).pathname,
-		...args,
-	])
+	runChangeDetectorIn(REPO, ...args)
+
+const outputOf = (detection: ReturnType<typeof runChangeDetector>) =>
+	Object.fromEntries(
+		detection.stdout
+			.toString()
+			.split("\n")
+			.filter(Boolean)
+			.map((line) => {
+				const [job, runs] = line.split("=")
+				return [job, runs === "true"]
+			}),
+	)
+
+const scratch = mkdtempSync(join(tmpdir(), "kiroshi-ci-changes-test-"))
+
+afterAll(() => rmSync(scratch, { recursive: true, force: true }))
+
+const git = (cwd: string, ...args: string[]) => {
+	const run = Bun.spawnSync(["git", ...args], { cwd })
+	if (!run.success) throw new Error(`git ${args.join(" ")}: ${run.stderr}`)
+	return run.stdout.toString().trim()
+}
+
+const commitFile = (repo: string, path: string) => {
+	mkdirSync(dirname(join(repo, path)), { recursive: true })
+	writeFileSync(join(repo, path), path)
+	git(repo, "add", path)
+	git(repo, "commit", "--quiet", "--message", path)
+	return git(repo, "rev-parse", "HEAD")
+}
+
+const shallowCheckoutPastGreen = (name: string) => {
+	const origin = join(scratch, `${name}-origin`)
+	mkdirSync(origin)
+	git(origin, "init", "--quiet", "--initial-branch=main")
+	git(origin, "config", "user.email", "ci@example.com")
+	git(origin, "config", "user.name", "CI")
+	const green = commitFile(origin, "packages/ui/src/button.tsx")
+	commitFile(origin, "apps/website/src/page.tsx")
+	commitFile(origin, "apps/app/src-tauri/src/lib.rs")
+	const checkout = join(scratch, `${name}-checkout`)
+	git(scratch, "clone", "--quiet", "--depth=1", `file://${origin}`, checkout)
+	return { checkout, green }
+}
+
+const ABSENT_SHA = "0123456789abcdef0123456789abcdef01234567"
 
 describe("ci jobs per event", () => {
 	it.each(PATH_MIXES)(
@@ -118,15 +177,48 @@ describe("ci jobs per event", () => {
 		expect(detection.stdout.toString().split("\n")).toContain("rust=true")
 	})
 
-	it.each(["pull_request", "push"])(
-		"refuses a %s without a BASE to diff against",
-		(event) => {
-			const detection = runChangeDetector(event)
+	it("refuses a pull_request without a BASE to diff against", () => {
+		const detection = runChangeDetector("pull_request")
 
-			expect(detection.exitCode).toBe(1)
-			expect(detection.stderr.toString()).toContain("BASE is required")
-		},
-	)
+		expect(detection.exitCode).toBe(1)
+		expect(detection.stderr.toString()).toContain("BASE is required")
+	})
+
+	it("selects every job on a push to main when no CI push run on main concluded success", () => {
+		const detection = runChangeDetector("push")
+
+		expect(detection.exitCode).toBe(0)
+		expect(outputOf(detection)).toEqual(every)
+		expect(detection.stderr.toString()).toContain(
+			"no CI push run on main concluded success: every job runs",
+		)
+	})
+
+	it("selects every job on a push to main when the last green sha is absent from origin", () => {
+		const { checkout } = shallowCheckoutPastGreen("absent")
+
+		const detection = runChangeDetectorIn(checkout, "push", ABSENT_SHA)
+
+		expect(detection.exitCode).toBe(0)
+		expect(outputOf(detection)).toEqual(every)
+		expect(detection.stderr.toString()).toContain(
+			`fetching the last green sha ${ABSENT_SHA} failed`,
+		)
+	})
+
+	it("diffs a push to main against the last green sha, covering every commit pushed since", () => {
+		const { checkout, green } = shallowCheckoutPastGreen("green")
+
+		const detection = runChangeDetectorIn(checkout, "push", green)
+
+		expect(detection.exitCode).toBe(0)
+		expect(outputOf(detection)).toEqual({
+			...none,
+			website: true,
+			rust: true,
+			ios: true,
+		})
+	})
 
 	it("refuses an event it does not know", () => {
 		const detection = runChangeDetector("schedule")

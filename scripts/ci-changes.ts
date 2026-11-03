@@ -89,8 +89,6 @@ export const touchedJobs = (paths: string[]): FilteredJobs => {
 	}
 }
 
-const isDiffed = (event: CiEvent) => event !== "tag"
-
 export const decideJobs = ({ event, paths }: ChangeSet): FilteredJobs => {
 	if (event === "tag") return { ...EVERY_JOB, ios: false }
 	const touched = touchedJobs(paths)
@@ -106,17 +104,44 @@ const readEvent = (name: string | undefined): CiEvent => {
 }
 
 const changedPaths = (base: string | undefined) => {
-	if (!base) throw new Error("BASE is required on a pull_request or a push")
+	if (!base) throw new Error("BASE is required on a pull_request")
 	const diff = Bun.spawnSync(["git", "diff", "--name-only", base, "HEAD"])
 	if (!diff.success)
 		throw new Error(`git diff against ${base} failed: ${diff.stderr}`)
 	return diff.stdout.toString().split("\n").filter(Boolean)
 }
 
+const everyJobBecause = (reason: string) => {
+	console.error(`ci-changes  ${reason}: every job runs`)
+	return EVERY_JOB
+}
+
+const jobsOfPush = (greenBase: string | undefined) => {
+	if (!greenBase)
+		return everyJobBecause("no CI push run on main concluded success")
+	const fetched = Bun.spawnSync([
+		"git",
+		"fetch",
+		"--depth=1",
+		"origin",
+		greenBase,
+	])
+	if (!fetched.success)
+		return everyJobBecause(
+			`fetching the last green sha ${greenBase} failed (${fetched.stderr.toString().trim()})`,
+		)
+	return decideJobs({ event: "push", paths: changedPaths(greenBase) })
+}
+
+const jobsOf = (event: CiEvent, base: string | undefined) => {
+	if (event === "tag") return decideJobs({ event, paths: [] })
+	if (event === "pull_request")
+		return decideJobs({ event, paths: changedPaths(base) })
+	return jobsOfPush(base)
+}
+
 const main = ([eventName, base]: string[]) => {
-	const event = readEvent(eventName)
-	const paths = isDiffed(event) ? changedPaths(base) : []
-	for (const [job, runs] of Object.entries(decideJobs({ event, paths })))
+	for (const [job, runs] of Object.entries(jobsOf(readEvent(eventName), base)))
 		console.log(`${job}=${runs}`)
 }
 
