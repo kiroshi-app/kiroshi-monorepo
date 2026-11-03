@@ -626,9 +626,9 @@ const holdHostCall = (command: string) => {
 		})
 }
 
-const settle = () =>
+const settle = (waited = 0) =>
 	act(async () => {
-		await new Promise((resolve) => setTimeout(resolve, 0))
+		await new Promise((resolve) => setTimeout(resolve, waited))
 	})
 
 const IDEAS = itemNamed("ideas.txt", "document")
@@ -638,11 +638,12 @@ const openIdeas = async () => {
 	await waitFor(() => expect(shownTitle()).toBe("ideas"))
 }
 
+type SentUpdate = NamedCall & { update: string }
+
 const textOfUpdatesTo = (name: string) => {
 	const doc = new Y.Doc()
-	for (const { update } of callsOf("library_apply_update").filter(
-		(call) => (call as NamedCall).name === name,
-	) as { update: string }[]) {
+	const sent = callsOf("library_apply_update") as SentUpdate[]
+	for (const { update } of sent.filter((call) => call.name === name)) {
 		Y.applyUpdate(doc, bytesOf(update))
 	}
 	return doc.getText("markdown").toString()
@@ -839,9 +840,7 @@ describe("a rename in flight", () => {
 
 		await pressInTitle(await retitleFromDocumentBar("Plans"), "Enter")
 		await typeInBody("Rollout")
-		await act(async () => {
-			await new Promise((resolve) => setTimeout(resolve, 2 * SEND_INTERVAL_MS))
-		})
+		await settle(2 * SEND_INTERVAL_MS)
 		await release()
 
 		await waitFor(() => expect(textOfUpdatesTo("Plans.txt")).toBe("Rollout"))
