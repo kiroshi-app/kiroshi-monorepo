@@ -82,11 +82,13 @@ const renameListed = ({ name, newName }: RenameCall) => {
 	return renamed
 }
 
-const OPENED_STATE = (() => {
+const stateWith = (markdown: string) => {
 	const doc = new Y.Doc()
-	doc.getText("markdown").insert(0, "Draft")
+	doc.getText("markdown").insert(0, markdown)
 	return Y.encodeStateAsUpdate(doc)
-})()
+}
+
+const OPENED_STATE = stateWith("Draft")
 
 const LIBRARY_ANSWERS: Record<string, (args: NamedCall) => unknown> = {
 	library_list: () => harness.listed,
