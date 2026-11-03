@@ -3,6 +3,10 @@ import type { ChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 import type { TransportError } from "./contract"
 
 type Crash = Extract<TransportError, { kind: "crashed" }>
+type RunLapse = Extract<TransportError, { kind: "runLapsed" }>
+
+const minutesOf = (milliseconds: number): number =>
+	Math.round(milliseconds / 60_000)
 
 function describeCrash(t: ChatCopy, { code, detail }: Crash): string {
 	if (code === null) {
@@ -33,6 +37,40 @@ const describeNamedCrash = (
 		: t("screen.transport.crashedNamed", { name, code })
 }
 
+const describeRunLapse = (
+	t: ChatCopy,
+	{ lapse, boundMs }: RunLapse,
+): string => {
+	switch (lapse) {
+		case "silent":
+			return t("screen.transport.runLapsedSilent")
+		case "interruptUnanswered":
+			return t("screen.transport.runLapsedInterrupt")
+		case "tasksPending":
+			return t("screen.transport.runLapsedTasksPending", {
+				minutes: minutesOf(boundMs),
+			})
+	}
+}
+
+const describeNamedRunLapse = (
+	t: ChatCopy,
+	{ lapse, boundMs }: RunLapse,
+	name: string,
+): string => {
+	switch (lapse) {
+		case "silent":
+			return t("screen.transport.runLapsedSilentNamed", { name })
+		case "interruptUnanswered":
+			return t("screen.transport.runLapsedInterruptNamed", { name })
+		case "tasksPending":
+			return t("screen.transport.runLapsedTasksPendingNamed", {
+				name,
+				minutes: minutesOf(boundMs),
+			})
+	}
+}
+
 const describeNamedTransportError = (
 	t: ChatCopy,
 	error: TransportError,
@@ -56,9 +94,7 @@ const describeNamedTransportError = (
 		case "resumeFailed":
 			return t("screen.transport.resumeFailedNamed", { name })
 		case "runLapsed":
-			return error.lapse === "silent"
-				? t("screen.transport.runLapsedSilentNamed", { name })
-				: t("screen.transport.runLapsedInterruptNamed", { name })
+			return describeNamedRunLapse(t, error, name)
 		default:
 			return null
 	}
@@ -106,9 +142,7 @@ const describeUnnamedTransportError = (
 		case "writeFailed":
 			return t("screen.transport.writeFailed", { detail: error.detail })
 		case "runLapsed":
-			return error.lapse === "silent"
-				? t("screen.transport.runLapsedSilent")
-				: t("screen.transport.runLapsedInterrupt")
+			return describeRunLapse(t, error)
 		case "readFailed":
 			return t("screen.transport.readFailed", { detail: error.detail })
 		case "unknownFailure":

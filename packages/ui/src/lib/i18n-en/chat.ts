@@ -566,6 +566,10 @@ const chat = {
 				"The agent didn’t answer the stop, so its reply ended. Send your message again.",
 			runLapsedInterruptNamed:
 				"{{name}} didn’t answer the stop, so its reply ended. Send your message again.",
+			runLapsedTasksPending:
+				"The agent waited {{minutes}} minutes on its background work, so its reply ended. Send your message again.",
+			runLapsedTasksPendingNamed:
+				"{{name}} waited {{minutes}} minutes on its background work, so its reply ended. Send your message again.",
 			readFailed: "Couldn’t load earlier messages ({{detail}}). Retry.",
 			unknownFailure: "Something went wrong ({{detail}}). Retry.",
 		},
