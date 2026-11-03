@@ -3598,6 +3598,25 @@
         "text"
       ]
     },
+    "LibraryDocumentRenamed": {
+      "properties": {
+        "formerName": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "spaceId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "spaceId",
+        "formerName",
+        "name"
+      ],
+      "type": "object"
+    },
     "LibraryDocumentState": {
       "properties": {
         "name": {
@@ -11547,6 +11566,33 @@
         "$ref": "#/$defs/LibraryImage"
       }
     },
+    "library_rename_document": {
+      "args": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "newName": {
+            "type": "string"
+          },
+          "spaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spaceId",
+          "name",
+          "newName"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/LibraryError"
+      },
+      "ok": {
+        "$ref": "#/$defs/LibraryItem"
+      }
+    },
     "library_templates": {
       "args": {
         "properties": {},
@@ -12814,6 +12860,11 @@
     "hosting://members-changed": {
       "payload": {
         "$ref": "#/$defs/MembersChanged"
+      }
+    },
+    "library://document-renamed": {
+      "payload": {
+        "$ref": "#/$defs/LibraryDocumentRenamed"
       }
     },
     "library://document-updated": {

@@ -17,8 +17,9 @@ use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Manager, Runtime, State};
 
 use contract::{
-	LibraryDocument, LibraryDocumentFormat, LibraryDocumentState, LibraryDocumentUpdated,
-	LibraryError, LibraryFile, LibraryImage, LibraryImport, LibraryItem, LibraryItemKind,
+	LibraryDocument, LibraryDocumentFormat, LibraryDocumentRenamed, LibraryDocumentState,
+	LibraryDocumentUpdated, LibraryError, LibraryFile, LibraryImage, LibraryImport, LibraryItem,
+	LibraryItemKind,
 };
 use documents::Documents;
 
@@ -396,9 +397,38 @@ pub(crate) fn apply_update<R: Runtime>(
 	update: &str,
 ) -> Result<(), LibraryError> {
 	let update = decoded_content(name, update)?;
-	let change = documents(app).apply(root, space_id, name, &update)?;
-	announce(app, space_id, name, &change);
+	let applied = documents(app).apply(root, space_id, name, &update)?;
+	announce(app, space_id, &applied.name, &applied.change);
 	Ok(())
+}
+
+pub(crate) fn rename_document<R: Runtime>(
+	app: &AppHandle<R>,
+	root: &Path,
+	space_id: &str,
+	name: &str,
+	new_name: &str,
+) -> Result<LibraryItem, LibraryError> {
+	let landed = match documents(app).rename(root, space_id, name, new_name)? {
+		Some(landed) => {
+			announce_rename(app, space_id, name, &landed);
+			landed
+		}
+		None => name.to_owned(),
+	};
+	item_at(&space_dir(root, space_id).join(&landed), landed.clone())?
+		.ok_or(LibraryError::Missing { name: landed })
+}
+
+fn announce_rename<R: Runtime>(app: &AppHandle<R>, space_id: &str, former_name: &str, name: &str) {
+	let renamed = LibraryDocumentRenamed {
+		space_id: space_id.to_owned(),
+		former_name: former_name.to_owned(),
+		name: name.to_owned(),
+	};
+	if let Err(error) = events::emit(app, events::LIBRARY_DOCUMENT_RENAMED, renamed) {
+		log::warn!("a rename of a library document of space {space_id} was not announced: {error}");
+	}
 }
 
 fn announce<R: Runtime>(app: &AppHandle<R>, space_id: &str, name: &str, update: &[u8]) {

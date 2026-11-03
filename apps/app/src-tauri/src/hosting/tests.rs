@@ -84,7 +84,7 @@ use crate::events::{self, Event, BUFFERED_FRAMES};
 use crate::joined_spaces::contract::JoinedSpaceConnection;
 use crate::joined_spaces::relay::RelayGuests;
 use crate::library;
-use crate::library::contract::{LibraryError, DOCUMENT_UPDATED_EVENT};
+use crate::library::contract::{LibraryError, DOCUMENT_RENAMED_EVENT, DOCUMENT_UPDATED_EVENT};
 use crate::library::tests::YjsClient;
 use crate::logging::contract::InstallKind;
 use crate::mcp_oauth::asking::AuthorizationAnswers;
@@ -732,6 +732,15 @@ async fn host_effect_applied(
 				&space_id,
 				&name,
 				&text("content"),
+			));
+		}
+		"library_rename_document" => {
+			return answered_by_the_library(library::rename_document(
+				effects.app(),
+				&effects.library(),
+				&text("spaceId"),
+				&text("name"),
+				&text("newName"),
 			));
 		}
 		"joined_space_remove" => {
@@ -3588,6 +3597,61 @@ fn a_member_opens_a_library_document_of_the_shared_space_only() {
 #[test]
 fn a_member_applies_a_library_update_to_the_shared_space_only() {
 	run(kept_in_the_space_named("library_apply_update", a_library_update_of(AN_EMPTY_UPDATE)));
+}
+
+#[test]
+fn a_member_renames_a_library_document_of_the_shared_space_only() {
+	run(kept_in_the_space_named(
+		"library_rename_document",
+		|space_id| json!({ "spaceId": space_id, "name": "notes.md", "newName": "plan.md" }),
+	));
+}
+
+#[test]
+fn a_member_renames_a_library_document_then_its_update_lands_under_the_landed_name() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("library-rename").await;
+		let shelf = guest.effects.library().join(PERSONAL);
+		std::fs::write(shelf.join("plan.md"), "older").expect("the other file lands");
+		let opened =
+			guest.called("library_open_document", a_library_entry_of("notes.md")(PERSONAL)).await;
+		let base = opened["body"]["update"].as_str().expect("a yjs state").to_owned();
+		let rename = json!({ "spaceId": PERSONAL, "name": "notes.md", "newName": "plan.md" });
+
+		let frame = json!({ "id": "rename", "command": "library_rename_document", "args": rename });
+		send(&mut guest.member, &frame.to_string()).await;
+		let (mut renamed, mut heard) = (None, None);
+		while renamed.is_none() || heard.is_none() {
+			let frame = unstamped(next_json(&mut guest.member).await);
+			if frame["event"]["event"] == DOCUMENT_RENAMED_EVENT {
+				heard = Some(frame["event"]["payload"].clone());
+			} else if frame.get("event").is_none() {
+				renamed = Some(frame);
+			}
+		}
+		let (renamed, heard) = (renamed.expect("an answer"), heard.expect("a rename"));
+		let landed = renamed["body"]["name"].as_str().expect("a landed name").to_owned();
+		let update = YjsClient::of(&base).inserted(17, " kept");
+		let applied = guest
+			.called(
+				"library_apply_update",
+				json!({ "spaceId": PERSONAL, "name": landed, "update": update }),
+			)
+			.await;
+
+		assert_eq!(renamed["status"], json!(200), "{renamed}");
+		assert_eq!(landed, "plan (2).md");
+		assert_eq!(
+			heard,
+			json!({ "spaceId": PERSONAL, "formerName": "notes.md", "name": "plan (2).md" })
+		);
+		assert_eq!(applied["status"], json!(200), "{applied}");
+		let on_disk =
+			|name: &str| std::fs::read_to_string(shelf.join(name)).expect("the file reads");
+		assert_eq!(on_disk("plan (2).md"), "notes of personal kept");
+		assert_eq!(on_disk("plan.md"), "older");
+		assert!(!shelf.join("notes.md").exists());
+	});
 }
 
 #[test]

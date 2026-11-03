@@ -115,6 +115,8 @@ declared! {
 		joined_spaces::deep_link::OPENED_EVENT,
 	LIBRARY_DOCUMENT_UPDATED: library::contract::LibraryDocumentUpdated =
 		library::contract::DOCUMENT_UPDATED_EVENT,
+	LIBRARY_DOCUMENT_RENAMED: library::contract::LibraryDocumentRenamed =
+		library::contract::DOCUMENT_RENAMED_EVENT,
 	MISSION_CHANGED: missions::commands::MissionChanged = missions::commands::CHANGED_EVENT,
 	NOTIFICATION_ACTIVATED: notifications::commands::NotificationTarget =
 		notifications::commands::ACTIVATED_EVENT,

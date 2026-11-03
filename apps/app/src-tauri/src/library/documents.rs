@@ -9,7 +9,8 @@ use yrs::{Doc, GetString, ReadTxn, StateVector, Text, Transact, Update};
 
 use super::contract::LibraryError;
 use super::{
-	document_text, resolve, undecodable, unwritable, within, AcceptedType, MAX_DOCUMENT_BYTES,
+	accepted_type, discarded, document_text, is_plain_name, linked_under_free_name, resolve,
+	space_dir, undecodable, unwritable, within, AcceptedType, MAX_DOCUMENT_BYTES,
 };
 use crate::private_files;
 
@@ -22,14 +23,27 @@ const STATE_EXTENSION: &str = "yjs";
 type Key = (String, String);
 
 #[derive(Default)]
-pub(crate) struct Documents(Mutex<HashMap<Key, Doc>>);
+pub(crate) struct Documents(Mutex<Held>);
+
+#[derive(Default)]
+struct Held {
+	docs: HashMap<Key, Doc>,
+	landed_names: HashMap<Key, String>,
+}
 
 pub(crate) struct Opened {
 	pub(crate) state: Vec<u8>,
 	pub(crate) host_edit: Option<Vec<u8>>,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct Applied {
+	pub(crate) name: String,
+	pub(crate) change: Vec<u8>,
+}
+
 struct DocumentFile {
+	name: String,
 	path: PathBuf,
 	text: String,
 }
@@ -46,11 +60,11 @@ impl Documents {
 		space_id: &str,
 		name: &str,
 	) -> Result<Opened, LibraryError> {
-		let mut documents = self.held();
+		let mut held = self.held();
 		let file = document_file(root, space_id, name)?;
 		let key = key(space_id, name);
 		let mut loaded = None;
-		let (doc, was_stored) = match documents.get(&key) {
+		let (doc, was_stored) = match held.docs.get(&key) {
 			Some(held) => (held, true),
 			None => {
 				let loaded = loaded.insert(loaded_from_disk(root, space_id, name)?);
@@ -65,7 +79,7 @@ impl Documents {
 		let host_edit = is_host_edited.then(|| doc.transact().encode_state_as_update_v1(&before));
 		let state = full_state(doc);
 		if let Some(loaded) = loaded {
-			documents.insert(key, loaded.doc);
+			held.docs.insert(key, loaded.doc);
 		}
 		Ok(Opened { state, host_edit })
 	}
@@ -76,13 +90,14 @@ impl Documents {
 		space_id: &str,
 		name: &str,
 		update: &[u8],
-	) -> Result<Vec<u8>, LibraryError> {
+	) -> Result<Applied, LibraryError> {
 		let incoming = decoded(name, update)?;
-		let mut documents = self.held();
-		let file = document_file(root, space_id, name)?;
+		let mut held = self.held();
+		let file = held.located(root, space_id, name)?;
+		let name = file.name.as_str();
 		let key = key(space_id, name);
 		let mut loaded = None;
-		let doc = match documents.get(&key) {
+		let doc = match held.docs.get(&key) {
 			Some(held) => held,
 			None => &loaded.insert(loaded_from_disk(root, space_id, name)?).doc,
 		};
@@ -95,22 +110,115 @@ impl Documents {
 		private_files::replace_atomically(&file.path, text_of(doc).as_bytes())
 			.map_err(unwritable)?;
 		if let Some(loaded) = loaded {
-			documents.insert(key, loaded.doc);
+			held.docs.insert(key, loaded.doc);
 		}
-		Ok(change)
+		Ok(Applied { name: file.name, change })
+	}
+
+	pub(crate) fn rename(
+		&self,
+		root: &Path,
+		space_id: &str,
+		name: &str,
+		new_name: &str,
+	) -> Result<Option<String>, LibraryError> {
+		let mut held = self.held();
+		let item = resolve(root, space_id, name)?;
+		let AcceptedType::Document(format) = item.accepted else {
+			return Err(LibraryError::Missing { name: name.to_owned() });
+		};
+		if new_name == name {
+			return Ok(None);
+		}
+		let keeps_the_format = matches!(
+			accepted_type(new_name),
+			Some(AcceptedType::Document(wanted)) if wanted == format
+		);
+		if !is_plain_name(new_name) || !keeps_the_format {
+			return Err(LibraryError::InvalidName { name: new_name.to_owned() });
+		}
+		let landed = linked_under_free_name(&item.path, &space_dir(root, space_id), new_name)?;
+		if let Err(error) = moved_from(root, space_id, &item.path, name, &landed) {
+			discarded(&space_dir(root, space_id).join(&landed));
+			return Err(unwritable(error));
+		}
+		held.moved(space_id, name, &landed);
+		Ok(Some(landed))
 	}
 
 	pub(crate) fn forget(&self, root: &Path, space_id: &str) -> io::Result<()> {
-		self.held().retain(|(held_space_id, _), _| held_space_id != space_id);
+		let mut held = self.held();
+		held.docs.retain(|(held_space_id, _), _| held_space_id != space_id);
+		held.landed_names.retain(|(held_space_id, _), _| held_space_id != space_id);
 		match fs::remove_dir_all(state_dir(root, space_id)) {
 			Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
 			removed => removed,
 		}
 	}
 
-	fn held(&self) -> MutexGuard<'_, HashMap<Key, Doc>> {
+	fn held(&self) -> MutexGuard<'_, Held> {
 		self.0.lock().unwrap_or_else(PoisonError::into_inner)
 	}
+}
+
+impl Held {
+	fn located(
+		&self,
+		root: &Path,
+		space_id: &str,
+		name: &str,
+	) -> Result<DocumentFile, LibraryError> {
+		match (document_file(root, space_id, name), self.landed_names.get(&key(space_id, name))) {
+			(Err(LibraryError::Missing { .. }), Some(landed)) => {
+				document_file(root, space_id, landed)
+			}
+			(found, _) => found,
+		}
+	}
+
+	fn moved(&mut self, space_id: &str, name: &str, landed: &str) {
+		let former_key = key(space_id, name);
+		let landed_key = key(space_id, landed);
+		self.docs.remove(&landed_key);
+		if let Some(doc) = self.docs.remove(&former_key) {
+			self.docs.insert(landed_key.clone(), doc);
+		}
+		self.landed_names.remove(&landed_key);
+		for ((held_space_id, _), target) in &mut self.landed_names {
+			if held_space_id == space_id && target == name {
+				landed.clone_into(target);
+			}
+		}
+		self.landed_names.insert(former_key, landed.to_owned());
+	}
+}
+
+fn moved_from(
+	root: &Path,
+	space_id: &str,
+	former: &Path,
+	name: &str,
+	landed: &str,
+) -> io::Result<()> {
+	let state = state_path(root, space_id, name);
+	let landed_state = state_path(root, space_id, landed);
+	let has_moved_state = match fs::rename(&state, &landed_state) {
+		Ok(()) => true,
+		Err(error) if error.kind() == io::ErrorKind::NotFound => {
+			discarded(&landed_state);
+			false
+		}
+		Err(error) => return Err(error),
+	};
+	fs::remove_file(former).inspect_err(|_| {
+		if has_moved_state {
+			if let Err(error) = fs::rename(&landed_state, &state) {
+				log::warn!(
+					"the stored state of a library document stayed under its new name: {error}"
+				);
+			}
+		}
+	})
 }
 
 fn key(space_id: &str, name: &str) -> Key {
@@ -123,7 +231,7 @@ fn document_file(root: &Path, space_id: &str, name: &str) -> Result<DocumentFile
 		return Err(LibraryError::NotADocument { name: name.to_owned() });
 	}
 	let text = document_text(&item, name)?;
-	Ok(DocumentFile { path: item.path, text })
+	Ok(DocumentFile { name: name.to_owned(), path: item.path, text })
 }
 
 fn decoded(name: &str, update: &[u8]) -> Result<Update, LibraryError> {

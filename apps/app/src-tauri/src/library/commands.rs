@@ -14,7 +14,7 @@ use super::contract::{
 use super::{
 	apply_update, clipboard_payload, clipboard_payload_of_bytes, create_document, import,
 	import_paths, list, open_document, read_document, read_file, read_image, read_thumbnail,
-	resolve, root, save, save_bytes, templates, ClipboardPayload,
+	rename_document, resolve, root, save, save_bytes, templates, ClipboardPayload,
 };
 use crate::db;
 use crate::logging::scrub::scrubbed;
@@ -118,6 +118,19 @@ pub async fn library_apply_update<R: Runtime>(
 ) -> Result<(), LibraryError> {
 	known_space(&state, &space_id).await?;
 	apply_update(&app, &root(&app)?, &space_id, &name, &update)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn library_rename_document<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	space_id: String,
+	name: String,
+	new_name: String,
+) -> Result<LibraryItem, LibraryError> {
+	known_space(&state, &space_id).await?;
+	rename_document(&app, &root(&app)?, &space_id, &name, &new_name)
 }
 
 #[tauri::command]
