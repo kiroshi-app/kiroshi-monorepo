@@ -118,39 +118,32 @@ function assistantRows(message: TranscriptMessage): TranscriptRow[] {
 
 const rowsByMessage = new WeakMap<TranscriptMessage, TranscriptRow[]>()
 
-const continuedTurnOf = (message: TranscriptMessage): string | null =>
-	message.continuesTurnId ?? null
-
 const underContinuedTurns = (
 	messages: TranscriptMessage[],
 ): TranscriptMessage[] => {
 	const shownTurnIds = new Set(
 		messages
-			.filter((message) => continuedTurnOf(message) === null)
+			.filter(({ continuesTurnId }) => !continuesTurnId)
 			.map(({ turnId }) => turnId),
 	)
-	const isPlacedUnder = (message: TranscriptMessage) =>
-		shownTurnIds.has(continuedTurnOf(message) ?? "")
-	const continuations = Map.groupBy(
-		messages.filter(isPlacedUnder),
-		(message) => continuedTurnOf(message) ?? "",
-	)
-	if (continuations.size === 0) {
+	const shownTurnContinuedBy = ({ continuesTurnId }: TranscriptMessage) =>
+		continuesTurnId && shownTurnIds.has(continuesTurnId)
+			? continuesTurnId
+			: null
+	const placed = messages.filter((message) => shownTurnContinuedBy(message))
+	if (placed.length === 0) {
 		return messages
 	}
+	const continuations = Map.groupBy(placed, shownTurnContinuedBy)
+	const kept = messages.filter((message) => !shownTurnContinuedBy(message))
 	const closingOfTurn = new Map(
-		messages
-			.filter((message) => !isPlacedUnder(message))
-			.map((message) => [message.turnId, message]),
+		kept.map((message) => [message.turnId, message]),
 	)
-	return messages.flatMap((message) => {
-		if (isPlacedUnder(message)) {
-			return []
-		}
-		return closingOfTurn.get(message.turnId) === message
+	return kept.flatMap((message) =>
+		closingOfTurn.get(message.turnId) === message
 			? [message, ...(continuations.get(message.turnId) ?? [])]
-			: [message]
-	})
+			: [message],
+	)
 }
 
 export function toTranscriptRows(
