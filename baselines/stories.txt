@@ -1417,6 +1417,8 @@ navigation-librarydocumenteditor--selecting-across-agent-run-light
 navigation-librarydocumenteditor--shortcuts-without-callbacks
 navigation-librarydocumenteditor--strikethrough-shortcut
 navigation-librarydocumenteditor--struck-through-text
+navigation-librarydocumenteditor--toolbar-after-drag
+navigation-librarydocumenteditor--toolbar-after-keyboard-selection
 navigation-librarydocumenteditor--unclosed-markers
 navigation-librarydocumenteditor--unmounted-right-after-blur
 navigation-librarydocumenteditor--with-typed-text

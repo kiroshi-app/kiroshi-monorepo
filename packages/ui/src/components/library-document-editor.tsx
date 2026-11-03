@@ -678,6 +678,8 @@ type SelectionActions = {
 	onList?: FormatAction
 }
 
+type SelectionGesture = "pointer" | "keys"
+
 type SelectedText = {
 	id: string
 	start: number
@@ -840,6 +842,7 @@ const LibraryDocumentEditor = ({
 	const frame = useRef<HTMLDivElement>(null)
 	const [selected, setSelected] = useState<SelectedText>()
 	const [toolbarMode, setToolbarMode] = useState<ToolbarMode>("bar")
+	const selectingBy = useRef<SelectionGesture>(undefined)
 	const [heldListAnchors, setHeldListAnchors] = useState<
 		ReadonlyMap<string, string>
 	>(() => listAnchorsOf(runsOf(blocks), new Map()))
@@ -933,7 +936,12 @@ const LibraryDocumentEditor = ({
 		const [id, field] = focusedIn(fields.current) ?? []
 		const { start, end } = field ? selectionOf(field) : { start: 0, end: 0 }
 		const next =
-			id && field && frame.current && id !== TITLE_FIELD && start !== end
+			id &&
+			field &&
+			frame.current &&
+			id !== TITLE_FIELD &&
+			start !== end &&
+			!selectingBy.current
 				? { id, start, end, anchor: anchorOf(field, start, end, frame.current) }
 				: undefined
 		if (!isSameSelected(selected, next)) setToolbarMode("bar")
@@ -945,15 +953,67 @@ const LibraryDocumentEditor = ({
 	useEffect(() => {
 		const follow = () => followSelection()
 		const followOnceFocusLands = () => queueMicrotask(follow)
+		const isInDocument = (target: EventTarget | null) =>
+			target instanceof Node && frame.current?.contains(target) === true
+		const startPointerSelection = (event: PointerEvent) => {
+			if (
+				event.button !== 0 ||
+				!isInDocument(event.target) ||
+				isInToolbar(event.target as Element)
+			)
+				return
+			selectingBy.current = "pointer"
+			setSelected(undefined)
+		}
+		const startKeySelection = (event: globalThis.KeyboardEvent) => {
+			if (
+				isInDocument(event.target) &&
+				event.shiftKey &&
+				event.key.startsWith("Arrow")
+			)
+				selectingBy.current = "keys"
+		}
+		const closeGesture = () => {
+			selectingBy.current = undefined
+			follow()
+		}
+		const finishSelectionBy = (gesture: SelectionGesture) => {
+			if (selectingBy.current === gesture) closeGesture()
+		}
+		const finishPointerSelection = () => finishSelectionBy("pointer")
+		const finishLostPointerSelection = (event: PointerEvent) => {
+			if (event.buttons === 0 && isInDocument(event.target))
+				finishPointerSelection()
+		}
+		const finishAnySelection = () => {
+			if (selectingBy.current) closeGesture()
+		}
+		const finishKeySelection = (event: globalThis.KeyboardEvent) => {
+			if (event.key === "Shift") finishSelectionBy("keys")
+		}
 		document.addEventListener("selectionchange", follow)
 		document.addEventListener("focusout", followOnceFocusLands)
+		document.addEventListener("pointerdown", startPointerSelection)
+		document.addEventListener("pointerup", finishPointerSelection)
+		document.addEventListener("pointercancel", finishPointerSelection)
+		document.addEventListener("pointermove", finishLostPointerSelection)
+		document.addEventListener("keydown", startKeySelection)
+		document.addEventListener("keyup", finishKeySelection)
 		window.addEventListener("scroll", follow, { capture: true, passive: true })
 		window.addEventListener("resize", follow)
+		window.addEventListener("blur", finishAnySelection)
 		return () => {
 			document.removeEventListener("selectionchange", follow)
 			document.removeEventListener("focusout", followOnceFocusLands)
+			document.removeEventListener("pointerdown", startPointerSelection)
+			document.removeEventListener("pointerup", finishPointerSelection)
+			document.removeEventListener("pointercancel", finishPointerSelection)
+			document.removeEventListener("pointermove", finishLostPointerSelection)
+			document.removeEventListener("keydown", startKeySelection)
+			document.removeEventListener("keyup", finishKeySelection)
 			window.removeEventListener("scroll", follow, { capture: true })
 			window.removeEventListener("resize", follow)
+			window.removeEventListener("blur", finishAnySelection)
 		}
 	}, [])
 
