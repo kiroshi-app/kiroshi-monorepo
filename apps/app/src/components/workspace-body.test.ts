@@ -1512,10 +1512,11 @@ describe("WorkspaceBody library", () => {
 			"value",
 			"Spring launch brief",
 		)
-		expect(screen.getByRole("textbox", { name: "Text" })).toHaveProperty(
-			"value",
-			EXCERPT,
-		)
+		expect(
+			screen
+				.getByRole("textbox", { name: "Document text" })
+				.querySelector("[data-kind='paragraph']")?.textContent,
+		).toBe(EXCERPT)
 		expect(screen.queryByRole("searchbox")).toBeNull()
 
 		await press("Library")

@@ -334,9 +334,7 @@ const common = {
 			created: "Created just now",
 			createdFrom: "Created just now from {{template}}",
 			title: "Title",
-			paragraph: "Text",
-			heading: "Heading",
-			item: "List item",
+			body: "Document text",
 			toolbar: {
 				label: "Format",
 				bold: "Bold",

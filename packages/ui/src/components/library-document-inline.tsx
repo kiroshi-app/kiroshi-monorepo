@@ -352,13 +352,6 @@ const showInlineIn = (field: HTMLElement, text: string) => {
 const isInMarker = (node: Node) =>
 	node.parentElement?.closest(`[data-slot="${MARKER_SLOT}"]`) != null
 
-const isCaretOnShownText = (field: HTMLElement) => {
-	const selection = document.getSelection()
-	const caret = selection?.focusNode
-	if (!selection?.isCollapsed) return true
-	return caret instanceof Text && field.contains(caret) && !isInMarker(caret)
-}
-
 type TextField = HTMLElement &
 	Pick<
 		HTMLTextAreaElement,
@@ -478,7 +471,8 @@ export {
 	hasInlineFormat,
 	inlineDrawingOf,
 	inlineNodesOf,
-	isCaretOnShownText,
+	offsetIn,
+	pointAt,
 	showInlineIn,
 	shownBoundsOf,
 	shownOffsetOf,

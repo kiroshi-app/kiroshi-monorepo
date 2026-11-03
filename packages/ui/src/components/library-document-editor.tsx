@@ -36,16 +36,14 @@ import {
 	deletedIn,
 	deletedRangeOf,
 	formatsAround,
-	hasInlineFormat,
 	inlineDrawingOf,
 	inlineNodesOf,
-	isCaretOnShownText,
+	offsetIn,
+	pointAt,
 	showInlineIn,
 	shownBoundsOf,
 	shownOffsetOf,
 	shownSpansOf,
-	type TextField,
-	textFieldOf,
 } from "@workspace/ui/components/library-document-inline"
 import {
 	DOCUMENT_TITLE,
@@ -97,12 +95,6 @@ const BLOCK_TYPE: Record<BlockKind, string> = {
 }
 
 const SELECTION_LOOK = "selection:bg-primary/30 selection:text-foreground"
-
-const BLOCK_LABEL = {
-	paragraph: "library.editor.paragraph",
-	heading: "library.editor.heading",
-	item: "library.editor.item",
-} as const
 
 const HEADING_LINE = /^(#{1,6} +)(.*)$/
 
@@ -408,32 +400,100 @@ const drawnTextOf = (
 	]
 }
 
-const selectionOf = (field: TextField) => ({
+type TextSelection = {
+	start: number
+	end: number
+	direction: HTMLTextAreaElement["selectionDirection"]
+}
+
+const selectionOf = (field: HTMLTextAreaElement): TextSelection => ({
 	start: field.selectionStart,
 	end: field.selectionEnd,
 	direction: field.selectionDirection,
 })
 
-type TextSelection = ReturnType<typeof selectionOf>
+type BodyPoint = {
+	id: string
+	offset: number
+}
 
-type FieldSelection = TextSelection & { id: string }
+type BodySelection = {
+	anchor: BodyPoint
+	focus: BodyPoint
+}
+
+type BodyRange = {
+	start: BodyPoint
+	end: BodyPoint
+}
+
+type HeldSelection =
+	| { field: "title"; selection: TextSelection }
+	| ({ field: "body" } & BodySelection)
 
 const TITLE_FIELD = "title"
 
+const BLOCK_TEXT = "[data-block-id]"
+
 const NATIVE_PRESS = "textarea, [contenteditable], button, a"
 
-const focusedIn = (fields: Map<string, TextField>) =>
-	[...fields].find(([, field]) => field === document.activeElement)
+const pointOfText = (text: HTMLElement, offset: number): BodyPoint => ({
+	id: text.dataset.blockId ?? "",
+	offset,
+})
 
-const selectionIn = (
-	fields: Map<string, TextField>,
-): FieldSelection | undefined => {
-	const [id, field] = focusedIn(fields) ?? []
-	return id && field ? { id, ...selectionOf(field) } : undefined
+const bodyPointOf = (
+	host: HTMLElement,
+	node: Node,
+	offset: number,
+): BodyPoint | undefined => {
+	const text = (
+		node instanceof Element ? node : node.parentElement
+	)?.closest<HTMLElement>(BLOCK_TEXT)
+	if (text && host.contains(text))
+		return pointOfText(text, offsetIn(text, node, offset))
+
+	const texts = [...host.querySelectorAll<HTMLElement>(BLOCK_TEXT)]
+	const probe = document.createRange()
+	probe.setStart(node, offset)
+	const next = texts.find((candidate) => probe.comparePoint(candidate, 0) >= 0)
+	if (next) return pointOfText(next, 0)
+	const last = texts.at(-1)
+	return last && pointOfText(last, last.textContent?.length ?? 0)
 }
 
-const fieldTextOf = (id: string, title: string, blocks: Block[]) =>
-	id === TITLE_FIELD ? title : blocks.find((block) => block.id === id)?.text
+const bodySelectionIn = (
+	host: HTMLElement | null,
+): BodySelection | undefined => {
+	const live = document.getSelection()
+	const anchorNode = live?.anchorNode
+	const focusNode = live?.focusNode
+	if (
+		!(host && anchorNode && focusNode) ||
+		document.activeElement !== host ||
+		!host.contains(anchorNode) ||
+		!host.contains(focusNode)
+	)
+		return undefined
+
+	const anchor = bodyPointOf(host, anchorNode, live.anchorOffset)
+	const focus = bodyPointOf(host, focusNode, live.focusOffset)
+	return anchor && focus ? { anchor, focus } : undefined
+}
+
+const isCollapsed = ({ start, end }: BodyRange) =>
+	start.id === end.id && start.offset === end.offset
+
+const isSamePoint = (first: BodyPoint, second?: BodyPoint) =>
+	first.id === second?.id && first.offset === second.offset
+
+type BodySnapshot = {
+	blocks: Block[]
+	selection?: BodySelection
+}
+
+const IS_MAC =
+	typeof navigator !== "undefined" && /Mac/.test(navigator.userAgent)
 
 const shiftedOffset = (before: string, after: string, offset: number) => {
 	const limit = Math.min(before.length, after.length)
@@ -452,15 +512,15 @@ const shiftedOffset = (before: string, after: string, offset: number) => {
 	return after.length - tail
 }
 
-const shiftedSelection = (
-	selection: FieldSelection,
-	before: string,
-	after: string,
-) => ({
-	...selection,
-	start: shiftedOffset(before, after, selection.start),
-	end: shiftedOffset(before, after, selection.end),
-})
+const shiftedPoint = (point: BodyPoint, before: Block[], after: Block[]) => {
+	const textIn = (blocks: Block[]) =>
+		blocks.find(({ id }) => id === point.id)?.text
+	const was = textIn(before)
+	const now = textIn(after)
+	return was === undefined || now === undefined
+		? undefined
+		: { id: point.id, offset: shiftedOffset(was, now, point.offset) }
+}
 
 const openingBlocks = (
 	body: string,
@@ -539,7 +599,8 @@ type DrawnTextProps = {
 
 const DrawnText = ({ children }: DrawnTextProps) => (
 	<span
-		className="pointer-events-none col-start-1 row-start-1 whitespace-pre-wrap [&_[data-slot=library-document-caret]]:pointer-events-auto [&_[data-slot=library-document-caret]]:-me-0.5"
+		className="pointer-events-none col-start-1 row-start-1 select-none whitespace-pre-wrap [&_[data-slot=library-document-caret]]:pointer-events-auto [&_[data-slot=library-document-caret]]:-me-0.5"
+		contentEditable={false}
 		data-slot="library-document-drawn-text"
 	>
 		{children}
@@ -552,7 +613,6 @@ type GrowingFieldProps = TextareaHTMLAttributes<HTMLTextAreaElement> & {
 	className: string
 	fieldClassName: string
 	fieldRef?: Ref<HTMLTextAreaElement>
-	drawnText?: ReactNode
 }
 
 const GrowingField = ({
@@ -561,25 +621,18 @@ const GrowingField = ({
 	className,
 	fieldClassName,
 	fieldRef,
-	drawnText,
 	...props
 }: GrowingFieldProps) => (
 	<span className={cn("grid break-words", className)}>
-		{drawnText ? (
-			<DrawnText>{drawnText}</DrawnText>
-		) : (
-			<span
-				aria-hidden="true"
-				className="pointer-events-none invisible col-start-1 row-start-1 whitespace-pre-wrap"
-			>
-				{`${value || placeholder || ""}​`}
-			</span>
-		)}
+		<span
+			aria-hidden="true"
+			className="pointer-events-none invisible col-start-1 row-start-1 whitespace-pre-wrap"
+		>
+			{`${value || placeholder || ""}​`}
+		</span>
 		<textarea
 			className={cn(
 				"col-start-1 row-start-1 resize-none overflow-hidden bg-transparent outline-none",
-				drawnText &&
-					"selection:bg-primary/30 [-webkit-text-fill-color:transparent]",
 				fieldClassName,
 			)}
 			placeholder={placeholder}
@@ -591,73 +644,69 @@ const GrowingField = ({
 	</span>
 )
 
-type InlineFieldProps = Omit<HTMLAttributes<HTMLSpanElement>, "children"> & {
-	value: string
-	className: string
-	fieldRef: (node: TextField | null) => (() => void) | undefined
-	drawnText?: ReactNode
-	onInsert: (field: HTMLElement, text: string) => void
-	onDelete: (field: HTMLElement, range: [from: number, to: number]) => void
+type BlockRef = (node: HTMLElement | null) => (() => void) | undefined
+
+type BlockTextProps = HTMLAttributes<HTMLElement> & {
+	text: string
+	isHeading: boolean
+	textRef: BlockRef
 }
 
-const InlineField = ({
-	value,
-	className,
-	fieldRef,
-	drawnText,
-	onInsert,
-	onDelete,
-	...props
-}: InlineFieldProps) => {
-	const field = useRef<HTMLSpanElement>(null)
+const BlockText = ({ text, isHeading, textRef, ...props }: BlockTextProps) => {
+	const shown = useRef<HTMLElement>(null)
 
 	useLayoutEffect(() => {
-		if (field.current) showInlineIn(field.current, value)
-	}, [value])
+		if (shown.current) showInlineIn(shown.current, text)
+	}, [text])
 
-	const editAroundMarkers = useEffectEvent((event: InputEvent) => {
-		const node = field.current
-		if (!node || event.isComposing) return
+	const ref = (node: HTMLElement | null) => {
+		shown.current = node
+		return textRef(node)
+	}
+	return isHeading ? <h2 ref={ref} {...props} /> : <p ref={ref} {...props} />
+}
 
-		if (event.inputType === "insertText" && event.data !== null) {
-			if (isCaretOnShownText(node)) return
-			event.preventDefault()
-			onInsert(node, event.data)
-		} else if (
-			event.inputType.startsWith("delete") &&
-			event.inputType !== "deleteByDrag"
-		) {
-			event.preventDefault()
-			const range = deletedRangeOf(node, event)
-			if (range) onDelete(node, range)
-		}
-	})
+const PLACEHOLDER_LOOK =
+	"data-placeholder:before:pointer-events-none data-placeholder:before:float-start data-placeholder:before:h-0 data-placeholder:before:text-placeholder-foreground data-placeholder:before:content-[attr(data-placeholder)]"
 
-	useEffect(() => {
-		const node = field.current
-		const listener = (event: InputEvent) => editAroundMarkers(event)
-		node?.addEventListener("beforeinput", listener)
-		return () => node?.removeEventListener("beforeinput", listener)
-	}, [])
+const UNDER_DRAWN_TEXT =
+	"selection:bg-primary/30 [-webkit-text-fill-color:transparent] [&_*]:decoration-transparent [&_code]:bg-transparent [&_code]:ring-0"
 
+type BodyBlockProps = {
+	block: Block
+	bodyOffset?: number
+	drawnText?: ReactNode
+	textRef: BlockRef
+}
+
+const BodyBlock = ({
+	block,
+	bodyOffset,
+	drawnText,
+	textRef,
+}: BodyBlockProps) => {
+	const isHeading = block.kind === "heading"
 	return (
-		<span className={cn("grid break-words", className)}>
+		<div
+			className={cn("grid break-words", BLOCK_TYPE[block.kind], SELECTION_LOOK)}
+		>
 			{drawnText ? <DrawnText>{drawnText}</DrawnText> : null}
-			<span
+			<BlockText
 				className={cn(
-					"col-start-1 row-start-1 whitespace-pre-wrap outline-none",
-					drawnText &&
-						"selection:bg-primary/30 [-webkit-text-fill-color:transparent] [&_*]:decoration-transparent [&_code]:bg-transparent [&_code]:ring-0",
+					"col-start-1 row-start-1 whitespace-pre-wrap",
+					PLACEHOLDER_LOOK,
+					drawnText && UNDER_DRAWN_TEXT,
 				)}
-				contentEditable
-				ref={(node) => {
-					field.current = node
-					return fieldRef(node && textFieldOf(node))
-				}}
-				role="textbox"
-				{...props}
+				data-block-id={block.id}
+				data-body-offset={bodyOffset}
+				data-kind={block.kind}
+				data-placeholder={block.text === "" ? block.placeholder : undefined}
+				isHeading={isHeading}
+				key={isHeading ? "heading" : "text"}
+				text={block.text}
+				textRef={textRef}
 			/>
-		</span>
+		</div>
 	)
 }
 
@@ -680,10 +729,7 @@ type SelectionActions = {
 
 type SelectionGesture = "pointer" | "keys"
 
-type SelectedText = {
-	id: string
-	start: number
-	end: number
+type SelectedText = BodyRange & {
 	anchor: SelectionToolbarAnchor
 }
 
@@ -706,56 +752,26 @@ const shortcutFormatOf = (event: KeyboardEvent<HTMLElement>) => {
 }
 
 const isSameSelected = (first?: SelectedText, second?: SelectedText) =>
-	first?.id === second?.id &&
-	first?.start === second?.start &&
-	first?.end === second?.end
+	first === second ||
+	(first !== undefined &&
+		second !== undefined &&
+		isSamePoint(first.start, second.start) &&
+		isSamePoint(first.end, second.end))
 
 const COLUMN = '[data-slot="library-document-column"]'
-
-const OUTSIDE_THE_TEXT =
-	'[data-slot="library-document-caret"], [data-slot="library-document-person-caret"]'
 
 const isInToolbar = (node: Element | null) =>
 	node?.closest(`[data-slot="${SELECTION_TOOLBAR_SLOT}"]`) != null
 
-const textRangeIn = (shown: Node, start: number, end: number) => {
-	const range = document.createRange()
-	const walker = document.createTreeWalker(shown, NodeFilter.SHOW_TEXT, {
-		acceptNode: (node) =>
-			node.parentElement?.closest(OUTSIDE_THE_TEXT)
-				? NodeFilter.FILTER_REJECT
-				: NodeFilter.FILTER_ACCEPT,
-	})
-	let read = 0
-	let hasStart = false
-	for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-		const length = node.textContent?.length ?? 0
-		if (!hasStart && start < read + length) {
-			range.setStart(node, start - read)
-			hasStart = true
-		}
-		if (end <= read + length) {
-			range.setEnd(node, end - read)
-			break
-		}
-		read += length
-	}
-	return range
-}
-
 const anchorOf = (
-	field: TextField,
-	start: number,
-	end: number,
+	selection: Range,
 	frame: HTMLElement,
 ): SelectionToolbarAnchor => {
-	const shown =
-		field instanceof HTMLTextAreaElement
-			? (field.previousElementSibling ?? field)
-			: field
-	const selected = textRangeIn(shown, start, end).getBoundingClientRect()
+	const selected = selection.getBoundingClientRect()
 	const framed = frame.getBoundingClientRect()
-	const viewport = (field.closest(COLUMN) ?? frame).getBoundingClientRect()
+	const viewport = (
+		frame.querySelector(COLUMN) ?? frame
+	).getBoundingClientRect()
 	return {
 		centre: (selected.left + selected.right) / 2 - framed.left,
 		top: selected.top - framed.top,
@@ -795,13 +811,6 @@ type LibraryDocumentEditorProps = WriterActions &
 		onCaretChange?: (caret: number | null) => void
 	}
 
-const caretIn = (field: TextField) => {
-	const { start, end, direction } = selectionOf(field)
-	return (
-		Number(field.dataset.bodyOffset) + (direction === "backward" ? start : end)
-	)
-}
-
 const endingOf = (body: string) => /\s*$/.exec(body)?.[0] ?? ""
 
 const LibraryDocumentEditor = ({
@@ -835,11 +844,17 @@ const LibraryDocumentEditor = ({
 	const [blocks, setBlocks] = useState(() => openingBlocks(body, template, t))
 	const [ending, setEnding] = useState(() => endingOf(body))
 	const received = useRef({ title: titleProp, body })
-	const [restoredSelection, setRestoredSelection] = useState<FieldSelection>()
-	const fields = useRef(new Map<string, TextField>())
+	const [restoredSelection, setRestoredSelection] = useState<HeldSelection>()
+	const titleField = useRef<HTMLTextAreaElement>(null)
+	const host = useRef<HTMLDivElement>(null)
+	const blockTexts = useRef(new Map<string, HTMLElement>())
 	const reportedCaret = useRef<number | null>(null)
 	const pendingBlurReport = useRef<ReturnType<typeof setTimeout>>(undefined)
 	const frame = useRef<HTMLDivElement>(null)
+	const undoSteps = useRef<BodySnapshot[]>([])
+	const redoSteps = useRef<BodySnapshot[]>([])
+	const typedUpTo = useRef<BodyPoint>(undefined)
+	const draggedFrom = useRef<BodyRange>(undefined)
 	const [selected, setSelected] = useState<SelectedText>()
 	const [toolbarMode, setToolbarMode] = useState<ToolbarMode>("bar")
 	const selectingBy = useRef<SelectionGesture>(undefined)
@@ -847,22 +862,75 @@ const LibraryDocumentEditor = ({
 		ReadonlyMap<string, string>
 	>(() => listAnchorsOf(runsOf(blocks), new Map()))
 
+	const indexOf = (id: string) => blocks.findIndex((block) => block.id === id)
+
+	const isBefore = (first: BodyPoint, second: BodyPoint) =>
+		first.id === second.id
+			? first.offset < second.offset
+			: indexOf(first.id) < indexOf(second.id)
+
+	const bodyRange = (): BodyRange | undefined => {
+		const held = bodySelectionIn(host.current)
+		if (!held) return undefined
+		const { anchor, focus } = held
+		return isBefore(focus, anchor)
+			? { start: focus, end: anchor }
+			: { start: anchor, end: focus }
+	}
+
+	const targetRangeOf = (event: InputEvent): BodyRange | undefined => {
+		const [target] = event.getTargetRanges()
+		const node = host.current
+		if (!(target && node)) return undefined
+		const start = bodyPointOf(node, target.startContainer, target.startOffset)
+		const end = bodyPointOf(node, target.endContainer, target.endOffset)
+		return start && end ? { start, end } : undefined
+	}
+
 	const reportCaret = () => {
-		const [id, field] = focusedIn(fields.current) ?? []
-		const caret = field && id !== TITLE_FIELD ? caretIn(field) : null
+		const focus = bodySelectionIn(host.current)?.focus
+		const text = focus && blockTexts.current.get(focus.id)
+		const caret =
+			focus && text ? Number(text.dataset.bodyOffset) + focus.offset : null
 		if (caret === reportedCaret.current) return
 
 		reportedCaret.current = caret
 		onCaretChange?.(caret)
 	}
 
-	const focusAt = (id: string | undefined, caret: number | "end") => {
-		const field = id ? fields.current.get(id) : undefined
-		if (!field) return
+	const selectBody = ({ anchor, focus }: BodySelection) => {
+		const from = blockTexts.current.get(anchor.id)
+		const to = blockTexts.current.get(focus.id)
+		if (!(host.current && from && to)) return
 
-		const position = caret === "end" ? field.value.length : caret
-		field.focus()
-		field.setSelectionRange(position, position)
+		host.current.focus({ preventScroll: true })
+		document
+			.getSelection()
+			?.setBaseAndExtent(
+				...pointAt(from, anchor.offset),
+				...pointAt(to, focus.offset),
+			)
+	}
+
+	const focusAt = (id: string | undefined, caret: number | "end") => {
+		const field = id === TITLE_FIELD ? titleField.current : undefined
+		if (field) {
+			const position = caret === "end" ? field.value.length : caret
+			field.focus()
+			field.setSelectionRange(position, position)
+			reportCaret()
+			return
+		}
+
+		const text = id ? blockTexts.current.get(id) : undefined
+		if (!(id && text)) return
+
+		const point = {
+			id,
+			offset: caret === "end" ? (text.textContent?.length ?? 0) : caret,
+		}
+		selectBody({ anchor: point, focus: point })
+		text.scrollIntoView({ block: "nearest" })
 		reportCaret()
 	}
 
@@ -879,11 +947,13 @@ const LibraryDocumentEditor = ({
 			return
 
 		const ids = [TITLE_FIELD, ...blocks.map(({ id }) => id)]
+		const fieldOf = (id: string) =>
+			id === TITLE_FIELD ? titleField.current : blockTexts.current.get(id)
 		const besideId =
 			ids.find(
 				(id) =>
 					event.clientY <=
-					(fields.current.get(id)?.getBoundingClientRect().bottom ??
+					(fieldOf(id)?.getBoundingClientRect().bottom ??
 						Number.NEGATIVE_INFINITY),
 			) ?? ids.at(-1)
 		event.preventDefault()
@@ -893,6 +963,14 @@ const LibraryDocumentEditor = ({
 	const bodyOf = (next: Block[]) => {
 		const markdown = markdownOf(next)
 		return markdown === "" ? "" : `${markdown}${ending}`
+	}
+
+	const heldSelection = (): HeldSelection | undefined => {
+		const field = titleField.current
+		if (field && document.activeElement === field)
+			return { field: "title", selection: selectionOf(field) }
+		const held = bodySelectionIn(host.current)
+		return held && { field: "body", ...held }
 	}
 
 	const takeReceived = useEffectEvent(
@@ -905,19 +983,32 @@ const LibraryDocumentEditor = ({
 			const nextBlocks = isBodyOutside ? reconciled(blocks, nextBody) : blocks
 			if (nextTitle === title && !isBodyOutside) return
 
-			const selection = selectionIn(fields.current)
-			const before = selection && fieldTextOf(selection.id, title, blocks)
-			const after =
-				selection && fieldTextOf(selection.id, nextTitle, nextBlocks)
+			const held = heldSelection()
 			setTitle(nextTitle)
 			if (isBodyOutside) {
 				setBlocks(
 					nextBlocks.length > 0 ? nextBlocks : startingBlocks("blank", t),
 				)
 				setEnding(endingOf(nextBody))
+				undoSteps.current = []
+				redoSteps.current = []
 			}
-			if (selection && before !== undefined && after !== undefined)
-				setRestoredSelection(shiftedSelection(selection, before, after))
+			if (held?.field === "title") {
+				const { selection } = held
+				setRestoredSelection({
+					field: "title",
+					selection: {
+						...selection,
+						start: shiftedOffset(title, nextTitle, selection.start),
+						end: shiftedOffset(title, nextTitle, selection.end),
+					},
+				})
+				return
+			}
+			const anchor = held && shiftedPoint(held.anchor, blocks, nextBlocks)
+			const focus = held && shiftedPoint(held.focus, blocks, nextBlocks)
+			if (anchor && focus)
+				setRestoredSelection({ field: "body", anchor, focus })
 		},
 	)
 
@@ -933,16 +1024,15 @@ const LibraryDocumentEditor = ({
 	const readSelection = () => {
 		if (isInToolbar(document.activeElement)) return
 
-		const [id, field] = focusedIn(fields.current) ?? []
-		const { start, end } = field ? selectionOf(field) : { start: 0, end: 0 }
+		const range = bodyRange()
+		const live = document.getSelection()
 		const next =
-			id &&
-			field &&
+			range &&
 			frame.current &&
-			id !== TITLE_FIELD &&
-			start !== end &&
+			live?.rangeCount &&
+			!isCollapsed(range) &&
 			!selectingBy.current
-				? { id, start, end, anchor: anchorOf(field, start, end, frame.current) }
+				? { ...range, anchor: anchorOf(live.getRangeAt(0), frame.current) }
 				: undefined
 		if (!isSameSelected(selected, next)) setToolbarMode("bar")
 		setSelected(next)
@@ -1017,24 +1107,25 @@ const LibraryDocumentEditor = ({
 		}
 	}, [])
 
-	const reportRestoredCaret = useEffectEvent(reportCaret)
+	const restoreSelection = useEffectEvent((held: HeldSelection) => {
+		if (held.field === "body") selectBody(held)
+		else {
+			const { start, end, direction } = held.selection
+			titleField.current?.focus({ preventScroll: true })
+			titleField.current?.setSelectionRange(start, end, direction)
+		}
+		reportCaret()
+	})
 
 	useLayoutEffect(() => {
-		if (!restoredSelection) return
-		const { id, start, end, direction } = restoredSelection
-		const field = fields.current.get(id)
-		if (!field) return
-
-		field.focus({ preventScroll: true })
-		field.setSelectionRange(start, end, direction)
-		reportRestoredCaret()
+		if (restoredSelection) restoreSelection(restoredSelection)
 	}, [restoredSelection])
 
-	const fieldRefOf = (id: string) => (node: TextField | null) => {
+	const blockRefOf = (id: string) => (node: HTMLElement | null) => {
 		if (!node) return
-		fields.current.set(id, node)
+		blockTexts.current.set(id, node)
 		return () => {
-			fields.current.delete(id)
+			blockTexts.current.delete(id)
 		}
 	}
 
@@ -1065,19 +1156,50 @@ const LibraryDocumentEditor = ({
 		)
 	}
 
-	const commit = (next: Block[]) => {
+	const show = (next: Block[]) => {
 		const markdown = bodyOf(next)
 		const hasBodyChanged = markdown !== bodyOf(blocks)
 		flushSync(() => setBlocks(next))
 		if (hasBodyChanged) onBodyChange(markdown)
 	}
 
-	const replaceAt = (index: number, ...replacement: Block[]) =>
-		blocks.toSpliced(index, 1, ...replacement)
+	const commit = (next: Block[], isTyping = false) => {
+		const selection = bodySelectionIn(host.current)
+		const isSameTypingRun =
+			isTyping &&
+			selection !== undefined &&
+			isSamePoint(selection.anchor, typedUpTo.current) &&
+			isSamePoint(selection.focus, typedUpTo.current)
+		if (!isSameTypingRun) undoSteps.current.push({ blocks, selection })
+		redoSteps.current = []
+		typedUpTo.current = undefined
+		show(next)
+	}
 
-	const turnIntoParagraph = (index: number, block: Block) => {
-		setRestoredSelection({ id: block.id, start: 0, end: 0, direction: "none" })
-		commit(replaceAt(index, asKind(block, "paragraph")))
+	const stepBetween = (from: BodySnapshot[], to: BodySnapshot[]) => {
+		const step = from.pop()
+		if (!step) return
+
+		to.push({ blocks, selection: bodySelectionIn(host.current) })
+		typedUpTo.current = undefined
+		show(step.blocks)
+		if (step.selection) {
+			selectBody(step.selection)
+			blockTexts.current
+				.get(step.selection.focus.id)
+				?.scrollIntoView({ block: "nearest" })
+		}
+		reportCaret()
+	}
+
+	const undo = () => stepBetween(undoSteps.current, redoSteps.current)
+
+	const redo = () => stepBetween(redoSteps.current, undoSteps.current)
+
+	const turnIntoParagraph = (source: Block[], index: number, block: Block) => {
+		const point = { id: block.id, offset: 0 }
+		setRestoredSelection({ field: "body", anchor: point, focus: point })
+		commit(source.toSpliced(index, 1, asKind(block, "paragraph")))
 	}
 
 	const changeTitle = (value: string) => {
@@ -1086,8 +1208,14 @@ const LibraryDocumentEditor = ({
 		onTitleChange(next)
 	}
 
-	const changeText = (index: number, value: string, caret: number) => {
-		const block = blocks[index]
+	const writeAt = (
+		source: Block[],
+		index: number,
+		value: string,
+		caret: number,
+		isTyping = false,
+	) => {
+		const block = source[index]
 		if (!block) return
 
 		const shortcut =
@@ -1096,14 +1224,15 @@ const LibraryDocumentEditor = ({
 				: undefined
 		if (!shortcut) {
 			const text = block.kind === "paragraph" ? value : singleLine(value)
-			commit(replaceAt(index, { ...block, text }))
+			commit(source.toSpliced(index, 1, { ...block, text }), isTyping)
 			focusAt(block.id, caret)
+			if (isTyping) typedUpTo.current = { id: block.id, offset: caret }
 			return
 		}
 
 		const [prefix, kind] = shortcut
 		commit(
-			replaceAt(index, {
+			source.toSpliced(index, 1, {
 				...asKind(block, kind),
 				text: singleLine(value.slice(prefix.length)),
 				placeholder: undefined,
@@ -1112,34 +1241,88 @@ const LibraryDocumentEditor = ({
 		focusAt(block.id, Math.max(0, caret - prefix.length))
 	}
 
-	const takeTyped = (index: number, element: HTMLElement) => {
-		const field = textFieldOf(element)
-		changeText(index, field.value, field.selectionStart)
+	const joinedOver = ({ start, end }: BodyRange) => {
+		const index = indexOf(start.id)
+		const last = indexOf(end.id)
+		const head = blocks[index]
+		const tail = blocks[last]
+		if (!(head && tail)) return undefined
+
+		const kept = deletedIn(head.text, start.offset, head.text.length)
+		const value = `${kept.text}${deletedIn(tail.text, 0, end.offset).text}`
+		return {
+			source: blocks.toSpliced(index, last - index + 1, {
+				...head,
+				text: value,
+			}),
+			index,
+			value,
+			caret: kept.caret,
+		}
 	}
 
-	const insertIn = (index: number, element: HTMLElement, text: string) => {
-		const field = textFieldOf(element)
-		const { start, end } = selectionOf(field)
-		const { value } = field
-		changeText(
+	const replaceSelection = (
+		range: BodyRange,
+		typed: string,
+		isTyping = false,
+	) => {
+		const { start, end } = range
+		if (start.id === end.id) {
+			const index = indexOf(start.id)
+			const value = blocks[index]?.text ?? ""
+			writeAt(
+				blocks,
+				index,
+				`${value.slice(0, start.offset)}${typed}${value.slice(end.offset)}`,
+				start.offset + typed.length,
+				isTyping,
+			)
+			return
+		}
+
+		const joined = joinedOver(range)
+		if (!joined) return
+		const { source, index, value, caret } = joined
+		writeAt(
+			source,
 			index,
-			`${value.slice(0, start)}${text}${value.slice(end)}`,
-			start + text.length,
+			`${value.slice(0, caret)}${typed}${value.slice(caret)}`,
+			caret + typed.length,
+		)
+	}
+
+	const copiedOf = ({ start, end }: BodyRange) => {
+		const first = indexOf(start.id)
+		const last = indexOf(end.id)
+		if (first === last)
+			return blocks[first]?.text.slice(start.offset, end.offset) ?? ""
+
+		return markdownOf(
+			blocks.slice(first, last + 1).map((block, index, selection) => ({
+				...block,
+				text: block.text.slice(
+					index === 0 ? start.offset : 0,
+					index === selection.length - 1 ? end.offset : undefined,
+				),
+			})),
 		)
 	}
 
 	const copyFrom = (event: ClipboardEvent<HTMLElement>) => {
-		const field = textFieldOf(event.currentTarget)
-		const { start, end } = selectionOf(field)
-		if (start === end) return false
+		const range = bodyRange()
+		if (!range || isCollapsed(range)) return undefined
 
 		event.preventDefault()
-		event.clipboardData.setData("text/plain", field.value.slice(start, end))
-		return true
+		event.clipboardData.setData("text/plain", copiedOf(range))
+		return range
 	}
 
-	const splitAt = (index: number, selection: TextSelection) => {
-		const block = blocks[index]
+	const splitOver = (range: BodyRange) => {
+		const joined =
+			range.start.id === range.end.id ? undefined : joinedOver(range)
+		const source = joined?.source ?? blocks
+		const index = joined?.index ?? indexOf(range.start.id)
+		const block = source[index]
 		if (!block) return
 
 		const shown = shownBoundsOf(block.text)
@@ -1147,11 +1330,11 @@ const LibraryDocumentEditor = ({
 			if (offset <= shown.start) return 0
 			return offset >= shown.end ? block.text.length : offset
 		}
-		const start = edgeOf(selection.start)
-		const end = edgeOf(selection.end)
+		const start = edgeOf(joined?.caret ?? range.start.offset)
+		const end = edgeOf(joined?.caret ?? range.end.offset)
 
 		if (block.kind === "item" && block.text === "") {
-			turnIntoParagraph(index, block)
+			turnIntoParagraph(source, index, block)
 			return
 		}
 
@@ -1163,7 +1346,12 @@ const LibraryDocumentEditor = ({
 					}
 				: blockOf("paragraph", block.text.slice(end))
 		commit(
-			replaceAt(index, { ...block, text: block.text.slice(0, start) }, after),
+			source.toSpliced(
+				index,
+				1,
+				{ ...block, text: block.text.slice(0, start) },
+				after,
+			),
 		)
 		focusAt(after.id, 0)
 	}
@@ -1174,7 +1362,7 @@ const LibraryDocumentEditor = ({
 		if (!block) return
 
 		if (block.kind !== "paragraph") {
-			turnIntoParagraph(index, block)
+			turnIntoParagraph(blocks, index, block)
 			return
 		}
 		if (!previous) return
@@ -1188,10 +1376,131 @@ const LibraryDocumentEditor = ({
 		focusAt(previous.id, previous.text.length)
 	}
 
-	const documentRangeOf = (id: string, start: number, end: number) => {
-		const offset = textStarts.get(id) ?? 0
-		return { start: offset + start, end: offset + end }
+	const joinForward = (index: number) => {
+		const block = blocks[index]
+		const next = blocks[index + 1]
+		if (!(block && next)) return
+
+		writeAt(
+			blocks.toSpliced(index + 1, 1),
+			index,
+			`${block.text}${next.text}`,
+			block.text.length,
+		)
 	}
+
+	const deleteOver = (range: BodyRange, event: InputEvent) => {
+		if (range.start.id !== range.end.id) {
+			replaceSelection(range, "")
+			return
+		}
+
+		const index = indexOf(range.end.id)
+		const block = blocks[index]
+		const text = blockTexts.current.get(range.end.id)
+		if (!(block && text)) return
+
+		const isForward = event.inputType.includes("Forward")
+		if (
+			isForward &&
+			isCollapsed(range) &&
+			range.end.offset >= shownBoundsOf(block.text).end
+		) {
+			joinForward(index)
+			return
+		}
+
+		const deleted: [from: number, to: number] | undefined = isCollapsed(range)
+			? deletedRangeOf(text, event)
+			: [range.start.offset, range.end.offset]
+		if (!deleted) return
+		const { text: kept, caret } = deletedIn(block.text, ...deleted)
+		writeAt(blocks, index, kept, caret)
+	}
+
+	const dropInto = (at: BodyPoint, text: string, from?: BodyRange) => {
+		if (!from) {
+			replaceSelection({ start: at, end: at }, text)
+			return
+		}
+		if (!(isBefore(at, from.start) || isBefore(from.end, at))) return
+
+		const first = indexOf(from.start.id)
+		const last = indexOf(from.end.id)
+		const head = blocks[first]
+		const tail = blocks[last]
+		if (!(head && tail)) return
+
+		const source = blocks.toSpliced(first, last - first + 1, {
+			...head,
+			text: `${head.text.slice(0, from.start.offset)}${tail.text.slice(from.end.offset)}`,
+		})
+		const target =
+			at.id === from.end.id && !isBefore(at, from.start)
+				? {
+						id: from.start.id,
+						offset: from.start.offset + at.offset - from.end.offset,
+					}
+				: at
+		const index = source.findIndex(({ id }) => id === target.id)
+		const value = source[index]?.text ?? ""
+		writeAt(
+			source,
+			index,
+			`${value.slice(0, target.offset)}${text}${value.slice(target.offset)}`,
+			target.offset + text.length,
+		)
+	}
+
+	const editFrom = useEffectEvent((event: InputEvent) => {
+		if (event.isComposing || event.inputType.includes("Composition")) return
+
+		event.preventDefault()
+		const { inputType } = event
+		const text = event.data ?? event.dataTransfer?.getData("text/plain") ?? ""
+		if (inputType === "historyUndo") return undo()
+		if (inputType === "historyRedo") return redo()
+		if (inputType === "insertFromDrop") {
+			const at = targetRangeOf(event)?.start
+			if (at) dropInto(at, text, draggedFrom.current)
+			draggedFrom.current = undefined
+			return
+		}
+
+		const range = bodyRange()
+		if (!range) return
+		if (inputType === "insertText")
+			replaceSelection(range, text, isCollapsed(range))
+		else if (inputType === "insertReplacementText")
+			replaceSelection(targetRangeOf(event) ?? range, text)
+		else if (inputType.startsWith("delete") && inputType !== "deleteByDrag")
+			deleteOver(range, event)
+	})
+
+	useEffect(() => {
+		const node = host.current
+		const listener = (event: InputEvent) => editFrom(event)
+		node?.addEventListener("beforeinput", listener)
+		return () => node?.removeEventListener("beforeinput", listener)
+	}, [])
+
+	const takeComposed = () => {
+		const focus = bodySelectionIn(host.current)?.focus
+		const text = focus && blockTexts.current.get(focus.id)
+		if (focus && text)
+			writeAt(
+				blocks,
+				indexOf(focus.id),
+				text.textContent ?? "",
+				focus.offset,
+				true,
+			)
+	}
+
+	const documentRangeOf = ({ start, end }: BodyRange) => ({
+		start: (textStarts.get(start.id) ?? 0) + start.offset,
+		end: (textStarts.get(end.id) ?? 0) + end.offset,
+	})
 
 	const openLinkField = () => {
 		readSelection()
@@ -1201,8 +1510,7 @@ const LibraryDocumentEditor = ({
 	const formatOnShortcut = (
 		event: KeyboardEvent<HTMLElement>,
 		format: ShortcutFormat,
-		index: number,
-		{ start, end }: TextSelection,
+		range: BodyRange,
 	) => {
 		const action = {
 			bold: onBold,
@@ -1211,40 +1519,55 @@ const LibraryDocumentEditor = ({
 			code: onCode,
 			link: onLink && openLinkField,
 		}[format]
-		const id = blocks[index]?.id
-		if (!(action && id)) return
+		if (!action) return
 
 		event.preventDefault()
 		event.stopPropagation()
-		action(documentRangeOf(id, start, end))
+		action(documentRangeOf(range))
 	}
 
-	const keyDownIn = (index: number) => (event: KeyboardEvent<HTMLElement>) => {
+	const keyDown = (event: KeyboardEvent<HTMLElement>) => {
 		if (event.nativeEvent.isComposing) return
 
-		const field = textFieldOf(event.currentTarget)
-		const selection = selectionOf(field)
-		const { start, end } = selection
-		const shown = shownBoundsOf(field.value)
-		const isCollapsed = start === end
-		const isAtStart = isCollapsed && start <= shown.start
-		const isAtEnd = isCollapsed && end >= shown.end
-		const shortcutFormat = isCollapsed ? undefined : shortcutFormatOf(event)
+		const isCommand = IS_MAC ? event.metaKey : event.ctrlKey
+		const key = event.key.toLowerCase()
+		const isRedo =
+			isCommand && ((key === "z" && event.shiftKey) || (!IS_MAC && key === "y"))
+		if (isRedo || (isCommand && key === "z")) {
+			event.preventDefault()
+			if (isRedo) redo()
+			else undo()
+			return
+		}
+
+		const range = bodyRange()
+		const index = range ? indexOf(range.end.id) : -1
+		const block = blocks[index]
+		if (!(range && block)) return
+
+		const shown = shownBoundsOf(block.text)
+		const isAtStart = isCollapsed(range) && range.start.offset <= shown.start
+		const isAtEnd = isCollapsed(range) && range.end.offset >= shown.end
+		const shortcutFormat = isCollapsed(range)
+			? undefined
+			: shortcutFormatOf(event)
 
 		if (shortcutFormat) {
-			formatOnShortcut(event, shortcutFormat, index, selection)
+			formatOnShortcut(event, shortcutFormat, range)
 		} else if (event.key === "Escape" && selected && toolbarMode !== "closed") {
 			event.preventDefault()
 			setToolbarMode("closed")
 		} else if (event.key === "Enter" && !event.shiftKey) {
 			event.preventDefault()
-			splitAt(index, selection)
-		} else if (event.key === "Enter" && field.isContentEditable) {
+			splitOver(range)
+		} else if (event.key === "Enter") {
 			event.preventDefault()
-			insertIn(index, field, "\n")
+			replaceSelection(range, "\n")
 		} else if (event.key === "Backspace" && isAtStart) {
 			event.preventDefault()
 			joinBackward(index)
+		} else if (event.shiftKey) {
+			return
 		} else if (event.key === "ArrowUp" && isAtStart && index > 0) {
 			event.preventDefault()
 			focusAt(blocks[index - 1]?.id, "end")
@@ -1258,70 +1581,20 @@ const LibraryDocumentEditor = ({
 		}
 	}
 
-	const fieldOf = (block: Block) => {
-		const index = blocks.indexOf(block)
+	const blockIn = (block: Block) => {
 		const runs = runPieces.get(block.id)
 		const carets = caretPieces.get(block.id)
-		const shared = {
-			"aria-label": t(BLOCK_LABEL[block.kind]),
-			className: cn(BLOCK_TYPE[block.kind], SELECTION_LOOK),
-			"data-body-offset": textStarts.get(block.id),
-			"data-kind": block.kind,
-			drawnText:
-				runs || carets
-					? drawnTextOf(block.text, runs ?? [], carets ?? [], drawRun)
-					: undefined,
-			fieldRef: fieldRefOf(block.id),
-			onBlur: reportCaretAfterBlur,
-			onKeyDown: keyDownIn(index),
-			onSelect: reportCaret,
-			value: block.text,
-		}
-
-		if (!hasInlineFormat(block.text))
-			return (
-				<GrowingField
-					{...shared}
-					fieldClassName="placeholder:text-placeholder-foreground"
-					key={block.id}
-					onChange={(event) =>
-						changeText(
-							index,
-							event.target.value,
-							selectionOf(event.target).start,
-						)
-					}
-					placeholder={block.placeholder}
-				/>
-			)
-
 		return (
-			<InlineField
-				{...shared}
+			<BodyBlock
+				block={block}
+				bodyOffset={textStarts.get(block.id)}
+				drawnText={
+					runs || carets
+						? drawnTextOf(block.text, runs ?? [], carets ?? [], drawRun)
+						: undefined
+				}
 				key={block.id}
-				onCompositionEnd={(event) => takeTyped(index, event.currentTarget)}
-				onCopy={copyFrom}
-				onCut={(event) => {
-					if (copyFrom(event)) insertIn(index, event.currentTarget, "")
-				}}
-				onInput={(event) => {
-					if (!(event.nativeEvent as InputEvent).isComposing)
-						takeTyped(index, event.currentTarget)
-				}}
-				aria-multiline={block.kind === "paragraph"}
-				onDelete={(field, [from, to]) => {
-					const { text, caret } = deletedIn(textFieldOf(field).value, from, to)
-					changeText(index, text, caret)
-				}}
-				onInsert={(field, text) => insertIn(index, field, text)}
-				onPaste={(event) => {
-					event.preventDefault()
-					insertIn(
-						index,
-						event.currentTarget,
-						event.clipboardData.getData("text/plain"),
-					)
-				}}
+				textRef={blockRefOf(block.id)}
 			/>
 		)
 	}
@@ -1334,11 +1607,14 @@ const LibraryDocumentEditor = ({
 	if (!isSameAnchors(listAnchors, heldListAnchors))
 		setHeldListAnchors(listAnchors)
 
-	const toolbarFor = ({ id, start, end, anchor }: SelectedText) => {
-		const range = documentRangeOf(id, start, end)
+	const toolbarFor = ({ start, end, anchor }: SelectedText) => {
+		const range = documentRangeOf({ start, end })
 		const onRange = (action?: FormatAction) => action && (() => action(range))
-		const block = blocks.find((candidate) => candidate.id === id)
-		const { formats, link } = formatsOf(block, start, end)
+		const block =
+			start.id === end.id
+				? blocks.find((candidate) => candidate.id === start.id)
+				: undefined
+		const { formats, link } = formatsOf(block, start.offset, end.offset)
 		return (
 			<SelectionToolbar
 				activeFormats={formats}
@@ -1391,7 +1667,7 @@ const LibraryDocumentEditor = ({
 					<GrowingField
 						aria-label={t("library.editor.title")}
 						className={DOCUMENT_TITLE}
-						fieldRef={fieldRefOf(TITLE_FIELD)}
+						fieldRef={titleField}
 						onChange={(event) => changeTitle(event.target.value)}
 						onKeyDown={(event) => {
 							if (event.key !== "Enter" || event.nativeEvent.isComposing) return
@@ -1405,8 +1681,48 @@ const LibraryDocumentEditor = ({
 				}
 			>
 				<div
-					className="flex flex-col gap-3.5"
+					aria-label={t("library.editor.body")}
+					aria-multiline
+					className="flex flex-col gap-3.5 outline-none"
+					contentEditable
 					data-slot="library-document-body"
+					onBlur={reportCaretAfterBlur}
+					onFocus={() => {
+						const held = bodySelectionIn(host.current)
+						if (selected && (!held || isSamePoint(held.anchor, held.focus)))
+							selectBody({ anchor: selected.start, focus: selected.end })
+					}}
+					onCompositionEnd={takeComposed}
+					onCompositionStart={() => {
+						const range = bodyRange()
+						if (range && range.start.id !== range.end.id)
+							replaceSelection(range, "")
+					}}
+					onCopy={copyFrom}
+					onDragEnd={() => {
+						draggedFrom.current = undefined
+					}}
+					onDragStart={(event) => {
+						const range = bodyRange()
+						if (!range || isCollapsed(range)) return
+						draggedFrom.current = range
+						event.dataTransfer.setData("text/plain", copiedOf(range))
+					}}
+					onCut={(event) => {
+						const range = copyFrom(event)
+						if (range) replaceSelection(range, "")
+					}}
+					onKeyDown={keyDown}
+					onPaste={(event) => {
+						event.preventDefault()
+						const range = bodyRange()
+						if (range)
+							replaceSelection(range, event.clipboardData.getData("text/plain"))
+					}}
+					onSelect={reportCaret}
+					ref={host}
+					role="textbox"
+					suppressContentEditableWarning
 				>
 					{runs.flatMap((run) =>
 						run[0]?.kind === "item" ? (
@@ -1416,12 +1732,12 @@ const LibraryDocumentEditor = ({
 							>
 								{run.map((block) => (
 									<li className="ps-1" key={block.id}>
-										{fieldOf(block)}
+										{blockIn(block)}
 									</li>
 								))}
 							</ul>
 						) : (
-							run.map(fieldOf)
+							run.map(blockIn)
 						),
 					)}
 				</div>
