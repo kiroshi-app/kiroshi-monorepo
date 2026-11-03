@@ -28,7 +28,7 @@ const APP = "apps/app"
 
 const SRC_TAURI = join(APP, "src-tauri")
 
-const RETRYING_EVENT = "merge_group"
+const RETRYING_REF = "refs/heads/main"
 
 const SIMULATOR_DESTINATION =
 	'-destination "platform=iOS Simulator,id=$SIMULATOR"'
@@ -63,11 +63,6 @@ const PR_ENQUEUE_UNIT_TESTS: Step = {
 	command: "bun run test:pr-enqueue",
 }
 
-const PR_REQUEUE_CHECK_UNIT_TESTS: Step = {
-	name: "PR requeue check script unit tests",
-	command: "bun run test:pr-requeue-check",
-}
-
 const QUEUE_SCRIPT_UNIT_TESTS = [
 	{
 		step: PR_DEQUEUE_UNIT_TESTS,
@@ -76,10 +71,6 @@ const QUEUE_SCRIPT_UNIT_TESTS = [
 	{
 		step: PR_ENQUEUE_UNIT_TESTS,
 		paths: ["scripts/pr-enqueue.sh", "scripts/pr-enqueue.test.ts"],
-	},
-	{
-		step: PR_REQUEUE_CHECK_UNIT_TESTS,
-		paths: ["scripts/pr-requeue-check.sh", "scripts/pr-requeue-check.test.ts"],
 	},
 ]
 
@@ -124,7 +115,6 @@ export const GATE = {
 		},
 		PR_DEQUEUE_UNIT_TESTS,
 		PR_ENQUEUE_UNIT_TESTS,
-		PR_REQUEUE_CHECK_UNIT_TESTS,
 		{ name: "Gate definition matches ci.yml", command: "bun run test:ci" },
 		{
 			name: "Biome and knip against the baseline",
@@ -226,8 +216,8 @@ export const GROUP_ORDER: Group[] = [
 ]
 
 const OFF_PULL_REQUEST_TRIGGERS: Partial<Record<Group, string>> = {
-	website: "on a merge_group and on a v* tag",
-	storybook: "on a merge_group and on a v* tag",
+	website: "on a push to main and on a v* tag",
+	storybook: "on a push to main and on a v* tag",
 	ios: "on a push to main only",
 }
 
@@ -235,8 +225,8 @@ const OFF_PULL_REQUEST_TRIGGERS: Partial<Record<Group, string>> = {
 // dozen agents loading the machine, which the full unit set cannot do. It
 // runs the format, Biome and knip against the baseline, the types, the unit
 // test step bun scripts/ci.ts changed picks for the same diff, and the
-// pr-dequeue, pr-enqueue or pr-requeue-check script tests when the diff
-// touches that script or its tests. bun run ci and the CI jobs keep the rest:
+// pr-dequeue or pr-enqueue script tests when the diff touches that script
+// or its tests. bun run ci and the CI jobs keep the rest:
 // the perf set, the
 // stories, the website and sidecar suites, rust, the website build and ios.
 export const FAST_STEP_NAMES = [
@@ -455,8 +445,8 @@ const runStep = ({ label, step }: Labelled) => {
 	return false
 }
 
-export const retryOf = (step: Step, event: string | undefined) =>
-	event === RETRYING_EVENT ? step.retry : undefined
+export const retryOf = (step: Step, ref: string | undefined) =>
+	ref === RETRYING_REF ? step.retry : undefined
 
 const shellQuoted = (text: string) => `'${text.replaceAll("'", "'\\''")}'`
 
@@ -592,7 +582,7 @@ const runRustTestsWithRerun = ({ label, step }: Labelled) => {
 
 const runWithRetry = ({ label, step }: Labelled) => {
 	// biome-ignore lint/suspicious/noUndeclaredEnvVars: scripts/ci.ts runs outside turbo, its cache never reads this variable
-	const retry = retryOf(step, process.env.GITHUB_EVENT_NAME)
+	const retry = retryOf(step, process.env.GITHUB_REF)
 	if (retry === "cargo") return runRustTestsWithRerun({ label, step })
 	if (retry === "vitest") return runStep({ label, step: vitestRetryStep(step) })
 	return runStep({ label, step })

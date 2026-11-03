@@ -94,9 +94,6 @@ const CI_JOBS = GROUP_ORDER.filter(
 	(group) => !LOCAL_ONLY_GROUPS.includes(group),
 )
 
-const LINT_EVENTS =
-	"github.event_name != 'push' || startsWith(github.ref, 'refs/tags/v')"
-
 const OFF_PULL_REQUEST_JOBS: Group[] = ["website", "storybook", "ios"]
 
 const EVERY_PATH_TOUCHED = {
@@ -204,10 +201,14 @@ const failingVerifySteps = (github: GitHubContext, results: JobResults) =>
 		evaluate(step.if ?? "true", scopeOf(github, results)),
 	)
 
-const A_PUSH_TO_MAIN: GitHubContext = {
+const pushToMain = (runId: number): GitHubContext => ({
 	event_name: "push",
 	ref: "refs/heads/main",
-}
+	run_id: String(runId),
+	event: { before: "main-before" },
+})
+
+const A_PUSH_TO_MAIN = pushToMain(7)
 
 const A_RELEASE_TAG: GitHubContext = {
 	event_name: "push",
@@ -219,19 +220,11 @@ const A_PULL_REQUEST: GitHubContext = {
 	ref: "refs/pull/7/merge",
 }
 
-const queueCommit = (pullRequest: number): GitHubContext => ({
-	event_name: "merge_group",
-	ref: `refs/heads/gh-readonly-queue/main/pr-${pullRequest}-0123abc`,
-	run_id: `30${pullRequest}`,
-	event: { merge_group: { base_sha: "queue-base" } },
-})
-
-const A_QUEUE_COMMIT = queueCommit(7)
-
 const PULL_REQUEST_JOB_SET = ["changes", "lint", "rust", "verify", "vitest"]
 
-const MERGE_GROUP_JOB_SET = [
+const PUSH_TO_MAIN_JOB_SET = [
 	"changes",
+	"ios",
 	"lint",
 	"rust",
 	"storybook",
@@ -365,7 +358,7 @@ describe("the gate", () => {
 		)
 		for (const group of ["website", "storybook"] as const) {
 			expect(offPullRequestNote(group)).toBe(
-				`${group} skips a pull_request, CI runs it on a merge_group and on a v* tag`,
+				`${group} skips a pull_request, CI runs it on a push to main and on a v* tag`,
 			)
 		}
 		expect(offPullRequestNote("ios")).toBe(
@@ -423,16 +416,6 @@ describe("ci:fast", () => {
 			"scripts/pr-enqueue.test.ts",
 			"PR enqueue script unit tests",
 			"test:pr-enqueue",
-		],
-		[
-			"scripts/pr-requeue-check.sh",
-			"PR requeue check script unit tests",
-			"test:pr-requeue-check",
-		],
-		[
-			"scripts/pr-requeue-check.test.ts",
-			"PR requeue check script unit tests",
-			"test:pr-requeue-check",
 		],
 	]
 	const QUEUE_SCRIPT_PATHS = QUEUE_SCRIPT_UNIT_TESTS.map(([path]) => path)
@@ -700,7 +683,7 @@ describe("the unit test scope of a pull request", () => {
 	})
 })
 
-describe("the merge_group retry", () => {
+describe("the push to main retry", () => {
 	const FULL_SCOPE: UnitTestScope = {
 		scope: "full",
 		path: "baselines/a.json",
@@ -718,18 +701,18 @@ describe("the merge_group retry", () => {
 			...fastSteps(["scripts/pr-dequeue.sh", "scripts/pr-enqueue.sh"], scope),
 		]),
 	]
-	type RetriedOn = { event: string | undefined; scope: UnitTestScope }
-	const retried = ({ event, scope }: RetriedOn) =>
+	type RetriedOn = { ref: string | undefined; scope: UnitTestScope }
+	const retried = ({ ref, scope }: RetriedOn) =>
 		everyStep(scope).flatMap((step) => {
-			const retry = retryOf(step, event)
+			const retry = retryOf(step, ref)
 			return retry ? [`${step.name}: ${retry}`] : []
 		})
 	const RUST_TEST = GATE.rust.find((step) => step.name === "Test") as Step
 
 	it.each(SCOPES)(
-		"retries the vitest gate, the rust cargo test and the storybook gate on a merge_group, nothing else, under %s",
+		"retries the vitest gate, the rust cargo test and the storybook gate on a push to main, nothing else, under %s",
 		(_, scope) => {
-			expect(retried({ event: "merge_group", scope })).toEqual([
+			expect(retried({ ref: "refs/heads/main", scope })).toEqual([
 				"Unit tests, website, sidecar and story ids against the baseline: vitest",
 				"Test: cargo",
 				"Stories played in chromium against the baseline: vitest",
@@ -744,12 +727,12 @@ describe("the merge_group retry", () => {
 	})
 
 	it.each([
-		["a pull_request", "pull_request"],
-		["a push", "push"],
-		["no event", undefined],
-	])("retries nothing on %s", (_, event) => {
-		for (const [, scope] of SCOPES)
-			expect(retried({ event, scope })).toEqual([])
+		["a pull_request", "refs/pull/7/merge"],
+		["a v* tag", "refs/tags/v1.2.0"],
+		["another branch", "refs/heads/feature/ope-1-fix"],
+		["no ref", undefined],
+	])("retries nothing on %s", (_, ref) => {
+		for (const [, scope] of SCOPES) expect(retried({ ref, scope })).toEqual([])
 	})
 
 	it("hands the vitest gate one retry per failing test", () => {
@@ -918,10 +901,10 @@ describe("the jobs of ci.yml", () => {
 
 	it.each([
 		["vitest", A_PULL_REQUEST, "bun scripts/ci.ts changed"],
-		["vitest", A_QUEUE_COMMIT, "bun scripts/ci.ts vitest"],
+		["vitest", A_PUSH_TO_MAIN, "bun scripts/ci.ts vitest"],
 		["vitest", A_RELEASE_TAG, "bun scripts/ci.ts vitest"],
 		["rust", A_PULL_REQUEST, "bun scripts/ci.ts rust-pr"],
-		["rust", A_QUEUE_COMMIT, "bun scripts/ci.ts rust"],
+		["rust", A_PUSH_TO_MAIN, "bun scripts/ci.ts rust"],
 		["rust", A_RELEASE_TAG, "bun scripts/ci.ts rust"],
 	] as const)(
 		"has %s run one gate through bun scripts/ci.ts on %p",
@@ -981,12 +964,10 @@ describe("the jobs of ci.yml", () => {
 		expect(systemCommands).toEqual([])
 	})
 
-	it("starts lint without changes on every event but a push to main, and has verify require it then and its skip on a push to main", () => {
+	it("starts lint without changes on every event, and has verify require it", () => {
 		expect(workflow.jobs.lint?.needs).toBeUndefined()
-		expect(workflow.jobs.lint?.if).toBe(LINT_EVENTS)
-		expect(verifyCondition("lint")).toBe(
-			`needs.lint.result != ((${LINT_EVENTS}) && 'success' || 'skipped')`,
-		)
+		expect(workflow.jobs.lint?.if).toBeUndefined()
+		expect(verifyCondition("lint")).toBe("needs.lint.result != 'success'")
 	})
 
 	it.each(CI_JOBS.filter((group) => group !== "lint"))(
@@ -1007,18 +988,16 @@ describe("the jobs of ci.yml", () => {
 
 	it.each([
 		[A_PULL_REQUEST, "pull_request"],
-		[A_QUEUE_COMMIT, "merge_group"],
 		[A_PUSH_TO_MAIN, "push"],
 		[A_RELEASE_TAG, "tag"],
 	])("hands changes the event of %p as %s", (github, event) => {
 		expect(ciEventOf(github)).toBe(event)
 	})
 
-	it("triggers on a push, a pull_request and a merge_group asking for checks", () => {
+	it("triggers on a push and a pull_request only", () => {
 		expect(workflow.on).toEqual({
 			push: { branches: ["main"], tags: ["v*"] },
 			pull_request: { branches: ["main"] },
-			merge_group: { types: ["checks_requested"] },
 		})
 	})
 
@@ -1026,12 +1005,8 @@ describe("the jobs of ci.yml", () => {
 		expect(jobsRunningOn(A_PULL_REQUEST)).toEqual(PULL_REQUEST_JOB_SET)
 	})
 
-	it("runs every desktop job on a merge_group, never ios", () => {
-		expect(jobsRunningOn(A_QUEUE_COMMIT)).toEqual(MERGE_GROUP_JOB_SET)
-	})
-
-	it("runs only changes and ios on a push to main", () => {
-		expect(jobsRunningOn(A_PUSH_TO_MAIN)).toEqual(["changes", "ios", "verify"])
+	it("runs every desktop job and ios on a push to main", () => {
+		expect(jobsRunningOn(A_PUSH_TO_MAIN)).toEqual(PUSH_TO_MAIN_JOB_SET)
 	})
 
 	it("keeps the desktop jobs on a v* tag, never ios", () => {
@@ -1046,7 +1021,7 @@ describe("the jobs of ci.yml", () => {
 		])
 	})
 
-	it.each([A_PULL_REQUEST, A_QUEUE_COMMIT, A_PUSH_TO_MAIN, A_RELEASE_TAG])(
+	it.each([A_PULL_REQUEST, A_PUSH_TO_MAIN, A_RELEASE_TAG])(
 		"has verify pass on %p when every job succeeded or was skipped by rule",
 		(github) => {
 			expect(failingVerifySteps(github, resultsByRule(github))).toEqual([])
@@ -1054,14 +1029,14 @@ describe("the jobs of ci.yml", () => {
 	)
 
 	it.each(
-		MERGE_GROUP_JOB_SET.filter((job) => job !== "verify").flatMap((job) => [
+		PUSH_TO_MAIN_JOB_SET.filter((job) => job !== "verify").flatMap((job) => [
 			[job, "failure"],
 			[job, "skipped"],
 		]),
-	)("has verify fail on a merge_group when %s ended %s", (job, result) => {
-		const results = { ...resultsByRule(A_QUEUE_COMMIT), [job]: result }
+	)("has verify fail on a push to main when %s ended %s", (job, result) => {
+		const results = { ...resultsByRule(A_PUSH_TO_MAIN), [job]: result }
 
-		expect(failingVerifySteps(A_QUEUE_COMMIT, results)).not.toEqual([])
+		expect(failingVerifySteps(A_PUSH_TO_MAIN, results)).not.toEqual([])
 	})
 
 	it.each(
@@ -1073,12 +1048,6 @@ describe("the jobs of ci.yml", () => {
 		const results = { ...resultsByRule(A_PULL_REQUEST), [job]: result }
 
 		expect(failingVerifySteps(A_PULL_REQUEST, results)).not.toEqual([])
-	})
-
-	it("has verify fail on a push to main when lint ran", () => {
-		const results = { ...resultsByRule(A_PUSH_TO_MAIN), lint: "success" }
-
-		expect(failingVerifySteps(A_PUSH_TO_MAIN, results)).not.toEqual([])
 	})
 
 	it("skips rust on a pull_request whose paths leave the rust filter unselected, and has verify accept the skip", () => {
@@ -1106,30 +1075,38 @@ describe("the jobs of ci.yml", () => {
 		},
 	)
 
-	it("diffs a merge_group against its base_sha, fetched before the diff", () => {
+	it("diffs a push to main against the commit it replaced, fetched before the diff", () => {
 		const changes = workflow.jobs.changes
 		const steps = changes?.steps ?? []
 		const fetchIndex = steps.findIndex(
 			(step) => step.name === "Fetch the base to diff against",
 		)
 		const decideIndex = steps.findIndex((step) => step.id === "filter")
-		const scope = scopeOf(A_QUEUE_COMMIT)
+		const scope = scopeOf(A_PUSH_TO_MAIN)
 
-		expect(interpolate(changes?.env?.BASE ?? "", scope)).toBe("queue-base")
+		expect(interpolate(changes?.env?.BASE ?? "", scope)).toBe("main-before")
 		expect(evaluate(steps[fetchIndex]?.if ?? "false", scope)).toBe(true)
 		expect(steps[fetchIndex]?.run).toBe('git fetch --depth=1 origin "$BASE"')
 		expect(fetchIndex).toBeLessThan(decideIndex)
 	})
 
-	it("never cancels the run of another queue commit", () => {
+	it("fetches no base on a v* tag, which runs every desktop job undiffed", () => {
+		const fetch = (workflow.jobs.changes?.steps ?? []).find(
+			(step) => step.name === "Fetch the base to diff against",
+		)
+
+		expect(evaluate(fetch?.if ?? "true", scopeOf(A_RELEASE_TAG))).toBe(false)
+	})
+
+	it("never cancels the run of another push to main", () => {
 		const groupOf = (github: GitHubContext) =>
 			interpolate(workflow.concurrency.group, scopeOf(github))
 
-		expect(groupOf(queueCommit(7))).not.toBe(groupOf(queueCommit(8)))
+		expect(groupOf(pushToMain(7))).not.toBe(groupOf(pushToMain(8)))
 		expect(
 			interpolate(
 				workflow.concurrency["cancel-in-progress"],
-				scopeOf(A_QUEUE_COMMIT),
+				scopeOf(A_PUSH_TO_MAIN),
 			),
 		).toBe("false")
 	})
