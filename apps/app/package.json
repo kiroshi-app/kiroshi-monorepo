@@ -32,7 +32,8 @@
 		"@tauri-apps/plugin-process": "^2.4.0",
 		"@workspace/ui": "workspace:*",
 		"react": "^19.3.0",
-		"react-dom": "^19.3.0"
+		"react-dom": "^19.3.0",
+		"yjs": "^13.6.33"
 	},
 	"devDependencies": {
 		"@tailwindcss/vite": "^4",
