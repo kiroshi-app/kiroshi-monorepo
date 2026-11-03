@@ -437,11 +437,6 @@ const BLOCK_TEXT = "[data-block-id]"
 
 const NATIVE_PRESS = "textarea, [contenteditable], button, a"
 
-const blockTextOf = (node: Node) =>
-	(node instanceof Element ? node : node.parentElement)?.closest<HTMLElement>(
-		BLOCK_TEXT,
-	)
-
 const pointOfText = (text: HTMLElement, offset: number): BodyPoint => ({
 	id: text.dataset.blockId ?? "",
 	offset,
@@ -452,7 +447,9 @@ const bodyPointOf = (
 	node: Node,
 	offset: number,
 ): BodyPoint | undefined => {
-	const text = blockTextOf(node)
+	const text = (
+		node instanceof Element ? node : node.parentElement
+	)?.closest<HTMLElement>(BLOCK_TEXT)
 	if (text && host.contains(text))
 		return pointOfText(text, offsetIn(text, node, offset))
 
