@@ -202,9 +202,9 @@ const LibraryLightbox = ({
 		return () => window.clearTimeout(timer)
 	}, [copyOutcome])
 
-	const copy = async (copied: LibraryLightboxImage) => {
+	const copyImage = async (shown: LibraryLightboxImage) => {
 		try {
-			await onCopy(copied)
+			await onCopy(shown)
 			setCopyOutcome("copied")
 		} catch {
 			setCopyOutcome("failed")
@@ -263,7 +263,7 @@ const LibraryLightbox = ({
 								<TooltipButton
 									aria-label={t("library.lightbox.copy")}
 									className={ACTION}
-									onClick={() => copy(image)}
+									onClick={() => copyImage(image)}
 									size="icon"
 									tooltip={t("library.lightbox.copy")}
 									tooltipSide="bottom"
