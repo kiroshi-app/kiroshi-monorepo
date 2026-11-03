@@ -147,4 +147,4 @@ const MapCard = ({
 	)
 }
 
-export { MapCard, type MapCardPlace, type MapCardProps }
+export { MapCard, type MapCardProps }
