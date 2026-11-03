@@ -226,8 +226,7 @@ const OFF_PULL_REQUEST_TRIGGERS: Partial<Record<Group, string>> = {
 // runs the format, Biome and knip against the baseline, the types, the unit
 // test step bun scripts/ci.ts changed picks for the same diff, and the
 // pr-dequeue or pr-enqueue script tests when the diff touches that script
-// or its tests. bun run ci and the CI jobs keep the rest:
-// the perf set, the
+// or its tests. bun run ci and the CI jobs keep the rest: the perf set, the
 // stories, the website and sidecar suites, rust, the website build and ios.
 export const FAST_STEP_NAMES = [
 	"Biome format",
