@@ -14,7 +14,7 @@ use super::contract::{
 	QuestionOption, QuestionRequest, RuntimeScope, SubmittedTurn, TransportError, TurnOutcome,
 	TurnState,
 };
-use super::session::{Drained, EventSink};
+use super::session::{Drained, EventSink, FollowUp};
 use super::translate::now_ms;
 use crate::attachments::attachment_block;
 use crate::conversations::awaited_runs::{forget_settled_turns, serve_handed};
@@ -123,6 +123,7 @@ enum Entry {
 	Submitted(SubmittedTurn),
 	Withdrawn,
 	Event(AgentEvent),
+	FollowUp(FollowUp),
 	Drained(oneshot::Sender<()>),
 }
 
@@ -166,7 +167,7 @@ impl ReplyWriter {
 		};
 		tauri::async_runtime::spawn(write_then_forward(
 			queued,
-			Desk { store, turn: None, attachments, inner, holds_prompts: false },
+			Desk::new(store, attachments, inner),
 		));
 		Self { entries }
 	}
@@ -185,6 +186,10 @@ impl EventSink for ReplyWriter {
 
 	fn submitted(&self, turn: SubmittedTurn) {
 		self.queue(Entry::Submitted(turn));
+	}
+
+	fn follow_up(&self, step: FollowUp) {
+		self.queue(Entry::FollowUp(step));
 	}
 
 	fn withdrawn(&self) {
@@ -211,12 +216,15 @@ async fn write_then_forward<R: Runtime>(
 	while let Some(entry) = queued.recv().await {
 		match entry {
 			Entry::Submitted(turn) => desk.open_turn(turn).await,
-			Entry::Withdrawn => desk.end(TerminalState::Failed).await,
+			Entry::Withdrawn => desk.withdraw().await,
 			Entry::Event(event) => {
-				let turn = desk.open_turn_named();
+				let turn = desk.turn_named_by(&event);
 				desk.record(&event).await;
 				desk.inner.emit(event, turn);
 			}
+			Entry::FollowUp(FollowUp::Started) => desk.open_continuation().await,
+			Entry::FollowUp(FollowUp::FoldedIn) => desk.fold_in_parked().await,
+			Entry::FollowUp(FollowUp::Settled(events)) => desk.settle_follow_up(events).await,
 			Entry::Drained(written) => {
 				if written.send(()).is_err() {
 					log::warn!("a shutdown stopped waiting for the reply writer of its run");
@@ -229,6 +237,7 @@ async fn write_then_forward<R: Runtime>(
 struct OpenTurn {
 	id: String,
 	prompt_id: String,
+	continues_turn_id: Option<String>,
 	held: Option<ChatMessage>,
 	streamed: HashMap<String, u64>,
 	written: HashMap<String, String>,
@@ -242,6 +251,7 @@ impl OpenTurn {
 		Self {
 			id: turn.turn_id,
 			prompt_id: turn.prompt_id,
+			continues_turn_id: None,
 			held: None,
 			streamed: HashMap::new(),
 			written: HashMap::new(),
@@ -249,6 +259,22 @@ impl OpenTurn {
 			last_reply: None,
 			endings: HashMap::new(),
 		}
+	}
+
+	fn continuing(continued: &SubmittedTurn) -> Self {
+		let turn = SubmittedTurn {
+			turn_id: Uuid::new_v4().to_string(),
+			prompt_id: continued.prompt_id.clone(),
+		};
+		Self { continues_turn_id: Some(continued.turn_id.clone()), ..Self::new(turn) }
+	}
+
+	fn answered(&self) -> SubmittedTurn {
+		SubmittedTurn { turn_id: self.id.clone(), prompt_id: self.prompt_id.clone() }
+	}
+
+	fn is_continuation(&self) -> bool {
+		self.continues_turn_id.is_some()
 	}
 
 	fn is_unwritten(&self, id: &str) -> bool {
@@ -266,31 +292,137 @@ impl OpenTurn {
 struct Desk<R: Runtime> {
 	store: Store<R>,
 	turn: Option<OpenTurn>,
+	parked: Option<OpenTurn>,
+	last_answered: Option<SubmittedTurn>,
 	attachments: Arc<TurnAttachments>,
 	inner: Arc<dyn TurnSink>,
 	holds_prompts: bool,
 }
 
 impl<R: Runtime> Desk<R> {
-	fn named(&self, turn_id: &str) -> EventTurn {
+	fn new(store: Store<R>, attachments: Arc<TurnAttachments>, inner: Arc<dyn TurnSink>) -> Self {
+		Self {
+			store,
+			turn: None,
+			parked: None,
+			last_answered: None,
+			attachments,
+			inner,
+			holds_prompts: false,
+		}
+	}
+
+	fn named(&self, turn: &OpenTurn) -> EventTurn {
 		EventTurn {
-			turn_id: turn_id.to_owned(),
+			turn_id: turn.id.clone(),
 			conversation_id: self.store.conversation_id.clone(),
+			continues_turn_id: turn.continues_turn_id.clone(),
 		}
 	}
 
 	fn open_turn_named(&self) -> Option<EventTurn> {
-		self.turn.as_ref().map(|turn| self.named(&turn.id))
+		self.turn.as_ref().map(|turn| self.named(turn))
+	}
+
+	fn turn_named_by(&self, event: &AgentEvent) -> Option<EventTurn> {
+		match event {
+			AgentEvent::TurnChanged { .. } | AgentEvent::TurnEnded { .. } => {
+				self.parked.as_ref().or(self.turn.as_ref()).map(|turn| self.named(turn))
+			}
+			_ => self.open_turn_named(),
+		}
+	}
+
+	fn streams_a_continuation(&self) -> bool {
+		self.turn.as_ref().is_some_and(OpenTurn::is_continuation)
 	}
 
 	async fn open_turn(&mut self, turn: SubmittedTurn) {
-		self.end(TerminalState::Cancelled).await;
-		match self.store.start_turn(&turn.turn_id).await {
-			Ok(()) => self.turn = Some(OpenTurn::new(turn)),
+		let follows_up = self.streams_a_continuation();
+		if !follows_up {
+			self.end(TerminalState::Cancelled).await;
+		}
+		let opened = match self.store.start_turn(&turn.turn_id).await {
+			Ok(()) => Some(OpenTurn::new(turn)),
 			Err(error) => {
 				self.store.report(&turn.turn_id, &error);
-				self.turn = None;
+				None
 			}
+		};
+		if follows_up {
+			self.parked = opened;
+		} else {
+			self.turn = opened;
+		}
+	}
+
+	async fn open_continuation(&mut self) {
+		if self.streams_a_continuation() {
+			return;
+		}
+		let Some(continued) = &self.last_answered else {
+			log::warn!(
+				"a follow-up of conversation {} continues no turn this run answered and is not written",
+				self.store.conversation_id
+			);
+			return;
+		};
+		let turn = OpenTurn::continuing(continued);
+		match self.store.start_continuation(&turn.id, &continued.turn_id).await {
+			Ok(()) => self.parked = self.turn.replace(turn),
+			Err(error) => self.store.report(&turn.id, &error),
+		}
+	}
+
+	async fn fold_in_parked(&mut self) {
+		if self.parked.is_none() {
+			return;
+		}
+		self.end(TerminalState::Complete).await;
+		self.turn = self.parked.take();
+	}
+
+	async fn withdraw(&mut self) {
+		if let Some(parked) = self.parked.take() {
+			return self.close(parked, TerminalState::Failed).await;
+		}
+		if self.streams_a_continuation() {
+			return;
+		}
+		if let Some(withdrawn) = self.turn.take() {
+			self.close(withdrawn, TerminalState::Failed).await;
+		}
+	}
+
+	async fn settle_follow_up(&mut self, events: Vec<AgentEvent>) {
+		if !self.streams_a_continuation() {
+			log::warn!(
+				"a follow-up of conversation {} settled with no continuation open and ends no turn",
+				self.store.conversation_id
+			);
+			return;
+		}
+		let turn = self.open_turn_named();
+		for event in events {
+			self.record_follow_up(&event).await;
+			self.inner.emit(event, turn.clone());
+		}
+	}
+
+	async fn record_follow_up(&mut self, event: &AgentEvent) {
+		let AgentEvent::TurnEnded { ended } = event else {
+			return self.record(event).await;
+		};
+		self.keep_prompts(event).await;
+		self.end(ending_of(ended.outcome)).await;
+		self.turn = self.parked.take();
+	}
+
+	async fn end_every(&mut self, completion: TerminalState) {
+		self.end(completion).await;
+		if let Some(parked) = self.parked.take() {
+			self.turn = Some(parked);
+			self.end(completion).await;
 		}
 	}
 
@@ -308,9 +440,9 @@ impl<R: Runtime> Desk<R> {
 			AgentEvent::MessageDelta { id, seq, text } => self.stream(id, *seq, text).await,
 			AgentEvent::MessageCompleted { message } => self.settle_completed(message).await,
 			AgentEvent::QuestionRequested { request } => self.ask(request).await,
-			AgentEvent::TurnEnded { ended } => self.end(ending_of(ended.outcome)).await,
+			AgentEvent::TurnEnded { ended } => self.end_every(ending_of(ended.outcome)).await,
 			AgentEvent::TurnChanged { state: TurnState::Failed } => {
-				self.end(TerminalState::Failed).await
+				self.end_every(TerminalState::Failed).await
 			}
 			_ => {}
 		}
@@ -472,9 +604,15 @@ impl<R: Runtime> Desk<R> {
 
 	async fn end(&mut self, completion: TerminalState) {
 		self.settle_open(completion).await;
-		let Some(turn) = self.turn.take() else {
-			return;
-		};
+		if let Some(turn) = self.turn.take() {
+			if !turn.is_continuation() {
+				self.last_answered = Some(turn.answered());
+			}
+			self.close(turn, completion).await;
+		}
+	}
+
+	async fn close(&mut self, turn: OpenTurn, completion: TerminalState) {
 		self.show_attachments(&turn).await;
 		let handed_to = self.handed_to(&turn, completion).await;
 		if let Err(error) = self.store.end_run(&turn.id, handed_to).await {
@@ -482,7 +620,7 @@ impl<R: Runtime> Desk<R> {
 			let detail = format!("the end of turn {} could not be written: {error:?}", turn.id);
 			self.inner.emit(
 				AgentEvent::Failed { error: TransportError::WriteFailed { detail } },
-				Some(self.named(&turn.id)),
+				Some(self.named(&turn)),
 			);
 		}
 	}
@@ -518,7 +656,7 @@ impl<R: Runtime> Desk<R> {
 			return;
 		}
 		let sent_at = Utc::now();
-		let named = Some(self.named(&turn.id));
+		let named = Some(self.named(turn));
 		match &turn.last_reply {
 			Some(id) => {
 				let written = turn.written.get(id).map(String::as_str).unwrap_or_default();
@@ -629,6 +767,26 @@ impl<R: Runtime> Store<R> {
 
 	async fn observe_state(&self, database: &db::Database) {
 		conversation_state::observe_reporting(&self.app, database, &self.conversation_id).await;
+	}
+
+	async fn start_continuation(
+		&self,
+		id: &str,
+		continued_turn_id: &str,
+	) -> Result<(), TranscriptStoreError> {
+		let turn = NewTurn {
+			id: id.to_owned(),
+			conversation_id: self.conversation_id.clone(),
+			started_at: now_ms(),
+		};
+		let database = self.database()?;
+		database
+			.messages()
+			.start_continuation_run(turn, continued_turn_id.to_owned(), self.bot_id.clone())
+			.await?;
+		self.owned.claim_turn(id);
+		self.announce_updated(database).await;
+		Ok(())
 	}
 
 	async fn start_turn(&self, id: &str) -> Result<(), TranscriptStoreError> {
@@ -1037,13 +1195,7 @@ mod tests {
 				runtime_session_id: RUNTIME_SESSION_ID.to_owned(),
 				owned: Arc::default(),
 			};
-			Desk {
-				store,
-				turn: None,
-				attachments: self.attachments.clone(),
-				inner,
-				holds_prompts: false,
-			}
+			Desk::new(store, self.attachments.clone(), inner)
 		}
 
 		async fn in_a_room_of_two(name: &str) -> (Self, String) {
@@ -1117,7 +1269,8 @@ mod tests {
 			messages.append_user_message(said).await.expect("the prompt is stored");
 		}
 
-		async fn completed_at(&self, turn_id: &'static str) -> Option<i64> {
+		async fn completed_at(&self, turn_id: &str) -> Option<i64> {
+			let turn_id = turn_id.to_owned();
 			self.database()
 				.messages()
 				.call(move |connection| {
@@ -1551,6 +1704,7 @@ mod tests {
 		let named = Some(EventTurn {
 			turn_id: "t1".to_owned(),
 			conversation_id: written.conversation_id.clone(),
+			continues_turn_id: None,
 		});
 		assert_eq!(heard.len(), 2, "heard {heard:#?}");
 		assert!(
@@ -1658,6 +1812,7 @@ mod tests {
 		let named = Some(EventTurn {
 			turn_id: "t1".to_owned(),
 			conversation_id: written.conversation_id.clone(),
+			continues_turn_id: None,
 		});
 		let (spoken, after) = heard.split_at(heard.len() - 1);
 		assert!(spoken.iter().any(|(event, _)| matches!(event, AgentEvent::MessageDelta { .. })));
@@ -2393,5 +2548,232 @@ mod tests {
 		desk.record(&resolved("q1")).await;
 
 		assert_eq!(*heard.lock().expect("the list is kept"), [json!("needs_you"), json!("idle")]);
+	}
+
+	fn said(id: &str, text: &str) -> Vec<AgentEvent> {
+		vec![
+			AgentEvent::MessageStarted { message: streaming(id) },
+			AgentEvent::MessageDelta { id: id.into(), seq: 1, text: text.into() },
+			completed(id, text, 2),
+		]
+	}
+
+	fn follow_up_settled() -> Entry {
+		Entry::FollowUp(FollowUp::Settled(vec![turn_ended()]))
+	}
+
+	fn events(events: Vec<AgentEvent>) -> impl Iterator<Item = Entry> {
+		events.into_iter().map(Entry::Event)
+	}
+
+	impl Written {
+		async fn settled(&self, id: &str) -> StoredMessage {
+			let stored = self.stored(id).await.expect("the reply is stored");
+			assert_eq!(stored.state, MessageState::Complete, "{stored:?}");
+			stored
+		}
+
+		async fn turn_of(&self, id: &str) -> String {
+			let stored = self.settled(id).await;
+			assert!(self.completed_at(&stored.turn_id).await.is_some(), "{stored:?} left open");
+			stored.turn_id
+		}
+	}
+
+	#[tokio::test]
+	async fn a_follow_up_after_the_turn_ended_is_written_to_a_continuation_of_that_turn() {
+		let written = Written::new("follow-up").await;
+		written.prompt("t1", "p1").await;
+		let entries = entries_of(&a_spoken_turn())
+			.into_iter()
+			.chain([Entry::FollowUp(FollowUp::Started)])
+			.chain(events(said("m2", "the shell finished")))
+			.chain([follow_up_settled()])
+			.collect();
+
+		let heard = written.forwarded_with_turns(entries).await;
+
+		let follow_up = written.settled("m2").await;
+		assert_ne!(follow_up.turn_id, "t1");
+		assert_eq!(follow_up.content, "the shell finished");
+		assert_eq!(follow_up.continues_turn_id.as_deref(), Some("t1"));
+		assert_eq!(follow_up.replied_to_message_id.as_deref(), Some("p1"));
+		assert_eq!(written.turn_of("m2").await, follow_up.turn_id);
+		assert_eq!(written.settled("m1").await.continues_turn_id, None);
+		let continuation = Some(EventTurn {
+			turn_id: follow_up.turn_id.clone(),
+			conversation_id: written.conversation_id.clone(),
+			continues_turn_id: Some("t1".to_owned()),
+		});
+		let (spoken, followed) = heard.split_at(a_spoken_turn().len());
+		assert!(spoken
+			.iter()
+			.all(|(_, turn)| turn.as_ref().is_some_and(|turn| turn.turn_id == "t1")));
+		assert!(followed.iter().all(|(_, turn)| *turn == continuation), "{followed:?}");
+		assert_eq!(followed.last().map(|(event, _)| event), Some(&turn_ended()));
+	}
+
+	#[tokio::test]
+	async fn two_follow_ups_are_two_continuations_each_completed_on_its_own_settle() {
+		let written = Written::new("follow-ups").await;
+		written.prompt("t1", "p1").await;
+		let entries = entries_of(&a_spoken_turn())
+			.into_iter()
+			.chain([Entry::FollowUp(FollowUp::Started)])
+			.chain(events(said("m2", "one")))
+			.chain([follow_up_settled(), Entry::FollowUp(FollowUp::Started)])
+			.chain(events(said("m3", "two")))
+			.chain([follow_up_settled()])
+			.collect();
+
+		written.forwarded(entries).await;
+
+		assert_ne!(written.turn_of("m2").await, written.turn_of("m3").await);
+		assert_eq!(written.settled("m3").await.continues_turn_id.as_deref(), Some("t1"));
+	}
+
+	#[tokio::test]
+	async fn a_prompt_submitted_while_a_follow_up_streams_waits_for_it_and_gets_its_own_turn() {
+		let written = Written::new("follow-up-overtaken").await;
+		written.prompt("t1", "p1").await;
+		written.prompt("t2", "p2").await;
+		let entries = entries_of(&a_spoken_turn())
+			.into_iter()
+			.chain([Entry::FollowUp(FollowUp::Started)])
+			.chain(events(vec![
+				AgentEvent::MessageStarted { message: streaming("m2") },
+				AgentEvent::MessageDelta { id: "m2".into(), seq: 1, text: "half".into() },
+			]))
+			.chain([Entry::Submitted(submitted("t2", "p2"))])
+			.chain(events(vec![
+				AgentEvent::MessageDelta { id: "m2".into(), seq: 2, text: " whole".into() },
+				completed("m2", "half whole", 2),
+			]))
+			.chain([follow_up_settled()])
+			.chain(events(said("m3", "the answer")))
+			.chain(events(vec![turn_ended()]))
+			.collect();
+
+		written.forwarded(entries).await;
+
+		assert_eq!(written.settled("m2").await.content, "half whole");
+		assert_ne!(written.turn_of("m2").await, "t2");
+		assert_eq!(written.turn_of("m3").await, "t2");
+		assert_eq!(written.settled("m3").await.content, "the answer");
+	}
+
+	#[tokio::test]
+	async fn a_prompt_folded_into_a_follow_up_completes_the_follow_up_and_takes_the_rest() {
+		let written = Written::new("follow-up-folded").await;
+		written.prompt("t1", "p1").await;
+		written.prompt("t2", "p2").await;
+		let entries = entries_of(&a_spoken_turn())
+			.into_iter()
+			.chain([Entry::FollowUp(FollowUp::Started)])
+			.chain(events(vec![
+				AgentEvent::MessageStarted { message: streaming("m2") },
+				AgentEvent::MessageDelta { id: "m2".into(), seq: 1, text: "half".into() },
+			]))
+			.chain([Entry::Submitted(submitted("t2", "p2")), Entry::FollowUp(FollowUp::FoldedIn)])
+			.chain(events(said("m3", "the answer")))
+			.chain(events(vec![turn_ended()]))
+			.collect();
+
+		written.forwarded(entries).await;
+
+		assert_eq!(written.settled("m2").await.content, "half");
+		assert_ne!(written.turn_of("m2").await, "t2");
+		assert_eq!(written.turn_of("m3").await, "t2");
+	}
+
+	#[tokio::test]
+	async fn a_prompt_withdrawn_behind_a_follow_up_fails_that_prompt_alone() {
+		let written = Written::new("follow-up-withdrawn").await;
+		written.prompt("t1", "p1").await;
+		written.prompt("t2", "p2").await;
+		let entries = entries_of(&a_spoken_turn())
+			.into_iter()
+			.chain([Entry::FollowUp(FollowUp::Started)])
+			.chain(events(vec![AgentEvent::MessageStarted { message: streaming("m2") }]))
+			.chain([Entry::Submitted(submitted("t2", "p2")), Entry::Withdrawn])
+			.chain(events(vec![
+				AgentEvent::MessageDelta { id: "m2".into(), seq: 1, text: "kept".into() },
+				completed("m2", "kept", 2),
+			]))
+			.chain([follow_up_settled()])
+			.collect();
+
+		written.forwarded(entries).await;
+
+		assert_eq!(written.settled("m2").await.content, "kept");
+		assert!(written.completed_at("t2").await.is_some(), "the withdrawn prompt was left open");
+		assert_eq!(written.assistant_rows().await, 2);
+	}
+
+	#[tokio::test]
+	async fn a_follow_up_settle_while_a_prompted_turn_is_open_leaves_that_turn_open_and_writes_nothing(
+	) {
+		let written = Written::new("follow-up-settle-prompted").await;
+		written.prompt("t1", "p1").await;
+		let entries =
+			entries_of(&said("m1", "half")).into_iter().chain([follow_up_settled()]).collect();
+
+		let heard = written.forwarded_with_turns(entries).await;
+
+		assert_eq!(written.completed_at("t1").await, None, "the prompted turn was ended");
+		assert!(heard.iter().all(|(event, _)| *event != turn_ended()), "{heard:?}");
+	}
+
+	#[tokio::test]
+	async fn a_withdrawal_with_no_prompt_parked_leaves_the_streaming_continuation_open() {
+		let written = Written::new("follow-up-withdrawn-alone").await;
+		written.prompt("t1", "p1").await;
+		let entries = entries_of(&a_spoken_turn())
+			.into_iter()
+			.chain([Entry::FollowUp(FollowUp::Started)])
+			.chain(events(vec![AgentEvent::MessageStarted { message: streaming("m2") }]))
+			.chain([Entry::Withdrawn])
+			.chain(events(vec![
+				AgentEvent::MessageDelta { id: "m2".into(), seq: 1, text: "kept".into() },
+				completed("m2", "kept", 2),
+			]))
+			.chain([follow_up_settled()])
+			.collect();
+
+		written.forwarded(entries).await;
+
+		let follow_up = written.settled("m2").await;
+		assert_eq!(follow_up.content, "kept");
+		assert_eq!(follow_up.continues_turn_id.as_deref(), Some("t1"));
+	}
+
+	#[tokio::test]
+	async fn a_follow_up_landing_while_a_prompt_is_submitting_continues_the_last_answered_turn() {
+		let written = Written::new("follow-up-racing-a-prompt").await;
+		written.prompt("t1", "p1").await;
+		written.prompt("t2", "p2").await;
+		let entries = entries_of(&a_spoken_turn())
+			.into_iter()
+			.chain([Entry::Submitted(submitted("t2", "p2")), Entry::FollowUp(FollowUp::Started)])
+			.chain(events(said("m2", "the shell finished")))
+			.chain([follow_up_settled()])
+			.chain(events(said("m3", "the answer")))
+			.chain(events(vec![turn_ended()]))
+			.collect();
+
+		let heard = written.forwarded_with_turns(entries).await;
+
+		let follow_up = written.settled("m2").await;
+		assert_eq!(follow_up.continues_turn_id.as_deref(), Some("t1"));
+		assert_eq!(follow_up.replied_to_message_id.as_deref(), Some("p1"));
+		assert_eq!(written.turn_of("m3").await, "t2");
+		assert_eq!(written.settled("m3").await.continues_turn_id, None);
+		let ended: Vec<String> = heard
+			.iter()
+			.filter(|(event, _)| *event == turn_ended())
+			.filter_map(|(_, turn)| turn.as_ref().map(|turn| turn.turn_id.clone()))
+			.collect();
+		assert_eq!(ended, ["t1".to_owned(), follow_up.turn_id, "t2".to_owned()]);
+		assert!(written.completed_at("t2").await.is_some());
 	}
 }

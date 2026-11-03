@@ -3056,8 +3056,18 @@
       ],
       "type": "object"
     },
-    "EventTurn": {
+    "EventTurn_Serialize": {
       "properties": {
+        "continuesTurnId": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "conversationId": {
           "type": "string"
         },
@@ -6097,13 +6107,13 @@
       ],
       "type": "object"
     },
-    "PinnedBubble": {
+    "PinnedBubble_Serialize": {
       "properties": {
         "blockIndex": {
           "type": "integer"
         },
         "message": {
-          "$ref": "#/$defs/TranscriptMessage"
+          "$ref": "#/$defs/TranscriptMessage_Serialize"
         },
         "pinnedAt": {
           "type": "integer"
@@ -7146,7 +7156,7 @@
         "turn": {
           "anyOf": [
             {
-              "$ref": "#/$defs/EventTurn"
+              "$ref": "#/$defs/EventTurn_Serialize"
             },
             {
               "type": "null"
@@ -8276,7 +8286,7 @@
         "interrupted"
       ]
     },
-    "TranscriptMessage": {
+    "TranscriptMessage_Serialize": {
       "properties": {
         "authorAccountId": {
           "anyOf": [
@@ -8313,6 +8323,16 @@
         },
         "content": {
           "type": "string"
+        },
+        "continuesTurnId": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "conversationId": {
           "type": "string"
@@ -8380,7 +8400,7 @@
       ],
       "type": "object"
     },
-    "TranscriptPage": {
+    "TranscriptPage_Serialize": {
       "properties": {
         "arrivals": {
           "items": {
@@ -8396,7 +8416,7 @@
         },
         "messages": {
           "items": {
-            "$ref": "#/$defs/TranscriptMessage"
+            "$ref": "#/$defs/TranscriptMessage_Serialize"
           },
           "type": "array"
         }
@@ -8813,7 +8833,7 @@
         }
       ]
     },
-    "TranscriptWindow": {
+    "TranscriptWindow_Serialize": {
       "properties": {
         "arrivals": {
           "items": {
@@ -8832,7 +8852,7 @@
         },
         "messages": {
           "items": {
-            "$ref": "#/$defs/TranscriptMessage"
+            "$ref": "#/$defs/TranscriptMessage_Serialize"
           },
           "type": "array"
         }
@@ -10564,7 +10584,7 @@
         "$ref": "#/$defs/TranscriptStoreError"
       },
       "ok": {
-        "$ref": "#/$defs/TranscriptPage"
+        "$ref": "#/$defs/TranscriptPage_Serialize"
       }
     },
     "conversation_message_page_around": {
@@ -10592,7 +10612,7 @@
         "$ref": "#/$defs/TranscriptStoreError"
       },
       "ok": {
-        "$ref": "#/$defs/TranscriptWindow"
+        "$ref": "#/$defs/TranscriptWindow_Serialize"
       }
     },
     "conversation_message_reference": {
@@ -10779,7 +10799,7 @@
       },
       "ok": {
         "items": {
-          "$ref": "#/$defs/PinnedBubble"
+          "$ref": "#/$defs/PinnedBubble_Serialize"
         },
         "type": "array"
       }
@@ -12975,7 +12995,7 @@
     },
     "conversation://message-stored": {
       "payload": {
-        "$ref": "#/$defs/TranscriptMessage"
+        "$ref": "#/$defs/TranscriptMessage_Serialize"
       }
     },
     "conversation://state-changed": {

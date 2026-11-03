@@ -237,7 +237,7 @@ Every other command names its session.
 | `type` | Carries | Becomes |
 | --- | --- | --- |
 | `open` | `cwd`, `resume?`, `pluginPath?`, `systemPluginPath?`, `userPluginPath?`, `agent?`, `identity?`, `outputStyle?`, `settingsPath?`, `partialMessages`, `env?`, `outputSchema?`, `missionThread?`, `members?` | `query()` options |
-| `prompt` | `text` | one `SDKUserMessage` on the session's prompt stream |
+| `prompt` | `text`, `uuid` | one `SDKUserMessage` on the session's prompt stream, stamped with `uuid`, which the SDK echoes as `user_message_uuid` on the turn answering it |
 | `interrupt` | — | `Query.interrupt()` |
 | `permission` | `requestId`, `decision` | the `canUseTool` promise's answer |
 | `host_response` | `requestId`, `result` or `error` | the `askHost` promise's answer |
@@ -511,6 +511,45 @@ The sidecar writes one `turn_settled`, carrying every field of the last `result`
   otherwise. Until the next `prompt`, the sidecar then forwards no SDK message of the
   session: a follow-up turn the CLI still runs when a task ends reaches the host neither
   as a stream nor as a `result`. `heartbeat`, `closed` and the control frames still pass.
+
+The SDK stamps `user_message_uuid` on `assistant` frames and on the first non-ping
+`stream_event` of a turn, never on a `result`. The sidecar, not the SDK, stamps the
+`result` it relays and the `turn_settled` it writes, with the `user_message_uuid` of the
+`assistant` and `stream_event` frames seen since the previous `result`, and with none
+when no such frame carried one.
+
+A `result` stamped with a prompt's uuid is held while the CLI is busy and settles on
+the idle, as above. A `result` carrying no `user_message_uuid`, arriving while no
+`result` is held, answers no prompt: it ends a follow-up turn the CLI ran after the turn
+settled. The sidecar settles it at once, busy or not, unless tasks are counted, so each
+follow-up settles on its own `result`, two queued follow-ups included.
+
+### Continuation turns
+
+The host mints a uuid for each `prompt` it writes and reads the SDK's echo, never the
+order frames arrive in:
+
+- a `stream_event` or `assistant` frame starting an SDK turn while no prompted turn is
+  running and carrying no `user_message_uuid` opens a follow-up. The reply writer writes
+  it as a continuation turn of the bot of the run, its `continues_turn_id` naming the last
+  turn the run answered, its messages replying to that turn's prompt;
+- a `message_start` or `assistant` frame carrying no `user_message_uuid` while a prompt
+  is still submitting, before any frame named it, opens a follow-up too: a background
+  task ended as the prompt was sent. The submitted turn waits, still submitting, and is
+  not the turn the continuation names, since the run has not answered it yet;
+- the `turn_settled` of a follow-up completes the continuation alone: a prompt submitted
+  while the follow-up streams stays open and waits for its own `turn_settled`. Landing
+  while no continuation is open, it ends no turn;
+- a prompt withdrawn while a follow-up streams fails only that prompt's turn, never the
+  continuation;
+- a frame stamped with the running prompt's uuid while a follow-up streams means the SDK
+  folded that prompt into the follow-up: the continuation completes and what follows
+  belongs to the prompted turn;
+- a `turn_settled` that names the running prompt, or lands while a stop is in flight,
+  ends the prompted turn, and a follow-up still open with it.
+
+`EventTurn` and `TranscriptMessage` carry `continuesTurnId` on a continuation and omit it
+everywhere else.
 
 While a `result` has arrived and tasks are counted, the sidecar writes `tasks_pending`
 with the count on every change, `0` included. The host keeps the run `running`, logs the
@@ -797,7 +836,7 @@ Host → sidecar:
 
 ```json
 {"type":"open","session":"…",…}
-{"type":"prompt","session":"…","text":"…"}
+{"type":"prompt","session":"…","text":"…","uuid":"…"}
 {"type":"interrupt","session":"…"}
 {"type":"permission","session":"…",…}
 {"type":"host_response","session":"…",…}

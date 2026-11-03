@@ -1072,7 +1072,11 @@ impl<R: Runtime> HostTurn<R> {
 	}
 
 	fn event_turn(&self) -> EventTurn {
-		EventTurn { turn_id: self.turn_id.clone(), conversation_id: self.conversation_id.clone() }
+		EventTurn {
+			turn_id: self.turn_id.clone(),
+			conversation_id: self.conversation_id.clone(),
+			continues_turn_id: None,
+		}
 	}
 
 	fn hears(&self, speaker: &Speaker, scoped: &ScopedEvent) -> bool {
@@ -1934,7 +1938,11 @@ mod tests {
 		driving.abort();
 
 		assert_eq!(outcome, CancelOutcome::Cancelled);
-		let turn = EventTurn { turn_id: "t1".to_owned(), conversation_id: room.id.clone() };
+		let turn = EventTurn {
+			turn_id: "t1".to_owned(),
+			conversation_id: room.id.clone(),
+			continues_turn_id: None,
+		};
 		let ended = ScopedEvent {
 			scope: Some(ada),
 			turn: Some(turn),

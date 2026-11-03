@@ -3847,6 +3847,7 @@ fn a_turn_in(conversation_id: &str) -> Option<agent::EventTurn> {
 	Some(agent::EventTurn {
 		turn_id: format!("t-{conversation_id}"),
 		conversation_id: conversation_id.to_owned(),
+		continues_turn_id: None,
 	})
 }
 
@@ -5018,8 +5019,11 @@ fn a_relay_guest_hears_every_event_of_a_host_turn_in_the_shared_conversation_in_
 		let app = guest.harness.app.handle().clone();
 		let scope = a_live_scope_of("c-mine");
 		let run = commands::a_live_run(&app, scope.clone());
-		let turn =
-			agent::EventTurn { turn_id: "t-mine".to_owned(), conversation_id: "c-mine".to_owned() };
+		let turn = agent::EventTurn {
+			turn_id: "t-mine".to_owned(),
+			conversation_id: "c-mine".to_owned(),
+			continues_turn_id: None,
+		};
 		let checking =
 			agent::AgentEvent::ConnectionChanged { state: agent::ConnectionState::Checking };
 
@@ -5027,6 +5031,7 @@ fn a_relay_guest_hears_every_event_of_a_host_turn_in_the_shared_conversation_in_
 		let turn_elsewhere = agent::EventTurn {
 			turn_id: "t-theirs".to_owned(),
 			conversation_id: "c-theirs".to_owned(),
+			continues_turn_id: None,
 		};
 
 		commands::a_host_wide_announce(&app, checking.clone());
@@ -5094,8 +5099,11 @@ fn a_relay_guest_hears_the_end_of_a_host_turn_in_the_shared_conversation() {
 		let app = guest.harness.app.handle().clone();
 		let scope = a_live_scope_of("c-mine");
 		let run = commands::a_live_run(&app, scope.clone());
-		let turn =
-			agent::EventTurn { turn_id: "t-mine".to_owned(), conversation_id: "c-mine".to_owned() };
+		let turn = agent::EventTurn {
+			turn_id: "t-mine".to_owned(),
+			conversation_id: "c-mine".to_owned(),
+			continues_turn_id: None,
+		};
 
 		run.emit(a_completed_turn_end(), Some(turn.clone()));
 		let heard = guest.events_until_the_marker().await;
@@ -5114,8 +5122,11 @@ fn a_relay_guest_hears_the_end_of_a_host_turn_once_when_its_evolution_lands_befo
 		let app = guest.harness.app.handle().clone();
 		let scope = a_live_scope_of("c-mine");
 		let run = commands::a_live_run(&app, scope.clone());
-		let turn =
-			agent::EventTurn { turn_id: "t-mine".to_owned(), conversation_id: "c-mine".to_owned() };
+		let turn = agent::EventTurn {
+			turn_id: "t-mine".to_owned(),
+			conversation_id: "c-mine".to_owned(),
+			continues_turn_id: None,
+		};
 		let evolution_failed = agent::AgentEvent::BotEvolutionFailed {
 			bundle: agent::EvolvedBundle::Bot,
 			detail: "the objects are read-only".to_owned(),

@@ -368,6 +368,9 @@ pub struct ScopedEvent {
 pub struct EventTurn {
 	pub turn_id: String,
 	pub conversation_id: String,
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	#[specta(optional)]
+	pub continues_turn_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]

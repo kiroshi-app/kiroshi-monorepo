@@ -171,8 +171,8 @@ export const commands = {
 	tokenCount: number,
 	createdAt: number,
 } | null, TranscriptStoreError>(__TAURI_INVOKE("conversation_capture_checkpoint", { conversationId, botId, runtimeSessionId, createdAt })),
-	conversationMessagePage: (conversationId: string, beforeSeq: number | null, limit: number) => typedError<TranscriptPage, TranscriptStoreError>(__TAURI_INVOKE("conversation_message_page", { conversationId, beforeSeq, limit })),
-	conversationMessagePageAround: (conversationId: string, seq: number, limit: number) => typedError<TranscriptWindow, TranscriptStoreError>(__TAURI_INVOKE("conversation_message_page_around", { conversationId, seq, limit })),
+	conversationMessagePage: (conversationId: string, beforeSeq: number | null, limit: number) => typedError<TranscriptPage_Serialize, TranscriptStoreError>(__TAURI_INVOKE("conversation_message_page", { conversationId, beforeSeq, limit })),
+	conversationMessagePageAround: (conversationId: string, seq: number, limit: number) => typedError<TranscriptWindow_Serialize, TranscriptStoreError>(__TAURI_INVOKE("conversation_message_page_around", { conversationId, seq, limit })),
 	conversationMessageReference: (conversationId: string, messageId: string) => typedError<{
 	uri: string,
 	conversationId: string,
@@ -187,7 +187,7 @@ export const commands = {
 	conversationMessageHeader: (conversationId: string, messageId: string) => typedError<string, TranscriptStoreError>(__TAURI_INVOKE("conversation_message_header", { conversationId, messageId })),
 	conversationPinMessage: (conversationId: string, messageId: string, blockIndex: number, pinnedAt: number) => typedError<null, TranscriptStoreError>(__TAURI_INVOKE("conversation_pin_message", { conversationId, messageId, blockIndex, pinnedAt })),
 	conversationUnpinMessage: (conversationId: string, messageId: string, blockIndex: number) => typedError<null, TranscriptStoreError>(__TAURI_INVOKE("conversation_unpin_message", { conversationId, messageId, blockIndex })),
-	conversationPinnedMessages: (conversationId: string) => typedError<PinnedBubble[], TranscriptStoreError>(__TAURI_INVOKE("conversation_pinned_messages", { conversationId })),
+	conversationPinnedMessages: (conversationId: string) => typedError<PinnedBubble_Serialize[], TranscriptStoreError>(__TAURI_INVOKE("conversation_pinned_messages", { conversationId })),
 	conversationStartTurn: (turn: NewTurn) => typedError<number, TranscriptStoreError>(__TAURI_INVOKE("conversation_start_turn", { turn })),
 	conversationCompleteTurn: (id: string, completedAt: number) => typedError<null, TranscriptStoreError>(__TAURI_INVOKE("conversation_complete_turn", { id, completedAt })),
 	conversationAppendUserMessage: (message: NewUserMessage) => typedError<number, TranscriptStoreError>(__TAURI_INVOKE("conversation_append_user_message", { message })),
@@ -983,9 +983,18 @@ export type EnvScope_Deserialize = ({ kind: "user" }) & { id?: never; name?: nev
 
 export type EnvScope_Serialize = ({ kind: "user" }) & { id?: never; name?: never; owner?: never; spaceId?: never } | ({ kind: "space"; id: string }) & { name?: never; owner?: never; spaceId?: never } | ({ kind: "bot"; id: string; spaceId: string }) & { name?: never; owner?: never } | ({ kind: "server"; name: string; owner: EnvOwner }) & { id?: never; spaceId?: never } | ({ kind: "person" }) & { id?: never; name?: never; owner?: never; spaceId?: never } | ({ kind: "account" }) & { id?: never; name?: never; owner?: never; spaceId?: never };
 
-export type EventTurn = {
+export type EventTurn = EventTurn_Serialize | EventTurn_Deserialize;
+
+export type EventTurn_Deserialize = {
 	turnId: string,
 	conversationId: string,
+	continuesTurnId?: string | null,
+};
+
+export type EventTurn_Serialize = {
+	turnId: string,
+	conversationId: string,
+	continuesTurnId?: string | null,
 };
 
 export type EvolvedBundle = "bot" | "user" | "space";
@@ -1562,8 +1571,16 @@ export type PermissionRequest = {
 	detail: string | null,
 };
 
-export type PinnedBubble = {
-	message: TranscriptMessage,
+export type PinnedBubble = PinnedBubble_Serialize | PinnedBubble_Deserialize;
+
+export type PinnedBubble_Deserialize = {
+	message: TranscriptMessage_Deserialize,
+	blockIndex: number,
+	pinnedAt: number,
+};
+
+export type PinnedBubble_Serialize = {
+	message: TranscriptMessage_Serialize,
 	blockIndex: number,
 	pinnedAt: number,
 };
@@ -1775,13 +1792,13 @@ export type ScopedEvent = ScopedEvent_Serialize | ScopedEvent_Deserialize;
 
 export type ScopedEvent_Deserialize = {
 	scope: RuntimeScope | null,
-	turn?: EventTurn | null,
+	turn?: EventTurn_Deserialize | null,
 	event: AgentEvent_Deserialize,
 };
 
 export type ScopedEvent_Serialize = {
 	scope: RuntimeScope | null,
-	turn?: EventTurn | null,
+	turn?: EventTurn_Serialize | null,
 	event: AgentEvent_Serialize,
 };
 
@@ -1963,7 +1980,9 @@ export type Ticket = {
 
 export type TranscriptCompletion = "pending" | "streaming" | "complete" | "cancelled" | "failed" | "interrupted";
 
-export type TranscriptMessage = {
+export type TranscriptMessage = TranscriptMessage_Serialize | TranscriptMessage_Deserialize;
+
+export type TranscriptMessage_Deserialize = {
 	id: string,
 	conversationId: string,
 	turnId: string,
@@ -1978,11 +1997,39 @@ export type TranscriptMessage = {
 	writtenFrom?: WrittenFrom | null,
 	repliedToMessageId: string | null,
 	runtimeSessionId: string | null,
+	continuesTurnId?: string | null,
 };
 
-export type TranscriptPage = {
+export type TranscriptMessage_Serialize = {
+	id: string,
 	conversationId: string,
-	messages: TranscriptMessage[],
+	turnId: string,
+	seq: number,
+	role: TranscriptRole,
+	content: string,
+	completion: TranscriptCompletion,
+	createdAt: number,
+	authorBotId: string | null,
+	authorAccountId: string | null,
+	authorName: string | null,
+	writtenFrom?: WrittenFrom | null,
+	repliedToMessageId: string | null,
+	runtimeSessionId: string | null,
+	continuesTurnId?: string | null,
+};
+
+export type TranscriptPage = TranscriptPage_Serialize | TranscriptPage_Deserialize;
+
+export type TranscriptPage_Deserialize = {
+	conversationId: string,
+	messages: TranscriptMessage_Deserialize[],
+	arrivals: CompanionArrival[],
+	hasMore: boolean,
+};
+
+export type TranscriptPage_Serialize = {
+	conversationId: string,
+	messages: TranscriptMessage_Serialize[],
 	arrivals: CompanionArrival[],
 	hasMore: boolean,
 };
@@ -1991,9 +2038,19 @@ export type TranscriptRole = "user" | "assistant";
 
 export type TranscriptStoreError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "conflict"; id: string; field: string } | { kind: "invalidTransition"; id: string; from: string; to: string } | { kind: "unknownBot"; id: string } | { kind: "namelessBot" } | { kind: "unknownConversation"; id: string } | { kind: "foreignBot"; id: string } | { kind: "severalSpaces"; id: string } | { kind: "unknownParticipant"; conversationId: string; botId: string } | { kind: "blankIcon" } | { kind: "unlistedIcon"; icon: string; accepted: string[] } | { kind: "unknownColour"; colour: string; accepted: string[] } | { kind: "unknownMessage"; id: string } | { kind: "unknownTurn"; id: string } | { kind: "unknownMessageSeq"; conversationId: string; seq: number } | { kind: "rejectedAvatarImage"; reason: AvatarRejection } | { kind: "unwritableBundle"; detail: string } | { kind: "unwritableEnvironment"; failure: EnvError } | { kind: "systemSkill"; id: string } | { kind: "unreadableHistory"; detail: string } | { kind: "unreadableSources"; path: string; reason: string } | { kind: "turnAlreadyRunning"; conversationId: string; turnId: string } | { kind: "unreadableCursor"; cursor: string };
 
-export type TranscriptWindow = {
+export type TranscriptWindow = TranscriptWindow_Serialize | TranscriptWindow_Deserialize;
+
+export type TranscriptWindow_Deserialize = {
 	conversationId: string,
-	messages: TranscriptMessage[],
+	messages: TranscriptMessage_Deserialize[],
+	arrivals: CompanionArrival[],
+	hasOlder: boolean,
+	hasNewer: boolean,
+};
+
+export type TranscriptWindow_Serialize = {
+	conversationId: string,
+	messages: TranscriptMessage_Serialize[],
 	arrivals: CompanionArrival[],
 	hasOlder: boolean,
 	hasNewer: boolean,

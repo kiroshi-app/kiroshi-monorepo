@@ -190,6 +190,8 @@ struct Run {
 	pending_permission: Option<String>,
 	held_prompt: Option<String>,
 	hung: bool,
+	streaming_follow_up: Option<String>,
+	answered_a_prompt: bool,
 }
 
 impl Run {
@@ -231,6 +233,8 @@ impl Run {
 			pending_permission: None,
 			held_prompt: None,
 			hung: false,
+			streaming_follow_up: None,
+			answered_a_prompt: false,
 			settings,
 		}
 	}
@@ -280,10 +284,13 @@ fn emit_text_stream(key: &str, text: &str) -> String {
 	let message_id = next_message_id();
 	emit(
 		key,
-		json!({
-			"type": "stream_event",
-			"event": { "type": "message_start", "message": { "id": message_id, "role": "assistant" } }
-		}),
+		answering_the_prompt(
+			key,
+			json!({
+				"type": "stream_event",
+				"event": { "type": "message_start", "message": { "id": message_id, "role": "assistant" } }
+			}),
+		),
 	);
 	emit(
 		key,
@@ -309,10 +316,13 @@ fn emit_text_turn(key: &str, run: &Run, text: &str) {
 		if run.partial_messages { emit_text_stream(key, text) } else { next_message_id() };
 	emit(
 		key,
-		json!({
-			"type": "assistant",
-			"message": { "id": message_id, "role": "assistant", "content": [{ "type": "text", "text": text }] }
-		}),
+		answering_the_prompt(
+			key,
+			json!({
+				"type": "assistant",
+				"message": { "id": message_id, "role": "assistant", "content": [{ "type": "text", "text": text }] }
+			}),
+		),
 	);
 }
 
@@ -324,14 +334,17 @@ fn own_turn(run: &Run) -> String {
 fn emit_tool_turn(key: &str) {
 	emit(
 		key,
-		json!({
-			"type": "stream_event",
-			"event": {
-				"type": "content_block_start",
-				"index": 0,
-				"content_block": { "type": "tool_use", "id": "toolu_fake_1", "name": "Bash", "input": {} }
-			}
-		}),
+		answering_the_prompt(
+			key,
+			json!({
+				"type": "stream_event",
+				"event": {
+					"type": "content_block_start",
+					"index": 0,
+					"content_block": { "type": "tool_use", "id": "toolu_fake_1", "name": "Bash", "input": {} }
+				}
+			}),
+		),
 	);
 	emit(
 		key,
@@ -372,7 +385,11 @@ fn result_of(session_id: &str, subtype: &str, is_error: bool) -> Value {
 }
 
 fn emit_settled(key: &str, result: Value) {
-	let mut settled = result.clone();
+	emit_settled_answering(key, result, None);
+}
+
+fn emit_settled_answering(key: &str, result: Value, prompt_uuid: Option<&str>) {
+	let mut settled = answering(result.clone(), prompt_uuid);
 	settled["type"] = json!("turn_settled");
 	emit(key, result);
 	emit(key, settled);
@@ -384,6 +401,77 @@ fn emit_result(key: &str, run: &Run, subtype: &str, is_error: bool) {
 
 fn emit_tasks_pending(key: &str, count: u32) {
 	emit(key, json!({ "type": "tasks_pending", "count": count }));
+}
+
+const FOLLOW_UP_HEAD: &str = "the background shell";
+const FOLLOW_UP_TAIL: &str = " finished";
+const SECOND_FOLLOW_UP: &str = "the second background shell finished";
+
+fn answered_prompts() -> std::sync::MutexGuard<'static, HashMap<String, String>> {
+	static ANSWERED: std::sync::OnceLock<std::sync::Mutex<HashMap<String, String>>> =
+		std::sync::OnceLock::new();
+	ANSWERED.get_or_init(Default::default).lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+fn answering_the_prompt(key: &str, frame: Value) -> Value {
+	let prompt_uuid = answered_prompts().get(key).cloned();
+	answering(frame, prompt_uuid.as_deref())
+}
+
+fn answering(mut frame: Value, prompt_uuid: Option<&str>) -> Value {
+	if let Some(uuid) = prompt_uuid {
+		frame["user_message_uuid"] = json!(uuid);
+	}
+	frame
+}
+
+fn start_reply(key: &str, head: &str, prompt_uuid: Option<&str>) -> String {
+	let message_id = next_message_id();
+	let started = json!({
+		"type": "stream_event",
+		"event": { "type": "message_start", "message": { "id": message_id, "role": "assistant" } }
+	});
+	emit(key, answering(started, prompt_uuid));
+	emit(
+		key,
+		json!({
+			"type": "stream_event",
+			"event": { "type": "content_block_start", "index": 0, "content_block": { "type": "text", "text": "" } }
+		}),
+	);
+	emit(
+		key,
+		json!({
+			"type": "stream_event",
+			"event": { "type": "content_block_delta", "index": 0, "delta": { "type": "text_delta", "text": head } }
+		}),
+	);
+	message_id
+}
+
+fn complete_reply(key: &str, run: &Run, message_id: &str, text: &str, prompt_uuid: Option<&str>) {
+	let completed = json!({
+		"type": "assistant",
+		"message": { "id": message_id, "role": "assistant", "content": [{ "type": "text", "text": text }] }
+	});
+	emit(key, answering(completed, prompt_uuid));
+	emit_settled_answering(key, result_of(&run.session_id, "success", false), prompt_uuid);
+}
+
+fn emit_whole_reply(key: &str, run: &Run, text: &str, prompt_uuid: Option<&str>) {
+	let message_id = start_reply(key, text, prompt_uuid);
+	complete_reply(key, run, &message_id, text, prompt_uuid);
+}
+
+fn finish_follow_up(key: &str, run: &Run, message_id: &str) {
+	emit(
+		key,
+		json!({
+			"type": "stream_event",
+			"event": { "type": "content_block_delta", "index": 0, "delta": { "type": "text_delta", "text": FOLLOW_UP_TAIL } }
+		}),
+	);
+	complete_reply(key, run, message_id, &format!("{FOLLOW_UP_HEAD}{FOLLOW_UP_TAIL}"), None);
 }
 
 const BACKGROUND_TASK_RUNS_FOR: std::time::Duration = std::time::Duration::from_millis(300);
@@ -489,8 +577,9 @@ fn on_open(key: &str, runs: &mut HashMap<String, Run>, command: &Value) {
 	runs.insert(key.to_owned(), run);
 }
 
-fn on_prompt(key: &str, runs: &mut HashMap<String, Run>, text: &str) {
+fn on_prompt(key: &str, runs: &mut HashMap<String, Run>, text: &str, prompt_uuid: &str) {
 	let Some(run) = runs.get_mut(key) else { return };
+	answered_prompts().insert(key.to_owned(), prompt_uuid.to_owned());
 	if !run.announced {
 		run.announced = true;
 		emit_init(key, run);
@@ -525,6 +614,32 @@ fn on_prompt(key: &str, runs: &mut HashMap<String, Run>, text: &str) {
 			emit_text_stream(key, &format!("echo :: {text}"));
 			emit_closed(key, "the agent exited unexpectedly");
 			dropped = true;
+		}
+		"follow_up_after_settle" => {
+			emit_whole_reply(key, run, &format!("echo :: {text}"), Some(prompt_uuid));
+			emit_whole_reply(key, run, &format!("{FOLLOW_UP_HEAD}{FOLLOW_UP_TAIL}"), None);
+		}
+		"two_follow_ups" => {
+			emit_whole_reply(key, run, &format!("echo :: {text}"), Some(prompt_uuid));
+			emit_whole_reply(key, run, &format!("{FOLLOW_UP_HEAD}{FOLLOW_UP_TAIL}"), None);
+			emit_whole_reply(key, run, SECOND_FOLLOW_UP, None);
+		}
+		"follow_up_then_prompt" => match run.streaming_follow_up.take() {
+			None => {
+				emit_whole_reply(key, run, &format!("echo :: {text}"), Some(prompt_uuid));
+				run.streaming_follow_up = Some(start_reply(key, FOLLOW_UP_HEAD, None));
+			}
+			Some(follow_up) => {
+				finish_follow_up(key, run, &follow_up);
+				emit_whole_reply(key, run, &format!("echo :: {text}"), Some(prompt_uuid));
+			}
+		},
+		"follow_up_races_a_prompt" => {
+			if run.answered_a_prompt {
+				emit_whole_reply(key, run, &format!("{FOLLOW_UP_HEAD}{FOLLOW_UP_TAIL}"), None);
+			}
+			run.answered_a_prompt = true;
+			emit_whole_reply(key, run, &format!("echo :: {text}"), Some(prompt_uuid));
 		}
 		"background_task" => {
 			emit_text_turn(key, run, "a background shell runs");
@@ -834,7 +949,12 @@ fn serve() {
 
 		match command["type"].as_str() {
 			Some("open") => on_open(&key, &mut runs, &command),
-			Some("prompt") => on_prompt(&key, &mut runs, command["text"].as_str().unwrap_or("")),
+			Some("prompt") => on_prompt(
+				&key,
+				&mut runs,
+				command["text"].as_str().unwrap_or(""),
+				command["uuid"].as_str().unwrap_or(""),
+			),
 			Some("interrupt") => on_interrupt(&key, &runs),
 			Some("permission") => on_permission(&key, &mut runs, &command),
 			Some("close") => {

@@ -1423,6 +1423,21 @@ describe("reportConnections", () => {
 		expect(pushed[pushed.length - 1]).toEndWith("second")
 	})
 
+	it("hands the agent a held prompt with the uuid the host stamped on it", async () => {
+		const handed = Promise.withResolvers<string | undefined>()
+		const report = reportConnections({
+			emit: () => {},
+			push: (_text, uuid) => {
+				handed.resolve(uuid)
+			},
+			pass: refusing(),
+		})
+
+		report.prompt("first", PROMPT_UUID)
+
+		expect(await handed.promise).toBe(PROMPT_UUID)
+	})
+
 	it("hands the turn that follows a dropped one to the agent", async () => {
 		const settling = Promise.withResolvers<RenewedGrant>()
 		const { pushed, report } = turning(rejectingAfterOpening(), {
@@ -1638,6 +1653,8 @@ const tasks = (...entries: { task_id: string; ambient?: boolean }[]) => ({
 	})),
 })
 
+const PROMPT_UUID = "6f1c2a4e-8d3b-4f7a-9c21-0b5e7d4a3f10"
+
 const resultOf = (turn: string): SessionFrame => ({
 	type: "result",
 	subtype: "success",
@@ -1647,7 +1664,25 @@ const resultOf = (turn: string): SessionFrame => ({
 	total_cost_usd: 0.01,
 })
 
+const answering: SessionFrame = {
+	type: "assistant",
+	user_message_uuid: PROMPT_UUID,
+	message: { content: [{ type: "text", text: "on it" }] },
+}
+
+const prompted = (turn: string): SessionFrame[] => [answering, resultOf(turn)]
+
+const answeredResultOf = (turn: string): SessionFrame => ({
+	...resultOf(turn),
+	user_message_uuid: PROMPT_UUID,
+})
+
 const settledOn = (turn: string): SessionFrame => ({
+	...answeredResultOf(turn),
+	type: "turn_settled",
+})
+
+const followUpSettledOn = (turn: string): SessionFrame => ({
 	...resultOf(turn),
 	type: "turn_settled",
 })
@@ -1688,7 +1723,7 @@ describe("createTurnSettler", () => {
 	it("settles a result with no task on the idle that follows it, with no added delay", () => {
 		const { frames, play } = settling()
 
-		play(running, resultOf("first"))
+		play(running, ...prompted("first"))
 		expect(frames).toEqual([])
 
 		play(idle)
@@ -1698,15 +1733,36 @@ describe("createTurnSettler", () => {
 	it("settles a result at once from a CLI that reports no session state", () => {
 		const { frames, play } = settling()
 
-		play(resultOf("first"))
+		play(...prompted("first"))
 
 		expect(frames).toEqual([settledOn("first")])
+	})
+
+	it("stamps each result it relays and its settle with the prompt the frames since the last result answered, and none when none did", () => {
+		const { relayed, frames, play } = settling()
+		const streamStarted: SessionFrame = {
+			type: "stream_event",
+			user_message_uuid: PROMPT_UUID,
+			event: { type: "message_start" },
+		}
+
+		play(streamStarted, resultOf("first"))
+		play(assistantOf("the shell finished"), {
+			...resultOf("follow-up"),
+			user_message_uuid: PROMPT_UUID,
+		})
+
+		expect(relayed.filter((frame) => frame.type === "result")).toEqual([
+			answeredResultOf("first"),
+			resultOf("follow-up"),
+		])
+		expect(frames).toEqual([settledOn("first"), followUpSettledOn("follow-up")])
 	})
 
 	it("holds a result while a task runs, tells each count, and settles on the follow-up turn", async () => {
 		const { frames, settler, play } = settling()
 
-		play(running, tasks({ task_id: "b1" }), resultOf("first"), idle)
+		play(running, tasks({ task_id: "b1" }), ...prompted("first"), idle)
 		play(tasks({ task_id: "b1" }, { task_id: "b2" }))
 		play(tasks({ task_id: "b2" }))
 		expect(frames).toEqual([pendingOf(1), pendingOf(2), pendingOf(1)])
@@ -1721,7 +1777,7 @@ describe("createTurnSettler", () => {
 		])
 
 		play(resultOf("follow-up"), idle)
-		expect(frames.at(-1)).toEqual(settledOn("follow-up"))
+		expect(frames.at(-1)).toEqual(followUpSettledOn("follow-up"))
 		expect(frames).toHaveLength(5)
 		settler.forget()
 	})
@@ -1729,7 +1785,7 @@ describe("createTurnSettler", () => {
 	it("settles on the last result when no follow-up turn starts within the grace window", async () => {
 		const { frames, play } = settling()
 
-		play(running, tasks({ task_id: "b1" }), resultOf("first"), idle, tasks())
+		play(running, tasks({ task_id: "b1" }), ...prompted("first"), idle, tasks())
 		expect(frames).toEqual([pendingOf(1), pendingOf(0)])
 
 		await outlastTheGrace()
@@ -1739,7 +1795,7 @@ describe("createTurnSettler", () => {
 	it("counts no ambient task", () => {
 		const { frames, play } = settling()
 
-		play(running, tasks({ task_id: "w1", ambient: true }), resultOf("first"))
+		play(running, tasks({ task_id: "w1", ambient: true }), ...prompted("first"))
 		play(idle)
 
 		expect(frames).toEqual([settledOn("first")])
@@ -1748,20 +1804,20 @@ describe("createTurnSettler", () => {
 	it("settles the held result at once when the person stops, and ignores the turns after it until the next prompt", () => {
 		const { frames, settler, play } = settling()
 
-		play(running, tasks({ task_id: "b1" }), resultOf("first"), idle)
+		play(running, tasks({ task_id: "b1" }), ...prompted("first"), idle)
 		settler.stopped()
 		play(running, resultOf("interrupted"), idle, tasks())
 		expect(frames).toEqual([pendingOf(1), settledOn("first")])
 
 		settler.prompted()
-		play(running, resultOf("second"), idle)
+		play(running, ...prompted("second"), idle)
 		expect(frames.at(-1)).toEqual(settledOn("second"))
 	})
 
 	it("relays the stream of the session until a stop settles it, and nothing of the follow-up turn after", () => {
 		const { relayed, settler, play } = settling()
 
-		play(running, tasks({ task_id: "b1" }), resultOf("first"), idle)
+		play(running, tasks({ task_id: "b1" }), ...prompted("first"), idle)
 		settler.stopped()
 		const settledAt = relayed.length
 		play(running, assistantOf("the shell finished"), resultOf("follow-up"))
@@ -1770,7 +1826,8 @@ describe("createTurnSettler", () => {
 		expect(relayed.slice(0, settledAt)).toEqual([
 			running,
 			tasks({ task_id: "b1" }),
-			resultOf("first"),
+			answering,
+			answeredResultOf("first"),
 			pendingOf(1),
 			idle,
 			settledOn("first"),
@@ -1782,12 +1839,36 @@ describe("createTurnSettler", () => {
 		expect(relayed.at(-1)).toEqual(running)
 	})
 
+	it("settles each follow-up the CLI runs after a settled turn on its own result, while the CLI stays busy", () => {
+		const { frames, play } = settling()
+
+		play(running, ...prompted("first"), idle)
+		play(running, resultOf("one"), resultOf("two"))
+
+		expect(frames).toEqual([
+			settledOn("first"),
+			followUpSettledOn("one"),
+			followUpSettledOn("two"),
+		])
+	})
+
+	it("settles a follow-up at once and holds the prompt queued behind it until the idle", () => {
+		const { frames, play } = settling()
+
+		play(running, ...prompted("first"), idle)
+		play(running, resultOf("follow-up"), ...prompted("second"))
+		expect(frames).toEqual([settledOn("first"), followUpSettledOn("follow-up")])
+
+		play(idle)
+		expect(frames.at(-1)).toEqual(settledOn("second"))
+	})
+
 	it("settles on the first result after a stop, whatever task still runs", () => {
 		const { frames, settler, play } = settling()
 
 		play(running, tasks({ task_id: "b1" }))
 		settler.stopped()
-		play(resultOf("interrupted"))
+		play(...prompted("interrupted"))
 
 		expect(frames).toEqual([settledOn("interrupted")])
 	})

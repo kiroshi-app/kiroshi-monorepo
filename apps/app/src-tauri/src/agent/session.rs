@@ -14,7 +14,8 @@ use super::contract::{
 };
 use super::lease::{Lapse, Liveness, RunLease};
 use super::protocol::{
-	self, ClosedFrame, Frame, HostAnswer, HostRequestFrame, OpenRequest, SpaceMember,
+	self, ClosedFrame, Frame, HostAnswer, HostRequestFrame, OpenRequest, SpaceMember, StreamEvent,
+	StreamEventFrame,
 };
 use super::sidecar::Sidecar;
 use super::translate::Translator;
@@ -24,10 +25,24 @@ pub const DEFAULT_STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
 
 pub const PARTIAL_MESSAGES: &str = "partialMessages";
 
+pub enum FollowUp {
+	Started,
+	FoldedIn,
+	Settled(Vec<AgentEvent>),
+}
+
 pub trait EventSink: Send + Sync + 'static {
 	fn emit(&self, event: AgentEvent);
 
 	fn submitted(&self, _turn: SubmittedTurn) {}
+
+	fn follow_up(&self, step: FollowUp) {
+		if let FollowUp::Settled(events) = step {
+			for event in events {
+				self.emit(event);
+			}
+		}
+	}
 
 	fn withdrawn(&self) {}
 
@@ -94,6 +109,10 @@ impl EventSink for GatedSink {
 
 	fn submitted(&self, turn: SubmittedTurn) {
 		self.inner.submitted(turn);
+	}
+
+	fn follow_up(&self, step: FollowUp) {
+		self.inner.follow_up(step);
 	}
 
 	fn withdrawn(&self) {
@@ -249,6 +268,7 @@ struct Shared {
 	running: Option<RunningTurn>,
 	queued: VecDeque<QueuedPrompt>,
 	lease: RunLease,
+	streams_a_follow_up: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -271,6 +291,7 @@ struct QueuedPrompt {
 
 struct RunningTurn {
 	id: Option<String>,
+	prompt_uuid: String,
 	started_at: Instant,
 	liveness: Liveness,
 }
@@ -288,13 +309,47 @@ impl Shared {
 		Some(AgentEvent::TurnChanged { state: next })
 	}
 
-	fn turn_started(&mut self, session: &str, id: Option<String>) {
+	fn turn_started(&mut self, session: &str, id: Option<String>, prompt_uuid: String) {
 		log::info!("the turn started session={session} turn={id:?}");
 		self.running = Some(RunningTurn {
 			id,
+			prompt_uuid,
 			started_at: Instant::now(),
 			liveness: Liveness::since(tokio::time::Instant::now()),
 		});
+	}
+
+	fn answers_the_running_prompt(&self, frame: &Frame) -> bool {
+		let running = self.running.as_ref().map(|running| running.prompt_uuid.as_str());
+		frame.answered_prompt().is_some_and(|answered| Some(answered) == running)
+	}
+
+	fn follow_up_of(&mut self, frame: &Frame) -> Option<FollowUp> {
+		if !is_turn_activity(frame) {
+			return None;
+		}
+		if self.answers_the_running_prompt(frame) {
+			return std::mem::take(&mut self.streams_a_follow_up).then_some(FollowUp::FoldedIn);
+		}
+		if self.streams_a_follow_up || !self.opens_a_follow_up(frame) {
+			return None;
+		}
+		self.streams_a_follow_up = true;
+		Some(FollowUp::Started)
+	}
+
+	fn opens_a_follow_up(&self, frame: &Frame) -> bool {
+		match self.turn {
+			TurnState::Submitting => starts_a_reply(frame),
+			_ => !self.is_mid_turn(),
+		}
+	}
+
+	fn settles_the_follow_up_alone(&self, frame: &Frame) -> bool {
+		matches!(frame, Frame::TurnSettled(_))
+			&& self.streams_a_follow_up
+			&& self.turn != TurnState::Stopping
+			&& !self.answers_the_running_prompt(frame)
 	}
 
 	fn liveness(&mut self) -> Option<&mut Liveness> {
@@ -365,6 +420,7 @@ impl Shared {
 	}
 
 	fn turn_ended(&mut self, session: &str, outcome: TurnOutcome) {
+		self.streams_a_follow_up = false;
 		let Some(running) = self.running.take() else {
 			return;
 		};
@@ -431,7 +487,12 @@ impl Line<'_> {
 		turn: Option<SubmittedTurn>,
 	) -> Result<(), TransportError> {
 		let key = shared.key.clone();
-		shared.turn_started(&key, turn.as_ref().map(|turn| turn.turn_id.clone()));
+		let prompt_uuid = uuid::Uuid::new_v4().to_string();
+		shared.turn_started(
+			&key,
+			turn.as_ref().map(|turn| turn.turn_id.clone()),
+			prompt_uuid.clone(),
+		);
 		let entering = shared.set_turn(TurnState::Submitting);
 		self.rearmed.notify_one();
 		let handed = turn.is_some();
@@ -441,7 +502,7 @@ impl Line<'_> {
 		if let Some(entering) = entering {
 			self.sink.emit(entering);
 		}
-		let written = self.sidecar.send(protocol::prompt_command(&key, text));
+		let written = self.sidecar.send(protocol::prompt_command(&key, text, &prompt_uuid));
 		if written.is_err() {
 			shared.turn_ended(&key, TurnOutcome::Failed);
 		}
@@ -493,6 +554,7 @@ impl Session {
 			running: None,
 			queued: VecDeque::new(),
 			lease: options.lease,
+			streams_a_follow_up: false,
 		}));
 		let rearmed = Arc::new(Notify::new());
 
@@ -752,6 +814,17 @@ fn is_turn_activity(frame: &Frame) -> bool {
 	matches!(frame, Frame::StreamEvent(_) | Frame::Assistant(_) | Frame::ControlRequest(_))
 }
 
+fn starts_a_reply(frame: &Frame) -> bool {
+	matches!(
+		frame,
+		Frame::Assistant(_)
+			| Frame::StreamEvent(StreamEventFrame {
+				event: Some(StreamEvent::MessageStart { .. }),
+				..
+			})
+	)
+}
+
 fn crashed(closed: &ClosedFrame) -> TransportError {
 	TransportError::Crashed { code: None, detail: closed.detail.clone() }
 }
@@ -879,13 +952,26 @@ async fn read_loop(
 			if guard.shutting_down {
 				return;
 			}
+			if guard.settles_the_follow_up_alone(&frame) {
+				guard.streams_a_follow_up = false;
+				sink.follow_up(FollowUp::Settled(guard.translator.ingest(frame)));
+				continue;
+			}
+			if let Some(step) = guard.follow_up_of(&frame) {
+				sink.follow_up(step);
+			}
+			if matches!(frame, Frame::TurnSettled(_))
+				&& std::mem::take(&mut guard.streams_a_follow_up)
+			{
+				sink.follow_up(FollowUp::FoldedIn);
+			}
 			let entering = match guard.turn {
-				TurnState::Submitting if is_turn_activity(&frame) => {
+				TurnState::Submitting if is_turn_activity(&frame) && !guard.streams_a_follow_up => {
 					guard.set_turn(TurnState::Running)
 				}
 				_ => None,
 			};
-			let holds_a_result = matches!(frame, Frame::Result(_));
+			let holds_a_result = matches!(frame, Frame::Result(_)) && !guard.streams_a_follow_up;
 			if holds_a_result {
 				guard.result_held();
 			}

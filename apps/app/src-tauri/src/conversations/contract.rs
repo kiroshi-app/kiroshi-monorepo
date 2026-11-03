@@ -48,6 +48,7 @@ mod tests {
 			written_from: None,
 			replied_to_message_id: Some("m0".into()),
 			runtime_session_id: Some("run-1".into()),
+			continues_turn_id: None,
 		}
 	}
 

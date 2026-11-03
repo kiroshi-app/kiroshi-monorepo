@@ -129,6 +129,7 @@ pub struct StoredMessage {
 	pub runtime_session_id: Option<String>,
 	pub author: AccountAuthor,
 	pub written_from: Option<WrittenFrom>,
+	pub continues_turn_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -210,6 +211,8 @@ const COMPLETE_EARLIER_UNANSWERED_TURNS: &str = "UPDATE turns SET completed_at =
 			AND messages.completion_state IN ('pending', 'streaming'))";
 const COMPLETE_OPEN_TURNS: &str = "UPDATE turns SET completed_at = ?1 WHERE completed_at IS NULL";
 const REOPEN_TURN: &str = "UPDATE turns SET completed_at = NULL WHERE id = ?1";
+const LINK_CONTINUED_TURN: &str =
+	"UPDATE turns SET continues_turn_id = ?2 WHERE id = ?1 AND continues_turn_id IS NULL";
 const COMPLETE_TURN_NO_BOT_RUNS_ON: &str = "UPDATE turns SET completed_at = ?2
 	WHERE id = ?1 AND completed_at IS NULL
 		AND NOT EXISTS (SELECT 1 FROM turn_runs WHERE turn_runs.turn_id = turns.id)";
@@ -272,15 +275,18 @@ const REPLACE_INDEXED_CONTENT: &str =
 	"UPDATE message_search SET content = ?2 WHERE message_id = ?1";
 const MESSAGE_PAGE: &str = "SELECT id, turn_id, author_bot_id, replied_to_message_id, seq, role,
 		content, completion_state, created_at, runtime_session_id, author_account_id,
-		author_name, written_from, author_email, author_computer
+		author_name, written_from, author_email, author_computer,
+		(SELECT continues_turn_id FROM turns WHERE turns.id = messages.turn_id)
 	FROM messages WHERE conversation_id = ?1 AND seq < ?2 ORDER BY seq DESC LIMIT ?3";
 const MESSAGE_AT_SEQ: &str = "SELECT id, turn_id, author_bot_id, replied_to_message_id, seq, role,
 		content, completion_state, created_at, runtime_session_id, author_account_id,
-		author_name, written_from, author_email, author_computer
+		author_name, written_from, author_email, author_computer,
+		(SELECT continues_turn_id FROM turns WHERE turns.id = messages.turn_id)
 	FROM messages WHERE conversation_id = ?1 AND seq = ?2";
 const MESSAGES_AFTER_SEQ: &str = "SELECT id, turn_id, author_bot_id, replied_to_message_id, seq,
 		role, content, completion_state, created_at, runtime_session_id, author_account_id,
-		author_name, written_from, author_email, author_computer
+		author_name, written_from, author_email, author_computer,
+		(SELECT continues_turn_id FROM turns WHERE turns.id = messages.turn_id)
 	FROM messages WHERE conversation_id = ?1 AND seq > ?2 ORDER BY seq ASC LIMIT ?3";
 const MESSAGE_OLDER_THAN_SEQ: &str =
 	"SELECT EXISTS(SELECT 1 FROM messages WHERE conversation_id = ?1 AND seq < ?2)";
@@ -288,29 +294,34 @@ const MESSAGE_NEWER_THAN_SEQ: &str =
 	"SELECT EXISTS(SELECT 1 FROM messages WHERE conversation_id = ?1 AND seq > ?2)";
 const MESSAGE_BY_ID: &str = "SELECT id, turn_id, author_bot_id, replied_to_message_id, seq, role,
 		content, completion_state, created_at, runtime_session_id, author_account_id,
-		author_name, written_from, author_email, author_computer
+		author_name, written_from, author_email, author_computer,
+		(SELECT continues_turn_id FROM turns WHERE turns.id = messages.turn_id)
 	FROM messages WHERE conversation_id = ?1 AND id = ?2";
 const MESSAGE_WINDOW: &str = "SELECT id, turn_id, author_bot_id, replied_to_message_id, seq, role,
 		content, completion_state, created_at, runtime_session_id, author_account_id,
-		author_name, written_from, author_email, author_computer
+		author_name, written_from, author_email, author_computer,
+		(SELECT continues_turn_id FROM turns WHERE turns.id = messages.turn_id)
 	FROM messages WHERE conversation_id = ?1 AND seq > ?2 AND seq < ?3
 	ORDER BY seq DESC LIMIT ?4";
 const SETTLED_MESSAGE_WINDOW: &str = "SELECT id, turn_id, author_bot_id, replied_to_message_id,
 		seq, role, content, completion_state, created_at, runtime_session_id, author_account_id,
-		author_name, written_from, author_email, author_computer
+		author_name, written_from, author_email, author_computer,
+		(SELECT continues_turn_id FROM turns WHERE turns.id = messages.turn_id)
 	FROM messages WHERE conversation_id = ?1 AND seq > ?2 AND seq < ?3
 		AND completion_state NOT IN ('pending', 'streaming')
 		AND trim(content, char(32, 9, 10, 13)) <> ''
 	ORDER BY seq DESC LIMIT ?4";
 const LATEST_MESSAGE_ASIDE_BOT: &str = "SELECT id, turn_id, author_bot_id, replied_to_message_id,
 		seq, role, content, completion_state, created_at, runtime_session_id, author_account_id,
-		author_name, written_from, author_email, author_computer
+		author_name, written_from, author_email, author_computer,
+		(SELECT continues_turn_id FROM turns WHERE turns.id = messages.turn_id)
 	FROM messages WHERE conversation_id = ?1 AND COALESCE(author_bot_id, '') <> ?2
 		AND created_at <= ?3
 		AND trim(content, char(32, 9, 10, 13)) <> '' ORDER BY seq DESC LIMIT 1";
 const LATEST_MESSAGE_OF_BOT: &str = "SELECT id, turn_id, author_bot_id, replied_to_message_id, seq,
 		role, content, completion_state, created_at, runtime_session_id, author_account_id,
-		author_name, written_from, author_email, author_computer
+		author_name, written_from, author_email, author_computer,
+		(SELECT continues_turn_id FROM turns WHERE turns.id = messages.turn_id)
 	FROM messages WHERE conversation_id = ?1 AND author_bot_id = ?2 AND created_at <= ?3
 		AND trim(content, char(32, 9, 10, 13)) <> '' ORDER BY seq DESC LIMIT 1";
 const MESSAGE_OF_CONVERSATION: &str =
@@ -325,6 +336,7 @@ const PINNED_MESSAGES: &str = "SELECT messages.id, messages.turn_id, messages.au
 		messages.completion_state, messages.created_at, messages.runtime_session_id,
 		messages.author_account_id, messages.author_name, messages.written_from,
 		messages.author_email, messages.author_computer,
+		(SELECT continues_turn_id FROM turns WHERE turns.id = messages.turn_id),
 		message_pins.block_index, message_pins.pinned_at
 	FROM message_pins
 	JOIN messages ON messages.id = message_pins.message_id
@@ -388,6 +400,19 @@ impl MessagesRepository {
 		self.call_mut(move |connection| Ok(started_run(connection, &turn, &bot_id)))
 			.await?
 			.at("start_run", "turn_runs")
+	}
+
+	pub async fn start_continuation_run(
+		&self,
+		turn: NewTurn,
+		continued_turn_id: String,
+		bot_id: String,
+	) -> Result<(), TranscriptError> {
+		self.call_mut(move |connection| {
+			Ok(started_continuation_run(connection, &turn, &continued_turn_id, &bot_id))
+		})
+		.await?
+		.at("start_continuation_run", "turns")
 	}
 
 	pub async fn end_run(&self, ended: EndedRun) -> Result<(), TranscriptError> {
@@ -1095,6 +1120,20 @@ fn started_run(
 	Ok(())
 }
 
+fn started_continuation_run(
+	connection: &mut Connection,
+	turn: &NewTurn,
+	continued_turn_id: &str,
+	bot_id: &str,
+) -> Result<(), TranscriptError> {
+	let transaction = write_transaction(connection)?;
+	insert_turn_once(&transaction, turn)?;
+	transaction.execute(LINK_CONTINUED_TURN, params![turn.id, continued_turn_id])?;
+	transaction.execute(HOLD_RUN, params![turn.id, bot_id, RUNNING])?;
+	transaction.commit()?;
+	Ok(())
+}
+
 fn claimed_awaited_run(
 	connection: &mut Connection,
 	turn_id: &str,
@@ -1583,14 +1622,15 @@ fn read_message(row: &Row<'_>) -> rusqlite::Result<StoredMessage> {
 			computer: row.get(14)?,
 		},
 		written_from: row.get(12)?,
+		continues_turn_id: row.get(15)?,
 	})
 }
 
 fn read_pin(row: &Row<'_>) -> rusqlite::Result<StoredPin> {
 	Ok(StoredPin {
 		message: read_message(row)?,
-		block_index: row.get(15)?,
-		pinned_at: row.get(16)?,
+		block_index: row.get(16)?,
+		pinned_at: row.get(17)?,
 	})
 }
 

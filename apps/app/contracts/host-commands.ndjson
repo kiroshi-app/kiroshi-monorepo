@@ -1,5 +1,5 @@
 {"type":"open","session":"k1","cwd":"/workspace/space","resume":"sdk-0001","pluginPath":"/plugins/companion","systemPluginPath":"/plugins/system","userPluginPath":"/plugins/user","spacePluginPath":"/plugins/space","agent":"companion","identity":"Ada, the companion","outputStyle":"Concise","settingsPath":"/plugins/companion/settings.json","appDataDir":"/app-data","conversationId":"c-0001","partialMessages":true,"env":{"TZ":"UTC"},"serverEnv":{"base":{"CLOCK_URL":"https://clock.example.test"},"perServer":{"clock":{"CLOCK_ROOM":"main"}},"needsAuthorization":["granola"],"failure":"clock has not connected"},"connection":{"ANTHROPIC_API_KEY":"<redacted>"},"outputSchema":{"type":"object","properties":{"summary":{"type":"string"}},"required":["summary"]},"missionThread":true}
-{"type":"prompt","session":"k1","text":"Draft the release note"}
+{"type":"prompt","session":"k1","text":"Draft the release note","uuid":"6f1c2a4e-8d3b-4f7a-9c21-0b5e7d4a3f10"}
 {"type":"interrupt","session":"k1"}
 {"type":"permission","session":"k1","requestId":"req-0001","decision":{"behavior":"allow","updatedInput":{"file_path":"/workspace/space/README.md"}}}
 {"type":"host_response","session":"k1","requestId":"host-0001","result":{"id":"r-0001"}}
