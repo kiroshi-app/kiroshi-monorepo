@@ -562,9 +562,16 @@ const besideImage = (stage: Element, image: Element): Point => {
 		: { x: room.left + 8, y: (room.top + drawn.top) / 2 }
 }
 
+const SCROLLBAR_BAND = 16
+
 const onVerticalScrollbar = (stage: Element): Point => {
 	const box = stage.getBoundingClientRect()
-	return { x: box.right - 8, y: box.top + box.height / 2 }
+	return { x: box.right - SCROLLBAR_BAND / 2, y: box.top + box.height / 2 }
+}
+
+const onHorizontalScrollbar = (stage: Element): Point => {
+	const box = stage.getBoundingClientRect()
+	return { x: box.left + box.width / 2, y: box.bottom - SCROLLBAR_BAND / 2 }
 }
 
 const pressAt = (userEvent: UserEventObject, target: Element, point: Point) =>
@@ -733,27 +740,49 @@ export const OverlayScrollbarPress = meta.story({
 		docs: {
 			description: {
 				story:
-					"The image zoomed in on a stage whose scrollbar takes no layout space, like an overlay scrollbar drawn over the content. Check that a press and release on that scrollbar, at the inline end of the stage, keeps the lightbox open.",
+					"The image zoomed in on a stage whose scrollbars take no layout space, like overlay scrollbars drawn over the content. Check that a press and release on the vertical scrollbar at the inline end of the stage, then on the horizontal one at its block end, keeps the lightbox open, and that once zoomed out to leave room beside the image, a click on the backdrop there, away from the scrollbar band, closes it once.",
 			},
 		},
 	},
 	play: async ({ args, userEvent }) => {
 		const popup = await lightbox()
 		const stage = slotIn(popup, "library-lightbox-zoom")
+		const image = within(popup).getByRole("img", { name: "hero-dunes.png" })
 		stage.style.scrollbarWidth = "none"
-		await userEvent.click(
-			within(popup).getByRole("button", { name: "Zoom in" }),
-		)
-		await userEvent.click(
-			within(popup).getByRole("button", { name: "Zoom in" }),
-		)
-		await expect(stage.offsetWidth).toBe(stage.clientWidth)
-		await expect(stage.scrollHeight).toBeGreaterThan(stage.clientHeight)
+		const zoomInUntil = async (isReached: () => boolean) => {
+			const zoomIn = within(popup).getByRole("button", { name: "Zoom in" })
+			while (!isReached()) {
+				await expect(zoomIn).toBeEnabled()
+				await userEvent.click(zoomIn)
+			}
+		}
+		const scrollsVertically = () => stage.scrollHeight > stage.clientHeight
+		const scrollsHorizontally = () => stage.scrollWidth > stage.clientWidth
 
-		const onScrollbar = onVerticalScrollbar(stage)
-		await pressAt(userEvent, stage, onScrollbar)
+		await zoomInUntil(scrollsVertically)
+		await expect(stage.offsetWidth).toBe(stage.clientWidth)
+		await pressAt(userEvent, stage, onVerticalScrollbar(stage))
+		await expect(args.onClose).not.toHaveBeenCalled()
+
+		await zoomInUntil(scrollsHorizontally)
+		await expect(stage.offsetHeight).toBe(stage.clientHeight)
+		await pressAt(userEvent, stage, onHorizontalScrollbar(stage))
 		await expect(args.onClose).not.toHaveBeenCalled()
 		await expect(popup).toBeVisible()
+
+		await userEvent.click(
+			within(popup).getByRole("button", { name: "Zoom out" }),
+		)
+		await expect(scrollsHorizontally()).toBe(true)
+		await expect(scrollsVertically()).toBe(false)
+		const room = stage.getBoundingClientRect()
+		const beside = besideImage(stage, image)
+		await expect(elementAt(beside)).toBe(stage)
+		await expect(room.bottom - beside.y).toBeGreaterThan(SCROLLBAR_BAND)
+		await expect(room.right - beside.x).toBeGreaterThan(SCROLLBAR_BAND)
+		await clickAt(userEvent, beside)
+		await expect(args.onClose).toHaveBeenCalledOnce()
+		await waitFor(() => expect(screen.queryByRole("dialog")).toBe(null))
 	},
 })
 
