@@ -5,7 +5,10 @@ import type {
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
 import { conversationIconOf } from "@workspace/ui/components/conversation-subject-icon"
 import { ConversationIcons, Icons } from "@workspace/ui/components/icons"
-import type { TitleBarTab } from "@workspace/ui/components/title-bar-tabs"
+import type {
+	TitleBarTab,
+	TitleBarTabDescriptor,
+} from "@workspace/ui/components/title-bar-tabs"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import {
@@ -18,11 +21,14 @@ import {
 	threadRowIdOf,
 } from "./tab-pages"
 
+import type { LibraryItemKind } from "../bindings"
+import { titleOf } from "../library/library-items"
+import type { LibraryOpening } from "../navigation/library-search"
 import { APPLICATIONS_ENTRY } from "../navigation/settings-search"
 
 const BOT_AVATAR_SIDE = 16
 
-export type TabFace = Pick<TitleBarTab, "title" | "icon">
+export type TabFace = Pick<TitleBarTab, "title" | "icon" | "descriptor">
 
 export type TabBot = Pick<AppSidebarBot, "id" | "name" | "blot" | "image">
 
@@ -56,6 +62,31 @@ const libraryFace = (): TabFace => ({
 	title: i18n.t("common:library.title"),
 	icon: <Icons.Library />,
 })
+
+const LIBRARY_ITEM_DESCRIPTORS = {
+	document: { kind: "library-document", icon: "File" },
+	image: { kind: "library-image", icon: "Image" },
+} as const satisfies Record<
+	LibraryItemKind,
+	Omit<TitleBarTabDescriptor, "name">
+>
+
+const libraryItemDescriptorOf = ({
+	kind,
+	name,
+	title,
+}: LibraryOpening): TitleBarTabDescriptor => ({
+	...LIBRARY_ITEM_DESCRIPTORS[kind],
+	name: title ?? titleOf({ kind, name }),
+})
+
+const libraryFaceOf = ({ libraryOpening }: TabPage): TabFace => {
+	if (libraryOpening === undefined) {
+		return libraryFace()
+	}
+	const descriptor = libraryItemDescriptorOf(libraryOpening)
+	return { ...libraryFace(), title: descriptor.name, descriptor }
+}
 
 const settingsFaceOf = (page: TabPage): TabFace => ({
 	title:
@@ -101,7 +132,7 @@ const rowFaceOf = (rowId: string, { bots, conversations }: TabFaceSources) => {
 export const tabFaceOf = (href: string, sources: TabFaceSources): TabFace => {
 	const page = pageOf(href)
 	if (isLibraryPage(page)) {
-		return libraryFace()
+		return libraryFaceOf(page)
 	}
 	if (!isListPage(page)) {
 		return settingsFaceOf(page)

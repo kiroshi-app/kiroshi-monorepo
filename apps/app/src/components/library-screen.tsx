@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
 import {
 	LibraryDocumentEditor,
@@ -17,13 +17,14 @@ import {
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { LibraryDropTarget } from "@/components/library-drop-target"
-import type { Space } from "@/lib/bindings"
+import type { LibraryItem, Space } from "@/lib/bindings"
 import type { Bot } from "@/lib/conversations/store-contract"
 import { formatActionsOf } from "@/lib/library/library-document-formats"
 import { withoutEdits } from "@/lib/library/library-document-writers"
 import {
 	documentNamedAs,
 	matchesQuery,
+	titleOf,
 	toShownItem,
 } from "@/lib/library/library-items"
 import { useCreateLibraryDocument } from "@/lib/library/use-create-library-document"
@@ -37,16 +38,16 @@ import { useLibraryDocumentWriters } from "@/lib/library/use-library-document-wr
 import { useLibraryImageSources } from "@/lib/library/use-library-image-sources"
 import { useLibraryImports } from "@/lib/library/use-library-imports"
 import { useLibraryItems } from "@/lib/library/use-library-items"
-import { useOpenOnArrival } from "@/lib/library/use-open-on-arrival"
+import type { LibraryOpening } from "@/lib/navigation/library-search"
 
-type LibraryScreenProps = {
+export type LibraryScreenProps = {
 	spaceId: string
 	isJoined: boolean
 	bots: Bot[]
 	spaceTint?: Space["colour"]
-	openedOnArrival?: string
-	onArrivalOpened?: () => void
-	onOpenInNewTab?: (item: NamedItem) => void
+	opening?: LibraryOpening
+	onOpeningChange: (opening: LibraryOpening | undefined) => void
+	onOpenInNewTab?: (opening: LibraryOpening) => void
 }
 
 type ShownImage = Extract<ShownLibraryItem, { kind: "image" }>
@@ -60,9 +61,98 @@ type OpenedDocument = {
 	template?: LibraryDocumentTemplate
 }
 
-type OpenedItem = { kind: "image"; id: string } | OpenedDocument | null
+type DocumentDraft = Omit<OpenedDocument, "kind" | "detail"> & {
+	detail?: string
+}
 
 type NamedItem = { id: string }
+
+type KindedItem = Pick<ShownLibraryItem, "id" | "kind">
+
+const openingOfItem = ({ id, kind }: KindedItem): LibraryOpening => ({
+	kind,
+	name: id,
+})
+
+const documentOpeningOf = ({ name, title }: DocumentDraft): LibraryOpening => ({
+	kind: "document",
+	name,
+	title: title === titleOf({ kind: "document", name }) ? undefined : title,
+})
+
+const isNamedBy =
+	(opening: LibraryOpening | undefined) =>
+	({ kind, name }: LibraryItem) =>
+		opening?.kind === kind && opening.name === name
+
+const isOpenedBy =
+	(opening: LibraryOpening | undefined) =>
+	({ id, kind }: KindedItem) =>
+		opening?.kind === kind && opening.name === id
+
+const draftOf = (
+	opening: LibraryOpening,
+	held: DocumentDraft | null,
+): DocumentDraft => {
+	if (held?.name === opening.name) {
+		return held
+	}
+	const startTitle = titleOf({ kind: "document", name: opening.name })
+	return {
+		name: opening.name,
+		title: opening.title ?? startTitle,
+		startTitle,
+	}
+}
+
+const openedDocumentOf = (
+	opening: LibraryOpening | undefined,
+	held: DocumentDraft | null,
+	listedDetail: string | undefined,
+): OpenedDocument | null => {
+	if (opening?.kind !== "document") {
+		return null
+	}
+	const draft = draftOf(opening, held)
+	const detail = draft.detail ?? listedDetail
+	return detail === undefined ? null : { ...draft, kind: "document", detail }
+}
+
+type OpeningPresence = {
+	opening: LibraryOpening | undefined
+	isListing: boolean
+	isListed: boolean
+	isDocumentOpened: boolean
+	hasFailedToOpen: boolean
+}
+
+const isOpeningMissing = ({
+	opening,
+	isListing,
+	isListed,
+	isDocumentOpened,
+	hasFailedToOpen,
+}: OpeningPresence) => {
+	if (opening === undefined) {
+		return false
+	}
+	if (isDocumentOpened) {
+		return hasFailedToOpen
+	}
+	return !isListing && !isListed
+}
+
+const useDropMissingOpening = (
+	presence: OpeningPresence,
+	onOpeningChange: LibraryScreenProps["onOpeningChange"],
+) => {
+	const isMissing = isOpeningMissing(presence)
+	useEffect(() => {
+		if (isMissing) {
+			onOpeningChange(undefined)
+		}
+	}, [isMissing, onOpeningChange])
+}
 
 const renameIfRetitled = (
 	{ name, title, startTitle }: OpenedDocument,
@@ -74,7 +164,7 @@ const renameIfRetitled = (
 	}
 }
 
-const boundTo = (item: NamedItem, action?: (item: NamedItem) => void) =>
+const boundTo = <Item,>(item: Item, action?: (item: Item) => void) =>
 	action && (() => action(item))
 
 const isActionShownOn = (
@@ -87,8 +177,8 @@ export const LibraryScreen = ({
 	isJoined,
 	bots,
 	spaceTint,
-	openedOnArrival,
-	onArrivalOpened,
+	opening,
+	onOpeningChange,
 	onOpenInNewTab,
 }: LibraryScreenProps) => {
 	const library = useLibraryItems(spaceId)
@@ -105,12 +195,23 @@ export const LibraryScreen = ({
 	const remove = ({ id }: NamedItem) => actions.remove(id)
 	const [filter, setFilter] = useState<LibraryFilter>("all")
 	const [query, setQuery] = useState("")
-	const [opened, setOpened] = useState<OpenedItem>(null)
+	const [heldDraft, setHeldDraft] = useState<DocumentDraft | null>(null)
 	const [pickedTemplate, setPickedTemplate] =
 		useState<LibraryDocumentTemplate | null>(null)
 	const { create, isCreating } = useCreateLibraryDocument(spaceId)
 	const { importingItems, importDropped } = useLibraryImports(spaceId, isJoined)
-	const openedDocument = opened?.kind === "document" ? opened : null
+	const toShown = (item: LibraryItem) =>
+		toShownItem(
+			item,
+			{ excerpt: library.excerptOf(item), src: sourceOf(item) },
+			library.readAt,
+		)
+	const listedOpened = library.items.find(isNamedBy(opening))
+	const openedDocument = openedDocumentOf(
+		opening,
+		heldDraft,
+		listedOpened && toShown(listedOpened).detail,
+	)
 	const { document, edit, shareCaret, hasFailedToOpen, closeAndRelist } =
 		useLibraryDocumentSession(spaceId, openedDocument?.name ?? null)
 	const { writers, people, finished, dismissFinished } =
@@ -122,54 +223,46 @@ export const LibraryScreen = ({
 			bots,
 			title: openedDocument?.title ?? "",
 		})
-	if (openedDocument && hasFailedToOpen) {
-		setOpened(null)
-	}
+	useDropMissingOpening(
+		{
+			opening,
+			isListing: library.isLoading,
+			isListed: listedOpened !== undefined,
+			isDocumentOpened: openedDocument !== null,
+			hasFailedToOpen,
+		},
+		onOpeningChange,
+	)
 
 	const shownItems = library.items
 		.filter((item) => matchesQuery(item, query))
-		.map((item) =>
-			toShownItem(
-				item,
-				{ excerpt: library.excerptOf(item), src: sourceOf(item) },
-				library.readAt,
-			),
-		)
+		.map(toShown)
 	const images = shownItems.filter(
 		(item): item is ShownImage => item.kind === "image",
 	)
-	const imageIndex =
-		opened?.kind === "image"
-			? images.findIndex((image) => image.id === opened.id)
-			: -1
+	const imageIndex = images.findIndex(isOpenedBy(opening))
 
-	const close = () => setOpened(null)
+	const close = () => {
+		setHeldDraft(null)
+		onOpeningChange(undefined)
+	}
 	const openImageAt = (index: number) => {
 		const image = images[index]
 		if (image) {
-			setOpened({ kind: "image", id: image.id })
+			onOpeningChange(openingOfItem(image))
 		}
 	}
-	const openItem = (item: ShownLibraryItem) => {
-		if (item.kind === "image") {
-			setOpened({ kind: "image", id: item.id })
-			return
-		}
-		setOpened({
-			kind: "document",
-			name: item.id,
-			title: item.name,
-			startTitle: item.name,
-			detail: item.detail,
-		})
+	const openItem = (item: KindedItem) => onOpeningChange(openingOfItem(item))
+	const openInNewTab =
+		onOpenInNewTab &&
+		((item: KindedItem) => onOpenInNewTab(openingOfItem(item)))
+	const openImageInNewTab =
+		onOpenInNewTab &&
+		(({ id }: NamedItem) => onOpenInNewTab({ kind: "image", name: id }))
+	const showDraft = (shown: DocumentDraft) => {
+		setHeldDraft(shown)
+		onOpeningChange(documentOpeningOf(shown))
 	}
-	useOpenOnArrival({
-		name: openedOnArrival,
-		items: shownItems,
-		isListing: library.isLoading,
-		open: openItem,
-		consume: onArrivalOpened,
-	})
 	const createFrom = (template: LibraryDocumentTemplate) => {
 		if (isCreating) {
 			return
@@ -181,14 +274,7 @@ export const LibraryScreen = ({
 		)
 		create({ title, body }, (name) => {
 			setPickedTemplate(null)
-			setOpened({
-				kind: "document",
-				name,
-				title,
-				startTitle: title,
-				detail,
-				template,
-			})
+			showDraft({ name, title, startTitle: title, detail, template })
 		})
 	}
 	const leaveDocument = (left: OpenedDocument) => {
@@ -205,12 +291,12 @@ export const LibraryScreen = ({
 		closeAndRelist().then(() => actions.remove(name, { onSuccess: close }))
 	const retitle = (title: string) => {
 		if (openedDocument) {
-			setOpened({ ...openedDocument, title })
+			showDraft({ ...openedDocument, title })
 		}
 	}
 
 	if (openedDocument && document) {
-		const openedItem = { id: openedDocument.name }
+		const openedItem = { id: openedDocument.name, kind: "document" } as const
 		return (
 			<LibraryDocumentEditor
 				{...formatActionsOf(document.markdown, edit)}
@@ -228,7 +314,7 @@ export const LibraryScreen = ({
 				onDelete={() => deleteDocument(openedDocument)}
 				onDone={dismissFinished}
 				onDownload={() => save(openedItem)}
-				onOpenInNewTab={boundTo(openedItem, onOpenInNewTab)}
+				onOpenInNewTab={boundTo(openedItem, openInNewTab)}
 				onShowInFolder={boundTo(openedItem, reveal)}
 				onTitleChange={retitle}
 				onUndoAll={undoAll}
@@ -251,7 +337,7 @@ export const LibraryScreen = ({
 			onDownload={save}
 			onNewDocument={() => setPickedTemplate("blank")}
 			onOpen={openItem}
-			onOpenInNewTab={onOpenInNewTab}
+			onOpenInNewTab={openInNewTab}
 			onOpenItem={openItem}
 			onRename={openItem}
 			onSearchQueryChange={setQuery}
@@ -268,7 +354,7 @@ export const LibraryScreen = ({
 						onDownload={save}
 						onShowInFolder={reveal}
 						onNext={() => openImageAt(imageIndex + 1)}
-						onOpenInNewTab={onOpenInNewTab}
+						onOpenInNewTab={openImageInNewTab}
 						onPrevious={() => openImageAt(imageIndex - 1)}
 						position={imageIndex + 1}
 					/>

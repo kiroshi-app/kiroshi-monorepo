@@ -20,7 +20,7 @@ import { libraryDocumentStartOf } from "@workspace/ui/components/library-documen
 import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
-import { LibraryScreen } from "@/components/library-screen"
+import { LibraryScreenHoldingOpening } from "@/components/library-screen-holding-opening"
 import {
 	LIBRARY_DOCUMENT_UPDATED_EVENT,
 	type LibraryDocumentUpdated,
@@ -451,7 +451,7 @@ const DOCUMENT = libraryItemOf("notes.txt", "document")
 
 const renderLibraryScreen = async (isJoined: boolean) => {
 	const { container } = render(
-		createElement(LibraryScreen, {
+		createElement(LibraryScreenHoldingOpening, {
 			spaceId: LIBRARY_SPACE_ID,
 			isJoined,
 			bots: [],
@@ -750,7 +750,7 @@ describe("a new Library document the host refuses to seed", () => {
 
 const otherTab = () =>
 	screen
-		.getAllByRole("tab")
+		.getAllByRole("tab", { hidden: true })
 		.find((tab) => tab.getAttribute("aria-selected") !== "true") as HTMLElement
 
 describe("Open in new tab on a Library item", () => {
@@ -796,22 +796,37 @@ const closeLightbox = () =>
 		}),
 	)
 
-const LIBRARY_ON_IMAGE = `/library?item=${IMAGE.name}`
+const IMAGE_OPENING = { item: IMAGE.name, kind: "image" } as const
+
+const DOCUMENT_OPENING = { item: DOCUMENT.name, kind: "document" } as const
+
+const LIBRARY_ON_IMAGE = `/library?item=${IMAGE.name}&kind=image`
+
+const selectedTabName = () =>
+	screen
+		.getAllByRole("tab", { hidden: true })
+		.find((tab) => tab.getAttribute("aria-selected") === "true")?.textContent
+
+const openByAddress = async (
+	router: Awaited<ReturnType<typeof mountApp>>["router"],
+	search: typeof IMAGE_OPENING | typeof DOCUMENT_OPENING,
+) => {
+	await act(async () => router.navigate({ to: "/library", search }))
+	await settle()
+}
+
+const editorTitleField = () =>
+	screen.getByRole("textbox", { name: common("library.editor.title") })
 
 describe("the item a Library address names", () => {
-	it("opens it, then drops it from the address in place without closing it", async () => {
+	it("opens it and keeps it in the address", async () => {
 		const { router } = await mountApp()
 		harness.libraryItems = [IMAGE]
-		const entriesBefore = router.history.length
 
-		await act(async () =>
-			router.navigate({ to: "/library", search: { item: IMAGE.name } }),
-		)
-		await settle()
+		await openByAddress(router, IMAGE_OPENING)
 
 		expect(lightboxShown()).toBe(true)
-		expect(router.state.location.search).toEqual({})
-		expect(router.history.length).toBe(entriesBefore + 1)
+		expect(router.state.location.search).toEqual(IMAGE_OPENING)
 	})
 
 	it("stays closed once closed, after leaving the tab and coming back", async () => {
@@ -834,34 +849,99 @@ describe("the item a Library address names", () => {
 		expect(screen.queryByRole("dialog")).toBeNull()
 	})
 
+	it("reopens it after leaving the tab open on it and coming back", async () => {
+		const { router } = await mountApp()
+		harness.libraryItems = [IMAGE]
+		await act(async () =>
+			router.options.context.tabs.openInNewTab(LIBRARY_ON_IMAGE),
+		)
+		await settle()
+		await click(otherTab())
+
+		await click(otherTab())
+		await click(otherTab())
+
+		expect(lightboxShown()).toBe(true)
+		expect(selectedTabName()).toContain(IMAGE.name)
+	})
+
 	it("is dropped from the address when the Library does not list it, showing the grid", async () => {
 		const { router } = await mountApp()
 		harness.libraryItems = [IMAGE]
 
 		await act(async () =>
-			router.navigate({ to: "/library", search: { item: "gone.png" } }),
+			router.navigate({
+				to: "/library",
+				search: { item: "gone.png", kind: "image" },
+			}),
 		)
 		await settle()
 
 		expect(router.state.location.search).toEqual({})
 		expect(libraryHeading()).not.toBeNull()
 		expect(screen.queryByRole("dialog")).toBeNull()
+		expect(selectedTabName()).toContain(LIBRARY_NAME)
 	})
 
 	it("opens the item of a second address landing in the same tab", async () => {
 		const { router } = await mountApp()
 		harness.libraryItems = [IMAGE]
-		const openImageByAddress = async () => {
-			await act(async () =>
-				router.navigate({ to: "/library", search: { item: IMAGE.name } }),
-			)
-			await settle()
-		}
-		await openImageByAddress()
+		await openByAddress(router, IMAGE_OPENING)
 		await closeLightbox()
 
-		await openImageByAddress()
+		await openByAddress(router, IMAGE_OPENING)
 
 		expect(lightboxShown()).toBe(true)
+	})
+})
+
+describe("the tab of an opened Library item", () => {
+	it("is named after the image opened in place, then the Library once closed", async () => {
+		const { router } = await mountApp()
+		harness.libraryItems = [IMAGE]
+		await act(async () => router.navigate({ to: "/library" }))
+		await settle()
+
+		await click(
+			screen
+				.getAllByRole("button")
+				.find((button) =>
+					button.textContent?.includes(IMAGE.name),
+				) as HTMLElement,
+		)
+		expect(selectedTabName()).toContain(IMAGE.name)
+
+		await closeLightbox()
+		expect(selectedTabName()).toContain(LIBRARY_NAME)
+	})
+
+	it("is named after the document title, then its new title once renamed", async () => {
+		const { router } = await mountApp()
+		harness.libraryItems = [DOCUMENT]
+
+		await openByAddress(router, DOCUMENT_OPENING)
+		expect(selectedTabName()).toContain("notes")
+
+		await act(async () => {
+			fireEvent.change(editorTitleField(), { target: { value: "Plans" } })
+		})
+		await settle()
+
+		expect(selectedTabName()).toContain("Plans")
+		expect(router.state.location.search).toEqual({
+			...DOCUMENT_OPENING,
+			title: "Plans",
+		})
+	})
+
+	it("names the new tab an item opens in like the item", async () => {
+		const { router } = await mountApp()
+		harness.libraryItems = [IMAGE]
+		await act(async () =>
+			router.options.context.tabs.openInNewTab(LIBRARY_ON_IMAGE),
+		)
+		await settle()
+
+		expect(otherTab().textContent).toContain(IMAGE.name)
 	})
 })

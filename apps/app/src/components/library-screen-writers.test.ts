@@ -17,7 +17,7 @@ import * as Y from "yjs"
 import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
-import { LibraryScreen } from "@/components/library-screen"
+import { LibraryScreenHoldingOpening } from "@/components/library-screen-holding-opening"
 import { accountQueryKeys } from "@/lib/account/account-query-keys"
 import {
 	type Bot,
@@ -260,7 +260,7 @@ const signedInWrapper = () => {
 
 const renderLibraryScreen = async (isJoined: boolean) => {
 	const rendered = render(
-		createElement(LibraryScreen, {
+		createElement(LibraryScreenHoldingOpening, {
 			spaceId: SPACE_ID,
 			isJoined,
 			bots: [ATLAS],

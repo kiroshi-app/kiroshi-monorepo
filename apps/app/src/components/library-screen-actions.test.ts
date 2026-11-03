@@ -16,10 +16,11 @@ import * as Y from "yjs"
 import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
-import { LibraryScreen } from "@/components/library-screen"
+import { LibraryScreenHoldingOpening } from "@/components/library-screen-holding-opening"
 import type { LibraryItem } from "@/lib/bindings"
 import type { Invoke } from "@/lib/host/joined-hosts-invoke"
 import { base64Of } from "@/lib/library/library-document-session"
+import type { LibraryOpening } from "@/lib/navigation/library-search"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 
 type HostCall = { command: string; args: unknown }
@@ -129,20 +130,20 @@ const LIBRARY_TITLE = common("library.title")
 
 type ScreenOptions = {
 	isJoined: boolean
-	openedOnArrival?: string
+	openedFirst?: LibraryOpening
 }
 
 const renderLibraryScreen = async ({
 	isJoined,
-	openedOnArrival,
+	openedFirst,
 }: ScreenOptions) => {
 	const onOpenInNewTab = vi.fn()
 	render(
-		createElement(LibraryScreen, {
+		createElement(LibraryScreenHoldingOpening, {
 			spaceId: SPACE_ID,
 			isJoined,
 			bots: [],
-			openedOnArrival,
+			openedFirst,
 			onOpenInNewTab,
 		}),
 		{ wrapper: createQueryTestWrapper().wrapper },
@@ -304,14 +305,17 @@ describe("Open in new tab in the menu of a Library item", () => {
 			await screen.findByRole("menuitem", { name: menuItemOf("openInNewTab") }),
 		)
 
-		expect(onOpenInNewTab.mock.calls.map(([item]) => item.id)).toEqual([
-			"notes.txt",
-			"diagram.png",
+		expect(onOpenInNewTab.mock.calls.map(([opening]) => opening)).toEqual([
+			{ kind: "document", name: "notes.txt" },
+			{ kind: "image", name: "diagram.png" },
 		])
 	})
 
 	it("opens the item the tab names once the Library lists it", async () => {
-		await renderLibraryScreen({ isJoined: false, openedOnArrival: "notes.txt" })
+		await renderLibraryScreen({
+			isJoined: false,
+			openedFirst: { kind: "document", name: "notes.txt" },
+		})
 
 		expect((await titleField()).value).toBe("notes")
 	})
@@ -618,7 +622,10 @@ describe("the document bar", () => {
 
 		await pickInDocumentMore("openInNewTab")
 
-		expect(onOpenInNewTab).toHaveBeenCalledWith({ id: "notes.txt" })
+		expect(onOpenInNewTab).toHaveBeenCalledWith({
+			kind: "document",
+			name: "notes.txt",
+		})
 	})
 
 	it("reveals the open document on the host", async () => {

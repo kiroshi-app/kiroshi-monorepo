@@ -24,7 +24,7 @@ import * as Y from "yjs"
 import { NoticeSurface } from "@workspace/ui/components/notice-surface"
 import "@workspace/ui/lib/i18n"
 
-import { LibraryScreen } from "@/components/library-screen"
+import { LibraryScreenHoldingOpening } from "@/components/library-screen-holding-opening"
 import type { ActivityPanel } from "@/components/thread-routines"
 import { WorkspaceBody } from "@/components/workspace-body"
 import {
@@ -1291,7 +1291,7 @@ describe("WorkspaceBody library", () => {
 		spaceId = SPACE,
 		spaceRowId = SPACE,
 	}: LibraryPlace = {}) =>
-		createElement(LibraryScreen, {
+		createElement(LibraryScreenHoldingOpening, {
 			bots: [],
 			isJoined: isJoinedRowId(spaceRowId),
 			key: spaceRowId,

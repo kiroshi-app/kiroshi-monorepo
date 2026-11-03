@@ -133,4 +133,58 @@ describe("the face of a tab", () => {
 		expect(face.title).toBe(i18n.t("common:library.title"))
 		expect(markupOf(face.icon)).toBe(libraryGlyph)
 	})
+
+	it("gives the Library page no descriptor", () => {
+		expect(tabFaceOf("/library", SOURCES).descriptor).toBeUndefined()
+	})
+
+	it("describes an opened Library document by its title and the File icon", () => {
+		const face = tabFaceOf("/library?item=Notes.md&kind=document", SOURCES)
+
+		expect(face.descriptor).toEqual({
+			kind: "library-document",
+			icon: "File",
+			name: "Notes",
+		})
+		expect(face.title).toBe("Notes")
+	})
+
+	it("describes an opened Library image by its name and the Image icon", () => {
+		const face = tabFaceOf("/library?item=photo.png&kind=image", SOURCES)
+
+		expect(face.descriptor).toEqual({
+			kind: "library-image",
+			icon: "Image",
+			name: "photo.png",
+		})
+	})
+
+	it("names a renamed Library document by its new title", () => {
+		const face = tabFaceOf(
+			"/library?item=Notes.md&kind=document&title=Weekly%20review",
+			SOURCES,
+		)
+
+		expect(face.descriptor?.name).toBe("Weekly review")
+	})
+
+	it("keeps only JSON-serialisable fields in the descriptor", () => {
+		const { descriptor } = tabFaceOf(
+			"/library?item=photo.png&kind=image",
+			SOURCES,
+		)
+
+		expect(JSON.parse(JSON.stringify(descriptor))).toEqual(descriptor)
+	})
+
+	it.each([
+		"/library?item=Notes.md",
+		"/library?item=Notes.md&kind=folder",
+		"/library?kind=document",
+	])("keeps the Library face for %s, which names no Library item", (href) => {
+		const face = tabFaceOf(href, SOURCES)
+
+		expect(face.descriptor).toBeUndefined()
+		expect(face.title).toBe(i18n.t("common:library.title"))
+	})
 })
