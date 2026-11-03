@@ -100,6 +100,9 @@ pub struct TranscriptMessage {
 	pub written_from: Option<WrittenFrom>,
 	pub replied_to_message_id: Option<String>,
 	pub runtime_session_id: Option<String>,
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	#[specta(optional)]
+	pub continues_turn_id: Option<String>,
 }
 
 impl TranscriptMessage {
@@ -119,6 +122,7 @@ impl TranscriptMessage {
 			created_at: stored.created_at,
 			replied_to_message_id: stored.replied_to_message_id,
 			runtime_session_id: stored.runtime_session_id,
+			continues_turn_id: stored.continues_turn_id,
 		}
 	}
 }

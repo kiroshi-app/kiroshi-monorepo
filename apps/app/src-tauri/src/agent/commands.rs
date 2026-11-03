@@ -2719,7 +2719,11 @@ mod tests {
 		}
 
 		fn the_turn() -> Option<EventTurn> {
-			Some(EventTurn { turn_id: "t1".into(), conversation_id: "c1".into() })
+			Some(EventTurn {
+				turn_id: "t1".into(),
+				conversation_id: "c1".into(),
+				continues_turn_id: None,
+			})
 		}
 
 		fn question(id: &str) -> AgentEvent {
@@ -2799,7 +2803,11 @@ mod tests {
 			here.emit(question("q1"), the_turn());
 			elsewhere.emit(
 				question("q9"),
-				Some(EventTurn { turn_id: "t9".into(), conversation_id: "c2".into() }),
+				Some(EventTurn {
+					turn_id: "t9".into(),
+					conversation_id: "c2".into(),
+					continues_turn_id: None,
+				}),
 			);
 
 			let pending = pending_in(app.handle(), "c1").await;
@@ -2891,7 +2899,11 @@ mod tests {
 			run.emit(question("q2"), the_turn());
 			a_run_held_by_the_app(app, another_bots_run()).emit(
 				question("q9"),
-				Some(EventTurn { turn_id: "t9".into(), conversation_id: "c2".into() }),
+				Some(EventTurn {
+					turn_id: "t9".into(),
+					conversation_id: "c2".into(),
+					continues_turn_id: None,
+				}),
 			);
 		}
 
@@ -2923,7 +2935,11 @@ mod tests {
 
 			let elsewhere = ScopedEvent {
 				scope: Some(another_bots_run()),
-				turn: Some(EventTurn { turn_id: "t9".into(), conversation_id: "c2".into() }),
+				turn: Some(EventTurn {
+					turn_id: "t9".into(),
+					conversation_id: "c2".into(),
+					continues_turn_id: None,
+				}),
 				event: AgentEvent::PermissionResolved {
 					id: "q9".into(),
 					decision: PermissionDecision::Deny,

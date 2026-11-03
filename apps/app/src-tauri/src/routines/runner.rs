@@ -327,6 +327,7 @@ fn report_event(scope: &RuntimeScope, turn_id: &str, message: ChatMessage) -> Sc
 		turn: Some(EventTurn {
 			turn_id: turn_id.to_owned(),
 			conversation_id: scope.conversation_id.clone(),
+			continues_turn_id: None,
 		}),
 		event: AgentEvent::MessageCompleted { message },
 	}
@@ -760,6 +761,7 @@ mod tests {
 			Some(EventTurn {
 				turn_id: "turn-1".to_owned(),
 				conversation_id: "conversation-1".to_owned(),
+				continues_turn_id: None,
 			})
 		);
 	}

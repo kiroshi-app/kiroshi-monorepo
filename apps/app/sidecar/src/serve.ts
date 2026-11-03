@@ -44,6 +44,7 @@ export type Command = {
 	members?: SpaceMember[]
 	connection?: Record<string, string>
 	text?: string
+	uuid?: string
 	url?: string
 	token?: string
 	refreshToken?: string
@@ -198,7 +199,7 @@ export const createRouter = (
 	const promptSession = (command: Command, session: string) =>
 		on(session, (opened) => {
 			heartbeats.queried(session)
-			opened.prompt(command.text ?? "")
+			opened.prompt(command.text ?? "", command.uuid)
 		})
 
 	const interruptSession = async (_command: Command, session: string) => {

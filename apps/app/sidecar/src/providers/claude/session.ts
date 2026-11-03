@@ -213,6 +213,9 @@ type StopPhase = "none" | "requested" | "settled"
 const isSystem = (message: SessionFrame, subtype: string): boolean =>
 	message.type === "system" && message.subtype === subtype
 
+const answersAPrompt = (result: SessionFrame): boolean =>
+	typeof result.user_message_uuid === "string"
+
 const liveTasks = (message: SessionFrame): number =>
 	((message.tasks as BackgroundTask[] | undefined) ?? []).filter(
 		(task) => !task.ambient,
@@ -254,7 +257,8 @@ export const createTurnSettler = (
 			settle(result)
 			return
 		}
-		if (pending === 0 && !busy) {
+		const followsUpASettledTurn = !held && !answersAPrompt(result)
+		if (pending === 0 && (!busy || followsUpASettledTurn)) {
 			settle(result)
 			return
 		}
@@ -330,9 +334,14 @@ type WaitingLine = ServerLine & {
 	owing: boolean
 }
 
+type HeldPrompt = {
+	text: string
+	uuid?: string
+}
+
 export type ConnectionReport = {
 	emit: EmitFrame
-	push: (text: string) => void
+	push: (text: string, uuid?: string) => void
 	pass: ConnectPass
 	record?: (line: ServerLine) => void
 }
@@ -355,7 +364,7 @@ export const reportConnections = ({
 }: ConnectionReport) => {
 	const abandoning = new AbortController()
 	const { signal } = abandoning
-	const held: string[] = []
+	const held: HeldPrompt[] = []
 	const waiting: WaitingLine[] = []
 	const secrets = heldSecrets(pass.env)
 	let holding = pass.names.length > 0
@@ -375,7 +384,7 @@ export const reportConnections = ({
 		waiting.push({ detail, state, owing: false })
 	}
 
-	const hand = (text: string) => {
+	const hand = ({ text, uuid }: HeldPrompt) => {
 		const carried = latest(waiting)
 		waiting.splice(0, waiting.length, ...carried)
 		for (const line of carried) {
@@ -385,14 +394,14 @@ export const reportConnections = ({
 			}
 		}
 		if (carried.length === 0 || SLASH_COMMAND.test(text)) {
-			push(text)
+			push(text, uuid)
 			return
 		}
 		waiting.length = 0
 		const section = unavailableServersSection(
 			carried.map(({ detail, state }) => ({ detail, state })),
 		)
-		push(`${section}\n\n${text}`)
+		push(`${section}\n\n${text}`, uuid)
 	}
 
 	const release = (settled: ReportedLine[]) => {
@@ -410,8 +419,8 @@ export const reportConnections = ({
 			})),
 		)
 		holding = false
-		for (const text of held.splice(0)) {
-			hand(text)
+		for (const prompt of held.splice(0)) {
+			hand(prompt)
 		}
 	}
 
@@ -422,16 +431,16 @@ export const reportConnections = ({
 		.then(release, () => release([]))
 
 	return {
-		prompt: (text: string) => {
+		prompt: (text: string, uuid?: string) => {
 			if (holding) {
-				held.push(text)
+				held.push({ text, uuid })
 				return
 			}
 			if (!renewsBeforeTurn(passing)) {
-				hand(text)
+				hand({ text, uuid })
 				return
 			}
-			held.push(text)
+			held.push({ text, uuid })
 			holding = true
 			void renewedBeforeTurn(passing, secrets).then(() => release([]))
 		},
@@ -550,9 +559,9 @@ export const openClaudeSession = async (
 	})
 
 	return {
-		prompt: (text: string) => {
+		prompt: (text: string, uuid?: string) => {
 			settler.prompted()
-			report.prompt(text)
+			report.prompt(text, uuid)
 		},
 		interrupt: () => {
 			reminder.forget()

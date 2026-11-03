@@ -824,6 +824,7 @@ mod tests {
 			state: MessageState::Complete,
 			created_at: seq,
 			runtime_session_id: None,
+			continues_turn_id: None,
 		}
 	}
 

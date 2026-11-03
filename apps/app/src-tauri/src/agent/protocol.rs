@@ -104,6 +104,17 @@ pub enum Frame {
 	Ignored,
 }
 
+impl Frame {
+	pub fn answered_prompt(&self) -> Option<&str> {
+		match self {
+			Frame::StreamEvent(frame) => frame.user_message_uuid.as_deref(),
+			Frame::Assistant(frame) => frame.user_message_uuid.as_deref(),
+			Frame::Result(frame) | Frame::TurnSettled(frame) => frame.user_message_uuid.as_deref(),
+			_ => None,
+		}
+	}
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct ClosedFrame {
 	#[serde(default)]
@@ -139,6 +150,8 @@ pub struct CommandsFrame {
 pub struct StreamEventFrame {
 	#[serde(default)]
 	pub event: Option<StreamEvent>,
+	#[serde(default)]
+	pub user_message_uuid: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -181,6 +194,8 @@ pub enum ContentDelta {
 pub struct MessageFrame {
 	#[serde(default)]
 	pub message: Option<MessageBody>,
+	#[serde(default)]
+	pub user_message_uuid: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -227,6 +242,8 @@ pub struct ResultFrame {
 	pub total_cost_usd: Option<f64>,
 	#[serde(default, rename = "modelUsage")]
 	pub model_usage: Option<Value>,
+	#[serde(default)]
+	pub user_message_uuid: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -291,8 +308,8 @@ pub fn open_command(session: &str, request: &OpenRequest) -> Value {
 	)
 }
 
-pub fn prompt_command(session: &str, text: &str) -> Value {
-	command("prompt", session, serde_json::json!({ "text": text }))
+pub fn prompt_command(session: &str, text: &str, uuid: &str) -> Value {
+	command("prompt", session, serde_json::json!({ "text": text, "uuid": uuid }))
 }
 
 pub fn interrupt_command(session: &str) -> Value {

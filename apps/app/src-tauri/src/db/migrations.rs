@@ -71,6 +71,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 62, statements: MESSAGE_AUTHOR_EMAIL_AND_COMPUTER },
 	Migration { version: 63, statements: PENDING_PROMPTS },
 	Migration { version: 64, statements: HUE_COLOURS },
+	Migration { version: 65, statements: CONTINUATION_TURNS },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -1348,6 +1349,12 @@ ALTER TABLE bots DROP COLUMN avatar_color;
 ALTER TABLE bots RENAME COLUMN avatar_color_hue TO avatar_color;
 
 DROP TABLE temp.preset_hues;
+";
+
+const CONTINUATION_TURNS: &str = "
+ALTER TABLE turns ADD COLUMN continues_turn_id TEXT REFERENCES turns (id) ON DELETE SET NULL;
+
+CREATE INDEX turns_by_continued_turn ON turns (continues_turn_id);
 ";
 
 const FRESH_INSTALL_UNTINTED_PERSONAL_SPACE: &str =

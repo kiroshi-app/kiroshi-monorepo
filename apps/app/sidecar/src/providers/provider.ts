@@ -63,7 +63,7 @@ export type AgentCommand = {
 export type EmitFrame = (frame: SessionFrame) => void
 
 export type AgentSession = {
-	prompt: (text: string) => void
+	prompt: (text: string, uuid?: string) => void
 	interrupt: () => Promise<void>
 	decide: (requestId: string, decision: PermissionDecision) => void
 	close: () => Promise<void>

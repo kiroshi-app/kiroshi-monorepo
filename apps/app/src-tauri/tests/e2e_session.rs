@@ -11,13 +11,14 @@ use common::{an_app_of_its_own, AppOfItsOwn};
 use event_log::EventLog;
 use kiroshi_app::agent::commands::{terminate_session, EVENT_CHANNEL};
 use kiroshi_app::agent::contract::{
-	AgentEvent, CheckReport, ConnectionState, PermissionDecision, PermissionRequest, RuntimeScope,
-	ScopedEvent, TransportError, TurnOutcome,
+	AgentEvent, CheckReport, ConnectionState, EventTurn, PermissionDecision, PermissionRequest,
+	RuntimeScope, ScopedEvent, TransportError, TurnOutcome,
 };
 use kiroshi_app::agent::lease::{Lapse, RunLease};
 use kiroshi_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
 use kiroshi_app::agent::AgentState;
 use kiroshi_app::commands::invoke_handler;
+use kiroshi_app::conversations::contract::{TranscriptMessage, TranscriptPage};
 use kiroshi_app::db;
 use kiroshi_app::db::repositories::messages::{MessagePageQuery, MessageState, StoredMessage};
 use serde_json::{json, Value};
@@ -470,7 +471,8 @@ impl Stored {
 			.collect()
 	}
 
-	fn completed_at(&self, turn_id: &'static str) -> Option<i64> {
+	fn completed_at(&self, turn_id: &str) -> Option<i64> {
+		let turn_id = turn_id.to_owned();
 		tauri::async_runtime::block_on(self.database().messages().call(move |connection| {
 			Ok(connection.query_row(
 				"SELECT completed_at FROM turns WHERE id = ?1",
@@ -553,6 +555,34 @@ impl Stored {
 	fn reply_of(&self, turn_id: &str) -> Option<StoredMessage> {
 		self.replies().into_iter().find(|reply| reply.turn_id == turn_id)
 	}
+
+	fn completed_reply_reading(&self, text: &str) -> StoredMessage {
+		self.wait_for(&format!("the completed reply {text:?}"), |stored| {
+			stored
+				.replies()
+				.into_iter()
+				.find(|reply| reply.content == text && reply.state == MessageState::Complete)
+		})
+	}
+
+	fn transcript_after_a_relaunch(&self) -> Vec<TranscriptMessage> {
+		let reopened = db::bootstrap(self.app.handle()).expect("the database reopens");
+		let query = MessagePageQuery {
+			conversation_id: self.conversation_id.clone(),
+			before_seq: None,
+			limit: 50,
+		};
+		let page = tauri::async_runtime::block_on(reopened.messages().page_messages(query))
+			.expect("the transcript reads");
+		TranscriptPage::of(self.conversation_id.clone(), page).messages
+	}
+
+	fn turn_named_for(&self, text: &str) -> Option<EventTurn> {
+		self.log.held().into_iter().find_map(|scoped| match scoped.event {
+			AgentEvent::MessageCompleted { message } if message.text == text => scoped.turn,
+			_ => None,
+		})
+	}
 }
 
 const SHORT_LEASE: RunLease = RunLease {
@@ -568,6 +598,7 @@ const SHORT_TASK_BOUND: RunLease = RunLease {
 };
 
 const FOLLOW_UP: &str = "the background shell finished";
+const SECOND_FOLLOW_UP: &str = "the second background shell finished";
 
 fn launch_leased(name: &str, played: &str) -> Stored {
 	launch_stored_with(name, played, AgentState::leasing(SHORT_LEASE))
@@ -706,6 +737,90 @@ fn a_turn_holding_a_background_task_ends_only_after_the_follow_up_turn_it_runs()
 	assert_eq!(pending, vec![1, 0], "each tasks_pending frame reaches the listeners once");
 	assert_eq!(stored.turn_endings(), vec![TurnOutcome::Completed]);
 	assert!(stored.lapses().is_empty());
+	stored.close();
+}
+
+#[test]
+fn a_follow_up_after_a_settled_turn_is_a_continuation_of_it_read_back_after_a_relaunch() {
+	let _serial = serial();
+	let stored = launch_stored("follow-up-settled", "follow_up_after_settle");
+	stored.start();
+
+	stored.submit("t1", "p1");
+	stored.completed("t1");
+	let follow_up = stored.completed_reply_reading(FOLLOW_UP);
+
+	assert_ne!(follow_up.turn_id, "t1", "the follow-up was written into the settled turn");
+	assert_eq!(follow_up.continues_turn_id.as_deref(), Some("t1"));
+	assert_eq!(follow_up.replied_to_message_id.as_deref(), Some("p1"));
+	stored.wait_for("the continuation completed", |stored| stored.completed_at(&follow_up.turn_id));
+	let named = stored.turn_named_for(FOLLOW_UP).expect("the follow-up names its turn");
+	assert_eq!(named.turn_id, follow_up.turn_id);
+	assert_eq!(named.continues_turn_id.as_deref(), Some("t1"));
+	assert_eq!(stored.reply_of("t1").expect("the answer").content, STREAMED);
+
+	let transcript = stored.transcript_after_a_relaunch();
+	let read_back = transcript
+		.iter()
+		.find(|message| message.id == follow_up.id)
+		.expect("the relaunch reads the follow-up");
+	assert_eq!(read_back.continues_turn_id.as_deref(), Some("t1"));
+	let answer = transcript
+		.iter()
+		.find(|message| message.turn_id == "t1" && message.author_bot_id.is_some());
+	assert_eq!(answer.expect("the relaunch reads the answer").continues_turn_id, None);
+	stored.close();
+}
+
+#[test]
+fn a_prompt_sent_while_a_follow_up_streams_leaves_both_replies_whole() {
+	let _serial = serial();
+	let stored = launch_stored("follow-up-overtaken", "follow_up_then_prompt");
+	stored.start();
+	stored.submit("t1", "p1");
+	stored.completed("t1");
+	let streaming = stored.wait_for("the follow-up streaming", |stored| {
+		stored.replies().into_iter().find(|reply| reply.turn_id != "t1")
+	});
+
+	stored.submit("t2", "p2");
+	stored.completed("t2");
+
+	let follow_up = stored.completed_reply_reading(FOLLOW_UP);
+	assert_eq!(follow_up.id, streaming.id);
+	assert_eq!(follow_up.turn_id, streaming.turn_id);
+	assert_eq!(follow_up.continues_turn_id.as_deref(), Some("t1"));
+	assert!(stored.completed_at(&follow_up.turn_id).is_some(), "the continuation was left open");
+	let answer = stored.reply_of("t2").expect("the prompt sent during the follow-up is answered");
+	assert_eq!(answer.content, STREAMED);
+	assert_eq!(answer.state, MessageState::Complete);
+	assert_eq!(answer.continues_turn_id, None);
+	assert_eq!(
+		stored.awaited_turn_endings(&[TurnOutcome::Completed; 3]),
+		vec![TurnOutcome::Completed; 3]
+	);
+	stored.close();
+}
+
+#[test]
+fn two_queued_follow_ups_are_two_continuations_each_with_its_own_completion() {
+	let _serial = serial();
+	let stored = launch_stored("follow-ups-queued", "two_follow_ups");
+	stored.start();
+
+	stored.submit("t1", "p1");
+	stored.completed("t1");
+	let first = stored.completed_reply_reading(FOLLOW_UP);
+	let second = stored.completed_reply_reading(SECOND_FOLLOW_UP);
+
+	assert_ne!(first.turn_id, second.turn_id);
+	for follow_up in [&first, &second] {
+		assert_ne!(follow_up.turn_id, "t1");
+		assert_eq!(follow_up.continues_turn_id.as_deref(), Some("t1"));
+		stored.wait_for("the continuation completed", |stored| {
+			stored.completed_at(&follow_up.turn_id)
+		});
+	}
 	stored.close();
 }
 
