@@ -7,6 +7,7 @@ import {
 	type ReactNode,
 	type Ref,
 	type TextareaHTMLAttributes,
+	useEffectEvent,
 	useLayoutEffect,
 	useRef,
 	useState,
@@ -586,6 +587,8 @@ const LibraryDocumentEditor = ({
 		}
 	}
 
+	const reportRestoredCaret = useEffectEvent(reportCaret)
+
 	useLayoutEffect(() => {
 		if (!restoredSelection) return
 		const { id, start, end, direction } = restoredSelection
@@ -594,6 +597,7 @@ const LibraryDocumentEditor = ({
 
 		if (field !== document.activeElement) field.focus({ preventScroll: true })
 		field.setSelectionRange(start, end, direction)
+		reportRestoredCaret()
 	}, [restoredSelection])
 
 	const fieldRefOf = (id: string) => (node: HTMLTextAreaElement | null) => {
@@ -764,11 +768,10 @@ const LibraryDocumentEditor = ({
 				}
 				fieldRef={fieldRefOf(block.id)}
 				key={block.id}
-				onBlur={() => queueMicrotask(reportCaret)}
+				onBlur={() => setTimeout(reportCaret)}
 				onChange={(event) =>
 					changeText(index, event.target.value, event.target.selectionStart)
 				}
-				onFocus={reportCaret}
 				onKeyDown={keyDownIn(index)}
 				onSelect={reportCaret}
 				placeholder={block.placeholder}

@@ -495,44 +495,69 @@ export const OutsideTitleChange = meta.story({
 
 export const CaretMoves = meta.story({
 	args: { ...LAUNCH_REVIEW, template: undefined, onCaretChange: fn() },
+	beforeEach: launchReviewDraft.reset,
+	render: (args) => <LiveEditor {...args} />,
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The person moves the caret through the body, then leaves it. Check that `onCaretChange` reports each move as an offset in the body markdown, the same coordinates as a writer's start and end, that moving to the next block reports the new offset without a null between, and that leaving the body for the title, then for outside the editor, reports null once each time.",
+					"The person moves the caret through the body while someone else writes, then leaves it. Check that `onCaretChange` reports each move as an offset in the body markdown, the same coordinates as a writer's start and end, that clicking into a block reports where the caret lands and never where it sat before, that moving to the next block reports the new offset without a null between, that text arriving above the caret reports the shifted offset once and text arriving below reports nothing, and that leaving the body for the title, then for outside the editor, reports null once each time.",
 			},
 		},
 	},
 	play: async ({ args, canvas, canvasElement, userEvent }) => {
-		const reported = () =>
-			(args.onCaretChange as ReturnType<typeof fn>).mock.calls.map(
-				([caret]) => caret,
-			)
+		const onCaretChange = args.onCaretChange as ReturnType<typeof fn>
+		const reported = () => onCaretChange.mock.calls.map(([caret]) => caret)
 		const [intro] = bodyFieldsIn(canvasElement) as [HTMLTextAreaElement]
 		const introEnd = intro.value.length
 		const heading = LAUNCH_REVIEW.body.indexOf("Decisions")
 
 		await userEvent.click(intro)
-		await expect(args.onCaretChange).toHaveBeenLastCalledWith(
-			intro.selectionEnd,
-		)
+		await expect(onCaretChange).toHaveBeenLastCalledWith(intro.selectionEnd)
 		await userEvent.keyboard("{End}{ArrowLeft}")
-		await expect(args.onCaretChange).toHaveBeenLastCalledWith(introEnd - 1)
+		await expect(onCaretChange).toHaveBeenLastCalledWith(introEnd - 1)
 		await userEvent.keyboard("{ArrowRight}{ArrowDown}")
-		await expect(args.onCaretChange).toHaveBeenLastCalledWith(heading)
+		await expect(onCaretChange).toHaveBeenLastCalledWith(heading)
 		await expect(reported()).not.toContain(null)
 
 		await userEvent.click(canvas.getByRole("textbox", { name: "Title" }))
-		await expect(args.onCaretChange).toHaveBeenLastCalledWith(null)
+		await waitFor(() => expect(onCaretChange).toHaveBeenLastCalledWith(null))
 
+		const beforeReturn = onCaretChange.mock.calls.length
 		await userEvent.click(intro)
-		await expect(args.onCaretChange).toHaveBeenLastCalledWith(
-			intro.selectionEnd,
-		)
-		intro.blur()
+		await expect(intro.selectionEnd).not.toBe(introEnd)
+		await expect(onCaretChange).toHaveBeenLastCalledWith(intro.selectionEnd)
+		await expect(reported().slice(beforeReturn)).not.toContain(introEnd)
+
+		const landed = intro.selectionEnd
+		const above = "Read this before the meeting.\n\n"
+		launchReviewDraft.write({
+			body: `${above}${launchReviewDraft.read().body}`,
+		})
 		await waitFor(() =>
-			expect(args.onCaretChange).toHaveBeenLastCalledWith(null),
+			expect(onCaretChange).toHaveBeenLastCalledWith(landed + above.length),
 		)
+		const afterAbove = onCaretChange.mock.calls.length
+		await expect(reported().slice(beforeReturn)).toEqual([
+			landed,
+			landed + above.length,
+		])
+
+		launchReviewDraft.write({
+			body: `${launchReviewDraft.read().body}\n\nOne more line below.`,
+		})
+		await waitFor(() =>
+			expect(bodyFieldsIn(canvasElement).at(-1)).toHaveValue(
+				"One more line below.",
+			),
+		)
+		const focused = document.activeElement as HTMLTextAreaElement
+		await expect(focused).toHaveValue(intro.value)
+		await expect(focused.selectionEnd).toBe(landed)
+		await expect(onCaretChange).toHaveBeenCalledTimes(afterAbove)
+
+		focused.blur()
+		await waitFor(() => expect(onCaretChange).toHaveBeenLastCalledWith(null))
 
 		const calls = reported()
 		await expect(calls.filter((caret) => caret === null)).toHaveLength(2)
