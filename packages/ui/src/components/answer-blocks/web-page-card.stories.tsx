@@ -72,3 +72,54 @@ export const InNarrowColumn = meta.story({
 		await expectAnswerInsideFrame(canvasElement)
 	},
 })
+
+export const WithPreviewAndAltText = meta.story({
+	globals: { theme: "dark" },
+	args: {
+		preview: {
+			src: CASA_DO_RIO_PAGE,
+			alt: "Casa do Rio rooms page, a river view above the rate table",
+		},
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Artboard 12. The preview carries alt text, so it reads as an image by that name. Check it spans the card 200 high, cropped to cover, above the footer.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const image = canvas.getByRole("img", {
+			name: "Casa do Rio rooms page, a river view above the rate table",
+		})
+		const card = canvas.getByRole("article", {
+			name: "Casa do Rio · Rooms and rates",
+		})
+		const { height, width } = image.getBoundingClientRect()
+		await expect(height).toBe(200)
+		await expect(width).toBe(card.clientWidth)
+		await expect(image).toHaveStyle({ objectFit: "cover" })
+		await expect(card.firstElementChild).toBe(image)
+	},
+})
+
+export const WithoutPreview = meta.story({
+	globals: { theme: "dark" },
+	args: { preview: undefined },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A web page block carries no image. Check the card is the footer alone, with no divider above it and no empty preview area.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		await expect(canvas.queryByRole("img")).toBeNull()
+		const footer = canvas.getByRole("article", {
+			name: "Casa do Rio · Rooms and rates",
+		}).firstElementChild
+		await expect(footer).toHaveStyle({ borderTopWidth: "0px" })
+	},
+})
