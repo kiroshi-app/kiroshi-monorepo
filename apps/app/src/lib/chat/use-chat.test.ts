@@ -107,3 +107,26 @@ it("holds the same map while nothing about the activity changes", () => {
 
 	expect(result.current).toBe(held)
 })
+
+it("follows the background task count of a held turn on its line", () => {
+	const chat = createFakeChat()
+	const { result } = mounted(chat)
+	const heldOn = (count: number): Partial<ChatState> => ({
+		...writingIn(AWAY),
+		hold: { reason: "backgroundTasks", count },
+	})
+
+	chat.publish(BOT, heldOn(3))
+	chat.publish(BOT, heldOn(1))
+
+	expect(activityIn(result.current, AWAY)[BOT]).toMatchObject({
+		backgroundTasks: 1,
+	})
+
+	chat.publish(BOT, writingIn(AWAY))
+
+	expect(activityIn(result.current, AWAY)[BOT]).not.toHaveProperty(
+		"backgroundTasks",
+		1,
+	)
+})

@@ -554,6 +554,26 @@ describe("sidebarActivityFor", () => {
 		})
 	})
 
+	it("carries the background task count a held turn waits on", () => {
+		const state = chatState({
+			activities: [activity({ title: "Grep · driver" })],
+			hold: { reason: "backgroundTasks", count: 2 },
+		})
+
+		expect(sidebarActivityFor(state)).toEqual({
+			isWorking: true,
+			kind: "working",
+			backgroundTasks: 2,
+		})
+	})
+
+	it("drops the count once the hold is released", () => {
+		expect(sidebarActivityFor(chatState({ hold: null }))).not.toHaveProperty(
+			"backgroundTasks",
+			expect.any(Number),
+		)
+	})
+
 	it("carries the pose read off the running step", () => {
 		const state = chatState({
 			activities: [activity({ title: "Grep · driver" })],

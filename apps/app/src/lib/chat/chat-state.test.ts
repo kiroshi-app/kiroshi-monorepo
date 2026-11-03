@@ -953,6 +953,7 @@ describe("a turn held for its background tasks", () => {
 		expect(sidebarActivityFor(held)).toEqual({
 			isWorking: true,
 			kind: "working",
+			backgroundTasks: 2,
 		})
 		expect(canStopTurn(held.turn)).toBe(true)
 	})

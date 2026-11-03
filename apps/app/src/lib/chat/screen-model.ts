@@ -342,6 +342,7 @@ export function workingStateFor(state: ChatState): WorkingState | null {
 export type SidebarActivity = {
 	isWorking: boolean
 	kind?: ActivityIndicatorKind
+	backgroundTasks?: number
 }
 
 export function sidebarActivityFor(state: ChatState): SidebarActivity {
@@ -349,7 +350,11 @@ export function sidebarActivityFor(state: ChatState): SidebarActivity {
 	if (!working) {
 		return { isWorking: false }
 	}
-	return { isWorking: true, kind: working.kind }
+	return {
+		isWorking: true,
+		kind: working.kind,
+		backgroundTasks: working.backgroundTasks,
+	}
 }
 
 export function isSignedOut(error: TransportError): boolean {
