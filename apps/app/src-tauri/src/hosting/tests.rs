@@ -3623,11 +3623,9 @@ fn a_member_deletes_a_library_item_of_the_shared_space_only() {
 		let shelf = |space_id: &str| library.join(space_id).join("notes.md");
 
 		guest.refused("library_delete", a_library_entry_of("notes.md")(ELSEWHERE)).await;
-		let other_kept = shelf(ELSEWHERE).exists();
 		guest.forwarded("library_delete", a_library_entry_of("notes.md")(PERSONAL)).await;
 		let again = guest.called("library_delete", a_library_entry_of("notes.md")(PERSONAL)).await;
 
-		assert!(other_kept);
 		assert!(shelf(ELSEWHERE).exists());
 		assert!(!shelf(PERSONAL).exists());
 		assert_eq!(again["body"], json!({ "kind": "missing", "name": "notes.md" }), "{again}");
