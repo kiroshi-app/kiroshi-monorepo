@@ -1422,6 +1422,12 @@ navigation-librarydocumenteditor--selecting-across-agent-run-light
 navigation-librarydocumenteditor--shortcuts-without-callbacks
 navigation-librarydocumenteditor--strikethrough-shortcut
 navigation-librarydocumenteditor--struck-through-text
+navigation-librarydocumenteditor--title-at-rest
+navigation-librarydocumenteditor--title-click-away-keeps
+navigation-librarydocumenteditor--title-emptied-restores
+navigation-librarydocumenteditor--title-enter-moves-to-body
+navigation-librarydocumenteditor--title-escape-restores
+navigation-librarydocumenteditor--title-focused-by-rename
 navigation-librarydocumenteditor--toolbar-after-drag
 navigation-librarydocumenteditor--toolbar-after-keyboard-selection
 navigation-librarydocumenteditor--unclosed-markers
