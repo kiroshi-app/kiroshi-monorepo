@@ -5,18 +5,16 @@ import { startReportRelay } from "./report-relay"
 import { failureReporterIn } from "../failure-report"
 import type { ChatDriver } from "../chat/driver"
 import type { ConversationRuntimes } from "../conversations/conversation-runtimes"
-import type { TranscriptStore } from "../conversations/store-port"
+import { missionRunTransport } from "../missions/missions-transport"
 
 export type ReportRelayMount = {
 	driver: ChatDriver
-	store: TranscriptStore
 	runtimes: ConversationRuntimes
 	isDriverWindow: boolean
 }
 
 export const useReportRelay = ({
 	driver,
-	store,
 	runtimes,
 	isDriverWindow,
 }: ReportRelayMount) => {
@@ -26,9 +24,9 @@ export const useReportRelay = ({
 		}
 		return startReportRelay({
 			driver,
-			store,
+			store: { mainChat: missionRunTransport.mainChat },
 			runtimes,
 			reportFailure: failureReporterIn("report-relay"),
 		})
-	}, [driver, store, runtimes, isDriverWindow])
+	}, [driver, runtimes, isDriverWindow])
 }
