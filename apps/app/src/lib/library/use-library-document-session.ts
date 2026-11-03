@@ -18,6 +18,8 @@ import {
 import { libraryQueryKeys } from "./library-query-keys"
 import { openLibraryDocument } from "./library-reads"
 
+import { failureReporterIn } from "../failure-report"
+
 type SentUpdate = {
 	name: string
 	update: string
@@ -44,8 +46,26 @@ const useApplyLibraryUpdate = (spaceId: string) => {
 
 const subscribeToNothing = () => () => undefined
 
-const reportUnsharedCaret = (reason: unknown) => {
-	console.error("library: the caret could not be shared", reason)
+const reportFailure = failureReporterIn("use-library-document-session")
+
+const createCaretShareBurst = (spaceId: string) => {
+	let hasRaisedNotice = false
+	return {
+		succeeded: () => {
+			hasRaisedNotice = false
+		},
+		failed: (reason: unknown) => {
+			console.error("library: the caret could not be shared", reason)
+			if (hasRaisedNotice) {
+				return
+			}
+			hasRaisedNotice = true
+			void reportFailure(
+				{ title: i18n.t("chat:screen.notice.failed") },
+				{ space: spaceId },
+			)
+		},
+	}
 }
 
 export const useLibraryDocumentSession = (
@@ -90,20 +110,21 @@ export const useLibraryDocumentSession = (
 		[openedState, apply],
 	)
 	const session = opened.isError ? null : openedSession
-	const sharer = useMemo(
-		() =>
-			openedState && openedSession
-				? createCaretSharer({
-						caretOf: openedSession.caretOf,
-						share: (caret) => {
-							shareLibraryCaret(spaceId, openedState.name, caret).catch(
-								reportUnsharedCaret,
-							)
-						},
-					})
-				: null,
-		[spaceId, openedState, openedSession],
-	)
+	const sharer = useMemo(() => {
+		if (!openedState || !openedSession) {
+			return null
+		}
+		const burst = createCaretShareBurst(spaceId)
+		return createCaretSharer({
+			caretOf: openedSession.caretOf,
+			share: (caret) => {
+				shareLibraryCaret(spaceId, openedState.name, caret).then(
+					burst.succeeded,
+					burst.failed,
+				)
+			},
+		})
+	}, [spaceId, openedState, openedSession])
 
 	useEffect(() => {
 		if (!sharer) {
