@@ -537,9 +537,10 @@ export const EmptyQueue = meta.story({
 		await expect(
 			canvasElement.querySelector('[data-slot="prompt-queue"]'),
 		).toBeNull()
-		await expect(
-			slotIn(canvasElement, "message-quote").previousElementSibling,
-		).toBeNull()
+		const composer = slotIn(canvasElement, "message-quote")
+		await expect(composer.getBoundingClientRect().top).toBe(
+			composer.parentElement?.getBoundingClientRect().top,
+		)
 	},
 })
 

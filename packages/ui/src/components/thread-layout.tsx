@@ -121,7 +121,9 @@ function ThreadLayout({
 							{pending}
 							{composer ? (
 								<div className="flex flex-col">
-									{queue}
+									{queue ? (
+										<div className="-mb-1.5 empty:hidden *:pb-3">{queue}</div>
+									) : null}
 									<PromptReply quote={reply} className="relative">
 										{composer}
 									</PromptReply>

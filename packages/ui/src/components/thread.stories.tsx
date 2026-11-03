@@ -1485,6 +1485,28 @@ export const Work6 = meta.story({
 	},
 })
 
+const QUEUE_TUCKED_UNDER_INPUT = 6
+
+const QUEUE_TRAY_PADDING = 6
+
+const expectTrayDockedOnInput = async (root: HTMLElement) => {
+	const input = slotIn(root, "prompt-input")
+	input.scrollIntoView({ block: "center" })
+	const tray = slotIn(root, "prompt-queue").getBoundingClientRect()
+	const field = input.getBoundingClientRect()
+	await expect(tray.top).toBeLessThan(field.top)
+	await expect(tray.bottom - field.top).toBe(QUEUE_TUCKED_UNDER_INPUT)
+	const lastRow = slotsIn(root, "prompt-queue-item").at(-1)
+	await expect(field.top - (lastRow?.getBoundingClientRect().bottom ?? 0)).toBe(
+		QUEUE_TRAY_PADDING,
+	)
+	await expect(
+		input.contains(
+			document.elementFromPoint(tray.left + tray.width / 2, tray.bottom - 1),
+		),
+	).toBe(true)
+}
+
 const sendQueuedNow = fn()
 
 const removeQueued = fn()
@@ -1524,15 +1546,7 @@ export const Queue1 = meta.story({
 		},
 	},
 	play: async ({ canvasElement }) => {
-		const tray = slotIn(canvasElement, "prompt-queue").getBoundingClientRect()
-		const input = slotIn(canvasElement, "prompt-input")
-		const field = input.getBoundingClientRect()
-		await expect(tray.top).toBeLessThan(field.top)
-		await expect(
-			input.contains(
-				document.elementFromPoint(tray.left + tray.width / 2, tray.bottom - 1),
-			),
-		).toBe(true)
+		await expectTrayDockedOnInput(canvasElement)
 
 		if (!isInBrowserRunner()) return
 		const pointer = await realPointer()
@@ -1577,6 +1591,9 @@ export const Queue2 = meta.story({
 					"Artboard Queue 2: the queue waits on the agent up next, named in its header and its row.",
 			},
 		},
+	},
+	play: async ({ canvasElement }) => {
+		await expectTrayDockedOnInput(canvasElement)
 	},
 })
 
@@ -1732,6 +1749,7 @@ export const PromptInputStates = meta.story({
 		await expect(prompts).toHaveLength(8)
 		for (const prompt of prompts)
 			await expect(prompt.getBoundingClientRect().width).toBe(720)
+		await expectTrayDockedOnInput(slotIn(canvasElement, "chat-layout"))
 	},
 })
 

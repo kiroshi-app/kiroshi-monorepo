@@ -82,7 +82,7 @@ const PromptQueue = ({
 			data-slot="prompt-queue"
 			aria-labelledby={titleId}
 			className={cn(
-				"mx-5 -mb-1.5 flex flex-col rounded-t-[14px] border-foreground/8 border-x border-t bg-prompt-surface-inert p-1.5 pb-3",
+				"mx-5 flex flex-col rounded-t-[14px] border-foreground/8 border-x border-t bg-prompt-surface-inert p-1.5",
 				className,
 			)}
 		>
@@ -97,7 +97,7 @@ const PromptQueue = ({
 					<li
 						key={item.id}
 						data-slot="prompt-queue-item"
-						className="group/queued flex h-10 items-center gap-2.5 rounded-lg px-2 focus-within:bg-prompt-surface focus-within:pe-1.5 hover:bg-prompt-surface hover:pe-1.5 dark:focus-within:bg-foreground/4 dark:hover:bg-foreground/4"
+						className="group/queued flex h-10 items-center gap-2.5 rounded-lg px-2 hover:bg-prompt-surface hover:pe-1.5 has-focus-visible:bg-prompt-surface has-focus-visible:pe-1.5 dark:has-focus-visible:bg-foreground/4 dark:hover:bg-foreground/4"
 					>
 						<InitialsAvatar name={readerName} size={QUEUE_AVATAR_SIZE} />
 						<span className="shrink-0 font-medium text-compact text-muted-foreground leading-4">
