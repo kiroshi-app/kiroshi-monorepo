@@ -1275,7 +1275,6 @@ export const Images3 = meta.story({
 					onClose={noop}
 					onCopy={noop}
 					onDownload={noop}
-					onMore={noop}
 					onNext={noop}
 					onPrevious={noop}
 					position={1}

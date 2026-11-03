@@ -20,6 +20,7 @@ import {
 	LibraryGridSkeleton,
 	type LibraryItem,
 } from "@workspace/ui/components/library-grid"
+import type { LibraryItemActions } from "@workspace/ui/components/library-item-menu"
 import { Button } from "@workspace/ui/components/ui/button"
 import { Input } from "@workspace/ui/components/ui/input"
 import { Skeleton } from "@workspace/ui/components/ui/skeleton"
@@ -177,7 +178,7 @@ const LibraryHeader = ({ actions, filters }: LibraryHeaderProps) => {
 	)
 }
 
-type LibraryPanelProps = {
+type LibraryPanelProps = LibraryItemActions<LibraryItem> & {
 	state: LibraryPanelState
 	items: LibraryItem[]
 	filter: LibraryFilter
@@ -203,6 +204,7 @@ const LibraryPanel = ({
 	onNewDocument,
 	onStartTemplate,
 	overlay,
+	...itemActions
 }: LibraryPanelProps) => {
 	const { t } = useTranslation("common")
 	const overlayContainer = useRef<HTMLDivElement>(null)
@@ -290,7 +292,11 @@ const LibraryPanel = ({
 									: t("library.noResult.documents")}
 						</p>
 					) : (
-						<LibraryGrid items={shownItems} onOpenItem={onOpenItem} />
+						<LibraryGrid
+							{...itemActions}
+							items={shownItems}
+							onOpenItem={onOpenItem}
+						/>
 					)}
 				</div>
 				{overlay}

@@ -502,7 +502,9 @@ describe("the More action of an opened Library item", () => {
 		expect(buttonNamed(i18n.t("common:library.lightbox.copy"))).toBeInstanceOf(
 			HTMLElement,
 		)
-		expect(buttonNamed(i18n.t("common:library.lightbox.openFolder"))).toBeNull()
+		expect(
+			buttonNamed(i18n.t("common:library.itemMenu.showInFolder")),
+		).toBeNull()
 	})
 
 	it("shows no More on a document of a joined Space", async () => {
@@ -521,7 +523,7 @@ describe("the More action of an opened Library item", () => {
 
 		await openLibraryItem(IMAGE)
 		expect(
-			await findButtonNamed(i18n.t("common:library.lightbox.openFolder")),
+			await findButtonNamed(i18n.t("common:library.lightbox.more")),
 		).toBeInstanceOf(HTMLElement)
 
 		await act(async () => {

@@ -156,7 +156,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The Library tab of a Space: every image and document the Space holds, read-only. The header carries the search, Import and New document, each drawn only when its callback is passed; the filters are one single-selection toggle group whose pressed pill wears the Space colour; each grid item is a single button that hands the item to `onOpenItem`. A Library with nothing in it trades the grid for the Start a document templates and the Bring in files strip, and while the Library loads a grid skeleton fills the card. Pass a `LibraryLightbox` as `overlay` so it covers the card.",
+					"The Library tab of a Space: every image and document the Space holds, read-only. The header carries the search, Import and New document, each drawn only when its callback is passed; the filters are one single-selection toggle group whose pressed pill wears the Space colour; each grid item is a single button that hands the item to `onOpenItem`, and a right-click on it opens the item action menu, listing only the actions whose callback is given. A Library with nothing in it trades the grid for the Start a document templates and the Bring in files strip, and while the Library loads a grid skeleton fills the card. Pass a `LibraryLightbox` as `overlay` so it covers the card.",
 			},
 		},
 	},
@@ -241,6 +241,80 @@ export const GridAll = meta.story({
 		await userEvent.click(all)
 		await expect(args.onFilterChange).toHaveBeenLastCalledWith("all")
 		await expect(all).toHaveAttribute("aria-pressed", "true")
+	},
+})
+
+const ITEM_ACTION_NAMES = [
+	"Open",
+	"Open in new tab",
+	"Rename",
+	"Copy",
+	"Download",
+	"Show in folder",
+	"Delete",
+]
+
+export const GridContextMenu = meta.story({
+	args: {
+		onOpen: fn(),
+		onOpenInNewTab: fn(),
+		onRename: fn(),
+		onCopy: fn(),
+		onDownload: fn(),
+		onShowInFolder: fn(),
+		onDelete: fn(),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A grid item right-clicked on the host, every item action given. Check that the menu lists Open, Open in new tab, Rename, Copy, Download, Show in folder, then Delete under a rule and drawn as destructive, that the highlight follows the pointer with no colour transition, and that an entry hands the item to its callback.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const item = canvas.getByRole("button", { name: /hero-dunes\.png/ })
+		await userEvent.pointer({ keys: "[MouseRight]", target: item })
+
+		const menu = await within(document.body).findByRole("menu", {
+			name: "Actions for hero-dunes.png",
+		})
+		const entries = within(menu).getAllByRole("menuitem")
+		await expect(entries.map((entry) => entry.textContent)).toEqual(
+			ITEM_ACTION_NAMES,
+		)
+		await expect(entries.at(-1)?.previousElementSibling).toHaveAttribute(
+			"role",
+			"separator",
+		)
+		await expect(entries.at(-1)).toHaveAttribute("data-variant", "destructive")
+		for (const entry of entries)
+			await expect(getComputedStyle(entry).transitionDuration).toBe("0s")
+
+		await userEvent.click(
+			within(menu).getByRole("menuitem", { name: "Rename" }),
+		)
+		await expect(args.onRename).toHaveBeenCalledWith(LIBRARY_ITEMS[0])
+		await waitFor(() =>
+			expect(within(document.body).queryByRole("menu")).toBe(null),
+		)
+	},
+})
+
+export const GridWithoutItemActions = meta.story({
+	tags: ["test-only"],
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A grid item right-clicked with no item action given. Check that no menu opens, so a right-click never offers an empty menu.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const item = canvas.getByRole("button", { name: /hero-dunes\.png/ })
+		await userEvent.pointer({ keys: "[MouseRight]", target: item })
+		await expect(within(document.body).queryByRole("menu")).toBe(null)
 	},
 })
 

@@ -385,11 +385,27 @@ const common = {
 			stillImporting_other:
 				"{{count}} fichiers sont encore en cours d’importation.",
 		},
+		itemMenu: {
+			label: "Actions pour {{name}}",
+			open: "Ouvrir",
+			openInNewTab: "Ouvrir dans un nouvel onglet",
+			rename: "Renommer",
+			copy: "Copier",
+			download: "Télécharger",
+			showInFolder: "Afficher dans le dossier",
+			delete: "Supprimer",
+			deleteConfirm: {
+				title: "Supprimer {{name}} ?",
+				description: "C’est irréversible.",
+				failure: "Impossible de supprimer {{name}}. Réessayez.",
+			},
+		},
 		lightbox: {
 			download: "Télécharger",
 			copy: "Copier",
 			copied: "Copié",
-			openFolder: "Ouvrir le dossier",
+			more: "Plus",
+			back: "Retour",
 			close: "Fermer",
 			previous: "Image précédente",
 			next: "Image suivante",

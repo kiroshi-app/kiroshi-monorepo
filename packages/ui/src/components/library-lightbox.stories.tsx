@@ -1,5 +1,12 @@
 import { useState } from "react"
-import { expect, fn, screen, waitFor, within } from "storybook/test"
+import {
+	expect,
+	fn,
+	screen,
+	type UserEventObject,
+	waitFor,
+	within,
+} from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
@@ -13,6 +20,8 @@ import {
 	LIBRARY_ITEMS,
 	LIBRARY_LIGHTBOX_IMAGES,
 } from "@workspace/ui/components/library.fixtures"
+import type { LibraryItem } from "@workspace/ui/components/library-grid"
+import type { LibraryItemActions } from "@workspace/ui/components/library-item-menu"
 import {
 	LibraryLightbox,
 	type LibraryLightboxImage,
@@ -20,22 +29,21 @@ import {
 import { LibraryPanel } from "@workspace/ui/components/library-panel"
 import { COPIED_RESET_MS } from "@workspace/ui/hooks/use-copy-text"
 
-type LibraryWithLightboxProps = {
+type LibraryWithLightboxProps = LibraryItemActions<
+	LibraryItem | LibraryLightboxImage
+> & {
 	openedAt: number | null
+	onClose: () => void
 	onPrevious: () => void
 	onNext: () => void
-	onDownload: (image: LibraryLightboxImage) => void
-	onCopy: (image: LibraryLightboxImage) => void | Promise<void>
-	onMore?: (image: LibraryLightboxImage) => void
 }
 
 const LibraryWithLightbox = ({
 	openedAt,
+	onClose,
 	onPrevious,
 	onNext,
-	onDownload,
-	onCopy,
-	onMore,
+	...actions
 }: LibraryWithLightboxProps) => {
 	const [shownAt, setShownAt] = useState(openedAt)
 
@@ -46,6 +54,7 @@ const LibraryWithLightbox = ({
 		>
 			<ContentCard isLandmark={false}>
 				<LibraryPanel
+					{...actions}
 					filter="all"
 					items={LIBRARY_ITEMS}
 					onFilterChange={fn()}
@@ -58,16 +67,17 @@ const LibraryWithLightbox = ({
 					}
 					overlay={
 						<LibraryLightbox
+							{...actions}
 							count={LIBRARY_LIGHTBOX_IMAGES.length}
 							image={
 								shownAt === null
 									? null
 									: (LIBRARY_LIGHTBOX_IMAGES[shownAt] ?? null)
 							}
-							onClose={() => setShownAt(null)}
-							onCopy={onCopy}
-							onDownload={onDownload}
-							onMore={onMore}
+							onClose={() => {
+								onClose()
+								setShownAt(null)
+							}}
 							onNext={() => {
 								onNext()
 								setShownAt((at) => (at ?? 0) + 1)
@@ -103,13 +113,58 @@ const copySwapIn = (popup: HTMLElement) => {
 const announcementIn = (popup: HTMLElement) =>
 	popup.querySelector("[aria-live=polite]")
 
+const menuEntryNames = (menu: HTMLElement) =>
+	within(menu)
+		.getAllByRole("menuitem")
+		.map((entry) => entry.textContent)
+
+const ITEM_ACTION_NAMES = [
+	"Open",
+	"Open in new tab",
+	"Rename",
+	"Copy",
+	"Download",
+	"Show in folder",
+	"Delete",
+]
+
+const openMoreMenu = async (popup: HTMLElement, userEvent: UserEventObject) => {
+	await userEvent.click(within(popup).getByRole("button", { name: "More" }))
+	return screen.findByRole("menu", { name: /^Actions for / })
+}
+
+const closeMenu = async (userEvent: UserEventObject) => {
+	await userEvent.keyboard("{Escape}")
+	await waitFor(() => expect(screen.queryByRole("menu")).toBe(null))
+}
+
+const openGridMenu = async (
+	canvasElement: HTMLElement,
+	userEvent: UserEventObject,
+) => {
+	await userEvent.pointer({
+		keys: "[MouseRight]",
+		target: within(canvasElement).getByRole("button", {
+			name: /dashboard-redesign\.png/,
+		}),
+	})
+	return screen.findByRole("menu", {
+		name: "Actions for dashboard-redesign.png",
+	})
+}
+
 const LIGHTBOX_STORY_ARGS: LibraryWithLightboxProps = {
 	openedAt: 1,
+	onClose: fn(),
 	onPrevious: fn(),
 	onNext: fn(),
-	onDownload: fn(),
+	onOpen: fn(),
+	onOpenInNewTab: fn(),
+	onRename: fn(),
 	onCopy: fn(),
-	onMore: fn(),
+	onDownload: fn(),
+	onShowInFolder: fn(),
+	onDelete: fn(),
 }
 
 const meta = preview.meta({
@@ -120,7 +175,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"One image of the Library, over the content card, opened from a grid item. It traps focus, closes on Escape and on Close, and hands focus back to the item that opened it. Left and Right arrows, like Previous and Next, ask the caller for the neighbouring image, and the two buttons disable at either end. Download and Open folder only report the image to their callback, and Open folder is drawn only when `onMore` is given. Copy reports the image too, then swaps its icon for a check and announces Copied once `onCopy` settles, until the shared copy reset delay runs out. The zoom pill steps the image out and in, and its middle button, Fit, shows the zoom percentage until it is pressed to fit the stage again. Render it as the `overlay` of `LibraryPanel` so it covers the card.",
+					"One image of the Library, over the content card, opened from a grid item. It traps focus, closes on Escape and on Close, and hands focus back to the item that opened it. Left and Right arrows, like Previous and Next, ask the caller for the neighbouring image, and the two buttons disable at either end. Back, at the leading edge of the header, closes it like Close. Download and Copy are drawn only when their callback is given, and More opens the item action menu, drawn only when at least one item action is given. Copy reports the image too, then swaps its icon for a check and announces Copied once `onCopy` settles, until the shared copy reset delay runs out. The zoom pill steps the image out and in, and its middle button, Fit, shows the zoom percentage until it is pressed to fit the stage again. Render it as the `overlay` of `LibraryPanel` so it covers the card.",
 			},
 		},
 	},
@@ -134,7 +189,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"The second image open, as artboard 8 draws it. Check the arrows and the three actions report to their callbacks, that the third action is Open folder with a folder icon, that every action of the bar is a 32 px button that changes colour instantly, that every icon button names its action in a tooltip, and that Escape hands focus back to the grid item that opened the image.",
+					"The second image open, as artboard 8 draws it. Check the arrows, Download and Copy report to their callbacks, that the third action is More, that every action of the bar is a 32 px button that changes colour instantly, that every icon button names its action in a tooltip, and that Escape hands focus back to the grid item that opened the image.",
 			},
 		},
 	},
@@ -155,19 +210,13 @@ export const Default = meta.story({
 		)
 		await userEvent.click(within(popup).getByRole("button", { name: "Copy" }))
 		await expect(args.onCopy).toHaveBeenCalledWith(LIBRARY_LIGHTBOX_IMAGES[1])
-		const openFolder = within(popup).getByRole("button", {
-			name: "Open folder",
-		})
-		await userEvent.hover(openFolder)
-		await expect(await screen.findByRole("tooltip")).toHaveTextContent(
-			"Open folder",
-		)
-		await userEvent.unhover(openFolder)
+		const more = within(popup).getByRole("button", { name: "More" })
+		await userEvent.hover(more)
+		await expect(await screen.findByRole("tooltip")).toHaveTextContent("More")
+		await userEvent.unhover(more)
 		await waitFor(() => expect(screen.queryByRole("tooltip")).toBe(null))
-		await userEvent.click(openFolder)
-		await expect(args.onMore).toHaveBeenCalledWith(LIBRARY_LIGHTBOX_IMAGES[1])
 
-		for (const name of ["Download", "Copy", "Open folder", "Close"]) {
+		for (const name of ["Back", "Download", "Copy", "More", "Close"]) {
 			const action = within(popup).getByRole("button", { name })
 			await expect(action.getBoundingClientRect().width).toBe(32)
 			await expect(action.getBoundingClientRect().height).toBe(32)
@@ -220,17 +269,58 @@ export const Default = meta.story({
 	},
 })
 
-export const Member = meta.story({
-	args: { onMore: undefined },
+export const HostMoreMenu = meta.story({
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The second image open in a joined Space, where Open folder has no action for a member. Check that the bar keeps Download, Copy and Close and draws no Open folder.",
+					"More pressed on the host, every item action given. Check that the menu lists Open, Open in new tab, Rename, Copy, Download, Show in folder, then Delete under a rule and drawn as destructive, that the highlight follows the pointer with no colour transition, that an entry hands the shown image to its callback, and that the grid item menu lists the same actions in the same order.",
 			},
 		},
 	},
-	play: async () => {
+	play: async ({ args, canvasElement, userEvent }) => {
+		const popup = await lightbox()
+		const menu = await openMoreMenu(popup, userEvent)
+		await expect(menu).toHaveAccessibleName(
+			"Actions for dashboard-redesign.png",
+		)
+		await expect(menuEntryNames(menu)).toEqual(ITEM_ACTION_NAMES)
+		const entries = within(menu).getAllByRole("menuitem")
+		await expect(entries.at(-1)?.previousElementSibling).toHaveAttribute(
+			"role",
+			"separator",
+		)
+		await expect(entries.at(-1)).toHaveAttribute("data-variant", "destructive")
+		for (const entry of entries)
+			await expect(getComputedStyle(entry).transitionDuration).toBe("0s")
+
+		await userEvent.click(
+			within(menu).getByRole("menuitem", { name: "Show in folder" }),
+		)
+		await expect(args.onShowInFolder).toHaveBeenCalledWith(
+			LIBRARY_LIGHTBOX_IMAGES[1],
+		)
+		await waitFor(() => expect(screen.queryByRole("menu")).toBe(null))
+
+		await userEvent.click(within(popup).getByRole("button", { name: "Close" }))
+		await waitFor(() => expect(screen.queryByRole("dialog")).toBe(null))
+		const gridMenu = await openGridMenu(canvasElement, userEvent)
+		await expect(menuEntryNames(gridMenu)).toEqual(ITEM_ACTION_NAMES)
+		await closeMenu(userEvent)
+	},
+})
+
+export const MemberMoreMenu = meta.story({
+	args: { onShowInFolder: undefined },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"More pressed in a joined Space, where Show in folder has no action for a member. Check that the bar keeps Download, Copy and More, and that neither the More menu nor the grid item menu lists Show in folder.",
+			},
+		},
+	},
+	play: async ({ canvasElement, userEvent }) => {
 		const popup = await lightbox()
 		await expect(
 			within(popup).getByRole("button", { name: "Download" }),
@@ -238,9 +328,116 @@ export const Member = meta.story({
 		await expect(
 			within(popup).getByRole("button", { name: "Copy" }),
 		).toBeVisible()
+
+		const memberActions = ITEM_ACTION_NAMES.filter(
+			(name) => name !== "Show in folder",
+		)
+		await expect(menuEntryNames(await openMoreMenu(popup, userEvent))).toEqual(
+			memberActions,
+		)
+		await closeMenu(userEvent)
+
+		await userEvent.click(within(popup).getByRole("button", { name: "Close" }))
+		await waitFor(() => expect(screen.queryByRole("dialog")).toBe(null))
 		await expect(
-			within(popup).queryByRole("button", { name: "Open folder" }),
-		).toBe(null)
+			menuEntryNames(await openGridMenu(canvasElement, userEvent)),
+		).toEqual(memberActions)
+		await closeMenu(userEvent)
+	},
+})
+
+export const DeleteConfirmation = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Delete picked in the More menu. Check that a confirmation asks first and says this can’t be undone, that nothing is deleted before the confirmation, and that confirming hands the shown image to `onDelete` once.",
+			},
+		},
+	},
+	play: async ({ args, userEvent }) => {
+		const popup = await lightbox()
+		const menu = await openMoreMenu(popup, userEvent)
+		await userEvent.click(
+			within(menu).getByRole("menuitem", { name: "Delete" }),
+		)
+
+		const confirmation = await screen.findByRole("alertdialog")
+		await expect(confirmation).toHaveAccessibleName(
+			"Delete dashboard-redesign.png?",
+		)
+		await expect(confirmation).toHaveAccessibleDescription(
+			"This can’t be undone.",
+		)
+		await expect(args.onDelete).not.toHaveBeenCalled()
+
+		await userEvent.click(
+			within(confirmation).getByRole("button", { name: "Delete" }),
+		)
+		await waitFor(() => expect(screen.queryByRole("alertdialog")).toBe(null))
+		await expect(args.onDelete).toHaveBeenCalledOnce()
+		await expect(args.onDelete).toHaveBeenCalledWith(LIBRARY_LIGHTBOX_IMAGES[1])
+	},
+})
+
+export const BackButton = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The header with its back button at the leading edge, before the image name. Check that it names itself Back in a tooltip and that pressing it closes the lightbox.",
+			},
+		},
+	},
+	play: async ({ args, userEvent }) => {
+		const popup = await lightbox()
+		const back = within(popup).getByRole("button", { name: "Back" })
+		await expect(back.getBoundingClientRect().right).toBeLessThan(
+			within(popup).getByRole("heading").getBoundingClientRect().left,
+		)
+		await userEvent.hover(back)
+		await expect(await screen.findByRole("tooltip")).toHaveTextContent("Back")
+		await userEvent.unhover(back)
+
+		await userEvent.click(back)
+		await expect(args.onClose).toHaveBeenCalledOnce()
+		await waitFor(() => expect(screen.queryByRole("dialog")).toBe(null))
+	},
+})
+
+export const WithoutItemActions = meta.story({
+	tags: ["test-only"],
+	args: {
+		onOpen: undefined,
+		onOpenInNewTab: undefined,
+		onRename: undefined,
+		onCopy: undefined,
+		onDownload: undefined,
+		onShowInFolder: undefined,
+		onDelete: undefined,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The lightbox with no item action given. Check that the bar draws neither Download, Copy nor More, keeping Back and Close.",
+			},
+		},
+	},
+	play: async () => {
+		const popup = await lightbox()
+		await expect(
+			within(popup)
+				.getAllByRole("button")
+				.map((button) => button.getAttribute("aria-label"))
+				.filter((name) => ["Download", "Copy", "More"].includes(name ?? "")),
+		).toEqual([])
+		await expect(
+			within(popup).getByRole("button", { name: "Back" }),
+		).toBeVisible()
+		await expect(
+			within(popup).getByRole("button", { name: "Close" }),
+		).toBeVisible()
 	},
 })
 
