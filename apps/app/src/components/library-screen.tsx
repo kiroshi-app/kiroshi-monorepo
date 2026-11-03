@@ -74,8 +74,10 @@ const renameIfRetitled = (
 	}
 }
 
-const isActionShownOn = (item: ShownLibraryItem, action: string) =>
-	action !== "onRename" || item.kind === "document"
+const isActionShownOn = (
+	item: Pick<ShownLibraryItem, "kind">,
+	action: string,
+) => action !== "onRename" || item.kind === "document"
 
 export const LibraryScreen = ({
 	spaceId,
@@ -196,6 +198,8 @@ export const LibraryScreen = ({
 		}
 		dismissFinished()
 	}
+	const deleteDocument = ({ name }: OpenedDocument) =>
+		closeAndRelist().then(() => actions.remove(name, { onSuccess: close }))
 	const retitle = (title: string) => {
 		if (openedDocument) {
 			setOpened({ ...openedDocument, title })
@@ -203,18 +207,26 @@ export const LibraryScreen = ({
 	}
 
 	if (openedDocument && document) {
+		const openedItem = { id: openedDocument.name }
 		return (
 			<LibraryDocumentEditor
 				{...formatActionsOf(document.markdown, edit)}
 				body={document.markdown}
 				detail={openedDocument.detail}
 				finished={finished}
+				isActionShown={(_subject, action) =>
+					isActionShownOn(openedDocument, action)
+				}
 				key={openedDocument.name}
 				onBack={() => leaveDocument(openedDocument)}
 				onBodyChange={edit}
 				onCaretChange={shareCaret}
+				onCopy={() => copyAndWait(openedItem)}
+				onDelete={() => deleteDocument(openedDocument)}
 				onDone={dismissFinished}
-				onShowInFolder={reveal && (() => reveal({ id: openedDocument.name }))}
+				onDownload={() => save(openedItem)}
+				onOpenInNewTab={onOpenInNewTab && (() => onOpenInNewTab(openedItem))}
+				onShowInFolder={reveal && (() => reveal(openedItem))}
 				onTitleChange={retitle}
 				onUndoAll={undoAll}
 				people={people}

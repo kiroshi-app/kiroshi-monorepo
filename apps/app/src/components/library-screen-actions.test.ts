@@ -547,3 +547,168 @@ describe("the Back button of the lightbox", () => {
 		expect(libraryShown()).toBeInstanceOf(HTMLElement)
 	})
 })
+
+type DocumentBarButton = "copy" | "download" | "more"
+
+const documentBarButton = (button: DocumentBarButton) =>
+	screen.getByRole("button", { name: common(`library.document.${button}`) })
+
+const openNotes = async () => {
+	await press(await tileOf("notes"))
+	return titleField()
+}
+
+const openDocumentMore = async () => {
+	await press(documentBarButton("more"))
+	return screen.findByRole("menu", {
+		name: common("library.itemMenu.label", { name: "notes" }),
+	})
+}
+
+const pickInDocumentMore = async (action: MenuAction) => {
+	const menu = await openDocumentMore()
+	await press(within(menu).getByRole("menuitem", { name: menuItemOf(action) }))
+}
+
+const documentMoreItems = async () =>
+	within(await openDocumentMore())
+		.getAllByRole("menuitem")
+		.map((item) => item.textContent)
+
+const documentOpen = () =>
+	screen.queryByRole("textbox", { name: common("library.editor.title") })
+
+describe("the document bar", () => {
+	it.each([
+		["the host", false, "library_copy"],
+		["a joined Space", true, "library_copy_bytes"],
+	] as const)(
+		"copies the open document on %s as the grid does and shows Copied",
+		async (_space, isJoined, command) => {
+			await renderLibraryScreen({ isJoined })
+			await openNotes()
+
+			await press(documentBarButton("copy"))
+
+			await waitFor(() => expect(callsOf(command)).toHaveLength(1))
+			expect(
+				await screen.findByText(common("library.document.copied")),
+			).toBeInstanceOf(HTMLElement)
+		},
+	)
+
+	it.each([
+		["the host", false, "library_save"],
+		["a joined Space", true, "library_save_bytes"],
+	] as const)(
+		"downloads the open document on %s as the grid does",
+		async (_space, isJoined, command) => {
+			await renderLibraryScreen({ isJoined })
+			await openNotes()
+
+			await press(documentBarButton("download"))
+
+			await waitFor(() => expect(callsOf(command)).toHaveLength(1))
+		},
+	)
+
+	it("asks for a new tab on the open document", async () => {
+		const { onOpenInNewTab } = await renderLibraryScreen({ isJoined: true })
+		await openNotes()
+
+		await pickInDocumentMore("openInNewTab")
+
+		expect(onOpenInNewTab).toHaveBeenCalledWith({ id: "notes.txt" })
+	})
+
+	it("reveals the open document on the host", async () => {
+		await renderLibraryScreen({ isJoined: false })
+		await openNotes()
+
+		await pickInDocumentMore("showInFolder")
+
+		await waitFor(() =>
+			expect(callsOf("library_reveal")).toEqual([
+				{ spaceId: SPACE_ID, name: "notes.txt" },
+			]),
+		)
+	})
+
+	it.each([
+		["the host", false, ["openInNewTab", "showInFolder", "delete"]],
+		["a joined Space", true, ["openInNewTab", "delete"]],
+	] as const)(
+		"offers in More on %s neither Open nor Rename",
+		async (_space, isJoined, actions) => {
+			await renderLibraryScreen({ isJoined })
+			await openNotes()
+
+			expect(await documentMoreItems()).toEqual(actions.map(menuItemOf))
+		},
+	)
+
+	it.each(SPACES)(
+		"deletes the open document on %s, closes it and shows the Library without it",
+		async (_space, isJoined) => {
+			await renderLibraryScreen({ isJoined })
+			await openNotes()
+
+			await pickInDocumentMore("delete")
+			await confirmDelete()
+
+			await waitFor(() => expect(libraryShown()).toBeInstanceOf(HTMLElement))
+			await waitFor(() => expect(tileShown("notes")).toBe(false))
+			expect(callsOf("library_delete")).toEqual([
+				{ spaceId: SPACE_ID, name: "notes.txt" },
+			])
+		},
+	)
+
+	it("makes no delete call and keeps the document open when the person dismisses Delete", async () => {
+		await renderLibraryScreen({ isJoined: false })
+		await openNotes()
+
+		await pickInDocumentMore("delete")
+		const dialog = await screen.findByRole("alertdialog")
+		await press(
+			within(dialog).getByRole("button", { name: common("confirm.cancel") }),
+		)
+
+		await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull())
+		expect(callsOf("library_delete")).toEqual([])
+		expect(documentOpen()).toBeInstanceOf(HTMLElement)
+	})
+
+	it.each([
+		["copy", "library_copy", "copy"],
+		["download", "library_save", "save"],
+	] as const)(
+		"raises the grid's notice and keeps the document open when the host refuses %s",
+		async (button, command, failure) => {
+			harness.refused = command
+			await renderLibraryScreen({ isJoined: false })
+			await openNotes()
+
+			await press(documentBarButton(button))
+
+			await waitFor(() =>
+				expect(raiseFailureNotice).toHaveBeenCalledWith(failureOf(failure)),
+			)
+			expect(documentOpen()).toBeInstanceOf(HTMLElement)
+		},
+	)
+
+	it("raises the grid's notice and keeps the document open when the host refuses Delete", async () => {
+		harness.refused = "library_delete"
+		await renderLibraryScreen({ isJoined: false })
+		await openNotes()
+
+		await pickInDocumentMore("delete")
+		await confirmDelete()
+
+		await waitFor(() =>
+			expect(raiseFailureNotice).toHaveBeenCalledWith(failureOf("delete")),
+		)
+		expect(documentOpen()).toBeInstanceOf(HTMLElement)
+	})
+})
