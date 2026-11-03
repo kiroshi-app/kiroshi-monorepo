@@ -425,19 +425,17 @@ describe("an agent answer carrying rich blocks", () => {
 	})
 })
 
-const WEB_PAGE_ANSWER = `The rooms.
+const webPageAnswer = (fields: string) =>
+	`The rooms.\n\n\`\`\`web-page\n${fields}\n\`\`\``
 
-\`\`\`web-page
-url: https://www.casadorio.pt/rooms
-title: Casa do Rio, rooms and rates
+const WEB_PAGE_FIELDS = `url: https://www.casadorio.pt/rooms
+title: Casa do Rio, rooms and rates`
+
+const WEB_PAGE_ANSWER = webPageAnswer(`${WEB_PAGE_FIELDS}
 image: https://images.example.org/casa-do-rio.jpg
-alt: Terrace of Casa do Rio over the river
-\`\`\``
+alt: Terrace of Casa do Rio over the river`)
 
-const WEB_PAGE_WITHOUT_IMAGE_ANSWER = WEB_PAGE_ANSWER.replace(
-	/\nimage: .*\nalt: .*/,
-	"",
-)
+const WEB_PAGE_WITHOUT_IMAGE_ANSWER = webPageAnswer(WEB_PAGE_FIELDS)
 
 const openAsPage = () =>
 	fireEvent.click(screen.getByRole("button", { name: "Open as page" }))

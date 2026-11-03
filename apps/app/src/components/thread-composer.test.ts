@@ -296,7 +296,7 @@ describe("ThreadComposer", () => {
 			expect(sentPrompts).toEqual([])
 		})
 
-		it("holds the quote in the quote slot of the field, once, never among the attachments", () => {
+		it("holds the quote in the quote slot, not among the attachments", () => {
 			renderLinked()
 
 			act(() =>
