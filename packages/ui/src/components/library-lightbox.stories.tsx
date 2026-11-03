@@ -562,12 +562,27 @@ const besideImage = (stage: Element, image: Element): Point => {
 		: { x: room.left + 8, y: (room.top + drawn.top) / 2 }
 }
 
-const clickAt = (userEvent: UserEventObject, point: Point) =>
+const SCROLLBAR_BAND = 16
+
+const onVerticalScrollbar = (stage: Element): Point => {
+	const box = stage.getBoundingClientRect()
+	return { x: box.right - SCROLLBAR_BAND / 2, y: box.top + box.height / 2 }
+}
+
+const onHorizontalScrollbar = (stage: Element): Point => {
+	const box = stage.getBoundingClientRect()
+	return { x: box.left + box.width / 2, y: box.bottom - SCROLLBAR_BAND / 2 }
+}
+
+const pressAt = (userEvent: UserEventObject, target: Element, point: Point) =>
 	userEvent.pointer({
 		keys: "[MouseLeft]",
-		target: elementAt(point),
+		target,
 		coords: { clientX: point.x, clientY: point.y },
 	})
+
+const clickAt = (userEvent: UserEventObject, point: Point) =>
+	pressAt(userEvent, elementAt(point), point)
 
 export const BackdropClick = meta.story({
 	args: { openedAt: 0 },
@@ -575,7 +590,7 @@ export const BackdropClick = meta.story({
 		docs: {
 			description: {
 				story:
-					"The first image, so Previous is disabled. Check that a click on the backdrop closes the lightbox once, beside the image in fit and in zoomed mode and in the bottom strip outside the zoom pill, and that a click on the image, the scrollbar of the zoomed stage where one is drawn, the header, the zoom pill or Previous and Next, disabled or not, keeps it open. A press on the image released on the backdrop keeps it open too, and while the More menu or the delete confirmation is open, a click outside never closes the lightbox.",
+					"The first image, so Previous is disabled. Check that a click on the backdrop closes the lightbox once, beside the image in fit and in zoomed mode and in the bottom strip outside the zoom pill, and that a click on the image, the classic scrollbar of the zoomed stage, its room held by a stable gutter so a headless browser keeps it, the header, the zoom pill or Previous and Next, disabled or not, keeps it open. A press on the image or on that scrollbar released on the backdrop keeps it open too, and while the More menu or the delete confirmation is open, a click outside never closes the lightbox.",
 			},
 		},
 	},
@@ -649,6 +664,40 @@ export const BackdropClick = meta.story({
 		])
 		await expect(args.onClose).not.toHaveBeenCalled()
 
+		stage.style.scrollbarGutter = "stable"
+		await userEvent.click(
+			within(popup).getByRole("button", { name: "Zoom in" }),
+		)
+		await userEvent.click(
+			within(popup).getByRole("button", { name: "Zoom in" }),
+		)
+		await expect(stage.offsetWidth).toBeGreaterThan(stage.clientWidth)
+		const onScrollbar = onVerticalScrollbar(stage)
+		await expect(
+			onScrollbar.x - stage.getBoundingClientRect().left - stage.clientLeft,
+		).toBeGreaterThanOrEqual(stage.clientWidth)
+		await pressAt(userEvent, stage, onScrollbar)
+		await expect(args.onClose).not.toHaveBeenCalled()
+
+		const zoomedStripCorner = cornerOf(bottomStripIn(popup))
+		await userEvent.pointer([
+			{
+				keys: "[MouseLeft>]",
+				target: stage,
+				coords: { clientX: onScrollbar.x, clientY: onScrollbar.y },
+			},
+			{
+				target: elementAt(zoomedStripCorner),
+				coords: { clientX: zoomedStripCorner.x, clientY: zoomedStripCorner.y },
+			},
+			{ keys: "[/MouseLeft]" },
+		])
+		await expect(args.onClose).not.toHaveBeenCalled()
+		await userEvent.click(
+			within(popup).getByRole("button", { name: /%, fit to the window$/ }),
+		)
+		stage.style.scrollbarGutter = ""
+
 		await openMoreMenu(popup, userEvent)
 		await clickAt(userEvent, cornerOf(bottomStripIn(popup)))
 		await waitFor(() => expect(screen.queryByRole("menu")).toBe(null))
@@ -681,6 +730,59 @@ export const BackdropClick = meta.story({
 		await expect(elementAt(stripCorner)).toBe(bottomStrip)
 		await clickAt(userEvent, stripCorner)
 		await closedFor(3)
+	},
+})
+
+export const OverlayScrollbarPress = meta.story({
+	tags: ["test-only"],
+	args: { openedAt: 0 },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The image zoomed in on a stage whose scrollbars take no layout space, like overlay scrollbars drawn over the content. Check that a press and release on the vertical scrollbar at the inline end of the stage, then on the horizontal one at its block end, keeps the lightbox open, and that once zoomed out to leave room beside the image, a click on the backdrop there, away from the scrollbar band, closes it once.",
+			},
+		},
+	},
+	play: async ({ args, userEvent }) => {
+		const popup = await lightbox()
+		const stage = slotIn(popup, "library-lightbox-zoom")
+		const image = within(popup).getByRole("img", { name: "hero-dunes.png" })
+		stage.style.scrollbarWidth = "none"
+		const zoomInUntil = async (isReached: () => boolean) => {
+			const zoomIn = within(popup).getByRole("button", { name: "Zoom in" })
+			while (!isReached()) {
+				await expect(zoomIn).toBeEnabled()
+				await userEvent.click(zoomIn)
+			}
+		}
+		const scrollsVertically = () => stage.scrollHeight > stage.clientHeight
+		const scrollsHorizontally = () => stage.scrollWidth > stage.clientWidth
+
+		await zoomInUntil(scrollsVertically)
+		await expect(stage.offsetWidth).toBe(stage.clientWidth)
+		await pressAt(userEvent, stage, onVerticalScrollbar(stage))
+		await expect(args.onClose).not.toHaveBeenCalled()
+
+		await zoomInUntil(scrollsHorizontally)
+		await expect(stage.offsetHeight).toBe(stage.clientHeight)
+		await pressAt(userEvent, stage, onHorizontalScrollbar(stage))
+		await expect(args.onClose).not.toHaveBeenCalled()
+		await expect(popup).toBeVisible()
+
+		await userEvent.click(
+			within(popup).getByRole("button", { name: "Zoom out" }),
+		)
+		await expect(scrollsHorizontally()).toBe(true)
+		await expect(scrollsVertically()).toBe(false)
+		const room = stage.getBoundingClientRect()
+		const beside = besideImage(stage, image)
+		await expect(elementAt(beside)).toBe(stage)
+		await expect(room.bottom - beside.y).toBeGreaterThan(SCROLLBAR_BAND)
+		await expect(room.right - beside.x).toBeGreaterThan(SCROLLBAR_BAND)
+		await clickAt(userEvent, beside)
+		await expect(args.onClose).toHaveBeenCalledOnce()
+		await waitFor(() => expect(screen.queryByRole("dialog")).toBe(null))
 	},
 })
 
