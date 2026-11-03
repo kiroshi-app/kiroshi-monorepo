@@ -435,14 +435,17 @@ const mountLibraryScreen = (isJoined: boolean) => {
 
 type Shown = Pick<typeof screen, "getAllByRole">
 
-const openLibraryItem = async (item: LibraryItem, shown: Shown = screen) => {
-	const tile = await waitFor(() => {
+const findButtonContaining = (text: string, shown: Shown) =>
+	waitFor(() => {
 		const found = shown
 			.getAllByRole("button")
-			.find((button) => button.textContent?.includes(titleOf(item)))
+			.find((button) => button.textContent?.includes(text))
 		expect(found).toBeInstanceOf(HTMLElement)
 		return found as HTMLElement
 	})
+
+const openLibraryItem = async (item: LibraryItem, shown: Shown = screen) => {
+	const tile = await findButtonContaining(titleOf(item), shown)
 	await act(async () => {
 		fireEvent.click(tile, { detail: 1 })
 	})
@@ -517,6 +520,11 @@ const typeInto = async (field: HTMLElement, value: string) => {
 const paragraphOf = (shown: Pick<typeof screen, "getByRole">) =>
 	shown.getByRole("textbox", { name: PARAGRAPH_FIELD }) as HTMLTextAreaElement
 
+const checkedTemplateOf = (dialog: HTMLElement) =>
+	within(dialog)
+		.getAllByRole("radio")
+		.find((radio) => radio.getAttribute("aria-checked") === "true")?.textContent
+
 const createFromDialog = async () => {
 	const dialog = await screen.findByRole("dialog")
 	await press(
@@ -536,10 +544,7 @@ describe("a new Library document", () => {
 			shown.getByRole("button", { name: common("library.newDocument") }),
 		)
 		const dialog = await screen.findByRole("dialog")
-		const checked = within(dialog)
-			.getAllByRole("radio")
-			.find((radio) => radio.getAttribute("aria-checked") === "true")
-		expect(checked?.textContent).toContain(
+		expect(checkedTemplateOf(dialog)).toContain(
 			common("library.templates.blank.name"),
 		)
 		await createFromDialog()
@@ -554,12 +559,8 @@ describe("a new Library document", () => {
 		await press(
 			shown.getByRole("button", { name: common("library.document.back") }),
 		)
-		await waitFor(() =>
-			expect(
-				shown
-					.getAllByRole("button")
-					.some((button) => button.textContent?.includes("Untitled 2")),
-			).toBe(true),
+		expect(await findButtonContaining("Untitled 2", shown)).toBeInstanceOf(
+			HTMLElement,
 		)
 	})
 
@@ -567,21 +568,11 @@ describe("a new Library document", () => {
 		const start = libraryDocumentStartOf("brief", new Date(), common)
 		const shown = await renderLibraryScreen(true)
 
-		const card = await waitFor(() => {
-			const found = shown
-				.getAllByRole("button")
-				.find((button) =>
-					button.textContent?.includes(common("library.templates.brief.name")),
-				)
-			expect(found).toBeInstanceOf(HTMLElement)
-			return found as HTMLElement
-		})
-		await press(card)
+		await press(
+			await findButtonContaining(common("library.templates.brief.name"), shown),
+		)
 		const dialog = await screen.findByRole("dialog")
-		const checked = within(dialog)
-			.getAllByRole("radio")
-			.find((radio) => radio.getAttribute("aria-checked") === "true")
-		expect(checked?.textContent).toContain(
+		expect(checkedTemplateOf(dialog)).toContain(
 			common("library.templates.brief.name"),
 		)
 		await createFromDialog()

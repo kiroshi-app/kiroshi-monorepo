@@ -6,12 +6,6 @@ const MARKDOWN_TEXT = "markdown"
 
 const REMOTE_ORIGIN = Symbol("remote")
 
-const HIGH_SURROGATES = { first: 0xd800, last: 0xdbff }
-
-const LOW_SURROGATES = { first: 0xdc00, last: 0xdfff }
-
-type CodeRange = typeof HIGH_SURROGATES
-
 type LibraryDocumentSessionOptions = {
 	state: string
 	send: (update: string) => Promise<unknown>
@@ -23,8 +17,9 @@ export const bytesOf = (base64: string) =>
 export const base64Of = (bytes: Uint8Array) =>
 	btoa(Array.from(bytes, (byte) => String.fromCharCode(byte)).join(""))
 
-const isInRange = (code: number, { first, last }: CodeRange) =>
-	code >= first && code <= last
+const isHighSurrogate = (code: number) => code >= 0xd800 && code <= 0xdbff
+
+const isLowSurrogate = (code: number) => code >= 0xdc00 && code <= 0xdfff
 
 const sharedPrefixLength = (current: string, next: string) => {
 	let length = 0
@@ -35,8 +30,7 @@ const sharedPrefixLength = (current: string, next: string) => {
 	) {
 		length++
 	}
-	const splitsPair = isInRange(current.charCodeAt(length - 1), HIGH_SURROGATES)
-	return splitsPair ? length - 1 : length
+	return isHighSurrogate(current.charCodeAt(length - 1)) ? length - 1 : length
 }
 
 const sharedSuffixLength = (current: string, next: string, prefix: number) => {
@@ -48,11 +42,9 @@ const sharedSuffixLength = (current: string, next: string, prefix: number) => {
 	) {
 		length++
 	}
-	const splitsPair = isInRange(
-		current.charCodeAt(current.length - length),
-		LOW_SURROGATES,
-	)
-	return splitsPair ? length - 1 : length
+	return isLowSurrogate(current.charCodeAt(current.length - length))
+		? length - 1
+		: length
 }
 
 const replaceChangedRange = (doc: Y.Doc, next: string) => {
