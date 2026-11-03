@@ -507,15 +507,22 @@ describe("the More action of an opened Library item", () => {
 		).toBeNull()
 	})
 
-	it("shows no More on a document of a joined Space", async () => {
+	it("leaves Show in folder out of More on a document of a joined Space", async () => {
 		await mountLibraryScreen(true)
 
 		await openLibraryItem(DOCUMENT)
+		await act(async () => {
+			fireEvent.click(
+				await findButtonNamed(i18n.t("common:library.document.more")),
+			)
+		})
 
+		const menu = await screen.findByRole("menu")
 		expect(
-			await findButtonNamed(i18n.t("common:library.document.back")),
-		).toBeInstanceOf(HTMLElement)
-		expect(buttonNamed(i18n.t("common:library.document.more"))).toBeNull()
+			within(menu).queryByRole("menuitem", {
+				name: i18n.t("common:library.itemMenu.showInFolder"),
+			}),
+		).toBeNull()
 	})
 
 	it("keeps More on an image and a document of the host's own Space", async () => {
