@@ -450,6 +450,13 @@ const listAnchorsOf = (
 	return anchors
 }
 
+const isSameAnchors = (
+	first: ReadonlyMap<string, string>,
+	second: ReadonlyMap<string, string>,
+) =>
+	first.size === second.size &&
+	[...first].every(([id, anchor]) => second.get(id) === anchor)
+
 const singleLine = (text: string) => text.replace(/\n/g, " ")
 
 type GrowingFieldProps = TextareaHTMLAttributes<HTMLTextAreaElement> & {
@@ -560,7 +567,9 @@ const LibraryDocumentEditor = ({
 	const fields = useRef(new Map<string, HTMLTextAreaElement>())
 	const reportedCaret = useRef<number | null>(null)
 	const pendingBlurReport = useRef<ReturnType<typeof setTimeout>>(undefined)
-	const listAnchors = useRef<ReadonlyMap<string, string>>(new Map())
+	const [heldListAnchors, setHeldListAnchors] = useState<
+		ReadonlyMap<string, string>
+	>(() => listAnchorsOf(runsOf(blocks), new Map()))
 
 	const reportCaret = () => {
 		const field = document.activeElement
@@ -811,7 +820,9 @@ const LibraryDocumentEditor = ({
 
 	const untitled = t("library.editor.untitled")
 	const runs = runsOf(blocks)
-	listAnchors.current = listAnchorsOf(runs, listAnchors.current)
+	const listAnchors = listAnchorsOf(runs, heldListAnchors)
+	if (!isSameAnchors(listAnchors, heldListAnchors))
+		setHeldListAnchors(listAnchors)
 
 	return (
 		<div
@@ -864,7 +875,7 @@ const LibraryDocumentEditor = ({
 						run[0]?.kind === "item" ? (
 							<ul
 								className="flex list-disc flex-col gap-1.5 ps-[1.5em] text-reading leading-6 marker:text-muted-foreground"
-								key={`list-${listAnchors.current.get(run[0].id)}`}
+								key={`list-${listAnchors.get(run[0].id)}`}
 							>
 								{run.map((block) => (
 									<li className="ps-1" key={block.id}>
