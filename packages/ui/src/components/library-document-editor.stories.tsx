@@ -2081,7 +2081,7 @@ export const A3ToolbarButtonHover = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard A3: the pointer rests on Bold. Check that Bold changes fill with no colour transition, and that its tooltip names it with its shortcut, 14px above the button.",
+					"Artboard A3: the pointer rests on Bold. Check that Bold changes fill with no colour transition, and that its tooltip names it with its shortcut, with no arrow, 14px above the button.",
 			},
 		},
 	},
@@ -2093,6 +2093,11 @@ export const A3ToolbarButtonHover = meta.story({
 		await userEvent.hover(bold)
 		const tooltip = await screen.findByRole("tooltip")
 		await expect(tooltip).toHaveTextContent("Bold⌘B")
+		await expect(
+			[...tooltip.children]
+				.filter((child) => child.checkVisibility())
+				.map((child) => child.tagName),
+		).toEqual(["KBD"])
 		await expect(
 			bold.getBoundingClientRect().top - tooltip.getBoundingClientRect().bottom,
 		).toBeCloseTo(14, 0)

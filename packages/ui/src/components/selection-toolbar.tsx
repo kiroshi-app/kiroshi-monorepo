@@ -67,7 +67,7 @@ const BUTTON =
 	"size-7 min-w-7 rounded-md px-0 transition-none hover:bg-selection-toolbar-highlight aria-pressed:bg-user-bubble/15 aria-pressed:text-user-bubble hover:aria-pressed:bg-user-bubble/15 hover:aria-pressed:text-user-bubble"
 
 const TOOLTIP = cn(
-	"rounded-control p-1.5 font-medium text-card break-words **:data-[slot=kbd]:rounded-md",
+	"rounded-control p-1.5 font-medium text-card break-words **:data-[slot=kbd]:rounded-md [&>[data-side]]:hidden",
 	STILL_UNDER_REDUCED_MOTION,
 )
 
