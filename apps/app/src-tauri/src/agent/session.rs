@@ -313,17 +313,20 @@ impl Shared {
 		}
 	}
 
-	fn tasks_pending(&mut self, count: u32) -> Option<AgentEvent> {
-		let running = self.running.as_ref()?;
+	fn tasks_pending(&mut self, count: u32) -> Vec<AgentEvent> {
+		let Some(running) = self.running.as_ref() else {
+			return Vec::new();
+		};
 		log::info!(
 			"the turn holds for its background tasks session={} turn={:?} reason={count} background tasks",
 			self.key,
 			running.id
 		);
-		match self.turn {
+		let entering = match self.turn {
 			TurnState::Submitting => self.set_turn(TurnState::Running),
 			_ => None,
-		}
+		};
+		entering.into_iter().chain([AgentEvent::TasksPending { count }]).collect()
 	}
 
 	fn lease_deadline(&self) -> Option<(tokio::time::Instant, Lapse)> {
@@ -858,14 +861,14 @@ async fn read_loop(
 		}
 
 		if let Frame::TasksPending(pending) = frame {
-			let entering = {
+			let held = {
 				let mut guard = shared.lock().await;
 				if guard.shutting_down {
 					return;
 				}
 				guard.tasks_pending(pending.count)
 			};
-			if let Some(event) = entering {
+			for event in held {
 				sink.emit(event);
 			}
 			continue;

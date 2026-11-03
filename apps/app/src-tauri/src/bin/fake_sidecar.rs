@@ -410,19 +410,38 @@ fn finish_background_task(key: &str, run: &Run) {
 }
 
 fn emit_structured_result(key: &str, run: &Run, structured_output: Value) {
-	emit_settled(
-		key,
-		json!({
-			"type": "result",
-			"subtype": "success",
-			"is_error": false,
-			"session_id": run.session_id,
-			"num_turns": 1,
-			"structured_output": structured_output,
-			"total_cost_usd": 0.0425,
-			"modelUsage": { "claude-sonnet-4-5": { "inputTokens": 12, "costUSD": 0.0425 } }
-		}),
-	);
+	emit_settled(key, structured_result_of(&run.session_id, structured_output));
+}
+
+fn structured_result_of(session_id: &str, structured_output: Value) -> Value {
+	json!({
+		"type": "result",
+		"subtype": "success",
+		"is_error": false,
+		"session_id": session_id,
+		"num_turns": 1,
+		"structured_output": structured_output,
+		"total_cost_usd": 0.0425,
+		"modelUsage": { "claude-sonnet-4-5": { "inputTokens": 12, "costUSD": 0.0425 } }
+	})
+}
+
+const ROUTINE_TASK_RUNS_FOR: std::time::Duration = std::time::Duration::from_secs(3);
+
+fn report_once_the_background_task_ends(key: &str, run: &Run) {
+	let key = key.to_owned();
+	let session_id = run.session_id.clone();
+	std::thread::spawn(move || {
+		std::thread::sleep(ROUTINE_TASK_RUNS_FOR);
+		emit_tasks_pending(&key, 0);
+		emit_settled(
+			&key,
+			structured_result_of(
+				&session_id,
+				json!({ "outcome": "report", "report": "The shift log changed." }),
+			),
+		);
+	});
 }
 
 fn emit_closed(key: &str, detail: &str) {
@@ -544,6 +563,12 @@ fn on_prompt(key: &str, runs: &mut HashMap<String, Run>, text: &str) {
 				run,
 				json!({ "outcome": "report", "report": "  The shift log changed.\n" }),
 			);
+		}
+		"routine_background_report" => {
+			emit_text_turn(key, run, "a background shell runs");
+			emit(key, result_of(&run.session_id, "success", false));
+			emit_tasks_pending(key, 1);
+			report_once_the_background_task_ends(key, run);
 		}
 		"routine_report_own" => {
 			let turn = own_turn(run);

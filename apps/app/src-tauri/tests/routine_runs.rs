@@ -9,6 +9,7 @@ use bundled::bundled_bots;
 use common::removed_on_drop::RemovedOnDrop;
 use common::{an_app_of_its_own, AppOfItsOwn};
 use kiroshi_app::agent::commands::{agent_live_sessions, terminate_session};
+use kiroshi_app::agent::lease::RunLease;
 use kiroshi_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
 use kiroshi_app::agent::AgentState;
 use kiroshi_app::bundles::{self, EffortLevel};
@@ -94,6 +95,15 @@ fn launch(name: &str, played: &str) -> Host {
 	hosting(app, scenario, name, chat.id)
 }
 
+fn launch_leased(name: &str, played: &str, lease: RunLease) -> Host {
+	let scenario = scenario(played);
+	let app = booted_with(name, AgentState::leasing(lease));
+	let chat =
+		block_on(conversation_main_chat(app.handle().clone(), app.state(), BOT.to_owned(), None))
+			.expect("the main chat opens");
+	hosting(app, scenario, name, chat.id)
+}
+
 fn launch_in_a_room(name: &str, played: &str) -> Host {
 	let scenario = scenario(played);
 	let app = booted(name);
@@ -110,11 +120,12 @@ fn planted(app: &App<MockRuntime>, statements: &'static str) {
 }
 
 fn booted(name: &str) -> AppOfItsOwn {
+	booted_with(name, AgentState::default())
+}
+
+fn booted_with(name: &str, agent: AgentState) -> AppOfItsOwn {
 	std::env::set_var(SIDECAR_OVERRIDE_ENV, FAKE_SIDECAR);
-	let app = an_app_of_its_own(
-		&format!("routine-runs-{name}"),
-		mock_builder().manage(AgentState::default()),
-	);
+	let app = an_app_of_its_own(&format!("routine-runs-{name}"), mock_builder().manage(agent));
 	app.manage(db::bootstrap(app.handle()));
 	bundled_bots(&app, &["default"]);
 	app
@@ -485,6 +496,44 @@ fn a_run_that_outlives_its_deadline_is_cancelled_after_renewing_its_lease() {
 	let renewed = host.lease_renewed_at(&run.id).expect("the run holds a lease");
 	assert!(renewed > run.started_at, "the lease was never renewed while the run was live");
 	host.wait_for_no_live_session();
+	host.quit();
+}
+
+#[test]
+fn a_run_holding_a_background_task_past_its_deadline_reports_once_the_task_ends() {
+	let _serial = serial();
+	let host = launch("background-deadline", "routine_background_report");
+	let timing = RunTiming { lease: Duration::from_millis(100), deadline: Duration::from_secs(1) };
+
+	assert!(is_started(&host.run_now_timed(timing)));
+	let run = host.closed_run();
+
+	assert_reported(&host, &run);
+	let ended_at = run.ended_at.expect("the run closed");
+	assert!(ended_at - run.started_at >= 3_000, "the run closed before its background task ended");
+	let renewed = host.lease_renewed_at(&run.id).expect("the run holds a lease");
+	assert!(renewed - run.started_at >= 2_000, "the lease was not renewed while the task ran");
+	host.wait_for_no_live_session();
+	host.quit();
+}
+
+#[test]
+fn a_background_task_past_its_bound_closes_the_run_naming_the_tasks_pending_lapse() {
+	let _serial = serial();
+	let lease = RunLease {
+		silence: Duration::from_secs(30),
+		interrupt_answer: Duration::from_secs(15),
+		tasks_pending: Duration::from_millis(1_500),
+	};
+	let host = launch_leased("tasks-bound", "endless_task", lease);
+	let timing = RunTiming { lease: Duration::from_millis(100), deadline: Duration::from_secs(1) };
+
+	assert!(is_started(&host.run_now_timed(timing)));
+
+	assert_failed(
+		&host,
+		"the run's turn lapsed on tasksPending, held unsettled past the background task bound of 1500 ms",
+	);
 	host.quit();
 }
 

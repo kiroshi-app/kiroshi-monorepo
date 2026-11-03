@@ -1,4 +1,5 @@
 use std::fmt;
+use std::pin::Pin;
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
@@ -7,7 +8,7 @@ use tauri::async_runtime::JoinHandle;
 use tauri::{AppHandle, Manager, Runtime, State};
 use tokio::sync::broadcast::{self, error::RecvError};
 use tokio::sync::mpsc;
-use tokio::time::{self, Instant};
+use tokio::time::{self, Instant, Sleep};
 use uuid::Uuid;
 
 use super::commands::announce_change;
@@ -22,6 +23,7 @@ use crate::agent::contract::{
 	AgentEvent, CancelOutcome, ChatMessage, EventTurn, MessageCompletion, MessageRole,
 	RuntimeScope, ScopedEvent, TransportError, TurnEnded, TurnOutcome,
 };
+use crate::agent::lease::Lapse;
 use crate::agent::reply_writer::settled_mentions;
 use crate::agent::AgentState;
 use crate::conversations::commands::{
@@ -44,6 +46,13 @@ const QUESTION_REASON: &str = "a run cannot be asked a question";
 const PERMISSION_REASON: &str = "a run cannot be asked for a permission";
 
 const DEADLINE_REASON: &str = "the run outlived its deadline";
+
+const TASKS_PENDING_REASON: &str =
+	"the run's turn lapsed on tasksPending, held unsettled past the background task bound";
+
+const LAPSE_HEARD_WITHIN: Duration = Duration::from_secs(1);
+
+const DEADLINE_SECS_ENV: &str = "KIROSHI_ROUTINE_DEADLINE_SECS";
 
 const EVENTS_LOST_REASON: &str = "the run's session events stopped arriving";
 
@@ -69,11 +78,49 @@ pub struct Runner<R: Runtime> {
 
 impl<R: Runtime> Runner<R> {
 	pub fn new(app: AppHandle<R>) -> Self {
-		Self::timed(app, RUN_TIMING)
+		let deadline = resolve_deadline(std::env::var(DEADLINE_SECS_ENV).ok());
+		Self::timed(app, RunTiming { deadline, ..RUN_TIMING })
 	}
 
 	pub fn timed(app: AppHandle<R>, timing: RunTiming) -> Self {
 		Self { app, timing }
+	}
+}
+
+fn resolve_deadline(overridden: Option<String>) -> Duration {
+	let seconds = overridden.and_then(|seconds| seconds.trim().parse::<u64>().ok());
+	match seconds {
+		Some(seconds) if cfg!(debug_assertions) && seconds > 0 => Duration::from_secs(seconds),
+		_ => RUN_TIMING.deadline,
+	}
+}
+
+struct Deadline {
+	expiry: Pin<Box<Sleep>>,
+	held_with: Option<Duration>,
+}
+
+impl Deadline {
+	fn armed(after: Duration) -> Self {
+		Self { expiry: Box::pin(time::sleep(after)), held_with: None }
+	}
+
+	fn is_held(&self) -> bool {
+		self.held_with.is_some()
+	}
+
+	fn tasks_pending(&mut self, count: u32) {
+		let now = Instant::now();
+		match (self.held_with, count) {
+			(None, 1..) => {
+				self.held_with = Some(self.expiry.deadline().saturating_duration_since(now));
+			}
+			(Some(left), 0) => {
+				self.expiry.as_mut().reset(now + left);
+				self.held_with = None;
+			}
+			_ => {}
+		}
 	}
 }
 
@@ -107,10 +154,9 @@ async fn drive<R: Runtime>(
 	reading: &mut RelayReader,
 ) -> RunClosing {
 	let run_id = &requested.run_id;
-	let expiry = time::sleep(timing.deadline);
-	tokio::pin!(expiry);
+	let mut deadline = Deadline::armed(timing.deadline);
 	tokio::select! {
-		() = &mut expiry => return refused(app, scope, DEADLINE_REASON).await,
+		() = &mut deadline.expiry => return refused(app, scope, DEADLINE_REASON).await,
 		begun = started(app, scope, requested) => {
 			if let Err(detail) = begun {
 				return could_not_start(&detail);
@@ -120,18 +166,58 @@ async fn drive<R: Runtime>(
 	let mut lease = time::interval_at(Instant::now() + timing.lease, timing.lease);
 	loop {
 		tokio::select! {
-			() = &mut expiry => return refused(app, scope, DEADLINE_REASON).await,
+			() = &mut deadline.expiry, if !deadline.is_held() => {
+				return refused(app, scope, DEADLINE_REASON).await
+			}
 			_ = lease.tick() => renew(app, run_id).await,
 			arrived = arriving.recv() => {
 				let Some(scoped) = arrived else {
 					return lost(reading).await;
 				};
-				if let Some(closing) = settled_by(app, scope, scoped.event).await {
-					return closing;
+				if let AgentEvent::TasksPending { count } = scoped.event {
+					deadline.tasks_pending(count);
+					continue;
 				}
+				let lapse_may_follow = deadline.is_held() && ends_failed(&scoped.event);
+				let Some(closing) = settled_by(app, scope, scoped.event).await else {
+					continue;
+				};
+				if lapse_may_follow {
+					return named_by_its_lapse(closing, arriving).await;
+				}
+				return closing;
 			}
 		}
 	}
+}
+
+fn ends_failed(event: &AgentEvent) -> bool {
+	matches!(event, AgentEvent::TurnEnded { ended } if ended.outcome == TurnOutcome::Failed)
+}
+
+async fn named_by_its_lapse(
+	failed: RunClosing,
+	arriving: &mut mpsc::UnboundedReceiver<ScopedEvent>,
+) -> RunClosing {
+	match time::timeout(LAPSE_HEARD_WITHIN, tasks_pending_lapse(arriving)).await {
+		Ok(Some(bound_ms)) => RunClosing {
+			reason: Some(format!("{TASKS_PENDING_REASON} of {bound_ms} ms")),
+			..failed
+		},
+		_ => failed,
+	}
+}
+
+async fn tasks_pending_lapse(arriving: &mut mpsc::UnboundedReceiver<ScopedEvent>) -> Option<u64> {
+	while let Some(scoped) = arriving.recv().await {
+		if let AgentEvent::Failed {
+			error: TransportError::RunLapsed { lapse: Lapse::TasksPending, bound_ms },
+		} = scoped.event
+		{
+			return Some(bound_ms);
+		}
+	}
+	None
 }
 
 async fn lost(reading: &mut RelayReader) -> RunClosing {
@@ -676,6 +762,53 @@ mod tests {
 				conversation_id: "conversation-1".to_owned(),
 			})
 		);
+	}
+
+	fn left_on(deadline: &Deadline) -> Duration {
+		deadline.expiry.deadline().saturating_duration_since(Instant::now())
+	}
+
+	#[tokio::test(start_paused = true)]
+	async fn a_deadline_held_for_pending_tasks_resumes_with_the_time_it_had_left() {
+		let mut deadline = Deadline::armed(Duration::from_secs(10));
+		time::advance(Duration::from_secs(4)).await;
+
+		deadline.tasks_pending(1);
+		time::advance(Duration::from_secs(60)).await;
+		deadline.tasks_pending(2);
+		assert!(deadline.is_held());
+
+		deadline.tasks_pending(0);
+
+		assert!(!deadline.is_held());
+		assert_eq!(left_on(&deadline), Duration::from_secs(6));
+	}
+
+	#[tokio::test(start_paused = true)]
+	async fn a_deadline_with_no_pending_task_keeps_counting() {
+		let mut deadline = Deadline::armed(Duration::from_secs(10));
+		time::advance(Duration::from_secs(4)).await;
+
+		deadline.tasks_pending(0);
+
+		assert!(!deadline.is_held());
+		assert_eq!(left_on(&deadline), Duration::from_secs(6));
+	}
+
+	#[test]
+	fn a_positive_deadline_override_is_read_in_a_debug_build_only() {
+		let overridden = resolve_deadline(Some("10".to_owned()));
+
+		let expected =
+			if cfg!(debug_assertions) { Duration::from_secs(10) } else { RUN_TIMING.deadline };
+		assert_eq!(overridden, expected);
+	}
+
+	#[test]
+	fn a_missing_zero_or_unreadable_deadline_override_keeps_the_routine_deadline() {
+		for overridden in [None, Some("0".to_owned()), Some("ten".to_owned())] {
+			assert_eq!(resolve_deadline(overridden), RUN_TIMING.deadline);
+		}
 	}
 
 	#[tokio::test]

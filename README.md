@@ -63,11 +63,12 @@ bun run dev
 | --- | --- | --- |
 | `KIROSHI_AGENT_SIDECAR` | the app, whenever it resolves the agent | Path to an `kiroshi-agent` executable. It is tried **before** the copy beside the app executable and the one left in the build tree, so it wins over the sidecar the app ships with. Leave it unset to run that one. |
 | `KIROSHI_CLAUDE_EXECUTABLE` | the sidecar, whenever it resolves the provider | Path to a Claude Code executable. It is tried **before** the copy shipped beside the sidecar, which is what a bundle and a build tree both carry. Leave it unset to run that one; the sidecar test suites point it at the platform binary of the agent SDK in `node_modules`, having no bundle of their own. |
+| `KIROSHI_ROUTINE_DEADLINE_SECS` | the app, in a debug build only | A positive whole number of seconds that replaces the 30-minute routine deadline, to try a run past its deadline without waiting for it. A release build ignores it. |
 | `APPLE_SIGNING_IDENTITY` | `bun run tauri:build` | Developer ID to sign the macOS bundle with. Turbo passes it through to that task, and the release workflow feeds it from a repository secret. |
 
 `KIROSHI_AGENT_SIDECAR` is what the host test suites point at a fake sidecar. A leftover export silently sends the app at that fake too, so `unset KIROSHI_AGENT_SIDECAR` before running against the bundled sidecar.
 
-None of them belongs in the repository: two are local paths, the third a personal certificate name.
+None of them belongs in the repository: two are local paths, the third a debug-only override, the fourth a personal certificate name.
 
 ## Monorepo
 
