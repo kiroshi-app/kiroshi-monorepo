@@ -534,7 +534,7 @@ describe("a Library action the host refuses", () => {
 		await waitFor(() =>
 			expect(raiseFailureNotice).toHaveBeenCalledWith(failureOf("save")),
 		)
-		await waitFor(async () => expect((await titleField()).value).toBe("notes"))
+		await waitFor(() => expect(shownTitle()).toBe("notes"))
 	})
 
 	it("raises a notice and keeps the item in the grid on delete", async () => {
@@ -591,6 +591,8 @@ const documentMoreItems = async () =>
 
 const documentOpen = () =>
 	screen.queryByRole("textbox", { name: common("library.editor.title") })
+
+const shownTitle = () => (documentOpen() as HTMLInputElement | null)?.value
 
 const pressInTitle = async (field: HTMLInputElement, key: string) => {
 	await act(async () => {
@@ -672,9 +674,7 @@ describe("Rename in the document bar", () => {
 				field.blur()
 			})
 
-			await waitFor(async () =>
-				expect((await titleField()).value).toBe("Plans"),
-			)
+			await waitFor(() => expect(shownTitle()).toBe("Plans"))
 			expect(callsOf("library_rename_document")).toEqual([
 				{ spaceId: SPACE_ID, name: "notes.txt", newName: "Plans.txt" },
 			])
@@ -685,7 +685,7 @@ describe("Rename in the document bar", () => {
 		await renderLibraryScreen({ isJoined: false })
 
 		await pressInTitle(await retitleFromDocumentBar("Plans"), "Enter")
-		await waitFor(async () => expect((await titleField()).value).toBe("Plans"))
+		await waitFor(() => expect(shownTitle()).toBe("Plans"))
 		await typeInBody("Rollout")
 
 		await waitFor(() =>
