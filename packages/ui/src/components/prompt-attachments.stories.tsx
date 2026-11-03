@@ -11,14 +11,12 @@ import {
 import {
 	LONG_PROMPT_ATTACHMENTS,
 	PROMPT_ATTACHMENTS,
+	REPLY_CHIP_MAX_WIDTH,
+	REPLY_CHIP_MIN_WIDTH,
 } from "@workspace/ui/components/prompt-attachments.fixtures"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
 
 const attach = fn()
-
-const REPLY_MIN_WIDTH = 236
-
-const REPLY_MAX_WIDTH = 360
 
 const expectThemeApplied = (theme: unknown) =>
 	expect(document.documentElement.classList.contains("dark")).toBe(
@@ -62,8 +60,8 @@ const excerptOf = (chip: HTMLElement) => {
 
 const expectReplySizedToContent = async (chip: HTMLElement) => {
 	const { width } = chip.getBoundingClientRect()
-	await expect(width).toBeGreaterThanOrEqual(REPLY_MIN_WIDTH)
-	await expect(width).toBeLessThanOrEqual(REPLY_MAX_WIDTH)
+	await expect(width).toBeGreaterThanOrEqual(REPLY_CHIP_MIN_WIDTH)
+	await expect(width).toBeLessThanOrEqual(REPLY_CHIP_MAX_WIDTH)
 	const excerpt = excerptOf(chip)
 	await expect(excerpt.getBoundingClientRect().height).toBe(14)
 	await expect(getComputedStyle(excerpt).textOverflow).toBe("ellipsis")
@@ -215,7 +213,7 @@ export const ReplyExcerpt = meta.story({
 		)
 		await expect(excerpt).toHaveTextContent(`“${EXCERPT_REPLY.excerpt}”`)
 		await expectReplySizedToContent(chip)
-		await expect(chip.getBoundingClientRect().width).toBe(REPLY_MAX_WIDTH)
+		await expect(chip.getBoundingClientRect().width).toBe(REPLY_CHIP_MAX_WIDTH)
 
 		await userEvent.click(
 			canvas.getByRole("button", { name: "Remove the reply to Atlas" }),
@@ -242,7 +240,7 @@ export const ReplyWholeMessage = meta.story({
 		const [chip] = replyChipsIn(canvasElement)
 		await expect(excerptOf(chip).textContent).toBe(WHOLE_REPLY.excerpt)
 		await expectReplySizedToContent(chip)
-		await expect(chip.getBoundingClientRect().width).toBe(REPLY_MIN_WIDTH)
+		await expect(chip.getBoundingClientRect().width).toBe(REPLY_CHIP_MIN_WIDTH)
 	},
 })
 
@@ -287,7 +285,7 @@ export const ReplyUnbreakableExcerpt = meta.story({
 	play: async ({ canvasElement }) => {
 		const [chip] = replyChipsIn(canvasElement)
 		await expectReplySizedToContent(chip)
-		await expect(chip.getBoundingClientRect().width).toBe(REPLY_MAX_WIDTH)
+		await expect(chip.getBoundingClientRect().width).toBe(REPLY_CHIP_MAX_WIDTH)
 		const excerpt = excerptOf(chip)
 		await expect(excerpt.scrollWidth).toBeGreaterThan(excerpt.clientWidth)
 	},
