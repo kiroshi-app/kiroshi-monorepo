@@ -378,7 +378,17 @@ fn text_holds(
 		return Ok(false);
 	}
 	let resolved = resolve(root, space_id, &item.name)?;
-	Ok(document_text(&resolved, &item.name)?.to_lowercase().contains(query))
+	match document_text(&resolved, &item.name) {
+		Ok(text) => Ok(text.to_lowercase().contains(query)),
+		Err(LibraryError::NotUtf8 { .. } | LibraryError::TooLarge { .. }) => {
+			log::warn!(
+				"a library search of space {space_id} matched {} on its name only: its text is unreadable",
+				item.name
+			);
+			Ok(false)
+		}
+		Err(error) => Err(error),
+	}
 }
 
 fn item_read(root: &Path, space_id: &str, name: &str) -> Result<ItemRead, LibraryError> {

@@ -368,6 +368,21 @@ async fn a_search_matches_a_name_or_a_document_text_whatever_its_case() {
 }
 
 #[tokio::test]
+async fn a_search_matches_a_document_without_readable_text_on_its_name_and_keeps_searching() {
+	let (app, root) = a_host("search-unreadable").await;
+	put_bytes(&root, "notes.txt", &[0xff, 0xfe, 0x00, 0x62]);
+	put(&root, SPACE, "plan.md", "The budget moved.");
+	let host = the_host(&app);
+	let search = |query: &str| host.served(Operation::Search, json!({ "query": query }));
+
+	let in_the_text = search("budget").await.expect("searches");
+	let in_the_name = search("notes").await.expect("searches");
+
+	assert_eq!(names_in(&in_the_text), ["plan.md"]);
+	assert_eq!(names_in(&in_the_name), ["notes.txt"]);
+}
+
+#[tokio::test]
 async fn a_read_answers_a_document_text_an_image_or_what_an_image_too_large_to_show_is() {
 	let (app, root) = a_host("read").await;
 	put(&root, SPACE, "notes.md", "# Notes\n");
