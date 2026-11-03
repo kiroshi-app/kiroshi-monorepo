@@ -1098,9 +1098,7 @@ const SoloThreadTail = ({
 		step: signInStep,
 	})
 
-	return (
-		<>{botWork ? <WorkingBot {...stop} face={face} work={botWork} /> : null}</>
-	)
+	return botWork ? <WorkingBot {...stop} face={face} work={botWork} /> : null
 }
 
 type ThreadQueueProps = {
@@ -1119,9 +1117,7 @@ const ThreadQueue = ({ thread, readerName }: ThreadQueueProps) =>
 			agentName={thread.bot.name}
 			items={thread.state.outbox.map(queuedPromptOf)}
 			onRemove={thread.controller.discard}
-			onSendNow={(id) => {
-				void thread.controller.sendNow(id)
-			}}
+			onSendNow={thread.controller.sendNow}
 			readerName={readerName}
 		/>
 	) : null

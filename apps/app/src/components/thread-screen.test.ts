@@ -1149,17 +1149,14 @@ const queuedSoloOf = async (queued: string[]) => {
 const queuedTray = () =>
 	document.querySelector<HTMLElement>('[data-slot="prompt-queue"]')
 
-const queuedTexts = () =>
-	[...document.querySelectorAll('[data-slot="prompt-queue-item"]')].map(
-		(row) => row.textContent ?? "",
-	)
+const queuedRows = () => [
+	...document.querySelectorAll<HTMLElement>('[data-slot="prompt-queue-item"]'),
+]
+
+const queuedTexts = () => queuedRows().map((row) => row.textContent ?? "")
 
 const queuedRowOf = (text: string) => {
-	const row = [
-		...document.querySelectorAll<HTMLElement>(
-			'[data-slot="prompt-queue-item"]',
-		),
-	].find((item) => item.textContent?.includes(text))
+	const row = queuedRows().find((item) => item.textContent?.includes(text))
 	if (!row) {
 		throw new Error(`no queued row holds ${text}`)
 	}
