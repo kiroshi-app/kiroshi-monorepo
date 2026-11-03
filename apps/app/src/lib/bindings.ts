@@ -51,6 +51,7 @@ export const commands = {
 	libraryImport: (spaceId: string, name: string, content: string) => typedError<LibraryItem, LibraryError>(__TAURI_INVOKE("library_import", { spaceId, name, content })),
 	libraryImportPaths: (spaceId: string, paths: string[]) => typedError<LibraryImport[], LibraryError>(__TAURI_INVOKE("library_import_paths", { spaceId, paths })),
 	libraryRenameDocument: (spaceId: string, name: string, newName: string) => typedError<LibraryItem, LibraryError>(__TAURI_INVOKE("library_rename_document", { spaceId, name, newName })),
+	libraryDelete: (spaceId: string, name: string) => typedError<null, LibraryError>(__TAURI_INVOKE("library_delete", { spaceId, name })),
 	badgeSet: (count: number) => typedError<null, string>(__TAURI_INVOKE("badge_set", { count })),
 	claudeImportInventory: () => typedError<ClaudeInventory, TranscriptStoreError>(__TAURI_INVOKE("claude_import_inventory")),
 	claudeImportRun: (selection: string[], spaceId: string) => typedError<ClaudeImportOutcome[], TranscriptStoreError>(__TAURI_INVOKE("claude_import_run", { selection, spaceId })),

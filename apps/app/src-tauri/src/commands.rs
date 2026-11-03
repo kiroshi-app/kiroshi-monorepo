@@ -112,6 +112,7 @@ fn commands<R: Runtime>() -> Commands<R> {
 		library::commands::library_import::<tauri::Wry>,
 		library::commands::library_import_paths::<tauri::Wry>,
 		library::commands::library_rename_document::<tauri::Wry>,
+		library::commands::library_delete::<tauri::Wry>,
 		badge::commands::badge_set::<tauri::Wry>,
 		claude_import::commands::claude_import_inventory,
 		claude_import::commands::claude_import_run::<tauri::Wry>,

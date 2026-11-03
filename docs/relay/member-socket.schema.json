@@ -11582,6 +11582,29 @@
         "$ref": "#/$defs/LibraryItem"
       }
     },
+    "library_delete": {
+      "args": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "spaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spaceId",
+          "name"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/LibraryError"
+      },
+      "ok": {
+        "type": "null"
+      }
+    },
     "library_import": {
       "args": {
         "properties": {

@@ -11,14 +11,15 @@ use tauri::{AppHandle, Manager, Runtime, State};
 use tokio::sync::OwnedMutexGuard;
 
 use super::contract::{
-	LibraryChanged, LibraryDocumentFormat, LibraryDocumentWriterFinished, LibraryError,
-	LibraryItem, LibraryItemKind, LibraryWriteOutcome,
+	LibraryDocumentFormat, LibraryDocumentWriterFinished, LibraryError, LibraryItem,
+	LibraryItemKind, LibraryWriteOutcome,
 };
 use super::documents::{located, Location, Placement, WriteStep};
 use super::presence::{seat_writer, unseat_writer, Seat, Seated};
 use super::{
-	a_document, announce, create_document, document_text, documents, encoded_content, import_path,
-	list, read_document, rename_document, resolve, root, AcceptedType,
+	a_document, announce, announce_change, create_document, delete_item, document_text, documents,
+	encoded_content, import_path, list, read_document, rename_document, resolve, root,
+	AcceptedType,
 };
 use crate::agent::host::{Host, Refusal};
 use crate::conversations::commands::ready;
@@ -309,8 +310,7 @@ impl<R: Runtime> Host for LibraryHost<R> {
 			}
 			Operation::Delete => {
 				let asked: Named = Self::read(payload)?;
-				documents(&self.app).delete(&root, &space_id, &asked.name)?;
-				announce_change(&self.app, &space_id);
+				delete_item(&self.app, &root, &space_id, &asked.name)?;
 				Self::answered(Deleted { name: asked.name })
 			}
 		}
@@ -414,13 +414,6 @@ fn item_read(root: &Path, space_id: &str, name: &str) -> Result<ItemRead, Librar
 			bytes: item.bytes,
 		},
 	})
-}
-
-fn announce_change<R: Runtime>(app: &AppHandle<R>, space_id: &str) {
-	let changed = LibraryChanged { space_id: space_id.to_owned() };
-	if let Err(error) = events::emit(app, events::LIBRARY_CHANGED, changed) {
-		log::warn!("a change of the library of space {space_id} was not announced: {error}");
-	}
 }
 
 struct Writing<'a, R: Runtime> {

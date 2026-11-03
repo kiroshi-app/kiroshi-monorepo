@@ -16,7 +16,8 @@ use yrs::{Doc, GetString, IndexedSequence, ReadTxn, Text, Transact, Update};
 
 use super::*;
 use crate::library::contract::{
-	LibraryDocumentPresence, LibraryDocumentRenamed, LibraryWriter, LibraryWriterKind,
+	LibraryChanged, LibraryDocumentPresence, LibraryDocumentRenamed, LibraryWriter,
+	LibraryWriterKind,
 };
 use crate::library::presence::{share_caret, Presences};
 use crate::library::{apply_update, open_document, read_thumbnail};
