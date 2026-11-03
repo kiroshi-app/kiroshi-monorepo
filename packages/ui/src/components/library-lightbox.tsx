@@ -1,12 +1,7 @@
 "use client"
 
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
-import {
-	type KeyboardEvent,
-	type PointerEvent,
-	useRef,
-	useState,
-} from "react"
+import { type KeyboardEvent, type PointerEvent, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { Icons } from "@workspace/ui/components/icons"
