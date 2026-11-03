@@ -24,10 +24,11 @@ use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
 use super::bridge::{self, LocalApi};
 use super::contract::{HostingFailureKind, HostingState};
 use super::devices::Revocation;
+use super::handover::{self, Handover};
 use super::replay::{self, LastSent, Relaying, Ring, Stamped};
 use super::roster::{self, Rostered};
 use super::wire::{self, Dropped, HostKeys, Opened as OpenedFrame, Refusal, Wire};
-use super::{admission, devices, entered, handover, members, Hosting};
+use super::{admission, devices, entered, members, Hosting};
 use crate::account::cloud::{retry_after, Cloud, DeviceRegisterError, MeError, RegisterError};
 use crate::account::session::{self, AccountSession};
 use crate::db::repositories::conversations::Hue;
@@ -626,7 +627,7 @@ async fn online<R: Runtime>(
 					}
 					Received::Answer(sender, answer) => Outgoing::Answer(sender, answer),
 					Received::Hello(sender) => {
-						if let Err(ended) = rekeys_sent(&mut sink, &hosted, |member| member.relay_device_id == sender.relay_device_id).await {
+						if let Err(ended) = rekeys_sent(&mut sink, &hosted, Recipients::Device(&sender.relay_device_id)).await {
 							return ended;
 						}
 						Outgoing::Hello(sender)
@@ -651,7 +652,7 @@ async fn online<R: Runtime>(
 			Some(admitted) = admissions.join_next(), if !admissions.is_empty() => {
 				match admitted {
 					Ok(Ok(admitted)) if !admitted.is_empty() => {
-						if let Err(ended) = rekeys_sent(&mut sink, &hosted, |_| true).await {
+						if let Err(ended) = rekeys_sent(&mut sink, &hosted, Recipients::Everyone).await {
 							return ended;
 						}
 					}
@@ -691,7 +692,7 @@ async fn online<R: Runtime>(
 			}
 			Ok(()) = rotations.changed() => {
 				rotations.borrow_and_update();
-				if let Err(ended) = rekeys_sent(&mut sink, &hosted, |_| true).await {
+				if let Err(ended) = rekeys_sent(&mut sink, &hosted, Recipients::Everyone).await {
 					return ended;
 				}
 				continue;
@@ -843,16 +844,41 @@ async fn stale_rekeyed(
 ) -> Result<(), Ended> {
 	match (&refusal.cause, refusal.from.as_deref()) {
 		(Dropped::StaleKey(_), Some(from)) => {
-			rekeys_sent(sink, hosted, |member| member.relay_device_id == from).await
+			rekeys_sent(sink, hosted, Recipients::Device(from)).await
 		}
 		_ => Ok(()),
 	}
 }
 
+enum Recipients<'a> {
+	Everyone,
+	Device(&'a str),
+}
+
+fn recipients_of<'a>(
+	handover: &'a Handover,
+	hosted: &HostedSpace<'_>,
+	recipients: Recipients<'_>,
+) -> Vec<&'a Rostered> {
+	let members = handover.members(hosted.keys);
+	let Recipients::Device(relay_device_id) = recipients else {
+		return members.collect();
+	};
+	let found: Vec<&Rostered> =
+		members.filter(|member| member.relay_device_id == relay_device_id).collect();
+	if found.is_empty() {
+		log::warn!(
+			"hosted space {} sent no rekey: relay device {relay_device_id} is not in its handover roster",
+			hosted.space_id
+		);
+	}
+	found
+}
+
 async fn rekeys_sent(
 	sink: &mut MeasuredSink<'_>,
 	hosted: &HostedSpace<'_>,
-	is_recipient: impl Fn(&Rostered) -> bool,
+	recipients: Recipients<'_>,
 ) -> Result<(), Ended> {
 	let space_id = hosted.space_id;
 	let handover = match handover::current(hosted.database, hosted.keys, space_id).await {
@@ -862,8 +888,7 @@ async fn rekeys_sent(
 			return Ok(());
 		}
 	};
-	let recipients = handover.members(hosted.keys).filter(|member| is_recipient(member));
-	for member in recipients {
+	for member in recipients_of(&handover, hosted, recipients) {
 		match handover.rekey_frame(hosted.keys, hosted.instance_id, member) {
 			Ok(frame) => sink.sent(Message::text(frame)).await.map_err(Ended::Dropped)?,
 			Err(reason) => log::warn!("hosted space {space_id} sent no rekey: {reason}"),
@@ -959,7 +984,45 @@ pub(crate) async fn until_stopped<F: Future>(
 
 #[cfg(test)]
 mod tests {
+	use super::super::sealing_member::SealingMember;
 	use super::*;
+	use crate::crypto::device_keys::DeviceKeys;
+	use crate::crypto::space_key::HeldSpaceKey;
+	use crate::db::connection::temp_dir;
+	use crate::test_log::{capturing, warnings_naming};
+
+	const SPACE: &str = "personal";
+
+	#[tokio::test]
+	async fn a_rekey_asked_for_a_device_outside_the_handover_roster_is_skipped_with_a_warning() {
+		capturing();
+		let dir = temp_dir();
+		let database = crate::db::open(&dir);
+		let space =
+			tokio::sync::watch::channel(Arc::new(HeldSpaceKey::first().expect("randomness")));
+		let keys = HostKeys { device: DeviceKeys::generate().expect("randomness"), space: space.1 };
+		let member = SealingMember::new("a1");
+		let row = member.row(&keys.device, SPACE);
+		database.space_relay().rostered(SPACE.to_owned(), row).await.expect("rostered");
+		let hosted =
+			HostedSpace { database: &database, keys: &keys, space_id: SPACE, instance_id: "i-1" };
+		let handover = handover::current(&database, &keys, SPACE).await.expect("a handover");
+		let devices_of = |recipients| -> Vec<String> {
+			let found = recipients_of(&handover, &hosted, recipients);
+			found.into_iter().map(|member| member.relay_device_id.clone()).collect()
+		};
+
+		let everyone = devices_of(Recipients::Everyone);
+		let named = devices_of(Recipients::Device(&member.relay_device_id));
+		let skipped = devices_of(Recipients::Device("relay-device-gone"));
+
+		assert_eq!(everyone, vec![member.relay_device_id.clone()]);
+		assert_eq!(named, everyone);
+		assert!(skipped.is_empty());
+		let warned = warnings_naming("relay-device-gone").await;
+		assert_eq!(warned.len(), 1, "{warned:?}");
+		assert!(warned[0].contains(SPACE), "{}", warned[0]);
+	}
 
 	#[test]
 	fn a_dropped_line_carries_the_reason_and_the_size_of_the_last_frames_both_ways() {

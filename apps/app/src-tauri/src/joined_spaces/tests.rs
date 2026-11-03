@@ -74,6 +74,7 @@ const ENDING_PAUSE: Duration = Duration::from_secs(90);
 #[derive(Clone)]
 enum HostSide {
 	Absent,
+	Vanishing,
 	Closing(u16),
 	Silent,
 	Leaving(Duration),
@@ -422,6 +423,7 @@ async fn membered(relay: Relay, mut socket: WebSocket) {
 				Message::Close(Some(close))
 			}
 			HostSide::Closing(code) => Message::Close(Some(CloseFrame { code, reason: "".into() })),
+			HostSide::Vanishing => return,
 			HostSide::Silent
 			| HostSide::Leaving(_)
 			| HostSide::GreetingAfterRead { .. }
@@ -505,6 +507,10 @@ impl Member {
 
 	fn last_wait(&self) -> Option<JoinedSpaceWaitReason> {
 		self.app.state::<RelayGuests>().last_wait(INSTANCE).map(|wait| wait.reason)
+	}
+
+	fn last_waited(&self) -> Option<JoinedSpaceWait> {
+		self.app.state::<RelayGuests>().last_wait(INSTANCE)
 	}
 
 	fn device(&self) -> DeviceKeys {
@@ -867,6 +873,30 @@ fn an_absent_a_silent_or_a_forged_host_leaves_the_joined_space_waiting_on_its_re
 			);
 			assert_eq!(member.held_key_id(), None, "case {case}");
 			assert_eq!(member.held_roster().await, None, "case {case}");
+		}
+	});
+}
+
+#[test]
+fn a_waiting_socket_names_a_host_offline_on_4002_and_no_close_code_on_a_bare_drop() {
+	run(async {
+		let cases = [
+			(HostSide::Absent, "the host is offline (code 4002)"),
+			(HostSide::Vanishing, "no close code reached this device"),
+		];
+		for (host, expected) in cases {
+			let member = Member::facing_a_silent_host("join-offline").await;
+			member.relay.hosting(HostSide::Silent);
+			member.accepted().await.expect("the join waits");
+			member.relay.hosting(host);
+
+			relay::reconciled(member.app.handle()).await;
+			let waited = until("the waiting socket to record its end", || async {
+				member.last_waited().filter(|wait| wait.detail.contains(expected))
+			})
+			.await;
+
+			assert_eq!(waited.reason, JoinedSpaceWaitReason::SocketClosed, "{}", waited.detail);
 		}
 	});
 }
