@@ -12,6 +12,7 @@ import {
 import { I18nProvider } from "@workspace/ui/components/i18n-provider"
 import { prepareHighlighter } from "@workspace/ui/lib/code-highlight"
 
+import { isInBrowserRunner } from "./story-utils"
 import { THEME_CLASS_NAMES, ThemedDocsContainer } from "./themed-docs-container"
 
 prepareHighlighter()
@@ -40,9 +41,41 @@ const withThemeLayout: Decorator = (Story, context) => {
 	)
 }
 
+const OFF_THE_PAGE = { x: -1, y: -1 }
+
+const parkPointerOffThePage = async () => {
+	if (!isInBrowserRunner()) return
+	const { cdp } = await import("vitest/browser")
+	await cdp().send("Input.dispatchMouseEvent", {
+		type: "mouseMoved",
+		...OFF_THE_PAGE,
+	})
+}
+
+const isClockDriven = (animation: Animation) =>
+	animation.timeline === document.timeline
+
+const hasAnEnd = (animation: Animation) =>
+	animation.effect?.getComputedTiming().endTime !== Number.POSITIVE_INFINITY
+
+const settleAnimations = () => {
+	if (!isInBrowserRunner()) return
+	for (const animation of document.getAnimations()) {
+		if (
+			animation.playState === "running" &&
+			isClockDriven(animation) &&
+			hasAnEnd(animation)
+		) {
+			animation.finish()
+		}
+	}
+}
+
 export default definePreview({
 	addons: [addonDocs(), addonA11y(), addonThemes()],
 	tags: ["autodocs"],
+	beforeEach: parkPointerOffThePage,
+	afterEach: settleAnimations,
 	decorators: [
 		withThemeByClassName<ReactRenderer>({
 			themes: THEME_CLASS_NAMES,

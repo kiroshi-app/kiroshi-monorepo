@@ -176,6 +176,7 @@ Good: the snippet above — the reader learns the condition it reproduces, what 
 - Never disable a rule to go green. Fix the markup. The one sanctioned exception is `A11Y_CONTRAST_AWAITING_DESIGN_DECISION` from `@workspace/storybook/story-utils`: it covers the palette contrast debt tracked by `PAIRS_AWAITING_DESIGN_DECISION` in **Foundations → Token Contrast**, marks violations for review instead of hiding them, and must be removed from a story the moment the tokens it excuses pass the audit.
 - Icon-only controls need `aria-label` — see `Sizes` and `WithIcons` in `button.stories.tsx`.
 - Every input needs a label, visible or `aria-label`.
+- Under `test:storybook`, `preview.tsx` moves the real pointer off the page before every story, so no story inherits the hover the previous one left, and finishes every running clock-driven animation before the check, so axe reads end states. Scroll-driven animations such as the OverlayScrollbars handles keep their scroll position. A story that needs a hover sets it in its own play function.
 
 Viewports available: `mobile` 390x844, `tablet` 768x1024, `laptop` 1280x800, `desktop` 1536x960. Set `parameters.viewport.defaultViewport` only for stories whose layout is genuinely viewport-dependent; the default is fine for everything else.
 
