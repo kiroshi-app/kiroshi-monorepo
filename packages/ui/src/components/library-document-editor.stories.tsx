@@ -8,7 +8,11 @@ import { flushSync } from "react-dom"
 import { expect, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { hueScopeOf, slotIn } from "@workspace/storybook/story-utils"
+import {
+	hueScopeOf,
+	isInBrowserRunner,
+	slotIn,
+} from "@workspace/storybook/story-utils"
 import { ContentCard } from "@workspace/ui/components/content-card"
 import {
 	LIBRARY_AGENT_DOCUMENT,
@@ -2433,5 +2437,51 @@ export const ShortcutsWithoutCallbacks = meta.story({
 		await expect(canvas.queryByRole("textbox", { name: "Link address" })).toBe(
 			null,
 		)
+	},
+})
+
+export const ToolbarAfterDrag = meta.story({
+	...selectionStory(
+		"A press in a paragraph, then a drag across a few words with the button held, then the release. Check that no toolbar shows while the button is down, whatever the selection under the pointer, and that the toolbar lands above the finished selection on the release.",
+	),
+	play: async ({ canvasElement, userEvent }) => {
+		const [opening] = bodyFieldsIn(canvasElement) as [HTMLTextAreaElement]
+		const start = opening.value.indexOf("the launch date")
+		await userEvent.pointer([
+			{ keys: "[MouseLeft>]", target: opening, offset: start },
+			{ target: opening, offset: start + "the launch".length },
+			{ target: opening, offset: start + "the launch date".length },
+		])
+		await expect(
+			opening.value.slice(opening.selectionStart, opening.selectionEnd),
+		).toBe("the launch date")
+		await new Promise((resolve) => setTimeout(resolve, 50))
+		await expect(toolbarIn(canvasElement)).toBe(null)
+
+		await userEvent.pointer({ keys: "[/MouseLeft]", target: opening })
+		await expectToolbarAbove(canvasElement, opening)
+	},
+})
+
+export const ToolbarAfterKeyboardSelection = meta.story({
+	...selectionStory(
+		"A selection grown with Shift and the right arrow from the start of the launch date. Check that no toolbar shows while Shift is held, and that the toolbar lands above the selection once Shift is released.",
+	),
+	play: async ({ canvasElement }) => {
+		if (!isInBrowserRunner()) return
+		const { userEvent: browserKeys } = await import("vitest/browser")
+		const [opening] = bodyFieldsIn(canvasElement) as [HTMLTextAreaElement]
+		const start = selectIn(opening, "the launch date")
+		opening.setSelectionRange(start, start)
+
+		await browserKeys.keyboard("{Shift>}{ArrowRight}{ArrowRight}{ArrowRight}")
+		await expect(
+			opening.value.slice(opening.selectionStart, opening.selectionEnd),
+		).toBe("the")
+		await new Promise((resolve) => setTimeout(resolve, 50))
+		await expect(toolbarIn(canvasElement)).toBe(null)
+
+		await browserKeys.keyboard("{/Shift}")
+		await expectToolbarAbove(canvasElement, opening)
 	},
 })
