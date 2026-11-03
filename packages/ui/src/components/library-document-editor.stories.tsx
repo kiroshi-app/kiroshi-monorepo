@@ -11,6 +11,7 @@ import preview from "@workspace/storybook/preview"
 import {
 	hueScopeOf,
 	isInBrowserRunner,
+	realPointer,
 	slotIn,
 } from "@workspace/storybook/story-utils"
 import { ContentCard } from "@workspace/ui/components/content-card"
@@ -25,6 +26,11 @@ import {
 	type LibraryDocumentEditorProps,
 	libraryDocumentStartOf,
 } from "@workspace/ui/components/library-document-editor"
+import {
+	pointAt,
+	type TextField,
+	textFieldOf,
+} from "@workspace/ui/components/library-document-inline"
 import {
 	endNotice,
 	NoticeSurface,
@@ -58,6 +64,31 @@ const TITLE_PLACEHOLDER_INK = "rgb(82, 82, 82)"
 
 const placeholderInkOf = (field: HTMLElement) =>
 	getComputedStyle(field, "::placeholder").color
+
+const blockPlaceholderInkOf = (field: HTMLElement) =>
+	getComputedStyle(field, "::before").color
+
+const bodyIn = (canvasElement: HTMLElement) =>
+	slotIn(canvasElement, "library-document-body")
+
+const bodyFieldsIn = (canvasElement: HTMLElement): TextField[] =>
+	[
+		...bodyIn(canvasElement).querySelectorAll<HTMLElement>("[data-block-id]"),
+	].map(textFieldOf)
+
+const kindsAndValuesOf = (fields: TextField[]) =>
+	fields.map((field) => [field.dataset.kind, field.value])
+
+const selectInField = (
+	canvasElement: HTMLElement,
+	field: TextField,
+	start: number,
+	end = start,
+	direction: TextField["selectionDirection"] = "forward",
+) => {
+	bodyIn(canvasElement).focus()
+	field.setSelectionRange(start, end, direction)
+}
 
 const breadcrumbIn = (canvasElement: HTMLElement) =>
 	canvasElement.querySelector('[aria-current="page"]') as HTMLElement
@@ -115,17 +146,19 @@ export const Blank = meta.story({
 	play: async ({ args, canvas, canvasElement, userEvent }) => {
 		const title = canvas.getByRole("textbox", { name: "Title" })
 		const body = canvas.getByRole("textbox", { name: "Text" })
+		const [line] = bodyFieldsIn(canvasElement) as [TextField]
+		await expect(body).toHaveAttribute("aria-multiline", "true")
 		await expect(title).toHaveAttribute("placeholder", "Untitled")
 		await expect(placeholderInkOf(title)).toBe(TITLE_PLACEHOLDER_INK)
 		await expect(breadcrumbIn(canvasElement)).toHaveTextContent("Untitled")
 		await expect(canvas.getByText("Created just now")).toBeVisible()
-		await expect(body).toHaveAttribute(
-			"placeholder",
+		await expect(line).toHaveAttribute(
+			"data-placeholder",
 			"Start writing. Use # for a heading and - for a list.",
 		)
-		await expect(placeholderInkOf(body)).toBe(PLACEHOLDER_INK)
-		await expect(getComputedStyle(body).fontSize).toBe("15px")
-		await expect(getComputedStyle(body).lineHeight).toBe("24px")
+		await expect(blockPlaceholderInkOf(line)).toBe(PLACEHOLDER_INK)
+		await expect(getComputedStyle(line).fontSize).toBe("15px")
+		await expect(getComputedStyle(line).lineHeight).toBe("24px")
 
 		await userEvent.type(title, "Q")
 		await expect(args.onTitleChange).toHaveBeenLastCalledWith("Q")
@@ -134,11 +167,16 @@ export const Blank = meta.story({
 		await expect(args.onTitleChange).toHaveBeenLastCalledWith("")
 		await expect(breadcrumbIn(canvasElement)).toHaveTextContent("Untitled")
 
-		await userEvent.type(body, "Hi")
+		await userEvent.type(line, "Hi")
 		await expect(args.onBodyChange).toHaveBeenLastCalledWith("Hi")
-		await userEvent.clear(body)
+		selectInField(canvasElement, line, 0, line.value.length)
+		await userEvent.keyboard("{Backspace}")
 		await expect(args.onBodyChange).toHaveBeenLastCalledWith("")
-		await expect(body).toHaveValue("")
+		await expect(line).toHaveValue("")
+		await expect(line).toHaveAttribute(
+			"data-placeholder",
+			"Start writing. Use # for a heading and - for a list.",
+		)
 	},
 })
 
@@ -164,13 +202,10 @@ export const FromMeetingNotes = meta.story({
 			canvas.getByText("Created just now from Meeting notes"),
 		).toBeVisible()
 
-		const body = within(slotIn(canvasElement, "library-document-body"))
-		const fields = body.getAllByRole("textbox")
+		const fields = bodyFieldsIn(canvasElement)
 		await expect(
 			fields.map(
-				(field) =>
-					(field as HTMLTextAreaElement).value ||
-					field.getAttribute("placeholder"),
+				(field) => field.value || field.getAttribute("data-placeholder"),
 			),
 		).toEqual([
 			"Who was there, and what the meeting was for.",
@@ -179,7 +214,8 @@ export const FromMeetingNotes = meta.story({
 			"Next steps",
 			"Who does what, and by when.",
 		])
-		const heading = body.getAllByRole("textbox", { name: "Heading" })[0]
+		const heading = fields[1] as TextField
+		await expect(heading.dataset.kind).toBe("heading")
 		await expect(getComputedStyle(heading as HTMLElement).fontSize).toBe("17px")
 		await expect(getComputedStyle(heading as HTMLElement).lineHeight).toBe(
 			"24px",
@@ -197,17 +233,18 @@ export const FromMeetingNotes = meta.story({
 			"Meeting notes, 2 November",
 		)
 
-		const decisions = fields[2] as HTMLElement
+		const decisions = fields[2] as TextField
 		await userEvent.type(decisions, "Ship")
 		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
 			"## Decisions\n\nShip\n\n## Next steps",
 		)
-		await userEvent.clear(decisions)
+		selectInField(canvasElement, decisions, 0, decisions.value.length)
+		await userEvent.keyboard("{Backspace}")
 		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
 			"## Decisions\n\n## Next steps",
 		)
 		await expect(decisions).toHaveAttribute(
-			"placeholder",
+			"data-placeholder",
 			"One line per decision, with the reason behind it.",
 		)
 	},
@@ -237,15 +274,15 @@ export const WithTypedText = meta.story({
 		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
 			"We agreed the date.\n\n## Decisions\n\n- Ship on the 14th\n- Copy is final on the 7th",
 		)
-		await expect(canvas.getByRole("textbox", { name: "Heading" })).toHaveValue(
-			"Decisions",
-		)
-		const items = within(canvas.getByRole("list")).getAllByRole("textbox", {
-			name: "List item",
-		})
+		await expect(kindsAndValuesOf(bodyFieldsIn(canvasElement))).toEqual([
+			["paragraph", "We agreed the date."],
+			["heading", "Decisions"],
+			["item", "Ship on the 14th"],
+			["item", "Copy is final on the 7th"],
+		])
 		await expect(
-			items.map((item) => (item as HTMLTextAreaElement).value),
-		).toEqual(["Ship on the 14th", "Copy is final on the 7th"])
+			within(canvas.getByRole("list")).getAllByRole("listitem"),
+		).toHaveLength(2)
 	},
 })
 
@@ -264,21 +301,17 @@ export const ExistingDocument = meta.story({
 			"Launch review",
 		)
 		await expect(canvas.getByText(LAUNCH_REVIEW.detail)).toBeVisible()
-		const fields = within(
-			slotIn(canvasElement, "library-document-body"),
-		).getAllByRole("textbox")
-		await expect(
-			fields.map((field) => [
-				field.getAttribute("aria-label"),
-				(field as HTMLTextAreaElement).value,
-			]),
-		).toEqual([
-			["Text", "We met to agree the launch date and who signs off the copy."],
-			["Heading", "Decisions"],
-			["List item", "Ship on the 14th"],
-			["List item", "Copy is final on the 7th"],
-			["Heading", "Next steps"],
-			["Text", "Screenshots land on the 10th."],
+		const fields = bodyFieldsIn(canvasElement)
+		await expect(kindsAndValuesOf(fields)).toEqual([
+			[
+				"paragraph",
+				"We met to agree the launch date and who signs off the copy.",
+			],
+			["heading", "Decisions"],
+			["item", "Ship on the 14th"],
+			["item", "Copy is final on the 7th"],
+			["heading", "Next steps"],
+			["paragraph", "Screenshots land on the 10th."],
 		])
 		await expect(args.onTitleChange).not.toHaveBeenCalled()
 		await expect(args.onBodyChange).not.toHaveBeenCalled()
@@ -312,10 +345,9 @@ export const ClickBelowTheLastLine = meta.story({
 	},
 	play: async ({ args, canvasElement, userEvent }) => {
 		const column = slotIn(canvasElement, "library-document-column")
-		const fields = within(
-			slotIn(canvasElement, "library-document-body"),
-		).getAllByRole("textbox") as HTMLTextAreaElement[]
-		const last = fields.at(-1) as HTMLTextAreaElement
+		const body = bodyIn(canvasElement)
+		const fields = bodyFieldsIn(canvasElement)
+		const last = fields.at(-1) as TextField
 		const lastLine = last.getBoundingClientRect()
 		await expect(column.getBoundingClientRect().bottom).toBeGreaterThan(
 			lastLine.bottom + 80,
@@ -326,7 +358,7 @@ export const ClickBelowTheLastLine = meta.story({
 			target: column,
 			coords: { clientX: lastLine.left + 40, clientY: lastLine.bottom + 80 },
 		})
-		await expect(last).toHaveFocus()
+		await expect(body).toHaveFocus()
 		await expect(last.selectionStart).toBe(last.value.length)
 		await userEvent.keyboard(" Then the launch.")
 		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
@@ -336,7 +368,7 @@ export const ClickBelowTheLastLine = meta.story({
 			),
 		)
 
-		const heading = fields[1] as HTMLTextAreaElement
+		const heading = fields[1] as TextField
 		const headingLine = heading.getBoundingClientRect()
 		await userEvent.pointer({
 			keys: "[MouseLeft]",
@@ -346,7 +378,7 @@ export const ClickBelowTheLastLine = meta.story({
 				clientY: headingLine.top + headingLine.height / 2,
 			},
 		})
-		await expect(heading).toHaveFocus()
+		await expect(body).toHaveFocus()
 		await expect(heading.selectionStart).toBe(heading.value.length)
 
 		const onText = new MouseEvent("mousedown", {
@@ -412,12 +444,7 @@ const LiveEditor = (args: LibraryDocumentEditorProps) => {
 	)
 }
 
-const bodyFieldsIn = (canvasElement: HTMLElement) =>
-	within(slotIn(canvasElement, "library-document-body")).getAllByRole(
-		"textbox",
-	) as HTMLTextAreaElement[]
-
-const textBeforeCaret = (field: HTMLTextAreaElement) =>
+const textBeforeCaret = (field: TextField) =>
 	field.value.slice(0, field.selectionStart)
 
 export const OutsideChangeWhileTyping = meta.story({
@@ -435,13 +462,13 @@ export const OutsideChangeWhileTyping = meta.story({
 	play: async ({ args, canvasElement, userEvent }) => {
 		const editor = slotIn(canvasElement, "library-document-editor")
 		const fields = bodyFieldsIn(canvasElement)
-		const ship = fields[2] as HTMLTextAreaElement
-		const screenshots = fields[5] as HTMLTextAreaElement
+		const ship = fields[2] as TextField
+		const screenshots = fields[5] as TextField
 		const typed = ", after the review"
 
 		await userEvent.type(ship, typed)
 		await expect(args.onBodyChange).toHaveBeenCalledTimes(typed.length)
-		await expect(document.activeElement).toBe(ship)
+		await expect(document.activeElement).toBe(bodyIn(canvasElement))
 		const caret = ship.selectionStart
 		await expect(caret).toBe(ship.value.length)
 
@@ -458,7 +485,7 @@ export const OutsideChangeWhileTyping = meta.story({
 				"Screenshots land on the 10th, the release notes on the 12th.",
 			),
 		)
-		await expect(document.activeElement).toBe(ship)
+		await expect(document.activeElement).toBe(bodyIn(canvasElement))
 		await expect(ship.selectionStart).toBe(caret)
 		await expect(ship.selectionEnd).toBe(caret)
 
@@ -470,7 +497,7 @@ export const OutsideChangeWhileTyping = meta.story({
 		await waitFor(() =>
 			expect(ship).toHaveValue("Ship on Monday the 14th, after the review"),
 		)
-		await expect(document.activeElement).toBe(ship)
+		await expect(document.activeElement).toBe(bodyIn(canvasElement))
 		await expect(textBeforeCaret(ship)).toBe(
 			"Ship on Monday the 14th, after the review",
 		)
@@ -510,7 +537,7 @@ export const OutsideChangeWhileTyping = meta.story({
 				"Ship early on Monday the 14th, after the review!",
 			),
 		)
-		await expect(document.activeElement).toBe(ship)
+		await expect(document.activeElement).toBe(bodyIn(canvasElement))
 		await expect(ship.selectionStart).toBe(selectedFrom + "early ".length)
 		await expect(ship.selectionEnd).toBe(
 			selectedFrom + "early ".length + selected.length,
@@ -537,7 +564,7 @@ export const OutsideTitleChange = meta.story({
 	play: async ({ args, canvas, canvasElement, userEvent }) => {
 		const title = canvas.getByRole("textbox", {
 			name: "Title",
-		}) as HTMLTextAreaElement
+		}) as TextField
 		const typed = " notes"
 
 		await userEvent.type(title, typed)
@@ -570,7 +597,7 @@ export const OutsideFormatWhileTyping = meta.story({
 		},
 	},
 	play: async ({ args, canvasElement, userEvent }) => {
-		const shipAt = () => bodyFieldsIn(canvasElement)[2] as HTMLTextAreaElement
+		const shipAt = () => bodyFieldsIn(canvasElement)[2] as TextField
 		const typed = ", after the review"
 		await userEvent.type(shipAt(), typed)
 
@@ -585,7 +612,7 @@ export const OutsideFormatWhileTyping = meta.story({
 			),
 		)
 		const bolded = shipAt()
-		await expect(document.activeElement).toBe(bolded)
+		await expect(document.activeElement).toBe(bodyIn(canvasElement))
 		await expect(bolded).toHaveValue(`Ship on **the 14th**${typed}`)
 		await expect(bolded.selectionStart).toBe(bolded.value.length)
 		await expect(bolded.selectionEnd).toBe(bolded.value.length)
@@ -604,7 +631,7 @@ export const OutsideFormatWhileTyping = meta.story({
 			expect(shipAt()).toHaveValue(`Ship on the 14th${typed}`),
 		)
 		const plain = shipAt()
-		await expect(document.activeElement).toBe(plain)
+		await expect(document.activeElement).toBe(bodyIn(canvasElement))
 		await expect(
 			plain.value.slice(plain.selectionStart, plain.selectionEnd),
 		).toBe(selected)
@@ -628,13 +655,14 @@ export const CaretMoves = meta.story({
 	play: async ({ args, canvas, canvasElement, userEvent }) => {
 		const onCaretChange = args.onCaretChange as ReturnType<typeof fn>
 		const reported = () => onCaretChange.mock.calls.map(([caret]) => caret)
-		const [intro] = bodyFieldsIn(canvasElement) as [HTMLTextAreaElement]
+		const [intro] = bodyFieldsIn(canvasElement) as [TextField]
 		const introEnd = intro.value.length
 		const heading = LAUNCH_REVIEW.body.indexOf("Decisions")
 
 		await userEvent.click(intro)
 		await expect(onCaretChange).toHaveBeenLastCalledWith(intro.selectionEnd)
-		await userEvent.keyboard("{End}{ArrowLeft}")
+		selectInField(canvasElement, intro, introEnd)
+		await userEvent.keyboard("{ArrowLeft}")
 		await expect(onCaretChange).toHaveBeenLastCalledWith(introEnd - 1)
 		await userEvent.keyboard("{ArrowRight}{ArrowDown}")
 		await expect(onCaretChange).toHaveBeenLastCalledWith(heading)
@@ -644,7 +672,7 @@ export const CaretMoves = meta.story({
 		await waitFor(() => expect(onCaretChange).toHaveBeenLastCalledWith(null))
 
 		const beforeReturn = onCaretChange.mock.calls.length
-		await userEvent.click(intro)
+		await userEvent.pointer({ keys: "[MouseLeft]", target: intro, offset: 10 })
 		await expect(intro.selectionEnd).not.toBe(introEnd)
 		await expect(onCaretChange).toHaveBeenLastCalledWith(intro.selectionEnd)
 		await expect(reported().slice(beforeReturn)).not.toContain(introEnd)
@@ -671,12 +699,11 @@ export const CaretMoves = meta.story({
 				"One more line below.",
 			),
 		)
-		const focused = document.activeElement as HTMLTextAreaElement
-		await expect(focused).toHaveValue(intro.value)
-		await expect(focused.selectionEnd).toBe(landed)
+		await expect(document.activeElement).toBe(bodyIn(canvasElement))
+		await expect(intro.selectionEnd).toBe(landed)
 		await expect(onCaretChange).toHaveBeenCalledTimes(afterAbove)
 
-		focused.blur()
+		bodyIn(canvasElement).blur()
 		await waitFor(() => expect(onCaretChange).toHaveBeenLastCalledWith(null))
 
 		const calls = reported()
@@ -734,19 +761,19 @@ export const UnmountedRightAfterBlur = meta.story({
 	},
 	play: async ({ args, canvasElement, userEvent }) => {
 		const onCaretChange = args.onCaretChange as ReturnType<typeof fn>
-		const [intro] = bodyFieldsIn(canvasElement) as [HTMLTextAreaElement]
+		const [intro] = bodyFieldsIn(canvasElement) as [TextField]
 
 		await userEvent.click(intro)
 		await expect(onCaretChange).toHaveBeenLastCalledWith(intro.selectionEnd)
 		const beforeBlur = onCaretChange.mock.calls.length
-		intro.blur()
+		bodyIn(canvasElement).blur()
 		await waitFor(() => expect(onCaretChange).toHaveBeenLastCalledWith(null))
 		await expect(onCaretChange).toHaveBeenCalledTimes(beforeBlur + 1)
 
 		await userEvent.click(intro)
 		await expect(onCaretChange).toHaveBeenLastCalledWith(intro.selectionEnd)
 		const beforeUnmount = onCaretChange.mock.calls.length
-		intro.blur()
+		bodyIn(canvasElement).blur()
 		flushSync(editorShown.hide)
 		await expect(
 			canvasElement.querySelector('[data-slot="library-document-editor"]'),
@@ -757,10 +784,7 @@ export const UnmountedRightAfterBlur = meta.story({
 	},
 })
 
-const isSameNodes = (
-	current: HTMLTextAreaElement[],
-	held: HTMLTextAreaElement[],
-) =>
+const isSameNodes = (current: TextField[], held: TextField[]) =>
 	current.length === held.length &&
 	current.every((field, index) => field === held[index])
 
@@ -781,7 +805,7 @@ export const FieldsStayInPlace = meta.story({
 		const [intro, decisions, ship, copy, nextSteps, screenshots] = fields
 		const typed = " Notes follow."
 		const caretStaysInIntro = async () => {
-			await expect(document.activeElement).toBe(intro)
+			await expect(document.activeElement).toBe(bodyIn(canvasElement))
 			await expect(intro.selectionStart).toBe(intro.value.length)
 			await expect(intro.selectionEnd).toBe(intro.value.length)
 		}
@@ -857,11 +881,11 @@ export const ItemTurnedIntoParagraph = meta.story({
 	play: async ({ args, canvasElement, userEvent }) => {
 		const onCaretChange = args.onCaretChange as ReturnType<typeof fn>
 		const fieldAt = (index: number) =>
-			bodyFieldsIn(canvasElement)[index] as HTMLTextAreaElement
+			bodyFieldsIn(canvasElement)[index] as TextField
 		const caretStaysAtStartOf = async (index: number) => {
 			const paragraph = fieldAt(index)
 			await expect(paragraph.dataset.kind).toBe("paragraph")
-			await expect(document.activeElement).toBe(paragraph)
+			await expect(document.activeElement).toBe(bodyIn(canvasElement))
 			await expect(paragraph.selectionStart).toBe(0)
 			await expect(paragraph.selectionEnd).toBe(0)
 			await new Promise((resolve) => setTimeout(resolve, 50))
@@ -870,8 +894,8 @@ export const ItemTurnedIntoParagraph = meta.story({
 			)
 		}
 
-		await userEvent.click(fieldAt(2))
-		await userEvent.keyboard("{Home}{Backspace}")
+		selectInField(canvasElement, fieldAt(2), 0)
+		await userEvent.keyboard("{Backspace}")
 		await expect(fieldAt(2)).toHaveValue("Ship on the 14th")
 		await caretStaysAtStartOf(2)
 		await expect(launchReviewDraft.read().body).toContain(
@@ -879,9 +903,9 @@ export const ItemTurnedIntoParagraph = meta.story({
 		)
 		await expect(launchReviewDraft.read().body).not.toContain("- Ship")
 
-		await userEvent.click(fieldAt(3))
-		await userEvent.keyboard("{End}{Enter}")
-		await expect(document.activeElement).toBe(fieldAt(4))
+		selectInField(canvasElement, fieldAt(3), fieldAt(3).value.length)
+		await userEvent.keyboard("{Enter}")
+		await expect(document.activeElement).toBe(bodyIn(canvasElement))
 		await expect(fieldAt(4).dataset.kind).toBe("item")
 		await userEvent.keyboard("{Enter}")
 		await expect(fieldAt(4)).toHaveValue("")
@@ -935,14 +959,13 @@ export const CaretMovedWhileOutsideChangeRenders = meta.story({
 			},
 		},
 	},
-	play: async ({ canvasElement, userEvent }) => {
+	play: async ({ canvasElement }) => {
 		const [, , ship] = bodyFieldsIn(canvasElement) as [
-			HTMLTextAreaElement,
-			HTMLTextAreaElement,
-			HTMLTextAreaElement,
+			TextField,
+			TextField,
+			TextField,
 		]
-		await userEvent.click(ship)
-		await userEvent.keyboard("{End}")
+		selectInField(canvasElement, ship, ship.value.length)
 		await expect(ship.selectionStart).toBe("Ship on the 14th".length)
 
 		caretMoveInRender.arm(() =>
@@ -955,7 +978,7 @@ export const CaretMovedWhileOutsideChangeRenders = meta.story({
 		})
 		await waitFor(() => expect(ship).toHaveValue("Ship on Monday the 14th"))
 
-		await expect(document.activeElement).toBe(ship)
+		await expect(document.activeElement).toBe(bodyIn(canvasElement))
 		await expect(ship.selectionStart).toBe("Ship on Monday the ".length)
 		await expect(ship.selectionEnd).toBe("Ship on Monday the 14th".length)
 		await expect(ship.value.slice(ship.selectionStart, ship.selectionEnd)).toBe(
@@ -1030,8 +1053,10 @@ export const AgentsWriting = meta.story({
 		await expect(
 			getComputedStyle(fields[0] as HTMLElement).webkitTextFillColor,
 		).not.toBe("rgba(0, 0, 0, 0)")
-		for (const field of fields) await expect(field).toBeEnabled()
-		await expect(fields.some((field) => field.readOnly)).toBe(false)
+		await expect(bodyIn(canvasElement)).toHaveAttribute(
+			"contenteditable",
+			"true",
+		)
 
 		const flag = screen.getByRole("button", { name: "Mira is writing" })
 		await expect(flag).toHaveTextContent("Mira")
@@ -1144,7 +1169,7 @@ export const AgentFinished = meta.story({
 		)?.parentElement as HTMLElement
 		await expect(scroller.scrollHeight).toBeGreaterThan(scroller.clientHeight)
 		scroller.scrollTop = scroller.scrollHeight
-		const lastLine = fields.at(-1) as HTMLTextAreaElement
+		const lastLine = fields.at(-1) as TextField
 		await expect(lastLine.value).toBe(
 			"The last line of the brief stays above the finished bar.",
 		)
@@ -1310,11 +1335,11 @@ const selectingAcrossAgentRun = (theme: "light" | "dark") => ({
 	play: async ({ canvasElement }: PlayedCanvas) => {
 		const item = bodyFieldsIn(canvasElement).find(
 			(field) => field.value === ATLAS_ITEM,
-		) as HTMLTextAreaElement
+		) as TextField
 		const runFrom = ATLAS_ITEM.indexOf("and the agent")
-		item.focus()
+		bodyIn(canvasElement).focus()
 		item.setSelectionRange(runFrom - "task, ".length, ATLAS_ITEM.length)
-		await expect(document.activeElement).toBe(item)
+		await expect(document.activeElement).toBe(bodyIn(canvasElement))
 		await expect(item.value.slice(item.selectionStart, item.selectionEnd)).toBe(
 			"task, and the agent says why it asks",
 		)
@@ -1421,16 +1446,9 @@ const inlineFormatStory = ({
 			))
 				await expect(marker).not.toBeVisible()
 			await checkLook(element, field)
-			await expect(field).toHaveAttribute(
-				"aria-multiline",
-				String(field.dataset.kind === "paragraph"),
-			)
 		}
 
-		const [heading, paragraph] = fields as [
-			HTMLTextAreaElement,
-			HTMLTextAreaElement,
-		]
+		const [heading, paragraph] = fields as [TextField, TextField]
 		await userEvent.type(heading, "!")
 		await expect(heading).toHaveValue(`Decisions on ${span}!`)
 		await expect(slotIn(heading, `library-document-${format}`).innerText).toBe(
@@ -1545,7 +1563,7 @@ export const UnclosedMarkers = meta.story({
 		},
 	},
 	play: async ({ args, canvasElement, userEvent }) => {
-		const [paragraph] = bodyFieldsIn(canvasElement) as [HTMLTextAreaElement]
+		const [paragraph] = bodyFieldsIn(canvasElement) as [TextField]
 		await expect(paragraph).toHaveValue(UNCLOSED_MARKERS)
 		await expect(getComputedStyle(paragraph).webkitTextFillColor).not.toBe(
 			"rgba(0, 0, 0, 0)",
@@ -1555,12 +1573,10 @@ export const UnclosedMarkers = meta.story({
 		).toBe(null)
 
 		const closing = "A **bold".length
-		await userEvent.type(paragraph, "**", {
-			initialSelectionStart: closing,
-			initialSelectionEnd: closing,
-		})
-		const [bolded] = bodyFieldsIn(canvasElement) as [HTMLTextAreaElement]
-		await expect(document.activeElement).toBe(bolded)
+		selectInField(canvasElement, paragraph, closing)
+		await userEvent.keyboard("**")
+		const [bolded] = bodyFieldsIn(canvasElement) as [TextField]
+		await expect(document.activeElement).toBe(bodyIn(canvasElement))
 		await expect(slotIn(bolded, "library-document-bold").innerText).toBe("bold")
 		await expect(bolded.selectionStart).toBe(closing + "**".length)
 		await userEvent.keyboard("!")
@@ -1600,13 +1616,13 @@ export const DeletingAtRunEdges = meta.story({
 	play: async ({ args, canvasElement, userEvent }) => {
 		const lines = [...RUN_EDGES]
 		const fieldAt = (index: number) =>
-			bodyFieldsIn(canvasElement)[index] as HTMLTextAreaElement
+			bodyFieldsIn(canvasElement)[index] as TextField
 		const deleteIn = async (
 			index: number,
 			[from, to]: [from: number, to: number],
 			key: "{Backspace}" | "{Delete}",
 		) => {
-			fieldAt(index).focus()
+			bodyIn(canvasElement).focus()
 			fieldAt(index).setSelectionRange(from, to)
 			await userEvent.keyboard(key)
 		}
@@ -1614,7 +1630,7 @@ export const DeletingAtRunEdges = meta.story({
 			lines[index] = line
 			const field = fieldAt(index)
 			await expect(field).toHaveValue(line)
-			await expect(document.activeElement).toBe(field)
+			await expect(document.activeElement).toBe(bodyIn(canvasElement))
 			await expect(field.selectionStart).toBe(caret)
 			await expect(field.selectionEnd).toBe(caret)
 			await expect(args.onBodyChange).toHaveBeenLastCalledWith(
@@ -1639,7 +1655,7 @@ export const DeletingAtRunEdges = meta.story({
 		const afterX = "Run `x".length
 		await deleteIn(2, [afterX, afterX], "{Backspace}")
 		await expectStored(2, "Run  now", "Run ".length)
-		await expect(fieldAt(2).tagName).toBe("TEXTAREA")
+		await expect(fieldAt(2).querySelector("code")).toBe(null)
 
 		await deleteIn(3, [3, "Cut ~~the ".length], "{Backspace}")
 		await expectStored(3, "Cut~~old copy~~ today", 3)
@@ -1679,7 +1695,7 @@ const mixedInlineFormats = (theme: "light" | "dark") => ({
 		},
 	},
 	play: async ({ args, canvasElement, userEvent }: InlineFormatContext) => {
-		const [paragraph] = bodyFieldsIn(canvasElement) as [HTMLTextAreaElement]
+		const [paragraph] = bodyFieldsIn(canvasElement) as [TextField]
 		await expect(paragraph.innerText).toBe(MIXED_SHOWN)
 		const ground = groundOf(paragraph)
 		for (const [format, shown] of MIXED_SLOTS) {
@@ -1706,7 +1722,7 @@ const mixedInlineFormats = (theme: "light" | "dark") => ({
 			top + height / 2,
 		)
 		await expect(paragraph.contains(pressed?.offsetNode ?? null)).toBe(true)
-		paragraph.focus()
+		bodyIn(canvasElement).focus()
 		document
 			.getSelection()
 			?.collapse(pressed?.offsetNode ?? null, pressed?.offset ?? 0)
@@ -1793,9 +1809,9 @@ export const PersonCaretInFormattedText = meta.story({
 	},
 	play: async ({ canvas, canvasElement }) => {
 		const [paragraph, , item] = bodyFieldsIn(canvasElement) as [
-			HTMLTextAreaElement,
-			HTMLTextAreaElement,
-			HTMLTextAreaElement,
+			TextField,
+			TextField,
+			TextField,
 		]
 		const drawn = slotIn(
 			paragraph.parentElement as HTMLElement,
@@ -1965,33 +1981,34 @@ const SELECTION_GAP = 8
 const toolbarIn = (canvasElement: HTMLElement) =>
 	canvasElement.querySelector<HTMLElement>('[data-slot="selection-toolbar"]')
 
-const selectionRectOf = (field: HTMLElement) => {
+const selectionRectOf = (field: TextField) => {
 	const range = document.createRange()
-	if (field instanceof HTMLTextAreaElement) {
-		const mirrored = field.previousElementSibling?.firstChild
-		if (!mirrored) throw new Error("The field draws no mirrored text")
-		range.setStart(mirrored, field.selectionStart)
-		range.setEnd(mirrored, field.selectionEnd)
-		return range.getBoundingClientRect()
-	}
-	const live = document.getSelection()
-	if (!live?.rangeCount) throw new Error("Nothing is selected")
-	return live.getRangeAt(0).getBoundingClientRect()
+	range.setStart(...pointAt(field, field.selectionStart))
+	range.setEnd(...pointAt(field, field.selectionEnd))
+	return range.getBoundingClientRect()
 }
 
-const selectIn = (field: HTMLElement, text: string, from = 0) => {
-	const start = (field as HTMLTextAreaElement).value.indexOf(text, from)
-	field.focus({ preventScroll: true })
-	;(field as HTMLTextAreaElement).setSelectionRange(start, start + text.length)
+const selectIn = (field: TextField, text: string, from = 0) => {
+	const start = field.value.indexOf(text, from)
+	field
+		.closest<HTMLElement>('[data-slot="library-document-body"]')
+		?.focus({ preventScroll: true })
+	field.setSelectionRange(start, start + text.length)
 	return start
 }
 
 const expectToolbarAbove = async (
 	canvasElement: HTMLElement,
-	field: HTMLElement,
+	field: TextField,
 ) => {
 	await waitFor(() => expect(toolbarIn(canvasElement)).not.toBe(null))
-	const selection = selectionRectOf(field)
+	await expectToolbarOver(canvasElement, selectionRectOf(field))
+}
+
+const expectToolbarOver = async (
+	canvasElement: HTMLElement,
+	selection: DOMRect,
+) => {
 	const toolbar = toolbarIn(canvasElement)?.getBoundingClientRect()
 	if (!toolbar) throw new Error("No toolbar")
 	await expect(
@@ -2015,7 +2032,7 @@ export const A1ToolbarAboveSelection = meta.story({
 		"Artboard A1: a few words selected on one line of a paragraph. Check that the toolbar sits centred on the selection 8px above it, over every caret and flag, that a pointer press on Bold reports the selected range and keeps the text selected without touching the document, and that the toolbar leaves when the selection collapses or moves to the title.",
 	),
 	play: async ({ args, canvas, canvasElement, userEvent }) => {
-		const [opening] = bodyFieldsIn(canvasElement) as [HTMLTextAreaElement]
+		const [opening] = bodyFieldsIn(canvasElement) as [TextField]
 		const start = selectIn(opening, "the launch date")
 		await expectToolbarAbove(canvasElement, opening)
 		await expect(
@@ -2042,7 +2059,7 @@ export const A1ToolbarAboveSelection = meta.story({
 			start,
 			end: start + "the launch date".length,
 		})
-		await expect(document.activeElement).toBe(opening)
+		await expect(document.activeElement).toBe(bodyIn(canvasElement))
 		await expect(
 			opening.value.slice(opening.selectionStart, opening.selectionEnd),
 		).toBe("the launch date")
@@ -2054,7 +2071,7 @@ export const A1ToolbarAboveSelection = meta.story({
 		await waitFor(() => expect(toolbarIn(canvasElement)).not.toBe(null))
 		const title = canvas.getByRole("textbox", {
 			name: "Title",
-		}) as HTMLTextAreaElement
+		}) as TextField
 		title.focus()
 		title.setSelectionRange(0, 6)
 		await waitFor(() => expect(toolbarIn(canvasElement)).toBe(null))
@@ -2069,7 +2086,7 @@ export const A2ToolbarOverTwoLines = meta.story({
 		"Artboard A2: a selection running from the first line of a paragraph onto the second. Check that the toolbar centres on the box holding both selected lines and sits 8px above its top.",
 	),
 	play: async ({ canvasElement }) => {
-		const [opening] = bodyFieldsIn(canvasElement) as [HTMLTextAreaElement]
+		const [opening] = bodyFieldsIn(canvasElement) as [TextField]
 		selectIn(
 			opening,
 			"who signs off the copy before the screenshots land, so the press kit and the store",
@@ -2090,7 +2107,7 @@ export const A3ToolbarButtonHover = meta.story({
 		},
 	},
 	play: async ({ canvas, canvasElement, userEvent }) => {
-		const [opening] = bodyFieldsIn(canvasElement) as [HTMLTextAreaElement]
+		const [opening] = bodyFieldsIn(canvasElement) as [TextField]
 		selectIn(opening, "the launch date")
 		const bold = await canvas.findByRole("button", { name: "Bold" })
 		await expect(getComputedStyle(bold).transitionProperty).toBe("none")
@@ -2116,7 +2133,7 @@ export const A4ToolbarFormatOn = meta.story({
 		const item = bodyFieldsIn(canvasElement).find(
 			(field) =>
 				field.dataset.kind === "item" && field.value.includes("**14th**"),
-		) as HTMLElement
+		) as TextField
 		selectIn(item, "14th")
 		const toolbar = await canvas.findByRole("toolbar", { name: "Format" })
 		const pressed = within(toolbar)
@@ -2133,7 +2150,7 @@ export const A5ToolbarLinkField = meta.story({
 		"Artboard A5: Link pressed, the bar gives way to the link field at the same place. Check that the field takes focus, that Escape returns to the bar without reporting a link, and that Enter reports the typed url with the selected range and returns to the bar.",
 	),
 	play: async ({ args, canvas, canvasElement, userEvent }) => {
-		const [opening] = bodyFieldsIn(canvasElement) as [HTMLTextAreaElement]
+		const [opening] = bodyFieldsIn(canvasElement) as [TextField]
 		const start = selectIn(opening, "the launch date")
 		const openLinkField = async () => {
 			await userEvent.click(await canvas.findByRole("button", { name: "Link" }))
@@ -2195,7 +2212,7 @@ export const A6ToolbarFlippedBelow = meta.story({
 		const column = slotIn(canvasElement, "library-document-column")
 		const week = bodyFieldsIn(canvasElement).find((field) =>
 			field.value.startsWith("Week 6 "),
-		) as HTMLTextAreaElement
+		) as TextField
 		column.scrollTop +=
 			week.getBoundingClientRect().top - column.getBoundingClientRect().top - 16
 		selectIn(week, "screenshots")
@@ -2226,7 +2243,7 @@ const pressIn = (field: HTMLElement, init: KeyboardEventInit) => {
 	return event
 }
 
-const selectedTextOf = (field: HTMLTextAreaElement) =>
+const selectedTextOf = (field: TextField) =>
 	field.value.slice(field.selectionStart, field.selectionEnd)
 
 type ShortcutCheck = {
@@ -2244,7 +2261,7 @@ const expectShortcutReports = async ({
 	callback,
 	onBodyChange,
 }: ShortcutCheck) => {
-	const [opening] = bodyFieldsIn(canvasElement) as [HTMLTextAreaElement]
+	const [opening] = bodyFieldsIn(canvasElement) as [TextField]
 	const start = selectIn(opening, LAUNCH_DATE)
 	await waitFor(() => expect(toolbarIn(canvasElement)).not.toBe(null))
 
@@ -2254,7 +2271,7 @@ const expectShortcutReports = async ({
 		start,
 		end: start + LAUNCH_DATE.length,
 	})
-	await expect(document.activeElement).toBe(opening)
+	await expect(document.activeElement).toBe(bodyIn(canvasElement))
 	await expect(selectedTextOf(opening)).toBe(LAUNCH_DATE)
 	await expect(onBodyChange).not.toHaveBeenCalled()
 	return { opening, start }
@@ -2353,7 +2370,7 @@ export const LinkShortcut = meta.story({
 		"Cmd+K on a selected range, the toolbar showing then closed by Escape. Check that the toolbar opens on its link field, focused, that Escape there returns to the bar, and that Enter reports the typed url with the selected range.",
 	),
 	play: async ({ args, canvas, canvasElement, userEvent }) => {
-		const [opening] = bodyFieldsIn(canvasElement) as [HTMLTextAreaElement]
+		const [opening] = bodyFieldsIn(canvasElement) as [TextField]
 		const start = selectIn(opening, LAUNCH_DATE)
 		await waitFor(() => expect(toolbarIn(canvasElement)).not.toBe(null))
 		const linkField = () =>
@@ -2365,7 +2382,7 @@ export const LinkShortcut = meta.story({
 		await expect(canvas.getByRole("toolbar", { name: "Format" })).toBeVisible()
 		await expect(args.onLink).not.toHaveBeenCalled()
 
-		opening.focus()
+		bodyIn(canvasElement).focus()
 		await expect(selectedTextOf(opening)).toBe(LAUNCH_DATE)
 		await userEvent.keyboard("{Escape}")
 		await expect(toolbarIn(canvasElement)).toBe(null)
@@ -2391,14 +2408,14 @@ export const EscapeClosesToolbar = meta.story({
 		"Escape with the toolbar showing over a selected range. Check that the toolbar closes while the focus, the selection and the text stay, that selecting another range brings it back, and that a typed character still replaces the selection.",
 	),
 	play: async ({ args, canvasElement, userEvent }) => {
-		const [opening] = bodyFieldsIn(canvasElement) as [HTMLTextAreaElement]
+		const [opening] = bodyFieldsIn(canvasElement) as [TextField]
 		const before = opening.value
 		selectIn(opening, LAUNCH_DATE)
 		await waitFor(() => expect(toolbarIn(canvasElement)).not.toBe(null))
 
 		await userEvent.keyboard("{Escape}")
 		await expect(toolbarIn(canvasElement)).toBe(null)
-		await expect(document.activeElement).toBe(opening)
+		await expect(document.activeElement).toBe(bodyIn(canvasElement))
 		await expect(selectedTextOf(opening)).toBe(LAUNCH_DATE)
 		await expect(opening.value).toBe(before)
 
@@ -2422,7 +2439,7 @@ export const ShortcutsWithoutCallbacks = meta.story({
 		},
 	},
 	play: async ({ canvas, canvasElement }) => {
-		const [opening] = bodyFieldsIn(canvasElement) as [HTMLTextAreaElement]
+		const [opening] = bodyFieldsIn(canvasElement) as [TextField]
 		selectIn(opening, LAUNCH_DATE)
 		await waitFor(() => expect(toolbarIn(canvasElement)).not.toBe(null))
 
@@ -2445,7 +2462,7 @@ export const ToolbarAfterDrag = meta.story({
 		"A press in a paragraph, then a drag across a few words with the button held, then the release. Check that no toolbar shows while the button is down, whatever the selection under the pointer, that the toolbar lands above the finished selection on the release, that a right-button press and release leaves it in place, and that a new primary press hides it before its release.",
 	),
 	play: async ({ canvasElement, userEvent }) => {
-		const [opening] = bodyFieldsIn(canvasElement) as [HTMLTextAreaElement]
+		const [opening] = bodyFieldsIn(canvasElement) as [TextField]
 		const start = opening.value.indexOf("the launch date")
 		await userEvent.pointer([
 			{ keys: "[MouseLeft>]", target: opening, offset: start },
@@ -2489,7 +2506,7 @@ export const ToolbarAfterKeyboardSelection = meta.story({
 	play: async ({ canvasElement }) => {
 		if (!isInBrowserRunner()) return
 		const { userEvent: browserKeys } = await import("vitest/browser")
-		const [opening] = bodyFieldsIn(canvasElement) as [HTMLTextAreaElement]
+		const [opening] = bodyFieldsIn(canvasElement) as [TextField]
 		const start = selectIn(opening, "the launch date")
 		opening.setSelectionRange(start, start)
 
@@ -2502,5 +2519,182 @@ export const ToolbarAfterKeyboardSelection = meta.story({
 
 		await browserKeys.keyboard("{/Shift}")
 		await expectToolbarAbove(canvasElement, opening)
+	},
+})
+
+const pressSelectAll = async () => {
+	const modifier = navigator.userAgent.includes("Mac") ? "Meta" : "Control"
+	await (await realPointer()).keyboard(`{${modifier}>}a{/${modifier}}`)
+}
+
+const liveRange = () => {
+	const live = document.getSelection()
+	if (!live?.rangeCount) throw new Error("Nothing is selected")
+	return live.getRangeAt(0)
+}
+
+const expectRangeHolds = async (
+	range: Range,
+	field: TextField,
+	offset: number,
+) => {
+	await expect(range.comparePoint(...pointAt(field, offset))).toBe(0)
+}
+
+export const SelectAllTakesEveryBlock = meta.story({
+	...selectionStory(
+		"The caret sits in a heading and the person presses Cmd+A, Ctrl+A on Windows and Linux. Check that the browser's own select-all runs from the start of the first block to the end of the last, through the headings and the list items, that the toolbar stands over that selection, and that Bold reports the whole body as the range.",
+	),
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		const fields = bodyFieldsIn(canvasElement)
+		const first = fields[0] as TextField
+		const last = fields.at(-1) as TextField
+		selectInField(canvasElement, fields[1] as TextField, 3)
+		if (!isInBrowserRunner()) return
+
+		await pressSelectAll()
+		const range = liveRange()
+		await expectRangeHolds(range, first, 0)
+		await expectRangeHolds(range, last, last.value.length)
+		for (const field of fields)
+			await expect(range.intersectsNode(field)).toBe(true)
+		await expect(document.getSelection()?.toString()).toContain(
+			"Screenshots land on the 10th.",
+		)
+
+		const toolbar = await canvas.findByRole("toolbar", { name: "Format" })
+		await expectToolbarOver(canvasElement, range.getBoundingClientRect())
+		await userEvent.click(within(toolbar).getByRole("button", { name: "Bold" }))
+		await expect(args.onBold).toHaveBeenCalledWith({
+			start: 0,
+			end: SELECTION_DOCUMENT.body.length,
+		})
+		await expect(args.onBodyChange).not.toHaveBeenCalled()
+	},
+})
+
+export const DragAcrossEveryBlock = meta.story({
+	...selectionStory(
+		"The person presses inside the first paragraph and drags to inside the last one. Check that the browser's own drag selection runs through every block between them, the headings and the list items included, and that the toolbar stands over it.",
+	),
+	play: async ({ canvas, canvasElement }) => {
+		const fields = bodyFieldsIn(canvasElement)
+		const first = fields[0] as TextField
+		const last = fields.at(-1) as TextField
+		if (!isInBrowserRunner()) return
+
+		await (await realPointer()).dragAndDrop(first, last)
+		const range = liveRange()
+		await expect(fields.map((field) => range.intersectsNode(field))).toEqual(
+			fields.map(() => true),
+		)
+		for (const field of fields.slice(1, -1))
+			await expectRangeHolds(range, field, field.value.length)
+		await expect(range.comparePoint(...pointAt(first, 0))).toBe(-1)
+		await expect(last.contains(range.endContainer)).toBe(true)
+		await canvas.findByRole("toolbar", { name: "Format" })
+		await expectToolbarOver(canvasElement, range.getBoundingClientRect())
+	},
+})
+
+export const CopyEveryBlock = meta.story({
+	...selectionStory(
+		"The person selects the whole body with Cmd+A, then copies it. Check that the clipboard carries every block in order as plain text, one line per block with its heading or list lead, the same markdown the document stores.",
+	),
+	play: async ({ canvasElement, userEvent }) => {
+		selectInField(canvasElement, bodyFieldsIn(canvasElement)[0] as TextField, 0)
+		if (!isInBrowserRunner()) return
+
+		await pressSelectAll()
+		const copied = await userEvent.copy()
+		await expect(copied?.getData("text/plain")).toBe(SELECTION_DOCUMENT.body)
+	},
+})
+
+const selectAcross = (
+	canvasElement: HTMLElement,
+	[from, fromOffset]: [TextField, number],
+	[to, toOffset]: [TextField, number],
+) => {
+	bodyIn(canvasElement).focus()
+	document
+		.getSelection()
+		?.setBaseAndExtent(...pointAt(from, fromOffset), ...pointAt(to, toOffset))
+}
+
+export const EditingOverSeveralBlocks = meta.story({
+	args: { ...LAUNCH_REVIEW, template: undefined },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The person holds a selection running over several blocks, then types, pastes, presses Backspace and presses Delete over it. Check that each edit removes the selected text, joins the first and the last block into one, leaves the caret right after what was written, and that the blocks on the page always match the markdown reported.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const fieldAt = (index: number) =>
+			bodyFieldsIn(canvasElement)[index] as TextField
+		const expectBlocks = async (expected: string[][], caret: number) => {
+			const fields = bodyFieldsIn(canvasElement)
+			await expect(kindsAndValuesOf(fields)).toEqual(expected)
+			await expect(document.activeElement).toBe(bodyIn(canvasElement))
+			await expect(fieldAt(0).selectionStart).toBe(caret)
+			await expect(fieldAt(0).selectionEnd).toBe(caret)
+			const reported = (args.onBodyChange as ReturnType<typeof fn>).mock.calls
+				.at(-1)
+				?.at(0) as string
+			await expect(reported.split(/\n+/)).toEqual(
+				expected.map(
+					([kind, text]) =>
+						`${kind === "heading" ? "## " : kind === "item" ? "- " : ""}${text}`,
+				),
+			)
+		}
+
+		selectAcross(canvasElement, [fieldAt(0), "We met".length], [fieldAt(2), 7])
+		await userEvent.keyboard("X")
+		await expectBlocks(
+			[
+				["paragraph", "We metX the 14th"],
+				["item", "Copy is final on the 7th"],
+				["heading", "Next steps"],
+				["paragraph", "Screenshots land on the 10th."],
+			],
+			"We metX".length,
+		)
+
+		selectAcross(canvasElement, [fieldAt(0), "We met".length], [fieldAt(1), 4])
+		await userEvent.paste("Y")
+		await expectBlocks(
+			[
+				["paragraph", "We metY is final on the 7th"],
+				["heading", "Next steps"],
+				["paragraph", "Screenshots land on the 10th."],
+			],
+			"We metY".length,
+		)
+
+		selectAcross(
+			canvasElement,
+			[fieldAt(1), "Next".length],
+			[fieldAt(0), "We met".length],
+		)
+		await userEvent.keyboard("{Backspace}")
+		await expectBlocks(
+			[
+				["paragraph", "We met steps"],
+				["paragraph", "Screenshots land on the 10th."],
+			],
+			"We met".length,
+		)
+
+		selectAcross(
+			canvasElement,
+			[fieldAt(0), 2],
+			[fieldAt(1), "Screenshots".length],
+		)
+		await userEvent.keyboard("{Delete}")
+		await expectBlocks([["paragraph", "We land on the 10th."]], 2)
 	},
 })

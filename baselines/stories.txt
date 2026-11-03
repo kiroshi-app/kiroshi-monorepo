@@ -1391,8 +1391,11 @@ navigation-librarydocumenteditor--caret-moves
 navigation-librarydocumenteditor--caret-share-failure
 navigation-librarydocumenteditor--click-below-the-last-line
 navigation-librarydocumenteditor--code-shortcut
+navigation-librarydocumenteditor--copy-every-block
 navigation-librarydocumenteditor--create-failure
 navigation-librarydocumenteditor--deleting-at-run-edges
+navigation-librarydocumenteditor--drag-across-every-block
+navigation-librarydocumenteditor--editing-over-several-blocks
 navigation-librarydocumenteditor--escape-closes-toolbar
 navigation-librarydocumenteditor--existing-document
 navigation-librarydocumenteditor--fields-stay-in-place
@@ -1412,6 +1415,7 @@ navigation-librarydocumenteditor--outside-title-change
 navigation-librarydocumenteditor--person-caret-beside-agent
 navigation-librarydocumenteditor--person-caret-in-formatted-text
 navigation-librarydocumenteditor--save-failure
+navigation-librarydocumenteditor--select-all-takes-every-block
 navigation-librarydocumenteditor--selecting-across-agent-run
 navigation-librarydocumenteditor--selecting-across-agent-run-light
 navigation-librarydocumenteditor--shortcuts-without-callbacks
