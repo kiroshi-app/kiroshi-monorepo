@@ -20,6 +20,7 @@ const rowOf = (
 	turnId: `t-${timestamp}`,
 	continuesTurnId: null,
 	quotedMessageId: null,
+	replyLinks: [],
 	authorBotId,
 	authorAccountId: null,
 	authorName: null,

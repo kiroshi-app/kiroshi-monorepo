@@ -14,6 +14,7 @@ import type { TranscriptPaging } from "./transcript-paging"
 
 import type { SubmittedAttachment } from "../attachments-contract"
 import { isTurnBusy, toStoreError, toTransportError } from "../chat-state"
+import type { ReplyLink } from "../../bindings"
 
 type PromptOutcome = "submitted" | "unwritten" | "refused"
 
@@ -98,7 +99,7 @@ export const createPromptSubmission = (
 	const sendPrompt = async (
 		bot: BotChat,
 		trimmed: string,
-		repliedToMessageId?: string,
+		replyLinks: ReplyLink[],
 	): Promise<PromptOutcome> => {
 		const conversationId = await landedConversationOf(bot)
 		if (!conversationId) {
@@ -112,7 +113,7 @@ export const createPromptSubmission = (
 		await rotateIfDue(bot)
 		dispatch(bot, { type: "promptSubmitted" })
 
-		const said = promptRow(conversationId, trimmed, repliedToMessageId)
+		const said = promptRow(conversationId, trimmed, replyLinks)
 		try {
 			await enqueue(() => storePrompt(said, [bot.id]))
 		} catch (reason) {

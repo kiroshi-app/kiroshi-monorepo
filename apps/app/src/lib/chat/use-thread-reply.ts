@@ -4,12 +4,14 @@ import type { TranscriptHandle } from "@workspace/ui/components/transcript"
 
 import { claimsComposerFocus, type ReplyTarget } from "./screen-model"
 
+import type { ReplyLink } from "../bindings"
+
 type ThreadReplyInput = {
 	composerRef: RefObject<HTMLTextAreaElement | null>
 	scrollerRef: RefObject<TranscriptHandle | null>
 	readReplies: () => ReplyTarget[]
 	rememberReplies: (targets: ReplyTarget[]) => void
-	send: (text: string, repliedToMessageIds: string[]) => Promise<boolean>
+	send: (text: string, replyLinks: ReplyLink[]) => Promise<boolean>
 }
 
 export type ThreadReply = {
@@ -24,8 +26,13 @@ const NO_TARGETS: ReplyTarget[] = []
 
 const withTarget = (held: ReplyTarget[], target: ReplyTarget) =>
 	held.some(({ messageId }) => messageId === target.messageId)
-		? held
+		? held.map((kept) => (kept.messageId === target.messageId ? target : kept))
 		: [...held, target]
+
+const replyLinkOf = ({ messageId, excerpt, isExcerpt }: ReplyTarget) => ({
+	messageId,
+	excerpt: isExcerpt ? excerpt : null,
+})
 
 const withoutTarget = (held: ReplyTarget[], messageId: string) =>
 	held.filter((target) => target.messageId !== messageId)
@@ -60,10 +67,7 @@ export function useThreadReply({
 	const submitPrompt = useCallback(
 		async (text: string) => {
 			scrollerRef.current?.scrollToEnd("auto")
-			const sent = await send(
-				text,
-				replyTargets.map(({ messageId }) => messageId),
-			)
+			const sent = await send(text, replyTargets.map(replyLinkOf))
 			if (sent) {
 				holdTargets(NO_TARGETS)
 			}

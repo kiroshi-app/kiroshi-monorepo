@@ -21,7 +21,11 @@ import {
 } from "./transcript-contract"
 import { message, seatBots } from "./transcript-fixtures"
 
-import { MAX_SUMMONS_PER_CHAIN, type SummonsDropped } from "../bindings"
+import {
+	MAX_SUMMONS_PER_CHAIN,
+	type ReplyLink,
+	type SummonsDropped,
+} from "../bindings"
 import type {
 	ActivityStatus,
 	AgentEvent,
@@ -35,6 +39,10 @@ import { attachmentBlock } from "../chat/message-attachments"
 import type { ReportedRun } from "../routines/routine-contract"
 
 const SPACE = "personal"
+
+const wholeReplyTo = (messageId: string): ReplyLink[] => [
+	{ messageId, excerpt: null },
+]
 
 type RejectionListener = (reason: unknown) => void
 
@@ -260,10 +268,25 @@ describe("createConversationController", () => {
 		])
 	})
 
+	it("stores on the message sent its reply links with their excerpt", async () => {
+		const said = await saidIn(harness)
+		const replyLinks = [{ messageId: said.id, excerpt: "the walls" }]
+
+		await harness.controller.send("and this?", replyLinks)
+		await harness.settled()
+
+		const answering = harness.controller.getState().messages.at(-1)
+		expect(answering?.replyLinks).toEqual(replyLinks)
+		const page = await harness.store.loadPage(harness.conversation.id, null)
+		expect(
+			page.messages.find((message) => message.id === answering?.id)?.replyLinks,
+		).toEqual(replyLinks)
+	})
+
 	it("stores on the message sent the identifier of the message it answers", async () => {
 		const said = await saidIn(harness)
 
-		await harness.controller.send("and this?", said.id)
+		await harness.controller.send("and this?", wholeReplyTo(said.id))
 		await harness.settled()
 
 		const answering = harness.controller.getState().messages.at(-1)
@@ -293,7 +316,7 @@ describe("createConversationController", () => {
 		await harness.controller.open(elsewhere)
 		await harness.settled()
 
-		await harness.controller.send("and this?", said.id)
+		await harness.controller.send("and this?", wholeReplyTo(said.id))
 		await harness.settled()
 
 		const answering = harness.controller.getState().messages.at(-1)
@@ -348,7 +371,7 @@ describe("createConversationController", () => {
 			await harness.settled()
 			const answered = await answeredBy(harness, nyx)
 
-			await harness.controller.send("and the gates?", answered.id)
+			await harness.controller.send("and the gates?", wholeReplyTo(answered.id))
 			await harness.settled()
 
 			expect(submittedIn(harness)).toEqual([nyx, nyx])
@@ -361,7 +384,10 @@ describe("createConversationController", () => {
 			await harness.settled()
 			const answered = await answeredBy(harness, nyx)
 
-			await harness.controller.send("@Iris and @Nyx, again", answered.id)
+			await harness.controller.send(
+				"@Iris and @Nyx, again",
+				wholeReplyTo(answered.id),
+			)
 			await harness.settled()
 
 			expect(submittedIn(harness)).toEqual([nyx, nyx, iris])
@@ -375,7 +401,7 @@ describe("createConversationController", () => {
 			const said = await saidIn(harness)
 			await answeredBy(harness, ada)
 
-			await harness.controller.send("@Iris and this?", said.id)
+			await harness.controller.send("@Iris and this?", wholeReplyTo(said.id))
 			await harness.settled()
 
 			expect(submittedIn(harness)).toEqual([ada, iris])
@@ -386,7 +412,7 @@ describe("createConversationController", () => {
 			const said = await saidIn(harness)
 			await answeredBy(harness, ada)
 
-			await harness.controller.send("and this?", said.id)
+			await harness.controller.send("and this?", wholeReplyTo(said.id))
 			await harness.settled()
 
 			expect(submittedIn(harness)).toEqual([ada, ada])
@@ -405,7 +431,7 @@ describe("createConversationController", () => {
 			await harness.controller.open(without)
 			await harness.settled()
 
-			await harness.controller.send("and the gates?", answered.id)
+			await harness.controller.send("and the gates?", wholeReplyTo(answered.id))
 			await harness.settled()
 
 			expect(runningIn(harness.controller)).toEqual([ada])
@@ -426,7 +452,7 @@ describe("createConversationController", () => {
 			await harness.controller.open(elsewhere)
 			await harness.settled()
 
-			await harness.controller.send("and the gates?", answered.id)
+			await harness.controller.send("and the gates?", wholeReplyTo(answered.id))
 			await harness.settled()
 
 			expect(runningIn(harness.controller)).toEqual([ada])
@@ -453,7 +479,7 @@ describe("createConversationController", () => {
 			await harness.settled()
 			expect(harness.controller.getState().messages[0].id).toBe(answered)
 
-			await harness.controller.send("and the gates?", answered)
+			await harness.controller.send("and the gates?", wholeReplyTo(answered))
 			await harness.settled()
 
 			const shown = harness.controller.getState().messages
@@ -467,7 +493,7 @@ describe("createConversationController", () => {
 			await harness.settled()
 			const answered = await answeredBy(harness, nyx)
 			harness.refuseNextWrite()
-			await harness.controller.send("and the gates?", answered.id)
+			await harness.controller.send("and the gates?", wholeReplyTo(answered.id))
 			await harness.settled()
 			const held = harness.controller.getState().refusedMessage
 
@@ -1594,13 +1620,40 @@ describe("createConversationController", () => {
 		const said = await saidIn(harness)
 		harness.refuseNextWrite()
 
-		await harness.controller.send("and this?", said.id)
+		await harness.controller.send("and this?", wholeReplyTo(said.id))
 		await harness.settled()
 
 		expect(harness.controller.getState().refusedMessage).toMatchObject({
 			text: "and this?",
 			repliedToMessageId: said.id,
 		})
+	})
+
+	it("sends again a refused message with the same reply links in the same order", async () => {
+		const said = await saidIn(harness)
+		await harness.controller.send("and then?")
+		await harness.settled()
+		const later = harness.controller
+			.getState()
+			.messages.find((message) => message.content === "and then?")
+		const replyLinks = [
+			{ messageId: later?.id ?? "", excerpt: "and then" },
+			{ messageId: said.id, excerpt: null },
+		]
+		harness.refuseNextWrite()
+		await harness.controller.send("on both", replyLinks)
+		await harness.settled()
+		const held = harness.controller.getState().refusedMessage
+		expect(held?.replyLinks).toEqual(replyLinks)
+
+		await harness.controller.sendAgain(held?.id ?? "")
+		await harness.settled()
+
+		const page = await harness.store.loadPage(harness.conversation.id, null)
+		expect(
+			page.messages.find((message) => message.content === "on both")
+				?.replyLinks,
+		).toEqual(replyLinks)
 	})
 
 	it("stores the message sent again and lets the seated companions answer it", async () => {

@@ -1,6 +1,7 @@
 import { isPostedRequest } from "./posted-question"
 import { withActivity } from "./working-kind"
 
+import type { ReplyLink } from "../bindings"
 import { describeFailure } from "../failure-report"
 import type {
 	ActivityEvent,
@@ -38,7 +39,7 @@ export type ChatError = {
 export type OutboxEntry = {
 	id: string
 	text: string
-	repliedToMessageId: string | null
+	replyLinks: ReplyLink[]
 }
 
 export type ChatState = {

@@ -1,5 +1,7 @@
 import type { ChatContext } from "./chat-context"
 
+import type { ReplyLink } from "../../bindings"
+
 export type PromptRows = ReturnType<typeof createPromptRows>
 
 export const createPromptRows = ({
@@ -12,14 +14,15 @@ export const createPromptRows = ({
 	const promptRow = (
 		conversationId: string,
 		content: string,
-		repliedToMessageId?: string,
+		replyLinks: ReplyLink[],
 	) => ({
 		id: newId(),
 		turnId: newId(),
 		conversationId,
 		content,
 		createdAt: now(),
-		repliedToMessageId: repliedToMessageId ?? null,
+		repliedToMessageId: replyLinks[0]?.messageId ?? null,
+		replyLinks,
 	})
 
 	type PromptRow = ReturnType<typeof promptRow>
@@ -32,6 +35,7 @@ export const createPromptRows = ({
 				turnId: said.turnId,
 				authorBotId: null,
 				repliedToMessageId: said.repliedToMessageId,
+				replyLinks: said.replyLinks,
 				content: said.content,
 				createdAt: said.createdAt,
 			},
@@ -51,6 +55,7 @@ export const createPromptRows = ({
 			authorAccountId: senderAccountId(),
 			authorName: null,
 			repliedToMessageId: said.repliedToMessageId,
+			replyLinks: said.replyLinks,
 			runtimeSessionId: null,
 		})
 

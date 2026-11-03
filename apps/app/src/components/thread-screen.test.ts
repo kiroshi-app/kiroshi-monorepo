@@ -55,6 +55,7 @@ import {
 } from "@/lib/applications/fake-application-port"
 import { ConversationApplicationsContext } from "@/lib/applications/use-conversation-installs"
 import { SessionApplicationsContext } from "@/lib/applications/use-session-application"
+import type { ReplyLink } from "@/lib/bindings"
 import {
 	type AttachmentsController,
 	createAttachmentsController,
@@ -4129,7 +4130,7 @@ const summonedBotIds = (room: SendingRoom) =>
 
 type ReplySend = {
 	text: string
-	repliedToMessageId?: string
+	replyLinks?: ReplyLink[]
 }
 
 type ReplyRoom = {
@@ -4167,8 +4168,8 @@ const replyRoomOn = async (thread: BotThread): Promise<ReplyRoom> => {
 	const drafts = createDraftsController()
 	const staging = createAttachmentsController({
 		store: async () => [],
-		send: (_owner, text, repliedToMessageId) => {
-			sends.push({ text, repliedToMessageId })
+		send: (_owner, text, replyLinks) => {
+			sends.push({ text, replyLinks })
 			return isSending
 		},
 	})
@@ -4199,12 +4200,86 @@ const replyChipNames = () =>
 		.queryAllByRole("button", { name: /^Remove the reply to/ })
 		.map((chip) => chip.getAttribute("aria-label"))
 
+const selectAllOf = (text: string) => {
+	const passage = screen.getByText(text)
+	const range = document.createRange()
+	range.selectNodeContents(passage)
+	document.getSelection()?.removeAllRanges()
+	document.getSelection()?.addRange(range)
+	fireEvent.pointerUp(passage)
+}
+
+const replyToSelection = async (text: string) => {
+	await act(async () => {
+		selectAllOf(text)
+	})
+	await act(async () => {
+		fireEvent.click(
+			within(screen.getByRole("toolbar", { name: "Selected text" })).getByRole(
+				"button",
+				{ name: "Reply" },
+			),
+		)
+	})
+	await settle()
+}
+
 const replyTo = async (index: number) => {
 	await act(async () => {
 		fireEvent.click(screen.getAllByRole("button", { name: "Reply" })[index])
 	})
 	await settle()
 }
+
+const refusingRoomOn = async () => {
+	const store = createFakeTranscriptStore()
+	const [ada] = await seatBots(store, SPACE, ["Ada"])
+	const conversation = await store.createConversation({
+		spaceId: SPACE,
+		sectionId: null,
+		title: "Walls",
+		botIds: [ada.id],
+	})
+	await writeTurn(store, conversation.id, ada.id, {
+		turnId: "t-1",
+		text: "walls up",
+		createdAt: 1,
+	})
+	await writeTurn(store, conversation.id, ada.id, {
+		turnId: "t-2",
+		text: "the gates hold",
+		createdAt: 2,
+	})
+	const refusing: TranscriptStore = {
+		...store,
+		sendUserMessage: () => Promise.reject(new Error("refused")),
+	}
+	const driver = createScriptedDriver()
+	const runtimes = createConversationRuntimes(driver, refusing, {})
+	render(
+		createElement(ThreadScreenHarness, {
+			bots: [ada],
+			landings: createMessageLandingController(),
+			onOpenMission: () => undefined,
+			staging: createAttachmentsController(
+				createAttachmentsPort({ chat: NO_BOT_CHAT, driver, runtimes }),
+			),
+			thread: {
+				kind: "conversation",
+				conversation,
+				runtimes,
+				onOpenSettings: () => undefined,
+			},
+		}),
+		{ wrapper: createQueryTestWrapper().wrapper },
+	)
+	await settle()
+}
+
+const repliedToCardNames = (author: string) =>
+	screen
+		.queryAllByRole("button", { name: new RegExp(`^${author}: `) })
+		.map((card) => card.getAttribute("aria-label"))
 
 describe("ThreadScreen holding several replies", () => {
 	let layout: FakeLayout
@@ -4249,17 +4324,99 @@ describe("ThreadScreen holding several replies", () => {
 		expect(replyChipNames()).toEqual(["Remove the reply to Reader"])
 	})
 
-	it("sends with the first reply held and clears every chip", async () => {
+	it("sends every held reply as a link in held order, the text unchanged, and clears every chip", async () => {
 		const room = await replyRoomOn(exchangeOf("bot-1", "Nyx"))
-		await replyTo(1)
+		await replyToSelection("the answer of Nyx")
 		await replyTo(0)
 
 		await sendInComposer("on both")
 
 		expect(room.sends).toEqual([
-			{ text: "on both", repliedToMessageId: "m-bot-1" },
+			{
+				text: "on both",
+				replyLinks: [
+					{ messageId: "m-bot-1", excerpt: "the answer of Nyx" },
+					{ messageId: "q-bot-1", excerpt: null },
+				],
+			},
 		])
 		expect(replyChipNames()).toEqual([])
+	})
+
+	it("adds an excerpt chip for a selection replied to, and replaces it with the whole message from the author line", async () => {
+		await replyRoomOn(exchangeOf("bot-1", "Nyx"))
+
+		await replyToSelection("the answer of Nyx")
+
+		expect(replyChipNames()).toEqual(["Remove the reply to Nyx"])
+		expect(screen.getByText("“the answer of Nyx”")).toBeTruthy()
+
+		await replyTo(1)
+
+		expect(replyChipNames()).toEqual(["Remove the reply to Nyx"])
+		expect(screen.queryByText("“the answer of Nyx”")).toBeNull()
+	})
+
+	it("quotes nothing in the input when a selection is only released", async () => {
+		await replyRoomOn(exchangeOf("bot-1", "Nyx"))
+
+		selectAllOf("the answer of Nyx")
+
+		expect(replyChipNames()).toEqual([])
+		expect(
+			screen.getByRole<HTMLTextAreaElement>("textbox", { name: "Message" })
+				.value,
+		).toBe("")
+	})
+
+	it("shows one replied-to card per reply link, in link order, on a refused message held for Send again", async () => {
+		await refusingRoomOn()
+		await replyToSelection("walls up")
+		await replyTo(1)
+
+		await sendInComposer("on both")
+
+		expect(screen.getByText("Not sent.")).toBeTruthy()
+		expect(repliedToCardNames("Ada")).toEqual([
+			"Ada: “walls up”",
+			"Ada: the gates hold",
+		])
+	})
+
+	it("shows one replied-to card per reply link on a sent message", async () => {
+		const exchange = exchangeOf("bot-1", "Nyx")
+		const state = exchange.chat.state
+		await replyRoomOn({
+			...exchange,
+			chat: {
+				...exchange.chat,
+				state: {
+					...state,
+					messages: [
+						...state.messages,
+						message({
+							id: "r-bot-1",
+							conversationId: "c-bot-1",
+							role: "user",
+							authorBotId: null,
+							content: "on both",
+							repliedToMessageId: "m-bot-1",
+							replyLinks: [
+								{ messageId: "m-bot-1", excerpt: "the answer" },
+								{ messageId: "q-bot-1", excerpt: null },
+							],
+						}),
+					],
+				},
+			},
+		})
+
+		expect(
+			screen.getByRole("button", { name: "Nyx: “the answer”" }),
+		).toBeTruthy()
+		expect(
+			screen.getByRole("button", { name: "Reader: the question to Nyx" }),
+		).toBeTruthy()
 	})
 
 	it("keeps every chip when the message does not send", async () => {

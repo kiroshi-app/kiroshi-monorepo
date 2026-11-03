@@ -10,6 +10,8 @@ import {
 import type { ReplyTarget } from "./screen-model"
 import { useComposerFocus, useThreadReply } from "./use-thread-reply"
 
+import type { ReplyLink } from "../bindings"
+
 type FocusProps = {
 	threadId: string | null
 }
@@ -114,7 +116,7 @@ const renderReplies = ({
 	threadId = "thread-1",
 	drafts = createDraftsController(),
 }: ReplyFixture) => {
-	const send = vi.fn(async (_text: string, _repliedTo: string[]) => isSent)
+	const send = vi.fn(async (_text: string, _replyLinks: ReplyLink[]) => isSent)
 	const rendered = renderHook(() =>
 		useThreadReply({
 			composerRef: { current: null },
@@ -139,12 +141,37 @@ const holdAll = (
 	}
 }
 
+const selectionOf = (messageId: string, excerpt: string): ReplyTarget => ({
+	...targetOf(messageId),
+	excerpt,
+	isExcerpt: true,
+})
+
 it("holds every message the person replies to, once each, in the order picked", () => {
 	const { result } = renderReplies({ isSent: true })
 
 	holdAll(() => result.current, ["m-1", "m-2", "m-1", "m-3"])
 
 	expect(heldIds(result.current)).toEqual(["m-1", "m-2", "m-3"])
+})
+
+it("replaces the held chip of a message replied to again, in place", () => {
+	const { result } = renderReplies({ isSent: true })
+	holdAll(() => result.current, ["m-1", "m-2"])
+
+	act(() => result.current.holdReply(selectionOf("m-1", "the gates")))
+
+	expect(result.current.replyTargets).toEqual([
+		selectionOf("m-1", "the gates"),
+		targetOf("m-2"),
+	])
+
+	act(() => result.current.holdReply(targetOf("m-1")))
+
+	expect(result.current.replyTargets).toEqual([
+		targetOf("m-1"),
+		targetOf("m-2"),
+	])
 })
 
 it("drops only the reply the person removes", () => {
@@ -162,8 +189,24 @@ it("sends every held reply in the order picked, then holds none", async () => {
 
 	await act(() => result.current.submitPrompt("both of these"))
 
-	expect(send).toHaveBeenCalledWith("both of these", ["m-2", "m-1"])
+	expect(send).toHaveBeenCalledWith("both of these", [
+		{ messageId: "m-2", excerpt: null },
+		{ messageId: "m-1", excerpt: null },
+	])
 	expect(heldIds(result.current)).toEqual([])
+})
+
+it("sends a selection with its excerpt and a whole message with none, in held order", async () => {
+	const { result, send } = renderReplies({ isSent: true })
+	act(() => result.current.holdReply(selectionOf("m-2", "the gates")))
+	holdAll(() => result.current, ["m-1"])
+
+	await act(() => result.current.submitPrompt("why?"))
+
+	expect(send).toHaveBeenCalledWith("why?", [
+		{ messageId: "m-2", excerpt: "the gates" },
+		{ messageId: "m-1", excerpt: null },
+	])
 })
 
 it("keeps every held reply when the message does not send", async () => {
@@ -188,6 +231,19 @@ it("brings back the replies of a thread mounted again, and none of another threa
 
 	const back = renderReplies({ isSent: true, threadId: "thread-1", drafts })
 	expect(heldIds(back.result.current)).toEqual(["m-2", "m-1"])
+})
+
+it("brings back a held selection with its excerpt on a thread mounted again", () => {
+	const drafts = createDraftsController()
+	const first = renderReplies({ isSent: true, threadId: "thread-1", drafts })
+	act(() => first.result.current.holdReply(selectionOf("m-2", "the gates")))
+	first.unmount()
+
+	const back = renderReplies({ isSent: true, threadId: "thread-1", drafts })
+
+	expect(back.result.current.replyTargets).toEqual([
+		selectionOf("m-2", "the gates"),
+	])
 })
 
 it("clears the replies of the thread that sent only", async () => {

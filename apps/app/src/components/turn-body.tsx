@@ -2,7 +2,6 @@ import { useContext } from "react"
 
 import { Markdown, type MarkdownProps } from "@workspace/ui/components/markdown"
 import { MessageAttachments } from "@workspace/ui/components/message-attachments"
-import { QuotableAnswer } from "@workspace/ui/components/quotable-answer"
 
 import { AnswerActionsContext } from "@/lib/chat/answer-actions"
 import type { MessageContent } from "@/lib/chat/message-attachments"
@@ -48,21 +47,17 @@ export const AnswerBody = ({
 	}
 
 	return (
-		<QuotableAnswer
-			onQuote={(quote) => actions.quote({ agentName, text: quote })}
-		>
-			<TurnBody
-				answerActions={{
-					agentName,
-					onPickOption: actions.insert,
-					onUseValues: actions.insert,
-					onOpenImage: actions.openImage,
-					onOpenWebPage: openWebPage,
-				}}
-				attachments={attachments}
-				isWriting={isWriting}
-				text={text}
-			/>
-		</QuotableAnswer>
+		<TurnBody
+			answerActions={{
+				agentName,
+				onPickOption: actions.insert,
+				onUseValues: actions.insert,
+				onOpenImage: actions.openImage,
+				onOpenWebPage: openWebPage,
+			}}
+			attachments={attachments}
+			isWriting={isWriting}
+			text={text}
+		/>
 	)
 }

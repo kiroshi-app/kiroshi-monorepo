@@ -14,6 +14,7 @@ import type {
 	SubmittedAttachment,
 } from "./attachments-contract"
 
+import type { ReplyLink } from "../bindings"
 import { createStore } from "../store"
 
 export type AttachmentsState = {
@@ -29,7 +30,7 @@ export type AttachmentsPort = {
 	send: (
 		owner: AttachmentsOwner,
 		text: string,
-		repliedToMessageId?: string,
+		replyLinks?: ReplyLink[],
 	) => boolean
 }
 
@@ -42,7 +43,7 @@ export type AttachmentsController = {
 	submit: (
 		owner: AttachmentsOwner,
 		text: string,
-		repliedToMessageId?: string,
+		replyLinks?: ReplyLink[],
 	) => Promise<boolean>
 	forget: (owner: AttachmentsOwner) => void
 	release: () => void
@@ -95,7 +96,7 @@ export function createAttachmentsController(
 	const submit = async (
 		owner: AttachmentsOwner,
 		text: string,
-		repliedToMessageId?: string,
+		replyLinks?: ReplyLink[],
 	) => {
 		const key = ownerKey(owner)
 		if (sending.has(key)) {
@@ -104,7 +105,7 @@ export function createAttachmentsController(
 		const items = stagedFor(owner)
 		if (items.length === 0) {
 			holdRefusal(owner, null)
-			return port.send(owner, text, repliedToMessageId)
+			return port.send(owner, text, replyLinks)
 		}
 
 		const sentAt = new Date()
@@ -120,11 +121,7 @@ export function createAttachmentsController(
 		}
 
 		if (
-			!port.send(
-				owner,
-				promptWithAttachments(text, paths, sentAt),
-				repliedToMessageId,
-			)
+			!port.send(owner, promptWithAttachments(text, paths, sentAt), replyLinks)
 		) {
 			return false
 		}

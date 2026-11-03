@@ -15,11 +15,7 @@ import {
 } from "@workspace/ui/components/prompt-attachments"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
 
-import {
-	draftWithText,
-	type QuotedSelection,
-	quotedMessage,
-} from "@/lib/chat/answer-actions"
+import { draftWithText } from "@/lib/chat/answer-actions"
 import type { StagedAttachment } from "@/lib/chat/attachments"
 import { holdsDismissal } from "@/lib/chat/prompt-commands"
 import { promptWithMentionAdded } from "@/lib/conversations/mentions"
@@ -31,7 +27,6 @@ import {
 export type PromptHandle = {
 	mention: (name: string) => void
 	insert: (text: string) => void
-	quote: (selection: QuotedSelection) => void
 }
 
 export type ThreadMenuSlot = {
@@ -83,7 +78,6 @@ export const ThreadComposer = ({
 	const offline = composerOfflineOf(useContext(OpenJoinedHostContext))
 	const [prompt, setPrompt] = useState(readDraft)
 	const [wasDismissed, setWasDismissed] = useState(false)
-	const [quoted, setQuoted] = useState<QuotedSelection | null>(null)
 	const latestPrompt = useRef(prompt)
 
 	const query = queryIn(prompt)
@@ -103,15 +97,12 @@ export const ThreadComposer = ({
 
 	const submit = useCallback(
 		async (value: string) => {
-			const sent = await onSubmitPrompt(
-				quoted ? quotedMessage(quoted.text, value) : value,
-			)
-			if (sent) setQuoted(null)
+			const sent = await onSubmitPrompt(value)
 			if (sent && latestPrompt.current.trim() === value) {
 				changePrompt("")
 			}
 		},
-		[changePrompt, onSubmitPrompt, quoted],
+		[changePrompt, onSubmitPrompt],
 	)
 
 	const pick = useCallback(
@@ -129,12 +120,8 @@ export const ThreadComposer = ({
 				pick(promptWithMentionAdded(latestPrompt.current, name)),
 			insert: (text: string) =>
 				changePrompt(draftWithText(latestPrompt.current, text)),
-			quote: (selection: QuotedSelection) => {
-				setQuoted(selection)
-				composerRef.current?.focus({ preventScroll: true })
-			},
 		}),
-		[changePrompt, composerRef, pick],
+		[changePrompt, pick],
 	)
 
 	return menu({
@@ -162,9 +149,6 @@ export const ThreadComposer = ({
 				onSubmit={submit}
 				onValueChange={changePrompt}
 				placeholder={placeholder}
-				quote={
-					quoted ? { ...quoted, onRemove: () => setQuoted(null) } : undefined
-				}
 				replies={replies}
 				textareaRef={composerRef}
 				value={prompt}

@@ -2,6 +2,7 @@ import { memo, type ReactNode } from "react"
 
 import type { MessageAuthor } from "@workspace/ui/components/message"
 import type { QuotedMessage } from "@workspace/ui/components/message-quote"
+import { MessageSelection } from "@workspace/ui/components/message-selection"
 import {
 	AssistantTurn,
 	PersonTurn,
@@ -14,6 +15,7 @@ import {
 import { probeRender } from "@workspace/ui/lib/render-probe"
 
 import { AnswerBody, TurnBody } from "@/components/turn-body"
+import { copySelection } from "@/lib/chat/copy-selection"
 import { messageWithAttachments } from "@/lib/chat/message-attachments"
 import type { ReplyTarget, TranscriptRow } from "@/lib/chat/screen-model"
 import { usePersonOf } from "@/lib/chat/thread-authorship"
@@ -34,7 +36,7 @@ type ThreadTurnProps = {
 	cause?: TurnCause
 	avatarFace?: ThreadFace
 	card?: ReactNode
-	quoted?: ReplyTarget
+	quoted?: ReplyTarget[]
 	pinned: boolean
 	now: number
 	toQuote: (target: ReplyTarget) => QuotedMessage
@@ -69,22 +71,32 @@ export const ThreadTurn = memo(function ThreadTurn({
 	const personOf = usePersonOf()
 	const person = row.role === "user" ? personOf(row) : undefined
 	const { text, attachments } = messageWithAttachments(row.text)
-	const content = card ?? <TurnBody attachments={attachments} text={text} />
-	const repliedTo = quoted ? [toQuote(quoted)] : undefined
+	const repliedTo = quoted?.map(toQuote)
 	const pin = () => {
 		onPin(row.messageId)
 	}
-	const reply = () => {
-		onReply({
-			messageId: row.messageId,
-			role: row.role,
-			excerpt: text.trim(),
-			authorBotId: row.authorBotId,
-			authorAccountId: row.authorAccountId,
-			authorName: row.authorName,
-			writtenFrom: row.writtenFrom,
-		})
+	const target: ReplyTarget = {
+		messageId: row.messageId,
+		role: row.role,
+		excerpt: text.trim(),
+		authorBotId: row.authorBotId,
+		authorAccountId: row.authorAccountId,
+		authorName: row.authorName,
+		writtenFrom: row.writtenFrom,
 	}
+	const reply = () => {
+		onReply(target)
+	}
+	const replyToSelection = (selected: string) => {
+		onReply({ ...target, excerpt: selected, isExcerpt: true })
+	}
+	const selectable = (body: ReactNode) =>
+		card ?? (
+			<MessageSelection onCopy={copySelection} onReply={replyToSelection}>
+				{body}
+			</MessageSelection>
+		)
+	const content = selectable(<TurnBody attachments={attachments} text={text} />)
 
 	if (person !== undefined) {
 		return (
@@ -126,13 +138,13 @@ export const ThreadTurn = memo(function ThreadTurn({
 		)
 	}
 
-	const answer = card ?? (
+	const answer = selectable(
 		<AnswerBody
 			agentName={author?.name ?? row.authorName ?? botName ?? ""}
 			attachments={attachments}
 			isWriting={state === "streaming"}
 			text={text}
-		/>
+		/>,
 	)
 
 	return (
@@ -163,7 +175,7 @@ export const ThreadTurn = memo(function ThreadTurn({
 type RefusedTurnProps = {
 	message: RefusedMessage
 	readerName: string
-	repliedTo?: QuotedMessage
+	repliedTo?: QuotedMessage[]
 	onSendAgain: (messageId: string) => void
 }
 
@@ -178,7 +190,7 @@ export const RefusedTurn = ({
 			copyText={message.text}
 			name={readerName}
 			onRetry={() => onSendAgain(message.id)}
-			repliedTo={repliedTo && [repliedTo]}
+			repliedTo={repliedTo}
 			state="failed"
 		>
 			<TurnBody {...messageWithAttachments(message.text)} />

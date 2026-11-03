@@ -118,6 +118,7 @@ export function useThreadNaming({
 					? (personOf(target) ?? reader)
 					: nameOf(target.authorBotId),
 			excerpt: toExcerpt(target.excerpt),
+			isExcerpt: target.isExcerpt,
 			from: target.role,
 			onJump: () => onJump(target.messageId),
 		}),
