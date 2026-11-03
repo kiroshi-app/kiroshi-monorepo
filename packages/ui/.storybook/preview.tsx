@@ -41,14 +41,13 @@ const withThemeLayout: Decorator = (Story, context) => {
 	)
 }
 
-const OFF_THE_PAGE = { x: -1, y: -1 }
-
 const parkPointerOffThePage = async () => {
 	if (!isInBrowserRunner()) return
 	const { cdp } = await import("vitest/browser")
 	await cdp().send("Input.dispatchMouseEvent", {
 		type: "mouseMoved",
-		...OFF_THE_PAGE,
+		x: -1,
+		y: -1,
 	})
 }
 
