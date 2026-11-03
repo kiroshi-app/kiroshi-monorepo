@@ -407,6 +407,8 @@ const common = {
 				create: "Couldn’t create the document. Try again from New document.",
 				open: "Couldn’t open the document. Open it again from the Library.",
 				save: "Couldn’t save your last changes. Keep the document open and edit again to retry.",
+				write:
+					"{{name}} stopped writing before it finished. Ask again from the conversation.",
 			},
 			import: {
 				title: "Couldn’t import {{name}}",

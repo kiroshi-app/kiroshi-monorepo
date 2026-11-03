@@ -437,6 +437,8 @@ const common = {
 					"Impossible de créer le document. Réessayez depuis Nouveau document.",
 				open: "Impossible d’ouvrir le document. Rouvrez-le depuis la Bibliothèque.",
 				save: "Impossible d’enregistrer vos dernières modifications. Gardez le document ouvert et modifiez-le à nouveau pour réessayer.",
+				write:
+					"L’écriture de {{name}} s’est interrompue. Redemandez-la depuis la conversation.",
 			},
 			import: {
 				title: "Impossible d’importer {{name}}",

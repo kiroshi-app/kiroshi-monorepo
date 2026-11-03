@@ -13,6 +13,7 @@ import { formatElapsed } from "@workspace/ui/components/activity-indicator"
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
 import { companionHue } from "@workspace/ui/components/companion-avatar"
 import { hueStyle } from "@workspace/ui/components/hue-palette"
+import { InitialsAvatar } from "@workspace/ui/components/initials-avatar"
 import { Button } from "@workspace/ui/components/ui/button"
 import {
 	Popover,
@@ -39,6 +40,13 @@ type LibraryDocumentWriter = LibraryDocumentEdit & {
 	elapsedSeconds: number
 	sentenceCount: number
 	section: string
+}
+
+type LibraryDocumentPerson = {
+	id: string
+	name: string
+	image?: string
+	caret: number
 }
 
 type LibraryDocumentFinished = {
@@ -304,6 +312,32 @@ const LibraryDocumentWrittenRun = ({
 	</AgentScope>
 )
 
+type LibraryDocumentPersonCaretProps = {
+	person: LibraryDocumentPerson
+}
+
+const LibraryDocumentPersonCaret = ({
+	person,
+}: LibraryDocumentPersonCaretProps) => (
+	<span
+		aria-label={person.name}
+		className="relative -me-0.5 inline-block h-6 w-0.5 rounded-[1px] bg-primary align-top"
+		data-slot="library-document-person-caret"
+		role="img"
+	>
+		<span
+			aria-hidden="true"
+			className="absolute start-0 -bottom-5.5 flex h-5 items-center gap-1 whitespace-nowrap rounded-[5px] rounded-ss-none bg-primary ps-0.5 pe-1.75 text-primary-foreground"
+			data-slot="library-document-person-flag"
+		>
+			<InitialsAvatar image={person.image} name={person.name} size={16} />
+			<span className="max-w-40 truncate font-semibold text-xs leading-4">
+				{person.name}
+			</span>
+		</span>
+	</span>
+)
+
 type LibraryDocumentFinishedRunProps = {
 	agent: LibraryDocumentAgent
 	children: ReactNode
@@ -408,6 +442,8 @@ export {
 	type LibraryDocumentFinished,
 	LibraryDocumentFinishedBar,
 	LibraryDocumentFinishedRun,
+	type LibraryDocumentPerson,
+	LibraryDocumentPersonCaret,
 	LibraryDocumentPresence,
 	type LibraryDocumentWriter,
 	LibraryDocumentWrittenRun,
