@@ -2,7 +2,9 @@
 
 import type { TFunction } from "i18next"
 import {
+	type ClipboardEvent,
 	Fragment,
+	type HTMLAttributes,
 	type KeyboardEvent,
 	type MouseEvent,
 	type ReactNode,
@@ -29,6 +31,18 @@ import {
 	LibraryDocumentWrittenRun,
 	type WriterActions,
 } from "@workspace/ui/components/library-document-agents"
+import {
+	hasInlineFormat,
+	inlineDrawingOf,
+	inlineNodesOf,
+	isCaretOnShownText,
+	showInlineIn,
+	shownBoundsOf,
+	shownOffsetOf,
+	shownSpansOf,
+	type TextField,
+	textFieldOf,
+} from "@workspace/ui/components/library-document-inline"
 import {
 	DOCUMENT_TITLE,
 	LibraryDocumentBar,
@@ -292,6 +306,8 @@ const caretPiecesOf = (
 	return carets
 }
 
+const LAST_LINE_HOLDER = "\u200b"
+
 type DrawRun = (piece: RunPiece, children: ReactNode, key: string) => ReactNode
 
 const drawnTextOf = (
@@ -300,46 +316,83 @@ const drawnTextOf = (
 	carets: CaretPiece[],
 	drawRun: DrawRun,
 ) => {
-	const segments: { from: number; to: number; run?: RunPiece }[] = []
-	let read = 0
-	for (const run of runs) {
-		if (run.from > read) segments.push({ from: read, to: run.from })
-		segments.push({ from: run.from, to: run.to, run })
-		read = run.to
-	}
-	segments.push({ from: read, to: text.length })
-
-	return segments.map(({ from, to, run }, index) => {
-		const isLast = index === segments.length - 1
-		const parts: ReactNode[] = []
-		let at = from
-		for (const caret of carets) {
-			if (caret.at < from || (caret.at >= to && !isLast)) continue
-			parts.push(
-				<span aria-hidden="true" key={`text-${parts.length}`}>
-					{text.slice(at, caret.at)}
-				</span>,
+	const nodes = inlineNodesOf(text)
+	const spans = shownSpansOf(nodes)
+	const shownCarets = carets.map((caret) => ({
+		person: caret.person,
+		shown: shownOffsetOf(spans, caret.at),
+	}))
+	const shownRunEnds = new Map(
+		runs.map((run) => [run, shownOffsetOf(spans, run.to)?.at]),
+	)
+	const caretsAt = (spanFrom: number, at: number) =>
+		shownCarets
+			.filter(({ shown }) => shown?.spanFrom === spanFrom && shown.at === at)
+			.map(({ person }) => (
 				<LibraryDocumentPersonCaret
-					key={`caret-${caret.person.id}`}
-					person={caret.person}
-				/>,
+					key={`caret-${person.id}`}
+					person={person}
+				/>
+			))
+
+	const drawText = (from: number, to: number) => {
+		const cuts = [
+			...new Set([
+				from,
+				to,
+				...runs.flatMap((run) => [run.from, run.to]),
+				...shownCarets.flatMap(({ shown }) =>
+					shown?.spanFrom === from ? [shown.at] : [],
+				),
+			]),
+		]
+			.filter((cut) => cut >= from && cut <= to)
+			.sort((first, second) => first - second)
+
+		const parts = cuts.slice(1).flatMap((end, index) => {
+			const start = cuts[index] ?? from
+			const run = runs.find((piece) => piece.from <= start && end <= piece.to)
+			const piece = (
+				<span aria-hidden="true" key={`text-${start}`}>
+					{text.slice(start, end)}
+				</span>
 			)
-			at = caret.at
-		}
-		parts.push(
-			<span aria-hidden="true" key={`text-${parts.length}`}>
-				{`${text.slice(at, to)}${isLast ? "​" : ""}`}
-			</span>,
+			return [
+				...caretsAt(from, start),
+				run
+					? drawRun(
+							{ ...run, isEnd: run.isEnd && shownRunEnds.get(run) === end },
+							piece,
+							`run-${start}`,
+						)
+					: piece,
+			]
+		})
+		return (
+			<Fragment key={`text-${from}`}>
+				{parts}
+				{caretsAt(from, to)}
+			</Fragment>
 		)
-		return run ? (
-			drawRun(run, parts, `run-${from}`)
-		) : (
-			<Fragment key={`text-${from}`}>{parts}</Fragment>
-		)
-	})
+	}
+
+	return [
+		...inlineDrawingOf(text, nodes, drawText),
+		...(spans.length === 0
+			? shownCarets.map(({ person }) => (
+					<LibraryDocumentPersonCaret
+						key={`caret-${person.id}`}
+						person={person}
+					/>
+				))
+			: []),
+		<span aria-hidden="true" key="end">
+			{LAST_LINE_HOLDER}
+		</span>,
+	]
 }
 
-const selectionOf = (field: HTMLTextAreaElement) => ({
+const selectionOf = (field: TextField) => ({
 	start: field.selectionStart,
 	end: field.selectionEnd,
 	direction: field.selectionDirection,
@@ -351,13 +404,13 @@ type FieldSelection = TextSelection & { id: string }
 
 const TITLE_FIELD = "title"
 
-const NATIVE_PRESS = "textarea, button, a"
+const NATIVE_PRESS = "textarea, [contenteditable], button, a"
 
-const focusedIn = (fields: Map<string, HTMLTextAreaElement>) =>
+const focusedIn = (fields: Map<string, TextField>) =>
 	[...fields].find(([, field]) => field === document.activeElement)
 
 const selectionIn = (
-	fields: Map<string, HTMLTextAreaElement>,
+	fields: Map<string, TextField>,
 ): FieldSelection | undefined => {
 	const [id, field] = focusedIn(fields) ?? []
 	return id && field ? { id, ...selectionOf(field) } : undefined
@@ -464,6 +517,19 @@ const isSameAnchors = (
 
 const singleLine = (text: string) => text.replace(/\n/g, " ")
 
+type DrawnTextProps = {
+	children: ReactNode
+}
+
+const DrawnText = ({ children }: DrawnTextProps) => (
+	<span
+		className="pointer-events-none col-start-1 row-start-1 whitespace-pre-wrap [&_[data-slot=library-document-caret]]:pointer-events-auto [&_[data-slot=library-document-caret]]:-me-0.5"
+		data-slot="library-document-drawn-text"
+	>
+		{children}
+	</span>
+)
+
 type GrowingFieldProps = TextareaHTMLAttributes<HTMLTextAreaElement> & {
 	value: string
 	placeholder?: string
@@ -484,12 +550,7 @@ const GrowingField = ({
 }: GrowingFieldProps) => (
 	<span className={cn("grid break-words", className)}>
 		{drawnText ? (
-			<span
-				className="pointer-events-none col-start-1 row-start-1 whitespace-pre-wrap [&_[data-slot=library-document-caret]]:pointer-events-auto [&_[data-slot=library-document-caret]]:-me-0.5"
-				data-slot="library-document-drawn-text"
-			>
-				{drawnText}
-			</span>
+			<DrawnText>{drawnText}</DrawnText>
 		) : (
 			<span
 				aria-hidden="true"
@@ -514,6 +575,71 @@ const GrowingField = ({
 	</span>
 )
 
+type InlineFieldProps = Omit<HTMLAttributes<HTMLSpanElement>, "children"> & {
+	value: string
+	className: string
+	fieldRef: (node: TextField | null) => (() => void) | undefined
+	drawnText?: ReactNode
+	onInsert: (text: string) => void
+}
+
+const InlineField = ({
+	value,
+	className,
+	fieldRef,
+	drawnText,
+	onInsert,
+	...props
+}: InlineFieldProps) => {
+	const field = useRef<HTMLSpanElement>(null)
+
+	useLayoutEffect(() => {
+		if (field.current) showInlineIn(field.current, value)
+	}, [value])
+
+	const insertTyped = useEffectEvent((event: InputEvent) => {
+		const node = field.current
+		if (
+			!node ||
+			event.inputType !== "insertText" ||
+			event.data === null ||
+			isCaretOnShownText(node)
+		)
+			return
+
+		event.preventDefault()
+		onInsert(event.data)
+	})
+
+	useEffect(() => {
+		const node = field.current
+		const listener = (event: InputEvent) => insertTyped(event)
+		node?.addEventListener("beforeinput", listener)
+		return () => node?.removeEventListener("beforeinput", listener)
+	}, [])
+
+	return (
+		<span className={cn("grid break-words", className)}>
+			{drawnText ? <DrawnText>{drawnText}</DrawnText> : null}
+			<span
+				aria-multiline="true"
+				className={cn(
+					"col-start-1 row-start-1 whitespace-pre-wrap outline-none",
+					drawnText &&
+						"selection:bg-primary/30 [-webkit-text-fill-color:transparent] [&_*]:decoration-transparent [&_code]:bg-transparent [&_code]:ring-0",
+				)}
+				contentEditable
+				ref={(node) => {
+					field.current = node
+					return fieldRef(node && textFieldOf(node))
+				}}
+				role="textbox"
+				{...props}
+			/>
+		</span>
+	)
+}
+
 type LibraryDocumentEditorProps = WriterActions & {
 	title: string
 	body: string
@@ -532,7 +658,7 @@ type LibraryDocumentEditorProps = WriterActions & {
 	onCaretChange?: (caret: number | null) => void
 }
 
-const caretIn = (field: HTMLTextAreaElement) => {
+const caretIn = (field: TextField) => {
 	const { start, end, direction } = selectionOf(field)
 	return (
 		Number(field.dataset.bodyOffset) + (direction === "backward" ? start : end)
@@ -566,7 +692,7 @@ const LibraryDocumentEditor = ({
 	const [ending, setEnding] = useState(() => endingOf(body))
 	const received = useRef({ title: titleProp, body })
 	const [restoredSelection, setRestoredSelection] = useState<FieldSelection>()
-	const fields = useRef(new Map<string, HTMLTextAreaElement>())
+	const fields = useRef(new Map<string, TextField>())
 	const reportedCaret = useRef<number | null>(null)
 	const pendingBlurReport = useRef<ReturnType<typeof setTimeout>>(undefined)
 	const [heldListAnchors, setHeldListAnchors] = useState<
@@ -669,7 +795,7 @@ const LibraryDocumentEditor = ({
 		reportRestoredCaret()
 	}, [restoredSelection])
 
-	const fieldRefOf = (id: string) => (node: HTMLTextAreaElement | null) => {
+	const fieldRefOf = (id: string) => (node: TextField | null) => {
 		if (!node) return
 		fields.current.set(id, node)
 		return () => {
@@ -736,6 +862,7 @@ const LibraryDocumentEditor = ({
 		if (!shortcut) {
 			const text = block.kind === "paragraph" ? value : singleLine(value)
 			commit(replaceAt(index, { ...block, text }))
+			focusAt(block.id, caret)
 			return
 		}
 
@@ -750,9 +877,43 @@ const LibraryDocumentEditor = ({
 		focusAt(block.id, Math.max(0, caret - prefix.length))
 	}
 
-	const splitAt = (index: number, { start, end }: TextSelection) => {
+	const takeTyped = (index: number, element: HTMLElement) => {
+		const field = textFieldOf(element)
+		changeText(index, field.value, field.selectionStart)
+	}
+
+	const insertIn = (index: number, element: HTMLElement, text: string) => {
+		const field = textFieldOf(element)
+		const { start, end } = selectionOf(field)
+		const { value } = field
+		changeText(
+			index,
+			`${value.slice(0, start)}${text}${value.slice(end)}`,
+			start + text.length,
+		)
+	}
+
+	const copyFrom = (event: ClipboardEvent<HTMLElement>) => {
+		const field = textFieldOf(event.currentTarget)
+		const { start, end } = selectionOf(field)
+		if (start === end) return false
+
+		event.preventDefault()
+		event.clipboardData.setData("text/plain", field.value.slice(start, end))
+		return true
+	}
+
+	const splitAt = (index: number, selection: TextSelection) => {
 		const block = blocks[index]
 		if (!block) return
+
+		const shown = shownBoundsOf(block.text)
+		const edgeOf = (offset: number) => {
+			if (offset <= shown.start) return 0
+			return offset >= shown.end ? block.text.length : offset
+		}
+		const start = edgeOf(selection.start)
+		const end = edgeOf(selection.end)
 
 		if (block.kind === "item" && block.text === "") {
 			turnIntoParagraph(index, block)
@@ -792,63 +953,101 @@ const LibraryDocumentEditor = ({
 		focusAt(previous.id, previous.text.length)
 	}
 
-	const keyDownIn =
-		(index: number) => (event: KeyboardEvent<HTMLTextAreaElement>) => {
-			if (event.nativeEvent.isComposing) return
+	const keyDownIn = (index: number) => (event: KeyboardEvent<HTMLElement>) => {
+		if (event.nativeEvent.isComposing) return
 
-			const field = event.currentTarget
-			const selection = selectionOf(field)
-			const { start, end } = selection
-			const isCollapsed = start === end
-			const isAtStart = isCollapsed && start === 0
-			const isAtEnd = isCollapsed && end === field.value.length
+		const field = textFieldOf(event.currentTarget)
+		const selection = selectionOf(field)
+		const { start, end } = selection
+		const shown = shownBoundsOf(field.value)
+		const isCollapsed = start === end
+		const isAtStart = isCollapsed && start <= shown.start
+		const isAtEnd = isCollapsed && end >= shown.end
 
-			if (event.key === "Enter" && !event.shiftKey) {
-				event.preventDefault()
-				splitAt(index, selection)
-			} else if (event.key === "Backspace" && isAtStart) {
-				event.preventDefault()
-				joinBackward(index)
-			} else if (event.key === "ArrowUp" && isAtStart && index > 0) {
-				event.preventDefault()
-				focusAt(blocks[index - 1]?.id, "end")
-			} else if (
-				event.key === "ArrowDown" &&
-				isAtEnd &&
-				index < blocks.length - 1
-			) {
-				event.preventDefault()
-				focusAt(blocks[index + 1]?.id, 0)
-			}
+		if (event.key === "Enter" && !event.shiftKey) {
+			event.preventDefault()
+			splitAt(index, selection)
+		} else if (event.key === "Enter" && field.isContentEditable) {
+			event.preventDefault()
+			insertIn(index, field, "\n")
+		} else if (event.key === "Backspace" && isAtStart) {
+			event.preventDefault()
+			joinBackward(index)
+		} else if (event.key === "ArrowUp" && isAtStart && index > 0) {
+			event.preventDefault()
+			focusAt(blocks[index - 1]?.id, "end")
+		} else if (
+			event.key === "ArrowDown" &&
+			isAtEnd &&
+			index < blocks.length - 1
+		) {
+			event.preventDefault()
+			focusAt(blocks[index + 1]?.id, 0)
 		}
+	}
 
 	const fieldOf = (block: Block) => {
 		const index = blocks.indexOf(block)
 		const runs = runPieces.get(block.id)
 		const carets = caretPieces.get(block.id)
+		const shared = {
+			"aria-label": t(BLOCK_LABEL[block.kind]),
+			className: BLOCK_TYPE[block.kind],
+			"data-body-offset": textStarts.get(block.id),
+			"data-kind": block.kind,
+			drawnText:
+				runs || carets
+					? drawnTextOf(block.text, runs ?? [], carets ?? [], drawRun)
+					: undefined,
+			fieldRef: fieldRefOf(block.id),
+			onBlur: reportCaretAfterBlur,
+			onKeyDown: keyDownIn(index),
+			onSelect: reportCaret,
+			value: block.text,
+		}
+
+		if (!hasInlineFormat(block.text))
+			return (
+				<GrowingField
+					{...shared}
+					fieldClassName="placeholder:text-placeholder-foreground"
+					key={block.id}
+					onChange={(event) =>
+						changeText(
+							index,
+							event.target.value,
+							selectionOf(event.target).start,
+						)
+					}
+					placeholder={block.placeholder}
+				/>
+			)
 
 		return (
-			<GrowingField
-				aria-label={t(BLOCK_LABEL[block.kind])}
-				className={BLOCK_TYPE[block.kind]}
-				data-body-offset={textStarts.get(block.id)}
-				data-kind={block.kind}
-				drawnText={
-					runs || carets
-						? drawnTextOf(block.text, runs ?? [], carets ?? [], drawRun)
-						: undefined
-				}
-				fieldRef={fieldRefOf(block.id)}
+			<InlineField
+				{...shared}
 				key={block.id}
-				onBlur={reportCaretAfterBlur}
-				onChange={(event) =>
-					changeText(index, event.target.value, selectionOf(event.target).start)
-				}
-				onKeyDown={keyDownIn(index)}
-				onSelect={reportCaret}
-				placeholder={block.placeholder}
-				fieldClassName="placeholder:text-placeholder-foreground"
-				value={block.text}
+				onCompositionEnd={(event) => takeTyped(index, event.currentTarget)}
+				onCopy={copyFrom}
+				onCut={(event) => {
+					if (copyFrom(event)) insertIn(index, event.currentTarget, "")
+				}}
+				onInput={(event) => {
+					if (!(event.nativeEvent as InputEvent).isComposing)
+						takeTyped(index, event.currentTarget)
+				}}
+				onInsert={(text) => {
+					const field = fields.current.get(block.id)
+					if (field) insertIn(index, field, text)
+				}}
+				onPaste={(event) => {
+					event.preventDefault()
+					insertIn(
+						index,
+						event.currentTarget,
+						event.clipboardData.getData("text/plain"),
+					)
+				}}
 			/>
 		)
 	}

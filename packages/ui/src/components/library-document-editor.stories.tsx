@@ -553,6 +553,62 @@ export const OutsideTitleChange = meta.story({
 	},
 })
 
+export const OutsideFormatWhileTyping = meta.story({
+	args: { ...LAUNCH_REVIEW, template: undefined },
+	beforeEach: launchReviewDraft.reset,
+	render: (args) => <LiveEditor {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Someone else turns words bold in the list item the person is typing in, then takes the bold away while the person holds a backward selection. Check that the bold renders as it arrives, that the focused field keeps the caret after the same character of the person's text and the selection on the same words and direction, and that neither change is reported back through `onBodyChange`.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const shipAt = () => bodyFieldsIn(canvasElement)[2] as HTMLTextAreaElement
+		const typed = ", after the review"
+		await userEvent.type(shipAt(), typed)
+
+		launchReviewDraft.write({
+			body: launchReviewDraft
+				.read()
+				.body.replace("Ship on the 14th", "Ship on **the 14th**"),
+		})
+		await waitFor(() =>
+			expect(slotIn(shipAt(), "library-document-bold").innerText).toBe(
+				"the 14th",
+			),
+		)
+		const bolded = shipAt()
+		await expect(document.activeElement).toBe(bolded)
+		await expect(bolded).toHaveValue(`Ship on **the 14th**${typed}`)
+		await expect(bolded.selectionStart).toBe(bolded.value.length)
+		await expect(bolded.selectionEnd).toBe(bolded.value.length)
+
+		const selected = "after the review"
+		const selectedFrom = bolded.value.indexOf(selected)
+		bolded.setSelectionRange(
+			selectedFrom,
+			selectedFrom + selected.length,
+			"backward",
+		)
+		launchReviewDraft.write({
+			body: launchReviewDraft.read().body.replace("**the 14th**", "the 14th"),
+		})
+		await waitFor(() =>
+			expect(shipAt()).toHaveValue(`Ship on the 14th${typed}`),
+		)
+		const plain = shipAt()
+		await expect(document.activeElement).toBe(plain)
+		await expect(
+			plain.value.slice(plain.selectionStart, plain.selectionEnd),
+		).toBe(selected)
+		await expect(plain.selectionDirection).toBe("backward")
+		await expect(args.onBodyChange).toHaveBeenCalledTimes(typed.length)
+	},
+})
+
 export const CaretMoves = meta.story({
 	args: { ...LAUNCH_REVIEW, template: undefined, onCaretChange: fn() },
 	beforeEach: launchReviewDraft.reset,
@@ -1299,6 +1355,413 @@ export const SelectingAcrossAgentRun = meta.story({
 
 export const SelectingAcrossAgentRunLight = meta.story({
 	...selectingAcrossAgentRun("light"),
+})
+
+type InlineFormatContext = {
+	args: LibraryDocumentEditorProps
+	canvasElement: HTMLElement
+	userEvent: {
+		type: (element: Element, text: string) => Promise<void>
+		keyboard: (text: string) => Promise<void>
+	}
+}
+
+type InlineFormatCase = {
+	format: "bold" | "italic" | "strikethrough" | "code" | "link"
+	span: string
+	shown: string
+	checkLook: (element: HTMLElement, field: HTMLElement) => Promise<void>
+	story: string
+}
+
+const SOFT_INK = "rgb(212, 212, 212)"
+
+const STRONG_INK = "rgb(245, 245, 245)"
+
+const formattedBody = (span: string) =>
+	[
+		`## Decisions on ${span}`,
+		`We agreed on ${span} today.`,
+		`- Ship ${span} first`,
+	].join("\n\n")
+
+const inlineFormatStory = ({
+	format,
+	span,
+	shown,
+	checkLook,
+	story,
+}: InlineFormatCase) => ({
+	args: {
+		title: LAUNCH_REVIEW.title,
+		body: formattedBody(span),
+		detail: LAUNCH_REVIEW.detail,
+		template: undefined,
+	},
+	parameters: { docs: { description: { story } } },
+	play: async ({ args, canvasElement, userEvent }: InlineFormatContext) => {
+		const fields = bodyFieldsIn(canvasElement)
+		await expect(
+			fields.map((field) => [field.dataset.kind, field.value]),
+		).toEqual([
+			["heading", `Decisions on ${span}`],
+			["paragraph", `We agreed on ${span} today.`],
+			["item", `Ship ${span} first`],
+		])
+		for (const field of fields) {
+			const element = slotIn(field, `library-document-${format}`)
+			await expect(element.innerText).toBe(shown)
+			await expect(field.innerText).toBe(field.value.replace(span, shown))
+			for (const marker of field.querySelectorAll<HTMLElement>(
+				"[data-slot='library-document-marker']",
+			))
+				await expect(marker).not.toBeVisible()
+			await checkLook(element, field)
+		}
+
+		const [heading, paragraph] = fields as [
+			HTMLTextAreaElement,
+			HTMLTextAreaElement,
+		]
+		await userEvent.type(heading, "!")
+		await expect(heading).toHaveValue(`Decisions on ${span}!`)
+		await expect(slotIn(heading, `library-document-${format}`).innerText).toBe(
+			shown,
+		)
+		await userEvent.type(paragraph, "!")
+		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+			args.body
+				.replace(`Decisions on ${span}`, `Decisions on ${span}!`)
+				.replace("today.", "today.!"),
+		)
+		await expect(
+			slotIn(paragraph, `library-document-${format}`).innerText,
+		).toBe(shown)
+	},
+})
+
+export const BoldText = meta.story({
+	...inlineFormatStory({
+		format: "bold",
+		span: "**the launch date**",
+		shown: "the launch date",
+		checkLook: async (element, field) => {
+			await expect(getComputedStyle(element).fontWeight).toBe("600")
+			await expect(getComputedStyle(element).color).toBe(STRONG_INK)
+			if (field.dataset.kind !== "heading")
+				await expect(getComputedStyle(field).color).toBe(SOFT_INK)
+		},
+		story:
+			"A double-asterisk span in a heading, a paragraph and a list item, as artboard A4 of the Selection toolbar explorations draws it. Check that its text reads semibold in the foreground ink over the soft ink of the body, that the asterisks never show, and that typing after it reports the markdown with the asterisks kept.",
+	}),
+})
+
+export const ItalicText = meta.story({
+	...inlineFormatStory({
+		format: "italic",
+		span: "_the launch date_",
+		shown: "the launch date",
+		checkLook: async (element) => {
+			await expect(getComputedStyle(element).fontStyle).toBe("italic")
+		},
+		story:
+			"An underscore span in a heading, a paragraph and a list item. Check that its text reads italic, that the underscores never show, and that typing after it reports the markdown with the underscores kept.",
+	}),
+})
+
+export const StruckThroughText = meta.story({
+	...inlineFormatStory({
+		format: "strikethrough",
+		span: "~~the launch date~~",
+		shown: "the launch date",
+		checkLook: async (element) => {
+			await expect(getComputedStyle(element).textDecorationLine).toBe(
+				"line-through",
+			)
+		},
+		story:
+			"A double-tilde span in a heading, a paragraph and a list item, in the struck look of the chat Markdown renderer. Check that its text is struck through, that the tildes never show, and that typing after it reports the markdown with the tildes kept.",
+	}),
+})
+
+export const InlineCode = meta.story({
+	...inlineFormatStory({
+		format: "code",
+		span: "`bun run ci`",
+		shown: "bun run ci",
+		checkLook: async (element, field) => {
+			await expect(getComputedStyle(element).fontFamily).toContain("Geist Mono")
+			await expect(field.getBoundingClientRect().height).toBe(24)
+			await expect(getComputedStyle(element).backgroundColor).not.toBe(
+				"rgba(0, 0, 0, 0)",
+			)
+			await expect(element.getBoundingClientRect().height).toBeLessThan(24)
+		},
+		story:
+			"A single-backtick span in a heading, a paragraph and a list item, in the inline code look of the chat Markdown renderer. Check that its text reads in the mono face on the code ground, that the backticks never show, and that typing after it reports the markdown with the backticks kept.",
+	}),
+})
+
+export const LinkText = meta.story({
+	...inlineFormatStory({
+		format: "link",
+		span: "[the brief](https://kiroshi.app/brief)",
+		shown: "the brief",
+		checkLook: async (element) => {
+			await expect(getComputedStyle(element).textDecorationLine).toBe(
+				"underline",
+			)
+			await expect(getComputedStyle(element).fontWeight).toBe("500")
+		},
+		story:
+			"A bracket text then parenthesis url link in a heading, a paragraph and a list item, in the link look of the chat Markdown renderer. Check that only its text shows, underlined, that the brackets, the parentheses and the url never show, and that typing after it reports the markdown with the url kept.",
+	}),
+})
+
+const UNCLOSED_MARKERS =
+	"A **bold, an _italic, a ~~strike, a `code and a [link]( never close."
+
+export const UnclosedMarkers = meta.story({
+	args: {
+		title: LAUNCH_REVIEW.title,
+		body: UNCLOSED_MARKERS,
+		detail: LAUNCH_REVIEW.detail,
+		template: undefined,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A paragraph opening each format without closing it, then the person closes the bold one. Check that every marker shows as typed text while nothing in the line takes a format, and that typing the closing asterisks turns the run bold at once with the caret right after them, so the next character lands outside the run.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const [paragraph] = bodyFieldsIn(canvasElement) as [HTMLTextAreaElement]
+		await expect(paragraph).toHaveValue(UNCLOSED_MARKERS)
+		await expect(getComputedStyle(paragraph).webkitTextFillColor).not.toBe(
+			"rgba(0, 0, 0, 0)",
+		)
+		await expect(
+			paragraph.parentElement?.querySelector("strong, em, del, code"),
+		).toBe(null)
+
+		const closing = "A **bold".length
+		await userEvent.type(paragraph, "**", {
+			initialSelectionStart: closing,
+			initialSelectionEnd: closing,
+		})
+		const [bolded] = bodyFieldsIn(canvasElement) as [HTMLTextAreaElement]
+		await expect(document.activeElement).toBe(bolded)
+		await expect(slotIn(bolded, "library-document-bold").innerText).toBe("bold")
+		await expect(bolded.selectionStart).toBe(closing + "**".length)
+		await userEvent.keyboard("!")
+		await expect(bolded).toHaveValue(
+			UNCLOSED_MARKERS.replace("**bold", "**bold**!"),
+		)
+		await expect(slotIn(bolded, "library-document-bold").innerText).toBe("bold")
+		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+			UNCLOSED_MARKERS.replace("**bold", "**bold**!"),
+		)
+	},
+})
+
+const MIXED_PARAGRAPH =
+	"Ship **the launch notes** with _care_, ~~not Friday~~, run `bun run ci` and read [the brief](https://kiroshi.app/brief)."
+
+const MIXED_SHOWN =
+	"Ship the launch notes with care, not Friday, run bun run ci and read the brief."
+
+const MIXED_SLOTS = [
+	["bold", "the launch notes"],
+	["italic", "care"],
+	["strikethrough", "not Friday"],
+	["code", "bun run ci"],
+	["link", "the brief"],
+] as const
+
+const mixedInlineFormats = (theme: "light" | "dark") => ({
+	args: {
+		title: LAUNCH_REVIEW.title,
+		body: MIXED_PARAGRAPH,
+		detail: LAUNCH_REVIEW.detail,
+		template: undefined,
+	},
+	globals: { theme },
+	parameters: {
+		docs: {
+			description: {
+				story: `One paragraph mixing the five inline formats, in the ${theme} theme. Check that each format reads at 4.5:1 or more against what sits under it, that a click on a glyph of the bold run lands the caret at that glyph, that typing inside the bold run keeps the caret right after the typed text and the run bold, that the markdown reported keeps every marker, and that selecting inside the run keeps its asterisks hidden.`,
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }: InlineFormatContext) => {
+		const [paragraph] = bodyFieldsIn(canvasElement) as [HTMLTextAreaElement]
+		await expect(paragraph.innerText).toBe(MIXED_SHOWN)
+		const ground = groundOf(paragraph)
+		for (const [format, shown] of MIXED_SLOTS) {
+			const element = slotIn(paragraph, `library-document-${format}`)
+			await expect(element.innerText).toBe(shown)
+			const under = over(
+				rgbaOf(getComputedStyle(element).backgroundColor),
+				ground,
+			)
+			await expect(
+				contrastOf(rgbaOf(getComputedStyle(element).color), under),
+			).toBeGreaterThanOrEqual(4.5)
+		}
+
+		const glyphAt = MIXED_PARAGRAPH.indexOf("launch")
+		const bold = slotIn(paragraph, "library-document-bold")
+		const glyph = document.createRange()
+		const boldText = bold.childNodes[1] as Text
+		glyph.setStart(boldText, "the ".length)
+		glyph.setEnd(boldText, "the l".length)
+		const { left, top, width, height } = glyph.getBoundingClientRect()
+		const pressed = document.caretPositionFromPoint(
+			left + width / 4,
+			top + height / 2,
+		)
+		await expect(paragraph.contains(pressed?.offsetNode ?? null)).toBe(true)
+		paragraph.focus()
+		document
+			.getSelection()
+			?.collapse(pressed?.offsetNode ?? null, pressed?.offset ?? 0)
+		await expect(paragraph.selectionStart).toBe(glyphAt)
+
+		await userEvent.keyboard("first ")
+		const typed = MIXED_PARAGRAPH.replace("launch", "first launch")
+		await expect(paragraph.selectionStart).toBe(glyphAt + "first ".length)
+		await expect(paragraph.selectionEnd).toBe(paragraph.selectionStart)
+		await expect(paragraph.value).toBe(typed)
+		await expect(args.onBodyChange).toHaveBeenLastCalledWith(typed)
+		await expect(slotIn(paragraph, "library-document-bold").innerText).toBe(
+			"the first launch notes",
+		)
+
+		const boldFrom = typed.indexOf("the first")
+		paragraph.setSelectionRange(boldFrom, boldFrom + "the first".length)
+		await expect(document.getSelection()?.toString()).toBe("the first")
+		for (const marker of paragraph.querySelectorAll<HTMLElement>(
+			"[data-slot='library-document-marker']",
+		))
+			await expect(marker).not.toBeVisible()
+	},
+})
+
+export const MixedInlineFormats = meta.story({
+	...mixedInlineFormats("dark"),
+})
+
+export const MixedInlineFormatsLight = meta.story({
+	...mixedInlineFormats("light"),
+})
+
+const FORMATTED_DOCUMENT = {
+	title: LAUNCH_REVIEW.title,
+	detail: LAUNCH_REVIEW.detail,
+	body: [
+		"We met to agree **the launch date and the copy** for the brief.",
+		"## Decisions",
+		"- Ship _the release notes_ on the 14th",
+	].join("\n\n"),
+}
+
+const NINA = {
+	id: "nina",
+	name: "Nina Duarte",
+	caret: FORMATTED_DOCUMENT.body.indexOf("date and"),
+}
+
+const SOL_RUN = "_the release notes_ on"
+
+const SOL_WRITER = {
+	agent: LIBRARY_AGENTS.sol,
+	start: FORMATTED_DOCUMENT.body.indexOf(SOL_RUN),
+	end: FORMATTED_DOCUMENT.body.indexOf(SOL_RUN) + SOL_RUN.length,
+	elapsedSeconds: 12,
+	sentenceCount: 1,
+	section: "Decisions",
+}
+
+const glyphLeftOf = (field: HTMLElement, textNode: Text, offset: number) => {
+	const range = document.createRange()
+	range.setStart(textNode, offset)
+	range.setEnd(textNode, offset + 1)
+	return range.getBoundingClientRect().left - field.getBoundingClientRect().left
+}
+
+export const PersonCaretInFormattedText = meta.story({
+	args: {
+		...FORMATTED_DOCUMENT,
+		template: undefined,
+		writers: [SOL_WRITER],
+		people: [NINA],
+		onStopAll: fn(),
+		onStop: fn(),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Nina's caret sits inside a bold run while Sol writes over an italic span, both offsets in the body markdown. Check that the drawn bold run lines up with the field's own glyphs, that her caret stands at the glyph matching its markdown offset inside that run, and that Sol's run covers the italic words without showing a marker.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const [paragraph, , item] = bodyFieldsIn(canvasElement) as [
+			HTMLTextAreaElement,
+			HTMLTextAreaElement,
+			HTMLTextAreaElement,
+		]
+		const drawn = slotIn(
+			paragraph.parentElement as HTMLElement,
+			"library-document-drawn-text",
+		)
+		const caret = canvas.getByRole("img", { name: NINA.name })
+		const drawnBold = slotIn(drawn, "library-document-bold")
+		await expect(drawnBold).toContainElement(caret)
+		const fieldBold = slotIn(paragraph, "library-document-bold")
+		for (const edge of ["left", "right", "top"] as const)
+			await expect(
+				Math.abs(
+					drawnBold.getBoundingClientRect()[edge] -
+						fieldBold.getBoundingClientRect()[edge],
+				),
+			).toBeLessThanOrEqual(1)
+		await expect(drawn.getBoundingClientRect().height).toBe(
+			paragraph.getBoundingClientRect().height,
+		)
+		const glyphLeft = glyphLeftOf(
+			paragraph,
+			fieldBold.childNodes[1] as Text,
+			"the launch ".length,
+		)
+		await expect(
+			Math.abs(
+				caret.getBoundingClientRect().left -
+					paragraph.getBoundingClientRect().left -
+					glyphLeft,
+			),
+		).toBeLessThanOrEqual(1)
+
+		const itemDrawn = slotIn(
+			item.parentElement as HTMLElement,
+			"library-document-drawn-text",
+		)
+		const runs = itemDrawn.querySelectorAll<HTMLElement>(
+			"[data-slot='library-document-run']",
+		)
+		await expect([...runs].map((run) => run.innerText).join("")).toBe(
+			"the release notes on",
+		)
+		await expect(slotIn(itemDrawn, "library-document-italic")).toContainElement(
+			runs[0] as HTMLElement,
+		)
+		await expect(getComputedStyle(item).webkitTextFillColor).toBe(
+			"rgba(0, 0, 0, 0)",
+		)
+	},
 })
 
 type FailureNoticeProps = {
