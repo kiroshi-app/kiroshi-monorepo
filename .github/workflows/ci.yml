@@ -190,7 +190,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           sha=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --event push --branch main --status success --limit 1 \
-            --json headSha --jq '.[0].headSha // ""')
+            --json headSha --jq '.[0].headSha // ""') || {
+            echo "::warning::gh run list exited $? reading the last green push to main: every job runs"
+            sha=""
+          }
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
       - name: Fetch the base to diff against

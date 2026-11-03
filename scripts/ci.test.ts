@@ -1111,6 +1111,59 @@ describe("the jobs of ci.yml", () => {
 		expect(JSON.stringify(changes)).not.toContain("event.before")
 	})
 
+	const runGreenLookup = (fakeGh: string) => {
+		const bin = mkdtempSync(join(tmpdir(), "kiroshi-ci-test-gh-"))
+		const output = join(bin, "github-output")
+		writeFileSync(join(bin, "gh"), `#!/bin/sh\n${fakeGh}\n`, { mode: 0o755 })
+		writeFileSync(output, "")
+		const step = (workflow.jobs.changes?.steps ?? []).find(
+			(candidate) => candidate.id === "green",
+		)
+		const run = Bun.spawnSync(
+			[
+				"bash",
+				"--noprofile",
+				"--norc",
+				"-eo",
+				"pipefail",
+				"-c",
+				step?.run ?? "",
+			],
+			{
+				env: {
+					PATH: `${bin}:${process.env.PATH}`,
+					GITHUB_OUTPUT: output,
+					GITHUB_REPOSITORY: "acme/repo",
+				},
+			},
+		)
+		const lookup = {
+			exitCode: run.exitCode,
+			log: run.stdout.toString(),
+			output: readFileSync(output, "utf8"),
+		}
+		rmSync(bin, { recursive: true, force: true })
+		return lookup
+	}
+
+	it("hands ci-changes the head of the last green push run on main", () => {
+		expect(runGreenLookup("echo last-green-sha")).toEqual({
+			exitCode: 0,
+			log: "",
+			output: "sha=last-green-sha\n",
+		})
+	})
+
+	it("hands ci-changes an empty sha and warns, exiting 0, when gh run list fails", () => {
+		const lookup = runGreenLookup("echo 'HTTP 502' >&2; exit 4")
+
+		expect(lookup.exitCode).toBe(0)
+		expect(lookup.output).toBe("sha=\n")
+		expect(lookup.log).toBe(
+			"::warning::gh run list exited 4 reading the last green push to main: every job runs\n",
+		)
+	})
+
 	it.each([A_PULL_REQUEST, A_RELEASE_TAG])(
 		"looks up no green push run on %p",
 		(github) => {
