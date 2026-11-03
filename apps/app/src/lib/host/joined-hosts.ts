@@ -8,6 +8,7 @@ import { createJoinedHostsInvoke, type LocalHost } from "./joined-hosts-invoke"
 import { createJoinedHostsJoin, type JoinOutcome } from "./joined-hosts-join"
 import { createJoinedHostsListen } from "./joined-hosts-listen"
 
+import type { JoinedSpaceWaitReason } from "../bindings"
 import {
 	describeFailure,
 	failureReporterIn,
@@ -22,7 +23,7 @@ export type JoinedHostState =
 	| { status: "connecting" }
 	| { status: "up" }
 	| { status: "down" }
-	| { status: "refused"; failure: string }
+	| { status: "refused"; failure: string; wait?: JoinedSpaceWaitReason }
 
 export type JoinedHostsState = {
 	active: string | null
@@ -97,6 +98,7 @@ export const createJoinedHosts = ({
 		openSocket,
 		reportFailure,
 		reportJoinRefusal,
+		isOnScreen: (id) => requested === id,
 	})
 	const { invoke, invokeOn, invokeOnThisComputer } = createJoinedHostsInvoke({
 		store,
