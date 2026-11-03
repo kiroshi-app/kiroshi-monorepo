@@ -338,24 +338,23 @@ const drawnTextOf = (
 	})
 }
 
-type FieldSelection = {
-	id: string
-	start: number
-	end: number
-	direction: HTMLTextAreaElement["selectionDirection"]
-}
+const selectionOf = (field: HTMLTextAreaElement) => ({
+	start: field.selectionStart,
+	end: field.selectionEnd,
+	direction: field.selectionDirection,
+})
+
+type TextSelection = ReturnType<typeof selectionOf>
+
+type FieldSelection = TextSelection & { id: string }
 
 const TITLE_FIELD = "title"
 
-const selectionIn = (fields: Map<string, HTMLTextAreaElement>) => {
+const selectionIn = (
+	fields: Map<string, HTMLTextAreaElement>,
+): FieldSelection | undefined => {
 	for (const [id, field] of fields)
-		if (field === document.activeElement)
-			return {
-				id,
-				start: field.selectionStart,
-				end: field.selectionEnd,
-				direction: field.selectionDirection,
-			}
+		if (field === document.activeElement) return { id, ...selectionOf(field) }
 }
 
 const fieldTextOf = (id: string, title: string, blocks: Block[]) =>
@@ -527,15 +526,10 @@ type LibraryDocumentEditorProps = WriterActions & {
 	onCaretChange?: (caret: number | null) => void
 }
 
-const isBodyField = (element: Element | null): element is HTMLTextAreaElement =>
-	element instanceof HTMLTextAreaElement &&
-	element.dataset.bodyOffset !== undefined
-
-const caretIn = (field: HTMLTextAreaElement) =>
-	Number(field.dataset.bodyOffset) +
-	(field.selectionDirection === "backward"
-		? field.selectionStart
-		: field.selectionEnd)
+const caretIn = (
+	field: HTMLTextAreaElement,
+	{ start, end, direction }: TextSelection,
+) => Number(field.dataset.bodyOffset) + (direction === "backward" ? start : end)
 
 const endingOf = (body: string) => /\s*$/.exec(body)?.[0] ?? ""
 
@@ -562,7 +556,7 @@ const LibraryDocumentEditor = ({
 	const [title, setTitle] = useState(titleProp)
 	const [blocks, setBlocks] = useState(() => openingBlocks(body, template, t))
 	const [ending, setEnding] = useState(() => endingOf(body))
-	const [received, setReceived] = useState({ title: titleProp, body })
+	const received = useRef({ title: titleProp, body })
 	const [restoredSelection, setRestoredSelection] = useState<FieldSelection>()
 	const fields = useRef(new Map<string, HTMLTextAreaElement>())
 	const reportedCaret = useRef<number | null>(null)
@@ -572,8 +566,10 @@ const LibraryDocumentEditor = ({
 	>(() => listAnchorsOf(runsOf(blocks), new Map()))
 
 	const reportCaret = () => {
-		const field = document.activeElement
-		const caret = isBodyField(field) ? caretIn(field) : null
+		const selection = selectionIn(fields.current)
+		const field = selection && fields.current.get(selection.id)
+		const caret =
+			field && selection.id !== TITLE_FIELD ? caretIn(field, selection) : null
 		if (caret === reportedCaret.current) return
 
 		reportedCaret.current = caret
@@ -595,12 +591,16 @@ const LibraryDocumentEditor = ({
 		return markdown === "" ? "" : `${markdown}${ending}`
 	}
 
-	if (titleProp !== received.title || body !== received.body) {
-		setReceived({ title: titleProp, body })
-		const nextTitle = titleProp === received.title ? title : titleProp
-		const isBodyOutside = body !== received.body && body !== bodyOf(blocks)
-		const nextBlocks = isBodyOutside ? reconciled(blocks, body) : blocks
-		if (nextTitle !== title || isBodyOutside) {
+	const takeReceived = useEffectEvent(
+		(nextTitleProp: string, nextBody: string) => {
+			const previous = received.current
+			received.current = { title: nextTitleProp, body: nextBody }
+			const nextTitle = nextTitleProp === previous.title ? title : nextTitleProp
+			const isBodyOutside =
+				nextBody !== previous.body && nextBody !== bodyOf(blocks)
+			const nextBlocks = isBodyOutside ? reconciled(blocks, nextBody) : blocks
+			if (nextTitle === title && !isBodyOutside) return
+
 			const selection = selectionIn(fields.current)
 			const before = selection && fieldTextOf(selection.id, title, blocks)
 			const after =
@@ -610,12 +610,14 @@ const LibraryDocumentEditor = ({
 				setBlocks(
 					nextBlocks.length > 0 ? nextBlocks : startingBlocks("blank", t),
 				)
-				setEnding(endingOf(body))
+				setEnding(endingOf(nextBody))
 			}
 			if (selection && before !== undefined && after !== undefined)
 				setRestoredSelection(shiftedSelection(selection, before, after))
-		}
-	}
+		},
+	)
+
+	useLayoutEffect(() => takeReceived(titleProp, body), [titleProp, body])
 
 	const reportCaretAfterBlur = () => {
 		clearTimeout(pendingBlurReport.current)
@@ -632,7 +634,7 @@ const LibraryDocumentEditor = ({
 		const field = fields.current.get(id)
 		if (!field) return
 
-		if (field !== document.activeElement) field.focus({ preventScroll: true })
+		field.focus({ preventScroll: true })
 		field.setSelectionRange(start, end, direction)
 		reportRestoredCaret()
 	}, [restoredSelection])
@@ -713,7 +715,7 @@ const LibraryDocumentEditor = ({
 		focusAt(block.id, Math.max(0, caret - prefix.length))
 	}
 
-	const splitAt = (index: number, field: HTMLTextAreaElement) => {
+	const splitAt = (index: number, { start, end }: TextSelection) => {
 		const block = blocks[index]
 		if (!block) return
 
@@ -725,16 +727,12 @@ const LibraryDocumentEditor = ({
 		const after =
 			block.kind === "item"
 				? {
-						...blockOf("item", block.text.slice(field.selectionEnd)),
+						...blockOf("item", block.text.slice(end)),
 						prefix: block.prefix,
 					}
-				: blockOf("paragraph", block.text.slice(field.selectionEnd))
+				: blockOf("paragraph", block.text.slice(end))
 		commit(
-			replaceAt(
-				index,
-				{ ...block, text: block.text.slice(0, field.selectionStart) },
-				after,
-			),
+			replaceAt(index, { ...block, text: block.text.slice(0, start) }, after),
 		)
 		focusAt(after.id, 0)
 	}
@@ -764,13 +762,15 @@ const LibraryDocumentEditor = ({
 			if (event.nativeEvent.isComposing) return
 
 			const field = event.currentTarget
-			const isCollapsed = field.selectionStart === field.selectionEnd
-			const isAtStart = isCollapsed && field.selectionStart === 0
-			const isAtEnd = isCollapsed && field.selectionEnd === field.value.length
+			const selection = selectionOf(field)
+			const { start, end } = selection
+			const isCollapsed = start === end
+			const isAtStart = isCollapsed && start === 0
+			const isAtEnd = isCollapsed && end === field.value.length
 
 			if (event.key === "Enter" && !event.shiftKey) {
 				event.preventDefault()
-				splitAt(index, field)
+				splitAt(index, selection)
 			} else if (event.key === "Backspace" && isAtStart) {
 				event.preventDefault()
 				joinBackward(index)
@@ -807,7 +807,7 @@ const LibraryDocumentEditor = ({
 				key={block.id}
 				onBlur={reportCaretAfterBlur}
 				onChange={(event) =>
-					changeText(index, event.target.value, event.target.selectionStart)
+					changeText(index, event.target.value, selectionOf(event.target).start)
 				}
 				onKeyDown={keyDownIn(index)}
 				onSelect={reportCaret}

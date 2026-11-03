@@ -1325,6 +1325,7 @@ navigation-headeridentitybutton--working
 navigation-librarydocumenteditor--agent-finished
 navigation-librarydocumenteditor--agents-writing
 navigation-librarydocumenteditor--blank
+navigation-librarydocumenteditor--caret-moved-while-outside-change-renders
 navigation-librarydocumenteditor--caret-moves
 navigation-librarydocumenteditor--create-failure
 navigation-librarydocumenteditor--existing-document
