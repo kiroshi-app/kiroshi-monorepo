@@ -1929,3 +1929,283 @@ export const CaretShareFailure = meta.story({
 		"The notice raised over the open editor when sharing the person's caret was refused, from `common:library.failure.document.caret`. Check that it names what failed and tells the person to keep editing.",
 	),
 })
+
+const SELECTION_OPENING =
+	"We met to agree the launch date and who signs off the copy before the screenshots land, so the press kit and the store listing go out together on the same morning."
+
+const SELECTION_DOCUMENT = {
+	title: LAUNCH_REVIEW.title,
+	detail: LAUNCH_REVIEW.detail,
+	template: undefined,
+	body: [
+		SELECTION_OPENING,
+		"## Decisions",
+		"- Ship on the **14th**\n- Copy is final on the 7th",
+		"## Next steps",
+		"Screenshots land on the 10th.",
+	].join("\n\n"),
+}
+
+const SELECTION_ACTIONS = {
+	onBold: fn(),
+	onItalic: fn(),
+	onStrikethrough: fn(),
+	onCode: fn(),
+	onLink: fn(),
+	onHeading: fn(),
+	onList: fn(),
+}
+
+const SELECTION_GAP = 8
+
+const toolbarIn = (canvasElement: HTMLElement) =>
+	canvasElement.querySelector<HTMLElement>('[data-slot="selection-toolbar"]')
+
+const selectionRectOf = (field: HTMLElement) => {
+	const range = document.createRange()
+	if (field instanceof HTMLTextAreaElement) {
+		const mirrored = field.previousElementSibling?.firstChild
+		if (!mirrored) throw new Error("The field draws no mirrored text")
+		range.setStart(mirrored, field.selectionStart)
+		range.setEnd(mirrored, field.selectionEnd)
+		return range.getBoundingClientRect()
+	}
+	const live = document.getSelection()
+	if (!live?.rangeCount) throw new Error("Nothing is selected")
+	return live.getRangeAt(0).getBoundingClientRect()
+}
+
+const selectIn = (field: HTMLElement, text: string, from = 0) => {
+	const start = (field as HTMLTextAreaElement).value.indexOf(text, from)
+	field.focus({ preventScroll: true })
+	;(field as HTMLTextAreaElement).setSelectionRange(start, start + text.length)
+	return start
+}
+
+const expectToolbarAbove = async (
+	canvasElement: HTMLElement,
+	field: HTMLElement,
+) => {
+	await waitFor(() => expect(toolbarIn(canvasElement)).not.toBe(null))
+	const selection = selectionRectOf(field)
+	const toolbar = toolbarIn(canvasElement)?.getBoundingClientRect()
+	if (!toolbar) throw new Error("No toolbar")
+	await expect(
+		Math.abs(
+			(toolbar.left + toolbar.right) / 2 -
+				(selection.left + selection.right) / 2,
+		),
+	).toBeLessThan(1)
+	await expect(
+		Math.abs(selection.top - toolbar.bottom - SELECTION_GAP),
+	).toBeLessThan(1)
+}
+
+const selectionStory = (story: string) => ({
+	args: { ...SELECTION_DOCUMENT, ...SELECTION_ACTIONS },
+	parameters: { docs: { description: { story } } },
+})
+
+export const A1ToolbarAboveSelection = meta.story({
+	...selectionStory(
+		"Artboard A1: a few words selected on one line of a paragraph. Check that the toolbar sits centred on the selection 8px above it, over every caret and flag, that a pointer press on Bold reports the selected range and keeps the text selected without touching the document, and that the toolbar leaves when the selection collapses or moves to the title.",
+	),
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		const [opening] = bodyFieldsIn(canvasElement) as [HTMLTextAreaElement]
+		const start = selectIn(opening, "the launch date")
+		await expectToolbarAbove(canvasElement, opening)
+		await expect(
+			getComputedStyle(toolbarIn(canvasElement) as HTMLElement).zIndex,
+		).toBe("10")
+
+		const toolbar = canvas.getByRole("toolbar", { name: "Format" })
+		await expect(
+			within(toolbar)
+				.getAllByRole("button")
+				.map((button) => button.getAttribute("aria-label")),
+		).toEqual([
+			"Bold",
+			"Italic",
+			"Strikethrough",
+			"Code",
+			"Link",
+			"Heading",
+			"List",
+		])
+
+		await userEvent.click(within(toolbar).getByRole("button", { name: "Bold" }))
+		await expect(args.onBold).toHaveBeenCalledWith({
+			start,
+			end: start + "the launch date".length,
+		})
+		await expect(document.activeElement).toBe(opening)
+		await expect(
+			opening.value.slice(opening.selectionStart, opening.selectionEnd),
+		).toBe("the launch date")
+		await expect(args.onBodyChange).not.toHaveBeenCalled()
+
+		opening.setSelectionRange(start, start)
+		await waitFor(() => expect(toolbarIn(canvasElement)).toBe(null))
+		selectIn(opening, "the launch date")
+		await waitFor(() => expect(toolbarIn(canvasElement)).not.toBe(null))
+		const title = canvas.getByRole("textbox", {
+			name: "Title",
+		}) as HTMLTextAreaElement
+		title.focus()
+		title.setSelectionRange(0, 6)
+		await waitFor(() => expect(toolbarIn(canvasElement)).toBe(null))
+
+		selectIn(opening, "the launch date")
+		await expectToolbarAbove(canvasElement, opening)
+	},
+})
+
+export const A2ToolbarOverTwoLines = meta.story({
+	...selectionStory(
+		"Artboard A2: a selection running from the first line of a paragraph onto the second. Check that the toolbar centres on the box holding both selected lines and sits 8px above its top.",
+	),
+	play: async ({ canvasElement }) => {
+		const [opening] = bodyFieldsIn(canvasElement) as [HTMLTextAreaElement]
+		selectIn(
+			opening,
+			"who signs off the copy before the screenshots land, so the press kit and the store",
+		)
+		await expect(selectionRectOf(opening).height).toBeGreaterThan(40)
+		await expectToolbarAbove(canvasElement, opening)
+	},
+})
+
+export const A3ToolbarButtonHover = meta.story({
+	args: { ...SELECTION_DOCUMENT, ...SELECTION_ACTIONS },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Artboard A3: the pointer rests on Bold. Check that Bold changes fill with no colour transition, and that its tooltip names it with its shortcut, with no arrow, 14px above the button.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		const [opening] = bodyFieldsIn(canvasElement) as [HTMLTextAreaElement]
+		selectIn(opening, "the launch date")
+		const bold = await canvas.findByRole("button", { name: "Bold" })
+		await expect(getComputedStyle(bold).transitionProperty).toBe("none")
+		await userEvent.hover(bold)
+		const tooltip = await screen.findByRole("tooltip")
+		await expect(tooltip).toHaveTextContent("Bold⌘B")
+		await expect(
+			[...tooltip.children]
+				.filter((child) => child.checkVisibility())
+				.map((child) => child.tagName),
+		).toEqual(["KBD"])
+		await expect(
+			bold.getBoundingClientRect().top - tooltip.getBoundingClientRect().bottom,
+		).toBeCloseTo(14, 0)
+	},
+})
+
+export const A4ToolbarFormatOn = meta.story({
+	...selectionStory(
+		"Artboard A4: a selection inside bold text in a list item. Check that Bold and List wear the Space colour and report themselves pressed, while every other button stays off.",
+	),
+	play: async ({ canvas, canvasElement }) => {
+		const item = bodyFieldsIn(canvasElement).find(
+			(field) =>
+				field.dataset.kind === "item" && field.value.includes("**14th**"),
+		) as HTMLElement
+		selectIn(item, "14th")
+		const toolbar = await canvas.findByRole("toolbar", { name: "Format" })
+		const pressed = within(toolbar)
+			.getAllByRole("button")
+			.filter((button) => button.getAttribute("aria-pressed") === "true")
+			.map((button) => button.getAttribute("aria-label"))
+		await expect(pressed).toEqual(["Bold", "List"])
+		await expectToolbarAbove(canvasElement, item)
+	},
+})
+
+export const A5ToolbarLinkField = meta.story({
+	...selectionStory(
+		"Artboard A5: Link pressed, the bar gives way to the link field at the same place. Check that the field takes focus, that Escape returns to the bar without reporting a link, and that Enter reports the typed url with the selected range and returns to the bar.",
+	),
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		const [opening] = bodyFieldsIn(canvasElement) as [HTMLTextAreaElement]
+		const start = selectIn(opening, "the launch date")
+		const openLinkField = async () => {
+			await userEvent.click(await canvas.findByRole("button", { name: "Link" }))
+			const field = canvas.getByRole("textbox", { name: "Link address" })
+			await expect(document.activeElement).toBe(field)
+			return field
+		}
+
+		await userEvent.type(await openLinkField(), "https://kiroshi.app/brief")
+		await userEvent.keyboard("{Escape}")
+		await expect(args.onLink).not.toHaveBeenCalled()
+		await expect(canvas.getByRole("toolbar", { name: "Format" })).toBeVisible()
+
+		await userEvent.type(
+			await openLinkField(),
+			"https://kiroshi.app/brief{Enter}",
+		)
+		await expect(args.onLink).toHaveBeenCalledOnce()
+		await expect(args.onLink).toHaveBeenCalledWith(
+			"https://kiroshi.app/brief",
+			{
+				start,
+				end: start + "the launch date".length,
+			},
+		)
+		await expect(canvas.getByRole("toolbar", { name: "Format" })).toBeVisible()
+		await expect(args.onBodyChange).not.toHaveBeenCalled()
+
+		await userEvent.type(await openLinkField(), "https://kiroshi.app/brief")
+		const field = toolbarIn(canvasElement)?.getBoundingClientRect()
+		await expect(field?.width).toBe(340)
+		await expectToolbarAbove(canvasElement, opening)
+	},
+})
+
+const FLIPPED_DOCUMENT = {
+	...SELECTION_DOCUMENT,
+	body: [
+		SELECTION_DOCUMENT.body,
+		...Array.from(
+			{ length: 40 },
+			(_, index) =>
+				`Week ${index + 1} brings the next round of screenshots and copy.`,
+		),
+	].join("\n\n"),
+}
+
+export const A6ToolbarFlippedBelow = meta.story({
+	args: { ...FLIPPED_DOCUMENT, ...SELECTION_ACTIONS },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Artboard A6: the document scrolled until the selected line sits just under the top of the column, with no room above it for the toolbar. Check that the toolbar flips under the selection, its top edge 8px below the selection bottom.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const column = slotIn(canvasElement, "library-document-column")
+		const week = bodyFieldsIn(canvasElement).find((field) =>
+			field.value.startsWith("Week 6 "),
+		) as HTMLTextAreaElement
+		column.scrollTop +=
+			week.getBoundingClientRect().top - column.getBoundingClientRect().top - 16
+		selectIn(week, "screenshots")
+		await waitFor(() =>
+			expect(toolbarIn(canvasElement)).toHaveAttribute(
+				"data-placement",
+				"below",
+			),
+		)
+		const selection = selectionRectOf(week)
+		const toolbar = toolbarIn(canvasElement)?.getBoundingClientRect()
+		await expect(toolbar?.top).toBeGreaterThan(selection.bottom)
+		await expect(
+			Math.abs((toolbar?.top ?? 0) - selection.bottom - SELECTION_GAP),
+		).toBeLessThan(1)
+	},
+})

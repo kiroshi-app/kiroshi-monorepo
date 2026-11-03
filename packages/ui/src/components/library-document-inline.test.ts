@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
 	deletedIn,
+	formatsAround,
 	hasInlineFormat,
 	inlineNodesOf,
 	shownBoundsOf,
@@ -87,6 +88,25 @@ describe("deletedIn", () => {
 		expect(deletedIn(text, 3, text.indexOf("old"))).toEqual({
 			text: "Cut~~old copy~~ today",
 			caret: 3,
+		})
+	})
+})
+
+describe("formatsAround", () => {
+	const text = "We met on **the [brief](https://k.app/b) date** today."
+
+	it("names every format holding the selection, with the link url", () => {
+		const start = text.indexOf("brief")
+		expect(formatsAround(text, start, start + "brief".length)).toEqual({
+			formats: ["bold", "link"],
+			link: "https://k.app/b",
+		})
+	})
+
+	it("names nothing for a selection reaching outside every format", () => {
+		const start = text.indexOf("met")
+		expect(formatsAround(text, start, text.indexOf("date"))).toEqual({
+			formats: [],
 		})
 	})
 })
