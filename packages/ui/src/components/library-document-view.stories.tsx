@@ -1,4 +1,4 @@
-import { expect, fn, screen } from "storybook/test"
+import { expect, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { hueScopeOf, slotIn } from "@workspace/storybook/story-utils"
@@ -32,6 +32,33 @@ const SPRING_BRIEF: LibraryDocument = {
 	].join("\n\n"),
 }
 
+const DOCUMENT_ACTIONS = {
+	onOpen: fn(),
+	onOpenInNewTab: fn(),
+	onRename: fn(),
+	onCopy: fn(),
+	onDownload: fn(),
+	onShowInFolder: fn(),
+	onDelete: fn(),
+}
+
+const NO_DOCUMENT_ACTIONS = {
+	onOpen: undefined,
+	onOpenInNewTab: undefined,
+	onRename: undefined,
+	onCopy: undefined,
+	onDownload: undefined,
+	onShowInFolder: undefined,
+	onDelete: undefined,
+}
+
+const BAR_ACTION_NAMES = ["Download", "Copy"]
+
+const barButtonNames = (bar: HTMLElement) =>
+	within(bar)
+		.getAllByRole("button")
+		.map((button) => button.getAttribute("aria-label") ?? button.textContent)
+
 const meta = preview.meta({
 	title: "Navigation/LibraryDocumentView",
 	component: LibraryDocumentView,
@@ -40,7 +67,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"One document of the Library, read-only, in place of the grid. The bar carries the breadcrumb back to the Library and a More button, drawn only when `onMore` is given, that only reports the document to it; the body is the document's markdown, rendered by the repo renderer in a 640 wide column.",
+					"One document of the Library, read-only, in place of the grid. The bar carries the breadcrumb back to the Library, then the image viewer's actions: Download and Copy, each drawn only when its callback is given, More, drawn only when an item action is left that the bar does not already show as a button, and Close, which calls `onBack` like the breadcrumb; the body is the document's markdown, rendered by the repo renderer in a 640 wide column.",
 			},
 		},
 	},
@@ -48,7 +75,7 @@ const meta = preview.meta({
 	args: {
 		document: SPRING_BRIEF,
 		onBack: fn(),
-		onMore: fn(),
+		...DOCUMENT_ACTIONS,
 	},
 	render: (args) => (
 		<div
@@ -67,7 +94,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"A document open from the Library, as artboard 9 draws it. Check that Library in the breadcrumb calls `onBack`, that More names itself in a tooltip and reports the document, and that the body keeps 15/24 paragraphs with 17/24 headings.",
+					"A document open from the Library, as artboard 9 draws it. Check that Library in the breadcrumb calls `onBack`, that More names itself in a tooltip, and that the body keeps 15/24 paragraphs with 17/24 headings.",
 			},
 		},
 	},
@@ -78,8 +105,6 @@ export const Default = meta.story({
 		const more = canvas.getByRole("button", { name: "More" })
 		await userEvent.hover(more)
 		await expect(await screen.findByRole("tooltip")).toHaveTextContent("More")
-		await userEvent.click(more)
-		await expect(args.onMore).toHaveBeenCalledWith(SPRING_BRIEF)
 
 		const body = slotIn(canvasElement, "markdown")
 		const paragraph = body.querySelector("p") as HTMLElement
@@ -94,19 +119,119 @@ export const Default = meta.story({
 	},
 })
 
-export const Member = meta.story({
-	args: { onMore: undefined },
+export const BarMatchesImageBar = meta.story({
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"A document open in a joined Space, where More has no action for a member. Check that the bar keeps the breadcrumb and draws no More.",
+					"The document bar given the same item actions as the image viewer's Default story. Check that it is 56 tall like the image bar, that Download, Copy, More then Close follow the breadcrumb in the image bar's order, each a 32 px button that changes colour instantly and names itself in a tooltip, and that the divider between More and Close is 20 tall and centred on the row. Pick it to compare the two bars side by side with Overlays/LibraryLightbox Default.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		const bar = canvas.getByRole("navigation").parentElement as HTMLElement
+		await expect(bar.getBoundingClientRect().height).toBe(56)
+		await expect(barButtonNames(bar)).toEqual([
+			"Library",
+			"Download",
+			"Copy",
+			"More",
+			"Close",
+		])
+		for (const name of ["Download", "Copy", "More", "Close"]) {
+			const action = within(bar).getByRole("button", { name })
+			await expect(action.getBoundingClientRect().width).toBe(32)
+			await expect(action.getBoundingClientRect().height).toBe(32)
+			await expect(getComputedStyle(action).transitionProperty).toBe("none")
+			await userEvent.hover(action)
+			await expect(await screen.findByRole("tooltip")).toHaveTextContent(name)
+			await userEvent.unhover(action)
+			await waitFor(() => expect(screen.queryByRole("tooltip")).toBe(null))
+		}
+
+		const divider = within(bar).getByRole("separator")
+		const box = divider.getBoundingClientRect()
+		const row = divider.parentElement?.getBoundingClientRect()
+		await expect(box.height).toBe(20)
+		await expect(box.top + box.height / 2).toBeCloseTo(
+			(row?.top ?? 0) + (row?.height ?? 0) / 2,
+			0,
+		)
+
+		await userEvent.click(within(bar).getByRole("button", { name: "Download" }))
+		await expect(args.onDownload).toHaveBeenCalledWith(SPRING_BRIEF)
+		await userEvent.click(within(bar).getByRole("button", { name: "Copy" }))
+		await expect(args.onCopy).toHaveBeenCalledWith(SPRING_BRIEF)
+		await userEvent.click(within(bar).getByRole("button", { name: "Close" }))
+		await expect(args.onBack).toHaveBeenCalledOnce()
+		await expect(slotIn(canvasElement, "library-document-view")).toBeVisible()
+	},
+})
+
+export const MoreMenu = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"More pressed on a document, every item action given. Check that the menu lists Open, Open in new tab, Rename, Show in folder, then Delete under its rule, that neither Download nor Copy, already buttons of the bar, appears in it, and that an entry hands the document to its callback.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		await userEvent.click(canvas.getByRole("button", { name: "More" }))
+		const menu = await screen.findByRole("menu", {
+			name: "Actions for Spring launch brief",
+		})
+		await expect(
+			within(menu)
+				.getAllByRole("menuitem")
+				.map((entry) => entry.textContent),
+		).toEqual(["Open", "Open in new tab", "Rename", "Show in folder", "Delete"])
+		for (const name of BAR_ACTION_NAMES)
+			await expect(within(menu).queryByRole("menuitem", { name })).toBe(null)
+
+		await userEvent.click(
+			within(menu).getByRole("menuitem", { name: "Show in folder" }),
+		)
+		await expect(args.onShowInFolder).toHaveBeenCalledWith(SPRING_BRIEF)
+	},
+})
+
+export const OnlyBarActionsGiven = meta.story({
+	tags: ["test-only"],
+	args: { ...NO_DOCUMENT_ACTIONS, onCopy: fn(), onDownload: fn() },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Only Download and Copy given, both already buttons of the bar. Check that the bar draws them and no More, since its menu would have nothing left to list.",
 			},
 		},
 	},
 	play: async ({ canvas }) => {
-		await expect(canvas.getByRole("button", { name: "Library" })).toBeVisible()
-		await expect(canvas.queryByRole("button", { name: "More" })).toBe(null)
+		const bar = canvas.getByRole("navigation").parentElement as HTMLElement
+		await expect(barButtonNames(bar)).toEqual([
+			"Library",
+			"Download",
+			"Copy",
+			"Close",
+		])
+	},
+})
+
+export const Member = meta.story({
+	args: NO_DOCUMENT_ACTIONS,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A document open in a joined Space, where no item action is given for a member. Check that the bar keeps the breadcrumb and Close and draws neither Download, Copy nor More.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const bar = canvas.getByRole("navigation").parentElement as HTMLElement
+		await expect(barButtonNames(bar)).toEqual(["Library", "Close"])
 	},
 })
 
@@ -286,7 +411,7 @@ export const OneAgentWriting = meta.story({
 		docs: {
 			description: {
 				story:
-					"Mira alone writing. Check that the pill reads 1 agent writing, and that the keyboard reaches Stop all, then the flag, which opens the card on focus, then Stop Mira inside it.",
+					"Mira alone writing. Check that the pill reads 1 agent writing, and that the keyboard reaches Stop all, then the bar actions, then the flag, which opens the card on focus, then Stop Mira inside it.",
 			},
 		},
 	},
@@ -299,8 +424,10 @@ export const OneAgentWriting = meta.story({
 		await expect(canvas.getByRole("button", { name: "Library" })).toHaveFocus()
 		await userEvent.tab()
 		await expect(canvas.getByRole("button", { name: "Stop all" })).toHaveFocus()
-		await userEvent.tab()
-		await expect(canvas.getByRole("button", { name: "More" })).toHaveFocus()
+		for (const name of ["Download", "Copy", "More", "Close"]) {
+			await userEvent.tab()
+			await expect(canvas.getByRole("button", { name })).toHaveFocus()
+		}
 		await userEvent.tab()
 		const flag = flagNamed("Mira")
 		await expect(flag).toHaveFocus()

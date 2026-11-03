@@ -128,6 +128,17 @@ const ITEM_ACTION_NAMES = [
 	"Delete",
 ]
 
+const BAR_ACTION_NAMES = ["Download", "Copy"]
+
+const BAR_MENU_ACTION_NAMES = ITEM_ACTION_NAMES.filter(
+	(name) => !BAR_ACTION_NAMES.includes(name),
+)
+
+const expectNoBarActionIn = async (menu: HTMLElement) => {
+	for (const name of BAR_ACTION_NAMES)
+		await expect(within(menu).queryByRole("menuitem", { name })).toBe(null)
+}
+
 const openMoreMenu = async (popup: HTMLElement, userEvent: UserEventObject) => {
 	await userEvent.click(within(popup).getByRole("button", { name: "More" }))
 	return screen.findByRole("menu", { name: /^Actions for / })
@@ -274,7 +285,7 @@ export const HostMoreMenu = meta.story({
 		docs: {
 			description: {
 				story:
-					"More pressed on the host, every item action given. Check that the menu lists Open, Open in new tab, Rename, Copy, Download, Show in folder, then Delete under a rule and drawn as destructive, that the highlight follows the pointer with no colour transition, that an entry hands the shown image to its callback, and that the grid item menu lists the same actions in the same order.",
+					"More pressed on the host, every item action given. Check that the menu lists Open, Open in new tab, Rename, Show in folder, then Delete under a rule and drawn as destructive, that neither Download nor Copy, already buttons of the bar, appears in it, that the highlight follows the pointer with no colour transition, that an entry hands the shown image to its callback, and that the grid item menu still lists every action, Copy and Download included.",
 			},
 		},
 	},
@@ -284,7 +295,8 @@ export const HostMoreMenu = meta.story({
 		await expect(menu).toHaveAccessibleName(
 			"Actions for dashboard-redesign.png",
 		)
-		await expect(menuEntryNames(menu)).toEqual(ITEM_ACTION_NAMES)
+		await expect(menuEntryNames(menu)).toEqual(BAR_MENU_ACTION_NAMES)
+		await expectNoBarActionIn(menu)
 		const entries = within(menu).getAllByRole("menuitem")
 		await expect(entries.at(-1)?.previousElementSibling).toHaveAttribute(
 			"role",
@@ -316,7 +328,7 @@ export const MemberMoreMenu = meta.story({
 		docs: {
 			description: {
 				story:
-					"More pressed in a joined Space, where Show in folder has no action for a member. Check that the bar keeps Download, Copy and More, and that neither the More menu nor the grid item menu lists Show in folder.",
+					"More pressed in a joined Space, where Show in folder has no action for a member. Check that the bar keeps Download, Copy and More, that neither the More menu nor the grid item menu lists Show in folder, and that only the grid item menu lists Download and Copy.",
 			},
 		},
 	},
@@ -333,7 +345,7 @@ export const MemberMoreMenu = meta.story({
 			(name) => name !== "Show in folder",
 		)
 		await expect(menuEntryNames(await openMoreMenu(popup, userEvent))).toEqual(
-			memberActions,
+			memberActions.filter((name) => !BAR_ACTION_NAMES.includes(name)),
 		)
 		await closeMenu(userEvent)
 
@@ -355,7 +367,7 @@ export const ImageWithoutRename = meta.story({
 		docs: {
 			description: {
 				story:
-					"More pressed on an image, every item action given and Rename kept for documents. Check that the menu lists every action but Rename, with Delete still under its rule.",
+					"More pressed on an image, every item action given and Rename kept for documents. Check that the menu lists every action but Rename and the bar's own Download and Copy, with Delete still under its rule.",
 			},
 		},
 	},
@@ -363,7 +375,7 @@ export const ImageWithoutRename = meta.story({
 		const popup = await lightbox()
 		const menu = await openMoreMenu(popup, userEvent)
 		await expect(menuEntryNames(menu)).toEqual(
-			ITEM_ACTION_NAMES.filter((name) => name !== "Rename"),
+			BAR_MENU_ACTION_NAMES.filter((name) => name !== "Rename"),
 		)
 		await expect(
 			within(menu).getAllByRole("menuitem").at(-1)?.previousElementSibling,
@@ -403,6 +415,33 @@ export const OnlyDeleteShown = meta.story({
 		await expect(menuEntryNames(gridMenu)).toEqual(["Delete"])
 		await expect(within(gridMenu).queryByRole("separator")).toBe(null)
 		await closeMenu(userEvent)
+	},
+})
+
+export const OnlyBarActionsGiven = meta.story({
+	tags: ["test-only"],
+	args: {
+		isActionShown: (_, action) =>
+			action === "onDownload" || action === "onCopy",
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Every item action given and only Download and Copy shown for the image, both already buttons of the bar. Check that the bar draws them and no More, since its menu would have nothing left to list.",
+			},
+		},
+	},
+	play: async () => {
+		const popup = await lightbox()
+		await expect(
+			within(popup)
+				.getAllByRole("button")
+				.map((button) => button.getAttribute("aria-label"))
+				.filter((name) =>
+					["Download", "Copy", "More", "Close"].includes(name ?? ""),
+				),
+		).toEqual(["Download", "Copy", "Close"])
 	},
 })
 

@@ -14,9 +14,15 @@ import {
 	LibraryDocumentWrittenRun,
 	type WriterActions,
 } from "@workspace/ui/components/library-document-agents"
+import {
+	handlersFor,
+	LIBRARY_BAR,
+	type LibraryItemActions,
+	LibraryItemBarActions,
+	type LibraryMenuSubject,
+} from "@workspace/ui/components/library-item-menu"
 import { Markdown } from "@workspace/ui/components/markdown"
 import type { MarkdownRunRenderProps } from "@workspace/ui/components/markdown/run"
-import { TooltipButton } from "@workspace/ui/components/tooltip-button"
 import { Button } from "@workspace/ui/components/ui/button"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -36,23 +42,23 @@ const DOCUMENT_TYPE = cn(
 const DOCUMENT_TITLE =
 	"break-words font-heading font-semibold text-[1.75rem] text-foreground leading-[2.125rem] tracking-[-0.02em]"
 
-type LibraryDocumentBarProps = {
-	name: string
-	onBack: () => void
-	onMore?: () => void
-	presence?: ReactNode
-}
+type LibraryDocumentBarProps<Item extends LibraryMenuSubject> =
+	LibraryItemActions<Item> & {
+		item: Item
+		onBack: () => void
+		presence?: ReactNode
+	}
 
-const LibraryDocumentBar = ({
-	name,
+const LibraryDocumentBar = <Item extends LibraryMenuSubject>({
+	item,
 	onBack,
-	onMore,
 	presence,
-}: LibraryDocumentBarProps) => {
+	...actions
+}: LibraryDocumentBarProps<Item>) => {
 	const { t } = useTranslation("common")
 
 	return (
-		<div className="flex h-13 shrink-0 items-center justify-between gap-4 px-3">
+		<div className={LIBRARY_BAR}>
 			<nav className="flex min-w-0 items-center gap-1.5">
 				<Button
 					className="h-7 shrink-0 gap-1 rounded-full ps-1.5 pe-2.5 font-medium text-compact text-muted-foreground leading-4 transition-none hover:bg-foreground/6 hover:text-foreground dark:hover:bg-foreground/6"
@@ -71,27 +77,18 @@ const LibraryDocumentBar = ({
 				<span
 					aria-current="page"
 					className="truncate ps-1 font-medium text-compact text-foreground leading-4"
-					title={name}
+					title={item.name}
 				>
-					{name}
+					{item.name}
 				</span>
 			</nav>
-			<div className="flex shrink-0 items-center gap-2">
-				{presence}
-				{onMore ? (
-					<TooltipButton
-						aria-label={t("library.document.more")}
-						className="size-8 shrink-0 rounded-full border-input bg-foreground/3 transition-none hover:bg-foreground/8 dark:bg-foreground/3 dark:hover:bg-foreground/8"
-						onClick={onMore}
-						size="icon"
-						tooltip={t("library.document.more")}
-						tooltipSide="bottom"
-						variant="outline"
-					>
-						<Icons.More aria-hidden="true" />
-					</TooltipButton>
-				) : null}
-			</div>
+			<LibraryItemBarActions
+				actions={handlersFor(actions, item)}
+				item={item}
+				leading={presence}
+				onClose={onBack}
+				surface="document"
+			/>
 		</div>
 	)
 }
@@ -140,16 +137,16 @@ const LibraryDocumentColumn = ({
 	</div>
 )
 
-type LibraryDocumentViewProps = WriterActions & {
-	document: LibraryDocument
-	onBack: () => void
-	onMore?: (document: LibraryDocument) => void
-	writers?: LibraryDocumentWriter[]
-	finished?: LibraryDocumentFinished
-	onStopAll?: () => void
-	onUndoAll?: () => void
-	onDone?: () => void
-}
+type LibraryDocumentViewProps = WriterActions &
+	LibraryItemActions<LibraryDocument> & {
+		document: LibraryDocument
+		onBack: () => void
+		writers?: LibraryDocumentWriter[]
+		finished?: LibraryDocumentFinished
+		onStopAll?: () => void
+		onUndoAll?: () => void
+		onDone?: () => void
+	}
 
 const runsOf = (edits: LibraryDocumentEdit[]) =>
 	edits.map(({ agent, start, end }) => ({ id: agent.id, start, end }))
@@ -157,7 +154,6 @@ const runsOf = (edits: LibraryDocumentEdit[]) =>
 const LibraryDocumentView = ({
 	document,
 	onBack,
-	onMore,
 	writers = [],
 	finished,
 	onStopAll,
@@ -165,6 +161,7 @@ const LibraryDocumentView = ({
 	onOpenConversation,
 	onUndoAll,
 	onDone,
+	...actions
 }: LibraryDocumentViewProps) => {
 	const isWriting = writers.length > 0
 	const shownFinished = isWriting ? undefined : finished
@@ -199,9 +196,9 @@ const LibraryDocumentView = ({
 			data-slot="library-document-view"
 		>
 			<LibraryDocumentBar
-				name={document.name}
+				{...actions}
+				item={document}
 				onBack={onBack}
-				onMore={onMore ? () => onMore(document) : undefined}
 				presence={
 					isWriting ? (
 						<LibraryDocumentPresence onStopAll={onStopAll} writers={writers} />

@@ -1416,11 +1416,14 @@ navigation-librarydocumenteditor--with-typed-text
 navigation-librarydocumenteditor--write-failure
 navigation-librarydocumentview--agent-finished
 navigation-librarydocumentview--agents-writing
+navigation-librarydocumentview--bar-matches-image-bar
 navigation-librarydocumentview--default
 navigation-librarydocumentview--long-agent-name-finished
 navigation-librarydocumentview--long-agent-name-writing
 navigation-librarydocumentview--member
+navigation-librarydocumentview--more-menu
 navigation-librarydocumentview--one-agent-writing
+navigation-librarydocumentview--only-bar-actions-given
 navigation-librarynewdocumentdialog--blank-selected
 navigation-librarynewdocumentdialog--meeting-notes-selected
 navigation-librarynewdocumentdialog--narrow-window
@@ -1644,6 +1647,7 @@ overlays-librarylightbox--every-action-left-out
 overlays-librarylightbox--host-more-menu
 overlays-librarylightbox--image-without-rename
 overlays-librarylightbox--member-more-menu
+overlays-librarylightbox--only-bar-actions-given
 overlays-librarylightbox--only-delete-shown
 overlays-librarylightbox--without-item-actions
 overlays-librarylightbox--zoomed

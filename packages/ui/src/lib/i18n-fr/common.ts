@@ -437,6 +437,10 @@ const common = {
 		document: {
 			back: "Bibliothèque",
 			more: "Plus",
+			download: "Télécharger",
+			copy: "Copier",
+			copied: "Copié",
+			close: "Fermer",
 			agents: {
 				writing_one: "{{count}} agent écrit",
 				writing_many: "{{count}} agents écrivent",
