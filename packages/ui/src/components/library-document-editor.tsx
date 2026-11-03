@@ -725,6 +725,7 @@ const NO_EDITS: LibraryDocumentEdit[] = []
 type LibraryDocumentEditorHandle = {
 	focusTitle: () => void
 	restoreTitle: (name: string) => void
+	titleField: () => HTMLTextAreaElement | null
 }
 
 type LibraryDocumentEditorProps = WriterActions &
@@ -833,6 +834,7 @@ const LibraryDocumentEditor = ({
 	useImperativeHandle(ref, () => ({
 		focusTitle: focusTitleAtEnd,
 		restoreTitle: setTitle,
+		titleField: () => titleField.current,
 	}))
 
 	const takeHeldTitle = () => {

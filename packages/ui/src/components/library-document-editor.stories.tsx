@@ -4,6 +4,7 @@ import {
 	type ComponentType,
 	createRef,
 	type ReactNode,
+	type RefObject,
 	useEffect,
 	useSyncExternalStore,
 } from "react"
@@ -405,6 +406,48 @@ export const TitleFocusedByRename = meta.story({
 		await expect(args.onTitleChange).toHaveBeenLastCalledWith(
 			"Launch review v2",
 		)
+	},
+})
+
+const renameHandle = createRef<LibraryDocumentEditorHandle>()
+
+const titleFieldOf =
+	(handle: RefObject<LibraryDocumentEditorHandle | null>) => () =>
+		handle.current?.titleField() ?? false
+
+export const RenameFocusesTitleFromHandle = meta.story({
+	args: { ...LAUNCH_REVIEW, template: undefined, onRename: fn() },
+	render: (args) => (
+		<EditorFrame>
+			<LibraryDocumentEditor
+				{...args}
+				menuFinalFocus={titleFieldOf(renameHandle)}
+				ref={renameHandle}
+			/>
+		</EditorFrame>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Rename picked from More while `menuFinalFocus` returns the handle's `titleField()`, as the app wires it. Check that the title holds focus once the menu closes and that More does not.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		await expect(titleFieldOf(createRef())()).toBe(false)
+		const title = titleIn(canvasElement)
+		await expect(renameHandle.current?.titleField()).toBe(title)
+
+		const more = within(canvasElement).getByRole("button", { name: "More" })
+		await userEvent.click(more)
+		const menu = await screen.findByRole("menu")
+		await userEvent.click(
+			within(menu).getByRole("menuitem", { name: "Rename" }),
+		)
+		await expect(args.onRename).toHaveBeenCalledOnce()
+		await waitFor(() => expect(title).toHaveFocus())
+		await expect(more).not.toHaveFocus()
 	},
 })
 
