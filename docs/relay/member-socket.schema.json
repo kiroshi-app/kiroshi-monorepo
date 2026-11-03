@@ -3621,6 +3621,17 @@
       ],
       "type": "object"
     },
+    "LibraryChanged": {
+      "properties": {
+        "spaceId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "spaceId"
+      ],
+      "type": "object"
+    },
     "LibraryDocument": {
       "properties": {
         "content": {
@@ -13062,6 +13073,11 @@
     "hosting://members-changed": {
       "payload": {
         "$ref": "#/$defs/MembersChanged"
+      }
+    },
+    "library://changed": {
+      "payload": {
+        "$ref": "#/$defs/LibraryChanged"
       }
     },
     "library://document-presence": {

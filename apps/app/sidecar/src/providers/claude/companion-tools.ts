@@ -209,10 +209,12 @@ type AttachInput = {
 const detailOf = (error: unknown): string =>
 	error instanceof Error ? error.message : String(error)
 
-const attached = async (
-	session: string | undefined,
+type CarriedPath<T> = (resolved: string) => Promise<T>
+
+export const onReadablePath = async <T>(
 	{ cwd, floor }: AttachScope,
-	{ path, ...rest }: AttachInput,
+	path: string,
+	carried: CarriedPath<T>,
 ) => {
 	const named = resolve(cwd, path)
 	if (deniesRead(floor, named)) {
@@ -227,8 +229,17 @@ const attached = async (
 	if (deniesRead(floor, resolved)) {
 		return refused({ kind: "deniedPath", path })
 	}
-	return asked(session, "conversationAttach", { path: resolved, ...rest })
+	return carried(resolved)
 }
+
+const attached = (
+	session: string | undefined,
+	scope: AttachScope,
+	{ path, ...rest }: AttachInput,
+) =>
+	onReadablePath(scope, path, (resolved) =>
+		asked(session, "conversationAttach", { path: resolved, ...rest }),
+	)
 
 export const companionTools = (
 	session: string | undefined,

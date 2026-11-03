@@ -24,7 +24,7 @@ const INSTALLS: &str = "skills/applications/SKILL.md";
 
 const RICH_ANSWERS: &str = "skills/rich-answers/SKILL.md";
 
-const DOCUMENTS: &str = "skills/documents/SKILL.md";
+const LIBRARY: &str = "skills/library/SKILL.md";
 
 const TRIGGERS: &str = ".triggers.json";
 
@@ -36,8 +36,8 @@ const FILES: [(&str, &[u8]); 12] = [
 	(INSTALLS, include_bytes!("../../plugins/kiroshi/skills/applications/SKILL.md")),
 	(MISSIONS, include_bytes!("../../plugins/kiroshi/skills/missions/SKILL.md")),
 	(CONVERSATIONS, include_bytes!("../../plugins/kiroshi/skills/conversations/SKILL.md")),
+	(LIBRARY, include_bytes!("../../plugins/kiroshi/skills/library/SKILL.md")),
 	(RICH_ANSWERS, include_bytes!("../../plugins/kiroshi/skills/rich-answers/SKILL.md")),
-	(DOCUMENTS, include_bytes!("../../plugins/kiroshi/skills/documents/SKILL.md")),
 	(
 		"skills/learn/references/skills.md",
 		include_bytes!("../../plugins/kiroshi/skills/learn/references/skills.md"),
@@ -380,13 +380,33 @@ mod tests {
 	}
 
 	#[test]
-	fn the_documents_skill_is_preloaded_and_says_a_passage_must_occur_once() {
-		let text = String::from_utf8_lossy(embedded(DOCUMENTS));
+	fn the_library_skill_is_preloaded_and_names_every_library_tool() {
+		let text = String::from_utf8_lossy(embedded(LIBRARY));
 		let said_in_one_breath = text.split_whitespace().collect::<Vec<_>>().join(" ");
 
 		assert!(text.contains("preload: true"), "got {text}");
-		for said in ["`document_read`", "`document_write`", "occurs once"] {
+		for said in [
+			"`library_list`",
+			"`library_search`",
+			"`library_read`",
+			"`library_create`",
+			"`library_write`",
+			"`library_import`",
+			"`library_rename`",
+			"`library_delete`",
+			"occurs once",
+		] {
 			assert!(said_in_one_breath.contains(said), "{said} is missing");
+		}
+	}
+
+	#[test]
+	fn no_skill_names_a_tool_the_library_tools_replaced() {
+		for (name, bytes) in FILES {
+			let text = String::from_utf8_lossy(bytes);
+			for replaced in ["document_read", "document_write"] {
+				assert!(!text.contains(replaced), "{name} still names {replaced}");
+			}
 		}
 	}
 

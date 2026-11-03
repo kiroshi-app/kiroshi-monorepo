@@ -989,15 +989,62 @@
 		}
 	},
 	{
-		"name": "document_read",
-		"description": "Read a Markdown document of the Library of this Space, as it stands now with what everyone has typed in it. It answers its name and its text.",
+		"name": "library_list",
+		"description": "List the items of the Library of this Space, the latest update first, each with its name, its kind (document or image) and its updatedAt in milliseconds since the epoch, before you read, write, rename or delete one whose name you do not hold.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"kind": {
+					"description": "One of document or image to list only that kind; left out, every kind is listed.",
+					"type": "string",
+					"enum": [
+						"document",
+						"image"
+					]
+				},
+				"limit": {
+					"description": "How many items to answer, from 1 to 200; left out, 50.",
+					"type": "integer",
+					"minimum": -9007199254740991,
+					"maximum": 9007199254740991
+				},
+				"cursor": {
+					"description": "The cursor the previous library_list answered, to list the page after it; left out, the list starts at the latest update, and a null cursor in the answer marks the last page.",
+					"type": "string"
+				}
+			},
+			"additionalProperties": false
+		}
+	},
+	{
+		"name": "library_search",
+		"description": "Find the items of the Library of this Space whose name or document text holds the words you give, whatever their case, each with its name, its kind and its updatedAt, the latest update first; an empty list means nothing in this Library matched, and no other Space is ever searched.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"query": {
+					"type": "string",
+					"description": "The words to look for, matched whatever their case."
+				}
+			},
+			"required": [
+				"query"
+			],
+			"additionalProperties": false
+		}
+	},
+	{
+		"name": "library_read",
+		"description": "Read an item of the Library of this Space by its name. A document answers its text as it stands now with what everyone has typed in it; an image is shown to you; an image too large to show answers its name, its type and its size.",
 		"inputSchema": {
 			"$schema": "https://json-schema.org/draft/2020-12/schema",
 			"type": "object",
 			"properties": {
 				"name": {
 					"type": "string",
-					"description": "The name of the document in the Library of this Space, with its extension, such as notes.md."
+					"description": "The name of the item in the Library of this Space, with its extension, such as notes.md."
 				}
 			},
 			"required": [
@@ -1007,7 +1054,35 @@
 		}
 	},
 	{
-		"name": "document_write",
+		"name": "library_create",
+		"description": "Create a Markdown document in the Library of this Space, empty or filled from a template, shown in the Library of the person right away. A name already taken is refused. It answers the name, the kind and the updatedAt of the document.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"name": {
+					"type": "string",
+					"description": "The name of the new document, ending in .md, such as minutes.md, without any folder."
+				},
+				"template": {
+					"description": "One of meeting-notes, project-brief, decision-record or weekly-update to start the document from that template; left out, the document starts empty.",
+					"type": "string",
+					"enum": [
+						"meeting-notes",
+						"project-brief",
+						"decision-record",
+						"weekly-update"
+					]
+				}
+			},
+			"required": [
+				"name"
+			],
+			"additionalProperties": false
+		}
+	},
+	{
+		"name": "library_write",
 		"description": "Write text into a Markdown document of the Library of this Space, live, beside the people editing it. The text lands at the end of the document, or right after the passage you name. Nothing is replaced or removed. It answers the name and how many characters you wrote.",
 		"inputSchema": {
 			"$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -1015,7 +1090,7 @@
 			"properties": {
 				"name": {
 					"type": "string",
-					"description": "The name of the document in the Library of this Space, with its extension, such as notes.md."
+					"description": "The name of the item in the Library of this Space, with its extension, such as notes.md."
 				},
 				"text": {
 					"type": "string",
@@ -1023,12 +1098,71 @@
 				},
 				"after": {
 					"type": "string",
-					"description": "An exact passage of the document, copied from document_read, that occurs once in it: the text lands right after it. Leave it out to write at the end."
+					"description": "An exact passage of the document, copied from library_read, that occurs once in it: the text lands right after it. Leave it out to write at the end."
 				}
 			},
 			"required": [
 				"name",
 				"text"
+			],
+			"additionalProperties": false
+		}
+	},
+	{
+		"name": "library_import",
+		"description": "Copy a file you produced into the Library of this Space, a Markdown or text document or a PNG, JPEG, GIF or WebP image, under its own name, a number added when that name is taken. It answers the name the copy landed under, its kind and its updatedAt.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"path": {
+					"type": "string",
+					"description": "The path of the file to copy, absolute or relative to your working directory."
+				}
+			},
+			"required": [
+				"path"
+			],
+			"additionalProperties": false
+		}
+	},
+	{
+		"name": "library_rename",
+		"description": "Rename a document of the Library of this Space, keeping its extension, as the person renames it: the people editing it follow it under the new name, a number added when that name is taken. It answers the name it landed under, its kind and its updatedAt.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"name": {
+					"type": "string",
+					"description": "The name of the item in the Library of this Space, with its extension, such as notes.md."
+				},
+				"newName": {
+					"type": "string",
+					"description": "The new name of the document, with the same extension, without any folder."
+				}
+			},
+			"required": [
+				"name",
+				"newName"
+			],
+			"additionalProperties": false
+		}
+	},
+	{
+		"name": "library_delete",
+		"description": "Delete an item of the Library of this Space for everyone, with its thumbnail and its shared editing state, once the person asked you to remove it. It can't be undone. It answers the name of the item deleted.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"name": {
+					"type": "string",
+					"description": "The name of the item in the Library of this Space, with its extension, such as notes.md."
+				}
+			},
+			"required": [
+				"name"
 			],
 			"additionalProperties": false
 		}
