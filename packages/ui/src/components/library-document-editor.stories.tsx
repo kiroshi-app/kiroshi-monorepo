@@ -1,5 +1,6 @@
 import {
 	type ComponentType,
+	createRef,
 	type ReactNode,
 	useEffect,
 	useSyncExternalStore,
@@ -23,6 +24,7 @@ import {
 } from "@workspace/ui/components/library.fixtures"
 import {
 	LibraryDocumentEditor,
+	type LibraryDocumentEditorHandle,
 	type LibraryDocumentEditorProps,
 	libraryDocumentStartOf,
 } from "@workspace/ui/components/library-document-editor"
@@ -169,6 +171,8 @@ export const Blank = meta.story({
 
 		await userEvent.type(line, "Hi")
 		await expect(args.onBodyChange).toHaveBeenLastCalledWith("Hi")
+		await expect(title).toHaveValue("")
+		await expect(args.onTitleChange).toHaveBeenLastCalledWith("")
 		selectInField(canvasElement, line, 0, line.value.length)
 		await userEvent.keyboard("{Backspace}")
 		await expect(args.onBodyChange).toHaveBeenLastCalledWith("")
@@ -581,6 +585,199 @@ export const OutsideTitleChange = meta.story({
 		await expect(textBeforeCaret(title)).toBe("Spring launch review notes")
 		await expect(args.onTitleChange).toHaveBeenCalledTimes(typed.length)
 		await expect(args.onBodyChange).not.toHaveBeenCalled()
+	},
+})
+
+const titleHandle = createRef<LibraryDocumentEditorHandle>()
+
+const titleIn = (canvasElement: HTMLElement) =>
+	within(canvasElement).getByRole<HTMLTextAreaElement>("textbox", {
+		name: "Title",
+	})
+
+const titleLookOf = (element: Element) => {
+	const style = getComputedStyle(element)
+	return {
+		fontFamily: style.fontFamily,
+		fontSize: style.fontSize,
+		fontWeight: style.fontWeight,
+		lineHeight: style.lineHeight,
+		color: style.color,
+	}
+}
+
+const pressComposing = (field: HTMLElement, key: string) =>
+	field.dispatchEvent(
+		new KeyboardEvent("keydown", { key, isComposing: true, bubbles: true }),
+	)
+
+export const TitleAtRest = meta.story({
+	args: { ...LAUNCH_REVIEW, template: undefined },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The title of an open document, before any edit. Check that it reads the document title in the heading type, with no field border, no outline and no fill, and that nothing is reported.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		const title = titleIn(canvasElement)
+		await expect(title).toHaveValue("Launch review")
+		await expect(title).not.toHaveFocus()
+		await expect(titleLookOf(title)).toEqual(
+			titleLookOf(title.parentElement as HTMLElement),
+		)
+		await expect(titleLookOf(title)).toMatchObject({
+			fontSize: "28px",
+			fontWeight: "600",
+			lineHeight: "34px",
+		})
+		await expect(getComputedStyle(title).borderTopWidth).toBe("0px")
+		await expect(getComputedStyle(title).outlineStyle).toBe("none")
+		await expect(getComputedStyle(title).backgroundColor).toBe(
+			"rgba(0, 0, 0, 0)",
+		)
+		await expect(args.onTitleChange).not.toHaveBeenCalled()
+	},
+})
+
+export const TitleFocusedByRename = meta.story({
+	args: { ...LAUNCH_REVIEW, template: undefined },
+	render: (args) => (
+		<EditorFrame>
+			<LibraryDocumentEditor {...args} ref={titleHandle} />
+		</EditorFrame>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The app calls `focusTitle()` on the editor handle, as Rename does. Check that the title takes the focus with the caret collapsed after its last character, that its type, size, colour and bare edges stay those of the title at rest, and that typing goes on from there.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const title = titleIn(canvasElement)
+		const atRest = titleLookOf(title)
+
+		titleHandle.current?.focusTitle()
+		await expect(title).toHaveFocus()
+		await expect(title.selectionStart).toBe("Launch review".length)
+		await expect(title.selectionEnd).toBe("Launch review".length)
+		await expect(titleLookOf(title)).toEqual(atRest)
+		await expect(getComputedStyle(title).borderTopWidth).toBe("0px")
+		await expect(getComputedStyle(title).outlineStyle).toBe("none")
+
+		await userEvent.keyboard(" v2")
+		await expect(title).toHaveValue("Launch review v2")
+		await expect(args.onTitleChange).toHaveBeenLastCalledWith(
+			"Launch review v2",
+		)
+	},
+})
+
+export const TitleEnterMovesToBody = meta.story({
+	args: { ...LAUNCH_REVIEW, template: undefined },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Enter in an edited title. Check that Enter during an IME composition leaves the caret in the title, and that Enter otherwise keeps the edited title and moves the caret to the start of the body.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const title = titleIn(canvasElement)
+		const [intro] = bodyFieldsIn(canvasElement) as [TextField]
+
+		await userEvent.type(title, " v2")
+		pressComposing(title, "Enter")
+		await expect(title).toHaveFocus()
+
+		await userEvent.keyboard("{Enter}")
+		await expect(bodyIn(canvasElement)).toHaveFocus()
+		await expect(intro.selectionStart).toBe(0)
+		await expect(intro.selectionEnd).toBe(0)
+		await expect(title).toHaveValue("Launch review v2")
+		await expect(args.onTitleChange).toHaveBeenLastCalledWith(
+			"Launch review v2",
+		)
+	},
+})
+
+export const TitleEscapeRestores = meta.story({
+	args: { ...LAUNCH_REVIEW, template: undefined },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Escape in an edited title. Check that Escape during an IME composition changes nothing, and that Escape otherwise brings back the title held when the edit started, reports it through `onTitleChange` and leaves the field.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const title = titleIn(canvasElement)
+
+		await userEvent.type(title, " v2")
+		pressComposing(title, "Escape")
+		await expect(title).toHaveFocus()
+		await expect(title).toHaveValue("Launch review v2")
+
+		await userEvent.keyboard("{Escape}")
+		await expect(title).toHaveValue("Launch review")
+		await expect(args.onTitleChange).toHaveBeenLastCalledWith("Launch review")
+		await expect(title).not.toHaveFocus()
+	},
+})
+
+export const TitleClickAwayKeeps = meta.story({
+	args: { ...LAUNCH_REVIEW, template: undefined },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"An edited title left by a click in the body. Check that the edited title stays and that leaving reports nothing more.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const title = titleIn(canvasElement)
+		const [intro] = bodyFieldsIn(canvasElement) as [TextField]
+
+		await userEvent.type(title, " v2")
+		const reportedWhileTyping = (args.onTitleChange as ReturnType<typeof fn>)
+			.mock.calls.length
+		await userEvent.click(intro)
+		await expect(title).not.toHaveFocus()
+		await expect(title).toHaveValue("Launch review v2")
+		await expect(args.onTitleChange).toHaveBeenCalledTimes(reportedWhileTyping)
+		await expect(args.onTitleChange).toHaveBeenLastCalledWith(
+			"Launch review v2",
+		)
+	},
+})
+
+export const TitleEmptiedRestores = meta.story({
+	args: { ...LAUNCH_REVIEW, template: undefined },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A titled document whose title is cleared to spaces, then left. Check that leaving brings back the title held when the edit started and reports it through `onTitleChange`. A document that starts untitled keeps its empty title: see Blank.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const title = titleIn(canvasElement)
+		const [intro] = bodyFieldsIn(canvasElement) as [TextField]
+
+		await userEvent.clear(title)
+		await userEvent.type(title, "   ")
+		await expect(args.onTitleChange).toHaveBeenLastCalledWith("   ")
+		await userEvent.click(intro)
+		await expect(title).toHaveValue("Launch review")
+		await expect(args.onTitleChange).toHaveBeenLastCalledWith("Launch review")
 	},
 })
 

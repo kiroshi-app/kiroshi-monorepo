@@ -12,6 +12,7 @@ import {
 	type TextareaHTMLAttributes,
 	useEffect,
 	useEffectEvent,
+	useImperativeHandle,
 	useLayoutEffect,
 	useMemo,
 	useRef,
@@ -793,6 +794,10 @@ const formatsOf = (block: Block | undefined, start: number, end: number) => {
 	return { formats: [...formats, ...blockFormat], link }
 }
 
+type LibraryDocumentEditorHandle = {
+	focusTitle: () => void
+}
+
 type LibraryDocumentEditorProps = WriterActions &
 	SelectionActions &
 	LibraryItemActions<LibraryMenuSubject> & {
@@ -810,6 +815,7 @@ type LibraryDocumentEditorProps = WriterActions &
 		onUndoAll?: () => void
 		onDone?: () => void
 		onCaretChange?: (caret: number | null) => void
+		ref?: Ref<LibraryDocumentEditorHandle>
 	}
 
 const endingOf = (body: string) => /\s*$/.exec(body)?.[0] ?? ""
@@ -838,6 +844,7 @@ const LibraryDocumentEditor = ({
 	onLink,
 	onHeading,
 	onList,
+	ref,
 	...actions
 }: LibraryDocumentEditorProps) => {
 	const { t } = useTranslation("common")
@@ -847,6 +854,7 @@ const LibraryDocumentEditor = ({
 	const received = useRef({ title: titleProp, body })
 	const [restoredSelection, setRestoredSelection] = useState<HeldSelection>()
 	const titleField = useRef<HTMLTextAreaElement>(null)
+	const titleAtEditStart = useRef<string>(undefined)
 	const host = useRef<HTMLDivElement>(null)
 	const blockTexts = useRef(new Map<string, HTMLElement>())
 	const reportedCaret = useRef<number | null>(null)
@@ -1207,6 +1215,26 @@ const LibraryDocumentEditor = ({
 		const next = singleLine(value)
 		setTitle(next)
 		onTitleChange(next)
+	}
+
+	useImperativeHandle(ref, () => ({
+		focusTitle: () => focusAt(TITLE_FIELD, "end"),
+	}))
+
+	const takeHeldTitle = () => {
+		const held = titleAtEditStart.current
+		titleAtEditStart.current = undefined
+		return held
+	}
+
+	const cancelTitleEdit = (field: HTMLTextAreaElement) => {
+		changeTitle(takeHeldTitle() ?? title)
+		field.blur()
+	}
+
+	const leaveTitle = (value: string) => {
+		const held = takeHeldTitle()
+		if (held && value.trim() === "") changeTitle(held)
 	}
 
 	const writeAt = (
@@ -1683,11 +1711,20 @@ const LibraryDocumentEditor = ({
 						aria-label={t("library.editor.title")}
 						className={DOCUMENT_TITLE}
 						fieldRef={titleField}
+						onBlur={(event) => leaveTitle(event.currentTarget.value)}
 						onChange={(event) => changeTitle(event.target.value)}
+						onFocus={() => {
+							titleAtEditStart.current = title
+						}}
 						onKeyDown={(event) => {
-							if (event.key !== "Enter" || event.nativeEvent.isComposing) return
-							event.preventDefault()
-							focusAt(blocks[0]?.id, 0)
+							if (event.nativeEvent.isComposing) return
+							if (event.key === "Enter") {
+								event.preventDefault()
+								focusAt(blocks[0]?.id, 0)
+							} else if (event.key === "Escape") {
+								event.preventDefault()
+								cancelTitleEdit(event.currentTarget)
+							}
 						}}
 						placeholder={untitled}
 						fieldClassName="placeholder:text-title-placeholder-foreground"
@@ -1764,6 +1801,7 @@ const LibraryDocumentEditor = ({
 
 export {
 	LibraryDocumentEditor,
+	type LibraryDocumentEditorHandle,
 	type LibraryDocumentEditorProps,
 	type LibraryDocumentRange,
 	type LibraryDocumentStart,
