@@ -42,14 +42,14 @@ export const startReportRelay = ({
 }: ReportRelayOptions): (() => void) => {
 	const endedRuns = new Set<string>()
 
+	const logSkipped = (thrown: unknown) => {
+		console.warn(
+			"report relay: skipped a report of an agent this computer does not hold",
+			thrown,
+		)
+	}
+
 	const raiseFailure = (thrown: unknown) => {
-		if (isUnknownBot(thrown)) {
-			console.warn(
-				"report relay: skipped a report of an agent this computer does not hold",
-				thrown,
-			)
-			return
-		}
 		console.error("report relay:", thrown)
 		reportFailure({
 			title: i18n.t("chat:transcript.mention.unresolved.title", { count: 1 }),
@@ -68,6 +68,10 @@ export const startReportRelay = ({
 				.runtimeFor(scope.conversationId)
 				.relayRunReport(scope, message)
 		} catch (thrown) {
+			if (isUnknownBot(thrown)) {
+				logSkipped(thrown)
+				return
+			}
 			raiseFailure(thrown)
 		}
 	}
