@@ -293,6 +293,9 @@ const selectionIn = (fields: Map<string, HTMLTextAreaElement>) => {
 			}
 }
 
+const fieldTextOf = (id: string, title: string, blocks: Block[]) =>
+	id === TITLE_FIELD ? title : blocks.find((block) => block.id === id)?.text
+
 const shiftedOffset = (before: string, after: string, offset: number) => {
 	const limit = Math.min(before.length, after.length)
 	let head = 0
@@ -472,13 +475,10 @@ const LibraryDocumentEditor = ({
 		const isBodyOutside = body !== received.body && body !== bodyOf(blocks)
 		const nextBlocks = isBodyOutside ? reconciled(blocks, body) : blocks
 		if (nextTitle !== title || isBodyOutside) {
-			const textOf = (id: string, inTitle: string, inBlocks: Block[]) =>
-				id === TITLE_FIELD
-					? inTitle
-					: inBlocks.find((block) => block.id === id)?.text
 			const selection = selectionIn(fields.current)
-			const before = selection && textOf(selection.id, title, blocks)
-			const after = selection && textOf(selection.id, nextTitle, nextBlocks)
+			const before = selection && fieldTextOf(selection.id, title, blocks)
+			const after =
+				selection && fieldTextOf(selection.id, nextTitle, nextBlocks)
 			setTitle(nextTitle)
 			if (isBodyOutside) {
 				setBlocks(

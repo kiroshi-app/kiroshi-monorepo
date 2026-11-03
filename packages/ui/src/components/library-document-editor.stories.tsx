@@ -57,7 +57,7 @@ const breadcrumbIn = (canvasElement: HTMLElement) =>
 	canvasElement.querySelector('[aria-current="page"]') as HTMLElement
 
 type EditorFrameProps = {
-	children: ReactNode
+	children?: ReactNode
 }
 
 const EditorFrame = ({ children }: EditorFrameProps) => (
@@ -602,10 +602,8 @@ const failureStory = (
 	},
 })
 
-const LibraryBehind = () => <EditorFrame>{null}</EditorFrame>
-
 export const CreateFailure = meta.story({
-	render: () => <LibraryBehind />,
+	render: () => <EditorFrame />,
 	...failureStory(
 		"create",
 		"Couldn’t create the document. Try again from New document.",
@@ -614,7 +612,7 @@ export const CreateFailure = meta.story({
 })
 
 export const OpenFailure = meta.story({
-	render: () => <LibraryBehind />,
+	render: () => <EditorFrame />,
 	...failureStory(
 		"open",
 		"Couldn’t open the document. Open it again from the Library.",
