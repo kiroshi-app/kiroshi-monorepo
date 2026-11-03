@@ -176,11 +176,8 @@ const isParagraphLine = (line: Line | undefined) =>
 
 const blockAt = (body: string, offset: number): Span => {
 	const lines = linesOf(body)
-	const index = Math.max(
-		lines.findIndex((line) => offset <= line.to),
-		0,
-	)
-	const line = lines[index] ?? { from: 0, to: 0, text: "" }
+	const index = lines.findIndex((line) => offset <= line.to)
+	const line = lines[index]
 	const prefix = markedLineOf(line.text)?.[1]
 	if (prefix !== undefined)
 		return { from: line.from + prefix.length, to: line.to }
@@ -188,7 +185,7 @@ const blockAt = (body: string, offset: number): Span => {
 	let last = index
 	while (isParagraphLine(lines[first - 1])) first--
 	while (isParagraphLine(lines[last + 1])) last++
-	return { from: lines[first]?.from ?? 0, to: lines[last]?.to ?? body.length }
+	return { from: lines[first].from, to: lines[last].to }
 }
 
 const editedInBlock = (
