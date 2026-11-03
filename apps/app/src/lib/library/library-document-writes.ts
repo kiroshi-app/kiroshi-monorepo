@@ -26,6 +26,9 @@ export const renameLibraryDocument = (
 	newName: string,
 ) => invoke<LibraryItem>("library_rename_document", { spaceId, name, newName })
 
+export const deleteLibraryItem = (spaceId: string, name: string) =>
+	invoke<null>("library_delete", { spaceId, name })
+
 export const shareLibraryCaret = (
 	spaceId: string,
 	name: string,

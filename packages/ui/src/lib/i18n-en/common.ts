@@ -424,6 +424,7 @@ const common = {
 			save: "Couldn’t save the file",
 			copy: "Couldn’t copy the image",
 			reveal: "Couldn’t show the file in its folder",
+			delete: "Couldn’t delete the item",
 			document: {
 				create: "Couldn’t create the document. Try again from New document.",
 				open: "Couldn’t open the document. Open it again from the Library.",

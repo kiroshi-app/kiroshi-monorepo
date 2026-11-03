@@ -82,6 +82,10 @@ const LIBRARY_ANSWERS: Record<string, (args: NamedCall) => unknown> = {
 	library_apply_update: () => null,
 	library_share_caret: () => null,
 	library_rename_document: ({ name }) => itemNamed(name, "document"),
+	library_delete: ({ name }) => {
+		harness.listed = harness.listed.filter((item) => item.name !== name)
+		return null
+	},
 }
 
 vi.mock("@tauri-apps/api/core", async (importOriginal) => ({
@@ -179,12 +183,27 @@ type MenuAction =
 	| "copy"
 	| "download"
 	| "showInFolder"
+	| "delete"
 
 const menuItemOf = (action: MenuAction) => common(`library.itemMenu.${action}`)
 
 const pickInMenuOf = async (title: string, action: MenuAction) => {
 	const menu = await openMenuOf(title)
 	await press(within(menu).getByRole("menuitem", { name: menuItemOf(action) }))
+}
+
+const confirmDelete = async () => {
+	const dialog = await screen.findByRole("alertdialog")
+	await press(
+		within(dialog).getByRole("button", { name: menuItemOf("delete") }),
+	)
+}
+
+const pickInLightboxMore = async (action: MenuAction) => {
+	await press(
+		screen.getByRole("button", { name: common("library.lightbox.more") }),
+	)
+	await press(await screen.findByRole("menuitem", { name: menuItemOf(action) }))
 }
 
 const openImage = async () => {
@@ -204,6 +223,18 @@ const callsOf = (command: string) =>
 	harness.calls
 		.filter((call) => call.command === command)
 		.map((call) => call.args)
+
+const closeMenu = async () => {
+	await act(async () => {
+		fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" })
+	})
+	await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
+}
+
+const tileShown = (title: string) =>
+	screen
+		.queryAllByRole("button")
+		.some((button) => button.textContent?.includes(title))
 
 const libraryShown = () =>
 	screen.queryByRole("heading", { level: 1, name: LIBRARY_TITLE })
@@ -297,14 +328,34 @@ describe("Rename in the menu of a Library item", () => {
 		},
 	)
 
-	it("makes no rename call on an image", async () => {
-		await renderLibraryScreen({ isJoined: false })
+	it.each(SPACES)(
+		"is offered on a document and not on an image, in the grid and the lightbox, on %s",
+		async (_space, isJoined) => {
+			await renderLibraryScreen({ isJoined })
 
-		await pickInMenuOf("diagram.png", "rename")
+			expect(
+				within(await openMenuOf("notes")).queryByRole("menuitem", {
+					name: menuItemOf("rename"),
+				}),
+			).toBeInstanceOf(HTMLElement)
+			await closeMenu()
+			expect(
+				within(await openMenuOf("diagram.png")).queryByRole("menuitem", {
+					name: menuItemOf("rename"),
+				}),
+			).toBeNull()
+			await closeMenu()
 
-		expect(lightboxBack()).toBeNull()
-		expect(callsOf("library_rename_document")).toEqual([])
-	})
+			await openImage()
+			await press(
+				screen.getByRole("button", { name: common("library.lightbox.more") }),
+			)
+			await screen.findByRole("menuitem", { name: menuItemOf("openInNewTab") })
+			expect(
+				screen.queryByRole("menuitem", { name: menuItemOf("rename") }),
+			).toBeNull()
+		},
+	)
 
 	it("makes no rename call when the title was left as it was", async () => {
 		await renderLibraryScreen({ isJoined: false })
@@ -313,6 +364,50 @@ describe("Rename in the menu of a Library item", () => {
 
 		await tileOf("notes")
 		expect(callsOf("library_rename_document")).toEqual([])
+	})
+})
+
+describe("Delete in the menu of a Library item", () => {
+	it.each(SPACES)(
+		"deletes the item picked in the grid on %s and drops it from the grid",
+		async (_space, isJoined) => {
+			await renderLibraryScreen({ isJoined })
+
+			await pickInMenuOf("notes", "delete")
+			await confirmDelete()
+
+			await waitFor(() => expect(tileShown("notes")).toBe(false))
+			expect(callsOf("library_delete")).toEqual([
+				{ spaceId: SPACE_ID, name: "notes.txt" },
+			])
+			expect(tileShown("diagram.png")).toBe(true)
+		},
+	)
+
+	it.each(SPACES)(
+		"deletes the image shown in the lightbox on %s and stops showing it",
+		async (_space, isJoined) => {
+			await renderLibraryScreen({ isJoined })
+
+			await openImage()
+			await pickInLightboxMore("delete")
+			await confirmDelete()
+
+			await waitFor(() => expect(lightboxBack()).toBeNull())
+			await waitFor(() => expect(tileShown("diagram.png")).toBe(false))
+			expect(callsOf("library_delete")).toEqual([
+				{ spaceId: SPACE_ID, name: "diagram.png" },
+			])
+		},
+	)
+
+	it("makes no delete call until the person confirms", async () => {
+		await renderLibraryScreen({ isJoined: false })
+
+		await pickInMenuOf("notes", "delete")
+		await screen.findByRole("alertdialog")
+
+		expect(callsOf("library_delete")).toEqual([])
 	})
 })
 
@@ -394,7 +489,7 @@ describe("Show in folder in the menu of a Library item", () => {
 	})
 })
 
-type FailedAction = "copy" | "save" | "reveal"
+type FailedAction = "copy" | "save" | "reveal" | "delete"
 
 const failureOf = (action: FailedAction) =>
 	expect.objectContaining({ title: common(`library.failure.${action}`) })
@@ -429,6 +524,19 @@ describe("a Library action the host refuses", () => {
 			expect(raiseFailureNotice).toHaveBeenCalledWith(failureOf("save")),
 		)
 		expect(libraryShown()).toBeInstanceOf(HTMLElement)
+	})
+
+	it("raises a notice and keeps the item in the grid on delete", async () => {
+		harness.refused = "library_delete"
+		await renderLibraryScreen({ isJoined: false })
+
+		await pickInMenuOf("notes", "delete")
+		await confirmDelete()
+
+		await waitFor(() =>
+			expect(raiseFailureNotice).toHaveBeenCalledWith(failureOf("delete")),
+		)
+		expect(tileShown("notes")).toBe(true)
 	})
 })
 

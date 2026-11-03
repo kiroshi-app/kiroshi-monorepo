@@ -2,7 +2,10 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 
 import { i18n } from "@workspace/ui/lib/i18n"
 
-import { renameLibraryDocument } from "./library-document-writes"
+import {
+	deleteLibraryItem,
+	renameLibraryDocument,
+} from "./library-document-writes"
 import { libraryQueryKeys } from "./library-query-keys"
 import { readLibraryFile } from "./library-reads"
 
@@ -94,15 +97,34 @@ const useLibraryRename = (spaceId: string) => {
 	}).mutate
 }
 
+const useLibraryDelete = (spaceId: string) => {
+	const queryClient = useQueryClient()
+	return useMutation({
+		mutationFn: (name: string) => deleteLibraryItem(spaceId, name),
+		onSettled: () =>
+			queryClient.invalidateQueries({
+				queryKey: libraryQueryKeys.itemsOf(spaceId),
+			}),
+		meta: {
+			failureNotice: () => ({
+				title: i18n.t("common:library.failure.delete"),
+			}),
+			raisedIn: "use-library-actions",
+		},
+	}).mutate
+}
+
 export const useLibraryActions = (spaceId: string) => ({
 	save: useLibraryAction(spaceId, "save", ACTION_COMMANDS.save),
 	...useLibraryCopy(spaceId, ACTION_COMMANDS.copy),
 	reveal: useLibraryAction(spaceId, "reveal", ACTION_COMMANDS.reveal),
 	rename: useLibraryRename(spaceId),
+	remove: useLibraryDelete(spaceId),
 })
 
 export const useJoinedLibraryActions = (spaceId: string) => ({
 	save: useLibraryAction(spaceId, "save", saveFromHost),
 	...useLibraryCopy(spaceId, copyFromHost),
 	rename: useLibraryRename(spaceId),
+	remove: useLibraryDelete(spaceId),
 })
