@@ -352,6 +352,12 @@ const replyChipOf =
 		return { id: target.messageId, author, excerpt }
 	}
 
+const useReplyChips = (
+	targets: ReplyTarget[],
+	toQuote: ThreadNaming["toQuote"],
+): PromptReplyAttachment[] =>
+	useMemo(() => targets.map(replyChipOf(toQuote)), [targets, toQuote])
+
 const isClosedMission = (seat: ThreadMission | null): boolean =>
 	seat !== null && seat.mission.closedAt !== null
 
@@ -1754,6 +1760,7 @@ const useThreadView = (props: ThreadViewProps) => {
 		...annotations,
 		...actions,
 		...threadRowsOf(props, seats, annotations, actions),
+		replyChips: useReplyChips(actions.replyTargets, annotations.toQuote),
 	}
 }
 
@@ -1817,7 +1824,7 @@ function ThreadView(props: ThreadViewProps) {
 						placeholder={view.composerPlaceholder}
 						promptRef={view.promptRef}
 						readDraft={view.readDraft}
-						replies={view.replyTargets.map(replyChipOf(view.toQuote))}
+						replies={view.replyChips}
 						staged={view.staged}
 						thread={thread}
 					/>
