@@ -5,7 +5,11 @@ use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use yrs::updates::decoder::Decode;
-use yrs::{Doc, GetString, ReadTxn, StateVector, Text, Transact, Update};
+use yrs::updates::encoder::Encode;
+use yrs::{
+	Assoc, Doc, GetString, IndexedSequence, ReadTxn, StateVector, StickyIndex, Text, TextRef,
+	Transact, Update,
+};
 
 use super::contract::LibraryError;
 use super::{
@@ -41,6 +45,29 @@ pub(crate) struct Opened {
 pub(crate) struct Applied {
 	pub(crate) name: String,
 	pub(crate) change: Vec<u8>,
+}
+
+pub(crate) struct WriteStep<'a> {
+	pub(crate) writer: u64,
+	pub(crate) caret: &'a [u8],
+	pub(crate) text: &'a str,
+}
+
+pub(crate) struct Written {
+	pub(crate) name: String,
+	pub(crate) change: Vec<u8>,
+	pub(crate) caret: Vec<u8>,
+}
+
+pub(crate) enum Placement<'a> {
+	End,
+	After(&'a str),
+}
+
+pub(crate) enum Location {
+	Caret(Vec<u8>),
+	PassageNotFound,
+	PassageNotUnique,
 }
 
 struct DocumentFile {
@@ -92,7 +119,30 @@ impl Documents {
 		name: &str,
 		update: &[u8],
 	) -> Result<Applied, LibraryError> {
-		let incoming = decoded(name, update)?;
+		decoded(name, update)?;
+		let (applied, ()) = self.merged(root, space_id, name, |_, _| Ok((update.to_vec(), ())))?;
+		Ok(applied)
+	}
+
+	pub(crate) fn write(
+		&self,
+		root: &Path,
+		space_id: &str,
+		name: &str,
+		step: &WriteStep<'_>,
+	) -> Result<Written, LibraryError> {
+		let (applied, caret) =
+			self.merged(root, space_id, name, |doc, name| inserted_by(doc, name, step))?;
+		Ok(Written { name: applied.name, change: applied.change, caret })
+	}
+
+	fn merged<T>(
+		&self,
+		root: &Path,
+		space_id: &str,
+		name: &str,
+		update_of: impl FnOnce(&Doc, &str) -> Result<(Vec<u8>, T), LibraryError>,
+	) -> Result<(Applied, T), LibraryError> {
 		let mut held = self.held();
 		let file = held.located(root, space_id, name)?;
 		let name = file.name.as_str();
@@ -102,10 +152,11 @@ impl Documents {
 			Some(held) => held,
 			None => &loaded.insert(loaded_from_disk(root, space_id, name)?).doc,
 		};
-		checked_on_a_copy(doc, &file.text, update, name)?;
+		let (update, made) = update_of(doc, name)?;
+		checked_on_a_copy(doc, &file.text, &update, name)?;
 		let before = doc.transact().state_vector();
 		took_as_host_edit(doc, &file.text);
-		merged_into(doc, name, incoming)?;
+		merged_into(doc, name, decoded(name, &update)?)?;
 		let change = doc.transact().encode_state_as_update_v1(&before);
 		store_state(root, space_id, name, doc)?;
 		private_files::replace_atomically(&file.path, text_of(doc).as_bytes())
@@ -113,7 +164,7 @@ impl Documents {
 		if let Some(loaded) = loaded {
 			held.docs.insert(key, loaded.doc);
 		}
-		Ok(Applied { name: file.name, change })
+		Ok((Applied { name: file.name, change }, made))
 	}
 
 	pub(crate) fn rename(
@@ -297,6 +348,69 @@ fn checked_on_a_copy(
 	took_as_host_edit(&copy, file_text);
 	merged_into(&copy, name, decoded(name, update)?)?;
 	within(name, text_of(&copy).len() as u64, MAX_DOCUMENT_BYTES)
+}
+
+pub(crate) fn located(
+	state: &[u8],
+	name: &str,
+	placement: &Placement<'_>,
+) -> Result<Location, LibraryError> {
+	let doc = Doc::new();
+	merged_into(&doc, name, decoded(name, state)?)?;
+	let text = doc.get_or_insert_text(TEXT_NAME);
+	let txn = doc.transact();
+	let current = text.get_string(&txn);
+	let index = match placement {
+		Placement::End => current.len(),
+		Placement::After(passage) => match passage_ends(&current, passage).as_slice() {
+			[] => return Ok(Location::PassageNotFound),
+			[end] => *end,
+			_ => return Ok(Location::PassageNotUnique),
+		},
+	};
+	Ok(Location::Caret(caret_at(&text, &txn, index, name)?))
+}
+
+fn passage_ends(text: &str, passage: &str) -> Vec<usize> {
+	let Some(first) = text.find(passage) else {
+		return Vec::new();
+	};
+	let past_first = text[first..].chars().next().map_or(text.len() + 1, |c| first + c.len_utf8());
+	let second = text.get(past_first..).and_then(|rest| rest.find(passage));
+	let mut ends = vec![first + passage.len()];
+	ends.extend(second.map(|at| past_first + at + passage.len()));
+	ends
+}
+
+fn inserted_by(
+	doc: &Doc,
+	name: &str,
+	step: &WriteStep<'_>,
+) -> Result<(Vec<u8>, Vec<u8>), LibraryError> {
+	let anchor =
+		StickyIndex::decode_v1(step.caret).map_err(|error| undecodable(name, error.to_string()))?;
+	let writer = Doc::with_client_id(step.writer);
+	merged_into(&writer, name, decoded(name, &full_state(doc))?)?;
+	let text = writer.get_or_insert_text(TEXT_NAME);
+	let mut txn = writer.transact_mut();
+	let index = anchor.get_offset(&txn).map_or_else(|| text.len(&txn), |offset| offset.index);
+	text.insert(&mut txn, index, step.text);
+	let caret = caret_at(&text, &txn, index as usize + step.text.len(), name)?;
+	let update = txn.encode_state_as_update_v1(&doc.transact().state_vector());
+	Ok((update, caret))
+}
+
+fn caret_at<T: ReadTxn>(
+	text: &TextRef,
+	txn: &T,
+	index: usize,
+	name: &str,
+) -> Result<Vec<u8>, LibraryError> {
+	u32::try_from(index)
+		.ok()
+		.and_then(|index| text.sticky_index(txn, index, Assoc::Before))
+		.map(|caret| caret.encode_v1())
+		.ok_or_else(|| undecodable(name, format!("no caret stands at byte {index}")))
 }
 
 fn full_state(doc: &Doc) -> Vec<u8> {

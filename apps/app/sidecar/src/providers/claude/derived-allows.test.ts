@@ -7,6 +7,10 @@ import type { Settings } from "@anthropic-ai/claude-agent-sdk"
 
 import { claudeSourceExecutable } from "./build"
 import { BUNDLE_WRITE_TOOL_NAME } from "./bundle-tools"
+import {
+	DOCUMENT_READ_TOOL_NAME,
+	DOCUMENT_WRITE_TOOL_NAME,
+} from "./document-tools"
 import { EXECUTABLE_OVERRIDE_ENV } from "./executable"
 import { KIROSHI_SERVER } from "./kiroshi-server"
 import type { Servers } from "./server-env"
@@ -90,6 +94,20 @@ describe("derived allows", () => {
 		expect(
 			settled(permissions, `mcp__${KIROSHI_SERVER}__${BUNDLE_WRITE_TOOL_NAME}`),
 		).toBe("allow")
+	})
+
+	it("settles a document_read or document_write call as allow by a rule, before any classifier step", () => {
+		const options = buildOptions(requestFor(), undefined, undefined, {
+			servers: { kiroshi: server },
+			rejections: [],
+		})
+		const permissions = (options.settings as Settings).permissions
+
+		for (const name of [DOCUMENT_READ_TOOL_NAME, DOCUMENT_WRITE_TOOL_NAME]) {
+			expect(settled(permissions, `mcp__${KIROSHI_SERVER}__${name}`)).toBe(
+				"allow",
+			)
+		}
 	})
 
 	it("normalizes a server name the way Claude Code prefixes its tools", () => {

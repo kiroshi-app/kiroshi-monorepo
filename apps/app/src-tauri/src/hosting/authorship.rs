@@ -94,6 +94,13 @@ impl Caller {
 		matches!(self, Caller::Relayed(_))
 	}
 
+	pub fn relayed_account(&self) -> Option<&str> {
+		match self {
+			Caller::Relayed(Some(member)) => Some(&member.user_id),
+			_ => None,
+		}
+	}
+
 	pub fn written_from(&self) -> WrittenFrom {
 		match self {
 			Caller::Host => WrittenFrom::Here,

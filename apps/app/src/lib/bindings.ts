@@ -46,6 +46,7 @@ export const commands = {
 	libraryCreateDocument: (spaceId: string, name: string, templateId: string | null) => typedError<LibraryItem, LibraryError>(__TAURI_INVOKE("library_create_document", { spaceId, name, templateId })),
 	libraryOpenDocument: (spaceId: string, name: string) => typedError<LibraryDocumentState, LibraryError>(__TAURI_INVOKE("library_open_document", { spaceId, name })),
 	libraryApplyUpdate: (spaceId: string, name: string, update: string) => typedError<null, LibraryError>(__TAURI_INVOKE("library_apply_update", { spaceId, name, update })),
+	libraryShareCaret: (spaceId: string, name: string, caret: string | null) => typedError<null, LibraryError>(__TAURI_INVOKE("library_share_caret", { spaceId, name, caret })),
 	libraryReadThumbnail: (spaceId: string, name: string) => typedError<LibraryImage, LibraryError>(__TAURI_INVOKE("library_read_thumbnail", { spaceId, name })),
 	libraryImport: (spaceId: string, name: string, content: string) => typedError<LibraryItem, LibraryError>(__TAURI_INVOKE("library_import", { spaceId, name, content })),
 	libraryImportPaths: (spaceId: string, paths: string[]) => typedError<LibraryImport[], LibraryError>(__TAURI_INVOKE("library_import_paths", { spaceId, paths })),
@@ -1180,6 +1181,12 @@ export type LibraryDocument = {
 
 export type LibraryDocumentFormat = "markdown" | "text";
 
+export type LibraryDocumentPresence = {
+	spaceId: string,
+	name: string,
+	writers: LibraryWriter[],
+};
+
 export type LibraryDocumentRenamed = {
 	spaceId: string,
 	formerName: string,
@@ -1195,6 +1202,14 @@ export type LibraryDocumentUpdated = {
 	spaceId: string,
 	name: string,
 	update: string,
+};
+
+export type LibraryDocumentWriterFinished = {
+	spaceId: string,
+	name: string,
+	agentId: string,
+	agentName: string,
+	outcome: LibraryWriteOutcome,
 };
 
 export type LibraryError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "unknownSpace"; id: string } | { kind: "invalidName"; name: string } | { kind: "unsupported"; name: string } | { kind: "missing"; name: string } | { kind: "alreadyExists"; name: string } | { kind: "unknownTemplate"; id: string } | { kind: "notADocument"; name: string } | { kind: "notAnImage"; name: string } | { kind: "notUtf8"; name: string } | { kind: "tooLarge"; name: string; bytes: number; limit: number } | { kind: "unreadable"; detail: string } | { kind: "undecodable"; name: string; detail: string } | { kind: "unwritable"; detail: string } | { kind: "clipboardRefused"; detail: string } | { kind: "unrevealed"; detail: string };
@@ -1228,6 +1243,17 @@ export type LibraryTemplate = {
 	id: string,
 	title: string,
 };
+
+export type LibraryWriteOutcome = "finished" | "failed";
+
+export type LibraryWriter = {
+	id: string,
+	kind: LibraryWriterKind,
+	name: string | null,
+	caret: string,
+};
+
+export type LibraryWriterKind = "agent" | "person" | "member";
 
 export type LiveSession = {
 	botId: string,

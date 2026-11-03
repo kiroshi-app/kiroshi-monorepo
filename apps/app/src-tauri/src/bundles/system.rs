@@ -24,9 +24,11 @@ const INSTALLS: &str = "skills/applications/SKILL.md";
 
 const RICH_ANSWERS: &str = "skills/rich-answers/SKILL.md";
 
+const DOCUMENTS: &str = "skills/documents/SKILL.md";
+
 const TRIGGERS: &str = ".triggers.json";
 
-const FILES: [(&str, &[u8]); 11] = [
+const FILES: [(&str, &[u8]); 12] = [
 	(MANIFEST, include_bytes!("../../plugins/kiroshi/.claude-plugin/plugin.json")),
 	(TRIGGERS, include_bytes!("../../plugins/kiroshi/.triggers.json")),
 	(LEARN, include_bytes!("../../plugins/kiroshi/skills/learn/SKILL.md")),
@@ -35,6 +37,7 @@ const FILES: [(&str, &[u8]); 11] = [
 	(MISSIONS, include_bytes!("../../plugins/kiroshi/skills/missions/SKILL.md")),
 	(CONVERSATIONS, include_bytes!("../../plugins/kiroshi/skills/conversations/SKILL.md")),
 	(RICH_ANSWERS, include_bytes!("../../plugins/kiroshi/skills/rich-answers/SKILL.md")),
+	(DOCUMENTS, include_bytes!("../../plugins/kiroshi/skills/documents/SKILL.md")),
 	(
 		"skills/learn/references/skills.md",
 		include_bytes!("../../plugins/kiroshi/skills/learn/references/skills.md"),
@@ -374,6 +377,17 @@ mod tests {
 			.nth(1)
 			.and_then(|rest| rest.split("\n````").next())
 			.unwrap_or_else(|| panic!("the example of {section} is missing"))
+	}
+
+	#[test]
+	fn the_documents_skill_is_preloaded_and_says_a_passage_must_occur_once() {
+		let text = String::from_utf8_lossy(embedded(DOCUMENTS));
+		let said_in_one_breath = text.split_whitespace().collect::<Vec<_>>().join(" ");
+
+		assert!(text.contains("preload: true"), "got {text}");
+		for said in ["`document_read`", "`document_write`", "occurs once"] {
+			assert!(said_in_one_breath.contains(said), "{said} is missing");
+		}
 	}
 
 	#[test]

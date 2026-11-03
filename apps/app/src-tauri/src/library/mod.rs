@@ -1,6 +1,8 @@
 pub mod commands;
 pub mod contract;
 mod documents;
+pub mod host;
+pub(crate) mod presence;
 mod templates;
 
 use std::fs::{self, Metadata};
@@ -159,6 +161,13 @@ pub(crate) fn read_document(
 	};
 	let content = document_text(&item, name)?;
 	Ok(LibraryDocument { name: name.to_owned(), format, content })
+}
+
+fn a_document(root: &Path, space_id: &str, name: &str) -> Result<(), LibraryError> {
+	match resolve(root, space_id, name)?.accepted {
+		AcceptedType::Document(_) => Ok(()),
+		AcceptedType::Image { .. } => Err(LibraryError::NotADocument { name: name.to_owned() }),
+	}
 }
 
 fn document_text(item: &ResolvedItem, name: &str) -> Result<String, LibraryError> {

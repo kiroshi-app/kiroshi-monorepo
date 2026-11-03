@@ -3614,6 +3614,28 @@
         "text"
       ]
     },
+    "LibraryDocumentPresence": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "spaceId": {
+          "type": "string"
+        },
+        "writers": {
+          "items": {
+            "$ref": "#/$defs/LibraryWriter"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "spaceId",
+        "name",
+        "writers"
+      ],
+      "type": "object"
+    },
     "LibraryDocumentRenamed": {
       "properties": {
         "formerName": {
@@ -3664,6 +3686,33 @@
         "spaceId",
         "name",
         "update"
+      ],
+      "type": "object"
+    },
+    "LibraryDocumentWriterFinished": {
+      "properties": {
+        "agentId": {
+          "type": "string"
+        },
+        "agentName": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "outcome": {
+          "$ref": "#/$defs/LibraryWriteOutcome"
+        },
+        "spaceId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "spaceId",
+        "name",
+        "agentId",
+        "agentName",
+        "outcome"
       ],
       "type": "object"
     },
@@ -4037,6 +4086,49 @@
         "title"
       ],
       "type": "object"
+    },
+    "LibraryWriteOutcome": {
+      "enum": [
+        "finished",
+        "failed"
+      ]
+    },
+    "LibraryWriter": {
+      "properties": {
+        "caret": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/LibraryWriterKind"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "name",
+        "caret"
+      ],
+      "type": "object"
+    },
+    "LibraryWriterKind": {
+      "enum": [
+        "agent",
+        "person",
+        "member"
+      ]
     },
     "LiveSession": {
       "properties": {
@@ -11609,6 +11701,39 @@
         "$ref": "#/$defs/LibraryItem"
       }
     },
+    "library_share_caret": {
+      "args": {
+        "properties": {
+          "caret": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "spaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spaceId",
+          "name"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/LibraryError"
+      },
+      "ok": {
+        "type": "null"
+      }
+    },
     "library_templates": {
       "args": {
         "properties": {},
@@ -12878,6 +13003,11 @@
         "$ref": "#/$defs/MembersChanged"
       }
     },
+    "library://document-presence": {
+      "payload": {
+        "$ref": "#/$defs/LibraryDocumentPresence"
+      }
+    },
     "library://document-renamed": {
       "payload": {
         "$ref": "#/$defs/LibraryDocumentRenamed"
@@ -12886,6 +13016,11 @@
     "library://document-updated": {
       "payload": {
         "$ref": "#/$defs/LibraryDocumentUpdated"
+      }
+    },
+    "library://document-writer-finished": {
+      "payload": {
+        "$ref": "#/$defs/LibraryDocumentWriterFinished"
       }
     },
     "mission://changed": {

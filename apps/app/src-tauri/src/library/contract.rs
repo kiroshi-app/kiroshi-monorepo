@@ -78,6 +78,52 @@ pub struct LibraryDocumentUpdated {
 	pub update: String,
 }
 
+pub const DOCUMENT_PRESENCE_EVENT: &str = "library://document-presence";
+
+pub const DOCUMENT_WRITER_FINISHED_EVENT: &str = "library://document-writer-finished";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum LibraryWriterKind {
+	Agent,
+	Person,
+	Member,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryWriter {
+	pub id: String,
+	pub kind: LibraryWriterKind,
+	pub name: Option<String>,
+	pub caret: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryDocumentPresence {
+	pub space_id: String,
+	pub name: String,
+	pub writers: Vec<LibraryWriter>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum LibraryWriteOutcome {
+	Finished,
+	Failed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryDocumentWriterFinished {
+	pub space_id: String,
+	pub name: String,
+	pub agent_id: String,
+	pub agent_name: String,
+	pub outcome: LibraryWriteOutcome,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LibraryDocumentRenamed {
