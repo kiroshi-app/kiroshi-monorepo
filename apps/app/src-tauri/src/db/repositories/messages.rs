@@ -2,6 +2,7 @@ use std::collections::HashSet;
 
 use rusqlite::types::{FromSql, Type};
 use rusqlite::{params, Connection, OptionalExtension, Row, Transaction, TransactionBehavior};
+use serde::Deserialize;
 
 use super::arrivals::{self, Arrival, SeqSpan};
 use super::conversations::release_every_prompt;
@@ -105,6 +106,18 @@ pub struct AccountAuthor {
 	pub computer: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct ReplyLink {
+	pub message_id: String,
+	pub excerpt: Option<String>,
+}
+
+impl ReplyLink {
+	pub fn bare(message_id: String) -> Self {
+		Self { message_id, excerpt: None }
+	}
+}
+
 pub struct NewUserMessage {
 	pub id: String,
 	pub conversation_id: String,
@@ -112,7 +125,7 @@ pub struct NewUserMessage {
 	pub author_bot_id: Option<String>,
 	pub author: AccountAuthor,
 	pub written_from: WrittenFrom,
-	pub replied_to_message_ids: Vec<String>,
+	pub reply_links: Vec<ReplyLink>,
 	pub content: String,
 	pub created_at: i64,
 }
@@ -122,7 +135,7 @@ pub struct StoredMessage {
 	pub id: String,
 	pub turn_id: String,
 	pub author_bot_id: Option<String>,
-	pub replied_to_message_ids: Vec<String>,
+	pub reply_links: Vec<ReplyLink>,
 	pub seq: i64,
 	pub role: MessageRole,
 	pub content: String,
@@ -251,7 +264,8 @@ const OPEN_TURNS_WITHOUT_REPLY: &str = "SELECT id FROM turns
 	ORDER BY seq";
 
 const MESSAGE_KEY: &str = "SELECT seq, conversation_id, turn_id, author_bot_id,
-		(SELECT json_group_array(target_message_id ORDER BY position) FROM message_replies
+		(SELECT json_group_array(json_object('message_id', target_message_id, 'excerpt', excerpt)
+			ORDER BY position) FROM message_replies
 			WHERE message_id = messages.id),
 		role, created_at, content
 	FROM messages WHERE id = ?1";
@@ -269,7 +283,10 @@ const INSERT_MESSAGE: &str = "INSERT INTO messages
 		?10, ?11, ?12, ?13, ?14)
 	RETURNING seq";
 const INSERT_REPLY_LINK: &str = "INSERT INTO message_replies
-	(message_id, conversation_id, position, target_message_id) VALUES (?1, ?2, ?3, ?4)";
+	(message_id, conversation_id, position, target_message_id, excerpt)
+	VALUES (?1, ?2, ?3, ?4, ?5)";
+const SET_FIRST_REPLY_EXCERPT: &str =
+	"UPDATE message_replies SET excerpt = ?2 WHERE message_id = ?1 AND position = 0";
 const APPEND_TEXT: &str =
 	"UPDATE messages SET content = content || ?2, completion_state = 'streaming'
 	WHERE id = ?1 AND completion_state IN ('pending', 'streaming')";
@@ -280,21 +297,24 @@ const REPLACE_CONTENT: &str = "UPDATE messages SET content = ?2 WHERE id = ?1";
 const REPLACE_INDEXED_CONTENT: &str =
 	"UPDATE message_search SET content = ?2 WHERE message_id = ?1";
 const MESSAGE_PAGE: &str = "SELECT id, turn_id, author_bot_id,
-		(SELECT json_group_array(target_message_id ORDER BY position) FROM message_replies
+		(SELECT json_group_array(json_object('message_id', target_message_id, 'excerpt', excerpt)
+			ORDER BY position) FROM message_replies
 			WHERE message_id = messages.id), seq, role,
 		content, completion_state, created_at, runtime_session_id, author_account_id,
 		author_name, written_from, author_email, author_computer,
 		(SELECT continues_turn_id FROM turns WHERE turns.id = messages.turn_id)
 	FROM messages WHERE conversation_id = ?1 AND seq < ?2 ORDER BY seq DESC LIMIT ?3";
 const MESSAGE_AT_SEQ: &str = "SELECT id, turn_id, author_bot_id,
-		(SELECT json_group_array(target_message_id ORDER BY position) FROM message_replies
+		(SELECT json_group_array(json_object('message_id', target_message_id, 'excerpt', excerpt)
+			ORDER BY position) FROM message_replies
 			WHERE message_id = messages.id), seq, role,
 		content, completion_state, created_at, runtime_session_id, author_account_id,
 		author_name, written_from, author_email, author_computer,
 		(SELECT continues_turn_id FROM turns WHERE turns.id = messages.turn_id)
 	FROM messages WHERE conversation_id = ?1 AND seq = ?2";
 const MESSAGES_AFTER_SEQ: &str = "SELECT id, turn_id, author_bot_id,
-		(SELECT json_group_array(target_message_id ORDER BY position) FROM message_replies
+		(SELECT json_group_array(json_object('message_id', target_message_id, 'excerpt', excerpt)
+			ORDER BY position) FROM message_replies
 			WHERE message_id = messages.id), seq,
 		role, content, completion_state, created_at, runtime_session_id, author_account_id,
 		author_name, written_from, author_email, author_computer,
@@ -305,14 +325,16 @@ const MESSAGE_OLDER_THAN_SEQ: &str =
 const MESSAGE_NEWER_THAN_SEQ: &str =
 	"SELECT EXISTS(SELECT 1 FROM messages WHERE conversation_id = ?1 AND seq > ?2)";
 const MESSAGE_BY_ID: &str = "SELECT id, turn_id, author_bot_id,
-		(SELECT json_group_array(target_message_id ORDER BY position) FROM message_replies
+		(SELECT json_group_array(json_object('message_id', target_message_id, 'excerpt', excerpt)
+			ORDER BY position) FROM message_replies
 			WHERE message_id = messages.id), seq, role,
 		content, completion_state, created_at, runtime_session_id, author_account_id,
 		author_name, written_from, author_email, author_computer,
 		(SELECT continues_turn_id FROM turns WHERE turns.id = messages.turn_id)
 	FROM messages WHERE conversation_id = ?1 AND id = ?2";
 const MESSAGE_WINDOW: &str = "SELECT id, turn_id, author_bot_id,
-		(SELECT json_group_array(target_message_id ORDER BY position) FROM message_replies
+		(SELECT json_group_array(json_object('message_id', target_message_id, 'excerpt', excerpt)
+			ORDER BY position) FROM message_replies
 			WHERE message_id = messages.id), seq, role,
 		content, completion_state, created_at, runtime_session_id, author_account_id,
 		author_name, written_from, author_email, author_computer,
@@ -320,7 +342,8 @@ const MESSAGE_WINDOW: &str = "SELECT id, turn_id, author_bot_id,
 	FROM messages WHERE conversation_id = ?1 AND seq > ?2 AND seq < ?3
 	ORDER BY seq DESC LIMIT ?4";
 const SETTLED_MESSAGE_WINDOW: &str = "SELECT id, turn_id, author_bot_id,
-		(SELECT json_group_array(target_message_id ORDER BY position) FROM message_replies
+		(SELECT json_group_array(json_object('message_id', target_message_id, 'excerpt', excerpt)
+			ORDER BY position) FROM message_replies
 			WHERE message_id = messages.id),
 		seq, role, content, completion_state, created_at, runtime_session_id, author_account_id,
 		author_name, written_from, author_email, author_computer,
@@ -330,7 +353,8 @@ const SETTLED_MESSAGE_WINDOW: &str = "SELECT id, turn_id, author_bot_id,
 		AND trim(content, char(32, 9, 10, 13)) <> ''
 	ORDER BY seq DESC LIMIT ?4";
 const LATEST_MESSAGE_ASIDE_BOT: &str = "SELECT id, turn_id, author_bot_id,
-		(SELECT json_group_array(target_message_id ORDER BY position) FROM message_replies
+		(SELECT json_group_array(json_object('message_id', target_message_id, 'excerpt', excerpt)
+			ORDER BY position) FROM message_replies
 			WHERE message_id = messages.id),
 		seq, role, content, completion_state, created_at, runtime_session_id, author_account_id,
 		author_name, written_from, author_email, author_computer,
@@ -339,7 +363,8 @@ const LATEST_MESSAGE_ASIDE_BOT: &str = "SELECT id, turn_id, author_bot_id,
 		AND created_at <= ?3
 		AND trim(content, char(32, 9, 10, 13)) <> '' ORDER BY seq DESC LIMIT 1";
 const LATEST_MESSAGE_OF_BOT: &str = "SELECT id, turn_id, author_bot_id,
-		(SELECT json_group_array(target_message_id ORDER BY position) FROM message_replies
+		(SELECT json_group_array(json_object('message_id', target_message_id, 'excerpt', excerpt)
+			ORDER BY position) FROM message_replies
 			WHERE message_id = messages.id), seq,
 		role, content, completion_state, created_at, runtime_session_id, author_account_id,
 		author_name, written_from, author_email, author_computer,
@@ -354,7 +379,8 @@ const KEEP_MESSAGE_PIN: &str =
 const CLEAR_MESSAGE_PIN: &str = "DELETE FROM message_pins
 	WHERE conversation_id = ?1 AND message_id = ?2 AND block_index = ?3";
 const PINNED_MESSAGES: &str = "SELECT messages.id, messages.turn_id, messages.author_bot_id,
-		(SELECT json_group_array(target_message_id ORDER BY position) FROM message_replies
+		(SELECT json_group_array(json_object('message_id', target_message_id, 'excerpt', excerpt)
+			ORDER BY position) FROM message_replies
 			WHERE message_id = messages.id),
 		messages.seq, messages.role, messages.content,
 		messages.completion_state, messages.created_at, messages.runtime_session_id,
@@ -1007,7 +1033,7 @@ struct AppendedMessage {
 	conversation_id: String,
 	turn_id: String,
 	author_bot_id: Option<String>,
-	replied_to_message_ids: Vec<String>,
+	reply_links: Vec<ReplyLink>,
 	role: MessageRole,
 	content: Option<String>,
 	created_at: i64,
@@ -1022,7 +1048,7 @@ impl From<NewAssistantMessage> for AppendedMessage {
 			conversation_id: message.conversation_id,
 			turn_id: message.turn_id,
 			author_bot_id: message.author_bot_id,
-			replied_to_message_ids: message.replied_to_message_id.into_iter().collect(),
+			reply_links: message.replied_to_message_id.into_iter().map(ReplyLink::bare).collect(),
 			role: MessageRole::Assistant,
 			content: None,
 			created_at: message.created_at,
@@ -1039,7 +1065,7 @@ impl From<NewUserMessage> for AppendedMessage {
 			conversation_id: message.conversation_id,
 			turn_id: message.turn_id,
 			author_bot_id: message.author_bot_id,
-			replied_to_message_ids: first_occurrences(message.replied_to_message_ids),
+			reply_links: normalised(message.reply_links),
 			role: MessageRole::User,
 			content: Some(message.content),
 			created_at: message.created_at,
@@ -1054,7 +1080,7 @@ struct StoredMessageKey {
 	conversation_id: String,
 	turn_id: String,
 	author_bot_id: Option<String>,
-	replied_to_message_ids: Vec<String>,
+	reply_links: Vec<ReplyLink>,
 	role: MessageRole,
 	created_at: i64,
 	content: Option<String>,
@@ -1071,7 +1097,7 @@ impl StoredMessageKey {
 		if self.author_bot_id != message.author_bot_id {
 			return Some("author_bot_id");
 		}
-		if self.replied_to_message_ids != message.replied_to_message_ids {
+		if self.reply_links != message.reply_links {
 			return Some("replied_to_message_id");
 		}
 		if self.role != message.role {
@@ -1355,7 +1381,7 @@ fn insert_message_once(
 			message.conversation_id,
 			message.turn_id,
 			message.author_bot_id,
-			message.replied_to_message_ids.first(),
+			message.reply_links.first().map(|link| &link.message_id),
 			message.role,
 			content,
 			state,
@@ -1368,31 +1394,39 @@ fn insert_message_once(
 		],
 		|row| row.get(0),
 	)?;
-	link_further_replies(
-		transaction,
-		&message.id,
-		&message.conversation_id,
-		&message.replied_to_message_ids,
-	)?;
+	link_replies(transaction, &message.id, &message.conversation_id, &message.reply_links)?;
 	Ok(seq)
 }
 
-fn link_further_replies(
+fn link_replies(
 	transaction: &Transaction<'_>,
 	id: &str,
 	conversation_id: &str,
-	target_ids: &[String],
+	links: &[ReplyLink],
 ) -> rusqlite::Result<()> {
+	let Some((first, further)) = links.split_first() else {
+		return Ok(());
+	};
+	if first.excerpt.is_some() {
+		transaction.prepare_cached(SET_FIRST_REPLY_EXCERPT)?.execute(params![id, first.excerpt])?;
+	}
 	let mut statement = transaction.prepare_cached(INSERT_REPLY_LINK)?;
-	for (position, target_id) in (1_i64..).zip(target_ids.iter().skip(1)) {
-		statement.execute(params![id, conversation_id, position, target_id])?;
+	for (position, link) in (1_i64..).zip(further) {
+		statement.execute(params![id, conversation_id, position, link.message_id, link.excerpt])?;
 	}
 	Ok(())
 }
 
-fn first_occurrences(ids: Vec<String>) -> Vec<String> {
+fn normalised(links: Vec<ReplyLink>) -> Vec<ReplyLink> {
 	let mut seen = HashSet::new();
-	ids.into_iter().filter(|id| seen.insert(id.clone())).collect()
+	links
+		.into_iter()
+		.filter(|link| seen.insert(link.message_id.clone()))
+		.map(|link| ReplyLink {
+			excerpt: link.excerpt.filter(|excerpt| !excerpt.trim().is_empty()),
+			..link
+		})
+		.collect()
 }
 
 fn refuse_unknown_conversation(
@@ -1545,7 +1579,7 @@ fn stored_message_key(
 				conversation_id: row.get(1)?,
 				turn_id: row.get(2)?,
 				author_bot_id: row.get(3)?,
-				replied_to_message_ids: reply_links(row, 4)?,
+				reply_links: reply_links(row, 4)?,
 				role: row.get(5)?,
 				created_at: row.get(6)?,
 				content: message.content.is_some().then(|| row.get(7)).transpose()?,
@@ -1657,7 +1691,7 @@ fn read_message(row: &Row<'_>) -> rusqlite::Result<StoredMessage> {
 		id: row.get(0)?,
 		turn_id: row.get(1)?,
 		author_bot_id: row.get(2)?,
-		replied_to_message_ids: reply_links(row, 3)?,
+		reply_links: reply_links(row, 3)?,
 		seq: row.get(4)?,
 		role: row.get(5)?,
 		content: row.get(6)?,
@@ -1675,7 +1709,7 @@ fn read_message(row: &Row<'_>) -> rusqlite::Result<StoredMessage> {
 	})
 }
 
-fn reply_links(row: &Row<'_>, index: usize) -> rusqlite::Result<Vec<String>> {
+fn reply_links(row: &Row<'_>, index: usize) -> rusqlite::Result<Vec<ReplyLink>> {
 	serde_json::from_str(&row.get::<_, String>(index)?).map_err(|error| {
 		rusqlite::Error::FromSqlConversionFailure(index, Type::Text, Box::new(error))
 	})
@@ -1762,7 +1796,7 @@ mod tests {
 			author_bot_id: None,
 			author: Default::default(),
 			written_from: WrittenFrom::Here,
-			replied_to_message_ids: Vec::new(),
+			reply_links: Vec::new(),
 			content: content.into(),
 			created_at,
 		}
@@ -2251,6 +2285,36 @@ mod tests {
 	}
 
 	#[tokio::test]
+	async fn each_reply_link_reads_back_in_order_with_its_excerpt() {
+		let dir = temp_dir();
+		let database = seeded(&dir).await;
+		a_turn(&database, "t1", "c1").await;
+		for id in ["m1", "m2"] {
+			database
+				.messages()
+				.append_user_message(a_user_message(id, "hello", 1))
+				.await
+				.expect("a target is appended");
+		}
+		let excerpted = ReplyLink { message_id: "m2".into(), excerpt: Some("the roof".into()) };
+
+		database
+			.messages()
+			.append_user_message(NewUserMessage {
+				reply_links: vec![excerpted.clone(), ReplyLink::bare("m1".into())],
+				..a_user_message("m3", "and now?", 1)
+			})
+			.await
+			.expect("the reply is appended");
+
+		let transcript = whole_transcript(&database, PAGE).await;
+		assert_eq!(transcript[2].reply_links, [excerpted, ReplyLink::bare("m1".into())]);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
 	async fn a_reply_names_a_message_of_its_own_conversation_and_nothing_else() {
 		let dir = temp_dir();
 		let database = seeded(&dir).await;
@@ -2282,9 +2346,9 @@ mod tests {
 		assert!(across.is_err(), "a message quoted another conversation's message");
 		let transcript = whole_transcript(&database, PAGE).await;
 		assert_eq!(seqs(&transcript), vec![1, 2], "the refused reply left a row behind");
-		assert_eq!(transcript[1].replied_to_message_ids, ["m1"]);
+		assert_eq!(transcript[1].reply_links, [ReplyLink::bare("m1".into())]);
 		assert_eq!(transcript[1].author_bot_id.as_deref(), Some("b1"));
-		assert!(transcript[0].replied_to_message_ids.is_empty());
+		assert!(transcript[0].reply_links.is_empty());
 
 		drop(database);
 		fs::remove_dir_all(&dir).expect("cleanup");
@@ -3148,7 +3212,7 @@ mod tests {
 		let another_quote = database
 			.messages()
 			.append_user_message(NewUserMessage {
-				replied_to_message_ids: vec!["m1".into()],
+				reply_links: vec![ReplyLink::bare("m1".into())],
 				..a_user_message("m1", "hello", 1)
 			})
 			.await;

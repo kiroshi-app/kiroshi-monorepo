@@ -241,6 +241,7 @@ pub(crate) async fn run_handed_turn<R: Runtime>(
 		created_at,
 		replied_to_message_id: None,
 		replied_to_message_ids: Vec::new(),
+		reply_links: Vec::new(),
 	};
 	tauri::async_runtime::spawn(host_turn::run(app.clone(), held, message, vec![summoned]));
 	Ok(())
@@ -374,6 +375,7 @@ mod tests {
 	use tauri::Listener;
 
 	use super::*;
+	use crate::conversations::contract::ReplyLink;
 	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 
 	const ONE_SEATED_CONVERSATION: &str = "
@@ -527,6 +529,7 @@ mod tests {
 			author_bot_id: None,
 			replied_to_message_id: targets.first().map(|target| (*target).to_owned()),
 			replied_to_message_ids: targets.iter().map(|target| (*target).to_owned()).collect(),
+			reply_links: Vec::new(),
 			content: "hello".into(),
 			created_at: 1,
 		}
@@ -556,8 +559,12 @@ mod tests {
 			.messages
 	}
 
+	fn read<'a>(page: &'a [TranscriptMessage], id: &str) -> &'a TranscriptMessage {
+		page.iter().find(|message| message.id == id).expect("the message is read")
+	}
+
 	fn links_of<'a>(page: &'a [TranscriptMessage], id: &str) -> (Option<&'a str>, Vec<&'a str>) {
-		let message = page.iter().find(|message| message.id == id).expect("the message is read");
+		let message = read(page, id);
 		let listed = message.replied_to_message_ids.iter().map(String::as_str).collect();
 		(message.replied_to_message_id.as_deref(), listed)
 	}
@@ -599,6 +606,51 @@ mod tests {
 
 		let page = page_of(&app).await;
 		assert_eq!(links_of(&page, "m2"), (Some("m1"), vec!["m1"]));
+		assert_eq!(excerpts_of(&page, "m2"), [("m1", None)]);
+	}
+
+	fn linking(id: &str, links: &[(&str, Option<&str>)]) -> NewUserMessage {
+		let reply_links = links
+			.iter()
+			.map(|(target, excerpt)| ReplyLink {
+				message_id: (*target).to_owned(),
+				excerpt: excerpt.map(str::to_owned),
+			})
+			.collect();
+		NewUserMessage { reply_links, ..a_reply_to(id, &[]) }
+	}
+
+	fn excerpts_of<'a>(page: &'a [TranscriptMessage], id: &str) -> Vec<(&'a str, Option<&'a str>)> {
+		read(page, id)
+			.reply_links
+			.iter()
+			.map(|link| (link.message_id.as_str(), link.excerpt.as_deref()))
+			.collect()
+	}
+
+	#[tokio::test]
+	async fn each_reply_link_keeps_its_first_occurrence_with_its_excerpt_or_none_when_blank() {
+		let app = a_host("excerpted-replies").await;
+		sent_targets(&app, &["m1", "m2"]).await;
+
+		let links = [("m2", Some("the roof")), ("m1", Some(" \n\t")), ("m2", Some("again"))];
+		send(&app, linking("m3", &links)).await.expect("the reply is sent");
+
+		let page = page_of(&app).await;
+		assert_eq!(excerpts_of(&page, "m3"), [("m2", Some("the roof")), ("m1", None)]);
+		assert_eq!(links_of(&page, "m3"), (Some("m2"), vec!["m2", "m1"]));
+	}
+
+	#[tokio::test]
+	async fn an_unknown_target_among_the_reply_links_refuses_the_send_as_a_listed_id_does() {
+		let app = a_host("unknown-excerpted-reply").await;
+		sent_targets(&app, &["m1"]).await;
+
+		let listed = send(&app, a_reply_to("refused", &["m1", "gone"])).await;
+		let linked = send(&app, linking("refused", &[("m1", None), ("gone", Some("x"))])).await;
+
+		assert!(listed.is_err(), "a listed unknown target was stored");
+		assert_eq!(linked, listed);
 	}
 
 	#[tokio::test]

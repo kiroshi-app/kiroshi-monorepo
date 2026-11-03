@@ -1505,6 +1505,7 @@ export type NewUserMessage = {
 	authorBotId: string | null,
 	repliedToMessageId: string | null,
 	repliedToMessageIds?: string[],
+	replyLinks?: ReplyLink[],
 	content: string,
 	createdAt: number,
 };
@@ -1626,6 +1627,11 @@ export type ReleaseNotes = {
 };
 
 export type ReleaseNotesError = { kind: "invalidVersion"; version: string } | { kind: "unavailable"; version: string; detail: string };
+
+export type ReplyLink = {
+	messageId: string,
+	excerpt: string | null,
+};
 
 export type ReportedRun = {
 	turnId: string,
@@ -1833,6 +1839,7 @@ export type SentMessage = {
 	createdAt: number,
 	repliedToMessageId: string | null,
 	repliedToMessageIds?: string[],
+	replyLinks?: ReplyLink[],
 };
 
 export type SessionHandle = {
@@ -2006,6 +2013,7 @@ export type TranscriptMessage_Deserialize = {
 	writtenFrom?: WrittenFrom | null,
 	repliedToMessageId: string | null,
 	repliedToMessageIds?: string[],
+	replyLinks?: ReplyLink[],
 	runtimeSessionId: string | null,
 	continuesTurnId?: string | null,
 };
@@ -2025,6 +2033,7 @@ export type TranscriptMessage_Serialize = {
 	writtenFrom?: WrittenFrom | null,
 	repliedToMessageId: string | null,
 	repliedToMessageIds?: string[],
+	replyLinks?: ReplyLink[],
 	runtimeSessionId: string | null,
 	continuesTurnId?: string | null,
 };

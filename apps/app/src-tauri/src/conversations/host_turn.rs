@@ -253,7 +253,7 @@ async fn answered_author(
 	database: &db::Database,
 	message: &SentMessage,
 ) -> Result<Option<String>, TranscriptStoreError> {
-	let Some(answered_id) = message.replied_to_message_id.clone() else {
+	let Some(answered_id) = message.first_reply_target() else {
 		return Ok(None);
 	};
 	let answered =
@@ -1188,7 +1188,7 @@ mod tests {
 
 	use crate::agent::commands::{agent_cancel_turn, EVENT_CHANNEL};
 	use crate::agent::contract::ConnectionState;
-	use crate::conversations::contract::StorageFailure;
+	use crate::conversations::contract::{ReplyLink, StorageFailure};
 	use crate::conversations::contract::{SummonsDropped, SUMMONS_DROPPED_EVENT, UPDATED_EVENT};
 	use crate::conversations::turn_run_deadline::TurnRunDeadlines;
 	use crate::db::repositories::conversations::{
@@ -1425,6 +1425,54 @@ mod tests {
 			stopped,
 			handed_bot_ids: Mutex::default(),
 		}
+	}
+
+	fn sent_in(room: &Room, replied_to: Option<&str>, linked: &str) -> SentMessage {
+		SentMessage {
+			id: "p1".to_owned(),
+			conversation_id: room.id.clone(),
+			turn_id: "t1".to_owned(),
+			content: "and now?".to_owned(),
+			created_at: 3,
+			replied_to_message_id: replied_to.map(str::to_owned),
+			replied_to_message_ids: Vec::new(),
+			reply_links: vec![ReplyLink { message_id: linked.to_owned(), excerpt: None }],
+		}
+	}
+
+	#[tokio::test]
+	async fn a_message_linking_only_through_reply_links_summons_the_author_of_the_first() {
+		let app = an_app_of_its_own("host-turn-reply-links-summon", mock_builder());
+		app.manage(db::bootstrap(app.handle()));
+		let room = a_room_running(app.handle(), &["Ada", "Grace"]).await;
+		let grace = room.bot_ids[1].clone();
+		speaking_in(app.handle(), &room, &[]).await;
+		a_streaming_reply(app.handle(), &room, &grace).await;
+		let database = database(app.handle()).expect("the database opens");
+
+		let sent = sent_in(&room, None, &format!("reply-of-{grace}"));
+		let summoned = summoned_for(database, &sent, Vec::new()).await.expect("it resolves");
+
+		assert_eq!(summoned, [grace]);
+	}
+
+	#[tokio::test]
+	async fn reply_links_outrank_a_replied_to_id_naming_another_message_when_summoning() {
+		let app = an_app_of_its_own("host-turn-reply-links-outrank", mock_builder());
+		app.manage(db::bootstrap(app.handle()));
+		let room = a_room_running(app.handle(), &["Ada", "Grace"]).await;
+		let (ada, grace) = (room.bot_ids[0].clone(), room.bot_ids[1].clone());
+		speaking_in(app.handle(), &room, &[]).await;
+		for bot_id in [&ada, &grace] {
+			a_streaming_reply(app.handle(), &room, bot_id).await;
+		}
+		let database = database(app.handle()).expect("the database opens");
+
+		let replied_to = format!("reply-of-{ada}");
+		let sent = sent_in(&room, Some(&replied_to), &format!("reply-of-{grace}"));
+		let summoned = summoned_for(database, &sent, Vec::new()).await.expect("it resolves");
+
+		assert_eq!(summoned, [grace]);
 	}
 
 	#[tokio::test]

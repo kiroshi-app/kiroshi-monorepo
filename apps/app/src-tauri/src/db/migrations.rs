@@ -73,6 +73,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 64, statements: HUE_COLOURS },
 	Migration { version: 65, statements: CONTINUATION_TURNS },
 	Migration { version: 66, statements: MESSAGE_REPLIES },
+	Migration { version: 67, statements: MESSAGE_REPLY_EXCERPTS },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -1386,6 +1387,11 @@ BEGIN
 END;
 ";
 
+const MESSAGE_REPLY_EXCERPTS: &str = "
+ALTER TABLE message_replies ADD COLUMN excerpt TEXT
+	CHECK (excerpt IS NULL OR trim(excerpt, char(32, 9, 10, 13)) <> '');
+";
+
 const FRESH_INSTALL_UNTINTED_PERSONAL_SPACE: &str =
 	"UPDATE spaces SET colour = NULL WHERE id = 'personal';";
 
@@ -1437,6 +1443,7 @@ mod tests {
 
 	use super::*;
 	use crate::db::connection::{open, temp_dir, FILE_NAME};
+	use crate::db::repositories::messages::ReplyLink;
 
 	const BOTS_HOLDING_A_MEMBERSHIP: &str = "
 		INSERT INTO bots (id, name, model, created_at)
@@ -1509,6 +1516,7 @@ mod tests {
 	const MESSAGE_AUTHOR_EMAIL_AND_COMPUTER_STEP: u32 = 62;
 	const HUE_COLOURS_STEP: u32 = 64;
 	const MESSAGE_REPLIES_STEP: u32 = 66;
+	const MESSAGE_REPLY_EXCERPTS_STEP: u32 = 67;
 
 	const A_LIVE_SESSION: &str = "INSERT INTO runtime_sessions
 		(id, conversation_id, bot_id, provider_session_id, seq, status, started_at)
@@ -5114,8 +5122,41 @@ mod tests {
 		let replying = read("m2").await.expect("the reply reads").expect("the reply is kept");
 		let quoted = read("m1").await.expect("the target reads").expect("the target is kept");
 
-		assert_eq!(replying.replied_to_message_ids, ["m1"]);
-		assert!(quoted.replied_to_message_ids.is_empty());
+		assert_eq!(replying.reply_links, [ReplyLink::bare("m1".into())]);
+		assert!(quoted.reply_links.is_empty());
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_reply_kept_before_excerpts_reads_back_as_one_link_without_one_once_upgraded() {
+		let dir = temp_dir();
+		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
+		apply_each(&mut connection, shipped_before(MESSAGE_REPLY_EXCERPTS_STEP))
+			.expect("the shipped schema");
+		connection
+			.execute_batch(&format!(
+				"INSERT INTO conversations (id, kind, space_id, title, created_at, updated_at)
+					VALUES ('room', 'topic', 'personal', 'Room', 1, 1);
+				{}{}
+				INSERT INTO message_replies (message_id, conversation_id, position, target_message_id)
+					VALUES ('m2', 'room', 0, 'm1');",
+				a_message_at("room", "m1", 1, 2),
+				a_message_at("room", "m2", 2, 3),
+			))
+			.expect("the rows are inserted");
+		drop(connection);
+
+		let database = crate::db::open(&dir);
+		let replying = database
+			.messages()
+			.message("room".into(), "m2".into())
+			.await
+			.expect("the reply reads")
+			.expect("the reply is kept");
+
+		assert_eq!(replying.reply_links, [ReplyLink::bare("m1".into())]);
 
 		drop(database);
 		fs::remove_dir_all(&dir).expect("cleanup");

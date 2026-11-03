@@ -48,6 +48,7 @@ mod tests {
 			written_from: None,
 			replied_to_message_id: Some("m0".into()),
 			replied_to_message_ids: vec!["m0".into()],
+			reply_links: vec![ReplyLink { message_id: "m0".into(), excerpt: None }],
 			runtime_session_id: Some("run-1".into()),
 			continues_turn_id: None,
 		}
@@ -69,6 +70,7 @@ mod tests {
 			"writtenFrom": null,
 			"repliedToMessageId": "m0",
 			"repliedToMessageIds": ["m0"],
+			"replyLinks": [{ "messageId": "m0", "excerpt": null }],
 			"runtimeSessionId": "run-1"
 		})
 	}

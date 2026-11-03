@@ -252,7 +252,7 @@ async fn commit_samples(
 			author_bot_id: None,
 			author: Default::default(),
 			written_from: WrittenFrom::Here,
-			replied_to_message_ids: Vec::new(),
+			reply_links: Vec::new(),
 			content: BODY.to_owned(),
 			created_at: index as i64,
 		};
@@ -337,7 +337,7 @@ async fn commits_in_a_loop(handle: AppHandle<MockRuntime>, stop: Arc<AtomicBool>
 			author_bot_id: None,
 			author: Default::default(),
 			written_from: WrittenFrom::Here,
-			replied_to_message_ids: Vec::new(),
+			reply_links: Vec::new(),
 			content: BODY.to_owned(),
 			created_at: committed as i64,
 		};

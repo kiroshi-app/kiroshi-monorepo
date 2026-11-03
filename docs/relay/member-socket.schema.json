@@ -5733,6 +5733,12 @@
           },
           "type": "array"
         },
+        "replyLinks": {
+          "items": {
+            "$ref": "#/$defs/ReplyLink"
+          },
+          "type": "array"
+        },
         "turnId": {
           "type": "string"
         }
@@ -6293,6 +6299,28 @@
         "dedupeValueMissing",
         "alreadySeen"
       ]
+    },
+    "ReplyLink": {
+      "properties": {
+        "excerpt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "messageId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "messageId",
+        "excerpt"
+      ],
+      "type": "object"
     },
     "ReportedRun": {
       "properties": {
@@ -7375,6 +7403,12 @@
           },
           "type": "array"
         },
+        "replyLinks": {
+          "items": {
+            "$ref": "#/$defs/ReplyLink"
+          },
+          "type": "array"
+        },
         "turnId": {
           "type": "string"
         }
@@ -8401,6 +8435,12 @@
         "repliedToMessageIds": {
           "items": {
             "type": "string"
+          },
+          "type": "array"
+        },
+        "replyLinks": {
+          "items": {
+            "$ref": "#/$defs/ReplyLink"
           },
           "type": "array"
         },

@@ -1128,7 +1128,7 @@ mod tests {
 		BotIdentity, ConversationDraft, DEFAULT_BOT_ID, DEFAULT_BOT_MODEL,
 	};
 	use crate::db::repositories::messages::{
-		MessageRole, MessageState, NewUserMessage, StoredMessage, WrittenFrom,
+		MessageRole, MessageState, NewUserMessage, ReplyLink, StoredMessage, WrittenFrom,
 	};
 	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 	use crate::test_log::{capturing, infos_naming, warnings_naming};
@@ -1262,7 +1262,7 @@ mod tests {
 				author_bot_id: None,
 				author: Default::default(),
 				written_from: WrittenFrom::Here,
-				replied_to_message_ids: Vec::new(),
+				reply_links: Vec::new(),
 				content: "hello".to_owned(),
 				created_at: 1,
 			};
@@ -1407,7 +1407,7 @@ mod tests {
 		assert_eq!(asked.role, MessageRole::Assistant);
 		assert_eq!(asked.turn_id, "t1");
 		assert_eq!(asked.author_bot_id.as_deref(), Some(DEFAULT_BOT_ID));
-		assert_eq!(asked.replied_to_message_ids, ["p1"]);
+		assert_eq!(asked.reply_links, [ReplyLink::bare("p1".into())]);
 		assert_eq!(asked.state, MessageState::Complete);
 		assert!(asked.seq > reply.seq, "the question landed before the reply");
 		assert_eq!(asked.content, QUESTION_TEXT);
@@ -1868,6 +1868,7 @@ mod tests {
 			author_bot_id: None,
 			replied_to_message_id: None,
 			replied_to_message_ids: Vec::new(),
+			reply_links: Vec::new(),
 			content: "hello".to_owned(),
 			created_at: 1,
 		};
@@ -2598,7 +2599,7 @@ mod tests {
 		assert_ne!(follow_up.turn_id, "t1");
 		assert_eq!(follow_up.content, "the shell finished");
 		assert_eq!(follow_up.continues_turn_id.as_deref(), Some("t1"));
-		assert_eq!(follow_up.replied_to_message_ids, ["p1"]);
+		assert_eq!(follow_up.reply_links, [ReplyLink::bare("p1".into())]);
 		assert_eq!(written.turn_of("m2").await, follow_up.turn_id);
 		assert_eq!(written.settled("m1").await.continues_turn_id, None);
 		let continuation = Some(EventTurn {
@@ -2766,7 +2767,7 @@ mod tests {
 
 		let follow_up = written.settled("m2").await;
 		assert_eq!(follow_up.continues_turn_id.as_deref(), Some("t1"));
-		assert_eq!(follow_up.replied_to_message_ids, ["p1"]);
+		assert_eq!(follow_up.reply_links, [ReplyLink::bare("p1".into())]);
 		assert_eq!(written.turn_of("m3").await, "t2");
 		assert_eq!(written.settled("m3").await.continues_turn_id, None);
 		let ended: Vec<String> = heard
