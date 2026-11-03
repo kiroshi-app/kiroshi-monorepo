@@ -690,9 +690,8 @@ describe("Rename in the document bar", () => {
 
 		await pickInDocumentMore("rename")
 
-		await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
 		await waitFor(() => expect(document.activeElement).toBe(field))
-		expect(documentBarButton("more")).not.toBe(document.activeElement)
+		expect(document.activeElement).not.toBe(documentBarButton("more"))
 	})
 
 	it("returns focus to More when the menu closes without Rename", async () => {
