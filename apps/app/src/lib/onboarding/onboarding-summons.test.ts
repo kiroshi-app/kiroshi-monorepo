@@ -18,6 +18,7 @@ const PREVIOUS_FIRST_COMPANION = onboardingSummonsFor("firstCompanion").replace(
 const userRowOf = (text: string): TranscriptRow => ({
 	messageId: "m-1",
 	turnId: "t-1",
+	continuesTurnId: null,
 	blockIndex: 0,
 	quotedMessageId: null,
 	authorBotId: null,

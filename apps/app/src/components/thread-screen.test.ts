@@ -2800,6 +2800,34 @@ describe("ThreadScreen", () => {
 		expect(screen.getByRole("textbox").hasAttribute("disabled")).toBe(true)
 	})
 
+	it.each([
+		[1, "Nyx · waiting on 1 background task"],
+		[3, "Nyx · waiting on 3 background tasks"],
+	])(
+		"names the %i background tasks a held turn waits on, Stop kept",
+		async (count, line) => {
+			const thread = threadOf({ id: "bot-1", name: "Nyx", said: "the answer" })
+			render(
+				screenOf({
+					...thread,
+					chat: {
+						...thread.chat,
+						state: {
+							...thread.chat.state,
+							turn: "running",
+							hold: { reason: "backgroundTasks", count },
+						},
+					},
+				}),
+				{ wrapper: createQueryTestWrapper().wrapper },
+			)
+			await settle()
+
+			expect(workLines()).toEqual([line])
+			expect(stopFor("Nyx")).not.toBeNull()
+		},
+	)
+
 	it("stops the solo companion from the row it works on", async () => {
 		const thread = threadOf({ id: "bot-1", name: "Nyx", said: "the answer" })
 		const cancelled: string[] = []

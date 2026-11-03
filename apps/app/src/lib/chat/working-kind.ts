@@ -9,6 +9,7 @@ export type WorkingState = {
 	kind: ActivityIndicatorKind
 	label?: string
 	waitingOn?: ActivityIndicatorWait
+	backgroundTasks?: number
 	startedAt?: number
 }
 

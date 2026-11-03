@@ -980,3 +980,72 @@ describe("runPresentationsOf", () => {
 		).toEqual([])
 	})
 })
+
+describe("continuation turns", () => {
+	const asked = prompt({ id: "p1", turnId: "t1", createdAt: 0 })
+	const answered = message({
+		id: "m1",
+		turnId: "t1",
+		content: "Started the build.",
+		completion: "complete",
+		createdAt: 1_000,
+	})
+	const followedUp = prompt({
+		id: "p2",
+		turnId: "t2",
+		content: "Thanks",
+		createdAt: 2_000,
+	})
+	const continued = message({
+		id: "m2",
+		turnId: "c1",
+		continuesTurnId: "t1",
+		content: "The build passed.",
+		completion: "complete",
+		createdAt: 3_000,
+	})
+
+	const idsOf = (messages: TranscriptMessage[]) =>
+		toRuns(toTranscriptRows(messages)).map((run) =>
+			run.map((row) => row.messageId),
+		)
+
+	it("renders a continuation as its own bubble group under the reply it continues", () => {
+		expect(idsOf([asked, answered, continued])).toEqual([
+			["p1"],
+			["m1"],
+			["m2"],
+		])
+	})
+
+	it("places the continuation under the reply of its turn, before later prompts", () => {
+		expect(idsOf([asked, answered, followedUp, continued])).toEqual([
+			["p1"],
+			["m1"],
+			["m2"],
+			["p2"],
+		])
+	})
+
+	it("keeps every message of a continuation turn together, in their order", () => {
+		const closing = message({
+			id: "m3",
+			turnId: "c1",
+			continuesTurnId: "t1",
+			content: "And the tests too.",
+			completion: "complete",
+			createdAt: 4_000,
+		})
+
+		expect(idsOf([asked, answered, followedUp, continued, closing])).toEqual([
+			["p1"],
+			["m1"],
+			["m2", "m3"],
+			["p2"],
+		])
+	})
+
+	it("leaves a continuation where it was stored when its turn is not loaded", () => {
+		expect(idsOf([followedUp, continued])).toEqual([["p2"], ["m2"]])
+	})
+})
