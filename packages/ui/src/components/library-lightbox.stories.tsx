@@ -175,7 +175,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"One image of the Library, over the content card, opened from a grid item. It traps focus, closes on Escape and on Close, and hands focus back to the item that opened it. Left and Right arrows, like Previous and Next, ask the caller for the neighbouring image, and the two buttons disable at either end. Back, at the leading edge of the header, closes it like Close. Download and Copy are drawn only when their callback is given, and More opens the item action menu, drawn only when at least one item action is given. Copy reports the image too, then swaps its icon for a check and announces Copied once `onCopy` settles, until the shared copy reset delay runs out. The zoom pill steps the image out and in, and its middle button, Fit, shows the zoom percentage until it is pressed to fit the stage again. Render it as the `overlay` of `LibraryPanel` so it covers the card.",
+					"One image of the Library, over the content card, opened from a grid item. It traps focus, closes on Escape and on Close, and hands focus back to the item that opened it. Left and Right arrows, like Previous and Next, ask the caller for the neighbouring image, and the two buttons disable at either end. Back, at the leading edge of the header, closes it like Close. Download and Copy are drawn only when their callback is given and `isActionShown` keeps them for the image, and More opens the item action menu, drawn only when at least one item action is shown. Copy reports the image too, then swaps its icon for a check and announces Copied once `onCopy` settles, until the shared copy reset delay runs out. The zoom pill steps the image out and in, and its middle button, Fit, shows the zoom percentage until it is pressed to fit the stage again. Render it as the `overlay` of `LibraryPanel` so it covers the card.",
 			},
 		},
 	},
@@ -343,6 +343,98 @@ export const MemberMoreMenu = meta.story({
 			menuEntryNames(await openGridMenu(canvasElement, userEvent)),
 		).toEqual(memberActions)
 		await closeMenu(userEvent)
+	},
+})
+
+export const ImageWithoutRename = meta.story({
+	args: {
+		isActionShown: (item, action) =>
+			action !== "onRename" || ("kind" in item && item.kind === "document"),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"More pressed on an image, every item action given and Rename kept for documents. Check that the menu lists every action but Rename, with Delete still under its rule.",
+			},
+		},
+	},
+	play: async ({ userEvent }) => {
+		const popup = await lightbox()
+		const menu = await openMoreMenu(popup, userEvent)
+		await expect(menuEntryNames(menu)).toEqual(
+			ITEM_ACTION_NAMES.filter((name) => name !== "Rename"),
+		)
+		await expect(
+			within(menu).getAllByRole("menuitem").at(-1)?.previousElementSibling,
+		).toHaveAttribute("role", "separator")
+		await closeMenu(userEvent)
+	},
+})
+
+export const OnlyDeleteShown = meta.story({
+	tags: ["test-only"],
+	args: { isActionShown: (_, action) => action === "onDelete" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Every item action given and only Delete shown for the image. Check that the bar draws neither Download nor Copy, and that the More menu and the grid item menu list Delete alone with no rule above it.",
+			},
+		},
+	},
+	play: async ({ canvasElement, userEvent }) => {
+		const popup = await lightbox()
+		await expect(
+			within(popup).queryByRole("button", { name: "Download" }),
+		).toBe(null)
+		await expect(within(popup).queryByRole("button", { name: "Copy" })).toBe(
+			null,
+		)
+
+		const menu = await openMoreMenu(popup, userEvent)
+		await expect(menuEntryNames(menu)).toEqual(["Delete"])
+		await expect(within(menu).queryByRole("separator")).toBe(null)
+		await closeMenu(userEvent)
+
+		await userEvent.click(within(popup).getByRole("button", { name: "Close" }))
+		await waitFor(() => expect(screen.queryByRole("dialog")).toBe(null))
+		const gridMenu = await openGridMenu(canvasElement, userEvent)
+		await expect(menuEntryNames(gridMenu)).toEqual(["Delete"])
+		await expect(within(gridMenu).queryByRole("separator")).toBe(null)
+		await closeMenu(userEvent)
+	},
+})
+
+export const EveryActionLeftOut = meta.story({
+	tags: ["test-only"],
+	args: { isActionShown: () => false },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Every item action given and every one left out for the image. Check that the bar draws neither Download, Copy nor More, and that a right-click on the grid item opens no menu.",
+			},
+		},
+	},
+	play: async ({ canvasElement, userEvent }) => {
+		const popup = await lightbox()
+		await expect(
+			within(popup)
+				.getAllByRole("button")
+				.map((button) => button.getAttribute("aria-label"))
+				.filter((name) => ["Download", "Copy", "More"].includes(name ?? "")),
+		).toEqual([])
+
+		await userEvent.click(within(popup).getByRole("button", { name: "Close" }))
+		await waitFor(() => expect(screen.queryByRole("dialog")).toBe(null))
+		await userEvent.pointer({
+			keys: "[MouseRight]",
+			target: within(canvasElement).getByRole("button", {
+				name: /dashboard-redesign\.png/,
+			}),
+		})
+		await expect(screen.queryByRole("menu")).toBe(null)
 	},
 })
 

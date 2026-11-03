@@ -1405,6 +1405,7 @@ navigation-librarypanel--dropping-one-file
 navigation-librarypanel--empty-with-every-callback
 navigation-librarypanel--empty-with-no-callbacks
 navigation-librarypanel--filter-with-no-match
+navigation-librarypanel--grid-actions-per-item
 navigation-librarypanel--grid-all
 navigation-librarypanel--grid-context-menu
 navigation-librarypanel--grid-documents
@@ -1614,8 +1615,11 @@ overlays-librarylightbox--copy-check
 overlays-librarylightbox--copy-refused
 overlays-librarylightbox--default
 overlays-librarylightbox--delete-confirmation
+overlays-librarylightbox--every-action-left-out
 overlays-librarylightbox--host-more-menu
+overlays-librarylightbox--image-without-rename
 overlays-librarylightbox--member-more-menu
+overlays-librarylightbox--only-delete-shown
 overlays-librarylightbox--without-item-actions
 overlays-librarylightbox--zoomed
 overlays-missionmenu--answer-the-question-leaves-the-card

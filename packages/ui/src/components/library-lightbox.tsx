@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next"
 import { IconSwap } from "@workspace/ui/components/icon-swap"
 import { Icons } from "@workspace/ui/components/icons"
 import {
+	handlersFor,
 	hasLibraryItemActions,
 	type LibraryItemActions,
 	LibraryItemDeleteDialog,
@@ -207,7 +208,8 @@ const LibraryLightbox = ({
 	}
 	const isCopied = image !== null && copiedImageId === image.id
 	const [isConfirmingDelete, setConfirmingDelete] = useState(false)
-	const { onCopy, onDownload, onDelete } = actions
+	const handlers = image === null ? {} : handlersFor(actions, image)
+	const { onCopy, onDownload, onDelete } = handlers
 
 	useEffect(() => {
 		if (copiedImageId === null) return
@@ -311,7 +313,7 @@ const LibraryLightbox = ({
 										/>
 									</TooltipButton>
 								) : null}
-								{hasLibraryItemActions(actions) ? (
+								{hasLibraryItemActions(handlers) ? (
 									<>
 										<DropdownMenu>
 											<DropdownMenuTrigger
@@ -340,7 +342,7 @@ const LibraryLightbox = ({
 											>
 												<LibraryItemMenuItems
 													actions={{
-														...actions,
+														...handlers,
 														onCopy: onCopy && copyImage,
 													}}
 													item={image}
