@@ -157,13 +157,12 @@ export const createOutbox = (
 		}
 	}
 
-	const stopOwnTurn = async (bot: BotChat) => {
+	const interruptOwnTurn = async (bot: BotChat) => {
 		const runtime = bot.state.runtime
 		if (!runtime) {
 			return
 		}
 		announce(bot, { type: "turnChanged", state: "stopping" })
-		recordHeld(bot)
 		await cancel(bot, runtime)
 	}
 
@@ -180,9 +179,9 @@ export const createOutbox = (
 		}
 	}
 
-	const stop = async (bot: BotChat) => {
+	const interrupt = async (bot: BotChat) => {
 		if (canStopTurn(bot.state.turn)) {
-			await stopOwnTurn(bot)
+			await interruptOwnTurn(bot)
 			return
 		}
 		const { foreignTurn } = bot.state
@@ -191,5 +190,23 @@ export const createOutbox = (
 		}
 	}
 
-	return { pump, send, stop }
+	const stop = async (bot: BotChat) => {
+		if (canStopTurn(bot.state.turn) && bot.state.runtime) {
+			recordHeld(bot)
+		}
+		await interrupt(bot)
+	}
+
+	const sendNow = async (bot: BotChat, id: string) => {
+		const entry = bot.state.outbox.find((held) => held.id === id)
+		if (!entry) {
+			return
+		}
+		dispatch(bot, { type: "outboxEntryRemoved", id })
+		dispatch(bot, { type: "promptReturned", entry })
+		await interrupt(bot)
+		pump(bot)
+	}
+
+	return { pump, send, stop, sendNow }
 }

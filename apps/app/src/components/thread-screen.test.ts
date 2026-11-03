@@ -315,6 +315,7 @@ const stubController = (
 	stop: async () => undefined,
 	stopFor: async () => undefined,
 	discard: () => undefined,
+	sendNow: async () => undefined,
 	respond: async () => undefined,
 	answer: async () => undefined,
 	postQuestion: () => false,
@@ -938,6 +939,7 @@ type Solo = {
 	report: (text: string) => Promise<void>
 	send: (text: string) => Promise<void>
 	push: (events: AgentEvent[]) => Promise<void>
+	cancelled: string[]
 }
 
 const soloOf = async ({
@@ -962,6 +964,7 @@ const soloOf = async ({
 	})
 
 	return {
+		cancelled: driver.cancelled,
 		send: async (text) => {
 			await act(async () => {
 				await controller.send(text)
@@ -1134,8 +1137,6 @@ const QUEUED_FIRST = "and the gate"
 
 const QUEUED_LAST = "and the roof"
 
-const WAITING_TO_BE_SENT = "Waiting to be sent"
-
 const queuedSoloOf = async (queued: string[]) => {
 	const solo = await soloOf({})
 	await solo.send(SENT_FIRST)
@@ -1143,6 +1144,43 @@ const queuedSoloOf = async (queued: string[]) => {
 		await solo.send(text)
 	}
 	return solo
+}
+
+const queuedTray = () =>
+	document.querySelector<HTMLElement>('[data-slot="prompt-queue"]')
+
+const queuedTexts = () =>
+	[...document.querySelectorAll('[data-slot="prompt-queue-item"]')].map(
+		(row) => row.textContent ?? "",
+	)
+
+const queuedRowOf = (text: string) => {
+	const row = [
+		...document.querySelectorAll<HTMLElement>(
+			'[data-slot="prompt-queue-item"]',
+		),
+	].find((item) => item.textContent?.includes(text))
+	if (!row) {
+		throw new Error(`no queued row holds ${text}`)
+	}
+	return row
+}
+
+const shownQueuedSolo = async (queued: string[]) => {
+	const solo = await queuedSoloOf(queued)
+	const shown = render(screenOf(solo.thread()), {
+		wrapper: createQueryTestWrapper().wrapper,
+	})
+	await settle()
+	const clickInRow = async (text: string, name: string) => {
+		await act(async () => {
+			fireEvent.click(within(queuedRowOf(text)).getByRole("button", { name }))
+		})
+		await settle()
+		shown.rerender(screenOf(solo.thread()))
+		await settle()
+	}
+	return { solo, clickInRow }
 }
 
 const runRoomOf = () =>
@@ -2188,34 +2226,50 @@ describe("ThreadScreen", () => {
 		)
 	})
 
-	it("draws every queued message of a run in the same bubble", async () => {
-		const solo = await queuedSoloOf([QUEUED_FIRST, QUEUED_LAST])
-		render(screenOf(solo.thread()), {
-			wrapper: createQueryTestWrapper().wrapper,
-		})
-		await settle()
+	it("shows a queued message in the tray above the input, never in the transcript", async () => {
+		await shownQueuedSolo([QUEUED_FIRST, QUEUED_LAST])
 
-		expect(screen.getAllByText(WAITING_TO_BE_SENT)).toHaveLength(2)
-		expect(bubbleShapeOf(QUEUED_FIRST)).toEqual(bubbleShapeOf(QUEUED_LAST))
+		const tray = queuedTray()
+		expect(tray).not.toBeNull()
+		expect(tray?.textContent).toContain("Queued · 2")
+		expect(queuedTexts()).toEqual([
+			expect.stringContaining(QUEUED_FIRST),
+			expect.stringContaining(QUEUED_LAST),
+		])
+		expect(turnOf(QUEUED_FIRST)).toBeNull()
+		expect(turnOf(QUEUED_LAST)).toBeNull()
+		expect(turnOf(SENT_FIRST)).not.toBeNull()
 	})
 
-	it("draws a lone queued message in the same bubble as a queued run", async () => {
-		const grouped = await queuedSoloOf([QUEUED_FIRST, QUEUED_LAST])
-		const run = render(screenOf(grouped.thread()), {
-			wrapper: createQueryTestWrapper().wrapper,
-		})
-		await settle()
-		const ends = [bubbleShapeOf(QUEUED_FIRST), bubbleShapeOf(QUEUED_LAST)]
+	it("drops a queued message from the tray when it is removed", async () => {
+		const { clickInRow } = await shownQueuedSolo([QUEUED_FIRST, QUEUED_LAST])
 
-		run.unmount()
-		const lone = await queuedSoloOf([QUEUED_FIRST])
-		render(screenOf(lone.thread()), {
-			wrapper: createQueryTestWrapper().wrapper,
-		})
-		await settle()
+		await clickInRow(QUEUED_FIRST, "Remove from the queue")
 
-		expect(screen.getAllByText(WAITING_TO_BE_SENT)).toHaveLength(1)
-		expect(ends).toContain(bubbleShapeOf(QUEUED_FIRST))
+		expect(queuedTexts()).toEqual([expect.stringContaining(QUEUED_LAST)])
+		expect(screen.queryByText(QUEUED_FIRST)).toBeNull()
+	})
+
+	it("stops the agent and sends a queued message ahead of the rest on Send now", async () => {
+		const { solo, clickInRow } = await shownQueuedSolo([
+			QUEUED_FIRST,
+			QUEUED_LAST,
+		])
+
+		await clickInRow(QUEUED_LAST, "Send now")
+
+		expect(solo.cancelled).toHaveLength(1)
+		expect(queuedTexts()).toEqual([expect.stringContaining(QUEUED_FIRST)])
+		expect(turnOf(QUEUED_LAST)).not.toBeNull()
+		expect(turnOf(QUEUED_FIRST)).toBeNull()
+	})
+
+	it("shows no tray once nothing is queued", async () => {
+		const { clickInRow } = await shownQueuedSolo([QUEUED_FIRST])
+
+		await clickInRow(QUEUED_FIRST, "Remove from the queue")
+
+		expect(queuedTray()).toBeNull()
 	})
 
 	it("names the routine on the turn its report opened", async () => {

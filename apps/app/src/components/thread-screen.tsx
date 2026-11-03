@@ -34,6 +34,10 @@ import {
 	type PinnedMessage,
 	PinnedMessages,
 } from "@workspace/ui/components/pinned-messages"
+import {
+	PromptQueue,
+	type QueuedPrompt,
+} from "@workspace/ui/components/prompt-queue"
 import { type RosterBot, RosterProvider } from "@workspace/ui/components/roster"
 import { RoutinesPanelTrigger } from "@workspace/ui/components/routines-panel"
 import { SpaceAccessBanner } from "@workspace/ui/components/space-access-banner"
@@ -67,7 +71,7 @@ import {
 	type ActivityPanel,
 	ThreadRoutines,
 } from "@/components/thread-routines"
-import { QueuedTurn, RefusedTurn, ThreadTurn } from "@/components/thread-turn"
+import { RefusedTurn, ThreadTurn } from "@/components/thread-turn"
 import { titleBarDragRegion } from "@/components/window-caption-controls"
 import type { ApplicationInstall } from "@/lib/applications/application-port"
 import {
@@ -95,7 +99,7 @@ import {
 } from "@/lib/chat/answered-question"
 import type { AttachmentsOwner } from "@/lib/chat/attachments-contract"
 import type { AttachmentsController } from "@/lib/chat/attachments-controller"
-import type { ChatError } from "@/lib/chat/chat-state"
+import type { ChatError, OutboxEntry } from "@/lib/chat/chat-state"
 import { canStopTurn } from "@/lib/chat/chat-state"
 import type { DraftsController } from "@/lib/chat/drafts-controller"
 import { isTableBlock } from "@/lib/chat/markdown-blocks"
@@ -1074,7 +1078,6 @@ type SoloThreadTailProps = {
 	face: ThreadFace
 	botWork: WorkingState | null
 	signInStep: SignInStep | null
-	readerName: string
 	onStop: () => void
 }
 
@@ -1083,7 +1086,6 @@ const SoloThreadTail = ({
 	face,
 	botWork,
 	signInStep,
-	readerName,
 	onStop,
 }: SoloThreadTailProps) => {
 	const isStoppable =
@@ -1097,23 +1099,32 @@ const SoloThreadTail = ({
 	})
 
 	return (
-		<>
-			{botWork ? <WorkingBot {...stop} face={face} work={botWork} /> : null}
-			{thread.state.outbox.length > 0 ? (
-				<TurnGroup>
-					{thread.state.outbox.map((entry) => (
-						<QueuedTurn
-							controller={thread.controller}
-							entry={entry}
-							key={entry.id}
-							readerName={readerName}
-						/>
-					))}
-				</TurnGroup>
-			) : null}
-		</>
+		<>{botWork ? <WorkingBot {...stop} face={face} work={botWork} /> : null}</>
 	)
 }
+
+type ThreadQueueProps = {
+	thread: LoadedThread
+	readerName: string
+}
+
+const queuedPromptOf = ({ id, text }: OutboxEntry): QueuedPrompt => ({
+	id,
+	text: messageWithAttachments(text).text,
+})
+
+const ThreadQueue = ({ thread, readerName }: ThreadQueueProps) =>
+	thread.kind === "bot" ? (
+		<PromptQueue
+			agentName={thread.bot.name}
+			items={thread.state.outbox.map(queuedPromptOf)}
+			onRemove={thread.controller.discard}
+			onSendNow={(id) => {
+				void thread.controller.sendNow(id)
+			}}
+			readerName={readerName}
+		/>
+	) : null
 
 type SpeakingRow = {
 	seated: RosterBot
@@ -1220,7 +1231,6 @@ const ThreadTail = ({
 			botWork={botWork}
 			face={faceOfBot(thread.bot)}
 			onStop={onStop}
-			readerName={readerName}
 			signInStep={signInStep}
 			thread={thread}
 		/>
@@ -1867,6 +1877,7 @@ function ThreadView(props: ThreadViewProps) {
 					? { ...view.toQuote(view.replyTarget), onDismiss: view.releaseReply }
 					: undefined
 			}
+			queue={<ThreadQueue readerName={view.reader} thread={thread} />}
 			rootRef={view.rootRef}
 			rows={view.transcriptRows}
 			scrollerRef={view.scrollerRef}

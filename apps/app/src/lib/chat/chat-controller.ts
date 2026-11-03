@@ -87,6 +87,7 @@ export type ChatController = {
 	stop: () => Promise<void>
 	stopFor: (botId: string) => Promise<void>
 	discard: (id: string) => void
+	sendNow: (id: string) => Promise<void>
 	dismissError: (id: string) => void
 	respond: (id: string, decision: PermissionDecision) => Promise<void>
 	answer: (id: string, answers: QuestionAnswers) => Promise<void>
@@ -236,6 +237,7 @@ export function createChatController(
 				await outbox.stop(bot)
 			}
 		},
+		sendNow: (id) => onSelected((bot) => outbox.sendNow(bot, id), undefined),
 		discard: (id) =>
 			forSelected((bot) => dispatch(bot, { type: "outboxEntryRemoved", id })),
 		dismissError: (id) =>

@@ -273,6 +273,28 @@ describe("prompts the session cannot take yet", () => {
 		harness.detach()
 	})
 
+	it("stops the turn and sends a held prompt ahead of the rest on Send now", async () => {
+		const submits: string[] = []
+		const harness = await bootedHarness({ driver: submitting(submits) })
+		await harness.controller.send("first")
+		await harness.controller.send("second")
+		await harness.controller.send("third")
+		await vi.advanceTimersByTimeAsync(STEP_MS * 2)
+
+		const third = harness.controller.getState().outbox[1]
+		await harness.controller.sendNow(third?.id ?? "")
+		await vi.runAllTimersAsync()
+
+		expect(harness.controller.getState().outbox).toEqual([])
+		expect(submits.map((prompt) => prompt.includes("third"))).toEqual([
+			false,
+			true,
+			false,
+		])
+		expect(submits.at(-1)).toContain("second")
+		harness.detach()
+	})
+
 	it("drops one held prompt and keeps the order of the rest", async () => {
 		const harness = await bootedHarness()
 		await harness.controller.send("first")
