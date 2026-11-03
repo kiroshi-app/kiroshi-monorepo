@@ -19,7 +19,10 @@ import {
 } from "../chat/sidebar-badges"
 import { withNeedsYou } from "../conversations/host-state-rows"
 import { toRosterConversations } from "../conversations/roster-conversations"
-import { useConversationWorkers } from "../conversations/use-conversation"
+import {
+	useConversationWorkers,
+	useNotSentConversations,
+} from "../conversations/use-conversation"
 import {
 	missionRingBadges,
 	missionsIn,
@@ -94,6 +97,11 @@ export const useRosterLists = ({
 		rosteredConversations,
 	)
 
+	const notSentConversations = useNotSentConversations(
+		conversationRuntimes,
+		rosteredConversations,
+	)
+
 	const rosterConversations = useSharedStructure(
 		useMemo(
 			() =>
@@ -106,6 +114,7 @@ export const useRosterLists = ({
 									hostStates,
 									working: conversationWorkers,
 									previews: conversationPreviews,
+									notSent: notSentConversations,
 									personOf: personOfSpace(rosteredSpaceId),
 								},
 								now,
@@ -122,6 +131,7 @@ export const useRosterLists = ({
 				rosteredSpaceId,
 				conversationWorkers,
 				conversationPreviews,
+				notSentConversations,
 				personOfSpace,
 				now,
 				conversationBadges,
@@ -145,6 +155,7 @@ export const useRosterLists = ({
 											hostStates,
 											working: conversationWorkers,
 											previews: conversationPreviews,
+											notSent: notSentConversations,
 											personOf: personOfSpace(spaceId),
 										},
 										now,
@@ -162,6 +173,7 @@ export const useRosterLists = ({
 				hostStates,
 				conversationWorkers,
 				conversationPreviews,
+				notSentConversations,
 				personOfSpace,
 				now,
 				conversationBadges,

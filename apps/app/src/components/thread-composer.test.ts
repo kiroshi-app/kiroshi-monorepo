@@ -46,11 +46,13 @@ const composerOf = ({
 		onAttach,
 		onPromptChange: () => undefined,
 		onRemoveAttachment: () => undefined,
+		onRemoveReply: () => undefined,
 		onSubmitPrompt,
 		placeholder: "Ask Nyx to do something…",
 		promptRef,
 		queryIn,
 		readDraft: () => "",
+		replies: [],
 	})
 
 const field = () => screen.getByRole("textbox") as HTMLTextAreaElement

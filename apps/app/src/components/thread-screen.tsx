@@ -34,6 +34,7 @@ import {
 	type PinnedMessage,
 	PinnedMessages,
 } from "@workspace/ui/components/pinned-messages"
+import type { PromptReplyAttachment } from "@workspace/ui/components/prompt-attachments"
 import {
 	PromptQueue,
 	type QueuedPrompt,
@@ -344,6 +345,19 @@ const failureContextOf = (
 const shownConversationIdOf = (thread: LoadedThread): string | null =>
 	thread.kind === "bot" ? thread.state.conversationId : thread.conversation.id
 
+const useReplyChips = (
+	targets: ReplyTarget[],
+	toQuote: ThreadNaming["toQuote"],
+): PromptReplyAttachment[] =>
+	useMemo(
+		() =>
+			targets.map((target) => {
+				const { author, excerpt } = toQuote(target)
+				return { id: target.messageId, author, excerpt }
+			}),
+		[targets, toQuote],
+	)
+
 const isClosedMission = (seat: ThreadMission | null): boolean =>
 	seat !== null && seat.mission.closedAt !== null
 
@@ -467,6 +481,8 @@ type ThreadComposerSlotProps = {
 	placeholder: string
 	bots: Bot[]
 	readDraft: () => string
+	replies: PromptReplyAttachment[]
+	onRemoveReply: (messageId: string) => void
 	onPromptChange: (draft: string) => void
 	onSubmitPrompt: (text: string) => Promise<boolean>
 }
@@ -481,6 +497,8 @@ const ThreadComposerSlot = ({
 	placeholder,
 	bots,
 	readDraft,
+	replies,
+	onRemoveReply,
 	onPromptChange,
 	onSubmitPrompt,
 }: ThreadComposerSlotProps) => {
@@ -507,10 +525,12 @@ const ThreadComposerSlot = ({
 			onAttach={staged.stage}
 			onPromptChange={onPromptChange}
 			onRemoveAttachment={staged.remove}
+			onRemoveReply={onRemoveReply}
 			onSubmitPrompt={onSubmitPrompt}
 			placeholder={placeholder}
 			promptRef={promptRef}
 			readDraft={readDraft}
+			replies={replies}
 		/>
 	)
 }
@@ -1467,8 +1487,8 @@ const useThreadActions = (
 		open: thread.kind === "conversation" ? thread.controller.open : null,
 	})
 	const submitSeated = useCallback(
-		async (text: string, repliedToMessageId?: string) =>
-			(await seatMentioned(text)) && staged.submit(text, repliedToMessageId),
+		async (text: string, [storedReplyId]: string[]) =>
+			(await seatMentioned(text)) && staged.submit(text, storedReplyId),
 		[seatMentioned, staged.submit],
 	)
 	const { send, isSentInMount } = useSentInMount({
@@ -1476,8 +1496,18 @@ const useThreadActions = (
 		messages: state.messages,
 		send: submitSeated,
 	})
-	const { replyTarget, focusComposer, holdReply, releaseReply, submitPrompt } =
-		useThreadReply({ composerRef, scrollerRef, send })
+	const rememberReplies = useCallback(
+		(targets: ReplyTarget[]) => drafts.rememberReplies(facts.id, targets),
+		[drafts, facts.id],
+	)
+	const { replyTargets, focusComposer, holdReply, releaseReply, submitPrompt } =
+		useThreadReply({
+			composerRef,
+			scrollerRef,
+			readReplies: () => drafts.readReplies(facts.id),
+			rememberReplies,
+			send,
+		})
 
 	useComposerFocus({
 		threadId: shownConversationIdOf(thread),
@@ -1570,7 +1600,7 @@ const useThreadActions = (
 		readDraft,
 		releaseReply,
 		rememberDraft,
-		replyTarget,
+		replyTargets,
 		restart,
 		retry,
 		stop,
@@ -1730,6 +1760,7 @@ const useThreadView = (props: ThreadViewProps) => {
 		...annotations,
 		...actions,
 		...threadRowsOf(props, seats, annotations, actions),
+		replyChips: useReplyChips(actions.replyTargets, annotations.toQuote),
 	}
 }
 
@@ -1788,10 +1819,12 @@ function ThreadView(props: ThreadViewProps) {
 						composerRef={view.composerRef}
 						isDisabled={view.isMissionClosed}
 						onPromptChange={view.rememberDraft}
+						onRemoveReply={view.releaseReply}
 						onSubmitPrompt={view.submitPrompt}
 						placeholder={view.composerPlaceholder}
 						promptRef={view.promptRef}
 						readDraft={view.readDraft}
+						replies={view.replyChips}
 						staged={view.staged}
 						thread={thread}
 					/>
@@ -1863,11 +1896,6 @@ function ThreadView(props: ThreadViewProps) {
 						responder={view.promptResponder}
 					/>
 				)
-			}
-			reply={
-				view.replyTarget && !view.asked
-					? { ...view.toQuote(view.replyTarget), onDismiss: view.releaseReply }
-					: undefined
 			}
 			queue={<ThreadQueue readerName={view.reader} thread={thread} />}
 			rootRef={view.rootRef}

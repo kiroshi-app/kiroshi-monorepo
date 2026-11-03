@@ -46,10 +46,12 @@ const composerWith = (wiring: ThreadMenuWiring): ReactNode =>
 		onAttach: () => undefined,
 		onPromptChange: () => undefined,
 		onRemoveAttachment: () => undefined,
+		onRemoveReply: () => undefined,
 		onSubmitPrompt: () => Promise.resolve(true),
 		placeholder: "Ask Nyx to do something…",
 		queryIn: wiring.queryIn,
 		readDraft: () => "",
+		replies: [],
 	})
 
 const mentionMenuWith = (bots: MentionBot[]) =>

@@ -69,7 +69,10 @@ import {
 	chatReducer,
 	initialChatState,
 } from "@/lib/chat/chat-state"
-import { createDraftsController } from "@/lib/chat/drafts-controller"
+import {
+	createDraftsController,
+	type DraftsController,
+} from "@/lib/chat/drafts-controller"
 import {
 	type ThreadAuthorship,
 	ThreadAuthorshipContext,
@@ -412,6 +415,7 @@ type ThreadScreenHarnessProps = {
 	onOpenMission: (missionId: string) => void
 	onOpenMissionInNewTab?: (missionId: string) => void
 	staging?: AttachmentsController
+	drafts?: DraftsController
 }
 
 const ThreadScreenHarness = ({
@@ -423,6 +427,7 @@ const ThreadScreenHarness = ({
 	onOpenMission,
 	onOpenMissionInNewTab = () => undefined,
 	staging = attachments,
+	drafts = createDraftsController(),
 }: ThreadScreenHarnessProps) => {
 	const [isOpen, setOpen] = useState(false)
 	const signInState = useSyncExternalStore(
@@ -438,7 +443,7 @@ const ThreadScreenHarness = ({
 		},
 		attachments: staging,
 		bots,
-		drafts: createDraftsController(),
+		drafts,
 		landings,
 		onboardingCreation,
 		onOpenMission,
@@ -1490,13 +1495,17 @@ describe("ThreadScreen", () => {
 
 		const painted = turnGroups()[0]
 		fireEvent.click(screen.getAllByRole("button", { name: "Reply" })[0])
-		expect(screen.getByRole("button", { name: "Cancel reply" })).toBeTruthy()
+		expect(
+			screen.getByRole("button", { name: "Remove the reply to Nyx" }),
+		).toBeTruthy()
 
 		rerender(screenOf(thread))
 		await settle()
 
 		expect(turnGroups()[0]).toBe(painted)
-		expect(screen.getByRole("button", { name: "Cancel reply" })).toBeTruthy()
+		expect(
+			screen.getByRole("button", { name: "Remove the reply to Nyx" }),
+		).toBeTruthy()
 		expect(listRoutines).toHaveBeenCalledWith("c-bot-1")
 	})
 
@@ -1782,12 +1791,16 @@ describe("ThreadScreen", () => {
 		await settle()
 
 		fireEvent.click(screen.getAllByRole("button", { name: "Reply" })[0])
-		expect(screen.getByRole("button", { name: "Cancel reply" })).toBeTruthy()
+		expect(
+			screen.getByRole("button", { name: "Remove the reply to Nyx" }),
+		).toBeTruthy()
 
 		rerender(screenOf(second))
 		await settle()
 
-		expect(screen.queryByRole("button", { name: "Cancel reply" })).toBeNull()
+		expect(
+			screen.queryByRole("button", { name: /^Remove the reply to/ }),
+		).toBeNull()
 	})
 
 	it("drops the pages of the solo thread left behind for a conversation", async () => {
@@ -4113,6 +4126,190 @@ const seatedBotIds = (room: SendingRoom) =>
 
 const summonedBotIds = (room: SendingRoom) =>
 	room.driver.submissions.map((submission) => submission.scope.botId)
+
+type ReplySend = {
+	text: string
+	repliedToMessageId?: string
+}
+
+type ReplyRoom = {
+	sends: ReplySend[]
+	refuseSends: () => void
+	switchTo: (thread: BotThread) => void
+}
+
+const exchangeOf = (id: string, name: string): BotThread => {
+	const thread = threadOf({ id, name, said: `the answer of ${name}` })
+	return {
+		...thread,
+		chat: {
+			...thread.chat,
+			state: {
+				...thread.chat.state,
+				messages: [
+					message({
+						id: `q-${id}`,
+						conversationId: `c-${id}`,
+						role: "user",
+						authorBotId: null,
+						content: `the question to ${name}`,
+					}),
+					...thread.chat.state.messages,
+				],
+			},
+		},
+	}
+}
+
+const replyRoomOn = async (thread: BotThread): Promise<ReplyRoom> => {
+	const sends: ReplySend[] = []
+	let isSending = true
+	const drafts = createDraftsController()
+	const staging = createAttachmentsController({
+		store: async () => [],
+		send: (_owner, text, repliedToMessageId) => {
+			sends.push({ text, repliedToMessageId })
+			return isSending
+		},
+	})
+	const harnessOf = (shown: BotThread) =>
+		createElement(ThreadScreenHarness, {
+			bots: NO_BOT_RECORDS,
+			landings: createMessageLandingController(),
+			drafts,
+			onOpenMission: () => undefined,
+			staging,
+			thread: shown,
+		})
+	const { rerender } = render(harnessOf(thread), {
+		wrapper: createQueryTestWrapper().wrapper,
+	})
+	await settle()
+	return {
+		sends,
+		refuseSends: () => {
+			isSending = false
+		},
+		switchTo: (shown) => rerender(harnessOf(shown)),
+	}
+}
+
+const replyChipNames = () =>
+	screen
+		.queryAllByRole("button", { name: /^Remove the reply to/ })
+		.map((chip) => chip.getAttribute("aria-label"))
+
+const replyTo = async (index: number) => {
+	await act(async () => {
+		fireEvent.click(screen.getAllByRole("button", { name: "Reply" })[index])
+	})
+	await settle()
+}
+
+describe("ThreadScreen holding several replies", () => {
+	let layout: FakeLayout
+
+	beforeEach(() => {
+		layout = fakeLayout()
+		vi.clearAllMocks()
+		listRoutines.mockResolvedValue([])
+		listRuns.mockResolvedValue([])
+		listSources.mockResolvedValue(SCHEDULE_DECLARED)
+		listMissions.mockResolvedValue({ open: [], done: [] })
+		listenToMissions.mockResolvedValue(() => undefined)
+	})
+
+	afterEach(() => {
+		cleanup()
+		layout.restore()
+	})
+
+	it("adds a chip naming the author and the excerpt for each message replied to, once each", async () => {
+		await replyRoomOn(exchangeOf("bot-1", "Nyx"))
+
+		await replyTo(1)
+		await replyTo(0)
+		await replyTo(1)
+
+		expect(replyChipNames()).toEqual([
+			"Remove the reply to Nyx",
+			"Remove the reply to Reader",
+		])
+		expect(screen.getAllByText("the answer of Nyx").length).toBe(2)
+		expect(screen.queryByRole("button", { name: "Cancel reply" })).toBeNull()
+	})
+
+	it("drops only the chip the person removes", async () => {
+		await replyRoomOn(exchangeOf("bot-1", "Nyx"))
+		await replyTo(1)
+		await replyTo(0)
+
+		await press("Remove the reply to Nyx")
+
+		expect(replyChipNames()).toEqual(["Remove the reply to Reader"])
+	})
+
+	it("sends with the first reply held and clears every chip", async () => {
+		const room = await replyRoomOn(exchangeOf("bot-1", "Nyx"))
+		await replyTo(1)
+		await replyTo(0)
+
+		await sendInComposer("on both")
+
+		expect(room.sends).toEqual([
+			{ text: "on both", repliedToMessageId: "m-bot-1" },
+		])
+		expect(replyChipNames()).toEqual([])
+	})
+
+	it("keeps every chip when the message does not send", async () => {
+		const room = await replyRoomOn(exchangeOf("bot-1", "Nyx"))
+		await replyTo(1)
+		await replyTo(0)
+		room.refuseSends()
+
+		await sendInComposer("on both")
+
+		expect(replyChipNames()).toEqual([
+			"Remove the reply to Nyx",
+			"Remove the reply to Reader",
+		])
+	})
+
+	it("shows only the chips of the thread on screen, and brings them back in order on return", async () => {
+		const room = await replyRoomOn(exchangeOf("bot-1", "Nyx"))
+		await replyTo(1)
+		await replyTo(0)
+
+		room.switchTo(exchangeOf("bot-2", "Vex"))
+		await settle()
+
+		expect(replyChipNames()).toEqual([])
+
+		await replyTo(1)
+		room.switchTo(exchangeOf("bot-1", "Nyx"))
+		await settle()
+
+		expect(replyChipNames()).toEqual([
+			"Remove the reply to Nyx",
+			"Remove the reply to Reader",
+		])
+	})
+
+	it("clears the chips of the thread that sent only", async () => {
+		const room = await replyRoomOn(exchangeOf("bot-1", "Nyx"))
+		await replyTo(1)
+		room.switchTo(exchangeOf("bot-2", "Vex"))
+		await settle()
+		await replyTo(1)
+
+		await sendInComposer("to Vex")
+		room.switchTo(exchangeOf("bot-1", "Nyx"))
+		await settle()
+
+		expect(replyChipNames()).toEqual(["Remove the reply to Nyx"])
+	})
+})
 
 describe("ThreadScreen sending a message that mentions absent companions", () => {
 	let layout: FakeLayout
