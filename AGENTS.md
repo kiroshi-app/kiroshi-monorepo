@@ -229,10 +229,10 @@ Force push, hard reset, `git clean -fd`, branch delete (`-D`), `rm -rf` on a dir
 
 Never push to `main`. Always work on feature branches.
 
-Right after `gh pr create`, run `scripts/pr-enqueue.sh` alone in its own Bash call: it arms auto-merge on the PR of the current branch and fails if it is not armed.
+Right after `gh pr create`, run `scripts/pr-enqueue.sh` alone in its own Bash call: it arms auto-merge with the squash method on the PR of the current branch and fails if it is not armed. The PR squash-merges as soon as its fast gate is green: lint, types, baseline, the touched tests and `verify`.
 
-`scripts/pr-requeue-check.sh` refuses a PR ejected from the merge queue on its current head unless `--reason "<why this head can pass now>"` is given; it is not wired into the enqueue gesture yet, `scripts/pr-enqueue.sh` does not run it (OPE-1423).
+Auto-merge armed and a fix must land: run `scripts/pr-dequeue.sh` to disarm it, push, then run `scripts/pr-enqueue.sh` again. Never close the PR.
 
-PR already queued and a fix must land: run `scripts/pr-dequeue.sh`, push, then run `scripts/pr-enqueue.sh` again. Never close the PR.
+Every push to main runs the full verify: lint, then vitest, website, rust and storybook on the paths it changed, then ios. A red run opens the Red main ticket. A fix PR merges on its own fast gate whatever the state of main.
 
-A merge_group run retries a failing vitest or Rust test once and names every test that passed only on its retry in the job summary; a pull_request, `bun run ci` and `ci:fast` retry nothing.
+A push to main retries a failing vitest or Rust test once and names every test that passed only on its retry in the job summary; a pull_request, `bun run ci` and `ci:fast` retry nothing.

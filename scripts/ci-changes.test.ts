@@ -19,7 +19,7 @@ const every = {
 	storybook: true,
 	ios: true,
 }
-const CI_EVENTS = ["pull_request", "merge_group", "push", "tag"] as const
+const CI_EVENTS = ["pull_request", "push", "tag"] as const
 
 const SHARED_ONLY_PATHS = [
 	"packages/shared/permission-modes.json",
@@ -82,31 +82,18 @@ describe("ci jobs per event", () => {
 	})
 
 	it.each(PATH_MIXES)(
-		"selects rust, vitest, website and storybook on the paths they watch on a merge_group, never ios, on %p",
-		(...paths) => {
-			expect(decideJobs({ event: "merge_group", paths })).toEqual({
-				...touchedJobs(paths),
-				ios: false,
-			})
-		},
-	)
-
-	it("selects every desktop job on a merge_group touching a shared path", () => {
-		expect(decideJobs({ event: "merge_group", paths: ["bun.lock"] })).toEqual({
-			...every,
-			ios: false,
-		})
-	})
-
-	it.each(PATH_MIXES)(
-		"selects only ios on a push to main, the merge_group run of the commit having run the rest, on %p",
+		"selects rust, vitest, website and storybook on the paths they watch on a push to main, and ios always, on %p",
 		(...paths) => {
 			expect(decideJobs({ event: "push", paths })).toEqual({
-				...none,
+				...touchedJobs(paths),
 				ios: true,
 			})
 		},
 	)
+
+	it("selects every job on a push to main touching a shared path", () => {
+		expect(decideJobs({ event: "push", paths: ["bun.lock"] })).toEqual(every)
+	})
 
 	it.each(PATH_MIXES)(
 		"selects vitest, website, rust and storybook on a v* tag, never ios, on %p",
@@ -124,17 +111,14 @@ describe("ci jobs per event", () => {
 		)
 	})
 
-	it.each([
-		["push", "ios=true"],
-		["tag", "rust=true"],
-	])("decides a %s without a BASE to diff against", (event, line) => {
-		const detection = runChangeDetector(event)
+	it("decides a tag without a BASE to diff against", () => {
+		const detection = runChangeDetector("tag")
 
 		expect(detection.exitCode).toBe(0)
-		expect(detection.stdout.toString().split("\n")).toContain(line)
+		expect(detection.stdout.toString().split("\n")).toContain("rust=true")
 	})
 
-	it.each(["pull_request", "merge_group"])(
+	it.each(["pull_request", "push"])(
 		"refuses a %s without a BASE to diff against",
 		(event) => {
 			const detection = runChangeDetector(event)
