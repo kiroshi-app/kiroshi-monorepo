@@ -1,3 +1,4 @@
+import { TITLE_BAR_TAB_CHIP_DRAG_SIZE } from "@workspace/ui/components/title-bar-tab-chip"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import {
@@ -127,13 +128,11 @@ const originWindowSize = (): WindowSize => ({
 	height: Math.round(window.innerHeight),
 })
 
-const LIFTED_CHIP_SIZE: WindowSize = { width: 256, height: 28 }
-
 const GHOST_PAGE_INSET = 32
 
 const GHOST_SIZE: WindowSize = {
-	width: LIFTED_CHIP_SIZE.width + GHOST_PAGE_INSET * 2,
-	height: LIFTED_CHIP_SIZE.height + GHOST_PAGE_INSET * 2,
+	width: TITLE_BAR_TAB_CHIP_DRAG_SIZE.width + GHOST_PAGE_INSET * 2,
+	height: TITLE_BAR_TAB_CHIP_DRAG_SIZE.height + GHOST_PAGE_INSET * 2,
 }
 
 const ghostOriginAt = ({ x, y }: ScreenPosition): ScreenPosition => ({
