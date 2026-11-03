@@ -34,6 +34,7 @@ import {
 import {
 	deletedIn,
 	deletedRangeOf,
+	formatsAround,
 	hasInlineFormat,
 	inlineDrawingOf,
 	inlineNodesOf,
@@ -51,6 +52,12 @@ import {
 	LibraryDocumentColumn,
 } from "@workspace/ui/components/library-document-view"
 import type { LibraryDocumentTemplate } from "@workspace/ui/components/library-new-document-dialog"
+import {
+	SELECTION_TOOLBAR_SLOT,
+	SelectionToolbar,
+	type SelectionToolbarAnchor,
+	type SelectionToolbarFormat,
+} from "@workspace/ui/components/selection-toolbar"
 import { cn } from "@workspace/ui/lib/utils"
 
 type BlockKind = "paragraph" | "heading" | "item"
@@ -83,6 +90,8 @@ const BLOCK_TYPE: Record<BlockKind, string> = {
 		"font-heading font-semibold text-[1.0625rem] text-foreground leading-6 not-first:mt-2.5",
 	item: BODY_TYPE,
 }
+
+const SELECTION_LOOK = "selection:bg-primary/30 selection:text-foreground"
 
 const BLOCK_LABEL = {
 	paragraph: "library.editor.paragraph",
@@ -647,23 +656,114 @@ const InlineField = ({
 	)
 }
 
-type LibraryDocumentEditorProps = WriterActions & {
-	title: string
-	body: string
-	detail: string
-	template?: LibraryDocumentTemplate
-	onTitleChange: (title: string) => void
-	onBodyChange: (markdown: string) => void
-	onBack: () => void
-	onMore?: () => void
-	writers?: LibraryDocumentWriter[]
-	people?: LibraryDocumentPerson[]
-	finished?: LibraryDocumentFinished
-	onStopAll?: () => void
-	onUndoAll?: () => void
-	onDone?: () => void
-	onCaretChange?: (caret: number | null) => void
+type LibraryDocumentRange = {
+	start: number
+	end: number
 }
+
+type FormatAction = (range: LibraryDocumentRange) => void
+
+type SelectionActions = {
+	onBold?: FormatAction
+	onItalic?: FormatAction
+	onStrikethrough?: FormatAction
+	onCode?: FormatAction
+	onLink?: (url: string, range: LibraryDocumentRange) => void
+	onHeading?: FormatAction
+	onList?: FormatAction
+}
+
+type SelectedText = {
+	id: string
+	start: number
+	end: number
+	anchor: SelectionToolbarAnchor
+}
+
+const COLUMN = '[data-slot="library-document-column"]'
+
+const OUTSIDE_THE_TEXT =
+	'[data-slot="library-document-caret"], [data-slot="library-document-person-caret"]'
+
+const isInToolbar = (node: Element | null) =>
+	node?.closest(`[data-slot="${SELECTION_TOOLBAR_SLOT}"]`) != null
+
+const textRangeIn = (shown: Node, start: number, end: number) => {
+	const range = document.createRange()
+	const walker = document.createTreeWalker(shown, NodeFilter.SHOW_TEXT, {
+		acceptNode: (node) =>
+			node.parentElement?.closest(OUTSIDE_THE_TEXT)
+				? NodeFilter.FILTER_REJECT
+				: NodeFilter.FILTER_ACCEPT,
+	})
+	let read = 0
+	let hasStart = false
+	for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+		const length = node.textContent?.length ?? 0
+		if (!hasStart && start < read + length) {
+			range.setStart(node, start - read)
+			hasStart = true
+		}
+		if (end <= read + length) {
+			range.setEnd(node, end - read)
+			break
+		}
+		read += length
+	}
+	return range
+}
+
+const anchorOf = (
+	field: TextField,
+	start: number,
+	end: number,
+	frame: HTMLElement,
+): SelectionToolbarAnchor => {
+	const shown =
+		field instanceof HTMLTextAreaElement
+			? (field.previousElementSibling ?? field)
+			: field
+	const selected = textRangeIn(shown, start, end).getBoundingClientRect()
+	const framed = frame.getBoundingClientRect()
+	const viewport = (field.closest(COLUMN) ?? frame).getBoundingClientRect()
+	return {
+		centre: (selected.left + selected.right) / 2 - framed.left,
+		top: selected.top - framed.top,
+		bottom: selected.bottom - framed.top,
+		roomAbove: selected.top - viewport.top,
+	}
+}
+
+const formatsOf = (block: Block | undefined, start: number, end: number) => {
+	if (!block) return { formats: [] }
+	const { formats, link } = formatsAround(block.text, start, end)
+	const blockFormat: SelectionToolbarFormat[] =
+		block.kind === "heading"
+			? ["heading"]
+			: block.kind === "item"
+				? ["list"]
+				: []
+	return { formats: [...formats, ...blockFormat], link }
+}
+
+type LibraryDocumentEditorProps = WriterActions &
+	SelectionActions & {
+		title: string
+		body: string
+		detail: string
+		template?: LibraryDocumentTemplate
+		onTitleChange: (title: string) => void
+		onBodyChange: (markdown: string) => void
+		onBack: () => void
+		onMore?: () => void
+		writers?: LibraryDocumentWriter[]
+		people?: LibraryDocumentPerson[]
+		finished?: LibraryDocumentFinished
+		onStopAll?: () => void
+		onUndoAll?: () => void
+		onDone?: () => void
+		onCaretChange?: (caret: number | null) => void
+	}
 
 const caretIn = (field: TextField) => {
 	const { start, end, direction } = selectionOf(field)
@@ -692,6 +792,13 @@ const LibraryDocumentEditor = ({
 	onUndoAll,
 	onDone,
 	onCaretChange,
+	onBold,
+	onItalic,
+	onStrikethrough,
+	onCode,
+	onLink,
+	onHeading,
+	onList,
 }: LibraryDocumentEditorProps) => {
 	const { t } = useTranslation("common")
 	const [title, setTitle] = useState(titleProp)
@@ -702,6 +809,8 @@ const LibraryDocumentEditor = ({
 	const fields = useRef(new Map<string, TextField>())
 	const reportedCaret = useRef<number | null>(null)
 	const pendingBlurReport = useRef<ReturnType<typeof setTimeout>>(undefined)
+	const frame = useRef<HTMLDivElement>(null)
+	const [selected, setSelected] = useState<SelectedText>()
 	const [heldListAnchors, setHeldListAnchors] = useState<
 		ReadonlyMap<string, string>
 	>(() => listAnchorsOf(runsOf(blocks), new Map()))
@@ -788,6 +897,44 @@ const LibraryDocumentEditor = ({
 	}
 
 	useEffect(() => () => clearTimeout(pendingBlurReport.current), [])
+
+	const readSelection = () => {
+		if (isInToolbar(document.activeElement)) return
+
+		const [id, field] = focusedIn(fields.current) ?? []
+		const { start, end } = field ? selectionOf(field) : { start: 0, end: 0 }
+		if (
+			!(id && field && frame.current) ||
+			id === TITLE_FIELD ||
+			start === end
+		) {
+			setSelected(undefined)
+			return
+		}
+		setSelected({
+			id,
+			start,
+			end,
+			anchor: anchorOf(field, start, end, frame.current),
+		})
+	}
+
+	const followSelection = useEffectEvent(readSelection)
+
+	useEffect(() => {
+		const follow = () => followSelection()
+		const followOnceFocusLands = () => queueMicrotask(follow)
+		document.addEventListener("selectionchange", follow)
+		document.addEventListener("focusout", followOnceFocusLands)
+		window.addEventListener("scroll", follow, { capture: true, passive: true })
+		window.addEventListener("resize", follow)
+		return () => {
+			document.removeEventListener("selectionchange", follow)
+			document.removeEventListener("focusout", followOnceFocusLands)
+			window.removeEventListener("scroll", follow, { capture: true })
+			window.removeEventListener("resize", follow)
+		}
+	}, [])
 
 	const reportRestoredCaret = useEffectEvent(reportCaret)
 
@@ -999,7 +1146,7 @@ const LibraryDocumentEditor = ({
 		const carets = caretPieces.get(block.id)
 		const shared = {
 			"aria-label": t(BLOCK_LABEL[block.kind]),
-			className: BLOCK_TYPE[block.kind],
+			className: cn(BLOCK_TYPE[block.kind], SELECTION_LOOK),
 			"data-body-offset": textStarts.get(block.id),
 			"data-kind": block.kind,
 			drawnText:
@@ -1067,10 +1214,21 @@ const LibraryDocumentEditor = ({
 	if (!isSameAnchors(listAnchors, heldListAnchors))
 		setHeldListAnchors(listAnchors)
 
+	const selectedBlock = selected && blocks.find(({ id }) => id === selected.id)
+	const selectedRange = selected && {
+		start: (textStarts.get(selected.id) ?? 0) + selected.start,
+		end: (textStarts.get(selected.id) ?? 0) + selected.end,
+	}
+	const forSelection = (action?: FormatAction) =>
+		action && selectedRange ? () => action(selectedRange) : undefined
+	const selectedFormats =
+		selected && formatsOf(selectedBlock, selected.start, selected.end)
+
 	return (
 		<div
-			className="flex size-full min-h-0 flex-col"
+			className="relative flex size-full min-h-0 flex-col"
 			data-slot="library-document-editor"
+			ref={frame}
 		>
 			<LibraryDocumentBar
 				name={title || untitled}
@@ -1133,6 +1291,20 @@ const LibraryDocumentEditor = ({
 					)}
 				</div>
 			</LibraryDocumentColumn>
+			{selected && selectedRange ? (
+				<SelectionToolbar
+					activeFormats={selectedFormats?.formats}
+					anchor={selected.anchor}
+					link={selectedFormats?.link}
+					onBold={forSelection(onBold)}
+					onCode={forSelection(onCode)}
+					onHeading={forSelection(onHeading)}
+					onItalic={forSelection(onItalic)}
+					onLink={onLink && ((url) => onLink(url, selectedRange))}
+					onList={forSelection(onList)}
+					onStrikethrough={forSelection(onStrikethrough)}
+				/>
+			) : null}
 		</div>
 	)
 }
@@ -1140,6 +1312,7 @@ const LibraryDocumentEditor = ({
 export {
 	LibraryDocumentEditor,
 	type LibraryDocumentEditorProps,
+	type LibraryDocumentRange,
 	type LibraryDocumentStart,
 	libraryDocumentStartOf,
 }

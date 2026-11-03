@@ -27,6 +27,10 @@
 	--tab-thumbnail-shadow:
 		0 0 0 1px #00000012, 0 2px 4px #00000014, 0 16px 40px #00000033;
 	--tab-chip-shadow: 0 8px 24px #00000033, 0 2px 6px #00000014;
+	--selection-toolbar-border: oklch(0 0 0 / 8%);
+	--selection-toolbar-highlight: oklch(0 0 0 / 6%);
+	--selection-toolbar-shadow:
+		0 1px 2px rgb(0 0 0 / 0.08), 0 8px 20px rgb(0 0 0 / 0.12);
 	--icon-stroke: 0.09em;
 	--question-segment-foreground: color-mix(
 		in oklab,
@@ -43,6 +47,10 @@
 	--tab-thumbnail-header: #101011;
 	--tab-thumbnail-shadow: 0 0 0 1px #ffffff1a, 0 16px 40px #000000b3;
 	--tab-chip-shadow: 0 8px 24px #00000066, 0 2px 6px #00000040;
+	--selection-toolbar-border: oklch(1 0 0 / 10%);
+	--selection-toolbar-highlight: oklch(1 0 0 / 8%);
+	--selection-toolbar-shadow:
+		0 1px 2px rgb(0 0 0 / 0.4), 0 8px 20px rgb(0 0 0 / 0.35);
 	--question-segment-foreground: var(--muted-foreground);
 }
 
@@ -57,6 +65,9 @@
 	--color-tab-thumbnail-header: var(--tab-thumbnail-header);
 	--shadow-tab-thumbnail: var(--tab-thumbnail-shadow);
 	--shadow-tab-chip: var(--tab-chip-shadow);
+	--shadow-selection-toolbar: var(--selection-toolbar-shadow);
+	--color-selection-toolbar-border: var(--selection-toolbar-border);
+	--color-selection-toolbar-highlight: var(--selection-toolbar-highlight);
 	--color-primary: var(--primary);
 	--color-primary-foreground: var(--primary-foreground);
 	--color-primary-strong: var(--primary-strong);
