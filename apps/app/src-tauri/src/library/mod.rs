@@ -19,9 +19,9 @@ use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Manager, Runtime, State};
 
 use contract::{
-	LibraryDocument, LibraryDocumentFormat, LibraryDocumentRenamed, LibraryDocumentState,
-	LibraryDocumentUpdated, LibraryError, LibraryFile, LibraryImage, LibraryImport, LibraryItem,
-	LibraryItemKind,
+	LibraryChanged, LibraryDocument, LibraryDocumentFormat, LibraryDocumentRenamed,
+	LibraryDocumentState, LibraryDocumentUpdated, LibraryError, LibraryFile, LibraryImage,
+	LibraryImport, LibraryItem, LibraryItemKind,
 };
 use documents::Documents;
 
@@ -423,6 +423,24 @@ pub(crate) fn rename_document<R: Runtime>(
 	})?;
 	item_at(&space_dir(root, space_id).join(&landed), landed.clone())?
 		.ok_or(LibraryError::Missing { name: landed })
+}
+
+pub(crate) fn delete_item<R: Runtime>(
+	app: &AppHandle<R>,
+	root: &Path,
+	space_id: &str,
+	name: &str,
+) -> Result<(), LibraryError> {
+	documents(app).delete(root, space_id, name)?;
+	announce_change(app, space_id);
+	Ok(())
+}
+
+fn announce_change<R: Runtime>(app: &AppHandle<R>, space_id: &str) {
+	let changed = LibraryChanged { space_id: space_id.to_owned() };
+	if let Err(error) = events::emit(app, events::LIBRARY_CHANGED, changed) {
+		log::warn!("a change of the library of space {space_id} was not announced: {error}");
+	}
 }
 
 fn announce_rename<R: Runtime>(app: &AppHandle<R>, space_id: &str, former_name: &str, name: &str) {

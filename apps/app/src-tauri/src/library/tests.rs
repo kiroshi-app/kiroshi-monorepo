@@ -12,14 +12,15 @@ use yrs::updates::decoder::Decode;
 use yrs::{Doc, GetString, ReadTxn, StateVector, Text, Transact, Update};
 
 use super::commands::{
-	library_apply_update, library_copy, library_create_document, library_import,
+	library_apply_update, library_copy, library_create_document, library_delete, library_import,
 	library_import_paths, library_list, library_open_document, library_read_document,
 	library_read_file, library_read_image, library_read_thumbnail, library_rename_document,
 	library_reveal, library_save, library_templates,
 };
 use super::contract::{
-	LibraryDocumentFormat, LibraryDocumentRenamed, LibraryDocumentUpdated, LibraryError,
-	LibraryFile, LibraryImage, LibraryImport, LibraryItem, LibraryItemKind, LibraryTemplate,
+	LibraryChanged, LibraryDocumentFormat, LibraryDocumentRenamed, LibraryDocumentUpdated,
+	LibraryError, LibraryFile, LibraryImage, LibraryImport, LibraryItem, LibraryItemKind,
+	LibraryTemplate,
 };
 use super::*;
 use crate::db;
@@ -2177,4 +2178,63 @@ async fn an_update_to_the_landed_name_racing_a_rename_returns_only_after_the_ren
 	let raced = applied.recv_timeout(Duration::from_secs(5)).expect("the update returns");
 	assert_eq!(raced, Ok(()));
 	assert_eq!(*order.lock().expect("the order"), ["renamed plan.md", "updated plan.md"]);
+}
+
+async fn deleted(app: &App<MockRuntime>, space_id: &str, name: &str) -> Result<(), LibraryError> {
+	library_delete(app.handle().clone(), app.state(), space_id.to_owned(), name.to_owned()).await
+}
+
+fn heard_changes(app: &App<MockRuntime>) -> mpsc::Receiver<LibraryChanged> {
+	let (told, heard) = mpsc::channel();
+	app.listen_any(events::LIBRARY_CHANGED.name(), move |event| {
+		let changed = serde_json::from_str(event.payload()).expect("a change payload");
+		told.send(changed).expect("the test listens");
+	});
+	heard
+}
+
+#[tokio::test]
+async fn a_deleted_item_leaves_the_library_with_its_shared_state_and_is_announced() {
+	let app = a_host("delete");
+	let space_id = a_space(&app, "Work").await;
+	let root = root(app.handle()).expect("the library root resolves");
+	put(&root, &space_id, "notes.md", b"base");
+	put(&root, &space_id, "plan.md", b"kept");
+	opened(&app, &space_id, "notes.md").await;
+	let heard = heard_changes(&app);
+
+	let removed = deleted(&app, &space_id, "notes.md").await;
+	let again = deleted(&app, &space_id, "notes.md").await;
+	let elsewhere = deleted(&app, "nowhere", "plan.md").await;
+
+	assert_eq!(removed, Ok(()));
+	assert_eq!(names(&root, &space_id), ["plan.md"]);
+	assert!(!root.join(".documents").join(&space_id).join("notes.md.yjs").exists());
+	let announced = heard.recv_timeout(Duration::from_secs(5)).expect("the delete is announced");
+	assert_eq!(announced, LibraryChanged { space_id: space_id.clone() });
+	assert_eq!(again, Err(LibraryError::Missing { name: "notes.md".to_owned() }));
+	assert_eq!(elsewhere, Err(LibraryError::UnknownSpace { id: "nowhere".to_owned() }));
+	assert!(heard.try_recv().is_err());
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_delete_that_cannot_remove_the_file_keeps_the_item_listed() {
+	use std::os::unix::fs::PermissionsExt;
+
+	let app = a_host("delete-locked");
+	let space_id = a_space(&app, "Work").await;
+	let root = root(app.handle()).expect("the library root resolves");
+	put(&root, &space_id, "notes.md", b"base");
+	let dir = space_dir(&root, &space_id);
+	let set_mode = |mode| {
+		fs::set_permissions(&dir, fs::Permissions::from_mode(mode)).expect("the mode lands");
+	};
+
+	set_mode(0o500);
+	let refused = deleted(&app, &space_id, "notes.md").await;
+	set_mode(0o700);
+
+	assert!(matches!(refused, Err(LibraryError::Unwritable { .. })), "{refused:?}");
+	assert_eq!(names(&root, &space_id), ["notes.md"]);
 }

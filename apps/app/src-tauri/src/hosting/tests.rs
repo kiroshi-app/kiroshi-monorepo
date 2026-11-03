@@ -743,6 +743,14 @@ async fn host_effect_applied(
 				&text("newName"),
 			));
 		}
+		"library_delete" => {
+			return answered_by_the_library(library::delete_item(
+				effects.app(),
+				&effects.library(),
+				&text("spaceId"),
+				&text("name"),
+			));
+		}
 		"joined_space_remove" => {
 			database.joined_spaces().remove(text("id")).await.expect("the host leaves");
 		}
@@ -3605,6 +3613,24 @@ fn a_member_renames_a_library_document_of_the_shared_space_only() {
 		"library_rename_document",
 		|space_id| json!({ "spaceId": space_id, "name": "notes.md", "newName": "plan.md" }),
 	));
+}
+
+#[test]
+fn a_member_deletes_a_library_item_of_the_shared_space_only() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("library-delete").await;
+		let library = guest.effects.library();
+		let shelf = |space_id: &str| library.join(space_id).join("notes.md");
+
+		guest.refused("library_delete", a_library_entry_of("notes.md")(ELSEWHERE)).await;
+		guest.forwarded("library_delete", a_library_entry_of("notes.md")(PERSONAL)).await;
+		let again = guest.called("library_delete", a_library_entry_of("notes.md")(PERSONAL)).await;
+
+		assert!(shelf(ELSEWHERE).exists());
+		assert!(!shelf(PERSONAL).exists());
+		assert_eq!(again["body"], json!({ "kind": "missing", "name": "notes.md" }), "{again}");
+		assert_eq!(guest.effects.reached(), ["library_delete", "library_delete"]);
+	});
 }
 
 #[test]

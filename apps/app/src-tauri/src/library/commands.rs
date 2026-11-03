@@ -13,9 +13,9 @@ use super::contract::{
 };
 use super::presence::{seated_name, share_caret, unseat_writer, Seat};
 use super::{
-	apply_update, clipboard_payload, clipboard_payload_of_bytes, create_document, import,
-	import_paths, list, open_document, read_document, read_file, read_image, read_thumbnail,
-	rename_document, resolve, root, save, save_bytes, templates, ClipboardPayload,
+	apply_update, clipboard_payload, clipboard_payload_of_bytes, create_document, delete_item,
+	import, import_paths, list, open_document, read_document, read_file, read_image,
+	read_thumbnail, rename_document, resolve, root, save, save_bytes, templates, ClipboardPayload,
 };
 use crate::db;
 use crate::hosting::authorship::Caller;
@@ -133,6 +133,18 @@ pub async fn library_rename_document<R: Runtime>(
 ) -> Result<LibraryItem, LibraryError> {
 	known_space(&state, &space_id).await?;
 	rename_document(&app, &root(&app)?, &space_id, &name, &new_name)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn library_delete<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	space_id: String,
+	name: String,
+) -> Result<(), LibraryError> {
+	known_space(&state, &space_id).await?;
+	delete_item(&app, &root(&app)?, &space_id, &name)
 }
 
 #[tauri::command]
