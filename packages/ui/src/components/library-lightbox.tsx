@@ -6,6 +6,13 @@ import { useTranslation } from "react-i18next"
 
 import { IconSwap } from "@workspace/ui/components/icon-swap"
 import { Icons } from "@workspace/ui/components/icons"
+import {
+	hasLibraryItemActions,
+	type LibraryItemActions,
+	LibraryItemDeleteDialog,
+	LibraryItemMenuItems,
+	type LibraryItemMenuParts,
+} from "@workspace/ui/components/library-item-menu"
 import { useLibraryOverlayContainer } from "@workspace/ui/components/library-panel"
 import { TooltipButton } from "@workspace/ui/components/tooltip-button"
 import {
@@ -14,8 +21,16 @@ import {
 	DialogPortal,
 	DialogTitle,
 } from "@workspace/ui/components/ui/dialog"
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "@workspace/ui/components/ui/dropdown-menu"
 import { Separator } from "@workspace/ui/components/ui/separator"
 import { COPIED_RESET_MS } from "@workspace/ui/hooks/use-copy-text"
+import { STILL_UNDER_REDUCED_MOTION } from "@workspace/ui/lib/reduced-motion"
 import { cn } from "@workspace/ui/lib/utils"
 
 type LibraryLightboxImage = {
@@ -39,7 +54,14 @@ const STEP = cn(ROUND, "size-10 bg-foreground/10 hover:bg-foreground/16")
 
 const ZOOM_CONTROL = cn(ROUND, "size-7 hover:bg-foreground/8")
 
+const BARE = cn(ROUND, "size-8 hover:bg-foreground/8")
+
 const DIVIDER = "bg-foreground/12 data-vertical:self-center"
+
+const DROPDOWN_MENU_PARTS: LibraryItemMenuParts = {
+	Item: DropdownMenuItem,
+	Separator: DropdownMenuSeparator,
+}
 
 const ZOOM_SLOT = "library-lightbox-zoom"
 
@@ -154,16 +176,13 @@ const ZoomStage = ({ image, position, count }: ZoomStageProps) => {
 	)
 }
 
-type LibraryLightboxProps = {
+type LibraryLightboxProps = LibraryItemActions<LibraryLightboxImage> & {
 	image: LibraryLightboxImage | null
 	position: number
 	count: number
 	onClose: () => void
 	onPrevious: () => void
 	onNext: () => void
-	onDownload: (image: LibraryLightboxImage) => void
-	onCopy: (image: LibraryLightboxImage) => void | Promise<void>
-	onMore?: (image: LibraryLightboxImage) => void
 }
 
 const LibraryLightbox = ({
@@ -173,9 +192,7 @@ const LibraryLightbox = ({
 	onClose,
 	onPrevious,
 	onNext,
-	onDownload,
-	onCopy,
-	onMore,
+	...actions
 }: LibraryLightboxProps) => {
 	const { t } = useTranslation("common")
 	const container = useLibraryOverlayContainer()
@@ -189,6 +206,8 @@ const LibraryLightbox = ({
 		setCopiedImageId(null)
 	}
 	const isCopied = image !== null && copiedImageId === image.id
+	const [isConfirmingDelete, setConfirmingDelete] = useState(false)
+	const { onCopy, onDownload, onDelete } = actions
 
 	useEffect(() => {
 		if (copiedImageId === null) return
@@ -201,7 +220,7 @@ const LibraryLightbox = ({
 
 	const copyImage = async (shown: LibraryLightboxImage) => {
 		try {
-			await onCopy(shown)
+			await onCopy?.(shown)
 			setCopiedImageId(shown.id)
 		} catch {
 			setCopiedImageId(null)
@@ -233,67 +252,114 @@ const LibraryLightbox = ({
 						onKeyDown={stepWithArrows}
 						ref={surfaceRef}
 					>
-						<div className="flex h-14 shrink-0 items-center justify-between gap-4 ps-5 pe-3">
-							<div className="flex min-w-0 items-baseline gap-2.5">
-								<DialogTitle
-									className="truncate font-medium text-foreground text-sm leading-4.5"
-									title={image.name}
+						<div className="flex h-14 shrink-0 items-center justify-between gap-4 px-3">
+							<div className="flex min-w-0 items-center gap-2">
+								<DialogClose
+									render={
+										<TooltipButton
+											aria-label={t("library.lightbox.back")}
+											className={cn(BARE, "shrink-0")}
+											size="icon"
+											tooltip={t("library.lightbox.back")}
+											tooltipSide="bottom"
+											variant="ghost"
+										/>
+									}
 								>
-									{image.name}
-								</DialogTitle>
-								<p className="shrink-0 text-compact text-muted-foreground leading-4.5 tabular-nums">
-									{image.detail}
-								</p>
+									<Icons.Previous aria-hidden="true" />
+								</DialogClose>
+								<div className="flex min-w-0 items-baseline gap-2.5">
+									<DialogTitle
+										className="truncate font-medium text-foreground text-sm leading-4.5"
+										title={image.name}
+									>
+										{image.name}
+									</DialogTitle>
+									<p className="shrink-0 text-compact text-muted-foreground leading-4.5 tabular-nums">
+										{image.detail}
+									</p>
+								</div>
 							</div>
 							<div className="flex shrink-0 items-center gap-2">
-								<TooltipButton
-									aria-label={t("library.lightbox.download")}
-									className={ACTION}
-									onClick={() => onDownload(image)}
-									size="icon"
-									tooltip={t("library.lightbox.download")}
-									tooltipSide="bottom"
-									variant="ghost"
-								>
-									<Icons.Download aria-hidden="true" />
-								</TooltipButton>
-								<TooltipButton
-									aria-label={t("library.lightbox.copy")}
-									className={ACTION}
-									onClick={() => copyImage(image)}
-									size="icon"
-									tooltip={t("library.lightbox.copy")}
-									tooltipSide="bottom"
-									variant="ghost"
-								>
-									<IconSwap
-										icon={<Icons.Copy aria-hidden="true" />}
-										isSwapped={isCopied}
-										swappedIcon={<Icons.Check aria-hidden="true" />}
-									/>
-								</TooltipButton>
-								{onMore ? (
+								{onDownload ? (
 									<TooltipButton
-										aria-label={t("library.lightbox.openFolder")}
+										aria-label={t("library.lightbox.download")}
 										className={ACTION}
-										onClick={() => onMore(image)}
+										onClick={() => onDownload(image)}
 										size="icon"
-										tooltip={t("library.lightbox.openFolder")}
+										tooltip={t("library.lightbox.download")}
 										tooltipSide="bottom"
 										variant="ghost"
 									>
-										<Icons.Folder aria-hidden="true" />
+										<Icons.Download aria-hidden="true" />
 									</TooltipButton>
 								) : null}
-								<Separator
-									className={cn(DIVIDER, "h-5")}
-									orientation="vertical"
-								/>
+								{onCopy ? (
+									<TooltipButton
+										aria-label={t("library.lightbox.copy")}
+										className={ACTION}
+										onClick={() => copyImage(image)}
+										size="icon"
+										tooltip={t("library.lightbox.copy")}
+										tooltipSide="bottom"
+										variant="ghost"
+									>
+										<IconSwap
+											icon={<Icons.Copy aria-hidden="true" />}
+											isSwapped={isCopied}
+											swappedIcon={<Icons.Check aria-hidden="true" />}
+										/>
+									</TooltipButton>
+								) : null}
+								{hasLibraryItemActions(actions) ? (
+									<>
+										<DropdownMenu>
+											<DropdownMenuTrigger
+												render={
+													<TooltipButton
+														aria-label={t("library.lightbox.more")}
+														className={ACTION}
+														size="icon"
+														tooltip={t("library.lightbox.more")}
+														tooltipSide="bottom"
+														variant="ghost"
+													/>
+												}
+											>
+												<Icons.More aria-hidden="true" />
+											</DropdownMenuTrigger>
+											<DropdownMenuContent
+												align="end"
+												aria-label={t("library.itemMenu.label", {
+													name: image.name,
+												})}
+												className={cn(
+													"dark w-auto",
+													STILL_UNDER_REDUCED_MOTION,
+												)}
+											>
+												<LibraryItemMenuItems
+													actions={{
+														...actions,
+														onCopy: onCopy && copyImage,
+													}}
+													item={image}
+													onPickDelete={() => setConfirmingDelete(true)}
+													parts={DROPDOWN_MENU_PARTS}
+												/>
+											</DropdownMenuContent>
+										</DropdownMenu>
+										<Separator
+											className={cn(DIVIDER, "h-5")}
+											orientation="vertical"
+										/>
+									</>
+								) : null}
 								<DialogClose
 									render={
 										<TooltipButton
 											aria-label={t("library.lightbox.close")}
-											className={cn(ROUND, "size-8 hover:bg-foreground/8")}
+											className={BARE}
 											size="icon"
 											tooltip={t("library.lightbox.close")}
 											tooltipSide="bottom"
@@ -340,6 +406,12 @@ const LibraryLightbox = ({
 						<span aria-live="polite" className="sr-only">
 							{isCopied ? t("library.lightbox.copied") : ""}
 						</span>
+						<LibraryItemDeleteDialog
+							name={image.name}
+							onConfirm={() => onDelete?.(image)}
+							onOpenChange={setConfirmingDelete}
+							open={isConfirmingDelete}
+						/>
 					</DialogPrimitive.Popup>
 				) : null}
 			</DialogPortal>

@@ -296,6 +296,65 @@ export const ExistingDocument = meta.story({
 	},
 })
 
+export const ClickBelowTheLastLine = meta.story({
+	args: { ...LAUNCH_REVIEW, template: undefined },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A press in the empty space of the column, under the last line and beside a heading. Check that the press below the last line puts the caret at the end of the text so typing writes there, that a press beside a line focuses that line, and that a press on the text itself keeps the browser's own caret placement.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const column = slotIn(canvasElement, "library-document-column")
+		const fields = within(
+			slotIn(canvasElement, "library-document-body"),
+		).getAllByRole("textbox") as HTMLTextAreaElement[]
+		const last = fields.at(-1) as HTMLTextAreaElement
+		const lastLine = last.getBoundingClientRect()
+		await expect(column.getBoundingClientRect().bottom).toBeGreaterThan(
+			lastLine.bottom + 80,
+		)
+
+		await userEvent.pointer({
+			keys: "[MouseLeft]",
+			target: column,
+			coords: { clientX: lastLine.left + 40, clientY: lastLine.bottom + 80 },
+		})
+		await expect(last).toHaveFocus()
+		await expect(last.selectionStart).toBe(last.value.length)
+		await userEvent.keyboard(" Then the launch.")
+		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+			LAUNCH_REVIEW.body.replace(
+				"on the 10th.",
+				"on the 10th. Then the launch.",
+			),
+		)
+
+		const heading = fields[1] as HTMLTextAreaElement
+		const headingLine = heading.getBoundingClientRect()
+		await userEvent.pointer({
+			keys: "[MouseLeft]",
+			target: column,
+			coords: {
+				clientX: column.getBoundingClientRect().left + 8,
+				clientY: headingLine.top + headingLine.height / 2,
+			},
+		})
+		await expect(heading).toHaveFocus()
+		await expect(heading.selectionStart).toBe(heading.value.length)
+
+		const onText = new MouseEvent("mousedown", {
+			bubbles: true,
+			cancelable: true,
+			button: 0,
+		})
+		fields[0]?.dispatchEvent(onText)
+		await expect(onText.defaultPrevented).toBe(false)
+	},
+})
+
 type DocumentDraft = {
 	title: string
 	body: string

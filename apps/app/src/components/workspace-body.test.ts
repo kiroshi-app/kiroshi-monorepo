@@ -1604,7 +1604,11 @@ describe("WorkspaceBody library", () => {
 	it("reveals the opened image and the opened document in their folder", async () => {
 		await openLibrary()
 		await open("hero-dunes.png")
-		await press("Open folder")
+		await press("More")
+		fireEvent.click(
+			await screen.findByRole("menuitem", { name: "Show in folder" }),
+		)
+		await settle()
 		await press("Close")
 
 		await open("Spring launch brief")
@@ -1625,7 +1629,11 @@ describe("WorkspaceBody library", () => {
 		await openLibrary()
 		await open("hero-dunes.png")
 
-		await press("Open folder")
+		await press("More")
+		fireEvent.click(
+			await screen.findByRole("menuitem", { name: "Show in folder" }),
+		)
+		await settle()
 
 		await noticeTitled(REVEAL_FAILURE)
 	})
@@ -1636,7 +1644,11 @@ describe("WorkspaceBody library", () => {
 
 		await press("Download")
 		await press("Copy")
-		await press("Open folder")
+		await press("More")
+		fireEvent.click(
+			await screen.findByRole("menuitem", { name: "Show in folder" }),
+		)
+		await settle()
 
 		expect(save).toHaveBeenCalledExactlyOnceWith(SPACE, HERO.name)
 		expect(copyToClipboard).toHaveBeenCalledExactlyOnceWith(SPACE, HERO.name)
@@ -1776,7 +1788,14 @@ describe("WorkspaceBody library", () => {
 		it("shows no Open folder on an image and no More on a document, with no notice", async () => {
 			await openJoinedLibrary()
 			await open("hero-dunes.png")
-			expect(screen.queryByRole("button", { name: "Open folder" })).toBeNull()
+			await press("More")
+			expect(
+				within(await screen.findByRole("menu")).queryByRole("menuitem", {
+					name: "Show in folder",
+				}),
+			).toBeNull()
+			fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" })
+			await settle()
 			await press("Close")
 
 			await open("Spring launch brief")

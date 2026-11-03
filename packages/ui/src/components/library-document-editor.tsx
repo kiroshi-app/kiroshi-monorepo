@@ -4,6 +4,7 @@ import type { TFunction } from "i18next"
 import {
 	Fragment,
 	type KeyboardEvent,
+	type MouseEvent,
 	type ReactNode,
 	type Ref,
 	type TextareaHTMLAttributes,
@@ -350,6 +351,8 @@ type FieldSelection = TextSelection & { id: string }
 
 const TITLE_FIELD = "title"
 
+const NATIVE_PRESS = "textarea, button, a"
+
 const focusedIn = (fields: Map<string, HTMLTextAreaElement>) =>
 	[...fields].find(([, field]) => field === document.activeElement)
 
@@ -587,6 +590,30 @@ const LibraryDocumentEditor = ({
 		field.focus()
 		field.setSelectionRange(position, position)
 		reportCaret()
+	}
+
+	const writeFromColumn = (event: MouseEvent<HTMLDivElement>) => {
+		const column = event.currentTarget
+		const isOnScrollbar =
+			event.clientX >= column.getBoundingClientRect().left + column.clientWidth
+		if (
+			event.button !== 0 ||
+			isOnScrollbar ||
+			!(event.target instanceof Element) ||
+			event.target.closest(NATIVE_PRESS)
+		)
+			return
+
+		const ids = [TITLE_FIELD, ...blocks.map(({ id }) => id)]
+		const besideId =
+			ids.find(
+				(id) =>
+					event.clientY <=
+					(fields.current.get(id)?.getBoundingClientRect().bottom ??
+						Number.NEGATIVE_INFINITY),
+			) ?? ids.at(-1)
+		event.preventDefault()
+		focusAt(besideId, "end")
 	}
 
 	const bodyOf = (next: Block[]) => {
@@ -849,6 +876,7 @@ const LibraryDocumentEditor = ({
 			/>
 			<LibraryDocumentColumn
 				detail={detail}
+				onColumnMouseDown={writeFromColumn}
 				footer={
 					shownFinished ? (
 						<LibraryDocumentFinishedBar

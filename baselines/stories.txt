@@ -1361,6 +1361,7 @@ navigation-librarydocumenteditor--blank
 navigation-librarydocumenteditor--caret-moved-while-outside-change-renders
 navigation-librarydocumenteditor--caret-moves
 navigation-librarydocumenteditor--caret-share-failure
+navigation-librarydocumenteditor--click-below-the-last-line
 navigation-librarydocumenteditor--create-failure
 navigation-librarydocumenteditor--existing-document
 navigation-librarydocumenteditor--fields-stay-in-place
@@ -1393,8 +1394,10 @@ navigation-librarypanel--empty-with-every-callback
 navigation-librarypanel--empty-with-no-callbacks
 navigation-librarypanel--filter-with-no-match
 navigation-librarypanel--grid-all
+navigation-librarypanel--grid-context-menu
 navigation-librarypanel--grid-documents
 navigation-librarypanel--grid-images
+navigation-librarypanel--grid-without-item-actions
 navigation-librarypanel--import-failures
 navigation-librarypanel--import-long-names
 navigation-librarypanel--loading
@@ -1592,11 +1595,16 @@ overlays-dialogsurface--dismissing
 overlays-dialogsurface--long-title
 overlays-dialogsurface--overflowing
 overlays-dialogsurface--sized
+overlays-dropdownmenu--default
 overlays-librarylightbox--at-the-first-image
+overlays-librarylightbox--back-button
 overlays-librarylightbox--copy-check
 overlays-librarylightbox--copy-refused
 overlays-librarylightbox--default
-overlays-librarylightbox--member
+overlays-librarylightbox--delete-confirmation
+overlays-librarylightbox--host-more-menu
+overlays-librarylightbox--member-more-menu
+overlays-librarylightbox--without-item-actions
 overlays-librarylightbox--zoomed
 overlays-missionmenu--answer-the-question-leaves-the-card
 overlays-missionmenu--close-at-once

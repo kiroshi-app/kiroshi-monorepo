@@ -1,6 +1,6 @@
 "use client"
 
-import type { ReactNode } from "react"
+import type { MouseEvent, ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
 import { Icons } from "@workspace/ui/components/icons"
@@ -101,6 +101,7 @@ type LibraryDocumentColumnProps = {
 	detail: string
 	children: ReactNode
 	footer?: ReactNode
+	onColumnMouseDown?: (event: MouseEvent<HTMLDivElement>) => void
 }
 
 const LibraryDocumentColumn = ({
@@ -108,13 +109,18 @@ const LibraryDocumentColumn = ({
 	detail,
 	children,
 	footer,
+	onColumnMouseDown,
 }: LibraryDocumentColumnProps) => (
 	<div className="relative flex min-h-0 flex-1 flex-col">
+		{/* biome-ignore lint/a11y/noStaticElementInteractions: a pointer press only moves focus into a field the keyboard already reaches with Tab */}
 		<div
 			className={cn(
 				"min-h-0 flex-1 overflow-y-auto px-10 pt-10 pb-10",
 				footer && "pb-24",
+				onColumnMouseDown && "cursor-text",
 			)}
+			data-slot="library-document-column"
+			onMouseDown={onColumnMouseDown}
 		>
 			<article className="mx-auto flex w-full max-w-160 flex-col gap-3.5">
 				<header className="flex flex-col gap-1.5 pb-1.5">

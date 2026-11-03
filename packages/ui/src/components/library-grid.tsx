@@ -3,6 +3,10 @@
 import { useTranslation } from "react-i18next"
 
 import {
+	type LibraryItemActions,
+	LibraryItemContextMenu,
+} from "@workspace/ui/components/library-item-menu"
+import {
 	ListSkeleton,
 	SkeletonBar,
 } from "@workspace/ui/components/list-skeleton"
@@ -109,24 +113,34 @@ const LibraryItemCaption = ({ name, detail }: LibraryItemCaptionProps) => (
 	</span>
 )
 
-type LibraryGridItemProps = {
+type LibraryGridItemProps = LibraryItemActions<LibraryItem> & {
 	item: LibraryItem
-	onOpen: (item: LibraryItem) => void
+	onPress: (item: LibraryItem) => void
 }
 
-const LibraryGridItem = ({ item, onOpen }: LibraryGridItemProps) => (
-	<button
-		className="group/library-item flex min-w-0 flex-col gap-2.5 rounded-control text-start focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring focus-visible:outline-offset-2"
-		data-slot="library-item"
-		onClick={(event) => {
-			holdFocusForItsReturn(event.currentTarget)
-			onOpen(item)
-		}}
-		type="button"
-	>
-		<LibraryThumbnail item={item} />
-		<LibraryItemCaption detail={item.detail} name={item.name} />
-	</button>
+const LibraryGridItem = ({
+	item,
+	onPress,
+	...actions
+}: LibraryGridItemProps) => (
+	<LibraryItemContextMenu
+		{...actions}
+		item={item}
+		trigger={
+			<button
+				className="group/library-item flex min-w-0 flex-col gap-2.5 rounded-control text-start focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring focus-visible:outline-offset-2"
+				data-slot="library-item"
+				onClick={(event) => {
+					holdFocusForItsReturn(event.currentTarget)
+					onPress(item)
+				}}
+				type="button"
+			>
+				<LibraryThumbnail item={item} />
+				<LibraryItemCaption detail={item.detail} name={item.name} />
+			</button>
+		}
+	/>
 )
 
 type LibraryImportingItemProps = {
@@ -173,12 +187,16 @@ const LibraryImportingItem = ({
 	)
 }
 
-type LibraryGridProps = {
+type LibraryGridProps = LibraryItemActions<LibraryItem> & {
 	items: LibraryItem[]
 	onOpenItem: (item: LibraryItem) => void
 }
 
-const LibraryGrid = ({ items, onOpenItem }: LibraryGridProps) => (
+const LibraryGrid = ({
+	items,
+	onOpenItem,
+	...itemActions
+}: LibraryGridProps) => (
 	<ul
 		className={cn(GRID_COLUMNS, "gap-y-7 px-10 pt-2 pb-10")}
 		data-slot="library-grid"
@@ -186,7 +204,7 @@ const LibraryGrid = ({ items, onOpenItem }: LibraryGridProps) => (
 		{items.map((item) => (
 			<li className="flex min-w-0 flex-col" key={item.id}>
 				{item.importProgress === undefined ? (
-					<LibraryGridItem item={item} onOpen={onOpenItem} />
+					<LibraryGridItem {...itemActions} item={item} onPress={onOpenItem} />
 				) : (
 					<LibraryImportingItem item={item} progress={item.importProgress} />
 				)}

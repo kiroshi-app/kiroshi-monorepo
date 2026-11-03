@@ -197,7 +197,7 @@ export const LibraryScreen = ({
 						onClose={close}
 						onCopy={copy}
 						onDownload={save}
-						onMore={reveal}
+						onShowInFolder={reveal}
 						onNext={() => openImageAt(imageIndex + 1)}
 						onPrevious={() => openImageAt(imageIndex - 1)}
 						position={imageIndex + 1}
