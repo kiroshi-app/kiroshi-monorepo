@@ -335,6 +335,7 @@ const common = {
 			createdFrom: "Created just now from {{template}}",
 			title: "Title",
 			body: "Document text",
+			task: "Done",
 			toolbar: {
 				label: "Format",
 				bold: "Bold",
