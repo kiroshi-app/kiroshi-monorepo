@@ -69,9 +69,8 @@ export const LibraryScreen = ({
 		useState<LibraryDocumentTemplate | null>(null)
 	const { create, isCreating } = useCreateLibraryDocument(spaceId)
 	const openedDocument = opened?.kind === "document" ? opened : null
-	const openedDocumentName = openedDocument?.name ?? null
 	const { document, edit, hasFailedToOpen, closeAndRelist } =
-		useLibraryDocumentSession(spaceId, openedDocumentName)
+		useLibraryDocumentSession(spaceId, openedDocument?.name ?? null)
 	if (openedDocument && hasFailedToOpen) {
 		setOpened(null)
 	}
