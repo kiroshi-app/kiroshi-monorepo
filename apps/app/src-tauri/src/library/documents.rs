@@ -9,8 +9,9 @@ use yrs::{Doc, GetString, ReadTxn, StateVector, Text, Transact, Update};
 
 use super::contract::LibraryError;
 use super::{
-	accepted_type, discarded, document_text, is_plain_name, linked_under_free_name, resolve,
-	space_dir, undecodable, unwritable, within, AcceptedType, MAX_DOCUMENT_BYTES,
+	accepted_type, discarded, document_text, is_plain_name, is_the_item_itself,
+	linked_under_free_name, resolve, space_dir, undecodable, unwritable, within, AcceptedType,
+	ResolvedItem, MAX_DOCUMENT_BYTES,
 };
 use crate::private_files;
 
@@ -121,14 +122,15 @@ impl Documents {
 		space_id: &str,
 		name: &str,
 		new_name: &str,
-	) -> Result<Option<String>, LibraryError> {
+		announce: impl FnOnce(&str),
+	) -> Result<String, LibraryError> {
 		let mut held = self.held();
 		let item = resolve(root, space_id, name)?;
 		let AcceptedType::Document(format) = item.accepted else {
 			return Err(LibraryError::Missing { name: name.to_owned() });
 		};
 		if new_name == name {
-			return Ok(None);
+			return Ok(name.to_owned());
 		}
 		let keeps_the_format = matches!(
 			accepted_type(new_name),
@@ -137,14 +139,15 @@ impl Documents {
 		if !is_plain_name(new_name) || !keeps_the_format {
 			return Err(LibraryError::InvalidName { name: new_name.to_owned() });
 		}
-		let dir = space_dir(root, space_id);
-		let landed = linked_under_free_name(&item.path, &dir, new_name)?;
-		if let Err(error) = moved_from(root, space_id, &item.path, name, &landed) {
-			discarded(&dir.join(&landed));
-			return Err(unwritable(error));
-		}
+		let target = space_dir(root, space_id).join(new_name);
+		let landed = if is_the_item_itself(&item, &target) {
+			recased(root, space_id, &item, name, new_name)?
+		} else {
+			relinked(root, space_id, &item, name, new_name)?
+		};
 		held.moved(space_id, name, &landed);
-		Ok(Some(landed))
+		announce(&landed);
+		Ok(landed)
 	}
 
 	pub(crate) fn forget(&self, root: &Path, space_id: &str) -> io::Result<()> {
@@ -173,6 +176,9 @@ impl Held {
 			(Err(LibraryError::Missing { .. }), Some(landed)) => {
 				document_file(root, space_id, landed)
 			}
+			(Ok(file), Some(landed)) if file.path.ends_with(landed) => {
+				document_file(root, space_id, landed)
+			}
 			(found, _) => found,
 		}
 	}
@@ -194,12 +200,41 @@ impl Held {
 	}
 }
 
+fn recased(
+	root: &Path,
+	space_id: &str,
+	item: &ResolvedItem,
+	name: &str,
+	new_name: &str,
+) -> Result<String, LibraryError> {
+	let target = space_dir(root, space_id).join(new_name);
+	moved_from(root, space_id, name, new_name, || fs::rename(&item.path, &target))
+		.map_err(unwritable)?;
+	Ok(new_name.to_owned())
+}
+
+fn relinked(
+	root: &Path,
+	space_id: &str,
+	item: &ResolvedItem,
+	name: &str,
+	new_name: &str,
+) -> Result<String, LibraryError> {
+	let dir = space_dir(root, space_id);
+	let landed = linked_under_free_name(&item.path, &dir, new_name)?;
+	if let Err(error) = moved_from(root, space_id, name, &landed, || fs::remove_file(&item.path)) {
+		discarded(&dir.join(&landed));
+		return Err(unwritable(error));
+	}
+	Ok(landed)
+}
+
 fn moved_from(
 	root: &Path,
 	space_id: &str,
-	former: &Path,
 	name: &str,
 	landed: &str,
+	file_moved: impl FnOnce() -> io::Result<()>,
 ) -> io::Result<()> {
 	let state = state_path(root, space_id, name);
 	let landed_state = state_path(root, space_id, landed);
@@ -211,7 +246,7 @@ fn moved_from(
 		}
 		Err(error) => return Err(error),
 	};
-	fs::remove_file(former).inspect_err(|_| {
+	file_moved().inspect_err(|_| {
 		if has_moved_state {
 			if let Err(error) = fs::rename(&landed_state, &state) {
 				log::warn!(

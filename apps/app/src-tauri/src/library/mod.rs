@@ -409,13 +409,9 @@ pub(crate) fn rename_document<R: Runtime>(
 	name: &str,
 	new_name: &str,
 ) -> Result<LibraryItem, LibraryError> {
-	let landed = match documents(app).rename(root, space_id, name, new_name)? {
-		Some(landed) => {
-			announce_rename(app, space_id, name, &landed);
-			landed
-		}
-		None => name.to_owned(),
-	};
+	let landed = documents(app).rename(root, space_id, name, new_name, |landed| {
+		announce_rename(app, space_id, name, landed);
+	})?;
 	item_at(&space_dir(root, space_id).join(&landed), landed.clone())?
 		.ok_or(LibraryError::Missing { name: landed })
 }

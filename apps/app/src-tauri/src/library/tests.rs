@@ -1897,7 +1897,7 @@ fn a_renamed_document_opens_on_its_stored_state_after_a_restart() {
 	let before_restart = Documents::default();
 	let before = before_restart.open(&root, SPACE, "notes.md").expect("opens").state;
 
-	before_restart.rename(&root, SPACE, "notes.md", "plan.md").expect("the rename lands");
+	before_restart.rename(&root, SPACE, "notes.md", "plan.md", |_| {}).expect("the rename lands");
 
 	let restarted = Documents::default();
 	assert_eq!(restarted.open(&root, SPACE, "plan.md").expect("opens").state, before);
@@ -1951,7 +1951,7 @@ fn an_update_to_a_former_name_a_new_file_now_holds_lands_in_that_file() {
 	let root = temp_root();
 	put(&root, SPACE, "notes.md", b"base");
 	let documents = Documents::default();
-	documents.rename(&root, SPACE, "notes.md", "plan.md").expect("the rename lands");
+	documents.rename(&root, SPACE, "notes.md", "plan.md", |_| {}).expect("the rename lands");
 	put(&root, SPACE, "notes.md", b"fresh");
 	let member = YjsClient::of(
 		&BASE64_STANDARD.encode(documents.open(&root, SPACE, "notes.md").expect("opens").state),
@@ -1974,8 +1974,8 @@ fn an_update_to_the_first_name_follows_a_document_renamed_twice() {
 	let member = YjsClient::of(
 		&BASE64_STANDARD.encode(documents.open(&root, SPACE, "notes.md").expect("opens").state),
 	);
-	documents.rename(&root, SPACE, "notes.md", "plan.md").expect("the rename lands");
-	documents.rename(&root, SPACE, "plan.md", "final.md").expect("the rename lands");
+	documents.rename(&root, SPACE, "notes.md", "plan.md", |_| {}).expect("the rename lands");
+	documents.rename(&root, SPACE, "plan.md", "final.md", |_| {}).expect("the rename lands");
 
 	let applied = documents
 		.apply(&root, SPACE, "notes.md", &bytes_of(&member.inserted(4, "!")))
@@ -2049,11 +2049,134 @@ fn a_rename_that_cannot_move_the_stored_state_keeps_the_former_file_and_drops_th
 	let blocking = root.join(".documents").join(SPACE).join("plan.md.yjs");
 	fs::create_dir_all(blocking.join("taken")).expect("the blocking folder lands");
 
-	let refused = documents.rename(&root, SPACE, "notes.md", "plan.md");
+	let refused = documents.rename(&root, SPACE, "notes.md", "plan.md", |_| {});
 
 	assert!(matches!(refused, Err(LibraryError::Unwritable { .. })), "{refused:?}");
 	assert_eq!(names(&root, SPACE), ["notes.md"]);
 	assert_eq!(file_text(&root, "notes.md"), "base");
 	assert_eq!(stored_state_of(&root, "notes.md"), before);
 	assert_eq!(documents.open(&root, SPACE, "notes.md").expect("opens").state, before);
+}
+
+fn state_names(root: &Path, space_id: &str) -> Vec<String> {
+	let states = fs::read_dir(root.join(".documents").join(space_id)).expect("the states read");
+	let mut names: Vec<String> = states
+		.map(|entry| entry.expect("an entry").file_name().to_string_lossy().into_owned())
+		.collect();
+	names.sort();
+	names
+}
+
+#[tokio::test]
+async fn a_case_only_rename_lands_on_the_exact_name_with_its_state_and_takes_late_updates() {
+	let app = a_host("rename-case");
+	let space_id = a_space(&app, "Work").await;
+	let root = root(app.handle()).expect("the library root resolves");
+	put(&root, &space_id, "notes.md", b"base");
+	let heard = heard_renames(&app);
+	let heard_edits = heard_updates(&app);
+	let before = opened(&app, &space_id, "notes.md").await;
+	let member = YjsClient::of(&before);
+
+	let item = renamed(&app, &space_id, "notes.md", "Notes.md").await.expect("the rename lands");
+
+	assert_eq!(item.name, "Notes.md");
+	assert_eq!(names(&root, &space_id), ["Notes.md"]);
+	assert_eq!(on_disk(&root, &space_id, "Notes.md"), "base");
+	assert_eq!(state_names(&root, &space_id), ["Notes.md.yjs"]);
+	assert_eq!(opened(&app, &space_id, "Notes.md").await, before);
+	assert_eq!(
+		heard.recv_timeout(Duration::from_secs(5)).expect("the rename is announced"),
+		LibraryDocumentRenamed {
+			space_id: space_id.clone(),
+			former_name: "notes.md".to_owned(),
+			name: "Notes.md".to_owned(),
+		}
+	);
+	applied(&app, &space_id, "notes.md", &member.inserted(4, "!")).await.expect("merges");
+	let reopened = YjsClient::of(&opened(&app, &space_id, "Notes.md").await);
+
+	assert_eq!(on_disk(&root, &space_id, "Notes.md"), "base!");
+	assert_eq!(reopened.text(), "base!");
+	let announced: Vec<String> =
+		heard_count(&heard_edits, 2).into_iter().map(|updated| updated.name).collect();
+	assert_eq!(announced, ["notes.md", "Notes.md"]);
+	assert!(heard_edits.try_recv().is_err());
+}
+
+#[tokio::test]
+async fn a_rename_onto_the_case_variant_of_another_file_keeps_the_numbered_rule() {
+	let app = a_host("rename-case-other");
+	let space_id = a_space(&app, "Work").await;
+	let root = root(app.handle()).expect("the library root resolves");
+	put(&root, &space_id, "notes.md", b"older");
+	put(&root, &space_id, "draft.md", b"draft");
+	let is_case_sensitive = !space_dir(&root, &space_id).join("NOTES.md").exists();
+
+	let item = renamed(&app, &space_id, "draft.md", "NOTES.md").await.expect("the rename lands");
+
+	let landed = if is_case_sensitive { "NOTES.md" } else { "NOTES (2).md" };
+	assert_eq!(item.name, landed);
+	assert_eq!(on_disk(&root, &space_id, "notes.md"), "older");
+	assert_eq!(on_disk(&root, &space_id, landed), "draft");
+	assert!(!space_dir(&root, &space_id).join("draft.md").exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn a_case_only_rename_that_cannot_move_the_file_keeps_it_and_its_state_under_the_former_name() {
+	use std::os::unix::fs::PermissionsExt;
+
+	let root = temp_root();
+	put(&root, SPACE, "notes.md", b"base");
+	let documents = Documents::default();
+	let before = documents.open(&root, SPACE, "notes.md").expect("opens").state;
+	let dir = space_dir(&root, SPACE);
+	let set_mode = |mode| {
+		fs::set_permissions(&dir, fs::Permissions::from_mode(mode)).expect("the mode lands");
+	};
+
+	set_mode(0o500);
+	let refused = documents.rename(&root, SPACE, "notes.md", "Notes.md", |_| {});
+	set_mode(0o700);
+
+	assert!(matches!(refused, Err(LibraryError::Unwritable { .. })), "{refused:?}");
+	assert_eq!(names(&root, SPACE), ["notes.md"]);
+	assert_eq!(file_text(&root, "notes.md"), "base");
+	assert_eq!(state_names(&root, SPACE), ["notes.md.yjs"]);
+	assert_eq!(documents.open(&root, SPACE, "notes.md").expect("opens").state, before);
+}
+
+#[tokio::test]
+async fn an_update_to_the_landed_name_racing_a_rename_returns_only_after_the_rename_is_announced() {
+	let app = a_host("rename-race");
+	let space_id = a_space(&app, "Work").await;
+	let root = root(app.handle()).expect("the library root resolves");
+	put(&root, &space_id, "notes.md", b"base");
+	let order = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+	let (told, applied) = mpsc::channel();
+	let (heard, handle, library) =
+		(std::sync::Arc::clone(&order), app.handle().clone(), root.clone());
+	let shared_space = space_id.clone();
+	app.listen_any(events::LIBRARY_DOCUMENT_RENAMED.name(), move |event| {
+		let renamed: LibraryDocumentRenamed =
+			serde_json::from_str(event.payload()).expect("a rename payload");
+		let (racing, handle, library) =
+			(std::sync::Arc::clone(&heard), handle.clone(), library.clone());
+		let (space_id, told) = (shared_space.clone(), told.clone());
+		let landed = renamed.name.clone();
+		std::thread::spawn(move || {
+			let result = apply_update(&handle, &library, &space_id, &landed, "AAA=");
+			racing.lock().expect("the order").push(format!("updated {landed}"));
+			told.send(result).expect("the test listens");
+		});
+		std::thread::sleep(Duration::from_millis(100));
+		heard.lock().expect("the order").push(format!("renamed {}", renamed.name));
+	});
+
+	renamed(&app, &space_id, "notes.md", "plan.md").await.expect("the rename lands");
+
+	let raced = applied.recv_timeout(Duration::from_secs(5)).expect("the update returns");
+	assert_eq!(raced, Ok(()));
+	assert_eq!(*order.lock().expect("the order"), ["renamed plan.md", "updated plan.md"]);
 }
