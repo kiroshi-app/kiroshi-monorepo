@@ -737,9 +737,9 @@ export const AgentFinished = meta.story({
 	},
 })
 
-const [ATLAS_WRITER] = LIBRARY_WRITERS as [(typeof LIBRARY_WRITERS)[number]]
+const ATLAS_WRITERS = LIBRARY_WRITERS.slice(0, 1)
 
-const LEA = { id: "lea", name: "Léa Martin", caret: ATLAS_WRITER.end }
+const LEA = { id: "lea", name: "Léa Martin", caret: ATLAS_WRITERS[0]?.end ?? 0 }
 
 export const PersonCaretBesideAgent = meta.story({
 	args: {
@@ -747,7 +747,7 @@ export const PersonCaretBesideAgent = meta.story({
 		body: LIBRARY_AGENT_DOCUMENT.body,
 		detail: LIBRARY_AGENT_DOCUMENT.detail,
 		template: undefined,
-		writers: [ATLAS_WRITER],
+		writers: ATLAS_WRITERS,
 		people: [LEA],
 		finished: LIBRARY_FINISHED,
 		onStopAll: fn(),
