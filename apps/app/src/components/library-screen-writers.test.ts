@@ -71,6 +71,8 @@ const host = vi.hoisted(() => ({
 	listeners: new Map<string, Set<Heard>>(),
 	sharedCarets: [] as SharedCaret[],
 	refusesCreates: false,
+	refusesCaretShares: false,
+	caretRefusals: 0,
 }))
 
 const itemNamed = (name: string): LibraryItem => ({
@@ -104,6 +106,10 @@ const LIBRARY_COMMANDS: Record<string, (call: LibraryCall) => unknown> = {
 		return null
 	},
 	library_share_caret: ({ spaceId, name, caret }) => {
+		if (host.refusesCaretShares) {
+			host.caretRefusals += 1
+			throw { kind: "unreachable", detail: "host gone" }
+		}
 		host.sharedCarets.push({ spaceId, name, caret })
 		return null
 	},
@@ -163,7 +169,10 @@ afterEach(() => {
 	host.listeners.clear()
 	host.sharedCarets = []
 	host.refusesCreates = false
+	host.refusesCaretShares = false
+	host.caretRefusals = 0
 	vi.mocked(raiseFailureNotice).mockClear()
+	vi.restoreAllMocks()
 })
 
 const emit = (event: string, payload: unknown, hostId: string | null) => {
@@ -587,6 +596,88 @@ describe("the caret the person shares", () => {
 		expect(nullCaretsShared()).toEqual([
 			{ spaceId: SPACE_ID, name: NOTES, caret: null },
 		])
+	})
+})
+
+const caretNotices = () =>
+	vi
+		.mocked(raiseFailureNotice)
+		.mock.calls.map(([notice]) => notice)
+		.filter(
+			({ title, report }) =>
+				title === i18n.t("chat:screen.notice.failed") &&
+				report?.context?.raisedIn === "use-library-document-session",
+		)
+
+const settle = () =>
+	act(async () => {
+		await new Promise((resolve) => setTimeout(resolve))
+	})
+
+const refuseCaretSharesAt = async (
+	field: HTMLTextAreaElement,
+	offsets: number[],
+) => {
+	host.refusesCaretShares = true
+	const refusedBefore = host.caretRefusals
+	for (const offset of offsets) {
+		placeCaret(field, offset)
+		await settle()
+	}
+	await waitFor(() =>
+		expect(host.caretRefusals - refusedBefore).toBe(offsets.length),
+	)
+}
+
+const silenceConsoleErrors = () =>
+	vi.spyOn(console, "error").mockImplementation(() => undefined)
+
+describe("a caret the host refuses to share", () => {
+	it("raises one notice for a burst of refusals and logs each of them", async () => {
+		const consoleError = silenceConsoleErrors()
+		await renderLibraryScreen(false)
+		const [intro] = await openDocument(NOTES)
+
+		await refuseCaretSharesAt(intro as HTMLTextAreaElement, [2, 5, 8])
+
+		await waitFor(() => expect(caretNotices()).toHaveLength(1))
+		expect(caretNotices()[0]?.report?.context?.space).toBe(SPACE_ID)
+		expect(
+			consoleError.mock.calls.filter(
+				([line]) => line === "library: the caret could not be shared",
+			),
+		).toHaveLength(3)
+	})
+
+	it("raises a new notice on the first refusal after a share succeeds", async () => {
+		silenceConsoleErrors()
+		await renderLibraryScreen(false)
+		const [intro] = await openDocument(NOTES)
+		const field = intro as HTMLTextAreaElement
+		await refuseCaretSharesAt(field, [2, 5])
+		await waitFor(() => expect(caretNotices()).toHaveLength(1))
+
+		host.refusesCaretShares = false
+		placeCaret(field, 7)
+		await waitFor(() => expect(host.sharedCarets).toHaveLength(1))
+		await refuseCaretSharesAt(field, [3, 9])
+
+		await waitFor(() => expect(caretNotices()).toHaveLength(2))
+	})
+
+	it("starts a new burst when another document opens", async () => {
+		silenceConsoleErrors()
+		await renderLibraryScreen(false)
+		const [intro] = await openDocument(NOTES)
+		await refuseCaretSharesAt(intro as HTMLTextAreaElement, [2, 5])
+		await goBack()
+		await settle()
+		await waitFor(() => expect(caretNotices()).toHaveLength(1))
+
+		const [plan] = await openDocument(PLAN)
+		await refuseCaretSharesAt(plan as HTMLTextAreaElement, [4])
+
+		await waitFor(() => expect(caretNotices()).toHaveLength(2))
 	})
 })
 
