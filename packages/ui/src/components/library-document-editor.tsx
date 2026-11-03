@@ -678,6 +678,8 @@ type SelectionActions = {
 	onList?: FormatAction
 }
 
+type SelectionGesture = "pointer" | "keys"
+
 type SelectedText = {
 	id: string
 	start: number
@@ -840,7 +842,7 @@ const LibraryDocumentEditor = ({
 	const frame = useRef<HTMLDivElement>(null)
 	const [selected, setSelected] = useState<SelectedText>()
 	const [toolbarMode, setToolbarMode] = useState<ToolbarMode>("bar")
-	const selectingBy = useRef<"pointer" | "keys">(undefined)
+	const selectingBy = useRef<SelectionGesture>(undefined)
 	const [heldListAnchors, setHeldListAnchors] = useState<
 		ReadonlyMap<string, string>
 	>(() => listAnchorsOf(runsOf(blocks), new Map()))
@@ -967,8 +969,8 @@ const LibraryDocumentEditor = ({
 			)
 				selectingBy.current = "keys"
 		}
-		const finishSelectionBy = (way: "pointer" | "keys") => {
-			if (selectingBy.current !== way) return
+		const finishSelectionBy = (gesture: SelectionGesture) => {
+			if (selectingBy.current !== gesture) return
 			selectingBy.current = undefined
 			follow()
 		}
