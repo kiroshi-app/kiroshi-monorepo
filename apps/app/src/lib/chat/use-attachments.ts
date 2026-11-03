@@ -8,6 +8,7 @@ import type {
 import { type AttachmentsController, ownerKey } from "./attachments-controller"
 import { watchConversationDrags } from "./conversation-drags"
 
+import type { ReplyLink } from "../bindings"
 import { useControllerState } from "../use-controller"
 
 export type StagedFiles = {
@@ -16,7 +17,7 @@ export type StagedFiles = {
 	isDropTarget: boolean
 	stage: (files: File[]) => void
 	remove: (id: string) => void
-	submit: (text: string, repliedToMessageId?: string) => Promise<boolean>
+	submit: (text: string, replyLinks?: ReplyLink[]) => Promise<boolean>
 	dismissRefusal: () => void
 }
 
@@ -34,8 +35,8 @@ export function useAttachments(
 		() => ({
 			stage: (files: File[]) => controller.stage(owner, files),
 			remove: (id: string) => controller.remove(owner, id),
-			submit: (text: string, repliedToMessageId?: string) =>
-				controller.submit(owner, text, repliedToMessageId),
+			submit: (text: string, replyLinks?: ReplyLink[]) =>
+				controller.submit(owner, text, replyLinks),
 			dismissRefusal: () => controller.dismissRefusal(owner),
 		}),
 		[controller, owner],

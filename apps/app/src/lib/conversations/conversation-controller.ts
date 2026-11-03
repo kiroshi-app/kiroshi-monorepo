@@ -61,6 +61,7 @@ import {
 
 import {
 	MAX_SUMMONS_PER_CHAIN,
+	type ReplyLink,
 	type SummonsDropped,
 	type SummonsDropReason,
 } from "../bindings"
@@ -134,6 +135,7 @@ export type RefusedMessage = {
 	id: string
 	text: string
 	repliedToMessageId: string | null
+	replyLinks: ReplyLink[]
 }
 
 export type PendingPrompt =
@@ -176,7 +178,7 @@ export type ConversationController = {
 	landOn: (seq: number) => Promise<TranscriptMessage[]>
 	follow: (isAtLiveEdge: boolean) => void
 	leave: () => void
-	send: (text: string, repliedToMessageId?: string) => Promise<void>
+	send: (text: string, replyLinks?: ReplyLink[]) => Promise<void>
 	sendAgain: (messageId: string) => Promise<void>
 	reportRun: (draft: RunReportDraft) => Promise<string>
 	relayRunReport: (scope: RuntimeScope, message: ChatMessage) => Promise<void>
@@ -232,6 +234,7 @@ type SentPrompt = {
 	conversationId: string
 	content: string
 	answered: TranscriptMessage | null
+	replyLinks: ReplyLink[]
 }
 
 type HandedMention = {
@@ -1250,6 +1253,7 @@ export const createConversationController = (
 				turnId: said.turnId,
 				authorBotId: null,
 				repliedToMessageId: said.repliedToMessageId,
+				replyLinks: said.replyLinks,
 				content: said.content,
 				createdAt: said.createdAt,
 			},
@@ -1269,6 +1273,7 @@ export const createConversationController = (
 		conversationId,
 		content,
 		answered,
+		replyLinks,
 	}: SentPrompt): TranscriptMessage => ({
 		id: turn.promptId,
 		conversationId,
@@ -1282,6 +1287,7 @@ export const createConversationController = (
 		authorAccountId: senderAccountId(),
 		authorName: null,
 		repliedToMessageId: answered?.id ?? null,
+		replyLinks,
 		runtimeSessionId: null,
 	})
 
@@ -1439,6 +1445,7 @@ export const createConversationController = (
 			id: said.id,
 			text,
 			repliedToMessageId: said.repliedToMessageId,
+			replyLinks: said.replyLinks ?? [],
 		}
 		sync()
 	}
@@ -1449,7 +1456,7 @@ export const createConversationController = (
 		}
 	}
 
-	const send = async (text: string, repliedToMessageId?: string) => {
+	const send = async (text: string, replyLinks: ReplyLink[] = []) => {
 		const trimmed = text.trim()
 		if (!conversation || trimmed.length === 0) {
 			return
@@ -1458,9 +1465,15 @@ export const createConversationController = (
 		const isNamingItself =
 			isNameless(conversation) && current().messages.length === 0
 		const content = toMentionTokens(trimmed, mentionBots())
-		const answered = messageAnsweredIn(conversationId, repliedToMessageId)
+		const answered = messageAnsweredIn(conversationId, replyLinks[0]?.messageId)
 		const turn: OpenTurn = { id: newId(), promptId: newId() }
-		const said = sentMessage({ turn, conversationId, content, answered })
+		const said = sentMessage({
+			turn,
+			conversationId,
+			content,
+			answered,
+			replyLinks,
+		})
 
 		if (!(await loadLatest())) {
 			refuse(said, trimmed)
@@ -1495,7 +1508,7 @@ export const createConversationController = (
 	const sendAgain = (messageId: string) => {
 		const held = refused
 		return held?.id === messageId
-			? send(held.text, held.repliedToMessageId ?? undefined)
+			? send(held.text, held.replyLinks)
 			: Promise.resolve()
 	}
 

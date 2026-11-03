@@ -89,6 +89,7 @@ import {
 	type SessionApplications,
 	SessionApplicationsContext,
 } from "@/lib/applications/use-session-application"
+import type { ReplyLink } from "@/lib/bindings"
 import { useRosterClock } from "@/lib/bots/use-roster-clock"
 import {
 	type AnswerActions,
@@ -112,6 +113,7 @@ import { type AskedBubble, askedQuestionOf } from "@/lib/chat/question-run"
 import {
 	emptyStateStatusFor,
 	opensNewDay,
+	quotedTargetsOf,
 	type ReplyTarget,
 	type RunPresentation,
 	runPresentationsOf,
@@ -352,8 +354,8 @@ const useReplyChips = (
 	useMemo(
 		() =>
 			targets.map((target) => {
-				const { author, excerpt } = toQuote(target)
-				return { id: target.messageId, author, excerpt }
+				const { author, excerpt, isExcerpt } = toQuote(target)
+				return { id: target.messageId, author, excerpt, isExcerpt }
 			}),
 		[targets, toQuote],
 	)
@@ -707,9 +709,7 @@ const ThreadRun = ({
 					onReply={onReply}
 					onRetry={onRetry}
 					pinned={pins.isPinned(row.messageId)}
-					quoted={
-						row.quotedMessageId ? quotes.get(row.quotedMessageId) : undefined
-					}
+					quoted={quotedTargetsOf(row.replyLinks, quotes)}
 					readerName={readerName}
 					row={row}
 					state={row.messageId === rejectedPromptId ? "failed" : row.completion}
@@ -1487,8 +1487,8 @@ const useThreadActions = (
 		open: thread.kind === "conversation" ? thread.controller.open : null,
 	})
 	const submitSeated = useCallback(
-		async (text: string, [storedReplyId]: string[]) =>
-			(await seatMentioned(text)) && staged.submit(text, storedReplyId),
+		async (text: string, replyLinks: ReplyLink[]) =>
+			(await seatMentioned(text)) && staged.submit(text, replyLinks),
 		[seatMentioned, staged.submit],
 	)
 	const { send, isSentInMount } = useSentInMount({
@@ -1785,7 +1785,6 @@ function ThreadView(props: ThreadViewProps) {
 	const imageViewer = useAnswerImageViewer()
 	const answerActions: AnswerActions = {
 		insert: (text) => view.promptRef.current?.insert(text),
-		quote: (selection) => view.promptRef.current?.quote(selection),
 		openImage: imageViewer.open,
 	}
 	const joinedHost = useContext(OpenJoinedHostContext)

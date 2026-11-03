@@ -20,16 +20,16 @@ export const createAttachmentsPort = ({
 			? chat.storeAttachments(owner.id, attachments)
 			: driver.storeAttachments(owner.id, attachments),
 
-	send: (owner, text, repliedToMessageId) => {
+	send: (owner, text, replyLinks) => {
 		if (owner.kind === "bot") {
-			void chat.sendTo(owner.id, text, repliedToMessageId)
+			void chat.sendTo(owner.id, text, replyLinks)
 			return true
 		}
 		const runtime = runtimes.heldFor(owner.id)
 		if (!runtime) {
 			return false
 		}
-		void runtime.send(text, repliedToMessageId)
+		void runtime.send(text, replyLinks)
 		return true
 	},
 })

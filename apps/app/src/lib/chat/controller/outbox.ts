@@ -19,6 +19,7 @@ import {
 import { isPostedRequest } from "../posted-question"
 import { answersFromText } from "../question-message"
 import type { CancelOutcome, RuntimeScope } from "../../agent/contract"
+import type { ReplyLink } from "../../bindings"
 import { keyOf } from "../../conversations/foreign-turns"
 
 type OutboxParts = {
@@ -58,7 +59,7 @@ export const createOutbox = (
 			}
 			dispatch(bot, { type: "outboxEntryRemoved", id: entry.id })
 			const outcome = await claim(bot, () =>
-				sendPrompt(bot, entry.text, entry.repliedToMessageId ?? undefined),
+				sendPrompt(bot, entry.text, entry.replyLinks),
 			)
 			if (outcome === "unwritten") {
 				dispatch(bot, { type: "promptReturned", entry })
@@ -80,7 +81,11 @@ export const createOutbox = (
 			})
 	}
 
-	const send = async (bot: BotChat, text: string, repliedTo?: string) => {
+	const send = async (
+		bot: BotChat,
+		text: string,
+		replyLinks: ReplyLink[] = [],
+	) => {
 		const trimmed = text.trim()
 		if (trimmed.length === 0) {
 			return
@@ -94,7 +99,7 @@ export const createOutbox = (
 			await runInOpenThread(bot)
 		}
 		const outcome = canSend(bot)
-			? await claim(bot, () => sendPrompt(bot, trimmed, repliedTo))
+			? await claim(bot, () => sendPrompt(bot, trimmed, replyLinks))
 			: "unwritten"
 		if (outcome === "unwritten") {
 			dispatch(bot, {
@@ -102,7 +107,7 @@ export const createOutbox = (
 				entry: {
 					id: newId(),
 					text: trimmed,
-					repliedToMessageId: repliedTo ?? null,
+					replyLinks,
 				},
 			})
 		}
@@ -118,11 +123,7 @@ export const createOutbox = (
 		const held = bot.state.outbox
 		dispatch(bot, { type: "outboxCleared" })
 		for (const entry of held) {
-			const said = promptRow(
-				conversationId,
-				entry.text,
-				entry.repliedToMessageId ?? undefined,
-			)
+			const said = promptRow(conversationId, entry.text, entry.replyLinks)
 			write(
 				bot,
 				() => storePrompt(said, []),

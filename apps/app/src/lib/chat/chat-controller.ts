@@ -3,6 +3,7 @@ import { type ChatState, initialChatState } from "./chat-state"
 import type { ChatDriver } from "./driver"
 import type { PostedAnswerHandler, PostedRequest } from "./posted-question"
 
+import type { ReplyLink } from "../bindings"
 import type {
 	CheckReport,
 	PermissionDecision,
@@ -69,11 +70,11 @@ export type ChatController = {
 	loadLatest: () => Promise<boolean>
 	landOn: (seq: number) => Promise<TranscriptMessage[]>
 	follow: (isAtLiveEdge: boolean) => void
-	send: (text: string, repliedToMessageId?: string) => Promise<void>
+	send: (text: string, replyLinks?: ReplyLink[]) => Promise<void>
 	sendTo: (
 		botId: string,
 		text: string,
-		repliedToMessageId?: string,
+		replyLinks?: ReplyLink[],
 	) => Promise<void>
 	reference: (messageId: string) => Promise<MessageReference | null>
 	pin: (messageId: string, blockIndex: number) => Promise<void>
@@ -207,15 +208,12 @@ export function createChatController(
 			onSelected((bot) => paging.landOn(bot, seq), NO_LANDED_MESSAGES),
 		follow: (isAtLiveEdge) =>
 			forSelected((bot) => paging.follow(bot, isAtLiveEdge)),
-		send: (text, repliedToMessageId) =>
-			onSelected(
-				(bot) => outbox.send(bot, text, repliedToMessageId),
-				undefined,
-			),
-		sendTo: async (botId, text, repliedToMessageId) => {
+		send: (text, replyLinks) =>
+			onSelected((bot) => outbox.send(bot, text, replyLinks), undefined),
+		sendTo: async (botId, text, replyLinks) => {
 			const bot = bots.get(botId)
 			if (bot) {
-				await outbox.send(bot, text, repliedToMessageId)
+				await outbox.send(bot, text, replyLinks)
 			}
 		},
 		reference: (messageId) =>

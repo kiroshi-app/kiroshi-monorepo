@@ -1,6 +1,8 @@
 import { useCallback, useState } from "react"
 
-type Send = (text: string, repliedToMessageIds: string[]) => Promise<boolean>
+import type { ReplyLink } from "../bindings"
+
+type Send = (text: string, replyLinks: ReplyLink[]) => Promise<boolean>
 
 type SentInMountInput = {
 	threadId: string
@@ -30,12 +32,12 @@ export const useSentInMount = ({
 	}
 
 	const markedSend = useCallback<Send>(
-		(text, repliedToMessageIds) => {
+		(text, replyLinks) => {
 			setMark({
 				threadId,
 				priorMessageIds: new Set(messages.map(({ id }) => id)),
 			})
-			return send(text, repliedToMessageIds)
+			return send(text, replyLinks)
 		},
 		[threadId, messages, send],
 	)

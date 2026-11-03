@@ -8,6 +8,7 @@ import { messageWithAttachments } from "./message-attachments"
 import type { MessageAuthorship } from "./thread-authorship"
 import { heldWorkFor, type WorkingState, workingFor } from "./working-kind"
 
+import type { ReplyLink } from "../bindings"
 import type { ConnectionState, TransportError } from "../agent/contract"
 import { agentNameOf } from "../agent/messages"
 import type { MessageReference } from "../conversations/store-contract"
@@ -26,6 +27,7 @@ export type TranscriptRow = MessageAuthorship & {
 	turnId: string
 	continuesTurnId: string | null
 	quotedMessageId: string | null
+	replyLinks: ReplyLink[]
 	authorBotId: string | null
 	role: TranscriptRole
 	text: string
@@ -68,6 +70,20 @@ const SESSION_ENDING: Record<TransportError["kind"], boolean> = {
 
 const RUN_GAP_MS = 5 * 60_000
 
+const NO_REPLY_LINKS: ReplyLink[] = []
+
+function replyLinksOf(message: TranscriptMessage): ReplyLink[] {
+	if (message.role !== "user") {
+		return NO_REPLY_LINKS
+	}
+	if (message.replyLinks?.length) {
+		return message.replyLinks
+	}
+	return message.repliedToMessageId
+		? [{ messageId: message.repliedToMessageId, excerpt: null }]
+		: NO_REPLY_LINKS
+}
+
 function toRow(
 	message: TranscriptMessage,
 	fields: Pick<TranscriptRow, "text" | "completion">,
@@ -78,6 +94,7 @@ function toRow(
 		continuesTurnId: message.continuesTurnId ?? null,
 		quotedMessageId:
 			message.role === "user" ? message.repliedToMessageId : null,
+		replyLinks: replyLinksOf(message),
 		authorBotId: message.authorBotId,
 		authorAccountId: message.authorAccountId,
 		authorName: message.authorName,
@@ -213,6 +230,7 @@ export type ReplyTarget = MessageAuthorship & {
 	messageId: string
 	role: TranscriptRole
 	excerpt: string
+	isExcerpt?: boolean
 	authorBotId: string | null
 }
 
@@ -249,11 +267,32 @@ export function replyTargetOfReference(
 	}
 }
 
+const quotedTargetOf = (
+	link: ReplyLink,
+	quotes: ReadonlyMap<string, ReplyTarget>,
+): ReplyTarget[] => {
+	const target = quotes.get(link.messageId)
+	if (!target) {
+		return []
+	}
+	return link.excerpt
+		? [{ ...target, excerpt: link.excerpt, isExcerpt: true }]
+		: [target]
+}
+
+export function quotedTargetsOf(
+	links: ReplyLink[],
+	quotes: ReadonlyMap<string, ReplyTarget>,
+): ReplyTarget[] | undefined {
+	const targets = links.flatMap((link) => quotedTargetOf(link, quotes))
+	return targets.length > 0 ? targets : undefined
+}
+
 export function quotedMessageIdsIn(messages: TranscriptMessage[]): string[] {
 	const ids = new Set<string>()
 	for (const message of messages) {
-		if (message.role === "user" && message.repliedToMessageId) {
-			ids.add(message.repliedToMessageId)
+		for (const { messageId } of replyLinksOf(message)) {
+			ids.add(messageId)
 		}
 	}
 	return [...ids]

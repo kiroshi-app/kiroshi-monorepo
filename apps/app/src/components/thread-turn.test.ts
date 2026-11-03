@@ -21,7 +21,7 @@ import {
 	AnswerActionsContext,
 } from "@/lib/chat/answer-actions"
 import { attachmentBlock } from "@/lib/chat/message-attachments"
-import type { TranscriptRow } from "@/lib/chat/screen-model"
+import type { ReplyTarget, TranscriptRow } from "@/lib/chat/screen-model"
 import {
 	HOSTED_SIGNED_OUT,
 	type MessageAuthorship,
@@ -62,6 +62,7 @@ const rowOf = (role: TranscriptRole, text: string): TranscriptRow => ({
 	turnId: "t-1",
 	continuesTurnId: null,
 	quotedMessageId: null,
+	replyLinks: [],
 	authorBotId: role === "assistant" ? "bot-1" : null,
 	authorAccountId: null,
 	authorName: null,
@@ -76,6 +77,7 @@ type TurnSetup = {
 	authorship?: ThreadAuthorship
 	state?: TurnState
 	onRetry?: (messageId: string) => void
+	onReply?: (target: ReplyTarget) => void
 	actions?: AnswerActions
 }
 
@@ -87,6 +89,7 @@ const renderTurn = (
 		authorship = HOSTED_SIGNED_OUT,
 		state = "complete",
 		onRetry,
+		onReply = () => undefined,
 		actions,
 	}: TurnSetup = {},
 ) => {
@@ -105,7 +108,7 @@ const renderTurn = (
 			onJump: () => undefined,
 		}),
 		onPin: () => undefined,
-		onReply: () => undefined,
+		onReply,
 	}
 	return render(
 		createElement(
@@ -294,7 +297,6 @@ describe("whose user message a bubble shows", () => {
 
 const actionsSpy = () => ({
 	insert: vi.fn<AnswerActions["insert"]>(),
-	quote: vi.fn<AnswerActions["quote"]>(),
 	openImage: vi.fn<AnswerActions["openImage"]>(),
 })
 
@@ -391,26 +393,6 @@ describe("an agent answer carrying rich blocks", () => {
 		)
 	})
 
-	it("quotes a selection of the answer with the name of its agent", () => {
-		const actions = actionsSpy()
-		renderTurn("assistant", "The sync dedupes on the client id.", {
-			actions,
-			author: { authorAccountId: null, authorName: "Atlas", writtenFrom: null },
-		})
-		const passage = screen.getByText("The sync dedupes on the client id.")
-		const range = document.createRange()
-		range.selectNodeContents(passage)
-		document.getSelection()?.removeAllRanges()
-		document.getSelection()?.addRange(range)
-
-		fireEvent.pointerUp(passage)
-
-		expect(actions.quote).toHaveBeenCalledWith({
-			agentName: "Atlas",
-			text: "The sync dedupes on the client id.",
-		})
-	})
-
 	it("holds the pending frame while the agent is still writing the block", () => {
 		renderTurn("assistant", OPTIONS_ANSWER.replace(/\n```$/, ""), {
 			actions: actionsSpy(),
@@ -486,6 +468,96 @@ describe("an agent answer carrying a web page", () => {
 	})
 })
 
+const selectAll = (text: string) => {
+	const passage = screen.getByText(text)
+	const range = document.createRange()
+	range.selectNodeContents(passage)
+	document.getSelection()?.removeAllRanges()
+	document.getSelection()?.addRange(range)
+	fireEvent.pointerUp(passage)
+}
+
+const pressOnSelection = (action: "Reply" | "Copy") =>
+	fireEvent.click(
+		within(screen.getByRole("toolbar", { name: "Selected text" })).getByRole(
+			"button",
+			{ name: action },
+		),
+	)
+
+describe("a selection inside a message", () => {
+	it("replies to the selected excerpt of an agent answer", () => {
+		const onReply = vi.fn<(target: ReplyTarget) => void>()
+		renderTurn("assistant", "The sync dedupes on the client id.", {
+			actions: actionsSpy(),
+			author: { authorAccountId: null, authorName: "Atlas", writtenFrom: null },
+			onReply,
+		})
+
+		selectAll("The sync dedupes on the client id.")
+		pressOnSelection("Reply")
+
+		expect(onReply).toHaveBeenCalledWith(
+			expect.objectContaining({
+				messageId: "m-1",
+				role: "assistant",
+				excerpt: "The sync dedupes on the client id.",
+				isExcerpt: true,
+			}),
+		)
+	})
+
+	it("replies to the selected excerpt of your own message", () => {
+		const onReply = vi.fn<(target: ReplyTarget) => void>()
+		renderTurn("user", "Ship it on Friday.", { onReply })
+
+		selectAll("Ship it on Friday.")
+		pressOnSelection("Reply")
+
+		expect(onReply).toHaveBeenCalledWith(
+			expect.objectContaining({
+				messageId: "m-1",
+				role: "user",
+				excerpt: "Ship it on Friday.",
+				isExcerpt: true,
+			}),
+		)
+	})
+
+	it("replies to the whole message from the author line", () => {
+		const onReply = vi.fn<(target: ReplyTarget) => void>()
+		renderTurn("user", "Ship it on Friday.", { onReply })
+
+		fireEvent.click(screen.getByRole("button", { name: "Reply" }))
+
+		expect(onReply).toHaveBeenCalledWith(
+			expect.objectContaining({
+				messageId: "m-1",
+				excerpt: "Ship it on Friday.",
+			}),
+		)
+		expect(onReply.mock.calls[0]?.[0].isExcerpt).toBeUndefined()
+	})
+
+	it("copies exactly the selected text and replies to nothing", async () => {
+		const writeText = vi
+			.spyOn(navigator.clipboard, "writeText")
+			.mockResolvedValue()
+		const onReply = vi.fn<(target: ReplyTarget) => void>()
+		renderTurn("assistant", "The sync dedupes on the client id.", {
+			actions: actionsSpy(),
+			onReply,
+		})
+
+		selectAll("The sync dedupes on the client id.")
+		pressOnSelection("Copy")
+
+		expect(writeText).toHaveBeenCalledWith("The sync dedupes on the client id.")
+		expect(onReply).not.toHaveBeenCalled()
+		writeText.mockRestore()
+	})
+})
+
 describe("a message of yours that did not send", () => {
 	it("shows it as not sent and sends that same message again on Retry", () => {
 		const onSendAgain = vi.fn<(messageId: string) => void>()
@@ -495,6 +567,7 @@ describe("a message of yours that did not send", () => {
 					id: "m-9",
 					text: "Book it for 20:00.",
 					repliedToMessageId: null,
+					replyLinks: [],
 				},
 				readerName: "Ada Moreau",
 				onSendAgain,

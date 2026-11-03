@@ -284,59 +284,5 @@ describe("ThreadComposer", () => {
 
 			expect(field().value).toBe("Thanks.\nDual write")
 		})
-
-		it("holds a quote over the draft, sends nothing, and keeps the draft", () => {
-			renderLinked()
-			type("Why this one?")
-
-			act(() =>
-				promptRef.current?.quote({ agentName: "Atlas", text: "Dedupe on id" }),
-			)
-
-			expect(screen.getByText("Dedupe on id")).toBeTruthy()
-			expect(field().value).toBe("Why this one?")
-			expect(sentPrompts).toEqual([])
-		})
-
-		it("holds the quote in the quote slot, not among the attachments", () => {
-			renderLinked()
-
-			act(() =>
-				promptRef.current?.quote({ agentName: "Atlas", text: "Dedupe on id" }),
-			)
-
-			const quote = screen.getByRole("group", {
-				name: "Selection quoted from Atlas",
-			})
-			expect(quote.closest('[data-slot="prompt-input-quote"]')).not.toBeNull()
-		})
-
-		it("sends the quote ahead of the message, then lets it go", async () => {
-			renderLinked()
-			act(() =>
-				promptRef.current?.quote({ agentName: "Atlas", text: "Dedupe on id" }),
-			)
-			type("Why this one?")
-
-			await send()
-
-			expect(sentPrompts).toEqual(["> Dedupe on id\n\nWhy this one?"])
-			expect(screen.queryByText("Dedupe on id")).toBeNull()
-		})
-
-		it("drops the quote when its cross is pressed and keeps the draft", () => {
-			renderLinked()
-			type("Why this one?")
-			act(() =>
-				promptRef.current?.quote({ agentName: "Atlas", text: "Dedupe on id" }),
-			)
-
-			fireEvent.click(
-				screen.getByRole("button", { name: "Remove the selection" }),
-			)
-
-			expect(screen.queryByText("Dedupe on id")).toBeNull()
-			expect(field().value).toBe("Why this one?")
-		})
 	})
 })
