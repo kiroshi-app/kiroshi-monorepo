@@ -105,7 +105,7 @@ export const createJoinedHosts = ({
 		reportFailure,
 		reportJoinRefusal,
 		isOnScreen: (id) => requested === id,
-		namingOf: (id) => (requested === id ? requestedNamingOf() : {}),
+		namingOf: (id) => (requested === id ? requestedNamingOf() : UNNAMED()),
 	})
 	const { invoke, invokeOn, invokeOnThisComputer } = createJoinedHostsInvoke({
 		store,

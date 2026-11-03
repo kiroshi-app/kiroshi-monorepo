@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 
+import type { NoticeMessage } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import {
@@ -68,13 +69,8 @@ const STUDIO_NAMING = { space: "Studio", host: "Lea" }
 
 const UNNAMED_WORDS = ["the host", "this space"]
 
-const textOf = ({
-	title,
-	description,
-}: {
-	title: string
-	description?: string
-}) => `${title} ${description ?? ""}`
+const textOf = ({ title, description }: NoticeMessage) =>
+	`${title} ${description ?? ""}`
 
 describe("a notice naming its joined space", () => {
 	it("names the host in the waiting title and reason line", () => {
