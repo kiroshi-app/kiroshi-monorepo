@@ -230,15 +230,14 @@ const BAR_ACTION = cn(
 	"size-8 bg-foreground/8 hover:bg-foreground/14",
 )
 
-const BAR_BUTTON_ACTIONS = ["onDownload", "onCopy"] as const
+const BAR_BUTTON_ACTIONS = new Set<string>(["onDownload", "onCopy"])
 
 const barMenuActionsOf = <Item,>(
 	handlers: LibraryItemHandlers<Item>,
 ): LibraryItemHandlers<Item> =>
 	Object.fromEntries(
 		Object.entries(handlers).filter(
-			([handler]) =>
-				!(BAR_BUTTON_ACTIONS as readonly string[]).includes(handler),
+			([handler]) => !BAR_BUTTON_ACTIONS.has(handler),
 		),
 	)
 
@@ -277,10 +276,10 @@ const LibraryItemBarActions = <Item extends LibraryMenuSubject>({
 		return () => window.clearTimeout(timer)
 	}, [copiedItem])
 
-	const copy = async (copied: Item) => {
+	const copy = async () => {
 		try {
-			await onCopy?.(copied)
-			setCopiedItem(copied)
+			await onCopy?.(item)
+			setCopiedItem(item)
 		} catch {
 			setCopiedItem(null)
 		}
@@ -306,7 +305,7 @@ const LibraryItemBarActions = <Item extends LibraryMenuSubject>({
 				<TooltipButton
 					aria-label={t(`library.${surface}.copy`)}
 					className={BAR_ACTION}
-					onClick={() => copy(item)}
+					onClick={copy}
 					size="icon"
 					tooltip={t(`library.${surface}.copy`)}
 					tooltipSide="bottom"
