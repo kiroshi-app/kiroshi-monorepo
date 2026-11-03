@@ -18,6 +18,7 @@ import { i18n } from "@workspace/ui/lib/i18n"
 
 import { LibraryDropTarget } from "@/components/library-drop-target"
 import type { Space } from "@/lib/bindings"
+import type { Bot } from "@/lib/conversations/store-contract"
 import { matchesQuery, toShownItem } from "@/lib/library/library-items"
 import { useCreateLibraryDocument } from "@/lib/library/use-create-library-document"
 import {
@@ -25,6 +26,7 @@ import {
 	useLibraryActions,
 } from "@/lib/library/use-library-actions"
 import { useLibraryDocumentSession } from "@/lib/library/use-library-document-session"
+import { useLibraryDocumentWriters } from "@/lib/library/use-library-document-writers"
 import { useLibraryImageSources } from "@/lib/library/use-library-image-sources"
 import { useLibraryImports } from "@/lib/library/use-library-imports"
 import { useLibraryItems } from "@/lib/library/use-library-items"
@@ -32,6 +34,7 @@ import { useLibraryItems } from "@/lib/library/use-library-items"
 type LibraryScreenProps = {
 	spaceId: string
 	isJoined: boolean
+	bots: Bot[]
 	spaceTint?: Space["colour"]
 }
 
@@ -52,6 +55,7 @@ type NamedItem = { id: string }
 export const LibraryScreen = ({
 	spaceId,
 	isJoined,
+	bots,
 	spaceTint,
 }: LibraryScreenProps) => {
 	const library = useLibraryItems(spaceId)
@@ -74,6 +78,13 @@ export const LibraryScreen = ({
 	const openedDocument = opened?.kind === "document" ? opened : null
 	const { document, edit, hasFailedToOpen, closeAndRelist } =
 		useLibraryDocumentSession(spaceId, openedDocument?.name ?? null)
+	const writers = useLibraryDocumentWriters({
+		spaceId,
+		name: openedDocument?.name ?? null,
+		document,
+		bots,
+		title: openedDocument?.title ?? "",
+	})
 	if (openedDocument && hasFailedToOpen) {
 		setOpened(null)
 	}
@@ -143,13 +154,14 @@ export const LibraryScreen = ({
 			<LibraryDocumentEditor
 				body={document.markdown}
 				detail={openedDocument.detail}
-				key={document.version}
+				key={openedDocument.name}
 				onBack={leaveDocument}
 				onBodyChange={edit}
 				onMore={reveal && (() => reveal({ id: openedDocument.name }))}
 				onTitleChange={retitle}
 				template={openedDocument.template}
 				title={openedDocument.title}
+				writers={writers}
 			/>
 		)
 	}

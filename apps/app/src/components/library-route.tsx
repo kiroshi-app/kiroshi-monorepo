@@ -14,6 +14,7 @@ export const LibraryRoute = () => {
 		<ContentCard>
 			{spaceRowId && rosteredHostSpaceId ? (
 				<LibraryScreen
+					bots={rosterView.bots}
 					isJoined={isJoinedRowId(spaceRowId)}
 					key={spaceRowId}
 					spaceId={rosteredHostSpaceId}

@@ -1292,6 +1292,7 @@ describe("WorkspaceBody library", () => {
 		spaceRowId = SPACE,
 	}: LibraryPlace = {}) =>
 		createElement(LibraryScreen, {
+			bots: [],
 			isJoined: isJoinedRowId(spaceRowId),
 			key: spaceRowId,
 			spaceId,

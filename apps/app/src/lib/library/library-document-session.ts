@@ -108,10 +108,25 @@ export const createLibraryDocumentSession = ({
 		return text.toString() !== before
 	}
 
+	const offsetOf = (caret: string) => {
+		const position = Y.createAbsolutePositionFromRelativePosition(
+			Y.decodeRelativePosition(bytesOf(caret)),
+			doc,
+		)
+		return position?.type === text ? position.index : null
+	}
+
+	const subscribe = (onChange: () => void) => {
+		doc.on("update", onChange)
+		return () => doc.off("update", onChange)
+	}
+
 	return {
 		markdown: () => text.toString(),
+		subscribe,
 		edit: (markdown: string) => replaceChangedRange(doc, markdown),
 		receive,
 		flush,
+		offsetOf,
 	}
 }

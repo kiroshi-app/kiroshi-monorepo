@@ -451,7 +451,11 @@ const DOCUMENT = libraryItemOf("notes.txt", "document")
 
 const renderLibraryScreen = async (isJoined: boolean) => {
 	const { container } = render(
-		createElement(LibraryScreen, { spaceId: LIBRARY_SPACE_ID, isJoined }),
+		createElement(LibraryScreen, {
+			spaceId: LIBRARY_SPACE_ID,
+			isJoined,
+			bots: [],
+		}),
 		{ wrapper: createQueryTestWrapper().wrapper },
 	)
 	const shown = within(container)

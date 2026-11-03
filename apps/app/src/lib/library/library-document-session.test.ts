@@ -159,3 +159,60 @@ describe("the seed of a new Library document", () => {
 		)
 	})
 })
+
+const hostDocOf = (markdown: string) => {
+	const doc = new Y.Doc()
+	doc.getText("markdown").insert(0, markdown)
+	return doc
+}
+
+const caretIn = (doc: Y.Doc, index: number) =>
+	base64Of(
+		Y.encodeRelativePosition(
+			Y.createRelativePositionFromTypeIndex(doc.getText("markdown"), index, -1),
+		),
+	)
+
+const changeOn = (doc: Y.Doc, change: (text: Y.Text) => void) => {
+	const before = Y.encodeStateVector(doc)
+	change(doc.getText("markdown"))
+	return base64Of(Y.encodeStateAsUpdate(doc, before))
+}
+
+describe("a caret the host shares in a Library document", () => {
+	it("stands at the offset it sticks to, and moves with text arriving before it", () => {
+		const host = hostDocOf("Hello world")
+		const session = createLibraryDocumentSession({
+			state: base64Of(Y.encodeStateAsUpdate(host)),
+			send: async () => null,
+		})
+		const caret = caretIn(host, 5)
+
+		expect(session.offsetOf(caret)).toBe(5)
+
+		session.receive(
+			changeOn(host, (text) => {
+				text.insert(0, ">> ")
+				text.insert(text.length, "!")
+			}),
+		)
+
+		expect(session.offsetOf(caret)).toBe(8)
+	})
+
+	it("stands nowhere until the text it sticks to has arrived", () => {
+		const host = hostDocOf("Hello")
+		const session = createLibraryDocumentSession({
+			state: base64Of(Y.encodeStateAsUpdate(host)),
+			send: async () => null,
+		})
+		const arriving = changeOn(host, (text) => text.insert(5, " world"))
+		const caret = caretIn(host, 11)
+
+		expect(session.offsetOf(caret)).toBeNull()
+
+		session.receive(arriving)
+
+		expect(session.offsetOf(caret)).toBe(11)
+	})
+})

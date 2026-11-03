@@ -104,7 +104,7 @@ const renderLibraryScreen = async (isJoined: boolean) => {
 			Fragment,
 			null,
 			createElement("button", { type: "button" }, OUTSIDE),
-			createElement(LibraryScreen, { spaceId: SPACE_ID, isJoined }),
+			createElement(LibraryScreen, { spaceId: SPACE_ID, isJoined, bots: [] }),
 		),
 		{ wrapper: createQueryTestWrapper().wrapper },
 	)
