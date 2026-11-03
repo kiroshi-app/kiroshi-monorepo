@@ -202,14 +202,13 @@ const deletedIn = (text: string, from: number, to: number): Deletion => {
 	const isRemoved = isMarker.map(
 		(marker, index) => !marker && index >= from && index < to,
 	)
-	const isEmptied = (spans: InlineSpan[]) =>
-		spans.every(({ from: start, to: end }) =>
-			isRemoved.slice(start, end).every(Boolean),
-		)
 	const clear = (node: InlineNode) => {
 		if (node.kind === "text" || node.kind === "marker") return
 		node.children.forEach(clear)
-		if (!isEmptied(shownSpansOf(node.children))) return
+		const isEmptied = shownSpansOf(node.children).every((span) =>
+			isRemoved.slice(span.from, span.to).every(Boolean),
+		)
+		if (!isEmptied) return
 		for (const child of node.children)
 			if (child.kind === "marker") isRemoved.fill(true, child.from, child.to)
 	}
