@@ -74,6 +74,9 @@ const renameIfRetitled = (
 	}
 }
 
+const boundTo = (item: NamedItem, action?: (item: NamedItem) => void) =>
+	action && (() => action(item))
+
 const isActionShownOn = (
 	item: Pick<ShownLibraryItem, "kind">,
 	action: string,
@@ -225,8 +228,8 @@ export const LibraryScreen = ({
 				onDelete={() => deleteDocument(openedDocument)}
 				onDone={dismissFinished}
 				onDownload={() => save(openedItem)}
-				onOpenInNewTab={onOpenInNewTab && (() => onOpenInNewTab(openedItem))}
-				onShowInFolder={reveal && (() => reveal(openedItem))}
+				onOpenInNewTab={boundTo(openedItem, onOpenInNewTab)}
+				onShowInFolder={boundTo(openedItem, reveal)}
 				onTitleChange={retitle}
 				onUndoAll={undoAll}
 				people={people}
