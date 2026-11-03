@@ -1329,8 +1329,13 @@ navigation-librarydocumenteditor--blank
 navigation-librarydocumenteditor--existing-document
 navigation-librarydocumenteditor--from-meeting-notes
 navigation-librarydocumenteditor--with-typed-text
+navigation-librarydocumentview--agent-finished
+navigation-librarydocumentview--agents-writing
 navigation-librarydocumentview--default
+navigation-librarydocumentview--long-agent-name-finished
+navigation-librarydocumentview--long-agent-name-writing
 navigation-librarydocumentview--member
+navigation-librarydocumentview--one-agent-writing
 navigation-librarynewdocumentdialog--blank-selected
 navigation-librarynewdocumentdialog--meeting-notes-selected
 navigation-librarynewdocumentdialog--narrow-window

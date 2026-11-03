@@ -1,5 +1,5 @@
-import { useId } from "react"
-import ReactMarkdown from "react-markdown"
+import { useId, useMemo } from "react"
+import ReactMarkdown, { type Options } from "react-markdown"
 import rehypeSanitize from "rehype-sanitize"
 import remarkGfm from "remark-gfm"
 import remarkMath from "remark-math"
@@ -12,6 +12,14 @@ import {
 	MARKDOWN_WHITESPACE_CLASS,
 } from "@workspace/ui/components/markdown/prose"
 import { remarkLiteralHtml } from "@workspace/ui/components/markdown/raw-html"
+import {
+	MarkdownRunContext,
+	type MarkdownRunRenderer,
+} from "@workspace/ui/components/markdown/run"
+import {
+	type MarkdownRun,
+	remarkRuns,
+} from "@workspace/ui/components/markdown/runs"
 import { MARKDOWN_SANITIZE_SCHEMA } from "@workspace/ui/components/markdown/sanitize"
 import { rehypeScopeIds } from "@workspace/ui/components/markdown/scope-ids"
 import { cn } from "@workspace/ui/lib/utils"
@@ -19,6 +27,8 @@ import { cn } from "@workspace/ui/lib/utils"
 export interface MarkdownProps {
 	children: string
 	className?: string
+	runs?: MarkdownRun[]
+	renderRun?: MarkdownRunRenderer
 }
 
 const MARKDOWN_REMARK_PLUGINS = [
@@ -35,21 +45,35 @@ const MARKDOWN_CLASS = cn(
 	"text-sm leading-6",
 )
 
-export const Markdown = ({ children, className }: MarkdownProps) => {
+export const Markdown = ({
+	children,
+	className,
+	runs,
+	renderRun,
+}: MarkdownProps) => {
 	const scope = useId()
+	const remarkPlugins = useMemo<Options["remarkPlugins"]>(
+		() =>
+			runs?.length
+				? [...MARKDOWN_REMARK_PLUGINS, [remarkRuns, { runs }]]
+				: MARKDOWN_REMARK_PLUGINS,
+		[runs],
+	)
 
 	return (
 		<div data-slot="markdown" className={cn(MARKDOWN_CLASS, className)}>
-			<ReactMarkdown
-				components={MARKDOWN_COMPONENTS}
-				rehypePlugins={[
-					[rehypeSanitize, MARKDOWN_SANITIZE_SCHEMA],
-					[rehypeScopeIds, { scope }],
-				]}
-				remarkPlugins={MARKDOWN_REMARK_PLUGINS}
-			>
-				{children}
-			</ReactMarkdown>
+			<MarkdownRunContext value={renderRun ?? null}>
+				<ReactMarkdown
+					components={MARKDOWN_COMPONENTS}
+					rehypePlugins={[
+						[rehypeSanitize, MARKDOWN_SANITIZE_SCHEMA],
+						[rehypeScopeIds, { scope }],
+					]}
+					remarkPlugins={remarkPlugins}
+				>
+					{children}
+				</ReactMarkdown>
+			</MarkdownRunContext>
 		</div>
 	)
 }
