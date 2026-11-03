@@ -3,9 +3,14 @@ const FILES = "Files"
 const carriesFiles = (event: DragEvent) =>
 	Boolean(event.dataTransfer?.types.includes(FILES))
 
+const fileCountOf = (event: DragEvent) =>
+	Array.from(event.dataTransfer?.items ?? []).filter(
+		(item) => item.kind === "file",
+	).length
+
 export type ConversationDragsPort = {
 	conversation: { current: HTMLElement | null }
-	onHover: (isOver: boolean) => void
+	onHover: (isOver: boolean, fileCount: number) => void
 	onDrop: (files: File[]) => void
 }
 
@@ -20,12 +25,12 @@ export const watchConversationDrags = ({
 	const isInside = (target: EventTarget | null) =>
 		target instanceof Node && Boolean(conversation.current?.contains(target))
 
-	const mark = (next: boolean) => {
+	const mark = (next: boolean, fileCount = 0) => {
 		if (next === isOver) {
 			return
 		}
 		isOver = next
-		onHover(next)
+		onHover(next, fileCount)
 	}
 
 	const settle = () => {
@@ -44,7 +49,7 @@ export const watchConversationDrags = ({
 				return
 			}
 			depth += 1
-			mark(isInside(event.target))
+			mark(isInside(event.target), fileCountOf(event))
 		},
 		dragleave: (event) => {
 			if (!carriesFiles(event)) {

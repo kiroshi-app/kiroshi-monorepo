@@ -438,6 +438,7 @@ const common = {
 				open: "Impossible d’ouvrir le document. Rouvrez-le depuis la Bibliothèque.",
 				save: "Impossible d’enregistrer vos dernières modifications. Gardez le document ouvert et modifiez-le à nouveau pour réessayer.",
 			},
+			import: "Impossible d’importer {{name}}",
 		},
 	},
 	whatsNew: {

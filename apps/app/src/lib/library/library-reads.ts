@@ -21,3 +21,9 @@ export const readLibraryFile = (spaceId: string, name: string) =>
 
 export const openLibraryDocument = (spaceId: string, name: string) =>
 	invoke<LibraryDocumentState>("library_open_document", { spaceId, name })
+
+export const importLibraryFile = (
+	spaceId: string,
+	name: string,
+	content: string,
+) => invoke<LibraryItem>("library_import", { spaceId, name, content })
