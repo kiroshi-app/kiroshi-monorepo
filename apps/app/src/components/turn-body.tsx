@@ -7,6 +7,7 @@ import { QuotableAnswer } from "@workspace/ui/components/quotable-answer"
 import { AnswerActionsContext } from "@/lib/chat/answer-actions"
 import type { MessageContent } from "@/lib/chat/message-attachments"
 import { openAttachment } from "@/lib/links/open-attachment"
+import { openWebPage } from "@/lib/links/open-web-page"
 
 type TurnBodyProps = MessageContent &
 	Pick<MarkdownProps, "answerActions" | "isWriting">
@@ -56,6 +57,7 @@ export const AnswerBody = ({
 					onPickOption: actions.insert,
 					onUseValues: actions.insert,
 					onOpenImage: actions.openImage,
+					onOpenWebPage: openWebPage,
 				}}
 				attachments={attachments}
 				isWriting={isWriting}

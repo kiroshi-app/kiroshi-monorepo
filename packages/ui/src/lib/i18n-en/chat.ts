@@ -347,6 +347,8 @@ const chat = {
 		},
 		webPage: {
 			open: "Open as page",
+			openFailed:
+				"Couldn’t open the page in the browser. Press Open as page again.",
 		},
 		video: {
 			play: "Play {{title}}",

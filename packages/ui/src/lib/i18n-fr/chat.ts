@@ -371,6 +371,8 @@ const chat = {
 		},
 		webPage: {
 			open: "Ouvrir comme page",
+			openFailed:
+				"Impossible d’ouvrir la page dans le navigateur. Appuyez de nouveau sur Ouvrir comme page.",
 		},
 		video: {
 			play: "Lire {{title}}",
