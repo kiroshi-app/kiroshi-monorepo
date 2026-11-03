@@ -72,6 +72,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 63, statements: PENDING_PROMPTS },
 	Migration { version: 64, statements: HUE_COLOURS },
 	Migration { version: 65, statements: CONTINUATION_TURNS },
+	Migration { version: 66, statements: MESSAGE_REPLIES },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -1357,6 +1358,34 @@ ALTER TABLE turns ADD COLUMN continues_turn_id TEXT REFERENCES turns (id) ON DEL
 CREATE INDEX turns_by_continued_turn ON turns (continues_turn_id);
 ";
 
+const MESSAGE_REPLIES: &str = "
+CREATE TABLE message_replies (
+	message_id TEXT NOT NULL,
+	conversation_id TEXT NOT NULL,
+	position INTEGER NOT NULL CHECK (position >= 0),
+	target_message_id TEXT NOT NULL,
+	PRIMARY KEY (message_id, position),
+	UNIQUE (message_id, target_message_id),
+	FOREIGN KEY (message_id, conversation_id)
+		REFERENCES messages (id, conversation_id) ON DELETE CASCADE,
+	FOREIGN KEY (target_message_id, conversation_id)
+		REFERENCES messages (id, conversation_id) ON DELETE CASCADE
+);
+
+CREATE INDEX message_replies_by_target ON message_replies (target_message_id, conversation_id);
+
+INSERT INTO message_replies (message_id, conversation_id, position, target_message_id)
+	SELECT id, conversation_id, 0, replied_to_message_id FROM messages
+	WHERE replied_to_message_id IS NOT NULL;
+
+CREATE TRIGGER message_replies_hold_the_first_link
+AFTER INSERT ON messages WHEN NEW.replied_to_message_id IS NOT NULL
+BEGIN
+	INSERT INTO message_replies (message_id, conversation_id, position, target_message_id)
+		VALUES (NEW.id, NEW.conversation_id, 0, NEW.replied_to_message_id);
+END;
+";
+
 const FRESH_INSTALL_UNTINTED_PERSONAL_SPACE: &str =
 	"UPDATE spaces SET colour = NULL WHERE id = 'personal';";
 
@@ -1479,6 +1508,7 @@ mod tests {
 	const MESSAGE_WRITTEN_FROM_STEP: u32 = 61;
 	const MESSAGE_AUTHOR_EMAIL_AND_COMPUTER_STEP: u32 = 62;
 	const HUE_COLOURS_STEP: u32 = 64;
+	const MESSAGE_REPLIES_STEP: u32 = 66;
 
 	const A_LIVE_SESSION: &str = "INSERT INTO runtime_sessions
 		(id, conversation_id, bot_id, provider_session_id, seq, status, started_at)
@@ -5058,6 +5088,36 @@ mod tests {
 		}
 
 		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_message_kept_with_one_reply_reads_it_back_as_its_whole_list_once_upgraded() {
+		let dir = temp_dir();
+		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
+		apply_each(&mut connection, shipped_before(MESSAGE_REPLIES_STEP))
+			.expect("the shipped schema");
+		connection
+			.execute_batch(&format!(
+				"INSERT INTO conversations (id, kind, space_id, title, created_at, updated_at)
+					VALUES ('room', 'topic', 'personal', 'Room', 1, 1);
+				{}{}
+				UPDATE messages SET replied_to_message_id = 'm1' WHERE id = 'm2';",
+				a_message_at("room", "m1", 1, 2),
+				a_message_at("room", "m2", 2, 3),
+			))
+			.expect("the rows are inserted");
+		drop(connection);
+
+		let database = crate::db::open(&dir);
+		let read = |id: &str| database.messages().message("room".into(), id.into());
+		let replying = read("m2").await.expect("the reply reads").expect("the reply is kept");
+		let quoted = read("m1").await.expect("the target reads").expect("the target is kept");
+
+		assert_eq!(replying.replied_to_message_ids, ["m1"]);
+		assert!(quoted.replied_to_message_ids.is_empty());
+
+		drop(database);
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 

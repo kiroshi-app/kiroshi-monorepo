@@ -5727,6 +5727,12 @@
             }
           ]
         },
+        "repliedToMessageIds": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "turnId": {
           "type": "string"
         }
@@ -7363,6 +7369,12 @@
             }
           ]
         },
+        "repliedToMessageIds": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "turnId": {
           "type": "string"
         }
@@ -8385,6 +8397,12 @@
               "type": "null"
             }
           ]
+        },
+        "repliedToMessageIds": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         },
         "role": {
           "$ref": "#/$defs/TranscriptRole"

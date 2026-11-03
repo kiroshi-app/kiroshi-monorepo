@@ -4522,6 +4522,23 @@ fn a_relay_guest_writes_a_message_of_the_shared_space_only() {
 }
 
 #[test]
+fn a_relay_guest_replies_to_messages_of_the_shared_space_only() {
+	run(kept_in_the_shared_space(
+		"conversation_append_user_message",
+		json!({ "message": {
+			"id": "new", "conversationId": "c-mine", "turnId": "t-mine", "authorBotId": null,
+			"repliedToMessageId": "m-mine", "repliedToMessageIds": ["m-mine", "m-theirs"],
+			"content": "c", "createdAt": 1
+		} }),
+		json!({ "message": {
+			"id": "new", "conversationId": "c-mine", "turnId": "t-mine", "authorBotId": null,
+			"repliedToMessageId": "m-mine", "repliedToMessageIds": ["m-mine"],
+			"content": "c", "createdAt": 1
+		} }),
+	));
+}
+
+#[test]
 fn a_relay_guest_naming_a_row_the_host_does_not_hold_is_refused() {
 	run(async {
 		let mut guest = Guest::of_two_spaces("unknown-child").await;
@@ -6282,6 +6299,7 @@ fn a_user_message(conversation_id: &str, turn_id: &str) -> NewUserMessage {
 		turn_id: turn_id.to_owned(),
 		author_bot_id: None,
 		replied_to_message_id: None,
+		replied_to_message_ids: Vec::new(),
 		content: "hello".to_owned(),
 		created_at: 2,
 	}

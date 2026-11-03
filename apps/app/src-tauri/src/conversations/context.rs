@@ -80,7 +80,7 @@ pub async fn bounded_context(
 		.ok_or_else(no_such_message)?;
 	let checkpoint = database.runtime_context().latest_checkpoint(runtime_session_id).await?;
 	let recent = stored_until_now(database, &conversation_id, checkpoint.as_ref(), &prompt).await?;
-	let replied_to = replied_to_target(database, &conversation_id, &prompt).await?;
+	let replied_to = replied_to_targets(database, &conversation_id, &prompt).await?;
 	let room = room_around(database, &participant).await?;
 	let instructions = database.conversations().instructions(conversation_id.clone()).await?;
 	let mission = mission_carried(database, conversation_id).await?;
@@ -93,7 +93,7 @@ pub async fn bounded_context(
 		instructions: &instructions,
 		mission: mission.as_deref(),
 		summary: checkpoint.as_ref().map(|checkpoint| checkpoint.summary.as_str()),
-		replied_to: replied_to.as_ref(),
+		replied_to: &replied_to,
 		recent: &recent,
 		header: header.as_deref(),
 		prompt: &prompt.content,
@@ -310,30 +310,30 @@ async fn room_around(
 	})
 }
 
-async fn replied_to_target(
+async fn replied_to_targets(
 	database: &Database,
 	conversation_id: &str,
 	prompt: &StoredMessage,
-) -> Result<Option<RepliedTo>, TranscriptStoreError> {
-	let Some(target_id) = prompt.replied_to_message_id.as_ref() else {
-		return Ok(None);
-	};
-	let Some(target) =
-		database.messages().message(conversation_id.to_owned(), target_id.clone()).await?
-	else {
-		return Ok(None);
-	};
-	let run = run_behind(database, &target).await?;
-
-	Ok(Some(RepliedTo {
-		uri: message_uri(conversation_id, &target.id),
-		role: target.role,
-		author_bot_id: target.author_bot_id,
-		author: target.author,
-		written_from: target.written_from,
-		provider_session_id: run.provider_session_id,
-		content: target.content,
-	}))
+) -> Result<Vec<RepliedTo>, TranscriptStoreError> {
+	let mut targets = Vec::new();
+	for target_id in &prompt.replied_to_message_ids {
+		let Some(target) =
+			database.messages().message(conversation_id.to_owned(), target_id.clone()).await?
+		else {
+			continue;
+		};
+		let run = run_behind(database, &target).await?;
+		targets.push(RepliedTo {
+			uri: message_uri(conversation_id, &target.id),
+			role: target.role,
+			author_bot_id: target.author_bot_id,
+			author: target.author,
+			written_from: target.written_from,
+			provider_session_id: run.provider_session_id,
+			content: target.content,
+		});
+	}
+	Ok(targets)
 }
 
 pub async fn run_behind(
@@ -558,7 +558,7 @@ struct Parts<'a> {
 	instructions: &'a str,
 	mission: Option<&'a str>,
 	summary: Option<&'a str>,
-	replied_to: Option<&'a RepliedTo>,
+	replied_to: &'a [RepliedTo],
 	recent: &'a [StoredMessage],
 	header: Option<&'a str>,
 	prompt: &'a str,
@@ -578,9 +578,9 @@ fn compose(parts: Parts<'_>) -> String {
 	if let Some(summary) = parts.summary {
 		push_section(&mut sections, SUMMARY_LABEL, &spelled(parts.room, summary));
 	}
-	if let Some(replied_to) = parts.replied_to {
-		push_section(&mut sections, REPLY_LABEL, &quoted(replied_to, parts.room));
-	}
+	let quotes: Vec<String> =
+		parts.replied_to.iter().map(|replied_to| quoted(replied_to, parts.room)).collect();
+	push_section(&mut sections, REPLY_LABEL, &quotes.join("\n\n"));
 	if !parts.recent.is_empty() {
 		push_section(&mut sections, RECENT_LABEL, &recent_spoken(parts.recent, parts.room));
 	}
@@ -676,7 +676,7 @@ fn answer_to<'a>(recent: &'a [StoredMessage], card: &StoredMessage) -> Option<&'
 	recent.iter().find(|message| {
 		message.role == MessageRole::User
 			&& message.seq > card.seq
-			&& message.replied_to_message_id.as_deref() == Some(card.id.as_str())
+			&& message.replied_to_message_ids.first() == Some(&card.id)
 	})
 }
 
@@ -817,7 +817,7 @@ mod tests {
 			author_bot_id: None,
 			author: Default::default(),
 			written_from: None,
-			replied_to_message_id: None,
+			replied_to_message_ids: Vec::new(),
 			seq,
 			role,
 			content: content.to_owned(),
@@ -833,7 +833,7 @@ mod tests {
 			instructions: "",
 			mission: None,
 			summary: None,
-			replied_to: None,
+			replied_to: &[],
 			recent: &[],
 			header: None,
 			prompt,
@@ -864,7 +864,7 @@ mod tests {
 
 		let context = compose(Parts {
 			summary: Some("user: we are building a house"),
-			replied_to: Some(&target),
+			replied_to: std::slice::from_ref(&target),
 			recent: &recent,
 			..only("and now?")
 		});
@@ -1245,7 +1245,7 @@ mod tests {
 					author_bot_id: None,
 					author: Default::default(),
 					written_from: WrittenFrom::Here,
-					replied_to_message_id: None,
+					replied_to_message_ids: Vec::new(),
 					content,
 					created_at: index as i64,
 				})
@@ -1279,6 +1279,15 @@ mod tests {
 		id: &str,
 		replied_to: Option<&str>,
 	) {
+		prompt_replying_to(database, conversation_id, id, replied_to.as_slice()).await;
+	}
+
+	async fn prompt_replying_to(
+		database: &Database,
+		conversation_id: &str,
+		id: &str,
+		targets: &[&str],
+	) {
 		database
 			.messages()
 			.append_user_message(NewUserMessage {
@@ -1288,7 +1297,7 @@ mod tests {
 				author_bot_id: None,
 				author: Default::default(),
 				written_from: WrittenFrom::Here,
-				replied_to_message_id: replied_to.map(str::to_owned),
+				replied_to_message_ids: targets.iter().map(|target| (*target).to_owned()).collect(),
 				content: asked(id),
 				created_at: 99,
 			})
@@ -1334,7 +1343,7 @@ mod tests {
 				author_bot_id: None,
 				author: Default::default(),
 				written_from: WrittenFrom::Here,
-				replied_to_message_id: None,
+				replied_to_message_ids: Vec::new(),
 				content: content.clone(),
 				created_at: 98,
 			})
@@ -1534,6 +1543,39 @@ mod tests {
 				.is_some_and(|tail| tail.lines().any(|line| line == "assistant: message 30")),
 			"the tail lost the message being answered: {recent}"
 		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_prompt_replying_to_several_messages_quotes_each_under_one_section_in_order() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let conversation = a_conversation(&database).await;
+		spoken_so_far(&database, &conversation, SPOKEN).await;
+		prompt_replying_to(&database, &conversation, "p1", &["m30", "m1"]).await;
+		let run = a_run_of(&database, &conversation, "default").await;
+
+		let context = bounded_context(
+			&database,
+			participant_of(&conversation, "default"),
+			run,
+			"p1".to_owned(),
+		)
+		.await
+		.expect("the context is rebuilt");
+
+		let quotes = [
+			quoting(&conversation, "m30", "you", "unknown", "message 30"),
+			quoting(&conversation, "m1", "user · from an unknown computer", "unknown", "message 1"),
+		]
+		.join("\n\n");
+		assert!(
+			context.contains(&format!("{REPLY_LABEL}\n{quotes}\n\n")),
+			"the targets were not quoted in order: {context}"
+		);
+		assert_eq!(occurrences(&context, REPLY_LABEL), 1, "{context}");
 
 		drop(database);
 		fs::remove_dir_all(&dir).expect("cleanup");
@@ -1884,7 +1926,7 @@ mod tests {
 				author_bot_id: None,
 				author: Default::default(),
 				written_from: WrittenFrom::Here,
-				replied_to_message_id: None,
+				replied_to_message_ids: Vec::new(),
 				content: content.to_owned(),
 				created_at,
 			})
@@ -1925,7 +1967,7 @@ mod tests {
 				author_bot_id: None,
 				author: Default::default(),
 				written_from: WrittenFrom::Here,
-				replied_to_message_id: None,
+				replied_to_message_ids: Vec::new(),
 				content: asked(id),
 				created_at: 99,
 			})
@@ -2617,7 +2659,7 @@ mod tests {
 					..Default::default()
 				},
 				written_from: WrittenFrom::Here,
-				replied_to_message_id: replied_to.map(str::to_owned),
+				replied_to_message_ids: replied_to.map(str::to_owned).into_iter().collect(),
 				content: content.to_owned(),
 				created_at: STEVE_AT,
 			})
@@ -2891,7 +2933,7 @@ mod tests {
 				author_bot_id: None,
 				author: ada_on(Some("Studio")),
 				written_from: WrittenFrom::Here,
-				replied_to_message_id: None,
+				replied_to_message_ids: Vec::new(),
 				content: "the roof leaks".to_owned(),
 				created_at: STEVE_AT,
 			})

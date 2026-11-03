@@ -343,7 +343,7 @@ fn assert_reported(host: &Host, run: &RoutineRun) {
 	let report = &replies[0];
 	assert_eq!(report.content, REPORT_TEXT);
 	assert_eq!(report.state, MessageState::Complete);
-	assert_eq!(report.replied_to_message_id, None);
+	assert!(report.replied_to_message_ids.is_empty());
 
 	let reported = host.reported();
 	assert_eq!(reported.len(), 1, "the conversation reports {reported:?}");

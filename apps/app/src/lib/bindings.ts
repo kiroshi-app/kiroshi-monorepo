@@ -1504,6 +1504,7 @@ export type NewUserMessage = {
 	turnId: string,
 	authorBotId: string | null,
 	repliedToMessageId: string | null,
+	repliedToMessageIds?: string[],
 	content: string,
 	createdAt: number,
 };
@@ -1831,6 +1832,7 @@ export type SentMessage = {
 	content: string,
 	createdAt: number,
 	repliedToMessageId: string | null,
+	repliedToMessageIds?: string[],
 };
 
 export type SessionHandle = {
@@ -2003,6 +2005,7 @@ export type TranscriptMessage_Deserialize = {
 	authorName: string | null,
 	writtenFrom?: WrittenFrom | null,
 	repliedToMessageId: string | null,
+	repliedToMessageIds?: string[],
 	runtimeSessionId: string | null,
 	continuesTurnId?: string | null,
 };
@@ -2021,6 +2024,7 @@ export type TranscriptMessage_Serialize = {
 	authorName: string | null,
 	writtenFrom?: WrittenFrom | null,
 	repliedToMessageId: string | null,
+	repliedToMessageIds?: string[],
 	runtimeSessionId: string | null,
 	continuesTurnId?: string | null,
 };
