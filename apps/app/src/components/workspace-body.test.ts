@@ -1788,7 +1788,14 @@ describe("WorkspaceBody library", () => {
 		it("shows no Open folder on an image and no More on a document, with no notice", async () => {
 			await openJoinedLibrary()
 			await open("hero-dunes.png")
-			expect(screen.queryByRole("button", { name: "Open folder" })).toBeNull()
+			await press("More")
+			expect(
+				within(await screen.findByRole("menu")).queryByRole("menuitem", {
+					name: "Show in folder",
+				}),
+			).toBeNull()
+			fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" })
+			await settle()
 			await press("Close")
 
 			await open("Spring launch brief")
