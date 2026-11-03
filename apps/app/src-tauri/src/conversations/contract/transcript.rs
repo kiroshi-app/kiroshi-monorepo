@@ -399,6 +399,17 @@ pub struct SentMessage {
 	pub reply_links: Vec<ReplyLink>,
 }
 
+impl SentMessage {
+	pub fn first_reply_target(&self) -> Option<String> {
+		let links = reply_links(
+			self.replied_to_message_id.clone(),
+			self.replied_to_message_ids.clone(),
+			self.reply_links.clone(),
+		);
+		links.into_iter().next().map(|link| link.message_id)
+	}
+}
+
 impl From<SentMessage> for NewUserMessage {
 	fn from(sent: SentMessage) -> Self {
 		Self {
@@ -573,6 +584,28 @@ mod tests {
 		};
 		assert_eq!(written_by(message(Some("b1"))), Default::default());
 		assert_eq!(written_by(message(None)), author);
+	}
+
+	#[test]
+	fn the_first_reply_target_is_the_first_link_the_store_keeps() {
+		let sent = |first: Option<&str>, ids: &[&str], links: &[&str]| SentMessage {
+			id: "m1".into(),
+			conversation_id: "c1".into(),
+			turn_id: "t1".into(),
+			content: "hello".into(),
+			created_at: 1,
+			replied_to_message_id: first.map(Into::into),
+			replied_to_message_ids: ids.iter().map(|id| (*id).to_owned()).collect(),
+			reply_links: links
+				.iter()
+				.map(|id| ReplyLink { message_id: (*id).to_owned(), excerpt: None })
+				.collect(),
+		};
+
+		assert_eq!(sent(Some("a"), &["b"], &["c"]).first_reply_target().as_deref(), Some("c"));
+		assert_eq!(sent(Some("a"), &["b", "a"], &[]).first_reply_target().as_deref(), Some("b"));
+		assert_eq!(sent(Some("a"), &[], &[]).first_reply_target().as_deref(), Some("a"));
+		assert_eq!(sent(None, &[], &[]).first_reply_target(), None);
 	}
 
 	#[test]
