@@ -19,6 +19,7 @@ type SourcedImageProps = {
 	status?: string
 	chips?: readonly string[]
 	onSave?: () => void
+	onOpen?: () => void
 	className?: string
 }
 
@@ -31,10 +32,15 @@ const SourcedImage = ({
 	status,
 	chips = [],
 	onSave,
+	onOpen,
 	className,
 }: SourcedImageProps) => {
 	const { t } = useTranslation("chat")
 	const hasChips = status !== undefined || chips.length > 0
+	const name = accessibleNameOf(image, title)
+	const picture = (
+		<img src={image.src} alt={name} className="size-full object-cover" />
+	)
 
 	return (
 		<figure
@@ -42,11 +48,19 @@ const SourcedImage = ({
 			className={cn("flex w-full min-w-0 flex-col gap-2", className)}
 		>
 			<div className="relative h-75 overflow-hidden rounded-xl">
-				<img
-					src={image.src}
-					alt={accessibleNameOf(image, title)}
-					className="size-full object-cover"
-				/>
+				{onOpen ? (
+					<button
+						type="button"
+						aria-label={name}
+						data-slot="sourced-image-open"
+						className="block size-full -outline-offset-2"
+						onClick={onOpen}
+					>
+						{picture}
+					</button>
+				) : (
+					picture
+				)}
 				{onSave ? (
 					<button
 						type="button"
