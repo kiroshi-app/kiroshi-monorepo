@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 
-const COPIED_RESET_MS = 1600
+export const COPIED_RESET_MS = 1600
 
 export function useCopyText(text: string, resetMs = COPIED_RESET_MS) {
 	const [copied, setCopied] = useState(false)

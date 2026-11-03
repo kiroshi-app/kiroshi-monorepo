@@ -18,13 +18,14 @@ import {
 	type LibraryLightboxImage,
 } from "@workspace/ui/components/library-lightbox"
 import { LibraryPanel } from "@workspace/ui/components/library-panel"
+import { COPIED_RESET_MS } from "@workspace/ui/hooks/use-copy-text"
 
 type LibraryWithLightboxProps = {
 	openedAt: number | null
 	onPrevious: () => void
 	onNext: () => void
 	onDownload: (image: LibraryLightboxImage) => void
-	onCopy: (image: LibraryLightboxImage) => void
+	onCopy: (image: LibraryLightboxImage) => void | Promise<void>
 	onMore?: (image: LibraryLightboxImage) => void
 }
 
@@ -92,6 +93,16 @@ const lightbox = async () => {
 	return popup
 }
 
+const copySwapIn = (popup: HTMLElement) => {
+	const [copyLayer, checkLayer] = within(popup)
+		.getByRole("button", { name: "Copy" })
+		.querySelectorAll("[data-slot=icon-swap] > span")
+	return { copyLayer, checkLayer }
+}
+
+const announcementIn = (popup: HTMLElement) =>
+	popup.querySelector("[aria-live=polite]")
+
 const LIGHTBOX_STORY_ARGS: LibraryWithLightboxProps = {
 	openedAt: 1,
 	onPrevious: fn(),
@@ -109,7 +120,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"One image of the Library, over the content card, opened from a grid item. It traps focus, closes on Escape and on Close, and hands focus back to the item that opened it. Left and Right arrows, like Previous and Next, ask the caller for the neighbouring image, and the two buttons disable at either end. Download, Copy and More only report the image to their callback, and More is drawn only when `onMore` is given. The zoom pill steps the image out and in, and its middle button, Fit, shows the zoom percentage until it is pressed to fit the stage again. Render it as the `overlay` of `LibraryPanel` so it covers the card.",
+					"One image of the Library, over the content card, opened from a grid item. It traps focus, closes on Escape and on Close, and hands focus back to the item that opened it. Left and Right arrows, like Previous and Next, ask the caller for the neighbouring image, and the two buttons disable at either end. Download and Open folder only report the image to their callback, and Open folder is drawn only when `onMore` is given. Copy reports the image too, then swaps its icon for a check and announces Copied once `onCopy` settles, until the shared copy reset delay runs out. The zoom pill steps the image out and in, and its middle button, Fit, shows the zoom percentage until it is pressed to fit the stage again. Render it as the `overlay` of `LibraryPanel` so it covers the card.",
 			},
 		},
 	},
@@ -123,7 +134,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"The second image open, as artboard 8 draws it. Check the arrows and the three actions report to their callbacks, that every icon button names its action in a tooltip, and that Escape hands focus back to the grid item that opened the image.",
+					"The second image open, as artboard 8 draws it. Check the arrows and the three actions report to their callbacks, that the third action is Open folder with a folder icon, that every action of the bar is a 32 px button that changes colour instantly, that every icon button names its action in a tooltip, and that Escape hands focus back to the grid item that opened the image.",
 			},
 		},
 	},
@@ -144,8 +155,24 @@ export const Default = meta.story({
 		)
 		await userEvent.click(within(popup).getByRole("button", { name: "Copy" }))
 		await expect(args.onCopy).toHaveBeenCalledWith(LIBRARY_LIGHTBOX_IMAGES[1])
-		await userEvent.click(within(popup).getByRole("button", { name: "More" }))
+		const openFolder = within(popup).getByRole("button", {
+			name: "Open folder",
+		})
+		await userEvent.hover(openFolder)
+		await expect(await screen.findByRole("tooltip")).toHaveTextContent(
+			"Open folder",
+		)
+		await userEvent.unhover(openFolder)
+		await waitFor(() => expect(screen.queryByRole("tooltip")).toBe(null))
+		await userEvent.click(openFolder)
 		await expect(args.onMore).toHaveBeenCalledWith(LIBRARY_LIGHTBOX_IMAGES[1])
+
+		for (const name of ["Download", "Copy", "Open folder", "Close"]) {
+			const action = within(popup).getByRole("button", { name })
+			await expect(action.getBoundingClientRect().width).toBe(32)
+			await expect(action.getBoundingClientRect().height).toBe(32)
+			await expect(getComputedStyle(action).transitionProperty).toBe("none")
+		}
 
 		await userEvent.hover(
 			within(popup).getByRole("button", { name: "Next image" }),
@@ -190,7 +217,7 @@ export const Member = meta.story({
 		docs: {
 			description: {
 				story:
-					"The second image open in a joined Space, where More has no action for a member. Check that the bar keeps Download, Copy and Close and draws no More.",
+					"The second image open in a joined Space, where Open folder has no action for a member. Check that the bar keeps Download, Copy and Close and draws no Open folder.",
 			},
 		},
 	},
@@ -202,8 +229,93 @@ export const Member = meta.story({
 		await expect(
 			within(popup).getByRole("button", { name: "Copy" }),
 		).toBeVisible()
-		await expect(within(popup).queryByRole("button", { name: "More" })).toBe(
-			null,
+		await expect(
+			within(popup).queryByRole("button", { name: "Open folder" }),
+		).toBe(null)
+	},
+})
+
+export const CopyCheck = meta.story({
+	args: { onCopy: fn(async () => undefined) },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Copy pressed and the copy settled. Check that the copy icon swaps for a check, that a screen reader hears Copied, and that the copy icon comes back once the shared copy reset delay runs out.",
+			},
+		},
+	},
+	play: async ({ args, userEvent }) => {
+		const popup = await lightbox()
+		await expect(copySwapIn(popup).checkLayer).toHaveAttribute(
+			"data-shown",
+			"false",
+		)
+
+		await userEvent.click(within(popup).getByRole("button", { name: "Copy" }))
+
+		await expect(args.onCopy).toHaveBeenCalledWith(LIBRARY_LIGHTBOX_IMAGES[1])
+		await waitFor(() =>
+			expect(copySwapIn(popup).checkLayer).toHaveAttribute(
+				"data-shown",
+				"true",
+			),
+		)
+		await expect(copySwapIn(popup).copyLayer).toHaveAttribute(
+			"data-shown",
+			"false",
+		)
+		await expect(announcementIn(popup)).toHaveTextContent("Copied")
+
+		await waitFor(
+			() =>
+				expect(copySwapIn(popup).copyLayer).toHaveAttribute(
+					"data-shown",
+					"true",
+				),
+			{ timeout: COPIED_RESET_MS + 1000 },
+		)
+		await expect(copySwapIn(popup).checkLayer).toHaveAttribute(
+			"data-shown",
+			"false",
+		)
+		await expect(announcementIn(popup)).toHaveTextContent("")
+	},
+})
+
+export const CopyRefused = meta.story({
+	tags: ["test-only"],
+	args: {
+		onCopy: fn(async () => {
+			throw new Error("The clipboard refused the image.")
+		}),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Copy pressed and the copy rejected. Check that the copy icon stays, that no Copied is announced, and that the failure is announced instead.",
+			},
+		},
+	},
+	play: async ({ args, userEvent }) => {
+		const popup = await lightbox()
+
+		await userEvent.click(within(popup).getByRole("button", { name: "Copy" }))
+
+		await expect(args.onCopy).toHaveBeenCalledWith(LIBRARY_LIGHTBOX_IMAGES[1])
+		await waitFor(() =>
+			expect(announcementIn(popup)).toHaveTextContent(
+				"Couldn’t copy the image. Press Copy again.",
+			),
+		)
+		await expect(copySwapIn(popup).copyLayer).toHaveAttribute(
+			"data-shown",
+			"true",
+		)
+		await expect(copySwapIn(popup).checkLayer).toHaveAttribute(
+			"data-shown",
+			"false",
 		)
 	},
 })

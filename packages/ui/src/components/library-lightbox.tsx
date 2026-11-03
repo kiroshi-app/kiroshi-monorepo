@@ -1,9 +1,10 @@
 "use client"
 
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
-import { type KeyboardEvent, useRef, useState } from "react"
+import { type KeyboardEvent, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
+import { IconSwap } from "@workspace/ui/components/icon-swap"
 import { Icons } from "@workspace/ui/components/icons"
 import { useLibraryOverlayContainer } from "@workspace/ui/components/library-panel"
 import { TooltipButton } from "@workspace/ui/components/tooltip-button"
@@ -13,7 +14,17 @@ import {
 	DialogPortal,
 	DialogTitle,
 } from "@workspace/ui/components/ui/dialog"
+import { Separator } from "@workspace/ui/components/ui/separator"
+import { COPIED_RESET_MS } from "@workspace/ui/hooks/use-copy-text"
 import { cn } from "@workspace/ui/lib/utils"
+
+type CopyOutcome = "idle" | "copied" | "failed"
+
+const COPY_ANNOUNCEMENT_KEY = {
+	idle: null,
+	copied: "library.lightbox.copied",
+	failed: "library.lightbox.copyFailed",
+} as const satisfies Record<CopyOutcome, string | null>
 
 type LibraryLightboxImage = {
 	id: string
@@ -36,7 +47,7 @@ const STEP = cn(ROUND, "size-10 bg-foreground/10 hover:bg-foreground/16")
 
 const ZOOM_CONTROL = cn(ROUND, "size-7 hover:bg-foreground/8")
 
-const DIVIDER = "w-px shrink-0 bg-foreground/12"
+const DIVIDER = "bg-foreground/12"
 
 const ZOOM_SLOT = "library-lightbox-zoom"
 
@@ -141,7 +152,7 @@ const ZoomStage = ({ image, position, count }: ZoomStageProps) => {
 					>
 						<Icons.Add aria-hidden="true" />
 					</TooltipButton>
-					<span aria-hidden="true" className={cn(DIVIDER, "h-4.5")} />
+					<Separator className={cn(DIVIDER, "h-4.5")} orientation="vertical" />
 					<span className="px-2.5 text-compact text-muted-foreground leading-4 tabular-nums">
 						{t("library.lightbox.position", { position, count })}
 					</span>
@@ -159,7 +170,7 @@ type LibraryLightboxProps = {
 	onPrevious: () => void
 	onNext: () => void
 	onDownload: (image: LibraryLightboxImage) => void
-	onCopy: (image: LibraryLightboxImage) => void
+	onCopy: (image: LibraryLightboxImage) => void | Promise<void>
 	onMore?: (image: LibraryLightboxImage) => void
 }
 
@@ -179,6 +190,26 @@ const LibraryLightbox = ({
 	const surfaceRef = useRef<HTMLDivElement>(null)
 	const isFirst = position <= 1
 	const isLast = position >= count
+	const [copyOutcome, setCopyOutcome] = useState<CopyOutcome>("idle")
+	const announcementKey = COPY_ANNOUNCEMENT_KEY[copyOutcome]
+
+	useEffect(() => {
+		if (copyOutcome === "idle") return
+		const timer = window.setTimeout(
+			() => setCopyOutcome("idle"),
+			COPIED_RESET_MS,
+		)
+		return () => window.clearTimeout(timer)
+	}, [copyOutcome])
+
+	const copy = async (copied: LibraryLightboxImage) => {
+		try {
+			await onCopy(copied)
+			setCopyOutcome("copied")
+		} catch {
+			setCopyOutcome("failed")
+		}
+	}
 
 	const stepWithArrows = (event: KeyboardEvent) => {
 		if (isInZoomScroller(event.target)) return
@@ -232,28 +263,35 @@ const LibraryLightbox = ({
 								<TooltipButton
 									aria-label={t("library.lightbox.copy")}
 									className={ACTION}
-									onClick={() => onCopy(image)}
+									onClick={() => copy(image)}
 									size="icon"
 									tooltip={t("library.lightbox.copy")}
 									tooltipSide="bottom"
 									variant="ghost"
 								>
-									<Icons.Copy aria-hidden="true" />
+									<IconSwap
+										icon={<Icons.Copy aria-hidden="true" />}
+										isSwapped={copyOutcome === "copied"}
+										swappedIcon={<Icons.Check aria-hidden="true" />}
+									/>
 								</TooltipButton>
 								{onMore ? (
 									<TooltipButton
-										aria-label={t("library.lightbox.more")}
+										aria-label={t("library.lightbox.openFolder")}
 										className={ACTION}
 										onClick={() => onMore(image)}
 										size="icon"
-										tooltip={t("library.lightbox.more")}
+										tooltip={t("library.lightbox.openFolder")}
 										tooltipSide="bottom"
 										variant="ghost"
 									>
-										<Icons.More aria-hidden="true" />
+										<Icons.Folder aria-hidden="true" />
 									</TooltipButton>
 								) : null}
-								<span aria-hidden="true" className={cn(DIVIDER, "h-5")} />
+								<Separator
+									className={cn(DIVIDER, "h-5")}
+									orientation="vertical"
+								/>
 								<DialogClose
 									render={
 										<TooltipButton
@@ -302,6 +340,9 @@ const LibraryLightbox = ({
 								<Icons.Next aria-hidden="true" className="size-4.5" />
 							</TooltipButton>
 						</div>
+						<span aria-live="polite" className="sr-only">
+							{announcementKey ? t(announcementKey) : ""}
+						</span>
 					</DialogPrimitive.Popup>
 				) : null}
 			</DialogPortal>

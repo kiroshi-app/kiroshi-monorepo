@@ -359,7 +359,9 @@ const common = {
 		lightbox: {
 			download: "Download",
 			copy: "Copy",
-			more: "More",
+			copied: "Copied",
+			copyFailed: "Couldn’t copy the image. Press Copy again.",
+			openFolder: "Open folder",
 			close: "Close",
 			previous: "Previous image",
 			next: "Next image",
