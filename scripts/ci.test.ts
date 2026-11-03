@@ -46,6 +46,7 @@ type WorkflowStep = {
 	run?: string
 	if?: string
 	"timeout-minutes"?: number
+	env?: Record<string, string>
 	with?: Record<string, unknown>
 }
 
@@ -59,6 +60,7 @@ type Workflow = {
 			container?: { image?: string }
 			env?: Record<string, string>
 			needs?: string | string[]
+			permissions?: Record<string, string>
 			"timeout-minutes"?: number
 			steps?: WorkflowStep[]
 		}
@@ -140,7 +142,7 @@ const lookUp = (scope: ExpressionScope, path: string) =>
 const evaluate = (expression: string, scope: ExpressionScope): unknown =>
 	new Function(
 		`return (${expression
-			.replace(/\b(?:github|needs)(?:\.[\w-]+)+/g, (path) =>
+			.replace(/\b(?:github|needs|steps)(?:\.[\w-]+)+/g, (path) =>
 				JSON.stringify(lookUp(scope, path) ?? null),
 			)
 			.replace("always()", "true")
@@ -210,15 +212,21 @@ const pushToMain = (runId: number): GitHubContext => ({
 
 const A_PUSH_TO_MAIN = pushToMain(7)
 
-const A_RELEASE_TAG: GitHubContext = {
+const releaseTag = (runId: number): GitHubContext => ({
 	event_name: "push",
 	ref: "refs/tags/v1.2.0",
-}
+	run_id: String(runId),
+})
 
-const A_PULL_REQUEST: GitHubContext = {
+const A_RELEASE_TAG = releaseTag(9)
+
+const pullRequest = (number: number, runId: number): GitHubContext => ({
 	event_name: "pull_request",
-	ref: "refs/pull/7/merge",
-}
+	ref: `refs/pull/${number}/merge`,
+	run_id: String(runId),
+})
+
+const A_PULL_REQUEST = pullRequest(7, 11)
 
 const PULL_REQUEST_JOB_SET = ["changes", "lint", "rust", "verify", "vitest"]
 
@@ -1075,40 +1083,99 @@ describe("the jobs of ci.yml", () => {
 		},
 	)
 
-	it("diffs a push to main against the commit it replaced, fetched before the diff", () => {
+	it("diffs a push to main against the head of the last green push run on main, never the commit it replaced", () => {
 		const changes = workflow.jobs.changes
 		const steps = changes?.steps ?? []
-		const fetchIndex = steps.findIndex(
-			(step) => step.name === "Fetch the base to diff against",
-		)
+		const greenIndex = steps.findIndex((step) => step.id === "green")
 		const decideIndex = steps.findIndex((step) => step.id === "filter")
-		const scope = scopeOf(A_PUSH_TO_MAIN)
+		const lookup = steps[greenIndex]?.run ?? ""
+		const scope = {
+			...scopeOf(A_PUSH_TO_MAIN),
+			steps: { green: { outputs: { sha: "last-green" } } },
+		}
 
-		expect(interpolate(changes?.env?.BASE ?? "", scope)).toBe("main-before")
-		expect(evaluate(steps[fetchIndex]?.if ?? "false", scope)).toBe(true)
-		expect(steps[fetchIndex]?.run).toBe('git fetch --depth=1 origin "$BASE"')
-		expect(fetchIndex).toBeLessThan(decideIndex)
+		expect(evaluate(steps[greenIndex]?.if ?? "false", scope)).toBe(true)
+		for (const filter of [
+			"--workflow ci.yml",
+			"--event push",
+			"--branch main",
+			"--status success",
+			"--limit 1",
+		])
+			expect(lookup).toContain(filter)
+		expect(changes?.permissions).toEqual({ actions: "read", contents: "read" })
+		expect(greenIndex).toBeLessThan(decideIndex)
+		expect(interpolate(steps[decideIndex]?.env?.BASE ?? "", scope)).toBe(
+			"last-green",
+		)
+		expect(JSON.stringify(changes)).not.toContain("event.before")
 	})
 
-	it("fetches no base on a v* tag, which runs every desktop job undiffed", () => {
+	it.each([A_PULL_REQUEST, A_RELEASE_TAG])(
+		"looks up no green push run on %p",
+		(github) => {
+			const green = (workflow.jobs.changes?.steps ?? []).find(
+				(step) => step.id === "green",
+			)
+
+			expect(evaluate(green?.if ?? "true", scopeOf(github))).toBe(false)
+		},
+	)
+
+	it("fetches the base of a pull_request only, a push to main fetching its green base in scripts/ci-changes.ts", () => {
 		const fetch = (workflow.jobs.changes?.steps ?? []).find(
 			(step) => step.name === "Fetch the base to diff against",
 		)
+		const fetchesOn = (github: GitHubContext) =>
+			evaluate(fetch?.if ?? "true", scopeOf(github))
 
-		expect(evaluate(fetch?.if ?? "true", scopeOf(A_RELEASE_TAG))).toBe(false)
+		expect(fetchesOn(A_PULL_REQUEST)).toBe(true)
+		expect(fetchesOn(A_PUSH_TO_MAIN)).toBe(false)
+		expect(fetchesOn(A_RELEASE_TAG)).toBe(false)
 	})
 
-	it("never cancels the run of another push to main", () => {
-		const groupOf = (github: GitHubContext) =>
-			interpolate(workflow.concurrency.group, scopeOf(github))
-
-		expect(groupOf(pushToMain(7))).not.toBe(groupOf(pushToMain(8)))
-		expect(
-			interpolate(
+	const concurrencyOf = (github: GitHubContext) => {
+		const scope = scopeOf({ ...github, workflow: "CI" })
+		return {
+			group: interpolate(workflow.concurrency.group, scope),
+			cancelsInProgress: interpolate(
 				workflow.concurrency["cancel-in-progress"],
-				scopeOf(A_PUSH_TO_MAIN),
+				scope,
 			),
-		).toBe("false")
+		}
+	}
+
+	it.each([
+		[pushToMain(7), "CI-refs/heads/main", "true"],
+		[pullRequest(7, 11), "CI-refs/pull/7/merge", "true"],
+		[releaseTag(9), "CI-9", "false"],
+	])(
+		"puts %p in the concurrency group %s, cancel-in-progress %s",
+		(github, group, cancelsInProgress) => {
+			expect(concurrencyOf(github)).toEqual({ group, cancelsInProgress })
+		},
+	)
+
+	it("has a push to main cancel the in-progress run of an earlier push to main", () => {
+		expect(concurrencyOf(pushToMain(8))).toEqual(concurrencyOf(pushToMain(7)))
+		expect(concurrencyOf(pushToMain(8)).cancelsInProgress).toBe("true")
+	})
+
+	it("keeps one concurrency group per pull_request ref", () => {
+		expect(concurrencyOf(pullRequest(7, 12)).group).toBe(
+			concurrencyOf(pullRequest(7, 11)).group,
+		)
+		expect(concurrencyOf(pullRequest(8, 12)).group).not.toBe(
+			concurrencyOf(pullRequest(7, 11)).group,
+		)
+	})
+
+	it("never cancels a v* tag run, nor lets it cancel a push to main", () => {
+		const tag = concurrencyOf(releaseTag(9))
+
+		expect(tag.cancelsInProgress).toBe("false")
+		expect(concurrencyOf(releaseTag(10)).group).not.toBe(tag.group)
+		expect(tag.group).not.toBe(concurrencyOf(pushToMain(9)).group)
 	})
 
 	it("has verify wait on every job", () => {

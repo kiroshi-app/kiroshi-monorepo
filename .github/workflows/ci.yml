@@ -14,13 +14,13 @@ env:
   CARGO_BUILD_JOBS: default
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ${{ github.workflow }}-${{ (github.event_name == 'pull_request' || github.ref == 'refs/heads/main') && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/main' }}
 
 # lint runs on every event, without waiting on changes.
 # scripts/ci-changes.ts selects every other job per event, verify requires every selected job.
 # pull_request: changes, lint, vitest on the test files the diff changed, rust on its library tests, verify.
-# push to main: changes, lint, vitest, website, rust, storybook on the paths the push changed, ios, verify.
+# push to main: changes, lint, vitest, website, rust, storybook on the paths changed since the last green push to main, ios, verify.
 # v* tag: changes, lint, vitest, website, rust, storybook, verify.
 jobs:
   lint:
@@ -164,8 +164,10 @@ jobs:
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
     env:
-      BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
       CI_EVENT: ${{ startsWith(github.ref, 'refs/tags/v') && 'tag' || github.event_name }}
     outputs:
       rust: ${{ steps.filter.outputs.rust }}
@@ -181,12 +183,26 @@ jobs:
         with:
           bun-version-file: package.json
 
+      - name: Find the head of the last green push to main
+        id: green
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --event push --branch main --status success --limit 1 \
+            --json headSha --jq '.[0].headSha // ""')
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
       - name: Fetch the base to diff against
-        if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+        if: github.event_name == 'pull_request'
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
         run: git fetch --depth=1 origin "$BASE"
 
       - name: Decide the jobs to run
         id: filter
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || steps.green.outputs.sha }}
         run: bun scripts/ci-changes.ts "$CI_EVENT" "$BASE" | tee -a "$GITHUB_OUTPUT"
 
       - name: Tag the CI rust image with the Dockerfile digest
