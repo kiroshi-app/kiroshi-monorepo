@@ -51,6 +51,7 @@ const UNKNOWN_COMPUTER: &str = "an unknown computer";
 const INSTRUCTIONS_LABEL: &str = "The instructions of this conversation:";
 const SUMMARY_LABEL: &str = "The conversation so far:";
 const REPLY_LABEL: &str = "The message this one replies to:";
+const EXCERPT_LABEL: &str = "the part replied to:";
 const RECENT_LABEL: &str = "The most recent messages:";
 const PROMPT_LABEL: &str = "The new message:";
 const ROOM_LABEL: &str = "The bots in this conversation, and the token that reaches each of them:";
@@ -316,9 +317,11 @@ async fn replied_to_targets(
 	prompt: &StoredMessage,
 ) -> Result<Vec<RepliedTo>, TranscriptStoreError> {
 	let mut targets = Vec::new();
-	for target_id in &prompt.replied_to_message_ids {
-		let Some(target) =
-			database.messages().message(conversation_id.to_owned(), target_id.clone()).await?
+	for link in &prompt.reply_links {
+		let Some(target) = database
+			.messages()
+			.message(conversation_id.to_owned(), link.message_id.clone())
+			.await?
 		else {
 			continue;
 		};
@@ -330,6 +333,7 @@ async fn replied_to_targets(
 			author: target.author,
 			written_from: target.written_from,
 			provider_session_id: run.provider_session_id,
+			excerpt: link.excerpt.clone(),
 			content: target.content,
 		});
 	}
@@ -414,6 +418,7 @@ struct RepliedTo {
 	author: AccountAuthor,
 	written_from: Option<WrittenFrom>,
 	provider_session_id: Option<String>,
+	excerpt: Option<String>,
 	content: String,
 }
 
@@ -621,8 +626,12 @@ fn quoted(replied_to: &RepliedTo, room: Option<&Room>) -> String {
 	let from = authored(replied_to.author_bot_id.as_deref(), room).unwrap_or_else(|| {
 		quoted_speaker(replied_to.role, &replied_to.author, replied_to.written_from)
 	});
+	let excerpt = match &replied_to.excerpt {
+		Some(excerpt) => format!("{EXCERPT_LABEL} {}\n", spelled(room, excerpt)),
+		None => String::new(),
+	};
 	format!(
-		"uri: {}\nfrom: {from}\nclaude session: {session}\n{}",
+		"uri: {}\nfrom: {from}\nclaude session: {session}\n{excerpt}{}",
 		replied_to.uri,
 		spelled(room, &replied_to.content)
 	)
@@ -676,7 +685,7 @@ fn answer_to<'a>(recent: &'a [StoredMessage], card: &StoredMessage) -> Option<&'
 	recent.iter().find(|message| {
 		message.role == MessageRole::User
 			&& message.seq > card.seq
-			&& message.replied_to_message_ids.first() == Some(&card.id)
+			&& message.reply_links.first().is_some_and(|link| link.message_id == card.id)
 	})
 }
 
@@ -806,7 +815,8 @@ mod tests {
 	use crate::db::connection::temp_dir;
 	use crate::db::open;
 	use crate::db::repositories::messages::{
-		MessageState, NewAssistantMessage, NewTurn, NewUserMessage, TerminalState, WrittenFrom,
+		MessageState, NewAssistantMessage, NewTurn, NewUserMessage, ReplyLink, TerminalState,
+		WrittenFrom,
 	};
 	use crate::missions::contract::{Mission, MissionDraft, MissionEntry, MissionNote};
 
@@ -817,7 +827,7 @@ mod tests {
 			author_bot_id: None,
 			author: Default::default(),
 			written_from: None,
-			replied_to_message_ids: Vec::new(),
+			reply_links: Vec::new(),
 			seq,
 			role,
 			content: content.to_owned(),
@@ -855,6 +865,7 @@ mod tests {
 			author: Default::default(),
 			written_from: None,
 			provider_session_id: Some("claude-9f3c".to_owned()),
+			excerpt: None,
 			content: "what about the roof?".to_owned(),
 		};
 		let recent = [
@@ -1245,7 +1256,7 @@ mod tests {
 					author_bot_id: None,
 					author: Default::default(),
 					written_from: WrittenFrom::Here,
-					replied_to_message_ids: Vec::new(),
+					reply_links: Vec::new(),
 					content,
 					created_at: index as i64,
 				})
@@ -1288,6 +1299,16 @@ mod tests {
 		id: &str,
 		targets: &[&str],
 	) {
+		let links = targets.iter().map(|target| ReplyLink::bare((*target).to_owned())).collect();
+		prompt_linking(database, conversation_id, id, links).await;
+	}
+
+	async fn prompt_linking(
+		database: &Database,
+		conversation_id: &str,
+		id: &str,
+		reply_links: Vec<ReplyLink>,
+	) {
 		database
 			.messages()
 			.append_user_message(NewUserMessage {
@@ -1297,7 +1318,7 @@ mod tests {
 				author_bot_id: None,
 				author: Default::default(),
 				written_from: WrittenFrom::Here,
-				replied_to_message_ids: targets.iter().map(|target| (*target).to_owned()).collect(),
+				reply_links,
 				content: asked(id),
 				created_at: 99,
 			})
@@ -1343,7 +1364,7 @@ mod tests {
 				author_bot_id: None,
 				author: Default::default(),
 				written_from: WrittenFrom::Here,
-				replied_to_message_ids: Vec::new(),
+				reply_links: Vec::new(),
 				content: content.clone(),
 				created_at: 98,
 			})
@@ -1576,6 +1597,48 @@ mod tests {
 			"the targets were not quoted in order: {context}"
 		);
 		assert_eq!(occurrences(&context, REPLY_LABEL), 1, "{context}");
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn an_excerpt_is_quoted_under_the_target_its_link_names() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let conversation = a_conversation(&database).await;
+		spoken_so_far(&database, &conversation, SPOKEN).await;
+		let links = vec![
+			ReplyLink { message_id: "m30".to_owned(), excerpt: Some("sage 30".to_owned()) },
+			ReplyLink::bare("m1".to_owned()),
+		];
+		prompt_linking(&database, &conversation, "p1", links).await;
+		let run = a_run_of(&database, &conversation, "default").await;
+
+		let context = bounded_context(
+			&database,
+			participant_of(&conversation, "default"),
+			run,
+			"p1".to_owned(),
+		)
+		.await
+		.expect("the context is rebuilt");
+
+		let quotes = [
+			quoting(
+				&conversation,
+				"m30",
+				"you",
+				"unknown",
+				"the part replied to: sage 30\nmessage 30",
+			),
+			quoting(&conversation, "m1", "user · from an unknown computer", "unknown", "message 1"),
+		]
+		.join("\n\n");
+		assert!(
+			context.contains(&format!("{REPLY_LABEL}\n{quotes}\n\n")),
+			"the excerpt was not quoted under its target: {context}"
+		);
 
 		drop(database);
 		fs::remove_dir_all(&dir).expect("cleanup");
@@ -1926,7 +1989,7 @@ mod tests {
 				author_bot_id: None,
 				author: Default::default(),
 				written_from: WrittenFrom::Here,
-				replied_to_message_ids: Vec::new(),
+				reply_links: Vec::new(),
 				content: content.to_owned(),
 				created_at,
 			})
@@ -1967,7 +2030,7 @@ mod tests {
 				author_bot_id: None,
 				author: Default::default(),
 				written_from: WrittenFrom::Here,
-				replied_to_message_ids: Vec::new(),
+				reply_links: Vec::new(),
 				content: asked(id),
 				created_at: 99,
 			})
@@ -2659,7 +2722,10 @@ mod tests {
 					..Default::default()
 				},
 				written_from: WrittenFrom::Here,
-				replied_to_message_ids: replied_to.map(str::to_owned).into_iter().collect(),
+				reply_links: replied_to
+					.map(|target| ReplyLink::bare(target.to_owned()))
+					.into_iter()
+					.collect(),
 				content: content.to_owned(),
 				created_at: STEVE_AT,
 			})
@@ -2820,6 +2886,7 @@ mod tests {
 			author: message.author.clone(),
 			written_from: message.written_from,
 			provider_session_id: None,
+			excerpt: None,
 			content: message.content.clone(),
 		};
 		[header_of(message, None), summary_line(message, None), quoted(&replied_to, None)]
@@ -2933,7 +3000,7 @@ mod tests {
 				author_bot_id: None,
 				author: ada_on(Some("Studio")),
 				written_from: WrittenFrom::Here,
-				replied_to_message_ids: Vec::new(),
+				reply_links: Vec::new(),
 				content: "the roof leaks".to_owned(),
 				created_at: STEVE_AT,
 			})

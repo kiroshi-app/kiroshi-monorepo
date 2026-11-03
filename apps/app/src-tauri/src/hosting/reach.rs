@@ -27,6 +27,7 @@ pub(super) struct Held {
 enum Check {
 	Space,
 	Child(SpaceChild),
+	ChildOfEach(SpaceChild, &'static str),
 	PluginScope(SpaceChild),
 	EnvOwner(SpaceChild),
 	Absent,
@@ -35,7 +36,7 @@ enum Check {
 impl Check {
 	fn kind(self) -> String {
 		match self {
-			Check::Child(kind) => format!("{kind:?}"),
+			Check::Child(kind) | Check::ChildOfEach(kind, _) => format!("{kind:?}"),
 			Check::PluginScope(_) => "PluginScope".to_owned(),
 			Check::EnvOwner(_) => "EnvOwner".to_owned(),
 			check => format!("{check:?}"),
@@ -58,6 +59,12 @@ const fn env_owner(kind: SpaceChild, argument: &'static str) -> Held {
 const fn optional_child(kind: SpaceChild, argument: &'static str) -> Held {
 	Held { argument, check: Check::Child(kind), is_optional: true }
 }
+
+const REPLY_LINKS: Held = Held {
+	argument: "/message/replyLinks",
+	check: Check::ChildOfEach(Message, "/messageId"),
+	is_optional: true,
+};
 
 const SPACE_ID: &[Held] = &[space("/spaceId")];
 const QUERY_FILTER: &[Held] = &[space("/query/spaceId")];
@@ -85,12 +92,14 @@ const NEW_MESSAGE: &[Held] = &[
 	optional_child(Bot, "/message/authorBotId"),
 	optional_child(Message, "/message/repliedToMessageId"),
 	optional_child(Message, "/message/repliedToMessageIds"),
+	REPLY_LINKS,
 ];
 const OPENING_MESSAGE: &[Held] = &[
 	child(Conversation, "/message/conversationId"),
 	optional_child(Bot, "/message/authorBotId"),
 	optional_child(Message, "/message/repliedToMessageId"),
 	optional_child(Message, "/message/repliedToMessageIds"),
+	REPLY_LINKS,
 ];
 const BOT_ID: &[Held] = &[child(Bot, "/botId")];
 const BOT_WRITE_AS_ID: &[Held] = &[child(BotHeldAlone, "/id")];
@@ -271,6 +280,7 @@ pub(super) const REACHES: &[(&str, Reach)] = &[
 			child(Conversation, "/message/conversationId"),
 			optional_child(Message, "/message/repliedToMessageId"),
 			optional_child(Message, "/message/repliedToMessageIds"),
+			REPLY_LINKS,
 			child(Bot, "/summoned"),
 		]),
 	),
@@ -640,7 +650,10 @@ impl<R: Runtime> Lookup<'_, R> {
 			(Check::Space, Value::String(space_id)) => space_id == self.shared_space_id,
 			(Check::Child(kind), Value::String(child_id)) => self.holds_child(kind, child_id).await,
 			(Check::Child(kind), Value::Array(child_ids)) => {
-				return self.holds_children(kind, child_ids).await;
+				return self.holds_children(kind, child_ids, "").await;
+			}
+			(Check::ChildOfEach(kind, child_id), Value::Array(items)) => {
+				return self.holds_children(kind, items, child_id).await;
 			}
 			(Check::PluginScope(bot_kind), scope) => {
 				match (scope["kind"].as_str(), scope["id"].as_str()) {
@@ -668,14 +681,19 @@ impl<R: Runtime> Lookup<'_, R> {
 		}
 	}
 
-	async fn holds_children(&self, kind: SpaceChild, child_ids: &[Value]) -> Result<(), Offending> {
-		for child_id in child_ids {
-			let is_held = match child_id.as_str() {
+	async fn holds_children(
+		&self,
+		kind: SpaceChild,
+		items: &[Value],
+		child_id: &str,
+	) -> Result<(), Offending> {
+		for item in items {
+			let is_held = match item.pointer(child_id).and_then(Value::as_str) {
 				Some(child_id) => self.holds_child(kind, child_id).await,
 				None => false,
 			};
 			if !is_held {
-				return Err(Offending::Value(child_id.clone()));
+				return Err(Offending::Value(item.clone()));
 			}
 		}
 		Ok(())

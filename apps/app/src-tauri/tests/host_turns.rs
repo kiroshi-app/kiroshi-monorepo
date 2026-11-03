@@ -40,7 +40,9 @@ use kiroshi_app::crypto::sealed_box;
 use kiroshi_app::crypto::space_key::HeldSpaceKey;
 use kiroshi_app::crypto::subkey::Subkey;
 use kiroshi_app::db;
-use kiroshi_app::db::repositories::messages::{MessagePageQuery, MessageRole, StoredMessage};
+use kiroshi_app::db::repositories::messages::{
+	MessagePageQuery, MessageRole, ReplyLink, StoredMessage,
+};
 use kiroshi_app::environment::contract::{EnvScope, ACCOUNT_BEARER};
 use kiroshi_app::environment::store;
 use kiroshi_app::events::{self, BUFFERED_FRAMES, MISSION_CHANGED};
@@ -605,6 +607,7 @@ impl Host {
 			author_bot_id: None,
 			replied_to_message_id: None,
 			replied_to_message_ids: Vec::new(),
+			reply_links: Vec::new(),
 			content: content.to_owned(),
 			created_at: 1,
 		};
@@ -870,7 +873,7 @@ fn one_member_call_stores_the_guest_message_and_the_lead_reply_with_their_live_e
 		assert_eq!(replies.len(), 1, "the room holds {transcript:#?}");
 		assert_eq!(replies[0].content, "noted");
 		assert_eq!(replies[0].turn_id, "t1");
-		assert_eq!(replies[0].replied_to_message_ids, ["p1"]);
+		assert_eq!(replies[0].reply_links, [ReplyLink::bare("p1".into())]);
 		assert!(replies_of(&transcript, GRACE).is_empty(), "a companion nobody named answered");
 		assert!(host.stored_ids().contains(&json!("p1")), "the guest heard no stored message");
 		assert_eq!(completed_texts(&host.agent_events(ADA)), vec!["noted"]);
@@ -898,7 +901,7 @@ fn a_reply_naming_a_seated_companion_starts_it_in_the_next_wave() {
 		assert_eq!(answered.len(), 1, "the room holds {transcript:#?}");
 		assert_eq!(answered[0].content, "noted");
 		assert_eq!(answered[0].turn_id, "t1");
-		assert_eq!(answered[0].replied_to_message_ids, ["p1"]);
+		assert_eq!(answered[0].reply_links, [ReplyLink::bare("p1".into())]);
 		assert!(handed[0].seq < answered[0].seq, "the handed companion spoke first");
 		host.quit().await;
 	});

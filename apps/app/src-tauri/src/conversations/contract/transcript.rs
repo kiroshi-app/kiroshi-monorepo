@@ -84,6 +84,25 @@ pub const MESSAGE_STORED_EVENT: &str = "conversation://message-stored";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
+pub struct ReplyLink {
+	pub message_id: String,
+	pub excerpt: Option<String>,
+}
+
+impl From<messages::ReplyLink> for ReplyLink {
+	fn from(link: messages::ReplyLink) -> Self {
+		Self { message_id: link.message_id, excerpt: link.excerpt }
+	}
+}
+
+impl From<ReplyLink> for messages::ReplyLink {
+	fn from(link: ReplyLink) -> Self {
+		Self { message_id: link.message_id, excerpt: link.excerpt }
+	}
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
 pub struct TranscriptMessage {
 	pub id: String,
 	pub conversation_id: String,
@@ -102,6 +121,9 @@ pub struct TranscriptMessage {
 	#[serde(default)]
 	#[specta(optional)]
 	pub replied_to_message_ids: Vec<String>,
+	#[serde(default)]
+	#[specta(optional)]
+	pub reply_links: Vec<ReplyLink>,
 	pub runtime_session_id: Option<String>,
 	#[serde(default, skip_serializing_if = "Option::is_none")]
 	#[specta(optional)]
@@ -123,8 +145,13 @@ impl TranscriptMessage {
 			content: stored.content,
 			completion: stored.state.into(),
 			created_at: stored.created_at,
-			replied_to_message_id: stored.replied_to_message_ids.first().cloned(),
-			replied_to_message_ids: stored.replied_to_message_ids,
+			replied_to_message_id: stored.reply_links.first().map(|link| link.message_id.clone()),
+			replied_to_message_ids: stored
+				.reply_links
+				.iter()
+				.map(|link| link.message_id.clone())
+				.collect(),
+			reply_links: stored.reply_links.into_iter().map(Into::into).collect(),
 			runtime_session_id: stored.runtime_session_id,
 			continues_turn_id: stored.continues_turn_id,
 		}
@@ -320,6 +347,9 @@ pub struct NewUserMessage {
 	#[serde(default)]
 	#[specta(optional)]
 	pub replied_to_message_ids: Vec<String>,
+	#[serde(default)]
+	#[specta(optional)]
+	pub reply_links: Vec<ReplyLink>,
 	pub content: String,
 	pub created_at: i64,
 }
@@ -341,9 +371,10 @@ impl NewUserMessage {
 			author_bot_id: self.author_bot_id,
 			author,
 			written_from,
-			replied_to_message_ids: reply_links(
+			reply_links: reply_links(
 				self.replied_to_message_id,
 				self.replied_to_message_ids,
+				self.reply_links,
 			),
 			content: self.content,
 			created_at: self.created_at,
@@ -363,6 +394,9 @@ pub struct SentMessage {
 	#[serde(default)]
 	#[specta(optional)]
 	pub replied_to_message_ids: Vec<String>,
+	#[serde(default)]
+	#[specta(optional)]
+	pub reply_links: Vec<ReplyLink>,
 }
 
 impl From<SentMessage> for NewUserMessage {
@@ -374,17 +408,26 @@ impl From<SentMessage> for NewUserMessage {
 			author_bot_id: None,
 			replied_to_message_id: sent.replied_to_message_id,
 			replied_to_message_ids: sent.replied_to_message_ids,
+			reply_links: sent.reply_links,
 			content: sent.content,
 			created_at: sent.created_at,
 		}
 	}
 }
 
-fn reply_links(first: Option<String>, all: Vec<String>) -> Vec<String> {
-	match all.is_empty() {
-		true => first.into_iter().collect(),
-		false => all,
+fn reply_links(
+	first: Option<String>,
+	ids: Vec<String>,
+	links: Vec<ReplyLink>,
+) -> Vec<messages::ReplyLink> {
+	if !links.is_empty() {
+		return links.into_iter().map(Into::into).collect();
 	}
+	let ids = match ids.is_empty() {
+		true => first.into_iter().collect(),
+		false => ids,
+	};
+	ids.into_iter().map(messages::ReplyLink::bare).collect()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
@@ -520,6 +563,7 @@ mod tests {
 			author_bot_id: author_bot_id.map(Into::into),
 			replied_to_message_id: None,
 			replied_to_message_ids: Vec::new(),
+			reply_links: Vec::new(),
 			content: "hello".into(),
 			created_at: 1,
 		};
@@ -545,6 +589,7 @@ mod tests {
 				author_bot_id: None,
 				replied_to_message_id: None,
 				replied_to_message_ids: Vec::new(),
+				reply_links: Vec::new(),
 				content: "hello".into(),
 				created_at: 1,
 			},
@@ -555,6 +600,7 @@ mod tests {
 				"authorBotId": null,
 				"repliedToMessageId": null,
 				"repliedToMessageIds": [],
+				"replyLinks": [],
 				"content": "hello",
 				"createdAt": 1
 			}),

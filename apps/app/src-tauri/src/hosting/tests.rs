@@ -4539,6 +4539,28 @@ fn a_relay_guest_replies_to_messages_of_the_shared_space_only() {
 }
 
 #[test]
+fn a_relay_guest_quotes_an_excerpt_of_a_message_of_the_shared_space_only() {
+	run(kept_in_the_shared_space(
+		"conversation_append_user_message",
+		json!({ "message": {
+			"id": "new", "conversationId": "c-mine", "turnId": "t-mine", "authorBotId": null,
+			"repliedToMessageId": null,
+			"replyLinks": [
+				{ "messageId": "m-mine", "excerpt": "mine" },
+				{ "messageId": "m-theirs", "excerpt": null }
+			],
+			"content": "c", "createdAt": 1
+		} }),
+		json!({ "message": {
+			"id": "new", "conversationId": "c-mine", "turnId": "t-mine", "authorBotId": null,
+			"repliedToMessageId": null,
+			"replyLinks": [{ "messageId": "m-mine", "excerpt": "mine" }],
+			"content": "c", "createdAt": 1
+		} }),
+	));
+}
+
+#[test]
 fn a_relay_guest_naming_a_row_the_host_does_not_hold_is_refused() {
 	run(async {
 		let mut guest = Guest::of_two_spaces("unknown-child").await;
@@ -5502,6 +5524,37 @@ fn one_account_reads_as_one_name_on_the_host_or_through_the_relay_and_each_line_
 }
 
 #[test]
+fn a_member_replying_with_an_excerpt_through_the_relay_stores_it_as_the_host_would() {
+	run(async {
+		let host = Authoring::new(Some(BEARER)).await;
+		direct(&host.window, "conversation_send_user_message", host.sent("typed"));
+		let mut replying = host.sent("relayed");
+		replying["message"]["replyLinks"] = json!([{ "messageId": "typed", "excerpt": "hello" }]);
+		host.relayed(json!({
+			"id": 1,
+			"command": "conversation_send_user_message",
+			"args": replying,
+		}))
+		.await;
+
+		let page = host
+			.relayed(
+				json!({ "id": 2, "command": "conversation_message_page", "args": host.page() }),
+			)
+			.await;
+
+		let relayed = page["messages"]
+			.as_array()
+			.expect("a page of messages")
+			.iter()
+			.find(|message| message["id"] == "relayed")
+			.expect("the relayed reply is stored");
+		assert_eq!(relayed["replyLinks"], json!([{ "messageId": "typed", "excerpt": "hello" }]));
+		assert_eq!(relayed["repliedToMessageIds"], json!(["typed"]));
+	});
+}
+
+#[test]
 fn a_hosted_space_with_a_joined_member_names_every_member_to_a_session_and_marks_the_host() {
 	run(async {
 		let host = Authoring::new(Some(BEARER)).await;
@@ -6300,6 +6353,7 @@ fn a_user_message(conversation_id: &str, turn_id: &str) -> NewUserMessage {
 		author_bot_id: None,
 		replied_to_message_id: None,
 		replied_to_message_ids: Vec::new(),
+		reply_links: Vec::new(),
 		content: "hello".to_owned(),
 		created_at: 2,
 	}
