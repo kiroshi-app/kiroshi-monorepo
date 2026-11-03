@@ -29,6 +29,9 @@ export const titleOf = ({ kind, name }: Pick<LibraryItem, "kind" | "name">) =>
 		? name.slice(0, extensionAt(name))
 		: name
 
+export const documentNamedAs = (name: string, title: string) =>
+	`${title}${name.slice(titleOf({ kind: "document", name }).length)}`
+
 const detailOf = (item: LibraryItem, now: number) =>
 	[
 		formatOf(item.name),

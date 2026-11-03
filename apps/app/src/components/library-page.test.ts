@@ -727,3 +727,43 @@ describe("a new Library document the host refuses to seed", () => {
 		)
 	})
 })
+
+const backgroundTabTitled = (title: string) =>
+	screen
+		.getAllByRole("tab")
+		.find(
+			(tab) =>
+				tab.getAttribute("aria-selected") !== "true" &&
+				tab.textContent?.includes(title),
+		) as HTMLElement
+
+describe("Open in new tab on a Library item", () => {
+	it("opens a new tab on the Library with that item opened", async () => {
+		const { router } = await mountApp()
+		harness.libraryItems = [IMAGE]
+		await act(async () => router.navigate({ to: "/library" }))
+		await settle()
+
+		const tile = screen
+			.getAllByRole("button")
+			.find((button) => button.textContent?.includes(IMAGE.name))
+		await act(async () => {
+			fireEvent.contextMenu(tile as HTMLElement)
+		})
+		await click(
+			screen.getByRole("menuitem", {
+				name: common("library.itemMenu.openInNewTab"),
+			}),
+		)
+		expect(screen.queryByRole("dialog")).toBeNull()
+
+		await click(backgroundTabTitled(LIBRARY_NAME))
+
+		expect(router.state.location.search).toEqual({ item: IMAGE.name })
+		expect(
+			within(screen.getByRole("dialog")).getByRole("button", {
+				name: common("library.lightbox.download"),
+			}),
+		).toBeInstanceOf(HTMLElement)
+	})
+})

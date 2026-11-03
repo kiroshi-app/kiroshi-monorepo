@@ -13,6 +13,7 @@ import {
 	SpaceSettingsRoute,
 	UserSettingsRoute,
 } from "@/components/workspace-settings"
+import { validateLibrarySearch } from "@/lib/navigation/library-search"
 import {
 	validateCompanionSettingsSearch,
 	validateSettingsSearch,
@@ -41,6 +42,7 @@ const conversationsRoute = createRoute({
 const libraryRoute = createRoute({
 	getParentRoute: () => rootRoute,
 	path: "/library",
+	validateSearch: validateLibrarySearch,
 	component: LibraryRoute,
 })
 
