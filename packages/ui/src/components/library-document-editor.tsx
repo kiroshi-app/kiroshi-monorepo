@@ -1227,8 +1227,7 @@ const LibraryDocumentEditor = ({
 	}
 
 	const cancelTitleEdit = (field: HTMLTextAreaElement) => {
-		const held = takeHeldTitle()
-		if (held !== undefined) changeTitle(held)
+		changeTitle(takeHeldTitle() ?? title)
 		field.blur()
 	}
 
