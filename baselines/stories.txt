@@ -59,10 +59,14 @@ conversation-markdown-answerblocks--illustrated-list-in-answer
 conversation-markdown-answerblocks--images-look-the-same-when-openable
 conversation-markdown-answerblocks--interactive-result-not-defined
 conversation-markdown-answerblocks--interactive-view-in-answer
+conversation-markdown-answerblocks--map-with-one-place-in-answer
+conversation-markdown-answerblocks--map-with-route-in-answer
 conversation-markdown-answerblocks--options-card-in-answer
 conversation-markdown-answerblocks--pending-while-writing
 conversation-markdown-answerblocks--plain-image-in-answer
 conversation-markdown-answerblocks--sourced-image-in-answer
+conversation-markdown-answerblocks--video-paused-with-marker-in-answer
+conversation-markdown-answerblocks--video-without-poster-or-marker-in-answer
 conversation-markdown-answerblocks--web-page-with-preview-in-answer
 conversation-markdown-answerblocks--web-page-without-preview-in-answer
 conversation-markdown-callout--in-agent-answer
@@ -92,6 +96,9 @@ conversation-markdown-interactiveview--mode-pick
 conversation-markdown-interactiveview--narrow-long-content
 conversation-markdown-interactiveview--send-values
 conversation-markdown-interactiveview--thumb-focus-ring
+conversation-markdown-mapcard--in-narrow-column
+conversation-markdown-mapcard--one-place-without-link
+conversation-markdown-mapcard--with-route
 conversation-markdown-markdown--adjacent-blocks
 conversation-markdown-markdown--appended-block
 conversation-markdown-markdown--autolinks
@@ -180,6 +187,11 @@ conversation-markdown-quotableanswer--selection-reaching-outside
 conversation-markdown-quotableanswer--whitespace-selection
 conversation-markdown-sourcedimage--in-agent-answer
 conversation-markdown-sourcedimage--in-narrow-column
+conversation-markdown-videoplayer--in-narrow-column
+conversation-markdown-videoplayer--paused-with-marker
+conversation-markdown-videoplayer--play-failed
+conversation-markdown-videoplayer--plays-and-pauses
+conversation-markdown-videoplayer--without-poster-or-marker
 conversation-markdown-webpagecard--in-agent-answer
 conversation-markdown-webpagecard--in-narrow-column
 conversation-markdown-webpagecard--with-preview-and-alt-text
