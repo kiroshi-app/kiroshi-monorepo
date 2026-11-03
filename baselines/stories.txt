@@ -1327,6 +1327,7 @@ navigation-librarydocumenteditor--agents-writing
 navigation-librarydocumenteditor--blank
 navigation-librarydocumenteditor--caret-moved-while-outside-change-renders
 navigation-librarydocumenteditor--caret-moves
+navigation-librarydocumenteditor--caret-share-failure
 navigation-librarydocumenteditor--create-failure
 navigation-librarydocumenteditor--existing-document
 navigation-librarydocumenteditor--fields-stay-in-place

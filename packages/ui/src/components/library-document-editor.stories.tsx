@@ -1243,7 +1243,7 @@ export const SelectingAcrossAgentRunLight = meta.story({
 })
 
 type FailureNoticeProps = {
-	entry: "create" | "open" | "save" | "write"
+	entry: "create" | "open" | "save" | "write" | "caret"
 }
 
 const DocumentFailureNotice = ({ entry }: FailureNoticeProps) => {
@@ -1317,5 +1317,14 @@ export const WriteFailure = meta.story({
 		"write",
 		"Atlas stopped writing before it finished. Ask again from the conversation.",
 		"The notice raised over the open editor when an agent's write broke off before it finished, from `common:library.failure.document.write`, which takes the agent's name. Check that it names the agent and sends the person back to the conversation.",
+	),
+})
+
+export const CaretShareFailure = meta.story({
+	args: { ...LAUNCH_REVIEW, template: undefined },
+	...failureStory(
+		"caret",
+		"Couldn’t show others where you are in the document. Keep editing to try again.",
+		"The notice raised over the open editor when sharing the person's caret was refused, from `common:library.failure.document.caret`. Check that it names what failed and tells the person to keep editing.",
 	),
 })
