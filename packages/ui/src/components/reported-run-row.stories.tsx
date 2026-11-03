@@ -42,7 +42,7 @@ export const Reported = meta.story({
 		docs: {
 			description: {
 				story:
-					"A morning digest that reported at 08:04. Check that the companion's face wears its own blot rather than the default blue-grey, that the routine title reads at the foreground colour rather than muted, that no badge dot is drawn on the glyph, that the trigger, the companion and the word reported follow the routine mark, and that the row answers neither the pointer nor the keyboard. `packages/ui/src/components/routines-panel.tsx:384` lists one row per run that reported earlier today, from the rows `apps/app/src/lib/missions/missions-model.ts:174` builds.",
+					"A morning digest that reported at 08:04. Check that the agent's face wears its own blot rather than the default blue-grey, that the routine title reads at the foreground colour rather than muted, that no badge dot is drawn on the glyph, that the trigger, the agent and the word reported follow the routine mark, and that the row answers neither the pointer nor the keyboard. `packages/ui/src/components/routines-panel.tsx:384` lists one row per run that reported earlier today, from the rows `apps/app/src/lib/missions/missions-model.ts:174` builds.",
 			},
 		},
 	},
