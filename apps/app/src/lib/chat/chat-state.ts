@@ -448,6 +448,7 @@ function applyEvent(state: ChatState, event: AgentEvent): ChatState {
 			return applyPermissionResolved(state, event.id, event.decision)
 		case "turnEnded":
 			return applyTurnEnded(state, event.ended)
+		case "tasksPending":
 		case "botEvolved":
 		case "botEvolutionFailed":
 			return state

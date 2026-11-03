@@ -889,3 +889,15 @@ describe("the instant a turn went busy", () => {
 		expect(at(over, submitted, 2_000).turnStartedAt).toBe(2_000)
 	})
 })
+
+describe("background tasks held by a running turn", () => {
+	it("leaves the state as it was on a tasksPending event", () => {
+		const running = applyEvents(initialChatState, [
+			{ type: "turnChanged", state: "running" },
+		])
+
+		const held = applyEvents(running, [{ type: "tasksPending", count: 2 }])
+
+		expect(held).toBe(running)
+	})
+})

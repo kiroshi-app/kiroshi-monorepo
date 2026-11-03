@@ -130,6 +130,7 @@ export type AgentEvent =
 	| { type: "questionRequested"; request: QuestionRequest }
 	| { type: "permissionResolved"; id: string; decision: PermissionDecision }
 	| { type: "turnEnded"; ended: TurnEnded }
+	| { type: "tasksPending"; count: number }
 	| {
 			type: "botEvolved"
 			bundle: EvolvedBundle
