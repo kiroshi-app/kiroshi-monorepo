@@ -30,7 +30,6 @@ import {
 } from "@/lib/library/library-items"
 import { useCreateLibraryDocument } from "@/lib/library/use-create-library-document"
 import {
-	type LibraryRename,
 	useJoinedLibraryActions,
 	useLibraryActions,
 } from "@/lib/library/use-library-actions"
@@ -155,14 +154,12 @@ const useDropMissingOpening = (
 	}, [isMissing, onOpeningChange])
 }
 
-const renameIfRetitled = (
-	{ name, title, startTitle }: OpenedDocument,
-	rename: (renamed: LibraryRename) => void,
-) => {
-	const newTitle = title.trim()
-	if (newTitle && newTitle !== startTitle) {
-		rename({ name, newName: documentNamedAs(name, newTitle) })
-	}
+const renamedDraftOf = (
+	opened: OpenedDocument,
+	{ name }: LibraryItem,
+): DocumentDraft => {
+	const title = titleOf({ kind: "document", name })
+	return { ...opened, name, title, startTitle: title }
 }
 
 const boundTo = <Item,>(item: Item, action?: (item: Item) => void) =>
@@ -279,9 +276,34 @@ export const LibraryScreen = ({
 			showDraft({ name, title, startTitle: title, detail, template })
 		})
 	}
-	const leaveDocument = (left: OpenedDocument) => {
-		void closeAndRelist().then(() => renameIfRetitled(left, actions.rename))
+	const leaveDocument = () => {
+		void closeAndRelist()
 		close()
+	}
+	const showWhileDocumentShown = (draft: DocumentDraft) => {
+		if (editor.current) {
+			showDraft(draft)
+		}
+	}
+	const restoreTitleOf = (opened: OpenedDocument) => {
+		editor.current?.restoreTitle(opened.startTitle)
+		showWhileDocumentShown({ ...opened, title: opened.startTitle })
+	}
+	const renameDocument = (opened: OpenedDocument, newTitle: string) => {
+		const newName = documentNamedAs(opened.name, newTitle)
+		if (newName === opened.name) {
+			return
+		}
+		void closeAndRelist().then(() =>
+			actions.rename(
+				{ name: opened.name, newName },
+				{
+					onSuccess: (renamed) =>
+						showWhileDocumentShown(renamedDraftOf(opened, renamed)),
+					onError: () => restoreTitleOf(opened),
+				},
+			),
+		)
 	}
 	const undoAll = () => {
 		if (document && finished) {
@@ -312,7 +334,7 @@ export const LibraryScreen = ({
 					isActionShownOn(openedDocument, action)
 				}
 				key={openedDocument.name}
-				onBack={() => leaveDocument(openedDocument)}
+				onBack={leaveDocument}
 				onBodyChange={edit}
 				onCaretChange={shareCaret}
 				onCopy={() => copyAndWait(openedItem)}
@@ -323,6 +345,7 @@ export const LibraryScreen = ({
 				onRename={focusTitleOnceMenuCloses}
 				onShowInFolder={boundTo(openedItem, reveal)}
 				onTitleChange={retitle}
+				onTitleConfirm={(newTitle) => renameDocument(openedDocument, newTitle)}
 				onUndoAll={undoAll}
 				people={people}
 				ref={editor}
