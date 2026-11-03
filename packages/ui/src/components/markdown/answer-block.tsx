@@ -246,10 +246,9 @@ const ChecklistBlockView = ({ block }: BlockProps<"checklist">) => {
 	const onCopyList = actions?.onCopyChecklist
 
 	const toggle = (id: string, isChecked: boolean) => {
-		setChecks(
-			checks.map((check, index) => (`${index}` === id ? isChecked : check)),
-		)
-		onToggleItem?.(block.title, Number(id), isChecked)
+		const row = Number(id)
+		setChecks(checks.map((check, index) => (index === row ? isChecked : check)))
+		onToggleItem?.(block.title, row, isChecked)
 	}
 
 	const listText = () =>
