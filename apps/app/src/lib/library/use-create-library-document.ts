@@ -16,25 +16,37 @@ type NewLibraryDocument = {
 	body: string
 }
 
-const seedDocument = async (spaceId: string, name: string, body: string) => {
+type Seed = {
+	name: string
+	body: string
+}
+
+type OpenCreated = (name: string) => void
+
+const seedDocument = async ({ name, body }: Seed, spaceId: string) => {
 	const { update } = await openLibraryDocument(spaceId, name)
 	await applyLibraryUpdate(spaceId, name, seedUpdateOf(update, body))
 }
 
+const useSeedLibraryDocument = (spaceId: string) =>
+	useMutation({
+		mutationFn: (seed: Seed) => seedDocument(seed, spaceId),
+		meta: {
+			failureNotice: () => ({ title: i18n.t("common:library.failure.save") }),
+			raisedIn: "use-create-library-document",
+		},
+	})
+
 export const useCreateLibraryDocument = (spaceId: string) => {
 	const queryClient = useQueryClient()
-	const { mutate, isPending } = useMutation({
-		mutationFn: async ({ title, body }: NewLibraryDocument) => {
-			const item = await createFreelyNamed(
+	const seeding = useSeedLibraryDocument(spaceId)
+	const creating = useMutation({
+		mutationFn: (title: string) =>
+			createFreelyNamed(
 				(name) => createLibraryDocument(spaceId, name),
 				title,
 				i18n.t("common:library.editor.untitled"),
-			)
-			if (body) {
-				await seedDocument(spaceId, item.name, body)
-			}
-			return item
-		},
+			),
 		onSettled: () =>
 			queryClient.invalidateQueries({
 				queryKey: libraryQueryKeys.itemsOf(spaceId),
@@ -44,5 +56,17 @@ export const useCreateLibraryDocument = (spaceId: string) => {
 			raisedIn: "use-create-library-document",
 		},
 	})
-	return { create: mutate, isCreating: isPending }
+
+	const create = ({ title, body }: NewLibraryDocument, open: OpenCreated) =>
+		creating.mutate(title, {
+			onSuccess: ({ name }) => {
+				if (!body) {
+					open(name)
+					return
+				}
+				seeding.mutate({ name, body }, { onSettled: () => open(name) })
+			},
+		})
+
+	return { create, isCreating: creating.isPending || seeding.isPending }
 }

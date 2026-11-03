@@ -4,32 +4,19 @@ import {
 	useQuery,
 	useQueryClient,
 } from "@tanstack/react-query"
-import type { Event } from "@tauri-apps/api/event"
 import { useEffect, useMemo, useState } from "react"
 
 import { i18n } from "@workspace/ui/lib/i18n"
 
+import { createLibraryDocumentFeed } from "./library-document-feed"
 import { createLibraryDocumentSession } from "./library-document-session"
 import { applyLibraryUpdate } from "./library-document-writes"
 import { libraryQueryKeys } from "./library-query-keys"
 import { openLibraryDocument } from "./library-reads"
 
-import {
-	LIBRARY_DOCUMENT_UPDATED_EVENT,
-	type LibraryDocumentUpdated,
-} from "../bindings"
-import { listen } from "../host/index"
-
 type SentUpdate = {
 	name: string
 	update: string
-}
-
-const reportUnheardUpdates = (reason: unknown) => {
-	console.error(
-		`library: ${LIBRARY_DOCUMENT_UPDATED_EVENT} could not be listened to`,
-		reason,
-	)
 }
 
 const useApplyLibraryUpdate = (spaceId: string) => {
@@ -56,12 +43,24 @@ export const useLibraryDocumentSession = (
 	const queryClient = useQueryClient()
 	const apply = useApplyLibraryUpdate(spaceId)
 	const [remoteRevision, setRemoteRevision] = useState(0)
+	const feed = useMemo(
+		() => (name ? createLibraryDocumentFeed(spaceId, name) : null),
+		[spaceId, name],
+	)
+	useEffect(() => feed?.start(), [feed])
 	const opened = useQuery({
 		queryKey: libraryQueryKeys.documentOf(spaceId, name ?? ""),
-		queryFn: name ? () => openLibraryDocument(spaceId, name) : skipToken,
+		queryFn:
+			feed && name
+				? async () => {
+						await feed.whenListening()
+						return openLibraryDocument(spaceId, name)
+					}
+				: skipToken,
 		gcTime: 0,
 		structuralSharing: false,
 		meta: {
+			raisesWhenHostOffline: true,
 			failureNotice: () => ({
 				title: i18n.t("bots:skills.files.failure.read"),
 			}),
@@ -82,26 +81,19 @@ export const useLibraryDocumentSession = (
 	const session = opened.isError ? null : openedSession
 
 	useEffect(() => {
-		if (!session) {
+		if (!session || !feed) {
 			return
 		}
-		const heard = ({ payload }: Event<LibraryDocumentUpdated>) => {
-			if (payload.spaceId !== spaceId || payload.name !== name) {
-				return
-			}
-			if (session.receive(payload.update)) {
+		const detach = feed.attach((update) => {
+			if (session.receive(update)) {
 				setRemoteRevision((revision) => revision + 1)
 			}
-		}
-		const subscription = listen<LibraryDocumentUpdated>(
-			LIBRARY_DOCUMENT_UPDATED_EVENT,
-			heard,
-		).catch(reportUnheardUpdates)
+		})
 		return () => {
+			detach()
 			void session.flush()
-			void subscription.then((unlisten) => unlisten?.())
 		}
-	}, [session, spaceId, name])
+	}, [session, feed])
 
 	const closeAndRelist = async () => {
 		await session?.flush()
@@ -118,7 +110,7 @@ export const useLibraryDocumentSession = (
 				}
 			: null,
 		edit: (markdown: string) => session?.edit(markdown),
+		hasFailedToOpen: opened.isError,
 		closeAndRelist,
-		readAgain: opened.refetch,
 	}
 }

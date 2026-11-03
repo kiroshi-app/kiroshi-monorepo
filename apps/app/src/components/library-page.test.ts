@@ -17,6 +17,7 @@ import * as Y from "yjs"
 
 import type { AppRailPanel } from "@workspace/ui/components/app-rail"
 import { libraryDocumentStartOf } from "@workspace/ui/components/library-document-editor"
+import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { LibraryScreen } from "@/components/library-screen"
@@ -30,6 +31,7 @@ import { newBotIdentity } from "@/lib/bots/bot-settings"
 import { createFakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
+import { hostOfflineOf } from "@/lib/host/host-offline"
 import type { Invoke } from "@/lib/host/joined-hosts-invoke"
 import { base64Of, bytesOf } from "@/lib/library/library-document-session"
 import { titleOf } from "@/lib/library/library-items"
@@ -70,7 +72,11 @@ const libraryItemOf = (
 const createFakeLibraryHost = () => {
 	const documents = new Map<string, Y.Doc>()
 	const listeners = new Set<UpdateHeard>()
-	const host = { refusesUpdates: false }
+	const host = {
+		refusesUpdates: false,
+		isOffline: false,
+		onOpened: null as ((name: string) => void) | null,
+	}
 
 	const documentOf = (name: string) => {
 		const held = documents.get(name)
@@ -99,10 +105,14 @@ const createFakeLibraryHost = () => {
 			harness.libraryItems = [...harness.libraryItems, item]
 			return item
 		},
-		library_open_document: ({ name }) => ({
-			name,
-			update: base64Of(Y.encodeStateAsUpdate(documentOf(name))),
-		}),
+		library_open_document: ({ name }) => {
+			if (host.isOffline) {
+				throw hostOfflineOf("gone")
+			}
+			const update = base64Of(Y.encodeStateAsUpdate(documentOf(name)))
+			host.onOpened?.(name)
+			return { name, update }
+		},
 		library_apply_update: ({ name, update }) => {
 			if (host.refusesUpdates) {
 				throw { kind: "tooLarge", name, bytes: 0, limit: 0 }
@@ -118,6 +128,17 @@ const createFakeLibraryHost = () => {
 		commands,
 		markdownOf: (name: string) =>
 			documentOf(name).getText("markdown").toString(),
+		writeElsewhere: (name: string, markdown: string) => {
+			const doc = documentOf(name)
+			const text = doc.getText("markdown")
+			const before = Y.encodeStateVector(doc)
+			doc.transact(() => {
+				text.delete(0, text.length)
+				text.insert(0, markdown)
+			})
+			const update = base64Of(Y.encodeStateAsUpdate(doc, before))
+			announce({ spaceId: LIBRARY_SPACE_ID, name, update })
+		},
 		listen: (heard: UpdateHeard) => {
 			listeners.add(heard)
 			return () => {
@@ -128,6 +149,8 @@ const createFakeLibraryHost = () => {
 			documents.clear()
 			listeners.clear()
 			host.refusesUpdates = false
+			host.isOffline = false
+			host.onOpened = null
 		},
 	}
 }
@@ -175,6 +198,13 @@ vi.mock("@/lib/host/index", async (importOriginal) => {
 			: actual.listen(event, handler)
 	return { ...actual, invoke, listen, isDesktopHost: () => false }
 })
+
+vi.mock("@workspace/ui/components/notice-surface", async (importOriginal) => ({
+	...(await importOriginal<
+		typeof import("@workspace/ui/components/notice-surface")
+	>()),
+	raiseFailureNotice: vi.fn(() => "notice"),
+}))
 
 vi.mock("@/lib/host/tauri", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/lib/host/tauri")>()),
@@ -235,6 +265,7 @@ afterEach(() => {
 	harness.missions = []
 	harness.libraryItems = []
 	fakeLibraryHost.reset()
+	vi.mocked(raiseFailureNotice).mockClear()
 })
 
 const settle = async () => {
@@ -615,5 +646,76 @@ describe("an opened Library document", () => {
 			timeout: 1000,
 		})
 		expect(fakeLibraryHost.markdownOf(DOCUMENT.name)).toBe(HOSTED_CONTENT)
+	})
+
+	it("shows in a client an update the host announced while that client was opening", async () => {
+		harness.libraryItems = [DOCUMENT]
+		const onHost = await renderLibraryScreen(false)
+		const member = await renderLibraryScreen(true)
+		await openLibraryItem(DOCUMENT, onHost)
+		await waitFor(() => expect(paragraphOf(onHost).value).toBe(HOSTED_CONTENT))
+		fakeLibraryHost.host.onOpened = (name) => {
+			fakeLibraryHost.host.onOpened = null
+			fakeLibraryHost.writeElsewhere(name, "Notes from elsewhere")
+		}
+
+		await openLibraryItem(DOCUMENT, member)
+
+		await waitFor(
+			() => expect(paragraphOf(member).value).toBe("Notes from elsewhere"),
+			{ timeout: 1000 },
+		)
+		await typeInto(paragraphOf(onHost), "Notes from elsewhere and here")
+		await waitFor(
+			() =>
+				expect(paragraphOf(member).value).toBe("Notes from elsewhere and here"),
+			{ timeout: 1000 },
+		)
+	})
+
+	it("returns to the panel and raises a notice on each open the offline joined host fails", async () => {
+		harness.libraryItems = [DOCUMENT]
+		const shown = await renderLibraryScreen(true)
+		fakeLibraryHost.host.isOffline = true
+
+		await openLibraryItem(DOCUMENT, shown)
+
+		await waitFor(() => expect(raiseFailureNotice).toHaveBeenCalledTimes(1))
+		expect(raiseFailureNotice).toHaveBeenCalledWith(
+			expect.objectContaining({
+				title: i18n.t("bots:skills.files.failure.read"),
+			}),
+		)
+		expect(
+			shown.getByRole("heading", { level: 1, name: LIBRARY_NAME }),
+		).toBeInstanceOf(HTMLElement)
+		expect(shown.queryByRole("textbox", { name: PARAGRAPH_FIELD })).toBeNull()
+
+		await openLibraryItem(DOCUMENT, shown)
+
+		await waitFor(() => expect(raiseFailureNotice).toHaveBeenCalledTimes(2))
+		expect(shown.queryByRole("textbox", { name: PARAGRAPH_FIELD })).toBeNull()
+	})
+})
+
+describe("a new Library document the host refuses to seed", () => {
+	it("opens blank from the host's state and raises the save failure", async () => {
+		const start = libraryDocumentStartOf("brief", new Date(), common)
+		const shown = await renderLibraryScreen(false)
+		fakeLibraryHost.host.refusesUpdates = true
+
+		await press(
+			await findButtonContaining(common("library.templates.brief.name"), shown),
+		)
+		await createFromDialog()
+
+		expect(await screen.findByText(start.detail)).toBeInstanceOf(HTMLElement)
+		expect(paragraphOf(screen).value).toBe("")
+		expect(fakeLibraryHost.markdownOf("Untitled.md")).toBe("")
+		await waitFor(() =>
+			expect(raiseFailureNotice).toHaveBeenCalledWith(
+				expect.objectContaining({ title: common("library.failure.save") }),
+			),
+		)
 	})
 })

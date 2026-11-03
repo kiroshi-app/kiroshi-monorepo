@@ -70,8 +70,11 @@ export const LibraryScreen = ({
 	const { create, isCreating } = useCreateLibraryDocument(spaceId)
 	const openedDocument = opened?.kind === "document" ? opened : null
 	const openedDocumentName = openedDocument?.name ?? null
-	const { document, edit, closeAndRelist, readAgain } =
+	const { document, edit, hasFailedToOpen, closeAndRelist } =
 		useLibraryDocumentSession(spaceId, openedDocumentName)
+	if (openedDocument && hasFailedToOpen) {
+		setOpened(null)
+	}
 
 	const shownItems = library.items
 		.filter((item) => matchesQuery(item, query))
@@ -102,10 +105,6 @@ export const LibraryScreen = ({
 			setOpened({ kind: "image", id: item.id })
 			return
 		}
-		if (item.id === openedDocumentName) {
-			void readAgain()
-			return
-		}
 		setOpened({
 			kind: "document",
 			name: item.id,
@@ -122,15 +121,10 @@ export const LibraryScreen = ({
 			new Date(),
 			i18n.getFixedT(null, "common"),
 		)
-		create(
-			{ title, body },
-			{
-				onSuccess: ({ name }) => {
-					setPickedTemplate(null)
-					setOpened({ kind: "document", name, title, detail, template })
-				},
-			},
-		)
+		create({ title, body }, (name) => {
+			setPickedTemplate(null)
+			setOpened({ kind: "document", name, title, detail, template })
+		})
 	}
 	const leaveDocument = () => {
 		void closeAndRelist()

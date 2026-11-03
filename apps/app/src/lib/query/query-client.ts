@@ -22,7 +22,10 @@ type NoticedFailure = {
 
 export type FailureMeta = InlineFailure | NoticedFailure
 
-type QueryMeta = FailureMeta & { rereadsItselfOnReconnect?: true }
+type QueryMeta = FailureMeta & {
+	rereadsItselfOnReconnect?: true
+	raisesWhenHostOffline?: true
+}
 
 declare module "@tanstack/react-query" {
 	interface Register {
@@ -72,7 +75,7 @@ const createQueryCache = (): QueryCache => {
 	const noticedOutages = new WeakSet<Query<unknown, unknown>>()
 	return new QueryCache({
 		onError: (error, query) => {
-			if (isHostOffline(error)) {
+			if (isHostOffline(error) && !query.meta?.raisesWhenHostOffline) {
 				return
 			}
 			const noticed = noticedFailureOf(error, query.meta, "query-cache")
