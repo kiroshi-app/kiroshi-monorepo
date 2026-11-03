@@ -8,7 +8,8 @@ import { type DroppedFile, toImportingItem } from "./library-items"
 import { libraryQueryKeys } from "./library-query-keys"
 import { importLibraryFile } from "./library-reads"
 
-import { describeFailure } from "../failure-report"
+import type { LibraryError } from "../bindings"
+import { isHostRefused } from "../host/host-refused"
 
 const MIB = 1024 * 1024
 
@@ -18,11 +19,44 @@ const MAX_HOSTED_IMPORT_BYTES = 20 * MIB
 
 const ENCODED_CHUNK_BYTES = 32 * 1024
 
+const WORDED_IMPORT_REASONS = [
+	"tooLarge",
+	"invalidName",
+	"unsupported",
+	"undecodable",
+	"notUtf8",
+	"missing",
+	"unwritable",
+	"unreadable",
+	"unknownSpace",
+	"unavailable",
+	"storage",
+] as const satisfies readonly LibraryError["kind"][]
+
+type WordedImportReason = (typeof WORDED_IMPORT_REASONS)[number]
+
+const isWordedImportReason = (kind: unknown): kind is WordedImportReason =>
+	WORDED_IMPORT_REASONS.some((reason) => reason === kind)
+
+const refusalOf = (cause: unknown) =>
+	isHostRefused(cause) ? cause.cause : cause
+
+const importReasonOf = (cause: unknown) => {
+	const refusal = refusalOf(cause)
+	const kind =
+		typeof refusal === "object" && refusal !== null
+			? (refusal as { kind?: unknown }).kind
+			: undefined
+	return isWordedImportReason(kind) ? kind : "generic"
+}
+
 class LibraryImportFailure extends Error {
 	readonly fileName: string
 
 	constructor(fileName: string, cause: unknown) {
-		super(describeFailure(cause), { cause })
+		super(i18n.t(`common:library.failure.import.${importReasonOf(cause)}`), {
+			cause,
+		})
 		this.fileName = fileName
 	}
 }

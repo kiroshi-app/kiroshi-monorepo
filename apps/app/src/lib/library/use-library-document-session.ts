@@ -29,7 +29,9 @@ const useApplyLibraryUpdate = (spaceId: string) => {
 				queryKey: libraryQueryKeys.documentOf(spaceId, name),
 			}),
 		meta: {
-			failureNotice: () => ({ title: i18n.t("common:library.failure.save") }),
+			failureNotice: () => ({
+				title: i18n.t("common:library.failure.document.save"),
+			}),
 			raisedIn: "use-library-document-session",
 		},
 	})
@@ -62,7 +64,7 @@ export const useLibraryDocumentSession = (
 		meta: {
 			raisesWhenHostOffline: true,
 			failureNotice: () => ({
-				title: i18n.t("bots:skills.files.failure.read"),
+				title: i18n.t("common:library.failure.document.open"),
 			}),
 			raisedIn: "use-library-document-session",
 		},

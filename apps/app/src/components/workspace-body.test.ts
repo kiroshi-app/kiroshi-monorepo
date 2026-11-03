@@ -1541,7 +1541,9 @@ describe("WorkspaceBody library", () => {
 
 		await open("notes")
 
-		await noticeTitled("Couldn’t open this file. Retry.")
+		await noticeTitled(
+			"Couldn’t open the document. Open it again from the Library.",
+		)
 		expect(shownNames()).toContain("notes")
 	})
 

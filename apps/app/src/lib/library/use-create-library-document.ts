@@ -32,7 +32,9 @@ const useSeedLibraryDocument = (spaceId: string) =>
 	useMutation({
 		mutationFn: (seed: Seed) => seedDocument(seed, spaceId),
 		meta: {
-			failureNotice: () => ({ title: i18n.t("common:library.failure.save") }),
+			failureNotice: () => ({
+				title: i18n.t("common:library.failure.document.save"),
+			}),
 			raisedIn: "use-create-library-document",
 		},
 	})
@@ -52,7 +54,9 @@ export const useCreateLibraryDocument = (spaceId: string) => {
 				queryKey: libraryQueryKeys.itemsOf(spaceId),
 			}),
 		meta: {
-			failureNotice: () => ({ title: i18n.t("chat:screen.notice.failed") }),
+			failureNotice: () => ({
+				title: i18n.t("common:library.failure.document.create"),
+			}),
 			raisedIn: "use-create-library-document",
 		},
 	})

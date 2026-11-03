@@ -683,7 +683,7 @@ describe("an opened Library document", () => {
 		await waitFor(() => expect(raiseFailureNotice).toHaveBeenCalledTimes(1))
 		expect(raiseFailureNotice).toHaveBeenCalledWith(
 			expect.objectContaining({
-				title: i18n.t("bots:skills.files.failure.read"),
+				title: i18n.t("common:library.failure.document.open"),
 			}),
 		)
 		expect(
@@ -714,7 +714,9 @@ describe("a new Library document the host refuses to seed", () => {
 		expect(fakeLibraryHost.markdownOf("Untitled.md")).toBe("")
 		await waitFor(() =>
 			expect(raiseFailureNotice).toHaveBeenCalledWith(
-				expect.objectContaining({ title: common("library.failure.save") }),
+				expect.objectContaining({
+					title: common("library.failure.document.save"),
+				}),
 			),
 		)
 	})
