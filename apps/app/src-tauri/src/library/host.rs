@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
@@ -11,16 +11,27 @@ use tauri::{AppHandle, Manager, Runtime, State};
 use tokio::sync::OwnedMutexGuard;
 
 use super::contract::{
-	LibraryDocumentFormat, LibraryDocumentWriterFinished, LibraryError, LibraryWriteOutcome,
+	LibraryChanged, LibraryDocumentFormat, LibraryDocumentWriterFinished, LibraryError,
+	LibraryItem, LibraryItemKind, LibraryWriteOutcome,
 };
 use super::documents::{located, Location, Placement, WriteStep};
 use super::presence::{seat_writer, unseat_writer, Seat, Seated};
-use super::{announce, documents, read_document, root};
+use super::{
+	a_document, announce, create_document, document_text, documents, encoded_content, import_path,
+	list, read_document, rename_document, resolve, root, AcceptedType,
+};
 use crate::agent::host::{Host, Refusal};
 use crate::conversations::commands::ready;
+use crate::db::repositories::keyset::{self, Keyset};
 use crate::{db, events};
 
 const WRITE_STEPS: usize = 40;
+
+const LIST_LIMIT_DEFAULT: u32 = 50;
+
+const LIST_LIMIT_MAXIMUM: u32 = 200;
+
+const MAX_SHOWN_IMAGE_BYTES: u64 = 5 * 1024 * 1024 / 4 * 3;
 
 const STEP_PAUSE: Duration = Duration::from_millis(40);
 
@@ -50,6 +61,16 @@ pub enum ToolRefusal {
 		conversation_id: String,
 	},
 	#[serde(rename_all = "camelCase")]
+	LimitOutOfRange {
+		limit: i64,
+		minimum: i64,
+		maximum: i64,
+	},
+	#[serde(rename_all = "camelCase")]
+	UnreadableCursor {
+		cursor: String,
+	},
+	#[serde(rename_all = "camelCase")]
 	UnreadableRequest {
 		detail: String,
 	},
@@ -62,14 +83,54 @@ pub enum ToolRefusal {
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Operation {
+	List,
+	Search,
 	Read,
+	Create,
 	Write,
+	Import,
+	Rename,
+	Delete,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct Read {
+struct Listed {
+	kind: Option<LibraryItemKind>,
+	limit: Option<i64>,
+	cursor: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Searched {
+	query: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Named {
 	name: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Created {
+	name: String,
+	template: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Imported {
+	path: PathBuf,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Renamed {
+	name: String,
+	new_name: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -85,6 +146,44 @@ struct Write {
 struct DocumentText {
 	name: String,
 	text: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Entry {
+	name: String,
+	kind: LibraryItemKind,
+	updated_at: i64,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EntriesListed {
+	items: Vec<Entry>,
+	cursor: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EntriesFound {
+	items: Vec<Entry>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(tag = "form", rename_all = "camelCase")]
+enum ItemRead {
+	#[serde(rename_all = "camelCase")]
+	Text { name: String, kind: LibraryItemKind, text: String },
+	#[serde(rename_all = "camelCase")]
+	Image { name: String, mime_type: String, content: String },
+	#[serde(rename_all = "camelCase")]
+	Described { name: String, kind: LibraryItemKind, mime_type: String, bytes: u64 },
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Deleted {
+	name: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -181,16 +280,145 @@ impl<R: Runtime> Host for LibraryHost<R> {
 		let space_id = self.space(database).await?;
 		let root = root(&self.app)?;
 		match operation {
+			Operation::List => Self::answered(listed(&root, &space_id, Self::read(payload)?)?),
+			Operation::Search => Self::answered(found(&root, &space_id, &Self::read(payload)?)?),
 			Operation::Read => {
-				let asked: Read = Self::read(payload)?;
-				Self::answered(markdown(&root, &space_id, &asked.name)?)
+				let asked: Named = Self::read(payload)?;
+				Self::answered(item_read(&root, &space_id, &asked.name)?)
+			}
+			Operation::Create => {
+				let asked: Created = Self::read(payload)?;
+				let created =
+					create_document(&root, &space_id, &asked.name, asked.template.as_deref())?;
+				Self::answered(self.changed(&space_id, created))
 			}
 			Operation::Write => {
 				let asked: Write = Self::read(payload)?;
 				let agent = self.agent(database).await?;
 				Self::answered(self.written(&root, &space_id, &agent, asked).await?)
 			}
+			Operation::Import => {
+				let asked: Imported = Self::read(payload)?;
+				let imported = import_path(&root, &space_id, &asked.path)?;
+				Self::answered(self.changed(&space_id, imported))
+			}
+			Operation::Rename => {
+				let asked: Renamed = Self::read(payload)?;
+				a_document(&root, &space_id, &asked.name)?;
+				let renamed =
+					rename_document(&self.app, &root, &space_id, &asked.name, &asked.new_name)?;
+				Self::answered(self.changed(&space_id, renamed))
+			}
+			Operation::Delete => {
+				let asked: Named = Self::read(payload)?;
+				documents(&self.app).delete(&root, &space_id, &asked.name)?;
+				announce_change(&self.app, &space_id);
+				Self::answered(Deleted { name: asked.name })
+			}
 		}
+	}
+}
+
+impl<R: Runtime> LibraryHost<R> {
+	fn changed(&self, space_id: &str, item: LibraryItem) -> Entry {
+		announce_change(&self.app, space_id);
+		Entry::of(item)
+	}
+}
+
+impl Entry {
+	fn of(item: LibraryItem) -> Self {
+		Self { name: item.name, kind: item.kind, updated_at: item.modified_at }
+	}
+}
+
+fn listed(root: &Path, space_id: &str, asked: Listed) -> Result<EntriesListed, DocumentRefusal> {
+	let size = list_limit(asked.limit)?;
+	let after =
+		keyset::after(asked.cursor).map_err(|cursor| ToolRefusal::UnreadableCursor { cursor })?;
+	let rows = list(root, space_id)?
+		.into_iter()
+		.filter(|item| asked.kind.is_none_or(|kind| item.kind == kind))
+		.filter(|item| after.as_ref().is_none_or(|after| is_past(item, after)))
+		.take(size as usize + 1)
+		.collect();
+	let page = keyset::paged(rows, size, |item: &LibraryItem| Keyset {
+		sort_key: item.modified_at,
+		id: item.name.clone(),
+	});
+	Ok(EntriesListed {
+		items: page.rows.into_iter().map(Entry::of).collect(),
+		cursor: page.next.map(|next| next.encoded()),
+	})
+}
+
+fn list_limit(limit: Option<i64>) -> Result<u32, ToolRefusal> {
+	let Some(limit) = limit else {
+		return Ok(LIST_LIMIT_DEFAULT);
+	};
+	u32::try_from(limit).ok().filter(|held| (1..=LIST_LIMIT_MAXIMUM).contains(held)).ok_or(
+		ToolRefusal::LimitOutOfRange { limit, minimum: 1, maximum: i64::from(LIST_LIMIT_MAXIMUM) },
+	)
+}
+
+fn is_past(item: &LibraryItem, after: &Keyset) -> bool {
+	item.modified_at < after.sort_key
+		|| (item.modified_at == after.sort_key && item.name > after.id)
+}
+
+fn found(root: &Path, space_id: &str, asked: &Searched) -> Result<EntriesFound, LibraryError> {
+	let query = asked.query.to_lowercase();
+	let mut items = Vec::new();
+	for item in list(root, space_id)? {
+		if item.name.to_lowercase().contains(&query) || text_holds(root, space_id, &item, &query)? {
+			items.push(Entry::of(item));
+		}
+	}
+	Ok(EntriesFound { items })
+}
+
+fn text_holds(
+	root: &Path,
+	space_id: &str,
+	item: &LibraryItem,
+	query: &str,
+) -> Result<bool, LibraryError> {
+	if item.kind != LibraryItemKind::Document {
+		return Ok(false);
+	}
+	let resolved = resolve(root, space_id, &item.name)?;
+	Ok(document_text(&resolved, &item.name)?.to_lowercase().contains(query))
+}
+
+fn item_read(root: &Path, space_id: &str, name: &str) -> Result<ItemRead, LibraryError> {
+	let item = resolve(root, space_id, name)?;
+	let name = name.to_owned();
+	Ok(match item.accepted {
+		AcceptedType::Document(_) => ItemRead::Text {
+			text: document_text(&item, &name)?,
+			name,
+			kind: LibraryItemKind::Document,
+		},
+		AcceptedType::Image { mime_type } if item.bytes <= MAX_SHOWN_IMAGE_BYTES => {
+			ItemRead::Image {
+				content: encoded_content(&item, &name)?,
+				name,
+				mime_type: mime_type.to_owned(),
+			}
+		}
+		AcceptedType::Image { mime_type } => ItemRead::Described {
+			name,
+			kind: LibraryItemKind::Image,
+			mime_type: mime_type.to_owned(),
+			bytes: item.bytes,
+		},
+	})
+}
+
+fn announce_change<R: Runtime>(app: &AppHandle<R>, space_id: &str) {
+	let changed = LibraryChanged { space_id: space_id.to_owned() };
+	if let Err(error) = events::emit(app, events::LIBRARY_CHANGED, changed) {
+		log::warn!("a change of the library of space {space_id} was not announced: {error}");
 	}
 }
 

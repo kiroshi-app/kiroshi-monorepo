@@ -14,8 +14,8 @@ use yrs::{
 use super::contract::LibraryError;
 use super::{
 	accepted_type, discarded, document_text, is_plain_name, is_the_item_itself,
-	linked_under_free_name, resolve, space_dir, undecodable, unwritable, within, AcceptedType,
-	ResolvedItem, MAX_DOCUMENT_BYTES,
+	linked_under_free_name, resolve, space_dir, thumbnail_name, thumbnails_dir, undecodable,
+	unwritable, within, AcceptedType, ResolvedItem, MAX_DOCUMENT_BYTES,
 };
 use crate::private_files;
 
@@ -200,6 +200,29 @@ impl Documents {
 		Ok(landed)
 	}
 
+	pub(crate) fn delete(
+		&self,
+		root: &Path,
+		space_id: &str,
+		name: &str,
+	) -> Result<(), LibraryError> {
+		let mut held = self.held();
+		let item = resolve(root, space_id, name)?;
+		let thumbnail = match item.accepted {
+			AcceptedType::Image { .. } => Some(
+				thumbnails_dir(&space_dir(root, space_id)).join(thumbnail_name(name, &item.path)?),
+			),
+			AcceptedType::Document(_) => None,
+		};
+		fs::remove_file(&item.path).map_err(unwritable)?;
+		if let Some(thumbnail) = thumbnail {
+			discarded(&thumbnail);
+		}
+		discarded(&state_path(root, space_id, name));
+		held.forgot(space_id, name);
+		Ok(())
+	}
+
 	pub(crate) fn forget(&self, root: &Path, space_id: &str) -> io::Result<()> {
 		let mut held = self.held();
 		held.docs.retain(|(held_space_id, _), _| held_space_id != space_id);
@@ -231,6 +254,13 @@ impl Held {
 			}
 			(found, _) => found,
 		}
+	}
+
+	fn forgot(&mut self, space_id: &str, name: &str) {
+		self.docs.remove(&key(space_id, name));
+		self.landed_names.retain(|(held_space_id, former), landed| {
+			held_space_id != space_id || (former != name && landed != name)
+		});
 	}
 
 	fn moved(&mut self, space_id: &str, name: &str, landed: &str) {

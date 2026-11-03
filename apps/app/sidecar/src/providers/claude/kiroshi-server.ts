@@ -11,7 +11,7 @@ import {
 	type DelegateScope,
 	delegateTool,
 } from "./delegate"
-import { documentTools } from "./document-tools"
+import { libraryTools } from "./document-tools"
 import { missionTools } from "./mission-tools"
 import { routineTools } from "./routine-tools"
 
@@ -29,7 +29,7 @@ export const kiroshiTools = ({ session, ...scope }: KiroshiScope) => [
 	...applicationTools(session),
 	...companionTools(session, scope),
 	...bundleTools(session),
-	...documentTools(session),
+	...libraryTools(session, scope),
 ]
 
 export const kiroshiServer = (

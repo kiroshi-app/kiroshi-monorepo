@@ -1,6 +1,10 @@
+use std::fs::File;
+use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{channel, Receiver};
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
+
+use image::{DynamicImage, ImageFormat, Rgb, RgbImage};
 
 use serde::de::DeserializeOwned;
 use serde_json::{json, Value};
@@ -11,9 +15,11 @@ use yrs::updates::encoder::Encode;
 use yrs::{Doc, GetString, IndexedSequence, ReadTxn, Text, Transact, Update};
 
 use super::*;
-use crate::library::contract::{LibraryDocumentPresence, LibraryWriter, LibraryWriterKind};
+use crate::library::contract::{
+	LibraryDocumentPresence, LibraryDocumentRenamed, LibraryWriter, LibraryWriterKind,
+};
 use crate::library::presence::{share_caret, Presences};
-use crate::library::{apply_update, open_document};
+use crate::library::{apply_update, open_document, read_thumbnail};
 use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 
 const A_CONVERSATION: &str = "
@@ -241,23 +247,289 @@ async fn a_passage_found_zero_or_many_times_writes_nothing_says_which_and_publis
 }
 
 #[tokio::test]
-async fn both_tools_stay_in_the_space_of_the_conversation_and_on_markdown() {
+async fn every_tool_stays_in_the_space_of_the_conversation_and_writes_only_markdown() {
 	let (app, root) = a_host("scope").await;
 	let published = heard_in_order(&app);
+	let changes = heard::<LibraryChanged>(&app, events::LIBRARY_CHANGED.name());
 	put(&root, SPACE, "plain.txt", "plain");
 	put(&root, "work", "elsewhere.md", "not yours");
 	let host = the_host(&app);
-	let read = |name: &str| host.served(Operation::Read, json!({ "name": name }));
+	let named = |operation: Operation, name: &str| host.served(operation, json!({ "name": name }));
 	let write = |name: &str| host.served(Operation::Write, json!({ "name": name, "text": "!" }));
+	let rename = |name: &str, new_name: &str| {
+		host.served(Operation::Rename, json!({ "name": name, "newName": new_name }))
+	};
 
-	assert_eq!(refusal_kind(read("elsewhere.md").await), "missing");
-	assert_eq!(refusal_kind(read("../work/elsewhere.md").await), "invalidName");
-	assert_eq!(refusal_kind(read("plain.txt").await), "notADocument");
+	for operation in [Operation::Read, Operation::Delete, Operation::Create] {
+		assert_eq!(refusal_kind(named(operation, "../work/elsewhere.md").await), "invalidName");
+	}
+	assert_eq!(refusal_kind(named(Operation::Read, "elsewhere.md").await), "missing");
+	assert_eq!(refusal_kind(named(Operation::Delete, "elsewhere.md").await), "missing");
 	assert_eq!(refusal_kind(write("elsewhere.md").await), "missing");
 	assert_eq!(refusal_kind(write("../work/elsewhere.md").await), "invalidName");
 	assert_eq!(refusal_kind(write("plain.txt").await), "notADocument");
+	assert_eq!(refusal_kind(rename("elsewhere.md", "mine.md").await), "missing");
+	assert_eq!(refusal_kind(rename("plain.txt", "../work/plain.txt").await), "invalidName");
 	assert_eq!(std::fs::read_to_string(root.join("work/elsewhere.md")).expect("kept"), "not yours");
+	assert_eq!(on_disk(&root, "plain.txt"), "plain");
+	assert!(!root.join("work/plain.txt").exists());
 	assert_eq!(all_of(&published), []);
+	assert_eq!(all_of(&changes), []);
+}
+
+fn png_of(edge: u32) -> Vec<u8> {
+	let mut png = Vec::new();
+	DynamicImage::ImageRgb8(RgbImage::from_pixel(edge, edge, Rgb([200, 40, 40])))
+		.write_to(&mut Cursor::new(&mut png), ImageFormat::Png)
+		.expect("the image encodes");
+	png
+}
+
+fn put_bytes(root: &Path, name: &str, bytes: &[u8]) {
+	let dir = root.join(SPACE);
+	std::fs::create_dir_all(&dir).expect("the space folder lands");
+	std::fs::write(dir.join(name), bytes).expect("the file lands");
+}
+
+fn modified_at(root: &Path, name: &str, seconds: u64) {
+	File::options()
+		.write(true)
+		.open(root.join(SPACE).join(name))
+		.expect("the file opens")
+		.set_modified(SystemTime::UNIX_EPOCH + Duration::from_secs(seconds))
+		.expect("the modified time lands");
+}
+
+fn thumbnails(root: &Path) -> usize {
+	std::fs::read_dir(root.join(SPACE).join(".thumbnails")).map_or(0, |found| found.count())
+}
+
+fn state_file(root: &Path, name: &str) -> PathBuf {
+	root.join(".documents").join(SPACE).join(format!("{name}.yjs"))
+}
+
+fn names_in(answer: &Value) -> Vec<&str> {
+	answer["items"]
+		.as_array()
+		.expect("a list of items")
+		.iter()
+		.map(|item| item["name"].as_str().expect("a name"))
+		.collect()
+}
+
+#[tokio::test]
+async fn a_list_runs_newest_first_by_kind_and_pages_on_its_cursor() {
+	let (app, root) = a_host("list").await;
+	put(&root, SPACE, "a.md", "A");
+	put(&root, SPACE, "b.md", "B");
+	put_bytes(&root, "c.png", &png_of(4));
+	put(&root, "work", "elsewhere.md", "not yours");
+	modified_at(&root, "a.md", 300);
+	modified_at(&root, "b.md", 100);
+	modified_at(&root, "c.png", 200);
+	let host = the_host(&app);
+	let list = |asked: Value| host.served(Operation::List, asked);
+
+	let first = list(json!({ "limit": 2 })).await.expect("lists");
+	let rest = list(json!({ "limit": 2, "cursor": first["cursor"] })).await.expect("lists");
+	let documents = list(json!({ "kind": "document" })).await.expect("lists");
+
+	assert_eq!(names_in(&first), ["a.md", "c.png"]);
+	assert_eq!(
+		first["items"][1],
+		json!({ "name": "c.png", "kind": "image", "updatedAt": 200_000 })
+	);
+	assert_eq!(names_in(&rest), ["b.md"]);
+	assert_eq!(rest["cursor"], Value::Null);
+	assert_eq!(names_in(&documents), ["a.md", "b.md"]);
+	assert_eq!(refusal_kind(list(json!({ "limit": 0 })).await), "limitOutOfRange");
+	assert_eq!(refusal_kind(list(json!({ "cursor": "not a cursor" })).await), "unreadableCursor");
+	assert_eq!(refusal_kind(list(json!({ "kind": "song" })).await), "unreadableRequest");
+}
+
+#[tokio::test]
+async fn a_search_matches_a_name_or_a_document_text_whatever_its_case() {
+	let (app, root) = a_host("search").await;
+	put(&root, SPACE, "Roadmap.md", "Dates.");
+	put(&root, SPACE, "notes.md", "The ROADMAP moved.");
+	put(&root, SPACE, "other.txt", "Nothing here.");
+	put_bytes(&root, "roadmap.png", &png_of(4));
+	put(&root, "work", "roadmap.md", "not yours");
+	modified_at(&root, "Roadmap.md", 300);
+	modified_at(&root, "notes.md", 200);
+	modified_at(&root, "roadmap.png", 100);
+
+	let found = the_host(&app)
+		.served(Operation::Search, json!({ "query": "roadMap" }))
+		.await
+		.expect("searches");
+
+	assert_eq!(names_in(&found), ["Roadmap.md", "notes.md", "roadmap.png"]);
+}
+
+#[tokio::test]
+async fn a_read_answers_a_document_text_an_image_or_what_an_image_too_large_to_show_is() {
+	let (app, root) = a_host("read").await;
+	put(&root, SPACE, "notes.md", "# Notes\n");
+	put(&root, SPACE, "plain.txt", "plain");
+	let png = png_of(4);
+	put_bytes(&root, "cover.png", &png);
+	let huge = vec![0; usize::try_from(MAX_SHOWN_IMAGE_BYTES).expect("fits") + 1];
+	put_bytes(&root, "huge.png", &huge);
+	let host = the_host(&app);
+	let read = |name: &str| host.served(Operation::Read, json!({ "name": name }));
+
+	assert_eq!(
+		read("notes.md").await.expect("reads"),
+		json!({ "form": "text", "name": "notes.md", "kind": "document", "text": "# Notes\n" })
+	);
+	assert_eq!(read("plain.txt").await.expect("reads")["text"], "plain");
+	assert_eq!(
+		read("cover.png").await.expect("reads"),
+		json!({
+			"form": "image",
+			"name": "cover.png",
+			"mimeType": "image/png",
+			"content": BASE64_STANDARD.encode(&png)
+		})
+	);
+	assert_eq!(
+		read("huge.png").await.expect("reads"),
+		json!({
+			"form": "described",
+			"name": "huge.png",
+			"kind": "image",
+			"mimeType": "image/png",
+			"bytes": huge.len()
+		})
+	);
+}
+
+#[tokio::test]
+async fn a_read_answers_the_text_as_it_stands_in_the_shared_document() {
+	let (app, root) = a_host("read-shared").await;
+	put(&root, SPACE, "notes.md", "Base.");
+	person_typed_at_the_end(&app, &root, &Doc::with_client_id(PERSON_CLIENT));
+
+	let answer =
+		the_host(&app).served(Operation::Read, json!({ "name": "notes.md" })).await.expect("reads");
+
+	assert_eq!(answer["text"], "Base.#");
+}
+
+#[tokio::test]
+async fn a_create_writes_the_template_and_tells_the_library_it_changed() {
+	let (app, root) = a_host("create").await;
+	let changes = heard::<LibraryChanged>(&app, events::LIBRARY_CHANGED.name());
+	let host = the_host(&app);
+
+	let created = host
+		.served(Operation::Create, json!({ "name": "minutes.md", "template": "meeting-notes" }))
+		.await
+		.expect("creates");
+	let again = host.served(Operation::Create, json!({ "name": "minutes.md" })).await;
+
+	assert_eq!(created["name"], "minutes.md");
+	assert_eq!(created["kind"], "document");
+	assert_eq!(
+		on_disk(&root, "minutes.md"),
+		crate::library::templates::markdown_of("meeting-notes").expect("a template")
+	);
+	assert_eq!(refusal_kind(again), "alreadyExists");
+	assert_eq!(all_of(&changes), [LibraryChanged { space_id: SPACE.to_owned() }]);
+}
+
+#[tokio::test]
+async fn an_import_copies_the_file_with_its_thumbnail_and_tells_the_library_it_changed() {
+	let (app, root) = a_host("import").await;
+	let changes = heard::<LibraryChanged>(&app, events::LIBRARY_CHANGED.name());
+	let produced = root.join("produced");
+	std::fs::create_dir_all(&produced).expect("the folder lands");
+	let source = produced.join("chart.png");
+	std::fs::write(&source, png_of(8)).expect("the file lands");
+
+	let imported =
+		the_host(&app).served(Operation::Import, json!({ "path": source })).await.expect("imports");
+
+	assert_eq!(imported["name"], "chart.png");
+	assert_eq!(imported["kind"], "image");
+	assert_eq!(std::fs::read(root.join(SPACE).join("chart.png")).expect("copied"), png_of(8));
+	assert!(source.exists());
+	assert_eq!(thumbnails(&root), 1);
+	assert_eq!(all_of(&changes), [LibraryChanged { space_id: SPACE.to_owned() }]);
+}
+
+#[tokio::test]
+async fn a_rename_moves_the_document_and_its_shared_state_as_the_person_rename_does() {
+	let (app, root) = a_host("rename").await;
+	put(&root, SPACE, "notes.md", "Base.");
+	put_bytes(&root, "cover.png", &png_of(4));
+	person_typed_at_the_end(&app, &root, &Doc::with_client_id(PERSON_CLIENT));
+	let renames = heard::<LibraryDocumentRenamed>(&app, events::LIBRARY_DOCUMENT_RENAMED.name());
+	let changes = heard::<LibraryChanged>(&app, events::LIBRARY_CHANGED.name());
+	let host = the_host(&app);
+
+	let renamed = host
+		.served(Operation::Rename, json!({ "name": "notes.md", "newName": "final.md" }))
+		.await
+		.expect("renames");
+	let image = host
+		.served(Operation::Rename, json!({ "name": "cover.png", "newName": "front.png" }))
+		.await;
+
+	assert_eq!(renamed["name"], "final.md");
+	assert!(!root.join(SPACE).join("notes.md").exists());
+	assert_eq!(on_disk(&root, "final.md"), "Base.#");
+	assert!(state_file(&root, "final.md").exists());
+	assert!(!state_file(&root, "notes.md").exists());
+	let opened = open_document(app.handle(), &root, SPACE, "final.md").expect("opens");
+	let doc = Doc::new();
+	let update = BASE64_STANDARD.decode(opened.update).expect("base64");
+	doc.transact_mut().apply_update(Update::decode_v1(&update).expect("yjs")).expect("applies");
+	assert_eq!(doc.get_or_insert_text("markdown").get_string(&doc.transact()), "Base.#");
+	assert_eq!(
+		all_of(&renames),
+		[LibraryDocumentRenamed {
+			space_id: SPACE.to_owned(),
+			former_name: "notes.md".to_owned(),
+			name: "final.md".to_owned(),
+		}]
+	);
+	assert_eq!(refusal_kind(image), "notADocument");
+	assert!(root.join(SPACE).join("cover.png").exists());
+	assert_eq!(all_of(&changes), [LibraryChanged { space_id: SPACE.to_owned() }]);
+}
+
+#[tokio::test]
+async fn a_delete_removes_the_item_its_thumbnail_and_its_shared_state() {
+	let (app, root) = a_host("delete").await;
+	put(&root, SPACE, "notes.md", "Base.");
+	person_typed_at_the_end(&app, &root, &Doc::with_client_id(PERSON_CLIENT));
+	put_bytes(&root, "cover.png", &png_of(4));
+	read_thumbnail(&root, SPACE, "cover.png").expect("the thumbnail lands");
+	let changes = heard::<LibraryChanged>(&app, events::LIBRARY_CHANGED.name());
+	let host = the_host(&app);
+	let delete = |name: &str| host.served(Operation::Delete, json!({ "name": name }));
+	assert!(state_file(&root, "notes.md").exists());
+	assert_eq!(thumbnails(&root), 1);
+
+	assert_eq!(delete("notes.md").await.expect("deletes"), json!({ "name": "notes.md" }));
+	assert_eq!(delete("cover.png").await.expect("deletes"), json!({ "name": "cover.png" }));
+	let again = delete("notes.md").await;
+
+	assert!(!root.join(SPACE).join("notes.md").exists());
+	assert!(!root.join(SPACE).join("cover.png").exists());
+	assert!(!state_file(&root, "notes.md").exists());
+	assert_eq!(thumbnails(&root), 0);
+	assert_eq!(refusal_kind(again), "missing");
+	let changed = LibraryChanged { space_id: SPACE.to_owned() };
+	assert_eq!(all_of(&changes), [changed.clone(), changed]);
+	put(&root, SPACE, "notes.md", "Fresh.");
+	assert_eq!(
+		open_document(app.handle(), &root, SPACE, "notes.md").map(|opened| opened.name),
+		Ok("notes.md".to_owned())
+	);
+	assert_eq!(on_disk(&root, "notes.md"), "Fresh.");
 }
 
 #[derive(Debug, PartialEq)]
@@ -334,17 +606,6 @@ async fn a_write_dropped_mid_way_publishes_one_failed_finish_and_leaves() {
 	assert_eq!(finishes, [&Published::Finished(LibraryWriteOutcome::Failed)]);
 	assert_eq!(published.last(), Some(&Published::Writers(vec![])));
 	assert!(on_disk(&root, "notes.md").len() < "Base.".len() + 200);
-}
-
-#[tokio::test]
-async fn a_read_answers_the_markdown_text() {
-	let (app, root) = a_host("read").await;
-	put(&root, SPACE, "notes.md", "# Notes\n");
-
-	let answer =
-		the_host(&app).served(Operation::Read, json!({ "name": "notes.md" })).await.expect("reads");
-
-	assert_eq!(answer, json!({ "name": "notes.md", "text": "# Notes\n" }));
 }
 
 #[tokio::test(start_paused = true)]

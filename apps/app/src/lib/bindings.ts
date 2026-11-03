@@ -344,6 +344,8 @@ export const JOINED_SPACE_REMOVED_EVENT = "joined-space://removed" as const;
 
 export const JOIN_LINK_OPENED_EVENT = "join-link://opened" as const;
 
+export const LIBRARY_CHANGED_EVENT = "library://changed" as const;
+
 export const LIBRARY_DOCUMENT_RENAMED_EVENT = "library://document-renamed" as const;
 
 export const LIBRARY_DOCUMENT_UPDATED_EVENT = "library://document-updated" as const;
@@ -1180,6 +1182,10 @@ export type LastWord = {
 export type LaunchOutcome = {
 	created: CompanionCreated | null,
 	refused: CompanionSeedRefused | null,
+};
+
+export type LibraryChanged = {
+	spaceId: string,
 };
 
 export type LibraryDocument = {

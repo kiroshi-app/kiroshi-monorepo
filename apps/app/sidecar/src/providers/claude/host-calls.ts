@@ -1,6 +1,8 @@
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js"
+
 import { askHost, HostRefusal } from "../../host"
 
-const spoken = (answer: unknown) => ({
+export const spoken = (answer: unknown) => ({
 	content: [{ type: "text" as const, text: JSON.stringify(answer ?? null) }],
 })
 
@@ -9,11 +11,13 @@ export const refused = (error: unknown) => ({
 	isError: true,
 })
 
+type Shown = (answer: unknown) => CallToolResult
+
 export const carriedTo =
-	(subtype: string) =>
+	(subtype: string, shown: Shown = spoken) =>
 	async (session: string | undefined, operation: string, payload: object) => {
 		try {
-			return spoken(await askHost(session, { subtype, operation, payload }))
+			return shown(await askHost(session, { subtype, operation, payload }))
 		} catch (error) {
 			if (error instanceof HostRefusal) {
 				return refused(error.error)

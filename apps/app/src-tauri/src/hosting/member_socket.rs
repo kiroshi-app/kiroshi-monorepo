@@ -41,6 +41,7 @@ const PAYLOADS: &[(&str, Definition)] = &[
 	payload_of(events::LIBRARY_DOCUMENT_RENAMED),
 	payload_of(events::LIBRARY_DOCUMENT_PRESENCE),
 	payload_of(events::LIBRARY_DOCUMENT_WRITER_FINISHED),
+	payload_of(events::LIBRARY_CHANGED),
 	payload_of(events::MEMBERS_CHANGED),
 	payload_of(events::MISSION_CHANGED),
 	payload_of(events::ROUTINE_CHANGED),

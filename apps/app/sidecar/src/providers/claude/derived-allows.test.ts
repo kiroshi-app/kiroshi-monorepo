@@ -7,10 +7,7 @@ import type { Settings } from "@anthropic-ai/claude-agent-sdk"
 
 import { claudeSourceExecutable } from "./build"
 import { BUNDLE_WRITE_TOOL_NAME } from "./bundle-tools"
-import {
-	DOCUMENT_READ_TOOL_NAME,
-	DOCUMENT_WRITE_TOOL_NAME,
-} from "./document-tools"
+import { libraryTools } from "./document-tools"
 import { EXECUTABLE_OVERRIDE_ENV } from "./executable"
 import { KIROSHI_SERVER } from "./kiroshi-server"
 import type { Servers } from "./server-env"
@@ -96,14 +93,25 @@ describe("derived allows", () => {
 		).toBe("allow")
 	})
 
-	it("settles a document_read or document_write call as allow by a rule, before any classifier step", () => {
+	it("settles every library tool call as allow by a rule, before any classifier step", () => {
 		const options = buildOptions(requestFor(), undefined, undefined, {
 			servers: { kiroshi: server },
 			rejections: [],
 		})
 		const permissions = (options.settings as Settings).permissions
 
-		for (const name of [DOCUMENT_READ_TOOL_NAME, DOCUMENT_WRITE_TOOL_NAME]) {
+		const names = libraryTools(undefined, {
+			cwd: "/tmp",
+			floor: {
+				home: "/home",
+				platform: "darwin",
+				pluginPaths: [],
+				writablePaths: [],
+			},
+		}).map((held) => held.name)
+
+		expect(names).toHaveLength(8)
+		for (const name of names) {
 			expect(settled(permissions, `mcp__${KIROSHI_SERVER}__${name}`)).toBe(
 				"allow",
 			)
