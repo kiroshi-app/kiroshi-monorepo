@@ -74,7 +74,10 @@ const Mention = ({ botId, count = 1, className }: MentionProps) => {
 			<span className={NAME_CLASS} data-slot="bot-mention-name">
 				{name}
 			</span>
-			<BotTitleBadge title={bot?.title} />
+			<BotTitleBadge
+				className="bg-current/10 text-current"
+				title={bot?.title}
+			/>
 			{isCounted ? (
 				<>
 					<span

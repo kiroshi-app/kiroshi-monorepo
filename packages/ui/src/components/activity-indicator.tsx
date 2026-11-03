@@ -4,10 +4,10 @@ import type { TFunction } from "i18next"
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 
+import { AuthorLineName } from "@workspace/ui/components/author-line"
 import {
 	type ActivityIndicatorKind,
 	BotIdentityAvatar,
-	BotStopButton,
 	type BotStopProps,
 } from "@workspace/ui/components/bot-identity-avatar"
 import { useMarkId } from "@workspace/ui/components/mark-context"
@@ -17,7 +17,6 @@ import {
 	WORKING_SHIMMER_DURATION,
 } from "@workspace/ui/components/motion/text-shimmer"
 import { TooltipHint } from "@workspace/ui/components/tooltip-hint"
-import { TURN_AVATAR_SIZE } from "@workspace/ui/components/turn"
 import { readableLabel } from "@workspace/ui/lib/agent-tool"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -40,24 +39,32 @@ type ActivityIndicatorProps = BotStopProps & {
 
 const SECOND = 1000
 
-type RowTextInput = {
+const WORK_LINE_AVATAR_SIZE = 20
+
+type LineTextInput = {
 	t: TFunction<"chat">
 	kind: ActivityIndicatorKind
-	name: string
 	label?: string
 	waitingOn: ActivityIndicatorWait
 }
 
-const rowTextOf = ({ t, kind, name, label, waitingOn }: RowTextInput) => {
+const lineTextOf = ({ t, kind, label, waitingOn }: LineTextInput) => {
 	if (kind === "waiting") {
-		if (waitingOn === "next") return t("working.upNext", { name })
+		if (waitingOn === "next") return t("working.line.upNext")
 		return label
-			? t("working.waitingTitled", { name, title: label })
-			: t("working.state", { name, verb: t("working.verb.waiting") })
+			? t("working.line.waitingTitled", { title: label })
+			: t("working.line.state", { verb: t("working.verb.waiting") })
 	}
 	return label
-		? t("working.labelled", { name, label: readableLabel(t, label) })
-		: t("working.state", { name, verb: t(`working.verb.${kind}`) })
+		? readableLabel(t, label)
+		: t("working.line.state", { verb: t(`working.verb.${kind}`) })
+}
+
+const labelToneOf = (kind: ActivityIndicatorKind, waitingOn: string) => {
+	if (kind !== "waiting") return "text-soft-foreground"
+	return waitingOn === "next"
+		? "text-muted-foreground"
+		: "text-waiting-foreground"
 }
 
 const secondsSince = (startedAt: number) =>
@@ -76,7 +83,7 @@ type ClockProps = { seconds: number }
 const Clock = ({ seconds }: ClockProps) => (
 	<span
 		data-slot="bot-working-elapsed"
-		className="shrink-0 font-normal text-muted-foreground text-sm tabular-nums"
+		className="shrink-0 text-muted-foreground text-xs tabular-nums leading-5"
 	>
 		{formatElapsed(seconds)}
 	</span>
@@ -109,6 +116,31 @@ const ActivityClock = ({ startedAt, elapsedSeconds }: ActivityClockProps) => {
 	return startedAt === undefined ? null : <ElapsedClock startedAt={startedAt} />
 }
 
+type WorkLineStopProps = {
+	name: string
+	onStop: () => void
+}
+
+const WorkLineStop = ({ name, onStop }: WorkLineStopProps) => {
+	const { t } = useTranslation("chat")
+
+	return (
+		<button
+			type="button"
+			data-slot="bot-working-stop"
+			aria-label={t("working.stop", { name })}
+			onClick={onStop}
+			className="absolute inset-0 flex items-center justify-center rounded-sm bg-foreground opacity-0 outline-offset-2 group-focus-within/work:opacity-100 group-hover/work:opacity-100"
+		>
+			<span
+				aria-hidden="true"
+				data-slot="bot-working-stop-glyph"
+				className="size-2 rounded-[1px] bg-on-foreground"
+			/>
+		</button>
+	)
+}
+
 function ActivityIndicator(props: ActivityIndicatorProps) {
 	const {
 		kind = "thinking",
@@ -121,50 +153,65 @@ function ActivityIndicator(props: ActivityIndicatorProps) {
 		blot,
 		image,
 		seed,
-		size = TURN_AVATAR_SIZE,
+		size = WORK_LINE_AVATAR_SIZE,
 		className,
 	} = props
 	const { t } = useTranslation("chat")
 	const markId = useMarkId(botId)
 	const named = name ?? t("working.name")
 	const isBusy = kind !== "waiting"
-	const text = rowTextOf({ t, kind, name: named, label, waitingOn })
-	const avatar = (
-		<BotIdentityAvatar
-			hue={blot}
-			image={image}
-			kind={kind}
-			name={name}
-			seed={seed}
-			size={size}
-			working
-		/>
-	)
+	const isTool = isBusy && label !== undefined
+	const text = lineTextOf({ t, kind, label, waitingOn })
 
 	return (
 		<div
 			data-slot="bot-working"
 			data-kind={kind}
-			className={cn("flex min-w-0 items-center gap-2", className)}
+			className={cn(
+				"group/work flex h-5 min-w-0 items-center gap-2",
+				className,
+			)}
 		>
-			<SharedMark markId={markId} className="shrink-0">
-				{props.stoppable ? (
-					<BotStopButton
-						image={image}
-						name={named}
-						onStop={props.onStop}
-						size={size}
-					>
-						{avatar}
-					</BotStopButton>
-				) : (
-					avatar
+			<span
+				className={cn(
+					"relative flex size-5 shrink-0 items-center justify-center",
+					kind === "waiting" && waitingOn === "next" && "opacity-70",
 				)}
-			</SharedMark>
-			<TooltipHint content={text}>
+			>
+				<SharedMark markId={markId} className="shrink-0">
+					<BotIdentityAvatar
+						hue={blot}
+						image={image}
+						kind={kind}
+						name={name}
+						seed={seed}
+						size={size}
+						working={isBusy}
+					/>
+				</SharedMark>
+				{props.stoppable ? (
+					<WorkLineStop name={named} onStop={props.onStop} />
+				) : null}
+			</span>
+			<AuthorLineName tone="agent" name={named} hue={blot} />
+			{isTool ? (
+				<span
+					aria-hidden="true"
+					data-slot="bot-working-separator"
+					className="text-faint-foreground text-compact"
+				>
+					{t("working.line.separator")}
+				</span>
+			) : null}
+			<TooltipHint content={t("working.line.titled", { name: named, text })}>
 				<span
 					data-slot="bot-working-label"
-					className="block min-w-0 max-w-full flex-1 truncate font-medium text-muted-foreground text-sm"
+					className={cn(
+						"block min-w-0 max-w-full truncate text-compact leading-5",
+						labelToneOf(kind, waitingOn),
+						props.stoppable &&
+							"group-focus-within/work:hidden group-hover/work:hidden",
+					)}
 				>
 					{isBusy ? (
 						<TextShimmer className="inline" duration={WORKING_SHIMMER_DURATION}>
@@ -175,6 +222,14 @@ function ActivityIndicator(props: ActivityIndicatorProps) {
 					)}
 				</span>
 			</TooltipHint>
+			{props.stoppable ? (
+				<span
+					aria-hidden="true"
+					className="hidden shrink-0 text-bubble-foreground text-compact leading-5 group-focus-within/work:block group-hover/work:block"
+				>
+					{t("working.stop", { name: named })}
+				</span>
+			) : null}
 			{isBusy ? (
 				<ActivityClock elapsedSeconds={elapsedSeconds} startedAt={startedAt} />
 			) : null}

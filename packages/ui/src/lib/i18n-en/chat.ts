@@ -114,6 +114,7 @@ const chat = {
 	},
 	turn: {
 		copy: "Copy",
+		you: "You",
 		reply: "Reply",
 		pin: "Pin",
 		unpin: "Unpin",
@@ -125,10 +126,25 @@ const chat = {
 			failed: "This response failed",
 			queued: "Waiting to be sent",
 		},
+		notSent: "Not sent.",
+		notSentBecause: "Not sent. {{reason}}",
+	},
+	richBlock: {
+		building: "Building the view…",
+	},
+	queue: {
+		title_one: "Queued · {{count}} · goes once {{name}}’s answer is done",
+		title_other: "Queued · {{count}} · sent in order, one after each answer",
+		you: "you",
+		next: "Next, after {{name}}",
+		sendNow: "Send now",
+		remove: "Remove from the queue",
 	},
 	reply: {
 		label: "Replying to {{author}}",
+		jump: "{{author}}: {{excerpt}}",
 		dismiss: "Cancel reply",
+		dismissFrom: "Remove the reply to {{author}}",
 	},
 	pinned: {
 		title: "Pinned messages",
@@ -158,6 +174,13 @@ const chat = {
 		waitingTitled: "{{name}} is waiting for you… · {{title}}",
 		upNext: "{{name}} is up next…",
 		stop: "Stop {{name}}",
+		line: {
+			state: "is {{verb}}…",
+			upNext: "is up next…",
+			waitingTitled: "is waiting for you… · {{title}}",
+			separator: "·",
+			titled: "{{name}} {{text}}",
+		},
 	},
 	notice: {
 		retry: "Retry",

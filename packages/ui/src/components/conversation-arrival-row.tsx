@@ -24,7 +24,7 @@ const ArrivalRow = ({
 }: ArrivalRowProps) => (
 	<p
 		className={cn(
-			"flex w-full min-w-0 items-center justify-center gap-1.5 py-0.5 text-center text-muted-foreground text-xs wrap-anywhere",
+			"flex w-full min-w-0 items-center justify-center gap-2 py-0.5 text-center text-muted-foreground text-xs wrap-anywhere",
 			className,
 		)}
 		data-slot="conversation-arrival-row"

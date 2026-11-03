@@ -81,7 +81,6 @@ const usePromptLayout = ({ attachments, currentValue }: PromptLayout) => {
 
 		const promptWidth = Math.ceil(singleLine.getBoundingClientRect().width)
 		const isFillingRow =
-			isCarryingFiles ||
 			rowsIn(singleLine) > 1 ||
 			promptWidth > roomBesideControls(form, leadingRef.current, controls)
 

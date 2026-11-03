@@ -34,6 +34,9 @@ const WARDEN: RosterBot = {
 
 const SEATED = [KEEPER, SCOUT, WARDEN]
 
+const ownBubbleRoleOf = (theme: "light" | "dark") =>
+	theme === "dark" ? "accent" : "bubble"
+
 const meta = preview.meta({
 	title: "Conversation/Message/ConversationEmptyState",
 	component: ConversationEmptyState,
@@ -177,7 +180,7 @@ export const InSpace = meta.story({
 		docs: {
 			description: {
 				story:
-					"An empty thread in the green Space Northwind, light beside dark. Check that a 16 px rounded square sits before the Space name, filled with the Space bubble tone and edged in 1 px of its accent, and that it reads as the Space colour in both themes. `apps/app/src/components/thread-screen.tsx` does not pass the Space yet.",
+					"An empty thread in the green Space Northwind, light beside dark. Check that a 16 px rounded square sits before the Space name, filled with the colour of your bubble in that Space (its bubble tone in light, its accent in dark) and edged in 1 px of its accent, and that it reads as the Space colour in both themes. `apps/app/src/components/thread-screen.tsx` does not pass the Space yet.",
 			},
 		},
 	},
@@ -198,7 +201,7 @@ export const InSpace = meta.story({
 			await expect(style.borderTopLeftRadius).not.toBe("9999px")
 			await expect(style.borderTopWidth).toBe("1px")
 			await expect(hexOfComputed(style.backgroundColor)).toBe(
-				hueTone(BLOT_HUES.green, theme, "bubble").hex,
+				hueTone(BLOT_HUES.green, theme, ownBubbleRoleOf(theme)).hex,
 			)
 			await expect(hexOfComputed(style.borderTopColor)).toBe(
 				hueTone(BLOT_HUES.green, theme, "accent").hex,
@@ -436,7 +439,7 @@ export const FreeHue = meta.story({
 		for (const line of slotsIn(canvasElement, "conversation-empty-space")) {
 			const chip = slotIn(line, "space-tint")
 			await expect(hexOfComputed(getComputedStyle(chip).backgroundColor)).toBe(
-				hueTone(210, schemeOf(chip), "bubble").hex,
+				hueTone(210, schemeOf(chip), ownBubbleRoleOf(schemeOf(chip))).hex,
 			)
 		}
 	},

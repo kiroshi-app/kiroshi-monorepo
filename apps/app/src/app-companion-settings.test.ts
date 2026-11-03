@@ -344,10 +344,12 @@ const turnOf = (text: string) => {
 	return turn
 }
 
-const gutterOf = (text: string) => {
-	const gutter = turnOf(text).querySelector('[data-slot="message-gutter"]')
-	if (!gutter) throw new Error(`no gutter for ${text}`)
-	return gutter
+const authorAvatarOf = (text: string) => {
+	const avatar = turnOf(text).querySelector(
+		'[data-slot="author-line"] [data-slot="bot-identity-avatar"]',
+	)
+	if (!avatar) throw new Error(`no author line avatar for ${text}`)
+	return avatar
 }
 
 const mentionPillOf = (text: string) => {
@@ -605,7 +607,7 @@ it("opens the companion screen on General from the Settings of a message avatar 
 	await mountApp()
 	await openRow(ROOM)
 
-	await openContextMenuOn(gutterOf(ROOM_POST))
+	await openContextMenuOn(authorAvatarOf(ROOM_POST))
 	await chooseInMenu(i18n.t("bots:roster.settings"))
 
 	expect(companionScreenOf(ATLAS)).toEqual(ON_GENERAL)
@@ -754,7 +756,7 @@ it("brings back the open mission thread and its draft on Back to conversations",
 	await press(missionCardOf(MISSION_OBJECTIVE))
 	expect(screen.getByText(MISSION_SAID)).toBeTruthy()
 	fireEvent.change(composerOf(), { target: { value: MISSION_DRAFT } })
-	await openContextMenuOn(gutterOf(MISSION_SAID))
+	await openContextMenuOn(authorAvatarOf(MISSION_SAID))
 	await chooseInMenu(i18n.t("bots:roster.settings"))
 	expect(companionScreenOf(ATLAS)).toEqual(ON_GENERAL)
 

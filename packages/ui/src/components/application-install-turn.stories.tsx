@@ -87,14 +87,13 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"The receipt on its own, the way an install that needed nothing lands. Check that the card carries its border and separates its footnote by one rule, that no bubble surface wraps it, and that the gutter column stays empty rather than borrowing the avatar of whoever ran the install. Pick `WhenTheKeyWasLeftOut` for the install that could not read its key. " +
+					"The receipt on its own, the way an install that needed nothing lands. Check that the card carries its border and separates its footnote by one rule, that no bubble surface wraps it, and that it starts at the start edge of the transcript, where an agent's bubble starts, without borrowing the avatar of whoever ran the install. Pick `WhenTheKeyWasLeftOut` for the install that could not read its key. " +
 					PLACED_BY_THE_FEED,
 			},
 		},
 	},
 	play: async ({ args, canvas, canvasElement, userEvent }) => {
 		const receipt = slotIn(canvasElement, "application-receipt")
-		const gutter = slotIn(canvasElement, "message-gutter")
 		const footnote = receipt.lastElementChild as HTMLElement
 		const openSettings = canvas.getByRole("button", { name: "Open Settings" })
 
@@ -102,8 +101,12 @@ export const Default = meta.story({
 		await expect(receipt.closest('[data-slot="message-bubble"]')).toBeNull()
 		await expect(getComputedStyle(receipt).borderTopWidth).toBe("1px")
 		await expect(getComputedStyle(footnote).borderTopWidth).toBe("1px")
-		await expect(gutter).toBeEmptyDOMElement()
-		await expect(gutter).toHaveAttribute("aria-hidden", "true")
+		const message = canvas.getByLabelText("assistant message")
+		await expect(
+			message.querySelector('[data-slot="bot-identity-avatar"]'),
+		).toBeNull()
+		await expect(message.querySelector('[data-slot="author-line"]')).toBeNull()
+		await expect(startEdgeOf(receipt)).toBeCloseTo(startEdgeOf(message), 1)
 		for (const wording of CONNECTION_WORDING) {
 			await expect(receipt).not.toHaveTextContent(wording)
 		}

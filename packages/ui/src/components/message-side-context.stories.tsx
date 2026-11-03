@@ -1,12 +1,8 @@
-import { expect, fn } from "storybook/test"
+import { expect } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { slotsIn } from "@workspace/storybook/story-utils"
-import { Icons } from "@workspace/ui/components/icons"
-import {
-	MessageAction,
-	MessageActions,
-} from "@workspace/ui/components/message-actions"
+import { MessageActions } from "@workspace/ui/components/message-actions"
 import {
 	MessageBubble,
 	type MessageBubbleAlign,
@@ -20,21 +16,13 @@ import {
 const ANSWER =
 	"Two packages: the design system holds every visual, the shell composes them."
 
-const noop = fn()
-
 type TurnProps = {
 	align?: MessageBubbleAlign
 }
 
 const Turn = ({ align }: TurnProps) => (
 	<MessageBubble align={align} variant="soft">
-		<MessageActions
-			actions={
-				<MessageAction alwaysVisible label="Copy" onClick={noop}>
-					<Icons.Copy />
-				</MessageAction>
-			}
-		>
+		<MessageActions>
 			<MessageBubbleContent>{ANSWER}</MessageBubbleContent>
 		</MessageActions>
 	</MessageBubble>

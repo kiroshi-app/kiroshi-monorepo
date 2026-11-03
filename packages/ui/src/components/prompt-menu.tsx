@@ -178,7 +178,7 @@ const PromptMenuRow = ({
 		tabIndex={-1}
 		onPointerMove={onPointerMove}
 		onClick={onSelect}
-		className={cn(className, isActive && "bg-muted")}
+		className={cn(className, isActive && "bg-muted dark:bg-foreground/8")}
 	>
 		{children}
 	</button>

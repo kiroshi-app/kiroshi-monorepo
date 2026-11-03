@@ -11,6 +11,7 @@ The transcript with an agent and everything that happens inside it — turns, th
 The transcript and its turns.
 
 - **ChatEmptyState** — no conversation open yet.
+- **AuthorLine** - the foot of every bubble: avatar, name, role badge, time and how an answer ended.
 - **BotCreatedRow** - the line recording who created the agent a conversation opens on.
 - **ConversationArrivalRow** - the line recording a companion joining a conversation.
 - **ConversationEmptyState** — a conversation with no turns yet.
@@ -24,6 +25,7 @@ The transcript and its turns.
 - **MessageScroller** — the scroll container and its anchoring.
 - **MessageSideContext** — the side rail attached to a message.
 - **PinnedMessages** — the pinned strip above the transcript.
+- **RichBlockPending** - the frame of a rich block while the agent still writes it.
 - **Turn** — a full agent turn with its phases.
 
 ## Prompt
@@ -35,6 +37,7 @@ The composer.
 - **PromptCommandMenu** — the slash-command menu.
 - **PromptInput** — the composer field.
 - **PromptMentionMenu** — the mention menu.
+- **PromptQueue** - the tray of messages waiting above the field while an agent answers.
 - **PromptReply** — the reply-to banner.
 - **SelectionQuote**: a selection quoted from an answer, waiting in the input.
 

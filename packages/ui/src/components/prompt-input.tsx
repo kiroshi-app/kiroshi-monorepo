@@ -11,14 +11,13 @@ import {
 import { useTranslation } from "react-i18next"
 
 import { Icons } from "@workspace/ui/components/icons"
-import { INVERSE_BUTTON_CLASS } from "@workspace/ui/components/inverse-button"
 import { PromptField } from "@workspace/ui/components/prompt-input-field"
 import { usePromptLayout } from "@workspace/ui/components/prompt-input-layout"
 import { usePromptTransfer } from "@workspace/ui/components/prompt-input-transfer"
 import { Button } from "@workspace/ui/components/ui/button"
 import { cn, mergeRefs } from "@workspace/ui/lib/utils"
 
-const OFFLINE_CONTROLS = "opacity-40"
+const OFFLINE_CONTROLS = "[&_svg]:invisible"
 
 export type PromptInputOffline = {
 	spaceName: string
@@ -115,7 +114,11 @@ export function PromptInput({
 			onDragEnd={handleDragEnd}
 			onDrop={handleDrop}
 			className={cn(
-				"flex w-full flex-wrap items-center gap-1 rounded-4xl border border-border bg-muted p-2 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30",
+				"flex w-full flex-wrap items-center gap-1 rounded-[25px] border border-foreground/10 bg-prompt-surface p-2 focus-within:border-foreground/20",
+				hasPayload && "border-foreground/20",
+				isExpanded && "rounded-3xl",
+				hasAttachments && "rounded-[20px]",
+				offline && "border-foreground/8 bg-prompt-surface-inert",
 				isDropTarget && "border-primary bg-primary/10",
 				disabled && "opacity-50",
 				className,
@@ -124,7 +127,7 @@ export function PromptInput({
 			<div
 				ref={refs.attachments}
 				inert={isBlocked}
-				className="w-full empty:hidden"
+				className="order-first w-full empty:hidden"
 			>
 				{attachments}
 			</div>
@@ -173,7 +176,13 @@ export function PromptInput({
 					size="icon"
 					disabled={disabled}
 					aria-label={t("composer.send")}
-					className={cn("rounded-full", INVERSE_BUTTON_CLASS)}
+					data-empty={!hasPayload}
+					className={cn(
+						"size-8 rounded-full",
+						hasPayload
+							? "bg-foreground text-on-foreground hover:bg-foreground"
+							: "bg-foreground/8 text-disabled-foreground hover:bg-foreground/8",
+					)}
 				>
 					<Icons.Send />
 				</Button>

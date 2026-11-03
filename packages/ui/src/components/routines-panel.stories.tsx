@@ -1567,11 +1567,14 @@ const expectOneInsetRuleOnShell = async (
 	await expectShellSurfaceAround(canvasElement)
 
 	const opened = threadInsetsIn(canvasElement)
-	await expect(opened).toEqual(closed)
-	await expect(panelBodyInsetIn(panel)).toEqual({
-		start: opened.foot.start,
-		end: opened.foot.end,
-	})
+	const inset = shellInset()
+	await expect(opened.card).toEqual(closed.card)
+	for (const state of [closed, opened]) {
+		await expect(state.foot.start).toBe(state.foot.end)
+		await expect(state.foot.start).toBeGreaterThanOrEqual(inset)
+		await expect(state.transcript.start).toBe(state.transcript.end)
+	}
+	await expect(panelBodyInsetIn(panel)).toEqual({ start: inset, end: inset })
 	await expectBodyInsetUnderHeader(panel)
 	const headerTitleStart = within(slotIn(panel, "sidebar-header"))
 		.getByRole("heading")
@@ -1583,7 +1586,7 @@ const expectOneInsetRuleOnShell = async (
 }
 
 const ONE_INSET_RULE_ON_SHELL =
-	"The thread opens its panel inside the shell, and nothing it already drew moves: the shell card keeps its distance from the top, the trailing and the bottom edges of the window, the transcript keeps its inset from the thread card and the composer its own. Inside the panel, cards line up with cards and text with text: the panel body takes the composer's inset from its surface on every side, the routine cards sit that inset in from the surface edges, the header title starts where a routine title starts, and the close icon sits on the same line as each row's delete icon. Check the conversation and the composer hold still as the panel opens, that the first item sits one shell inset under the header, and that the Routines list keeps the composer's inset above the bottom of the panel. Pick `OnShellSurfaceOpen` for the frames the two surfaces draw. `apps/app/src/App.tsx:935` is the shell, and `apps/app/src/components/thread-routines.tsx:107` the panel inside it."
+	"The thread opens its panel inside the shell: the shell card keeps its distance from the top, the trailing and the bottom edges of the window, and the transcript and the composer stay centred in the thread card, the composer never closer than the shell inset to its edges. Inside the panel, cards line up with cards and text with text: the panel body takes the shell inset from its surface on every side, the routine cards sit that inset in from the surface edges, the header title starts where a routine title starts, and the close icon sits on the same line as each row's delete icon. Check the conversation and the composer stay centred as the panel opens, that the first item sits one shell inset under the header, and that the Routines list keeps the composer's inset above the bottom of the panel. Pick `OnShellSurfaceOpen` for the frames the two surfaces draw. `apps/app/src/App.tsx:935` is the shell, and `apps/app/src/components/thread-routines.tsx:107` the panel inside it."
 
 export const OnShellSurfaceInsets = meta.story({
 	args: { isOpen: false },

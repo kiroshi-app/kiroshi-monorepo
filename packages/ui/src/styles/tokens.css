@@ -143,6 +143,24 @@
 		--hue-light-avatar-ground,
 		color-mix(in oklab, var(--bot-avatar-field-untinted) 25%, var(--secondary))
 	);
+	--on-foreground: #ffffff;
+	--user-bubble-hover: color-mix(in oklab, var(--user-bubble) 92%, #000000);
+	--user-bubble-muted-foreground: color-mix(
+		in oklab,
+		var(--user-bubble-foreground) 70%,
+		var(--user-bubble)
+	);
+	--bubble: oklch(0 0 0 / 4%);
+	--bubble-hover: oklch(0 0 0 / 7%);
+	--bubble-foreground: var(--foreground);
+	--faint-foreground: #67676c;
+	--disabled-foreground: #a3a3a8;
+	--waiting-foreground: #8a6400;
+	--prompt-surface: #ffffff;
+	--prompt-surface-inert: #f0f0f0;
+	--prompt-menu: #ffffff;
+	--menu-surface: #ffffff;
+	--author-line-sticky: #fafafa;
 	--user-bubble-muted-strength: 70%;
 }
 
@@ -268,8 +286,8 @@
 	--sidebar-ring: var(--primary-strong);
 	--scrollbar: oklch(0.44 0.008 286.033);
 	--scrollbar-hover: oklch(0.55 0.01 286.033);
-	--user-bubble: var(--hue-dark-bubble, #364f7c);
-	--user-bubble-foreground: var(--hue-dark-bubble-foreground, #ffffff);
+	--user-bubble: var(--hue-dark-accent, var(--hue-blue-accent));
+	--user-bubble-foreground: var(--on-foreground);
 	--user-bubble-tint-ink: var(--foreground);
 	--image-outline: oklch(1 0 0 / 8%);
 	--shell-border: oklch(1 0 0 / 6%);
@@ -285,5 +303,23 @@
 		--hue-dark-avatar-ground,
 		color-mix(in oklab, var(--bot-avatar-field-untinted) 35%, var(--secondary))
 	);
-	--user-bubble-muted-strength: 90%;
+	--on-foreground: #0e0e10;
+	--user-bubble-hover: color-mix(in oklab, var(--user-bubble) 88%, #ffffff);
+	--user-bubble-muted-foreground: color-mix(
+		in oklab,
+		var(--user-bubble-foreground) 70%,
+		var(--user-bubble)
+	);
+	--bubble: oklch(1 0 0 / 5%);
+	--bubble-hover: oklch(1 0 0 / 8%);
+	--bubble-foreground: #ececec;
+	--faint-foreground: #8a8a8e;
+	--disabled-foreground: #6b6b70;
+	--waiting-foreground: #f5d88f;
+	--prompt-surface: #1c1c1e;
+	--prompt-surface-inert: #161618;
+	--prompt-menu: #1f1f22;
+	--menu-surface: #232325;
+	--author-line-sticky: #1e1e1f;
+	--user-bubble-muted-strength: 70%;
 }

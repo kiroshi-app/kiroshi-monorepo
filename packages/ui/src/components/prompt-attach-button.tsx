@@ -37,7 +37,10 @@ export function PromptAttachButton({
 				aria-label={label}
 				disabled={disabled}
 				onClick={() => fileRef.current?.click()}
-				className={cn("rounded-full", className)}
+				className={cn(
+					"size-8 rounded-full border-foreground/12 text-soft-foreground",
+					className,
+				)}
 			>
 				<Icons.Add />
 			</Button>

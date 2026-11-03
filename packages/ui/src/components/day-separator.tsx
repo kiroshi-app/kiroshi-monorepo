@@ -1,6 +1,5 @@
 import { useTranslation } from "react-i18next"
 
-import { Separator } from "@workspace/ui/components/ui/separator"
 import { formatDateTime } from "@workspace/ui/lib/time-format"
 
 type DaySeparatorProps = {
@@ -36,11 +35,9 @@ const DaySeparator = ({ at, now }: DaySeparatorProps) => {
 	return (
 		<div
 			data-slot="day-separator"
-			className="flex items-center gap-3 text-muted-foreground text-xs"
+			className="flex items-center justify-center font-medium text-muted-foreground text-xs"
 		>
-			<Separator aria-hidden="true" className="flex-1" />
 			<span className="shrink-0">{label}</span>
-			<Separator aria-hidden="true" className="flex-1" />
 		</div>
 	)
 }

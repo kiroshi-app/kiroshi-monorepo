@@ -125,6 +125,7 @@ const chat = {
 	},
 	turn: {
 		copy: "Copier",
+		you: "Vous",
 		reply: "Répondre",
 		pin: "Épingler",
 		unpin: "Retirer l’épingle",
@@ -136,10 +137,29 @@ const chat = {
 			failed: "Cette réponse a échoué",
 			queued: "En attente d’envoi",
 		},
+		notSent: "Non envoyé.",
+		notSentBecause: "Non envoyé. {{reason}}",
+	},
+	richBlock: {
+		building: "Construction de la vue…",
+	},
+	queue: {
+		title_one:
+			"En file · {{count}} · part une fois la réponse de {{name}} terminée",
+		title_many:
+			"En file · {{count}} · partent dans l’ordre, une après chaque réponse",
+		title_other:
+			"En file · {{count}} · partent dans l’ordre, une après chaque réponse",
+		you: "vous",
+		next: "Ensuite, après {{name}}",
+		sendNow: "Envoyer maintenant",
+		remove: "Retirer de la file",
 	},
 	reply: {
 		label: "Réponse à {{author}}",
+		jump: "{{author}} : {{excerpt}}",
 		dismiss: "Annuler la réponse",
+		dismissFrom: "Retirer la réponse à {{author}}",
 	},
 	pinned: {
 		title: "Messages épinglés",
@@ -170,6 +190,13 @@ const chat = {
 		waitingTitled: "{{name}} vous attend… · {{title}}",
 		upNext: "{{name}} passe ensuite…",
 		stop: "Arrêter {{name}}",
+		line: {
+			state: "{{verb}}…",
+			upNext: "passe ensuite…",
+			waitingTitled: "vous attend… · {{title}}",
+			separator: "·",
+			titled: "{{name}} {{text}}",
+		},
 	},
 	notice: {
 		retry: "Réessayer",

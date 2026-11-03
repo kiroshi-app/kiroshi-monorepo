@@ -88,6 +88,7 @@ type InitialsAvatarProps = {
 	name?: string
 	image?: string
 	size?: number
+	isOnOwnBubble?: boolean
 	className?: string
 }
 
@@ -95,6 +96,7 @@ const InitialsAvatar = ({
 	name,
 	image,
 	size = DEFAULT_SIZE,
+	isOnOwnBubble = false,
 	className,
 }: InitialsAvatarProps) => (
 	<AvatarFrame
@@ -106,7 +108,11 @@ const InitialsAvatar = ({
 	>
 		<span
 			aria-hidden="true"
-			className={INITIALS_CLASS}
+			className={cn(
+				INITIALS_CLASS,
+				isOnOwnBubble &&
+					"bg-user-bubble-foreground/14 text-user-bubble-foreground",
+			)}
 			style={{ fontSize: Math.round(size * INITIALS_RATIO) }}
 		>
 			{initialsOf(displayNameOf(name))}

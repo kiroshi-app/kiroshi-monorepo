@@ -171,7 +171,10 @@ const CompanionMenuHost = ({
 
 	return (
 		<ContextMenu>
-			<ContextMenuTrigger render={children} />
+			<ContextMenuTrigger
+				render={children}
+				onContextMenu={(event) => event.stopPropagation()}
+			/>
 			{menu}
 		</ContextMenu>
 	)

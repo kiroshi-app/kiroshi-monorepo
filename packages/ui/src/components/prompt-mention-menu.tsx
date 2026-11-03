@@ -14,7 +14,7 @@ import {
 import type { RosterBot } from "@workspace/ui/components/roster"
 import { cn } from "@workspace/ui/lib/utils"
 
-const ROW_AVATAR_SIZE = 24
+const ROW_AVATAR_SIZE = 22
 
 const OPENING_ROWS = 6
 
@@ -89,7 +89,7 @@ const PromptMentionMenu = ({
 		return (
 			<PromptMenuRow
 				key={bot.id}
-				className="flex h-9 w-full items-center gap-2 rounded-md px-2 py-1.5 text-start text-foreground text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+				className="flex h-9 w-full items-center gap-2.5 rounded-md px-2 text-start font-medium text-foreground text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
 				isActive={index === active}
 				onPointerMove={activateOnPointerMove(index)}
 				onSelect={() => onSelect(bot.id, Boolean(bot.isOutside))}
@@ -111,7 +111,7 @@ const PromptMentionMenu = ({
 						<span className="truncate" data-slot="prompt-mention-name">
 							{bot.name}
 						</span>
-						<BotTitleBadge title={bot.title} />
+						<BotTitleBadge className="ms-1" title={bot.title} variant="plain" />
 						{count > 0 ? (
 							<>
 								<span
@@ -130,7 +130,7 @@ const PromptMentionMenu = ({
 				</span>
 				{isLead || bot.isOutside ? (
 					<span
-						className="flex w-14 shrink-0 items-center justify-end gap-1"
+						className="flex shrink-0 items-center justify-end gap-1"
 						data-slot="prompt-mention-trailing"
 					>
 						{isLead ? (
@@ -144,14 +144,12 @@ const PromptMentionMenu = ({
 							</>
 						) : null}
 						{bot.isOutside ? (
-							<>
-								<Icons.Add
-									aria-hidden="true"
-									className="size-3.5 shrink-0 text-muted-foreground"
-									data-slot="prompt-mention-invite"
-								/>
-								<span className="sr-only">{t("composer.invite")}</span>
-							</>
+							<span
+								className="font-normal text-primary text-xs"
+								data-slot="prompt-mention-invite"
+							>
+								{t("composer.invite")}
+							</span>
 						) : null}
 					</span>
 				) : null}
@@ -177,15 +175,21 @@ const PromptMentionMenu = ({
 			}
 			isOpen={isOpen}
 			label={t("composer.mentions")}
-			panelClassName="absolute bottom-full left-0 z-50 mb-2 w-84 max-w-full overflow-hidden rounded-xl p-1.5 shadow-popover"
+			panelClassName="absolute bottom-full left-0 z-50 mb-2 w-75 max-w-full overflow-hidden rounded-[14px] border border-foreground/12 bg-prompt-menu p-1.5 shadow-popover"
 			rootRef={rootRef}
 			rows={
 				<>
+					<p
+						aria-hidden="true"
+						className="px-2 pt-1 pb-1.5 font-medium text-muted-foreground text-xs"
+					>
+						{t("composer.mentions")}
+					</p>
 					{inside.map(renderRow)}
 					{outside.length > 0 ? (
 						<div role="group" aria-labelledby={boundaryId}>
 							<div
-								className="flex items-center gap-2 px-2 pt-3 pb-1.5"
+								className="mt-1.5 flex items-center gap-2 border-foreground/8 border-t px-2 pt-2.5 pb-1.5"
 								data-slot="prompt-mention-boundary"
 							>
 								<span
@@ -194,7 +198,6 @@ const PromptMentionMenu = ({
 								>
 									{t("composer.outside")}
 								</span>
-								<span aria-hidden="true" className="h-px flex-1 bg-border" />
 							</div>
 							{outside.map((bot, index) =>
 								renderRow(bot, inside.length + index),

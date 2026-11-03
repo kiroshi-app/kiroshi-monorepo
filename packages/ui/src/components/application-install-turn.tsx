@@ -12,7 +12,6 @@ import {
 	MessageBubbleContent,
 } from "@workspace/ui/components/message-bubble"
 import { ToolQuestion } from "@workspace/ui/components/tool-question"
-import { TURN_AVATAR_SIZE } from "@workspace/ui/components/turn"
 import { useChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -35,7 +34,7 @@ const LeftOutKeyNotice = ({
 	const t = useChatCopy()
 
 	return (
-		<MessageBubble className="col-start-2 row-start-1">
+		<MessageBubble>
 			<MessageBubbleContent>
 				<ToolQuestion
 					questions={[
@@ -70,22 +69,9 @@ const ApplicationInstallTurn = ({
 	notice,
 }: ApplicationInstallTurnProps) => (
 	<Message from="assistant">
-		<MessageContent
-			className="grid gap-x-2"
-			style={{ gridTemplateColumns: `${TURN_AVATAR_SIZE}px 1fr` }}
-		>
+		<MessageContent className="flex flex-col gap-3">
 			{notice ? <LeftOutKeyNotice {...notice} /> : null}
-			<span
-				aria-hidden="true"
-				className="col-start-1 row-start-2"
-				data-slot="message-gutter"
-			/>
-			<div
-				className={cn(
-					"col-start-2 row-start-2 min-w-0",
-					MESSAGE_BUBBLE_MAX_INLINE_SIZE,
-				)}
-			>
+			<div className={cn("min-w-0", MESSAGE_BUBBLE_MAX_INLINE_SIZE)}>
 				<ApplicationCard {...receipt} />
 			</div>
 		</MessageContent>
