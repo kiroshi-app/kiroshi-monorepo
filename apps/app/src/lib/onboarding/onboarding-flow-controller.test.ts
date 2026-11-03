@@ -67,7 +67,34 @@ let reportFailure: Mock<(notice: NoticeMessage) => void>
 
 const flushed = () => new Promise((resolve) => setTimeout(resolve, 0))
 
+const stubWebLocks = () => {
+	const held = new Set<string>()
+	const request = async (
+		name: string,
+		options: LockOptions,
+		callback: (lock: Lock | null) => Promise<void>,
+	) => {
+		if (held.has(name) && options.ifAvailable) {
+			return callback(null)
+		}
+		if (held.has(name)) {
+			throw new Error("waiting for a held lock isn't stubbed")
+		}
+		held.add(name)
+		try {
+			return await callback({ name, mode: "exclusive" })
+		} finally {
+			held.delete(name)
+		}
+	}
+	Object.defineProperty(navigator, "locks", {
+		configurable: true,
+		value: { request },
+	})
+}
+
 beforeEach(() => {
+	stubWebLocks()
 	port = createFakeOnboardingPort()
 	world = createFakeFlowWorld()
 	world.names = { [SCOUT.id]: SCOUT.name }
@@ -83,7 +110,12 @@ const connectedThroughLogin = async () => {
 	await flushed()
 }
 
+const closeWindowOf = (closing: FakeFlowWorld) => {
+	closing.profile.isShotoRunHeld = false
+}
+
 const relaunch = () => {
+	closeWindowOf(world)
 	port = createFakeOnboardingPort()
 	world.opened = []
 	world.sent = []
@@ -252,6 +284,130 @@ describe("relaunching after the sign-in", () => {
 		expect(screenStep()).toBeNull()
 		expect(controller.getState().isWithShoto).toBe(false)
 		expect(world.opened).toEqual([])
+	})
+})
+
+describe("a Shoto run that doesn't complete", () => {
+	const greeting = { botId: SHOTO, text: onboardingSummonsFor("greeting") }
+	const firstAgent = {
+		botId: SHOTO,
+		text: onboardingSummonsFor("firstCompanion"),
+	}
+
+	const leftAccountIn = async (leaving: OnboardingFlowController) => {
+		await leaving.finish()
+		await flushed()
+	}
+
+	const windowOn = (shared: FakeFlowWorld) => {
+		const opened = createFakeFlowWorld(shared.profile)
+		opened.step = shared.step
+		opened.firstRunDone = shared.firstRunDone
+		return {
+			world: opened,
+			controller: createOnboardingFlowController(
+				createFakeOnboardingPort(),
+				opened,
+				{ reportFailure },
+			),
+		}
+	}
+
+	const resumedIn = async (resuming: OnboardingFlowController) => {
+		await resuming.resume()
+		await flushed()
+	}
+
+	beforeEach(() => {
+		world.step = "account"
+	})
+
+	it("opens Shoto again on the next resume when his conversation couldn't be opened", async () => {
+		world.refusesOpen = true
+		await leftAccountIn(controller)
+
+		expect(world.opened).toEqual([])
+		expect(world.sent).toEqual([])
+		expect(reportFailure).toHaveBeenCalledWith({
+			title: i18n.t("chat:screen.notice.failed"),
+			description: "the host is unreachable",
+		})
+
+		world.refusesOpen = false
+		relaunch()
+		await resumedIn(controller)
+
+		expect(world.opened).toEqual([SHOTO])
+		expect(world.sent).toEqual([greeting, firstAgent])
+	})
+
+	it("sends the first agent request on the next resume when it couldn't be sent", async () => {
+		world.unsendable = [firstAgent.text]
+		await leftAccountIn(controller)
+
+		expect(world.sent).toEqual([greeting])
+
+		world.threadHistory = [...world.sent]
+		world.unsendable = []
+		relaunch()
+		await resumedIn(controller)
+
+		expect(world.opened).toEqual([SHOTO])
+		expect(world.sent).toEqual([firstAgent])
+
+		world.threadHistory = [...world.threadHistory, ...world.sent]
+		relaunch()
+		await resumedIn(controller)
+
+		expect(world.opened).toEqual([])
+		expect(world.sent).toEqual([])
+	})
+
+	it("greets Shoto again on the next resume when the greeting couldn't be sent", async () => {
+		world.unsendable = [greeting.text]
+		await leftAccountIn(controller)
+
+		expect(world.sent).toEqual([])
+
+		world.unsendable = []
+		relaunch()
+		await resumedIn(controller)
+
+		expect(world.sent).toEqual([greeting, firstAgent])
+	})
+
+	it("greets Shoto and asks for the first agent once across two windows", async () => {
+		let answerGreeting = () => {}
+		world.outcomeOf = () =>
+			new Promise((resolve) => {
+				answerGreeting = () => resolve({ kind: "answered" })
+			})
+		await leftAccountIn(controller)
+		const second = windowOn(world)
+
+		await resumedIn(second.controller)
+		answerGreeting()
+		await flushed()
+		await resumedIn(second.controller)
+
+		expect(second.world.opened).toEqual([])
+		expect([...world.sent, ...second.world.sent]).toEqual([
+			greeting,
+			firstAgent,
+		])
+	})
+
+	it("lets another window take the run over once the window holding it closed", async () => {
+		world.outcomeOf = () => new Promise(() => {})
+		await leftAccountIn(controller)
+		closeWindowOf(world)
+		const second = windowOn(world)
+		second.world.threadHistory = [...world.sent]
+
+		await resumedIn(second.controller)
+
+		expect(second.world.opened).toEqual([SHOTO])
+		expect(second.world.sent).toEqual([firstAgent])
 	})
 })
 
@@ -952,6 +1108,59 @@ describe("landing after an import", () => {
 		await controller.finish()
 
 		expect(world.opened).toEqual([SCOUT.id])
+	})
+})
+
+describe("holding the Shoto run in a window", () => {
+	const hold = onboardingFlowWorldOf({
+		chat: {} as ChatController,
+		roster: {} as RosterController,
+		user: {} as UserController,
+	}).holdShotoRun
+
+	it("runs when no other window holds the run", async () => {
+		const run = vi.fn(async () => {})
+
+		await hold(run)
+
+		expect(run).toHaveBeenCalledOnce()
+	})
+
+	it("skips while another window holds the run", async () => {
+		const run = vi.fn(async () => {})
+		void hold(() => new Promise(() => {}))
+
+		await hold(run)
+
+		expect(run).not.toHaveBeenCalled()
+	})
+
+	it("runs without a hold in a webview that has no Web Locks", async () => {
+		Object.defineProperty(navigator, "locks", {
+			configurable: true,
+			value: null,
+		})
+		const run = vi.fn(async () => {})
+
+		await hold(run)
+
+		expect(run).toHaveBeenCalledOnce()
+	})
+
+	it("names the failure when the run can't be held", async () => {
+		world.step = "account"
+		world.holdShotoRun = async () => {
+			throw { kind: "storage", detail: "the lock was refused" }
+		}
+
+		await controller.finish()
+		await flushed()
+
+		expect(world.opened).toEqual([])
+		expect(reportFailure).toHaveBeenCalledWith({
+			title: i18n.t("chat:screen.notice.failed"),
+			description: "the lock was refused",
+		})
 	})
 })
 

@@ -44,6 +44,7 @@ export type OnboardingFlowWorld = {
 	isShotoRunOwed: () => boolean
 	oweShotoRun: () => void
 	clearShotoRunOwed: () => void
+	holdShotoRun: (run: () => Promise<void>) => Promise<void>
 	shotoId: () => string | null
 	firstCompanionId: () => string | null
 	storeFirstCompanion: (botId: string) => Promise<void>
@@ -87,6 +88,8 @@ const initialOnboardingFlowState: OnboardingFlowState = {
 }
 
 const SHOTO_RUN_OWED_KEY = "onboardingShotoRunOwed"
+
+const SHOTO_RUN_LOCK = "onboardingShotoRun"
 
 type StoredOnboarding = Pick<UserPreferences, "onboardingStep">
 
@@ -156,7 +159,7 @@ export const createOnboardingFlowController = (
 		}
 	}
 
-	const meetShoto = async (shotoId: string) => {
+	const hasMetShoto = async (shotoId: string) => {
 		const greeting = onboardingSummonsFor("greeting")
 		try {
 			await world.openConversation(shotoId)
@@ -165,8 +168,10 @@ export const createOnboardingFlowController = (
 			if (outcome.kind === "answered") {
 				await summonOnce(shotoId, onboardingSummonsFor("firstCompanion"))
 			}
+			return true
 		} catch (reason) {
 			reportUnsent(reason)
+			return false
 		}
 	}
 
@@ -181,16 +186,26 @@ export const createOnboardingFlowController = (
 			kind: "unknownBot",
 		})
 
-	const joinShoto = async () => {
+	const completesShotoRun = async (shotoId: string | null) => {
+		if (shotoId) {
+			return hasMetShoto(shotoId)
+		}
+		reportShotoMissing()
+		return true
+	}
+
+	const runShoto = async () => {
+		if (!isShotoRunStored()) {
+			return
+		}
 		const shotoId = world.shotoId()
 		set({ isWithShoto: true, shotoId })
-		if (shotoId) {
-			await meetShoto(shotoId)
-		} else {
-			reportShotoMissing()
+		if (await completesShotoRun(shotoId)) {
+			world.clearShotoRunOwed()
 		}
-		world.clearShotoRunOwed()
 	}
+
+	const joinShoto = () => world.holdShotoRun(runShoto).catch(reportUnsent)
 
 	const isShotoRunStored = () =>
 		world.storedStep() === "done" &&
@@ -379,6 +394,18 @@ export const onboardingFlowWorldOf = ({
 	isShotoRunOwed: () => localStorage.getItem(SHOTO_RUN_OWED_KEY) !== null,
 	oweShotoRun: () => localStorage.setItem(SHOTO_RUN_OWED_KEY, ""),
 	clearShotoRunOwed: () => localStorage.removeItem(SHOTO_RUN_OWED_KEY),
+	holdShotoRun: (run) =>
+		navigator.locks
+			? navigator.locks.request(
+					SHOTO_RUN_LOCK,
+					{ ifAvailable: true },
+					async (lock) => {
+						if (lock) {
+							await run()
+						}
+					},
+				)
+			: run(),
 	shotoId: () => user.getState().preferences.onboardingShotoId ?? null,
 	firstCompanionId: () =>
 		user.getState().preferences.onboardingFirstCompanionId ?? null,
