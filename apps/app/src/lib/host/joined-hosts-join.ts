@@ -10,6 +10,7 @@ import {
 	unexpectedJoinNotice,
 } from "./join-refusal"
 import type {
+	JoinedHostState,
 	JoinedHostsOptions,
 	JoinedHostsState,
 	RecordJoinedHost,
@@ -43,6 +44,8 @@ type JoinedHostsJoinOptions = Pick<
 }
 
 const JOIN_COMMAND = "joined_space_connect"
+
+type RefusedJoin = Extract<JoinedHostState, { status: "refused" }>
 
 const refusalFactsOf = (id: string): ReporterFacts => ({
 	command: JOIN_COMMAND,
@@ -115,18 +118,18 @@ export const createJoinedHostsJoin = ({
 		down.markUp(id)
 	}
 
+	const refuse = (id: string, refusal: Omit<RefusedJoin, "status">): null => {
+		record(id, { status: "refused", ...refusal })
+		return null
+	}
+
 	const refuseJoin = (id: string, error: JoinedSpaceError): null => {
 		const notice = joinRefusalNoticeOf(error)
 		logJoinFailure(id, error)
 		if (isReportedJoinError(error)) {
 			reportRefusalOnce(id, notice, refusalFactsOf(id))
 		}
-		record(id, {
-			status: "refused",
-			failure: notice.title,
-			...waitReasonOf(error),
-		})
-		return null
+		return refuse(id, { failure: notice.title, ...waitReasonOf(error) })
 	}
 
 	const refuseRejection = (id: string, reason: unknown): null => {
@@ -135,8 +138,7 @@ export const createJoinedHostsJoin = ({
 		}
 		logJoinFailure(id, reason)
 		reportRefusalOnce(id, unexpectedJoinNotice(), refusalFactsOf(id))
-		record(id, { status: "refused", failure: describeFailure(reason) })
-		return null
+		return refuse(id, { failure: describeFailure(reason) })
 	}
 
 	const openHost = (
