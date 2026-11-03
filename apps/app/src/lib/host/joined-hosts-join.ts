@@ -6,6 +6,7 @@ import { hostOfflineOf, isHostOffline } from "./host-offline"
 import { createHttpHost, type HttpHost, isTimeout } from "./http"
 import {
 	isJoinedSpaceError,
+	type JoinedSpaceNaming,
 	joinRefusalNoticeOf,
 	unexpectedJoinNotice,
 } from "./join-refusal"
@@ -41,6 +42,7 @@ type JoinedHostsJoinOptions = Pick<
 	attachHost: (id: string, host: HttpHost) => void
 	reportJoinRefusal: NonNullable<JoinedHostsOptions["reportJoinRefusal"]>
 	isOnScreen: (id: string) => boolean
+	namingOf: (id: string) => JoinedSpaceNaming
 }
 
 const JOIN_COMMAND = "joined_space_connect"
@@ -97,6 +99,7 @@ export const createJoinedHostsJoin = ({
 	reportFailure,
 	reportJoinRefusal,
 	isOnScreen,
+	namingOf,
 }: JoinedHostsJoinOptions) => {
 	const pendingJoins = new Map<string, Promise<HttpHost | null>>()
 	const reportedRefusals = new Set<string>()
@@ -124,7 +127,7 @@ export const createJoinedHostsJoin = ({
 	}
 
 	const refuseJoin = (id: string, error: JoinedSpaceError): null => {
-		const notice = joinRefusalNoticeOf(error)
+		const notice = joinRefusalNoticeOf(error, namingOf(id))
 		logJoinFailure(id, error)
 		if (isReportedJoinError(error)) {
 			reportRefusalOnce(id, notice, refusalFactsOf(id))
@@ -137,7 +140,11 @@ export const createJoinedHostsJoin = ({
 			return refuseJoin(id, reason)
 		}
 		logJoinFailure(id, reason)
-		reportRefusalOnce(id, unexpectedJoinNotice(), refusalFactsOf(id))
+		reportRefusalOnce(
+			id,
+			unexpectedJoinNotice(namingOf(id)),
+			refusalFactsOf(id),
+		)
 		return refuse(id, { failure: describeFailure(reason) })
 	}
 

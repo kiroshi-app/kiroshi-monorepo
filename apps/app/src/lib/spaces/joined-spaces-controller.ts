@@ -31,7 +31,10 @@ import { createStore } from "../store"
 import { createWriteLoop } from "../write-loop"
 import type { RosterSpace, RosterState } from "../bots/roster-controller"
 import type { Space } from "../conversations/store-contract"
-import { joinRejectionNoticeOf } from "../host/join-refusal"
+import {
+	type JoinedSpaceNaming,
+	joinRejectionNoticeOf,
+} from "../host/join-refusal"
 import {
 	JOINED_SPACE_CHANGED_EVENT,
 	type JoinedHostState,
@@ -70,6 +73,7 @@ export type JoinedSpacesController = {
 	admit: (joined: JoinedSpace) => Promise<void>
 	describe: (id: string, value: SpaceSettingsValue) => void
 	hostNameOf: (id: string) => string
+	shownHostNameOf: (id: string) => string
 }
 
 export type JoinedSpacesTransport = {
@@ -478,7 +482,7 @@ export const createJoinedSpacesController = ({
 	}
 
 	const hostOfflineNoticeOf = (joined: JoinedSpace) => {
-		const naming = { space: joined.name, host: hostNameOf(joined.id) }
+		const naming = { space: joined.name, host: shownHostNameOf(joined.id) }
 		return {
 			title: i18n.t("chat:spaceAccessBanner.offline.title", naming),
 			description: i18n.t(hostOfflineBodyKeyOf(joined.wait?.reason), naming),
@@ -583,6 +587,23 @@ export const createJoinedSpacesController = ({
 			i18n.t("chat:working.name"),
 		)
 
+	const knownHostNameOf = (id: string): string | undefined =>
+		heldJoined(id)?.hostedBy ||
+		hostAmong(heldJoinedMembersOf(queryClient, id))?.name ||
+		undefined
+
+	const shownHostNameOf = (id: string) =>
+		knownHostNameOf(id) ?? i18n.t("common:spaces.unnamed.host")
+
+	const namingOf = (id: string): JoinedSpaceNaming => {
+		const space = heldJoined(id)?.name
+		const host = knownHostNameOf(id)
+		return {
+			...(space ? { space } : {}),
+			...(host ? { host } : {}),
+		}
+	}
+
 	const shownThreadId = () =>
 		shownThreads ? threadIdOf(shownThreads.getState()) : null
 
@@ -651,7 +672,9 @@ export const createJoinedSpacesController = ({
 		set({ openId: joined?.id ?? null, departed: null })
 		spaces.select(joined ? hostSpaceIdOf(joined) : id)
 		void (joined
-			? hosts.activate(joined.id, hostSpaceIdOf(joined))
+			? hosts.activate(joined.id, hostSpaceIdOf(joined), () =>
+					namingOf(joined.id),
+				)
 			: hosts.activate(null))
 	}
 
@@ -710,5 +733,6 @@ export const createJoinedSpacesController = ({
 		admit,
 		describe,
 		hostNameOf,
+		shownHostNameOf,
 	}
 }

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
+import type { NoticeMessage } from "@workspace/ui/components/notice-surface"
 import {
 	raiseFailureNotice,
 	raiseTransientNotice,
@@ -33,7 +34,12 @@ import type {
 import { createStore } from "../store"
 import iPhoneVectors from "../../../../ios/KiroshiTests/Vectors/space-avatar.json?raw"
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
-import type { JoinedHostState, JoinedHostsState } from "../host/joined-hosts"
+import { joinRejectionNoticeOf } from "../host/join-refusal"
+import type {
+	JoinedHostState,
+	JoinedHosts,
+	JoinedHostsState,
+} from "../host/joined-hosts"
 import { createQueryTestWrapper } from "../query/query-test-wrapper"
 
 vi.mock("@workspace/ui/components/notice-surface", async (importOriginal) => ({
@@ -81,7 +87,7 @@ const hostsFake = () => {
 			const answer = answers.get(id)
 			if (answer) record(id, answer)
 		}),
-		activate: vi.fn(async (id: string | null) => {
+		activate: vi.fn<JoinedHosts["activate"]>(async (id) => {
 			store.setState({ ...store.getState(), active: id })
 		}),
 		forget: vi.fn(),
@@ -460,6 +466,7 @@ describe("selecting a space", () => {
 		expect(hosts.activate).toHaveBeenLastCalledWith(
 			GARAGE.id,
 			GARAGE.remoteSpaceId,
+			expect.any(Function),
 		)
 	})
 
@@ -524,6 +531,7 @@ describe("selecting a space", () => {
 		expect(hosts.activate).toHaveBeenCalledExactlyOnceWith(
 			GARAGE.id,
 			GARAGE.remoteSpaceId,
+			expect.any(Function),
 		)
 	})
 
@@ -711,6 +719,7 @@ describe("accepting an invited space", () => {
 		expect(gear.hosts.activate).toHaveBeenLastCalledWith(
 			STUDIO.id,
 			STUDIO.remoteSpaceId,
+			expect.any(Function),
 		)
 	})
 })
@@ -733,6 +742,7 @@ describe("accepting an invited space its host has not let in yet", () => {
 		expect(gear.hosts.activate).not.toHaveBeenCalledWith(
 			STUDIO.id,
 			expect.anything(),
+			expect.any(Function),
 		)
 	})
 
@@ -747,6 +757,7 @@ describe("accepting an invited space its host has not let in yet", () => {
 		expect(gear.hosts.activate).toHaveBeenLastCalledWith(
 			STUDIO.id,
 			STUDIO.remoteSpaceId,
+			expect.any(Function),
 		)
 	})
 
@@ -770,6 +781,7 @@ describe("accepting an invited space its host has not let in yet", () => {
 		expect(gear.hosts.activate).not.toHaveBeenCalledWith(
 			STUDIO.id,
 			expect.anything(),
+			expect.any(Function),
 		)
 	})
 })
@@ -851,6 +863,7 @@ describe("a joined space turning to wait for its host", () => {
 		expect(gear.hosts.activate).toHaveBeenLastCalledWith(
 			STUDIO.id,
 			STUDIO.remoteSpaceId,
+			expect.any(Function),
 		)
 	})
 })
@@ -873,6 +886,7 @@ describe("a joined space admitted before whose host is offline", () => {
 		expect(gear.hosts.activate).toHaveBeenLastCalledWith(
 			STUDIO.id,
 			STUDIO.remoteSpaceId,
+			expect.any(Function),
 		)
 	})
 
@@ -909,6 +923,105 @@ describe("the host name of a joined space", () => {
 		await settle()
 
 		expect(gear.joined.hostNameOf(STUDIO.id)).toBe("No name")
+	})
+})
+
+const UNNAMED_WORDS = ["the host", "this space", "No name"]
+
+const textOf = ({ title, description }: NoticeMessage) =>
+	`${title} ${description ?? ""}`
+
+const namingOnScreenOf = (gear: Awaited<ReturnType<typeof gearFor>>) => {
+	gear.joined.selectSpace(STUDIO_ROW)
+	const namingOf = gear.hosts.activate.mock.lastCall?.[2]
+	return namingOf?.()
+}
+
+const withHostedStudio = async () => {
+	const gear = await gearFor([{ ...STUDIO, hostedBy: "Mia" }])
+	gear.holdMembers(STUDIO.id, [hostNamed("Lea")])
+	gear.joined.watch()
+	await settle()
+	return gear
+}
+
+const withUnnamedStudio = async () => {
+	const gear = await gearFor([STUDIO])
+	gear.joined.watch()
+	await settle()
+	return gear
+}
+
+describe("the naming of a joined space on screen", () => {
+	it("names the host by the space's hostedBy before its roster", async () => {
+		const gear = await withHostedStudio()
+
+		expect(namingOnScreenOf(gear)).toEqual({
+			space: "Studio Nord",
+			host: "Mia",
+		})
+		expect(gear.joined.shownHostNameOf(STUDIO.id)).toBe("Mia")
+	})
+
+	it("names the host by the host member of the roster otherwise", async () => {
+		const gear = await withStudio()
+
+		expect(namingOnScreenOf(gear)).toEqual({
+			space: "Studio Nord",
+			host: "Lea",
+		})
+		expect(gear.joined.shownHostNameOf(STUDIO.id)).toBe("Lea")
+	})
+
+	it("leaves the host unpassed when no name is known, never the unnamed placeholder", async () => {
+		const gear = await withUnnamedStudio()
+
+		expect(namingOnScreenOf(gear)).toEqual({ space: "Studio Nord" })
+		expect(gear.joined.shownHostNameOf(STUDIO.id)).toBe("the host")
+	})
+
+	it("raises named connect notices for the space on screen", async () => {
+		const gear = await withStudio()
+		const naming = namingOnScreenOf(gear)
+
+		const notices = [
+			joinRejectionNoticeOf(
+				{
+					kind: "waitingForHost",
+					id: STUDIO.id,
+					instanceId: STUDIO.instanceId,
+					reason: "hostSilent",
+					detail: "relay said 502",
+				},
+				naming,
+			),
+			joinRejectionNoticeOf(new Error("ipc closed"), naming),
+		]
+
+		expect(notices.map(({ title }) => title)).toEqual([
+			"Waiting for Lea",
+			"Something went wrong with Studio Nord",
+		])
+		expect(notices[0]?.description).toContain("Lea")
+		for (const notice of notices) {
+			for (const word of UNNAMED_WORDS) {
+				expect(textOf(notice)).not.toContain(word)
+			}
+		}
+	})
+
+	it("names the host by the fallback in the host offline notice when no name is known", async () => {
+		const gear = await withUnnamedStudio()
+
+		gear.wire.hold([WAITING_STUDIO])
+		gear.wire.announce()
+		await settle()
+
+		expect(gear.reportHostOffline).toHaveBeenCalledExactlyOnceWith({
+			title: HOST_OFFLINE_NOTICE.title,
+			description:
+				"You can read what’s here. You can send again once Kiroshi is open on the host’s computer.",
+		})
 	})
 })
 
@@ -1138,6 +1251,7 @@ describe("a local and a joined space both carrying the id personal", () => {
 		expect(gear.hosts.activate).toHaveBeenLastCalledWith(
 			HOST_PERSONAL.id,
 			HOST_PERSONAL.remoteSpaceId,
+			expect.any(Function),
 		)
 	})
 
@@ -1179,6 +1293,7 @@ describe("a local and a joined space both carrying the id personal", () => {
 		expect(gear.hosts.activate).toHaveBeenLastCalledWith(
 			HOST_PERSONAL.id,
 			HOST_PERSONAL.remoteSpaceId,
+			expect.any(Function),
 		)
 	})
 

@@ -135,15 +135,18 @@ const STUDIO_SPACE: JoinedSpace = {
 	instanceId: "instance-of-joined-studio",
 }
 
-const openStudio = async () => {
+const LEA_HOSTING = [{ userId: "u-lea", name: "Lea", role: "host" }]
+
+const openStudio = async (
+	studio: JoinedSpace = STUDIO_SPACE,
+	members: unknown[] = LEA_HOSTING,
+) => {
 	const store = createFakeTranscriptStore()
 	const home = await store.createSpace("Home")
 	const { queryClient } = createQueryTestWrapper()
 	const spaces = createSpacesController(store, { queryClient })
 	await spaces.load(home.id)
-	queryClient.setQueryData(spaceQueryKeys.joinedMembersOf(STUDIO_SPACE.id), [
-		{ userId: "u-lea", name: "Lea", role: "host" },
-	])
+	queryClient.setQueryData(spaceQueryKeys.joinedMembersOf(studio.id), members)
 	const joined = createJoinedSpacesController({
 		queryClient,
 		spaces,
@@ -154,7 +157,7 @@ const openStudio = async () => {
 			forget: () => undefined,
 		},
 		transport: {
-			list: async () => [STUDIO_SPACE],
+			list: async () => [studio],
 			remove: async () => undefined,
 			onChanged: async () => () => undefined,
 			onRemoved: async () => () => undefined,
@@ -162,7 +165,7 @@ const openStudio = async () => {
 			onDescribed: async () => () => undefined,
 		},
 	})
-	await joined.admit(STUDIO_SPACE)
+	await joined.admit(studio)
 	return { home, spaces, joined }
 }
 
@@ -192,6 +195,39 @@ it("reads the host name and the host presence of the open joined space", async (
 		isDown: false,
 	})
 })
+
+it.each<[string, JoinedSpace, unknown[], string]>([
+	[
+		"the space's hostedBy before the roster",
+		{ ...STUDIO_SPACE, hostedBy: "Mia" },
+		LEA_HOSTING,
+		"Mia",
+	],
+	[
+		"the fallback, never the unnamed placeholder, when no name is known",
+		STUDIO_SPACE,
+		[],
+		"the host",
+	],
+])(
+	"names the host of the waiting banner by %s",
+	async (_, studio, members, hostName) => {
+		const { spaces, joined } = await openStudio(studio, members)
+
+		const { result } = renderHook(() =>
+			useOpenJoinedHost(spaces.getState().selectedSpaceId, {
+				state: joined.getState(),
+				controller: joined,
+				hosts: {
+					active: studio.id,
+					connections: { [studio.id]: { status: "down" } },
+				},
+			}),
+		)
+
+		expect(result.current).toMatchObject({ spaceName: "Studio Nord", hostName })
+	},
+)
 
 it.each<[string, JoinedHostState]>([
 	["connecting", { status: "connecting" }],

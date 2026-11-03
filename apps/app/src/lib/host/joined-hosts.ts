@@ -3,6 +3,7 @@ import type { UnlistenFn } from "@tauri-apps/api/event"
 import type { NoticeMessage } from "@workspace/ui/components/notice-surface"
 
 import type { HostRefusal, HostSocket, HttpHost } from "./http"
+import type { JoinedSpaceNaming } from "./join-refusal"
 import { createJoinedHostsDown } from "./joined-hosts-down"
 import { createJoinedHostsInvoke, type LocalHost } from "./joined-hosts-invoke"
 import { createJoinedHostsJoin, type JoinOutcome } from "./joined-hosts-join"
@@ -32,6 +33,10 @@ export type JoinedHostsState = {
 
 export type RecordJoinedHost = (id: string, state: JoinedHostState) => void
 
+export type JoinedSpaceNamingOf = () => JoinedSpaceNaming
+
+const UNNAMED: JoinedSpaceNamingOf = () => ({})
+
 export type JoinedHostsOptions = {
 	local: LocalHost
 	join: (id: string) => Promise<JoinOutcome>
@@ -53,6 +58,7 @@ export const createJoinedHosts = ({
 	const hosts = new Map<string, HttpHost>()
 	const sharedSpaceIds = new Map<string, string>()
 	let requested: string | null = null
+	let requestedNamingOf = UNNAMED
 
 	const record: RecordJoinedHost = (id, state) => {
 		const current = store.getState()
@@ -99,6 +105,7 @@ export const createJoinedHosts = ({
 		reportFailure,
 		reportJoinRefusal,
 		isOnScreen: (id) => requested === id,
+		namingOf: (id) => (requested === id ? requestedNamingOf() : UNNAMED()),
 	})
 	const { invoke, invokeOn, invokeOnThisComputer } = createJoinedHostsInvoke({
 		store,
@@ -125,8 +132,10 @@ export const createJoinedHosts = ({
 	const activate = async (
 		id: string | null,
 		sharedSpaceId?: string,
+		namingOf: JoinedSpaceNamingOf = UNNAMED,
 	): Promise<void> => {
 		requested = id
+		requestedNamingOf = namingOf
 		if (id === null) {
 			setActive(null)
 			return
