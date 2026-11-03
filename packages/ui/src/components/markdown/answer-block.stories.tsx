@@ -118,6 +118,55 @@ title: Casa do Rio, rooms and rates
 description: Eight rooms on the river, breakfast included.
 \`\`\``
 
+const VIDEO_WITH_MARKER = `The tour they sent, the terrace comes at 2:16.
+
+\`\`\`video
+url: https://media.casadorio.pt/casa-do-rio-tour.mp4
+title: casa-do-rio-tour.mp4
+duration: 4:32
+source: casadorio.pt
+poster: https://images.example.org/casa-do-rio-tour.jpg
+marker: 2:16
+marker-label: Terrace
+\`\`\``
+
+const VIDEO_WITHOUT_POSTER = `The tour they sent.
+
+\`\`\`video
+url: https://media.casadorio.pt/casa-do-rio-tour.mp4
+title: casa-do-rio-tour.mp4
+duration: 4:32
+\`\`\``
+
+const MAP_LINK =
+	"https://www.openstreetmap.org/directions?from=38.7105,-9.1302&to=38.7069,-9.1459"
+
+const MAP_WITH_ROUTE = `From the guesthouse to the market, along the river.
+
+\`\`\`map
+title: 1.9 km · 25 min walk
+subtitle: Alfama, Lisbon · © OpenStreetMap contributors
+area: Rio Tejo
+link: ${MAP_LINK}
+- name: Casa do Rio
+  lat: 38.7105
+  lon: -9.1302
+- name: Time Out Market
+  lat: 38.7069
+  lon: -9.1459
+\`\`\``
+
+const MAP_WITH_ONE_PLACE = `The guesthouse sits on the river.
+
+\`\`\`map
+title: Casa do Rio
+subtitle: Alfama, Lisbon · © OpenStreetMap contributors
+area: Rio Tejo
+- name: Casa do Rio
+  lat: 38.7105
+  lon: -9.1302
+\`\`\``
+
 const BROKEN = `Two ways forward.
 
 \`\`\`options
@@ -370,6 +419,122 @@ export const WebPageWithoutPreviewInAnswer = meta.story({
 		await expect(args.answerActions?.onOpenWebPage).toHaveBeenCalledWith(
 			WEB_PAGE_URL,
 		)
+	},
+})
+
+const expectInstantColours = async (element: HTMLElement) => {
+	await expect(getComputedStyle(element).transitionDuration).toBe("0s")
+}
+
+const expectInside = async (inner: Element, outer: Element) => {
+	const box = inner.getBoundingClientRect()
+	const bounds = outer.getBoundingClientRect()
+	await expect(box.left).toBeGreaterThanOrEqual(bounds.left)
+	await expect(box.right).toBeLessThanOrEqual(bounds.right)
+	await expect(box.top).toBeGreaterThanOrEqual(bounds.top)
+	await expect(box.bottom).toBeLessThanOrEqual(bounds.bottom)
+}
+
+export const VideoPausedWithMarkerInAnswer = meta.story({
+	globals: { theme: "dark" },
+	args: { children: VIDEO_WITH_MARKER },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Artboard Markdown 13. A `video` block with a poster and a marker: the player is paused at 0:00, the Space coloured marker sits at 2:16 of 4:32, the caption joins title, source and marker label. Check the marker seeks to its time.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		await expect(
+			canvasElement.querySelector('[data-slot="markdown-fence"]'),
+		).toBeNull()
+		await expect(slotIn(canvasElement, "video-player")).toHaveTextContent(
+			"casa-do-rio-tour.mp4 · casadorio.pt · Terrace",
+		)
+		const play = canvas.getByRole("button", {
+			name: "Play casa-do-rio-tour.mp4",
+		})
+		const marker = canvas.getByRole("button", { name: "Go to 2:16" })
+		await expectInstantColours(play)
+		await expectInstantColours(marker)
+
+		await userEvent.click(marker)
+		const video = canvasElement.querySelector("video")
+		await expect(video?.currentTime).toBe(136)
+		await expect(canvas.getByText("2:16")).toBeInTheDocument()
+	},
+})
+
+export const VideoWithoutPosterOrMarkerInAnswer = meta.story({
+	globals: { theme: "dark" },
+	args: { children: VIDEO_WITHOUT_POSTER },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A `video` block with only its address, title and duration: the player shows the slate, the track carries no marker, the caption is the title alone.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		await expect(canvasElement.querySelector("video")).not.toHaveAttribute(
+			"poster",
+		)
+		await expect(canvas.queryByRole("button", { name: /^Go to/ })).toBeNull()
+		await expect(slotIn(canvasElement, "video-player")).toHaveTextContent(
+			"0:004:32casa-do-rio-tour.mp4",
+		)
+	},
+})
+
+export const MapWithRouteInAnswer = meta.story({
+	globals: { theme: "dark" },
+	args: { children: MAP_WITH_ROUTE },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Artboard Markdown 14. A `map` block with two places and a link: the start pin on the foreground, the destination pin in the Space colour, the dotted route between them, Open in Maps on the footer. Check every pin stays inside the map surface and nothing is fetched.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const card = slotIn(canvasElement, "map-card")
+		const surface = card.firstElementChild
+		if (!surface) throw new Error("The map card draws no surface")
+		const pins = canvas.getAllByRole("listitem")
+		await expect(pins.map((pin) => pin.textContent)).toEqual([
+			"Casa do Rio",
+			"Time Out Market",
+		])
+		for (const pin of pins) await expectInside(pin, surface)
+		await expect(card.querySelectorAll("line")).toHaveLength(1)
+		await expect(card.querySelector("img, iframe")).toBeNull()
+
+		const open = canvas.getByRole("link", { name: "Open in Maps" })
+		await expect(open).toHaveAttribute("href", MAP_LINK)
+		await expectInstantColours(open)
+	},
+})
+
+export const MapWithOnePlaceInAnswer = meta.story({
+	globals: { theme: "dark" },
+	args: { children: MAP_WITH_ONE_PLACE },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A `map` block with one place and no link: the pin sits at the centre in the Space colour, no route, no Open in Maps.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const card = slotIn(canvasElement, "map-card")
+		await expect(canvas.getAllByRole("listitem")).toHaveLength(1)
+		await expect(card.querySelector("line")).toBeNull()
+		await expect(canvas.queryByRole("link")).toBeNull()
 	},
 })
 

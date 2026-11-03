@@ -138,6 +138,8 @@ const chat = {
 			"illustrated-list": "List",
 			collapsible: "Section",
 			"web-page": "Web page",
+			video: "Video",
+			map: "Map",
 		},
 	},
 	queue: {
@@ -345,6 +347,15 @@ const chat = {
 		},
 		webPage: {
 			open: "Open as page",
+		},
+		video: {
+			play: "Play {{title}}",
+			pause: "Pause {{title}}",
+			seek: "Go to {{time}}",
+			failed: "Couldn’t play the video. Press play to try again.",
+		},
+		map: {
+			open: "Open in Maps",
 		},
 		options: {
 			title: "Options",

@@ -82,7 +82,33 @@ const WEB_PAGE = `${WEB_PAGE_TEXT}
 image: https://images.example.org/casa-do-rio.jpg
 alt: Terrace of Casa do Rio over the river`
 
+const VIDEO_REQUIRED = `url: https://media.example.org/standup-0312.mp4
+title: standup-0312.mp4
+duration: 4:32`
+
+const VIDEO = `${VIDEO_REQUIRED}
+source: Recorded in Meet
+poster: https://images.example.org/standup-0312.jpg
+marker: 2:16
+marker-label: Release plan`
+
+const MAP_PLACES = `- name: Casa do Rio
+  lat: 38.7105
+  lon: -9.1302
+- name: Time Out Market
+  lat: 38.7069
+  lon: -9.1459`
+
+const MAP = `title: 1.9 km · 25 min walk
+subtitle: Alfama, Lisbon · © OpenStreetMap contributors
+area: Rio Tejo
+link: https://www.openstreetmap.org/directions?from=38.7105,-9.1302&to=38.7069,-9.1459
+${MAP_PLACES}`
+
 const slot = (name: string) => `data-slot="${name}"`
+
+const leftOffsets = (html: string) =>
+	[...html.matchAll(/left:(-?[\d.]+)%/g)].map(([, value]) => Number(value))
 
 describe("rich answer blocks", () => {
 	it.each([
@@ -92,6 +118,8 @@ describe("rich answer blocks", () => {
 		["interactive", INTERACTIVE, "interactive-view"],
 		["collapsible", COLLAPSIBLE, "collapsible-sections"],
 		["web-page", WEB_PAGE, "web-page-card"],
+		["video", VIDEO, "video-player"],
+		["map", MAP, "map-card"],
 	])("draws a %s block with its component", (label, body, component) => {
 		const html = render(fenced(label, body))
 
@@ -192,6 +220,34 @@ describe("rich answer blocks", () => {
 			"web-page",
 			`${WEB_PAGE_TEXT}\nimage: http://images.example.org/casa-do-rio.jpg`,
 		],
+		["a video has no duration", "video", VIDEO.replace("duration: 4:32\n", "")],
+		[
+			"a video address is not https",
+			"video",
+			VIDEO.replace("https://media", "http://media"),
+		],
+		[
+			"a video duration is not a time",
+			"video",
+			VIDEO.replace("duration: 4:32", "duration: four minutes"),
+		],
+		[
+			"a video marker lies past the end",
+			"video",
+			VIDEO.replace("marker: 2:16", "marker: 5:00"),
+		],
+		["a map has no place", "map", "title: 1.9 km · 25 min walk"],
+		["a map place has no longitude", "map", MAP.replace("  lon: -9.1459", "")],
+		[
+			"a map latitude lies off the globe",
+			"map",
+			MAP.replace("lat: 38.7105", "lat: 98.7105"),
+		],
+		[
+			"a map link is not https",
+			"map",
+			MAP.replace("https://www.openstreetmap", "http://www.openstreetmap"),
+		],
 	])("draws the source as a plain fence when %s", (_, label, body) => {
 		const html = render(fenced(label, body))
 
@@ -235,6 +291,65 @@ describe("rich answer blocks", () => {
 		expect(html).toContain(slot("web-page-card"))
 		expect(html).not.toContain("<img")
 		expect(html).not.toContain("Terrace over the river")
+	})
+
+	it("captions a video with its title, source and marker label", () => {
+		const html = render(fenced("video", VIDEO))
+
+		expect(html).toContain(
+			"standup-0312.mp4 · Recorded in Meet · Release plan</figcaption>",
+		)
+		expect(html).toContain('aria-label="Play standup-0312.mp4"')
+		expect(html).toContain(">0:00<")
+		expect(html).toContain(">4:32<")
+	})
+
+	it("places the video marker at its time over the duration", () => {
+		const html = render(fenced("video", VIDEO))
+
+		expect(html).toContain('aria-label="Go to 2:16"')
+		expect(leftOffsets(html)).toEqual([50])
+	})
+
+	it("draws a video without poster or marker on its slate", () => {
+		const html = render(fenced("video", VIDEO_REQUIRED))
+
+		expect(html).toContain(slot("video-player"))
+		expect(html).not.toContain("poster=")
+		expect(html).not.toContain("Go to")
+		expect(html).toContain(">standup-0312.mp4</figcaption>")
+	})
+
+	it("draws the map route through its places, in order, inside the surface", () => {
+		const html = render(fenced("map", MAP))
+		const [start, destination] = leftOffsets(html)
+
+		expect(html.match(/<line /g)).toHaveLength(1)
+		expect(html.indexOf("Casa do Rio")).toBeLessThan(
+			html.indexOf("Time Out Market"),
+		)
+		expect(start).toBeCloseTo(80)
+		expect(destination).toBeCloseTo(20)
+		expect(html).toContain(
+			'href="https://www.openstreetmap.org/directions?from=38.7105,-9.1302&amp;to=38.7069,-9.1459"',
+		)
+	})
+
+	it("draws a map with one place at the centre, with no route and no link", () => {
+		const html = render(
+			fenced("map", `title: Casa do Rio\n${MAP_PLACES.split("\n- ")[0]}`),
+		)
+
+		expect(html).toContain(slot("map-card"))
+		expect(leftOffsets(html)).toEqual([50])
+		expect(html).not.toContain("<line")
+		expect(html).not.toContain("<a ")
+	})
+
+	it("draws the map without loading anything", () => {
+		const html = render(fenced("map", MAP))
+
+		expect(html).not.toMatch(/<img|<iframe|src=|url\(/)
 	})
 
 	it("draws the pending frame while the agent is still writing a block", () => {

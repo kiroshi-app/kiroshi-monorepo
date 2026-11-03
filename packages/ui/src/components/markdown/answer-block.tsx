@@ -6,6 +6,8 @@ import { useTranslation } from "react-i18next"
 import { CollapsibleSections } from "@workspace/ui/components/answer-blocks/collapsible-sections"
 import { Gallery } from "@workspace/ui/components/answer-blocks/gallery"
 import { IllustratedList } from "@workspace/ui/components/answer-blocks/illustrated-list"
+import { MapCard } from "@workspace/ui/components/answer-blocks/map-card"
+import { VideoPlayer } from "@workspace/ui/components/answer-blocks/video-player"
 import { WebPageCard } from "@workspace/ui/components/answer-blocks/web-page-card"
 import {
 	InteractiveView,
@@ -187,6 +189,30 @@ const WebPageBlockView = ({ block }: BlockProps<"web-page">) => {
 	)
 }
 
+const VideoBlockView = ({ block }: BlockProps<"video">) => (
+	<VideoPlayer
+		duration={block.duration}
+		marker={block.marker}
+		poster={block.poster}
+		source={block.source}
+		src={block.url}
+		title={block.title}
+	/>
+)
+
+const MapBlockView = ({ block }: BlockProps<"map">) => (
+	<MapCard
+		area={block.area}
+		link={block.link}
+		places={block.places.map((place, index) => ({
+			id: `${index}`,
+			...place,
+		}))}
+		subtitle={block.subtitle}
+		title={block.title}
+	/>
+)
+
 type MarkdownAnswerBlockProps = {
 	block: AnswerBlock
 }
@@ -205,6 +231,10 @@ const blockViewOf = (block: AnswerBlock) => {
 			return <CollapsibleBlockView block={block} />
 		case "web-page":
 			return <WebPageBlockView block={block} />
+		case "video":
+			return <VideoBlockView block={block} />
+		case "map":
+			return <MapBlockView block={block} />
 	}
 }
 

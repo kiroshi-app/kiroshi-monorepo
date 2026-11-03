@@ -149,6 +149,8 @@ const chat = {
 			"illustrated-list": "Liste",
 			collapsible: "Section",
 			"web-page": "Page web",
+			video: "Vidéo",
+			map: "Carte",
 		},
 	},
 	queue: {
@@ -369,6 +371,16 @@ const chat = {
 		},
 		webPage: {
 			open: "Ouvrir comme page",
+		},
+		video: {
+			play: "Lire {{title}}",
+			pause: "Mettre en pause {{title}}",
+			seek: "Aller à {{time}}",
+			failed:
+				"Impossible de lire la vidéo. Appuyez sur lecture pour réessayer.",
+		},
+		map: {
+			open: "Ouvrir la carte",
 		},
 		options: {
 			title: "Options",

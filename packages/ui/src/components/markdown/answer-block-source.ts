@@ -54,6 +54,31 @@ type WebPageBlock = {
 	alt?: string
 }
 
+type VideoBlock = {
+	label: "video"
+	url: string
+	title: string
+	duration: number
+	source?: string
+	poster?: string
+	marker?: { time: number; label?: string }
+}
+
+type MapPlace = {
+	name: string
+	latitude: number
+	longitude: number
+}
+
+type MapBlock = {
+	label: "map"
+	title: string
+	subtitle?: string
+	area?: string
+	link?: string
+	places: MapPlace[]
+}
+
 type AnswerBlock =
 	| OptionsBlock
 	| IllustratedListBlock
@@ -61,11 +86,14 @@ type AnswerBlock =
 	| InteractiveBlock
 	| CollapsibleBlock
 	| WebPageBlock
+	| VideoBlock
+	| MapBlock
 
 type AnswerBlockLabel = AnswerBlock["label"]
 
 const SLIDER_NAME = /^[a-z][a-z0-9_]*$/
-const SLIDER_NUMBER = /^-?\d+(?:\.\d+)?$/
+const DECIMAL = /^-?\d+(?:\.\d+)?$/
+const CLOCK_TIME = /^(?:(\d+):)?([0-5]?\d):([0-5]\d)$/
 const MAX_SLIDERS = 5
 const FENCE_LINE = /^ {0,3}(?:`{3,}|~{3,})/m
 
@@ -124,7 +152,7 @@ const readGallery = (source: string): GalleryBlock | null => {
 const readSlider = (item: BlockRecord): InteractiveSlider | null => {
 	const numbers = [item.min, item.max, item.step, item.default]
 	if (!SLIDER_NAME.test(item.name)) return null
-	if (!numbers.every((value) => SLIDER_NUMBER.test(value))) return null
+	if (!numbers.every((value) => DECIMAL.test(value))) return null
 
 	const [min, max, step, defaultValue] = numbers.map(Number)
 	const holds =
@@ -203,6 +231,73 @@ const readWebPage = (source: string): WebPageBlock | null => {
 	return { label: "web-page", url, title, site, image, alt }
 }
 
+const readSeconds = (time: string) => {
+	const match = CLOCK_TIME.exec(time)
+	if (!match) return null
+
+	const [, hours = "0", minutes, seconds] = match
+	return Number(hours) * 3600 + Number(minutes) * 60 + Number(seconds)
+}
+
+const readVideo = (source: string): VideoBlock | null => {
+	const body = readShapedBody(source, {
+		fields: {
+			required: ["url", "title", "duration"],
+			optional: ["source", "poster", "marker", "marker-label"],
+			urls: ["url", "poster"],
+		},
+	})
+	if (!body) return null
+
+	const { url, title, poster, marker } = body.fields
+	const duration = readSeconds(body.fields.duration)
+	const markerTime = marker === undefined ? undefined : readSeconds(marker)
+	if (!duration || markerTime === null || (markerTime ?? 0) > duration) {
+		return null
+	}
+
+	return {
+		label: "video",
+		url,
+		title,
+		duration,
+		source: body.fields.source,
+		poster,
+		marker:
+			markerTime === undefined
+				? undefined
+				: { time: markerTime, label: body.fields["marker-label"] },
+	}
+}
+
+const readPlace = (item: BlockRecord): MapPlace | null => {
+	if (!DECIMAL.test(item.lat) || !DECIMAL.test(item.lon)) return null
+
+	const latitude = Number(item.lat)
+	const longitude = Number(item.lon)
+	return Math.abs(latitude) <= 90 && Math.abs(longitude) <= 180
+		? { name: item.name, latitude, longitude }
+		: null
+}
+
+const readMap = (source: string): MapBlock | null => {
+	const body = readShapedBody(source, {
+		fields: {
+			required: ["title"],
+			optional: ["subtitle", "area", "link"],
+			urls: ["link"],
+		},
+		item: { required: ["name", "lat", "lon"] },
+	})
+	if (!body) return null
+
+	const places = body.items.map(readPlace)
+	if (!places.every((place) => place !== null)) return null
+
+	const { title, subtitle, area, link } = body.fields
+	return { label: "map", title, subtitle, area, link, places }
+}
+
 const READERS: Readonly<
 	Record<AnswerBlockLabel, (source: string) => AnswerBlock | null>
 > = {
@@ -212,6 +307,8 @@ const READERS: Readonly<
 	interactive: readInteractive,
 	collapsible: readCollapsible,
 	"web-page": readWebPage,
+	video: readVideo,
+	map: readMap,
 }
 
 const isAnswerBlockLabel = (label?: string): label is AnswerBlockLabel =>
