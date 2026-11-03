@@ -17,6 +17,7 @@ export type FakeFlowWorld = OnboardingFlowWorld & {
 	firstRunDone: number
 	refusesStep: boolean
 	refusesFirstRunDone: boolean
+	shotoRunOwed: boolean
 	shoto: string | null
 	firstCompanion: string | null
 	names: Record<string, string>
@@ -34,6 +35,7 @@ export const createFakeFlowWorld = (): FakeFlowWorld => {
 		firstRunDone: 0,
 		refusesStep: false,
 		refusesFirstRunDone: false,
+		shotoRunOwed: false,
 		shoto: SHOTO,
 		firstCompanion: null,
 		names: {},
@@ -58,6 +60,13 @@ export const createFakeFlowWorld = (): FakeFlowWorld => {
 				throw { kind: "storage", detail: "disk full" }
 			}
 			fake.firstRunDone += 1
+		},
+		isShotoRunOwed: () => fake.shotoRunOwed,
+		oweShotoRun: () => {
+			fake.shotoRunOwed = true
+		},
+		clearShotoRunOwed: () => {
+			fake.shotoRunOwed = false
 		},
 		shotoId: () => fake.shoto,
 		firstCompanionId: () => fake.firstCompanion,

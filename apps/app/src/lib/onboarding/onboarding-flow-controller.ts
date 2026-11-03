@@ -41,6 +41,9 @@ export type OnboardingFlowWorld = {
 	storeStep: (step: OnboardingStep) => Promise<void>
 	replay: () => Promise<void>
 	markFirstRunDone: () => Promise<void>
+	isShotoRunOwed: () => boolean
+	oweShotoRun: () => void
+	clearShotoRunOwed: () => void
 	shotoId: () => string | null
 	firstCompanionId: () => string | null
 	storeFirstCompanion: (botId: string) => Promise<void>
@@ -82,6 +85,8 @@ const initialOnboardingFlowState: OnboardingFlowState = {
 	shotoId: null,
 	firstCompanion: null,
 }
+
+const SHOTO_RUN_OWED_KEY = "onboardingShotoRunOwed"
 
 type StoredOnboarding = Pick<UserPreferences, "onboardingStep">
 
@@ -176,18 +181,20 @@ export const createOnboardingFlowController = (
 			kind: "unknownBot",
 		})
 
-	const joinShoto = () => {
+	const joinShoto = async () => {
 		const shotoId = world.shotoId()
 		set({ isWithShoto: true, shotoId })
-		if (!shotoId) {
+		if (shotoId) {
+			await meetShoto(shotoId)
+		} else {
 			reportShotoMissing()
-			return
 		}
-		void meetShoto(shotoId)
+		world.clearShotoRunOwed()
 	}
 
-	const isShotoPhaseStored = () =>
-		world.storedStep() === "done" && !world.isFirstRunDone()
+	const isShotoRunStored = () =>
+		world.storedStep() === "done" &&
+		(!world.isFirstRunDone() || world.isShotoRunOwed())
 
 	const settle = async () => {
 		const { connection } = current()
@@ -196,11 +203,9 @@ export const createOnboardingFlowController = (
 			await store("import")
 			return
 		}
-		if (!(await store("done"))) {
+		if (!(await store("account"))) {
 			set({ connection })
-			return
 		}
-		joinShoto()
 	}
 
 	const showConnection = (connection: ConnectionStep) => {
@@ -244,11 +249,7 @@ export const createOnboardingFlowController = (
 		}
 	}
 
-	const landOnFirstCompanion = async () => {
-		const companionId = world.firstCompanionId()
-		if (!companionId) {
-			return
-		}
+	const landOnFirstCompanion = async (companionId: string) => {
 		try {
 			await world.openConversation(companionId)
 			await summonOnce(companionId, onboardingSummonsFor("arrival"))
@@ -257,7 +258,19 @@ export const createOnboardingFlowController = (
 		}
 	}
 
-	const land = () => (isImportJourney ? landOnShoto() : landOnFirstCompanion())
+	const land = async () => {
+		if (isImportJourney) {
+			await landOnShoto()
+			return
+		}
+		const companionId = world.firstCompanionId()
+		if (companionId === null) {
+			world.oweShotoRun()
+			void joinShoto()
+			return
+		}
+		await landOnFirstCompanion(companionId)
+	}
 
 	return {
 		...actions,
@@ -270,8 +283,8 @@ export const createOnboardingFlowController = (
 			if (world.storedStep() === "connect") {
 				await enterConnect()
 			}
-			if (isShotoPhaseStored() && !current().isWithShoto) {
-				joinShoto()
+			if (isShotoRunStored() && !current().isWithShoto) {
+				void joinShoto()
 			}
 		},
 
@@ -300,6 +313,7 @@ export const createOnboardingFlowController = (
 		replay: async () => {
 			stateStore.setState(initialOnboardingFlowState)
 			isImportJourney = false
+			world.clearShotoRunOwed()
 			await persisted(world.replay)
 		},
 
@@ -316,7 +330,7 @@ export const createOnboardingFlowController = (
 		},
 
 		noteFirstRunDone: async () => {
-			if (!current().isWithShoto) {
+			if (!current().isWithShoto || world.isFirstRunDone()) {
 				return
 			}
 			set({ isWithShoto: false, isAtAccount: true })
@@ -362,6 +376,9 @@ export const onboardingFlowWorldOf = ({
 	storeStep: user.setOnboardingStep,
 	replay: user.replayOnboarding,
 	markFirstRunDone: user.markFirstRunDone,
+	isShotoRunOwed: () => localStorage.getItem(SHOTO_RUN_OWED_KEY) !== null,
+	oweShotoRun: () => localStorage.setItem(SHOTO_RUN_OWED_KEY, ""),
+	clearShotoRunOwed: () => localStorage.removeItem(SHOTO_RUN_OWED_KEY),
 	shotoId: () => user.getState().preferences.onboardingShotoId ?? null,
 	firstCompanionId: () =>
 		user.getState().preferences.onboardingFirstCompanionId ?? null,
