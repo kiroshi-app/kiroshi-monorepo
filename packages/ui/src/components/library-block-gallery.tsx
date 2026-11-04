@@ -11,6 +11,7 @@ import {
 } from "react"
 import { useTranslation } from "react-i18next"
 
+import { accessibleNameOf } from "@workspace/ui/components/answer-blocks/answer-image"
 import {
 	Gallery,
 	type GalleryImageStatus,
@@ -127,7 +128,7 @@ const LibraryGalleryEditor = ({
 	onAddImages,
 	resolveImage,
 }: LibraryGalleryEditorProps) => {
-	const { t } = useTranslation("common")
+	const { t } = useTranslation(["common", "chat"])
 	const hintId = useId()
 	const frame = useRef<HTMLDivElement>(null)
 	const [drag, setDrag] = useState<TileDrag>()
@@ -349,7 +350,16 @@ const LibraryGalleryEditor = ({
 										key={at}
 									>
 										{status ? (
-											<GallerySurface name={alt} status={status} />
+											<GallerySurface
+												name={accessibleNameOf(
+													{ src, alt },
+													t("chat:answerBlock.gallery.tile", {
+														caption: "",
+														position: TILE_COUNT + at + 1,
+													}),
+												)}
+												status={status}
+											/>
 										) : (
 											<img
 												alt={alt}

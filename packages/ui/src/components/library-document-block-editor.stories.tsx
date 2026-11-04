@@ -140,7 +140,7 @@ const STORED_ITEMS = STORED_IMAGES.map(
 
 const STORED_GALLERY = galleryWith(...STORED_ITEMS)
 
-const [, STORED_GREY] = STORED_IMAGES
+const [, STORED_GREY, , , , STORED_OAK] = STORED_IMAGES
 
 const resolvedImageOf = (src: string) =>
 	`data:image/svg+xml,${encodeURIComponent(
@@ -148,8 +148,9 @@ const resolvedImageOf = (src: string) =>
 	)}`
 
 const resolveAllBut =
-	(src: string, outcome: () => Promise<string>) => (asked: string) =>
-		asked === src ? outcome() : Promise.resolve(resolvedImageOf(asked))
+	(srcs: readonly string[], outcome: () => Promise<string>) =>
+	(asked: string) =>
+		srcs.includes(asked) ? outcome() : Promise.resolve(resolvedImageOf(asked))
 
 const resolvedImgIn = (gallery: HTMLElement, alt: string) =>
 	waitFor(() => {
@@ -1185,7 +1186,7 @@ export const GalleryImageResolving = meta.story({
 	args: {
 		body: STORED_GALLERY,
 		resolveImage: fn(
-			resolveAllBut(STORED_GREY.src, () => new Promise<string>(() => {})),
+			resolveAllBut([STORED_GREY.src], () => new Promise<string>(() => {})),
 		),
 	},
 	parameters: {
@@ -1232,9 +1233,12 @@ export const GalleryImageResolving = meta.story({
 export const GalleryImageFailing = meta.story({
 	globals: { theme: "light" },
 	args: {
-		body: STORED_GALLERY,
+		body: galleryWith(
+			...STORED_ITEMS.slice(0, -1),
+			`- image: ${STORED_OAK.src}`,
+		),
 		resolveImage: fn(
-			resolveAllBut(STORED_GREY.src, () =>
+			resolveAllBut([STORED_GREY.src, STORED_OAK.src], () =>
 				Promise.reject(new Error("The image file is missing")),
 			),
 		),
@@ -1243,19 +1247,28 @@ export const GalleryImageFailing = meta.story({
 		docs: {
 			description: {
 				story:
-					"The second image failing to resolve. Check its tile is the broken image tile with its icon, and every other tile still shows its resolved image.",
+					"The second image and the sixth, in the overflow row and with no alt text, failing to resolve. Check both tiles are the broken image tile with its icon, the sixth named photo 6 like the grid names an image without alt text, and every other tile still shows its resolved image.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
 		const gallery = await openBlock(canvasElement, "gallery")
-		const broken = await waitFor(() => partOf(gallery, "gallery-broken"))
+		const [broken, overflowBroken] = await waitFor(() => {
+			const tiles = slotsIn(gallery, "gallery-broken")
+			expect(tiles).toHaveLength(2)
+			return tiles
+		})
 		await expect(broken).toHaveAccessibleName(STORED_GREY.alt)
-		await expect(broken.querySelector("svg")).not.toBeNull()
-		await expect(broken).not.toHaveAttribute("aria-busy")
-		await expect(slotsIn(gallery, "gallery-broken")).toHaveLength(1)
+		await expect(
+			partOf(gallery, "library-gallery-overflow").contains(overflowBroken),
+		).toBe(true)
+		await expect(overflowBroken).toHaveAccessibleName(", photo 6")
+		for (const tile of [broken, overflowBroken]) {
+			await expect(tile.querySelector("svg")).not.toBeNull()
+			await expect(tile).not.toHaveAttribute("aria-busy")
+		}
 		for (const { alt } of STORED_IMAGES.filter(
-			(image) => image !== STORED_GREY,
+			(image) => image !== STORED_GREY && image !== STORED_OAK,
 		))
 			await resolvedImgIn(gallery, alt)
 		await expect(slotsIn(gallery, "gallery-resolving")).toHaveLength(0)
