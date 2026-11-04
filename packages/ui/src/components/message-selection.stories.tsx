@@ -31,6 +31,8 @@ const ANSWER =
 const SELECTED =
 	"the studio tablet came back with a clock drift of about four minutes"
 
+const DOUBLE_CLICKED_WORD = "drift"
+
 const NO_RING = "none"
 
 const SELECTION_GAP = 8
@@ -284,6 +286,38 @@ export const CopyPressed = meta.story({
 		await expect(args.onReply).not.toHaveBeenCalled()
 		await expect(document.getSelection()?.toString()).toBe(SELECTED)
 		await expectToolbarGone(canvasElement)
+	},
+})
+
+export const DoubleClickedWord = meta.story({
+	tags: ["test-only"],
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A word double-clicked in the answer keeps the browser's own word selection and raises the toolbar on it. Check that the selection is that word alone and that the toolbar holds Reply then Copy, with neither reported yet.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const paragraph = answerTextOf(canvasElement).parentElement
+		if (!paragraph) throw new Error("The answer drew no paragraph")
+		await userEvent.pointer({
+			keys: "[MouseLeft][MouseLeft]",
+			target: paragraph,
+			offset: ANSWER.indexOf(DOUBLE_CLICKED_WORD) + 1,
+		})
+		const toolbar = await toolbarIn(canvasElement)
+
+		await expect(document.getSelection()?.toString()).toBe(DOUBLE_CLICKED_WORD)
+		await expect(
+			within(toolbar).getByRole("button", { name: "Reply" }),
+		).toBeVisible()
+		await expect(
+			within(toolbar).getByRole("button", { name: "Copy" }),
+		).toBeVisible()
+		await expect(args.onReply).not.toHaveBeenCalled()
+		await expect(args.onCopy).not.toHaveBeenCalled()
 	},
 })
 
