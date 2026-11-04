@@ -975,12 +975,9 @@ const expectCoversPanel = async (panel: HTMLElement, popup: HTMLElement) => {
 	await expect(panel).toContainElement(popup)
 	await expect(popup.parentElement).not.toBe(document.body)
 	await expect(getComputedStyle(popup).position).toBe("absolute")
-	const panelBox = panel.getBoundingClientRect()
-	const popupBox = popup.getBoundingClientRect()
-	await expect(popupBox.left).toBe(panelBox.left)
-	await expect(popupBox.top).toBe(panelBox.top)
-	await expect(popupBox.width).toBe(panelBox.width)
-	await expect(popupBox.height).toBe(panelBox.height)
+	await expect(popup.getBoundingClientRect().toJSON()).toEqual(
+		panel.getBoundingClientRect().toJSON(),
+	)
 }
 
 export const OpenedWithThePanel = meta.story({
