@@ -73,6 +73,7 @@ const host = vi.hoisted(() => ({
 	refusesCreates: false,
 	refusesCaretShares: false,
 	caretRefusals: 0,
+	appliedUpdates: 0,
 }))
 
 const itemNamed = (name: string): LibraryItem => ({
@@ -102,6 +103,7 @@ const LIBRARY_COMMANDS: Record<string, (call: LibraryCall) => unknown> = {
 		update: base64Of(Y.encodeStateAsUpdate(documentOf(name))),
 	}),
 	library_apply_update: ({ name, update }) => {
+		host.appliedUpdates += 1
 		Y.applyUpdate(documentOf(name), bytesOf(update))
 		return null
 	},
@@ -171,6 +173,7 @@ afterEach(() => {
 	host.refusesCreates = false
 	host.refusesCaretShares = false
 	host.caretRefusals = 0
+	host.appliedUpdates = 0
 	vi.mocked(raiseFailureNotice).mockClear()
 	vi.restoreAllMocks()
 })
@@ -845,5 +848,161 @@ describe("an agent that finishes writing in the open document", () => {
 
 		await goBack()
 		await waitFor(() => expect(finishedListenerCount()).toBe(0))
+	})
+})
+
+const RICH_DOCUMENT = [
+	"# Venue",
+	"The rooms we kept.",
+	"- Atlas\n- Mira",
+	"> [!NOTE]\n> The export keeps the archived rooms too.",
+	"| Room | Seats |\n| --- | --- |\n| Atlas | 12 |",
+	"```web-page\nurl: https://www.example.org/rooms\ntitle: Casa do Rio\n```",
+	"```gallery\n- image: https://images.example.org/sofa.jpg\n  alt: Green sofa\n```",
+].join("\n\n")
+
+const LINK = "https://www.example.org/rates"
+
+const seedDocument = (name: string, markdown: string) => {
+	const doc = new Y.Doc()
+	doc.getText("markdown").insert(0, markdown)
+	host.documents.set(name, doc)
+}
+
+const markdownOnHost = (name: string) =>
+	documentOf(name).getText("markdown").toString()
+
+const blockTypes = () =>
+	[
+		...document.querySelectorAll<HTMLElement>(
+			"[data-slot='library-document-block']",
+		),
+	].map((block) => block.dataset.type)
+
+const blockWith = (text: string) => {
+	const block = [
+		...document.querySelectorAll<HTMLElement>(
+			"[data-slot='library-document-block']",
+		),
+	].find((each) => each.textContent?.includes(text))
+	expect(block).toBeInstanceOf(HTMLElement)
+	return block as HTMLElement
+}
+
+const typeEach = (typed: string) => {
+	for (const character of typed) {
+		const field = document.activeElement as HTMLTextAreaElement
+		act(() => {
+			fireEvent.change(field, { target: { value: field.value + character } })
+		})
+	}
+}
+
+const addBlockBelow = async (text: string, slash: string) => {
+	act(() => {
+		fireEvent.click(
+			within(blockWith(text)).getByRole("button", {
+				name: common("library.editor.blocks.handle.insert"),
+			}),
+		)
+	})
+	await waitFor(() =>
+		expect(document.activeElement?.getAttribute("data-slot")).toBe(
+			"library-document-block-field",
+		),
+	)
+	typeEach(slash)
+	act(() => {
+		fireEvent.keyDown(document.activeElement as HTMLElement, { key: "Enter" })
+	})
+}
+
+describe.each([
+	{ place: "on the host", isJoined: false },
+	{ place: "in a joined Space", isJoined: true },
+])("a person editing a Library document $place", ({ isJoined }) => {
+	it("shows every block of an untouched document and writes nothing to it", async () => {
+		seedDocument(NOTES, RICH_DOCUMENT)
+		await renderLibraryScreen(isJoined)
+		await openDocument(NOTES)
+
+		expect(blockTypes()).toEqual([
+			"heading",
+			"paragraph",
+			"list",
+			"callout",
+			"table",
+			"web-page",
+			"gallery",
+		])
+		await goBack()
+		await new Promise((resolve) => setTimeout(resolve, 50))
+
+		expect(host.appliedUpdates).toBe(0)
+		expect(markdownOnHost(NOTES)).toBe(RICH_DOCUMENT)
+	})
+
+	it("saves a block added with the slash menu in its place", async () => {
+		await renderLibraryScreen(isJoined)
+		await openDocument(NOTES)
+
+		await addBlockBelow("Intro line", "/hea")
+		typeEach("Risks")
+
+		await waitFor(() =>
+			expect(markdownOnHost(NOTES)).toBe(
+				"Intro line\n\n## Risks\n\n## Rollout\n\nWe ship in May.",
+			),
+		)
+	})
+
+	it("saves a block moved with its handle in its new place", async () => {
+		await renderLibraryScreen(isJoined)
+		await openDocument(NOTES)
+		const handle = blockWith("We ship in May.").querySelector<HTMLElement>(
+			"[data-slot='library-block-drag']",
+		) as HTMLElement
+
+		act(() => {
+			handle.focus()
+			fireEvent.keyDown(handle, {
+				key: "ArrowUp",
+				altKey: true,
+				shiftKey: true,
+			})
+		})
+
+		await waitFor(() =>
+			expect(markdownOnHost(NOTES)).toBe(
+				"Intro line\n\nWe ship in May.\n\n## Rollout",
+			),
+		)
+	})
+
+	it("keeps the bare link pasted into a web card while no preview can be read", async () => {
+		await renderLibraryScreen(isJoined)
+		await openDocument(NOTES)
+		await addBlockBelow("We ship in May.", "/web")
+		act(() => {
+			document
+				.querySelector<HTMLElement>("[data-type='web-page'] [tabindex]")
+				?.focus()
+		})
+		const link = await screen.findByRole("textbox", {
+			name: common("library.editor.blocks.webPage.link"),
+		})
+
+		await act(async () => {
+			fireEvent.change(link, { target: { value: LINK } })
+			fireEvent.keyDown(link, { key: "Enter" })
+		})
+
+		await waitFor(() =>
+			expect(markdownOnHost(NOTES)).toBe(
+				`${OPENING}\n\n\`\`\`web-page\nurl: ${LINK}\n\`\`\``,
+			),
+		)
+		expect(link).toHaveProperty("value", LINK)
+		expect(link.getAttribute("aria-invalid")).toBe("false")
 	})
 })
