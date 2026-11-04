@@ -4,6 +4,14 @@ import { useTranslation } from "react-i18next"
 
 import { Icons } from "@workspace/ui/components/icons"
 import { Button } from "@workspace/ui/components/ui/button"
+import {
+	Item,
+	ItemActions,
+	ItemContent,
+	ItemDescription,
+	ItemMedia,
+	ItemTitle,
+} from "@workspace/ui/components/ui/item"
 import { cn } from "@workspace/ui/lib/utils"
 
 const SIZE_UNITS = ["B", "KB", "MB", "GB"]
@@ -68,43 +76,50 @@ export function PromptAttachments({
 			className={cn("flex w-full flex-wrap items-center gap-1.5", className)}
 		>
 			{replies.map((reply) => (
-				<li
+				<Item
 					key={reply.id}
+					render={<li />}
+					variant="outline"
 					data-slot="prompt-reply-attachment"
 					className={cn(
 						CHIP,
-						"w-fit min-w-[min(--spacing(59),100%)] max-w-[min(--spacing(90),100%)]",
+						"w-fit min-w-[min(--spacing(59),100%)] max-w-[min(--spacing(90),100%)] flex-nowrap text-[length:inherit] transition-none",
 					)}
 				>
-					<span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-foreground/8 text-soft-foreground">
+					<ItemMedia
+						variant="icon"
+						className="size-8 rounded-md bg-foreground/8 text-soft-foreground"
+					>
 						<Icons.Reply aria-hidden="true" className="size-4" />
-					</span>
-					<div className="flex min-w-0 flex-1 flex-col">
-						<span className="truncate font-medium text-foreground text-xs">
+					</ItemMedia>
+					<ItemContent className="min-w-0 gap-0">
+						<ItemTitle className="line-clamp-none w-auto truncate text-foreground text-xs">
 							{reply.author}
-						</span>
-						<span
+						</ItemTitle>
+						<ItemDescription
 							data-slot="prompt-reply-excerpt"
-							className="truncate text-[11px] text-muted-foreground leading-3.5"
+							className="line-clamp-none truncate text-start text-[11px] leading-3.5"
 						>
 							{reply.isExcerpt
 								? t("reply.excerpt", { excerpt: reply.excerpt })
 								: reply.excerpt}
-						</span>
-					</div>
+						</ItemDescription>
+					</ItemContent>
 					{onRemoveReply ? (
-						<Button
-							type="button"
-							variant="ghost"
-							size="icon-xs"
-							aria-label={t("reply.dismissFrom", { author: reply.author })}
-							onClick={() => onRemoveReply(reply.id)}
-							className={CHIP_REMOVE}
-						>
-							<Icons.Close />
-						</Button>
+						<ItemActions>
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon-xs"
+								aria-label={t("reply.dismissFrom", { author: reply.author })}
+								onClick={() => onRemoveReply(reply.id)}
+								className={CHIP_REMOVE}
+							>
+								<Icons.Close />
+							</Button>
+						</ItemActions>
 					) : null}
-				</li>
+				</Item>
 			))}
 			{items.map((item) => (
 				<li
