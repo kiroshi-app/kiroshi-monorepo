@@ -43,8 +43,9 @@ export const useListEnd = ({
 			}
 			const requestPage = () => {
 				setPhase("requesting")
-				void loadMore().then((hasLanded) =>
-					setPhase(hasLanded ? "armed" : "stalled"),
+				void loadMore().then(
+					(hasLanded) => setPhase(hasLanded ? "armed" : "stalled"),
+					() => setPhase("stalled"),
 				)
 			}
 			let wasWithinReach = phase === "stalled"

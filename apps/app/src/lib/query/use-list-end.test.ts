@@ -20,14 +20,17 @@ const ListEndProbe = (read: ListEndRead) =>
 type Deferred = {
 	promise: Promise<boolean>
 	settle: (hasLanded: boolean) => void
+	reject: (reason: Error) => void
 }
 
 const deferredPage = (): Deferred => {
 	let settle: (hasLanded: boolean) => void = () => undefined
-	const promise = new Promise<boolean>((resolve) => {
+	let reject: (reason: Error) => void = () => undefined
+	const promise = new Promise<boolean>((resolve, refuse) => {
 		settle = resolve
+		reject = refuse
 	})
-	return { promise, settle }
+	return { promise, settle, reject }
 }
 
 const settlePage = (page: Deferred, hasLanded: boolean) =>
@@ -115,6 +118,23 @@ describe("useListEnd", () => {
 		await scroll.scrollInto(sentinel())
 		await settlePage(failed, false)
 		await scroll.scrollInto(sentinel())
+		await scroll.scrollInto(sentinel())
+
+		expect(loadMore).toHaveBeenCalledTimes(1)
+
+		await scroll.scrollAway(sentinel())
+		await scroll.scrollInto(sentinel())
+
+		expect(loadMore).toHaveBeenCalledTimes(2)
+	})
+
+	it("requests again after a rejected page only once the person scrolls away and back", async () => {
+		const rejected = deferredPage()
+		const loadMore = pagesInOrder([rejected])
+		mount({ hasMore: true, isLoading: false, loadMore })
+
+		await scroll.scrollInto(sentinel())
+		await act(async () => rejected.reject(new Error("read refused")))
 		await scroll.scrollInto(sentinel())
 
 		expect(loadMore).toHaveBeenCalledTimes(1)
