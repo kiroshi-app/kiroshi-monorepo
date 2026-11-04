@@ -54,13 +54,10 @@ export const useThreadDocuments = (
 
 const documentTitleOf = (name: string) => titleOf({ kind: "document", name })
 
-type ThreadDocumentProps = {
+type ThreadDocumentPanelProps = {
 	spaceId: string
 	isJoined: boolean
 	name: string
-}
-
-type ThreadDocumentPanelProps = ThreadDocumentProps & {
 	onClose: () => void
 }
 
