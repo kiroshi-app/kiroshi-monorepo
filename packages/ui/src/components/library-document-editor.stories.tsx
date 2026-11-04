@@ -2521,7 +2521,7 @@ export const GalleryImagesResolved = meta.story({
 		docs: {
 			description: {
 				story:
-					"A Library document whose body holds a gallery of images stored as paths, `resolveImage` handed to the editor and passed down to the gallery. Check each path is resolved once and each tile shows the address `resolveImage` returned.",
+					"A Library document whose body holds a gallery of images stored as paths, `resolveImage` handed to the editor and passed down to the gallery. Check each path is resolved once by the read-only gallery and once by the editor it opens into, and each tile shows the address `resolveImage` returned.",
 			},
 		},
 	},
@@ -2535,7 +2535,9 @@ export const GalleryImagesResolved = meta.story({
 						.getAttribute("src"),
 				).toBe(resolvedImageOf(src)),
 			)
-		await expect(args.resolveImage).toHaveBeenCalledTimes(STORED_IMAGES.length)
+		await expect(args.resolveImage).toHaveBeenCalledTimes(
+			STORED_IMAGES.length * 2,
+		)
 		for (const { src } of STORED_IMAGES)
 			await expect(args.resolveImage).toHaveBeenCalledWith(src)
 	},
