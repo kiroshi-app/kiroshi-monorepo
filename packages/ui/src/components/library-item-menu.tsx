@@ -31,6 +31,7 @@ import {
 } from "@workspace/ui/components/ui/dropdown-menu"
 import { Separator } from "@workspace/ui/components/ui/separator"
 import { COPIED_RESET_MS } from "@workspace/ui/hooks/use-copy-text"
+import { libraryDisplayName } from "@workspace/ui/lib/library-display-name"
 import { STILL_UNDER_REDUCED_MOTION } from "@workspace/ui/lib/reduced-motion"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -156,16 +157,19 @@ const LibraryItemDeleteDialog = ({
 	onConfirm,
 }: LibraryItemDeleteDialogProps) => {
 	const { t } = useTranslation("common")
+	const shownName = libraryDisplayName(name, t)
 
 	return (
 		<ConfirmDialog
 			confirmLabel={t("library.itemMenu.delete")}
 			description={t("library.itemMenu.deleteConfirm.description")}
-			failureLabel={t("library.itemMenu.deleteConfirm.failure", { name })}
+			failureLabel={t("library.itemMenu.deleteConfirm.failure", {
+				name: shownName,
+			})}
 			onConfirm={onConfirm}
 			onOpenChange={onOpenChange}
 			open={open}
-			title={t("library.itemMenu.deleteConfirm.title", { name })}
+			title={t("library.itemMenu.deleteConfirm.title", { name: shownName })}
 		/>
 	)
 }
@@ -197,7 +201,9 @@ const LibraryItemContextMenu = <Item extends LibraryMenuSubject>({
 			<ContextMenu>
 				<ContextMenuTrigger render={trigger} />
 				<ContextMenuContent
-					aria-label={t("library.itemMenu.label", { name: item.name })}
+					aria-label={t("library.itemMenu.label", {
+						name: libraryDisplayName(item.name, t),
+					})}
 					className={STILL_UNDER_REDUCED_MOTION}
 				>
 					<LibraryItemMenuItems
@@ -349,7 +355,9 @@ const LibraryItemBarActions = <Item extends LibraryMenuSubject>({
 						</DropdownMenuTrigger>
 						<DropdownMenuContent
 							align="end"
-							aria-label={t("library.itemMenu.label", { name: item.name })}
+							aria-label={t("library.itemMenu.label", {
+								name: libraryDisplayName(item.name, t),
+							})}
 							className={cn(
 								"w-auto",
 								surface === "lightbox" && "dark",

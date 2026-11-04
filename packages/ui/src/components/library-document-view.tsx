@@ -24,6 +24,7 @@ import {
 import { Markdown } from "@workspace/ui/components/markdown"
 import type { MarkdownRunRenderProps } from "@workspace/ui/components/markdown/run"
 import { Button } from "@workspace/ui/components/ui/button"
+import { libraryDisplayName } from "@workspace/ui/lib/library-display-name"
 import { cn } from "@workspace/ui/lib/utils"
 
 type LibraryDocument = {
@@ -58,6 +59,7 @@ const LibraryDocumentBar = <Item extends LibraryMenuSubject>({
 	...actions
 }: LibraryDocumentBarProps<Item>) => {
 	const { t } = useTranslation("common")
+	const shownName = libraryDisplayName(item.name, t)
 
 	return (
 		<div className={LIBRARY_BAR}>
@@ -79,9 +81,9 @@ const LibraryDocumentBar = <Item extends LibraryMenuSubject>({
 				<span
 					aria-current="page"
 					className="truncate ps-1 font-medium text-compact text-foreground leading-4"
-					title={item.name}
+					title={shownName}
 				>
-					{item.name}
+					{shownName}
 				</span>
 			</nav>
 			<LibraryItemBarActions
@@ -166,6 +168,7 @@ const LibraryDocumentView = ({
 	onDone,
 	...actions
 }: LibraryDocumentViewProps) => {
+	const { t } = useTranslation("common")
 	const isWriting = writers.length > 0
 	const shownFinished = isWriting ? undefined : finished
 	const edits = isWriting ? writers : (shownFinished?.edits ?? [])
@@ -219,7 +222,11 @@ const LibraryDocumentView = ({
 						/>
 					) : null
 				}
-				heading={<h1 className={DOCUMENT_TITLE}>{document.name}</h1>}
+				heading={
+					<h1 className={DOCUMENT_TITLE}>
+						{libraryDisplayName(document.name, t)}
+					</h1>
+				}
 			>
 				<Markdown
 					className={DOCUMENT_TYPE}

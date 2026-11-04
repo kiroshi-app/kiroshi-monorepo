@@ -1463,6 +1463,7 @@ navigation-librarydocumenteditor--toolbar-after-drag
 navigation-librarydocumenteditor--toolbar-after-keyboard-selection
 navigation-librarydocumenteditor--toolbar-pressed-state
 navigation-librarydocumenteditor--undo-after-outside-edit
+navigation-librarydocumenteditor--whitespace-title-reads-untitled
 navigation-librarydocumenteditor--with-typed-text
 navigation-librarydocumenteditor--write-failure
 navigation-librarydocumentview--agent-finished
@@ -1478,6 +1479,7 @@ navigation-librarydocumentview--only-bar-actions-given
 navigation-librarydocumentview--rename-with-focus-left-in-place
 navigation-librarydocumentview--rename-with-focus-target
 navigation-librarydocumentview--rename-without-focus-target
+navigation-librarydocumentview--whitespace-name-reads-untitled
 navigation-librarynewdocumentdialog--blank-selected
 navigation-librarynewdocumentdialog--meeting-notes-selected
 navigation-librarynewdocumentdialog--narrow-window
@@ -1501,6 +1503,7 @@ navigation-librarypanel--loading
 navigation-librarypanel--long-names
 navigation-librarypanel--search-filled
 navigation-librarypanel--search-with-no-match
+navigation-librarypanel--whitespace-name-reads-untitled
 navigation-missionspanel--complete
 navigation-missionspanel--complete-dark
 navigation-missionspanel--default

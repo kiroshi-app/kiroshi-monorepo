@@ -327,6 +327,50 @@ export const Blank = meta.story({
 	},
 })
 
+const WHITESPACE_TITLE = "   "
+
+export const WhitespaceTitleReadsUntitled = meta.story({
+	args: {
+		...LAUNCH_REVIEW,
+		template: undefined,
+		title: WHITESPACE_TITLE,
+		onDelete: fn(() => Promise.reject(new Error("Disk is read-only"))),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A document whose title holds only spaces. Check that the field keeps the spaces as typed with Untitled as its placeholder, that the breadcrumb, the More menu and its delete confirmation, failure included, all say Untitled, and that Delete still hands the document its own title.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		const title = titleIn(canvasElement)
+		await expect(title).toHaveValue(WHITESPACE_TITLE)
+		await expect(title).toHaveAttribute("placeholder", "Untitled")
+		await expect(breadcrumbIn(canvasElement)).toHaveTextContent("Untitled")
+
+		await userEvent.click(canvas.getByRole("button", { name: "More" }))
+		const menu = await screen.findByRole("menu", {
+			name: "Actions for Untitled",
+		})
+		await userEvent.click(
+			within(menu).getByRole("menuitem", { name: "Delete" }),
+		)
+		const confirmation = await screen.findByRole("alertdialog")
+		await expect(confirmation).toHaveTextContent("Delete Untitled?")
+		await userEvent.click(
+			within(confirmation).getByRole("button", { name: "Delete" }),
+		)
+		await expect(
+			await within(confirmation).findByRole("alert"),
+		).toHaveTextContent("Couldn’t delete Untitled. Retry.")
+		await expect(args.onDelete).toHaveBeenCalledWith({
+			name: WHITESPACE_TITLE,
+		})
+	},
+})
+
 const titleHandle = createRef<LibraryDocumentEditorHandle>()
 
 const titleIn = (canvasElement: HTMLElement) =>
