@@ -1282,7 +1282,6 @@ const LibraryDocumentEditor = ({
 		markAgents({ edits, writers, people })
 	}, [body, edits, writers, people])
 
-	const untitled = t("library.editor.untitled")
 	const barItem = useMemo(() => ({ name: title }), [title])
 
 	const toolbarFor = ({ anchor, formats, link }: SelectedText) => {
@@ -1382,7 +1381,7 @@ const LibraryDocumentEditor = ({
 								cancelTitleEdit(event.currentTarget)
 							}
 						}}
-						placeholder={untitled}
+						placeholder={t("library.editor.untitled")}
 						fieldClassName="placeholder:text-title-placeholder-foreground"
 						value={title}
 					/>
