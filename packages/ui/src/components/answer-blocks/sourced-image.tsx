@@ -57,6 +57,7 @@ const SourcedImage = ({
 			alt={name}
 			className="size-full object-cover"
 			onError={() => setFailedSrc(image.src)}
+			onLoad={() => setFailedSrc(undefined)}
 		/>
 	)
 	const openable = onOpen ? (

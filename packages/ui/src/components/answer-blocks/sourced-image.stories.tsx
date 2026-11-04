@@ -30,6 +30,7 @@ const OTHER_UNDECODABLE_PICTURE = "data:image/png;base64,AAAA"
 const SOURCE_SEQUENCE = [
 	UNDECODABLE_PICTURE,
 	CASA_DO_RIO_TERRACE,
+	UNDECODABLE_PICTURE,
 	OTHER_UNDECODABLE_PICTURE,
 ]
 
@@ -241,25 +242,45 @@ export const TriesEachNewSource = meta.story({
 		docs: {
 			description: {
 				story:
-					"The same picture slot fed a failing source, then a working one, then another failing one. Check the frame gives way to the picture as soon as the source changes, and comes back when the next source fails too.",
+					"The same picture slot fed a failing source, a working one, the first failing source again, then another failing one. Check the frame gives way to the picture as soon as the source changes, that the source which failed before the working one is tried again, and that the frame comes back only once each source has failed.",
 			},
 		},
 	},
 	play: async ({ canvas, canvasElement, userEvent }) => {
 		const nextSource = canvas.getByRole("button", { name: "Next source" })
+		const failedSources: string[] = []
+		const expectPictureShown = async () => {
+			const picture = await canvas.findByRole("img", {
+				name: "Casa do Rio, a terrace over the Tagus",
+			})
+			await waitFor(() => expect(picture).not.toHaveProperty("naturalWidth", 0))
+			await expect(picture).toBeVisible()
+			await expect(canvas.queryByText("Image unavailable")).toBeNull()
+		}
+		const expectFrameAfterFailureOf = async (source: string) => {
+			await waitFor(() => expect(failedSources.at(-1)).toBe(source))
+			await expect(await canvas.findByText("Image unavailable")).toBeVisible()
+		}
 
 		await canvas.findByText("Image unavailable")
+		canvasElement.addEventListener(
+			"error",
+			({ target }) => {
+				if (target instanceof HTMLImageElement) {
+					failedSources.push(target.getAttribute("src") ?? "")
+				}
+			},
+			{ capture: true },
+		)
 		await userEvent.click(nextSource)
-		const picture = await canvas.findByRole("img", {
-			name: "Casa do Rio, a terrace over the Tagus",
-		})
-		await waitFor(() => expect(picture).not.toHaveProperty("naturalWidth", 0))
-		await expect(picture).toBeVisible()
-		await expect(
-			canvasElement.querySelector('[data-slot="sourced-image-unavailable"]'),
-		).toBeNull()
-
+		await expectPictureShown()
 		await userEvent.click(nextSource)
-		await expect(await canvas.findByText("Image unavailable")).toBeVisible()
+		await expectFrameAfterFailureOf(UNDECODABLE_PICTURE)
+		await userEvent.click(nextSource)
+		await expectFrameAfterFailureOf(OTHER_UNDECODABLE_PICTURE)
+		await expect(failedSources).toEqual([
+			UNDECODABLE_PICTURE,
+			OTHER_UNDECODABLE_PICTURE,
+		])
 	},
 })

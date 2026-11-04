@@ -625,8 +625,35 @@ export const IllustratedListInAnswer = meta.story({
 	},
 })
 
+const FIXTURE_PICTURES: Readonly<Record<string, string>> = {
+	"https://images.example.org/taberna-da-se.jpg": SE_CATHEDRAL,
+	"https://images.example.org/cais-22.jpg": CASA_DO_RIO_TERRACE,
+	"https://images.example.org/a-baiuca.jpg": BAR_AT_NIGHT,
+	"https://images.example.org/senhora-do-monte.jpg": SANTA_LUZIA,
+	"https://images.example.org/lisbon-waterfront.jpg": CASA_DO_RIO_TERRACE,
+	"https://www.visitlisboa.example/favicon.png": CASA_DO_RIO_FAVICON,
+}
+
+const showFixturePicture = (image: Element) => {
+	const picture = FIXTURE_PICTURES[image.getAttribute("src") ?? ""]
+	if (picture) image.setAttribute("src", picture)
+}
+
+const drawFixturePictures = () => {
+	const observer = new MutationObserver((mutations) => {
+		for (const { target } of mutations) {
+			if (target instanceof Element) {
+				target.querySelectorAll("img").forEach(showFixturePicture)
+			}
+		}
+	})
+	observer.observe(document.body, { childList: true, subtree: true })
+	return () => observer.disconnect()
+}
+
 export const SourcedImageInAnswer = meta.story({
 	tags: ["test-only"],
+	beforeEach: drawFixturePictures,
 	args: { children: SOURCED_IMAGE },
 	parameters: {
 		docs: {
@@ -789,32 +816,6 @@ export const ImageMenuOnPlainImage = meta.story({
 		})
 	},
 })
-
-const FIXTURE_PICTURES: Readonly<Record<string, string>> = {
-	"https://images.example.org/taberna-da-se.jpg": SE_CATHEDRAL,
-	"https://images.example.org/cais-22.jpg": CASA_DO_RIO_TERRACE,
-	"https://images.example.org/a-baiuca.jpg": BAR_AT_NIGHT,
-	"https://images.example.org/senhora-do-monte.jpg": SANTA_LUZIA,
-	"https://images.example.org/lisbon-waterfront.jpg": CASA_DO_RIO_TERRACE,
-	"https://www.visitlisboa.example/favicon.png": CASA_DO_RIO_FAVICON,
-}
-
-const showFixturePicture = (image: Element) => {
-	const picture = FIXTURE_PICTURES[image.getAttribute("src") ?? ""]
-	if (picture) image.setAttribute("src", picture)
-}
-
-const drawFixturePictures = () => {
-	const observer = new MutationObserver((mutations) => {
-		for (const { target } of mutations) {
-			if (target instanceof Element) {
-				target.querySelectorAll("img").forEach(showFixturePicture)
-			}
-		}
-	})
-	observer.observe(document.body, { childList: true, subtree: true })
-	return () => observer.disconnect()
-}
 
 export const ImageMenuOnSourcedImage = meta.story({
 	tags: ["test-only"],
@@ -1359,6 +1360,7 @@ const boxOf = (element: Element) => {
 
 export const ImagesLookTheSameWhenOpenable = meta.story({
 	tags: ["test-only"],
+	beforeEach: drawFixturePictures,
 	render: (args) => (
 		<>
 			<div data-testid="openable">
