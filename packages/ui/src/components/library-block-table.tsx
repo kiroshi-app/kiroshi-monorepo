@@ -20,7 +20,7 @@ import {
 	withColumn,
 	withRow,
 } from "@workspace/ui/components/library-document-blocks"
-import { GrowingField } from "@workspace/ui/components/library-document-editor"
+import { GrowingField } from "@workspace/ui/components/library-document-view"
 import { MarkdownTable } from "@workspace/ui/components/markdown/table"
 
 type LibraryTableEditorProps = {

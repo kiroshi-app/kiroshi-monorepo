@@ -1,6 +1,6 @@
 "use client"
 
-import type { MouseEvent, ReactNode } from "react"
+import type { MouseEvent, ReactNode, Ref, TextareaHTMLAttributes } from "react"
 import { useTranslation } from "react-i18next"
 
 import { Icons } from "@workspace/ui/components/icons"
@@ -38,6 +38,43 @@ const DOCUMENT_TYPE = cn(
 
 const DOCUMENT_TITLE =
 	"break-words font-heading font-semibold text-[1.75rem] text-foreground leading-[2.125rem] tracking-[-0.02em]"
+
+type GrowingFieldProps = TextareaHTMLAttributes<HTMLTextAreaElement> & {
+	value: string
+	placeholder?: string
+	className: string
+	fieldClassName: string
+	fieldRef?: Ref<HTMLTextAreaElement>
+}
+
+const GrowingField = ({
+	value,
+	placeholder,
+	className,
+	fieldClassName,
+	fieldRef,
+	...props
+}: GrowingFieldProps) => (
+	<span className={cn("grid break-words", className)}>
+		<span
+			aria-hidden="true"
+			className="pointer-events-none invisible col-start-1 row-start-1 whitespace-pre-wrap"
+		>
+			{`${value || placeholder || ""}​`}
+		</span>
+		<textarea
+			className={cn(
+				"col-start-1 row-start-1 resize-none overflow-hidden bg-transparent outline-none",
+				fieldClassName,
+			)}
+			placeholder={placeholder}
+			ref={fieldRef}
+			rows={1}
+			value={value}
+			{...props}
+		/>
+	</span>
+)
 
 type LibraryDocumentBarProps<Item extends LibraryMenuSubject> =
 	LibraryItemActions<Item> & {
@@ -251,6 +288,7 @@ const LibraryDocumentView = ({
 export {
 	DOCUMENT_TITLE,
 	DOCUMENT_TYPE,
+	GrowingField,
 	type LibraryDocument,
 	LibraryDocumentBar,
 	LibraryDocumentBody,

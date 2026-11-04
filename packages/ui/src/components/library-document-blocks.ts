@@ -145,6 +145,23 @@ const offsetsOf = ({ lead, blocks }: LibraryBlockDocument) => {
 	})
 }
 
+const shiftedOffset = (before: string, after: string, offset: number) => {
+	const limit = Math.min(before.length, after.length)
+	let head = 0
+	while (head < limit && before[head] === after[head]) head++
+	let tail = 0
+	while (
+		tail < limit - head &&
+		before[before.length - 1 - tail] === after[after.length - 1 - tail]
+	)
+		tail++
+
+	if (offset <= head) return offset
+	if (offset >= before.length - tail)
+		return offset + after.length - before.length
+	return after.length - tail
+}
+
 const keepIds = (
 	previous: LibraryBlock[],
 	next: LibraryBlockDocument,
@@ -448,6 +465,7 @@ export {
 	rowAfter,
 	type SourceEdit,
 	serializeBlocks,
+	shiftedOffset,
 	tableRowsOf,
 	tableSourceOf,
 	toggledRow,

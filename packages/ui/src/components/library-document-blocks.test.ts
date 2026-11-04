@@ -19,6 +19,7 @@ import {
 	relaid,
 	rowAfter,
 	serializeBlocks,
+	shiftedOffset,
 	tableRowsOf,
 	tableSourceOf,
 	toggledRow,
@@ -309,5 +310,16 @@ describe("library rich block sources", () => {
 			"```web-page\nurl: https://example.org/a\ntitle: A\nsite: Example\n```",
 		)
 		expect(webPageFieldsOf("```web-page\n```")).toEqual({})
+	})
+})
+
+describe("shiftedOffset", () => {
+	it("keeps an offset before the change and shifts one after it", () => {
+		expect(shiftedOffset("Ship it", "Ship it now", 4)).toBe(4)
+		expect(shiftedOffset("We ship it", "Ship it", 10)).toBe(7)
+	})
+
+	it("moves an offset inside a replaced span to its end", () => {
+		expect(shiftedOffset("on the 10th", "on the 1st", 9)).toBe(10)
 	})
 })

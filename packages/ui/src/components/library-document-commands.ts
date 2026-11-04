@@ -1,9 +1,10 @@
 import { isolateHistory } from "@codemirror/commands"
+import { markdown, markdownLanguage } from "@codemirror/lang-markdown"
 import { ensureSyntaxTree, syntaxTree } from "@codemirror/language"
 import {
 	type ChangeSet,
 	type EditorSelection,
-	type EditorState,
+	EditorState,
 	type Line,
 	type SelectionRange,
 	type StateCommand,
@@ -712,9 +713,40 @@ const selectedLinkOf = (state: EditorState) => {
 	return { url: url ? state.sliceDoc(url.from, url.to) : "" }
 }
 
+type MarkdownSelection = {
+	text: string
+	anchor: number
+	head: number
+}
+
+const markdownStateOf = ({ text, anchor, head }: MarkdownSelection) =>
+	EditorState.create({
+		doc: text,
+		selection: { anchor, head },
+		extensions: markdown({ base: markdownLanguage }),
+	})
+
+const formattedSelection = (
+	selection: MarkdownSelection,
+	command: StateCommand,
+): MarkdownSelection | undefined => {
+	const dispatched: EditorState[] = []
+	command({
+		state: markdownStateOf(selection),
+		dispatch: (transaction) => dispatched.push(transaction.state),
+	})
+	const next = dispatched.at(-1)
+	if (!next) return undefined
+	const { anchor, head } = next.selection.main
+	return { text: next.doc.toString(), anchor, head }
+}
+
 export {
+	formattedSelection,
 	isFormatOn,
 	isFormatToRemove,
+	type MarkdownSelection,
+	markdownStateOf,
 	selectedLinkOf,
 	setLink,
 	toggleBold,

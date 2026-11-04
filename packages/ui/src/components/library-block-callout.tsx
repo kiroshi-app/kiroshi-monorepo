@@ -14,7 +14,7 @@ import {
 	withCalloutText,
 	withCalloutTone,
 } from "@workspace/ui/components/library-document-blocks"
-import { GrowingField } from "@workspace/ui/components/library-document-editor"
+import { GrowingField } from "@workspace/ui/components/library-document-view"
 import { AnswerBlockFrame } from "@workspace/ui/components/markdown/answer-block"
 import {
 	ToggleGroup,
