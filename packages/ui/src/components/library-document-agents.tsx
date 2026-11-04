@@ -112,37 +112,68 @@ const StopSquare = () => (
 	<span aria-hidden="true" className="size-2 shrink-0 rounded-xs bg-current" />
 )
 
+type PeopleStackProps = {
+	people: LibraryDocumentPerson[]
+}
+
+const PeopleStack = ({ people }: PeopleStackProps) => (
+	<span className="flex shrink-0" data-slot="library-document-people">
+		{people.slice(0, STACK_LIMIT).map((person, index) => (
+			<span
+				aria-label={person.name}
+				className={cn("flex", index > 0 && "-ms-1.5")}
+				key={person.id}
+				role="img"
+			>
+				<InitialsAvatar
+					className="border-2 border-card"
+					image={person.image}
+					name={person.name}
+					size={26}
+				/>
+			</span>
+		))}
+	</span>
+)
+
 type LibraryDocumentPresenceProps = {
 	writers: LibraryDocumentWriter[]
+	people?: LibraryDocumentPerson[]
 	onStopAll?: () => void
 }
 
 const LibraryDocumentPresence = ({
 	writers,
+	people = [],
 	onStopAll,
 }: LibraryDocumentPresenceProps) => {
 	const { t } = useTranslation("common")
 
 	return (
-		<div
-			className="flex h-8 shrink-0 items-center gap-2 rounded-full border border-foreground/8 bg-foreground/4 ps-1 pe-2.5 has-[button]:pe-1"
-			data-slot="library-document-presence"
-		>
-			<AgentStack agents={writers.map(({ agent }) => agent)} />
-			<span className="whitespace-nowrap font-medium text-compact text-soft-foreground leading-4">
-				{t("library.document.agents.writing", { count: writers.length })}
-			</span>
-			{onStopAll ? (
-				<Button
-					className={cn(CHIP, "h-6 text-xs leading-4")}
-					onClick={onStopAll}
-					variant="ghost"
+		<>
+			{people.length > 0 ? <PeopleStack people={people} /> : null}
+			{writers.length > 0 ? (
+				<div
+					className="flex h-8 shrink-0 items-center gap-2 rounded-full border border-foreground/8 bg-foreground/4 ps-1 pe-2.5 has-[button]:pe-1"
+					data-slot="library-document-presence"
 				>
-					<StopSquare />
-					{t("library.document.agents.stopAll")}
-				</Button>
+					<AgentStack agents={writers.map(({ agent }) => agent)} />
+					<span className="whitespace-nowrap font-medium text-compact text-soft-foreground leading-4">
+						{t("library.document.agents.writing", { count: writers.length })}
+					</span>
+					{onStopAll ? (
+						<Button
+							className={cn(CHIP, "h-6 text-xs leading-4")}
+							onClick={onStopAll}
+							variant="ghost"
+						>
+							<StopSquare />
+							{t("library.document.agents.stopAll")}
+						</Button>
+					) : null}
+				</div>
 			) : null}
-		</div>
+		</>
 	)
 }
 
