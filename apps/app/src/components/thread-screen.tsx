@@ -64,6 +64,11 @@ import { ApplicationInstallRow } from "@/components/application-install-row"
 import { FaceAvatar } from "@/components/face-avatar"
 import { useMissionCardMenus } from "@/components/mission-card-menu"
 import { type PromptHandle, ThreadComposer } from "@/components/thread-composer"
+import {
+	ThreadDocumentPanel,
+	ThreadDocumentsContext,
+	useThreadDocuments,
+} from "@/components/thread-documents"
 import { botThreadMenu, conversationThreadMenu } from "@/components/thread-menu"
 import { PinsNotice, ThreadNotice } from "@/components/thread-notice"
 import {
@@ -1840,6 +1845,7 @@ function ThreadView(props: ThreadViewProps) {
 		onOpenMissionInNewTab,
 	} = props
 	const view = useThreadView(props)
+	const documents = useThreadDocuments()
 	const imageViewer = useAnswerImageViewer()
 	const imageActions = useShownImageActions()
 	const answerActions: AnswerActions = {
@@ -1862,6 +1868,16 @@ function ThreadView(props: ThreadViewProps) {
 	const layout = (
 		<ThreadLayout
 			anchorOnSend={view.isSoloThread}
+			aside={
+				documents?.openedName ? (
+					<ThreadDocumentPanel
+						key={documents.openedName}
+						name={documents.openedName}
+						onClose={documents.close}
+						spaceId={documents.spaceId}
+					/>
+				) : undefined
+			}
 			busy={view.facts.isBusy}
 			composer={
 				departure ? undefined : view.asked ? (
@@ -1997,7 +2013,9 @@ function ThreadView(props: ThreadViewProps) {
 				wrapMissionCard={view.wrapMissionCard}
 			>
 				<AnswerActionsContext value={answerActions}>
-					{layout}
+					<ThreadDocumentsContext value={documents}>
+						{layout}
+					</ThreadDocumentsContext>
 				</AnswerActionsContext>
 			</ThreadRoutines>
 		</RosterProvider>

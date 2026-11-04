@@ -14,6 +14,7 @@ import {
 } from "@workspace/ui/components/turn"
 import { probeRender } from "@workspace/ui/lib/render-probe"
 
+import { ThreadDocumentCards } from "@/components/thread-documents"
 import { AnswerBody, TurnBody } from "@/components/turn-body"
 import { copySelection } from "@/lib/chat/copy-selection"
 import { messageWithAttachments } from "@/lib/chat/message-attachments"
@@ -96,7 +97,22 @@ export const ThreadTurn = memo(function ThreadTurn({
 				{body}
 			</MessageSelection>
 		)
-	const content = selectable(<TurnBody attachments={attachments} text={text} />)
+	const cards =
+		row.documents.length > 0 ? (
+			<ThreadDocumentCards names={row.documents} />
+		) : null
+	const withCards = (body: ReactNode) =>
+		cards ? (
+			<>
+				{body}
+				{cards}
+			</>
+		) : (
+			body
+		)
+	const content = withCards(
+		selectable(<TurnBody attachments={attachments} text={text} />),
+	)
 
 	if (person !== undefined) {
 		return (
@@ -138,14 +154,21 @@ export const ThreadTurn = memo(function ThreadTurn({
 		)
 	}
 
-	const answer = selectable(
-		<AnswerBody
-			agentName={author?.name ?? row.authorName ?? botName ?? ""}
-			attachments={attachments}
-			isWriting={state === "streaming"}
-			text={text}
-		/>,
-	)
+	const isDocumentPost =
+		card === undefined && cards !== null && row.text.trim() === ""
+	const answer = isDocumentPost
+		? cards
+		: withCards(
+				selectable(
+					<AnswerBody
+						agentName={author?.name ?? row.authorName ?? botName ?? ""}
+						attachments={attachments}
+						isWriting={state === "streaming"}
+						text={text}
+					/>,
+				),
+			)
+	const isFramed = card !== undefined || isDocumentPost
 
 	return (
 		<AssistantTurn
@@ -153,10 +176,10 @@ export const ThreadTurn = memo(function ThreadTurn({
 			cause={cause}
 			identity={avatarFace}
 			bare={bare}
-			framed={card !== undefined}
+			framed={isFramed}
 			botId={botId}
 			carriesMark={carriesMark}
-			copyText={card === undefined ? text : ""}
+			copyText={isFramed ? "" : text}
 			messageId={anchor}
 			now={now}
 			onPin={pin}

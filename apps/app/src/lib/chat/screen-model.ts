@@ -28,6 +28,7 @@ export type TranscriptRow = MessageAuthorship & {
 	continuesTurnId: string | null
 	quotedMessageId: string | null
 	replyLinks: ReplyLink[]
+	documents: string[]
 	authorBotId: string | null
 	role: TranscriptRole
 	text: string
@@ -72,6 +73,19 @@ const RUN_GAP_MS = 5 * 60_000
 
 const NO_REPLY_LINKS: ReplyLink[] = []
 
+const NO_DOCUMENTS: string[] = []
+
+const carriesDocuments = (message: TranscriptMessage) =>
+	(message.documents?.length ?? 0) > 0
+
+const isDocumentPostedByAgent = (message: TranscriptMessage) =>
+	message.role === "user" &&
+	message.authorBotId !== null &&
+	carriesDocuments(message)
+
+const shownRoleOf = (message: TranscriptMessage): TranscriptRole =>
+	isDocumentPostedByAgent(message) ? "assistant" : message.role
+
 function replyLinksOf(message: TranscriptMessage): ReplyLink[] {
 	if (message.role !== "user") {
 		return NO_REPLY_LINKS
@@ -95,11 +109,12 @@ function toRow(
 		quotedMessageId:
 			message.role === "user" ? message.repliedToMessageId : null,
 		replyLinks: replyLinksOf(message),
+		documents: message.documents ?? NO_DOCUMENTS,
 		authorBotId: message.authorBotId,
 		authorAccountId: message.authorAccountId,
 		authorName: message.authorName,
 		writtenFrom: message.writtenFrom,
-		role: message.role,
+		role: shownRoleOf(message),
 		timestamp: message.createdAt,
 		...fields,
 	}
@@ -110,7 +125,11 @@ export const shownTextOf = (content: string): string => content.trimEnd()
 function assistantRows(message: TranscriptMessage): TranscriptRow[] {
 	const text = shownTextOf(message.content)
 	const completion = TURN_STATE[message.completion]
-	if (text.length === 0 && completion !== "failed") {
+	if (
+		text.length === 0 &&
+		completion !== "failed" &&
+		!carriesDocuments(message)
+	) {
 		return []
 	}
 	return [toRow(message, { text, completion })]
@@ -155,7 +174,7 @@ export function toTranscriptRows(
 			return cached
 		}
 		const rows =
-			message.role === "user"
+			shownRoleOf(message) === "user"
 				? [
 						toRow(message, {
 							text: message.content,

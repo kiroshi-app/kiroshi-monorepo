@@ -21,6 +21,7 @@ const rowOf = (
 	continuesTurnId: null,
 	quotedMessageId: null,
 	replyLinks: [],
+	documents: [],
 	authorBotId,
 	authorAccountId: null,
 	authorName: null,

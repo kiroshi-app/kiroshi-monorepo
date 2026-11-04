@@ -64,6 +64,7 @@ const rowOf = (role: TranscriptRole, text: string): TranscriptRow => ({
 	continuesTurnId: null,
 	quotedMessageId: null,
 	replyLinks: [],
+	documents: [],
 	authorBotId: role === "assistant" ? "bot-1" : null,
 	authorAccountId: null,
 	authorName: null,

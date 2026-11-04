@@ -36,7 +36,7 @@ export const shownTitleOf = (title: string) =>
 export const documentNamedAs = (name: string, title: string) =>
 	`${title}${name.slice(titleOf({ kind: "document", name }).length)}`
 
-const detailOf = (item: LibraryItem, now: number) =>
+export const detailOf = (item: LibraryItem, now: number) =>
 	[
 		formatOf(item.name),
 		formatBytes(item.bytes),
