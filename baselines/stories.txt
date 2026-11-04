@@ -1565,6 +1565,7 @@ navigation-librarypanel--filter-with-no-match
 navigation-librarypanel--grid-actions-per-item
 navigation-librarypanel--grid-all
 navigation-librarypanel--grid-context-menu
+navigation-librarypanel--grid-document-preview-holds-no-control
 navigation-librarypanel--grid-documents
 navigation-librarypanel--grid-documents-across-spaces
 navigation-librarypanel--grid-documents-across-spaces-light

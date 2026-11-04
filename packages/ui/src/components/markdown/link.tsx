@@ -70,3 +70,7 @@ export const MarkdownLink = ({
 		</a>
 	)
 }
+
+export const MarkdownStaticLink = ({ children }: MarkdownLinkProps) => (
+	<>{children}</>
+)

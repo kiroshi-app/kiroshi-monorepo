@@ -54,6 +54,9 @@ const FRAME_CLASS = `${MARKDOWN_ESCAPED_BLOCK_CLASS} group/markdown-table relati
 const VIEWPORT_CLASS =
 	"overflow-x-auto rounded-xl border border-foreground/15 outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
 
+const STATIC_VIEWPORT_CLASS =
+	"overflow-hidden rounded-xl border border-foreground/15"
+
 const COPY_CLASS =
 	"absolute top-1.5 right-1.5 bg-foreground/10 text-foreground opacity-0 hover:bg-foreground/20 focus-visible:opacity-100 group-focus-within/markdown-table:opacity-100 group-hover/markdown-table:opacity-100"
 
@@ -102,3 +105,18 @@ export const MarkdownTable = ({
 		</div>
 	)
 }
+
+export const MarkdownStaticTable = ({
+	node,
+	children,
+	className,
+	...props
+}: MarkdownTableProps) => (
+	<div data-slot="markdown-table" className={FRAME_CLASS}>
+		<div className={STATIC_VIEWPORT_CLASS}>
+			<table {...props} className={cn(TABLE_CLASS, className)}>
+				{children}
+			</table>
+		</div>
+	</div>
+)

@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect } from "react"
 import { useTranslation } from "react-i18next"
-import { expect, fn, waitFor, within } from "storybook/test"
+import { expect, fn, mocked, spyOn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
@@ -460,6 +460,80 @@ export const GridDocuments = meta.story({
 		await expect(
 			canvasElement.querySelector("[data-slot=library-thumbnail] img"),
 		).toBe(null)
+	},
+})
+
+const CONTROLS_DOCUMENT: LibraryItem = {
+	kind: "document",
+	id: "launch-checklist",
+	name: "Launch checklist",
+	detail: "Document · 2 KB · 5 min ago",
+	excerpt: [
+		"# Launch checklist",
+		"Read the [partner brief](https://example.com/brief) before the call.",
+		"- [x] Draft the pricing page\n- [ ] Book the onboarding emails",
+		"| Channel | Owner |\n| --- | --- |\n| Newsletter | Mara |",
+		'```ts\nconst launch = "spring"\n```',
+	].join("\n\n"),
+}
+
+const NEXT_DOCUMENT: LibraryItem = {
+	...CONTROLS_DOCUMENT,
+	id: "launch-notes",
+	name: "Launch notes",
+	excerpt: "Notes from the partner call.",
+}
+
+const INTERACTIVE_ELEMENTS =
+	"button, a, input, select, textarea, summary, [tabindex]"
+
+const NESTED_INTERACTIVE_WARNING =
+	/cannot (be a descendant of|contain a nested)/
+
+export const GridDocumentPreviewHoldsNoControl = meta.story({
+	args: { items: [CONTROLS_DOCUMENT, NEXT_DOCUMENT] },
+	beforeEach: () => {
+		const consoleError = spyOn(console, "error")
+		return () => consoleError.mockRestore()
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A document whose start holds a link, a task list, a table and a code block. Check that the page draws each of them as a still picture: the link as plain text, each box in its state, the table and the code without their copy control, and that the item stays one Tab stop that opens on a press anywhere on its page.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const item = canvas.getByRole("button", { name: /^Launch checklist/ })
+		const page = slotIn(item, "library-page")
+
+		await expect(item.querySelectorAll(INTERACTIVE_ELEMENTS)).toHaveLength(0)
+		await expect(page).toHaveTextContent("Read the partner brief before")
+		await expect(page.querySelector("table")).toHaveTextContent("Newsletter")
+		await expect(page.querySelector("pre")).toHaveTextContent(
+			'const launch = "spring"',
+		)
+		const boxes = slotsIn(page, "markdown-task-box")
+		await expect(boxes.map((box) => box.hasAttribute("data-checked"))).toEqual([
+			true,
+			false,
+		])
+		await expect(
+			mocked(console.error).mock.calls.filter((call) =>
+				NESTED_INTERACTIVE_WARNING.test(call.map(String).join(" ")),
+			),
+		).toHaveLength(0)
+
+		item.focus()
+		await userEvent.tab()
+		await expect(
+			canvas.getByRole("button", { name: /^Launch notes/ }),
+		).toHaveFocus()
+
+		await userEvent.click(slotIn(item, "library-thumbnail"))
+		await expect(args.onOpenItem).toHaveBeenCalledOnce()
+		await expect(args.onOpenItem).toHaveBeenCalledWith(CONTROLS_DOCUMENT)
 	},
 })
 

@@ -10,7 +10,10 @@ import {
 } from "@workspace/ui/components/markdown/answer-actions"
 import { rehypeAnswerMarks } from "@workspace/ui/components/markdown/answer-marks"
 import { remarkBotMentions } from "@workspace/ui/components/markdown/bot-mentions"
-import { MARKDOWN_COMPONENTS } from "@workspace/ui/components/markdown/components"
+import {
+	MARKDOWN_COMPONENTS,
+	MARKDOWN_STATIC_COMPONENTS,
+} from "@workspace/ui/components/markdown/components"
 import { NestedMarkdownContext } from "@workspace/ui/components/markdown/nested-markdown"
 import {
 	MARKDOWN_CODE_SURFACE_CLASS,
@@ -39,6 +42,7 @@ export interface MarkdownProps {
 	isWriting?: boolean
 	answerActions?: MarkdownAnswerActions
 	onToggleTask?: (box: HTMLInputElement) => void
+	isStatic?: boolean
 }
 
 const MARKDOWN_REMARK_PLUGINS = [
@@ -63,6 +67,7 @@ export const Markdown = ({
 	isWriting = false,
 	answerActions,
 	onToggleTask,
+	isStatic = false,
 }: MarkdownProps) => {
 	const scope = useId()
 	const remarkPlugins = useMemo<Options["remarkPlugins"]>(
@@ -80,7 +85,9 @@ export const Markdown = ({
 					<MarkdownRunContext value={renderRun ?? null}>
 						<MarkdownTaskToggleContext value={onToggleTask ?? null}>
 							<ReactMarkdown
-								components={MARKDOWN_COMPONENTS}
+								components={
+									isStatic ? MARKDOWN_STATIC_COMPONENTS : MARKDOWN_COMPONENTS
+								}
 								rehypePlugins={[
 									[rehypeSanitize, MARKDOWN_SANITIZE_SCHEMA],
 									[rehypeScopeIds, { scope }],

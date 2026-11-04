@@ -87,13 +87,7 @@ export const MarkdownCode = ({
 	return <code {...props}>{children}</code>
 }
 
-const MarkdownFence = ({ code, language }: MarkdownFenceProps) => {
-	const { t } = useTranslation("chat")
-	const { copied, copy } = useCopyText(code)
-	const named = language?.trim()
-	const snippetLabel = named
-		? t("code.namedSnippet", { name: named })
-		: t("code.snippet")
+const FenceCode = ({ code, language }: MarkdownFenceProps) => {
 	const [firstPaint] = useState(() => (fitsInOneFrame(code) ? code : ""))
 	const painted = useDeferredValue(code, firstPaint)
 	const ready = useCodeHighlightReady(language)
@@ -107,10 +101,29 @@ const MarkdownFence = ({ code, language }: MarkdownFenceProps) => {
 	}, [code, language, painted, ready])
 
 	return (
-		<div
-			data-slot="markdown-fence"
-			className={`${MARKDOWN_ESCAPED_BLOCK_CLASS} relative my-2`}
-		>
+		<code>
+			{lines.map((line, index) => (
+				<Fragment key={line.offset}>
+					<CodeLine content={line.content} tokens={line.tokens} />
+					{index < lines.length - 1 ? "\n" : null}
+				</Fragment>
+			))}
+		</code>
+	)
+}
+
+const FENCE_CLASS = `${MARKDOWN_ESCAPED_BLOCK_CLASS} relative my-2`
+
+const MarkdownFence = ({ code, language }: MarkdownFenceProps) => {
+	const { t } = useTranslation("chat")
+	const { copied, copy } = useCopyText(code)
+	const named = language?.trim()
+	const snippetLabel = named
+		? t("code.namedSnippet", { name: named })
+		: t("code.snippet")
+
+	return (
+		<div data-slot="markdown-fence" className={FENCE_CLASS}>
 			<pre>
 				<span
 					// biome-ignore lint/a11y/noNoninteractiveTabindex: an overflowing fence must be keyboard scrollable
@@ -119,14 +132,7 @@ const MarkdownFence = ({ code, language }: MarkdownFenceProps) => {
 					aria-label={snippetLabel}
 					className="mr-8 block overflow-x-auto outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
 				>
-					<code>
-						{lines.map((line, index) => (
-							<Fragment key={line.offset}>
-								<CodeLine content={line.content} tokens={line.tokens} />
-								{index < lines.length - 1 ? "\n" : null}
-							</Fragment>
-						))}
-					</code>
+					<FenceCode code={code} language={language} />
 				</span>
 			</pre>
 			<span className="absolute top-2 right-2">
@@ -165,4 +171,31 @@ export const MarkdownPre = ({ node, children, ...props }: MarkdownPreProps) => {
 	}
 
 	return <MarkdownFence code={source} language={language} />
+}
+
+const MarkdownStaticFence = ({ code, language }: MarkdownFenceProps) => (
+	<div data-slot="markdown-fence" className={FENCE_CLASS}>
+		<pre>
+			<span className="block overflow-hidden">
+				<FenceCode code={code} language={language} />
+			</span>
+		</pre>
+	</div>
+)
+
+export const MarkdownStaticPre = ({
+	node,
+	children,
+	...props
+}: MarkdownPreProps) => {
+	const code = codeChildOf(node)
+	if (!code) return <pre {...props}>{children}</pre>
+
+	const source = sourceOf(code)
+	const language = languageOf(code)
+
+	if (language === MATH_LANGUAGE)
+		return <MarkdownMath display source={source} />
+
+	return <MarkdownStaticFence code={source} language={language} />
 }
