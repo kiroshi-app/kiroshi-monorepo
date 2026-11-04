@@ -99,6 +99,12 @@ const SelectableAnswer = ({ identity = ATLAS }: SelectableAnswerProps) => (
 	</CompanionSelectProvider>
 )
 
+const FramedSelectableAnswer = () => (
+	<BubbleFrame>
+		<SelectableAnswer />
+	</BubbleFrame>
+)
+
 const expectFootGap = async (root: HTMLElement, footSlot: string) => {
 	const content = slotIn(root, "message-bubble-content")
 	const text = slotIn(content, "message-bubble-text").getBoundingClientRect()
@@ -264,11 +270,7 @@ export const GapAboveAQueuedLine = meta.story({
 })
 
 export const NameClickSelectsTheAgent = meta.story({
-	render: () => (
-		<BubbleFrame>
-			<SelectableAnswer />
-		</BubbleFrame>
-	),
+	render: () => <FramedSelectableAnswer />,
 	parameters: {
 		docs: {
 			description: {
@@ -293,11 +295,7 @@ export const NameClickSelectsTheAgent = meta.story({
 })
 
 export const NameRightClickOpensTheAgentMenu = meta.story({
-	render: () => (
-		<BubbleFrame>
-			<SelectableAnswer />
-		</BubbleFrame>
-	),
+	render: () => <FramedSelectableAnswer />,
 	parameters: {
 		docs: {
 			description: {
@@ -318,11 +316,7 @@ export const NameRightClickOpensTheAgentMenu = meta.story({
 })
 
 export const KeyboardFocusOnTheAgentBlock = meta.story({
-	render: () => (
-		<BubbleFrame>
-			<SelectableAnswer />
-		</BubbleFrame>
-	),
+	render: () => <FramedSelectableAnswer />,
 	parameters: {
 		docs: {
 			description: {
