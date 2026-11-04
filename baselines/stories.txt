@@ -1396,6 +1396,7 @@ navigation-librarydocumenteditor--a-4-toolbar-format-on
 navigation-librarydocumenteditor--a-5-toolbar-link-field
 navigation-librarydocumenteditor--a-6-toolbar-flipped-below
 navigation-librarydocumenteditor--agent-finished
+navigation-librarydocumenteditor--agent-run-held-then-fades
 navigation-librarydocumenteditor--agents-writing
 navigation-librarydocumenteditor--blank
 navigation-librarydocumenteditor--blank-line-between-blocks
@@ -1411,6 +1412,9 @@ navigation-librarydocumenteditor--existing-document
 navigation-librarydocumenteditor--format-undone-whole
 navigation-librarydocumenteditor--format-without-change
 navigation-librarydocumenteditor--from-meeting-notes
+navigation-librarydocumenteditor--held-run-fades-with-motion
+navigation-librarydocumenteditor--held-run-kept-while-typing
+navigation-librarydocumenteditor--held-run-restarted-by-agent
 navigation-librarydocumenteditor--italic-shortcut
 navigation-librarydocumenteditor--link-shortcut
 navigation-librarydocumenteditor--live-preview
