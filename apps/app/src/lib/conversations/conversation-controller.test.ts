@@ -1682,6 +1682,15 @@ describe("createConversationController", () => {
 			}
 		}
 
+		const refusedFromComposer = async () => {
+			const composer = composerOn(harness)
+			harness.refuseNextWrite()
+			await composer.submit("on the brief")
+			await harness.settled()
+			const refusedId = harness.controller.getState().refusedMessage?.id ?? ""
+			return { composer, refusedId }
+		}
+
 		const storedMessages = async (held: Harness) =>
 			(await held.store.loadPage(held.conversation.id, null)).messages.map(
 				({ content, documents }) => ({ content, documents }),
@@ -1702,13 +1711,9 @@ describe("createConversationController", () => {
 		})
 
 		it("sends again its text and its document as one message", async () => {
-			const composer = composerOn(harness)
-			harness.refuseNextWrite()
-			await composer.submit("on the brief")
-			await harness.settled()
-			const held = harness.controller.getState().refusedMessage
+			const { composer, refusedId } = await refusedFromComposer()
 
-			await harness.controller.sendAgain(held?.id ?? "")
+			await harness.controller.sendAgain(refusedId)
 			await harness.settled()
 
 			expect(await storedMessages(harness)).toEqual([
@@ -1719,14 +1724,10 @@ describe("createConversationController", () => {
 		})
 
 		it("shows it refused again with its document when the resend is refused", async () => {
-			const composer = composerOn(harness)
-			harness.refuseNextWrite()
-			await composer.submit("on the brief")
-			await harness.settled()
-			const held = harness.controller.getState().refusedMessage
+			const { composer, refusedId } = await refusedFromComposer()
 			harness.refuseNextWrite()
 
-			await harness.controller.sendAgain(held?.id ?? "")
+			await harness.controller.sendAgain(refusedId)
 			await harness.settled()
 
 			expect(harness.controller.getState().refusedMessage).toMatchObject({
