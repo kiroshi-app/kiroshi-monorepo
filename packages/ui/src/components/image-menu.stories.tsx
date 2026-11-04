@@ -26,6 +26,16 @@ const VIEWER_ACTION_ORDER = [
 
 const IMAGE_ACTION_ORDER = ["Save to Library", "Copy image", "Open in viewer"]
 
+const WITHOUT_VIEWER_ACTIONS = {
+	onDownload: undefined,
+	onCopy: undefined,
+	onOpen: undefined,
+	onOpenInNewTab: undefined,
+	onRename: undefined,
+	onShowInFolder: undefined,
+	onDelete: undefined,
+}
+
 const openMenu = async (
 	canvasElement: HTMLElement,
 	userEvent: UserEventObject,
@@ -137,15 +147,7 @@ export const InViewer = meta.story({
 })
 
 export const ImageActionsOnly = meta.story({
-	args: {
-		onDownload: undefined,
-		onCopy: undefined,
-		onOpen: undefined,
-		onOpenInNewTab: undefined,
-		onRename: undefined,
-		onShowInFolder: undefined,
-		onDelete: undefined,
-	},
+	args: WITHOUT_VIEWER_ACTIONS,
 	parameters: {
 		docs: {
 			description: {
@@ -165,16 +167,7 @@ export const ImageActionsOnly = meta.story({
 })
 
 export const SavingToLibrary = meta.story({
-	args: {
-		isSavingToLibrary: true,
-		onDownload: undefined,
-		onCopy: undefined,
-		onOpen: undefined,
-		onOpenInNewTab: undefined,
-		onRename: undefined,
-		onShowInFolder: undefined,
-		onDelete: undefined,
-	},
+	args: { ...WITHOUT_VIEWER_ACTIONS, isSavingToLibrary: true },
 	parameters: {
 		docs: {
 			description: {
@@ -216,13 +209,7 @@ export const SavingToLibrary = meta.story({
 export const WithoutCallbacks = meta.story({
 	tags: ["test-only"],
 	args: {
-		onDownload: undefined,
-		onCopy: undefined,
-		onOpen: undefined,
-		onOpenInNewTab: undefined,
-		onRename: undefined,
-		onShowInFolder: undefined,
-		onDelete: undefined,
+		...WITHOUT_VIEWER_ACTIONS,
 		onSaveToLibrary: undefined,
 		onCopyImage: undefined,
 		onOpenInViewer: undefined,

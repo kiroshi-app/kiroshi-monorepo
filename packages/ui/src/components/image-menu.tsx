@@ -90,7 +90,7 @@ const ImageMenu = <Item,>({
 	name,
 	trigger,
 	surface = "thread",
-	isSavingToLibrary = false,
+	isSavingToLibrary,
 	onOpenChange,
 	onConfirmingDeleteChange,
 	onSaveToLibrary,
