@@ -13,6 +13,7 @@ import { useTranslation } from "react-i18next"
 
 import { Icons } from "@workspace/ui/components/icons"
 import { MessageScrollerButton } from "@workspace/ui/components/message-scroller"
+import { cn } from "@workspace/ui/lib/utils"
 
 type TranscriptJump = {
 	behavior: ScrollBehavior
@@ -33,11 +34,13 @@ type TranscriptJumpProviderProps = {
 	children: ReactNode
 }
 
+const JUMP_PILL =
+	"gap-1.5 rounded-full border-foreground/10 text-compact tabular-nums [&_svg]:size-3.5"
+
 const JUMP_PLACEMENT = {
-	floating:
-		"h-8 gap-1.5 rounded-full border-foreground/10 bg-prompt-surface px-3 text-compact tabular-nums [&_svg]:size-3.5",
+	floating: "h-8 bg-prompt-surface px-3",
 	docked:
-		"static translate-x-0 gap-1.5 rounded-full border-foreground/10 bg-transparent text-compact tabular-nums has-data-[icon=inline-start]:pl-2.5 data-[active=false]:hidden [&_svg]:size-3.5",
+		"static translate-x-0 bg-transparent has-data-[icon=inline-start]:pl-2.5 data-[active=false]:hidden",
 } as const satisfies Record<JumpToLatestPlacement, string>
 
 const TranscriptJumpContext = createContext<TranscriptJump | null>(null)
@@ -79,7 +82,7 @@ const JumpToLatest = ({ jump, placement }: JumpToLatestProps) => {
 	return (
 		<MessageScrollerButton
 			behavior={jump.behavior}
-			className={JUMP_PLACEMENT[placement]}
+			className={cn(JUMP_PILL, JUMP_PLACEMENT[placement])}
 			data-placement={placement}
 			onClick={jump.onClick}
 			size="sm"
