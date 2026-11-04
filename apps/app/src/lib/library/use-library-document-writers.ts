@@ -7,7 +7,6 @@ import {
 	type AgentSeat,
 	agentNameOf,
 	type CaretPlacedDocument,
-	finishedOf,
 	LIBRARY_DOCUMENT_PRESENCE_EVENT,
 	LIBRARY_DOCUMENT_WRITER_FINISHED_EVENT,
 	peopleOf,
@@ -33,9 +32,7 @@ type WatchedDocument = {
 type HeldPresence = {
 	watched: WatchedDocument | null
 	seats: AgentSeat[]
-	lastSeats: AgentSeat[]
 	people: LibraryWriter[]
-	finishedAgentId: string | null
 }
 
 type LibraryDocumentWritersInput = {
@@ -50,9 +47,7 @@ type LibraryDocumentWritersInput = {
 const NO_PRESENCE: HeldPresence = {
 	watched: null,
 	seats: [],
-	lastSeats: [],
 	people: [],
-	finishedAgentId: null,
 }
 
 const reportUnheard = (event: string) => (reason: unknown) => {
@@ -93,11 +88,6 @@ const useIsOwnSeat = (isJoined: boolean) => {
 			? kind === "member" && id === signedInAccountId()
 			: kind === "person" && id === currentWindowLabel()
 }
-
-const lastSeatsAfter = (lastSeats: AgentSeat[], seats: AgentSeat[]) => [
-	...lastSeats.filter(({ id }) => !seats.some((seat) => seat.id === id)),
-	...seats,
-]
 
 const raiseWriteFailure = (
 	{ spaceId, agentId, agentName }: LibraryDocumentWriterFinished,
@@ -142,11 +132,9 @@ const useDocumentPresence = (
 			)
 			setHeld((current) => {
 				const previous = heldFor(current, document)
-				const seats = seatsAfter(previous.seats, writers, seenAt)
 				return {
 					...previous,
-					seats,
-					lastSeats: lastSeatsAfter(previous.lastSeats, seats),
+					seats: seatsAfter(previous.seats, writers, seenAt),
 					people,
 				}
 			})
@@ -156,25 +144,14 @@ const useDocumentPresence = (
 	useListenWhileWatched<LibraryDocumentWriterFinished>(
 		watched,
 		LIBRARY_DOCUMENT_WRITER_FINISHED_EVENT,
-		(document, finished) => {
+		(_document, finished) => {
 			if (finished.outcome === "failed") {
 				raiseWriteFailure(finished, bots)
-				return
 			}
-			setHeld((current) => ({
-				...heldFor(current, document),
-				finishedAgentId: finished.agentId,
-			}))
 		},
 	)
 
-	const dismissFinished = () =>
-		setHeld((current) => ({ ...current, finishedAgentId: null }))
-
-	return {
-		presence: held.watched === watched ? held : NO_PRESENCE,
-		dismissFinished,
-	}
+	return held.watched === watched ? held : NO_PRESENCE
 }
 
 export const useLibraryDocumentWriters = ({
@@ -185,22 +162,11 @@ export const useLibraryDocumentWriters = ({
 	bots,
 	title,
 }: LibraryDocumentWritersInput) => {
-	const { presence, dismissFinished } = useDocumentPresence(
-		spaceId,
-		name,
-		isJoined,
-		bots,
-	)
-	const seat = presence.lastSeats.find(
-		({ id }) => id === presence.finishedAgentId,
-	)
+	const presence = useDocumentPresence(spaceId, name, isJoined, bots)
 	return {
 		writers: document
 			? writersOf({ seats: presence.seats, bots, document, title })
 			: [],
 		people: document ? peopleOf(presence.people, document) : [],
-		finished:
-			document && seat ? finishedOf({ seat, bots, document }) : undefined,
-		dismissFinished,
 	}
 }
