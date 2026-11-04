@@ -837,9 +837,8 @@ const InTheShell = ({ windowWidth, ...panel }: InTheShellProps) => (
 )
 
 const expectThreadAtItsFloor = async (thread: HTMLElement) => {
-	const floor = Number.parseFloat(getComputedStyle(thread).minWidth)
 	await waitFor(async () => {
-		await expect(thread.getBoundingClientRect().width).toBe(floor)
+		await expect(thread.getBoundingClientRect().width).toBe(THREAD_MIN_WIDTH)
 	}, FRAME_POLL)
 }
 
@@ -892,7 +891,7 @@ const scrollUpHalfAScreen = async (viewport: HTMLElement) => {
 
 export const ConsecutiveAnswersAtTheThreadFloor = meta.story({
 	args: { defaultWidth: DOCUMENT_PANEL_MAX_WIDTH },
-	render: (args) => <InTheShell {...args} windowWidth={NARROW_WINDOW} />,
+	render: (args) => <InTheShell {...args} windowWidth={LAPTOP_WIDTH} />,
 	parameters: {
 		docs: {
 			description: {
