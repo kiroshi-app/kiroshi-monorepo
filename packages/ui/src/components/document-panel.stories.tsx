@@ -10,6 +10,7 @@ import {
 } from "@workspace/storybook/story-utils"
 import { AppHeader } from "@workspace/ui/components/app-header"
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
+import { ContentCard } from "@workspace/ui/components/content-card"
 import {
 	DOCUMENT_PANEL_DEFAULT_WIDTH,
 	DOCUMENT_PANEL_MAX_WIDTH,
@@ -27,6 +28,7 @@ import { FileReferenceChip } from "@workspace/ui/components/file-reference-chip"
 import { LIBRARY_AGENTS } from "@workspace/ui/components/library.fixtures"
 import { LibraryDocumentPresence } from "@workspace/ui/components/library-document-agents"
 import { LibraryDocumentBody } from "@workspace/ui/components/library-document-view"
+import { Markdown } from "@workspace/ui/components/markdown"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
 import { RESIZE_STEP } from "@workspace/ui/components/resize-handle"
 import type { RosterBot } from "@workspace/ui/components/roster"
@@ -771,5 +773,182 @@ export const HandleWithKeyboardFocusDark = meta.story({
 		await expect(getComputedStyle(handle, "::after").backgroundColor).toBe(
 			darkRing,
 		)
+	},
+})
+
+const LONG_ANSWER = [
+	"The brief opens on the people it serves: the five teams that ship on the 14th, each with a lead who signs off the page they own before the copy freezes.",
+	"Screenshots live in the Library under Launch, one folder per team, named by the page they illustrate so the release notes can link them without a second pass.",
+	"Launch day measures three things only: sign ups in the first hour, the share of new Spaces that invite a second person, and the support threads opened before noon.",
+].join("\n\n")
+
+const WRITER: RosterBot = { ...ATLAS, title: "Launch writer" }
+
+const READ_AT = Date.UTC(2026, 10, 4, 10)
+
+const CONSECUTIVE_ANSWERS: TranscriptItem[] = Array.from(
+	{ length: 8 },
+	(_, index) => ({
+		key: `answer-${index}`,
+		render: () => (
+			<AssistantTurn
+				copyText={LONG_ANSWER}
+				identity={WRITER}
+				now={READ_AT}
+				sentAt={READ_AT - (8 - index) * 60_000}
+			>
+				<Markdown>{LONG_ANSWER}</Markdown>
+			</AssistantTurn>
+		),
+	}),
+)
+
+type InTheShellProps = DocumentPanelProps & {
+	windowWidth: number
+}
+
+const InTheShell = ({ windowWidth, ...panel }: InTheShellProps) => (
+	<div
+		className="flex h-200"
+		data-testid="window"
+		{...BLUE_SCOPE}
+		style={{ ...BLUE_SCOPE.style, width: windowWidth }}
+	>
+		<SidebarProvider
+			style={
+				{ "--sidebar-width": `${SIDEBAR_DEFAULT_WIDTH}px` } as CSSProperties
+			}
+		>
+			<Sidebar collapsible="icon">
+				<SidebarContent />
+			</Sidebar>
+			<ContentCard>
+				<ThreadLayout
+					aside={<DocumentPanel {...panel} />}
+					composer={<PromptInput onSubmit={fn()} />}
+					header={<AppHeader leading="Spring launch" />}
+					rows={CONSECUTIVE_ANSWERS}
+				>
+					{null}
+				</ThreadLayout>
+			</ContentCard>
+		</SidebarProvider>
+	</div>
+)
+
+const expectThreadAtItsFloor = async (thread: HTMLElement) => {
+	const floor = Number.parseFloat(getComputedStyle(thread).minWidth)
+	await waitFor(async () => {
+		await expect(thread.getBoundingClientRect().width).toBe(floor)
+	}, FRAME_POLL)
+}
+
+const transcriptOf = (canvasElement: HTMLElement) => {
+	const viewport = canvasElement.querySelector<HTMLElement>(
+		'[data-slot="message-scroller-viewport"]',
+	)
+	if (!viewport) throw new Error("No transcript drawn")
+	return viewport
+}
+
+const expectEachMessageClearsTheNext = async (canvasElement: HTMLElement) => {
+	const messages = Array.from(
+		canvasElement.querySelectorAll<HTMLElement>(
+			'[data-slot="message-scroller-item"]',
+		),
+	)
+	await expect(messages).toHaveLength(CONSECUTIVE_ANSWERS.length)
+	for (const [index, message] of messages.entries()) {
+		const box = message.getBoundingClientRect()
+		const bubble = message.querySelector<HTMLElement>(
+			'[data-slot="message-bubble-content"]',
+		)
+		const authorLine = message.querySelector('[data-slot="author-line"]')
+		if (!bubble || !authorLine) throw new Error("No bubble drawn")
+		await expect(bubble.scrollHeight).toBe(bubble.clientHeight)
+		await expect(authorLine.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+			box.top,
+		)
+		await expect(authorLine.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+			box.bottom,
+		)
+		const next = messages[index + 1]
+		if (next) {
+			await expect(next.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+				box.bottom,
+			)
+		}
+	}
+}
+
+const scrollUpHalfAScreen = async (viewport: HTMLElement) => {
+	const target = viewport.scrollTop - viewport.clientHeight / 2
+	viewport.dispatchEvent(
+		new WheelEvent("wheel", { bubbles: true, deltaY: -viewport.clientHeight }),
+	)
+	viewport.scrollTop = target
+	await waitFor(() => expect(viewport.scrollTop).toBe(target), FRAME_POLL)
+	await afterTwoFrames()
+}
+
+export const ConsecutiveAnswersAtTheThreadFloor = meta.story({
+	args: { defaultWidth: DOCUMENT_PANEL_MAX_WIDTH },
+	render: (args) => <InTheShell {...args} windowWidth={NARROW_WINDOW} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Eight long answers in a row from one agent, each signed by its author line with a title badge and a time, beside the document panel with the thread held at the narrowest width its layout allows. Check that every bubble holds its whole text, that each author line stays inside its own message, and that every message ends above the next one.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expectThreadAtItsFloor(threadOf(canvasElement))
+		const viewport = transcriptOf(canvasElement)
+		await waitFor(
+			() =>
+				expect(viewport.scrollHeight).toBeGreaterThan(viewport.clientHeight),
+			FRAME_POLL,
+		)
+		await expectEachMessageClearsTheNext(canvasElement)
+	},
+})
+
+export const NarrowedToTheThreadFloorThenScrolled = meta.story({
+	tags: ["test-only"],
+	args: { defaultWidth: DOCUMENT_PANEL_MIN_WIDTH },
+	render: (args) => <InTheShell {...args} windowWidth={LAPTOP_WIDTH} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same answers in a wide thread, the panel's edge then dragged toward the thread until the thread stops at its narrowest width, then the thread scrolled up three half screens. Check that after every step each message still ends above the next one and every bubble still holds its whole text.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const thread = threadOf(canvasElement)
+		const viewport = transcriptOf(canvasElement)
+		await waitFor(
+			() =>
+				expect(viewport.scrollHeight).toBeGreaterThan(viewport.clientHeight),
+			FRAME_POLL,
+		)
+		await expectEachMessageClearsTheNext(canvasElement)
+
+		const handle = canvas.getByRole("separator", { name: HANDLE_LABEL })
+		const originX = handle.getBoundingClientRect().left
+		const pastTheFloorX = originX - thread.getBoundingClientRect().width
+		handle.dispatchEvent(pointerAt("pointerdown", originX))
+		window.dispatchEvent(pointerAt("pointermove", pastTheFloorX))
+		window.dispatchEvent(pointerAt("pointerup", pastTheFloorX))
+		await expectThreadAtItsFloor(thread)
+		await afterTwoFrames()
+		await expectEachMessageClearsTheNext(canvasElement)
+
+		for (const _ of [1, 2, 3]) {
+			await scrollUpHalfAScreen(viewport)
+			await expectEachMessageClearsTheNext(canvasElement)
+		}
 	},
 })
