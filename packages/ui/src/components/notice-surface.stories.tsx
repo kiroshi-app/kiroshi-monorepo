@@ -240,14 +240,15 @@ const noticesOnScreen = () =>
 		viewport().querySelectorAll<HTMLElement>("[data-slot=toast]"),
 	).filter((notice) => !notice.hasAttribute("data-limited"))
 
-const atTopCentre = async (notice: HTMLElement) => {
+const atBottomRight = async (notice: HTMLElement) => {
 	await waitFor(async () => {
 		const box = notice.getBoundingClientRect()
+		const rightMargin = window.innerWidth - box.right
+		const bottomMargin = window.innerHeight - box.bottom
 
-		await expect(box.top).toBeLessThanOrEqual(24)
-		await expect(
-			Math.abs(box.left - (window.innerWidth - box.right)),
-		).toBeLessThanOrEqual(1)
+		await expect(rightMargin).toBeGreaterThan(0)
+		await expect(rightMargin).toBeLessThan(box.left)
+		await expect(Math.abs(bottomMargin - rightMargin)).toBeLessThanOrEqual(1)
 	})
 }
 
@@ -259,7 +260,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The window's notice surface: one viewport mounted once in the shell, anchored to the top edge of the window and centred on it, and two ways to raise something into it. `raiseTransientNotice` reports what went right on the `success` mark, or on the `info`, `warning` or `loading` mark when it is handed a type, and leaves on its own once `TRANSIENT_NOTICE_DELAY` has passed - except on `loading`, which holds until its caller ends it, because the work it reports has no deadline; `raiseFailureNotice` reports what went wrong on the `error` mark, the one mark on the destructive colour role, and stays until the reader closes it - a failure that dismisses itself is close to silence. Both are module-level calls, so a controller, a driver or a scheduler raises a notice without a hook and without a component in scope, and both take an optional action drawn between the text and the close control. Both return the identifier of the notice they raised, and `endNotice` takes that identifier and takes the notice off screen; an identifier no notice on screen carries leaves the surface as it was. Notices land against the top edge, newest nearest it, three at most, with the ones beyond the limit marked `data-limited` rather than removed. Enter and leave travel through the top edge over 500ms, and drop to a fade with no movement under `prefers-reduced-motion` - see `ReducedMotion`. `transientDelay` on the viewport overrides the delay for the whole surface; a failure ignores it.",
+					"The window's notice surface: one viewport mounted once in the shell, anchored to the bottom right corner of the window with the same margin below it as beside it, and two ways to raise something into it. `raiseTransientNotice` reports what went right on the `success` mark, or on the `info`, `warning` or `loading` mark when it is handed a type, and leaves on its own once `TRANSIENT_NOTICE_DELAY` has passed - except on `loading`, which holds until its caller ends it, because the work it reports has no deadline; `raiseFailureNotice` reports what went wrong on the `error` mark, the one mark on the destructive colour role, and stays until the reader closes it - a failure that dismisses itself is close to silence. Both are module-level calls, so a controller, a driver or a scheduler raises a notice without a hook and without a component in scope, and both take an optional action drawn between the text and the close control. Both return the identifier of the notice they raised, and `endNotice` takes that identifier and takes the notice off screen; an identifier no notice on screen carries leaves the surface as it was. Notices land against the bottom edge, newest nearest it and older ones stacking upward above it, three at most, with the ones beyond the limit marked `data-limited` rather than removed. Enter and leave travel through the right edge over 500ms, and drop to a fade with no movement under `prefers-reduced-motion` - see `ReducedMotion`; a drag toward the right edge dismisses - see `Dismissing`. `transientDelay` on the viewport overrides the delay for the whole surface; a failure ignores it.",
 			},
 		},
 	},
@@ -277,7 +278,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"The notice an action that succeeded reaches for, raised with no type and drawn on the success mark. Check that it lands against the top edge, centred on the window, on the surface tokens the other floating surfaces use, is announced politely through the viewport's live region rather than interrupting, carries no action control when the caller passed none, and leaves on its own once `TRANSIENT_NOTICE_DELAY` has passed without anyone touching it. Pick `Error` for the notice that stays.",
+					"The notice an action that succeeded reaches for, raised with no type and drawn on the success mark. Check that it lands in the bottom right corner of the window, as far from the bottom edge as from the right edge, on the surface tokens the other floating surfaces use, is announced politely through the viewport's live region rather than interrupting, carries no action control when the caller passed none, and leaves on its own once `TRANSIENT_NOTICE_DELAY` has passed without anyone touching it. Pick `Error` for the notice that stays.",
 			},
 		},
 	},
@@ -292,7 +293,7 @@ export const Default = meta.story({
 		await expectHeadingFont(within(notice).getByRole("heading", { level: 2 }))
 
 		await opaque(notice)
-		await atTopCentre(notice)
+		await atBottomRight(notice)
 		await expect(markOf(notice)).toBeVisible()
 		await expect(actionControl()).toBe(null)
 
@@ -333,7 +334,7 @@ export const Error = meta.story({
 		await expect(announcement).toHaveTextContent(FAILURE.title)
 
 		const notice = await failureNotice()
-		await atTopCentre(notice)
+		await atBottomRight(notice)
 
 		const mark = markOf(notice)
 		await expect(getComputedStyle(mark).color).toBe(destructiveRole())
@@ -1254,7 +1255,7 @@ export const Stacked = meta.story({
 		docs: {
 			description: {
 				story:
-					"Four failures raised in a row from the module itself, three drawn. Reach for this when several jobs fail at once: check that the surface draws no more than three notices, that the one that no longer fits is the oldest, and that the newest sits nearest the top edge with the older ones peeking below it, so a reader's eye lands on what just happened rather than on what they already read. The `aria-hidden-focus` audit is left to review here for the same reason as in `LongContent`: three urgent notices sit unfocused, hidden from the accessibility tree by the library while their mirrors do the announcing. The app assembles it at `apps/app/src/App.tsx:1240`.",
+					"Four failures raised in a row from the module itself, three drawn. Reach for this when several jobs fail at once: check that the surface draws no more than three notices, that the one that no longer fits is the oldest, and that the newest sits nearest the bottom edge with each older one peeking above the newer one, so a reader's eye lands on what just happened rather than on what they already read. The `aria-hidden-focus` audit is left to review here for the same reason as in `LongContent`: three urgent notices sit unfocused, hidden from the accessibility tree by the library while their mirrors do the announcing. The app assembles it at `apps/app/src/App.tsx:1240`.",
 			},
 		},
 	},
@@ -1276,11 +1277,11 @@ export const Stacked = meta.story({
 			.closest("[data-slot=toast]")
 		await expect(dropped).toHaveAttribute("data-limited")
 
-		await atTopCentre(onScreen[0])
+		await atBottomRight(onScreen[0])
 
 		const tops = onScreen.map((notice) => notice.getBoundingClientRect().top)
-		await expect(tops[0]).toBeLessThan(tops[1])
-		await expect(tops[1]).toBeLessThan(tops[2])
+		await expect(tops[1]).toBeLessThan(tops[0])
+		await expect(tops[2]).toBeLessThan(tops[1])
 	},
 })
 
@@ -1413,7 +1414,7 @@ export const Dismissing = meta.story({
 		docs: {
 			description: {
 				story:
-					"The pointer way out. Notices are anchored to the top edge, so they leave through it: a drag toward the top of the window dismisses, a drag back toward the middle snaps the notice into place and keeps it. Reach for this when checking that the gesture points at the nearest edge rather than dragging the notice across the surface. The app assembles it at `apps/app/src/App.tsx:1240`.",
+					"The pointer way out. Notices enter and leave through the right edge, so the gesture follows it: a drag toward the right edge of the window dismisses, a drag back toward the left snaps the notice into place and keeps it. Reach for this when checking that the gesture points at the nearest edge rather than dragging the notice across the surface. The app assembles it at `apps/app/src/App.tsx:1240`.",
 			},
 		},
 	},
@@ -1424,10 +1425,11 @@ export const Dismissing = meta.story({
 
 		const notice = await failureNotice()
 
-		await swipe(notice, userEvent, { y: SWIPE_DISTANCE })
+		await swipe(notice, userEvent, { x: -SWIPE_DISTANCE })
 		await expect(within(viewport()).getByText(FAILURE.title)).toBeVisible()
+		await atBottomRight(notice)
 
-		await swipe(notice, userEvent, { y: -SWIPE_DISTANCE })
+		await swipe(notice, userEvent, { x: SWIPE_DISTANCE })
 		await waitFor(() =>
 			expect(within(viewport()).queryByText(FAILURE.title)).toBe(null),
 		)
@@ -1521,6 +1523,7 @@ export const DarkTheme = meta.story({
 		await expect(getComputedStyle(mark).color).toBe(destructiveRole())
 		await expect(getComputedStyle(mark).color).not.toBe(surface)
 		await expect(getComputedStyle(closeControl()).color).not.toBe(surface)
+		await atBottomRight(notice)
 	},
 })
 
@@ -1535,7 +1538,7 @@ export const ReducedMotion = meta.story({
 		docs: {
 			description: {
 				story:
-					"The same failure raised for a reader who asked the system to stop moving things. The registry toast travels a notice in through the top edge and scales the ones stacked behind it; the surface drops both under `prefers-reduced-motion` and fades instead, keeping the opacity transition so the library still hears the end event it unmounts on. Check the notice transitions opacity and nothing else, and that it is already at its resting place and its resting height on the frame it appears - a notice that travels is the one thing a reader who asked for stillness cannot look away from. The app assembles it at `apps/app/src/App.tsx:1240`.",
+					"The same failure raised for a reader who asked the system to stop moving things. The registry toast travels a notice in through the right edge and scales the ones stacked behind it; the surface drops both under `prefers-reduced-motion` and fades instead, keeping the opacity transition so the library still hears the end event it unmounts on. Check the notice transitions opacity and nothing else, and that it is already at its resting place and its resting height on the frame it appears - a notice that travels is the one thing a reader who asked for stillness cannot look away from. The app assembles it at `apps/app/src/App.tsx:1240`.",
 			},
 		},
 	},
@@ -1556,6 +1559,43 @@ export const ReducedMotion = meta.story({
 
 		await expect(rested.top).toBe(raised.top)
 		await expect(rested.height).toBe(raised.height)
+	},
+})
+
+export const NarrowWindow = meta.story({
+	tags: ["test-only"],
+	globals: { viewport: { value: "mobile" } },
+	render: () => (
+		<NoticeDemo
+			label="Run the routine"
+			raise={() => raiseFailureNotice(FAILURE)}
+		/>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same failure in a window narrower than the `sm` breakpoint, which the desktop window never reaches since it stops at 1024px wide. Check that the notice stays inside the window with as much room on its left as on its right, still against the bottom edge.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Run the routine" }),
+		)
+
+		const notice = await failureNotice()
+
+		await waitFor(async () => {
+			const box = notice.getBoundingClientRect()
+			const rightMargin = window.innerWidth - box.right
+
+			await expect(box.left).toBeGreaterThan(0)
+			await expect(Math.abs(box.left - rightMargin)).toBeLessThanOrEqual(1)
+			await expect(
+				Math.abs(window.innerHeight - box.bottom - rightMargin),
+			).toBeLessThanOrEqual(1)
+		})
 	},
 })
 
@@ -1767,7 +1807,7 @@ const expectDeviceNotice = async (title: string, description: string) => {
 	const notice = heading.closest<HTMLElement>("[data-slot=toast]")
 	if (!notice) throw new window.Error("The notice is not on the surface")
 	await opaque(notice)
-	await atTopCentre(notice)
+	await atBottomRight(notice)
 	await expect(notice).toHaveAttribute("data-type", "success")
 	await expect(notice).toHaveAccessibleDescription(description)
 	await expect(actionControl()).toBe(null)
@@ -1780,7 +1820,7 @@ export const DeviceApproved = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${SPACES_ARTBOARD} Artboard 6.2: the reader approved another device and the dialog closed. Check the success notice lands at top centre naming the device, says where to remove it, and carries no action. Pick \`DeviceRejected\` for the device the reader turned down.`,
+				story: `${SPACES_ARTBOARD} Artboard 6.2: the reader approved another device and the dialog closed. Check the success notice lands at the bottom right naming the device, says where to remove it, and carries no action. Pick \`DeviceRejected\` for the device the reader turned down.`,
 			},
 		},
 	},
