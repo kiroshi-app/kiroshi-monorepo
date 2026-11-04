@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { expect } from "storybook/test"
+import { expect, fn } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
@@ -24,6 +24,7 @@ import {
 	MessageBubbleGroup,
 	type MessageBubbleVariant,
 } from "@workspace/ui/components/message-bubble"
+import { PromptInput } from "@workspace/ui/components/prompt-input"
 
 const MESSAGE_BUBBLE_VARIANTS = listExhaustively<MessageBubbleVariant>({
 	solid: true,
@@ -373,5 +374,68 @@ export const NarrowContainer = meta.story({
 				group.getBoundingClientRect().right + 1,
 			)
 		}
+	},
+})
+
+const MARKDOWN_REPLY = `Three follow-ups came out of the call:
+
+- send Ada Martin the revised quote,
+- book the migration window.
+
+> Who owns the data export?`
+
+const BODY_TEXT = { fontSize: "14px", lineHeight: "24px" }
+
+const typeOf = (element: Element, pseudo?: string) => {
+	const { fontSize, lineHeight } = getComputedStyle(element, pseudo)
+	return { fontSize, lineHeight }
+}
+
+export const BodyTextSize = meta.story({
+	render: () => (
+		<MessageBubbleGroup className={THREAD_WIDTH}>
+			<MessageBubble variant="soft">
+				<MessageBubbleContent>
+					<Markdown>{MARKDOWN_REPLY}</Markdown>
+				</MessageBubbleContent>
+			</MessageBubble>
+			<MessageBubble variant="solid" align="end">
+				<MessageBubbleContent>{USER_PROMPT}</MessageBubbleContent>
+			</MessageBubble>
+			<PromptInput defaultValue={USER_LONG_PROMPT} onSubmit={fn()} />
+			<PromptInput placeholder="Message Atlas" onSubmit={fn()} />
+			<PromptInput
+				offline={{ spaceName: "Studio", hostName: "Steve" }}
+				onSubmit={fn()}
+			/>
+		</MessageBubbleGroup>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Message text and the prompt take the body size of the rest of the app, 14 on 24, the same for an agent answer, its paragraphs, list items and quote, your message, and the prompt's draft, placeholder, offline notice and the hidden mirror that sizes it. The Final artboards draw 16 on 26 in bubbles and 15 on 24 in the input: Steve's later decision wins.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const markdown = slotIn(canvasElement, "markdown")
+		const prompts = slotsIn(canvasElement, "prompt-input")
+		const textareas = Array.from(canvasElement.querySelectorAll("textarea"))
+		const mirrors = prompts.flatMap((prompt) =>
+			Array.from(prompt.querySelectorAll('div[aria-hidden="true"]')),
+		)
+		const texts = [
+			...slotsIn(canvasElement, "message-bubble-text"),
+			...markdown.querySelectorAll("p, li, blockquote"),
+			...textareas,
+			...mirrors,
+			slotIn(canvasElement, "prompt-input-notice"),
+		]
+		await expect(textareas).toHaveLength(2)
+		await expect(mirrors).toHaveLength(4)
+		for (const text of texts) await expect(typeOf(text)).toEqual(BODY_TEXT)
+		for (const textarea of textareas)
+			await expect(typeOf(textarea, "::placeholder")).toEqual(BODY_TEXT)
 	},
 })

@@ -2,7 +2,11 @@ import { useState } from "react"
 import { expect, fn, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { probedStyleOf, slotIn } from "@workspace/storybook/story-utils"
+import {
+	probedStyleOf,
+	slotIn,
+	slotsIn,
+} from "@workspace/storybook/story-utils"
 import { AppHeader } from "@workspace/ui/components/app-header"
 import { ChatEmptyState } from "@workspace/ui/components/chat-empty-state"
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
@@ -558,5 +562,53 @@ export const ForwardedRegion = meta.story({
 	render: (args) => <RegionProbe {...args} />,
 	play: async ({ canvas }) => {
 		await expect(canvas.getByText("Composer inside")).toBeVisible()
+	},
+})
+
+const PROMPT_OVERHANG = 20
+
+const overhangOf = (frame: HTMLElement) => {
+	const column = slotIn(frame, "message-scroller-content")
+	const { paddingLeft, paddingRight } = getComputedStyle(column)
+	const columnBox = column.getBoundingClientRect()
+	const promptBox = slotIn(frame, "prompt-input").getBoundingClientRect()
+	return {
+		start: Math.round(
+			columnBox.left + Number.parseFloat(paddingLeft) - promptBox.left,
+		),
+		end: Math.round(
+			promptBox.right - columnBox.right + Number.parseFloat(paddingRight),
+		),
+	}
+}
+
+export const PromptOverhangsTheThread = meta.story({
+	render: (args) => (
+		<div className="flex flex-col gap-6">
+			<div data-slot="overhang-frame" className="h-100 w-[1072px]">
+				<ThreadLayout {...args} label="Widest thread" />
+			</div>
+			<div data-slot="overhang-frame" className="h-100 w-120">
+				<ThreadLayout {...args} header={null} label="Narrow thread" />
+			</div>
+		</div>
+	),
+	args: { rows: CONVERSATION_ROWS, children: null },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Measured on the Final page, artboard 1b Solo a long message the input grows: the bubbles column is 680 wide and the prompt 720, so the prompt overhangs it by 20 on each side and the bubbles edge meets the start of its rounded corner. Check the 20 holds at the widest thread and on a 480 wide one, where both columns shrink together.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const [widest, narrow] = slotsIn(canvasElement, "overhang-frame")
+		const both = { start: PROMPT_OVERHANG, end: PROMPT_OVERHANG }
+		await expect(overhangOf(widest)).toEqual(both)
+		await expect(overhangOf(narrow)).toEqual(both)
+		await expect(
+			slotIn(widest, "prompt-input").getBoundingClientRect().width,
+		).toBe(720)
 	},
 })

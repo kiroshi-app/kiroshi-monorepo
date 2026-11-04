@@ -1043,7 +1043,7 @@ export const Offline = meta.story({
 		await expect(canvas.queryByRole("textbox")).toBeNull()
 		const wording = canvas.getByText(OFFLINE_WORDING)
 		const style = getComputedStyle(wording)
-		await expect(style.fontSize).toBe("15px")
+		await expect(style.fontSize).toBe("14px")
 		await expect(style.lineHeight).toBe("24px")
 		await expect(style.color).toBe("rgb(163, 163, 163)")
 

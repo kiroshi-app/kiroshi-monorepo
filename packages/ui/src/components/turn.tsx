@@ -418,7 +418,8 @@ function UserTurn({
 				<InitialsAvatar name={name} size={AUTHOR_AVATAR_SIZE} isOnOwnBubble />
 			}
 			time={sentTimeOf(sentAt, now)}
-			actions={turnActionsOf(actions)}
+			actions={turnActionsOf(actions.toReversed())}
+			isSticky
 		/>
 	)
 
@@ -664,7 +665,8 @@ const PersonTurn = ({
 										/>
 									}
 									time={sentTimeOf(sentAt, now)}
-									actions={turnActionsOf(actions)}
+									actions={turnActionsOf(actions.toReversed())}
+									isSticky
 								/>
 							}
 						>

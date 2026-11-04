@@ -3,6 +3,7 @@ import { expect, fireEvent, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
+	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 	hueScopeOf,
 	isInBrowserRunner,
 	realPointer,
@@ -203,6 +204,7 @@ type PanelProps = {
 	leading?: ReactNode
 	header?: ReactNode
 	hasPins?: boolean
+	label?: string
 }
 
 const Panel = ({
@@ -216,6 +218,7 @@ const Panel = ({
 	leading,
 	header,
 	hasPins = true,
+	label,
 }: PanelProps) => (
 	<div className="relative h-[847px] w-[1072px]" {...hueScopeOf("blue")}>
 		<RosterProvider bots={MENTIONED_BOTS}>
@@ -248,6 +251,7 @@ const Panel = ({
 						)
 					}
 					rows={rows}
+					label={label}
 					queue={queue}
 					composer={
 						composer ?? (
@@ -348,8 +352,8 @@ export const Conversations1 = meta.story({
 		await expect(slotsIn(canvasElement, "author-line")).toHaveLength(7)
 		const answer = slotIn(canvasElement, "markdown").querySelector("p")
 		if (!answer) throw new Error("The answer draws no paragraph")
-		await expect(getComputedStyle(answer).fontSize).toBe("16px")
-		await expect(getComputedStyle(answer).lineHeight).toBe("26px")
+		await expect(getComputedStyle(answer).fontSize).toBe("14px")
+		await expect(getComputedStyle(answer).lineHeight).toBe("24px")
 	},
 })
 
@@ -548,7 +552,7 @@ export const Conversations4 = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard Conversations 4: an answer taller than the transcript, with a heading, a table and a list, read from its top. Check the bubble keeps padding 18 around rich content and that its author line stays pinned to the bottom edge on the sticky fill, with its top rule and rounded foot, until the bubble's own end scrolls into view.",
+					"Artboard Conversations 4: an answer taller than the transcript, with a heading, a table and a list, read from its top. Check the bubble keeps padding 18 around rich content and that its author line stays pinned to the bottom edge on the sticky fill, with its top rule and a square foot, until the bubble's own end scrolls into view.",
 			},
 		},
 	},
@@ -740,6 +744,7 @@ export const Conversations7 = meta.story({
 		/>
 	),
 	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:
@@ -987,6 +992,281 @@ const stuckLinesIn = (canvasElement: HTMLElement) =>
 	slotsIn(canvasElement, "author-line").filter(
 		(line) => line.dataset.stuck === "true",
 	)
+
+const ACTION_ROWS: TranscriptItem[] = [
+	{
+		key: "agent",
+		render: () => (
+			<AssistantTurn
+				author={ATLAS}
+				sentAt={at(9, 20)}
+				copyText={SAMPLE_TEXT.agent}
+				onReply={noop}
+				onPin={noop}
+			>
+				{SAMPLE_TEXT.agent}
+			</AssistantTurn>
+		),
+	},
+	{
+		key: "person",
+		render: () => (
+			<PersonTurn
+				name="Tom"
+				sentAt={at(10, 5)}
+				copyText={SAMPLE_TEXT.person}
+				onReply={noop}
+				onPin={noop}
+			>
+				{SAMPLE_TEXT.person}
+			</PersonTurn>
+		),
+	},
+	{
+		key: "you",
+		render: () => (
+			<UserTurn
+				name="Sam"
+				sentAt={at(10, 6)}
+				copyText={SAMPLE_TEXT.you}
+				onReply={noop}
+				onPin={noop}
+			>
+				{SAMPLE_TEXT.you}
+			</UserTurn>
+		),
+	},
+]
+
+const lineOf = (canvasElement: HTMLElement, tone: string) => {
+	const line = slotsIn(canvasElement, "author-line").find(
+		(candidate) => candidate.dataset.tone === tone,
+	)
+	if (!line) throw new Error(`No ${tone} author line`)
+	return line
+}
+
+type ActionRow = {
+	buttons: string[]
+	dividerIsFirst: boolean
+	isBeforeAvatar: boolean
+}
+
+const actionRowOf = (line: HTMLElement): ActionRow => {
+	const row = slotIn(line, "author-line-actions")
+	const avatar = slotIn(line, "author-line-name").previousElementSibling
+	if (!avatar) throw new Error("No avatar before the name")
+	return {
+		buttons: Array.from(row.querySelectorAll("button")).map(
+			(button) => button.getAttribute("aria-label") ?? "",
+		),
+		dividerIsFirst:
+			row.firstElementChild?.getAttribute("aria-hidden") === "true",
+		isBeforeAvatar:
+			row.getBoundingClientRect().right <= avatar.getBoundingClientRect().left,
+	}
+}
+
+export const UserAuthorLineMirrored = meta.story({
+	render: () => (
+		<div className="[&_[data-slot=author-line-actions]]:flex">
+			<Panel face={ATLAS} rows={ACTION_ROWS} />
+		</div>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Your author line and another person's are the agent's mirrored, actions shown as on hover. Check the agent reads avatar, name, badge, time, divider, then Pin, Reply and Copy, and that yours and Tom's read Copy, Reply and Pin, the divider, then the avatar, the name and the time.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expect(actionRowOf(lineOf(canvasElement, "agent"))).toEqual({
+			buttons: ["Pin", "Reply", "Copy"],
+			dividerIsFirst: true,
+			isBeforeAvatar: false,
+		})
+		for (const tone of ["person", "you"])
+			await expect(actionRowOf(lineOf(canvasElement, tone))).toEqual({
+				buttons: ["Copy", "Reply", "Pin"],
+				dividerIsFirst: false,
+				isBeforeAvatar: true,
+			})
+	},
+})
+
+const LONG_OWN_MESSAGE = [
+	"Before we book anything for Lisbon, here is everything I know so far, so you can plan around it rather than guess.",
+	"We are twelve, maybe thirteen if Lena's partner joins, arriving on Thursday the 12th and leaving on Saturday the 14th after lunch. Three people fly in from Berlin and land around 13:00, the rest come from Paris on the morning flight and should be at the airport by 11:30.",
+	"The budget is €6,000 for everything: rooms, the planning room on Friday, food and getting around. I would rather keep €500 aside for surprises, so plan for €5,500 and tell me early if that does not hold.",
+	"We need one room big enough for the whole team on Friday from 9:30 to 17:00, with a screen and decent wifi, and somewhere we can eat together on Thursday night. A kitchen we can use would be a bonus, two of us cook and it would save on the dinners.",
+	"Dietary needs so far: two vegetarians, one vegan, one person who cannot eat nuts at all, so the kitchen has to know ahead. I will chase the others by Friday.",
+	"Keep it walkable if you can. Half the team will not want taxis every morning, and the Saturday morning is free, so being close to the river or the old town would make that morning worth it.",
+	"For Friday, the planning day matters more than the rooms. We will spend most of it on the roadmap for the spring, so we need a room where twelve people can sit around one table, a wall or a board we can write on, and a second smaller room for when we split into two groups after lunch.",
+	"On Thursday night I would like the dinner to feel like the start of the offsite rather than another work evening. A terrace or a garden would be perfect, and if the place has its own kitchen we can do the dinner ourselves and spend the money on the Saturday lunch instead.",
+	"Last thing: Marc needs a ground floor room or a lift, his knee is still healing. Please check that before anything else, it rules places out faster than the budget does.",
+].join(" ")
+
+const LISBON_DAY: TranscriptItem = {
+	key: "today",
+	render: () => <DaySeparator at={at(14, 10)} now={at(14, 12)} />,
+}
+
+const LISBON_QUESTION = rowOf({
+	key: "question",
+	from: "you",
+	text: "Find us a place in Lisbon for the offsite: 12 people, March 12 to 14, under €6,000.",
+	time: at(14, 10),
+})
+
+type ThemedPanelsProps = {
+	rows: TranscriptItem[]
+}
+
+const ThemedPanels = ({ rows }: ThemedPanelsProps) => (
+	<div className="flex flex-col">
+		{(["Light", "Dark"] as const).map((theme) => (
+			<section
+				key={theme}
+				aria-label={`${theme} theme`}
+				className={theme === "Dark" ? "dark" : undefined}
+			>
+				<Panel
+					face={ATLAS}
+					leading={LISBON_HEADER}
+					rows={rows}
+					label={`Lisbon offsite, ${theme} theme`}
+				/>
+			</section>
+		))}
+	</div>
+)
+
+const paintedRgb = (...colours: string[]) => {
+	const canvas = document.createElement("canvas")
+	canvas.width = 1
+	canvas.height = 1
+	const context = canvas.getContext("2d")
+	if (!context) throw new Error("No 2D canvas to paint on")
+	for (const colour of colours) {
+		context.fillStyle = colour
+		context.fillRect(0, 0, 1, 1)
+	}
+	return Array.from(context.getImageData(0, 0, 1, 1).data.slice(0, 3))
+}
+
+const widestChannelGap = (first: number[], second: number[]) =>
+	Math.max(...first.map((channel, index) => Math.abs(channel - second[index])))
+
+const STUCK_INSET = 18
+
+const BUBBLE_PADDING = 18
+
+const expectCleanCutStuckLine = async (
+	canvasElement: HTMLElement,
+	tone: string,
+) => {
+	const viewports = slotsIn(canvasElement, "message-scroller-viewport")
+	await expect(viewports).toHaveLength(2)
+	for (const viewport of viewports) {
+		await waitFor(() =>
+			expect(viewport.scrollHeight).toBeGreaterThan(viewport.clientHeight),
+		)
+		await waitFor(
+			() => {
+				viewport.scrollTop = 0
+				expect(lineOf(viewport, tone).dataset.stuck).toBe("true")
+			},
+			{ timeout: 3000 },
+		)
+		const line = lineOf(viewport, tone)
+		const content = line.closest<HTMLElement>(
+			'[data-slot="message-bubble-content"]',
+		)
+		const surface = content?.querySelector(":scope > span[aria-hidden='true']")
+		const screen = line.closest('[data-slot="chat-layout"]')
+		if (!content || !surface || !screen)
+			throw new Error("The stuck line sits outside a painted bubble")
+		const block = getComputedStyle(line, "::before")
+		const lineBox = line.getBoundingClientRect()
+		await expect(
+			Math.round(viewport.getBoundingClientRect().bottom - lineBox.bottom),
+		).toBe(STUCK_INSET)
+		await expect(block.bottom).toBe(`-${STUCK_INSET}px`)
+		await expect(Math.round(lineBox.width + 2 * BUBBLE_PADDING)).toBe(
+			Math.round(content.getBoundingClientRect().width),
+		)
+		await expect([
+			block.borderBottomLeftRadius,
+			block.borderBottomRightRadius,
+		]).toEqual(["0px", "0px"])
+		await expect(getComputedStyle(content).overflow).toBe("clip")
+		const bubble = paintedRgb(
+			getComputedStyle(screen).backgroundColor,
+			getComputedStyle(surface).backgroundColor,
+		)
+		await expect(
+			widestChannelGap(bubble, paintedRgb(block.backgroundColor)),
+		).toBeLessThanOrEqual(1)
+	}
+}
+
+export const UserAuthorLineStuckOnALongMessage = meta.story({
+	globals: { theme: "light" },
+	render: () => (
+		<ThemedPanels
+			rows={[
+				LISBON_DAY,
+				rowOf({
+					key: "brief",
+					from: "you",
+					text: LONG_OWN_MESSAGE,
+					time: at(14, 10),
+				}),
+			]}
+		/>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Your message taller than the transcript, read from its top, light then dark. Check your author line stays pinned 18 above the transcript's bottom edge, the way an agent's does, on a block in your bubble's colour that spans the bubble and runs square to the edge, so the message reads cut by the edge rather than closed.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) =>
+		expectCleanCutStuckLine(canvasElement, "you"),
+})
+
+export const AgentAuthorLineStuckOnALongAnswer = meta.story({
+	globals: { theme: "light" },
+	render: () => (
+		<ThemedPanels
+			rows={[
+				LISBON_DAY,
+				LISBON_QUESTION,
+				rowOf({
+					key: "answer",
+					from: "agent",
+					author: ATLAS,
+					text: OFFSITE_ANSWER,
+					time: at(14, 12),
+				}),
+			]}
+		/>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"An answer taller than the transcript, read from its top, light then dark. Check the author line stays pinned 18 above the transcript's bottom edge on a block in the bubble's own grey, square at the foot and running to the edge, and that the answer scrolling under it is cut at the bubble's sides.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) =>
+		expectCleanCutStuckLine(canvasElement, "agent"),
+})
 
 export const ComponentsAuthorLineAndWorkLine = meta.story({
 	render: () => (

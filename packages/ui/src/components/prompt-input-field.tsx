@@ -14,10 +14,10 @@ import {
 } from "@workspace/ui/components/prompt-input-layout"
 import { cn } from "@workspace/ui/lib/utils"
 
-const NOTICE = "px-2 py-1 text-muted-foreground text-reading leading-6"
+const NOTICE = "px-2 py-1 text-muted-foreground text-sm leading-6"
 
 const MIRROR =
-	"pointer-events-none invisible absolute top-0 left-0 px-2 text-reading leading-6"
+	"pointer-events-none invisible absolute top-0 left-0 px-2 text-sm leading-6"
 
 type PromptFieldProps = {
 	value: string
@@ -103,7 +103,7 @@ const PromptField = ({
 						onChange={(event) => onValueChange(event.target.value)}
 						onKeyDown={handleKeyDown}
 						onPaste={onPaste}
-						className="block w-full resize-none overflow-y-auto bg-transparent px-2 py-1 text-foreground text-reading leading-6 outline-none placeholder:text-faint-foreground disabled:cursor-not-allowed [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-foreground/22 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar]:w-1"
+						className="block w-full resize-none overflow-y-auto bg-transparent px-2 py-1 text-foreground text-sm leading-6 outline-none placeholder:text-faint-foreground disabled:cursor-not-allowed [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-foreground/22 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar]:w-1"
 					/>
 				</>
 			)}
