@@ -1610,6 +1610,9 @@ const expectJumpDockedAtTheBarEnd = async (canvasElement: HTMLElement) => {
 		const jumpBox = jump.getBoundingClientRect()
 		await expect(jump).toHaveAccessibleName("Jump to latest")
 		await expect(jump).toBeVisible()
+		await expect(jump.closest("[aria-live]")?.getAttribute("aria-live")).toBe(
+			"off",
+		)
 		await expect(Math.round(jumpBox.height)).toBe(28)
 		await expect(
 			Math.round(content.getBoundingClientRect().right - jumpBox.right),
@@ -1641,6 +1644,7 @@ const expectDockedJumpReturnsToTheEnd = async (canvasElement: HTMLElement) => {
 		},
 		{ timeout: 3000 },
 	)
+	await expect(document.activeElement).toBe(viewport)
 }
 
 type PinnedSamplesProps = {
@@ -1744,6 +1748,7 @@ export const AgentAuthorLineInPlaceAtTheNarrowestWidth = meta.story({
 })
 
 export const AgentAuthorLinePinned = meta.story({
+	tags: ["test-only"],
 	globals: { theme: "light" },
 	render: () => <PinnedSamples width={PINNED_BUBBLE_WIDTH} />,
 	parameters: {
@@ -1758,6 +1763,7 @@ export const AgentAuthorLinePinned = meta.story({
 })
 
 export const AgentAuthorLinePinnedAtTheNarrowestWidth = meta.story({
+	tags: ["test-only"],
 	globals: { theme: "light" },
 	render: () => <PinnedSamples width={NARROWEST_PINNED_BUBBLE_WIDTH} />,
 	parameters: {
@@ -1778,7 +1784,7 @@ export const AgentAuthorLinePinnedWithJumpToLatestDocked = meta.story({
 		docs: {
 			description: {
 				story:
-					"A long answer read from its top, light then dark. Check Jump to latest leaves the thread floor and docks in the pinned bar, after the time and 12 from the bar end, as a 28 high outlined pill with no shadow, that the keyboard reaches it with a visible ring, and that pressing it returns to the end, where it shows in neither position.",
+					"A long answer read from its top, light then dark. Check Jump to latest leaves the thread floor and docks in the pinned bar, after the time and 12 from the bar end, as a 28 high outlined pill with no shadow, that the keyboard reaches it with a visible ring, that the transcript's live log never announces it, and that pressing it returns to the end, where it shows in neither position and focus rests on the transcript.",
 			},
 		},
 	},

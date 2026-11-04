@@ -14,6 +14,7 @@ import { hueStyle } from "@workspace/ui/components/hue-palette"
 import { Icons } from "@workspace/ui/components/icons"
 import {
 	JumpToLatest,
+	TRANSCRIPT_VIEWPORT,
 	useDockedJump,
 } from "@workspace/ui/components/transcript-jump"
 import { Button } from "@workspace/ui/components/ui/button"
@@ -64,8 +65,6 @@ const STUCK_INSET = 16
 
 const AUTHOR_LINE_STICKY =
 	"sticky bottom-4 z-10 self-stretch before:pointer-events-none before:absolute before:-inset-x-3 before:-inset-y-4 before:-z-10 before:hidden before:border-shell-border before:border-t before:bg-card before:bg-[image:linear-gradient(var(--bubble-surface,var(--bubble)),var(--bubble-surface,var(--bubble)))] data-[stuck=true]:-mx-1.5 data-[stuck=true]:max-w-none data-[stuck=true]:before:block"
-
-const TRANSCRIPT_VIEWPORT = '[data-slot="message-scroller-viewport"]'
 
 const useStuckToBottom = (isSticky: boolean) => {
 	const markerRef = useRef<HTMLSpanElement>(null)
@@ -267,11 +266,14 @@ const AuthorLine = ({
 				{end === "stopped" ? <AuthorLineStopped /> : null}
 				{end === "failed" ? <AuthorLineFailed onRetry={onRetry} /> : null}
 				{isEndSide ? null : actionRow}
-				{dockedJump && !isEndSide ? (
-					<span aria-hidden="true" className="min-w-3 flex-1" />
-				) : null}
 				{dockedJump ? (
-					<JumpToLatest jump={dockedJump} placement="docked" />
+					<span
+						aria-live="off"
+						data-slot="author-line-docked-jump"
+						className={cn("flex", !isEndSide && "flex-1 justify-end ps-5")}
+					>
+						<JumpToLatest jump={dockedJump} placement="docked" />
+					</span>
 				) : null}
 			</div>
 			{isSticky ? (

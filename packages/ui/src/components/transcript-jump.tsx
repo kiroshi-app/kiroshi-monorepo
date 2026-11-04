@@ -43,6 +43,13 @@ const JUMP_PLACEMENT = {
 		"static translate-x-0 bg-transparent has-data-[icon=inline-start]:pl-2.5 data-[active=false]:hidden",
 } as const satisfies Record<JumpToLatestPlacement, string>
 
+const TRANSCRIPT_VIEWPORT = '[data-slot="message-scroller-viewport"]'
+
+const focusTranscriptOf = (button: HTMLElement) =>
+	button
+		.closest<HTMLElement>(TRANSCRIPT_VIEWPORT)
+		?.focus({ preventScroll: true })
+
 const TranscriptJumpContext = createContext<TranscriptJump | null>(null)
 
 const TranscriptJumpProvider = ({
@@ -84,7 +91,14 @@ const JumpToLatest = ({ jump, placement }: JumpToLatestProps) => {
 			behavior={jump.behavior}
 			className={cn(JUMP_PILL, JUMP_PLACEMENT[placement])}
 			data-placement={placement}
-			onClick={jump.onClick}
+			onClick={
+				placement === "docked"
+					? (event) => {
+							jump.onClick?.(event)
+							focusTranscriptOf(event.currentTarget)
+						}
+					: jump.onClick
+			}
 			size="sm"
 			variant="secondary"
 		>
@@ -98,6 +112,7 @@ const JumpToLatest = ({ jump, placement }: JumpToLatestProps) => {
 
 export {
 	JumpToLatest,
+	TRANSCRIPT_VIEWPORT,
 	type TranscriptJump,
 	TranscriptJumpProvider,
 	useDockedJump,
