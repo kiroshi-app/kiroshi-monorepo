@@ -102,37 +102,30 @@ const FailureLine = ({ id, failure }: FailureLineProps) => {
 	)
 }
 
-type DocumentCardProps = {
+type DocumentCardShellProps = {
 	title: string
-	detail: string
-	excerpt: string
 	writer?: DocumentCardWriter
 	isSelected?: boolean
-	failure?: DocumentCardFailure
-	onOpen: () => void
+	detail?: ReactNode
+	describedBy?: string
 	children: ReactNode
 }
 
-const DocumentCard = ({
+const DocumentCardShell = ({
 	title,
-	detail,
-	excerpt,
 	writer,
 	isSelected = false,
-	failure,
-	onOpen,
+	detail,
+	describedBy,
 	children,
-}: DocumentCardProps) => {
+}: DocumentCardShellProps) => {
 	const { t } = useTranslation("common")
-	const [isOpen, setOpen] = useState(false)
 	const titleId = useId()
-	const bodyId = useId()
-	const failureId = useId()
 	const shownTitle = libraryDisplayName(title, t)
 
 	return (
 		<article
-			aria-describedby={failure ? failureId : undefined}
+			aria-describedby={describedBy}
 			aria-labelledby={titleId}
 			className={cn(
 				"flex min-w-0 flex-col gap-3 rounded-control border border-border bg-card p-4",
@@ -151,68 +144,134 @@ const DocumentCard = ({
 					>
 						{shownTitle}
 					</h3>
-					{failure ? null : (
+					{detail ? (
 						<span className="truncate text-muted-foreground text-xs leading-4 tabular-nums">
-							{isOpen ? t("library.card.live") : detail}
+							{detail}
 						</span>
-					)}
+					) : null}
 				</span>
 				{writer ? <WriterChip writer={writer} /> : null}
 			</header>
-			{failure ? (
-				<FailureLine failure={failure} id={failureId} />
-			) : (
-				<>
-					<div
-						className={cn(
-							isOpen && "flex flex-col gap-3 border-foreground/7 border-t py-3",
-						)}
-						data-slot="document-card-body"
-						id={bodyId}
-					>
-						{isOpen ? (
-							children
-						) : (
-							<p className="line-clamp-3 break-words text-soft-foreground text-sm leading-5.5">
-								{excerpt}
-							</p>
-						)}
-					</div>
-					<div className="flex flex-wrap items-center gap-2">
-						<Button
-							aria-controls={bodyId}
-							aria-expanded={isOpen}
-							className={cn(
-								CARD_PILL,
-								"bg-foreground/6 ps-2 pe-3 hover:bg-foreground/10 active:bg-foreground/14 aria-expanded:bg-foreground/6 aria-expanded:hover:bg-foreground/10 dark:hover:bg-foreground/10",
-							)}
-							onClick={() => setOpen(!isOpen)}
-							variant="ghost"
-						>
-							{isOpen ? (
-								<Icons.Collapse aria-hidden="true" />
-							) : (
-								<Icons.Expand aria-hidden="true" />
-							)}
-							{isOpen ? t("library.card.hide") : t("library.card.show")}
-						</Button>
-						<Button
-							className={cn(
-								CARD_PILL,
-								"border-border px-3 hover:bg-foreground/4 active:bg-foreground/8 dark:hover:bg-foreground/4",
-							)}
-							onClick={onOpen}
-							variant="ghost"
-						>
-							{t("library.card.open")}
-							<Icons.ArrowUpRight aria-hidden="true" />
-						</Button>
-					</div>
-				</>
-			)}
+			{children}
 		</article>
 	)
 }
+
+type DocumentCardHeadProps = {
+	title: string
+	writer?: DocumentCardWriter
+	isSelected?: boolean
+}
+
+type LiveDocumentCardProps = DocumentCardHeadProps & {
+	detail: string
+	excerpt: string
+	onOpen: () => void
+	children: ReactNode
+	failure?: never
+}
+
+type FailedDocumentCardProps = DocumentCardHeadProps & {
+	failure: DocumentCardFailure
+	detail?: never
+	excerpt?: never
+	onOpen?: never
+	children?: never
+}
+
+type DocumentCardProps = LiveDocumentCardProps | FailedDocumentCardProps
+
+const LiveDocumentCard = ({
+	detail,
+	excerpt,
+	onOpen,
+	children,
+	...head
+}: LiveDocumentCardProps) => {
+	const { t } = useTranslation("common")
+	const [isOpen, setOpen] = useState(false)
+	const bodyId = useId()
+
+	return (
+		<DocumentCardShell
+			{...head}
+			detail={isOpen ? t("library.card.live") : detail}
+		>
+			<div
+				className={cn(
+					isOpen && "flex flex-col gap-3 border-foreground/7 border-t py-3",
+				)}
+				data-slot="document-card-body"
+				id={bodyId}
+			>
+				{isOpen ? (
+					children
+				) : (
+					<p className="line-clamp-3 break-words text-soft-foreground text-sm leading-5.5">
+						{excerpt}
+					</p>
+				)}
+			</div>
+			<div className="flex flex-wrap items-center gap-2">
+				<Button
+					aria-controls={bodyId}
+					aria-expanded={isOpen}
+					className={cn(
+						CARD_PILL,
+						"bg-foreground/6 ps-2 pe-3 hover:bg-foreground/10 active:bg-foreground/14 aria-expanded:bg-foreground/6 aria-expanded:hover:bg-foreground/10 dark:hover:bg-foreground/10",
+					)}
+					onClick={() => setOpen(!isOpen)}
+					variant="ghost"
+				>
+					{isOpen ? (
+						<Icons.Collapse aria-hidden="true" />
+					) : (
+						<Icons.Expand aria-hidden="true" />
+					)}
+					{isOpen ? t("library.card.hide") : t("library.card.show")}
+				</Button>
+				<Button
+					className={cn(
+						CARD_PILL,
+						"border-border px-3 hover:bg-foreground/4 active:bg-foreground/8 dark:hover:bg-foreground/4",
+					)}
+					onClick={onOpen}
+					variant="ghost"
+				>
+					{t("library.card.open")}
+					<Icons.ArrowUpRight aria-hidden="true" />
+				</Button>
+			</div>
+		</DocumentCardShell>
+	)
+}
+
+const FailedDocumentCard = ({
+	title,
+	writer,
+	isSelected,
+	failure,
+}: FailedDocumentCardProps) => {
+	const failureId = useId()
+
+	return (
+		<DocumentCardShell
+			describedBy={failureId}
+			isSelected={isSelected}
+			title={title}
+			writer={writer}
+		>
+			<FailureLine failure={failure} id={failureId} />
+		</DocumentCardShell>
+	)
+}
+
+const DocumentCard = (props: DocumentCardProps) =>
+	props.failure ? (
+		<FailedDocumentCard {...props} />
+	) : (
+		<LiveDocumentCard {...props} />
+	)
 
 export {
 	DocumentCard,

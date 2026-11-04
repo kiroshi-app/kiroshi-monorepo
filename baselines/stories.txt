@@ -415,6 +415,7 @@ conversation-message-turn--menu
 conversation-message-turn--not-sent
 conversation-message-turn--not-sent-with-document
 conversation-message-turn--person-turn-with-document
+conversation-message-turn--person-turn-with-failed-document
 conversation-message-turn--queued
 conversation-message-turn--quoted
 conversation-message-turn--replies-to-two

@@ -180,7 +180,7 @@ interface PeopleTurnFooterProps {
 }
 
 const PeopleTurnFooter = ({ children }: PeopleTurnFooterProps) => (
-	<div data-slot="turn-footer" className={PEOPLE_BUBBLE_WIDTH}>
+	<div data-slot="turn-footer" className={cn("w-full", PEOPLE_BUBBLE_WIDTH)}>
 		{children}
 	</div>
 )

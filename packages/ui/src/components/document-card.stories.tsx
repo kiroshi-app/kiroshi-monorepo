@@ -109,13 +109,17 @@ export const UnfoldedLive = meta.story({
 })
 
 export const LongContent = meta.story({
-	args: {
-		title: LONG_TITLE,
-		writer: { kind: "person", name: "Ada Martin" },
-	},
-	render: (args) => (
+	render: () => (
 		<div className="w-80 bg-background p-4" {...hueScopeOf("blue")}>
-			<DocumentCard {...args} />
+			<DocumentCard
+				detail={DOCUMENT_CARD_DETAIL}
+				excerpt={DOCUMENT_CARD_EXCERPT}
+				onOpen={fn()}
+				title={LONG_TITLE}
+				writer={{ kind: "person", name: "Ada Martin" }}
+			>
+				<LibraryDocumentBody body={DOCUMENT_CARD_BODY} />
+			</DocumentCard>
 		</div>
 	),
 	parameters: {
@@ -158,7 +162,11 @@ const expectFailedCards = async (canvasElement: HTMLElement, line: string) => {
 }
 
 export const FailedDeleted = meta.story({
-	args: { failure: "deleted" },
+	render: () => (
+		<div className="w-140 bg-background p-6" {...hueScopeOf("blue")}>
+			<DocumentCard failure="deleted" title={DOCUMENT_CARD_TITLE} />
+		</div>
+	),
 	globals: { theme_layout: "side-by-side" },
 	parameters: {
 		docs: {
@@ -177,7 +185,11 @@ export const FailedDeleted = meta.story({
 })
 
 export const FailedUnreadable = meta.story({
-	args: { failure: "unreadable" },
+	render: () => (
+		<div className="w-140 bg-background p-6" {...hueScopeOf("blue")}>
+			<DocumentCard failure="unreadable" title={DOCUMENT_CARD_TITLE} />
+		</div>
+	),
 	globals: { theme_layout: "side-by-side" },
 	parameters: {
 		docs: {

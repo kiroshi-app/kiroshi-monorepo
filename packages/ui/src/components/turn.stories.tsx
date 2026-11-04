@@ -1176,3 +1176,44 @@ export const PersonTurnWithDocument = meta.story({
 		for (const footer of footers) await expectFooterUnderItsBubble(footer)
 	},
 })
+
+export const PersonTurnWithFailedDocument = meta.story({
+	tags: ["test-only"],
+	render: () => (
+		<div className="mx-auto flex max-w-170 flex-col gap-3">
+			<PersonTurn
+				name="Tom"
+				copyText={SHARED_DOCUMENT}
+				footer={<DocumentFooter />}
+			>
+				{SHARED_DOCUMENT}
+			</PersonTurn>
+			<PersonTurn
+				name="Tom"
+				copyText={SHARED_DOCUMENT}
+				footer={<DocumentCard failure="deleted" title={DOCUMENT_CARD_TITLE} />}
+			>
+				{SHARED_DOCUMENT}
+			</PersonTurn>
+		</div>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A live and a failed document under two messages of Tom. Check that the failed card, a title and one line, spans the same width as the live one instead of shrinking to its words.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const [live, failed] = slotsIn(canvasElement, "document-card")
+		if (!live || !failed) throw new globalThis.Error("Two cards expected")
+
+		await expect(failed.getBoundingClientRect().width).toBe(
+			live.getBoundingClientRect().width,
+		)
+		await expectFooterUnderItsBubble(
+			failed.closest<HTMLElement>("[data-slot='turn-footer']") ?? failed,
+		)
+	},
+})
