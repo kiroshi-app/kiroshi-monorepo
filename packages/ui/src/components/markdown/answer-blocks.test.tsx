@@ -690,6 +690,7 @@ describe("fields of the Final page artboards", () => {
 describe("rich answer blocks written in GFM", () => {
 	it.each([
 		["NOTE", "note"],
+		["TIP", "tip"],
 		["WARNING", "warning"],
 	])(
 		"draws a [!%s] quote as a %s callout without its marker",
@@ -738,7 +739,7 @@ describe("rich answer blocks written in GFM", () => {
 	})
 
 	it.each([
-		["another alert kind", "> [!TIP]\n> Try it."],
+		["another alert kind", "> [!CAUTION]\n> Try it."],
 		["a marker with no text", "> [!NOTE]"],
 		["a marker sharing its line", "> [!NOTE] The export keeps."],
 	])("keeps %s as a plain quote", (_, source) => {

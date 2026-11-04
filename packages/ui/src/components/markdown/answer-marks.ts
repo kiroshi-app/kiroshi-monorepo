@@ -23,9 +23,13 @@ export const PENDING_PROPERTY = "dataPending"
 export const SOURCED_IMAGE_PROPERTY = "dataSourcedImage"
 export const LINKED_IMAGE_PROPERTY = "dataLinkedImage"
 
-const CALLOUT_MARKER_LINE = /^\[!(NOTE|WARNING)\](?:[ \t]+([^\n]*))?(\n|$)/
+const CALLOUT_MARKER_LINE = /^\[!(NOTE|TIP|WARNING)\](?:[ \t]+([^\n]*))?(\n|$)/
 
-const CALLOUT_TONES = { NOTE: "note", WARNING: "warning" } as const
+const CALLOUT_TONES = {
+	NOTE: "note",
+	TIP: "tip",
+	WARNING: "warning",
+} as const
 
 const SOURCE_LEAD = "Source: "
 
