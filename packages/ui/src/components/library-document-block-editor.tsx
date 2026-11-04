@@ -1363,15 +1363,12 @@ const LibraryDocumentBlockEditor = ({
 										resolveImage={resolveImage}
 										renderRun={({ isEnd }) =>
 											isEnd ? (
-												<>
-													<span
-														aria-hidden="true"
-														className={PLACEHOLDER_LOOK}
-														data-placeholder={placeholder}
-														data-slot="library-document-placeholder"
-													/>
-													<span className="sr-only">{placeholder}</span>
-												</>
+												<span
+													aria-hidden="true"
+													className={PLACEHOLDER_LOOK}
+													data-placeholder={placeholder}
+													data-slot="library-document-placeholder"
+												/>
 											) : null
 										}
 										runs={[

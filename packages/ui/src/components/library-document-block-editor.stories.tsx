@@ -1059,9 +1059,9 @@ export const EmptiedBlocksKeepTheirType = meta.story({
 	play: async ({ args, canvasElement }) => {
 		let body = EMPTIED_DOCUMENT
 		for (const [text, type, tag, emptied] of [
-			["Risks", "heading", "h2", "## "],
 			["Venue", "list", "li", "- "],
 			["Quoted", "quote", "blockquote", "> "],
+			["Risks", "heading", "h2", "## "],
 		]) {
 			const field = await focusTextBlock(canvasElement, type)
 			selectShown(field, text)
