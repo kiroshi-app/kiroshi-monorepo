@@ -170,17 +170,13 @@ const LibraryItemUnavailable = ({
 			className="flex size-full min-h-0 items-center justify-center p-6"
 			data-slot="library-item-unavailable"
 		>
-			<div className="sr-only" role="status">
-				<p>{line}</p>
-				<p>{reasonLine}</p>
-			</div>
 			<div
 				aria-describedby={reasonId}
 				aria-labelledby={lineId}
 				className={cn(FAILURE_CARD, "w-full max-w-sm rounded-control")}
 				role="group"
 			>
-				<div className="flex min-w-0 flex-col gap-1">
+				<div className="flex min-w-0 flex-col gap-1" role="alert">
 					<p className={FAILURE_LINE}>
 						<Icons.Error
 							aria-hidden="true"

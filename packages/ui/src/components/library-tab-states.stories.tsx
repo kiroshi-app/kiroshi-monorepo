@@ -64,7 +64,24 @@ const expectDocumentLoading = async (canvasElement: HTMLElement) => {
 }
 
 const MISSING_ITEM_STORY =
-	"A tab whose item is no longer in the Library list, deleted or moved since it was opened. Check the title without the item name, the reason, the centred card, the polite announcement of both without focus moving, and that Close tab takes a focus ring from the keyboard and calls `onAction`. Pick UnreadableItem when the file is there but can't be read."
+	"A tab whose item is no longer in the Library list, deleted or moved since it was opened. Check the title without the item name, the reason, the centred card, one alert announcing both as the card appears, each read once in browse mode, focus staying put, and that Close tab takes a focus ring from the keyboard and calls `onAction`. Pick UnreadableItem when the file is there but can't be read."
+
+const exposedCount = (canvasElement: HTMLElement, text: string) =>
+	within(canvasElement)
+		.queryAllByText(text)
+		.filter((node) => !node.closest('[aria-hidden="true"]')).length
+
+const expectAnnouncedOnce = async (
+	canvasElement: HTMLElement,
+	line: string,
+	reasonLine: string,
+) => {
+	const alert = within(canvasElement).getByRole("alert")
+	await expect(alert).toHaveTextContent(line)
+	await expect(alert).toHaveTextContent(reasonLine)
+	await expect(exposedCount(canvasElement, line)).toBe(1)
+	await expect(exposedCount(canvasElement, reasonLine)).toBe(1)
+}
 
 const MISSING_TITLE = "This item isn’t in the Library anymore."
 
@@ -79,9 +96,7 @@ const expectMissingItem = async (
 	await expect(state).toHaveAccessibleDescription(MISSING_BODY)
 	await expect(state).not.toHaveTextContent("Spring launch brief")
 
-	const announcement = canvas.getByRole("status")
-	await expect(announcement).toHaveTextContent(MISSING_TITLE)
-	await expect(announcement).toHaveTextContent(MISSING_BODY)
+	await expectAnnouncedOnce(canvasElement, MISSING_TITLE, MISSING_BODY)
 	await expect(state).not.toContainElement(
 		document.activeElement as HTMLElement,
 	)
@@ -103,6 +118,36 @@ const expectMissingItem = async (
 	await expect(close).toHaveFocus()
 	await expect(getComputedStyle(close).outlineStyle).toBe("solid")
 	await userEvent.keyboard("{Enter}")
+	await expect(onAction).toHaveBeenCalledOnce()
+}
+
+const UNREADABLE_ITEM_STORY =
+	"A tab whose file is still in the Library but can't be read, under a name far longer than the card. Check that the name stays on one line, cut with an ellipsis, with the full line in its tooltip and accessible name, that one alert announces the line and the reason, each read once in browse mode, and that the reason says how to retry. Pick MissingItem when the item is gone."
+
+const UNREADABLE_LINE = `Couldn’t open ${LONG_NAME}`
+
+const UNREADABLE_BODY =
+	"Couldn’t read this item on the computer where Kiroshi runs. Go back to the Library and open it again."
+
+const expectUnreadableItem = async (
+	canvasElement: HTMLElement,
+	onAction: () => void,
+) => {
+	const canvas = within(canvasElement)
+	const state = canvas.getByRole("group", { name: UNREADABLE_LINE })
+	await expect(state).toHaveAccessibleDescription(UNREADABLE_BODY)
+	await expectAnnouncedOnce(canvasElement, UNREADABLE_LINE, UNREADABLE_BODY)
+	await expectFillsFrameHeight(
+		slotIn(canvasElement, "library-item-unavailable"),
+	)
+
+	const shownLine = canvas.getByTitle(UNREADABLE_LINE)
+	await expect(shownLine.scrollWidth).toBeGreaterThan(shownLine.clientWidth)
+	await expect(shownLine.getClientRects()).toHaveLength(1)
+
+	await userEvent.click(
+		canvas.getByRole("button", { name: "Back to the Library" }),
+	)
 	await expect(onAction).toHaveBeenCalledOnce()
 }
 
@@ -222,28 +267,29 @@ export const UnreadableItem = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story:
-					"A tab whose file is still in the Library but can't be read, under a name far longer than the card. Check that the name stays on one line, cut with an ellipsis, with the full line in its tooltip and accessible name, and that the reason says how to retry. Pick MissingItem when the item is gone.",
+				story: `${UNREADABLE_ITEM_STORY} Pick \`UnreadableItemDark\` for the dark theme.`,
 			},
 		},
 	},
-	play: async ({ args, canvas, canvasElement, userEvent }) => {
-		const line = `Couldn’t open ${LONG_NAME}`
-		const state = canvas.getByRole("group", { name: line })
-		await expect(state).toHaveAccessibleDescription(
-			"Couldn’t read this item on the computer where Kiroshi runs. Go back to the Library and open it again.",
-		)
-		await expectFillsFrameHeight(
-			slotIn(canvasElement, "library-item-unavailable"),
-		)
+	play: ({ args, canvasElement }) =>
+		expectUnreadableItem(canvasElement, args.onAction),
+})
 
-		const shownLine = canvas.getByTitle(line)
-		await expect(shownLine.scrollWidth).toBeGreaterThan(shownLine.clientWidth)
-		await expect(shownLine.getClientRects()).toHaveLength(1)
-
-		await userEvent.click(
-			canvas.getByRole("button", { name: "Back to the Library" }),
-		)
-		await expect(args.onAction).toHaveBeenCalledOnce()
+export const UnreadableItemDark = meta.story({
+	args: { name: LONG_NAME, reason: "unreadable", onAction: fn() },
+	globals: { theme: "dark", theme_layout: "single" },
+	render: (args) => (
+		<LibraryFrame>
+			<LibraryItemUnavailable {...args} />
+		</LibraryFrame>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story: `${UNREADABLE_ITEM_STORY} Pick \`UnreadableItem\` for the light theme.`,
+			},
+		},
 	},
+	play: ({ args, canvasElement }) =>
+		expectUnreadableItem(canvasElement, args.onAction),
 })
