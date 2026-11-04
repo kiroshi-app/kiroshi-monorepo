@@ -20,6 +20,7 @@ import {
 	mergeA11y,
 	realPointer,
 	resolvedRootColor,
+	slotIn,
 	slotsIn,
 } from "@workspace/storybook/story-utils"
 import { ContentCard } from "@workspace/ui/components/content-card"
@@ -105,6 +106,25 @@ const galleryWith = (...items: string[]) =>
 		["```gallery", ...items, "```"].join("\n"),
 	].join("\n\n")
 
+const MORE_GALLERY_ITEMS = [
+	"lamp-brass",
+	"rug-wool",
+	"table-oak",
+	"shelf-pine",
+].map(
+	(name) =>
+		`- image: https://images.example.org/${name}.jpg\n  alt: ${name.replace("-", " ")}`,
+)
+
+const [LAMP, RUG, TABLE, SHELF] = MORE_GALLERY_ITEMS
+
+const SEVEN_IMAGES = galleryWith(
+	GALLERY_ITEMS.green,
+	GALLERY_ITEMS.grey,
+	GALLERY_ITEMS.rust,
+	...MORE_GALLERY_ITEMS,
+)
+
 const ADDED_IMAGES = [
 	{ src: "https://images.example.org/lamp-brass.jpg", alt: "Brass lamp" },
 ]
@@ -113,6 +133,12 @@ const TABLE_DOCUMENT = [
 	"Rooms held for the offsite:",
 	"| Room | Seats |\n| --- | --- |\n| Atlas | 12 |\n| Mira |  |",
 ].join("\n\n")
+
+const WIDE_TABLE_DOCUMENT = [
+	"| Room | Seats | Floor | Projector | Notes for the team |",
+	"| --- | --- | --- | --- | --- |",
+	"| Atlas | 12 | 3 | Epson | Book a week early |",
+].join("\n")
 
 const CODE_DOCUMENT = [
 	"Run this once the build is green:",
@@ -1150,6 +1176,14 @@ export const ChecklistItemMoved = meta.story({
 		await expect(
 			box.getBoundingClientRect().left - grip.getBoundingClientRect().left,
 		).toBe(26)
+		const handle = partOf(
+			checklist,
+			"library-block-handle",
+		).getBoundingClientRect()
+		for (const each of slotsIn(checklist, "library-checklist-grip"))
+			await expect(each.getBoundingClientRect().left).toBeGreaterThanOrEqual(
+				handle.right,
+			)
 		fireEvent.pointerDown(grip, { button: 0, ...centreOf(grip) })
 		const below = rows[2].getBoundingClientRect().bottom + 4
 		fireEvent.pointerMove(rows[2], { clientY: below })
@@ -1253,6 +1287,11 @@ const tableEditingStory = (theme: "light" | "dark") => ({
 			return block
 		})
 		await expect(partOf(editing, "library-table-column-grip")).toBeVisible()
+		const cell = getComputedStyle(slotsIn(editing, "library-table-cell")[2])
+		await expect([cell.paddingTop, cell.paddingInlineStart]).toEqual([
+			"10px",
+			"10px",
+		])
 		await expect(
 			within(editing).getByRole("textbox", { name: "Row 3, column 2" }),
 		).toHaveAttribute("placeholder", "Empty")
@@ -1460,3 +1499,115 @@ export const WebPageLinkFailed = meta.story({
 		await expect(args.onBodyChange).not.toHaveBeenCalled()
 	},
 })
+
+export const GalleryBeyondFive = meta.story({
+	globals: { theme: "light" },
+	args: { body: SEVEN_IMAGES },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A gallery of seven images being edited. The bubble shows five tiles and +2; while editing, the sixth image onward sits in tiles under the grid, inside the same ring. Check every image has its tile, remove button and caption field, the seventh moves to first place with the arrow keys, and the image left seventh can be captioned and removed.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		const gallery = await openBlock(canvasElement, "gallery")
+		await expect(slotsIn(gallery, "library-gallery-tile")).toHaveLength(7)
+		await expect(slotsIn(gallery, "library-gallery-remove")).toHaveLength(7)
+		await expect(slotsIn(gallery, "gallery-more")).toHaveLength(0)
+		const seventh = slotsIn(gallery, "library-gallery-tile")[6]
+		await expect(seventh).toHaveAccessibleName(
+			"Image 7 of 7, arrow keys move it",
+		)
+		seventh.focus()
+		for (let position = 6; position > 0; position -= 1) {
+			const tile = await waitFor(() => {
+				const focused = slotsIn(gallery, "library-gallery-tile")[position]
+				expect(focused).toHaveFocus()
+				return focused
+			})
+			fireEvent.keyDown(tile, { key: "ArrowLeft" })
+		}
+		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+			galleryWith(
+				SHELF,
+				GALLERY_ITEMS.green,
+				GALLERY_ITEMS.grey,
+				GALLERY_ITEMS.rust,
+				LAMP,
+				RUG,
+				TABLE,
+			),
+		)
+		fireEvent.change(
+			within(gallery).getByRole("textbox", { name: "Caption of image 7" }),
+			{ target: { value: "Oak table" } },
+		)
+		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+			galleryWith(
+				SHELF,
+				GALLERY_ITEMS.green,
+				GALLERY_ITEMS.grey,
+				GALLERY_ITEMS.rust,
+				LAMP,
+				RUG,
+				`${TABLE}\n  caption: Oak table`,
+			),
+		)
+		fireEvent.click(
+			within(gallery).getByRole("button", { name: "Remove image 7" }),
+		)
+		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+			galleryWith(
+				SHELF,
+				GALLERY_ITEMS.green,
+				GALLERY_ITEMS.grey,
+				GALLERY_ITEMS.rust,
+				LAMP,
+				RUG,
+			),
+		)
+	},
+})
+
+const narrowStory = (body: string, type: string) => ({
+	tags: ["test-only"],
+	args: { body },
+	parameters: {
+		docs: {
+			description: {
+				story: `The ${type} editor in a 320 wide window. Check neither the document column nor the page scrolls sideways.`,
+			},
+		},
+	},
+	render: (args: Parameters<typeof LibraryDocumentBlockEditor>[0]) => (
+		<DocumentFrame isNarrow>
+			<LibraryDocumentBlockEditor {...args} />
+		</DocumentFrame>
+	),
+	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+		await openBlock(canvasElement, type)
+		const frame = canvasElement.firstElementChild as HTMLElement
+		const column = slotIn(frame, "library-document-column")
+		frame.style.width = "320px"
+		try {
+			await waitFor(() =>
+				expect(column.scrollWidth).toBeLessThanOrEqual(column.clientWidth),
+			)
+			await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(
+				document.documentElement.clientWidth,
+			)
+		} finally {
+			frame.style.width = ""
+		}
+	},
+})
+
+export const GalleryEditingAt320 = meta.story(
+	narrowStory(SEVEN_IMAGES, "gallery"),
+)
+
+export const TableEditingAt320 = meta.story(
+	narrowStory(WIDE_TABLE_DOCUMENT, "table"),
+)

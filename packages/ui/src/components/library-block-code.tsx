@@ -98,7 +98,7 @@ const LanguagePicker = ({ chosen, onChoose }: LanguagePickerProps) => {
 				aria-label={t("library.editor.blocks.code.language", {
 					name: nameOf(chosen),
 				})}
-				className="flex h-6 items-center gap-1 rounded-[6px] bg-foreground/6 ps-2 pe-1.5 font-medium font-sans text-foreground text-xs leading-4 outline-offset-2 hover:bg-foreground/10 active:bg-foreground/14 aria-expanded:bg-foreground/10"
+				className="flex h-6 items-center gap-1 rounded-sm bg-foreground/6 p-1 font-medium font-sans text-foreground text-xs leading-4 outline-offset-2 hover:bg-foreground/10 active:bg-foreground/14 aria-expanded:bg-foreground/10"
 				data-slot="library-code-language"
 			>
 				{nameOf(chosen)}
@@ -110,7 +110,7 @@ const LanguagePicker = ({ chosen, onChoose }: LanguagePickerProps) => {
 				data-slot={BLOCK_POPUP}
 				sideOffset={2}
 			>
-				<label className="flex h-8 items-center gap-2 px-2 text-muted-foreground">
+				<label className="flex h-8 items-center gap-2 p-2 text-muted-foreground">
 					<Icons.Search aria-hidden="true" className="size-3.5 shrink-0" />
 					<input
 						aria-activedescendant={
@@ -141,7 +141,7 @@ const LanguagePicker = ({ chosen, onChoose }: LanguagePickerProps) => {
 					role="listbox"
 				>
 					{matches.length === 0 ? (
-						<p className="flex h-8 items-center px-2 text-compact text-muted-foreground leading-4">
+						<p className="flex h-8 items-center p-2 text-compact text-muted-foreground leading-4">
 							{t("library.editor.blocks.code.noMatch")}
 						</p>
 					) : (
@@ -149,7 +149,7 @@ const LanguagePicker = ({ chosen, onChoose }: LanguagePickerProps) => {
 							<div
 								aria-selected={language === chosen}
 								className={cn(
-									"flex h-8 shrink-0 cursor-default items-center justify-between gap-2 rounded-lg px-2 text-compact text-foreground leading-4",
+									"flex h-8 shrink-0 cursor-default items-center justify-between gap-2 rounded-lg p-2 text-compact text-foreground leading-4",
 									index === highlighted && "bg-foreground/5",
 								)}
 								data-highlighted={index === highlighted ? "" : undefined}

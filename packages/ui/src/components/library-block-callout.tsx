@@ -67,7 +67,7 @@ const LibraryCalloutEditor = ({
 					>
 						{TONES.map((each) => (
 							<ToggleGroupItem
-								className="h-6 min-w-0 rounded-full px-2.5 font-medium text-muted-foreground text-xs leading-4 transition-none hover:bg-transparent hover:text-foreground aria-pressed:bg-card aria-pressed:text-foreground aria-pressed:inset-ring aria-pressed:inset-ring-foreground/8"
+								className="h-6 min-w-0 rounded-full p-1 font-medium text-muted-foreground text-xs leading-4 transition-none hover:bg-transparent hover:text-foreground aria-pressed:bg-card aria-pressed:text-foreground aria-pressed:inset-ring aria-pressed:inset-ring-foreground/8"
 								key={each}
 								value={each}
 							>

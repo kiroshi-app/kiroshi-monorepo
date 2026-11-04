@@ -199,4 +199,4 @@ const Gallery = ({
 	)
 }
 
-export { Gallery, type GalleryProps }
+export { Gallery, type GalleryProps, TILE_COUNT }

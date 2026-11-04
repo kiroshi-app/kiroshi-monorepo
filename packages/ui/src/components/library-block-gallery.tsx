@@ -10,7 +10,10 @@ import {
 } from "react"
 import { useTranslation } from "react-i18next"
 
-import { Gallery } from "@workspace/ui/components/answer-blocks/gallery"
+import {
+	Gallery,
+	TILE_COUNT,
+} from "@workspace/ui/components/answer-blocks/gallery"
 import { Icons } from "@workspace/ui/components/icons"
 import {
 	type BlockRecord,
@@ -220,7 +223,7 @@ const LibraryGalleryEditor = ({
 				</button>
 				<input
 					aria-label={t("library.editor.blocks.gallery.caption", { position })}
-					className="absolute inset-x-2 bottom-2 min-w-0 rounded-[6px] bg-card/92 px-2 py-1.5 font-medium text-foreground text-xs leading-4 outline-offset-2 placeholder:text-placeholder-foreground"
+					className="absolute inset-x-2 bottom-2 min-w-0 rounded-sm bg-card/92 p-1.5 font-medium text-foreground text-xs leading-4 outline-offset-2 placeholder:text-placeholder-foreground"
 					data-slot="library-document-block-field"
 					onChange={(event) => caption(index, event.target.value)}
 					placeholder={t("library.editor.blocks.gallery.captionPlaceholder")}
@@ -242,7 +245,7 @@ const LibraryGalleryEditor = ({
 			<div className="flex min-h-7 flex-wrap items-center gap-x-3 gap-y-1">
 				{onAddImages ? (
 					<button
-						className="flex h-7 shrink-0 items-center gap-1 rounded-full bg-foreground/6 ps-2 pe-3 font-medium text-compact text-foreground leading-4 outline-offset-2 hover:bg-foreground/10 active:bg-foreground/14"
+						className="flex h-7 shrink-0 items-center gap-1 rounded-full bg-foreground/6 p-1.5 font-medium text-compact text-foreground leading-4 outline-offset-2 hover:bg-foreground/10 active:bg-foreground/14"
 						data-slot="library-gallery-add"
 						onClick={add}
 						type="button"
@@ -264,11 +267,40 @@ const LibraryGalleryEditor = ({
 						: t("library.editor.blocks.gallery.hint")}
 				</p>
 			</div>
-			<Gallery
-				className="rounded-[calc(var(--radius-control)+4px)] ring-2 ring-primary ring-offset-4 ring-offset-card"
-				images={shown.map(({ image, alt }) => ({ src: image, alt }))}
-				tileSlot={tileSlot}
-			/>
+			{count > 0 ? (
+				<div
+					className="flex flex-col gap-1.5 rounded-[calc(var(--radius-control)+4px)] ring-2 ring-primary ring-offset-4 ring-offset-card"
+					data-slot="library-gallery-grid"
+				>
+					<Gallery
+						images={shown
+							.slice(0, TILE_COUNT)
+							.map(({ image, alt }) => ({ src: image, alt }))}
+						tileSlot={tileSlot}
+					/>
+					{count > TILE_COUNT ? (
+						<div
+							className="grid grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))] gap-1.5"
+							data-slot="library-gallery-overflow"
+						>
+							{shown.slice(TILE_COUNT).map(({ image, alt }, at) => (
+								<span
+									className="relative h-28 min-w-0 overflow-hidden rounded-[4px]"
+									// biome-ignore lint/suspicious/noArrayIndexKey: a tile is the slot at its position, two images may share a src
+									key={at}
+								>
+									<img
+										alt={alt}
+										className="image-outline size-full object-cover"
+										src={image}
+									/>
+									{tileSlot(TILE_COUNT + at)}
+								</span>
+							))}
+						</div>
+					) : null}
+				</div>
+			) : null}
 			{drag && lifted ? (
 				<span
 					aria-hidden="true"

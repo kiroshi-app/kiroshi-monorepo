@@ -169,7 +169,7 @@ const LibraryChecklistEditor = ({
 	return (
 		<ul
 			className={cn(
-				"relative flex flex-col gap-1.5",
+				"relative flex flex-col gap-1.5 p-0 ms-[calc(30px_-_clamp(-6px,calc((100cqw_-_40rem)/2_-_6px),6px))]",
 				drop !== undefined && "select-none",
 			)}
 			data-slot="library-checklist-editor"
@@ -179,7 +179,7 @@ const LibraryChecklistEditor = ({
 				const position = index + 1
 				return (
 					<li
-						className="group/row relative mt-0! flex items-start gap-2.5 ps-0!"
+						className="group/row relative mt-0! flex items-start gap-2.5 p-0!"
 						data-slot={ROW_SLOT}
 						// biome-ignore lint/suspicious/noArrayIndexKey: a row is the line at its position, two rows may read the same
 						key={index}

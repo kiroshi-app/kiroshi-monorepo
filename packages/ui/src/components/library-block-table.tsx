@@ -1,8 +1,9 @@
 "use client"
 
 import {
-	type FocusEvent,
 	type KeyboardEvent,
+	useEffect,
+	useEffectEvent,
 	useLayoutEffect,
 	useRef,
 	useState,
@@ -102,16 +103,42 @@ const LibraryTableEditor = ({ source, onEdit }: LibraryTableEditorProps) => {
 			setCellFocus({ index: next })
 		}
 
-	const showGrip = (event: FocusEvent<HTMLElement>) => {
+	const placeGrip = () => {
+		const focused = document.activeElement?.closest(
+			`[data-slot="${CELL_SLOT}"]`,
+		)
 		const container = frame.current?.getBoundingClientRect()
-		const table = frame.current?.querySelector("table")?.getBoundingClientRect()
-		if (!container || !table) return
-		const cell = event.currentTarget.getBoundingClientRect()
-		setGrip({
-			left: cell.left - container.left + cell.width / 2,
-			top: table.top - container.top,
-		})
+		const viewport = frame.current
+			?.querySelector('[data-slot="markdown-table"] > [role="group"]')
+			?.getBoundingClientRect()
+		if (
+			!focused ||
+			!frame.current?.contains(focused) ||
+			!container ||
+			!viewport
+		) {
+			setGrip(undefined)
+			return
+		}
+		const cell = focused.getBoundingClientRect()
+		const centre = cell.left + cell.width / 2
+		const isShown = centre >= viewport.left && centre <= viewport.right
+		setGrip(
+			isShown
+				? { left: centre - container.left, top: viewport.top - container.top }
+				: undefined,
+		)
 	}
+
+	const followLayout = useEffectEvent(placeGrip)
+
+	useEffect(() => {
+		const editor = frame.current
+		if (!editor) return
+		const observer = new ResizeObserver(() => followLayout())
+		observer.observe(editor)
+		return () => observer.disconnect()
+	}, [])
 
 	const addRow = () => {
 		onEdit(editTable(withRow))
@@ -132,7 +159,7 @@ const LibraryTableEditor = ({ source, onEdit }: LibraryTableEditorProps) => {
 				data-slot={CELL_SLOT}
 				key={column}
 				onBlur={() => setGrip(undefined)}
-				onFocus={showGrip}
+				onFocus={placeGrip}
 			>
 				<GrowingField
 					aria-label={t("library.editor.blocks.table.cell", {
@@ -140,6 +167,7 @@ const LibraryTableEditor = ({ source, onEdit }: LibraryTableEditorProps) => {
 						column: column + 1,
 					})}
 					className="min-w-6"
+					cols={1}
 					data-slot="library-document-block-field"
 					fieldClassName="w-full placeholder:text-faint-foreground"
 					onChange={(event) => write(row, column, event.target.value)}
@@ -155,9 +183,13 @@ const LibraryTableEditor = ({ source, onEdit }: LibraryTableEditorProps) => {
 		<div
 			className="relative grid w-fit max-w-full grid-cols-[minmax(0,auto)_1.5rem] gap-x-3 gap-y-1 *:data-[slot=markdown-table]:mt-0"
 			data-slot="library-table-editor"
+			onScrollCapture={placeGrip}
 			ref={frame}
 		>
-			<MarkdownTable node={tableNodeOf(shown)}>
+			<MarkdownTable
+				className="[&_td]:p-2.5 [&_th]:p-2.5"
+				node={tableNodeOf(shown)}
+			>
 				<thead>
 					<tr>{shown[0].map(cellOf(0))}</tr>
 				</thead>
@@ -172,7 +204,7 @@ const LibraryTableEditor = ({ source, onEdit }: LibraryTableEditorProps) => {
 			</MarkdownTable>
 			<button
 				aria-label={t("library.editor.blocks.table.addColumn")}
-				className="mb-2 grid place-items-center rounded-[6px] bg-foreground/4 text-muted-foreground outline-offset-2 hover:bg-foreground/8 hover:text-foreground active:bg-foreground/12"
+				className="mb-2 grid place-items-center rounded-sm bg-foreground/4 text-muted-foreground outline-offset-2 hover:bg-foreground/8 hover:text-foreground active:bg-foreground/12"
 				data-slot="library-table-add-column"
 				onClick={addColumn}
 				type="button"
@@ -180,7 +212,7 @@ const LibraryTableEditor = ({ source, onEdit }: LibraryTableEditorProps) => {
 				<Icons.Add aria-hidden="true" className="size-3" />
 			</button>
 			<button
-				className="flex h-6 items-center justify-center gap-1 rounded-[6px] bg-foreground/4 font-medium text-muted-foreground text-xs leading-4 outline-offset-2 hover:bg-foreground/8 hover:text-foreground active:bg-foreground/12"
+				className="flex h-6 items-center justify-center gap-1 rounded-sm bg-foreground/4 font-medium text-muted-foreground text-xs leading-4 outline-offset-2 hover:bg-foreground/8 hover:text-foreground active:bg-foreground/12"
 				data-slot="library-table-add-row"
 				onClick={addRow}
 				type="button"

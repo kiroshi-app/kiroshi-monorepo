@@ -1468,7 +1468,9 @@ navigation-librarydocumentblockeditor--code-body-edited
 navigation-librarydocumentblockeditor--code-language-chosen
 navigation-librarydocumentblockeditor--drag-moves-block
 navigation-librarydocumentblockeditor--drag-with-drop-indicator
+navigation-librarydocumentblockeditor--gallery-beyond-five
 navigation-librarydocumentblockeditor--gallery-editing
+navigation-librarydocumentblockeditor--gallery-editing-at-320
 navigation-librarydocumentblockeditor--gallery-editing-dark
 navigation-librarydocumentblockeditor--gallery-remove-and-caption
 navigation-librarydocumentblockeditor--gallery-tile-dragged
@@ -1488,6 +1490,7 @@ navigation-librarydocumentblockeditor--slash-menu-filtered
 navigation-librarydocumentblockeditor--slash-menu-near-bottom
 navigation-librarydocumentblockeditor--slash-menu-near-bottom-dark
 navigation-librarydocumentblockeditor--table-editing
+navigation-librarydocumentblockeditor--table-editing-at-320
 navigation-librarydocumentblockeditor--table-editing-dark
 navigation-librarydocumentblockeditor--turn-into-rich-block-offers-itself
 navigation-librarydocumentblockeditor--web-page-link-failed
