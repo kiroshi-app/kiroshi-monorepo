@@ -1,20 +1,47 @@
 import { expect } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { MarkdownProse } from "@workspace/storybook/story-utils"
+import { slotIn } from "@workspace/storybook/story-utils"
+import { Markdown } from "@workspace/ui/components/markdown"
 import { MarkdownTaskCheckbox } from "@workspace/ui/components/markdown/task-list"
 
-interface Task {
-	label: string
-	isDone: boolean
+const TASKS = [
+	"- [x] Read the nest",
+	"- [x] Summarise the occupants",
+	"- [ ] Archive the record",
+	"- [ ] Notify the owner",
+].join("\n")
+
+const NESTED_TASKS = [
+	"- [x] Book the venue",
+	"  - [ ] Confirm the caterer",
+	"- [ ] Send the invites",
+	"  - [x] Draft the guest list",
+].join("\n")
+
+const BOX_SIZE = 16
+
+const LABEL_GAP = 10
+
+const labelElementOf = (box: HTMLElement) => {
+	const label = box.closest<HTMLElement>('[data-slot="markdown-task-label"]')
+	if (!label) throw new Error("The box sits in no task label")
+	return label
 }
 
-const TASKS: Task[] = [
-	{ label: "read the nest", isDone: true },
-	{ label: "summarise the occupants", isDone: true },
-	{ label: "archive the record", isDone: false },
-	{ label: "notify the owner", isDone: false },
-]
+const labelOf = (box: HTMLElement) => getComputedStyle(labelElementOf(box))
+
+const isStruckFromAnyAncestor = (element: HTMLElement) => {
+	for (
+		let current: HTMLElement | null = element;
+		current && current.dataset.slot !== "markdown";
+		current = current.parentElement
+	) {
+		if (getComputedStyle(current).textDecorationLine.includes("line-through"))
+			return true
+	}
+	return false
+}
 
 const meta = preview.meta({
 	title: "Conversation/Markdown/MarkdownTaskCheckbox",
@@ -23,12 +50,15 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The box GFM emits for a task list item. A transcript is a record, not a form: the box never changes under the reader, so it stays read-only whether or not the parser marked it disabled, and it names its own state — Done or To do — instead of borrowing the item text through a label. The item text stays a sibling, so a screen reader reads the state and the task as two separate things and the copied transcript keeps its own wording.",
+					"The box GFM emits for a task list item, drawn as the 16 box of the to-do artboard: radius 5, a 1.5 border at foreground 30 percent on the card surface, filled with the Space colour and a 12 check once ticked. A click ticks or unticks it in the message alone: nothing is written back to the message, so a reload shows the agent's state again. A ticked item strikes and mutes its own label alone, never the sub-tasks nested under it. The box names its own state, Done or To do, and the item text stays a sibling.",
 			},
 		},
 	},
-	args: { type: "checkbox", checked: true },
-	decorators: [(Story) => <MarkdownProse>{Story()}</MarkdownProse>],
+	render: () => (
+		<div className="w-[44rem] max-w-full">
+			<Markdown>{TASKS}</Markdown>
+		</div>
+	),
 })
 
 export const Default = meta.story({
@@ -36,45 +66,128 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"A checklist as an agent reports progress, both states in one list — the parser marks every box disabled. Check that the list marker is gone, that each box aligns with the first line of its label, and that the checked fill takes the primary token in both themes — flip the theme layout toolbar to side-by-side. Every box a checklist carries comes through `packages/ui/src/components/markdown/components.tsx:15`, which hands over the `disabled` the parser set.",
+					"A checklist as an agent reports progress, both states in one list. Check that the list marker is gone, that each box sits centred on the first line of its label, 10 before it, and that the ticked labels are struck and muted in both themes.",
 			},
 		},
 	},
-	render: () => (
-		<ul>
-			{TASKS.map(({ isDone, label }) => (
-				<li key={label} className="task-list-item">
-					<MarkdownTaskCheckbox type="checkbox" checked={isDone} disabled />
-					{label}
-				</li>
-			))}
-		</ul>
-	),
 	play: async ({ canvas }) => {
+		const done = canvas.getAllByRole("checkbox", { name: "Done" })
+		const [todo] = canvas.getAllByRole("checkbox", { name: "To do" })
+		if (!todo) throw new Error("No box left to do")
+
+		await expect(done).toHaveLength(2)
+		await expect(todo.getBoundingClientRect().width).toBe(BOX_SIZE)
+		await expect(todo).toBeEnabled()
+		const item = todo.closest("li")
+		if (!item) throw new Error("The box sits in no list item")
 		await expect(
-			canvas.getAllByRole("checkbox", { name: "Done" }),
-		).toHaveLength(2)
+			todo.getBoundingClientRect().top - item.getBoundingClientRect().top,
+		).toBeCloseTo(
+			(Number.parseFloat(labelOf(todo).lineHeight) - BOX_SIZE) / 2,
+			0,
+		)
+		for (const box of done) {
+			await expect(labelOf(box).textDecorationLine).toBe("line-through")
+		}
+		await expect(labelOf(todo).textDecorationLine).toBe("none")
+		const words = [...labelElementOf(todo).childNodes].find(
+			(child) => child.nodeType === Node.TEXT_NODE,
+		)
+		if (!words) throw new Error("The label holds no text")
+		const wordsRange = document.createRange()
+		wordsRange.selectNodeContents(words)
 		await expect(
-			canvas.getAllByRole("checkbox", { name: "To do" }),
-		).toHaveLength(2)
+			wordsRange.getBoundingClientRect().left -
+				todo.getBoundingClientRect().right,
+		).toBeCloseTo(LABEL_GAP, 0)
 	},
 })
 
-export const ReadOnly = meta.story({
+export const TicksAndUnticksByClick = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A reader ticks a box, then unticks it. Check that the box fills with the Space colour, that the label strikes and mutes, and that both come back on the second click.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const [box] = canvas.getAllByRole("checkbox", { name: "To do" })
+		if (!box) throw new Error("No box left to do")
+
+		await userEvent.click(box)
+		await expect(box).toBeChecked()
+		await expect(box).toHaveAccessibleName("Done")
+		await expect(labelOf(box).textDecorationLine).toBe("line-through")
+
+		await userEvent.click(box)
+		await expect(box).not.toBeChecked()
+		await expect(box).toHaveAccessibleName("To do")
+		await expect(labelOf(box).textDecorationLine).toBe("none")
+	},
+})
+
+export const TicksFromTheKeyboard = meta.story({
 	tags: ["test-only"],
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The edge the component exists for: a box the parser left enabled, so a reader can reach it and click it. `readonly` has no effect on a checkbox in HTML, so the guarantee comes from the controlled value — the click is taken and the state is restored. Check that the box does not toggle and that its accessible name still reads Done. No parser leaves the box enabled — `packages/ui/src/components/markdown/components.tsx:15` only ever passes what remark-gfm marked disabled — so this one is here to hold the guarantee, not to be read.",
+					"The first box reached with Tab and unticked with Space. Check that the browser focus ring shows around it.",
 			},
 		},
 	},
 	play: async ({ canvas, userEvent }) => {
-		const box = canvas.getByRole("checkbox", { name: "Done" })
+		const [box] = canvas.getAllByRole("checkbox", { name: "Done" })
 
-		await userEvent.click(box)
+		await userEvent.tab()
+		await expect(box).toHaveFocus()
+		await userEvent.keyboard(" ")
+		await expect(box).toHaveAccessibleName("To do")
+	},
+})
 
-		await expect(box).toBeChecked()
+export const NestedChecklist = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Sub-tasks under a ticked and an unticked parent. Check that Book the venue is struck and muted while Confirm the caterer under it stays in the foreground, and that Draft the guest list is struck and muted while Send the invites above it is not.",
+			},
+		},
+	},
+	render: () => (
+		<div className="w-[44rem] max-w-full">
+			<Markdown>{NESTED_TASKS}</Markdown>
+		</div>
+	),
+	play: async ({ canvas, canvasElement }) => {
+		const [bookVenue, draftList] = canvas.getAllByRole("checkbox", {
+			name: "Done",
+		})
+		const [confirmCaterer, sendInvites] = canvas.getAllByRole("checkbox", {
+			name: "To do",
+		})
+		if (!bookVenue || !draftList || !confirmCaterer || !sendInvites)
+			throw new Error("Four boxes expected")
+		const foreground = getComputedStyle(slotIn(canvasElement, "markdown")).color
+
+		await expect(labelElementOf(confirmCaterer)).toHaveTextContent(
+			"Confirm the caterer",
+		)
+		await expect(isStruckFromAnyAncestor(labelElementOf(confirmCaterer))).toBe(
+			false,
+		)
+		await expect(labelOf(confirmCaterer).color).toBe(foreground)
+		await expect(labelOf(bookVenue).textDecorationLine).toBe("line-through")
+		await expect(labelOf(bookVenue).color).not.toBe(foreground)
+
+		await expect(isStruckFromAnyAncestor(labelElementOf(sendInvites))).toBe(
+			false,
+		)
+		await expect(labelOf(sendInvites).color).toBe(foreground)
+		await expect(labelOf(draftList).textDecorationLine).toBe("line-through")
+		await expect(labelOf(draftList).color).not.toBe(foreground)
 	},
 })

@@ -14,10 +14,7 @@ import {
 } from "@workspace/ui/components/turn"
 import { probeRender } from "@workspace/ui/lib/render-probe"
 
-import {
-	ThreadDocumentCards,
-	ThreadDocumentsContext,
-} from "@/components/thread-documents"
+import { ThreadDocumentsContext } from "@/components/thread-documents"
 import { AnswerBody, TurnBody } from "@/components/turn-body"
 import { copySelection } from "@/lib/chat/copy-selection"
 import { messageWithAttachments } from "@/lib/chat/message-attachments"
@@ -107,17 +104,12 @@ export const ThreadTurn = memo(function ThreadTurn({
 				{body}
 			</MessageSelection>
 		)
-	const cards =
-		row.documents.length > 0 ? (
-			<ThreadDocumentCards names={row.documents} />
-		) : null
 	const content = selectable(<TurnBody attachments={attachments} text={text} />)
 
 	if (person !== undefined) {
 		return (
 			<PersonTurn
 				copyText={text}
-				footer={cards}
 				messageId={anchor}
 				name={person}
 				now={now}
@@ -138,7 +130,6 @@ export const ThreadTurn = memo(function ThreadTurn({
 		return (
 			<UserTurn
 				copyText={text}
-				footer={cards}
 				messageId={anchor}
 				name={readerName}
 				now={now}
@@ -157,24 +148,15 @@ export const ThreadTurn = memo(function ThreadTurn({
 		)
 	}
 
-	const isDocumentPost =
-		card === undefined && cards !== null && row.text.trim() === ""
-	const answer = isDocumentPost ? (
-		cards
-	) : (
-		<>
-			{selectable(
-				<AnswerBody
-					agentName={author?.name ?? row.authorName ?? botName ?? ""}
-					attachments={attachments}
-					isWriting={state === "streaming"}
-					text={text}
-				/>,
-			)}
-			{cards}
-		</>
+	const answer = selectable(
+		<AnswerBody
+			agentName={author?.name ?? row.authorName ?? botName ?? ""}
+			attachments={attachments}
+			isWriting={state === "streaming"}
+			text={text}
+		/>,
 	)
-	const isFramed = card !== undefined || isDocumentPost
+	const isFramed = card !== undefined
 
 	return (
 		<AssistantTurn
@@ -218,11 +200,6 @@ export const RefusedTurn = ({
 	<TurnGroup>
 		<UserTurn
 			copyText={message.text}
-			footer={
-				message.documents.length > 0 ? (
-					<ThreadDocumentCards names={message.documents} />
-				) : null
-			}
 			name={readerName}
 			onRetry={() => onSendAgain(message.id)}
 			repliedTo={repliedTo}

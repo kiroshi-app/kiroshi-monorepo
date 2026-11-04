@@ -13,6 +13,7 @@ import { cn } from "@workspace/ui/lib/utils"
 
 type SourcedImageSource = {
 	domain: string
+	url: string
 	favicon?: string
 }
 
@@ -25,6 +26,7 @@ type SourcedImageProps = {
 	onOpen?: () => void
 	imageMenu?: ImageMenuActions<AnswerImage>
 	isSaving?: boolean
+	isUnavailable?: boolean
 	className?: string
 }
 
@@ -39,6 +41,7 @@ const SourcedImage = ({
 	onOpen,
 	imageMenu,
 	isSaving = false,
+	isUnavailable = false,
 	className,
 }: SourcedImageProps) => {
 	const { t } = useTranslation("chat")
@@ -67,56 +70,88 @@ const SourcedImage = ({
 			data-slot="sourced-image"
 			className={cn("flex w-full min-w-0 flex-col gap-2", className)}
 		>
-			<div className="relative h-75 overflow-hidden rounded-xl">
-				<ImageMenu
-					{...imageMenu}
-					isSavingToLibrary={isSaving}
-					item={image}
-					name={name}
-					trigger={openable}
-				/>
-				{onSaveToLibrary ? (
-					<button
-						type="button"
-						aria-label={t(
-							isSaving
-								? "answerBlock.sourcedImage.saving"
-								: "answerBlock.sourcedImage.save",
-						)}
-						aria-disabled={isSaving || undefined}
-						aria-busy={isSaving || undefined}
-						className={cn(
-							"absolute end-3 top-3 grid size-8 place-items-center rounded-full bg-black/70 text-white outline-offset-2",
-							!isSaving && "hover:bg-black/80 active:bg-black/90",
-						)}
-						onClick={isSaving ? undefined : () => onSaveToLibrary(image)}
+			{isUnavailable ? (
+				<div
+					className="flex h-75 flex-col items-center justify-center gap-2.5 rounded-xl border border-border bg-muted p-4 text-center"
+					data-slot="sourced-image-unavailable"
+				>
+					<Icons.ImageOff
+						aria-hidden="true"
+						className="size-6 shrink-0 text-muted-foreground"
+					/>
+					<p className="text-sm leading-5 font-medium">
+						{t("answerBlock.sourcedImage.unavailable")}
+					</p>
+					<a
+						className="inline-flex items-center gap-1 text-compact leading-4.5 font-medium underline decoration-foreground/30 decoration-1 underline-offset-3 outline-offset-2"
+						href={source.url}
+						rel="noreferrer noopener"
+						target="_blank"
 					>
-						{isSaving ? (
-							<Icons.Loading
-								aria-hidden="true"
-								data-slot="sourced-image-saving"
-								className="size-3.5 animate-spin motion-reduce:animate-none"
-							/>
-						) : (
-							<Icons.Bookmark aria-hidden="true" className="size-3.5" />
-						)}
-					</button>
-				) : null}
-				<p className="absolute start-3 bottom-3 flex max-w-[calc(100%-1.5rem)] items-center gap-1.5 rounded-full bg-black/80 p-1.25 text-xs font-medium text-white">
-					{source.favicon ? (
-						<img
-							src={source.favicon}
-							alt=""
-							className="size-3.5 shrink-0 rounded-[4px]"
+						{t("answerBlock.sourcedImage.openOriginal")}
+						<Icons.ArrowUpRight
+							aria-hidden="true"
+							className="size-3 shrink-0"
 						/>
+					</a>
+				</div>
+			) : (
+				<div className="relative h-75 overflow-hidden rounded-xl">
+					<ImageMenu
+						{...imageMenu}
+						isSavingToLibrary={isSaving}
+						item={image}
+						name={name}
+						trigger={openable}
+					/>
+					{onSaveToLibrary ? (
+						<button
+							type="button"
+							aria-label={t(
+								isSaving
+									? "answerBlock.sourcedImage.saving"
+									: "answerBlock.sourcedImage.save",
+							)}
+							aria-disabled={isSaving || undefined}
+							aria-busy={isSaving || undefined}
+							className={cn(
+								"absolute end-3 top-3 grid size-8 place-items-center rounded-full bg-black/70 text-white outline-offset-2",
+								!isSaving && "hover:bg-black/80 active:bg-black/90",
+							)}
+							onClick={isSaving ? undefined : () => onSaveToLibrary(image)}
+						>
+							{isSaving ? (
+								<Icons.Loading
+									aria-hidden="true"
+									data-slot="sourced-image-saving"
+									className="size-3.5 animate-spin motion-reduce:animate-none"
+								/>
+							) : (
+								<Icons.Bookmark aria-hidden="true" className="size-3.5" />
+							)}
+						</button>
 					) : null}
-					<span className="min-w-0 truncate">{source.domain}</span>
-				</p>
-			</div>
+				</div>
+			)}
 			<figcaption className="flex flex-col gap-2">
-				<p className="text-[1.0625rem] leading-6 font-semibold wrap-anywhere">
-					{title}
-				</p>
+				<div className="flex flex-col gap-1">
+					<p
+						className="flex min-w-0 items-center gap-1.5 text-xs leading-4 font-medium text-muted-foreground"
+						data-slot="sourced-image-source"
+					>
+						{source.favicon ? (
+							<img
+								src={source.favicon}
+								alt=""
+								className="size-3.5 shrink-0 rounded-[4px]"
+							/>
+						) : null}
+						<span className="min-w-0 truncate">{source.domain}</span>
+					</p>
+					<p className="text-[1.0625rem] leading-6 font-semibold wrap-anywhere">
+						{title}
+					</p>
+				</div>
 				{hasChips ? (
 					<ul className="flex flex-wrap gap-1.5">
 						{status === undefined ? null : (

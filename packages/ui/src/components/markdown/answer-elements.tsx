@@ -140,6 +140,7 @@ export const MarkdownFigure = ({
 				onOpen={actions ? () => actions.onOpenImage([image], 0) : undefined}
 				source={{
 					domain: sourceName,
+					url: String(properties.dataSourceUrl),
 					favicon: optionalString(properties.dataFavicon),
 				}}
 				status={optionalString(properties.dataStatus)}

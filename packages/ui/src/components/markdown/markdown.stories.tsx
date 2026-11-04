@@ -778,7 +778,7 @@ export const TaskList = meta.story({
 		docs: {
 			description: {
 				story:
-					"A GFM checklist as an agent reports progress. The boxes are read-only by design — the transcript is a record, not a form — so they render disabled and keep their checked state for screen readers. Check that the list marker is gone and that the box aligns with the first line of its label. " +
+					"A GFM checklist as an agent reports progress. A reader can tick or untick a box for themselves, in the message alone: nothing is written back. Check that the list marker is gone, that the box sits on the first line of its label, and that a ticked label is struck and muted. " +
 					RENDERED_BY_TURN_BODY,
 			},
 		},
@@ -788,7 +788,7 @@ export const TaskList = meta.story({
 
 		await expect(boxes).toHaveLength(4)
 		await expect(boxes[0]).toBeChecked()
-		await expect(boxes[0]).toBeDisabled()
+		await expect(boxes[0]).toBeEnabled()
 	},
 })
 

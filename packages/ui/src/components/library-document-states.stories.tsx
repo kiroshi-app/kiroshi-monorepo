@@ -4,7 +4,7 @@ import { expect, fn, within } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import { hueScopeOf } from "@workspace/storybook/story-utils"
 import { ContentCard } from "@workspace/ui/components/content-card"
-import { DOCUMENT_CARD_BODY } from "@workspace/ui/components/document-card.fixtures"
+import { DOCUMENT_BODY } from "@workspace/ui/components/document-panel.fixtures"
 import {
 	LIBRARY_DRAG_PREVIEW,
 	LIBRARY_LIGHTBOX_IMAGES,
@@ -29,7 +29,7 @@ const BRIEF: LibraryDocument = {
 	id: "brief",
 	name: "Spring launch brief",
 	detail: "1,240 words · Edited today at 10:41",
-	body: DOCUMENT_CARD_BODY,
+	body: DOCUMENT_BODY,
 }
 
 const DROPPED_NAMES = [

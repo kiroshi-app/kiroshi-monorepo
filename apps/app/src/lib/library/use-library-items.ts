@@ -13,7 +13,7 @@ import { readLibraryDocument, readLibraryItems } from "./library-reads"
 
 import type { LibraryItem } from "../bindings"
 
-export const EXCERPT_LENGTH = 1_000
+const EXCERPT_LENGTH = 1_000
 
 const NO_ITEMS: LibraryItem[] = []
 

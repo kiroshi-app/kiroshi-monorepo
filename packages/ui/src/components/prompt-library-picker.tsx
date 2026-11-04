@@ -4,7 +4,7 @@ import { Combobox } from "@base-ui/react/combobox"
 import { type ChangeEvent, useId, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
-import { DocumentGlyph } from "@workspace/ui/components/document-card"
+import { DocumentGlyph } from "@workspace/ui/components/document-panel"
 import { Icons } from "@workspace/ui/components/icons"
 import { FOCUS_OUTLINE } from "@workspace/ui/components/library-document-agents"
 import { Button } from "@workspace/ui/components/ui/button"

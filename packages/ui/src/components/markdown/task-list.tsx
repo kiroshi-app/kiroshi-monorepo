@@ -1,4 +1,12 @@
-import { type ComponentPropsWithoutRef, createContext, useContext } from "react"
+import {
+	Children,
+	type ComponentPropsWithoutRef,
+	createContext,
+	isValidElement,
+	type ReactNode,
+	useContext,
+	useState,
+} from "react"
 import { useTranslation } from "react-i18next"
 import type { ExtraProps } from "react-markdown"
 
@@ -8,30 +16,85 @@ import { cn } from "@workspace/ui/lib/utils"
 export type MarkdownTaskCheckboxProps = ComponentPropsWithoutRef<"input"> &
 	ExtraProps
 
+export type MarkdownListItemProps = ComponentPropsWithoutRef<"li"> & ExtraProps
+
 type MarkdownTaskToggle = (box: HTMLInputElement) => void
 
 export const MarkdownTaskToggleContext =
 	createContext<MarkdownTaskToggle | null>(null)
 
+const TODO_BOX_CLASS =
+	"peer size-4 appearance-none rounded-[5px] border-[1.5px] border-foreground/30 bg-card outline-offset-2 checked:border-primary checked:bg-primary"
+
 export const MarkdownTaskCheckbox = ({
 	node,
+	checked = false,
 	...props
 }: MarkdownTaskCheckboxProps) => {
 	const { t } = useTranslation("chat")
 	const toggle = useContext(MarkdownTaskToggleContext)
-	const label = props.checked ? t("task.done") : t("task.todo")
+	const [isTickedHere, setTickedHere] = useState(checked)
+	const isTicked = toggle ? checked : isTickedHere
 
-	if (toggle)
-		return (
+	return (
+		<label
+			className="relative me-2.5 mt-[calc((1lh-1rem)/2)] inline-grid size-4 align-top before:absolute before:-inset-1"
+			data-slot="markdown-task-checkbox"
+		>
 			<input
 				{...props}
-				aria-label={label}
+				aria-label={isTicked ? t("task.done") : t("task.todo")}
+				checked={isTicked}
+				className={TODO_BOX_CLASS}
 				disabled={false}
-				onChange={(event) => toggle(event.currentTarget)}
+				onChange={(event) =>
+					toggle
+						? toggle(event.currentTarget)
+						: setTickedHere(event.currentTarget.checked)
+				}
 			/>
+			<Icons.Check
+				aria-hidden="true"
+				className="pointer-events-none absolute inset-0 m-auto size-3 text-primary-foreground opacity-0 peer-checked:opacity-100"
+			/>
+		</label>
+	)
+}
+
+const TEXT_AFTER_BOX = 1
+
+const isNestedList = (child: ReactNode) =>
+	isValidElement(child) && (child.type === "ul" || child.type === "ol")
+
+const isParagraph = (child: ReactNode) =>
+	isValidElement(child) && child.type === "p"
+
+export const MarkdownListItem = ({
+	node,
+	children,
+	...props
+}: MarkdownListItemProps) => {
+	const items = Children.toArray(children)
+	const isTightTask =
+		props.className?.includes("task-list-item") && !items.some(isParagraph)
+	if (!isTightTask) return <li {...props}>{children}</li>
+
+	const nestedAt = items.findIndex(isNestedList)
+	const labelEnd = nestedAt === -1 ? items.length : nestedAt
+	const label = items
+		.slice(0, labelEnd)
+		.map((child, index) =>
+			index === TEXT_AFTER_BOX && typeof child === "string"
+				? child.trimStart()
+				: child,
 		)
 
-	return <input {...props} aria-label={label} readOnly />
+	return (
+		<li {...props}>
+			<span data-slot="markdown-task-label">{label}</span>
+			{items.slice(labelEnd)}
+		</li>
+	)
 }
 
 const TASK_BOX_CLASS =

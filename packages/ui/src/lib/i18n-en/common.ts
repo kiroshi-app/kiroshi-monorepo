@@ -563,17 +563,6 @@ const common = {
 				remove: "Remove",
 			},
 		},
-		card: {
-			live: "Document · read-only here · updates live",
-			show: "Show",
-			hide: "Hide",
-			open: "Open",
-			failure: {
-				deleted: "This document was deleted from the Library.",
-				unreadable:
-					"Couldn’t read this document. Open it again from the Library.",
-			},
-		},
 		panel: {
 			openInLibrary: "Open in Library",
 			close: "Close",

@@ -1,13 +1,10 @@
-import { createContext, useContext, useMemo, useState } from "react"
+import { createContext, useMemo, useState } from "react"
 
-import { DocumentCard } from "@workspace/ui/components/document-card"
 import { DocumentPanel } from "@workspace/ui/components/document-panel"
 import { LibraryDocumentBlockEditor } from "@workspace/ui/components/library-document-block-editor"
-import { LibraryDocumentBody } from "@workspace/ui/components/library-document-view"
 
 import { useLibraryOnScreen } from "@/components/answer-image-viewer"
 import { titleOf } from "@/lib/library/library-items"
-import { useLibraryDocumentCard } from "@/lib/library/use-library-document-card"
 import { useLibraryDocumentSession } from "@/lib/library/use-library-document-session"
 import { useLibraryImageResolver } from "@/lib/library/use-library-image-sources"
 import { useSaveMessageAsDocument } from "@/lib/library/use-save-message-as-document"
@@ -57,80 +54,10 @@ export const useThreadDocuments = (
 
 const documentTitleOf = (name: string) => titleOf({ kind: "document", name })
 
-type ThreadDocumentProps = {
+type ThreadDocumentPanelProps = {
 	spaceId: string
 	isJoined: boolean
 	name: string
-}
-
-const UnfoldedDocument = ({ spaceId, isJoined, name }: ThreadDocumentProps) => {
-	const { document } = useLibraryDocumentSession(spaceId, name)
-	const resolveImage = useLibraryImageResolver(spaceId, isJoined)
-	return (
-		<LibraryDocumentBody
-			body={document?.markdown ?? ""}
-			resolveImage={resolveImage}
-		/>
-	)
-}
-
-type ThreadDocumentCardProps = ThreadDocumentProps & {
-	isSelected: boolean
-	onOpen: () => void
-}
-
-const ThreadDocumentCard = ({
-	spaceId,
-	isJoined,
-	name,
-	isSelected,
-	onOpen,
-}: ThreadDocumentCardProps) => {
-	const { detail, excerpt, failure } = useLibraryDocumentCard(spaceId, name)
-	const title = documentTitleOf(name)
-
-	if (failure) {
-		return (
-			<DocumentCard failure={failure} isSelected={isSelected} title={title} />
-		)
-	}
-
-	return (
-		<DocumentCard
-			detail={detail}
-			excerpt={excerpt}
-			isSelected={isSelected}
-			onOpen={onOpen}
-			title={title}
-		>
-			<UnfoldedDocument isJoined={isJoined} name={name} spaceId={spaceId} />
-		</DocumentCard>
-	)
-}
-
-type ThreadDocumentCardsProps = {
-	names: string[]
-}
-
-export const ThreadDocumentCards = ({ names }: ThreadDocumentCardsProps) => {
-	const documents = useContext(ThreadDocumentsContext)
-	if (!documents) {
-		return null
-	}
-
-	return names.map((name) => (
-		<ThreadDocumentCard
-			isJoined={documents.isJoined}
-			isSelected={documents.openedName === name}
-			key={name}
-			name={name}
-			onOpen={() => documents.open(name)}
-			spaceId={documents.spaceId}
-		/>
-	))
-}
-
-type ThreadDocumentPanelProps = ThreadDocumentProps & {
 	onClose: () => void
 }
 

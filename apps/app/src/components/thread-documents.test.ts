@@ -2,7 +2,6 @@
 
 import {
 	cleanup,
-	fireEvent,
 	render,
 	screen,
 	waitFor,
@@ -15,7 +14,6 @@ import * as Y from "yjs"
 import "@workspace/ui/lib/i18n"
 
 import {
-	ThreadDocumentCards,
 	ThreadDocumentPanel,
 	ThreadDocumentsContext,
 } from "@/components/thread-documents"
@@ -78,91 +76,6 @@ const planItem = {
 	createdAt: null,
 }
 
-const renderPlanCard = () =>
-	render(
-		createElement(
-			ThreadDocumentsContext,
-			{ value: DOCUMENTS },
-			createElement(ThreadDocumentCards, { names: [PLAN] }),
-		),
-		{ wrapper: createQueryTestWrapper().wrapper },
-	)
-
-const planCard = () => screen.getByRole("article", { name: "plan" })
-
-describe("the card of a document posted in a thread", () => {
-	beforeEach(() => {
-		libraryHost.answers.set("library_list", () => [planItem])
-		libraryHost.answers.set("library_read_document", ({ name }) => ({
-			name,
-			format: "markdown",
-			content: "The plan opens here.",
-		}))
-	})
-
-	afterEach(() => {
-		cleanup()
-		libraryHost.answers.clear()
-	})
-
-	it("shows the excerpt with Show and Open while the document is in the Library", async () => {
-		renderPlanCard()
-
-		expect(
-			await within(planCard()).findByText("The plan opens here."),
-		).toBeTruthy()
-		expect(
-			within(planCard()).getByRole("button", { name: "Show" }),
-		).toBeTruthy()
-		expect(
-			within(planCard()).getByRole("button", { name: "Open" }),
-		).toBeTruthy()
-	})
-
-	it("says the document was deleted once the Library no longer lists it", async () => {
-		libraryHost.answers.set("library_list", () => [])
-		renderPlanCard()
-
-		expect(
-			await screen.findByText("This document was deleted from the Library."),
-		).toBeTruthy()
-		expect(
-			within(planCard()).queryByRole("button", { name: "Show" }),
-		).toBeNull()
-	})
-
-	it("says the document can't be read when its read fails", async () => {
-		libraryHost.answers.set("library_read_document", () => {
-			throw { kind: "unreadable", detail: "disk gone" }
-		})
-		renderPlanCard()
-
-		await waitFor(() =>
-			expect(
-				within(planCard()).getByText(
-					"Couldn’t read this document. Open it again from the Library.",
-				),
-			).toBeTruthy(),
-		)
-		expect(
-			within(planCard()).queryByRole("button", { name: "Open" }),
-		).toBeNull()
-	})
-
-	it("says the document can't be read when the Library can't be listed", async () => {
-		libraryHost.answers.set("library_list", () => {
-			throw { kind: "unreadable", detail: "disk gone" }
-		})
-		renderPlanCard()
-
-		expect(
-			await screen.findByText(
-				"Couldn’t read this document. Open it again from the Library.",
-			),
-		).toBeTruthy()
-	})
-})
-
 const GALLERY_IMAGES = [
 	{ name: "sofa-green.jpg", alt: "Green velvet sofa" },
 	{ name: "sofa-grey.jpg", alt: "Grey linen sofa" },
@@ -197,7 +110,6 @@ const renderGalleryPlan = (isJoined: boolean) =>
 		createElement(
 			ThreadDocumentsContext,
 			{ value: { ...DOCUMENTS, isJoined } },
-			createElement(ThreadDocumentCards, { names: [PLAN] }),
 			createElement(ThreadDocumentPanel, {
 				spaceId: SPACE_ID,
 				isJoined,
@@ -276,13 +188,9 @@ describe("a gallery in a document opened from a conversation", () => {
 		imageReads.length = 0
 	})
 
-	it("reads each image of a joined Space once across the card, the closed gallery and the opened one", async () => {
+	it("reads each image of a joined Space once across the closed gallery and the opened one", async () => {
 		renderGalleryPlan(true)
 
-		fireEvent.click(
-			await within(planCard()).findByRole("button", { name: "Show" }),
-		)
-		await expectGalleryShown(planCard(), joinedSourceOf)
 		await expectGalleryShown(panelOf(), joinedSourceOf)
 		await openGalleryIn(panelOf())
 		await expectGalleryShown(galleryIn(panelOf()), joinedSourceOf)
@@ -296,10 +204,7 @@ describe("a gallery in a document opened from a conversation", () => {
 		renderGalleryPlan(false)
 		const hostSourceOf = (name: string) => `asset:///library/${name}`
 
-		fireEvent.click(
-			await within(planCard()).findByRole("button", { name: "Show" }),
-		)
-		await expectGalleryShown(planCard(), hostSourceOf)
+		await expectGalleryShown(panelOf(), hostSourceOf)
 		await openGalleryIn(panelOf())
 		await expectGalleryShown(galleryIn(panelOf()), hostSourceOf)
 

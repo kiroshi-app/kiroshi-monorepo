@@ -591,17 +591,6 @@ const common = {
 				remove: "Retirer",
 			},
 		},
-		card: {
-			live: "Document · lecture seule ici · mis à jour en direct",
-			show: "Afficher",
-			hide: "Masquer",
-			open: "Ouvrir",
-			failure: {
-				deleted: "Ce document a été supprimé de la Bibliothèque.",
-				unreadable:
-					"Impossible de lire ce document. Rouvrez-le depuis la Bibliothèque.",
-			},
-		},
 		panel: {
 			openInLibrary: "Ouvrir dans la Bibliothèque",
 			close: "Fermer",
