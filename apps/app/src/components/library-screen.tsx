@@ -63,6 +63,7 @@ export type LibraryScreenProps = {
 	opening?: LibraryOpening
 	onOpeningChange: (opening: LibraryOpening | undefined) => void
 	onOpenInNewTab?: (opening: LibraryOpening) => void
+	onOpenImage: (opening: LibraryOpening) => void
 	onCloseTab?: () => void
 }
 
@@ -255,6 +256,7 @@ export const LibraryScreen = ({
 	opening,
 	onOpeningChange,
 	onOpenInNewTab,
+	onOpenImage,
 	onCloseTab,
 }: LibraryScreenProps) => {
 	const library = useLibraryItems(spaceId)
@@ -341,7 +343,10 @@ export const LibraryScreen = ({
 			onOpeningChange(openingOfItem(image))
 		}
 	}
-	const openItem = (item: KindedItem) => onOpeningChange(openingOfItem(item))
+	const openItem = (item: KindedItem) =>
+		item.kind === "image"
+			? onOpenImage(openingOfItem(item))
+			: onOpeningChange(openingOfItem(item))
 	const openInNewTab =
 		onOpenInNewTab &&
 		((item: KindedItem) => onOpenInNewTab(openingOfItem(item)))

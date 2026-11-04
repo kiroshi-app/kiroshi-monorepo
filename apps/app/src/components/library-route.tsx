@@ -14,15 +14,25 @@ import {
 import { isJoinedRowId } from "@/lib/spaces/joined-spaces-controller"
 import { useWorkspace } from "@/lib/workspace/workspace-context"
 
-const useOpenLibraryItemInNewTab = () => {
+const useLibraryHrefOf = () => {
 	const router = useRouter()
 	return (opening: LibraryOpening) =>
-		router.options.context.tabs.openInNewTab(
-			router.buildLocation({
-				to: "/library",
-				search: librarySearchOf(opening),
-			}).href,
-		)
+		router.buildLocation({ to: "/library", search: librarySearchOf(opening) })
+			.href
+}
+
+const useOpenLibraryItemInNewTab = () => {
+	const router = useRouter()
+	const hrefOf = useLibraryHrefOf()
+	return (opening: LibraryOpening) =>
+		router.options.context.tabs.openInNewTab(hrefOf(opening))
+}
+
+const useOpenLibraryItemInNewActiveTab = () => {
+	const router = useRouter()
+	const hrefOf = useLibraryHrefOf()
+	return (opening: LibraryOpening) =>
+		router.options.context.tabs.openInNewActiveTab(hrefOf(opening))
 }
 
 const useCloseActiveTab = () => {
@@ -51,6 +61,7 @@ export const LibraryRoute = () => {
 	const { rosteredHostSpaceId, rosterView, scopes } = useWorkspace()
 	const opening = openingOf(useSearch({ from: "/library" }))
 	const openInNewTab = useOpenLibraryItemInNewTab()
+	const openInNewActiveTab = useOpenLibraryItemInNewActiveTab()
 	const showOpening = useShowOpening()
 	const closeTab = useCloseActiveTab()
 	const spaceRowId = rosterView.rosteredSpaceId
@@ -63,6 +74,7 @@ export const LibraryRoute = () => {
 					isJoined={isJoinedRowId(spaceRowId)}
 					key={spaceRowId}
 					onCloseTab={closeTab}
+					onOpenImage={openInNewActiveTab}
 					onOpenInNewTab={openInNewTab}
 					onOpeningChange={showOpening}
 					opening={opening}

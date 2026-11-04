@@ -1075,25 +1075,6 @@ describe("the item a Library address names", () => {
 })
 
 describe("the tab of an opened Library item", () => {
-	it("is named after the image opened in place, then the Library once closed", async () => {
-		const { router } = await mountApp()
-		harness.libraryItems = [IMAGE]
-		await act(async () => router.navigate({ to: "/library" }))
-		await settle()
-
-		await click(
-			screen
-				.getAllByRole("button")
-				.find((button) =>
-					button.textContent?.includes(IMAGE.name),
-				) as HTMLElement,
-		)
-		expect(selectedTabName()).toContain(IMAGE.name)
-
-		await closeLightbox()
-		expect(selectedTabName()).toContain(LIBRARY_NAME)
-	})
-
 	it("is named after the document title, then its new title once renamed", async () => {
 		const { router } = await mountApp()
 		harness.libraryItems = [DOCUMENT]
@@ -1158,5 +1139,99 @@ describe("the tab of an opened Library item", () => {
 		await settle()
 
 		expect(otherTab().textContent).toContain(IMAGE.name)
+	})
+})
+
+const tileNamed = (name: string) =>
+	screen
+		.getAllByRole("button")
+		.find((button) => button.textContent?.includes(name)) as HTMLElement
+
+const tabCount = () => screen.getAllByRole("tab", { hidden: true }).length
+
+const showLibraryGrid = async (
+	router: Awaited<ReturnType<typeof mountApp>>["router"],
+) => {
+	harness.libraryItems = [IMAGE]
+	await act(async () => router.navigate({ to: "/library" }))
+	await settle()
+}
+
+const pickOpenInMenuOf = async (tile: HTMLElement) => {
+	await act(async () => {
+		fireEvent.contextMenu(tile)
+	})
+	await click(
+		screen.getByRole("menuitem", { name: common("library.itemMenu.open") }),
+	)
+}
+
+const IMAGE_OPENERS = [
+	["a click on it", click],
+	["Open in its menu", pickOpenInMenuOf],
+] as const
+
+describe("an image opened from the Library grid", () => {
+	it.each(IMAGE_OPENERS)(
+		"opens on %s in a new active tab named after it, the Library tab left on its grid",
+		async (_gesture, open) => {
+			const { router } = await mountApp()
+			await showLibraryGrid(router)
+			const tabsBefore = tabCount()
+
+			await open(tileNamed(IMAGE.name))
+
+			expect(tabCount()).toBe(tabsBefore + 1)
+			expect(selectedTabName()).toContain(IMAGE.name)
+			expect(otherTab().textContent).toContain(LIBRARY_NAME)
+			expect(router.state.location.search).toEqual(IMAGE_OPENING)
+			expect(lightboxShown()).toBe(true)
+		},
+	)
+
+	it("is drawn inside the Library panel, the rail still shown", async () => {
+		const { router } = await mountApp()
+		await showLibraryGrid(router)
+
+		await click(tileNamed(IMAGE.name))
+
+		expect(
+			screen.getByRole("dialog").closest('[data-slot="library-panel"]'),
+		).not.toBeNull()
+		expect(
+			screen.getByRole("button", {
+				name: i18n.t("bots:rail.library"),
+				hidden: true,
+			}),
+		).toBeInstanceOf(HTMLElement)
+	})
+
+	it("leaves the Library tab on its grid once its tab is closed", async () => {
+		const { router } = await mountApp()
+		await showLibraryGrid(router)
+		const tabsBefore = tabCount()
+		await click(tileNamed(IMAGE.name))
+
+		await act(async () => router.options.context.tabs.closeActive())
+		await settle()
+
+		expect(tabCount()).toBe(tabsBefore)
+		expect(selectedTabName()).toContain(LIBRARY_NAME)
+		expect(router.state.location.search).toEqual({})
+		expect(libraryHeading()).not.toBeNull()
+		expect(screen.queryByRole("dialog")).toBeNull()
+	})
+
+	it("turns its tab back into the Library on the viewer's Back", async () => {
+		const { router } = await mountApp()
+		await showLibraryGrid(router)
+		await click(tileNamed(IMAGE.name))
+		const tabsWithImage = tabCount()
+
+		await closeLightbox()
+
+		expect(tabCount()).toBe(tabsWithImage)
+		expect(selectedTabName()).toContain(LIBRARY_NAME)
+		expect(libraryHeading()).not.toBeNull()
 	})
 })
