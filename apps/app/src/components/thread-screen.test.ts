@@ -100,6 +100,7 @@ import {
 import type {
 	Bot,
 	Conversation,
+	NewUserMessage,
 	Space,
 } from "@/lib/conversations/store-contract"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
@@ -5948,5 +5949,160 @@ describe("ThreadScreen with Library documents on its messages", () => {
 		})
 
 		expect(screen.queryByRole("complementary", { name: "plan" })).toBeNull()
+	})
+})
+
+describe("ThreadScreen attaching Library documents from the composer", () => {
+	const PLAN = "plan.md"
+	const BRIEF = "brief.md"
+	const WORKSPACE = {
+		rosterView: { rosteredSpaceId: "space-row" },
+		rosteredHostSpaceId: "space-on-screen",
+	} as unknown as WorkspaceAssembly
+	let layout: FakeLayout
+
+	const itemNamed = (name: string) => ({
+		name,
+		kind: "document",
+		path: `/library/${name}`,
+		bytes: 10,
+		modifiedAt: 0,
+		createdAt: null,
+	})
+
+	const roomAttaching = async ({ refuses = false } = {}) => {
+		const store = createFakeTranscriptStore()
+		const [ada] = await seatBots(store, SPACE, ["Ada"])
+		const conversation = await store.createConversation({
+			spaceId: SPACE,
+			sectionId: null,
+			title: "Walls",
+			botIds: [ada.id],
+		})
+		const sent: NewUserMessage[] = []
+		const recording: TranscriptStore = {
+			...store,
+			sendUserMessage: (message, summoned) => {
+				sent.push(message)
+				return refuses
+					? Promise.reject(new Error("refused"))
+					: store.sendUserMessage(message, summoned)
+			},
+		}
+		const driver = createScriptedDriver()
+		const runtimes = createConversationRuntimes(driver, recording, {})
+		render(
+			createElement(
+				WorkspaceContext.Provider,
+				{ value: WORKSPACE },
+				createElement(ThreadScreenHarness, {
+					bots: [ada],
+					landings: createMessageLandingController(),
+					onOpenMission: () => undefined,
+					staging: createAttachmentsController(
+						createAttachmentsPort({ chat: NO_BOT_CHAT, driver, runtimes }),
+					),
+					thread: {
+						kind: "conversation",
+						conversation,
+						runtimes,
+						onOpenSettings: () => undefined,
+					},
+				}),
+			),
+		)
+		await settle()
+		return sent
+	}
+
+	const pickDocument = async (title: string) => {
+		await act(async () => {
+			fireEvent.click(screen.getByRole("combobox", { name: "Attach files" }))
+		})
+		const option = await screen.findByRole("option", {
+			name: new RegExp(`^${title}`),
+		})
+		await act(async () => {
+			fireEvent.click(option)
+		})
+		await settle()
+	}
+
+	const stagedChipNames = () =>
+		within(screen.getByRole("list", { name: "Attachments" }))
+			.queryAllByRole("button", { name: /^Remove / })
+			.map((chip) => chip.getAttribute("aria-label"))
+
+	const chipRemovals = () =>
+		screen.queryAllByRole("button", { name: /^Remove (plan|brief)$/ })
+
+	beforeEach(() => {
+		layout = fakeLayout()
+		vi.clearAllMocks()
+		listRoutines.mockResolvedValue([])
+		listRuns.mockResolvedValue([])
+		listSources.mockResolvedValue(SCHEDULE_DECLARED)
+		listMissions.mockResolvedValue({ open: [], done: [] })
+		listenToMissions.mockResolvedValue(() => undefined)
+		libraryHost.answers.set("library_list", () => [
+			itemNamed(PLAN),
+			itemNamed(BRIEF),
+		])
+		libraryHost.answers.set("library_read_document", ({ name }) => ({
+			name,
+			format: "markdown",
+			content: "The plan opens here.",
+		}))
+	})
+
+	afterEach(() => {
+		cleanup()
+		layout.restore()
+		libraryHost.answers.clear()
+	})
+
+	it("stages a picked document as one chip, even when it is picked twice", async () => {
+		await roomAttaching()
+
+		await pickDocument("plan")
+		await pickDocument("plan")
+
+		expect(stagedChipNames()).toEqual(["Remove plan"])
+	})
+
+	it("drops a removed document from the next send", async () => {
+		const sent = await roomAttaching()
+		await pickDocument("plan")
+		await pickDocument("brief")
+
+		await act(async () => {
+			fireEvent.click(screen.getByRole("button", { name: "Remove plan" }))
+		})
+		await sendInComposer("Here is the brief.")
+
+		expect(sent.map(({ documents }) => documents)).toEqual([[BRIEF]])
+	})
+
+	it("sends a document with no text, clears its chip and shows it as a card on the message", async () => {
+		const sent = await roomAttaching()
+		await pickDocument("plan")
+
+		await sendInComposer("")
+
+		expect(
+			sent.map(({ content, documents }) => ({ content, documents })),
+		).toEqual([{ content: "", documents: [PLAN] }])
+		expect(chipRemovals()).toEqual([])
+		expect(screen.getAllByRole("article", { name: "plan" })).toHaveLength(1)
+	})
+
+	it("keeps the document chip and shows the message as not sent when the send is refused", async () => {
+		await roomAttaching({ refuses: true })
+		await pickDocument("plan")
+
+		await sendInComposer("Here is the plan.")
+
+		expect(screen.getByText("Not sent.")).toBeTruthy()
+		expect(stagedChipNames()).toEqual(["Remove plan"])
 	})
 })

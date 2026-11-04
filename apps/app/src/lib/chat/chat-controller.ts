@@ -75,6 +75,7 @@ export type ChatController = {
 		botId: string,
 		text: string,
 		replyLinks?: ReplyLink[],
+		documents?: string[],
 	) => Promise<void>
 	reference: (messageId: string) => Promise<MessageReference | null>
 	pin: (messageId: string, blockIndex: number) => Promise<void>
@@ -210,10 +211,10 @@ export function createChatController(
 			forSelected((bot) => paging.follow(bot, isAtLiveEdge)),
 		send: (text, replyLinks) =>
 			onSelected((bot) => outbox.send(bot, text, replyLinks), undefined),
-		sendTo: async (botId, text, replyLinks) => {
+		sendTo: async (botId, text, replyLinks, documents) => {
 			const bot = bots.get(botId)
 			if (bot) {
-				await outbox.send(bot, text, replyLinks)
+				await outbox.send(bot, text, replyLinks, documents)
 			}
 		},
 		reference: (messageId) =>

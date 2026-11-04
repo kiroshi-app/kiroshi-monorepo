@@ -1,6 +1,12 @@
 import { type RefObject, useEffect, useMemo, useState } from "react"
 
-import { NO_ATTACHMENTS, type StagedAttachment } from "./attachments"
+import type { PromptAttachment } from "@workspace/ui/components/prompt-attachments"
+
+import {
+	NO_ATTACHMENTS,
+	NO_DOCUMENTS,
+	type StagedAttachment,
+} from "./attachments"
 import type {
 	AttachmentStoreError,
 	AttachmentsOwner,
@@ -13,9 +19,11 @@ import { useControllerState } from "../use-controller"
 
 export type StagedFiles = {
 	items: StagedAttachment[]
+	documents: PromptAttachment[]
 	refusal: AttachmentStoreError | null
 	isDropTarget: boolean
 	stage: (files: File[]) => void
+	stageDocument: (document: PromptAttachment) => void
 	remove: (id: string) => void
 	submit: (text: string, replyLinks?: ReplyLink[]) => Promise<boolean>
 	dismissRefusal: () => void
@@ -34,6 +42,8 @@ export function useAttachments(
 	const bound = useMemo(
 		() => ({
 			stage: (files: File[]) => controller.stage(owner, files),
+			stageDocument: (document: PromptAttachment) =>
+				controller.stageDocument(owner, document),
 			remove: (id: string) => controller.remove(owner, id),
 			submit: (text: string, replyLinks?: ReplyLink[]) =>
 				controller.submit(owner, text, replyLinks),
@@ -60,6 +70,7 @@ export function useAttachments(
 
 	return {
 		items: state.staged[key] ?? NO_ATTACHMENTS,
+		documents: state.documents[key] ?? NO_DOCUMENTS,
 		refusal: state.refusals[key] ?? null,
 		isDropTarget,
 		...bound,

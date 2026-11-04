@@ -100,6 +100,7 @@ export const createPromptSubmission = (
 		bot: BotChat,
 		trimmed: string,
 		replyLinks: ReplyLink[],
+		documents: string[],
 	): Promise<PromptOutcome> => {
 		const conversationId = await landedConversationOf(bot)
 		if (!conversationId) {
@@ -113,7 +114,7 @@ export const createPromptSubmission = (
 		await rotateIfDue(bot)
 		dispatch(bot, { type: "promptSubmitted" })
 
-		const said = promptRow(conversationId, trimmed, replyLinks)
+		const said = promptRow(conversationId, trimmed, replyLinks, documents)
 		try {
 			await enqueue(() => storePrompt(said, [bot.id]))
 		} catch (reason) {

@@ -10,15 +10,19 @@ import type { ConversationController } from "../conversations/conversation-contr
 
 const heldHosts = () => {
 	const sentToBots: { botId: string; text: string }[] = []
-	const sentToRooms: { text: string; replyLinks?: ReplyLink[] }[] = []
+	const sentToRooms: {
+		text: string
+		replyLinks?: ReplyLink[]
+		documents?: string[]
+	}[] = []
 	const storedByChat: string[] = []
 	const storedByDriver: string[] = []
 	const runtimes = new Map<string, ConversationController>()
 
 	const runtime = {
-		send: (text: string, replyLinks?: ReplyLink[]) => {
-			sentToRooms.push({ text, replyLinks })
-			return Promise.resolve()
+		send: (text: string, replyLinks?: ReplyLink[], documents?: string[]) => {
+			sentToRooms.push({ text, replyLinks, documents })
+			return Promise.resolve(true)
 		},
 	} as ConversationController
 
@@ -73,17 +77,21 @@ describe("a draft owned by a companion", () => {
 })
 
 describe("a draft owned by a conversation", () => {
-	it("goes through the runtime of that conversation", () => {
+	it("goes through the runtime of that conversation with its documents", async () => {
 		const host = heldHosts()
 		host.open("room")
 		const port = createAttachmentsPort(host.hosts)
 
 		const replyLinks = [{ messageId: "m1", excerpt: "the gates" }]
 
-		expect(
-			port.send({ kind: "conversation", id: "room" }, "look", replyLinks),
-		).toBe(true)
-		expect(host.sentToRooms).toEqual([{ text: "look", replyLinks }])
+		await expect(
+			port.send({ kind: "conversation", id: "room" }, "look", replyLinks, [
+				"plan.md",
+			]),
+		).resolves.toBe(true)
+		expect(host.sentToRooms).toEqual([
+			{ text: "look", replyLinks, documents: ["plan.md"] },
+		])
 	})
 
 	it("is stored against that conversation", async () => {

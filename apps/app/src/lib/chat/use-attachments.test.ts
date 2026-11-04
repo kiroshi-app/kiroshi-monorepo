@@ -24,7 +24,11 @@ const CONVERSATION_ID = "c-1"
 
 const OWNER = { kind: "conversation", id: CONVERSATION_ID } as const
 
-const EMPTY_STATE: AttachmentsState = { staged: {}, refusals: {} }
+const EMPTY_STATE: AttachmentsState = {
+	staged: {},
+	documents: {},
+	refusals: {},
+}
 
 const unseatedConversation: Conversation = {
 	id: CONVERSATION_ID,
@@ -73,6 +77,7 @@ const watchedController = () => {
 		getState: () => EMPTY_STATE,
 		subscribe: () => () => undefined,
 		stage: (_owner, files) => staged.push(files.map((file) => file.name)),
+		stageDocument: () => undefined,
 		remove: () => undefined,
 		dismissRefusal: () => undefined,
 		submit: () => Promise.resolve(true),

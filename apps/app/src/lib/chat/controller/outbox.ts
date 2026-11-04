@@ -59,7 +59,7 @@ export const createOutbox = (
 			}
 			dispatch(bot, { type: "outboxEntryRemoved", id: entry.id })
 			const outcome = await claim(bot, () =>
-				sendPrompt(bot, entry.text, entry.replyLinks),
+				sendPrompt(bot, entry.text, entry.replyLinks, entry.documents),
 			)
 			if (outcome === "unwritten") {
 				dispatch(bot, { type: "promptReturned", entry })
@@ -85,13 +85,19 @@ export const createOutbox = (
 		bot: BotChat,
 		text: string,
 		replyLinks: ReplyLink[] = [],
+		documents: string[] = [],
 	) => {
 		const trimmed = text.trim()
-		if (trimmed.length === 0) {
+		if (trimmed.length === 0 && documents.length === 0) {
 			return
 		}
 		const asked = bot.state.question
-		if (asked && !isPostedRequest(asked) && !isRunOutsideOpenThread(bot)) {
+		if (
+			asked &&
+			!isPostedRequest(asked) &&
+			!isRunOutsideOpenThread(bot) &&
+			documents.length === 0
+		) {
 			await answer(bot, asked.id, answersFromText(asked, trimmed))
 			return
 		}
@@ -99,7 +105,7 @@ export const createOutbox = (
 			await runInOpenThread(bot)
 		}
 		const outcome = canSend(bot)
-			? await claim(bot, () => sendPrompt(bot, trimmed, replyLinks))
+			? await claim(bot, () => sendPrompt(bot, trimmed, replyLinks, documents))
 			: "unwritten"
 		if (outcome === "unwritten") {
 			dispatch(bot, {
@@ -108,6 +114,7 @@ export const createOutbox = (
 					id: newId(),
 					text: trimmed,
 					replyLinks,
+					documents,
 				},
 			})
 		}
@@ -123,7 +130,12 @@ export const createOutbox = (
 		const held = bot.state.outbox
 		dispatch(bot, { type: "outboxCleared" })
 		for (const entry of held) {
-			const said = promptRow(conversationId, entry.text, entry.replyLinks)
+			const said = promptRow(
+				conversationId,
+				entry.text,
+				entry.replyLinks,
+				entry.documents,
+			)
 			write(
 				bot,
 				() => storePrompt(said, []),

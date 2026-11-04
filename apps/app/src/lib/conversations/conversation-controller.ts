@@ -179,7 +179,11 @@ export type ConversationController = {
 	landOn: (seq: number) => Promise<TranscriptMessage[]>
 	follow: (isAtLiveEdge: boolean) => void
 	leave: () => void
-	send: (text: string, replyLinks?: ReplyLink[]) => Promise<void>
+	send: (
+		text: string,
+		replyLinks?: ReplyLink[],
+		documents?: string[],
+	) => Promise<boolean>
 	sendAgain: (messageId: string) => Promise<void>
 	retryTurn: (botId: string) => Promise<void>
 	reportRun: (draft: RunReportDraft) => Promise<string>
@@ -237,6 +241,7 @@ type SentPrompt = {
 	content: string
 	answered: TranscriptMessage | null
 	replyLinks: ReplyLink[]
+	documents: string[]
 }
 
 type FailedTurn = Summons & {
@@ -1281,6 +1286,7 @@ export const createConversationController = (
 				authorBotId: null,
 				repliedToMessageId: said.repliedToMessageId,
 				replyLinks: said.replyLinks,
+				documents: said.documents,
 				content: said.content,
 				createdAt: said.createdAt,
 			},
@@ -1301,6 +1307,7 @@ export const createConversationController = (
 		content,
 		answered,
 		replyLinks,
+		documents,
 	}: SentPrompt): TranscriptMessage => ({
 		id: turn.promptId,
 		conversationId,
@@ -1315,6 +1322,7 @@ export const createConversationController = (
 		authorName: null,
 		repliedToMessageId: answered?.id ?? null,
 		replyLinks,
+		documents,
 		runtimeSessionId: null,
 	})
 
@@ -1483,10 +1491,14 @@ export const createConversationController = (
 		}
 	}
 
-	const send = async (text: string, replyLinks: ReplyLink[] = []) => {
+	const send = async (
+		text: string,
+		replyLinks: ReplyLink[] = [],
+		documents: string[] = [],
+	) => {
 		const trimmed = text.trim()
-		if (!conversation || trimmed.length === 0) {
-			return
+		if (!conversation || (trimmed.length === 0 && documents.length === 0)) {
+			return false
 		}
 		const conversationId = conversation.id
 		const isNamingItself =
@@ -1500,14 +1512,15 @@ export const createConversationController = (
 			content,
 			answered,
 			replyLinks,
+			documents,
 		})
 
 		if (!(await loadLatest())) {
 			refuse(said, trimmed)
-			return
+			return false
 		}
 		if (conversation?.id !== conversationId) {
-			return
+			return false
 		}
 
 		const summoned = summonedBy(said, answered)
@@ -1515,12 +1528,12 @@ export const createConversationController = (
 			await enqueue(() => storePrompt(said, summoned))
 		} catch {
 			refuse(said, trimmed)
-			return
+			return false
 		}
 
 		refused = null
 		failedTurns = []
-		if (isNamingItself) {
+		if (isNamingItself && trimmed.length > 0) {
 			void nameFrom(conversationId, trimmed)
 		}
 		transcript.append(said)
@@ -1531,13 +1544,14 @@ export const createConversationController = (
 		activeTurn = turn
 		sync()
 		drive()
+		return true
 	}
 
-	const sendAgain = (messageId: string) => {
+	const sendAgain = async (messageId: string) => {
 		const held = refused
-		return held?.id === messageId
-			? send(held.text, held.replyLinks)
-			: Promise.resolve()
+		if (held?.id === messageId) {
+			await send(held.text, held.replyLinks)
+		}
 	}
 
 	const retryTurn = (botId: string) => {

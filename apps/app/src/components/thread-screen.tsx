@@ -58,6 +58,7 @@ import { type ChatCopy, useChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 import {
 	AnswerImageViewer,
 	useAnswerImageViewer,
+	useLibraryOnScreen,
 	useShownImageActions,
 } from "@/components/answer-image-viewer"
 import { ApplicationInstallRow } from "@/components/application-install-row"
@@ -205,6 +206,7 @@ import {
 	useSuggestedBots,
 } from "@/lib/conversations/use-conversation-seating"
 import type { FailureCorrelation } from "@/lib/failure-report"
+import { useComposerLibrary } from "@/lib/library/use-composer-library"
 import type {
 	OpenMission,
 	OpenMissionInNewTab,
@@ -530,6 +532,10 @@ const ThreadComposerSlot = ({
 	onPromptChange,
 	onSubmitPrompt,
 }: ThreadComposerSlotProps) => {
+	const library = useComposerLibrary(
+		useLibraryOnScreen()?.spaceId ?? null,
+		staged.stageDocument,
+	)
 	const wiring =
 		thread.kind === "bot"
 			? botThreadMenu({
@@ -545,11 +551,12 @@ const ThreadComposerSlot = ({
 		<ThreadComposer
 			{...wiring}
 			key={thread.kind === "bot" ? thread.bot.id : thread.conversation.id}
-			attachments={staged.items}
+			attachments={[...staged.items, ...staged.documents]}
 			canAttach={canAttach}
 			composerRef={composerRef}
 			isDisabled={isDisabled}
 			isDropTarget={staged.isDropTarget}
+			library={library}
 			onAttach={staged.stage}
 			onPromptChange={onPromptChange}
 			onRemoveAttachment={staged.remove}
