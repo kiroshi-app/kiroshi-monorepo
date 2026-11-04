@@ -962,6 +962,13 @@ const openByAddress = async (
 const editorTitleField = () =>
 	screen.getByRole("textbox", { name: common("library.editor.title") })
 
+const typeTitle = async (value: string) => {
+	await act(async () => {
+		fireEvent.change(editorTitleField(), { target: { value } })
+	})
+	await settle()
+}
+
 describe("the item a Library address names", () => {
 	it("opens it and keeps it in the address", async () => {
 		const { router } = await mountApp()
@@ -1066,10 +1073,7 @@ describe("the tab of an opened Library item", () => {
 		await openByAddress(router, DOCUMENT_OPENING)
 		expect(selectedTabName()).toContain("notes")
 
-		await act(async () => {
-			fireEvent.change(editorTitleField(), { target: { value: "Plans" } })
-		})
-		await settle()
+		await typeTitle("Plans")
 
 		expect(selectedTabName()).toContain("Plans")
 		expect(router.state.location.search).toEqual({
@@ -1107,16 +1111,10 @@ describe("the tab of an opened Library item", () => {
 			harness.libraryItems = [DOCUMENT]
 			await openByAddress(router, DOCUMENT_OPENING)
 
-			await act(async () => {
-				fireEvent.change(editorTitleField(), { target: { value: "Plans" } })
-			})
-			await settle()
+			await typeTitle("Plans")
 			expect(selectedTabName()).toBe("Plans")
 
-			await act(async () => {
-				fireEvent.change(editorTitleField(), { target: { value: typed } })
-			})
-			await settle()
+			await typeTitle(typed)
 
 			expect(editorTitleField()).toHaveProperty("value", typed)
 			expect(selectedTabName()).toBe(common("library.editor.untitled"))
