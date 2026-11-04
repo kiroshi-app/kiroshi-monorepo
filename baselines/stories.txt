@@ -407,6 +407,15 @@ conversation-message-turn--summoned-by-mission
 conversation-message-turn--thread-crossing-a-day
 conversation-message-turn--time-follows-now
 conversation-message-turn--working
+conversation-message-websources--controlled
+conversation-message-websources--favicon-and-fallbacks
+conversation-message-websources--folded
+conversation-message-websources--in-narrow-column
+conversation-message-websources--no-source
+conversation-message-websources--one-source
+conversation-message-websources--one-source-in-narrow-column
+conversation-message-websources--open
+conversation-message-websources--open-source-from-row
 conversation-missions-missionactivityline--default
 conversation-missions-missioncard--card-activity-line
 conversation-missions-missioncard--card-closed

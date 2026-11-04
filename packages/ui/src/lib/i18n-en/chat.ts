@@ -361,6 +361,13 @@ const chat = {
 		done: "Done",
 		todo: "To do",
 	},
+	webSources: {
+		list: "Sources",
+		counted_one: "{{count}} source",
+		counted_other: "{{count}} sources",
+		open: "Open {{name}}",
+		openTitled: "Open {{title}}, {{domain}}",
+	},
 	answerBlock: {
 		checklist: {
 			copy: "Copy the list",
