@@ -264,6 +264,10 @@ const common = {
 		search: "Search the Library",
 		import: "Import",
 		newDocument: "New document",
+		saved: {
+			title: "Saved to Library",
+			open: "Open",
+		},
 		filters: {
 			label: "Show",
 			all: "All",

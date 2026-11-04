@@ -118,6 +118,7 @@ const chat = {
 		selection: "Selected text",
 		pin: "Pin",
 		unpin: "Unpin",
+		saveAsDocument: "Save as document",
 		copied: "Copied",
 		retry: "Retry",
 		cancel: "Cancel this message",

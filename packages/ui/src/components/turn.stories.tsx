@@ -45,6 +45,8 @@ const reply = fn()
 
 const pin = fn()
 
+const saveAsDocument = fn()
+
 const jumpToQuoted = fn()
 
 const QUESTION = "Is any of that destructive?"
@@ -230,7 +232,7 @@ export const Menu = meta.story({
 		docs: {
 			description: {
 				story:
-					"The same actions the hover row offers, reached by right-clicking the bubble instead of hunting for a button: pin, then reply and copy behind a separator, each carrying the icon and the label its button carries — a pinned row says `Unpin` in both places. A row is handed only the actions it was given a handler for, and the last row here, given none at all, keeps the browser's own menu rather than drawing an empty one. Check that the menu grows out of the pointer, that choosing a row reports it and closes, and that right-clicking a second bubble hands the menu over rather than leaving two open. The bubble stays selectable under the menu, because a reader copies a passage of an answer far more often than they right-click it; the registry trigger's own `select-none` is overridden here and only comes back on a coarse pointer, where a drag is a scroll and a long press is the way in. That coarse branch is a media query the runner cannot emulate, so the play reads the rule rather than the effect. " +
+					"The same actions the hover row offers, reached by right-clicking the bubble instead of hunting for a button: reply, copy, then pin, each carrying the icon and the label its button carries, so a pinned row says `Unpin` in both places. No row here is given a save handler, so the menu draws no separator and no Save as document entry. A row is handed only the actions it was given a handler for, and the last row here, given none at all, keeps the browser's own menu rather than drawing an empty one. Check that the menu grows out of the pointer, that choosing a row reports it and closes, and that right-clicking a second bubble hands the menu over rather than leaving two open. The bubble stays selectable under the menu, because a reader copies a passage of an answer far more often than they right-click it; the registry trigger's own `select-none` is overridden here and only comes back on a coarse pointer, where a drag is a scroll and a long press is the way in. That coarse branch is a media query the runner cannot emulate, so the play reads the rule rather than the effect. " +
 					RENDERED_BY_THE_THREAD,
 			},
 		},
@@ -247,11 +249,11 @@ export const Menu = meta.story({
 		const items = within(menu).getAllByRole("menuitem")
 
 		await expect(items.map((item) => item.textContent)).toEqual([
-			"Pin",
 			"Reply",
 			"Copy",
+			"Pin",
 		])
-		await expect(within(menu).getByRole("separator")).toBeInTheDocument()
+		await expect(within(menu).queryByRole("separator")).toBeNull()
 
 		const pinned = await openTurnMenu(canvas.getByText(ANSWER))
 
@@ -270,6 +272,57 @@ export const Menu = meta.story({
 
 		await expect(defaulted).toBe(true)
 		await expect(screen.queryByRole("menu")).toBeNull()
+	},
+})
+
+export const MenuWithSaveAsDocument = meta.story({
+	render: () => (
+		<div className="mx-auto flex max-w-2xl flex-col gap-6">
+			<AssistantTurn
+				copyText={ANSWER}
+				identity={BOT}
+				onReply={reply}
+				onPin={pin}
+				onSaveAsDocument={saveAsDocument}
+			>
+				{ANSWER}
+			</AssistantTurn>
+		</div>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The message menu of a turn the app can save: reply, copy and pin, then a separator, then Save as document with the file glyph, the last row. The hover row under the answer keeps its pin, reply and copy buttons and gains no save button. Check that the entry reads in the same type and icon size as the rows above it, in the light and the dark theme, and that choosing it reports the save once and closes the menu. " +
+					RENDERED_BY_THE_THREAD,
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		saveAsDocument.mockClear()
+
+		const menu = await openTurnMenu(canvas.getByText(ANSWER))
+		const items = within(menu).getAllByRole("menuitem")
+
+		await expect(items.map((item) => item.textContent)).toEqual([
+			"Reply",
+			"Copy",
+			"Pin",
+			"Save as document",
+		])
+		const separators = within(menu).getAllByRole("separator")
+
+		await expect(separators).toHaveLength(1)
+		await expect(separators[0]?.nextElementSibling).toBe(items.at(-1))
+		await expect(
+			canvas.queryByRole("button", { name: "Save as document" }),
+		).toBeNull()
+
+		await userEvent.click(
+			within(menu).getByRole("menuitem", { name: "Save as document" }),
+		)
+		await expect(saveAsDocument).toHaveBeenCalledTimes(1)
+		await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
 	},
 })
 
