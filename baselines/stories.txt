@@ -1537,6 +1537,7 @@ navigation-librarydocumenteditor--format-link
 navigation-librarydocumenteditor--format-strikethrough
 navigation-librarydocumenteditor--format-without-change
 navigation-librarydocumenteditor--from-meeting-notes
+navigation-librarydocumenteditor--gallery-images-resolved
 navigation-librarydocumenteditor--held-run-fades-with-motion
 navigation-librarydocumenteditor--held-run-kept-while-typing
 navigation-librarydocumenteditor--held-run-restarted-by-agent

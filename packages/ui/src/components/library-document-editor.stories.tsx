@@ -2473,3 +2473,70 @@ export const ToolbarPressedState = meta.story({
 			})
 	},
 })
+
+const STORED_IMAGES = [
+	{ src: "images/sofa-green.jpg", alt: "Green velvet sofa", tint: "#5b7a55" },
+	{ src: "images/sofa-grey.jpg", alt: "Grey linen sofa", tint: "#9a9a94" },
+	{ src: "images/armchair-rust.jpg", alt: "Rust armchair", tint: "#a4553a" },
+]
+
+const STORED_GALLERY = [
+	"The sofas we kept for the lobby.",
+	[
+		"```gallery",
+		...STORED_IMAGES.map(({ src, alt }) => `- image: ${src}\n  alt: ${alt}`),
+		"```",
+	].join("\n"),
+].join("\n\n")
+
+const resolvedImageOf = (src: string) =>
+	`data:image/svg+xml,${encodeURIComponent(
+		`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4 3"><rect width="4" height="3" fill="${STORED_IMAGES.find((image) => image.src === src)?.tint}"/></svg>`,
+	)}`
+
+const openGalleryIn = (canvasElement: HTMLElement) => {
+	const galleryOf = () => {
+		const gallery = blocksIn(canvasElement).find(
+			(block) => block.dataset.type === "gallery",
+		)
+		if (!gallery) throw new Error("No gallery block")
+		return gallery
+	}
+	galleryOf().querySelector<HTMLElement>("[tabindex]")?.focus()
+	return waitFor(() => {
+		const gallery = galleryOf()
+		slotIn(gallery, "library-document-block-editing")
+		return gallery
+	})
+}
+
+export const GalleryImagesResolved = meta.story({
+	args: {
+		...LAUNCH_REVIEW,
+		body: STORED_GALLERY,
+		template: undefined,
+		resolveImage: fn(async (src: string) => resolvedImageOf(src)),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A Library document whose body holds a gallery of images stored as paths, `resolveImage` handed to the editor and passed down to the gallery. Check each path is resolved once and each tile shows the address `resolveImage` returned.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		const gallery = await openGalleryIn(canvasElement)
+		for (const { src, alt } of STORED_IMAGES)
+			await waitFor(() =>
+				expect(
+					within(gallery)
+						.getByRole<HTMLImageElement>("img", { name: alt })
+						.getAttribute("src"),
+				).toBe(resolvedImageOf(src)),
+			)
+		await expect(args.resolveImage).toHaveBeenCalledTimes(STORED_IMAGES.length)
+		for (const { src } of STORED_IMAGES)
+			await expect(args.resolveImage).toHaveBeenCalledWith(src)
+	},
+})
