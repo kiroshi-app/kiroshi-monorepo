@@ -333,8 +333,12 @@ const LibraryDocumentEditor = ({
 				menuFinalFocus={menuFinalFocus}
 				onBack={onBack}
 				presence={
-					writers.length > 0 ? (
-						<LibraryDocumentPresence onStopAll={onStopAll} writers={writers} />
+					writers.length > 0 || (people?.length ?? 0) > 0 ? (
+						<LibraryDocumentPresence
+							onStopAll={onStopAll}
+							people={people}
+							writers={writers}
+						/>
 					) : null
 				}
 			/>

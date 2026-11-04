@@ -1588,7 +1588,9 @@ export const PersonCaretBesideAgent = meta.story({
 		},
 	},
 	play: async ({ canvas, canvasElement }) => {
-		const caret = await canvas.findByRole("img", { name: "Léa Martin" })
+		const caret = await within(
+			slotIn(canvasElement, "library-document-column"),
+		).findByRole("img", { name: "Léa Martin" })
 		await expect(caret).toHaveAttribute(
 			"data-slot",
 			"library-document-person-caret",
@@ -1605,6 +1607,107 @@ export const PersonCaretBesideAgent = meta.story({
 		await expect(
 			canvas.getByRole("button", { name: "Atlas is writing" }),
 		).toBeVisible()
+	},
+})
+
+const PEOPLE = [
+	LEA,
+	{ id: "noah", name: "Noah", caret: 0 },
+	{ id: "ines", name: "Inès", caret: 0 },
+]
+
+const PAST_STACK_LIMIT = { id: "sam", name: "Sam", caret: 0 }
+
+const PRESENCE_ARGS = {
+	title: LIBRARY_AGENT_DOCUMENT.name,
+	body: LIBRARY_AGENT_DOCUMENT.body,
+	detail: LIBRARY_AGENT_DOCUMENT.detail,
+	template: undefined,
+	onStopAll: fn(),
+}
+
+const barIn = (canvasElement: HTMLElement) =>
+	within(
+		breadcrumbIn(canvasElement).closest("nav")?.parentElement as HTMLElement,
+	)
+
+const WRITING_COUNT = /agents? writing/
+
+const expectPeopleInBar = async (
+	canvasElement: HTMLElement,
+	names: string[],
+) => {
+	const bar = barIn(canvasElement)
+	const avatars = await bar.findAllByRole("img")
+	await expect(names.map((name) => bar.getByRole("img", { name }))).toEqual(
+		avatars,
+	)
+}
+
+export const PresencePeopleOnly = meta.story({
+	args: { ...PRESENCE_ARGS, people: [...PEOPLE, PAST_STACK_LIMIT] },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Four people have the document open and no agent writes. Check that the bar draws the first three as round avatars named by the person, in order, with no presence pill, no writing count and no Stop all.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expectPeopleInBar(
+			canvasElement,
+			PEOPLE.map(({ name }) => name),
+		)
+		const bar = barIn(canvasElement)
+		await expect(
+			bar.queryByRole("img", { name: PAST_STACK_LIMIT.name }),
+		).toBeNull()
+		await expect(bar.queryByText(WRITING_COUNT)).toBeNull()
+		await expect(bar.queryByRole("button", { name: "Stop all" })).toBeNull()
+	},
+})
+
+export const PresenceAgentsOnly = meta.story({
+	args: { ...PRESENCE_ARGS, writers: LIBRARY_WRITERS },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Agents write and nobody else has the document open. Check that the bar shows the presence pill with its writing count and no person avatar.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const bar = barIn(canvasElement)
+		await expect(
+			await bar.findByText(`${LIBRARY_WRITERS.length} agents writing`),
+		).toBeVisible()
+		await expect(bar.queryAllByRole("img")).toHaveLength(0)
+	},
+})
+
+export const PresenceAgentsAndPeople = meta.story({
+	args: { ...PRESENCE_ARGS, writers: ATLAS_WRITERS, people: PEOPLE },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Atlas writes while three people have the document open. Check that the people stack stands right before the presence pill, outside it, and that the pill still reads 1 agent writing.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expectPeopleInBar(
+			canvasElement,
+			PEOPLE.map(({ name }) => name),
+		)
+		const bar = barIn(canvasElement)
+		await expect(bar.getByText("1 agent writing")).toBeVisible()
+		const people = slotIn(canvasElement, "library-document-people")
+		await expect(people.nextElementSibling).toBe(
+			slotIn(canvasElement, "library-document-presence"),
+		)
 	},
 })
 
