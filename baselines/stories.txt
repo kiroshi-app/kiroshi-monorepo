@@ -198,6 +198,7 @@ conversation-markdown-markdowntable--default
 conversation-markdown-markdowntable--header-only
 conversation-markdown-markdowntable--wider-than-the-block
 conversation-markdown-markdowntaskcheckbox--default
+conversation-markdown-markdowntaskcheckbox--nested-checklist
 conversation-markdown-markdowntaskcheckbox--ticks-and-unticks-by-click
 conversation-markdown-markdowntaskcheckbox--ticks-from-the-keyboard
 conversation-markdown-optionscard--all-folded

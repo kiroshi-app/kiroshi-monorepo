@@ -1,6 +1,7 @@
 import { expect } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
+import { slotIn } from "@workspace/storybook/story-utils"
 import { Markdown } from "@workspace/ui/components/markdown"
 import { MarkdownTaskCheckbox } from "@workspace/ui/components/markdown/task-list"
 
@@ -11,12 +12,33 @@ const TASKS = [
 	"- [ ] Notify the owner",
 ].join("\n")
 
+const NESTED_TASKS = [
+	"- [x] Book the venue",
+	"  - [ ] Confirm the caterer",
+	"- [ ] Send the invites",
+	"  - [x] Draft the guest list",
+].join("\n")
+
 const BOX_SIZE = 16
 
-const labelOf = (box: HTMLElement) => {
-	const item = box.closest("li")
-	if (!item) throw new Error("The box sits in no list item")
-	return getComputedStyle(item)
+const labelElementOf = (box: HTMLElement) => {
+	const label = box.closest<HTMLElement>('[data-slot="markdown-task-label"]')
+	if (!label) throw new Error("The box sits in no task label")
+	return label
+}
+
+const labelOf = (box: HTMLElement) => getComputedStyle(labelElementOf(box))
+
+const isStruckFromAnyAncestor = (element: HTMLElement) => {
+	for (
+		let current: HTMLElement | null = element;
+		current && current.dataset.slot !== "markdown";
+		current = current.parentElement
+	) {
+		if (getComputedStyle(current).textDecorationLine.includes("line-through"))
+			return true
+	}
+	return false
 }
 
 const meta = preview.meta({
@@ -26,7 +48,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The box GFM emits for a task list item, drawn as the 16 box of the to-do artboard: radius 5, a 1.5 border at foreground 30 percent on the card surface, filled with the Space colour and a 12 check once ticked. A click ticks or unticks it in the message alone: nothing is written back to the message, so a reload shows the agent's state again. A ticked item strikes and mutes its label. The box names its own state, Done or To do, and the item text stays a sibling.",
+					"The box GFM emits for a task list item, drawn as the 16 box of the to-do artboard: radius 5, a 1.5 border at foreground 30 percent on the card surface, filled with the Space colour and a 12 check once ticked. A click ticks or unticks it in the message alone: nothing is written back to the message, so a reload shows the agent's state again. A ticked item strikes and mutes its own label alone, never the sub-tasks nested under it. The box names its own state, Done or To do, and the item text stays a sibling.",
 			},
 		},
 	},
@@ -111,5 +133,49 @@ export const TicksFromTheKeyboard = meta.story({
 		await expect(box).toHaveFocus()
 		await userEvent.keyboard(" ")
 		await expect(box).toHaveAccessibleName("To do")
+	},
+})
+
+export const NestedChecklist = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Sub-tasks under a ticked and an unticked parent. Check that Book the venue is struck and muted while Confirm the caterer under it stays in the foreground, and that Draft the guest list is struck and muted while Send the invites above it is not.",
+			},
+		},
+	},
+	render: () => (
+		<div className="w-[44rem] max-w-full">
+			<Markdown>{NESTED_TASKS}</Markdown>
+		</div>
+	),
+	play: async ({ canvas, canvasElement }) => {
+		const [bookVenue, draftList] = canvas.getAllByRole("checkbox", {
+			name: "Done",
+		})
+		const [confirmCaterer, sendInvites] = canvas.getAllByRole("checkbox", {
+			name: "To do",
+		})
+		if (!bookVenue || !draftList || !confirmCaterer || !sendInvites)
+			throw new Error("Four boxes expected")
+		const foreground = getComputedStyle(slotIn(canvasElement, "markdown")).color
+
+		await expect(labelElementOf(confirmCaterer)).toHaveTextContent(
+			"Confirm the caterer",
+		)
+		await expect(isStruckFromAnyAncestor(labelElementOf(confirmCaterer))).toBe(
+			false,
+		)
+		await expect(labelOf(confirmCaterer).color).toBe(foreground)
+		await expect(labelOf(bookVenue).textDecorationLine).toBe("line-through")
+		await expect(labelOf(bookVenue).color).not.toBe(foreground)
+
+		await expect(isStruckFromAnyAncestor(labelElementOf(sendInvites))).toBe(
+			false,
+		)
+		await expect(labelOf(sendInvites).color).toBe(foreground)
+		await expect(labelOf(draftList).textDecorationLine).toBe("line-through")
+		await expect(labelOf(draftList).color).not.toBe(foreground)
 	},
 })

@@ -1,6 +1,9 @@
 import {
+	Children,
 	type ComponentPropsWithoutRef,
 	createContext,
+	isValidElement,
+	type ReactNode,
 	useContext,
 	useState,
 } from "react"
@@ -12,6 +15,8 @@ import { cn } from "@workspace/ui/lib/utils"
 
 export type MarkdownTaskCheckboxProps = ComponentPropsWithoutRef<"input"> &
 	ExtraProps
+
+export type MarkdownListItemProps = ComponentPropsWithoutRef<"li"> & ExtraProps
 
 type MarkdownTaskToggle = (box: HTMLInputElement) => void
 
@@ -53,6 +58,33 @@ export const MarkdownTaskCheckbox = ({
 				className="pointer-events-none absolute inset-0 m-auto size-3 text-primary-foreground opacity-0 peer-checked:opacity-100"
 			/>
 		</label>
+	)
+}
+
+const isNestedList = (child: ReactNode) =>
+	isValidElement(child) && (child.type === "ul" || child.type === "ol")
+
+const isParagraph = (child: ReactNode) =>
+	isValidElement(child) && child.type === "p"
+
+export const MarkdownListItem = ({
+	node,
+	children,
+	...props
+}: MarkdownListItemProps) => {
+	const items = Children.toArray(children)
+	const isTightTask =
+		props.className?.includes("task-list-item") && !items.some(isParagraph)
+	if (!isTightTask) return <li {...props}>{children}</li>
+
+	const nestedAt = items.findIndex(isNestedList)
+	const labelEnd = nestedAt === -1 ? items.length : nestedAt
+
+	return (
+		<li {...props}>
+			<span data-slot="markdown-task-label">{items.slice(0, labelEnd)}</span>
+			{items.slice(labelEnd)}
+		</li>
 	)
 }
 

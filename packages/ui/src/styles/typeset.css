@@ -231,7 +231,10 @@
       padding-inline-start: 0;
     }
     &:where(
-        li.task-list-item:has(> label > input:checked, > p > label > input:checked)
+        li.task-list-item
+          > :is([data-slot="markdown-task-label"], p):has(
+            > label > input:checked
+          )
       ) {
       color: var(--typeset-muted);
       text-decoration-line: line-through;

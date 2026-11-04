@@ -23,6 +23,7 @@ import {
 	MarkdownTable,
 } from "@workspace/ui/components/markdown/table"
 import {
+	MarkdownListItem,
 	MarkdownStaticTaskBox,
 	MarkdownTaskCheckbox,
 } from "@workspace/ui/components/markdown/task-list"
@@ -34,6 +35,7 @@ export const MARKDOWN_COMPONENTS: Components = {
 	figure: MarkdownFigure,
 	img: MarkdownImage,
 	input: MarkdownTaskCheckbox,
+	li: MarkdownListItem,
 	pre: MarkdownPre,
 	span: MarkdownSpan,
 	table: MarkdownTable,
