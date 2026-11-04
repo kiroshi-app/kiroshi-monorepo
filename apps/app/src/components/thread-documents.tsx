@@ -9,7 +9,6 @@ import {
 	type FileReferenceChipProps,
 } from "@workspace/ui/components/file-reference-chip"
 import { LibraryDocumentBlockEditor } from "@workspace/ui/components/library-document-block-editor"
-import type { MarkdownProps } from "@workspace/ui/components/markdown"
 import type { MarkdownRunRenderProps } from "@workspace/ui/components/markdown/run"
 
 import { useLibraryOnScreen } from "@/components/answer-image-viewer"
@@ -111,16 +110,12 @@ type DocumentReferencesSource = {
 	isWriting: boolean
 }
 
-type DocumentReferences = Pick<MarkdownProps, "runs" | "renderRun"> & {
-	text: string
-}
-
 export const documentReferencesOf = ({
 	documents,
 	text,
 	names,
 	isWriting,
-}: DocumentReferencesSource): DocumentReferences => {
+}: DocumentReferencesSource) => {
 	const shownText = text.trim() === "" ? names.join(" ") : text
 	const runs = documentRunsOf(shownText, names)
 	const trailingNames = new Set(runs.filter(isTrailingRun).map(({ id }) => id))
