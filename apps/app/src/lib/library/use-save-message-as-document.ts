@@ -38,7 +38,7 @@ export const useSaveMessageAsDocument = (
 		},
 		meta: {
 			failureNotice: () => ({
-				title: i18n.t("common:library.failure.save"),
+				title: i18n.t("common:library.failure.document.saveAsDocument"),
 			}),
 			raisedIn: "use-save-message-as-document",
 		},

@@ -73,7 +73,14 @@ const ThreadDocumentCard = ({
 	isSelected,
 	onOpen,
 }: ThreadDocumentCardProps) => {
-	const { detail, excerpt } = useLibraryDocumentCard(spaceId, name)
+	const { detail, excerpt, failure } = useLibraryDocumentCard(spaceId, name)
+	const title = documentTitleOf(name)
+
+	if (failure) {
+		return (
+			<DocumentCard failure={failure} isSelected={isSelected} title={title} />
+		)
+	}
 
 	return (
 		<DocumentCard
@@ -81,7 +88,7 @@ const ThreadDocumentCard = ({
 			excerpt={excerpt}
 			isSelected={isSelected}
 			onOpen={onOpen}
-			title={documentTitleOf(name)}
+			title={title}
 		>
 			<UnfoldedDocument name={name} spaceId={spaceId} />
 		</DocumentCard>

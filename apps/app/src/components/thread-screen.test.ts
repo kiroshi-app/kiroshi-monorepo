@@ -6249,7 +6249,7 @@ describe("ThreadScreen saving a message as a Library document", () => {
 		])
 	})
 
-	it("raises Couldn’t save the file when the save is refused", async () => {
+	it("raises the failed save text when the save is refused", async () => {
 		libraryHost.answers.set("library_save_message", () => {
 			throw {
 				kind: "unknownMessage",
@@ -6261,7 +6261,11 @@ describe("ThreadScreen saving a message as a Library document", () => {
 
 		await saveFrom(ASKED)
 
-		expect(raisedNotice("Couldn’t save the file")).toBeTruthy()
+		expect(
+			raisedNotice(
+				"Couldn’t save the message as a document. Try Save as document again.",
+			),
+		).toBeTruthy()
 		expect(raisedNotices("Saved to Library")).toEqual([])
 	})
 

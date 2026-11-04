@@ -117,14 +117,13 @@ export const ThreadTurn = memo(function ThreadTurn({
 			{cards}
 		</>
 	)
-	const content = withCards(
-		selectable(<TurnBody attachments={attachments} text={text} />),
-	)
+	const content = selectable(<TurnBody attachments={attachments} text={text} />)
 
 	if (person !== undefined) {
 		return (
 			<PersonTurn
 				copyText={text}
+				footer={cards}
 				messageId={anchor}
 				name={person}
 				now={now}
@@ -145,6 +144,7 @@ export const ThreadTurn = memo(function ThreadTurn({
 		return (
 			<UserTurn
 				copyText={text}
+				footer={cards}
 				messageId={anchor}
 				name={readerName}
 				now={now}

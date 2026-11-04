@@ -16,6 +16,7 @@ import "@workspace/ui/lib/i18n"
 import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
 import type { TurnState } from "@workspace/ui/components/turn"
 
+import { ThreadDocumentsContext } from "@/components/thread-documents"
 import { RefusedTurn, ThreadTurn } from "@/components/thread-turn"
 import {
 	type AnswerActions,
@@ -31,6 +32,7 @@ import {
 } from "@/lib/chat/thread-authorship"
 import type { TranscriptRole } from "@/lib/conversations/transcript-contract"
 import { openInBrowser } from "@/lib/links/use-external-links"
+import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 
 vi.mock("@/lib/links/use-external-links", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/lib/links/use-external-links")>()),
@@ -81,6 +83,14 @@ type TurnSetup = {
 	onRetry?: (messageId: string) => void
 	onReply?: (target: ReplyTarget) => void
 	actions?: AnswerActions
+	documents?: string[]
+}
+
+const THREAD_DOCUMENTS = {
+	spaceId: "space-on-screen",
+	openedName: null,
+	open: () => undefined,
+	close: () => undefined,
 }
 
 const renderTurn = (
@@ -93,10 +103,11 @@ const renderTurn = (
 		onRetry,
 		onReply = () => undefined,
 		actions,
+		documents,
 	}: TurnSetup = {},
 ) => {
 	const props: ComponentProps<typeof ThreadTurn> = {
-		row: { ...rowOf(role, text), ...author },
+		row: { ...rowOf(role, text), ...author, documents: documents ?? [] },
 		anchor: "m-1",
 		state,
 		readerName: "Ada Moreau",
@@ -119,9 +130,14 @@ const renderTurn = (
 			createElement(
 				ThreadAuthorshipContext.Provider,
 				{ value: authorship },
-				createElement(ThreadTurn, props),
+				createElement(
+					ThreadDocumentsContext,
+					{ value: documents ? THREAD_DOCUMENTS : null },
+					createElement(ThreadTurn, props),
+				),
 			),
 		),
+		{ wrapper: createQueryTestWrapper().wrapper },
 	)
 }
 
@@ -658,4 +674,35 @@ describe("a message of yours that did not send", () => {
 
 		expect(onSendAgain).toHaveBeenCalledWith("m-9")
 	})
+})
+
+describe("a person message carrying Library documents", () => {
+	const RELAYED: MessageAuthorship = {
+		authorAccountId: "account-zoe",
+		authorName: "Zoe",
+		writtenFrom: "relay",
+	}
+
+	const footerOf = (text: string) =>
+		screen
+			.getByText(text)
+			.closest('[data-slot="message"]')
+			?.querySelector('[data-slot="turn-footer"]') ?? null
+
+	it.each([
+		["the reader", undefined],
+		["another person", RELAYED],
+	])(
+		"draws the card under the bubble of %s, never inside it",
+		(_who, author) => {
+			renderTurn("user", "Here is the brief.", {
+				author,
+				documents: ["brief.md"],
+			})
+
+			const card = screen.getByRole("article", { name: "brief" })
+			expect(footerOf("Here is the brief.")?.contains(card)).toBe(true)
+			expect(card.closest('[data-slot="message-bubble-content"]')).toBeNull()
+		},
+	)
 })
