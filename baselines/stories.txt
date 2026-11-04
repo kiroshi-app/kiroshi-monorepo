@@ -1623,6 +1623,7 @@ navigation-librarytabstates--image-loading
 navigation-librarytabstates--missing-item
 navigation-librarytabstates--missing-item-dark
 navigation-librarytabstates--unreadable-item
+navigation-librarytabstates--unreadable-item-dark
 navigation-missionspanel--complete
 navigation-missionspanel--complete-dark
 navigation-missionspanel--default
