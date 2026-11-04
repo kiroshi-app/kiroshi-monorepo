@@ -1888,6 +1888,7 @@ fn a_picked_image_is_refused_by_name_type_size_presence_and_permission() {
 		fs::set_permissions(picked.join(name), fs::Permissions::from_mode(0o000))
 			.expect("the file locks");
 	}
+	fs::create_dir(picked.join("folder.png")).expect("the picked folder lands");
 	let read = |name: &str| read_picked_image(&picked.join(name));
 
 	assert_eq!(read("notes.md"), Err(LibraryError::NotAnImage { name: "notes.md".to_owned() }));
@@ -1897,10 +1898,25 @@ fn a_picked_image_is_refused_by_name_type_size_presence_and_permission() {
 	);
 	assert_eq!(read("gone.png"), Err(LibraryError::Missing { name: "gone.png".to_owned() }));
 	assert!(matches!(read("locked.png"), Err(LibraryError::Unreadable { .. })));
+	assert!(matches!(read("folder.png"), Err(LibraryError::Unreadable { .. })));
 	assert_eq!(
 		read("huge.png"),
 		Err(LibraryError::TooLarge {
 			name: "huge.png".to_owned(),
+			bytes: MAX_RELAYED_IMPORT_BYTES + 1,
+			limit: MAX_RELAYED_IMPORT_BYTES
+		})
+	);
+}
+
+#[test]
+fn a_picked_image_growing_past_the_limit_is_read_no_further_and_refused() {
+	let endless = std::io::repeat(0);
+
+	assert_eq!(
+		bytes_within("grown.png", endless, MAX_RELAYED_IMPORT_BYTES),
+		Err(LibraryError::TooLarge {
+			name: "grown.png".to_owned(),
 			bytes: MAX_RELAYED_IMPORT_BYTES + 1,
 			limit: MAX_RELAYED_IMPORT_BYTES
 		})

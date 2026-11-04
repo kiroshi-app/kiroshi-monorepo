@@ -8,7 +8,7 @@ mod templates;
 
 use std::fs::{self, Metadata};
 use std::future::Future;
-use std::io::{self, Cursor, Write};
+use std::io::{self, Cursor, Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
@@ -718,15 +718,27 @@ pub(crate) fn read_picked_image(path: &Path) -> Result<LibraryImage, LibraryErro
 	let AcceptedType::Image { mime_type } = accepted else {
 		return Err(LibraryError::NotAnImage { name });
 	};
+	let limit = relayed_import_limit(&accepted);
 	let missing = || LibraryError::Missing { name: name.clone() };
 	let metadata = fs::metadata(path).map_err(|error| refusal(&error, missing()))?;
-	within(&name, metadata.len(), relayed_import_limit(&accepted))?;
-	let bytes = fs::read(path).map_err(|error| refusal(&error, missing()))?;
+	if !metadata.is_file() {
+		return Err(LibraryError::Unreadable { detail: format!("{name} is not a regular file") });
+	}
+	within(&name, metadata.len(), limit)?;
+	let file = fs::File::open(path).map_err(|error| refusal(&error, missing()))?;
+	let bytes = bytes_within(&name, file, limit)?;
 	Ok(LibraryImage {
 		name,
 		mime_type: mime_type.to_owned(),
 		content: BASE64_STANDARD.encode(bytes),
 	})
+}
+
+fn bytes_within(name: &str, content: impl Read, limit: u64) -> Result<Vec<u8>, LibraryError> {
+	let mut bytes = Vec::new();
+	content.take(limit + 1).read_to_end(&mut bytes).map_err(|error| unreadable(&error))?;
+	within(name, bytes.len() as u64, limit)?;
+	Ok(bytes)
 }
 
 fn importable(name: &str) -> Result<AcceptedType, LibraryError> {
