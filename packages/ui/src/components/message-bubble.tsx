@@ -122,8 +122,10 @@ function bubbleContentClass(
 		"[&_[data-slot=markdown]_:is(p,li,blockquote)]:text-sm [&_[data-slot=markdown]_:is(p,li,blockquote)]:leading-6",
 		hasSurface(variant) && "max-w-full",
 		MARKDOWN_TYPESET_CLASS,
+		variant === "soft" &&
+			"[--bubble-surface:var(--bubble)] hover:[--bubble-surface:var(--bubble-hover)] focus-visible:[--bubble-surface:var(--bubble-hover)]",
 		variant === "solid" && [
-			"on-user-bubble text-user-bubble-foreground",
+			"on-user-bubble text-user-bubble-foreground [--bubble-surface:var(--user-bubble)] hover:[--bubble-surface:var(--user-bubble-hover)] focus-visible:[--bubble-surface:var(--user-bubble-hover)]",
 			OWN_BUBBLE_FOCUS_RING,
 		],
 		variant === "ghost" && "w-full rounded-none px-0 py-0",
@@ -136,10 +138,7 @@ function bubbleContentClass(
 function bubbleSurfaceClass(variant: MessageBubbleVariant) {
 	return cn(
 		"pointer-events-none absolute inset-0 -z-10 rounded-[inherit]",
-		variant === "solid" &&
-			"surface-user-bubble group-hover/bubble-content:bg-user-bubble-hover group-focus-visible/bubble-content:bg-user-bubble-hover",
-		variant === "soft" &&
-			"bg-bubble group-hover/bubble-content:bg-bubble-hover group-focus-visible/bubble-content:bg-bubble-hover",
+		(variant === "solid" || variant === "soft") && "bg-(--bubble-surface)",
 		variant === "tint" && "surface-user-bubble-soft",
 		variant === "outline" && "border border-border/70 bg-card",
 		variant === "danger" && "bg-destructive/10",
