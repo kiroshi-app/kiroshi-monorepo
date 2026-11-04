@@ -82,11 +82,7 @@ fn is_web_page(url: &Url) -> bool {
 }
 
 fn domain_of(host: &str) -> String {
-	let host = host.to_ascii_lowercase();
-	match host.strip_prefix("www.") {
-		Some(domain) => domain.to_owned(),
-		None => host,
-	}
+	host.strip_prefix("www.").unwrap_or(host).to_owned()
 }
 
 fn is_detached(output: Option<&Value>) -> bool {
