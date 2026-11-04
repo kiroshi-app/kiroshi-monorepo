@@ -1052,14 +1052,10 @@ describe("a push from a pinned tab", () => {
 		expect(tabs.history.location.state.key).not.toBe(keyBefore)
 	})
 
-	it.each([
-		["back", "/", (tabs: WorkspaceTabs) => tabs.history.back()],
-		[
-			"forward",
-			threadOf("second"),
-			(tabs: WorkspaceTabs) => tabs.history.forward(),
-		],
-		["go", "/", (tabs: WorkspaceTabs) => tabs.history.go(-1)],
+	it.each<[string, string, (tabs: WorkspaceTabs) => void]>([
+		["back", "/", (tabs) => tabs.history.back()],
+		["forward", threadOf("second"), (tabs) => tabs.history.forward()],
+		["go", "/", (tabs) => tabs.history.go(-1)],
 	])(
 		"shows the %s target in another tab, then focuses it",
 		(_, target, move) => {
