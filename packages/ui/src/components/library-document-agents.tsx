@@ -125,7 +125,7 @@ const LibraryDocumentPresence = ({
 
 	return (
 		<div
-			className="flex h-8 shrink-0 items-center gap-2 rounded-full border border-foreground/8 bg-foreground/4 px-1"
+			className="flex h-8 shrink-0 items-center gap-2 rounded-full border border-foreground/8 bg-foreground/4 ps-1 pe-2.5 has-[button]:pe-1"
 			data-slot="library-document-presence"
 		>
 			<AgentStack agents={writers.map(({ agent }) => agent)} />
@@ -322,6 +322,7 @@ const LibraryDocumentPersonCaret = ({
 export {
 	AgentCaret as LibraryDocumentAgentCaret,
 	agentScopeOf,
+	FOCUS_OUTLINE,
 	type LibraryDocumentAgent,
 	type LibraryDocumentEdit,
 	type LibraryDocumentPerson,

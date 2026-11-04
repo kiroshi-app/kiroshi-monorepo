@@ -1,0 +1,180 @@
+"use client"
+
+import { type ReactNode, useId, useState } from "react"
+import { useTranslation } from "react-i18next"
+
+import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
+import { Icons } from "@workspace/ui/components/icons"
+import { InitialsAvatar } from "@workspace/ui/components/initials-avatar"
+import {
+	FOCUS_OUTLINE,
+	type LibraryDocumentAgent,
+} from "@workspace/ui/components/library-document-agents"
+import { Button } from "@workspace/ui/components/ui/button"
+import { libraryDisplayName } from "@workspace/ui/lib/library-display-name"
+import { cn } from "@workspace/ui/lib/utils"
+
+const WRITER_AVATAR_SIZE = 18
+
+const CARD_PILL = cn(
+	"h-7 gap-1.5 rounded-full font-medium text-compact text-foreground leading-4 transition-none [&_svg:not([class*='size-'])]:size-3.5",
+	FOCUS_OUTLINE,
+)
+
+type DocumentCardWriter =
+	| { kind: "agent"; agent: LibraryDocumentAgent }
+	| { kind: "person"; name: string; image?: string }
+
+const DocumentGlyph = () => (
+	<span
+		aria-hidden="true"
+		className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-foreground"
+		data-slot="document-glyph"
+	>
+		<Icons.File className="size-4" />
+	</span>
+)
+
+type WriterChipProps = {
+	writer: DocumentCardWriter
+}
+
+const WriterChip = ({ writer }: WriterChipProps) => {
+	const { t } = useTranslation("common")
+	const name = writer.kind === "agent" ? writer.agent.name : writer.name
+
+	return (
+		<span
+			className="flex h-6 min-w-0 max-w-40 shrink-0 items-center gap-1.5 rounded-full bg-foreground/4 ps-0.75 pe-2"
+			data-slot="document-card-writer"
+		>
+			<span aria-hidden="true" className="flex shrink-0">
+				{writer.kind === "agent" ? (
+					<BotIdentityAvatar
+						hue={writer.agent.hue}
+						image={writer.agent.image}
+						name={writer.agent.name}
+						seed={writer.agent.id}
+						size={WRITER_AVATAR_SIZE}
+					/>
+				) : (
+					<InitialsAvatar
+						image={writer.image}
+						name={writer.name}
+						size={WRITER_AVATAR_SIZE}
+					/>
+				)}
+			</span>
+			<span className="truncate font-medium text-soft-foreground text-xs leading-4">
+				{t("library.document.agents.caret", { name })}
+			</span>
+		</span>
+	)
+}
+
+type DocumentCardProps = {
+	title: string
+	detail: string
+	excerpt: string
+	writer?: DocumentCardWriter
+	isSelected?: boolean
+	onOpen: () => void
+	children: ReactNode
+}
+
+const DocumentCard = ({
+	title,
+	detail,
+	excerpt,
+	writer,
+	isSelected = false,
+	onOpen,
+	children,
+}: DocumentCardProps) => {
+	const { t } = useTranslation("common")
+	const [isOpen, setOpen] = useState(false)
+	const titleId = useId()
+	const bodyId = useId()
+	const shownTitle = libraryDisplayName(title, t)
+
+	return (
+		<article
+			aria-labelledby={titleId}
+			className={cn(
+				"flex min-w-0 flex-col gap-3 rounded-control border border-border bg-card p-4",
+				isSelected && "ring-2 ring-primary",
+			)}
+			data-selected={isSelected || undefined}
+			data-slot="document-card"
+		>
+			<header className="flex min-w-0 items-center gap-2.5">
+				<DocumentGlyph />
+				<span className="flex min-w-0 flex-1 flex-col">
+					<h3
+						className="truncate font-semibold text-foreground text-reading leading-5"
+						id={titleId}
+						title={shownTitle}
+					>
+						{shownTitle}
+					</h3>
+					<span className="truncate text-muted-foreground text-xs leading-4 tabular-nums">
+						{isOpen ? t("library.card.live") : detail}
+					</span>
+				</span>
+				{writer ? <WriterChip writer={writer} /> : null}
+			</header>
+			<div
+				className={cn(
+					isOpen && "flex flex-col gap-3 border-foreground/7 border-t py-3",
+				)}
+				data-slot="document-card-body"
+				id={bodyId}
+			>
+				{isOpen ? (
+					children
+				) : (
+					<p className="line-clamp-3 break-words text-soft-foreground text-sm leading-5.5">
+						{excerpt}
+					</p>
+				)}
+			</div>
+			<div className="flex flex-wrap items-center gap-2">
+				<Button
+					aria-controls={bodyId}
+					aria-expanded={isOpen}
+					className={cn(
+						CARD_PILL,
+						"bg-foreground/6 ps-2 pe-3 hover:bg-foreground/10 active:bg-foreground/14 aria-expanded:bg-foreground/6 aria-expanded:hover:bg-foreground/10 dark:hover:bg-foreground/10",
+					)}
+					onClick={() => setOpen(!isOpen)}
+					variant="ghost"
+				>
+					{isOpen ? (
+						<Icons.Collapse aria-hidden="true" />
+					) : (
+						<Icons.Expand aria-hidden="true" />
+					)}
+					{isOpen ? t("library.card.hide") : t("library.card.show")}
+				</Button>
+				<Button
+					className={cn(
+						CARD_PILL,
+						"border-border px-3 hover:bg-foreground/4 active:bg-foreground/8 dark:hover:bg-foreground/4",
+					)}
+					onClick={onOpen}
+					variant="ghost"
+				>
+					{t("library.card.open")}
+					<Icons.ArrowUpRight aria-hidden="true" />
+				</Button>
+			</div>
+		</article>
+	)
+}
+
+export {
+	DocumentCard,
+	type DocumentCardProps,
+	type DocumentCardWriter,
+	DocumentGlyph,
+}

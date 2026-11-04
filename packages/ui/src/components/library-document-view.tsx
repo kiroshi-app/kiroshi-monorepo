@@ -44,13 +44,29 @@ type LibraryDocumentBarProps<Item extends LibraryMenuSubject> =
 		item: Item
 		onBack: () => void
 		presence?: ReactNode
+		isReadOnly?: boolean
 		menuFinalFocus?: () => HTMLElement | boolean
 	}
+
+const LibraryDocumentReadOnly = () => {
+	const { t } = useTranslation("common")
+
+	return (
+		<span
+			className="flex h-7 shrink-0 items-center gap-1.5 rounded-full bg-foreground/5 px-2.5 font-medium text-soft-foreground text-xs leading-4"
+			data-slot="library-document-read-only"
+		>
+			<Icons.Lock aria-hidden="true" className="size-3.25" />
+			{t("library.document.readOnly")}
+		</span>
+	)
+}
 
 const LibraryDocumentBar = <Item extends LibraryMenuSubject>({
 	item,
 	onBack,
 	presence,
+	isReadOnly = false,
 	menuFinalFocus,
 	...actions
 }: LibraryDocumentBarProps<Item>) => {
@@ -85,7 +101,12 @@ const LibraryDocumentBar = <Item extends LibraryMenuSubject>({
 			<LibraryItemBarActions
 				actions={handlersFor(actions, item)}
 				item={item}
-				leading={presence}
+				leading={
+					<>
+						{presence}
+						{isReadOnly ? <LibraryDocumentReadOnly /> : null}
+					</>
+				}
 				menuFinalFocus={menuFinalFocus}
 				onClose={onBack}
 				surface="document"
@@ -130,27 +151,20 @@ const LibraryDocumentColumn = ({
 	</div>
 )
 
-type LibraryDocumentViewProps = WriterActions &
-	LibraryItemActions<LibraryDocument> & {
-		document: LibraryDocument
-		onBack: () => void
-		writers?: LibraryDocumentWriter[]
-		onStopAll?: () => void
-	}
+type LibraryDocumentBodyProps = WriterActions & {
+	body: string
+	writers?: LibraryDocumentWriter[]
+}
 
 const runsOf = (writers: LibraryDocumentWriter[]) =>
 	writers.map(({ agent, start, end }) => ({ id: agent.id, start, end }))
 
-const LibraryDocumentView = ({
-	document,
-	onBack,
+const LibraryDocumentBody = ({
+	body,
 	writers = [],
-	onStopAll,
 	onStop,
 	onOpenConversation,
-	...actions
-}: LibraryDocumentViewProps) => {
-	const { t } = useTranslation("common")
+}: LibraryDocumentBodyProps) => {
 	const isWriting = writers.length > 0
 
 	const renderRun = ({ id, isEnd, children }: MarkdownRunRenderProps) => {
@@ -168,6 +182,37 @@ const LibraryDocumentView = ({
 			children
 		)
 	}
+
+	return (
+		<Markdown
+			className={DOCUMENT_TYPE}
+			renderRun={isWriting ? renderRun : undefined}
+			runs={isWriting ? runsOf(writers) : undefined}
+		>
+			{body}
+		</Markdown>
+	)
+}
+
+type LibraryDocumentViewProps = WriterActions &
+	LibraryItemActions<LibraryDocument> & {
+		document: LibraryDocument
+		onBack: () => void
+		writers?: LibraryDocumentWriter[]
+		onStopAll?: () => void
+	}
+
+const LibraryDocumentView = ({
+	document,
+	onBack,
+	writers = [],
+	onStopAll,
+	onStop,
+	onOpenConversation,
+	...actions
+}: LibraryDocumentViewProps) => {
+	const { t } = useTranslation("common")
+	const isWriting = writers.length > 0
 
 	return (
 		<div
@@ -192,13 +237,12 @@ const LibraryDocumentView = ({
 					</h1>
 				}
 			>
-				<Markdown
-					className={DOCUMENT_TYPE}
-					renderRun={isWriting ? renderRun : undefined}
-					runs={isWriting ? runsOf(writers) : undefined}
-				>
-					{document.body}
-				</Markdown>
+				<LibraryDocumentBody
+					body={document.body}
+					onOpenConversation={onOpenConversation}
+					onStop={onStop}
+					writers={writers}
+				/>
 			</LibraryDocumentColumn>
 		</div>
 	)
@@ -208,6 +252,7 @@ export {
 	DOCUMENT_TITLE,
 	type LibraryDocument,
 	LibraryDocumentBar,
+	LibraryDocumentBody,
 	LibraryDocumentColumn,
 	LibraryDocumentView,
 	type LibraryDocumentViewProps,

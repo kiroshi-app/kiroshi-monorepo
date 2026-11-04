@@ -240,6 +240,9 @@ conversation-message-dayseparator--earlier-this-year
 conversation-message-dayseparator--previous-year
 conversation-message-dayseparator--today
 conversation-message-dayseparator--yesterday
+conversation-message-documentcard--default
+conversation-message-documentcard--long-content
+conversation-message-documentcard--unfolded-live
 conversation-message-emptystateshell--default
 conversation-message-emptystateshell--long-content
 conversation-message-emptystateshell--with-action
@@ -539,6 +542,8 @@ conversation-prompt-promptinput--with-quote
 conversation-prompt-promptinput--with-quote-and-attachments
 conversation-prompt-promptinput--with-quote-blocked
 conversation-prompt-promptinput--with-replies-and-attachments
+conversation-prompt-promptlibrarypicker--highlighted-row
+conversation-prompt-promptlibrarypicker--picks-on-enter
 conversation-prompt-promptmentionmenu--counted
 conversation-prompt-promptmentionmenu--counted-again
 conversation-prompt-promptmentionmenu--counted-lead
@@ -1400,6 +1405,7 @@ navigation-conversationsubjecticon--red-shield-key
 navigation-conversationsubjecticon--red-shield-key-dark
 navigation-conversationsubjecticon--unknown-icon-falls-back-to-message-square
 navigation-conversationsubjecticon--yellow
+navigation-documentpanel--in-thread
 navigation-headerconversationbutton--crowded
 navigation-headerconversationbutton--default
 navigation-headerconversationbutton--expanded
@@ -1488,6 +1494,10 @@ navigation-librarydocumenteditor--undo-after-outside-edit
 navigation-librarydocumenteditor--whitespace-title-reads-untitled
 navigation-librarydocumenteditor--with-typed-text
 navigation-librarydocumenteditor--write-failure
+navigation-librarydocumentstates--empty-document
+navigation-librarydocumentstates--failed-import
+navigation-librarydocumentstates--files-dropped-in
+navigation-librarydocumentstates--read-only
 navigation-librarydocumentview--agents-writing
 navigation-librarydocumentview--bar-matches-image-bar
 navigation-librarydocumentview--default
