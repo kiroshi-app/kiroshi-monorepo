@@ -5,6 +5,7 @@ import preview from "@workspace/storybook/preview"
 import {
 	FRAME_POLL,
 	isInBrowserRunner,
+	slotIn,
 	slotsIn,
 	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
@@ -673,14 +674,10 @@ export const PrependsOlderMessages = meta.story({
 		)
 		await settleScroll()
 
-		const [skeleton] = slotsIn(viewport, "list-end-skeleton")
-		const rows = viewport.querySelector(
-			'[data-slot="message-scroller-content"]',
-		)
+		const skeleton = slotIn(viewport, "list-end-skeleton")
+		const rows = slotIn(viewport, "message-scroller-content")
 		await expect(
-			rows &&
-				skeleton.compareDocumentPosition(rows) &
-					Node.DOCUMENT_POSITION_FOLLOWING,
+			skeleton.compareDocumentPosition(rows) & Node.DOCUMENT_POSITION_FOLLOWING,
 		).toBeTruthy()
 		await expect(canvas.queryByText(OLDER_PAGE[0].text)).toBeNull()
 		await expect(
