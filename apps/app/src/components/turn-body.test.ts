@@ -31,6 +31,13 @@ type ImageSurface = {
 	src: string
 }
 
+const SOURCED_IMAGE: ImageSurface = {
+	surface: "a sourced image",
+	text: "![The Lisbon waterfront](https://images.example.org/lisbon.jpg)\n\nSource: [Visit Lisboa](https://www.visitlisboa.com/en)",
+	name: "The Lisbon waterfront",
+	src: "https://images.example.org/lisbon.jpg",
+}
+
 const IMAGE_SURFACES: ImageSurface[] = [
 	{
 		surface: "a gallery",
@@ -50,12 +57,7 @@ const IMAGE_SURFACES: ImageSurface[] = [
 		name: "A green sofa",
 		src: "https://images.example.org/sofa.jpg",
 	},
-	{
-		surface: "a sourced image",
-		text: "![The Lisbon waterfront](https://images.example.org/lisbon.jpg)\n\nSource: [Visit Lisboa](https://www.visitlisboa.com/en)",
-		name: "The Lisbon waterfront",
-		src: "https://images.example.org/lisbon.jpg",
-	},
+	SOURCED_IMAGE,
 	{
 		surface: "an illustrated list",
 		text: fenced(
@@ -158,9 +160,9 @@ describe.each(IMAGE_SURFACES)(
 
 			await pickInImageMenuOf(name, "Open in viewer")
 
-			const [images, index] = vi.mocked(actions.openImage).mock.calls[0] ?? []
-			expect(images?.[index ?? -1]).toEqual(
-				expect.objectContaining({ name, src }),
+			expect(actions.openImage).toHaveBeenCalledWith(
+				expect.arrayContaining([expect.objectContaining({ name, src })]),
+				expect.any(Number),
 			)
 		})
 	},
@@ -169,7 +171,7 @@ describe.each(IMAGE_SURFACES)(
 describe("the Save button of a sourced image in an answer", () => {
 	it("saves the image to the Library", async () => {
 		const actions = actionsSpy()
-		renderAnswer(IMAGE_SURFACES[2]?.text ?? "", actions)
+		renderAnswer(SOURCED_IMAGE.text, actions)
 
 		await act(async () => {
 			fireEvent.click(screen.getByRole("button", { name: "Save the image" }))
@@ -177,8 +179,8 @@ describe("the Save button of a sourced image in an answer", () => {
 
 		expect(actions.imageActions.onSaveToLibrary).toHaveBeenCalledWith(
 			expect.objectContaining({
-				name: "The Lisbon waterfront",
-				src: "https://images.example.org/lisbon.jpg",
+				name: SOURCED_IMAGE.name,
+				src: SOURCED_IMAGE.src,
 			}),
 		)
 	})
