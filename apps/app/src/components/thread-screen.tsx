@@ -1597,9 +1597,10 @@ const useThreadActions = (
 		void controller.stop()
 	}, [controller])
 	const loadOlderPage = useCallback(async () => {
-		const oldestShownId = controller.getState().messages[0]?.id
+		const oldestShownId = () => controller.getState().messages[0]?.id
+		const oldestBefore = oldestShownId()
 		await controller.loadOlder()
-		return controller.getState().messages[0]?.id !== oldestShownId
+		return oldestShownId() !== oldestBefore
 	}, [controller])
 	const older = useListEnd({
 		hasMore: state.hasOlder,
