@@ -285,10 +285,11 @@ conversation-message-messageattachments--states
 conversation-message-messagebubble--body-text-size
 conversation-message-messagebubble--content-widths
 conversation-message-messagebubble--default
+conversation-message-messagebubble--double-clicked-word
 conversation-message-messagebubble--long-content
 conversation-message-messagebubble--narrow-container
 conversation-message-messagebubble--space-tinted
-conversation-message-messagebubble--text-selection
+conversation-message-messagebubble--triple-clicked-paragraph
 conversation-message-messagebubble--variants
 conversation-message-messagequote--default
 conversation-message-messagequote--long-content
@@ -300,6 +301,7 @@ conversation-message-messagescroller--holds-the-reader-while-scrolling-back
 conversation-message-messagescroller--scrolled-back
 conversation-message-messageselection--copy-pressed
 conversation-message-messageselection--dismissed
+conversation-message-messageselection--double-clicked-word
 conversation-message-messageselection--first-line-in-scroller
 conversation-message-messageselection--keyboard-selection
 conversation-message-messageselection--reply-hovered

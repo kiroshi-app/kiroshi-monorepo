@@ -1,22 +1,21 @@
 import type { ReactNode } from "react"
-import { expect, fn } from "storybook/test"
+import { expect, fn, userEvent } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 	hueScopeOf,
+	isInBrowserRunner,
 	listExhaustively,
 	slotIn,
 	slotsIn,
 } from "@workspace/storybook/story-utils"
-import { CodeSnippet } from "@workspace/ui/components/code-snippet"
 import {
 	BLOT_HUES,
 	BLOT_TINTS,
 	type BotAvatarBlot,
 } from "@workspace/ui/components/companion-colour"
 import { Markdown } from "@workspace/ui/components/markdown"
-import { MessageAttachments } from "@workspace/ui/components/message-attachments"
 import {
 	MessageBubble,
 	MessageBubbleCollapsible,
@@ -203,55 +202,105 @@ export const LongContent = meta.story({
 	},
 })
 
-const ATTACHMENT = { id: "brief", name: "brief.pdf" }
+const USER_WORD = "onboarding"
 
-const SNIPPET = "bun run build"
+const AGENT_WORD = "legacy"
+
+const PARAGRAPH_WORD = "export"
 
 const selectedText = () => window.getSelection()?.toString() ?? ""
 
-export const TextSelection = meta.story({
+const textRangeIn = (element: HTMLElement, part: string) => {
+	const text = element.firstChild
+	const start = element.textContent?.indexOf(part) ?? -1
+	if (!(text instanceof Text) || start < 0) throw new Error(`No ${part} drawn`)
+	const range = document.createRange()
+	range.setStart(text, start)
+	range.setEnd(text, start + part.length)
+	return range
+}
+
+const clickWord = async (
+	element: HTMLElement,
+	word: string,
+	clickCount: 2 | 3,
+) => {
+	const range = textRangeIn(element, word)
+	if (!isInBrowserRunner()) {
+		return userEvent.pointer({
+			keys: "[MouseLeft]".repeat(clickCount),
+			target: element,
+			offset: range.startOffset + 1,
+		})
+	}
+	const { userEvent: browser } = await import("vitest/browser")
+	const wordBox = range.getBoundingClientRect()
+	const box = element.getBoundingClientRect()
+	const position = {
+		x: wordBox.left + wordBox.width / 2 - box.left,
+		y: wordBox.top + wordBox.height / 2 - box.top,
+	}
+	return clickCount === 2
+		? browser.dblClick(element, { position })
+		: browser.tripleClick(element, { position })
+}
+
+const SelectableThread = () => (
+	<MessageBubbleGroup spacing="default" className={THREAD_WIDTH}>
+		<MessageBubble variant="solid" align="end">
+			<MessageBubbleContent>
+				<p>{USER_PROMPT}</p>
+			</MessageBubbleContent>
+		</MessageBubble>
+		<MessageBubble variant="soft" align="start">
+			<MessageBubbleContent>
+				{AGENT_LONG_REPLY.slice(0, 2).map((paragraph) => (
+					<p key={paragraph}>{paragraph}</p>
+				))}
+			</MessageBubbleContent>
+		</MessageBubble>
+	</MessageBubbleGroup>
+)
+
+export const DoubleClickedWord = meta.story({
 	parameters: {
 		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:
-					"Double-click inside a bubble to select that message whole, ready for a copy. Check that the highlight spans every paragraph and stops at the attachment chip, that a second double-click moves the highlight instead of adding one, and that a double-click inside the fence keeps the native word selection. Both bubbles are the ones `packages/ui/src/components/turn.tsx:340` and `packages/ui/src/components/turn.tsx:492` build, filled by `apps/app/src/components/turn-body.tsx:7`.",
+					"Double-click a word inside a bubble and the browser selects that word, nothing more. Check that the highlight covers the word alone in the user bubble and in the agent bubble, never the whole message. Both bubbles are the ones `TurnBody` in `packages/ui/src/components/turn.tsx` builds.",
 			},
 		},
 	},
-	render: () => (
-		<MessageBubbleGroup spacing="default" className={THREAD_WIDTH}>
-			<MessageBubble variant="solid" align="end">
-				<MessageBubbleContent>
-					<MessageAttachments items={[ATTACHMENT]} onOpen={() => {}} />
-					<p>{USER_PROMPT}</p>
-				</MessageBubbleContent>
-			</MessageBubble>
-			<MessageBubble variant="soft" align="start">
-				<MessageBubbleContent>
-					{AGENT_LONG_REPLY.slice(0, 2).map((paragraph) => (
-						<p key={paragraph}>{paragraph}</p>
-					))}
-					<CodeSnippet code={SNIPPET} language="bash" />
-				</MessageBubbleContent>
-			</MessageBubble>
-		</MessageBubbleGroup>
-	),
-	play: async ({ canvas, canvasElement, userEvent }) => {
-		await userEvent.dblClick(canvas.getByText(USER_PROMPT))
+	render: () => <SelectableThread />,
+	play: async ({ canvas }) => {
+		await document.fonts.ready
+		await clickWord(canvas.getByText(USER_PROMPT), USER_WORD, 2)
 
-		await expect(selectedText()).toBe(USER_PROMPT)
+		await expect(selectedText()).toBe(USER_WORD)
 
-		await userEvent.dblClick(canvas.getByText(AGENT_LONG_REPLY[0]))
+		await clickWord(canvas.getByText(AGENT_LONG_REPLY[0]), AGENT_WORD, 2)
 
-		await expect(window.getSelection()?.rangeCount).toBe(1)
-		await expect(selectedText()).toContain(AGENT_LONG_REPLY[1])
+		await expect(selectedText()).toBe(AGENT_WORD)
+	},
+})
 
-		await userEvent.dblClick(
-			canvasElement.querySelector("pre code") as HTMLElement,
-		)
+export const TripleClickedParagraph = meta.story({
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"Triple-click inside an agent bubble with several paragraphs and the browser selects the paragraph under the pointer. Check that the highlight stops at that paragraph and leaves the others unselected.",
+			},
+		},
+	},
+	render: () => <SelectableThread />,
+	play: async ({ canvas }) => {
+		await document.fonts.ready
+		await clickWord(canvas.getByText(AGENT_LONG_REPLY[1]), PARAGRAPH_WORD, 3)
 
-		await expect(selectedText()).not.toContain(AGENT_LONG_REPLY[1])
+		await expect(selectedText().trim()).toBe(AGENT_LONG_REPLY[1])
 	},
 })
 

@@ -5,7 +5,6 @@ import {
 	type ComponentPropsWithRef,
 	cloneElement,
 	createContext,
-	type MouseEvent,
 	type ReactElement,
 	type ReactNode,
 	type Ref,
@@ -145,67 +144,6 @@ function bubbleSurfaceClass(variant: MessageBubbleVariant) {
 	)
 }
 
-const MESSAGE_BUBBLE_TEXT_SELECTOR = '[data-slot="message-bubble-text"]'
-
-const NATIVE_SELECTION_SELECTOR =
-	'pre, a, button, input, textarea, [contenteditable="true"], [data-slot="message-attachments"]'
-
-const NON_MESSAGE_TEXT_SELECTOR =
-	'button, [aria-hidden="true"], [data-slot="message-attachments"]'
-
-function messageTextNodesOf(root: Element) {
-	const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
-	const nodes: Text[] = []
-
-	while (walker.nextNode()) {
-		const node = walker.currentNode as Text
-		const carriesText = node.data.trim().length > 0
-		const belongsToMessage = !node.parentElement?.closest(
-			NON_MESSAGE_TEXT_SELECTOR,
-		)
-
-		if (carriesText && belongsToMessage) nodes.push(node)
-	}
-
-	return nodes
-}
-
-function messageTextContainerIn(target: Element, content: Element) {
-	const nearest = target.closest(MESSAGE_BUBBLE_TEXT_SELECTOR)
-
-	if (nearest && content.contains(nearest)) return nearest
-
-	return [...content.children].find((child) =>
-		child.matches(MESSAGE_BUBBLE_TEXT_SELECTOR),
-	)
-}
-
-function selectMessageTextAt(
-	eventTarget: EventTarget | null,
-	content: Element,
-) {
-	const target = eventTarget instanceof Element ? eventTarget : null
-
-	if (!target || target.closest(NATIVE_SELECTION_SELECTOR)) return
-
-	const textContainer = messageTextContainerIn(target, content)
-	const selection = window.getSelection()
-
-	if (!textContainer || !selection) return
-
-	const nodes = messageTextNodesOf(textContainer)
-	const first = nodes[0]
-	const last = nodes[nodes.length - 1]
-
-	if (!first || !last) return
-
-	const range = document.createRange()
-	range.setStart(first, 0)
-	range.setEnd(last, last.data.length)
-	selection.removeAllRanges()
-	selection.addRange(range)
-}
-
 export function MessageBubbleContent({
 	render,
 	foot,
@@ -218,8 +156,6 @@ export function MessageBubbleContent({
 	const interactive = render?.type === "button" || render?.type === "a"
 	const filled = hasSurface(variant)
 	const classes = cn(bubbleContentClass(variant, interactive), className)
-	const selectMessageText = (event: MouseEvent<HTMLDivElement>) =>
-		selectMessageTextAt(event.target, event.currentTarget)
 	const composedChildren = (
 		<>
 			{filled ? (
@@ -242,18 +178,15 @@ export function MessageBubbleContent({
 			ref: mergeRefs(child.props.ref, ref as Ref<HTMLElement> | undefined),
 			className: cn(classes, child.props.className),
 			children: composedChildren,
-			onDoubleClick: selectMessageText,
 			"data-slot": "message-bubble-content",
 		})
 	}
 
 	return (
-		// biome-ignore lint/a11y/noStaticElementInteractions: the double-click only widens a text selection the browser already grants
 		<div
 			ref={ref}
 			data-slot="message-bubble-content"
 			className={classes}
-			onDoubleClick={selectMessageText}
 			{...props}
 		>
 			{composedChildren}
