@@ -162,6 +162,46 @@ const shiftedOffset = (before: string, after: string, offset: number) => {
 	return after.length - tail
 }
 
+const withEmptyBlockAt = (
+	document: LibraryBlockDocument,
+	at: number,
+	nextId: BlockIds,
+): LibraryBlockDocument => {
+	const markdown = serializeBlocks(document)
+	const offsets = offsetsOf(document)
+	const isLineStart = at === 0 || markdown[at - 1] === "\n"
+	if (!isLineStart || at > markdown.length || offsets.includes(at))
+		return document
+
+	const { lead, blocks } = document
+	const emptyBlock = (gap: string) => ({ id: nextId(), source: "", gap })
+	if (at <= lead.length)
+		return {
+			lead: lead.slice(0, at),
+			blocks: [emptyBlock(lead.slice(at)), ...blocks],
+		}
+	const index = offsets.findLastIndex((start) => start < at)
+	const block = blocks[index]
+	const within = at - offsets[index] - block.source.length
+	if (within < 0) return document
+	return {
+		lead,
+		blocks: [
+			...blocks.slice(0, index),
+			{ ...block, gap: block.gap.slice(0, within) },
+			emptyBlock(block.gap.slice(within)),
+			...blocks.slice(index + 1),
+		],
+	}
+}
+
+const withEmptyBlocksAt = (
+	document: LibraryBlockDocument,
+	offsets: number[],
+	nextId: BlockIds,
+) =>
+	offsets.reduce((seeded, at) => withEmptyBlockAt(seeded, at, nextId), document)
+
 const keepIds = (
 	previous: LibraryBlock[],
 	next: LibraryBlockDocument,
@@ -478,6 +518,7 @@ export {
 	withCodeBody,
 	withCodeLanguage,
 	withColumn,
+	withEmptyBlocksAt,
 	withGalleryItems,
 	withRow,
 	withRowText,

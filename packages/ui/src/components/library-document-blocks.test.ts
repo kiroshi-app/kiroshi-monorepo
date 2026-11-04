@@ -15,6 +15,7 @@ import {
 	conversionsOf,
 	convertSource,
 	galleryItemsOf,
+	offsetsOf,
 	parseBlocks,
 	relaid,
 	rowAfter,
@@ -32,6 +33,7 @@ import {
 	withCodeBody,
 	withCodeLanguage,
 	withColumn,
+	withEmptyBlocksAt,
 	withGalleryItems,
 	withRow,
 	withRowText,
@@ -321,5 +323,39 @@ describe("shiftedOffset", () => {
 
 	it("moves an offset inside a replaced span to its end", () => {
 		expect(shiftedOffset("on the 10th", "on the 1st", 9)).toBe(10)
+	})
+})
+
+describe("withEmptyBlocksAt", () => {
+	it("cuts an empty block at each empty line, the markdown unchanged", () => {
+		const markdown = "\n## Decisions\n\n## Next steps\n"
+		const seeded = withEmptyBlocksAt(
+			parseBlocks(markdown, idsFrom()),
+			[0, 14, 29],
+			idsFrom(),
+		)
+
+		expect(serializeBlocks(seeded)).toBe(markdown)
+		expect(seeded.blocks.map(({ source }) => source)).toEqual([
+			"",
+			"## Decisions",
+			"",
+			"## Next steps",
+			"",
+		])
+		expect(offsetsOf(seeded)).toEqual([0, 1, 14, 15, 29])
+	})
+
+	it("adds nothing where a block starts or inside a line", () => {
+		const document = parseBlocks("Ship it\n\nThen rest", idsFrom())
+
+		expect(withEmptyBlocksAt(document, [0, 3, 9], idsFrom())).toEqual(document)
+	})
+
+	it("gives an empty document its one empty block", () => {
+		const seeded = withEmptyBlocksAt(parseBlocks("", idsFrom()), [0], idsFrom())
+
+		expect(seeded.blocks.map(({ source }) => source)).toEqual([""])
+		expect(serializeBlocks(seeded)).toBe("")
 	})
 })

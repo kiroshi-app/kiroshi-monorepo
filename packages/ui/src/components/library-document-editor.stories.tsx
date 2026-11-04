@@ -87,7 +87,26 @@ const ROUND_TRIP = [
 	"",
 ].join("\n")
 
+const PLACEHOLDER_INK = "rgb(115, 115, 115)"
+
 const TITLE_PLACEHOLDER_INK = "rgb(82, 82, 82)"
+
+const BLANK_PLACEHOLDER = "Start writing. Use # for a heading and - for a list."
+
+const MEETING_PLACEHOLDERS = [
+	"Who was there, and what the meeting was for.",
+	"One line per decision, with the reason behind it.",
+	"Who does what, and by when.",
+]
+
+const placeholdersIn = (root: HTMLElement) =>
+	slotsIn(root, "library-document-placeholder").map(
+		(shown) => shown.dataset.placeholder,
+	)
+
+const placeholderInkIn = (root: HTMLElement) =>
+	getComputedStyle(slotIn(root, "library-document-placeholder"), "::before")
+		.color
 
 const COMMAND = navigator.userAgent.includes("Mac") ? "Meta" : "Control"
 
@@ -268,7 +287,7 @@ export const Blank = meta.story({
 		docs: {
 			description: {
 				story:
-					"A blank document, as artboard 4 draws it. Check that the empty title reads Untitled in the field and in the breadcrumb, that the body is one empty text block, that its field writes in the reading type with no outline and no ring, the caret being its only signal, and that clearing what was typed reports an empty body.",
+					"A blank document, as artboard 4 draws it. Check that the empty title reads Untitled in the field and in the breadcrumb, that the body is one empty text block showing its placeholder line in the placeholder ink, at rest and once open, that its field writes in the reading type with no outline and no ring, the caret being its only signal, that typing hides the placeholder and reports only the typed text, and that clearing what was typed brings the placeholder back and reports an empty body.",
 			},
 		},
 	},
@@ -280,7 +299,12 @@ export const Blank = meta.story({
 		)
 		await expect(breadcrumbIn(canvasElement)).toHaveTextContent("Untitled")
 		await expect(canvas.getByText("Created just now")).toBeVisible()
+		await expect(canvas.getByRole("group", { name: "Document text" })).toBe(
+			slotIn(canvasElement, "library-document-blocks"),
+		)
 		await expect(typesIn(canvasElement)).toEqual(["paragraph"])
+		await expect(placeholdersIn(canvasElement)).toEqual([BLANK_PLACEHOLDER])
+		await expect(placeholderInkIn(canvasElement)).toBe(PLACEHOLDER_INK)
 
 		await userEvent.type(title, "Q")
 		await expect(args.onTitleChange).toHaveBeenLastCalledWith("Q")
@@ -292,6 +316,8 @@ export const Blank = meta.story({
 		const [line] = blocksIn(canvasElement)
 		const field = await openBlock(canvasElement, line as HTMLElement)
 		await expect(field).toHaveValue("")
+		await expect(placeholdersIn(canvasElement)).toEqual([BLANK_PLACEHOLDER])
+		await expect(placeholderInkIn(canvasElement)).toBe(PLACEHOLDER_INK)
 		await expect(getComputedStyle(field).fontSize).toBe("15px")
 		await expect(getComputedStyle(field).lineHeight).toBe("24px")
 		await expect(getComputedStyle(field).outlineStyle).toBe("none")
@@ -299,10 +325,12 @@ export const Blank = meta.story({
 		if (!isInBrowserRunner()) return
 		await keyboard("Hi")
 		await expect(args.onBodyChange).toHaveBeenLastCalledWith("Hi")
+		await expect(placeholdersIn(canvasElement)).toEqual([])
 		await expect(title).toHaveValue("")
 		await expect(args.onTitleChange).toHaveBeenLastCalledWith("")
 		await keyboard("{Backspace}{Backspace}")
 		await expect(args.onBodyChange).toHaveBeenLastCalledWith("")
+		await expect(placeholdersIn(canvasElement)).toEqual([BLANK_PLACEHOLDER])
 	},
 })
 
@@ -665,7 +693,7 @@ export const FromMeetingNotes = meta.story({
 		docs: {
 			description: {
 				story:
-					"A document from Meeting notes, as artboard 5 draws it. Check that the title is dated, that the template headings render as two heading blocks without their markers, and that a line added under Decisions writes there in the markdown.",
+					"A document from Meeting notes, as artboard 5 draws it. Check that the title is dated, that each empty line of the template is an empty block showing its placeholder in the placeholder ink, at rest and once open, that the headings render without their markers, that leaving an untouched placeholder block reports nothing, and that typing on one writes there and drops only that placeholder, never writing one into the markdown.",
 			},
 		},
 	},
@@ -681,21 +709,37 @@ export const FromMeetingNotes = meta.story({
 		await expect(
 			canvas.getByText("Created just now from Meeting notes"),
 		).toBeVisible()
-		await expect(typesIn(canvasElement)).toEqual(["heading", "heading"])
+		await expect(typesIn(canvasElement)).toEqual([
+			"paragraph",
+			"heading",
+			"paragraph",
+			"heading",
+			"paragraph",
+		])
+		await expect(placeholdersIn(canvasElement)).toEqual(MEETING_PLACEHOLDERS)
+		await expect(placeholderInkIn(canvasElement)).toBe(PLACEHOLDER_INK)
 		const decisions = canvas.getByRole("heading", { name: "Decisions" })
 		await expect(getComputedStyle(decisions).fontWeight).toBe("600")
-		await expect(canvas.getByRole("heading", { name: "Next steps" })).toBe(
-			blockWith(canvasElement, "Next steps").querySelector("h2"),
-		)
 
-		fireEvent.click(
-			slotIn(blockWith(canvasElement, "Decisions"), "library-block-insert"),
-		)
-		const field = await focusedFieldIn(canvasElement)
+		const underDecisions = () => blocksIn(canvasElement)[2] as HTMLElement
+		const untouched = await openBlock(canvasElement, underDecisions())
+		await expect(placeholdersIn(underDecisions())).toEqual([
+			MEETING_PLACEHOLDERS[1],
+		])
+		untouched.blur()
+		await waitFor(() => expect(canvasElement.querySelector(FIELD)).toBe(null))
+		await expect(placeholdersIn(canvasElement)).toEqual(MEETING_PLACEHOLDERS)
+		await expect(args.onBodyChange).not.toHaveBeenCalled()
+
+		const field = await openBlock(canvasElement, underDecisions())
 		fireEvent.change(field, { target: { value: "Ship" } })
 		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
-			"\n## Decisions\n\nShip\n\n## Next steps\n",
+			"\n## Decisions\nShip\n## Next steps\n",
 		)
+		await expect(placeholdersIn(canvasElement)).toEqual([
+			MEETING_PLACEHOLDERS[0],
+			MEETING_PLACEHOLDERS[2],
+		])
 	},
 })
 
@@ -1002,32 +1046,32 @@ export const MultiParagraphPaste = meta.story({
 		docs: {
 			description: {
 				story:
-					"Three paragraphs separated by blank lines pasted on a line added under Decisions. Check that the markdown reported carries them exactly as pasted, and that once the line is left they render as three paragraph blocks.",
+					"Three paragraphs separated by blank lines, with no leading newline, pasted on the empty line under Decisions. Check that the markdown reported carries them exactly as pasted, and that once the line is left they render as three paragraph blocks.",
 			},
 		},
 	},
 	play: async ({ args, canvasElement, userEvent }) => {
-		fireEvent.click(
-			slotIn(blockWith(canvasElement, "Decisions"), "library-block-insert"),
-		)
-		await focusedFieldIn(canvasElement)
+		await openBlock(canvasElement, blocksIn(canvasElement)[2] as HTMLElement)
 		await userEvent.paste(PASTED)
 
-		const expected = `\n## Decisions\n\n${PASTED}\n\n## Next steps\n`
+		const at = "\n## Decisions\n".length
+		const expected = `${MEETING_NOTES.body.slice(0, at)}${PASTED}${MEETING_NOTES.body.slice(at)}`
 		await expect(args.onBodyChange).toHaveBeenLastCalledWith(expected)
 		fieldIn(canvasElement).blur()
 		await waitFor(() =>
 			expect(typesIn(canvasElement)).toEqual([
-				"heading",
-				"paragraph",
-				"paragraph",
 				"paragraph",
 				"heading",
+				"paragraph",
+				"paragraph",
+				"paragraph",
+				"heading",
+				"paragraph",
 			]),
 		)
 		await expect(
 			blocksIn(canvasElement)
-				.slice(1, 4)
+				.slice(2, 5)
 				.map((block) => block.textContent),
 		).toEqual(["First thought.", "Second thought.", "Third thought."])
 		await expect(args.onBodyChange).toHaveBeenLastCalledWith(expected)
@@ -2185,6 +2229,80 @@ const lineFormatStory = (button: string, marker: string, type: string) => ({
 		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
 			SELECTION_DOCUMENT.body,
 		)
+		for (const action of Object.values(SELECTION_ACTIONS))
+			await expect(action).not.toHaveBeenCalled()
+	},
+})
+
+const inlineFormatStory = (button: string, marker: string, tag: string) => ({
+	...selectionStory(
+		`${button} pressed in the toolbar over a word of a paragraph block. Check that it writes the ${marker} markers around the word in the markdown of that block, keeping the word selected, that the block left renders the word in its ${tag} element with the markers hidden, and that no \`SelectionActions\` prop is called.`,
+	),
+	play: async ({ args, canvasElement }: PlayContext) => {
+		const { field } = await selectText(canvasElement, "Screenshots")
+		fireEvent.click(
+			await within(canvasElement).findByRole("button", { name: button }),
+		)
+		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+			SELECTION_DOCUMENT.body.replace(
+				"Screenshots",
+				`${marker}Screenshots${marker}`,
+			),
+		)
+		await waitFor(() => expect(selectedTextIn(field)).toBe("Screenshots"))
+
+		field.blur()
+		await waitFor(() => expect(canvasElement.querySelector(FIELD)).toBe(null))
+		const block = blockWith(canvasElement, "land on the 10th.")
+		await expect(block.querySelector(tag)).toHaveTextContent("Screenshots")
+		await expect(block.textContent).not.toContain(marker)
+		for (const action of Object.values(SELECTION_ACTIONS))
+			await expect(action).not.toHaveBeenCalled()
+	},
+})
+
+export const FormatBold = meta.story({
+	...inlineFormatStory("Bold", "**", "strong"),
+})
+
+export const FormatItalic = meta.story({
+	...inlineFormatStory("Italic", "*", "em"),
+})
+
+export const FormatStrikethrough = meta.story({
+	...inlineFormatStory("Strikethrough", "~~", "del"),
+})
+
+export const FormatInlineCode = meta.story({
+	...inlineFormatStory("Code", "`", "code"),
+})
+
+export const FormatLink = meta.story({
+	...selectionStory(
+		"Link pressed in the toolbar over a word of a paragraph block, a url typed then confirmed. Check that it links the word in the markdown of that block, that the block left renders the word as a link to that url with the markers hidden, and that no `SelectionActions` prop is called.",
+	),
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		const { field } = await selectText(canvasElement, "Screenshots")
+		await userEvent.click(await canvas.findByRole("button", { name: "Link" }))
+		await userEvent.type(
+			canvas.getByRole("textbox", { name: "Link address" }),
+			"https://kiroshi.app/brief{Enter}",
+		)
+		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+			SELECTION_DOCUMENT.body.replace(
+				"Screenshots",
+				"[Screenshots](https://kiroshi.app/brief)",
+			),
+		)
+
+		field.focus()
+		field.blur()
+		await waitFor(() => expect(canvasElement.querySelector(FIELD)).toBe(null))
+		const link = within(
+			blockWith(canvasElement, "land on the 10th."),
+		).getByRole("link")
+		await expect(link).toHaveTextContent("Screenshots")
+		await expect(link).toHaveAttribute("href", "https://kiroshi.app/brief")
 		for (const action of Object.values(SELECTION_ACTIONS))
 			await expect(action).not.toHaveBeenCalled()
 	},

@@ -1525,8 +1525,13 @@ navigation-librarydocumenteditor--code-shortcut
 navigation-librarydocumenteditor--create-failure
 navigation-librarydocumenteditor--escape-closes-toolbar
 navigation-librarydocumenteditor--existing-document
+navigation-librarydocumenteditor--format-bold
 navigation-librarydocumenteditor--format-bullet-list
 navigation-librarydocumenteditor--format-heading-2
+navigation-librarydocumenteditor--format-inline-code
+navigation-librarydocumenteditor--format-italic
+navigation-librarydocumenteditor--format-link
+navigation-librarydocumenteditor--format-strikethrough
 navigation-librarydocumenteditor--format-without-change
 navigation-librarydocumenteditor--from-meeting-notes
 navigation-librarydocumenteditor--held-run-fades-with-motion

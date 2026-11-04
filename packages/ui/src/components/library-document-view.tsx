@@ -39,9 +39,13 @@ const DOCUMENT_TYPE = cn(
 const DOCUMENT_TITLE =
 	"break-words font-heading font-semibold text-[1.75rem] text-foreground leading-[2.125rem] tracking-[-0.02em]"
 
+const PLACEHOLDER_LOOK =
+	"pointer-events-none before:text-placeholder-foreground before:content-[attr(data-placeholder)]"
+
 type GrowingFieldProps = TextareaHTMLAttributes<HTMLTextAreaElement> & {
 	value: string
 	placeholder?: string
+	hint?: string
 	className: string
 	fieldClassName: string
 	fieldRef?: Ref<HTMLTextAreaElement>
@@ -50,6 +54,7 @@ type GrowingFieldProps = TextareaHTMLAttributes<HTMLTextAreaElement> & {
 const GrowingField = ({
 	value,
 	placeholder,
+	hint,
 	className,
 	fieldClassName,
 	fieldRef,
@@ -62,6 +67,19 @@ const GrowingField = ({
 		>
 			{`${value || placeholder || ""}​`}
 		</span>
+		{hint ? (
+			<span
+				aria-hidden="true"
+				className="pointer-events-none col-start-1 row-start-1 whitespace-pre-wrap"
+			>
+				<span className="invisible">{value}</span>
+				<span
+					className={PLACEHOLDER_LOOK}
+					data-placeholder={hint}
+					data-slot="library-document-placeholder"
+				/>
+			</span>
+		) : null}
 		<textarea
 			className={cn(
 				"col-start-1 row-start-1 resize-none overflow-hidden bg-transparent outline-none",
@@ -295,4 +313,5 @@ export {
 	LibraryDocumentColumn,
 	LibraryDocumentView,
 	type LibraryDocumentViewProps,
+	PLACEHOLDER_LOOK,
 }

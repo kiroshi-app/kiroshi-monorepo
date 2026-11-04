@@ -24,6 +24,7 @@ import {
 import {
 	LibraryDocumentBlockEditor,
 	type LibraryDocumentBlockEditorHandle,
+	type LibraryDocumentPlaceholder,
 } from "@workspace/ui/components/library-document-block-editor"
 import { shiftedOffset } from "@workspace/ui/components/library-document-blocks"
 import {
@@ -88,6 +89,24 @@ const templateLinesOf = (
 
 const bodyOfLines = (lines: TemplateLine[]) =>
 	lines.map(({ text }) => text).join("\n")
+
+const placeholdersOf = (
+	template: LibraryDocumentTemplate | undefined,
+	body: string,
+	t: TFunction<"common">,
+): LibraryDocumentPlaceholder[] => {
+	if (body === "")
+		return [{ at: 0, text: t("library.templates.blank.placeholder") }]
+	const lines = template ? templateLinesOf(template, t) : []
+	if (body !== bodyOfLines(lines)) return []
+
+	let at = 0
+	return lines.flatMap(({ text, placeholder }) => {
+		const from = at
+		at += text.length + 1
+		return placeholder ? [{ at: from, text: placeholder }] : []
+	})
+}
 
 type LibraryDocumentStart = {
 	title: string
@@ -161,7 +180,6 @@ type LibraryDocumentEditorProps = WriterActions &
 		title: string
 		body: string
 		detail: string
-		// TODO: OPE-1802 removes template once apps/app stops passing it.
 		template?: LibraryDocumentTemplate
 		onTitleChange: (title: string) => void
 		onTitleConfirm?: (name: string) => void
@@ -213,6 +231,7 @@ const LibraryDocumentEditor = ({
 	const titleField = useRef<HTMLTextAreaElement>(null)
 	const titleAtEditStart = useRef<string>(undefined)
 	const blocks = useRef<LibraryDocumentBlockEditorHandle>(null)
+	const [placeholders] = useState(() => placeholdersOf(template, body, t))
 
 	const focusTitleAtEnd = () => {
 		const field = titleField.current
@@ -358,6 +377,7 @@ const LibraryDocumentEditor = ({
 					onOpenConversation={onOpenConversation}
 					onStop={onStop}
 					people={people}
+					placeholders={placeholders}
 					ref={blocks}
 					writers={writers}
 				/>

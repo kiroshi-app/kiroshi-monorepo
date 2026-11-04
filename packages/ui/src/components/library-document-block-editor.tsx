@@ -66,6 +66,7 @@ import {
 	serializeBlocks,
 	shiftedOffset,
 	toggleTask,
+	withEmptyBlocksAt,
 } from "@workspace/ui/components/library-document-blocks"
 import {
 	formattedSelection,
@@ -84,6 +85,7 @@ import {
 import {
 	DOCUMENT_TYPE,
 	GrowingField,
+	PLACEHOLDER_LOOK,
 } from "@workspace/ui/components/library-document-view"
 import {
 	LibrarySlashMenu,
@@ -133,6 +135,10 @@ const DRAG_THRESHOLD = 4
 const HANDLE_GUTTER = "me-[clamp(-6px,calc((100cqw-40rem)/2-6px),6px)]"
 
 const PERSON_RUN = "person:"
+
+const PLACEHOLDER_RUN = "placeholder"
+
+const UNWRITTEN_LINE = /^\s*(?:[-*+]|\d+[.)])?\s*$/
 
 const HELD_RUN = "held:"
 
@@ -199,6 +205,13 @@ type BlockField = HTMLInputElement | HTMLTextAreaElement
 const NO_WRITERS: LibraryDocumentWriter[] = []
 
 const NO_PEOPLE: LibraryDocumentPerson[] = []
+
+type LibraryDocumentPlaceholder = {
+	at: number
+	text: string
+}
+
+const NO_PLACEHOLDERS: LibraryDocumentPlaceholder[] = []
 
 const blockIdsOf = (): BlockIds => {
 	let count = 0
@@ -362,6 +375,7 @@ type LibraryDocumentBlockEditorProps = WriterActions & {
 	onAddImages?: () => Promise<LibraryGalleryImage[]>
 	onLinkPreview?: (url: string) => Promise<LibraryLinkPreview>
 	onCaretChange?: (caret: number | null) => void
+	placeholders?: LibraryDocumentPlaceholder[]
 	ref?: Ref<LibraryDocumentBlockEditorHandle>
 }
 
@@ -375,6 +389,7 @@ const LibraryDocumentBlockEditor = ({
 	onAddImages,
 	onLinkPreview,
 	onCaretChange,
+	placeholders = NO_PLACEHOLDERS,
 	ref,
 }: LibraryDocumentBlockEditorProps) => {
 	const { t } = useTranslation("common")
@@ -384,7 +399,15 @@ const LibraryDocumentBlockEditor = ({
 		blocks:
 			blocks.length > 0 ? blocks : [{ id: nextId(), source: "", gap: "" }],
 	})
-	const [doc, setDoc] = useState(() => withLine(parseBlocks(body, nextId)))
+	const seeded = (markdown: string, at: LibraryDocumentPlaceholder[]) =>
+		withEmptyBlocksAt(
+			parseBlocks(markdown, nextId),
+			at.map((placeholder) => placeholder.at),
+			nextId,
+		)
+	const [doc, setDoc] = useState(() => withLine(seeded(body, placeholders)))
+	const [anchors, setAnchors] = useState(placeholders)
+	const shownAnchors = useRef(anchors)
 	const latest = useRef(doc)
 	const received = useRef(body)
 	const [editing, setEditing] = useState<string>()
@@ -406,10 +429,34 @@ const LibraryDocumentBlockEditor = ({
 	const serialized = serializeBlocks(doc)
 	const heldBody = useRef(serialized)
 
-	const show = (next: LibraryBlockDocument) => {
+	const anchorsAfter = (markdown: string) => {
+		const before = serializeBlocks(latest.current)
+		if (shownAnchors.current.length === 0 || before === markdown)
+			return shownAnchors.current
+		return shownAnchors.current.map((placeholder) => ({
+			...placeholder,
+			at: shiftedOffset(before, markdown, placeholder.at),
+		}))
+	}
+
+	const show = (
+		next: LibraryBlockDocument,
+		nextAnchors = anchorsAfter(serializeBlocks(next)),
+	) => {
 		latest.current = next
 		setDoc(next)
+		shownAnchors.current = nextAnchors
+		setAnchors(nextAnchors)
 	}
+
+	const placeholderAt = (
+		block: LibraryBlock,
+		start: number,
+		shown: LibraryDocumentPlaceholder[],
+	) =>
+		UNWRITTEN_LINE.test(block.source)
+			? shown.find((placeholder) => placeholder.at === start)?.text
+			: undefined
 
 	const commit = (next: LibraryBlockDocument) => {
 		show(next)
@@ -424,10 +471,13 @@ const LibraryDocumentBlockEditor = ({
 	const restructure = (sources: LibraryBlock[]) =>
 		commitBlocks(relaid(latest.current.blocks, sources))
 
-	const reread = (markdown: string) =>
+	const reread = (markdown: string) => {
+		const nextAnchors = anchorsAfter(markdown)
 		show(
-			withLine(keepIds(latest.current.blocks, parseBlocks(markdown, nextId))),
+			withLine(keepIds(latest.current.blocks, seeded(markdown, nextAnchors))),
+			nextAnchors,
 		)
+	}
 
 	const remove = (id: string) =>
 		restructure(latest.current.blocks.filter((block) => block.id !== id))
@@ -764,9 +814,12 @@ const LibraryDocumentBlockEditor = ({
 		setSlashFor(undefined)
 		const index = indexOf(id)
 		if (index === -1) return
+		const block = latest.current.blocks[index]
+		const start = offsetsOf(latest.current)[index]
 		if (
-			latest.current.blocks[index].source.trim() === "" &&
-			latest.current.blocks.length > 1
+			block.source.trim() === "" &&
+			latest.current.blocks.length > 1 &&
+			!placeholderAt(block, start, shownAnchors.current)
 		)
 			remove(id)
 		else reread(serializeBlocks(latest.current))
@@ -1140,12 +1193,13 @@ const LibraryDocumentBlockEditor = ({
 	const count = doc.blocks.length
 
 	return (
-		// biome-ignore lint/a11y/noStaticElementInteractions: the list drops the shared caret once focus leaves every field it holds
 		<div
+			aria-label={t("library.editor.body")}
 			className={cn("relative flex flex-col gap-3.5", drop && "select-none")}
 			data-slot="library-document-blocks"
 			onBlur={leaveBody}
 			ref={list}
+			role="group"
 		>
 			{doc.blocks.map((block, index) => {
 				const type = blockTypeOf(block.source)
@@ -1159,6 +1213,7 @@ const LibraryDocumentBlockEditor = ({
 					start: offsets[index],
 					length: block.source.length,
 				})
+				const placeholder = placeholderAt(block, offsets[index], anchors)
 				const isDropBefore = drop?.to === index
 				const isDropAfter = drop?.to === count && index === count - 1
 				return (
@@ -1207,6 +1262,7 @@ const LibraryDocumentBlockEditor = ({
 									data-slot={FIELD_SLOT}
 									fieldClassName={cn("w-full", FIELD_LOOK[type])}
 									fieldRef={textField}
+									hint={placeholder}
 									onBlur={(event) => {
 										if (!isInToolbar(event.relatedTarget)) stopEditing(block.id)
 									}}
@@ -1227,14 +1283,39 @@ const LibraryDocumentBlockEditor = ({
 								onPointerDown={isEditable ? pointAt : undefined}
 								tabIndex={isEditable ? 0 : undefined}
 							>
-								<Markdown
-									className={DOCUMENT_TYPE}
-									onToggleTask={toggleTaskIn(block.id)}
-									renderRun={runs.length > 0 ? renderRun : undefined}
-									runs={runs.length > 0 ? runs : undefined}
-								>
-									{block.source}
-								</Markdown>
+								{placeholder ? (
+									<Markdown
+										className={DOCUMENT_TYPE}
+										renderRun={({ isEnd }) =>
+											isEnd ? (
+												<span
+													aria-hidden="true"
+													className={PLACEHOLDER_LOOK}
+													data-placeholder={placeholder}
+													data-slot="library-document-placeholder"
+												/>
+											) : null
+										}
+										runs={[
+											{
+												id: PLACEHOLDER_RUN,
+												start: block.source.length,
+												end: block.source.length + placeholder.length,
+											},
+										]}
+									>
+										{`${block.source}${placeholder}`}
+									</Markdown>
+								) : (
+									<Markdown
+										className={DOCUMENT_TYPE}
+										onToggleTask={toggleTaskIn(block.id)}
+										renderRun={runs.length > 0 ? renderRun : undefined}
+										runs={runs.length > 0 ? runs : undefined}
+									>
+										{block.source}
+									</Markdown>
+								)}
 							</div>
 						)}
 						{isDropBefore || isDropAfter ? (
@@ -1255,4 +1336,8 @@ const LibraryDocumentBlockEditor = ({
 	)
 }
 
-export { LibraryDocumentBlockEditor, type LibraryDocumentBlockEditorHandle }
+export {
+	LibraryDocumentBlockEditor,
+	type LibraryDocumentBlockEditorHandle,
+	type LibraryDocumentPlaceholder,
+}
