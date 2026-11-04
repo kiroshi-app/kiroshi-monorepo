@@ -77,15 +77,6 @@ const trimTextAfterBox = (nodes: ReactNode[]) =>
 			: child,
 	)
 
-const withTextAfterBoxTrimmed = (paragraph: ReactNode) =>
-	isValidElement<{ children?: ReactNode }>(paragraph)
-		? cloneElement(
-				paragraph,
-				undefined,
-				trimTextAfterBox(Children.toArray(paragraph.props.children)),
-			)
-		: paragraph
-
 export const MarkdownListItem = ({
 	node,
 	children,
@@ -100,7 +91,14 @@ export const MarkdownListItem = ({
 		return (
 			<li {...props}>
 				{items.map((child, index) =>
-					index === boxParagraphAt ? withTextAfterBoxTrimmed(child) : child,
+					index === boxParagraphAt &&
+					isValidElement<{ children?: ReactNode }>(child)
+						? cloneElement(
+								child,
+								undefined,
+								trimTextAfterBox(Children.toArray(child.props.children)),
+							)
+						: child,
 				)}
 			</li>
 		)
