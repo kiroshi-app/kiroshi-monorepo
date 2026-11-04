@@ -1515,9 +1515,9 @@ describe("WorkspaceBody library", () => {
 		expect(
 			[
 				...screen
-					.getByRole("textbox", { name: "Document text" })
-					.querySelectorAll(".cm-line"),
-			].map((line) => line.textContent),
+					.getByRole("group", { name: "Document text" })
+					.querySelectorAll("[data-slot='library-document-block']"),
+			].map((block) => block.textContent),
 		).toContain(EXCERPT)
 		expect(screen.queryByRole("searchbox")).toBeNull()
 

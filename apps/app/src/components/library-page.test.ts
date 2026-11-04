@@ -12,7 +12,7 @@ import {
 	within,
 } from "@testing-library/react"
 import { createElement } from "react"
-import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import * as Y from "yjs"
 
 import type { AppRailPanel } from "@workspace/ui/components/app-rail"
@@ -557,112 +557,66 @@ const press = async (target: Element) => {
 
 const TASK_NOTES = "Notes\n\n\n\n- [ ] Ship the notes"
 
-const TASK_LINE = 4
-
 const PASTED_PARAGRAPHS = "First thought.\n\nSecond thought.\n\nThird thought."
 
 const AGENT_LINE = "\n\nAtlas adds a line."
 
-const linesOf = (body: HTMLElement) => [
-	...body.querySelectorAll<HTMLElement>(".cm-line"),
+const BLOCK_FIELD = "[data-slot='library-document-block-field']"
+
+const bodyOf = (shown: Pick<typeof screen, "getByRole">) =>
+	shown.getByRole("group", { name: BODY_FIELD })
+
+const blocksOf = (body: HTMLElement) => [
+	...body.querySelectorAll<HTMLElement>("[data-slot='library-document-block']"),
 ]
 
-const firstLineOf = (body: HTMLElement) => linesOf(body)[0] as HTMLElement
+const shownTextOf = (block: HTMLElement) =>
+	block.querySelector<HTMLTextAreaElement>(BLOCK_FIELD)?.value ??
+	block.textContent?.trim()
 
-const typeInto = async (body: HTMLElement, value: string) => {
-	await act(async () => {
-		body.focus()
-		const text = firstLineOf(body).firstChild as Text
-		text.data = value
-		document.getSelection()?.collapse(text, value.length)
-	})
-}
-
-const pasteOnLine = async (body: HTMLElement, index: number, text: string) => {
-	await act(async () => {
-		body.focus()
-		document.getSelection()?.collapse(linesOf(body)[index] as HTMLElement, 0)
-		fireEvent(document, new Event("selectionchange"))
-	})
-	const clipboardData = new DataTransfer()
-	clipboardData.setData("text/plain", text)
-	await act(async () => {
-		body.dispatchEvent(
-			new ClipboardEvent("paste", {
-				bubbles: true,
-				cancelable: true,
-				clipboardData,
-			}),
-		)
-	})
-}
-
-const queueSelectionChangesAsBrowsersDo = () => {
-	const queued = new WeakSet<globalThis.Event>()
-	const queue = (event: globalThis.Event) => {
-		if (queued.has(event)) {
-			return
-		}
-		event.stopImmediatePropagation()
-		const later = new Event("selectionchange")
-		queued.add(later)
-		queueMicrotask(() => document.dispatchEvent(later))
-	}
-	window.addEventListener("selectionchange", queue, { capture: true })
-	return () =>
-		window.removeEventListener("selectionchange", queue, { capture: true })
-}
-
-const placeCaretInLine = async (
-	body: HTMLElement,
-	index: number,
-	offset: number,
-) => {
-	const line = linesOf(body)[index] as HTMLElement
-	const text = document.createTreeWalker(line, NodeFilter.SHOW_TEXT).nextNode()
-	await act(async () => {
-		body.focus()
-		document.getSelection()?.collapse(text, offset)
-		fireEvent(document, new Event("selectionchange"))
-	})
-}
-
-const caretInLine = (body: HTMLElement, index: number) => {
-	const line = linesOf(body)[index] as HTMLElement
-	const selection = document.getSelection()
-	const anchor = selection?.anchorNode ?? null
-	if (!(selection && anchor && line.contains(anchor))) {
-		return null
-	}
-	const beforeCaret = document.createRange()
-	beforeCaret.setStart(line, 0)
-	beforeCaret.setEnd(anchor, selection.anchorOffset)
-	return { line: line.textContent, offset: beforeCaret.toString().length }
-}
-
-const undoIn = async (body: HTMLElement) => {
-	const isMac = /Mac/.test(navigator.platform)
-	await act(async () => {
-		fireEvent.keyDown(body, { key: "z", metaKey: isMac, ctrlKey: !isMac })
-	})
-}
-
-const shownMarkdownOfLine = (line: HTMLElement) => {
-	const task = line.querySelector<HTMLInputElement>(
-		"[data-slot='library-document-task']",
-	)
-	const marker = task ? `- [${task.checked ? "x" : " "}]` : ""
-	return `${marker}${line.textContent}`
-}
-
-const paragraphOf = (shown: Pick<typeof screen, "getByRole">) =>
-	shown.getByRole("textbox", { name: BODY_FIELD })
-
-const shownMarkdownOf = (shown: Pick<typeof screen, "getByRole">) =>
-	linesOf(paragraphOf(shown)).map(shownMarkdownOfLine).join("\n")
+const shownTextsOf = (shown: Pick<typeof screen, "getByRole">) =>
+	blocksOf(bodyOf(shown)).map(shownTextOf)
 
 const textOf = (shown: Pick<typeof screen, "getByRole">) =>
-	firstLineOf(paragraphOf(shown)).textContent
+	shownTextsOf(shown)[0]
+
+const openBlock = async (block: HTMLElement) => {
+	await act(async () => {
+		;(
+			block.querySelector<HTMLElement>(BLOCK_FIELD) ??
+			block.querySelector<HTMLElement>("[tabindex]")
+		)?.focus()
+	})
+	return waitFor(() => {
+		const field = block.querySelector<HTMLTextAreaElement>(BLOCK_FIELD)
+		expect(document.activeElement).toBe(field)
+		return field as HTMLTextAreaElement
+	})
+}
+
+const typeInto = async (body: HTMLElement, value: string) => {
+	const field = await openBlock(blocksOf(body)[0] as HTMLElement)
+	await act(async () => {
+		fireEvent.change(field, { target: { value } })
+	})
+}
+
+const pasteBelow = async (block: HTMLElement, text: string) => {
+	await press(
+		block.querySelector("[data-slot='library-block-insert']") as HTMLElement,
+	)
+	const field = await waitFor(() => {
+		const focused = document.activeElement
+		expect(focused?.getAttribute("data-slot")).toBe(
+			"library-document-block-field",
+		)
+		return focused as HTMLTextAreaElement
+	})
+	await act(async () => {
+		fireEvent.change(field, { target: { value: text } })
+	})
+	return field
+}
 
 const checkedTemplateOf = (dialog: HTMLElement) =>
 	within(dialog)
@@ -735,7 +689,7 @@ describe("an opened Library document", () => {
 		await openLibraryItem(DOCUMENT, member)
 		await waitFor(() => expect(textOf(member)).toBe(HOSTED_CONTENT))
 
-		await typeInto(paragraphOf(onHost), "Notes and actions")
+		await typeInto(bodyOf(onHost), "Notes and actions")
 
 		await waitFor(() => expect(textOf(member)).toBe("Notes and actions"), {
 			timeout: 1000,
@@ -751,7 +705,7 @@ describe("an opened Library document", () => {
 		await waitFor(() => expect(textOf(shown)).toBe(HOSTED_CONTENT))
 		fakeLibraryHost.host.refusesUpdates = true
 
-		await typeInto(paragraphOf(shown), "Notes nobody keeps")
+		await typeInto(bodyOf(shown), "Notes nobody keeps")
 
 		expect(textOf(shown)).toBe("Notes nobody keeps")
 		await waitFor(() => expect(textOf(shown)).toBe(HOSTED_CONTENT), {
@@ -776,7 +730,7 @@ describe("an opened Library document", () => {
 		await waitFor(() => expect(textOf(member)).toBe("Notes from elsewhere"), {
 			timeout: 1000,
 		})
-		await typeInto(paragraphOf(onHost), "Notes from elsewhere and here")
+		await typeInto(bodyOf(onHost), "Notes from elsewhere and here")
 		await waitFor(
 			() => expect(textOf(member)).toBe("Notes from elsewhere and here"),
 			{ timeout: 1000 },
@@ -799,21 +753,22 @@ describe("an opened Library document", () => {
 		expect(
 			shown.queryByRole("heading", { level: 1, name: LIBRARY_NAME }),
 		).toBeNull()
-		expect(shown.queryByRole("textbox", { name: BODY_FIELD })).toBeNull()
+		expect(shown.queryByRole("group", { name: BODY_FIELD })).toBeNull()
 	})
 
-	it("holds on the host the markdown the editor shows through typing, paste, undo, a task, an agent write and a reopen", async () => {
-		onTestFinished(queueSelectionChangesAsBrowsersDo())
+	it("holds on the host the markdown the editor shows through typing, paste, a task, an agent write and a reopen", async () => {
 		harness.libraryItems = [DOCUMENT]
 		fakeLibraryHost.writeElsewhere(DOCUMENT.name, TASK_NOTES)
 		const shown = await renderLibraryScreen(false)
 		await openLibraryItem(DOCUMENT, shown)
-		await waitFor(() => expect(shownMarkdownOf(shown)).toBe(TASK_NOTES))
-		const body = paragraphOf(shown)
-		const holdsShownMarkdown = (markdown: string) =>
+		await waitFor(() =>
+			expect(shownTextsOf(shown)).toEqual(["Notes", "Ship the notes"]),
+		)
+		const body = bodyOf(shown)
+		const holdsMarkdown = (markdown: string, texts: string[]) =>
 			waitFor(
 				() => {
-					expect(shownMarkdownOf(shown)).toBe(markdown)
+					expect(shownTextsOf(shown)).toEqual(texts)
 					expect(fakeLibraryHost.markdownOf(DOCUMENT.name)).toBe(markdown)
 				},
 				{ timeout: 1000 },
@@ -821,45 +776,59 @@ describe("an opened Library document", () => {
 
 		await typeInto(body, "Notes and actions")
 		const typed = TASK_NOTES.replace("Notes", "Notes and actions")
-		await holdsShownMarkdown(typed)
+		await holdsMarkdown(typed, ["Notes and actions", "Ship the notes"])
 
-		await pasteOnLine(body, 2, PASTED_PARAGRAPHS)
-		await holdsShownMarkdown(
-			typed.replace("\n\n\n", `\n\n${PASTED_PARAGRAPHS}\n`),
+		const pastedField = await pasteBelow(
+			blocksOf(body)[0] as HTMLElement,
+			PASTED_PARAGRAPHS,
 		)
+		const pasted = typed.replace("- [ ]", `${PASTED_PARAGRAPHS}\n\n- [ ]`)
+		await holdsMarkdown(pasted, [
+			"Notes and actions",
+			PASTED_PARAGRAPHS,
+			"Ship the notes",
+		])
+		await act(async () => {
+			pastedField.blur()
+		})
+		const paragraphs = [
+			"Notes and actions",
+			"First thought.",
+			"Second thought.",
+			"Third thought.",
+		]
+		await holdsMarkdown(pasted, [...paragraphs, "Ship the notes"])
 
-		await undoIn(body)
-		await holdsShownMarkdown(typed)
+		await press(shown.getByRole("checkbox", { name: i18n.t("chat:task.todo") }))
+		const ticked = pasted.replace("- [ ]", "- [x]")
+		await holdsMarkdown(ticked, [...paragraphs, "Ship the notes"])
 
-		await press(
-			shown.getByRole("checkbox", { name: common("library.editor.task") }),
-		)
-		const ticked = typed.replace("- [ ]", "- [x]")
-		await holdsShownMarkdown(ticked)
-
-		await placeCaretInLine(body, TASK_LINE, " Ship".length)
-		const caretInTask = {
-			line: "- [x] Ship the notes",
-			offset: "- [x] Ship".length,
-		}
-		expect(caretInLine(body, TASK_LINE)).toEqual(caretInTask)
+		const task = await openBlock(blocksOf(body).at(-1) as HTMLElement)
+		await act(async () => {
+			task.setSelectionRange("Ship".length, "Ship".length)
+		})
 
 		const written = `${ticked}${AGENT_LINE}`
 		fakeLibraryHost.writeElsewhere(DOCUMENT.name, written)
-		await holdsShownMarkdown(written)
-		expect(paragraphOf(shown)).toBe(body)
-		expect(caretInLine(body, TASK_LINE)).toEqual(caretInTask)
-
-		await undoIn(body)
-		const unticked = `${typed}${AGENT_LINE}`
-		await holdsShownMarkdown(unticked)
+		await holdsMarkdown(written, [
+			...paragraphs,
+			"Ship the notes",
+			"Atlas adds a line.",
+		])
+		expect(bodyOf(shown)).toBe(body)
+		expect(document.activeElement).toBe(task)
+		expect(task.selectionStart).toBe("Ship".length)
 
 		await press(
 			shown.getByRole("button", { name: common("library.document.back") }),
 		)
 		await openLibraryItem(DOCUMENT, shown)
-		await holdsShownMarkdown(unticked)
-		expect(paragraphOf(shown)).not.toBe(body)
+		await holdsMarkdown(written, [
+			...paragraphs,
+			"Ship the notes",
+			"Atlas adds a line.",
+		])
+		expect(bodyOf(shown)).not.toBe(body)
 	})
 })
 

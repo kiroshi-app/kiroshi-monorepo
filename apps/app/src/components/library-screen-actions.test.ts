@@ -1066,15 +1066,28 @@ const callsAfterRename = (command: string) => {
 const leaveDocument = () =>
 	press(screen.getByRole("button", { name: common("library.document.back") }))
 
+const BLOCK_FIELD = "[data-slot='library-document-block-field']"
+
 const typeInBody = async (text: string) => {
-	const body = await screen.findByRole("textbox", {
+	const body = await screen.findByRole("group", {
 		name: common("library.editor.body"),
 	})
+	const block = body.querySelector(
+		"[data-slot='library-document-block']",
+	) as HTMLElement
 	await act(async () => {
-		body.focus()
-		const line = body.querySelector(".cm-line")?.firstChild as Text
-		line.data = text
-		document.getSelection()?.collapse(line, text.length)
+		;(
+			block.querySelector<HTMLElement>(BLOCK_FIELD) ??
+			block.querySelector<HTMLElement>("[tabindex]")
+		)?.focus()
+	})
+	const field = await waitFor(() => {
+		const opened = block.querySelector<HTMLTextAreaElement>(BLOCK_FIELD)
+		expect(opened).toBeInstanceOf(HTMLTextAreaElement)
+		return opened as HTMLTextAreaElement
+	})
+	await act(async () => {
+		fireEvent.change(field, { target: { value: text } })
 	})
 }
 

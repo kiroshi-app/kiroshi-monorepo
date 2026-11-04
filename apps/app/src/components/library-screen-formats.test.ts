@@ -9,7 +9,7 @@ import {
 	waitFor,
 } from "@testing-library/react"
 import { createElement } from "react"
-import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import * as Y from "yjs"
 
 import { i18n } from "@workspace/ui/lib/i18n"
@@ -32,7 +32,7 @@ const NOTES = "notes.md"
 
 const TWO_PARAGRAPHS = "First paragraph\n\nSecond paragraph"
 
-const BOTH_BOLD = "**First paragraph**\n\n**Second paragraph**"
+const FIRST_BOLD = "**First paragraph**\n\nSecond paragraph"
 
 const common = i18n.getFixedT(null, "common")
 
@@ -133,27 +133,28 @@ const openNotes = async (isJoined: boolean) => {
 	await act(async () => {
 		fireEvent.click(tile, { detail: 1 })
 	})
-	const body = await screen.findByRole("textbox", {
+	const body = await screen.findByRole("group", {
 		name: common("library.editor.body"),
 	})
 	await waitFor(() => expect(body.textContent).toContain("Second paragraph"))
 	return body
 }
 
-const queueSelectionChangesAsBrowsersDo = () => {
-	const queued = new WeakSet<globalThis.Event>()
-	const queue = (event: globalThis.Event) => {
-		if (queued.has(event)) {
-			return
-		}
-		event.stopImmediatePropagation()
-		const later = new Event("selectionchange")
-		queued.add(later)
-		queueMicrotask(() => document.dispatchEvent(later))
-	}
-	window.addEventListener("selectionchange", queue, { capture: true })
-	return () =>
-		window.removeEventListener("selectionchange", queue, { capture: true })
+const BLOCK_FIELD = "[data-slot='library-document-block-field']"
+
+const openFirstBlock = async (body: HTMLElement) => {
+	await act(async () => {
+		body
+			.querySelector<HTMLElement>(
+				"[data-slot='library-document-block'] [tabindex]",
+			)
+			?.focus()
+	})
+	return waitFor(() => {
+		const field = body.querySelector<HTMLTextAreaElement>(BLOCK_FIELD)
+		expect(document.activeElement).toBe(field)
+		return field as HTMLTextAreaElement
+	})
 }
 
 const pressWithMod = async (body: HTMLElement, key: string) => {
@@ -168,17 +169,21 @@ const storedMarkdown = () => documentOf(NOTES).getText("markdown").toString()
 describe.each([
 	{ place: "on the host", isJoined: false },
 	{ place: "in a joined Space", isJoined: true },
-])("Mod-b on the whole body of a document opened $place", ({ isJoined }) => {
-	it("stores both paragraphs bold, then the original markdown on a second press", async () => {
-		const body = await openNotes(isJoined)
-		onTestFinished(queueSelectionChangesAsBrowsersDo())
-		body.focus()
+])(
+	"Mod-b on the text of a block of a document opened $place",
+	({ isJoined }) => {
+		it("stores the paragraph bold, then the original markdown on a second press", async () => {
+			const body = await openNotes(isJoined)
+			const field = await openFirstBlock(body)
+			await act(async () => {
+				field.setSelectionRange(0, field.value.length)
+			})
 
-		await pressWithMod(body, "a")
-		await pressWithMod(body, "b")
-		await waitFor(() => expect(storedMarkdown()).toBe(BOTH_BOLD))
+			await pressWithMod(field, "b")
+			await waitFor(() => expect(storedMarkdown()).toBe(FIRST_BOLD))
 
-		await pressWithMod(body, "b")
-		await waitFor(() => expect(storedMarkdown()).toBe(TWO_PARAGRAPHS))
-	})
-})
+			await pressWithMod(field, "b")
+			await waitFor(() => expect(storedMarkdown()).toBe(TWO_PARAGRAPHS))
+		})
+	},
+)
