@@ -33,7 +33,7 @@ const harness = vi.hoisted(() => ({
 	calls: [] as HostCall[],
 	refused: null as string | null,
 	isImageReadable: true,
-	pngContent: "cG5n",
+	imageContent: "cG5n",
 	pathImport: null as unknown,
 }))
 
@@ -42,7 +42,17 @@ const answerHostCall = async (command: string, args: unknown) => {
 	if (command === harness.refused) {
 		throw { kind: "unwritable" }
 	}
+	if (command === "remote_image_read") {
+		return remoteImageRead()
+	}
 	return command === "library_import_paths" ? [harness.pathImport] : null
+}
+
+const remoteImageRead = () => {
+	if (!harness.isImageReadable) {
+		throw { kind: "networkFailure", status: 404 }
+	}
+	return { mediaType: "image/jpeg", base64: harness.imageContent }
 }
 
 vi.mock("@tauri-apps/api/core", async (importOriginal) => ({
@@ -190,7 +200,7 @@ beforeEach(() => {
 	harness.calls = []
 	harness.refused = null
 	harness.isImageReadable = true
-	harness.pngContent = "cG5n"
+	harness.imageContent = "cG5n"
 	harness.pathImport = {
 		status: "imported",
 		item: {
@@ -207,7 +217,7 @@ beforeEach(() => {
 		drawImage: () => undefined,
 	} as unknown as CanvasRenderingContext2D)
 	vi.spyOn(HTMLCanvasElement.prototype, "toDataURL").mockImplementation(
-		() => `data:image/png;base64,${harness.pngContent}`,
+		() => `data:image/png;base64,${harness.imageContent}`,
 	)
 	vi.mocked(raiseFailureNotice).mockClear()
 })
@@ -239,7 +249,7 @@ describe("the image menu of the thread viewer", () => {
 	})
 
 	it.each(SPACES)(
-		"adds a web image as a PNG named after it to the Library of %s, again on a second save",
+		"adds a web image read on this computer, named after it, to the Library of %s, again on a second save",
 		async (_space, space) => {
 			await pickInImageMenu(SAVE_TO_LIBRARY, { space })
 			await waitFor(() => expect(callsOf("library_import")).toHaveLength(1))
@@ -248,8 +258,8 @@ describe("the image menu of the thread viewer", () => {
 
 			const imported = {
 				spaceId: SPACE_ID,
-				name: "Grey linen sofa.png",
-				content: harness.pngContent,
+				name: "Grey linen sofa.jpeg",
+				content: harness.imageContent,
 			}
 			await waitFor(() =>
 				expect(callsOf("library_import")).toEqual([imported, imported]),
@@ -278,7 +288,7 @@ describe("the image menu of the thread viewer", () => {
 				{
 					spaceId: SPACE_ID,
 					name: "1c8d7e2f.png",
-					content: harness.pngContent,
+					content: harness.imageContent,
 				},
 			]),
 		)
@@ -301,9 +311,9 @@ describe("the image menu of the thread viewer", () => {
 	})
 
 	it.each(SPACES)(
-		"raises the tooLarge notice of a dropped file when the PNG exceeds the limit of %s",
+		"raises the tooLarge notice of a dropped file when the image exceeds the limit of %s",
 		async (_space, space) => {
-			harness.pngContent = base64OfBytes(space.limit + 3)
+			harness.imageContent = base64OfBytes(space.limit + 3)
 
 			await pickInImageMenu(SAVE_TO_LIBRARY, { space })
 
@@ -311,7 +321,7 @@ describe("the image menu of the thread viewer", () => {
 				expect(raiseFailureNotice).toHaveBeenCalledWith(
 					expect.objectContaining({
 						title: common("library.failure.import.title", {
-							name: "Grey linen sofa.png",
+							name: "Grey linen sofa",
 						}),
 						description: common("library.failure.import.tooLarge"),
 					}),
@@ -321,8 +331,8 @@ describe("the image menu of the thread viewer", () => {
 		},
 	)
 
-	it("sends a PNG right under the limit of a joined Space", async () => {
-		harness.pngContent = base64OfBytes(JOINED.limit - 3)
+	it("sends an image right under the limit of a joined Space", async () => {
+		harness.imageContent = base64OfBytes(JOINED.limit - 3)
 
 		await pickInImageMenu(SAVE_TO_LIBRARY, { space: JOINED })
 
@@ -334,13 +344,13 @@ describe("the image menu of the thread viewer", () => {
 
 		await waitFor(() =>
 			expect(callsOf("library_copy_bytes")).toEqual([
-				{ name: "Grey linen sofa.png", content: harness.pngContent },
+				{ name: "Grey linen sofa.jpeg", content: harness.imageContent },
 			]),
 		)
 	})
 
 	it.each([
-		[SAVE_TO_LIBRARY, importFailureNamed("Grey linen sofa.png")],
+		[SAVE_TO_LIBRARY, importFailureNamed("Grey linen sofa")],
 		[
 			COPY_IMAGE,
 			expect.objectContaining({ title: common("library.failure.copy") }),
@@ -363,11 +373,7 @@ describe("the image menu of the thread viewer", () => {
 	)
 
 	it.each([
-		[
-			SAVE_TO_LIBRARY,
-			"library_import",
-			importFailureNamed("Grey linen sofa.png"),
-		],
+		[SAVE_TO_LIBRARY, "library_import", importFailureNamed("Grey linen sofa")],
 		[
 			COPY_IMAGE,
 			"library_copy_bytes",
@@ -398,7 +404,7 @@ describe("the bar of the thread viewer on an attachment", () => {
 
 		await waitFor(() =>
 			expect(callsOf("library_copy_bytes")).toEqual([
-				{ name: "1c8d7e2f.png", content: harness.pngContent },
+				{ name: "1c8d7e2f.png", content: harness.imageContent },
 			]),
 		)
 	})

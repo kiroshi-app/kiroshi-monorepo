@@ -78,8 +78,10 @@ const useLibraryCopy = (spaceId: string, command: ActionCommand) => {
 	}
 }
 
-const copyImageBytes = async ({ name, readContent }: LibraryImageSource) =>
-	dataOf(await commands.libraryCopyBytes(name, await readContent()))
+const copyImageBytes = async ({ read }: LibraryImageSource) => {
+	const { name, content } = await read()
+	return dataOf(await commands.libraryCopyBytes(name, content))
+}
 
 export const useLibraryImageCopy = () =>
 	useMutation({
