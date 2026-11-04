@@ -1450,11 +1450,14 @@ navigation-conversationsubjecticon--red-shield-key-dark
 navigation-conversationsubjecticon--unknown-icon-falls-back-to-message-square
 navigation-conversationsubjecticon--yellow
 navigation-documentpanel--after-a-drag
+navigation-documentpanel--capped-by-the-room-left
 navigation-documentpanel--controlled-width
 navigation-documentpanel--handle-with-keyboard-focus
+navigation-documentpanel--handle-with-keyboard-focus-dark
 navigation-documentpanel--header-aligned-with-the-thread-header
 navigation-documentpanel--in-thread
 navigation-documentpanel--keeps-the-thread-when-toggled
+navigation-documentpanel--moves-from-the-capped-edge
 navigation-headerconversationbutton--crowded
 navigation-headerconversationbutton--default
 navigation-headerconversationbutton--expanded

@@ -100,7 +100,7 @@ function ThreadLayout({
 					className={cn(
 						"relative",
 						THREAD_WIDTHS,
-						aside && "min-w-0 flex-1",
+						aside && "min-w-80 flex-1",
 						className,
 					)}
 					contentClassName={cn(THREAD_COLUMN, contentClassName)}

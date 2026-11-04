@@ -1,6 +1,6 @@
 "use client"
 
-import { type ReactNode, useId } from "react"
+import { type ReactNode, useId, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { DocumentGlyph } from "@workspace/ui/components/document-card"
@@ -12,6 +12,7 @@ import {
 	useResizableWidth,
 } from "@workspace/ui/components/resize-handle"
 import { TooltipButton } from "@workspace/ui/components/tooltip-button"
+import { useRenderedWidth } from "@workspace/ui/hooks/use-rendered-width"
 import { libraryDisplayName } from "@workspace/ui/lib/library-display-name"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -56,23 +57,35 @@ const DocumentPanel = ({
 		minWidth: DOCUMENT_PANEL_MIN_WIDTH,
 		maxWidth: DOCUMENT_PANEL_MAX_WIDTH,
 	})
+	const [panel, setPanel] = useState<HTMLElement | null>(null)
+	const renderedWidth = useRenderedWidth(panel) ?? resize.width
+	const reachableResize =
+		renderedWidth < resize.width
+			? {
+					...resize,
+					width: renderedWidth,
+					minWidth: Math.min(resize.minWidth, renderedWidth),
+					maxWidth: renderedWidth,
+				}
+			: resize
 
 	return (
 		<aside
 			aria-labelledby={titleId}
-			className="relative flex h-full min-w-0 max-w-full shrink-0 flex-col border-foreground/8 border-s bg-card text-foreground"
+			className="relative flex h-full min-w-0 max-w-full shrink flex-col border-foreground/8 border-s bg-card text-foreground"
 			data-resizing={resize.isResizing}
 			data-slot="document-panel"
+			ref={setPanel}
 			style={{ width: resize.width }}
 		>
 			<ResizeHandle
 				label={t("library.panel.resize")}
-				resize={resize}
+				resize={reachableResize}
 				side="right"
 				slot="document-panel-resize-handle"
 			/>
 			<div
-				className="flex h-12 shrink-0 items-center gap-2 border-foreground/6 border-b px-3"
+				className="flex h-12 shrink-0 items-center gap-2 border-foreground/6 border-b px-3 pt-px"
 				data-slot="document-panel-header"
 			>
 				<DocumentGlyph />
