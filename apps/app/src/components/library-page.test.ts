@@ -783,7 +783,7 @@ describe("an opened Library document", () => {
 		)
 	})
 
-	it("returns to the panel and raises a notice on each open the offline joined host fails", async () => {
+	it("shows the failed view and raises a notice when the offline joined host fails the open", async () => {
 		harness.libraryItems = [DOCUMENT]
 		const shown = await renderLibraryScreen(true)
 		fakeLibraryHost.host.isOffline = true
@@ -797,13 +797,8 @@ describe("an opened Library document", () => {
 			}),
 		)
 		expect(
-			shown.getByRole("heading", { level: 1, name: LIBRARY_NAME }),
-		).toBeInstanceOf(HTMLElement)
-		expect(shown.queryByRole("textbox", { name: BODY_FIELD })).toBeNull()
-
-		await openLibraryItem(DOCUMENT, shown)
-
-		await waitFor(() => expect(raiseFailureNotice).toHaveBeenCalledTimes(2))
+			shown.queryByRole("heading", { level: 1, name: LIBRARY_NAME }),
+		).toBeNull()
 		expect(shown.queryByRole("textbox", { name: BODY_FIELD })).toBeNull()
 	})
 
@@ -1016,7 +1011,7 @@ describe("the item a Library address names", () => {
 		expect(selectedTabName()).toContain(IMAGE.name)
 	})
 
-	it("is dropped from the address when the Library does not list it, showing the grid", async () => {
+	it("stays in the address when the Library does not list it, showing the failed view", async () => {
 		const { router } = await mountApp()
 		harness.libraryItems = [IMAGE]
 
@@ -1028,10 +1023,50 @@ describe("the item a Library address names", () => {
 		)
 		await settle()
 
-		expect(router.state.location.search).toEqual({})
-		expect(libraryHeading()).not.toBeNull()
+		expect(router.state.location.search).toEqual({
+			item: "gone.png",
+			kind: "image",
+		})
+		expect(libraryHeading()).toBeNull()
 		expect(screen.queryByRole("dialog")).toBeNull()
-		expect(selectedTabName()).toContain(LIBRARY_NAME)
+	})
+
+	const closeTabAction = () =>
+		screen.getByRole("button", {
+			name: common("library.tab.unavailable.missing.action"),
+		})
+
+	it("closes the tab from the missing state", async () => {
+		const { router } = await mountApp()
+		harness.libraryItems = [IMAGE]
+		await act(async () =>
+			router.options.context.tabs.openInNewTab(
+				"/library?item=gone.png&kind=image",
+			),
+		)
+		await settle()
+		await click(otherTab())
+		expect(screen.getAllByRole("tab", { hidden: true })).toHaveLength(2)
+
+		await click(closeTabAction())
+
+		expect(screen.getAllByRole("tab", { hidden: true })).toHaveLength(1)
+		expect(router.state.location.search).not.toHaveProperty("item")
+	})
+
+	it("closes a pinned tab from the missing state", async () => {
+		const { router } = await mountApp()
+		harness.libraryItems = [IMAGE]
+		await openByAddress(router, { item: "gone.png", kind: "image" })
+		const { tabs } = router.options.context
+		const pinnedId = tabs.getState().bySpace[tabs.getState().spaceId].activeId
+		await act(async () => tabs.pin(pinnedId))
+
+		await click(closeTabAction())
+
+		const { bySpace, spaceId } = tabs.getState()
+		expect(bySpace[spaceId].tabs.map((tab) => tab.id)).not.toContain(pinnedId)
+		expect(router.state.location.search).not.toHaveProperty("item")
 	})
 
 	it("opens the item of a second address landing in the same tab", async () => {

@@ -25,6 +25,15 @@ const useOpenLibraryItemInNewTab = () => {
 		)
 }
 
+const useCloseActiveTab = () => {
+	const router = useRouter()
+	return () => {
+		const { tabs } = router.options.context
+		const { bySpace, spaceId } = tabs.getState()
+		tabs.close(bySpace[spaceId].activeId)
+	}
+}
+
 const useShowOpening = () => {
 	const navigate = useNavigate()
 	return useCallback(
@@ -43,6 +52,7 @@ export const LibraryRoute = () => {
 	const opening = openingOf(useSearch({ from: "/library" }))
 	const openInNewTab = useOpenLibraryItemInNewTab()
 	const showOpening = useShowOpening()
+	const closeTab = useCloseActiveTab()
 	const spaceRowId = rosterView.rosteredSpaceId
 
 	return (
@@ -52,6 +62,7 @@ export const LibraryRoute = () => {
 					bots={rosterView.bots}
 					isJoined={isJoinedRowId(spaceRowId)}
 					key={spaceRowId}
+					onCloseTab={closeTab}
 					onOpenInNewTab={openInNewTab}
 					onOpeningChange={showOpening}
 					opening={opening}

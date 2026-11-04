@@ -15,6 +15,7 @@ const NO_ITEMS: LibraryItem[] = []
 export type LibraryItemsRead = {
 	items: LibraryItem[]
 	isLoading: boolean
+	hasLoaded: boolean
 	readAt: number
 	excerptOf: (item: LibraryItem) => string
 }
@@ -72,6 +73,7 @@ export const useLibraryItems = (spaceId: string): LibraryItemsRead => {
 	return {
 		items,
 		isLoading: list.isPending,
+		hasLoaded: list.data !== undefined,
 		readAt: list.dataUpdatedAt,
 		excerptOf,
 	}
