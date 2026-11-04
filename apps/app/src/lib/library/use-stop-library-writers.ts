@@ -24,22 +24,22 @@ class LibraryWritersNotStopped extends Error {
 	}
 }
 
-const outcomeOfStop = async (spaceId: string, { name, writer }: StopRun) => {
-	try {
-		return await invoke<CancelOutcome>("library_stop_writers", {
-			spaceId,
-			name,
-			agentId: writer?.id ?? null,
-		})
-	} catch (reason) {
-		throw new LibraryWritersNotStopped(writer, reason)
+const stopWriters = async (spaceId: string, { name, writer }: StopRun) => {
+	const outcome = await invoke<CancelOutcome>("library_stop_writers", {
+		spaceId,
+		name,
+		agentId: writer?.id ?? null,
+	})
+	if (outcome.kind === "failed") {
+		throw outcome.failures
 	}
 }
 
-const stopWriters = async (spaceId: string, run: StopRun) => {
-	const outcome = await outcomeOfStop(spaceId, run)
-	if (outcome.kind === "failed") {
-		throw new LibraryWritersNotStopped(run.writer, outcome.failures)
+const stopOrFail = async (spaceId: string, run: StopRun) => {
+	try {
+		await stopWriters(spaceId, run)
+	} catch (reason) {
+		throw new LibraryWritersNotStopped(run.writer, reason)
 	}
 }
 
@@ -54,7 +54,7 @@ const stopFailureNoticeOf = (error: unknown) => {
 
 export const useStopLibraryWriters = (spaceId: string) => {
 	const stopping = useMutation({
-		mutationFn: (run: StopRun) => stopWriters(spaceId, run),
+		mutationFn: (run: StopRun) => stopOrFail(spaceId, run),
 		meta: {
 			failureNotice: stopFailureNoticeOf,
 			raisedIn: "use-stop-library-writers",
