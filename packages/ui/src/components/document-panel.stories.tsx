@@ -593,25 +593,22 @@ export const MovesFromTheCappedEdge = meta.story({
 		}, FRAME_POLL)
 
 		const originX = handle.getBoundingClientRect().left
+		const narrowedWidth = cappedWidth - DRAGGED / 3
 		const narrowerX = originX + DRAGGED / 3
 		handle.dispatchEvent(pointerAt("pointerdown", originX))
 		window.dispatchEvent(pointerAt("pointermove", narrowerX))
 		window.dispatchEvent(pointerAt("pointerup", narrowerX))
 		await waitFor(async () => {
-			await expect(panel.getBoundingClientRect().width).toBe(
-				cappedWidth - DRAGGED / 3,
-			)
+			await expect(panel.getBoundingClientRect().width).toBe(narrowedWidth)
 		}, FRAME_POLL)
-		await expect(args.onWidthChange).toHaveBeenCalledWith(
-			cappedWidth - DRAGGED / 3,
-		)
+		await expect(args.onWidthChange).toHaveBeenCalledWith(narrowedWidth)
 
 		handle.focus()
 		await userEvent.keyboard("{ArrowRight}")
 		await waitFor(async () => {
 			await expect(handle).toHaveAttribute(
 				"aria-valuenow",
-				String(cappedWidth - DRAGGED / 3 - RESIZE_STEP),
+				String(narrowedWidth - RESIZE_STEP),
 			)
 		}, FRAME_POLL)
 	},
