@@ -61,6 +61,7 @@ type Workflow = {
 			if?: string
 			container?: { image?: string }
 			env?: Record<string, string>
+			outputs?: Record<string, string>
 			needs?: string | string[]
 			permissions?: Record<string, string>
 			"timeout-minutes"?: number
@@ -134,23 +135,27 @@ type GitHubContext = ExpressionScope & { event_name: string; ref: string }
 type JobResults = Record<string, string>
 
 const lookUp = (scope: ExpressionScope, path: string) =>
-	path
-		.split(".")
-		.reduce<unknown>(
-			(value, key) => (value as ExpressionScope | undefined)?.[key],
-			scope,
-		)
+	path.split(".").reduce<unknown>((value, key) => {
+		if (key === "*") return value
+		if (Array.isArray(value))
+			return value.map((item: ExpressionScope) => item[key])
+		return (value as ExpressionScope | undefined)?.[key]
+	}, scope)
 
 const evaluate = (expression: string, scope: ExpressionScope): unknown =>
 	new Function(
 		`return (${expression
-			.replace(/\b(?:github|needs|steps)(?:\.[\w-]+)+/g, (path) =>
+			.replace(/\b(?:github|needs|steps|env)(?:\.(?:[\w-]+|\*))+/g, (path) =>
 				JSON.stringify(lookUp(scope, path) ?? null),
 			)
 			.replace("always()", "true")
 			.replace(
 				/startsWith\(/g,
 				"((value, prefix) => String(value).startsWith(prefix))(",
+			)
+			.replace(
+				/contains\(/g,
+				"((items, item) => [items ?? []].flat().includes(item))(",
 			)
 			.replace(/'([^']*)'/g, '"$1"')
 			.replace(/([!=])=/g, "$1==")})`,
@@ -166,12 +171,21 @@ type CiEvent = Parameters<typeof decideJobs>[0]["event"]
 const ciEventOf = (github: GitHubContext) =>
 	interpolate(workflow.jobs.changes?.env?.CI_EVENT ?? "", { github }) as CiEvent
 
-const outputsOn = (github: GitHubContext, paths = ["bun.lock"]) =>
+const filterOutputsOn = (github: GitHubContext, paths: string[]) =>
 	Object.fromEntries(
 		Object.entries(decideJobs({ event: ciEventOf(github), paths })).map(
 			([job, runs]) => [job, String(runs)],
 		),
 	)
+
+const outputsOn = (github: GitHubContext, paths = ["bun.lock"]) => {
+	const steps = { filter: { outputs: filterOutputsOn(github, paths) } }
+	return Object.fromEntries(
+		Object.entries(workflow.jobs.changes?.outputs ?? {}).map(
+			([name, template]) => [name, interpolate(template, { github, steps })],
+		),
+	)
+}
 
 const scopeOf = (github: GitHubContext, results: JobResults = {}) => ({
 	github,
@@ -229,6 +243,18 @@ const pullRequest = (number: number, runId: number): GitHubContext => ({
 })
 
 const A_PULL_REQUEST = pullRequest(7, 11)
+
+const A_PULL_REQUEST_OPTED_INTO_STORYBOOK: GitHubContext = {
+	...pullRequest(8, 12),
+	event: { pull_request: { labels: [{ name: "ci:storybook" }] } },
+}
+
+const storybookEnvOn = (github: GitHubContext) =>
+	Object.fromEntries(
+		Object.entries(workflow.jobs.storybook?.env ?? {}).map(
+			([name, template]) => [name, interpolate(template, { github })],
+		),
+	)
 
 const PULL_REQUEST_JOB_SET = ["changes", "lint", "rust", "verify", "vitest"]
 
@@ -366,11 +392,12 @@ describe("the gate", () => {
 		expect(GROUP_ORDER.filter((group) => offPullRequestNote(group))).toEqual(
 			OFF_PULL_REQUEST_JOBS,
 		)
-		for (const group of ["website", "storybook"] as const) {
-			expect(offPullRequestNote(group)).toBe(
-				`${group} skips a pull_request, CI runs it on a push to main and on a v* tag`,
-			)
-		}
+		expect(offPullRequestNote("website")).toBe(
+			"website skips a pull_request, CI runs it on a push to main and on a v* tag",
+		)
+		expect(offPullRequestNote("storybook")).toBe(
+			"storybook skips a pull_request, CI runs it on a push to main, on a v* tag and on a pull_request labelled ci:storybook",
+		)
 		expect(offPullRequestNote("ios")).toBe(
 			"ios skips a pull_request, CI runs it on a push to main only",
 		)
@@ -930,18 +957,17 @@ describe("the jobs of ci.yml", () => {
 		expect(JSON.stringify(workflow.jobs.verify)).not.toContain("rust-check")
 	})
 
-	it.each(CI_JOBS.filter((group) => group !== "vitest" && group !== "rust"))(
-		"%s runs its checks through bun scripts/ci.ts",
-		(job) => {
-			const gateSteps = runStepsOf(job).filter(
-				(step) => !SETUP_STEPS.has(step.name ?? ""),
-			)
+	it.each(
+		CI_JOBS.filter((group) => !["vitest", "rust", "storybook"].includes(group)),
+	)("%s runs its checks through bun scripts/ci.ts", (job) => {
+		const gateSteps = runStepsOf(job).filter(
+			(step) => !SETUP_STEPS.has(step.name ?? ""),
+		)
 
-			expect(gateSteps.map((step) => step.run?.trim())).toEqual([
-				`bun scripts/ci.ts ${job}`,
-			])
-		},
-	)
+		expect(gateSteps.map((step) => step.run?.trim())).toEqual([
+			`bun scripts/ci.ts ${job}`,
+		])
+	})
 
 	it.each([
 		["vitest", A_PULL_REQUEST, "bun scripts/ci.ts changed"],
@@ -1047,6 +1073,52 @@ describe("the jobs of ci.yml", () => {
 
 	it("runs only changes, lint, vitest and rust on a pull_request", () => {
 		expect(jobsRunningOn(A_PULL_REQUEST)).toEqual(PULL_REQUEST_JOB_SET)
+	})
+
+	it("adds storybook on a pull_request labelled ci:storybook", () => {
+		expect(jobsRunningOn(A_PULL_REQUEST_OPTED_INTO_STORYBOOK)).toEqual(
+			[...PULL_REQUEST_JOB_SET, "storybook"].sort(),
+		)
+	})
+
+	it("has verify require storybook to succeed on a pull_request labelled ci:storybook", () => {
+		const github = A_PULL_REQUEST_OPTED_INTO_STORYBOOK
+		const passed = resultsByRule(github)
+
+		expect(failingVerifySteps(github, passed)).toEqual([])
+		expect(
+			failingVerifySteps(github, { ...passed, storybook: "failure" }),
+		).not.toEqual([])
+	})
+
+	it.each([A_PULL_REQUEST, A_PUSH_TO_MAIN, A_RELEASE_TAG])(
+		"has storybook run its gate with no debug output and upload nothing on %p",
+		(github) => {
+			const env = storybookEnvOn(github)
+			const gate = stepNamed("storybook", "Gate")
+			const upload = (workflow.jobs.storybook?.steps ?? []).find(
+				(step) => step.name === "Upload the browser debug output",
+			)
+
+			expect(gate?.run).toStartWith("bun scripts/ci.ts storybook ")
+			expect(interpolate(gate?.env?.DEBUG ?? "", { env })).toBe("")
+			expect(evaluate(upload?.if ?? "true", { env })).toBe(false)
+		},
+	)
+
+	it("has storybook run its gate with the browser debug output and upload it on a pull_request labelled ci:storybook", () => {
+		const env = storybookEnvOn(A_PULL_REQUEST_OPTED_INTO_STORYBOOK)
+		const gate = stepNamed("storybook", "Gate")
+		const upload = (workflow.jobs.storybook?.steps ?? []).find(
+			(step) => step.name === "Upload the browser debug output",
+		)
+
+		expect(interpolate(gate?.env?.DEBUG ?? "", { env })).toBe(
+			"vitest:browser*,pw:browser*",
+		)
+		expect(evaluate(upload?.if ?? "false", { env })).toBe(true)
+		expect(upload?.with?.path).toEndWith("/storybook-debug.log")
+		expect(gate?.run).toContain('tee "$RUNNER_TEMP/storybook-debug.log"')
 	})
 
 	it("runs every desktop job and ios on a push to main", () => {

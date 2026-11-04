@@ -217,7 +217,8 @@ export const GROUP_ORDER: Group[] = [
 
 const OFF_PULL_REQUEST_TRIGGERS: Partial<Record<Group, string>> = {
 	website: "on a push to main and on a v* tag",
-	storybook: "on a push to main and on a v* tag",
+	storybook:
+		"on a push to main, on a v* tag and on a pull_request labelled ci:storybook",
 	ios: "on a push to main only",
 }
 
