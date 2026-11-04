@@ -214,8 +214,8 @@ pub async fn library_stop_writers<R: Runtime>(
 	if stopped.is_empty() {
 		return Ok(CancelOutcome::NothingToCancel);
 	}
-	let cancelled = join_all(stopped.iter().map(|scope| cancel_session_turn(&app, &agent, scope)));
-	let mut outcomes = cancelled.await;
+	let mut outcomes =
+		join_all(stopped.iter().map(|scope| cancel_session_turn(&app, &agent, scope))).await;
 	outcomes.push(CancelOutcome::Cancelled);
 	Ok(merged(outcomes))
 }
