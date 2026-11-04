@@ -2,6 +2,7 @@
 
 import {
 	cleanup,
+	fireEvent,
 	render,
 	screen,
 	waitFor,
