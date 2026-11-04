@@ -120,7 +120,11 @@ pub async fn joined_space_connect<R: Runtime>(
 	app: AppHandle<R>,
 	id: String,
 ) -> Result<JoinedSpaceConnection, JoinedSpaceError> {
-	relay::connected(&app, id).await
+	let received = std::time::Instant::now();
+	crate::ope1176!("joined_space_connect received id {id}");
+	let connected = relay::connected(&app, id.clone()).await;
+	crate::ope1176!("joined_space_connect answered id {id} ok={} ms={}", connected.is_ok(), received.elapsed().as_millis());
+	connected
 }
 
 #[tauri::command]

@@ -9,6 +9,7 @@ import { HostRefused } from "./host-refused"
 import { type HttpHost, hostOnlyRefusalOf } from "./http"
 import type { JoinedHostsOptions, JoinedHostsState } from "./joined-hosts"
 import type { Listen } from "./joined-hosts-listen"
+import { ope1176, received, settled, stepped } from "./ope1176-probe"
 
 import { describeFailure } from "../failure-report"
 import type { Store } from "../store"
@@ -210,21 +211,33 @@ export const createJoinedHostsInvoke = ({
 			.heldOnlyHereIn(args, active)
 			.some((id) => id !== sharedSpaceIds.get(active))
 
+	let ownerReason = ""
 	const ownerOf = (active: string, args?: InvokeArgs): ConversationSource => {
 		if (namesWhatOnlyThisMacHolds(active, args)) {
+			ownerReason = "names an id only this Mac holds"
 			return null
 		}
 		const sources = provenance.sourcesNamedIn(args)
 		if (sources.size === 0) {
-			return provenance.namesConversation(args) && !hasLocalIds ? null : active
+			const isLocal = provenance.namesConversation(args) && !hasLocalIds
+			ownerReason = isLocal
+				? "no recorded source, local ids not recalled"
+				: `no recorded source, hasLocalIds=${hasLocalIds}, defaults to active`
+			return isLocal ? null : active
 		}
 		if (sources.has(active)) {
+			ownerReason = "recorded source is the active host"
 			return active
 		}
 		if (sources.has(null)) {
+			ownerReason = "recorded source is this Mac"
 			return null
 		}
-		return [...sources].find(isOpenHost) ?? null
+		const open = [...sources].find(isOpenHost)
+		ownerReason = open
+			? `recorded source ${open} is an open host`
+			: `recorded sources [${[...sources].join(",")}] none open, falls back to this Mac`
+		return open ?? null
 	}
 
 	const sendTo = <T>(
@@ -234,15 +247,26 @@ export const createJoinedHostsInvoke = ({
 		const [command, args, options] = call
 		provenance.recordSent(target, command, args)
 		if (target === null) {
-			return provenance.record(null, command, local.invoke<T>(...call))
+			stepped(args, "sent to local (Tauri invoke)")
+			return settled(
+				args,
+				"local",
+				provenance.record(null, command, local.invoke<T>(...call)),
+			)
 		}
 		const joined = hosts.get(target)
-		return provenance.record(
-			target,
-			command,
-			joined
-				? joined.invoke<T>(command, args, options?.signal)
-				: invokeOnceOpen<T>(target, command, args, options?.signal),
+		const label = joined ? `joined host ${target}` : `invokeOnceOpen ${target}`
+		stepped(args, `sent to ${label}`)
+		return settled(
+			args,
+			label,
+			provenance.record(
+				target,
+				command,
+				joined
+					? joined.invoke<T>(command, args, options?.signal)
+					: invokeOnceOpen<T>(target, command, args, options?.signal),
+			),
 		)
 	}
 
@@ -255,22 +279,46 @@ export const createJoinedHostsInvoke = ({
 	const invoke = <T>(...call: Parameters<Invoke>): Promise<T> => {
 		const [command, args] = call
 		const { active } = store.getState()
+		received(command, args, active)
 		if (
 			isLocalCommand(command) ||
 			active === null ||
 			carriesPersonalScope(args)
 		) {
+			stepped(
+				args,
+				`route target=local reason=${active === null ? "no active joined Space" : "local command or personal scope"}`,
+			)
 			return sendTo<T>(null, call)
 		}
 		const route = () => {
 			const target = ownerOf(active, args)
+			stepped(
+				args,
+				`route target=${target ?? "local"} reason=${ownerReason} active=${active}`,
+			)
 			return target !== null && COMMANDS_ONLY_THE_HOST_RUNS.has(command)
 				? refuseAsTheHostWould<T>(command)
 				: sendTo<T>(target, call)
 		}
-		return provenance.namesConversation(args)
-			? recallLocalIds().then(route)
-			: route()
+		if (!provenance.namesConversation(args)) {
+			return route()
+		}
+		stepped(args, "recallLocalIds wait started")
+		const recallStarted = performance.now()
+		const recall = recallLocalIds()
+		recall.then(
+			() =>
+				stepped(
+					args,
+					`recallLocalIds settled resolved hasLocalIds=${hasLocalIds} wait_ms=${(performance.now() - recallStarted).toFixed(0)}`,
+				),
+			(reason: unknown) =>
+				ope1176(
+					`recallLocalIds settled rejected wait_ms=${(performance.now() - recallStarted).toFixed(0)} reason=${String(reason)}`,
+				),
+		)
+		return recall.then(route)
 	}
 
 	const invokeOn =

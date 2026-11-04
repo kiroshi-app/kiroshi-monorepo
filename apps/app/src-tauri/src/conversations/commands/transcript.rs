@@ -26,9 +26,12 @@ pub async fn conversation_message_page(
 	before_seq: Option<i64>,
 	limit: u32,
 ) -> Result<TranscriptPage, TranscriptStoreError> {
+	let received = std::time::Instant::now();
+	crate::ope1176!("conversation_message_page received conversation {conversation_id} before_seq={before_seq:?}");
 	let query = MessagePageQuery { conversation_id: conversation_id.clone(), before_seq, limit };
-	let page = ready(&state)?.messages().page_messages(query).await?;
-	Ok(TranscriptPage::of(conversation_id, page))
+	let page = ready(&state)?.messages().page_messages(query).await;
+	crate::ope1176!("conversation_message_page answered conversation {conversation_id} ok={} ms={}", page.is_ok(), received.elapsed().as_millis());
+	Ok(TranscriptPage::of(conversation_id, page?))
 }
 
 #[tauri::command]

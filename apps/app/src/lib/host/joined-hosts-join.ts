@@ -17,6 +17,7 @@ import type {
 	RecordJoinedHost,
 } from "./joined-hosts"
 import type { JoinedHostsDown } from "./joined-hosts-down"
+import { stepped } from "./ope1176-probe"
 
 import type {
 	commands,
@@ -228,10 +229,26 @@ export const createJoinedHostsJoin = ({
 		args?: InvokeArgs,
 		signal?: AbortSignal,
 	): Promise<T> => {
-		const host = await openConnectionBefore(id, signal)
+		const waitStarted = performance.now()
+		const waited = () => (performance.now() - waitStarted).toFixed(0)
+		stepped(args, `invokeOnceOpen waits for host ${id} to open`)
+		const host = await openConnectionBefore(id, signal).catch(
+			(reason: unknown) => {
+				stepped(
+					args,
+					`invokeOnceOpen gave up on host ${id} (threw ${String(reason)}) wait_ms=${waited()}`,
+				)
+				throw reason
+			},
+		)
 		if (!host) {
+			stepped(
+				args,
+				`invokeOnceOpen gave up on host ${id} (no host) wait_ms=${waited()}`,
+			)
 			throw unreachable(id)
 		}
+		stepped(args, `invokeOnceOpen sends to host ${id} wait_ms=${waited()}`)
 		return host.invoke<T>(command, args, signal)
 	}
 

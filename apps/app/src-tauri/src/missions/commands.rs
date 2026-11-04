@@ -604,8 +604,11 @@ pub async fn mission_list<R: Runtime>(
 	state: State<'_, db::DatabaseState>,
 	conversation_id: String,
 ) -> Result<ConversationMissions, MissionError> {
-	let ConversationMissions { open, done } =
-		ready(&state)?.missions().of_conversation(conversation_id).await?;
+	let received = std::time::Instant::now();
+	crate::ope1176!("mission_list received conversation {conversation_id}");
+	let listed = ready(&state)?.missions().of_conversation(conversation_id.clone()).await;
+	crate::ope1176!("mission_list answered conversation {conversation_id} ok={} ms={}", listed.is_ok(), received.elapsed().as_millis());
+	let ConversationMissions { open, done } = listed?;
 	Ok(ConversationMissions { open: observed_all(&app, open), done: observed_all(&app, done) })
 }
 

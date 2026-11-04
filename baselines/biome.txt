@@ -1,5 +1,7 @@
 deserialize :: biome.json :: "linter": {
+lint/complexity/noExcessiveCognitiveComplexity :: apps/app/ope1176/fake-cloud.ts :: const answered = (request: Request, path: string): Response | undefined => {
 lint/complexity/noExcessiveCognitiveComplexity :: apps/app/sidecar/src/mcp-oauth.test.ts :: fetch: async (request): Promise<Response> => {
+lint/complexity/noExcessiveCognitiveComplexity :: apps/app/src/lib/host/joined-hosts-invoke.ts :: const ownerOf = (active: string, args?: InvokeArgs): ConversationSource => {
 lint/style/noNonNullAssertion :: apps/app/src/main.tsx :: createRoot(document.getElementById("root")!).render(
 lint/style/noNonNullAssertion :: apps/website/src/main.tsx :: createRoot(document.getElementById("root")!).render(
 lint/suspicious/noTemplateCurlyInString :: apps/app/sidecar/src/providers/claude/server-env.test.ts :: args: ["--token", "${TOKEN}"],

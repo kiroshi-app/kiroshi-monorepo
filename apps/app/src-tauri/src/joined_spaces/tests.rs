@@ -2086,3 +2086,164 @@ fn a_description_heard_again_with_the_same_name_and_hue_writes_nothing_and_annou
 		assert_eq!(named_and_coloured(&member.app).await, lab);
 	});
 }
+
+async fn ope1176_timed<T, F: std::future::Future<Output = T>>(label: &str, read: F) -> Duration {
+	let started = Instant::now();
+	let answered = tokio::time::timeout(Duration::from_secs(10), read).await;
+	let took = started.elapsed();
+	if answered.is_err() {
+		crate::ope1176!("STUCK {label} gave no answer within 10 s");
+	}
+	took
+}
+
+async fn ope1176_reads_round(member: &Member, joined_id: &str, round: usize) -> (Duration, Duration) {
+	let conversation = "ope1176-room".to_owned();
+	let app = member.app.handle().clone();
+	let switch = joined_space_connect(app.clone(), joined_id.to_owned());
+	let listing = joined_spaces_list(app.clone());
+	let page = ope1176_timed(
+		"conversation_message_page",
+		crate::conversations::commands::conversation_message_page(
+			member.app.state(),
+			conversation.clone(),
+			None,
+			50,
+		),
+	);
+	let missions = ope1176_timed(
+		"mission_list",
+		crate::missions::commands::mission_list(app.clone(), member.app.state(), conversation.clone()),
+	);
+	let reconcile = relay::reconciled(&app);
+	let (switched, _, page, missions, _) = tokio::join!(switch, listing, page, missions, reconcile);
+	crate::ope1176!(
+		"round {round}: switch={:?} page_ms={} missions_ms={}",
+		switched.map(|connection| connection.id).map_err(|error| format!("{error:?}")),
+		page.as_millis(),
+		missions.as_millis()
+	);
+	(page, missions)
+}
+
+#[test]
+fn ope1176_both_reads_answer_while_a_joined_space_reconnects_to_a_silent_host() {
+	run(async {
+		let member = Member::facing_a_silent_host("ope1176").await;
+		let waiting_host = std::env::var("OPE1176_ONLINE").is_err();
+		let joined = if waiting_host {
+			member.relay.hosting(HostSide::Silent);
+			member.accepted().await.expect("the join waits")
+		} else {
+			let host = member.host();
+			let joined = online_with_two_members(&member, &host).await;
+			member.relay.hosting(HostSide::Leaving(Duration::from_millis(300)));
+			joined_space_connect(member.app.handle().clone(), joined.id.clone())
+				.await
+				.expect("online");
+			member.app.state::<RelayGuests>().link_dropped(&joined.id).await;
+			joined
+		};
+		let rounds: usize =
+			std::env::var("OPE1176_ROUNDS").ok().and_then(|n| n.parse().ok()).unwrap_or(60);
+		let mut worst = (Duration::ZERO, Duration::ZERO);
+		for round in 0..rounds {
+			let (page, missions) = ope1176_reads_round(&member, &joined.id, round).await;
+			worst = (worst.0.max(page), worst.1.max(missions));
+			tokio::time::sleep(Duration::from_millis(250)).await;
+		}
+		crate::ope1176!(
+			"worst page_ms={} worst missions_ms={} connections={} upgrades={}",
+			worst.0.as_millis(),
+			worst.1.as_millis(),
+			member.relay.connections(),
+			member.relay.room().upgrades.len()
+		);
+		assert!(worst.0 < Duration::from_secs(10) && worst.1 < Duration::from_secs(10));
+	});
+}
+
+const OPE1176_PROFILE: &str = "com.kiroshi.app.dev";
+const OPE1176_MARKER: &str = ".ope1176-seeded";
+pub(crate) const OPE1176_INSTANCE: &str = "0e1176aa-0000-4000-8000-00000000a176";
+pub(crate) const OPE1176_BEARER: &str = "ope1176-fake-bearer";
+
+fn ope1176_seed_rows(now: i64) -> String {
+	format!(
+		"
+		INSERT INTO spaces (id, name, colour, position, created_at)
+			VALUES ('ope1176-elsewhere', 'Elsewhere', 'blue', 1, {now});
+		INSERT INTO bots (id, name, model, created_at)
+			VALUES ('ope1176-bot', 'Probe', 'sonnet', {now});
+		INSERT INTO bot_spaces (bot_id, space_id, joined_at)
+			VALUES ('ope1176-bot', 'personal', {now});
+		INSERT INTO conversations (id, kind, space_id, title, created_at, updated_at)
+			VALUES ('ope1176-room', 'topic', 'personal', 'Stuck room', {now}, {now}),
+				('ope1176-thread-1', 'topic', 'personal', 'Mission one', {now}, {now}),
+				('ope1176-thread-2', 'topic', 'personal', 'Mission two', {now}, {now}),
+				('ope1176-thread-3', 'topic', 'personal', 'Mission three', {now}, {now});
+		INSERT INTO conversation_participants (conversation_id, bot_id, role, joined_at, join_seq)
+			VALUES ('ope1176-room', 'ope1176-bot', 'lead', {now}, 0);
+		INSERT INTO turns (id, conversation_id, seq, started_at)
+			VALUES ('ope1176-turn', 'ope1176-room', 1, {now});
+		INSERT INTO messages
+				(id, conversation_id, turn_id, author_bot_id, seq, role, content, completion_state, created_at)
+			VALUES ('ope1176-m1', 'ope1176-room', 'ope1176-turn', NULL, 1, 'user', 'First message of the stuck room', 'complete', {now}),
+				('ope1176-m2', 'ope1176-room', 'ope1176-turn', 'ope1176-bot', 2, 'assistant', 'Second message', 'complete', {now}),
+				('ope1176-m3', 'ope1176-room', 'ope1176-turn', NULL, 3, 'user', 'Third message', 'complete', {now});
+		INSERT INTO missions (id, origin_conversation_id, bot_id, thread_conversation_id,
+				objective, ticket_platform, ticket_external_id, ticket_url, ticket_title, opened_at)
+			VALUES ('ope1176-mi1', 'ope1176-room', 'ope1176-bot', 'ope1176-thread-1', 'One', 'linear', 'P-1', 'https://l.test/1', 'One', {now}),
+				('ope1176-mi2', 'ope1176-room', 'ope1176-bot', 'ope1176-thread-2', 'Two', 'linear', 'P-2', 'https://l.test/2', 'Two', {now}),
+				('ope1176-mi3', 'ope1176-room', 'ope1176-bot', 'ope1176-thread-3', 'Three', 'linear', 'P-3', 'https://l.test/3', 'Three', {now});
+		"
+	)
+}
+
+#[test]
+#[ignore = "ope1176 seed, run by apps/app/ope1176/seed.ts only"]
+fn ope1176_seed_dev_profile() {
+	let profile = PathBuf::from(std::env::var("OPE1176_SEED_PROFILE").expect("OPE1176_SEED_PROFILE"));
+	let name = profile.file_name().and_then(|name| name.to_str());
+	assert_eq!(name, Some(OPE1176_PROFILE), "refused: not the dev profile, nothing written");
+	let is_foreign = profile.join(crate::db::connection::FILE_NAME).exists()
+		&& !profile.join(OPE1176_MARKER).exists();
+	assert!(!is_foreign, "refused: this dev profile holds data the seed did not write");
+	run(async {
+		std::fs::create_dir_all(&profile).expect("the profile folder exists");
+		std::fs::write(profile.join(OPE1176_MARKER), "seeded by ope1176\n").expect("the marker");
+		let database = db::open(&profile);
+		let now = chrono::Utc::now().timestamp_millis();
+		let rows = ope1176_seed_rows(now);
+		let is_seeded = database
+			.call(|connection| {
+				Ok(connection.query_row(
+					"SELECT COUNT(*) FROM conversations WHERE id = 'ope1176-room'",
+					[],
+					|row| row.get::<_, i64>(0),
+				)? > 0)
+			})
+			.await
+			.expect("the seed check reads");
+		if !is_seeded {
+			database
+				.call_mut(move |connection| Ok(connection.execute_batch(&rows)?))
+				.await
+				.expect("the local rows are planted");
+		}
+		let joined = crate::db::repositories::joined_spaces::JoinedSpace {
+			id: "ope1176-joined".to_owned(),
+			reach: crate::db::repositories::joined_spaces::JoinedReach::Relay {
+				instance_id: OPE1176_INSTANCE.to_owned(),
+			},
+			remote_space_id: None,
+			name: "Silent host".to_owned(),
+			inviter_email: None,
+			listing: Default::default(),
+		};
+		database.joined_spaces().join(joined).await.expect("the joined space is planted");
+		store::set(&profile.join("env"), &EnvScope::Account, ACCOUNT_BEARER, OPE1176_BEARER)
+			.expect("the fake bearer is kept");
+		eprintln!("ope1176 seed written into {}", profile.display());
+	});
+}

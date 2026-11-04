@@ -1,2 +1,4 @@
 exports :: apps/app/src/lib/routines/filter-vocabulary.ts :: NO_FILTER_VOCABULARY_DRIFT
+files :: apps/app/ope1176/fake-cloud.ts
+files :: apps/app/ope1176/seed.ts
 types :: apps/app/src/lib/routines/routine-contract.ts :: ReportRefusal

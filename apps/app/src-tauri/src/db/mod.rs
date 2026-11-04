@@ -1,4 +1,5 @@
 pub mod connection;
+pub mod probe;
 pub mod migrations;
 pub mod repositories;
 pub mod result_code;
@@ -36,9 +37,15 @@ impl Access {
 		T: Send + 'static,
 	{
 		let connection = self.connection.clone();
+		let ticket = probe::spawned(probe::caller_of::<F>());
 		tokio::task::spawn_blocking(move || {
+			let started = probe::started(&ticket);
 			let connection = locked(&connection)?;
-			f(&connection)
+			let acquired = probe::acquired(&ticket, started);
+			let answer = f(&connection);
+			drop(connection);
+			probe::released(&ticket, started, acquired);
+			answer
 		})
 		.await
 		.map_err(|_| DatabaseError::CallInterrupted)?
@@ -50,9 +57,15 @@ impl Access {
 		T: Send + 'static,
 	{
 		let connection = self.connection.clone();
+		let ticket = probe::spawned(probe::caller_of::<F>());
 		tokio::task::spawn_blocking(move || {
+			let started = probe::started(&ticket);
 			let mut connection = locked(&connection)?;
-			f(&mut connection)
+			let acquired = probe::acquired(&ticket, started);
+			let answer = f(&mut connection);
+			drop(connection);
+			probe::released(&ticket, started, acquired);
+			answer
 		})
 		.await
 		.map_err(|_| DatabaseError::CallInterrupted)?

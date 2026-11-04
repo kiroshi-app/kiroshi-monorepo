@@ -151,7 +151,27 @@ impl From<db::DatabaseError> for RelayJoinError {
 	}
 }
 
+pub(super) struct TurnHeld<'a> {
+	_guard: tokio::sync::MutexGuard<'a, ()>,
+	site: &'static str,
+	since: std::time::Instant,
+}
+
+impl Drop for TurnHeld<'_> {
+	fn drop(&mut self) {
+		crate::ope1176!("turn released site={} hold_ms={}", self.site, self.since.elapsed().as_millis());
+	}
+}
+
 impl RelayGuests {
+	pub(super) async fn turn_taken(&self, site: &'static str) -> TurnHeld<'_> {
+		let asked = std::time::Instant::now();
+		crate::ope1176!("turn asked site={site}");
+		let guard = self.turn.lock().await;
+		crate::ope1176!("turn acquired site={site} wait_ms={}", asked.elapsed().as_millis());
+		TurnHeld { _guard: guard, site, since: std::time::Instant::now() }
+	}
+
 	pub fn new(api_url: &str) -> Self {
 		Self {
 			cloud: Cloud::new(api_url),
@@ -368,7 +388,7 @@ pub async fn joined<R: Runtime>(
 	listing: HostListing,
 ) -> Result<JoinedSpace, RelayJoinError> {
 	let guests = app.state::<RelayGuests>();
-	let _turn = guests.turn.lock().await;
+	let _turn = guests.turn_taken("joined").await;
 	if !is_signed_in(app).map_err(RelayJoinError::Account)? {
 		return Err(RelayJoinError::SignedOut);
 	}
@@ -408,7 +428,7 @@ pub async fn reconciled<R: Runtime>(app: &AppHandle<R>) {
 			"the joined spaces of every instance did not follow the cloud memberships: {failure}"
 		);
 	}
-	let _turn = guests.turn.lock().await;
+	let _turn = guests.turn_taken("reconciled.joins_started").await;
 	if let Err(failure) = waiting::joins_started(app, &guests).await {
 		log::warn!(
 			"the joined spaces of every instance waiting for their host were not all followed: {failure:?}"
@@ -441,7 +461,7 @@ async fn memberships_followed<R: Runtime>(
 		return Ok(());
 	};
 	let unlisted = {
-		let _turn = guests.turn.lock().await;
+		let _turn = guests.turn_taken("memberships_followed.listed").await;
 		if is_outdated(app, guests, &listing)? {
 			log::info!(
 				"the cloud memberships were read while a join, a leave or a sign-out moved the joined spaces: the next reconciliation follows them"
@@ -451,7 +471,7 @@ async fn memberships_followed<R: Runtime>(
 		listed_followed_unlisted_stopped(app, guests, listing).await?
 	};
 	let departed = departures_read(app, guests.cloud(), &unlisted).await;
-	let _turn = guests.turn.lock().await;
+	let _turn = guests.turn_taken("memberships_followed.departed").await;
 	departed_evicted(app, guests, &unlisted.bearer, departed).await
 }
 
@@ -657,7 +677,7 @@ async fn started<R: Runtime>(
 	id: &str,
 ) -> Result<(joined_spaces::JoinedSpace, Reached), JoinedSpaceError> {
 	let guests = app.state::<RelayGuests>();
-	let _turn = guests.turn.lock().await;
+	let _turn = guests.turn_taken("started(connect)").await;
 	started_in_turn(app, &guests, id).await
 }
 
@@ -815,7 +835,7 @@ pub(super) async fn description_adopted<R: Runtime>(
 
 pub async fn left<R: Runtime>(app: &AppHandle<R>, id: &str) -> Result<(), JoinedSpaceError> {
 	let guests = app.state::<RelayGuests>();
-	let _turn = guests.turn.lock().await;
+	let _turn = guests.turn_taken("left").await;
 	let state = app.state::<db::DatabaseState>();
 	let repository = ready(&state)?.joined_spaces();
 	let unknown = || JoinedSpaceError::UnknownJoinedSpace { id: id.to_owned() };
@@ -866,7 +886,9 @@ async fn membership_ended<R: Runtime>(
 
 pub async fn signed_out<R: Runtime>(app: &AppHandle<R>) -> Option<tokio::sync::MutexGuard<'_, ()>> {
 	let guests = app.try_state::<RelayGuests>()?.inner();
+	let ope1176_wait = std::time::Instant::now();
 	let turn = guests.turn.lock().await;
+	crate::ope1176!("turn acquired site=signed_out wait_ms={} (guard handed to caller, hold not timed)", ope1176_wait.elapsed().as_millis());
 	guests.gesture_made();
 	guests.removed().clear();
 	guests.unlisted().clear();

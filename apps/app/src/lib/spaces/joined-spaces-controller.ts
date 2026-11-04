@@ -41,6 +41,12 @@ import {
 	type JoinedHosts,
 } from "../host/joined-hosts"
 import { hostAmong, memberNameOf } from "../host/member-names"
+import {
+	drivenSidebar,
+	firstListedConversation,
+	noteSpace,
+	ope1176,
+} from "../host/ope1176-probe"
 import { memoizedOn, subscribeWithQueries } from "../query/cache-view"
 import { runMutation } from "../query/run-mutation"
 
@@ -657,6 +663,7 @@ export const createJoinedSpacesController = ({
 		rowIdOf(joined) === admittedRowId && isWaitingForHost(joined)
 
 	const selectSpace = (id: string) => {
+		noteSpace(id)
 		const joined = joinedOfRow(id)
 		if (joined && isAwaitingAdmission(joined)) {
 			return
@@ -720,6 +727,71 @@ export const createJoinedSpacesController = ({
 		if (isOpenJoined(leaving) && firstLocal) {
 			selectSpace(firstLocal.id)
 		}
+	}
+
+	if (
+		import.meta.env.VITE_OPE1176_DRIVE === "1" &&
+		!(globalThis as { ope1176Driving?: boolean }).ope1176Driving
+	) {
+		;(globalThis as { ope1176Driving?: boolean }).ope1176Driving = true
+		const isCyclingEverySpace = import.meta.env.VITE_OPE1176_DRIVE_ALL === "1"
+		let switches = 0
+		const cycleEverySpace = () => {
+			const sidebar = drivenSidebar()
+			const rows = [
+				...spaces.getState().spaces.map((space) => space.id),
+				...current().joinedSpaces.map(rowIdOf),
+			]
+			if (!sidebar || rows.length < 2) {
+				setTimeout(cycleEverySpace, 1000)
+				return
+			}
+			const row = rows[switches % rows.length] as string
+			switches += 1
+			ope1176(
+				`driver switch ${switches} clicks Space ${row} (${rows.length} Spaces)`,
+			)
+			noteSpace(row)
+			sidebar.onSelectSpace(row)
+			setTimeout(() => {
+				const conversationId = firstListedConversation(row)
+				if (!conversationId) {
+					ope1176(`driver no conversation in Space ${row}`)
+					return
+				}
+				ope1176(`driver opens ${conversationId} in Space ${row}`)
+				sidebar.onSelectConversation(conversationId, undefined)
+			}, 1500)
+			setTimeout(cycleEverySpace, 5000)
+		}
+		if (isCyclingEverySpace) setTimeout(cycleEverySpace, 2000)
+		let cycles = 0
+		const room = "ope1176-room"
+		const openRoom = (why: string) => {
+			ope1176(`driver clicks ${room} (${why})`)
+			drivenSidebar()?.onSelectConversation(room, undefined)
+		}
+		if (!isCyclingEverySpace)
+			setTimeout(() => openRoom("before the first switch"), 10000)
+		const drive = () => {
+			const [joined] = current().joinedSpaces
+			const sidebar = drivenSidebar()
+			if (!joined || !sidebar) {
+				setTimeout(drive, 1000)
+				return
+			}
+			const previous = spaces.getState().selectedSpaceId ?? "personal"
+			cycles += 1
+			ope1176(`driver cycle ${cycles} clicks joined Space ${joined.id}`)
+			sidebar.onSelectSpace(rowIdOf(joined))
+			setTimeout(() => {
+				ope1176(`driver cycle ${cycles} clicks back to ${previous}`)
+				sidebar.onSelectSpace(previous)
+				setTimeout(() => openRoom(`after return ${cycles}`), 1500)
+				if (cycles < 3) setTimeout(drive, 8000)
+			}, 5000)
+		}
+		if (!isCyclingEverySpace) setTimeout(drive, 15000)
 	}
 
 	return {
