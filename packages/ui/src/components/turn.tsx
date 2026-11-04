@@ -105,6 +105,7 @@ interface UserTurnProps {
 	repliedTo?: readonly QuotedMessage[]
 	onReply?: () => void
 	onPin?: () => void
+	onSaveAsDocument?: () => void
 	pinned?: boolean
 	onRetry?: () => void
 	onCancel?: () => void
@@ -123,6 +124,7 @@ type AssistantTurnProps = {
 	repliedTo?: readonly QuotedMessage[]
 	onReply?: () => void
 	onPin?: () => void
+	onSaveAsDocument?: () => void
 	onRetry?: () => void
 	pinned?: boolean
 	bare?: boolean
@@ -150,6 +152,7 @@ type PersonTurnProps = {
 	repliedTo?: readonly QuotedMessage[]
 	onReply?: () => void
 	onPin?: () => void
+	onSaveAsDocument?: () => void
 	pinned?: boolean
 	className?: string
 }
@@ -194,7 +197,7 @@ function runPositionFor(index: number, length: number): TurnRun {
 }
 
 interface TurnAction {
-	key: "pin" | "reply" | "copy"
+	key: "pin" | "reply" | "copy" | "save-as-document"
 	label: string
 	icon: Icon
 	onSelect: () => void
@@ -204,11 +207,21 @@ interface TurnActionsInput {
 	copyText?: string
 	onReply?: () => void
 	onPin?: () => void
+	onSaveAsDocument?: () => void
 	pinned: boolean
+}
+
+interface TurnActions {
+	buttons: TurnAction[]
+	menuGroups: TurnAction[][]
 }
 
 interface TurnActionListProps {
 	actions: TurnAction[]
+}
+
+interface TurnActionMenuProps {
+	groups: TurnAction[][]
 }
 
 interface TurnBodyProps {
@@ -223,46 +236,54 @@ interface NotSentProps {
 	onRetry?: () => void
 }
 
+const isTurnAction = (action: TurnAction | undefined): action is TurnAction =>
+	action !== undefined
+
 function useTurnActions({
 	copyText,
 	onReply,
 	onPin,
+	onSaveAsDocument,
 	pinned,
-}: TurnActionsInput) {
+}: TurnActionsInput): TurnActions {
 	const { t } = useTranslation("chat")
 	const { copied, copy } = useCopyText(copyText ?? "")
-	const actions: TurnAction[] = []
 
-	if (onPin) {
-		actions.push({
-			key: "pin",
-			label: t(pinned ? "turn.unpin" : "turn.pin"),
-			icon: pinned ? Icons.Unpin : Icons.Pin,
-			onSelect: onPin,
-		})
+	const pinAction: TurnAction | undefined = onPin && {
+		key: "pin",
+		label: t(pinned ? "turn.unpin" : "turn.pin"),
+		icon: pinned ? Icons.Unpin : Icons.Pin,
+		onSelect: onPin,
+	}
+	const replyAction: TurnAction | undefined = onReply && {
+		key: "reply",
+		label: t("turn.reply"),
+		icon: Icons.Reply,
+		onSelect: onReply,
+	}
+	const copyAction: TurnAction | undefined = copyText
+		? {
+				key: "copy",
+				label: copied ? t("turn.copied") : t("turn.copy"),
+				icon: copied ? Icons.Check : Icons.Copy,
+				onSelect: () => {
+					void copy()
+				},
+			}
+		: undefined
+	const saveAsDocumentAction: TurnAction | undefined = onSaveAsDocument && {
+		key: "save-as-document",
+		label: t("turn.saveAsDocument"),
+		icon: Icons.File,
+		onSelect: onSaveAsDocument,
 	}
 
-	if (onReply) {
-		actions.push({
-			key: "reply",
-			label: t("turn.reply"),
-			icon: Icons.Reply,
-			onSelect: onReply,
-		})
+	return {
+		buttons: [pinAction, replyAction, copyAction].filter(isTurnAction),
+		menuGroups: [[replyAction, copyAction, pinAction], [saveAsDocumentAction]]
+			.map((group) => group.filter(isTurnAction))
+			.filter((group) => group.length > 0),
 	}
-
-	if (copyText) {
-		actions.push({
-			key: "copy",
-			label: copied ? t("turn.copied") : t("turn.copy"),
-			icon: copied ? Icons.Check : Icons.Copy,
-			onSelect: () => {
-				void copy()
-			},
-		})
-	}
-
-	return actions
 }
 
 function TurnActionButtons({ actions }: TurnActionListProps) {
@@ -279,24 +300,28 @@ function TurnActionButtons({ actions }: TurnActionListProps) {
 	)
 }
 
-function TurnActionMenu({ actions }: TurnActionListProps) {
+function TurnActionMenu({ groups }: TurnActionMenuProps) {
 	return (
 		<>
-			{actions.map(({ key, label, icon: ActionIcon, onSelect }, index) => (
-				<Fragment key={key}>
-					{actions[index - 1]?.key === "pin" ? <ContextMenuSeparator /> : null}
-					<MessageMenuItem label={label} onClick={onSelect}>
-						<ActionIcon aria-hidden="true" />
-						{label}
-					</MessageMenuItem>
+			{groups.map((group, index) => (
+				<Fragment key={group[0]?.key}>
+					{index > 0 ? <ContextMenuSeparator /> : null}
+					{group.map(({ key, label, icon: ActionIcon, onSelect }) => (
+						<MessageMenuItem key={key} label={label} onClick={onSelect}>
+							<ActionIcon aria-hidden="true" />
+							{label}
+						</MessageMenuItem>
+					))}
 				</Fragment>
 			))}
 		</>
 	)
 }
 
-function turnMenuOf(actions: TurnAction[]) {
-	return actions.length > 0 ? <TurnActionMenu actions={actions} /> : undefined
+function turnMenuOf({ menuGroups }: TurnActions) {
+	return menuGroups.length > 0 ? (
+		<TurnActionMenu groups={menuGroups} />
+	) : undefined
 }
 
 function turnActionsOf(actions: TurnAction[]) {
@@ -397,6 +422,7 @@ function UserTurn({
 	repliedTo,
 	onReply,
 	onPin,
+	onSaveAsDocument,
 	pinned = false,
 	onRetry,
 	onCancel,
@@ -407,7 +433,13 @@ function UserTurn({
 	const anchor = useMessageAnchor(messageId)
 	const isQueued = state === "queued"
 	const isNotSent = state === "failed"
-	const actions = useTurnActions({ copyText, onReply, onPin, pinned })
+	const actions = useTurnActions({
+		copyText,
+		onReply,
+		onPin,
+		onSaveAsDocument,
+		pinned,
+	})
 	const foot = isQueued ? (
 		<AuthorLineQueued onCancel={onCancel} />
 	) : (
@@ -418,7 +450,7 @@ function UserTurn({
 				<InitialsAvatar name={name} size={AUTHOR_AVATAR_SIZE} isOnOwnBubble />
 			}
 			time={sentTimeOf(sentAt, now)}
-			actions={turnActionsOf(actions.toReversed())}
+			actions={turnActionsOf(actions.buttons.toReversed())}
 			isSticky
 		/>
 	)
@@ -516,6 +548,7 @@ function AssistantTurn(props: AssistantTurnProps) {
 		repliedTo,
 		onReply,
 		onPin,
+		onSaveAsDocument,
 		onRetry,
 		pinned = false,
 		bare = false,
@@ -534,7 +567,13 @@ function AssistantTurn(props: AssistantTurnProps) {
 	const anchor = useMessageAnchor(messageId)
 	const markedBotId = carriesMark ? (botId ?? author?.id) : undefined
 	const markId = useMarkId(markedBotId)
-	const actions = useTurnActions({ copyText, onReply, onPin, pinned })
+	const actions = useTurnActions({
+		copyText,
+		onReply,
+		onPin,
+		onSaveAsDocument,
+		pinned,
+	})
 	const onSelectCompanion = useCompanionSelect()
 	const face = identity ?? author
 	const unwrapped = bare || framed
@@ -574,7 +613,7 @@ function AssistantTurn(props: AssistantTurnProps) {
 			time={sentTimeOf(sentAt, now)}
 			end={end}
 			onRetry={onRetry}
-			actions={turnActionsOf(actions)}
+			actions={turnActionsOf(actions.buttons)}
 			isSticky
 		/>
 	) : null
@@ -628,12 +667,19 @@ const PersonTurn = ({
 	repliedTo,
 	onReply,
 	onPin,
+	onSaveAsDocument,
 	pinned = false,
 	className,
 }: PersonTurnProps) => {
 	const { t } = useTranslation("chat")
 	const anchor = useMessageAnchor(messageId)
-	const actions = useTurnActions({ copyText, onReply, onPin, pinned })
+	const actions = useTurnActions({
+		copyText,
+		onReply,
+		onPin,
+		onSaveAsDocument,
+		pinned,
+	})
 
 	return (
 		<MessageSideContext.Provider value="end">
@@ -665,7 +711,7 @@ const PersonTurn = ({
 										/>
 									}
 									time={sentTimeOf(sentAt, now)}
-									actions={turnActionsOf(actions.toReversed())}
+									actions={turnActionsOf(actions.buttons.toReversed())}
 									isSticky
 								/>
 							}

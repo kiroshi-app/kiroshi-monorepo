@@ -410,6 +410,7 @@ conversation-message-turn--footnoted-squeezed
 conversation-message-turn--hover-actions
 conversation-message-turn--long-content
 conversation-message-turn--menu
+conversation-message-turn--menu-with-save-as-document
 conversation-message-turn--not-sent
 conversation-message-turn--queued
 conversation-message-turn--quoted

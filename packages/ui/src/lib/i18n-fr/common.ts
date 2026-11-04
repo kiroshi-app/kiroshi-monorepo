@@ -281,6 +281,10 @@ const common = {
 		search: "Rechercher dans la Bibliothèque",
 		import: "Importer",
 		newDocument: "Nouveau document",
+		saved: {
+			title: "Enregistré dans la Bibliothèque",
+			open: "Ouvrir",
+		},
 		filters: {
 			label: "Afficher",
 			all: "Tout",

@@ -129,6 +129,7 @@ const chat = {
 		selection: "Texte sélectionné",
 		pin: "Épingler",
 		unpin: "Retirer l’épingle",
+		saveAsDocument: "Enregistrer comme document",
 		copied: "Copié",
 		retry: "Réessayer",
 		cancel: "Annuler ce message",
