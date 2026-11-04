@@ -393,6 +393,7 @@ const actionsSpy = () => ({
 	imageActions: {
 		onSaveToLibrary: vi.fn(),
 		onCopyImage: vi.fn(),
+		isSavingImage: () => false,
 	},
 })
 

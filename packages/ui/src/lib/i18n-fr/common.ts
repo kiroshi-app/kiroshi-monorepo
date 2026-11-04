@@ -283,6 +283,7 @@ const common = {
 		newDocument: "Nouveau document",
 		saved: {
 			title: "Enregistré dans la Bibliothèque",
+			image: "Image enregistrée dans la Bibliothèque",
 			open: "Ouvrir",
 		},
 		filters: {

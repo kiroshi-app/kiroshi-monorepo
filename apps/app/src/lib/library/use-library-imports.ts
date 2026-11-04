@@ -174,10 +174,12 @@ const importLocalFile = async ({ spaceId, file }: LocalFileSave) => {
 const importImage = (save: LibraryImageSave) =>
 	"file" in save ? importLocalFile(save) : importContent(save)
 
-export const useLibraryImageSave = () => {
+export const useLibraryImageSave = (onSaved?: (item: LibraryItem) => void) => {
 	const queryClient = useQueryClient()
 	return useMutation({
+		mutationKey: libraryQueryKeys.imageSave(),
 		mutationFn: importImage,
+		onSuccess: onSaved,
 		onSettled: (_item, _error, { spaceId }) =>
 			queryClient.invalidateQueries({
 				queryKey: libraryQueryKeys.itemsOf(spaceId),

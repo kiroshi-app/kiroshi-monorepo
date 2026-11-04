@@ -266,6 +266,7 @@ const common = {
 		newDocument: "New document",
 		saved: {
 			title: "Saved to Library",
+			image: "Image saved to Library",
 			open: "Open",
 		},
 		filters: {
