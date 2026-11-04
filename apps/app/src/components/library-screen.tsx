@@ -370,6 +370,7 @@ export const LibraryScreen = ({
 			items={[...importingItems, ...shownItems]}
 			onFilterChange={setFilter}
 			onCopy={copy}
+			onCopyImage={copyAndWait}
 			onDelete={remove}
 			onDownload={save}
 			onNewDocument={() => setPickedTemplate("blank")}
@@ -377,6 +378,7 @@ export const LibraryScreen = ({
 			onOpenInNewTab={openInNewTab}
 			onOpenItem={openItem}
 			onRename={openItem}
+			onSaveToLibrary={saveToLibrary}
 			onSearchQueryChange={setQuery}
 			onShowInFolder={reveal}
 			onStartTemplate={setPickedTemplate}
