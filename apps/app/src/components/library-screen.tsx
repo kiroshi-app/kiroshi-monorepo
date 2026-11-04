@@ -144,8 +144,8 @@ const missingOpeningOf = ({
 	isDocumentRead,
 }: OpeningPresence) => {
 	const isUnlisted = hasListed && !isListed && !isDocumentOpened
-	const isReadOrImage = opening?.kind === "image" || isDocumentRead
-	return isUnlisted && isReadOrImage ? opening : undefined
+	const hasNoOpenFailure = opening?.kind === "image" || isDocumentRead
+	return isUnlisted && hasNoOpenFailure ? opening : undefined
 }
 
 const reportFailure = failureReporterIn("library-screen")
