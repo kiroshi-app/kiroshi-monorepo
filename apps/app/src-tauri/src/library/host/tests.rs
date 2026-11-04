@@ -902,3 +902,52 @@ async fn a_stop_in_a_document_nobody_writes_in_has_nothing_to_cancel() {
 	assert_eq!(stopped(&app, None).await, CancelOutcome::NothingToCancel);
 	assert_eq!(stopped(&app, Some("b1")).await, CancelOutcome::NothingToCancel);
 }
+
+async fn enlisted_by(app: &App<MockRuntime>, agent_id: &str, count: usize) {
+	let key = (SPACE.to_owned(), "notes.md".to_owned(), agent_id.to_owned());
+	while writes(app.handle()).writing().get(&key).map_or(0, Vec::len) < count {
+		tokio::time::sleep(Duration::from_millis(1)).await;
+	}
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_stop_also_stops_the_write_queued_behind_the_running_one_before_it_writes() {
+	let (app, root) = two_agents_writing("stop-queued").await;
+	let published = heard_in_order(&app);
+	let running = writing(&app, "b1", "a".repeat(200));
+	tokio::time::sleep(STEP_PAUSE * 3).await;
+	let queued = writing(&app, "b1", "b".repeat(200));
+	enlisted_by(&app, "b1", 2).await;
+
+	assert_eq!(stopped(&app, None).await, CancelOutcome::Cancelled);
+
+	assert!(running.is_finished() && queued.is_finished(), "the stop answered before both left");
+	for write in [running, queued] {
+		assert_eq!(refusal_kind(write.await.expect("the write ends")), "stopped");
+	}
+	let text = on_disk(&root, "notes.md");
+	assert!(!text.contains('b'), "{text}");
+	let published = all_of(&published);
+	let finishes: Vec<_> =
+		published.iter().filter(|event| matches!(event, Published::Finished(_))).collect();
+	let failed = Published::Finished(LibraryWriteOutcome::Failed);
+	assert_eq!(finishes, [&failed, &failed]);
+	assert_eq!(published.last(), Some(&Published::Writers(vec![])));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_write_of_the_stopped_agent_started_after_the_stop_lands_in_full() {
+	let (app, root) = two_agents_writing("stop-then-write").await;
+	let interrupted = writing(&app, "b1", "a".repeat(200));
+	enlisted_by(&app, "b1", 1).await;
+	assert_eq!(stopped(&app, Some("b1")).await, CancelOutcome::Cancelled);
+	assert_eq!(refusal_kind(interrupted.await.expect("the stopped write ends")), "stopped");
+
+	writing(&app, "b1", "b".repeat(200))
+		.await
+		.expect("the new write ends")
+		.expect("the new write lands");
+
+	let text = on_disk(&root, "notes.md");
+	assert_eq!(text.matches('b').count(), 200, "{text}");
+}

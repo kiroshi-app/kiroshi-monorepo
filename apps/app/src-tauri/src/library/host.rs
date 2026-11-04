@@ -265,6 +265,10 @@ impl<R: Runtime> LibraryHost<R> {
 	) -> Result<DocumentWritten, DocumentRefusal> {
 		markdown(root, space_id, &asked.name)?;
 		let turn = turn_of(&self.app, space_id, &asked.name, &self.scope).await;
+		if turn.is_stopped() {
+			drop(Writing::of(&self.app, space_id, &asked.name, agent));
+			return Err(ToolRefusal::Stopped.into());
+		}
 		let opened = documents(&self.app).open(root, space_id, &asked.name)?;
 		if let Some(host_edit) = opened.host_edit {
 			announce(&self.app, space_id, &asked.name, &host_edit);
@@ -275,13 +279,7 @@ impl<R: Runtime> LibraryHost<R> {
 			Location::PassageNotFound => return Err(ToolRefusal::PassageNotFound.into()),
 			Location::PassageNotUnique => return Err(ToolRefusal::PassageNotUnique.into()),
 		};
-		let mut writing = Writing {
-			app: &self.app,
-			space_id,
-			name: &asked.name,
-			agent,
-			outcome: LibraryWriteOutcome::Failed,
-		};
+		let mut writing = Writing::of(&self.app, space_id, &asked.name, agent);
 		writing.at(&caret);
 		let writer = client_id_of(&agent.id);
 		for (index, text) in steps(&asked.text).into_iter().enumerate() {
@@ -472,7 +470,11 @@ struct Writing<'a, R: Runtime> {
 	outcome: LibraryWriteOutcome,
 }
 
-impl<R: Runtime> Writing<'_, R> {
+impl<'a, R: Runtime> Writing<'a, R> {
+	fn of(app: &'a AppHandle<R>, space_id: &'a str, name: &'a str, agent: &'a Agent) -> Self {
+		Self { app, space_id, name, agent, outcome: LibraryWriteOutcome::Failed }
+	}
+
 	fn at(&self, caret: &[u8]) {
 		let seated = Seated {
 			seat: Seat::Agent(self.agent.id.clone()),
@@ -517,7 +519,7 @@ struct Writer {
 #[derive(Default)]
 struct AgentWrites {
 	queues: Mutex<HashMap<WriteKey, WriteQueue>>,
-	writers: Mutex<HashMap<WriteKey, Writer>>,
+	writers: Mutex<HashMap<WriteKey, Vec<Writer>>>,
 }
 
 impl AgentWrites {
@@ -525,21 +527,52 @@ impl AgentWrites {
 		self.queues.lock().unwrap_or_else(PoisonError::into_inner)
 	}
 
-	fn writing(&self) -> MutexGuard<'_, HashMap<WriteKey, Writer>> {
+	fn writing(&self) -> MutexGuard<'_, HashMap<WriteKey, Vec<Writer>>> {
 		self.writers.lock().unwrap_or_else(PoisonError::into_inner)
 	}
 }
 
-struct Turn<'a, R: Runtime> {
+struct Enlisted<'a, R: Runtime> {
 	app: &'a AppHandle<R>,
 	key: WriteKey,
-	_held: OwnedMutexGuard<()>,
+	stop: Arc<watch::Sender<bool>>,
 	stopped: watch::Receiver<bool>,
+}
+
+fn enlisted<'a, R: Runtime>(
+	app: &'a AppHandle<R>,
+	key: WriteKey,
+	scope: &RuntimeScope,
+) -> Enlisted<'a, R> {
+	let (stop, stopped) = watch::channel(false);
+	let stop = Arc::new(stop);
+	let writer = Writer { scope: scope.clone(), stop: stop.clone() };
+	writes(app).writing().entry(key.clone()).or_default().push(writer);
+	Enlisted { app, key, stop, stopped }
+}
+
+impl<R: Runtime> Drop for Enlisted<'_, R> {
+	fn drop(&mut self) {
+		let writes = writes(self.app);
+		let mut writing = writes.writing();
+		let Some(writers) = writing.get_mut(&self.key) else {
+			return;
+		};
+		writers.retain(|writer| !Arc::ptr_eq(&writer.stop, &self.stop));
+		if writers.is_empty() {
+			writing.remove(&self.key);
+		}
+	}
+}
+
+struct Turn<'a, R: Runtime> {
+	_held: OwnedMutexGuard<()>,
+	enlisted: Enlisted<'a, R>,
 }
 
 impl<R: Runtime> Turn<'_, R> {
 	fn is_stopped(&self) -> bool {
-		*self.stopped.borrow()
+		*self.enlisted.stopped.borrow()
 	}
 }
 
@@ -550,12 +583,10 @@ async fn turn_of<'a, R: Runtime>(
 	scope: &RuntimeScope,
 ) -> Turn<'a, R> {
 	let key = (space_id.to_owned(), name.to_owned(), scope.bot_id.clone());
-	let queue = writes(app).held().entry(key.clone()).or_default().clone();
+	let enlisted = enlisted(app, key.clone(), scope);
+	let queue = writes(app).held().entry(key).or_default().clone();
 	let held = queue.lock_owned().await;
-	let (stop, stopped) = watch::channel(false);
-	let writer = Writer { scope: scope.clone(), stop: Arc::new(stop) };
-	writes(app).writing().insert(key.clone(), writer);
-	Turn { app, key, _held: held, stopped }
+	Turn { _held: held, enlisted }
 }
 
 pub(crate) async fn stop_writers<R: Runtime>(
@@ -570,28 +601,34 @@ pub(crate) async fn stop_writers<R: Runtime>(
 		.filter(|((space, document, agent), _)| {
 			space == space_id && document == name && agent_id.is_none_or(|asked| asked == agent)
 		})
-		.map(|(_, writer)| {
+		.flat_map(|(_, writers)| writers)
+		.map(|writer| {
 			writer.stop.send_replace(true);
 			(writer.scope.clone(), writer.stop.clone())
 		})
 		.collect();
 	join_all(stopping.iter().map(|(_, stop)| stop.closed())).await;
-	stopping.into_iter().map(|(scope, _)| scope).collect()
+	let mut scopes = Vec::new();
+	for (scope, _) in stopping {
+		if !scopes.contains(&scope) {
+			scopes.push(scope);
+		}
+	}
+	scopes
 }
 
 impl<R: Runtime> Drop for Turn<'_, R> {
 	fn drop(&mut self) {
-		let writes = writes(self.app);
-		writes.writing().remove(&self.key);
+		let Enlisted { app, key, .. } = &self.enlisted;
+		let writes = writes(app);
 		let mut held = writes.held();
-		let is_another_queued =
-			held.get(&self.key).is_some_and(|queue| Arc::strong_count(queue) > 2);
+		let is_another_queued = held.get(key).is_some_and(|queue| Arc::strong_count(queue) > 2);
 		if is_another_queued {
 			return;
 		}
-		held.remove(&self.key);
-		let (space_id, name, agent_id) = &self.key;
-		unseat_writer(self.app, space_id, name, &Seat::Agent(agent_id.clone()));
+		held.remove(key);
+		let (space_id, name, agent_id) = key;
+		unseat_writer(app, space_id, name, &Seat::Agent(agent_id.clone()));
 	}
 }
 
