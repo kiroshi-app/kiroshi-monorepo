@@ -8,7 +8,9 @@ import {
 	activeLanguageOf,
 	applyLanguage,
 	isMirrorKey,
+	keepDocumentPanelWidth,
 	mirrorOf,
+	readDocumentPanelWidth,
 	readMirror,
 	sameMirror,
 	writeMirror,
@@ -195,6 +197,28 @@ describe("the mirror", () => {
 
 		expect(readMirror().language).toBeNull()
 	})
+})
+
+describe("the width of the document panel", () => {
+	it("holds the width the reader dragged the edge to", () => {
+		keepDocumentPanelWidth(640)
+
+		expect(localStorage.getItem("documentPanelWidth")).toBe("640")
+		expect(readDocumentPanelWidth()).toBe(640)
+	})
+
+	it("reads no width when no edge was ever dragged", () => {
+		expect(readDocumentPanelWidth()).toBeNull()
+	})
+
+	it.each(["wide", "", "640.5", "640px", "0", "-640"])(
+		"reads no width for %j",
+		(stored) => {
+			localStorage.setItem("documentPanelWidth", stored)
+
+			expect(readDocumentPanelWidth()).toBeNull()
+		},
+	)
 })
 
 describe("the record the host holds", () => {

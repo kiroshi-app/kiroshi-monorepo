@@ -1,6 +1,9 @@
 import { createContext, useMemo, useState } from "react"
 
-import { DocumentPanel } from "@workspace/ui/components/document-panel"
+import {
+	DOCUMENT_PANEL_MAX_WIDTH,
+	DocumentPanel,
+} from "@workspace/ui/components/document-panel"
 import { LibraryDocumentBlockEditor } from "@workspace/ui/components/library-document-block-editor"
 
 import { useLibraryOnScreen } from "@/components/answer-image-viewer"
@@ -9,6 +12,10 @@ import { useLibraryDocumentSession } from "@/lib/library/use-library-document-se
 import { useLibraryImageResolver } from "@/lib/library/use-library-image-sources"
 import { useSaveMessageAsDocument } from "@/lib/library/use-save-message-as-document"
 import { useOpenLibraryDocument } from "@/lib/navigation/use-open-library-document"
+import {
+	keepDocumentPanelWidth,
+	readDocumentPanelWidth,
+} from "@/lib/user/preferences-mirror"
 
 type ThreadDocuments = {
 	spaceId: string
@@ -70,12 +77,21 @@ export const ThreadDocumentPanel = ({
 	const { document, edit } = useLibraryDocumentSession(spaceId, name)
 	const openInLibrary = useOpenLibraryDocument()
 	const resolveImage = useLibraryImageResolver(spaceId, isJoined)
+	const [keptWidth, setKeptWidth] = useState(readDocumentPanelWidth)
+
+	const keepWidth = (width: number) => {
+		keepDocumentPanelWidth(width)
+		setKeptWidth(width)
+	}
 
 	return (
 		<DocumentPanel
+			defaultWidth={DOCUMENT_PANEL_MAX_WIDTH}
 			onClose={onClose}
 			onOpenInLibrary={() => openInLibrary(name)}
+			onWidthChange={keepWidth}
 			title={documentTitleOf(name)}
+			width={keptWidth ?? DOCUMENT_PANEL_MAX_WIDTH}
 		>
 			{document ? (
 				<LibraryDocumentBlockEditor
