@@ -219,9 +219,11 @@ conversation-markdown-quotableanswer--in-answer-dark
 conversation-markdown-quotableanswer--keyboard-selection
 conversation-markdown-quotableanswer--selection-reaching-outside
 conversation-markdown-quotableanswer--whitespace-selection
+conversation-markdown-sourcedimage--fails-to-load
 conversation-markdown-sourcedimage--in-agent-answer
 conversation-markdown-sourcedimage--in-narrow-column
 conversation-markdown-sourcedimage--pending
+conversation-markdown-sourcedimage--tries-each-new-source
 conversation-markdown-sourcedimage--unavailable
 conversation-markdown-videoplayer--in-narrow-column
 conversation-markdown-videoplayer--paused-with-marker
