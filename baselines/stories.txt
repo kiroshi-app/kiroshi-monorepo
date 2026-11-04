@@ -1462,6 +1462,7 @@ navigation-conversationsubjecticon--yellow
 navigation-documentpanel--after-a-drag
 navigation-documentpanel--asked-under-the-room-left
 navigation-documentpanel--capped-by-the-room-left
+navigation-documentpanel--consecutive-answers-at-the-thread-floor
 navigation-documentpanel--controlled-width
 navigation-documentpanel--handle-with-keyboard-focus
 navigation-documentpanel--handle-with-keyboard-focus-dark
@@ -1470,6 +1471,7 @@ navigation-documentpanel--held-at-its-floor-in-the-smallest-window
 navigation-documentpanel--in-thread
 navigation-documentpanel--keeps-the-thread-when-toggled
 navigation-documentpanel--moves-from-the-capped-edge
+navigation-documentpanel--narrowed-to-the-thread-floor-then-scrolled
 navigation-headerconversationbutton--crowded
 navigation-headerconversationbutton--default
 navigation-headerconversationbutton--expanded
