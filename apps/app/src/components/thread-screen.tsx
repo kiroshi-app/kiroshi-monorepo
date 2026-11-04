@@ -231,6 +231,7 @@ import { type SignInStep, signInStepOf } from "@/lib/onboarding/sign-in-steps"
 import { usePostedSignInStep } from "@/lib/onboarding/use-posted-sign-in-step"
 import type { SignIn } from "@/lib/onboarding/use-sign-in"
 import { useInvokePhaseEnd } from "@/lib/perf/use-invoke-phase-end"
+import { useListEnd } from "@/lib/query/use-list-end"
 import { useSkeletonSlot } from "@/lib/query/use-skeleton-slot"
 import type { ReportedRun } from "@/lib/routines/routine-contract"
 import type { MessageLandingController } from "@/lib/search/message-landing-controller"
@@ -243,6 +244,8 @@ import { opensInNewTab } from "@/lib/tabs/new-tab-clicks"
 const THREAD_TRANSCRIPT_SKELETON = <ThreadTranscriptSkeleton />
 
 const MISSION_TRANSCRIPT_SKELETON = <MissionDetailSkeleton />
+
+const OLDER_PRELOAD_MARGIN = "300px 0px 0px 0px"
 
 type WorkLineSeat = {
 	face: ThreadFace
@@ -1593,9 +1596,18 @@ const useThreadActions = (
 	const stop = useCallback(() => {
 		void controller.stop()
 	}, [controller])
-	const loadOlder = useCallback(() => {
-		void controller.loadOlder()
+	const loadOlderPage = useCallback(async () => {
+		const oldestShownId = () => controller.getState().messages[0]?.id
+		const oldestBefore = oldestShownId()
+		await controller.loadOlder()
+		return oldestShownId() !== oldestBefore
 	}, [controller])
+	const older = useListEnd({
+		hasMore: state.hasOlder,
+		isLoading: facts.isLoadingOlder,
+		loadMore: loadOlderPage,
+		rootMargin: OLDER_PRELOAD_MARGIN,
+	})
 	const loadNewer = useCallback(() => {
 		void controller.loadNewer()
 	}, [controller])
@@ -1642,8 +1654,8 @@ const useThreadActions = (
 		isSentInMount,
 		loadLatest,
 		loadNewer,
-		loadOlder,
 		offerSignIn,
+		older,
 		readDraft,
 		releaseReply,
 		rememberDraft,
@@ -1914,14 +1926,7 @@ function ThreadView(props: ThreadViewProps) {
 				onLoad: view.loadNewer,
 				onLoadLatest: view.loadLatest,
 			})}
-			older={
-				view.state.messages.length > 0
-					? {
-							hasNextPage: view.state.hasOlder,
-							isFetchingNextPage: view.facts.isLoadingOlder,
-						}
-					: undefined
-			}
+			older={view.state.messages.length > 0 ? view.older : undefined}
 			onFollowChange={view.controller.follow}
 			overlay={
 				<AnswerImageViewer

@@ -122,12 +122,13 @@ notarization credential belongs in the repo.
     → the partial reply is there with the words it had reached, marked stopped.
     Nothing is left looking like a message still being written.
 
-11. Scroll to the top of a transcript longer than 20 messages.
-    → `Load older messages` appears; use it — with the keyboard as well as the
-    mouse. The page lands above the reader without moving the row they were
-    looking at, the control keeps focus while it loads, and once the beginning
-    is reached it is replaced by `Beginning of the conversation`. No message
-    appears twice and none is skipped.
+11. Scroll up a transcript longer than 20 messages, with the trackpad, then
+    with Page Up from the focused transcript.
+    → before the top is reached, a skeleton row shows above the oldest message
+    and the older page lands there on its own, without a click and without
+    moving the row being read. Keep scrolling up: each page loads in turn, and
+    once the beginning is reached `Beginning of the conversation` shows. No
+    message appears twice and none is skipped.
 
 12. Quit, then `echo '{' > ~/Library/Application\ Support/com.kiroshi.app/session.json`
     and relaunch.

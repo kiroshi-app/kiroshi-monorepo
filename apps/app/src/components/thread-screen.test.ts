@@ -130,6 +130,10 @@ import {
 } from "@/lib/onboarding/sign-in-controller"
 import { type FakeLayout, fakeLayout } from "@/lib/perf/fake-layout"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
+import {
+	type SentinelScroll,
+	stubSentinelObserver,
+} from "@/lib/query/sentinel-test-observer"
 import { createOpenedRoutineController } from "@/lib/routines/opened-routine-controller"
 import type { Routine } from "@/lib/routines/routine-contract"
 import { routinesTransport } from "@/lib/routines/routines-transport"
@@ -796,6 +800,21 @@ const LONG_ROOM_SPOKEN: SpokenTurn[] = Array.from(
 
 const longRoomOf = () => roomOf({ names: ["Ada"], spoken: LONG_ROOM_SPOKEN })
 
+const olderSentinel = () => {
+	const sentinel = document.querySelector(
+		'[data-slot="message-scroller-viewport"] [data-slot="list-end-sentinel"]',
+	)
+	if (!sentinel) {
+		throw new Error("no older messages sentinel")
+	}
+	return sentinel
+}
+
+const scrollToOlder = async (scroll: SentinelScroll) => {
+	await scroll.scrollInto(olderSentinel())
+	await settle()
+}
+
 const anchorOf = (messageId: string) =>
 	document.querySelector(`[data-message-id="${messageId}"]`)
 
@@ -1441,6 +1460,7 @@ describe("ThreadScreen", () => {
 		cleanup()
 		layout.restore()
 		onCaptionWindow.mockReturnValue(false)
+		vi.unstubAllGlobals()
 	})
 
 	it("opens the routines of a solo companion thread on its main conversation", async () => {
@@ -2075,7 +2095,8 @@ describe("ThreadScreen", () => {
 	})
 
 	// TODO: OPE-1788 fires the older page from the transcript sentinel, trigger it from there
-	it.skip("leaves a dismissed conversation failure dismissed when the reader returns", async () => {
+	it("leaves a dismissed conversation failure dismissed when the reader returns", async () => {
+		const scroll = stubSentinelObserver()
 		const store = refusingOlderStore()
 		const conversation = await store.createConversation({
 			spaceId: SPACE,
@@ -2098,8 +2119,8 @@ describe("ThreadScreen", () => {
 		})
 		await settle()
 
-		fireEvent.click(screen.getByRole("button", { name: "Load older messages" }))
-		await settle()
+		await scrollToOlder(scroll)
+		await scrollToOlder(scroll)
 		expect(raisedNotices(READ_TITLE)).toHaveLength(1)
 
 		await closeNotice(READ_TITLE)
@@ -3083,7 +3104,8 @@ describe("ThreadScreen", () => {
 	})
 
 	// TODO: OPE-1788 fires the older page from the transcript sentinel, trigger it from there
-	it.skip("opens a searched message centred, highlighted and paged both ways", async () => {
+	it("opens a searched message centred, highlighted and paged both ways", async () => {
+		const scroll = stubSentinelObserver()
 		const room = await longRoomOf()
 		const landings = createMessageLandingController()
 		landings.record({
@@ -3108,8 +3130,11 @@ describe("ThreadScreen", () => {
 		const oldestLanded = Math.min(...landed)
 		const newestLanded = Math.max(...landed)
 
-		fireEvent.click(screen.getByRole("button", { name: "Load older messages" }))
-		await settle()
+		expect(scroll.watchesOf(olderSentinel())).toEqual([
+			expect.objectContaining({ rootMargin: "300px 0px 0px 0px" }),
+		])
+
+		await scrollToOlder(scroll)
 
 		expect(Math.min(...shownTurnNumbers())).toBeLessThan(oldestLanded)
 
