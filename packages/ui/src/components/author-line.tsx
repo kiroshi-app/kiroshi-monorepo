@@ -54,13 +54,6 @@ const STUCK_INSET = 18
 const AUTHOR_LINE_STICKY =
 	"sticky bottom-4.5 z-10 self-stretch before:pointer-events-none before:absolute before:-inset-x-4.5 before:-top-3.5 before:-bottom-4.5 before:-z-10 before:hidden before:border-foreground/6 before:border-t data-[stuck=true]:before:block"
 
-const STUCK_BLOCK_TONE = {
-	agent: "before:bg-author-line-sticky",
-	person: "before:bg-author-line-sticky",
-	you: "before:bg-user-bubble",
-	deleted: "before:bg-author-line-sticky",
-} as const satisfies Record<AuthorLineTone, string>
-
 const TRANSCRIPT_VIEWPORT = '[data-slot="message-scroller-viewport"]'
 
 const useStuckToBottom = (isSticky: boolean) => {
@@ -240,7 +233,12 @@ const AuthorLine = ({
 				className={cn(
 					AUTHOR_LINE,
 					isEndSide && "justify-end self-end",
-					isSticky && [AUTHOR_LINE_STICKY, STUCK_BLOCK_TONE[tone]],
+					isSticky && [
+						AUTHOR_LINE_STICKY,
+						isOnOwnBubble
+							? "before:bg-user-bubble"
+							: "before:bg-author-line-sticky",
+					],
 					className,
 				)}
 			>
