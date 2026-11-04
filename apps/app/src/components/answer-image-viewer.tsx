@@ -166,6 +166,9 @@ export const AnswerImageViewer = ({
 			{...barActionsOf(image, imageActions)}
 			count={viewed?.images.length ?? 0}
 			image={image}
+			isSavingToLibrary={
+				image !== null && imageActions.isSavingImage(image.src)
+			}
 			onClose={onClose}
 			onNext={() => onStep(1)}
 			onPrevious={() => onStep(-1)}
