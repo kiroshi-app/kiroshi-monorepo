@@ -197,7 +197,7 @@ export const CaptionPerImage = meta.story({
 		docs: {
 			description: {
 				story:
-					"Each picture carries its own caption, drawn inside its tile over a dark gradient; the +N tile keeps its count and shows no caption, and no line runs under the gallery. Check the picture without alt text takes its caption as its name, and a picture with alt text reads its caption as its description.",
+					"Each picture carries its own caption, drawn in a strip along the bottom of its tile, a dark gradient under the text only, that grows upward for a second line; the +N tile keeps its count and shows no caption, and no line runs under the gallery. Check each strip spans the tile width at its bottom edge and is as tall as its text plus 12px on each side, the picture without alt text takes its caption as its name, and a picture with alt text reads its caption as its description.",
 			},
 		},
 	},
@@ -215,6 +215,26 @@ export const CaptionPerImage = meta.story({
 		await expect(
 			canvas.getByRole("button", { name: "A double room facing the river" }),
 		).toHaveAccessibleDescription("River view double, 148 euros")
+		const strips = slotsIn(canvasElement, "gallery-image-caption")
+		for (const strip of strips) {
+			const tile = (strip.parentElement as HTMLElement).getBoundingClientRect()
+			const box = strip.getBoundingClientRect()
+			const text = (
+				strip.firstElementChild as HTMLElement
+			).getBoundingClientRect()
+			await expect(box.bottom).toBe(tile.bottom)
+			await expect(box.left).toBe(tile.left)
+			await expect(box.right).toBe(tile.right)
+			await expect(box.height).toBe(text.height + 24)
+			await expect(box.top).toBeGreaterThan(tile.top)
+		}
+		await expect(
+			strips.map(
+				(strip) =>
+					(strip.firstElementChild as HTMLElement).getBoundingClientRect()
+						.height,
+			),
+		).toContain(32)
 	},
 })
 

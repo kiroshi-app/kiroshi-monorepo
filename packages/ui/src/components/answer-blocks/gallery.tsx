@@ -110,11 +110,9 @@ const GalleryTile = ({
 					id={captionId}
 					aria-hidden="true"
 					data-slot="gallery-image-caption"
-					className="pointer-events-none absolute inset-0 flex items-end bg-linear-to-t from-black/65 to-transparent p-3 font-medium text-white text-xs leading-4"
+					className="pointer-events-none absolute inset-x-0 bottom-0 bg-linear-to-t from-black/65 to-transparent p-3 font-medium text-white text-xs leading-4"
 				>
-					<span className="line-clamp-2 min-w-0 wrap-break-word">
-						{imageCaption}
-					</span>
+					<span className="line-clamp-2 wrap-break-word">{imageCaption}</span>
 				</span>
 			) : null}
 			{hiddenCount > 0 ? (
