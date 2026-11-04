@@ -32,15 +32,11 @@ const SkeletonCircle = ({ className }: SkeletonCircleProps) => (
 	/>
 )
 
-type SkeletonBarActionsProps = {
-	className: string
-}
-
-const SkeletonBarActions = ({ className }: SkeletonBarActionsProps) => (
+const SkeletonBarActions = () => (
 	<div className="flex shrink-0 items-center gap-1">
-		<SkeletonCircle className={className} />
-		<SkeletonCircle className={className} />
-		<SkeletonCircle className={className} />
+		<SkeletonCircle className="size-8" />
+		<SkeletonCircle className="size-8" />
+		<SkeletonCircle className="size-8" />
 	</div>
 )
 
@@ -97,7 +93,7 @@ const LibraryDocumentSkeleton = () => {
 					<SkeletonBar className="w-16" />
 					<SkeletonBar className="w-32" />
 				</div>
-				<SkeletonBarActions className="size-8" />
+				<SkeletonBarActions />
 			</div>
 			<div className="flex min-h-0 flex-1 flex-col px-10 pt-10 pb-10">
 				<div className="mx-auto flex min-h-0 w-full max-w-160 flex-1 flex-col">
@@ -133,7 +129,7 @@ const LibraryImageSkeleton = () => {
 							<SkeletonBar className="w-24" isFaint />
 						</div>
 					</div>
-					<SkeletonBarActions className="size-8" />
+					<SkeletonBarActions />
 				</div>
 				<div className="flex min-h-0 flex-1 items-center gap-5 px-5 pb-18">
 					<SkeletonCircle className="size-10" />

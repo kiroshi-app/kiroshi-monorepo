@@ -133,11 +133,8 @@ export const DeletedItem = meta.story({
 		await expect(state).toHaveAccessibleDescription(
 			"This item was deleted from the Library.",
 		)
-		await expectFillsFrameHeight(
-			slotIn(canvasElement, "library-item-unavailable"),
-		)
-
 		const surface = slotIn(canvasElement, "library-item-unavailable")
+		await expectFillsFrameHeight(surface)
 		const surfaceBox = surface.getBoundingClientRect()
 		const stateBox = state.getBoundingClientRect()
 		await expect(
