@@ -523,10 +523,6 @@ mod tests {
 		format!("{origin}{}", path.replace("{file}", file))
 	}
 
-	async fn a_proxy_of_a_host_answering_attachments(token: Arc<HostToken>) -> String {
-		a_proxy_of_instance_answering_attachments("instance-1", token).await
-	}
-
 	async fn a_proxy_of_instance_answering_attachments(
 		instance_id: &str,
 		token: Arc<HostToken>,
@@ -541,7 +537,7 @@ mod tests {
 	#[tokio::test]
 	async fn an_attachment_of_the_shared_space_crosses_as_its_bytes_with_the_avatar_headers() {
 		let token = Arc::new(HostToken::random());
-		let origin = a_proxy_of_a_host_answering_attachments(token.clone()).await;
+		let origin = a_proxy_of_instance_answering_attachments("instance-1", token.clone()).await;
 		let client = a_client();
 
 		for asked in [
@@ -566,7 +562,7 @@ mod tests {
 	#[tokio::test]
 	async fn an_attachment_of_another_space_or_out_of_its_conversation_is_not_found() {
 		let token = Arc::new(HostToken::random());
-		let origin = a_proxy_of_a_host_answering_attachments(token.clone()).await;
+		let origin = a_proxy_of_instance_answering_attachments("instance-1", token.clone()).await;
 		let client = a_client();
 
 		for (conversation_id, file) in [
