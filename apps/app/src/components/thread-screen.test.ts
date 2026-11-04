@@ -2696,6 +2696,39 @@ describe("ThreadScreen", () => {
 		expect(stopFor("Ada")).toBeNull()
 	})
 
+	it("shows a failed agent with Retry next to one still at work, and re-addresses it alone", async () => {
+		const room = await roomOf({ names: ["Ada", "Nyx"] })
+		render(screenOf(room.thread), { wrapper: createQueryTestWrapper().wrapper })
+		await settle()
+
+		await room.send("@Ada @Nyx now")
+		act(() => {
+			room.driver.pushTo(room.idOf("Ada"), [
+				{
+					type: "failed",
+					error: { kind: "crashed", code: 1, detail: "sidecar is gone" },
+				},
+			])
+		})
+		await settle()
+
+		expect(workLineCount()).toBe(1)
+		expect(workLines()).toEqual(["Nyx is thinking…"])
+		fireEvent.click(screen.getByRole("button", { name: "Retry Ada" }))
+		await settle()
+
+		expect(room.driver.submissions.map(({ scope }) => scope.botId)).toEqual([
+			room.idOf("Ada"),
+			room.idOf("Nyx"),
+			room.idOf("Ada"),
+		])
+		expect(screen.queryByRole("button", { name: "Retry Ada" })).toBeNull()
+		openWorkLine()
+		expect(workLines()).toEqual(
+			expect.arrayContaining(["Ada is thinking…", "Nyx is thinking…"]),
+		)
+	})
+
 	it("clocks the working row of a seated companion from the start of its turn", async () => {
 		const room = await roomOf({ names: ["Ada"] })
 		render(screenOf(room.thread), { wrapper: createQueryTestWrapper().wrapper })

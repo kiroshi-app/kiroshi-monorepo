@@ -275,6 +275,11 @@ const upNextAgentOf = (face: ThreadFace): ThreadWorkLineAgent => ({
 	state: "upNext",
 })
 
+const failedAgentOf = (
+	face: ThreadFace,
+	onRetry: () => void,
+): ThreadWorkLineAgent => ({ ...face, state: "failed", onRetry })
+
 type ThreadWorkProps = {
 	agents: ThreadWorkLineAgent[]
 }
@@ -1183,14 +1188,20 @@ const speakingRowsIn = (
 		return seated ? [{ seated, speaking }] : []
 	})
 
+const seatedIn = (botIds: string[], bots: RosterBot[]): RosterBot[] =>
+	botIds.flatMap((botId) => bots.find(({ id }) => id === botId) ?? [])
+
 const waitingRowsIn = (
 	waitingBotIds: string[],
 	speakers: SpeakingBot[],
 	bots: RosterBot[],
 ): RosterBot[] =>
-	waitingBotIds
-		.filter((botId) => !speakers.some((speaking) => speaking.botId === botId))
-		.flatMap((botId) => bots.find(({ id }) => id === botId) ?? [])
+	seatedIn(
+		waitingBotIds.filter(
+			(botId) => !speakers.some((speaking) => speaking.botId === botId),
+		),
+		bots,
+	)
 
 type ConversationThreadTailProps = {
 	thread: LoadedConversationThread
@@ -1206,8 +1217,8 @@ const ConversationThreadTail = ({
 	refusedQuotes,
 }: ConversationThreadTailProps) => {
 	const t = useChatCopy()
-	const { refusedMessage, speakers, waitingBotIds } = thread.state
-	const agents = [
+	const { refusedMessage, speakers, waitingBotIds, failedBotIds } = thread.state
+	const atWork = [
 		...speakingRowsIn(speakers, bots).map(({ seated, speaking }) =>
 			workLineAgentOf(
 				{ face: seated, work: speaking.work, onStop: stopOf(speaking) },
@@ -1216,6 +1227,12 @@ const ConversationThreadTail = ({
 		),
 		...waitingRowsIn(waitingBotIds, speakers, bots).map(upNextAgentOf),
 	]
+	const failed = seatedIn(failedBotIds, bots).map((seated) =>
+		failedAgentOf(seated, () => {
+			void thread.controller.retryTurn(seated.id)
+		}),
+	)
+	const agents = atWork.length > 0 ? [...failed, ...atWork] : []
 
 	return (
 		<>
