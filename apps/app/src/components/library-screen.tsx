@@ -34,6 +34,7 @@ import {
 	titleOf,
 	toShownItem,
 } from "@/lib/library/library-items"
+import { readLinkPreview } from "@/lib/library/library-link-preview"
 import { useCreateLibraryDocument } from "@/lib/library/use-create-library-document"
 import {
 	useJoinedLibraryActions,
@@ -414,6 +415,7 @@ export const LibraryScreen = ({
 				onCopy={() => copyAndWait(openedItem)}
 				onDelete={() => deleteDocument(openedDocument)}
 				onDownload={() => save(openedItem)}
+				onLinkPreview={readLinkPreview}
 				onOpenInNewTab={boundTo(openedItem, openInNewTab)}
 				onRename={pickRename}
 				onShowInFolder={boundTo(openedItem, reveal)}
