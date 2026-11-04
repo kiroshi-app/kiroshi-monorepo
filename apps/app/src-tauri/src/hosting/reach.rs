@@ -120,6 +120,7 @@ pub(super) const REACHES: &[(&str, Reach)] = &[
 	("application_installs", Reach::Scoped(CONVERSATION_ID)),
 	("application_runnable", Reach::Free),
 	("chat_store_attachments", Reach::Scoped(CONVERSATION_ID)),
+	("remote_image_read", Reach::HostOnly),
 	("library_list", Reach::Scoped(SPACE_ID)),
 	("library_read_document", Reach::Scoped(SPACE_ID)),
 	("library_read_image", Reach::Scoped(SPACE_ID)),

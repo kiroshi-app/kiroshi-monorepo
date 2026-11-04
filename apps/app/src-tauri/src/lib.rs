@@ -33,6 +33,7 @@ pub mod missions;
 pub mod notifications;
 pub mod plugins;
 mod private_files;
+pub mod remote_image;
 #[cfg(test)]
 mod removed_on_drop;
 pub mod routines;
