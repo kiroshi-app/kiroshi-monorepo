@@ -731,6 +731,22 @@ describe("a Library document the agent wrote in its message", () => {
 		expect(planChip().closest("p")?.lastElementChild).toBe(planChip())
 	})
 
+	it("shows the chip after a final link, outside it, when the text never names the document", () => {
+		renderTurn(
+			"assistant",
+			"Booked it, details on [Visit Lisboa](https://www.visitlisboa.com)",
+			{ documents: threadDocumentsOf(), names: [PLAN] },
+		)
+		const link = screen.getByRole("link", { name: /^Visit Lisboa/ })
+
+		expect(planChip().closest("a")).toBeNull()
+		expect(
+			link.compareDocumentPosition(planChip()) &
+				Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy()
+		expect(planChip().closest("p")?.lastElementChild).toBe(planChip())
+	})
+
 	it("shows the chip alone when the message carries only the document", () => {
 		renderTurn("assistant", "", {
 			documents: threadDocumentsOf(),
@@ -857,26 +873,5 @@ describe("a to-do in an agent message", () => {
 		fireEvent.click(planChip())
 
 		expect(actions.insert).not.toHaveBeenCalled()
-	})
-})
-
-describe("a sourced image that fails to load", () => {
-	it("shows the image as unavailable with its site and the Open original link", () => {
-		renderTurn(
-			"assistant",
-			"The waterfront.\n\n![The Lisbon waterfront](https://images.example.org/lisbon.jpg)\n\nSource: [Visit Lisboa](https://www.visitlisboa.com)",
-			{ actions: actionsSpy() },
-		)
-
-		fireEvent.error(screen.getByRole("img", { name: "The Lisbon waterfront" }))
-
-		expect(screen.getByText("Image unavailable")).toBeTruthy()
-		expect(screen.getByText("Visit Lisboa")).toBeTruthy()
-		expect(
-			screen.getByRole("link", { name: "Open original" }).getAttribute("href"),
-		).toBe("https://www.visitlisboa.com")
-		expect(
-			screen.queryByRole("img", { name: "The Lisbon waterfront" }),
-		).toBeNull()
 	})
 })

@@ -12,7 +12,11 @@ import { LibraryDocumentBlockEditor } from "@workspace/ui/components/library-doc
 import type { MarkdownRunRenderProps } from "@workspace/ui/components/markdown/run"
 
 import { useLibraryOnScreen } from "@/components/answer-image-viewer"
-import { documentRunsOf, isTrailingRun } from "@/lib/chat/document-mentions"
+import {
+	documentRunsOf,
+	isTrailingRun,
+	textCarryingDocuments,
+} from "@/lib/chat/document-mentions"
 import { titleOf } from "@/lib/library/library-items"
 import { useLibraryDocumentSession } from "@/lib/library/use-library-document-session"
 import { useLibraryImageResolver } from "@/lib/library/use-library-image-sources"
@@ -116,7 +120,7 @@ export const documentReferencesOf = ({
 	names,
 	isWriting,
 }: DocumentReferencesSource) => {
-	const shownText = text.trim() === "" ? names.join(" ") : text
+	const shownText = textCarryingDocuments(text, names)
 	const runs = documentRunsOf(shownText, names)
 	const trailingNames = new Set(runs.filter(isTrailingRun).map(({ id }) => id))
 	const renderRun = ({ id, isEnd }: MarkdownRunRenderProps) => {

@@ -5,6 +5,8 @@ import { titleOf } from "@/lib/library/library-items"
 const OUTSIDE_PROSE =
 	/```[\s\S]*?(?:```|$)|~~~[\s\S]*?(?:~~~|$)|`[^`\n]*`|!?\[[^\]\n]*\]\([^)\n]*\)|<[^>\s]+>/g
 
+const ENDS_IN_LINK = /(?:\]\([^)\n]*\)|<[^>\s]+>|(?:https?:\/\/|www\.)\S+)\s*$/
+
 const PATTERN_SYNTAX = /[.*+?^${}()|[\]\\]/g
 
 const blankedOutsideProse = (text: string) =>
@@ -32,6 +34,18 @@ const mentionRunOf = (prose: string, name: string): MarkdownRun => {
 		start: mention.index,
 		end: mention.index + mention[0].length,
 	}
+}
+
+const isNamedIn = (prose: string, name: string) =>
+	mentionPatternOf(name).test(prose)
+
+export const textCarryingDocuments = (text: string, names: string[]) => {
+	if (text.trim() !== "" && !ENDS_IN_LINK.test(text)) {
+		return text
+	}
+	const prose = blankedOutsideProse(text)
+	const unnamed = names.filter((name) => !isNamedIn(prose, name))
+	return [text.trimEnd(), ...unnamed].filter(Boolean).join(" ")
 }
 
 export const isTrailingRun = ({ start, end }: MarkdownRun) => start === end
