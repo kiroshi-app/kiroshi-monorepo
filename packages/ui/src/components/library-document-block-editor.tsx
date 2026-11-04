@@ -176,11 +176,18 @@ const LibraryDocumentBlockEditor = ({
 	const restructure = (sources: LibraryBlock[]) =>
 		commitBlocks(relaid(latest.current.blocks, sources))
 
+	const reread = (markdown: string) =>
+		show(
+			withLine(keepIds(latest.current.blocks, parseBlocks(markdown, nextId))),
+		)
+
+	const remove = (id: string) =>
+		restructure(latest.current.blocks.filter((block) => block.id !== id))
+
 	const takeBody = useEffectEvent((next: string) => {
 		if (next === received.current) return
 		received.current = next
-		if (next === serializeBlocks(latest.current)) return
-		show(withLine(keepIds(latest.current.blocks, parseBlocks(next, nextId))))
+		if (next !== serializeBlocks(latest.current)) reread(next)
 	})
 
 	useLayoutEffect(() => takeBody(body), [body])
@@ -236,18 +243,9 @@ const LibraryDocumentBlockEditor = ({
 		if (
 			latest.current.blocks[index].source.trim() === "" &&
 			latest.current.blocks.length > 1
-		) {
-			restructure(latest.current.blocks.filter((block) => block.id !== id))
-			return
-		}
-		show(
-			withLine(
-				keepIds(
-					latest.current.blocks,
-					parseBlocks(serializeBlocks(latest.current), nextId),
-				),
-			),
 		)
+			remove(id)
+		else reread(serializeBlocks(latest.current))
 	}
 
 	const actionsFor = (id: string) => {
@@ -286,7 +284,7 @@ const LibraryDocumentBlockEditor = ({
 				const neighbour = blocks[index + 1] ?? blocks[index - 1]
 				setEditing(undefined)
 				setSlashFor(undefined)
-				restructure(blocks.filter((block) => block.id !== id))
+				remove(id)
 				if (neighbour) focusHandle(neighbour.id)
 			},
 		}
@@ -406,7 +404,7 @@ const LibraryDocumentBlockEditor = ({
 			) {
 				event.preventDefault()
 				const previous = latest.current.blocks[index - 1]
-				restructure(latest.current.blocks.filter(({ id }) => id !== block.id))
+				remove(block.id)
 				if (previous && EDITABLE_TYPES.includes(blockTypeOf(previous.source)))
 					edit(previous.id)
 				else if (previous) focusHandle(previous.id)
@@ -482,6 +480,7 @@ const LibraryDocumentBlockEditor = ({
 			{doc.blocks.map((block, index) => {
 				const type = blockTypeOf(block.source)
 				const isEditing = editing === block.id
+				const isEditable = EDITABLE_TYPES.includes(type)
 				const runs = runsIn({
 					writers,
 					people,
@@ -534,16 +533,9 @@ const LibraryDocumentBlockEditor = ({
 						) : (
 							// biome-ignore lint/a11y/noStaticElementInteractions: focusing a text block opens its field, the keyboard reaches it with Tab
 							<div
-								className={cn(
-									EDITABLE_TYPES.includes(type) &&
-										"min-h-6 cursor-text outline-none",
-								)}
-								onFocus={
-									EDITABLE_TYPES.includes(type)
-										? startEditingOnFocus(block.id)
-										: undefined
-								}
-								tabIndex={EDITABLE_TYPES.includes(type) ? 0 : undefined}
+								className={cn(isEditable && "min-h-6 cursor-text outline-none")}
+								onFocus={isEditable ? startEditingOnFocus(block.id) : undefined}
+								tabIndex={isEditable ? 0 : undefined}
 							>
 								<Markdown
 									className={DOCUMENT_TYPE}
