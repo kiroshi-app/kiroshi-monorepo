@@ -8,7 +8,7 @@ import type { LibraryOpening } from "@/lib/navigation/library-search"
 
 type LibraryScreenHoldingOpeningProps = Omit<
 	LibraryScreenProps,
-	"opening" | "onOpeningChange"
+	"opening" | "onOpeningChange" | "onOpenImage"
 > & { openedFirst?: LibraryOpening }
 
 export const LibraryScreenHoldingOpening = ({
@@ -20,5 +20,6 @@ export const LibraryScreenHoldingOpening = ({
 		...props,
 		opening,
 		onOpeningChange: setOpening,
+		onOpenImage: setOpening,
 	})
 }
