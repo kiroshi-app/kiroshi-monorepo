@@ -89,6 +89,28 @@ const GALLERY = `Two sofas that fit the room.
   caption: Grey linen, 990 euros
 \`\`\``
 
+const GALLERY_PARTLY_CAPTIONED = `Three seats that fit the room.
+
+\`\`\`gallery
+- image: https://images.example.org/sofa-green.jpg
+  alt: Green velvet sofa, three seats
+  caption: Green velvet, 1,290 euros
+- image: https://images.example.org/armchair-oak.jpg
+  alt: Oak armchair with a cane back
+- image: https://images.example.org/sofa-grey.jpg
+  alt: Grey linen sofa, three seats
+  caption: Grey linen, 990 euros
+\`\`\``
+
+const GALLERY_WITHOUT_CAPTIONS = `Two sofas that fit the room.
+
+\`\`\`gallery
+- image: https://images.example.org/sofa-green.jpg
+  alt: Green velvet sofa, three seats
+- image: https://images.example.org/sofa-grey.jpg
+  alt: Grey linen sofa, three seats
+\`\`\``
+
 const ILLUSTRATED_LIST = `Three cities for the offsite.
 
 \`\`\`illustrated-list
@@ -371,6 +393,47 @@ export const GalleryInAnswer = meta.story({
 			]),
 			1,
 		)
+	},
+})
+
+export const GalleryCaptionsUnderGrid = meta.story({
+	tags: ["test-only"],
+	args: { children: GALLERY_PARTLY_CAPTIONED },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A `gallery` block whose middle image has no caption. Check one muted line under the grid joins the captions there are in image order, and no tile draws a caption.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expect(canvasElement.querySelector("figcaption")).toHaveTextContent(
+			/^Green velvet, 1,290 euros · Grey linen, 990 euros$/,
+		)
+		await expect(canvasElement.querySelector("figcaption")).toHaveClass(
+			"text-muted-foreground",
+		)
+		await expect(slotsIn(canvasElement, "gallery-image-caption")).toHaveLength(
+			0,
+		)
+	},
+})
+
+export const GalleryWithoutCaptions = meta.story({
+	tags: ["test-only"],
+	args: { children: GALLERY_WITHOUT_CAPTIONS },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A `gallery` block without any caption. Check no line runs under the grid.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expect(slotIn(canvasElement, "gallery")).toBeVisible()
+		await expect(canvasElement.querySelector("figcaption")).toBeNull()
 	},
 })
 

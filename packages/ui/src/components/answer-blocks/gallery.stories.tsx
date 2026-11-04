@@ -190,51 +190,30 @@ const CAPTIONED_PHOTOS = [
 	})),
 ]
 
-export const CaptionPerImage = meta.story({
+export const CaptionsUnderGrid = meta.story({
 	globals: { theme: "dark" },
-	args: { images: CAPTIONED_PHOTOS, caption: "" },
+	args: {
+		images: CAPTIONED_PHOTOS,
+		caption: CAPTIONED_PHOTOS.map(({ caption }) => caption).join(" · "),
+	},
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Each picture carries its own caption, drawn in a strip along the bottom of its tile, a dark gradient under the text only, that grows upward for a second line; the +N tile keeps its count and shows no caption, and no line runs under the gallery. Check each strip spans the tile width at its bottom edge and is as tall as its text plus 12px on each side, the picture without alt text takes its caption as its name, and a picture with alt text reads its caption as its description.",
+					"Each picture carries its own caption, and the gallery shows them all as one muted line under the grid, joined by a middle dot; no tile draws a caption, the +N tile included. Check the picture without alt text takes its caption as its name.",
 			},
 		},
 	},
-	play: async ({ canvas, canvasElement }) => {
-		await expect(slotsIn(canvasElement, "gallery-image-caption")).toHaveLength(
-			4,
+	play: async ({ args, canvas, canvasElement }) => {
+		await expect(canvasElement.querySelector("figcaption")).toHaveTextContent(
+			args.caption ?? "",
 		)
-		await expect(
-			slotIn(canvasElement, "gallery-more").parentElement,
-		).not.toHaveTextContent("The lobby")
+		await expect(slotsIn(canvasElement, "gallery-image-caption")).toHaveLength(
+			0,
+		)
 		await expect(
 			canvas.getByRole("img", { name: "Breakfast on the terrace" }),
 		).toBeVisible()
-		await expect(canvasElement.querySelector("figcaption")).toBeNull()
-		await expect(
-			canvas.getByRole("button", { name: "A double room facing the river" }),
-		).toHaveAccessibleDescription("River view double, 148 euros")
-		const strips = slotsIn(canvasElement, "gallery-image-caption")
-		for (const strip of strips) {
-			const tile = (strip.parentElement as HTMLElement).getBoundingClientRect()
-			const box = strip.getBoundingClientRect()
-			const text = (
-				strip.firstElementChild as HTMLElement
-			).getBoundingClientRect()
-			await expect(box.bottom).toBe(tile.bottom)
-			await expect(box.left).toBe(tile.left)
-			await expect(box.right).toBe(tile.right)
-			await expect(box.height).toBe(text.height + 24)
-			await expect(box.top).toBeGreaterThan(tile.top)
-		}
-		await expect(
-			strips.map(
-				(strip) =>
-					(strip.firstElementChild as HTMLElement).getBoundingClientRect()
-						.height,
-			),
-		).toContain(32)
 	},
 })
 
