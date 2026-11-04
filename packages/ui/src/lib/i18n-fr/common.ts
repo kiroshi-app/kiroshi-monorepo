@@ -654,6 +654,10 @@ const common = {
 					"Impossible d’ouvrir la Bibliothèque sur l’ordinateur où tourne Kiroshi. Redémarrez Kiroshi sur cet ordinateur, puis importez à nouveau le fichier.",
 				storage:
 					"Impossible d’enregistrer le fichier dans la Bibliothèque. Importez-le à nouveau.",
+				imageUnreadable:
+					"Impossible de lire cette image. Vérifiez qu’elle s’ouvre toujours, puis enregistrez-la à nouveau dans la Bibliothèque.",
+				refused:
+					"Impossible d’ajouter ce fichier à la Bibliothèque. Vérifiez le fichier, puis importez-le à nouveau.",
 				generic:
 					"Un problème est survenu pendant l’import. Importez à nouveau le fichier.",
 			},

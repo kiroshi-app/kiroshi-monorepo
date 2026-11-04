@@ -624,6 +624,10 @@ const common = {
 				unavailable:
 					"Couldn’t open the Library on the computer where Kiroshi runs. Restart Kiroshi there, then import the file again.",
 				storage: "Couldn’t record the file in the Library. Import it again.",
+				imageUnreadable:
+					"Couldn’t read this image. Check that it still opens, then save it to the Library again.",
+				refused:
+					"Couldn’t add this file to the Library. Check the file, then import it again.",
 				generic:
 					"Something went wrong during the import. Import the file again.",
 			},
