@@ -168,10 +168,4 @@ const ResizeHandle = ({ side, label, resize, slot }: ResizeHandleProps) => {
 	)
 }
 
-export {
-	RESIZE_STEP,
-	type ResizableWidth,
-	ResizeHandle,
-	type ResizeHandleProps,
-	useResizableWidth,
-}
+export { RESIZE_STEP, type ResizableWidth, ResizeHandle, useResizableWidth }
