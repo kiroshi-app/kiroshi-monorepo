@@ -866,12 +866,9 @@ const expectEachMessageClearsTheNext = async (canvasElement: HTMLElement) => {
 		const authorLine = message.querySelector('[data-slot="author-line"]')
 		if (!bubble || !authorLine) throw new Error("No bubble drawn")
 		await expect(bubble.scrollHeight).toBe(bubble.clientHeight)
-		await expect(authorLine.getBoundingClientRect().top).toBeGreaterThanOrEqual(
-			box.top,
-		)
-		await expect(authorLine.getBoundingClientRect().bottom).toBeLessThanOrEqual(
-			box.bottom,
-		)
+		const line = authorLine.getBoundingClientRect()
+		await expect(line.top).toBeGreaterThanOrEqual(box.top)
+		await expect(line.bottom).toBeLessThanOrEqual(box.bottom)
 		const next = messages[index + 1]
 		if (next) {
 			await expect(next.getBoundingClientRect().top).toBeGreaterThanOrEqual(
@@ -880,6 +877,8 @@ const expectEachMessageClearsTheNext = async (canvasElement: HTMLElement) => {
 		}
 	}
 }
+
+const SCROLL_STEPS = 3
 
 const scrollUpHalfAScreen = async (viewport: HTMLElement) => {
 	const target = viewport.scrollTop - viewport.clientHeight / 2
@@ -946,7 +945,7 @@ export const NarrowedToTheThreadFloorThenScrolled = meta.story({
 		await afterTwoFrames()
 		await expectEachMessageClearsTheNext(canvasElement)
 
-		for (const _ of [1, 2, 3]) {
+		for (let step = 0; step < SCROLL_STEPS; step++) {
 			await scrollUpHalfAScreen(viewport)
 			await expectEachMessageClearsTheNext(canvasElement)
 		}
