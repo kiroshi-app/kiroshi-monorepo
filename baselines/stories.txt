@@ -61,8 +61,11 @@ conversation-markdown-answerblocks--collapsible-sections-with-values
 conversation-markdown-answerblocks--gallery-in-answer
 conversation-markdown-answerblocks--illustrated-list-in-answer
 conversation-markdown-answerblocks--illustrated-list-with-badge-and-meta
+conversation-markdown-answerblocks--image-menu-from-keyboard-on-illustrated-list
+conversation-markdown-answerblocks--image-menu-from-keyboard-on-web-page-preview
 conversation-markdown-answerblocks--image-menu-on-gallery
 conversation-markdown-answerblocks--image-menu-on-illustrated-list
+conversation-markdown-answerblocks--image-menu-on-linked-image
 conversation-markdown-answerblocks--image-menu-on-plain-image
 conversation-markdown-answerblocks--image-menu-on-sourced-image
 conversation-markdown-answerblocks--image-menu-on-web-page-preview

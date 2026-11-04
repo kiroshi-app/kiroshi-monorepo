@@ -1,6 +1,6 @@
 "use client"
 
-import type { ComponentPropsWithoutRef, ReactNode } from "react"
+import type { ComponentPropsWithoutRef, ReactElement } from "react"
 import { useTranslation } from "react-i18next"
 import type { ExtraProps } from "react-markdown"
 
@@ -33,12 +33,17 @@ type MarkdownFigureProps = ComponentPropsWithoutRef<"figure"> & ExtraProps
 
 type MarkdownImageProps = ComponentPropsWithoutRef<"img"> & ExtraProps
 
-type ImageOpenButtonProps = {
+type MarkdownImageMenuProps = {
 	image: LibraryLightboxImage
-	children: ReactNode
+	isLinked: boolean
+	children: ReactElement
 }
 
-const ImageOpenButton = ({ image, children }: ImageOpenButtonProps) => {
+const MarkdownImageMenu = ({
+	image,
+	isLinked,
+	children,
+}: MarkdownImageMenuProps) => {
 	const actions = useMarkdownAnswerActions()
 	if (!actions) return children
 
@@ -48,15 +53,19 @@ const ImageOpenButton = ({ image, children }: ImageOpenButtonProps) => {
 			item={0}
 			name={image.name}
 			trigger={
-				<button
-					type="button"
-					aria-label={image.name}
-					data-slot="markdown-image-open"
-					className="inline-block max-w-full outline-offset-2"
-					onClick={() => actions.onOpenImage([image], 0)}
-				>
-					{children}
-				</button>
+				isLinked ? (
+					children
+				) : (
+					<button
+						type="button"
+						aria-label={image.name}
+						data-slot="markdown-image-open"
+						className="inline-block max-w-full outline-offset-2"
+						onClick={() => actions.onOpenImage([image], 0)}
+					>
+						{children}
+					</button>
+				)
 			}
 		/>
 	)
@@ -146,20 +155,19 @@ export const MarkdownImage = ({
 }: MarkdownImageProps) => {
 	const { t } = useTranslation("chat")
 	const image = <img {...props} alt={alt} src={src} />
-	if (typeof src !== "string" || node?.properties?.[LINKED_IMAGE_PROPERTY]) {
-		return image
-	}
+	if (typeof src !== "string") return image
 
 	return (
-		<ImageOpenButton
+		<MarkdownImageMenu
 			image={{
 				id: src,
 				name: alt || t("answerBlock.image.untitled"),
 				src,
 				detail: "",
 			}}
+			isLinked={Boolean(node?.properties?.[LINKED_IMAGE_PROPERTY])}
 		>
 			{image}
-		</ImageOpenButton>
+		</MarkdownImageMenu>
 	)
 }

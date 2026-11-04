@@ -845,6 +845,272 @@ export const ImageMenuOnWebPagePreview = meta.story({
 	},
 })
 
+const pressContextMenuKey = (element: Element) => {
+	const { left, bottom } = element.getBoundingClientRect()
+	element.dispatchEvent(
+		new MouseEvent("contextmenu", {
+			bubbles: true,
+			cancelable: true,
+			clientX: left,
+			clientY: bottom,
+		}),
+	)
+}
+
+const expectKeyboardImageMenu = async (
+	user: ReturnType<typeof userEvent.setup>,
+	picture: HTMLElement,
+	press: () => Promise<void>,
+) => {
+	await expect(picture).toHaveFocus()
+	await press()
+	const menu = await within(document.body).findByRole("menu", {
+		name: `Actions for ${picture.getAttribute("aria-label")}`,
+	})
+	await expect(
+		within(menu)
+			.getAllByRole("menuitem")
+			.map((entry) => entry.textContent),
+	).toEqual(IMAGE_MENU_ENTRIES)
+	await waitFor(() => expect(menu.contains(document.activeElement)).toBe(true))
+	await user.keyboard("{Escape}")
+	await waitFor(() => expect(picture).toHaveFocus())
+}
+
+const expectFocusRingFollowing = async (
+	picture: HTMLElement,
+	rounded: Element,
+) => {
+	await expect(picture).toHaveAttribute("aria-haspopup", "menu")
+	await expect(picture.matches(":focus-visible")).toBe(true)
+	await expect(getComputedStyle(picture).outlineStyle).not.toBe("none")
+	await expect(getComputedStyle(picture).borderTopLeftRadius).toBe(
+		getComputedStyle(rounded).borderTopLeftRadius,
+	)
+}
+
+const pickFromKeyboard = async (
+	user: ReturnType<typeof userEvent.setup>,
+	picture: HTMLElement,
+	entry: string,
+) => {
+	await user.keyboard("{Enter}")
+	const menu = await within(document.body).findByRole("menu")
+	const item = within(menu).getByRole("menuitem", { name: entry })
+	await waitFor(() => expect(menu.contains(document.activeElement)).toBe(true))
+	while (document.activeElement !== item) await user.keyboard("{ArrowDown}")
+	await user.keyboard("{Enter}")
+	await waitFor(() => expect(picture).toHaveFocus())
+}
+
+export const ImageMenuFromKeyboardOnIllustratedList = meta.story({
+	tags: ["test-only"],
+	render: (args) => (
+		<>
+			<div data-testid="with-menu">
+				<Markdown answerActions={args.answerActions}>
+					{ILLUSTRATED_LIST}
+				</Markdown>
+			</div>
+			<div data-testid="without-menu">
+				<Markdown>{ILLUSTRATED_LIST}</Markdown>
+			</div>
+		</>
+	),
+	args: { answerActions: IMAGE_MENU_ACTIONS },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"An `illustrated-list` block reached from the keyboard, the answer carrying `imageMenu`, beside the same list without it. Check each picture is one tab stop named by the image and announced as opening a menu, with a focus ring at the picture's radius, that the context-menu key, Shift+F10, Enter and Space open the `ImageMenu` and Escape brings focus back, that Save to Library hands the picture to `imageMenu.onSaveToLibrary`, and that the list without `imageMenu` draws its pictures out of the tab order, boxed as before.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const withMenu = within(canvas.getByTestId("with-menu"))
+		const withoutMenu = canvas.getByTestId("without-menu")
+
+		await userEvent.tab()
+		await expect(withMenu.getByRole("button", { name: "Lisbon" })).toHaveFocus()
+		await userEvent.tab()
+		const picture = withMenu.getByRole("button", { name: "Porto" })
+		const image = withMenu.getByRole("img", { name: "Porto" })
+		await expectFocusRingFollowing(picture, image)
+
+		await expectKeyboardImageMenu(userEvent, picture, async () =>
+			pressContextMenuKey(picture),
+		)
+		await expectKeyboardImageMenu(userEvent, picture, () =>
+			userEvent.keyboard("{Enter}"),
+		)
+		await expectKeyboardImageMenu(userEvent, picture, () =>
+			userEvent.keyboard(" "),
+		)
+		await pickFromKeyboard(userEvent, picture, "Save to Library")
+		await expect(
+			args.answerActions?.imageMenu?.onSaveToLibrary,
+		).toHaveBeenCalledWith({
+			id: "1",
+			name: "Porto",
+			src: "https://images.example.org/porto.jpg",
+			detail: "",
+		})
+
+		await expect(withoutMenu.querySelector("button")).toBeNull()
+		await expect(withoutMenu.querySelector("[tabindex]")).toBeNull()
+		const kept = within(withoutMenu).getByRole("img", { name: "Porto" })
+		await expect(boxOf(kept)).toEqual(boxOf(image))
+	},
+})
+
+export const ImageMenuFromKeyboardOnWebPagePreview = meta.story({
+	tags: ["test-only"],
+	render: (args) => (
+		<>
+			<div data-testid="with-menu">
+				<Markdown answerActions={args.answerActions}>
+					{WEB_PAGE_WITH_PREVIEW}
+				</Markdown>
+			</div>
+			<div data-testid="without-menu">
+				<Markdown
+					answerActions={{ ...IMAGE_MENU_ACTIONS, imageMenu: undefined }}
+				>
+					{WEB_PAGE_WITH_PREVIEW}
+				</Markdown>
+			</div>
+		</>
+	),
+	args: { answerActions: IMAGE_MENU_ACTIONS },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A `web-page` block reached from the keyboard, the answer carrying `imageMenu`, beside the same card without it. Check the preview is one tab stop named by the image and announced as opening a menu, with a focus ring at the card's radius, that the context-menu key, Enter and Space open the `ImageMenu` and Escape brings focus back, that Copy image hands the preview to `imageMenu.onCopyImage` and leaves `onOpenWebPage` alone, and that the card without `imageMenu` keeps its preview out of the tab order, boxed as before.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const withMenu = within(canvas.getByTestId("with-menu"))
+		const withoutMenu = within(canvas.getByTestId("without-menu"))
+		const name = "Terrace of Casa do Rio over the river"
+
+		await userEvent.tab()
+		const picture = withMenu.getByRole("button", { name })
+		const card = withMenu.getByRole("article")
+		await expectFocusRingFollowing(picture, card)
+
+		await expectKeyboardImageMenu(userEvent, picture, async () =>
+			pressContextMenuKey(picture),
+		)
+		await expectKeyboardImageMenu(userEvent, picture, () =>
+			userEvent.keyboard("{Enter}"),
+		)
+		await expectKeyboardImageMenu(userEvent, picture, () =>
+			userEvent.keyboard(" "),
+		)
+		await pickFromKeyboard(userEvent, picture, "Copy image")
+		await expect(
+			args.answerActions?.imageMenu?.onCopyImage,
+		).toHaveBeenCalledWith({
+			id: "https://images.example.org/casa-do-rio.jpg",
+			name,
+			src: "https://images.example.org/casa-do-rio.jpg",
+			detail: "casadorio.pt",
+		})
+		await expect(args.answerActions?.onOpenWebPage).not.toHaveBeenCalled()
+
+		await expect(withoutMenu.queryByRole("button", { name })).toBeNull()
+		await expect(boxOf(withoutMenu.getByRole("img", { name }))).toEqual(
+			boxOf(withMenu.getByRole("img", { name })),
+		)
+	},
+})
+
+const LINKED_IMAGE =
+	"The one I mean: [![Green velvet sofa](https://images.example.org/sofa-green.jpg)](https://shop.example.org/sofa-green)"
+
+const defaultPreventedOf = (eventName: string) => {
+	const prevented: boolean[] = []
+	const record = (event: Event) => {
+		prevented.push(event.defaultPrevented)
+		event.preventDefault()
+	}
+	window.addEventListener(eventName, record)
+	return {
+		prevented,
+		stop: () => window.removeEventListener(eventName, record),
+	}
+}
+
+export const ImageMenuOnLinkedImage = meta.story({
+	tags: ["test-only"],
+	render: (args) => (
+		<>
+			<div data-testid="with-menu">
+				<Markdown answerActions={args.answerActions}>{LINKED_IMAGE}</Markdown>
+			</div>
+			<div data-testid="without-menu">
+				<Markdown
+					answerActions={{ ...IMAGE_MENU_ACTIONS, imageMenu: undefined }}
+				>
+					{LINKED_IMAGE}
+				</Markdown>
+			</div>
+		</>
+	),
+	args: { answerActions: IMAGE_MENU_ACTIONS },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"An image inside a Markdown link, the answer carrying `imageMenu`, beside the same answer without it. Check the link stays the image's only focusable element, that a right-click opens the `ImageMenu` and Copy image hands the image to `imageMenu.onCopyImage`, that a left-click still follows the link, and that without `imageMenu` a right-click leaves the platform menu.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const withMenu = canvas.getByTestId("with-menu")
+		const withoutMenu = canvas.getByTestId("without-menu")
+		const image = within(withMenu).getByRole("img", {
+			name: "Green velvet sofa",
+		})
+		const link = within(withMenu).getByRole("link")
+
+		await expect(link).toContainElement(image)
+		await expect(
+			withMenu.querySelectorAll("a, button, [tabindex]"),
+		).toHaveLength(1)
+
+		const menu = await openImageMenu(userEvent, image, "Green velvet sofa")
+		await userEvent.click(menu.getByRole("menuitem", { name: "Copy image" }))
+		await expect(
+			args.answerActions?.imageMenu?.onCopyImage,
+		).toHaveBeenCalledWith({
+			id: "https://images.example.org/sofa-green.jpg",
+			name: "Green velvet sofa",
+			src: "https://images.example.org/sofa-green.jpg",
+			detail: "",
+		})
+
+		const clicks = defaultPreventedOf("click")
+		await userEvent.click(image)
+		clicks.stop()
+		await expect(clicks.prevented).toEqual([false])
+		await expect(args.answerActions?.onOpenImage).not.toHaveBeenCalled()
+
+		const contextMenus = defaultPreventedOf("contextmenu")
+		await userEvent.pointer({
+			keys: "[MouseRight]",
+			target: within(withoutMenu).getByRole("img", {
+				name: "Green velvet sofa",
+			}),
+		})
+		contextMenus.stop()
+		await expect(contextMenus.prevented).toEqual([false])
+		await expect(within(document.body).queryByRole("menu")).toBeNull()
+	},
+})
+
 const boxOf = (element: Element) => {
 	const { width, height } = element.getBoundingClientRect()
 	return { width, height }
