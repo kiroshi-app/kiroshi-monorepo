@@ -615,39 +615,47 @@ describe("the image menu of the Library viewer", () => {
 	)
 })
 
-const GRID_IMAGE_MENU: MenuAction[] = [
+const GRID_IMAGE_ACTIONS: MenuAction[] = [
 	"open",
 	"openInNewTab",
 	"copy",
 	"download",
 	"showInFolder",
-	"delete",
 ]
 
-const gridImageMenuOf = (isJoined: boolean) =>
-	GRID_IMAGE_MENU.filter((action) => !isJoined || action !== "showInFolder")
+const SEPARATOR = "---"
+
+const HOST_GRID_IMAGE_MENU = [
+	...GRID_IMAGE_ACTIONS.map(menuItemOf),
+	SEPARATOR,
+	menuItemOf("delete"),
+]
+
+const JOINED_GRID_IMAGE_MENU = HOST_GRID_IMAGE_MENU.filter(
+	(entry) => entry !== menuItemOf("showInFolder"),
+)
 
 const entriesOf = (menu: HTMLElement) =>
 	Array.from(
 		menu.querySelectorAll('[role="menuitem"], [role="separator"]'),
 		(entry) =>
-			entry.getAttribute("role") === "separator" ? "---" : entry.textContent,
+			entry.getAttribute("role") === "separator"
+				? SEPARATOR
+				: entry.textContent,
 	)
 
 describe("the menu of a Library grid image", () => {
-	it.each(SPACES)(
+	it.each([
+		["the host", false, HOST_GRID_IMAGE_MENU],
+		["a joined Space", true, JOINED_GRID_IMAGE_MENU],
+	] as const)(
 		"offers the item actions, a separator, then Delete and nothing after, in %s",
-		async (_space, isJoined) => {
+		async (_space, isJoined, expected) => {
 			await renderLibraryScreen({ isJoined })
 
 			const menu = await openMenuOf("diagram.png")
 
-			const actions = gridImageMenuOf(isJoined).map(menuItemOf)
-			expect(entriesOf(menu)).toEqual([
-				...actions.slice(0, -1),
-				"---",
-				menuItemOf("delete"),
-			])
+			expect(entriesOf(menu)).toEqual(expected)
 			expect(
 				within(menu).queryByRole("menuitem", { name: SAVE_TO_LIBRARY }),
 			).toBeNull()
