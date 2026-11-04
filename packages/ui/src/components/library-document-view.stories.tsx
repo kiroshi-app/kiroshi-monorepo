@@ -575,3 +575,57 @@ export const LongAgentNameWriting = meta.story({
 		).toBe(true)
 	},
 })
+
+const STORED_IMAGES = [
+	{ src: "images/sofa-green.jpg", alt: "Green velvet sofa", tint: "#5b7a55" },
+	{ src: "images/sofa-grey.jpg", alt: "Grey linen sofa", tint: "#9a9a94" },
+	{ src: "images/armchair-rust.jpg", alt: "Rust armchair", tint: "#a4553a" },
+]
+
+const resolvedImageOf = (src: string) =>
+	`data:image/svg+xml,${encodeURIComponent(
+		`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4 3"><rect width="4" height="3" fill="${STORED_IMAGES.find((image) => image.src === src)?.tint}"/></svg>`,
+	)}`
+
+const LOBBY_MOODBOARD: LibraryDocument = {
+	id: "moodboard",
+	name: "Lobby moodboard",
+	detail: "12 words · Edited today at 11:02",
+	body: [
+		"The sofas we kept for the lobby.",
+		[
+			"```gallery",
+			...STORED_IMAGES.map(({ src, alt }) => `- image: ${src}\n  alt: ${alt}`),
+			"```",
+		].join("\n"),
+	].join("\n\n"),
+}
+
+export const GalleryOfStoredImages = meta.story({
+	args: {
+		document: LOBBY_MOODBOARD,
+		resolveImage: fn(async (src: string) => resolvedImageOf(src)),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A document whose gallery stores its images as Library paths, each turned into a displayable address by `resolveImage`. Check the resolver runs once per image and every tile shows the address it resolved to.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		const gallery = slotIn(canvasElement, "gallery")
+
+		await waitFor(() =>
+			expect(
+				[...gallery.querySelectorAll("img")].map((img) =>
+					img.getAttribute("src"),
+				),
+			).toEqual(STORED_IMAGES.map(({ src }) => resolvedImageOf(src))),
+		)
+		await expect(args.resolveImage).toHaveBeenCalledTimes(STORED_IMAGES.length)
+		for (const { src } of STORED_IMAGES)
+			await expect(args.resolveImage).toHaveBeenCalledWith(src)
+	},
+})

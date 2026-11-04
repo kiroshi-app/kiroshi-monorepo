@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest"
 import { I18nProvider } from "@workspace/ui/components/i18n-provider"
 import { Markdown } from "@workspace/ui/components/markdown"
 import type { MarkdownAnswerActions } from "@workspace/ui/components/markdown/answer-actions"
+import { MarkdownImageResolverContext } from "@workspace/ui/components/markdown/image-resolver"
 import { prepareHighlighter } from "@workspace/ui/lib/code-highlight"
 
 prepareHighlighter()
@@ -871,5 +872,49 @@ describe("images of an agent answer", () => {
 			/<a [^>]*>.*<img [^>]*data-slot="context-menu-trigger"[^>]*>.*<\/a>/,
 		)
 		expect(html).not.toContain("<button")
+	})
+})
+
+const STORED_GALLERY = `- image: images/sofa-green.jpg
+  alt: Green velvet sofa
+- image: images/sofa-grey.jpg
+  alt: Grey linen sofa`
+
+const pendingResolve = () => new Promise<string>(() => {})
+
+const tilesResolvingIn = (html: string) =>
+	html.split(slot("gallery-resolving")).length - 1
+
+describe("gallery image resolver", () => {
+	it("draws a gallery of stored paths as its source without a resolver", () => {
+		const html = render(fenced("gallery", STORED_GALLERY))
+
+		expect(html).toContain(slot("markdown-fence"))
+		expect(html).not.toContain(slot("gallery"))
+	})
+
+	it("draws every tile resolving while the resolver runs", () => {
+		const html = renderToStaticMarkup(
+			<I18nProvider>
+				<Markdown resolveImage={pendingResolve}>
+					{fenced("gallery", STORED_GALLERY)}
+				</Markdown>
+			</I18nProvider>,
+		)
+
+		expect(tilesResolvingIn(html)).toBe(2)
+		expect(html).not.toContain("<img")
+	})
+
+	it("lends its resolver to a Markdown mounted inside it", () => {
+		const html = renderToStaticMarkup(
+			<I18nProvider>
+				<MarkdownImageResolverContext value={pendingResolve}>
+					<Markdown>{fenced("gallery", STORED_GALLERY)}</Markdown>
+				</MarkdownImageResolverContext>
+			</I18nProvider>,
+		)
+
+		expect(tilesResolvingIn(html)).toBe(2)
 	})
 })

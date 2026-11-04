@@ -38,6 +38,10 @@ type GalleryBlock = {
 	images: { image: string; alt: string; caption?: string }[]
 }
 
+type AnswerBlockReadOptions = {
+	hasImageResolver: boolean
+}
+
 type Measure = {
 	currency?: string
 	unit?: string
@@ -200,13 +204,16 @@ const readChecklist = (source: string): ChecklistBlock | null => {
 	return { label: "checklist", title: body.fields.title, items }
 }
 
-const readGallery = (source: string): GalleryBlock | null => {
+const readGallery = (
+	source: string,
+	{ hasImageResolver }: AnswerBlockReadOptions,
+): GalleryBlock | null => {
 	const body = readShapedBody(source, {
 		fields: { required: [] },
 		item: {
 			required: ["image", "alt"],
 			optional: ["caption", "source"],
-			urls: ["image", "source"],
+			urls: hasImageResolver ? ["source"] : ["image", "source"],
 		},
 	})
 	if (!body) return null
@@ -482,7 +489,10 @@ const readMap = (source: string): MapBlock | null => {
 }
 
 const READERS: Readonly<
-	Record<AnswerBlockLabel, (source: string) => AnswerBlock | null>
+	Record<
+		AnswerBlockLabel,
+		(source: string, options: AnswerBlockReadOptions) => AnswerBlock | null
+	>
 > = {
 	options: readOptions,
 	"illustrated-list": readIllustratedList,
@@ -498,8 +508,11 @@ const READERS: Readonly<
 const isAnswerBlockLabel = (label?: string): label is AnswerBlockLabel =>
 	label !== undefined && Object.hasOwn(READERS, label)
 
-const readAnswerBlock = (label: AnswerBlockLabel, source: string) =>
-	READERS[label](source)
+const readAnswerBlock = (
+	label: AnswerBlockLabel,
+	source: string,
+	options: AnswerBlockReadOptions = { hasImageResolver: false },
+) => READERS[label](source, options)
 
 export {
 	type AnswerBlock,

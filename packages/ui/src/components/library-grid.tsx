@@ -13,6 +13,7 @@ import {
 } from "@workspace/ui/components/list-skeleton"
 import { Markdown } from "@workspace/ui/components/markdown"
 import { Skeleton } from "@workspace/ui/components/ui/skeleton"
+import type { ResolveImage } from "@workspace/ui/hooks/use-shown-images"
 import { libraryDisplayName } from "@workspace/ui/lib/library-display-name"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -53,9 +54,14 @@ const PAGE_TYPE = cn(
 type LibraryPageProps = {
 	excerpt: string
 	className: string
+	resolveImage?: ResolveImage
 }
 
-const LibraryPage = ({ excerpt, className }: LibraryPageProps) => (
+const LibraryPage = ({
+	excerpt,
+	className,
+	resolveImage,
+}: LibraryPageProps) => (
 	<div
 		aria-hidden="true"
 		className={cn(
@@ -65,7 +71,7 @@ const LibraryPage = ({ excerpt, className }: LibraryPageProps) => (
 		)}
 		data-slot="library-page"
 	>
-		<Markdown className={PAGE_TYPE} isStatic>
+		<Markdown className={PAGE_TYPE} isStatic resolveImage={resolveImage}>
 			{excerpt}
 		</Markdown>
 	</div>
@@ -73,9 +79,10 @@ const LibraryPage = ({ excerpt, className }: LibraryPageProps) => (
 
 type LibraryThumbnailProps = {
 	item: LibraryItem
+	resolveImage?: ResolveImage
 }
 
-const LibraryThumbnail = ({ item }: LibraryThumbnailProps) => (
+const LibraryThumbnail = ({ item, resolveImage }: LibraryThumbnailProps) => (
 	<span
 		className={cn(
 			"relative block h-45 overflow-hidden rounded-control border border-shell-border group-hover/library-item:border-input",
@@ -91,7 +98,11 @@ const LibraryThumbnail = ({ item }: LibraryThumbnailProps) => (
 				src={item.src}
 			/>
 		) : (
-			<LibraryPage className="start-9 top-5.5 w-49.75" excerpt={item.excerpt} />
+			<LibraryPage
+				className="start-9 top-5.5 w-49.75"
+				excerpt={item.excerpt}
+				resolveImage={resolveImage}
+			/>
 		)}
 	</span>
 )
@@ -131,6 +142,7 @@ type LibraryGridItemProps = LibraryItemActions<LibraryItem> &
 	LibraryImageActions & {
 		item: LibraryItem
 		onPress: (item: LibraryItem) => void
+		resolveImage?: ResolveImage
 	}
 
 const LibraryGridItem = ({
@@ -138,6 +150,7 @@ const LibraryGridItem = ({
 	onPress,
 	onSaveToLibrary,
 	onCopyImage,
+	resolveImage,
 	...actions
 }: LibraryGridItemProps) => {
 	const trigger = (
@@ -150,7 +163,7 @@ const LibraryGridItem = ({
 			}}
 			type="button"
 		>
-			<LibraryThumbnail item={item} />
+			<LibraryThumbnail item={item} resolveImage={resolveImage} />
 			<LibraryItemCaption detail={item.detail} name={item.name} />
 		</button>
 	)
@@ -171,11 +184,13 @@ const LibraryGridItem = ({
 type LibraryImportingItemProps = {
 	item: LibraryItem
 	progress: number
+	resolveImage?: ResolveImage
 }
 
 const LibraryImportingItem = ({
 	item,
 	progress,
+	resolveImage,
 }: LibraryImportingItemProps) => {
 	const { t } = useTranslation("common")
 	const percent = Math.round(progress * 100)
@@ -183,7 +198,7 @@ const LibraryImportingItem = ({
 	return (
 		<div className="flex min-w-0 flex-col gap-2.5" data-slot="library-item">
 			<span className="relative block">
-				<LibraryThumbnail item={item} />
+				<LibraryThumbnail item={item} resolveImage={resolveImage} />
 				<span
 					className="absolute inset-0 flex items-end rounded-control bg-card/72 p-4"
 					data-slot="library-import-scrim"
@@ -218,11 +233,13 @@ type LibraryGridProps = LibraryItemActions<LibraryItem> &
 	LibraryImageActions & {
 		items: LibraryItem[]
 		onOpenItem: (item: LibraryItem) => void
+		resolveImage?: ResolveImage
 	}
 
 const LibraryGrid = ({
 	items,
 	onOpenItem,
+	resolveImage,
 	...itemActions
 }: LibraryGridProps) => (
 	<ul
@@ -232,9 +249,18 @@ const LibraryGrid = ({
 		{items.map((item) => (
 			<li className="flex min-w-0 flex-col" key={item.id}>
 				{item.importProgress === undefined ? (
-					<LibraryGridItem {...itemActions} item={item} onPress={onOpenItem} />
+					<LibraryGridItem
+						{...itemActions}
+						item={item}
+						onPress={onOpenItem}
+						resolveImage={resolveImage}
+					/>
 				) : (
-					<LibraryImportingItem item={item} progress={item.importProgress} />
+					<LibraryImportingItem
+						item={item}
+						progress={item.importProgress}
+						resolveImage={resolveImage}
+					/>
 				)}
 			</li>
 		))}

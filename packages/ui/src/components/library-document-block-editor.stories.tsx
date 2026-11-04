@@ -1143,7 +1143,7 @@ export const GalleryImagesResolved = meta.story({
 		docs: {
 			description: {
 				story:
-					"A gallery of Library images stored as paths, each turned into a displayable address by `resolveImage`. Check every tile, the five of the grid and the one of the overflow row, shows its resolved image, the lifted tile carries it while dragging, each path is resolved once, and a caption edit writes the stored path back to the source.",
+					"A gallery of Library images stored as paths, each turned into a displayable address by `resolveImage`. Check every tile, the five of the grid and the one of the overflow row, shows its resolved image, the lifted tile carries it while dragging, each path is resolved once by the read-only gallery and once by the editor it opens into, and a caption edit writes the stored path back to the source.",
 			},
 		},
 	},
@@ -1177,7 +1177,9 @@ export const GalleryImagesResolved = meta.story({
 			galleryWith(`${green}\n  caption: Green velvet, 1,290 euros`, ...rest),
 		)
 		await resolvedImgIn(gallery, "Green velvet sofa")
-		await expect(args.resolveImage).toHaveBeenCalledTimes(STORED_IMAGES.length)
+		await expect(args.resolveImage).toHaveBeenCalledTimes(
+			STORED_IMAGES.length * 2,
+		)
 	},
 })
 
