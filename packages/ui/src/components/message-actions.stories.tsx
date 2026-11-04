@@ -39,11 +39,6 @@ const Actions = () => (
 
 const Menu = () => (
 	<>
-		<MessageMenuItem label="Pin" onClick={noop}>
-			<Icons.Pin aria-hidden="true" />
-			Pin
-		</MessageMenuItem>
-		<ContextMenuSeparator />
 		<MessageMenuItem label="Reply" onClick={noop}>
 			<Icons.Reply aria-hidden="true" />
 			Reply
@@ -51,6 +46,15 @@ const Menu = () => (
 		<MessageMenuItem label="Copy" onClick={noop}>
 			<Icons.Copy aria-hidden="true" />
 			Copy
+		</MessageMenuItem>
+		<MessageMenuItem label="Pin" onClick={noop}>
+			<Icons.Pin aria-hidden="true" />
+			Pin
+		</MessageMenuItem>
+		<ContextMenuSeparator />
+		<MessageMenuItem label="Save as document" onClick={noop}>
+			<Icons.File aria-hidden="true" />
+			Save as document
 		</MessageMenuItem>
 	</>
 )
@@ -88,7 +92,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The right-click menu of a bubble and the 24 square action button its author line shows on hover or focus. `MessageActions` wraps the bubble so a right click anywhere on it opens Pin, a separator, Reply and Copy; `MessageAction` is the icon button `AuthorLine` lays after its divider. `Turn` hands both the same actions, so the menu and the hover row never disagree.",
+					"The right-click menu of a bubble and the 24 square action button its author line shows on hover or focus. `MessageActions` wraps the bubble so a right click anywhere on it opens Reply, Copy and Pin, then a separator and Save as document; `MessageAction` is the icon button `AuthorLine` lays after its divider, Pin, Reply and Copy in that order. The two orders differ: the menu follows the message menu artboard, the hover row keeps its own order, and Save as document lives only in the menu.",
 			},
 		},
 	},
@@ -100,7 +104,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"An agent answer at rest. Right click it and check the menu: 168 wide, Pin first, a separator, then Reply and Copy, each 32 high with a 14 icon. Tab onto the bubble and check that the same three actions appear in its author line, 24 square each.",
+					"An agent answer at rest. Right click it and check the menu: 168 wide, Reply, Copy and Pin, then a separator and Save as document with the file glyph, each row 32 high with a 14 icon. Tab onto the bubble and check that its author line shows Pin, Reply and Copy, 24 square each, and no Save as document button.",
 			},
 		},
 	},
@@ -114,6 +118,9 @@ export const Default = meta.story({
 		await expect(pin).toBeVisible()
 		await expect(pin.getBoundingClientRect().width).toBe(24)
 		await expect(pin.getBoundingClientRect().height).toBe(24)
+		await expect(
+			canvas.queryByRole("button", { name: "Save as document" }),
+		).toBeNull()
 
 		await userEvent.pointer({ keys: "[MouseRight]", target: bubble })
 		const menu = await within(canvasElement.ownerDocument.body).findByRole(
@@ -121,10 +128,14 @@ export const Default = meta.story({
 		)
 		const items = within(menu).getAllByRole("menuitem")
 		await expect(items.map((item) => item.textContent)).toEqual([
-			"Pin",
 			"Reply",
 			"Copy",
+			"Pin",
+			"Save as document",
 		])
+		const separators = within(menu).getAllByRole("separator")
+		await expect(separators).toHaveLength(1)
+		await expect(separators[0]?.nextElementSibling).toBe(items.at(-1))
 		await waitFor(() => expect(menu.getBoundingClientRect().width).toBe(168))
 		await userEvent.keyboard("{Escape}")
 	},
