@@ -12,6 +12,7 @@ import {
 } from "@workspace/ui/components/list-skeleton"
 import { Markdown } from "@workspace/ui/components/markdown"
 import { Skeleton } from "@workspace/ui/components/ui/skeleton"
+import { libraryDisplayName } from "@workspace/ui/lib/library-display-name"
 import { cn } from "@workspace/ui/lib/utils"
 
 type LibraryImageItem = {
@@ -99,19 +100,24 @@ type LibraryItemCaptionProps = {
 	detail: string
 }
 
-const LibraryItemCaption = ({ name, detail }: LibraryItemCaptionProps) => (
-	<span className="flex min-w-0 flex-col gap-0.5">
-		<span
-			className="truncate font-medium text-compact text-foreground leading-4.5"
-			title={name}
-		>
-			{name}
+const LibraryItemCaption = ({ name, detail }: LibraryItemCaptionProps) => {
+	const { t } = useTranslation("common")
+	const shownName = libraryDisplayName(name, t)
+
+	return (
+		<span className="flex min-w-0 flex-col gap-0.5">
+			<span
+				className="truncate font-medium text-compact text-foreground leading-4.5"
+				title={shownName}
+			>
+				{shownName}
+			</span>
+			<span className="truncate text-muted-foreground text-xs tabular-nums">
+				{detail}
+			</span>
 		</span>
-		<span className="truncate text-muted-foreground text-xs tabular-nums">
-			{detail}
-		</span>
-	</span>
-)
+	)
+}
 
 type LibraryGridItemProps = LibraryItemActions<LibraryItem> & {
 	item: LibraryItem
@@ -164,7 +170,9 @@ const LibraryImportingItem = ({
 					data-slot="library-import-scrim"
 				>
 					<span
-						aria-label={t("library.importing.label", { name: item.name })}
+						aria-label={t("library.importing.label", {
+							name: libraryDisplayName(item.name, t),
+						})}
 						aria-valuemax={100}
 						aria-valuemin={0}
 						aria-valuenow={percent}

@@ -616,6 +616,44 @@ export const Loading = meta.story({
 	},
 })
 
+const WHITESPACE_NAMED_DOCUMENT: LibraryItem = {
+	kind: "document",
+	id: "whitespace",
+	name: "   ",
+	detail: "Document · 1 KB · 2 min ago",
+	excerpt: "Notes that never got a title.",
+}
+
+export const WhitespaceNameReadsUntitled = meta.story({
+	args: {
+		items: [WHITESPACE_NAMED_DOCUMENT],
+		onRename: fn(),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A document whose name holds only spaces. Check that its caption and its item action menu say Untitled, and that Rename still hands the item its own name.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const item = canvas.getByRole("button", { name: /^Untitled/ })
+		await expect(within(item).getByTitle("Untitled")).toHaveTextContent(
+			"Untitled",
+		)
+
+		await userEvent.pointer({ keys: "[MouseRight]", target: item })
+		const menu = await within(document.body).findByRole("menu", {
+			name: "Actions for Untitled",
+		})
+		await userEvent.click(
+			within(menu).getByRole("menuitem", { name: "Rename" }),
+		)
+		await expect(args.onRename).toHaveBeenCalledWith(WHITESPACE_NAMED_DOCUMENT)
+	},
+})
+
 export const LongNames = meta.story({
 	args: { items: LONG_NAMED_ITEMS },
 	render: (args) => (

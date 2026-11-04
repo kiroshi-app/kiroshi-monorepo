@@ -231,6 +231,42 @@ export const MoreMenu = meta.story({
 	},
 })
 
+const WHITESPACE_NAMED_BRIEF: LibraryDocument = {
+	...SPRING_BRIEF,
+	name: "   ",
+}
+
+export const WhitespaceNameReadsUntitled = meta.story({
+	args: { document: WHITESPACE_NAMED_BRIEF },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A document whose name holds only spaces. Check that the breadcrumb, the heading and the More menu all say Untitled, and that an entry still hands the document its own name.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		await expect(
+			canvas.getByRole("heading", { level: 1, name: "Untitled" }),
+		).toBeVisible()
+		await expect(
+			canvas.getByRole("navigation").querySelector('[aria-current="page"]'),
+		).toHaveTextContent("Untitled")
+
+		await userEvent.click(canvas.getByRole("button", { name: "More" }))
+		const menu = await screen.findByRole("menu", {
+			name: "Actions for Untitled",
+		})
+		await userEvent.click(
+			within(menu).getByRole("menuitem", { name: "Show in folder" }),
+		)
+		await expect(args.onShowInFolder).toHaveBeenCalledWith(
+			WHITESPACE_NAMED_BRIEF,
+		)
+	},
+})
+
 export const RenameWithFocusTarget = meta.story({
 	tags: ["test-only"],
 	render: barAboveTitle(
