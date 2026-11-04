@@ -111,12 +111,6 @@ export const ThreadTurn = memo(function ThreadTurn({
 		row.documents.length > 0 ? (
 			<ThreadDocumentCards names={row.documents} />
 		) : null
-	const withCards = (body: ReactNode) => (
-		<>
-			{body}
-			{cards}
-		</>
-	)
 	const content = selectable(<TurnBody attachments={attachments} text={text} />)
 
 	if (person !== undefined) {
@@ -165,18 +159,21 @@ export const ThreadTurn = memo(function ThreadTurn({
 
 	const isDocumentPost =
 		card === undefined && cards !== null && row.text.trim() === ""
-	const answer = isDocumentPost
-		? cards
-		: withCards(
-				selectable(
-					<AnswerBody
-						agentName={author?.name ?? row.authorName ?? botName ?? ""}
-						attachments={attachments}
-						isWriting={state === "streaming"}
-						text={text}
-					/>,
-				),
-			)
+	const answer = isDocumentPost ? (
+		cards
+	) : (
+		<>
+			{selectable(
+				<AnswerBody
+					agentName={author?.name ?? row.authorName ?? botName ?? ""}
+					attachments={attachments}
+					isWriting={state === "streaming"}
+					text={text}
+				/>,
+			)}
+			{cards}
+		</>
+	)
 	const isFramed = card !== undefined || isDocumentPost
 
 	return (
