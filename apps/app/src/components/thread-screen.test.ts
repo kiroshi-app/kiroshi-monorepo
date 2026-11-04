@@ -6106,3 +6106,172 @@ describe("ThreadScreen attaching Library documents from the composer", () => {
 		expect(stagedChipNames()).toEqual(["Remove plan"])
 	})
 })
+
+describe("ThreadScreen saving a message as a Library document", () => {
+	const ASKED = "Draft the plan for the gates."
+	const ANSWERED = "The gates open at dawn."
+	const SAVED = "plan.md"
+	const WORKSPACE = {
+		rosterView: { rosteredSpaceId: "space-row" },
+		rosteredHostSpaceId: "space-on-screen",
+	} as unknown as WorkspaceAssembly
+	let layout: FakeLayout
+	let saves: LibraryCall[]
+	let listings: number
+
+	const EXCHANGE = [
+		message({
+			id: "m-asked",
+			conversationId: "c-bot-1",
+			turnId: "t-asked",
+			seq: 1,
+			role: "user",
+			content: ASKED,
+		}),
+		message({
+			id: "m-answered",
+			conversationId: "c-bot-1",
+			turnId: "t-asked",
+			seq: 2,
+			role: "assistant",
+			authorBotId: "bot-1",
+			content: ANSWERED,
+		}),
+	]
+
+	const renderExchange = async (workspace: WorkspaceAssembly | null) => {
+		const base = threadOf({ id: "bot-1", name: "Nyx", said: "" })
+		const thread: BotThread = {
+			...base,
+			chat: {
+				...base.chat,
+				state: { ...base.chat.state, messages: EXCHANGE },
+			},
+		}
+		const queries = createQueryTestWrapper()
+		render(createElement(NoticeSurface), { wrapper: queries.wrapper })
+		render(
+			createElement(
+				WorkspaceContext.Provider,
+				{ value: workspace },
+				createElement(ThreadScreenHarness, {
+					bots: NO_BOT_RECORDS,
+					landings: createMessageLandingController(),
+					onOpenMission: () => undefined,
+					thread,
+				}),
+			),
+			{ wrapper: queries.wrapper },
+		)
+		await settle()
+	}
+
+	const menuOf = async (text: string) => {
+		await act(async () => {
+			fireEvent.contextMenu(screen.getByText(text), {
+				clientX: 20,
+				clientY: 20,
+			})
+		})
+		return screen.findByRole("menu")
+	}
+
+	const saveFrom = async (text: string) => {
+		const menu = await menuOf(text)
+		await act(async () => {
+			fireEvent.click(
+				within(menu).getByRole("menuitem", { name: "Save as document" }),
+				{ detail: 1 },
+			)
+		})
+		await settle()
+	}
+
+	beforeEach(() => {
+		layout = fakeLayout()
+		vi.clearAllMocks()
+		listRoutines.mockResolvedValue([])
+		listRuns.mockResolvedValue([])
+		listSources.mockResolvedValue(SCHEDULE_DECLARED)
+		listMissions.mockResolvedValue({ open: [], done: [] })
+		listenToMissions.mockResolvedValue(() => undefined)
+		saves = []
+		listings = 0
+		libraryHost.answers.set("library_list", () => {
+			listings += 1
+			return []
+		})
+		libraryHost.answers.set("library_save_message", (call) => {
+			saves.push(call)
+			return {
+				name: SAVED,
+				kind: "document",
+				path: `/library/${SAVED}`,
+				bytes: 10,
+				modifiedAt: 0,
+				createdAt: null,
+			}
+		})
+		libraryHost.answers.set("library_open_document", ({ name }) => ({
+			name,
+			update: base64Of(Y.encodeStateAsUpdate(new Y.Doc())),
+		}))
+		libraryHost.answers.set("library_share_caret", () => null)
+	})
+
+	afterEach(() => {
+		cleanup()
+		layout.restore()
+		libraryHost.answers.clear()
+		libraryHost.updates.clear()
+	})
+
+	it("saves a person message once, then Open on the notice shows the document beside the thread", async () => {
+		await renderExchange(WORKSPACE)
+		const listingsBeforeSave = listings
+
+		await saveFrom(ASKED)
+
+		expect(saves).toEqual([{ conversationId: "c-bot-1", messageId: "m-asked" }])
+		expect(listings).toBeGreaterThan(listingsBeforeSave)
+		await pressInNotice("Saved to Library", "Open")
+		await settle()
+		expect(screen.getByRole("complementary", { name: "plan" })).toBeTruthy()
+	})
+
+	it("saves an agent answer through the same menu entry", async () => {
+		await renderExchange(WORKSPACE)
+
+		await saveFrom(ANSWERED)
+
+		expect(saves).toEqual([
+			{ conversationId: "c-bot-1", messageId: "m-answered" },
+		])
+	})
+
+	it("raises Couldn’t save the file when the save is refused", async () => {
+		libraryHost.answers.set("library_save_message", () => {
+			throw {
+				kind: "unknownMessage",
+				conversationId: "c-bot-1",
+				messageId: "m-asked",
+			}
+		})
+		await renderExchange(WORKSPACE)
+
+		await saveFrom(ASKED)
+
+		expect(raisedNotice("Couldn’t save the file")).toBeTruthy()
+		expect(raisedNotices("Saved to Library")).toEqual([])
+	})
+
+	it("offers no Save as document without a Space on screen", async () => {
+		await renderExchange(null)
+
+		const menu = await menuOf(ASKED)
+
+		expect(
+			within(menu).queryByRole("menuitem", { name: "Save as document" }),
+		).toBeNull()
+	})
+})

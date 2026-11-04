@@ -1852,7 +1852,7 @@ function ThreadView(props: ThreadViewProps) {
 		onOpenMissionInNewTab,
 	} = props
 	const view = useThreadView(props)
-	const documents = useThreadDocuments()
+	const documents = useThreadDocuments(shownConversationIdOf(thread))
 	const imageViewer = useAnswerImageViewer()
 	const imageActions = useShownImageActions()
 	const answerActions: AnswerActions = {

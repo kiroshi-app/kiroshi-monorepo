@@ -9,6 +9,7 @@ import { useLibraryOnScreen } from "@/components/answer-image-viewer"
 import { titleOf } from "@/lib/library/library-items"
 import { useLibraryDocumentCard } from "@/lib/library/use-library-document-card"
 import { useLibraryDocumentSession } from "@/lib/library/use-library-document-session"
+import { useSaveMessageAsDocument } from "@/lib/library/use-save-message-as-document"
 import { useOpenLibraryDocument } from "@/lib/navigation/use-open-library-document"
 
 type ThreadDocuments = {
@@ -16,15 +17,21 @@ type ThreadDocuments = {
 	openedName: string | null
 	open: (name: string) => void
 	close: () => void
+	saveAsDocument?: (messageId: string) => void
 }
 
 export const ThreadDocumentsContext = createContext<ThreadDocuments | null>(
 	null,
 )
 
-export const useThreadDocuments = (): ThreadDocuments | null => {
+export const useThreadDocuments = (
+	conversationId: string | null,
+): ThreadDocuments | null => {
 	const spaceId = useLibraryOnScreen()?.spaceId
 	const [openedName, setOpenedName] = useState<string | null>(null)
+	const save = useSaveMessageAsDocument(spaceId, ({ name }) =>
+		setOpenedName(name),
+	)
 
 	return useMemo(
 		() =>
@@ -34,9 +41,12 @@ export const useThreadDocuments = (): ThreadDocuments | null => {
 						openedName,
 						open: setOpenedName,
 						close: () => setOpenedName(null),
+						saveAsDocument: conversationId
+							? (messageId: string) => save({ conversationId, messageId })
+							: undefined,
 					}
 				: null,
-		[spaceId, openedName],
+		[spaceId, openedName, conversationId, save],
 	)
 }
 

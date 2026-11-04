@@ -1,4 +1,4 @@
-import { memo, type ReactNode } from "react"
+import { memo, type ReactNode, useContext } from "react"
 
 import type { MessageAuthor } from "@workspace/ui/components/message"
 import type { QuotedMessage } from "@workspace/ui/components/message-quote"
@@ -14,7 +14,10 @@ import {
 } from "@workspace/ui/components/turn"
 import { probeRender } from "@workspace/ui/lib/render-probe"
 
-import { ThreadDocumentCards } from "@/components/thread-documents"
+import {
+	ThreadDocumentCards,
+	ThreadDocumentsContext,
+} from "@/components/thread-documents"
 import { AnswerBody, TurnBody } from "@/components/turn-body"
 import { copySelection } from "@/lib/chat/copy-selection"
 import { messageWithAttachments } from "@/lib/chat/message-attachments"
@@ -85,6 +88,13 @@ export const ThreadTurn = memo(function ThreadTurn({
 		authorName: row.authorName,
 		writtenFrom: row.writtenFrom,
 	}
+	const saveAsDocument = useContext(ThreadDocumentsContext)?.saveAsDocument
+	const isSaveable =
+		card === undefined && state !== "streaming" && row.text.trim() !== ""
+	const onSaveAsDocument =
+		saveAsDocument && isSaveable
+			? () => saveAsDocument(row.messageId)
+			: undefined
 	const reply = () => {
 		onReply(target)
 	}
@@ -119,6 +129,7 @@ export const ThreadTurn = memo(function ThreadTurn({
 				name={person}
 				now={now}
 				onPin={pin}
+				onSaveAsDocument={onSaveAsDocument}
 				onReply={reply}
 				pinned={pinned}
 				repliedTo={repliedTo}
@@ -138,6 +149,7 @@ export const ThreadTurn = memo(function ThreadTurn({
 				name={readerName}
 				now={now}
 				onPin={pin}
+				onSaveAsDocument={onSaveAsDocument}
 				onReply={reply}
 				onRetry={onRetry ? () => onRetry(row.messageId) : undefined}
 				pinned={pinned}
@@ -180,6 +192,7 @@ export const ThreadTurn = memo(function ThreadTurn({
 			messageId={anchor}
 			now={now}
 			onPin={pin}
+			onSaveAsDocument={onSaveAsDocument}
 			onReply={reply}
 			pinned={pinned}
 			repliedTo={repliedTo}
