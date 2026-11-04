@@ -14,6 +14,7 @@ use super::protocol::{
 	ResultFrame, StreamEvent, SystemFrame,
 };
 use super::redact;
+use super::web_sources::WebReads;
 
 pub(crate) fn now_ms() -> i64 {
 	SystemTime::now()
@@ -116,6 +117,7 @@ pub struct Translator {
 	cancelling: bool,
 	pending_permissions: HashMap<String, Value>,
 	activity_titles: HashMap<String, String>,
+	web_reads: WebReads,
 }
 
 impl Translator {
@@ -148,9 +150,10 @@ impl Translator {
 			Frame::Assistant(frame) => {
 				frame.message.map(|body| self.on_assistant(body.content)).unwrap_or_default()
 			}
-			Frame::User(frame) => {
-				frame.message.map(|body| self.on_user(body.content)).unwrap_or_default()
-			}
+			Frame::User(frame) => frame
+				.message
+				.map(|body| self.on_user(body.content, frame.tool_use_result.as_ref()))
+				.unwrap_or_default(),
 			Frame::Result(result) => {
 				self.remember_session(&result);
 				Vec::new()
@@ -251,6 +254,7 @@ impl Translator {
 	fn tool_started(&mut self, id: String, name: &str, input: &Value) -> AgentEvent {
 		let title = tool_title(name, input);
 		self.activity_titles.insert(id.clone(), title.clone());
+		self.web_reads.called(&id, name, input);
 		AgentEvent::Activity {
 			activity: ActivityEvent {
 				id,
@@ -261,22 +265,25 @@ impl Translator {
 		}
 	}
 
-	fn on_user(&mut self, content: Vec<ContentBlock>) -> Vec<AgentEvent> {
+	fn on_user(&mut self, content: Vec<ContentBlock>, output: Option<&Value>) -> Vec<AgentEvent> {
 		content
 			.into_iter()
 			.filter_map(|block| match block {
-				ContentBlock::ToolResult { tool_use_id, is_error } => Some(AgentEvent::Activity {
-					activity: ActivityEvent {
-						title: self.activity_titles.remove(&tool_use_id).unwrap_or_default(),
-						id: tool_use_id,
-						kind: ActivityKind::Tool,
-						status: if is_error {
-							ActivityStatus::Failed
-						} else {
-							ActivityStatus::Succeeded
+				ContentBlock::ToolResult { tool_use_id, is_error } => {
+					self.web_reads.answered(&tool_use_id, is_error, output);
+					Some(AgentEvent::Activity {
+						activity: ActivityEvent {
+							title: self.activity_titles.remove(&tool_use_id).unwrap_or_default(),
+							id: tool_use_id,
+							kind: ActivityKind::Tool,
+							status: if is_error {
+								ActivityStatus::Failed
+							} else {
+								ActivityStatus::Succeeded
+							},
 						},
-					},
-				}),
+					})
+				}
 				_ => None,
 			})
 			.collect()
@@ -370,6 +377,7 @@ impl Translator {
 				structured_output: frame.structured_output,
 				total_cost_usd: frame.total_cost_usd,
 				model_usage: frame.model_usage,
+				web_sources: self.web_reads.take(),
 			},
 		});
 		events

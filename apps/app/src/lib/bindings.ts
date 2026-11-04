@@ -2016,6 +2016,7 @@ export type TranscriptMessage_Deserialize = {
 	replyLinks?: ReplyLink[],
 	runtimeSessionId: string | null,
 	continuesTurnId?: string | null,
+	webSources?: WebSource[],
 };
 
 export type TranscriptMessage_Serialize = {
@@ -2036,6 +2037,7 @@ export type TranscriptMessage_Serialize = {
 	replyLinks?: ReplyLink[],
 	runtimeSessionId: string | null,
 	continuesTurnId?: string | null,
+	webSources?: WebSource[],
 };
 
 export type TranscriptPage = TranscriptPage_Serialize | TranscriptPage_Deserialize;
@@ -2174,6 +2176,12 @@ export type UserPreferences = {
 };
 
 export type UserPreferencesError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "rejectedProfilePicture"; reason: AvatarRejection } | { kind: "unknownBot"; id: string };
+
+export type WebSource = {
+	url: string,
+	domain: string,
+	title: string | null,
+};
 
 export type WindowFrameError = { kind: "unsupported" } | { kind: "invalidBounds" } | { kind: "unavailable" } | { kind: "overlayFailed" };
 

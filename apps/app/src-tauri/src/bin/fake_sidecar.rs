@@ -374,6 +374,71 @@ fn emit_tool_turn(key: &str) {
 	);
 }
 
+fn emit_web_read(key: &str, id: &str, name: &str, input: Value, answer: Value) {
+	emit(
+		key,
+		answering_the_prompt(
+			key,
+			json!({
+				"type": "assistant",
+				"message": {
+					"id": next_message_id(),
+					"role": "assistant",
+					"content": [{ "type": "tool_use", "id": id, "name": name, "input": input }]
+				}
+			}),
+		),
+	);
+	let is_error = answer.is_null();
+	emit(
+		key,
+		json!({
+			"type": "user",
+			"message": {
+				"role": "user",
+				"content": [{ "type": "tool_result", "tool_use_id": id, "content": "read", "is_error": is_error }]
+			},
+			"tool_use_result": answer
+		}),
+	);
+}
+
+fn emit_web_turn(key: &str) {
+	emit_web_read(
+		key,
+		"toolu_fetch",
+		"WebFetch",
+		json!({ "url": "https://WWW.Docs.rs/serde#derive", "prompt": "read it" }),
+		json!({ "url": "https://www.docs.rs/serde", "code": 200 }),
+	);
+	emit_web_read(
+		key,
+		"toolu_fetch_refused",
+		"WebFetch",
+		json!({ "url": "https://refused.example/page", "prompt": "read it" }),
+		Value::Null,
+	);
+	emit_web_read(
+		key,
+		"toolu_search",
+		"WebSearch",
+		json!({ "query": "serde derive" }),
+		json!({
+			"query": "serde derive",
+			"results": [
+				"the model's commentary",
+				{ "tool_use_id": "srvtoolu_1", "content": [
+					{ "title": "Serde derive", "url": "https://serde.rs/derive.html" },
+					{ "title": "Serde again", "url": "https://WWW.Docs.rs/serde" },
+					{ "title": "A file", "url": "file:///etc/hosts" },
+					{ "url": "http://blog.example/untitled" }
+				] }
+			],
+			"durationSeconds": 1
+		}),
+	);
+}
+
 fn result_of(session_id: &str, subtype: &str, is_error: bool) -> Value {
 	json!({
 		"type": "result",
@@ -740,6 +805,12 @@ fn on_prompt(key: &str, runs: &mut HashMap<String, Run>, text: &str, prompt_uuid
 		"tool" => {
 			emit_tool_turn(key);
 			emit_text_turn(key, run, "done");
+			emit_result(key, run, "success", false);
+		}
+		"web_reads" => {
+			emit_text_turn(key, run, "let me look that up");
+			emit_web_turn(key);
+			emit_text_turn(key, run, "serde derives both traits");
 			emit_result(key, run, "success", false);
 		}
 		"held_echo" => {

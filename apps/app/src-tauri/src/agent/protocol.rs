@@ -196,6 +196,8 @@ pub struct MessageFrame {
 	pub message: Option<MessageBody>,
 	#[serde(default)]
 	pub user_message_uuid: Option<String>,
+	#[serde(default)]
+	pub tool_use_result: Option<Value>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

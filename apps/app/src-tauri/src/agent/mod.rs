@@ -11,5 +11,6 @@ pub mod sign_in;
 #[cfg(test)]
 pub(crate) mod stub_session;
 pub mod translate;
+mod web_sources;
 
 pub use commands::AgentState;

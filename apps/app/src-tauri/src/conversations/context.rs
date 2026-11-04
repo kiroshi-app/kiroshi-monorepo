@@ -835,6 +835,7 @@ mod tests {
 			created_at: seq,
 			runtime_session_id: None,
 			continues_turn_id: None,
+			web_sources: Vec::new(),
 		}
 	}
 

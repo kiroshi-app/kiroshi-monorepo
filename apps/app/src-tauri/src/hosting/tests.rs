@@ -74,7 +74,9 @@ use crate::crypto::space_key::HeldSpaceKey;
 use crate::db::connection::temp_dir;
 use crate::db::repositories::conversations::{a_pending_prompt, PromptKind};
 use crate::db::repositories::joined_spaces::{JoinedReach, JoinedSpace};
-use crate::db::repositories::messages::{EndedRun, MessagePageQuery, MessageRole, NewTurn};
+use crate::db::repositories::messages::{
+	EndedRun, MessagePageQuery, MessageRole, NewAssistantMessage, NewTurn, WebSource,
+};
 use crate::db::{self, DatabaseState};
 use crate::environment::commands::{env_list, writable_root};
 use crate::environment::connection;
@@ -3946,6 +3948,7 @@ fn the_pending_questions_in_a_space_leave_out_every_question_settled_or_let_go()
 				structured_output: None,
 				total_cost_usd: None,
 				model_usage: None,
+				web_sources: Vec::new(),
 			},
 		};
 
@@ -5133,6 +5136,7 @@ fn a_completed_turn_end() -> agent::AgentEvent {
 			structured_output: None,
 			total_cost_usd: None,
 			model_usage: None,
+			web_sources: Vec::new(),
 		},
 	}
 }
@@ -5551,6 +5555,63 @@ fn a_member_replying_with_an_excerpt_through_the_relay_stores_it_as_the_host_wou
 			.expect("the relayed reply is stored");
 		assert_eq!(relayed["replyLinks"], json!([{ "messageId": "typed", "excerpt": "hello" }]));
 		assert_eq!(relayed["repliedToMessageIds"], json!(["typed"]));
+	});
+}
+
+#[test]
+fn a_member_reads_the_web_sources_of_a_reply_through_the_relay_as_the_host_does() {
+	run(async {
+		let host = Authoring::new(Some(BEARER)).await;
+		direct(&host.window, "conversation_send_user_message", host.sent("typed"));
+		let state = host.app.state::<DatabaseState>();
+		let messages = state.as_ref().expect("the database").messages();
+		messages
+			.open_assistant_message(NewAssistantMessage {
+				id: "answer".to_owned(),
+				conversation_id: host.conversation_id.clone(),
+				turn_id: "typed".to_owned(),
+				author_bot_id: Some("default".to_owned()),
+				replied_to_message_id: Some("typed".to_owned()),
+				created_at: 2,
+			})
+			.await
+			.expect("the reply is opened");
+		let read = vec![
+			WebSource {
+				url: "https://serde.rs/derive.html".to_owned(),
+				domain: "serde.rs".to_owned(),
+				title: Some("Serde derive".to_owned()),
+			},
+			WebSource {
+				url: "https://docs.rs/serde".to_owned(),
+				domain: "docs.rs".to_owned(),
+				title: None,
+			},
+		];
+		messages.keep_web_sources("answer".to_owned(), read).await.expect("the sources are kept");
+		let web_sources_of = |page: &Value| {
+			page["messages"]
+				.as_array()
+				.expect("a page of messages")
+				.iter()
+				.find(|message| message["id"] == "answer")
+				.expect("the reply is read")["webSources"]
+				.clone()
+		};
+
+		let on_the_host = direct(&host.window, "conversation_message_page", host.page());
+		let through_the_relay = host
+			.relayed(
+				json!({ "id": 1, "command": "conversation_message_page", "args": host.page() }),
+			)
+			.await;
+
+		let expected = json!([
+			{ "url": "https://serde.rs/derive.html", "domain": "serde.rs", "title": "Serde derive" },
+			{ "url": "https://docs.rs/serde", "domain": "docs.rs", "title": null },
+		]);
+		assert_eq!(web_sources_of(&on_the_host), expected);
+		assert_eq!(web_sources_of(&through_the_relay), expected);
 	});
 }
 

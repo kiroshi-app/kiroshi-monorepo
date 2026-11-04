@@ -11,8 +11,8 @@ use uuid::Uuid;
 use super::commands::AgentState;
 use super::contract::{
 	AgentEvent, AskedQuestion, ChatMessage, EventTurn, MessageCompletion, MessageRole,
-	QuestionOption, QuestionRequest, RuntimeScope, SubmittedTurn, TransportError, TurnOutcome,
-	TurnState,
+	QuestionOption, QuestionRequest, RuntimeScope, SubmittedTurn, TransportError, TurnEnded,
+	TurnOutcome, TurnState,
 };
 use super::session::{Drained, EventSink, FollowUp};
 use super::translate::now_ms;
@@ -20,7 +20,7 @@ use crate::attachments::attachment_block;
 use crate::conversations::awaited_runs::{forget_settled_turns, serve_handed};
 use crate::conversations::commands::{announce_conversation, ready};
 use crate::conversations::context::mentioned_bot_ids;
-use crate::conversations::contract::TranscriptStoreError;
+use crate::conversations::contract::{TranscriptStoreError, WebSource};
 use crate::conversations::host_turn::present_bot_ids;
 use crate::conversations::state as conversation_state;
 use crate::conversations::summons::{self, SummonsDropReason, SummonsRun};
@@ -244,6 +244,7 @@ struct OpenTurn {
 	settled: HashSet<String>,
 	last_reply: Option<String>,
 	endings: HashMap<String, TerminalState>,
+	web_sources: Vec<WebSource>,
 }
 
 impl OpenTurn {
@@ -258,6 +259,7 @@ impl OpenTurn {
 			settled: HashSet::new(),
 			last_reply: None,
 			endings: HashMap::new(),
+			web_sources: Vec::new(),
 		}
 	}
 
@@ -414,8 +416,15 @@ impl<R: Runtime> Desk<R> {
 			return self.record(event).await;
 		};
 		self.keep_prompts(event).await;
+		self.hold_web_sources(ended);
 		self.end(ending_of(ended.outcome)).await;
 		self.turn = self.parked.take();
+	}
+
+	fn hold_web_sources(&mut self, ended: &TurnEnded) {
+		if let Some(turn) = self.turn.as_mut() {
+			turn.web_sources.clone_from(&ended.web_sources);
+		}
 	}
 
 	async fn end_every(&mut self, completion: TerminalState) {
@@ -440,7 +449,10 @@ impl<R: Runtime> Desk<R> {
 			AgentEvent::MessageDelta { id, seq, text } => self.stream(id, *seq, text).await,
 			AgentEvent::MessageCompleted { message } => self.settle_completed(message).await,
 			AgentEvent::QuestionRequested { request } => self.ask(request).await,
-			AgentEvent::TurnEnded { ended } => self.end_every(ending_of(ended.outcome)).await,
+			AgentEvent::TurnEnded { ended } => {
+				self.hold_web_sources(ended);
+				self.end_every(ending_of(ended.outcome)).await
+			}
 			AgentEvent::TurnChanged { state: TurnState::Failed } => {
 				self.end_every(TerminalState::Failed).await
 			}
@@ -614,6 +626,7 @@ impl<R: Runtime> Desk<R> {
 
 	async fn close(&mut self, turn: OpenTurn, completion: TerminalState) {
 		self.show_attachments(&turn).await;
+		self.keep_web_sources(&turn).await;
 		let handed_to = self.handed_to(&turn, completion).await;
 		if let Err(error) = self.store.end_run(&turn.id, handed_to).await {
 			self.store.report(&turn.id, &error);
@@ -648,6 +661,18 @@ impl<R: Runtime> Desk<R> {
 			summons::note_dropped(&self.store.app, &run, *reason, None);
 		}
 		handover.handed
+	}
+
+	async fn keep_web_sources(&self, turn: &OpenTurn) {
+		let Some(reply) = turn.last_reply.as_deref() else {
+			return;
+		};
+		if turn.web_sources.is_empty() {
+			return;
+		}
+		if let Err(error) = self.store.keep_web_sources(reply, turn.web_sources.clone()).await {
+			self.store.report(reply, &error);
+		}
 	}
 
 	async fn show_attachments(&self, turn: &OpenTurn) {
@@ -820,6 +845,15 @@ impl<R: Runtime> Store<R> {
 	) -> Result<(), TranscriptStoreError> {
 		self.open_assistant(turn, id, now_ms()).await?;
 		self.finalize(id, TerminalState::Complete, Some(text.to_owned())).await
+	}
+
+	async fn keep_web_sources(
+		&self,
+		id: &str,
+		sources: Vec<WebSource>,
+	) -> Result<(), TranscriptStoreError> {
+		let sources = sources.into_iter().map(Into::into).collect();
+		Ok(self.database()?.messages().keep_web_sources(id.to_owned(), sources).await?)
 	}
 
 	async fn replace_content(&self, id: &str, text: String) -> Result<(), TranscriptStoreError> {
@@ -1658,6 +1692,7 @@ mod tests {
 				structured_output: None,
 				total_cost_usd: None,
 				model_usage: None,
+				web_sources: Vec::new(),
 			},
 		}
 	}
@@ -2009,6 +2044,7 @@ mod tests {
 				structured_output: None,
 				total_cost_usd: None,
 				model_usage: None,
+				web_sources: Vec::new(),
 			},
 		};
 
@@ -2169,6 +2205,7 @@ mod tests {
 				structured_output: None,
 				total_cost_usd: None,
 				model_usage: None,
+				web_sources: Vec::new(),
 			},
 		}
 	}

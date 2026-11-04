@@ -8463,6 +8463,12 @@
         "turnId": {
           "type": "string"
         },
+        "webSources": {
+          "items": {
+            "$ref": "#/$defs/WebSource"
+          },
+          "type": "array"
+        },
         "writtenFrom": {
           "anyOf": [
             {
@@ -9507,6 +9513,32 @@
           "type": "object"
         }
       ]
+    },
+    "WebSource": {
+      "properties": {
+        "domain": {
+          "type": "string"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "url",
+        "domain",
+        "title"
+      ],
+      "type": "object"
     },
     "WorkingBot": {
       "properties": {

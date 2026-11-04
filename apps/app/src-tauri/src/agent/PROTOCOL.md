@@ -470,7 +470,7 @@ The frame is an `SDKMessage` verbatim, plus the ones the sidecar adds itself.
 | `commands` | the sidecar, from `initializationResult().commands` | `commandsListed` (only when the frame names one) |
 | `stream_event` | `SDKPartialAssistantMessage` — one Messages API streaming event | `messageStarted` / `messageDelta` / `activity` |
 | `assistant` | `SDKAssistantMessage` — `text` and/or `tool_use` blocks | `messageCompleted` / `activity` |
-| `user` | `SDKUserMessage` — `tool_result` with `is_error` | `activity` (succeeded / failed) |
+| `user` | `SDKUserMessage` — `tool_result` with `is_error`, and `tool_use_result` | `activity` (succeeded / failed); a `WebFetch` input `url` or the `WebSearch` result links of a call that did not fail are kept on the turn's last reply as its `webSources` |
 | `result` | `SDKResultMessage`: `subtype`, `session_id`, `is_error` | nothing on the front: it records the SDK session id and starts the held result bound of the running run; the turn ends on `turn_settled` |
 | `tasks_pending` | the sidecar, once a `result` has arrived, on every change of `count`, the live background tasks not flagged `ambient` | `tasksPending` with the frame's `count`, once per frame of a running run, then `turnHeld` when the count changes: the host logs the reason `N background tasks` and the run stays `running` |
 | `turn_settled` | the sidecar, once the turn is settled (see below): every field of the last `result`, its `type` renamed; or the sidecar when a stop lands on a prompt still held | `turnEnded` |

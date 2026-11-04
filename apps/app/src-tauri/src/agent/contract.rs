@@ -2,7 +2,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 
 use crate::bundles::EffortLevel;
-use crate::conversations::contract::TranscriptStoreError;
+use crate::conversations::contract::{TranscriptStoreError, WebSource};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
@@ -177,6 +177,8 @@ pub struct TurnEnded {
 	#[serde(skip_serializing_if = "Option::is_none")]
 	#[specta(type = Option<crate::json::JsonValue>)]
 	pub model_usage: Option<Value>,
+	#[serde(skip)]
+	pub web_sources: Vec<WebSource>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
