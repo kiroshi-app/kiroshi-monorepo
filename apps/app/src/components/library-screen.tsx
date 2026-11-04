@@ -21,7 +21,6 @@ import { LibraryDropTarget } from "@/components/library-drop-target"
 import type { LibraryItem, Space } from "@/lib/bindings"
 import type { Bot } from "@/lib/conversations/store-contract"
 import { formatActionsOf } from "@/lib/library/library-document-formats"
-import { withoutEdits } from "@/lib/library/library-document-writers"
 import {
 	documentNamedAs,
 	matchesQuery,
@@ -226,15 +225,14 @@ export const LibraryScreen = ({
 		closeAndRelist,
 		moveDocument,
 	} = useLibraryDocumentSession(spaceId, openedDocument?.name ?? null)
-	const { writers, people, finished, dismissFinished } =
-		useLibraryDocumentWriters({
-			spaceId,
-			name: openedDocument?.name ?? null,
-			isJoined,
-			document,
-			bots,
-			title: openedDocument?.title ?? "",
-		})
+	const { writers, people } = useLibraryDocumentWriters({
+		spaceId,
+		name: openedDocument?.name ?? null,
+		isJoined,
+		document,
+		bots,
+		title: openedDocument?.title ?? "",
+	})
 	useDropMissingOpening(
 		{
 			opening,
@@ -308,12 +306,6 @@ export const LibraryScreen = ({
 			onRefused: () => showTitled({ ...opened, title: opened.startTitle }),
 		})
 	}
-	const undoAll = () => {
-		if (document && finished) {
-			edit(withoutEdits(document.markdown, finished.edits))
-		}
-		dismissFinished()
-	}
 	const deleteDocument = ({ name }: OpenedDocument) =>
 		closeAndRelist().then(() => actions.remove(name, { onSuccess: close }))
 	const isRenamePicked = useRef(false)
@@ -340,7 +332,6 @@ export const LibraryScreen = ({
 				{...formatActionsOf(document.markdown, edit)}
 				body={document.markdown}
 				detail={openedDocument.detail}
-				finished={finished}
 				isActionShown={(_subject, action) =>
 					isActionShownOn(openedDocument, action)
 				}
@@ -351,14 +342,12 @@ export const LibraryScreen = ({
 				onCaretChange={shareCaret}
 				onCopy={() => copyAndWait(openedItem)}
 				onDelete={() => deleteDocument(openedDocument)}
-				onDone={dismissFinished}
 				onDownload={() => save(openedItem)}
 				onOpenInNewTab={boundTo(openedItem, openInNewTab)}
 				onRename={pickRename}
 				onShowInFolder={boundTo(openedItem, reveal)}
 				onTitleChange={retitle}
 				onTitleConfirm={(newTitle) => renameDocument(openedDocument, newTitle)}
-				onUndoAll={undoAll}
 				people={people}
 				ref={editor}
 				template={openedDocument.template}

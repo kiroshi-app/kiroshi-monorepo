@@ -1,7 +1,5 @@
 import type {
 	LibraryDocumentAgent,
-	LibraryDocumentEdit,
-	LibraryDocumentFinished,
 	LibraryDocumentPerson,
 	LibraryDocumentWriter,
 } from "@workspace/ui/components/library-document-agents"
@@ -34,12 +32,6 @@ type WritersInput = {
 	bots: Bot[]
 	document: CaretPlacedDocument
 	title: string
-}
-
-type FinishedInput = {
-	seat: AgentSeat
-	bots: Bot[]
-	document: CaretPlacedDocument
 }
 
 type Span = {
@@ -138,29 +130,3 @@ export const writersOf = ({
 			},
 		]
 	})
-
-export const finishedOf = ({
-	seat,
-	bots,
-	document,
-}: FinishedInput): LibraryDocumentFinished | undefined => {
-	const span = spanOf(seat, document)
-	if (!span) {
-		return undefined
-	}
-	return {
-		edits: [{ agent: agentOf(seat, bots), ...span }],
-		sentenceCount: sentenceCountOf(
-			document.markdown.slice(span.start, span.end),
-		),
-		elapsedSeconds: elapsedSecondsOf(seat),
-	}
-}
-
-export const withoutEdits = (markdown: string, edits: LibraryDocumentEdit[]) =>
-	[...edits]
-		.sort((first, second) => second.start - first.start)
-		.reduce(
-			(text, { start, end }) => text.slice(0, start) + text.slice(end),
-			markdown,
-		)

@@ -507,10 +507,15 @@ const finishWriting = (
 const atlasWritesThenFinishes = async (name: string) => {
 	const caret = agentWritesAtEnd(name, AGENT_TEXT, null)
 	announcePresence(name, [writerOf(ATLAS_ID, "agent", caret, "Atlas")], null)
+	await waitFor(() => expect(shownRuns()).toEqual([AGENT_TEXT]))
 	announcePresence(name, [], null)
 	finishWriting(name, "finished")
-	return waitFor(() => finishedBar() as HTMLElement)
 }
+
+const heldRuns = () =>
+	[...document.querySelectorAll("[data-slot='library-document-held-run']")].map(
+		(run) => run.textContent,
+	)
 
 const finishedBar = () =>
 	document.querySelector("[data-slot='library-document-finished']")
@@ -752,71 +757,15 @@ describe.each([
 )
 
 describe("an agent that finishes writing in the open document", () => {
-	it("shows what it wrote with Undo all and Done", async () => {
+	it("shows no finished bar and holds the run it wrote", async () => {
 		await renderLibraryScreen(false)
 		await openDocument(NOTES)
+		await waitFor(() => expect(finishedListenerCount()).toBe(1))
 
-		const bar = await atlasWritesThenFinishes(NOTES)
-
-		expect(
-			within(bar).getByText(
-				common("library.document.agents.finished.one", { name: "Atlas" }),
-			),
-		).toBeInstanceOf(HTMLElement)
-		expect(bar.textContent).toContain(
-			common("library.document.agents.added", { count: 2 }),
-		)
-		expect(shownRuns()).toEqual([AGENT_TEXT])
-	})
-
-	it("removes the written text for every writer on Undo all", async () => {
-		await renderLibraryScreen(false)
-		await openDocument(NOTES)
-		const bar = await atlasWritesThenFinishes(NOTES)
-
-		await act(async () => {
-			fireEvent.click(
-				within(bar).getByRole("button", {
-					name: common("library.document.agents.undoAll"),
-				}),
-			)
-		})
-
-		await waitFor(() =>
-			expect(documentOf(NOTES).getText("markdown").toString()).toBe(OPENING),
-		)
-		expect(finishedBar()).toBeNull()
-	})
-
-	it("keeps the text on Done", async () => {
-		await renderLibraryScreen(false)
-		await openDocument(NOTES)
-		const bar = await atlasWritesThenFinishes(NOTES)
-
-		await act(async () => {
-			fireEvent.click(
-				within(bar).getByRole("button", {
-					name: common("library.document.agents.done"),
-				}),
-			)
-		})
-
-		expect(finishedBar()).toBeNull()
-		await new Promise((resolve) => setTimeout(resolve, 300))
-		expect(documentOf(NOTES).getText("markdown").toString()).toBe(
-			`${OPENING}${AGENT_TEXT}`,
-		)
-	})
-
-	it("forgets the finished state when another document opens", async () => {
-		await renderLibraryScreen(false)
-		await openDocument(NOTES)
 		await atlasWritesThenFinishes(NOTES)
 
-		await goBack()
-		await openDocument(PLAN)
-
 		expect(finishedBar()).toBeNull()
+		expect(heldRuns()).toEqual([AGENT_TEXT])
 	})
 
 	it.each([
@@ -846,7 +795,6 @@ describe("an agent that finishes writing in the open document", () => {
 				}),
 			),
 		)
-		expect(finishedBar()).toBeNull()
 	})
 
 	it("ignores an agent finishing in another space or another document", async () => {
@@ -861,7 +809,6 @@ describe("an agent that finishes writing in the open document", () => {
 		finishWriting(NOTES, "failed", { spaceId: "other-space" })
 
 		await new Promise((resolve) => setTimeout(resolve, 50))
-		expect(finishedBar()).toBeNull()
 		expect(raiseFailureNotice).not.toHaveBeenCalled()
 	})
 
