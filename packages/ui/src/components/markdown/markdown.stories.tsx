@@ -1960,3 +1960,38 @@ export const GalleryResolvedImageOpens = meta.story({
 		)
 	},
 })
+
+export const GalleryResolvingNotOpenable = meta.story({
+	tags: ["test-only"],
+	args: {
+		children: STORED_GALLERY,
+		resolveImage: fn(() => new Promise<string>(() => {})),
+		answerActions: {
+			agentName: "Atlas",
+			onPickOption: fn(),
+			onUseValues: fn(),
+			onOpenImage: fn(),
+		},
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A gallery of stored Library paths whose `resolveImage` never settles, given answer actions. Check every tile is the resolving surface and none is a button, so `onOpenImage` never receives a stored path.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		await waitFor(() =>
+			expect(args.resolveImage).toHaveBeenCalledTimes(STORED_IMAGES.length),
+		)
+		for (const { alt } of STORED_IMAGES)
+			await expect(galleryTileOf(canvasElement, alt)).toHaveAttribute(
+				"data-slot",
+				"gallery-resolving",
+			)
+		await expect(canvas.queryAllByRole("button")).toHaveLength(0)
+		await userEvent.click(galleryTileOf(canvasElement, STORED_IMAGES[0].alt))
+		await expect(args.answerActions?.onOpenImage).not.toHaveBeenCalled()
+	},
+})

@@ -145,6 +145,7 @@ conversation-markdown-markdown--footnotes-twice
 conversation-markdown-markdown--fragment-link
 conversation-markdown-markdown--gallery-image-fails-to-resolve
 conversation-markdown-markdown--gallery-resolved-image-opens
+conversation-markdown-markdown--gallery-resolving-not-openable
 conversation-markdown-markdown--headings
 conversation-markdown-markdown--hostile-markup
 conversation-markdown-markdown--in-message-bubble

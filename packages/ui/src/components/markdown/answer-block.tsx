@@ -204,29 +204,35 @@ const GalleryBlockView = ({ block }: BlockProps<"gallery">) => {
 		block.images.map(({ image }) => image),
 		useMarkdownImageResolver(),
 	)
-	const viewerImages = block.images.map(({ image, alt, caption }, index) => ({
+	const images = block.images.map(({ image, alt, caption }) => ({
+		...shownImageOf(image),
+		alt,
+		caption,
+	}))
+	const viewerImages = images.map(({ src, alt, caption }, index) => ({
 		id: `${index}`,
 		name: alt,
-		src: shownImageOf(image).src,
+		src,
 		detail: caption ?? "",
 	}))
+	const openableImages = viewerImages.filter(
+		(_, index) => !images[index].status,
+	)
+	const openInViewer = (index: number) =>
+		actions?.onOpenImage(
+			openableImages,
+			openableImages.indexOf(viewerImages[index]),
+		)
+	const imageMenu = answerImageMenuOf(actions, viewerImages)
 
 	return (
 		<Gallery
 			caption={block.images
 				.flatMap(({ caption }) => caption?.trim() || [])
 				.join(" · ")}
-			imageMenu={answerImageMenuOf(actions, viewerImages)}
-			images={block.images.map(({ image, alt, caption }) => ({
-				...shownImageOf(image),
-				alt,
-				caption,
-			}))}
-			onOpen={
-				actions
-					? (index) => actions.onOpenImage(viewerImages, index)
-					: undefined
-			}
+			imageMenu={imageMenu && { ...imageMenu, onOpenInViewer: openInViewer }}
+			images={images}
+			onOpen={actions ? openInViewer : undefined}
 		/>
 	)
 }
