@@ -125,6 +125,45 @@ const SEVEN_IMAGES = galleryWith(
 	...MORE_GALLERY_ITEMS,
 )
 
+const STORED_IMAGES = [
+	{ src: "images/sofa-green.jpg", alt: "Green velvet sofa", tint: "#5b7a55" },
+	{ src: "images/sofa-grey.jpg", alt: "Grey linen sofa", tint: "#9a9a94" },
+	{ src: "images/armchair-rust.jpg", alt: "Rust armchair", tint: "#a4553a" },
+	{ src: "images/lamp-brass.jpg", alt: "Brass lamp", tint: "#b8923f" },
+	{ src: "images/rug-wool.jpg", alt: "Wool rug", tint: "#c9b79c" },
+	{ src: "images/table-oak.jpg", alt: "Oak table", tint: "#8a6542" },
+]
+
+const STORED_ITEMS = STORED_IMAGES.map(
+	({ src, alt }) => `- image: ${src}\n  alt: ${alt}`,
+)
+
+const STORED_GALLERY = galleryWith(...STORED_ITEMS)
+
+const [, STORED_GREY] = STORED_IMAGES
+
+const resolvedImageOf = (src: string) =>
+	`data:image/svg+xml,${encodeURIComponent(
+		`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4 3"><rect width="4" height="3" fill="${STORED_IMAGES.find((image) => image.src === src)?.tint}"/></svg>`,
+	)}`
+
+const resolveAllBut =
+	(src: string, outcome: () => Promise<string>) => (asked: string) =>
+		asked === src ? outcome() : Promise.resolve(resolvedImageOf(asked))
+
+const resolvedImgIn = (gallery: HTMLElement, alt: string) =>
+	waitFor(() => {
+		const img = within(gallery).getByRole<HTMLImageElement>("img", {
+			name: alt,
+		})
+		expect(img.getAttribute("src")).toBe(
+			resolvedImageOf(
+				STORED_IMAGES.find((image) => image.alt === alt)?.src ?? "",
+			),
+		)
+		return img
+	})
+
 const ADDED_IMAGES = [
 	{ src: "https://images.example.org/lamp-brass.jpg", alt: "Brass lamp" },
 ]
@@ -1090,6 +1129,136 @@ export const GalleryRemoveAndCaption = meta.story({
 			"The sofas we kept for the lobby.",
 		)
 		await expect(typesIn(canvasElement)).toEqual(["paragraph"])
+	},
+})
+
+export const GalleryImagesResolved = meta.story({
+	globals: { theme: "light" },
+	args: {
+		body: STORED_GALLERY,
+		resolveImage: fn(async (src: string) => resolvedImageOf(src)),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A gallery of Library images stored as paths, each turned into a displayable address by `resolveImage`. Check every tile, the five of the grid and the one of the overflow row, shows its resolved image, the lifted tile carries it while dragging, each path is resolved once, and a caption edit writes the stored path back to the source.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		const gallery = await openBlock(canvasElement, "gallery")
+		for (const { alt } of STORED_IMAGES) await resolvedImgIn(gallery, alt)
+		await expect(slotsIn(gallery, "library-gallery-overflow")).toHaveLength(1)
+		await expect(slotsIn(gallery, "gallery-resolving")).toHaveLength(0)
+
+		const [first] = slotsIn(gallery, "library-gallery-tile")
+		fireEvent.pointerDown(first, { button: 0, ...centreOf(first) })
+		const { clientX, clientY } = centreOf(first)
+		fireEvent.pointerMove(first, { clientX: clientX + 20, clientY })
+		const lifted = await waitFor(() =>
+			partOf(gallery, "library-gallery-lifted"),
+		)
+		await expect(lifted.style.backgroundImage).toBe(
+			`url("${resolvedImageOf("images/sofa-green.jpg")}")`,
+		)
+		fireEvent.pointerCancel(window)
+		await waitFor(() =>
+			expect(slotsIn(gallery, "library-gallery-lifted")).toHaveLength(0),
+		)
+
+		fireEvent.change(
+			within(gallery).getByRole("textbox", { name: "Caption of image 1" }),
+			{ target: { value: "Green velvet, 1,290 euros" } },
+		)
+		const [green, ...rest] = STORED_ITEMS
+		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+			galleryWith(`${green}\n  caption: Green velvet, 1,290 euros`, ...rest),
+		)
+		await resolvedImgIn(gallery, "Green velvet sofa")
+		await expect(args.resolveImage).toHaveBeenCalledTimes(STORED_IMAGES.length)
+	},
+})
+
+export const GalleryImageResolving = meta.story({
+	globals: { theme: "light" },
+	args: {
+		body: STORED_GALLERY,
+		resolveImage: fn(
+			resolveAllBut(STORED_GREY.src, () => new Promise<string>(() => {})),
+		),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The second image still resolving. Check its tile is the broken image surface without its icon, marked busy, every other tile shows its resolved image, and its caption field and remove button still work.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		const gallery = await openBlock(canvasElement, "gallery")
+		for (const { alt } of STORED_IMAGES.filter(
+			(image) => image !== STORED_GREY,
+		))
+			await resolvedImgIn(gallery, alt)
+		const [resolving] = slotsIn(gallery, "gallery-resolving")
+		await expect(resolving).toHaveAttribute("aria-busy", "true")
+		await expect(resolving).toHaveAccessibleName(STORED_GREY.alt)
+		await expect(resolving.querySelector("svg")).toBeNull()
+		await expect(slotsIn(gallery, "gallery-resolving")).toHaveLength(1)
+		await expect(slotsIn(gallery, "gallery-broken")).toHaveLength(0)
+
+		const [green, grey, ...rest] = STORED_ITEMS
+		fireEvent.change(
+			within(gallery).getByRole("textbox", { name: "Caption of image 2" }),
+			{ target: { value: "Grey linen, 990 euros" } },
+		)
+		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+			galleryWith(green, `${grey}\n  caption: Grey linen, 990 euros`, ...rest),
+		)
+		fireEvent.click(
+			within(gallery).getByRole("button", { name: "Remove image 2" }),
+		)
+		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+			galleryWith(green, ...rest),
+		)
+		await waitFor(() =>
+			expect(slotsIn(gallery, "gallery-resolving")).toHaveLength(0),
+		)
+	},
+})
+
+export const GalleryImageFailing = meta.story({
+	globals: { theme: "light" },
+	args: {
+		body: STORED_GALLERY,
+		resolveImage: fn(
+			resolveAllBut(STORED_GREY.src, () =>
+				Promise.reject(new Error("The image file is missing")),
+			),
+		),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The second image failing to resolve. Check its tile is the broken image tile with its icon, and every other tile still shows its resolved image.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const gallery = await openBlock(canvasElement, "gallery")
+		const broken = await waitFor(() => partOf(gallery, "gallery-broken"))
+		await expect(broken).toHaveAccessibleName(STORED_GREY.alt)
+		await expect(broken.querySelector("svg")).not.toBeNull()
+		await expect(broken).not.toHaveAttribute("aria-busy")
+		await expect(slotsIn(gallery, "gallery-broken")).toHaveLength(1)
+		for (const { alt } of STORED_IMAGES.filter(
+			(image) => image !== STORED_GREY,
+		))
+			await resolvedImgIn(gallery, alt)
+		await expect(slotsIn(gallery, "gallery-resolving")).toHaveLength(0)
 	},
 })
 

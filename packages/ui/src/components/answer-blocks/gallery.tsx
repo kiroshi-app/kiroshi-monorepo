@@ -14,8 +14,14 @@ import { cn } from "@workspace/ui/lib/utils"
 
 type GalleryTileLabel = "name" | "open"
 
+type GalleryImageStatus = "resolving" | "broken"
+
+type GalleryImage = AnswerImage & {
+	status?: GalleryImageStatus
+}
+
 type GalleryProps = {
-	images: readonly AnswerImage[]
+	images: readonly GalleryImage[]
 	caption?: string
 	tileLabel?: GalleryTileLabel
 	onOpen?: (index: number) => void
@@ -25,7 +31,7 @@ type GalleryProps = {
 }
 
 type GalleryTileProps = {
-	image: AnswerImage
+	image: GalleryImage
 	index: number
 	caption: string
 	tileLabel: GalleryTileLabel
@@ -37,6 +43,25 @@ type GalleryTileProps = {
 }
 
 const TILE_COUNT = 5
+
+type GallerySurfaceProps = {
+	name: string
+	status: GalleryImageStatus
+}
+
+const GallerySurface = ({ name, status }: GallerySurfaceProps) => (
+	<span
+		aria-busy={status === "resolving" || undefined}
+		aria-label={name}
+		className="grid size-full place-items-center bg-foreground/10"
+		data-slot={status === "resolving" ? "gallery-resolving" : "gallery-broken"}
+		role="img"
+	>
+		{status === "broken" ? (
+			<Icons.Image aria-hidden="true" className="size-5" />
+		) : null}
+	</span>
+)
 
 type GridLayout = {
 	grid: string
@@ -84,15 +109,10 @@ const GalleryTile = ({
 	)
 	const content = (
 		<>
-			{brokenSrc === image.src ? (
-				<span
-					aria-label={name}
-					className="grid size-full place-items-center bg-foreground/10"
-					data-slot="gallery-broken"
-					role="img"
-				>
-					<Icons.Image aria-hidden="true" className="size-5" />
-				</span>
+			{image.status ? (
+				<GallerySurface name={name} status={image.status} />
+			) : brokenSrc === image.src ? (
+				<GallerySurface name={name} status="broken" />
 			) : (
 				<img
 					src={image.src}
@@ -199,4 +219,10 @@ const Gallery = ({
 	)
 }
 
-export { Gallery, type GalleryProps, TILE_COUNT }
+export {
+	Gallery,
+	type GalleryImageStatus,
+	type GalleryProps,
+	GallerySurface,
+	TILE_COUNT,
+}
