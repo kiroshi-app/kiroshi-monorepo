@@ -51,6 +51,7 @@ const conversationState: ConversationState = {
 	isFirstLoadPending: false,
 	speakers: [],
 	waitingBotIds: [],
+	failedBotIds: [],
 	refusedMessage: null,
 	pendingPrompt: null,
 	latestError: null,

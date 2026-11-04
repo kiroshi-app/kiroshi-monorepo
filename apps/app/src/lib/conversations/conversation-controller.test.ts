@@ -2201,6 +2201,58 @@ describe("failures the conversation carries to the screen", () => {
 	})
 })
 
+describe("retrying the turn of a speaker that failed", () => {
+	const SESSION_LOST: TransportError = {
+		kind: "crashed",
+		code: 1,
+		detail: "sidecar is gone",
+	}
+
+	let harness: Harness
+	let ada: string
+	let nyx: string
+
+	beforeEach(async () => {
+		harness = await createHarness(["Ada", "Nyx"])
+		ada = idOf(harness.conversation, "Ada")
+		nyx = idOf(harness.conversation, "Nyx")
+		await harness.controller.send("@Ada @Nyx hold the walls")
+		await harness.settled()
+		harness.driver.pushTo(ada, [{ type: "failed", error: SESSION_LOST }])
+		await harness.settled()
+	})
+
+	const submittedTo = (botId: string) =>
+		harness.driver.submissions.filter(({ scope }) => scope.botId === botId)
+
+	it("holds the failed speaker apart from the one still at work", () => {
+		expect(harness.controller.getState().failedBotIds).toEqual([ada])
+		expect(runningIn(harness.controller)).toEqual([nyx])
+	})
+
+	it("re-addresses the message to the failed speaker alone and clears its entry", async () => {
+		const [addressed] = harness.contexts.filter(([botId]) => botId === ada)
+
+		await harness.controller.retryTurn(ada)
+		await harness.settled()
+
+		expect(harness.controller.getState().failedBotIds).toEqual([])
+		expect(runningIn(harness.controller)).toEqual(
+			expect.arrayContaining([ada, nyx]),
+		)
+		expect(submittedTo(ada)).toHaveLength(2)
+		expect(submittedTo(nyx)).toHaveLength(1)
+		expect(harness.contexts.at(-1)).toEqual(addressed)
+	})
+
+	it("clears the failed entry when a new message is sent", async () => {
+		await harness.controller.send("@Nyx carry on")
+		await harness.settled()
+
+		expect(harness.controller.getState().failedBotIds).toEqual([])
+	})
+})
+
 describe("a failure reaching a speaker", () => {
 	const CRASHED: TransportError = {
 		kind: "crashed",

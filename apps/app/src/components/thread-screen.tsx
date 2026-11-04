@@ -5,12 +5,11 @@ import {
 	useEffect,
 	useMemo,
 	useRef,
+	useState,
 	useSyncExternalStore,
 } from "react"
 
-import { ActivityIndicator } from "@workspace/ui/components/activity-indicator"
 import { AppHeader } from "@workspace/ui/components/app-header"
-import type { BotStopProps } from "@workspace/ui/components/bot-identity-avatar"
 import { ChatEmptyState } from "@workspace/ui/components/chat-empty-state"
 import {
 	BotCreatedRow,
@@ -44,6 +43,10 @@ import { RoutinesPanelTrigger } from "@workspace/ui/components/routines-panel"
 import { SpaceAccessBanner } from "@workspace/ui/components/space-access-banner"
 import { ThreadLayout } from "@workspace/ui/components/thread-layout"
 import { ThreadTranscriptSkeleton } from "@workspace/ui/components/thread-transcript-skeleton"
+import {
+	ThreadWorkLine,
+	type ThreadWorkLineAgent,
+} from "@workspace/ui/components/thread-work-line"
 import type {
 	TranscriptHandle,
 	TranscriptItem,
@@ -241,36 +244,48 @@ const THREAD_TRANSCRIPT_SKELETON = <ThreadTranscriptSkeleton />
 
 const MISSION_TRANSCRIPT_SKELETON = <MissionDetailSkeleton />
 
-type WorkingBotProps = BotStopProps & {
+type WorkLineSeat = {
 	face: ThreadFace
 	work: WorkingState
+	onStop?: () => void
 }
 
-const workLabelOf = (work: WorkingState, t: ChatCopy) =>
-	work.backgroundTasks === undefined
-		? work.label
-		: t("working.backgroundTasks", { count: work.backgroundTasks })
+const workLineAgentOf = (
+	{ face, work, onStop }: WorkLineSeat,
+	t: ChatCopy,
+): ThreadWorkLineAgent => {
+	const agent = { ...face, startedAt: work.startedAt, onStop }
+	if (work.backgroundTasks !== undefined)
+		return {
+			...agent,
+			state: "tool",
+			label: t("working.backgroundTasks", { count: work.backgroundTasks }),
+		}
+	if (work.kind === "waiting") return { ...agent, state: "waiting" }
+	if (
+		(work.kind === "thinking" || work.kind === "writing") &&
+		work.label === undefined
+	)
+		return { ...agent, state: work.kind }
+	return { ...agent, state: "tool", label: work.label ?? "" }
+}
 
-const WorkingBot = ({ face, work, ...stop }: WorkingBotProps) => {
-	const t = useChatCopy()
+const upNextAgentOf = (face: ThreadFace): ThreadWorkLineAgent => ({
+	...face,
+	state: "upNext",
+})
+
+type ThreadWorkProps = {
+	agents: ThreadWorkLineAgent[]
+}
+
+const ThreadWork = ({ agents }: ThreadWorkProps) => {
+	const [isOpen, setOpen] = useState(false)
 
 	return (
-		<ActivityIndicator
-			{...stop}
-			blot={face.blot}
-			botId={face.id}
-			image={face.image}
-			kind={work.kind}
-			label={workLabelOf(work, t)}
-			name={face.name}
-			seed={face.id}
-			startedAt={work.startedAt}
-			waitingOn={work.waitingOn}
-		/>
+		<ThreadWorkLine agents={agents} isOpen={isOpen} onOpenChange={setOpen} />
 	)
 }
-
-const UP_NEXT: WorkingState = { kind: "waiting", waitingOn: "next" }
 
 const writerOf = (row: TranscriptRow, personOf: PersonOf, reader: string) =>
 	(row.role === "user" && personOf(row)) || reader
@@ -646,9 +661,12 @@ const ThreadEmptyState = ({
 	) : null
 }
 
-const stopOf = (speaking: SpeakingBot) => () => {
-	void speaking.stop?.()
-}
+const stopOf = ({ stop }: SpeakingBot) =>
+	stop
+		? () => {
+				void stop()
+			}
+		: undefined
 
 type ThreadRunProps = {
 	run: TranscriptRow[]
@@ -1108,9 +1126,9 @@ const SoloThreadTail = ({
 	signInStep,
 	onStop,
 }: SoloThreadTailProps) => {
+	const t = useChatCopy()
 	const isStoppable =
 		canStopTurn(thread.state.turn) || thread.state.foreignTurn !== null
-	const stop: BotStopProps = isStoppable ? { stoppable: true, onStop } : {}
 	usePostedSignInStep({
 		controller: thread.controller,
 		botId: thread.bot.id,
@@ -1118,7 +1136,16 @@ const SoloThreadTail = ({
 		step: signInStep,
 	})
 
-	return botWork ? <WorkingBot {...stop} face={face} work={botWork} /> : null
+	const agents = botWork
+		? [
+				workLineAgentOf(
+					{ face, work: botWork, onStop: isStoppable ? onStop : undefined },
+					t,
+				),
+			]
+		: []
+
+	return <ThreadWork agents={agents} key={thread.bot.id} />
 }
 
 type ThreadQueueProps = {
@@ -1156,14 +1183,20 @@ const speakingRowsIn = (
 		return seated ? [{ seated, speaking }] : []
 	})
 
+const seatedIn = (botIds: string[], bots: RosterBot[]): RosterBot[] =>
+	botIds.flatMap((botId) => bots.find(({ id }) => id === botId) ?? [])
+
 const waitingRowsIn = (
 	waitingBotIds: string[],
 	speakers: SpeakingBot[],
 	bots: RosterBot[],
 ): RosterBot[] =>
-	waitingBotIds
-		.filter((botId) => !speakers.some((speaking) => speaking.botId === botId))
-		.flatMap((botId) => bots.find(({ id }) => id === botId) ?? [])
+	seatedIn(
+		waitingBotIds.filter(
+			(botId) => !speakers.some((speaking) => speaking.botId === botId),
+		),
+		bots,
+	)
 
 type ConversationThreadTailProps = {
 	thread: LoadedConversationThread
@@ -1178,7 +1211,27 @@ const ConversationThreadTail = ({
 	readerName,
 	refusedQuotes,
 }: ConversationThreadTailProps) => {
-	const { refusedMessage, speakers, waitingBotIds } = thread.state
+	const t = useChatCopy()
+	const { refusedMessage, speakers, waitingBotIds, failedBotIds } = thread.state
+	const atWork = [
+		...speakingRowsIn(speakers, bots).map(({ seated, speaking }) =>
+			workLineAgentOf(
+				{ face: seated, work: speaking.work, onStop: stopOf(speaking) },
+				t,
+			),
+		),
+		...waitingRowsIn(waitingBotIds, speakers, bots).map(upNextAgentOf),
+	]
+	const failed = seatedIn(failedBotIds, bots).map(
+		(seated): ThreadWorkLineAgent => ({
+			...seated,
+			state: "failed",
+			onRetry: () => {
+				void thread.controller.retryTurn(seated.id)
+			},
+		}),
+	)
+	const agents = atWork.length > 0 ? [...failed, ...atWork] : []
 
 	return (
 		<>
@@ -1190,18 +1243,7 @@ const ConversationThreadTail = ({
 					repliedTo={refusedQuotes}
 				/>
 			) : null}
-			{speakingRowsIn(speakers, bots).map(({ seated, speaking }) => (
-				<WorkingBot
-					face={seated}
-					key={seated.id}
-					onStop={stopOf(speaking)}
-					stoppable={speaking.stop !== null}
-					work={speaking.work}
-				/>
-			))}
-			{waitingRowsIn(waitingBotIds, speakers, bots).map((seated) => (
-				<WorkingBot face={seated} key={seated.id} work={UP_NEXT} />
-			))}
+			<ThreadWork agents={agents} key={thread.conversation.id} />
 		</>
 	)
 }

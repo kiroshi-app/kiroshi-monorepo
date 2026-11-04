@@ -1418,6 +1418,12 @@ const stopsFor = (name: string) =>
 
 const stopFor = (name: string) => stopsFor(name)[0] ?? null
 
+const workLineCount = () =>
+	document.querySelectorAll('[data-slot="thread-work-line"]').length
+
+const openWorkLine = () =>
+	fireEvent.click(screen.getByRole("button", { name: "Each agent’s work" }))
+
 describe("ThreadScreen", () => {
 	let layout: FakeLayout
 
@@ -2604,9 +2610,10 @@ describe("ThreadScreen", () => {
 			room.driver.pushTo(room.idOf("Nyx"), ASKED)
 		})
 		await settle()
+		openWorkLine()
 
 		expect(workLines()).toContain("Zoe is up next…")
-		expect(workLines()).toContain("Nyx is waiting for you… · Which wall holds?")
+		expect(workLines()).toContain("Nyx is waiting for you…")
 	})
 
 	it("stops the companion whose working row carries the stop, and no other", async () => {
@@ -2615,6 +2622,7 @@ describe("ThreadScreen", () => {
 		await settle()
 
 		await room.send("@Ada @Nyx now")
+		openWorkLine()
 
 		expect(stopFor("Nyx")).toBeTruthy()
 		fireEvent.click(screen.getByRole("button", { name: "Stop Ada" }))
@@ -2631,9 +2639,95 @@ describe("ThreadScreen", () => {
 
 		await room.send("@Ada now")
 		await room.send("@Nyx after")
+		openWorkLine()
 
 		expect(stopFor("Ada")).toBeTruthy()
 		expect(stopFor("Nyx")).toBeNull()
+	})
+
+	it("draws one work line for one agent at work, and none once it finishes", async () => {
+		const room = await roomOf({ names: ["Ada"] })
+		render(screenOf(room.thread), { wrapper: createQueryTestWrapper().wrapper })
+		await settle()
+
+		expect(workLineCount()).toBe(0)
+
+		await room.send("@Ada now")
+
+		expect(workLineCount()).toBe(1)
+		expect(workLines()).toEqual(["Ada is thinking…"])
+		expect(stopFor("Ada")).toBeTruthy()
+
+		act(() => {
+			room.driver.pushTo(room.idOf("Ada"), SAID_AND_LANDED)
+		})
+		await settle()
+
+		expect(workLineCount()).toBe(0)
+	})
+
+	it("draws one work line for an agent at work and the one up next", async () => {
+		const room = await roomOf({ names: ["Ada", "Nyx"] })
+		render(screenOf(room.thread), { wrapper: createQueryTestWrapper().wrapper })
+		await settle()
+
+		await room.send("@Ada now")
+		await room.send("@Nyx after")
+
+		expect(workLineCount()).toBe(1)
+		openWorkLine()
+		expect(workLines()).toEqual(
+			expect.arrayContaining(["Ada is thinking…", "Nyx is up next…"]),
+		)
+	})
+
+	it("drops an agent that finishes from the work line while another goes on", async () => {
+		const room = await roomOf({ names: ["Ada", "Nyx"] })
+		render(screenOf(room.thread), { wrapper: createQueryTestWrapper().wrapper })
+		await settle()
+
+		await room.send("@Ada @Nyx now")
+		act(() => {
+			room.driver.pushTo(room.idOf("Ada"), SAID_AND_LANDED)
+		})
+		await settle()
+
+		expect(workLineCount()).toBe(1)
+		expect(workLines()).toEqual(["Nyx is thinking…"])
+		expect(stopFor("Ada")).toBeNull()
+	})
+
+	it("shows a failed agent with Retry next to one still at work, and re-addresses it alone", async () => {
+		const room = await roomOf({ names: ["Ada", "Nyx"] })
+		render(screenOf(room.thread), { wrapper: createQueryTestWrapper().wrapper })
+		await settle()
+
+		await room.send("@Ada @Nyx now")
+		act(() => {
+			room.driver.pushTo(room.idOf("Ada"), [
+				{
+					type: "failed",
+					error: { kind: "crashed", code: 1, detail: "sidecar is gone" },
+				},
+			])
+		})
+		await settle()
+
+		expect(workLineCount()).toBe(1)
+		expect(workLines()).toEqual(["Nyx is thinking…"])
+		fireEvent.click(screen.getByRole("button", { name: "Retry Ada" }))
+		await settle()
+
+		expect(room.driver.submissions.map(({ scope }) => scope.botId)).toEqual([
+			room.idOf("Ada"),
+			room.idOf("Nyx"),
+			room.idOf("Ada"),
+		])
+		expect(screen.queryByRole("button", { name: "Retry Ada" })).toBeNull()
+		openWorkLine()
+		expect(workLines()).toEqual(
+			expect.arrayContaining(["Ada is thinking…", "Nyx is thinking…"]),
+		)
 	})
 
 	it("clocks the working row of a seated companion from the start of its turn", async () => {
@@ -2740,7 +2834,7 @@ describe("ThreadScreen", () => {
 		})
 		await settle()
 
-		expect(workLines()).toContain("Ada is waiting for you… · Which wall holds?")
+		expect(workLines()).toContain("Ada is waiting for you…")
 	})
 
 	it("draws one row for a speaking companion another speaker hands over to", async () => {

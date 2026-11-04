@@ -161,6 +161,7 @@ export type ConversationState = {
 	isFirstLoadPending: boolean
 	speakers: SpeakingBot[]
 	waitingBotIds: string[]
+	failedBotIds: string[]
 	refusedMessage: RefusedMessage | null
 	pendingPrompt: PendingPrompt | null
 	latestError: ChatError | null
@@ -180,6 +181,7 @@ export type ConversationController = {
 	leave: () => void
 	send: (text: string, replyLinks?: ReplyLink[]) => Promise<void>
 	sendAgain: (messageId: string) => Promise<void>
+	retryTurn: (botId: string) => Promise<void>
 	reportRun: (draft: RunReportDraft) => Promise<string>
 	relayRunReport: (scope: RuntimeScope, message: ChatMessage) => Promise<void>
 	relaySpoken: (spoken: CompanionSpoke, side: SpokenSide) => Promise<boolean>
@@ -235,6 +237,10 @@ type SentPrompt = {
 	content: string
 	answered: TranscriptMessage | null
 	replyLinks: ReplyLink[]
+}
+
+type FailedTurn = Summons & {
+	turn: OpenTurn
 }
 
 type HandedMention = {
@@ -336,6 +342,7 @@ const isSameState = (left: ConversationState, right: ConversationState) =>
 	left.isFirstLoadPending === right.isFirstLoadPending &&
 	isSameSpeakers(left.speakers, right.speakers) &&
 	isSameOrder(left.waitingBotIds, right.waitingBotIds) &&
+	isSameOrder(left.failedBotIds, right.failedBotIds) &&
 	left.refusedMessage === right.refusedMessage &&
 	left.pendingPrompt === right.pendingPrompt &&
 	left.latestError === right.latestError &&
@@ -368,6 +375,7 @@ const initialState: ConversationState = {
 	isFirstLoadPending: false,
 	speakers: NO_SPEAKERS,
 	waitingBotIds: [],
+	failedBotIds: [],
 	refusedMessage: null,
 	pendingPrompt: null,
 	latestError: null,
@@ -408,6 +416,7 @@ export const createConversationController = (
 	let conversation: StoredConversation | null = null
 	let queue: TurnQueue = emptyQueue
 	let activeTurn: OpenTurn | null = null
+	let failedTurns: FailedTurn[] = []
 	const speakers = new Map<string, Speaker>()
 	let asks = 0
 	const runs = new Map<string, RuntimeScope>()
@@ -601,6 +610,7 @@ export const createConversationController = (
 			conversationId: conversation?.id ?? null,
 			speakers: speakingBots(),
 			waitingBotIds: queue.waiting.map(({ botId }) => botId),
+			failedBotIds: failedTurns.map(({ botId }) => botId),
 			refusedMessage: refused,
 			pendingPrompt: oldestPrompt(),
 			latestError,
@@ -897,6 +907,18 @@ export const createConversationController = (
 		return unseated
 	}
 
+	const forgetFailedTurns = (botIds: string[]) => {
+		failedTurns = failedTurns.filter(({ botId }) => !botIds.includes(botId))
+	}
+
+	const noteFailedTurn = ({ botId, promptId, turn, droppedFor }: Speaker) => {
+		if (droppedFor) {
+			return
+		}
+		forgetFailedTurns([botId])
+		failedTurns = [...failedTurns, { botId, promptId, turn }]
+	}
+
 	const syncAndDrive = () => {
 		sync()
 		drive()
@@ -907,6 +929,9 @@ export const createConversationController = (
 			return
 		}
 		speakers.delete(held.botId)
+		if (completion === "failed") {
+			noteFailedTurn(held)
+		}
 		settleOpenReplies(held, completion)
 		void shutdownSpeaker(held)
 		const handed = noteHandovers(held)
@@ -1208,6 +1233,7 @@ export const createConversationController = (
 		for (const held of started) {
 			speakers.set(held.botId, held)
 		}
+		forgetFailedTurns(started.map(({ botId }) => botId))
 		sync()
 		return started
 	}
@@ -1223,6 +1249,7 @@ export const createConversationController = (
 			traceSummonsDropped(summonsRunOf(held.turn.id, held.botId), "startFailed")
 			const error = toTransportError(reason)
 			noteSpeakerFailure(held.botId, error)
+			noteFailedTurn(held)
 			noteFrontDrop(held.turn.id, held.botId, "startFailed", error)
 		}
 		sync()
@@ -1492,6 +1519,7 @@ export const createConversationController = (
 		}
 
 		refused = null
+		failedTurns = []
 		if (isNamingItself) {
 			void nameFrom(conversationId, trimmed)
 		}
@@ -1510,6 +1538,19 @@ export const createConversationController = (
 		return held?.id === messageId
 			? send(held.text, held.replyLinks)
 			: Promise.resolve()
+	}
+
+	const retryTurn = (botId: string) => {
+		const failed = failedTurns.find((entry) => entry.botId === botId)
+		if (!failed || speakers.has(botId)) {
+			return Promise.resolve()
+		}
+		forgetFailedTurns([botId])
+		activeTurn = failed.turn
+		const held = newSpeaker(failed, failed.turn)
+		speakers.set(botId, held)
+		sync()
+		return begin(held).then(drive)
 	}
 
 	const rememberCause = (reported: ReportedRun) => {
@@ -1878,6 +1919,7 @@ export const createConversationController = (
 		}
 		queue = emptyQueue
 		activeTurn = null
+		failedTurns = []
 		refused = null
 		reportedCauses = NO_REPORTED_RUNS
 		arrivedBotIds = []
@@ -2022,6 +2064,7 @@ export const createConversationController = (
 		leave,
 		send,
 		sendAgain,
+		retryTurn,
 		reportRun,
 		relayRunReport,
 		relaySpoken,

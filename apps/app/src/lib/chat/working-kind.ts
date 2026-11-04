@@ -1,14 +1,10 @@
-import type {
-	ActivityIndicatorKind,
-	ActivityIndicatorWait,
-} from "@workspace/ui/components/activity-indicator"
+import type { ActivityIndicatorKind } from "@workspace/ui/components/activity-indicator"
 
 import type { ActivityEvent, ActivityStatus, TurnHold } from "../agent/contract"
 
 export type WorkingState = {
 	kind: ActivityIndicatorKind
 	label?: string
-	waitingOn?: ActivityIndicatorWait
 	backgroundTasks?: number
 	startedAt?: number
 }

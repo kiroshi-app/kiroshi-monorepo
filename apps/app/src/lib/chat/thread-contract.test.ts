@@ -78,6 +78,7 @@ const conversationState = (
 	isFirstLoadPending: false,
 	speakers: [],
 	waitingBotIds: [],
+	failedBotIds: [],
 	refusedMessage: null,
 	pendingPrompt,
 	latestError: null,
