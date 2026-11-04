@@ -65,7 +65,9 @@ const LibraryPage = ({ excerpt, className }: LibraryPageProps) => (
 		)}
 		data-slot="library-page"
 	>
-		<Markdown className={PAGE_TYPE}>{excerpt}</Markdown>
+		<Markdown className={PAGE_TYPE} isStatic>
+			{excerpt}
+		</Markdown>
 	</div>
 )
 

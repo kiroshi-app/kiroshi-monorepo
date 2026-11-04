@@ -33,9 +33,15 @@ type MentionProps = {
 	botId: string
 	count?: number
 	className?: string
+	isStatic?: boolean
 }
 
-const Mention = ({ botId, count = 1, className }: MentionProps) => {
+const Mention = ({
+	botId,
+	count = 1,
+	className,
+	isStatic = false,
+}: MentionProps) => {
 	const { t } = useTranslation("chat")
 	const bot = useRosterBot(botId)
 	const name = bot?.name ?? t("transcript.mention.unknown")
@@ -43,7 +49,7 @@ const Mention = ({ botId, count = 1, className }: MentionProps) => {
 	const onSelect = useCompanionSelect()
 
 	const selectHandlers =
-		onSelect && bot
+		onSelect && bot && !isStatic
 			? clickHandlersFor((modifiers) => onSelect(bot.id, modifiers))
 			: undefined
 	const pillProps = {
@@ -94,6 +100,8 @@ const Mention = ({ botId, count = 1, className }: MentionProps) => {
 			) : null}
 		</>
 	)
+
+	if (isStatic) return <span {...pillProps}>{content}</span>
 
 	return (
 		<CompanionMenuHost companionId={bot?.id}>

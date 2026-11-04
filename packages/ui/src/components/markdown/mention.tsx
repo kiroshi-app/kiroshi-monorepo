@@ -20,11 +20,14 @@ export type MarkdownSpanProps = ComponentPropsWithoutRef<"span"> &
 		[MARKDOWN_RUN_END_ATTRIBUTE]?: string
 	}
 
-export const MarkdownSpan = ({
+type MarkdownSpanForkProps = MarkdownSpanProps & { isStatic: boolean }
+
+const MarkdownSpanFork = ({
 	node,
 	children,
+	isStatic,
 	...props
-}: MarkdownSpanProps) => {
+}: MarkdownSpanForkProps) => {
 	const botId = props[BOT_MENTION_ATTRIBUTE]
 
 	if (botId)
@@ -33,6 +36,7 @@ export const MarkdownSpan = ({
 				botId={botId}
 				className="not-typeset"
 				count={Number(props[BOT_MENTION_COUNT_ATTRIBUTE] ?? 1)}
+				isStatic={isStatic}
 			/>
 		)
 
@@ -50,3 +54,11 @@ export const MarkdownSpan = ({
 
 	return <span {...props}>{children}</span>
 }
+
+export const MarkdownSpan = (props: MarkdownSpanProps) => (
+	<MarkdownSpanFork {...props} isStatic={false} />
+)
+
+export const MarkdownStaticSpan = (props: MarkdownSpanProps) => (
+	<MarkdownSpanFork {...props} isStatic />
+)

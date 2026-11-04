@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect } from "react"
 import { useTranslation } from "react-i18next"
-import { expect, fn, waitFor, within } from "storybook/test"
+import { expect, fn, mocked, spyOn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
@@ -11,6 +11,12 @@ import {
 	slotIn,
 	slotsIn,
 } from "@workspace/storybook/story-utils"
+import { CONVERSATION_BOTS } from "@workspace/ui/components/bots.fixtures"
+import {
+	CompanionMenuContent,
+	CompanionMenuProvider,
+} from "@workspace/ui/components/companion-menu"
+import { CompanionSelectProvider } from "@workspace/ui/components/companion-select"
 import { ContentCard } from "@workspace/ui/components/content-card"
 import { hueTone } from "@workspace/ui/components/hue-palette"
 import { HUE_PRESETS } from "@workspace/ui/components/hue-tones"
@@ -38,6 +44,9 @@ import {
 	raiseFailureNotice,
 	raiseTransientNotice,
 } from "@workspace/ui/components/notice-surface"
+import { RosterProvider } from "@workspace/ui/components/roster"
+import type { RosterMenuSection } from "@workspace/ui/components/roster-menu-items"
+import type { Space } from "@workspace/ui/components/space"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 type LibraryStoryFrameProps = {
@@ -460,6 +469,117 @@ export const GridDocuments = meta.story({
 		await expect(
 			canvasElement.querySelector("[data-slot=library-thumbnail] img"),
 		).toBe(null)
+	},
+})
+
+const [ATLAS] = CONVERSATION_BOTS
+
+const CONTROLS_DOCUMENT: LibraryItem = {
+	kind: "document",
+	id: "launch-checklist",
+	name: "Launch checklist",
+	detail: "Document · 2 KB · 5 min ago",
+	excerpt: [
+		"# Launch checklist",
+		`Read the [partner brief](https://example.com/brief) before the call with <@${ATLAS.id}>.`,
+		"- [x] Draft the pricing page\n- [ ] Book the onboarding emails",
+		"| Channel | Owner |\n| --- | --- |\n| Newsletter | Mara |",
+		'```ts\nconst launch = "spring"\n```',
+	].join("\n\n"),
+}
+
+const NEXT_DOCUMENT: LibraryItem = {
+	...CONTROLS_DOCUMENT,
+	id: "launch-notes",
+	name: "Launch notes",
+	excerpt: "Notes from the partner call.",
+}
+
+const NO_SPACES: Space[] = []
+
+const NO_MEMBERSHIPS: string[] = []
+
+const NO_SECTIONS: RosterMenuSection[] = []
+
+const companionMenuFor = (companionId: string) =>
+	companionId === ATLAS.id ? (
+		<CompanionMenuContent
+			companion={{ id: ATLAS.id, name: ATLAS.name }}
+			isPinned={false}
+			memberships={NO_MEMBERSHIPS}
+			onDelete={fn()}
+			sections={NO_SECTIONS}
+			spaces={NO_SPACES}
+		/>
+	) : null
+
+const INTERACTIVE_ELEMENTS =
+	"button, a, input, select, textarea, summary, [tabindex]"
+
+const NESTED_INTERACTIVE_WARNING =
+	/cannot (be a descendant of|contain a nested)/
+
+export const GridDocumentPreviewHoldsNoControl = meta.story({
+	args: { items: [CONTROLS_DOCUMENT, NEXT_DOCUMENT] },
+	render: (args) => (
+		<CompanionMenuProvider menuFor={companionMenuFor}>
+			<CompanionSelectProvider onSelect={fn()}>
+				<RosterProvider bots={CONVERSATION_BOTS}>
+					<LibraryStoryFrame hue="blue">
+						<LibraryPanel {...args} />
+					</LibraryStoryFrame>
+				</RosterProvider>
+			</CompanionSelectProvider>
+		</CompanionMenuProvider>
+	),
+	beforeEach: () => {
+		const consoleError = spyOn(console, "error")
+		return () => consoleError.mockRestore()
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A document whose start holds a link, a mention of Atlas, a task list, a table and a code block, under the companion select and menu providers the workspace mounts. Check that the page draws each of them as a still picture: the link as plain text, the mention as its pill with no button and no menu, each box in its state, the table and the code without their copy control, and that the item stays one Tab stop that opens on a press anywhere on its page.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const item = canvas.getByRole("button", { name: /^Launch checklist/ })
+		const page = slotIn(item, "library-page")
+
+		await expect(item.querySelectorAll(INTERACTIVE_ELEMENTS)).toHaveLength(0)
+		await expect(page).toHaveTextContent("Read the partner brief before")
+		const mention = slotIn(page, "bot-mention")
+		await expect(mention.tagName).toBe("SPAN")
+		await expect(mention).toHaveTextContent(ATLAS.name)
+		await expect(
+			item.querySelectorAll("[data-slot=context-menu-trigger]"),
+		).toHaveLength(0)
+		await expect(page.querySelector("table")).toHaveTextContent("Newsletter")
+		await expect(page.querySelector("pre")).toHaveTextContent(
+			'const launch = "spring"',
+		)
+		const boxes = slotsIn(page, "markdown-task-box")
+		await expect(boxes.map((box) => box.hasAttribute("data-checked"))).toEqual([
+			true,
+			false,
+		])
+		await expect(
+			mocked(console.error).mock.calls.filter((call) =>
+				NESTED_INTERACTIVE_WARNING.test(call.map(String).join(" ")),
+			),
+		).toHaveLength(0)
+
+		item.focus()
+		await userEvent.tab()
+		await expect(
+			canvas.getByRole("button", { name: /^Launch notes/ }),
+		).toHaveFocus()
+
+		await userEvent.click(slotIn(item, "library-thumbnail"))
+		await expect(args.onOpenItem).toHaveBeenCalledOnce()
+		await expect(args.onOpenItem).toHaveBeenCalledWith(CONTROLS_DOCUMENT)
 	},
 })
 

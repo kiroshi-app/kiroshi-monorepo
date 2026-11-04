@@ -8,11 +8,24 @@ import {
 import {
 	MarkdownCode,
 	MarkdownPre,
+	MarkdownStaticPre,
 } from "@workspace/ui/components/markdown/code"
-import { MarkdownLink } from "@workspace/ui/components/markdown/link"
-import { MarkdownSpan } from "@workspace/ui/components/markdown/mention"
-import { MarkdownTable } from "@workspace/ui/components/markdown/table"
-import { MarkdownTaskCheckbox } from "@workspace/ui/components/markdown/task-list"
+import {
+	MarkdownLink,
+	MarkdownStaticLink,
+} from "@workspace/ui/components/markdown/link"
+import {
+	MarkdownSpan,
+	MarkdownStaticSpan,
+} from "@workspace/ui/components/markdown/mention"
+import {
+	MarkdownStaticTable,
+	MarkdownTable,
+} from "@workspace/ui/components/markdown/table"
+import {
+	MarkdownStaticTaskBox,
+	MarkdownTaskCheckbox,
+} from "@workspace/ui/components/markdown/task-list"
 
 export const MARKDOWN_COMPONENTS: Components = {
 	a: MarkdownLink,
@@ -24,4 +37,14 @@ export const MARKDOWN_COMPONENTS: Components = {
 	pre: MarkdownPre,
 	span: MarkdownSpan,
 	table: MarkdownTable,
+}
+
+export const MARKDOWN_STATIC_COMPONENTS: Components = {
+	a: MarkdownStaticLink,
+	blockquote: MarkdownBlockquote,
+	code: MarkdownCode,
+	input: MarkdownStaticTaskBox,
+	pre: MarkdownStaticPre,
+	span: MarkdownStaticSpan,
+	table: MarkdownStaticTable,
 }
