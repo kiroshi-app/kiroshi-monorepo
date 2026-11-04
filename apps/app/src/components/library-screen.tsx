@@ -48,6 +48,7 @@ import {
 	useLibraryImports,
 } from "@/lib/library/use-library-imports"
 import { useLibraryItems } from "@/lib/library/use-library-items"
+import { useStopLibraryWriters } from "@/lib/library/use-stop-library-writers"
 import type { LibraryOpening } from "@/lib/navigation/library-search"
 
 export type LibraryScreenProps = {
@@ -304,6 +305,7 @@ export const LibraryScreen = ({
 		bots,
 		title: shownTitleOf(openedDocument?.title ?? ""),
 	})
+	const { stopAll, stop } = useStopLibraryWriters(spaceId)
 	const { isMissing, notifiedMissing, hasFailedToRead } = openingStatusOf({
 		opening,
 		isListing: library.isLoading,
@@ -419,6 +421,8 @@ export const LibraryScreen = ({
 				onOpenInNewTab={boundTo(openedItem, openInNewTab)}
 				onRename={pickRename}
 				onShowInFolder={boundTo(openedItem, reveal)}
+				onStop={(agent) => stop(openedDocument.name, agent)}
+				onStopAll={() => stopAll(openedDocument.name)}
 				onTitleChange={retitle}
 				onTitleConfirm={(newTitle) => renameDocument(openedDocument, newTitle)}
 				people={people}
