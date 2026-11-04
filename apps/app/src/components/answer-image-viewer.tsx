@@ -98,7 +98,7 @@ const useSavingImageSrcs = () =>
 const useRaiseImageSaved = () => {
 	const openInLibrary = useOpenLibraryImage()
 	return ({ name }: LibraryItem) =>
-		void raiseTransientNotice({
+		raiseTransientNotice({
 			type: "success",
 			title: i18n.t("common:library.saved.image"),
 			action: {
@@ -114,11 +114,11 @@ export const useShownImageActions = (): ShownImageActions => {
 	const copy = useLibraryImageCopy()
 	const savingSrcs = useSavingImageSrcs()
 	const isSavingImage = (src: string) => savingSrcs.includes(src)
-	const saveOnce = (library: LibraryOnScreen, image: ThreadImage) => {
+	const saveOnce = (onScreen: LibraryOnScreen, image: ThreadImage) => {
 		if (isSavingImage(image.src)) {
 			return
 		}
-		save(threadImageSaveOf(library, image))
+		save(threadImageSaveOf(onScreen, image))
 	}
 	return {
 		onSaveToLibrary:
