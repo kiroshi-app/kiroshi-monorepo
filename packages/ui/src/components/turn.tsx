@@ -587,34 +587,37 @@ function AssistantTurn(props: AssistantTurnProps) {
 			size={AUTHOR_AVATAR_SIZE}
 		/>
 	) : null
-	const control =
-		face && onSelectCompanion ? (
-			<BotSelectButton
-				image={face.image}
-				name={face.name}
-				onSelect={(modifiers) => onSelectCompanion(face.id, modifiers)}
-				size={AUTHOR_AVATAR_SIZE}
-			>
-				{mark}
-			</BotSelectButton>
-		) : null
-	const avatar = mark ? (
+	const renderIdentity = (block: ReactElement) => (
 		<CompanionMenuHost companionId={face?.id}>
-			<SharedMark markId={markId}>{control ?? mark}</SharedMark>
+			{face && onSelectCompanion ? (
+				<span className="flex min-w-0">
+					<BotSelectButton
+						image={face.image}
+						name={face.name}
+						onSelect={(modifiers) => onSelectCompanion(face.id, modifiers)}
+						size={AUTHOR_AVATAR_SIZE}
+					>
+						{block}
+					</BotSelectButton>
+				</span>
+			) : (
+				block
+			)}
 		</CompanionMenuHost>
-	) : null
+	)
 	const authorLine = face ? (
 		<AuthorLine
 			tone={author?.isDeleted ? "deleted" : "agent"}
 			name={face.name}
 			hue={face.blot}
 			badge={(author ?? identity)?.title}
-			avatar={avatar}
+			avatar={<SharedMark markId={markId}>{mark}</SharedMark>}
 			time={sentTimeOf(sentAt, now)}
 			end={end}
 			onRetry={onRetry}
 			actions={turnActionsOf(actions.buttons)}
 			isSticky
+			renderIdentity={renderIdentity}
 		/>
 	) : null
 	const shownFooter = !face && end ? t(FOOTER_KEY[end]) : null

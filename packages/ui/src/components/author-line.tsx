@@ -1,6 +1,12 @@
 "use client"
 
-import { type ReactNode, useEffect, useRef, useState } from "react"
+import {
+	type ReactElement,
+	type ReactNode,
+	useEffect,
+	useRef,
+	useState,
+} from "react"
 import { useTranslation } from "react-i18next"
 
 import { BotTitleBadge } from "@workspace/ui/components/bot-badge"
@@ -24,6 +30,7 @@ type AuthorLineProps = {
 	onRetry?: () => void
 	actions?: ReactNode
 	isSticky?: boolean
+	renderIdentity?: (identity: ReactElement) => ReactNode
 	className?: string
 }
 
@@ -52,7 +59,7 @@ const AUTHOR_LINE = "flex h-5 min-w-0 max-w-full items-center gap-2"
 const STUCK_INSET = 18
 
 const AUTHOR_LINE_STICKY =
-	"sticky bottom-4.5 z-10 self-stretch before:pointer-events-none before:absolute before:-inset-x-4.5 before:-top-3.5 before:-bottom-4.5 before:-z-10 before:hidden before:bg-card before:bg-[image:linear-gradient(var(--bubble-surface,var(--bubble)),var(--bubble-surface,var(--bubble)))] data-[stuck=true]:before:block"
+	"sticky bottom-4.5 z-10 self-stretch before:pointer-events-none before:absolute before:-inset-x-4.5 before:-top-4 before:-bottom-4.5 before:-z-10 before:hidden before:bg-card before:bg-[image:linear-gradient(var(--bubble-surface,var(--bubble)),var(--bubble-surface,var(--bubble)))] data-[stuck=true]:before:block"
 
 const TRANSCRIPT_VIEWPORT = '[data-slot="message-scroller-viewport"]'
 
@@ -198,6 +205,7 @@ const AuthorLine = ({
 	onRetry,
 	actions,
 	isSticky = false,
+	renderIdentity,
 	className,
 }: AuthorLineProps) => {
 	const isEndSide = tone === "person" || tone === "you"
@@ -223,6 +231,14 @@ const AuthorLine = ({
 		/>
 	) : null
 	const { markerRef, isStuck } = useStuckToBottom(isSticky)
+	const identity = (
+		<span className="flex min-w-0 items-center gap-2">
+			<span className="flex size-5 shrink-0 items-center justify-center">
+				{avatar}
+			</span>
+			<AuthorLineName tone={tone} name={name} hue={hue} />
+		</span>
+	)
 
 	return (
 		<>
@@ -238,10 +254,7 @@ const AuthorLine = ({
 				)}
 			>
 				{isEndSide ? actionRow : null}
-				<span className="flex size-5 shrink-0 items-center justify-center">
-					{avatar}
-				</span>
-				<AuthorLineName tone={tone} name={name} hue={hue} />
+				{renderIdentity ? renderIdentity(identity) : identity}
 				{tone === "agent" ? (
 					<BotTitleBadge title={badge} variant="line" />
 				) : null}
@@ -251,11 +264,7 @@ const AuthorLine = ({
 				{isEndSide ? null : actionRow}
 			</div>
 			{isSticky ? (
-				<span
-					ref={markerRef}
-					aria-hidden="true"
-					className="-mt-1.5 block h-0"
-				/>
+				<span ref={markerRef} aria-hidden="true" className="-mt-2 block h-0" />
 			) : null}
 		</>
 	)

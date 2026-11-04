@@ -1235,9 +1235,10 @@ const authorAvatarOf = (text: string) =>
 		'[data-slot="author-line"] :is([data-slot="bot-identity-avatar"], [data-slot="user-avatar"])',
 	) ?? null
 
-const authorAvatarSlotOf = (text: string) =>
-	turnOf(text)?.querySelector('[data-slot="author-line"] > span:first-child') ??
-	null
+const authorSelectOf = (text: string) =>
+	turnOf(text)?.querySelector(
+		'[data-slot="author-line"] button[data-slot="bot-select"]',
+	) ?? null
 
 const workLines = () =>
 	[...document.querySelectorAll('[data-slot="bot-working"]')].map((row) =>
@@ -1343,7 +1344,7 @@ const underCompanionSelect = (
 ) => createElement(CompanionSelectHarness, { children, companionIds, target })
 
 const clickAuthorAvatarOf = (text: string) => {
-	const avatar = authorAvatarSlotOf(text)?.querySelector("button")
+	const avatar = authorSelectOf(text)
 	if (!avatar) throw new Error(`no author line avatar for ${text}`)
 	fireEvent.click(avatar)
 }
