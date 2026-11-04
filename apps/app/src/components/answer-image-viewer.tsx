@@ -6,7 +6,11 @@ import {
 } from "@workspace/ui/components/library-lightbox"
 import { i18n } from "@workspace/ui/lib/i18n"
 
+import type { ShownImageActions } from "@/lib/chat/answer-actions"
 import { failureReporterIn } from "@/lib/failure-report"
+import { shownImageSourceOf } from "@/lib/library/library-image-source"
+import { useLibraryImageCopy } from "@/lib/library/use-library-actions"
+import { useLibraryImageSave } from "@/lib/library/use-library-imports"
 import { openInBrowser } from "@/lib/links/use-external-links"
 
 type ViewedImages = {
@@ -43,18 +47,35 @@ export const useAnswerImageViewer = () => {
 	}
 }
 
+export const useShownImageActions = (
+	spaceId: string | null,
+): ShownImageActions => {
+	const save = useLibraryImageSave()
+	const copy = useLibraryImageCopy()
+	return {
+		onSaveToLibrary:
+			spaceId === null
+				? undefined
+				: (image) => save({ spaceId, image: shownImageSourceOf(image) }),
+		onCopyImage: (image) => copy(shownImageSourceOf(image)),
+	}
+}
+
 type AnswerImageViewerProps = {
 	viewed: ViewedImages | null
+	imageActions: ShownImageActions
 	onClose: () => void
 	onStep: (offset: number) => void
 }
 
 export const AnswerImageViewer = ({
 	viewed,
+	imageActions,
 	onClose,
 	onStep,
 }: AnswerImageViewerProps) => (
 	<LibraryLightbox
+		{...imageActions}
 		count={viewed?.images.length ?? 0}
 		image={viewed?.images[viewed.index] ?? null}
 		onClose={onClose}

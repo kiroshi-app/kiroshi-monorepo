@@ -4,6 +4,7 @@ import { useCallback, useState } from "react"
 import { raiseTransientNotice } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
+import type { LibraryImageSource } from "./library-image-source"
 import { type DroppedFile, toImportingItem } from "./library-items"
 import { libraryQueryKeys } from "./library-query-keys"
 import { importLibraryFile } from "./library-reads"
@@ -103,6 +104,38 @@ const importFile = async (spaceId: string, isJoined: boolean, file: File) => {
 	} catch (reason) {
 		throw new LibraryImportFailure(file.name, reason)
 	}
+}
+
+type LibraryImageSave = {
+	spaceId: string
+	image: LibraryImageSource
+}
+
+const importImage = async ({ spaceId, image }: LibraryImageSave) => {
+	try {
+		return await importLibraryFile(
+			spaceId,
+			image.name,
+			await image.readContent(),
+		)
+	} catch (reason) {
+		throw new LibraryImportFailure(image.name, reason)
+	}
+}
+
+export const useLibraryImageSave = () => {
+	const queryClient = useQueryClient()
+	return useMutation({
+		mutationFn: importImage,
+		onSettled: (_item, _error, { spaceId }) =>
+			queryClient.invalidateQueries({
+				queryKey: libraryQueryKeys.itemsOf(spaceId),
+			}),
+		meta: {
+			failureNotice: failureNoticeOf,
+			raisedIn: "use-library-imports",
+		},
+	}).mutate
 }
 
 const announceAdded = (count: number) => {

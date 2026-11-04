@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 
 import {
+	act,
 	cleanup,
 	fireEvent,
 	render,
@@ -157,6 +158,75 @@ describe("a companion bubble carrying attachments", () => {
 	})
 })
 
+const IMAGE_MENU_ENTRIES = ["Save to Library", "Copy image", "Open in viewer"]
+
+const openImageMenuOf = async (name: string) => {
+	await act(async () => {
+		fireEvent.contextMenu(screen.getByRole("button", { name: `Open ${name}` }))
+	})
+	return screen.findByRole("menu", { name: `Actions for ${name}` })
+}
+
+const pickInImageMenuOf = async (name: string, entry: string) => {
+	const menu = await openImageMenuOf(name)
+	await act(async () => {
+		fireEvent.click(within(menu).getByRole("menuitem", { name: entry }), {
+			detail: 1,
+		})
+	})
+}
+
+describe.each<TranscriptRole>(["user", "assistant"])(
+	"the image menu of a %s bubble attachment",
+	(role) => {
+		it("opens on right-click with the image actions", async () => {
+			renderTurn(role, shownWith("look", [FIRST, SECOND]), {
+				actions: actionsSpy(),
+			})
+
+			const menu = await openImageMenuOf(SECOND_NAME)
+
+			expect(
+				within(menu)
+					.getAllByRole("menuitem")
+					.map((item) => item.textContent),
+			).toEqual(IMAGE_MENU_ENTRIES)
+		})
+
+		it("opens the image in the viewer at its place among the attachments", async () => {
+			const actions = actionsSpy()
+			renderTurn(role, shownWith("look", [FIRST, SECOND]), { actions })
+
+			await pickInImageMenuOf(SECOND_NAME, "Open in viewer")
+
+			expect(actions.openImage).toHaveBeenCalledWith(
+				[
+					expect.objectContaining({ id: FIRST, name: FIRST_NAME }),
+					expect.objectContaining({ id: SECOND, name: SECOND_NAME }),
+				],
+				1,
+			)
+		})
+
+		it.each([
+			["Save to Library", "onSaveToLibrary"],
+			["Copy image", "onCopyImage"],
+		] as const)("hands the image to %s", async (entry, handler) => {
+			const actions = actionsSpy()
+			renderTurn(role, shownWith("look", [FIRST, SECOND]), { actions })
+
+			await pickInImageMenuOf(FIRST_NAME, entry)
+
+			expect(actions.imageActions[handler]).toHaveBeenCalledWith(
+				expect.objectContaining({
+					name: FIRST_NAME,
+					src: previewOf(FIRST_NAME),
+				}),
+			)
+		})
+	},
+)
+
 const SELF = "account-self"
 
 const SIGNED_IN_HOSTING: ThreadAuthorship = {
@@ -298,6 +368,10 @@ describe("whose user message a bubble shows", () => {
 const actionsSpy = () => ({
 	insert: vi.fn<AnswerActions["insert"]>(),
 	openImage: vi.fn<AnswerActions["openImage"]>(),
+	imageActions: {
+		onSaveToLibrary: vi.fn(),
+		onCopyImage: vi.fn(),
+	},
 })
 
 const OPTIONS_ANSWER = `Two ways forward.
