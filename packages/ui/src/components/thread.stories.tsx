@@ -1163,6 +1163,50 @@ const STUCK_INSET = 18
 
 const BUBBLE_PADDING = 18
 
+const stuckLineIn = async (viewport: HTMLElement, tone: string) => {
+	await waitFor(() =>
+		expect(viewport.scrollHeight).toBeGreaterThan(viewport.clientHeight),
+	)
+	await waitFor(
+		() => {
+			viewport.scrollTop = 0
+			expect(lineOf(viewport, tone).dataset.stuck).toBe("true")
+		},
+		{ timeout: 3000 },
+	)
+	const line = lineOf(viewport, tone)
+	const content = line.closest<HTMLElement>(
+		'[data-slot="message-bubble-content"]',
+	)
+	const surface = content?.querySelector(":scope > span[aria-hidden='true']")
+	const screen = line.closest('[data-slot="chat-layout"]')
+	if (!content || !surface || !screen)
+		throw new Error("The stuck line sits outside a painted bubble")
+	return { line, content, surface, screen }
+}
+
+type StuckLine = Awaited<ReturnType<typeof stuckLineIn>>
+
+const SURFACE_LAYER = /^linear-gradient\((.+), \1\)$/
+
+const paintedBlockRgb = (line: HTMLElement) => {
+	const block = getComputedStyle(line, "::before")
+	const layer = SURFACE_LAYER.exec(block.backgroundImage)?.[1]
+	if (!layer) throw new Error("The stuck block paints no bubble surface")
+	return paintedRgb(block.backgroundColor, layer)
+}
+
+const paintedBubbleRgb = ({ screen, surface }: StuckLine) =>
+	paintedRgb(
+		getComputedStyle(screen).backgroundColor,
+		getComputedStyle(surface).backgroundColor,
+	)
+
+const expectBlockPaintsBubble = async (stuck: StuckLine) =>
+	expect(
+		widestChannelGap(paintedBubbleRgb(stuck), paintedBlockRgb(stuck.line)),
+	).toBeLessThanOrEqual(1)
+
 const expectCleanCutStuckLine = async (
 	canvasElement: HTMLElement,
 	tone: string,
@@ -1170,24 +1214,8 @@ const expectCleanCutStuckLine = async (
 	const viewports = slotsIn(canvasElement, "message-scroller-viewport")
 	await expect(viewports).toHaveLength(2)
 	for (const viewport of viewports) {
-		await waitFor(() =>
-			expect(viewport.scrollHeight).toBeGreaterThan(viewport.clientHeight),
-		)
-		await waitFor(
-			() => {
-				viewport.scrollTop = 0
-				expect(lineOf(viewport, tone).dataset.stuck).toBe("true")
-			},
-			{ timeout: 3000 },
-		)
-		const line = lineOf(viewport, tone)
-		const content = line.closest<HTMLElement>(
-			'[data-slot="message-bubble-content"]',
-		)
-		const surface = content?.querySelector(":scope > span[aria-hidden='true']")
-		const screen = line.closest('[data-slot="chat-layout"]')
-		if (!content || !surface || !screen)
-			throw new Error("The stuck line sits outside a painted bubble")
+		const stuck = await stuckLineIn(viewport, tone)
+		const { line, content } = stuck
 		const block = getComputedStyle(line, "::before")
 		const lineBox = line.getBoundingClientRect()
 		await expect(
@@ -1202,14 +1230,34 @@ const expectCleanCutStuckLine = async (
 			block.borderBottomRightRadius,
 		]).toEqual(["0px", "0px"])
 		await expect(getComputedStyle(content).overflow).toBe("clip")
-		const bubble = paintedRgb(
-			getComputedStyle(screen).backgroundColor,
-			getComputedStyle(surface).backgroundColor,
+		await expectBlockPaintsBubble(stuck)
+	}
+}
+
+const expectHoveredStuckBlockPaintsBubble = async (
+	canvasElement: HTMLElement,
+	tone: string,
+) => {
+	const viewports = slotsIn(canvasElement, "message-scroller-viewport")
+	await expect(viewports).toHaveLength(2)
+	if (!isInBrowserRunner()) return
+	const pointer = await realPointer()
+	for (const viewport of viewports) {
+		const stuck = await stuckLineIn(viewport, tone)
+		const resting = paintedBubbleRgb(stuck)
+		await pointer.hover(stuck.line)
+		await stuckLineIn(viewport, tone)
+		await waitFor(() =>
+			expect(
+				widestChannelGap(resting, paintedBubbleRgb(stuck)),
+			).toBeGreaterThan(1),
 		)
 		await expect(
-			widestChannelGap(bubble, paintedRgb(block.backgroundColor)),
-		).toBeLessThanOrEqual(1)
+			getComputedStyle(stuck.line, "::before").backgroundColor,
+		).toMatch(/^rgb\(/)
+		await expectBlockPaintsBubble(stuck)
 	}
+	await pointer.unhover(viewports[1])
 }
 
 export const UserAuthorLineStuckOnALongMessage = meta.story({
@@ -1266,6 +1314,62 @@ export const AgentAuthorLineStuckOnALongAnswer = meta.story({
 	},
 	play: async ({ canvasElement }) =>
 		expectCleanCutStuckLine(canvasElement, "agent"),
+})
+
+export const UserAuthorLineStuckOnAHoveredMessage = meta.story({
+	globals: { theme: "light" },
+	render: () => (
+		<ThemedPanels
+			rows={[
+				LISBON_DAY,
+				rowOf({
+					key: "brief",
+					from: "you",
+					text: LONG_OWN_MESSAGE,
+					time: at(14, 10),
+				}),
+			]}
+		/>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Your long message read from its top with the pointer on it, light then dark. Check the stuck block under your author line turns the bubble's hover colour along with the bubble, at once, so the line never sits on a resting patch.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) =>
+		expectHoveredStuckBlockPaintsBubble(canvasElement, "you"),
+})
+
+export const AgentAuthorLineStuckOnAHoveredAnswer = meta.story({
+	globals: { theme: "light" },
+	render: () => (
+		<ThemedPanels
+			rows={[
+				LISBON_DAY,
+				LISBON_QUESTION,
+				rowOf({
+					key: "answer",
+					from: "agent",
+					author: ATLAS,
+					text: OFFSITE_ANSWER,
+					time: at(14, 12),
+				}),
+			]}
+		/>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A long answer read from its top with the pointer on it, light then dark. Check the stuck block under the author line darkens with the hovered bubble to the same grey, at once, and still hides the answer scrolling under it.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) =>
+		expectHoveredStuckBlockPaintsBubble(canvasElement, "agent"),
 })
 
 export const ComponentsAuthorLineAndWorkLine = meta.story({

@@ -52,7 +52,7 @@ const AUTHOR_LINE = "flex h-5 min-w-0 max-w-full items-center gap-2"
 const STUCK_INSET = 18
 
 const AUTHOR_LINE_STICKY =
-	"sticky bottom-4.5 z-10 self-stretch before:pointer-events-none before:absolute before:-inset-x-4.5 before:-top-3.5 before:-bottom-4.5 before:-z-10 before:hidden before:border-foreground/6 before:border-t data-[stuck=true]:before:block"
+	"sticky bottom-4.5 z-10 self-stretch before:pointer-events-none before:absolute before:-inset-x-4.5 before:-top-3.5 before:-bottom-4.5 before:-z-10 before:hidden before:border-foreground/6 before:border-t before:bg-card before:bg-[image:linear-gradient(var(--bubble-surface),var(--bubble-surface))] data-[stuck=true]:before:block"
 
 const TRANSCRIPT_VIEWPORT = '[data-slot="message-scroller-viewport"]'
 
@@ -233,12 +233,7 @@ const AuthorLine = ({
 				className={cn(
 					AUTHOR_LINE,
 					isEndSide && "justify-end self-end",
-					isSticky && [
-						AUTHOR_LINE_STICKY,
-						isOnOwnBubble
-							? "before:bg-user-bubble"
-							: "before:bg-author-line-sticky",
-					],
+					isSticky && AUTHOR_LINE_STICKY,
 					className,
 				)}
 			>

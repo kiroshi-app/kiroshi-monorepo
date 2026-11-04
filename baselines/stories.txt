@@ -314,6 +314,7 @@ conversation-message-pinnedmessages--empty
 conversation-message-pinnedmessages--overflowing
 conversation-message-pinnedmessages--unpinning
 conversation-message-richblockpending--default
+conversation-message-thread--agent-author-line-stuck-on-a-hovered-answer
 conversation-message-thread--agent-author-line-stuck-on-a-long-answer
 conversation-message-thread--components-author-line-and-work-line
 conversation-message-thread--components-message-bubble
@@ -337,6 +338,7 @@ conversation-message-thread--prompt-input-states
 conversation-message-thread--queue-1
 conversation-message-thread--queue-2
 conversation-message-thread--user-author-line-mirrored
+conversation-message-thread--user-author-line-stuck-on-a-hovered-message
 conversation-message-thread--user-author-line-stuck-on-a-long-message
 conversation-message-thread--work-1
 conversation-message-thread--work-2
