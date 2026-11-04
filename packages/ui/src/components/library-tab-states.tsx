@@ -144,26 +144,26 @@ const LibraryImageSkeleton = () => {
 	)
 }
 
-type LibraryItemUnavailableReason = "deleted" | "unreadable"
+type LibraryItemUnavailableReason = "missing" | "unreadable"
 
 type LibraryItemUnavailableProps = {
 	name: string
 	reason: LibraryItemUnavailableReason
-	onBack: () => void
+	onAction: () => void
 }
 
 const LibraryItemUnavailable = ({
 	name,
 	reason,
-	onBack,
+	onAction,
 }: LibraryItemUnavailableProps) => {
 	const { t } = useTranslation("common")
 	const lineId = useId()
 	const reasonId = useId()
-	const line = t("library.tab.unavailable.title", {
+	const line = t(`library.tab.unavailable.${reason}.title`, {
 		name: libraryDisplayName(name, t),
 	})
-	const reasonLine = t(`library.tab.unavailable.${reason}`)
+	const reasonLine = t(`library.tab.unavailable.${reason}.body`)
 
 	return (
 		<div
@@ -199,10 +199,10 @@ const LibraryItemUnavailable = ({
 				</div>
 				<Button
 					className={cn(FAILURE_PRIMARY_PILL, "self-start")}
-					onClick={onBack}
+					onClick={onAction}
 					variant="ghost"
 				>
-					{t("library.tab.unavailable.back")}
+					{t(`library.tab.unavailable.${reason}.action`)}
 				</Button>
 			</div>
 		</div>

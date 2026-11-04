@@ -63,24 +63,25 @@ const expectDocumentLoading = async (canvasElement: HTMLElement) => {
 	).toBe(DOCUMENT_COLUMN_WIDTH)
 }
 
-const DELETED_ITEM_STORY =
-	"A tab whose item was deleted from the Library since it was opened. Check the line naming the item, the reason, the centred card, the polite announcement of both without focus moving, and that Back to the Library takes a focus ring from the keyboard and calls `onBack`. Pick UnreadableItem when the file is there but can't be read."
+const MISSING_ITEM_STORY =
+	"A tab whose item is no longer in the Library list, deleted or moved since it was opened. Check the title without the item name, the reason, the centred card, the polite announcement of both without focus moving, and that Close tab takes a focus ring from the keyboard and calls `onAction`. Pick UnreadableItem when the file is there but can't be read."
 
-const DELETED_LINE = "Couldn’t open Spring launch brief"
+const MISSING_TITLE = "This item isn’t in the Library anymore."
 
-const DELETED_REASON = "This item was deleted from the Library."
+const MISSING_BODY = "It was deleted or moved. Close this tab."
 
-const expectDeletedItem = async (
+const expectMissingItem = async (
 	canvasElement: HTMLElement,
-	onBack: () => void,
+	onAction: () => void,
 ) => {
 	const canvas = within(canvasElement)
-	const state = canvas.getByRole("group", { name: DELETED_LINE })
-	await expect(state).toHaveAccessibleDescription(DELETED_REASON)
+	const state = canvas.getByRole("group", { name: MISSING_TITLE })
+	await expect(state).toHaveAccessibleDescription(MISSING_BODY)
+	await expect(state).not.toHaveTextContent("Spring launch brief")
 
 	const announcement = canvas.getByRole("status")
-	await expect(announcement).toHaveTextContent(DELETED_LINE)
-	await expect(announcement).toHaveTextContent(DELETED_REASON)
+	await expect(announcement).toHaveTextContent(MISSING_TITLE)
+	await expect(announcement).toHaveTextContent(MISSING_BODY)
 	await expect(state).not.toContainElement(
 		document.activeElement as HTMLElement,
 	)
@@ -97,12 +98,12 @@ const expectDeletedItem = async (
 		),
 	).toBeLessThanOrEqual(1)
 
-	const back = canvas.getByRole("button", { name: "Back to the Library" })
+	const close = canvas.getByRole("button", { name: "Close tab" })
 	await userEvent.tab()
-	await expect(back).toHaveFocus()
-	await expect(getComputedStyle(back).outlineStyle).toBe("solid")
+	await expect(close).toHaveFocus()
+	await expect(getComputedStyle(close).outlineStyle).toBe("solid")
 	await userEvent.keyboard("{Enter}")
-	await expect(onBack).toHaveBeenCalledOnce()
+	await expect(onAction).toHaveBeenCalledOnce()
 }
 
 const meta = preview.meta({
@@ -113,7 +114,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"What a Library tab shows before its item is on screen: the document editor skeleton while a document loads, the image viewer skeleton while an image loads, and the can't-open state when the item was deleted or can't be read. Each fills the tab's card from top to bottom, so the Library grid never flashes in between.",
+					"What a Library tab shows before its item is on screen: the document editor skeleton while a document loads, the image viewer skeleton while an image loads, and the can't-open state when the item is no longer in the Library or can't be read. Each fills the tab's card from top to bottom, so the Library grid never flashes in between.",
 			},
 		},
 	},
@@ -174,8 +175,8 @@ export const ImageLoading = meta.story({
 	},
 })
 
-export const DeletedItem = meta.story({
-	args: { name: "Spring launch brief", reason: "deleted", onBack: fn() },
+export const MissingItem = meta.story({
+	args: { name: "Spring launch brief", reason: "missing", onAction: fn() },
 	render: (args) => (
 		<LibraryFrame>
 			<LibraryItemUnavailable {...args} />
@@ -184,16 +185,16 @@ export const DeletedItem = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${DELETED_ITEM_STORY} Pick \`DeletedItemDark\` for the dark theme.`,
+				story: `${MISSING_ITEM_STORY} Pick \`MissingItemDark\` for the dark theme.`,
 			},
 		},
 	},
 	play: ({ args, canvasElement }) =>
-		expectDeletedItem(canvasElement, args.onBack),
+		expectMissingItem(canvasElement, args.onAction),
 })
 
-export const DeletedItemDark = meta.story({
-	args: { name: "Spring launch brief", reason: "deleted", onBack: fn() },
+export const MissingItemDark = meta.story({
+	args: { name: "Spring launch brief", reason: "missing", onAction: fn() },
 	globals: { theme: "dark", theme_layout: "single" },
 	render: (args) => (
 		<LibraryFrame>
@@ -203,16 +204,16 @@ export const DeletedItemDark = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${DELETED_ITEM_STORY} Pick \`DeletedItem\` for the light theme.`,
+				story: `${MISSING_ITEM_STORY} Pick \`MissingItem\` for the light theme.`,
 			},
 		},
 	},
 	play: ({ args, canvasElement }) =>
-		expectDeletedItem(canvasElement, args.onBack),
+		expectMissingItem(canvasElement, args.onAction),
 })
 
 export const UnreadableItem = meta.story({
-	args: { name: LONG_NAME, reason: "unreadable", onBack: fn() },
+	args: { name: LONG_NAME, reason: "unreadable", onAction: fn() },
 	render: (args) => (
 		<LibraryFrame>
 			<LibraryItemUnavailable {...args} />
@@ -222,11 +223,11 @@ export const UnreadableItem = meta.story({
 		docs: {
 			description: {
 				story:
-					"A tab whose file is still in the Library but can't be read, under a name far longer than the card. Check that the name stays on one line, cut with an ellipsis, with the full line in its tooltip and accessible name, and that the reason says how to retry. Pick DeletedItem when the item is gone.",
+					"A tab whose file is still in the Library but can't be read, under a name far longer than the card. Check that the name stays on one line, cut with an ellipsis, with the full line in its tooltip and accessible name, and that the reason says how to retry. Pick MissingItem when the item is gone.",
 			},
 		},
 	},
-	play: async ({ canvas, canvasElement }) => {
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
 		const line = `Couldn’t open ${LONG_NAME}`
 		const state = canvas.getByRole("group", { name: line })
 		await expect(state).toHaveAccessibleDescription(
@@ -239,5 +240,10 @@ export const UnreadableItem = meta.story({
 		const shownLine = canvas.getByTitle(line)
 		await expect(shownLine.scrollWidth).toBeGreaterThan(shownLine.clientWidth)
 		await expect(shownLine.getClientRects()).toHaveLength(1)
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Back to the Library" }),
+		)
+		await expect(args.onAction).toHaveBeenCalledOnce()
 	},
 })

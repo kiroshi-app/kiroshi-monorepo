@@ -610,11 +610,16 @@ const common = {
 			loadingDocument: "Chargement du document…",
 			loadingImage: "Chargement de l’image…",
 			unavailable: {
-				title: "Impossible d’ouvrir {{name}}",
-				deleted: "Cet élément a été supprimé de la Bibliothèque.",
-				unreadable:
-					"Impossible de lire cet élément sur l’ordinateur où tourne Kiroshi. Revenez à la Bibliothèque et rouvrez-le.",
-				back: "Retour à la Bibliothèque",
+				missing: {
+					title: "Cet élément n’est plus dans la Bibliothèque.",
+					body: "Il a été supprimé ou déplacé. Fermez cet onglet.",
+					action: "Fermer l’onglet",
+				},
+				unreadable: {
+					title: "Impossible d’ouvrir {{name}}",
+					body: "Impossible de lire cet élément sur l’ordinateur où tourne Kiroshi. Revenez à la Bibliothèque et rouvrez-le.",
+					action: "Retour à la Bibliothèque",
+				},
 			},
 		},
 		documentPicker: {

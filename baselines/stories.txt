@@ -1613,11 +1613,11 @@ navigation-librarypanel--long-names
 navigation-librarypanel--search-filled
 navigation-librarypanel--search-with-no-match
 navigation-librarypanel--whitespace-name-reads-untitled
-navigation-librarytabstates--deleted-item
-navigation-librarytabstates--deleted-item-dark
 navigation-librarytabstates--document-loading
 navigation-librarytabstates--document-loading-dark
 navigation-librarytabstates--image-loading
+navigation-librarytabstates--missing-item
+navigation-librarytabstates--missing-item-dark
 navigation-librarytabstates--unreadable-item
 navigation-missionspanel--complete
 navigation-missionspanel--complete-dark
