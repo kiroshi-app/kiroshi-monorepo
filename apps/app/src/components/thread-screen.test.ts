@@ -6096,14 +6096,15 @@ describe("ThreadScreen attaching Library documents from the composer", () => {
 		expect(screen.getAllByRole("article", { name: "plan" })).toHaveLength(1)
 	})
 
-	it("keeps the document chip and shows the message as not sent when the send is refused", async () => {
+	it("shows the refused message as not sent with its document card, and no chip left in the composer", async () => {
 		await roomAttaching({ refuses: true })
 		await pickDocument("plan")
 
 		await sendInComposer("Here is the plan.")
 
 		expect(screen.getByText("Not sent.")).toBeTruthy()
-		expect(stagedChipNames()).toEqual(["Remove plan"])
+		expect(screen.getAllByRole("article", { name: "plan" })).toHaveLength(1)
+		expect(chipRemovals()).toEqual([])
 	})
 })
 
