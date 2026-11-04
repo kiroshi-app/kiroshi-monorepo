@@ -11,7 +11,8 @@ afterAll(unmountTheLastStory)
 
 const RESIZE_OBSERVER_LOOP = "ResizeObserver loop"
 
-const swallowResizeObserverLoop = (event: ErrorEvent) => {
+const swallowResizeObserverLoop = (event: Event) => {
+	if (!(event instanceof ErrorEvent)) return
 	if (!event.message.includes(RESIZE_OBSERVER_LOOP)) return
 	event.stopImmediatePropagation()
 	event.preventDefault()
