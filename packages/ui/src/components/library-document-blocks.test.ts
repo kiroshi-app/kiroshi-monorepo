@@ -6,12 +6,35 @@ import {
 } from "@workspace/ui/components/library.fixtures"
 import {
 	blockTypeOf,
+	calloutTextOf,
+	calloutTitleOf,
+	calloutToneOf,
+	checklistRowsOf,
+	checklistSourceOf,
+	codeLanguageOf,
 	conversionsOf,
 	convertSource,
+	galleryItemsOf,
 	parseBlocks,
 	relaid,
+	rowAfter,
 	serializeBlocks,
+	tableRowsOf,
+	tableSourceOf,
+	toggledRow,
 	toggleTask,
+	webPageFieldsOf,
+	withCalloutText,
+	withCalloutTone,
+	withCaption,
+	withCell,
+	withCodeBody,
+	withCodeLanguage,
+	withColumn,
+	withGalleryItems,
+	withRow,
+	withRowText,
+	withWebPageFields,
 } from "@workspace/ui/components/library-document-blocks"
 import { libraryDocumentStartOf } from "@workspace/ui/components/library-document-editor"
 import { LIBRARY_DOCUMENT_TEMPLATES } from "@workspace/ui/components/library-new-document-dialog"
@@ -151,5 +174,140 @@ describe("library document blocks", () => {
 		const moved = relaid(blocks, [blocks[1], blocks[0]])
 
 		expect(serializeBlocks({ lead: "", blocks: moved })).toBe("Text\n\n# A\n")
+	})
+})
+
+const GALLERY = [
+	"```gallery",
+	"- image: https://images.example.org/sofa.jpg",
+	"  alt: Green velvet sofa",
+	"  source: https://shop.example.org/sofa",
+	"- image: https://images.example.org/lamp.jpg",
+	"  alt: Brass lamp",
+	"  caption: In the hall",
+	"```",
+].join("\n")
+
+describe("library rich block sources", () => {
+	it("reads a gallery's images with every field and writes them back in order", () => {
+		const [sofa, lamp] = galleryItemsOf(GALLERY)
+
+		expect(sofa).toEqual({
+			image: "https://images.example.org/sofa.jpg",
+			alt: "Green velvet sofa",
+			source: "https://shop.example.org/sofa",
+		})
+		expect(withGalleryItems(GALLERY, [sofa, lamp])).toBe(GALLERY)
+		expect(withGalleryItems(GALLERY, [lamp, sofa])).toBe(
+			[
+				"```gallery",
+				"- image: https://images.example.org/lamp.jpg",
+				"  alt: Brass lamp",
+				"  caption: In the hall",
+				"- image: https://images.example.org/sofa.jpg",
+				"  alt: Green velvet sofa",
+				"  source: https://shop.example.org/sofa",
+				"```",
+			].join("\n"),
+		)
+	})
+
+	it("sets a caption on one line and drops it once blank", () => {
+		const [sofa, lamp] = galleryItemsOf(GALLERY)
+
+		expect(withCaption(sofa, "By the\nwindow")).toEqual({
+			...sofa,
+			caption: "By the window",
+		})
+		expect(withCaption(lamp, "  ")).toEqual({
+			image: lamp.image,
+			alt: lamp.alt,
+		})
+	})
+
+	it("ticks, splits and rewrites the rows of a checklist", () => {
+		const source = "- [ ] Book the room\n* [x] Send the invite"
+		const [room, invite] = checklistRowsOf(source)
+
+		expect(room).toEqual({
+			marker: "- [ ] ",
+			isDone: false,
+			text: "Book the room",
+		})
+		expect(checklistSourceOf([toggledRow(room), toggledRow(invite)])).toBe(
+			"- [x] Book the room\n* [ ] Send the invite",
+		)
+		expect(checklistSourceOf([invite, rowAfter(invite)])).toBe(
+			"* [x] Send the invite\n* [ ] ",
+		)
+		expect(
+			withRowText({ marker: "- [ ]", isDone: false, text: "" }, "Call"),
+		).toEqual({ marker: "- [ ] ", isDone: false, text: "Call" })
+	})
+
+	it("switches a callout's tone and edits its text under the marker line", () => {
+		const source = "> [!NOTE] Held until Wednesday\n> Pay the deposit."
+
+		expect(calloutToneOf(source)).toBe("note")
+		expect(calloutTitleOf(source)).toBe("Held until Wednesday")
+		expect(calloutTextOf(source)).toBe("Pay the deposit.")
+		expect(withCalloutTone(source, "tip")).toBe(
+			"> [!TIP] Held until Wednesday\n> Pay the deposit.",
+		)
+		expect(withCalloutText(source, "Pay it.\n\nThen book.")).toBe(
+			"> [!NOTE] Held until Wednesday\n> Pay it.\n>\n> Then book.",
+		)
+		expect(blockTypeOf(withCalloutTone(source, "tip"))).toBe("callout")
+	})
+
+	it("edits a table cell, escaping its pipes, and grows rows and columns", () => {
+		const rows = tableRowsOf("| Room | Seats |\n| :-- | --: |\n| Atlas | 12 |")
+
+		expect(rows).toEqual([
+			["Room", "Seats"],
+			[":--", "--:"],
+			["Atlas", "12"],
+		])
+		expect(tableSourceOf(withCell(rows, 2, 1, "12 | 14"))).toBe(
+			"| Room | Seats |\n| :-- | --: |\n| Atlas | 12 \\| 14 |",
+		)
+		expect(tableSourceOf(withColumn(withRow(rows)))).toBe(
+			"| Room | Seats |  |\n| :-- | --: | --- |\n| Atlas | 12 |  |\n|  |  |  |",
+		)
+		expect(tableRowsOf("| a \\| b | c |")).toEqual([["a \\| b", "c"]])
+	})
+
+	it("writes the language and the body of a code fence", () => {
+		const fence = "```ts title=launch\nconst launch = await ship()\n```"
+
+		expect(codeLanguageOf(fence)).toBe("ts")
+		expect(withCodeLanguage(fence, "python")).toBe(
+			"```python title=launch\nconst launch = await ship()\n```",
+		)
+		expect(withCodeLanguage("```ts\na\n```", "")).toBe("```\na\n```")
+		expect(withCodeBody("```\n```", "echo hi")).toBe("```\necho hi\n```")
+		expect(withCodeLanguage("    echo hi", "bash")).toBe(
+			"```bash\necho hi\n```",
+		)
+	})
+
+	it("reads and rewrites the fields of a web page card", () => {
+		const card =
+			"```web-page\nurl: https://www.example.org/rooms\ntitle: Rooms\n```"
+
+		expect(webPageFieldsOf(card)).toEqual({
+			url: "https://www.example.org/rooms",
+			title: "Rooms",
+		})
+		expect(
+			withWebPageFields(card, {
+				url: "https://example.org/a",
+				title: "A",
+				site: "Example",
+			}),
+		).toBe(
+			"```web-page\nurl: https://example.org/a\ntitle: A\nsite: Example\n```",
+		)
+		expect(webPageFieldsOf("```web-page\n```")).toEqual({})
 	})
 })

@@ -437,6 +437,56 @@ const common = {
 				skeleton: {
 					column: "Colonne",
 				},
+				gallery: {
+					add: "Ajouter des images",
+					hint: "Faites glisser pour réordonner. La première image ouvre la galerie.",
+					addFailed: "Impossible d’ajouter les images. Réessayez.",
+					tile: "Image {{position}} sur {{count}}, les flèches la déplacent",
+					remove: "Retirer l’image {{position}}",
+					caption: "Légende de l’image {{position}}",
+					captionPlaceholder: "Ajouter une légende",
+				},
+				checklist: {
+					item: "Élément {{position}}",
+					move: "Déplacer l’élément {{position}}, les flèches le déplacent",
+				},
+				callout: {
+					text: "Texte de l’encadré",
+					tone: "Ton de l’encadré",
+				},
+				table: {
+					cell: "Ligne {{row}}, colonne {{column}}",
+					empty: "Vide",
+					addRow: "Ajouter une ligne",
+					addColumn: "Ajouter une colonne",
+				},
+				code: {
+					body: "Code",
+					language: "Langage, {{name}}",
+					search: "Rechercher un langage",
+					noMatch: "Aucun langage ne correspond",
+					languages: {
+						text: "Texte brut",
+						bash: "Shell",
+						json: "JSON",
+						typescript: "TypeScript",
+						python: "Python",
+						css: "CSS",
+						diff: "Diff",
+						html: "HTML",
+						markdown: "Markdown",
+						rust: "Rust",
+						tsx: "TSX",
+						yaml: "YAML",
+					},
+				},
+				webPage: {
+					link: "Lien",
+					updateKey: "↵",
+					update: "Mettre à jour",
+					failed:
+						"Impossible de charger l’aperçu de ce lien. Vérifiez l’adresse, puis appuyez sur Entrée pour réessayer.",
+				},
 			},
 		},
 		bringIn: {
