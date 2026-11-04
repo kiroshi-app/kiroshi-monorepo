@@ -431,6 +431,36 @@ const common = {
 				stop: "Stop {{name}}",
 				openConversation: "Open conversation",
 			},
+			readOnly: "Read-only",
+			placeholder: "Start writing, or type / to add a block.",
+			start: {
+				label: "Start with",
+				checklist: "Checklist",
+				gallery: "Gallery",
+				table: "Table",
+				template: "From a template",
+			},
+			drop_one: "Drop to add {{count}} image here",
+			drop_other: "Drop to add {{count}} images here",
+			failedImport: {
+				choose: "Choose another file",
+				remove: "Remove",
+			},
+		},
+		card: {
+			live: "Document · read-only here · updates live",
+			show: "Show",
+			hide: "Hide",
+			open: "Open",
+		},
+		panel: {
+			openInLibrary: "Open in Library",
+			close: "Close",
+		},
+		documentPicker: {
+			label: "Attach from the Library",
+			search: "Search documents",
+			attachFiles: "Attach files from this computer",
 		},
 		failure: {
 			list: "Couldn’t open the Library",

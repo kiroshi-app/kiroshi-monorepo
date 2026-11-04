@@ -46,6 +46,7 @@ interface ThreadLayoutProps {
 	onFollowChange?: (following: boolean) => void
 	children: ReactNode
 	overlay?: ReactNode
+	aside?: ReactNode
 	rootRef?: Ref<HTMLDivElement>
 	scrollerRef?: Ref<TranscriptHandle>
 	className?: string
@@ -74,6 +75,7 @@ function ThreadLayout({
 	onFollowChange,
 	children,
 	overlay,
+	aside,
 	rootRef,
 	scrollerRef,
 	className,
@@ -83,61 +85,72 @@ function ThreadLayout({
 
 	return (
 		<LibraryOverlayContainer.Provider value={overlayContainer}>
-			<ScreenLayout
-				ref={mergeRefs(rootRef, overlayContainer)}
-				data-slot="chat-layout"
-				className={cn("relative", THREAD_WIDTHS, className)}
-				contentClassName={cn(THREAD_COLUMN, contentClassName)}
-				header={header}
-				scroller={(columnClassName) =>
-					skeleton ? (
-						<div className="min-h-0 flex-1" data-slot="thread-skeleton">
-							{skeleton}
-						</div>
-					) : (
-						<MarkProvider transcriptKey={transcriptKey}>
-							<Transcript
-								className="@container flex-1"
-								transcriptKey={transcriptKey}
-								autoScroll={autoScroll}
-								busy={busy}
-								label={label}
-								anchorOnSend={anchorOnSend}
-								marksNewMessages={marksNewMessages}
-								countsNewMessages={countsNewMessages}
-								older={older}
-								newer={newer}
-								rows={rows}
-								onFollowChange={onFollowChange}
-								highlightedMessageId={highlightedMessageId}
-								scrollerRef={scrollerRef}
-								contentClassName={columnClassName}
-							>
-								{children}
-							</Transcript>
-						</MarkProvider>
-					)
-				}
-				footer={
-					notice || pending || composer ? (
-						<>
-							{notice}
-							{pending}
-							{composer ? (
-								<div className="flex flex-col">
-									{queue ? (
-										<div className="-mb-1.5 empty:hidden *:pb-3">{queue}</div>
-									) : null}
-									<PromptReply quote={reply} className="relative">
-										{composer}
-									</PromptReply>
-								</div>
-							) : null}
-						</>
-					) : null
-				}
-				footerClassName={composer ? THREAD_PROMPT_COLUMN : "px-12 pb-6"}
-			/>
+			<div
+				className={aside ? "flex h-svh max-h-full" : "contents"}
+				data-slot="thread-with-aside"
+			>
+				<ScreenLayout
+					ref={mergeRefs(rootRef, overlayContainer)}
+					data-slot="chat-layout"
+					className={cn(
+						"relative",
+						THREAD_WIDTHS,
+						aside && "min-w-0 flex-1",
+						className,
+					)}
+					contentClassName={cn(THREAD_COLUMN, contentClassName)}
+					header={header}
+					scroller={(columnClassName) =>
+						skeleton ? (
+							<div className="min-h-0 flex-1" data-slot="thread-skeleton">
+								{skeleton}
+							</div>
+						) : (
+							<MarkProvider transcriptKey={transcriptKey}>
+								<Transcript
+									className="@container flex-1"
+									transcriptKey={transcriptKey}
+									autoScroll={autoScroll}
+									busy={busy}
+									label={label}
+									anchorOnSend={anchorOnSend}
+									marksNewMessages={marksNewMessages}
+									countsNewMessages={countsNewMessages}
+									older={older}
+									newer={newer}
+									rows={rows}
+									onFollowChange={onFollowChange}
+									highlightedMessageId={highlightedMessageId}
+									scrollerRef={scrollerRef}
+									contentClassName={columnClassName}
+								>
+									{children}
+								</Transcript>
+							</MarkProvider>
+						)
+					}
+					footer={
+						notice || pending || composer ? (
+							<>
+								{notice}
+								{pending}
+								{composer ? (
+									<div className="flex flex-col">
+										{queue ? (
+											<div className="-mb-1.5 empty:hidden *:pb-3">{queue}</div>
+										) : null}
+										<PromptReply quote={reply} className="relative">
+											{composer}
+										</PromptReply>
+									</div>
+								) : null}
+							</>
+						) : null
+					}
+					footerClassName={composer ? THREAD_PROMPT_COLUMN : "px-12 pb-6"}
+				/>
+				{aside}
+			</div>
 			{overlay}
 		</LibraryOverlayContainer.Provider>
 	)

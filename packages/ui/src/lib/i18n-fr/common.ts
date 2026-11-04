@@ -458,6 +458,37 @@ const common = {
 				stop: "Arrêter {{name}}",
 				openConversation: "Ouvrir la conversation",
 			},
+			readOnly: "Lecture seule",
+			placeholder: "Commencez à écrire, ou tapez / pour ajouter un bloc.",
+			start: {
+				label: "Commencer avec",
+				checklist: "Liste de tâches",
+				gallery: "Galerie",
+				table: "Tableau",
+				template: "Un modèle",
+			},
+			drop_one: "Déposez pour ajouter {{count}} image ici",
+			drop_many: "Déposez pour ajouter {{count}} images ici",
+			drop_other: "Déposez pour ajouter {{count}} images ici",
+			failedImport: {
+				choose: "Choisir un autre fichier",
+				remove: "Retirer",
+			},
+		},
+		card: {
+			live: "Document · lecture seule ici · mis à jour en direct",
+			show: "Afficher",
+			hide: "Masquer",
+			open: "Ouvrir",
+		},
+		panel: {
+			openInLibrary: "Ouvrir dans la Bibliothèque",
+			close: "Fermer",
+		},
+		documentPicker: {
+			label: "Joindre depuis la Bibliothèque",
+			search: "Rechercher des documents",
+			attachFiles: "Joindre des fichiers de cet ordinateur",
 		},
 		failure: {
 			list: "Impossible d’ouvrir la Bibliothèque",
