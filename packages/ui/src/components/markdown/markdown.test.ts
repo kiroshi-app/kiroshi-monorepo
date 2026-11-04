@@ -77,6 +77,13 @@ describe("markdown constructions", () => {
 		expect(html.match(/checked=""/g)).toHaveLength(1)
 	})
 
+	it("starts a loose task label right after its box and keeps later paragraphs", () => {
+		const html = render("- [ ] pending\n\n  later words\n\n- [x] shipped")
+
+		expect(html).toContain("</label>pending</p>")
+		expect(html).toContain("<p>later words</p>")
+	})
+
 	it("renders blockquotes, thematic breaks and tables", () => {
 		const html = render(
 			"> quoted\n>\n> | a | b |\n> | --- | --- |\n> | 1 | 2 |\n\n---\n",

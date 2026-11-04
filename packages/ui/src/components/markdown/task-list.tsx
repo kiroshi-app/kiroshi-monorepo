@@ -1,6 +1,7 @@
 import {
 	Children,
 	type ComponentPropsWithoutRef,
+	cloneElement,
 	createContext,
 	isValidElement,
 	type ReactNode,
@@ -69,25 +70,42 @@ const isNestedList = (child: ReactNode) =>
 const isParagraph = (child: ReactNode) =>
 	isValidElement(child) && child.type === "p"
 
+const trimTextAfterBox = (nodes: ReactNode[]) =>
+	nodes.map((child, index) =>
+		index === TEXT_AFTER_BOX && typeof child === "string"
+			? child.trimStart()
+			: child,
+	)
+
 export const MarkdownListItem = ({
 	node,
 	children,
 	...props
 }: MarkdownListItemProps) => {
+	if (!props.className?.includes("task-list-item"))
+		return <li {...props}>{children}</li>
+
 	const items = Children.toArray(children)
-	const isTightTask =
-		props.className?.includes("task-list-item") && !items.some(isParagraph)
-	if (!isTightTask) return <li {...props}>{children}</li>
+	const boxParagraphAt = items.findIndex(isParagraph)
+	if (boxParagraphAt !== -1)
+		return (
+			<li {...props}>
+				{items.map((child, index) =>
+					index === boxParagraphAt &&
+					isValidElement<{ children?: ReactNode }>(child)
+						? cloneElement(
+								child,
+								undefined,
+								trimTextAfterBox(Children.toArray(child.props.children)),
+							)
+						: child,
+				)}
+			</li>
+		)
 
 	const nestedAt = items.findIndex(isNestedList)
 	const labelEnd = nestedAt === -1 ? items.length : nestedAt
-	const label = items
-		.slice(0, labelEnd)
-		.map((child, index) =>
-			index === TEXT_AFTER_BOX && typeof child === "string"
-				? child.trimStart()
-				: child,
-		)
+	const label = trimTextAfterBox(items.slice(0, labelEnd))
 
 	return (
 		<li {...props}>

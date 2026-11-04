@@ -44,7 +44,7 @@ const FileReferenceChip = ({
 				className={cn(
 					"grid size-4 shrink-0 place-items-center rounded-full",
 					isOpen
-						? "bg-primary-foreground text-primary"
+						? "bg-(--brand-mark-ground) text-primary"
 						: "bg-card text-foreground",
 				)}
 			>

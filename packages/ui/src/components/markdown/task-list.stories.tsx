@@ -19,6 +19,16 @@ const NESTED_TASKS = [
 	"  - [x] Draft the guest list",
 ].join("\n")
 
+const LOOSE_TASKS = [
+	"- [x] Read the nest",
+	"",
+	"- [ ] Archive the record",
+	"",
+	"  Keep the occupants list with it, the owner asks for that one first.",
+	"",
+	"- [ ] Notify the owner",
+].join("\n")
+
 const BOX_SIZE = 16
 
 const LABEL_GAP = 10
@@ -27,6 +37,20 @@ const labelElementOf = (box: HTMLElement) => {
 	const label = box.closest<HTMLElement>('[data-slot="markdown-task-label"]')
 	if (!label) throw new Error("The box sits in no task label")
 	return label
+}
+
+const gapToLabelOf = (box: HTMLElement) => {
+	const words = box.closest("label")?.nextSibling
+	if (!words || words.nodeType !== Node.TEXT_NODE)
+		throw new Error("No words follow the box")
+	const firstLetterAt = words.textContent?.search(/\S/) ?? -1
+	if (firstLetterAt === -1) throw new Error("The words after the box are blank")
+	const firstLetter = document.createRange()
+	firstLetter.setStart(words, firstLetterAt)
+	firstLetter.setEnd(words, firstLetterAt + 1)
+	return (
+		firstLetter.getBoundingClientRect().left - box.getBoundingClientRect().right
+	)
 }
 
 const labelOf = (box: HTMLElement) => getComputedStyle(labelElementOf(box))
@@ -90,17 +114,52 @@ export const Default = meta.story({
 			await expect(labelOf(box).textDecorationLine).toBe("line-through")
 		}
 		await expect(labelOf(todo).textDecorationLine).toBe("none")
-		const words = [...labelElementOf(todo).childNodes].find(
-			(child) => child.nodeType === Node.TEXT_NODE,
-		)
-		if (!words) throw new Error("The label holds no text")
-		const wordsRange = document.createRange()
-		wordsRange.selectNodeContents(words)
-		await expect(
-			wordsRange.getBoundingClientRect().left -
-				todo.getBoundingClientRect().right,
-		).toBeCloseTo(LABEL_GAP, 0)
+		await expect(gapToLabelOf(todo)).toBeCloseTo(LABEL_GAP, 0)
 	},
+})
+
+export const LooseChecklist = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A checklist written with blank lines between the items, so each label is a paragraph, one item carrying a second paragraph. Check that each box sits 10 before its label, as in the tight checklist, that the ticked label is struck and muted, and that the second paragraph keeps its own start.",
+			},
+		},
+	},
+	render: () => (
+		<div className="w-[44rem] max-w-full">
+			<Markdown>{LOOSE_TASKS}</Markdown>
+		</div>
+	),
+	play: async ({ canvas }) => {
+		const boxes = canvas.getAllByRole("checkbox")
+
+		await expect(boxes).toHaveLength(3)
+		for (const box of boxes) {
+			await expect(gapToLabelOf(box)).toBeCloseTo(LABEL_GAP, 0)
+		}
+		const done = canvas.getByRole("checkbox", { name: "Done" }).closest("p")
+		if (!done) throw new Error("The ticked box sits in no paragraph")
+		await expect(getComputedStyle(done).textDecorationLine).toBe("line-through")
+		const note = canvas.getByText(/^Keep the occupants list/)
+		await expect(note.tagName).toBe("P")
+		await expect(note.querySelector("label")).toBeNull()
+	},
+})
+
+export const LooseChecklistDark = meta.story({
+	globals: { theme: "dark" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The loose checklist in the dark theme. Check that each box sits 10 before its label and that the ticked label is struck and muted.",
+			},
+		},
+	},
+	render: LooseChecklist.input.render,
+	play: LooseChecklist.input.play,
 })
 
 export const TicksAndUnticksByClick = meta.story({
