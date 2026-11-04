@@ -71,6 +71,10 @@ conversation-markdown-answerblocks--image-menu-on-linked-image
 conversation-markdown-answerblocks--image-menu-on-plain-image
 conversation-markdown-answerblocks--image-menu-on-sourced-image
 conversation-markdown-answerblocks--image-menu-on-web-page-preview
+conversation-markdown-answerblocks--image-menu-saving-on-gallery
+conversation-markdown-answerblocks--image-menu-saving-on-illustrated-list
+conversation-markdown-answerblocks--image-menu-saving-on-plain-image
+conversation-markdown-answerblocks--image-menu-saving-on-web-page-preview
 conversation-markdown-answerblocks--images-look-the-same-when-openable
 conversation-markdown-answerblocks--interactive-budget-with-breakdown
 conversation-markdown-answerblocks--interactive-result-not-defined
