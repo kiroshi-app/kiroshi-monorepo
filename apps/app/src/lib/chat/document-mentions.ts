@@ -36,15 +36,12 @@ const mentionRunOf = (prose: string, name: string): MarkdownRun => {
 	}
 }
 
-const isNamedIn = (prose: string, name: string) =>
-	mentionPatternOf(name).test(prose)
-
 export const textCarryingDocuments = (text: string, names: string[]) => {
 	if (text.trim() !== "" && !ENDS_IN_LINK.test(text)) {
 		return text
 	}
 	const prose = blankedOutsideProse(text)
-	const unnamed = names.filter((name) => !isNamedIn(prose, name))
+	const unnamed = names.filter((name) => !mentionPatternOf(name).test(prose))
 	return [text.trimEnd(), ...unnamed].filter(Boolean).join(" ")
 }
 
