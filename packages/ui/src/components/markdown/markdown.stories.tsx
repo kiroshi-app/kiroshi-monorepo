@@ -1,7 +1,11 @@
 import { useState } from "react"
-import { expect, fn, spyOn, waitFor } from "storybook/test"
+import { expect, fn, spyOn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
+import {
+	LIBRARY_STORED_IMAGES,
+	resolvedLibraryImageOf,
+} from "@workspace/ui/components/library.fixtures"
 import { Markdown } from "@workspace/ui/components/markdown"
 import {
 	MessageBubble,
@@ -1856,5 +1860,138 @@ export const AppendedBlock = meta.story({
 		)
 
 		await expect(blockOffsetsIn(root).slice(0, before.length)).toEqual(before)
+	},
+})
+
+const STORED_IMAGES = LIBRARY_STORED_IMAGES.slice(0, 3)
+
+const [, UNRESOLVABLE_IMAGE] = STORED_IMAGES
+
+const STORED_GALLERY = [
+	"```gallery",
+	...STORED_IMAGES.map(({ src, alt }) => `- image: ${src}\n  alt: ${alt}`),
+	"```",
+].join("\n")
+
+const resolveAllButUnresolvable = async (src: string) => {
+	if (src === UNRESOLVABLE_IMAGE.src) throw new Error("No such Library image")
+	return resolvedLibraryImageOf(src)
+}
+
+const galleryTileOf = (canvasElement: HTMLElement, alt: string) =>
+	within(
+		canvasElement.querySelector<HTMLElement>('[data-slot="gallery"]') ??
+			canvasElement,
+	).getByRole("img", { name: alt })
+
+const resolvedTileOf = (canvasElement: HTMLElement, alt: string) =>
+	waitFor(() => {
+		const tile = galleryTileOf(canvasElement, alt)
+		expect(tile.getAttribute("src")).toBe(
+			resolvedLibraryImageOf(
+				STORED_IMAGES.find((image) => image.alt === alt)?.src ?? "",
+			),
+		)
+		return tile
+	})
+
+export const GalleryImageFailsToResolve = meta.story({
+	args: {
+		children: STORED_GALLERY,
+		resolveImage: fn(resolveAllButUnresolvable),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A gallery of stored Library paths whose second image `resolveImage` cannot turn into an address. Check that tile is the broken image tile with its icon, and every other tile shows the address it resolved to.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await waitFor(() =>
+			expect(
+				galleryTileOf(canvasElement, UNRESOLVABLE_IMAGE.alt),
+			).toHaveAttribute("data-slot", "gallery-broken"),
+		)
+		for (const { alt } of STORED_IMAGES.filter(
+			(image) => image !== UNRESOLVABLE_IMAGE,
+		))
+			await resolvedTileOf(canvasElement, alt)
+	},
+})
+
+export const GalleryResolvedImageOpens = meta.story({
+	tags: ["test-only"],
+	args: {
+		children: STORED_GALLERY,
+		resolveImage: fn(async (src: string) => resolvedLibraryImageOf(src)),
+		answerActions: {
+			agentName: "Atlas",
+			onPickOption: fn(),
+			onUseValues: fn(),
+			onOpenImage: fn(),
+		},
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A gallery of stored Library paths, given answer actions. Check opening a tile hands `onOpenImage` the resolved addresses, never the stored paths.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const [, opened] = STORED_IMAGES
+		await waitFor(() =>
+			expect(args.resolveImage).toHaveBeenCalledTimes(STORED_IMAGES.length),
+		)
+		await waitFor(() =>
+			expect(
+				canvas.getByRole("button", { name: opened.alt }).querySelector("img"),
+			).toHaveAttribute("src", resolvedLibraryImageOf(opened.src)),
+		)
+		await userEvent.click(canvas.getByRole("button", { name: opened.alt }))
+		await expect(args.answerActions?.onOpenImage).toHaveBeenCalledWith(
+			STORED_IMAGES.map(({ src }) =>
+				expect.objectContaining({ src: resolvedLibraryImageOf(src) }),
+			),
+			1,
+		)
+	},
+})
+
+export const GalleryResolvingNotOpenable = meta.story({
+	tags: ["test-only"],
+	args: {
+		children: STORED_GALLERY,
+		resolveImage: fn(() => new Promise<string>(() => {})),
+		answerActions: {
+			agentName: "Atlas",
+			onPickOption: fn(),
+			onUseValues: fn(),
+			onOpenImage: fn(),
+		},
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A gallery of stored Library paths whose `resolveImage` never settles, given answer actions. Check every tile is the resolving surface and none is a button, so `onOpenImage` never receives a stored path.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		await waitFor(() =>
+			expect(args.resolveImage).toHaveBeenCalledTimes(STORED_IMAGES.length),
+		)
+		for (const { alt } of STORED_IMAGES)
+			await expect(galleryTileOf(canvasElement, alt)).toHaveAttribute(
+				"data-slot",
+				"gallery-resolving",
+			)
+		await expect(canvas.queryAllByRole("button")).toHaveLength(0)
+		await userEvent.click(galleryTileOf(canvasElement, STORED_IMAGES[0].alt))
+		await expect(args.answerActions?.onOpenImage).not.toHaveBeenCalled()
 	},
 })

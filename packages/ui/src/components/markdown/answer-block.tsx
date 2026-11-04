@@ -30,11 +30,13 @@ import type {
 	InteractiveTemplate,
 	Measure,
 } from "@workspace/ui/components/markdown/answer-block-source"
+import { useMarkdownImageResolver } from "@workspace/ui/components/markdown/image-resolver"
 import { MarkdownLink } from "@workspace/ui/components/markdown/link"
 import { NestedMarkdownContext } from "@workspace/ui/components/markdown/nested-markdown"
 import { MARKDOWN_ESCAPED_BLOCK_CLASS } from "@workspace/ui/components/markdown/prose"
 import { OptionsCard } from "@workspace/ui/components/options-card"
 import { RichBlockPending } from "@workspace/ui/components/rich-block-pending"
+import { useShownImages } from "@workspace/ui/hooks/use-shown-images"
 
 type BlockProps<Label extends AnswerBlock["label"]> = {
 	block: Extract<AnswerBlock, { label: Label }>
@@ -198,29 +200,39 @@ const InteractiveBlockView = ({ block }: BlockProps<"interactive">) => {
 
 const GalleryBlockView = ({ block }: BlockProps<"gallery">) => {
 	const actions = useMarkdownAnswerActions()
-	const viewerImages = block.images.map(({ image, alt, caption }, index) => ({
+	const shownImageOf = useShownImages(
+		block.images.map(({ image }) => image),
+		useMarkdownImageResolver(),
+	)
+	const images = block.images.map(({ image, alt, caption }) => ({
+		...shownImageOf(image),
+		alt,
+		caption,
+	}))
+	const viewerImages = images.map(({ src, alt, caption }, index) => ({
 		id: `${index}`,
 		name: alt,
-		src: image,
+		src,
 		detail: caption ?? "",
 	}))
+	const openableImages = viewerImages.filter(
+		(_, index) => !images[index].status,
+	)
+	const openInViewer = (index: number) =>
+		actions?.onOpenImage(
+			openableImages,
+			openableImages.indexOf(viewerImages[index]),
+		)
+	const imageMenu = answerImageMenuOf(actions, viewerImages)
 
 	return (
 		<Gallery
 			caption={block.images
 				.flatMap(({ caption }) => caption?.trim() || [])
 				.join(" · ")}
-			imageMenu={answerImageMenuOf(actions, viewerImages)}
-			images={block.images.map(({ image, alt, caption }) => ({
-				src: image,
-				alt,
-				caption,
-			}))}
-			onOpen={
-				actions
-					? (index) => actions.onOpenImage(viewerImages, index)
-					: undefined
-			}
+			imageMenu={imageMenu && { ...imageMenu, onOpenInViewer: openInViewer }}
+			images={images}
+			onOpen={actions ? openInViewer : undefined}
 		/>
 	)
 }

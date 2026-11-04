@@ -3,7 +3,6 @@
 import {
 	type KeyboardEvent,
 	type PointerEvent,
-	useEffect,
 	useId,
 	useLayoutEffect,
 	useRef,
@@ -14,7 +13,6 @@ import { useTranslation } from "react-i18next"
 import { accessibleNameOf } from "@workspace/ui/components/answer-blocks/answer-image"
 import {
 	Gallery,
-	type GalleryImageStatus,
 	GallerySurface,
 	TILE_COUNT,
 } from "@workspace/ui/components/answer-blocks/gallery"
@@ -27,6 +25,10 @@ import {
 	withCaption,
 	withGalleryItems,
 } from "@workspace/ui/components/library-document-blocks"
+import {
+	type ResolveImage,
+	useShownImages,
+} from "@workspace/ui/hooks/use-shown-images"
 import { cn } from "@workspace/ui/lib/utils"
 
 type LibraryGalleryImage = {
@@ -35,19 +37,12 @@ type LibraryGalleryImage = {
 	caption?: string
 }
 
-type ResolveImage = (src: string) => Promise<string>
-
 type LibraryGalleryEditorProps = {
 	source: string
 	onEdit: SourceEdit
 	onRemove: () => void
 	onAddImages?: () => Promise<LibraryGalleryImage[]>
 	resolveImage?: ResolveImage
-}
-
-type ShownImage = {
-	src: string
-	status?: GalleryImageStatus
 }
 
 type TileDrag = {
@@ -80,46 +75,6 @@ const recordOf = ({ src, alt, caption = "" }: LibraryGalleryImage) =>
 const editItems =
 	(change: (items: BlockRecord[]) => BlockRecord[]) => (source: string) =>
 		withGalleryItems(source, change(galleryItemsOf(source)))
-
-const useShownImages = (
-	sources: readonly string[],
-	resolveImage: ResolveImage | undefined,
-) => {
-	const [settled, setSettled] = useState<ReadonlyMap<string, ShownImage>>(
-		() => new Map(),
-	)
-	const requested = useRef(new Set<string>())
-	const present = useRef(new Set<string>())
-
-	useEffect(() => {
-		present.current = new Set(sources)
-		const leave = () => {
-			present.current = new Set()
-		}
-		if (!resolveImage) return leave
-		const settle = (source: string, shown: ShownImage) => {
-			if (!present.current.has(source)) {
-				requested.current.delete(source)
-				return
-			}
-			setSettled((current) => new Map(current).set(source, shown))
-		}
-		for (const source of present.current) {
-			if (requested.current.has(source)) continue
-			requested.current.add(source)
-			resolveImage(source).then(
-				(src) => settle(source, { src }),
-				() => settle(source, { src: source, status: "broken" }),
-			)
-		}
-		return leave
-	})
-
-	return (source: string): ShownImage =>
-		resolveImage
-			? (settled.get(source) ?? { src: source, status: "resolving" })
-			: { src: source }
-}
 
 const LibraryGalleryEditor = ({
 	source,

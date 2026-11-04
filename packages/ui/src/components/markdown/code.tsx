@@ -22,6 +22,7 @@ import {
 	readAnswerBlock,
 } from "@workspace/ui/components/markdown/answer-block-source"
 import { PENDING_PROPERTY } from "@workspace/ui/components/markdown/answer-marks"
+import { useMarkdownImageResolver } from "@workspace/ui/components/markdown/image-resolver"
 import {
 	MATH_LANGUAGE,
 	MarkdownMath,
@@ -164,6 +165,7 @@ export const MarkdownFence = ({
 }
 
 export const MarkdownPre = ({ node, children, ...props }: MarkdownPreProps) => {
+	const resolveImage = useMarkdownImageResolver()
 	const code = codeChildOf(node)
 	if (!code) return <pre {...props}>{children}</pre>
 
@@ -177,7 +179,9 @@ export const MarkdownPre = ({ node, children, ...props }: MarkdownPreProps) => {
 		if (node?.properties?.[PENDING_PROPERTY]) {
 			return <PendingAnswerBlock label={language} />
 		}
-		const block = readAnswerBlock(language, source)
+		const block = readAnswerBlock(language, source, {
+			hasImageResolver: resolveImage !== undefined,
+		})
 		if (block) return <MarkdownAnswerBlock block={block} />
 	}
 

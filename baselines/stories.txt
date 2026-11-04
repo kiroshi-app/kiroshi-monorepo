@@ -143,6 +143,9 @@ conversation-markdown-markdown--emphasis
 conversation-markdown-markdown--footnotes
 conversation-markdown-markdown--footnotes-twice
 conversation-markdown-markdown--fragment-link
+conversation-markdown-markdown--gallery-image-fails-to-resolve
+conversation-markdown-markdown--gallery-resolved-image-opens
+conversation-markdown-markdown--gallery-resolving-not-openable
 conversation-markdown-markdown--headings
 conversation-markdown-markdown--hostile-markup
 conversation-markdown-markdown--in-message-bubble
@@ -1576,6 +1579,7 @@ navigation-librarydocumentstates--read-only
 navigation-librarydocumentview--agents-writing
 navigation-librarydocumentview--bar-matches-image-bar
 navigation-librarydocumentview--default
+navigation-librarydocumentview--gallery-of-stored-images
 navigation-librarydocumentview--long-agent-name-writing
 navigation-librarydocumentview--member
 navigation-librarydocumentview--more-menu

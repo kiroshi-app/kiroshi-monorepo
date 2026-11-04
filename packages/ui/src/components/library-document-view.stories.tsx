@@ -14,7 +14,9 @@ import {
 	LIBRARY_AGENT_DOCUMENT,
 	LIBRARY_AGENTS,
 	LIBRARY_LONG_NAME_WRITERS,
+	LIBRARY_STORED_IMAGES,
 	LIBRARY_WRITERS,
+	resolvedLibraryImageOf,
 } from "@workspace/ui/components/library.fixtures"
 import {
 	type LibraryDocument,
@@ -573,5 +575,50 @@ export const LongAgentNameWriting = meta.story({
 				card.querySelector("[data-slot='popover-title']") as HTMLElement,
 			),
 		).toBe(true)
+	},
+})
+
+const STORED_IMAGES = LIBRARY_STORED_IMAGES.slice(0, 3)
+
+const LOBBY_MOODBOARD: LibraryDocument = {
+	id: "moodboard",
+	name: "Lobby moodboard",
+	detail: "12 words · Edited today at 11:02",
+	body: [
+		"The sofas we kept for the lobby.",
+		[
+			"```gallery",
+			...STORED_IMAGES.map(({ src, alt }) => `- image: ${src}\n  alt: ${alt}`),
+			"```",
+		].join("\n"),
+	].join("\n\n"),
+}
+
+export const GalleryOfStoredImages = meta.story({
+	args: {
+		document: LOBBY_MOODBOARD,
+		resolveImage: fn(async (src: string) => resolvedLibraryImageOf(src)),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A document whose gallery stores its images as Library paths, each turned into a displayable address by `resolveImage`. Check the resolver runs once per image and every tile shows the address it resolved to.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		const gallery = slotIn(canvasElement, "gallery")
+
+		await waitFor(() =>
+			expect(
+				[...gallery.querySelectorAll("img")].map((img) =>
+					img.getAttribute("src"),
+				),
+			).toEqual(STORED_IMAGES.map(({ src }) => resolvedLibraryImageOf(src))),
+		)
+		await expect(args.resolveImage).toHaveBeenCalledTimes(STORED_IMAGES.length)
+		for (const { src } of STORED_IMAGES)
+			await expect(args.resolveImage).toHaveBeenCalledWith(src)
 	},
 })

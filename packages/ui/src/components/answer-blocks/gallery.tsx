@@ -136,20 +136,22 @@ const GalleryTile = ({
 		</>
 	)
 
-	const tile = onOpen ? (
-		<button
-			type="button"
-			aria-label={openLabel}
-			className={cn(tileClass, "outline-offset-2")}
-			onClick={() => onOpen(index)}
-		>
-			{content}
-		</button>
-	) : (
-		<div className={tileClass}>{content}</div>
-	)
+	const isOpenable = !image.status
+	const tile =
+		onOpen && isOpenable ? (
+			<button
+				type="button"
+				aria-label={openLabel}
+				className={cn(tileClass, "outline-offset-2")}
+				onClick={() => onOpen(index)}
+			>
+				{content}
+			</button>
+		) : (
+			<div className={tileClass}>{content}</div>
+		)
 
-	if (!imageMenu) return tile
+	if (!imageMenu || !isOpenable) return tile
 
 	return <ImageMenu {...imageMenu} item={index} name={name} trigger={tile} />
 }

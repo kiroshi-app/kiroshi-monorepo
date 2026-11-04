@@ -100,6 +100,7 @@ import {
 	type SelectionToolbarAnchor,
 	type SelectionToolbarFormat,
 } from "@workspace/ui/components/selection-toolbar"
+import type { ResolveImage } from "@workspace/ui/hooks/use-shown-images"
 import { isMacPlatform } from "@workspace/ui/lib/platform"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -373,7 +374,7 @@ type LibraryDocumentBlockEditorProps = WriterActions & {
 	writers?: LibraryDocumentWriter[]
 	people?: LibraryDocumentPerson[]
 	onAddImages?: () => Promise<LibraryGalleryImage[]>
-	resolveImage?: (src: string) => Promise<string>
+	resolveImage?: ResolveImage
 	onLinkPreview?: (url: string) => Promise<LibraryLinkPreview>
 	onCaretChange?: (caret: number | null) => void
 	placeholders?: LibraryDocumentPlaceholder[]
@@ -1289,6 +1290,7 @@ const LibraryDocumentBlockEditor = ({
 								{placeholder ? (
 									<Markdown
 										className={DOCUMENT_TYPE}
+										resolveImage={resolveImage}
 										renderRun={({ isEnd }) =>
 											isEnd ? (
 												<span
@@ -1314,6 +1316,7 @@ const LibraryDocumentBlockEditor = ({
 										className={DOCUMENT_TYPE}
 										onToggleTask={toggleTaskIn(block.id)}
 										renderRun={runs.length > 0 ? renderRun : undefined}
+										resolveImage={resolveImage}
 										runs={runs.length > 0 ? runs : undefined}
 									>
 										{block.source}

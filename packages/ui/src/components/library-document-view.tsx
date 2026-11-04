@@ -20,6 +20,7 @@ import {
 import { Markdown } from "@workspace/ui/components/markdown"
 import type { MarkdownRunRenderProps } from "@workspace/ui/components/markdown/run"
 import { Button } from "@workspace/ui/components/ui/button"
+import type { ResolveImage } from "@workspace/ui/hooks/use-shown-images"
 import { libraryDisplayName } from "@workspace/ui/lib/library-display-name"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -209,6 +210,7 @@ const LibraryDocumentColumn = ({
 type LibraryDocumentBodyProps = WriterActions & {
 	body: string
 	writers?: LibraryDocumentWriter[]
+	resolveImage?: ResolveImage
 }
 
 const runsOf = (writers: LibraryDocumentWriter[]) =>
@@ -219,6 +221,7 @@ const LibraryDocumentBody = ({
 	writers = [],
 	onStop,
 	onOpenConversation,
+	resolveImage,
 }: LibraryDocumentBodyProps) => {
 	const isWriting = writers.length > 0
 
@@ -242,6 +245,7 @@ const LibraryDocumentBody = ({
 		<Markdown
 			className={DOCUMENT_TYPE}
 			renderRun={isWriting ? renderRun : undefined}
+			resolveImage={resolveImage}
 			runs={isWriting ? runsOf(writers) : undefined}
 		>
 			{body}
@@ -255,6 +259,7 @@ type LibraryDocumentViewProps = WriterActions &
 		onBack: () => void
 		writers?: LibraryDocumentWriter[]
 		onStopAll?: () => void
+		resolveImage?: ResolveImage
 	}
 
 const LibraryDocumentView = ({
@@ -264,6 +269,7 @@ const LibraryDocumentView = ({
 	onStopAll,
 	onStop,
 	onOpenConversation,
+	resolveImage,
 	...actions
 }: LibraryDocumentViewProps) => {
 	const { t } = useTranslation("common")
@@ -296,6 +302,7 @@ const LibraryDocumentView = ({
 					body={document.body}
 					onOpenConversation={onOpenConversation}
 					onStop={onStop}
+					resolveImage={resolveImage}
 					writers={writers}
 				/>
 			</LibraryDocumentColumn>
