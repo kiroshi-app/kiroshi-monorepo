@@ -407,6 +407,7 @@ const chat = {
 		},
 		callout: {
 			note: "Note",
+			tip: "Tip",
 			warning: "Warning",
 		},
 		gallery: {

@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { type ReactNode, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -20,6 +20,7 @@ type GalleryProps = {
 	tileLabel?: GalleryTileLabel
 	onOpen?: (index: number) => void
 	imageMenu?: ImageMenuActions<number>
+	tileSlot?: (index: number) => ReactNode
 	className?: string
 }
 
@@ -31,6 +32,7 @@ type GalleryTileProps = {
 	hiddenCount: number
 	onOpen?: (index: number) => void
 	imageMenu?: ImageMenuActions<number>
+	tileSlot?: (index: number) => ReactNode
 	className: string
 }
 
@@ -65,6 +67,7 @@ const GalleryTile = ({
 	hiddenCount,
 	onOpen,
 	imageMenu,
+	tileSlot,
 	className,
 }: GalleryTileProps) => {
 	const { t } = useTranslation("chat")
@@ -109,6 +112,7 @@ const GalleryTile = ({
 					</span>
 				</span>
 			) : null}
+			{tileSlot?.(index)}
 		</>
 	)
 
@@ -136,6 +140,7 @@ const Gallery = ({
 	tileLabel = "name",
 	onOpen,
 	imageMenu,
+	tileSlot,
 	className,
 }: GalleryProps) => {
 	const [lead, ...rest] = images
@@ -159,6 +164,7 @@ const Gallery = ({
 					hiddenCount={0}
 					onOpen={onOpen}
 					imageMenu={imageMenu}
+					tileSlot={tileSlot}
 					className={cn(
 						"flex-[1.4]",
 						layout ? "rounded-s-control" : "rounded-control",
@@ -177,6 +183,7 @@ const Gallery = ({
 								hiddenCount={position === TILE_COUNT - 2 ? hiddenCount : 0}
 								onOpen={onOpen}
 								imageMenu={imageMenu}
+								tileSlot={tileSlot}
 								className={layout.tiles[position] ?? ""}
 							/>
 						))}
@@ -192,4 +199,4 @@ const Gallery = ({
 	)
 }
 
-export { Gallery, type GalleryProps }
+export { Gallery, type GalleryProps, TILE_COUNT }

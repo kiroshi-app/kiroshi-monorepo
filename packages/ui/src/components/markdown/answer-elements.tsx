@@ -73,6 +73,7 @@ const MarkdownImageMenu = ({
 
 const CALLOUT_TONES: readonly unknown[] = [
 	"note",
+	"tip",
 	"warning",
 ] satisfies CalloutTone[]
 

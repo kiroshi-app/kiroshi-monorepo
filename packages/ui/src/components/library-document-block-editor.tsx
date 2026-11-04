@@ -4,6 +4,7 @@ import type { TFunction } from "i18next"
 import {
 	type FocusEvent,
 	type KeyboardEvent,
+	type PointerEvent,
 	useEffectEvent,
 	useLayoutEffect,
 	useRef,
@@ -11,10 +12,25 @@ import {
 } from "react"
 import { useTranslation } from "react-i18next"
 
+import { LibraryCalloutEditor } from "@workspace/ui/components/library-block-callout"
+import { LibraryChecklistEditor } from "@workspace/ui/components/library-block-checklist"
+import {
+	BLOCK_POPUP,
+	LibraryCodeEditor,
+} from "@workspace/ui/components/library-block-code"
+import {
+	LibraryGalleryEditor,
+	type LibraryGalleryImage,
+} from "@workspace/ui/components/library-block-gallery"
 import {
 	type DragProps,
 	LibraryBlockHandle,
 } from "@workspace/ui/components/library-block-handle"
+import { LibraryTableEditor } from "@workspace/ui/components/library-block-table"
+import {
+	type LibraryLinkPreview,
+	LibraryWebPageEditor,
+} from "@workspace/ui/components/library-block-web-page"
 import {
 	type LibraryDocumentPerson,
 	LibraryDocumentPersonCaret,
@@ -34,9 +50,11 @@ import {
 	type LibraryBlockDocument,
 	type LibraryBlockType,
 	MARKERS,
+	movedTo,
 	offsetsOf,
 	parseBlocks,
 	relaid,
+	type SourceEdit,
 	serializeBlocks,
 	toggleTask,
 } from "@workspace/ui/components/library-document-blocks"
@@ -46,7 +64,7 @@ import {
 	LibrarySlashMenu,
 	type LibrarySlashType,
 } from "@workspace/ui/components/library-slash-menu"
-import { Markdown } from "@workspace/ui/components/markdown"
+import { MARKDOWN_CLASS, Markdown } from "@workspace/ui/components/markdown"
 import type { MarkdownRunRenderProps } from "@workspace/ui/components/markdown/run"
 import { isMacPlatform } from "@workspace/ui/lib/platform"
 import { cn } from "@workspace/ui/lib/utils"
@@ -58,6 +76,21 @@ const EDITABLE_TYPES: LibraryBlockType[] = [
 	"checklist",
 	"quote",
 ]
+
+const BLOCK_EDITORS: LibraryBlockType[] = [
+	"checklist",
+	"gallery",
+	"callout",
+	"table",
+	"code",
+	"web-page",
+]
+
+const POINTED_PARTS = "li, th, td, img"
+
+const FIELD_SLOT = "library-document-block-field"
+
+const EDITING_SLOT = "library-document-block-editing"
 
 const FIELD_LOOK: Partial<Record<LibraryBlockType, string>> = {
 	heading: "font-heading font-semibold text-[1.0625rem] text-foreground",
@@ -92,6 +125,7 @@ type FocusRequest = {
 	id: string
 	on: "field" | "handle"
 	caret?: number
+	field?: number
 }
 
 type Drop = {
@@ -121,18 +155,13 @@ const runsIn = ({ writers, people, start, length }: RunsInput) => [
 	),
 ]
 
-const movedTo = (blocks: LibraryBlock[], from: number, to: number) => {
-	const next = [...blocks]
-	const [moved] = next.splice(from, 1)
-	next.splice(to, 0, moved)
-	return next
-}
-
 type LibraryDocumentBlockEditorProps = WriterActions & {
 	body: string
 	onBodyChange: (markdown: string) => void
 	writers?: LibraryDocumentWriter[]
 	people?: LibraryDocumentPerson[]
+	onAddImages?: () => Promise<LibraryGalleryImage[]>
+	onLinkPreview?: (url: string) => Promise<LibraryLinkPreview>
 }
 
 const LibraryDocumentBlockEditor = ({
@@ -142,6 +171,8 @@ const LibraryDocumentBlockEditor = ({
 	people = NO_PEOPLE,
 	onStop,
 	onOpenConversation,
+	onAddImages,
+	onLinkPreview,
 }: LibraryDocumentBlockEditorProps) => {
 	const { t } = useTranslation("common")
 	const [nextId] = useState(blockIdsOf)
@@ -158,6 +189,7 @@ const LibraryDocumentBlockEditor = ({
 	const [focusRequest, setFocusRequest] = useState<FocusRequest>()
 	const [drop, setDrop] = useState<Drop>()
 	const wasDragged = useRef(false)
+	const pointedField = useRef<number | undefined>(undefined)
 	const list = useRef<HTMLDivElement>(null)
 
 	const show = (next: LibraryBlockDocument) => {
@@ -205,8 +237,19 @@ const LibraryDocumentBlockEditor = ({
 				?.focus()
 			return
 		}
-		const field = block?.querySelector("textarea")
-		if (!field) return
+		const fields = [
+			...(block?.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(
+				`[data-slot="${FIELD_SLOT}"]`,
+			) ?? []),
+		]
+		const last = fields.length - 1
+		const field = fields[Math.min(focusRequest.field ?? last, last)]
+		if (!field) {
+			block
+				?.querySelector<HTMLElement>(`[data-slot="${EDITING_SLOT}"]`)
+				?.focus()
+			return
+		}
 		const caret = focusRequest.caret ?? field.value.length
 		field.focus()
 		field.setSelectionRange(caret, caret)
@@ -215,9 +258,9 @@ const LibraryDocumentBlockEditor = ({
 	const indexOf = (id: string) =>
 		latest.current.blocks.findIndex((block) => block.id === id)
 
-	const edit = (id: string, caret?: number) => {
+	const edit = (id: string, caret?: number, field?: number) => {
 		setEditing(id)
-		setFocusRequest({ id, on: "field", caret })
+		setFocusRequest({ id, on: "field", caret, field })
 	}
 
 	const focusHandle = (id: string) => setFocusRequest({ id, on: "handle" })
@@ -228,6 +271,13 @@ const LibraryDocumentBlockEditor = ({
 				block.id === id ? { ...block, source } : block,
 			),
 		)
+
+	const editSource =
+		(id: string): SourceEdit =>
+		(change) => {
+			const block = latest.current.blocks[indexOf(id)]
+			if (block) writeSource(id, change(block.source))
+		}
 
 	const insertAfter = (index: number, source: string) => {
 		const block = { id: nextId(), source, gap: "" }
@@ -248,6 +298,15 @@ const LibraryDocumentBlockEditor = ({
 		)
 			remove(id)
 		else reread(serializeBlocks(latest.current))
+	}
+
+	const stepBack = (id: string) => {
+		const previous = latest.current.blocks[indexOf(id) - 1]
+		setEditing(undefined)
+		remove(id)
+		if (previous && EDITABLE_TYPES.includes(blockTypeOf(previous.source)))
+			edit(previous.id)
+		else if (previous) focusHandle(previous.id)
 	}
 
 	const actionsFor = (id: string) => {
@@ -302,7 +361,15 @@ const LibraryDocumentBlockEditor = ({
 				event.stopPropagation()
 				action()
 			}
-			if (isCommand && event.key.toLowerCase() === "d") run(actions.onDuplicate)
+			if (
+				event.key === "Escape" &&
+				editing === id &&
+				!event.defaultPrevented &&
+				event.currentTarget.contains(event.target as Node)
+			)
+				run(() => focusHandle(id))
+			else if (isCommand && event.key.toLowerCase() === "d")
+				run(actions.onDuplicate)
 			else if (event.altKey && event.shiftKey && event.key === "ArrowUp")
 				run(actions.onMoveUp)
 			else if (event.altKey && event.shiftKey && event.key === "ArrowDown")
@@ -384,6 +451,59 @@ const LibraryDocumentBlockEditor = ({
 		else if (slashFor === block.id && !value.startsWith("/"))
 			setSlashFor(undefined)
 		writeSource(block.id, value)
+		if (BLOCK_EDITORS.includes(blockTypeOf(value)))
+			setFocusRequest({ id: block.id, on: "field" })
+	}
+
+	const leaveBlockEditor =
+		(id: string) => (event: FocusEvent<HTMLDivElement>) => {
+			const next = event.relatedTarget
+			if (
+				next instanceof Element &&
+				(event.currentTarget.contains(next) ||
+					next.closest(`[data-slot="${BLOCK_POPUP}"]`))
+			)
+				return
+			stopEditing(id)
+		}
+
+	const editorFor = (block: LibraryBlock, type: LibraryBlockType) => {
+		const onEdit = editSource(block.id)
+		const { source } = block
+		if (type === "checklist")
+			return (
+				<LibraryChecklistEditor
+					onEdit={onEdit}
+					onLeave={(kept) => {
+						writeSource(block.id, kept)
+						edit(insertAfter(indexOf(block.id), ""), 0)
+					}}
+					onRemove={() => stepBack(block.id)}
+					source={source}
+				/>
+			)
+		if (type === "gallery")
+			return (
+				<LibraryGalleryEditor
+					onAddImages={onAddImages}
+					onEdit={onEdit}
+					onRemove={actionsFor(block.id).onDelete}
+					source={source}
+				/>
+			)
+		if (type === "callout")
+			return <LibraryCalloutEditor onEdit={onEdit} source={source} />
+		if (type === "table")
+			return <LibraryTableEditor onEdit={onEdit} source={source} />
+		if (type === "code")
+			return <LibraryCodeEditor onEdit={onEdit} source={source} />
+		return (
+			<LibraryWebPageEditor
+				onEdit={onEdit}
+				onLinkPreview={onLinkPreview}
+				source={source}
+			/>
+		)
 	}
 
 	const keyInField =
@@ -405,11 +525,7 @@ const LibraryDocumentBlockEditor = ({
 				latest.current.blocks.length > 1
 			) {
 				event.preventDefault()
-				const previous = latest.current.blocks[index - 1]
-				remove(block.id)
-				if (previous && EDITABLE_TYPES.includes(blockTypeOf(previous.source)))
-					edit(previous.id)
-				else if (previous) focusHandle(previous.id)
+				stepBack(block.id)
 				return
 			}
 			if (event.key !== "Enter" || event.shiftKey || caret !== selectionEnd)
@@ -473,9 +589,29 @@ const LibraryDocumentBlockEditor = ({
 			writeSource(id, toggleTask(source, boxes.indexOf(box)))
 	}
 
+	const pointAt = (event: PointerEvent<HTMLDivElement>) => {
+		const part =
+			event.target instanceof Element
+				? event.target.closest(POINTED_PARTS)
+				: null
+		pointedField.current = part
+			? [...event.currentTarget.querySelectorAll(POINTED_PARTS)].indexOf(part)
+			: undefined
+	}
+
 	const startEditingOnFocus =
-		(id: string) => (event: FocusEvent<HTMLDivElement>) => {
-			if (event.target === event.currentTarget) edit(id)
+		(id: string, hasBlockEditor: boolean) =>
+		(event: FocusEvent<HTMLDivElement>) => {
+			const isInnerControl =
+				event.target instanceof HTMLButtonElement ||
+				event.target instanceof HTMLInputElement
+			if (
+				event.target !== event.currentTarget &&
+				(!hasBlockEditor || isInnerControl)
+			)
+				return
+			edit(id, undefined, pointedField.current)
+			pointedField.current = undefined
 		}
 
 	const offsets = offsetsOf(doc)
@@ -490,7 +626,8 @@ const LibraryDocumentBlockEditor = ({
 			{doc.blocks.map((block, index) => {
 				const type = blockTypeOf(block.source)
 				const isEditing = editing === block.id
-				const isEditable = EDITABLE_TYPES.includes(type)
+				const hasBlockEditor = BLOCK_EDITORS.includes(type)
+				const isEditable = EDITABLE_TYPES.includes(type) || hasBlockEditor
 				const runs = runsIn({
 					writers,
 					people,
@@ -522,7 +659,17 @@ const LibraryDocumentBlockEditor = ({
 								type={type}
 							/>
 						</div>
-						{isEditing ? (
+						{isEditing && hasBlockEditor ? (
+							// biome-ignore lint/a11y/noStaticElementInteractions: the block editor stops when focus leaves every control it holds
+							<div
+								className={cn(MARKDOWN_CLASS, DOCUMENT_TYPE, "outline-none")}
+								data-slot={EDITING_SLOT}
+								onBlur={leaveBlockEditor(block.id)}
+								tabIndex={-1}
+							>
+								{editorFor(block, type)}
+							</div>
+						) : isEditing ? (
 							<LibrarySlashMenu
 								onChoose={(chosen) => chooseSlash(block.id, chosen)}
 								onDismiss={() => setSlashFor(undefined)}
@@ -532,7 +679,7 @@ const LibraryDocumentBlockEditor = ({
 								<GrowingField
 									aria-label={t(`library.editor.blocks.types.${type}`)}
 									className={DOCUMENT_TYPE}
-									data-slot="library-document-block-field"
+									data-slot={FIELD_SLOT}
 									fieldClassName={cn("w-full", FIELD_LOOK[type])}
 									onBlur={() => stopEditing(block.id)}
 									onChange={(event) => typeInField(block, event.target.value)}
@@ -544,7 +691,12 @@ const LibraryDocumentBlockEditor = ({
 							// biome-ignore lint/a11y/noStaticElementInteractions: focusing a text block opens its field, the keyboard reaches it with Tab
 							<div
 								className={cn(isEditable && "min-h-6 cursor-text outline-none")}
-								onFocus={isEditable ? startEditingOnFocus(block.id) : undefined}
+								onFocus={
+									isEditable
+										? startEditingOnFocus(block.id, hasBlockEditor)
+										: undefined
+								}
+								onPointerDown={isEditable ? pointAt : undefined}
 								tabIndex={isEditable ? 0 : undefined}
 							>
 								<Markdown

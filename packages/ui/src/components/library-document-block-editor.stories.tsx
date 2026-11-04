@@ -19,6 +19,8 @@ import {
 	isInBrowserRunner,
 	mergeA11y,
 	realPointer,
+	resolvedRootColor,
+	slotIn,
 	slotsIn,
 } from "@workspace/storybook/story-utils"
 import { ContentCard } from "@workspace/ui/components/content-card"
@@ -75,6 +77,84 @@ const CHECKLIST_DOCUMENT = [
 	"- [ ] Book the room\n- [x] Send the invite",
 	"The call starts at ten.",
 ].join("\n\n")
+
+const GALLERY_DOCUMENT = [
+	"The sofas we kept for the lobby.",
+	[
+		"```gallery",
+		"- image: https://images.example.org/sofa-green.jpg",
+		"  alt: Green velvet sofa",
+		"- image: https://images.example.org/sofa-grey.jpg",
+		"  alt: Grey linen sofa",
+		"  caption: Grey linen, 990 euros",
+		"- image: https://images.example.org/armchair-rust.jpg",
+		"  alt: Rust armchair",
+		"```",
+	].join("\n"),
+].join("\n\n")
+
+const GALLERY_ITEMS = {
+	green:
+		"- image: https://images.example.org/sofa-green.jpg\n  alt: Green velvet sofa",
+	grey: "- image: https://images.example.org/sofa-grey.jpg\n  alt: Grey linen sofa\n  caption: Grey linen, 990 euros",
+	rust: "- image: https://images.example.org/armchair-rust.jpg\n  alt: Rust armchair",
+}
+
+const galleryWith = (...items: string[]) =>
+	[
+		"The sofas we kept for the lobby.",
+		["```gallery", ...items, "```"].join("\n"),
+	].join("\n\n")
+
+const MORE_GALLERY_ITEMS = [
+	"lamp-brass",
+	"rug-wool",
+	"table-oak",
+	"shelf-pine",
+].map(
+	(name) =>
+		`- image: https://images.example.org/${name}.jpg\n  alt: ${name.replace("-", " ")}`,
+)
+
+const [LAMP, RUG, TABLE, SHELF] = MORE_GALLERY_ITEMS
+
+const SEVEN_IMAGES = galleryWith(
+	GALLERY_ITEMS.green,
+	GALLERY_ITEMS.grey,
+	GALLERY_ITEMS.rust,
+	...MORE_GALLERY_ITEMS,
+)
+
+const ADDED_IMAGES = [
+	{ src: "https://images.example.org/lamp-brass.jpg", alt: "Brass lamp" },
+]
+
+const TABLE_DOCUMENT = [
+	"Rooms held for the offsite:",
+	"| Room | Seats |\n| --- | --- |\n| Atlas | 12 |\n| Mira |  |",
+].join("\n\n")
+
+const WIDE_TABLE_DOCUMENT = [
+	"| Room | Seats | Floor | Projector | Notes for the team |",
+	"| --- | --- | --- | --- | --- |",
+	"| Atlas | 12 | 3 | Epson | Book a week early |",
+].join("\n")
+
+const CODE_DOCUMENT = [
+	"Run this once the build is green:",
+	"```ts\nconst launch = await ship()\n```",
+].join("\n\n")
+
+const WEB_PAGE_DOCUMENT = [
+	"Where the team sleeps:",
+	"```web-page\nurl: https://www.example.org/rooms\ntitle: Casa do Rio, rooms and rates\n```",
+].join("\n\n")
+
+const SUITES_PREVIEW = {
+	url: "https://www.example.org/suites",
+	title: "Casa do Rio, suites",
+	site: "Casa do Rio",
+}
 
 const PEOPLE = [
 	{ id: "ada", name: "Ada Martin", caret: BRIEF.indexOf("## What changes") },
@@ -186,6 +266,34 @@ const groupNamesIn = (root: HTMLElement) =>
 	slotsIn(root, "library-slash-menu-group").map(
 		(group) => group.firstElementChild?.textContent,
 	)
+
+const blockOfType = (root: HTMLElement, type: string) => {
+	const block = blocksIn(root).find((each) => each.dataset.type === type)
+	if (!block) throw new Error(`No ${type} block`)
+	return block
+}
+
+const openBlock = async (root: HTMLElement, type: string) => {
+	const shown = blockOfType(root, type).querySelector<HTMLElement>("[tabindex]")
+	if (!shown) throw new Error(`No ${type} to focus`)
+	shown.focus()
+	return waitFor(() => {
+		const block = blockOfType(root, type)
+		partOf(block, "library-document-block-editing")
+		return block
+	})
+}
+
+const centreOf = (element: HTMLElement) => {
+	const { left, top, width, height } = element.getBoundingClientRect()
+	return { clientX: left + width / 2, clientY: top + height / 2 }
+}
+
+const fieldsOf = (block: HTMLElement) =>
+	slotsIn(block, "library-document-block-field") as (
+		| HTMLInputElement
+		| HTMLTextAreaElement
+	)[]
 
 const openHandleMenu = async (block: HTMLElement) => {
 	const handle = partOf(block, "library-block-drag")
@@ -371,7 +479,7 @@ export const BubbleAndDocumentParity = meta.story({
 		docs: {
 			description: {
 				story:
-					"The same rich blocks, a callout, a web page card, a table and collapsible sections, in a message bubble and in a document. Check each side mounts the same component, read-only in the document until OPE-1798.",
+					"The same rich blocks, a callout, a web page card, a table and collapsible sections, in a message bubble and in a document. Check each side mounts the same component while no block is edited.",
 			},
 		},
 	},
@@ -738,7 +846,7 @@ export const ChecklistEditsInPlace = meta.story({
 		docs: {
 			description: {
 				story:
-					"A checklist, the [] item of the Text group. Check a box toggles in the markdown without opening the field, focusing the checklist opens its source with the caret at the end, and Backspace on an empty line under it puts the caret back at the end of the checklist.",
+					"A checklist, the [] item of the Text group. Check a box toggles in the markdown without opening the editor, focusing the checklist opens one field per item with the caret at the end of the last, and Backspace on an empty line under it puts the caret back there.",
 			},
 		},
 	},
@@ -751,26 +859,27 @@ export const ChecklistEditsInPlace = meta.story({
 		)
 		await expect(canvasElement.querySelector("textarea")).toBeNull()
 
-		const shown = checklist.querySelector<HTMLElement>("[tabindex]")
-		if (!shown) throw new Error("No checklist")
-		shown.focus()
-		const field = await focusedFieldIn(canvasElement)
-		await expect(field.value).toBe("- [x] Book the room\n- [x] Send the invite")
-		await expect(field.selectionStart).toBe(field.value.length)
+		const editing = await openBlock(canvasElement, "checklist")
+		const last = await waitFor(() => {
+			const field = fieldsOf(editing).at(-1)
+			expect(field).toHaveFocus()
+			return field as HTMLTextAreaElement
+		})
+		await expect(fieldsOf(editing).map(({ value }) => value)).toEqual([
+			"Book the room",
+			"Send the invite",
+		])
+		await expect(last.selectionStart).toBe(last.value.length)
 
-		fireEvent.click(
-			partOf(blockWith(canvasElement, "Book the room"), "library-block-insert"),
-		)
+		fireEvent.click(partOf(editing, "library-block-insert"))
 		const empty = await focusedFieldIn(canvasElement)
 		await expect(empty.value).toBe("")
 		fireEvent.keyDown(empty, { key: "Backspace" })
-		const back = await waitFor(() => {
-			const field = fieldIn(canvasElement)
-			expect(field.value).toContain("Book the room")
-			return field
+		await waitFor(() => {
+			const back = document.activeElement as HTMLTextAreaElement
+			expect(back.value).toBe("Send the invite")
+			expect(back.selectionStart).toBe(back.value.length)
 		})
-		await expect(back).toHaveFocus()
-		await expect(back.selectionStart).toBe(back.value.length)
 	},
 })
 
@@ -838,3 +947,667 @@ export const NarrowColumn = meta.story({
 		).toBe("1")
 	},
 })
+
+const galleryEditingStory = (theme: "light" | "dark") => ({
+	globals: { theme },
+	args: {
+		body: GALLERY_DOCUMENT,
+		onAddImages: fn(async () => ADDED_IMAGES),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story: `Paper 3d${theme === "dark" ? ", dark" : ""}: a gallery being edited. Check the pill Add images and the hint over the grid, the grid ringed in the page background then the Space colour, a remove button and a caption field on every tile, and Add images appending what \`onAddImages\` returns after the last tile.`,
+			},
+		},
+	},
+	play: async ({
+		args,
+		canvasElement,
+	}: {
+		args: { onBodyChange: (body: string) => void; onAddImages?: () => void }
+		canvasElement: HTMLElement
+	}) => {
+		const gallery = await openBlock(canvasElement, "gallery")
+		const add = partOf(gallery, "library-gallery-add")
+		await expect(add).toHaveAccessibleName("Add images")
+		await expect(
+			within(gallery).getByText("Drag to reorder. The first image leads."),
+		).toBeVisible()
+		await expect(slotsIn(gallery, "library-gallery-remove")).toHaveLength(3)
+		await expect(
+			within(gallery).getByRole("textbox", { name: "Caption of image 2" }),
+		).toHaveValue("Grey linen, 990 euros")
+		await expect(colourTransitionsOf(add)).toEqual([])
+		fireEvent.click(add)
+		await expect(args.onAddImages).toHaveBeenCalledOnce()
+		await waitFor(() =>
+			expect(args.onBodyChange).toHaveBeenLastCalledWith(
+				galleryWith(
+					GALLERY_ITEMS.green,
+					GALLERY_ITEMS.grey,
+					GALLERY_ITEMS.rust,
+					"- image: https://images.example.org/lamp-brass.jpg\n  alt: Brass lamp",
+				),
+			),
+		)
+		await waitFor(() =>
+			expect(slotsIn(gallery, "library-gallery-remove")).toHaveLength(4),
+		)
+	},
+})
+
+export const GalleryEditing = meta.story(galleryEditingStory("light"))
+
+export const GalleryEditingDark = meta.story(galleryEditingStory("dark"))
+
+export const GalleryTileDragged = meta.story({
+	globals: { theme: "light" },
+	args: { body: GALLERY_DOCUMENT },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Paper 3d: the first tile held and carried onto the third. Check the lifted copy, 240 by 170 and turned 2 degrees, follows the pointer, the dashed Space colour slot marks where it lands, release writes the new order, and the arrow keys on a focused tile move it the same way.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		const gallery = await openBlock(canvasElement, "gallery")
+		const [first, , third] = slotsIn(gallery, "library-gallery-tile")
+		fireEvent.pointerDown(first, { button: 0, ...centreOf(first) })
+		const target = centreOf(third)
+		fireEvent.pointerMove(third, target)
+		const lifted = await waitFor(() =>
+			partOf(gallery, "library-gallery-lifted"),
+		)
+		await expect(lifted.getBoundingClientRect().width).toBeGreaterThan(230)
+		await expect(getComputedStyle(lifted).rotate).toBe("-2deg")
+		const [slot] = slotsIn(gallery, "library-gallery-slot")
+		await expect(slot).toBeDefined()
+		await expect(
+			getComputedStyle(slot.firstElementChild as Element).borderStyle,
+		).toBe("dashed")
+		fireEvent.pointerUp(window, target)
+		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+			galleryWith(GALLERY_ITEMS.grey, GALLERY_ITEMS.rust, GALLERY_ITEMS.green),
+		)
+		await expect(slotsIn(gallery, "library-gallery-lifted")).toHaveLength(0)
+
+		const moved = await waitFor(() => {
+			const tile = slotsIn(gallery, "library-gallery-tile")[2]
+			expect(tile).toHaveFocus()
+			return tile
+		})
+		fireEvent.keyDown(moved, { key: "ArrowLeft" })
+		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+			galleryWith(GALLERY_ITEMS.grey, GALLERY_ITEMS.green, GALLERY_ITEMS.rust),
+		)
+	},
+})
+
+export const GalleryRemoveAndCaption = meta.story({
+	tags: ["test-only"],
+	args: { body: GALLERY_DOCUMENT },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A caption typed on a tile and every tile removed. Check the caption lands in the gallery source, each remove drops its image, and the gallery block goes with its last image.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		const gallery = await openBlock(canvasElement, "gallery")
+		fireEvent.change(
+			within(gallery).getByRole("textbox", { name: "Caption of image 1" }),
+			{ target: { value: "Green velvet, 1,290 euros" } },
+		)
+		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+			galleryWith(
+				`${GALLERY_ITEMS.green}\n  caption: Green velvet, 1,290 euros`,
+				GALLERY_ITEMS.grey,
+				GALLERY_ITEMS.rust,
+			),
+		)
+		fireEvent.click(
+			within(gallery).getByRole("button", { name: "Remove image 2" }),
+		)
+		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+			galleryWith(
+				`${GALLERY_ITEMS.green}\n  caption: Green velvet, 1,290 euros`,
+				GALLERY_ITEMS.rust,
+			),
+		)
+		for (const name of ["Remove image 2", "Remove image 1"])
+			fireEvent.click(
+				await within(blockOfType(canvasElement, "gallery")).findByRole(
+					"button",
+					{ name },
+				),
+			)
+		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+			"The sofas we kept for the lobby.",
+		)
+		await expect(typesIn(canvasElement)).toEqual(["paragraph"])
+	},
+})
+
+export const ChecklistEditing = meta.story({
+	globals: { theme: "light" },
+	args: { body: CHECKLIST_DOCUMENT },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Paper 3e: a checklist being edited. Check each item is a 16 box and a 15/24 field 10 apart, the done item muted and struck through in a Space colour box, the focused row's box ringed in the Space colour, Enter at the end of an item opening an empty unchecked item under it with the caret, and a box toggling in the source.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		const checklist = await openBlock(canvasElement, "checklist")
+		const [room, invite] = fieldsOf(checklist)
+		const [first, second] = slotsIn(checklist, "library-checklist-row")
+		await expect(
+			second.getBoundingClientRect().top - first.getBoundingClientRect().top,
+		).toBe(30)
+		await expect(getComputedStyle(invite).textDecorationLine).toBe(
+			"line-through",
+		)
+		room.focus()
+		room.setSelectionRange(room.value.length, room.value.length)
+		const [box] = slotsIn(checklist, "library-checklist-box")
+		await expect(["1px", "1.5px"]).toContain(
+			getComputedStyle(box).borderTopWidth,
+		)
+		await expect(getComputedStyle(box).borderTopColor).toBe(
+			resolvedRootColor("--primary"),
+		)
+		fireEvent.keyDown(room, { key: "Enter" })
+		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+			CHECKLIST_DOCUMENT.replace(
+				"- [ ] Book the room\n",
+				"- [ ] Book the room\n- [ ] \n",
+			),
+		)
+		await waitFor(() => {
+			const added = fieldsOf(blockOfType(canvasElement, "checklist"))[1]
+			expect(added).toHaveFocus()
+			expect(added.value).toBe("")
+		})
+		fireEvent.click(
+			slotsIn(
+				blockOfType(canvasElement, "checklist"),
+				"library-checklist-box",
+			)[0],
+		)
+		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+			CHECKLIST_DOCUMENT.replace(
+				"- [ ] Book the room\n",
+				"- [x] Book the room\n- [ ] \n",
+			),
+		)
+		await expect(colourTransitionsOf(box)).toEqual([])
+	},
+})
+
+export const ChecklistItemMoved = meta.story({
+	globals: { theme: "light" },
+	args: {
+		body: [
+			"Before the launch call:",
+			"- [ ] Book the room\n- [x] Send the invite\n- [ ] Print the agenda",
+		].join("\n\n"),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Paper 3e: the pointer on an item shows its six dot grip 26 left of the box. Check dragging the grip below the last item moves it there, and the arrow keys on a focused grip move it one row at a time.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		const checklist = await openBlock(canvasElement, "checklist")
+		const rows = slotsIn(checklist, "library-checklist-row")
+		const [grip] = slotsIn(checklist, "library-checklist-grip")
+		const [box] = slotsIn(checklist, "library-checklist-box")
+		if (isInBrowserRunner()) await (await realPointer()).hover(rows[0])
+		await expect(
+			box.getBoundingClientRect().left - grip.getBoundingClientRect().left,
+		).toBe(26)
+		const handle = partOf(
+			checklist,
+			"library-block-handle",
+		).getBoundingClientRect()
+		for (const each of slotsIn(checklist, "library-checklist-grip"))
+			await expect(each.getBoundingClientRect().left).toBeGreaterThanOrEqual(
+				handle.right,
+			)
+		fireEvent.pointerDown(grip, { button: 0, ...centreOf(grip) })
+		const below = rows[2].getBoundingClientRect().bottom + 4
+		fireEvent.pointerMove(rows[2], { clientY: below })
+		await waitFor(() =>
+			expect(
+				slotsIn(checklist, "library-checklist-drop-indicator"),
+			).toHaveLength(1),
+		)
+		fireEvent.pointerUp(rows[2], { clientY: below })
+		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+			[
+				"Before the launch call:",
+				"- [x] Send the invite\n- [ ] Print the agenda\n- [ ] Book the room",
+			].join("\n\n"),
+		)
+		const moved = await waitFor(() => {
+			const last = slotsIn(
+				blockOfType(canvasElement, "checklist"),
+				"library-checklist-grip",
+			)[2]
+			expect(last).toHaveFocus()
+			return last
+		})
+		fireEvent.keyDown(moved, { key: "ArrowUp" })
+		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+			[
+				"Before the launch call:",
+				"- [x] Send the invite\n- [ ] Book the room\n- [ ] Print the agenda",
+			].join("\n\n"),
+		)
+	},
+})
+
+export const CalloutToneSwitch = meta.story({
+	globals: { theme: "light" },
+	args: { body: CALLOUT_DOCUMENT },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Paper 3e: a callout being edited, its text under the caret and under it the Note, Tip and Warning segments on a translucent white track. Check the chosen segment is white with a hairline, and each choice switches the tone in place and writes its alert marker.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		const callout = await openBlock(canvasElement, "callout")
+		const tones = partOf(callout, "library-callout-tones")
+		await expect(tones).toHaveAccessibleName("Callout tone")
+		const note = within(tones).getByRole("button", { name: "Note" })
+		await expect(note).toHaveAttribute("aria-pressed", "true")
+		await expect(fieldsOf(callout)[0]).toHaveValue(
+			"The export keeps the archived rooms too.",
+		)
+		fireEvent.click(within(tones).getByRole("button", { name: "Tip" }))
+		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+			CALLOUT_DOCUMENT.replace("[!NOTE]", "[!TIP]"),
+		)
+		await waitFor(() =>
+			expect(
+				partOf(blockOfType(canvasElement, "callout"), "callout"),
+			).toHaveAttribute("data-tone", "tip"),
+		)
+		fireEvent.click(
+			within(
+				partOf(blockOfType(canvasElement, "callout"), "library-callout-tones"),
+			).getByRole("button", { name: "Warning" }),
+		)
+		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+			CALLOUT_DOCUMENT.replace("[!NOTE]", "[!WARNING]"),
+		)
+		await expect(colourTransitionsOf(note)).toEqual([])
+	},
+})
+
+const tableEditingStory = (theme: "light" | "dark") => ({
+	globals: { theme },
+	args: { body: TABLE_DOCUMENT },
+	parameters: {
+		docs: {
+			description: {
+				story: `Paper 3f${theme === "dark" ? ", dark" : ""}: a table being edited. Check the focused cell rings in the Space colour on the page background with the column grip above it, an empty cell reads Empty, Tab and Shift Tab walk the cells, and Add row and Add column append an empty row or column with the caret in its first cell.`,
+			},
+		},
+	},
+	play: async ({
+		args,
+		canvasElement,
+	}: {
+		args: { onBodyChange: (body: string) => void }
+		canvasElement: HTMLElement
+	}) => {
+		const table = blockOfType(canvasElement, "table")
+		const atlas = within(table).getByText("Atlas")
+		fireEvent.pointerDown(atlas)
+		partOf(table, "markdown-table")
+			.querySelector<HTMLElement>("[tabindex]")
+			?.focus()
+		const editing = await waitFor(() => {
+			const block = blockOfType(canvasElement, "table")
+			expect(fieldsOf(block)[2]).toHaveFocus()
+			return block
+		})
+		await expect(partOf(editing, "library-table-column-grip")).toBeVisible()
+		const cell = getComputedStyle(slotsIn(editing, "library-table-cell")[2])
+		await expect([cell.paddingTop, cell.paddingInlineStart]).toEqual([
+			"10px",
+			"10px",
+		])
+		await expect(
+			within(editing).getByRole("textbox", { name: "Row 3, column 2" }),
+		).toHaveAttribute("placeholder", "Empty")
+		fireEvent.change(fieldsOf(editing)[2], { target: { value: "Atlas North" } })
+		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+			TABLE_DOCUMENT.replace("| Atlas |", "| Atlas North |"),
+		)
+		fireEvent.keyDown(fieldsOf(editing)[2], { key: "Tab" })
+		await waitFor(() => expect(fieldsOf(editing)[3]).toHaveFocus())
+		fireEvent.keyDown(fieldsOf(editing)[3], { key: "Tab", shiftKey: true })
+		await waitFor(() => expect(fieldsOf(editing)[2]).toHaveFocus())
+
+		fireEvent.click(partOf(editing, "library-table-add-row"))
+		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+			`${TABLE_DOCUMENT.replace("| Atlas |", "| Atlas North |")}\n|  |  |`,
+		)
+		await waitFor(() => expect(fieldsOf(editing)[6]).toHaveFocus())
+		fireEvent.click(partOf(editing, "library-table-add-column"))
+		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+			[
+				"Rooms held for the offsite:",
+				"| Room | Seats |  |\n| --- | --- | --- |\n| Atlas North | 12 |  |\n| Mira |  |  |\n|  |  |  |",
+			].join("\n\n"),
+		)
+		await waitFor(() =>
+			expect(
+				within(editing).getByRole("textbox", { name: "Row 1, column 3" }),
+			).toHaveFocus(),
+		)
+		await expect(
+			colourTransitionsOf(partOf(editing, "library-table-add-row")),
+		).toEqual([])
+	},
+})
+
+export const TableEditing = meta.story(tableEditingStory("light"))
+
+export const TableEditingDark = meta.story(tableEditingStory("dark"))
+
+export const CodeLanguageChosen = meta.story({
+	globals: { theme: "light" },
+	args: { body: CODE_DOCUMENT },
+	parameters: {
+		a11y: A11Y_FLOATING_FOCUS_GUARDS,
+		docs: {
+			description: {
+				story:
+					"Paper 3g: the language trigger of a code block opened. Check the 200 wide list opens under the trigger with Search languages, then Plain text, Shell, JSON, TypeScript and Python first, TypeScript ticked in the Space colour, typing filters it, and Enter writes the chosen language into the fence.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		const code = await openBlock(canvasElement, "code")
+		const trigger = partOf(code, "library-code-language")
+		await expect(trigger).toHaveAccessibleName("Language, TypeScript")
+		fireEvent.click(trigger)
+		const list = await screen.findByRole("listbox")
+		const names = within(list)
+			.getAllByRole("option")
+			.map((option) => option.textContent)
+		await expect(names.slice(0, 5)).toEqual([
+			"Plain text",
+			"Shell",
+			"JSON",
+			"TypeScript",
+			"Python",
+		])
+		await expect(
+			within(list).getByRole("option", { selected: true }),
+		).toHaveTextContent("TypeScript")
+		const search = screen.getByRole("combobox", { name: "Search languages" })
+		await waitFor(() => expect(search).toHaveFocus())
+		fireEvent.change(search, { target: { value: "py" } })
+		await expect(optionNamesIn(list)).toEqual(["Python"])
+		fireEvent.keyDown(search, { key: "Enter" })
+		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+			CODE_DOCUMENT.replace("```ts", "```python"),
+		)
+		await waitFor(() => expect(screen.queryByRole("listbox")).toBeNull())
+		await expect(isInDocument(canvasElement)).toBe(true)
+	},
+})
+
+export const CodeBodyEdited = meta.story({
+	tags: ["test-only"],
+	args: { body: CODE_DOCUMENT },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The body of a code block typed into. Check the field keeps the monospace face of the block, the fence takes the new body, and Copy code copies it.",
+			},
+		},
+	},
+	beforeEach: () => {
+		const write = spyOn(navigator.clipboard, "writeText").mockResolvedValue()
+		return () => write.mockRestore()
+	},
+	play: async ({ args, canvasElement }) => {
+		const code = await openBlock(canvasElement, "code")
+		const [body] = fieldsOf(code)
+		const pre = code.querySelector("pre") as HTMLElement
+		await expect(getComputedStyle(body).fontFamily).toBe(
+			getComputedStyle(pre).fontFamily,
+		)
+		fireEvent.change(body, {
+			target: { value: "const launch = await ship()\nawait announce(launch)" },
+		})
+		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+			CODE_DOCUMENT.replace(
+				"await ship()\n",
+				"await ship()\nawait announce(launch)\n",
+			),
+		)
+		fireEvent.click(within(code).getByRole("button", { name: "Copy code" }))
+		await waitFor(() =>
+			expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+				"const launch = await ship()\nawait announce(launch)",
+			),
+		)
+	},
+})
+
+export const WebPageLinkUpdated = meta.story({
+	globals: { theme: "light" },
+	args: {
+		body: WEB_PAGE_DOCUMENT,
+		onLinkPreview: fn(async () => SUITES_PREVIEW),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Paper 3h: the link field over a web page card, ringed in the Space colour, Return Update at its end. Check Return hands the new link to `onLinkPreview` and the card redraws with what it returns, and Escape puts back the link the card shows.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		const card = await openBlock(canvasElement, "web-page")
+		const [link] = fieldsOf(card)
+		await waitFor(() => expect(link).toHaveFocus())
+		await expect(link).toHaveAccessibleName("Link")
+		await expect(link).toHaveValue("https://www.example.org/rooms")
+		fireEvent.change(link, {
+			target: { value: "https://www.example.org/suites" },
+		})
+		fireEvent.keyDown(link, { key: "Enter" })
+		await expect(args.onLinkPreview).toHaveBeenCalledWith(
+			"https://www.example.org/suites",
+		)
+		await waitFor(() =>
+			expect(args.onBodyChange).toHaveBeenLastCalledWith(
+				[
+					"Where the team sleeps:",
+					"```web-page\nurl: https://www.example.org/suites\ntitle: Casa do Rio, suites\nsite: Casa do Rio\n```",
+				].join("\n\n"),
+			),
+		)
+		await waitFor(() =>
+			expect(
+				partOf(blockOfType(canvasElement, "web-page"), "web-page-card"),
+			).toHaveAccessibleName("Casa do Rio, suites"),
+		)
+		fireEvent.change(link, { target: { value: "https://www.example.org/bar" } })
+		fireEvent.keyDown(link, { key: "Escape" })
+		await expect(link).toHaveValue("https://www.example.org/suites")
+		await expect(link).toHaveFocus()
+	},
+})
+
+export const WebPageLinkFailed = meta.story({
+	globals: { theme: "light" },
+	args: {
+		body: WEB_PAGE_DOCUMENT,
+		onLinkPreview: fn(() => Promise.reject(new Error("offline"))),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Paper 3h, the preview refused: `onLinkPreview` rejects. Check the card keeps the previous page, the source is untouched, and the line under the field says what failed and what to do.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		const card = await openBlock(canvasElement, "web-page")
+		const [link] = fieldsOf(card)
+		fireEvent.change(link, {
+			target: { value: "https://www.example.org/nowhere" },
+		})
+		fireEvent.keyDown(link, { key: "Enter" })
+		const failure = await waitFor(() =>
+			partOf(
+				blockOfType(canvasElement, "web-page"),
+				"library-web-page-failure",
+			),
+		)
+		await expect(failure).toHaveTextContent(
+			"Couldn’t load a preview of this link. Check the address, then press Return to try again.",
+		)
+		await expect(link).toHaveAttribute("aria-describedby", failure.id)
+		await expect(
+			partOf(blockOfType(canvasElement, "web-page"), "web-page-card"),
+		).toHaveAccessibleName("Casa do Rio, rooms and rates")
+		await expect(args.onBodyChange).not.toHaveBeenCalled()
+	},
+})
+
+export const GalleryBeyondFive = meta.story({
+	globals: { theme: "light" },
+	args: { body: SEVEN_IMAGES },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A gallery of seven images being edited. The bubble shows five tiles and +2; while editing, the sixth image onward sits in tiles under the grid, inside the same ring. Check every image has its tile, remove button and caption field, the seventh moves to first place with the arrow keys, and the image left seventh can be captioned and removed.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		const gallery = await openBlock(canvasElement, "gallery")
+		await expect(slotsIn(gallery, "library-gallery-tile")).toHaveLength(7)
+		await expect(slotsIn(gallery, "library-gallery-remove")).toHaveLength(7)
+		await expect(slotsIn(gallery, "gallery-more")).toHaveLength(0)
+		const seventh = slotsIn(gallery, "library-gallery-tile")[6]
+		await expect(seventh).toHaveAccessibleName(
+			"Image 7 of 7, arrow keys move it",
+		)
+		seventh.focus()
+		for (let position = 6; position > 0; position -= 1) {
+			const tile = await waitFor(() => {
+				const focused = slotsIn(gallery, "library-gallery-tile")[position]
+				expect(focused).toHaveFocus()
+				return focused
+			})
+			fireEvent.keyDown(tile, { key: "ArrowLeft" })
+		}
+		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+			galleryWith(
+				SHELF,
+				GALLERY_ITEMS.green,
+				GALLERY_ITEMS.grey,
+				GALLERY_ITEMS.rust,
+				LAMP,
+				RUG,
+				TABLE,
+			),
+		)
+		fireEvent.change(
+			within(gallery).getByRole("textbox", { name: "Caption of image 7" }),
+			{ target: { value: "Oak table" } },
+		)
+		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+			galleryWith(
+				SHELF,
+				GALLERY_ITEMS.green,
+				GALLERY_ITEMS.grey,
+				GALLERY_ITEMS.rust,
+				LAMP,
+				RUG,
+				`${TABLE}\n  caption: Oak table`,
+			),
+		)
+		fireEvent.click(
+			within(gallery).getByRole("button", { name: "Remove image 7" }),
+		)
+		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+			galleryWith(
+				SHELF,
+				GALLERY_ITEMS.green,
+				GALLERY_ITEMS.grey,
+				GALLERY_ITEMS.rust,
+				LAMP,
+				RUG,
+			),
+		)
+	},
+})
+
+const narrowStory = (body: string, type: string) => ({
+	tags: ["test-only"],
+	args: { body },
+	parameters: {
+		docs: {
+			description: {
+				story: `The ${type} editor in a 320 wide window. Check neither the document column nor the page scrolls sideways.`,
+			},
+		},
+	},
+	render: (args: Parameters<typeof LibraryDocumentBlockEditor>[0]) => (
+		<DocumentFrame isNarrow>
+			<LibraryDocumentBlockEditor {...args} />
+		</DocumentFrame>
+	),
+	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+		await openBlock(canvasElement, type)
+		const frame = canvasElement.firstElementChild as HTMLElement
+		const column = slotIn(frame, "library-document-column")
+		frame.style.width = "320px"
+		try {
+			await waitFor(() =>
+				expect(column.scrollWidth).toBeLessThanOrEqual(column.clientWidth),
+			)
+			await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(
+				document.documentElement.clientWidth,
+			)
+		} finally {
+			frame.style.width = ""
+		}
+	},
+})
+
+export const GalleryEditingAt320 = meta.story(
+	narrowStory(SEVEN_IMAGES, "gallery"),
+)
+
+export const TableEditingAt320 = meta.story(
+	narrowStory(WIDE_TABLE_DOCUMENT, "table"),
+)

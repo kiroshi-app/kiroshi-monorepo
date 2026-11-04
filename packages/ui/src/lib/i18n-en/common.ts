@@ -418,6 +418,56 @@ const common = {
 				skeleton: {
 					column: "Column",
 				},
+				gallery: {
+					add: "Add images",
+					hint: "Drag to reorder. The first image leads.",
+					addFailed: "Couldn’t add the images. Try again.",
+					tile: "Image {{position}} of {{count}}, arrow keys move it",
+					remove: "Remove image {{position}}",
+					caption: "Caption of image {{position}}",
+					captionPlaceholder: "Add a caption",
+				},
+				checklist: {
+					item: "Item {{position}}",
+					move: "Move item {{position}}, arrow keys move it",
+				},
+				callout: {
+					text: "Callout text",
+					tone: "Callout tone",
+				},
+				table: {
+					cell: "Row {{row}}, column {{column}}",
+					empty: "Empty",
+					addRow: "Add row",
+					addColumn: "Add column",
+				},
+				code: {
+					body: "Code",
+					language: "Language, {{name}}",
+					search: "Search languages",
+					noMatch: "No language matches",
+					languages: {
+						text: "Plain text",
+						bash: "Shell",
+						json: "JSON",
+						typescript: "TypeScript",
+						python: "Python",
+						css: "CSS",
+						diff: "Diff",
+						html: "HTML",
+						markdown: "Markdown",
+						rust: "Rust",
+						tsx: "TSX",
+						yaml: "YAML",
+					},
+				},
+				webPage: {
+					link: "Link",
+					updateKey: "↵",
+					update: "Update",
+					failed:
+						"Couldn’t load a preview of this link. Check the address, then press Return to try again.",
+				},
 			},
 		},
 		bringIn: {

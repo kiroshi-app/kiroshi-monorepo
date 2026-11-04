@@ -3,6 +3,7 @@
 import {
 	type ComponentPropsWithoutRef,
 	Fragment,
+	type ReactNode,
 	useDeferredValue,
 	useMemo,
 	useState,
@@ -41,6 +42,8 @@ export type MarkdownPreProps = ComponentPropsWithoutRef<"pre"> & ExtraProps
 interface MarkdownFenceProps {
 	code: string
 	language?: string
+	header?: ReactNode
+	body?: ReactNode
 }
 
 type FenceNode = NonNullable<ExtraProps["node"]>
@@ -114,7 +117,12 @@ const FenceCode = ({ code, language }: MarkdownFenceProps) => {
 
 const FENCE_CLASS = `${MARKDOWN_ESCAPED_BLOCK_CLASS} relative my-2`
 
-const MarkdownFence = ({ code, language }: MarkdownFenceProps) => {
+export const MarkdownFence = ({
+	code,
+	language,
+	header,
+	body,
+}: MarkdownFenceProps) => {
 	const { t } = useTranslation("chat")
 	const { copied, copy } = useCopyText(code)
 	const named = language?.trim()
@@ -125,15 +133,18 @@ const MarkdownFence = ({ code, language }: MarkdownFenceProps) => {
 	return (
 		<div data-slot="markdown-fence" className={FENCE_CLASS}>
 			<pre>
-				<span
-					// biome-ignore lint/a11y/noNoninteractiveTabindex: an overflowing fence must be keyboard scrollable
-					tabIndex={0}
-					role="group"
-					aria-label={snippetLabel}
-					className="mr-8 block overflow-x-auto outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
-				>
-					<FenceCode code={code} language={language} />
-				</span>
+				{header}
+				{body ?? (
+					<span
+						// biome-ignore lint/a11y/noNoninteractiveTabindex: an overflowing fence must be keyboard scrollable
+						tabIndex={0}
+						role="group"
+						aria-label={snippetLabel}
+						className="mr-8 block overflow-x-auto outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
+					>
+						<FenceCode code={code} language={language} />
+					</span>
+				)}
 			</pre>
 			<span className="absolute top-2 right-2">
 				<TooltipButton

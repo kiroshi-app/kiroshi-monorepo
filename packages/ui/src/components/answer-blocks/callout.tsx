@@ -3,7 +3,7 @@ import type { ReactNode } from "react"
 import { type Icon, Icons } from "@workspace/ui/components/icons"
 import { cn } from "@workspace/ui/lib/utils"
 
-type CalloutTone = "note" | "warning"
+type CalloutTone = "note" | "tip" | "warning"
 
 type CalloutProps = {
 	tone: CalloutTone
@@ -24,6 +24,11 @@ const TONES: Record<CalloutTone, CalloutToneLook> = {
 		surface:
 			"border-primary-strong/16 bg-primary-strong/5 dark:bg-primary-strong/8",
 		ink: "text-primary-strong",
+	},
+	tip: {
+		icon: Icons.Tip,
+		surface: "border-success/20 bg-success/5 dark:bg-success/8",
+		ink: "text-success",
 	},
 	warning: {
 		icon: Icons.Alert,

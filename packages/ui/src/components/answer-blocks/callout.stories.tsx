@@ -26,7 +26,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"A boxed aside with a title and a body: tone `note` in the Space colour with the info icon, tone `warning` in the warning token with the triangle. Reach for it when one piece of the answer must not be skimmed past; a blockquote covers a plain quotation.",
+					"A boxed aside with a title and a body: tone `note` in the Space colour with the info icon, tone `tip` in the success token with the light bulb, tone `warning` in the warning token with the triangle. Reach for it when one piece of the answer must not be skimmed past; a blockquote covers a plain quotation.",
 			},
 		},
 	},
@@ -63,6 +63,33 @@ export const InAgentAnswer = meta.story({
 		await expect(iconColourOf(note)).toBe(resolvedRootColor("--primary-strong"))
 		await expect(warning).toHaveAttribute("data-tone", "warning")
 		await expect(iconColourOf(warning)).toBe(resolvedRootColor("--warning"))
+	},
+})
+
+export const TipTone = meta.story({
+	globals: { theme: "light" },
+	args: {
+		tone: "tip",
+		title: "Ride before ten",
+		children: "The first trams out of Martim Moniz still have seats.",
+	},
+	render: (args) => (
+		<AgentAnswerFrame intro="One thing that makes the 28 easier.">
+			<Callout {...args} />
+		</AgentAnswerFrame>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The tip tone, the `> [!TIP]` alert. No artboard draws its colours: it tints and strokes in the success token with the light bulb, the way note uses the Space colour. Check the icon wears the success token.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const tip = canvas.getByRole("note")
+		await expect(tip).toHaveAttribute("data-tone", "tip")
+		await expect(iconColourOf(tip)).toBe(resolvedRootColor("--success"))
 	},
 })
 

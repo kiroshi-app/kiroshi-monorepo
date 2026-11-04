@@ -441,6 +441,7 @@ const chat = {
 		},
 		callout: {
 			note: "Note",
+			tip: "Astuce",
 			warning: "Attention",
 		},
 		gallery: {
