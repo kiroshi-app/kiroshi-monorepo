@@ -4,8 +4,10 @@ import preview from "@workspace/storybook/preview"
 import {
 	AgentAnswerFrame,
 	expectAnswerInsideFrame,
+	isInBrowserRunner,
 	resolvedRootColor,
 	slotIn,
+	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
 import {
 	CASA_DO_RIO_FAVICON,
@@ -75,7 +77,7 @@ export const Pending = meta.story({
 		docs: {
 			description: {
 				story:
-					"The picture is on its way to the Library. Check the loader spins where the bookmark was, the button keeps focus, reads Saving the image… and ignores a second press.",
+					"The picture is on its way to the Library. Check the loader spins where the bookmark was, holds still under reduced motion, the button keeps focus, reads Saving the image… and ignores a second press.",
 			},
 		},
 	},
@@ -84,10 +86,17 @@ export const Pending = meta.story({
 
 		await expect(save).toHaveAttribute("aria-disabled", "true")
 		await expect(save).toHaveAttribute("aria-busy", "true")
-		await expect(slotIn(canvasElement, "sourced-image-saving")).toBeVisible()
+		const loader = slotIn(canvasElement, "sourced-image-saving")
+		await expect(loader).toBeVisible()
 		await userEvent.click(save)
 		await expect(save).toHaveFocus()
 		await expect(args.imageMenu?.onSaveToLibrary).not.toHaveBeenCalled()
+
+		if (!isInBrowserRunner()) return
+		await expect(getComputedStyle(loader).animationName).toBe("none")
+		await withMotionAllowed(() =>
+			expect(getComputedStyle(loader).animationName).toBe("spin"),
+		)
 	},
 })
 

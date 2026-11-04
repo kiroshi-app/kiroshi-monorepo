@@ -89,7 +89,7 @@ const SourcedImage = ({
 							<Icons.Loading
 								aria-hidden="true"
 								data-slot="sourced-image-saving"
-								className="size-3.5 animate-spin"
+								className="size-3.5 animate-spin motion-reduce:animate-none"
 							/>
 						) : (
 							<Icons.Bookmark aria-hidden="true" className="size-3.5" />
