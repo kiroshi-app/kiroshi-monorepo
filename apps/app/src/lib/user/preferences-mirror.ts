@@ -77,7 +77,7 @@ const widthOf = (value: string | null): number | null => {
 }
 
 const draggedWidthOf = (value: string | null): number | null => {
-	const width = Number(value ?? "")
+	const width = Number(value)
 	return Number.isInteger(width) && width > 0 ? width : null
 }
 
