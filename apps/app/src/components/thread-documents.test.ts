@@ -245,13 +245,7 @@ const expectGalleryShown = (
 		}
 	})
 
-const panelOf = () => {
-	const panel = screen.getAllByRole("complementary")[0]
-	if (!panel) {
-		throw new Error("No document panel")
-	}
-	return panel
-}
+const panelOf = () => screen.getByRole("complementary")
 
 describe("a gallery in a document opened from a conversation", () => {
 	const imageReads: LibraryCall[] = []
