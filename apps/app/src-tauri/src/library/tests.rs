@@ -14,8 +14,8 @@ use yrs::{Doc, GetString, ReadTxn, StateVector, Text, Transact, Update};
 use super::commands::{
 	library_apply_update, library_copy, library_create_document, library_delete, library_import,
 	library_import_paths, library_list, library_open_document, library_read_document,
-	library_read_file, library_read_image, library_read_thumbnail, library_rename_document,
-	library_reveal, library_save, library_save_message, library_templates,
+	library_read_file, library_read_image, library_read_picked_image, library_read_thumbnail,
+	library_rename_document, library_reveal, library_save, library_save_message, library_templates,
 };
 use super::contract::{
 	LibraryChanged, LibraryDocumentFormat, LibraryDocumentRenamed, LibraryDocumentUpdated,
@@ -1833,6 +1833,78 @@ fn a_name_starting_with_a_dot_is_refused_by_both_imports_and_writes_nothing() {
 	assert_eq!(sent, hidden.map(|name| Err(invalid(name))));
 	assert_eq!(outcomes, hidden.map(|name| LibraryImport::Refused { error: invalid(name) }));
 	assert!(entries(&root).is_empty());
+}
+
+#[tokio::test]
+async fn a_picked_image_read_then_imported_lands_what_importing_its_path_lands() {
+	let picked = temp_root();
+	fs::create_dir_all(&*picked).expect("the picked folder lands");
+	let path = picked.join("cover.png");
+	let bytes = picture(600, 400, 90);
+	fs::write(&path, &bytes).expect("the picked image lands");
+	let sent_root = temp_root();
+	let dropped_root = temp_root();
+
+	let read = library_read_picked_image(path.clone()).await.expect("the picked image reads");
+	let sent = import(&sent_root, SPACE, &read.name, &read.content).expect("the sent image lands");
+	let dropped = match &import_paths(&dropped_root, SPACE, &[path])[..] {
+		[LibraryImport::Imported { item }] => item.clone(),
+		outcomes => panic!("the dropped image was refused: {outcomes:?}"),
+	};
+	let landed_bytes = |root: &Path, item: &LibraryItem| {
+		fs::read(space_dir(root, SPACE).join(&item.name)).expect("the landed image reads")
+	};
+
+	assert_eq!(
+		read,
+		LibraryImage {
+			name: "cover.png".to_owned(),
+			mime_type: "image/png".to_owned(),
+			content: base64_of(&bytes),
+		}
+	);
+	assert_eq!((&sent.name, sent.kind), (&dropped.name, dropped.kind));
+	assert_eq!(landed_bytes(&sent_root, &sent), landed_bytes(&dropped_root, &dropped));
+	assert_eq!(landed_bytes(&sent_root, &sent), bytes);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_picked_image_is_refused_by_name_type_size_presence_and_permission() {
+	use std::os::unix::fs::PermissionsExt;
+
+	let picked = temp_root();
+	fs::create_dir_all(&*picked).expect("the picked folder lands");
+	for name in ["notes.md", "archive.zip", "locked.png", "huge.png"] {
+		fs::write(picked.join(name), "picked").expect("the picked file lands");
+	}
+	File::options()
+		.write(true)
+		.open(picked.join("huge.png"))
+		.expect("the file opens")
+		.set_len(MAX_RELAYED_IMPORT_BYTES + 1)
+		.expect("the file grows");
+	for name in ["locked.png", "huge.png"] {
+		fs::set_permissions(picked.join(name), fs::Permissions::from_mode(0o000))
+			.expect("the file locks");
+	}
+	let read = |name: &str| read_picked_image(&picked.join(name));
+
+	assert_eq!(read("notes.md"), Err(LibraryError::NotAnImage { name: "notes.md".to_owned() }));
+	assert_eq!(
+		read("archive.zip"),
+		Err(LibraryError::Unsupported { name: "archive.zip".to_owned() })
+	);
+	assert_eq!(read("gone.png"), Err(LibraryError::Missing { name: "gone.png".to_owned() }));
+	assert!(matches!(read("locked.png"), Err(LibraryError::Unreadable { .. })));
+	assert_eq!(
+		read("huge.png"),
+		Err(LibraryError::TooLarge {
+			name: "huge.png".to_owned(),
+			bytes: MAX_RELAYED_IMPORT_BYTES + 1,
+			limit: MAX_RELAYED_IMPORT_BYTES
+		})
+	);
 }
 
 fn heard_renames(app: &App<MockRuntime>) -> mpsc::Receiver<LibraryDocumentRenamed> {

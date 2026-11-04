@@ -712,6 +712,23 @@ fn import_path(root: &Path, space_id: &str, path: &Path) -> Result<LibraryItem, 
 	imported(root, space_id, &name, &accepted, &bytes, import_limit)
 }
 
+pub(crate) fn read_picked_image(path: &Path) -> Result<LibraryImage, LibraryError> {
+	let name = path.file_name().unwrap_or_default().to_string_lossy().into_owned();
+	let accepted = importable(&name)?;
+	let AcceptedType::Image { mime_type } = accepted else {
+		return Err(LibraryError::NotAnImage { name });
+	};
+	let missing = || LibraryError::Missing { name: name.clone() };
+	let metadata = fs::metadata(path).map_err(|error| refusal(&error, missing()))?;
+	within(&name, metadata.len(), relayed_import_limit(&accepted))?;
+	let bytes = fs::read(path).map_err(|error| refusal(&error, missing()))?;
+	Ok(LibraryImage {
+		name,
+		mime_type: mime_type.to_owned(),
+		content: BASE64_STANDARD.encode(bytes),
+	})
+}
+
 fn importable(name: &str) -> Result<AcceptedType, LibraryError> {
 	if !is_plain_name(name) || name.starts_with('.') {
 		return Err(LibraryError::InvalidName { name: name.to_owned() });
