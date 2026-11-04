@@ -32,8 +32,8 @@ fn admitting(origin: &str) -> HashMap<String, String> {
 	HashMap::from([(origin.to_owned(), "unused".to_owned())])
 }
 
-fn html(page: &'static str) -> Response {
-	([(header::CONTENT_TYPE, "text/html; charset=utf-8")], page).into_response()
+fn html(page: impl Into<Body>) -> Response {
+	([(header::CONTENT_TYPE, "text/html; charset=utf-8")], page.into()).into_response()
 }
 
 async fn previewed(page: &'static str) -> Result<LibraryLinkPreview, LibraryLinkPreviewError> {
@@ -152,7 +152,7 @@ async fn a_body_past_two_mebibytes_is_parsed_from_what_is_already_held() {
 						)
 					});
 					let padding = futures_util::stream::repeat_with(|| Ok(vec![b' '; 64 * 1024]));
-					html_stream(Body::from_stream(futures_util::StreamExt::chain(head, padding)))
+					html(Body::from_stream(futures_util::StreamExt::chain(head, padding)))
 				}),
 			)
 			.route(
@@ -160,7 +160,7 @@ async fn a_body_past_two_mebibytes_is_parsed_from_what_is_already_held() {
 				get(|| async {
 					let mut page = vec![b' '; MAX_BYTES];
 					page.extend_from_slice(b"<title>Late</title>");
-					html_stream(Body::from(page))
+					html(Body::from(page))
 				}),
 			),
 	)
@@ -172,10 +172,6 @@ async fn a_body_past_two_mebibytes_is_parsed_from_what_is_already_held() {
 
 	assert_eq!(endless.map(|preview| preview.title), Ok("Held".to_owned()));
 	assert_eq!(late.map(|preview| preview.title), Ok(LOOPBACK_HOST.to_owned()));
-}
-
-fn html_stream(body: Body) -> Response {
-	([(header::CONTENT_TYPE, "text/html")], body).into_response()
 }
 
 #[tokio::test]
