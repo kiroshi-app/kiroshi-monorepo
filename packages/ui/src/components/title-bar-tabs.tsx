@@ -1,6 +1,7 @@
 "use client"
 
 import { Tabs } from "@base-ui/react/tabs"
+import type { TFunction } from "i18next"
 import {
 	type FocusEvent,
 	type KeyboardEvent,
@@ -43,6 +44,7 @@ import {
 } from "@workspace/ui/hooks/use-sliding-lift"
 import { useStableCallback } from "@workspace/ui/hooks/use-stable-callback"
 import { middleClickHandlers } from "@workspace/ui/lib/click-modifiers"
+import { libraryDisplayName } from "@workspace/ui/lib/library-display-name"
 import { STILL_UNDER_REDUCED_MOTION } from "@workspace/ui/lib/reduced-motion"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -65,7 +67,8 @@ type TitleBarTab = {
 	isNeedingYou?: boolean
 }
 
-const titleOf = (tab: TitleBarTab) => tab.descriptor?.name ?? tab.title
+const titleOf = (tab: TitleBarTab, t: TFunction<"common">) =>
+	tab.descriptor ? libraryDisplayName(tab.descriptor.name, t) : tab.title
 
 const iconOf = ({ icon, descriptor }: TitleBarTab) => {
 	if (!descriptor) return icon
@@ -491,6 +494,7 @@ const useTabLift = ({
 	onTearOffMove,
 	onTearOffCancel,
 }: TabLiftSource) => {
+	const { t } = useTranslation("common")
 	const isPinned = (id: string) => pinned.some((tab) => tab.id === id)
 	const zoneOf = (id: string) => (isPinned(id) ? pinned : kept)
 	const rankOf = (id: string) => zoneOf(id).findIndex((tab) => tab.id === id)
@@ -508,7 +512,7 @@ const useTabLift = ({
 		const to = from + step
 		if (to < 0 || to >= zone.length) return
 		setMove({
-			title: titleOf(zone[from]),
+			title: titleOf(zone[from], t),
 			position: (isPinned(id) ? 0 : pinned.length) + to + 1,
 			count: pinned.length + kept.length,
 		})
@@ -639,7 +643,7 @@ const TitleBarTabItem = ({
 		(landing) => isLifted && landing === TORN_OFF,
 	)
 	const PinIcon = tab.isPinned ? Icons.Unpin : Icons.Pin
-	const title = titleOf(tab)
+	const title = titleOf(tab, t)
 
 	return (
 		<ContextMenu>
@@ -813,16 +817,20 @@ type IncomingTabProps = {
 	box: IncomingBox
 }
 
-const IncomingTab = ({ tab, widthClass, box }: IncomingTabProps) => (
-	<TitleBarTabChip
-		aria-hidden="true"
-		className={cn(INCOMING_TAB, widthClass)}
-		icon={iconOf(tab)}
-		placement="strip"
-		style={{ left: box.left, width: box.width ?? undefined }}
-		title={titleOf(tab)}
-	/>
-)
+const IncomingTab = ({ tab, widthClass, box }: IncomingTabProps) => {
+	const { t } = useTranslation("common")
+
+	return (
+		<TitleBarTabChip
+			aria-hidden="true"
+			className={cn(INCOMING_TAB, widthClass)}
+			icon={iconOf(tab)}
+			placement="strip"
+			style={{ left: box.left, width: box.width ?? undefined }}
+			title={titleOf(tab, t)}
+		/>
+	)
+}
 
 type IncomingIndexSource = {
 	tabs: TitleBarTab[]
@@ -919,7 +927,7 @@ const OverflowChip = ({ tabs, onSelectTab }: OverflowChipProps) => {
 						<span aria-hidden="true" className={OVERFLOW_ICON}>
 							{iconOf(tab)}
 						</span>
-						<span className="min-w-0 truncate">{titleOf(tab)}</span>
+						<span className="min-w-0 truncate">{titleOf(tab, t)}</span>
 					</ContextMenuItem>
 				))}
 			</ContextMenuContent>
@@ -1090,7 +1098,7 @@ const TitleBarTabs = ({
 								onClose={() => onCloseTab?.(tab.id)}
 								onKeyDown={closeKeyOf(tab.id)}
 								revealHandlers={closeRevealFor(tab.id)}
-								title={titleOf(tab)}
+								title={titleOf(tab, t)}
 							/>
 						</TabCloseSlot>
 					))}

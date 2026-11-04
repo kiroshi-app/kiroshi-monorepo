@@ -149,6 +149,46 @@ export const LibraryDocumentTab = meta.story({
 	},
 })
 
+const WHITESPACE_NAMED_DOCUMENT_TAB = {
+	...QUARTERLY_REPORT_TAB,
+	descriptor: { ...QUARTERLY_REPORT, name: "   " },
+}
+
+export const WhitespaceDocumentNameReadsUntitled = meta.story({
+	args: {
+		tabs: [WHITESPACE_NAMED_DOCUMENT_TAB, RELEASE_NOTES],
+		activeTabId: WHITESPACE_NAMED_DOCUMENT_TAB.id,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A Library document whose name holds only spaces, open in a tab beside a conversation. Check the tab, its accessible name, Close and the move announcement read Untitled, and that the conversation tab without a descriptor keeps its own title.",
+			},
+		},
+	},
+	play: async ({ canvasElement }: DescriptorPlayContext) => {
+		const tab = tabNamed(canvasElement, "Untitled")
+		await expect(tab).toHaveTextContent("Untitled")
+		await expect(
+			within(barIn(canvasElement)).getByRole("button", {
+				name: "Close Untitled",
+			}),
+		).toBeInTheDocument()
+		await expect(
+			tabNamed(canvasElement, RELEASE_NOTES.title),
+		).toHaveTextContent(RELEASE_NOTES.title)
+
+		tab.focus()
+		fireEvent.keyDown(tab, { key: "ArrowRight", altKey: true })
+		await waitFor(() =>
+			expect(
+				slotIn(document.body, "title-bar-tab-move-announcement"),
+			).toHaveTextContent("Untitled moved to position 2 of 2"),
+		)
+	},
+})
+
 const IMAGE_TABS = {
 	tabs: [MOODBOARD_TAB, RELEASE_NOTES],
 	activeTabId: MOODBOARD_TAB.id,

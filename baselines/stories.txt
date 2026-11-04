@@ -1652,6 +1652,7 @@ navigation-titlebartabchip--short-title-dark
 navigation-titlebartabs--library-document-tab
 navigation-titlebartabs--library-image-tab
 navigation-titlebartabs--long-name-truncated
+navigation-titlebartabs--whitespace-document-name-reads-untitled
 navigation-userchip--default
 navigation-userchip--long-content
 navigation-userchip--middle-click-ignored
