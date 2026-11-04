@@ -240,9 +240,10 @@ const moveActiveIndex = (space: SpaceTabs, steps: number): SpaceTabs =>
 
 export const moveInHistory = (space: SpaceTabs, steps: number): SpaceTabs => {
 	const moved = moveActiveIndex(space, steps)
-	return navigatesInPlace(activeTabOf(space), currentHrefOf(activeTabOf(moved)))
+	const target = currentHrefOf(activeTabOf(moved))
+	return navigatesInPlace(activeTabOf(space), target)
 		? moved
-		: space
+		: showInAnotherTab(space, target)
 }
 
 export const dropTabsWhere = (

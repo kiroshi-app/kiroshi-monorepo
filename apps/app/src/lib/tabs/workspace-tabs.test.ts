@@ -811,6 +811,35 @@ describe("the leave guard", () => {
 		expect(activeHref(shown.tabs)).toBe(USER_SETTINGS)
 	})
 
+	it("holds going back from a pinned tab while the guard cancels", () => {
+		const shown = tabsShowingSettings()
+		shown.tabs.pin(shown.settingsId)
+		const guard = cancellingGuard()
+		shown.tabs.guardLeave(guard)
+		const before = shown.tabs.getState()
+
+		shown.tabs.back()
+
+		expect(guard).toHaveBeenCalledOnce()
+		expect(shown.tabs.getState()).toBe(before)
+		expect(activeHref(shown.tabs)).toBe(USER_SETTINGS)
+	})
+
+	it("shows the previous URL in another tab once the guard proceeds", () => {
+		const shown = tabsShowingSettings()
+		shown.tabs.pin(shown.settingsId)
+		const guard = proceedingGuard()
+		shown.tabs.guardLeave(guard)
+
+		shown.tabs.back()
+
+		expect(guard).toHaveBeenCalledOnce()
+		expect(activeHref(shown.tabs)).toBe(threadOf("earlier"))
+		expect(tabWithId(shown.tabs, shown.settingsId)?.entries.at(-1)?.href).toBe(
+			USER_SETTINGS,
+		)
+	})
+
 	it.each([
 		["active", ({ settingsId }: ShownSettings) => settingsId],
 		["inactive", ({ otherId }: ShownSettings) => otherId],
@@ -1023,21 +1052,68 @@ describe("a push from a pinned tab", () => {
 		expect(tabs.history.location.state.key).not.toBe(keyBefore)
 	})
 
-	it("ignores back, forward and go that would change the URL of the pinned tab", () => {
+	it.each([
+		["back", "/", (tabs: WorkspaceTabs) => tabs.history.back()],
+		[
+			"forward",
+			threadOf("second"),
+			(tabs: WorkspaceTabs) => tabs.history.forward(),
+		],
+		["go", "/", (tabs: WorkspaceTabs) => tabs.history.go(-1)],
+	])(
+		"shows the %s target in another tab, then focuses it",
+		(_, target, move) => {
+			const tabs = tabsOfSpace()
+			tabs.history.push(threadOf("first"))
+			tabs.history.push(threadOf("second"))
+			tabs.history.back()
+			const [pinnedId = ""] = idsOf(tabs)
+			tabs.pin(pinnedId)
+			const pinnedBefore = tabWithId(tabs, pinnedId)
+
+			move(tabs)
+			const openedId = viewOf(tabs).activeId
+			tabs.select(pinnedId)
+			move(tabs)
+
+			expect(shownHrefs(tabs)).toEqual([threadOf("first"), target])
+			expect(viewOf(tabs).activeId).toBe(openedId)
+			expect(activeHref(tabs)).toBe(target)
+			expect(tabWithId(tabs, pinnedId)).toEqual(pinnedBefore)
+		},
+	)
+
+	it("moves inside the pinned tab when the entry it reaches has the same URL", () => {
 		const tabs = tabsOfSpace()
-		tabs.history.push(threadOf("first"))
-		tabs.history.push(threadOf("second"))
-		tabs.history.back()
+		tabs.history.push(threadOf("same"))
+		tabs.history.push(threadOf("same"))
 		const [pinnedId = ""] = idsOf(tabs)
 		tabs.pin(pinnedId)
-		const pinnedBefore = tabWithId(tabs, pinnedId)
+		const indexBefore = tabWithId(tabs, pinnedId)?.index ?? 0
 
 		tabs.history.back()
-		tabs.history.forward()
-		tabs.history.go(-2)
 
-		expect(activeHref(tabs)).toBe(threadOf("first"))
-		expect(tabWithId(tabs, pinnedId)).toEqual(pinnedBefore)
+		expect(idsOf(tabs)).toEqual([pinnedId])
+		expect(tabWithId(tabs, pinnedId)?.index).toBe(indexBefore - 1)
+		expect(activeHref(tabs)).toBe(threadOf("same"))
+	})
+
+	it("shows the previous URL in another tab on Settings Back from a pinned settings tab", async () => {
+		const tabs = tabsOfSpace()
+		tabs.history.push(threadOf("earlier"))
+		tabs.history.push(USER_SETTINGS)
+		const [pinnedId = ""] = idsOf(tabs)
+		tabs.pin(pinnedId)
+		const router = routerOn(tabs)
+		await router.load()
+
+		expect(router.history.canGoBack()).toBe(true)
+		router.history.back()
+		await router.load()
+
+		expect(shownHrefs(tabs)).toEqual([USER_SETTINGS, threadOf("earlier")])
+		expect(viewOf(tabs).activeId).not.toBe(pinnedId)
+		expect(router.state.location.href).toBe(threadOf("earlier"))
 	})
 
 	it("pushes into an unpinned active tab even when a pinned tab shows that page", () => {
