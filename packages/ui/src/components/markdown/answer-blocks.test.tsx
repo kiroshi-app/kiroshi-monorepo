@@ -624,6 +624,27 @@ describe("fields of the Final page artboards", () => {
 		).toContain(save)
 	})
 
+	it("shows Save as pending only while the answer actions are saving that image", () => {
+		const renderSaving = (savingSrc: string) =>
+			render(SOURCED_DETAILS, {
+				answerActions: {
+					...ANSWER_ACTIONS,
+					imageMenu: { onSaveToLibrary: () => undefined },
+					isSavingImage: (src) => src === savingSrc,
+				},
+			})
+
+		const saving = renderSaving("https://images.example.org/miradouro.jpg")
+		expect(saving).toContain('aria-label="Saving the image…"')
+		expect(saving).toContain('aria-disabled="true"')
+		expect(saving).toContain(slot("sourced-image-saving"))
+
+		const resting = renderSaving("https://images.example.org/other.jpg")
+		expect(resting).toContain('aria-label="Save the image"')
+		expect(resting).not.toContain("aria-disabled")
+		expect(resting).not.toContain(slot("sourced-image-saving"))
+	})
+
 	it.each([
 		[
 			"the favicon is not https",

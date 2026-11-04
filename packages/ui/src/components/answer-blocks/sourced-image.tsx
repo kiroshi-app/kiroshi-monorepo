@@ -24,6 +24,7 @@ type SourcedImageProps = {
 	chips?: readonly string[]
 	onOpen?: () => void
 	imageMenu?: ImageMenuActions<AnswerImage>
+	isSaving?: boolean
 	className?: string
 }
 
@@ -37,6 +38,7 @@ const SourcedImage = ({
 	chips = [],
 	onOpen,
 	imageMenu,
+	isSaving = false,
 	className,
 }: SourcedImageProps) => {
 	const { t } = useTranslation("chat")
@@ -70,11 +72,28 @@ const SourcedImage = ({
 				{onSaveToLibrary ? (
 					<button
 						type="button"
-						aria-label={t("answerBlock.sourcedImage.save")}
-						className="absolute end-3 top-3 grid size-8 place-items-center rounded-full bg-black/70 text-white outline-offset-2 hover:bg-black/80 active:bg-black/90"
-						onClick={() => onSaveToLibrary(image)}
+						aria-label={t(
+							isSaving
+								? "answerBlock.sourcedImage.saving"
+								: "answerBlock.sourcedImage.save",
+						)}
+						aria-disabled={isSaving || undefined}
+						aria-busy={isSaving || undefined}
+						className={cn(
+							"absolute end-3 top-3 grid size-8 place-items-center rounded-full bg-black/70 text-white outline-offset-2",
+							!isSaving && "hover:bg-black/80 active:bg-black/90",
+						)}
+						onClick={isSaving ? undefined : () => onSaveToLibrary(image)}
 					>
-						<Icons.Bookmark aria-hidden="true" className="size-3.5" />
+						{isSaving ? (
+							<Icons.Loading
+								aria-hidden="true"
+								data-slot="sourced-image-saving"
+								className="size-3.5 animate-spin"
+							/>
+						) : (
+							<Icons.Bookmark aria-hidden="true" className="size-3.5" />
+						)}
 					</button>
 				) : null}
 				<p className="absolute start-3 bottom-3 flex max-w-[calc(100%-1.5rem)] items-center gap-1.5 rounded-full bg-black/80 p-1.25 text-xs font-medium text-white">

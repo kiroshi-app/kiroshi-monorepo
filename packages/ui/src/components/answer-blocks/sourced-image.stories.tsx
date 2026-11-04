@@ -68,6 +68,29 @@ export const InAgentAnswer = meta.story({
 	},
 })
 
+export const Pending = meta.story({
+	globals: { theme: "dark" },
+	args: { isSaving: true },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The picture is on its way to the Library. Check the loader spins where the bookmark was, the button keeps focus, reads Saving the image… and ignores a second press.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		const save = canvas.getByRole("button", { name: "Saving the image…" })
+
+		await expect(save).toHaveAttribute("aria-disabled", "true")
+		await expect(save).toHaveAttribute("aria-busy", "true")
+		await expect(slotIn(canvasElement, "sourced-image-saving")).toBeVisible()
+		await userEvent.click(save)
+		await expect(save).toHaveFocus()
+		await expect(args.imageMenu?.onSaveToLibrary).not.toHaveBeenCalled()
+	},
+})
+
 export const InNarrowColumn = meta.story({
 	args: {
 		title: "CasadoRioterraceovertheTagusatsunsetwithbridgeview",

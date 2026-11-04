@@ -136,6 +136,7 @@ export const MarkdownFigure = ({
 				}
 				image={{ src, alt }}
 				imageMenu={imageMenu && imageMenuActionsFor(imageMenu, () => 0)}
+				isSaving={actions?.isSavingImage?.(src)}
 				onOpen={actions ? () => actions.onOpenImage([image], 0) : undefined}
 				source={{
 					domain: sourceName,

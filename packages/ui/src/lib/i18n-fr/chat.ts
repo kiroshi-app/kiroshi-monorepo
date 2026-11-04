@@ -407,6 +407,7 @@ const chat = {
 		},
 		sourcedImage: {
 			save: "Enregistrer l’image",
+			saving: "Enregistrement de l’image…",
 		},
 		webPage: {
 			open: "Ouvrir comme page",
