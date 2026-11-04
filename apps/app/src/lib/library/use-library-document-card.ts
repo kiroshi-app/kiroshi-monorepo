@@ -16,7 +16,7 @@ const documentNamed = (items: LibraryItem[], name: string) =>
 
 export const useLibraryDocumentCard = (spaceId: string, name: string) => {
 	const listed = useQuery({
-		queryKey: libraryQueryKeys.itemsOf(spaceId),
+		queryKey: libraryQueryKeys.documentsOf(spaceId),
 		queryFn: () => readLibraryItems(spaceId),
 		select: (items: LibraryItem[]) => documentNamed(items, name),
 		meta: {

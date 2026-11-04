@@ -40,7 +40,7 @@ export const useComposerLibrary = (
 	stage: (document: PromptAttachment) => void,
 ): ComposerLibrary | undefined => {
 	const listed = useQuery({
-		queryKey: libraryQueryKeys.itemsOf(spaceId ?? ""),
+		queryKey: libraryQueryKeys.documentsOf(spaceId ?? ""),
 		queryFn: spaceId ? () => readLibraryItems(spaceId) : skipToken,
 		select: documentsIn,
 		meta: {

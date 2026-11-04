@@ -2,6 +2,8 @@ export const libraryQueryKeys = {
 	all: ["library"] as const,
 	itemsOf: (spaceId: string) =>
 		[...libraryQueryKeys.all, "items", spaceId] as const,
+	documentsOf: (spaceId: string) =>
+		[...libraryQueryKeys.itemsOf(spaceId), "documents"] as const,
 	excerptOf: (spaceId: string, name: string, modifiedAt: number) =>
 		[...libraryQueryKeys.all, "excerpt", spaceId, name, modifiedAt] as const,
 	imageOf: (spaceId: string, name: string, modifiedAt: number) =>
