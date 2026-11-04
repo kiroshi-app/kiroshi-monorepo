@@ -167,20 +167,20 @@ const renderLibraryScreen = async ({
 	openedFirst,
 }: ScreenOptions) => {
 	const onOpenInNewTab = vi.fn()
-	render(
-		createElement(LibraryScreenHoldingOpening, {
-			spaceId: SPACE_ID,
-			isJoined,
-			bots: [],
-			openedFirst,
-			onOpenInNewTab,
-		}),
-		{ wrapper: createQueryTestWrapper().wrapper },
-	)
+	const screenElement = createElement(LibraryScreenHoldingOpening, {
+		spaceId: SPACE_ID,
+		isJoined,
+		bots: [],
+		openedFirst,
+		onOpenInNewTab,
+	})
+	const view = render(screenElement, {
+		wrapper: createQueryTestWrapper().wrapper,
+	})
 	if (openedFirst === undefined) {
 		await screen.findByRole("heading", { level: 1, name: LIBRARY_TITLE })
 	}
-	return { onOpenInNewTab }
+	return { onOpenInNewTab, rerender: () => view.rerender(screenElement) }
 }
 
 const press = async (target: Element) => {
@@ -390,7 +390,7 @@ describe("a tab opening a Library item", () => {
 	)
 
 	it.each(SPACES)(
-		"shows the failed view, and no grid item, for a deleted document on %s",
+		"shows the failed view and raises one notice for a deleted document the host refuses to open, on %s",
 		async (_space, isJoined) => {
 			harness.listed = [IMAGE]
 			harness.refused = "library_open_document"
@@ -398,10 +398,87 @@ describe("a tab opening a Library item", () => {
 			await renderLibraryScreen({ isJoined, openedFirst: NOTES_OPENING })
 
 			await waitFor(() => expect(raiseFailureNotice).toHaveBeenCalledOnce())
-			await settle()
+			await settle(50)
+			expect(raiseFailureNotice).toHaveBeenCalledOnce()
 			expect(callsOf("library_list")).toHaveLength(1)
 			expect(gridItemShown()).toBe(false)
 			expect(editorShown()).toBeNull()
+		},
+	)
+
+	it.each(SPACES)(
+		"shows the failed view and raises one notice for a document the list no longer carries, on %s",
+		async (_space, isJoined) => {
+			harness.listed = [IMAGE]
+
+			await renderLibraryScreen({ isJoined, openedFirst: NOTES_OPENING })
+
+			await waitFor(() =>
+				expect(raiseFailureNotice).toHaveBeenCalledExactlyOnceWith(
+					expect.objectContaining({
+						title: common("library.failure.document.open"),
+					}),
+				),
+			)
+			expect(gridItemShown()).toBe(false)
+			expect(editorShown()).toBeNull()
+		},
+	)
+
+	it.each(SPACES)(
+		"shows the failed view and raises one notice for an image the list does not carry, on %s",
+		async (_space, isJoined) => {
+			harness.listed = [DOCUMENT]
+
+			const { rerender } = await renderLibraryScreen({
+				isJoined,
+				openedFirst: { kind: "image", name: "diagram.png" },
+			})
+
+			await waitFor(() =>
+				expect(raiseFailureNotice).toHaveBeenCalledExactlyOnceWith(
+					expect.objectContaining({
+						title: common("library.failure.image"),
+					}),
+				),
+			)
+			rerender()
+			await settle(50)
+			expect(raiseFailureNotice).toHaveBeenCalledOnce()
+			expect(gridItemShown()).toBe(false)
+			expect(lightboxBack()).toBeNull()
+		},
+	)
+
+	it.each(SPACES)(
+		"shows the failed view and raises one notice when the shown document leaves the list, on %s",
+		async (_space, isJoined) => {
+			const { rerender } = await renderLibraryScreen({
+				isJoined,
+				openedFirst: NOTES_OPENING,
+			})
+			expect((await titleField()).value).toBe("notes")
+
+			harness.listed = [IMAGE]
+			await act(async () => {
+				window.dispatchEvent(new Event("focus"))
+			})
+
+			await waitFor(() => expect(editorShown()).toBeNull())
+			await waitFor(() =>
+				expect(raiseFailureNotice).toHaveBeenCalledExactlyOnceWith(
+					expect.objectContaining({
+						title: common("library.failure.document.open"),
+					}),
+				),
+			)
+			rerender()
+			await act(async () => {
+				window.dispatchEvent(new Event("focus"))
+			})
+			await settle(50)
+			expect(raiseFailureNotice).toHaveBeenCalledOnce()
+			expect(gridItemShown()).toBe(false)
 		},
 	)
 
@@ -504,6 +581,8 @@ describe("Delete in the menu of a Library item", () => {
 			await waitFor(() => expect(lightboxBack()).toBeNull())
 			await waitFor(() => expect(tileShown("diagram.png")).toBe(false))
 			expect(await tileOf("notes")).toBeInstanceOf(HTMLElement)
+			await settle(50)
+			expect(raiseFailureNotice).not.toHaveBeenCalled()
 			expect(callsOf("library_delete")).toEqual([
 				{ spaceId: SPACE_ID, name: "diagram.png" },
 			])
@@ -1203,6 +1282,8 @@ describe("the document bar", () => {
 			expect(callsOf("library_delete")).toEqual([
 				{ spaceId: SPACE_ID, name: "notes.txt" },
 			])
+			await settle(50)
+			expect(raiseFailureNotice).not.toHaveBeenCalled()
 		},
 	)
 

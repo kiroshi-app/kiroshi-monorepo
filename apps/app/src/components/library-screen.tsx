@@ -1,4 +1,4 @@
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 import {
 	LibraryDocumentEditor,
@@ -22,6 +22,7 @@ import { BareAppHeader } from "@/components/bare-app-header"
 import { LibraryDropTarget } from "@/components/library-drop-target"
 import type { LibraryItem, Space } from "@/lib/bindings"
 import type { Bot } from "@/lib/conversations/store-contract"
+import { failureReporterIn } from "@/lib/failure-report"
 import { storedImageSourceOf } from "@/lib/library/library-image-source"
 import {
 	documentNamedAs,
@@ -127,6 +128,57 @@ const openedDocumentOf = (
 const documentNameOf = (opening: LibraryOpening | undefined) =>
 	opening?.kind === "document" ? opening.name : null
 
+type OpeningPresence = {
+	opening: LibraryOpening | undefined
+	hasListed: boolean
+	isListed: boolean
+	isDocumentOpened: boolean
+	isDocumentRead: boolean
+}
+
+const missingOpeningOf = ({
+	opening,
+	hasListed,
+	isListed,
+	isDocumentOpened,
+	isDocumentRead,
+}: OpeningPresence) => {
+	const isUnlisted = hasListed && !isListed && !isDocumentOpened
+	const isReadOrImage = opening?.kind === "image" || isDocumentRead
+	return isUnlisted && isReadOrImage ? opening : undefined
+}
+
+const reportFailure = failureReporterIn("library-screen")
+
+const missingNoticeTitleOf = (kind: LibraryOpening["kind"]) =>
+	kind === "image"
+		? i18n.t("common:library.failure.image")
+		: i18n.t("common:library.failure.document.open")
+
+const useMissingOpeningNotice = (
+	spaceId: string,
+	missing: LibraryOpening | undefined,
+) => {
+	const raisedFor = useRef<string | null>(null)
+	const kind = missing?.kind
+	const name = missing?.name
+	useEffect(() => {
+		if (kind === undefined) {
+			raisedFor.current = null
+			return
+		}
+		const raised = `${kind}:${name}`
+		if (raisedFor.current === raised) {
+			return
+		}
+		raisedFor.current = raised
+		void reportFailure(
+			{ title: missingNoticeTitleOf(kind) },
+			{ space: spaceId },
+		)
+	}, [spaceId, kind, name])
+}
+
 const renamedDraftOf = (
 	opened: OpenedDocument,
 	{ name }: LibraryItem,
@@ -204,6 +256,16 @@ export const LibraryScreen = ({
 		bots,
 		title: shownTitleOf(openedDocument?.title ?? ""),
 	})
+	useMissingOpeningNotice(
+		spaceId,
+		missingOpeningOf({
+			opening,
+			hasListed: library.hasLoaded,
+			isListed: listedOpened !== undefined,
+			isDocumentOpened: openedDocument !== null,
+			isDocumentRead: document !== null,
+		}),
+	)
 
 	const shownItems = library.items
 		.filter((item) => matchesQuery(item, query))
