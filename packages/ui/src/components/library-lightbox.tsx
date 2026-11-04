@@ -48,6 +48,8 @@ const STEP = cn(
 	"size-10 bg-foreground/10 hover:bg-foreground/16",
 )
 
+const LIGHTBOX_SURFACE = "dark bg-[#080809]/93 text-foreground"
+
 const ZOOM_CONTROL = cn(LIBRARY_BAR_ROUND, "size-7 hover:bg-foreground/8")
 
 const ZOOM_SLOT = "library-lightbox-zoom"
@@ -262,7 +264,8 @@ const LibraryLightbox = ({
 				{image ? (
 					<DialogPrimitive.Popup
 						className={cn(
-							"dark inset-0 z-50 flex flex-col bg-[#080809]/93 text-foreground outline-none",
+							LIGHTBOX_SURFACE,
+							"inset-0 z-50 flex flex-col outline-none",
 							container ? "absolute" : "fixed",
 						)}
 						data-lightbox-backdrop
@@ -382,4 +385,9 @@ const LibraryLightbox = ({
 	)
 }
 
-export { LibraryLightbox, type LibraryLightboxImage, type LibraryLightboxProps }
+export {
+	LIGHTBOX_SURFACE,
+	LibraryLightbox,
+	type LibraryLightboxImage,
+	type LibraryLightboxProps,
+}

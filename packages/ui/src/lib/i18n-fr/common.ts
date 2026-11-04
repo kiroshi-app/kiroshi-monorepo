@@ -606,6 +606,22 @@ const common = {
 			openInLibrary: "Ouvrir dans la Bibliothèque",
 			close: "Fermer",
 		},
+		tab: {
+			loadingDocument: "Chargement du document…",
+			loadingImage: "Chargement de l’image…",
+			unavailable: {
+				missing: {
+					title: "Cet élément n’est plus dans la Bibliothèque.",
+					body: "Il a été supprimé ou déplacé. Fermez cet onglet.",
+					action: "Fermer l’onglet",
+				},
+				unreadable: {
+					title: "Impossible d’ouvrir {{name}}",
+					body: "Impossible de lire cet élément sur l’ordinateur où tourne Kiroshi. Revenez à la Bibliothèque et rouvrez-le.",
+					action: "Retour à la Bibliothèque",
+				},
+			},
+		},
 		documentPicker: {
 			label: "Joindre depuis la Bibliothèque",
 			search: "Rechercher des documents",

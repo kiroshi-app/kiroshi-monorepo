@@ -24,6 +24,17 @@ const SMALL_PILL = cn(
 	FOCUS_OUTLINE,
 )
 
+const FAILURE_CARD =
+	"flex min-w-0 flex-col justify-center gap-2 border border-foreground/17 border-dashed bg-foreground/4 p-3"
+
+const FAILURE_LINE =
+	"flex min-w-0 items-center gap-1.5 font-semibold text-foreground text-xs leading-4"
+
+const FAILURE_PRIMARY_PILL = cn(
+	SMALL_PILL,
+	"bg-card px-2.5 text-foreground ring-1 ring-foreground/8 hover:bg-muted active:bg-foreground/8 dark:hover:bg-muted",
+)
+
 type LibraryDocumentStartProps = {
 	onStart: (kind: LibraryDocumentStartKind) => void
 }
@@ -125,11 +136,11 @@ const LibraryFailedImage = ({
 	return (
 		<div
 			aria-labelledby={lineId}
-			className="flex size-full min-w-0 flex-col justify-center gap-2 rounded-[inherit] border border-foreground/17 border-dashed bg-foreground/4 p-3"
+			className={cn(FAILURE_CARD, "size-full rounded-[inherit]")}
 			data-slot="library-failed-image"
 			role="group"
 		>
-			<p className="flex min-w-0 items-center gap-1.5 font-semibold text-foreground text-xs leading-4">
+			<p className={FAILURE_LINE}>
 				<Icons.Error
 					aria-hidden="true"
 					className="size-4 shrink-0 text-destructive"
@@ -140,10 +151,7 @@ const LibraryFailedImage = ({
 			</p>
 			<div className="flex flex-wrap items-center gap-1.5">
 				<Button
-					className={cn(
-						SMALL_PILL,
-						"bg-card px-2.5 text-foreground ring-1 ring-foreground/8 hover:bg-muted active:bg-foreground/8 dark:hover:bg-muted",
-					)}
+					className={FAILURE_PRIMARY_PILL}
 					onClick={onChooseAnother}
 					variant="ghost"
 				>
@@ -165,6 +173,9 @@ const LibraryFailedImage = ({
 }
 
 export {
+	FAILURE_CARD,
+	FAILURE_LINE,
+	FAILURE_PRIMARY_PILL,
 	LibraryDocumentDropLine,
 	type LibraryDocumentDropLineProps,
 	LibraryDocumentStart,

@@ -578,6 +578,22 @@ const common = {
 			openInLibrary: "Open in Library",
 			close: "Close",
 		},
+		tab: {
+			loadingDocument: "Loading the document…",
+			loadingImage: "Loading the image…",
+			unavailable: {
+				missing: {
+					title: "This item isn’t in the Library anymore.",
+					body: "It was deleted or moved. Close this tab.",
+					action: "Close tab",
+				},
+				unreadable: {
+					title: "Couldn’t open {{name}}",
+					body: "Couldn’t read this item on the computer where Kiroshi runs. Go back to the Library and open it again.",
+					action: "Back to the Library",
+				},
+			},
+		},
 		documentPicker: {
 			label: "Attach from the Library",
 			search: "Search documents",
