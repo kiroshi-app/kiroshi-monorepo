@@ -10,6 +10,7 @@ import {
 import { describe, expect, it } from "vitest"
 
 import {
+	formattedSelection,
 	isFormatOn,
 	isFormatToRemove,
 	selectedLinkOf,
@@ -473,5 +474,31 @@ describe("a document written outside the app", () => {
 		expect(formatted(OUTSIDE, toggleQuote)).toBe(
 			OUTSIDE.replace("Read the", "> Read the"),
 		)
+	})
+})
+
+describe("formattedSelection", () => {
+	it("formats the text of one field and maps its selection", () => {
+		expect(
+			formattedSelection(
+				{ text: "Ship it now", anchor: 5, head: 7 },
+				toggleBold,
+			),
+		).toEqual({ text: "Ship **it** now", anchor: 7, head: 9 })
+	})
+
+	it("keeps a backward selection backward", () => {
+		expect(
+			formattedSelection(
+				{ text: "Ship it now", anchor: 7, head: 5 },
+				toggleItalic,
+			),
+		).toEqual({ text: "Ship *it* now", anchor: 8, head: 6 })
+	})
+
+	it("gives nothing back when the command changes nothing", () => {
+		expect(
+			formattedSelection({ text: "Ship it", anchor: 2, head: 2 }, toggleBold),
+		).toBeUndefined()
 	})
 })

@@ -1,6 +1,6 @@
 "use client"
 
-import type { MouseEvent, ReactNode } from "react"
+import type { MouseEvent, ReactNode, Ref, TextareaHTMLAttributes } from "react"
 import { useTranslation } from "react-i18next"
 
 import { Icons } from "@workspace/ui/components/icons"
@@ -38,6 +38,61 @@ const DOCUMENT_TYPE = cn(
 
 const DOCUMENT_TITLE =
 	"break-words font-heading font-semibold text-[1.75rem] text-foreground leading-[2.125rem] tracking-[-0.02em]"
+
+const PLACEHOLDER_LOOK =
+	"pointer-events-none before:text-placeholder-foreground before:content-[attr(data-placeholder)]"
+
+type GrowingFieldProps = TextareaHTMLAttributes<HTMLTextAreaElement> & {
+	value: string
+	placeholder?: string
+	hint?: string
+	className: string
+	fieldClassName: string
+	fieldRef?: Ref<HTMLTextAreaElement>
+}
+
+const GrowingField = ({
+	value,
+	placeholder,
+	hint,
+	className,
+	fieldClassName,
+	fieldRef,
+	...props
+}: GrowingFieldProps) => (
+	<span className={cn("grid break-words", className)}>
+		<span
+			aria-hidden="true"
+			className="pointer-events-none invisible col-start-1 row-start-1 whitespace-pre-wrap"
+		>
+			{`${value || placeholder || ""}​`}
+		</span>
+		{hint ? (
+			<span
+				aria-hidden="true"
+				className="pointer-events-none col-start-1 row-start-1 whitespace-pre-wrap"
+			>
+				<span className="invisible">{value}</span>
+				<span
+					className={PLACEHOLDER_LOOK}
+					data-placeholder={hint}
+					data-slot="library-document-placeholder"
+				/>
+			</span>
+		) : null}
+		<textarea
+			className={cn(
+				"col-start-1 row-start-1 resize-none overflow-hidden bg-transparent outline-none",
+				fieldClassName,
+			)}
+			placeholder={placeholder}
+			ref={fieldRef}
+			rows={1}
+			value={value}
+			{...props}
+		/>
+	</span>
+)
 
 type LibraryDocumentBarProps<Item extends LibraryMenuSubject> =
 	LibraryItemActions<Item> & {
@@ -251,10 +306,12 @@ const LibraryDocumentView = ({
 export {
 	DOCUMENT_TITLE,
 	DOCUMENT_TYPE,
+	GrowingField,
 	type LibraryDocument,
 	LibraryDocumentBar,
 	LibraryDocumentBody,
 	LibraryDocumentColumn,
 	LibraryDocumentView,
 	type LibraryDocumentViewProps,
+	PLACEHOLDER_LOOK,
 }

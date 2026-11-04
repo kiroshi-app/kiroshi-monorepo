@@ -1,11 +1,16 @@
 "use client"
 
+import type { EditorState, StateCommand } from "@codemirror/state"
 import type { TFunction } from "i18next"
 import {
 	type FocusEvent,
 	type KeyboardEvent,
 	type PointerEvent,
+	type ReactNode,
+	type Ref,
+	useEffect,
 	useEffectEvent,
+	useImperativeHandle,
 	useLayoutEffect,
 	useRef,
 	useState,
@@ -32,10 +37,13 @@ import {
 	LibraryWebPageEditor,
 } from "@workspace/ui/components/library-block-web-page"
 import {
+	agentScopeOf,
+	type LibraryDocumentAgent,
 	type LibraryDocumentPerson,
 	LibraryDocumentPersonCaret,
 	type LibraryDocumentWriter,
 	LibraryDocumentWrittenRun,
+	WRITTEN_RUN_LOOK,
 	type WriterActions,
 } from "@workspace/ui/components/library-document-agents"
 import {
@@ -56,16 +64,42 @@ import {
 	relaid,
 	type SourceEdit,
 	serializeBlocks,
+	shiftedOffset,
 	toggleTask,
+	withEmptyBlocksAt,
 } from "@workspace/ui/components/library-document-blocks"
-import { GrowingField } from "@workspace/ui/components/library-document-editor"
-import { DOCUMENT_TYPE } from "@workspace/ui/components/library-document-view"
+import {
+	formattedSelection,
+	isFormatOn,
+	type MarkdownSelection,
+	markdownStateOf,
+	selectedLinkOf,
+	setLink,
+	toggleBold,
+	toggleBulletList,
+	toggleHeading2,
+	toggleInlineCode,
+	toggleItalic,
+	toggleStrikethrough,
+} from "@workspace/ui/components/library-document-commands"
+import {
+	DOCUMENT_TYPE,
+	GrowingField,
+	PLACEHOLDER_LOOK,
+} from "@workspace/ui/components/library-document-view"
 import {
 	LibrarySlashMenu,
 	type LibrarySlashType,
 } from "@workspace/ui/components/library-slash-menu"
 import { MARKDOWN_CLASS, Markdown } from "@workspace/ui/components/markdown"
 import type { MarkdownRunRenderProps } from "@workspace/ui/components/markdown/run"
+import {
+	SELECTION_TOOLBAR_SEPARATOR,
+	SELECTION_TOOLBAR_SLOT,
+	SelectionToolbar,
+	type SelectionToolbarAnchor,
+	type SelectionToolbarFormat,
+} from "@workspace/ui/components/selection-toolbar"
 import { isMacPlatform } from "@workspace/ui/lib/platform"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -102,9 +136,82 @@ const HANDLE_GUTTER = "me-[clamp(-6px,calc((100cqw-40rem)/2-6px),6px)]"
 
 const PERSON_RUN = "person:"
 
+const PLACEHOLDER_RUN = "placeholder"
+
+const UNWRITTEN_LINE = /^\s*(?:[-*+]|\d+[.)])?\s*$/
+
+const HELD_RUN = "held:"
+
+const RUN_HOLD = 3000
+
+const RUN_FADE = 1000
+
+const RUN_FADE_LOOK = "animate-run-fade"
+
+const REDUCED_MOTION = "(prefers-reduced-motion: reduce)"
+
+const BLOCK_SLOT = '[data-slot="library-document-block"]'
+
+const COLUMN = '[data-slot="library-document-column"]'
+
+type CommandFormat = Exclude<SelectionToolbarFormat, "link">
+
+const TOOLBAR_COMMANDS: Record<CommandFormat, StateCommand> = {
+	bold: toggleBold,
+	italic: toggleItalic,
+	strikethrough: toggleStrikethrough,
+	code: toggleInlineCode,
+	heading: toggleHeading2,
+	list: toggleBulletList,
+}
+
+type ShortcutFormat = StateCommand | "link"
+
+const SHORTCUT_KEYS: [
+	key: string,
+	isShifted: boolean,
+	format: ShortcutFormat,
+][] = [
+	["b", false, toggleBold],
+	["i", false, toggleItalic],
+	["s", true, toggleStrikethrough],
+	["e", false, toggleInlineCode],
+	["k", false, "link"],
+]
+
+type SelectionGesture = "pointer" | "keys"
+
+type ToolbarMode = "bar" | "link" | "closed"
+
+type SelectedText = {
+	id: string
+	from: number
+	to: number
+	anchor: SelectionToolbarAnchor
+	formats: SelectionToolbarFormat[]
+	link?: string
+}
+
+type HeldRun = {
+	id: string
+	agent: LibraryDocumentAgent
+	start: number
+	end: number
+	isFading: boolean
+}
+
+type BlockField = HTMLInputElement | HTMLTextAreaElement
+
 const NO_WRITERS: LibraryDocumentWriter[] = []
 
 const NO_PEOPLE: LibraryDocumentPerson[] = []
+
+type LibraryDocumentPlaceholder = {
+	at: number
+	text: string
+}
+
+const NO_PLACEHOLDERS: LibraryDocumentPlaceholder[] = []
 
 const blockIdsOf = (): BlockIds => {
 	let count = 0
@@ -125,6 +232,7 @@ type FocusRequest = {
 	id: string
 	on: "field" | "handle"
 	caret?: number
+	head?: number
 	field?: number
 }
 
@@ -135,25 +243,129 @@ type Drop = {
 
 type RunsInput = {
 	writers: LibraryDocumentWriter[]
+	held: HeldRun[]
 	people: LibraryDocumentPerson[]
 	start: number
 	length: number
 }
 
-const runsIn = ({ writers, people, start, length }: RunsInput) => [
-	...writers.flatMap(({ agent, start: from, end: to }) => {
+const runsIn = ({ writers, held, people, start, length }: RunsInput) => {
+	const clipped = (id: string, from: number, to: number) => {
 		const clippedStart = Math.max(from - start, 0)
 		const clippedEnd = Math.min(to - start, length)
 		return clippedStart < clippedEnd
-			? [{ id: agent.id, start: clippedStart, end: clippedEnd }]
+			? [{ id, start: clippedStart, end: clippedEnd }]
 			: []
-	}),
-	...people.flatMap(({ id, caret }) =>
-		caret >= start && caret <= start + length
-			? [{ id: `${PERSON_RUN}${id}`, start: caret - start, end: caret - start }]
-			: [],
-	),
-]
+	}
+	return [
+		...writers.flatMap(({ agent, start: from, end: to }) =>
+			clipped(agent.id, from, to),
+		),
+		...held.flatMap(({ id, start: from, end: to }) =>
+			clipped(`${HELD_RUN}${id}`, from, to),
+		),
+		...people.flatMap(({ id, caret }) =>
+			caret >= start && caret <= start + length
+				? [
+						{
+							id: `${PERSON_RUN}${id}`,
+							start: caret - start,
+							end: caret - start,
+						},
+					]
+				: [],
+		),
+	]
+}
+
+const isInToolbar = (node: EventTarget | null) =>
+	node instanceof Element &&
+	node.closest(`[data-slot="${SELECTION_TOOLBAR_SLOT}"]`) !== null
+
+const isBlockField = (node: EventTarget | null): node is BlockField =>
+	(node instanceof HTMLTextAreaElement || node instanceof HTMLInputElement) &&
+	node.dataset.slot === FIELD_SLOT
+
+const headOf = (field: BlockField) =>
+	(field.selectionDirection === "backward"
+		? field.selectionStart
+		: field.selectionEnd) ?? 0
+
+const selectionOf = (field: HTMLTextAreaElement): MarkdownSelection => ({
+	text: field.value,
+	anchor:
+		field.selectionDirection === "backward"
+			? field.selectionEnd
+			: field.selectionStart,
+	head: headOf(field),
+})
+
+const formatsOf = (state: EditorState) => {
+	const link = selectedLinkOf(state)
+	const formats: SelectionToolbarFormat[] = Object.entries(TOOLBAR_COMMANDS)
+		.filter(([, command]) => isFormatOn(state, command))
+		.map(([format]) => format as CommandFormat)
+	return {
+		formats: link ? [...formats, "link" as const] : formats,
+		link: link?.url,
+	}
+}
+
+const anchorOf = (
+	field: HTMLTextAreaElement,
+	from: number,
+	to: number,
+	frame: HTMLElement,
+): SelectionToolbarAnchor => {
+	const mirrored = field.previousElementSibling?.firstChild as Node
+	const range = document.createRange()
+	range.setStart(mirrored, from)
+	range.setEnd(mirrored, to)
+	const selected = range.getBoundingClientRect()
+	const framed = frame.getBoundingClientRect()
+	const viewport = (frame.closest(COLUMN) ?? frame).getBoundingClientRect()
+	return {
+		centre: (selected.left + selected.right) / 2 - framed.left,
+		top: selected.top - framed.top,
+		bottom: selected.bottom - framed.top,
+		roomAbove: selected.top - viewport.top,
+	}
+}
+
+const isSameSelected = (first?: SelectedText, second?: SelectedText) =>
+	first?.id === second?.id &&
+	first?.from === second?.from &&
+	first?.to === second?.to
+
+const isSameAnchor = (
+	first?: SelectionToolbarAnchor,
+	second?: SelectionToolbarAnchor,
+) =>
+	first?.centre === second?.centre &&
+	first?.top === second?.top &&
+	first?.bottom === second?.bottom &&
+	first?.roomAbove === second?.roomAbove
+
+type HeldRunProps = {
+	run: HeldRun
+	children: ReactNode
+}
+
+const HeldWrittenRun = ({ run, children }: HeldRunProps) => (
+	<span {...agentScopeOf(run.agent)}>
+		<span
+			className={cn(WRITTEN_RUN_LOOK, run.isFading && RUN_FADE_LOOK)}
+			data-slot="library-document-held-run"
+		>
+			{children}
+		</span>
+	</span>
+)
+
+type LibraryDocumentBlockEditorHandle = {
+	focusStart: () => void
+	focusEndAt: (clientY: number) => void
+}
 
 type LibraryDocumentBlockEditorProps = WriterActions & {
 	body: string
@@ -162,6 +374,9 @@ type LibraryDocumentBlockEditorProps = WriterActions & {
 	people?: LibraryDocumentPerson[]
 	onAddImages?: () => Promise<LibraryGalleryImage[]>
 	onLinkPreview?: (url: string) => Promise<LibraryLinkPreview>
+	onCaretChange?: (caret: number | null) => void
+	placeholders?: LibraryDocumentPlaceholder[]
+	ref?: Ref<LibraryDocumentBlockEditorHandle>
 }
 
 const LibraryDocumentBlockEditor = ({
@@ -173,6 +388,9 @@ const LibraryDocumentBlockEditor = ({
 	onOpenConversation,
 	onAddImages,
 	onLinkPreview,
+	onCaretChange,
+	placeholders = NO_PLACEHOLDERS,
+	ref,
 }: LibraryDocumentBlockEditorProps) => {
 	const { t } = useTranslation("common")
 	const [nextId] = useState(blockIdsOf)
@@ -181,7 +399,15 @@ const LibraryDocumentBlockEditor = ({
 		blocks:
 			blocks.length > 0 ? blocks : [{ id: nextId(), source: "", gap: "" }],
 	})
-	const [doc, setDoc] = useState(() => withLine(parseBlocks(body, nextId)))
+	const seeded = (markdown: string, shown: LibraryDocumentPlaceholder[]) =>
+		withEmptyBlocksAt(
+			parseBlocks(markdown, nextId),
+			shown.map(({ at }) => at),
+			nextId,
+		)
+	const [doc, setDoc] = useState(() => withLine(seeded(body, placeholders)))
+	const [anchors, setAnchors] = useState(placeholders)
+	const shownAnchors = useRef(anchors)
 	const latest = useRef(doc)
 	const received = useRef(body)
 	const [editing, setEditing] = useState<string>()
@@ -191,11 +417,46 @@ const LibraryDocumentBlockEditor = ({
 	const wasDragged = useRef(false)
 	const pointedField = useRef<number | undefined>(undefined)
 	const list = useRef<HTMLDivElement>(null)
+	const textField = useRef<HTMLTextAreaElement>(null)
+	const reportedCaret = useRef<number | null>(null)
+	const [selected, setSelected] = useState<SelectedText>()
+	const [toolbarMode, setToolbarMode] = useState<ToolbarMode>("bar")
+	const selectingBy = useRef<SelectionGesture>(undefined)
+	const [heldRuns, setHeldRuns] = useState<HeldRun[]>([])
+	const shownWriters = useRef(writers)
+	const heldCount = useRef(0)
+	const holdTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
+	const serialized = serializeBlocks(doc)
+	const heldBody = useRef(serialized)
 
-	const show = (next: LibraryBlockDocument) => {
+	const anchorsAfter = (markdown: string) => {
+		const before = serializeBlocks(latest.current)
+		if (shownAnchors.current.length === 0 || before === markdown)
+			return shownAnchors.current
+		return shownAnchors.current.map((placeholder) => ({
+			...placeholder,
+			at: shiftedOffset(before, markdown, placeholder.at),
+		}))
+	}
+
+	const show = (
+		next: LibraryBlockDocument,
+		nextAnchors = anchorsAfter(serializeBlocks(next)),
+	) => {
 		latest.current = next
 		setDoc(next)
+		shownAnchors.current = nextAnchors
+		setAnchors(nextAnchors)
 	}
+
+	const placeholderAt = (
+		block: LibraryBlock,
+		start: number,
+		shown: LibraryDocumentPlaceholder[],
+	) =>
+		UNWRITTEN_LINE.test(block.source)
+			? shown.find((placeholder) => placeholder.at === start)?.text
+			: undefined
 
 	const commit = (next: LibraryBlockDocument) => {
 		show(next)
@@ -210,10 +471,13 @@ const LibraryDocumentBlockEditor = ({
 	const restructure = (sources: LibraryBlock[]) =>
 		commitBlocks(relaid(latest.current.blocks, sources))
 
-	const reread = (markdown: string) =>
+	const reread = (markdown: string) => {
+		const nextAnchors = anchorsAfter(markdown)
 		show(
-			withLine(keepIds(latest.current.blocks, parseBlocks(markdown, nextId))),
+			withLine(keepIds(latest.current.blocks, seeded(markdown, nextAnchors))),
+			nextAnchors,
 		)
+	}
 
 	const remove = (id: string) =>
 		restructure(latest.current.blocks.filter((block) => block.id !== id))
@@ -225,6 +489,103 @@ const LibraryDocumentBlockEditor = ({
 	})
 
 	useLayoutEffect(() => takeBody(body), [body])
+
+	const reportCaret = (caret: number | null) => {
+		if (caret === reportedCaret.current) return
+		reportedCaret.current = caret
+		onCaretChange?.(caret)
+	}
+
+	const caretOf = (field: BlockField) => {
+		const id = field.closest<HTMLElement>(BLOCK_SLOT)?.dataset.blockId
+		const index = latest.current.blocks.findIndex((block) => block.id === id)
+		if (index === -1) return null
+		const { source } = latest.current.blocks[index]
+		const start = offsetsOf(latest.current)[index]
+		const within = field.value === source ? 0 : source.indexOf(field.value)
+		return within === -1 ? start : start + within + headOf(field)
+	}
+
+	const reportFocusedCaret = () => {
+		const focused = document.activeElement
+		if (isBlockField(focused) && list.current?.contains(focused))
+			reportCaret(caretOf(focused))
+	}
+
+	const reportFocusedField = useEffectEvent(reportFocusedCaret)
+
+	const dropHeldRuns = (ids: string[]) => {
+		for (const id of ids) {
+			clearTimeout(holdTimers.current.get(id))
+			holdTimers.current.delete(id)
+		}
+		setHeldRuns((runs) => runs.filter((run) => !ids.includes(run.id)))
+	}
+
+	const holdFor = (id: string, delay: number, then: () => void) =>
+		holdTimers.current.set(id, setTimeout(then, delay))
+
+	const endHold = (id: string) => {
+		if (matchMedia(REDUCED_MOTION).matches) return dropHeldRuns([id])
+		setHeldRuns((runs) =>
+			runs.map((run) => (run.id === id ? { ...run, isFading: true } : run)),
+		)
+		holdFor(id, RUN_FADE, () => dropHeldRuns([id]))
+	}
+
+	const holdFinishedRuns = useEffectEvent((next: LibraryDocumentWriter[]) => {
+		const previous = shownWriters.current
+		shownWriters.current = next
+		if (previous === next) return
+		const covered = heldRuns.filter((run) =>
+			next.some(
+				({ agent, start, end }) =>
+					agent.id === run.agent.id && start <= run.end && run.start <= end,
+			),
+		)
+		if (covered.length > 0) dropHeldRuns(covered.map(({ id }) => id))
+		const finished = previous
+			.filter(
+				({ agent }) => !next.some((writer) => writer.agent.id === agent.id),
+			)
+			.map(({ agent, start, end }) => ({
+				id: `${agent.id}-${++heldCount.current}`,
+				agent,
+				start,
+				end,
+				isFading: false,
+			}))
+		if (finished.length === 0) return
+		for (const run of finished) holdFor(run.id, RUN_HOLD, () => endHold(run.id))
+		setHeldRuns((runs) => [...runs, ...finished])
+	})
+
+	useLayoutEffect(() => holdFinishedRuns(writers), [writers])
+
+	useEffect(() => {
+		const timers = holdTimers.current
+		return () => {
+			for (const timer of timers.values()) clearTimeout(timer)
+		}
+	}, [])
+
+	const followBody = useEffectEvent((next: string) => {
+		const before = heldBody.current
+		heldBody.current = next
+		if (before === next) return
+		reportFocusedCaret()
+		if (heldRuns.length === 0) return
+		const shifted = (at: number) => shiftedOffset(before, next, at)
+		setHeldRuns((runs) =>
+			runs.map((run) => ({
+				...run,
+				start: shifted(run.start),
+				end: shifted(run.end),
+			})),
+		)
+	})
+
+	useLayoutEffect(() => followBody(serialized), [serialized])
 
 	useLayoutEffect(() => {
 		if (!focusRequest) return
@@ -251,8 +612,14 @@ const LibraryDocumentBlockEditor = ({
 			return
 		}
 		const caret = focusRequest.caret ?? field.value.length
+		const head = focusRequest.head ?? caret
 		field.focus()
-		field.setSelectionRange(caret, caret)
+		field.setSelectionRange(
+			Math.min(caret, head),
+			Math.max(caret, head),
+			head < caret ? "backward" : "forward",
+		)
+		reportFocusedField()
 	}, [focusRequest])
 
 	const indexOf = (id: string) =>
@@ -287,14 +654,172 @@ const LibraryDocumentBlockEditor = ({
 		return block.id
 	}
 
+	const readSelection = () => {
+		const field = textField.current
+		const frame = list.current
+		const isHeldByToolbar = isInToolbar(document.activeElement)
+		const next =
+			field &&
+			frame &&
+			editing &&
+			(document.activeElement === field || isHeldByToolbar) &&
+			field.selectionStart < field.selectionEnd &&
+			!selectingBy.current
+				? {
+						id: editing,
+						from: field.selectionStart,
+						to: field.selectionEnd,
+						anchor: anchorOf(
+							field,
+							field.selectionStart,
+							field.selectionEnd,
+							frame,
+						),
+						...formatsOf(markdownStateOf(selectionOf(field))),
+					}
+				: undefined
+		if (isHeldByToolbar && (!selected || !next)) return
+		const isSame = isSameSelected(selected, next)
+		if (!isSame && !isHeldByToolbar) setToolbarMode("bar")
+		else if (isSame && isSameAnchor(selected?.anchor, next?.anchor)) return
+		setSelected(next)
+	}
+
+	const followSelection = useEffectEvent(() => {
+		reportFocusedCaret()
+		readSelection()
+	})
+
+	useEffect(() => {
+		const follow = () => followSelection()
+		const followOnceFocusLands = () => queueMicrotask(follow)
+		const isInDocument = (target: EventTarget | null) =>
+			target instanceof Node && list.current?.contains(target) === true
+		const startPointerSelection = (event: globalThis.PointerEvent) => {
+			if (
+				event.button !== 0 ||
+				!isInDocument(event.target) ||
+				isInToolbar(event.target)
+			)
+				return
+			selectingBy.current = "pointer"
+			setSelected(undefined)
+		}
+		const startKeySelection = (event: globalThis.KeyboardEvent) => {
+			if (
+				isInDocument(event.target) &&
+				event.shiftKey &&
+				event.key.startsWith("Arrow")
+			)
+				selectingBy.current = "keys"
+		}
+		const closeGesture = () => {
+			selectingBy.current = undefined
+			follow()
+		}
+		const finishSelectionBy = (gesture: SelectionGesture) => {
+			if (selectingBy.current === gesture) closeGesture()
+		}
+		const finishPointerSelection = () => finishSelectionBy("pointer")
+		const finishLostPointerSelection = (event: globalThis.PointerEvent) => {
+			if (event.buttons === 0 && isInDocument(event.target))
+				finishPointerSelection()
+		}
+		const finishAnySelection = () => {
+			if (selectingBy.current) closeGesture()
+		}
+		const finishKeySelection = (event: globalThis.KeyboardEvent) => {
+			if (event.key === "Shift") finishSelectionBy("keys")
+		}
+		document.addEventListener("selectionchange", follow, true)
+		document.addEventListener("focusout", followOnceFocusLands)
+		document.addEventListener("pointerdown", startPointerSelection)
+		document.addEventListener("pointerup", finishPointerSelection)
+		document.addEventListener("pointercancel", finishPointerSelection)
+		document.addEventListener("pointermove", finishLostPointerSelection)
+		document.addEventListener("keydown", startKeySelection)
+		document.addEventListener("keyup", finishKeySelection)
+		window.addEventListener("scroll", follow, { capture: true, passive: true })
+		window.addEventListener("resize", follow)
+		window.addEventListener("blur", finishAnySelection)
+		return () => {
+			document.removeEventListener("selectionchange", follow, true)
+			document.removeEventListener("focusout", followOnceFocusLands)
+			document.removeEventListener("pointerdown", startPointerSelection)
+			document.removeEventListener("pointerup", finishPointerSelection)
+			document.removeEventListener("pointercancel", finishPointerSelection)
+			document.removeEventListener("pointermove", finishLostPointerSelection)
+			document.removeEventListener("keydown", startKeySelection)
+			document.removeEventListener("keyup", finishKeySelection)
+			window.removeEventListener("scroll", follow, { capture: true })
+			window.removeEventListener("resize", follow)
+			window.removeEventListener("blur", finishAnySelection)
+		}
+	}, [])
+
+	const formatSelected = (command: StateCommand) => {
+		const field = textField.current
+		if (!field || !editing) return
+		const next = formattedSelection(selectionOf(field), command)
+		if (!next) return
+		writeSource(editing, next.text)
+		setFocusRequest({
+			id: editing,
+			on: "field",
+			caret: next.anchor,
+			head: next.head,
+		})
+	}
+
+	const openLinkField = () => {
+		readSelection()
+		setToolbarMode("link")
+	}
+
+	const shownSelection = toolbarMode === "closed" ? undefined : selected
+
+	const toolbarFor = ({ anchor, formats, link }: SelectedText) => {
+		const action = (name: CommandFormat) => ({
+			name,
+			isOn: formats.includes(name),
+			onPress: () => formatSelected(TOOLBAR_COMMANDS[name]),
+		})
+		return (
+			<SelectionToolbar
+				actions={[
+					action("bold"),
+					action("italic"),
+					action("strikethrough"),
+					action("code"),
+					SELECTION_TOOLBAR_SEPARATOR,
+					{ name: "link", isOn: formats.includes("link") },
+					SELECTION_TOOLBAR_SEPARATOR,
+					action("heading"),
+					action("list"),
+				]}
+				anchor={anchor}
+				isLinking={toolbarMode === "link"}
+				label={t("library.editor.toolbar.label")}
+				link={link}
+				onLink={(url) => formatSelected(setLink(url))}
+				onLinkingChange={(isLinking) =>
+					setToolbarMode(isLinking ? "link" : "bar")
+				}
+			/>
+		)
+	}
+
 	const stopEditing = (id: string) => {
 		setEditing(undefined)
 		setSlashFor(undefined)
 		const index = indexOf(id)
 		if (index === -1) return
+		const block = latest.current.blocks[index]
+		const start = offsetsOf(latest.current)[index]
 		if (
-			latest.current.blocks[index].source.trim() === "" &&
-			latest.current.blocks.length > 1
+			block.source.trim() === "" &&
+			latest.current.blocks.length > 1 &&
+			!placeholderAt(block, start, shownAnchors.current)
 		)
 			remove(id)
 		else reread(serializeBlocks(latest.current))
@@ -513,9 +1038,24 @@ const LibraryDocumentBlockEditor = ({
 			const field = event.currentTarget
 			const { value, selectionStart: caret, selectionEnd } = field
 			const index = indexOf(block.id)
+			const shortcut =
+				(event.metaKey || event.ctrlKey) &&
+				!event.altKey &&
+				SHORTCUT_KEYS.find(
+					([key, isShifted]) =>
+						event.key.toLowerCase() === key && event.shiftKey === isShifted,
+				)
+			if (shortcut && caret !== selectionEnd) {
+				event.preventDefault()
+				const [, , format] = shortcut
+				if (format === "link") openLinkField()
+				else formatSelected(format)
+				return
+			}
 			if (event.key === "Escape") {
 				event.preventDefault()
 				if (slashFor === block.id) setSlashFor(undefined)
+				else if (shownSelection) setToolbarMode("closed")
 				else focusHandle(block.id)
 				return
 			}
@@ -566,6 +1106,8 @@ const LibraryDocumentBlockEditor = ({
 				</>
 			)
 		}
+		const held = heldRuns.find((run) => `${HELD_RUN}${run.id}` === id)
+		if (held) return <HeldWrittenRun run={held}>{children}</HeldWrittenRun>
 		const writer = writers.find(({ agent }) => agent.id === id)
 		return writer ? (
 			<LibraryDocumentWrittenRun
@@ -614,14 +1156,50 @@ const LibraryDocumentBlockEditor = ({
 			pointedField.current = undefined
 		}
 
+	const focusBlock = (block: LibraryBlock | undefined, caret?: number) => {
+		if (!block) return
+		const type = blockTypeOf(block.source)
+		if (EDITABLE_TYPES.includes(type) || BLOCK_EDITORS.includes(type))
+			edit(block.id, caret, caret === undefined ? undefined : 0)
+		else focusHandle(block.id)
+	}
+
+	useImperativeHandle(ref, () => ({
+		focusStart: () => focusBlock(latest.current.blocks[0], 0),
+		focusEndAt: (clientY) => {
+			const above = [
+				...(list.current?.querySelectorAll(BLOCK_SLOT) ?? []),
+			].filter((block) => block.getBoundingClientRect().top <= clientY).length
+			focusBlock(latest.current.blocks[Math.max(above - 1, 0)])
+		},
+	}))
+
+	const leaveBody = (event: FocusEvent<HTMLDivElement>) => {
+		const next = event.relatedTarget
+		if (
+			editing &&
+			isInToolbar(event.target) &&
+			!isInToolbar(next) &&
+			next !== textField.current
+		)
+			stopEditing(editing)
+		if (next instanceof Node && event.currentTarget.contains(next)) return
+		queueMicrotask(() => {
+			if (!list.current?.contains(document.activeElement)) reportCaret(null)
+		})
+	}
+
 	const offsets = offsetsOf(doc)
 	const count = doc.blocks.length
 
 	return (
 		<div
-			className={cn("flex flex-col gap-3.5", drop && "select-none")}
+			aria-label={t("library.editor.body")}
+			className={cn("relative flex flex-col gap-3.5", drop && "select-none")}
 			data-slot="library-document-blocks"
+			onBlur={leaveBody}
 			ref={list}
+			role="group"
 		>
 			{doc.blocks.map((block, index) => {
 				const type = blockTypeOf(block.source)
@@ -630,10 +1208,12 @@ const LibraryDocumentBlockEditor = ({
 				const isEditable = EDITABLE_TYPES.includes(type) || hasBlockEditor
 				const runs = runsIn({
 					writers,
+					held: heldRuns,
 					people,
 					start: offsets[index],
 					length: block.source.length,
 				})
+				const placeholder = placeholderAt(block, offsets[index], anchors)
 				const isDropBefore = drop?.to === index
 				const isDropAfter = drop?.to === count && index === count - 1
 				return (
@@ -681,7 +1261,11 @@ const LibraryDocumentBlockEditor = ({
 									className={DOCUMENT_TYPE}
 									data-slot={FIELD_SLOT}
 									fieldClassName={cn("w-full", FIELD_LOOK[type])}
-									onBlur={() => stopEditing(block.id)}
+									fieldRef={textField}
+									hint={placeholder}
+									onBlur={(event) => {
+										if (!isInToolbar(event.relatedTarget)) stopEditing(block.id)
+									}}
 									onChange={(event) => typeInField(block, event.target.value)}
 									onKeyDown={keyInField(block, type)}
 									value={block.source}
@@ -699,14 +1283,39 @@ const LibraryDocumentBlockEditor = ({
 								onPointerDown={isEditable ? pointAt : undefined}
 								tabIndex={isEditable ? 0 : undefined}
 							>
-								<Markdown
-									className={DOCUMENT_TYPE}
-									onToggleTask={toggleTaskIn(block.id)}
-									renderRun={runs.length > 0 ? renderRun : undefined}
-									runs={runs.length > 0 ? runs : undefined}
-								>
-									{block.source}
-								</Markdown>
+								{placeholder ? (
+									<Markdown
+										className={DOCUMENT_TYPE}
+										renderRun={({ isEnd }) =>
+											isEnd ? (
+												<span
+													aria-hidden="true"
+													className={PLACEHOLDER_LOOK}
+													data-placeholder={placeholder}
+													data-slot="library-document-placeholder"
+												/>
+											) : null
+										}
+										runs={[
+											{
+												id: PLACEHOLDER_RUN,
+												start: block.source.length,
+												end: block.source.length + placeholder.length,
+											},
+										]}
+									>
+										{`${block.source}${placeholder}`}
+									</Markdown>
+								) : (
+									<Markdown
+										className={DOCUMENT_TYPE}
+										onToggleTask={toggleTaskIn(block.id)}
+										renderRun={runs.length > 0 ? renderRun : undefined}
+										runs={runs.length > 0 ? runs : undefined}
+									>
+										{block.source}
+									</Markdown>
+								)}
 							</div>
 						)}
 						{isDropBefore || isDropAfter ? (
@@ -722,8 +1331,13 @@ const LibraryDocumentBlockEditor = ({
 					</div>
 				)
 			})}
+			{shownSelection ? toolbarFor(shownSelection) : null}
 		</div>
 	)
 }
 
-export { LibraryDocumentBlockEditor }
+export {
+	LibraryDocumentBlockEditor,
+	type LibraryDocumentBlockEditorHandle,
+	type LibraryDocumentPlaceholder,
+}

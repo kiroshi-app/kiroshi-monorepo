@@ -145,6 +145,63 @@ const offsetsOf = ({ lead, blocks }: LibraryBlockDocument) => {
 	})
 }
 
+const shiftedOffset = (before: string, after: string, offset: number) => {
+	const limit = Math.min(before.length, after.length)
+	let head = 0
+	while (head < limit && before[head] === after[head]) head++
+	let tail = 0
+	while (
+		tail < limit - head &&
+		before[before.length - 1 - tail] === after[after.length - 1 - tail]
+	)
+		tail++
+
+	if (offset <= head) return offset
+	if (offset >= before.length - tail)
+		return offset + after.length - before.length
+	return after.length - tail
+}
+
+const withEmptyBlockAt = (
+	document: LibraryBlockDocument,
+	at: number,
+	nextId: BlockIds,
+): LibraryBlockDocument => {
+	const markdown = serializeBlocks(document)
+	const offsets = offsetsOf(document)
+	const isLineStart = at === 0 || markdown[at - 1] === "\n"
+	if (!isLineStart || at > markdown.length || offsets.includes(at))
+		return document
+
+	const { lead, blocks } = document
+	const emptyBlock = (gap: string) => ({ id: nextId(), source: "", gap })
+	if (at <= lead.length)
+		return {
+			lead: lead.slice(0, at),
+			blocks: [emptyBlock(lead.slice(at)), ...blocks],
+		}
+	const index = offsets.findLastIndex((start) => start < at)
+	const block = blocks[index]
+	const within = at - offsets[index] - block.source.length
+	if (within < 0) return document
+	return {
+		lead,
+		blocks: [
+			...blocks.slice(0, index),
+			{ ...block, gap: block.gap.slice(0, within) },
+			emptyBlock(block.gap.slice(within)),
+			...blocks.slice(index + 1),
+		],
+	}
+}
+
+const withEmptyBlocksAt = (
+	document: LibraryBlockDocument,
+	offsets: number[],
+	nextId: BlockIds,
+) =>
+	offsets.reduce((seeded, at) => withEmptyBlockAt(seeded, at, nextId), document)
+
 const keepIds = (
 	previous: LibraryBlock[],
 	next: LibraryBlockDocument,
@@ -448,6 +505,7 @@ export {
 	rowAfter,
 	type SourceEdit,
 	serializeBlocks,
+	shiftedOffset,
 	tableRowsOf,
 	tableSourceOf,
 	toggledRow,
@@ -460,6 +518,7 @@ export {
 	withCodeBody,
 	withCodeLanguage,
 	withColumn,
+	withEmptyBlocksAt,
 	withGalleryItems,
 	withRow,
 	withRowText,
