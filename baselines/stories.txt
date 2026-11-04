@@ -1823,6 +1823,7 @@ overlays-dropdownmenu--default
 overlays-imagemenu--every-action
 overlays-imagemenu--image-actions-only
 overlays-imagemenu--in-viewer
+overlays-imagemenu--saving-to-library
 overlays-imagemenu--without-callbacks
 overlays-librarylightbox--at-the-first-image
 overlays-librarylightbox--back-button

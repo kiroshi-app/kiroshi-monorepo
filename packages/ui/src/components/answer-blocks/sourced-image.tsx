@@ -68,7 +68,13 @@ const SourcedImage = ({
 			className={cn("flex w-full min-w-0 flex-col gap-2", className)}
 		>
 			<div className="relative h-75 overflow-hidden rounded-xl">
-				<ImageMenu {...imageMenu} item={image} name={name} trigger={openable} />
+				<ImageMenu
+					{...imageMenu}
+					isSavingToLibrary={isSaving}
+					item={image}
+					name={name}
+					trigger={openable}
+				/>
 				{onSaveToLibrary ? (
 					<button
 						type="button"

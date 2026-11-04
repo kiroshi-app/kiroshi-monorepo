@@ -36,6 +36,7 @@ type ImageMenuProps<Item> = ImageMenuActions<Item> & {
 	name: string
 	trigger: ReactElement
 	surface?: ImageMenuSurface
+	isSavingToLibrary?: boolean
 	onOpenChange?: ComponentProps<typeof ContextMenu>["onOpenChange"]
 	onConfirmingDeleteChange?: (isConfirming: boolean) => void
 }
@@ -89,6 +90,7 @@ const ImageMenu = <Item,>({
 	name,
 	trigger,
 	surface = "thread",
+	isSavingToLibrary = false,
 	onOpenChange,
 	onConfirmingDeleteChange,
 	onSaveToLibrary,
@@ -133,7 +135,11 @@ const ImageMenu = <Item,>({
 					{hasViewerActions && hasImageMenuActions ? (
 						<ContextMenuSeparator />
 					) : null}
-					<ImageMenuItems actions={imageHandlers} item={item} />
+					<ImageMenuItems
+						actions={imageHandlers}
+						isSavingToLibrary={isSavingToLibrary}
+						item={item}
+					/>
 				</ContextMenuContent>
 			</ContextMenu>
 			<LibraryItemDeleteDialog
