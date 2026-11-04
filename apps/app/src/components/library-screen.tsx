@@ -127,11 +127,6 @@ const openedDocumentOf = (
 const documentNameOf = (opening: LibraryOpening | undefined) =>
 	opening?.kind === "document" ? opening.name : null
 
-const isImageListed = (
-	opening: LibraryOpening,
-	listedOpened: LibraryItem | undefined,
-) => opening.kind === "image" && listedOpened !== undefined
-
 const renamedDraftOf = (
 	opened: OpenedDocument,
 	{ name }: LibraryItem,
@@ -193,6 +188,7 @@ export const LibraryScreen = ({
 			library.readAt,
 		)
 	const listedOpened = library.items.find(isNamedBy(opening))
+	const isImageListed = listedOpened?.kind === "image"
 	const openedDocument = openedDocumentOf(
 		opening,
 		heldDraft,
@@ -323,7 +319,7 @@ export const LibraryScreen = ({
 		)
 	}
 
-	if (opening && !isImageListed(opening, listedOpened)) {
+	if (opening && !isImageListed) {
 		return <ScreenLayout header={<BareAppHeader />} />
 	}
 
