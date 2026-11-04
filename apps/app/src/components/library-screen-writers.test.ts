@@ -21,6 +21,7 @@ import { LibraryScreenHoldingOpening } from "@/components/library-screen-holding
 import { accountQueryKeys } from "@/lib/account/account-query-keys"
 import {
 	type Bot,
+	type CancelOutcome,
 	LIBRARY_DOCUMENT_UPDATED_EVENT,
 	type LibraryItem,
 	type LibraryWriter,
@@ -38,7 +39,12 @@ type LibraryCall = {
 	name: string
 	update: string
 	caret: string | null
+	agentId: string | null
 }
+
+type StopCall = Pick<LibraryCall, "spaceId" | "name" | "agentId">
+
+type StopAnswer = CancelOutcome | "refused"
 
 type SharedCaret = Pick<LibraryCall, "spaceId" | "name" | "caret">
 
@@ -74,6 +80,9 @@ const host = vi.hoisted(() => ({
 	refusesCaretShares: false,
 	caretRefusals: 0,
 	appliedUpdates: 0,
+	stops: [] as StopCall[],
+	stopAnswer: { kind: "cancelled" } as StopAnswer,
+	readLinkPreview: vi.fn(),
 }))
 
 const itemNamed = (name: string): LibraryItem => ({
@@ -121,6 +130,13 @@ const LIBRARY_COMMANDS: Record<string, (call: LibraryCall) => unknown> = {
 		}
 		return itemNamed(name)
 	},
+	library_stop_writers: ({ spaceId, name, agentId }) => {
+		host.stops.push({ spaceId, name, agentId })
+		if (host.stopAnswer === "refused") {
+			throw { kind: "unreachable", detail: "host gone" }
+		}
+		return host.stopAnswer
+	},
 }
 
 const heardOn = (event: string) => {
@@ -153,6 +169,17 @@ vi.mock("@/lib/host/index", async (importOriginal) => {
 	}
 })
 
+vi.mock("@/lib/bindings", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("@/lib/bindings")>()
+	return {
+		...actual,
+		commands: {
+			...actual.commands,
+			libraryReadLinkPreview: host.readLinkPreview,
+		},
+	}
+})
+
 vi.mock("@workspace/ui/components/notice-surface", async (importOriginal) => ({
 	...(await importOriginal<
 		typeof import("@workspace/ui/components/notice-surface")
@@ -174,6 +201,9 @@ afterEach(() => {
 	host.refusesCaretShares = false
 	host.caretRefusals = 0
 	host.appliedUpdates = 0
+	host.stops = []
+	host.stopAnswer = { kind: "cancelled" }
+	host.readLinkPreview.mockReset()
 	vi.mocked(raiseFailureNotice).mockClear()
 	vi.restoreAllMocks()
 })
@@ -791,6 +821,124 @@ const PLACES = [
 	{ place: "in a joined Space", isJoined: true, hostId: "host-1" },
 ]
 
+const atlasWritingIn = async (isJoined: boolean, hostId: string | null) => {
+	await renderLibraryScreen(isJoined)
+	await openDocument(NOTES)
+	const caret = agentWritesAtEnd(NOTES, AGENT_TEXT, hostId)
+	announcePresence(NOTES, [writerOf(ATLAS_ID, "agent", caret, "Atlas")], hostId)
+	await waitFor(() => expect(atlasCaret()).toBeInstanceOf(HTMLElement))
+}
+
+const settleStop = async () => {
+	await waitFor(() => expect(host.stops).toHaveLength(1))
+	await act(async () => {
+		await new Promise((resolve) => setTimeout(resolve, 0))
+	})
+}
+
+const pressStopAll = async () => {
+	await act(async () => {
+		fireEvent.click(
+			screen.getByRole("button", {
+				name: common("library.document.agents.stopAll"),
+			}),
+		)
+	})
+	await settleStop()
+}
+
+const pressStopAtlas = async () => {
+	act(() => {
+		fireEvent.click(atlasCaret() as HTMLElement)
+	})
+	const stop = await screen.findByRole("button", {
+		name: common("library.document.agents.stop", { name: "Atlas" }),
+	})
+	await act(async () => {
+		fireEvent.click(stop)
+	})
+	await settleStop()
+}
+
+const STOP_ALL_FAILED = common("library.failure.document.stopAll")
+
+const STOP_ATLAS_FAILED = common("library.failure.document.stop", {
+	name: "Atlas",
+})
+
+const FAILED_STOP: CancelOutcome = {
+	kind: "failed",
+	failures: [
+		{
+			botId: ATLAS_ID,
+			reason: { source: "session", error: { kind: "notAuthenticated" } },
+		},
+	],
+}
+
+describe.each(PLACES)(
+	"a person stopping the agents writing in the open document $place",
+	({ isJoined, hostId }) => {
+		it("stops every agent writing in it with Stop all", async () => {
+			await atlasWritingIn(isJoined, hostId)
+
+			await pressStopAll()
+
+			expect(host.stops).toEqual([
+				{ spaceId: SPACE_ID, name: NOTES, agentId: null },
+			])
+			expect(raiseFailureNotice).not.toHaveBeenCalled()
+		})
+
+		it("stops only the agent whose Stop was pressed", async () => {
+			await atlasWritingIn(isJoined, hostId)
+
+			await pressStopAtlas()
+
+			expect(host.stops).toEqual([
+				{ spaceId: SPACE_ID, name: NOTES, agentId: ATLAS_ID },
+			])
+			expect(raiseFailureNotice).not.toHaveBeenCalled()
+		})
+
+		it.each([
+			{ answer: "an error", stopAnswer: "refused" as StopAnswer },
+			{ answer: "a failed outcome", stopAnswer: FAILED_STOP },
+		])(
+			"names the failed stop and the gesture to retry when it answers $answer",
+			async ({ stopAnswer }) => {
+				host.stopAnswer = stopAnswer
+				await atlasWritingIn(isJoined, hostId)
+
+				await pressStopAll()
+				await waitFor(() =>
+					expect(raiseFailureNotice).toHaveBeenCalledWith(
+						expect.objectContaining({ title: STOP_ALL_FAILED }),
+					),
+				)
+
+				vi.mocked(raiseFailureNotice).mockClear()
+				host.stops = []
+				await pressStopAtlas()
+				await waitFor(() =>
+					expect(raiseFailureNotice).toHaveBeenCalledWith(
+						expect.objectContaining({ title: STOP_ATLAS_FAILED }),
+					),
+				)
+			},
+		)
+
+		it("raises no notice when there was nothing left to stop", async () => {
+			host.stopAnswer = { kind: "nothingToCancel" }
+			await atlasWritingIn(isJoined, hostId)
+
+			await pressStopAll()
+
+			expect(raiseFailureNotice).not.toHaveBeenCalled()
+		})
+	},
+)
+
 describe("an agent that finishes writing in the open document", () => {
 	it.each(PLACES)(
 		"drops its caret, shows no finished bar and holds the run it wrote $place",
@@ -958,6 +1106,21 @@ const addBlockBelow = async (text: string, slash: string) => {
 	})
 }
 
+const pasteLinkInWebCard = async (isJoined: boolean) => {
+	await renderLibraryScreen(isJoined)
+	await openDocument(NOTES)
+	await addBlockBelow("We ship in May.", "/web")
+	const link = await openBlockOfType(
+		"web-page",
+		common("library.editor.blocks.webPage.link"),
+	)
+	await act(async () => {
+		fireEvent.change(link, { target: { value: LINK } })
+		fireEvent.keyDown(link, { key: "Enter" })
+	})
+	return link
+}
+
 describe.each(PLACES)(
 	"a person editing a Library document $place",
 	({ isJoined }) => {
@@ -1019,28 +1182,56 @@ describe.each(PLACES)(
 			)
 		})
 
-		it("keeps the bare link pasted into a web card while no preview can be read", async () => {
-			await renderLibraryScreen(isJoined)
-			await openDocument(NOTES)
-			await addBlockBelow("We ship in May.", "/web")
-			const link = await openBlockOfType(
-				"web-page",
-				common("library.editor.blocks.webPage.link"),
-			)
-
-			await act(async () => {
-				fireEvent.change(link, { target: { value: LINK } })
-				fireEvent.keyDown(link, { key: "Enter" })
+		it("fills the web card of a pasted link with the preview the host reads", async () => {
+			host.readLinkPreview.mockResolvedValue({
+				status: "ok",
+				data: {
+					url: LINK,
+					title: "Rates",
+					site: "example.org",
+					image: "https://www.example.org/rates.jpg",
+					alt: "The rates table",
+				},
 			})
+			await pasteLinkInWebCard(isJoined)
 
 			await waitFor(() =>
 				expect(markdownOnHost(NOTES)).toBe(
-					`${OPENING}\n\n\`\`\`web-page\nurl: ${LINK}\n\`\`\``,
+					`${OPENING}\n\n\`\`\`web-page\nurl: ${LINK}\ntitle: Rates\nsite: example.org\nimage: https://www.example.org/rates.jpg\nalt: The rates table\n\`\`\``,
 				),
 			)
-			expect(link).toHaveProperty("value", LINK)
-			expect(link.getAttribute("aria-invalid")).toBe("false")
+			expect(host.readLinkPreview).toHaveBeenCalledWith(LINK)
 		})
+
+		it.each([
+			{
+				answer: "an error",
+				read: () =>
+					host.readLinkPreview.mockResolvedValue({
+						status: "error",
+						error: { kind: "notAPage" },
+					}),
+			},
+			{
+				answer: "a rejection",
+				read: () => host.readLinkPreview.mockRejectedValue(new Error("gone")),
+			},
+		])(
+			"keeps the bare link pasted into a web card when the preview read answers $answer",
+			async ({ read }) => {
+				read()
+				const link = await pasteLinkInWebCard(isJoined)
+
+				await waitFor(() =>
+					expect(markdownOnHost(NOTES)).toBe(
+						`${OPENING}\n\n\`\`\`web-page\nurl: ${LINK}\n\`\`\``,
+					),
+				)
+				expect(link).toHaveProperty("value", LINK)
+				expect(link.getAttribute("aria-invalid")).toBe("false")
+				expect(raiseFailureNotice).not.toHaveBeenCalled()
+			},
+		)
 
 		it("saves a table cell edited in place and leaves every other block as it was", async () => {
 			seedDocument(NOTES, documentAround(TABLE))
