@@ -1415,6 +1415,19 @@ navigation-librarydocumenteditor--code-shortcut
 navigation-librarydocumenteditor--create-failure
 navigation-librarydocumenteditor--escape-closes-toolbar
 navigation-librarydocumenteditor--existing-document
+navigation-librarydocumenteditor--format-bold
+navigation-librarydocumenteditor--format-bullet-list
+navigation-librarydocumenteditor--format-code-block
+navigation-librarydocumenteditor--format-heading-1
+navigation-librarydocumenteditor--format-heading-2
+navigation-librarydocumenteditor--format-heading-3
+navigation-librarydocumenteditor--format-inline-code
+navigation-librarydocumenteditor--format-italic
+navigation-librarydocumenteditor--format-link
+navigation-librarydocumenteditor--format-numbered-list
+navigation-librarydocumenteditor--format-quote
+navigation-librarydocumenteditor--format-strikethrough
+navigation-librarydocumenteditor--format-task
 navigation-librarydocumenteditor--format-undone-whole
 navigation-librarydocumenteditor--format-without-change
 navigation-librarydocumenteditor--from-meeting-notes
@@ -1433,7 +1446,6 @@ navigation-librarydocumenteditor--person-caret-beside-agent
 navigation-librarydocumenteditor--rename-focuses-title-from-handle
 navigation-librarydocumenteditor--round-trip-fixture
 navigation-librarydocumenteditor--save-failure
-navigation-librarydocumenteditor--shortcuts-without-callbacks
 navigation-librarydocumenteditor--strikethrough-shortcut
 navigation-librarydocumenteditor--task-toggle
 navigation-librarydocumenteditor--title-at-rest
