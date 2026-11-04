@@ -659,34 +659,30 @@ const lastBubbleAgainstPrompt = (frame: HTMLElement) => {
 
 const WEBKIT_SCROLLBAR_GUTTER = "[&_[data-slot=message-scroller-viewport]]:pe-4"
 
+const PROMPT_EDGE_FRAMES = [
+	{ label: "Widest thread", className: "w-[1072px]" },
+	{ label: "Narrow thread", className: "w-120" },
+	{
+		label: "Widest thread beside a scrollbar",
+		className: cn("w-[1072px]", WEBKIT_SCROLLBAR_GUTTER),
+	},
+	{
+		label: "Narrow thread beside a scrollbar",
+		className: cn("w-120", WEBKIT_SCROLLBAR_GUTTER),
+	},
+]
+
 const PromptEdgeFrames = (args: ThreadLayoutProps) => (
 	<div className="flex flex-col gap-6">
-		<div data-slot="prompt-edge-frame" className="h-100 w-[1072px]">
-			<ThreadLayout {...args} label="Widest thread" />
-		</div>
-		<div data-slot="prompt-edge-frame" className="h-100 w-120">
-			<ThreadLayout {...args} header={null} label="Narrow thread" />
-		</div>
-		<div
-			data-slot="prompt-edge-frame"
-			className={cn("h-100 w-[1072px]", WEBKIT_SCROLLBAR_GUTTER)}
-		>
-			<ThreadLayout
-				{...args}
-				header={null}
-				label="Widest thread beside a scrollbar"
-			/>
-		</div>
-		<div
-			data-slot="prompt-edge-frame"
-			className={cn("h-100 w-120", WEBKIT_SCROLLBAR_GUTTER)}
-		>
-			<ThreadLayout
-				{...args}
-				header={null}
-				label="Narrow thread beside a scrollbar"
-			/>
-		</div>
+		{PROMPT_EDGE_FRAMES.map(({ label, className }) => (
+			<div
+				key={label}
+				data-slot="prompt-edge-frame"
+				className={cn("h-100", className)}
+			>
+				<ThreadLayout {...args} header={null} label={label} />
+			</div>
+		))}
 	</div>
 )
 
