@@ -9,6 +9,7 @@ import { Icons } from "@workspace/ui/components/icons"
 import { FOCUS_OUTLINE } from "@workspace/ui/components/library-document-agents"
 import { LIBRARY_BAR_BARE } from "@workspace/ui/components/library-item-menu"
 import {
+	type ResizableWidth,
 	ResizeHandle,
 	useResizableWidth,
 } from "@workspace/ui/components/resize-handle"
@@ -61,23 +62,19 @@ const DocumentPanel = ({
 	})
 	const [panel, setPanel] = useState<HTMLElement | null>(null)
 	const room = useRenderedWidth(panel?.parentElement ?? null)
-	const fittedResize =
-		room === null
-			? resize
-			: {
-					...resize,
-					...panelWidthsInRoom({
-						room,
-						askedWidth: resize.width,
-						minWidth: DOCUMENT_PANEL_MIN_WIDTH,
-						maxWidth: DOCUMENT_PANEL_MAX_WIDTH,
-						threadMinWidth: THREAD_MIN_WIDTH,
-					}),
-				}
-	const reachableResize = {
-		...fittedResize,
+	const reachableResize: ResizableWidth = {
+		...resize,
+		...(room === null
+			? {}
+			: panelWidthsInRoom({
+					room,
+					askedWidth: resize.width,
+					minWidth: DOCUMENT_PANEL_MIN_WIDTH,
+					maxWidth: DOCUMENT_PANEL_MAX_WIDTH,
+					threadMinWidth: THREAD_MIN_WIDTH,
+				})),
 		commitWidth: (next: number) =>
-			resize.commitWidth(Math.min(next, fittedResize.maxWidth)),
+			resize.commitWidth(Math.min(next, reachableResize.maxWidth)),
 	}
 
 	return (
