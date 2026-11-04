@@ -151,9 +151,9 @@ const openFirstBlock = async (body: HTMLElement) => {
 			?.focus()
 	})
 	return waitFor(() => {
-		const field = body.querySelector<HTMLTextAreaElement>(BLOCK_FIELD)
+		const field = body.querySelector<HTMLElement>(BLOCK_FIELD)
 		expect(document.activeElement).toBe(field)
-		return field as HTMLTextAreaElement
+		return field as HTMLElement
 	})
 }
 
@@ -176,7 +176,7 @@ describe.each([
 			const body = await openNotes(isJoined)
 			const field = await openFirstBlock(body)
 			await act(async () => {
-				field.setSelectionRange(0, field.value.length)
+				document.getSelection()?.selectAllChildren(field)
 			})
 
 			await pressWithMod(field, "b")

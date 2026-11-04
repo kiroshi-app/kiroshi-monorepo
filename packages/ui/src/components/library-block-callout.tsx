@@ -6,6 +6,7 @@ import {
 	Callout,
 	type CalloutTone,
 } from "@workspace/ui/components/answer-blocks/callout"
+import { LibraryBlockText } from "@workspace/ui/components/library-block-text"
 import {
 	calloutTextOf,
 	calloutTitleOf,
@@ -14,7 +15,6 @@ import {
 	withCalloutText,
 	withCalloutTone,
 } from "@workspace/ui/components/library-document-blocks"
-import { GrowingField } from "@workspace/ui/components/library-document-view"
 import { AnswerBlockFrame } from "@workspace/ui/components/markdown/answer-block"
 import {
 	ToggleGroup,
@@ -43,15 +43,15 @@ const LibraryCalloutEditor = ({
 				tone={tone}
 			>
 				<span className="flex flex-col items-start gap-2">
-					<GrowingField
+					<LibraryBlockText
 						aria-label={t("library.editor.blocks.callout.text")}
 						className="w-full"
 						data-slot="library-document-block-field"
-						fieldClassName="w-full"
-						onChange={(event) =>
-							onEdit((current) => withCalloutText(current, event.target.value))
+						onEdit={(text) =>
+							onEdit((current) => withCalloutText(current, text))
 						}
-						value={calloutTextOf(source)}
+						source={calloutTextOf(source)}
+						type="paragraph"
 					/>
 					<ToggleGroup
 						aria-label={t("library.editor.blocks.callout.tone")}

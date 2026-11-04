@@ -15,6 +15,10 @@ import { createElement } from "react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import * as Y from "yjs"
 
+import {
+	fieldSelectionOf,
+	selectInField,
+} from "@workspace/ui/components/library-block-text"
 import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
@@ -371,24 +375,40 @@ const openDocument = async (name: string) => {
 }
 
 const fieldOf = (block: HTMLElement) =>
-	block.querySelector<HTMLTextAreaElement>(
-		"[data-slot='library-document-block-field']",
-	)
+	block.querySelector<HTMLElement>("[data-slot='library-document-block-field']")
 
 const openIn = (block: HTMLElement) => {
 	act(() => {
 		;(fieldOf(block) ?? block.querySelector<HTMLElement>("[tabindex]"))?.focus()
 	})
-	return fieldOf(block) as HTMLTextAreaElement
+	return fieldOf(block) as HTMLElement
 }
 
 const selectIn = (block: HTMLElement, start: number, end = start) => {
 	const field = openIn(block)
 	act(() => {
-		field.setSelectionRange(start, end)
+		selectInField(field, start, end)
 		fireEvent(document, new Event("selectionchange"))
 	})
 	return field
+}
+
+const inputInto = (field: HTMLElement, data: string) =>
+	field.dispatchEvent(
+		Object.assign(
+			new InputEvent("beforeinput", {
+				inputType: "insertText",
+				data,
+				bubbles: true,
+				cancelable: true,
+			}),
+			{ getTargetRanges: () => [] },
+		),
+	)
+
+const replaceIn = (field: HTMLElement, text: string) => {
+	document.getSelection()?.selectAllChildren(field)
+	inputInto(field, text)
 }
 
 const goBack = async () => {
@@ -436,10 +456,10 @@ describe.each([
 		await waitFor(() => expect(shownRuns()).toEqual([AGENT_TEXT]))
 		expect(atlasCaret()).toBeInstanceOf(HTMLElement)
 		expect(document.activeElement).toBe(field)
-		expect([field.selectionStart, field.selectionEnd]).toEqual([2, 5])
+		expect(fieldSelectionOf(field)).toMatchObject({ start: 2, end: 5 })
 
 		await act(async () => {
-			fireEvent.change(field, { target: { value: "Intro line, edited" } })
+			replaceIn(field, "Intro line, edited")
 		})
 
 		await waitFor(() =>
@@ -1121,9 +1141,9 @@ const openBlockOfType = async (
 
 const typeEach = (typed: string) => {
 	for (const character of typed) {
-		const field = document.activeElement as HTMLTextAreaElement
+		const field = document.activeElement as HTMLElement
 		act(() => {
-			fireEvent.change(field, { target: { value: field.value + character } })
+			inputInto(field, character)
 		})
 	}
 }
@@ -1284,7 +1304,7 @@ describe.each(PLACES)(
 			)
 
 			act(() => {
-				fireEvent.change(cell, { target: { value: "Atlas North" } })
+				replaceIn(cell, "Atlas North")
 			})
 
 			await waitFor(() =>

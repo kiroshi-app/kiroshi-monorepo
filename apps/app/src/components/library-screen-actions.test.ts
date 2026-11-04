@@ -1082,12 +1082,23 @@ const typeInBody = async (text: string) => {
 		)?.focus()
 	})
 	const field = await waitFor(() => {
-		const opened = block.querySelector<HTMLTextAreaElement>(BLOCK_FIELD)
-		expect(opened).toBeInstanceOf(HTMLTextAreaElement)
-		return opened as HTMLTextAreaElement
+		const opened = block.querySelector<HTMLElement>(BLOCK_FIELD)
+		expect(document.activeElement).toBe(opened)
+		return opened as HTMLElement
 	})
 	await act(async () => {
-		fireEvent.change(field, { target: { value: text } })
+		document.getSelection()?.selectAllChildren(field)
+		field.dispatchEvent(
+			Object.assign(
+				new InputEvent("beforeinput", {
+					inputType: "insertText",
+					data: text,
+					bubbles: true,
+					cancelable: true,
+				}),
+				{ getTargetRanges: () => [] },
+			),
+		)
 	})
 }
 

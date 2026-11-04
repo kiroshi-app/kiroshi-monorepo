@@ -11,6 +11,11 @@ import { useTranslation } from "react-i18next"
 
 import { Icons } from "@workspace/ui/components/icons"
 import {
+	fieldSelectionOf,
+	LibraryBlockText,
+	selectInField,
+} from "@workspace/ui/components/library-block-text"
+import {
 	type ChecklistRow,
 	checklistRowsOf,
 	checklistSourceOf,
@@ -20,7 +25,7 @@ import {
 	toggledRow,
 	withRowText,
 } from "@workspace/ui/components/library-document-blocks"
-import { GrowingField } from "@workspace/ui/components/library-document-view"
+import { splitBlockText } from "@workspace/ui/components/library-document-inline"
 import { cn } from "@workspace/ui/lib/utils"
 
 type LibraryChecklistEditorProps = {
@@ -39,6 +44,8 @@ type RowFocus = {
 const DRAG_THRESHOLD = 4
 
 const ROW_SLOT = "library-checklist-row"
+
+const FIELD_SLOT = "library-document-block-field"
 
 const STEPS: Readonly<Record<string, number>> = { ArrowUp: -1, ArrowDown: 1 }
 
@@ -70,11 +77,10 @@ const LibraryChecklistEditor = ({
 				?.focus()
 			return
 		}
-		const field = row?.querySelector("textarea")
+		const field = row?.querySelector<HTMLElement>(`[data-slot="${FIELD_SLOT}"]`)
 		if (!field) return
-		const caret = rowFocus.caret ?? field.value.length
 		field.focus()
-		field.setSelectionRange(caret, caret)
+		selectInField(field, rowFocus.caret)
 	}, [rowFocus])
 
 	const move = (from: number, to: number) => {
@@ -124,25 +130,28 @@ const LibraryChecklistEditor = ({
 	}
 
 	const keyInRow =
-		(index: number) => (event: KeyboardEvent<HTMLTextAreaElement>) => {
+		(index: number) => (event: KeyboardEvent<HTMLDivElement>) => {
 			if (event.nativeEvent.isComposing) return
-			const { value, selectionStart: caret, selectionEnd } = event.currentTarget
-			if (caret !== selectionEnd) return
+			const value = rows[index].text
+			const range = fieldSelectionOf(event.currentTarget)
+			if (range && range.start !== range.end) return
+			const caret = range?.start ?? value.length
 			if (event.key === "Enter" && !event.shiftKey) {
 				event.preventDefault()
 				if (value === "") {
 					onLeave(checklistSourceOf(rows.filter((_, at) => at !== index)))
 					return
 				}
+				const { before, after, opened } = splitBlockText(value, "line", caret)
 				onEdit(
 					editRows((current) => [
 						...current.slice(0, index),
-						withRowText(current[index], value.slice(0, caret)),
-						rowAfter(current[index], value.slice(caret)),
+						withRowText(current[index], before),
+						rowAfter(current[index], after),
 						...current.slice(index + 1),
 					]),
 				)
-				setRowFocus({ index: index + 1, on: "field", caret: 0 })
+				setRowFocus({ index: index + 1, on: "field", caret: opened })
 				return
 			}
 			if (event.key === "Backspace" && value === "") {
@@ -212,23 +221,21 @@ const LibraryChecklistEditor = ({
 								/>
 							</span>
 						)}
-						<GrowingField
+						<LibraryBlockText
 							aria-label={t("library.editor.blocks.checklist.item", {
 								position,
 							})}
-							className="min-w-0 flex-1"
-							data-slot="library-document-block-field"
-							fieldClassName={cn(
-								"w-full",
+							className={cn(
+								"min-w-0 flex-1",
 								row.isDone && "text-muted-foreground line-through",
 							)}
-							onChange={(event) =>
-								editRow(index, (current) =>
-									withRowText(current, event.target.value),
-								)
+							data-slot={FIELD_SLOT}
+							onEdit={(text) =>
+								editRow(index, (current) => withRowText(current, text))
 							}
 							onKeyDown={keyInRow(index)}
-							value={row.text}
+							source={row.text}
+							type="line"
 						/>
 						{drop === index ||
 						(drop === rows.length && index === rows.length - 1) ? (

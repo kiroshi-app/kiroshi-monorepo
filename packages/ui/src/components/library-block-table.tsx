@@ -13,6 +13,10 @@ import type { ExtraProps } from "react-markdown"
 
 import { Icons } from "@workspace/ui/components/icons"
 import {
+	LibraryBlockText,
+	selectInField,
+} from "@workspace/ui/components/library-block-text"
+import {
 	type SourceEdit,
 	tableRowsOf,
 	tableSourceOf,
@@ -20,7 +24,6 @@ import {
 	withColumn,
 	withRow,
 } from "@workspace/ui/components/library-document-blocks"
-import { GrowingField } from "@workspace/ui/components/library-document-view"
 import { MarkdownTable } from "@workspace/ui/components/markdown/table"
 
 type LibraryTableEditorProps = {
@@ -40,6 +43,8 @@ type ColumnGrip = {
 type TableNode = NonNullable<ExtraProps["node"]>
 
 const CELL_SLOT = "library-table-cell"
+
+const FIELD_SLOT = "library-document-block-field"
 
 const DELIMITER_ROWS = 1
 
@@ -77,11 +82,12 @@ const LibraryTableEditor = ({ source, onEdit }: LibraryTableEditorProps) => {
 
 	useLayoutEffect(() => {
 		if (!cellFocus) return
-		frame.current
-			?.querySelectorAll<HTMLTextAreaElement>(
-				`[data-slot="${CELL_SLOT}"] textarea`,
-			)
-			[cellFocus.index]?.focus()
+		const field = frame.current?.querySelectorAll<HTMLElement>(
+			`[data-slot="${CELL_SLOT}"] [data-slot="${FIELD_SLOT}"]`,
+		)[cellFocus.index]
+		if (!field) return
+		field.focus()
+		selectInField(field)
 	}, [cellFocus])
 
 	const sourceRowOf = (row: number) => (row === 0 ? 0 : row + DELIMITER_ROWS)
@@ -90,7 +96,7 @@ const LibraryTableEditor = ({ source, onEdit }: LibraryTableEditorProps) => {
 		onEdit(editTable((rows) => withCell(rows, sourceRowOf(row), column, value)))
 
 	const keyInCell =
-		(index: number) => (event: KeyboardEvent<HTMLTextAreaElement>) => {
+		(index: number) => (event: KeyboardEvent<HTMLDivElement>) => {
 			if (event.nativeEvent.isComposing) return
 			if (event.key === "Enter") {
 				event.preventDefault()
@@ -156,19 +162,18 @@ const LibraryTableEditor = ({ source, onEdit }: LibraryTableEditorProps) => {
 				onBlur={() => setGrip(undefined)}
 				onFocus={placeGrip}
 			>
-				<GrowingField
+				<LibraryBlockText
 					aria-label={t("library.editor.blocks.table.cell", {
 						row: row + 1,
 						column: column + 1,
 					})}
-					className="min-w-6"
-					cols={1}
-					data-slot="library-document-block-field"
-					fieldClassName="w-full placeholder:text-faint-foreground"
-					onChange={(event) => write(row, column, event.target.value)}
+					className="min-w-6 [&_[data-slot=library-document-placeholder]]:before:text-faint-foreground"
+					data-slot={FIELD_SLOT}
+					hint={t("library.editor.blocks.table.empty")}
+					onEdit={(text) => write(row, column, text)}
 					onKeyDown={keyInCell(index)}
-					placeholder={t("library.editor.blocks.table.empty")}
-					value={value}
+					source={value}
+					type="line"
 				/>
 			</Cell>
 		)

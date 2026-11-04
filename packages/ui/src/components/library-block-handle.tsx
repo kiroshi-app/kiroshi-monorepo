@@ -93,6 +93,7 @@ const LibraryBlockHandle = ({
 	const { t } = useTranslation("common")
 	const dragHandle = useRef<HTMLButtonElement>(null)
 	const [isOpen, setOpen] = useState(false)
+	const hasTurnedInto = useRef(false)
 	const typeName = t(`library.editor.blocks.types.${type}`)
 	const platform = isMacPlatform() ? "mac" : "other"
 
@@ -145,7 +146,11 @@ const LibraryBlockHandle = ({
 								"w-55 rounded-control p-1 text-popover-foreground",
 							)}
 							data-slot="library-block-menu"
-							finalFocus={dragHandle}
+							finalFocus={() => {
+								const isLeftToBlock = hasTurnedInto.current
+								hasTurnedInto.current = false
+								return isLeftToBlock ? false : dragHandle.current
+							}}
 						>
 							<DropdownMenuGroup>
 								<DropdownMenuLabel className="px-2.5 pt-1.5 pb-1 font-medium text-xs leading-4">
@@ -161,9 +166,10 @@ const LibraryBlockHandle = ({
 										data-slot="library-block-turn-into"
 									>
 										<DropdownMenuRadioGroup
-											onValueChange={(next: LibraryBlockType) =>
+											onValueChange={(next: LibraryBlockType) => {
+												hasTurnedInto.current = true
 												onTurnInto(next)
-											}
+											}}
 											value={type}
 										>
 											{conversions.map((each) => {

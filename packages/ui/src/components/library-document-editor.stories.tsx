@@ -31,6 +31,10 @@ import {
 	LIBRARY_WRITERS,
 } from "@workspace/ui/components/library.fixtures"
 import {
+	fieldSelectionOf,
+	selectInField,
+} from "@workspace/ui/components/library-block-text"
+import {
 	LibraryDocumentEditor,
 	type LibraryDocumentEditorHandle,
 	type LibraryDocumentEditorProps,
@@ -127,7 +131,7 @@ const blockWith = (canvasElement: HTMLElement, text: string) => {
 }
 
 const fieldIn = (canvasElement: HTMLElement) => {
-	const field = canvasElement.querySelector<HTMLTextAreaElement>(FIELD)
+	const field = canvasElement.querySelector<HTMLElement>(FIELD)
 	if (!field) throw new Error("No block field")
 	return field
 }
@@ -140,7 +144,7 @@ const focusedFieldIn = (canvasElement: HTMLElement) =>
 	})
 
 const openBlock = (canvasElement: HTMLElement, block: HTMLElement) => {
-	const field = block.querySelector<HTMLTextAreaElement>(FIELD)
+	const field = block.querySelector<HTMLElement>(FIELD)
 	if (field) field.focus()
 	else block.querySelector<HTMLElement>("[tabindex]")?.focus()
 	return focusedFieldIn(canvasElement)
@@ -149,11 +153,32 @@ const openBlock = (canvasElement: HTMLElement, block: HTMLElement) => {
 const openBlockWith = (canvasElement: HTMLElement, text: string) =>
 	openBlock(canvasElement, blockWith(canvasElement, text))
 
-const selectIn = (field: HTMLTextAreaElement, text: string, from = 0) => {
-	const start = field.value.indexOf(text, from)
+const shownIn = (field: HTMLElement) => field.textContent ?? ""
+
+const shownPointAt = (field: HTMLElement, at: number) => {
+	const walker = document.createTreeWalker(field, NodeFilter.SHOW_TEXT)
+	let passed = 0
+	for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+		const size = node.textContent?.length ?? 0
+		if (at <= passed + size) return { node, offset: at - passed }
+		passed += size
+	}
+	throw new Error(`No shown offset ${at}`)
+}
+
+const selectShownRange = (field: HTMLElement, from: number, to: number) => {
+	const start = shownPointAt(field, from)
+	const end = shownPointAt(field, to)
+	document
+		.getSelection()
+		?.setBaseAndExtent(start.node, start.offset, end.node, end.offset)
+	return fieldSelectionOf(field)?.start ?? 0
+}
+
+const selectIn = (field: HTMLElement, text: string, from = 0) => {
+	const start = shownIn(field).indexOf(text, from)
 	if (start === -1) throw new Error(`No ${text} in the block`)
-	field.setSelectionRange(start, start + text.length)
-	return start
+	return selectShownRange(field, start, start + text.length)
 }
 
 const selectText = async (canvasElement: HTMLElement, text: string) => {
@@ -163,13 +188,15 @@ const selectText = async (canvasElement: HTMLElement, text: string) => {
 
 const caretAfter = async (canvasElement: HTMLElement, text: string) => {
 	const field = await openBlockWith(canvasElement, text)
-	const at = field.value.indexOf(text) + text.length
-	field.setSelectionRange(at, at)
+	const at = shownIn(field).indexOf(text) + text.length
+	selectShownRange(field, at, at)
 	return field
 }
 
-const selectedTextIn = (field: HTMLTextAreaElement) =>
-	field.value.slice(field.selectionStart, field.selectionEnd)
+const selectedTextIn = (field: HTMLElement) =>
+	field.contains(document.getSelection()?.anchorNode ?? null)
+		? (document.getSelection()?.toString() ?? "")
+		: ""
 
 const lastBodyOf = (args: LibraryDocumentEditorProps) =>
 	(args.onBodyChange as ReturnType<typeof fn>).mock.lastCall?.[0]
@@ -315,7 +342,7 @@ export const Blank = meta.story({
 
 		const [line] = blocksIn(canvasElement)
 		const field = await openBlock(canvasElement, line as HTMLElement)
-		await expect(field).toHaveValue("")
+		await expect(shownIn(field)).toBe("")
 		await expect(placeholdersIn(canvasElement)).toEqual([BLANK_PLACEHOLDER])
 		await expect(placeholderInkIn(canvasElement)).toBe(PLACEHOLDER_INK)
 		await expect(getComputedStyle(field).fontSize).toBe("15px")
@@ -531,11 +558,10 @@ export const TitleEnterMovesToBody = meta.story({
 		await expect(field.closest("[data-slot='library-document-block']")).toBe(
 			blocksIn(canvasElement)[0],
 		)
-		await expect(field).toHaveValue(
+		await expect(shownIn(field)).toBe(
 			"We met to agree the launch date and who signs off the copy.",
 		)
-		await expect(field.selectionStart).toBe(0)
-		await expect(field.selectionEnd).toBe(0)
+		await expect(fieldSelectionOf(field)).toMatchObject({ start: 0, end: 0 })
 		await expect(args.onTitleConfirm).toHaveBeenCalledOnce()
 		await expect(args.onTitleConfirm).toHaveBeenCalledWith("Launch review v2")
 		await expect(title).toHaveValue("Launch review v2 ")
@@ -731,8 +757,8 @@ export const FromMeetingNotes = meta.story({
 		await expect(placeholdersIn(canvasElement)).toEqual(MEETING_PLACEHOLDERS)
 		await expect(args.onBodyChange).not.toHaveBeenCalled()
 
-		const field = await openBlock(canvasElement, underDecisions())
-		fireEvent.change(field, { target: { value: "Ship" } })
+		await openBlock(canvasElement, underDecisions())
+		await keyboard("Ship")
 		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
 			"\n## Decisions\nShip\n## Next steps\n",
 		)
@@ -838,9 +864,8 @@ export const RoundTripFixture = meta.story({
 		}
 		await expect(args.onBodyChange).not.toHaveBeenCalled()
 
-		const field = await openBlockWith(canvasElement, "Launch plan")
-		fireEvent.change(field, { target: { value: "# Launch planx" } })
-		fireEvent.change(field, { target: { value: "# Launch plan" } })
+		await openBlockWith(canvasElement, "Launch plan")
+		await keyboard("x{Backspace}")
 		await expect(args.onBodyChange).toHaveBeenCalledTimes(2)
 		await expect(args.onBodyChange).toHaveBeenLastCalledWith(ROUND_TRIP)
 	},
@@ -918,7 +943,8 @@ const renderedBlocksStory = (theme: "dark" | "light") => ({
 		await expect(canvasElement.textContent).not.toContain("**14th**")
 
 		const field = await openBlockWith(canvasElement, "Launch plan")
-		await expect(field).toHaveValue("# Launch plan")
+		await expect(shownIn(field)).toBe("Launch plan")
+		await expect(field.querySelector("h1")).not.toBeNull()
 	},
 })
 
@@ -934,7 +960,7 @@ export const BoldTypedThenRendered = meta.story({
 		docs: {
 			description: {
 				story:
-					"Bold typed at the end of a paragraph, then the block left and opened again. Check that the open block shows the markers as typed, that the left block renders the words bold with the markers hidden, and that opening it again shows its markdown source.",
+					"Bold typed at the end of a paragraph, then the block left and opened again. Check that the closing markers turn the typed word bold in place with every marker hidden, that the words typed after it stay plain, that the left block renders the word bold, and that opening it again shows the bold word with no marker.",
 			},
 		},
 	},
@@ -945,9 +971,10 @@ export const BoldTypedThenRendered = meta.story({
 			"Screenshots land on the 10th.",
 		)
 		await keyboard(" Then **ship** it.")
-		await expect(field).toHaveValue(
-			"Screenshots land on the 10th. Then **ship** it.",
+		await expect(shownIn(field)).toBe(
+			"Screenshots land on the 10th. Then ship it.",
 		)
+		await expect(field.querySelector("strong")).toHaveTextContent(/^ship$/)
 		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
 			`${LAUNCH_REVIEW.body} Then **ship** it.`,
 		)
@@ -956,9 +983,11 @@ export const BoldTypedThenRendered = meta.story({
 		await expect(block.textContent).not.toContain("**")
 		await expect(lookOf(canvasElement, "strong", "ship").fontWeight).toBe("600")
 
-		await expect(await openBlock(canvasElement, block)).toHaveValue(
-			"Screenshots land on the 10th. Then **ship** it.",
+		const reopened = await openBlock(canvasElement, block)
+		await expect(shownIn(reopened)).toBe(
+			"Screenshots land on the 10th. Then ship it.",
 		)
+		await expect(reopened.querySelector("strong")).toHaveTextContent(/^ship$/)
 	},
 })
 
@@ -1024,8 +1053,8 @@ export const OutsideChangeWhileTyping = meta.story({
 		await expect(blockWith(canvasElement, "spring launch")).toBeDefined()
 		await expect(fieldIn(canvasElement)).toBe(field)
 		await expect(field).toHaveFocus()
-		await expect(field.value.slice(0, field.selectionStart)).toBe(
-			"- Ship on the 14th, after the review",
+		await expect(fieldSelectionOf(field)?.start).toBe(
+			"- Ship on the 14th, after the review".length,
 		)
 		await keyboard(" call")
 		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
@@ -1140,9 +1169,9 @@ export const CaretMoves = meta.story({
 				listStart + list.length,
 			),
 		)
-		field.setSelectionRange(at - listStart, at - listStart)
+		selectInField(field, at - listStart)
 		await waitFor(() => expect(args.onCaretChange).toHaveBeenLastCalledWith(at))
-		field.setSelectionRange(at - listStart + 4, at - listStart + 4)
+		selectInField(field, at - listStart + 4)
 		await waitFor(() =>
 			expect(args.onCaretChange).toHaveBeenLastCalledWith(at + 4),
 		)
@@ -1188,8 +1217,10 @@ export const ClickBelowTheLastLine = meta.story({
 			coords: { clientX: lastBlock.left + 40, clientY: lastBlock.bottom + 80 },
 		})
 		const last = await focusedFieldIn(canvasElement)
-		await expect(last).toHaveValue("Screenshots land on the 10th.")
-		await expect(last.selectionStart).toBe(last.value.length)
+		await expect(shownIn(last)).toBe("Screenshots land on the 10th.")
+		await expect(fieldSelectionOf(last)?.head).toBe(
+			"Screenshots land on the 10th.".length,
+		)
 
 		const heading = blockWith(
 			canvasElement,
@@ -1204,17 +1235,17 @@ export const ClickBelowTheLastLine = meta.story({
 			},
 		})
 		await waitFor(() =>
-			expect(fieldIn(canvasElement)).toHaveValue("## Decisions"),
+			expect(shownIn(fieldIn(canvasElement))).toBe("Decisions"),
 		)
 		const decisions = await focusedFieldIn(canvasElement)
-		await expect(decisions.selectionStart).toBe("## Decisions".length)
+		await expect(fieldSelectionOf(decisions)?.head).toBe("## Decisions".length)
 
 		if (!isInBrowserRunner()) return
 		await (await realPointer()).click(
 			blockWith(canvasElement, "who signs off the copy"),
 		)
 		await waitFor(() =>
-			expect(fieldIn(canvasElement)).toHaveValue(
+			expect(shownIn(fieldIn(canvasElement))).toBe(
 				"We met to agree the launch date and who signs off the copy.",
 			),
 		)
@@ -1831,17 +1862,15 @@ const LAUNCH_DATE = "the launch date"
 const toolbarIn = (canvasElement: HTMLElement) =>
 	canvasElement.querySelector<HTMLElement>('[data-slot="selection-toolbar"]')
 
-const selectionRectOf = (field: HTMLTextAreaElement) => {
-	const mirrored = field.previousElementSibling?.firstChild as Node
-	const range = document.createRange()
-	range.setStart(mirrored, field.selectionStart)
-	range.setEnd(mirrored, field.selectionEnd)
-	return range.getBoundingClientRect()
-}
+const selectionRect = () =>
+	document.getSelection()?.getRangeAt(0).getBoundingClientRect() ??
+	new DOMRect()
 
-const expectToolbarAbove = async (canvasElement: HTMLElement) => {
+const expectToolbarAbove = async (
+	canvasElement: HTMLElement,
+	selection = selectionRect(),
+) => {
 	await waitFor(() => expect(toolbarIn(canvasElement)).not.toBe(null))
-	const selection = selectionRectOf(fieldIn(canvasElement))
 	const toolbar = toolbarIn(canvasElement)?.getBoundingClientRect()
 	if (!toolbar) throw new Error("No toolbar")
 	await expect(
@@ -1874,7 +1903,7 @@ export const FormatWithoutChange = meta.story({
 		).toHaveFocus()
 		await keyboard("{Enter}")
 		await expect(args.onBodyChange).not.toHaveBeenCalled()
-		await expect(field).toHaveValue(SELECTION_OPENING)
+		await expect(shownIn(field)).toBe(SELECTION_OPENING)
 		await expect(canvas.getByRole("toolbar", { name: "Format" })).toBeVisible()
 	},
 })
@@ -1914,12 +1943,11 @@ export const A1ToolbarAboveSelection = meta.story({
 		await expect(args.onBold).not.toHaveBeenCalled()
 		const field = fieldIn(canvasElement)
 		await expect(field).toHaveFocus()
-		await expect(field).toHaveValue(
-			SELECTION_OPENING.replace(LAUNCH_DATE, `**${LAUNCH_DATE}**`),
-		)
+		await expect(shownIn(field)).toBe(SELECTION_OPENING)
+		await expect(field.querySelector("strong")).toHaveTextContent(LAUNCH_DATE)
 		await waitFor(() => expect(selectedTextIn(field)).toBe(LAUNCH_DATE))
 
-		field.setSelectionRange(start, start)
+		selectInField(field, start)
 		await waitFor(() => expect(toolbarIn(canvasElement)).toBe(null))
 		selectIn(field, LAUNCH_DATE)
 		await waitFor(() => expect(toolbarIn(canvasElement)).not.toBe(null))
@@ -1938,11 +1966,11 @@ export const A2ToolbarOverTwoLines = meta.story({
 		"Artboard A2: a selection running from the first line of a paragraph onto the second. Check that the toolbar centres on the box holding both selected lines and sits 8px above its top.",
 	),
 	play: async ({ canvasElement }) => {
-		const { field } = await selectText(
+		await selectText(
 			canvasElement,
 			"who signs off the copy before the screenshots land, so the press kit and the store",
 		)
-		await expect(selectionRectOf(field).height).toBeGreaterThan(40)
+		await expect(selectionRect().height).toBeGreaterThan(40)
 		await expectToolbarAbove(canvasElement)
 	},
 })
@@ -2023,11 +2051,12 @@ export const A5ToolbarLinkField = meta.story({
 		await expect(selectedTextIn(field)).toBe(LAUNCH_DATE)
 		await expect(canvas.getByRole("toolbar", { name: "Format" })).toBeVisible()
 
+		const linkedWords = selectionRect()
 		await userEvent.type(await openLinkField(), "https://kiroshi.app/brief")
 		await expect(toolbarIn(canvasElement)?.getBoundingClientRect().width).toBe(
 			340,
 		)
-		await expectToolbarAbove(canvasElement)
+		await expectToolbarAbove(canvasElement, linkedWords)
 	},
 })
 
@@ -2070,7 +2099,7 @@ export const A6ToolbarFlippedBelow = meta.story({
 			)
 		})
 		await waitFor(() => {
-			const selection = selectionRectOf(field)
+			const selection = selectionRect()
 			const toolbar = toolbarIn(canvasElement)?.getBoundingClientRect()
 			expect(toolbar?.top).toBeGreaterThan(selection.bottom)
 			expect(
@@ -2148,7 +2177,7 @@ export const BoldShortcut = meta.story({
 		await pressWithCommand("b")
 		await expect(lastBodyOf(args)).toBe(formattedLaunchDate("**"))
 
-		field.setSelectionRange(start, start)
+		selectInField(field, start)
 		await expect(
 			pressIn(field, { key: "b", metaKey: true }).defaultPrevented,
 		).toBe(false)
@@ -2219,7 +2248,6 @@ export const LinkShortcut = meta.story({
 		await expect(toolbarIn(canvasElement)).toBe(null)
 		await pressWithCommand("k")
 		await expect(document.activeElement).toBe(linkField())
-		await expect(selectedTextIn(field)).toBe(LAUNCH_DATE)
 
 		await keyboard("https://kiroshi.app/brief{Enter}")
 		const linked = SELECTION_DOCUMENT.body.replace(
@@ -2294,7 +2322,7 @@ export const ToolbarAfterKeyboardSelection = meta.story({
 	play: async ({ canvasElement }) => {
 		if (!isInBrowserRunner()) return
 		const { field, start } = await selectText(canvasElement, LAUNCH_DATE)
-		field.setSelectionRange(start, start)
+		selectInField(field, start)
 
 		await keyboard("{Shift>}{ArrowRight}{ArrowRight}{ArrowRight}")
 		await expect(selectedTextIn(field)).toBe("the")
