@@ -23,8 +23,13 @@ import {
 	AnswerImageViewer,
 	useShownImageActions,
 } from "@/components/answer-image-viewer"
+import { AnswerBody } from "@/components/turn-body"
 import type { LibraryImport, LibraryItem } from "@/lib/bindings"
-import type { ShownImageActions, ThreadImage } from "@/lib/chat/answer-actions"
+import {
+	AnswerActionsContext,
+	type ShownImageActions,
+	type ThreadImage,
+} from "@/lib/chat/answer-actions"
 import type { Invoke } from "@/lib/host/joined-hosts-invoke"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 import { joinedRowIdOf } from "@/lib/spaces/joined-spaces-controller"
@@ -621,4 +626,111 @@ describe("Save the image from a thread", () => {
 			await waitFor(() => expect(raise).toHaveBeenCalledWith(notice))
 		},
 	)
+})
+
+describe("Save to Library in the menu of a sourced answer image", () => {
+	const sourcedImageOf = ({ name, src }: ThreadImage) =>
+		`![${name}](${src})\n\nSource: [Example](https://www.example.org)`
+
+	const TURN_TEXT = `${sourcedImageOf(SOFA)}\n\n${sourcedImageOf(OAK)}`
+
+	const SAVE_THE_IMAGE = i18n.t("chat:answerBlock.sourcedImage.save")
+
+	const TurnWithSavableImages = () =>
+		createElement(
+			AnswerActionsContext,
+			{
+				value: {
+					insert: () => undefined,
+					openImage: () => undefined,
+					imageActions: useShownImageActions(),
+				},
+			},
+			createElement(AnswerBody, {
+				attachments: [],
+				text: TURN_TEXT,
+				agentName: "Ada",
+				isWriting: false,
+			}),
+		)
+
+	const holdImport = () => {
+		let open: () => void = () => undefined
+		harness.importGate = new Promise<void>((resolve) => {
+			open = resolve
+		})
+		return () =>
+			act(async () => {
+				open()
+			})
+	}
+
+	const figureOf = (name: string) => {
+		const figure = screen
+			.getAllByRole("figure")
+			.find((candidate) => within(candidate).queryByRole("img", { name }))
+		if (!figure) {
+			throw new Error(`No sourced image named ${name}`)
+		}
+		return figure
+	}
+
+	const saveFromButton = async (name: string) => {
+		await press(
+			within(figureOf(name)).getByRole("button", { name: SAVE_THE_IMAGE }),
+		)
+		await waitFor(() => expect(callsOf("library_import")).toHaveLength(1))
+	}
+
+	const isSaveToLibraryDisabledIn = (menu: HTMLElement) =>
+		within(menu)
+			.getByRole("menuitem", { name: SAVE_TO_LIBRARY })
+			.getAttribute("aria-disabled") === "true"
+
+	const renderTurn = () => {
+		render(createElement(TurnWithSavableImages), {
+			wrapper: wrapperOn(HOSTED),
+		})
+	}
+
+	it("disables Save to Library in the menu of the image while its save is pending", async () => {
+		holdImport()
+		renderTurn()
+
+		await saveFromButton(SOFA.name)
+
+		expect(
+			isSaveToLibraryDisabledIn(await openRenderedImageMenu(SOFA.name)),
+		).toBe(true)
+	})
+
+	it.each([
+		["resolves", null],
+		["rejects", "library_import"],
+	] as const)(
+		"enables Save to Library again when the save %s",
+		async (_outcome, refused) => {
+			harness.refused = refused
+			const release = holdImport()
+			renderTurn()
+			await saveFromButton(SOFA.name)
+			const menu = await openRenderedImageMenu(SOFA.name)
+			expect(isSaveToLibraryDisabledIn(menu)).toBe(true)
+
+			await release()
+
+			await waitFor(() => expect(isSaveToLibraryDisabledIn(menu)).toBe(false))
+		},
+	)
+
+	it("keeps Save to Library enabled in the menu of another image of the turn", async () => {
+		holdImport()
+		renderTurn()
+
+		await saveFromButton(SOFA.name)
+
+		expect(
+			isSaveToLibraryDisabledIn(await openRenderedImageMenu(OAK.name)),
+		).toBe(false)
+	})
 })
