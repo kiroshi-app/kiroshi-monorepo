@@ -233,6 +233,18 @@ const useTranscriptHandle = (
 	)
 }
 
+const holdRowsBelowInPlace = (skeletonRow: HTMLDivElement | null) => {
+	const viewport = skeletonRow?.closest<HTMLElement>(
+		'[data-slot="message-scroller-viewport"]',
+	)
+	if (!skeletonRow || !viewport) return
+	const height = skeletonRow.offsetHeight
+	viewport.scrollTop += height
+	return () => {
+		viewport.scrollTop -= height
+	}
+}
+
 type TranscriptOlderEdgeProps = {
 	older: ListEnd
 	contentClassName?: string
@@ -250,7 +262,10 @@ const TranscriptOlderEdge = ({
 				edge="top"
 				listEnd={older}
 				row={
-					<div className={cn(contentClassName, "min-h-0 py-0")}>
+					<div
+						className={cn(contentClassName, "min-h-0 py-0")}
+						ref={holdRowsBelowInPlace}
+					>
 						<AgentSkeleton bubbleClassName="h-11 w-100" nameClassName="w-11" />
 					</div>
 				}
