@@ -634,10 +634,6 @@ const common = {
 			copy: "Impossible de copier l’image",
 			reveal: "Impossible d’afficher le fichier dans son dossier",
 			delete: "Impossible de supprimer l’élément",
-			missing: {
-				title: "Cet élément n’est plus dans la Bibliothèque.",
-				body: "Il a été supprimé ou déplacé. Fermez cet onglet.",
-			},
 			document: {
 				create:
 					"Impossible de créer le document. Réessayez depuis Nouveau document.",

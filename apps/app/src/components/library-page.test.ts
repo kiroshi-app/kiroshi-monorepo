@@ -1031,6 +1031,44 @@ describe("the item a Library address names", () => {
 		expect(screen.queryByRole("dialog")).toBeNull()
 	})
 
+	const closeTabAction = () =>
+		screen.getByRole("button", {
+			name: common("library.tab.unavailable.missing.action"),
+		})
+
+	it("closes the tab from the missing state", async () => {
+		const { router } = await mountApp()
+		harness.libraryItems = [IMAGE]
+		await act(async () =>
+			router.options.context.tabs.openInNewTab(
+				"/library?item=gone.png&kind=image",
+			),
+		)
+		await settle()
+		await click(otherTab())
+		expect(screen.getAllByRole("tab", { hidden: true })).toHaveLength(2)
+
+		await click(closeTabAction())
+
+		expect(screen.getAllByRole("tab", { hidden: true })).toHaveLength(1)
+		expect(router.state.location.search).not.toHaveProperty("item")
+	})
+
+	it("closes a pinned tab from the missing state", async () => {
+		const { router } = await mountApp()
+		harness.libraryItems = [IMAGE]
+		await openByAddress(router, { item: "gone.png", kind: "image" })
+		const { tabs } = router.options.context
+		const pinnedId = tabs.getState().bySpace[tabs.getState().spaceId].activeId
+		await act(async () => tabs.pin(pinnedId))
+
+		await click(closeTabAction())
+
+		const { bySpace, spaceId } = tabs.getState()
+		expect(bySpace[spaceId].tabs.map((tab) => tab.id)).not.toContain(pinnedId)
+		expect(router.state.location.search).not.toHaveProperty("item")
+	})
+
 	it("opens the item of a second address landing in the same tab", async () => {
 		const { router } = await mountApp()
 		harness.libraryItems = [IMAGE]

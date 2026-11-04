@@ -606,10 +606,6 @@ const common = {
 			copy: "Couldn’t copy the image",
 			reveal: "Couldn’t show the file in its folder",
 			delete: "Couldn’t delete the item",
-			missing: {
-				title: "This item isn't in the Library anymore.",
-				body: "It was deleted or moved. Close this tab.",
-			},
 			document: {
 				create: "Couldn’t create the document. Try again from New document.",
 				open: "Couldn’t open the document. Open it again from the Library.",

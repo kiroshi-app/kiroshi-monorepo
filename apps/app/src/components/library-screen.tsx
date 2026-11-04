@@ -15,10 +15,13 @@ import {
 	type LibraryFilter,
 	LibraryPanel,
 } from "@workspace/ui/components/library-panel"
-import { ScreenLayout } from "@workspace/ui/components/screen-layout"
+import {
+	LibraryDocumentSkeleton,
+	LibraryImageSkeleton,
+	LibraryItemUnavailable,
+} from "@workspace/ui/components/library-tab-states"
 import { i18n } from "@workspace/ui/lib/i18n"
 
-import { BareAppHeader } from "@/components/bare-app-header"
 import { LibraryDropTarget } from "@/components/library-drop-target"
 import type { LibraryItem, Space } from "@/lib/bindings"
 import type { Bot } from "@/lib/conversations/store-contract"
@@ -54,6 +57,7 @@ export type LibraryScreenProps = {
 	opening?: LibraryOpening
 	onOpeningChange: (opening: LibraryOpening | undefined) => void
 	onOpenInNewTab?: (opening: LibraryOpening) => void
+	onCloseTab?: () => void
 }
 
 type ShownImage = Extract<ShownLibraryItem, { kind: "image" }>
@@ -128,31 +132,36 @@ const openedDocumentOf = (
 const documentNameOf = (opening: LibraryOpening | undefined) =>
 	opening?.kind === "document" ? opening.name : null
 
-type OpeningPresence = {
+type OpeningRead = {
 	opening: LibraryOpening | undefined
+	isListing: boolean
 	hasListed: boolean
 	isListed: boolean
 	isDocumentOpened: boolean
 	isDocumentRead: boolean
+	hasFailedToOpen: boolean
 }
 
-const missingOpeningOf = ({
-	opening,
-	hasListed,
-	isListed,
-	isDocumentOpened,
-	isDocumentRead,
-}: OpeningPresence) => {
-	const isUnlisted = hasListed && !isListed && !isDocumentOpened
-	const hasNoOpenFailure = opening?.kind === "image" || isDocumentRead
-	return isUnlisted && hasNoOpenFailure ? opening : undefined
+const openingStatusOf = (read: OpeningRead) => {
+	const isMissing =
+		read.opening !== undefined &&
+		read.hasListed &&
+		!read.isListed &&
+		!read.isDocumentOpened
+	const hasNoOpenFailure = read.opening?.kind === "image" || read.isDocumentRead
+	return {
+		isMissing,
+		notifiedMissing: isMissing && hasNoOpenFailure ? read.opening : undefined,
+		hasFailedToRead:
+			read.hasFailedToOpen || (!read.isListing && !read.hasListed),
+	}
 }
 
 const reportFailure = failureReporterIn("library-screen")
 
 const missingNotice = () => ({
-	title: i18n.t("common:library.failure.missing.title"),
-	description: i18n.t("common:library.failure.missing.body"),
+	title: i18n.t("common:library.tab.unavailable.missing.title"),
+	description: i18n.t("common:library.tab.unavailable.missing.body"),
 })
 
 const useMissingOpeningNotice = (
@@ -196,6 +205,46 @@ const isActionShownOn = (
 	action: string,
 ) => action !== "onRename" || item.kind === "document"
 
+type LibraryOpeningStateProps = {
+	opening: LibraryOpening
+	isMissing: boolean
+	hasFailedToRead: boolean
+	onCloseTab?: () => void
+	onBackToLibrary: () => void
+}
+
+const LibraryOpeningState = ({
+	opening,
+	isMissing,
+	hasFailedToRead,
+	onCloseTab,
+	onBackToLibrary,
+}: LibraryOpeningStateProps) => {
+	if (isMissing) {
+		return (
+			<LibraryItemUnavailable
+				name={opening.name}
+				onAction={onCloseTab ?? onBackToLibrary}
+				reason="missing"
+			/>
+		)
+	}
+	if (hasFailedToRead) {
+		return (
+			<LibraryItemUnavailable
+				name={opening.name}
+				onAction={onBackToLibrary}
+				reason="unreadable"
+			/>
+		)
+	}
+	return opening.kind === "image" ? (
+		<LibraryImageSkeleton />
+	) : (
+		<LibraryDocumentSkeleton />
+	)
+}
+
 export const LibraryScreen = ({
 	spaceId,
 	isJoined,
@@ -204,6 +253,7 @@ export const LibraryScreen = ({
 	opening,
 	onOpeningChange,
 	onOpenInNewTab,
+	onCloseTab,
 }: LibraryScreenProps) => {
 	const library = useLibraryItems(spaceId)
 	const sourceOf = useLibraryImageSources(spaceId, library.items, isJoined)
@@ -241,8 +291,14 @@ export const LibraryScreen = ({
 		heldDraft,
 		listedOpened && toShown(listedOpened).detail,
 	)
-	const { document, edit, shareCaret, closeAndRelist, moveDocument } =
-		useLibraryDocumentSession(spaceId, documentNameOf(opening))
+	const {
+		document,
+		edit,
+		shareCaret,
+		hasFailedToOpen,
+		closeAndRelist,
+		moveDocument,
+	} = useLibraryDocumentSession(spaceId, documentNameOf(opening))
 	const { writers, people } = useLibraryDocumentWriters({
 		spaceId,
 		name: openedDocument?.name ?? null,
@@ -251,16 +307,16 @@ export const LibraryScreen = ({
 		bots,
 		title: shownTitleOf(openedDocument?.title ?? ""),
 	})
-	useMissingOpeningNotice(
-		spaceId,
-		missingOpeningOf({
-			opening,
-			hasListed: library.hasLoaded,
-			isListed: listedOpened !== undefined,
-			isDocumentOpened: openedDocument !== null,
-			isDocumentRead: document !== null,
-		}),
-	)
+	const { isMissing, notifiedMissing, hasFailedToRead } = openingStatusOf({
+		opening,
+		isListing: library.isLoading,
+		hasListed: library.hasLoaded,
+		isListed: listedOpened !== undefined,
+		isDocumentOpened: openedDocument !== null,
+		isDocumentRead: document !== null,
+		hasFailedToOpen,
+	})
+	useMissingOpeningNotice(spaceId, notifiedMissing)
 
 	const shownItems = library.items
 		.filter((item) => matchesQuery(item, query))
@@ -377,7 +433,15 @@ export const LibraryScreen = ({
 	}
 
 	if (opening && !isImageListed) {
-		return <ScreenLayout header={<BareAppHeader />} />
+		return (
+			<LibraryOpeningState
+				hasFailedToRead={hasFailedToRead}
+				isMissing={isMissing}
+				onBackToLibrary={close}
+				onCloseTab={onCloseTab}
+				opening={opening}
+			/>
+		)
 	}
 
 	return (

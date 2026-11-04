@@ -160,11 +160,13 @@ const LIBRARY_TITLE = common("library.title")
 type ScreenOptions = {
 	isJoined: boolean
 	openedFirst?: LibraryOpening
+	onCloseTab?: () => void
 }
 
 const renderLibraryScreen = async ({
 	isJoined,
 	openedFirst,
+	onCloseTab,
 }: ScreenOptions) => {
 	const onOpenInNewTab = vi.fn()
 	const screenElement = createElement(LibraryScreenHoldingOpening, {
@@ -173,6 +175,7 @@ const renderLibraryScreen = async ({
 		bots: [],
 		openedFirst,
 		onOpenInNewTab,
+		onCloseTab,
 	})
 	const view = render(screenElement, {
 		wrapper: createQueryTestWrapper().wrapper,
@@ -354,11 +357,15 @@ describe("Open in new tab in the menu of a Library item", () => {
 })
 
 const MISSING_NOTICE = {
-	title: "This item isn't in the Library anymore.",
-	description: "It was deleted or moved. Close this tab.",
+	title: common("library.tab.unavailable.missing.title"),
+	description: common("library.tab.unavailable.missing.body"),
 }
 
 const NOTES_OPENING: LibraryOpening = { kind: "document", name: "notes.txt" }
+
+const IMAGE_OPENING: LibraryOpening = { kind: "image", name: "diagram.png" }
+
+type UnavailableReason = "missing" | "unreadable"
 
 const editorShown = () =>
 	screen.queryByRole("textbox", { name: common("library.editor.title") })
@@ -366,9 +373,30 @@ const editorShown = () =>
 const gridItemShown = () =>
 	tileShown("notes") || tileShown("diagram.png") || libraryShown() !== null
 
+const skeletonShown = (label: "loadingDocument" | "loadingImage") =>
+	screen.queryByRole("region", { name: common(`library.tab.${label}`) }) !==
+	null
+
+const unavailableCard = (reason: UnavailableReason, name: string) =>
+	screen.findByRole("group", {
+		name: common(`library.tab.unavailable.${reason}.title`, { name }),
+	})
+
+const pressUnavailableAction = async (reason: UnavailableReason) =>
+	press(
+		screen.getByRole("button", {
+			name: common(`library.tab.unavailable.${reason}.action`),
+		}),
+	)
+
+const relist = () =>
+	act(async () => {
+		window.dispatchEvent(new Event("focus"))
+	})
+
 describe("a tab opening a Library item", () => {
 	it.each(SPACES)(
-		"loads the document alongside the list and shows no grid item while both load, on %s",
+		"loads the document alongside the list and shows the document skeleton while both load, on %s",
 		async (_space, isJoined) => {
 			const releaseList = holdHostCall("library_list")
 			const releaseDocument = holdHostCall("library_open_document")
@@ -381,27 +409,74 @@ describe("a tab opening a Library item", () => {
 				]),
 			)
 			expect(callsOf("library_list")).toHaveLength(1)
+			expect(skeletonShown("loadingDocument")).toBe(true)
 			expect(gridItemShown()).toBe(false)
-			expect(editorShown()).toBeNull()
 
 			await releaseDocument()
+			expect(skeletonShown("loadingDocument")).toBe(true)
 			expect(gridItemShown()).toBe(false)
-			expect(editorShown()).toBeNull()
 
 			await releaseList()
 			expect((await titleField()).value).toBe("notes")
+			expect(skeletonShown("loadingDocument")).toBe(false)
 			expect(gridItemShown()).toBe(false)
 		},
 	)
 
 	it.each(SPACES)(
-		"shows the failed view and raises one notice for a deleted document the host refuses to open, on %s",
+		"shows the image skeleton until the list loads, then the image, on %s",
+		async (_space, isJoined) => {
+			const releaseList = holdHostCall("library_list")
+
+			await renderLibraryScreen({ isJoined, openedFirst: IMAGE_OPENING })
+			await settle()
+			expect(skeletonShown("loadingImage")).toBe(true)
+			expect(gridItemShown()).toBe(false)
+
+			await releaseList()
+			expect(
+				await screen.findByRole("button", {
+					name: common("library.lightbox.back"),
+				}),
+			).toBeInstanceOf(HTMLElement)
+		},
+	)
+
+	it.each(SPACES)(
+		"shows the unreadable state when the read fails and goes back to the Library from it, on %s",
+		async (_space, isJoined) => {
+			harness.refused = "library_open_document"
+
+			await renderLibraryScreen({ isJoined, openedFirst: NOTES_OPENING })
+
+			expect(await unavailableCard("unreadable", "notes.txt")).toBeInstanceOf(
+				HTMLElement,
+			)
+			await settle(50)
+			expect(raiseFailureNotice).toHaveBeenCalledExactlyOnceWith(
+				expect.objectContaining({
+					title: common("library.failure.document.open"),
+				}),
+			)
+			expect(gridItemShown()).toBe(false)
+
+			await pressUnavailableAction("unreadable")
+
+			expect(await tileOf("notes")).toBeInstanceOf(HTMLElement)
+		},
+	)
+
+	it.each(SPACES)(
+		"shows the missing state, with the one refusal notice, for a deleted document the host refuses to open, on %s",
 		async (_space, isJoined) => {
 			harness.listed = [IMAGE]
 			harness.refused = "library_open_document"
 
 			await renderLibraryScreen({ isJoined, openedFirst: NOTES_OPENING })
 
+			expect(await unavailableCard("missing", "notes.txt")).toBeInstanceOf(
+				HTMLElement,
+			)
 			await waitFor(() => expect(raiseFailureNotice).toHaveBeenCalledOnce())
 			await settle(50)
 			expect(raiseFailureNotice).toHaveBeenCalledExactlyOnceWith(
@@ -409,39 +484,52 @@ describe("a tab opening a Library item", () => {
 					title: common("library.failure.document.open"),
 				}),
 			)
-			expect(callsOf("library_list")).toHaveLength(1)
 			expect(gridItemShown()).toBe(false)
 			expect(editorShown()).toBeNull()
 		},
 	)
 
 	it.each(SPACES)(
-		"shows the failed view and raises one notice for a document the list no longer carries, on %s",
+		"shows the missing state, raises its notice once and closes the tab from it, for a document the list no longer carries, on %s",
 		async (_space, isJoined) => {
 			harness.listed = [IMAGE]
+			const onCloseTab = vi.fn()
 
-			await renderLibraryScreen({ isJoined, openedFirst: NOTES_OPENING })
+			await renderLibraryScreen({
+				isJoined,
+				openedFirst: NOTES_OPENING,
+				onCloseTab,
+			})
 
+			expect(await unavailableCard("missing", "notes.txt")).toBeInstanceOf(
+				HTMLElement,
+			)
 			await waitFor(() =>
 				expect(raiseFailureNotice).toHaveBeenCalledExactlyOnceWith(
 					expect.objectContaining(MISSING_NOTICE),
 				),
 			)
 			expect(gridItemShown()).toBe(false)
-			expect(editorShown()).toBeNull()
+
+			await pressUnavailableAction("missing")
+
+			expect(onCloseTab).toHaveBeenCalledOnce()
 		},
 	)
 
 	it.each(SPACES)(
-		"shows the failed view and raises one notice for an image the list does not carry, on %s",
+		"shows the missing state for an image the list does not carry, raises its notice once and goes back to the Library without a way to close the tab, on %s",
 		async (_space, isJoined) => {
 			harness.listed = [DOCUMENT]
 
 			const { rerender } = await renderLibraryScreen({
 				isJoined,
-				openedFirst: { kind: "image", name: "diagram.png" },
+				openedFirst: IMAGE_OPENING,
 			})
 
+			expect(await unavailableCard("missing", "diagram.png")).toBeInstanceOf(
+				HTMLElement,
+			)
 			await waitFor(() =>
 				expect(raiseFailureNotice).toHaveBeenCalledExactlyOnceWith(
 					expect.objectContaining(MISSING_NOTICE),
@@ -452,11 +540,15 @@ describe("a tab opening a Library item", () => {
 			expect(raiseFailureNotice).toHaveBeenCalledOnce()
 			expect(gridItemShown()).toBe(false)
 			expect(lightboxBack()).toBeNull()
+
+			await pressUnavailableAction("missing")
+
+			expect(await tileOf("notes")).toBeInstanceOf(HTMLElement)
 		},
 	)
 
 	it.each(SPACES)(
-		"shows the failed view and raises one notice when the shown document leaves the list, on %s",
+		"shows the missing state and raises its notice once when the shown document leaves the list, on %s",
 		async (_space, isJoined) => {
 			const { rerender } = await renderLibraryScreen({
 				isJoined,
@@ -465,44 +557,22 @@ describe("a tab opening a Library item", () => {
 			expect((await titleField()).value).toBe("notes")
 
 			harness.listed = [IMAGE]
-			await act(async () => {
-				window.dispatchEvent(new Event("focus"))
-			})
+			await relist()
 
-			await waitFor(() => expect(editorShown()).toBeNull())
+			expect(await unavailableCard("missing", "notes.txt")).toBeInstanceOf(
+				HTMLElement,
+			)
 			await waitFor(() =>
 				expect(raiseFailureNotice).toHaveBeenCalledExactlyOnceWith(
 					expect.objectContaining(MISSING_NOTICE),
 				),
 			)
 			rerender()
-			await act(async () => {
-				window.dispatchEvent(new Event("focus"))
-			})
+			await relist()
 			await settle(50)
 			expect(raiseFailureNotice).toHaveBeenCalledOnce()
+			expect(editorShown()).toBeNull()
 			expect(gridItemShown()).toBe(false)
-		},
-	)
-
-	it.each(SPACES)(
-		"shows no grid item before the viewer shows the image, on %s",
-		async (_space, isJoined) => {
-			const releaseList = holdHostCall("library_list")
-
-			await renderLibraryScreen({
-				isJoined,
-				openedFirst: { kind: "image", name: "diagram.png" },
-			})
-			await settle()
-			expect(gridItemShown()).toBe(false)
-
-			await releaseList()
-			expect(
-				await screen.findByRole("button", {
-					name: common("library.lightbox.back"),
-				}),
-			).toBeInstanceOf(HTMLElement)
 		},
 	)
 })
