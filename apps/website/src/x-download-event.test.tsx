@@ -3,7 +3,6 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { WEBSITE_COPY } from "./copy"
-import "./router"
 import { X_DOWNLOAD_EVENT_ID } from "./x-ads"
 
 const MAC_AGENT =
@@ -31,6 +30,10 @@ const PRODUCT_HUNT_DARK_SRC =
 	"https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1299478&theme=dark&t=1793522267725"
 
 const neverAnswer = () => new Promise<Response>(() => {})
+
+const transformRouterGraphOnceAtCollection = () => import("./router")
+
+await transformRouterGraphOnceAtCollection()
 
 const openHome = async () => {
 	vi.spyOn(navigator, "userAgent", "get").mockReturnValue(MAC_AGENT)
