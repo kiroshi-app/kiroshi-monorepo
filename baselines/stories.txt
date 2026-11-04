@@ -91,6 +91,7 @@ conversation-markdown-codesnippet--overflow
 conversation-markdown-codesnippet--single-line
 conversation-markdown-collapsiblesections--in-agent-answer
 conversation-markdown-collapsiblesections--in-narrow-column
+conversation-markdown-gallery--caption-per-image
 conversation-markdown-gallery--image-menu-open
 conversation-markdown-gallery--in-agent-answer
 conversation-markdown-gallery--in-narrow-column
