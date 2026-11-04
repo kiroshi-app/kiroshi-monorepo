@@ -1396,6 +1396,7 @@ navigation-librarydocumenteditor--a-4-toolbar-format-on
 navigation-librarydocumenteditor--a-5-toolbar-link-field
 navigation-librarydocumenteditor--a-6-toolbar-flipped-below
 navigation-librarydocumenteditor--agent-finished
+navigation-librarydocumenteditor--agent-run-held-then-fades
 navigation-librarydocumenteditor--agents-writing
 navigation-librarydocumenteditor--blank
 navigation-librarydocumenteditor--blank-line-between-blocks

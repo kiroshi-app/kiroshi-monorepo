@@ -392,6 +392,21 @@
 	}
 }
 
+@keyframes ui-run-fade {
+	to {
+		background-color: transparent;
+		border-color: transparent;
+	}
+}
+
+@utility animate-run-fade {
+	animation: ui-run-fade 1000ms ease-out forwards;
+
+	@media (prefers-reduced-motion: reduce) {
+		animation: none;
+	}
+}
+
 @keyframes ui-text-shimmer {
 	from {
 		background-position: 200% 0;

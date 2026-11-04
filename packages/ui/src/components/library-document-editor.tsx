@@ -516,6 +516,7 @@ const agentMarksOf = ({
 		return [
 			Decoration.mark({
 				class: isWriter(edit) ? WRITTEN_RUN_LOOK : FINISHED_RUN_LOOK,
+				liveAgent: isWriter(edit) ? edit.agent.id : undefined,
 				attributes: {
 					"data-slot": "library-document-run",
 					"data-agent": edit.agent.id,
@@ -542,6 +543,138 @@ const agentMarksOf = ({
 		true,
 	)
 }
+
+const RUN_HOLD = 3000
+
+const RUN_FADE = 1000
+
+const RUN_FADE_LOOK = "animate-run-fade"
+
+const REDUCED_MOTION = "(prefers-reduced-motion: reduce)"
+
+const fadeHeldRun = StateEffect.define<symbol>()
+
+const dropHeldRun = StateEffect.define<symbol>()
+
+const runsIn = (marks: DecorationSet) => {
+	const runs: Range<Decoration>[] = []
+	for (const cursor = marks.iter(); cursor.value; cursor.next())
+		runs.push(cursor.value.range(cursor.from, cursor.to))
+	return runs
+}
+
+const liveRunsIn = (marks: DecorationSet) =>
+	runsIn(marks).filter(({ value }) => value.spec.liveAgent !== undefined)
+
+const isCoveredBy =
+	(live: Range<Decoration>[]) => (from: number, to: number, held: Decoration) =>
+		live.some(
+			(run) =>
+				run.value.spec.liveAgent === held.spec.liveAgent &&
+				run.from <= to &&
+				from <= run.to,
+		)
+
+const heldRunsAfterMarks = (
+	held: DecorationSet,
+	before: Range<Decoration>[],
+	after: Range<Decoration>[],
+) => {
+	const isStillLive = ({ value }: Range<Decoration>) =>
+		after.some((run) => run.value.spec.liveAgent === value.spec.liveAgent)
+	const covered = isCoveredBy(after)
+	return held.update({
+		filter: (from, to, run) => !covered(from, to, run),
+		add: before
+			.filter((run) => !isStillLive(run))
+			.map(({ from, to, value }) =>
+				Decoration.mark({ ...value.spec, heldRun: Symbol() }).range(from, to),
+			),
+		sort: true,
+	})
+}
+
+const fadedRuns = (held: DecorationSet, fading: symbol) =>
+	held.update({
+		filter: (_from, _to, run) => run.spec.heldRun !== fading,
+		add: runsIn(held)
+			.filter(({ value }) => value.spec.heldRun === fading)
+			.map(({ from, to, value }) =>
+				Decoration.mark({
+					...value.spec,
+					class: cn(WRITTEN_RUN_LOOK, RUN_FADE_LOOK),
+				}).range(from, to),
+			),
+		sort: true,
+	})
+
+const heldRuns = StateField.define<DecorationSet>({
+	create: () => Decoration.none,
+	update: (held, transaction) => {
+		let runs = held.map(transaction.changes)
+		for (const effect of transaction.effects) {
+			if (effect.is(setAgentMarks))
+				runs = heldRunsAfterMarks(
+					runs,
+					liveRunsIn(
+						transaction.startState.field(agentMarks).map(transaction.changes),
+					),
+					liveRunsIn(effect.value),
+				)
+			if (effect.is(fadeHeldRun)) runs = fadedRuns(runs, effect.value)
+			if (effect.is(dropHeldRun))
+				runs = runs.update({
+					filter: (_from, _to, run) => run.spec.heldRun !== effect.value,
+				})
+		}
+		return runs
+	},
+	provide: (field) => EditorView.decorations.from(field),
+})
+
+const runHolds = ViewPlugin.fromClass(
+	class {
+		readonly timers = new Map<symbol, ReturnType<typeof setTimeout>>()
+
+		constructor(readonly view: EditorView) {}
+
+		update({ state }: ViewUpdate) {
+			const shown = new Set<symbol>(
+				runsIn(state.field(heldRuns)).map(({ value }) => value.spec.heldRun),
+			)
+			for (const [run, timer] of this.timers)
+				if (!shown.has(run)) {
+					clearTimeout(timer)
+					this.timers.delete(run)
+				}
+			for (const run of shown)
+				if (!this.timers.has(run)) this.after(run, RUN_HOLD, this.endHold)
+		}
+
+		after(run: symbol, delay: number, then: (run: symbol) => void) {
+			this.timers.set(
+				run,
+				setTimeout(() => then(run), delay),
+			)
+		}
+
+		endHold = (run: symbol) => {
+			if (matchMedia(REDUCED_MOTION).matches) return this.drop(run)
+			this.dispatchOn(fadeHeldRun.of(run))
+			this.after(run, RUN_FADE, this.drop)
+		}
+
+		drop = (run: symbol) => this.dispatchOn(dropHeldRun.of(run))
+
+		dispatchOn(effect: StateEffect<symbol>) {
+			this.view.dispatch({ effects: effect, annotations: hostChange.of(true) })
+		}
+
+		destroy() {
+			for (const timer of this.timers.values()) clearTimeout(timer)
+		}
+	},
+)
 
 type TextSelection = {
 	start: number
@@ -1098,6 +1231,8 @@ const LibraryDocumentEditor = ({
 					),
 					placeholdersOf(t("library.templates.blank.placeholder")),
 					blockGaps,
+					heldRuns,
+					runHolds,
 					agentMarks,
 					EditorView.contentAttributes.of({
 						"aria-label": t("library.editor.body"),

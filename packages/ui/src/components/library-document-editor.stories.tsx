@@ -1521,6 +1521,97 @@ export const AgentFinished = meta.story({
 
 const ATLAS_WRITERS = LIBRARY_WRITERS.slice(0, 1)
 
+const createWritersStore = () => {
+	let writers = ATLAS_WRITERS
+	const listeners = new Set<() => void>()
+	return {
+		read: () => writers,
+		finish: () => {
+			writers = []
+			for (const listener of listeners) listener()
+		},
+		reset: () => {
+			writers = ATLAS_WRITERS
+		},
+		subscribe: (listener: () => void) => {
+			listeners.add(listener)
+			return () => {
+				listeners.delete(listener)
+			}
+		},
+	}
+}
+
+const atlasWriting = createWritersStore()
+
+const FinishingWriterEditor = (args: LibraryDocumentEditorProps) => {
+	const writers = useSyncExternalStore(
+		atlasWriting.subscribe,
+		atlasWriting.read,
+	)
+	return (
+		<EditorFrame>
+			<LibraryDocumentEditor {...args} writers={writers} />
+		</EditorFrame>
+	)
+}
+
+const after = (milliseconds: number) =>
+	new Promise((resolve) => setTimeout(resolve, milliseconds))
+
+const atlasRunIn = (canvasElement: HTMLElement) =>
+	slotsIn(canvasElement, "library-document-run").find(
+		(run) => run.dataset.agent === "atlas",
+	)
+
+export const AgentRunHeldThenFades = meta.story({
+	args: {
+		title: LIBRARY_AGENT_DOCUMENT.name,
+		body: LIBRARY_AGENT_DOCUMENT.body,
+		detail: LIBRARY_AGENT_DOCUMENT.detail,
+		template: undefined,
+		onStopAll: fn(),
+	},
+	beforeEach: atlasWriting.reset,
+	render: (args) => <FinishingWriterEditor {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Atlas stops writing. Check that his run keeps its written look for 3 seconds after he leaves, then its highlight fades out over a second while the text stays fully opaque, and that it is gone after that. With reduced motion the run leaves at 3 seconds without a fade.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const writing = await waitFor(() => {
+			const run = atlasRunIn(canvasElement)
+			expect(run).toBeDefined()
+			return getComputedStyle(run as HTMLElement)
+		})
+		const writtenLook = {
+			backgroundColor: writing.backgroundColor,
+			color: writing.color,
+		}
+
+		atlasWriting.finish()
+		await waitFor(() =>
+			expect(
+				canvasElement.querySelector("[data-slot='library-document-caret']"),
+			).toBe(null),
+		)
+		await after(2000)
+		const held = atlasRunIn(canvasElement)
+		await expect(held).toBeDefined()
+		await expect(getComputedStyle(held as HTMLElement)).toMatchObject(
+			writtenLook,
+		)
+
+		await waitFor(() => expect(atlasRunIn(canvasElement)).toBeUndefined(), {
+			timeout: 2500,
+		})
+	},
+})
+
 const LEA = {
 	id: "lea",
 	name: "Léa Martin",
