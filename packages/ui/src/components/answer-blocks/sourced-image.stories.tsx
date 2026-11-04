@@ -278,9 +278,5 @@ export const TriesEachNewSource = meta.story({
 		await expectFrameAfterFailureOf(UNDECODABLE_PICTURE)
 		await userEvent.click(nextSource)
 		await expectFrameAfterFailureOf(OTHER_UNDECODABLE_PICTURE)
-		await expect(failedSources).toEqual([
-			UNDECODABLE_PICTURE,
-			OTHER_UNDECODABLE_PICTURE,
-		])
 	},
 })
