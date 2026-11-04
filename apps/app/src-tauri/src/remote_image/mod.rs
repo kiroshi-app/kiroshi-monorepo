@@ -40,9 +40,7 @@ async fn followed(
 	let mut redirects = 0;
 	loop {
 		let response = sent(client, &url, bearer_admitted(&url, proxy_bearers)?).await?;
-		let next =
-			response.status().is_redirection().then(|| redirected(&response, &url)).flatten();
-		match next {
+		match redirected(&response, &url) {
 			Some(next) if redirects < MAX_REDIRECTS => {
 				url = next;
 				redirects += 1;
@@ -77,6 +75,9 @@ async fn sent(
 }
 
 fn redirected(response: &Response, url: &Url) -> Option<Url> {
+	if !response.status().is_redirection() {
+		return None;
+	}
 	let location = response.headers().get(LOCATION)?.to_str().ok()?;
 	url.join(location).ok()
 }
