@@ -599,6 +599,7 @@ svg[focusable="false"] {
 	[class*="animate-in"],
 	[class*="animate-out"] {
 		animation-duration: 0.01ms;
+		transition-duration: 0.01ms;
 	}
 
 	[data-slot="button"],
