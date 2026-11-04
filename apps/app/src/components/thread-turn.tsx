@@ -14,7 +14,10 @@ import {
 } from "@workspace/ui/components/turn"
 import { probeRender } from "@workspace/ui/lib/render-probe"
 
-import { ThreadDocumentsContext } from "@/components/thread-documents"
+import {
+	documentReferencesOf,
+	ThreadDocumentsContext,
+} from "@/components/thread-documents"
 import { AnswerBody, TurnBody } from "@/components/turn-body"
 import { copySelection } from "@/lib/chat/copy-selection"
 import { messageWithAttachments } from "@/lib/chat/message-attachments"
@@ -85,7 +88,8 @@ export const ThreadTurn = memo(function ThreadTurn({
 		authorName: row.authorName,
 		writtenFrom: row.writtenFrom,
 	}
-	const saveAsDocument = useContext(ThreadDocumentsContext)?.saveAsDocument
+	const documents = useContext(ThreadDocumentsContext)
+	const saveAsDocument = documents?.saveAsDocument
 	const isSaveable =
 		card === undefined && state !== "streaming" && row.text.trim() !== ""
 	const onSaveAsDocument =
@@ -148,12 +152,21 @@ export const ThreadTurn = memo(function ThreadTurn({
 		)
 	}
 
+	const isWriting = state === "streaming"
+	const references = documents
+		? documentReferencesOf({
+				documents,
+				text,
+				names: row.documents,
+				isWriting,
+			})
+		: { text }
 	const answer = selectable(
 		<AnswerBody
 			agentName={author?.name ?? row.authorName ?? botName ?? ""}
 			attachments={attachments}
-			isWriting={state === "streaming"}
-			text={text}
+			isWriting={isWriting}
+			{...references}
 		/>,
 	)
 	const isFramed = card !== undefined

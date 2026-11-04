@@ -19,7 +19,10 @@ import type { MessageContent } from "@/lib/chat/message-attachments"
 import { openAttachment } from "@/lib/links/open-attachment"
 import { openWebPage } from "@/lib/links/open-web-page"
 
+type DocumentRuns = Pick<MarkdownProps, "runs" | "renderRun">
+
 type TurnBodyProps = MessageContent &
+	DocumentRuns &
 	Pick<MarkdownProps, "answerActions" | "isWriting">
 
 const viewerImagesOf = (attachments: MessageAttachment[]): ThreadImage[] =>
@@ -63,6 +66,8 @@ export const TurnBody = ({
 	text,
 	answerActions,
 	isWriting,
+	runs,
+	renderRun,
 }: TurnBodyProps) => {
 	const actions = useContext(AnswerActionsContext)
 
@@ -78,7 +83,12 @@ export const TurnBody = ({
 				}
 			/>
 			{text ? (
-				<Markdown answerActions={answerActions} isWriting={isWriting}>
+				<Markdown
+					answerActions={answerActions}
+					isWriting={isWriting}
+					renderRun={renderRun}
+					runs={runs}
+				>
 					{text}
 				</Markdown>
 			) : null}
@@ -86,22 +96,31 @@ export const TurnBody = ({
 	)
 }
 
-type AnswerBodyProps = MessageContent & {
-	agentName: string
-	isWriting: boolean
-}
+type AnswerBodyProps = MessageContent &
+	DocumentRuns & {
+		agentName: string
+		isWriting: boolean
+	}
 
 export const AnswerBody = ({
 	attachments,
 	text,
 	agentName,
 	isWriting,
+	runs,
+	renderRun,
 }: AnswerBodyProps) => {
 	const actions = useContext(AnswerActionsContext)
 
 	if (!actions) {
 		return (
-			<TurnBody attachments={attachments} isWriting={isWriting} text={text} />
+			<TurnBody
+				attachments={attachments}
+				isWriting={isWriting}
+				renderRun={renderRun}
+				runs={runs}
+				text={text}
+			/>
 		)
 	}
 
@@ -118,6 +137,8 @@ export const AnswerBody = ({
 			}}
 			attachments={attachments}
 			isWriting={isWriting}
+			renderRun={renderRun}
+			runs={runs}
 			text={text}
 		/>
 	)
