@@ -274,3 +274,17 @@ export const LIBRARY_LONG_NAME_WRITERS: LibraryDocumentWriter[] = [
 		section: "What we measure",
 	},
 ]
+
+export const LIBRARY_STORED_IMAGES = [
+	{ src: "images/sofa-green.jpg", alt: "Green velvet sofa", tint: "#5b7a55" },
+	{ src: "images/sofa-grey.jpg", alt: "Grey linen sofa", tint: "#9a9a94" },
+	{ src: "images/armchair-rust.jpg", alt: "Rust armchair", tint: "#a4553a" },
+	{ src: "images/lamp-brass.jpg", alt: "Brass lamp", tint: "#b8923f" },
+	{ src: "images/rug-wool.jpg", alt: "Wool rug", tint: "#c9b79c" },
+	{ src: "images/table-oak.jpg", alt: "Oak table", tint: "#8a6542" },
+]
+
+export const resolvedLibraryImageOf = (src: string) =>
+	`data:image/svg+xml,${encodeURIComponent(
+		`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4 3"><rect width="4" height="3" fill="${LIBRARY_STORED_IMAGES.find((image) => image.src === src)?.tint}"/></svg>`,
+	)}`

@@ -26,7 +26,9 @@ import {
 import { ContentCard } from "@workspace/ui/components/content-card"
 import {
 	LIBRARY_AGENT_DOCUMENT,
+	LIBRARY_STORED_IMAGES,
 	LIBRARY_WRITERS,
+	resolvedLibraryImageOf,
 } from "@workspace/ui/components/library.fixtures"
 import { LibraryDocumentBlockEditor } from "@workspace/ui/components/library-document-block-editor"
 import {
@@ -125,14 +127,7 @@ const SEVEN_IMAGES = galleryWith(
 	...MORE_GALLERY_ITEMS,
 )
 
-const STORED_IMAGES = [
-	{ src: "images/sofa-green.jpg", alt: "Green velvet sofa", tint: "#5b7a55" },
-	{ src: "images/sofa-grey.jpg", alt: "Grey linen sofa", tint: "#9a9a94" },
-	{ src: "images/armchair-rust.jpg", alt: "Rust armchair", tint: "#a4553a" },
-	{ src: "images/lamp-brass.jpg", alt: "Brass lamp", tint: "#b8923f" },
-	{ src: "images/rug-wool.jpg", alt: "Wool rug", tint: "#c9b79c" },
-	{ src: "images/table-oak.jpg", alt: "Oak table", tint: "#8a6542" },
-]
+const STORED_IMAGES = LIBRARY_STORED_IMAGES
 
 const STORED_ITEMS = STORED_IMAGES.map(
 	({ src, alt }) => `- image: ${src}\n  alt: ${alt}`,
@@ -142,15 +137,12 @@ const STORED_GALLERY = galleryWith(...STORED_ITEMS)
 
 const [, STORED_GREY, , , , STORED_OAK] = STORED_IMAGES
 
-const resolvedImageOf = (src: string) =>
-	`data:image/svg+xml,${encodeURIComponent(
-		`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4 3"><rect width="4" height="3" fill="${STORED_IMAGES.find((image) => image.src === src)?.tint}"/></svg>`,
-	)}`
-
 const resolveAllBut =
 	(srcs: readonly string[], outcome: () => Promise<string>) =>
 	(asked: string) =>
-		srcs.includes(asked) ? outcome() : Promise.resolve(resolvedImageOf(asked))
+		srcs.includes(asked)
+			? outcome()
+			: Promise.resolve(resolvedLibraryImageOf(asked))
 
 const resolvedImgIn = (gallery: HTMLElement, alt: string) =>
 	waitFor(() => {
@@ -158,7 +150,7 @@ const resolvedImgIn = (gallery: HTMLElement, alt: string) =>
 			name: alt,
 		})
 		expect(img.getAttribute("src")).toBe(
-			resolvedImageOf(
+			resolvedLibraryImageOf(
 				STORED_IMAGES.find((image) => image.alt === alt)?.src ?? "",
 			),
 		)
@@ -1137,7 +1129,7 @@ export const GalleryImagesResolved = meta.story({
 	globals: { theme: "light" },
 	args: {
 		body: STORED_GALLERY,
-		resolveImage: fn(async (src: string) => resolvedImageOf(src)),
+		resolveImage: fn(async (src: string) => resolvedLibraryImageOf(src)),
 	},
 	parameters: {
 		docs: {
@@ -1161,7 +1153,7 @@ export const GalleryImagesResolved = meta.story({
 			partOf(gallery, "library-gallery-lifted"),
 		)
 		await expect(lifted.style.backgroundImage).toBe(
-			`url("${resolvedImageOf("images/sofa-green.jpg")}")`,
+			`url("${resolvedLibraryImageOf("images/sofa-green.jpg")}")`,
 		)
 		fireEvent.pointerCancel(window)
 		await waitFor(() =>

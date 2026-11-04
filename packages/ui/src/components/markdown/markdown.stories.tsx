@@ -2,6 +2,10 @@ import { useState } from "react"
 import { expect, fn, spyOn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
+import {
+	LIBRARY_STORED_IMAGES,
+	resolvedLibraryImageOf,
+} from "@workspace/ui/components/library.fixtures"
 import { Markdown } from "@workspace/ui/components/markdown"
 import {
 	MessageBubble,
@@ -1859,18 +1863,9 @@ export const AppendedBlock = meta.story({
 	},
 })
 
-const STORED_IMAGES = [
-	{ src: "images/sofa-green.jpg", alt: "Green velvet sofa", tint: "#5b7a55" },
-	{ src: "images/sofa-grey.jpg", alt: "Grey linen sofa", tint: "#9a9a94" },
-	{ src: "images/armchair-rust.jpg", alt: "Rust armchair", tint: "#a4553a" },
-]
+const STORED_IMAGES = LIBRARY_STORED_IMAGES.slice(0, 3)
 
 const [, UNRESOLVABLE_IMAGE] = STORED_IMAGES
-
-const resolvedImageOf = (src: string) =>
-	`data:image/svg+xml,${encodeURIComponent(
-		`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4 3"><rect width="4" height="3" fill="${STORED_IMAGES.find((image) => image.src === src)?.tint}"/></svg>`,
-	)}`
 
 const STORED_GALLERY = [
 	"```gallery",
@@ -1880,7 +1875,7 @@ const STORED_GALLERY = [
 
 const resolveAllButUnresolvable = async (src: string) => {
 	if (src === UNRESOLVABLE_IMAGE.src) throw new Error("No such Library image")
-	return resolvedImageOf(src)
+	return resolvedLibraryImageOf(src)
 }
 
 const galleryTileOf = (canvasElement: HTMLElement, alt: string) =>
@@ -1893,7 +1888,7 @@ const resolvedTileOf = (canvasElement: HTMLElement, alt: string) =>
 	waitFor(() => {
 		const tile = galleryTileOf(canvasElement, alt)
 		expect(tile.getAttribute("src")).toBe(
-			resolvedImageOf(
+			resolvedLibraryImageOf(
 				STORED_IMAGES.find((image) => image.alt === alt)?.src ?? "",
 			),
 		)
@@ -1930,7 +1925,7 @@ export const GalleryResolvedImageOpens = meta.story({
 	tags: ["test-only"],
 	args: {
 		children: STORED_GALLERY,
-		resolveImage: fn(async (src: string) => resolvedImageOf(src)),
+		resolveImage: fn(async (src: string) => resolvedLibraryImageOf(src)),
 		answerActions: {
 			agentName: "Atlas",
 			onPickOption: fn(),
@@ -1954,12 +1949,12 @@ export const GalleryResolvedImageOpens = meta.story({
 		await waitFor(() =>
 			expect(
 				canvas.getByRole("button", { name: opened.alt }).querySelector("img"),
-			).toHaveAttribute("src", resolvedImageOf(opened.src)),
+			).toHaveAttribute("src", resolvedLibraryImageOf(opened.src)),
 		)
 		await userEvent.click(canvas.getByRole("button", { name: opened.alt }))
 		await expect(args.answerActions?.onOpenImage).toHaveBeenCalledWith(
 			STORED_IMAGES.map(({ src }) =>
-				expect.objectContaining({ src: resolvedImageOf(src) }),
+				expect.objectContaining({ src: resolvedLibraryImageOf(src) }),
 			),
 			1,
 		)

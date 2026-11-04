@@ -14,7 +14,9 @@ import {
 	LIBRARY_AGENT_DOCUMENT,
 	LIBRARY_AGENTS,
 	LIBRARY_LONG_NAME_WRITERS,
+	LIBRARY_STORED_IMAGES,
 	LIBRARY_WRITERS,
+	resolvedLibraryImageOf,
 } from "@workspace/ui/components/library.fixtures"
 import {
 	type LibraryDocument,
@@ -576,16 +578,7 @@ export const LongAgentNameWriting = meta.story({
 	},
 })
 
-const STORED_IMAGES = [
-	{ src: "images/sofa-green.jpg", alt: "Green velvet sofa", tint: "#5b7a55" },
-	{ src: "images/sofa-grey.jpg", alt: "Grey linen sofa", tint: "#9a9a94" },
-	{ src: "images/armchair-rust.jpg", alt: "Rust armchair", tint: "#a4553a" },
-]
-
-const resolvedImageOf = (src: string) =>
-	`data:image/svg+xml,${encodeURIComponent(
-		`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4 3"><rect width="4" height="3" fill="${STORED_IMAGES.find((image) => image.src === src)?.tint}"/></svg>`,
-	)}`
+const STORED_IMAGES = LIBRARY_STORED_IMAGES.slice(0, 3)
 
 const LOBBY_MOODBOARD: LibraryDocument = {
 	id: "moodboard",
@@ -604,7 +597,7 @@ const LOBBY_MOODBOARD: LibraryDocument = {
 export const GalleryOfStoredImages = meta.story({
 	args: {
 		document: LOBBY_MOODBOARD,
-		resolveImage: fn(async (src: string) => resolvedImageOf(src)),
+		resolveImage: fn(async (src: string) => resolvedLibraryImageOf(src)),
 	},
 	parameters: {
 		docs: {
@@ -622,7 +615,7 @@ export const GalleryOfStoredImages = meta.story({
 				[...gallery.querySelectorAll("img")].map((img) =>
 					img.getAttribute("src"),
 				),
-			).toEqual(STORED_IMAGES.map(({ src }) => resolvedImageOf(src))),
+			).toEqual(STORED_IMAGES.map(({ src }) => resolvedLibraryImageOf(src))),
 		)
 		await expect(args.resolveImage).toHaveBeenCalledTimes(STORED_IMAGES.length)
 		for (const { src } of STORED_IMAGES)
