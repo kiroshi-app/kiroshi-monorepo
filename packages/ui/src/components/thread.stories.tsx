@@ -1163,7 +1163,7 @@ const STUCK_INSET = 18
 
 const BUBBLE_PADDING = 18
 
-const stuckLineIn = async (viewport: HTMLElement, tone: string) => {
+const pinnedLineIn = async (viewport: HTMLElement, tone: string) => {
 	await waitFor(() =>
 		expect(viewport.scrollHeight).toBeGreaterThan(viewport.clientHeight),
 	)
@@ -1175,6 +1175,11 @@ const stuckLineIn = async (viewport: HTMLElement, tone: string) => {
 		{ timeout: 3000 },
 	)
 	const line = lineOf(viewport, tone)
+	return line
+}
+
+const stuckLineIn = async (viewport: HTMLElement, tone: string) => {
+	const line = await pinnedLineIn(viewport, tone)
 	const content = line.closest<HTMLElement>(
 		'[data-slot="message-bubble-content"]',
 	)
@@ -1235,6 +1240,24 @@ const expectCleanCutStuckLine = async (
 		]).toEqual(["0px", "0px"])
 		await expect(getComputedStyle(content).overflow).toBe("clip")
 		await expectBlockPaintsBubble(stuck)
+	}
+}
+
+const expectUnwrappedStuckBlockPaintsRestingBubble = async (
+	canvasElement: HTMLElement,
+) => {
+	const viewports = slotsIn(canvasElement, "message-scroller-viewport")
+	await expect(viewports).toHaveLength(2)
+	for (const viewport of viewports) {
+		const line = await pinnedLineIn(viewport, "agent")
+		const tokens = getComputedStyle(line)
+		const restingBubble = paintedRgb(
+			tokens.getPropertyValue("--card"),
+			tokens.getPropertyValue("--bubble"),
+		)
+		await expect(
+			widestChannelGap(restingBubble, paintedBlockRgb(line)),
+		).toBeLessThanOrEqual(1)
 	}
 }
 
@@ -1371,6 +1394,42 @@ export const AgentAuthorLineStuckOnAHoveredAnswer = meta.story({
 	},
 	play: async ({ canvasElement }) =>
 		expectHoveredStuckBlockPaintsBubble(canvasElement, "agent"),
+})
+
+export const AgentAuthorLineStuckOnAnUnwrappedAnswer = meta.story({
+	tags: ["test-only"],
+	globals: { theme: "light" },
+	render: () => (
+		<ThemedPanels
+			rows={[
+				LISBON_DAY,
+				LISBON_QUESTION,
+				{
+					key: "answer",
+					render: () => (
+						<AssistantTurn
+							author={ATLAS}
+							sentAt={at(14, 12)}
+							copyText={OFFSITE_ANSWER}
+							bare
+						>
+							<Markdown>{OFFSITE_ANSWER}</Markdown>
+						</AssistantTurn>
+					),
+				},
+			]}
+		/>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"An unwrapped answer taller than the transcript, read from its top, light then dark. Check the stuck block under the author line keeps the resting agent bubble grey although no bubble surface sits around it.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) =>
+		expectUnwrappedStuckBlockPaintsRestingBubble(canvasElement),
 })
 
 export const ComponentsAuthorLineAndWorkLine = meta.story({
