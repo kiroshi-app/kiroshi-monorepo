@@ -343,10 +343,10 @@ export const LibraryScreen = ({
 			onOpeningChange(openingOfItem(image))
 		}
 	}
-	const openItem = (item: KindedItem) =>
-		item.kind === "image"
-			? onOpenImage(openingOfItem(item))
-			: onOpeningChange(openingOfItem(item))
+	const openItem = (item: KindedItem) => {
+		const show = item.kind === "image" ? onOpenImage : onOpeningChange
+		show(openingOfItem(item))
+	}
 	const openInNewTab =
 		onOpenInNewTab &&
 		((item: KindedItem) => onOpenInNewTab(openingOfItem(item)))
