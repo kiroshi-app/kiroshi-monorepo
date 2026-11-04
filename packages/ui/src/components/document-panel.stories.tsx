@@ -1,4 +1,5 @@
-import { expect, fn } from "storybook/test"
+import { useState } from "react"
+import { expect, fn, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { hueScopeOf } from "@workspace/storybook/story-utils"
@@ -52,6 +53,76 @@ const ROWS: TranscriptItem[] = [
 		),
 	},
 ]
+
+const EARLIER_QUESTIONS = [
+	"Who reads the brief first?",
+	"Which teams launch on the 14th?",
+	"Where do the screenshots live?",
+	"Who signs off the release notes?",
+	"When is the copy final?",
+	"Which messages repeat on every page?",
+	"What do we measure on launch day?",
+	"Who owns the timeline?",
+	"Where does the Library sit in the app?",
+	"What changes for teams of five?",
+]
+
+const SCROLLED_TOP = 160
+
+const afterTwoFrames = () =>
+	new Promise((resolve) =>
+		requestAnimationFrame(() => requestAnimationFrame(resolve)),
+	)
+
+const LONG_ROWS: TranscriptItem[] = EARLIER_QUESTIONS.map((question) => ({
+	key: question,
+	render: () => <UserTurn>{question}</UserTurn>,
+}))
+
+const ToggledPanel = () => {
+	const [isPanelOpen, setPanelOpen] = useState(true)
+	const rows: TranscriptItem[] = [
+		...LONG_ROWS,
+		{
+			key: "answer",
+			render: () => (
+				<AssistantTurn identity={ATLAS}>
+					<DocumentCard
+						detail={DOCUMENT_CARD_DETAIL}
+						excerpt={DOCUMENT_CARD_EXCERPT}
+						isSelected={isPanelOpen}
+						onOpen={() => setPanelOpen(true)}
+						title={DOCUMENT_CARD_TITLE}
+					>
+						<LibraryDocumentBody body={DOCUMENT_CARD_BODY} />
+					</DocumentCard>
+				</AssistantTurn>
+			),
+		},
+	]
+
+	return (
+		<div className="flex h-200 w-320" {...hueScopeOf("blue")}>
+			<ThreadLayout
+				aside={
+					isPanelOpen ? (
+						<DocumentPanel
+							onClose={() => setPanelOpen(false)}
+							onOpenInLibrary={fn()}
+							title={DOCUMENT_CARD_TITLE}
+						>
+							<LibraryDocumentBody body={DOCUMENT_CARD_BODY} />
+						</DocumentPanel>
+					) : null
+				}
+				composer={<PromptInput onSubmit={fn()} />}
+				rows={rows}
+			>
+				{null}
+			</ThreadLayout>
+		</div>
+	)
+}
 
 const meta = preview.meta({
 	title: "Navigation/DocumentPanel",
@@ -127,5 +198,47 @@ export const InThread = meta.story({
 		await expect(args.onOpenInLibrary).toHaveBeenCalledOnce()
 		await userEvent.click(canvas.getByRole("button", { name: "Close" }))
 		await expect(args.onClose).toHaveBeenCalledOnce()
+	},
+})
+
+export const KeepsTheThreadWhenToggled = meta.story({
+	render: () => <ToggledPanel />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A conversation scrolled up while the panel is open, then the panel closed with Close and opened again from the card. Check that the thread keeps the same transcript and the same scroll position through both changes: the panel must never remount the thread beside it.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		const viewportOf = () =>
+			canvasElement.querySelector<HTMLElement>(
+				'[data-slot="message-scroller-viewport"]',
+			)
+		const viewport = viewportOf()
+		if (!viewport) throw new Error("No transcript drawn")
+		await waitFor(() =>
+			expect(viewport.scrollHeight).toBeGreaterThan(viewport.clientHeight),
+		)
+		viewport.dispatchEvent(
+			new WheelEvent("wheel", { bubbles: true, deltaY: -200 }),
+		)
+		viewport.scrollTop = SCROLLED_TOP
+		await waitFor(() => expect(viewport.scrollTop).toBe(SCROLLED_TOP))
+
+		await userEvent.click(canvas.getByRole("button", { name: "Close" }))
+		await expect(canvas.queryByRole("complementary")).toBeNull()
+		await afterTwoFrames()
+		await expect(viewportOf()).toBe(viewport)
+		await expect(viewport.scrollTop).toBe(SCROLLED_TOP)
+
+		canvas.getByRole("button", { name: "Open" }).click()
+		await expect(
+			await canvas.findByRole("complementary", { name: DOCUMENT_CARD_TITLE }),
+		).toBeVisible()
+		await afterTwoFrames()
+		await expect(viewportOf()).toBe(viewport)
+		await expect(viewport.scrollTop).toBe(SCROLLED_TOP)
 	},
 })

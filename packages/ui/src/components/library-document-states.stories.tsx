@@ -109,7 +109,7 @@ export const EmptyDocument = meta.story({
 		<DocumentPage
 			heading={
 				<input
-					aria-label="Document title"
+					aria-label={i18n.t("common:library.editor.title")}
 					className={cn(
 						DOCUMENT_TITLE,
 						"bg-transparent outline-none placeholder:text-title-placeholder-foreground",

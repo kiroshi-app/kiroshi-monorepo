@@ -109,3 +109,43 @@ export const PicksOnEnter = meta.story({
 		await waitFor(() => expect(screen.queryByRole("listbox")).toBeNull())
 	},
 })
+
+export const ReachesFilesByKeyboard = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The picker opened, then Tab from the search field and Enter. Check that Tab lands on Attach files from this computer with the picker still open, and that Enter opens the file chooser and closes the picker. Pick `HighlightedRow` for the documents.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		const chooser =
+			canvasElement.querySelector<HTMLInputElement>('input[type="file"]')
+		if (!chooser) throw new Error("No file chooser drawn")
+		const chooserOpened = fn()
+		chooser.addEventListener("click", (event) => {
+			event.preventDefault()
+			chooserOpened()
+		})
+
+		await userEvent.click(
+			canvas.getByRole("combobox", { name: "Attach files" }),
+		)
+		const search = await screen.findByRole("combobox", {
+			name: "Search documents",
+		})
+		await waitFor(() => expect(search).toHaveFocus())
+
+		await userEvent.tab()
+		const files = screen.getByRole("button", {
+			name: "Attach files from this computer",
+		})
+		await expect(files).toHaveFocus()
+		await expect(screen.getByRole("listbox")).toBeVisible()
+
+		await userEvent.keyboard("{Enter}")
+		await expect(chooserOpened).toHaveBeenCalledOnce()
+		await waitFor(() => expect(screen.queryByRole("listbox")).toBeNull())
+	},
+})

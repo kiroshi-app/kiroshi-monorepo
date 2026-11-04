@@ -544,6 +544,7 @@ conversation-prompt-promptinput--with-quote-blocked
 conversation-prompt-promptinput--with-replies-and-attachments
 conversation-prompt-promptlibrarypicker--highlighted-row
 conversation-prompt-promptlibrarypicker--picks-on-enter
+conversation-prompt-promptlibrarypicker--reaches-files-by-keyboard
 conversation-prompt-promptmentionmenu--counted
 conversation-prompt-promptmentionmenu--counted-again
 conversation-prompt-promptmentionmenu--counted-lead
@@ -1406,6 +1407,7 @@ navigation-conversationsubjecticon--red-shield-key-dark
 navigation-conversationsubjecticon--unknown-icon-falls-back-to-message-square
 navigation-conversationsubjecticon--yellow
 navigation-documentpanel--in-thread
+navigation-documentpanel--keeps-the-thread-when-toggled
 navigation-headerconversationbutton--crowded
 navigation-headerconversationbutton--default
 navigation-headerconversationbutton--expanded

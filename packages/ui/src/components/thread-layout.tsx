@@ -148,14 +148,13 @@ function ThreadLayout({
 
 	return (
 		<LibraryOverlayContainer.Provider value={overlayContainer}>
-			{aside ? (
-				<div className="flex h-svh max-h-full" data-slot="thread-with-aside">
-					{screen}
-					{aside}
-				</div>
-			) : (
-				screen
-			)}
+			<div
+				className={aside ? "flex h-svh max-h-full" : "contents"}
+				data-slot="thread-with-aside"
+			>
+				{screen}
+				{aside}
+			</div>
 			{overlay}
 		</LibraryOverlayContainer.Provider>
 	)
