@@ -21,6 +21,8 @@ const NESTED_TASKS = [
 
 const BOX_SIZE = 16
 
+const LABEL_GAP = 10
+
 const labelElementOf = (box: HTMLElement) => {
 	const label = box.closest<HTMLElement>('[data-slot="markdown-task-label"]')
 	if (!label) throw new Error("The box sits in no task label")
@@ -88,6 +90,16 @@ export const Default = meta.story({
 			await expect(labelOf(box).textDecorationLine).toBe("line-through")
 		}
 		await expect(labelOf(todo).textDecorationLine).toBe("none")
+		const words = [...labelElementOf(todo).childNodes].find(
+			(child) => child.nodeType === Node.TEXT_NODE,
+		)
+		if (!words) throw new Error("The label holds no text")
+		const wordsRange = document.createRange()
+		wordsRange.selectNodeContents(words)
+		await expect(
+			wordsRange.getBoundingClientRect().left -
+				todo.getBoundingClientRect().right,
+		).toBeCloseTo(LABEL_GAP, 0)
 	},
 })
 

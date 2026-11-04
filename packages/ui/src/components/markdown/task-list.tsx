@@ -61,6 +61,8 @@ export const MarkdownTaskCheckbox = ({
 	)
 }
 
+const TEXT_AFTER_BOX = 1
+
 const isNestedList = (child: ReactNode) =>
 	isValidElement(child) && (child.type === "ul" || child.type === "ol")
 
@@ -79,10 +81,17 @@ export const MarkdownListItem = ({
 
 	const nestedAt = items.findIndex(isNestedList)
 	const labelEnd = nestedAt === -1 ? items.length : nestedAt
+	const label = items
+		.slice(0, labelEnd)
+		.map((child, index) =>
+			index === TEXT_AFTER_BOX && typeof child === "string"
+				? child.trimStart()
+				: child,
+		)
 
 	return (
 		<li {...props}>
-			<span data-slot="markdown-task-label">{items.slice(0, labelEnd)}</span>
+			<span data-slot="markdown-task-label">{label}</span>
 			{items.slice(labelEnd)}
 		</li>
 	)
