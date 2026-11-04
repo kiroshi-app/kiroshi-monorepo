@@ -57,7 +57,7 @@ export const useAnswerImageViewer = () => {
 	}
 }
 
-const useLibraryOnScreen = (): LibraryOnScreen | null => {
+export const useLibraryOnScreen = (): LibraryOnScreen | null => {
 	const workspace = useContext(WorkspaceContext)
 	const rowId = workspace?.rosterView.rosteredSpaceId
 	const spaceId = workspace?.rosteredHostSpaceId

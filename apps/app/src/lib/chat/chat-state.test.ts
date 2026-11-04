@@ -714,7 +714,7 @@ describe("the outbox a prompt waits in", () => {
 	const held = (state: ChatState, id: string, text: string): ChatState =>
 		reduce(state, {
 			type: "promptHeld",
-			entry: { id, text, replyLinks: [] },
+			entry: { id, text, replyLinks: [], documents: [] },
 		})
 
 	const queued = (state: ChatState) => state.outbox.map((entry) => entry.text)
@@ -742,7 +742,7 @@ describe("the outbox a prompt waits in", () => {
 		const taken = reduce(three, { type: "outboxEntryRemoved", id: "a" })
 		const returned = reduce(taken, {
 			type: "promptReturned",
-			entry: { id: "a", text: "one", replyLinks: [] },
+			entry: { id: "a", text: "one", replyLinks: [], documents: [] },
 		})
 
 		expect(queued(returned)).toEqual(["one", "two", "three"])

@@ -1,4 +1,4 @@
-import { memo, type ReactNode } from "react"
+import { memo, type ReactNode, useContext } from "react"
 
 import type { MessageAuthor } from "@workspace/ui/components/message"
 import type { QuotedMessage } from "@workspace/ui/components/message-quote"
@@ -14,6 +14,10 @@ import {
 } from "@workspace/ui/components/turn"
 import { probeRender } from "@workspace/ui/lib/render-probe"
 
+import {
+	ThreadDocumentCards,
+	ThreadDocumentsContext,
+} from "@/components/thread-documents"
 import { AnswerBody, TurnBody } from "@/components/turn-body"
 import { copySelection } from "@/lib/chat/copy-selection"
 import { messageWithAttachments } from "@/lib/chat/message-attachments"
@@ -84,6 +88,13 @@ export const ThreadTurn = memo(function ThreadTurn({
 		authorName: row.authorName,
 		writtenFrom: row.writtenFrom,
 	}
+	const saveAsDocument = useContext(ThreadDocumentsContext)?.saveAsDocument
+	const isSaveable =
+		card === undefined && state !== "streaming" && row.text.trim() !== ""
+	const onSaveAsDocument =
+		saveAsDocument && isSaveable
+			? () => saveAsDocument(row.messageId)
+			: undefined
 	const reply = () => {
 		onReply(target)
 	}
@@ -96,16 +107,22 @@ export const ThreadTurn = memo(function ThreadTurn({
 				{body}
 			</MessageSelection>
 		)
+	const cards =
+		row.documents.length > 0 ? (
+			<ThreadDocumentCards names={row.documents} />
+		) : null
 	const content = selectable(<TurnBody attachments={attachments} text={text} />)
 
 	if (person !== undefined) {
 		return (
 			<PersonTurn
 				copyText={text}
+				footer={cards}
 				messageId={anchor}
 				name={person}
 				now={now}
 				onPin={pin}
+				onSaveAsDocument={onSaveAsDocument}
 				onReply={reply}
 				pinned={pinned}
 				repliedTo={repliedTo}
@@ -121,10 +138,12 @@ export const ThreadTurn = memo(function ThreadTurn({
 		return (
 			<UserTurn
 				copyText={text}
+				footer={cards}
 				messageId={anchor}
 				name={readerName}
 				now={now}
 				onPin={pin}
+				onSaveAsDocument={onSaveAsDocument}
 				onReply={reply}
 				onRetry={onRetry ? () => onRetry(row.messageId) : undefined}
 				pinned={pinned}
@@ -138,14 +157,24 @@ export const ThreadTurn = memo(function ThreadTurn({
 		)
 	}
 
-	const answer = selectable(
-		<AnswerBody
-			agentName={author?.name ?? row.authorName ?? botName ?? ""}
-			attachments={attachments}
-			isWriting={state === "streaming"}
-			text={text}
-		/>,
+	const isDocumentPost =
+		card === undefined && cards !== null && row.text.trim() === ""
+	const answer = isDocumentPost ? (
+		cards
+	) : (
+		<>
+			{selectable(
+				<AnswerBody
+					agentName={author?.name ?? row.authorName ?? botName ?? ""}
+					attachments={attachments}
+					isWriting={state === "streaming"}
+					text={text}
+				/>,
+			)}
+			{cards}
+		</>
 	)
+	const isFramed = card !== undefined || isDocumentPost
 
 	return (
 		<AssistantTurn
@@ -153,13 +182,14 @@ export const ThreadTurn = memo(function ThreadTurn({
 			cause={cause}
 			identity={avatarFace}
 			bare={bare}
-			framed={card !== undefined}
+			framed={isFramed}
 			botId={botId}
 			carriesMark={carriesMark}
-			copyText={card === undefined ? text : ""}
+			copyText={isFramed ? "" : text}
 			messageId={anchor}
 			now={now}
 			onPin={pin}
+			onSaveAsDocument={onSaveAsDocument}
 			onReply={reply}
 			pinned={pinned}
 			repliedTo={repliedTo}

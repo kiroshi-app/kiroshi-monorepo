@@ -1,5 +1,8 @@
+import type { PromptAttachment } from "@workspace/ui/components/prompt-attachments"
+
 import {
 	NO_ATTACHMENTS,
+	NO_DOCUMENTS,
 	promptWithAttachments,
 	releasePreviews,
 	type StagedAttachment,
@@ -19,6 +22,7 @@ import { createStore } from "../store"
 
 export type AttachmentsState = {
 	staged: Record<string, StagedAttachment[]>
+	documents: Record<string, PromptAttachment[]>
 	refusals: Record<string, AttachmentStoreError | null>
 }
 
@@ -31,13 +35,15 @@ export type AttachmentsPort = {
 		owner: AttachmentsOwner,
 		text: string,
 		replyLinks?: ReplyLink[],
-	) => boolean
+		documents?: string[],
+	) => boolean | Promise<boolean>
 }
 
 export type AttachmentsController = {
 	getState: () => AttachmentsState
 	subscribe: (listener: () => void) => () => void
 	stage: (owner: AttachmentsOwner, files: File[]) => void
+	stageDocument: (owner: AttachmentsOwner, document: PromptAttachment) => void
 	remove: (owner: AttachmentsOwner, id: string) => void
 	dismissRefusal: (owner: AttachmentsOwner) => void
 	submit: (
@@ -54,7 +60,11 @@ export const ownerKey = (owner: AttachmentsOwner) => `${owner.kind}:${owner.id}`
 export function createAttachmentsController(
 	port: AttachmentsPort,
 ): AttachmentsController {
-	const stateStore = createStore<AttachmentsState>({ staged: {}, refusals: {} })
+	const stateStore = createStore<AttachmentsState>({
+		staged: {},
+		documents: {},
+		refusals: {},
+	})
 	const current = stateStore.getState
 
 	const sending = new Set<string>()
@@ -68,6 +78,53 @@ export function createAttachmentsController(
 			...state,
 			staged: { ...state.staged, [ownerKey(owner)]: items },
 		})
+	}
+
+	const documentsFor = (owner: AttachmentsOwner) =>
+		current().documents[ownerKey(owner)] ?? NO_DOCUMENTS
+
+	const holdDocuments = (
+		owner: AttachmentsOwner,
+		documents: PromptAttachment[],
+	) => {
+		const state = current()
+		stateStore.setState({
+			...state,
+			documents: { ...state.documents, [ownerKey(owner)]: documents },
+		})
+	}
+
+	const withDocuments = (
+		owner: AttachmentsOwner,
+		added: PromptAttachment[],
+	) => {
+		const held = documentsFor(owner)
+		const heldIds = new Set(held.map(({ id }) => id))
+		return [...held, ...added.filter(({ id }) => !heldIds.has(id))]
+	}
+
+	const sendWithDocuments = (
+		owner: AttachmentsOwner,
+		text: string,
+		replyLinks?: ReplyLink[],
+	) => {
+		const documents = documentsFor(owner)
+		const taken = port.send(
+			owner,
+			text,
+			replyLinks,
+			documents.map(({ id }) => id),
+		)
+		if (taken === false) {
+			return false
+		}
+		holdDocuments(owner, NO_DOCUMENTS)
+		void Promise.resolve(taken).then((isTaken) => {
+			if (!isTaken) {
+				holdDocuments(owner, withDocuments(owner, documents))
+			}
+		})
+		return true
 	}
 
 	const holdRefusal = (
@@ -105,7 +162,7 @@ export function createAttachmentsController(
 		const items = stagedFor(owner)
 		if (items.length === 0) {
 			holdRefusal(owner, null)
-			return port.send(owner, text, replyLinks)
+			return sendWithDocuments(owner, text, replyLinks)
 		}
 
 		const sentAt = new Date()
@@ -121,7 +178,11 @@ export function createAttachmentsController(
 		}
 
 		if (
-			!port.send(owner, promptWithAttachments(text, paths, sentAt), replyLinks)
+			!sendWithDocuments(
+				owner,
+				promptWithAttachments(text, paths, sentAt),
+				replyLinks,
+			)
 		) {
 			return false
 		}
@@ -143,7 +204,16 @@ export function createAttachmentsController(
 			hold(owner, [...stagedFor(owner), ...stagedFrom(files)])
 		},
 
-		remove: (owner, id) => hold(owner, withoutStaged(stagedFor(owner), id)),
+		stageDocument: (owner, document) =>
+			holdDocuments(owner, withDocuments(owner, [document])),
+
+		remove: (owner, id) => {
+			hold(owner, withoutStaged(stagedFor(owner), id))
+			holdDocuments(
+				owner,
+				documentsFor(owner).filter((document) => document.id !== id),
+			)
+		},
 
 		dismissRefusal: (owner) => holdRefusal(owner, null),
 
@@ -152,9 +222,10 @@ export function createAttachmentsController(
 		forget: (owner) => {
 			const key = ownerKey(owner)
 			releasePreviews(stagedFor(owner))
-			const { staged, refusals } = current()
+			const { staged, documents, refusals } = current()
 			stateStore.setState({
 				staged: { ...staged, [key]: NO_ATTACHMENTS },
+				documents: { ...documents, [key]: NO_DOCUMENTS },
 				refusals: { ...refusals, [key]: null },
 			})
 		},
@@ -163,7 +234,7 @@ export function createAttachmentsController(
 			for (const items of Object.values(current().staged)) {
 				releasePreviews(items)
 			}
-			stateStore.setState({ staged: {}, refusals: {} })
+			stateStore.setState({ staged: {}, documents: {}, refusals: {} })
 		},
 	}
 }

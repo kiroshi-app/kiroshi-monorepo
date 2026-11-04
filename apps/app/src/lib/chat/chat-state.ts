@@ -40,6 +40,7 @@ export type OutboxEntry = {
 	id: string
 	text: string
 	replyLinks: ReplyLink[]
+	documents: string[]
 }
 
 export type ChatState = {

@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 
+import type { Event } from "@tauri-apps/api/event"
 import {
 	act,
 	cleanup,
@@ -30,6 +31,7 @@ import {
 	onTestFinished,
 	vi,
 } from "vitest"
+import * as Y from "yjs"
 
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { CompanionMenuProvider } from "@workspace/ui/components/companion-menu"
@@ -55,7 +57,11 @@ import {
 } from "@/lib/applications/fake-application-port"
 import { ConversationApplicationsContext } from "@/lib/applications/use-conversation-installs"
 import { SessionApplicationsContext } from "@/lib/applications/use-session-application"
-import { commands, type ReplyLink } from "@/lib/bindings"
+import {
+	commands,
+	LIBRARY_DOCUMENT_UPDATED_EVENT,
+	type ReplyLink,
+} from "@/lib/bindings"
 import {
 	type AttachmentsController,
 	createAttachmentsController,
@@ -94,12 +100,14 @@ import {
 import type {
 	Bot,
 	Conversation,
+	NewUserMessage,
 	Space,
 } from "@/lib/conversations/store-contract"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import type {
 	CompanionArrival,
 	TerminalCompletion,
+	TranscriptMessage,
 	TranscriptRole,
 } from "@/lib/conversations/transcript-contract"
 import {
@@ -112,6 +120,7 @@ import {
 	ConversationSeatingContext,
 } from "@/lib/conversations/use-conversation-seating"
 import { hasCaptionWindowControls } from "@/lib/host"
+import { base64Of, bytesOf } from "@/lib/library/library-document-session"
 import type { Mission, MissionChanged } from "@/lib/missions/mission-contract"
 import { missionSummonsFor } from "@/lib/missions/mission-summons"
 import { missionsTransport } from "@/lib/missions/missions-transport"
@@ -182,10 +191,44 @@ vi.mock("@/lib/routines/routines-transport", async (importOriginal) => {
 vi.mock("@/lib/routines/trigger-sources-transport", () => ({
 	triggerSourcesTransport: { sourcesOfSpace: vi.fn() },
 }))
-vi.mock("@/lib/host", async (importOriginal) => ({
-	...(await importOriginal<typeof import("@/lib/host")>()),
-	hasCaptionWindowControls: vi.fn(() => false),
+type Heard = (event: Event<unknown>, hostId: string | null) => void
+
+type LibraryCall = {
+	spaceId: string
+	name: string
+	update: string
+}
+
+const libraryHost = vi.hoisted(() => ({
+	answers: new Map<string, (args: LibraryCall) => unknown>(),
+	updates: new Set<Heard>(),
 }))
+vi.mock("@/lib/host", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("@/lib/host")>()
+	const { LIBRARY_DOCUMENT_UPDATED_EVENT } = await import("@/lib/bindings")
+	const invoke = (async <T>(...call: Parameters<typeof actual.invoke>) => {
+		const [command, args] = call
+		const answer = libraryHost.answers.get(command)
+		return answer
+			? (answer(args as LibraryCall) as T)
+			: actual.invoke<T>(...call)
+	}) as typeof actual.invoke
+	const listen = ((event: string, handler: Heard) => {
+		if (event !== LIBRARY_DOCUMENT_UPDATED_EVENT) {
+			return actual.listen(event, handler)
+		}
+		libraryHost.updates.add(handler)
+		return Promise.resolve(() => {
+			libraryHost.updates.delete(handler)
+		})
+	}) as typeof actual.listen
+	return {
+		...actual,
+		invoke,
+		listen,
+		hasCaptionWindowControls: vi.fn(() => false),
+	}
+})
 vi.mock("@/lib/missions/missions-transport", () => ({
 	missionsTransport: {
 		list: vi.fn(),
@@ -5713,5 +5756,526 @@ describe("the first load of a thread transcript", () => {
 		await settle()
 
 		expect(document.querySelector(EMPTY_STATE_SLOT)).not.toBeNull()
+	})
+})
+
+describe("ThreadScreen with Library documents on its messages", () => {
+	const SCREEN_SPACE = "space-on-screen"
+	const BRIEF = "brief.md"
+	const PLAN = "plan.md"
+	const OPENING = "The plan opens here."
+	const WORKSPACE = {
+		rosterView: { rosteredSpaceId: "space-row" },
+		rosteredHostSpaceId: SCREEN_SPACE,
+	} as unknown as WorkspaceAssembly
+	const documents = new Map<string, Y.Doc>()
+	let layout: FakeLayout
+
+	const documentOf = (name: string) => {
+		const held = documents.get(name)
+		if (held) {
+			return held
+		}
+		const doc = new Y.Doc()
+		doc.getText("markdown").insert(0, OPENING)
+		documents.set(name, doc)
+		return doc
+	}
+
+	const itemNamed = (name: string) => ({
+		name,
+		kind: "document",
+		path: `/library/${name}`,
+		bytes: 10,
+		modifiedAt: 0,
+		createdAt: null,
+	})
+
+	const editElsewhere = (name: string, added: string) => {
+		const doc = documentOf(name)
+		const before = Y.encodeStateVector(doc)
+		const text = doc.getText("markdown")
+		text.insert(text.length, added)
+		const update = base64Of(Y.encodeStateAsUpdate(doc, before))
+		for (const heard of libraryHost.updates) {
+			heard(
+				{
+					event: LIBRARY_DOCUMENT_UPDATED_EVENT,
+					id: 0,
+					payload: { spaceId: SCREEN_SPACE, name, update },
+				},
+				null,
+			)
+		}
+	}
+
+	const threadSaying = (messages: TranscriptMessage[]): BotThread => {
+		const thread = threadOf({ id: "bot-1", name: "Nyx", said: "" })
+		return {
+			...thread,
+			chat: { ...thread.chat, state: { ...thread.chat.state, messages } },
+		}
+	}
+
+	const SENT_AND_POSTED = [
+		message({
+			id: "m-sent",
+			conversationId: "c-bot-1",
+			turnId: "t-sent",
+			seq: 1,
+			role: "user",
+			content: "Here is the brief.",
+			documents: [BRIEF],
+		}),
+		message({
+			id: "m-posted",
+			conversationId: "c-bot-1",
+			turnId: "t-posted",
+			seq: 2,
+			role: "user",
+			authorBotId: "bot-1",
+			content: "",
+			documents: [PLAN],
+		}),
+	]
+
+	const renderThread = async () => {
+		render(
+			createElement(
+				WorkspaceContext.Provider,
+				{ value: WORKSPACE },
+				createElement(ThreadScreenHarness, {
+					bots: NO_BOT_RECORDS,
+					landings: createMessageLandingController(),
+					onOpenMission: () => undefined,
+					thread: threadSaying(SENT_AND_POSTED),
+				}),
+			),
+		)
+		await settle()
+	}
+
+	const cardNamed = (title: string) =>
+		screen.getByRole("article", { name: title })
+
+	beforeEach(() => {
+		layout = fakeLayout()
+		vi.clearAllMocks()
+		listRoutines.mockResolvedValue([])
+		listRuns.mockResolvedValue([])
+		listSources.mockResolvedValue(SCHEDULE_DECLARED)
+		listMissions.mockResolvedValue({ open: [], done: [] })
+		listenToMissions.mockResolvedValue(() => undefined)
+		libraryHost.answers.set("library_list", () => [
+			itemNamed(BRIEF),
+			itemNamed(PLAN),
+		])
+		libraryHost.answers.set("library_read_document", ({ name }) => ({
+			name,
+			format: "markdown",
+			content: documentOf(name).getText("markdown").toString(),
+		}))
+		libraryHost.answers.set("library_open_document", ({ name }) => ({
+			name,
+			update: base64Of(Y.encodeStateAsUpdate(documentOf(name))),
+		}))
+		libraryHost.answers.set("library_apply_update", ({ name, update }) => {
+			Y.applyUpdate(documentOf(name), bytesOf(update))
+			return null
+		})
+		libraryHost.answers.set("library_share_caret", () => null)
+	})
+
+	afterEach(() => {
+		cleanup()
+		layout.restore()
+		libraryHost.answers.clear()
+		libraryHost.updates.clear()
+		documents.clear()
+	})
+
+	it("draws one card per document, on a message a person sent and on a document the agent posted", async () => {
+		await renderThread()
+
+		expect(screen.getAllByRole("article", { name: "brief" })).toHaveLength(1)
+		expect(screen.getAllByRole("article", { name: "plan" })).toHaveLength(1)
+		expect(await within(cardNamed("plan")).findByText(OPENING)).toBeTruthy()
+	})
+
+	it("unfolds a card read-only and repaints it while someone else edits the document", async () => {
+		await renderThread()
+
+		await act(async () => {
+			fireEvent.click(
+				within(cardNamed("plan")).getByRole("button", { name: "Show" }),
+			)
+		})
+		await settle()
+		expect(
+			within(cardNamed("plan")).getByRole("button", { name: "Hide" }),
+		).toBeTruthy()
+
+		await act(async () => {
+			editElsewhere(PLAN, " Ada adds a line.")
+		})
+
+		await waitFor(() =>
+			expect(
+				within(cardNamed("plan")).getByText(`${OPENING} Ada adds a line.`),
+			).toBeTruthy(),
+		)
+	})
+
+	it("opens the document editable beside the thread, then Close removes it", async () => {
+		await renderThread()
+
+		await act(async () => {
+			fireEvent.click(
+				within(cardNamed("plan")).getByRole("button", { name: "Open" }),
+			)
+		})
+		await settle()
+
+		const panel = screen.getByRole("complementary", { name: "plan" })
+		expect(
+			within(panel).getByRole("button", { name: "Open in Library" }),
+		).toBeTruthy()
+		expect(within(panel).getByText(OPENING)).toBeTruthy()
+		expect(cardNamed("plan").getAttribute("data-selected")).toBe("true")
+		expect(screen.getByText("Here is the brief.")).toBeTruthy()
+
+		await act(async () => {
+			fireEvent.click(within(panel).getByRole("button", { name: "Close" }))
+		})
+
+		expect(screen.queryByRole("complementary", { name: "plan" })).toBeNull()
+	})
+})
+
+describe("ThreadScreen attaching Library documents from the composer", () => {
+	const PLAN = "plan.md"
+	const BRIEF = "brief.md"
+	const WORKSPACE = {
+		rosterView: { rosteredSpaceId: "space-row" },
+		rosteredHostSpaceId: "space-on-screen",
+	} as unknown as WorkspaceAssembly
+	let layout: FakeLayout
+
+	const itemNamed = (name: string) => ({
+		name,
+		kind: "document",
+		path: `/library/${name}`,
+		bytes: 10,
+		modifiedAt: 0,
+		createdAt: null,
+	})
+
+	const roomAttaching = async ({ refuses = false } = {}) => {
+		const store = createFakeTranscriptStore()
+		const [ada] = await seatBots(store, SPACE, ["Ada"])
+		const conversation = await store.createConversation({
+			spaceId: SPACE,
+			sectionId: null,
+			title: "Walls",
+			botIds: [ada.id],
+		})
+		const sent: NewUserMessage[] = []
+		const recording: TranscriptStore = {
+			...store,
+			sendUserMessage: (message, summoned) => {
+				sent.push(message)
+				return refuses
+					? Promise.reject(new Error("refused"))
+					: store.sendUserMessage(message, summoned)
+			},
+		}
+		const driver = createScriptedDriver()
+		const runtimes = createConversationRuntimes(driver, recording, {})
+		render(
+			createElement(
+				WorkspaceContext.Provider,
+				{ value: WORKSPACE },
+				createElement(ThreadScreenHarness, {
+					bots: [ada],
+					landings: createMessageLandingController(),
+					onOpenMission: () => undefined,
+					staging: createAttachmentsController(
+						createAttachmentsPort({ chat: NO_BOT_CHAT, driver, runtimes }),
+					),
+					thread: {
+						kind: "conversation",
+						conversation,
+						runtimes,
+						onOpenSettings: () => undefined,
+					},
+				}),
+			),
+		)
+		await settle()
+		return sent
+	}
+
+	const pickDocument = async (title: string) => {
+		await act(async () => {
+			fireEvent.click(screen.getByRole("combobox", { name: "Attach files" }))
+		})
+		const option = await screen.findByRole("option", {
+			name: new RegExp(`^${title}`),
+		})
+		await act(async () => {
+			fireEvent.click(option)
+		})
+		await settle()
+	}
+
+	const stagedChipNames = () =>
+		within(screen.getByRole("list", { name: "Attachments" }))
+			.queryAllByRole("button", { name: /^Remove / })
+			.map((chip) => chip.getAttribute("aria-label"))
+
+	const chipRemovals = () =>
+		screen.queryAllByRole("button", { name: /^Remove (plan|brief)$/ })
+
+	beforeEach(() => {
+		layout = fakeLayout()
+		vi.clearAllMocks()
+		listRoutines.mockResolvedValue([])
+		listRuns.mockResolvedValue([])
+		listSources.mockResolvedValue(SCHEDULE_DECLARED)
+		listMissions.mockResolvedValue({ open: [], done: [] })
+		listenToMissions.mockResolvedValue(() => undefined)
+		libraryHost.answers.set("library_list", () => [
+			itemNamed(PLAN),
+			itemNamed(BRIEF),
+		])
+		libraryHost.answers.set("library_read_document", ({ name }) => ({
+			name,
+			format: "markdown",
+			content: "The plan opens here.",
+		}))
+	})
+
+	afterEach(() => {
+		cleanup()
+		layout.restore()
+		libraryHost.answers.clear()
+	})
+
+	it("stages a picked document as one chip, even when it is picked twice", async () => {
+		await roomAttaching()
+
+		await pickDocument("plan")
+		await pickDocument("plan")
+
+		expect(stagedChipNames()).toEqual(["Remove plan"])
+	})
+
+	it("drops a removed document from the next send", async () => {
+		const sent = await roomAttaching()
+		await pickDocument("plan")
+		await pickDocument("brief")
+
+		await act(async () => {
+			fireEvent.click(screen.getByRole("button", { name: "Remove plan" }))
+		})
+		await sendInComposer("Here is the brief.")
+
+		expect(sent.map(({ documents }) => documents)).toEqual([[BRIEF]])
+	})
+
+	it("sends a document with no text, clears its chip and shows it as a card on the message", async () => {
+		const sent = await roomAttaching()
+		await pickDocument("plan")
+
+		await sendInComposer("")
+
+		expect(
+			sent.map(({ content, documents }) => ({ content, documents })),
+		).toEqual([{ content: "", documents: [PLAN] }])
+		expect(chipRemovals()).toEqual([])
+		expect(screen.getAllByRole("article", { name: "plan" })).toHaveLength(1)
+	})
+
+	it("keeps the document chip and shows the message as not sent when the send is refused", async () => {
+		await roomAttaching({ refuses: true })
+		await pickDocument("plan")
+
+		await sendInComposer("Here is the plan.")
+
+		expect(screen.getByText("Not sent.")).toBeTruthy()
+		expect(stagedChipNames()).toEqual(["Remove plan"])
+	})
+})
+
+describe("ThreadScreen saving a message as a Library document", () => {
+	const ASKED = "Draft the plan for the gates."
+	const ANSWERED = "The gates open at dawn."
+	const SAVED = "plan.md"
+	const WORKSPACE = {
+		rosterView: { rosteredSpaceId: "space-row" },
+		rosteredHostSpaceId: "space-on-screen",
+	} as unknown as WorkspaceAssembly
+	let layout: FakeLayout
+	let saves: LibraryCall[]
+	let listings: number
+
+	const EXCHANGE = [
+		message({
+			id: "m-asked",
+			conversationId: "c-bot-1",
+			turnId: "t-asked",
+			seq: 1,
+			role: "user",
+			content: ASKED,
+		}),
+		message({
+			id: "m-answered",
+			conversationId: "c-bot-1",
+			turnId: "t-asked",
+			seq: 2,
+			role: "assistant",
+			authorBotId: "bot-1",
+			content: ANSWERED,
+		}),
+	]
+
+	const renderExchange = async (workspace: WorkspaceAssembly | null) => {
+		const base = threadOf({ id: "bot-1", name: "Nyx", said: "" })
+		const thread: BotThread = {
+			...base,
+			chat: {
+				...base.chat,
+				state: { ...base.chat.state, messages: EXCHANGE },
+			},
+		}
+		const queries = createQueryTestWrapper()
+		render(createElement(NoticeSurface), { wrapper: queries.wrapper })
+		render(
+			createElement(
+				WorkspaceContext.Provider,
+				{ value: workspace },
+				createElement(ThreadScreenHarness, {
+					bots: NO_BOT_RECORDS,
+					landings: createMessageLandingController(),
+					onOpenMission: () => undefined,
+					thread,
+				}),
+			),
+			{ wrapper: queries.wrapper },
+		)
+		await settle()
+	}
+
+	const menuOf = async (text: string) => {
+		await act(async () => {
+			fireEvent.contextMenu(screen.getByText(text), {
+				clientX: 20,
+				clientY: 20,
+			})
+		})
+		return screen.findByRole("menu")
+	}
+
+	const saveFrom = async (text: string) => {
+		const menu = await menuOf(text)
+		await act(async () => {
+			fireEvent.click(
+				within(menu).getByRole("menuitem", { name: "Save as document" }),
+				{ detail: 1 },
+			)
+		})
+		await settle()
+	}
+
+	beforeEach(() => {
+		layout = fakeLayout()
+		vi.clearAllMocks()
+		listRoutines.mockResolvedValue([])
+		listRuns.mockResolvedValue([])
+		listSources.mockResolvedValue(SCHEDULE_DECLARED)
+		listMissions.mockResolvedValue({ open: [], done: [] })
+		listenToMissions.mockResolvedValue(() => undefined)
+		saves = []
+		listings = 0
+		libraryHost.answers.set("library_list", () => {
+			listings += 1
+			return []
+		})
+		libraryHost.answers.set("library_save_message", (call) => {
+			saves.push(call)
+			return {
+				name: SAVED,
+				kind: "document",
+				path: `/library/${SAVED}`,
+				bytes: 10,
+				modifiedAt: 0,
+				createdAt: null,
+			}
+		})
+		libraryHost.answers.set("library_open_document", ({ name }) => ({
+			name,
+			update: base64Of(Y.encodeStateAsUpdate(new Y.Doc())),
+		}))
+		libraryHost.answers.set("library_share_caret", () => null)
+	})
+
+	afterEach(() => {
+		cleanup()
+		layout.restore()
+		libraryHost.answers.clear()
+		libraryHost.updates.clear()
+	})
+
+	it("saves a person message once, then Open on the notice shows the document beside the thread", async () => {
+		await renderExchange(WORKSPACE)
+		const listingsBeforeSave = listings
+
+		await saveFrom(ASKED)
+
+		expect(saves).toEqual([{ conversationId: "c-bot-1", messageId: "m-asked" }])
+		expect(listings).toBeGreaterThan(listingsBeforeSave)
+		await pressInNotice("Saved to Library", "Open")
+		await settle()
+		expect(screen.getByRole("complementary", { name: "plan" })).toBeTruthy()
+	})
+
+	it("saves an agent answer through the same menu entry", async () => {
+		await renderExchange(WORKSPACE)
+
+		await saveFrom(ANSWERED)
+
+		expect(saves).toEqual([
+			{ conversationId: "c-bot-1", messageId: "m-answered" },
+		])
+	})
+
+	it("raises the failed save text when the save is refused", async () => {
+		libraryHost.answers.set("library_save_message", () => {
+			throw {
+				kind: "unknownMessage",
+				conversationId: "c-bot-1",
+				messageId: "m-asked",
+			}
+		})
+		await renderExchange(WORKSPACE)
+
+		await saveFrom(ASKED)
+
+		expect(
+			raisedNotice(
+				"Couldn’t save the message as a document. Try Save as document again.",
+			),
+		).toBeTruthy()
+		expect(raisedNotices("Saved to Library")).toEqual([])
+	})
+
+	it("offers no Save as document without a Space on screen", async () => {
+		await renderExchange(null)
+
+		const menu = await menuOf(ASKED)
+
+		expect(
+			within(menu).queryByRole("menuitem", { name: "Save as document" }),
+		).toBeNull()
 	})
 })

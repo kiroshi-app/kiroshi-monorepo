@@ -14,6 +14,11 @@ export const createLibraryDocument = (spaceId: string, name: string) =>
 		templateId: null,
 	})
 
+export const saveMessageAsDocument = (
+	conversationId: string,
+	messageId: string,
+) => invoke<LibraryItem>("library_save_message", { conversationId, messageId })
+
 export const applyLibraryUpdate = (
 	spaceId: string,
 	name: string,

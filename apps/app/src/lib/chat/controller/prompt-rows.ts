@@ -15,6 +15,7 @@ export const createPromptRows = ({
 		conversationId: string,
 		content: string,
 		replyLinks: ReplyLink[],
+		documents: string[],
 	) => ({
 		id: newId(),
 		turnId: newId(),
@@ -23,6 +24,7 @@ export const createPromptRows = ({
 		createdAt: now(),
 		repliedToMessageId: replyLinks[0]?.messageId ?? null,
 		replyLinks,
+		documents,
 	})
 
 	type PromptRow = ReturnType<typeof promptRow>
@@ -36,6 +38,7 @@ export const createPromptRows = ({
 				authorBotId: null,
 				repliedToMessageId: said.repliedToMessageId,
 				replyLinks: said.replyLinks,
+				documents: said.documents,
 				content: said.content,
 				createdAt: said.createdAt,
 			},
@@ -56,6 +59,7 @@ export const createPromptRows = ({
 			authorName: null,
 			repliedToMessageId: said.repliedToMessageId,
 			replyLinks: said.replyLinks,
+			documents: said.documents,
 			runtimeSessionId: null,
 		})
 

@@ -21,6 +21,7 @@ const userRowOf = (text: string): TranscriptRow => ({
 	continuesTurnId: null,
 	quotedMessageId: null,
 	replyLinks: [],
+	documents: [],
 	authorBotId: null,
 	authorAccountId: null,
 	authorName: null,

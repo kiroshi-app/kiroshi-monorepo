@@ -15,6 +15,8 @@ export type StagedAttachment = PromptAttachment & {
 
 export const NO_ATTACHMENTS: StagedAttachment[] = []
 
+export const NO_DOCUMENTS: PromptAttachment[] = []
+
 const MEGABYTE = 1024 * 1024
 
 function inMegabytes(t: ChatCopy, bytes: number): string {

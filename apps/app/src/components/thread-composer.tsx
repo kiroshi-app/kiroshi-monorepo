@@ -10,15 +10,17 @@ import {
 
 import { PromptAttachButton } from "@workspace/ui/components/prompt-attach-button"
 import {
+	type PromptAttachment,
 	PromptAttachments,
 	type PromptReplyAttachment,
 } from "@workspace/ui/components/prompt-attachments"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
+import { PromptLibraryPicker } from "@workspace/ui/components/prompt-library-picker"
 
 import { draftWithText } from "@/lib/chat/answer-actions"
-import type { StagedAttachment } from "@/lib/chat/attachments"
 import { holdsDismissal } from "@/lib/chat/prompt-commands"
 import { promptWithMentionAdded } from "@/lib/conversations/mentions"
+import type { ComposerLibrary } from "@/lib/library/use-composer-library"
 import {
 	composerOfflineOf,
 	OpenJoinedHostContext,
@@ -39,7 +41,8 @@ export type ThreadMenuSlot = {
 }
 
 type ThreadComposerProps = {
-	attachments: StagedAttachment[]
+	attachments: PromptAttachment[]
+	library?: ComposerLibrary
 	canAttach: boolean
 	isDisabled: boolean
 	isDropTarget: boolean
@@ -59,6 +62,7 @@ type ThreadComposerProps = {
 
 export const ThreadComposer = ({
 	attachments,
+	library,
 	canAttach,
 	isDisabled,
 	isDropTarget,
@@ -141,7 +145,16 @@ export const ThreadComposer = ({
 				disabled={isDisabled}
 				dropTarget={isDropTarget}
 				leading={
-					<PromptAttachButton disabled={!canAttach} onAttach={onAttach} />
+					library ? (
+						<PromptLibraryPicker
+							disabled={!canAttach}
+							documents={library.documents}
+							onAttach={onAttach}
+							onPick={library.onPick}
+						/>
+					) : (
+						<PromptAttachButton disabled={!canAttach} onAttach={onAttach} />
+					)
 				}
 				offline={offline}
 				onAttach={canAttach ? onAttach : undefined}
