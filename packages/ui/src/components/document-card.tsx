@@ -89,7 +89,7 @@ const FailureLine = ({ id, failure }: FailureLineProps) => {
 
 	return (
 		<p
-			className="flex min-w-0 items-start gap-1.5 break-words text-foreground text-sm leading-5.5"
+			className="flex items-start gap-1.5 break-words text-foreground text-sm leading-5.5"
 			data-slot="document-card-failure"
 			id={id}
 		>
@@ -138,7 +138,6 @@ const DocumentCard = ({
 				"flex min-w-0 flex-col gap-3 rounded-control border border-border bg-card p-4",
 				isSelected && "ring-2 ring-primary",
 			)}
-			data-failure={failure}
 			data-selected={isSelected || undefined}
 			data-slot="document-card"
 		>
