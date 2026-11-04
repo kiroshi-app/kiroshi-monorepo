@@ -211,19 +211,18 @@ const linesOf = (state: EditorState, { from, to }: SelectionRange) => {
 	)
 }
 
-const segmentsOf = (state: EditorState, range: SelectionRange) =>
-	linesOf(state, range).flatMap((line) => {
-		const shape = shapeOf(state, line)
-		if (shape.isCode) return []
-		const segment = trimmed(state, {
-			from: Math.max(range.from, shape.textFrom),
-			to: Math.min(range.to, shape.textTo),
-		})
-		return segment.from < segment.to ? [segment] : []
-	})
-
 const segmentsOfSelection = (state: EditorState) =>
-	state.selection.ranges.flatMap((range) => segmentsOf(state, range))
+	state.selection.ranges.flatMap((range) =>
+		linesOf(state, range).flatMap((line) => {
+			const shape = shapeOf(state, line)
+			if (shape.isCode) return []
+			const segment = trimmed(state, {
+				from: Math.max(range.from, shape.textFrom),
+				to: Math.min(range.to, shape.textTo),
+			})
+			return segment.from < segment.to ? [segment] : []
+		}),
+	)
 
 const isCarried = (state: EditorState, segment: Span, node: string) => {
 	const runs = runsIn(state, segment).filter((run) => run.node.name === node)
