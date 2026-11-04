@@ -160,7 +160,6 @@
 	--prompt-surface: #ffffff;
 	--prompt-surface-inert: #f0f0f0;
 	--prompt-menu: #ffffff;
-	--menu-surface: #ffffff;
 	--author-line-sticky: #f5f5f5;
 	--user-bubble-muted-strength: 70%;
 }
@@ -321,7 +320,6 @@
 	--prompt-surface: #1c1c1e;
 	--prompt-surface-inert: #161618;
 	--prompt-menu: #1f1f22;
-	--menu-surface: #232325;
 	--author-line-sticky: #1e1e1f;
 	--user-bubble-muted-strength: 70%;
 }

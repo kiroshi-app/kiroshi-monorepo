@@ -299,6 +299,10 @@ conversation-message-message--long-content
 conversation-message-message--variants
 conversation-message-message--with-metadata
 conversation-message-messageactions--default
+conversation-message-messageactions--every-label-on-one-line
+conversation-message-messageactions--every-label-on-one-line-in-french
+conversation-message-messageactions--same-surface-as-image-menu
+conversation-message-messageactions--same-surface-as-image-menu-in-dark
 conversation-message-messageactions--square-icon-buttons
 conversation-message-messageattachments--default
 conversation-message-messageattachments--empty
