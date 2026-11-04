@@ -353,6 +353,11 @@ describe("Open in new tab in the menu of a Library item", () => {
 	})
 })
 
+const MISSING_NOTICE = {
+	title: "This item isn't in the Library anymore.",
+	description: "It was deleted or moved. Close this tab.",
+}
+
 const NOTES_OPENING: LibraryOpening = { kind: "document", name: "notes.txt" }
 
 const editorShown = () =>
@@ -399,7 +404,11 @@ describe("a tab opening a Library item", () => {
 
 			await waitFor(() => expect(raiseFailureNotice).toHaveBeenCalledOnce())
 			await settle(50)
-			expect(raiseFailureNotice).toHaveBeenCalledOnce()
+			expect(raiseFailureNotice).toHaveBeenCalledExactlyOnceWith(
+				expect.objectContaining({
+					title: common("library.failure.document.open"),
+				}),
+			)
 			expect(callsOf("library_list")).toHaveLength(1)
 			expect(gridItemShown()).toBe(false)
 			expect(editorShown()).toBeNull()
@@ -415,9 +424,7 @@ describe("a tab opening a Library item", () => {
 
 			await waitFor(() =>
 				expect(raiseFailureNotice).toHaveBeenCalledExactlyOnceWith(
-					expect.objectContaining({
-						title: common("library.failure.document.open"),
-					}),
+					expect.objectContaining(MISSING_NOTICE),
 				),
 			)
 			expect(gridItemShown()).toBe(false)
@@ -437,9 +444,7 @@ describe("a tab opening a Library item", () => {
 
 			await waitFor(() =>
 				expect(raiseFailureNotice).toHaveBeenCalledExactlyOnceWith(
-					expect.objectContaining({
-						title: common("library.failure.image"),
-					}),
+					expect.objectContaining(MISSING_NOTICE),
 				),
 			)
 			rerender()
@@ -467,9 +472,7 @@ describe("a tab opening a Library item", () => {
 			await waitFor(() => expect(editorShown()).toBeNull())
 			await waitFor(() =>
 				expect(raiseFailureNotice).toHaveBeenCalledExactlyOnceWith(
-					expect.objectContaining({
-						title: common("library.failure.document.open"),
-					}),
+					expect.objectContaining(MISSING_NOTICE),
 				),
 			)
 			rerender()

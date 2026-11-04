@@ -150,10 +150,10 @@ const missingOpeningOf = ({
 
 const reportFailure = failureReporterIn("library-screen")
 
-const missingNoticeTitleOf = (kind: LibraryOpening["kind"]) =>
-	kind === "image"
-		? i18n.t("common:library.failure.image")
-		: i18n.t("common:library.failure.document.open")
+const missingNotice = () => ({
+	title: i18n.t("common:library.failure.missing.title"),
+	description: i18n.t("common:library.failure.missing.body"),
+})
 
 const useMissingOpeningNotice = (
 	spaceId: string,
@@ -172,10 +172,7 @@ const useMissingOpeningNotice = (
 			return
 		}
 		raisedFor.current = raised
-		void reportFailure(
-			{ title: missingNoticeTitleOf(kind) },
-			{ space: spaceId },
-		)
+		void reportFailure(missingNotice(), { space: spaceId })
 	}, [spaceId, kind, name])
 }
 
