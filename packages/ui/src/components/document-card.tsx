@@ -102,10 +102,13 @@ const FailureLine = ({ id, failure }: FailureLineProps) => {
 	)
 }
 
-type DocumentCardShellProps = {
+type DocumentCardHeadProps = {
 	title: string
 	writer?: DocumentCardWriter
 	isSelected?: boolean
+}
+
+type DocumentCardShellProps = DocumentCardHeadProps & {
 	detail?: ReactNode
 	describedBy?: string
 	children: ReactNode
@@ -155,12 +158,6 @@ const DocumentCardShell = ({
 			{children}
 		</article>
 	)
-}
-
-type DocumentCardHeadProps = {
-	title: string
-	writer?: DocumentCardWriter
-	isSelected?: boolean
 }
 
 type LiveDocumentCardProps = DocumentCardHeadProps & {
