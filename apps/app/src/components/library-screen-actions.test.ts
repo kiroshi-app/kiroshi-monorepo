@@ -177,7 +177,9 @@ const renderLibraryScreen = async ({
 		}),
 		{ wrapper: createQueryTestWrapper().wrapper },
 	)
-	await screen.findByRole("heading", { level: 1, name: LIBRARY_TITLE })
+	if (openedFirst === undefined) {
+		await screen.findByRole("heading", { level: 1, name: LIBRARY_TITLE })
+	}
 	return { onOpenInNewTab }
 }
 
@@ -351,6 +353,80 @@ describe("Open in new tab in the menu of a Library item", () => {
 	})
 })
 
+const NOTES_OPENING: LibraryOpening = { kind: "document", name: "notes.txt" }
+
+const editorShown = () =>
+	screen.queryByRole("textbox", { name: common("library.editor.title") })
+
+const gridItemShown = () =>
+	tileShown("notes") || tileShown("diagram.png") || libraryShown() !== null
+
+describe("a tab opening a Library item", () => {
+	it.each(SPACES)(
+		"loads the document alongside the list and shows no grid item while both load, on %s",
+		async (_space, isJoined) => {
+			const releaseList = holdHostCall("library_list")
+			const releaseDocument = holdHostCall("library_open_document")
+
+			await renderLibraryScreen({ isJoined, openedFirst: NOTES_OPENING })
+
+			await waitFor(() =>
+				expect(callsOf("library_open_document")).toEqual([
+					{ spaceId: SPACE_ID, name: "notes.txt" },
+				]),
+			)
+			expect(callsOf("library_list")).toHaveLength(1)
+			expect(gridItemShown()).toBe(false)
+			expect(editorShown()).toBeNull()
+
+			await releaseDocument()
+			expect(gridItemShown()).toBe(false)
+			expect(editorShown()).toBeNull()
+
+			await releaseList()
+			expect((await titleField()).value).toBe("notes")
+			expect(gridItemShown()).toBe(false)
+		},
+	)
+
+	it.each(SPACES)(
+		"shows the failed view, and no grid item, for a deleted document on %s",
+		async (_space, isJoined) => {
+			harness.listed = [IMAGE]
+			harness.refused = "library_open_document"
+
+			await renderLibraryScreen({ isJoined, openedFirst: NOTES_OPENING })
+
+			await waitFor(() => expect(raiseFailureNotice).toHaveBeenCalledOnce())
+			await settle()
+			expect(callsOf("library_list")).toHaveLength(1)
+			expect(gridItemShown()).toBe(false)
+			expect(editorShown()).toBeNull()
+		},
+	)
+
+	it.each(SPACES)(
+		"shows no grid item before the viewer shows the image, on %s",
+		async (_space, isJoined) => {
+			const releaseList = holdHostCall("library_list")
+
+			await renderLibraryScreen({
+				isJoined,
+				openedFirst: { kind: "image", name: "diagram.png" },
+			})
+			await settle()
+			expect(gridItemShown()).toBe(false)
+
+			await releaseList()
+			expect(
+				await screen.findByRole("button", {
+					name: common("library.lightbox.back"),
+				}),
+			).toBeInstanceOf(HTMLElement)
+		},
+	)
+})
+
 describe("Rename in the menu of a Library item", () => {
 	it.each(SPACES)(
 		"renames the document on %s with the title edited in its editor",
@@ -427,6 +503,7 @@ describe("Delete in the menu of a Library item", () => {
 
 			await waitFor(() => expect(lightboxBack()).toBeNull())
 			await waitFor(() => expect(tileShown("diagram.png")).toBe(false))
+			expect(await tileOf("notes")).toBeInstanceOf(HTMLElement)
 			expect(callsOf("library_delete")).toEqual([
 				{ spaceId: SPACE_ID, name: "diagram.png" },
 			])

@@ -1540,7 +1540,7 @@ describe("WorkspaceBody library", () => {
 		expect(isBusy()).toBe(false)
 	})
 
-	it("raises what failed when a document cannot be read and keeps the grid", async () => {
+	it("raises what failed when a document cannot be read and shows no grid item", async () => {
 		await openLibrary()
 
 		await open("notes")
@@ -1548,7 +1548,7 @@ describe("WorkspaceBody library", () => {
 		await noticeTitled(
 			"Couldn’t open the document. Open it again from the Library.",
 		)
-		expect(shownNames()).toContain("notes")
+		expect(shownNames()).toEqual([])
 	})
 
 	const SAVE_FAILURE = "Couldn’t save the file"

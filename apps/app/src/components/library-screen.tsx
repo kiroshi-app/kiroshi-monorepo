@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useRef, useState } from "react"
 
 import {
 	LibraryDocumentEditor,
@@ -15,8 +15,10 @@ import {
 	type LibraryFilter,
 	LibraryPanel,
 } from "@workspace/ui/components/library-panel"
+import { ScreenLayout } from "@workspace/ui/components/screen-layout"
 import { i18n } from "@workspace/ui/lib/i18n"
 
+import { BareAppHeader } from "@/components/bare-app-header"
 import { LibraryDropTarget } from "@/components/library-drop-target"
 import type { LibraryItem, Space } from "@/lib/bindings"
 import type { Bot } from "@/lib/conversations/store-contract"
@@ -122,41 +124,13 @@ const openedDocumentOf = (
 	return detail === undefined ? null : { ...draft, kind: "document", detail }
 }
 
-type OpeningPresence = {
-	opening: LibraryOpening | undefined
-	isListing: boolean
-	isListed: boolean
-	isDocumentOpened: boolean
-	hasFailedToOpen: boolean
-}
+const documentNameOf = (opening: LibraryOpening | undefined) =>
+	opening?.kind === "document" ? opening.name : null
 
-const isOpeningMissing = ({
-	opening,
-	isListing,
-	isListed,
-	isDocumentOpened,
-	hasFailedToOpen,
-}: OpeningPresence) => {
-	if (opening === undefined) {
-		return false
-	}
-	if (isDocumentOpened) {
-		return hasFailedToOpen
-	}
-	return !isListing && !isListed
-}
-
-const useDropMissingOpening = (
-	presence: OpeningPresence,
-	onOpeningChange: LibraryScreenProps["onOpeningChange"],
-) => {
-	const isMissing = isOpeningMissing(presence)
-	useEffect(() => {
-		if (isMissing) {
-			onOpeningChange(undefined)
-		}
-	}, [isMissing, onOpeningChange])
-}
+const isImageListed = (
+	opening: LibraryOpening,
+	listedOpened: LibraryItem | undefined,
+) => opening.kind === "image" && listedOpened !== undefined
 
 const renamedDraftOf = (
 	opened: OpenedDocument,
@@ -224,14 +198,8 @@ export const LibraryScreen = ({
 		heldDraft,
 		listedOpened && toShown(listedOpened).detail,
 	)
-	const {
-		document,
-		edit,
-		shareCaret,
-		hasFailedToOpen,
-		closeAndRelist,
-		moveDocument,
-	} = useLibraryDocumentSession(spaceId, openedDocument?.name ?? null)
+	const { document, edit, shareCaret, closeAndRelist, moveDocument } =
+		useLibraryDocumentSession(spaceId, documentNameOf(opening))
 	const { writers, people } = useLibraryDocumentWriters({
 		spaceId,
 		name: openedDocument?.name ?? null,
@@ -240,16 +208,6 @@ export const LibraryScreen = ({
 		bots,
 		title: shownTitleOf(openedDocument?.title ?? ""),
 	})
-	useDropMissingOpening(
-		{
-			opening,
-			isListing: library.isLoading,
-			isListed: listedOpened !== undefined,
-			isDocumentOpened: openedDocument !== null,
-			hasFailedToOpen,
-		},
-		onOpeningChange,
-	)
 
 	const shownItems = library.items
 		.filter((item) => matchesQuery(item, query))
@@ -313,6 +271,8 @@ export const LibraryScreen = ({
 			onRefused: () => showTitled({ ...opened, title: opened.startTitle }),
 		})
 	}
+	const deleteShownImage = ({ id }: NamedItem) =>
+		actions.remove(id, { onSuccess: close })
 	const deleteDocument = ({ name }: OpenedDocument) =>
 		closeAndRelist().then(() => actions.remove(name, { onSuccess: close }))
 	const isRenamePicked = useRef(false)
@@ -363,6 +323,10 @@ export const LibraryScreen = ({
 		)
 	}
 
+	if (opening && !isImageListed(opening, listedOpened)) {
+		return <ScreenLayout header={<BareAppHeader />} />
+	}
+
 	return (
 		<LibraryPanel
 			filter={filter}
@@ -388,7 +352,7 @@ export const LibraryScreen = ({
 						onClose={close}
 						onCopy={copyAndWait}
 						onCopyImage={copyAndWait}
-						onDelete={remove}
+						onDelete={deleteShownImage}
 						onDownload={save}
 						onShowInFolder={reveal}
 						onNext={() => openImageAt(imageIndex + 1)}
