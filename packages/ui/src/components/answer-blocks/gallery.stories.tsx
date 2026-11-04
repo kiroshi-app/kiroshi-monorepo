@@ -190,11 +190,13 @@ const CAPTIONED_PHOTOS = [
 	})),
 ]
 
+const CAPTIONS_LINE = CAPTIONED_PHOTOS.map(({ caption }) => caption).join(" · ")
+
 export const CaptionsUnderGrid = meta.story({
 	globals: { theme: "dark" },
 	args: {
 		images: CAPTIONED_PHOTOS,
-		caption: CAPTIONED_PHOTOS.map(({ caption }) => caption).join(" · "),
+		caption: CAPTIONS_LINE,
 	},
 	parameters: {
 		docs: {
@@ -204,9 +206,9 @@ export const CaptionsUnderGrid = meta.story({
 			},
 		},
 	},
-	play: async ({ args, canvas, canvasElement }) => {
-		await expect(canvasElement.querySelector("figcaption")).toHaveTextContent(
-			args.caption ?? "",
+	play: async ({ canvas, canvasElement }) => {
+		await expect(canvasElement.querySelector("figcaption")?.textContent).toBe(
+			CAPTIONS_LINE,
 		)
 		await expect(slotsIn(canvasElement, "gallery-image-caption")).toHaveLength(
 			0,
