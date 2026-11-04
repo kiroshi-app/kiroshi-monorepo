@@ -566,15 +566,6 @@ const runsIn = (marks: DecorationSet) => {
 const liveRunsIn = (marks: DecorationSet) =>
 	runsIn(marks).filter(({ value }) => value.spec.liveAgent !== undefined)
 
-const isCoveredBy =
-	(live: Range<Decoration>[]) => (from: number, to: number, held: Decoration) =>
-		live.some(
-			(run) =>
-				run.value.spec.liveAgent === held.spec.liveAgent &&
-				run.from <= to &&
-				from <= run.to,
-		)
-
 const heldRunsAfterMarks = (
 	held: DecorationSet,
 	before: Range<Decoration>[],
@@ -582,9 +573,15 @@ const heldRunsAfterMarks = (
 ) => {
 	const isStillLive = ({ value }: Range<Decoration>) =>
 		after.some((run) => run.value.spec.liveAgent === value.spec.liveAgent)
-	const covered = isCoveredBy(after)
+	const isCovered = (from: number, to: number, held: Decoration) =>
+		after.some(
+			(run) =>
+				run.value.spec.liveAgent === held.spec.liveAgent &&
+				run.from <= to &&
+				from <= run.to,
+		)
 	return held.update({
-		filter: (from, to, run) => !covered(from, to, run),
+		filter: (from, to, run) => !isCovered(from, to, run),
 		add: before
 			.filter((run) => !isStillLive(run))
 			.map(({ from, to, value }) =>
