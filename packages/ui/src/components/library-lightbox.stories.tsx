@@ -1075,13 +1075,7 @@ export const ImageMenuOpen = meta.story({
 		await waitFor(() => expect(screen.queryByRole("menu")).toBe(null))
 
 		await openStageMenu()
-		await clickAt(
-			userEvent,
-			cornerOf(
-				popup.querySelector("[data-slot=library-lightbox-zoom-bar]")
-					?.parentElement as HTMLElement,
-			),
-		)
+		await clickAt(userEvent, besideImage(image.parentElement as Element, image))
 		await waitFor(() => expect(screen.queryByRole("menu")).toBe(null))
 		await expect(args.onClose).not.toHaveBeenCalled()
 
