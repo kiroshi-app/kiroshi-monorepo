@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useId, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -73,6 +73,11 @@ const GalleryTile = ({
 		image,
 		t("answerBlock.gallery.tile", { caption, position: index + 1 }),
 	)
+	const captionId = useId()
+	const imageCaption = hiddenCount === 0 ? image.caption?.trim() : undefined
+	const describedBy =
+		imageCaption && imageCaption !== name ? captionId : undefined
+	const imageDescribedBy = onOpen ? undefined : describedBy
 	const openLabel =
 		tileLabel === "open" ? t("attachments.open", { name }) : undefined
 	const tileClass = cn(
@@ -84,6 +89,7 @@ const GalleryTile = ({
 			{brokenSrc === image.src ? (
 				<span
 					aria-label={name}
+					aria-describedby={imageDescribedBy}
 					className="grid size-full place-items-center bg-foreground/10"
 					data-slot="gallery-broken"
 					role="img"
@@ -94,10 +100,21 @@ const GalleryTile = ({
 				<img
 					src={image.src}
 					alt={openLabel ? "" : name}
+					aria-describedby={imageDescribedBy}
 					onError={() => setBrokenSrc(image.src)}
 					className="image-outline size-full rounded-[inherit] object-cover"
 				/>
 			)}
+			{imageCaption ? (
+				<span
+					id={captionId}
+					aria-hidden="true"
+					data-slot="gallery-image-caption"
+					className="pointer-events-none absolute inset-x-0 bottom-0 bg-linear-to-t from-black/65 to-transparent p-3 font-medium text-white text-xs leading-4"
+				>
+					<span className="line-clamp-2 wrap-break-word">{imageCaption}</span>
+				</span>
+			) : null}
 			{hiddenCount > 0 ? (
 				<span
 					data-slot="gallery-more"
@@ -116,6 +133,7 @@ const GalleryTile = ({
 		<button
 			type="button"
 			aria-label={openLabel}
+			aria-describedby={describedBy}
 			className={cn(tileClass, "outline-offset-2")}
 			onClick={() => onOpen(index)}
 		>

@@ -91,6 +91,7 @@ conversation-markdown-codesnippet--overflow
 conversation-markdown-codesnippet--single-line
 conversation-markdown-collapsiblesections--in-agent-answer
 conversation-markdown-collapsiblesections--in-narrow-column
+conversation-markdown-gallery--caption-per-image
 conversation-markdown-gallery--image-menu-open
 conversation-markdown-gallery--in-agent-answer
 conversation-markdown-gallery--in-narrow-column
@@ -407,6 +408,15 @@ conversation-message-turn--summoned-by-mission
 conversation-message-turn--thread-crossing-a-day
 conversation-message-turn--time-follows-now
 conversation-message-turn--working
+conversation-message-websources--controlled
+conversation-message-websources--favicon-and-fallbacks
+conversation-message-websources--folded
+conversation-message-websources--in-narrow-column
+conversation-message-websources--no-source
+conversation-message-websources--one-source
+conversation-message-websources--one-source-in-narrow-column
+conversation-message-websources--open
+conversation-message-websources--open-source-from-row
 conversation-missions-missionactivityline--default
 conversation-missions-missioncard--card-activity-line
 conversation-missions-missioncard--card-closed
@@ -1860,6 +1870,7 @@ primitives-button--sizes
 primitives-button--states
 primitives-button--variants
 primitives-button--with-icons
+primitives-collapsible--default
 primitives-devicecard--default
 primitives-devicecard--long-content
 primitives-devicecard--with-meta
