@@ -61,7 +61,7 @@ export const useLibraryImageResolver = (spaceId: string, isJoined: boolean) => {
 	const itemsQuery = libraryItemsQueryOf(spaceId)
 	const listedImageNamed = async (name: string) => {
 		const image =
-			listedImageIn(queryClient.getQueryData(itemsQuery.queryKey), name) ??
+			listedImageIn(await queryClient.fetchQuery(itemsQuery), name) ??
 			listedImageIn(
 				await queryClient.fetchQuery({ ...itemsQuery, staleTime: 0 }),
 				name,
