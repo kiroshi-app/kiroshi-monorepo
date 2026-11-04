@@ -380,7 +380,8 @@ const SETTLED_MESSAGE_WINDOW: &str = "SELECT id, turn_id, author_bot_id,
 			WHERE message_id = messages.id)
 	FROM messages WHERE conversation_id = ?1 AND seq > ?2 AND seq < ?3
 		AND completion_state NOT IN ('pending', 'streaming')
-		AND trim(content, char(32, 9, 10, 13)) <> ''
+		AND (trim(content, char(32, 9, 10, 13)) <> ''
+			OR EXISTS (SELECT 1 FROM message_documents WHERE message_id = messages.id))
 	ORDER BY seq DESC LIMIT ?4";
 const LATEST_MESSAGE_ASIDE_BOT: &str = "SELECT id, turn_id, author_bot_id,
 		(SELECT json_group_array(json_object('message_id', target_message_id, 'excerpt', excerpt)
@@ -393,7 +394,9 @@ const LATEST_MESSAGE_ASIDE_BOT: &str = "SELECT id, turn_id, author_bot_id,
 			WHERE message_id = messages.id)
 	FROM messages WHERE conversation_id = ?1 AND COALESCE(author_bot_id, '') <> ?2
 		AND created_at <= ?3
-		AND trim(content, char(32, 9, 10, 13)) <> '' ORDER BY seq DESC LIMIT 1";
+		AND (trim(content, char(32, 9, 10, 13)) <> ''
+			OR EXISTS (SELECT 1 FROM message_documents WHERE message_id = messages.id))
+	ORDER BY seq DESC LIMIT 1";
 const LATEST_MESSAGE_OF_BOT: &str = "SELECT id, turn_id, author_bot_id,
 		(SELECT json_group_array(json_object('message_id', target_message_id, 'excerpt', excerpt)
 			ORDER BY position) FROM message_replies
@@ -404,7 +407,9 @@ const LATEST_MESSAGE_OF_BOT: &str = "SELECT id, turn_id, author_bot_id,
 		(SELECT json_group_array(name ORDER BY position) FROM message_documents
 			WHERE message_id = messages.id)
 	FROM messages WHERE conversation_id = ?1 AND author_bot_id = ?2 AND created_at <= ?3
-		AND trim(content, char(32, 9, 10, 13)) <> '' ORDER BY seq DESC LIMIT 1";
+		AND (trim(content, char(32, 9, 10, 13)) <> ''
+			OR EXISTS (SELECT 1 FROM message_documents WHERE message_id = messages.id))
+	ORDER BY seq DESC LIMIT 1";
 const MESSAGE_OF_CONVERSATION: &str =
 	"SELECT 1 FROM messages WHERE conversation_id = ?1 AND id = ?2";
 const KEEP_MESSAGE_PIN: &str =
