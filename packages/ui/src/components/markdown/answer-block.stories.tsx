@@ -1,4 +1,4 @@
-import { expect, fn, waitFor } from "storybook/test"
+import { expect, fn, type userEvent, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { slotIn, slotsIn } from "@workspace/storybook/story-utils"
@@ -624,6 +624,227 @@ export const PlainImageInAnswer = meta.story({
 	},
 })
 
+const IMAGE_MENU_ENTRIES = ["Save to Library", "Copy image", "Open in viewer"]
+
+const IMAGE_MENU_ACTIONS: MarkdownAnswerActions = {
+	agentName: "Atlas",
+	onPickOption: fn(),
+	onUseValues: fn(),
+	onOpenImage: fn(),
+	onOpenWebPage: fn(),
+	imageMenu: { onSaveToLibrary: fn(), onCopyImage: fn() },
+}
+
+const openImageMenu = async (
+	user: ReturnType<typeof userEvent.setup>,
+	image: Element,
+	name: string,
+) => {
+	await user.pointer({ keys: "[MouseRight]", target: image })
+	const menu = await within(document.body).findByRole("menu", {
+		name: `Actions for ${name}`,
+	})
+	await expect(
+		within(menu)
+			.getAllByRole("menuitem")
+			.map((entry) => entry.textContent),
+	).toEqual(IMAGE_MENU_ENTRIES)
+	return within(menu)
+}
+
+export const ImageMenuOnGallery = meta.story({
+	tags: ["test-only"],
+	args: { children: GALLERY, answerActions: IMAGE_MENU_ACTIONS },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A `gallery` block right-clicked on its second tile, the answer carrying `imageMenu`. Check the `ImageMenu` lists Save to Library, Copy image, then Open in viewer, that Copy image hands the tile's viewer image to `imageMenu.onCopyImage`, and that Open in viewer hands every image of the gallery and the tile's index to `onOpenImage`.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const tile = canvas.getByRole("button", {
+			name: "Grey linen sofa, three seats",
+		})
+		const greyLinen = {
+			id: "1",
+			name: "Grey linen sofa, three seats",
+			src: "https://images.example.org/sofa-grey.jpg",
+			detail: "Grey linen, 990 euros",
+		}
+
+		let menu = await openImageMenu(
+			userEvent,
+			tile,
+			"Grey linen sofa, three seats",
+		)
+		await userEvent.click(menu.getByRole("menuitem", { name: "Copy image" }))
+		await expect(
+			args.answerActions?.imageMenu?.onCopyImage,
+		).toHaveBeenCalledWith(greyLinen)
+		await expect(args.answerActions?.onOpenImage).not.toHaveBeenCalled()
+
+		menu = await openImageMenu(userEvent, tile, "Grey linen sofa, three seats")
+		await userEvent.click(
+			menu.getByRole("menuitem", { name: "Open in viewer" }),
+		)
+		await expect(args.answerActions?.onOpenImage).toHaveBeenCalledWith(
+			[expect.objectContaining({ id: "0" }), greyLinen],
+			1,
+		)
+	},
+})
+
+export const ImageMenuOnPlainImage = meta.story({
+	tags: ["test-only"],
+	args: { children: PLAIN_IMAGE, answerActions: IMAGE_MENU_ACTIONS },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A plain Markdown image right-clicked, the answer carrying `imageMenu`. Check the `ImageMenu` opens on it and Save to Library hands that image to `imageMenu.onSaveToLibrary`, with the id, name, address and detail the viewer gets for it.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const menu = await openImageMenu(
+			userEvent,
+			canvas.getByRole("button", { name: "Green velvet sofa" }),
+			"Green velvet sofa",
+		)
+		await userEvent.click(
+			menu.getByRole("menuitem", { name: "Save to Library" }),
+		)
+		await expect(
+			args.answerActions?.imageMenu?.onSaveToLibrary,
+		).toHaveBeenCalledWith({
+			id: "https://images.example.org/sofa-green.jpg",
+			name: "Green velvet sofa",
+			src: "https://images.example.org/sofa-green.jpg",
+			detail: "",
+		})
+	},
+})
+
+export const ImageMenuOnSourcedImage = meta.story({
+	tags: ["test-only"],
+	args: { children: SOURCED_IMAGE, answerActions: IMAGE_MENU_ACTIONS },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A sourced image right-clicked, the answer carrying `imageMenu`. Check the `ImageMenu` opens on the picture, that Copy image hands it to `imageMenu.onCopyImage` with the source as its detail, and that Open in viewer hands it alone to `onOpenImage`.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const picture = canvas.getByRole("button", {
+			name: "The Lisbon waterfront at dusk",
+		})
+		const waterfront = {
+			id: "https://images.example.org/lisbon-waterfront.jpg",
+			name: "The Lisbon waterfront at dusk",
+			src: "https://images.example.org/lisbon-waterfront.jpg",
+			detail: "Visit Lisboa",
+		}
+
+		let menu = await openImageMenu(
+			userEvent,
+			picture,
+			"The Lisbon waterfront at dusk",
+		)
+		await userEvent.click(menu.getByRole("menuitem", { name: "Copy image" }))
+		await expect(
+			args.answerActions?.imageMenu?.onCopyImage,
+		).toHaveBeenCalledWith(waterfront)
+
+		menu = await openImageMenu(
+			userEvent,
+			picture,
+			"The Lisbon waterfront at dusk",
+		)
+		await userEvent.click(
+			menu.getByRole("menuitem", { name: "Open in viewer" }),
+		)
+		await expect(args.answerActions?.onOpenImage).toHaveBeenCalledWith(
+			[waterfront],
+			0,
+		)
+	},
+})
+
+export const ImageMenuOnIllustratedList = meta.story({
+	tags: ["test-only"],
+	args: { children: ILLUSTRATED_LIST, answerActions: IMAGE_MENU_ACTIONS },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"An `illustrated-list` block right-clicked on its second picture, the answer carrying `imageMenu`. Check the `ImageMenu` opens on that picture, that Save to Library hands it to `imageMenu.onSaveToLibrary`, and that Open in viewer hands every picture of the list and its index to `onOpenImage`.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const picture = canvas.getByRole("img", { name: "Porto" })
+		const porto = {
+			id: "1",
+			name: "Porto",
+			src: "https://images.example.org/porto.jpg",
+			detail: "",
+		}
+
+		let menu = await openImageMenu(userEvent, picture, "Porto")
+		await userEvent.click(
+			menu.getByRole("menuitem", { name: "Save to Library" }),
+		)
+		await expect(
+			args.answerActions?.imageMenu?.onSaveToLibrary,
+		).toHaveBeenCalledWith(porto)
+
+		menu = await openImageMenu(userEvent, picture, "Porto")
+		await userEvent.click(
+			menu.getByRole("menuitem", { name: "Open in viewer" }),
+		)
+		await expect(args.answerActions?.onOpenImage).toHaveBeenCalledWith(
+			[expect.objectContaining({ name: "Lisbon" }), porto],
+			1,
+		)
+	},
+})
+
+export const ImageMenuOnWebPagePreview = meta.story({
+	tags: ["test-only"],
+	args: { children: WEB_PAGE_WITH_PREVIEW, answerActions: IMAGE_MENU_ACTIONS },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A `web-page` block right-clicked on its preview, the answer carrying `imageMenu`. Check the `ImageMenu` opens on the preview, that Copy image hands it to `imageMenu.onCopyImage` with the host as its detail, and that the menu leaves `onOpenWebPage` alone.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const menu = await openImageMenu(
+			userEvent,
+			canvas.getByRole("img", {
+				name: "Terrace of Casa do Rio over the river",
+			}),
+			"Terrace of Casa do Rio over the river",
+		)
+		await userEvent.click(menu.getByRole("menuitem", { name: "Copy image" }))
+		await expect(
+			args.answerActions?.imageMenu?.onCopyImage,
+		).toHaveBeenCalledWith({
+			id: "https://images.example.org/casa-do-rio.jpg",
+			name: "Terrace of Casa do Rio over the river",
+			src: "https://images.example.org/casa-do-rio.jpg",
+			detail: "casadorio.pt",
+		})
+		await expect(args.answerActions?.onOpenWebPage).not.toHaveBeenCalled()
+	},
+})
+
 const boxOf = (element: Element) => {
 	const { width, height } = element.getBoundingClientRect()
 	return { width, height }
@@ -700,7 +921,7 @@ const ARTBOARD_ACTIONS: MarkdownAnswerActions = {
 	onOpenWebPage: fn(),
 	onToggleChecklistItem: fn(),
 	onCopyChecklist: fn(),
-	onSaveImage: fn(),
+	imageMenu: { onSaveToLibrary: fn() },
 }
 
 const ILLUSTRATED_LIST_ARTBOARD = `## 🍽️ Three tables for 12, near Alfama
@@ -993,7 +1214,7 @@ export const SourcedImageWithSourceDetails = meta.story({
 		docs: {
 			description: {
 				story:
-					"Final page, Markdown 5. A sourced image whose `Source:` line is followed by its `Title:`, `Favicon:`, `Status:` and `Chip:` lines, between a heading and two bullets. Check the heading, the intro, the domain with its favicon, the title, the Free status, both chips and both bullets show with none of the field lines left, Save hands the image address to `onSaveImage`, and the picture still opens.",
+					"Final page, Markdown 5. A sourced image whose `Source:` line is followed by its `Title:`, `Favicon:`, `Status:` and `Chip:` lines, between a heading and two bullets. Check the heading, the intro, the domain with its favicon, the title, the Free status, both chips and both bullets show with none of the field lines left, Save hands the image to `imageMenu.onSaveToLibrary`, and the picture still opens.",
 			},
 		},
 	},
@@ -1035,9 +1256,14 @@ export const SourcedImageWithSourceDetails = meta.story({
 		await userEvent.click(
 			canvas.getByRole("button", { name: "Save the image" }),
 		)
-		await expect(args.answerActions?.onSaveImage).toHaveBeenCalledWith(
-			SOURCED_IMAGE_IMAGE,
-		)
+		await expect(
+			args.answerActions?.imageMenu?.onSaveToLibrary,
+		).toHaveBeenCalledWith({
+			id: SOURCED_IMAGE_IMAGE,
+			name: "The Miradouro da Senhora do Monte at sunset",
+			src: SOURCED_IMAGE_IMAGE,
+			detail: "visitlisboa.example",
+		})
 		await expect(args.answerActions?.onOpenImage).not.toHaveBeenCalled()
 
 		await userEvent.click(

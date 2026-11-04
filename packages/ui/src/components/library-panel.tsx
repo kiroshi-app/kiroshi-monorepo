@@ -18,6 +18,7 @@ import {
 import {
 	LibraryGrid,
 	LibraryGridSkeleton,
+	type LibraryImageActions,
 	type LibraryItem,
 } from "@workspace/ui/components/library-grid"
 import type { LibraryItemActions } from "@workspace/ui/components/library-item-menu"
@@ -178,19 +179,20 @@ const LibraryHeader = ({ actions, filters }: LibraryHeaderProps) => {
 	)
 }
 
-type LibraryPanelProps = LibraryItemActions<LibraryItem> & {
-	state: LibraryPanelState
-	items: LibraryItem[]
-	filter: LibraryFilter
-	onFilterChange: (filter: LibraryFilter) => void
-	onOpenItem: (item: LibraryItem) => void
-	searchQuery?: string
-	onSearchQueryChange?: (query: string) => void
-	onImport?: () => void
-	onNewDocument?: () => void
-	onStartTemplate?: (template: LibraryTemplate) => void
-	overlay?: ReactNode
-}
+type LibraryPanelProps = LibraryItemActions<LibraryItem> &
+	LibraryImageActions & {
+		state: LibraryPanelState
+		items: LibraryItem[]
+		filter: LibraryFilter
+		onFilterChange: (filter: LibraryFilter) => void
+		onOpenItem: (item: LibraryItem) => void
+		searchQuery?: string
+		onSearchQueryChange?: (query: string) => void
+		onImport?: () => void
+		onNewDocument?: () => void
+		onStartTemplate?: (template: LibraryTemplate) => void
+		overlay?: ReactNode
+	}
 
 const LibraryPanel = ({
 	state,

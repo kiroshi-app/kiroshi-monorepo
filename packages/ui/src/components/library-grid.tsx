@@ -2,6 +2,7 @@
 
 import { useTranslation } from "react-i18next"
 
+import type { ImageMenuActions } from "@workspace/ui/components/image-menu"
 import {
 	type LibraryItemActions,
 	LibraryItemContextMenu,
@@ -119,35 +120,51 @@ const LibraryItemCaption = ({ name, detail }: LibraryItemCaptionProps) => {
 	)
 }
 
-type LibraryGridItemProps = LibraryItemActions<LibraryItem> & {
-	item: LibraryItem
-	onPress: (item: LibraryItem) => void
-}
+type LibraryImageActions = Pick<
+	ImageMenuActions<LibraryImageItem>,
+	"onSaveToLibrary" | "onCopyImage"
+>
+
+type LibraryGridItemProps = LibraryItemActions<LibraryItem> &
+	LibraryImageActions & {
+		item: LibraryItem
+		onPress: (item: LibraryItem) => void
+	}
 
 const LibraryGridItem = ({
 	item,
 	onPress,
+	onSaveToLibrary,
+	onCopyImage,
 	...actions
-}: LibraryGridItemProps) => (
-	<LibraryItemContextMenu
-		{...actions}
-		item={item}
-		trigger={
-			<button
-				className="group/library-item flex min-w-0 flex-col gap-2.5 rounded-control text-start focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring focus-visible:outline-offset-2"
-				data-slot="library-item"
-				onClick={(event) => {
-					holdFocusForItsReturn(event.currentTarget)
-					onPress(item)
-				}}
-				type="button"
-			>
-				<LibraryThumbnail item={item} />
-				<LibraryItemCaption detail={item.detail} name={item.name} />
-			</button>
-		}
-	/>
-)
+}: LibraryGridItemProps) => {
+	const trigger = (
+		<button
+			className="group/library-item flex min-w-0 flex-col gap-2.5 rounded-control text-start focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring focus-visible:outline-offset-2"
+			data-slot="library-item"
+			onClick={(event) => {
+				holdFocusForItsReturn(event.currentTarget)
+				onPress(item)
+			}}
+			type="button"
+		>
+			<LibraryThumbnail item={item} />
+			<LibraryItemCaption detail={item.detail} name={item.name} />
+		</button>
+	)
+
+	return item.kind === "image" ? (
+		<LibraryItemContextMenu
+			{...actions}
+			item={item}
+			onCopyImage={onCopyImage}
+			onSaveToLibrary={onSaveToLibrary}
+			trigger={trigger}
+		/>
+	) : (
+		<LibraryItemContextMenu {...actions} item={item} trigger={trigger} />
+	)
+}
 
 type LibraryImportingItemProps = {
 	item: LibraryItem
@@ -195,10 +212,11 @@ const LibraryImportingItem = ({
 	)
 }
 
-type LibraryGridProps = LibraryItemActions<LibraryItem> & {
-	items: LibraryItem[]
-	onOpenItem: (item: LibraryItem) => void
-}
+type LibraryGridProps = LibraryItemActions<LibraryItem> &
+	LibraryImageActions & {
+		items: LibraryItem[]
+		onOpenItem: (item: LibraryItem) => void
+	}
 
 const LibraryGrid = ({
 	items,
@@ -258,6 +276,7 @@ const LibraryGridSkeleton = () => (
 export {
 	LibraryGrid,
 	LibraryGridSkeleton,
+	type LibraryImageActions,
 	type LibraryItem,
 	LibraryPage,
 	SPACE_GROUND,

@@ -1,6 +1,13 @@
 import { useTranslation } from "react-i18next"
 
-import type { AnswerImage } from "@workspace/ui/components/answer-blocks/answer-image"
+import {
+	type AnswerImage,
+	accessibleNameOf,
+} from "@workspace/ui/components/answer-blocks/answer-image"
+import {
+	ImageMenu,
+	type ImageMenuActions,
+} from "@workspace/ui/components/image-menu"
 import { cn } from "@workspace/ui/lib/utils"
 
 type WebPageCardProps = {
@@ -8,6 +15,7 @@ type WebPageCardProps = {
 	title: string
 	preview?: AnswerImage
 	onOpen?: () => void
+	imageMenu?: ImageMenuActions<AnswerImage>
 	className?: string
 }
 
@@ -16,6 +24,7 @@ const WebPageCard = ({
 	title,
 	preview,
 	onOpen,
+	imageMenu,
 	className,
 }: WebPageCardProps) => {
 	const { t } = useTranslation("chat")
@@ -30,10 +39,17 @@ const WebPageCard = ({
 			)}
 		>
 			{preview ? (
-				<img
-					src={preview.src}
-					alt={preview.alt ?? ""}
-					className="h-50 w-full object-cover"
+				<ImageMenu
+					{...imageMenu}
+					item={preview}
+					name={accessibleNameOf(preview, title)}
+					trigger={
+						<img
+							src={preview.src}
+							alt={preview.alt ?? ""}
+							className="h-50 w-full object-cover"
+						/>
+					}
 				/>
 			) : null}
 			<div

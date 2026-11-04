@@ -350,6 +350,62 @@ export const GridActionsPerItem = meta.story({
 	},
 })
 
+export const GridImageMenu = meta.story({
+	args: {
+		onOpen: fn(),
+		onDelete: fn(),
+		onSaveToLibrary: fn(),
+		onCopyImage: fn(),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"An image and a document right-clicked in one grid, item actions and the image actions given. Check that the image menu lists the item actions, then Save to Library and Copy image under one rule, that Copy image hands the image item to `onCopyImage`, and that the document menu lists the item actions alone.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const menuOf = async (name: string) => {
+			await userEvent.pointer({
+				keys: "[MouseRight]",
+				target: canvas.getByRole("button", { name: new RegExp(name) }),
+			})
+			return within(document.body).findByRole("menu", {
+				name: `Actions for ${name}`,
+			})
+		}
+		const entriesOf = (menu: HTMLElement) =>
+			within(menu)
+				.getAllByRole("menuitem")
+				.map((entry) => entry.textContent)
+
+		const imageMenu = await menuOf("hero-dunes.png")
+		await expect(entriesOf(imageMenu)).toEqual([
+			"Open",
+			"Delete",
+			"Save to Library",
+			"Copy image",
+		])
+		await expect(
+			within(imageMenu).getByRole("menuitem", { name: "Save to Library" })
+				.previousElementSibling,
+		).toHaveAttribute("role", "separator")
+		await userEvent.click(
+			within(imageMenu).getByRole("menuitem", { name: "Copy image" }),
+		)
+		await expect(args.onCopyImage).toHaveBeenCalledWith(LIBRARY_ITEMS[0])
+		await waitFor(() =>
+			expect(within(document.body).queryByRole("menu")).toBe(null),
+		)
+
+		await expect(entriesOf(await menuOf("Spring launch brief"))).toEqual([
+			"Open",
+			"Delete",
+		])
+	},
+})
+
 export const GridWithoutItemActions = meta.story({
 	tags: ["test-only"],
 	parameters: {

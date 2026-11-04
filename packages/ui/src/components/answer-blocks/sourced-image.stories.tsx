@@ -21,7 +21,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"One picture the agent found, with the site it came from over its corner, a title and a row of chips under it. Reach for it when the answer is about a single place or object the reader recognises by sight; `Gallery` covers several pictures of the same thing. The save button shows only when `onSave` is passed.",
+					"One picture the agent found, with the site it came from over its corner, a title and a row of chips under it. Reach for it when the answer is about a single place or object the reader recognises by sight; `Gallery` covers several pictures of the same thing. The save button shows only when `imageMenu` carries `onSaveToLibrary`, and hands it the picture.",
 			},
 		},
 	},
@@ -31,7 +31,7 @@ const meta = preview.meta({
 		source: { domain: "casadorio.pt", favicon: CASA_DO_RIO_FAVICON },
 		status: "Open now",
 		chips: ["€€", "Seafood", "4.6 rating"],
-		onSave: fn(),
+		imageMenu: { onSaveToLibrary: fn() },
 	},
 	render: (args) => (
 		<AgentAnswerFrame intro="This is the place I had in mind for Saturday dinner.">
@@ -46,7 +46,7 @@ export const InAgentAnswer = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard 5. The picture carries no alt text, so it takes the title as its name. Check the status chip leads in the success token and the save button reaches `onSave`.",
+					"Artboard 5. The picture carries no alt text, so it takes the title as its name. Check the status chip leads in the success token and the save button hands the picture to `imageMenu.onSaveToLibrary`.",
 			},
 		},
 	},
@@ -62,7 +62,9 @@ export const InAgentAnswer = meta.story({
 		await userEvent.click(
 			canvas.getByRole("button", { name: "Save the image" }),
 		)
-		await expect(args.onSave).toHaveBeenCalledOnce()
+		await expect(args.imageMenu?.onSaveToLibrary).toHaveBeenCalledWith(
+			args.image,
+		)
 	},
 })
 
