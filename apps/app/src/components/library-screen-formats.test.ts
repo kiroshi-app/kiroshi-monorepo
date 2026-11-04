@@ -82,8 +82,7 @@ vi.mock("@/lib/host/index", async (importOriginal) => {
 			? (answer(args as LibraryCall) as T)
 			: actual.invoke<T>(...call)
 	}
-	const listen = (() =>
-		Promise.resolve(() => undefined)) as unknown as typeof actual.listen
+	const listen: typeof actual.listen = () => Promise.resolve(() => undefined)
 	return {
 		...actual,
 		invoke,
