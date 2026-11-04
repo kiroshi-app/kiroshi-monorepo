@@ -2449,8 +2449,9 @@ const toggledTwice = (
 	command: StateCommand,
 	before: string,
 	after: string,
+	name = "the same action twice",
 ): FormatStep => ({
-	name: "the same action twice",
+	name,
 	before,
 	actions: [
 		[command, after],
@@ -2488,10 +2489,15 @@ const formatStory = (
 	},
 })
 
+const PUNCTUATION_AFTER_WORD = "Hello‹, world›"
+
+const PUNCTUATION_BEFORE_WORD = "Read ‹the brief.›Then ship."
+
 const inlineSteps =
 	(marker: string) =>
 	(command: StateCommand): FormatStep[] => {
 		const wrap = (text: string) => `${marker}${text}${marker}`
+		const isFlanked = marker !== "`"
 		return [
 			once(
 				"a word",
@@ -2533,11 +2539,25 @@ const inlineSteps =
 				"Ship the ‹launch› today.",
 				`Ship the ${wrap("‹launch›")} today.`,
 			),
+			toggledTwice(
+				command,
+				PUNCTUATION_AFTER_WORD,
+				isFlanked ? wrap("Hello‹, world›") : `Hello${wrap("‹, world›")}`,
+				"a selection starting on punctuation after a word, twice",
+			),
+			toggledTwice(
+				command,
+				PUNCTUATION_BEFORE_WORD,
+				isFlanked
+					? `Read ${wrap("‹the brief.›Then")} ship.`
+					: `Read ${wrap("‹the brief.›")}Then ship.`,
+				"a selection ending on punctuation before a word, twice",
+			),
 		]
 	}
 
 const INLINE_STORY =
-	"Run from the editor handle on a fresh document per step: a word, a partial word, a mixed selection with spaces at both ends, two paragraphs, select-all twice, and the same action twice, each undone in one step. Check the markdown and the selection before and after every action and every undo, that only markers change, that spaces stay outside them, and that no `SelectionActions` prop is called."
+	"Run from the editor handle on a fresh document per step: a word, a partial word, a mixed selection with spaces at both ends, two paragraphs, select-all twice, the same action twice, and a selection starting on punctuation after a word or ending on punctuation before one, pressed twice, each undone in one step. Check the markdown and the selection before and after every action and every undo, that only markers change, that spaces stay outside them, that a marker beside punctuation widens to the whole word so the format still reads, and that no `SelectionActions` prop is called."
 
 export const FormatBold = meta.story({
 	...formatStory(toggleBold, INLINE_STORY, inlineSteps("**")),
@@ -2605,13 +2625,29 @@ const linkSteps = (command: StateCommand): FormatStep[] => {
 				[unlink, "Read the ‹brief› today."],
 			],
 		},
+		{
+			name: "a selection starting on punctuation after a word, then an empty url",
+			before: PUNCTUATION_AFTER_WORD,
+			actions: [
+				[command, `Hello${linked("‹, world›")}`],
+				[unlink, PUNCTUATION_AFTER_WORD],
+			],
+		},
+		{
+			name: "a selection ending on punctuation before a word, then an empty url",
+			before: PUNCTUATION_BEFORE_WORD,
+			actions: [
+				[command, `Read ${linked("‹the brief.›")}Then ship.`],
+				[unlink, PUNCTUATION_BEFORE_WORD],
+			],
+		},
 	]
 }
 
 export const FormatLink = meta.story({
 	...formatStory(
 		setLink(BRIEF_URL),
-		"Run from the editor handle on a fresh document per step: a word, a partial word, a selection holding another link with spaces at both ends, two paragraphs, select-all then an empty url, and the same url twice then an empty url, each undone in one step. Check the markdown and the selection before and after every action and every undo, that a second identical link changes nothing, that an empty url removes the link and keeps its text, and that `onLink` is never called.",
+		"Run from the editor handle on a fresh document per step: a word, a partial word, a selection holding another link with spaces at both ends, two paragraphs, select-all then an empty url, the same url twice then an empty url, and a selection starting on punctuation after a word or ending on punctuation before one, each undone in one step. Check the markdown and the selection before and after every action and every undo, that a second identical link changes nothing, that an empty url removes the link and keeps its text, and that `onLink` is never called.",
 		linkSteps,
 	),
 })
@@ -2843,4 +2879,72 @@ export const FormatCodeBlock = meta.story({
 		"Run from the editor handle on a fresh document per step: a word, a partial word, lines reaching into a fence, two paragraphs, select-all twice, and the same action twice, each undone in one step. Check the markdown and the selection before and after every action and every undo, that lines outside a fence get one fence, that lines inside one lose it, and that no `SelectionActions` prop is called.",
 		codeBlockSteps,
 	),
+})
+
+const PRESSED_DOCUMENT = [
+	"**First note.**",
+	"**Second note.**",
+	"Third note.",
+	"# Launch plan",
+	"1. Draft the notes",
+	"## Decisions",
+	"- Ship it",
+].join("\n\n")
+
+const pressedButtonsIn = (canvasElement: HTMLElement) => {
+	const toolbar = within(canvasElement).getByRole("toolbar", {
+		name: "Format",
+	})
+	return within(toolbar)
+		.getAllByRole("button")
+		.filter((button) => button.getAttribute("aria-pressed") === "true")
+		.map((button) => button.getAttribute("aria-label"))
+}
+
+const PRESSED_CASES: [
+	name: string,
+	from: string,
+	to: string,
+	pressed: string[],
+][] = [
+	[
+		"a fully formatted two-paragraph selection",
+		"**First",
+		"Second note.**",
+		["Bold"],
+	],
+	["a mixed two-paragraph selection", "**Second", "Third note.", []],
+	["an H1 line", "Launch", "Launch plan", []],
+	["a numbered line", "Draft", "Draft the notes", []],
+	["an H2 line", "Decisions", "Decisions", ["Heading"]],
+	["a bullet line", "Ship", "Ship it", ["List"]],
+]
+
+export const ToolbarPressedState = meta.story({
+	tags: ["test-only"],
+	args: {
+		...LAUNCH_REVIEW,
+		body: PRESSED_DOCUMENT,
+		template: undefined,
+		...SELECTION_ACTIONS,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The toolbar over selections its buttons would treat differently. Check that a button shows pressed exactly when pressing it would remove its format: Bold over two fully bold paragraphs, nothing over one bold and one plain paragraph, nothing on an H1 or a numbered line since Heading toggles H2 and List a bullet list, Heading on an H2 line and List on a bullet line.",
+			},
+		},
+	},
+	play: async ({ canvasElement, step }) => {
+		for (const [name, from, to, pressed] of PRESSED_CASES)
+			await step(name, async () => {
+				const text = textIn(canvasElement)
+				const start = text.indexOf(from)
+				selectRange(canvasElement, start, text.indexOf(to) + to.length)
+				await waitFor(() =>
+					expect(pressedButtonsIn(canvasElement)).toEqual(pressed),
+				)
+			})
+	},
 })

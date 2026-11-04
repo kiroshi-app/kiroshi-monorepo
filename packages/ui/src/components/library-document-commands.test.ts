@@ -10,8 +10,9 @@ import {
 import { describe, expect, it } from "vitest"
 
 import {
-	inlineFormatsOf,
+	isFormatOn,
 	isFormatToRemove,
+	selectedLinkOf,
 	setLink,
 	toggleBold,
 	toggleBulletList,
@@ -305,21 +306,103 @@ describe("toggleCodeBlock", () => {
 	})
 })
 
-describe("inlineFormatsOf", () => {
-	it("names the formats carrying the selection, with the link url", () => {
-		const state = stateOf("We met on **the [‹brief›](https://k.app/b) date**.")
-		expect(inlineFormatsOf(state, state.selection.main)).toEqual({
-			formats: ["bold", "link"],
-			link: "https://k.app/b",
+const INLINE_COMMANDS: [name: string, command: StateCommand][] = [
+	["bold", toggleBold],
+	["italic", toggleItalic],
+	["strikethrough", toggleStrikethrough],
+	["inline code", toggleInlineCode],
+]
+
+const PUNCTUATION_CASES = [
+	"Hello‹, world›",
+	"Read ‹the brief.›Then ship.",
+	"Ship ‹(soon)›now",
+	"a‹,›b",
+	'Say ‹"yes"›please',
+	"‹done!›",
+	"end‹.›",
+	"snake‹_case›name",
+]
+
+const BESIDE_FORMAT_CASES = [
+	"**a**‹b›",
+	"‹a›**b**",
+	"*a*‹b›",
+	"~~a~~‹b›",
+	"`a`‹b›",
+	"**bold**‹ text›",
+	"*it*‹ and› more",
+	"‹Ship› the **launch**",
+]
+
+describe.each(INLINE_COMMANDS)(
+	"%s beside punctuation and other formats",
+	(_, command) => {
+		it.each([...PUNCTUATION_CASES, ...BESIDE_FORMAT_CASES])(
+			"reads the format over every character of %s",
+			(marked) => {
+				const formattedState = stateOf(run(marked, command).shown)
+				expect(isFormatOn(formattedState, command)).toBe(true)
+			},
+		)
+
+		it.each(PUNCTUATION_CASES)("restores %s on a second press", (marked) => {
+			expect(formatted(formatted(marked, command), command)).toBe(marked)
 		})
+	},
+)
+
+describe("a run of the same format touching the selection", () => {
+	it("merges into one run instead of doubling the markers", () => {
+		expect(formatted("**a**‹b›", toggleBold)).toBe("**a‹b›**")
+		expect(formatted("‹a›~~b~~", toggleStrikethrough)).toBe("~~‹a›b~~")
+	})
+})
+
+describe("flanking", () => {
+	it("widens the markers to the word a punctuation edge touches", () => {
+		expect(formatted("Hello‹, world›", toggleBold)).toBe("**Hello‹, world›**")
+		expect(formatted("Read ‹the brief.›Then ship.", toggleItalic)).toBe(
+			"Read *‹the brief.›Then* ship.",
+		)
+		expect(formatted("Hello‹, world›", toggleInlineCode)).toBe(
+			"Hello`‹, world›`",
+		)
+	})
+})
+
+describe("isFormatOn", () => {
+	it("agrees with the inline command over a selection of several paragraphs", () => {
+		const bold = stateOf("‹**First note.**\n\n**Second note.**›")
+		expect(isFormatOn(bold, toggleBold)).toBe(true)
+		expect(isFormatOn(bold, toggleItalic)).toBe(false)
+		expect(
+			isFormatOn(stateOf("‹**First note.**\n\nSecond note.›"), toggleBold),
+		).toBe(false)
 	})
 
-	it("names nothing for a selection reaching outside every format", () => {
-		const state = stateOf("We ‹met on **the brief** date›.")
-		expect(inlineFormatsOf(state, state.selection.main)).toEqual({
-			formats: [],
-			link: undefined,
-		})
+	it("answers for the heading level and the list kind the command toggles", () => {
+		expect(isFormatOn(stateOf("## ‹Plan›"), toggleHeading2)).toBe(true)
+		expect(isFormatOn(stateOf("# ‹Plan›"), toggleHeading2)).toBe(false)
+		expect(isFormatOn(stateOf("- ‹Draft›"), toggleBulletList)).toBe(true)
+		expect(isFormatOn(stateOf("1. ‹Draft›"), toggleBulletList)).toBe(false)
+		expect(isFormatOn(stateOf("1. ‹Draft›"), toggleNumberedList)).toBe(true)
+	})
+})
+
+describe("selectedLinkOf", () => {
+	it("gives the url of the link carrying the selection", () => {
+		expect(
+			selectedLinkOf(
+				stateOf("We met on **the [‹brief›](https://k.app/b) date**."),
+			),
+		).toEqual({ url: "https://k.app/b" })
+	})
+
+	it("gives nothing for a selection reaching outside every link", () => {
+		expect(
+			selectedLinkOf(stateOf("We ‹met on [the brief](https://k.app/b)›.")),
+		).toBe(undefined)
 	})
 })
 

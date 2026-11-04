@@ -1457,6 +1457,7 @@ navigation-librarydocumenteditor--title-focused-by-rename
 navigation-librarydocumenteditor--title-restored-after-refused-rename
 navigation-librarydocumenteditor--toolbar-after-drag
 navigation-librarydocumenteditor--toolbar-after-keyboard-selection
+navigation-librarydocumenteditor--toolbar-pressed-state
 navigation-librarydocumenteditor--undo-after-outside-edit
 navigation-librarydocumenteditor--with-typed-text
 navigation-librarydocumenteditor--write-failure

@@ -59,7 +59,8 @@ import {
 	type WriterActions,
 } from "@workspace/ui/components/library-document-agents"
 import {
-	inlineFormatsOf,
+	isFormatOn,
+	selectedLinkOf,
 	setLink,
 	toggleBold,
 	toggleBulletList,
@@ -835,24 +836,26 @@ const anchorOf = (
 	}
 }
 
-const lineFormatsAt = (state: EditorState, at: number) => {
-	const formats = new Set<SelectionToolbarFormat>()
-	for (
-		let node: SyntaxNode | null = syntaxTree(state).resolveInner(at, 1);
-		node;
-		node = node.parent
-	) {
-		if (node.name.startsWith("ATXHeading")) formats.add("heading")
-		if (node.name === "ListItem") formats.add("list")
-	}
-	return [...formats]
+type CommandFormat = Exclude<SelectionToolbarFormat, "link">
+
+const TOOLBAR_COMMANDS: Record<CommandFormat, StateCommand> = {
+	bold: toggleBold,
+	italic: toggleItalic,
+	strikethrough: toggleStrikethrough,
+	code: toggleInlineCode,
+	heading: toggleHeading2,
+	list: toggleBulletList,
 }
 
-const formatsOf = (state: EditorState, from: number, to: number) => {
-	const line = state.doc.lineAt(from)
-	if (to > line.to) return { formats: [], link: undefined }
-	const { formats, link } = inlineFormatsOf(state, state.selection.main)
-	return { formats: [...formats, ...lineFormatsAt(state, line.from)], link }
+const formatsOf = (state: EditorState) => {
+	const link = selectedLinkOf(state)
+	const formats: SelectionToolbarFormat[] = Object.entries(TOOLBAR_COMMANDS)
+		.filter(([, command]) => isFormatOn(state, command))
+		.map(([format]) => format as CommandFormat)
+	return {
+		formats: link ? [...formats, "link" as const] : formats,
+		link: link?.url,
+	}
 }
 
 const NO_WRITERS: LibraryDocumentWriter[] = []
@@ -1069,7 +1072,7 @@ const LibraryDocumentEditor = ({
 						from,
 						to,
 						anchor: anchorOf(view, from, to, frame.current),
-						...formatsOf(view.state, from, to),
+						...formatsOf(view.state),
 					}
 				: undefined
 		if (isHeldByToolbar && (!selected || !next)) return
@@ -1284,40 +1287,23 @@ const LibraryDocumentEditor = ({
 	const barItem = useMemo(() => ({ name: shownName }), [shownName])
 
 	const toolbarFor = ({ anchor, formats, link }: SelectedText) => {
-		const onRange = (command: StateCommand) => () => runFormat(command)
-		const isOn = (format: SelectionToolbarFormat) => formats.includes(format)
+		const action = (name: CommandFormat) => ({
+			name,
+			isOn: formats.includes(name),
+			onPress: () => runFormat(TOOLBAR_COMMANDS[name]),
+		})
 		return (
 			<SelectionToolbar
 				actions={[
-					{ name: "bold", isOn: isOn("bold"), onPress: onRange(toggleBold) },
-					{
-						name: "italic",
-						isOn: isOn("italic"),
-						onPress: onRange(toggleItalic),
-					},
-					{
-						name: "strikethrough",
-						isOn: isOn("strikethrough"),
-						onPress: onRange(toggleStrikethrough),
-					},
-					{
-						name: "code",
-						isOn: isOn("code"),
-						onPress: onRange(toggleInlineCode),
-					},
+					action("bold"),
+					action("italic"),
+					action("strikethrough"),
+					action("code"),
 					SELECTION_TOOLBAR_SEPARATOR,
-					{ name: "link", isOn: isOn("link") },
+					{ name: "link", isOn: formats.includes("link") },
 					SELECTION_TOOLBAR_SEPARATOR,
-					{
-						name: "heading",
-						isOn: isOn("heading"),
-						onPress: onRange(toggleHeading2),
-					},
-					{
-						name: "list",
-						isOn: isOn("list"),
-						onPress: onRange(toggleBulletList),
-					},
+					action("heading"),
+					action("list"),
 				]}
 				anchor={anchor}
 				isLinking={toolbarMode === "link"}

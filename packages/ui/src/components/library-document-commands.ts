@@ -28,6 +28,7 @@ type InlineMarkers = {
 	node: string
 	open: string
 	close: string
+	isFlanked: boolean
 }
 
 type ListMark = Span & {
@@ -88,6 +89,11 @@ const treeOf = (state: EditorState) =>
 	syntaxTree(state)
 
 const isSpace = (character: string) => character === " " || character === "\t"
+
+const PUNCTUATION = /[\p{P}\p{S}]/u
+
+const isWordCharacter = (character: string) =>
+	character !== "" && !/\s/.test(character) && !PUNCTUATION.test(character)
 
 const spacesEndFrom = (state: EditorState, at: number, to: number) => {
 	let end = at
@@ -228,19 +234,50 @@ const isCarried = (state: EditorState, segment: Span, node: string) => {
 	return true
 }
 
+const touches = (first: Span, second: Span) =>
+	first.from <= second.to && second.from <= first.to
+
 const isSplitBy = (run: InlineRun, span: Span, node: string) => {
-	if (run.node.name === node) return overlaps(run, span) && !contains(span, run)
+	if (run.node.name === node) return touches(run, span) && !contains(span, run)
 	if (!isInside(run, span.from) && !isInside(run, span.to)) return false
 	if (ATOMIC_RUNS.has(run.node.name)) return true
 	return !contains({ from: run.contentFrom, to: run.contentTo }, span)
 }
 
-const spanToFormat = (state: EditorState, segment: Span, node: string) => {
+const openingFlankedAt = (state: EditorState, at: number) => {
+	if (!PUNCTUATION.test(state.sliceDoc(at, at + 1))) return at
+	const { from } = state.doc.lineAt(at)
+	let start = at
+	while (start > from && isWordCharacter(state.sliceDoc(start - 1, start)))
+		start--
+	return start
+}
+
+const closingFlankedAt = (state: EditorState, at: number) => {
+	if (!PUNCTUATION.test(state.sliceDoc(at - 1, at))) return at
+	const { to } = state.doc.lineAt(at)
+	let end = at
+	while (end < to && isWordCharacter(state.sliceDoc(end, end + 1))) end++
+	return end
+}
+
+const flanked = (state: EditorState, span: Span): Span => ({
+	from: openingFlankedAt(state, span.from),
+	to: closingFlankedAt(state, span.to),
+})
+
+const spanToFormat = (
+	state: EditorState,
+	segment: Span,
+	{ node, isFlanked }: InlineMarkers,
+) => {
 	let span = segment
 	for (;;) {
 		const split = runsIn(state, span).find((run) => isSplitBy(run, span, node))
-		if (!split) return span
-		span = union(span, split)
+		const widened = isFlanked ? flanked(state, span) : span
+		const next = split ? union(widened, split) : widened
+		if (next.from === span.from && next.to === span.to) return span
+		span = next
 	}
 }
 
@@ -259,7 +296,7 @@ const wrapped = (
 	segment: Span,
 	markers: InlineMarkers,
 ): Change[] => {
-	const span = spanToFormat(state, segment, markers.node)
+	const span = spanToFormat(state, segment, markers)
 	const carried = runsIn(state, span).filter(
 		(run) => run.node.name === markers.node && contains(span, run),
 	)
@@ -323,30 +360,62 @@ const dispatchFormat = (
 	return true
 }
 
-const toggledInline =
-	(node: string, marker: string): StateCommand =>
-	(target) => {
-		const { state } = target
-		const segments = segmentsOfSelection(state)
-		if (segments.length === 0) return false
-		const isRemoval = isFormatToRemove(
-			segments.map((segment) => isCarried(state, segment, node)),
-		)
-		const changes = isRemoval
-			? runsCarrying(state, segments, node).flatMap(unwrapped)
-			: segments.flatMap((segment) =>
-					wrapped(state, segment, { node, open: marker, close: marker }),
-				)
-		return dispatchFormat(target, changes)
-	}
+const removalChecks = new WeakMap<
+	StateCommand,
+	(state: EditorState) => boolean
+>()
 
-const toggleBold = toggledInline("StrongEmphasis", "**")
+const withRemovalCheck = (
+	command: StateCommand,
+	isRemoval: (state: EditorState) => boolean,
+) => {
+	removalChecks.set(command, isRemoval)
+	return command
+}
 
-const toggleItalic = toggledInline("Emphasis", "*")
+const isFormatOn = (state: EditorState, command: StateCommand) =>
+	removalChecks.get(command)?.(state) ?? false
 
-const toggleStrikethrough = toggledInline("Strikethrough", "~~")
+const isEverySegmentCarried = (
+	state: EditorState,
+	segments: Span[],
+	node: string,
+) =>
+	segments.length > 0 &&
+	isFormatToRemove(segments.map((segment) => isCarried(state, segment, node)))
 
-const toggleInlineCode = toggledInline("InlineCode", "`")
+const toggledInline = (
+	node: string,
+	marker: string,
+	isFlanked: boolean,
+): StateCommand =>
+	withRemovalCheck(
+		(target) => {
+			const { state } = target
+			const segments = segmentsOfSelection(state)
+			if (segments.length === 0) return false
+			const changes = isEverySegmentCarried(state, segments, node)
+				? runsCarrying(state, segments, node).flatMap(unwrapped)
+				: segments.flatMap((segment) =>
+						wrapped(state, segment, {
+							node,
+							open: marker,
+							close: marker,
+							isFlanked,
+						}),
+					)
+			return dispatchFormat(target, changes)
+		},
+		(state) => isEverySegmentCarried(state, segmentsOfSelection(state), node),
+	)
+
+const toggleBold = toggledInline("StrongEmphasis", "**", true)
+
+const toggleItalic = toggledInline("Emphasis", "*", true)
+
+const toggleStrikethrough = toggledInline("Strikethrough", "~~", true)
+
+const toggleInlineCode = toggledInline("InlineCode", "`", false)
 
 const linkTargetOf = (url: string) =>
 	url.trim().replace(/[\s()]/g, encodeURIComponent)
@@ -367,16 +436,14 @@ const setLink =
 		const links = runsCarrying(state, segments, "Link")
 		if (destination === "")
 			return dispatchFormat(target, links.flatMap(unwrapped))
-		const isEveryPartLinked = isFormatToRemove(
-			segments.map((segment) => isCarried(state, segment, "Link")),
-		)
-		const changes = isEveryPartLinked
+		const changes = isEverySegmentCarried(state, segments, "Link")
 			? links.map((run) => relinked(run, destination))
 			: segments.flatMap((segment) =>
 					wrapped(state, segment, {
 						node: "Link",
 						open: "[",
 						close: `](${destination})`,
+						isFlanked: false,
 					}),
 				)
 		return dispatchFormat(target, changes)
@@ -394,19 +461,24 @@ const shapesOfSelection = (state: EditorState) => {
 	)
 }
 
-const toggledLines =
-	(format: LineFormat): StateCommand =>
-	(target) => {
-		const groups = shapesOfSelection(target.state)
-		const shapes = groups.flat()
-		if (shapes.length === 0) return false
-		const changes = isFormatToRemove(shapes.map(format.has))
-			? shapes.flatMap(format.removed)
-			: groups.flatMap((group) =>
-					group.flatMap((shape, index) => format.added(shape, index)),
-				)
-		return dispatchFormat(target, changes)
-	}
+const isEveryLineCarried = (shapes: LineShape[], format: LineFormat) =>
+	shapes.length > 0 && isFormatToRemove(shapes.map(format.has))
+
+const toggledLines = (format: LineFormat): StateCommand =>
+	withRemovalCheck(
+		(target) => {
+			const groups = shapesOfSelection(target.state)
+			const shapes = groups.flat()
+			if (shapes.length === 0) return false
+			const changes = isEveryLineCarried(shapes, format)
+				? shapes.flatMap(format.removed)
+				: groups.flatMap((group) =>
+						group.flatMap((shape, index) => format.added(shape, index)),
+					)
+			return dispatchFormat(target, changes)
+		},
+		(state) => isEveryLineCarried(shapesOfSelection(state).flat(), format),
+	)
 
 const inserted = (at: number, insert: string): Change => ({
 	from: at,
@@ -574,37 +646,17 @@ const toggleCodeBlock: StateCommand = (target) => {
 	return dispatchFormat(target, changes)
 }
 
-type InlineToolbarFormat = "bold" | "italic" | "strikethrough" | "code" | "link"
-
-const INLINE_FORMAT_NODES: [format: InlineToolbarFormat, node: string][] = [
-	["bold", "StrongEmphasis"],
-	["italic", "Emphasis"],
-	["strikethrough", "Strikethrough"],
-	["code", "InlineCode"],
-	["link", "Link"],
-]
-
-const inlineFormatsOf = (state: EditorState, range: SelectionRange) => {
-	const segments = segmentsOf(state, range)
-	const formats = INLINE_FORMAT_NODES.flatMap(([format, node]) =>
-		segments.length > 0 &&
-		isFormatToRemove(segments.map((segment) => isCarried(state, segment, node)))
-			? [format]
-			: [],
-	)
-	const [link] = formats.includes("link")
-		? runsCarrying(state, segments, "Link")
-		: []
-	const url = link?.node.getChild("URL")
-	return {
-		formats,
-		link: url ? state.sliceDoc(url.from, url.to) : undefined,
-	}
+const selectedLinkOf = (state: EditorState) => {
+	const segments = segmentsOfSelection(state)
+	if (!isEverySegmentCarried(state, segments, "Link")) return undefined
+	const url = runsCarrying(state, segments, "Link")[0]?.node.getChild("URL")
+	return { url: url ? state.sliceDoc(url.from, url.to) : "" }
 }
 
 export {
-	inlineFormatsOf,
+	isFormatOn,
 	isFormatToRemove,
+	selectedLinkOf,
 	setLink,
 	toggleBold,
 	toggleBulletList,
