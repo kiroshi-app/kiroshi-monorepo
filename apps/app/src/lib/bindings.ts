@@ -54,6 +54,7 @@ export const commands = {
 	libraryRenameDocument: (spaceId: string, name: string, newName: string) => typedError<LibraryItem, LibraryError>(__TAURI_INVOKE("library_rename_document", { spaceId, name, newName })),
 	librarySaveMessage: (conversationId: string, messageId: string) => typedError<LibraryItem, LibraryError>(__TAURI_INVOKE("library_save_message", { conversationId, messageId })),
 	libraryDelete: (spaceId: string, name: string) => typedError<null, LibraryError>(__TAURI_INVOKE("library_delete", { spaceId, name })),
+	libraryReadLinkPreview: (url: string) => typedError<LibraryLinkPreview_Serialize, LibraryLinkPreviewError>(__TAURI_INVOKE("library_read_link_preview", { url })),
 	badgeSet: (count: number) => typedError<null, string>(__TAURI_INVOKE("badge_set", { count })),
 	claudeImportInventory: () => typedError<ClaudeInventory, TranscriptStoreError>(__TAURI_INVOKE("claude_import_inventory")),
 	claudeImportRun: (selection: string[], spaceId: string) => typedError<ClaudeImportOutcome[], TranscriptStoreError>(__TAURI_INVOKE("claude_import_run", { selection, spaceId })),
@@ -1256,6 +1257,26 @@ export type LibraryItem = {
 };
 
 export type LibraryItemKind = "image" | "document";
+
+export type LibraryLinkPreview = LibraryLinkPreview_Serialize | LibraryLinkPreview_Deserialize;
+
+export type LibraryLinkPreviewError = { kind: "unsupportedScheme" } | { kind: "notAPage" } | { kind: "networkFailure"; status: number | null };
+
+export type LibraryLinkPreview_Deserialize = {
+	url: string,
+	title: string,
+	site: string,
+	image?: string,
+	alt?: string,
+};
+
+export type LibraryLinkPreview_Serialize = {
+	url: string,
+	title: string,
+	site: string,
+	image?: string,
+	alt?: string,
+};
 
 export type LibraryTemplate = {
 	id: string,

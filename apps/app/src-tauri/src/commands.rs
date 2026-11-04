@@ -115,6 +115,7 @@ fn commands<R: Runtime>() -> Commands<R> {
 		library::commands::library_rename_document::<tauri::Wry>,
 		library::commands::library_save_message::<tauri::Wry>,
 		library::commands::library_delete::<tauri::Wry>,
+		library::link_preview::commands::library_read_link_preview,
 		badge::commands::badge_set::<tauri::Wry>,
 		claude_import::commands::claude_import_inventory,
 		claude_import::commands::claude_import_run::<tauri::Wry>,

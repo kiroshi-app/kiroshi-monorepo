@@ -2,6 +2,7 @@ pub mod commands;
 pub mod contract;
 mod documents;
 pub mod host;
+pub mod link_preview;
 pub(crate) mod presence;
 mod templates;
 

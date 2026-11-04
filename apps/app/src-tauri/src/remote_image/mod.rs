@@ -18,25 +18,43 @@ pub(crate) const MAX_BYTES: u64 = 20 * 1024 * 1024;
 const MAX_REDIRECTS: usize = 5;
 const READ_BOUND: Duration = Duration::from_secs(30);
 
+pub(crate) enum FetchRefusal {
+	UnsupportedScheme,
+	NetworkFailure { status: Option<u16> },
+}
+
+impl From<reqwest::Error> for FetchRefusal {
+	fn from(error: reqwest::Error) -> Self {
+		FetchRefusal::NetworkFailure { status: error.status().map(|status| status.as_u16()) }
+	}
+}
+
 pub(crate) async fn read(
 	url: &str,
 	proxy_bearers: &HashMap<String, String>,
 	within: Duration,
 ) -> Result<RemoteImage, RemoteImageError> {
-	let url = Url::parse(url).map_err(|_| RemoteImageError::UnsupportedScheme)?;
+	tokio::time::timeout(within, async { image_of(fetched(url, proxy_bearers).await?).await })
+		.await
+		.unwrap_or(Err(RemoteImageError::NetworkFailure { status: None }))
+}
+
+pub(crate) async fn fetched(
+	url: &str,
+	proxy_bearers: &HashMap<String, String>,
+) -> Result<Response, FetchRefusal> {
+	let url = Url::parse(url).map_err(|_| FetchRefusal::UnsupportedScheme)?;
 	bearer_admitted(&url, proxy_bearers)?;
 	installed_tls_provider();
 	let client = Client::builder().redirect(redirect::Policy::none()).build()?;
-	tokio::time::timeout(within, followed(&client, url, proxy_bearers))
-		.await
-		.unwrap_or(Err(RemoteImageError::NetworkFailure { status: None }))
+	followed(&client, url, proxy_bearers).await
 }
 
 async fn followed(
 	client: &Client,
 	mut url: Url,
 	proxy_bearers: &HashMap<String, String>,
-) -> Result<RemoteImage, RemoteImageError> {
+) -> Result<Response, FetchRefusal> {
 	let mut redirects = 0;
 	loop {
 		let response = sent(client, &url, bearer_admitted(&url, proxy_bearers)?).await?;
@@ -45,7 +63,7 @@ async fn followed(
 				url = next;
 				redirects += 1;
 			}
-			_ => return image_of(response).await,
+			_ => return Ok(response),
 		}
 	}
 }
@@ -53,19 +71,15 @@ async fn followed(
 fn bearer_admitted<'a>(
 	url: &Url,
 	proxy_bearers: &'a HashMap<String, String>,
-) -> Result<Option<&'a str>, RemoteImageError> {
+) -> Result<Option<&'a str>, FetchRefusal> {
 	let bearer = proxy_bearers.get(&url.origin().ascii_serialization()).map(String::as_str);
 	if bearer.is_none() && url.scheme() != "https" {
-		return Err(RemoteImageError::UnsupportedScheme);
+		return Err(FetchRefusal::UnsupportedScheme);
 	}
 	Ok(bearer)
 }
 
-async fn sent(
-	client: &Client,
-	url: &Url,
-	bearer: Option<&str>,
-) -> Result<Response, RemoteImageError> {
+async fn sent(client: &Client, url: &Url, bearer: Option<&str>) -> Result<Response, FetchRefusal> {
 	let request = client.get(url.clone());
 	let request = match bearer {
 		Some(bearer) => request.bearer_auth(bearer),
