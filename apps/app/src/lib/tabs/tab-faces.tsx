@@ -22,7 +22,7 @@ import {
 } from "./tab-pages"
 
 import type { LibraryItemKind } from "../bindings"
-import { titleOf } from "../library/library-items"
+import { shownTitleOf, titleOf } from "../library/library-items"
 import type { LibraryOpening } from "../navigation/library-search"
 import { APPLICATIONS_ENTRY } from "../navigation/settings-search"
 
@@ -77,7 +77,7 @@ const libraryItemDescriptorOf = ({
 	title,
 }: LibraryOpening): TitleBarTabDescriptor => ({
 	...LIBRARY_ITEM_DESCRIPTORS[kind],
-	name: title ?? titleOf({ kind, name }),
+	name: shownTitleOf(title ?? titleOf({ kind, name })),
 })
 
 const libraryFaceOf = ({ libraryOpening }: TabPage): TabFace => {

@@ -168,6 +168,20 @@ describe("the face of a tab", () => {
 		expect(face.descriptor?.name).toBe("Weekly review")
 	})
 
+	it.each([
+		["empty", ""],
+		["whitespace", "%20%20"],
+	])("names a Library document with an %s title Untitled", (_shape, title) => {
+		const face = tabFaceOf(
+			`/library?item=Notes.md&kind=document&title=${title}`,
+			SOURCES,
+		)
+
+		const untitled = i18n.t("common:library.editor.untitled")
+		expect(face.descriptor?.name).toBe(untitled)
+		expect(face.title).toBe(untitled)
+	})
+
 	it("keeps only JSON-serialisable fields in the descriptor", () => {
 		const { descriptor } = tabFaceOf(
 			"/library?item=photo.png&kind=image",

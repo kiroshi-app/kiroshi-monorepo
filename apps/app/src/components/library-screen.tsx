@@ -23,6 +23,7 @@ import type { Bot } from "@/lib/conversations/store-contract"
 import {
 	documentNamedAs,
 	matchesQuery,
+	shownTitleOf,
 	titleOf,
 	toShownItem,
 } from "@/lib/library/library-items"
@@ -230,7 +231,7 @@ export const LibraryScreen = ({
 		isJoined,
 		document,
 		bots,
-		title: openedDocument?.title ?? "",
+		title: shownTitleOf(openedDocument?.title ?? ""),
 	})
 	useDropMissingOpening(
 		{
