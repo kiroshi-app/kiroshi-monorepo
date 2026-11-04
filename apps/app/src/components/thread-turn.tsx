@@ -101,15 +101,12 @@ export const ThreadTurn = memo(function ThreadTurn({
 		row.documents.length > 0 ? (
 			<ThreadDocumentCards names={row.documents} />
 		) : null
-	const withCards = (body: ReactNode) =>
-		cards ? (
-			<>
-				{body}
-				{cards}
-			</>
-		) : (
-			body
-		)
+	const withCards = (body: ReactNode) => (
+		<>
+			{body}
+			{cards}
+		</>
+	)
 	const content = withCards(
 		selectable(<TurnBody attachments={attachments} text={text} />),
 	)
