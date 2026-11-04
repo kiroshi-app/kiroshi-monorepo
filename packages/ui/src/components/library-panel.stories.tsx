@@ -472,6 +472,8 @@ export const GridDocuments = meta.story({
 	},
 })
 
+const [ATLAS] = CONVERSATION_BOTS
+
 const CONTROLS_DOCUMENT: LibraryItem = {
 	kind: "document",
 	id: "launch-checklist",
@@ -479,7 +481,7 @@ const CONTROLS_DOCUMENT: LibraryItem = {
 	detail: "Document · 2 KB · 5 min ago",
 	excerpt: [
 		"# Launch checklist",
-		"Read the [partner brief](https://example.com/brief) before the call with <@bot-atlas>.",
+		`Read the [partner brief](https://example.com/brief) before the call with <@${ATLAS.id}>.`,
 		"- [x] Draft the pricing page\n- [ ] Book the onboarding emails",
 		"| Channel | Owner |\n| --- | --- |\n| Newsletter | Mara |",
 		'```ts\nconst launch = "spring"\n```',
@@ -499,16 +501,17 @@ const NO_MEMBERSHIPS: string[] = []
 
 const NO_SECTIONS: RosterMenuSection[] = []
 
-const companionMenuFor = (companionId: string) => (
-	<CompanionMenuContent
-		companion={{ id: companionId, name: companionId }}
-		isPinned={false}
-		memberships={NO_MEMBERSHIPS}
-		onDelete={fn()}
-		sections={NO_SECTIONS}
-		spaces={NO_SPACES}
-	/>
-)
+const companionMenuFor = (companionId: string) =>
+	companionId === ATLAS.id ? (
+		<CompanionMenuContent
+			companion={{ id: ATLAS.id, name: ATLAS.name }}
+			isPinned={false}
+			memberships={NO_MEMBERSHIPS}
+			onDelete={fn()}
+			sections={NO_SECTIONS}
+			spaces={NO_SPACES}
+		/>
+	) : null
 
 const INTERACTIVE_ELEMENTS =
 	"button, a, input, select, textarea, summary, [tabindex]"
@@ -549,7 +552,7 @@ export const GridDocumentPreviewHoldsNoControl = meta.story({
 		await expect(page).toHaveTextContent("Read the partner brief before")
 		const mention = slotIn(page, "bot-mention")
 		await expect(mention.tagName).toBe("SPAN")
-		await expect(mention).toHaveTextContent("Atlas")
+		await expect(mention).toHaveTextContent(ATLAS.name)
 		await expect(
 			item.querySelectorAll("[data-slot=context-menu-trigger]"),
 		).toHaveLength(0)
