@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        variant: [stories-1, stories-2, stories-3, hold-660]
+        variant: [stories-1, stories-2, stories-3]
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -46,53 +46,13 @@ jobs:
           node --version
           nohup bash -c 'while true; do echo "== $(date -u +%T)"; free -m | sed -n 2,3p; ps -eo pid,ppid,rss,etimes,args --sort=-rss | head -12 | cut -c1-220; ss -tan state established | wc -l; sleep 5; done' > "$RUNNER_TEMP/probe-memory.log" 2>&1 &
 
-      - name: Write the 660 s hold
-        if: matrix.variant == 'hold-660'
-        working-directory: packages/ui
-        run: |
-          mkdir -p probe
-          cat > probe/vitest.config.ts <<'EOF'
-          import { playwright } from "@vitest/browser-playwright"
-          import { defineConfig } from "vitest/config"
-
-          export default defineConfig({
-          	test: {
-          		include: ["probe/hold.test.ts"],
-          		isolate: true,
-          		fileParallelism: false,
-          		testTimeout: 900_000,
-          		browser: {
-          			enabled: true,
-          			headless: true,
-          			provider: playwright(),
-          			instances: [{ browser: "chromium" }],
-          		},
-          	},
-          })
-          EOF
-          cat > probe/hold.test.ts <<'EOF'
-          import { expect, test } from "vitest"
-
-          test("holds the orchestrator socket open", async () => {
-          	const started = performance.now()
-          	while (performance.now() - started < 660_000) {
-          		await new Promise((resolve) => setTimeout(resolve, 1000))
-          	}
-          	expect(true).toBe(true)
-          })
-          EOF
-
       - name: Run
         working-directory: packages/ui
         env:
           DEBUG: vitest:browser*,pw:browser*
         run: |
           set -o pipefail
-          if [ "${{ matrix.variant }}" = hold-660 ]; then
-            ./node_modules/.bin/vitest run --config probe/vitest.config.ts 2>&1 | tee "$RUNNER_TEMP/probe-run.log"
-          else
-            bunx vitest run --project=storybook 2>&1 | tee "$RUNNER_TEMP/probe-run.log"
-          fi
+          bunx vitest run --project=storybook 2>&1 | tee "$RUNNER_TEMP/probe-run.log"
 
       - name: Read the kernel log
         if: always()
