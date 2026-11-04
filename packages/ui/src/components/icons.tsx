@@ -271,7 +271,6 @@ const Icons = {
 	Close: XIcon,
 	CloseOtherTabs: GridSquaresXIcon,
 	Cloud: CloudIcon,
-	Collapse: ChevronUpIcon,
 	Code: CodeIcon,
 	Collapse: ChevronUpIcon,
 	Command: SquareTerminalIcon,
