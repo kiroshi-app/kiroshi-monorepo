@@ -33,6 +33,14 @@ import {
 } from "@workspace/ui/components/library-block-handle"
 import { LibraryTableEditor } from "@workspace/ui/components/library-block-table"
 import {
+	type ClientPoint,
+	fieldSelectionOf,
+	fieldValueOf,
+	LibraryBlockText,
+	offsetAtPoint,
+	selectInField,
+} from "@workspace/ui/components/library-block-text"
+import {
 	type LibraryLinkPreview,
 	LibraryWebPageEditor,
 } from "@workspace/ui/components/library-block-web-page"
@@ -71,7 +79,6 @@ import {
 import {
 	formattedSelection,
 	isFormatOn,
-	type MarkdownSelection,
 	markdownStateOf,
 	selectedLinkOf,
 	setLink,
@@ -83,8 +90,12 @@ import {
 	toggleStrikethrough,
 } from "@workspace/ui/components/library-document-commands"
 import {
+	type BlockTextType,
+	blockTextOf,
+	splitBlockText,
+} from "@workspace/ui/components/library-document-inline"
+import {
 	DOCUMENT_TYPE,
-	GrowingField,
 	PLACEHOLDER_LOOK,
 } from "@workspace/ui/components/library-document-view"
 import {
@@ -126,10 +137,6 @@ const POINTED_PARTS = "li, th, td, img"
 const FIELD_SLOT = "library-document-block-field"
 
 const EDITING_SLOT = "library-document-block-editing"
-
-const FIELD_LOOK: Partial<Record<LibraryBlockType, string>> = {
-	heading: "font-heading font-semibold text-[1.0625rem] text-foreground",
-}
 
 const DRAG_THRESHOLD = 4
 
@@ -201,8 +208,6 @@ type HeldRun = {
 	isFading: boolean
 }
 
-type BlockField = HTMLInputElement | HTMLTextAreaElement
-
 const NO_WRITERS: LibraryDocumentWriter[] = []
 
 const NO_PEOPLE: LibraryDocumentPerson[] = []
@@ -235,6 +240,7 @@ type FocusRequest = {
 	caret?: number
 	head?: number
 	field?: number
+	point?: ClientPoint
 }
 
 type Drop = {
@@ -279,27 +285,15 @@ const runsIn = ({ writers, held, people, start, length }: RunsInput) => {
 	]
 }
 
+const textTypeOf = (type: LibraryBlockType): BlockTextType =>
+	type === "heading" || type === "list" || type === "quote" ? type : "paragraph"
+
 const isInToolbar = (node: EventTarget | null) =>
 	node instanceof Element &&
 	node.closest(`[data-slot="${SELECTION_TOOLBAR_SLOT}"]`) !== null
 
-const isBlockField = (node: EventTarget | null): node is BlockField =>
-	(node instanceof HTMLTextAreaElement || node instanceof HTMLInputElement) &&
-	node.dataset.slot === FIELD_SLOT
-
-const headOf = (field: BlockField) =>
-	(field.selectionDirection === "backward"
-		? field.selectionStart
-		: field.selectionEnd) ?? 0
-
-const selectionOf = (field: HTMLTextAreaElement): MarkdownSelection => ({
-	text: field.value,
-	anchor:
-		field.selectionDirection === "backward"
-			? field.selectionEnd
-			: field.selectionStart,
-	head: headOf(field),
-})
+const isBlockField = (node: EventTarget | null): node is HTMLElement =>
+	node instanceof HTMLElement && node.dataset.slot === FIELD_SLOT
 
 const formatsOf = (state: EditorState) => {
 	const link = selectedLinkOf(state)
@@ -312,17 +306,10 @@ const formatsOf = (state: EditorState) => {
 	}
 }
 
-const anchorOf = (
-	field: HTMLTextAreaElement,
-	from: number,
-	to: number,
-	frame: HTMLElement,
-): SelectionToolbarAnchor => {
-	const mirrored = field.previousElementSibling?.firstChild as Node
-	const range = document.createRange()
-	range.setStart(mirrored, from)
-	range.setEnd(mirrored, to)
-	const selected = range.getBoundingClientRect()
+const anchorOf = (frame: HTMLElement): SelectionToolbarAnchor => {
+	const selected =
+		document.getSelection()?.getRangeAt(0).getBoundingClientRect() ??
+		new DOMRect()
 	const framed = frame.getBoundingClientRect()
 	const viewport = (frame.closest(COLUMN) ?? frame).getBoundingClientRect()
 	return {
@@ -419,8 +406,9 @@ const LibraryDocumentBlockEditor = ({
 	const [drop, setDrop] = useState<Drop>()
 	const wasDragged = useRef(false)
 	const pointedField = useRef<number | undefined>(undefined)
+	const pointedAt = useRef<ClientPoint>(undefined)
 	const list = useRef<HTMLDivElement>(null)
-	const textField = useRef<HTMLTextAreaElement>(null)
+	const textField = useRef<HTMLDivElement>(null)
 	const reportedCaret = useRef<number | null>(null)
 	const [selected, setSelected] = useState<SelectedText>()
 	const [toolbarMode, setToolbarMode] = useState<ToolbarMode>("bar")
@@ -499,14 +487,17 @@ const LibraryDocumentBlockEditor = ({
 		onCaretChange?.(caret)
 	}
 
-	const caretOf = (field: BlockField) => {
+	const caretOf = (field: HTMLElement) => {
 		const id = field.closest<HTMLElement>(BLOCK_SLOT)?.dataset.blockId
 		const index = latest.current.blocks.findIndex((block) => block.id === id)
 		if (index === -1) return null
 		const { source } = latest.current.blocks[index]
 		const start = offsetsOf(latest.current)[index]
-		const within = field.value === source ? 0 : source.indexOf(field.value)
-		return within === -1 ? start : start + within + headOf(field)
+		const value = fieldValueOf(field)
+		const within = value === source ? 0 : source.indexOf(value)
+		return within === -1
+			? start
+			: start + within + (fieldSelectionOf(field)?.head ?? 0)
 	}
 
 	const reportFocusedCaret = () => {
@@ -602,9 +593,8 @@ const LibraryDocumentBlockEditor = ({
 			return
 		}
 		const fields = [
-			...(block?.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(
-				`[data-slot="${FIELD_SLOT}"]`,
-			) ?? []),
+			...(block?.querySelectorAll<HTMLElement>(`[data-slot="${FIELD_SLOT}"]`) ??
+				[]),
 		]
 		const last = fields.length - 1
 		const field = fields[Math.min(focusRequest.field ?? last, last)]
@@ -614,23 +604,25 @@ const LibraryDocumentBlockEditor = ({
 				?.focus()
 			return
 		}
-		const caret = focusRequest.caret ?? field.value.length
-		const head = focusRequest.head ?? caret
+		const caret =
+			(focusRequest.point && offsetAtPoint(field, focusRequest.point)) ??
+			focusRequest.caret
 		field.focus()
-		field.setSelectionRange(
-			Math.min(caret, head),
-			Math.max(caret, head),
-			head < caret ? "backward" : "forward",
-		)
+		selectInField(field, caret, focusRequest.head ?? caret)
 		reportFocusedField()
 	}, [focusRequest])
 
 	const indexOf = (id: string) =>
 		latest.current.blocks.findIndex((block) => block.id === id)
 
-	const edit = (id: string, caret?: number, field?: number) => {
+	const edit = (
+		id: string,
+		caret?: number,
+		field?: number,
+		point?: ClientPoint,
+	) => {
 		setEditing(id)
-		setFocusRequest({ id, on: "field", caret, field })
+		setFocusRequest({ id, on: "field", caret, field, point })
 	}
 
 	const focusHandle = (id: string) => setFocusRequest({ id, on: "handle" })
@@ -657,28 +649,35 @@ const LibraryDocumentBlockEditor = ({
 		return block.id
 	}
 
+	const sourceOfEditing = () =>
+		editing ? latest.current.blocks[indexOf(editing)]?.source : undefined
+
 	const readSelection = () => {
 		const field = textField.current
 		const frame = list.current
+		const source = sourceOfEditing()
 		const isHeldByToolbar = isInToolbar(document.activeElement)
+		const range = field ? fieldSelectionOf(field) : undefined
 		const next =
-			field &&
+			range &&
 			frame &&
 			editing &&
+			source !== undefined &&
 			(document.activeElement === field || isHeldByToolbar) &&
-			field.selectionStart < field.selectionEnd &&
+			range.start < range.end &&
 			!selectingBy.current
 				? {
 						id: editing,
-						from: field.selectionStart,
-						to: field.selectionEnd,
-						anchor: anchorOf(
-							field,
-							field.selectionStart,
-							field.selectionEnd,
-							frame,
+						from: range.start,
+						to: range.end,
+						anchor: anchorOf(frame),
+						...formatsOf(
+							markdownStateOf({
+								text: source,
+								anchor: range.anchor,
+								head: range.head,
+							}),
 						),
-						...formatsOf(markdownStateOf(selectionOf(field))),
 					}
 				: undefined
 		if (isHeldByToolbar && (!selected || !next)) return
@@ -762,8 +761,18 @@ const LibraryDocumentBlockEditor = ({
 
 	const formatSelected = (command: StateCommand) => {
 		const field = textField.current
-		if (!field || !editing) return
-		const next = formattedSelection(selectionOf(field), command)
+		const source = sourceOfEditing()
+		if (!field || !editing || source === undefined) return
+		const live = fieldSelectionOf(field)
+		const range =
+			live && live.start < live.end
+				? live
+				: selected && { anchor: selected.from, head: selected.to }
+		if (!range) return
+		const next = formattedSelection(
+			{ text: source, anchor: range.anchor, head: range.head },
+			command,
+		)
 		if (!next) return
 		writeSource(editing, next.text)
 		setFocusRequest({
@@ -859,7 +868,7 @@ const LibraryDocumentBlockEditor = ({
 							: block,
 					),
 				)
-				focusHandle(id)
+				edit(id)
 			},
 			onDuplicate: () => {
 				insertAfter(at(), latest.current.blocks[at()].source)
@@ -1036,12 +1045,14 @@ const LibraryDocumentBlockEditor = ({
 	}
 
 	const keyInField =
-		(block: LibraryBlock, type: LibraryBlockType) =>
-		(event: KeyboardEvent<HTMLTextAreaElement>) => {
+		(block: LibraryBlock, type: BlockTextType) =>
+		(event: KeyboardEvent<HTMLDivElement>) => {
 			if (event.nativeEvent.isComposing) return
-			const field = event.currentTarget
-			const { value, selectionStart: caret, selectionEnd } = field
 			const index = indexOf(block.id)
+			const value = latest.current.blocks[index]?.source ?? block.source
+			const range = fieldSelectionOf(event.currentTarget)
+			const caret = range?.start ?? value.length
+			const selectionEnd = range?.end ?? caret
 			const shortcut =
 				(event.metaKey || event.ctrlKey) &&
 				!event.altKey &&
@@ -1072,26 +1083,36 @@ const LibraryDocumentBlockEditor = ({
 				stepBack(block.id)
 				return
 			}
+			if (
+				event.key === "Backspace" &&
+				caret === selectionEnd &&
+				caret > 0 &&
+				caret === blockTextOf(value, type).lines[0].contentFrom
+			) {
+				event.preventDefault()
+				writeSource(block.id, convertSource(value, "paragraph"))
+				setFocusRequest({ id: block.id, on: "field", caret: 0 })
+				return
+			}
 			if (event.key !== "Enter" || event.shiftKey || caret !== selectionEnd)
 				return
 			event.preventDefault()
 			const lineStart = value.lastIndexOf("\n", caret - 1) + 1
-			const line = value.slice(lineStart, caret)
+			const lineEnd = value.indexOf("\n", caret)
+			const line = value.slice(lineStart, lineEnd === -1 ? undefined : lineEnd)
 			const marker = type === "paragraph" ? undefined : continuedMarkerOf(line)
+			const { before, after, opened } = splitBlockText(value, type, caret)
 			if (marker && line.trim() !== marker.trim()) {
-				const next = `${value.slice(0, caret)}\n${marker}${value.slice(caret)}`
-				writeSource(block.id, next)
+				writeSource(block.id, `${before}\n${marker}${after}`)
 				setFocusRequest({
 					id: block.id,
 					on: "field",
-					caret: caret + 1 + marker.length,
+					caret: before.length + 1 + marker.length + opened,
 				})
 				return
 			}
-			const kept = marker
-				? value.slice(0, Math.max(lineStart - 1, 0))
-				: value.slice(0, caret)
-			const carried = marker ? "" : value.slice(caret)
+			const kept = marker ? value.slice(0, Math.max(lineStart - 1, 0)) : before
+			const carried = marker ? "" : after
 			writeSource(block.id, kept)
 			edit(insertAfter(index, carried), 0)
 		}
@@ -1136,6 +1157,7 @@ const LibraryDocumentBlockEditor = ({
 	}
 
 	const pointAt = (event: PointerEvent<HTMLDivElement>) => {
+		pointedAt.current = { x: event.clientX, y: event.clientY }
 		const part =
 			event.target instanceof Element
 				? event.target.closest(POINTED_PARTS)
@@ -1156,8 +1178,9 @@ const LibraryDocumentBlockEditor = ({
 				(!hasBlockEditor || isInnerControl)
 			)
 				return
-			edit(id, undefined, pointedField.current)
+			edit(id, undefined, pointedField.current, pointedAt.current)
 			pointedField.current = undefined
+			pointedAt.current = undefined
 		}
 
 	const focusBlock = (block: LibraryBlock | undefined, caret?: number) => {
@@ -1260,19 +1283,29 @@ const LibraryDocumentBlockEditor = ({
 								open={slashFor === block.id}
 								query={block.source.slice(1)}
 							>
-								<GrowingField
+								<LibraryBlockText
 									aria-label={t(`library.editor.blocks.types.${type}`)}
-									className={DOCUMENT_TYPE}
 									data-slot={FIELD_SLOT}
-									fieldClassName={cn("w-full", FIELD_LOOK[type])}
 									fieldRef={textField}
 									hint={placeholder}
 									onBlur={(event) => {
 										if (!isInToolbar(event.relatedTarget)) stopEditing(block.id)
 									}}
-									onChange={(event) => typeInField(block, event.target.value)}
-									onKeyDown={keyInField(block, type)}
-									value={block.source}
+									onEdit={(value) => typeInField(block, value)}
+									onFocus={(event) => {
+										if (
+											selected?.id === block.id &&
+											isInToolbar(event.relatedTarget)
+										)
+											selectInField(
+												event.currentTarget,
+												selected.from,
+												selected.to,
+											)
+									}}
+									onKeyDown={keyInField(block, textTypeOf(type))}
+									source={block.source}
+									type={textTypeOf(type)}
 								/>
 							</LibrarySlashMenu>
 						) : (
