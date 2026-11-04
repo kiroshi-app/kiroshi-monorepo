@@ -1,15 +1,25 @@
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import {
 	type AnswerImage,
 	accessibleNameOf,
 } from "@workspace/ui/components/answer-blocks/answer-image"
+import { Icons } from "@workspace/ui/components/icons"
+import {
+	ImageMenu,
+	type ImageMenuActions,
+} from "@workspace/ui/components/image-menu"
 import { cn } from "@workspace/ui/lib/utils"
+
+type GalleryTileLabel = "name" | "open"
 
 type GalleryProps = {
 	images: readonly AnswerImage[]
-	caption: string
+	caption?: string
+	tileLabel?: GalleryTileLabel
 	onOpen?: (index: number) => void
+	imageMenu?: ImageMenuActions<number>
 	className?: string
 }
 
@@ -17,8 +27,10 @@ type GalleryTileProps = {
 	image: AnswerImage
 	index: number
 	caption: string
+	tileLabel: GalleryTileLabel
 	hiddenCount: number
 	onOpen?: (index: number) => void
+	imageMenu?: ImageMenuActions<number>
 	className: string
 }
 
@@ -49,25 +61,43 @@ const GalleryTile = ({
 	image,
 	index,
 	caption,
+	tileLabel,
 	hiddenCount,
 	onOpen,
+	imageMenu,
 	className,
 }: GalleryTileProps) => {
 	const { t } = useTranslation("chat")
+	const [brokenSrc, setBrokenSrc] = useState<string | null>(null)
+	const name = accessibleNameOf(
+		image,
+		t("answerBlock.gallery.tile", { caption, position: index + 1 }),
+	)
+	const openLabel =
+		tileLabel === "open" ? t("attachments.open", { name }) : undefined
 	const tileClass = cn(
 		"relative min-h-0 min-w-0 overflow-hidden rounded-[4px]",
 		className,
 	)
 	const content = (
 		<>
-			<img
-				src={image.src}
-				alt={accessibleNameOf(
-					image,
-					t("answerBlock.gallery.tile", { caption, position: index + 1 }),
-				)}
-				className="size-full object-cover"
-			/>
+			{brokenSrc === image.src ? (
+				<span
+					aria-label={name}
+					className="grid size-full place-items-center bg-foreground/10"
+					data-slot="gallery-broken"
+					role="img"
+				>
+					<Icons.Image aria-hidden="true" className="size-5" />
+				</span>
+			) : (
+				<img
+					src={image.src}
+					alt={openLabel ? "" : name}
+					onError={() => setBrokenSrc(image.src)}
+					className="image-outline size-full rounded-[inherit] object-cover"
+				/>
+			)}
 			{hiddenCount > 0 ? (
 				<span
 					data-slot="gallery-more"
@@ -82,20 +112,32 @@ const GalleryTile = ({
 		</>
 	)
 
-	if (!onOpen) return <div className={tileClass}>{content}</div>
-
-	return (
+	const tile = onOpen ? (
 		<button
 			type="button"
+			aria-label={openLabel}
 			className={cn(tileClass, "outline-offset-2")}
 			onClick={() => onOpen(index)}
 		>
 			{content}
 		</button>
+	) : (
+		<div className={tileClass}>{content}</div>
 	)
+
+	if (!imageMenu) return tile
+
+	return <ImageMenu {...imageMenu} item={index} name={name} trigger={tile} />
 }
 
-const Gallery = ({ images, caption, onOpen, className }: GalleryProps) => {
+const Gallery = ({
+	images,
+	caption = "",
+	tileLabel = "name",
+	onOpen,
+	imageMenu,
+	className,
+}: GalleryProps) => {
 	const [lead, ...rest] = images
 	const gridImages = rest.slice(0, TILE_COUNT - 1)
 	const layout = GRID_LAYOUTS[gridImages.length - 1]
@@ -113,8 +155,10 @@ const Gallery = ({ images, caption, onOpen, className }: GalleryProps) => {
 					image={lead}
 					index={0}
 					caption={caption}
+					tileLabel={tileLabel}
 					hiddenCount={0}
 					onOpen={onOpen}
+					imageMenu={imageMenu}
 					className={cn(
 						"flex-[1.4]",
 						layout ? "rounded-s-control" : "rounded-control",
@@ -129,17 +173,21 @@ const Gallery = ({ images, caption, onOpen, className }: GalleryProps) => {
 								image={image}
 								index={position + 1}
 								caption={caption}
+								tileLabel={tileLabel}
 								hiddenCount={position === TILE_COUNT - 2 ? hiddenCount : 0}
 								onOpen={onOpen}
+								imageMenu={imageMenu}
 								className={layout.tiles[position] ?? ""}
 							/>
 						))}
 					</div>
 				) : null}
 			</div>
-			<figcaption className="text-compact leading-4.5 text-muted-foreground wrap-anywhere">
-				{caption}
-			</figcaption>
+			{caption ? (
+				<figcaption className="text-compact leading-4.5 text-muted-foreground wrap-anywhere">
+					{caption}
+				</figcaption>
+			) : null}
 		</figure>
 	)
 }

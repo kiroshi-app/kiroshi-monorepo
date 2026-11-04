@@ -83,8 +83,36 @@ const LIBRARY_ITEM_ACTIONS = [
 	Icon: ComponentType
 }[]
 
-const shownActionsOf = <Item,>(handlers: LibraryItemHandlers<Item>) =>
-	LIBRARY_ITEM_ACTIONS.filter(({ handler }) => handlers[handler] !== undefined)
+type LibraryItemMenuEntry = (typeof LIBRARY_ITEM_ACTIONS)[number]
+
+const BAR_BUTTON_ORDER: readonly string[] = ["onDownload", "onCopy"]
+
+const BAR_BUTTON_ACTIONS = new Set(BAR_BUTTON_ORDER)
+
+const barRankOf = (handler: string) => {
+	const rank = BAR_BUTTON_ORDER.indexOf(handler)
+	return rank === -1 ? BAR_BUTTON_ORDER.length : rank
+}
+
+type LibraryItemMenuOrder = "menu" | "bar"
+
+const ACTIONS_IN_ORDER: Record<
+	LibraryItemMenuOrder,
+	readonly LibraryItemMenuEntry[]
+> = {
+	menu: LIBRARY_ITEM_ACTIONS,
+	bar: [...LIBRARY_ITEM_ACTIONS].sort(
+		(first, second) => barRankOf(first.handler) - barRankOf(second.handler),
+	),
+}
+
+const shownActionsOf = <Item,>(
+	handlers: LibraryItemHandlers<Item>,
+	order: LibraryItemMenuOrder = "menu",
+) =>
+	ACTIONS_IN_ORDER[order].filter(
+		({ handler }) => handlers[handler] !== undefined,
+	)
 
 const hasLibraryItemActions = <Item,>(handlers: LibraryItemHandlers<Item>) =>
 	shownActionsOf(handlers).length > 0
@@ -115,6 +143,7 @@ type LibraryItemMenuItemsProps<Item> = {
 	actions: LibraryItemHandlers<Item>
 	parts: LibraryItemMenuParts
 	onPickDelete: () => void
+	order?: LibraryItemMenuOrder
 }
 
 const LibraryItemMenuItems = <Item,>({
@@ -122,10 +151,13 @@ const LibraryItemMenuItems = <Item,>({
 	actions,
 	parts: { Item: MenuItem, Separator },
 	onPickDelete,
+	order,
 }: LibraryItemMenuItemsProps<Item>) => {
 	const { t } = useTranslation("common")
 
-	return shownActionsOf(actions).map(({ handler, label, Icon }, index) =>
+	const shown = shownActionsOf(actions, order)
+
+	return shown.map(({ handler, label, Icon }, index) =>
 		handler === "onDelete" ? (
 			<Fragment key={handler}>
 				{index > 0 ? <Separator /> : null}
@@ -236,8 +268,6 @@ const BAR_ACTION = cn(
 	LIBRARY_BAR_ROUND,
 	"size-8 bg-foreground/8 hover:bg-foreground/14",
 )
-
-const BAR_BUTTON_ACTIONS = new Set<string>(["onDownload", "onCopy"])
 
 const barMenuActionsOf = <Item,>(
 	handlers: LibraryItemHandlers<Item>,
@@ -404,6 +434,7 @@ const LibraryItemBarActions = <Item extends LibraryMenuSubject>({
 }
 
 export {
+	CONTEXT_MENU_PARTS,
 	handlersFor,
 	hasLibraryItemActions,
 	LIBRARY_BAR,
@@ -414,6 +445,7 @@ export {
 	LibraryItemBarActions,
 	LibraryItemContextMenu,
 	LibraryItemDeleteDialog,
+	type LibraryItemHandlers,
 	LibraryItemMenuItems,
 	type LibraryItemMenuParts,
 	type LibraryMenuSubject,

@@ -416,6 +416,11 @@ const common = {
 				failure: "Impossible de supprimer {{name}}. Réessayez.",
 			},
 		},
+		imageMenu: {
+			saveToLibrary: "Enregistrer dans la Bibliothèque",
+			copyImage: "Copier l’image",
+			openInViewer: "Ouvrir dans la visionneuse",
+		},
 		lightbox: {
 			download: "Télécharger",
 			copy: "Copier",

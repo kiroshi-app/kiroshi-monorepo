@@ -391,6 +391,11 @@ const common = {
 				failure: "Couldn’t delete {{name}}. Retry.",
 			},
 		},
+		imageMenu: {
+			saveToLibrary: "Save to Library",
+			copyImage: "Copy image",
+			openInViewer: "Open in viewer",
+		},
 		lightbox: {
 			download: "Download",
 			copy: "Copy",

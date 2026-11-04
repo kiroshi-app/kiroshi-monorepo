@@ -6,6 +6,11 @@ import { useTranslation } from "react-i18next"
 
 import { Icons } from "@workspace/ui/components/icons"
 import {
+	ImageMenu,
+	type ImageMenuActions,
+	type ImageMenuProps,
+} from "@workspace/ui/components/image-menu"
+import {
 	handlersFor,
 	LIBRARY_BAR,
 	LIBRARY_BAR_BARE,
@@ -85,9 +90,10 @@ type ZoomStageProps = {
 	image: LibraryLightboxImage
 	position: number
 	count: number
+	menu: Omit<ImageMenuProps<LibraryLightboxImage>, "trigger">
 }
 
-const ZoomStage = ({ image, position, count }: ZoomStageProps) => {
+const ZoomStage = ({ image, position, count, menu }: ZoomStageProps) => {
 	const { t } = useTranslation("common")
 	const imageRef = useRef<HTMLImageElement>(null)
 	const [zoom, setZoom] = useState<number | null>(null)
@@ -120,20 +126,27 @@ const ZoomStage = ({ image, position, count }: ZoomStageProps) => {
 				data-slot={ZOOM_SLOT}
 				tabIndex={zoom === null ? undefined : 0}
 			>
-				<img
-					alt={image.name}
-					className={cn(
-						"m-auto rounded-md shadow-[0_16px_40px_rgb(0_0_0/0.4)] ring-1 ring-foreground/8",
-						zoom === null && "max-h-full max-w-full object-contain",
-					)}
-					draggable={false}
-					onLoad={(event) => setNaturalWidth(event.currentTarget.naturalWidth)}
-					ref={imageRef}
-					src={image.src}
-					style={
-						zoom === null
-							? undefined
-							: { width: naturalWidth * zoom, maxWidth: "none" }
+				<ImageMenu
+					{...menu}
+					trigger={
+						<img
+							alt={image.name}
+							className={cn(
+								"m-auto rounded-md shadow-[0_16px_40px_rgb(0_0_0/0.4)] ring-1 ring-foreground/8",
+								zoom === null && "max-h-full max-w-full object-contain",
+							)}
+							draggable={false}
+							onLoad={(event) =>
+								setNaturalWidth(event.currentTarget.naturalWidth)
+							}
+							ref={imageRef}
+							src={image.src}
+							style={
+								zoom === null
+									? undefined
+									: { width: naturalWidth * zoom, maxWidth: "none" }
+							}
+						/>
 					}
 				/>
 			</div>
@@ -195,14 +208,18 @@ const ZoomStage = ({ image, position, count }: ZoomStageProps) => {
 	)
 }
 
-type LibraryLightboxProps = LibraryItemActions<LibraryLightboxImage> & {
-	image: LibraryLightboxImage | null
-	position: number
-	count: number
-	onClose: () => void
-	onPrevious: () => void
-	onNext: () => void
-}
+type LibraryLightboxProps = LibraryItemActions<LibraryLightboxImage> &
+	Pick<
+		ImageMenuActions<LibraryLightboxImage>,
+		"onSaveToLibrary" | "onCopyImage"
+	> & {
+		image: LibraryLightboxImage | null
+		position: number
+		count: number
+		onClose: () => void
+		onPrevious: () => void
+		onNext: () => void
+	}
 
 const LibraryLightbox = ({
 	image,
@@ -211,6 +228,8 @@ const LibraryLightbox = ({
 	onClose,
 	onPrevious,
 	onNext,
+	onSaveToLibrary,
+	onCopyImage,
 	...actions
 }: LibraryLightboxProps) => {
 	const { t } = useTranslation("common")
@@ -221,6 +240,10 @@ const LibraryLightbox = ({
 	const [isConfirmingDelete, setConfirmingDelete] = useState(false)
 	const isFirst = position <= 1
 	const isLast = position >= count
+	const handlers = image ? handlersFor(actions, image) : {}
+	const recordMenuToggle = (_open: boolean, details: { event?: Event }) => {
+		lastMenuToggleRef.current = details.event
+	}
 
 	const stepWithArrows = (event: KeyboardEvent) => {
 		if (isInZoomScroller(event.target)) return
@@ -292,13 +315,11 @@ const LibraryLightbox = ({
 								</div>
 							</div>
 							<LibraryItemBarActions
-								actions={handlersFor(actions, image)}
+								actions={handlers}
 								item={image}
 								onClose={onClose}
 								onConfirmingDeleteChange={setConfirmingDelete}
-								onMenuOpenChange={(_open, details) => {
-									lastMenuToggleRef.current = details.event
-								}}
+								onMenuOpenChange={recordMenuToggle}
 								surface="lightbox"
 							/>
 						</div>
@@ -327,6 +348,16 @@ const LibraryLightbox = ({
 									count={count}
 									image={image}
 									key={image.id}
+									menu={{
+										...handlers,
+										item: image,
+										name: image.name,
+										onConfirmingDeleteChange: setConfirmingDelete,
+										onCopyImage,
+										onOpenChange: recordMenuToggle,
+										onSaveToLibrary,
+										surface: "viewer",
+									}}
 									position={position}
 								/>
 							</div>
