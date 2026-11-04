@@ -8,7 +8,7 @@ import {
 	useEffect,
 	useSyncExternalStore,
 } from "react"
-import { expect, fn, screen, waitFor, within } from "storybook/test"
+import { expect, fn, screen, spyOn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
@@ -1524,12 +1524,14 @@ const ATLAS_WRITERS = LIBRARY_WRITERS.slice(0, 1)
 const createWritersStore = () => {
 	let writers = ATLAS_WRITERS
 	const listeners = new Set<() => void>()
+	const write = (next: typeof ATLAS_WRITERS) => {
+		writers = next
+		for (const listener of listeners) listener()
+	}
 	return {
 		read: () => writers,
-		finish: () => {
-			writers = []
-			for (const listener of listeners) listener()
-		},
+		finish: () => write([]),
+		resume: () => write(ATLAS_WRITERS),
 		reset: () => {
 			writers = ATLAS_WRITERS
 		},
@@ -1542,13 +1544,17 @@ const createWritersStore = () => {
 	}
 }
 
-const atlasWriting = createWritersStore()
+type WritersStore = ReturnType<typeof createWritersStore>
 
-const FinishingWriterEditor = (args: LibraryDocumentEditorProps) => {
-	const writers = useSyncExternalStore(
-		atlasWriting.subscribe,
-		atlasWriting.read,
-	)
+type FinishingWriterEditorProps = LibraryDocumentEditorProps & {
+	writing: WritersStore
+}
+
+const FinishingWriterEditor = ({
+	writing,
+	...args
+}: FinishingWriterEditorProps) => {
+	const writers = useSyncExternalStore(writing.subscribe, writing.read)
 	return (
 		<EditorFrame>
 			<LibraryDocumentEditor {...args} writers={writers} />
@@ -1564,6 +1570,49 @@ const atlasRunIn = (canvasElement: HTMLElement) =>
 		(run) => run.dataset.agent === "atlas",
 	)
 
+const agentCaretIn = (canvasElement: HTMLElement) =>
+	canvasElement.querySelector("[data-slot='library-document-caret']")
+
+const HELD_RUN_ARGS = {
+	title: LIBRARY_AGENT_DOCUMENT.name,
+	body: LIBRARY_AGENT_DOCUMENT.body,
+	detail: LIBRARY_AGENT_DOCUMENT.detail,
+	template: undefined,
+	onStopAll: fn(),
+}
+
+const stopWriting = async (
+	canvasElement: HTMLElement,
+	writing: WritersStore,
+) => {
+	const run = await waitFor(() => {
+		const shown = atlasRunIn(canvasElement)
+		expect(shown).toBeDefined()
+		return getComputedStyle(shown as HTMLElement)
+	})
+	const writtenLook = { backgroundColor: run.backgroundColor, color: run.color }
+	writing.finish()
+	const stoppedAt = performance.now()
+	await waitFor(() => expect(agentCaretIn(canvasElement)).toBe(null))
+	return {
+		writtenLook,
+		atSinceStop: (milliseconds: number) =>
+			after(milliseconds - (performance.now() - stoppedAt)),
+		sinceStop: () => performance.now() - stoppedAt,
+	}
+}
+
+const expectWrittenLook = async (
+	canvasElement: HTMLElement,
+	writtenLook: Pick<CSSStyleDeclaration, "backgroundColor" | "color">,
+) => {
+	const held = atlasRunIn(canvasElement)
+	await expect(held).toBeDefined()
+	await expect(getComputedStyle(held as HTMLElement)).toMatchObject(writtenLook)
+}
+
+const atlasWriting = createWritersStore()
+
 export const AgentRunHeldThenFades = meta.story({
 	args: {
 		title: LIBRARY_AGENT_DOCUMENT.name,
@@ -1573,7 +1622,7 @@ export const AgentRunHeldThenFades = meta.story({
 		onStopAll: fn(),
 	},
 	beforeEach: atlasWriting.reset,
-	render: (args) => <FinishingWriterEditor {...args} />,
+	render: (args) => <FinishingWriterEditor {...args} writing={atlasWriting} />,
 	parameters: {
 		docs: {
 			description: {
@@ -1583,31 +1632,121 @@ export const AgentRunHeldThenFades = meta.story({
 		},
 	},
 	play: async ({ canvasElement }) => {
-		const writing = await waitFor(() => {
-			const run = atlasRunIn(canvasElement)
-			expect(run).toBeDefined()
-			return getComputedStyle(run as HTMLElement)
-		})
-		const writtenLook = {
-			backgroundColor: writing.backgroundColor,
-			color: writing.color,
-		}
-
-		atlasWriting.finish()
-		await waitFor(() =>
-			expect(
-				canvasElement.querySelector("[data-slot='library-document-caret']"),
-			).toBe(null),
+		const { writtenLook, atSinceStop } = await stopWriting(
+			canvasElement,
+			atlasWriting,
 		)
-		await after(2000)
-		const held = atlasRunIn(canvasElement)
-		await expect(held).toBeDefined()
-		await expect(getComputedStyle(held as HTMLElement)).toMatchObject(
-			writtenLook,
-		)
+		await atSinceStop(2000)
+		await expectWrittenLook(canvasElement, writtenLook)
 
 		await waitFor(() => expect(atlasRunIn(canvasElement)).toBeUndefined(), {
 			timeout: 2500,
+		})
+	},
+})
+
+const typedDuringHold = createWritersStore()
+
+export const HeldRunKeptWhileTyping = meta.story({
+	tags: ["test-only"],
+	args: HELD_RUN_ARGS,
+	beforeEach: typedDuringHold.reset,
+	render: (args) => (
+		<FinishingWriterEditor {...args} writing={typedDuringHold} />
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Atlas stops writing and the person types inside his run one second later. Check that the run takes the typed text and keeps its written look two seconds after the stop.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const { writtenLook, atSinceStop } = await stopWriting(
+			canvasElement,
+			typedDuringHold,
+		)
+		if (!isInBrowserRunner()) return
+		await atSinceStop(1000)
+		caretAfter(canvasElement, "and the agent")
+		await keyboard(" truly")
+		await expect(atlasRunIn(canvasElement)?.textContent).toContain("truly")
+
+		await atSinceStop(2000)
+		await expectWrittenLook(canvasElement, writtenLook)
+		await expect(atlasRunIn(canvasElement)?.textContent).toContain("truly")
+	},
+})
+
+const resumedDuringHold = createWritersStore()
+
+export const HeldRunRestartedByAgent = meta.story({
+	tags: ["test-only"],
+	args: HELD_RUN_ARGS,
+	beforeEach: resumedDuringHold.reset,
+	render: (args) => (
+		<FinishingWriterEditor {...args} writing={resumedDuringHold} />
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Atlas stops writing, writes into his held run again two seconds later, then stops again. Check that the run starts a fresh hold and keeps its written look four seconds after the first stop.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const { writtenLook, atSinceStop } = await stopWriting(
+			canvasElement,
+			resumedDuringHold,
+		)
+		await atSinceStop(2000)
+		resumedDuringHold.resume()
+		await waitFor(() => expect(agentCaretIn(canvasElement)).not.toBe(null))
+		resumedDuringHold.finish()
+		await waitFor(() => expect(agentCaretIn(canvasElement)).toBe(null))
+
+		await atSinceStop(4000)
+		await expectWrittenLook(canvasElement, writtenLook)
+	},
+})
+
+const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)"
+
+const fadingRun = createWritersStore()
+
+export const HeldRunFadesWithMotion = meta.story({
+	tags: ["test-only"],
+	args: HELD_RUN_ARGS,
+	beforeEach: () => {
+		fadingRun.reset()
+		const matchMedia = window.matchMedia.bind(window)
+		const motion = spyOn(window, "matchMedia").mockImplementation((query) =>
+			matchMedia(query === REDUCED_MOTION_QUERY ? "not all" : query),
+		)
+		return () => motion.mockRestore()
+	},
+	render: (args) => <FinishingWriterEditor {...args} writing={fadingRun} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Atlas stops writing while reduced motion is off. Check that his held run takes the fade class between three and four seconds after the stop, and that it is gone by four and a half seconds.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const { sinceStop } = await stopWriting(canvasElement, fadingRun)
+		await waitFor(
+			() => expect(atlasRunIn(canvasElement)).toHaveClass("animate-run-fade"),
+			{ timeout: 4000 },
+		)
+		await expect(sinceStop()).toBeGreaterThanOrEqual(3000)
+		await expect(sinceStop()).toBeLessThan(4000)
+
+		await waitFor(() => expect(atlasRunIn(canvasElement)).toBeUndefined(), {
+			timeout: 4500 - sinceStop(),
 		})
 	},
 })

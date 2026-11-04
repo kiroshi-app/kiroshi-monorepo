@@ -1412,6 +1412,9 @@ navigation-librarydocumenteditor--existing-document
 navigation-librarydocumenteditor--format-undone-whole
 navigation-librarydocumenteditor--format-without-change
 navigation-librarydocumenteditor--from-meeting-notes
+navigation-librarydocumenteditor--held-run-fades-with-motion
+navigation-librarydocumenteditor--held-run-kept-while-typing
+navigation-librarydocumenteditor--held-run-restarted-by-agent
 navigation-librarydocumenteditor--italic-shortcut
 navigation-librarydocumenteditor--link-shortcut
 navigation-librarydocumenteditor--live-preview
