@@ -1,5 +1,13 @@
 import type { ReactNode } from "react"
-import { expect, fireEvent, fn, screen, waitFor, within } from "storybook/test"
+import {
+	expect,
+	fireEvent,
+	fn,
+	screen,
+	spyOn,
+	waitFor,
+	within,
+} from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
@@ -29,6 +37,8 @@ import {
 	MessageBubble,
 	MessageBubbleContent,
 } from "@workspace/ui/components/message-bubble"
+import { isMacPlatform } from "@workspace/ui/lib/platform"
+import { cn } from "@workspace/ui/lib/utils"
 
 const BRIEF = LIBRARY_AGENT_DOCUMENT.body
 
@@ -60,6 +70,33 @@ const RICH_BLOCKS = [
 	"```",
 ].join("\n")
 
+const CHECKLIST_DOCUMENT = [
+	"Before the launch call:",
+	"- [ ] Book the room\n- [x] Send the invite",
+	"The call starts at ten.",
+].join("\n\n")
+
+const PEOPLE = [
+	{ id: "ada", name: "Ada Martin", caret: BRIEF.indexOf("## What changes") },
+	{
+		id: "noe",
+		name: "Noé Petit",
+		caret: BRIEF.indexOf("\n\nWe also count"),
+	},
+]
+
+const MAC_SHORTCUTS = ["Duplicate⌘D", "Move up⌥⇧↑", "Move down⌥⇧↓", "Delete⌫"]
+
+const OTHER_SHORTCUTS = [
+	"DuplicateCtrl+D",
+	"Move upAlt+Shift+↑",
+	"Move downAlt+Shift+↓",
+	"DeleteBackspace",
+]
+
+const WINDOWS_AGENT =
+	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
+
 const CALLOUT_DOCUMENT = [
 	"The export is ready.",
 	"> [!NOTE]\n> The export keeps the archived rooms too.",
@@ -67,11 +104,15 @@ const CALLOUT_DOCUMENT = [
 
 type DocumentFrameProps = {
 	children: ReactNode
+	isNarrow?: boolean
 }
 
-const DocumentFrame = ({ children }: DocumentFrameProps) => (
+const DocumentFrame = ({ children, isNarrow = false }: DocumentFrameProps) => (
 	<div
-		className="flex h-[832px] w-[1280px] bg-background ps-15 pe-1.5 pt-2 pb-2"
+		className={cn(
+			"flex h-[832px] bg-background ps-15 pe-1.5 pt-2 pb-2",
+			isNarrow ? "w-[560px]" : "w-[1280px]",
+		)}
 		{...hueScopeOf("blue")}
 	>
 		<ContentCard isLandmark={false}>
@@ -275,10 +316,7 @@ export const BlockHandleMenu = meta.story({
 				.map((item) => item.textContent),
 		).toEqual([
 			"Turn into",
-			"Duplicate⌘D",
-			"Move up⌥⇧↑",
-			"Move down⌥⇧↓",
-			"Delete⌫",
+			...(isMacPlatform() ? MAC_SHORTCUTS : OTHER_SHORTCUTS),
 		])
 		const drag = partOf(block, "library-block-drag")
 		await expect(drag).toHaveAttribute("aria-expanded", "true")
@@ -655,5 +693,156 @@ export const DragMovesBlock = meta.story({
 		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
 			[...rest.slice(0, landing), first, ...rest.slice(landing)].join("\n\n"),
 		)
+	},
+})
+
+export const HandleMenuShortcutsOffMac = meta.story({
+	tags: ["test-only"],
+	parameters: {
+		a11y: mergeA11y(A11Y_FLOATING_FOCUS_GUARDS, A11Y_SUBMENU_PORTAL_GUARD),
+		docs: {
+			description: {
+				story:
+					"The block menu on Windows or Linux. Check every shortcut reads with Ctrl, Alt and Shift names and Backspace, never the Mac glyphs, and Ctrl+D duplicates the block.",
+			},
+		},
+	},
+	beforeEach: () => {
+		const agent = spyOn(navigator, "userAgent", "get").mockReturnValue(
+			WINDOWS_AGENT,
+		)
+		return () => agent.mockRestore()
+	},
+	play: async ({ canvasElement }) => {
+		const block = blockWith(canvasElement, "We also count")
+		const menu = await openHandleMenu(block)
+		await expect(
+			within(menu)
+				.getAllByRole("menuitem")
+				.map((item) => item.textContent),
+		).toEqual(["Turn into", ...OTHER_SHORTCUTS])
+		fireEvent.keyDown(menu, { key: "Escape" })
+		await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
+		const count = blocksIn(canvasElement).length
+		const handle = partOf(block, "library-block-drag")
+		handle.focus()
+		fireEvent.keyDown(handle, { key: "d", ctrlKey: true })
+		await expect(blocksIn(canvasElement)).toHaveLength(count + 1)
+	},
+})
+
+export const ChecklistEditsInPlace = meta.story({
+	tags: ["test-only"],
+	args: { body: CHECKLIST_DOCUMENT },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A checklist, the [] item of the Text group. Check a box toggles in the markdown without opening the field, focusing the checklist opens its source with the caret at the end, and Backspace on an empty line under it puts the caret back at the end of the checklist.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		const checklist = blockWith(canvasElement, "Book the room")
+		const [room] = within(checklist).getAllByRole("checkbox")
+		fireEvent.click(room)
+		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+			CHECKLIST_DOCUMENT.replace("- [ ] Book", "- [x] Book"),
+		)
+		await expect(canvasElement.querySelector("textarea")).toBeNull()
+
+		const shown = checklist.querySelector<HTMLElement>("[tabindex]")
+		if (!shown) throw new Error("No checklist")
+		shown.focus()
+		const field = await waitFor(() => {
+			const opened = fieldIn(canvasElement)
+			expect(opened).toHaveFocus()
+			return opened
+		})
+		await expect(field.value).toBe("- [x] Book the room\n- [x] Send the invite")
+		await expect(field.selectionStart).toBe(field.value.length)
+
+		fireEvent.click(
+			partOf(blockWith(canvasElement, "Book the room"), "library-block-insert"),
+		)
+		const empty = await waitFor(() => {
+			const opened = fieldIn(canvasElement)
+			expect(opened.value).toBe("")
+			expect(opened).toHaveFocus()
+			return opened
+		})
+		fireEvent.keyDown(empty, { key: "Backspace" })
+		const back = await waitFor(() => {
+			const opened = fieldIn(canvasElement)
+			expect(opened.value).toContain("Book the room")
+			expect(opened).toHaveFocus()
+			return opened
+		})
+		await expect(back.selectionStart).toBe(back.value.length)
+	},
+})
+
+export const PersonCaretAtBlockEdges = meta.story({
+	globals: { theme: "light" },
+	args: { people: PEOPLE },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Two people whose carets sit on the edges of a block: Ada on the first offset of What changes, Noé on the last offset of the paragraph under What we measure. Check each named caret renders on its block, Ada before the heading text and Noé after the last word.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const heading = blockWith(canvasElement, "What changes")
+		const paragraph = blockWith(canvasElement, "Weekly active Spaces")
+		const [ada] = slotsIn(heading, "library-document-person-caret")
+		const [noe] = slotsIn(paragraph, "library-document-person-caret")
+		await expect(ada).toBeDefined()
+		await expect(noe).toBeDefined()
+		await expect(ada).toHaveTextContent("Ada Martin")
+		await expect(noe).toHaveTextContent("Noé Petit")
+		await expect(heading.textContent?.indexOf("Ada Martin")).toBeLessThan(
+			heading.textContent?.indexOf("What changes") ?? 0,
+		)
+		await expect(paragraph.textContent?.trimEnd().endsWith("Noé Petit")).toBe(
+			true,
+		)
+		await expect(
+			slotsIn(canvasElement, "library-document-person-caret"),
+		).toHaveLength(2)
+	},
+})
+
+export const NarrowColumn = meta.story({
+	globals: { theme: "light" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The document column at its narrowest, the article narrower than 640 and only the 40px padding left of the text. Check the whole handle, + and the six dots, stays inside the visible column, overlapping the text by no more than the 6px the measured handle cannot fit.",
+			},
+		},
+	},
+	render: (args) => (
+		<DocumentFrame isNarrow>
+			<LibraryDocumentBlockEditor {...args} />
+		</DocumentFrame>
+	),
+	play: async ({ canvasElement }) => {
+		const block = blockWith(canvasElement, "The spring launch puts")
+		partOf(block, "library-block-drag").focus()
+		const column = slotsIn(canvasElement, "library-document-column")[0]
+		const visible = column.getBoundingClientRect()
+		const text = partOf(block, "markdown").getBoundingClientRect()
+		await expect(text.width).toBeLessThan(640)
+		for (const slot of ["library-block-insert", "library-block-drag"]) {
+			const part = partOf(block, slot).getBoundingClientRect()
+			await expect(part.left).toBeGreaterThanOrEqual(visible.left)
+			await expect(part.right).toBeLessThanOrEqual(text.left + 6)
+		}
+		await expect(
+			getComputedStyle(partOf(block, "library-block-handle")).opacity,
+		).toBe("1")
 	},
 })

@@ -412,13 +412,23 @@ const common = {
 				menu: {
 					turnInto: "Transformer en",
 					duplicate: "Dupliquer",
-					duplicateShortcut: "⌘D",
 					moveUp: "Monter",
-					moveUpShortcut: "⌥⇧↑",
 					moveDown: "Descendre",
-					moveDownShortcut: "⌥⇧↓",
 					delete: "Supprimer",
-					deleteShortcut: "⌫",
+					shortcuts: {
+						mac: {
+							duplicate: "⌘D",
+							moveUp: "⌥⇧↑",
+							moveDown: "⌥⇧↓",
+							delete: "⌫",
+						},
+						other: {
+							duplicate: "Ctrl+D",
+							moveUp: "Alt+Maj+↑",
+							moveDown: "Alt+Maj+↓",
+							delete: "Retour arrière",
+						},
+					},
 				},
 				skeleton: {
 					column: "Colonne",

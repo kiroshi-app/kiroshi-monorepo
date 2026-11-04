@@ -39,6 +39,7 @@ const HEADING_SOURCE = /^#{1,6}[ \t]+|^#{1,6}$/
 const SETEXT_UNDERLINE = /\n[ \t]*(?:=+|-+)[ \t]*$/
 const LIST_MARKER = /^[ \t]*(?:[-*+]|\d+[.)])[ \t]+/
 const TASK_MARKER = /^[ \t]*[-*+][ \t]+\[[ xX]\][ \t]?/
+const TASK_BOX = /^([ \t]*[-*+][ \t]+\[)([ xX])(\])/gm
 const QUOTE_MARKER = /^[ \t]*>[ \t]?/
 const CALLOUT_LEAD = /^[ \t]*>[ \t]*\[!(?:NOTE|WARNING)\]/
 const FENCE_INFO = /^[ \t]*(?:`{3,}|~{3,})[ \t]*([^\s`]*)/
@@ -198,6 +199,18 @@ const continuedMarkerOf = (line: string) =>
 	LIST_MARKER.exec(line)?.[0] ??
 	QUOTE_MARKER.exec(line)?.[0]
 
+const toggleTask = (source: string, index: number) => {
+	let seen = -1
+	return source.replace(
+		TASK_BOX,
+		(box, open: string, mark: string, close: string) => {
+			seen += 1
+			if (seen !== index) return box
+			return `${open}${mark === " " ? "x" : " "}${close}`
+		},
+	)
+}
+
 export {
 	type BlockIds,
 	blockTypeOf,
@@ -214,4 +227,5 @@ export {
 	parseBlocks,
 	relaid,
 	serializeBlocks,
+	toggleTask,
 }

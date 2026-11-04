@@ -11,6 +11,7 @@ import {
 	parseBlocks,
 	relaid,
 	serializeBlocks,
+	toggleTask,
 } from "@workspace/ui/components/library-document-blocks"
 import { libraryDocumentStartOf } from "@workspace/ui/components/library-document-editor"
 import { LIBRARY_DOCUMENT_TEMPLATES } from "@workspace/ui/components/library-new-document-dialog"
@@ -121,6 +122,17 @@ describe("library document blocks", () => {
 		expect(convertSource("## Decisions", "quote")).toBe("> Decisions")
 		expect(convertSource("> Decisions", "heading")).toBe("## Decisions")
 		expect(convertSource("- a\n- b", "paragraph")).toBe("a\nb")
+	})
+
+	it("ticks and unticks only the nth task of a checklist", () => {
+		const checklist = "- [ ] Book the room\n- [x] Send the invite"
+
+		expect(toggleTask(checklist, 0)).toBe(
+			"- [x] Book the room\n- [x] Send the invite",
+		)
+		expect(toggleTask(checklist, 1)).toBe(
+			"- [ ] Book the room\n- [ ] Send the invite",
+		)
 	})
 
 	it("offers no conversion but itself to a rich block", () => {

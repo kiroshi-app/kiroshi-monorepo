@@ -28,6 +28,7 @@ import {
 } from "@workspace/ui/components/markdown/runs"
 import { MARKDOWN_SANITIZE_SCHEMA } from "@workspace/ui/components/markdown/sanitize"
 import { rehypeScopeIds } from "@workspace/ui/components/markdown/scope-ids"
+import { MarkdownTaskToggleContext } from "@workspace/ui/components/markdown/task-list"
 import { cn } from "@workspace/ui/lib/utils"
 
 export interface MarkdownProps {
@@ -37,6 +38,7 @@ export interface MarkdownProps {
 	renderRun?: MarkdownRunRenderer
 	isWriting?: boolean
 	answerActions?: MarkdownAnswerActions
+	onToggleTask?: (box: HTMLInputElement) => void
 }
 
 const MARKDOWN_REMARK_PLUGINS = [
@@ -60,6 +62,7 @@ export const Markdown = ({
 	renderRun,
 	isWriting = false,
 	answerActions,
+	onToggleTask,
 }: MarkdownProps) => {
 	const scope = useId()
 	const remarkPlugins = useMemo<Options["remarkPlugins"]>(
@@ -75,17 +78,19 @@ export const Markdown = ({
 			<NestedMarkdownContext value={Markdown}>
 				<MarkdownAnswerContext value={answerActions ?? null}>
 					<MarkdownRunContext value={renderRun ?? null}>
-						<ReactMarkdown
-							components={MARKDOWN_COMPONENTS}
-							rehypePlugins={[
-								[rehypeSanitize, MARKDOWN_SANITIZE_SCHEMA],
-								[rehypeScopeIds, { scope }],
-								[rehypeAnswerMarks, { isWriting }],
-							]}
-							remarkPlugins={remarkPlugins}
-						>
-							{children}
-						</ReactMarkdown>
+						<MarkdownTaskToggleContext value={onToggleTask ?? null}>
+							<ReactMarkdown
+								components={MARKDOWN_COMPONENTS}
+								rehypePlugins={[
+									[rehypeSanitize, MARKDOWN_SANITIZE_SCHEMA],
+									[rehypeScopeIds, { scope }],
+									[rehypeAnswerMarks, { isWriting }],
+								]}
+								remarkPlugins={remarkPlugins}
+							>
+								{children}
+							</ReactMarkdown>
+						</MarkdownTaskToggleContext>
 					</MarkdownRunContext>
 				</MarkdownAnswerContext>
 			</NestedMarkdownContext>

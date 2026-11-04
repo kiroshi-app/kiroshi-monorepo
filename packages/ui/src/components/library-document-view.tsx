@@ -132,7 +132,7 @@ const LibraryDocumentColumn = ({
 		{/* biome-ignore lint/a11y/noStaticElementInteractions: a pointer press only moves focus into a field the keyboard already reaches with Tab */}
 		<div
 			className={cn(
-				"min-h-0 flex-1 overflow-y-auto px-10 pt-10 pb-10",
+				"@container min-h-0 flex-1 overflow-y-auto px-10 pt-10 pb-10",
 				onColumnMouseDown && "cursor-text",
 			)}
 			data-slot="library-document-column"

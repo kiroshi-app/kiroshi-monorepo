@@ -38,6 +38,7 @@ import {
 	parseBlocks,
 	relaid,
 	serializeBlocks,
+	toggleTask,
 } from "@workspace/ui/components/library-document-blocks"
 import { GrowingField } from "@workspace/ui/components/library-document-editor"
 import { DOCUMENT_TYPE } from "@workspace/ui/components/library-document-view"
@@ -47,12 +48,14 @@ import {
 } from "@workspace/ui/components/library-slash-menu"
 import { Markdown } from "@workspace/ui/components/markdown"
 import type { MarkdownRunRenderProps } from "@workspace/ui/components/markdown/run"
+import { isMacPlatform } from "@workspace/ui/lib/platform"
 import { cn } from "@workspace/ui/lib/utils"
 
 const EDITABLE_TYPES: LibraryBlockType[] = [
 	"paragraph",
 	"heading",
 	"list",
+	"checklist",
 	"quote",
 ]
 
@@ -62,14 +65,13 @@ const FIELD_LOOK: Partial<Record<LibraryBlockType, string>> = {
 
 const DRAG_THRESHOLD = 4
 
+const HANDLE_GUTTER = "me-[clamp(-6px,calc((100cqw-40rem)/2-6px),6px)]"
+
 const PERSON_RUN = "person:"
 
 const NO_WRITERS: LibraryDocumentWriter[] = []
 
 const NO_PEOPLE: LibraryDocumentPerson[] = []
-
-const IS_MAC =
-	typeof navigator !== "undefined" && navigator.userAgent.includes("Mac")
 
 const blockIdsOf = (): BlockIds => {
 	let count = 0
@@ -113,7 +115,7 @@ const runsIn = ({ writers, people, start, length }: RunsInput) => [
 			: []
 	}),
 	...people.flatMap(({ id, caret }) =>
-		caret > start && caret < start + length
+		caret >= start && caret <= start + length
 			? [{ id: `${PERSON_RUN}${id}`, start: caret - start, end: caret - start }]
 			: [],
 	),
@@ -294,7 +296,7 @@ const LibraryDocumentBlockEditor = ({
 		(id: string) => (event: KeyboardEvent<HTMLDivElement>) => {
 			if (event.nativeEvent.isComposing) return
 			const actions = actionsFor(id)
-			const isCommand = IS_MAC ? event.metaKey : event.ctrlKey
+			const isCommand = isMacPlatform() ? event.metaKey : event.ctrlKey
 			const run = (action: () => void) => {
 				event.preventDefault()
 				event.stopPropagation()
@@ -463,6 +465,14 @@ const LibraryDocumentBlockEditor = ({
 		)
 	}
 
+	const toggleTaskIn = (id: string) => (box: HTMLInputElement) => {
+		const block = box.closest('[data-slot="library-document-block"]')
+		const boxes = [...(block?.querySelectorAll('input[type="checkbox"]') ?? [])]
+		const source = latest.current.blocks[indexOf(id)]?.source
+		if (source !== undefined)
+			writeSource(id, toggleTask(source, boxes.indexOf(box)))
+	}
+
 	const startEditingOnFocus =
 		(id: string) => (event: FocusEvent<HTMLDivElement>) => {
 			if (event.target === event.currentTarget) edit(id)
@@ -502,7 +512,7 @@ const LibraryDocumentBlockEditor = ({
 						key={block.id}
 						onKeyDown={shortcutsFor(block.id)}
 					>
-						<div className="absolute end-full top-0 me-1.5">
+						<div className={cn("absolute end-full top-0", HANDLE_GUTTER)}>
 							<LibraryBlockHandle
 								{...actionsFor(block.id)}
 								canMoveDown={index < count - 1}
@@ -539,6 +549,7 @@ const LibraryDocumentBlockEditor = ({
 							>
 								<Markdown
 									className={DOCUMENT_TYPE}
+									onToggleTask={toggleTaskIn(block.id)}
 									renderRun={runs.length > 0 ? renderRun : undefined}
 									runs={runs.length > 0 ? runs : undefined}
 								>

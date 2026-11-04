@@ -26,6 +26,7 @@ import {
 	DropdownMenuSubContent,
 	DropdownMenuSubTrigger,
 } from "@workspace/ui/components/ui/dropdown-menu"
+import { isMacPlatform } from "@workspace/ui/lib/platform"
 import { cn } from "@workspace/ui/lib/utils"
 
 type BlockIcon = ComponentType<SVGProps<SVGSVGElement>>
@@ -93,6 +94,7 @@ const LibraryBlockHandle = ({
 	const dragHandle = useRef<HTMLButtonElement>(null)
 	const [isOpen, setOpen] = useState(false)
 	const typeName = t(`library.editor.blocks.types.${type}`)
+	const platform = isMacPlatform() ? "mac" : "other"
 
 	return (
 		<div
@@ -185,7 +187,9 @@ const LibraryBlockHandle = ({
 									<Icons.Copy aria-hidden="true" />
 									{t("library.editor.blocks.menu.duplicate")}
 									<DropdownMenuShortcut className={MENU_SHORTCUT}>
-										{t("library.editor.blocks.menu.duplicateShortcut")}
+										{t(
+											`library.editor.blocks.menu.shortcuts.${platform}.duplicate`,
+										)}
 									</DropdownMenuShortcut>
 								</DropdownMenuItem>
 								<DropdownMenuItem
@@ -196,7 +200,9 @@ const LibraryBlockHandle = ({
 									<Icons.ArrowUp aria-hidden="true" />
 									{t("library.editor.blocks.menu.moveUp")}
 									<DropdownMenuShortcut className={MENU_SHORTCUT}>
-										{t("library.editor.blocks.menu.moveUpShortcut")}
+										{t(
+											`library.editor.blocks.menu.shortcuts.${platform}.moveUp`,
+										)}
 									</DropdownMenuShortcut>
 								</DropdownMenuItem>
 								<DropdownMenuItem
@@ -207,7 +213,9 @@ const LibraryBlockHandle = ({
 									<Icons.ArrowDown aria-hidden="true" />
 									{t("library.editor.blocks.menu.moveDown")}
 									<DropdownMenuShortcut className={MENU_SHORTCUT}>
-										{t("library.editor.blocks.menu.moveDownShortcut")}
+										{t(
+											`library.editor.blocks.menu.shortcuts.${platform}.moveDown`,
+										)}
 									</DropdownMenuShortcut>
 								</DropdownMenuItem>
 								<DropdownMenuSeparator className="bg-border" />
@@ -219,7 +227,9 @@ const LibraryBlockHandle = ({
 									<Icons.Delete aria-hidden="true" />
 									{t("library.editor.blocks.menu.delete")}
 									<DropdownMenuShortcut className={MENU_SHORTCUT}>
-										{t("library.editor.blocks.menu.deleteShortcut")}
+										{t(
+											`library.editor.blocks.menu.shortcuts.${platform}.delete`,
+										)}
 									</DropdownMenuShortcut>
 								</DropdownMenuItem>
 							</DropdownMenuGroup>
