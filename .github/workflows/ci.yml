@@ -20,6 +20,7 @@ concurrency:
 # lint runs on every event, without waiting on changes.
 # scripts/ci-changes.ts selects every other job per event, verify requires every selected job.
 # pull_request: changes, lint, vitest on the test files the diff changed, rust on its library tests, verify.
+# pull_request labelled ci:storybook: storybook too, on the full story set, its browser debug output uploaded as an artifact.
 # push to main: changes, lint, vitest, website, rust, storybook on the paths changed since the last green push to main, ios, verify.
 # v* tag: changes, lint, vitest, website, rust, storybook, verify.
 jobs:
@@ -133,6 +134,8 @@ jobs:
     if: needs.changes.outputs.storybook == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      STORYBOOK_OPT_IN: ${{ contains(github.event.pull_request.labels.*.name, 'ci:storybook') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -159,7 +162,18 @@ jobs:
         run: bunx playwright install --with-deps chromium
 
       - name: Gate
-        run: bun scripts/ci.ts storybook
+        env:
+          DEBUG: ${{ env.STORYBOOK_OPT_IN == 'true' && 'vitest:browser*,pw:browser*' || '' }}
+        run: |
+          set -o pipefail
+          bun scripts/ci.ts storybook 2>&1 | tee "$RUNNER_TEMP/storybook-debug.log"
+
+      - name: Upload the browser debug output
+        if: always() && env.STORYBOOK_OPT_IN == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: storybook-debug-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/storybook-debug.log
 
   changes:
     runs-on: ubuntu-latest
@@ -173,7 +187,7 @@ jobs:
       rust: ${{ steps.filter.outputs.rust }}
       vitest: ${{ steps.filter.outputs.vitest }}
       website: ${{ steps.filter.outputs.website }}
-      storybook: ${{ steps.filter.outputs.storybook }}
+      storybook: ${{ steps.filter.outputs.storybook == 'true' || contains(github.event.pull_request.labels.*.name, 'ci:storybook') }}
       ios: ${{ steps.filter.outputs.ios }}
       rust-image: ${{ steps.image.outputs.tag }}
     steps:

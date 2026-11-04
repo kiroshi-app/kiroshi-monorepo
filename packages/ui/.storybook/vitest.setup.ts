@@ -2,11 +2,16 @@ import { getProjectAnnotations } from "virtual:/@storybook/builder-vite/project-
 
 import { composeStory, setProjectAnnotations } from "storybook/preview-api"
 import { afterAll } from "vitest"
+import { cdp } from "vitest/browser"
 
 setProjectAnnotations(getProjectAnnotations())
 
 const unmountTheLastStory = () => composeStory({}, {}).load()
 
+const freeTheDocumentsOfTheStoryFilesAlreadyPlayed = () =>
+	cdp().send("HeapProfiler.collectGarbage")
+
+afterAll(freeTheDocumentsOfTheStoryFilesAlreadyPlayed)
 afterAll(unmountTheLastStory)
 
 const RESIZE_OBSERVER_LOOP = "ResizeObserver loop"
