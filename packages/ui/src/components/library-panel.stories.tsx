@@ -133,6 +133,8 @@ const IMPORT_FAILURE_REASONS = [
 	"unknownSpace",
 	"unavailable",
 	"storage",
+	"imageUnreadable",
+	"refused",
 	"generic",
 ] as const
 
