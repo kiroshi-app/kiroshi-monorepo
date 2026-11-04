@@ -1826,10 +1826,11 @@ function ThreadView(props: ThreadViewProps) {
 		bots: known,
 		onOpenMission,
 		onOpenMissionInNewTab,
+		spaceId,
 	} = props
 	const view = useThreadView(props)
 	const imageViewer = useAnswerImageViewer()
-	const imageActions = useShownImageActions(props.spaceId)
+	const imageActions = useShownImageActions(spaceId)
 	const answerActions: AnswerActions = {
 		insert: (text) => view.promptRef.current?.insert(text),
 		openImage: imageViewer.open,
