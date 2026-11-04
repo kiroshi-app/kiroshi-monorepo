@@ -5,6 +5,7 @@ use crate::db::repositories::{conversations, messages};
 use crate::db::result_code::result_code_name;
 use crate::db::DatabaseError;
 use crate::environment::contract::EnvError;
+use crate::library::contract::LibraryError;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -163,6 +164,11 @@ pub enum TranscriptStoreError {
 	#[serde(rename_all = "camelCase")]
 	UnreadableCursor {
 		cursor: String,
+	},
+	#[serde(rename_all = "camelCase")]
+	DocumentRefused {
+		name: String,
+		failure: Box<LibraryError>,
 	},
 }
 

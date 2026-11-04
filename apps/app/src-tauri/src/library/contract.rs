@@ -177,6 +177,8 @@ pub enum LibraryError {
 	ClipboardRefused { detail: String },
 	#[serde(rename_all = "camelCase")]
 	Unrevealed { detail: String },
+	#[serde(rename_all = "camelCase")]
+	UnknownMessage { conversation_id: String, message_id: String },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]

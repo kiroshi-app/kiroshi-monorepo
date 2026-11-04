@@ -14,9 +14,12 @@ use crate::agent::reply_writer::{settled_mentions, HostWrites};
 use crate::agent::translate::now_ms;
 use crate::agent::AgentState;
 use crate::db;
-use crate::db::repositories::messages::{MessagePageQuery, MessagesAroundQuery, TerminalState};
+use crate::db::repositories::messages::{
+	self, AccountAuthor, MessagePageQuery, MessagesAroundQuery, TerminalState, WrittenFrom,
+};
 use crate::events::{self, CONVERSATION_UPDATED, MESSAGE_STORED};
 use crate::hosting::authorship::Caller;
+use crate::library::{self, contract::LibraryError};
 
 #[tauri::command]
 #[specta::specta]
@@ -154,6 +157,7 @@ pub async fn conversation_append_user_message<R: Runtime>(
 	message: NewUserMessage,
 ) -> Result<i64, TranscriptStoreError> {
 	let database = ready(&state)?;
+	refuse_unheld_documents(&app, database, &message.conversation_id, &message.documents).await?;
 	let written_from = caller.written_from();
 	let author = caller.author(&app, database).await?;
 	let (conversation_id, id) = (message.conversation_id.clone(), message.id.clone());
@@ -242,6 +246,7 @@ pub(crate) async fn run_handed_turn<R: Runtime>(
 		replied_to_message_id: None,
 		replied_to_message_ids: Vec::new(),
 		reply_links: Vec::new(),
+		documents: Vec::new(),
 	};
 	tauri::async_runtime::spawn(host_turn::run(app.clone(), held, message, vec![summoned]));
 	Ok(())
@@ -254,6 +259,7 @@ async fn store_sent<R: Runtime>(
 	message: NewUserMessage,
 	summoned: &[String],
 ) -> Result<i64, TranscriptStoreError> {
+	refuse_unheld_documents(app, database, &message.conversation_id, &message.documents).await?;
 	let turn_id = message.turn_id.clone();
 	let completed_at = summoned.is_empty().then_some(message.created_at);
 	let written_from = caller.written_from();
@@ -269,6 +275,56 @@ async fn store_sent<R: Runtime>(
 	announce_stored(app, database, conversation_id.clone(), id).await;
 	announce_conversation(app, database, CONVERSATION_UPDATED, &conversation_id).await;
 	Ok(seq)
+}
+
+pub(crate) async fn post_document<R: Runtime>(
+	app: &AppHandle<R>,
+	database: &db::Database,
+	conversation_id: &str,
+	author_bot_id: &str,
+	name: &str,
+) -> Result<String, TranscriptStoreError> {
+	let documents = vec![name.to_owned()];
+	refuse_unheld_documents(app, database, conversation_id, &documents).await?;
+	let id = Uuid::new_v4().to_string();
+	let posted = messages::NewUserMessage {
+		id: id.clone(),
+		conversation_id: conversation_id.to_owned(),
+		turn_id: Uuid::new_v4().to_string(),
+		author_bot_id: Some(author_bot_id.to_owned()),
+		author: AccountAuthor::default(),
+		written_from: WrittenFrom::Here,
+		reply_links: Vec::new(),
+		documents,
+		content: String::new(),
+		created_at: now_ms(),
+	};
+	database.messages().post_message(posted).await?;
+	announce_stored(app, database, conversation_id.to_owned(), id.clone()).await;
+	announce_conversation(app, database, CONVERSATION_UPDATED, conversation_id).await;
+	Ok(id)
+}
+
+async fn refuse_unheld_documents<R: Runtime>(
+	app: &AppHandle<R>,
+	database: &db::Database,
+	conversation_id: &str,
+	documents: &[String],
+) -> Result<(), TranscriptStoreError> {
+	let Some(first) = documents.first() else {
+		return Ok(());
+	};
+	let Some(space_id) = database.conversations().space(conversation_id.to_owned()).await? else {
+		return Err(TranscriptStoreError::DocumentRefused {
+			name: first.clone(),
+			failure: Box::new(LibraryError::Missing { name: first.clone() }),
+		});
+	};
+	documents.iter().try_for_each(|name| {
+		library::held_document(app, &space_id, name).map_err(|failure| {
+			TranscriptStoreError::DocumentRefused { name: name.clone(), failure: Box::new(failure) }
+		})
+	})
 }
 
 async fn announce_stored<R: Runtime>(
@@ -530,6 +586,7 @@ mod tests {
 			replied_to_message_id: targets.first().map(|target| (*target).to_owned()),
 			replied_to_message_ids: targets.iter().map(|target| (*target).to_owned()).collect(),
 			reply_links: Vec::new(),
+			documents: Vec::new(),
 			content: "hello".into(),
 			created_at: 1,
 		}

@@ -15,6 +15,8 @@ use yrs::updates::encoder::Encode;
 use yrs::{Doc, GetString, IndexedSequence, ReadTxn, Text, Transact, Update};
 
 use super::*;
+use crate::conversations::contract::TranscriptMessage;
+use crate::db::repositories::messages::MessagePageQuery;
 use crate::library::contract::{
 	LibraryChanged, LibraryDocumentPresence, LibraryDocumentRenamed, LibraryWriter,
 	LibraryWriterKind,
@@ -686,4 +688,70 @@ fn a_text_splits_into_steps_on_char_boundaries_and_loses_nothing() {
 		assert_eq!(split.len() > 1, text.chars().count() > 1, "{text}");
 	}
 	assert_eq!(steps(&"a".repeat(400)).len(), WRITE_STEPS);
+}
+
+#[tokio::test]
+async fn an_agent_posts_a_document_of_the_space_as_its_own_message_announced_live() {
+	let (app, root) = a_host("post-document").await;
+	put(&root, SPACE, "notes.md", "Notes.");
+	let stored = heard::<TranscriptMessage>(&app, events::MESSAGE_STORED.name());
+
+	let posted = the_host(&app)
+		.served(Operation::PostDocument, json!({ "name": "notes.md" }))
+		.await
+		.expect("the document is posted");
+
+	let page = ready(&app.state::<db::DatabaseState>())
+		.expect("the database opens")
+		.messages()
+		.page_messages(MessagePageQuery {
+			conversation_id: "c1".to_owned(),
+			before_seq: None,
+			limit: 10,
+		})
+		.await
+		.expect("the page reads");
+	assert_eq!(page.messages.len(), 1);
+	let message = &page.messages[0];
+	assert_eq!(message.author_bot_id.as_deref(), Some("b1"));
+	assert_eq!(message.documents, ["notes.md"]);
+	assert_eq!(
+		posted,
+		json!({ "name": "notes.md", "conversationId": "c1", "messageId": message.id })
+	);
+	let announced = all_of(&stored);
+	assert_eq!(announced.len(), 1);
+	assert_eq!(
+		(announced[0].id.as_str(), announced[0].documents.as_slice()),
+		(message.id.as_str(), ["notes.md".to_owned()].as_slice())
+	);
+}
+
+#[tokio::test]
+async fn an_agent_posting_what_is_not_a_document_of_the_space_is_refused_by_name_and_posts_nothing()
+{
+	let (app, root) = a_host("post-refused").await;
+	put(&root, "work", "theirs.md", "Theirs.");
+	put_bytes(&root, "cover.png", &png_of(4));
+	let host = the_host(&app);
+
+	let missing = host.served(Operation::PostDocument, json!({ "name": "theirs.md" })).await;
+	let image = host.served(Operation::PostDocument, json!({ "name": "cover.png" })).await;
+
+	let refused = |answer: Result<Value, DocumentRefusal>| {
+		serde_json::to_value(answer.expect_err("the post is refused")).expect("serializes")
+	};
+	assert_eq!(refused(missing), json!({ "kind": "missing", "name": "theirs.md" }));
+	assert_eq!(refused(image), json!({ "kind": "notADocument", "name": "cover.png" }));
+	let page = ready(&app.state::<db::DatabaseState>())
+		.expect("the database opens")
+		.messages()
+		.page_messages(MessagePageQuery {
+			conversation_id: "c1".to_owned(),
+			before_seq: None,
+			limit: 10,
+		})
+		.await
+		.expect("the page reads");
+	assert!(page.messages.is_empty());
 }

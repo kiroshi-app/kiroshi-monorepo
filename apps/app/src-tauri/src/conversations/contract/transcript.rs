@@ -144,6 +144,9 @@ pub struct TranscriptMessage {
 	#[serde(default)]
 	#[specta(optional)]
 	pub reply_links: Vec<ReplyLink>,
+	#[serde(default)]
+	#[specta(optional)]
+	pub documents: Vec<String>,
 	pub runtime_session_id: Option<String>,
 	#[serde(default, skip_serializing_if = "Option::is_none")]
 	#[specta(optional)]
@@ -175,6 +178,7 @@ impl TranscriptMessage {
 				.map(|link| link.message_id.clone())
 				.collect(),
 			reply_links: stored.reply_links.into_iter().map(Into::into).collect(),
+			documents: stored.documents,
 			runtime_session_id: stored.runtime_session_id,
 			continues_turn_id: stored.continues_turn_id,
 			web_sources: stored.web_sources.into_iter().map(Into::into).collect(),
@@ -374,6 +378,9 @@ pub struct NewUserMessage {
 	#[serde(default)]
 	#[specta(optional)]
 	pub reply_links: Vec<ReplyLink>,
+	#[serde(default)]
+	#[specta(optional)]
+	pub documents: Vec<String>,
 	pub content: String,
 	pub created_at: i64,
 }
@@ -400,6 +407,7 @@ impl NewUserMessage {
 				self.replied_to_message_ids,
 				self.reply_links,
 			),
+			documents: self.documents,
 			content: self.content,
 			created_at: self.created_at,
 		}
@@ -421,6 +429,9 @@ pub struct SentMessage {
 	#[serde(default)]
 	#[specta(optional)]
 	pub reply_links: Vec<ReplyLink>,
+	#[serde(default)]
+	#[specta(optional)]
+	pub documents: Vec<String>,
 }
 
 impl SentMessage {
@@ -444,6 +455,7 @@ impl From<SentMessage> for NewUserMessage {
 			replied_to_message_id: sent.replied_to_message_id,
 			replied_to_message_ids: sent.replied_to_message_ids,
 			reply_links: sent.reply_links,
+			documents: sent.documents,
 			content: sent.content,
 			created_at: sent.created_at,
 		}
@@ -599,6 +611,7 @@ mod tests {
 			replied_to_message_id: None,
 			replied_to_message_ids: Vec::new(),
 			reply_links: Vec::new(),
+			documents: Vec::new(),
 			content: "hello".into(),
 			created_at: 1,
 		};
@@ -624,6 +637,7 @@ mod tests {
 				.iter()
 				.map(|id| ReplyLink { message_id: (*id).to_owned(), excerpt: None })
 				.collect(),
+			documents: Vec::new(),
 		};
 
 		assert_eq!(sent(Some("a"), &["b"], &["c"]).first_reply_target().as_deref(), Some("c"));
@@ -647,6 +661,7 @@ mod tests {
 				replied_to_message_id: None,
 				replied_to_message_ids: Vec::new(),
 				reply_links: Vec::new(),
+				documents: Vec::new(),
 				content: "hello".into(),
 				created_at: 1,
 			},
@@ -658,6 +673,7 @@ mod tests {
 				"repliedToMessageId": null,
 				"repliedToMessageIds": [],
 				"replyLinks": [],
+				"documents": [],
 				"content": "hello",
 				"createdAt": 1
 			}),

@@ -119,6 +119,7 @@ describe("kiroshiServer", () => {
 			"library_import",
 			"library_rename",
 			"library_delete",
+			"conversation_post_document",
 		])
 	})
 

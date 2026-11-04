@@ -828,6 +828,7 @@ mod tests {
 			author: Default::default(),
 			written_from: None,
 			reply_links: Vec::new(),
+			documents: Vec::new(),
 			seq,
 			role,
 			content: content.to_owned(),
@@ -1258,6 +1259,7 @@ mod tests {
 					author: Default::default(),
 					written_from: WrittenFrom::Here,
 					reply_links: Vec::new(),
+					documents: Vec::new(),
 					content,
 					created_at: index as i64,
 				})
@@ -1320,6 +1322,7 @@ mod tests {
 				author: Default::default(),
 				written_from: WrittenFrom::Here,
 				reply_links,
+				documents: Vec::new(),
 				content: asked(id),
 				created_at: 99,
 			})
@@ -1366,6 +1369,7 @@ mod tests {
 				author: Default::default(),
 				written_from: WrittenFrom::Here,
 				reply_links: Vec::new(),
+				documents: Vec::new(),
 				content: content.clone(),
 				created_at: 98,
 			})
@@ -1991,6 +1995,7 @@ mod tests {
 				author: Default::default(),
 				written_from: WrittenFrom::Here,
 				reply_links: Vec::new(),
+				documents: Vec::new(),
 				content: content.to_owned(),
 				created_at,
 			})
@@ -2032,6 +2037,7 @@ mod tests {
 				author: Default::default(),
 				written_from: WrittenFrom::Here,
 				reply_links: Vec::new(),
+				documents: Vec::new(),
 				content: asked(id),
 				created_at: 99,
 			})
@@ -2728,6 +2734,7 @@ mod tests {
 					.into_iter()
 					.collect(),
 				content: content.to_owned(),
+				documents: Vec::new(),
 				created_at: STEVE_AT,
 			})
 			.await
@@ -3002,6 +3009,7 @@ mod tests {
 				author: ada_on(Some("Studio")),
 				written_from: WrittenFrom::Here,
 				reply_links: Vec::new(),
+				documents: Vec::new(),
 				content: "the roof leaks".to_owned(),
 				created_at: STEVE_AT,
 			})

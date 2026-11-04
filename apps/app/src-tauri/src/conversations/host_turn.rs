@@ -1438,6 +1438,7 @@ mod tests {
 			replied_to_message_id: replied_to.map(str::to_owned),
 			replied_to_message_ids: Vec::new(),
 			reply_links: vec![ReplyLink { message_id: linked.to_owned(), excerpt: None }],
+			documents: Vec::new(),
 		}
 	}
 

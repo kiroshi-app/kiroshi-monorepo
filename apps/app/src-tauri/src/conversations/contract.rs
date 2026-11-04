@@ -49,6 +49,7 @@ mod tests {
 			replied_to_message_id: Some("m0".into()),
 			replied_to_message_ids: vec!["m0".into()],
 			reply_links: vec![ReplyLink { message_id: "m0".into(), excerpt: None }],
+			documents: Vec::new(),
 			runtime_session_id: Some("run-1".into()),
 			continues_turn_id: None,
 			web_sources: vec![WebSource {
@@ -76,6 +77,7 @@ mod tests {
 			"repliedToMessageId": "m0",
 			"repliedToMessageIds": ["m0"],
 			"replyLinks": [{ "messageId": "m0", "excerpt": null }],
+			"documents": [],
 			"runtimeSessionId": "run-1",
 			"webSources": [{ "url": "https://docs.rs/serde", "domain": "docs.rs", "title": null }]
 		})

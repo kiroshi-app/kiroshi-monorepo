@@ -4029,6 +4029,25 @@
             "detail"
           ],
           "type": "object"
+        },
+        {
+          "properties": {
+            "conversationId": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "unknownMessage"
+            },
+            "messageId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "conversationId",
+            "messageId"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -5714,6 +5733,12 @@
         "createdAt": {
           "type": "integer"
         },
+        "documents": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "id": {
           "type": "string"
         },
@@ -7384,6 +7409,12 @@
         "createdAt": {
           "type": "integer"
         },
+        "documents": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "id": {
           "type": "string"
         },
@@ -8419,6 +8450,12 @@
         "createdAt": {
           "type": "integer"
         },
+        "documents": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "id": {
           "type": "string"
         },
@@ -8925,6 +8962,25 @@
           "required": [
             "kind",
             "cursor"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "failure": {
+              "$ref": "#/$defs/LibraryError"
+            },
+            "kind": {
+              "const": "documentRefused"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "name",
+            "failure"
           ],
           "type": "object"
         }
@@ -11876,6 +11932,29 @@
           "spaceId",
           "name",
           "newName"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/LibraryError"
+      },
+      "ok": {
+        "$ref": "#/$defs/LibraryItem"
+      }
+    },
+    "library_save_message": {
+      "args": {
+        "properties": {
+          "conversationId": {
+            "type": "string"
+          },
+          "messageId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "conversationId",
+          "messageId"
         ],
         "type": "object"
       },

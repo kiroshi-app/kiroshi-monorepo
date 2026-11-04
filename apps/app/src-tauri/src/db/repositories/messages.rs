@@ -134,6 +134,7 @@ pub struct NewUserMessage {
 	pub author: AccountAuthor,
 	pub written_from: WrittenFrom,
 	pub reply_links: Vec<ReplyLink>,
+	pub documents: Vec<String>,
 	pub content: String,
 	pub created_at: i64,
 }
@@ -154,6 +155,7 @@ pub struct StoredMessage {
 	pub written_from: Option<WrittenFrom>,
 	pub continues_turn_id: Option<String>,
 	pub web_sources: Vec<WebSource>,
+	pub documents: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -294,6 +296,12 @@ const INSERT_MESSAGE: &str = "INSERT INTO messages
 const INSERT_REPLY_LINK: &str = "INSERT INTO message_replies
 	(message_id, conversation_id, position, target_message_id, excerpt)
 	VALUES (?1, ?2, ?3, ?4, ?5)";
+const INSERT_DOCUMENT_LINK: &str =
+	"INSERT INTO message_documents (message_id, position, name) VALUES (?1, ?2, ?3)";
+const RENAME_DOCUMENT_LINKS: &str = "UPDATE message_documents SET name = ?3
+	WHERE name = ?2 AND message_id IN (SELECT messages.id FROM messages
+		JOIN conversations ON conversations.id = messages.conversation_id
+		WHERE conversations.space_id = ?1)";
 const SET_FIRST_REPLY_EXCERPT: &str =
 	"UPDATE message_replies SET excerpt = ?2 WHERE message_id = ?1 AND position = 0";
 const APPEND_TEXT: &str =
@@ -312,7 +320,9 @@ const MESSAGE_PAGE: &str = "SELECT id, turn_id, author_bot_id,
 			WHERE message_id = messages.id), seq, role,
 		content, completion_state, created_at, runtime_session_id, author_account_id,
 		author_name, written_from, author_email, author_computer,
-		(SELECT continues_turn_id FROM turns WHERE turns.id = messages.turn_id), web_sources
+		(SELECT continues_turn_id FROM turns WHERE turns.id = messages.turn_id), web_sources,
+		(SELECT json_group_array(name ORDER BY position) FROM message_documents
+			WHERE message_id = messages.id)
 	FROM messages WHERE conversation_id = ?1 AND seq < ?2 ORDER BY seq DESC LIMIT ?3";
 const MESSAGE_AT_SEQ: &str = "SELECT id, turn_id, author_bot_id,
 		(SELECT json_group_array(json_object('message_id', target_message_id, 'excerpt', excerpt)
@@ -320,7 +330,9 @@ const MESSAGE_AT_SEQ: &str = "SELECT id, turn_id, author_bot_id,
 			WHERE message_id = messages.id), seq, role,
 		content, completion_state, created_at, runtime_session_id, author_account_id,
 		author_name, written_from, author_email, author_computer,
-		(SELECT continues_turn_id FROM turns WHERE turns.id = messages.turn_id), web_sources
+		(SELECT continues_turn_id FROM turns WHERE turns.id = messages.turn_id), web_sources,
+		(SELECT json_group_array(name ORDER BY position) FROM message_documents
+			WHERE message_id = messages.id)
 	FROM messages WHERE conversation_id = ?1 AND seq = ?2";
 const MESSAGES_AFTER_SEQ: &str = "SELECT id, turn_id, author_bot_id,
 		(SELECT json_group_array(json_object('message_id', target_message_id, 'excerpt', excerpt)
@@ -328,7 +340,9 @@ const MESSAGES_AFTER_SEQ: &str = "SELECT id, turn_id, author_bot_id,
 			WHERE message_id = messages.id), seq,
 		role, content, completion_state, created_at, runtime_session_id, author_account_id,
 		author_name, written_from, author_email, author_computer,
-		(SELECT continues_turn_id FROM turns WHERE turns.id = messages.turn_id), web_sources
+		(SELECT continues_turn_id FROM turns WHERE turns.id = messages.turn_id), web_sources,
+		(SELECT json_group_array(name ORDER BY position) FROM message_documents
+			WHERE message_id = messages.id)
 	FROM messages WHERE conversation_id = ?1 AND seq > ?2 ORDER BY seq ASC LIMIT ?3";
 const MESSAGE_OLDER_THAN_SEQ: &str =
 	"SELECT EXISTS(SELECT 1 FROM messages WHERE conversation_id = ?1 AND seq < ?2)";
@@ -340,7 +354,9 @@ const MESSAGE_BY_ID: &str = "SELECT id, turn_id, author_bot_id,
 			WHERE message_id = messages.id), seq, role,
 		content, completion_state, created_at, runtime_session_id, author_account_id,
 		author_name, written_from, author_email, author_computer,
-		(SELECT continues_turn_id FROM turns WHERE turns.id = messages.turn_id), web_sources
+		(SELECT continues_turn_id FROM turns WHERE turns.id = messages.turn_id), web_sources,
+		(SELECT json_group_array(name ORDER BY position) FROM message_documents
+			WHERE message_id = messages.id)
 	FROM messages WHERE conversation_id = ?1 AND id = ?2";
 const MESSAGE_WINDOW: &str = "SELECT id, turn_id, author_bot_id,
 		(SELECT json_group_array(json_object('message_id', target_message_id, 'excerpt', excerpt)
@@ -348,7 +364,9 @@ const MESSAGE_WINDOW: &str = "SELECT id, turn_id, author_bot_id,
 			WHERE message_id = messages.id), seq, role,
 		content, completion_state, created_at, runtime_session_id, author_account_id,
 		author_name, written_from, author_email, author_computer,
-		(SELECT continues_turn_id FROM turns WHERE turns.id = messages.turn_id), web_sources
+		(SELECT continues_turn_id FROM turns WHERE turns.id = messages.turn_id), web_sources,
+		(SELECT json_group_array(name ORDER BY position) FROM message_documents
+			WHERE message_id = messages.id)
 	FROM messages WHERE conversation_id = ?1 AND seq > ?2 AND seq < ?3
 	ORDER BY seq DESC LIMIT ?4";
 const SETTLED_MESSAGE_WINDOW: &str = "SELECT id, turn_id, author_bot_id,
@@ -357,7 +375,9 @@ const SETTLED_MESSAGE_WINDOW: &str = "SELECT id, turn_id, author_bot_id,
 			WHERE message_id = messages.id),
 		seq, role, content, completion_state, created_at, runtime_session_id, author_account_id,
 		author_name, written_from, author_email, author_computer,
-		(SELECT continues_turn_id FROM turns WHERE turns.id = messages.turn_id), web_sources
+		(SELECT continues_turn_id FROM turns WHERE turns.id = messages.turn_id), web_sources,
+		(SELECT json_group_array(name ORDER BY position) FROM message_documents
+			WHERE message_id = messages.id)
 	FROM messages WHERE conversation_id = ?1 AND seq > ?2 AND seq < ?3
 		AND completion_state NOT IN ('pending', 'streaming')
 		AND trim(content, char(32, 9, 10, 13)) <> ''
@@ -368,7 +388,9 @@ const LATEST_MESSAGE_ASIDE_BOT: &str = "SELECT id, turn_id, author_bot_id,
 			WHERE message_id = messages.id),
 		seq, role, content, completion_state, created_at, runtime_session_id, author_account_id,
 		author_name, written_from, author_email, author_computer,
-		(SELECT continues_turn_id FROM turns WHERE turns.id = messages.turn_id), web_sources
+		(SELECT continues_turn_id FROM turns WHERE turns.id = messages.turn_id), web_sources,
+		(SELECT json_group_array(name ORDER BY position) FROM message_documents
+			WHERE message_id = messages.id)
 	FROM messages WHERE conversation_id = ?1 AND COALESCE(author_bot_id, '') <> ?2
 		AND created_at <= ?3
 		AND trim(content, char(32, 9, 10, 13)) <> '' ORDER BY seq DESC LIMIT 1";
@@ -378,7 +400,9 @@ const LATEST_MESSAGE_OF_BOT: &str = "SELECT id, turn_id, author_bot_id,
 			WHERE message_id = messages.id), seq,
 		role, content, completion_state, created_at, runtime_session_id, author_account_id,
 		author_name, written_from, author_email, author_computer,
-		(SELECT continues_turn_id FROM turns WHERE turns.id = messages.turn_id), web_sources
+		(SELECT continues_turn_id FROM turns WHERE turns.id = messages.turn_id), web_sources,
+		(SELECT json_group_array(name ORDER BY position) FROM message_documents
+			WHERE message_id = messages.id)
 	FROM messages WHERE conversation_id = ?1 AND author_bot_id = ?2 AND created_at <= ?3
 		AND trim(content, char(32, 9, 10, 13)) <> '' ORDER BY seq DESC LIMIT 1";
 const MESSAGE_OF_CONVERSATION: &str =
@@ -397,7 +421,10 @@ const PINNED_MESSAGES: &str = "SELECT messages.id, messages.turn_id, messages.au
 		messages.author_account_id, messages.author_name, messages.written_from,
 		messages.author_email, messages.author_computer,
 		(SELECT continues_turn_id FROM turns WHERE turns.id = messages.turn_id),
-		messages.web_sources, message_pins.block_index, message_pins.pinned_at
+		messages.web_sources,
+		(SELECT json_group_array(name ORDER BY position) FROM message_documents
+			WHERE message_id = messages.id),
+		message_pins.block_index, message_pins.pinned_at
 	FROM message_pins
 	JOIN messages ON messages.id = message_pins.message_id
 		AND messages.conversation_id = message_pins.conversation_id
@@ -655,6 +682,30 @@ impl MessagesRepository {
 		self.call_mut(move |connection| Ok(open_turn_with(connection, message, completed_at)))
 			.await?
 			.at("send_user_message", "messages")
+	}
+
+	pub async fn post_message(&self, message: NewUserMessage) -> Result<i64, TranscriptError> {
+		self.call_mut(move |connection| Ok(posted_in_a_closed_turn(connection, message)))
+			.await?
+			.at("post_message", "messages")
+	}
+
+	pub async fn rename_document_links(
+		&self,
+		space_id: String,
+		former_name: String,
+		name: String,
+	) -> Result<(), DatabaseError> {
+		self.call(move |connection| {
+			connection.prepare_cached(RENAME_DOCUMENT_LINKS)?.execute(params![
+				space_id,
+				former_name,
+				name
+			])?;
+			Ok(())
+		})
+		.await
+		.at("rename_document_links", "message_documents")
 	}
 
 	pub async fn open_turns_without_reply(
@@ -1061,6 +1112,7 @@ struct AppendedMessage {
 	turn_id: String,
 	author_bot_id: Option<String>,
 	reply_links: Vec<ReplyLink>,
+	documents: Vec<String>,
 	role: MessageRole,
 	content: Option<String>,
 	created_at: i64,
@@ -1076,6 +1128,7 @@ impl From<NewAssistantMessage> for AppendedMessage {
 			turn_id: message.turn_id,
 			author_bot_id: message.author_bot_id,
 			reply_links: message.replied_to_message_id.into_iter().map(ReplyLink::bare).collect(),
+			documents: Vec::new(),
 			role: MessageRole::Assistant,
 			content: None,
 			created_at: message.created_at,
@@ -1093,6 +1146,7 @@ impl From<NewUserMessage> for AppendedMessage {
 			turn_id: message.turn_id,
 			author_bot_id: message.author_bot_id,
 			reply_links: normalised(message.reply_links),
+			documents: distinct(message.documents),
 			role: MessageRole::User,
 			content: Some(message.content),
 			created_at: message.created_at,
@@ -1362,18 +1416,37 @@ fn open_turn_with(
 		COMPLETE_EARLIER_UNANSWERED_TURNS,
 		params![message.conversation_id, message.turn_id, message.created_at],
 	)?;
+	let seq = in_a_turn_of_its_own(&transaction, message, completed_at)?;
+	transaction.commit()?;
+	Ok(seq)
+}
+
+fn posted_in_a_closed_turn(
+	connection: &mut Connection,
+	message: NewUserMessage,
+) -> Result<i64, TranscriptError> {
+	let transaction = write_transaction(connection)?;
+	let created_at = message.created_at;
+	let seq = in_a_turn_of_its_own(&transaction, message, Some(created_at))?;
+	transaction.commit()?;
+	Ok(seq)
+}
+
+fn in_a_turn_of_its_own(
+	transaction: &Transaction<'_>,
+	message: NewUserMessage,
+	completed_at: Option<i64>,
+) -> Result<i64, TranscriptError> {
 	let turn = NewTurn {
 		id: message.turn_id.clone(),
 		conversation_id: message.conversation_id.clone(),
 		started_at: message.created_at,
 	};
-	insert_turn_once(&transaction, &turn)?;
+	insert_turn_once(transaction, &turn)?;
 	if let Some(completed_at) = completed_at {
 		transaction.execute(COMPLETE_TURN, params![turn.id, completed_at])?;
 	}
-	let seq = insert_message_once(&transaction, message.into())?;
-	transaction.commit()?;
-	Ok(seq)
+	insert_message_once(transaction, message.into())
 }
 
 fn store_message(
@@ -1422,7 +1495,25 @@ fn insert_message_once(
 		|row| row.get(0),
 	)?;
 	link_replies(transaction, &message.id, &message.conversation_id, &message.reply_links)?;
+	link_documents(transaction, &message.id, &message.documents)?;
 	Ok(seq)
+}
+
+fn link_documents(
+	transaction: &Transaction<'_>,
+	id: &str,
+	documents: &[String],
+) -> rusqlite::Result<()> {
+	let mut statement = transaction.prepare_cached(INSERT_DOCUMENT_LINK)?;
+	for (position, name) in (0_i64..).zip(documents) {
+		statement.execute(params![id, position, name])?;
+	}
+	Ok(())
+}
+
+fn distinct(documents: Vec<String>) -> Vec<String> {
+	let mut seen = HashSet::new();
+	documents.into_iter().filter(|name| seen.insert(name.clone())).collect()
 }
 
 fn link_replies(
@@ -1734,6 +1825,7 @@ fn read_message(row: &Row<'_>) -> rusqlite::Result<StoredMessage> {
 		written_from: row.get(12)?,
 		continues_turn_id: row.get(15)?,
 		web_sources: json_list(row, 16)?,
+		documents: json_list(row, 17)?,
 	})
 }
 
@@ -1746,8 +1838,8 @@ fn json_list<T: DeserializeOwned>(row: &Row<'_>, index: usize) -> rusqlite::Resu
 fn read_pin(row: &Row<'_>) -> rusqlite::Result<StoredPin> {
 	Ok(StoredPin {
 		message: read_message(row)?,
-		block_index: row.get(17)?,
-		pinned_at: row.get(18)?,
+		block_index: row.get(18)?,
+		pinned_at: row.get(19)?,
 	})
 }
 
@@ -1825,6 +1917,7 @@ mod tests {
 			author: Default::default(),
 			written_from: WrittenFrom::Here,
 			reply_links: Vec::new(),
+			documents: Vec::new(),
 			content: content.into(),
 			created_at,
 		}

@@ -15,7 +15,7 @@ use super::commands::{
 	library_apply_update, library_copy, library_create_document, library_delete, library_import,
 	library_import_paths, library_list, library_open_document, library_read_document,
 	library_read_file, library_read_image, library_read_thumbnail, library_rename_document,
-	library_reveal, library_save, library_templates,
+	library_reveal, library_save, library_save_message, library_templates,
 };
 use super::contract::{
 	LibraryChanged, LibraryDocumentFormat, LibraryDocumentRenamed, LibraryDocumentUpdated,
@@ -23,7 +23,12 @@ use super::contract::{
 	LibraryTemplate,
 };
 use super::*;
+use crate::attachments::attachment_block;
+use crate::attachments::contract::SubmittedAttachment;
+use crate::conversations::commands::{conversation_message_page, conversation_send_user_message};
+use crate::conversations::contract::{NewUserMessage, TranscriptStoreError};
 use crate::db;
+use crate::hosting::authorship::Caller;
 use crate::removed_on_drop::RemovedOnDrop;
 use crate::spaces::commands::space_delete;
 use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
@@ -2237,4 +2242,229 @@ async fn a_delete_that_cannot_remove_the_file_keeps_the_item_listed() {
 
 	assert!(matches!(refused, Err(LibraryError::Unwritable { .. })), "{refused:?}");
 	assert_eq!(names(&root, &space_id), ["notes.md"]);
+}
+
+const A_ROOM: &str = "INSERT INTO conversations (id, kind, space_id, title, created_at, updated_at)
+	VALUES ('c1', 'topic', 'personal', 'Notes', 1, 1);";
+
+const ROOM: &str = "c1";
+
+const PERSONAL: &str = "personal";
+
+async fn a_host_with_a_room(name: &str) -> AppOfItsOwn {
+	let app = a_host(name);
+	app.state::<db::DatabaseState>()
+		.as_ref()
+		.expect("the database opens")
+		.call_mut(|connection| Ok(connection.execute_batch(A_ROOM)?))
+		.await
+		.expect("the room is planted");
+	app
+}
+
+fn a_message(id: &str, content: &str, documents: &[&str]) -> NewUserMessage {
+	NewUserMessage {
+		id: id.to_owned(),
+		conversation_id: ROOM.to_owned(),
+		turn_id: format!("t-{id}"),
+		author_bot_id: None,
+		replied_to_message_id: None,
+		replied_to_message_ids: Vec::new(),
+		reply_links: Vec::new(),
+		documents: documents.iter().map(|name| (*name).to_owned()).collect(),
+		content: content.to_owned(),
+		created_at: 1,
+	}
+}
+
+async fn sent(
+	app: &App<MockRuntime>,
+	message: NewUserMessage,
+) -> Result<i64, TranscriptStoreError> {
+	conversation_send_user_message(app.handle().clone(), app.state(), Caller::Host, message, vec![])
+		.await
+}
+
+async fn linked_documents(app: &App<MockRuntime>) -> Vec<(String, Vec<String>)> {
+	let page = conversation_message_page(app.state(), ROOM.to_owned(), None, 20)
+		.await
+		.expect("the page reads");
+	page.messages.into_iter().map(|message| (message.id, message.documents)).collect()
+}
+
+fn attached(app: &App<MockRuntime>, files: &[(&str, Vec<u8>)]) -> Vec<PathBuf> {
+	let store = Attachments::dir(app.handle()).expect("the attachment store resolves");
+	let submitted: Vec<SubmittedAttachment> = files
+		.iter()
+		.map(|(name, bytes)| SubmittedAttachment {
+			name: (*name).to_owned(),
+			bytes: Some(bytes.clone()),
+			base64: None,
+		})
+		.collect();
+	attachments::store(&store, ROOM, &submitted).expect("the attachments are stored")
+}
+
+async fn saved_message(
+	app: &App<MockRuntime>,
+	message_id: &str,
+) -> Result<contract::LibraryItem, LibraryError> {
+	library_save_message(app.handle().clone(), app.state(), ROOM.to_owned(), message_id.to_owned())
+		.await
+}
+
+#[tokio::test]
+async fn a_message_with_two_images_saves_as_a_document_named_after_its_heading_with_both_images() {
+	let app = a_host_with_a_room("save-message").await;
+	let root = root(app.handle()).expect("the library root resolves");
+	let paths = attached(
+		&app,
+		&[
+			("shot.png", encoded(ImageFormat::Png)),
+			("report.pdf", b"pdf".to_vec()),
+			("photo.JPG", encoded(ImageFormat::Jpeg)),
+		],
+	);
+	let content =
+		format!("# Launch plan\nShip it on Friday.\n{}", attachment_block(&paths, Utc::now()));
+	sent(&app, a_message("m1", &content, &[])).await.expect("the message is sent");
+	let changes = heard_changes(&app);
+
+	let first = saved_message(&app, "m1").await.expect("the message is saved");
+	let second = saved_message(&app, "m1").await.expect("the message is saved again");
+
+	assert_eq!((first.name.as_str(), first.kind), ("Launch plan.md", LibraryItemKind::Document));
+	assert_eq!(second.name, "Launch plan (2).md");
+	assert_eq!(
+		on_disk(&root, PERSONAL, "Launch plan.md"),
+		"# Launch plan\nShip it on Friday.\n\n![](<Launch plan.png>)\n\n![](<Launch plan.jpg>)"
+	);
+	assert!(on_disk(&root, PERSONAL, "Launch plan (2).md")
+		.ends_with("![](<Launch plan (2).png>)\n\n![](<Launch plan (2).jpg>)"));
+	assert_eq!(
+		fs::read(space_dir(&root, PERSONAL).join("Launch plan.png")).expect("the image reads"),
+		encoded(ImageFormat::Png)
+	);
+	let mut listed = names(&root, PERSONAL);
+	listed.sort();
+	assert_eq!(
+		listed,
+		[
+			"Launch plan (2).jpg",
+			"Launch plan (2).md",
+			"Launch plan (2).png",
+			"Launch plan.jpg",
+			"Launch plan.md",
+			"Launch plan.png",
+		]
+	);
+	let announced: Vec<LibraryChanged> =
+		(0..2).map(|_| changes.recv_timeout(Duration::from_secs(5)).expect("announced")).collect();
+	assert_eq!(announced, vec![LibraryChanged { space_id: PERSONAL.to_owned() }; 2]);
+}
+
+#[tokio::test]
+async fn a_message_missing_from_the_conversation_or_an_attachment_gone_leaves_the_library_empty() {
+	let app = a_host_with_a_room("save-refused").await;
+	let root = root(app.handle()).expect("the library root resolves");
+	let paths = attached(&app, &[("shot.png", encoded(ImageFormat::Png))]);
+	fs::remove_file(&paths[0]).expect("the attachment leaves");
+	let content = format!("Look.\n{}", attachment_block(&paths, Utc::now()));
+	sent(&app, a_message("m1", &content, &[])).await.expect("the message is sent");
+	let changes = heard_changes(&app);
+
+	let missing = saved_message(&app, "nowhere").await;
+	let gone = saved_message(&app, "m1").await;
+
+	assert_eq!(
+		missing,
+		Err(LibraryError::UnknownMessage {
+			conversation_id: ROOM.to_owned(),
+			message_id: "nowhere".to_owned(),
+		})
+	);
+	assert!(matches!(gone, Err(LibraryError::Unreadable { .. })), "{gone:?}");
+	assert!(names(&root, PERSONAL).is_empty());
+	assert!(changes.try_recv().is_err());
+}
+
+#[test]
+fn an_image_that_fails_to_copy_takes_back_every_image_copied_before_it_and_the_document() {
+	let root = temp_root();
+	let images = [
+		AttachedImage { name: "a.png".to_owned(), bytes: encoded(ImageFormat::Png) },
+		AttachedImage { name: "b.png".to_owned(), bytes: b"not a png".to_vec() },
+	];
+
+	let saved = saved_as_document(&root, SPACE, "# Plan", &images);
+
+	assert!(matches!(saved, Err(LibraryError::Undecodable { .. })), "{saved:?}");
+	assert!(names(&root, SPACE).is_empty());
+	let thumbnails = fs::read_dir(thumbnails_dir(&space_dir(&root, SPACE)))
+		.expect("the thumbnails folder reads")
+		.count();
+	assert_eq!(thumbnails, 0);
+}
+
+#[test]
+fn a_document_is_named_after_its_first_heading_else_its_first_line_else_untitled() {
+	for (text, title) in [
+		("Intro line\n\n## Plan: Q3 / Q4 ##\nBody", "Plan Q3 Q4"),
+		("\n  First words here.\nSecond", "First words here"),
+		("#hashtag first\nnext", "#hashtag first"),
+		("", UNTITLED),
+		("  \n\t\n", UNTITLED),
+		("///", UNTITLED),
+		("...hidden.", "hidden"),
+	] {
+		assert_eq!(document_title(text), title, "{text:?}");
+	}
+	assert_eq!(document_title(&"word ".repeat(40)).chars().count(), MAX_TITLE_CHARS - 1);
+}
+
+#[test]
+fn a_message_without_text_or_images_saves_as_an_empty_untitled_document() {
+	let root = temp_root();
+
+	let saved = saved_as_document(&root, SPACE, "", &[]).expect("the document lands");
+
+	assert_eq!(saved.name, "Untitled.md");
+	assert_eq!(on_disk(&root, SPACE, "Untitled.md"), "");
+}
+
+#[tokio::test]
+async fn a_document_attached_to_a_sent_message_reads_back_with_it_and_follows_its_rename() {
+	let app = a_host_with_a_room("attach").await;
+	let root = root(app.handle()).expect("the library root resolves");
+	put(&root, PERSONAL, "notes.md", b"notes");
+	put(&root, PERSONAL, "brief.md", b"brief");
+	put(&root, PERSONAL, "cover.png", b"png");
+
+	sent(&app, a_message("m1", "Read these.", &["notes.md", "brief.md", "notes.md"]))
+		.await
+		.expect("the message is sent");
+	let missing = sent(&app, a_message("m2", "And this.", &["notes.md", "gone.md"])).await;
+	let image = sent(&app, a_message("m3", "And this.", &["cover.png"])).await;
+	let before = linked_documents(&app).await;
+	renamed(&app, PERSONAL, "notes.md", "final.md").await.expect("the rename lands");
+
+	assert_eq!(before, [("m1".to_owned(), vec!["notes.md".to_owned(), "brief.md".to_owned()])]);
+	assert_eq!(
+		missing,
+		Err(TranscriptStoreError::DocumentRefused {
+			name: "gone.md".to_owned(),
+			failure: Box::new(LibraryError::Missing { name: "gone.md".to_owned() }),
+		})
+	);
+	assert_eq!(
+		image,
+		Err(TranscriptStoreError::DocumentRefused {
+			name: "cover.png".to_owned(),
+			failure: Box::new(LibraryError::NotADocument { name: "cover.png".to_owned() }),
+		})
+	);
+	assert_eq!(
+		linked_documents(&app).await,
+		[("m1".to_owned(), vec!["final.md".to_owned(), "brief.md".to_owned()])]
+	);
 }

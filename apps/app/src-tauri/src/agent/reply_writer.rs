@@ -1297,6 +1297,7 @@ mod tests {
 				author: Default::default(),
 				written_from: WrittenFrom::Here,
 				reply_links: Vec::new(),
+				documents: Vec::new(),
 				content: "hello".to_owned(),
 				created_at: 1,
 			};
@@ -1904,6 +1905,7 @@ mod tests {
 			replied_to_message_id: None,
 			replied_to_message_ids: Vec::new(),
 			reply_links: Vec::new(),
+			documents: Vec::new(),
 			content: "hello".to_owned(),
 			created_at: 1,
 		};

@@ -25,6 +25,10 @@ use contract::{
 };
 use documents::Documents;
 
+use crate::attachments::{self, attached_content, Attachments};
+use crate::db;
+use crate::db::repositories::messages::TranscriptError;
+use crate::file_store::FileStore;
 use crate::{events, private_files};
 
 const DIR_NAME: &str = "library";
@@ -44,6 +48,12 @@ const THUMBNAIL_EDGE: u32 = 512;
 const THUMBNAILS_DIR: &str = ".thumbnails";
 
 const STAGED_PREFIX: &str = ".import-";
+
+const UNTITLED: &str = "Untitled";
+
+const MAX_TITLE_CHARS: usize = 100;
+
+const UNSAFE_IN_A_NAME: [char; 9] = ['/', '\\', ':', '*', '?', '"', '<', '>', '|'];
 
 enum AcceptedType {
 	Image { mime_type: &'static str },
@@ -168,6 +178,14 @@ fn a_document(root: &Path, space_id: &str, name: &str) -> Result<(), LibraryErro
 		AcceptedType::Document(_) => Ok(()),
 		AcceptedType::Image { .. } => Err(LibraryError::NotADocument { name: name.to_owned() }),
 	}
+}
+
+pub(crate) fn held_document<R: Runtime>(
+	app: &AppHandle<R>,
+	space_id: &str,
+	name: &str,
+) -> Result<(), LibraryError> {
+	a_document(&root(app)?, space_id, name)
 }
 
 fn document_text(item: &ResolvedItem, name: &str) -> Result<String, LibraryError> {
@@ -423,6 +441,185 @@ pub(crate) fn rename_document<R: Runtime>(
 	})?;
 	item_at(&space_dir(root, space_id).join(&landed), landed.clone())?
 		.ok_or(LibraryError::Missing { name: landed })
+}
+
+pub(crate) async fn rename_linked_document<R: Runtime>(
+	app: &AppHandle<R>,
+	database: &db::Database,
+	root: &Path,
+	space_id: &str,
+	name: &str,
+	new_name: &str,
+) -> Result<LibraryItem, LibraryError> {
+	let renamed = rename_document(app, root, space_id, name, new_name)?;
+	if renamed.name != name {
+		database
+			.messages()
+			.rename_document_links(space_id.to_owned(), name.to_owned(), renamed.name.clone())
+			.await?;
+	}
+	Ok(renamed)
+}
+
+struct AttachedImage {
+	name: String,
+	bytes: Vec<u8>,
+}
+
+pub(crate) async fn save_message<R: Runtime>(
+	app: &AppHandle<R>,
+	database: &db::Database,
+	conversation_id: &str,
+	message_id: &str,
+) -> Result<LibraryItem, LibraryError> {
+	let space_id = database.conversations().space(conversation_id.to_owned()).await?;
+	let message = database
+		.messages()
+		.message(conversation_id.to_owned(), message_id.to_owned())
+		.await
+		.map_err(unread_message)?;
+	let (Some(space_id), Some(message)) = (space_id, message) else {
+		return Err(LibraryError::UnknownMessage {
+			conversation_id: conversation_id.to_owned(),
+			message_id: message_id.to_owned(),
+		});
+	};
+	let attached = attached_content(&message.content);
+	let text = attached.text.to_owned();
+	let images = attached_images(app, conversation_id, &attached.paths)?;
+	let root = root(app)?;
+	let landed_in = space_id.clone();
+	let saved =
+		tokio::task::spawn_blocking(move || saved_as_document(&root, &landed_in, &text, &images))
+			.await
+			.map_err(unwritable)??;
+	announce_change(app, &space_id);
+	Ok(saved)
+}
+
+fn unread_message(error: TranscriptError) -> LibraryError {
+	match error {
+		TranscriptError::Database(failure) => failure.into(),
+		refused => LibraryError::Unreadable { detail: format!("{refused:?}") },
+	}
+}
+
+fn attached_images<R: Runtime>(
+	app: &AppHandle<R>,
+	conversation_id: &str,
+	paths: &[PathBuf],
+) -> Result<Vec<AttachedImage>, LibraryError> {
+	let images: Vec<&PathBuf> = paths.iter().filter(|path| is_an_image(path)).collect();
+	if images.is_empty() {
+		return Ok(Vec::new());
+	}
+	let store = Attachments::dir(app).ok_or_else(|| LibraryError::Unreadable {
+		detail: "there is no application data directory holding attachments".to_owned(),
+	})?;
+	images
+		.into_iter()
+		.map(|path| {
+			let bytes =
+				attachments::read_stored(&store, conversation_id, path).map_err(|rejection| {
+					LibraryError::Unreadable { detail: format!("{rejection:?}") }
+				})?;
+			Ok(AttachedImage { name: file_name_of(path), bytes })
+		})
+		.collect()
+}
+
+fn is_an_image(path: &Path) -> bool {
+	matches!(accepted_type(&file_name_of(path)), Some(AcceptedType::Image { .. }))
+}
+
+fn file_name_of(path: &Path) -> String {
+	path.file_name().unwrap_or_default().to_string_lossy().into_owned()
+}
+
+fn saved_as_document(
+	root: &Path,
+	space_id: &str,
+	text: &str,
+	images: &[AttachedImage],
+) -> Result<LibraryItem, LibraryError> {
+	let title = document_title(text);
+	let mut copied: Vec<LibraryItem> = Vec::with_capacity(images.len());
+	let saved = images
+		.iter()
+		.try_for_each(|image| {
+			copied.push(copied_image(root, space_id, &title, image)?);
+			Ok::<(), LibraryError>(())
+		})
+		.and_then(|()| {
+			let content = with_images(text, &copied);
+			let markdown = AcceptedType::Document(LibraryDocumentFormat::Markdown);
+			let name = format!("{title}.md");
+			imported(root, space_id, &name, &markdown, content.as_bytes(), import_limit)
+		});
+	if saved.is_err() {
+		copied.iter().for_each(|image| withdrawn(root, space_id, image));
+	}
+	saved
+}
+
+fn copied_image(
+	root: &Path,
+	space_id: &str,
+	title: &str,
+	image: &AttachedImage,
+) -> Result<LibraryItem, LibraryError> {
+	let accepted = accepted_name(&image.name)?;
+	let extension = Path::new(&image.name).extension().unwrap_or_default().to_string_lossy();
+	let name = format!("{title}.{}", extension.to_ascii_lowercase());
+	imported(root, space_id, &name, &accepted, &image.bytes, import_limit)
+}
+
+fn withdrawn(root: &Path, space_id: &str, image: &LibraryItem) {
+	let path = Path::new(&image.path);
+	match thumbnail_name(&image.name, path) {
+		Ok(file) => discarded(&thumbnails_dir(&space_dir(root, space_id)).join(file)),
+		Err(error) => log::warn!("the thumbnail of a withdrawn library image was kept: {error:?}"),
+	}
+	discarded(path);
+}
+
+fn with_images(text: &str, images: &[LibraryItem]) -> String {
+	std::iter::once(text.trim_end().to_owned())
+		.chain(images.iter().map(|image| format!("![](<{}>)", image.name)))
+		.filter(|part| !part.is_empty())
+		.collect::<Vec<_>>()
+		.join("\n\n")
+}
+
+fn document_title(text: &str) -> String {
+	let lines = || text.lines().map(str::trim);
+	lines()
+		.find_map(heading_text)
+		.or_else(|| lines().find(|line| !line.is_empty()))
+		.map(name_safe)
+		.filter(|title| !title.is_empty())
+		.unwrap_or_else(|| UNTITLED.to_owned())
+}
+
+fn heading_text(line: &str) -> Option<&str> {
+	let text = line.trim_start_matches('#');
+	let level = line.len() - text.len();
+	let is_heading = (1..=6).contains(&level) && text.starts_with([' ', '\t']);
+	let text = text.trim().trim_end_matches('#').trim_end();
+	(is_heading && !text.is_empty()).then_some(text)
+}
+
+fn name_safe(title: &str) -> String {
+	let spaced: String = title
+		.chars()
+		.map(|c| match c.is_control() || UNSAFE_IN_A_NAME.contains(&c) {
+			true => ' ',
+			false => c,
+		})
+		.collect();
+	let words = spaced.split_whitespace().collect::<Vec<_>>().join(" ");
+	let cut: String = words.trim_matches('.').chars().take(MAX_TITLE_CHARS).collect();
+	cut.trim_end().trim_end_matches('.').to_owned()
 }
 
 pub(crate) fn delete_item<R: Runtime>(
