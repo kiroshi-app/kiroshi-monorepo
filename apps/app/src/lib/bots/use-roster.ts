@@ -21,7 +21,7 @@ import { type RosterLine, rosterLineKey, type SoloThreads } from "./roster-line"
 import { listen, onHostReconnected } from "@/lib/host"
 import type { ConversationInPage } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
-import { useListEnd } from "../query/use-list-end"
+import { useInfiniteListEnd } from "../query/use-infinite-list-end"
 
 export type Roster = {
 	state: RosterFrame
@@ -129,7 +129,7 @@ const useRosterListEnd = (
 	controller: RosterController,
 	spaceRowId: string | null,
 ) =>
-	useListEnd(
+	useInfiniteListEnd(
 		useInfiniteQuery({
 			...controller.rosterQuery(spaceRowId ?? NO_SPACE_ROW),
 			enabled: spaceRowId !== null,

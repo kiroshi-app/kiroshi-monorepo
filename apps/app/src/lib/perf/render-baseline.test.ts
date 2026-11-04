@@ -18,6 +18,10 @@ import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-s
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { type FakeLayout, fakeLayout } from "@/lib/perf/fake-layout"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
+import {
+	type SentinelScroll,
+	stubSentinelObserver,
+} from "@/lib/query/sentinel-test-observer"
 import { MAIN_WINDOW_LABEL, writeSpaceTabs } from "@/lib/tabs/tabs-mirror"
 import { spaceTabsOn } from "@/lib/tabs/tabs-model"
 import { readMirror, writeMirror } from "@/lib/user/preferences-mirror"
@@ -187,8 +191,6 @@ const OPEN_FRAME_LIMIT = 4_000
 const OLDER_PAGES = 3
 
 const SETTLE_TASKS = 20
-
-const OLDER_LABEL = "Load older messages"
 
 const replyOf = (chunks: number) =>
 	"word ".repeat(chunks * WORDS_PER_CHUNK).trim()
@@ -796,11 +798,19 @@ const measureThreadOpen = async () => {
 	return { ...opened, runs: LONG_THREAD_RUNS }
 }
 
-const loadOlderPages = async (frames: FrameRunner) => {
+const olderSentinel = () => {
+	const sentinel = document.querySelector(
+		'[data-slot="message-scroller-viewport"] [data-slot="list-end-sentinel"]',
+	)
+	if (!sentinel) {
+		throw new Error("no older messages sentinel")
+	}
+	return sentinel
+}
+
+const loadOlderPages = async (frames: FrameRunner, scroll: SentinelScroll) => {
 	for (let page = 0; page < OLDER_PAGES; page += 1) {
-		await act(async () => {
-			fireEvent.click(screen.getByRole("button", { name: OLDER_LABEL }))
-		})
+		await scroll.scrollInto(olderSentinel())
 		await frames.flush(SETTLE_TASKS)
 	}
 }
@@ -809,6 +819,7 @@ const bubbleCount = () =>
 	document.querySelectorAll('[data-slot="message-bubble"]').length
 
 const measureThreadReopen = async () => {
+	const scroll = stubSentinelObserver()
 	const frames = takeFrameRunner()
 	const messages = LONG_THREAD_RUNS * 2
 	const { bot, store } = await seedThreadApp({ messages })
@@ -823,7 +834,7 @@ const measureThreadReopen = async () => {
 		commits,
 	}
 	const cold = await openThread(opening)
-	await loadOlderPages(frames)
+	await loadOlderPages(frames, scroll)
 	const grown = bubbleCount()
 
 	await act(async () => {
@@ -906,6 +917,7 @@ describe("PRF1 render baseline", () => {
 		cleanup()
 		localStorage.clear()
 		vi.useRealTimers()
+		vi.unstubAllGlobals()
 	})
 
 	it("counts what one streamed turn re-renders", async () => {
@@ -1022,8 +1034,7 @@ describe("PRF1 render baseline", () => {
 		`)
 	})
 
-	// TODO: OPE-1788 fires the older page from the transcript sentinel, trigger it from there
-	it.skip(
+	it(
 		"reopens a thread on one page, like a cold open",
 		async () => {
 			expect(await measureThreadReopen()).toMatchInlineSnapshot(`

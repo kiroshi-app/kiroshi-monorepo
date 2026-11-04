@@ -4,11 +4,12 @@ import { useCallback, useState } from "react"
 import { raiseTransientNotice } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
+import type { LibraryImageSource } from "./library-image-source"
 import { type DroppedFile, toImportingItem } from "./library-items"
 import { libraryQueryKeys } from "./library-query-keys"
 import { importLibraryFile } from "./library-reads"
 
-import type { LibraryError } from "../bindings"
+import { commands, type LibraryError } from "../bindings"
 import { isHostRefused } from "../host/host-refused"
 
 const MIB = 1024 * 1024
@@ -86,23 +87,95 @@ const contentOf = async (file: File) =>
 const importLimitOf = (isJoined: boolean) =>
 	isJoined ? MAX_RELAYED_IMPORT_BYTES : MAX_HOSTED_IMPORT_BYTES
 
-const tooLargeOf = (file: File, limit: number) => ({
+const tooLargeOf = (name: string, bytes: number, limit: number) => ({
 	kind: "tooLarge",
-	name: file.name,
-	bytes: file.size,
+	name,
+	bytes,
 	limit,
 })
 
 const importFile = async (spaceId: string, isJoined: boolean, file: File) => {
 	const limit = importLimitOf(isJoined)
 	if (file.size > limit) {
-		throw new LibraryImportFailure(file.name, tooLargeOf(file, limit))
+		throw new LibraryImportFailure(
+			file.name,
+			tooLargeOf(file.name, file.size, limit),
+		)
 	}
 	try {
 		return await importLibraryFile(spaceId, file.name, await contentOf(file))
 	} catch (reason) {
 		throw new LibraryImportFailure(file.name, reason)
 	}
+}
+
+type ContentSave = {
+	spaceId: string
+	isJoined: boolean
+	image: LibraryImageSource
+}
+
+type LocalFileSave = {
+	spaceId: string
+	file: { name: string; path: string }
+}
+
+export type LibraryImageSave = ContentSave | LocalFileSave
+
+const decodedBytesOf = (content: string) =>
+	Math.floor((content.replace(/=+$/, "").length * 3) / 4)
+
+const withinImportLimit = (
+	name: string,
+	content: string,
+	isJoined: boolean,
+) => {
+	const bytes = decodedBytesOf(content)
+	const limit = importLimitOf(isJoined)
+	if (bytes > limit) {
+		throw tooLargeOf(name, bytes, limit)
+	}
+	return content
+}
+
+const importContent = async ({ spaceId, isJoined, image }: ContentSave) => {
+	try {
+		const content = withinImportLimit(
+			image.name,
+			await image.readContent(),
+			isJoined,
+		)
+		return await importLibraryFile(spaceId, image.name, content)
+	} catch (reason) {
+		throw new LibraryImportFailure(image.name, reason)
+	}
+}
+
+const importLocalFile = async ({ spaceId, file }: LocalFileSave) => {
+	const result = await commands.libraryImportPaths(spaceId, [file.path])
+	const landed = result.status === "ok" ? result.data[0] : result
+	if (landed?.status === "imported") {
+		return landed.item
+	}
+	throw new LibraryImportFailure(file.name, landed?.error)
+}
+
+const importImage = (save: LibraryImageSave) =>
+	"file" in save ? importLocalFile(save) : importContent(save)
+
+export const useLibraryImageSave = () => {
+	const queryClient = useQueryClient()
+	return useMutation({
+		mutationFn: importImage,
+		onSettled: (_item, _error, { spaceId }) =>
+			queryClient.invalidateQueries({
+				queryKey: libraryQueryKeys.itemsOf(spaceId),
+			}),
+		meta: {
+			failureNotice: failureNoticeOf,
+			raisedIn: "use-library-imports",
+		},
+	}).mutate
 }
 
 const announceAdded = (count: number) => {

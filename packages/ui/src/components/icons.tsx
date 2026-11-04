@@ -273,6 +273,7 @@ const Icons = {
 	Cloud: CloudIcon,
 	Collapse: ChevronUpIcon,
 	Code: CodeIcon,
+	Collapse: ChevronUpIcon,
 	Command: SquareTerminalIcon,
 	Companions: HexagonsIcon,
 	Conceal: EyeOffIcon,

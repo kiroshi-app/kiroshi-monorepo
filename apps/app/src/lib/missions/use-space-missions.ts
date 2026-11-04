@@ -21,7 +21,7 @@ import {
 import { isHostRefused } from "@/lib/host/host-refused"
 import { useReachableHost } from "@/lib/host/use-reachable-host"
 import { isFirstReadPending } from "@/lib/query/last-read"
-import { useListEnd } from "@/lib/query/use-list-end"
+import { useInfiniteListEnd } from "@/lib/query/use-infinite-list-end"
 
 const NO_GROUPS: SpaceMissionGroups = {
 	waitingOnYou: [],
@@ -69,7 +69,7 @@ export const useSpaceMissions = (spaceId: string | null): SpaceMissionsView => {
 		meta: { rendersErrorInline: true, rereadsItselfOnReconnect: true },
 	})
 	const { data, error, isError, isFetching, refetch } = feed
-	const listEnd = useListEnd(feed)
+	const listEnd = useInfiniteListEnd(feed)
 
 	const reload = useCallback(() => {
 		if (!canRead) {

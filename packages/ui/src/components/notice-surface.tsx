@@ -288,15 +288,12 @@ const NOTICE_MARKS = {
 	warning: Icons.Alert,
 } satisfies Record<NoticeType, Icon>
 
-const TOP_CENTRED_VIEWPORT =
-	"top-4 bottom-auto z-100 sm:inset-x-4 sm:mx-auto sm:w-auto"
+const ABOVE_MODAL_VIEWPORT = "z-100"
 
-const TOP_ANCHORED_NOTICE = [
-	"top-0 bottom-auto origin-top",
-	"[--offset-y:calc(var(--toast-offset-y)+calc(var(--toast-index)*var(--gap))+var(--toast-swipe-movement-y))]",
-	"[transform:translateX(var(--toast-swipe-movement-x))_translateY(calc(var(--toast-swipe-movement-y)+(var(--toast-index)*var(--peek))+(var(--shrink)*var(--height))))_scale(var(--scale))]",
-	"data-starting-style:[transform:translateY(-150%)]",
-	"[&[data-ending-style]:not([data-limited]):not([data-swipe-direction])]:[transform:translateY(-150%)]",
+const ENTERS_AND_LEAVES_THROUGH_RIGHT_EDGE = [
+	"data-starting-style:[transform:translateX(150%)]",
+	"[&[data-ending-style]:not([data-limited]):not([data-swipe-direction])]:[transform:translateX(150%)_translateY(calc(var(--toast-swipe-movement-y)-(var(--toast-index)*var(--peek))-(var(--shrink)*var(--height))))_scale(var(--scale))]",
+	"data-expanded:[&[data-ending-style]:not([data-limited]):not([data-swipe-direction])]:[transform:translateX(150%)_translateY(var(--offset-y))]",
 ].join(" ")
 
 const FADE_ONLY_UNDER_REDUCED_MOTION =
@@ -417,12 +414,12 @@ const NoticeList = () => {
 		<Toast
 			className={cn(
 				"pointer-events-auto",
-				TOP_ANCHORED_NOTICE,
+				ENTERS_AND_LEAVES_THROUGH_RIGHT_EDGE,
 				FADE_ONLY_UNDER_REDUCED_MOTION,
 			)}
 			key={notice.id}
 			render={(props) => <NoticeRoot {...props} />}
-			swipeDirection={["up"]}
+			swipeDirection={["right"]}
 			toast={notice}
 		>
 			<ToastContent>
@@ -469,7 +466,7 @@ const NoticeSurface = ({
 			<ToastPortal>
 				<ToastViewport
 					aria-label={t("notice.label")}
-					className={TOP_CENTRED_VIEWPORT}
+					className={ABOVE_MODAL_VIEWPORT}
 				>
 					<NoticeList />
 				</ToastViewport>

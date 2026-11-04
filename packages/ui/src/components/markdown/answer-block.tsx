@@ -203,10 +203,11 @@ const GalleryBlockView = ({ block }: BlockProps<"gallery">) => {
 
 	return (
 		<Gallery
-			caption={block.images
-				.flatMap(({ caption }) => (caption ? [caption] : []))
-				.join(" · ")}
-			images={block.images.map(({ image, alt }) => ({ src: image, alt }))}
+			images={block.images.map(({ image, alt, caption }) => ({
+				src: image,
+				alt,
+				caption,
+			}))}
 			onOpen={
 				actions
 					? (index) => actions.onOpenImage(viewerImages, index)
