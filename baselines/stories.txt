@@ -1001,6 +1001,7 @@ layout-threadlayout--error
 layout-threadlayout--forwarded-region
 layout-threadlayout--image-viewer-in-panel
 layout-threadlayout--loading-older-messages
+layout-threadlayout--long-agent-message-above-the-prompt
 layout-threadlayout--long-content
 layout-threadlayout--older-messages
 layout-threadlayout--outside-content-card
@@ -1008,6 +1009,7 @@ layout-threadlayout--pending
 layout-threadlayout--prompt-overhangs-the-thread
 layout-threadlayout--start-of-older-messages
 layout-threadlayout--streaming-into-short-transcript
+layout-threadlayout--user-message-above-the-prompt
 layout-windowcontrols--close-hovered
 layout-windowcontrols--close-hovered-dark
 layout-windowcontrols--maximize-forced-hover

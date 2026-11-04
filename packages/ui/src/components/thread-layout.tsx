@@ -16,9 +16,13 @@ import {
 } from "@workspace/ui/components/transcript"
 import { cn, mergeRefs } from "@workspace/ui/lib/utils"
 
-const THREAD_COLUMN = "mx-auto max-w-182"
+const THREAD_WIDTHS =
+	"[--prompt-overhang:calc(var(--spacing)*5)] [--thread-width:calc(var(--spacing)*184)]"
 
-const THREAD_PROMPT_COLUMN = "mx-auto max-w-184"
+const THREAD_COLUMN =
+	"[--thread-gutter:calc(max(0px,(100cqw-var(--thread-width))/2)+var(--shell-inset)+var(--prompt-overhang))] ps-(--thread-gutter) pe-[calc(var(--thread-gutter)-(100cqw-100%))]"
+
+const THREAD_PROMPT_COLUMN = "mx-auto max-w-(--thread-width)"
 
 interface ThreadLayoutProps {
 	header?: ReactNode
@@ -82,7 +86,7 @@ function ThreadLayout({
 			<ScreenLayout
 				ref={mergeRefs(rootRef, overlayContainer)}
 				data-slot="chat-layout"
-				className={cn("relative", className)}
+				className={cn("relative", THREAD_WIDTHS, className)}
 				contentClassName={cn(THREAD_COLUMN, contentClassName)}
 				header={header}
 				scroller={(columnClassName) =>
@@ -93,7 +97,7 @@ function ThreadLayout({
 					) : (
 						<MarkProvider transcriptKey={transcriptKey}>
 							<Transcript
-								className="flex-1"
+								className="@container flex-1"
 								transcriptKey={transcriptKey}
 								autoScroll={autoScroll}
 								busy={busy}

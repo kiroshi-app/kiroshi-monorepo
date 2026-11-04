@@ -130,7 +130,7 @@ const YOU_AVATAR_INSET = 17
 
 const COMPOSER_INSET_IN_CARD = 9
 
-const THREAD_COLUMN_WIDTH = 728
+const THREAD_READING_WIDTH = 680
 
 const expectCardAndComposerOnShellInset = async (root: HTMLElement) => {
 	const avatar = slotIn(root, "app-rail-avatar").getBoundingClientRect()
@@ -232,7 +232,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"The nominal workspace: an expanded sidebar holding the session list, and a live conversation in the main column. Check that the transcript scrolls in the whole room the panel leaves it, its column centred there at most 728 wide (680 of reading width), and starts where the panel ends rather than running under it, that only the transcript scrolls — the sidebar, the bar above it and the composer stay put — and that Tab reaches the sidebar before the transcript. The app assembles it at `apps/app/src/App.tsx:928`.",
+					"The nominal workspace: an expanded sidebar holding the session list, and a live conversation in the main column. Check that the transcript scrolls in the whole room the panel leaves it, its column centred there with 680 of reading width, and starts where the panel ends rather than running under it, that only the transcript scrolls — the sidebar, the bar above it and the composer stay put — and that Tab reaches the sidebar before the transcript. The app assembles it at `apps/app/src/App.tsx:928`.",
 			},
 		},
 	},
@@ -257,11 +257,14 @@ export const Default = meta.story({
 		)
 		const room = viewport.getBoundingClientRect()
 		const columnBox = column.getBoundingClientRect()
-		await expect(column.clientWidth).toBe(
-			Math.min(viewport.clientWidth, THREAD_COLUMN_WIDTH),
+		const { paddingLeft, paddingRight } = getComputedStyle(column)
+		const readingLeft = columnBox.left + Number.parseFloat(paddingLeft)
+		const readingRight = columnBox.right - Number.parseFloat(paddingRight)
+		await expect(Math.round(readingRight - readingLeft)).toBe(
+			THREAD_READING_WIDTH,
 		)
-		await expect(Math.round(columnBox.left - room.left)).toBe(
-			Math.round(room.right - columnBox.right),
+		await expect(Math.round(readingLeft - room.left)).toBe(
+			Math.round(room.right - readingRight),
 		)
 		await expect(viewport.clientHeight).toBeLessThan(window.innerHeight)
 		await expect(viewport).toHaveClass("scrollbar-overlay")
