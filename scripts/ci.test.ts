@@ -9,9 +9,11 @@ import {
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 
+import { SCOPES, UNIT_SUITES } from "./baseline"
 import {
 	CHANGED_UNIT_TESTS,
 	FAST_STEP_NAMES,
+	FULL_UNIT_TESTS,
 	failedRustTargets,
 	fastSteps,
 	GATE,
@@ -439,17 +441,59 @@ describe("ci:fast", () => {
 		for (const step of steps.slice(0, -1)) expect(gate).toContainEqual(step)
 	})
 
-	it("runs the full vitest step of the gate, and no slot, when the scope is full", () => {
-		const scope: UnitTestScope = {
-			scope: "full",
-			path: "baselines/a.json",
-			rule: "baselines/**",
-		}
-		const steps = fastSteps([], scope)
+	const FULL_SCOPES = [
+		[
+			"a shared path rule",
+			{ scope: "full", path: "baselines/a.json", rule: "baselines/**" },
+		],
+		[
+			"the importer threshold",
+			{ scope: "full", path: "apps/app/src/a.ts", importers: 20, graphMs: 5 },
+		],
+		[
+			"an import graph failure",
+			{ scope: "full", error: "Error: ENOENT", graphMs: 3 },
+		],
+	] satisfies [string, UnitTestScope][]
+	const BASELINE_SCOPE = /^bun run baseline (\w+)$/
+	const baselineScopesOf = (steps: Step[]) =>
+		steps.flatMap((step) => {
+			const scope = BASELINE_SCOPE.exec(step.command)?.[1]
+			return scope && scope in SCOPES ? [scope as keyof typeof SCOPES] : []
+		})
 
-		expect(steps.slice(FAST_STEP_NAMES.length)).toEqual(unitTestSteps(scope))
-		expect(steps.slice(FAST_STEP_NAMES.length)).toEqual(GATE.vitest)
-		expect(steps.filter((step) => step.heavy)).toEqual([])
+	it.each(FULL_SCOPES)(
+		"runs the whole app and ui unit projects against the baseline, and no slot, when %s makes the scope full",
+		(_, scope) => {
+			const steps = fastSteps([], scope)
+
+			expect(steps.slice(FAST_STEP_NAMES.length)).toEqual([FULL_UNIT_TESTS])
+			expect(steps.filter((step) => step.heavy)).toEqual([])
+		},
+	)
+
+	it.each(FULL_SCOPES)(
+		"runs no perf project, no website suite and no sidecar suite when %s makes the scope full",
+		(_, scope) => {
+			const steps = fastSteps([], scope)
+			const suites = baselineScopesOf(steps).flatMap(
+				(name) => SCOPES[name].suites,
+			)
+
+			for (const step of GATE.vitest) expect(steps).not.toContainEqual(step)
+			expect(baselineScopesOf(steps)).toEqual(["lint", "unit"])
+			expect(suites).toEqual(["app", "ui"])
+			expect(UNIT_SUITES.map((suite) => suite.project)).toEqual([
+				"unit",
+				"unit",
+			])
+		},
+	)
+
+	it("leaves the app perf project and the website and sidecar suites to the gate", () => {
+		expect(gate).not.toContainEqual(FULL_UNIT_TESTS)
+		expect(baselineScopesOf(gate)).toContain("vitest")
+		expect(SCOPES.vitest.suites).toEqual(["app", "ui", "website", "sidecar"])
 	})
 
 	it("leaves the full unit set and the perf set to the gate when the scope is changed", () => {
@@ -683,11 +727,11 @@ describe("the unit test scope of a pull request", () => {
 		},
 	)
 
-	it("runs the full vitest step for a full scope and the changed unit tests otherwise", () => {
+	it("runs the whole unit projects for a full scope and the changed unit tests otherwise", () => {
 		expect(unitTestSteps({ scope: "changed" })).toEqual([CHANGED_UNIT_TESTS])
 		expect(
 			unitTestSteps({ scope: "full", error: "Error: ENOENT", graphMs: 3 }),
-		).toEqual(GATE.vitest)
+		).toEqual([FULL_UNIT_TESTS])
 	})
 })
 
