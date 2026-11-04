@@ -29,11 +29,13 @@ export const useSaveMessageAsDocument = (
 					onPress: () => onOpen(saved),
 				},
 			}),
-		onSettled: () =>
-			spaceId &&
-			queryClient.invalidateQueries({
-				queryKey: libraryQueryKeys.itemsOf(spaceId),
-			}),
+		onSettled: () => {
+			if (spaceId) {
+				void queryClient.invalidateQueries({
+					queryKey: libraryQueryKeys.itemsOf(spaceId),
+				})
+			}
+		},
 		meta: {
 			failureNotice: () => ({
 				title: i18n.t("common:library.failure.save"),
