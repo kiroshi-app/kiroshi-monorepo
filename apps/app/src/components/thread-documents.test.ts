@@ -11,7 +11,11 @@ import { createElement } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import * as Y from "yjs"
 
-import { DOCUMENT_PANEL_MAX_WIDTH } from "@workspace/ui/components/document-panel"
+import {
+	DOCUMENT_PANEL_MAX_WIDTH,
+	DOCUMENT_PANEL_MIN_WIDTH,
+	THREAD_MIN_WIDTH,
+} from "@workspace/ui/components/document-panel"
 import "@workspace/ui/lib/i18n"
 
 import {
@@ -48,6 +52,12 @@ vi.mock("@/lib/host/tauri", async (importOriginal) => ({
 
 vi.mock("@/lib/navigation/use-open-library-document", () => ({
 	useOpenLibraryDocument: () => () => undefined,
+}))
+
+const measuredRoom = vi.hoisted(() => ({ width: null as number | null }))
+
+vi.mock("@workspace/ui/hooks/use-rendered-width", () => ({
+	useRenderedWidth: () => measuredRoom.width,
 }))
 
 vi.mock("@workspace/ui/components/notice-surface", async (importOriginal) => ({
@@ -252,6 +262,7 @@ describe("the width of a document opened beside a conversation", () => {
 		cleanup()
 		libraryHost.answers.clear()
 		localStorage.clear()
+		measuredRoom.width = null
 	})
 
 	it("opens at the widest width the panel allows when no width was ever dragged", () => {
@@ -269,5 +280,30 @@ describe("the width of a document opened beside a conversation", () => {
 		renderPlanPanel()
 
 		expect(widthOfPanel()).toBe(`${keptWidth}px`)
+	})
+
+	describe("in a room narrower than the widest panel and the thread", () => {
+		const reachableWidth = DOCUMENT_PANEL_MIN_WIDTH + 100
+
+		beforeEach(() => {
+			measuredRoom.width = THREAD_MIN_WIDTH + reachableWidth
+		})
+
+		it("opens at the widest width the room allows when no width was ever dragged", () => {
+			renderPlanPanel()
+
+			expect(widthOfPanel()).toBe(`${reachableWidth}px`)
+		})
+
+		it("keeps the width the panel reached when the edge is dragged past it", () => {
+			const first = renderPlanPanel()
+			dragPanelEdgeBy(-DOCUMENT_PANEL_MAX_WIDTH)
+			first.unmount()
+			measuredRoom.width = null
+
+			renderPlanPanel()
+
+			expect(widthOfPanel()).toBe(`${reachableWidth}px`)
+		})
 	})
 })
