@@ -20,6 +20,7 @@ import { i18n } from "@workspace/ui/lib/i18n"
 import { LibraryDropTarget } from "@/components/library-drop-target"
 import type { LibraryItem, Space } from "@/lib/bindings"
 import type { Bot } from "@/lib/conversations/store-contract"
+import { storedImageSourceOf } from "@/lib/library/library-image-source"
 import {
 	documentNamedAs,
 	matchesQuery,
@@ -35,7 +36,10 @@ import {
 import { useLibraryDocumentSession } from "@/lib/library/use-library-document-session"
 import { useLibraryDocumentWriters } from "@/lib/library/use-library-document-writers"
 import { useLibraryImageSources } from "@/lib/library/use-library-image-sources"
-import { useLibraryImports } from "@/lib/library/use-library-imports"
+import {
+	useLibraryImageSave,
+	useLibraryImports,
+} from "@/lib/library/use-library-imports"
 import { useLibraryItems } from "@/lib/library/use-library-items"
 import type { LibraryOpening } from "@/lib/navigation/library-search"
 
@@ -197,6 +201,9 @@ export const LibraryScreen = ({
 	const copy = ({ id }: NamedItem) => actions.copy(id)
 	const copyAndWait = ({ id }: NamedItem) => actions.copyAndWait(id)
 	const remove = ({ id }: NamedItem) => actions.remove(id)
+	const saveImage = useLibraryImageSave()
+	const saveToLibrary = ({ id }: NamedItem) =>
+		saveImage({ spaceId, isJoined, image: storedImageSourceOf(spaceId, id) })
 	const [filter, setFilter] = useState<LibraryFilter>("all")
 	const [query, setQuery] = useState("")
 	const [heldDraft, setHeldDraft] = useState<DocumentDraft | null>(null)
@@ -380,12 +387,14 @@ export const LibraryScreen = ({
 						image={images[imageIndex] ?? null}
 						onClose={close}
 						onCopy={copyAndWait}
+						onCopyImage={copyAndWait}
 						onDelete={remove}
 						onDownload={save}
 						onShowInFolder={reveal}
 						onNext={() => openImageAt(imageIndex + 1)}
 						onOpenInNewTab={openImageInNewTab}
 						onPrevious={() => openImageAt(imageIndex - 1)}
+						onSaveToLibrary={saveToLibrary}
 						position={imageIndex + 1}
 					/>
 					<LibraryNewDocumentDialog

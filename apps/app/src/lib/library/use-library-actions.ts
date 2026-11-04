@@ -6,6 +6,7 @@ import {
 	deleteLibraryItem,
 	renameLibraryDocument,
 } from "./library-document-writes"
+import type { LibraryImageSource } from "./library-image-source"
 import { libraryQueryKeys } from "./library-query-keys"
 import { readLibraryFile } from "./library-reads"
 
@@ -76,6 +77,20 @@ const useLibraryCopy = (spaceId: string, command: ActionCommand) => {
 		},
 	}
 }
+
+const copyImageBytes = async ({ name, readContent }: LibraryImageSource) =>
+	dataOf(await commands.libraryCopyBytes(name, await readContent()))
+
+export const useLibraryImageCopy = () =>
+	useMutation({
+		mutationFn: copyImageBytes,
+		meta: {
+			failureNotice: () => ({
+				title: i18n.t("common:library.failure.copy"),
+			}),
+			raisedIn: "use-library-actions",
+		},
+	}).mutate
 
 type LibraryRename = { name: string; newName: string }
 

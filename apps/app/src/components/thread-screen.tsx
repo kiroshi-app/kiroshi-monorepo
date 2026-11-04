@@ -58,6 +58,7 @@ import { type ChatCopy, useChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 import {
 	AnswerImageViewer,
 	useAnswerImageViewer,
+	useShownImageActions,
 } from "@/components/answer-image-viewer"
 import { ApplicationInstallRow } from "@/components/application-install-row"
 import { FaceAvatar } from "@/components/face-avatar"
@@ -1840,9 +1841,11 @@ function ThreadView(props: ThreadViewProps) {
 	} = props
 	const view = useThreadView(props)
 	const imageViewer = useAnswerImageViewer()
+	const imageActions = useShownImageActions()
 	const answerActions: AnswerActions = {
 		insert: (text) => view.promptRef.current?.insert(text),
 		openImage: imageViewer.open,
+		imageActions,
 	}
 	const joinedHost = useContext(OpenJoinedHostContext)
 	const departure = joinedHost?.departure
@@ -1930,6 +1933,7 @@ function ThreadView(props: ThreadViewProps) {
 			onFollowChange={view.controller.follow}
 			overlay={
 				<AnswerImageViewer
+					imageActions={imageActions}
 					onClose={imageViewer.close}
 					onStep={imageViewer.step}
 					viewed={imageViewer.viewed}

@@ -55,7 +55,7 @@ import {
 } from "@/lib/applications/fake-application-port"
 import { ConversationApplicationsContext } from "@/lib/applications/use-conversation-installs"
 import { SessionApplicationsContext } from "@/lib/applications/use-session-application"
-import type { ReplyLink } from "@/lib/bindings"
+import { commands, type ReplyLink } from "@/lib/bindings"
 import {
 	type AttachmentsController,
 	createAttachmentsController,
@@ -74,6 +74,7 @@ import {
 	createDraftsController,
 	type DraftsController,
 } from "@/lib/chat/drafts-controller"
+import { attachmentBlock } from "@/lib/chat/message-attachments"
 import {
 	type ThreadAuthorship,
 	ThreadAuthorshipContext,
@@ -151,6 +152,8 @@ import {
 	type OpenJoinedHost,
 	OpenJoinedHostContext,
 } from "@/lib/spaces/open-joined-host"
+import type { WorkspaceAssembly } from "@/lib/workspace/use-workspace-assembly"
+import { WorkspaceContext } from "@/lib/workspace/workspace-context"
 
 let queries = createQueryTestWrapper()
 
@@ -421,6 +424,7 @@ type ThreadScreenHarnessProps = {
 	onOpenMissionInNewTab?: (missionId: string) => void
 	staging?: AttachmentsController
 	drafts?: DraftsController
+	spaceId?: string | null
 }
 
 const ThreadScreenHarness = ({
@@ -433,6 +437,7 @@ const ThreadScreenHarness = ({
 	onOpenMissionInNewTab = () => undefined,
 	staging = attachments,
 	drafts = createDraftsController(),
+	spaceId = THREAD_SPACE,
 }: ThreadScreenHarnessProps) => {
 	const [isOpen, setOpen] = useState(false)
 	const signInState = useSyncExternalStore(
@@ -459,7 +464,7 @@ const ThreadScreenHarness = ({
 			signIn && signInState
 				? { state: signInState, controller: signIn }
 				: undefined,
-		spaceId: THREAD_SPACE,
+		spaceId,
 		thread,
 	})
 }
@@ -3440,6 +3445,78 @@ const wearing = (
 ): ConversationThread => ({
 	...thread,
 	conversation: { ...thread.conversation, ...look },
+})
+
+describe("ThreadScreen of a mission, which has no Space id of its own", () => {
+	const SCREEN_SPACE = "space-on-screen"
+	const ATTACHED_NAME = "0b7c6d1e-2f3a-4b5c-8d9e-0f1a2b3c4d5e.png"
+	const ATTACHED = `/root/attachments/c-bot-1/${ATTACHED_NAME}`
+	const WORKSPACE = {
+		rosterView: { rosteredSpaceId: "space-row" },
+		rosteredHostSpaceId: SCREEN_SPACE,
+	} as unknown as WorkspaceAssembly
+	let layout: FakeLayout
+
+	beforeEach(() => {
+		layout = fakeLayout()
+		vi.clearAllMocks()
+		listRoutines.mockResolvedValue([])
+		listRuns.mockResolvedValue([])
+		listSources.mockResolvedValue(SCHEDULE_DECLARED)
+		listMissions.mockResolvedValue({ open: [], done: [] })
+		listenToMissions.mockResolvedValue(() => undefined)
+	})
+
+	afterEach(() => {
+		cleanup()
+		layout.restore()
+	})
+
+	it("offers Save to Library on an attachment and saves it into the Space on screen", async () => {
+		const importPaths = vi
+			.spyOn(commands, "libraryImportPaths")
+			.mockResolvedValue({ status: "ok", data: [] })
+		onTestFinished(() => importPaths.mockRestore())
+		render(
+			createElement(
+				WorkspaceContext.Provider,
+				{ value: WORKSPACE },
+				createElement(ThreadScreenHarness, {
+					bots: NO_BOT_RECORDS,
+					landings: createMessageLandingController(),
+					onOpenMission: () => undefined,
+					spaceId: null,
+					thread: threadOf({
+						id: "bot-1",
+						name: "Nyx",
+						said: attachmentBlock([ATTACHED], new Date(0)),
+					}),
+				}),
+			),
+			{ wrapper: createQueryTestWrapper().wrapper },
+		)
+		await settle()
+
+		await act(async () => {
+			fireEvent.contextMenu(
+				screen.getByRole("button", { name: `Open ${ATTACHED_NAME}` }),
+			)
+		})
+		const menu = await screen.findByRole("menu", {
+			name: `Actions for ${ATTACHED_NAME}`,
+		})
+		await act(async () => {
+			fireEvent.click(
+				within(menu).getByRole("menuitem", { name: "Save to Library" }),
+				{ detail: 1 },
+			)
+		})
+
+		await waitFor(() =>
+			expect(importPaths).toHaveBeenCalledWith(SCREEN_SPACE, [ATTACHED]),
+		)
+		expect(listMissions).toHaveBeenCalledWith("c-bot-1")
+	})
 })
 
 describe("ThreadScreen wearing the look of a group conversation", () => {

@@ -13,7 +13,10 @@ import { createElement } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import * as Y from "yjs"
 
-import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
+import {
+	raiseFailureNotice,
+	raiseTransientNotice,
+} from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { LibraryScreenHoldingOpening } from "@/components/library-screen-holding-opening"
@@ -99,6 +102,7 @@ const LIBRARY_ANSWERS: Record<string, (args: NamedCall) => unknown> = {
 		content: "",
 	}),
 	library_read_file: ({ name }) => ({ name, content: FILE_CONTENT }),
+	library_import: ({ name }) => itemNamed(name, "image"),
 	library_open_document: ({ name }) => ({
 		name,
 		update: base64Of(OPENED_STATE),
@@ -141,6 +145,7 @@ vi.mock("@workspace/ui/components/notice-surface", async (importOriginal) => ({
 		typeof import("@workspace/ui/components/notice-surface")
 	>()),
 	raiseFailureNotice: vi.fn(() => "notice"),
+	raiseTransientNotice: vi.fn(),
 }))
 
 vi.mock("@/lib/host/tauri", async (importOriginal) => ({
@@ -285,6 +290,7 @@ beforeEach(() => {
 	harness.refused = null
 	harness.held = {}
 	vi.mocked(raiseFailureNotice).mockClear()
+	vi.mocked(raiseTransientNotice).mockClear()
 })
 
 afterEach(cleanup)
@@ -513,6 +519,100 @@ describe("Show in folder in the menu of a Library item", () => {
 			screen.queryByRole("menuitem", { name: menuItemOf("showInFolder") }),
 		).toBeNull()
 	})
+})
+
+const openViewerImageMenu = async () => {
+	await act(async () => {
+		fireEvent.contextMenu(
+			within(screen.getByRole("dialog")).getByRole("img", {
+				name: "diagram.png",
+			}),
+		)
+	})
+	return screen.findByRole("menu", {
+		name: common("library.itemMenu.label", { name: "diagram.png" }),
+	})
+}
+
+const pickInViewerImageMenu = async (entry: string) => {
+	const menu = await openViewerImageMenu()
+	await press(within(menu).getByRole("menuitem", { name: entry }))
+}
+
+const SAVE_TO_LIBRARY = common("library.imageMenu.saveToLibrary")
+
+const COPY_IMAGE = common("library.imageMenu.copyImage")
+
+describe("the image menu of the Library viewer", () => {
+	it("offers Save to Library and Copy image after the viewer actions, never Open in viewer", async () => {
+		await renderLibraryScreen({ isJoined: false })
+		await openImage()
+
+		const menu = await openViewerImageMenu()
+
+		const entries = within(menu)
+			.getAllByRole("menuitem")
+			.map((item) => item.textContent)
+		expect(entries.slice(-2)).toEqual([SAVE_TO_LIBRARY, COPY_IMAGE])
+		expect(entries).toContain(menuItemOf("download"))
+		expect(entries).not.toContain(common("library.imageMenu.openInViewer"))
+	})
+
+	it.each(SPACES)(
+		"adds the image again under its name on each Save to Library, with no notice, in %s",
+		async (_space, isJoined) => {
+			await renderLibraryScreen({ isJoined })
+			await openImage()
+
+			await pickInViewerImageMenu(SAVE_TO_LIBRARY)
+			await waitFor(() => expect(callsOf("library_import")).toHaveLength(1))
+			await pickInViewerImageMenu(SAVE_TO_LIBRARY)
+
+			const imported = {
+				spaceId: SPACE_ID,
+				name: "diagram.png",
+				content: FILE_CONTENT,
+			}
+			await waitFor(() =>
+				expect(callsOf("library_import")).toEqual([imported, imported]),
+			)
+			expect(raiseTransientNotice).not.toHaveBeenCalled()
+			expect(raiseFailureNotice).not.toHaveBeenCalled()
+		},
+	)
+
+	it("raises the import notice naming the image when the host refuses Save to Library", async () => {
+		harness.refused = "library_import"
+		await renderLibraryScreen({ isJoined: false })
+		await openImage()
+
+		await pickInViewerImageMenu(SAVE_TO_LIBRARY)
+
+		await waitFor(() =>
+			expect(raiseFailureNotice).toHaveBeenCalledWith(
+				expect.objectContaining({
+					title: common("library.failure.import.title", {
+						name: "diagram.png",
+					}),
+				}),
+			),
+		)
+	})
+
+	it.each([
+		["the host", false, "library_copy"],
+		["a joined Space", true, "library_copy_bytes"],
+	] as const)(
+		"puts the image on the clipboard on Copy image in %s",
+		async (_space, isJoined, command) => {
+			await renderLibraryScreen({ isJoined })
+			await openImage()
+
+			await pickInViewerImageMenu(COPY_IMAGE)
+
+			await waitFor(() => expect(callsOf(command)).toHaveLength(1))
+		},
+	)
 })
 
 type FailedAction = "copy" | "save" | "reveal" | "delete"
