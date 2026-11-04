@@ -73,6 +73,8 @@ const GalleryTile = ({
 		image,
 		t("answerBlock.gallery.tile", { caption, position: index + 1 }),
 	)
+	const openLabel =
+		tileLabel === "open" ? t("attachments.open", { name }) : undefined
 	const tileClass = cn(
 		"relative min-h-0 min-w-0 overflow-hidden rounded-[4px]",
 		className,
@@ -91,7 +93,7 @@ const GalleryTile = ({
 			) : (
 				<img
 					src={image.src}
-					alt={tileLabel === "open" ? "" : name}
+					alt={openLabel ? "" : name}
 					onError={() => setBrokenSrc(image.src)}
 					className="image-outline size-full rounded-[inherit] object-cover"
 				/>
@@ -113,9 +115,7 @@ const GalleryTile = ({
 	const tile = onOpen ? (
 		<button
 			type="button"
-			aria-label={
-				tileLabel === "open" ? t("attachments.open", { name }) : undefined
-			}
+			aria-label={openLabel}
 			className={cn(tileClass, "outline-offset-2")}
 			onClick={() => onOpen(index)}
 		>
