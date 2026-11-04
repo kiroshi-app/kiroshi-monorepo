@@ -322,7 +322,7 @@ const Toggle = ({ isOpen, detailId, onOpenChange }: ToggleProps) => {
 			aria-label={t("workLine.toggle")}
 			onClick={() => onOpenChange(!isOpen)}
 			className={cn(
-				"relative flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground outline-offset-2 after:absolute after:-inset-0.5 hover:bg-foreground/8 hover:text-foreground active:bg-foreground/12",
+				"relative flex size-5 shrink-0 items-center justify-center rounded-sm border border-transparent text-muted-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 after:absolute after:-inset-0.5 hover:bg-foreground/8 hover:text-foreground active:bg-foreground/12",
 				isOpen && "bg-foreground/8 text-foreground",
 			)}
 		>

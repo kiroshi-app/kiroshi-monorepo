@@ -258,9 +258,18 @@ export const Final10 = meta.story({
 		onOpenChange.mockClear()
 		await userEvent.tab()
 		await expect(toggle).toHaveFocus()
-		await expect(getComputedStyle(toggle).outlineStyle).not.toBe("none")
+		await expect(getComputedStyle(toggle).boxShadow).not.toBe("none")
 		await userEvent.keyboard("{Enter}")
 		await expect(onOpenChange).toHaveBeenCalledWith(true)
+		if (isInBrowserRunner()) {
+			toggle.blur()
+			const pointer = await realPointer()
+			await pointer.click(toggle)
+			await expect(toggle).toHaveFocus()
+			await expect(getComputedStyle(toggle).boxShadow).toBe("none")
+			await expect(getComputedStyle(toggle).outlineStyle).toBe("none")
+			await pointer.unhover(toggle)
+		}
 	},
 })
 
