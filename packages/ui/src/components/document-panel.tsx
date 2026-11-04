@@ -4,10 +4,12 @@ import { type ReactNode, useId, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { DocumentGlyph } from "@workspace/ui/components/document-card"
+import { panelWidthsInRoom } from "@workspace/ui/components/document-panel-widths"
 import { Icons } from "@workspace/ui/components/icons"
 import { FOCUS_OUTLINE } from "@workspace/ui/components/library-document-agents"
 import { LIBRARY_BAR_BARE } from "@workspace/ui/components/library-item-menu"
 import {
+	type ResizableWidth,
 	ResizeHandle,
 	useResizableWidth,
 } from "@workspace/ui/components/resize-handle"
@@ -25,6 +27,7 @@ const BAR_BUTTON = cn(
 const DOCUMENT_PANEL_DEFAULT_WIDTH = 600
 const DOCUMENT_PANEL_MIN_WIDTH = 400
 const DOCUMENT_PANEL_MAX_WIDTH = 800
+const THREAD_MIN_WIDTH = 320
 
 type DocumentPanelProps = {
 	title: string
@@ -58,16 +61,21 @@ const DocumentPanel = ({
 		maxWidth: DOCUMENT_PANEL_MAX_WIDTH,
 	})
 	const [panel, setPanel] = useState<HTMLElement | null>(null)
-	const renderedWidth = useRenderedWidth(panel) ?? resize.width
-	const reachableResize =
-		renderedWidth < resize.width
-			? {
-					...resize,
-					width: renderedWidth,
-					minWidth: Math.min(resize.minWidth, renderedWidth),
-					maxWidth: renderedWidth,
-				}
-			: resize
+	const room = useRenderedWidth(panel?.parentElement ?? null)
+	const reachableResize: ResizableWidth = {
+		...resize,
+		...(room === null
+			? {}
+			: panelWidthsInRoom({
+					room,
+					askedWidth: resize.width,
+					minWidth: DOCUMENT_PANEL_MIN_WIDTH,
+					maxWidth: DOCUMENT_PANEL_MAX_WIDTH,
+					threadMinWidth: THREAD_MIN_WIDTH,
+				})),
+		commitWidth: (next: number) =>
+			resize.commitWidth(Math.min(next, reachableResize.maxWidth)),
+	}
 
 	return (
 		<aside
@@ -76,7 +84,7 @@ const DocumentPanel = ({
 			data-resizing={resize.isResizing}
 			data-slot="document-panel"
 			ref={setPanel}
-			style={{ width: resize.width }}
+			style={{ width: reachableResize.width }}
 		>
 			<ResizeHandle
 				label={t("library.panel.resize")}
@@ -141,4 +149,5 @@ export {
 	DOCUMENT_PANEL_MIN_WIDTH,
 	DocumentPanel,
 	type DocumentPanelProps,
+	THREAD_MIN_WIDTH,
 }
