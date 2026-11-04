@@ -104,19 +104,14 @@ const LibraryTableEditor = ({ source, onEdit }: LibraryTableEditorProps) => {
 		}
 
 	const placeGrip = () => {
-		const focused = document.activeElement?.closest(
-			`[data-slot="${CELL_SLOT}"]`,
+		const focused = frame.current?.querySelector(
+			`[data-slot="${CELL_SLOT}"]:focus-within`,
 		)
 		const container = frame.current?.getBoundingClientRect()
 		const viewport = frame.current
 			?.querySelector('[data-slot="markdown-table"] > [role="group"]')
 			?.getBoundingClientRect()
-		if (
-			!focused ||
-			!frame.current?.contains(focused) ||
-			!container ||
-			!viewport
-		) {
+		if (!focused || !container || !viewport) {
 			setGrip(undefined)
 			return
 		}
