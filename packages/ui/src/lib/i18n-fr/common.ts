@@ -604,6 +604,7 @@ const common = {
 		panel: {
 			openInLibrary: "Ouvrir dans la Bibliothèque",
 			close: "Fermer",
+			resize: "Redimensionner le panneau du document",
 		},
 		tab: {
 			loadingDocument: "Chargement du document…",

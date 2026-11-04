@@ -1,8 +1,13 @@
-import { useState } from "react"
+import { type CSSProperties, useState } from "react"
 import { expect, fn, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { hueScopeOf } from "@workspace/storybook/story-utils"
+import {
+	FRAME_POLL,
+	hueScopeOf,
+	LAPTOP_WINDOW,
+} from "@workspace/storybook/story-utils"
+import { AppHeader } from "@workspace/ui/components/app-header"
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { DocumentCard } from "@workspace/ui/components/document-card"
 import {
@@ -12,15 +17,29 @@ import {
 	DOCUMENT_CARD_TITLE,
 	DOCUMENT_CARD_WRITERS,
 } from "@workspace/ui/components/document-card.fixtures"
-import { DocumentPanel } from "@workspace/ui/components/document-panel"
+import {
+	DOCUMENT_PANEL_DEFAULT_WIDTH,
+	DOCUMENT_PANEL_MAX_WIDTH,
+	DOCUMENT_PANEL_MIN_WIDTH,
+	DocumentPanel,
+	type DocumentPanelProps,
+} from "@workspace/ui/components/document-panel"
 import { LIBRARY_AGENTS } from "@workspace/ui/components/library.fixtures"
 import { LibraryDocumentPresence } from "@workspace/ui/components/library-document-agents"
 import { LibraryDocumentBody } from "@workspace/ui/components/library-document-view"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
+import { RESIZE_STEP } from "@workspace/ui/components/resize-handle"
 import type { RosterBot } from "@workspace/ui/components/roster"
+import { SIDEBAR_DEFAULT_WIDTH } from "@workspace/ui/components/sidebar-resize"
 import { ThreadLayout } from "@workspace/ui/components/thread-layout"
 import type { TranscriptItem } from "@workspace/ui/components/transcript"
 import { AssistantTurn, UserTurn } from "@workspace/ui/components/turn"
+import {
+	Sidebar,
+	SidebarContent,
+	SidebarInset,
+	SidebarProvider,
+} from "@workspace/ui/components/ui/sidebar"
 
 const ATLAS: RosterBot = {
 	id: LIBRARY_AGENTS.atlas.id,
@@ -124,7 +143,20 @@ const ToggledPanel = () => {
 	)
 }
 
+const HANDLE_LABEL = "Resize document panel"
+
+const DRAGGED = 120
+
+const verticalCentreOf = (element: Element) => {
+	const { top, bottom } = element.getBoundingClientRect()
+	return (top + bottom) / 2
+}
+
+const pointerAt = (type: string, clientX: number) =>
+	new PointerEvent(type, { bubbles: true, button: 0, clientX })
+
 const meta = preview.meta({
+	globals: LAPTOP_WINDOW,
 	title: "Navigation/DocumentPanel",
 	component: DocumentPanel,
 	parameters: {
@@ -132,7 +164,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"A Library document opened beside the thread, 600 wide and full height. The bar carries the document's title, the presence chip of whoever writes in it, Open in Library and Close; the column below scrolls and holds the title, then the editor, which the app passes as children. ThreadLayout takes it through its `aside` slot.",
+					"A Library document opened beside the thread, full height, 600 wide by default and resized from its leading edge with the same grip as the sidebar: a drag, an arrow key step of 16px, a double press back to the default, always between 400 and 800. The width is the panel's own unless the caller passes `width`, and `onWidthChange` hears each committed drag or step, never a pointer move. The bar, as tall as the thread header beside it, carries the document's title, the presence chip of whoever writes in it, Open in Library and Close; the column below scrolls and holds the title, then the editor, which the app passes as children. ThreadLayout takes it through its `aside` slot.",
 			},
 		},
 	},
@@ -179,7 +211,7 @@ export const InThread = meta.story({
 		)
 		if (!thread) throw new Error("No thread drawn")
 		const panelBox = panel.getBoundingClientRect()
-		await expect(panelBox.width).toBe(600)
+		await expect(panelBox.width).toBe(DOCUMENT_PANEL_DEFAULT_WIDTH)
 		await expect(panelBox.left).toBe(thread.getBoundingClientRect().right)
 		await expect(panelBox.height).toBe(thread.getBoundingClientRect().height)
 
@@ -240,5 +272,374 @@ export const KeepsTheThreadWhenToggled = meta.story({
 		await afterTwoFrames()
 		await expect(viewportOf()).toBe(viewport)
 		await expect(viewport.scrollTop).toBe(SCROLLED_TOP)
+	},
+})
+
+export const AfterADrag = meta.story({
+	args: { onWidthChange: fn() },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The panel's leading edge dragged 120px toward the thread, then 240px away from it, then pressed twice. Check that the panel widens by exactly the distance dragged and narrows the same way, that the cursor stays col-resize and no text gets selected anywhere in the thread or the panel while the edge moves, that the width is reported once per drag rather than on every move, and that the double press brings back 600.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		const handle = canvas.getByRole("separator", { name: HANDLE_LABEL })
+		const panel = canvas.getByRole("complementary", {
+			name: DOCUMENT_CARD_TITLE,
+		})
+		const row = canvasElement.querySelector<HTMLElement>(
+			'[data-slot="thread-with-aside"]',
+		)
+		const composer = canvasElement.querySelector<HTMLElement>("textarea")
+		if (!row || !composer) throw new Error("No thread drawn")
+		const originX = handle.getBoundingClientRect().left
+		const widerX = originX - DRAGGED
+
+		handle.dispatchEvent(pointerAt("pointerdown", originX))
+		window.dispatchEvent(pointerAt("pointermove", originX - DRAGGED / 2))
+		window.dispatchEvent(pointerAt("pointermove", widerX))
+		await waitFor(async () => {
+			await expect(panel.getBoundingClientRect().width).toBe(
+				DOCUMENT_PANEL_DEFAULT_WIDTH + DRAGGED,
+			)
+		}, FRAME_POLL)
+		await expect(getComputedStyle(row).userSelect).toBe("none")
+		await expect(getComputedStyle(composer).cursor).toBe("col-resize")
+		await expect(getComputedStyle(panel).cursor).toBe("col-resize")
+		await expect(args.onWidthChange).not.toHaveBeenCalled()
+
+		window.dispatchEvent(pointerAt("pointerup", widerX))
+		await waitFor(async () => {
+			await expect(args.onWidthChange).toHaveBeenCalledOnce()
+			await expect(args.onWidthChange).toHaveBeenCalledWith(
+				DOCUMENT_PANEL_DEFAULT_WIDTH + DRAGGED,
+			)
+		}, FRAME_POLL)
+		await expect(getComputedStyle(row).userSelect).not.toBe("none")
+		await expect(handle).toHaveAttribute(
+			"aria-valuenow",
+			String(DOCUMENT_PANEL_DEFAULT_WIDTH + DRAGGED),
+		)
+
+		const narrowerX = widerX + 2 * DRAGGED
+		handle.dispatchEvent(pointerAt("pointerdown", widerX))
+		window.dispatchEvent(pointerAt("pointermove", narrowerX))
+		window.dispatchEvent(pointerAt("pointerup", narrowerX))
+		await waitFor(async () => {
+			await expect(panel.getBoundingClientRect().width).toBe(
+				DOCUMENT_PANEL_DEFAULT_WIDTH - DRAGGED,
+			)
+		}, FRAME_POLL)
+		await expect(args.onWidthChange).toHaveBeenCalledTimes(2)
+
+		await userEvent.dblClick(handle)
+		await waitFor(async () => {
+			await expect(panel.getBoundingClientRect().width).toBe(
+				DOCUMENT_PANEL_DEFAULT_WIDTH,
+			)
+		}, FRAME_POLL)
+		await expect(args.onWidthChange).toHaveBeenLastCalledWith(
+			DOCUMENT_PANEL_DEFAULT_WIDTH,
+		)
+	},
+})
+
+export const HandleWithKeyboardFocus = meta.story({
+	args: { onWidthChange: fn() },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The panel's grip reached from the keyboard. Check that it is a separator named Resize document panel announcing 600 between 400 and 800, that the grip lights up under focus, and that `ArrowLeft` widens the panel by 16px and `ArrowRight` narrows it back, each step reported once.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const handle = canvas.getByRole("separator", { name: HANDLE_LABEL })
+		const panel = canvas.getByRole("complementary", {
+			name: DOCUMENT_CARD_TITLE,
+		})
+		await expect(handle).toHaveAttribute(
+			"aria-valuemin",
+			String(DOCUMENT_PANEL_MIN_WIDTH),
+		)
+		await expect(handle).toHaveAttribute(
+			"aria-valuemax",
+			String(DOCUMENT_PANEL_MAX_WIDTH),
+		)
+
+		handle.focus()
+		await userEvent.keyboard("{ArrowLeft}")
+		await expect(handle).toHaveFocus()
+		await expect(handle.matches(":focus-visible")).toBe(true)
+		await expect(getComputedStyle(handle, "::after").backgroundColor).not.toBe(
+			"rgba(0, 0, 0, 0)",
+		)
+		await waitFor(async () => {
+			await expect(panel.getBoundingClientRect().width).toBe(
+				DOCUMENT_PANEL_DEFAULT_WIDTH + RESIZE_STEP,
+			)
+		}, FRAME_POLL)
+		await expect(args.onWidthChange).toHaveBeenCalledOnce()
+		await expect(args.onWidthChange).toHaveBeenCalledWith(
+			DOCUMENT_PANEL_DEFAULT_WIDTH + RESIZE_STEP,
+		)
+
+		await userEvent.keyboard("{ArrowRight}")
+		await waitFor(async () => {
+			await expect(handle).toHaveAttribute(
+				"aria-valuenow",
+				String(DOCUMENT_PANEL_DEFAULT_WIDTH),
+			)
+		}, FRAME_POLL)
+		await expect(args.onWidthChange).toHaveBeenLastCalledWith(
+			DOCUMENT_PANEL_DEFAULT_WIDTH,
+		)
+	},
+})
+
+export const HeaderAlignedWithTheThreadHeader = meta.story({
+	render: (args) => (
+		<div className="flex h-200 w-320" {...hueScopeOf("blue")}>
+			<ThreadLayout
+				aside={<DocumentPanel {...args} />}
+				composer={<PromptInput onSubmit={fn()} />}
+				header={<AppHeader leading="Spring launch" />}
+				rows={ROWS}
+			>
+				{null}
+			</ThreadLayout>
+		</div>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The panel open beside a conversation that wears its header. Check that the panel's bar is exactly as tall as the thread header, so the two bottom borders run as one line across the screen, and that the panel's title sits on the same horizontal centre as the thread's.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const threadHeader = canvasElement.querySelector<HTMLElement>(
+			'[data-slot="app-header"]',
+		)
+		const panelHeader = canvasElement.querySelector<HTMLElement>(
+			'[data-slot="document-panel-header"]',
+		)
+		if (!threadHeader || !panelHeader) throw new Error("No header drawn")
+		await expect(panelHeader.getBoundingClientRect().bottom).toBe(
+			threadHeader.getBoundingClientRect().bottom,
+		)
+		await expect(panelHeader.getBoundingClientRect().top).toBe(
+			threadHeader.getBoundingClientRect().top,
+		)
+
+		const threadTitle = canvas.getByText("Spring launch")
+		const panelTitle = panelHeader.querySelector("p")
+		if (!panelTitle) throw new Error("No panel title drawn")
+		await expect(verticalCentreOf(panelTitle)).toBe(
+			verticalCentreOf(threadTitle),
+		)
+	},
+})
+
+const CONTROLLED_WIDTH = 640
+
+export const ControlledWidth = meta.story({
+	tags: ["test-only"],
+	args: { width: CONTROLLED_WIDTH, onWidthChange: fn() },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A caller holding the width and not answering the change. Check that the panel opens at the width it was handed, that an arrow step reports the asked width, and that the panel stays where the caller keeps it.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const handle = canvas.getByRole("separator", { name: HANDLE_LABEL })
+		const panel = canvas.getByRole("complementary", {
+			name: DOCUMENT_CARD_TITLE,
+		})
+		await expect(panel.getBoundingClientRect().width).toBe(CONTROLLED_WIDTH)
+
+		handle.focus()
+		await userEvent.keyboard("{ArrowLeft}")
+		await expect(args.onWidthChange).toHaveBeenCalledOnce()
+		await expect(args.onWidthChange).toHaveBeenCalledWith(
+			CONTROLLED_WIDTH + RESIZE_STEP,
+		)
+		await expect(panel.getBoundingClientRect().width).toBe(CONTROLLED_WIDTH)
+	},
+})
+
+const THREAD_MIN_WIDTH = 320
+const NARROW_WINDOW = 1024
+const LAPTOP_WIDTH = 1280
+const WIDE_WINDOW = 1536
+
+const BLUE_SCOPE = hueScopeOf("blue")
+
+type BesideTheSidebarProps = DocumentPanelProps & {
+	windowWidth: number
+}
+
+const BesideTheSidebar = ({ windowWidth, ...panel }: BesideTheSidebarProps) => (
+	<div
+		className="flex h-200"
+		data-testid="window"
+		{...BLUE_SCOPE}
+		style={{ ...BLUE_SCOPE.style, width: windowWidth }}
+	>
+		<SidebarProvider
+			style={
+				{ "--sidebar-width": `${SIDEBAR_DEFAULT_WIDTH}px` } as CSSProperties
+			}
+		>
+			<Sidebar collapsible="icon">
+				<SidebarContent />
+			</Sidebar>
+			<SidebarInset className="min-w-0">
+				<ThreadLayout
+					aside={<DocumentPanel {...panel} />}
+					composer={<PromptInput onSubmit={fn()} />}
+					header={<AppHeader leading="Spring launch" />}
+					rows={ROWS}
+				>
+					{null}
+				</ThreadLayout>
+			</SidebarInset>
+		</SidebarProvider>
+	</div>
+)
+
+const threadOf = (canvasElement: HTMLElement) => {
+	const thread = canvasElement.querySelector<HTMLElement>(
+		'[data-slot="chat-layout"]',
+	)
+	if (!thread) throw new Error("No thread drawn")
+	return thread
+}
+
+export const CappedByTheRoomLeft = meta.story({
+	args: { defaultWidth: DOCUMENT_PANEL_MAX_WIDTH },
+	render: (args) => <BesideTheSidebar {...args} windowWidth={NARROW_WINDOW} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The panel asked at 800 in the 1024 window the app opens at its smallest, beside the open sidebar. Check that the thread keeps 320px and the panel gives up the rest, down to 400 here, that the grip announces the 400 it draws as both its value and its reachable maximum, and that widening the window brings the panel back to the 800 it was asked for.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const handle = canvas.getByRole("separator", { name: HANDLE_LABEL })
+		const panel = canvas.getByRole("complementary", {
+			name: DOCUMENT_CARD_TITLE,
+		})
+		const thread = threadOf(canvasElement)
+		const cappedWidth = NARROW_WINDOW - SIDEBAR_DEFAULT_WIDTH - THREAD_MIN_WIDTH
+
+		await waitFor(async () => {
+			await expect(handle).toHaveAttribute("aria-valuenow", String(cappedWidth))
+		}, FRAME_POLL)
+		await expect(handle).toHaveAttribute("aria-valuemax", String(cappedWidth))
+		await expect(thread.getBoundingClientRect().width).toBe(THREAD_MIN_WIDTH)
+		await expect(panel.getBoundingClientRect().width).toBe(cappedWidth)
+
+		canvas.getByTestId("window").style.width = `${WIDE_WINDOW}px`
+		await waitFor(async () => {
+			await expect(handle).toHaveAttribute(
+				"aria-valuenow",
+				String(DOCUMENT_PANEL_MAX_WIDTH),
+			)
+		}, FRAME_POLL)
+		await expect(handle).toHaveAttribute(
+			"aria-valuemax",
+			String(DOCUMENT_PANEL_MAX_WIDTH),
+		)
+		await expect(panel.getBoundingClientRect().width).toBe(
+			DOCUMENT_PANEL_MAX_WIDTH,
+		)
+		await expect(thread.getBoundingClientRect().width).toBe(
+			WIDE_WINDOW - SIDEBAR_DEFAULT_WIDTH - DOCUMENT_PANEL_MAX_WIDTH,
+		)
+	},
+})
+
+export const MovesFromTheCappedEdge = meta.story({
+	tags: ["test-only"],
+	args: { defaultWidth: DOCUMENT_PANEL_MAX_WIDTH, onWidthChange: fn() },
+	render: (args) => <BesideTheSidebar {...args} windowWidth={LAPTOP_WIDTH} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The panel asked at 800 and held at 656 by the room left in the laptop window. Check that a drag away from the thread moves the edge from where it is drawn on the first pixels, with no dead zone while the asked width falls back to the drawn one, and that an arrow step starts from the drawn width too.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const handle = canvas.getByRole("separator", { name: HANDLE_LABEL })
+		const panel = canvas.getByRole("complementary", {
+			name: DOCUMENT_CARD_TITLE,
+		})
+		const cappedWidth = LAPTOP_WIDTH - SIDEBAR_DEFAULT_WIDTH - THREAD_MIN_WIDTH
+		await waitFor(async () => {
+			await expect(handle).toHaveAttribute("aria-valuenow", String(cappedWidth))
+		}, FRAME_POLL)
+
+		const originX = handle.getBoundingClientRect().left
+		const narrowedWidth = cappedWidth - DRAGGED / 3
+		const narrowerX = originX + DRAGGED / 3
+		handle.dispatchEvent(pointerAt("pointerdown", originX))
+		window.dispatchEvent(pointerAt("pointermove", narrowerX))
+		window.dispatchEvent(pointerAt("pointerup", narrowerX))
+		await waitFor(async () => {
+			await expect(panel.getBoundingClientRect().width).toBe(narrowedWidth)
+		}, FRAME_POLL)
+		await expect(args.onWidthChange).toHaveBeenCalledWith(narrowedWidth)
+
+		handle.focus()
+		await userEvent.keyboard("{ArrowRight}")
+		await waitFor(async () => {
+			await expect(handle).toHaveAttribute(
+				"aria-valuenow",
+				String(narrowedWidth - RESIZE_STEP),
+			)
+		}, FRAME_POLL)
+	},
+})
+
+export const HandleWithKeyboardFocusDark = meta.story({
+	globals: { ...LAPTOP_WINDOW, theme: "dark" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The panel's grip reached from the keyboard in the dark theme. Check that the grip lights up in the dark sidebar ring rather than staying transparent or wearing the light one.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const handle = canvas.getByRole("separator", { name: HANDLE_LABEL })
+		await expect(document.documentElement).toHaveClass("dark")
+
+		handle.focus()
+		await expect(handle).toHaveFocus()
+		await expect(handle.matches(":focus-visible")).toBe(true)
+
+		const ringProbe = document.createElement("span")
+		ringProbe.style.backgroundColor = "var(--sidebar-ring)"
+		handle.append(ringProbe)
+		const darkRing = getComputedStyle(ringProbe).backgroundColor
+		ringProbe.remove()
+		await expect(darkRing).not.toBe("rgba(0, 0, 0, 0)")
+		await expect(getComputedStyle(handle, "::after").backgroundColor).toBe(
+			darkRing,
+		)
 	},
 })
