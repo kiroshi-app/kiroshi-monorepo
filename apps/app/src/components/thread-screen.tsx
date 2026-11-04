@@ -1879,6 +1879,7 @@ function ThreadView(props: ThreadViewProps) {
 				documents?.openedName ? (
 					<ThreadDocumentPanel
 						key={documents.openedName}
+						isJoined={documents.isJoined}
 						name={documents.openedName}
 						onClose={documents.close}
 						spaceId={documents.spaceId}

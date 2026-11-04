@@ -88,6 +88,7 @@ type TurnSetup = {
 
 const THREAD_DOCUMENTS = {
 	spaceId: "space-on-screen",
+	isJoined: false,
 	openedName: null,
 	open: () => undefined,
 	close: () => undefined,

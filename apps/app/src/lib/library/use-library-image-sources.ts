@@ -59,13 +59,20 @@ const listedImageIn = (items: LibraryItem[] | undefined, name: string) =>
 export const useLibraryImageResolver = (spaceId: string, isJoined: boolean) => {
 	const queryClient = useQueryClient()
 	const itemsQuery = libraryItemsQueryOf(spaceId)
+	const hasFreshList = () => {
+		const list = queryClient.getQueryState(itemsQuery.queryKey)
+		return list?.data !== undefined && !list.isInvalidated
+	}
+	const relistedImageNamed = async (name: string) =>
+		listedImageIn(
+			await queryClient.fetchQuery({ ...itemsQuery, staleTime: 0 }),
+			name,
+		)
 	const listedImageNamed = async (name: string) => {
+		const wasListFresh = hasFreshList()
 		const image =
-			listedImageIn(queryClient.getQueryData(itemsQuery.queryKey), name) ??
-			listedImageIn(
-				await queryClient.fetchQuery({ ...itemsQuery, staleTime: 0 }),
-				name,
-			)
+			listedImageIn(await queryClient.fetchQuery(itemsQuery), name) ??
+			(wasListFresh ? await relistedImageNamed(name) : undefined)
 		if (!image) {
 			throw new Error(`no Library image named ${name}`)
 		}
