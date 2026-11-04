@@ -1639,12 +1639,9 @@ const expectPeopleInBar = async (
 ) => {
 	const bar = barIn(canvasElement)
 	const avatars = await bar.findAllByRole("img")
-	await expect(
-		avatars.map((avatar) => avatar.getAttribute("aria-label")),
-	).toEqual(names)
-	for (const name of names) {
-		await expect(bar.getByRole("img", { name })).toBeVisible()
-	}
+	await expect(names.map((name) => bar.getByRole("img", { name }))).toEqual(
+		avatars,
+	)
 }
 
 export const PresencePeopleOnly = meta.story({
