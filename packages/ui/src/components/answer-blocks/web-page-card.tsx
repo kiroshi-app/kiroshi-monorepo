@@ -5,8 +5,8 @@ import {
 	accessibleNameOf,
 } from "@workspace/ui/components/answer-blocks/answer-image"
 import {
-	ImageMenu,
 	type ImageMenuActions,
+	PressableImageMenu,
 } from "@workspace/ui/components/image-menu"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -39,11 +39,12 @@ const WebPageCard = ({
 			)}
 		>
 			{preview ? (
-				<ImageMenu
+				<PressableImageMenu
 					{...imageMenu}
+					className="flex rounded-t-xl -outline-offset-2"
 					item={preview}
 					name={accessibleNameOf(preview, title)}
-					trigger={
+					picture={
 						<img
 							src={preview.src}
 							alt={preview.alt ?? ""}

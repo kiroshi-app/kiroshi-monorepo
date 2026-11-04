@@ -863,9 +863,12 @@ describe("images of an agent answer", () => {
 		},
 	)
 
-	it("leaves an image inside a link without a context menu", () => {
-		expect(render(LINKED, { answerActions: IMAGE_MENU_ACTIONS })).not.toContain(
-			menuTrigger,
+	it("makes an image inside a link the menu trigger, never a button", () => {
+		const html = render(LINKED, { answerActions: IMAGE_MENU_ACTIONS })
+
+		expect(html).toMatch(
+			/<a [^>]*>.*<img [^>]*data-slot="context-menu-trigger"[^>]*>.*<\/a>/,
 		)
+		expect(html).not.toContain("<button")
 	})
 })

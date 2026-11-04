@@ -1,6 +1,11 @@
 "use client"
 
-import { type ComponentProps, type ReactElement, useState } from "react"
+import {
+	type ComponentProps,
+	type MouseEvent,
+	type ReactElement,
+	useState,
+} from "react"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -35,6 +40,39 @@ type ImageMenuProps<Item> = ImageMenuActions<Item> & {
 	onConfirmingDeleteChange?: (isConfirming: boolean) => void
 }
 
+type PressableImageMenuProps<Item> = Omit<ImageMenuProps<Item>, "trigger"> & {
+	picture: ReactElement
+	className?: string
+}
+
+const imageHandlersOf = <Item,>(
+	{ onSaveToLibrary, onCopyImage, onOpenInViewer }: ImageHandlers<Item>,
+	surface: ImageMenuSurface,
+): ImageHandlers<Item> => ({
+	onSaveToLibrary,
+	onCopyImage,
+	onOpenInViewer: surface === "viewer" ? undefined : onOpenInViewer,
+})
+
+const hasAnyImageMenuAction = <Item,>({
+	surface = "thread",
+	...actions
+}: ImageMenuActions<Item> & Pick<ImageMenuProps<Item>, "surface">) =>
+	hasImageActions(imageHandlersOf(actions, surface)) ||
+	hasLibraryItemActions(actions)
+
+const openMenuAtPress = (event: MouseEvent<HTMLElement>) => {
+	const { left, bottom } = event.currentTarget.getBoundingClientRect()
+	event.currentTarget.dispatchEvent(
+		new globalThis.MouseEvent("contextmenu", {
+			bubbles: true,
+			cancelable: true,
+			clientX: left,
+			clientY: bottom,
+		}),
+	)
+}
+
 const imageMenuActionsFor = <From, To>(
 	actions: ImageMenuActions<To>,
 	itemOf: (from: From) => To,
@@ -60,11 +98,10 @@ const ImageMenu = <Item,>({
 }: ImageMenuProps<Item>) => {
 	const { t } = useTranslation("common")
 	const [isConfirmingDelete, setConfirmingDelete] = useState(false)
-	const imageHandlers: ImageHandlers<Item> = {
-		onSaveToLibrary,
-		onCopyImage,
-		onOpenInViewer: surface === "viewer" ? undefined : onOpenInViewer,
-	}
+	const imageHandlers = imageHandlersOf(
+		{ onSaveToLibrary, onCopyImage, onOpenInViewer },
+		surface,
+	)
 	const hasImageMenuActions = hasImageActions(imageHandlers)
 	const hasViewerActions = hasLibraryItemActions(viewerActions)
 
@@ -109,9 +146,35 @@ const ImageMenu = <Item,>({
 	)
 }
 
+const PressableImageMenu = <Item,>({
+	picture,
+	className,
+	...menu
+}: PressableImageMenuProps<Item>) => {
+	if (!hasAnyImageMenuAction(menu)) return picture
+
+	return (
+		<ImageMenu
+			{...menu}
+			trigger={
+				<button
+					type="button"
+					aria-label={menu.name}
+					aria-haspopup="menu"
+					className={className}
+					onClick={openMenuAtPress}
+				>
+					{picture}
+				</button>
+			}
+		/>
+	)
+}
+
 export {
 	ImageMenu,
 	type ImageMenuActions,
 	type ImageMenuProps,
 	imageMenuActionsFor,
+	PressableImageMenu,
 }

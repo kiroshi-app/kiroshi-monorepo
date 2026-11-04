@@ -5,8 +5,8 @@ import {
 	accessibleNameOf,
 } from "@workspace/ui/components/answer-blocks/answer-image"
 import {
-	ImageMenu,
 	type ImageMenuActions,
+	PressableImageMenu,
 } from "@workspace/ui/components/image-menu"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -42,11 +42,12 @@ const IllustratedList = ({
 				key={item.id}
 				className="flex gap-3.5 p-4 not-last:border-b not-last:border-shell-divider"
 			>
-				<ImageMenu
+				<PressableImageMenu
 					{...imageMenu}
+					className="flex shrink-0 rounded-lg outline-offset-2"
 					item={index}
 					name={accessibleNameOf(item.image, item.title)}
-					trigger={
+					picture={
 						<img
 							src={item.image.src}
 							alt={item.image.alt ?? ""}
