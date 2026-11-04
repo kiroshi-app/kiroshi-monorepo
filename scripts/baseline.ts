@@ -161,7 +161,7 @@ const VITEST_SUITES: VitestSuite[] = [
 	{ name: "website", filter: "website", script: "test" },
 ]
 
-const UNIT_SUITES: UnitSuite[] = [
+export const UNIT_SUITES: UnitSuite[] = [
 	{ ...APP_SUITE, project: "unit", root: "apps/app" },
 	{ ...UI_SUITE, root: "packages/ui" },
 ]
@@ -506,6 +506,15 @@ const collectStorybook = (retries: number): Live => {
 	return { [TESTS]: attributedFailures(ran.map(outcomeOf)) }
 }
 
+const collectUnit = (retries: number): Live => {
+	const ran = runSuites({
+		suites: UNIT_SUITES,
+		into: newReportFolder(),
+		retries,
+	})
+	return { [TESTS]: attributedFailures(ran.map(outcomeOf)) }
+}
+
 const existingChangedPaths = () =>
 	pathsChangedSinceMain().filter((path) => existsSync(join(REPO, path)))
 
@@ -538,7 +547,7 @@ type ScopeRun = { collect: (retries: number) => Live; suites: string[] }
 
 const suiteNames = (suites: VitestSuite[]) => suites.map((suite) => suite.name)
 
-const SCOPES = {
+export const SCOPES = {
 	vitest: {
 		collect: collectVitest,
 		suites: [...suiteNames(VITEST_SUITES), SIDECAR_SUITE],
@@ -548,6 +557,7 @@ const SCOPES = {
 		suites: suiteNames([STORYBOOK_SUITE]),
 	},
 	lint: { collect: collectLint, suites: [] },
+	unit: { collect: collectUnit, suites: suiteNames(UNIT_SUITES) },
 	changed: { collect: collectChanged, suites: suiteNames(UNIT_SUITES) },
 } satisfies Record<string, ScopeRun>
 
@@ -569,11 +579,14 @@ const requestedScopes = (argv: string[]): Scope[] => {
 	return chosen.length === 0 ? FULL_SCOPES : chosen
 }
 
-const assertChangedScopeChecksAlone = (scopes: Scope[], argv: string[]) => {
-	if (!scopes.includes("changed")) return
+const VITEST_SUBSET_SCOPES: Scope[] = ["unit", "changed"]
+
+const assertSubsetScopesCheckAlone = (scopes: Scope[], argv: string[]) => {
+	const subset = scopes.find((scope) => VITEST_SUBSET_SCOPES.includes(scope))
+	if (subset === undefined) return
 	if (!scopes.includes("vitest") && !argv.includes("--prune")) return
 	throw new Error(
-		"the changed scope reads a subset of the vitest scope: run it without vitest and without --prune",
+		`the ${subset} scope reads a subset of the vitest scope: run it without vitest and without --prune`,
 	)
 }
 
@@ -644,7 +657,7 @@ const collect = ({ scopes, retries }: Collection): Collected => {
 
 const main = (argv: string[]) => {
 	const scopes = requestedScopes(argv)
-	assertChangedScopeChecksAlone(scopes, argv)
+	assertSubsetScopesCheckAlone(scopes, argv)
 	const retries = argv.includes("--retry") ? 1 : 0
 	const collected = collect({ scopes, retries })
 	if (argv.includes("--prune")) return prune(collected)

@@ -226,8 +226,11 @@ const OFF_PULL_REQUEST_TRIGGERS: Partial<Record<Group, string>> = {
 // runs the format, Biome and knip against the baseline, the types, the unit
 // test step bun scripts/ci.ts changed picks for the same diff, and the
 // pr-dequeue or pr-enqueue script tests when the diff touches that script
-// or its tests. bun run ci and the CI jobs keep the rest: the perf set, the
-// stories, the website and sidecar suites, rust, the website build and ios.
+// or its tests. That unit test step runs the changed test files, or the
+// whole unit project of the app and ui suites when a changed path is shared,
+// and never the app perf project. bun run ci and the CI jobs keep the rest:
+// the perf set, the stories, the website and sidecar suites, rust, the
+// website build and ios.
 export const FAST_STEP_NAMES = [
 	"Biome format",
 	"Biome and knip against the baseline",
@@ -237,6 +240,11 @@ export const FAST_STEP_NAMES = [
 export const CHANGED_UNIT_TESTS: Step = {
 	name: "Unit tests changed since origin/main against the baseline",
 	command: "bun run baseline changed",
+}
+
+export const FULL_UNIT_TESTS: Step = {
+	name: "App and ui unit projects against the baseline",
+	command: "bun run baseline unit",
 }
 
 export const SHARED_IMPORTER_THRESHOLD = 20
@@ -322,8 +330,9 @@ const scopeReason = (scope: UnitTestScope) => {
 export const scopeLine = (scope: UnitTestScope) =>
 	`ci  unit test scope: ${scopeReason(scope)}${graphTime(scope)}`
 
-export const unitTestSteps = (scope: UnitTestScope) =>
-	scope.scope === "changed" ? [CHANGED_UNIT_TESTS] : GATE.vitest
+export const unitTestSteps = (scope: UnitTestScope) => [
+	scope.scope === "changed" ? CHANGED_UNIT_TESTS : FULL_UNIT_TESTS,
+]
 
 export const SIMULATOR_LOOKUP = `xcrun simctl list devices available "iOS $(cat .xcode-version)" | grep -m1 -E '^ +iPhone 17 \\(' | grep -oE '[0-9A-F-]{36}'`
 
