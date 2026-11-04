@@ -43,51 +43,47 @@ export function MessageAttachments({
 	const idAt = (index: number) => images[index].id
 
 	return (
-		<div
+		<ul
 			aria-label={t("attachments.label")}
 			data-slot="message-attachments"
-			role="group"
 			className={cn(
-				"not-typeset mb-2 flex flex-col gap-1.5 last:mb-0",
+				"not-typeset mb-2 flex flex-wrap items-start gap-1.5 last:mb-0",
 				className,
 			)}
 		>
 			{images.length > 0 ? (
-				<Gallery
-					images={images.map((item) => ({
-						src: item.previewUrl ?? "",
-						alt: item.name,
-					}))}
-					imageMenu={imageMenu && imageMenuActionsFor(imageMenu, idAt)}
-					onOpen={(index) => onOpen(idAt(index))}
-				/>
+				<li className="min-w-0 basis-full">
+					<Gallery
+						images={images.map((item) => ({
+							src: item.previewUrl ?? "",
+							alt: item.name,
+						}))}
+						imageMenu={imageMenu && imageMenuActionsFor(imageMenu, idAt)}
+						onOpen={(index) => onOpen(idAt(index))}
+						tileLabel="open"
+					/>
+				</li>
 			) : null}
-			{files.length > 0 ? (
-				<ul className="flex flex-wrap items-start gap-1.5">
-					{files.map((item) => (
-						<li key={item.id} data-slot="message-attachment">
-							<button
-								type="button"
-								aria-label={t("attachments.open", { name: item.name })}
-								onClick={() => onOpen(item.id)}
-								className="flex max-w-56 cursor-pointer items-center gap-2 overflow-hidden rounded-xl border border-foreground/15 bg-foreground/5 p-1 pr-2 text-left outline-none transition-opacity duration-150 hover:bg-foreground/10 focus-visible:ring-2 focus-visible:ring-current focus-visible:ring-offset-2 focus-visible:ring-offset-transparent motion-reduce:transition-none"
-							>
-								<span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-foreground/10">
-									<Icons.File aria-hidden="true" className="size-4" />
-								</span>
-								<span className="flex min-w-0 flex-col">
-									<span className="truncate font-medium text-xs">
-										{item.name}
-									</span>
-									<span className="text-[11px] tracking-wide">
-										{extensionOf(item.name)}
-									</span>
-								</span>
-							</button>
-						</li>
-					))}
-				</ul>
-			) : null}
-		</div>
+			{files.map((item) => (
+				<li key={item.id} data-slot="message-attachment">
+					<button
+						type="button"
+						aria-label={t("attachments.open", { name: item.name })}
+						onClick={() => onOpen(item.id)}
+						className="flex max-w-56 cursor-pointer items-center gap-2 overflow-hidden rounded-xl border border-foreground/15 bg-foreground/5 p-1 pr-2 text-left outline-none transition-opacity duration-150 hover:bg-foreground/10 focus-visible:ring-2 focus-visible:ring-current focus-visible:ring-offset-2 focus-visible:ring-offset-transparent motion-reduce:transition-none"
+					>
+						<span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-foreground/10">
+							<Icons.File aria-hidden="true" className="size-4" />
+						</span>
+						<span className="flex min-w-0 flex-col">
+							<span className="truncate font-medium text-xs">{item.name}</span>
+							<span className="text-[11px] tracking-wide">
+								{extensionOf(item.name)}
+							</span>
+						</span>
+					</button>
+				</li>
+			))}
+		</ul>
 	)
 }

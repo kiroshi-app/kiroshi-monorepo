@@ -83,7 +83,12 @@ const MANY_IMAGES: MessageAttachment[] = [
 const THREAD_MENU_ORDER = ["Save to Library", "Copy image", "Open in viewer"]
 
 const rowsIn = (canvasElement: HTMLElement) =>
-	within(canvasElement).getAllByRole("group", { name: "Attachments" })
+	within(canvasElement).getAllByRole("list", { name: "Attachments" })
+
+const chipsIn = (row: HTMLElement) =>
+	Array.from(
+		row.querySelectorAll<HTMLElement>("[data-slot='message-attachment']"),
+	)
 
 const tilesIn = (row: HTMLElement) =>
 	Array.from(row.querySelectorAll<HTMLElement>("[data-slot='gallery'] button"))
@@ -162,7 +167,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"One screenshot, the commonest thing a reader sends, in the reader's bubble and in the agent's. Check that the lone picture fills one gallery tile inside each bubble, that activating it reports the item's id, since the host opens by id and an index would open the wrong file, and that with no `imageMenu` a right-click opens no menu and leaves the platform's own. " +
+					"One screenshot, the commonest thing a reader sends, in the reader's bubble and in the agent's. Check that the lone picture fills one gallery tile inside each bubble, named Open and the file name, that its 1 px image outline keeps a light picture's edge on the blue and on the grey, that activating it reports the item's id, since the host opens by id and an index would open the wrong file, and that with no `imageMenu` a right-click opens no menu and leaves the platform's own. " +
 					FILLED_BY_TURN_BODY,
 			},
 		},
@@ -172,7 +177,12 @@ export const Default = meta.story({
 		for (const row of rows) await expectGalleryInBubble(row, 1)
 
 		const [tile] = tilesIn(rows[0])
-		await expect(tile).toHaveAccessibleName("composer-empty.png")
+		await expect(tile).toHaveAccessibleName("Open composer-empty.png")
+		for (const row of rows) {
+			const outline = getComputedStyle(row.querySelector("img") as Element)
+			await expect(outline.outlineStyle).toBe("solid")
+			await expect(outline.outlineWidth).toBe("1px")
+		}
 		await userEvent.click(tile)
 		await expect(args.onOpen).toHaveBeenCalledWith("screenshot")
 
@@ -213,7 +223,7 @@ export const SeveralImages = meta.story({
 		docs: {
 			description: {
 				story:
-					"Three pictures in one turn, one of them twice as tall as it is wide. Check that the large tile sits beside two stacked tiles, that the tall one is cropped to its tile instead of pushing the bubble down, and that every picture keeps its file name as its accessible name. " +
+					"Three pictures in one turn, one of them twice as tall as it is wide. Check that the large tile sits beside two stacked tiles, that the tall one is cropped to its tile instead of pushing the bubble down, and that every tile is named Open and its file name, its picture left decorative so the name is read once. " +
 					FILLED_BY_TURN_BODY,
 			},
 		},
@@ -222,10 +232,9 @@ export const SeveralImages = meta.story({
 		const [row] = rowsIn(canvasElement)
 		await expectGalleryInBubble(row, SEVERAL_IMAGES.length)
 		await expect(
-			within(row)
-				.getAllByRole("img")
-				.map((picture) => picture.getAttribute("alt")),
-		).toEqual(SEVERAL_IMAGES.map((item) => item.name))
+			tilesIn(row).map((tile) => tile.getAttribute("aria-label")),
+		).toEqual(SEVERAL_IMAGES.map((item) => `Open ${item.name}`))
+		await expect(within(row).queryAllByRole("img")).toHaveLength(0)
 	},
 })
 
@@ -273,7 +282,7 @@ export const MixedKinds = meta.story({
 		await expect(canvas.getByText("JSON")).toBeVisible()
 
 		const gallery = row.querySelector("[data-slot='gallery']")
-		const chips = within(row).getAllByRole("listitem")
+		const chips = chipsIn(row)
 		await expect(chips).toHaveLength(2)
 		await expect(chips[0].getBoundingClientRect().top).toBeGreaterThanOrEqual(
 			gallery?.getBoundingClientRect().bottom ?? 0,
@@ -295,7 +304,7 @@ export const States = meta.story({
 	play: async ({ args, canvas, userEvent }) => {
 		await userEvent.tab()
 		await expect(
-			canvas.getByRole("button", { name: "composer-empty.png" }),
+			canvas.getByRole("button", { name: "Open composer-empty.png" }),
 		).toHaveFocus()
 		await userEvent.keyboard("{Enter}")
 		await expect(args.onOpen).toHaveBeenLastCalledWith("screenshot")
@@ -322,7 +331,7 @@ export const LongContent = meta.story({
 	},
 	play: async ({ canvasElement }) => {
 		const [row] = rowsIn(canvasElement)
-		const chips = within(row).getAllByRole("listitem")
+		const chips = chipsIn(row)
 		const [first] = chips
 
 		await expect(chips).toHaveLength(
@@ -347,7 +356,7 @@ export const Error = meta.story({
 		docs: {
 			description: {
 				story:
-					"A source the host resolved and no decoder accepts. Check that the broken picture keeps its gallery tile, drawn as an image glyph on a shaded tile rather than a torn-image icon or an empty box, that it keeps the file name as its accessible name, and that it stays activatable so the reader can still open the file. " +
+					"A source the host resolved and no decoder accepts. Check that the broken picture keeps its gallery tile, drawn as an image glyph on a shaded tile rather than a torn-image icon or an empty box, that the glyph tile drops the image outline, that it is still named Open and the file name, and that it stays activatable so the reader can still open the file. " +
 					FILLED_BY_TURN_BODY,
 			},
 		},
@@ -359,8 +368,15 @@ export const Error = meta.story({
 			expect(row.querySelector("[data-slot='gallery-broken']")).toBeVisible(),
 		)
 		await expect(row.querySelector("img")).toBe(null)
+		await expect(
+			getComputedStyle(
+				row.querySelector("[data-slot='gallery-broken']") as Element,
+			).outlineStyle,
+		).toBe("none")
 
-		await userEvent.click(canvas.getByRole("button", { name: "capture.png" }))
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Open capture.png" }),
+		)
 		await expect(args.onOpen).toHaveBeenCalledWith("screenshot")
 	},
 })
@@ -459,14 +475,14 @@ export const Empty = meta.story({
 		docs: {
 			description: {
 				story:
-					"A message that carries nothing, every turn that is only text. Check that the row renders no element at all rather than an empty box: the bubble stacks its blocks with a gap, so an empty group would still cost the text one. `Default` covers the first file landing in it. " +
+					"A message that carries nothing, every turn that is only text. Check that the row renders no element at all rather than an empty box: the bubble stacks its blocks with a gap, so an empty list would still cost the text one. `Default` covers the first file landing in it. " +
 					FILLED_BY_TURN_BODY,
 			},
 		},
 	},
 	play: async ({ canvas }) => {
 		await expect(
-			canvas.queryByRole("group", { name: "Attachments" }),
+			canvas.queryByRole("list", { name: "Attachments" }),
 		).not.toBeInTheDocument()
 	},
 })

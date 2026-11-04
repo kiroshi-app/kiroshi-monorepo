@@ -12,9 +12,12 @@ import {
 } from "@workspace/ui/components/image-menu"
 import { cn } from "@workspace/ui/lib/utils"
 
+type GalleryTileLabel = "name" | "open"
+
 type GalleryProps = {
 	images: readonly AnswerImage[]
 	caption?: string
+	tileLabel?: GalleryTileLabel
 	onOpen?: (index: number) => void
 	imageMenu?: ImageMenuActions<number>
 	className?: string
@@ -24,6 +27,7 @@ type GalleryTileProps = {
 	image: AnswerImage
 	index: number
 	caption: string
+	tileLabel: GalleryTileLabel
 	hiddenCount: number
 	onOpen?: (index: number) => void
 	imageMenu?: ImageMenuActions<number>
@@ -57,6 +61,7 @@ const GalleryTile = ({
 	image,
 	index,
 	caption,
+	tileLabel,
 	hiddenCount,
 	onOpen,
 	imageMenu,
@@ -86,9 +91,9 @@ const GalleryTile = ({
 			) : (
 				<img
 					src={image.src}
-					alt={name}
+					alt={tileLabel === "open" ? "" : name}
 					onError={() => setBrokenSrc(image.src)}
-					className="size-full object-cover"
+					className="image-outline size-full rounded-[inherit] object-cover"
 				/>
 			)}
 			{hiddenCount > 0 ? (
@@ -108,6 +113,9 @@ const GalleryTile = ({
 	const tile = onOpen ? (
 		<button
 			type="button"
+			aria-label={
+				tileLabel === "open" ? t("attachments.open", { name }) : undefined
+			}
 			className={cn(tileClass, "outline-offset-2")}
 			onClick={() => onOpen(index)}
 		>
@@ -125,6 +133,7 @@ const GalleryTile = ({
 const Gallery = ({
 	images,
 	caption = "",
+	tileLabel = "name",
 	onOpen,
 	imageMenu,
 	className,
@@ -146,6 +155,7 @@ const Gallery = ({
 					image={lead}
 					index={0}
 					caption={caption}
+					tileLabel={tileLabel}
 					hiddenCount={0}
 					onOpen={onOpen}
 					imageMenu={imageMenu}
@@ -163,6 +173,7 @@ const Gallery = ({
 								image={image}
 								index={position + 1}
 								caption={caption}
+								tileLabel={tileLabel}
 								hiddenCount={position === TILE_COUNT - 2 ? hiddenCount : 0}
 								onOpen={onOpen}
 								imageMenu={imageMenu}
