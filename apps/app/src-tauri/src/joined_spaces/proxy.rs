@@ -17,14 +17,14 @@ use tokio::sync::{broadcast, watch};
 
 use super::member_link::{MemberLink, Presence};
 use crate::events::Frame;
-use crate::host_api::files::{AVATAR_PATH, INERT, NO_SNIFF};
+use crate::host_api::files::{ATTACHMENT_PATH, AVATAR_PATH, INERT, NO_SNIFF};
 use crate::host_api::invoke::{
 	self, arguments, bearer_admitted, declares_more_than_the_cap, names_an_app_command, unread,
 	JSON, MAX_BODY_BYTES, REFUSED, TOO_LARGE, UNAUTHORIZED, UNREADABLE, UNREGISTERED,
 };
 use crate::host_api::token::HostToken;
 use crate::host_api::{cors, events};
-use crate::hosting::bridge::{RelayedAvatar, AVATAR_COMMAND};
+use crate::hosting::bridge::{RelayedFile, ATTACHMENT_COMMAND, AVATAR_COMMAND};
 use crate::hosting::relay::until_stopped;
 use crate::routines::webhook::named_here;
 
@@ -35,6 +35,9 @@ const IMMUTABLE: &str = "private, max-age=31536000, immutable";
 
 const UNREAD_AVATAR: (StatusCode, &str) =
 	(StatusCode::BAD_GATEWAY, "the host relayed an avatar that could not be read");
+
+const UNREAD_ATTACHMENT: (StatusCode, &str) =
+	(StatusCode::BAD_GATEWAY, "the host relayed an attachment that could not be read");
 
 pub(super) type Reread = Arc<dyn Fn() + Send + Sync>;
 
@@ -74,6 +77,7 @@ fn routed(proxy: Proxy) -> Router {
 	let events = Router::new()
 		.route(events::PATH, get(events_opened))
 		.route(AVATAR_PATH, get(avatar))
+		.route(ATTACHMENT_PATH, get(attachment))
 		.route_layer(middleware::from_fn_with_state(proxy.clone(), events_guarded));
 	invokes.merge(events).layer(middleware::from_fn(cors::shared)).with_state(proxy)
 }
@@ -139,25 +143,50 @@ fn is_json_answered(status: StatusCode) -> bool {
 	status.is_success() || status == StatusCode::INTERNAL_SERVER_ERROR
 }
 
+struct RelayedRoute {
+	command: &'static str,
+	noun: &'static str,
+	unread: (StatusCode, &'static str),
+}
+
+const AVATAR_ROUTE: RelayedRoute =
+	RelayedRoute { command: AVATAR_COMMAND, noun: "an avatar", unread: UNREAD_AVATAR };
+
+const ATTACHMENT_ROUTE: RelayedRoute =
+	RelayedRoute { command: ATTACHMENT_COMMAND, noun: "an attachment", unread: UNREAD_ATTACHMENT };
+
 async fn avatar(State(proxy): State<Proxy>, Path(file): Path<String>) -> Response {
+	relayed_file(&proxy, &AVATAR_ROUTE, json!({ "file": file })).await
+}
+
+async fn attachment(
+	State(proxy): State<Proxy>,
+	Path((conversation_id, file)): Path<(String, String)>,
+) -> Response {
+	let args = json!({ "conversationId": conversation_id, "file": file });
+	relayed_file(&proxy, &ATTACHMENT_ROUTE, args).await
+}
+
+async fn relayed_file(proxy: &Proxy, route: &RelayedRoute, args: Value) -> Response {
 	if proxy.link.settled().await != Presence::Online {
 		return HOST_OFFLINE.into_response();
 	}
-	let Some(answer) = proxy.link.called(AVATAR_COMMAND, json!({ "file": file })).await else {
+	let Some(answer) = proxy.link.called(route.command, args).await else {
 		return HOST_OFFLINE.into_response();
 	};
 	if answer.status != StatusCode::OK.as_u16() {
 		return answered(answer.status, answer.body);
 	}
-	let relayed = serde_json::from_value::<RelayedAvatar>(answer.body).ok();
+	let relayed = serde_json::from_value::<RelayedFile>(answer.body).ok();
 	let Some((bytes, content_type)) =
 		relayed.and_then(|relayed| Some((relayed.bytes()?, relayed.content_type)))
 	else {
 		log::warn!(
-			"the joined space proxy of instance {} got an avatar from the host it could not read",
-			proxy.link.instance_id()
+			"the joined space proxy of instance {} got {} from the host it could not read",
+			proxy.link.instance_id(),
+			route.noun
 		);
-		return UNREAD_AVATAR.into_response();
+		return route.unread.into_response();
 	};
 	let headers = [
 		(header::CONTENT_TYPE, content_type.as_str()),
@@ -207,6 +236,7 @@ mod tests {
 	use std::time::Duration;
 
 	use axum::http::Method;
+	use base64::prelude::{Engine as _, BASE64_STANDARD};
 	use futures_util::StreamExt;
 	use tokio::net::TcpStream;
 	use tokio::sync::mpsc;
@@ -463,22 +493,152 @@ mod tests {
 		}
 	}
 
-	#[tokio::test]
-	async fn an_attachment_is_still_not_served_by_the_proxy() {
-		let link = Arc::new(MemberLink::new("instance-1", "Studio".to_owned()));
-		let (calls, mut sent) = mpsc::channel(4);
+	const BRIEF: &[u8] = b"%PDF-1.7 the brief";
+
+	fn a_host_answering_attachments(link: Arc<MemberLink>, mut sent: mpsc::Receiver<String>) {
+		tokio::spawn(async move {
+			while let Some(frame) = sent.recv().await {
+				let frame: Value = serde_json::from_str(&frame).expect("a json frame");
+				assert_eq!(frame["command"], ATTACHMENT_COMMAND);
+				let asked =
+					(frame["args"]["conversationId"].as_str(), frame["args"]["file"].as_str());
+				let (status, body) = match asked {
+					(Some("c1"), Some("brief.pdf")) => (
+						200,
+						json!({ "contentType": "application/pdf", "base64": BASE64_STANDARD.encode(BRIEF) }),
+					),
+					(Some("c1"), Some("broken.pdf")) => {
+						(200, json!({ "contentType": "application/pdf", "base64": "not base64" }))
+					}
+					_ => (404, json!("no attachment of the shared space bears this name")),
+				};
+				let answer = json!({ "id": frame["id"], "status": status, "body": body });
+				link.received(&answer.to_string());
+			}
+		});
+	}
+
+	fn attachment_url(origin: &str, conversation_id: &str, file: &str) -> String {
+		let path = ATTACHMENT_PATH.replace("{conversation_id}", conversation_id);
+		format!("{origin}{}", path.replace("{file}", file))
+	}
+
+	async fn a_proxy_of_instance_answering_attachments(
+		instance_id: &str,
+		token: Arc<HostToken>,
+	) -> String {
+		let link = Arc::new(MemberLink::new(instance_id, "Studio".to_owned()));
+		let (calls, sent) = mpsc::channel(4);
 		link.opened(calls);
+		a_host_answering_attachments(link.clone(), sent);
+		a_guest_proxy(link, token, no_reread()).await
+	}
+
+	#[tokio::test]
+	async fn an_attachment_of_the_shared_space_crosses_as_its_bytes_with_the_avatar_headers() {
 		let token = Arc::new(HostToken::random());
-		let origin = a_guest_proxy(link, token.clone(), no_reread()).await;
+		let origin = a_proxy_of_instance_answering_attachments("instance-1", token.clone()).await;
+		let client = a_client();
+
+		for asked in [
+			client.get(attachment_url(&origin, "c1", "brief.pdf")).bearer_auth(token.bearer()),
+			client.get(format!(
+				"{}?token={}",
+				attachment_url(&origin, "c1", "brief.pdf"),
+				token.bearer()
+			)),
+		] {
+			let answer = asked.send().await.expect("an answer");
+			assert_eq!(answer.status(), StatusCode::OK);
+			let headers = answer.headers();
+			assert_eq!(headers[header::CONTENT_TYPE], "application/pdf");
+			assert_eq!(headers[header::X_CONTENT_TYPE_OPTIONS], NO_SNIFF);
+			assert_eq!(headers[header::CONTENT_SECURITY_POLICY], INERT);
+			assert_eq!(headers[header::CACHE_CONTROL], IMMUTABLE);
+			assert_eq!(answer.bytes().await.expect("the bytes").as_ref(), BRIEF);
+		}
+	}
+
+	#[tokio::test]
+	async fn an_attachment_of_another_space_or_out_of_its_conversation_is_not_found() {
+		let token = Arc::new(HostToken::random());
+		let origin = a_proxy_of_instance_answering_attachments("instance-1", token.clone()).await;
+		let client = a_client();
+
+		for (conversation_id, file) in [
+			("c2", "brief.pdf"),
+			("c1", "missing.pdf"),
+			("c1", "..%2Fc2%2Fbrief.pdf"),
+			("c1", "..%5Cbrief.pdf"),
+			("%2E%2E", "brief.pdf"),
+			("c1", "%2E%2E"),
+			("c1", "%252E%252E"),
+		] {
+			let answer = client
+				.get(attachment_url(&origin, conversation_id, file))
+				.bearer_auth(token.bearer())
+				.send()
+				.await
+				.expect("an answer");
+			assert_eq!(answer.status(), StatusCode::NOT_FOUND, "{conversation_id} {file}");
+			assert!(answer.headers().get(header::CACHE_CONTROL).is_none());
+		}
+	}
+
+	#[tokio::test]
+	async fn an_attachment_the_proxy_cannot_decode_answers_a_bad_gateway_and_one_warning() {
+		let token = Arc::new(HostToken::random());
+		let instance_id = "instance-of-an-undecodable-attachment";
+		let origin = a_proxy_of_instance_answering_attachments(instance_id, token.clone()).await;
+		crate::test_log::capturing();
 
 		let answer = a_client()
-			.get(format!("{origin}/api/files/attachments/c1/a.png"))
+			.get(attachment_url(&origin, "c1", "broken.pdf"))
 			.bearer_auth(token.bearer())
 			.send()
 			.await
 			.expect("an answer");
 
-		assert_eq!(answer.status(), StatusCode::NOT_FOUND);
+		assert_eq!(answer.status(), UNREAD_ATTACHMENT.0);
+		assert_eq!(answer.text().await.expect("the text"), UNREAD_ATTACHMENT.1);
+		assert_eq!(crate::test_log::warnings_naming(instance_id).await.len(), 1);
+	}
+
+	#[tokio::test]
+	async fn an_attachment_asked_without_an_admitted_token_is_refused_before_the_relay() {
+		let link = Arc::new(MemberLink::new("instance-1", "Studio".to_owned()));
+		let (calls, mut sent) = mpsc::channel(4);
+		link.opened(calls);
+		let origin = a_guest_proxy(link, Arc::new(HostToken::random()), no_reread()).await;
+		let client = a_client();
+		let url = attachment_url(&origin, "c1", "brief.pdf");
+
+		for asked in [
+			client.get(&url),
+			client.get(format!("{url}?token=wrong")),
+			client.get(&url).bearer_auth("wrong"),
+		] {
+			let answer = asked.send().await.expect("an answer");
+			assert_eq!(answer.status(), StatusCode::UNAUTHORIZED);
+		}
 		assert!(sent.try_recv().is_err());
+	}
+
+	#[tokio::test]
+	async fn an_attachment_asked_of_an_offline_host_answers_the_offline_text() {
+		let link = Arc::new(MemberLink::new("instance-1", "Studio".to_owned()));
+		link.closed(Presence::Down);
+		let token = Arc::new(HostToken::random());
+		let origin = a_guest_proxy(link, token.clone(), no_reread()).await;
+
+		let answer = a_client()
+			.get(attachment_url(&origin, "c1", "brief.pdf"))
+			.bearer_auth(token.bearer())
+			.send()
+			.await
+			.expect("an answer");
+
+		assert_eq!(answer.status(), HOST_OFFLINE.0);
+		assert_eq!(answer.text().await.expect("the text"), HOST_OFFLINE.1);
 	}
 }

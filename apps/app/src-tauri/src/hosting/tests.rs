@@ -20,7 +20,7 @@ use tokio::net::TcpListener;
 use tokio::sync::{mpsc, watch};
 
 use super::authorship::Caller;
-use super::bridge::{belongs_to_the_host, LocalApi};
+use super::bridge::{self, belongs_to_the_host, LocalApi, RelayedFile, ATTACHMENT_COMMAND};
 use super::contract::{AccountDevices, RosterDevice};
 use super::contract::{
 	HostingFailureKind, HostingState, InvitationState, Member, MemberStatus, MembersError,
@@ -30,6 +30,7 @@ use super::contract::{
 use super::devices::{devices, remove_device};
 use super::members::{invite, invite_again, list, remove, resend, withdraw};
 use super::reach;
+use super::relay::relay_socket_config;
 use super::replay::{RESUME_COMMAND, RING_FRAMES};
 use super::roster::SignedRow;
 use super::sealing_member::{
@@ -46,6 +47,7 @@ use crate::agent::contract as agent;
 use crate::agent::protocol::OauthCredentials;
 use crate::agent::protocol::SpaceMember;
 use crate::agent::reply_writer::TurnSink;
+use crate::attachments;
 use crate::bundles::{self, BotPermissions, DEFAULT_OUTPUT_STYLE};
 use crate::companions::contract::{
 	CREATED_EVENT as COMPANION_CREATED_EVENT, DELETED_EVENT as COMPANION_DELETED_EVENT,
@@ -83,6 +85,7 @@ use crate::environment::connection;
 use crate::environment::contract::{ConnectionKind, EnvError, EnvOwner, EnvScope, ACCOUNT_BEARER};
 use crate::environment::store;
 use crate::events::{self, Event, BUFFERED_FRAMES};
+use crate::host_api::files::ATTACHMENT_PATH;
 use crate::joined_spaces::contract::JoinedSpaceConnection;
 use crate::joined_spaces::relay::RelayGuests;
 use crate::library;
@@ -3501,9 +3504,8 @@ fn the_largest_member_import_seals_into_a_frame_under_the_relay_and_host_socket_
 			"content": BASE64_STANDARD.encode(vec![0xff; largest])
 		}
 	});
-	let host_socket_ceiling = tokio_tungstenite::tungstenite::protocol::WebSocketConfig::default()
-		.max_frame_size
-		.expect("the host socket caps a frame");
+	let host_socket_ceiling =
+		relay_socket_config().max_frame_size.expect("the host socket caps a frame");
 
 	let frame = member.sealed(&space, u64::MAX, &call.to_string(), Some([0xff; CHALLENGE_LENGTH]));
 
@@ -3512,6 +3514,108 @@ fn the_largest_member_import_seals_into_a_frame_under_the_relay_and_host_socket_
 		"a frame of {} bytes passes neither the relay ceiling of {RELAY_FRAME_CEILING_BYTES} nor the host socket ceiling of {host_socket_ceiling}",
 		frame.len()
 	);
+}
+
+#[test]
+fn the_largest_attachment_answer_seals_into_a_frame_under_the_relay_and_socket_ceilings() {
+	let host = SealingMember::new("host");
+	let key = HeldSpaceKey::first().expect("randomness");
+	let verifying = DeviceKeys::generate().expect("randomness").signing_public();
+	let space =
+		Space { instance_id: &uuid::Uuid::new_v4().to_string(), key: &key, host: &verifying };
+	let largest = vec![0xff; attachments::MAX_BYTES as usize];
+	let relayed = RelayedFile::of("application/octet-stream".to_owned(), &largest);
+	let id = json!(uuid::Uuid::new_v4().to_string());
+	let answer = bridge::answer(id, reqwest::StatusCode::OK, json!(relayed));
+	let socket_ceiling = relay_socket_config().max_frame_size.expect("the socket caps a frame");
+
+	let frame = host.sealed(&space, u64::MAX, &answer, Some([0xff; CHALLENGE_LENGTH]));
+
+	assert!(
+		frame.len() < socket_ceiling.min(RELAY_FRAME_CEILING_BYTES),
+		"a frame of {} bytes passes neither the relay ceiling of {RELAY_FRAME_CEILING_BYTES} nor the socket ceiling of {socket_ceiling}",
+		frame.len()
+	);
+}
+
+const BRIEF: &[u8] = b"%PDF-1.7 the brief";
+
+async fn serving_attachments(name: &str) -> (Harness, Arc<AtomicUsize>) {
+	let database = temp_dir();
+	db::open(&database)
+		.call_mut(|connection| Ok(connection.execute_batch(TWO_SPACES)?))
+		.await
+		.expect("the two spaces are planted");
+	let reads = Arc::new(AtomicUsize::new(0));
+	let counted = Arc::clone(&reads);
+	let local = Router::new().route(
+		ATTACHMENT_PATH,
+		get(move |Path((conversation_id, file)): Path<(String, String)>| async move {
+			counted.fetch_add(1, Ordering::SeqCst);
+			match (conversation_id.as_str(), file.as_str()) {
+				("c-mine", "brief.pdf") => {
+					([(header::CONTENT_TYPE, "application/pdf")], BRIEF).into_response()
+				}
+				_ => (StatusCode::NOT_FOUND, "no file answers this path").into_response(),
+			}
+		}),
+	);
+	let every = super::members::MEMBERS_EVERY;
+	let harness = Harness::serving(name, None, Some(BEARER), every, database, local).await;
+	(harness, reads)
+}
+
+fn an_attachment_asked(id: &str) -> String {
+	let args = json!({ "conversationId": "c-mine", "file": "brief.pdf" });
+	json!({ "id": id, "command": ATTACHMENT_COMMAND, "args": args }).to_string()
+}
+
+fn relayed_bytes(answer: &Value) -> Option<Vec<u8>> {
+	serde_json::from_value::<RelayedFile>(answer["body"].clone()).ok()?.bytes()
+}
+
+#[test]
+fn a_device_removed_from_the_space_is_answered_no_attachment_byte() {
+	run(async {
+		let (mut harness, reads) = serving_attachments("attachment-removed").await;
+		harness.started().await;
+		let mut relay = harness.relay_side().await;
+		let host = harness.host_keys().signing_public();
+		let mut removed = harness.joined(&mut relay, "guest").await;
+		let mut kept = harness.joined(&mut relay, "joiner").await;
+		relay.addressed(&removed.member, "rekey").await;
+		let before =
+			called_with(&mut relay, &mut removed, &host, &an_attachment_asked("before")).await;
+		relay.addressed(&removed.member, "rekey").await;
+		let removed_id = removed.member.keys.device_id().to_string();
+		remove_device(harness.app.handle(), PERSONAL.to_owned(), removed_id)
+			.await
+			.expect("the device is removed");
+		let rekey = relay.addressed(&kept.member, "rekey").await;
+		let handover =
+			kept.member.rekey_opened(&rekey, &relay.instance_id, &host).expect("the rekey opens");
+		kept.space = space_key_of(&handover);
+		kept.ctr = 0;
+
+		let instance_id = relay.instance_id.clone();
+		let stale = Space { instance_id: &instance_id, key: &removed.space, host: &host };
+		removed.ctr += 1;
+		relay.sent(removed.member.sealed(&stale, removed.ctr, HELLO, None)).await;
+		removed.ctr += 1;
+		relay
+			.sent(removed.member.sealed(&stale, removed.ctr, &an_attachment_asked("after"), None))
+			.await;
+		let kept_call =
+			called_with(&mut relay, &mut kept, &host, &an_attachment_asked("kept")).await;
+
+		assert_eq!(
+			(before["status"].clone(), kept_call["status"].clone()),
+			(json!(200), json!(200))
+		);
+		assert_eq!(relayed_bytes(&kept_call), Some(BRIEF.to_vec()));
+		assert!(!relay.has_held_any_frame_to(&removed.member));
+		assert_eq!(reads.load(Ordering::SeqCst), 2);
+	});
 }
 
 #[test]

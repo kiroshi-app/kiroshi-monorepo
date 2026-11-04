@@ -241,6 +241,33 @@ avatars one at a time.
 | 500 | `{ "error": "the avatar was not read" }` |
 | 502 | `{ "error": "<reason>" }` |
 
+### The attachment frame
+
+A member reads a file attached to a message of a conversation of the shared space
+through the socket. Like the avatar frame, its command is not in the schema's
+`commands`:
+
+```json
+{ "id": 9, "command": "relay_attachment", "args": { "conversationId": "c-1", "file": "3f2a.pdf" } }
+```
+
+`conversationId` is the conversation's id, `file` the last path segment of the
+stored attachment. The host answers attachments and avatars one at a time, and
+answers a file only when the conversation belongs to the shared space.
+
+| Status | `body` |
+|---|---|
+| 200 | `{ "contentType": "application/pdf", "base64": "<the file, base64>" }` |
+| 400 | a string: `id`, `args.conversationId` or `args.file` is missing |
+| 404 | `"no attachment of the shared space bears this name"`, or `"no file answers this path"` when the conversation holds no such file |
+| 413 | `"the attachment is too large to cross the relay"` (the cap is 10 MiB) |
+| 500 | `{ "error": "the attachment was not read" }` |
+| 502 | `{ "error": "<reason>" }` |
+
+A 10 MiB file is about 18 MiB of frame once the envelope base64-encodes the answer
+again in `ct`: a client reads frames of up to 64 MiB, the relay cap of
+[Frames the relay refuses](#frames-the-relay-refuses).
+
 ### Attachments
 
 `chat_store_attachments` takes each attachment of `args.attachments` as
