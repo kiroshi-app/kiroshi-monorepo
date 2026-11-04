@@ -7,10 +7,13 @@ use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 use tokio::sync::oneshot;
 
+use futures_util::future::join_all;
+
 use super::contract::{
 	LibraryDocument, LibraryDocumentState, LibraryError, LibraryFile, LibraryImage, LibraryImport,
 	LibraryItem, LibraryTemplate,
 };
+use super::host::stop_writers;
 use super::presence::{seated_name, share_caret, unseat_writer, Seat};
 use super::{
 	apply_update, clipboard_payload, clipboard_payload_of_bytes, create_document, delete_item,
@@ -18,6 +21,10 @@ use super::{
 	read_thumbnail, rename_linked_document, resolve, root, save, save_bytes, save_message,
 	templates, ClipboardPayload,
 };
+use crate::agent::commands::cancel_session_turn;
+use crate::agent::contract::CancelOutcome;
+use crate::agent::AgentState;
+use crate::conversations::host_turn::merged;
 use crate::db;
 use crate::hosting::authorship::Caller;
 use crate::logging::scrub::scrubbed;
@@ -190,6 +197,27 @@ pub async fn library_share_caret<R: Runtime>(
 		}
 	};
 	share_caret(&app, &root(&app)?, &space_id, &name, seat, writer_name, &caret)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn library_stop_writers<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	agent: State<'_, AgentState>,
+	space_id: String,
+	name: String,
+	agent_id: Option<String>,
+) -> Result<CancelOutcome, LibraryError> {
+	known_space(&state, &space_id).await?;
+	let stopped = stop_writers(&app, &space_id, &name, agent_id.as_deref()).await;
+	if stopped.is_empty() {
+		return Ok(CancelOutcome::NothingToCancel);
+	}
+	let cancelled = join_all(stopped.iter().map(|scope| cancel_session_turn(&app, &agent, scope)));
+	let mut outcomes = cancelled.await;
+	outcomes.push(CancelOutcome::Cancelled);
+	Ok(merged(outcomes))
 }
 
 fn seat_of<R: Runtime>(caller: &Caller, webview: &Webview<R>) -> Result<Seat, LibraryError> {

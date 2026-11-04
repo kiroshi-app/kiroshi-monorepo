@@ -15,8 +15,11 @@ use yrs::updates::encoder::Encode;
 use yrs::{Doc, GetString, IndexedSequence, ReadTxn, Text, Transact, Update};
 
 use super::*;
+use crate::agent::contract::CancelOutcome;
+use crate::agent::AgentState;
 use crate::conversations::contract::TranscriptMessage;
 use crate::db::repositories::messages::MessagePageQuery;
+use crate::library::commands::library_stop_writers;
 use crate::library::contract::{
 	LibraryChanged, LibraryDocumentPresence, LibraryDocumentRenamed, LibraryWriter,
 	LibraryWriterKind,
@@ -62,7 +65,17 @@ fn on_disk(root: &Path, name: &str) -> String {
 }
 
 fn the_host(app: &App<MockRuntime>) -> LibraryHost<MockRuntime> {
-	LibraryHost::new(app.handle().clone(), "c1".to_owned(), "b1".to_owned())
+	the_host_of(app, "b1")
+}
+
+fn the_host_of(app: &App<MockRuntime>, bot_id: &str) -> LibraryHost<MockRuntime> {
+	let scope = RuntimeScope {
+		conversation_id: "c1".to_owned(),
+		bot_id: bot_id.to_owned(),
+		runtime_session_id: format!("r-{bot_id}"),
+		epoch: 0,
+	};
+	LibraryHost::new(app.handle().clone(), scope)
 }
 
 fn heard<P: DeserializeOwned + Send + 'static>(
@@ -754,4 +767,138 @@ async fn an_agent_posting_what_is_not_a_document_of_the_space_is_refused_by_name
 		.await
 		.expect("the page reads");
 	assert!(page.messages.is_empty());
+}
+
+const A_SECOND_AGENT_IN_THE_CONVERSATION: &str = "
+	INSERT INTO bots (id, name, model, created_at) VALUES ('b2', 'Kit', 'sonnet', 1);
+	INSERT INTO bot_spaces (bot_id, space_id, joined_at) VALUES ('b2', 'personal', 1);
+	INSERT INTO conversation_participants (conversation_id, bot_id, role, joined_at, join_seq)
+		VALUES ('c1', 'b2', 'assistant', 1, 1);
+";
+
+async fn two_agents_writing(name: &str) -> (AppOfItsOwn, PathBuf) {
+	let (app, root) = a_host(name).await;
+	app.manage(AgentState::default());
+	ready(&app.state::<db::DatabaseState>())
+		.expect("the database opens")
+		.call_mut(|connection| Ok(connection.execute_batch(A_SECOND_AGENT_IN_THE_CONVERSATION)?))
+		.await
+		.expect("the second agent is planted");
+	put(&root, SPACE, "notes.md", "Base.");
+	(app, root)
+}
+
+fn writing(
+	app: &App<MockRuntime>,
+	bot_id: &str,
+	text: String,
+) -> tokio::task::JoinHandle<Result<Value, DocumentRefusal>> {
+	let host = the_host_of(app, bot_id);
+	let asked = json!({ "name": "notes.md", "text": text });
+	tokio::spawn(async move { host.served(Operation::Write, asked).await })
+}
+
+async fn stopped(app: &App<MockRuntime>, agent_id: Option<&str>) -> CancelOutcome {
+	library_stop_writers(
+		app.handle().clone(),
+		app.state(),
+		app.state(),
+		SPACE.to_owned(),
+		"notes.md".to_owned(),
+		agent_id.map(str::to_owned),
+	)
+	.await
+	.expect("the stop is answered")
+}
+
+fn agent_finishes(
+	heard: &Receiver<LibraryDocumentWriterFinished>,
+) -> Vec<(String, LibraryWriteOutcome)> {
+	let mut finishes: Vec<_> =
+		heard.try_iter().map(|finished| (finished.agent_id, finished.outcome)).collect();
+	finishes.sort_by(|one, other| one.0.cmp(&other.0));
+	finishes
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_stop_without_an_agent_stops_every_agent_writing_and_leaves_the_member_seated() {
+	let (app, root) = two_agents_writing("stop-all").await;
+	let presences =
+		heard::<LibraryDocumentPresence>(&app, events::LIBRARY_DOCUMENT_PRESENCE.name());
+	let finishes = heard::<LibraryDocumentWriterFinished>(
+		&app,
+		events::LIBRARY_DOCUMENT_WRITER_FINISHED.name(),
+	);
+	let caret = caret_of_a_member(&app, "notes.md");
+	share_caret(
+		app.handle(),
+		&root,
+		SPACE,
+		"notes.md",
+		Seat::Member("u2".to_owned()),
+		Some("Ana".to_owned()),
+		&caret,
+	)
+	.expect("the member caret is published");
+	let bean = writing(&app, "b1", "a".repeat(200));
+	let kit = writing(&app, "b2", "b".repeat(200));
+	tokio::time::sleep(STEP_PAUSE * 3).await;
+
+	assert_eq!(stopped(&app, None).await, CancelOutcome::Cancelled);
+
+	let left = on_disk(&root, "notes.md");
+	for write in [bean, kit] {
+		let answer = write.await.expect("the write ends");
+		assert_eq!(refusal_kind(answer), "stopped");
+	}
+	tokio::time::sleep(STEP_PAUSE * 3).await;
+	assert_eq!(on_disk(&root, "notes.md"), left);
+	assert!(left.len() < "Base.".len() + 400, "{left}");
+	assert_eq!(
+		agent_finishes(&finishes),
+		[
+			("b1".to_owned(), LibraryWriteOutcome::Failed),
+			("b2".to_owned(), LibraryWriteOutcome::Failed)
+		]
+	);
+	let last = all_of(&presences).pop().expect("a presence was published");
+	assert_eq!(named(&last.writers), [(LibraryWriterKind::Member, Some("Ana"))]);
+	assert_eq!(stopped(&app, None).await, CancelOutcome::NothingToCancel);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_stop_of_one_agent_leaves_the_other_of_the_same_conversation_writing_to_its_last_step() {
+	let (app, root) = two_agents_writing("stop-one").await;
+	let finishes = heard::<LibraryDocumentWriterFinished>(
+		&app,
+		events::LIBRARY_DOCUMENT_WRITER_FINISHED.name(),
+	);
+	let bean = writing(&app, "b1", "a".repeat(200));
+	let kit = writing(&app, "b2", "b".repeat(200));
+	tokio::time::sleep(STEP_PAUSE * 3).await;
+
+	assert_eq!(stopped(&app, Some("b9")).await, CancelOutcome::NothingToCancel);
+	assert_eq!(stopped(&app, Some("b1")).await, CancelOutcome::Cancelled);
+
+	assert_eq!(refusal_kind(bean.await.expect("the stopped write ends")), "stopped");
+	kit.await.expect("the other write ends").expect("the other write lands");
+	let text = on_disk(&root, "notes.md");
+	assert_eq!(text.matches('b').count(), 200, "{text}");
+	assert!(text.matches('a').count() < 200, "{text}");
+	assert_eq!(
+		agent_finishes(&finishes),
+		[
+			("b1".to_owned(), LibraryWriteOutcome::Failed),
+			("b2".to_owned(), LibraryWriteOutcome::Finished)
+		]
+	);
+	assert_eq!(stopped(&app, Some("b2")).await, CancelOutcome::NothingToCancel);
+}
+
+#[tokio::test]
+async fn a_stop_in_a_document_nobody_writes_in_has_nothing_to_cancel() {
+	let (app, _root) = two_agents_writing("stop-nobody").await;
+
+	assert_eq!(stopped(&app, None).await, CancelOutcome::NothingToCancel);
+	assert_eq!(stopped(&app, Some("b1")).await, CancelOutcome::NothingToCancel);
 }

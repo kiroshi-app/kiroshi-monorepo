@@ -153,7 +153,7 @@ impl HostTurns {
 	}
 }
 
-fn merged(outcomes: Vec<CancelOutcome>) -> CancelOutcome {
+pub(crate) fn merged(outcomes: Vec<CancelOutcome>) -> CancelOutcome {
 	let mut has_cancelled = false;
 	let mut failures = Vec::new();
 	for outcome in outcomes {
