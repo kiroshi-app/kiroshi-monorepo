@@ -552,7 +552,7 @@ export const Conversations4 = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard Conversations 4: an answer taller than the transcript, with a heading, a table and a list, read from its top. Check the bubble keeps padding 18 around rich content and that its author line stays pinned to the bottom edge on the sticky fill, with its top rule and a square foot, until the bubble's own end scrolls into view.",
+					"Artboard Conversations 4: an answer taller than the transcript, with a heading, a table and a list, read from its top. Check the bubble keeps padding 18 around rich content and that its author line stays pinned to the bottom edge on the sticky fill, with no rule on its top edge and a square foot, until the bubble's own end scrolls into view.",
 			},
 		},
 	},
@@ -1207,6 +1207,9 @@ const paintedBubbleRgb = ({ screen, surface }: StuckLine) =>
 		getComputedStyle(surface).backgroundColor,
 	)
 
+const expectBlockHasNoTopBorder = async (line: HTMLElement) =>
+	expect(getComputedStyle(line, "::before").borderTopWidth).toBe("0px")
+
 const expectBlockPaintsBubble = async (stuck: StuckLine) => {
 	await expect(
 		getComputedStyle(stuck.line, "::before").backgroundColor,
@@ -1239,6 +1242,7 @@ const expectCleanCutStuckLine = async (
 			block.borderBottomRightRadius,
 		]).toEqual(["0px", "0px"])
 		await expect(getComputedStyle(content).overflow).toBe("clip")
+		await expectBlockHasNoTopBorder(line)
 		await expectBlockPaintsBubble(stuck)
 	}
 }
@@ -1258,6 +1262,7 @@ const expectUnwrappedStuckBlockPaintsRestingBubble = async (
 		await expect(
 			widestChannelGap(restingBubble, paintedBlockRgb(line)),
 		).toBeLessThanOrEqual(1)
+		await expectBlockHasNoTopBorder(line)
 	}
 }
 
@@ -1279,6 +1284,7 @@ const expectHoveredStuckBlockPaintsBubble = async (
 				widestChannelGap(resting, paintedBubbleRgb(stuck)),
 			).toBeGreaterThan(1),
 		)
+		await expectBlockHasNoTopBorder(stuck.line)
 		await expectBlockPaintsBubble(stuck)
 	}
 	await pointer.unhover(viewports[1])
