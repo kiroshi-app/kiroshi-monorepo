@@ -1023,14 +1023,10 @@ describe.each(PLACES)(
 			await renderLibraryScreen(isJoined)
 			await openDocument(NOTES)
 			await addBlockBelow("We ship in May.", "/web")
-			act(() => {
-				document
-					.querySelector<HTMLElement>("[data-type='web-page'] [tabindex]")
-					?.focus()
-			})
-			const link = await screen.findByRole("textbox", {
-				name: common("library.editor.blocks.webPage.link"),
-			})
+			const link = await openBlockOfType(
+				"web-page",
+				common("library.editor.blocks.webPage.link"),
+			)
 
 			await act(async () => {
 				fireEvent.change(link, { target: { value: LINK } })
