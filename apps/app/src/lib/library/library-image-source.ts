@@ -4,7 +4,7 @@ import { readLibraryFile } from "./library-reads"
 
 import { commands } from "../bindings"
 
-export type LibraryImageContent = {
+type LibraryImageContent = {
 	name: string
 	content: string
 }
