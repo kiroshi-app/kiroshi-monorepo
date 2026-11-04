@@ -41,8 +41,19 @@ const answerImageMenuOf = (
 	}
 }
 
+const answerImageSavingOf = (
+	actions: MarkdownAnswerActions | null,
+	images: LibraryLightboxImage[],
+): ((index: number) => boolean) | undefined => {
+	const isSavingImage = actions?.isSavingImage
+	if (!isSavingImage) return undefined
+
+	return (index) => isSavingImage(images[index].src)
+}
+
 export {
 	answerImageMenuOf,
+	answerImageSavingOf,
 	type MarkdownAnswerActions,
 	MarkdownAnswerContext,
 	useMarkdownAnswerActions,

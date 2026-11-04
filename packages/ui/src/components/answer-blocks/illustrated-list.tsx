@@ -22,12 +22,14 @@ type IllustratedListItem = {
 type IllustratedListProps = {
 	items: readonly IllustratedListItem[]
 	imageMenu?: ImageMenuActions<number>
+	isSavingToLibrary?: (index: number) => boolean
 	className?: string
 }
 
 const IllustratedList = ({
 	items,
 	imageMenu,
+	isSavingToLibrary,
 	className,
 }: IllustratedListProps) => (
 	<ol
@@ -45,6 +47,7 @@ const IllustratedList = ({
 				<PressableImageMenu
 					{...imageMenu}
 					className="flex shrink-0 rounded-lg outline-offset-2"
+					isSavingToLibrary={isSavingToLibrary?.(index)}
 					item={index}
 					name={accessibleNameOf(item.image, item.title)}
 					picture={

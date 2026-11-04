@@ -1,4 +1,4 @@
-import { expect, fn } from "storybook/test"
+import { expect, fn, screen, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
@@ -47,6 +47,51 @@ export const InAgentAnswer = meta.story({
 		await expect(canvas.queryByRole("img")).toBeNull()
 		await userEvent.click(canvas.getByRole("button", { name: "Open as page" }))
 		await expect(args.onOpen).toHaveBeenCalledOnce()
+	},
+})
+
+export const ImageMenuSaving = meta.story({
+	args: {
+		preview: {
+			src: CASA_DO_RIO_PAGE,
+			alt: "The rooms page of Casa do Rio",
+		},
+		imageMenu: {
+			onSaveToLibrary: fn(),
+			onCopyImage: fn(),
+			onOpenInViewer: fn(),
+		},
+		isSavingToLibrary: true,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The `ImageMenu` open on the preview while it is on its way to the Library. Check Save to Library is disabled while Copy image and Open in viewer still answer.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		await userEvent.pointer({
+			keys: "[MouseRight]",
+			target: canvas.getByRole("button", {
+				name: "The rooms page of Casa do Rio",
+			}),
+		})
+		const menu = within(
+			await screen.findByRole("menu", {
+				name: "Actions for The rooms page of Casa do Rio",
+			}),
+		)
+		await expect(
+			menu.getByRole("menuitem", { name: "Save to Library" }),
+		).toHaveAttribute("aria-disabled", "true")
+		await expect(
+			menu.getByRole("menuitem", { name: "Copy image" }),
+		).not.toHaveAttribute("aria-disabled")
+		await expect(
+			menu.getByRole("menuitem", { name: "Open in viewer" }),
+		).not.toHaveAttribute("aria-disabled")
 	},
 })
 

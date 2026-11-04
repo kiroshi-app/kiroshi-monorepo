@@ -908,6 +908,157 @@ export const ImageMenuOnWebPagePreview = meta.story({
 	},
 })
 
+const savingActionsFor = (savingSrc: string): MarkdownAnswerActions => ({
+	...IMAGE_MENU_ACTIONS,
+	isSavingImage: (src) => src === savingSrc,
+})
+
+const expectSaveDisabled = async (menu: ReturnType<typeof within>) => {
+	await expect(
+		menu.getByRole("menuitem", { name: "Save to Library" }),
+	).toHaveAttribute("aria-disabled", "true")
+	await expect(
+		menu.getByRole("menuitem", { name: "Copy image" }),
+	).not.toHaveAttribute("aria-disabled")
+	await expect(
+		menu.getByRole("menuitem", { name: "Open in viewer" }),
+	).not.toHaveAttribute("aria-disabled")
+}
+
+const expectSaveEnabled = async (menu: ReturnType<typeof within>) =>
+	expect(
+		menu.getByRole("menuitem", { name: "Save to Library" }),
+	).not.toHaveAttribute("aria-disabled")
+
+const closeImageMenu = async (user: ReturnType<typeof userEvent.setup>) => {
+	await user.keyboard("{Escape}")
+	await waitFor(() =>
+		expect(within(document.body).queryByRole("menu")).toBe(null),
+	)
+}
+
+export const ImageMenuSavingOnPlainImage = meta.story({
+	tags: ["test-only"],
+	args: {
+		children: PLAIN_IMAGE,
+		answerActions: savingActionsFor(
+			"https://images.example.org/sofa-green.jpg",
+		),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A plain Markdown image right-clicked while `isSavingImage` returns true for its address. Check Save to Library is disabled while Copy image and Open in viewer still answer.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		await expectSaveDisabled(
+			await openImageMenu(
+				userEvent,
+				canvas.getByRole("button", { name: "Green velvet sofa" }),
+				"Green velvet sofa",
+			),
+		)
+	},
+})
+
+export const ImageMenuSavingOnGallery = meta.story({
+	tags: ["test-only"],
+	args: {
+		children: GALLERY,
+		answerActions: savingActionsFor("https://images.example.org/sofa-grey.jpg"),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A `gallery` block while `isSavingImage` returns true for its second image. Check Save to Library is disabled on that tile only, and stays enabled on the first.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		await expectSaveDisabled(
+			await openImageMenu(
+				userEvent,
+				canvas.getByRole("button", { name: "Grey linen sofa, three seats" }),
+				"Grey linen sofa, three seats",
+			),
+		)
+		await closeImageMenu(userEvent)
+		await expectSaveEnabled(
+			await openImageMenu(
+				userEvent,
+				canvas.getByRole("button", { name: "Green velvet sofa, three seats" }),
+				"Green velvet sofa, three seats",
+			),
+		)
+	},
+})
+
+export const ImageMenuSavingOnIllustratedList = meta.story({
+	tags: ["test-only"],
+	args: {
+		children: ILLUSTRATED_LIST,
+		answerActions: savingActionsFor("https://images.example.org/porto.jpg"),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"An `illustrated-list` block while `isSavingImage` returns true for its second picture. Check Save to Library is disabled on that picture only, and stays enabled on the first.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		await expectSaveDisabled(
+			await openImageMenu(
+				userEvent,
+				canvas.getByRole("img", { name: "Porto" }),
+				"Porto",
+			),
+		)
+		await closeImageMenu(userEvent)
+		await expectSaveEnabled(
+			await openImageMenu(
+				userEvent,
+				canvas.getByRole("img", { name: "Lisbon" }),
+				"Lisbon",
+			),
+		)
+	},
+})
+
+export const ImageMenuSavingOnWebPagePreview = meta.story({
+	tags: ["test-only"],
+	args: {
+		children: WEB_PAGE_WITH_PREVIEW,
+		answerActions: savingActionsFor(
+			"https://images.example.org/casa-do-rio.jpg",
+		),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A `web-page` block while `isSavingImage` returns true for its preview. Check Save to Library is disabled while Copy image and Open in viewer still answer.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		await expectSaveDisabled(
+			await openImageMenu(
+				userEvent,
+				canvas.getByRole("img", {
+					name: "Terrace of Casa do Rio over the river",
+				}),
+				"Terrace of Casa do Rio over the river",
+			),
+		)
+	},
+})
+
 const pressContextMenuKey = (element: Element) => {
 	const { left, bottom } = element.getBoundingClientRect()
 	element.dispatchEvent(

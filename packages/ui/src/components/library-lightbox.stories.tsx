@@ -33,7 +33,10 @@ import { COPIED_RESET_MS } from "@workspace/ui/hooks/use-copy-text"
 type LibraryWithLightboxProps = LibraryItemActions<
 	LibraryItem | LibraryLightboxImage
 > &
-	Pick<LibraryLightboxProps, "onSaveToLibrary" | "onCopyImage"> & {
+	Pick<
+		LibraryLightboxProps,
+		"onSaveToLibrary" | "onCopyImage" | "isSavingToLibrary"
+	> & {
 		openedAt: number | null
 		onClose: () => void
 		onPrevious: () => void
@@ -47,6 +50,7 @@ const LibraryWithLightbox = ({
 	onNext,
 	onSaveToLibrary,
 	onCopyImage,
+	isSavingToLibrary,
 	...actions
 }: LibraryWithLightboxProps) => {
 	const [shownAt, setShownAt] = useState(openedAt)
@@ -73,6 +77,7 @@ const LibraryWithLightbox = ({
 						<LibraryLightbox
 							{...actions}
 							count={LIBRARY_LIGHTBOX_IMAGES.length}
+							isSavingToLibrary={isSavingToLibrary}
 							onCopyImage={onCopyImage}
 							onSaveToLibrary={onSaveToLibrary}
 							image={
@@ -1086,5 +1091,39 @@ export const ImageMenuOpen = meta.story({
 
 		menu = await openStageMenu()
 		await expect(menu).toBeVisible()
+	},
+})
+
+export const ImageMenuSaving = meta.story({
+	args: {
+		onSaveToLibrary: fn(),
+		onCopyImage: fn(),
+		isSavingToLibrary: true,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The `ImageMenu` open on the image on screen while it is on its way to the Library. Check Save to Library is disabled while Copy image still answers.",
+			},
+		},
+	},
+	play: async ({ userEvent }) => {
+		const popup = await lightbox()
+		await userEvent.pointer({
+			keys: "[MouseRight]",
+			target: within(popup).getByRole("img", {
+				name: "dashboard-redesign.png",
+			}),
+		})
+		const menu = await screen.findByRole("menu", {
+			name: "Actions for dashboard-redesign.png",
+		})
+		await expect(
+			within(menu).getByRole("menuitem", { name: "Save to Library" }),
+		).toHaveAttribute("aria-disabled", "true")
+		await expect(
+			within(menu).getByRole("menuitem", { name: "Copy image" }),
+		).not.toHaveAttribute("aria-disabled")
 	},
 })

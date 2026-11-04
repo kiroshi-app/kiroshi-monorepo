@@ -50,6 +50,7 @@ const MarkdownImageMenu = ({
 	return (
 		<ImageMenu
 			{...answerImageMenuOf(actions, [image])}
+			isSavingToLibrary={actions.isSavingImage?.(image.src)}
 			item={0}
 			name={image.name}
 			trigger={
