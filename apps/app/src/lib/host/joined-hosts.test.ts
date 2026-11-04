@@ -389,6 +389,17 @@ describe("the Library of a joined space", () => {
 		expect(localCommands(local)).toEqual(LIBRARY_ACTIONS)
 		expect(fetch).not.toHaveBeenCalled()
 	})
+	it("reads a remote image on this computer", async () => {
+		const { hosts, local, fetch } = joinedHostsOf()
+		await hosts.activate("garage")
+
+		await hosts.invoke("remote_image_read", {
+			url: "https://example.test/hero.png",
+		})
+
+		expect(localCommands(local)).toEqual(["remote_image_read"])
+		expect(fetch).not.toHaveBeenCalled()
+	})
 })
 
 const SIGN_IN_COMMANDS = [

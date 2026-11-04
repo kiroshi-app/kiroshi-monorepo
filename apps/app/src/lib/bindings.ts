@@ -33,6 +33,7 @@ export const commands = {
 	reason: string,
 } | null>("application_runnable", { config }),
 	chatStoreAttachments: (conversationId: string, attachments: SubmittedAttachment[]) => typedError<string[], AttachmentStoreError>(__TAURI_INVOKE("chat_store_attachments", { conversationId, attachments })),
+	remoteImageRead: (url: string) => typedError<RemoteImage, RemoteImageError>(__TAURI_INVOKE("remote_image_read", { url })),
 	libraryList: (spaceId: string) => typedError<LibraryItem[], LibraryError>(__TAURI_INVOKE("library_list", { spaceId })),
 	libraryReadDocument: (spaceId: string, name: string) => typedError<LibraryDocument, LibraryError>(__TAURI_INVOKE("library_read_document", { spaceId, name })),
 	librarySave: (spaceId: string, name: string) => typedError<string | null, LibraryError>(__TAURI_INVOKE("library_save", { spaceId, name })),
@@ -1629,6 +1630,13 @@ export type ReleaseNotes = {
 };
 
 export type ReleaseNotesError = { kind: "invalidVersion"; version: string } | { kind: "unavailable"; version: string; detail: string };
+
+export type RemoteImage = {
+	mediaType: string,
+	base64: string,
+};
+
+export type RemoteImageError = { kind: "unsupportedScheme" } | { kind: "tooLarge"; limit: number } | { kind: "notAnImage" } | { kind: "networkFailure"; status: number | null };
 
 export type ReplyLink = {
 	messageId: string,

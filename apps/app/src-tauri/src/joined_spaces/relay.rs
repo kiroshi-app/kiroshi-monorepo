@@ -294,6 +294,13 @@ impl RelayGuests {
 		})
 	}
 
+	pub(crate) fn proxy_bearers(&self) -> HashMap<String, String> {
+		self.guests()
+			.values()
+			.map(|guest| (guest.origin.clone(), guest.token.bearer().to_owned()))
+			.collect()
+	}
+
 	fn left(&self, id: &str, link: &Arc<MemberLink>) -> Option<Guest> {
 		let mut guests = self.guests();
 		let is_this_guest = guests.get(id).is_some_and(|guest| Arc::ptr_eq(&guest.link, link));
