@@ -6,17 +6,10 @@ import {
 	FRAME_POLL,
 	hueScopeOf,
 	LAPTOP_WINDOW,
+	MarkdownProse,
 } from "@workspace/storybook/story-utils"
 import { AppHeader } from "@workspace/ui/components/app-header"
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
-import { DocumentCard } from "@workspace/ui/components/document-card"
-import {
-	DOCUMENT_CARD_BODY,
-	DOCUMENT_CARD_DETAIL,
-	DOCUMENT_CARD_EXCERPT,
-	DOCUMENT_CARD_TITLE,
-	DOCUMENT_CARD_WRITERS,
-} from "@workspace/ui/components/document-card.fixtures"
 import {
 	DOCUMENT_PANEL_DEFAULT_WIDTH,
 	DOCUMENT_PANEL_MAX_WIDTH,
@@ -25,6 +18,12 @@ import {
 	type DocumentPanelProps,
 	THREAD_MIN_WIDTH,
 } from "@workspace/ui/components/document-panel"
+import {
+	DOCUMENT_BODY,
+	DOCUMENT_TITLE,
+	DOCUMENT_WRITERS,
+} from "@workspace/ui/components/document-panel.fixtures"
+import { FileReferenceChip } from "@workspace/ui/components/file-reference-chip"
 import { LIBRARY_AGENTS } from "@workspace/ui/components/library.fixtures"
 import { LibraryDocumentPresence } from "@workspace/ui/components/library-document-agents"
 import { LibraryDocumentBody } from "@workspace/ui/components/library-document-view"
@@ -52,7 +51,25 @@ const ATLAS: RosterBot = {
 	blot: BLOT_HUES.blue,
 }
 
-const onOpenCard = fn()
+type BriefAnswerProps = {
+	isOpen: boolean
+	onOpen: () => void
+}
+
+const BriefAnswer = ({ isOpen, onOpen }: BriefAnswerProps) => (
+	<MarkdownProse>
+		<p>
+			I drafted{" "}
+			<FileReferenceChip
+				onOpen={onOpen}
+				onOpenInNewTab={fn()}
+				state={isOpen ? "open" : "rest"}
+				title={DOCUMENT_TITLE}
+			/>{" "}
+			for the launch on the 14th.
+		</p>
+	</MarkdownProse>
+)
 
 const ROWS: TranscriptItem[] = [
 	{
@@ -63,16 +80,7 @@ const ROWS: TranscriptItem[] = [
 		key: "answer",
 		render: () => (
 			<AssistantTurn identity={ATLAS}>
-				<DocumentCard
-					detail={DOCUMENT_CARD_DETAIL}
-					excerpt={DOCUMENT_CARD_EXCERPT}
-					isSelected
-					onOpen={onOpenCard}
-					title={DOCUMENT_CARD_TITLE}
-					writer={{ kind: "agent", agent: LIBRARY_AGENTS.atlas }}
-				>
-					<LibraryDocumentBody body={DOCUMENT_CARD_BODY} />
-				</DocumentCard>
+				<BriefAnswer isOpen onOpen={fn()} />
 			</AssistantTurn>
 		),
 	},
@@ -111,15 +119,7 @@ const ToggledPanel = () => {
 			key: "answer",
 			render: () => (
 				<AssistantTurn identity={ATLAS}>
-					<DocumentCard
-						detail={DOCUMENT_CARD_DETAIL}
-						excerpt={DOCUMENT_CARD_EXCERPT}
-						isSelected={isPanelOpen}
-						onOpen={() => setPanelOpen(true)}
-						title={DOCUMENT_CARD_TITLE}
-					>
-						<LibraryDocumentBody body={DOCUMENT_CARD_BODY} />
-					</DocumentCard>
+					<BriefAnswer isOpen={isPanelOpen} onOpen={() => setPanelOpen(true)} />
 				</AssistantTurn>
 			),
 		},
@@ -133,9 +133,9 @@ const ToggledPanel = () => {
 						<DocumentPanel
 							onClose={() => setPanelOpen(false)}
 							onOpenInLibrary={fn()}
-							title={DOCUMENT_CARD_TITLE}
+							title={DOCUMENT_TITLE}
 						>
-							<LibraryDocumentBody body={DOCUMENT_CARD_BODY} />
+							<LibraryDocumentBody body={DOCUMENT_BODY} />
 						</DocumentPanel>
 					) : null
 				}
@@ -174,15 +174,12 @@ const meta = preview.meta({
 		},
 	},
 	args: {
-		title: DOCUMENT_CARD_TITLE,
-		presence: <LibraryDocumentPresence writers={DOCUMENT_CARD_WRITERS} />,
+		title: DOCUMENT_TITLE,
+		presence: <LibraryDocumentPresence writers={DOCUMENT_WRITERS} />,
 		onOpenInLibrary: fn(),
 		onClose: fn(),
 		children: (
-			<LibraryDocumentBody
-				body={DOCUMENT_CARD_BODY}
-				writers={DOCUMENT_CARD_WRITERS}
-			/>
+			<LibraryDocumentBody body={DOCUMENT_BODY} writers={DOCUMENT_WRITERS} />
 		),
 	},
 	render: (args) => (
@@ -203,13 +200,13 @@ export const InThread = meta.story({
 		docs: {
 			description: {
 				story:
-					"The document of a card open beside the conversation that posted it, as artboard 2d draws it. Check that the card wears the Space accent ring, that the panel sits at the end of the thread at full height, that the bar shows one agent writing, and that Open in Library and Close call their callbacks.",
+					"The document a message names open beside the conversation that posted it, as artboard 2d draws it. Check that the file chip in the message wears the Space colour, that the panel sits at the end of the thread at full height, that the bar shows one agent writing, and that Open in Library and Close call their callbacks.",
 			},
 		},
 	},
 	play: async ({ args, canvas, canvasElement, userEvent }) => {
 		const panel = canvas.getByRole("complementary", {
-			name: DOCUMENT_CARD_TITLE,
+			name: DOCUMENT_TITLE,
 		})
 		const thread = canvasElement.querySelector<HTMLElement>(
 			'[data-slot="chat-layout"]',
@@ -220,13 +217,9 @@ export const InThread = meta.story({
 		await expect(panelBox.left).toBe(thread.getBoundingClientRect().right)
 		await expect(panelBox.height).toBe(thread.getBoundingClientRect().height)
 
-		const card = canvasElement.querySelector<HTMLElement>(
-			'[data-slot="document-card"]',
-		)
-		await expect(card).toHaveAttribute("data-selected", "true")
-		await expect(card ? getComputedStyle(card).boxShadow : "none").not.toBe(
-			"none",
-		)
+		await expect(
+			canvas.getByRole("button", { name: DOCUMENT_TITLE, pressed: true }),
+		).toBeVisible()
 
 		await expect(canvas.getByText("1 agent writing")).toBeVisible()
 		await userEvent.click(
@@ -244,7 +237,7 @@ export const KeepsTheThreadWhenToggled = meta.story({
 		docs: {
 			description: {
 				story:
-					"A conversation scrolled up while the panel is open, then the panel closed with Close and opened again from the card. Check that the thread keeps the same transcript and the same scroll position through both changes: the panel must never remount the thread beside it.",
+					"A conversation scrolled up while the panel is open, then the panel closed with Close and opened again from the file chip. Check that the thread keeps the same transcript and the same scroll position through both changes: the panel must never remount the thread beside it.",
 			},
 		},
 	},
@@ -270,9 +263,9 @@ export const KeepsTheThreadWhenToggled = meta.story({
 		await expect(viewportOf()).toBe(viewport)
 		await expect(viewport.scrollTop).toBe(SCROLLED_TOP)
 
-		canvas.getByRole("button", { name: "Open" }).click()
+		canvas.getByRole("button", { name: DOCUMENT_TITLE }).click()
 		await expect(
-			await canvas.findByRole("complementary", { name: DOCUMENT_CARD_TITLE }),
+			await canvas.findByRole("complementary", { name: DOCUMENT_TITLE }),
 		).toBeVisible()
 		await afterTwoFrames()
 		await expect(viewportOf()).toBe(viewport)
@@ -293,7 +286,7 @@ export const AfterADrag = meta.story({
 	play: async ({ args, canvas, canvasElement, userEvent }) => {
 		const handle = canvas.getByRole("separator", { name: HANDLE_LABEL })
 		const panel = canvas.getByRole("complementary", {
-			name: DOCUMENT_CARD_TITLE,
+			name: DOCUMENT_TITLE,
 		})
 		const row = canvasElement.querySelector<HTMLElement>(
 			'[data-slot="thread-with-aside"]',
@@ -365,7 +358,7 @@ export const HandleWithKeyboardFocus = meta.story({
 	play: async ({ args, canvas, userEvent }) => {
 		const handle = canvas.getByRole("separator", { name: HANDLE_LABEL })
 		const panel = canvas.getByRole("complementary", {
-			name: DOCUMENT_CARD_TITLE,
+			name: DOCUMENT_TITLE,
 		})
 		await expect(handle).toHaveAttribute(
 			"aria-valuemin",
@@ -467,7 +460,7 @@ export const ControlledWidth = meta.story({
 	play: async ({ args, canvas, userEvent }) => {
 		const handle = canvas.getByRole("separator", { name: HANDLE_LABEL })
 		const panel = canvas.getByRole("complementary", {
-			name: DOCUMENT_CARD_TITLE,
+			name: DOCUMENT_TITLE,
 		})
 		await expect(panel.getBoundingClientRect().width).toBe(CONTROLLED_WIDTH)
 
@@ -601,7 +594,7 @@ export const CappedByTheRoomLeft = meta.story({
 	play: async ({ canvas, canvasElement }) => {
 		const handle = canvas.getByRole("separator", { name: HANDLE_LABEL })
 		const panel = canvas.getByRole("complementary", {
-			name: DOCUMENT_CARD_TITLE,
+			name: DOCUMENT_TITLE,
 		})
 		const thread = threadOf(canvasElement)
 		const cappedWidth = LAPTOP_WIDTH - SIDEBAR_DEFAULT_WIDTH - THREAD_MIN_WIDTH
@@ -722,7 +715,7 @@ export const MovesFromTheCappedEdge = meta.story({
 	play: async ({ args, canvas, userEvent }) => {
 		const handle = canvas.getByRole("separator", { name: HANDLE_LABEL })
 		const panel = canvas.getByRole("complementary", {
-			name: DOCUMENT_CARD_TITLE,
+			name: DOCUMENT_TITLE,
 		})
 		const cappedWidth = LAPTOP_WIDTH - SIDEBAR_DEFAULT_WIDTH - THREAD_MIN_WIDTH
 		await waitFor(async () => {

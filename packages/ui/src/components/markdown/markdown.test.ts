@@ -67,13 +67,13 @@ describe("markdown constructions", () => {
 		expect(html.match(/<ul>/g)).toHaveLength(3)
 	})
 
-	it("renders task lists as read-only named checkboxes", () => {
+	it("renders task lists as enabled named checkboxes", () => {
 		const html = render("- [x] shipped\n- [ ] pending")
 
 		expect(html).toContain('class="task-list-item"')
 		expect(html).toContain('aria-label="Done"')
 		expect(html).toContain('aria-label="To do"')
-		expect(html.match(/disabled=""/g)).toHaveLength(2)
+		expect(html).not.toContain('disabled=""')
 		expect(html.match(/checked=""/g)).toHaveLength(1)
 	})
 

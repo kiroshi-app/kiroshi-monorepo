@@ -1562,9 +1562,9 @@ export const SourcedImageWithSourceDetails = meta.story({
 				image.getAttribute("src"),
 			),
 		).toEqual([SANTA_LUZIA, CASA_DO_RIO_FAVICON])
-		await expect(figure.querySelector("figcaption p")).toHaveTextContent(
-			"Miradouro da Senhora do Monte",
-		)
+		await expect(
+			figure.querySelector('[data-slot="sourced-image-source"] + p'),
+		).toHaveTextContent("Miradouro da Senhora do Monte")
 		await expect(
 			slotIn(canvasElement, "sourced-image-status"),
 		).toHaveTextContent("Free")

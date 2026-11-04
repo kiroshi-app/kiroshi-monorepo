@@ -3,7 +3,6 @@
 import { type ReactNode, useId, useState } from "react"
 import { useTranslation } from "react-i18next"
 
-import { DocumentGlyph } from "@workspace/ui/components/document-card"
 import { panelWidthsInRoom } from "@workspace/ui/components/document-panel-widths"
 import { Icons } from "@workspace/ui/components/icons"
 import { FOCUS_OUTLINE } from "@workspace/ui/components/library-document-agents"
@@ -17,6 +16,16 @@ import { TooltipButton } from "@workspace/ui/components/tooltip-button"
 import { useRenderedWidth } from "@workspace/ui/hooks/use-rendered-width"
 import { libraryDisplayName } from "@workspace/ui/lib/library-display-name"
 import { cn } from "@workspace/ui/lib/utils"
+
+const DocumentGlyph = () => (
+	<span
+		aria-hidden="true"
+		className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-foreground"
+		data-slot="document-glyph"
+	>
+		<Icons.File className="size-4" />
+	</span>
+)
 
 const BAR_BUTTON = cn(
 	LIBRARY_BAR_BARE,
@@ -147,6 +156,7 @@ export {
 	DOCUMENT_PANEL_DEFAULT_WIDTH,
 	DOCUMENT_PANEL_MAX_WIDTH,
 	DOCUMENT_PANEL_MIN_WIDTH,
+	DocumentGlyph,
 	DocumentPanel,
 	type DocumentPanelProps,
 	THREAD_MIN_WIDTH,

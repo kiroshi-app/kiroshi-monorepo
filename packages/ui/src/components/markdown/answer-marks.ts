@@ -184,6 +184,7 @@ const sourcedImageOf = (paragraph: HastNode, next: HastNode | undefined) => {
 					src,
 					alt,
 					dataSourceName: name,
+					dataSourceUrl: href,
 					dataTitle: fields.title,
 					dataFavicon: fields.favicon,
 					dataStatus: fields.status,

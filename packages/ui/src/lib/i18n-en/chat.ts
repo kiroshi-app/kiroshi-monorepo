@@ -362,6 +362,9 @@ const chat = {
 		done: "Done",
 		todo: "To do",
 	},
+	fileReference: {
+		writing: "Writing…",
+	},
 	webSources: {
 		list: "Sources",
 		counted_one: "{{count}} source",
@@ -376,6 +379,8 @@ const chat = {
 		sourcedImage: {
 			save: "Save the image",
 			saving: "Saving the image…",
+			unavailable: "Image unavailable",
+			openOriginal: "Open original",
 		},
 		webPage: {
 			open: "Open as page",
