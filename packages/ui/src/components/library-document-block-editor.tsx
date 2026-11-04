@@ -5,6 +5,7 @@ import type { TFunction } from "i18next"
 import {
 	type FocusEvent,
 	type KeyboardEvent,
+	type MouseEvent,
 	type PointerEvent,
 	type ReactNode,
 	type Ref,
@@ -38,7 +39,9 @@ import {
 	fieldValueOf,
 	LibraryBlockText,
 	offsetAtPoint,
+	offsetAtShown,
 	selectInField,
+	shownOffsetAt,
 } from "@workspace/ui/components/library-block-text"
 import {
 	type LibraryLinkPreview,
@@ -134,6 +137,8 @@ const BLOCK_EDITORS: LibraryBlockType[] = [
 
 const POINTED_PARTS = "li, th, td, img"
 
+const POINTER_CONTROLS = "a, button, input, [role='button']"
+
 const FIELD_SLOT = "library-document-block-field"
 
 const EDITING_SLOT = "library-document-block-editing"
@@ -146,7 +151,7 @@ const PERSON_RUN = "person:"
 
 const PLACEHOLDER_RUN = "placeholder"
 
-const UNWRITTEN_LINE = /^\s*(?:[-*+]|\d+[.)])?\s*$/
+const UNWRITTEN_LINE = /^\s*(?:[-*+]|\d+[.)]|#{1,6}|>)?\s*$/
 
 const HELD_RUN = "held:"
 
@@ -241,6 +246,13 @@ type FocusRequest = {
 	head?: number
 	field?: number
 	point?: ClientPoint
+	shown?: number
+}
+
+type Pointed = {
+	point: ClientPoint
+	field?: number
+	shown?: number
 }
 
 type Drop = {
@@ -405,8 +417,7 @@ const LibraryDocumentBlockEditor = ({
 	const [focusRequest, setFocusRequest] = useState<FocusRequest>()
 	const [drop, setDrop] = useState<Drop>()
 	const wasDragged = useRef(false)
-	const pointedField = useRef<number | undefined>(undefined)
-	const pointedAt = useRef<ClientPoint>(undefined)
+	const pointed = useRef<Pointed>(undefined)
 	const list = useRef<HTMLDivElement>(null)
 	const textField = useRef<HTMLDivElement>(null)
 	const reportedCaret = useRef<number | null>(null)
@@ -604,9 +615,11 @@ const LibraryDocumentBlockEditor = ({
 				?.focus()
 			return
 		}
+		const { point, shown } = focusRequest
 		const caret =
-			(focusRequest.point && offsetAtPoint(field, focusRequest.point)) ??
-			focusRequest.caret
+			shown !== undefined
+				? offsetAtShown(field, shown)
+				: ((point && offsetAtPoint(field, point)) ?? focusRequest.caret)
 		field.focus()
 		selectInField(field, caret, focusRequest.head ?? caret)
 		reportFocusedField()
@@ -620,9 +633,10 @@ const LibraryDocumentBlockEditor = ({
 		caret?: number,
 		field?: number,
 		point?: ClientPoint,
+		shown?: number,
 	) => {
 		setEditing(id)
-		setFocusRequest({ id, on: "field", caret, field, point })
+		setFocusRequest({ id, on: "field", caret, field, point, shown })
 	}
 
 	const focusHandle = (id: string) => setFocusRequest({ id, on: "handle" })
@@ -1156,15 +1170,28 @@ const LibraryDocumentBlockEditor = ({
 			writeSource(id, toggleTask(source, boxes.indexOf(box)))
 	}
 
-	const pointAt = (event: PointerEvent<HTMLDivElement>) => {
-		pointedAt.current = { x: event.clientX, y: event.clientY }
-		const part =
-			event.target instanceof Element
-				? event.target.closest(POINTED_PARTS)
-				: null
-		pointedField.current = part
-			? [...event.currentTarget.querySelectorAll(POINTED_PARTS)].indexOf(part)
-			: undefined
+	const pointAt =
+		(hasBlockEditor: boolean) => (event: PointerEvent<HTMLDivElement>) => {
+			const point = { x: event.clientX, y: event.clientY }
+			const part =
+				event.target instanceof Element
+					? event.target.closest(POINTED_PARTS)
+					: null
+			pointed.current = {
+				point,
+				field: part
+					? [...event.currentTarget.querySelectorAll(POINTED_PARTS)].indexOf(
+							part,
+						)
+					: undefined,
+				shown: part && hasBlockEditor ? shownOffsetAt(part, point) : undefined,
+			}
+		}
+
+	const enterPointed = (id: string) => {
+		const { field, point, shown } = pointed.current ?? {}
+		pointed.current = undefined
+		edit(id, undefined, field, point, shown)
 	}
 
 	const startEditingOnFocus =
@@ -1178,9 +1205,17 @@ const LibraryDocumentBlockEditor = ({
 				(!hasBlockEditor || isInnerControl)
 			)
 				return
-			edit(id, undefined, pointedField.current, pointedAt.current)
-			pointedField.current = undefined
-			pointedAt.current = undefined
+			enterPointed(id)
+		}
+
+	const enterAtPointer =
+		(id: string) => (event: MouseEvent<HTMLDivElement>) => {
+			const isControl =
+				event.target instanceof Element &&
+				event.target.closest(POINTER_CONTROLS) !== null
+			if (event.button !== 0 || isControl) return
+			event.preventDefault()
+			enterPointed(id)
 		}
 
 	const focusBlock = (block: LibraryBlock | undefined, caret?: number) => {
@@ -1318,7 +1353,8 @@ const LibraryDocumentBlockEditor = ({
 										? startEditingOnFocus(block.id, hasBlockEditor)
 										: undefined
 								}
-								onPointerDown={isEditable ? pointAt : undefined}
+								onMouseDown={isEditable ? enterAtPointer(block.id) : undefined}
+								onPointerDown={isEditable ? pointAt(hasBlockEditor) : undefined}
 								tabIndex={isEditable ? 0 : undefined}
 							>
 								{placeholder ? (
@@ -1327,12 +1363,15 @@ const LibraryDocumentBlockEditor = ({
 										resolveImage={resolveImage}
 										renderRun={({ isEnd }) =>
 											isEnd ? (
-												<span
-													aria-hidden="true"
-													className={PLACEHOLDER_LOOK}
-													data-placeholder={placeholder}
-													data-slot="library-document-placeholder"
-												/>
+												<>
+													<span
+														aria-hidden="true"
+														className={PLACEHOLDER_LOOK}
+														data-placeholder={placeholder}
+														data-slot="library-document-placeholder"
+													/>
+													<span className="sr-only">{placeholder}</span>
+												</>
 											) : null
 										}
 										runs={[

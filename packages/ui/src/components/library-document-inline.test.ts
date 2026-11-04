@@ -16,7 +16,9 @@ type InlineSpan = Extract<InlineNode, { kind: "text" }>
 const shownSpansOf = (nodes: InlineNode[]): InlineSpan[] =>
 	nodes.flatMap((node) => {
 		if (node.kind === "text") return [node]
-		if (node.kind === "marker") return []
+		if (node.kind === "escape")
+			return [{ kind: "text", from: node.from + 1, to: node.to }]
+		if (node.kind === "marker" || node.kind === "image") return []
 		return shownSpansOf(node.children)
 	})
 
@@ -39,6 +41,28 @@ describe("inlineNodesOf", () => {
 	])("hides the markers of %s", (text, shown) => {
 		expect(hasInlineFormat(text)).toBe(true)
 		expect(shownTextOf(text)).toBe(shown)
+	})
+
+	it.each([
+		["costs \\$5 \\< \\*9\\*", "costs $5 < *9*"],
+		["**a\\*b**", "a*b"],
+		["mail <https://kiroshi.app/x> now", "mail https://kiroshi.app/x now"],
+		["write <ada@kiroshi.app>", "write ada@kiroshi.app"],
+		["see ![Sofa](https://k.app/s.png) here", "see  here"],
+	])("shows %s without its syntax", (text, shown) => {
+		expect(shownTextOf(text)).toBe(shown)
+	})
+
+	it("reads an image as one node with its alt and source", () => {
+		expect(inlineNodesOf("![Sofa](https://k.app/s.png)")).toEqual([
+			{
+				kind: "image",
+				from: 0,
+				to: 28,
+				alt: "Sofa",
+				src: "https://k.app/s.png",
+			},
+		])
 	})
 
 	it("reads formats nested in bold and in link text", () => {
@@ -84,6 +108,18 @@ describe("blockTextOf", () => {
 	])("shows %j as %s text without markers", (source, type, look, lines) => {
 		expect(blockTextOf(source, type).look).toBe(look)
 		expect(shownLinesOf(source, type)).toEqual(lines)
+	})
+
+	it("keeps an emptied quote a quote", () => {
+		expect(blockTextOf("> ", "quote").look).toBe("quote")
+	})
+
+	it("reads the depth of nested list items", () => {
+		expect(
+			blockTextOf("- a\n  - b\n    1. c\n- d", "list").lines.map(
+				({ depth }) => depth,
+			),
+		).toEqual([0, 1, 2, 0])
 	})
 
 	it("reads the heading level from its hashes", () => {
@@ -148,6 +184,17 @@ describe("editedBlockText", () => {
 })
 
 describe("stepIn", () => {
+	it("steps over an image whole", () => {
+		expect(stepIn("a![x](i.png)b", "paragraph", 12, -1)).toEqual({
+			from: 1,
+			to: 12,
+		})
+	})
+
+	it("steps over an escape whole", () => {
+		expect(stepIn("a\\*b", "paragraph", 3, -1)).toEqual({ from: 1, to: 3 })
+	})
+
 	it("steps over markers to the previous shown character", () => {
 		expect(stepIn("a**b**", "paragraph", 3, -1)).toEqual({ from: 0, to: 1 })
 	})

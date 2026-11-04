@@ -3,6 +3,7 @@
 import {
 	type CompositionEvent,
 	type FocusEvent,
+	Fragment,
 	type KeyboardEvent,
 	type ReactNode,
 	type Ref,
@@ -14,8 +15,10 @@ import {
 	useState,
 } from "react"
 
+import { shiftedOffset } from "@workspace/ui/components/library-document-blocks"
 import {
 	type BlockText,
+	type BlockTextLine,
 	type BlockTextType,
 	blockTextOf,
 	editedBlockText,
@@ -80,8 +83,17 @@ const anchorsIn = (field: HTMLElement) => [
 
 const fromOf = (anchor: HTMLElement) => Number(anchor.dataset.from)
 
-const lengthOf = (anchor: HTMLElement) =>
-	anchor.firstChild instanceof Text ? anchor.firstChild.length : 0
+const lengthOf = (anchor: HTMLElement) => {
+	if (anchor.dataset.to !== undefined)
+		return Number(anchor.dataset.to) - fromOf(anchor)
+	return anchor.firstChild instanceof Text ? anchor.firstChild.length : 0
+}
+
+const besideOf = (anchor: HTMLElement, isAfter: boolean) => {
+	const parent = anchor.parentNode as Node
+	const index = [...parent.childNodes].indexOf(anchor)
+	return { node: parent, offset: index + (isAfter ? 1 : 0) }
+}
 
 const offsetAt = (field: HTMLElement, node: Node, offset: number) => {
 	const holder = node.parentElement
@@ -105,13 +117,16 @@ const offsetAt = (field: HTMLElement, node: Node, offset: number) => {
 const pointAt = (field: HTMLElement, offset: number) => {
 	const anchors = anchorsIn(field)
 	const anchor =
-		anchors.find((each) => fromOf(each) + lengthOf(each) >= offset) ??
-		anchors.at(-1)
+		anchors.find((each) => {
+			const end = fromOf(each) + lengthOf(each)
+			return each.dataset.to === undefined ? end >= offset : end > offset
+		}) ?? anchors.at(-1)
 	if (!anchor) return { node: field as Node, offset: 0 }
 	const within = Math.min(
 		Math.max(offset - fromOf(anchor), 0),
 		lengthOf(anchor),
 	)
+	if (anchor.dataset.to !== undefined) return besideOf(anchor, within > 0)
 	return anchor.firstChild instanceof Text
 		? { node: anchor.firstChild as Node, offset: within }
 		: { node: anchor as Node, offset: 0 }
@@ -185,69 +200,126 @@ const offsetAtPoint = (field: HTMLElement, point: ClientPoint) => {
 		: undefined
 }
 
+const shownOffsetAt = (container: Element, point: ClientPoint) => {
+	const caret = caretPointAt(point)
+	if (!caret || !container.contains(caret.node)) return undefined
+	const range = document.createRange()
+	range.setStart(container, 0)
+	range.setEnd(caret.node, caret.offset)
+	const text = container.textContent ?? ""
+	const leading = text.length - text.trimStart().length
+	return Math.max(range.toString().length - leading, 0)
+}
+
+const offsetAtShown = (field: HTMLElement, shown: number) => {
+	let passed = 0
+	for (const anchor of anchorsIn(field)) {
+		const size = anchor.dataset.to === undefined ? lengthOf(anchor) : 0
+		if (shown <= passed + size) return fromOf(anchor) + shown - passed
+		passed += size
+	}
+	return fieldValueOf(field).length
+}
+
 const typedOf = ({ inputType, data, dataTransfer }: InputEvent) => {
 	if (inputType === "insertLineBreak" || inputType === "insertParagraph")
 		return "\n"
 	if (inputType.startsWith("insert"))
 		return data ?? dataTransfer?.getData("text/plain") ?? ""
-	if (inputType.startsWith("delete") && inputType !== "deleteByDrag") return ""
+	if (inputType.startsWith("delete")) return ""
 	return undefined
 }
 
 const marksOf = (source: string, nodes: InlineNode[]): ReactNode[] =>
 	nodes.map((node) => {
 		if (node.kind === "marker") return null
-		if (node.kind === "text")
+		if (node.kind === "text" || node.kind === "escape") {
+			const from = node.kind === "escape" ? node.from + 1 : node.from
 			return (
-				<span data-from={node.from} key={node.from}>
-					{source.slice(node.from, node.to)}
+				<span data-from={from} key={node.from}>
+					{source.slice(from, node.to)}
 				</span>
+			)
+		}
+		if (node.kind === "image")
+			return (
+				<img
+					alt={node.alt}
+					data-from={node.from}
+					data-to={node.to}
+					draggable={false}
+					key={node.from}
+					src={node.src}
+				/>
 			)
 		const Tag = MARK_TAGS[node.kind]
 		return <Tag key={node.from}>{marksOf(source, node.children)}</Tag>
 	})
 
-type LinesProps = {
+type Shown = {
 	source: string
 	text: BlockText
 	hint?: string
 }
 
-const linesOf = ({ source, text, hint }: LinesProps) =>
-	text.lines.map((line, index) => {
-		const isEmpty = line.nodes.length === 0
-		const isLast = index === text.lines.length - 1
-		const Line = text.look === "list" ? "li" : "span"
-		return (
-			<Line
-				className={cn(
-					Line === "span" && "block",
-					Line === "li" && line.marker === "" && "list-none",
-				)}
-				data-from={isEmpty ? line.contentFrom : undefined}
+const contentOf = ({ source, text, hint }: Shown, line: BlockTextLine) => {
+	if (line.nodes.length > 0) return marksOf(source, line.nodes)
+	const isLast = line === text.lines[text.lines.length - 1]
+	return (
+		<span data-from={line.contentFrom}>
+			{isLast && hint ? (
+				<span
+					aria-hidden="true"
+					className={PLACEHOLDER_LOOK}
+					contentEditable={false}
+					data-placeholder={hint}
+					data-slot="library-document-placeholder"
+				/>
+			) : null}
+			<br />
+		</span>
+	)
+}
+
+const listOf = (shown: Shown, lines: BlockTextLine[], depth: number) => {
+	const List = /\d/.test(lines[0]?.marker ?? "") ? "ol" : "ul"
+	const items: ReactNode[] = []
+	for (let at = 0; at < lines.length; ) {
+		const line = lines[at]
+		let end = at + 1
+		while (end < lines.length && lines[end].depth > depth) end++
+		const nested = lines.slice(at + 1, end)
+		items.push(
+			<li
+				className={cn(line.marker === "" && "list-none")}
 				key={line.contentFrom}
 				value={
-					Line === "li" && /\d/.test(line.marker)
+					/\d/.test(line.marker)
 						? Number.parseInt(line.marker.trim(), 10)
 						: undefined
 				}
 			>
-				{marksOf(source, line.nodes)}
-				{isEmpty && isLast && hint ? (
-					<span
-						aria-hidden="true"
-						className={PLACEHOLDER_LOOK}
-						contentEditable={false}
-						data-placeholder={hint}
-						data-slot="library-document-placeholder"
-					/>
-				) : null}
-				{isEmpty ? <br /> : null}
-			</Line>
+				{contentOf(shown, line)}
+				{nested.length > 0 ? listOf(shown, nested, depth + 1) : null}
+			</li>,
 		)
-	})
+		at = end
+	}
+	return <List>{items}</List>
+}
 
-const blockOf = (lines: ReactNode, text: BlockText, generation: number) => {
+const linesOf = (shown: Shown) =>
+	shown.text.lines.map((line) => (
+		<span className="block" key={line.contentFrom}>
+			{contentOf(shown, line)}
+		</span>
+	))
+
+const blockOf = (shown: Shown, generation: number) => {
+	const { text } = shown
+	if (text.look === "list")
+		return <Fragment key={generation}>{listOf(shown, text.lines, 0)}</Fragment>
+	const lines = linesOf(shown)
 	if (text.look === "line")
 		return (
 			<span className="block" key={generation}>
@@ -256,12 +328,11 @@ const blockOf = (lines: ReactNode, text: BlockText, generation: number) => {
 		)
 	if (text.look === "heading") {
 		const Heading = `h${text.level}` as "h1"
-		return <Heading key={generation}>{lines}</Heading>
-	}
-	if (text.look === "list") {
-		const isOrdered = /\d/.test(text.lines[0]?.marker ?? "")
-		const List = isOrdered ? "ol" : "ul"
-		return <List key={generation}>{lines}</List>
+		return (
+			<Heading key={generation} role="presentation">
+				{lines}
+			</Heading>
+		)
 	}
 	if (text.look === "quote")
 		return (
@@ -297,10 +368,11 @@ const LibraryBlockText = ({
 	...props
 }: LibraryBlockTextProps) => {
 	const field = useRef<HTMLDivElement>(null)
-	const pendingCaret = useRef<number>(undefined)
+	const pendingCaret = useRef<HeldText>(undefined)
 	const placedCaret = useRef<PlacedCaret>(undefined)
 	const shownSource = useRef(source)
 	const composing = useRef<SourceRange>(undefined)
+	const dragged = useRef<SourceRange>(undefined)
 	const history = useRef<{ past: HeldText[]; future: HeldText[] }>({
 		past: [],
 		future: [],
@@ -314,13 +386,14 @@ const LibraryBlockText = ({
 		const root = field.current
 		if (!root) return
 		SOURCES.set(root, source)
-		const at = pendingCaret.current
-		if (at === undefined) {
+		const pending = pendingCaret.current
+		if (pending === undefined) {
 			if (shownSource.current !== source) placedCaret.current = undefined
 			shownSource.current = source
 			return
 		}
 		shownSource.current = source
+		const at = shiftedOffset(pending.source, source, pending.caret)
 		selectInField(root, at)
 		placedCaret.current = { at, shown: fieldSelectionOf(root)?.start ?? at }
 		pendingCaret.current = undefined
@@ -332,17 +405,36 @@ const LibraryBlockText = ({
 			if (root) selectInField(root, next.caret)
 			return
 		}
-		pendingCaret.current = next.caret
+		pendingCaret.current = next
 		onEdit(next.source)
 	}
 
-	const write = (range: SourceRange, typed: string) => {
-		const caret = range.from
+	const remember = (caret: number) => {
 		history.current = {
 			past: [...history.current.past, { source, caret }],
 			future: [],
 		}
+	}
+
+	const write = (range: SourceRange, typed: string) => {
+		remember(range.from)
 		show(editedBlockText(source, type, range, typed))
+	}
+
+	const move = (moved: SourceRange, drop: SourceRange, typed: string) => {
+		if (drop.from > moved.from && drop.from < moved.to) return
+		remember(drop.from)
+		if (drop.from < moved.to) {
+			const removed = editedBlockText(source, type, moved, "")
+			show(editedBlockText(removed.source, type, drop, typed))
+			return
+		}
+		const inserted = editedBlockText(source, type, drop, typed)
+		const removed = editedBlockText(inserted.source, type, moved, "")
+		show({
+			source: removed.source,
+			caret: inserted.caret - (inserted.source.length - removed.source.length),
+		})
 	}
 
 	const travel = (direction: "past" | "future") => {
@@ -383,6 +475,19 @@ const LibraryBlockText = ({
 			placed && read.from === read.to && read.from === placed.shown
 				? { from: placed.at, to: placed.at }
 				: read
+		if (event.inputType === "deleteByDrag") {
+			dragged.current = range
+			setTimeout(() => {
+				if (dragged.current !== range) return
+				dragged.current = undefined
+				write(range, "")
+			})
+			return
+		}
+		const moved = dragged.current
+		dragged.current = undefined
+		if (moved && event.inputType === "insertFromDrop")
+			return move(moved, range, typed)
 		if (range.from === range.to && typed === "") {
 			const step = stepIn(
 				source,
@@ -428,8 +533,6 @@ const LibraryBlockText = ({
 		if (range) write(range, event.data)
 	}
 
-	const lines = linesOf({ source, text, hint })
-
 	return (
 		<div
 			{...props}
@@ -448,7 +551,7 @@ const LibraryBlockText = ({
 			role="textbox"
 			suppressContentEditableWarning
 		>
-			{blockOf(lines, text, generation)}
+			{blockOf({ source, text, hint }, generation)}
 		</div>
 	)
 }
@@ -459,5 +562,7 @@ export {
 	fieldValueOf,
 	LibraryBlockText,
 	offsetAtPoint,
+	offsetAtShown,
 	selectInField,
+	shownOffsetAt,
 }

@@ -20,7 +20,26 @@ type InlineElement = {
 	children: InlineNode[]
 }
 
-type InlineNode = InlineSpan | InlineMarker | InlineElement
+type InlineEscape = {
+	kind: "escape"
+	from: number
+	to: number
+}
+
+type InlineImage = {
+	kind: "image"
+	from: number
+	to: number
+	alt: string
+	src: string
+}
+
+type InlineNode =
+	| InlineSpan
+	| InlineMarker
+	| InlineElement
+	| InlineEscape
+	| InlineImage
 
 const INLINE_LOOK: Record<InlineFormat, string> = {
 	bold: "font-semibold text-foreground",
@@ -57,13 +76,29 @@ const canClose = (text: string, marker: string, at: number) =>
 	!isBlank(text[at - 1]) &&
 	(marker !== "_" || !isWordy(text[at + marker.length]))
 
+const ESCAPABLE = /[!-/:-@[-`{-~]/
+
+const AUTOLINK =
+	/^<([A-Za-z][A-Za-z0-9+.-]{1,31}:[^\s<>]*|[\w.!#$%&'*+/=?^`{|}~-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*)>/
+
+const isEscaped = (text: string, at: number) => {
+	let slashes = 0
+	while (text[at - 1 - slashes] === "\\") slashes++
+	return slashes % 2 === 1
+}
+
 const closingOf = (text: string, marker: string, from: number, to: number) => {
 	for (let at = from + 1; at + marker.length <= to; at++)
-		if (text.startsWith(marker, at) && canClose(text, marker, at)) return at
+		if (
+			text.startsWith(marker, at) &&
+			!isEscaped(text, at) &&
+			canClose(text, marker, at)
+		)
+			return at
 	return -1
 }
 
-type Found = { element: InlineElement; end: number }
+type Found = { node: InlineNode; end: number }
 
 type Bounds = [
 	from: number,
@@ -77,7 +112,7 @@ const elementOf = (
 	[from, contentFrom, contentTo, end]: Bounds,
 	content: InlineNode[],
 ): Found => ({
-	element: {
+	node: {
 		kind,
 		from,
 		children: [
@@ -97,15 +132,55 @@ const codeAt = (text: string, at: number, to: number) => {
 	return elementOf("code", [at, at + 1, close, close + 1], content)
 }
 
-const linkAt = (text: string, at: number, to: number) => {
+const escapeAt = (text: string, at: number, to: number): Found | undefined =>
+	text[at] === "\\" && at + 1 < to && ESCAPABLE.test(text[at + 1])
+		? { node: { kind: "escape", from: at, to: at + 2 }, end: at + 2 }
+		: undefined
+
+const bracketsAt = (text: string, at: number, to: number) => {
 	if (text[at] !== "[") return undefined
 	const textEnd = text.indexOf("]", at + 1)
-	if (textEnd <= at + 1 || text[textEnd + 1] !== "(") return undefined
+	if (text[textEnd + 1] !== "(") return undefined
 	const urlEnd = text.indexOf(")", textEnd + 2)
 	if (urlEnd <= textEnd + 2 || urlEnd >= to) return undefined
-	if (/\s/.test(text.slice(textEnd + 2, urlEnd))) return undefined
-	const content = nodesIn(text, at + 1, textEnd)
-	return elementOf("link", [at, at + 1, textEnd, urlEnd + 1], content)
+	const url = text.slice(textEnd + 2, urlEnd)
+	return /\s/.test(url) ? undefined : { textEnd, urlEnd, url }
+}
+
+const imageAt = (text: string, at: number, to: number): Found | undefined => {
+	if (text[at] !== "!") return undefined
+	const brackets = bracketsAt(text, at + 1, to)
+	if (!brackets) return undefined
+	const end = brackets.urlEnd + 1
+	return {
+		node: {
+			kind: "image",
+			from: at,
+			to: end,
+			alt: text.slice(at + 2, brackets.textEnd),
+			src: brackets.url,
+		},
+		end,
+	}
+}
+
+const autolinkAt = (text: string, at: number, to: number) => {
+	const address = AUTOLINK.exec(text.slice(at, to))?.[1]
+	if (!address) return undefined
+	const contentTo = at + 1 + address.length
+	const content: InlineNode[] = [{ kind: "text", from: at + 1, to: contentTo }]
+	return elementOf("link", [at, at + 1, contentTo, contentTo + 1], content)
+}
+
+const linkAt = (text: string, at: number, to: number) => {
+	const brackets = bracketsAt(text, at, to)
+	if (!brackets || brackets.textEnd <= at + 1) return undefined
+	const content = nodesIn(text, at + 1, brackets.textEnd)
+	return elementOf(
+		"link",
+		[at, at + 1, brackets.textEnd, brackets.urlEnd + 1],
+		content,
+	)
 }
 
 const pairAt = (text: string, at: number, to: number) => {
@@ -130,13 +205,18 @@ const nodesIn = (text: string, from: number, to: number): InlineNode[] => {
 	let at = from
 	while (at < to) {
 		const found =
-			codeAt(text, at, to) ?? linkAt(text, at, to) ?? pairAt(text, at, to)
+			escapeAt(text, at, to) ??
+			codeAt(text, at, to) ??
+			imageAt(text, at, to) ??
+			autolinkAt(text, at, to) ??
+			linkAt(text, at, to) ??
+			pairAt(text, at, to)
 		if (!found) {
 			at++
 			continue
 		}
 		if (plainFrom < at) nodes.push({ kind: "text", from: plainFrom, to: at })
-		nodes.push(found.element)
+		nodes.push(found.node)
 		at = found.end
 		plainFrom = at
 	}
@@ -152,6 +232,7 @@ type BlockTextLine = {
 	contentFrom: number
 	contentTo: number
 	marker: string
+	depth: number
 	nodes: InlineNode[]
 }
 
@@ -186,24 +267,40 @@ const lineOf = (
 	source: string,
 	{ from, text }: { from: number; text: string },
 	marker = "",
+	depth = 0,
 ): BlockTextLine => ({
 	contentFrom: from + marker.length,
 	contentTo: from + text.length,
 	marker,
+	depth,
 	nodes: nodesIn(source, from + marker.length, from + text.length),
 })
 
-const prefixedText = (
-	source: string,
-	look: BlockTextType,
-	prefix: RegExp,
-): BlockText => ({
-	look,
+const quoteTextOf = (source: string): BlockText => ({
+	look: "quote",
 	level: 0,
 	lines: sourceLinesOf(source).map((line) =>
-		lineOf(source, line, prefix.exec(line.text)?.[0]),
+		lineOf(source, line, QUOTE_PREFIX.exec(line.text)?.[0]),
 	),
 })
+
+const listTextOf = (source: string): BlockText => {
+	const columns: number[] = []
+	return {
+		look: "list",
+		level: 0,
+		lines: sourceLinesOf(source).map((line) => {
+			const marker = LIST_PREFIX.exec(line.text)?.[0]
+			if (!marker)
+				return lineOf(source, line, "", Math.max(columns.length - 1, 0))
+			const indent = marker.length - marker.trimStart().length
+			while (columns.length > 0 && indent < (columns.at(-1) ?? 0)) columns.pop()
+			const depth = columns.length
+			columns.push(marker.length)
+			return lineOf(source, line, marker, depth)
+		}),
+	}
+}
 
 const headingTextOf = (source: string): BlockText | undefined => {
 	const lines = sourceLinesOf(source)
@@ -235,15 +332,14 @@ const blockTextOf = (source: string, type: BlockTextType): BlockText => {
 	const firstLine = source.split("\n")[0]
 	if (type === "heading")
 		return headingTextOf(source) ?? plainTextOf(source, "paragraph")
-	if (type === "list" && LIST_PREFIX.test(firstLine))
-		return prefixedText(source, "list", LIST_PREFIX)
-	if (type === "quote" && source.trim() !== ">" && QUOTE_PREFIX.test(firstLine))
-		return prefixedText(source, "quote", QUOTE_PREFIX)
+	if (type === "list" && LIST_PREFIX.test(firstLine)) return listTextOf(source)
+	if (type === "quote" && source !== ">" && QUOTE_PREFIX.test(firstLine))
+		return quoteTextOf(source)
 	return plainTextOf(source, type === "line" ? "line" : "paragraph")
 }
 
 const isElement = (node: InlineNode): node is InlineElement =>
-	node.kind !== "text" && node.kind !== "marker"
+	"children" in node
 
 const edgesOf = (element: InlineElement) =>
 	[element.children[0], element.children[element.children.length - 1]] as [
@@ -258,13 +354,6 @@ const elementsIn = (nodes: InlineNode[]): InlineElement[] =>
 		.filter(isElement)
 		.flatMap((element) => [element, ...elementsIn(element.children)])
 
-const textRangesIn = (nodes: InlineNode[]): SourceRange[] =>
-	nodes.flatMap((node) => {
-		if (node.kind === "text") return [node]
-		if (node.kind === "marker") return []
-		return textRangesIn(node.children)
-	})
-
 const charactersIn = (source: string, { from, to }: SourceRange) => {
 	const characters: SourceRange[] = []
 	for (let at = from; at < to; ) {
@@ -275,12 +364,20 @@ const charactersIn = (source: string, { from, to }: SourceRange) => {
 	return characters
 }
 
+const shownUnitsIn = (source: string, nodes: InlineNode[]): SourceRange[] =>
+	nodes.flatMap((node) => {
+		if (node.kind === "text") return charactersIn(source, node)
+		if (node.kind === "marker") return []
+		if (isElement(node)) return shownUnitsIn(source, node.children)
+		return [{ from: node.from, to: node.to }]
+	})
+
 const unitsOf = (source: string, { lines }: BlockText) =>
 	lines.flatMap((line, index) => [
 		...(index > 0
 			? [{ from: lines[index - 1].contentTo, to: line.contentFrom }]
 			: []),
-		...textRangesIn(line.nodes).flatMap((range) => charactersIn(source, range)),
+		...shownUnitsIn(source, line.nodes),
 	])
 
 const lineAt = ({ lines }: BlockText, at: number) =>
@@ -317,7 +414,7 @@ const editedBlockText = (
 	for (const unit of unitsOf(source, text))
 		if (unit.from < to && unit.to > from) remove(unit)
 	for (const element of text.lines.flatMap((line) => elementsIn(line.nodes))) {
-		const shown = textRangesIn(element.children)
+		const shown = shownUnitsIn(source, element.children)
 		const [opening, closing] = edgesOf(element)
 		const isEmptied = shown.every(
 			(range) => range.from >= from && range.to <= to,
@@ -392,6 +489,7 @@ const splitBlockText = (
 
 export {
 	type BlockText,
+	type BlockTextLine,
 	type BlockTextType,
 	blockTextOf,
 	editedBlockText,

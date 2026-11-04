@@ -224,7 +224,30 @@ const MARKED_DOCUMENT = [
 	EVERY_MARK,
 ].join("\n\n")
 
-const MARKDOWN_SIGNS = /[#*_~`>[\]]|^[ \t]*(?:[-+]|\d+[.)])[ \t]/m
+const MARKDOWN_SIGNS = /[#*_~`<>[\]\\]|^[ \t]*(?:[-+]|\d+[.)])[ \t]/m
+
+const RICH_TEXT_DOCUMENT = [
+	"Costs \\$5 to \\$9 \\(tax included\\) for the room.",
+	"Write to <ada@kiroshi.app> or <https://kiroshi.app/help>.",
+	"See ![Green velvet sofa](https://images.example.org/sofa-green.jpg) in the lobby.",
+	"- Rooms\n  - Atlas\n  - Mira\n- Food",
+	"> [!NOTE]\n> Keep the **archived** rooms and the *export* too.",
+	"| Room | Seats |\n| --- | --- |\n| **Atlas** | 12 |",
+].join("\n\n")
+
+const EMPTIED_DOCUMENT = [
+	"Before the call:",
+	"## Risks",
+	"- Venue",
+	"> Quoted",
+].join("\n\n")
+
+const EMPTIED_PLACEHOLDERS = ["## Risks", "- Venue", "> Quoted"].map(
+	(block, index) => ({
+		at: EMPTIED_DOCUMENT.indexOf(block),
+		text: ["Name the risk", "Add an item", "Add a quote"][index],
+	}),
+)
 
 const CALLOUT_DOCUMENT = [
 	"The export is ready.",
@@ -864,6 +887,323 @@ export const TurnIntoKeepsTheCaretInTheBlock = meta.story({
 		)
 		await expect(field).toHaveAccessibleName("Heading")
 		await expectMark(field, "h2", "The export keeps the archived rooms too.")
+		await expectNoMarkdownIn(field)
+	},
+})
+
+const blockWithText = (root: HTMLElement, text: string) =>
+	blockWith(root, text).querySelector<HTMLElement>("[tabindex]")
+
+const focusBlockWith = async (root: HTMLElement, text: string) => {
+	const shown = blockWithText(root, text)
+	if (!shown) throw new Error(`No ${text} to focus`)
+	shown.focus()
+	return focusedFieldIn(blockWith(root, text))
+}
+
+const richTextStory = (story: string) => ({
+	args: { body: RICH_TEXT_DOCUMENT },
+	globals: { theme: "light" },
+	parameters: { docs: { description: { story } } },
+})
+
+export const CalloutBodyShowsItsMarks = meta.story({
+	...richTextStory(
+		"A callout being edited. Check its body is edited in its rendered look, the bold word bold and the italic word italic, with no asterisk or chevron shown.",
+	),
+	play: async ({ args, canvasElement }) => {
+		const callout = await openBlock(canvasElement, "callout")
+		const [field] = fieldsOf(callout)
+		await expect(shownIn(field)).toBe(
+			"Keep the archived rooms and the export too.",
+		)
+		await expectMark(field, "strong", "archived")
+		await expectMark(field, "em", "export")
+		await expectNoMarkdownIn(field)
+		selectInField(field, "Keep the **archived**".length)
+		await typeInto(field, "!")
+		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+			RICH_TEXT_DOCUMENT.replace("**archived**", "**archived**!"),
+		)
+		await expectNoMarkdownIn(field)
+	},
+})
+
+export const TableCellShowsItsMarks = meta.story({
+	...richTextStory(
+		"A table being edited. Check a cell holding bold text shows it bold with no asterisk.",
+	),
+	play: async ({ canvasElement }) => {
+		const table = await openBlock(canvasElement, "table")
+		const atlas = within(table).getByRole("textbox", {
+			name: "Row 2, column 1",
+		})
+		await expect(shownIn(atlas)).toBe("Atlas")
+		await expectMark(atlas, "strong", "Atlas")
+		for (const cell of fieldsOf(table)) await expectNoMarkdownIn(cell)
+	},
+})
+
+export const EscapeShowsTheCharacter = meta.story({
+	...richTextStory(
+		"A paragraph holding backslash escapes, focused. Check each backslash is hidden and the escaped character shows, as the reading view shows it.",
+	),
+	play: async ({ canvasElement }) => {
+		const shown = blockWith(canvasElement, "Costs").textContent
+		const field = await focusBlockWith(canvasElement, "Costs")
+		await expect(shownIn(field)).toBe(
+			"Costs $5 to $9 (tax included) for the room.",
+		)
+		await expect(shownIn(field)).toBe(shown)
+		await expectNoMarkdownIn(field)
+	},
+})
+
+export const AutolinkShowsItsText = meta.story({
+	...richTextStory(
+		"A paragraph holding an email and a web autolink, focused. Check each shows as a link with no angle bracket.",
+	),
+	play: async ({ canvasElement }) => {
+		const field = await focusBlockWith(canvasElement, "Write to")
+		await expect(shownIn(field)).toBe(
+			"Write to ada@kiroshi.app or https://kiroshi.app/help.",
+		)
+		await expect(
+			[...field.querySelectorAll("a")].map((link) => link.textContent),
+		).toEqual(["ada@kiroshi.app", "https://kiroshi.app/help"])
+		await expectNoMarkdownIn(field)
+	},
+})
+
+const SOFA = "![Green velvet sofa](https://images.example.org/sofa-green.jpg)"
+
+export const InlineImageIsOneNode = meta.story({
+	...richTextStory(
+		"A paragraph holding an inline image, focused. Check the image shows as in the reading view, the caret never lands inside it, and Backspace after it deletes it whole.",
+	),
+	play: async ({ args, canvasElement }) => {
+		const paragraph = `See ${SOFA} in the lobby.`
+		const field = await focusBlockWith(canvasElement, "in the lobby")
+		const image = within(field).getByRole("img", { name: "Green velvet sofa" })
+		await expect(image).toHaveAttribute(
+			"src",
+			"https://images.example.org/sofa-green.jpg",
+		)
+		await expect(shownIn(field)).toBe("See  in the lobby.")
+		await expectNoMarkdownIn(field)
+		const after = paragraph.indexOf(" in the lobby")
+		selectInField(field, "See ".length + 6)
+		await expect(["See ".length, after]).toContain(
+			fieldSelectionOf(field)?.start,
+		)
+		selectInField(field, after)
+		if (isInBrowserRunner()) {
+			const press = async (key: string) => {
+				await (await realPointer()).keyboard(`{${key}}`)
+				return fieldSelectionOf(field)?.start
+			}
+			const leftward = [await press("ArrowLeft"), await press("ArrowLeft")]
+			await expect(leftward.at(-1)).toBe("See ".length)
+			const rightward = [await press("ArrowRight"), await press("ArrowRight")]
+			await expect(rightward.at(-1)).toBe(after)
+			for (const caret of [...leftward, ...rightward])
+				await expect(["See ".length, after]).toContain(caret)
+		}
+		await inputInto(field, "deleteContentBackward")
+		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+			RICH_TEXT_DOCUMENT.replace(SOFA, ""),
+		)
+		await expect(field.querySelector("img")).toBeNull()
+		await expectNoMarkdownIn(field)
+	},
+})
+
+export const NestedListKeepsItsIndent = meta.story({
+	...richTextStory(
+		"A nested list focused. Check each item sits at the indent and wears the bullet of its level, exactly where the reading view draws it, with no dash typed in the text.",
+	),
+	play: async ({ canvasElement }) => {
+		const readItems = () =>
+			[...blockWith(canvasElement, "Rooms").querySelectorAll("li")].map(
+				(item) => ({
+					text: item.firstChild?.textContent?.trim(),
+					left: Math.round(item.getBoundingClientRect().left),
+					bullet: getComputedStyle(item.parentElement as HTMLElement)
+						.listStyleType,
+				}),
+			)
+		const reading = readItems()
+		const field = await focusBlockWith(canvasElement, "Rooms")
+		await expect(readItems()).toEqual(reading)
+		await expect(reading.map(({ bullet }) => bullet)).toEqual([
+			"disc",
+			"circle",
+			"circle",
+			"disc",
+		])
+		await expectNoMarkdownIn(field)
+	},
+})
+
+export const EmptiedBlocksKeepTheirType = meta.story({
+	globals: { theme: "light" },
+	args: { body: EMPTIED_DOCUMENT, placeholders: EMPTIED_PLACEHOLDERS },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A heading, a list item and a quote each emptied by deleting every character. Check each keeps its type, its look and its placeholder, with no hash, dash or chevron shown.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		let body = EMPTIED_DOCUMENT
+		for (const [text, type, tag, emptied] of [
+			["Risks", "heading", "h2", "## "],
+			["Venue", "list", "li", "- "],
+			["Quoted", "quote", "blockquote", "> "],
+		]) {
+			const field = await focusTextBlock(canvasElement, type)
+			selectShown(field, text)
+			await inputInto(field, "deleteContentBackward")
+			body = body.replace(
+				EMPTIED_DOCUMENT.split("\n\n").find((block) => block.includes(text)) ??
+					"",
+				emptied,
+			)
+			await expect(args.onBodyChange).toHaveBeenLastCalledWith(body)
+			await expect(blockOfType(canvasElement, type)).toContainElement(field)
+			await expect(field.querySelector(tag)).not.toBeNull()
+			await expect(shownIn(field)).toBe("")
+			await expect(
+				partOf(field, "library-document-placeholder"),
+			).toHaveAttribute(
+				"data-placeholder",
+				EMPTIED_PLACEHOLDERS.find(({ at }) =>
+					EMPTIED_DOCUMENT.startsWith(emptied.trim(), at),
+				)?.text,
+			)
+			await expectNoMarkdownIn(field)
+		}
+	},
+})
+
+export const DragMovesText = meta.story({
+	tags: ["test-only"],
+	args: { body: MARKED_DOCUMENT },
+	play: async ({ args, canvasElement }) => {
+		const field = await focusTextBlock(canvasElement, "paragraph")
+		selectShown(field, "today")
+		field.dispatchEvent(
+			new InputEvent("beforeinput", {
+				inputType: "deleteByDrag",
+				bubbles: true,
+				cancelable: true,
+			}),
+		)
+		selectInField(field, 0)
+		const dropped = new DataTransfer()
+		dropped.setData("text/plain", "today ")
+		field.dispatchEvent(
+			new InputEvent("beforeinput", {
+				inputType: "insertFromDrop",
+				dataTransfer: dropped,
+				bubbles: true,
+				cancelable: true,
+			}),
+		)
+		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+			MARKED_DOCUMENT.replace(
+				EVERY_MARK,
+				`today ${EVERY_MARK.replace(" today.", " .")}`,
+			),
+		)
+		await new Promise((resolve) => setTimeout(resolve, 20))
+		await expect(args.onBodyChange).toHaveBeenCalledTimes(1)
+		await expectNoMarkdownIn(field)
+	},
+})
+
+const clickOn = async (element: Element, text: string, at: number) => {
+	const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+	for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+		const index = node.textContent?.indexOf(text) ?? -1
+		if (index === -1) continue
+		const range = document.createRange()
+		range.setStart(node, index + at)
+		range.setEnd(node, index + at + 1)
+		const glyph = range.getBoundingClientRect()
+		const box = (node.parentElement as HTMLElement).getBoundingClientRect()
+		await (await realPointer()).click(node.parentElement as HTMLElement, {
+			position: {
+				x: glyph.left - box.left + 1,
+				y: glyph.top - box.top + glyph.height / 2,
+			},
+		})
+		return
+	}
+	throw new Error(`No ${text} to click`)
+}
+
+export const ClickPutsTheCaretOnTheCharacter = meta.story({
+	tags: ["test-only"],
+	args: { body: MARKED_DOCUMENT },
+	play: async ({ canvasElement }) => {
+		if (!isInBrowserRunner()) return
+		const cases: [type: string, text: string, caret: number][] = [
+			["heading", "Launch plan", "## Launch ".length],
+			["list", "Send the invite", "- Book the **room**\n- Send the ".length],
+			["checklist", "Order the cake", "Order the ".length],
+		]
+		for (const [type, text, caret] of cases) {
+			const word = text.split(" ").at(-1) ?? ""
+			await clickOn(
+				blockOfType(canvasElement, type),
+				text,
+				text.length - word.length,
+			)
+			const field = await waitFor(() => {
+				const focused = document.activeElement as HTMLElement
+				expect(focused).toHaveAttribute(
+					"data-slot",
+					"library-document-block-field",
+				)
+				expect(blockOfType(canvasElement, type)).toContainElement(focused)
+				return focused
+			})
+			await expect(fieldSelectionOf(field)?.start).toBe(caret)
+			await expectNoMarkdownIn(field)
+		}
+	},
+})
+
+export const PointerDragSelectsAcrossAMark = meta.story({
+	tags: ["test-only"],
+	args: { body: MARKED_DOCUMENT },
+	play: async ({ canvasElement }) => {
+		if (!isInBrowserRunner()) return
+		const field = await focusTextBlock(canvasElement, "paragraph")
+		const [ship, , withText] = [...field.querySelectorAll("[data-from]")]
+		const shipBox = ship.getBoundingClientRect()
+		await (await realPointer()).dragAndDrop(ship, withText, {
+			sourcePosition: { x: 1, y: shipBox.height / 2 },
+			targetPosition: {
+				x: withText.getBoundingClientRect().width - 2,
+				y: shipBox.height / 2,
+			},
+		})
+		await waitFor(() =>
+			expect(document.getSelection()?.toString()).toMatch(/^Ship bold w/),
+		)
+		await waitFor(() =>
+			expect(
+				canvasElement.querySelector('[data-slot="selection-toolbar"]'),
+			).not.toBeNull(),
+		)
+		await expect(fieldSelectionOf(field)?.start).toBe(0)
+		await expect(fieldSelectionOf(field)?.end).toBeGreaterThan(
+			"Ship **bold** w".length,
+		)
 		await expectNoMarkdownIn(field)
 	},
 })
@@ -1754,7 +2094,7 @@ export const CalloutToneSwitch = meta.story({
 		await expect(tones).toHaveAccessibleName("Callout tone")
 		const note = within(tones).getByRole("button", { name: "Note" })
 		await expect(note).toHaveAttribute("aria-pressed", "true")
-		await expect(fieldsOf(callout)[0]).toHaveValue(
+		await expect(shownIn(fieldsOf(callout)[0])).toBe(
 			"The export keeps the archived rooms too.",
 		)
 		fireEvent.click(within(tones).getByRole("button", { name: "Tip" }))
@@ -1813,9 +2153,12 @@ const tableEditingStory = (theme: "light" | "dark") => ({
 			"10px",
 		])
 		await expect(
-			within(editing).getByRole("textbox", { name: "Row 3, column 2" }),
-		).toHaveAttribute("placeholder", "Empty")
-		fireEvent.change(fieldsOf(editing)[2], { target: { value: "Atlas North" } })
+			partOf(
+				within(editing).getByRole("textbox", { name: "Row 3, column 2" }),
+				"library-document-placeholder",
+			),
+		).toHaveAttribute("data-placeholder", "Empty")
+		await inputInto(fieldsOf(editing)[2], "insertText", " North")
 		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
 			TABLE_DOCUMENT.replace("| Atlas |", "| Atlas North |"),
 		)
