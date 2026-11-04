@@ -1,4 +1,4 @@
-import { useQueries } from "@tanstack/react-query"
+import { useQueries, useQueryClient } from "@tanstack/react-query"
 
 import { i18n } from "@workspace/ui/lib/i18n"
 
@@ -50,4 +50,35 @@ export const useLibraryImageSources = (
 		: NO_IMAGES
 	const hostSourceOf = useHostImageSources(spaceId, images)
 	return isJoined ? hostSourceOf : fileSourceOf
+}
+
+const listedImageNamed = (items: LibraryItem[] | undefined, name: string) => {
+	const image = items?.find(
+		(item) => item.kind === "image" && item.name === name,
+	)
+	if (!image) {
+		throw new Error(`no Library image named ${name}`)
+	}
+	return image
+}
+
+export const useLibraryImageResolver = (spaceId: string, isJoined: boolean) => {
+	const queryClient = useQueryClient()
+	const readDataUrl = async ({ name, modifiedAt }: LibraryItem) =>
+		dataUrlOf(
+			await queryClient.fetchQuery({
+				queryKey: libraryQueryKeys.imageOf(spaceId, name, modifiedAt),
+				queryFn: () => readLibraryImage(spaceId, name),
+				meta: { rendersErrorInline: true },
+			}),
+		)
+	return async (src: string) => {
+		const image = listedImageNamed(
+			queryClient.getQueryData<LibraryItem[]>(
+				libraryQueryKeys.itemsOf(spaceId),
+			),
+			src,
+		)
+		return isJoined ? readDataUrl(image) : fileSourceOf(image)
+	}
 }

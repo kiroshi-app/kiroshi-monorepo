@@ -1,18 +1,21 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { open } from "@tauri-apps/plugin-dialog"
 import { useCallback, useState } from "react"
 
+import type { LibraryGalleryImage } from "@workspace/ui/components/library-block-gallery"
 import { raiseTransientNotice } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
-import type {
-	LibraryImageSource,
-	LibraryImageUnreadable,
+import {
+	baseNameOf,
+	type LibraryImageSource,
+	type LibraryImageUnreadable,
 } from "./library-image-source"
 import { type DroppedFile, toImportingItem } from "./library-items"
 import { libraryQueryKeys } from "./library-query-keys"
 import { importLibraryFile } from "./library-reads"
 
-import { commands, type LibraryError } from "../bindings"
+import { commands, type LibraryError, type LibraryItem } from "../bindings"
 import { isHostRefused } from "../host/host-refused"
 
 const MIB = 1024 * 1024
@@ -157,6 +160,8 @@ const importContent = async ({ spaceId, isJoined, image }: ContentSave) => {
 	}
 }
 
+type LocalFile = LocalFileSave["file"]
+
 const importLocalFile = async ({ spaceId, file }: LocalFileSave) => {
 	const result = await commands.libraryImportPaths(spaceId, [file.path])
 	const landed = result.status === "ok" ? result.data[0] : result
@@ -233,4 +238,64 @@ export const useLibraryImports = (spaceId: string, isJoined: boolean) => {
 	)
 
 	return { importingItems: importing.map(toImportingItem), importDropped }
+}
+
+const GALLERY_IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp"]
+
+const PATH_SEPARATOR = /[/\\]/
+
+const pickImagePaths = async () =>
+	(await open({
+		multiple: true,
+		directory: false,
+		filters: [
+			{
+				name: i18n.t("common:library.filters.images"),
+				extensions: GALLERY_IMAGE_EXTENSIONS,
+			},
+		],
+	})) ?? []
+
+const localFileAt = (path: string): LocalFile => ({
+	name: path.split(PATH_SEPARATOR).pop() ?? path,
+	path,
+})
+
+const galleryImageOf = (
+	{ name }: LocalFile,
+	item: LibraryItem,
+): LibraryGalleryImage => ({ src: item.name, alt: baseNameOf(name) })
+
+export const useLibraryGalleryImports = (
+	spaceId: string,
+	isJoined: boolean,
+) => {
+	const queryClient = useQueryClient()
+	const { mutateAsync } = useMutation({
+		mutationFn: (file: LocalFile) => importLocalFile({ spaceId, file }),
+		meta: {
+			failureNotice: failureNoticeOf,
+			raisedIn: "use-library-imports",
+		},
+	})
+
+	const addPicked = async () => {
+		const files = (await pickImagePaths()).map(localFileAt)
+		if (files.length === 0) {
+			return []
+		}
+		const settled = await Promise.allSettled(
+			files.map((file) => mutateAsync(file)),
+		)
+		await queryClient.invalidateQueries({
+			queryKey: libraryQueryKeys.itemsOf(spaceId),
+		})
+		return files.flatMap((file, index) => {
+			const landed = settled[index]
+			return landed?.status === "fulfilled"
+				? [galleryImageOf(file, landed.value)]
+				: []
+		})
+	}
+	return isJoined ? undefined : addPicked
 }

@@ -35,7 +35,7 @@ const REMOTE_PROTOCOLS = new Set(["http:", "https:"])
 
 const ASSET_HOST = "asset.localhost"
 
-const baseNameOf = (name: string) => {
+export const baseNameOf = (name: string) => {
 	const dot = name.lastIndexOf(".")
 	return dot > 0 ? name.slice(0, dot) : name
 }
