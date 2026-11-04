@@ -203,7 +203,7 @@ export const LibraryScreen = ({
 	const remove = ({ id }: NamedItem) => actions.remove(id)
 	const saveImage = useLibraryImageSave()
 	const saveToLibrary = ({ id }: NamedItem) =>
-		saveImage({ spaceId, image: storedImageSourceOf(spaceId, id) })
+		saveImage({ spaceId, isJoined, image: storedImageSourceOf(spaceId, id) })
 	const [filter, setFilter] = useState<LibraryFilter>("all")
 	const [query, setQuery] = useState("")
 	const [heldDraft, setHeldDraft] = useState<DocumentDraft | null>(null)

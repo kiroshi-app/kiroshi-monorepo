@@ -211,19 +211,23 @@ describe.each<TranscriptRole>(["user", "assistant"])(
 		it.each([
 			["Save to Library", "onSaveToLibrary"],
 			["Copy image", "onCopyImage"],
-		] as const)("hands the image to %s", async (entry, handler) => {
-			const actions = actionsSpy()
-			renderTurn(role, shownWith("look", [FIRST, SECOND]), { actions })
+		] as const)(
+			"hands the image with its path to %s",
+			async (entry, handler) => {
+				const actions = actionsSpy()
+				renderTurn(role, shownWith("look", [FIRST, SECOND]), { actions })
 
-			await pickInImageMenuOf(FIRST_NAME, entry)
+				await pickInImageMenuOf(FIRST_NAME, entry)
 
-			expect(actions.imageActions[handler]).toHaveBeenCalledWith(
-				expect.objectContaining({
-					name: FIRST_NAME,
-					src: previewOf(FIRST_NAME),
-				}),
-			)
-		})
+				expect(actions.imageActions[handler]).toHaveBeenCalledWith(
+					expect.objectContaining({
+						name: FIRST_NAME,
+						src: previewOf(FIRST_NAME),
+						path: FIRST,
+					}),
+				)
+			},
+		)
 	},
 )
 

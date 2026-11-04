@@ -4,7 +4,6 @@ import {
 	type ImageMenuActions,
 	imageMenuActionsFor,
 } from "@workspace/ui/components/image-menu"
-import type { LibraryLightboxImage } from "@workspace/ui/components/library-lightbox"
 import { Markdown, type MarkdownProps } from "@workspace/ui/components/markdown"
 import {
 	type MessageAttachment,
@@ -14,6 +13,7 @@ import {
 import {
 	type AnswerActions,
 	AnswerActionsContext,
+	type ThreadImage,
 } from "@/lib/chat/answer-actions"
 import type { MessageContent } from "@/lib/chat/message-attachments"
 import { openAttachment } from "@/lib/links/open-attachment"
@@ -22,11 +22,9 @@ import { openWebPage } from "@/lib/links/open-web-page"
 type TurnBodyProps = MessageContent &
 	Pick<MarkdownProps, "answerActions" | "isWriting">
 
-const viewerImagesOf = (
-	attachments: MessageAttachment[],
-): LibraryLightboxImage[] =>
+const viewerImagesOf = (attachments: MessageAttachment[]): ThreadImage[] =>
 	attachments.flatMap(({ id, name, previewUrl }) =>
-		previewUrl ? [{ id, name, src: previewUrl, detail: "" }] : [],
+		previewUrl ? [{ id, name, src: previewUrl, detail: "", path: id }] : [],
 	)
 
 const attachmentImageMenu = (
