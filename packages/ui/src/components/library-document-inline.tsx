@@ -303,9 +303,6 @@ const typedFor = (
 	return typed.replace(LINE_BREAK, `\n${marker}`)
 }
 
-const isCovered = (unit: SourceRange, { from, to }: SourceRange) =>
-	unit.from < to && unit.to > from
-
 const editedBlockText = (
 	source: string,
 	type: BlockTextType,
@@ -318,7 +315,7 @@ const editedBlockText = (
 		for (let at = range.from; at < range.to; at++) removed.add(at)
 	}
 	for (const unit of unitsOf(source, text))
-		if (isCovered(unit, { from, to })) remove(unit)
+		if (unit.from < to && unit.to > from) remove(unit)
 	for (const element of text.lines.flatMap((line) => elementsIn(line.nodes))) {
 		const shown = textRangesIn(element.children)
 		const [opening, closing] = edgesOf(element)

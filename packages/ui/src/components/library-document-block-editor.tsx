@@ -1232,6 +1232,7 @@ const LibraryDocumentBlockEditor = ({
 				const type = blockTypeOf(block.source)
 				const isEditing = editing === block.id
 				const hasBlockEditor = BLOCK_EDITORS.includes(type)
+				const textType = textTypeOf(type)
 				const isEditable = EDITABLE_TYPES.includes(type) || hasBlockEditor
 				const runs = runsIn({
 					writers,
@@ -1303,9 +1304,9 @@ const LibraryDocumentBlockEditor = ({
 												selected.to,
 											)
 									}}
-									onKeyDown={keyInField(block, textTypeOf(type))}
+									onKeyDown={keyInField(block, textType)}
 									source={block.source}
-									type={textTypeOf(type)}
+									type={textType}
 								/>
 							</LibrarySlashMenu>
 						) : (

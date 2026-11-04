@@ -134,8 +134,8 @@ const LibraryChecklistEditor = ({
 			if (event.nativeEvent.isComposing) return
 			const value = rows[index].text
 			const range = fieldSelectionOf(event.currentTarget)
+			if (range && range.start !== range.end) return
 			const caret = range?.start ?? value.length
-			if (caret !== (range?.end ?? caret)) return
 			if (event.key === "Enter" && !event.shiftKey) {
 				event.preventDefault()
 				if (value === "") {
