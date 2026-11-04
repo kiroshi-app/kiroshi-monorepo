@@ -108,11 +108,20 @@ describe("the Library image resolver", () => {
 		])
 	})
 
-	it("rejects a path that names no Library image", async () => {
+	it("rejects a path that names no Library image after one list fetch when no list was cached", async () => {
 		const { resolverIn } = renderResolver()
 
 		await expect(resolverIn(SPACE)("images/gone.jpg")).rejects.toThrow()
+		expect(host.readLibraryItems).toHaveBeenCalledTimes(1)
 		expect(host.readLibraryImage).not.toHaveBeenCalled()
+	})
+
+	it("lists the Library once more before rejecting a path the cached list misses", async () => {
+		const { resolverIn } = renderResolver()
+		await resolverIn(SPACE)(SOFA)
+
+		await expect(resolverIn(SPACE)("images/gone.jpg")).rejects.toThrow()
+		expect(host.readLibraryItems).toHaveBeenCalledTimes(2)
 	})
 
 	it("rejects a failed read, then reads again on the next call", async () => {
