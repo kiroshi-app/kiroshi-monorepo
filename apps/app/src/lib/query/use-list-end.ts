@@ -35,7 +35,6 @@ export const useListEnd = ({
 		(sentinel: HTMLDivElement | null) => {
 			if (
 				!sentinel ||
-				!hasMore ||
 				isLoading ||
 				phase === "requesting" ||
 				typeof IntersectionObserver === "undefined"
@@ -65,7 +64,7 @@ export const useListEnd = ({
 			observer.observe(sentinel)
 			return () => observer.disconnect()
 		},
-		[hasMore, isLoading, loadMore, phase, rootMargin],
+		[isLoading, loadMore, phase, rootMargin],
 	)
 
 	return useMemo(
