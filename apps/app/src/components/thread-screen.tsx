@@ -275,11 +275,6 @@ const upNextAgentOf = (face: ThreadFace): ThreadWorkLineAgent => ({
 	state: "upNext",
 })
 
-const failedAgentOf = (
-	face: ThreadFace,
-	onRetry: () => void,
-): ThreadWorkLineAgent => ({ ...face, state: "failed", onRetry })
-
 type ThreadWorkProps = {
 	agents: ThreadWorkLineAgent[]
 }
@@ -1227,9 +1222,13 @@ const ConversationThreadTail = ({
 		),
 		...waitingRowsIn(waitingBotIds, speakers, bots).map(upNextAgentOf),
 	]
-	const failed = seatedIn(failedBotIds, bots).map((seated) =>
-		failedAgentOf(seated, () => {
-			void thread.controller.retryTurn(seated.id)
+	const failed = seatedIn(failedBotIds, bots).map(
+		(seated): ThreadWorkLineAgent => ({
+			...seated,
+			state: "failed",
+			onRetry: () => {
+				void thread.controller.retryTurn(seated.id)
+			},
 		}),
 	)
 	const agents = atWork.length > 0 ? [...failed, ...atWork] : []
