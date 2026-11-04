@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { expect, fn } from "storybook/test"
+import { expect, fn, userEvent, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
@@ -47,6 +47,64 @@ const expectShapesHidden = async (region: HTMLElement) => {
 	}
 }
 
+const DOCUMENT_LOADING_STORY =
+	"A document tab before its text lands. Check the document bar, the title line, the detail line and the body lines in the 640px reading column, the lines reaching the bottom of the card, and the one busy region a screen reader hears. Pick ImageLoading for an image tab."
+
+const expectDocumentLoading = async (canvasElement: HTMLElement) => {
+	const region = within(canvasElement).getByRole("region", {
+		name: "Loading the document…",
+	})
+	await expect(region).toHaveAttribute("aria-busy", "true")
+	await expectShapesHidden(region)
+	await expectFillsFrameHeight(region)
+	await expectSkeletonFilledTo(canvasElement, "bottom")
+	await expect(
+		slotIn(canvasElement, "list-skeleton").getBoundingClientRect().width,
+	).toBe(DOCUMENT_COLUMN_WIDTH)
+}
+
+const DELETED_ITEM_STORY =
+	"A tab whose item was deleted from the Library since it was opened. Check the line naming the item, the reason, the centred card, the polite announcement of both without focus moving, and that Back to the Library takes a focus ring from the keyboard and calls `onBack`. Pick UnreadableItem when the file is there but can't be read."
+
+const DELETED_LINE = "Couldn’t open Spring launch brief"
+
+const DELETED_REASON = "This item was deleted from the Library."
+
+const expectDeletedItem = async (
+	canvasElement: HTMLElement,
+	onBack: () => void,
+) => {
+	const canvas = within(canvasElement)
+	const state = canvas.getByRole("group", { name: DELETED_LINE })
+	await expect(state).toHaveAccessibleDescription(DELETED_REASON)
+
+	const announcement = canvas.getByRole("status")
+	await expect(announcement).toHaveTextContent(DELETED_LINE)
+	await expect(announcement).toHaveTextContent(DELETED_REASON)
+	await expect(state).not.toContainElement(
+		document.activeElement as HTMLElement,
+	)
+
+	const surface = slotIn(canvasElement, "library-item-unavailable")
+	await expectFillsFrameHeight(surface)
+	const surfaceBox = surface.getBoundingClientRect()
+	const stateBox = state.getBoundingClientRect()
+	await expect(
+		Math.abs(
+			stateBox.top +
+				stateBox.height / 2 -
+				(surfaceBox.top + surfaceBox.height / 2),
+		),
+	).toBeLessThanOrEqual(1)
+
+	const back = canvas.getByRole("button", { name: "Back to the Library" })
+	await userEvent.tab()
+	await expect(back).toHaveFocus()
+	await expect(getComputedStyle(back).outlineStyle).toBe("solid")
+	await userEvent.keyboard("{Enter}")
+	await expect(onBack).toHaveBeenCalledOnce()
+}
+
 const meta = preview.meta({
 	title: "Navigation/LibraryTabStates",
 	component: LibraryItemUnavailable,
@@ -70,23 +128,28 @@ export const DocumentLoading = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story:
-					"A document tab before its text lands. Check the document bar, the title line, the detail line and the body lines in the 640px reading column, the lines reaching the bottom of the card, and the one busy region a screen reader hears. Pick ImageLoading for an image tab.",
+				story: `${DOCUMENT_LOADING_STORY} Pick \`DocumentLoadingDark\` for the dark theme.`,
 			},
 		},
 	},
-	play: async ({ canvas, canvasElement }) => {
-		const region = canvas.getByRole("region", {
-			name: "Loading the document…",
-		})
-		await expect(region).toHaveAttribute("aria-busy", "true")
-		await expectShapesHidden(region)
-		await expectFillsFrameHeight(region)
-		await expectSkeletonFilledTo(canvasElement, "bottom")
-		await expect(
-			slotIn(canvasElement, "list-skeleton").getBoundingClientRect().width,
-		).toBe(DOCUMENT_COLUMN_WIDTH)
+	play: ({ canvasElement }) => expectDocumentLoading(canvasElement),
+})
+
+export const DocumentLoadingDark = meta.story({
+	globals: { theme: "dark", theme_layout: "single" },
+	render: () => (
+		<LibraryFrame>
+			<LibraryDocumentSkeleton />
+		</LibraryFrame>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story: `${DOCUMENT_LOADING_STORY} Pick \`DocumentLoading\` for the light theme.`,
+			},
+		},
 	},
+	play: ({ canvasElement }) => expectDocumentLoading(canvasElement),
 })
 
 export const ImageLoading = meta.story({
@@ -121,37 +184,31 @@ export const DeletedItem = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story:
-					"A tab whose item was deleted from the Library since it was opened. Check the line naming the item, the reason, the centred card, and that Back to the Library takes a focus ring from the keyboard and calls `onBack`. Pick UnreadableItem when the file is there but can't be read.",
+				story: `${DELETED_ITEM_STORY} Pick \`DeletedItemDark\` for the dark theme.`,
 			},
 		},
 	},
-	play: async ({ args, canvas, canvasElement, userEvent }) => {
-		const state = canvas.getByRole("group", {
-			name: "Couldn’t open Spring launch brief",
-		})
-		await expect(state).toHaveAccessibleDescription(
-			"This item was deleted from the Library.",
-		)
-		const surface = slotIn(canvasElement, "library-item-unavailable")
-		await expectFillsFrameHeight(surface)
-		const surfaceBox = surface.getBoundingClientRect()
-		const stateBox = state.getBoundingClientRect()
-		await expect(
-			Math.abs(
-				stateBox.top +
-					stateBox.height / 2 -
-					(surfaceBox.top + surfaceBox.height / 2),
-			),
-		).toBeLessThanOrEqual(1)
+	play: ({ args, canvasElement }) =>
+		expectDeletedItem(canvasElement, args.onBack),
+})
 
-		const back = canvas.getByRole("button", { name: "Back to the Library" })
-		await userEvent.tab()
-		await expect(back).toHaveFocus()
-		await expect(getComputedStyle(back).outlineStyle).toBe("solid")
-		await userEvent.keyboard("{Enter}")
-		await expect(args.onBack).toHaveBeenCalledOnce()
+export const DeletedItemDark = meta.story({
+	args: { name: "Spring launch brief", reason: "deleted", onBack: fn() },
+	globals: { theme: "dark", theme_layout: "single" },
+	render: (args) => (
+		<LibraryFrame>
+			<LibraryItemUnavailable {...args} />
+		</LibraryFrame>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story: `${DELETED_ITEM_STORY} Pick \`DeletedItem\` for the light theme.`,
+			},
+		},
 	},
+	play: ({ args, canvasElement }) =>
+		expectDeletedItem(canvasElement, args.onBack),
 })
 
 export const UnreadableItem = meta.story({

@@ -163,12 +163,17 @@ const LibraryItemUnavailable = ({
 	const line = t("library.tab.unavailable.title", {
 		name: libraryDisplayName(name, t),
 	})
+	const reasonLine = t(`library.tab.unavailable.${reason}`)
 
 	return (
 		<div
 			className="flex size-full min-h-0 items-center justify-center p-6"
 			data-slot="library-item-unavailable"
 		>
+			<div className="sr-only" role="status">
+				<p>{line}</p>
+				<p>{reasonLine}</p>
+			</div>
 			<div
 				aria-describedby={reasonId}
 				aria-labelledby={lineId}
@@ -189,7 +194,7 @@ const LibraryItemUnavailable = ({
 						className="text-pretty text-muted-foreground text-xs leading-4"
 						id={reasonId}
 					>
-						{t(`library.tab.unavailable.${reason}`)}
+						{reasonLine}
 					</p>
 				</div>
 				<Button
