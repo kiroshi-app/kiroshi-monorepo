@@ -75,6 +75,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 66, statements: MESSAGE_REPLIES },
 	Migration { version: 67, statements: MESSAGE_REPLY_EXCERPTS },
 	Migration { version: 68, statements: MESSAGE_WEB_SOURCES },
+	Migration { version: 69, statements: MESSAGE_DOCUMENTS },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -1398,6 +1399,17 @@ ALTER TABLE messages ADD COLUMN web_sources TEXT NOT NULL DEFAULT '[]'
 	CHECK (json_valid(web_sources) AND json_type(web_sources) = 'array');
 ";
 
+const MESSAGE_DOCUMENTS: &str = "
+CREATE TABLE message_documents (
+	message_id TEXT NOT NULL REFERENCES messages (id) ON DELETE CASCADE,
+	position INTEGER NOT NULL CHECK (position >= 0),
+	name TEXT NOT NULL CHECK (name <> ''),
+	PRIMARY KEY (message_id, position)
+);
+
+CREATE INDEX message_documents_by_name ON message_documents (name);
+";
+
 const FRESH_INSTALL_UNTINTED_PERSONAL_SPACE: &str =
 	"UPDATE spaces SET colour = NULL WHERE id = 'personal';";
 
@@ -1524,6 +1536,7 @@ mod tests {
 	const MESSAGE_REPLIES_STEP: u32 = 66;
 	const MESSAGE_REPLY_EXCERPTS_STEP: u32 = 67;
 	const MESSAGE_WEB_SOURCES_STEP: u32 = 68;
+	const MESSAGE_DOCUMENTS_STEP: u32 = 69;
 
 	const A_LIVE_SESSION: &str = "INSERT INTO runtime_sessions
 		(id, conversation_id, bot_id, provider_session_id, seq, status, started_at)
@@ -5218,6 +5231,50 @@ mod tests {
 		assert!(keep("[]").is_ok());
 		assert!(keep("{}").is_err(), "an object was kept as a list of sources");
 		assert!(keep("not json").is_err(), "text was kept as a list of sources");
+
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_message_kept_before_the_documents_step_reads_back_with_none_and_drops_its_links_with_it(
+	) {
+		let dir = temp_dir();
+		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
+		apply_each(&mut connection, shipped_before(MESSAGE_DOCUMENTS_STEP))
+			.expect("the shipped schema");
+		connection
+			.execute_batch(&format!(
+				"INSERT INTO conversations (id, kind, space_id, title, created_at, updated_at)
+					VALUES ('room', 'topic', 'personal', 'Room', 1, 1);
+				{}{}",
+				a_message_at("room", "m1", 1, 2),
+				a_message_at("room", "m2", 2, 3),
+			))
+			.expect("the rows are inserted");
+		drop(connection);
+
+		let database = crate::db::open(&dir);
+		let kept = database
+			.messages()
+			.message("room".into(), "m1".into())
+			.await
+			.expect("the message reads")
+			.expect("the message is kept");
+		drop(database);
+		let connection = migrated(&dir);
+		write(
+			&connection,
+			"INSERT INTO message_documents (message_id, position, name) VALUES ('m2', 0, 'a.md')",
+		)
+		.expect("a link lands");
+		write(&connection, "DELETE FROM messages WHERE id = 'm2'").expect("the message leaves");
+		let links: i64 = connection
+			.query_row("SELECT COUNT(*) FROM message_documents", [], |row| row.get(0))
+			.expect("the links count");
+
+		assert!(kept.documents.is_empty());
+		assert_eq!(links, 0);
 
 		drop(connection);
 		fs::remove_dir_all(&dir).expect("cleanup");

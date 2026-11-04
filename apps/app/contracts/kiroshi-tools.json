@@ -1166,5 +1166,23 @@
 			],
 			"additionalProperties": false
 		}
+	},
+	{
+		"name": "conversation_post_document",
+		"description": "Post a document of the Library of this Space in this conversation, as a message of yours the person opens it from, once you want them to read it. A name that is not a document of this Library is refused and nothing is posted. It answers the name of the document, the id of this conversation and the id of the message.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"name": {
+					"type": "string",
+					"description": "The name of the item in the Library of this Space, with its extension, such as notes.md."
+				}
+			},
+			"required": [
+				"name"
+			],
+			"additionalProperties": false
+		}
 	}
 ]

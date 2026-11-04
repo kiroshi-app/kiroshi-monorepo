@@ -389,6 +389,7 @@ fn a_turn_written_over_ipc_reads_back_as_the_page_the_reader_displays() {
 					"repliedToMessageId": null,
 					"repliedToMessageIds": [],
 					"replyLinks": [],
+					"documents": [],
 					"runtimeSessionId": null,
 					"webSources": [],
 				},
@@ -408,6 +409,7 @@ fn a_turn_written_over_ipc_reads_back_as_the_page_the_reader_displays() {
 					"repliedToMessageId": "m1",
 					"repliedToMessageIds": ["m1"],
 					"replyLinks": [{ "messageId": "m1", "excerpt": null }],
+					"documents": [],
 					"runtimeSessionId": null,
 					"webSources": [],
 				}
@@ -760,6 +762,7 @@ fn a_chat_past_the_fold_bound_survives_a_dead_host_with_nothing_lost_or_doubled(
 			"repliedToMessageId": null,
 			"repliedToMessageIds": [],
 			"replyLinks": [],
+			"documents": [],
 			"runtimeSessionId": null,
 			"webSources": [],
 		}),

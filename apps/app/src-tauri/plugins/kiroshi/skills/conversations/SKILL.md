@@ -31,6 +31,10 @@ agent the subject belongs to. You hold nine tools for them, on the `kiroshi` ser
 - `conversation_attach`, one file shown to the person, here or in a room you hold a seat
   in, answering the path it was stored under and the id of that conversation. It takes the
   path of the file, a caption and the id of the room, left out for this conversation.
+- `conversation_post_document`, one document of the Library of this Space posted here as a
+  message of yours the person opens it from, answering the name of the document, the id of
+  this conversation and the id of the message. It takes the name of the document; a name
+  that is not a document of this Library is refused and nothing is posted.
 - `conversation_update`, the title, the icon, the colour and the seats of a conversation
   you hold a seat in, every field given landing in one call or none of them, answering that
   conversation as it stands after the call. It takes the id of the conversation, left out

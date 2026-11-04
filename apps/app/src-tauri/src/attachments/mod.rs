@@ -23,6 +23,8 @@ const MAX_TOTAL_BYTES: u64 = 30 * 1024 * 1024;
 
 const MAX_EXTENSION_LENGTH: usize = 16;
 
+const BLOCK_OPENING: &str = "Attached to this message, sent ";
+
 pub struct SizedFile<'a> {
 	pub name: &'a str,
 	pub bytes: u64,
@@ -141,12 +143,58 @@ pub fn attachment_block(paths: &[PathBuf], sent_at: DateTime<Utc>) -> String {
 		_ => "files",
 	};
 	let sent = sent_at.to_rfc3339_opts(SecondsFormat::Millis, true);
-	let header = format!("Attached to this message, sent {sent}, {count} {noun}:");
+	let header = format!("{BLOCK_OPENING}{sent}, {count} {noun}:");
 	let lines = paths
 		.iter()
 		.enumerate()
 		.map(|(index, path)| format!("{}/{count} {}", index + 1, path.display()));
 	std::iter::once(header).chain(lines).collect::<Vec<_>>().join("\n")
+}
+
+pub struct AttachedContent<'a> {
+	pub text: &'a str,
+	pub paths: Vec<PathBuf>,
+}
+
+pub fn attached_content(content: &str) -> AttachedContent<'_> {
+	block_of(content).unwrap_or(AttachedContent { text: content, paths: Vec::new() })
+}
+
+fn block_of(content: &str) -> Option<AttachedContent<'_>> {
+	let start = content
+		.rfind(BLOCK_OPENING)
+		.filter(|&start| start == 0 || content[..start].ends_with('\n'))?;
+	let mut lines = content[start..].lines();
+	let count = block_count(lines.next()?)?;
+	let entries: Vec<&str> = lines.collect();
+	if entries.len() != count {
+		return None;
+	}
+	let paths = entries
+		.iter()
+		.enumerate()
+		.map(|(index, line)| {
+			line.strip_prefix(&format!("{}/{count} ", index + 1)).map(PathBuf::from)
+		})
+		.collect::<Option<Vec<_>>>()?;
+	Some(AttachedContent { text: content[..start].trim_end(), paths })
+}
+
+fn block_count(header: &str) -> Option<usize> {
+	let counted = header.strip_suffix(" files:").or_else(|| header.strip_suffix(" file:"))?;
+	counted.rsplit_once(", ")?.1.parse().ok()
+}
+
+pub fn read_stored(root: &Path, conversation_id: &str, path: &Path) -> Result<Vec<u8>, Rejection> {
+	let name = path.file_name().unwrap_or_default().to_string_lossy().into_owned();
+	let unreadable = |detail: String| Rejection::Unreadable { name: name.clone(), detail };
+	let dir = fs::canonicalize(conversation_dir(root, conversation_id))
+		.map_err(|error| unreadable(error.to_string()))?;
+	let resolved = fs::canonicalize(path).map_err(|error| unreadable(error.to_string()))?;
+	if resolved.parent() != Some(dir.as_path()) {
+		return Err(unreadable("it is not a file attached in this conversation".to_owned()));
+	}
+	fs::read(resolved).map_err(|error| unreadable(error.to_string()))
 }
 
 fn take_back(stored: &[PathBuf]) {
@@ -403,6 +451,53 @@ mod tests {
 			pair,
 			"Attached to this message, sent 2026-09-28T10:04:05.123Z, 2 files:\n1/2 /data/attachments/c1/a.png\n2/2 /data/attachments/c1/b.gif"
 		);
+	}
+
+	#[test]
+	fn the_text_and_the_paths_of_a_written_block_read_back_in_order() {
+		let paths = [
+			PathBuf::from("/data/attachments/c1/a.png"),
+			PathBuf::from("/data/attachments/c1/b.gif"),
+		];
+		let content = format!("# Plan\nShip it.\n{}", attachment_block(&paths, Utc::now()));
+
+		let attached = attached_content(&content);
+
+		assert_eq!(attached.text, "# Plan\nShip it.");
+		assert_eq!(attached.paths, paths);
+	}
+
+	#[test]
+	fn a_block_that_does_not_end_the_message_or_miscounts_its_files_is_text() {
+		let block = attachment_block(&[PathBuf::from("/data/attachments/c1/a.png")], Utc::now());
+		let followed = format!("{block}\nmore words");
+		let miscounted = block.replace("1/1 ", "1/2 ");
+
+		for content in [followed.as_str(), miscounted.as_str(), "no block at all"] {
+			let attached = attached_content(content);
+			assert_eq!(attached.text, content);
+			assert!(attached.paths.is_empty(), "{content}");
+		}
+	}
+
+	#[test]
+	fn a_stored_attachment_reads_and_a_file_outside_its_conversation_is_refused() {
+		let root = temp_root();
+		let stored = store(&root, CONVERSATION, &[an_attachment("a.png", b"png")]).expect("stored");
+		let elsewhere = store(&root, "c2", &[an_attachment("b.png", b"theirs")]).expect("stored");
+		let escaping = conversation_dir(&root, CONVERSATION)
+			.join("..")
+			.join("c2")
+			.join(elsewhere[0].file_name().expect("a file name"));
+
+		assert_eq!(read_stored(&root, CONVERSATION, &stored[0]), Ok(b"png".to_vec()));
+		for refused in [&elsewhere[0], &escaping] {
+			assert!(matches!(
+				read_stored(&root, CONVERSATION, refused),
+				Err(Rejection::Unreadable { .. })
+			));
+		}
+		fs::remove_dir_all(&root).expect("cleanup");
 	}
 
 	#[test]

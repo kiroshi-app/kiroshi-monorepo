@@ -18,11 +18,12 @@ use super::documents::{located, Location, Placement, WriteStep};
 use super::presence::{seat_writer, unseat_writer, Seat, Seated};
 use super::{
 	a_document, announce, announce_change, create_document, delete_item, document_text, documents,
-	encoded_content, import_path, list, read_document, rename_document, resolve, root,
+	encoded_content, import_path, list, read_document, rename_linked_document, resolve, root,
 	AcceptedType,
 };
 use crate::agent::host::{Host, Refusal};
-use crate::conversations::commands::ready;
+use crate::conversations::commands::{post_document, ready};
+use crate::conversations::contract::TranscriptStoreError;
 use crate::db::repositories::keyset::{self, Keyset};
 use crate::{db, events};
 
@@ -92,6 +93,7 @@ pub enum Operation {
 	Import,
 	Rename,
 	Delete,
+	PostDocument,
 }
 
 #[derive(Debug, Deserialize)]
@@ -182,6 +184,14 @@ struct Deleted {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+struct DocumentPosted {
+	name: String,
+	conversation_id: String,
+	message_id: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct DocumentWritten {
 	name: String,
 	characters: usize,
@@ -220,6 +230,23 @@ impl<R: Runtime> LibraryHost<R> {
 				DocumentRefusal::unexpected(format!("the agent {} is gone", self.bot_id))
 			})?;
 		Ok(Agent { id: bot.id, name: bot.name })
+	}
+
+	async fn posted(
+		&self,
+		database: &db::Database,
+		name: String,
+	) -> Result<DocumentPosted, DocumentRefusal> {
+		let message_id =
+			post_document(&self.app, database, &self.conversation_id, &self.bot_id, &name)
+				.await
+				.map_err(|error| match error {
+					TranscriptStoreError::DocumentRefused { failure, .. } => {
+						DocumentRefusal::Library(*failure)
+					}
+					unexpected => DocumentRefusal::unexpected(format!("{unexpected:?}")),
+				})?;
+		Ok(DocumentPosted { name, conversation_id: self.conversation_id.clone(), message_id })
 	}
 
 	async fn written(
@@ -304,14 +331,25 @@ impl<R: Runtime> Host for LibraryHost<R> {
 			Operation::Rename => {
 				let asked: Renamed = Self::read(payload)?;
 				a_document(&root, &space_id, &asked.name)?;
-				let renamed =
-					rename_document(&self.app, &root, &space_id, &asked.name, &asked.new_name)?;
+				let renamed = rename_linked_document(
+					&self.app,
+					database,
+					&root,
+					&space_id,
+					&asked.name,
+					&asked.new_name,
+				)
+				.await?;
 				Self::answered(self.changed(&space_id, renamed))
 			}
 			Operation::Delete => {
 				let asked: Named = Self::read(payload)?;
 				delete_item(&self.app, &root, &space_id, &asked.name)?;
 				Self::answered(Deleted { name: asked.name })
+			}
+			Operation::PostDocument => {
+				let asked: Named = Self::read(payload)?;
+				Self::answered(self.posted(database, asked.name).await?)
 			}
 		}
 	}

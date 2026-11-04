@@ -15,7 +15,8 @@ use super::presence::{seated_name, share_caret, unseat_writer, Seat};
 use super::{
 	apply_update, clipboard_payload, clipboard_payload_of_bytes, create_document, delete_item,
 	import, import_paths, list, open_document, read_document, read_file, read_image,
-	read_thumbnail, rename_document, resolve, root, save, save_bytes, templates, ClipboardPayload,
+	read_thumbnail, rename_linked_document, resolve, root, save, save_bytes, save_message,
+	templates, ClipboardPayload,
 };
 use crate::db;
 use crate::hosting::authorship::Caller;
@@ -132,7 +133,22 @@ pub async fn library_rename_document<R: Runtime>(
 	new_name: String,
 ) -> Result<LibraryItem, LibraryError> {
 	known_space(&state, &space_id).await?;
-	rename_document(&app, &root(&app)?, &space_id, &name, &new_name)
+	let database =
+		state.as_ref().map_err(|failure| LibraryError::Unavailable { failure: failure.into() })?;
+	rename_linked_document(&app, database, &root(&app)?, &space_id, &name, &new_name).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn library_save_message<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	conversation_id: String,
+	message_id: String,
+) -> Result<LibraryItem, LibraryError> {
+	let database =
+		state.as_ref().map_err(|failure| LibraryError::Unavailable { failure: failure.into() })?;
+	save_message(&app, database, &conversation_id, &message_id).await
 }
 
 #[tauri::command]

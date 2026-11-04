@@ -61,6 +61,9 @@ const NEW_NAME =
 const DELETE =
 	"Delete an item of the Library of this Space for everyone, with its thumbnail and its shared editing state, once the person asked you to remove it. It can't be undone. It answers the name of the item deleted."
 
+const POST_DOCUMENT =
+	"Post a document of the Library of this Space in this conversation, as a message of yours the person opens it from, once you want them to read it. A name that is not a document of this Library is refused and nothing is posted. It answers the name of the document, the id of this conversation and the id of the message."
+
 type ToolInput = Record<string, z.ZodType>
 
 const LISTED: ToolInput = {
@@ -148,5 +151,8 @@ export const libraryTools = (
 	),
 	tool("library_delete", DELETE, NAMED, (input) =>
 		asked(session, "delete", input),
+	),
+	tool("conversation_post_document", POST_DOCUMENT, NAMED, (input) =>
+		asked(session, "postDocument", input),
 	),
 ]

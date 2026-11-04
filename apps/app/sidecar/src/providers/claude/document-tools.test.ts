@@ -78,7 +78,7 @@ afterEach(() => {
 })
 
 describe("libraryTools", () => {
-	it("serves the eight library tools and no document tool", () => {
+	it("serves the eight library tools and the tool that posts a document", () => {
 		expect(tools.map((held) => held.name)).toEqual([
 			"library_list",
 			"library_search",
@@ -88,6 +88,7 @@ describe("libraryTools", () => {
 			"library_import",
 			"library_rename",
 			"library_delete",
+			"conversation_post_document",
 		])
 	})
 
@@ -117,6 +118,7 @@ describe("libraryTools", () => {
 		expect(fieldsOf("library_import").required).toEqual(["path"])
 		expect(fieldsOf("library_rename").required).toEqual(["name", "newName"])
 		expect(fieldsOf("library_delete").required).toEqual(["name"])
+		expect(fieldsOf("conversation_post_document").required).toEqual(["name"])
 	})
 
 	it("hands each call to the library host of its session under its operation", async () => {
@@ -216,6 +218,41 @@ describe("libraryTools", () => {
 		const result = await called("library_delete", { name: "notes.md" })
 
 		expect(spoken(result)).toEqual(A_REFUSAL)
+		expect(result.isError).toBe(true)
+	})
+
+	it("posts a document of the Library in this conversation and speaks the posted message back", async () => {
+		const posted = {
+			name: "notes.md",
+			conversationId: "c1",
+			messageId: "m1",
+		}
+		const asked = aHost(() => ({ result: posted }))
+
+		const result = await called("conversation_post_document", {
+			name: "notes.md",
+		})
+
+		expect(asked).toEqual([
+			{
+				subtype: "library",
+				operation: "postDocument",
+				payload: { name: "notes.md" },
+			},
+		])
+		expect(spoken(result)).toEqual(posted)
+		expect(result.isError).toBeUndefined()
+	})
+
+	it("speaks back the refusal naming a document the Library does not hold", async () => {
+		const refusal = { kind: "missing", name: "gone.md" }
+		aHost(() => ({ error: refusal }))
+
+		const result = await called("conversation_post_document", {
+			name: "gone.md",
+		})
+
+		expect(spoken(result)).toEqual(refusal)
 		expect(result.isError).toBe(true)
 	})
 })

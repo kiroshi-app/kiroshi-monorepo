@@ -3595,6 +3595,20 @@ fn a_member_lists_the_library_templates() {
 }
 
 #[test]
+fn a_member_saves_a_message_of_the_shared_space_only_as_a_library_document() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("library-save-message").await;
+		let saving = |conversation: &str, message: &str| json!({ "conversationId": conversation, "messageId": message });
+
+		guest.refused("library_save_message", saving("c-theirs", "m-theirs")).await;
+		guest.refused("library_save_message", saving("c-mine", "m-theirs")).await;
+		guest.forwarded("library_save_message", saving("c-mine", "m-mine")).await;
+
+		assert_eq!(guest.effects.reached(), ["library_save_message"]);
+	});
+}
+
+#[test]
 fn a_member_creates_a_library_document_in_the_shared_space_only() {
 	run(kept_in_the_space_named("library_create_document", a_library_entry_of("fresh.md")));
 }
@@ -4521,6 +4535,21 @@ fn a_relay_guest_writes_a_message_of_the_shared_space_only() {
 			"id": "new", "conversationId": "c-mine", "turnId": "t-mine",
 			"authorBotId": "b-mine", "repliedToMessageId": "m-mine", "content": "c", "createdAt": 1
 		} }),
+	));
+}
+
+#[test]
+fn a_relay_guest_sends_a_message_with_documents_in_the_shared_space_only() {
+	let with_documents = |conversation: &str| {
+		json!({ "message": {
+			"id": "new", "conversationId": conversation, "turnId": "t-new", "authorBotId": null,
+			"repliedToMessageId": null, "documents": ["notes.md"], "content": "c", "createdAt": 1
+		}, "summoned": [] })
+	};
+	run(kept_in_the_shared_space(
+		"conversation_send_user_message",
+		with_documents("c-theirs"),
+		with_documents("c-mine"),
 	));
 }
 
@@ -6415,6 +6444,7 @@ fn a_user_message(conversation_id: &str, turn_id: &str) -> NewUserMessage {
 		replied_to_message_id: None,
 		replied_to_message_ids: Vec::new(),
 		reply_links: Vec::new(),
+		documents: Vec::new(),
 		content: "hello".to_owned(),
 		created_at: 2,
 	}

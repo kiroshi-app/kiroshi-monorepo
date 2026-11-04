@@ -54,6 +54,7 @@ const REPLY_LABEL: &str = "The message this one replies to:";
 const EXCERPT_LABEL: &str = "the part replied to:";
 const RECENT_LABEL: &str = "The most recent messages:";
 const PROMPT_LABEL: &str = "The new message:";
+const DOCUMENT_LINE: &str = "a document of the Library of this Space, readable with library_read:";
 const ROOM_LABEL: &str = "The bots in this conversation, and the token that reaches each of them:";
 const ADDRESSED_NOTE: &str = "This message names you: it is yours to answer.";
 const LEAD_NOTE: &str = "This message names nobody, and you hold the lead: it is yours to answer.";
@@ -89,6 +90,7 @@ pub async fn bounded_context(
 		MessageRole::User => Some(header_of(&prompt, room.as_ref())),
 		MessageRole::Assistant => None,
 	};
+	let prompt_text = with_documents(&prompt);
 
 	Ok(compose(Parts {
 		instructions: &instructions,
@@ -97,7 +99,7 @@ pub async fn bounded_context(
 		replied_to: &replied_to,
 		recent: &recent,
 		header: header.as_deref(),
-		prompt: &prompt.content,
+		prompt: &prompt_text,
 		room: room.as_ref(),
 	}))
 }
@@ -146,7 +148,15 @@ pub async fn headed_message(
 		.message(conversation_id, message_id.clone())
 		.await?
 		.ok_or(TranscriptStoreError::UnknownMessage { id: message_id })?;
-	Ok(format!("{}\n{}", header_of(&message, None), message.content))
+	Ok(format!("{}\n{}", header_of(&message, None), with_documents(&message)))
+}
+
+fn with_documents(message: &StoredMessage) -> String {
+	std::iter::once(message.content.clone())
+		.chain(message.documents.iter().map(|name| format!("{DOCUMENT_LINE} {name}")))
+		.filter(|line| !line.is_empty())
+		.collect::<Vec<_>>()
+		.join("\n")
 }
 
 fn header_of(message: &StoredMessage, room: Option<&Room>) -> String {
@@ -723,12 +733,16 @@ fn replies_of(answer: &str, questions: usize) -> Vec<Option<&str>> {
 }
 
 fn spoken(message: &StoredMessage, room: Option<&Room>) -> String {
-	format!("{}: {}", author_of(message, room), spelled(room, &message.content))
+	format!("{}: {}", author_of(message, room), spelled(room, &with_documents(message)))
 }
 
 fn author_of(message: &StoredMessage, room: Option<&Room>) -> String {
+	let role = match message.author_bot_id {
+		Some(_) => MessageRole::Assistant,
+		None => message.role,
+	};
 	authored(message.author_bot_id.as_deref(), room)
-		.unwrap_or_else(|| speaker(message.role, &message.author, message.written_from))
+		.unwrap_or_else(|| speaker(role, &message.author, message.written_from))
 }
 
 fn authored(author_bot_id: Option<&str>, room: Option<&Room>) -> Option<String> {
@@ -828,6 +842,7 @@ mod tests {
 			author: Default::default(),
 			written_from: None,
 			reply_links: Vec::new(),
+			documents: Vec::new(),
 			seq,
 			role,
 			content: content.to_owned(),
@@ -1258,6 +1273,7 @@ mod tests {
 					author: Default::default(),
 					written_from: WrittenFrom::Here,
 					reply_links: Vec::new(),
+					documents: Vec::new(),
 					content,
 					created_at: index as i64,
 				})
@@ -1320,6 +1336,7 @@ mod tests {
 				author: Default::default(),
 				written_from: WrittenFrom::Here,
 				reply_links,
+				documents: Vec::new(),
 				content: asked(id),
 				created_at: 99,
 			})
@@ -1366,6 +1383,7 @@ mod tests {
 				author: Default::default(),
 				written_from: WrittenFrom::Here,
 				reply_links: Vec::new(),
+				documents: Vec::new(),
 				content: content.clone(),
 				created_at: 98,
 			})
@@ -1410,6 +1428,81 @@ mod tests {
 
 	fn occurrences(context: &str, needle: &str) -> usize {
 		context.matches(needle).count()
+	}
+
+	async fn written(
+		database: &Database,
+		conversation_id: &str,
+		id: &str,
+		author_bot_id: Option<&str>,
+		content: &str,
+		documents: &[&str],
+	) {
+		let message = NewUserMessage {
+			id: id.to_owned(),
+			conversation_id: conversation_id.to_owned(),
+			turn_id: format!("t-{id}"),
+			author_bot_id: author_bot_id.map(str::to_owned),
+			author: Default::default(),
+			written_from: WrittenFrom::Here,
+			reply_links: Vec::new(),
+			documents: documents.iter().map(|name| (*name).to_owned()).collect(),
+			content: content.to_owned(),
+			created_at: 50,
+		};
+		database.messages().post_message(message).await.expect("the message is written");
+	}
+
+	fn document_line(name: &str) -> String {
+		format!("{DOCUMENT_LINE} {name}")
+	}
+
+	#[tokio::test]
+	async fn a_person_message_with_documents_names_each_one_in_the_prompt_in_the_stored_order() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let conversation = a_conversation(&database).await;
+		written(&database, &conversation, "p1", None, "Read these.", &["notes.md", "brief.md"])
+			.await;
+
+		let context = context_for_default(&database, &conversation, "p1").await;
+
+		let expected =
+			format!("Read these.\n{}\n{}", document_line("notes.md"), document_line("brief.md"));
+		assert!(context.ends_with(&expected), "{context}");
+	}
+
+	#[tokio::test]
+	async fn a_posted_document_stays_in_the_next_context_and_an_empty_message_without_one_does_not()
+	{
+		let dir = temp_dir();
+		let database = open(&dir);
+		let conversation = a_conversation(&database).await;
+		say(&database, &conversation, 1).await;
+		written(&database, &conversation, "posted", Some("default"), "", &["notes.md"]).await;
+		written(&database, &conversation, "blank", None, " \n", &[]).await;
+		prompt(&database, &conversation, "p1", None).await;
+
+		let context = context_for_default(&database, &conversation, "p1").await;
+
+		let recent = section(&context, RECENT_LABEL).expect("the recent messages are carried");
+		assert_eq!(
+			recent,
+			format!(
+				"user · from an unknown computer: message 1\nassistant: {}",
+				document_line("notes.md")
+			)
+		);
+		let latest = database
+			.messages()
+			.latest_message(LatestMessageQuery {
+				conversation_id: conversation.clone(),
+				authorship: MessageAuthorship::Bot("default".to_owned()),
+				not_after: 100,
+			})
+			.await
+			.expect("the latest message reads");
+		assert_eq!(latest.map(|message| message.id), Some("posted".to_owned()));
 	}
 
 	#[tokio::test]
@@ -1991,6 +2084,7 @@ mod tests {
 				author: Default::default(),
 				written_from: WrittenFrom::Here,
 				reply_links: Vec::new(),
+				documents: Vec::new(),
 				content: content.to_owned(),
 				created_at,
 			})
@@ -2032,6 +2126,7 @@ mod tests {
 				author: Default::default(),
 				written_from: WrittenFrom::Here,
 				reply_links: Vec::new(),
+				documents: Vec::new(),
 				content: asked(id),
 				created_at: 99,
 			})
@@ -2728,6 +2823,7 @@ mod tests {
 					.into_iter()
 					.collect(),
 				content: content.to_owned(),
+				documents: Vec::new(),
 				created_at: STEVE_AT,
 			})
 			.await
@@ -3002,6 +3098,7 @@ mod tests {
 				author: ada_on(Some("Studio")),
 				written_from: WrittenFrom::Here,
 				reply_links: Vec::new(),
+				documents: Vec::new(),
 				content: "the roof leaks".to_owned(),
 				created_at: STEVE_AT,
 			})

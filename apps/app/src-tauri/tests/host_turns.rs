@@ -608,6 +608,7 @@ impl Host {
 			replied_to_message_id: None,
 			replied_to_message_ids: Vec::new(),
 			reply_links: Vec::new(),
+			documents: Vec::new(),
 			content: content.to_owned(),
 			created_at: 1,
 		};
