@@ -872,19 +872,16 @@ const seedDocument = (name: string, markdown: string) => {
 const markdownOnHost = (name: string) =>
 	documentOf(name).getText("markdown").toString()
 
-const blockTypes = () =>
-	[
-		...document.querySelectorAll<HTMLElement>(
-			"[data-slot='library-document-block']",
-		),
-	].map((block) => block.dataset.type)
+const shownBlocks = () => [
+	...document.querySelectorAll<HTMLElement>(
+		"[data-slot='library-document-block']",
+	),
+]
+
+const blockTypes = () => shownBlocks().map((block) => block.dataset.type)
 
 const blockWith = (text: string) => {
-	const block = [
-		...document.querySelectorAll<HTMLElement>(
-			"[data-slot='library-document-block']",
-		),
-	].find((each) => each.textContent?.includes(text))
+	const block = shownBlocks().find((each) => each.textContent?.includes(text))
 	expect(block).toBeInstanceOf(HTMLElement)
 	return block as HTMLElement
 }
