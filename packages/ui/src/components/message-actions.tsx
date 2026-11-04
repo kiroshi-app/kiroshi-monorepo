@@ -32,9 +32,6 @@ interface MessageMenuItemProps {
 	children: ReactNode
 }
 
-const MESSAGE_MENU =
-	"w-42 min-w-42! rounded-2xl bg-menu-surface p-1 shadow-popover ring-0"
-
 const MESSAGE_MENU_ITEM =
 	"h-8 min-h-8 gap-2 rounded-xl px-2 py-0 text-compact [&_svg]:size-3.5"
 
@@ -61,7 +58,7 @@ function MessageActions({ menu, children }: MessageActionsProps) {
 			/>
 			<ContextMenuContent
 				aria-label={t("transcript.message.actions")}
-				className={cn(MESSAGE_MENU, STILL_UNDER_REDUCED_MOTION)}
+				className={STILL_UNDER_REDUCED_MOTION}
 			>
 				{menu}
 			</ContextMenuContent>

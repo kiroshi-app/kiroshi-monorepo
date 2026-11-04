@@ -138,7 +138,6 @@
 	--color-prompt-surface: var(--prompt-surface);
 	--color-prompt-surface-inert: var(--prompt-surface-inert);
 	--color-prompt-menu: var(--prompt-menu);
-	--color-menu-surface: var(--menu-surface);
 	--color-author-line-sticky: var(--author-line-sticky);
 	--color-question-segment-foreground: var(--question-segment-foreground);
 	--radius-xs: calc(var(--radius-root) * 0.2);
