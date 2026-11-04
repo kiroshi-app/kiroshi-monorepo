@@ -261,4 +261,10 @@ export type {
 	ActivityIndicatorLayout,
 	ActivityIndicatorWait,
 }
-export { ActivityClock, ActivityIndicator, formatElapsed, secondsSince }
+export {
+	ActivityClock,
+	ActivityIndicator,
+	formatElapsed,
+	secondsSince,
+	WORK_LINE_AVATAR_SIZE,
+}

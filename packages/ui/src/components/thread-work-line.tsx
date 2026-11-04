@@ -11,6 +11,7 @@ import {
 	type ActivityIndicatorLayout,
 	type ActivityIndicatorWait,
 	secondsSince,
+	WORK_LINE_AVATAR_SIZE,
 } from "@workspace/ui/components/activity-indicator"
 import {
 	AuthorLineDivider,
@@ -64,8 +65,6 @@ const BREAKDOWN_ORDER: BreakdownState[] = [
 	"thinking",
 	"upNext",
 ]
-
-const AVATAR_SIZE = 20
 
 const NO_ELAPSED = -1
 
@@ -144,7 +143,7 @@ const Failure = ({ agent }: FailureProps) => {
 				image={agent.image}
 				name={agent.name}
 				seed={agent.id}
-				size={AVATAR_SIZE}
+				size={WORK_LINE_AVATAR_SIZE}
 			/>
 			<AuthorLineName tone="agent" name={agent.name} hue={agent.blot} />
 			<span
