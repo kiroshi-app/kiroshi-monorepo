@@ -320,7 +320,7 @@ describe("files dropped on the Library", () => {
 		)
 	})
 
-	it("words a refusal it does not know with the generic sentence, never its code", async () => {
+	it("words a refusal it does not know with the refused sentence, never its code", async () => {
 		const { heading } = await renderLibraryScreen(false)
 		harness.answerImport = () =>
 			Promise.reject({ kind: "clipboardRefused", detail: "denied" })
@@ -329,7 +329,7 @@ describe("files dropped on the Library", () => {
 
 		await waitFor(() =>
 			expect(raiseFailureNotice).toHaveBeenCalledWith(
-				importFailureOf("odd.txt", common("library.failure.import.generic")),
+				importFailureOf("odd.txt", common("library.failure.import.refused")),
 			),
 		)
 	})

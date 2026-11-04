@@ -4,7 +4,10 @@ import { useCallback, useState } from "react"
 import { raiseTransientNotice } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
-import type { LibraryImageSource } from "./library-image-source"
+import type {
+	LibraryImageSource,
+	LibraryImageUnreadable,
+} from "./library-image-source"
 import { type DroppedFile, toImportingItem } from "./library-items"
 import { libraryQueryKeys } from "./library-query-keys"
 import { importLibraryFile } from "./library-reads"
@@ -32,7 +35,11 @@ const WORDED_IMPORT_REASONS = [
 	"unknownSpace",
 	"unavailable",
 	"storage",
-] as const satisfies readonly LibraryError["kind"][]
+	"imageUnreadable",
+] as const satisfies readonly (
+	| LibraryError["kind"]
+	| LibraryImageUnreadable["kind"]
+)[]
 
 type WordedImportReason = (typeof WORDED_IMPORT_REASONS)[number]
 
@@ -48,7 +55,10 @@ const importReasonOf = (cause: unknown) => {
 		typeof refusal === "object" && refusal !== null
 			? (refusal as { kind?: unknown }).kind
 			: undefined
-	return isWordedImportReason(kind) ? kind : "generic"
+	if (isWordedImportReason(kind)) {
+		return kind
+	}
+	return typeof kind === "string" ? "refused" : "generic"
 }
 
 class LibraryImportFailure extends Error {
@@ -135,17 +145,13 @@ const withinImportLimit = (
 	if (bytes > limit) {
 		throw tooLargeOf(name, bytes, limit)
 	}
-	return content
 }
 
 const importContent = async ({ spaceId, isJoined, image }: ContentSave) => {
 	try {
-		const content = withinImportLimit(
-			image.name,
-			await image.readContent(),
-			isJoined,
-		)
-		return await importLibraryFile(spaceId, image.name, content)
+		const { name, content } = await image.read()
+		withinImportLimit(name, content, isJoined)
+		return await importLibraryFile(spaceId, name, content)
 	} catch (reason) {
 		throw new LibraryImportFailure(image.name, reason)
 	}
