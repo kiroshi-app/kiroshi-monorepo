@@ -82,11 +82,11 @@ const pngImageOf = async (src: string): Promise<EncodedImage> => {
 }
 
 const decodedDataUrlOf = (src: string): EncodedImage => {
-	const match = BASE64_DATA_URL.exec(src)
-	if (!match?.[1] || match[2] === undefined) {
+	const [, mediaType, payload] = BASE64_DATA_URL.exec(src) ?? []
+	if (mediaType === undefined || payload === undefined) {
 		throw new Error("not a base64 image data url")
 	}
-	return { mediaType: match[1], base64: btoa(atob(match[2])) }
+	return { mediaType, base64: btoa(atob(payload)) }
 }
 
 const remoteImageOf = async (src: string): Promise<EncodedImage> => {
