@@ -25,6 +25,8 @@ const InSentence = (props: FileReferenceChipProps) => (
 	</MarkdownProse>
 )
 
+const WHITE = "rgb(255, 255, 255)"
+
 const chipIn = (canvasElement: HTMLElement) =>
 	slotIn(canvasElement, "file-reference-chip")
 
@@ -116,11 +118,33 @@ export const Open = meta.story({
 			},
 		},
 	},
-	play: async ({ canvas }) => {
+	play: async ({ canvas, canvasElement }) => {
+		const chip = chipIn(canvasElement)
+		const mark = chip.firstElementChild
+		if (!mark) throw new Error("The chip draws no mark circle")
+
 		await expect(
 			canvas.getByRole("button", { name: TITLE, pressed: true }),
 		).toBeVisible()
+		await expect(getComputedStyle(mark).backgroundColor).toBe(WHITE)
+		await expect(getComputedStyle(mark).color).toBe(
+			getComputedStyle(chip).backgroundColor,
+		)
 	},
+})
+
+export const OpenDark = meta.story({
+	globals: { theme: "dark" },
+	args: Open.input.args,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The open chip in the dark theme. Check that the mark circle stays white on the Space colour fill with the glyph in the Space colour, as in light, and that the title keeps the dark theme foreground of the Space colour.",
+			},
+		},
+	},
+	play: Open.input.play,
 })
 
 export const OpensFromTheKeyboard = meta.story({

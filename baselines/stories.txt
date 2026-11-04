@@ -204,6 +204,8 @@ conversation-markdown-markdowntable--default
 conversation-markdown-markdowntable--header-only
 conversation-markdown-markdowntable--wider-than-the-block
 conversation-markdown-markdowntaskcheckbox--default
+conversation-markdown-markdowntaskcheckbox--loose-checklist
+conversation-markdown-markdowntaskcheckbox--loose-checklist-dark
 conversation-markdown-markdowntaskcheckbox--nested-checklist
 conversation-markdown-markdowntaskcheckbox--ticks-and-unticks-by-click
 conversation-markdown-markdowntaskcheckbox--ticks-from-the-keyboard
@@ -281,6 +283,7 @@ conversation-message-emptystateshell--without-hint
 conversation-message-filereferencechip--hover
 conversation-message-filereferencechip--middle-click-opens-a-new-tab
 conversation-message-filereferencechip--open
+conversation-message-filereferencechip--open-dark
 conversation-message-filereferencechip--opens-from-the-keyboard
 conversation-message-filereferencechip--rest
 conversation-message-filereferencechip--wraps-with-the-sentence
