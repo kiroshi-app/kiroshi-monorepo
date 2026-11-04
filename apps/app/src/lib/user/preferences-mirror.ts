@@ -14,6 +14,7 @@ import type {
 const COLOR_SCHEME_KEY = "theme"
 const LANGUAGE_KEY = "language"
 const SIDEBAR_WIDTH_KEY = "sidebarWidth"
+const DOCUMENT_PANEL_WIDTH_KEY = "documentPanelWidth"
 const ACTIVITY_PANEL_OPEN_KEY = "activityPanelOpen"
 const FIRST_RUN_DONE_KEY = "firstRunDone"
 const LAST_SPACE_KEY = "lastSpaceId"
@@ -73,6 +74,18 @@ export const lastBotIn = (
 const widthOf = (value: string | null): number | null => {
 	const width = Number.parseInt(value ?? "", 10)
 	return Number.isNaN(width) ? null : width
+}
+
+const draggedWidthOf = (value: string | null): number | null => {
+	const width = Number(value ?? "")
+	return Number.isInteger(width) && width > 0 ? width : null
+}
+
+export const readDocumentPanelWidth = () =>
+	draggedWidthOf(localStorage.getItem(DOCUMENT_PANEL_WIDTH_KEY))
+
+export const keepDocumentPanelWidth = (width: number) => {
+	localStorage.setItem(DOCUMENT_PANEL_WIDTH_KEY, String(width))
 }
 
 export const activeLanguageOf = (chosen: string | null): Language =>

@@ -11,6 +11,7 @@ import { createElement } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import * as Y from "yjs"
 
+import { DOCUMENT_PANEL_MAX_WIDTH } from "@workspace/ui/components/document-panel"
 import "@workspace/ui/lib/i18n"
 
 import {
@@ -209,5 +210,64 @@ describe("a gallery in a document opened from a conversation", () => {
 		await expectGalleryShown(galleryIn(panelOf()), hostSourceOf)
 
 		expect(imageReads).toEqual([])
+	})
+})
+
+const renderPlanPanel = () =>
+	render(
+		createElement(ThreadDocumentPanel, {
+			spaceId: SPACE_ID,
+			isJoined: false,
+			name: PLAN,
+			onClose: () => undefined,
+		}),
+		{ wrapper: createQueryTestWrapper().wrapper },
+	)
+
+const dragPanelEdgeBy = (distance: number) => {
+	const handle = screen.getByRole("separator")
+	const originX = 1000
+	fireEvent.pointerDown(handle, { button: 0, clientX: originX })
+	fireEvent.pointerMove(window, { clientX: originX + distance })
+	fireEvent.pointerUp(window, { clientX: originX + distance })
+}
+
+const widthOfPanel = () => panelOf().style.width
+
+describe("the width of a document opened beside a conversation", () => {
+	beforeEach(() => {
+		libraryHost.answers.set("library_list", () => [planItem])
+		libraryHost.answers.set("library_read_document", ({ name }) => ({
+			name,
+			format: "markdown",
+			content: "# Plan",
+		}))
+		libraryHost.answers.set("library_open_document", ({ name }) =>
+			openedStateOf(name, "# Plan"),
+		)
+		libraryHost.answers.set("library_share_caret", () => null)
+	})
+
+	afterEach(() => {
+		cleanup()
+		libraryHost.answers.clear()
+		localStorage.clear()
+	})
+
+	it("opens at the widest width the panel allows when no width was ever dragged", () => {
+		renderPlanPanel()
+
+		expect(widthOfPanel()).toBe(`${DOCUMENT_PANEL_MAX_WIDTH}px`)
+	})
+
+	it("opens the next document at the width the edge was dragged to", () => {
+		const keptWidth = DOCUMENT_PANEL_MAX_WIDTH - 200
+		const first = renderPlanPanel()
+		dragPanelEdgeBy(200)
+		first.unmount()
+
+		renderPlanPanel()
+
+		expect(widthOfPanel()).toBe(`${keptWidth}px`)
 	})
 })
