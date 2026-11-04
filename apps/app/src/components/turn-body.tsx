@@ -96,6 +96,7 @@ export const AnswerBody = ({
 				onUseValues: actions.insert,
 				onOpenImage: actions.openImage,
 				onOpenWebPage: openWebPage,
+				imageMenu: actions.imageActions,
 			}}
 			attachments={attachments}
 			isWriting={isWriting}

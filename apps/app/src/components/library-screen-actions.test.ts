@@ -615,6 +615,54 @@ describe("the image menu of the Library viewer", () => {
 	)
 })
 
+const pickInGridImageMenu = async (entry: string) => {
+	const menu = await openMenuOf("diagram.png")
+	await press(within(menu).getByRole("menuitem", { name: entry }))
+}
+
+describe("the image menu of a Library grid image", () => {
+	it("offers Save to Library and Copy image after the item actions", async () => {
+		await renderLibraryScreen({ isJoined: false })
+
+		const menu = await openMenuOf("diagram.png")
+
+		const entries = within(menu)
+			.getAllByRole("menuitem")
+			.map((item) => item.textContent)
+		expect(entries.slice(-2)).toEqual([SAVE_TO_LIBRARY, COPY_IMAGE])
+		expect(entries).toContain(menuItemOf("download"))
+	})
+
+	it.each(SPACES)(
+		"adds the image again under its name on Save to Library in %s",
+		async (_space, isJoined) => {
+			await renderLibraryScreen({ isJoined })
+
+			await pickInGridImageMenu(SAVE_TO_LIBRARY)
+
+			await waitFor(() =>
+				expect(callsOf("library_import")).toEqual([
+					{ spaceId: SPACE_ID, name: "diagram.png", content: FILE_CONTENT },
+				]),
+			)
+		},
+	)
+
+	it.each([
+		["the host", false, "library_copy"],
+		["a joined Space", true, "library_copy_bytes"],
+	] as const)(
+		"puts the image on the clipboard on Copy image in %s",
+		async (_space, isJoined, command) => {
+			await renderLibraryScreen({ isJoined })
+
+			await pickInGridImageMenu(COPY_IMAGE)
+
+			await waitFor(() => expect(callsOf(command)).toHaveLength(1))
+		},
+	)
+})
+
 type FailedAction = "copy" | "save" | "reveal" | "delete"
 
 const failureOf = (action: FailedAction) =>
