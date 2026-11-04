@@ -613,6 +613,9 @@ const common = {
 					"{{name}} stopped writing before it finished. Ask again from the conversation.",
 				caret:
 					"Couldn’t show others where you are in the document. Keep editing to try again.",
+				stopAll:
+					"Couldn’t stop the agents writing in this document. Press Stop all to try again.",
+				stop: "Couldn’t stop {{name}}. Press Stop {{name}} to try again.",
 				saveAsDocument:
 					"Couldn’t save the message as a document. Try Save as document again.",
 			},

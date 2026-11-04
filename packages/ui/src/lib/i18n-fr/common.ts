@@ -642,6 +642,9 @@ const common = {
 					"L’écriture de {{name}} s’est interrompue. Redemandez-la depuis la conversation.",
 				caret:
 					"Impossible de montrer aux autres où vous êtes dans le document. Continuez à modifier pour réessayer.",
+				stopAll:
+					"Impossible d’arrêter les agents qui écrivent dans ce document. Appuyez sur Tout arrêter pour réessayer.",
+				stop: "Impossible d’arrêter {{name}}. Appuyez sur Arrêter {{name}} pour réessayer.",
 				saveAsDocument:
 					"Impossible d’enregistrer le message comme document. Réessayez avec Enregistrer comme document.",
 			},
