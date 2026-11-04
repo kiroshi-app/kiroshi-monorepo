@@ -230,12 +230,14 @@ const openMenuOn = async (target: Element, name: string) => {
 
 const expectSameSurfaceAsImageMenu = async (canvasElement: HTMLElement) => {
 	const canvas = within(canvasElement)
-	const answer = canvas.getByText(ANSWER)
 	const imageMenu = await openMenuOn(
 		canvas.getByRole("button", { name: IMAGE_NAME }),
 		IMAGE_MENU_LABEL,
 	)
-	const messageMenu = await openMenuOn(answer, MESSAGE_MENU_LABEL)
+	const messageMenu = await openMenuOn(
+		canvas.getByText(ANSWER),
+		MESSAGE_MENU_LABEL,
+	)
 	await expect(messageMenu).toBeVisible()
 	await expect(imageMenu).toBeVisible()
 	await expect(surfaceOf(messageMenu)).toEqual(surfaceOf(imageMenu))
