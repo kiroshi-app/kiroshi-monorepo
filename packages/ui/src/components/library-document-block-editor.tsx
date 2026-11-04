@@ -399,10 +399,10 @@ const LibraryDocumentBlockEditor = ({
 		blocks:
 			blocks.length > 0 ? blocks : [{ id: nextId(), source: "", gap: "" }],
 	})
-	const seeded = (markdown: string, at: LibraryDocumentPlaceholder[]) =>
+	const seeded = (markdown: string, shown: LibraryDocumentPlaceholder[]) =>
 		withEmptyBlocksAt(
 			parseBlocks(markdown, nextId),
-			at.map((placeholder) => placeholder.at),
+			shown.map(({ at }) => at),
 			nextId,
 		)
 	const [doc, setDoc] = useState(() => withLine(seeded(body, placeholders)))
