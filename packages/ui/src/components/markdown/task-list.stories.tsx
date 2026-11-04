@@ -20,6 +20,8 @@ const NESTED_TASKS = [
 ].join("\n")
 
 const LOOSE_TASKS = [
+	"Here is where the move stands.",
+	"",
 	"- [x] Read the nest",
 	"",
 	"- [ ] Archive the record",
@@ -32,6 +34,10 @@ const LOOSE_TASKS = [
 const BOX_SIZE = 16
 
 const LABEL_GAP = 10
+
+const ROW_GAP = 6
+
+const LEAD_IN_GAP = 8
 
 const labelElementOf = (box: HTMLElement) => {
 	const label = box.closest<HTMLElement>('[data-slot="markdown-task-label"]')
@@ -123,7 +129,7 @@ export const LooseChecklist = meta.story({
 		docs: {
 			description: {
 				story:
-					"A checklist written with blank lines between the items, so each label is a paragraph, one item carrying a second paragraph. Check that each box sits 10 before its label, as in the tight checklist, that the ticked label is struck and muted, and that the second paragraph keeps its own start.",
+					"A checklist written with blank lines between the items under a lead-in sentence, so each label is a paragraph, one item carrying a second paragraph. Check that the first row sits 8 below the lead-in, that the rows sit 6 apart as in the tight checklist, that each box sits 10 before its label, that the ticked label is struck and muted, and that the second paragraph keeps its own start.",
 			},
 		},
 	},
@@ -139,6 +145,21 @@ export const LooseChecklist = meta.story({
 		for (const box of boxes) {
 			await expect(gapToLabelOf(box)).toBeCloseTo(LABEL_GAP, 0)
 		}
+		const [first, second] = boxes
+		const firstRow = first?.closest("p")
+		if (!first || !second || !firstRow)
+			throw new Error("The checklist draws no two rows")
+		const leadIn = canvas.getByText(/^Here is where the move stands/)
+		await expect(
+			firstRow.getBoundingClientRect().top -
+				leadIn.getBoundingClientRect().bottom,
+		).toBeCloseTo(LEAD_IN_GAP, 0)
+		await expect(
+			second.getBoundingClientRect().top - first.getBoundingClientRect().top,
+		).toBeCloseTo(
+			Number.parseFloat(getComputedStyle(firstRow).lineHeight) + ROW_GAP,
+			0,
+		)
 		const done = canvas.getByRole("checkbox", { name: "Done" }).closest("p")
 		if (!done) throw new Error("The ticked box sits in no paragraph")
 		await expect(getComputedStyle(done).textDecorationLine).toBe("line-through")
