@@ -20,7 +20,6 @@ import { i18n } from "@workspace/ui/lib/i18n"
 import { LibraryDropTarget } from "@/components/library-drop-target"
 import type { LibraryItem, Space } from "@/lib/bindings"
 import type { Bot } from "@/lib/conversations/store-contract"
-import { formatActionsOf } from "@/lib/library/library-document-formats"
 import {
 	documentNamedAs,
 	matchesQuery,
@@ -329,7 +328,6 @@ export const LibraryScreen = ({
 		const openedItem = { id: openedDocument.name, kind: "document" } as const
 		return (
 			<LibraryDocumentEditor
-				{...formatActionsOf(document.markdown, edit)}
 				body={document.markdown}
 				detail={openedDocument.detail}
 				isActionShown={(_subject, action) =>
