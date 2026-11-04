@@ -109,6 +109,7 @@ interface UserTurnProps {
 	onRetry?: () => void
 	onCancel?: () => void
 	failureReason?: string
+	footer?: ReactNode
 	className?: string
 }
 
@@ -151,6 +152,7 @@ type PersonTurnProps = {
 	onReply?: () => void
 	onPin?: () => void
 	pinned?: boolean
+	footer?: ReactNode
 	className?: string
 }
 
@@ -172,6 +174,16 @@ const TURN_ROW = "flex flex-col gap-1.5"
 const AGENT_BUBBLE_WIDTH = "max-w-145"
 
 const PEOPLE_BUBBLE_WIDTH = "max-w-120"
+
+interface PeopleTurnFooterProps {
+	children: ReactNode
+}
+
+const PeopleTurnFooter = ({ children }: PeopleTurnFooterProps) => (
+	<div data-slot="turn-footer" className={PEOPLE_BUBBLE_WIDTH}>
+		{children}
+	</div>
+)
 
 const FOOTER_KEY = {
 	stopped: "turn.footer.cancelled",
@@ -401,6 +413,7 @@ function UserTurn({
 	onRetry,
 	onCancel,
 	failureReason,
+	footer,
 	className,
 }: UserTurnProps) {
 	const { t } = useTranslation("chat")
@@ -446,6 +459,7 @@ function UserTurn({
 						</TurnBody>
 					</MessageActions>
 				</MessageBubble>
+				{footer ? <PeopleTurnFooter>{footer}</PeopleTurnFooter> : null}
 				{isNotSent ? (
 					<NotSent reason={failureReason} onRetry={onRetry} />
 				) : null}
@@ -629,6 +643,7 @@ const PersonTurn = ({
 	onReply,
 	onPin,
 	pinned = false,
+	footer,
 	className,
 }: PersonTurnProps) => {
 	const { t } = useTranslation("chat")
@@ -674,6 +689,7 @@ const PersonTurn = ({
 						</TurnBody>
 					</MessageActions>
 				</MessageBubble>
+				{footer ? <PeopleTurnFooter>{footer}</PeopleTurnFooter> : null}
 			</Message>
 		</MessageSideContext.Provider>
 	)

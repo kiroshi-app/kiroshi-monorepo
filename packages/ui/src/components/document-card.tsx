@@ -72,12 +72,43 @@ const WriterChip = ({ writer }: WriterChipProps) => {
 	)
 }
 
+type DocumentCardFailure = "deleted" | "unreadable"
+
+const FAILURE_KEY = {
+	deleted: "library.card.failure.deleted",
+	unreadable: "library.card.failure.unreadable",
+} as const satisfies Record<DocumentCardFailure, string>
+
+type FailureLineProps = {
+	id: string
+	failure: DocumentCardFailure
+}
+
+const FailureLine = ({ id, failure }: FailureLineProps) => {
+	const { t } = useTranslation("common")
+
+	return (
+		<p
+			className="flex min-w-0 items-start gap-1.5 break-words text-foreground text-sm leading-5.5"
+			data-slot="document-card-failure"
+			id={id}
+		>
+			<Icons.Error
+				aria-hidden="true"
+				className="my-0.75 size-4 shrink-0 text-destructive"
+			/>
+			<span className="min-w-0">{t(FAILURE_KEY[failure])}</span>
+		</p>
+	)
+}
+
 type DocumentCardProps = {
 	title: string
 	detail: string
 	excerpt: string
 	writer?: DocumentCardWriter
 	isSelected?: boolean
+	failure?: DocumentCardFailure
 	onOpen: () => void
 	children: ReactNode
 }
@@ -88,6 +119,7 @@ const DocumentCard = ({
 	excerpt,
 	writer,
 	isSelected = false,
+	failure,
 	onOpen,
 	children,
 }: DocumentCardProps) => {
@@ -95,15 +127,18 @@ const DocumentCard = ({
 	const [isOpen, setOpen] = useState(false)
 	const titleId = useId()
 	const bodyId = useId()
+	const failureId = useId()
 	const shownTitle = libraryDisplayName(title, t)
 
 	return (
 		<article
+			aria-describedby={failure ? failureId : undefined}
 			aria-labelledby={titleId}
 			className={cn(
 				"flex min-w-0 flex-col gap-3 rounded-control border border-border bg-card p-4",
 				isSelected && "ring-2 ring-primary",
 			)}
+			data-failure={failure}
 			data-selected={isSelected || undefined}
 			data-slot="document-card"
 		>
@@ -117,57 +152,65 @@ const DocumentCard = ({
 					>
 						{shownTitle}
 					</h3>
-					<span className="truncate text-muted-foreground text-xs leading-4 tabular-nums">
-						{isOpen ? t("library.card.live") : detail}
-					</span>
+					{failure ? null : (
+						<span className="truncate text-muted-foreground text-xs leading-4 tabular-nums">
+							{isOpen ? t("library.card.live") : detail}
+						</span>
+					)}
 				</span>
 				{writer ? <WriterChip writer={writer} /> : null}
 			</header>
-			<div
-				className={cn(
-					isOpen && "flex flex-col gap-3 border-foreground/7 border-t py-3",
-				)}
-				data-slot="document-card-body"
-				id={bodyId}
-			>
-				{isOpen ? (
-					children
-				) : (
-					<p className="line-clamp-3 break-words text-soft-foreground text-sm leading-5.5">
-						{excerpt}
-					</p>
-				)}
-			</div>
-			<div className="flex flex-wrap items-center gap-2">
-				<Button
-					aria-controls={bodyId}
-					aria-expanded={isOpen}
-					className={cn(
-						CARD_PILL,
-						"bg-foreground/6 ps-2 pe-3 hover:bg-foreground/10 active:bg-foreground/14 aria-expanded:bg-foreground/6 aria-expanded:hover:bg-foreground/10 dark:hover:bg-foreground/10",
-					)}
-					onClick={() => setOpen(!isOpen)}
-					variant="ghost"
-				>
-					{isOpen ? (
-						<Icons.Collapse aria-hidden="true" />
-					) : (
-						<Icons.Expand aria-hidden="true" />
-					)}
-					{isOpen ? t("library.card.hide") : t("library.card.show")}
-				</Button>
-				<Button
-					className={cn(
-						CARD_PILL,
-						"border-border px-3 hover:bg-foreground/4 active:bg-foreground/8 dark:hover:bg-foreground/4",
-					)}
-					onClick={onOpen}
-					variant="ghost"
-				>
-					{t("library.card.open")}
-					<Icons.ArrowUpRight aria-hidden="true" />
-				</Button>
-			</div>
+			{failure ? (
+				<FailureLine failure={failure} id={failureId} />
+			) : (
+				<>
+					<div
+						className={cn(
+							isOpen && "flex flex-col gap-3 border-foreground/7 border-t py-3",
+						)}
+						data-slot="document-card-body"
+						id={bodyId}
+					>
+						{isOpen ? (
+							children
+						) : (
+							<p className="line-clamp-3 break-words text-soft-foreground text-sm leading-5.5">
+								{excerpt}
+							</p>
+						)}
+					</div>
+					<div className="flex flex-wrap items-center gap-2">
+						<Button
+							aria-controls={bodyId}
+							aria-expanded={isOpen}
+							className={cn(
+								CARD_PILL,
+								"bg-foreground/6 ps-2 pe-3 hover:bg-foreground/10 active:bg-foreground/14 aria-expanded:bg-foreground/6 aria-expanded:hover:bg-foreground/10 dark:hover:bg-foreground/10",
+							)}
+							onClick={() => setOpen(!isOpen)}
+							variant="ghost"
+						>
+							{isOpen ? (
+								<Icons.Collapse aria-hidden="true" />
+							) : (
+								<Icons.Expand aria-hidden="true" />
+							)}
+							{isOpen ? t("library.card.hide") : t("library.card.show")}
+						</Button>
+						<Button
+							className={cn(
+								CARD_PILL,
+								"border-border px-3 hover:bg-foreground/4 active:bg-foreground/8 dark:hover:bg-foreground/4",
+							)}
+							onClick={onOpen}
+							variant="ghost"
+						>
+							{t("library.card.open")}
+							<Icons.ArrowUpRight aria-hidden="true" />
+						</Button>
+					</div>
+				</>
+			)}
 		</article>
 	)
 }

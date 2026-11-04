@@ -20,7 +20,15 @@ import {
 } from "@workspace/ui/components/companion-menu"
 import { CompanionSelectProvider } from "@workspace/ui/components/companion-select"
 import { DaySeparator } from "@workspace/ui/components/day-separator"
+import { DocumentCard } from "@workspace/ui/components/document-card"
+import {
+	DOCUMENT_CARD_BODY,
+	DOCUMENT_CARD_DETAIL,
+	DOCUMENT_CARD_EXCERPT,
+	DOCUMENT_CARD_TITLE,
+} from "@workspace/ui/components/document-card.fixtures"
 import { Icons } from "@workspace/ui/components/icons"
+import { LibraryDocumentBody } from "@workspace/ui/components/library-document-view"
 import type { MessageAuthor } from "@workspace/ui/components/message"
 import type { RosterBot } from "@workspace/ui/components/roster"
 import type { RosterMenuSection } from "@workspace/ui/components/roster-menu-items"
@@ -155,7 +163,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The transcript rows. Every message is one bubble, radius 16 and padding 18 on every side, with its author line at the foot, 6 below the words. An agent sits on the start side up to 580 wide; another person and you sit on the end side up to 480 wide, your bubble in the Space colour. The author line carries the avatar, the name (in the agent colour for an agent), the role badge of an agent and the send time. Hovering a bubble or focusing it raises its fill from white 5 to 8 percent with no transition and shows Pin, Reply and Copy in the author line; a right click opens the same three in a menu. `state` ends an answer: `cancelled` appends Stopped, `failed` appends This response failed and a Retry when `onRetry` is given. `work` swaps the author line for the work line at the same height while the agent answers. A `UserTurn` that did not send draws a dimmed bubble with the reason and a Retry under it; a `queued` one swaps its author line for the Waiting to be sent chip. `repliedTo` draws one card per replied message inside the bubble, in order, above the words: a passage inside curly quotes, a whole message bare. `cause` names the routine or mission that opened the answer above its bubble. Neither scrolls nor animates the list: that belongs to the transcript around them.",
+					"The transcript rows. Every message is one bubble, radius 16 and padding 18 on every side, with its author line at the foot, 6 below the words. An agent sits on the start side up to 580 wide; another person and you sit on the end side up to 480 wide, your bubble in the Space colour. The author line carries the avatar, the name (in the agent colour for an agent), the role badge of an agent and the send time. Hovering a bubble or focusing it raises its fill from white 5 to 8 percent with no transition and shows Pin, Reply and Copy in the author line; a right click opens the same three in a menu. `state` ends an answer: `cancelled` appends Stopped, `failed` appends This response failed and a Retry when `onRetry` is given. `work` swaps the author line for the work line at the same height while the agent answers. A `UserTurn` that did not send draws a dimmed bubble with the reason and a Retry under it; a `queued` one swaps its author line for the Waiting to be sent chip. `repliedTo` draws one card per replied message inside the bubble, in order, above the words: a passage inside curly quotes, a whole message bare. `cause` names the routine or mission that opened the answer above its bubble. `footer` on a `UserTurn` or a `PersonTurn` draws what the message carries, a Library document card, under the bubble on the end side, up to the bubble's 480. Neither scrolls nor animates the list: that belongs to the transcript around them.",
 			},
 		},
 	},
@@ -1042,5 +1050,129 @@ export const Queued = meta.story({
 			canvas.getByRole("button", { name: "Cancel this message" }),
 		)
 		await expect(cancelQueued).toHaveBeenCalledTimes(1)
+	},
+})
+
+const SHARED_DOCUMENT = "Here is the brief for the spring launch."
+
+const DocumentFooter = () => (
+	<DocumentCard
+		title={DOCUMENT_CARD_TITLE}
+		detail={DOCUMENT_CARD_DETAIL}
+		excerpt={DOCUMENT_CARD_EXCERPT}
+		onOpen={fn()}
+	>
+		<LibraryDocumentBody body={DOCUMENT_CARD_BODY} />
+	</DocumentCard>
+)
+
+const PEOPLE_BUBBLE_MAX_WIDTH = 480
+
+const expectFooterUnderItsBubble = async (footer: HTMLElement) => {
+	const row = footer.closest<HTMLElement>("[data-slot='message']")
+	if (!row) throw new globalThis.Error("The footer sits in no turn row")
+	const bubble = slotIn(row, "message-bubble")
+	const footerBox = footer.getBoundingClientRect()
+	const bubbleBox = bubble.getBoundingClientRect()
+
+	await expect(bubble).not.toContainElement(footer)
+	await expect(slotIn(footer, "document-card")).toBeVisible()
+	await expect(footerBox.top).toBeGreaterThanOrEqual(bubbleBox.bottom)
+	await expect(footerBox.right).toBeCloseTo(bubbleBox.right, 0)
+	await expect(footerBox.width).toBeLessThanOrEqual(PEOPLE_BUBBLE_MAX_WIDTH)
+}
+
+export const UserTurnWithDocument = meta.story({
+	globals: { theme_layout: "side-by-side" },
+	render: () => (
+		<div className="mx-auto flex max-w-170 flex-col gap-3">
+			<UserTurn
+				copyText={SHARED_DOCUMENT}
+				sentAt={sentOn(10, 9, 25)}
+				now={READ_ON}
+				footer={<DocumentFooter />}
+			>
+				{SHARED_DOCUMENT}
+			</UserTurn>
+		</div>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this for a message of yours that carries a Library document. Check in both themes that the card sits under the bubble, outside it, on the end side, no wider than the bubble's 480, and that a right click on the bubble still opens its menu while the card stays out of it.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const footers = slotsIn(canvasElement, "turn-footer")
+		await expect(footers).toHaveLength(2)
+		for (const footer of footers) await expectFooterUnderItsBubble(footer)
+	},
+})
+
+export const NotSentWithDocument = meta.story({
+	tags: ["test-only"],
+	render: () => (
+		<div className="mx-auto flex max-w-170 flex-col gap-3">
+			<UserTurn
+				state="failed"
+				failureReason="The connection dropped."
+				onRetry={retryTurn}
+				sentAt={sentOn(10, 9, 25)}
+				now={READ_ON}
+				footer={<DocumentFooter />}
+			>
+				{SHARED_DOCUMENT}
+			</UserTurn>
+		</div>
+	),
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"A message of yours that carries a Library document and never left. Check that the card sits between the dimmed bubble and the Not sent line.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const footer = slotIn(canvasElement, "turn-footer")
+		const notSent = slotIn(canvasElement, "turn-not-sent")
+
+		await expectFooterUnderItsBubble(footer)
+		await expect(footer.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+			notSent.getBoundingClientRect().top,
+		)
+	},
+})
+
+export const PersonTurnWithDocument = meta.story({
+	globals: { theme_layout: "side-by-side" },
+	render: () => (
+		<div className="mx-auto flex max-w-170 flex-col gap-3">
+			<PersonTurn
+				name="Tom"
+				copyText={SHARED_DOCUMENT}
+				sentAt={sentOn(10, 9, 22)}
+				now={READ_ON}
+				footer={<DocumentFooter />}
+			>
+				{SHARED_DOCUMENT}
+			</PersonTurn>
+		</div>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this for a message of another person that carries a Library document. Check in both themes that the card sits under Tom's bubble, outside it, on the end side, no wider than the bubble's 480.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const footers = slotsIn(canvasElement, "turn-footer")
+		await expect(footers).toHaveLength(2)
+		for (const footer of footers) await expectFooterUnderItsBubble(footer)
 	},
 })
