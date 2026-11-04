@@ -400,6 +400,17 @@ describe("the Library of a joined space", () => {
 		expect(localCommands(local)).toEqual(["remote_image_read"])
 		expect(fetch).not.toHaveBeenCalled()
 	})
+	it("reads a link preview on this computer", async () => {
+		const { hosts, local, fetch } = joinedHostsOf()
+		await hosts.activate("garage")
+
+		await hosts.invoke("library_read_link_preview", {
+			url: "https://example.test/article",
+		})
+
+		expect(localCommands(local)).toEqual(["library_read_link_preview"])
+		expect(fetch).not.toHaveBeenCalled()
+	})
 })
 
 const SIGN_IN_COMMANDS = [

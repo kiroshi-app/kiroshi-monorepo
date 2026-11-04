@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use super::FetchRefusal;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct RemoteImage {
@@ -36,5 +38,14 @@ impl RemoteImageError {
 impl From<reqwest::Error> for RemoteImageError {
 	fn from(error: reqwest::Error) -> Self {
 		RemoteImageError::NetworkFailure { status: error.status().map(|status| status.as_u16()) }
+	}
+}
+
+impl From<FetchRefusal> for RemoteImageError {
+	fn from(refusal: FetchRefusal) -> Self {
+		match refusal {
+			FetchRefusal::UnsupportedScheme => RemoteImageError::UnsupportedScheme,
+			FetchRefusal::NetworkFailure { status } => RemoteImageError::NetworkFailure { status },
+		}
 	}
 }
