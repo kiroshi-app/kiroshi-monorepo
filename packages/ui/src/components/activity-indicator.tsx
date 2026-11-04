@@ -22,12 +22,15 @@ import { cn } from "@workspace/ui/lib/utils"
 
 type ActivityIndicatorWait = "you" | "next"
 
+type ActivityIndicatorLayout = "line" | "row"
+
 type ActivityIndicatorProps = BotStopProps & {
 	kind?: ActivityIndicatorKind
 	botId?: string
 	name?: string
 	label?: string
 	waitingOn?: ActivityIndicatorWait
+	layout?: ActivityIndicatorLayout
 	startedAt?: number
 	elapsedSeconds?: number
 	blot?: number | null
@@ -78,20 +81,23 @@ const formatElapsed = (seconds: number) => {
 		: `${rest}s`
 }
 
-type ClockProps = { seconds: number }
+type ClockProps = { seconds: number; className?: string }
 
-const Clock = ({ seconds }: ClockProps) => (
+const Clock = ({ seconds, className }: ClockProps) => (
 	<span
 		data-slot="bot-working-elapsed"
-		className="shrink-0 text-muted-foreground text-xs tabular-nums leading-5"
+		className={cn(
+			"shrink-0 text-muted-foreground text-xs tabular-nums leading-5",
+			className,
+		)}
 	>
 		{formatElapsed(seconds)}
 	</span>
 )
 
-type ElapsedClockProps = { startedAt: number }
+type ElapsedClockProps = { startedAt: number; className?: string }
 
-const ElapsedClock = ({ startedAt }: ElapsedClockProps) => {
+const ElapsedClock = ({ startedAt, className }: ElapsedClockProps) => {
 	const [seconds, setSeconds] = useState(() => secondsSince(startedAt))
 
 	useEffect(() => {
@@ -103,17 +109,24 @@ const ElapsedClock = ({ startedAt }: ElapsedClockProps) => {
 		return () => window.clearInterval(timer)
 	}, [startedAt])
 
-	return <Clock seconds={seconds} />
+	return <Clock seconds={seconds} className={className} />
 }
 
 type ActivityClockProps = Pick<
 	ActivityIndicatorProps,
-	"startedAt" | "elapsedSeconds"
+	"startedAt" | "elapsedSeconds" | "className"
 >
 
-const ActivityClock = ({ startedAt, elapsedSeconds }: ActivityClockProps) => {
-	if (elapsedSeconds !== undefined) return <Clock seconds={elapsedSeconds} />
-	return startedAt === undefined ? null : <ElapsedClock startedAt={startedAt} />
+const ActivityClock = ({
+	startedAt,
+	elapsedSeconds,
+	className,
+}: ActivityClockProps) => {
+	if (elapsedSeconds !== undefined)
+		return <Clock seconds={elapsedSeconds} className={className} />
+	return startedAt === undefined ? null : (
+		<ElapsedClock startedAt={startedAt} className={className} />
+	)
 }
 
 type WorkLineStopProps = {
@@ -148,6 +161,7 @@ function ActivityIndicator(props: ActivityIndicatorProps) {
 		name,
 		label,
 		waitingOn = "you",
+		layout = "line",
 		startedAt,
 		elapsedSeconds,
 		blot,
@@ -161,6 +175,7 @@ function ActivityIndicator(props: ActivityIndicatorProps) {
 	const named = name ?? t("working.name")
 	const isBusy = kind !== "waiting"
 	const isTool = isBusy && label !== undefined
+	const isRow = layout === "row"
 	const text = lineTextOf({ t, kind, label, waitingOn })
 
 	return (
@@ -231,11 +246,25 @@ function ActivityIndicator(props: ActivityIndicatorProps) {
 				</span>
 			) : null}
 			{isBusy ? (
-				<ActivityClock elapsedSeconds={elapsedSeconds} startedAt={startedAt} />
+				<ActivityClock
+					elapsedSeconds={elapsedSeconds}
+					startedAt={startedAt}
+					className={isRow ? "ms-auto w-12 text-end" : undefined}
+				/>
 			) : null}
 		</div>
 	)
 }
 
-export type { ActivityIndicatorKind, ActivityIndicatorWait }
-export { ActivityIndicator, formatElapsed }
+export type {
+	ActivityIndicatorKind,
+	ActivityIndicatorLayout,
+	ActivityIndicatorWait,
+}
+export {
+	ActivityClock,
+	ActivityIndicator,
+	formatElapsed,
+	secondsSince,
+	WORK_LINE_AVATAR_SIZE,
+}
