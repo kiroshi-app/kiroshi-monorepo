@@ -463,23 +463,15 @@ describe("ci:fast", () => {
 		})
 
 	it.each(FULL_SCOPES)(
-		"runs the whole app and ui unit projects against the baseline, and no slot, when %s makes the scope full",
-		(_, scope) => {
-			const steps = fastSteps([], scope)
-
-			expect(steps.slice(FAST_STEP_NAMES.length)).toEqual([FULL_UNIT_TESTS])
-			expect(steps.filter((step) => step.heavy)).toEqual([])
-		},
-	)
-
-	it.each(FULL_SCOPES)(
-		"runs no perf project, no website suite and no sidecar suite when %s makes the scope full",
+		"runs the app and ui unit projects against the baseline, no perf project, no website suite, no sidecar suite and no slot when %s makes the scope full",
 		(_, scope) => {
 			const steps = fastSteps([], scope)
 			const suites = baselineScopesOf(steps).flatMap(
 				(name) => SCOPES[name].suites,
 			)
 
+			expect(steps.slice(FAST_STEP_NAMES.length)).toEqual([FULL_UNIT_TESTS])
+			expect(steps.filter((step) => step.heavy)).toEqual([])
 			for (const step of GATE.vitest) expect(steps).not.toContainEqual(step)
 			expect(baselineScopesOf(steps)).toEqual(["lint", "unit"])
 			expect(suites).toEqual(["app", "ui"])

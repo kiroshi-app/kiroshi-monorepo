@@ -228,8 +228,8 @@ const OFF_PULL_REQUEST_TRIGGERS: Partial<Record<Group, string>> = {
 // pr-dequeue or pr-enqueue script tests when the diff touches that script
 // or its tests. That unit test step runs the changed test files, or the
 // whole unit project of the app and ui suites when a changed path is shared,
-// and never a perf or time-bound test. bun run ci and the CI jobs keep the
-// rest: the perf set, the stories, the website and sidecar suites, rust, the
+// and never the app perf project. bun run ci and the CI jobs keep the rest:
+// the perf set, the stories, the website and sidecar suites, rust, the
 // website build and ios.
 export const FAST_STEP_NAMES = [
 	"Biome format",
