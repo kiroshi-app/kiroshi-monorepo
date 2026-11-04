@@ -5,7 +5,8 @@ import {
 	type ReactNode,
 	type RefObject,
 	useContext,
-	useRef,
+	useMemo,
+	useState,
 } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -209,7 +210,13 @@ const LibraryPanel = ({
 	...itemActions
 }: LibraryPanelProps) => {
 	const { t } = useTranslation("common")
-	const overlayContainer = useRef<HTMLDivElement>(null)
+	const [overlayElement, setOverlayElement] = useState<HTMLDivElement | null>(
+		null,
+	)
+	const overlayContainer = useMemo(
+		() => ({ current: overlayElement }),
+		[overlayElement],
+	)
 	const isLoading = state === "loading"
 	const isEmpty = !isLoading && items.length === 0 && searchQuery === ""
 	const shownItems =
@@ -266,7 +273,7 @@ const LibraryPanel = ({
 			<div
 				className="relative flex size-full min-h-0 flex-col"
 				data-slot="library-panel"
-				ref={overlayContainer}
+				ref={setOverlayElement}
 			>
 				<div
 					aria-busy={isLoading}

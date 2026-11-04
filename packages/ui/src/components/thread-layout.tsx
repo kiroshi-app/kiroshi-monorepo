@@ -1,4 +1,4 @@
-import { type ReactNode, type Ref, useRef } from "react"
+import { type ReactNode, type Ref, useMemo, useState } from "react"
 
 import { LibraryOverlayContainer } from "@workspace/ui/components/library-panel"
 import type { ListEnd } from "@workspace/ui/components/list-skeleton"
@@ -84,7 +84,17 @@ function ThreadLayout({
 	className,
 	contentClassName,
 }: ThreadLayoutProps) {
-	const overlayContainer = useRef<HTMLDivElement>(null)
+	const [overlayElement, setOverlayElement] = useState<HTMLDivElement | null>(
+		null,
+	)
+	const overlayContainer = useMemo(
+		() => ({ current: overlayElement }),
+		[overlayElement],
+	)
+	const attachRoot = useMemo(
+		() => mergeRefs(rootRef, setOverlayElement),
+		[rootRef],
+	)
 
 	return (
 		<LibraryOverlayContainer.Provider value={overlayContainer}>
@@ -97,7 +107,7 @@ function ThreadLayout({
 				data-slot="thread-with-aside"
 			>
 				<ScreenLayout
-					ref={mergeRefs(rootRef, overlayContainer)}
+					ref={attachRoot}
 					data-slot="chat-layout"
 					className={cn(
 						"relative",
