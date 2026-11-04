@@ -508,20 +508,28 @@ const nullCaretsShared = () =>
 const finishWriting = (
 	name: string,
 	outcome: "finished" | "failed",
-	{ spaceId = SPACE_ID, agentId = ATLAS_ID, agentName = "atlas" } = {},
+	{
+		spaceId = SPACE_ID,
+		agentId = ATLAS_ID,
+		agentName = "atlas",
+		hostId = null as string | null,
+	} = {},
 ) =>
 	emit(
 		LIBRARY_DOCUMENT_WRITER_FINISHED_EVENT,
 		{ spaceId, name, agentId, agentName, outcome },
-		null,
+		hostId,
 	)
 
-const atlasWritesThenFinishes = async (name: string) => {
-	const caret = agentWritesAtEnd(name, AGENT_TEXT, null)
-	announcePresence(name, [writerOf(ATLAS_ID, "agent", caret, "Atlas")], null)
+const atlasWritesThenFinishes = async (
+	name: string,
+	hostId: string | null = null,
+) => {
+	const caret = agentWritesAtEnd(name, AGENT_TEXT, hostId)
+	announcePresence(name, [writerOf(ATLAS_ID, "agent", caret, "Atlas")], hostId)
 	await waitFor(() => expect(shownRuns()).toEqual([AGENT_TEXT]))
-	announcePresence(name, [], null)
-	finishWriting(name, "finished")
+	announcePresence(name, [], hostId)
+	finishWriting(name, "finished", { hostId })
 }
 
 const heldRuns = () =>
@@ -778,17 +786,27 @@ describe.each([
 	},
 )
 
+const PLACES = [
+	{ place: "on the host", isJoined: false, hostId: null },
+	{ place: "in a joined Space", isJoined: true, hostId: "host-1" },
+]
+
 describe("an agent that finishes writing in the open document", () => {
-	it("shows no finished bar and holds the run it wrote", async () => {
-		await renderLibraryScreen(false)
-		await openDocument(NOTES)
-		await waitFor(() => expect(finishedListenerCount()).toBe(1))
+	it.each(PLACES)(
+		"drops its caret, shows no finished bar and holds the run it wrote $place",
+		async ({ isJoined, hostId }) => {
+			await renderLibraryScreen(isJoined)
+			await openDocument(NOTES)
+			await waitFor(() => expect(finishedListenerCount()).toBe(1))
 
-		await atlasWritesThenFinishes(NOTES)
+			await atlasWritesThenFinishes(NOTES, hostId)
 
-		expect(finishedBar()).toBeNull()
-		expect(heldRuns()).toEqual([AGENT_TEXT])
-	})
+			await waitFor(() => expect(atlasCaret()).toBeNull())
+			expect(finishedBar()).toBeNull()
+			expect(shownRuns()).toEqual([])
+			expect(heldRuns()).toEqual([AGENT_TEXT])
+		},
+	)
 
 	it.each([
 		{
@@ -863,6 +881,18 @@ const RICH_DOCUMENT = [
 
 const LINK = "https://www.example.org/rates"
 
+const TABLE = "| Room | Seats |\n| --- | --- |\n| Atlas | 12 |"
+
+const galleryOf = (...items: string[]) =>
+	["```gallery", ...items, "```"].join("\n")
+
+const SOFA = "- image: https://images.example.org/sofa.jpg\n  alt: Green sofa"
+
+const LAMP = "- image: https://images.example.org/lamp.jpg\n  alt: Brass lamp"
+
+const documentAround = (block: string) =>
+	["# Venue", "The rooms we kept.", block, "We ship in May."].join("\n\n")
+
 const seedDocument = (name: string, markdown: string) => {
 	const doc = new Y.Doc()
 	doc.getText("markdown").insert(0, markdown)
@@ -884,6 +914,20 @@ const blockWith = (text: string) => {
 	const block = shownBlocks().find((each) => each.textContent?.includes(text))
 	expect(block).toBeInstanceOf(HTMLElement)
 	return block as HTMLElement
+}
+
+const openBlockOfType = async (
+	type: string,
+	name: string,
+	role: "textbox" | "button" = "textbox",
+) => {
+	act(() => {
+		document
+			.querySelector<HTMLElement>(`[data-type='${type}'] [tabindex]`)
+			?.focus()
+	})
+	const block = document.querySelector<HTMLElement>(`[data-type='${type}']`)
+	return within(block as HTMLElement).findByRole(role, { name })
 }
 
 const typeEach = (typed: string) => {
@@ -914,92 +958,156 @@ const addBlockBelow = async (text: string, slash: string) => {
 	})
 }
 
-describe.each([
-	{ place: "on the host", isJoined: false },
-	{ place: "in a joined Space", isJoined: true },
-])("a person editing a Library document $place", ({ isJoined }) => {
-	it("shows every block of an untouched document and writes nothing to it", async () => {
-		seedDocument(NOTES, RICH_DOCUMENT)
-		await renderLibraryScreen(isJoined)
-		await openDocument(NOTES)
+describe.each(PLACES)(
+	"a person editing a Library document $place",
+	({ isJoined }) => {
+		it("shows every block of an untouched document and writes nothing to it", async () => {
+			seedDocument(NOTES, RICH_DOCUMENT)
+			await renderLibraryScreen(isJoined)
+			await openDocument(NOTES)
 
-		expect(blockTypes()).toEqual([
-			"heading",
-			"paragraph",
-			"list",
-			"callout",
-			"table",
-			"web-page",
-			"gallery",
-		])
-		await goBack()
-		await new Promise((resolve) => setTimeout(resolve, 50))
+			expect(blockTypes()).toEqual([
+				"heading",
+				"paragraph",
+				"list",
+				"callout",
+				"table",
+				"web-page",
+				"gallery",
+			])
+			await goBack()
+			await new Promise((resolve) => setTimeout(resolve, 50))
 
-		expect(host.appliedUpdates).toBe(0)
-		expect(markdownOnHost(NOTES)).toBe(RICH_DOCUMENT)
-	})
+			expect(host.appliedUpdates).toBe(0)
+			expect(markdownOnHost(NOTES)).toBe(RICH_DOCUMENT)
+		})
 
-	it("saves a block added with the slash menu in its place", async () => {
-		await renderLibraryScreen(isJoined)
-		await openDocument(NOTES)
+		it("saves a block added with the slash menu in its place", async () => {
+			await renderLibraryScreen(isJoined)
+			await openDocument(NOTES)
 
-		await addBlockBelow("Intro line", "/hea")
-		typeEach("Risks")
+			await addBlockBelow("Intro line", "/hea")
+			typeEach("Risks")
 
-		await waitFor(() =>
-			expect(markdownOnHost(NOTES)).toBe(
-				"Intro line\n\n## Risks\n\n## Rollout\n\nWe ship in May.",
-			),
-		)
-	})
+			await waitFor(() =>
+				expect(markdownOnHost(NOTES)).toBe(
+					"Intro line\n\n## Risks\n\n## Rollout\n\nWe ship in May.",
+				),
+			)
+		})
 
-	it("saves a block moved with its handle in its new place", async () => {
-		await renderLibraryScreen(isJoined)
-		await openDocument(NOTES)
-		const handle = blockWith("We ship in May.").querySelector<HTMLElement>(
-			"[data-slot='library-block-drag']",
-		) as HTMLElement
+		it("saves a block moved with its handle in its new place", async () => {
+			await renderLibraryScreen(isJoined)
+			await openDocument(NOTES)
+			const handle = blockWith("We ship in May.").querySelector<HTMLElement>(
+				"[data-slot='library-block-drag']",
+			) as HTMLElement
 
-		act(() => {
-			handle.focus()
-			fireEvent.keyDown(handle, {
-				key: "ArrowUp",
-				altKey: true,
-				shiftKey: true,
+			act(() => {
+				handle.focus()
+				fireEvent.keyDown(handle, {
+					key: "ArrowUp",
+					altKey: true,
+					shiftKey: true,
+				})
 			})
+
+			await waitFor(() =>
+				expect(markdownOnHost(NOTES)).toBe(
+					"Intro line\n\nWe ship in May.\n\n## Rollout",
+				),
+			)
 		})
 
-		await waitFor(() =>
-			expect(markdownOnHost(NOTES)).toBe(
-				"Intro line\n\nWe ship in May.\n\n## Rollout",
-			),
-		)
-	})
+		it("keeps the bare link pasted into a web card while no preview can be read", async () => {
+			await renderLibraryScreen(isJoined)
+			await openDocument(NOTES)
+			await addBlockBelow("We ship in May.", "/web")
+			act(() => {
+				document
+					.querySelector<HTMLElement>("[data-type='web-page'] [tabindex]")
+					?.focus()
+			})
+			const link = await screen.findByRole("textbox", {
+				name: common("library.editor.blocks.webPage.link"),
+			})
 
-	it("keeps the bare link pasted into a web card while no preview can be read", async () => {
-		await renderLibraryScreen(isJoined)
-		await openDocument(NOTES)
-		await addBlockBelow("We ship in May.", "/web")
-		act(() => {
-			document
-				.querySelector<HTMLElement>("[data-type='web-page'] [tabindex]")
-				?.focus()
-		})
-		const link = await screen.findByRole("textbox", {
-			name: common("library.editor.blocks.webPage.link"),
+			await act(async () => {
+				fireEvent.change(link, { target: { value: LINK } })
+				fireEvent.keyDown(link, { key: "Enter" })
+			})
+
+			await waitFor(() =>
+				expect(markdownOnHost(NOTES)).toBe(
+					`${OPENING}\n\n\`\`\`web-page\nurl: ${LINK}\n\`\`\``,
+				),
+			)
+			expect(link).toHaveProperty("value", LINK)
+			expect(link.getAttribute("aria-invalid")).toBe("false")
 		})
 
-		await act(async () => {
-			fireEvent.change(link, { target: { value: LINK } })
-			fireEvent.keyDown(link, { key: "Enter" })
+		it("saves a table cell edited in place and leaves every other block as it was", async () => {
+			seedDocument(NOTES, documentAround(TABLE))
+			await renderLibraryScreen(isJoined)
+			await openDocument(NOTES)
+			const cell = await openBlockOfType(
+				"table",
+				common("library.editor.blocks.table.cell", { row: 2, column: 1 }),
+			)
+
+			act(() => {
+				fireEvent.change(cell, { target: { value: "Atlas North" } })
+			})
+
+			await waitFor(() =>
+				expect(markdownOnHost(NOTES)).toBe(
+					documentAround(TABLE.replace("| Atlas |", "| Atlas North |")),
+				),
+			)
 		})
 
-		await waitFor(() =>
-			expect(markdownOnHost(NOTES)).toBe(
-				`${OPENING}\n\n\`\`\`web-page\nurl: ${LINK}\n\`\`\``,
-			),
-		)
-		expect(link).toHaveProperty("value", LINK)
-		expect(link.getAttribute("aria-invalid")).toBe("false")
-	})
-})
+		it("saves a gallery caption typed in place and leaves every other block as it was", async () => {
+			seedDocument(NOTES, documentAround(galleryOf(SOFA, LAMP)))
+			await renderLibraryScreen(isJoined)
+			await openDocument(NOTES)
+			const caption = await openBlockOfType(
+				"gallery",
+				common("library.editor.blocks.gallery.caption", { position: 2 }),
+			)
+
+			act(() => {
+				fireEvent.change(caption, { target: { value: "Brass, 90 euros" } })
+			})
+
+			await waitFor(() =>
+				expect(markdownOnHost(NOTES)).toBe(
+					documentAround(
+						galleryOf(SOFA, `${LAMP}\n  caption: Brass, 90 euros`),
+					),
+				),
+			)
+		})
+
+		it("saves gallery images reordered in place and leaves every other block as it was", async () => {
+			seedDocument(NOTES, documentAround(galleryOf(SOFA, LAMP)))
+			await renderLibraryScreen(isJoined)
+			await openDocument(NOTES)
+			const tile = await openBlockOfType(
+				"gallery",
+				common("library.editor.blocks.gallery.tile", { position: 1, count: 2 }),
+				"button",
+			)
+
+			act(() => {
+				tile.focus()
+				fireEvent.keyDown(tile, { key: "ArrowRight" })
+			})
+
+			await waitFor(() =>
+				expect(markdownOnHost(NOTES)).toBe(
+					documentAround(galleryOf(LAMP, SOFA)),
+				),
+			)
+		})
+	},
+)
