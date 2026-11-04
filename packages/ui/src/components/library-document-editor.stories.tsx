@@ -1614,13 +1614,7 @@ const expectWrittenLook = async (
 const atlasWriting = createWritersStore()
 
 export const AgentRunHeldThenFades = meta.story({
-	args: {
-		title: LIBRARY_AGENT_DOCUMENT.name,
-		body: LIBRARY_AGENT_DOCUMENT.body,
-		detail: LIBRARY_AGENT_DOCUMENT.detail,
-		template: undefined,
-		onStopAll: fn(),
-	},
+	args: HELD_RUN_ARGS,
 	beforeEach: atlasWriting.reset,
 	render: (args) => <FinishingWriterEditor {...args} writing={atlasWriting} />,
 	parameters: {
