@@ -90,6 +90,8 @@ const POINTED_PARTS = "li, th, td, img"
 
 const FIELD_SLOT = "library-document-block-field"
 
+const EDITING_SLOT = "library-document-block-editing"
+
 const FIELD_LOOK: Partial<Record<LibraryBlockType, string>> = {
 	heading: "font-heading font-semibold text-[1.0625rem] text-foreground",
 }
@@ -244,9 +246,7 @@ const LibraryDocumentBlockEditor = ({
 		const field = fields[Math.min(focusRequest.field ?? last, last)]
 		if (!field) {
 			block
-				?.querySelector<HTMLElement>(
-					'[data-slot="library-document-block-editing"]',
-				)
+				?.querySelector<HTMLElement>(`[data-slot="${EDITING_SLOT}"]`)
 				?.focus()
 			return
 		}
@@ -663,7 +663,7 @@ const LibraryDocumentBlockEditor = ({
 							// biome-ignore lint/a11y/noStaticElementInteractions: the block editor stops when focus leaves every control it holds
 							<div
 								className={cn(MARKDOWN_CLASS, DOCUMENT_TYPE, "outline-none")}
-								data-slot="library-document-block-editing"
+								data-slot={EDITING_SLOT}
 								onBlur={leaveBlockEditor(block.id)}
 								tabIndex={-1}
 							>
