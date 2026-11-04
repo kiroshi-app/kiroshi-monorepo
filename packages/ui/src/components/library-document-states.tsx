@@ -17,7 +17,7 @@ const START_ICONS = {
 	gallery: Icons.Gallery,
 	table: Icons.Table,
 	template: Icons.Template,
-} satisfies Record<LibraryDocumentStartKind, unknown>
+} satisfies Record<LibraryDocumentStartKind, typeof Icons.Checklist>
 
 const SMALL_PILL = cn(
 	"h-6 rounded-full font-medium text-xs leading-4 transition-none",

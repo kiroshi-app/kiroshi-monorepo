@@ -123,33 +123,36 @@ const PromptLibraryPicker = ({
 								aria-labelledby={sectionId}
 								className="max-h-72 overflow-y-auto empty:hidden"
 							>
-								{(document: LibraryPickerDocument) => (
-									<Combobox.Item
-										className="group/row flex h-12 min-w-0 cursor-default items-center gap-2.5 rounded-lg px-2.5 outline-none data-highlighted:bg-foreground/5"
-										key={document.id}
-										value={document}
-									>
-										<DocumentGlyph />
-										<span className="flex min-w-0 flex-1 flex-col">
-											<span
-												className="truncate font-medium text-sm leading-5"
-												title={nameOf(document)}
-											>
-												{nameOf(document)}
-											</span>
-											<span className="truncate text-muted-foreground text-xs leading-4 tabular-nums">
-												{document.detail}
-											</span>
-										</span>
-										<span
-											aria-hidden="true"
-											className="hidden h-5 shrink-0 items-center rounded-sm border border-border px-1.5 text-muted-foreground group-data-highlighted/row:flex"
-											data-slot="prompt-library-picker-hint"
+								{(document: LibraryPickerDocument) => {
+									const name = nameOf(document)
+									return (
+										<Combobox.Item
+											className="group/row flex h-12 min-w-0 cursor-default items-center gap-2.5 rounded-lg px-2.5 outline-none data-highlighted:bg-foreground/5"
+											key={document.id}
+											value={document}
 										>
-											<Icons.Return className="size-3" />
-										</span>
-									</Combobox.Item>
-								)}
+											<DocumentGlyph />
+											<span className="flex min-w-0 flex-1 flex-col">
+												<span
+													className="truncate font-medium text-sm leading-5"
+													title={name}
+												>
+													{name}
+												</span>
+												<span className="truncate text-muted-foreground text-xs leading-4 tabular-nums">
+													{document.detail}
+												</span>
+											</span>
+											<span
+												aria-hidden="true"
+												className="hidden h-5 shrink-0 items-center rounded-sm border border-border px-1.5 text-muted-foreground group-data-highlighted/row:flex"
+												data-slot="prompt-library-picker-hint"
+											>
+												<Icons.Return className="size-3" />
+											</span>
+										</Combobox.Item>
+									)
+								}}
 							</Combobox.List>
 							<button
 								className={cn(
