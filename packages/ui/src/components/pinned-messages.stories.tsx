@@ -158,7 +158,7 @@ export const OnePinned = meta.story({
 		docs: {
 			description: {
 				story:
-					"One message pinned, the button at rest. Check that the pin and the number wear the same colour as the button with nothing pinned and as every other ghost button of the header, with no muted tone and no fade, and that the number keeps tabular figures and the count in the button's name. `apps/app/src/components/thread-screen.tsx:322` mounts it in the header of every thread.",
+					"One message pinned, the button at rest. Check that the pin and the number wear the same colour as the button with nothing pinned and as every other ghost button of the header, with no muted tone and no fade, and that the number keeps tabular figures and the count in the button's name. `apps/app/src/components/thread-screen.tsx` mounts it in the header of every thread.",
 			},
 		},
 	},
