@@ -14,7 +14,10 @@ import {
 	MarkdownLink,
 	MarkdownStaticLink,
 } from "@workspace/ui/components/markdown/link"
-import { MarkdownSpan } from "@workspace/ui/components/markdown/mention"
+import {
+	MarkdownSpan,
+	MarkdownStaticSpan,
+} from "@workspace/ui/components/markdown/mention"
 import {
 	MarkdownStaticTable,
 	MarkdownTable,
@@ -42,6 +45,6 @@ export const MARKDOWN_STATIC_COMPONENTS: Components = {
 	code: MarkdownCode,
 	input: MarkdownStaticTaskBox,
 	pre: MarkdownStaticPre,
-	span: MarkdownSpan,
+	span: MarkdownStaticSpan,
 	table: MarkdownStaticTable,
 }

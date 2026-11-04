@@ -11,6 +11,12 @@ import {
 	slotIn,
 	slotsIn,
 } from "@workspace/storybook/story-utils"
+import { CONVERSATION_BOTS } from "@workspace/ui/components/bots.fixtures"
+import {
+	CompanionMenuContent,
+	CompanionMenuProvider,
+} from "@workspace/ui/components/companion-menu"
+import { CompanionSelectProvider } from "@workspace/ui/components/companion-select"
 import { ContentCard } from "@workspace/ui/components/content-card"
 import { hueTone } from "@workspace/ui/components/hue-palette"
 import { HUE_PRESETS } from "@workspace/ui/components/hue-tones"
@@ -38,6 +44,9 @@ import {
 	raiseFailureNotice,
 	raiseTransientNotice,
 } from "@workspace/ui/components/notice-surface"
+import { RosterProvider } from "@workspace/ui/components/roster"
+import type { RosterMenuSection } from "@workspace/ui/components/roster-menu-items"
+import type { Space } from "@workspace/ui/components/space"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 type LibraryStoryFrameProps = {
@@ -470,7 +479,7 @@ const CONTROLS_DOCUMENT: LibraryItem = {
 	detail: "Document · 2 KB · 5 min ago",
 	excerpt: [
 		"# Launch checklist",
-		"Read the [partner brief](https://example.com/brief) before the call.",
+		"Read the [partner brief](https://example.com/brief) before the call with <@bot-atlas>.",
 		"- [x] Draft the pricing page\n- [ ] Book the onboarding emails",
 		"| Channel | Owner |\n| --- | --- |\n| Newsletter | Mara |",
 		'```ts\nconst launch = "spring"\n```',
@@ -484,6 +493,23 @@ const NEXT_DOCUMENT: LibraryItem = {
 	excerpt: "Notes from the partner call.",
 }
 
+const NO_SPACES: Space[] = []
+
+const NO_MEMBERSHIPS: string[] = []
+
+const NO_SECTIONS: RosterMenuSection[] = []
+
+const companionMenuFor = (companionId: string) => (
+	<CompanionMenuContent
+		companion={{ id: companionId, name: companionId }}
+		isPinned={false}
+		memberships={NO_MEMBERSHIPS}
+		onDelete={fn()}
+		sections={NO_SECTIONS}
+		spaces={NO_SPACES}
+	/>
+)
+
 const INTERACTIVE_ELEMENTS =
 	"button, a, input, select, textarea, summary, [tabindex]"
 
@@ -492,6 +518,17 @@ const NESTED_INTERACTIVE_WARNING =
 
 export const GridDocumentPreviewHoldsNoControl = meta.story({
 	args: { items: [CONTROLS_DOCUMENT, NEXT_DOCUMENT] },
+	render: (args) => (
+		<CompanionMenuProvider menuFor={companionMenuFor}>
+			<CompanionSelectProvider onSelect={fn()}>
+				<RosterProvider bots={CONVERSATION_BOTS}>
+					<LibraryStoryFrame hue="blue">
+						<LibraryPanel {...args} />
+					</LibraryStoryFrame>
+				</RosterProvider>
+			</CompanionSelectProvider>
+		</CompanionMenuProvider>
+	),
 	beforeEach: () => {
 		const consoleError = spyOn(console, "error")
 		return () => consoleError.mockRestore()
@@ -500,7 +537,7 @@ export const GridDocumentPreviewHoldsNoControl = meta.story({
 		docs: {
 			description: {
 				story:
-					"A document whose start holds a link, a task list, a table and a code block. Check that the page draws each of them as a still picture: the link as plain text, each box in its state, the table and the code without their copy control, and that the item stays one Tab stop that opens on a press anywhere on its page.",
+					"A document whose start holds a link, a mention of Atlas, a task list, a table and a code block, under the companion select and menu providers the workspace mounts. Check that the page draws each of them as a still picture: the link as plain text, the mention as its pill with no button and no menu, each box in its state, the table and the code without their copy control, and that the item stays one Tab stop that opens on a press anywhere on its page.",
 			},
 		},
 	},
@@ -510,6 +547,12 @@ export const GridDocumentPreviewHoldsNoControl = meta.story({
 
 		await expect(item.querySelectorAll(INTERACTIVE_ELEMENTS)).toHaveLength(0)
 		await expect(page).toHaveTextContent("Read the partner brief before")
+		const mention = slotIn(page, "bot-mention")
+		await expect(mention.tagName).toBe("SPAN")
+		await expect(mention).toHaveTextContent("Atlas")
+		await expect(
+			item.querySelectorAll("[data-slot=context-menu-trigger]"),
+		).toHaveLength(0)
 		await expect(page.querySelector("table")).toHaveTextContent("Newsletter")
 		await expect(page.querySelector("pre")).toHaveTextContent(
 			'const launch = "spring"',
