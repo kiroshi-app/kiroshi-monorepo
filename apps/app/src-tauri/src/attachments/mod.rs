@@ -16,7 +16,7 @@ use crate::file_store::FileStore;
 use crate::private_files;
 use contract::SubmittedAttachment;
 
-const MAX_BYTES: u64 = 10 * 1024 * 1024;
+pub(crate) const MAX_BYTES: u64 = 10 * 1024 * 1024;
 
 const MAX_ATTACHMENTS: usize = 20;
 const MAX_TOTAL_BYTES: u64 = 30 * 1024 * 1024;

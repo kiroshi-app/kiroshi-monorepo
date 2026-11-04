@@ -17,9 +17,9 @@ use tokio::task::JoinSet;
 use tokio::time::{interval_at, sleep, timeout, Instant};
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
-use tokio_tungstenite::tungstenite::protocol::CloseFrame;
+use tokio_tungstenite::tungstenite::protocol::{CloseFrame, WebSocketConfig};
 use tokio_tungstenite::tungstenite::{Error as SocketError, Message};
-use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
+use tokio_tungstenite::{connect_async_with_config, MaybeTlsStream, WebSocketStream};
 
 use super::bridge::{self, LocalApi};
 use super::contract::{HostingFailureKind, HostingState};
@@ -49,6 +49,8 @@ const BACKOFF_CAP: Duration = Duration::from_secs(60);
 const STEADY_OPEN: Duration = Duration::from_secs(30);
 
 const CONNECT_BOUND: Duration = Duration::from_secs(20);
+
+const RELAY_FRAME_CEILING_BYTES: usize = 64 * 1024 * 1024;
 
 const HOST_REPLACED: u16 = 4001;
 
@@ -472,7 +474,8 @@ pub(crate) async fn opened(cloud: &Cloud, url: String, bearer: &str) -> Opened {
 	request.headers_mut().insert(header::AUTHORIZATION, authorization);
 	let path = request.uri().path().to_owned();
 	installed_tls_provider();
-	match timeout(CONNECT_BOUND, connect_async(request)).await {
+	let connected = connect_async_with_config(request, Some(relay_socket_config()), false);
+	match timeout(CONNECT_BOUND, connected).await {
 		Err(_) => Opened::Unreachable(format!("the relay did not answer within {CONNECT_BOUND:?}")),
 		Ok(Ok((socket, _))) => Opened::Socket(Box::new(socket)),
 		Ok(Err(SocketError::Http(response)))
@@ -487,6 +490,10 @@ pub(crate) async fn opened(cloud: &Cloud, url: String, bearer: &str) -> Opened {
 		}
 		Ok(Err(error)) => Opened::Unreachable(format!("the relay could not be reached: {error}")),
 	}
+}
+
+pub(crate) fn relay_socket_config() -> WebSocketConfig {
+	WebSocketConfig::default().max_frame_size(Some(RELAY_FRAME_CEILING_BYTES))
 }
 
 fn refused(path: &str, status: StatusCode, body: Option<&[u8]>) -> Opened {
@@ -567,12 +574,12 @@ async fn online<R: Runtime>(
 	}
 	let mut pings = interval_at(Instant::now() + PING_EVERY, PING_EVERY);
 	let mut invokes = JoinSet::new();
-	let mut avatars = JoinSet::new();
+	let mut files = JoinSet::new();
 	let admission =
 		|| admission::admitted(app.clone(), ids.space_id.to_owned(), ids.instance_id.to_owned());
 	let mut admissions = JoinSet::new();
 	admissions.spawn(admission());
-	let avatar_turn = Arc::new(Mutex::new(()));
+	let file_turn = Arc::new(Mutex::new(()));
 	let silence = sleep(SILENCE_BOUND);
 	tokio::pin!(silence);
 	loop {
@@ -621,8 +628,13 @@ async fn online<R: Runtime>(
 						continue;
 					}
 					Received::Avatar(sender, call) => {
-						let bridged = bridge::avatar_bridged(app.clone(), serving.local.clone(), ids.space_id.to_owned(), avatar_turn.clone(), call);
-						avatars.spawn(async move { (sender, bridged.await) });
+						let bridged = bridge::avatar_bridged(app.clone(), serving.local.clone(), ids.space_id.to_owned(), file_turn.clone(), call);
+						files.spawn(async move { (sender, bridged.await) });
+						continue;
+					}
+					Received::Attachment(sender, call) => {
+						let bridged = bridge::attachment_bridged(app.clone(), serving.local.clone(), ids.space_id.to_owned(), file_turn.clone(), call);
+						files.spawn(async move { (sender, bridged.await) });
 						continue;
 					}
 					Received::Answer(sender, answer) => Outgoing::Answer(sender, answer),
@@ -666,13 +678,13 @@ async fn online<R: Runtime>(
 				}
 				continue;
 			}
-			Some(answer) = avatars.join_next(), if !avatars.is_empty() => match answer {
+			Some(answer) = files.join_next(), if !files.is_empty() => match answer {
 				Ok((sender, answer)) => {
 					held_turn = Some(answer.turn);
 					Outgoing::Answer(sender, answer.frame)
 				}
 				Err(failure) => {
-					log::error!("a relayed avatar of space {} ended abnormally: {failure}", ids.space_id);
+					log::error!("a relayed file of space {} ended abnormally: {failure}", ids.space_id);
 					continue;
 				}
 			},
@@ -712,6 +724,7 @@ async fn online<R: Runtime>(
 enum Received {
 	Call(Rostered, bridge::MemberCall),
 	Avatar(Rostered, bridge::AvatarCall),
+	Attachment(Rostered, bridge::AttachmentCall),
 	Answer(Rostered, String),
 	Resume(Rostered, replay::ResumeCall),
 	Hello(Rostered),
@@ -744,6 +757,11 @@ fn received(wire: &Wire<'_>, opened: OpenedFrame, ids: Ids<'_>) -> Received {
 	}
 	match bridge::avatar_call(text) {
 		Some(Ok(call)) => return Received::Avatar(sender, call),
+		Some(Err(refusal)) => return Received::Answer(sender, refusal),
+		None => {}
+	}
+	match bridge::attachment_call(text) {
+		Some(Ok(call)) => return Received::Attachment(sender, call),
 		Some(Err(refusal)) => return Received::Answer(sender, refusal),
 		None => {}
 	}

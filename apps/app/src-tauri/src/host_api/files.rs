@@ -108,7 +108,7 @@ fn confined(root: &Path, segments: &[String]) -> Option<PathBuf> {
 	(resolved.parent() == Some(expected.as_path()) && resolved.is_file()).then_some(resolved)
 }
 
-fn plain(segment: &str) -> bool {
+pub(crate) fn plain(segment: &str) -> bool {
 	!matches!(segment, "" | "." | "..") && !segment.contains(SEPARATORS)
 }
 
