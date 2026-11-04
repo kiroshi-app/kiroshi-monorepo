@@ -1202,10 +1202,14 @@ const paintedBubbleRgb = ({ screen, surface }: StuckLine) =>
 		getComputedStyle(surface).backgroundColor,
 	)
 
-const expectBlockPaintsBubble = async (stuck: StuckLine) =>
-	expect(
+const expectBlockPaintsBubble = async (stuck: StuckLine) => {
+	await expect(
+		getComputedStyle(stuck.line, "::before").backgroundColor,
+	).toMatch(/^rgb\(/)
+	await expect(
 		widestChannelGap(paintedBubbleRgb(stuck), paintedBlockRgb(stuck.line)),
 	).toBeLessThanOrEqual(1)
+}
 
 const expectCleanCutStuckLine = async (
 	canvasElement: HTMLElement,
@@ -1252,9 +1256,6 @@ const expectHoveredStuckBlockPaintsBubble = async (
 				widestChannelGap(resting, paintedBubbleRgb(stuck)),
 			).toBeGreaterThan(1),
 		)
-		await expect(
-			getComputedStyle(stuck.line, "::before").backgroundColor,
-		).toMatch(/^rgb\(/)
 		await expectBlockPaintsBubble(stuck)
 	}
 	await pointer.unhover(viewports[1])
