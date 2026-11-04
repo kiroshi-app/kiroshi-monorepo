@@ -1570,6 +1570,11 @@ const atlasRunIn = (canvasElement: HTMLElement) =>
 		(run) => run.dataset.agent === "atlas",
 	)
 
+const heldRunIn = (canvasElement: HTMLElement) =>
+	slotsIn(canvasElement, "library-document-held-run").find(
+		(run) => run.dataset.agent === "atlas",
+	)
+
 const agentCaretIn = (canvasElement: HTMLElement) =>
 	canvasElement.querySelector("[data-slot='library-document-caret']")
 
@@ -1606,7 +1611,7 @@ const expectWrittenLook = async (
 	canvasElement: HTMLElement,
 	writtenLook: Pick<CSSStyleDeclaration, "backgroundColor" | "color">,
 ) => {
-	const held = atlasRunIn(canvasElement)
+	const held = heldRunIn(canvasElement)
 	await expect(held).toBeDefined()
 	await expect(getComputedStyle(held as HTMLElement)).toMatchObject(writtenLook)
 }
@@ -1633,7 +1638,7 @@ export const AgentRunHeldThenFades = meta.story({
 		await atSinceStop(2000)
 		await expectWrittenLook(canvasElement, writtenLook)
 
-		await waitFor(() => expect(atlasRunIn(canvasElement)).toBeUndefined(), {
+		await waitFor(() => expect(heldRunIn(canvasElement)).toBeUndefined(), {
 			timeout: 2500,
 		})
 	},
@@ -1665,11 +1670,11 @@ export const HeldRunKeptWhileTyping = meta.story({
 		await atSinceStop(1000)
 		caretAfter(canvasElement, "and the agent")
 		await keyboard(" truly")
-		await expect(atlasRunIn(canvasElement)?.textContent).toContain("truly")
+		await expect(heldRunIn(canvasElement)?.textContent).toContain("truly")
 
 		await atSinceStop(2000)
 		await expectWrittenLook(canvasElement, writtenLook)
-		await expect(atlasRunIn(canvasElement)?.textContent).toContain("truly")
+		await expect(heldRunIn(canvasElement)?.textContent).toContain("truly")
 	},
 })
 
@@ -1733,13 +1738,13 @@ export const HeldRunFadesWithMotion = meta.story({
 	play: async ({ canvasElement }) => {
 		const { sinceStop } = await stopWriting(canvasElement, fadingRun)
 		await waitFor(
-			() => expect(atlasRunIn(canvasElement)).toHaveClass("animate-run-fade"),
+			() => expect(heldRunIn(canvasElement)).toHaveClass("animate-run-fade"),
 			{ timeout: 4000 },
 		)
 		await expect(sinceStop()).toBeGreaterThanOrEqual(3000)
 		await expect(sinceStop()).toBeLessThan(4000)
 
-		await waitFor(() => expect(atlasRunIn(canvasElement)).toBeUndefined(), {
+		await waitFor(() => expect(heldRunIn(canvasElement)).toBeUndefined(), {
 			timeout: 4500 - sinceStop(),
 		})
 	},

@@ -585,7 +585,14 @@ const heldRunsAfterMarks = (
 		add: before
 			.filter((run) => !isStillLive(run))
 			.map(({ from, to, value }) =>
-				Decoration.mark({ ...value.spec, heldRun: Symbol() }).range(from, to),
+				Decoration.mark({
+					...value.spec,
+					attributes: {
+						...value.spec.attributes,
+						"data-slot": "library-document-held-run",
+					},
+					heldRun: Symbol(),
+				}).range(from, to),
 			),
 		sort: true,
 	})
