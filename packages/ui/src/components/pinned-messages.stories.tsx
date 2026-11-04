@@ -59,20 +59,16 @@ const isReachable = (element: Element) => {
 	return Boolean(hit && element.contains(hit))
 }
 
-const expectHeaderRestColour = async (
-	canvasElement: HTMLElement,
-	trigger: HTMLElement,
-) => {
-	const header = canvasElement.querySelector("[data-slot='app-header']")
+const expectHeaderRestColour = async (trigger: HTMLElement) => {
+	const header = trigger.closest("[data-slot='app-header']")
 	const icon = trigger.querySelector("svg")
-	const restColour = header ? getComputedStyle(header).color : null
+	if (!header || !icon) throw new Error("The trigger sits outside a header")
+	const restColour = getComputedStyle(header).color
 
-	await expect(icon).not.toBeNull()
-	await expect(restColour).not.toBeNull()
 	await expect(getComputedStyle(trigger).color).toBe(restColour)
-	await expect(icon && getComputedStyle(icon).color).toBe(restColour)
+	await expect(getComputedStyle(icon).color).toBe(restColour)
 	await expect(getComputedStyle(trigger).opacity).toBe("1")
-	await expect(icon && getComputedStyle(icon).opacity).toBe("1")
+	await expect(getComputedStyle(icon).opacity).toBe("1")
 }
 
 const ChatHeader = (props: PinnedMessagesProps) => (
@@ -166,7 +162,7 @@ export const OnePinned = meta.story({
 			},
 		},
 	},
-	play: async ({ canvas, canvasElement }) => {
+	play: async ({ canvas }) => {
 		const trigger = canvas.getByRole("button", { name: TRIGGER })
 
 		await expect(trigger).toHaveAccessibleName(`${TITLE}, 1 pinned`)
@@ -174,7 +170,7 @@ export const OnePinned = meta.story({
 		await expect(getComputedStyle(trigger).fontVariantNumeric).toBe(
 			"tabular-nums",
 		)
-		await expectHeaderRestColour(canvasElement, trigger)
+		await expectHeaderRestColour(trigger)
 	},
 })
 
@@ -193,7 +189,7 @@ export const Empty = meta.story({
 
 		await expect(trigger.tagName).toBe("BUTTON")
 		await expect(trigger).toHaveAccessibleName(TITLE)
-		await expectHeaderRestColour(canvasElement, trigger)
+		await expectHeaderRestColour(trigger)
 
 		await userEvent.click(trigger)
 		const body = within(canvasElement.ownerDocument.body)
