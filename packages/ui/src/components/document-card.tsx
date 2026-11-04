@@ -72,33 +72,63 @@ const WriterChip = ({ writer }: WriterChipProps) => {
 	)
 }
 
-type DocumentCardProps = {
+type DocumentCardFailure = "deleted" | "unreadable"
+
+const FAILURE_KEY = {
+	deleted: "library.card.failure.deleted",
+	unreadable: "library.card.failure.unreadable",
+} as const satisfies Record<DocumentCardFailure, string>
+
+type FailureLineProps = {
+	id: string
+	failure: DocumentCardFailure
+}
+
+const FailureLine = ({ id, failure }: FailureLineProps) => {
+	const { t } = useTranslation("common")
+
+	return (
+		<p
+			className="flex items-start gap-1.5 break-words text-foreground text-sm leading-5.5"
+			data-slot="document-card-failure"
+			id={id}
+		>
+			<Icons.Error
+				aria-hidden="true"
+				className="my-0.75 size-4 shrink-0 text-destructive"
+			/>
+			<span className="min-w-0">{t(FAILURE_KEY[failure])}</span>
+		</p>
+	)
+}
+
+type DocumentCardHeadProps = {
 	title: string
-	detail: string
-	excerpt: string
 	writer?: DocumentCardWriter
 	isSelected?: boolean
-	onOpen: () => void
+}
+
+type DocumentCardShellProps = DocumentCardHeadProps & {
+	detail?: ReactNode
+	describedBy?: string
 	children: ReactNode
 }
 
-const DocumentCard = ({
+const DocumentCardShell = ({
 	title,
-	detail,
-	excerpt,
 	writer,
 	isSelected = false,
-	onOpen,
+	detail,
+	describedBy,
 	children,
-}: DocumentCardProps) => {
+}: DocumentCardShellProps) => {
 	const { t } = useTranslation("common")
-	const [isOpen, setOpen] = useState(false)
 	const titleId = useId()
-	const bodyId = useId()
 	const shownTitle = libraryDisplayName(title, t)
 
 	return (
 		<article
+			aria-describedby={describedBy}
 			aria-labelledby={titleId}
 			className={cn(
 				"flex min-w-0 flex-col gap-3 rounded-control border border-border bg-card p-4",
@@ -117,12 +147,53 @@ const DocumentCard = ({
 					>
 						{shownTitle}
 					</h3>
-					<span className="truncate text-muted-foreground text-xs leading-4 tabular-nums">
-						{isOpen ? t("library.card.live") : detail}
-					</span>
+					{detail ? (
+						<span className="truncate text-muted-foreground text-xs leading-4 tabular-nums">
+							{detail}
+						</span>
+					) : null}
 				</span>
 				{writer ? <WriterChip writer={writer} /> : null}
 			</header>
+			{children}
+		</article>
+	)
+}
+
+type LiveDocumentCardProps = DocumentCardHeadProps & {
+	detail: string
+	excerpt: string
+	onOpen: () => void
+	children: ReactNode
+	failure?: never
+}
+
+type FailedDocumentCardProps = DocumentCardHeadProps & {
+	failure: DocumentCardFailure
+	detail?: never
+	excerpt?: never
+	onOpen?: never
+	children?: never
+}
+
+type DocumentCardProps = LiveDocumentCardProps | FailedDocumentCardProps
+
+const LiveDocumentCard = ({
+	detail,
+	excerpt,
+	onOpen,
+	children,
+	...head
+}: LiveDocumentCardProps) => {
+	const { t } = useTranslation("common")
+	const [isOpen, setOpen] = useState(false)
+	const bodyId = useId()
+
+	return (
+		<DocumentCardShell
+			{...head}
+			detail={isOpen ? t("library.card.live") : detail}
+		>
 			<div
 				className={cn(
 					isOpen && "flex flex-col gap-3 border-foreground/7 border-t py-3",
@@ -168,9 +239,36 @@ const DocumentCard = ({
 					<Icons.ArrowUpRight aria-hidden="true" />
 				</Button>
 			</div>
-		</article>
+		</DocumentCardShell>
 	)
 }
+
+const FailedDocumentCard = ({
+	title,
+	writer,
+	isSelected,
+	failure,
+}: FailedDocumentCardProps) => {
+	const failureId = useId()
+
+	return (
+		<DocumentCardShell
+			describedBy={failureId}
+			isSelected={isSelected}
+			title={title}
+			writer={writer}
+		>
+			<FailureLine failure={failure} id={failureId} />
+		</DocumentCardShell>
+	)
+}
+
+const DocumentCard = (props: DocumentCardProps) =>
+	props.failure ? (
+		<FailedDocumentCard {...props} />
+	) : (
+		<LiveDocumentCard {...props} />
+	)
 
 export {
 	DocumentCard,

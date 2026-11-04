@@ -24,7 +24,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"A Library document posted in a conversation. Folded, it shows its head, a three-line excerpt and two actions: Show, a disclosure that unfolds the read-only document in place, and Open, which hands the document to `onOpen`. The unfolded body is a slot the app fills with the read-only document; `isSelected` draws the Space accent ring while the document is open in DocumentPanel.",
+					"A Library document posted in a conversation. Folded, it shows its head, a three-line excerpt and two actions: Show, a disclosure that unfolds the read-only document in place, and Open, which hands the document to `onOpen`. The unfolded body is a slot the app fills with the read-only document; `isSelected` draws the Space accent ring while the document is open in DocumentPanel. `failure` keeps the head and the title and swaps the detail, the excerpt and both actions for one failure line: `deleted` once the document left the Library, `unreadable` when the host could not read it.",
 			},
 		},
 	},
@@ -109,13 +109,17 @@ export const UnfoldedLive = meta.story({
 })
 
 export const LongContent = meta.story({
-	args: {
-		title: LONG_TITLE,
-		writer: { kind: "person", name: "Ada Martin" },
-	},
-	render: (args) => (
+	render: () => (
 		<div className="w-80 bg-background p-4" {...hueScopeOf("blue")}>
-			<DocumentCard {...args} />
+			<DocumentCard
+				detail={DOCUMENT_CARD_DETAIL}
+				excerpt={DOCUMENT_CARD_EXCERPT}
+				onOpen={fn()}
+				title={LONG_TITLE}
+				writer={{ kind: "person", name: "Ada Martin" }}
+			>
+				<LibraryDocumentBody body={DOCUMENT_CARD_BODY} />
+			</DocumentCard>
 		</div>
 	),
 	parameters: {
@@ -137,5 +141,68 @@ export const LongContent = meta.story({
 		if (!card) throw new Error("No card drawn")
 		await expect(card.scrollWidth).toBe(card.clientWidth)
 		await expect(canvas.getByText("Ada Martin is writing")).toBeVisible()
+	},
+})
+
+const expectFailedCards = async (canvasElement: HTMLElement, line: string) => {
+	const cards = Array.from(
+		canvasElement.querySelectorAll<HTMLElement>('[data-slot="document-card"]'),
+	)
+	await expect(cards).toHaveLength(2)
+	for (const card of cards) {
+		const inCard = within(card)
+		await expect(card).toHaveAccessibleName(DOCUMENT_CARD_TITLE)
+		await expect(card).toHaveAccessibleDescription(line)
+		await expect(inCard.getByText(line)).toBeVisible()
+		await expect(inCard.queryByRole("button")).toBeNull()
+		await expect(inCard.queryByText(DOCUMENT_CARD_DETAIL)).toBeNull()
+		await expect(inCard.queryByText(DOCUMENT_CARD_EXCERPT)).toBeNull()
+		await expect(card.querySelector("a, button, input, [tabindex]")).toBeNull()
+	}
+}
+
+export const FailedDeleted = meta.story({
+	render: () => (
+		<div className="w-140 bg-background p-6" {...hueScopeOf("blue")}>
+			<DocumentCard failure="deleted" title={DOCUMENT_CARD_TITLE} />
+		</div>
+	),
+	globals: { theme_layout: "side-by-side" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A document posted in a conversation and deleted from the Library since. Check in both themes that the head keeps its title, that one line led by the error icon in the destructive colour replaces the detail and the excerpt, and that neither Show nor Open is drawn. Pick `FailedUnreadable` for a document the host could not read.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expectFailedCards(
+			canvasElement,
+			"This document was deleted from the Library.",
+		)
+	},
+})
+
+export const FailedUnreadable = meta.story({
+	render: () => (
+		<div className="w-140 bg-background p-6" {...hueScopeOf("blue")}>
+			<DocumentCard failure="unreadable" title={DOCUMENT_CARD_TITLE} />
+		</div>
+	),
+	globals: { theme_layout: "side-by-side" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A document posted in a conversation that the host could not read. Check in both themes that the head keeps its title, that one line led by the error icon in the destructive colour replaces the detail and the excerpt, and that neither Show nor Open is drawn. Pick `FailedDeleted` for a document gone from the Library.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expectFailedCards(
+			canvasElement,
+			"Couldn’t read this document. Open it again from the Library.",
+		)
 	},
 })

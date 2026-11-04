@@ -546,6 +546,11 @@ const common = {
 			show: "Afficher",
 			hide: "Masquer",
 			open: "Ouvrir",
+			failure: {
+				deleted: "Ce document a été supprimé de la Bibliothèque.",
+				unreadable:
+					"Impossible de lire ce document. Rouvrez-le depuis la Bibliothèque.",
+			},
 		},
 		panel: {
 			openInLibrary: "Ouvrir dans la Bibliothèque",
@@ -572,6 +577,8 @@ const common = {
 					"L’écriture de {{name}} s’est interrompue. Redemandez-la depuis la conversation.",
 				caret:
 					"Impossible de montrer aux autres où vous êtes dans le document. Continuez à modifier pour réessayer.",
+				saveAsDocument:
+					"Impossible d’enregistrer le message comme document. Réessayez avec Enregistrer comme document.",
 			},
 			import: {
 				title: "Impossible d’importer {{name}}",

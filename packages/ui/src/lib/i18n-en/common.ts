@@ -518,6 +518,11 @@ const common = {
 			show: "Show",
 			hide: "Hide",
 			open: "Open",
+			failure: {
+				deleted: "This document was deleted from the Library.",
+				unreadable:
+					"Couldn’t read this document. Open it again from the Library.",
+			},
 		},
 		panel: {
 			openInLibrary: "Open in Library",
@@ -543,6 +548,8 @@ const common = {
 					"{{name}} stopped writing before it finished. Ask again from the conversation.",
 				caret:
 					"Couldn’t show others where you are in the document. Keep editing to try again.",
+				saveAsDocument:
+					"Couldn’t save the message as a document. Try Save as document again.",
 			},
 			import: {
 				title: "Couldn’t import {{name}}",
