@@ -13,13 +13,19 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import "@workspace/ui/lib/i18n"
 
-import { AnswerBody } from "@/components/turn-body"
+import { AnswerBody, TurnBody } from "@/components/turn-body"
 import {
 	type AnswerActions,
 	AnswerActionsContext,
 } from "@/lib/chat/answer-actions"
+import { openAttachment } from "@/lib/links/open-attachment"
 
-afterEach(cleanup)
+vi.mock("@/lib/links/open-attachment", () => ({ openAttachment: vi.fn() }))
+
+afterEach(() => {
+	cleanup()
+	vi.mocked(openAttachment).mockClear()
+})
 
 const fenced = (label: string, body: string) =>
 	`Here it is.\n\n\`\`\`${label}\n${body}\n\`\`\``
@@ -183,5 +189,69 @@ describe("the Save button of a sourced image in an answer", () => {
 				src: SOURCED_IMAGE.src,
 			}),
 		)
+	})
+})
+
+const MESSAGE_ATTACHMENTS = [
+	{
+		id: "/attachments/porto.jpg",
+		name: "porto.jpg",
+		previewUrl: "blob:porto",
+	},
+	{ id: "/attachments/brief.pdf", name: "brief.pdf" },
+	{
+		id: "/attachments/lisbon.jpg",
+		name: "lisbon.jpg",
+		previewUrl: "blob:lisbon",
+	},
+]
+
+const renderMessage = (actions: AnswerActions | null) =>
+	render(
+		createElement(
+			AnswerActionsContext,
+			{ value: actions },
+			createElement(TurnBody, { attachments: MESSAGE_ATTACHMENTS, text: "" }),
+		),
+	)
+
+const clickAttachment = (name: string) =>
+	act(async () => {
+		fireEvent.click(screen.getByRole("button", { name: `Open ${name}` }))
+	})
+
+describe("a left-click on an attachment of a message", () => {
+	it("opens the message images in the viewer at the clicked image", async () => {
+		const actions = actionsSpy()
+		renderMessage(actions)
+
+		await clickAttachment("lisbon.jpg")
+
+		expect(actions.openImage).toHaveBeenCalledWith(
+			[
+				expect.objectContaining({ name: "porto.jpg", src: "blob:porto" }),
+				expect.objectContaining({ name: "lisbon.jpg", src: "blob:lisbon" }),
+			],
+			1,
+		)
+		expect(openAttachment).not.toHaveBeenCalled()
+	})
+
+	it("opens a non-image attachment in its default app", async () => {
+		const actions = actionsSpy()
+		renderMessage(actions)
+
+		await clickAttachment("brief.pdf")
+
+		expect(openAttachment).toHaveBeenCalledWith("/attachments/brief.pdf")
+		expect(actions.openImage).not.toHaveBeenCalled()
+	})
+
+	it("opens an image attachment in its default app outside a thread", async () => {
+		renderMessage(null)
+
+		await clickAttachment("lisbon.jpg")
+
+		expect(openAttachment).toHaveBeenCalledWith("/attachments/lisbon.jpg")
 	})
 })
