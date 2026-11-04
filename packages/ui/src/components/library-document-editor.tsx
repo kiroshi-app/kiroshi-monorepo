@@ -1363,6 +1363,7 @@ const LibraryDocumentEditor = ({
 }
 
 export {
+	GrowingField,
 	LibraryDocumentEditor,
 	type LibraryDocumentEditorHandle,
 	type LibraryDocumentEditorProps,

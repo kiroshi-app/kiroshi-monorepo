@@ -250,6 +250,7 @@ const LibraryDocumentView = ({
 
 export {
 	DOCUMENT_TITLE,
+	DOCUMENT_TYPE,
 	type LibraryDocument,
 	LibraryDocumentBar,
 	LibraryDocumentBody,
