@@ -24,6 +24,9 @@ const THREAD_COLUMN =
 
 const THREAD_PROMPT_COLUMN = "mx-auto max-w-(--thread-width)"
 
+const ASIDE_RESIZING =
+	"has-data-[resizing=true]:select-none has-data-[resizing=true]:**:cursor-col-resize"
+
 interface ThreadLayoutProps {
 	header?: ReactNode
 	notice?: ReactNode
@@ -86,7 +89,9 @@ function ThreadLayout({
 	return (
 		<LibraryOverlayContainer.Provider value={overlayContainer}>
 			<div
-				className={aside ? "flex h-svh max-h-full" : "contents"}
+				className={
+					aside ? cn("flex h-svh max-h-full", ASIDE_RESIZING) : "contents"
+				}
 				data-slot="thread-with-aside"
 			>
 				<ScreenLayout

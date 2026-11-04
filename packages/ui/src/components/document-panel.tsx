@@ -7,6 +7,10 @@ import { DocumentGlyph } from "@workspace/ui/components/document-card"
 import { Icons } from "@workspace/ui/components/icons"
 import { FOCUS_OUTLINE } from "@workspace/ui/components/library-document-agents"
 import { LIBRARY_BAR_BARE } from "@workspace/ui/components/library-item-menu"
+import {
+	ResizeHandle,
+	useResizableWidth,
+} from "@workspace/ui/components/resize-handle"
 import { TooltipButton } from "@workspace/ui/components/tooltip-button"
 import { libraryDisplayName } from "@workspace/ui/lib/library-display-name"
 import { cn } from "@workspace/ui/lib/utils"
@@ -17,8 +21,15 @@ const BAR_BUTTON = cn(
 	FOCUS_OUTLINE,
 )
 
+const DOCUMENT_PANEL_DEFAULT_WIDTH = 600
+const DOCUMENT_PANEL_MIN_WIDTH = 400
+const DOCUMENT_PANEL_MAX_WIDTH = 800
+
 type DocumentPanelProps = {
 	title: string
+	width?: number
+	defaultWidth?: number
+	onWidthChange?: (width: number) => void
 	presence?: ReactNode
 	onOpenInLibrary: () => void
 	onClose: () => void
@@ -27,6 +38,9 @@ type DocumentPanelProps = {
 
 const DocumentPanel = ({
 	title,
+	width,
+	defaultWidth = DOCUMENT_PANEL_DEFAULT_WIDTH,
+	onWidthChange,
 	presence,
 	onOpenInLibrary,
 	onClose,
@@ -35,14 +49,32 @@ const DocumentPanel = ({
 	const { t } = useTranslation("common")
 	const titleId = useId()
 	const shownTitle = libraryDisplayName(title, t)
+	const resize = useResizableWidth({
+		width,
+		defaultWidth,
+		onWidthChange,
+		minWidth: DOCUMENT_PANEL_MIN_WIDTH,
+		maxWidth: DOCUMENT_PANEL_MAX_WIDTH,
+	})
 
 	return (
 		<aside
 			aria-labelledby={titleId}
-			className="flex h-full w-150 min-w-0 max-w-full shrink-0 flex-col border-foreground/8 border-s bg-card text-foreground"
+			className="relative flex h-full min-w-0 max-w-full shrink-0 flex-col border-foreground/8 border-s bg-card text-foreground"
+			data-resizing={resize.isResizing}
 			data-slot="document-panel"
+			style={{ width: resize.width }}
 		>
-			<div className="flex h-13 shrink-0 items-center gap-2 border-foreground/6 border-b px-3">
+			<ResizeHandle
+				label={t("library.panel.resize")}
+				resize={resize}
+				side="right"
+				slot="document-panel-resize-handle"
+			/>
+			<div
+				className="flex h-12 shrink-0 items-center gap-2 border-foreground/6 border-b px-3"
+				data-slot="document-panel-header"
+			>
 				<DocumentGlyph />
 				<p
 					className="min-w-0 flex-1 truncate font-medium text-sm leading-5"
@@ -90,4 +122,10 @@ const DocumentPanel = ({
 	)
 }
 
-export { DocumentPanel, type DocumentPanelProps }
+export {
+	DOCUMENT_PANEL_DEFAULT_WIDTH,
+	DOCUMENT_PANEL_MAX_WIDTH,
+	DOCUMENT_PANEL_MIN_WIDTH,
+	DocumentPanel,
+	type DocumentPanelProps,
+}

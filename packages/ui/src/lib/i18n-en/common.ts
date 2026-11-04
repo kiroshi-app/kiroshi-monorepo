@@ -576,6 +576,7 @@ const common = {
 		panel: {
 			openInLibrary: "Open in Library",
 			close: "Close",
+			resize: "Resize document panel",
 		},
 		tab: {
 			loadingDocument: "Loading the document…",
