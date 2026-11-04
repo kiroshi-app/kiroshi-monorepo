@@ -250,18 +250,11 @@ type WorkLineSeat = {
 	onStop?: () => void
 }
 
-const agentFaceOf = ({ id, name, blot, image }: ThreadFace) => ({
-	id,
-	name,
-	blot,
-	image,
-})
-
 const workLineAgentOf = (
 	{ face, work, onStop }: WorkLineSeat,
 	t: ChatCopy,
 ): ThreadWorkLineAgent => {
-	const agent = { ...agentFaceOf(face), startedAt: work.startedAt, onStop }
+	const agent = { ...face, startedAt: work.startedAt, onStop }
 	if (work.backgroundTasks !== undefined)
 		return {
 			...agent,
@@ -278,7 +271,7 @@ const workLineAgentOf = (
 }
 
 const upNextAgentOf = (face: ThreadFace): ThreadWorkLineAgent => ({
-	...agentFaceOf(face),
+	...face,
 	state: "upNext",
 })
 
