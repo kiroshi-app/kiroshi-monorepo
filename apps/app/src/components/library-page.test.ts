@@ -16,6 +16,10 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import * as Y from "yjs"
 
 import type { AppRailPanel } from "@workspace/ui/components/app-rail"
+import {
+	fieldSelectionOf,
+	selectInField,
+} from "@workspace/ui/components/library-block-text"
 import { libraryDocumentStartOf } from "@workspace/ui/components/library-document-editor"
 import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
@@ -570,9 +574,28 @@ const blocksOf = (body: HTMLElement) => [
 	...body.querySelectorAll<HTMLElement>("[data-slot='library-document-block']"),
 ]
 
-const shownTextOf = (block: HTMLElement) =>
-	block.querySelector<HTMLTextAreaElement>(BLOCK_FIELD)?.value ??
-	block.textContent?.trim()
+const linesIn = (field: HTMLElement) =>
+	[...field.querySelectorAll(".block, li")]
+		.filter((line) => line.querySelector(".block, li") === null)
+		.map((line) => line.textContent)
+
+const shownTextOf = (block: HTMLElement) => {
+	const field = block.querySelector<HTMLElement>(BLOCK_FIELD)
+	return field ? linesIn(field).join("\n") : block.textContent?.trim()
+}
+
+const inputInto = (field: HTMLElement, inputType: string, data: string) =>
+	field.dispatchEvent(
+		Object.assign(
+			new InputEvent("beforeinput", {
+				inputType,
+				data,
+				bubbles: true,
+				cancelable: true,
+			}),
+			{ getTargetRanges: () => [] },
+		),
+	)
 
 const shownTextsOf = (shown: Pick<typeof screen, "getByRole">) =>
 	blocksOf(bodyOf(shown)).map(shownTextOf)
@@ -588,16 +611,17 @@ const openBlock = async (block: HTMLElement) => {
 		)?.focus()
 	})
 	return waitFor(() => {
-		const field = block.querySelector<HTMLTextAreaElement>(BLOCK_FIELD)
+		const field = block.querySelector<HTMLElement>(BLOCK_FIELD)
 		expect(document.activeElement).toBe(field)
-		return field as HTMLTextAreaElement
+		return field as HTMLElement
 	})
 }
 
 const typeInto = async (body: HTMLElement, value: string) => {
 	const field = await openBlock(blocksOf(body)[0] as HTMLElement)
 	await act(async () => {
-		fireEvent.change(field, { target: { value } })
+		document.getSelection()?.selectAllChildren(field)
+		inputInto(field, "insertText", value)
 	})
 }
 
@@ -610,10 +634,10 @@ const pasteBelow = async (block: HTMLElement, text: string) => {
 		expect(focused?.getAttribute("data-slot")).toBe(
 			"library-document-block-field",
 		)
-		return focused as HTMLTextAreaElement
+		return focused as HTMLElement
 	})
 	await act(async () => {
-		fireEvent.change(field, { target: { value: text } })
+		inputInto(field, "insertFromPaste", text)
 	})
 	return field
 }
@@ -805,7 +829,7 @@ describe("an opened Library document", () => {
 
 		const task = await openBlock(blocksOf(body).at(-1) as HTMLElement)
 		await act(async () => {
-			task.setSelectionRange("Ship".length, "Ship".length)
+			selectInField(task, "Ship".length)
 		})
 
 		const written = `${ticked}${AGENT_LINE}`
@@ -817,7 +841,7 @@ describe("an opened Library document", () => {
 		])
 		expect(bodyOf(shown)).toBe(body)
 		expect(document.activeElement).toBe(task)
-		expect(task.selectionStart).toBe("Ship".length)
+		expect(fieldSelectionOf(task)?.start).toBe("Ship".length)
 
 		await press(
 			shown.getByRole("button", { name: common("library.document.back") }),
