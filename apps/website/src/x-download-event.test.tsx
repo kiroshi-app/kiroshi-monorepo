@@ -31,6 +31,10 @@ const PRODUCT_HUNT_DARK_SRC =
 
 const neverAnswer = () => new Promise<Response>(() => {})
 
+const transformRouterGraphOnceAtCollection = () => import("./router")
+
+await transformRouterGraphOnceAtCollection()
+
 const openHome = async () => {
 	vi.spyOn(navigator, "userAgent", "get").mockReturnValue(MAC_AGENT)
 	vi.resetModules()
