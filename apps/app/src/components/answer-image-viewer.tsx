@@ -1,20 +1,25 @@
+import { useMutationState, useQueryClient } from "@tanstack/react-query"
 import { useContext, useState } from "react"
 
 import {
 	LibraryLightbox,
 	type LibraryLightboxImage,
 } from "@workspace/ui/components/library-lightbox"
+import { raiseTransientNotice } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
+import type { LibraryItem } from "@/lib/bindings"
 import type { ShownImageActions, ThreadImage } from "@/lib/chat/answer-actions"
 import { failureReporterIn } from "@/lib/failure-report"
 import { shownImageSourceOf } from "@/lib/library/library-image-source"
+import { libraryQueryKeys } from "@/lib/library/library-query-keys"
 import { useLibraryImageCopy } from "@/lib/library/use-library-actions"
 import {
 	type LibraryImageSave,
 	useLibraryImageSave,
 } from "@/lib/library/use-library-imports"
 import { openInBrowser } from "@/lib/links/use-external-links"
+import { useOpenLibraryImage } from "@/lib/navigation/use-open-library-image"
 import { isJoinedRowId } from "@/lib/spaces/joined-spaces-controller"
 import { WorkspaceContext } from "@/lib/workspace/workspace-context"
 
@@ -72,16 +77,63 @@ const imageSaveOf = (
 		? { spaceId: library.spaceId, file: { name: image.name, path: image.path } }
 		: { ...library, image: shownImageSourceOf(image) }
 
+type ThreadImageSave = LibraryImageSave & { src: string }
+
+const threadImageSaveOf = (
+	library: LibraryOnScreen,
+	image: ThreadImage,
+): ThreadImageSave => ({ ...imageSaveOf(library, image), src: image.src })
+
+const savedSrcOf = (save: unknown) =>
+	typeof save === "object" && save !== null && "src" in save
+		? save.src
+		: undefined
+
+const useSavingImageSrcs = () =>
+	useMutationState({
+		filters: { mutationKey: libraryQueryKeys.imageSave(), status: "pending" },
+		select: ({ state }) => savedSrcOf(state.variables),
+	})
+
+const useIsImageSaveRunning = () => {
+	const queryClient = useQueryClient()
+	return (src: string) =>
+		queryClient.isMutating({
+			mutationKey: libraryQueryKeys.imageSave(),
+			predicate: ({ state }) => savedSrcOf(state.variables) === src,
+		}) > 0
+}
+
+const useRaiseImageSaved = () => {
+	const openInLibrary = useOpenLibraryImage()
+	return ({ name }: LibraryItem) =>
+		raiseTransientNotice({
+			type: "success",
+			title: i18n.t("common:library.saved.image"),
+			action: {
+				label: i18n.t("common:library.panel.openInLibrary"),
+				onPress: () => openInLibrary(name),
+			},
+		})
+}
+
 export const useShownImageActions = (): ShownImageActions => {
 	const library = useLibraryOnScreen()
-	const save = useLibraryImageSave()
+	const save = useLibraryImageSave(useRaiseImageSaved())
 	const copy = useLibraryImageCopy()
+	const savingSrcs = useSavingImageSrcs()
+	const isSaveRunning = useIsImageSaveRunning()
+	const saveOnce = (onScreen: LibraryOnScreen, image: ThreadImage) => {
+		if (isSaveRunning(image.src)) {
+			return
+		}
+		save(threadImageSaveOf(onScreen, image))
+	}
 	return {
 		onSaveToLibrary:
-			library === null
-				? undefined
-				: (image) => save(imageSaveOf(library, image)),
+			library === null ? undefined : (image) => saveOnce(library, image),
 		onCopyImage: (image) => copy(shownImageSourceOf(image)),
+		isSavingImage: (src) => savingSrcs.includes(src),
 	}
 }
 

@@ -5,6 +5,7 @@ import {
 	cleanup,
 	fireEvent,
 	render,
+	renderHook,
 	screen,
 	waitFor,
 	within,
@@ -12,15 +13,18 @@ import {
 import { createElement, type ReactNode } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
+import {
+	raiseFailureNotice,
+	raiseTransientNotice,
+} from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import {
 	AnswerImageViewer,
 	useShownImageActions,
 } from "@/components/answer-image-viewer"
-import type { LibraryImport } from "@/lib/bindings"
-import type { ThreadImage } from "@/lib/chat/answer-actions"
+import type { LibraryImport, LibraryItem } from "@/lib/bindings"
+import type { ShownImageActions, ThreadImage } from "@/lib/chat/answer-actions"
 import type { Invoke } from "@/lib/host/joined-hosts-invoke"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 import { joinedRowIdOf } from "@/lib/spaces/joined-spaces-controller"
@@ -35,15 +39,23 @@ const harness = vi.hoisted(() => ({
 	isImageReadable: true,
 	imageContent: "cG5n",
 	pathImport: null as unknown,
+	importGate: null as Promise<void> | null,
+	navigations: [] as unknown[],
 }))
 
 const answerHostCall = async (command: string, args: unknown) => {
 	harness.calls.push({ command, args })
+	if (command === "library_import") {
+		await harness.importGate
+	}
 	if (command === harness.refused) {
 		throw { kind: "unwritable" }
 	}
 	if (command === "remote_image_read") {
 		return remoteImageRead()
+	}
+	if (command === "library_import") {
+		return SAVED_SOFA
 	}
 	return command === "library_import_paths" ? [harness.pathImport] : null
 }
@@ -72,6 +84,15 @@ vi.mock("@workspace/ui/components/notice-surface", async (importOriginal) => ({
 		typeof import("@workspace/ui/components/notice-surface")
 	>()),
 	raiseFailureNotice: vi.fn(() => "notice"),
+	raiseTransientNotice: vi.fn(() => "notice"),
+}))
+
+vi.mock("@tanstack/react-router", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@tanstack/react-router")>()),
+	useNavigate: () => (options: unknown) => {
+		harness.navigations.push(options)
+		return Promise.resolve()
+	},
 }))
 
 class LoadingImage {
@@ -107,6 +128,22 @@ const SOFA: ThreadImage = {
 	id: "0",
 	name: "Grey linen sofa",
 	src: "https://images.example.org/grey.jpg",
+	detail: "",
+}
+
+const SAVED_SOFA: LibraryItem = {
+	name: "Grey linen sofa (2).jpeg",
+	kind: "image",
+	path: "/library/Grey linen sofa (2).jpeg",
+	bytes: 3,
+	modifiedAt: 0,
+	createdAt: null,
+}
+
+const OAK: ThreadImage = {
+	id: "1",
+	name: "Oak side table",
+	src: "https://images.example.org/oak.jpg",
 	detail: "",
 }
 
@@ -147,9 +184,9 @@ const ViewerOn = ({ image }: ViewerProps) =>
 		onStep: () => undefined,
 	})
 
-const renderViewer = ({ space = HOSTED, image = SOFA }: ViewerSetup = {}) => {
+const wrapperOn = (space: SpaceOnScreen | null) => {
 	const { wrapper: QueryWrapper } = createQueryTestWrapper()
-	const wrapper = ({ children }: { children: ReactNode }) =>
+	return ({ children }: { children: ReactNode }) =>
 		createElement(
 			QueryWrapper,
 			null,
@@ -159,12 +196,18 @@ const renderViewer = ({ space = HOSTED, image = SOFA }: ViewerSetup = {}) => {
 				children,
 			),
 		)
-	render(createElement(ViewerOn, { image }), { wrapper })
+}
+
+const renderViewer = ({ space = HOSTED, image = SOFA }: ViewerSetup = {}) => {
+	render(createElement(ViewerOn, { image }), { wrapper: wrapperOn(space) })
 }
 
 const openImageMenu = async (setup: ViewerSetup = {}) => {
 	renderViewer(setup)
-	const name = (setup.image ?? SOFA).name
+	return openRenderedImageMenu((setup.image ?? SOFA).name)
+}
+
+const openRenderedImageMenu = async (name: string) => {
 	await act(async () => {
 		fireEvent.contextMenu(screen.getByRole("img", { name }))
 	})
@@ -219,7 +262,10 @@ beforeEach(() => {
 	vi.spyOn(HTMLCanvasElement.prototype, "toDataURL").mockImplementation(
 		() => `data:image/png;base64,${harness.imageContent}`,
 	)
+	harness.importGate = null
+	harness.navigations = []
 	vi.mocked(raiseFailureNotice).mockClear()
+	vi.mocked(raiseTransientNotice).mockClear()
 })
 
 afterEach(() => {
@@ -420,4 +466,159 @@ describe("the bar of the thread viewer on an attachment", () => {
 
 		expect(barButton("download")).toBeInstanceOf(HTMLElement)
 	})
+})
+
+describe("Save the image from a thread", () => {
+	const holdImport = () => {
+		let open: () => void = () => undefined
+		harness.importGate = new Promise<void>((resolve) => {
+			open = resolve
+		})
+		return () =>
+			act(async () => {
+				open()
+			})
+	}
+
+	const renderImageActions = () =>
+		renderHook(useShownImageActions, { wrapper: wrapperOn(HOSTED) })
+
+	const saveSofa = async (actions: { current: ShownImageActions }) => {
+		await act(async () => {
+			actions.current.onSaveToLibrary?.(SOFA)
+		})
+		await waitFor(() => expect(callsOf("library_import")).toHaveLength(1))
+	}
+
+	const savedNotice = expect.objectContaining({
+		type: "success",
+		title: common("library.saved.image"),
+		action: expect.objectContaining({
+			label: common("library.panel.openInLibrary"),
+		}),
+	})
+
+	const failedNotice = importFailureNamed("Grey linen sofa")
+
+	const refuseImport = () => {
+		harness.refused = "library_import"
+	}
+
+	it("answers saving for the saved image only while its save is pending", async () => {
+		const release = holdImport()
+		const { result } = renderImageActions()
+
+		await saveSofa(result)
+
+		expect(result.current.isSavingImage(SOFA.src)).toBe(true)
+		expect(result.current.isSavingImage(OAK.src)).toBe(false)
+		await release()
+		await waitFor(() =>
+			expect(result.current.isSavingImage(SOFA.src)).toBe(false),
+		)
+	})
+
+	it("starts no second save of an image from the menu while its save is pending", async () => {
+		const release = holdImport()
+		renderViewer()
+		await press(
+			within(await openRenderedImageMenu(SOFA.name)).getByRole("menuitem", {
+				name: SAVE_TO_LIBRARY,
+			}),
+		)
+		await waitFor(() => expect(callsOf("library_import")).toHaveLength(1))
+
+		await press(
+			within(await openRenderedImageMenu(SOFA.name)).getByRole("menuitem", {
+				name: SAVE_TO_LIBRARY,
+			}),
+		)
+		await release()
+
+		await waitFor(() => expect(raiseTransientNotice).toHaveBeenCalled())
+		expect(callsOf("library_import")).toHaveLength(1)
+		expect(raiseTransientNotice).toHaveBeenCalledTimes(1)
+	})
+
+	it("starts one import for two saves of an image before the next render", async () => {
+		const release = holdImport()
+		const { result } = renderImageActions()
+
+		await act(async () => {
+			result.current.onSaveToLibrary?.(SOFA)
+			result.current.onSaveToLibrary?.(SOFA)
+		})
+		await release()
+
+		await waitFor(() => expect(raiseTransientNotice).toHaveBeenCalled())
+		expect(callsOf("library_import")).toHaveLength(1)
+	})
+
+	it("starts one import per image for saves of two images before the next render", async () => {
+		const { result } = renderImageActions()
+
+		await act(async () => {
+			result.current.onSaveToLibrary?.(SOFA)
+			result.current.onSaveToLibrary?.(OAK)
+		})
+
+		await waitFor(() => expect(callsOf("library_import")).toHaveLength(2))
+		expect(callsOf("library_import")).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({ name: "Grey linen sofa.jpeg" }),
+				expect.objectContaining({ name: "Oak side table.jpeg" }),
+			]),
+		)
+	})
+
+	it("raises one success notice whose Open in Library opens the saved image", async () => {
+		const { result } = renderImageActions()
+
+		await saveSofa(result)
+
+		await waitFor(() =>
+			expect(raiseTransientNotice).toHaveBeenCalledWith(savedNotice),
+		)
+		expect(raiseTransientNotice).toHaveBeenCalledTimes(1)
+		expect(raiseFailureNotice).not.toHaveBeenCalled()
+		vi.mocked(raiseTransientNotice).mock.calls[0]?.[0].action?.onPress()
+		expect(harness.navigations).toEqual([
+			{
+				to: "/library",
+				search: { item: SAVED_SOFA.name, kind: "image", title: undefined },
+			},
+		])
+	})
+
+	it("raises one failure notice naming the image, and no success notice, when the save fails", async () => {
+		refuseImport()
+		const { result } = renderImageActions()
+
+		await saveSofa(result)
+
+		await waitFor(() =>
+			expect(raiseFailureNotice).toHaveBeenCalledWith(failedNotice),
+		)
+		expect(raiseFailureNotice).toHaveBeenCalledTimes(1)
+		expect(raiseTransientNotice).not.toHaveBeenCalled()
+		expect(result.current.isSavingImage(SOFA.src)).toBe(false)
+	})
+
+	it.each([
+		["success", null, raiseTransientNotice, savedNotice],
+		["failure", "library_import", raiseFailureNotice, failedNotice],
+	] as const)(
+		"still raises the %s notice when the thread unmounts while the save is pending",
+		async (_outcome, refused, raise, notice) => {
+			harness.refused = refused
+			const release = holdImport()
+			const { result, unmount } = renderImageActions()
+			await saveSofa(result)
+
+			unmount()
+			await release()
+
+			await waitFor(() => expect(raise).toHaveBeenCalledWith(notice))
+		},
+	)
 })

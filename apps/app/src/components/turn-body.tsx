@@ -114,6 +114,7 @@ export const AnswerBody = ({
 				onOpenImage: actions.openImage,
 				onOpenWebPage: openWebPage,
 				imageMenu: actions.imageActions,
+				isSavingImage: actions.imageActions.isSavingImage,
 			}}
 			attachments={attachments}
 			isWriting={isWriting}

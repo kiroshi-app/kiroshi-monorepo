@@ -10,4 +10,5 @@ export const libraryQueryKeys = {
 		[...libraryQueryKeys.all, "image", spaceId, name, modifiedAt] as const,
 	documentOf: (spaceId: string, name: string) =>
 		[...libraryQueryKeys.all, "document", spaceId, name] as const,
+	imageSave: () => [...libraryQueryKeys.all, "imageSave"] as const,
 }

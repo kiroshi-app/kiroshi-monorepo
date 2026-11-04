@@ -7,6 +7,7 @@ export type ThreadImage = LibraryLightboxImage & { path?: string }
 export type ShownImageActions = {
 	onSaveToLibrary?: (image: ThreadImage) => void
 	onCopyImage: (image: ThreadImage) => void
+	isSavingImage: (src: string) => boolean
 }
 
 export type AnswerActions = {

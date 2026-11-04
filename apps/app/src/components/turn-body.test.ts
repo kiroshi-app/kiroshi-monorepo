@@ -95,7 +95,11 @@ const IMAGE_MENU_ENTRIES = ["Save to Library", "Copy image", "Open in viewer"]
 const actionsSpy = (): AnswerActions => ({
 	insert: vi.fn(),
 	openImage: vi.fn(),
-	imageActions: { onSaveToLibrary: vi.fn(), onCopyImage: vi.fn() },
+	imageActions: {
+		onSaveToLibrary: vi.fn(),
+		onCopyImage: vi.fn(),
+		isSavingImage: () => false,
+	},
 })
 
 const renderAnswer = (text: string, actions: AnswerActions) =>
