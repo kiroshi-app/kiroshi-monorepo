@@ -83,9 +83,10 @@ const anchorsIn = (field: HTMLElement) => [
 
 const fromOf = (anchor: HTMLElement) => Number(anchor.dataset.from)
 
+const isAtomic = (anchor: HTMLElement) => anchor.dataset.to !== undefined
+
 const lengthOf = (anchor: HTMLElement) => {
-	if (anchor.dataset.to !== undefined)
-		return Number(anchor.dataset.to) - fromOf(anchor)
+	if (isAtomic(anchor)) return Number(anchor.dataset.to) - fromOf(anchor)
 	return anchor.firstChild instanceof Text ? anchor.firstChild.length : 0
 }
 
@@ -119,14 +120,14 @@ const pointAt = (field: HTMLElement, offset: number) => {
 	const anchor =
 		anchors.find((each) => {
 			const end = fromOf(each) + lengthOf(each)
-			return each.dataset.to === undefined ? end >= offset : end > offset
+			return isAtomic(each) ? end > offset : end >= offset
 		}) ?? anchors.at(-1)
 	if (!anchor) return { node: field as Node, offset: 0 }
 	const within = Math.min(
 		Math.max(offset - fromOf(anchor), 0),
 		lengthOf(anchor),
 	)
-	if (anchor.dataset.to !== undefined) return besideOf(anchor, within > 0)
+	if (isAtomic(anchor)) return besideOf(anchor, within > 0)
 	return anchor.firstChild instanceof Text
 		? { node: anchor.firstChild as Node, offset: within }
 		: { node: anchor as Node, offset: 0 }
@@ -214,7 +215,7 @@ const shownOffsetAt = (container: Element, point: ClientPoint) => {
 const offsetAtShown = (field: HTMLElement, shown: number) => {
 	let passed = 0
 	for (const anchor of anchorsIn(field)) {
-		const size = anchor.dataset.to === undefined ? lengthOf(anchor) : 0
+		const size = isAtomic(anchor) ? 0 : lengthOf(anchor)
 		if (shown <= passed + size) return fromOf(anchor) + shown - passed
 		passed += size
 	}
