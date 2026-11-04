@@ -47,7 +47,7 @@ const LETTER_HUES = Object.values(HUE_PRESETS)
 const PILL =
 	"flex h-7 w-fit min-w-0 max-w-full items-center gap-1.5 rounded-full border border-foreground/8 bg-foreground/6 p-0.75 font-medium text-compact text-soft-foreground leading-4 outline-offset-2 hover:bg-foreground/8 active:bg-foreground/12"
 
-const PILL_OPEN =
+const PILL_TOGGLE =
 	"group/sources data-panel-open:border-foreground/16 data-panel-open:bg-foreground/12"
 
 const BUBBLE_RING =
@@ -66,7 +66,7 @@ const useWebSources = () => {
 const letterHueOf = (domain: string) =>
 	LETTER_HUES[companionSeed(domain) % LETTER_HUES.length] ?? HUE_PRESETS.blue
 
-const titleOf = (page: WebSource) => page.title?.trim() || undefined
+const titleOf = (page: WebSource) => page.title?.trim() ?? ""
 
 const useOpenLabel = () => {
 	const { t } = useTranslation("chat")
@@ -158,7 +158,7 @@ const WebSourcesButton = () => {
 	return (
 		<CollapsibleTrigger
 			data-slot="web-sources-button"
-			className={cn(PILL, PILL_OPEN)}
+			className={cn(PILL, PILL_TOGGLE)}
 		>
 			<span className="flex shrink-0">
 				{pages.slice(0, STACKED_FAVICONS).map((page, position) => (
@@ -206,7 +206,7 @@ const SourceRow = ({ page }: SourceRowProps) => {
 				<Favicon page={page} />
 				<span className="flex min-w-0 flex-1 flex-col gap-0.5">
 					<span className="truncate font-medium text-compact leading-4.5">
-						{title ?? page.domain}
+						{title || page.domain}
 					</span>
 					{title ? (
 						<span className="truncate text-muted-foreground text-xs leading-4">
