@@ -2,6 +2,7 @@
 
 import type { TFunction } from "i18next"
 import {
+	type ComponentProps,
 	type MouseEvent,
 	type Ref,
 	useEffectEvent,
@@ -190,6 +191,9 @@ type LibraryDocumentEditorProps = WriterActions &
 		onStopAll?: () => void
 		onCaretChange?: (caret: number | null) => void
 		onAddImages?: () => Promise<LibraryGalleryImage[]>
+		resolveImage?: ComponentProps<
+			typeof LibraryDocumentBlockEditor
+		>["resolveImage"]
 		onLinkPreview?: (url: string) => Promise<LibraryLinkPreview>
 		menuFinalFocus?: () => HTMLElement | boolean
 		ref?: Ref<LibraryDocumentEditorHandle>
@@ -211,6 +215,7 @@ const LibraryDocumentEditor = ({
 	onOpenConversation,
 	onCaretChange,
 	onAddImages,
+	resolveImage,
 	onLinkPreview,
 	onBold,
 	onItalic,
@@ -383,6 +388,7 @@ const LibraryDocumentEditor = ({
 					people={people}
 					placeholders={placeholders}
 					ref={blocks}
+					resolveImage={resolveImage}
 					writers={writers}
 				/>
 			</LibraryDocumentColumn>
