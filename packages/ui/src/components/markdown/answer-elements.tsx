@@ -9,8 +9,15 @@ import {
 	type CalloutTone,
 } from "@workspace/ui/components/answer-blocks/callout"
 import { SourcedImage } from "@workspace/ui/components/answer-blocks/sourced-image"
+import {
+	ImageMenu,
+	imageMenuActionsFor,
+} from "@workspace/ui/components/image-menu"
 import type { LibraryLightboxImage } from "@workspace/ui/components/library-lightbox"
-import { useMarkdownAnswerActions } from "@workspace/ui/components/markdown/answer-actions"
+import {
+	answerImageMenuOf,
+	useMarkdownAnswerActions,
+} from "@workspace/ui/components/markdown/answer-actions"
 import { AnswerBlockFrame } from "@workspace/ui/components/markdown/answer-block"
 import {
 	CALLOUT_PROPERTY,
@@ -36,15 +43,22 @@ const ImageOpenButton = ({ image, children }: ImageOpenButtonProps) => {
 	if (!actions) return children
 
 	return (
-		<button
-			type="button"
-			aria-label={image.name}
-			data-slot="markdown-image-open"
-			className="inline-block max-w-full outline-offset-2"
-			onClick={() => actions.onOpenImage([image], 0)}
-		>
-			{children}
-		</button>
+		<ImageMenu
+			{...answerImageMenuOf(actions, [image])}
+			item={0}
+			name={image.name}
+			trigger={
+				<button
+					type="button"
+					aria-label={image.name}
+					data-slot="markdown-image-open"
+					className="inline-block max-w-full outline-offset-2"
+					onClick={() => actions.onOpenImage([image], 0)}
+				>
+					{children}
+				</button>
+			}
+		/>
 	)
 }
 
@@ -99,8 +113,8 @@ export const MarkdownFigure = ({
 	const alt = String(properties.alt)
 	const src = String(properties.src)
 	const sourceName = String(properties.dataSourceName)
-	const onSaveImage = actions?.onSaveImage
 	const image = { id: src, name: alt, src, detail: sourceName }
+	const imageMenu = answerImageMenuOf(actions, [image])
 
 	return (
 		<AnswerBlockFrame>
@@ -111,8 +125,8 @@ export const MarkdownFigure = ({
 						: undefined
 				}
 				image={{ src, alt }}
+				imageMenu={imageMenu && imageMenuActionsFor(imageMenu, () => 0)}
 				onOpen={actions ? () => actions.onOpenImage([image], 0) : undefined}
-				onSave={onSaveImage ? () => onSaveImage(src) : undefined}
 				source={{
 					domain: sourceName,
 					favicon: optionalString(properties.dataFavicon),

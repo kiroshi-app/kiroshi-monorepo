@@ -5,6 +5,10 @@ import {
 	accessibleNameOf,
 } from "@workspace/ui/components/answer-blocks/answer-image"
 import { Icons } from "@workspace/ui/components/icons"
+import {
+	ImageMenu,
+	type ImageMenuActions,
+} from "@workspace/ui/components/image-menu"
 import { cn } from "@workspace/ui/lib/utils"
 
 type SourcedImageSource = {
@@ -18,8 +22,8 @@ type SourcedImageProps = {
 	source: SourcedImageSource
 	status?: string
 	chips?: readonly string[]
-	onSave?: () => void
 	onOpen?: () => void
+	imageMenu?: ImageMenuActions<AnswerImage>
 	className?: string
 }
 
@@ -31,15 +35,29 @@ const SourcedImage = ({
 	source,
 	status,
 	chips = [],
-	onSave,
 	onOpen,
+	imageMenu,
 	className,
 }: SourcedImageProps) => {
 	const { t } = useTranslation("chat")
 	const hasChips = status !== undefined || chips.length > 0
 	const name = accessibleNameOf(image, title)
+	const onSaveToLibrary = imageMenu?.onSaveToLibrary
 	const picture = (
 		<img src={image.src} alt={name} className="size-full object-cover" />
+	)
+	const openable = onOpen ? (
+		<button
+			type="button"
+			aria-label={name}
+			data-slot="sourced-image-open"
+			className="block size-full -outline-offset-2"
+			onClick={onOpen}
+		>
+			{picture}
+		</button>
+	) : (
+		picture
 	)
 
 	return (
@@ -48,25 +66,13 @@ const SourcedImage = ({
 			className={cn("flex w-full min-w-0 flex-col gap-2", className)}
 		>
 			<div className="relative h-75 overflow-hidden rounded-xl">
-				{onOpen ? (
-					<button
-						type="button"
-						aria-label={name}
-						data-slot="sourced-image-open"
-						className="block size-full -outline-offset-2"
-						onClick={onOpen}
-					>
-						{picture}
-					</button>
-				) : (
-					picture
-				)}
-				{onSave ? (
+				<ImageMenu {...imageMenu} item={image} name={name} trigger={openable} />
+				{onSaveToLibrary ? (
 					<button
 						type="button"
 						aria-label={t("answerBlock.sourcedImage.save")}
 						className="absolute end-3 top-3 grid size-8 place-items-center rounded-full bg-black/70 text-white outline-offset-2 hover:bg-black/80 active:bg-black/90"
-						onClick={onSave}
+						onClick={() => onSaveToLibrary(image)}
 					>
 						<Icons.Bookmark aria-hidden="true" className="size-3.5" />
 					</button>

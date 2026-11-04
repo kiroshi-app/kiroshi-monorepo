@@ -1,6 +1,13 @@
 import type { ReactNode } from "react"
 
-import type { AnswerImage } from "@workspace/ui/components/answer-blocks/answer-image"
+import {
+	type AnswerImage,
+	accessibleNameOf,
+} from "@workspace/ui/components/answer-blocks/answer-image"
+import {
+	ImageMenu,
+	type ImageMenuActions,
+} from "@workspace/ui/components/image-menu"
 import { cn } from "@workspace/ui/lib/utils"
 
 type IllustratedListItem = {
@@ -14,10 +21,15 @@ type IllustratedListItem = {
 
 type IllustratedListProps = {
 	items: readonly IllustratedListItem[]
+	imageMenu?: ImageMenuActions<number>
 	className?: string
 }
 
-const IllustratedList = ({ items, className }: IllustratedListProps) => (
+const IllustratedList = ({
+	items,
+	imageMenu,
+	className,
+}: IllustratedListProps) => (
 	<ol
 		data-slot="illustrated-list"
 		className={cn(
@@ -30,10 +42,17 @@ const IllustratedList = ({ items, className }: IllustratedListProps) => (
 				key={item.id}
 				className="flex gap-3.5 p-4 not-last:border-b not-last:border-shell-divider"
 			>
-				<img
-					src={item.image.src}
-					alt={item.image.alt ?? ""}
-					className="h-18 w-24 shrink-0 rounded-lg object-cover"
+				<ImageMenu
+					{...imageMenu}
+					item={index}
+					name={accessibleNameOf(item.image, item.title)}
+					trigger={
+						<img
+							src={item.image.src}
+							alt={item.image.alt ?? ""}
+							className="h-18 w-24 shrink-0 rounded-lg object-cover"
+						/>
+					}
 				/>
 				<div className="flex min-w-0 flex-1 flex-col gap-1">
 					<div className="flex min-w-0 flex-wrap items-center gap-2">

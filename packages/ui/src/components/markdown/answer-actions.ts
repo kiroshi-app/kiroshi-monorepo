@@ -1,5 +1,9 @@
 import { createContext, useContext } from "react"
 
+import {
+	type ImageMenuActions,
+	imageMenuActionsFor,
+} from "@workspace/ui/components/image-menu"
 import type { LibraryLightboxImage } from "@workspace/ui/components/library-lightbox"
 
 type MarkdownAnswerActions = {
@@ -14,14 +18,30 @@ type MarkdownAnswerActions = {
 		isChecked: boolean,
 	) => void
 	onCopyChecklist?: (list: string) => void
-	onSaveImage?: (url: string) => void
+	imageMenu?: Pick<
+		ImageMenuActions<LibraryLightboxImage>,
+		"onSaveToLibrary" | "onCopyImage"
+	>
 }
 
 const MarkdownAnswerContext = createContext<MarkdownAnswerActions | null>(null)
 
 const useMarkdownAnswerActions = () => useContext(MarkdownAnswerContext)
 
+const answerImageMenuOf = (
+	actions: MarkdownAnswerActions | null,
+	images: LibraryLightboxImage[],
+): ImageMenuActions<number> | undefined => {
+	if (!actions?.imageMenu) return undefined
+
+	return {
+		...imageMenuActionsFor(actions.imageMenu, (index: number) => images[index]),
+		onOpenInViewer: (index) => actions.onOpenImage(images, index),
+	}
+}
+
 export {
+	answerImageMenuOf,
 	type MarkdownAnswerActions,
 	MarkdownAnswerContext,
 	useMarkdownAnswerActions,

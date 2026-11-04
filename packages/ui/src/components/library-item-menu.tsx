@@ -53,6 +53,12 @@ type LibraryItemHandlers<Item> = {
 
 type LibraryItemActionName = keyof LibraryItemHandlers<unknown>
 
+type ImageHandlers<Item> = {
+	onSaveToLibrary?: LibraryItemAction<Item>
+	onCopyImage?: LibraryItemAction<Item>
+	onOpenInViewer?: LibraryItemAction<Item>
+}
+
 type LibraryItemActions<Item> = LibraryItemHandlers<Item> & {
 	isActionShown?: (item: Item, action: LibraryItemActionName) => boolean
 }
@@ -82,6 +88,53 @@ const LIBRARY_ITEM_ACTIONS = [
 	label: string
 	Icon: ComponentType
 }[]
+
+const IMAGE_ACTIONS = [
+	{
+		handler: "onSaveToLibrary",
+		label: "library.imageMenu.saveToLibrary",
+		Icon: Icons.Library,
+	},
+	{
+		handler: "onCopyImage",
+		label: "library.imageMenu.copyImage",
+		Icon: Icons.Copy,
+	},
+	{
+		handler: "onOpenInViewer",
+		label: "library.imageMenu.openInViewer",
+		Icon: Icons.Fullscreen,
+	},
+] as const satisfies {
+	handler: keyof ImageHandlers<unknown>
+	label: string
+	Icon: ComponentType
+}[]
+
+const hasImageActions = <Item,>(handlers: ImageHandlers<Item>) =>
+	IMAGE_ACTIONS.some(({ handler }) => handlers[handler] !== undefined)
+
+type ImageMenuItemsProps<Item> = {
+	item: Item
+	actions: ImageHandlers<Item>
+}
+
+const ImageMenuItems = <Item,>({
+	item,
+	actions,
+}: ImageMenuItemsProps<Item>) => {
+	const { t } = useTranslation("common")
+
+	return IMAGE_ACTIONS.map(({ handler, label, Icon }) => {
+		const action = actions[handler]
+		return action ? (
+			<ContextMenuItem key={handler} onClick={() => action(item)}>
+				<Icon aria-hidden="true" className="size-3.5" />
+				{t(label)}
+			</ContextMenuItem>
+		) : null
+	})
+}
 
 type LibraryItemMenuEntry = (typeof LIBRARY_ITEM_ACTIONS)[number]
 
@@ -212,21 +265,27 @@ const CONTEXT_MENU_PARTS: LibraryItemMenuParts = {
 }
 
 type LibraryItemContextMenuProps<Item extends LibraryMenuSubject> =
-	LibraryItemActions<Item> & {
-		item: Item
-		trigger: ReactElement
-	}
+	LibraryItemActions<Item> &
+		Pick<ImageHandlers<Item>, "onSaveToLibrary" | "onCopyImage"> & {
+			item: Item
+			trigger: ReactElement
+		}
 
 const LibraryItemContextMenu = <Item extends LibraryMenuSubject>({
 	item,
 	trigger,
+	onSaveToLibrary,
+	onCopyImage,
 	...actions
 }: LibraryItemContextMenuProps<Item>) => {
 	const { t } = useTranslation("common")
 	const [isConfirmingDelete, setConfirmingDelete] = useState(false)
 	const handlers = handlersFor(actions, item)
+	const imageHandlers = { onSaveToLibrary, onCopyImage }
+	const hasItemActions = hasLibraryItemActions(handlers)
+	const hasImageMenuActions = hasImageActions(imageHandlers)
 
-	if (!hasLibraryItemActions(handlers)) return trigger
+	if (!hasItemActions && !hasImageMenuActions) return trigger
 
 	return (
 		<>
@@ -244,6 +303,10 @@ const LibraryItemContextMenu = <Item extends LibraryMenuSubject>({
 						onPickDelete={() => setConfirmingDelete(true)}
 						parts={CONTEXT_MENU_PARTS}
 					/>
+					{hasItemActions && hasImageMenuActions ? (
+						<ContextMenuSeparator />
+					) : null}
+					<ImageMenuItems actions={imageHandlers} item={item} />
 				</ContextMenuContent>
 			</ContextMenu>
 			<LibraryItemDeleteDialog
@@ -436,7 +499,10 @@ const LibraryItemBarActions = <Item extends LibraryMenuSubject>({
 export {
 	CONTEXT_MENU_PARTS,
 	handlersFor,
+	hasImageActions,
 	hasLibraryItemActions,
+	type ImageHandlers,
+	ImageMenuItems,
 	LIBRARY_BAR,
 	LIBRARY_BAR_BARE,
 	LIBRARY_BAR_DIVIDER,

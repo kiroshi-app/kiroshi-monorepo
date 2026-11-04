@@ -607,7 +607,7 @@ describe("fields of the Final page artboards", () => {
 		).toContain(">The Lisbon waterfront at dusk</p>")
 	})
 
-	it("shows Save on a sourced image only with the save callback", () => {
+	it("shows Save on a sourced image only with the save to Library callback", () => {
 		const save = "Save the image"
 
 		expect(
@@ -615,7 +615,10 @@ describe("fields of the Final page artboards", () => {
 		).not.toContain(save)
 		expect(
 			render(SOURCED_DETAILS, {
-				answerActions: { ...ANSWER_ACTIONS, onSaveImage: () => undefined },
+				answerActions: {
+					...ANSWER_ACTIONS,
+					imageMenu: { onSaveToLibrary: () => undefined },
+				},
 			}),
 		).toContain(save)
 	})
@@ -831,4 +834,38 @@ describe("images of an agent answer", () => {
 			expect(html).not.toContain("<button")
 		},
 	)
+	const IMAGE_SURFACES = [
+		["a gallery", fenced("gallery", GALLERY)],
+		["a plain image", PLAIN],
+		["a sourced image", SOURCED],
+		["an illustrated list", fenced("illustrated-list", ILLUSTRATED_LIST)],
+		["a web page preview", fenced("web-page", WEB_PAGE)],
+	]
+	const menuTrigger = "-webkit-touch-callout:none"
+	const IMAGE_MENU_ACTIONS: MarkdownAnswerActions = {
+		...ANSWER_ACTIONS,
+		imageMenu: { onCopyImage: () => undefined },
+	}
+
+	it.each(IMAGE_SURFACES)(
+		"puts the image of %s under a context menu when the answer carries imageMenu",
+		(_, source) => {
+			expect(render(source, { answerActions: IMAGE_MENU_ACTIONS })).toContain(
+				menuTrigger,
+			)
+		},
+	)
+
+	it.each(IMAGE_SURFACES)(
+		"draws %s without a context menu when no answer actions are given",
+		(_, source) => {
+			expect(render(source)).not.toContain(menuTrigger)
+		},
+	)
+
+	it("leaves an image inside a link without a context menu", () => {
+		expect(render(LINKED, { answerActions: IMAGE_MENU_ACTIONS })).not.toContain(
+			menuTrigger,
+		)
+	})
 })

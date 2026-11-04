@@ -12,13 +12,17 @@ import { IllustratedList } from "@workspace/ui/components/answer-blocks/illustra
 import { MapCard } from "@workspace/ui/components/answer-blocks/map-card"
 import { VideoPlayer } from "@workspace/ui/components/answer-blocks/video-player"
 import { WebPageCard } from "@workspace/ui/components/answer-blocks/web-page-card"
+import { imageMenuActionsFor } from "@workspace/ui/components/image-menu"
 import {
 	InteractiveView,
 	type InteractiveViewMode,
 	type InteractiveViewResult,
 	type InteractiveViewValues,
 } from "@workspace/ui/components/interactive-view"
-import { useMarkdownAnswerActions } from "@workspace/ui/components/markdown/answer-actions"
+import {
+	answerImageMenuOf,
+	useMarkdownAnswerActions,
+} from "@workspace/ui/components/markdown/answer-actions"
 import type {
 	AnswerBlock,
 	AnswerBlockLabel,
@@ -203,6 +207,7 @@ const GalleryBlockView = ({ block }: BlockProps<"gallery">) => {
 
 	return (
 		<Gallery
+			imageMenu={answerImageMenuOf(actions, viewerImages)}
 			images={block.images.map(({ image, alt, caption }) => ({
 				src: image,
 				alt,
@@ -219,18 +224,31 @@ const GalleryBlockView = ({ block }: BlockProps<"gallery">) => {
 
 const IllustratedListBlockView = ({
 	block,
-}: BlockProps<"illustrated-list">) => (
-	<IllustratedList
-		items={block.items.map(({ title, image, text, badge, meta }, index) => ({
+}: BlockProps<"illustrated-list">) => {
+	const imageMenu = answerImageMenuOf(
+		useMarkdownAnswerActions(),
+		block.items.map(({ title, image, meta }, index) => ({
 			id: `${index}`,
-			title,
-			image: { src: image, alt: title },
-			badge,
-			description: text ? <InlineMarkdown>{text}</InlineMarkdown> : undefined,
-			meta,
-		}))}
-	/>
-)
+			name: title,
+			src: image,
+			detail: meta ?? "",
+		})),
+	)
+
+	return (
+		<IllustratedList
+			imageMenu={imageMenu}
+			items={block.items.map(({ title, image, text, badge, meta }, index) => ({
+				id: `${index}`,
+				title,
+				image: { src: image, alt: title },
+				badge,
+				description: text ? <InlineMarkdown>{text}</InlineMarkdown> : undefined,
+				meta,
+			}))}
+		/>
+	)
+}
 
 const ChecklistBlockView = ({ block }: BlockProps<"checklist">) => {
 	const actions = useMarkdownAnswerActions()
@@ -293,11 +311,27 @@ const CollapsibleBlockView = ({ block }: BlockProps<"collapsible">) => {
 const hostOf = (url: string) => new URL(url).hostname.replace(/^www\./, "")
 
 const WebPageBlockView = ({ block }: BlockProps<"web-page">) => {
-	const onOpenWebPage = useMarkdownAnswerActions()?.onOpenWebPage
+	const actions = useMarkdownAnswerActions()
+	const onOpenWebPage = actions?.onOpenWebPage
+	const domain = block.site ?? hostOf(block.url)
+	const imageMenu = answerImageMenuOf(
+		actions,
+		block.image
+			? [
+					{
+						id: block.image,
+						name: block.alt || block.title,
+						src: block.image,
+						detail: domain,
+					},
+				]
+			: [],
+	)
 
 	return (
 		<WebPageCard
-			domain={block.site ?? hostOf(block.url)}
+			domain={domain}
+			imageMenu={imageMenu && imageMenuActionsFor(imageMenu, () => 0)}
 			onOpen={onOpenWebPage ? () => onOpenWebPage(block.url) : undefined}
 			preview={block.image ? { src: block.image, alt: block.alt } : undefined}
 			title={block.title}

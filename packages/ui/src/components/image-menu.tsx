@@ -1,17 +1,14 @@
 "use client"
 
-import {
-	type ComponentProps,
-	type ComponentType,
-	type ReactElement,
-	useState,
-} from "react"
+import { type ComponentProps, type ReactElement, useState } from "react"
 import { useTranslation } from "react-i18next"
 
-import { Icons } from "@workspace/ui/components/icons"
 import {
 	CONTEXT_MENU_PARTS,
+	hasImageActions,
 	hasLibraryItemActions,
+	type ImageHandlers,
+	ImageMenuItems,
 	LibraryItemDeleteDialog,
 	type LibraryItemHandlers,
 	LibraryItemMenuItems,
@@ -19,20 +16,11 @@ import {
 import {
 	ContextMenu,
 	ContextMenuContent,
-	ContextMenuItem,
 	ContextMenuSeparator,
 	ContextMenuTrigger,
 } from "@workspace/ui/components/ui/context-menu"
 import { STILL_UNDER_REDUCED_MOTION } from "@workspace/ui/lib/reduced-motion"
 import { cn } from "@workspace/ui/lib/utils"
-
-type ImageMenuAction<Item> = (item: Item) => void | Promise<void>
-
-type ImageHandlers<Item> = {
-	onSaveToLibrary?: ImageMenuAction<Item>
-	onCopyImage?: ImageMenuAction<Item>
-	onOpenInViewer?: ImageMenuAction<Item>
-}
 
 type ImageMenuActions<Item> = LibraryItemHandlers<Item> & ImageHandlers<Item>
 
@@ -46,28 +34,6 @@ type ImageMenuProps<Item> = ImageMenuActions<Item> & {
 	onOpenChange?: ComponentProps<typeof ContextMenu>["onOpenChange"]
 	onConfirmingDeleteChange?: (isConfirming: boolean) => void
 }
-
-const IMAGE_ACTIONS = [
-	{
-		handler: "onSaveToLibrary",
-		label: "library.imageMenu.saveToLibrary",
-		Icon: Icons.Library,
-	},
-	{
-		handler: "onCopyImage",
-		label: "library.imageMenu.copyImage",
-		Icon: Icons.Copy,
-	},
-	{
-		handler: "onOpenInViewer",
-		label: "library.imageMenu.openInViewer",
-		Icon: Icons.Fullscreen,
-	},
-] as const satisfies {
-	handler: keyof ImageHandlers<unknown>
-	label: string
-	Icon: ComponentType
-}[]
 
 const imageMenuActionsFor = <From, To>(
 	actions: ImageMenuActions<To>,
@@ -99,12 +65,10 @@ const ImageMenu = <Item,>({
 		onCopyImage,
 		onOpenInViewer: surface === "viewer" ? undefined : onOpenInViewer,
 	}
-	const imageActions = IMAGE_ACTIONS.filter(
-		({ handler }) => imageHandlers[handler] !== undefined,
-	)
+	const hasImageMenuActions = hasImageActions(imageHandlers)
 	const hasViewerActions = hasLibraryItemActions(viewerActions)
 
-	if (!hasViewerActions && imageActions.length === 0) return trigger
+	if (!hasViewerActions && !hasImageMenuActions) return trigger
 
 	const confirmDelete = (isConfirming: boolean) => {
 		setConfirmingDelete(isConfirming)
@@ -129,18 +93,10 @@ const ImageMenu = <Item,>({
 						order="bar"
 						parts={CONTEXT_MENU_PARTS}
 					/>
-					{hasViewerActions && imageActions.length > 0 ? (
+					{hasViewerActions && hasImageMenuActions ? (
 						<ContextMenuSeparator />
 					) : null}
-					{imageActions.map(({ handler, label, Icon }) => (
-						<ContextMenuItem
-							key={handler}
-							onClick={() => imageHandlers[handler]?.(item)}
-						>
-							<Icon aria-hidden="true" className="size-3.5" />
-							{t(label)}
-						</ContextMenuItem>
-					))}
+					<ImageMenuItems actions={imageHandlers} item={item} />
 				</ContextMenuContent>
 			</ContextMenu>
 			<LibraryItemDeleteDialog

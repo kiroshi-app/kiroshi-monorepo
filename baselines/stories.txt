@@ -61,6 +61,11 @@ conversation-markdown-answerblocks--collapsible-sections-with-values
 conversation-markdown-answerblocks--gallery-in-answer
 conversation-markdown-answerblocks--illustrated-list-in-answer
 conversation-markdown-answerblocks--illustrated-list-with-badge-and-meta
+conversation-markdown-answerblocks--image-menu-on-gallery
+conversation-markdown-answerblocks--image-menu-on-illustrated-list
+conversation-markdown-answerblocks--image-menu-on-plain-image
+conversation-markdown-answerblocks--image-menu-on-sourced-image
+conversation-markdown-answerblocks--image-menu-on-web-page-preview
 conversation-markdown-answerblocks--images-look-the-same-when-openable
 conversation-markdown-answerblocks--interactive-budget-with-breakdown
 conversation-markdown-answerblocks--interactive-result-not-defined
@@ -1537,6 +1542,7 @@ navigation-librarypanel--grid-context-menu
 navigation-librarypanel--grid-documents
 navigation-librarypanel--grid-documents-across-spaces
 navigation-librarypanel--grid-documents-across-spaces-light
+navigation-librarypanel--grid-image-menu
 navigation-librarypanel--grid-images
 navigation-librarypanel--grid-without-item-actions
 navigation-librarypanel--import-failures
