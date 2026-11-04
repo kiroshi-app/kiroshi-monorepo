@@ -726,7 +726,7 @@ const LibraryDocumentBlockEditor = ({
 		setToolbarMode("link")
 	}
 
-	const isToolbarShown = selected !== undefined && toolbarMode !== "closed"
+	const shownSelection = toolbarMode === "closed" ? undefined : selected
 
 	const toolbarFor = ({ anchor, formats, link }: SelectedText) => {
 		const action = (name: CommandFormat) => ({
@@ -1002,7 +1002,7 @@ const LibraryDocumentBlockEditor = ({
 			if (event.key === "Escape") {
 				event.preventDefault()
 				if (slashFor === block.id) setSlashFor(undefined)
-				else if (isToolbarShown) setToolbarMode("closed")
+				else if (shownSelection) setToolbarMode("closed")
 				else focusHandle(block.id)
 				return
 			}
@@ -1250,7 +1250,7 @@ const LibraryDocumentBlockEditor = ({
 					</div>
 				)
 			})}
-			{selected && isToolbarShown ? toolbarFor(selected) : null}
+			{shownSelection ? toolbarFor(shownSelection) : null}
 		</div>
 	)
 }
