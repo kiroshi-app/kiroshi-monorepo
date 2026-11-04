@@ -232,6 +232,17 @@ const pickInImageMenu = async (entry: string, setup: ViewerSetup = {}) => {
 	await press(within(menu).getByRole("menuitem", { name: entry }))
 }
 
+const holdImport = () => {
+	let open: () => void = () => undefined
+	harness.importGate = new Promise<void>((resolve) => {
+		open = resolve
+	})
+	return () =>
+		act(async () => {
+			open()
+		})
+}
+
 const callsOf = (command: string) =>
 	harness.calls
 		.filter((call) => call.command === command)
@@ -474,17 +485,6 @@ describe("the bar of the thread viewer on an attachment", () => {
 })
 
 describe("Save the image from a thread", () => {
-	const holdImport = () => {
-		let open: () => void = () => undefined
-		harness.importGate = new Promise<void>((resolve) => {
-			open = resolve
-		})
-		return () =>
-			act(async () => {
-				open()
-			})
-	}
-
 	const renderImageActions = () =>
 		renderHook(useShownImageActions, { wrapper: wrapperOn(HOSTED) })
 
@@ -653,17 +653,6 @@ describe("Save to Library in the menu of a sourced answer image", () => {
 				isWriting: false,
 			}),
 		)
-
-	const holdImport = () => {
-		let open: () => void = () => undefined
-		harness.importGate = new Promise<void>((resolve) => {
-			open = resolve
-		})
-		return () =>
-			act(async () => {
-				open()
-			})
-	}
 
 	const figureOf = (name: string) => {
 		const figure = screen
