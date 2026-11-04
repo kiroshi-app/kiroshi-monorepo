@@ -43,6 +43,21 @@ const attachmentImageMenu = (
 	)
 }
 
+const attachmentOpener = (
+	attachments: MessageAttachment[],
+	{ openImage }: AnswerActions,
+) => {
+	const images = viewerImagesOf(attachments)
+	return (id: string) => {
+		const index = images.findIndex((image) => image.id === id)
+		if (index === -1) {
+			openAttachment(id)
+			return
+		}
+		openImage(images, index)
+	}
+}
+
 export const TurnBody = ({
 	attachments,
 	text,
@@ -58,7 +73,9 @@ export const TurnBody = ({
 					actions ? attachmentImageMenu(attachments, actions) : undefined
 				}
 				items={attachments}
-				onOpen={openAttachment}
+				onOpen={
+					actions ? attachmentOpener(attachments, actions) : openAttachment
+				}
 			/>
 			{text ? (
 				<Markdown answerActions={answerActions} isWriting={isWriting}>
