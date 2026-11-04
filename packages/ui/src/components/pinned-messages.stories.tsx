@@ -59,6 +59,22 @@ const isReachable = (element: Element) => {
 	return Boolean(hit && element.contains(hit))
 }
 
+const expectHeaderRestColour = async (
+	canvasElement: HTMLElement,
+	trigger: HTMLElement,
+) => {
+	const header = canvasElement.querySelector("[data-slot='app-header']")
+	const icon = trigger.querySelector("svg")
+	const restColour = header ? getComputedStyle(header).color : null
+
+	await expect(icon).not.toBeNull()
+	await expect(restColour).not.toBeNull()
+	await expect(getComputedStyle(trigger).color).toBe(restColour)
+	await expect(icon && getComputedStyle(icon).color).toBe(restColour)
+	await expect(getComputedStyle(trigger).opacity).toBe("1")
+	await expect(icon && getComputedStyle(icon).opacity).toBe("1")
+}
+
 const ChatHeader = (props: PinnedMessagesProps) => (
 	<AppHeader leading="Skippy" trailing={<PinnedMessages {...props} />} />
 )
@@ -140,6 +156,28 @@ export const Default = meta.story({
 	},
 })
 
+export const OnePinned = meta.story({
+	args: { messages: MESSAGES.slice(0, 1) },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"One message pinned, the button at rest. Check that the pin and the number wear the same colour as the button with nothing pinned and as every other ghost button of the header, with no muted tone and no fade, and that the number keeps tabular figures and the count in the button's name. `apps/app/src/components/thread-screen.tsx:322` mounts it in the header of every thread.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const trigger = canvas.getByRole("button", { name: TRIGGER })
+
+		await expect(trigger).toHaveAccessibleName(`${TITLE}, 1 pinned`)
+		await expect(trigger).toHaveTextContent("1")
+		await expect(getComputedStyle(trigger).fontVariantNumeric).toBe(
+			"tabular-nums",
+		)
+		await expectHeaderRestColour(canvasElement, trigger)
+	},
+})
+
 export const Empty = meta.story({
 	args: { messages: [] },
 	parameters: {
@@ -155,6 +193,7 @@ export const Empty = meta.story({
 
 		await expect(trigger.tagName).toBe("BUTTON")
 		await expect(trigger).toHaveAccessibleName(TITLE)
+		await expectHeaderRestColour(canvasElement, trigger)
 
 		await userEvent.click(trigger)
 		const body = within(canvasElement.ownerDocument.body)

@@ -349,6 +349,7 @@ conversation-message-messagesidecontext--reader-side
 conversation-message-messagesidecontext--without-provider
 conversation-message-pinnedmessages--default
 conversation-message-pinnedmessages--empty
+conversation-message-pinnedmessages--one-pinned
 conversation-message-pinnedmessages--overflowing
 conversation-message-pinnedmessages--unpinning
 conversation-message-richblockpending--default

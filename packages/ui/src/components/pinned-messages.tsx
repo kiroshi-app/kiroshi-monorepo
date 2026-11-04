@@ -111,9 +111,7 @@ const PinnedMessages = ({
 					variant="ghost"
 					aria-label={hasPins ? t("pinned.counted", { count }) : title}
 					className={
-						hasPins
-							? "h-7 gap-1 px-2 text-muted-foreground text-xs tabular-nums"
-							: undefined
+						hasPins ? "h-7 gap-1 px-2 text-xs tabular-nums" : undefined
 					}
 				>
 					<Icons.Pin />
