@@ -2,7 +2,6 @@ import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import type {
 	LibraryDocumentAgent,
 	LibraryDocumentEdit,
-	LibraryDocumentFinished,
 	LibraryDocumentWriter,
 } from "@workspace/ui/components/library-document-agents"
 import type { LibraryDocument } from "@workspace/ui/components/library-document-view"
@@ -213,8 +212,6 @@ export const LIBRARY_ITEMS_AFTER_IMPORT: LibraryItem[] = [
 export const LIBRARY_AGENTS = {
 	atlas: { id: "atlas", name: "Atlas", hue: 41 },
 	mira: { id: "mira", name: "Mira", hue: BLOT_HUES.green },
-	sol: { id: "sol", name: "Sol", hue: BLOT_HUES.blue },
-	ivo: { id: "ivo", name: "Ivo", hue: BLOT_HUES.pink },
 	longName: {
 		id: "long-name",
 		name: "Atlas Quarterly Planning and Review Lead",
@@ -269,19 +266,6 @@ export const LIBRARY_WRITERS: LibraryDocumentWriter[] = [
 	},
 ]
 
-export const LIBRARY_FINISHED: LibraryDocumentFinished = {
-	edits: [
-		editOf(LIBRARY_AGENTS.atlas, ATLAS_SENTENCE),
-		editOf(LIBRARY_AGENTS.mira, MIRA_SENTENCE),
-	],
-	sentenceCount: 2,
-	elapsedSeconds: 108,
-}
-
-const TIMELINE_SENTENCE = "Copy is final on the 7th"
-
-const LAUNCH_SENTENCE = "The spring launch puts the Library"
-
 export const LIBRARY_LONG_NAME_WRITERS: LibraryDocumentWriter[] = [
 	{
 		...editOf(LIBRARY_AGENTS.longName, MIRA_SENTENCE),
@@ -290,14 +274,3 @@ export const LIBRARY_LONG_NAME_WRITERS: LibraryDocumentWriter[] = [
 		section: "What we measure",
 	},
 ]
-
-export const LIBRARY_LONG_NAME_FINISHED: LibraryDocumentFinished = {
-	edits: [
-		editOf(LIBRARY_AGENTS.longName, MIRA_SENTENCE),
-		editOf(LIBRARY_AGENTS.mira, ATLAS_SENTENCE),
-		editOf(LIBRARY_AGENTS.sol, TIMELINE_SENTENCE),
-		editOf(LIBRARY_AGENTS.ivo, LAUNCH_SENTENCE),
-	],
-	sentenceCount: 4,
-	elapsedSeconds: 312,
-}

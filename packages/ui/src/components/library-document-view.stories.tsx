@@ -13,8 +13,6 @@ import { ContentCard } from "@workspace/ui/components/content-card"
 import {
 	LIBRARY_AGENT_DOCUMENT,
 	LIBRARY_AGENTS,
-	LIBRARY_FINISHED,
-	LIBRARY_LONG_NAME_FINISHED,
 	LIBRARY_LONG_NAME_WRITERS,
 	LIBRARY_WRITERS,
 } from "@workspace/ui/components/library.fixtures"
@@ -382,8 +380,6 @@ const AGENT_CALLBACKS = {
 	onStopAll: fn(),
 	onStop: fn(),
 	onOpenConversation: fn(),
-	onUndoAll: fn(),
-	onDone: fn(),
 }
 
 const flagNamed = (name: string) =>
@@ -494,55 +490,6 @@ export const AgentsWriting = meta.story({
 	},
 })
 
-export const AgentFinished = meta.story({
-	args: {
-		...AGENT_CALLBACKS,
-		document: LIBRARY_AGENT_DOCUMENT,
-		finished: LIBRARY_FINISHED,
-	},
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"Atlas and Mira done writing, as artboard 11 draws it. Check that the presence pill and the carets are gone, that each added run keeps its agent's colour as plain text, and that the finished bar names both agents and reports Undo all and Done.",
-			},
-		},
-	},
-	play: async ({ args, canvas, canvasElement, userEvent }) => {
-		await expect(canvas.queryByRole("button", { name: "Stop all" })).toBe(null)
-		await expect(
-			canvasElement.querySelector("[data-slot='library-document-caret']"),
-		).toBe(null)
-		await expect(canvas.getByRole("button", { name: "More" })).toBeVisible()
-
-		const [atlasRun] = canvasElement.querySelectorAll<HTMLElement>(
-			"[data-slot='library-document-run']",
-		)
-		const block = (atlasRun as HTMLElement).closest("li, p") as HTMLElement
-		await expect(getComputedStyle(atlasRun as HTMLElement).color).not.toBe(
-			getComputedStyle(block).color,
-		)
-		await expect(
-			getComputedStyle(atlasRun as HTMLElement).backgroundColor,
-		).toBe("rgba(0, 0, 0, 0)")
-
-		const bar = slotIn(canvasElement, "library-document-finished")
-		await expect(bar).toHaveTextContent("Atlas and Mira finished")
-		await expect(bar).toHaveTextContent("2 sentences added · 1m 48s")
-		await expect(bar.getBoundingClientRect()).toMatchObject({
-			width: 640,
-			height: 52,
-		})
-
-		await userEvent.click(canvas.getByRole("button", { name: "Undo all" }))
-		await expect(args.onUndoAll).toHaveBeenCalledOnce()
-		await userEvent.click(canvas.getByRole("button", { name: "Done" }))
-		await expect(args.onDone).toHaveBeenCalledOnce()
-		blurActiveElement()
-		await expect(document.activeElement).toBe(document.body)
-	},
-})
-
 export const OneAgentWriting = meta.story({
 	tags: ["test-only"],
 	args: {
@@ -626,38 +573,5 @@ export const LongAgentNameWriting = meta.story({
 				card.querySelector("[data-slot='popover-title']") as HTMLElement,
 			),
 		).toBe(true)
-	},
-})
-
-export const LongAgentNameFinished = meta.story({
-	tags: ["test-only"],
-	args: {
-		...AGENT_CALLBACKS,
-		document: LIBRARY_AGENT_DOCUMENT,
-		finished: LIBRARY_LONG_NAME_FINISHED,
-	},
-	parameters: {
-		a11y: {
-			config: {
-				rules: [{ id: "scrollable-region-focusable", reviewOnFail: true }],
-			},
-		},
-		docs: {
-			description: {
-				story:
-					"A 40-character agent name among four finished agents in a 320 wide document column. Check that the finished bar title names the first two and counts the others on one line, truncated.",
-			},
-		},
-	},
-	render: (args) => <NarrowColumn {...args} />,
-	play: async ({ canvasElement }) => {
-		const title = slotIn(
-			canvasElement,
-			"library-document-finished",
-		).querySelector("p") as HTMLElement
-		await expect(title).toHaveTextContent(
-			`${LIBRARY_AGENTS.longName.name}, Mira and 2 others finished`,
-		)
-		await expect(isTruncatedOnOneLine(title)).toBe(true)
 	},
 })

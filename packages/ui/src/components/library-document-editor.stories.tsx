@@ -24,7 +24,6 @@ import { ContentCard } from "@workspace/ui/components/content-card"
 import {
 	LIBRARY_AGENT_DOCUMENT,
 	LIBRARY_AGENTS,
-	LIBRARY_FINISHED,
 	LIBRARY_WRITERS,
 } from "@workspace/ui/components/library.fixtures"
 import {
@@ -1486,83 +1485,6 @@ export const AgentsWriting = meta.story({
 				"stops an agent in its tracks",
 			),
 		)
-	},
-})
-
-const LONG_AGENT_DOCUMENT = {
-	...LIBRARY_AGENT_DOCUMENT,
-	body: [
-		LIBRARY_AGENT_DOCUMENT.body,
-		"## Open questions",
-		...Array.from(
-			{ length: 10 },
-			(_, index) =>
-				`Question ${index + 1}: who reads the weekly number first, and what do they change when it drops?`,
-		),
-		"The last line of the brief stays above the finished bar.",
-	].join("\n\n"),
-}
-
-export const AgentFinished = meta.story({
-	args: {
-		title: LONG_AGENT_DOCUMENT.name,
-		body: LONG_AGENT_DOCUMENT.body,
-		detail: LONG_AGENT_DOCUMENT.detail,
-		template: undefined,
-		finished: LIBRARY_FINISHED,
-		onUndoAll: fn(),
-		onDone: fn(),
-	},
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"Atlas and Mira done writing in a long document open to edit, as artboard 11 draws it. Check that the presence pill and the carets are gone, that each added run keeps its agent's colour as plain text, that the finished bar floats centred at the bottom of the column with Undo all and Done, and that the last line of the document clears the bar once scrolled to the end.",
-			},
-		},
-	},
-	play: async ({ args, canvas, canvasElement, userEvent }) => {
-		await expect(
-			canvasElement.querySelector("[data-slot='library-document-presence']"),
-		).toBe(null)
-		await expect(
-			canvasElement.querySelector("[data-slot='library-document-caret']"),
-		).toBe(null)
-		await waitFor(() => expect(runTextsIn(canvasElement)).toEqual(AGENT_RUNS))
-		const [atlasRun] = slotsIn(canvasElement, "library-document-run")
-		await expect(getComputedStyle(atlasRun as HTMLElement).color).not.toBe(
-			getComputedStyle(bodyIn(canvasElement)).color,
-		)
-		await expect(
-			getComputedStyle(atlasRun as HTMLElement).backgroundColor,
-		).toBe("rgba(0, 0, 0, 0)")
-
-		const bar = slotIn(canvasElement, "library-document-finished")
-		await expect(bar).toHaveTextContent("Atlas and Mira finished")
-		await expect(bar).toHaveTextContent("2 sentences added · 1m 48s")
-		await expect(bar.getBoundingClientRect()).toMatchObject({
-			width: 640,
-			height: 52,
-		})
-
-		const column = slotIn(canvasElement, "library-document-column")
-		await expect(column.scrollHeight).toBeGreaterThan(column.clientHeight)
-		column.scrollTop = column.scrollHeight
-		const view = viewIn(canvasElement)
-		await waitFor(() =>
-			expect(lineAt(canvasElement, view.state.doc.lines).textContent).toBe(
-				"The last line of the brief stays above the finished bar.",
-			),
-		)
-		await expect(
-			lineAt(canvasElement, view.state.doc.lines).getBoundingClientRect()
-				.bottom,
-		).toBeLessThanOrEqual(bar.getBoundingClientRect().top)
-
-		await userEvent.click(canvas.getByRole("button", { name: "Undo all" }))
-		await expect(args.onUndoAll).toHaveBeenCalledOnce()
-		await userEvent.click(canvas.getByRole("button", { name: "Done" }))
-		await expect(args.onDone).toHaveBeenCalledOnce()
 	},
 })
 

@@ -5,10 +5,6 @@ import { useTranslation } from "react-i18next"
 
 import { Icons } from "@workspace/ui/components/icons"
 import {
-	type LibraryDocumentEdit,
-	type LibraryDocumentFinished,
-	LibraryDocumentFinishedBar,
-	LibraryDocumentFinishedRun,
 	LibraryDocumentPresence,
 	type LibraryDocumentWriter,
 	LibraryDocumentWrittenRun,
@@ -102,7 +98,6 @@ type LibraryDocumentColumnProps = {
 	heading: ReactNode
 	detail: string
 	children: ReactNode
-	footer?: ReactNode
 	onColumnMouseDown?: (event: MouseEvent<HTMLDivElement>) => void
 }
 
@@ -110,7 +105,6 @@ const LibraryDocumentColumn = ({
 	heading,
 	detail,
 	children,
-	footer,
 	onColumnMouseDown,
 }: LibraryDocumentColumnProps) => (
 	<div className="relative flex min-h-0 flex-1 flex-col">
@@ -118,7 +112,6 @@ const LibraryDocumentColumn = ({
 		<div
 			className={cn(
 				"min-h-0 flex-1 overflow-y-auto px-10 pt-10 pb-10",
-				footer && "pb-24",
 				onColumnMouseDown && "cursor-text",
 			)}
 			data-slot="library-document-column"
@@ -134,11 +127,6 @@ const LibraryDocumentColumn = ({
 				{children}
 			</article>
 		</div>
-		{footer ? (
-			<div className="pointer-events-none absolute inset-x-10 bottom-6 flex justify-center *:pointer-events-auto">
-				{footer}
-			</div>
-		) : null}
 	</div>
 )
 
@@ -147,50 +135,35 @@ type LibraryDocumentViewProps = WriterActions &
 		document: LibraryDocument
 		onBack: () => void
 		writers?: LibraryDocumentWriter[]
-		finished?: LibraryDocumentFinished
 		onStopAll?: () => void
-		onUndoAll?: () => void
-		onDone?: () => void
 	}
 
-const runsOf = (edits: LibraryDocumentEdit[]) =>
-	edits.map(({ agent, start, end }) => ({ id: agent.id, start, end }))
+const runsOf = (writers: LibraryDocumentWriter[]) =>
+	writers.map(({ agent, start, end }) => ({ id: agent.id, start, end }))
 
 const LibraryDocumentView = ({
 	document,
 	onBack,
 	writers = [],
-	finished,
 	onStopAll,
 	onStop,
 	onOpenConversation,
-	onUndoAll,
-	onDone,
 	...actions
 }: LibraryDocumentViewProps) => {
 	const { t } = useTranslation("common")
 	const isWriting = writers.length > 0
-	const shownFinished = isWriting ? undefined : finished
-	const edits = isWriting ? writers : (shownFinished?.edits ?? [])
 
 	const renderRun = ({ id, isEnd, children }: MarkdownRunRenderProps) => {
 		const writer = writers.find(({ agent }) => agent.id === id)
-		if (writer)
-			return (
-				<LibraryDocumentWrittenRun
-					isEnd={isEnd}
-					onOpenConversation={onOpenConversation}
-					onStop={onStop}
-					writer={writer}
-				>
-					{children}
-				</LibraryDocumentWrittenRun>
-			)
-		const edit = edits.find(({ agent }) => agent.id === id)
-		return edit ? (
-			<LibraryDocumentFinishedRun agent={edit.agent}>
+		return writer ? (
+			<LibraryDocumentWrittenRun
+				isEnd={isEnd}
+				onOpenConversation={onOpenConversation}
+				onStop={onStop}
+				writer={writer}
+			>
 				{children}
-			</LibraryDocumentFinishedRun>
+			</LibraryDocumentWrittenRun>
 		) : (
 			children
 		)
@@ -213,15 +186,6 @@ const LibraryDocumentView = ({
 			/>
 			<LibraryDocumentColumn
 				detail={document.detail}
-				footer={
-					shownFinished ? (
-						<LibraryDocumentFinishedBar
-							finished={shownFinished}
-							onDone={onDone}
-							onUndoAll={onUndoAll}
-						/>
-					) : null
-				}
 				heading={
 					<h1 className={DOCUMENT_TITLE}>
 						{libraryDisplayName(document.name, t)}
@@ -230,8 +194,8 @@ const LibraryDocumentView = ({
 			>
 				<Markdown
 					className={DOCUMENT_TYPE}
-					renderRun={edits.length > 0 ? renderRun : undefined}
-					runs={edits.length > 0 ? runsOf(edits) : undefined}
+					renderRun={isWriting ? renderRun : undefined}
+					runs={isWriting ? runsOf(writers) : undefined}
 				>
 					{document.body}
 				</Markdown>

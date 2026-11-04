@@ -1,6 +1,5 @@
 "use client"
 
-import type { TFunction } from "i18next"
 import {
 	type CSSProperties,
 	type FocusEvent,
@@ -49,12 +48,6 @@ type LibraryDocumentPerson = {
 	caret: number
 }
 
-type LibraryDocumentFinished = {
-	edits: LibraryDocumentEdit[]
-	sentenceCount: number
-	elapsedSeconds: number
-}
-
 const STACK_LIMIT = 3
 
 const CARD_CLOSE_DELAY = 150
@@ -67,16 +60,11 @@ const CHIP = cn(
 	FOCUS_OUTLINE,
 )
 
-const FLOATING_SHADOW =
-	"shadow-popover dark:shadow-[0_1px_2px_rgb(0_0_0/0.4),0_16px_40px_rgb(0_0_0/0.6)]"
-
 const CARD_SHADOW =
 	"shadow-popover dark:shadow-[0_1px_2px_rgb(0_0_0/0.4),0_12px_32px_rgb(0_0_0/0.5)]"
 
 const WRITTEN_RUN_LOOK =
 	"rounded-[3px] border-primary/50 border-b bg-primary/12 py-0.5 text-foreground box-decoration-clone"
-
-const FINISHED_RUN_LOOK = "text-primary"
 
 const agentScopeOf = ({ name, hue }: LibraryDocumentAgent) =>
 	hue === null || hue === undefined
@@ -340,113 +328,11 @@ const LibraryDocumentPersonCaret = ({
 	</span>
 )
 
-type LibraryDocumentFinishedRunProps = {
-	agent: LibraryDocumentAgent
-	children: ReactNode
-}
-
-const LibraryDocumentFinishedRun = ({
-	agent,
-	children,
-}: LibraryDocumentFinishedRunProps) => (
-	<AgentScope agent={agent}>
-		<span className={FINISHED_RUN_LOOK} data-slot="library-document-run">
-			{children}
-		</span>
-	</AgentScope>
-)
-
-const finishedTitle = (
-	t: TFunction<"common">,
-	[first, second, ...others]: LibraryDocumentAgent[],
-) => {
-	if (!second)
-		return t("library.document.agents.finished.one", { name: first?.name })
-	if (others.length === 0)
-		return t("library.document.agents.finished.two", {
-			first: first?.name,
-			second: second.name,
-		})
-	return t("library.document.agents.finished.more", {
-		first: first?.name,
-		second: second.name,
-		count: others.length,
-	})
-}
-
-const agentsOf = (edits: LibraryDocumentEdit[]) => [
-	...new Map(edits.map(({ agent }) => [agent.id, agent])).values(),
-]
-
-type LibraryDocumentFinishedBarProps = {
-	finished: LibraryDocumentFinished
-	onUndoAll?: () => void
-	onDone?: () => void
-}
-
-const LibraryDocumentFinishedBar = ({
-	finished,
-	onUndoAll,
-	onDone,
-}: LibraryDocumentFinishedBarProps) => {
-	const { t } = useTranslation("common")
-	const agents = agentsOf(finished.edits)
-
-	return (
-		<div
-			className={cn(
-				"flex h-13 w-full max-w-160 items-center gap-2.5 rounded-full border border-foreground/10 bg-card-raised ps-3 pe-2 dark:bg-[#1c1c1e]",
-				FLOATING_SHADOW,
-			)}
-			data-slot="library-document-finished"
-		>
-			<AgentStack agents={agents} />
-			<div className="flex min-w-0 flex-1 flex-col">
-				<p className="truncate font-semibold text-compact text-foreground leading-4">
-					{finishedTitle(t, agents)}
-				</p>
-				<p className="truncate text-muted-foreground text-xs leading-4 tabular-nums">
-					{t("library.document.agents.detail", {
-						added: t("library.document.agents.added", {
-							count: finished.sentenceCount,
-						}),
-						elapsed: formatElapsed(finished.elapsedSeconds),
-					})}
-				</p>
-			</div>
-			{onUndoAll ? (
-				<Button
-					className={cn(
-						"h-9 rounded-full border-input px-3.5 transition-none",
-						FOCUS_OUTLINE,
-					)}
-					onClick={onUndoAll}
-					variant="outline"
-				>
-					{t("library.document.agents.undoAll")}
-				</Button>
-			) : null}
-			{onDone ? (
-				<Button
-					className={cn("h-9 rounded-full px-4 transition-none", FOCUS_OUTLINE)}
-					onClick={onDone}
-				>
-					{t("library.document.agents.done")}
-				</Button>
-			) : null}
-		</div>
-	)
-}
-
 export {
 	AgentCaret as LibraryDocumentAgentCaret,
 	agentScopeOf,
-	FINISHED_RUN_LOOK,
 	type LibraryDocumentAgent,
 	type LibraryDocumentEdit,
-	type LibraryDocumentFinished,
-	LibraryDocumentFinishedBar,
-	LibraryDocumentFinishedRun,
 	type LibraryDocumentPerson,
 	LibraryDocumentPersonCaret,
 	LibraryDocumentPresence,
