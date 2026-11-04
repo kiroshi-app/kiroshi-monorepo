@@ -1069,18 +1069,20 @@ describe("a push from a pinned tab", () => {
 	})
 })
 
+type TestRouter = ReturnType<typeof routerOn>
+
 const PLAN: LibraryOpening = { kind: "document", name: "plan.md" }
 
 const PLAN_HREF = `${LIBRARY}?item=plan.md&kind=document`
 
-const openPlanFromLibrary = (router: ReturnType<typeof routerOn>) =>
+const openPlanFromLibrary = (router: TestRouter) =>
 	router.navigate({
 		to: LIBRARY,
 		search: (previous) => ({ ...previous, ...librarySearchOf(PLAN) }),
 		replace: true,
 	})
 
-const openProfileFromSettings = (router: ReturnType<typeof routerOn>) =>
+const openProfileFromSettings = (router: TestRouter) =>
 	router.navigate({ to: USER_SETTINGS, search: { entry: "profile" } })
 
 describe("a navigation through the router from a pinned tab", () => {
