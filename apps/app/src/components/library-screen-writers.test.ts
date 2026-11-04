@@ -1605,8 +1605,6 @@ describe("a gallery in a joined Space", () => {
 		}
 	}
 
-	const refusedAs = (error: object) => ({ status: "error", error })
-
 	it("opens the image picker of this computer, several files at once", async () => {
 		host.pickImages.mockResolvedValue(null)
 		const gallery = await openJoinedGallery()
@@ -1698,12 +1696,15 @@ describe("a gallery in a joined Space", () => {
 		host.readPickedImage.mockImplementation((path: string) =>
 			Promise.resolve(
 				path === "/Users/me/huge.png"
-					? refusedAs({
-							kind: "tooLarge",
-							name: "huge.png",
-							bytes: 9_000_000,
-							limit: 8_388_608,
-						})
+					? {
+							status: "error",
+							error: {
+								kind: "tooLarge",
+								name: "huge.png",
+								bytes: 9_000_000,
+								limit: 8_388_608,
+							},
+						}
 					: pickedImageAt(path),
 			),
 		)
