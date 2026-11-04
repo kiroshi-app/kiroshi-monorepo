@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 
+import type { QueryClient } from "@tanstack/react-query"
 import type { Event } from "@tauri-apps/api/event"
 import {
 	act,
@@ -32,6 +33,7 @@ import {
 	LIBRARY_DOCUMENT_PRESENCE_EVENT,
 	LIBRARY_DOCUMENT_WRITER_FINISHED_EVENT,
 } from "@/lib/library/library-document-writers"
+import { libraryQueryKeys } from "@/lib/library/library-query-keys"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 
 type LibraryCall = {
@@ -85,6 +87,8 @@ const host = vi.hoisted(() => ({
 	readLinkPreview: vi.fn(),
 	images: [] as LibraryItem[],
 	lists: 0,
+	listGate: null as Promise<void> | null,
+	imageReads: [] as string[],
 	pickImages: vi.fn(),
 	importPaths: vi.fn(),
 }))
@@ -110,11 +114,13 @@ const documentOf = (name: string) => {
 }
 
 const LIBRARY_COMMANDS: Record<string, (call: LibraryCall) => unknown> = {
-	library_list: () => {
+	library_list: async () => {
 		host.lists += 1
+		await host.listGate
 		return [itemNamed(NOTES), itemNamed(PLAN), ...host.images]
 	},
 	library_read_image: ({ name }) => {
+		host.imageReads.push(name)
 		if (!host.images.some((image) => image.name === name)) {
 			throw { kind: "missing", name }
 		}
@@ -225,6 +231,8 @@ afterEach(() => {
 	host.readLinkPreview.mockReset()
 	host.images = []
 	host.lists = 0
+	host.listGate = null
+	host.imageReads = []
 	host.pickImages.mockReset()
 	host.importPaths.mockReset()
 	vi.mocked(raiseFailureNotice).mockClear()
@@ -302,8 +310,11 @@ const ATLAS = {
 	avatarImagePath: null,
 } as Bot
 
+let screenQueryClient: QueryClient
+
 const signedInWrapper = () => {
 	const { queryClient, wrapper } = createQueryTestWrapper()
+	screenQueryClient = queryClient
 	queryClient.setQueryData(accountQueryKeys.state(), {
 		kind: "signedIn",
 		id: OWN_ACCOUNT,
@@ -1382,10 +1393,11 @@ describe.each([
 		await waitFor(() => expect(shownSources(gallery)).toEqual([shown]))
 	})
 
-	it("shows an image that names no Library item as broken", async () => {
+	it("shows an image that names no Library item as broken after one fresh read of the list", async () => {
 		seedDocument(NOTES, documentAround(galleryOf(UNLISTED_LAMP)))
 		await renderLibraryScreen(isJoined)
 		await openDocument(NOTES)
+		const listsBefore = host.lists
 		const gallery = await openGallery()
 
 		await waitFor(() =>
@@ -1394,6 +1406,37 @@ describe.each([
 			).toBeInstanceOf(HTMLElement),
 		)
 		expect(shownSources(gallery)).toEqual([])
+		expect(host.lists - listsBefore).toBe(1)
+	})
+
+	it("shows an image added to the Library after the list was read", async () => {
+		seedDocument(NOTES, documentAround(galleryOf(STORED_SOFA)))
+		await renderLibraryScreen(isJoined)
+		await openDocument(NOTES)
+		host.images = [imageNamed("sofa-green.jpg")]
+		const gallery = await openGallery()
+
+		await waitFor(() => expect(shownSources(gallery)).toEqual([shown]))
+	})
+
+	it("waits for the list when the gallery opens with no list in the cache", async () => {
+		let releaseList = () => {}
+		host.images = [imageNamed("sofa-green.jpg")]
+		seedDocument(NOTES, documentAround(galleryOf(STORED_SOFA)))
+		await renderLibraryScreen(isJoined)
+		await openDocument(NOTES)
+		screenQueryClient.removeQueries({
+			queryKey: libraryQueryKeys.itemsOf(SPACE_ID),
+		})
+		host.listGate = new Promise((release) => {
+			releaseList = release
+		})
+		const gallery = await openGallery()
+
+		expect(shownSources(gallery)).toEqual([])
+		await act(async () => releaseList())
+
+		await waitFor(() => expect(shownSources(gallery)).toEqual([shown]))
 	})
 })
 
@@ -1524,6 +1567,21 @@ describe("images added to a gallery on the host", () => {
 })
 
 describe("a gallery in a joined Space", () => {
+	it("reads a stored image over the relay once however often it is shown", async () => {
+		host.images = [imageNamed("sofa-green.jpg")]
+		seedDocument(NOTES, documentAround(galleryOf(STORED_SOFA)))
+		await renderLibraryScreen(true)
+		await openDocument(NOTES)
+		const gallery = await openGallery()
+
+		await waitFor(() =>
+			expect(shownSources(gallery)).toEqual([
+				"data:image/jpeg;base64,sofa-green.jpg-bytes",
+			]),
+		)
+		expect(host.imageReads).toEqual(["sofa-green.jpg"])
+	})
+
 	it("offers no way to add images picked on this computer", async () => {
 		host.images = [imageNamed("sofa-green.jpg")]
 		seedDocument(NOTES, documentAround(galleryOf(STORED_SOFA)))

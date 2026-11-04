@@ -1,4 +1,9 @@
-import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query"
+import {
+	queryOptions,
+	useQueries,
+	useQuery,
+	useQueryClient,
+} from "@tanstack/react-query"
 import { useEffect } from "react"
 
 import { i18n } from "@workspace/ui/lib/i18n"
@@ -56,15 +61,20 @@ const useExcerpts = (spaceId: string, items: LibraryItem[]) => {
 	return (item: LibraryItem) => excerptByName.get(item.name) ?? ""
 }
 
-export const useLibraryItems = (spaceId: string): LibraryItemsRead => {
-	const list = useQuery({
+export const libraryItemsQueryOf = (spaceId: string) =>
+	queryOptions({
 		queryKey: libraryQueryKeys.itemsOf(spaceId),
 		queryFn: () => readLibraryItems(spaceId),
-		refetchOnMount: "always",
 		meta: {
 			failureNotice: () => ({ title: i18n.t("common:library.failure.list") }),
 			raisedIn: "use-library-items",
 		},
+	})
+
+export const useLibraryItems = (spaceId: string): LibraryItemsRead => {
+	const list = useQuery({
+		...libraryItemsQueryOf(spaceId),
+		refetchOnMount: "always",
 	})
 	useRelistOnWindowFocus(spaceId)
 	const items = list.data ?? NO_ITEMS

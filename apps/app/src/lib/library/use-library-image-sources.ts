@@ -4,6 +4,7 @@ import { i18n } from "@workspace/ui/lib/i18n"
 
 import { libraryQueryKeys } from "./library-query-keys"
 import { readLibraryImage } from "./library-reads"
+import { libraryItemsQueryOf } from "./use-library-items"
 
 import type { LibraryImage, LibraryItem } from "../bindings"
 import { convertFileSrc } from "../host/tauri"
@@ -52,18 +53,23 @@ export const useLibraryImageSources = (
 	return isJoined ? hostSourceOf : fileSourceOf
 }
 
-const listedImageNamed = (items: LibraryItem[] | undefined, name: string) => {
-	const image = items?.find(
-		(item) => item.kind === "image" && item.name === name,
-	)
-	if (!image) {
-		throw new Error(`no Library image named ${name}`)
-	}
-	return image
-}
+const listedImageIn = (items: LibraryItem[] | undefined, name: string) =>
+	items?.find((item) => item.kind === "image" && item.name === name)
 
 export const useLibraryImageResolver = (spaceId: string, isJoined: boolean) => {
 	const queryClient = useQueryClient()
+	const itemsQuery = libraryItemsQueryOf(spaceId)
+	const readFreshItems = () =>
+		queryClient.fetchQuery({ ...itemsQuery, staleTime: 0 })
+	const listedImageNamed = async (name: string) => {
+		const image =
+			listedImageIn(queryClient.getQueryData(itemsQuery.queryKey), name) ??
+			listedImageIn(await readFreshItems(), name)
+		if (!image) {
+			throw new Error(`no Library image named ${name}`)
+		}
+		return image
+	}
 	const readDataUrl = async ({ name, modifiedAt }: LibraryItem) =>
 		dataUrlOf(
 			await queryClient.fetchQuery({
@@ -73,12 +79,7 @@ export const useLibraryImageResolver = (spaceId: string, isJoined: boolean) => {
 			}),
 		)
 	return async (src: string) => {
-		const image = listedImageNamed(
-			queryClient.getQueryData<LibraryItem[]>(
-				libraryQueryKeys.itemsOf(spaceId),
-			),
-			src,
-		)
+		const image = await listedImageNamed(src)
 		return isJoined ? readDataUrl(image) : fileSourceOf(image)
 	}
 }
