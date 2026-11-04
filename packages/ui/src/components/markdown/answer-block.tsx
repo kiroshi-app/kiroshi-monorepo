@@ -207,6 +207,9 @@ const GalleryBlockView = ({ block }: BlockProps<"gallery">) => {
 
 	return (
 		<Gallery
+			caption={block.images
+				.flatMap(({ caption }) => caption?.trim() || [])
+				.join(" · ")}
 			imageMenu={answerImageMenuOf(actions, viewerImages)}
 			images={block.images.map(({ image, alt, caption }) => ({
 				src: image,

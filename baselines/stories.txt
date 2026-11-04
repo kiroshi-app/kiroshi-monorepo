@@ -58,7 +58,9 @@ conversation-markdown-answerblocks--checklist-all-done
 conversation-markdown-answerblocks--checklist-partly-done
 conversation-markdown-answerblocks--collapsible-in-answer
 conversation-markdown-answerblocks--collapsible-sections-with-values
+conversation-markdown-answerblocks--gallery-captions-under-grid
 conversation-markdown-answerblocks--gallery-in-answer
+conversation-markdown-answerblocks--gallery-without-captions
 conversation-markdown-answerblocks--illustrated-list-in-answer
 conversation-markdown-answerblocks--illustrated-list-with-badge-and-meta
 conversation-markdown-answerblocks--image-menu-from-keyboard-on-illustrated-list
@@ -99,7 +101,7 @@ conversation-markdown-codesnippet--overflow
 conversation-markdown-codesnippet--single-line
 conversation-markdown-collapsiblesections--in-agent-answer
 conversation-markdown-collapsiblesections--in-narrow-column
-conversation-markdown-gallery--caption-per-image
+conversation-markdown-gallery--captions-under-grid
 conversation-markdown-gallery--image-menu-open
 conversation-markdown-gallery--in-agent-answer
 conversation-markdown-gallery--in-narrow-column
