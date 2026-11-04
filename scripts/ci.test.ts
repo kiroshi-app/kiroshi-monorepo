@@ -1100,7 +1100,7 @@ describe("the jobs of ci.yml", () => {
 				(step) => step.name === "Upload the browser debug output",
 			)
 
-			expect(gate?.run).toStartWith("bun scripts/ci.ts storybook ")
+			expect(gate?.run).toContain("bun scripts/ci.ts storybook 2>&1 | tee")
 			expect(interpolate(gate?.env?.DEBUG ?? "", { env })).toBe("")
 			expect(evaluate(upload?.if ?? "true", { env })).toBe(false)
 		},
@@ -1118,6 +1118,7 @@ describe("the jobs of ci.yml", () => {
 		)
 		expect(evaluate(upload?.if ?? "false", { env })).toBe(true)
 		expect(upload?.with?.path).toEndWith("/storybook-debug.log")
+		expect(gate?.run).toStartWith("set -o pipefail\n")
 		expect(gate?.run).toContain('tee "$RUNNER_TEMP/storybook-debug.log"')
 	})
 

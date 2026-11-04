@@ -164,7 +164,9 @@ jobs:
       - name: Gate
         env:
           DEBUG: ${{ env.STORYBOOK_OPT_IN == 'true' && 'vitest:browser*,pw:browser*' || '' }}
-        run: bun scripts/ci.ts storybook 2> >(tee "$RUNNER_TEMP/storybook-debug.log" >&2)
+        run: |
+          set -o pipefail
+          bun scripts/ci.ts storybook 2>&1 | tee "$RUNNER_TEMP/storybook-debug.log"
 
       - name: Upload the browser debug output
         if: always() && env.STORYBOOK_OPT_IN == 'true'
