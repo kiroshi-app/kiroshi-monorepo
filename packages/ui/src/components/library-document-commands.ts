@@ -1,7 +1,6 @@
 import { isolateHistory } from "@codemirror/commands"
 import { ensureSyntaxTree, syntaxTree } from "@codemirror/language"
 import {
-	type ChangeSpec,
 	type EditorState,
 	type Line,
 	type SelectionRange,
@@ -99,8 +98,8 @@ const spacesEndFrom = (state: EditorState, at: number, to: number) => {
 const trimmed = (state: EditorState, { from, to }: Span): Span => {
 	let start = from
 	let end = to
-	while (start < end && /\s/.test(state.sliceDoc(start, start + 1))) start++
-	while (end > start && /\s/.test(state.sliceDoc(end - 1, end))) end--
+	while (start < end && isSpace(state.sliceDoc(start, start + 1))) start++
+	while (end > start && isSpace(state.sliceDoc(end - 1, end))) end--
 	return { from: start, to: end }
 }
 
@@ -223,7 +222,7 @@ const segmentsOfSelection = (state: EditorState) =>
 const isCarried = (state: EditorState, segment: Span, node: string) => {
 	const runs = runsIn(state, segment).filter((run) => run.node.name === node)
 	for (let at = segment.from; at < segment.to; at++) {
-		if (/\s/.test(state.sliceDoc(at, at + 1))) continue
+		if (isSpace(state.sliceDoc(at, at + 1))) continue
 		if (!runs.some((run) => run.from <= at && at < run.to)) return false
 	}
 	return true
@@ -313,7 +312,7 @@ const dispatchFormat = (
 ) => {
 	const effective = withoutNoOps(state, withoutRewrittenMarkers(state, changes))
 	if (effective.length === 0) return false
-	const changeSet = state.changes(effective as ChangeSpec[])
+	const changeSet = state.changes(effective)
 	dispatch(
 		state.update({
 			changes: changeSet,
