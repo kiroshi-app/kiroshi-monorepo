@@ -48,6 +48,7 @@ export const commands = {
 	libraryOpenDocument: (spaceId: string, name: string) => typedError<LibraryDocumentState, LibraryError>(__TAURI_INVOKE("library_open_document", { spaceId, name })),
 	libraryApplyUpdate: (spaceId: string, name: string, update: string) => typedError<null, LibraryError>(__TAURI_INVOKE("library_apply_update", { spaceId, name, update })),
 	libraryShareCaret: (spaceId: string, name: string, caret: string | null) => typedError<null, LibraryError>(__TAURI_INVOKE("library_share_caret", { spaceId, name, caret })),
+	libraryStopWriters: (spaceId: string, name: string, agentId: string | null) => typedError<CancelOutcome, LibraryError>(__TAURI_INVOKE("library_stop_writers", { spaceId, name, agentId })),
 	libraryReadThumbnail: (spaceId: string, name: string) => typedError<LibraryImage, LibraryError>(__TAURI_INVOKE("library_read_thumbnail", { spaceId, name })),
 	libraryImport: (spaceId: string, name: string, content: string) => typedError<LibraryItem, LibraryError>(__TAURI_INVOKE("library_import", { spaceId, name, content })),
 	libraryImportPaths: (spaceId: string, paths: string[]) => typedError<LibraryImport[], LibraryError>(__TAURI_INVOKE("library_import_paths", { spaceId, paths })),

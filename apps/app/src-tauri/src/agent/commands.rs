@@ -1274,11 +1274,7 @@ pub(crate) async fn start_run<R: Runtime>(
 			scope.bot_id.clone(),
 		)))
 		.hosting(hosted(BundleHost::new(app.clone(), scope.clone())))
-		.hosting(hosted(LibraryHost::new(
-			app.clone(),
-			scope.conversation_id.clone(),
-			scope.bot_id.clone(),
-		)))
+		.hosting(hosted(LibraryHost::new(app.clone(), scope.clone())))
 		.answering(output_schema)
 		.on_mission_thread(mission_thread)
 		.read_by(members)

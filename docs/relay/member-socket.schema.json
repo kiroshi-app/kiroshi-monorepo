@@ -11998,6 +11998,39 @@
         "type": "null"
       }
     },
+    "library_stop_writers": {
+      "args": {
+        "properties": {
+          "agentId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "spaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spaceId",
+          "name"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/LibraryError"
+      },
+      "ok": {
+        "$ref": "#/$defs/CancelOutcome"
+      }
+    },
     "library_templates": {
       "args": {
         "properties": {},

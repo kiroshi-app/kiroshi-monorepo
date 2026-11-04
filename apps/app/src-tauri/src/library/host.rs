@@ -4,11 +4,12 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use base64::prelude::{Engine as _, BASE64_STANDARD};
+use futures_util::future::join_all;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Manager, Runtime, State};
-use tokio::sync::OwnedMutexGuard;
+use tokio::sync::{watch, OwnedMutexGuard};
 
 use super::contract::{
 	LibraryDocumentFormat, LibraryDocumentWriterFinished, LibraryError, LibraryItem,
@@ -21,6 +22,7 @@ use super::{
 	encoded_content, import_path, list, read_document, rename_linked_document, resolve, root,
 	AcceptedType,
 };
+use crate::agent::contract::RuntimeScope;
 use crate::agent::host::{Host, Refusal};
 use crate::conversations::commands::{post_document, ready};
 use crate::conversations::contract::TranscriptStoreError;
@@ -42,8 +44,7 @@ const NO_STORE: &str = "the store of this session is not open";
 #[derive(Debug)]
 pub struct LibraryHost<R: Runtime> {
 	app: AppHandle<R>,
-	conversation_id: String,
-	bot_id: String,
+	scope: RuntimeScope,
 }
 
 #[derive(Debug, Serialize)]
@@ -58,6 +59,7 @@ pub enum DocumentRefusal {
 pub enum ToolRefusal {
 	PassageNotFound,
 	PassageNotUnique,
+	Stopped,
 	#[serde(rename_all = "camelCase")]
 	ConversationWithoutSpace {
 		conversation_id: String,
@@ -203,8 +205,8 @@ struct Agent {
 }
 
 impl<R: Runtime> LibraryHost<R> {
-	pub fn new(app: AppHandle<R>, conversation_id: String, bot_id: String) -> Self {
-		Self { app, conversation_id, bot_id }
+	pub fn new(app: AppHandle<R>, scope: RuntimeScope) -> Self {
+		Self { app, scope }
 	}
 
 	fn changed(&self, space_id: &str, item: LibraryItem) -> Entry {
@@ -213,9 +215,9 @@ impl<R: Runtime> LibraryHost<R> {
 	}
 
 	async fn space(&self, database: &db::Database) -> Result<String, DocumentRefusal> {
-		database.conversations().space(self.conversation_id.clone()).await?.ok_or_else(|| {
+		database.conversations().space(self.scope.conversation_id.clone()).await?.ok_or_else(|| {
 			DocumentRefusal::Tool(ToolRefusal::ConversationWithoutSpace {
-				conversation_id: self.conversation_id.clone(),
+				conversation_id: self.scope.conversation_id.clone(),
 			})
 		})
 	}
@@ -223,11 +225,11 @@ impl<R: Runtime> LibraryHost<R> {
 	async fn agent(&self, database: &db::Database) -> Result<Agent, DocumentRefusal> {
 		let bot = database
 			.conversations()
-			.bot(self.bot_id.clone())
+			.bot(self.scope.bot_id.clone())
 			.await
 			.map_err(|error| DocumentRefusal::unexpected(format!("{error:?}")))?
 			.ok_or_else(|| {
-				DocumentRefusal::unexpected(format!("the agent {} is gone", self.bot_id))
+				DocumentRefusal::unexpected(format!("the agent {} is gone", self.scope.bot_id))
 			})?;
 		Ok(Agent { id: bot.id, name: bot.name })
 	}
@@ -237,16 +239,21 @@ impl<R: Runtime> LibraryHost<R> {
 		database: &db::Database,
 		name: String,
 	) -> Result<DocumentPosted, DocumentRefusal> {
-		let message_id =
-			post_document(&self.app, database, &self.conversation_id, &self.bot_id, &name)
-				.await
-				.map_err(|error| match error {
-					TranscriptStoreError::DocumentRefused { failure, .. } => {
-						DocumentRefusal::Library(*failure)
-					}
-					unexpected => DocumentRefusal::unexpected(format!("{unexpected:?}")),
-				})?;
-		Ok(DocumentPosted { name, conversation_id: self.conversation_id.clone(), message_id })
+		let message_id = post_document(
+			&self.app,
+			database,
+			&self.scope.conversation_id,
+			&self.scope.bot_id,
+			&name,
+		)
+		.await
+		.map_err(|error| match error {
+			TranscriptStoreError::DocumentRefused { failure, .. } => {
+				DocumentRefusal::Library(*failure)
+			}
+			unexpected => DocumentRefusal::unexpected(format!("{unexpected:?}")),
+		})?;
+		Ok(DocumentPosted { name, conversation_id: self.scope.conversation_id.clone(), message_id })
 	}
 
 	async fn written(
@@ -257,7 +264,11 @@ impl<R: Runtime> LibraryHost<R> {
 		asked: Write,
 	) -> Result<DocumentWritten, DocumentRefusal> {
 		markdown(root, space_id, &asked.name)?;
-		let _turn = turn_of(&self.app, space_id, &asked.name, &agent.id).await;
+		let turn = turn_of(&self.app, space_id, &asked.name, &self.scope).await;
+		if turn.is_stopped() {
+			drop(Writing::of(&self.app, space_id, &asked.name, agent));
+			return Err(ToolRefusal::Stopped.into());
+		}
 		let opened = documents(&self.app).open(root, space_id, &asked.name)?;
 		if let Some(host_edit) = opened.host_edit {
 			announce(&self.app, space_id, &asked.name, &host_edit);
@@ -268,18 +279,15 @@ impl<R: Runtime> LibraryHost<R> {
 			Location::PassageNotFound => return Err(ToolRefusal::PassageNotFound.into()),
 			Location::PassageNotUnique => return Err(ToolRefusal::PassageNotUnique.into()),
 		};
-		let mut writing = Writing {
-			app: &self.app,
-			space_id,
-			name: &asked.name,
-			agent,
-			outcome: LibraryWriteOutcome::Failed,
-		};
+		let mut writing = Writing::of(&self.app, space_id, &asked.name, agent);
 		writing.at(&caret);
 		let writer = client_id_of(&agent.id);
 		for (index, text) in steps(&asked.text).into_iter().enumerate() {
 			if index > 0 {
 				tokio::time::sleep(STEP_PAUSE).await;
+			}
+			if turn.is_stopped() {
+				return Err(ToolRefusal::Stopped.into());
 			}
 			let step = WriteStep { writer, caret: &caret, text };
 			let written = documents(&self.app).write(root, space_id, &asked.name, &step)?;
@@ -462,7 +470,11 @@ struct Writing<'a, R: Runtime> {
 	outcome: LibraryWriteOutcome,
 }
 
-impl<R: Runtime> Writing<'_, R> {
+impl<'a, R: Runtime> Writing<'a, R> {
+	fn of(app: &'a AppHandle<R>, space_id: &'a str, name: &'a str, agent: &'a Agent) -> Self {
+		Self { app, space_id, name, agent, outcome: LibraryWriteOutcome::Failed }
+	}
+
 	fn at(&self, caret: &[u8]) {
 		let seated = Seated {
 			seat: Seat::Agent(self.agent.id.clone()),
@@ -499,45 +511,124 @@ type WriteKey = (String, String, String);
 
 type WriteQueue = Arc<tokio::sync::Mutex<()>>;
 
+struct Writer {
+	scope: RuntimeScope,
+	stop: Arc<watch::Sender<bool>>,
+}
+
 #[derive(Default)]
-struct AgentWrites(Mutex<HashMap<WriteKey, WriteQueue>>);
+struct AgentWrites {
+	queues: Mutex<HashMap<WriteKey, WriteQueue>>,
+	writers: Mutex<HashMap<WriteKey, Vec<Writer>>>,
+}
 
 impl AgentWrites {
 	fn held(&self) -> MutexGuard<'_, HashMap<WriteKey, WriteQueue>> {
-		self.0.lock().unwrap_or_else(PoisonError::into_inner)
+		self.queues.lock().unwrap_or_else(PoisonError::into_inner)
+	}
+
+	fn writing(&self) -> MutexGuard<'_, HashMap<WriteKey, Vec<Writer>>> {
+		self.writers.lock().unwrap_or_else(PoisonError::into_inner)
+	}
+}
+
+struct Enlisted<'a, R: Runtime> {
+	app: &'a AppHandle<R>,
+	key: WriteKey,
+	stop: Arc<watch::Sender<bool>>,
+	stopped: watch::Receiver<bool>,
+}
+
+fn enlisted<'a, R: Runtime>(
+	app: &'a AppHandle<R>,
+	key: WriteKey,
+	scope: &RuntimeScope,
+) -> Enlisted<'a, R> {
+	let (stop, stopped) = watch::channel(false);
+	let stop = Arc::new(stop);
+	let writer = Writer { scope: scope.clone(), stop: stop.clone() };
+	writes(app).writing().entry(key.clone()).or_default().push(writer);
+	Enlisted { app, key, stop, stopped }
+}
+
+impl<R: Runtime> Drop for Enlisted<'_, R> {
+	fn drop(&mut self) {
+		let writes = writes(self.app);
+		let mut writing = writes.writing();
+		let Some(writers) = writing.get_mut(&self.key) else {
+			return;
+		};
+		writers.retain(|writer| !Arc::ptr_eq(&writer.stop, &self.stop));
+		if writers.is_empty() {
+			writing.remove(&self.key);
+		}
 	}
 }
 
 struct Turn<'a, R: Runtime> {
-	app: &'a AppHandle<R>,
-	key: WriteKey,
 	_held: OwnedMutexGuard<()>,
+	enlisted: Enlisted<'a, R>,
+}
+
+impl<R: Runtime> Turn<'_, R> {
+	fn is_stopped(&self) -> bool {
+		*self.enlisted.stopped.borrow()
+	}
 }
 
 async fn turn_of<'a, R: Runtime>(
 	app: &'a AppHandle<R>,
 	space_id: &str,
 	name: &str,
-	agent_id: &str,
+	scope: &RuntimeScope,
 ) -> Turn<'a, R> {
-	let key = (space_id.to_owned(), name.to_owned(), agent_id.to_owned());
-	let queue = writes(app).held().entry(key.clone()).or_default().clone();
+	let key = (space_id.to_owned(), name.to_owned(), scope.bot_id.clone());
+	let enlisted = enlisted(app, key.clone(), scope);
+	let queue = writes(app).held().entry(key).or_default().clone();
 	let held = queue.lock_owned().await;
-	Turn { app, key, _held: held }
+	Turn { _held: held, enlisted }
+}
+
+pub(crate) async fn stop_writers<R: Runtime>(
+	app: &AppHandle<R>,
+	space_id: &str,
+	name: &str,
+	agent_id: Option<&str>,
+) -> Vec<RuntimeScope> {
+	let stopping: Vec<_> = writes(app)
+		.writing()
+		.iter()
+		.filter(|((space, document, agent), _)| {
+			space == space_id && document == name && agent_id.is_none_or(|asked| asked == agent)
+		})
+		.flat_map(|(_, writers)| writers)
+		.map(|writer| {
+			writer.stop.send_replace(true);
+			(writer.scope.clone(), writer.stop.clone())
+		})
+		.collect();
+	join_all(stopping.iter().map(|(_, stop)| stop.closed())).await;
+	let mut scopes = Vec::new();
+	for (scope, _) in stopping {
+		if !scopes.contains(&scope) {
+			scopes.push(scope);
+		}
+	}
+	scopes
 }
 
 impl<R: Runtime> Drop for Turn<'_, R> {
 	fn drop(&mut self) {
-		let writes = writes(self.app);
+		let Enlisted { app, key, .. } = &self.enlisted;
+		let writes = writes(app);
 		let mut held = writes.held();
-		let is_another_queued =
-			held.get(&self.key).is_some_and(|queue| Arc::strong_count(queue) > 2);
+		let is_another_queued = held.get(key).is_some_and(|queue| Arc::strong_count(queue) > 2);
 		if is_another_queued {
 			return;
 		}
-		held.remove(&self.key);
-		let (space_id, name, agent_id) = &self.key;
-		unseat_writer(self.app, space_id, name, &Seat::Agent(agent_id.clone()));
+		held.remove(key);
+		let (space_id, name, agent_id) = key;
+		unseat_writer(app, space_id, name, &Seat::Agent(agent_id.clone()));
 	}
 }
 
