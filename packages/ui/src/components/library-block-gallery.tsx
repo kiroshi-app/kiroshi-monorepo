@@ -89,20 +89,14 @@ const useShownImages = (
 	)
 	const requested = useRef(new Set<string>())
 	const present = useRef(new Set<string>())
-	const isMounted = useRef(false)
-
-	useEffect(() => {
-		isMounted.current = true
-		return () => {
-			isMounted.current = false
-		}
-	}, [])
 
 	useEffect(() => {
 		present.current = new Set(sources)
-		if (!resolveImage) return
+		const leave = () => {
+			present.current = new Set()
+		}
+		if (!resolveImage) return leave
 		const settle = (source: string, shown: ShownImage) => {
-			if (!isMounted.current) return
 			if (!present.current.has(source)) {
 				requested.current.delete(source)
 				return
@@ -117,6 +111,7 @@ const useShownImages = (
 				() => settle(source, { src: source, status: "broken" }),
 			)
 		}
+		return leave
 	})
 
 	return (source: string): ShownImage =>
