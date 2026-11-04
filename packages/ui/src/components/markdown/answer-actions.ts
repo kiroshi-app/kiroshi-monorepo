@@ -22,6 +22,7 @@ type MarkdownAnswerActions = {
 		ImageMenuActions<LibraryLightboxImage>,
 		"onSaveToLibrary" | "onCopyImage"
 	>
+	isSavingImage?: (src: string) => boolean
 }
 
 const MarkdownAnswerContext = createContext<MarkdownAnswerActions | null>(null)

@@ -211,6 +211,7 @@ conversation-markdown-quotableanswer--selection-reaching-outside
 conversation-markdown-quotableanswer--whitespace-selection
 conversation-markdown-sourcedimage--in-agent-answer
 conversation-markdown-sourcedimage--in-narrow-column
+conversation-markdown-sourcedimage--pending
 conversation-markdown-videoplayer--in-narrow-column
 conversation-markdown-videoplayer--paused-with-marker
 conversation-markdown-videoplayer--play-failed

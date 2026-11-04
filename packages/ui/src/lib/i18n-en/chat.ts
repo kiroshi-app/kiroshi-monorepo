@@ -375,6 +375,7 @@ const chat = {
 		},
 		sourcedImage: {
 			save: "Save the image",
+			saving: "Saving the image…",
 		},
 		webPage: {
 			open: "Open as page",

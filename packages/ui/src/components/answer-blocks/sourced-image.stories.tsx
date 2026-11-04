@@ -4,8 +4,10 @@ import preview from "@workspace/storybook/preview"
 import {
 	AgentAnswerFrame,
 	expectAnswerInsideFrame,
+	isInBrowserRunner,
 	resolvedRootColor,
 	slotIn,
+	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
 import {
 	CASA_DO_RIO_FAVICON,
@@ -64,6 +66,36 @@ export const InAgentAnswer = meta.story({
 		)
 		await expect(args.imageMenu?.onSaveToLibrary).toHaveBeenCalledWith(
 			args.image,
+		)
+	},
+})
+
+export const Pending = meta.story({
+	globals: { theme: "dark" },
+	args: { isSaving: true },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The picture is on its way to the Library. Check the loader spins where the bookmark was, holds still under reduced motion, the button keeps focus, reads Saving the image… and ignores a second press.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		const save = canvas.getByRole("button", { name: "Saving the image…" })
+
+		await expect(save).toHaveAttribute("aria-disabled", "true")
+		await expect(save).toHaveAttribute("aria-busy", "true")
+		const loader = slotIn(canvasElement, "sourced-image-saving")
+		await expect(loader).toBeVisible()
+		await userEvent.click(save)
+		await expect(save).toHaveFocus()
+		await expect(args.imageMenu?.onSaveToLibrary).not.toHaveBeenCalled()
+
+		if (!isInBrowserRunner()) return
+		await expect(getComputedStyle(loader).animationName).toBe("none")
+		await withMotionAllowed(() =>
+			expect(getComputedStyle(loader).animationName).toBe("spin"),
 		)
 	},
 })
