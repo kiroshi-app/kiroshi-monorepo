@@ -224,24 +224,23 @@ const A11Y_SIDE_BY_SIDE_THREADS = mergeA11y(A11Y_SIDE_BY_SIDE_TWIN_LANDMARKS, {
 	},
 })
 
-const expectAboveTheRows = async (node: HTMLElement) => {
-	const content = slotIn(
+const rowsAround = (node: HTMLElement) =>
+	slotIn(
 		node.closest<HTMLElement>('[data-slot="message-scroller-viewport"]') ??
 			node,
 		"message-scroller-content",
 	)
+
+const expectAboveTheRows = async (node: HTMLElement) => {
 	await expect(
-		node.compareDocumentPosition(content) & Node.DOCUMENT_POSITION_FOLLOWING,
+		node.compareDocumentPosition(rowsAround(node)) &
+			Node.DOCUMENT_POSITION_FOLLOWING,
 	).toBeTruthy()
 }
 
 const expectInTheColumnOfTheRows = async (skeleton: HTMLElement) => {
 	const column = skeleton.firstElementChild?.getBoundingClientRect()
-	const rows = slotIn(
-		skeleton.closest<HTMLElement>('[data-slot="message-scroller-viewport"]') ??
-			skeleton,
-		"message-scroller-content",
-	).getBoundingClientRect()
+	const rows = rowsAround(skeleton).getBoundingClientRect()
 	await expect(column?.left).toBe(rows.left)
 	await expect(column?.width).toBe(rows.width)
 }
