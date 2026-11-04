@@ -160,20 +160,18 @@ const useMissingOpeningNotice = (
 	missing: LibraryOpening | undefined,
 ) => {
 	const raisedFor = useRef<string | null>(null)
-	const kind = missing?.kind
-	const name = missing?.name
+	const missingKey = missing && `${missing.kind}:${missing.name}`
 	useEffect(() => {
-		if (kind === undefined) {
+		if (!missingKey) {
 			raisedFor.current = null
 			return
 		}
-		const raised = `${kind}:${name}`
-		if (raisedFor.current === raised) {
+		if (raisedFor.current === missingKey) {
 			return
 		}
-		raisedFor.current = raised
+		raisedFor.current = missingKey
 		void reportFailure(missingNotice(), { space: spaceId })
-	}, [spaceId, kind, name])
+	}, [spaceId, missingKey])
 }
 
 const renamedDraftOf = (
