@@ -33,6 +33,12 @@ import {
 } from "../bindings"
 import type { LiveWindowsWatch } from "../host"
 import type { ObservedState } from "../conversations/store-contract"
+import {
+	type LibraryOpening,
+	librarySearchOf,
+	validateLibrarySearch,
+} from "../navigation/library-search"
+import { validateSettingsSearch } from "../navigation/settings-search"
 import { validateThreadSearch } from "../navigation/thread-search"
 
 const commandKey = vi.hoisted(() => ({ isUsed: true }))
@@ -166,9 +172,15 @@ const routerOn = (tabs: WorkspaceTabs) => {
 	const userSettings = createRoute({
 		getParentRoute: () => root,
 		path: USER_SETTINGS,
+		validateSearch: validateSettingsSearch,
+	})
+	const library = createRoute({
+		getParentRoute: () => root,
+		path: LIBRARY,
+		validateSearch: validateLibrarySearch,
 	})
 	return createRouter({
-		routeTree: root.addChildren([list, userSettings]),
+		routeTree: root.addChildren([list, userSettings, library]),
 		history: tabs.history,
 	})
 }
@@ -961,35 +973,71 @@ describe("a push from a pinned tab", () => {
 		expect(tabWithId(tabs, pinnedId)).toEqual(pinnedBefore)
 	})
 
-	it("pushes into the pinned tab when the page stays the same", () => {
+	it("opens a tab on a settings entry and leaves the pinned settings page as it is", () => {
 		const tabs = pinnedStripOn([USER_SETTINGS], [])
 		const [pinnedId = ""] = idsOf(tabs)
+		const pinnedBefore = tabWithId(tabs, pinnedId)
 		const settingsEntry = `${USER_SETTINGS}?entry=profile`
-		const entryCount = tabWithId(tabs, pinnedId)?.entries.length ?? 0
 
 		tabs.history.push(settingsEntry)
 
-		expect(viewOf(tabs).activeId).toBe(pinnedId)
-		expect(shownHrefs(tabs)).toEqual([settingsEntry])
+		expect(shownHrefs(tabs)).toEqual([USER_SETTINGS, settingsEntry])
+		expect(viewOf(tabs).activeId).not.toBe(pinnedId)
+		expect(tabWithId(tabs, pinnedId)).toEqual(pinnedBefore)
+	})
+
+	it("pushes into the pinned tab when only the param order changes", () => {
+		const pinnedHref = `${USER_SETTINGS}?entry=mcp&application=github`
+		const tabs = pinnedStripOn([pinnedHref], [])
+		const [pinnedId = ""] = idsOf(tabs)
+		const entryCount = tabWithId(tabs, pinnedId)?.entries.length ?? 0
+
+		tabs.history.push(`${USER_SETTINGS}?application=github&entry=mcp`)
+
+		expect(idsOf(tabs)).toEqual([pinnedId])
 		expect(tabWithId(tabs, pinnedId)?.entries).toHaveLength(entryCount + 1)
 	})
 
-	it("replaces, goes back and goes forward inside the pinned tab", () => {
+	it("opens a tab on a replace to another URL and leaves the pinned tab as it is", () => {
+		const tabs = pinnedStripOn([threadOf("pinned")], [])
+		const [pinnedId = ""] = idsOf(tabs)
+		const pinnedBefore = tabWithId(tabs, pinnedId)
+
+		tabs.history.replace(threadOf("replaced"))
+
+		expect(shownHrefs(tabs)).toEqual([threadOf("pinned"), threadOf("replaced")])
+		expect(viewOf(tabs).activeId).not.toBe(pinnedId)
+		expect(tabWithId(tabs, pinnedId)).toEqual(pinnedBefore)
+	})
+
+	it("replaces in place with the new state when the pinned tab keeps its URL", () => {
+		const tabs = pinnedStripOn([threadOf("pinned")], [])
+		const [pinnedId = ""] = idsOf(tabs)
+		const entryCount = tabWithId(tabs, pinnedId)?.entries.length ?? 0
+		const keyBefore = tabs.history.location.state.key
+
+		tabs.history.replace(threadOf("pinned"))
+
+		expect(idsOf(tabs)).toEqual([pinnedId])
+		expect(tabWithId(tabs, pinnedId)?.entries).toHaveLength(entryCount)
+		expect(tabs.history.location.state.key).not.toBe(keyBefore)
+	})
+
+	it("ignores back, forward and go that would change the URL of the pinned tab", () => {
 		const tabs = tabsOfSpace()
 		tabs.history.push(threadOf("first"))
 		tabs.history.push(threadOf("second"))
+		tabs.history.back()
 		const [pinnedId = ""] = idsOf(tabs)
 		tabs.pin(pinnedId)
+		const pinnedBefore = tabWithId(tabs, pinnedId)
 
 		tabs.history.back()
-		expect(activeHref(tabs)).toBe(threadOf("first"))
 		tabs.history.forward()
-		expect(activeHref(tabs)).toBe(threadOf("second"))
-		tabs.history.replace(threadOf("replaced"))
+		tabs.history.go(-2)
 
-		expect(activeHref(tabs)).toBe(threadOf("replaced"))
-		expect(idsOf(tabs)).toEqual([pinnedId])
-		expect(tabWithId(tabs, pinnedId)?.entries).toHaveLength(3)
+		expect(activeHref(tabs)).toBe(threadOf("first"))
+		expect(tabWithId(tabs, pinnedId)).toEqual(pinnedBefore)
 	})
 
 	it("pushes into an unpinned active tab even when a pinned tab shows that page", () => {
@@ -1019,6 +1067,54 @@ describe("a push from a pinned tab", () => {
 		expect(shownHrefs(tabs)).toEqual(["/", USER_SETTINGS])
 		expect(viewOf(tabs).activeId).not.toBe(pinnedId)
 	})
+})
+
+const PLAN: LibraryOpening = { kind: "document", name: "plan.md" }
+
+const PLAN_HREF = `${LIBRARY}?item=plan.md&kind=document`
+
+const openPlanFromLibrary = (router: ReturnType<typeof routerOn>) =>
+	router.navigate({
+		to: LIBRARY,
+		search: (previous) => ({ ...previous, ...librarySearchOf(PLAN) }),
+		replace: true,
+	})
+
+const openProfileFromSettings = (router: ReturnType<typeof routerOn>) =>
+	router.navigate({ to: USER_SETTINGS, search: { entry: "profile" } })
+
+describe("a navigation through the router from a pinned tab", () => {
+	it.each([
+		{
+			page: LIBRARY,
+			target: PLAN_HREF,
+			navigate: openPlanFromLibrary,
+		},
+		{
+			page: USER_SETTINGS,
+			target: `${USER_SETTINGS}?entry=profile`,
+			navigate: openProfileFromSettings,
+		},
+	])(
+		"opens one tab on $target from $page, then focuses it",
+		async ({ page, target, navigate }) => {
+			const tabs = pinnedStripOn([page], [])
+			const router = routerOn(tabs)
+			await router.load()
+			const [pinnedId = ""] = idsOf(tabs)
+
+			await navigate(router)
+			const openedId = viewOf(tabs).activeId
+			tabs.select(pinnedId)
+			await router.load()
+			await navigate(router)
+
+			expect(shownHrefs(tabs)).toEqual([page, target])
+			expect(viewOf(tabs).activeId).toBe(openedId)
+			expect(openedId).not.toBe(pinnedId)
+			expect(router.state.location.href).toBe(target)
+		},
+	)
 })
 
 describe("Duplicate tab", () => {
@@ -1070,6 +1166,7 @@ describe("the closed tabs", () => {
 		])
 		expect(activeHref(tabs)).toBe(threadOf("right"))
 		expect(viewOf(tabs).hasClosedTab).toBe(false)
+		tabs.unpin(idOfTabOn(tabs, threadOf("right")))
 		tabs.back()
 		expect(activeHref(tabs)).toBe(threadOf("left"))
 	})

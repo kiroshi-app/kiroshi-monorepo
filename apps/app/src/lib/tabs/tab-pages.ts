@@ -1,4 +1,5 @@
 import {
+	deepEqual,
 	defaultParseSearch,
 	defaultStringifySearch,
 } from "@tanstack/react-router"
@@ -118,8 +119,13 @@ export const sameThread = (one: ThreadSearch, other: ThreadSearch) =>
 	one.conversation === other.conversation &&
 	one.mission === other.mission
 
-export const samePage = (one: TabPage, other: TabPage) =>
-	one.pathname === other.pathname && sameThread(one.thread, other.thread)
+const urlOf = (href: string) => {
+	const { pathname, search } = new URL(href, HREF_BASE)
+	return { pathname, search: defaultParseSearch(search) }
+}
+
+export const sameUrl = (one: string, other: string) =>
+	deepEqual(urlOf(one), urlOf(other))
 
 export const rowIdsNamedBy = (href: string) => {
 	const { thread, companionId, conversationId } = pageOf(href)

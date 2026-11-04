@@ -1,6 +1,6 @@
 import type { HistoryLocation } from "@tanstack/react-router"
 
-import { EMPTY_LIST_HREF, pageOf, samePage, type TabPage } from "./tab-pages"
+import { EMPTY_LIST_HREF, sameUrl } from "./tab-pages"
 
 type EntryState = HistoryLocation["state"]
 
@@ -197,27 +197,7 @@ const pushInPlace = (space: SpaceTabs, entry: TabEntry): SpaceTabs =>
 		index: tab.index + 1,
 	}))
 
-const showsPage = (tab: Tab, page: TabPage) =>
-	samePage(pageOf(currentHrefOf(tab)), page)
-
-const tabsAfter = (space: SpaceTabs, id: string) => {
-	const position = indexOfTab(space, id)
-	return [...space.tabs.slice(position + 1), ...space.tabs.slice(0, position)]
-}
-
-export const pushEntry = (space: SpaceTabs, entry: TabEntry): SpaceTabs => {
-	const active = activeTabOf(space)
-	const page = pageOf(entry.href)
-	if (!active.isPinned || showsPage(active, page)) {
-		return pushInPlace(space, entry)
-	}
-	const showing = tabsAfter(space, active.id).find((tab) =>
-		showsPage(tab, page),
-	)
-	return showing ? selectTab(space, showing.id) : openTabOn(space, entry.href)
-}
-
-export const replaceEntry = (space: SpaceTabs, entry: TabEntry): SpaceTabs =>
+const replaceInPlace = (space: SpaceTabs, entry: TabEntry): SpaceTabs =>
 	withActiveTab(space, (tab) => ({
 		...tab,
 		entries: tab.entries.map((held, index) =>
@@ -225,11 +205,45 @@ export const replaceEntry = (space: SpaceTabs, entry: TabEntry): SpaceTabs =>
 		),
 	}))
 
-export const moveInHistory = (space: SpaceTabs, steps: number): SpaceTabs =>
+const showsUrl = (tab: Tab, href: string) => sameUrl(currentHrefOf(tab), href)
+
+const navigatesInPlace = (tab: Tab, href: string) =>
+	!tab.isPinned || showsUrl(tab, href)
+
+const tabsAfter = (space: SpaceTabs, id: string) => {
+	const position = indexOfTab(space, id)
+	return [...space.tabs.slice(position + 1), ...space.tabs.slice(0, position)]
+}
+
+const showInAnotherTab = (space: SpaceTabs, href: string): SpaceTabs => {
+	const showing = tabsAfter(space, activeTabOf(space).id).find((tab) =>
+		showsUrl(tab, href),
+	)
+	return showing ? selectTab(space, showing.id) : openTabOn(space, href)
+}
+
+export const pushEntry = (space: SpaceTabs, entry: TabEntry): SpaceTabs =>
+	navigatesInPlace(activeTabOf(space), entry.href)
+		? pushInPlace(space, entry)
+		: showInAnotherTab(space, entry.href)
+
+export const replaceEntry = (space: SpaceTabs, entry: TabEntry): SpaceTabs =>
+	navigatesInPlace(activeTabOf(space), entry.href)
+		? replaceInPlace(space, entry)
+		: showInAnotherTab(space, entry.href)
+
+const moveActiveIndex = (space: SpaceTabs, steps: number): SpaceTabs =>
 	withActiveTab(space, (tab) => ({
 		...tab,
 		index: Math.min(Math.max(tab.index + steps, 0), tab.entries.length - 1),
 	}))
+
+export const moveInHistory = (space: SpaceTabs, steps: number): SpaceTabs => {
+	const moved = moveActiveIndex(space, steps)
+	return navigatesInPlace(activeTabOf(space), currentHrefOf(activeTabOf(moved)))
+		? moved
+		: space
+}
 
 export const dropTabsWhere = (
 	space: SpaceTabs,
