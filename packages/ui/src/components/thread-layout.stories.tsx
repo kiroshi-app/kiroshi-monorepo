@@ -31,6 +31,7 @@ import {
 import type { TranscriptItem } from "@workspace/ui/components/transcript"
 import { AssistantTurn, UserTurn } from "@workspace/ui/components/turn"
 import { Button } from "@workspace/ui/components/ui/button"
+import { cn } from "@workspace/ui/lib/utils"
 
 const ANSWER =
 	"Two packages: `@workspace/ui` holds the design system, `app` holds the Tauri shell."
@@ -599,7 +600,7 @@ export const PromptOverhangsTheThread = meta.story({
 		docs: {
 			description: {
 				story:
-					"Measured on the Final page, artboard 1b Solo a long message the input grows: the bubbles column is 680 wide and the prompt 720, so the prompt overhangs it by 20 on each side and the bubbles edge meets the start of its rounded corner. Check the 20 at the widest thread. On a 480 wide one the overhang shrinks so the prompt keeps the shell inset from the thread card's edges: there it is 16, not the Final page's 20.",
+					"Measured on the Final page, artboard 1b Solo a long message the input grows: the bubbles column is 680 wide and the prompt 720, so the prompt overhangs it by 20 on each side and the bubbles edge meets the start of its rounded corner. Check the 20 at the widest thread and at a 480 wide one, where the prompt still keeps the shell inset from the thread card's edges.",
 			},
 		},
 	},
@@ -612,6 +613,10 @@ export const PromptOverhangsTheThread = meta.story({
 		await expect(
 			slotIn(widest, "prompt-input").getBoundingClientRect().width,
 		).toBe(720)
+		await expect(overhangOf(narrow)).toEqual({
+			start: PROMPT_OVERHANG,
+			end: PROMPT_OVERHANG,
+		})
 		const card = narrow.getBoundingClientRect()
 		const prompt = slotIn(narrow, "prompt-input").getBoundingClientRect()
 		const inset = Number.parseFloat(tokenLengthOf("--shell-inset"))
@@ -621,5 +626,114 @@ export const PromptOverhangsTheThread = meta.story({
 		await expect(Math.round(card.right - prompt.right)).toBeGreaterThanOrEqual(
 			inset,
 		)
+	},
+})
+
+const LONG_ANSWER =
+	"The design system lives in `packages/ui`: every component, token and story sits there, and the app only composes them. The Tauri shell in `apps/app` owns the commands, the drivers and the state machines that feed those components. A turn streams through the sidecar, lands in the transcript controller, and reaches the screen as rows the transcript renders one by one."
+
+const SCROLLING_ROWS: TranscriptItem[] = LONG_TRANSCRIPT.map((question) => ({
+	key: question,
+	render: () => <UserTurn>{question}</UserTurn>,
+}))
+
+const LONG_ANSWER_ROW: TranscriptItem = {
+	key: "long-answer",
+	render: () => (
+		<AssistantTurn copyText={LONG_ANSWER} identity={BOT}>
+			{LONG_ANSWER}
+		</AssistantTurn>
+	),
+}
+
+const PROMPT_EDGE_TOLERANCE = 1
+
+const lastBubbleAgainstPrompt = (frame: HTMLElement) => {
+	const bubble = slotsIn(frame, "message-bubble-content")
+		.at(-1)
+		?.getBoundingClientRect()
+	if (!bubble) throw new globalThis.Error("This thread holds no bubble")
+	const prompt = slotIn(frame, "prompt-input").getBoundingClientRect()
+	return { start: bubble.left - prompt.left, end: prompt.right - bubble.right }
+}
+
+const WEBKIT_SCROLLBAR_GUTTER = "[&_[data-slot=message-scroller-viewport]]:pe-4"
+
+const PROMPT_EDGE_FRAMES = [
+	{ label: "Widest thread", className: "w-[1072px]" },
+	{ label: "Narrow thread", className: "w-120" },
+	{
+		label: "Widest thread beside a scrollbar",
+		className: cn("w-[1072px]", WEBKIT_SCROLLBAR_GUTTER),
+	},
+	{
+		label: "Narrow thread beside a scrollbar",
+		className: cn("w-120", WEBKIT_SCROLLBAR_GUTTER),
+	},
+]
+
+const PromptEdgeFrames = (args: ThreadLayoutProps) => (
+	<div className="flex flex-col gap-6">
+		{PROMPT_EDGE_FRAMES.map(({ label, className }) => (
+			<div
+				key={label}
+				data-slot="prompt-edge-frame"
+				className={cn("h-100", className)}
+			>
+				<ThreadLayout {...args} header={null} label={label} />
+			</div>
+		))}
+	</div>
+)
+
+export const LongAgentMessageAboveThePrompt = meta.story({
+	render: (args) => <PromptEdgeFrames {...args} />,
+	args: { rows: [...SCROLLING_ROWS, LONG_ANSWER_ROW], children: null },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Final page, artboard 1b: a long agent answer rests right above the prompt. Check that the bubble's start edge sits 20 inside the prompt's start edge, past its rounded corner, in a scrolling thread at full width and at 480 wide, with and without the 16 wide scrollbar the app's webview reserves.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		for (const frame of slotsIn(canvasElement, "prompt-edge-frame")) {
+			const { start } = lastBubbleAgainstPrompt(frame)
+			await expect(Math.abs(start - PROMPT_OVERHANG)).toBeLessThanOrEqual(
+				PROMPT_EDGE_TOLERANCE,
+			)
+		}
+	},
+})
+
+export const UserMessageAboveThePrompt = meta.story({
+	render: (args) => <PromptEdgeFrames {...args} />,
+	args: {
+		rows: [
+			...SCROLLING_ROWS,
+			LONG_ANSWER_ROW,
+			{
+				key: "follow-up",
+				render: () => <UserTurn>{LONG_TRANSCRIPT[0]}</UserTurn>,
+			},
+		],
+		children: null,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Final page, artboard 1b mirrored: your message rests right above the prompt. Check that the bubble's end edge sits 20 inside the prompt's end edge, in a scrolling thread at full width and at 480 wide, with and without the 16 wide scrollbar the app's webview reserves.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		for (const frame of slotsIn(canvasElement, "prompt-edge-frame")) {
+			const { end } = lastBubbleAgainstPrompt(frame)
+			await expect(Math.abs(end - PROMPT_OVERHANG)).toBeLessThanOrEqual(
+				PROMPT_EDGE_TOLERANCE,
+			)
+		}
 	},
 })
