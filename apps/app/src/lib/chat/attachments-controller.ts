@@ -103,7 +103,7 @@ export function createAttachmentsController(
 		return [...held, ...added.filter(({ id }) => !heldIds.has(id))]
 	}
 
-	const send = (
+	const sendWithDocuments = (
 		owner: AttachmentsOwner,
 		text: string,
 		replyLinks?: ReplyLink[],
@@ -162,7 +162,7 @@ export function createAttachmentsController(
 		const items = stagedFor(owner)
 		if (items.length === 0) {
 			holdRefusal(owner, null)
-			return send(owner, text, replyLinks)
+			return sendWithDocuments(owner, text, replyLinks)
 		}
 
 		const sentAt = new Date()
@@ -177,7 +177,13 @@ export function createAttachmentsController(
 			sending.delete(key)
 		}
 
-		if (!send(owner, promptWithAttachments(text, paths, sentAt), replyLinks)) {
+		if (
+			!sendWithDocuments(
+				owner,
+				promptWithAttachments(text, paths, sentAt),
+				replyLinks,
+			)
+		) {
 			return false
 		}
 
