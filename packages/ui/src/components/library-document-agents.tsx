@@ -74,15 +74,6 @@ const agentScopeOf = ({ name, hue }: LibraryDocumentAgent) =>
 				style: hueStyle(companionHue(name, hue)) as CSSProperties,
 			}
 
-type AgentScopeProps = {
-	agent: LibraryDocumentAgent
-	children: ReactNode
-}
-
-const AgentScope = ({ agent, children }: AgentScopeProps) => (
-	<span {...agentScopeOf(agent)}>{children}</span>
-)
-
 type AgentAvatarProps = {
 	agent: LibraryDocumentAgent
 	size: number
@@ -288,7 +279,7 @@ const LibraryDocumentWrittenRun = ({
 	onStop,
 	onOpenConversation,
 }: LibraryDocumentWrittenRunProps) => (
-	<AgentScope agent={writer.agent}>
+	<span {...agentScopeOf(writer.agent)}>
 		<span className={WRITTEN_RUN_LOOK} data-slot="library-document-run">
 			{children}
 		</span>
@@ -299,7 +290,7 @@ const LibraryDocumentWrittenRun = ({
 				writer={writer}
 			/>
 		) : null}
-	</AgentScope>
+	</span>
 )
 
 type LibraryDocumentPersonCaretProps = {
