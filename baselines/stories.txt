@@ -1859,6 +1859,7 @@ primitives-button--sizes
 primitives-button--states
 primitives-button--variants
 primitives-button--with-icons
+primitives-collapsible--default
 primitives-devicecard--default
 primitives-devicecard--long-content
 primitives-devicecard--with-meta
