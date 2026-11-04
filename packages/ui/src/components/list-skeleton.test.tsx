@@ -1,10 +1,12 @@
 // @vitest-environment happy-dom
 
-import { cleanup, render } from "@testing-library/react"
-import { afterEach, describe, expect, it } from "vitest"
+import { act, cleanup, render } from "@testing-library/react"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
 	GenericSkeletonRow,
+	type ListEndEdge,
+	ListEndSlot,
 	ListSkeleton,
 } from "@workspace/ui/components/list-skeleton"
 
@@ -19,5 +21,39 @@ describe("ListSkeleton", () => {
 
 		expect(list?.classList.contains("gap-3")).toBe(true)
 		expect(list?.classList.contains("gap-1")).toBe(false)
+	})
+})
+
+const SKELETON_DELAY_MS = 300
+
+const slotOrderAt = (edge?: ListEndEdge) => {
+	vi.useFakeTimers()
+	const { container } = render(
+		<ListEndSlot
+			edge={edge}
+			listEnd={{ hasNextPage: true, isFetchingNextPage: true }}
+			row={<GenericSkeletonRow />}
+		/>,
+	)
+	act(() => vi.advanceTimersByTime(SKELETON_DELAY_MS))
+	vi.useRealTimers()
+	const slot = container.querySelector('[data-slot="list-end"]')
+	return Array.from(slot?.children ?? [], (child) =>
+		child.getAttribute("data-slot"),
+	)
+}
+
+describe("ListEndSlot", () => {
+	afterEach(cleanup)
+
+	it("keeps the sentinel above the skeleton on the bottom edge by default", () => {
+		expect(slotOrderAt()).toEqual(["list-end-sentinel", "list-end-skeleton"])
+	})
+
+	it("puts the skeleton above the sentinel on the top edge", () => {
+		expect(slotOrderAt("top")).toEqual([
+			"list-end-skeleton",
+			"list-end-sentinel",
+		])
 	})
 })

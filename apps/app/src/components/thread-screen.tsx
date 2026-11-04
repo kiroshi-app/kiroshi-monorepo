@@ -1875,9 +1875,8 @@ function ThreadView(props: ThreadViewProps) {
 			older={
 				view.state.messages.length > 0
 					? {
-							has: view.state.hasOlder,
-							isLoading: view.facts.isLoadingOlder,
-							onLoad: view.loadOlder,
+							hasNextPage: view.state.hasOlder,
+							isFetchingNextPage: view.facts.isLoadingOlder,
 						}
 					: undefined
 			}

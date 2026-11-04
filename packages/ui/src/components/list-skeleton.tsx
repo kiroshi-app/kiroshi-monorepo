@@ -156,33 +156,43 @@ type ListEnd = {
 	sentinelRef?: Ref<HTMLDivElement>
 }
 
+type ListEndEdge = "top" | "bottom"
+
 type ListEndSlotProps = {
 	listEnd?: ListEnd
 	row: ReactNode
+	edge?: ListEndEdge
 }
 
-const ListEndSlot = ({ listEnd, row }: ListEndSlotProps) => {
+const ListEndSlot = ({ listEnd, row, edge = "bottom" }: ListEndSlotProps) => {
 	const phase = useSkeletonTiming(listEnd?.isFetchingNextPage ?? false)
 
 	if (!listEnd?.hasNextPage) return null
 
+	const sentinel = (
+		<div data-slot="list-end-sentinel" ref={listEnd.sentinelRef} />
+	)
+	const skeleton =
+		phase === "skeleton" ? (
+			<div
+				className="animate-pulse motion-reduce:animate-none"
+				data-slot="list-end-skeleton"
+			>
+				{row}
+			</div>
+		) : null
+
 	return (
 		<div aria-hidden="true" data-slot="list-end">
-			<div data-slot="list-end-sentinel" ref={listEnd.sentinelRef} />
-			{phase === "skeleton" ? (
-				<div
-					className="animate-pulse motion-reduce:animate-none"
-					data-slot="list-end-skeleton"
-				>
-					{row}
-				</div>
-			) : null}
+			{edge === "top" ? skeleton : sentinel}
+			{edge === "top" ? sentinel : skeleton}
 		</div>
 	)
 }
 
 export type {
 	ListEnd,
+	ListEndEdge,
 	ListSkeletonAnchor,
 	ListSkeletonProps,
 	ListSkeletonRowAt,

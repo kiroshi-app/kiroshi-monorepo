@@ -14,6 +14,10 @@ import {
 import { useTranslation } from "react-i18next"
 
 import { Icons } from "@workspace/ui/components/icons"
+import {
+	type ListEnd,
+	ListEndSlot,
+} from "@workspace/ui/components/list-skeleton"
 import { MessageHighlightProvider } from "@workspace/ui/components/message-highlight-context"
 import {
 	MessageScroller,
@@ -25,6 +29,7 @@ import {
 	useMessageScroller,
 	useMessageScrollerScrollable,
 } from "@workspace/ui/components/message-scroller"
+import { AgentSkeleton } from "@workspace/ui/components/thread-transcript-skeleton"
 import { Button } from "@workspace/ui/components/ui/button"
 import {
 	scrollTraceViewportRef,
@@ -37,14 +42,6 @@ export interface TranscriptItem {
 	messageIds?: string[]
 	isAnchor?: boolean
 	render: () => ReactNode
-}
-
-export interface TranscriptOlder {
-	has: boolean
-	isLoading?: boolean
-	onLoad: () => void
-	label?: string
-	startOfHistoryLabel?: string
 }
 
 export interface TranscriptNewer {
@@ -74,7 +71,7 @@ export interface TranscriptProps extends ComponentPropsWithRef<"div"> {
 	label?: string
 	busy?: boolean
 	highlightedMessageId?: string
-	older?: TranscriptOlder
+	older?: ListEnd
 	newer?: TranscriptNewer
 	scrollerRef?: Ref<TranscriptHandle>
 	contentClassName?: string
@@ -236,46 +233,53 @@ const useTranscriptHandle = (
 	)
 }
 
-type TranscriptOlderControlProps = {
-	older: TranscriptOlder
-	isReducedMotion: boolean
+const holdRowsBelowInPlace = (skeletonRow: HTMLDivElement | null) => {
+	const viewport = skeletonRow?.closest<HTMLElement>(
+		'[data-slot="message-scroller-viewport"]',
+	)
+	if (!skeletonRow || !viewport) return
+	const height = skeletonRow.offsetHeight
+	viewport.scrollTop += height
+	return () => {
+		viewport.scrollTop -= height
+	}
 }
 
-const TranscriptOlderControl = ({
+type TranscriptOlderEdgeProps = {
+	older: ListEnd
+	contentClassName?: string
+}
+
+const TranscriptOlderEdge = ({
 	older,
-	isReducedMotion,
-}: TranscriptOlderControlProps) => {
+	contentClassName,
+}: TranscriptOlderEdgeProps) => {
 	const { t } = useTranslation("chat")
+
+	if (older.hasNextPage)
+		return (
+			<ListEndSlot
+				edge="top"
+				listEnd={older}
+				row={
+					<div
+						className={cn(contentClassName, "min-h-0 py-0")}
+						ref={holdRowsBelowInPlace}
+					>
+						<AgentSkeleton bubbleClassName="h-11 w-100" nameClassName="w-11" />
+					</div>
+				}
+			/>
+		)
 
 	return (
 		<div
-			data-slot="transcript-older"
+			data-slot="transcript-start-of-history"
 			className="flex min-h-9 items-center justify-center px-3"
 		>
-			{older.has ? (
-				<Button
-					variant="ghost"
-					size="sm"
-					aria-busy={older.isLoading}
-					aria-disabled={older.isLoading}
-					className="aria-disabled:opacity-60"
-					onClick={() => {
-						if (!older.isLoading) older.onLoad()
-					}}
-				>
-					{older.isLoading ? (
-						<Icons.Loading
-							data-icon="inline-start"
-							className={cn(!isReducedMotion && "animate-spin")}
-						/>
-					) : null}
-					{older.label ?? t("transcript.loadOlder")}
-				</Button>
-			) : (
-				<p className="text-muted-foreground text-xs">
-					{older.startOfHistoryLabel ?? t("transcript.startOfHistory")}
-				</p>
-			)}
+			<p className="text-muted-foreground text-xs">
+				{t("transcript.startOfHistory")}
+			</p>
 		</div>
 	)
 }
@@ -383,8 +387,8 @@ const TranscriptBody = ({
 				)}
 			>
 				{older ? (
-					<TranscriptOlderControl
-						isReducedMotion={isReducedMotion}
+					<TranscriptOlderEdge
+						contentClassName={contentClassName}
 						older={older}
 					/>
 				) : null}

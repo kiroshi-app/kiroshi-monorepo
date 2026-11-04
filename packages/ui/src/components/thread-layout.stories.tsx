@@ -3,6 +3,8 @@ import { expect, fn, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
+	A11Y_SIDE_BY_SIDE_TWIN_LANDMARKS,
+	mergeA11y,
 	probedStyleOf,
 	slotIn,
 	slotsIn,
@@ -215,6 +217,35 @@ const RegionProbe = (props: ThreadLayoutProps) => {
 	)
 }
 
+const BOTH_THEMES = 2
+
+const A11Y_SIDE_BY_SIDE_THREADS = mergeA11y(A11Y_SIDE_BY_SIDE_TWIN_LANDMARKS, {
+	config: {
+		rules: [{ id: "landmark-no-duplicate-banner", reviewOnFail: true }],
+	},
+})
+
+const rowsAround = (node: HTMLElement) =>
+	slotIn(
+		node.closest<HTMLElement>('[data-slot="message-scroller-viewport"]') ??
+			node,
+		"message-scroller-content",
+	)
+
+const expectAboveTheRows = async (node: HTMLElement) => {
+	await expect(
+		node.compareDocumentPosition(rowsAround(node)) &
+			Node.DOCUMENT_POSITION_FOLLOWING,
+	).toBeTruthy()
+}
+
+const expectInTheColumnOfTheRows = async (skeleton: HTMLElement) => {
+	const column = skeleton.firstElementChild?.getBoundingClientRect()
+	const rows = rowsAround(skeleton).getBoundingClientRect()
+	await expect(column?.left).toBe(rows.left)
+	await expect(column?.width).toBe(rows.width)
+}
+
 const meta = preview.meta({
 	title: "Layout/ThreadLayout",
 	component: ThreadLayout,
@@ -392,65 +423,97 @@ export const LongContent = meta.story({
 })
 
 export const OlderMessages = meta.story({
-	args: { older: { has: true, onLoad: fn() }, children: SCROLLING_TRANSCRIPT },
+	args: {
+		older: { hasNextPage: true, isFetchingNextPage: false },
+		children: SCROLLING_TRANSCRIPT,
+	},
+	globals: { theme_layout: "side-by-side" },
 	parameters: {
+		a11y: A11Y_SIDE_BY_SIDE_THREADS,
 		docs: {
 			description: {
 				story:
-					"Reach for this when the host pages the transcript by cursor. The layout owns nothing here — `older` is handed straight to MessageScroller, so the control sits above the first row inside the scrolling transcript and scrolls with it, never between the header and the transcript. Check that the header and the composer are untouched by it, and pick `Default` for a host that loads the whole conversation at once. The app assembles it at `apps/app/src/components/thread-screen.tsx:1368`.",
+					"Reach for this when the host pages the transcript by cursor. The layout owns nothing here: `older` is handed straight to the transcript, which parks an invisible sentinel above the first row, inside the scrolling transcript, so the host reads the next page as the reader nears the top. Check that nothing shows above the rows while no page is in flight, and that the header and the composer are untouched, in both themes. Pick `LoadingOlderMessages` for a page in flight. The app assembles it at `apps/app/src/components/thread-screen.tsx:1875`.",
 			},
 		},
 	},
-	play: async ({ args, canvas, userEvent }) => {
-		await userEvent.click(
-			await canvas.findByRole("button", { name: "Load older messages" }),
+	play: async ({ canvas, canvasElement }) => {
+		const sentinels = slotsIn(canvasElement, "list-end-sentinel")
+
+		await expect(sentinels).toHaveLength(BOTH_THEMES)
+		await expect(slotsIn(canvasElement, "list-end-skeleton")).toHaveLength(0)
+		for (const sentinel of sentinels) {
+			await expect(sentinel.closest('[aria-hidden="true"]')).not.toBeNull()
+			await expectAboveTheRows(sentinel)
+		}
+		await expect(canvas.queryAllByRole("button", { name: /older/i })).toEqual(
+			[],
 		)
-		await expect(args.older?.onLoad).toHaveBeenCalledTimes(1)
 	},
 })
 
 export const LoadingOlderMessages = meta.story({
 	args: {
-		older: { has: true, isLoading: true, onLoad: fn() },
+		older: { hasNextPage: true, isFetchingNextPage: true },
 		children: SCROLLING_TRANSCRIPT,
 	},
+	globals: { theme_layout: "side-by-side" },
 	parameters: {
+		a11y: A11Y_SIDE_BY_SIDE_THREADS,
 		docs: {
 			description: {
 				story:
-					"Reach for this while a page request is in flight through the layout. Check that the loading half of the contract survives the hop: the control announces itself busy, refuses a second request, and keeps its name and its focus — a keyboard reader who fired it must not be dropped back to the top of the transcript. Pick `OlderMessages` for the idle control. The app assembles it at `apps/app/src/components/thread-screen.tsx:1368`.",
+					"Reach for this while a page of older messages is in flight. A message-row skeleton shows above the first row, past the same delay as the sidebar skeleton so a quick page never flashes it, and pulses as one shape out of the accessible tree. Check that it lines up with the column of the rows below and reads against the ground in both themes. Pick `OlderMessages` for the idle sentinel. The app assembles it at `apps/app/src/components/thread-screen.tsx:1875`.",
 			},
 		},
 	},
-	play: async ({ args, canvas, userEvent }) => {
-		const loadOlder = await canvas.findByRole("button", {
-			name: "Load older messages",
-		})
+	play: async ({ canvasElement }) => {
+		await waitFor(() =>
+			expect(slotsIn(canvasElement, "list-end-skeleton")).toHaveLength(
+				BOTH_THEMES,
+			),
+		)
 
-		await expect(loadOlder).toHaveAttribute("aria-busy", "true")
-		await expect(loadOlder).toHaveAttribute("aria-disabled", "true")
-
-		await userEvent.click(loadOlder)
-
-		await expect(args.older?.onLoad).not.toHaveBeenCalled()
-		await expect(loadOlder).toHaveFocus()
+		for (const skeleton of slotsIn(canvasElement, "list-end-skeleton")) {
+			const sentinel = slotIn(
+				skeleton.closest<HTMLElement>('[data-slot="list-end"]') ?? skeleton,
+				"list-end-sentinel",
+			)
+			await expect(skeleton.closest('[aria-hidden="true"]')).not.toBeNull()
+			await expect(
+				skeleton.compareDocumentPosition(sentinel) &
+					Node.DOCUMENT_POSITION_FOLLOWING,
+			).toBeTruthy()
+			await expectAboveTheRows(skeleton)
+			await expect(slotsIn(skeleton, "skeleton-agent-bubble")).toHaveLength(1)
+			await expectInTheColumnOfTheRows(skeleton)
+		}
 	},
 })
 
 export const StartOfOlderMessages = meta.story({
-	args: { older: { has: false, onLoad: fn() }, children: CONVERSATION },
+	args: {
+		older: { hasNextPage: false, isFetchingNextPage: false },
+		children: CONVERSATION,
+	},
+	globals: { theme_layout: "side-by-side" },
 	parameters: {
+		a11y: A11Y_SIDE_BY_SIDE_THREADS,
 		docs: {
 			description: {
 				story:
-					"Reach for this once the last page has landed. Check that the control is replaced by the start-of-history copy rather than disappearing — the reader needs to know the history above them is finished, not still loading. Pick `OlderMessages` while pages remain. The app assembles it at `apps/app/src/components/thread-screen.tsx:1368`.",
+					"Reach for this once the last page has landed. Check that the sentinel is replaced by the start-of-history line rather than disappearing: the reader needs to know the history above them is finished, not still loading. Pick `OlderMessages` while pages remain. The app assembles it at `apps/app/src/components/thread-screen.tsx:1875`.",
 			},
 		},
 	},
-	play: async ({ canvas }) => {
-		await expect(
-			canvas.getByText("Beginning of the conversation"),
-		).toBeVisible()
+	play: async ({ canvas, canvasElement }) => {
+		const starts = slotsIn(canvasElement, "transcript-start-of-history")
+
+		await expect(starts).toHaveLength(BOTH_THEMES)
+		await expect(slotsIn(canvasElement, "list-end-sentinel")).toHaveLength(0)
+		for (const start of starts) await expectAboveTheRows(start)
+		for (const line of canvas.getAllByText("Beginning of the conversation"))
+			await expect(line).toBeVisible()
 	},
 })
 

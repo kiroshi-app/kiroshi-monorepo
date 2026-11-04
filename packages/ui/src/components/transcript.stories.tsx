@@ -5,6 +5,8 @@ import preview from "@workspace/storybook/preview"
 import {
 	FRAME_POLL,
 	isInBrowserRunner,
+	slotIn,
+	slotsIn,
 	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
 import { ActivityIndicator } from "@workspace/ui/components/activity-indicator"
@@ -45,6 +47,8 @@ const entryOf = (index: number): Entry => ({
 const HISTORY = Array.from({ length: 12 }, (_, index) => entryOf(index))
 
 const SHORT_HISTORY = HISTORY.slice(0, 2)
+
+const OLDER_PAGE_FLIGHT_MS = 1000
 
 const OLDER_PAGE = Array.from({ length: 6 }, (_, index) => ({
 	id: `older-${index}`,
@@ -188,6 +192,7 @@ const TranscriptDemo = ({
 	const [shown, setShown] = useState(entries)
 	const [sent, setSent] = useState(0)
 	const [pending, setPending] = useState(olderPages ?? [])
+	const [isFetchingOlder, setFetchingOlder] = useState(false)
 	const [ahead, setAhead] = useState(newerPages ?? [])
 	const next = incoming[sent]
 
@@ -200,8 +205,12 @@ const TranscriptDemo = ({
 	const deliverOlder = () => {
 		const page = pending[0]
 		if (!page) return
-		setShown((current) => [...page, ...current])
-		setPending((current) => current.slice(1))
+		setFetchingOlder(true)
+		setTimeout(() => {
+			setShown((current) => [...page, ...current])
+			setPending((current) => current.slice(1))
+			setFetchingOlder(false)
+		}, OLDER_PAGE_FLIGHT_MS)
 	}
 
 	const deliverNewer = () => {
@@ -230,7 +239,10 @@ const TranscriptDemo = ({
 				}
 				older={
 					olderPages
-						? { has: pending.length > 0, onLoad: deliverOlder }
+						? {
+								hasNextPage: pending.length > 0,
+								isFetchingNextPage: isFetchingOlder,
+							}
 						: undefined
 				}
 				rows={toItems(shown)}
@@ -239,6 +251,16 @@ const TranscriptDemo = ({
 				<Button disabled={!next} onClick={deliverIncoming} size="sm">
 					Send reply
 				</Button>
+				{olderPages ? (
+					<Button
+						disabled={pending.length === 0 || isFetchingOlder}
+						onClick={deliverOlder}
+						size="sm"
+						variant="outline"
+					>
+						Deliver older page
+					</Button>
+				) : null}
 			</div>
 		</div>
 	)
@@ -384,7 +406,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"Scroll container for a streamed transcript, composed on the shadcn MessageScroller primitive. Every row is mounted: nothing is windowed and no row height is guessed. It holds the live edge while the reader sits there, hands scroll control back the moment they move up, and shows a return control that takes them back and resumes following. `older` adds the load-older affordance at the top and the reading position survives the page being prepended above it. `rows` is one entry per run, with the `messageIds` it anchors, and a row marked `isAnchor` is a message the reader sent: with `anchorOnSend` the newest one is parked near the top of the viewport with a peek of the previous turn while the answer fills the room below. `marksNewMessages` draws a session-local separator where the reader was released, `countsNewMessages` names on the return control how many arrived since. A new `transcriptKey` forgets both and lands at the end again.",
+					"Scroll container for a streamed transcript, composed on the shadcn MessageScroller primitive. Every row is mounted: nothing is windowed and no row height is guessed. It holds the live edge while the reader sits there, hands scroll control back the moment they move up, and shows a return control that takes them back and resumes following. `older` parks a sentinel above the first row for the host to page from, shows a message-row skeleton there while a page is in flight, and the reading position survives the page being prepended above it. `rows` is one entry per run, with the `messageIds` it anchors, and a row marked `isAnchor` is a message the reader sent: with `anchorOnSend` the newest one is parked near the top of the viewport with a peek of the previous turn while the answer fills the room below. `marksNewMessages` draws a session-local separator where the reader was released, `countsNewMessages` names on the return control how many arrived since. A new `transcriptKey` forgets both and lands at the end again.",
 			},
 		},
 	},
@@ -628,7 +650,7 @@ export const PrependsOlderMessages = meta.story({
 		docs: {
 			description: {
 				story:
-					"A page of older messages loaded from the top of the history. The row the reader was looking at keeps its exact screen position while the page is inserted above it. " +
+					"A page of older messages loaded from the top of the history. A message-row skeleton shows above the first row while the page is in flight, then the page takes its place. The row the reader was looking at keeps its exact screen position through both swaps. " +
 					MOUNTED_BY_THE_LAYOUT,
 			},
 		},
@@ -642,11 +664,31 @@ export const PrependsOlderMessages = meta.story({
 		const anchor = canvas.getByText(HISTORY[0].text)
 		const before = anchor.getBoundingClientRect().top
 
+		await expect(slotsIn(viewport, "list-end-sentinel")).toHaveLength(1)
 		await userEvent.click(
-			await canvas.findByRole("button", { name: "Load older messages" }),
+			canvas.getByRole("button", { name: "Deliver older page" }),
 		)
+		await waitFor(
+			() => expect(slotsIn(viewport, "list-end-skeleton")).toHaveLength(1),
+			FRAME_POLL,
+		)
+		await settleScroll()
+
+		const skeleton = slotIn(viewport, "list-end-skeleton")
+		const rows = slotIn(viewport, "message-scroller-content")
+		await expect(
+			skeleton.compareDocumentPosition(rows) & Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy()
+		await expect(canvas.queryByText(OLDER_PAGE[0].text)).toBeNull()
+		await expect(
+			Math.abs(anchor.getBoundingClientRect().top - before),
+		).toBeLessThanOrEqual(2)
+
 		await waitFor(() =>
 			expect(canvas.getByText(OLDER_PAGE[0].text)).toBeInTheDocument(),
+		)
+		await waitFor(() =>
+			expect(slotsIn(viewport, "list-end-skeleton")).toHaveLength(0),
 		)
 		await settleScroll()
 

@@ -1,6 +1,7 @@
 import { type ReactNode, type Ref, useRef } from "react"
 
 import { LibraryOverlayContainer } from "@workspace/ui/components/library-panel"
+import type { ListEnd } from "@workspace/ui/components/list-skeleton"
 import { MarkProvider } from "@workspace/ui/components/mark-context"
 import {
 	PromptReply,
@@ -12,7 +13,6 @@ import {
 	type TranscriptHandle,
 	type TranscriptItem,
 	type TranscriptNewer,
-	type TranscriptOlder,
 } from "@workspace/ui/components/transcript"
 import { cn, mergeRefs } from "@workspace/ui/lib/utils"
 
@@ -40,7 +40,7 @@ interface ThreadLayoutProps {
 	anchorOnSend?: boolean
 	marksNewMessages?: boolean
 	countsNewMessages?: boolean
-	older?: TranscriptOlder
+	older?: ListEnd
 	newer?: TranscriptNewer
 	rows?: TranscriptItem[]
 	onFollowChange?: (following: boolean) => void
