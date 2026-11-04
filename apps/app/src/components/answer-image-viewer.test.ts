@@ -10,7 +10,7 @@ import {
 	waitFor,
 	within,
 } from "@testing-library/react"
-import { createElement, type ReactNode } from "react"
+import { createElement, type ReactNode, useState } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
@@ -628,6 +628,51 @@ describe("Save the image from a thread", () => {
 	)
 })
 
+type TurnProps = { text: string }
+
+const TurnWithSavableImages = ({ text }: TurnProps) =>
+	createElement(
+		AnswerActionsContext,
+		{
+			value: {
+				insert: () => undefined,
+				openImage: () => undefined,
+				imageActions: useShownImageActions(),
+			},
+		},
+		createElement(AnswerBody, {
+			attachments: [],
+			text,
+			agentName: "Ada",
+			isWriting: false,
+		}),
+	)
+
+const renderTurn = (text: string) => {
+	render(createElement(TurnWithSavableImages, { text }), {
+		wrapper: wrapperOn(HOSTED),
+	})
+}
+
+const isSaveToLibraryDisabledIn = (menu: HTMLElement) =>
+	within(menu)
+		.getByRole("menuitem", { name: SAVE_TO_LIBRARY })
+		.getAttribute("aria-disabled") === "true"
+
+const isSaveToLibraryDisabledFor = async (name: string) =>
+	isSaveToLibraryDisabledIn(await openRenderedImageMenu(name))
+
+const saveFromMenu = async (name: string) => {
+	const menu = await openRenderedImageMenu(name)
+	await press(within(menu).getByRole("menuitem", { name: SAVE_TO_LIBRARY }))
+	await waitFor(() => expect(callsOf("library_import")).toHaveLength(1))
+}
+
+const SETTLINGS = [
+	["resolves", null],
+	["rejects", "library_import"],
+] as const
+
 describe("Save to Library in the menu of a sourced answer image", () => {
 	const sourcedImageOf = ({ name, src }: ThreadImage) =>
 		`![${name}](${src})\n\nSource: [Example](https://www.example.org)`
@@ -635,24 +680,6 @@ describe("Save to Library in the menu of a sourced answer image", () => {
 	const TURN_TEXT = `${sourcedImageOf(SOFA)}\n\n${sourcedImageOf(OAK)}`
 
 	const SAVE_THE_IMAGE = i18n.t("chat:answerBlock.sourcedImage.save")
-
-	const TurnWithSavableImages = () =>
-		createElement(
-			AnswerActionsContext,
-			{
-				value: {
-					insert: () => undefined,
-					openImage: () => undefined,
-					imageActions: useShownImageActions(),
-				},
-			},
-			createElement(AnswerBody, {
-				attachments: [],
-				text: TURN_TEXT,
-				agentName: "Ada",
-				isWriting: false,
-			}),
-		)
 
 	const figureOf = (name: string) => {
 		const figure = screen
@@ -671,37 +698,27 @@ describe("Save to Library in the menu of a sourced answer image", () => {
 		await waitFor(() => expect(callsOf("library_import")).toHaveLength(1))
 	}
 
-	const isSaveToLibraryDisabledIn = (menu: HTMLElement) =>
-		within(menu)
-			.getByRole("menuitem", { name: SAVE_TO_LIBRARY })
-			.getAttribute("aria-disabled") === "true"
-
-	const renderTurn = () => {
-		render(createElement(TurnWithSavableImages), {
-			wrapper: wrapperOn(HOSTED),
-		})
-	}
-
-	it("disables Save to Library in the menu of the image while its save is pending", async () => {
-		holdImport()
-		renderTurn()
-
-		await saveFromButton(SOFA.name)
-
-		expect(
-			isSaveToLibraryDisabledIn(await openRenderedImageMenu(SOFA.name)),
-		).toBe(true)
-	})
-
 	it.each([
-		["resolves", null],
-		["rejects", "library_import"],
-	] as const)(
+		["the Save the image button", saveFromButton],
+		["Save to Library in its menu", saveFromMenu],
+	])(
+		"disables Save to Library in the menu of the image while its save from %s is pending",
+		async (_path, save) => {
+			holdImport()
+			renderTurn(TURN_TEXT)
+
+			await save(SOFA.name)
+
+			expect(await isSaveToLibraryDisabledFor(SOFA.name)).toBe(true)
+		},
+	)
+
+	it.each(SETTLINGS)(
 		"enables Save to Library again when the save %s",
 		async (_outcome, refused) => {
 			harness.refused = refused
 			const release = holdImport()
-			renderTurn()
+			renderTurn(TURN_TEXT)
 			await saveFromButton(SOFA.name)
 			const menu = await openRenderedImageMenu(SOFA.name)
 			expect(isSaveToLibraryDisabledIn(menu)).toBe(true)
@@ -714,12 +731,105 @@ describe("Save to Library in the menu of a sourced answer image", () => {
 
 	it("keeps Save to Library enabled in the menu of another image of the turn", async () => {
 		holdImport()
-		renderTurn()
+		renderTurn(TURN_TEXT)
 
 		await saveFromButton(SOFA.name)
 
-		expect(
-			isSaveToLibraryDisabledIn(await openRenderedImageMenu(OAK.name)),
-		).toBe(false)
+		expect(await isSaveToLibraryDisabledFor(OAK.name)).toBe(false)
+	})
+})
+
+describe("Save to Library in the menu of a gallery image", () => {
+	const galleryItemOf = ({ name, src }: ThreadImage) =>
+		`- image: ${src}\n  alt: ${name}`
+
+	const TURN_TEXT = `Here they are.\n\n\`\`\`gallery\n${galleryItemOf(SOFA)}\n${galleryItemOf(OAK)}\n\`\`\``
+
+	it("disables Save to Library in the menu of the image while its save is pending", async () => {
+		holdImport()
+		renderTurn(TURN_TEXT)
+
+		await saveFromMenu(SOFA.name)
+
+		expect(await isSaveToLibraryDisabledFor(SOFA.name)).toBe(true)
+	})
+
+	it("keeps Save to Library enabled in the menu of every other gallery image", async () => {
+		holdImport()
+		renderTurn(TURN_TEXT)
+
+		await saveFromMenu(SOFA.name)
+
+		expect(await isSaveToLibraryDisabledFor(OAK.name)).toBe(false)
+	})
+
+	it.each(SETTLINGS)(
+		"enables Save to Library again when the save %s",
+		async (_outcome, refused) => {
+			harness.refused = refused
+			const release = holdImport()
+			renderTurn(TURN_TEXT)
+			await saveFromMenu(SOFA.name)
+			const menu = await openRenderedImageMenu(SOFA.name)
+			expect(isSaveToLibraryDisabledIn(menu)).toBe(true)
+
+			await release()
+
+			await waitFor(() => expect(isSaveToLibraryDisabledIn(menu)).toBe(false))
+		},
+	)
+})
+
+describe("Save to Library in the menu of the thread lightbox", () => {
+	const SteppingViewer = () => {
+		const [index, setIndex] = useState(0)
+		return createElement(AnswerImageViewer, {
+			viewed: { images: [SOFA, OAK], index },
+			imageActions: useShownImageActions(),
+			onClose: () => undefined,
+			onStep: (offset: number) => setIndex((current) => current + offset),
+		})
+	}
+
+	const renderSteppingViewer = () => {
+		render(createElement(SteppingViewer), { wrapper: wrapperOn(HOSTED) })
+	}
+
+	const stepToNext = () =>
+		press(screen.getByRole("button", { name: common("library.lightbox.next") }))
+
+	it("disables Save to Library in the menu while the image shown saves", async () => {
+		holdImport()
+		renderSteppingViewer()
+
+		await saveFromMenu(SOFA.name)
+
+		expect(await isSaveToLibraryDisabledFor(SOFA.name)).toBe(true)
+	})
+
+	it.each(SETTLINGS)(
+		"enables Save to Library again when the save %s",
+		async (_outcome, refused) => {
+			harness.refused = refused
+			const release = holdImport()
+			renderSteppingViewer()
+			await saveFromMenu(SOFA.name)
+			const menu = await openRenderedImageMenu(SOFA.name)
+			expect(isSaveToLibraryDisabledIn(menu)).toBe(true)
+
+			await release()
+
+			await waitFor(() => expect(isSaveToLibraryDisabledIn(menu)).toBe(false))
+		},
+	)
+
+	it("enables Save to Library for the next image while the first one saves", async () => {
+		holdImport()
+		renderSteppingViewer()
+		await saveFromMenu(SOFA.name)
+
+		await stepToNext()
+
+		expect(await isSaveToLibraryDisabledFor(OAK.name)).toBe(false)
 	})
 })
