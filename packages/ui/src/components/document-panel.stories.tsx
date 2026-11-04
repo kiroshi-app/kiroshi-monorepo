@@ -554,7 +554,7 @@ export const AskedUnderTheRoomLeft = meta.story({
 	play: async ({ canvas, canvasElement }) => {
 		const handle = canvas.getByRole("separator", { name: HANDLE_LABEL })
 		const panel = canvas.getByRole("complementary", {
-			name: DOCUMENT_CARD_TITLE,
+			name: DOCUMENT_TITLE,
 		})
 		const room = LAPTOP_WIDTH - SIDEBAR_MAX_WIDTH
 		const reachableMaxWidth = room - THREAD_MIN_WIDTH
@@ -622,7 +622,7 @@ export const CappedByTheRoomLeft = meta.story({
 			String(DOCUMENT_PANEL_MAX_WIDTH),
 		)
 		await expect(
-			canvas.getByRole("complementary", { name: DOCUMENT_CARD_TITLE }),
+			canvas.getByRole("complementary", { name: DOCUMENT_TITLE }),
 		).toBe(panel)
 		await expect(panel.getBoundingClientRect().width).toBe(
 			DOCUMENT_PANEL_MAX_WIDTH,
@@ -653,7 +653,7 @@ export const HeldAtItsFloorInTheSmallestWindow = meta.story({
 	play: async ({ canvas, canvasElement }) => {
 		const handle = canvas.getByRole("separator", { name: HANDLE_LABEL })
 		const panel = canvas.getByRole("complementary", {
-			name: DOCUMENT_CARD_TITLE,
+			name: DOCUMENT_TITLE,
 		})
 		const thread = threadOf(canvasElement)
 		const floor = String(DOCUMENT_PANEL_MIN_WIDTH)
@@ -692,7 +692,7 @@ export const HeldAtItsFloorInTheSmallestWindow = meta.story({
 			String(DOCUMENT_PANEL_MAX_WIDTH),
 		)
 		await expect(
-			canvas.getByRole("complementary", { name: DOCUMENT_CARD_TITLE }),
+			canvas.getByRole("complementary", { name: DOCUMENT_TITLE }),
 		).toBe(panel)
 		await expect(panel.getBoundingClientRect().width).toBe(
 			DOCUMENT_PANEL_DEFAULT_WIDTH,
