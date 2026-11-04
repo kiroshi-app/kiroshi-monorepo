@@ -149,7 +149,6 @@ export const LooseChecklist = meta.story({
 		const firstRow = first?.closest("p")
 		if (!first || !second || !firstRow)
 			throw new Error("The checklist draws no two rows")
-		const line = Number.parseFloat(getComputedStyle(firstRow).lineHeight)
 		const leadIn = canvas.getByText(/^Here is where the move stands/)
 		await expect(
 			firstRow.getBoundingClientRect().top -
@@ -157,7 +156,10 @@ export const LooseChecklist = meta.story({
 		).toBeCloseTo(LEAD_IN_GAP, 0)
 		await expect(
 			second.getBoundingClientRect().top - first.getBoundingClientRect().top,
-		).toBeCloseTo(line + ROW_GAP, 0)
+		).toBeCloseTo(
+			Number.parseFloat(getComputedStyle(firstRow).lineHeight) + ROW_GAP,
+			0,
+		)
 		const done = canvas.getByRole("checkbox", { name: "Done" }).closest("p")
 		if (!done) throw new Error("The ticked box sits in no paragraph")
 		await expect(getComputedStyle(done).textDecorationLine).toBe("line-through")
