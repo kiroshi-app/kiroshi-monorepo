@@ -1,4 +1,6 @@
+import { undo } from "@codemirror/commands"
 import { syntaxTree } from "@codemirror/language"
+import { type StateCommand, Transaction } from "@codemirror/state"
 import { EditorView } from "@codemirror/view"
 import {
 	type ComponentType,
@@ -26,10 +28,24 @@ import {
 	LIBRARY_WRITERS,
 } from "@workspace/ui/components/library.fixtures"
 import {
+	setLink,
+	toggleBold,
+	toggleBulletList,
+	toggleCodeBlock,
+	toggleHeading1,
+	toggleHeading2,
+	toggleHeading3,
+	toggleInlineCode,
+	toggleItalic,
+	toggleNumberedList,
+	toggleQuote,
+	toggleStrikethrough,
+	toggleTask,
+} from "@workspace/ui/components/library-document-commands"
+import {
 	LibraryDocumentEditor,
 	type LibraryDocumentEditorHandle,
 	type LibraryDocumentEditorProps,
-	type LibraryDocumentRange,
 	libraryDocumentStartOf,
 } from "@workspace/ui/components/library-document-editor"
 import {
@@ -199,15 +215,6 @@ const createDraftStore = (start: DocumentDraft) => {
 type DraftStore = ReturnType<typeof createDraftStore>
 
 const launchReviewDraft = createDraftStore(LAUNCH_REVIEW)
-
-const boldOn =
-	(draft: DraftStore) =>
-	({ start, end }: LibraryDocumentRange) => {
-		const { body } = draft.read()
-		draft.write({
-			body: `${body.slice(0, start)}**${body.slice(start, end)}**${body.slice(end)}`,
-		})
-	}
 
 type LiveEditorProps = LibraryDocumentEditorProps & {
 	draft: DraftStore
@@ -1144,14 +1151,14 @@ export const MultiParagraphPaste = meta.story({
 const formatDraft = createDraftStore(LAUNCH_REVIEW)
 
 export const FormatUndoneWhole = meta.story({
-	args: { ...LAUNCH_REVIEW, template: undefined, onBold: boldOn(formatDraft) },
+	args: { ...LAUNCH_REVIEW, template: undefined },
 	beforeEach: formatDraft.reset,
 	render: (args) => <LiveEditor {...args} draft={formatDraft} />,
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The person types, then turns a few words bold from the toolbar and again with Cmd+B, the host writing the bold back through `body`. Check that each bold lands in the text, that the next Cmd+Z takes the whole bold back in one step and keeps the typing, and that the typing goes on the following Cmd+Z.",
+					"The person types, then turns a few words bold from the toolbar and again with Cmd+B, the host writing the reported markdown back through `body`. Check that each bold lands in the text, that the next Cmd+Z takes the whole bold back in one step and keeps the typing, and that the typing goes on the following Cmd+Z.",
 			},
 		},
 	},
@@ -1189,29 +1196,27 @@ export const FormatUndoneWhole = meta.story({
 const unchangedFormatDraft = createDraftStore(LAUNCH_REVIEW)
 
 export const FormatWithoutChange = meta.story({
-	args: {
-		...LAUNCH_REVIEW,
-		template: undefined,
-		onBold: boldOn(unchangedFormatDraft),
-		onItalic: fn(() =>
-			unchangedFormatDraft.write({ body: unchangedFormatDraft.read().body }),
-		),
-	},
+	args: { ...LAUNCH_REVIEW, template: undefined },
 	beforeEach: unchangedFormatDraft.reset,
 	render: (args) => <LiveEditor {...args} draft={unchangedFormatDraft} />,
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The person presses Cmd+I and the host answers with the text unchanged, someone else then changes a heading, and the person turns a few words bold with Cmd+B. Check that the bold lands, that the next Cmd+Z takes the whole bold back and keeps the outside change, and that a further Cmd+Z leaves the outside change in place.",
+					"The person confirms an empty link on plain text, which changes nothing, someone else then changes a heading, and the person turns a few words bold with Cmd+B. Check that the empty link reports nothing, that the bold lands, that the next Cmd+Z takes the whole bold back and keeps the outside change, and that a further Cmd+Z leaves the outside change in place.",
 			},
 		},
 	},
-	play: async ({ args, canvasElement }) => {
+	play: async ({ args, canvas, canvasElement }) => {
 		if (!isInBrowserRunner()) return
 		selectText(canvasElement, "the launch date")
-		await pressWithCommand("i")
-		await expect(args.onItalic).toHaveBeenCalledOnce()
+		await waitFor(() => expect(toolbarIn(canvasElement)).not.toBe(null))
+		await pressWithCommand("k")
+		await expect(
+			canvas.getByRole("textbox", { name: "Link address" }),
+		).toHaveFocus()
+		await keyboard("{Enter}")
+		await expect(args.onBodyChange).not.toHaveBeenCalled()
 		await expect(textIn(canvasElement)).toBe(LAUNCH_REVIEW.body)
 
 		const outside = LAUNCH_REVIEW.body.replace("## Next steps", "## Then")
@@ -1220,10 +1225,8 @@ export const FormatWithoutChange = meta.story({
 
 		selectText(canvasElement, "who signs off")
 		await pressWithCommand("b")
-		await waitFor(() =>
-			expect(textIn(canvasElement)).toBe(
-				outside.replace("who signs off", "**who signs off**"),
-			),
+		await expect(textIn(canvasElement)).toBe(
+			outside.replace("who signs off", "**who signs off**"),
 		)
 		await pressWithCommand("z")
 		await expect(textIn(canvasElement)).toBe(outside)
@@ -1949,7 +1952,7 @@ const selectionStory = (story: string) => ({
 
 export const A1ToolbarAboveSelection = meta.story({
 	...selectionStory(
-		"Artboard A1: a few words selected on one line of a paragraph. Check that the toolbar sits centred on the selection 8px above it, over every caret and flag, that a pointer press on Bold reports the selected range and keeps the text selected without touching the document, and that the toolbar leaves when the selection collapses or moves to the title.",
+		"Artboard A1: a few words selected on one line of a paragraph. Check that the toolbar sits centred on the selection 8px above it, over every caret and flag, that a pointer press on Bold turns the selected words bold in the editor, reports the new markdown and keeps the same words selected, never calling `onBold`, and that the toolbar leaves when the selection collapses or moves to the title.",
 	),
 	play: async ({ args, canvas, canvasElement, userEvent }) => {
 		const start = selectText(canvasElement, LAUNCH_DATE)
@@ -1974,13 +1977,15 @@ export const A1ToolbarAboveSelection = meta.story({
 		])
 
 		await userEvent.click(within(toolbar).getByRole("button", { name: "Bold" }))
-		await expect(args.onBold).toHaveBeenCalledWith({
-			start,
-			end: start + LAUNCH_DATE.length,
-		})
+		const bolded = SELECTION_DOCUMENT.body.replace(
+			LAUNCH_DATE,
+			`**${LAUNCH_DATE}**`,
+		)
+		await expect(textIn(canvasElement)).toBe(bolded)
+		await expect(args.onBodyChange).toHaveBeenLastCalledWith(bolded)
+		await expect(args.onBold).not.toHaveBeenCalled()
 		await expect(document.activeElement).toBe(bodyIn(canvasElement))
 		await expect(selectedTextIn(canvasElement)).toBe(LAUNCH_DATE)
-		await expect(args.onBodyChange).not.toHaveBeenCalled()
 
 		selectRange(canvasElement, start)
 		await waitFor(() => expect(toolbarIn(canvasElement)).toBe(null))
@@ -2058,10 +2063,10 @@ export const A4ToolbarFormatOn = meta.story({
 
 export const A5ToolbarLinkField = meta.story({
 	...selectionStory(
-		"Artboard A5: Link pressed, the bar gives way to the link field at the same place. Check that the field takes focus, that Escape returns to the bar without reporting a link, and that Enter reports the typed url with the selected range and returns to the bar.",
+		"Artboard A5: Link pressed, the bar gives way to the link field at the same place. Check that the field takes focus, that Escape returns to the bar without linking, and that Enter links the selected words to the typed url in the editor, never calling `onLink`, and returns to the bar.",
 	),
 	play: async ({ args, canvas, canvasElement, userEvent }) => {
-		const start = selectText(canvasElement, LAUNCH_DATE)
+		selectText(canvasElement, LAUNCH_DATE)
 		const openLinkField = async () => {
 			await userEvent.click(await canvas.findByRole("button", { name: "Link" }))
 			const field = canvas.getByRole("textbox", { name: "Link address" })
@@ -2071,20 +2076,22 @@ export const A5ToolbarLinkField = meta.story({
 
 		await userEvent.type(await openLinkField(), "https://kiroshi.app/brief")
 		await userEvent.keyboard("{Escape}")
-		await expect(args.onLink).not.toHaveBeenCalled()
+		await expect(args.onBodyChange).not.toHaveBeenCalled()
 		await expect(canvas.getByRole("toolbar", { name: "Format" })).toBeVisible()
 
 		await userEvent.type(
 			await openLinkField(),
 			"https://kiroshi.app/brief{Enter}",
 		)
-		await expect(args.onLink).toHaveBeenCalledOnce()
-		await expect(args.onLink).toHaveBeenCalledWith(
-			"https://kiroshi.app/brief",
-			{ start, end: start + LAUNCH_DATE.length },
+		const linked = SELECTION_DOCUMENT.body.replace(
+			LAUNCH_DATE,
+			`[${LAUNCH_DATE}](https://kiroshi.app/brief)`,
 		)
+		await expect(textIn(canvasElement)).toBe(linked)
+		await expect(args.onBodyChange).toHaveBeenLastCalledWith(linked)
+		await expect(args.onLink).not.toHaveBeenCalled()
+		await expect(selectedTextIn(canvasElement)).toBe(LAUNCH_DATE)
 		await expect(canvas.getByRole("toolbar", { name: "Format" })).toBeVisible()
-		await expect(args.onBodyChange).not.toHaveBeenCalled()
 
 		await userEvent.type(await openLinkField(), "https://kiroshi.app/brief")
 		await expect(toolbarIn(canvasElement)?.getBoundingClientRect().width).toBe(
@@ -2156,60 +2163,63 @@ const pressIn = (field: HTMLElement, init: KeyboardEventInit) => {
 }
 
 type ShortcutCheck = {
+	args: LibraryDocumentEditorProps
 	canvasElement: HTMLElement
 	keys: string
-	callback: unknown
-	onBodyChange: unknown
+	marker: string
 }
 
-const expectShortcutReports = async ({
+const formattedLaunchDate = (marker: string) =>
+	SELECTION_DOCUMENT.body.replace(
+		LAUNCH_DATE,
+		`${marker}${LAUNCH_DATE}${marker}`,
+	)
+
+const expectShortcutFormats = async ({
+	args,
 	canvasElement,
 	keys,
-	callback,
-	onBodyChange,
+	marker,
 }: ShortcutCheck) => {
 	const start = selectText(canvasElement, LAUNCH_DATE)
 	await waitFor(() => expect(toolbarIn(canvasElement)).not.toBe(null))
 
 	await keyboard(keys)
-	await expect(callback).toHaveBeenCalledOnce()
-	await expect(callback).toHaveBeenCalledWith({
-		start,
-		end: start + LAUNCH_DATE.length,
-	})
+	const formatted = formattedLaunchDate(marker)
+	await expect(textIn(canvasElement)).toBe(formatted)
+	await expect(args.onBodyChange).toHaveBeenCalledOnce()
+	await expect(args.onBodyChange).toHaveBeenLastCalledWith(formatted)
 	await expect(document.activeElement).toBe(bodyIn(canvasElement))
 	await expect(selectedTextIn(canvasElement)).toBe(LAUNCH_DATE)
-	await expect(onBodyChange).not.toHaveBeenCalled()
-	return start
+	for (const action of Object.values(SELECTION_ACTIONS))
+		await expect(action).not.toHaveBeenCalled()
+	return start + marker.length
 }
 
 export const BoldShortcut = meta.story({
 	...selectionStory(
-		"Cmd+B on a selected range. Check that Bold is reported once with the range its toolbar button would pass, that Ctrl+B does the same with the browser default prevented, that the shortcut still works once Escape closed the toolbar, and that a collapsed selection or the title field reports nothing.",
+		"Cmd+B on a selected range. Check that the range turns bold in the editor and stays selected, that Ctrl+B takes the bold back with the browser default prevented, that the shortcut still works once Escape closed the toolbar, that `onBold` is never called, and that a collapsed selection or the title field leaves the key to the browser.",
 	),
 	play: async ({ args, canvas, canvasElement }) => {
 		if (!isInBrowserRunner()) return
-		const start = await expectShortcutReports({
+		const start = await expectShortcutFormats({
+			args,
 			canvasElement,
 			keys: `{${COMMAND}>}b{/${COMMAND}}`,
-			callback: args.onBold,
-			onBodyChange: args.onBodyChange,
+			marker: "**",
 		})
 
 		const body = bodyIn(canvasElement)
 		await expect(
 			pressIn(body, { key: "b", ctrlKey: true }).defaultPrevented,
 		).toBe(true)
-		await expect(args.onBold).toHaveBeenCalledTimes(2)
-		await expect(args.onBold).toHaveBeenLastCalledWith({
-			start,
-			end: start + LAUNCH_DATE.length,
-		})
+		await expect(textIn(canvasElement)).toBe(SELECTION_DOCUMENT.body)
+		await expect(selectedTextIn(canvasElement)).toBe(LAUNCH_DATE)
 
 		await keyboard("{Escape}")
 		await expect(toolbarIn(canvasElement)).toBe(null)
 		await pressWithCommand("b")
-		await expect(args.onBold).toHaveBeenCalledTimes(3)
+		await expect(textIn(canvasElement)).toBe(formattedLaunchDate("**"))
 
 		selectRange(canvasElement, start)
 		await expect(
@@ -2223,59 +2233,51 @@ export const BoldShortcut = meta.story({
 		await expect(
 			pressIn(title, { key: "b", metaKey: true }).defaultPrevented,
 		).toBe(false)
-		await expect(args.onBold).toHaveBeenCalledTimes(3)
-		await expect(args.onBodyChange).not.toHaveBeenCalled()
+		await expect(textIn(canvasElement)).toBe(formattedLaunchDate("**"))
+		await expect(args.onBodyChange).toHaveBeenCalledTimes(3)
+		await expect(args.onBold).not.toHaveBeenCalled()
 	},
 })
 
-const shortcutStory = (
-	keys: string,
-	action: "onItalic" | "onStrikethrough" | "onCode",
-	story: string,
-) => ({
+const shortcutStory = (keys: string, marker: string, story: string) => ({
 	...selectionStory(story),
 	play: async ({ args, canvasElement }: PlayContext) => {
 		if (!isInBrowserRunner()) return
-		await expectShortcutReports({
-			canvasElement,
-			keys,
-			callback: args[action],
-			onBodyChange: args.onBodyChange,
-		})
+		await expectShortcutFormats({ args, canvasElement, keys, marker })
 	},
 })
 
 export const ItalicShortcut = meta.story({
 	...shortcutStory(
 		`{${COMMAND}>}i{/${COMMAND}}`,
-		"onItalic",
-		"Cmd+I on a selected range. Check that Italic is reported once with the range its toolbar button would pass, and that the focus, the selection and the text stay as they were.",
+		"*",
+		"Cmd+I on a selected range. Check that the range turns italic in the editor, that the new markdown is reported, that `onItalic` is never called, and that the focus and the selection stay on the same words.",
 	),
 })
 
 export const StrikethroughShortcut = meta.story({
 	...shortcutStory(
 		`{${COMMAND}>}{Shift>}s{/Shift}{/${COMMAND}}`,
-		"onStrikethrough",
-		"Cmd+Shift+S on a selected range. Check that Strikethrough is reported once with the range its toolbar button would pass, and that the focus, the selection and the text stay as they were.",
+		"~~",
+		"Cmd+Shift+S on a selected range. Check that the range is struck through in the editor, that the new markdown is reported, that `onStrikethrough` is never called, and that the focus and the selection stay on the same words.",
 	),
 })
 
 export const CodeShortcut = meta.story({
 	...shortcutStory(
 		`{${COMMAND}>}e{/${COMMAND}}`,
-		"onCode",
-		"Cmd+E on a selected range. Check that Code is reported once with the range its toolbar button would pass, and that the focus, the selection and the text stay as they were.",
+		"`",
+		"Cmd+E on a selected range. Check that the range turns into inline code in the editor, that the new markdown is reported, that `onCode` is never called, and that the focus and the selection stay on the same words.",
 	),
 })
 
 export const LinkShortcut = meta.story({
 	...selectionStory(
-		"Cmd+K on a selected range, the toolbar showing then closed by Escape. Check that the toolbar opens on its link field, focused, that Escape there returns to the bar, and that Enter reports the typed url with the selected range.",
+		"Cmd+K on a selected range, the toolbar showing then closed by Escape. Check that the toolbar opens on its link field, focused, that Escape there returns to the bar, and that Enter links the selected range to the typed url in the editor, never calling `onLink`.",
 	),
 	play: async ({ args, canvas, canvasElement }) => {
 		if (!isInBrowserRunner()) return
-		const start = selectText(canvasElement, LAUNCH_DATE)
+		selectText(canvasElement, LAUNCH_DATE)
 		await waitFor(() => expect(toolbarIn(canvasElement)).not.toBe(null))
 		const linkField = () =>
 			canvas.getByRole("textbox", { name: "Link address" })
@@ -2284,7 +2286,7 @@ export const LinkShortcut = meta.story({
 		await expect(document.activeElement).toBe(linkField())
 		await keyboard("{Escape}")
 		await expect(canvas.getByRole("toolbar", { name: "Format" })).toBeVisible()
-		await expect(args.onLink).not.toHaveBeenCalled()
+		await expect(args.onBodyChange).not.toHaveBeenCalled()
 
 		viewIn(canvasElement).focus()
 		await expect(selectedTextIn(canvasElement)).toBe(LAUNCH_DATE)
@@ -2295,12 +2297,13 @@ export const LinkShortcut = meta.story({
 		await expect(selectedTextIn(canvasElement)).toBe(LAUNCH_DATE)
 
 		await keyboard("https://kiroshi.app/brief{Enter}")
-		await expect(args.onLink).toHaveBeenCalledOnce()
-		await expect(args.onLink).toHaveBeenCalledWith(
-			"https://kiroshi.app/brief",
-			{ start, end: start + LAUNCH_DATE.length },
+		const linked = SELECTION_DOCUMENT.body.replace(
+			LAUNCH_DATE,
+			`[${LAUNCH_DATE}](https://kiroshi.app/brief)`,
 		)
-		await expect(args.onBodyChange).not.toHaveBeenCalled()
+		await expect(textIn(canvasElement)).toBe(linked)
+		await expect(args.onBodyChange).toHaveBeenLastCalledWith(linked)
+		await expect(args.onLink).not.toHaveBeenCalled()
 	},
 })
 
@@ -2326,37 +2329,6 @@ export const EscapeClosesToolbar = meta.story({
 			SELECTION_DOCUMENT.body.replace("the copy", "x"),
 		)
 		await expect(args.onBodyChange).toHaveBeenCalled()
-	},
-})
-
-export const ShortcutsWithoutCallbacks = meta.story({
-	tags: ["test-only"],
-	args: SELECTION_DOCUMENT,
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"No format callback passed. Check that the five shortcuts leave the key to the browser and that Cmd+K opens no link field.",
-			},
-		},
-	},
-	play: async ({ canvas, canvasElement }) => {
-		selectText(canvasElement, LAUNCH_DATE)
-		await waitFor(() => expect(toolbarIn(canvasElement)).not.toBe(null))
-
-		for (const init of [
-			{ key: "b", metaKey: true },
-			{ key: "i", metaKey: true },
-			{ key: "S", metaKey: true, shiftKey: true },
-			{ key: "e", metaKey: true },
-			{ key: "k", metaKey: true },
-		])
-			await expect(pressIn(bodyIn(canvasElement), init).defaultPrevented).toBe(
-				false,
-			)
-		await expect(canvas.queryByRole("textbox", { name: "Link address" })).toBe(
-			null,
-		)
 	},
 })
 
@@ -2408,5 +2380,571 @@ export const ToolbarAfterKeyboardSelection = meta.story({
 
 		await keyboard("{/Shift}")
 		await expectToolbarAbove(canvasElement)
+	},
+})
+
+const formatHandle = createRef<LibraryDocumentEditorHandle>()
+
+const SELECTION_START = "‹"
+
+const SELECTION_END = "›"
+
+const unmarked = (marked: string) =>
+	marked.replace(SELECTION_START, "").replace(SELECTION_END, "")
+
+const loadMarked = (view: EditorView, marked: string) => {
+	const anchor = marked.indexOf(SELECTION_START)
+	const head = marked.indexOf(SELECTION_END) - SELECTION_START.length
+	view.focus()
+	view.dispatch({
+		changes: { from: 0, to: view.state.doc.length, insert: unmarked(marked) },
+		selection: { anchor, head },
+		annotations: Transaction.addToHistory.of(false),
+	})
+}
+
+const markedIn = (view: EditorView) => {
+	const { from, to } = view.state.selection.main
+	const text = view.state.doc.toString()
+	return `${text.slice(0, from)}${SELECTION_START}${text.slice(from, to)}${SELECTION_END}${text.slice(to)}`
+}
+
+type StepRunner = (name: string, play: () => Promise<void>) => unknown
+
+type FormatAction = [command: StateCommand, after: string]
+
+type FormatStep = {
+	name: string
+	before: string
+	actions: FormatAction[]
+}
+
+const playFormatSteps = async (
+	{ args, canvasElement, step }: PlayContext & { step: StepRunner },
+	steps: FormatStep[],
+) => {
+	const view = viewIn(canvasElement)
+	for (const { name, before, actions } of steps)
+		await step(name, async () => {
+			loadMarked(view, before)
+			await expect(markedIn(view)).toBe(before)
+			const changed = [before]
+			for (const [command, after] of actions) {
+				formatHandle.current?.format(command)
+				await expect(markedIn(view)).toBe(after)
+				if (after === changed.at(-1)) continue
+				changed.push(after)
+				await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+					unmarked(after),
+				)
+			}
+			for (const previous of changed.slice(0, -1).reverse()) {
+				undo(view)
+				await expect(markedIn(view)).toBe(previous)
+			}
+		})
+}
+
+const toggledTwice = (
+	command: StateCommand,
+	before: string,
+	after: string,
+	name = "the same action twice",
+): FormatStep => ({
+	name,
+	before,
+	actions: [
+		[command, after],
+		[command, before],
+	],
+})
+
+const once = (
+	name: string,
+	command: StateCommand,
+	before: string,
+	after: string,
+): FormatStep => ({ name, before, actions: [[command, after]] })
+
+const SELECT_ALL_DOCUMENT =
+	"‹## Decisions\n\n- Ship on the 14th\n\n> Keep it quiet\n\nScreenshots land.›"
+
+const formatStory = (
+	command: StateCommand,
+	story: string,
+	steps: (command: StateCommand) => FormatStep[],
+) => ({
+	tags: ["test-only"],
+	args: { ...LAUNCH_REVIEW, template: undefined, ...SELECTION_ACTIONS },
+	render: (args: LibraryDocumentEditorProps) => (
+		<EditorFrame>
+			<LibraryDocumentEditor {...args} ref={formatHandle} />
+		</EditorFrame>
+	),
+	parameters: { docs: { description: { story } } },
+	play: async (context: PlayContext & { step: StepRunner }) => {
+		await playFormatSteps(context, steps(command))
+		for (const action of Object.values(SELECTION_ACTIONS))
+			await expect(action).not.toHaveBeenCalled()
+	},
+})
+
+const PUNCTUATION_AFTER_WORD = "Hello‹, world›"
+
+const PUNCTUATION_BEFORE_WORD = "Read ‹the brief.›Then ship."
+
+const inlineSteps =
+	(marker: string) =>
+	(command: StateCommand): FormatStep[] => {
+		const wrap = (text: string) => `${marker}${text}${marker}`
+		const isFlanked = marker !== "`"
+		return [
+			once(
+				"a word",
+				command,
+				"Ship the ‹launch› today.",
+				`Ship the ${wrap("‹launch›")} today.`,
+			),
+			once(
+				"a partial word",
+				command,
+				"Ship the la‹unc›h today.",
+				`Ship the la${wrap("‹unc›")}h today.`,
+			),
+			once(
+				"a mixed selection",
+				command,
+				`Ship‹ the ${wrap("launch")} today ›.`,
+				`Ship‹ ${wrap("the launch today")} ›.`,
+			),
+			once(
+				"several paragraphs",
+				command,
+				"First ‹note.\n\nSecond› note.",
+				`First ${marker}‹note.${marker}\n\n${marker}Second›${marker} note.`,
+			),
+			{
+				name: "select-all, then the same action again",
+				before: SELECT_ALL_DOCUMENT,
+				actions: [
+					[
+						command,
+						`‹## ${wrap("Decisions")}\n\n- ${wrap("Ship on the 14th")}\n\n> ${wrap("Keep it quiet")}\n\n${marker}Screenshots land.›${marker}`,
+					],
+					[command, SELECT_ALL_DOCUMENT],
+				],
+			},
+			toggledTwice(
+				command,
+				"Ship the ‹launch› today.",
+				`Ship the ${wrap("‹launch›")} today.`,
+			),
+			toggledTwice(
+				command,
+				PUNCTUATION_AFTER_WORD,
+				isFlanked ? wrap("Hello‹, world›") : `Hello${wrap("‹, world›")}`,
+				"a selection starting on punctuation after a word, twice",
+			),
+			toggledTwice(
+				command,
+				PUNCTUATION_BEFORE_WORD,
+				isFlanked
+					? `Read ${wrap("‹the brief.›Then")} ship.`
+					: `Read ${wrap("‹the brief.›")}Then ship.`,
+				"a selection ending on punctuation before a word, twice",
+			),
+		]
+	}
+
+const INLINE_STORY =
+	"Run from the editor handle on a fresh document per step: a word, a partial word, a mixed selection with spaces at both ends, two paragraphs, select-all twice, the same action twice, and a selection starting on punctuation after a word or ending on punctuation before one, pressed twice, each undone in one step. Check the markdown and the selection before and after every action and every undo, that only markers change, that spaces stay outside them, that a marker beside punctuation widens to the whole word so the format still reads, and that no `SelectionActions` prop is called."
+
+export const FormatBold = meta.story({
+	...formatStory(toggleBold, INLINE_STORY, inlineSteps("**")),
+})
+
+export const FormatItalic = meta.story({
+	...formatStory(toggleItalic, INLINE_STORY, inlineSteps("*")),
+})
+
+export const FormatStrikethrough = meta.story({
+	...formatStory(toggleStrikethrough, INLINE_STORY, inlineSteps("~~")),
+})
+
+export const FormatInlineCode = meta.story({
+	...formatStory(toggleInlineCode, INLINE_STORY, inlineSteps("`")),
+})
+
+const BRIEF_URL = "https://kiroshi.app/brief"
+
+const linkSteps = (command: StateCommand): FormatStep[] => {
+	const linked = (text: string) => `[${text}](${BRIEF_URL})`
+	const unlink = setLink("")
+	return [
+		once(
+			"a word",
+			command,
+			"Read the ‹brief› today.",
+			`Read the ${linked("‹brief›")} today.`,
+		),
+		once(
+			"a partial word",
+			command,
+			"Read the br‹ie›f today.",
+			`Read the br${linked("‹ie›")}f today.`,
+		),
+		once(
+			"a mixed selection",
+			command,
+			"Read‹ the [brief](https://kiroshi.app/old) today ›.",
+			`Read‹ ${linked("the brief today")} ›.`,
+		),
+		once(
+			"several paragraphs",
+			command,
+			"First ‹note.\n\nSecond› note.",
+			`First [‹note.](${BRIEF_URL})\n\n[Second›](${BRIEF_URL}) note.`,
+		),
+		{
+			name: "select-all, then an empty url",
+			before: SELECT_ALL_DOCUMENT,
+			actions: [
+				[
+					command,
+					`‹## ${linked("Decisions")}\n\n- ${linked("Ship on the 14th")}\n\n> ${linked("Keep it quiet")}\n\n[Screenshots land.›](${BRIEF_URL})`,
+				],
+				[unlink, SELECT_ALL_DOCUMENT],
+			],
+		},
+		{
+			name: "the same action twice, then an empty url",
+			before: "Read the ‹brief› today.",
+			actions: [
+				[command, `Read the ${linked("‹brief›")} today.`],
+				[command, `Read the ${linked("‹brief›")} today.`],
+				[unlink, "Read the ‹brief› today."],
+			],
+		},
+		{
+			name: "a selection starting on punctuation after a word, then an empty url",
+			before: PUNCTUATION_AFTER_WORD,
+			actions: [
+				[command, `Hello${linked("‹, world›")}`],
+				[unlink, PUNCTUATION_AFTER_WORD],
+			],
+		},
+		{
+			name: "a selection ending on punctuation before a word, then an empty url",
+			before: PUNCTUATION_BEFORE_WORD,
+			actions: [
+				[command, `Read ${linked("‹the brief.›")}Then ship.`],
+				[unlink, PUNCTUATION_BEFORE_WORD],
+			],
+		},
+	]
+}
+
+export const FormatLink = meta.story({
+	...formatStory(
+		setLink(BRIEF_URL),
+		"Run from the editor handle on a fresh document per step: a word, a partial word, a selection holding another link with spaces at both ends, two paragraphs, select-all then an empty url, the same url twice then an empty url, and a selection starting on punctuation after a word or ending on punctuation before one, each undone in one step. Check the markdown and the selection before and after every action and every undo, that a second identical link changes nothing, that an empty url removes the link and keeps its text, and that `onLink` is never called.",
+		linkSteps,
+	),
+})
+
+const headingSteps =
+	(level: number) =>
+	(command: StateCommand): FormatStep[] => {
+		const hashes = "#".repeat(level)
+		const other = "#".repeat(level === 3 ? 1 : level + 1)
+		return [
+			once(
+				"a word",
+				command,
+				"Ship the ‹launch› today.",
+				`${hashes} Ship the ‹launch› today.`,
+			),
+			once(
+				"a partial word",
+				command,
+				"Ship the la‹unc›h today.",
+				`${hashes} Ship the la‹unc›h today.`,
+			),
+			once(
+				"a mixed selection",
+				command,
+				`${hashes} ‹One\n${other} Two\nThree›`,
+				`${hashes} ‹One\n${hashes} Two\n${hashes} Three›`,
+			),
+			once(
+				"several paragraphs",
+				command,
+				"First ‹note.\n\nSecond› note.",
+				`${hashes} First ‹note.\n\n${hashes} Second› note.`,
+			),
+			{
+				name: "select-all, then the same action again",
+				before: SELECT_ALL_DOCUMENT,
+				actions: [
+					[
+						command,
+						`‹${hashes} Decisions\n\n- ${hashes} Ship on the 14th\n\n> ${hashes} Keep it quiet\n\n${hashes} Screenshots land.›`,
+					],
+					[
+						command,
+						"‹Decisions\n\n- Ship on the 14th\n\n> Keep it quiet\n\nScreenshots land.›",
+					],
+				],
+			},
+			toggledTwice(
+				command,
+				"Ship the ‹launch› today.",
+				`${hashes} Ship the ‹launch› today.`,
+			),
+		]
+	}
+
+const HEADING_STORY =
+	"Run from the editor handle on a fresh document per step: a word, a partial word, lines carrying this heading, another level and none, two paragraphs, select-all twice, and the same action twice, each undone in one step. Check the markdown and the selection before and after every action and every undo, that another level is replaced rather than stacked, and that no `SelectionActions` prop is called."
+
+export const FormatHeading1 = meta.story({
+	...formatStory(toggleHeading1, HEADING_STORY, headingSteps(1)),
+})
+
+export const FormatHeading2 = meta.story({
+	...formatStory(toggleHeading2, HEADING_STORY, headingSteps(2)),
+})
+
+export const FormatHeading3 = meta.story({
+	...formatStory(toggleHeading3, HEADING_STORY, headingSteps(3)),
+})
+
+type LineSteps = {
+	prefixOf: (index: number) => string
+	mixed: [before: string, after: string]
+	selectAll: [first: string, second: string]
+}
+
+const lineSteps =
+	({ prefixOf, mixed, selectAll }: LineSteps) =>
+	(command: StateCommand): FormatStep[] => [
+		once(
+			"a word",
+			command,
+			"Ship the ‹launch› today.",
+			`${prefixOf(0)}Ship the ‹launch› today.`,
+		),
+		once(
+			"a partial word",
+			command,
+			"Ship the la‹unc›h today.",
+			`${prefixOf(0)}Ship the la‹unc›h today.`,
+		),
+		once("a mixed selection", command, ...mixed),
+		once(
+			"several paragraphs",
+			command,
+			"First ‹note.\n\nSecond› note.",
+			`${prefixOf(0)}First ‹note.\n\n${prefixOf(1)}Second› note.`,
+		),
+		{
+			name: "select-all, then the same action again",
+			before: SELECT_ALL_DOCUMENT,
+			actions: [
+				[command, selectAll[0]],
+				[command, selectAll[1]],
+			],
+		},
+		toggledTwice(
+			command,
+			"Ship the ‹launch› today.",
+			`${prefixOf(0)}Ship the ‹launch› today.`,
+		),
+	]
+
+const LINE_STORY =
+	"Run from the editor handle on a fresh document per step: a word, a partial word, lines carrying this format, another of its family and none, two paragraphs, select-all twice, and the same action twice, each undone in one step. Check the markdown and the selection before and after every action and every undo, that a prefix of the same family is replaced rather than stacked, and that no `SelectionActions` prop is called."
+
+const SELECT_ALL_UNLISTED =
+	"‹## Decisions\n\nShip on the 14th\n\n> Keep it quiet\n\nScreenshots land.›"
+
+export const FormatBulletList = meta.story({
+	...formatStory(
+		toggleBulletList,
+		LINE_STORY,
+		lineSteps({
+			prefixOf: () => "- ",
+			mixed: ["‹- One\n1. Two\nThree›", "‹- One\n- Two\n- Three›"],
+			selectAll: [
+				"- ‹## Decisions\n\n- Ship on the 14th\n\n> - Keep it quiet\n\n- Screenshots land.›",
+				SELECT_ALL_UNLISTED,
+			],
+		}),
+	),
+})
+
+export const FormatNumberedList = meta.story({
+	...formatStory(
+		toggleNumberedList,
+		`${LINE_STORY} Check too that the touched lines are numbered from 1.`,
+		lineSteps({
+			prefixOf: (index) => `${index + 1}. `,
+			mixed: ["‹1. One\n- Two\nThree›", "‹1. One\n2. Two\n3. Three›"],
+			selectAll: [
+				"1. ‹## Decisions\n\n2. Ship on the 14th\n\n> 3. Keep it quiet\n\n4. Screenshots land.›",
+				SELECT_ALL_UNLISTED,
+			],
+		}),
+	),
+})
+
+export const FormatTask = meta.story({
+	...formatStory(
+		toggleTask,
+		LINE_STORY,
+		lineSteps({
+			prefixOf: () => "- [ ] ",
+			mixed: [
+				"‹- [ ] One\n- Two\nThree›",
+				"‹- [ ] One\n- [ ] Two\n- [ ] Three›",
+			],
+			selectAll: [
+				"- [ ] ‹## Decisions\n\n- [ ] Ship on the 14th\n\n> - [ ] Keep it quiet\n\n- [ ] Screenshots land.›",
+				SELECT_ALL_UNLISTED,
+			],
+		}),
+	),
+})
+
+export const FormatQuote = meta.story({
+	...formatStory(
+		toggleQuote,
+		LINE_STORY,
+		lineSteps({
+			prefixOf: () => "> ",
+			mixed: ["‹> One\nTwo\nThree›", "‹> One\n> Two\n> Three›"],
+			selectAll: [
+				"> ‹## Decisions\n\n> - Ship on the 14th\n\n> Keep it quiet\n\n> Screenshots land.›",
+				"‹## Decisions\n\n- Ship on the 14th\n\nKeep it quiet\n\nScreenshots land.›",
+			],
+		}),
+	),
+})
+
+const fencedIn = (marked: string) => `\`\`\`\n${marked}\n\`\`\``
+
+const codeBlockSteps = (command: StateCommand): FormatStep[] => [
+	once(
+		"a word",
+		command,
+		"Ship the ‹launch› today.",
+		fencedIn("Ship the ‹launch› today."),
+	),
+	once(
+		"a partial word",
+		command,
+		"Ship the la‹unc›h today.",
+		fencedIn("Ship the la‹unc›h today."),
+	),
+	once(
+		"a mixed selection",
+		command,
+		"‹Intro\n```\ncode›\n```",
+		fencedIn("‹Intro\ncode›"),
+	),
+	once(
+		"several paragraphs",
+		command,
+		"First ‹note.\n\nSecond› note.",
+		fencedIn("First ‹note.\n\nSecond› note."),
+	),
+	{
+		name: "select-all, then the same action again",
+		before: SELECT_ALL_DOCUMENT,
+		actions: [
+			[command, fencedIn(SELECT_ALL_DOCUMENT)],
+			[command, SELECT_ALL_DOCUMENT],
+		],
+	},
+	toggledTwice(
+		command,
+		"Ship the ‹launch› today.",
+		fencedIn("Ship the ‹launch› today."),
+	),
+]
+
+export const FormatCodeBlock = meta.story({
+	...formatStory(
+		toggleCodeBlock,
+		"Run from the editor handle on a fresh document per step: a word, a partial word, lines reaching into a fence, two paragraphs, select-all twice, and the same action twice, each undone in one step. Check the markdown and the selection before and after every action and every undo, that lines outside a fence get one fence, that lines inside one lose it, and that no `SelectionActions` prop is called.",
+		codeBlockSteps,
+	),
+})
+
+const PRESSED_DOCUMENT = [
+	"**First note.**",
+	"**Second note.**",
+	"Third note.",
+	"# Launch plan",
+	"1. Draft the notes",
+	"## Decisions",
+	"- Ship it",
+].join("\n\n")
+
+const pressedButtonsIn = (canvasElement: HTMLElement) => {
+	const toolbar = within(canvasElement).getByRole("toolbar", {
+		name: "Format",
+	})
+	return within(toolbar)
+		.getAllByRole("button")
+		.filter((button) => button.getAttribute("aria-pressed") === "true")
+		.map((button) => button.getAttribute("aria-label"))
+}
+
+const PRESSED_CASES: [
+	name: string,
+	from: string,
+	to: string,
+	pressed: string[],
+][] = [
+	[
+		"a fully formatted two-paragraph selection",
+		"**First",
+		"Second note.**",
+		["Bold"],
+	],
+	["a mixed two-paragraph selection", "**Second", "Third note.", []],
+	["an H1 line", "Launch", "Launch plan", []],
+	["a numbered line", "Draft", "Draft the notes", []],
+	["an H2 line", "Decisions", "Decisions", ["Heading"]],
+	["a bullet line", "Ship", "Ship it", ["List"]],
+]
+
+export const ToolbarPressedState = meta.story({
+	tags: ["test-only"],
+	args: {
+		...LAUNCH_REVIEW,
+		body: PRESSED_DOCUMENT,
+		template: undefined,
+		...SELECTION_ACTIONS,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The toolbar over selections its buttons would treat differently. Check that a button shows pressed exactly when pressing it would remove its format: Bold over two fully bold paragraphs, nothing over one bold and one plain paragraph, nothing on an H1 or a numbered line since Heading toggles H2 and List a bullet list, Heading on an H2 line and List on a bullet line.",
+			},
+		},
+	},
+	play: async ({ canvasElement, step }) => {
+		for (const [name, from, to, pressed] of PRESSED_CASES)
+			await step(name, async () => {
+				const text = textIn(canvasElement)
+				const start = text.indexOf(from)
+				selectRange(canvasElement, start, text.indexOf(to) + to.length)
+				await waitFor(() =>
+					expect(pressedButtonsIn(canvasElement)).toEqual(pressed),
+				)
+			})
 	},
 })

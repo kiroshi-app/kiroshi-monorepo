@@ -144,32 +144,4 @@ const nodesIn = (text: string, from: number, to: number): InlineNode[] => {
 
 const inlineNodesOf = (text: string) => nodesIn(text, 0, text.length)
 
-type FormatsAround = {
-	formats: InlineFormat[]
-	link?: string
-}
-
-const formatsAround = (
-	text: string,
-	start: number,
-	end: number,
-): FormatsAround => {
-	const around: FormatsAround = { formats: [] }
-	const visit = (nodes: InlineNode[]) => {
-		for (const node of nodes) {
-			if (node.kind === "text" || node.kind === "marker") continue
-			const closing = node.children.at(-1)
-			if (closing?.kind !== "marker" || start < node.from || end > closing.to)
-				continue
-
-			around.formats.push(node.kind)
-			if (node.kind === "link")
-				around.link = text.slice(closing.from + 2, closing.to - 1)
-			visit(node.children)
-		}
-	}
-	visit(inlineNodesOf(text))
-	return around
-}
-
-export { formatsAround, INLINE_LOOK, inlineNodesOf }
+export { INLINE_LOOK, inlineNodesOf }

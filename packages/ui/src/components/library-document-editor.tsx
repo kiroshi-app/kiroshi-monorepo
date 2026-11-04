@@ -1,11 +1,6 @@
 "use client"
 
-import {
-	history,
-	historyKeymap,
-	isolateHistory,
-	standardKeymap,
-} from "@codemirror/commands"
+import { history, historyKeymap, standardKeymap } from "@codemirror/commands"
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown"
 import { syntaxTree } from "@codemirror/language"
 import {
@@ -16,6 +11,7 @@ import {
 	type Range,
 	RangeSet,
 	RangeValue,
+	type StateCommand,
 	StateEffect,
 	StateField,
 	Transaction,
@@ -40,7 +36,6 @@ import {
 	useImperativeHandle,
 	useLayoutEffect,
 	useMemo,
-	useReducer,
 	useRef,
 	useState,
 	useSyncExternalStore,
@@ -63,7 +58,17 @@ import {
 	WRITTEN_RUN_LOOK,
 	type WriterActions,
 } from "@workspace/ui/components/library-document-agents"
-import { formatsAround } from "@workspace/ui/components/library-document-inline"
+import {
+	isFormatOn,
+	selectedLinkOf,
+	setLink,
+	toggleBold,
+	toggleBulletList,
+	toggleHeading2,
+	toggleInlineCode,
+	toggleItalic,
+	toggleStrikethrough,
+} from "@workspace/ui/components/library-document-commands"
 import { livePreview } from "@workspace/ui/components/library-document-live-preview"
 import {
 	DOCUMENT_TITLE,
@@ -757,6 +762,7 @@ type LibraryDocumentRange = {
 
 type FormatAction = (range: LibraryDocumentRange) => void
 
+// TODO: OPE-1774 removes SelectionActions once apps/app stops passing them.
 type SelectionActions = {
 	onBold?: FormatAction
 	onItalic?: FormatAction
@@ -779,13 +785,13 @@ type SelectedText = {
 
 type ToolbarMode = "bar" | "link" | "closed"
 
-type ShortcutFormat = "bold" | "italic" | "strikethrough" | "code" | "link"
+type ShortcutFormat = StateCommand | "link"
 
 const SHORTCUT_KEYS: [key: string, format: ShortcutFormat][] = [
-	["b", "bold"],
-	["i", "italic"],
-	["Shift-s", "strikethrough"],
-	["e", "code"],
+	["b", toggleBold],
+	["i", toggleItalic],
+	["Shift-s", toggleStrikethrough],
+	["e", toggleInlineCode],
 	["k", "link"],
 ]
 
@@ -830,28 +836,26 @@ const anchorOf = (
 	}
 }
 
-const lineFormatsAt = (state: EditorState, at: number) => {
-	const formats = new Set<SelectionToolbarFormat>()
-	for (
-		let node: SyntaxNode | null = syntaxTree(state).resolveInner(at, 1);
-		node;
-		node = node.parent
-	) {
-		if (node.name.startsWith("ATXHeading")) formats.add("heading")
-		if (node.name === "ListItem") formats.add("list")
-	}
-	return [...formats]
+type CommandFormat = Exclude<SelectionToolbarFormat, "link">
+
+const TOOLBAR_COMMANDS: Record<CommandFormat, StateCommand> = {
+	bold: toggleBold,
+	italic: toggleItalic,
+	strikethrough: toggleStrikethrough,
+	code: toggleInlineCode,
+	heading: toggleHeading2,
+	list: toggleBulletList,
 }
 
-const formatsOf = (state: EditorState, from: number, to: number) => {
-	const line = state.doc.lineAt(from)
-	if (to > line.to) return { formats: [], link: undefined }
-	const { formats, link } = formatsAround(
-		line.text,
-		from - line.from,
-		to - line.from,
-	)
-	return { formats: [...formats, ...lineFormatsAt(state, line.from)], link }
+const formatsOf = (state: EditorState) => {
+	const link = selectedLinkOf(state)
+	const formats: SelectionToolbarFormat[] = Object.entries(TOOLBAR_COMMANDS)
+		.filter(([, command]) => isFormatOn(state, command))
+		.map(([format]) => format as CommandFormat)
+	return {
+		formats: link ? [...formats, "link" as const] : formats,
+		link: link?.url,
+	}
 }
 
 const NO_WRITERS: LibraryDocumentWriter[] = []
@@ -864,6 +868,7 @@ type LibraryDocumentEditorHandle = {
 	focusTitle: () => void
 	restoreTitle: (name: string) => void
 	titleField: () => HTMLTextAreaElement | null
+	format: (command: StateCommand) => boolean
 }
 
 type LibraryDocumentEditorProps = WriterActions &
@@ -927,8 +932,6 @@ const LibraryDocumentEditor = ({
 	const titleAtEditStart = useRef<string>(undefined)
 	const bodyHost = useRef<HTMLDivElement>(null)
 	const editor = useRef<EditorView>(undefined)
-	const isFormatPending = useRef(false)
-	const [, commitFormatWait] = useReducer((waits: number) => waits + 1, 0)
 	const reportedCaret = useRef<number | null>(null)
 	const frame = useRef<HTMLDivElement>(null)
 	const [selected, setSelected] = useState<SelectedText>()
@@ -940,6 +943,11 @@ const LibraryDocumentEditor = ({
 		caretSlots.current,
 		caretSlots.current,
 	)
+
+	const runFormat = (command: StateCommand) => {
+		const view = editor.current
+		return view ? command(view) : false
+	}
 
 	const reportCaret = () => {
 		const view = editor.current
@@ -974,6 +982,7 @@ const LibraryDocumentEditor = ({
 		focusTitle: focusTitleAtEnd,
 		restoreTitle: setTitle,
 		titleField: () => titleField.current,
+		format: runFormat,
 	}))
 
 	const takeHeldTitle = () => {
@@ -1050,20 +1059,26 @@ const LibraryDocumentEditor = ({
 
 	const readSelection = () => {
 		const view = editor.current
-		if (!view || isInToolbar(document.activeElement)) return
+		if (!view) return
 
+		const isHeldByToolbar = isInToolbar(document.activeElement)
 		const { from, to } = view.state.selection.main
 		const next =
-			frame.current && view.hasFocus && from < to && !selectingBy.current
+			frame.current &&
+			(view.hasFocus || isHeldByToolbar) &&
+			from < to &&
+			!selectingBy.current
 				? {
 						from,
 						to,
 						anchor: anchorOf(view, from, to, frame.current),
-						...formatsOf(view.state, from, to),
+						...formatsOf(view.state),
 					}
 				: undefined
-		if (!isSameSelected(selected, next)) setToolbarMode("bar")
-		else if (isSameAnchor(selected?.anchor, next?.anchor)) return
+		if (isHeldByToolbar && (!selected || !next)) return
+		const isSame = isSameSelected(selected, next)
+		if (!isSame && !isHeldByToolbar) setToolbarMode("bar")
+		else if (isSame && isSameAnchor(selected?.anchor, next?.anchor)) return
 		setSelected(next)
 	}
 
@@ -1134,22 +1149,6 @@ const LibraryDocumentEditor = ({
 		}
 	}, [])
 
-	const awaitFormat = () => {
-		isFormatPending.current = true
-		commitFormatWait()
-	}
-
-	const formatWith = (action: FormatAction, range: LibraryDocumentRange) => {
-		awaitFormat()
-		action(range)
-	}
-
-	const linkWith = (url: string, range: LibraryDocumentRange) => {
-		if (!onLink) return
-		awaitFormat()
-		onLink(url, range)
-	}
-
 	const openLinkField = () => {
 		readSelection()
 		setToolbarMode("link")
@@ -1159,20 +1158,8 @@ const LibraryDocumentEditor = ({
 		const view = editor.current
 		const { from, to } = view?.state.selection.main ?? { from: 0, to: 0 }
 		if (from === to) return false
-		if (format === "link") {
-			if (!onLink) return false
-			openLinkField()
-			return true
-		}
-
-		const action = {
-			bold: onBold,
-			italic: onItalic,
-			strikethrough: onStrikethrough,
-			code: onCode,
-		}[format]
-		if (!action) return false
-		formatWith(action, { start: from, end: to })
+		if (format === "link") openLinkField()
+		else runFormat(format)
 		return true
 	})
 
@@ -1186,10 +1173,6 @@ const LibraryDocumentEditor = ({
 		const personChanges = update.transactions.filter(
 			(transaction) => !transaction.annotation(hostChange),
 		)
-		if (
-			personChanges.some(({ docChanged, selection }) => docChanged || selection)
-		)
-			isFormatPending.current = false
 		if (personChanges.some(({ docChanged }) => docChanged))
 			onBodyChange(update.state.doc.toString())
 		if (
@@ -1268,16 +1251,9 @@ const LibraryDocumentEditor = ({
 		const text = view?.state.doc.toString()
 		if (!view || nextBody === previous || nextBody === text) return
 
-		const annotations = isFormatPending.current
-			? [
-					hostChange.of(true),
-					isolateHistory.of("full"),
-					Transaction.userEvent.of("input.format"),
-				]
-			: [hostChange.of(true), Transaction.addToHistory.of(false)]
 		view.dispatch({
 			changes: changesBetween(text ?? "", nextBody),
-			annotations,
+			annotations: [hostChange.of(true), Transaction.addToHistory.of(false)],
 		})
 	})
 
@@ -1306,45 +1282,34 @@ const LibraryDocumentEditor = ({
 		markAgents({ edits, writers, people })
 	}, [body, edits, writers, people])
 
-	useLayoutEffect(() => {
-		isFormatPending.current = false
-	})
-
 	const untitled = t("library.editor.untitled")
 	const shownName = title || untitled
 	const barItem = useMemo(() => ({ name: shownName }), [shownName])
 
-	const toolbarFor = ({ from, to, anchor, formats, link }: SelectedText) => {
-		const range = { start: from, end: to }
-		const onRange = (action?: FormatAction) =>
-			action && (() => formatWith(action, range))
-		const isOn = (format: SelectionToolbarFormat) => formats.includes(format)
+	const toolbarFor = ({ anchor, formats, link }: SelectedText) => {
+		const action = (name: CommandFormat) => ({
+			name,
+			isOn: formats.includes(name),
+			onPress: () => runFormat(TOOLBAR_COMMANDS[name]),
+		})
 		return (
 			<SelectionToolbar
 				actions={[
-					{ name: "bold", isOn: isOn("bold"), onPress: onRange(onBold) },
-					{ name: "italic", isOn: isOn("italic"), onPress: onRange(onItalic) },
-					{
-						name: "strikethrough",
-						isOn: isOn("strikethrough"),
-						onPress: onRange(onStrikethrough),
-					},
-					{ name: "code", isOn: isOn("code"), onPress: onRange(onCode) },
+					action("bold"),
+					action("italic"),
+					action("strikethrough"),
+					action("code"),
 					SELECTION_TOOLBAR_SEPARATOR,
-					{ name: "link", isOn: isOn("link") },
+					{ name: "link", isOn: formats.includes("link") },
 					SELECTION_TOOLBAR_SEPARATOR,
-					{
-						name: "heading",
-						isOn: isOn("heading"),
-						onPress: onRange(onHeading),
-					},
-					{ name: "list", isOn: isOn("list"), onPress: onRange(onList) },
+					action("heading"),
+					action("list"),
 				]}
 				anchor={anchor}
 				isLinking={toolbarMode === "link"}
 				label={t("library.editor.toolbar.label")}
 				link={link}
-				onLink={onLink && ((url) => linkWith(url, range))}
+				onLink={(url) => runFormat(setLink(url))}
 				onLinkingChange={(isLinking) =>
 					setToolbarMode(isLinking ? "link" : "bar")
 				}
