@@ -1,7 +1,10 @@
 import { expect, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { AuthorLine } from "@workspace/ui/components/author-line"
+import {
+	AuthorLine,
+	AuthorLineQueued,
+} from "@workspace/ui/components/author-line"
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { Icons } from "@workspace/ui/components/icons"
@@ -85,7 +88,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The right-click menu of a bubble and the 24 by 20 action button its author line shows on hover or focus. `MessageActions` wraps the bubble so a right click anywhere on it opens Pin, a separator, Reply and Copy; `MessageAction` is the icon button `AuthorLine` lays after its divider. `Turn` hands both the same actions, so the menu and the hover row never disagree.",
+					"The right-click menu of a bubble and the 24 square action button its author line shows on hover or focus. `MessageActions` wraps the bubble so a right click anywhere on it opens Pin, a separator, Reply and Copy; `MessageAction` is the icon button `AuthorLine` lays after its divider. `Turn` hands both the same actions, so the menu and the hover row never disagree.",
 			},
 		},
 	},
@@ -97,7 +100,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"An agent answer at rest. Right click it and check the menu: 168 wide, Pin first, a separator, then Reply and Copy, each 32 high with a 14 icon. Tab onto the bubble and check that the same three actions appear in its author line, 24 by 20 each.",
+					"An agent answer at rest. Right click it and check the menu: 168 wide, Pin first, a separator, then Reply and Copy, each 32 high with a 14 icon. Tab onto the bubble and check that the same three actions appear in its author line, 24 square each.",
 			},
 		},
 	},
@@ -110,7 +113,7 @@ export const Default = meta.story({
 		const pin = canvas.getByRole("button", { name: "Pin" })
 		await expect(pin).toBeVisible()
 		await expect(pin.getBoundingClientRect().width).toBe(24)
-		await expect(pin.getBoundingClientRect().height).toBe(20)
+		await expect(pin.getBoundingClientRect().height).toBe(24)
 
 		await userEvent.pointer({ keys: "[MouseRight]", target: bubble })
 		const menu = await within(canvasElement.ownerDocument.body).findByRole(
@@ -124,5 +127,35 @@ export const Default = meta.story({
 		])
 		await waitFor(() => expect(menu.getBoundingClientRect().width).toBe(168))
 		await userEvent.keyboard("{Escape}")
+	},
+})
+
+const AUTHOR_LINE_BUTTONS = ["Pin", "Reply", "Copy", "Cancel this message"]
+
+export const SquareIconButtons = meta.story({
+	render: () => (
+		<div className="flex flex-col items-start gap-6">
+			<AgentBubble />
+			<AuthorLineQueued onCancel={noop} />
+		</div>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Every icon button an author line carries, Pin, Reply and Copy on hover or focus and Cancel on a queued message, at the Button `icon-xs` size: 24 square, its name read aloud, the Button focus ring when the keyboard lands on it.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		await userEvent.tab()
+		for (const name of AUTHOR_LINE_BUTTONS) {
+			await userEvent.tab()
+			const button = canvas.getByRole("button", { name })
+			await expect(button).toHaveFocus()
+			const { width, height } = button.getBoundingClientRect()
+			await expect([width, height]).toEqual([24, 24])
+			await expect(getComputedStyle(button).boxShadow).not.toBe("none")
+		}
 	},
 })

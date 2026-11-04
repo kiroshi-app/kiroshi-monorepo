@@ -35,6 +35,7 @@ type AuthorLineNameProps = {
 
 type AuthorLineActionsProps = {
 	actions: ReactNode
+	isEndSide: boolean
 	isOnOwnBubble: boolean
 }
 
@@ -51,7 +52,7 @@ const AUTHOR_LINE = "flex h-5 min-w-0 max-w-full items-center gap-2"
 const STUCK_INSET = 18
 
 const AUTHOR_LINE_STICKY =
-	"sticky bottom-4.5 z-10 before:pointer-events-none before:absolute before:-inset-x-4.5 before:-top-3.5 before:-bottom-4.5 before:-z-10 before:hidden before:rounded-b-2xl before:border-foreground/6 before:border-t before:bg-author-line-sticky data-[stuck=true]:before:block"
+	"sticky bottom-4.5 z-10 self-stretch before:pointer-events-none before:absolute before:-inset-x-4.5 before:-top-3.5 before:-bottom-4.5 before:-z-10 before:hidden before:border-foreground/6 before:border-t data-[stuck=true]:before:block"
 
 const TRANSCRIPT_VIEWPORT = '[data-slot="message-scroller-viewport"]'
 
@@ -128,6 +129,7 @@ const AuthorLineName = ({ tone, name, hue }: AuthorLineNameProps) => {
 
 const AuthorLineActions = ({
 	actions,
+	isEndSide,
 	isOnOwnBubble,
 }: AuthorLineActionsProps) => (
 	<span
@@ -138,8 +140,9 @@ const AuthorLineActions = ({
 			isOnOwnBubble && "[&_button]:text-user-bubble-muted-foreground",
 		)}
 	>
-		<AuthorLineDivider isOnOwnBubble={isOnOwnBubble} />
+		{isEndSide ? null : <AuthorLineDivider isOnOwnBubble={isOnOwnBubble} />}
 		<span className="flex items-center gap-0.5">{actions}</span>
+		{isEndSide ? <AuthorLineDivider isOnOwnBubble={isOnOwnBubble} /> : null}
 	</span>
 )
 
@@ -213,7 +216,11 @@ const AuthorLine = ({
 			</span>
 		) : null
 	const actionRow = actions ? (
-		<AuthorLineActions actions={actions} isOnOwnBubble={isOnOwnBubble} />
+		<AuthorLineActions
+			actions={actions}
+			isEndSide={isEndSide}
+			isOnOwnBubble={isOnOwnBubble}
+		/>
 	) : null
 	const { markerRef, isStuck } = useStuckToBottom(isSticky)
 
@@ -226,7 +233,12 @@ const AuthorLine = ({
 				className={cn(
 					AUTHOR_LINE,
 					isEndSide && "justify-end self-end",
-					isSticky && AUTHOR_LINE_STICKY,
+					isSticky && [
+						AUTHOR_LINE_STICKY,
+						isOnOwnBubble
+							? "before:bg-user-bubble"
+							: "before:bg-author-line-sticky",
+					],
 					className,
 				)}
 			>
@@ -271,7 +283,7 @@ const AuthorLineQueued = ({ onCancel }: AuthorLineQueuedProps) => {
 						size="icon-xs"
 						aria-label={t("turn.cancel")}
 						onClick={onCancel}
-						className="size-5 rounded-sm"
+						className="rounded-sm"
 					>
 						<Icons.Close aria-hidden="true" className="size-3" />
 					</Button>

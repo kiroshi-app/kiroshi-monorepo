@@ -117,9 +117,9 @@ function bubbleContentClass(
 	interactive: boolean,
 ) {
 	return cn(
-		"group/bubble-content relative z-0 flex min-w-9 flex-col gap-1.5 break-words rounded-bubble p-4.5 text-base text-bubble-foreground leading-6.5",
+		"group/bubble-content relative z-0 flex min-w-9 flex-col gap-1.5 break-words rounded-bubble p-4.5 text-bubble-foreground text-sm leading-6 has-data-[stuck=true]:overflow-clip",
 		BUBBLE_FOCUS_RING,
-		"[&_[data-slot=markdown]_:is(p,li,blockquote)]:text-base [&_[data-slot=markdown]_:is(p,li,blockquote)]:leading-6.5",
+		"[&_[data-slot=markdown]_:is(p,li,blockquote)]:text-sm [&_[data-slot=markdown]_:is(p,li,blockquote)]:leading-6",
 		hasSurface(variant) && "max-w-full",
 		MARKDOWN_TYPESET_CLASS,
 		variant === "solid" && [
