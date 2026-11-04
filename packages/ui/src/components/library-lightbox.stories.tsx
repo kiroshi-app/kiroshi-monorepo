@@ -751,7 +751,7 @@ export const BackdropClick = meta.story({
 
 export const OverlayScrollbarPress = meta.story({
 	tags: ["test-only"],
-	args: { openedAt: 0 },
+	args: { openedAt: 5 },
 	parameters: {
 		docs: {
 			description: {
@@ -763,7 +763,7 @@ export const OverlayScrollbarPress = meta.story({
 	play: async ({ args, userEvent }) => {
 		const popup = await lightbox()
 		const stage = slotIn(popup, "library-lightbox-zoom")
-		const image = within(popup).getByRole("img", { name: "hero-dunes.png" })
+		const image = within(popup).getByRole("img", { name: "growth-sketch.png" })
 		stage.style.scrollbarWidth = "none"
 		const zoomInUntil = async (isReached: () => boolean) => {
 			const zoomIn = within(popup).getByRole("button", { name: "Zoom in" })
@@ -968,6 +968,44 @@ export const AtTheFirstImage = meta.story({
 		await expect(args.onNext).toHaveBeenCalledOnce()
 		await userEvent.keyboard("{ArrowLeft}")
 		await expect(args.onPrevious).toHaveBeenCalledOnce()
+	},
+})
+
+const expectCoversPanel = async (panel: HTMLElement, popup: HTMLElement) => {
+	await expect(panel).toContainElement(popup)
+	await expect(popup.parentElement).not.toBe(document.body)
+	await expect(getComputedStyle(popup).position).toBe("absolute")
+	const panelBox = panel.getBoundingClientRect()
+	const popupBox = popup.getBoundingClientRect()
+	await expect(popupBox.left).toBe(panelBox.left)
+	await expect(popupBox.top).toBe(panelBox.top)
+	await expect(popupBox.width).toBe(panelBox.width)
+	await expect(popupBox.height).toBe(panelBox.height)
+}
+
+export const OpenedWithThePanel = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"An image already open on the very render that mounts the Library, as when the app restores a Library tab on a Library image. Check that the image covers the content card only, never the whole window, and that it still does once closed and opened again from the grid.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		const panel = canvasElement.querySelector<HTMLElement>(
+			'[data-slot="library-panel"]',
+		)
+		if (!panel) throw new Error("The library panel is not rendered.")
+
+		await expectCoversPanel(panel, await lightbox())
+
+		await userEvent.keyboard("{Escape}")
+		await waitFor(() => expect(screen.queryByRole("dialog")).toBe(null))
+		await userEvent.click(
+			canvas.getByRole("button", { name: /dashboard-redesign\.png/ }),
+		)
+		await expectCoversPanel(panel, await lightbox())
 	},
 })
 
