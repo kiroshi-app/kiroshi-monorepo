@@ -18,8 +18,8 @@ use super::presence::{seated_name, share_caret, unseat_writer, Seat};
 use super::{
 	apply_update, clipboard_payload, clipboard_payload_of_bytes, create_document, delete_item,
 	import, import_paths, list, open_document, read_document, read_file, read_image,
-	read_thumbnail, rename_linked_document, resolve, root, save, save_bytes, save_message,
-	templates, ClipboardPayload,
+	read_picked_image, read_thumbnail, rename_linked_document, resolve, root, save, save_bytes,
+	save_message, templates, ClipboardPayload,
 };
 use crate::agent::commands::cancel_session_turn;
 use crate::agent::contract::CancelOutcome;
@@ -276,6 +276,14 @@ pub async fn library_import_paths<R: Runtime>(
 	tokio::task::spawn_blocking(move || import_paths(&root, &space_id, &paths))
 		.await
 		.map_err(|error| LibraryError::Unwritable { detail: error.to_string() })
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn library_read_picked_image(path: PathBuf) -> Result<LibraryImage, LibraryError> {
+	tokio::task::spawn_blocking(move || read_picked_image(&path))
+		.await
+		.map_err(|error| LibraryError::Unreadable { detail: error.to_string() })?
 }
 
 #[tauri::command]

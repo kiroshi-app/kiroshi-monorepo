@@ -52,6 +52,7 @@ export const commands = {
 	libraryReadThumbnail: (spaceId: string, name: string) => typedError<LibraryImage, LibraryError>(__TAURI_INVOKE("library_read_thumbnail", { spaceId, name })),
 	libraryImport: (spaceId: string, name: string, content: string) => typedError<LibraryItem, LibraryError>(__TAURI_INVOKE("library_import", { spaceId, name, content })),
 	libraryImportPaths: (spaceId: string, paths: string[]) => typedError<LibraryImport[], LibraryError>(__TAURI_INVOKE("library_import_paths", { spaceId, paths })),
+	libraryReadPickedImage: (path: string) => typedError<LibraryImage, LibraryError>(__TAURI_INVOKE("library_read_picked_image", { path })),
 	libraryRenameDocument: (spaceId: string, name: string, newName: string) => typedError<LibraryItem, LibraryError>(__TAURI_INVOKE("library_rename_document", { spaceId, name, newName })),
 	librarySaveMessage: (conversationId: string, messageId: string) => typedError<LibraryItem, LibraryError>(__TAURI_INVOKE("library_save_message", { conversationId, messageId })),
 	libraryDelete: (spaceId: string, name: string) => typedError<null, LibraryError>(__TAURI_INVOKE("library_delete", { spaceId, name })),

@@ -134,6 +134,7 @@ pub(super) const REACHES: &[(&str, Reach)] = &[
 	("library_read_thumbnail", Reach::Scoped(SPACE_ID)),
 	("library_import", Reach::Scoped(SPACE_ID)),
 	("library_import_paths", Reach::HostOnly),
+	("library_read_picked_image", Reach::HostOnly),
 	("library_rename_document", Reach::Scoped(SPACE_ID)),
 	("library_save_message", Reach::Scoped(CONVERSATION_AND_MESSAGE)),
 	("library_delete", Reach::Scoped(SPACE_ID)),
