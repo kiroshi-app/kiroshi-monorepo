@@ -173,16 +173,6 @@ export const MarkdownPre = ({ node, children, ...props }: MarkdownPreProps) => {
 	return <MarkdownFence code={source} language={language} />
 }
 
-const MarkdownStaticFence = ({ code, language }: MarkdownFenceProps) => (
-	<div data-slot="markdown-fence" className={FENCE_CLASS}>
-		<pre>
-			<span className="block overflow-hidden">
-				<FenceCode code={code} language={language} />
-			</span>
-		</pre>
-	</div>
-)
-
 export const MarkdownStaticPre = ({
 	node,
 	children,
@@ -197,5 +187,13 @@ export const MarkdownStaticPre = ({
 	if (language === MATH_LANGUAGE)
 		return <MarkdownMath display source={source} />
 
-	return <MarkdownStaticFence code={source} language={language} />
+	return (
+		<div data-slot="markdown-fence" className={FENCE_CLASS}>
+			<pre>
+				<span className="block overflow-hidden">
+					<FenceCode code={source} language={language} />
+				</span>
+			</pre>
+		</div>
+	)
 }
