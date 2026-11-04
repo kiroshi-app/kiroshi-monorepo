@@ -23,6 +23,7 @@ import {
 	DOCUMENT_PANEL_MIN_WIDTH,
 	DocumentPanel,
 	type DocumentPanelProps,
+	THREAD_MIN_WIDTH,
 } from "@workspace/ui/components/document-panel"
 import { LIBRARY_AGENTS } from "@workspace/ui/components/library.fixtures"
 import { LibraryDocumentPresence } from "@workspace/ui/components/library-document-agents"
@@ -30,7 +31,11 @@ import { LibraryDocumentBody } from "@workspace/ui/components/library-document-v
 import { PromptInput } from "@workspace/ui/components/prompt-input"
 import { RESIZE_STEP } from "@workspace/ui/components/resize-handle"
 import type { RosterBot } from "@workspace/ui/components/roster"
-import { SIDEBAR_DEFAULT_WIDTH } from "@workspace/ui/components/sidebar-resize"
+import {
+	SIDEBAR_DEFAULT_WIDTH,
+	SIDEBAR_MAX_WIDTH,
+	SIDEBAR_MIN_WIDTH,
+} from "@workspace/ui/components/sidebar-resize"
 import { ThreadLayout } from "@workspace/ui/components/thread-layout"
 import type { TranscriptItem } from "@workspace/ui/components/transcript"
 import { AssistantTurn, UserTurn } from "@workspace/ui/components/turn"
@@ -476,7 +481,6 @@ export const ControlledWidth = meta.story({
 	},
 })
 
-const THREAD_MIN_WIDTH = 320
 const NARROW_WINDOW = 1024
 const LAPTOP_WIDTH = 1280
 const WIDE_WINDOW = 1536
@@ -485,9 +489,14 @@ const BLUE_SCOPE = hueScopeOf("blue")
 
 type BesideTheSidebarProps = DocumentPanelProps & {
 	windowWidth: number
+	sidebarWidth?: number
 }
 
-const BesideTheSidebar = ({ windowWidth, ...panel }: BesideTheSidebarProps) => (
+const BesideTheSidebar = ({
+	windowWidth,
+	sidebarWidth = SIDEBAR_DEFAULT_WIDTH,
+	...panel
+}: BesideTheSidebarProps) => (
 	<div
 		className="flex h-200"
 		data-testid="window"
@@ -495,9 +504,7 @@ const BesideTheSidebar = ({ windowWidth, ...panel }: BesideTheSidebarProps) => (
 		style={{ ...BLUE_SCOPE.style, width: windowWidth }}
 	>
 		<SidebarProvider
-			style={
-				{ "--sidebar-width": `${SIDEBAR_DEFAULT_WIDTH}px` } as CSSProperties
-			}
+			style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}
 		>
 			<Sidebar collapsible="icon">
 				<SidebarContent />
@@ -524,14 +531,70 @@ const threadOf = (canvasElement: HTMLElement) => {
 	return thread
 }
 
-export const CappedByTheRoomLeft = meta.story({
-	args: { defaultWidth: DOCUMENT_PANEL_MAX_WIDTH },
-	render: (args) => <BesideTheSidebar {...args} windowWidth={NARROW_WINDOW} />,
+const sidebarWrapperOf = (canvasElement: HTMLElement) => {
+	const wrapper = canvasElement.querySelector<HTMLElement>(
+		'[data-slot="sidebar-wrapper"]',
+	)
+	if (!wrapper) throw new Error("No sidebar drawn")
+	return wrapper
+}
+
+const ASKED_UNDER_THE_ROOM = 480
+
+export const AskedUnderTheRoomLeft = meta.story({
+	args: { defaultWidth: ASKED_UNDER_THE_ROOM },
+	render: (args) => (
+		<BesideTheSidebar
+			{...args}
+			sidebarWidth={SIDEBAR_MAX_WIDTH}
+			windowWidth={LAPTOP_WIDTH}
+		/>
+	),
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The panel asked at 800 in the 1024 window the app opens at its smallest, beside the open sidebar. Check that the thread keeps 320px and the panel gives up the rest, down to 400 here, that the grip announces the 400 it draws as both its value and its reachable maximum, and that widening the window brings the panel back to the 800 it was asked for.",
+					"The panel asked at 480 in the laptop window beside the widest sidebar, with room to spare. Check that the panel draws the 480 it was asked for, that the thread takes the rest, and that the grip announces 400 as its minimum and the room left beside a 320px thread as its maximum.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const handle = canvas.getByRole("separator", { name: HANDLE_LABEL })
+		const panel = canvas.getByRole("complementary", {
+			name: DOCUMENT_CARD_TITLE,
+		})
+		const room = LAPTOP_WIDTH - SIDEBAR_MAX_WIDTH
+		const reachableMaxWidth = room - THREAD_MIN_WIDTH
+
+		await waitFor(async () => {
+			await expect(handle).toHaveAttribute(
+				"aria-valuemax",
+				String(reachableMaxWidth),
+			)
+		}, FRAME_POLL)
+		await expect(handle).toHaveAttribute(
+			"aria-valuemin",
+			String(DOCUMENT_PANEL_MIN_WIDTH),
+		)
+		await expect(handle).toHaveAttribute(
+			"aria-valuenow",
+			String(ASKED_UNDER_THE_ROOM),
+		)
+		await expect(panel.getBoundingClientRect().width).toBe(ASKED_UNDER_THE_ROOM)
+		await expect(threadOf(canvasElement).getBoundingClientRect().width).toBe(
+			room - ASKED_UNDER_THE_ROOM,
+		)
+	},
+})
+
+export const CappedByTheRoomLeft = meta.story({
+	args: { defaultWidth: DOCUMENT_PANEL_MAX_WIDTH },
+	render: (args) => <BesideTheSidebar {...args} windowWidth={LAPTOP_WIDTH} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The panel asked at 800 in the laptop window beside the default sidebar. Check that the thread keeps 320px and the panel gives up the rest, 656 here, that the grip announces the 656 it draws as both its value and its maximum with 400 as its minimum, and that widening the window brings the panel back to the 800 it was asked for, with the same panel and new limits.",
 			},
 		},
 	},
@@ -541,12 +604,16 @@ export const CappedByTheRoomLeft = meta.story({
 			name: DOCUMENT_CARD_TITLE,
 		})
 		const thread = threadOf(canvasElement)
-		const cappedWidth = NARROW_WINDOW - SIDEBAR_DEFAULT_WIDTH - THREAD_MIN_WIDTH
+		const cappedWidth = LAPTOP_WIDTH - SIDEBAR_DEFAULT_WIDTH - THREAD_MIN_WIDTH
 
 		await waitFor(async () => {
 			await expect(handle).toHaveAttribute("aria-valuenow", String(cappedWidth))
 		}, FRAME_POLL)
 		await expect(handle).toHaveAttribute("aria-valuemax", String(cappedWidth))
+		await expect(handle).toHaveAttribute(
+			"aria-valuemin",
+			String(DOCUMENT_PANEL_MIN_WIDTH),
+		)
 		await expect(thread.getBoundingClientRect().width).toBe(THREAD_MIN_WIDTH)
 		await expect(panel.getBoundingClientRect().width).toBe(cappedWidth)
 
@@ -561,11 +628,81 @@ export const CappedByTheRoomLeft = meta.story({
 			"aria-valuemax",
 			String(DOCUMENT_PANEL_MAX_WIDTH),
 		)
+		await expect(
+			canvas.getByRole("complementary", { name: DOCUMENT_CARD_TITLE }),
+		).toBe(panel)
 		await expect(panel.getBoundingClientRect().width).toBe(
 			DOCUMENT_PANEL_MAX_WIDTH,
 		)
 		await expect(thread.getBoundingClientRect().width).toBe(
 			WIDE_WINDOW - SIDEBAR_DEFAULT_WIDTH - DOCUMENT_PANEL_MAX_WIDTH,
+		)
+	},
+})
+
+export const HeldAtItsFloorInTheSmallestWindow = meta.story({
+	args: { defaultWidth: DOCUMENT_PANEL_DEFAULT_WIDTH },
+	render: (args) => (
+		<BesideTheSidebar
+			{...args}
+			sidebarWidth={SIDEBAR_MAX_WIDTH}
+			windowWidth={NARROW_WINDOW}
+		/>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The panel in the 1024 window the app opens at its smallest, beside the widest sidebar, where 400 for the panel and 320 for the thread cannot both hold. Check that the panel keeps 400, that the thread gives way to the 208 left, that the grip announces 400 as its value, minimum and maximum, and that narrowing the sidebar then widening the window brings the panel back to its asked 600 without redrawing it.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const handle = canvas.getByRole("separator", { name: HANDLE_LABEL })
+		const panel = canvas.getByRole("complementary", {
+			name: DOCUMENT_CARD_TITLE,
+		})
+		const thread = threadOf(canvasElement)
+		const floor = String(DOCUMENT_PANEL_MIN_WIDTH)
+
+		await waitFor(async () => {
+			await expect(handle).toHaveAttribute("aria-valuemax", floor)
+		}, FRAME_POLL)
+		await expect(handle).toHaveAttribute("aria-valuenow", floor)
+		await expect(handle).toHaveAttribute("aria-valuemin", floor)
+		await expect(panel.getBoundingClientRect().width).toBe(
+			DOCUMENT_PANEL_MIN_WIDTH,
+		)
+		await expect(thread.getBoundingClientRect().width).toBe(
+			NARROW_WINDOW - SIDEBAR_MAX_WIDTH - DOCUMENT_PANEL_MIN_WIDTH,
+		)
+
+		sidebarWrapperOf(canvasElement).style.setProperty(
+			"--sidebar-width",
+			`${SIDEBAR_MIN_WIDTH}px`,
+		)
+		const cappedWidth = NARROW_WINDOW - SIDEBAR_MIN_WIDTH - THREAD_MIN_WIDTH
+		await waitFor(async () => {
+			await expect(handle).toHaveAttribute("aria-valuenow", String(cappedWidth))
+		}, FRAME_POLL)
+		await expect(handle).toHaveAttribute("aria-valuemax", String(cappedWidth))
+
+		canvas.getByTestId("window").style.width = `${WIDE_WINDOW}px`
+		await waitFor(async () => {
+			await expect(handle).toHaveAttribute(
+				"aria-valuenow",
+				String(DOCUMENT_PANEL_DEFAULT_WIDTH),
+			)
+		}, FRAME_POLL)
+		await expect(handle).toHaveAttribute(
+			"aria-valuemax",
+			String(DOCUMENT_PANEL_MAX_WIDTH),
+		)
+		await expect(
+			canvas.getByRole("complementary", { name: DOCUMENT_CARD_TITLE }),
+		).toBe(panel)
+		await expect(panel.getBoundingClientRect().width).toBe(
+			DOCUMENT_PANEL_DEFAULT_WIDTH,
 		)
 	},
 })
