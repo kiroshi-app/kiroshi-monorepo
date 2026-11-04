@@ -1,9 +1,10 @@
-import { useQueries } from "@tanstack/react-query"
+import { useQueries, useQueryClient } from "@tanstack/react-query"
 
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { libraryQueryKeys } from "./library-query-keys"
 import { readLibraryImage } from "./library-reads"
+import { libraryItemsQueryOf } from "./use-library-items"
 
 import type { LibraryImage, LibraryItem } from "../bindings"
 import { convertFileSrc } from "../host/tauri"
@@ -50,4 +51,36 @@ export const useLibraryImageSources = (
 		: NO_IMAGES
 	const hostSourceOf = useHostImageSources(spaceId, images)
 	return isJoined ? hostSourceOf : fileSourceOf
+}
+
+const listedImageIn = (items: LibraryItem[] | undefined, name: string) =>
+	items?.find((item) => item.kind === "image" && item.name === name)
+
+export const useLibraryImageResolver = (spaceId: string, isJoined: boolean) => {
+	const queryClient = useQueryClient()
+	const itemsQuery = libraryItemsQueryOf(spaceId)
+	const listedImageNamed = async (name: string) => {
+		const image =
+			listedImageIn(queryClient.getQueryData(itemsQuery.queryKey), name) ??
+			listedImageIn(
+				await queryClient.fetchQuery({ ...itemsQuery, staleTime: 0 }),
+				name,
+			)
+		if (!image) {
+			throw new Error(`no Library image named ${name}`)
+		}
+		return image
+	}
+	const readDataUrl = async ({ name, modifiedAt }: LibraryItem) =>
+		dataUrlOf(
+			await queryClient.fetchQuery({
+				queryKey: libraryQueryKeys.imageOf(spaceId, name, modifiedAt),
+				queryFn: () => readLibraryImage(spaceId, name),
+				meta: { rendersErrorInline: true },
+			}),
+		)
+	return async (src: string) => {
+		const image = await listedImageNamed(src)
+		return isJoined ? readDataUrl(image) : fileSourceOf(image)
+	}
 }

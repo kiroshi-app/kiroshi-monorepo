@@ -42,8 +42,12 @@ import {
 } from "@/lib/library/use-library-actions"
 import { useLibraryDocumentSession } from "@/lib/library/use-library-document-session"
 import { useLibraryDocumentWriters } from "@/lib/library/use-library-document-writers"
-import { useLibraryImageSources } from "@/lib/library/use-library-image-sources"
 import {
+	useLibraryImageResolver,
+	useLibraryImageSources,
+} from "@/lib/library/use-library-image-sources"
+import {
+	useLibraryGalleryImports,
 	useLibraryImageSave,
 	useLibraryImports,
 } from "@/lib/library/use-library-imports"
@@ -255,6 +259,8 @@ export const LibraryScreen = ({
 }: LibraryScreenProps) => {
 	const library = useLibraryItems(spaceId)
 	const sourceOf = useLibraryImageSources(spaceId, library.items, isJoined)
+	const resolveImage = useLibraryImageResolver(spaceId, isJoined)
+	const addGalleryImages = useLibraryGalleryImports(spaceId, isJoined)
 	const localActions = useLibraryActions(spaceId)
 	const joinedActions = useJoinedLibraryActions(spaceId)
 	const actions = isJoined ? joinedActions : localActions
@@ -411,6 +417,7 @@ export const LibraryScreen = ({
 				}
 				key={openedDocument.openedAs ?? openedDocument.name}
 				menuFinalFocus={titleFieldOnceRenamePicked}
+				onAddImages={addGalleryImages}
 				onBack={leaveDocument}
 				onBodyChange={edit}
 				onCaretChange={shareCaret}
@@ -427,6 +434,7 @@ export const LibraryScreen = ({
 				onTitleConfirm={(newTitle) => renameDocument(openedDocument, newTitle)}
 				people={people}
 				ref={editor}
+				resolveImage={resolveImage}
 				template={openedDocument.template}
 				title={openedDocument.title}
 				writers={writers}

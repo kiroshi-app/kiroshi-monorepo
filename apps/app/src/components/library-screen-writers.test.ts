@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 
+import type { QueryClient } from "@tanstack/react-query"
 import type { Event } from "@tauri-apps/api/event"
 import {
 	act,
@@ -32,6 +33,7 @@ import {
 	LIBRARY_DOCUMENT_PRESENCE_EVENT,
 	LIBRARY_DOCUMENT_WRITER_FINISHED_EVENT,
 } from "@/lib/library/library-document-writers"
+import { libraryQueryKeys } from "@/lib/library/library-query-keys"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 
 type LibraryCall = {
@@ -83,6 +85,12 @@ const host = vi.hoisted(() => ({
 	stops: [] as StopCall[],
 	stopAnswer: { kind: "cancelled" } as StopAnswer,
 	readLinkPreview: vi.fn(),
+	images: [] as LibraryItem[],
+	lists: 0,
+	listGate: null as Promise<void> | null,
+	imageReads: [] as string[],
+	pickImages: vi.fn(),
+	importPaths: vi.fn(),
 }))
 
 const itemNamed = (name: string): LibraryItem => ({
@@ -106,7 +114,18 @@ const documentOf = (name: string) => {
 }
 
 const LIBRARY_COMMANDS: Record<string, (call: LibraryCall) => unknown> = {
-	library_list: () => [itemNamed(NOTES), itemNamed(PLAN)],
+	library_list: async () => {
+		host.lists += 1
+		await host.listGate
+		return [itemNamed(NOTES), itemNamed(PLAN), ...host.images]
+	},
+	library_read_image: ({ name }) => {
+		host.imageReads.push(name)
+		if (!host.images.some((image) => image.name === name)) {
+			throw { kind: "missing", name }
+		}
+		return { name, mimeType: "image/jpeg", content: `${name}-bytes` }
+	},
 	library_open_document: ({ name }) => ({
 		name,
 		update: base64Of(Y.encodeStateAsUpdate(documentOf(name))),
@@ -176,6 +195,7 @@ vi.mock("@/lib/bindings", async (importOriginal) => {
 		commands: {
 			...actual.commands,
 			libraryReadLinkPreview: host.readLinkPreview,
+			libraryImportPaths: host.importPaths,
 		},
 	}
 })
@@ -185,6 +205,11 @@ vi.mock("@workspace/ui/components/notice-surface", async (importOriginal) => ({
 		typeof import("@workspace/ui/components/notice-surface")
 	>()),
 	raiseFailureNotice: vi.fn(() => "notice"),
+}))
+
+vi.mock("@tauri-apps/plugin-dialog", () => ({
+	open: host.pickImages,
+	save: vi.fn(),
 }))
 
 vi.mock("@/lib/host/tauri", async (importOriginal) => ({
@@ -204,6 +229,12 @@ afterEach(() => {
 	host.stops = []
 	host.stopAnswer = { kind: "cancelled" }
 	host.readLinkPreview.mockReset()
+	host.images = []
+	host.lists = 0
+	host.listGate = null
+	host.imageReads = []
+	host.pickImages.mockReset()
+	host.importPaths.mockReset()
 	vi.mocked(raiseFailureNotice).mockClear()
 	vi.restoreAllMocks()
 })
@@ -279,8 +310,11 @@ const ATLAS = {
 	avatarImagePath: null,
 } as Bot
 
+let screenQueryClient: QueryClient
+
 const signedInWrapper = () => {
 	const { queryClient, wrapper } = createQueryTestWrapper()
+	screenQueryClient = queryClient
 	queryClient.setQueryData(accountQueryKeys.state(), {
 		kind: "signedIn",
 		id: OWN_ACCOUNT,
@@ -1298,3 +1332,267 @@ describe.each(PLACES)(
 		})
 	},
 )
+
+const imageNamed = (name: string): LibraryItem => ({
+	...itemNamed(name),
+	kind: "image",
+})
+
+const STORED_SOFA = "- image: sofa-green.jpg\n  alt: Green sofa"
+
+const UNLISTED_LAMP = "- image: lamp.jpg\n  alt: Brass lamp"
+
+const openGallery = async () => {
+	await openBlockOfType(
+		"gallery",
+		common("library.editor.blocks.gallery.tile", { position: 1, count: 1 }),
+		"button",
+	)
+	return document.querySelector<HTMLElement>(
+		"[data-type='gallery']",
+	) as HTMLElement
+}
+
+const shownSources = (gallery: HTMLElement) =>
+	[...gallery.querySelectorAll("img")].map((image) => image.getAttribute("src"))
+
+const importedAs = (name: string) => ({
+	status: "imported",
+	item: imageNamed(name),
+})
+
+const addImagesTo = async (gallery: HTMLElement) => {
+	await act(async () => {
+		fireEvent.click(
+			within(gallery).getByRole("button", {
+				name: common("library.editor.blocks.gallery.add"),
+			}),
+		)
+	})
+}
+
+describe.each([
+	{
+		place: "on the host",
+		isJoined: false,
+		shown: "asset:///library/sofa-green.jpg",
+	},
+	{
+		place: "in a joined Space",
+		isJoined: true,
+		shown: "data:image/jpeg;base64,sofa-green.jpg-bytes",
+	},
+])("a gallery of stored images $place", ({ isJoined, shown }) => {
+	it("shows a stored image at its displayable address", async () => {
+		host.images = [imageNamed("sofa-green.jpg")]
+		seedDocument(NOTES, documentAround(galleryOf(STORED_SOFA)))
+		await renderLibraryScreen(isJoined)
+		await openDocument(NOTES)
+		const gallery = await openGallery()
+
+		await waitFor(() => expect(shownSources(gallery)).toEqual([shown]))
+	})
+
+	it("shows an image that names no Library item as broken after one fresh read of the list", async () => {
+		seedDocument(NOTES, documentAround(galleryOf(UNLISTED_LAMP)))
+		await renderLibraryScreen(isJoined)
+		await openDocument(NOTES)
+		const listsBefore = host.lists
+		const gallery = await openGallery()
+
+		await waitFor(() =>
+			expect(
+				gallery.querySelector("[data-slot='gallery-broken']"),
+			).toBeInstanceOf(HTMLElement),
+		)
+		expect(shownSources(gallery)).toEqual([])
+		expect(host.lists - listsBefore).toBe(1)
+	})
+
+	it("shows an image added to the Library after the list was read", async () => {
+		seedDocument(NOTES, documentAround(galleryOf(STORED_SOFA)))
+		await renderLibraryScreen(isJoined)
+		await openDocument(NOTES)
+		host.images = [imageNamed("sofa-green.jpg")]
+		const gallery = await openGallery()
+
+		await waitFor(() => expect(shownSources(gallery)).toEqual([shown]))
+	})
+
+	it("waits for the list when the gallery opens with no list in the cache", async () => {
+		let releaseList = () => {}
+		host.images = [imageNamed("sofa-green.jpg")]
+		seedDocument(NOTES, documentAround(galleryOf(STORED_SOFA)))
+		await renderLibraryScreen(isJoined)
+		await openDocument(NOTES)
+		screenQueryClient.removeQueries({
+			queryKey: libraryQueryKeys.itemsOf(SPACE_ID),
+		})
+		host.listGate = new Promise((release) => {
+			releaseList = release
+		})
+		const gallery = await openGallery()
+
+		expect(shownSources(gallery)).toEqual([])
+		await act(async () => releaseList())
+
+		await waitFor(() => expect(shownSources(gallery)).toEqual([shown]))
+	})
+})
+
+describe("images added to a gallery on the host", () => {
+	const openStoredGallery = async () => {
+		host.images = [imageNamed("sofa-green.jpg")]
+		seedDocument(NOTES, documentAround(galleryOf(STORED_SOFA)))
+		await renderLibraryScreen(false)
+		await openDocument(NOTES)
+		return openGallery()
+	}
+
+	it("opens the image picker of the computer, several files at once", async () => {
+		host.pickImages.mockResolvedValue(null)
+		const gallery = await openStoredGallery()
+
+		await addImagesTo(gallery)
+
+		expect(host.pickImages).toHaveBeenCalledWith({
+			multiple: true,
+			directory: false,
+			filters: [
+				{
+					name: common("library.filters.images"),
+					extensions: ["png", "jpg", "jpeg", "gif", "webp"],
+				},
+			],
+		})
+	})
+
+	it("imports each picked image, adds it as a tile and relists the Library", async () => {
+		host.pickImages.mockResolvedValue([
+			"/Users/me/lamp.jpg",
+			"/Users/me/rug.png",
+		])
+		host.importPaths.mockImplementation((_spaceId, [path]: string[]) => {
+			const name = path === "/Users/me/lamp.jpg" ? "lamp.jpg" : "rug-2.png"
+			host.images = [...host.images, imageNamed(name)]
+			return Promise.resolve({ status: "ok", data: [importedAs(name)] })
+		})
+		const gallery = await openStoredGallery()
+		const listsBefore = host.lists
+
+		await addImagesTo(gallery)
+
+		await waitFor(() =>
+			expect(markdownOnHost(NOTES)).toBe(
+				documentAround(
+					galleryOf(
+						STORED_SOFA,
+						"- image: lamp.jpg\n  alt: lamp",
+						"- image: rug-2.png\n  alt: rug",
+					),
+				),
+			),
+		)
+		expect(host.importPaths).toHaveBeenCalledWith(SPACE_ID, [
+			"/Users/me/lamp.jpg",
+		])
+		expect(host.importPaths).toHaveBeenCalledWith(SPACE_ID, [
+			"/Users/me/rug.png",
+		])
+		expect(host.lists).toBeGreaterThan(listsBefore)
+		await waitFor(() =>
+			expect(shownSources(gallery)).toEqual([
+				"asset:///library/sofa-green.jpg",
+				"asset:///library/lamp.jpg",
+				"asset:///library/rug-2.png",
+			]),
+		)
+	})
+
+	it("adds nothing when the person cancels the picker", async () => {
+		host.pickImages.mockResolvedValue(null)
+		const gallery = await openStoredGallery()
+
+		await addImagesTo(gallery)
+		await new Promise((resolve) => setTimeout(resolve, 50))
+
+		expect(host.importPaths).not.toHaveBeenCalled()
+		expect(markdownOnHost(NOTES)).toBe(documentAround(galleryOf(STORED_SOFA)))
+		expect(raiseFailureNotice).not.toHaveBeenCalled()
+	})
+
+	it("raises the import failure of a refused image and still adds the others", async () => {
+		host.pickImages.mockResolvedValue([
+			"/Users/me/huge.jpg",
+			"/Users/me/lamp.jpg",
+		])
+		host.importPaths.mockImplementation((_spaceId, [path]: string[]) =>
+			Promise.resolve(
+				path === "/Users/me/huge.jpg"
+					? {
+							status: "ok",
+							data: [
+								{
+									status: "refused",
+									error: {
+										kind: "tooLarge",
+										name: "huge.jpg",
+										bytes: 30_000_000,
+										limit: 20_971_520,
+									},
+								},
+							],
+						}
+					: { status: "ok", data: [importedAs("lamp.jpg")] },
+			),
+		)
+		const gallery = await openStoredGallery()
+
+		await addImagesTo(gallery)
+
+		await waitFor(() =>
+			expect(markdownOnHost(NOTES)).toBe(
+				documentAround(
+					galleryOf(STORED_SOFA, "- image: lamp.jpg\n  alt: lamp"),
+				),
+			),
+		)
+		expect(raiseFailureNotice).toHaveBeenCalledWith(
+			expect.objectContaining({
+				title: common("library.failure.import.title", { name: "huge.jpg" }),
+				description: common("library.failure.import.tooLarge"),
+			}),
+		)
+	})
+})
+
+describe("a gallery in a joined Space", () => {
+	it("reads a stored image over the relay once however often it is shown", async () => {
+		host.images = [imageNamed("sofa-green.jpg")]
+		seedDocument(NOTES, documentAround(galleryOf(STORED_SOFA)))
+		await renderLibraryScreen(true)
+		await openDocument(NOTES)
+		const gallery = await openGallery()
+
+		await waitFor(() =>
+			expect(shownSources(gallery)).toEqual([
+				"data:image/jpeg;base64,sofa-green.jpg-bytes",
+			]),
+		)
+		expect(host.imageReads).toEqual(["sofa-green.jpg"])
+	})
+
+	it("offers no way to add images picked on this computer", async () => {
+		host.images = [imageNamed("sofa-green.jpg")]
+		seedDocument(NOTES, documentAround(galleryOf(STORED_SOFA)))
+		await renderLibraryScreen(true)
+		await openDocument(NOTES)
+		const gallery = await openGallery()
+
+		expect(
+			within(gallery).queryByRole("button", {
+				name: common("library.editor.blocks.gallery.add"),
+			}),
+		).toBeNull()
+	})
+})
