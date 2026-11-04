@@ -382,7 +382,7 @@ const unavailableCard = (reason: UnavailableReason, name: string) =>
 		name: common(`library.tab.unavailable.${reason}.title`, { name }),
 	})
 
-const pressUnavailableAction = async (reason: UnavailableReason) =>
+const pressUnavailableAction = (reason: UnavailableReason) =>
 	press(
 		screen.getByRole("button", {
 			name: common(`library.tab.unavailable.${reason}.action`),

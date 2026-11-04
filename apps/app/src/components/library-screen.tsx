@@ -143,11 +143,7 @@ type OpeningRead = {
 }
 
 const openingStatusOf = (read: OpeningRead) => {
-	const isMissing =
-		read.opening !== undefined &&
-		read.hasListed &&
-		!read.isListed &&
-		!read.isDocumentOpened
+	const isMissing = read.hasListed && !read.isListed && !read.isDocumentOpened
 	const hasNoOpenFailure = read.opening?.kind === "image" || read.isDocumentRead
 	return {
 		isMissing,
