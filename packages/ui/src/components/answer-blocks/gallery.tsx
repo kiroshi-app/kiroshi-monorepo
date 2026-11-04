@@ -26,6 +26,7 @@ type GalleryProps = {
 	tileLabel?: GalleryTileLabel
 	onOpen?: (index: number) => void
 	imageMenu?: ImageMenuActions<number>
+	isSavingToLibrary?: (index: number) => boolean
 	tileSlot?: (index: number) => ReactNode
 	className?: string
 }
@@ -38,6 +39,7 @@ type GalleryTileProps = {
 	hiddenCount: number
 	onOpen?: (index: number) => void
 	imageMenu?: ImageMenuActions<number>
+	isSavingToLibrary?: boolean
 	tileSlot?: (index: number) => ReactNode
 	className: string
 }
@@ -92,6 +94,7 @@ const GalleryTile = ({
 	hiddenCount,
 	onOpen,
 	imageMenu,
+	isSavingToLibrary,
 	tileSlot,
 	className,
 }: GalleryTileProps) => {
@@ -153,7 +156,15 @@ const GalleryTile = ({
 
 	if (!imageMenu || !isOpenable) return tile
 
-	return <ImageMenu {...imageMenu} item={index} name={name} trigger={tile} />
+	return (
+		<ImageMenu
+			{...imageMenu}
+			isSavingToLibrary={isSavingToLibrary}
+			item={index}
+			name={name}
+			trigger={tile}
+		/>
+	)
 }
 
 const Gallery = ({
@@ -162,6 +173,7 @@ const Gallery = ({
 	tileLabel = "name",
 	onOpen,
 	imageMenu,
+	isSavingToLibrary,
 	tileSlot,
 	className,
 }: GalleryProps) => {
@@ -186,6 +198,7 @@ const Gallery = ({
 					hiddenCount={0}
 					onOpen={onOpen}
 					imageMenu={imageMenu}
+					isSavingToLibrary={isSavingToLibrary?.(0)}
 					tileSlot={tileSlot}
 					className={cn(
 						"flex-[1.4]",
@@ -205,6 +218,7 @@ const Gallery = ({
 								hiddenCount={position === TILE_COUNT - 2 ? hiddenCount : 0}
 								onOpen={onOpen}
 								imageMenu={imageMenu}
+								isSavingToLibrary={isSavingToLibrary?.(position + 1)}
 								tileSlot={tileSlot}
 								className={layout.tiles[position] ?? ""}
 							/>

@@ -16,6 +16,7 @@ type WebPageCardProps = {
 	preview?: AnswerImage
 	onOpen?: () => void
 	imageMenu?: ImageMenuActions<AnswerImage>
+	isSavingToLibrary?: boolean
 	className?: string
 }
 
@@ -25,6 +26,7 @@ const WebPageCard = ({
 	preview,
 	onOpen,
 	imageMenu,
+	isSavingToLibrary,
 	className,
 }: WebPageCardProps) => {
 	const { t } = useTranslation("chat")
@@ -42,6 +44,7 @@ const WebPageCard = ({
 				<PressableImageMenu
 					{...imageMenu}
 					className="flex rounded-t-xl -outline-offset-2"
+					isSavingToLibrary={isSavingToLibrary}
 					item={preview}
 					name={accessibleNameOf(preview, title)}
 					picture={

@@ -21,6 +21,7 @@ import {
 } from "@workspace/ui/components/interactive-view"
 import {
 	answerImageMenuOf,
+	answerImageSavingOf,
 	useMarkdownAnswerActions,
 } from "@workspace/ui/components/markdown/answer-actions"
 import type {
@@ -232,6 +233,7 @@ const GalleryBlockView = ({ block }: BlockProps<"gallery">) => {
 				.join(" · ")}
 			imageMenu={imageMenu && { ...imageMenu, onOpenInViewer: openInViewer }}
 			images={images}
+			isSavingToLibrary={answerImageSavingOf(actions, viewerImages)}
 			onOpen={actions ? openInViewer : undefined}
 		/>
 	)
@@ -240,19 +242,18 @@ const GalleryBlockView = ({ block }: BlockProps<"gallery">) => {
 const IllustratedListBlockView = ({
 	block,
 }: BlockProps<"illustrated-list">) => {
-	const imageMenu = answerImageMenuOf(
-		useMarkdownAnswerActions(),
-		block.items.map(({ title, image, meta }, index) => ({
-			id: `${index}`,
-			name: title,
-			src: image,
-			detail: meta ?? "",
-		})),
-	)
+	const actions = useMarkdownAnswerActions()
+	const viewerImages = block.items.map(({ title, image, meta }, index) => ({
+		id: `${index}`,
+		name: title,
+		src: image,
+		detail: meta ?? "",
+	}))
 
 	return (
 		<IllustratedList
-			imageMenu={imageMenu}
+			imageMenu={answerImageMenuOf(actions, viewerImages)}
+			isSavingToLibrary={answerImageSavingOf(actions, viewerImages)}
 			items={block.items.map(({ title, image, text, badge, meta }, index) => ({
 				id: `${index}`,
 				title,
@@ -329,24 +330,23 @@ const WebPageBlockView = ({ block }: BlockProps<"web-page">) => {
 	const actions = useMarkdownAnswerActions()
 	const onOpenWebPage = actions?.onOpenWebPage
 	const domain = block.site ?? hostOf(block.url)
-	const imageMenu = answerImageMenuOf(
-		actions,
-		block.image
-			? [
-					{
-						id: block.image,
-						name: block.alt || block.title,
-						src: block.image,
-						detail: domain,
-					},
-				]
-			: [],
-	)
+	const viewerImages = block.image
+		? [
+				{
+					id: block.image,
+					name: block.alt || block.title,
+					src: block.image,
+					detail: domain,
+				},
+			]
+		: []
+	const imageMenu = answerImageMenuOf(actions, viewerImages)
 
 	return (
 		<WebPageCard
 			domain={domain}
 			imageMenu={imageMenu && imageMenuActionsFor(imageMenu, () => 0)}
+			isSavingToLibrary={answerImageSavingOf(actions, viewerImages)?.(0)}
 			onOpen={onOpenWebPage ? () => onOpenWebPage(block.url) : undefined}
 			preview={block.image ? { src: block.image, alt: block.alt } : undefined}
 			title={block.title}

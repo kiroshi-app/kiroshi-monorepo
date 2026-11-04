@@ -104,10 +104,12 @@ conversation-markdown-collapsiblesections--in-agent-answer
 conversation-markdown-collapsiblesections--in-narrow-column
 conversation-markdown-gallery--captions-under-grid
 conversation-markdown-gallery--image-menu-open
+conversation-markdown-gallery--image-menu-saving
 conversation-markdown-gallery--in-agent-answer
 conversation-markdown-gallery--in-narrow-column
 conversation-markdown-gallery--three-images
 conversation-markdown-gallery--two-images
+conversation-markdown-illustratedlist--image-menu-saving
 conversation-markdown-illustratedlist--in-agent-answer
 conversation-markdown-illustratedlist--in-narrow-column
 conversation-markdown-interactiveview--arrow-key-adjust
@@ -217,6 +219,7 @@ conversation-markdown-videoplayer--paused-with-marker
 conversation-markdown-videoplayer--play-failed
 conversation-markdown-videoplayer--plays-and-pauses
 conversation-markdown-videoplayer--without-poster-or-marker
+conversation-markdown-webpagecard--image-menu-saving
 conversation-markdown-webpagecard--in-agent-answer
 conversation-markdown-webpagecard--in-narrow-column
 conversation-markdown-webpagecard--with-preview-and-alt-text
@@ -1842,6 +1845,7 @@ overlays-librarylightbox--delete-confirmation
 overlays-librarylightbox--every-action-left-out
 overlays-librarylightbox--host-more-menu
 overlays-librarylightbox--image-menu-open
+overlays-librarylightbox--image-menu-saving
 overlays-librarylightbox--image-without-rename
 overlays-librarylightbox--member-more-menu
 overlays-librarylightbox--only-bar-actions-given

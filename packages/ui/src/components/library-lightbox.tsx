@@ -221,6 +221,7 @@ type LibraryLightboxProps = LibraryItemActions<LibraryLightboxImage> &
 		onClose: () => void
 		onPrevious: () => void
 		onNext: () => void
+		isSavingToLibrary?: boolean
 	}
 
 const LibraryLightbox = ({
@@ -232,6 +233,7 @@ const LibraryLightbox = ({
 	onNext,
 	onSaveToLibrary,
 	onCopyImage,
+	isSavingToLibrary,
 	...actions
 }: LibraryLightboxProps) => {
 	const { t } = useTranslation("common")
@@ -353,6 +355,7 @@ const LibraryLightbox = ({
 									key={image.id}
 									menu={{
 										...handlers,
+										isSavingToLibrary,
 										item: image,
 										name: image.name,
 										onConfirmingDeleteChange: setConfirmingDelete,

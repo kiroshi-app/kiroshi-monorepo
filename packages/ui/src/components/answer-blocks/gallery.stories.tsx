@@ -1,4 +1,4 @@
-import { expect, fn, screen, within } from "storybook/test"
+import { expect, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
@@ -263,5 +263,54 @@ export const ImageMenuOpen = meta.story({
 
 		menu = await openTileMenu()
 		await expect(menu).toBeVisible()
+	},
+})
+
+export const ImageMenuSaving = meta.story({
+	args: {
+		imageMenu: {
+			onSaveToLibrary: fn(),
+			onCopyImage: fn(),
+			onOpenInViewer: fn(),
+		},
+		isSavingToLibrary: (index) => index === 3,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The `ImageMenu` open on a tile whose image is on its way to the Library. Check Save to Library is disabled on that tile while Copy image and Open in viewer still answer, and that the menu of another tile keeps Save to Library enabled.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const openTileMenu = async (name: string) => {
+			await userEvent.pointer({
+				keys: "[MouseRight]",
+				target: canvas.getByRole("button", { name }),
+			})
+			return within(
+				await screen.findByRole("menu", { name: `Actions for ${name}` }),
+			)
+		}
+
+		let menu = await openTileMenu("The rooftop pool")
+		await expect(
+			menu.getByRole("menuitem", { name: "Save to Library" }),
+		).toHaveAttribute("aria-disabled", "true")
+		await expect(
+			menu.getByRole("menuitem", { name: "Copy image" }),
+		).not.toHaveAttribute("aria-disabled")
+		await expect(
+			menu.getByRole("menuitem", { name: "Open in viewer" }),
+		).not.toHaveAttribute("aria-disabled")
+
+		await userEvent.keyboard("{Escape}")
+		await waitFor(() => expect(screen.queryByRole("menu")).toBe(null))
+
+		menu = await openTileMenu("The double room with its tiled floor")
+		await expect(
+			menu.getByRole("menuitem", { name: "Save to Library" }),
+		).not.toHaveAttribute("aria-disabled")
 	},
 })
