@@ -261,6 +261,22 @@ const localFileAt = (path: string): LocalFile => ({
 	path,
 })
 
+const pickedImageOf = ({ name, path }: LocalFile): LibraryImageSource => ({
+	name,
+	read: async () => {
+		const result = await commands.libraryReadPickedImage(path)
+		if (result.status === "error") {
+			throw result.error
+		}
+		return result.data
+	},
+})
+
+const importPicked = (spaceId: string, isJoined: boolean, file: LocalFile) =>
+	isJoined
+		? importContent({ spaceId, isJoined, image: pickedImageOf(file) })
+		: importLocalFile({ spaceId, file })
+
 const galleryImageOf = (
 	{ name }: LocalFile,
 	item: LibraryItem,
@@ -272,7 +288,7 @@ export const useLibraryGalleryImports = (
 ) => {
 	const queryClient = useQueryClient()
 	const { mutateAsync } = useMutation({
-		mutationFn: (file: LocalFile) => importLocalFile({ spaceId, file }),
+		mutationFn: (file: LocalFile) => importPicked(spaceId, isJoined, file),
 		meta: {
 			failureNotice: failureNoticeOf,
 			raisedIn: "use-library-imports",
@@ -297,5 +313,5 @@ export const useLibraryGalleryImports = (
 				: []
 		})
 	}
-	return isJoined ? undefined : addPicked
+	return addPicked
 }

@@ -40,6 +40,7 @@ type LibraryCall = {
 	spaceId: string
 	name: string
 	update: string
+	content: string
 	caret: string | null
 	agentId: string | null
 }
@@ -91,6 +92,8 @@ const host = vi.hoisted(() => ({
 	imageReads: [] as string[],
 	pickImages: vi.fn(),
 	importPaths: vi.fn(),
+	readPickedImage: vi.fn(),
+	importContent: vi.fn(),
 }))
 
 const itemNamed = (name: string): LibraryItem => ({
@@ -126,6 +129,7 @@ const LIBRARY_COMMANDS: Record<string, (call: LibraryCall) => unknown> = {
 		}
 		return { name, mimeType: "image/jpeg", content: `${name}-bytes` }
 	},
+	library_import: (call) => host.importContent(call),
 	library_open_document: ({ name }) => ({
 		name,
 		update: base64Of(Y.encodeStateAsUpdate(documentOf(name))),
@@ -196,6 +200,7 @@ vi.mock("@/lib/bindings", async (importOriginal) => {
 			...actual.commands,
 			libraryReadLinkPreview: host.readLinkPreview,
 			libraryImportPaths: host.importPaths,
+			libraryReadPickedImage: host.readPickedImage,
 		},
 	}
 })
@@ -235,6 +240,8 @@ afterEach(() => {
 	host.imageReads = []
 	host.pickImages.mockReset()
 	host.importPaths.mockReset()
+	host.readPickedImage.mockReset()
+	host.importContent.mockReset()
 	vi.mocked(raiseFailureNotice).mockClear()
 	vi.restoreAllMocks()
 })
@@ -1582,17 +1589,183 @@ describe("a gallery in a joined Space", () => {
 		expect(host.imageReads).toEqual(["sofa-green.jpg"])
 	})
 
-	it("offers no way to add images picked on this computer", async () => {
+	const openJoinedGallery = async () => {
 		host.images = [imageNamed("sofa-green.jpg")]
 		seedDocument(NOTES, documentAround(galleryOf(STORED_SOFA)))
 		await renderLibraryScreen(true)
 		await openDocument(NOTES)
-		const gallery = await openGallery()
+		return openGallery()
+	}
 
-		expect(
-			within(gallery).queryByRole("button", {
-				name: common("library.editor.blocks.gallery.add"),
+	const pickedImageAt = (path: string) => {
+		const name = path.split("/").pop() ?? path
+		return {
+			status: "ok",
+			data: { name, mimeType: "image/png", content: `${name}-picked` },
+		}
+	}
+
+	it("opens the image picker of this computer, several files at once", async () => {
+		host.pickImages.mockResolvedValue(null)
+		const gallery = await openJoinedGallery()
+
+		await addImagesTo(gallery)
+
+		expect(host.pickImages).toHaveBeenCalledWith({
+			multiple: true,
+			directory: false,
+			filters: [
+				{
+					name: common("library.filters.images"),
+					extensions: ["png", "jpg", "jpeg", "gif", "webp"],
+				},
+			],
+		})
+	})
+
+	it("reads each picked image here, imports it to the host, adds it as a tile and relists the Library", async () => {
+		host.pickImages.mockResolvedValue([
+			"/Users/me/lamp.png",
+			"/Users/me/rug.png",
+		])
+		host.readPickedImage.mockImplementation((path: string) =>
+			Promise.resolve(pickedImageAt(path)),
+		)
+		host.importContent.mockImplementation(({ name }: LibraryCall) => {
+			const stored = name === "lamp.png" ? "lamp.png" : "rug-2.png"
+			host.images = [...host.images, imageNamed(stored)]
+			return imageNamed(stored)
+		})
+		const gallery = await openJoinedGallery()
+		const listsBefore = host.lists
+
+		await addImagesTo(gallery)
+
+		await waitFor(() =>
+			expect(markdownOnHost(NOTES)).toBe(
+				documentAround(
+					galleryOf(
+						STORED_SOFA,
+						"- image: lamp.png\n  alt: lamp",
+						"- image: rug-2.png\n  alt: rug",
+					),
+				),
+			),
+		)
+		expect(host.readPickedImage).toHaveBeenCalledWith("/Users/me/lamp.png")
+		expect(host.readPickedImage).toHaveBeenCalledWith("/Users/me/rug.png")
+		expect(host.importContent).toHaveBeenCalledWith({
+			spaceId: SPACE_ID,
+			name: "lamp.png",
+			content: "lamp.png-picked",
+		})
+		expect(host.importContent).toHaveBeenCalledWith({
+			spaceId: SPACE_ID,
+			name: "rug.png",
+			content: "rug.png-picked",
+		})
+		expect(host.importPaths).not.toHaveBeenCalled()
+		expect(host.lists).toBeGreaterThan(listsBefore)
+		await waitFor(() =>
+			expect(shownSources(gallery)).toEqual([
+				"data:image/jpeg;base64,sofa-green.jpg-bytes",
+				"data:image/jpeg;base64,lamp.png-bytes",
+				"data:image/jpeg;base64,rug-2.png-bytes",
+			]),
+		)
+	})
+
+	it("imports nothing and raises no notice when the person cancels the picker", async () => {
+		host.pickImages.mockResolvedValue(null)
+		const gallery = await openJoinedGallery()
+
+		await addImagesTo(gallery)
+		await new Promise((resolve) => setTimeout(resolve, 50))
+
+		expect(host.readPickedImage).not.toHaveBeenCalled()
+		expect(host.importContent).not.toHaveBeenCalled()
+		expect(markdownOnHost(NOTES)).toBe(documentAround(galleryOf(STORED_SOFA)))
+		expect(raiseFailureNotice).not.toHaveBeenCalled()
+	})
+
+	it("raises the tooLarge failure of an image over the relayed limit, sends it nothing and still adds the others", async () => {
+		host.pickImages.mockResolvedValue([
+			"/Users/me/huge.png",
+			"/Users/me/lamp.png",
+		])
+		host.readPickedImage.mockImplementation((path: string) =>
+			Promise.resolve(
+				path === "/Users/me/huge.png"
+					? {
+							status: "error",
+							error: {
+								kind: "tooLarge",
+								name: "huge.png",
+								bytes: 9_000_000,
+								limit: 8_388_608,
+							},
+						}
+					: pickedImageAt(path),
+			),
+		)
+		host.importContent.mockImplementation(({ name }: LibraryCall) => {
+			host.images = [...host.images, imageNamed(name)]
+			return imageNamed(name)
+		})
+		const gallery = await openJoinedGallery()
+
+		await addImagesTo(gallery)
+
+		await waitFor(() =>
+			expect(markdownOnHost(NOTES)).toBe(
+				documentAround(
+					galleryOf(STORED_SOFA, "- image: lamp.png\n  alt: lamp"),
+				),
+			),
+		)
+		expect(host.importContent).toHaveBeenCalledTimes(1)
+		expect(host.importContent).toHaveBeenCalledWith(
+			expect.objectContaining({ name: "lamp.png" }),
+		)
+		expect(raiseFailureNotice).toHaveBeenCalledWith(
+			expect.objectContaining({
+				title: common("library.failure.import.title", { name: "huge.png" }),
+				description: common("library.failure.import.tooLarge"),
 			}),
-		).toBeNull()
+		)
+	})
+
+	it("raises the import failure of an image the host refuses and still adds the others", async () => {
+		host.pickImages.mockResolvedValue([
+			"/Users/me/taken.png",
+			"/Users/me/lamp.png",
+		])
+		host.readPickedImage.mockImplementation((path: string) =>
+			Promise.resolve(pickedImageAt(path)),
+		)
+		host.importContent.mockImplementation(({ name }: LibraryCall) => {
+			if (name === "taken.png") {
+				throw { kind: "unwritable", detail: "disk full" }
+			}
+			host.images = [...host.images, imageNamed(name)]
+			return imageNamed(name)
+		})
+		const gallery = await openJoinedGallery()
+
+		await addImagesTo(gallery)
+
+		await waitFor(() =>
+			expect(markdownOnHost(NOTES)).toBe(
+				documentAround(
+					galleryOf(STORED_SOFA, "- image: lamp.png\n  alt: lamp"),
+				),
+			),
+		)
+		expect(raiseFailureNotice).toHaveBeenCalledWith(
+			expect.objectContaining({
+				title: common("library.failure.import.title", { name: "taken.png" }),
+				description: common("library.failure.import.unwritable"),
+			}),
+		)
 	})
 })
