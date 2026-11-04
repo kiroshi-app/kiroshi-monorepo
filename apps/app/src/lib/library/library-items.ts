@@ -1,4 +1,5 @@
 import type { LibraryItem as ShownLibraryItem } from "@workspace/ui/components/library-grid"
+import { i18n } from "@workspace/ui/lib/i18n"
 import { toRelativeTime } from "@workspace/ui/lib/time-format"
 
 import type { LibraryItem } from "../bindings"
@@ -28,6 +29,9 @@ export const titleOf = ({ kind, name }: Pick<LibraryItem, "kind" | "name">) =>
 	kind === "document" && extensionAt(name) > 0
 		? name.slice(0, extensionAt(name))
 		: name
+
+export const shownTitleOf = (title: string) =>
+	title.trim() === "" ? i18n.t("common:library.editor.untitled") : title
 
 export const documentNamedAs = (name: string, title: string) =>
 	`${title}${name.slice(titleOf({ kind: "document", name }).length)}`

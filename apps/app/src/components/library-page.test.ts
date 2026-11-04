@@ -1078,6 +1078,51 @@ describe("the tab of an opened Library item", () => {
 		})
 	})
 
+	it("is named Untitled for a blank document opened from New document", async () => {
+		const { router } = await mountApp()
+		harness.libraryItems = [DOCUMENT, libraryItemOf("Untitled.md", "document")]
+		await act(async () => router.navigate({ to: "/library" }))
+		await settle()
+
+		await click(
+			screen.getByRole("button", { name: common("library.newDocument") }),
+		)
+		await click(
+			within(screen.getByRole("dialog")).getByRole("button", {
+				name: common("library.picker.create"),
+			}),
+		)
+
+		expect(editorTitleField()).toHaveProperty("value", "")
+		expect(selectedTabName()).toBe(common("library.editor.untitled"))
+	})
+
+	it.each([
+		["cleared", ""],
+		["left as whitespace", "   "],
+	])(
+		"is named Untitled once its title is %s, the title field left as typed",
+		async (_shape, typed) => {
+			const { router } = await mountApp()
+			harness.libraryItems = [DOCUMENT]
+			await openByAddress(router, DOCUMENT_OPENING)
+
+			await act(async () => {
+				fireEvent.change(editorTitleField(), { target: { value: "Plans" } })
+			})
+			await settle()
+			expect(selectedTabName()).toBe("Plans")
+
+			await act(async () => {
+				fireEvent.change(editorTitleField(), { target: { value: typed } })
+			})
+			await settle()
+
+			expect(editorTitleField()).toHaveProperty("value", typed)
+			expect(selectedTabName()).toBe(common("library.editor.untitled"))
+		},
+	)
+
 	it("names the new tab an item opens in like the item", async () => {
 		const { router } = await mountApp()
 		harness.libraryItems = [IMAGE]
