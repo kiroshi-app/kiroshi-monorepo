@@ -1163,7 +1163,6 @@ export const UserTurnWithDocument = meta.story({
 })
 
 export const NotSentWithDocument = meta.story({
-	tags: ["test-only"],
 	render: () => (
 		<div className="mx-auto flex max-w-170 flex-col gap-3">
 			<UserTurn

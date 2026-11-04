@@ -663,6 +663,7 @@ describe("a message of yours that did not send", () => {
 					text: "Book it for 20:00.",
 					repliedToMessageId: null,
 					replyLinks: [],
+					documents: [],
 				},
 				readerName: "Ada Moreau",
 				onSendAgain,
@@ -673,6 +674,31 @@ describe("a message of yours that did not send", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Retry" }))
 
 		expect(onSendAgain).toHaveBeenCalledWith("m-9")
+	})
+
+	it("keeps the documents it carries under its bubble", () => {
+		render(
+			createElement(
+				ThreadDocumentsContext,
+				{ value: THREAD_DOCUMENTS },
+				createElement(RefusedTurn, {
+					message: {
+						id: "m-9",
+						text: "Here is the brief.",
+						repliedToMessageId: null,
+						replyLinks: [],
+						documents: ["brief.md"],
+					},
+					readerName: "Ada Moreau",
+					onSendAgain: () => undefined,
+				}),
+			),
+			{ wrapper: createQueryTestWrapper().wrapper },
+		)
+
+		const card = screen.getByRole("article", { name: "brief" })
+		expect(card.closest('[data-slot="turn-footer"]')).not.toBeNull()
+		expect(card.closest('[data-slot="message-bubble-content"]')).toBeNull()
 	})
 })
 

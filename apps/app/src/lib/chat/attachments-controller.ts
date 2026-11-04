@@ -119,11 +119,6 @@ export function createAttachmentsController(
 			return false
 		}
 		holdDocuments(owner, NO_DOCUMENTS)
-		void Promise.resolve(taken).then((isTaken) => {
-			if (!isTaken) {
-				holdDocuments(owner, withDocuments(owner, documents))
-			}
-		})
 		return true
 	}
 

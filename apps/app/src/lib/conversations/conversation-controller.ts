@@ -136,6 +136,7 @@ export type RefusedMessage = {
 	text: string
 	repliedToMessageId: string | null
 	replyLinks: ReplyLink[]
+	documents: string[]
 }
 
 export type PendingPrompt =
@@ -1481,6 +1482,7 @@ export const createConversationController = (
 			text,
 			repliedToMessageId: said.repliedToMessageId,
 			replyLinks: said.replyLinks ?? [],
+			documents: said.documents ?? [],
 		}
 		sync()
 	}
@@ -1550,7 +1552,7 @@ export const createConversationController = (
 	const sendAgain = async (messageId: string) => {
 		const held = refused
 		if (held?.id === messageId) {
-			await send(held.text, held.replyLinks)
+			await send(held.text, held.replyLinks, held.documents)
 		}
 	}
 

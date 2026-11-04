@@ -34,6 +34,11 @@ import type {
 	TransportError,
 	TurnOutcome,
 } from "../agent/contract"
+import {
+	createAttachmentsController,
+	ownerKey,
+} from "../chat/attachments-controller"
+import { createAttachmentsPort } from "../chat/attachments-port"
 import type { ChatDriver } from "../chat/driver"
 import { attachmentBlock } from "../chat/message-attachments"
 import type { ReportedRun } from "../routines/routine-contract"
@@ -1654,6 +1659,84 @@ describe("createConversationController", () => {
 			page.messages.find((message) => message.content === "on both")
 				?.replyLinks,
 		).toEqual(replyLinks)
+	})
+
+	describe("a refused message carrying a document", () => {
+		const BRIEF = { id: "brief.md", name: "brief", size: 0 }
+		const unused = () => Promise.reject(new Error("unused"))
+
+		const composerOn = (held: Harness) => {
+			const owner = { kind: "conversation", id: held.conversation.id } as const
+			const attachments = createAttachmentsController(
+				createAttachmentsPort({
+					chat: { storeAttachments: unused, sendTo: unused },
+					driver: { storeAttachments: unused },
+					runtimes: { heldFor: () => held.controller },
+				}),
+			)
+			attachments.stageDocument(owner, BRIEF)
+			return {
+				submit: (text: string) => attachments.submit(owner, text),
+				stagedDocuments: () =>
+					attachments.getState().documents[ownerKey(owner)],
+			}
+		}
+
+		const refusedFromComposer = async () => {
+			const composer = composerOn(harness)
+			harness.refuseNextWrite()
+			await composer.submit("on the brief")
+			await harness.settled()
+			const refusedId = harness.controller.getState().refusedMessage?.id ?? ""
+			return { composer, refusedId }
+		}
+
+		const storedMessages = async (held: Harness) =>
+			(await held.store.loadPage(held.conversation.id, null)).messages.map(
+				({ content, documents }) => ({ content, documents }),
+			)
+
+		it("keeps the document on the refused message, never back in the input", async () => {
+			const composer = composerOn(harness)
+			harness.refuseNextWrite()
+
+			await composer.submit("on the brief")
+			await harness.settled()
+
+			expect(harness.controller.getState().refusedMessage).toMatchObject({
+				text: "on the brief",
+				documents: ["brief.md"],
+			})
+			expect(composer.stagedDocuments()).toEqual([])
+		})
+
+		it("sends again its text and its document as one message", async () => {
+			const { composer, refusedId } = await refusedFromComposer()
+
+			await harness.controller.sendAgain(refusedId)
+			await harness.settled()
+
+			expect(await storedMessages(harness)).toEqual([
+				{ content: "on the brief", documents: ["brief.md"] },
+			])
+			expect(harness.controller.getState().refusedMessage).toBeNull()
+			expect(composer.stagedDocuments()).toEqual([])
+		})
+
+		it("shows it refused again with its document when the resend is refused", async () => {
+			const { composer, refusedId } = await refusedFromComposer()
+			harness.refuseNextWrite()
+
+			await harness.controller.sendAgain(refusedId)
+			await harness.settled()
+
+			expect(harness.controller.getState().refusedMessage).toMatchObject({
+				text: "on the brief",
+				documents: ["brief.md"],
+			})
+			expect(await storedMessages(harness)).toEqual([])
+			expect(composer.stagedDocuments()).toEqual([])
+		})
 	})
 
 	it("stores the message sent again and lets the seated companions answer it", async () => {

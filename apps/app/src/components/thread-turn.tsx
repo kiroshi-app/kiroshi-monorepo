@@ -218,6 +218,11 @@ export const RefusedTurn = ({
 	<TurnGroup>
 		<UserTurn
 			copyText={message.text}
+			footer={
+				message.documents.length > 0 ? (
+					<ThreadDocumentCards names={message.documents} />
+				) : null
+			}
 			name={readerName}
 			onRetry={() => onSendAgain(message.id)}
 			repliedTo={repliedTo}
