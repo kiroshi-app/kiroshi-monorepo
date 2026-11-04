@@ -330,23 +330,27 @@ const WebPageBlockView = ({ block }: BlockProps<"web-page">) => {
 	const actions = useMarkdownAnswerActions()
 	const onOpenWebPage = actions?.onOpenWebPage
 	const domain = block.site ?? hostOf(block.url)
-	const viewerImages = block.image
-		? [
-				{
-					id: block.image,
-					name: block.alt || block.title,
-					src: block.image,
-					detail: domain,
-				},
-			]
-		: []
-	const imageMenu = answerImageMenuOf(actions, viewerImages)
+	const imageMenu = answerImageMenuOf(
+		actions,
+		block.image
+			? [
+					{
+						id: block.image,
+						name: block.alt || block.title,
+						src: block.image,
+						detail: domain,
+					},
+				]
+			: [],
+	)
 
 	return (
 		<WebPageCard
 			domain={domain}
 			imageMenu={imageMenu && imageMenuActionsFor(imageMenu, () => 0)}
-			isSavingToLibrary={answerImageSavingOf(actions, viewerImages)?.(0)}
+			isSavingToLibrary={
+				block.image ? actions?.isSavingImage?.(block.image) : undefined
+			}
 			onOpen={onOpenWebPage ? () => onOpenWebPage(block.url) : undefined}
 			preview={block.image ? { src: block.image, alt: block.alt } : undefined}
 			title={block.title}

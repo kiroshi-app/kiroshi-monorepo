@@ -16,7 +16,6 @@ import {
 import type { LibraryLightboxImage } from "@workspace/ui/components/library-lightbox"
 import {
 	answerImageMenuOf,
-	answerImageSavingOf,
 	useMarkdownAnswerActions,
 } from "@workspace/ui/components/markdown/answer-actions"
 import { AnswerBlockFrame } from "@workspace/ui/components/markdown/answer-block"
@@ -51,7 +50,7 @@ const MarkdownImageMenu = ({
 	return (
 		<ImageMenu
 			{...answerImageMenuOf(actions, [image])}
-			isSavingToLibrary={answerImageSavingOf(actions, [image])?.(0)}
+			isSavingToLibrary={actions.isSavingImage?.(image.src)}
 			item={0}
 			name={image.name}
 			trigger={
