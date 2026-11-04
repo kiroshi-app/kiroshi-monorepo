@@ -25,24 +25,28 @@ import type { LibraryItemActions } from "@workspace/ui/components/library-item-m
 import {
 	LibraryLightbox,
 	type LibraryLightboxImage,
+	type LibraryLightboxProps,
 } from "@workspace/ui/components/library-lightbox"
 import { LibraryPanel } from "@workspace/ui/components/library-panel"
 import { COPIED_RESET_MS } from "@workspace/ui/hooks/use-copy-text"
 
 type LibraryWithLightboxProps = LibraryItemActions<
 	LibraryItem | LibraryLightboxImage
-> & {
-	openedAt: number | null
-	onClose: () => void
-	onPrevious: () => void
-	onNext: () => void
-}
+> &
+	Pick<LibraryLightboxProps, "onSaveToLibrary" | "onCopyImage"> & {
+		openedAt: number | null
+		onClose: () => void
+		onPrevious: () => void
+		onNext: () => void
+	}
 
 const LibraryWithLightbox = ({
 	openedAt,
 	onClose,
 	onPrevious,
 	onNext,
+	onSaveToLibrary,
+	onCopyImage,
 	...actions
 }: LibraryWithLightboxProps) => {
 	const [shownAt, setShownAt] = useState(openedAt)
@@ -69,6 +73,8 @@ const LibraryWithLightbox = ({
 						<LibraryLightbox
 							{...actions}
 							count={LIBRARY_LIGHTBOX_IMAGES.length}
+							onCopyImage={onCopyImage}
+							onSaveToLibrary={onSaveToLibrary}
 							image={
 								shownAt === null
 									? null
@@ -1023,5 +1029,63 @@ export const Zoomed = meta.story({
 		await userEvent.click(
 			within(popup).getByRole("button", { name: "Zoom in" }),
 		)
+	},
+})
+
+export const ImageMenuOpen = meta.story({
+	args: { onSaveToLibrary: fn(), onCopyImage: fn() },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The `ImageMenu` open on the image, on a right-click on the stage. Check it opens dark at the pointer, lists the bar's actions in the bar's order, Download and Copy then the More menu's, then Save to Library and Copy image, never Open in viewer, that an entry hands the image to its callback, and that a click outside the menu dismisses it without closing the lightbox.",
+			},
+		},
+	},
+	play: async ({ args, userEvent }) => {
+		const popup = await lightbox()
+		const image = within(popup).getByRole("img", {
+			name: "dashboard-redesign.png",
+		})
+		const openStageMenu = async () => {
+			await userEvent.pointer({ keys: "[MouseRight]", target: image })
+			return screen.findByRole("menu", {
+				name: "Actions for dashboard-redesign.png",
+			})
+		}
+
+		let menu = await openStageMenu()
+		await expect(menuEntryNames(menu)).toEqual([
+			...BAR_ACTION_NAMES,
+			...BAR_MENU_ACTION_NAMES,
+			"Save to Library",
+			"Copy image",
+		])
+		await expect(
+			within(menu).queryByRole("menuitem", { name: "Open in viewer" }),
+		).toBe(null)
+		await expect(menu.closest(".dark")).not.toBe(null)
+
+		await userEvent.click(
+			within(menu).getByRole("menuitem", { name: "Save to Library" }),
+		)
+		await expect(args.onSaveToLibrary).toHaveBeenCalledWith(
+			LIBRARY_LIGHTBOX_IMAGES[1],
+		)
+		await waitFor(() => expect(screen.queryByRole("menu")).toBe(null))
+
+		await openStageMenu()
+		await clickAt(
+			userEvent,
+			cornerOf(
+				popup.querySelector("[data-slot=library-lightbox-zoom-bar]")
+					?.parentElement as HTMLElement,
+			),
+		)
+		await waitFor(() => expect(screen.queryByRole("menu")).toBe(null))
+		await expect(args.onClose).not.toHaveBeenCalled()
+
+		menu = await openStageMenu()
+		await expect(menu).toBeVisible()
 	},
 })

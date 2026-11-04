@@ -1,4 +1,4 @@
-import { expect, fn } from "storybook/test"
+import { expect, fn, screen, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
@@ -174,5 +174,52 @@ export const InNarrowColumn = meta.story({
 	},
 	play: async ({ canvasElement }) => {
 		await expectAnswerInsideFrame(canvasElement)
+	},
+})
+
+export const ImageMenuOpen = meta.story({
+	args: {
+		imageMenu: {
+			onSaveToLibrary: fn(),
+			onCopyImage: fn(),
+			onOpenInViewer: fn(),
+		},
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The `ImageMenu` open on a tile, on a right-click. Check it lists Save to Library, Copy image, then Open in viewer, and that an entry hands the tile's index to its callback, the same index `onOpen` gets.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const openTileMenu = async () => {
+			await userEvent.pointer({
+				keys: "[MouseRight]",
+				target: canvas.getByRole("button", { name: "The rooftop pool" }),
+			})
+			return screen.findByRole("menu", {
+				name: "Actions for The rooftop pool",
+			})
+		}
+
+		let menu = await openTileMenu()
+		await expect(
+			within(menu)
+				.getAllByRole("menuitem")
+				.map((entry) => entry.textContent),
+		).toEqual(["Save to Library", "Copy image", "Open in viewer"])
+		await expect(
+			within(menu).getByRole("menuitem", { name: "Open in viewer" }),
+		).toBeVisible()
+
+		await userEvent.click(
+			within(menu).getByRole("menuitem", { name: "Copy image" }),
+		)
+		await expect(args.imageMenu?.onCopyImage).toHaveBeenCalledWith(3)
+
+		menu = await openTileMenu()
+		await expect(menu).toBeVisible()
 	},
 })
