@@ -668,7 +668,7 @@ const saveFromMenu = async (name: string) => {
 	await waitFor(() => expect(callsOf("library_import")).toHaveLength(1))
 }
 
-const SETTLINGS = [
+const SAVE_OUTCOMES = [
 	["resolves", null],
 	["rejects", "library_import"],
 ] as const
@@ -713,7 +713,7 @@ describe("Save to Library in the menu of a sourced answer image", () => {
 		},
 	)
 
-	it.each(SETTLINGS)(
+	it.each(SAVE_OUTCOMES)(
 		"enables Save to Library again when the save %s",
 		async (_outcome, refused) => {
 			harness.refused = refused
@@ -763,7 +763,7 @@ describe("Save to Library in the menu of a gallery image", () => {
 		expect(await isSaveToLibraryDisabledFor(OAK.name)).toBe(false)
 	})
 
-	it.each(SETTLINGS)(
+	it.each(SAVE_OUTCOMES)(
 		"enables Save to Library again when the save %s",
 		async (_outcome, refused) => {
 			harness.refused = refused
@@ -807,7 +807,7 @@ describe("Save to Library in the menu of the thread lightbox", () => {
 		expect(await isSaveToLibraryDisabledFor(SOFA.name)).toBe(true)
 	})
 
-	it.each(SETTLINGS)(
+	it.each(SAVE_OUTCOMES)(
 		"enables Save to Library again when the save %s",
 		async (_outcome, refused) => {
 			harness.refused = refused
