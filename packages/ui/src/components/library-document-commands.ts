@@ -1,10 +1,14 @@
 import { isolateHistory } from "@codemirror/commands"
 import { ensureSyntaxTree, syntaxTree } from "@codemirror/language"
 import {
+	type ChangeSet,
+	type EditorSelection,
 	type EditorState,
 	type Line,
 	type SelectionRange,
 	type StateCommand,
+	StateEffect,
+	StateField,
 	Transaction,
 } from "@codemirror/state"
 import type { SyntaxNode } from "@lezer/common"
@@ -49,6 +53,12 @@ type LineShape = {
 	textFrom: number
 	textTo: number
 	isCode: boolean
+}
+
+type RoundTrip = {
+	node: string
+	inverse: ChangeSet
+	selection: EditorSelection
 }
 
 type LineFormat = {
@@ -342,9 +352,31 @@ const withoutRewrittenMarkers = (state: EditorState, changes: Change[]) => {
 	return changes.filter((change) => !kept.has(change))
 }
 
+const roundTripStarted = StateEffect.define<RoundTrip>()
+
+const pendingRoundTrip = StateField.define<RoundTrip | null>({
+	create: () => null,
+	update: (pending, transaction) => {
+		for (const effect of transaction.effects)
+			if (effect.is(roundTripStarted)) return effect.value
+		const isSelectionMoved = !transaction.startState.selection.eq(
+			transaction.newSelection,
+		)
+		return transaction.docChanged || isSelectionMoved ? null : pending
+	},
+})
+
+const roundTripEffects = (state: EditorState, roundTrip: RoundTrip) => [
+	...(state.field(pendingRoundTrip, false) === undefined
+		? [StateEffect.appendConfig.of(pendingRoundTrip)]
+		: []),
+	roundTripStarted.of(roundTrip),
+]
+
 const dispatchFormat = (
 	{ state, dispatch }: Parameters<StateCommand>[0],
 	changes: Change[],
+	roundTripNode?: string,
 ) => {
 	const effective = withoutNoOps(state, withoutRewrittenMarkers(state, changes))
 	if (effective.length === 0) return false
@@ -353,6 +385,30 @@ const dispatchFormat = (
 		state.update({
 			changes: changeSet,
 			selection: state.selection.map(changeSet, 1),
+			effects:
+				roundTripNode === undefined
+					? []
+					: roundTripEffects(state, {
+							node: roundTripNode,
+							inverse: changeSet.invert(state.doc),
+							selection: state.selection,
+						}),
+			annotations: FORMAT_EVENT,
+		}),
+	)
+	return true
+}
+
+const returnedRoundTrip = (
+	{ state, dispatch }: Parameters<StateCommand>[0],
+	node: string,
+) => {
+	const pending = state.field(pendingRoundTrip, false)
+	if (pending?.node !== node) return false
+	dispatch(
+		state.update({
+			changes: pending.inverse,
+			selection: pending.selection,
 			annotations: FORMAT_EVENT,
 		}),
 	)
@@ -391,19 +447,23 @@ const toggledInline = (
 	withRemovalCheck(
 		(target) => {
 			const { state } = target
+			if (returnedRoundTrip(target, node)) return true
 			const segments = segmentsOfSelection(state)
 			if (segments.length === 0) return false
-			const changes = isEverySegmentCarried(state, segments, node)
-				? runsCarrying(state, segments, node).flatMap(unwrapped)
-				: segments.flatMap((segment) =>
-						wrapped(state, segment, {
-							node,
-							open: marker,
-							close: marker,
-							isFlanked,
-						}),
-					)
-			return dispatchFormat(target, changes)
+			if (isEverySegmentCarried(state, segments, node))
+				return dispatchFormat(
+					target,
+					runsCarrying(state, segments, node).flatMap(unwrapped),
+				)
+			const changes = segments.flatMap((segment) =>
+				wrapped(state, segment, {
+					node,
+					open: marker,
+					close: marker,
+					isFlanked,
+				}),
+			)
+			return dispatchFormat(target, changes, node)
 		},
 		(state) => isEverySegmentCarried(state, segmentsOfSelection(state), node),
 	)

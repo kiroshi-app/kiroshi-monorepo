@@ -66,7 +66,7 @@ type Run = {
 	undone: () => string
 }
 
-const run = (marked: string, command: StateCommand): Run => {
+const run = (marked: string, ...commands: StateCommand[]): Run => {
 	let state = stateOf(marked)
 	const transactions: Transaction[] = []
 	const target = {
@@ -78,7 +78,7 @@ const run = (marked: string, command: StateCommand): Run => {
 			state = transaction.state
 		},
 	}
-	command(target)
+	for (const command of commands) command(target)
 	return {
 		shown: shownOf(state),
 		transactions,
@@ -356,6 +356,43 @@ describe("a run of the same format touching the selection", () => {
 	it("merges into one run instead of doubling the markers", () => {
 		expect(formatted("**a**‹b›", toggleBold)).toBe("**a‹b›**")
 		expect(formatted("‹a›~~b~~", toggleStrikethrough)).toBe("~~‹a›b~~")
+	})
+})
+
+describe.each([
+	[toggleBold, "**"],
+	[toggleItalic, "*"],
+	[toggleStrikethrough, "~~"],
+	[toggleInlineCode, "`"],
+])("%s pressed twice beside a run of the same format", (command, marker) => {
+	const wrap = (text: string) => `${marker}${text}${marker}`
+
+	it.each([
+		["overlapping", `Ship ${wrap("the ‹launch")} today›.`],
+		["containing", `‹Ship ${wrap("the")} launch›.`],
+		["touching after", `${wrap("Ship")}‹the› launch.`],
+		["touching before", `Ship ‹the›${wrap("launch")}.`],
+	])(
+		"gives back the markdown and the selection of a run %s it",
+		(_, before) => {
+			const joined = run(before, command).shown
+			const result = run(before, command, command)
+			expect(joined).not.toBe(before)
+			expect(result.shown).toBe(before)
+			expect(result.transactions).toHaveLength(2)
+			expect(result.undone()).toBe(joined)
+		},
+	)
+
+	it("follows the add or remove rule once the selection moved in between", () => {
+		const before = `${wrap("Ship")}‹the› launch.`
+		const moved: StateCommand = (target) => {
+			const { selection } = target.state
+			target.dispatch(target.state.update({ selection: { anchor: 0 } }))
+			target.dispatch(target.state.update({ selection }))
+			return true
+		}
+		expect(run(before, command, moved, command).shown).not.toBe(before)
 	})
 })
 

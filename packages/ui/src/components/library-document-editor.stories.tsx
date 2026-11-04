@@ -2575,6 +2575,51 @@ export const FormatInlineCode = meta.story({
 	...formatStory(toggleInlineCode, INLINE_STORY, inlineSteps("`")),
 })
 
+const roundTripSteps =
+	(marker: string) =>
+	(command: StateCommand): FormatStep[] => {
+		const wrap = (text: string) => `${marker}${text}${marker}`
+		return [
+			toggledTwice(
+				command,
+				`Ship ${wrap("the ‹launch")} today›.`,
+				`Ship ${wrap("the ‹launch today›")}.`,
+				"a selection overlapping a run, twice",
+			),
+			toggledTwice(
+				command,
+				`‹Ship ${wrap("the")} launch›.`,
+				`${wrap("‹Ship the launch›")}.`,
+				"a selection containing a run, twice",
+			),
+			toggledTwice(
+				command,
+				`${wrap("Ship")}‹the› launch.`,
+				`${wrap("Ship‹the›")} launch.`,
+				"a selection touching a run edge to edge, twice",
+			),
+		]
+	}
+
+const ROUND_TRIP_STORY =
+	"Run from the editor handle on a fresh document per step: a selection overlapping, containing, then touching edge to edge a run of the same format, pressed twice, each undone one step at a time. Check that the first press joins the run, that the second gives back the starting markdown and selection, and that one undo brings the joined run back."
+
+export const FormatBoldRoundTrip = meta.story({
+	...formatStory(toggleBold, ROUND_TRIP_STORY, roundTripSteps("**")),
+})
+
+export const FormatItalicRoundTrip = meta.story({
+	...formatStory(toggleItalic, ROUND_TRIP_STORY, roundTripSteps("*")),
+})
+
+export const FormatStrikethroughRoundTrip = meta.story({
+	...formatStory(toggleStrikethrough, ROUND_TRIP_STORY, roundTripSteps("~~")),
+})
+
+export const FormatInlineCodeRoundTrip = meta.story({
+	...formatStory(toggleInlineCode, ROUND_TRIP_STORY, roundTripSteps("`")),
+})
+
 const BRIEF_URL = "https://kiroshi.app/brief"
 
 const linkSteps = (command: StateCommand): FormatStep[] => {
