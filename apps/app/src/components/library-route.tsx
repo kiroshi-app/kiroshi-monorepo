@@ -11,22 +11,12 @@ import {
 	librarySearchOf,
 	openingOf,
 } from "@/lib/navigation/library-search"
+import {
+	useLibraryHrefOf,
+	useOpenLibraryItemInNewTab,
+} from "@/lib/navigation/use-open-library-document"
 import { isJoinedRowId } from "@/lib/spaces/joined-spaces-controller"
 import { useWorkspace } from "@/lib/workspace/workspace-context"
-
-const useLibraryHrefOf = () => {
-	const router = useRouter()
-	return (opening: LibraryOpening) =>
-		router.buildLocation({ to: "/library", search: librarySearchOf(opening) })
-			.href
-}
-
-const useOpenLibraryItemInNewTab = () => {
-	const router = useRouter()
-	const hrefOf = useLibraryHrefOf()
-	return (opening: LibraryOpening) =>
-		router.options.context.tabs.openInNewTab(hrefOf(opening))
-}
 
 const useOpenLibraryItemInNewActiveTab = () => {
 	const router = useRouter()

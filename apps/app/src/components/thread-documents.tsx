@@ -4,14 +4,24 @@ import {
 	DOCUMENT_PANEL_MAX_WIDTH,
 	DocumentPanel,
 } from "@workspace/ui/components/document-panel"
+import {
+	FileReferenceChip,
+	type FileReferenceChipProps,
+} from "@workspace/ui/components/file-reference-chip"
 import { LibraryDocumentBlockEditor } from "@workspace/ui/components/library-document-block-editor"
+import type { MarkdownProps } from "@workspace/ui/components/markdown"
+import type { MarkdownRunRenderProps } from "@workspace/ui/components/markdown/run"
 
 import { useLibraryOnScreen } from "@/components/answer-image-viewer"
+import { documentRunsOf, isTrailingRun } from "@/lib/chat/document-mentions"
 import { titleOf } from "@/lib/library/library-items"
 import { useLibraryDocumentSession } from "@/lib/library/use-library-document-session"
 import { useLibraryImageResolver } from "@/lib/library/use-library-image-sources"
 import { useSaveMessageAsDocument } from "@/lib/library/use-save-message-as-document"
-import { useOpenLibraryDocument } from "@/lib/navigation/use-open-library-document"
+import {
+	useOpenLibraryDocument,
+	useOpenLibraryItemInNewTab,
+} from "@/lib/navigation/use-open-library-document"
 import {
 	keepDocumentPanelWidth,
 	readDocumentPanelWidth,
@@ -60,6 +70,76 @@ export const useThreadDocuments = (
 }
 
 const documentTitleOf = (name: string) => titleOf({ kind: "document", name })
+
+const chipStateOf = (
+	isWriting: boolean,
+	isOpen: boolean,
+): FileReferenceChipProps["state"] => {
+	if (isWriting) {
+		return "writing"
+	}
+	return isOpen ? "open" : "rest"
+}
+
+type ThreadDocumentChipProps = {
+	documents: ThreadDocuments
+	name: string
+	isWriting: boolean
+}
+
+const ThreadDocumentChip = ({
+	documents,
+	name,
+	isWriting,
+}: ThreadDocumentChipProps) => {
+	const openInNewTab = useOpenLibraryItemInNewTab()
+
+	return (
+		<FileReferenceChip
+			onOpen={() => documents.open(name)}
+			onOpenInNewTab={() => openInNewTab({ kind: "document", name })}
+			state={chipStateOf(isWriting, documents.openedName === name)}
+			title={documentTitleOf(name)}
+		/>
+	)
+}
+
+type DocumentReferencesSource = {
+	documents: ThreadDocuments
+	text: string
+	names: string[]
+	isWriting: boolean
+}
+
+type DocumentReferences = Pick<MarkdownProps, "runs" | "renderRun"> & {
+	text: string
+}
+
+export const documentReferencesOf = ({
+	documents,
+	text,
+	names,
+	isWriting,
+}: DocumentReferencesSource): DocumentReferences => {
+	const shownText = text.trim() === "" ? names.join(" ") : text
+	const runs = documentRunsOf(shownText, names)
+	const trailingNames = new Set(runs.filter(isTrailingRun).map(({ id }) => id))
+	const renderRun = ({ id, isEnd }: MarkdownRunRenderProps) => {
+		if (!isEnd) {
+			return null
+		}
+		const chip = (
+			<ThreadDocumentChip
+				documents={documents}
+				isWriting={isWriting}
+				name={id}
+			/>
+		)
+		return trailingNames.has(id) ? <> {chip}</> : chip
+	}
+
+	return { text: shownText, runs, renderRun }
+}
 
 type ThreadDocumentPanelProps = {
 	spaceId: string

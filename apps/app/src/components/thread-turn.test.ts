@@ -8,7 +8,7 @@ import {
 	screen,
 	within,
 } from "@testing-library/react"
-import { type ComponentProps, createElement } from "react"
+import { type ComponentProps, type ContextType, createElement } from "react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import "@workspace/ui/lib/i18n"
@@ -16,6 +16,7 @@ import "@workspace/ui/lib/i18n"
 import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
 import type { TurnState } from "@workspace/ui/components/turn"
 
+import { ThreadDocumentsContext } from "@/components/thread-documents"
 import { RefusedTurn, ThreadTurn } from "@/components/thread-turn"
 import {
 	type AnswerActions,
@@ -38,6 +39,13 @@ vi.mock("@/lib/links/use-external-links", async (importOriginal) => ({
 	openInBrowser: vi.fn(() => Promise.resolve()),
 }))
 
+const openInNewTab = vi.hoisted(() => vi.fn())
+
+vi.mock("@/lib/navigation/use-open-library-document", () => ({
+	useOpenLibraryDocument: () => () => undefined,
+	useOpenLibraryItemInNewTab: () => openInNewTab,
+}))
+
 vi.mock("@workspace/ui/components/notice-surface", async (importOriginal) => ({
 	...(await importOriginal<
 		typeof import("@workspace/ui/components/notice-surface")
@@ -49,6 +57,7 @@ afterEach(() => {
 	cleanup()
 	vi.mocked(openInBrowser).mockClear()
 	vi.mocked(raiseFailureNotice).mockClear()
+	openInNewTab.mockClear()
 })
 
 const FIRST_NAME = "0b7c6d1e-2f3a-4b5c-8d9e-0f1a2b3c4d5e.png"
@@ -82,6 +91,8 @@ type TurnSetup = {
 	onRetry?: (messageId: string) => void
 	onReply?: (target: ReplyTarget) => void
 	actions?: AnswerActions
+	documents?: ContextType<typeof ThreadDocumentsContext>
+	names?: string[]
 }
 
 const renderTurn = (
@@ -94,10 +105,12 @@ const renderTurn = (
 		onRetry,
 		onReply = () => undefined,
 		actions,
+		documents = null,
+		names = [],
 	}: TurnSetup = {},
 ) => {
 	const props: ComponentProps<typeof ThreadTurn> = {
-		row: { ...rowOf(role, text), ...author },
+		row: { ...rowOf(role, text), documents: names, ...author },
 		anchor: "m-1",
 		state,
 		readerName: "Ada Moreau",
@@ -113,18 +126,28 @@ const renderTurn = (
 		onPin: () => undefined,
 		onReply,
 	}
-	return render(
+	const turnOf = (shown: ContextType<typeof ThreadDocumentsContext>) =>
 		createElement(
-			AnswerActionsContext,
-			{ value: actions ?? null },
+			ThreadDocumentsContext,
+			{ value: shown },
 			createElement(
-				ThreadAuthorshipContext.Provider,
-				{ value: authorship },
-				createElement(ThreadTurn, props),
+				AnswerActionsContext,
+				{ value: actions ?? null },
+				createElement(
+					ThreadAuthorshipContext.Provider,
+					{ value: authorship },
+					createElement(ThreadTurn, props),
+				),
 			),
-		),
-		{ wrapper: createQueryTestWrapper().wrapper },
-	)
+		)
+	const rendered = render(turnOf(documents), {
+		wrapper: createQueryTestWrapper().wrapper,
+	})
+	return {
+		...rendered,
+		showDocuments: (shown: ContextType<typeof ThreadDocumentsContext>) =>
+			rendered.rerender(turnOf(shown)),
+	}
 }
 
 const attachmentButtons = () =>
@@ -661,5 +684,199 @@ describe("a message of yours that did not send", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Retry" }))
 
 		expect(onSendAgain).toHaveBeenCalledWith("m-9")
+	})
+})
+
+const PLAN = "Launch plan.md"
+
+const threadDocumentsOf = (
+	overrides: Partial<
+		NonNullable<ContextType<typeof ThreadDocumentsContext>>
+	> = {},
+) => ({
+	spaceId: "space-on-screen",
+	isJoined: false,
+	openedName: null,
+	open: vi.fn<(name: string) => void>(),
+	close: () => undefined,
+	...overrides,
+})
+
+const planChip = () => screen.getByRole("button", { name: /^Launch plan/ })
+
+const paragraphHolding = (chip: HTMLElement) => chip.closest("p")?.textContent
+
+describe("a Library document the agent wrote in its message", () => {
+	it("shows the document as a chip where the text names it", () => {
+		renderTurn("assistant", "I wrote Launch plan.md for the offsite.", {
+			documents: threadDocumentsOf(),
+			names: [PLAN],
+		})
+
+		expect(paragraphHolding(planChip())).toBe(
+			"I wrote Launch plan for the offsite.",
+		)
+		expect(screen.queryByText(/Launch plan\.md/)).toBeNull()
+	})
+
+	it("shows the document as a chip after the last sentence when the text never names it", () => {
+		renderTurn("assistant", "Done. Tell me what to change.", {
+			documents: threadDocumentsOf(),
+			names: [PLAN],
+		})
+
+		expect(paragraphHolding(planChip())).toBe(
+			"Done. Tell me what to change. Launch plan",
+		)
+		expect(planChip().closest("p")?.lastElementChild).toBe(planChip())
+	})
+
+	it("shows the chip alone when the message carries only the document", () => {
+		renderTurn("assistant", "", {
+			documents: threadDocumentsOf(),
+			names: [PLAN],
+		})
+
+		expect(
+			screen.getAllByRole("button", { name: /^Launch plan/ }),
+		).toHaveLength(1)
+		expect(screen.queryByText(PLAN)).toBeNull()
+	})
+
+	it("keeps a file that is not one of the message's documents as plain text", () => {
+		renderTurn("assistant", "Launch plan.md now quotes budget.md.", {
+			documents: threadDocumentsOf(),
+			names: [PLAN],
+		})
+
+		expect(screen.getAllByRole("button", { name: /plan|budget/ })).toEqual([
+			planChip(),
+		])
+		expect(paragraphHolding(planChip())).toBe(
+			"Launch plan now quotes budget.md.",
+		)
+	})
+
+	it("shows the chip as writing while the message streams", () => {
+		renderTurn("assistant", "Writing Launch plan.md now.", {
+			documents: threadDocumentsOf(),
+			names: [PLAN],
+			state: "streaming",
+		})
+
+		expect(planChip().getAttribute("aria-busy")).toBe("true")
+		expect(planChip().textContent).toContain("Writing…")
+	})
+
+	it("shows the chip at rest once the message is written", () => {
+		renderTurn("assistant", "Wrote Launch plan.md.", {
+			documents: threadDocumentsOf(),
+			names: [PLAN],
+		})
+
+		expect(planChip().getAttribute("aria-busy")).toBeNull()
+		expect(planChip().getAttribute("aria-pressed")).toBe("false")
+	})
+
+	it.each([
+		["the host", false],
+		["a joined Space", true],
+	])("opens the document in the panel on click in %s", (_, isJoined) => {
+		const documents = threadDocumentsOf({ isJoined })
+		renderTurn("assistant", "Wrote Launch plan.md.", {
+			documents,
+			names: [PLAN],
+		})
+
+		fireEvent.click(planChip())
+
+		expect(documents.open).toHaveBeenCalledWith(PLAN)
+		expect(openInNewTab).not.toHaveBeenCalled()
+	})
+
+	it("shows the chip open while its document is in the panel, at rest once the panel closes", () => {
+		const { showDocuments } = renderTurn("assistant", "Wrote Launch plan.md.", {
+			documents: threadDocumentsOf(),
+			names: [PLAN],
+		})
+
+		showDocuments(threadDocumentsOf({ openedName: PLAN }))
+		expect(planChip().getAttribute("aria-pressed")).toBe("true")
+
+		showDocuments(threadDocumentsOf({ openedName: null }))
+		expect(planChip().getAttribute("aria-pressed")).toBe("false")
+	})
+
+	it("opens the document in the Library in a new tab on middle click, leaving the panel as it was", () => {
+		const documents = threadDocumentsOf()
+		renderTurn("assistant", "Wrote Launch plan.md.", {
+			documents,
+			names: [PLAN],
+		})
+
+		fireEvent(
+			planChip(),
+			new MouseEvent("auxclick", { bubbles: true, button: 1, detail: 1 }),
+		)
+
+		expect(openInNewTab).toHaveBeenCalledWith({ kind: "document", name: PLAN })
+		expect(documents.open).not.toHaveBeenCalled()
+	})
+})
+
+const TODO_ANSWER = `Before Friday:
+
+- [ ] Book the venue
+- [x] Send the invites`
+
+describe("a to-do in an agent message", () => {
+	it("ticks and unticks on click, leaving the conversation input untouched", () => {
+		const actions = actionsSpy()
+		renderTurn("assistant", TODO_ANSWER, { actions })
+		const [venue] = screen.getAllByRole("checkbox")
+
+		fireEvent.click(venue)
+		expect(screen.getAllByRole("checkbox", { checked: true })).toHaveLength(2)
+
+		fireEvent.click(venue)
+		expect(screen.getAllByRole("checkbox", { checked: true })).toHaveLength(1)
+
+		expect(actions.insert).not.toHaveBeenCalled()
+	})
+
+	it("leaves the conversation input untouched when any block of the message is clicked", () => {
+		const actions = actionsSpy()
+		renderTurn("assistant", `${TODO_ANSWER}\n\nWrote Launch plan.md.`, {
+			actions,
+			documents: threadDocumentsOf(),
+			names: [PLAN],
+		})
+
+		fireEvent.click(screen.getByText("Before Friday:"))
+		fireEvent.click(screen.getByText("Book the venue"))
+		fireEvent.click(planChip())
+
+		expect(actions.insert).not.toHaveBeenCalled()
+	})
+})
+
+describe("a sourced image that fails to load", () => {
+	it("shows the image as unavailable with its site and the Open original link", () => {
+		renderTurn(
+			"assistant",
+			"The waterfront.\n\n![The Lisbon waterfront](https://images.example.org/lisbon.jpg)\n\nSource: [Visit Lisboa](https://www.visitlisboa.com)",
+			{ actions: actionsSpy() },
+		)
+
+		fireEvent.error(screen.getByRole("img", { name: "The Lisbon waterfront" }))
+
+		expect(screen.getByText("Image unavailable")).toBeTruthy()
+		expect(screen.getByText("Visit Lisboa")).toBeTruthy()
+		expect(
+			screen.getByRole("link", { name: "Open original" }).getAttribute("href"),
+		).toBe("https://www.visitlisboa.com")
+		expect(
+			screen.queryByRole("img", { name: "The Lisbon waterfront" }),
+		).toBeNull()
 	})
 })
