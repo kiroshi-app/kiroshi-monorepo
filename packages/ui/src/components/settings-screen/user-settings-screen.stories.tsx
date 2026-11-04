@@ -612,7 +612,7 @@ export const AfterLeavingASpace = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard F09: Northwind just left. Check that its row is gone, the other rows unchanged, and that a success notice says You left Northwind and whom to ask for a new invitation. Kept gap: the artboard draws the notice bottom right, 24px from the edges and 340px wide; it sits top centred here, where every notice of the app sits, since moving it means changing the placement of the notice surface for all of them. The contrast audit is left to review: the Invitation pill wears the warning token on its own tint as the artboard draws it.",
+					"Artboard F09: Northwind just left. Check that its row is gone, the other rows unchanged, and that a success notice says You left Northwind and whom to ask for a new invitation. Kept gap: the artboard draws the notice bottom right, 24px from the edges and 340px wide; it sits bottom right here like every notice of the app, 16px from the edges and up to 384px wide, the registry viewport's numbers for all of them. The contrast audit is left to review: the Invitation pill wears the warning token on its own tint as the artboard draws it.",
 			},
 		},
 	},

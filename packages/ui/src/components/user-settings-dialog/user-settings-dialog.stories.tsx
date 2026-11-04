@@ -903,7 +903,7 @@ export const CantReachKiroshi = meta.story({
 		docs: {
 			description: {
 				story:
-					"Signing in failed to reach Kiroshi. The panel is the signed out one unchanged, and the host raises a failure notice at the top of the window with the copy the catalogue holds under `account.unreachable`. Pressing Sign in with your browser again is the retry.",
+					"Signing in failed to reach Kiroshi. The panel is the signed out one unchanged, and the host raises a failure notice at the bottom right of the window with the copy the catalogue holds under `account.unreachable`. Pressing Sign in with your browser again is the retry.",
 			},
 		},
 	},
