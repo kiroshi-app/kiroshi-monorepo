@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next"
 
 import { Icons } from "@workspace/ui/components/icons"
 import type { MessageFrom } from "@workspace/ui/components/message"
+import { Button } from "@workspace/ui/components/ui/button"
 import { cn } from "@workspace/ui/lib/utils"
 
 export interface QuotedMessage {
@@ -16,6 +17,9 @@ export interface QuotedMessage {
 }
 
 const QUOTE_SURFACE = "bg-foreground/5 text-foreground"
+
+const JUMP_BUTTON_RESET =
+	"flex h-auto border-0 text-[length:inherit] font-[number:inherit] whitespace-normal select-auto text-inherit hover:no-underline focus-visible:ring-0 active:not-aria-[haspopup]:translate-none"
 
 type MessageQuoteSize = "sm" | "md"
 
@@ -61,12 +65,16 @@ export function MessageQuoteCard({
 	const shown = isExcerpt ? t("reply.excerpt", { excerpt }) : excerpt
 
 	return (
-		<button
+		<Button
 			type="button"
+			variant="link"
 			data-slot="message-quote-jump"
 			aria-label={t("reply.jump", { author, excerpt: shown })}
 			onClick={onJump}
-			className="flex w-full min-w-0 items-center gap-2 rounded-[10px] bg-foreground/8 p-2 text-start outline-offset-2"
+			className={cn(
+				JUMP_BUTTON_RESET,
+				"w-full min-w-0 shrink gap-2 rounded-[10px] bg-foreground/8 p-2 text-start outline-offset-2 transition-none focus-visible:[outline-style:auto]",
+			)}
 		>
 			<Icons.Reply
 				aria-hidden="true"
@@ -78,7 +86,7 @@ export function MessageQuoteCard({
 				</span>
 				<span className="truncate text-xs leading-4">{shown}</span>
 			</span>
-		</button>
+		</Button>
 	)
 }
 
@@ -134,11 +142,15 @@ export function MessageQuote({
 								className={cn("opacity-70", metrics.glyph)}
 							/>
 						</span>
-						<button
+						<Button
 							type="button"
+							variant="link"
 							data-slot="message-quote-jump"
 							onClick={onJump}
-							className="flex min-w-0 flex-1 flex-col items-start rounded-md text-left transition-opacity hover:opacity-70 focus-visible:outline-2 focus-visible:outline-current motion-reduce:transition-none"
+							className={cn(
+								JUMP_BUTTON_RESET,
+								"min-w-0 flex-1 flex-col items-start gap-0 rounded-md p-0 text-left transition-opacity hover:opacity-70 focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-current motion-reduce:transition-none",
+							)}
 						>
 							<span className="w-full truncate font-semibold text-xs leading-4">
 								{author}
@@ -146,7 +158,7 @@ export function MessageQuote({
 							<span className="w-full truncate text-muted-foreground text-xs leading-4">
 								{excerpt}
 							</span>
-						</button>
+						</Button>
 						{trailing}
 					</div>
 				) : null}
