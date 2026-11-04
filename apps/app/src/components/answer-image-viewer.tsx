@@ -1,4 +1,4 @@
-import { useMutationState } from "@tanstack/react-query"
+import { useMutationState, useQueryClient } from "@tanstack/react-query"
 import { useContext, useState } from "react"
 
 import {
@@ -95,6 +95,15 @@ const useSavingImageSrcs = () =>
 		select: ({ state }) => savedSrcOf(state.variables),
 	})
 
+const useIsImageSaveRunning = () => {
+	const queryClient = useQueryClient()
+	return (src: string) =>
+		queryClient.isMutating({
+			mutationKey: libraryQueryKeys.imageSave(),
+			predicate: ({ state }) => savedSrcOf(state.variables) === src,
+		}) > 0
+}
+
 const useRaiseImageSaved = () => {
 	const openInLibrary = useOpenLibraryImage()
 	return ({ name }: LibraryItem) =>
@@ -113,9 +122,9 @@ export const useShownImageActions = (): ShownImageActions => {
 	const save = useLibraryImageSave(useRaiseImageSaved())
 	const copy = useLibraryImageCopy()
 	const savingSrcs = useSavingImageSrcs()
-	const isSavingImage = (src: string) => savingSrcs.includes(src)
+	const isSaveRunning = useIsImageSaveRunning()
 	const saveOnce = (onScreen: LibraryOnScreen, image: ThreadImage) => {
-		if (isSavingImage(image.src)) {
+		if (isSaveRunning(image.src)) {
 			return
 		}
 		save(threadImageSaveOf(onScreen, image))
@@ -124,7 +133,7 @@ export const useShownImageActions = (): ShownImageActions => {
 		onSaveToLibrary:
 			library === null ? undefined : (image) => saveOnce(library, image),
 		onCopyImage: (image) => copy(shownImageSourceOf(image)),
-		isSavingImage,
+		isSavingImage: (src) => savingSrcs.includes(src),
 	}
 }
 

@@ -140,7 +140,12 @@ const SAVED_SOFA: LibraryItem = {
 	createdAt: null,
 }
 
-const OAK_SRC = "https://images.example.org/oak.jpg"
+const OAK: ThreadImage = {
+	id: "1",
+	name: "Oak side table",
+	src: "https://images.example.org/oak.jpg",
+	detail: "",
+}
 
 const ATTACHMENT_PATH = "/root/attachments/c-1/1c8d7e2f.jpg"
 
@@ -506,7 +511,7 @@ describe("Save the image from a thread", () => {
 		await saveSofa(result)
 
 		expect(result.current.isSavingImage(SOFA.src)).toBe(true)
-		expect(result.current.isSavingImage(OAK_SRC)).toBe(false)
+		expect(result.current.isSavingImage(OAK.src)).toBe(false)
 		await release()
 		await waitFor(() =>
 			expect(result.current.isSavingImage(SOFA.src)).toBe(false),
@@ -533,6 +538,37 @@ describe("Save the image from a thread", () => {
 		await waitFor(() => expect(raiseTransientNotice).toHaveBeenCalled())
 		expect(callsOf("library_import")).toHaveLength(1)
 		expect(raiseTransientNotice).toHaveBeenCalledTimes(1)
+	})
+
+	it("starts one import for two saves of an image before the next render", async () => {
+		const release = holdImport()
+		const { result } = renderImageActions()
+
+		await act(async () => {
+			result.current.onSaveToLibrary?.(SOFA)
+			result.current.onSaveToLibrary?.(SOFA)
+		})
+		await release()
+
+		await waitFor(() => expect(raiseTransientNotice).toHaveBeenCalled())
+		expect(callsOf("library_import")).toHaveLength(1)
+	})
+
+	it("starts one import per image for saves of two images before the next render", async () => {
+		const { result } = renderImageActions()
+
+		await act(async () => {
+			result.current.onSaveToLibrary?.(SOFA)
+			result.current.onSaveToLibrary?.(OAK)
+		})
+
+		await waitFor(() => expect(callsOf("library_import")).toHaveLength(2))
+		expect(callsOf("library_import")).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({ name: "Grey linen sofa.jpeg" }),
+				expect.objectContaining({ name: "Oak side table.jpeg" }),
+			]),
+		)
 	})
 
 	it("raises one success notice whose Open in Library opens the saved image", async () => {
