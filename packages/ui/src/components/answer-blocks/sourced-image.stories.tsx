@@ -253,8 +253,7 @@ export const TriesEachNewSource = meta.story({
 		const picture = await canvas.findByRole("img", {
 			name: "Casa do Rio, a terrace over the Tagus",
 		})
-		await waitFor(() => expect(picture).toHaveProperty("complete", true))
-		await expect(picture).not.toHaveProperty("naturalWidth", 0)
+		await waitFor(() => expect(picture).not.toHaveProperty("naturalWidth", 0))
 		await expect(picture).toBeVisible()
 		await expect(
 			canvasElement.querySelector('[data-slot="sourced-image-unavailable"]'),
