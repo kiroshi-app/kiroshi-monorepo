@@ -2,7 +2,8 @@ use std::collections::HashSet;
 
 use rusqlite::types::{FromSql, Type};
 use rusqlite::{params, Connection, OptionalExtension, Row, Transaction, TransactionBehavior};
-use serde::Deserialize;
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 
 use super::arrivals::{self, Arrival, SeqSpan};
 use super::conversations::release_every_prompt;
@@ -118,6 +119,13 @@ impl ReplyLink {
 	}
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WebSource {
+	pub url: String,
+	pub domain: String,
+	pub title: Option<String>,
+}
+
 pub struct NewUserMessage {
 	pub id: String,
 	pub conversation_id: String,
@@ -145,6 +153,7 @@ pub struct StoredMessage {
 	pub author: AccountAuthor,
 	pub written_from: Option<WrittenFrom>,
 	pub continues_turn_id: Option<String>,
+	pub web_sources: Vec<WebSource>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -293,6 +302,7 @@ const APPEND_TEXT: &str =
 const FINALIZE_MESSAGE: &str =
 	"UPDATE messages SET completion_state = ?2, content = COALESCE(?3, content)
 	WHERE id = ?1 AND completion_state IN ('pending', 'streaming')";
+const KEEP_WEB_SOURCES: &str = "UPDATE messages SET web_sources = ?2 WHERE id = ?1";
 const REPLACE_CONTENT: &str = "UPDATE messages SET content = ?2 WHERE id = ?1";
 const REPLACE_INDEXED_CONTENT: &str =
 	"UPDATE message_search SET content = ?2 WHERE message_id = ?1";
@@ -302,7 +312,7 @@ const MESSAGE_PAGE: &str = "SELECT id, turn_id, author_bot_id,
 			WHERE message_id = messages.id), seq, role,
 		content, completion_state, created_at, runtime_session_id, author_account_id,
 		author_name, written_from, author_email, author_computer,
-		(SELECT continues_turn_id FROM turns WHERE turns.id = messages.turn_id)
+		(SELECT continues_turn_id FROM turns WHERE turns.id = messages.turn_id), web_sources
 	FROM messages WHERE conversation_id = ?1 AND seq < ?2 ORDER BY seq DESC LIMIT ?3";
 const MESSAGE_AT_SEQ: &str = "SELECT id, turn_id, author_bot_id,
 		(SELECT json_group_array(json_object('message_id', target_message_id, 'excerpt', excerpt)
@@ -310,7 +320,7 @@ const MESSAGE_AT_SEQ: &str = "SELECT id, turn_id, author_bot_id,
 			WHERE message_id = messages.id), seq, role,
 		content, completion_state, created_at, runtime_session_id, author_account_id,
 		author_name, written_from, author_email, author_computer,
-		(SELECT continues_turn_id FROM turns WHERE turns.id = messages.turn_id)
+		(SELECT continues_turn_id FROM turns WHERE turns.id = messages.turn_id), web_sources
 	FROM messages WHERE conversation_id = ?1 AND seq = ?2";
 const MESSAGES_AFTER_SEQ: &str = "SELECT id, turn_id, author_bot_id,
 		(SELECT json_group_array(json_object('message_id', target_message_id, 'excerpt', excerpt)
@@ -318,7 +328,7 @@ const MESSAGES_AFTER_SEQ: &str = "SELECT id, turn_id, author_bot_id,
 			WHERE message_id = messages.id), seq,
 		role, content, completion_state, created_at, runtime_session_id, author_account_id,
 		author_name, written_from, author_email, author_computer,
-		(SELECT continues_turn_id FROM turns WHERE turns.id = messages.turn_id)
+		(SELECT continues_turn_id FROM turns WHERE turns.id = messages.turn_id), web_sources
 	FROM messages WHERE conversation_id = ?1 AND seq > ?2 ORDER BY seq ASC LIMIT ?3";
 const MESSAGE_OLDER_THAN_SEQ: &str =
 	"SELECT EXISTS(SELECT 1 FROM messages WHERE conversation_id = ?1 AND seq < ?2)";
@@ -330,7 +340,7 @@ const MESSAGE_BY_ID: &str = "SELECT id, turn_id, author_bot_id,
 			WHERE message_id = messages.id), seq, role,
 		content, completion_state, created_at, runtime_session_id, author_account_id,
 		author_name, written_from, author_email, author_computer,
-		(SELECT continues_turn_id FROM turns WHERE turns.id = messages.turn_id)
+		(SELECT continues_turn_id FROM turns WHERE turns.id = messages.turn_id), web_sources
 	FROM messages WHERE conversation_id = ?1 AND id = ?2";
 const MESSAGE_WINDOW: &str = "SELECT id, turn_id, author_bot_id,
 		(SELECT json_group_array(json_object('message_id', target_message_id, 'excerpt', excerpt)
@@ -338,7 +348,7 @@ const MESSAGE_WINDOW: &str = "SELECT id, turn_id, author_bot_id,
 			WHERE message_id = messages.id), seq, role,
 		content, completion_state, created_at, runtime_session_id, author_account_id,
 		author_name, written_from, author_email, author_computer,
-		(SELECT continues_turn_id FROM turns WHERE turns.id = messages.turn_id)
+		(SELECT continues_turn_id FROM turns WHERE turns.id = messages.turn_id), web_sources
 	FROM messages WHERE conversation_id = ?1 AND seq > ?2 AND seq < ?3
 	ORDER BY seq DESC LIMIT ?4";
 const SETTLED_MESSAGE_WINDOW: &str = "SELECT id, turn_id, author_bot_id,
@@ -347,7 +357,7 @@ const SETTLED_MESSAGE_WINDOW: &str = "SELECT id, turn_id, author_bot_id,
 			WHERE message_id = messages.id),
 		seq, role, content, completion_state, created_at, runtime_session_id, author_account_id,
 		author_name, written_from, author_email, author_computer,
-		(SELECT continues_turn_id FROM turns WHERE turns.id = messages.turn_id)
+		(SELECT continues_turn_id FROM turns WHERE turns.id = messages.turn_id), web_sources
 	FROM messages WHERE conversation_id = ?1 AND seq > ?2 AND seq < ?3
 		AND completion_state NOT IN ('pending', 'streaming')
 		AND trim(content, char(32, 9, 10, 13)) <> ''
@@ -358,7 +368,7 @@ const LATEST_MESSAGE_ASIDE_BOT: &str = "SELECT id, turn_id, author_bot_id,
 			WHERE message_id = messages.id),
 		seq, role, content, completion_state, created_at, runtime_session_id, author_account_id,
 		author_name, written_from, author_email, author_computer,
-		(SELECT continues_turn_id FROM turns WHERE turns.id = messages.turn_id)
+		(SELECT continues_turn_id FROM turns WHERE turns.id = messages.turn_id), web_sources
 	FROM messages WHERE conversation_id = ?1 AND COALESCE(author_bot_id, '') <> ?2
 		AND created_at <= ?3
 		AND trim(content, char(32, 9, 10, 13)) <> '' ORDER BY seq DESC LIMIT 1";
@@ -368,7 +378,7 @@ const LATEST_MESSAGE_OF_BOT: &str = "SELECT id, turn_id, author_bot_id,
 			WHERE message_id = messages.id), seq,
 		role, content, completion_state, created_at, runtime_session_id, author_account_id,
 		author_name, written_from, author_email, author_computer,
-		(SELECT continues_turn_id FROM turns WHERE turns.id = messages.turn_id)
+		(SELECT continues_turn_id FROM turns WHERE turns.id = messages.turn_id), web_sources
 	FROM messages WHERE conversation_id = ?1 AND author_bot_id = ?2 AND created_at <= ?3
 		AND trim(content, char(32, 9, 10, 13)) <> '' ORDER BY seq DESC LIMIT 1";
 const MESSAGE_OF_CONVERSATION: &str =
@@ -387,7 +397,7 @@ const PINNED_MESSAGES: &str = "SELECT messages.id, messages.turn_id, messages.au
 		messages.author_account_id, messages.author_name, messages.written_from,
 		messages.author_email, messages.author_computer,
 		(SELECT continues_turn_id FROM turns WHERE turns.id = messages.turn_id),
-		message_pins.block_index, message_pins.pinned_at
+		messages.web_sources, message_pins.block_index, message_pins.pinned_at
 	FROM message_pins
 	JOIN messages ON messages.id = message_pins.message_id
 		AND messages.conversation_id = message_pins.conversation_id
@@ -702,6 +712,23 @@ impl MessagesRepository {
 		})
 		.await?
 		.at("finalize_message", "messages")
+	}
+
+	pub async fn keep_web_sources(
+		&self,
+		id: String,
+		sources: Vec<WebSource>,
+	) -> Result<(), TranscriptError> {
+		let kept = serde_json::to_string(&sources)
+			.map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
+		self.call(move |connection| {
+			match connection.prepare_cached(KEEP_WEB_SOURCES)?.execute(params![id, kept])? {
+				0 => Ok(Err(TranscriptError::UnknownMessage { id })),
+				_ => Ok(Ok(())),
+			}
+		})
+		.await?
+		.at("keep_web_sources", "messages")
 	}
 
 	pub async fn replace_content(
@@ -1579,7 +1606,7 @@ fn stored_message_key(
 				conversation_id: row.get(1)?,
 				turn_id: row.get(2)?,
 				author_bot_id: row.get(3)?,
-				reply_links: reply_links(row, 4)?,
+				reply_links: json_list(row, 4)?,
 				role: row.get(5)?,
 				created_at: row.get(6)?,
 				content: message.content.is_some().then(|| row.get(7)).transpose()?,
@@ -1691,7 +1718,7 @@ fn read_message(row: &Row<'_>) -> rusqlite::Result<StoredMessage> {
 		id: row.get(0)?,
 		turn_id: row.get(1)?,
 		author_bot_id: row.get(2)?,
-		reply_links: reply_links(row, 3)?,
+		reply_links: json_list(row, 3)?,
 		seq: row.get(4)?,
 		role: row.get(5)?,
 		content: row.get(6)?,
@@ -1706,10 +1733,11 @@ fn read_message(row: &Row<'_>) -> rusqlite::Result<StoredMessage> {
 		},
 		written_from: row.get(12)?,
 		continues_turn_id: row.get(15)?,
+		web_sources: json_list(row, 16)?,
 	})
 }
 
-fn reply_links(row: &Row<'_>, index: usize) -> rusqlite::Result<Vec<ReplyLink>> {
+fn json_list<T: DeserializeOwned>(row: &Row<'_>, index: usize) -> rusqlite::Result<Vec<T>> {
 	serde_json::from_str(&row.get::<_, String>(index)?).map_err(|error| {
 		rusqlite::Error::FromSqlConversionFailure(index, Type::Text, Box::new(error))
 	})
@@ -1718,8 +1746,8 @@ fn reply_links(row: &Row<'_>, index: usize) -> rusqlite::Result<Vec<ReplyLink>> 
 fn read_pin(row: &Row<'_>) -> rusqlite::Result<StoredPin> {
 	Ok(StoredPin {
 		message: read_message(row)?,
-		block_index: row.get(16)?,
-		pinned_at: row.get(17)?,
+		block_index: row.get(17)?,
+		pinned_at: row.get(18)?,
 	})
 }
 

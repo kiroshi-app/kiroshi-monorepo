@@ -1167,6 +1167,7 @@ pub(crate) fn ended_as(outcome: TurnOutcome) -> AgentEvent {
 			structured_output: None,
 			total_cost_usd: None,
 			model_usage: None,
+			web_sources: Vec::new(),
 		},
 	}
 }

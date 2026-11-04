@@ -74,6 +74,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 65, statements: CONTINUATION_TURNS },
 	Migration { version: 66, statements: MESSAGE_REPLIES },
 	Migration { version: 67, statements: MESSAGE_REPLY_EXCERPTS },
+	Migration { version: 68, statements: MESSAGE_WEB_SOURCES },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -1392,6 +1393,11 @@ ALTER TABLE message_replies ADD COLUMN excerpt TEXT
 	CHECK (excerpt IS NULL OR trim(excerpt, char(32, 9, 10, 13)) <> '');
 ";
 
+const MESSAGE_WEB_SOURCES: &str = "
+ALTER TABLE messages ADD COLUMN web_sources TEXT NOT NULL DEFAULT '[]'
+	CHECK (json_valid(web_sources) AND json_type(web_sources) = 'array');
+";
+
 const FRESH_INSTALL_UNTINTED_PERSONAL_SPACE: &str =
 	"UPDATE spaces SET colour = NULL WHERE id = 'personal';";
 
@@ -1517,6 +1523,7 @@ mod tests {
 	const HUE_COLOURS_STEP: u32 = 64;
 	const MESSAGE_REPLIES_STEP: u32 = 66;
 	const MESSAGE_REPLY_EXCERPTS_STEP: u32 = 67;
+	const MESSAGE_WEB_SOURCES_STEP: u32 = 68;
 
 	const A_LIVE_SESSION: &str = "INSERT INTO runtime_sessions
 		(id, conversation_id, bot_id, provider_session_id, seq, status, started_at)
@@ -5159,6 +5166,60 @@ mod tests {
 		assert_eq!(replying.reply_links, [ReplyLink::bare("m1".into())]);
 
 		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_message_kept_before_web_sources_reads_back_with_none_once_upgraded() {
+		let dir = temp_dir();
+		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
+		apply_each(&mut connection, shipped_before(MESSAGE_WEB_SOURCES_STEP))
+			.expect("the shipped schema");
+		connection
+			.execute_batch(&format!(
+				"INSERT INTO conversations (id, kind, space_id, title, created_at, updated_at)
+					VALUES ('room', 'topic', 'personal', 'Room', 1, 1);
+				{}",
+				a_message_at("room", "m1", 1, 2),
+			))
+			.expect("the rows are inserted");
+		drop(connection);
+
+		let database = crate::db::open(&dir);
+		let kept = database
+			.messages()
+			.message("room".into(), "m1".into())
+			.await
+			.expect("the message reads")
+			.expect("the message is kept");
+
+		assert!(kept.web_sources.is_empty());
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[test]
+	fn a_message_keeps_its_web_sources_as_a_json_array_and_nothing_else() {
+		let dir = temp_dir();
+		let connection = migrated(&dir);
+		connection
+			.execute_batch(&format!(
+				"INSERT INTO conversations (id, kind, space_id, title, created_at, updated_at)
+					VALUES ('room', 'topic', 'personal', 'Room', 1, 1);
+				{}",
+				a_message_at("room", "m1", 1, 2),
+			))
+			.expect("the rows are inserted");
+		let keep = |sources: &str| {
+			connection.execute("UPDATE messages SET web_sources = ?1 WHERE id = 'm1'", [sources])
+		};
+
+		assert!(keep("[]").is_ok());
+		assert!(keep("{}").is_err(), "an object was kept as a list of sources");
+		assert!(keep("not json").is_err(), "text was kept as a list of sources");
+
+		drop(connection);
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 

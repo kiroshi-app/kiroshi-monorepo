@@ -18,7 +18,7 @@ use kiroshi_app::agent::lease::{Lapse, RunLease};
 use kiroshi_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
 use kiroshi_app::agent::AgentState;
 use kiroshi_app::commands::invoke_handler;
-use kiroshi_app::conversations::contract::{TranscriptMessage, TranscriptPage};
+use kiroshi_app::conversations::contract::{TranscriptMessage, TranscriptPage, WebSource};
 use kiroshi_app::db;
 use kiroshi_app::db::repositories::messages::{
 	MessagePageQuery, MessageState, ReplyLink, StoredMessage,
@@ -787,6 +787,59 @@ fn a_follow_up_after_a_settled_turn_is_a_continuation_of_it_read_back_after_a_re
 		.iter()
 		.find(|message| message.turn_id == "t1" && message.author_bot_id.is_some());
 	assert_eq!(answer.expect("the relaunch reads the answer").continues_turn_id, None);
+	stored.close();
+}
+
+fn a_web_source(url: &str, domain: &str, title: Option<&str>) -> WebSource {
+	WebSource { url: url.to_owned(), domain: domain.to_owned(), title: title.map(str::to_owned) }
+}
+
+#[test]
+fn the_pages_a_turn_read_are_kept_on_its_last_reply_in_order_and_read_back_after_a_relaunch() {
+	let _serial = serial();
+	let stored = launch_stored("web-reads", "web_reads");
+	stored.start();
+
+	stored.submit("t1", "p1");
+	stored.completed("t1");
+
+	let transcript = stored.transcript_after_a_relaunch();
+	let replies: Vec<&TranscriptMessage> =
+		transcript.iter().filter(|message| message.author_bot_id.is_some()).collect();
+	let [opening, answer] = replies.as_slice() else {
+		panic!("the turn wrote other than two replies: {replies:#?}");
+	};
+	assert_eq!(opening.content, "let me look that up");
+	assert!(opening.web_sources.is_empty(), "a reply before the last one carried sources");
+	assert_eq!(answer.content, "serde derives both traits");
+	assert_eq!(
+		answer.web_sources,
+		[
+			a_web_source("https://WWW.Docs.rs/serde#derive", "docs.rs", None),
+			a_web_source("https://serde.rs/derive.html", "serde.rs", Some("Serde derive")),
+			a_web_source("http://blog.example/untitled", "blog.example", None),
+		]
+	);
+	let prompt = transcript.iter().find(|message| message.id == "p1").expect("the prompt");
+	assert!(prompt.web_sources.is_empty());
+	stored.close();
+}
+
+#[test]
+fn a_turn_that_read_no_web_page_keeps_no_web_source() {
+	let _serial = serial();
+	let stored = launch_stored("no-web-reads", "tool");
+	stored.start();
+
+	stored.submit("t1", "p1");
+	stored.completed("t1");
+
+	let transcript = stored.transcript_after_a_relaunch();
+	let answer = transcript
+		.iter()
+		.find(|message| message.content == "done")
+		.expect("the relaunch reads the answer");
+	assert!(answer.web_sources.is_empty());
 	stored.close();
 }
 

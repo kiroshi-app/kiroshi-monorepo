@@ -103,6 +103,26 @@ impl From<ReplyLink> for messages::ReplyLink {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
+pub struct WebSource {
+	pub url: String,
+	pub domain: String,
+	pub title: Option<String>,
+}
+
+impl From<messages::WebSource> for WebSource {
+	fn from(source: messages::WebSource) -> Self {
+		Self { url: source.url, domain: source.domain, title: source.title }
+	}
+}
+
+impl From<WebSource> for messages::WebSource {
+	fn from(source: WebSource) -> Self {
+		Self { url: source.url, domain: source.domain, title: source.title }
+	}
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
 pub struct TranscriptMessage {
 	pub id: String,
 	pub conversation_id: String,
@@ -128,6 +148,9 @@ pub struct TranscriptMessage {
 	#[serde(default, skip_serializing_if = "Option::is_none")]
 	#[specta(optional)]
 	pub continues_turn_id: Option<String>,
+	#[serde(default)]
+	#[specta(optional)]
+	pub web_sources: Vec<WebSource>,
 }
 
 impl TranscriptMessage {
@@ -154,6 +177,7 @@ impl TranscriptMessage {
 			reply_links: stored.reply_links.into_iter().map(Into::into).collect(),
 			runtime_session_id: stored.runtime_session_id,
 			continues_turn_id: stored.continues_turn_id,
+			web_sources: stored.web_sources.into_iter().map(Into::into).collect(),
 		}
 	}
 }

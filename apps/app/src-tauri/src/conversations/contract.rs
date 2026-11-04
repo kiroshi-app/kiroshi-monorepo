@@ -51,6 +51,11 @@ mod tests {
 			reply_links: vec![ReplyLink { message_id: "m0".into(), excerpt: None }],
 			runtime_session_id: Some("run-1".into()),
 			continues_turn_id: None,
+			web_sources: vec![WebSource {
+				url: "https://docs.rs/serde".into(),
+				domain: "docs.rs".into(),
+				title: None,
+			}],
 		}
 	}
 
@@ -71,7 +76,8 @@ mod tests {
 			"repliedToMessageId": "m0",
 			"repliedToMessageIds": ["m0"],
 			"replyLinks": [{ "messageId": "m0", "excerpt": null }],
-			"runtimeSessionId": "run-1"
+			"runtimeSessionId": "run-1",
+			"webSources": [{ "url": "https://docs.rs/serde", "domain": "docs.rs", "title": null }]
 		})
 	}
 }
