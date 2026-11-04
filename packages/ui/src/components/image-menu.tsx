@@ -54,10 +54,10 @@ const imageHandlersOf = <Item,>(
 	onOpenInViewer: surface === "viewer" ? undefined : onOpenInViewer,
 })
 
-const hasAnyImageMenuAction = <Item,>(
-	actions: ImageMenuActions<Item>,
-	surface: ImageMenuSurface = "thread",
-) =>
+const hasAnyImageMenuAction = <Item,>({
+	surface = "thread",
+	...actions
+}: ImageMenuActions<Item> & Pick<ImageMenuProps<Item>, "surface">) =>
 	hasImageActions(imageHandlersOf(actions, surface)) ||
 	hasLibraryItemActions(actions)
 
@@ -151,7 +151,7 @@ const PressableImageMenu = <Item,>({
 	className,
 	...menu
 }: PressableImageMenuProps<Item>) => {
-	if (!hasAnyImageMenuAction(menu, menu.surface)) return picture
+	if (!hasAnyImageMenuAction(menu)) return picture
 
 	return (
 		<ImageMenu
