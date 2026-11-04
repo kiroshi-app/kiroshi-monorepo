@@ -1163,6 +1163,10 @@ const STUCK_INSET = 18
 
 const BUBBLE_PADDING = 18
 
+const AUTHOR_LINE_GAP = 8
+
+const STUCK_BLOCK_OVERREACH = 16
+
 const pinnedLineIn = async (viewport: HTMLElement, tone: string) => {
 	await waitFor(() =>
 		expect(viewport.scrollHeight).toBeGreaterThan(viewport.clientHeight),
@@ -1234,6 +1238,13 @@ const expectCleanCutStuckLine = async (
 			Math.round(viewport.getBoundingClientRect().bottom - lineBox.bottom),
 		).toBe(STUCK_INSET)
 		await expect(block.bottom).toBe(`-${STUCK_INSET}px`)
+		await expect(block.top).toBe(`-${STUCK_BLOCK_OVERREACH}px`)
+		await expect(
+			Math.round(
+				(line.nextElementSibling?.getBoundingClientRect().top ?? 0) -
+					slotIn(content, "message-bubble-text").getBoundingClientRect().bottom,
+			),
+		).toBe(AUTHOR_LINE_GAP + lineBox.height)
 		await expect(Math.round(lineBox.width + 2 * BUBBLE_PADDING)).toBe(
 			Math.round(content.getBoundingClientRect().width),
 		)

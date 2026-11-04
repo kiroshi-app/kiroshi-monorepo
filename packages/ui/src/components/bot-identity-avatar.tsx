@@ -141,10 +141,7 @@ const BotSelectButton = ({
 		data-slot="bot-select"
 		aria-label={name}
 		{...clickHandlersFor(onSelect)}
-		className={cn(
-			"block w-fit cursor-pointer transition-opacity duration-150 ease-out hover:not-focus-visible:opacity-70 hover:transition-none motion-reduce:transition-none",
-			SILHOUETTE_FOCUS_RING,
-		)}
+		className="flex min-w-0 cursor-pointer rounded-sm hover:not-focus-visible:opacity-70 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
 	>
 		{children}
 	</button>

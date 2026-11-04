@@ -216,6 +216,14 @@ conversation-markdown-webpagecard--with-preview-and-alt-text
 conversation-markdown-webpagecard--without-preview
 conversation-message-authorline--default
 conversation-message-authorline--failed
+conversation-message-authorline--gap-above-a-person-line
+conversation-message-authorline--gap-above-a-queued-line
+conversation-message-authorline--gap-above-an-agent-line
+conversation-message-authorline--gap-above-your-line
+conversation-message-authorline--keyboard-focus-on-the-agent-block
+conversation-message-authorline--long-name-in-a-narrow-bubble
+conversation-message-authorline--name-click-selects-the-agent
+conversation-message-authorline--name-right-click-opens-the-agent-menu
 conversation-message-authorline--queued
 conversation-message-chatemptystate--centred-in-its-frame
 conversation-message-chatemptystate--free-hue
