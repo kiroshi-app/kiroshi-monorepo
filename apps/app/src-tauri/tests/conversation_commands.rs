@@ -390,6 +390,7 @@ fn a_turn_written_over_ipc_reads_back_as_the_page_the_reader_displays() {
 					"repliedToMessageIds": [],
 					"replyLinks": [],
 					"runtimeSessionId": null,
+					"webSources": [],
 				},
 				{
 					"id": "m2",
@@ -408,6 +409,7 @@ fn a_turn_written_over_ipc_reads_back_as_the_page_the_reader_displays() {
 					"repliedToMessageIds": ["m1"],
 					"replyLinks": [{ "messageId": "m1", "excerpt": null }],
 					"runtimeSessionId": null,
+					"webSources": [],
 				}
 			]
 		}))
@@ -759,6 +761,7 @@ fn a_chat_past_the_fold_bound_survives_a_dead_host_with_nothing_lost_or_doubled(
 			"repliedToMessageIds": [],
 			"replyLinks": [],
 			"runtimeSessionId": null,
+			"webSources": [],
 		}),
 		"the reply the dead host left came back as something else"
 	);
