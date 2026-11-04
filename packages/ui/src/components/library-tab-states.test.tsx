@@ -9,7 +9,7 @@ import {
 	type LibraryItemUnavailableReason,
 } from "@workspace/ui/components/library-tab-states"
 
-const renderUnavailable = (reason: LibraryItemUnavailableReason) => (
+const unavailableFor = (reason: LibraryItemUnavailableReason) => (
 	<I18nProvider>
 		<LibraryItemUnavailable
 			name="Spring launch brief"
@@ -23,11 +23,11 @@ describe("LibraryItemUnavailable", () => {
 	afterEach(cleanup)
 
 	it("announces the new title line once in the alert already mounted when the reason changes", () => {
-		const { rerender } = render(renderUnavailable("unreadable"))
+		const { rerender } = render(unavailableFor("unreadable"))
 		const alert = screen.getByRole("alert")
 		expect(alert.textContent).toContain("Couldn’t open Spring launch brief")
 
-		rerender(renderUnavailable("missing"))
+		rerender(unavailableFor("missing"))
 
 		expect(screen.getAllByRole("alert")).toEqual([alert])
 		expect(alert.textContent).toContain(
