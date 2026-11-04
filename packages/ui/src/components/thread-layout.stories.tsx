@@ -6,6 +6,7 @@ import {
 	probedStyleOf,
 	slotIn,
 	slotsIn,
+	tokenLengthOf,
 } from "@workspace/storybook/story-utils"
 import { AppHeader } from "@workspace/ui/components/app-header"
 import { ChatEmptyState } from "@workspace/ui/components/chat-empty-state"
@@ -598,17 +599,27 @@ export const PromptOverhangsTheThread = meta.story({
 		docs: {
 			description: {
 				story:
-					"Measured on the Final page, artboard 1b Solo a long message the input grows: the bubbles column is 680 wide and the prompt 720, so the prompt overhangs it by 20 on each side and the bubbles edge meets the start of its rounded corner. Check the 20 holds at the widest thread and on a 480 wide one, where both columns shrink together.",
+					"Measured on the Final page, artboard 1b Solo a long message the input grows: the bubbles column is 680 wide and the prompt 720, so the prompt overhangs it by 20 on each side and the bubbles edge meets the start of its rounded corner. Check the 20 at the widest thread. On a 480 wide one the overhang shrinks so the prompt keeps the shell inset from the thread card's edges: there it is 16, not the Final page's 20.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
 		const [widest, narrow] = slotsIn(canvasElement, "overhang-frame")
-		const both = { start: PROMPT_OVERHANG, end: PROMPT_OVERHANG }
-		await expect(overhangOf(widest)).toEqual(both)
-		await expect(overhangOf(narrow)).toEqual(both)
+		await expect(overhangOf(widest)).toEqual({
+			start: PROMPT_OVERHANG,
+			end: PROMPT_OVERHANG,
+		})
 		await expect(
 			slotIn(widest, "prompt-input").getBoundingClientRect().width,
 		).toBe(720)
+		const card = narrow.getBoundingClientRect()
+		const prompt = slotIn(narrow, "prompt-input").getBoundingClientRect()
+		const inset = Number.parseFloat(tokenLengthOf("--shell-inset"))
+		await expect(Math.round(prompt.left - card.left)).toBeGreaterThanOrEqual(
+			inset,
+		)
+		await expect(Math.round(card.right - prompt.right)).toBeGreaterThanOrEqual(
+			inset,
+		)
 	},
 })
