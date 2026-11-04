@@ -1,4 +1,4 @@
-import { expect, fn } from "storybook/test"
+import { expect, fn, screen, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
@@ -77,7 +77,7 @@ export const Pending = meta.story({
 		docs: {
 			description: {
 				story:
-					"The picture is on its way to the Library. Check the loader spins where the bookmark was, holds still under reduced motion, the button keeps focus, reads Saving the image… and ignores a second press.",
+					"The picture is on its way to the Library. Check the loader spins where the bookmark was, holds still under reduced motion, the button keeps focus, reads Saving the image… and ignores a second press, and that the right-click menu offers Save to Library disabled.",
 			},
 		},
 	},
@@ -91,6 +91,18 @@ export const Pending = meta.story({
 		await userEvent.click(save)
 		await expect(save).toHaveFocus()
 		await expect(args.imageMenu?.onSaveToLibrary).not.toHaveBeenCalled()
+
+		await userEvent.pointer({
+			keys: "[MouseRight]",
+			target: canvas.getByRole("img", {
+				name: "Casa do Rio, a terrace over the Tagus",
+			}),
+		})
+		const menu = await screen.findByRole("menu")
+		await expect(
+			within(menu).getByRole("menuitem", { name: "Save to Library" }),
+		).toHaveAttribute("aria-disabled", "true")
+		await userEvent.keyboard("{Escape}")
 
 		if (!isInBrowserRunner()) return
 		await expect(getComputedStyle(loader).animationName).toBe("none")

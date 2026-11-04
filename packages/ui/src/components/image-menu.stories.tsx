@@ -1,4 +1,5 @@
 import {
+	userEvent as directUserEvent,
 	expect,
 	fn,
 	screen,
@@ -24,6 +25,16 @@ const VIEWER_ACTION_ORDER = [
 ]
 
 const IMAGE_ACTION_ORDER = ["Save to Library", "Copy image", "Open in viewer"]
+
+const WITHOUT_VIEWER_ACTIONS = {
+	onDownload: undefined,
+	onCopy: undefined,
+	onOpen: undefined,
+	onOpenInNewTab: undefined,
+	onRename: undefined,
+	onShowInFolder: undefined,
+	onDelete: undefined,
+}
 
 const openMenu = async (
 	canvasElement: HTMLElement,
@@ -136,15 +147,7 @@ export const InViewer = meta.story({
 })
 
 export const ImageActionsOnly = meta.story({
-	args: {
-		onDownload: undefined,
-		onCopy: undefined,
-		onOpen: undefined,
-		onOpenInNewTab: undefined,
-		onRename: undefined,
-		onShowInFolder: undefined,
-		onDelete: undefined,
-	},
+	args: WITHOUT_VIEWER_ACTIONS,
 	parameters: {
 		docs: {
 			description: {
@@ -157,19 +160,56 @@ export const ImageActionsOnly = meta.story({
 		const menu = await openMenu(canvasElement, userEvent)
 		await expect(entryNamesIn(menu)).toEqual(IMAGE_ACTION_ORDER)
 		await expect(within(menu).queryByRole("separator")).toBe(null)
+		await expect(
+			within(menu).getByRole("menuitem", { name: "Save to Library" }),
+		).not.toHaveAttribute("aria-disabled")
+	},
+})
+
+export const SavingToLibrary = meta.story({
+	args: { ...WITHOUT_VIEWER_ACTIONS, isSavingToLibrary: true },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The image is on its way to the Library. Check Save to Library keeps its place, label and icon, draws in the menu's disabled style and ignores a press, while Copy image and Open in viewer still answer.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		let menu = await openMenu(canvasElement, userEvent)
+		await expect(entryNamesIn(menu)).toEqual(IMAGE_ACTION_ORDER)
+		const save = within(menu).getByRole("menuitem", { name: "Save to Library" })
+		await expect(save).toHaveAttribute("aria-disabled", "true")
+		await expect(
+			within(menu).getByRole("menuitem", { name: "Copy image" }),
+		).not.toHaveAttribute("aria-disabled")
+		await expect(
+			within(menu).getByRole("menuitem", { name: "Open in viewer" }),
+		).not.toHaveAttribute("aria-disabled")
+
+		await directUserEvent.click(save, { pointerEventsCheck: 0 })
+		save.focus()
+		await userEvent.keyboard("{Enter}")
+		await expect(args.onSaveToLibrary).not.toHaveBeenCalled()
+
+		await userEvent.click(
+			within(menu).getByRole("menuitem", { name: "Copy image" }),
+		)
+		await expect(args.onCopyImage).toHaveBeenCalledWith(IMAGE.id)
+
+		menu = await openMenu(canvasElement, userEvent)
+		await userEvent.click(
+			within(menu).getByRole("menuitem", { name: "Open in viewer" }),
+		)
+		await expect(args.onOpenInViewer).toHaveBeenCalledWith(IMAGE.id)
 	},
 })
 
 export const WithoutCallbacks = meta.story({
 	tags: ["test-only"],
 	args: {
-		onDownload: undefined,
-		onCopy: undefined,
-		onOpen: undefined,
-		onOpenInNewTab: undefined,
-		onRename: undefined,
-		onShowInFolder: undefined,
-		onDelete: undefined,
+		...WITHOUT_VIEWER_ACTIONS,
 		onSaveToLibrary: undefined,
 		onCopyImage: undefined,
 		onOpenInViewer: undefined,

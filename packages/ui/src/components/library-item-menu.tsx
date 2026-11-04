@@ -117,18 +117,24 @@ const hasImageActions = <Item,>(handlers: ImageHandlers<Item>) =>
 type ImageMenuItemsProps<Item> = {
 	item: Item
 	actions: ImageHandlers<Item>
+	isSavingToLibrary?: boolean
 }
 
 const ImageMenuItems = <Item,>({
 	item,
 	actions,
+	isSavingToLibrary = false,
 }: ImageMenuItemsProps<Item>) => {
 	const { t } = useTranslation("common")
 
 	return IMAGE_ACTIONS.map(({ handler, label, Icon }) => {
 		const action = actions[handler]
 		return action ? (
-			<ContextMenuItem key={handler} onClick={() => action(item)}>
+			<ContextMenuItem
+				key={handler}
+				disabled={handler === "onSaveToLibrary" && isSavingToLibrary}
+				onClick={() => action(item)}
+			>
 				<Icon aria-hidden="true" className="size-3.5" />
 				{t(label)}
 			</ContextMenuItem>
