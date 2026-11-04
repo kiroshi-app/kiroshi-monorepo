@@ -295,6 +295,7 @@ const AuthorLineQueued = ({ onCancel }: AuthorLineQueuedProps) => {
 
 export {
 	AuthorLine,
+	AuthorLineDivider,
 	type AuthorLineEnd,
 	AuthorLineName,
 	type AuthorLineProps,
